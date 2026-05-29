@@ -80,57 +80,9 @@ cd frontend && npm run dev
 
 前端运行在 `http://localhost:5173`，自动将 `/api` 请求代理到 FastAPI 后端 `http://localhost:8000`。
 
-## 项目结构
+## 项目结构与设计原则
 
-```
-dreamulator/
-├── docs/
-│   ├── knowledge/           # 各学科科学知识参考文档
-│   ├── worldbuilding/       # 架空世界创建思路与方法论
-│   └── usage/               # 项目用法指南
-├── data/
-│   ├── templates/           # 世界模板（minimal, earthlike）
-│   └── worlds/              # 世界实例
-├── schemas/                 # 自动生成的 JSON Schema
-├── src/dreamulator/         # Python 后端
-│   ├── models/              # Pydantic 数据模型
-│   ├── engine/              # 模拟引擎（DAG pipeline）
-│   ├── io/                  # 文件读写层
-│   ├── api.py               # FastAPI 应用
-│   ├── cli.py               # Typer CLI 入口
-│   └── utils/               # 物理常量、单位换算、随机数
-├── frontend/                # TypeScript SPA（Vite + React）
-│   └── src/
-│       ├── api/             # API 客户端
-│       ├── components/      # UI 组件
-│       ├── pages/           # 页面组件
-│       └── stores/          # Zustand 状态管理
-└── tests/                   # Python 测试
-```
-
-## 核心设计原则
-
-### 输入/衍生分离
-
-每个世界目录严格分离：
-- **`input/`**（YAML）— 人类或 LLM 编写的创意设定（恒星类型、行星大小、文明种子等）
-- **`derived/`**（JSON）— 引擎计算的物理结果（光度、温度、气候带、生态系统等）
-
-LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理结果。
-
-### 可复现性
-
-- 所有引擎使用种子化随机数生成器（`numpy.random.Generator`）
-- 计算清单（manifest）记录每步的输入/输出校验和
-- 相同输入 + 种子 = 相同输出
-
-### 引擎管道
-
-```
-stellar → orbital → geological + climate → ecology → civilization
-```
-
-引擎继承 `BaseEngine`，声明依赖（`requires`）、输入文件（`input_files`）和输出文件（`output_files`），由 `engine/pipeline.py` 自动拓扑排序并按顺序执行。
+详见 [docs/usage/project-structure.md](docs/usage/project-structure.md)。
 
 ## 开发
 

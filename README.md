@@ -80,57 +80,9 @@ cd frontend && npm run dev
 
 The frontend runs at `http://localhost:5173` and proxies `/api` requests to the FastAPI backend at `http://localhost:8000`.
 
-## Project Structure
+## Project Structure & Design Principles
 
-```
-dreamulator/
-├── docs/
-│   ├── knowledge/           # Scientific reference docs by discipline
-│   ├── worldbuilding/       # World building methodology
-│   └── usage/               # Usage guides
-├── data/
-│   ├── templates/           # World templates (minimal, earthlike)
-│   └── worlds/              # World instances
-├── schemas/                 # Auto-generated JSON Schemas
-├── src/dreamulator/         # Python backend
-│   ├── models/              # Pydantic data models
-│   ├── engine/              # Simulation engines (DAG pipeline)
-│   ├── io/                  # File I/O layer
-│   ├── api.py               # FastAPI application
-│   ├── cli.py               # Typer CLI
-│   └── utils/               # Constants, units, RNG
-├── frontend/                # TypeScript SPA (Vite + React)
-│   └── src/
-│       ├── api/             # API client
-│       ├── components/      # UI components
-│       ├── pages/           # Page components
-│       └── stores/          # Zustand state management
-└── tests/                   # Python tests
-```
-
-## Core Design Principles
-
-### Input / Derived Separation
-
-Each world directory strictly separates:
-- **`input/`** (YAML) — Creative settings authored by humans or LLMs
-- **`derived/`** (JSON) — Physical results computed by engines
-
-LLMs only modify inputs; engines compute derived data — preventing AI "hallucinations" of physical results.
-
-### Reproducibility
-
-- All engines use seeded RNG (`numpy.random.Generator`)
-- Computation manifests record checksums for every step
-- Same inputs + seed = same outputs
-
-### Engine Pipeline
-
-```
-stellar → orbital → geological + climate → ecology → civilization
-```
-
-Engines inherit from `BaseEngine`, declaring dependencies (`requires`), `input_files`, and `output_files`. The pipeline runner (`engine/pipeline.py`) performs topological sorting and executes in order.
+See [docs/usage/project-structure.md](docs/usage/project-structure.md).
 
 ## Development
 
