@@ -42,3 +42,6 @@ data/worlds/*/derived/
 data/worlds/*/simulations/
 *.log
 /private/
+
+# Claude Code
+.claude/settings.local.json
