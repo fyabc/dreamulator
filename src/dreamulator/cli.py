@@ -257,7 +257,7 @@ def narrate(
         help="Claude model ID (default: resolved from env / settings.json)",
     ),
     max_tokens: int = typer.Option(
-        4096, "--max-tokens",
+        32768, "--max-tokens",
         help="Maximum number of output tokens",
     ),
     no_stream: bool = typer.Option(

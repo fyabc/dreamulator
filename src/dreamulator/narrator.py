@@ -199,7 +199,7 @@ def narrate(
     world_name: str,
     branch: str | None = None,
     model: str | None = None,
-    max_tokens: int = 4096,
+    max_tokens: int = 32768,
     stream_callback: StreamCallback | None = None,
 ) -> NarrateResult:
     """Generate a conversational description of a world using Claude.
