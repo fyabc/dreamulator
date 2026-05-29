@@ -1,0 +1,90 @@
+# Earth-Moon system with L4 Companion asteroid
+# Forked from root world at geological layer
+# Adds the Moon and a Trojan companion at the Earth-Moon L4 point
+planets:
+  - id: planet_earth
+    name: Earth
+    orbits: star_sol
+    planet_type: terrestrial
+    mass: 1.0                    # 5.9722e24 kg
+    radius: 1.0                  # 6371.0 km
+    rotation_period_days: 0.9973 # sidereal day = 23h 56m 4s
+    axial_tilt_deg: 23.44
+    albedo: 0.306                # Bond albedo
+    atmosphere:
+      surface_pressure_atm: 1.01325
+      composition:
+        N2: 0.7808
+        O2: 0.2095
+        Ar: 0.0093
+        CO2: 0.0004
+      greenhouse_factor: 33.0    # ~33 K greenhouse warming
+    hydrosphere:
+      water_coverage: 0.708
+      salinity_ppt: 35.0
+      ocean_depth_km: 3.688
+    lithosphere:
+      has_plate_tectonics: true
+      num_plates: 15
+      volcanic_activity: 1.0
+    magnetic_field_strength: 50.0 # ~25-65 uT, average ~50 uT
+    satellites:
+      - id: satellite_moon
+        name: Moon
+        orbits: planet_earth
+        body_type: natural_satellite
+        mass_earth: 0.0123       # 7.342e22 kg (1/81.3 of Earth)
+        radius_km: 1737.4
+        semi_major_axis_km: 384399
+        eccentricity: 0.0549
+        inclination_deg: 5.145   # to ecliptic
+        orbital_period_days: 27.3217  # sidereal
+        rotation_period_days: 27.3217 # tidally locked
+        albedo: 0.136            # geometric albedo
+        axial_tilt_deg: 6.687
+        surface:
+          composition: silicate_regolith
+          has_atmosphere: false
+        # Earth-Moon mass ratio: 81.3:1 > 24.96:1 threshold
+        # => L4 and L5 are dynamically stable
+
+      - id: satellite_companion
+        name: Companion
+        # L4 Trojan of the Earth-Moon system
+        # Positioned 60 degrees ahead of the Moon in its orbit
+        orbits: planet_earth
+        body_type: trojan_asteroid
+        trojan_point: L4
+        trojan_primary: satellite_moon
+        # Physical parameters (S-type asteroid)
+        mass_earth: 1.5e-11      # ~9e13 kg, negligible
+        radius_km: 12.0          # diameter ~24 km
+        shape: irregular         # not spherical
+        # Orbital parameters: same as Moon but phase-shifted -60 degrees
+        semi_major_axis_km: 384399
+        eccentricity: 0.0549
+        inclination_deg: 5.145
+        orbital_period_days: 27.3217  # identical to Moon
+        rotation_period_days: 8.5     # irregular rotation
+        # Phase offset: 60 degrees ahead of Moon in mean anomaly
+        mean_anomaly_offset_deg: -60.0  # leading Moon by 60 deg
+        # Observational properties
+        albedo: 0.20             # S-type geometric albedo
+        spectral_class: S        # silicate-rich stony asteroid
+        # Apparent magnitude at full phase: V ~ -2.5 (Jupiter-bright)
+        # Apparent angular diameter: ~13 arcsec (point source to naked eye)
+        # Phase cycle: ~29.5 day synodic period, same as Moon
+        # Full phase occurs ~4.9 days before lunar full moon
+        surface:
+          composition: silicate_metal  # S-type: olivine + pyroxene + metal
+          has_atmosphere: false
+          color_index_BV: 0.92   # typical S-type B-V color
+
+# Notes on the Companion:
+# - At 384,399 km distance, the 24 km body has angular diameter ~13 arcsec
+# - Naked eye cannot resolve disk (< 60 arcsec resolution limit)
+# - Appears as an extremely bright star, V ~ -2.5 at full phase
+# - Always maintains ~60 degree angular separation from Moon
+# - Dynamically stable: Earth-Moon mass ratio (81.3) >> critical ratio (24.96)
+# - Phase cycle mirrors lunar cycle with ~4.9 day advance
+# - Synodic period: 29.53 days (same as Moon)

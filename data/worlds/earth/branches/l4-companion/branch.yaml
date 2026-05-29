@@ -1,0 +1,14 @@
+{
+  "name": "l4-companion",
+  "parent": null,
+  "fork_layer": "geological",
+  "description": "地月系L4拉格朗日点存在一颗直径约24公里的S型小行星（伴星），呈现为木星亮度的点光源，永远锁定在月球前方六分之一圆周处。探索其物理参数及对人类文明的文化影响。",
+  "created": "2026-05-30T00:00:00",
+  "tags": [
+    "lagrange-point",
+    "earth-moon",
+    "asteroid",
+    "cultural-divergence",
+    "what-if"
+  ]
+}
