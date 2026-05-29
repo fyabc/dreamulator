@@ -1,5 +1,6 @@
 """Pydantic data models for dreamulator world data."""
 
+from .branch import BranchMetadata
 from .civilization import Civilization, Culture, Government, Settlement
 from .common import (
     AU,
@@ -13,6 +14,17 @@ from .common import (
     Year,
 )
 from .ecology import BiomeType, Ecosystem, FoodWeb, Species, TrophicLevel
+from .layers import (
+    LAYER_DEPENDENCIES,
+    LAYER_ENGINES,
+    LAYER_ORDER,
+    Layer,
+    LayerSummary,
+    get_layer_dependencies,
+    get_layer_index,
+    get_layers_before,
+    validate_layer_order,
+)
 from .planet import Atmosphere, Hydrosphere, Lithosphere, Planet, PlanetType
 from .simulation import ComputationManifest, EngineInfo, SimulationRun, SimulationSeed, StepRecord
 from .stellar import LuminosityClass, OrbitalElements, SpectralClass, Star, StellarSystem
@@ -61,4 +73,16 @@ __all__ = [
     # world
     "WorldConfig",
     "WorldMetadata",
+    # layers
+    "LAYER_DEPENDENCIES",
+    "LAYER_ENGINES",
+    "LAYER_ORDER",
+    "Layer",
+    "LayerSummary",
+    "get_layer_dependencies",
+    "get_layer_index",
+    "get_layers_before",
+    "validate_layer_order",
+    # branch
+    "BranchMetadata",
 ]

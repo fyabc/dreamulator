@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
 from dreamulator import __version__
-from dreamulator.models.simulation import SimulationSeed
-from dreamulator.models.stellar import LuminosityClass, SpectralClass, Star, StellarSystem
-from dreamulator.models.world import WorldConfig, WorldMetadata
-from dreamulator.utils.rng import create_rng
+from dreamulator.models.world import WorldConfig
 
 
 def _data_dir() -> Path:
@@ -81,7 +78,7 @@ class WorldManager:
             seed = int(time.time_ns() % (2**31))
 
         # Update world.yaml with actual values
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         world_yaml = world_dir / "world.yaml"
         data: dict = {}
         if world_yaml.exists():
@@ -97,10 +94,6 @@ class WorldManager:
 
         with world_yaml.open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-        # Create empty derived and simulations directories
-        (world_dir / "derived").mkdir(exist_ok=True)
-        (world_dir / "simulations").mkdir(exist_ok=True)
 
         return world_dir
 
@@ -177,14 +170,21 @@ class WorldManager:
             except Exception as e:
                 errors.append(f"world.yaml validation error: {e}")
 
-        # Check optional input files
-        input_dir = world_dir / "input"
-        if input_dir.exists():
-            for yaml_file in input_dir.glob("*.yaml"):
-                try:
-                    with yaml_file.open("r", encoding="utf-8") as f:
-                        yaml.safe_load(f)
-                except Exception as e:
-                    errors.append(f"input/{yaml_file.name} parse error: {e}")
+        # Check layer input files
+        layers_dir = world_dir / "layers"
+        if layers_dir.exists():
+            for layer_dir in sorted(layers_dir.iterdir()):
+                if not layer_dir.is_dir():
+                    continue
+                input_dir = layer_dir / "input"
+                if input_dir.exists():
+                    for yaml_file in input_dir.glob("*.yaml"):
+                        try:
+                            with yaml_file.open("r", encoding="utf-8") as f:
+                                yaml.safe_load(f)
+                        except Exception as e:
+                            errors.append(
+                                f"layers/{layer_dir.name}/input/{yaml_file.name} parse error: {e}"
+                            )
 
         return errors

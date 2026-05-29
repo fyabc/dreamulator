@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 # alias documents the expected physical unit and enables static checking.
 # ---------------------------------------------------------------------------
 SolarMass = Annotated[float, Field(gt=0, description="Mass in solar masses (M_sun)")]
-SolarLuminosity = Annotated[float, Field(gt=0, description="Luminosity in solar luminosities (L_sun)")]
+SolarLuminosity = Annotated[
+    float, Field(gt=0, description="Luminosity in solar luminosities (L_sun)")
+]
 SolarRadius = Annotated[float, Field(gt=0, description="Radius in solar radii (R_sun)")]
 Kelvin = Annotated[float, Field(gt=0, description="Temperature in Kelvin")]
 AU = Annotated[float, Field(gt=0, description="Distance in astronomical units")]

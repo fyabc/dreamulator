@@ -47,3 +47,43 @@ def load_world(world_dir: Path) -> WorldConfig:
         Validated WorldConfig instance.
     """
     return load_yaml_model(world_dir / "world.yaml", WorldConfig)
+
+
+def load_layer_input(
+    world_dir: Path,
+    layer: str,
+    filename: str,
+    model_class: type[T],
+    *,
+    branch: str | None = None,
+) -> T:
+    """Load a YAML file from a layer's input directory.
+
+    Searches the branch inheritance chain if branch is specified.
+
+    Args:
+        world_dir: Path to the world directory.
+        layer: Layer name (e.g., 'stellar', 'geological').
+        filename: YAML filename within the input directory.
+        model_class: Pydantic model class for validation.
+        branch: Optional branch name to search from.
+
+    Returns:
+        Validated model instance.
+
+    Raises:
+        FileNotFoundError: If the file cannot be found in the layer chain.
+    """
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+    input_dir = resolver.get_input_dir(layer)
+
+    if input_dir is None:
+        raise FileNotFoundError(
+            f"No input directory found for layer '{layer}'"
+            + (f" in branch '{branch}'" if branch else "")
+        )
+
+    path = input_dir / filename
+    return load_yaml_model(path, model_class)

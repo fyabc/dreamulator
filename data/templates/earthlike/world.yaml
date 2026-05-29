@@ -12,33 +12,31 @@ metadata:
 seed:
   seed: 42
 
-stellar_system:
-  name: "Helios System"
-  stars:
-    - id: "star_helios"
-      name: "Helios"
-      spectral_class: "G"
-      luminosity_class: "V"
-      mass: 1.0
-      luminosity: 1.0
-      temperature: 5778.0
-      radius: 1.0
-      metallicity: 0.0
-      age_gyr: 4.6
-      position:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-  orbits:
-    - body_id: "planet_gaia"
-      parent_id: "star_helios"
-      semi_major_axis_au: 1.0
-      eccentricity: 0.017
-      inclination_deg: 0.0
-      longitude_ascending_node_deg: 0.0
-      argument_of_periapsis_deg: 102.9
-      mean_anomaly_epoch_deg: 357.5
-      epoch_year: 0.0
+layers:
+  physics:
+    configured: false
+    engine: ""
+  chemistry:
+    configured: false
+    engine: ""
+  stellar:
+    configured: true
+    engine: stellar
+  orbital:
+    configured: false
+    engine: orbital
+  geological:
+    configured: true
+    engine: geological
+  climate:
+    configured: false
+    engine: climate
+  ecology:
+    configured: false
+    engine: ecology
+  civilization:
+    configured: true
+    engine: civilization
 
 planet_ids:
   - "planet_gaia"

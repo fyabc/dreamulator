@@ -1,0 +1,15 @@
+# Stellar system for the minimal template
+name: "Minimal System"
+stars:
+  - id: "star_sol"
+    name: "Sol"
+    spectral_class: "G"
+    luminosity_class: "V"
+    mass: 1.0
+    metallicity: 0.0
+    age_gyr: 4.6
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+orbits: []

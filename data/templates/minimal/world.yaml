@@ -10,21 +10,31 @@ metadata:
 seed:
   seed: 42
 
-stellar_system:
-  name: "Minimal System"
-  stars:
-    - id: "star_sol"
-      name: "Sol"
-      spectral_class: "G"
-      luminosity_class: "V"
-      mass: 1.0
-      metallicity: 0.0
-      age_gyr: 4.6
-      position:
-        x: 0.0
-        y: 0.0
-        z: 0.0
-  orbits: []
+layers:
+  physics:
+    configured: false
+    engine: ""
+  chemistry:
+    configured: false
+    engine: ""
+  stellar:
+    configured: true
+    engine: stellar
+  orbital:
+    configured: true
+    engine: orbital
+  geological:
+    configured: true
+    engine: geological
+  climate:
+    configured: false
+    engine: climate
+  ecology:
+    configured: false
+    engine: ecology
+  civilization:
+    configured: false
+    engine: civilization
 
 planet_ids:
   - "planet_terra"
