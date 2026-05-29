@@ -24,6 +24,7 @@ dreamulator/
 │   ├── api_routes/          # API 路由模块
 │   ├── branch_manager.py    # 分支 CRUD 操作
 │   ├── resolver.py          # 层级数据解析器
+│   ├── narrator.py          # AI 叙述后端（Claude API）
 │   ├── world_manager.py     # 世界 CRUD
 │   ├── cli.py               # Typer CLI 入口
 │   └── utils/               # 常量、单位、RNG
@@ -34,6 +35,9 @@ dreamulator/
 │       ├── pages/           # 页面
 │       ├── stores/          # Zustand 状态管理
 │       └── viewers/         # 3D/2D 可视化（Phase 3）
+├── .claude/
+│   └── commands/            # Claude Code 自定义技能
+│       └── narrate.md       # /narrate 技能（调用 narrate 后端）
 └── tests/                   # Python 测试
 ```
 
@@ -62,6 +66,12 @@ uv run dreamulator branch delete myworld pangea
 
 # 生成 JSON Schema
 uv run dreamulator schema
+
+# AI 叙述（用 Claude 生成世界的口语化描述）
+uv sync --extra narrate                        # 安装可选依赖（仅需一次）
+uv run dreamulator narrate myworld
+uv run dreamulator narrate myworld --branch pangea
+uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 
 # 启动服务器（API + 前端，一条命令）
 uv run dreamulator serve --open              # 启动并打开浏览器
@@ -99,6 +109,22 @@ npm run lint
 
 > **单命令启动**：`npm run build` 后，`uv run dreamulator serve` 同时提供 API 和前端。
 > 开发时仍可单独 `npm run dev` 使用 Vite HMR（代理到 :8000）。
+
+### Claude Code 自定义技能
+
+本项目在 `.claude/commands/` 中定义了自定义技能，可在 Claude Code 中直接使用：
+
+```
+/narrate earth                         # 描述基础世界
+/narrate earth --branch l4-companion   # 描述分支世界
+```
+
+技能底层调用 `src/dreamulator/narrator.py` 后端模块，与 CLI `dreamulator narrate` 命令共享逻辑。
+
+**API 配置解析链**（优先级从高到低）：
+1. CLI `--model` 参数 / 环境变量 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`
+2. `~/.claude/settings.json` → `env.*` 字段及顶层 `model` 字段
+3. 内置默认值 `claude-sonnet-4-6`
 
 ## 核心设计原则
 

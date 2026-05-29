@@ -249,6 +249,88 @@ def build(
 
 
 @app.command()
+def narrate(
+    world: str = typer.Argument(help="World name"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch to narrate"),
+    model: str | None = typer.Option(
+        None, "--model", "-m",
+        help="Claude model ID (default: resolved from env / settings.json)",
+    ),
+    no_stream: bool = typer.Option(
+        False, "--no-stream", help="Disable streaming output"
+    ),
+) -> None:
+    """Generate a conversational description of a world using Claude."""
+    from rich.markdown import Markdown
+
+    try:
+        from dreamulator.narrator import narrate as generate_narration
+    except ImportError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
+
+    model_label = model or "auto"
+    console.print(
+        f"[cyan]Generating narration for '{world}'"
+        + (f" branch '{branch}'" if branch else "")
+        + f" using model={model_label}...[/cyan]"
+    )
+
+    if no_stream:
+        # Non-streaming mode
+        try:
+            text = generate_narration(world, branch=branch, model=model)
+        except FileNotFoundError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except ImportError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except RuntimeError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except Exception as e:
+            console.print(f"[red]API error: {e}[/red]")
+            raise typer.Exit(code=1) from None
+
+        console.print()
+        console.print(Markdown(text))
+    else:
+        # Streaming mode — print text as it arrives
+        import sys
+
+        # Ensure UTF-8 output (Windows defaults to GBK)
+        sys.stdout.reconfigure(encoding="utf-8")
+
+        def on_text_delta(delta: str) -> None:
+            sys.stdout.write(delta)
+            sys.stdout.flush()
+
+        try:
+            sys.stdout.write("\n")
+            generate_narration(
+                world,
+                branch=branch,
+                model=model,
+                stream_callback=on_text_delta,
+            )
+        except FileNotFoundError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except ImportError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except RuntimeError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=1) from None
+        except Exception as e:
+            console.print(f"[red]API error: {e}[/red]")
+            raise typer.Exit(code=1) from None
+
+        sys.stdout.write("\n")
+
+
+@app.command()
 def validate(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Validate a specific branch"),

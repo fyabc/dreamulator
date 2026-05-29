@@ -15,6 +15,7 @@ A fantasy world building and simulation tool grounded in real science. Starting 
 - **Reproducible results** — Seeded RNG and checksum-tracked computation manifests ensure the same inputs always produce the same outputs
 - **LLM-friendly architecture** — Structured YAML/JSON data, JSON Schema validation, and hierarchical `CLAUDE.md` documentation minimize hallucinations during AI-assisted world building
 - **CLI + Web UI** — Manage worlds from the command line or explore them through a TypeScript SPA frontend with 3D star system visualization and multi-layer 2D maps
+- **AI narration** — Generate conversational descriptions of your worlds via the Claude API (`dreamulator narrate`)
 
 ## Tech Stack
 
@@ -26,6 +27,7 @@ A fantasy world building and simulation tool grounded in real science. Starting 
 | 3D visualization | Three.js via @react-three/fiber |
 | 2D maps | Leaflet via react-leaflet |
 | Package management | uv (Python), npm (Node.js) |
+| AI narration | Anthropic SDK (Claude API) |
 
 ## Quick Start
 
@@ -66,6 +68,11 @@ uv run dreamulator list
 
 # Generate JSON schemas
 uv run dreamulator schema
+
+# Generate a conversational world description using Claude
+uv sync --extra narrate                # install optional dependency (one-time)
+uv run dreamulator narrate myworld
+uv run dreamulator narrate myworld --branch pangea
 ```
 
 ### Development

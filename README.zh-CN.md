@@ -15,6 +15,7 @@
 - **可复现的结果** — 种子化随机数生成器和带校验和的计算清单确保相同输入始终产生相同输出
 - **LLM 友好架构** — 结构化的 YAML/JSON 数据、JSON Schema 验证和分层 `CLAUDE.md` 文档，最大限度减少 AI 辅助世界构建时的幻觉
 - **命令行 + Web 界面** — 通过命令行管理世界，或通过 TypeScript SPA 前端探索世界（3D 恒星系可视化 + 多层 2D 地图）
+- **AI 叙述** — 通过 Claude API 生成世界的口语化描述（`dreamulator narrate`）
 
 ## 技术栈
 
@@ -26,6 +27,7 @@
 | 3D 可视化 | Three.js (@react-three/fiber) |
 | 2D 地图 | Leaflet (react-leaflet) |
 | 包管理 | uv (Python), npm (Node.js) |
+| AI 叙述 | Anthropic SDK (Claude API) |
 
 ## 快速开始
 
@@ -66,6 +68,11 @@ uv run dreamulator list
 
 # 生成 JSON Schema
 uv run dreamulator schema
+
+# 用 Claude 生成世界的口语化描述
+uv sync --extra narrate                # 安装可选依赖（仅需一次）
+uv run dreamulator narrate myworld
+uv run dreamulator narrate myworld --branch pangea
 ```
 
 ### 开发
