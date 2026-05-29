@@ -269,6 +269,10 @@ def narrate(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1) from None
 
+    console.print(
+        "[yellow]WARNING:[/yellow] 此命令将调用大语言模型 API，会消耗 token。"
+    )
+
     model_label = model or "auto"
     console.print(
         f"[cyan]Generating narration for '{world}'"
