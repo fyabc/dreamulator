@@ -1,5 +1,9 @@
 # Dreamulator
 
+<div align="center">
+  <img src="docs/images/logo.png" alt="Dreamulator logo" width="700">
+</div>
+
 **[中文文档](README.zh-CN.md)**
 
 A fantasy world building and simulation tool grounded in real science. Starting from stellar systems and physical laws, Dreamulator leverages knowledge across scientific disciplines to rigorously design and simulate fictional worlds.

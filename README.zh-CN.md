@@ -1,5 +1,9 @@
 # Dreamulator
 
+<div align="center">
+  <img src="docs/images/logo.png" alt="Dreamulator logo" width="700">
+</div>
+
 **[English](README.md)**
 
 架空世界设定工具——从恒星系和物理定律出发，利用各学科知识进行严谨的架空世界推演。
