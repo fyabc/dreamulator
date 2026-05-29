@@ -256,6 +256,10 @@ def narrate(
         None, "--model", "-m",
         help="Claude model ID (default: resolved from env / settings.json)",
     ),
+    max_tokens: int = typer.Option(
+        4096, "--max-tokens",
+        help="Maximum number of output tokens",
+    ),
     no_stream: bool = typer.Option(
         False, "--no-stream", help="Disable streaming output"
     ),
@@ -277,13 +281,16 @@ def narrate(
     console.print(
         f"[cyan]Generating narration for '{world}'"
         + (f" branch '{branch}'" if branch else "")
-        + f" using model={model_label}...[/cyan]"
+        + f" using model={model_label}, max_tokens={max_tokens}...[/cyan]"
     )
 
+    result = None
     if no_stream:
         # Non-streaming mode
         try:
-            text = generate_narration(world, branch=branch, model=model)
+            result = generate_narration(
+                world, branch=branch, model=model, max_tokens=max_tokens
+            )
         except FileNotFoundError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=1) from None
@@ -298,7 +305,7 @@ def narrate(
             raise typer.Exit(code=1) from None
 
         console.print()
-        console.print(Markdown(text))
+        console.print(Markdown(result.text))
     else:
         # Streaming mode — print text as it arrives
         import sys
@@ -312,10 +319,11 @@ def narrate(
 
         try:
             sys.stdout.write("\n")
-            generate_narration(
+            result = generate_narration(
                 world,
                 branch=branch,
                 model=model,
+                max_tokens=max_tokens,
                 stream_callback=on_text_delta,
             )
         except FileNotFoundError as e:
@@ -332,6 +340,13 @@ def narrate(
             raise typer.Exit(code=1) from None
 
         sys.stdout.write("\n")
+
+    # Print token usage statistics
+    if result:
+        console.print(
+            f"\n[dim]Token 用量: input={result.input_tokens}, "
+            f"output={result.output_tokens}, total={result.total_tokens}[/dim]"
+        )
 
 
 @app.command()

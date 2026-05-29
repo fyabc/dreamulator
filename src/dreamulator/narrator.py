@@ -28,6 +28,20 @@ class _ApiConfig:
     model: str = _DEFAULT_MODEL
 
 
+@dataclass
+class NarrateResult:
+    """Result of narrate() including generated text and token usage."""
+
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        """Total tokens used (input + output)."""
+        return self.input_tokens + self.output_tokens
+
+
 def _read_claude_settings() -> dict:
     """Read ~/.claude/settings.json if it exists."""
     settings_path = Path.home() / ".claude" / "settings.json"
@@ -185,8 +199,9 @@ def narrate(
     world_name: str,
     branch: str | None = None,
     model: str | None = None,
+    max_tokens: int = 4096,
     stream_callback: StreamCallback | None = None,
-) -> str:
+) -> NarrateResult:
     """Generate a conversational description of a world using Claude.
 
     Args:
@@ -194,11 +209,12 @@ def narrate(
         branch: Optional branch name.
         model: Claude model ID. If None, resolved from environment /
                settings.json / default.
+        max_tokens: Maximum number of output tokens (default 4096).
         stream_callback: Optional callback function that receives text deltas
                          as they arrive. If provided, enables streaming mode.
 
     Returns:
-        Generated description text.
+        NarrateResult containing the generated text and token usage statistics.
 
     Raises:
         FileNotFoundError: If the world does not exist.
@@ -228,19 +244,27 @@ def narrate(
         text_parts: list[str] = []
         with client.messages.stream(
             model=api_config.model,
-            max_tokens=4096,
+            max_tokens=max_tokens,
             system=_SYSTEM_PROMPT,
             messages=messages,
         ) as stream:
             for text in stream.text_stream:
                 text_parts.append(text)
                 stream_callback(text)
-        return "".join(text_parts)
+
+        # Extract usage from final message
+        final_message = stream.get_final_message()
+        usage = final_message.usage
+        return NarrateResult(
+            text="".join(text_parts),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
     else:
         # Non-streaming mode
         response = client.messages.create(
             model=api_config.model,
-            max_tokens=4096,
+            max_tokens=max_tokens,
             system=_SYSTEM_PROMPT,
             messages=messages,
         )
@@ -249,4 +273,10 @@ def narrate(
         for block in response.content:
             if hasattr(block, "text"):
                 text_parts.append(block.text)
-        return "".join(text_parts)
+
+        usage = response.usage
+        return NarrateResult(
+            text="".join(text_parts),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
