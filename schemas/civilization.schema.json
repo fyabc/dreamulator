@@ -1,0 +1,227 @@
+{
+  "$defs": {
+    "Culture": {
+      "description": "A cultural group.",
+      "properties": {
+        "id": {
+          "description": "Unique identifier, e.g. 'culture_northern_tribes'",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "language_family": {
+          "default": "",
+          "description": "Language family grouping",
+          "title": "Language Family",
+          "type": "string"
+        },
+        "religion": {
+          "default": "",
+          "title": "Religion",
+          "type": "string"
+        },
+        "customs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Customs",
+          "type": "array"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Culture",
+      "type": "object"
+    },
+    "Government": {
+      "description": "A political entity's government.",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/GovernmentType"
+        },
+        "tech_level": {
+          "$ref": "#/$defs/TechLevel",
+          "default": "iron_age"
+        },
+        "stability": {
+          "default": 0.5,
+          "description": "Political stability index",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Stability",
+          "type": "number"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Government",
+      "type": "object"
+    },
+    "GovernmentType": {
+      "description": "Forms of government.",
+      "enum": [
+        "tribal",
+        "monarchy",
+        "feudal",
+        "republic",
+        "theocracy",
+        "oligarchy",
+        "democracy",
+        "empire"
+      ],
+      "title": "GovernmentType",
+      "type": "string"
+    },
+    "Settlement": {
+      "description": "A settlement (village, city, etc.).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "settlement_type": {
+          "$ref": "#/$defs/SettlementType",
+          "default": "village"
+        },
+        "position": {
+          "$ref": "#/$defs/Vec3",
+          "description": "Position on world map"
+        },
+        "population": {
+          "default": 100,
+          "minimum": 0,
+          "title": "Population",
+          "type": "integer"
+        },
+        "culture_id": {
+          "default": "",
+          "description": "ID of the dominant culture",
+          "title": "Culture Id",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Key local resources",
+          "items": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Settlement",
+      "type": "object"
+    },
+    "SettlementType": {
+      "description": "Size classification for settlements.",
+      "enum": [
+        "hamlet",
+        "village",
+        "town",
+        "city",
+        "metropolis",
+        "capital"
+      ],
+      "title": "SettlementType",
+      "type": "string"
+    },
+    "TechLevel": {
+      "description": "Technological development level.",
+      "enum": [
+        "stone_age",
+        "bronze_age",
+        "iron_age",
+        "medieval",
+        "early_industrial",
+        "industrial",
+        "modern",
+        "future"
+      ],
+      "title": "TechLevel",
+      "type": "string"
+    },
+    "Vec3": {
+      "description": "3D vector in Cartesian coordinates.",
+      "properties": {
+        "x": {
+          "default": 0.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0.0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "default": 0.0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "title": "Vec3",
+      "type": "object"
+    }
+  },
+  "description": "A civilization encompassing one or more settlements.",
+  "properties": {
+    "id": {
+      "description": "Unique identifier, e.g. 'civ_river_kingdom'",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "culture": {
+      "$ref": "#/$defs/Culture"
+    },
+    "government": {
+      "$ref": "#/$defs/Government"
+    },
+    "settlements": {
+      "items": {
+        "$ref": "#/$defs/Settlement"
+      },
+      "title": "Settlements",
+      "type": "array"
+    },
+    "territory_description": {
+      "default": "",
+      "title": "Territory Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "culture",
+    "government"
+  ],
+  "title": "Civilization",
+  "type": "object"
+}

@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "SettlementType": {
+      "description": "Size classification for settlements.",
+      "enum": [
+        "hamlet",
+        "village",
+        "town",
+        "city",
+        "metropolis",
+        "capital"
+      ],
+      "title": "SettlementType",
+      "type": "string"
+    },
+    "Vec3": {
+      "description": "3D vector in Cartesian coordinates.",
+      "properties": {
+        "x": {
+          "default": 0.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0.0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "default": 0.0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "title": "Vec3",
+      "type": "object"
+    }
+  },
+  "description": "A settlement (village, city, etc.).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "settlement_type": {
+      "$ref": "#/$defs/SettlementType",
+      "default": "village"
+    },
+    "position": {
+      "$ref": "#/$defs/Vec3",
+      "description": "Position on world map"
+    },
+    "population": {
+      "default": 100,
+      "minimum": 0,
+      "title": "Population",
+      "type": "integer"
+    },
+    "culture_id": {
+      "default": "",
+      "description": "ID of the dominant culture",
+      "title": "Culture Id",
+      "type": "string"
+    },
+    "resources": {
+      "description": "Key local resources",
+      "items": {
+        "type": "string"
+      },
+      "title": "Resources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "name"
+  ],
+  "title": "Settlement",
+  "type": "object"
+}

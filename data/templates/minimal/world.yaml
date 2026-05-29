@@ -1,0 +1,30 @@
+metadata:
+  name: template
+  description: Minimal world template — a single G-type star with one rocky planet.
+  version: "0.1.0"
+  dreamulator_version: "0.1.0"
+  created: ""
+  modified: ""
+  tags: []
+
+seed:
+  seed: 42
+
+stellar_system:
+  name: "Minimal System"
+  stars:
+    - id: "star_sol"
+      name: "Sol"
+      spectral_class: "G"
+      luminosity_class: "V"
+      mass: 1.0
+      metallicity: 0.0
+      age_gyr: 4.6
+      position:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+  orbits: []
+
+planet_ids:
+  - "planet_terra"

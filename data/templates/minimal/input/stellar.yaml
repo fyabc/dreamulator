@@ -1,0 +1,11 @@
+# Orbital parameters for the minimal template
+orbits:
+  - body_id: "planet_terra"
+    parent_id: "star_sol"
+    semi_major_axis_au: 1.0
+    eccentricity: 0.017
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 102.9
+    mean_anomaly_epoch_deg: 357.5
+    epoch_year: 0.0

@@ -1,0 +1,354 @@
+{
+  "$defs": {
+    "LuminosityClass": {
+      "description": "Morgan–Keenan luminosity class.",
+      "enum": [
+        "Ia",
+        "Ib",
+        "II",
+        "III",
+        "IV",
+        "V"
+      ],
+      "title": "LuminosityClass",
+      "type": "string"
+    },
+    "OrbitalElements": {
+      "description": "Keplerian orbital elements for a body orbiting another body.",
+      "properties": {
+        "body_id": {
+          "description": "ID of the orbiting body",
+          "title": "Body Id",
+          "type": "string"
+        },
+        "parent_id": {
+          "description": "ID of the central body being orbited",
+          "title": "Parent Id",
+          "type": "string"
+        },
+        "semi_major_axis_au": {
+          "description": "Distance in astronomical units",
+          "exclusiveMinimum": 0,
+          "title": "Semi Major Axis Au",
+          "type": "number"
+        },
+        "eccentricity": {
+          "description": "Orbital eccentricity (0 = circle)",
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Eccentricity",
+          "type": "number"
+        },
+        "inclination_deg": {
+          "default": 0,
+          "description": "Orbital inclination",
+          "maximum": 180,
+          "minimum": 0,
+          "title": "Inclination Deg",
+          "type": "number"
+        },
+        "longitude_ascending_node_deg": {
+          "default": 0,
+          "description": "Longitude of ascending node",
+          "maximum": 360,
+          "minimum": 0,
+          "title": "Longitude Ascending Node Deg",
+          "type": "number"
+        },
+        "argument_of_periapsis_deg": {
+          "default": 0,
+          "description": "Argument of periapsis",
+          "maximum": 360,
+          "minimum": 0,
+          "title": "Argument Of Periapsis Deg",
+          "type": "number"
+        },
+        "mean_anomaly_epoch_deg": {
+          "default": 0,
+          "description": "Mean anomaly at epoch",
+          "maximum": 360,
+          "minimum": 0,
+          "title": "Mean Anomaly Epoch Deg",
+          "type": "number"
+        },
+        "epoch_year": {
+          "default": 0.0,
+          "description": "Epoch of orbital elements",
+          "title": "Epoch Year",
+          "type": "number"
+        }
+      },
+      "required": [
+        "body_id",
+        "parent_id",
+        "semi_major_axis_au",
+        "eccentricity"
+      ],
+      "title": "OrbitalElements",
+      "type": "object"
+    },
+    "SimulationSeed": {
+      "description": "Reproducible randomness seed.",
+      "properties": {
+        "seed": {
+          "description": "Integer seed for numpy.random.Generator",
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seed"
+      ],
+      "title": "SimulationSeed",
+      "type": "object"
+    },
+    "SpectralClass": {
+      "description": "Morgan–Keenan spectral classification.",
+      "enum": [
+        "O",
+        "B",
+        "A",
+        "F",
+        "G",
+        "K",
+        "M"
+      ],
+      "title": "SpectralClass",
+      "type": "string"
+    },
+    "Star": {
+      "description": "A star in a stellar system.",
+      "properties": {
+        "id": {
+          "description": "Unique identifier within the system, e.g. 'star_sol'",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name of the star",
+          "title": "Name",
+          "type": "string"
+        },
+        "spectral_class": {
+          "$ref": "#/$defs/SpectralClass"
+        },
+        "luminosity_class": {
+          "$ref": "#/$defs/LuminosityClass",
+          "default": "V"
+        },
+        "mass": {
+          "description": "Mass in solar masses (M_sun)",
+          "exclusiveMinimum": 0,
+          "title": "Mass",
+          "type": "number"
+        },
+        "luminosity": {
+          "anyOf": [
+            {
+              "description": "Luminosity in solar luminosities (L_sun)",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bolometric luminosity in L_sun (computed if omitted)",
+          "title": "Luminosity"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "description": "Temperature in Kelvin",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Effective surface temperature in K (computed if omitted)",
+          "title": "Temperature"
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "description": "Radius in solar radii (R_sun)",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stellar radius in R_sun (computed if omitted)",
+          "title": "Radius"
+        },
+        "metallicity": {
+          "default": 0.0,
+          "description": "Metallicity [Fe/H] in dex",
+          "title": "Metallicity",
+          "type": "number"
+        },
+        "age_gyr": {
+          "default": 4.6,
+          "description": "Age in gigayears",
+          "exclusiveMinimum": 0,
+          "title": "Age Gyr",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/Vec3",
+          "description": "Position in system barycentric frame (AU)"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "spectral_class",
+        "mass"
+      ],
+      "title": "Star",
+      "type": "object"
+    },
+    "StellarSystem": {
+      "description": "A system of one or more stars and their orbiting bodies.",
+      "properties": {
+        "name": {
+          "description": "Name of the stellar system",
+          "title": "Name",
+          "type": "string"
+        },
+        "stars": {
+          "description": "Stars in the system",
+          "items": {
+            "$ref": "#/$defs/Star"
+          },
+          "minItems": 1,
+          "title": "Stars",
+          "type": "array"
+        },
+        "orbits": {
+          "description": "Orbital elements for planets and other bodies",
+          "items": {
+            "$ref": "#/$defs/OrbitalElements"
+          },
+          "title": "Orbits",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "stars"
+      ],
+      "title": "StellarSystem",
+      "type": "object"
+    },
+    "Vec3": {
+      "description": "3D vector in Cartesian coordinates.",
+      "properties": {
+        "x": {
+          "default": 0.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0.0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "default": 0.0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "title": "Vec3",
+      "type": "object"
+    },
+    "WorldMetadata": {
+      "description": "Metadata about a world instance.",
+      "properties": {
+        "name": {
+          "description": "World name (also used as directory name)",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "description": "Brief description of the world",
+          "title": "Description",
+          "type": "string"
+        },
+        "version": {
+          "default": "0.1.0",
+          "description": "World data format version",
+          "title": "Version",
+          "type": "string"
+        },
+        "dreamulator_version": {
+          "default": "0.1.0",
+          "description": "Version of dreamulator that created this world",
+          "title": "Dreamulator Version",
+          "type": "string"
+        },
+        "created": {
+          "description": "ISO 8601 creation timestamp",
+          "title": "Created",
+          "type": "string"
+        },
+        "modified": {
+          "description": "ISO 8601 last-modified timestamp",
+          "title": "Modified",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Freeform tags for categorization",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "created",
+        "modified"
+      ],
+      "title": "WorldMetadata",
+      "type": "object"
+    }
+  },
+  "description": "Top-level world.yaml structure — the root of all world data.",
+  "properties": {
+    "metadata": {
+      "$ref": "#/$defs/WorldMetadata"
+    },
+    "seed": {
+      "$ref": "#/$defs/SimulationSeed"
+    },
+    "stellar_system": {
+      "$ref": "#/$defs/StellarSystem"
+    },
+    "planet_ids": {
+      "description": "IDs of planets defined in separate planets.yaml file",
+      "items": {
+        "type": "string"
+      },
+      "title": "Planet Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "metadata",
+    "seed",
+    "stellar_system"
+  ],
+  "title": "WorldConfig",
+  "type": "object"
+}

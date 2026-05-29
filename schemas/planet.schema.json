@@ -1,0 +1,243 @@
+{
+  "$defs": {
+    "Atmosphere": {
+      "description": "Planetary atmosphere properties.",
+      "properties": {
+        "surface_pressure_atm": {
+          "default": 1.0,
+          "description": "Surface pressure in atmospheres",
+          "exclusiveMinimum": 0,
+          "title": "Surface Pressure Atm",
+          "type": "number"
+        },
+        "composition": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Mole fractions of atmospheric gases",
+          "title": "Composition",
+          "type": "object"
+        },
+        "scale_height_km": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Atmospheric scale height in km (computed if omitted)",
+          "title": "Scale Height Km"
+        },
+        "greenhouse_factor": {
+          "default": 0.0,
+          "description": "Additional greenhouse warming in Kelvin",
+          "minimum": 0,
+          "title": "Greenhouse Factor",
+          "type": "number"
+        }
+      },
+      "title": "Atmosphere",
+      "type": "object"
+    },
+    "Hydrosphere": {
+      "description": "Planetary hydrosphere properties.",
+      "properties": {
+        "water_coverage": {
+          "default": 0.71,
+          "description": "Fraction of surface covered by water",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Water Coverage",
+          "type": "number"
+        },
+        "salinity_ppt": {
+          "default": 35.0,
+          "description": "Average ocean salinity in parts per thousand",
+          "minimum": 0,
+          "title": "Salinity Ppt",
+          "type": "number"
+        },
+        "ocean_depth_km": {
+          "default": 3.7,
+          "description": "Average ocean depth in km",
+          "exclusiveMinimum": 0,
+          "title": "Ocean Depth Km",
+          "type": "number"
+        }
+      },
+      "title": "Hydrosphere",
+      "type": "object"
+    },
+    "Lithosphere": {
+      "description": "Planetary lithosphere / geological properties.",
+      "properties": {
+        "has_plate_tectonics": {
+          "default": true,
+          "title": "Has Plate Tectonics",
+          "type": "boolean"
+        },
+        "num_plates": {
+          "default": 15,
+          "description": "Number of tectonic plates",
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Num Plates",
+          "type": "integer"
+        },
+        "crust_composition": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Crust composition as mass fractions",
+          "title": "Crust Composition"
+        },
+        "volcanic_activity": {
+          "default": 1.0,
+          "description": "Volcanic activity relative to Earth (1.0 = Earth-like)",
+          "minimum": 0,
+          "title": "Volcanic Activity",
+          "type": "number"
+        }
+      },
+      "title": "Lithosphere",
+      "type": "object"
+    },
+    "PlanetType": {
+      "description": "Classification of planet types.",
+      "enum": [
+        "terrestrial",
+        "gas_giant",
+        "ice_giant",
+        "ocean_world",
+        "dwarf"
+      ],
+      "title": "PlanetType",
+      "type": "string"
+    }
+  },
+  "description": "A planet in the stellar system.",
+  "properties": {
+    "id": {
+      "description": "Unique identifier, e.g. 'planet_terra'",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "orbits": {
+      "description": "ID of star or body this planet orbits",
+      "title": "Orbits",
+      "type": "string"
+    },
+    "planet_type": {
+      "$ref": "#/$defs/PlanetType",
+      "default": "terrestrial"
+    },
+    "mass": {
+      "description": "Mass in Earth masses",
+      "exclusiveMinimum": 0,
+      "title": "Mass",
+      "type": "number"
+    },
+    "radius": {
+      "description": "Radius in Earth radii",
+      "exclusiveMinimum": 0,
+      "title": "Radius",
+      "type": "number"
+    },
+    "rotation_period_days": {
+      "default": 1.0,
+      "description": "Sidereal rotation period",
+      "exclusiveMinimum": 0,
+      "title": "Rotation Period Days",
+      "type": "number"
+    },
+    "axial_tilt_deg": {
+      "default": 23.4,
+      "description": "Axial obliquity",
+      "maximum": 90,
+      "minimum": 0,
+      "title": "Axial Tilt Deg",
+      "type": "number"
+    },
+    "albedo": {
+      "default": 0.3,
+      "description": "Bond albedo",
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Albedo",
+      "type": "number"
+    },
+    "atmosphere": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Atmosphere"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "hydrosphere": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Hydrosphere"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lithosphere": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Lithosphere"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "magnetic_field_strength": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Surface magnetic field strength in microtesla",
+      "title": "Magnetic Field Strength"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "orbits",
+    "mass",
+    "radius"
+  ],
+  "title": "Planet",
+  "type": "object"
+}
