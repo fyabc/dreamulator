@@ -37,134 +37,134 @@ export default function WorldList() {
     }
   }
 
-  if (isLoading) {
-    return <div className="text-center py-12">Loading worlds...</div>
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-12 text-red-400">
-        Error loading worlds: {error.message}
-      </div>
-    )
-  }
-
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Worlds</h1>
-        <button
-          onClick={() => setShowCreateDialog(true)}
-          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          + New World
-        </button>
-      </div>
+    <div className="relative min-h-screen">
+      <div className="starfield" />
+      <div className="nebula" />
 
-      {worlds && worlds.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {worlds.map((worldName) => (
-            <div
-              key={worldName}
-              className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-blue-500 transition-colors"
-            >
-              <Link to={`/worlds/${worldName}`} className="block">
-                <h3 className="text-xl font-semibold mb-2 text-blue-400">
-                  {worldName}
-                </h3>
-              </Link>
-              <div className="flex gap-2 mt-4">
-                <Link
-                  to={`/worlds/${worldName}`}
-                  className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors"
-                >
-                  Open
-                </Link>
-                <button
-                  onClick={() => {
-                    if (confirm(`Delete world "${worldName}"?`)) {
-                      deleteMutation.mutate(worldName)
-                    }
-                  }}
-                  className="text-sm bg-red-900 hover:bg-red-800 px-3 py-1 rounded transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-lg mb-4">No worlds yet</p>
+      <div className="relative z-10 px-6 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">世界管理</h1>
           <button
             onClick={() => setShowCreateDialog(true)}
-            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
+            className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 hover:shadow-[0_0_12px_rgba(0,212,255,0.15)]"
           >
-            Create Your First World
+            + 新建世界
           </button>
         </div>
-      )}
 
-      {showCreateDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
-            <h2 className="text-2xl font-bold mb-4">Create New World</h2>
+        {isLoading && <div className="text-center py-12 text-gray-400">加载中...</div>}
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  World Name
-                </label>
-                <input
-                  type="text"
-                  value={newWorldName}
-                  onChange={(e) => setNewWorldName(e.target.value)}
-                  placeholder="my_world"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                  autoFocus
-                />
-              </div>
+        {error && (
+          <div className="text-center py-12 text-red-400">加载失败: {error.message}</div>
+        )}
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Template
-                </label>
-                <select
-                  value={newWorldTemplate}
-                  onChange={(e) => setNewWorldTemplate(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="minimal">Minimal</option>
-                  <option value="earthlike">Earth-like</option>
-                </select>
-              </div>
-
-              {createMutation.error && (
-                <div className="text-red-400 text-sm">
-                  Error: {createMutation.error.message}
+        {!isLoading && !error && worlds && worlds.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {worlds.map((worldName) => (
+              <div key={worldName} className="glass-panel p-6">
+                <Link to={`/worlds/${worldName}`} className="block">
+                  <h3 className="text-xl font-semibold mb-2 text-neon-cyan neon-glow-subtle">
+                    {worldName}
+                  </h3>
+                </Link>
+                <div className="flex gap-2 mt-4">
+                  <Link
+                    to={`/worlds/${worldName}`}
+                    className="text-sm px-3 py-1.5 rounded transition-all bg-space-surface text-gray-300 border border-space-border hover:border-neon-cyan/30 hover:text-neon-cyan"
+                  >
+                    打开
+                  </Link>
+                  <button
+                    onClick={() => {
+                      if (confirm(`确定删除世界 "${worldName}"？`)) {
+                        deleteMutation.mutate(worldName)
+                      }
+                    }}
+                    className="text-sm px-3 py-1.5 rounded transition-all bg-red-900/30 text-red-400 border border-red-500/20 hover:bg-red-900/50"
+                  >
+                    删除
+                  </button>
                 </div>
-              )}
+              </div>
+            ))}
+          </div>
+        )}
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create'}
-                </button>
-                <button
-                  onClick={() => setShowCreateDialog(false)}
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
+        {!isLoading && !error && worlds && worlds.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-lg mb-4 text-gray-400">暂无世界</p>
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="px-6 py-3 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25"
+            >
+              创建你的第一个世界
+            </button>
+          </div>
+        )}
+
+        {showCreateDialog && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="bg-space-panel border border-space-border rounded-xl p-6 w-full max-w-md shadow-[0_0_40px_rgba(0,212,255,0.08)]">
+              <h2 className="text-2xl font-bold mb-4 text-neon-cyan neon-glow-subtle">
+                创建新世界
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-400">
+                    世界名称
+                  </label>
+                  <input
+                    type="text"
+                    value={newWorldName}
+                    onChange={(e) => setNewWorldName(e.target.value)}
+                    placeholder="my_world"
+                    className="w-full bg-space-bg border border-space-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-cyan transition-colors"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-400">
+                    模板
+                  </label>
+                  <select
+                    value={newWorldTemplate}
+                    onChange={(e) => setNewWorldTemplate(e.target.value)}
+                    className="w-full bg-space-bg border border-space-border rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-cyan transition-colors"
+                  >
+                    <option value="minimal">Minimal</option>
+                    <option value="earthlike">Earth-like</option>
+                  </select>
+                </div>
+
+                {createMutation.error && (
+                  <div className="text-red-400 text-sm">
+                    错误: {createMutation.error.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleCreate}
+                    disabled={createMutation.isPending}
+                    className="flex-1 px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+                  >
+                    {createMutation.isPending ? '创建中...' : '创建'}
+                  </button>
+                  <button
+                    onClick={() => setShowCreateDialog(false)}
+                    className="flex-1 px-4 py-2 rounded-lg font-medium transition-all bg-space-surface text-gray-300 border border-space-border hover:border-gray-500"
+                  >
+                    取消
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

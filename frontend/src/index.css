@@ -6,26 +6,322 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background-color: #0a0a1a;
 }
 
 #root {
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* ============================================================
+   Starfield — three parallax layers of CSS box-shadow stars
+   ============================================================ */
+
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Far stars — tiny, dim, slow drift */
+.starfield::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  animation: star-drift 120s linear infinite;
+  box-shadow:
+    50px 80px #fff,
+    150px 200px rgba(255, 255, 255, 0.6),
+    300px 50px #fff,
+    450px 300px rgba(255, 255, 255, 0.5),
+    600px 150px #fff,
+    750px 400px rgba(255, 255, 255, 0.7),
+    100px 500px #fff,
+    250px 650px rgba(255, 255, 255, 0.6),
+    400px 100px #fff,
+    550px 550px rgba(255, 255, 255, 0.5),
+    700px 250px #fff,
+    850px 600px rgba(255, 255, 255, 0.7),
+    950px 350px #fff,
+    1100px 100px rgba(255, 255, 255, 0.6),
+    1250px 450px #fff,
+    1400px 200px rgba(255, 255, 255, 0.5),
+    200px 750px #fff,
+    500px 850px rgba(255, 255, 255, 0.6),
+    800px 700px #fff,
+    1050px 550px rgba(255, 255, 255, 0.7),
+    1200px 700px #fff,
+    1350px 50px rgba(255, 255, 255, 0.5),
+    75px 350px rgba(255, 255, 255, 0.4),
+    425px 450px rgba(255, 255, 255, 0.4),
+    675px 50px rgba(255, 255, 255, 0.4),
+    925px 650px rgba(255, 255, 255, 0.4);
+}
+
+/* Mid stars — medium, brighter */
+.starfield::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  animation: star-drift 90s linear infinite;
+  box-shadow:
+    120px 160px rgba(180, 200, 255, 0.9),
+    380px 420px rgba(255, 220, 180, 0.8),
+    640px 280px rgba(180, 200, 255, 0.9),
+    900px 500px rgba(255, 255, 255, 0.8),
+    1160px 120px rgba(180, 200, 255, 0.9),
+    260px 580px rgba(255, 220, 180, 0.7),
+    520px 360px rgba(180, 200, 255, 0.8),
+    780px 640px rgba(255, 255, 255, 0.7),
+    1040px 280px rgba(180, 200, 255, 0.8),
+    1300px 460px rgba(255, 220, 180, 0.7),
+    180px 720px rgba(180, 200, 255, 0.7),
+    700px 80px rgba(255, 255, 255, 0.8),
+    1100px 700px rgba(180, 200, 255, 0.7);
+}
+
+@keyframes star-drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-20px); }
+}
+
+/* Nebula overlay */
+.nebula {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 120% 30% at 20% 55%,
+      rgba(123, 47, 190, 0.10) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 100% 25% at 75% 40%,
+      rgba(0, 212, 255, 0.06) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 80% 40% at 50% 50%,
+      rgba(68, 102, 255, 0.04) 0%,
+      transparent 70%
+    );
+}
+
+/* ============================================================
+   Neon glow utilities
+   ============================================================ */
+
+.neon-glow-cyan {
+  text-shadow:
+    0 0 7px rgba(0, 212, 255, 0.8),
+    0 0 15px rgba(0, 212, 255, 0.5),
+    0 0 30px rgba(0, 212, 255, 0.3),
+    0 0 50px rgba(0, 212, 255, 0.15);
+}
+
+.neon-glow-purple {
+  text-shadow:
+    0 0 7px rgba(123, 47, 190, 0.8),
+    0 0 15px rgba(123, 47, 190, 0.5),
+    0 0 30px rgba(123, 47, 190, 0.3);
+}
+
+.neon-glow-subtle {
+  text-shadow:
+    0 0 5px rgba(0, 212, 255, 0.4),
+    0 0 10px rgba(0, 212, 255, 0.2);
+}
+
+/* ============================================================
+   Glass panel — translucent card with glow border
+   ============================================================ */
+
+.glass-panel {
+  background: rgba(18, 18, 42, 0.7);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.glass-panel:hover {
+  border-color: rgba(0, 212, 255, 0.35);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08), inset 0 0 20px rgba(0, 212, 255, 0.03);
+}
+
+/* ============================================================
+   Logo text
+   ============================================================ */
+
+.logo-dream {
+  background: linear-gradient(135deg, #1a1a5e 0%, #00d4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 0 8px rgba(0, 212, 255, 0.6))
+    drop-shadow(0 0 20px rgba(0, 212, 255, 0.3));
+}
+
+.logo-ulator {
+  color: #00d4ff;
+  text-shadow:
+    0 0 7px rgba(0, 212, 255, 0.8),
+    0 0 15px rgba(0, 212, 255, 0.5),
+    0 0 30px rgba(0, 212, 255, 0.3);
+}
+
+/* Circuit node decoration */
+.circuit-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  position: relative;
+}
+
+.circuit-line {
+  height: 2px;
+  width: 2rem;
+  background: linear-gradient(90deg, transparent, #00d4ff);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+}
+
+.circuit-line-right {
+  background: linear-gradient(90deg, #00d4ff, transparent);
+}
+
+.circuit-node {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00d4ff;
+  box-shadow: 0 0 8px #00d4ff, 0 0 16px rgba(0, 212, 255, 0.5);
+  position: relative;
+  margin: 0 4px;
+}
+
+.circuit-node::before,
+.circuit-node::after {
+  content: '';
+  position: absolute;
+  background: rgba(0, 212, 255, 0.5);
+  box-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+}
+
+/* Vertical line up */
+.circuit-node::before {
+  width: 2px;
+  height: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 100%;
+}
+
+/* Vertical line down */
+.circuit-node::after {
+  width: 2px;
+  height: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 100%;
+}
+
+/* Planet decoration (the 'e' replacement in dream) */
+.planet-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.planet-body {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, #00d4ff, #1a1a5e);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 16px rgba(0, 212, 255, 0.3);
+}
+
+.planet-ring {
+  position: absolute;
+  width: 24px;
+  height: 8px;
+  border: 2px solid rgba(0, 212, 255, 0.5);
+  border-radius: 50%;
+  transform: rotateX(65deg);
+  box-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+}
+
+/* ============================================================
+   Pulse animation
+   ============================================================ */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* ============================================================
+   Custom scrollbar
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a5a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a7a;
+}
+
+/* ============================================================
+   Selection color
+   ============================================================ */
+
+::selection {
+  background: rgba(0, 212, 255, 0.3);
+  color: #fff;
 }

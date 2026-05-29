@@ -1,5 +1,10 @@
 const API_BASE = '/api'
 
+interface ApiResponse<T> {
+  ok: boolean
+  data: T
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
     headers: {
@@ -11,10 +16,22 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP ${response.status}`)
+    throw new Error(error.detail || error.error || `HTTP ${response.status}`)
   }
 
-  return response.json()
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const body = await response.json()
+
+  // Unwrap { ok, data } envelope if present
+  if (body && typeof body === 'object' && 'ok' in body && 'data' in body) {
+    return (body as ApiResponse<T>).data
+  }
+
+  return body as T
 }
 
 export const api = {
@@ -33,7 +50,7 @@ export const api = {
     fetchJson<void>(`/worlds/${name}`, { method: 'DELETE' }),
 
   validateWorld: (name: string) =>
-    fetchJson<{ valid: boolean; errors: string[] }>(`/worlds/${name}/validate`),
+    fetchJson<{ ok: boolean; errors: string[] }>(`/worlds/${name}/validate`),
 
   // Build and simulation
   buildWorld: (name: string, engine?: string) =>

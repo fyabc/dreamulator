@@ -310,11 +310,21 @@ def serve(
     host: str = typer.Option("127.0.0.1", help="Host to bind to"),
     port: int = typer.Option(8000, help="Port to listen on"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
+    open_browser: bool = typer.Option(False, "--open", help="Open browser on start"),
 ) -> None:
-    """Start the FastAPI development server."""
+    """Start the server (API + frontend)."""
+    import threading
+    import webbrowser
+
     import uvicorn
 
-    console.print(f"[cyan]Starting dreamulator API server at http://{host}:{port}[/cyan]")
+    url = f"http://{host}:{port}"
+    console.print(f"[cyan]Starting dreamulator server at {url}[/cyan]")
+
+    if open_browser:
+        # Delay slightly so the server is ready when the browser opens
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
     uvicorn.run(
         "dreamulator.api:app",
         host=host,

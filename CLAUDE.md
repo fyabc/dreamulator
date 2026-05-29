@@ -63,8 +63,9 @@ uv run dreamulator branch delete myworld pangea
 # 生成 JSON Schema
 uv run dreamulator schema
 
-# 启动 API 服务器
-uv run dreamulator serve --reload
+# 启动服务器（API + 前端，一条命令）
+uv run dreamulator serve --open              # 启动并打开浏览器
+uv run dreamulator serve --reload             # 开发模式（热重载）
 
 # 运行测试
 uv run pytest
@@ -83,10 +84,10 @@ cd frontend
 # 安装依赖
 npm install
 
-# 开发（自动代理 /api → FastAPI :8000）
+# 开发（Vite HMR，自动代理 /api → FastAPI :8000）
 npm run dev
 
-# 构建
+# 构建静态文件（构建后由 `dreamulator serve` 统一提供）
 npm run build
 
 # 类型检查
@@ -95,6 +96,9 @@ npx tsc --noEmit
 # Lint
 npm run lint
 ```
+
+> **单命令启动**：`npm run build` 后，`uv run dreamulator serve` 同时提供 API 和前端。
+> 开发时仍可单独 `npm run dev` 使用 Vite HMR（代理到 :8000）。
 
 ## 核心设计原则
 
