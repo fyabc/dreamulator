@@ -90,3 +90,20 @@ def validate_world(world_name: str) -> dict:
         return {"ok": len(errors) == 0, "errors": errors}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{world_name}/branches")
+def list_branches(world_name: str) -> dict:
+    """List all branches for a world."""
+    from dreamulator.branch_manager import BranchManager
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+        branch_mgr = BranchManager(world_dir)
+        branches = branch_mgr.list_branches()
+        return {
+            "ok": True,
+            "data": [b.model_dump(mode="json") for b in branches],
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))

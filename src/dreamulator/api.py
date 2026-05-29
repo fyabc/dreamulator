@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
+from dreamulator.api_routes.narrate import router as narrate_router
 from dreamulator.api_routes.worlds import router as worlds_router
 
 app = FastAPI(
@@ -27,6 +28,7 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(worlds_router)
+app.include_router(narrate_router)
 
 
 @app.get("/api/health")
@@ -38,6 +40,7 @@ def health_check() -> dict[str, object]:
 # ---------------------------------------------------------------------------
 # Frontend static file serving
 # ---------------------------------------------------------------------------
+
 
 def _find_frontend_dist() -> Path | None:
     """Walk up from project root to find frontend/dist/."""

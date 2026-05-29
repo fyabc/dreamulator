@@ -296,6 +296,69 @@ body {
 }
 
 /* ============================================================
+   Narrator prose — markdown styling for narration output
+   ============================================================ */
+
+.narrator-prose {
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.75;
+  font-size: 0.95rem;
+}
+
+.narrator-prose h2 {
+  color: #00d4ff;
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  text-shadow: 0 0 5px rgba(0, 212, 255, 0.3);
+}
+
+.narrator-prose h2:first-child {
+  margin-top: 0;
+}
+
+.narrator-prose h3 {
+  color: rgba(0, 212, 255, 0.85);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+}
+
+.narrator-prose p {
+  margin-bottom: 0.75em;
+}
+
+.narrator-prose strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.narrator-prose ul, .narrator-prose ol {
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+
+.narrator-prose li {
+  margin-bottom: 0.25em;
+}
+
+.narrator-prose code {
+  background: rgba(0, 212, 255, 0.1);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.narrator-prose blockquote {
+  border-left: 3px solid rgba(0, 212, 255, 0.4);
+  padding-left: 1em;
+  margin-left: 0;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ============================================================
    Custom scrollbar
    ============================================================ */
 

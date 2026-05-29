@@ -2,12 +2,15 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useState } from 'react'
+import NarratorPanel from '../components/NarratorPanel'
+import BranchSelector from '../components/BranchSelector'
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
-  const [activeTab, setActiveTab] = useState<'overview' | 'stellar' | 'planets'>(
+  const [activeTab, setActiveTab] = useState<'overview' | 'stellar' | 'planets' | 'narrate'>(
     'overview',
   )
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
 
   const {
     data: world,
@@ -61,7 +64,7 @@ export default function WorldDetail() {
 
         {worldName && !isLoading && !error && (
           <>
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-4 mb-4">
               <Link
                 to="/worlds"
                 className="text-gray-400 hover:text-neon-cyan transition-colors"
@@ -71,6 +74,14 @@ export default function WorldDetail() {
               <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
                 {worldName}
               </h1>
+            </div>
+
+            <div className="mb-4">
+              <BranchSelector
+                worldName={worldName!}
+                selectedBranch={selectedBranch}
+                onSelect={setSelectedBranch}
+              />
             </div>
 
             <div className="flex gap-3 mb-6">
@@ -115,7 +126,7 @@ export default function WorldDetail() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 border-b border-space-border">
-              {(['overview', 'stellar', 'planets'] as const).map((tab) => (
+              {(['overview', 'stellar', 'planets', 'narrate'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -129,7 +140,9 @@ export default function WorldDetail() {
                     ? '概览'
                     : tab === 'stellar'
                       ? '恒星系'
-                      : '行星'}
+                      : tab === 'planets'
+                        ? '行星'
+                        : '叙述'}
                 </button>
               ))}
             </div>
@@ -288,6 +301,10 @@ export default function WorldDetail() {
                   <p className="text-gray-500">加载中...</p>
                 )}
               </div>
+            )}
+
+            {activeTab === 'narrate' && (
+              <NarratorPanel worldName={worldName!} branch={selectedBranch} />
             )}
           </>
         )}
