@@ -195,10 +195,12 @@ def ipa_to_asciipa(ipa: str) -> str:
         mapped = IPA_TO_ASCIIPA_MAP.get(ch)
         if mapped:
             result.append(mapped)
+        elif ch == " ":
+            pass  # skip spaces (not meaningful in IPA)
         else:
             result.append(ch)
         i += 1
-    return " ".join(result)
+    return "".join(result)
 
 
 def asciipa_to_ipa(asciipa_str: str) -> str:
