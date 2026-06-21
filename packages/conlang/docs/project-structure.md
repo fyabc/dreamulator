@@ -6,10 +6,14 @@ packages/conlang/
 ├── README.md                      # 项目简介
 ├── docs/                          # 文档
 │   ├── asciipa-reference.md       #   ASCIIPA 语法速查表
+│   ├── asciipa-vs-xsampa.md       #   ASCIIPA 与 X-SAMPA 对比
+│   ├── sca-guide.md               #   SCA 引擎开发指南
 │   ├── cli.md                     #   命令行工具参考
 │   ├── project-structure.md       #   项目结构（本文件）
 │   ├── development.md             #   开发指南
-│   └── roadmap.md                 #   路线图
+│   ├── roadmap.md                 #   路线图
+│   └── knowledge/                 #   领域知识库
+│       └── sca.md                 #     SCA 音变理论与规则语法
 ├── src/conlang/
 │   ├── __init__.py                # 包入口 + 版本号
 │   ├── cli.py                     # 独立 CLI 入口（Typer）
