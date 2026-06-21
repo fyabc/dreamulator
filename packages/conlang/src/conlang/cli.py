@@ -94,25 +94,43 @@ def convert(
         typer.echo(f"Error: unknown input format '{from_fmt}'", err=True)
         raise typer.Exit(code=1)
 
-    # Step 2: Check (validate)
+    # Step 2: Check (validate) or Chars (describe each character)
+    if check or chars:
+        import io
+        import sys
+
+        from rich.console import Console
+
+        # Wrap stdout in UTF-8 to avoid Windows GBK encoding errors with IPA chars
+        console = Console(file=io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8"))
+
     if check:
         from conlang.phonology.charinfo import validate_ipa
 
         valid, invalid = validate_ipa(ipa)
         if valid:
-            typer.echo("Valid: all characters are recognized IPA symbols")
+            console.print("[bold green]✓[/] Valid: all characters are recognized IPA symbols")
         else:
             unique = sorted(set(invalid))
             chars_str = " ".join(f"'{c}' (U+{ord(c):04X})" for c in unique)
-            typer.echo(f"Invalid: {len(unique)} unrecognized character(s): {chars_str}")
+            console.print(
+                f"[bold red]✗[/] Invalid: {len(unique)} unrecognized character(s): {chars_str}"
+            )
         return
 
     # Step 3: Chars (describe each character)
     if chars:
+        from rich.table import Table
+
         from conlang.phonology.charinfo import describe_string
 
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("char", style="bold cyan", justify="right")
+        table.add_column("code", style="dim")
+        table.add_column("desc")
         for ch, hex_code, desc, _uni_name in describe_string(ipa):
-            typer.echo(f"'{ch}'\t{hex_code}\t{desc}")
+            table.add_row(ch, hex_code, desc)
+        console.print(table)
         return
 
     # Step 4: Convert IPA to target format
