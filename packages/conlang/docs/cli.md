@@ -9,6 +9,8 @@ conlang version                                         # 查看版本
 conlang asciipa encode "θɪŋk"                          # IPA → ASCIIPA
 conlang asciipa decode "{th}I{ng}k"                     # ASCIIPA → IPA
 conlang tokenize "p^h a . {ng} o"                       # Token 拆解
+conlang speak "p^h a . t a"                             # 发音（需要 eSpeak-NG）
+conlang speak "θɪŋk" -f ipa -o think.wav               # IPA 输入，保存 .wav
 conlang sca run --rules rules.sca --lexicon words.yaml  # 运行音变
 ```
 
@@ -57,6 +59,74 @@ p' a → p^h a
 ```
 
 可用 `--output` 参数将结果写入文件。
+
+### `conlang speak`
+
+将音标字符串合成为语音并播放或保存为 .wav 文件。底层通过 eSpeak-NG 实现。
+
+**前置要求**：需要安装 [eSpeak-NG](https://github.com/espeak-ng/espeak-ng)。
+
+```bash
+# Windows
+choco install espeak-ng
+
+# macOS
+brew install espeak-ng
+
+# Linux
+sudo apt install espeak-ng
+```
+
+**基本用法**：
+
+```bash
+# 默认 ASCIIPA 格式，直接播放
+$ conlang speak "p^h a . t a"
+
+# IPA 格式输入
+$ conlang speak "θɪŋk" --format ipa
+
+# X-SAMPA 格式输入
+$ conlang speak "p_h a N o" -f xsampa
+```
+
+**保存到文件**：
+
+```bash
+# 保存为 .wav，不播放
+$ conlang speak "k^w a" -o output.wav --no-play
+
+# 保存并播放
+$ conlang speak "k^w a" -o output.wav
+```
+
+**参数**：
+
+| 参数 | 缩写 | 说明 | 默认值 |
+|:---|:---|:---|:---|
+| `text` | — | 音标字符串（必填） | — |
+| `--format` | `-f` | 输入格式：`asciipa`、`ipa`、`xsampa` | `asciipa` |
+| `--output` | `-o` | 输出 .wav 文件路径 | 不保存 |
+| `--play` / `--no-play` | — | 是否播放音频 | `--play` |
+| `--language` | `-l` | eSpeak 语言代码（搭嘴音用 `zu`） | `en` |
+| `--speed` | `-s` | 语速（词/分钟） | `130` |
+| `--pitch` | `-p` | 音调（0–99） | `50` |
+
+**跨平台播放**：自动检测系统音频播放器：
+- macOS：`afplay`
+- Windows：PowerShell `SoundPlayer`
+- Linux：`aplay`（ALSA）→ `paplay`（PulseAudio）→ `ffplay`
+
+**格式转换**：输入会先转换为 X-SAMPA 再传给 eSpeak-NG。转换过程对修饰符进行正确分解：
+
+| 输入（ASCIIPA） | 转换后（X-SAMPA） |
+|:---|:---|
+| `p^h` | `p_h` |
+| `t^w` | `t_w` |
+| `<b` | `b_<` |
+| `p'` | `p_>` |
+| `{sh}` | `S` |
+| `{ng}` | `N` |
 
 ## Dreamulator 集成
 
