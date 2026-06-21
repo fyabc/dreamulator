@@ -274,25 +274,9 @@ def ipa_to_kirshenbaum(ipa_str: str) -> str:
                 parts.append(ch)
             i += 1
 
-    # Build output with smart spacing:
-    # - No space after stress markers (' and ,)
-    # - No space before # (syllable break)
-    # - Space between phonemes
-    result: list[str] = []
-    for j, part in enumerate(parts):
-        if j > 0:
-            prev = result[-1] if result else ""
-            # Stress markers: attach to following phoneme
-            if prev in ("'", ","):
-                pass  # no space
-            # Syllable break: space before it
-            elif part == "#":
-                result.append(" ")
-            else:
-                result.append(" ")
-        result.append(part)
-
-    return "[[" + "".join(result) + "]]"
+    # Build output: all phonemes, stress markers, and syllable breaks
+    # are concatenated without any spaces.
+    return "[[" + "".join(parts) + "]]"
 
 
 def asciipa_to_kirshenbaum(asciipa_str: str) -> str:
