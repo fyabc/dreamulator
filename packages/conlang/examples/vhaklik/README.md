@@ -117,7 +117,14 @@ conlang convert "p'a" -t xsampa      # → pa（经 IPA 中转）
 
 ### 3. TTS 语音合成
 
-通过 eSpeak-NG 将 ASCIIPA 字符串合成为真实语音。内部自动转换路径：
+> ⚠️ **已知限制**：当前 TTS 后端 eSpeak-NG **无法正确发音瓦克里克语的核心音素**。
+> 详见下方"TTS 引擎局限性"一节。
+>
+> <!-- TODO: 引入 ToucanTTS 作为可选后端，支持非肺部气流辅音的神经合成 -->
+
+#### 当前后端：eSpeak-NG（参数式合成）
+
+eSpeak-NG 通过 Kirshenbaum 格式接受音素输入：
 
 ```
 ASCIIPA → Unicode IPA → Kirshenbaum → eSpeak-NG → .wav
@@ -133,8 +140,24 @@ speak("p' a", play=True, language="zu")
 speak("<b a", output="mother.wav", language="zu")
 ```
 
-> **注意**：搭嘴音需要 `--language zu`（祖鲁语模块）才能正确发声。
-> 安装 eSpeak-NG：`choco install espeak-ng`（Windows）/ `brew install espeak-ng`（macOS）。
+#### eSpeak-NG 的局限性
+
+eSpeak-NG 对**非肺部气流辅音**的支持存在严重缺陷：
+
+| 音素类型 | 支持情况 | 说明 |
+|:---|:---|:---|
+| **搭嘴音**（ǀ ǃ ǁ ǂ） | ❌ 不支持 | `[[...]]` 音素语法无法触发搭嘴音。搭嘴音被硬编码为"大写字母提示音"，只能通过 `-k 1` 参数间接触发，无法作为正常音素输入 |
+| **挤喉音**（pʼ tʼ kʼ） | ⚠️ 受限 | 必须切换到特定语言 Voice（阿姆哈拉语 `am`、阿布哈兹语 `ab`），无法通过英语或祖鲁语 Voice 直接触发 |
+| **内爆音**（ɓ ɗ ɠ） | ⚠️ 受限 | 同上，依赖特定语言的字典规则映射，无法通过 `[[...]]` 语法直接使用 |
+
+**根本原因**：eSpeak-NG 的非肺部辅音采用预录 WAV 波形拼接（而非共振峰实时计算），但这些音频样本被绑定在特定语言的音素表中，不暴露给通用的 `[[...]]` 音素输入接口。
+
+**对瓦克里克语的影响**：由于高阶语 100% 由非肺部气流辅音构成（搭嘴音 + 挤喉音 + 内爆音），eSpeak-NG 无法正确合成任何高阶语词汇。低阶语（含肺部气流音）可以部分发音，但失去搭嘴音的平原方言仍不完整。
+
+> <!-- TODO: 计划引入 IMS-Toucan (ToucanTTS) 作为可选 TTS 后端。
+>      ToucanTTS 是基于 PyTorch 的神经语音合成系统，支持 7000+ 语言，
+>      使用发音特征向量（articulatory features）表示音素，理论上可以合成
+>      搭嘴音、挤喉音等非肺部气流辅音。详见 private/tts-toucan-integration.md -->
 
 ### 4. SCA 方言演化：高原语 → 平原方言
 

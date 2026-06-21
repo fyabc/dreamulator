@@ -9,6 +9,19 @@ Mapping data extracted from ipapy's ``kirshenbaum.dat``:
     - Author: Alberto Pettarin (Copyright 2016-2019)
     - Only the mapping table was extracted; no ipapy runtime code is used.
 
+.. warning::
+    **Non-pulmonic consonant limitations**: eSpeak-NG cannot synthesize
+    clicks (ǀ ǃ ǁ ǂ) via the ``[[...]]`` phoneme input — they are
+    hardcoded as capital-letter alert sounds. Ejectives (pʼ tʼ kʼ) and
+    implosives (ɓ ɗ ɠ) require specific language voices (e.g. Amharic,
+    Abkhaz) and cannot be triggered from the general phoneme interface.
+    Languages heavily reliant on non-pulmonic consonants (e.g. Vha'Klik)
+    cannot be properly synthesized with this backend.
+
+    TODO: Introduce ToucanTTS (IMS-Toucan) as an optional neural TTS
+    backend that supports articulatory feature input for non-pulmonic
+    consonants. See ``private/tts-toucan-integration.md``.
+
 Usage::
 
     from conlang.phonology.espeak_ng import ipa_to_kirshenbaum, speak

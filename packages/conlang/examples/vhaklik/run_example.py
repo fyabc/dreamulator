@@ -152,6 +152,15 @@ def demo_evolution_detail() -> None:
 def demo_tts() -> None:
     print_header("5. TTS 语音合成（eSpeak-NG）")
 
+    print("  ⚠ 已知限制：eSpeak-NG 无法正确发音瓦克里克语的核心音素。")
+    print("    - 搭嘴音（ǀ ǃ ǁ ǂ）：[[...]] 音素语法无法触发")
+    print("    - 挤喉音（pʼ tʼ kʼ）：需切换到特定语言 Voice")
+    print("    - 内爆音（ɓ ɗ ɠ）：依赖特定语言字典规则")
+    print()
+    print("  高阶语 100% 由非肺部气流辅音构成，eSpeak-NG 无法合成。")
+    print("  TODO: 计划引入 ToucanTTS 作为可选后端，支持神经合成。")
+    print()
+
     try:
         from conlang.phonology.espeak_ng import find_espeak, to_kirshenbaum
     except ImportError:
@@ -166,14 +175,14 @@ def demo_tts() -> None:
         return
 
     # 仅展示 Kirshenbaum 转换（TTS 需要系统音频设备）
-    print("  Kirshenbaum 格式（eSpeak-NG 内部表示）：\n")
+    print("  Kirshenbaum 格式（eSpeak-NG 内部表示，仅供参考）：\n")
     for word, gloss in SAMPLE_WORDS[:4]:
         kirs = to_kirshenbaum(word, input_format="asciipa")
         print(f"  {word:16s}  →  {kirs:20s}  「{gloss}」")
 
-    print("\n  发音命令示例：")
-    print("    conlang speak \"p' a\" --language zu")
-    print("    conlang speak \"<b a\" --language zu -o mother.wav")
+    print("\n  发音命令示例（低阶语词汇，肺部气流音可正常发音）：")
+    print("    conlang speak \"fu\" --language en")
+    print("    conlang speak \"ha\" --language en -o death.wav")
 
 
 # ---------------------------------------------------------------------------
