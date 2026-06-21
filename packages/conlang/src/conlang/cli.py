@@ -14,9 +14,7 @@ app = typer.Typer(
 
 # Sub-command groups
 sca_app = typer.Typer(help="Sound Change Applier (SCA) tools.")
-asciipa_app = typer.Typer(help="ASCIIPA encoding/decoding tools.")
 app.add_typer(sca_app, name="sca")
-app.add_typer(asciipa_app, name="asciipa")
 
 
 @app.callback()
@@ -41,26 +39,92 @@ def version() -> None:
     typer.echo(f"conlang v{__version__}")
 
 
-@asciipa_app.command()
-def encode(
-    ipa: str = typer.Argument(help="IPA string to encode as ASCIIPA"),
+@app.command()
+def convert(
+    text: str = typer.Argument(help="Phonetic string to convert"),
+    from_fmt: str = typer.Option(
+        "asciipa", "--from", "-f",
+        help="Input format: asciipa, ipa",
+    ),
+    to_fmt: str = typer.Option(
+        "ipa", "--to", "-t",
+        help="Output format: asciipa, ipa, xsampa, kirshenbaum",
+    ),
+    chars: bool = typer.Option(
+        False, "--chars", "-c",
+        help="Show each character's Unicode name and codepoint",
+    ),
+    check: bool = typer.Option(
+        False, "--check",
+        help="Validate that all input characters are recognized IPA",
+    ),
 ) -> None:
-    """Convert IPA notation to ASCIIPA."""
-    from conlang.phonology.asciipa import ipa_to_asciipa
+    """Convert between phonetic notations.
 
-    result = ipa_to_asciipa(ipa)
-    typer.echo(result)
+    All conversions go through Unicode IPA as the universal intermediate.
 
+    Examples:
 
-@asciipa_app.command()
-def decode(
-    asciipa: str = typer.Argument(help="ASCIIPA string to decode to IPA"),
-) -> None:
-    """Convert ASCIIPA notation to IPA."""
-    from conlang.phonology.asciipa import asciipa_to_ipa
+      conlang convert "{th}I{ng}k" -t ipa
 
-    result = asciipa_to_ipa(asciipa)
-    typer.echo(result)
+      conlang convert "həlˈoʊ" -f ipa -t asciipa
+
+      conlang convert "həlˈəʊ" -f ipa -t kirshenbaum
+
+      conlang convert "həlˈəʊ" -f ipa --chars
+
+      conlang convert "həlˈəʊ" -f ipa --check
+    """
+    # Step 1: Convert input to Unicode IPA
+    from conlang.phonology.asciipa import asciipa_to_ipa, ipa_to_asciipa
+
+    fmt = from_fmt.lower().strip()
+    if fmt == "asciipa":
+        ipa = asciipa_to_ipa(text)
+    elif fmt == "ipa":
+        ipa = text
+    else:
+        typer.echo(f"Error: unknown input format '{from_fmt}'", err=True)
+        raise typer.Exit(code=1)
+
+    # Step 2: Check (validate)
+    if check:
+        from conlang.phonology.charinfo import validate_ipa
+
+        valid, invalid = validate_ipa(ipa)
+        if valid:
+            typer.echo("Valid: all characters are recognized IPA symbols")
+        else:
+            unique = sorted(set(invalid))
+            chars_str = " ".join(f"'{c}' (U+{ord(c):04X})" for c in unique)
+            typer.echo(f"Invalid: {len(unique)} unrecognized character(s): {chars_str}")
+        return
+
+    # Step 3: Chars (describe each character)
+    if chars:
+        from conlang.phonology.charinfo import describe_string
+
+        for ch, hex_code, desc, _uni_name in describe_string(ipa):
+            typer.echo(f"'{ch}'\t{hex_code}\t{desc}")
+        return
+
+    # Step 4: Convert IPA to target format
+    target = to_fmt.lower().strip()
+    if target == "ipa":
+        typer.echo(ipa)
+    elif target == "asciipa":
+        typer.echo(ipa_to_asciipa(ipa))
+    elif target == "xsampa":
+        from conlang.phonology.xsampa import ipa_to_xsampa
+
+        typer.echo(ipa_to_xsampa(ipa))
+    elif target == "kirshenbaum":
+        from conlang.phonology.espeak_ng import ipa_to_kirshenbaum
+
+        typer.echo(ipa_to_kirshenbaum(ipa))
+    else:
+        typer.echo(f"Error: unknown output format '{to_fmt}'", err=True)
+        raise typer.Exit(code=1)
 
 
 @sca_app.command()
