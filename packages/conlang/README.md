@@ -61,7 +61,7 @@ sca.apply("t a p a")    # → "t a f a"
 sca.apply("a k a t a")  # → "a h a s a"
 ```
 
-### 瓦克里克语方言演化（完整示例）
+### 瓦克里克语方言演化
 
 ```python
 from conlang.phonology import SCAEngine
@@ -81,128 +81,13 @@ results = sca.apply_all()
 # {"| a": "t a", "! i": "t^h i", "p' a": "p^h a", "<b a": "b a"}
 ```
 
-## ASCIIPA 语法速查表
+## 文档
 
-ASCIIPA（读作 /æˈskiːpə/）是一门面向纯文本环境的音标领域特定语言（DSL）。核心哲学：**特征即代码**。
-
-### 辅音
-
-| 类型 | 语法 | IPA | 说明 |
-|:---|:---|:---|:---|
-| 花括号宏 | `{sh}` `{zh}` `{ch}` | ʃ ʒ tʃ | 英语直觉映射 |
-| | `{th}` `{dh}` `{ng}` | θ ð ŋ | |
-| 大写映射 | `I` `U` `E` `O` `A` | ɪ ʊ ɛ ɔ ɑ | Small Caps |
-| | `B` `G` `N` `R` `L` | ʙ ɢ ɴ ʀ ʟ | |
-| 转义/倒置 | `\a` `\e` `\v` `\m` | ɐ ə ʌ ɯ | 反斜杠 = 物理翻转 |
-| | `\r` `\h` `\w` `\y` | ɹ ɥ ʍ ʎ | |
-| 镜像 | `<e` `<A` | ɘ ɒ | 左右翻转 |
-| 卷舌 | `t>` `d>` `n>` `s>` | ʈ ɖ ɳ ʂ | 右钩 |
-| 横穿 | `i=` `u=` `o=` `h=` | ɨ ʉ ɵ ħ | 横杠 |
-| 内爆音 | `<b` `<d` `<g` | ɓ ɗ ɠ | 左钩 |
-| 挤喉音 | `p'` `t'` `k'` | pʼ tʼ kʼ | 撇号 |
-| 搭嘴音 | `\|` `!` `\|\|` `=` | ǀ ǃ ǁ ǂ | 几何形状 |
-
-### 修饰符
-
-| 类型 | 语法 | IPA | 说明 |
-|:---|:---|:---|:---|
-| 上标 | `^h` `^w` `^j` | ʰ ʷ ʲ | LaTeX 风格 |
-| 下标 | `_o` `_v` `_t` | ̥ ̬ ̪ | |
-| 鼻化 | `~` | ̃ | 置于元音后 |
-| 音节 | `.` | . | IPA 官方标准 |
-| 重音 | `!` | ˈ | 置于音节前 |
-| 长音 | `:` | ː | 置于元音后 |
-| 声调 | `:55` `:214` | 五度制 | 置于音节末 |
-
-### 文档级指令
-
-```asciipa
-@bind click_set          # 交换符号含义，解决冲突
-  ! = alveolar_click     # 裸 ! 现在表示搭嘴音
-  | = dental_click
-@endbind
-
-@unbind !                # 恢复默认
-```
-
-## 命令行工具
-
-### 独立 CLI
-
-```bash
-conlang version                                    # 查看版本
-conlang asciipa encode "θɪŋk"                     # IPA → ASCIIPA
-conlang asciipa decode "{th}I{ng}k"                # ASCIIPA → IPA
-conlang tokenize "p^h a . {ng} o"                  # Token 拆解
-conlang sca run --rules rules.sca --lexicon words.yaml  # 运行音变
-```
-
-### Dreamulator 集成
-
-```bash
-dreamulator conlang evolve earth vha_klik --generations 5  # 多代音变模拟
-dreamulator conlang tokenize "!i:55"                        # Token 拆解
-```
-
-语言数据存放在 `layers/civilization/input/languages/<语言ID>/` 目录下：
-
-```
-languages/vha_klik/
-├── sca_rules.sca       # SCA 音变规则脚本
-├── lexicon.yaml        # 词典（YAML 格式）
-├── phonology.yaml      # 音位表
-└── morphology.yaml     # 形态规则
-```
-
-## 项目结构
-
-```
-packages/conlang/
-├── pyproject.toml                 # 独立包配置
-├── src/conlang/
-│   ├── phonology/                 # 语音学模块
-│   │   ├── asciipa.py             #   ASCIIPA 词法分析器 + IPA 互转
-│   │   ├── ipa_table.py           #   IPA 音标映射表
-│   │   ├── sca.py                 #   SCA 音变引擎
-│   │   ├── features.py            #   音素特征矩阵
-│   │   └── xsampa.py              #   X-SAMPA 转换 + TTS 桥接
-│   ├── morphology/                # 形态学模块
-│   │   ├── fst.py                 #   有限状态转换器引擎
-│   │   ├── affix.py               #   词缀规则工厂函数
-│   │   └── harmony.py             #   元音和谐 + 辅音突变
-│   ├── lexicon/                   # 词汇学模块
-│   │   ├── entry.py               #   词典条目 Pydantic 模型
-│   │   ├── database.py            #   YAML 持久化数据库
-│   │   └── etymology.py           #   词源追踪链
-│   └── cli.py                     # 独立 CLI 入口
-└── tests/                         # 测试套件
-```
-
-## 开发
-
-```bash
-# 运行测试
-cd packages/conlang && uv run pytest
-
-# 从 dreamulator 根目录运行全部测试
-uv run pytest packages/conlang/tests/ tests/
-
-# 代码检查
-uv run ruff check packages/conlang/src/ packages/conlang/tests/
-uv run ruff format packages/conlang/src/ packages/conlang/tests/
-uv run mypy packages/conlang/src/
-
-# 独立构建分发包
-cd packages/conlang && uv build
-```
-
-## 路线图
-
-- [x] **Phase 1** —— phonology（ASCIIPA + SCA）、morphology（FST）、lexicon（词典库）
-- [ ] **Phase 2** —— SCA v2（概率音变 + 词频加权 + 世代模拟）、特征矩阵音变规则
-- [ ] **Phase 3** —— syntax 句法模块（语序生成器、依存句法树）
-- [ ] **Phase 4** —— orthography 文字系统模块（Abjad/Abugida/Syllabary 转写器）
-- [ ] **Phase 5** —— eSpeak-NG TTS 深度集成、神经网络语音合成
+- [ASCIIPA 语法速查表](docs/asciipa-reference.md) —— 辅音、修饰符、文档级指令的完整语法
+- [命令行工具](docs/cli.md) —— 独立 CLI 和 Dreamulator 集成命令参考
+- [项目结构](docs/project-structure.md) —— 模块说明与文件职责
+- [开发指南](docs/development.md) —— 测试、lint、构建
+- [路线图](docs/roadmap.md) —— 当前进度与未来计划
 
 ## 许可证
 
