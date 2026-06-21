@@ -232,8 +232,8 @@ _MULTI_CHAR_IPA: list[tuple[str, str]] = sorted(
 # ---------------------------------------------------------------------------
 
 
-def ipa_to_kirshenbaum(ipa_str: str) -> str:
-    """Convert a Unicode IPA string to eSpeak-NG Kirshenbaum format.
+def ipa_to_kirshenbaum(ipa_str: str, *, wrap: bool = False) -> str:
+    """Convert a Unicode IPA string to Kirshenbaum format.
 
     Multi-character IPA sequences (e.g. ``tʃ``, ``dʒ``) are matched
     greedily before single characters.
@@ -245,9 +245,10 @@ def ipa_to_kirshenbaum(ipa_str: str) -> str:
 
     Args:
         ipa_str: Unicode IPA string (e.g. ``"həlˈoʊ"``).
+        wrap: If True, wrap output in ``[[ ]]`` for eSpeak-NG input.
 
     Returns:
-        Kirshenbaum string wrapped in ``[[ ]]`` for eSpeak input.
+        Kirshenbaum string.
     """
     # Strip common bracket markers
     cleaned = ipa_str.strip().strip("/[]")
@@ -276,48 +277,53 @@ def ipa_to_kirshenbaum(ipa_str: str) -> str:
 
     # Build output: all phonemes, stress markers, and syllable breaks
     # are concatenated without any spaces.
-    return "[[" + "".join(parts) + "]]"
+    result = "".join(parts)
+    if wrap:
+        return "[[" + result + "]]"
+    return result
 
 
-def asciipa_to_kirshenbaum(asciipa_str: str) -> str:
-    """Convert an ASCIIPA string to eSpeak-NG Kirshenbaum format.
+def asciipa_to_kirshenbaum(asciipa_str: str, *, wrap: bool = False) -> str:
+    """Convert an ASCIIPA string to Kirshenbaum format.
 
     Goes through IPA as intermediate: ASCIIPA → IPA → Kirshenbaum.
 
     Args:
         asciipa_str: ASCIIPA-encoded string.
+        wrap: If True, wrap output in ``[[ ]]`` for eSpeak-NG input.
 
     Returns:
-        Kirshenbaum string wrapped in ``[[ ]]``.
+        Kirshenbaum string.
     """
     from conlang.phonology.asciipa import asciipa_to_ipa
 
     ipa = asciipa_to_ipa(asciipa_str)
-    return ipa_to_kirshenbaum(ipa)
+    return ipa_to_kirshenbaum(ipa, wrap=wrap)
 
 
-def to_kirshenbaum(text: str, input_format: str = "asciipa") -> str:
-    """Convert a phonetic string to eSpeak-NG Kirshenbaum format.
+def to_kirshenbaum(
+    text: str, input_format: str = "asciipa", *, wrap: bool = False
+) -> str:
+    """Convert a phonetic string to Kirshenbaum format.
 
     Args:
         text: Input phonetic string.
         input_format: One of ``'asciipa'``, ``'ipa'``, ``'kirshenbaum'``.
+        wrap: If True, wrap output in ``[[ ]]`` for eSpeak-NG input.
 
     Returns:
-        Kirshenbaum string wrapped in ``[[ ]]``.
+        Kirshenbaum string.
 
     Raises:
         ValueError: If input_format is not recognized.
     """
     fmt = input_format.lower().strip()
     if fmt == "asciipa":
-        return asciipa_to_kirshenbaum(text)
+        return asciipa_to_kirshenbaum(text, wrap=wrap)
     elif fmt == "ipa":
-        return ipa_to_kirshenbaum(text)
+        return ipa_to_kirshenbaum(text, wrap=wrap)
     elif fmt in ("kirshenbaum", "kirs", "espeak"):
-        if text.startswith("[[") and text.endswith("]]"):
-            return text
-        return f"[[{text}]]"
+        return text
     else:
         raise ValueError(
             f"Unknown input format: {input_format!r}. "
@@ -372,7 +378,7 @@ def synthesize(
     if espeak is None:
         return False
 
-    kirs = to_kirshenbaum(text, input_format)
+    kirs = to_kirshenbaum(text, input_format, wrap=True)
     output_file = Path(output_file)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 

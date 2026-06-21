@@ -170,14 +170,15 @@ _MULTI_CHAR_IPA: list[tuple[str, str]] = sorted(
 # ---------------------------------------------------------------------------
 
 
-def ipa_to_xsampa(ipa_str: str) -> str:
+def ipa_to_xsampa(ipa_str: str, *, wrap: bool = False) -> str:
     """Convert a Unicode IPA string to X-SAMPA.
 
     Args:
         ipa_str: Unicode IPA string (e.g. ``"θɪŋk"``).
+        wrap: If True, wrap output in ``[[ ]]`` for eSpeak input.
 
     Returns:
-        X-SAMPA string wrapped in ``[[ ]]``.
+        X-SAMPA string.
     """
     cleaned = ipa_str.strip().strip("/[]")
 
@@ -202,10 +203,15 @@ def ipa_to_xsampa(ipa_str: str) -> str:
                 parts.append(ch)
             i += 1
 
-    return "[[" + " ".join(parts) + "]]"
+    result = " ".join(parts)
+    if wrap:
+        return "[[" + result + "]]"
+    return result
 
 
-def to_xsampa(text: str, input_format: str = "asciipa") -> str:
+def to_xsampa(
+    text: str, input_format: str = "asciipa", *, wrap: bool = False
+) -> str:
     """Convert a phonetic string to X-SAMPA via Unicode IPA.
 
     All input formats are first converted to Unicode IPA, then to X-SAMPA.
@@ -213,9 +219,10 @@ def to_xsampa(text: str, input_format: str = "asciipa") -> str:
     Args:
         text: Input phonetic string.
         input_format: One of ``'asciipa'``, ``'ipa'``, ``'xsampa'``.
+        wrap: If True, wrap output in ``[[ ]]`` for eSpeak input.
 
     Returns:
-        X-SAMPA string wrapped in ``[[ ]]``.
+        X-SAMPA string.
 
     Raises:
         ValueError: If input_format is not recognized.
@@ -225,13 +232,11 @@ def to_xsampa(text: str, input_format: str = "asciipa") -> str:
         from conlang.phonology.asciipa import asciipa_to_ipa
 
         ipa = asciipa_to_ipa(text)
-        return ipa_to_xsampa(ipa)
+        return ipa_to_xsampa(ipa, wrap=wrap)
     elif fmt == "ipa":
-        return ipa_to_xsampa(text)
+        return ipa_to_xsampa(text, wrap=wrap)
     elif fmt in ("xsampa", "x-sampa"):
-        if text.startswith("[[") and text.endswith("]]"):
-            return text
-        return f"[[{text}]]"
+        return text
     else:
         raise ValueError(
             f"Unknown input format: {input_format!r}. "

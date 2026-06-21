@@ -60,12 +60,13 @@ class TestIPAToSAMPA:
     ) -> None:
         """Each IPA character maps to the correct X-SAMPA symbol."""
         result = ipa_to_xsampa(expected_ipa)
-        # Strip [[ ]] wrapper
-        inner = result[2:-2]
-        assert inner == expected_xsampa
+        assert result == expected_xsampa
 
     def test_word_think(self) -> None:
-        assert ipa_to_xsampa("θɪŋk") == "[[T I N k]]"
+        assert ipa_to_xsampa("θɪŋk") == "T I N k"
+
+    def test_wrap(self) -> None:
+        assert ipa_to_xsampa("θɪŋk", wrap=True) == "[[T I N k]]"
 
     def test_stress_adjacent(self) -> None:
         """Primary stress marker should appear in output."""
@@ -86,19 +87,18 @@ class TestASCIIPAViaIPAToSAMPA:
     ) -> None:
         """ASCIIPA → IPA → X-SAMPA produces correct X-SAMPA."""
         result = to_xsampa(asciipa, "asciipa")
-        inner = result[2:-2]
-        assert inner == expected_xsampa
+        assert result == expected_xsampa
 
     def test_modifier_chain(self) -> None:
         """Modifiers decompose correctly through IPA hub."""
-        assert to_xsampa("p^h", "asciipa") == "[[p _h]]"
+        assert to_xsampa("p^h", "asciipa") == "p _h"
 
     def test_implosive(self) -> None:
-        assert to_xsampa("<b", "asciipa") == "[[b_<]]"
+        assert to_xsampa("<b", "asciipa") == "b_<"
 
     def test_complex_word(self) -> None:
         result = to_xsampa("{th}I{ng}k", "asciipa")
-        assert result == "[[T I N k]]"
+        assert result == "T I N k"
 
 
 class TestRoundTrip:
@@ -123,13 +123,13 @@ class TestDispatch:
     """Test to_xsampa format dispatch."""
 
     def test_ipa_format(self) -> None:
-        assert to_xsampa("θɪŋk", "ipa") == "[[T I N k]]"
+        assert to_xsampa("θɪŋk", "ipa") == "T I N k"
 
     def test_xsampa_passthrough(self) -> None:
-        assert to_xsampa("T I N k", "xsampa") == "[[T I N k]]"
+        assert to_xsampa("T I N k", "xsampa") == "T I N k"
 
-    def test_xsampa_already_wrapped(self) -> None:
-        assert to_xsampa("[[T I N k]]", "xsampa") == "[[T I N k]]"
+    def test_xsampa_wrap(self) -> None:
+        assert to_xsampa("θɪŋk", "ipa", wrap=True) == "[[T I N k]]"
 
     def test_unknown_format_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown input format"):
