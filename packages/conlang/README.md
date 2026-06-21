@@ -19,7 +19,7 @@
 | 核心语言 | Python 3.12+ |
 | 数据模型 | Pydantic v2 |
 | 持久化 | PyYAML |
-| 语音合成（可选） | eSpeak-NG via X-SAMPA |
+| 语音合成（可选） | eSpeak-NG via Kirshenbaum 映射 |
 | 包管理 | uv / hatchling |
 
 ## 快速开始
