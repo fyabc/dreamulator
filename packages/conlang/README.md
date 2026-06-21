@@ -75,6 +75,10 @@ results = sca.apply_all()
 # {"| a": "t a", "! i": "t^h i", "p' a": "p^h a", "<b a": "b a"}
 ```
 
+## 示例
+
+- [瓦克里克语完整示例](examples/vhaklik/README.md) —— 通过一门架空语言综合展示 ASCIIPA 编码、IPA 转换、TTS 发音、SCA 方言演化
+
 ## 文档
 
 - [ASCIIPA 语法速查表](docs/asciipa-reference.md) —— 辅音、修饰符、文档级指令的完整语法

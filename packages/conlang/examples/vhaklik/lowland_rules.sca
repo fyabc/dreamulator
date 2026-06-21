@@ -1,0 +1,38 @@
+# 瓦克里克语方言演化规则
+# SCA SCRIPT: Highland → Lowland (Vha'Klik → Vha'Kli)
+# TARGET: 高原语 (Highland) → 平原方言 (Lowland)
+#
+# 历史背景：一支瓦克里克人沿河下山，在洪泛平原定居 4 代（~150 年）后
+# 形成的方言。搭嘴音崩溃、挤喉音退化、内爆音浊化、声调简化。
+
+# === 音类定义 ===
+V = i e a o u
+
+# === Phase 1: 搭嘴音崩溃 (Click Collapse) ===
+# 搭嘴音（最高标记性音素）率先崩溃，退化为肺部辅音
+| > t
+! > t^h
+|| > l
+= > {ch}
+
+# === Phase 2: 挤喉音退化 (Ejective Degradation) ===
+# 挤喉音失去挤喉特征，退化为送气塞音
+p' > p^h
+t' > t^h
+k' > k^h
+s' > s
+{ch'} > {ch}
+
+# === Phase 3: 内爆音浊化 (Implosive Voicing) ===
+# 内爆音退化为普通浊塞音
+<b > b
+<d > d
+<g > g
+<j > {j}
+
+# === Phase 4: 声调合并 (Tonal Merger: 4→2) ===
+# 四声调系统简化为二声调
+:55 > :5
+:35 > :5
+:33 > :3
+:21 > :3

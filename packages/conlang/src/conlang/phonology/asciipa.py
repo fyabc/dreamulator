@@ -36,20 +36,23 @@ from dataclasses import dataclass
 #   2. Turned bases:       \a, \e, \v, \m, \r, \h, \w, \y + modifiers
 #   3. Implosive/mirror:   <b, <d, <g, <e, <A + modifiers
 #   4. Lateral click:      ||
-#   5. Single-char base:   a-zA-Z, |, = + modifier chain (^h, _o, ~, ', >)
+#   5. Single-char base:   a-zA-Z, |, = + modifier chain (^h, _o, >) + ejective (')
 #   6. Structural tokens:  syllable dot (.), tone (:NN), stress (!), directives
+#
+# NOTE: The ejective marker ' is terminal — it does NOT consume following
+# characters.  This ensures p'a tokenizes as p' + a (two tokens), not one.
 TOKEN_PATTERN = re.compile(
     r"""
     (
-    \{[^}]+\}                               # 1. brace macro
-    |\\[a-zA-Z](?:[\^_~'>][a-zA-Z0-9]*)*    # 2. turned base + modifiers
-    |<[a-zA-Z](?:[\^_~'>][a-zA-Z0-9]*)*     # 3. implosive/mirror + modifiers
-    |\|\|                                    # 4. lateral click
-    |[a-zA-Z|=](?:[\^_~'>][a-zA-Z0-9]*)*    # 5. single base + modifiers
-    |!                                       # 6a. stress marker (always)
-    |:[0-9]+                                 # 6b. tone/length
-    |\.[0-9]*                                # 6c. syllable dot
-    |@[a-z]+                                 # 6d. directives
+    \{[^}]+\}                                      # 1. brace macro
+    |\\[a-zA-Z](?:[\^_~>][a-zA-Z0-9]*)*'?(?:~)?    # 2. turned base + modifiers
+    |<[a-zA-Z](?:[\^_~>][a-zA-Z0-9]*)*'?(?:~)?     # 3. implosive/mirror + modifiers
+    |\|\|                                           # 4. lateral click
+    |[a-zA-Z|=](?:[\^_~>][a-zA-Z0-9]*)*'?(?:~)?    # 5. single base + modifiers
+    |!                                              # 6a. stress marker (always)
+    |:[0-9]+                                        # 6b. tone/length
+    |\.[0-9]*                                       # 6c. syllable dot
+    |@[a-z]+                                        # 6d. directives
     )
     """,
     re.VERBOSE,
@@ -144,6 +147,9 @@ class ASCIIPATokenizer:
         """Extract modifier segments from a token suffix.
 
         E.g. ``^h_o~`` → ``('^h', '_o', '~')``
+
+        The ejective marker ``'`` is terminal: it does NOT consume
+        following characters, so ``p'a`` is split as ``p'`` + ``a``.
         """
         if not suffix:
             return ()
@@ -159,7 +165,12 @@ class ASCIIPATokenizer:
                     j += 1
                 mods.append(suffix[i:j])
                 i = j
-            elif ch in ("~", "'", ">"):
+            elif ch == "'":
+                # Ejective marker is terminal — does not consume following chars
+                mods.append(ch)
+                i += 1
+                break  # remaining chars belong to the next token
+            elif ch in ("~", ">"):
                 mods.append(ch)
                 i += 1
             else:

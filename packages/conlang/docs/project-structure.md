@@ -4,6 +4,12 @@
 packages/conlang/
 ├── pyproject.toml                 # 独立包配置（hatchling 构建）
 ├── README.md                      # 项目简介
+├── examples/                      # 综合示例
+│   └── vhaklik/                   #   瓦克里克语（Vha'Klik）完整示例
+│       ├── README.md              #     示例文档（ASCIIPA、IPA、TTS、SCA）
+│       ├── run_example.py         #     可运行的 Python 演示脚本
+│       ├── highland_lexicon.yaml  #     高原语词汇表
+│       └── lowland_rules.sca      #     音变规则（高原 → 平原方言）
 ├── docs/                          # 文档
 │   ├── asciipa-reference.md       #   ASCIIPA 语法速查表
 │   ├── asciipa-vs-xsampa.md       #   ASCIIPA 与 X-SAMPA 对比
