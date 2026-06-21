@@ -12,6 +12,13 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+# Short aliases for format names (canonical name → itself is implicit)
+FMT_ALIASES: dict[str, str] = {
+    "kir": "kirshenbaum",
+    "xs": "xsampa",
+    "asc": "asciipa",
+}
+
 # Sub-command groups
 sca_app = typer.Typer(help="Sound Change Applier (SCA) tools.")
 app.add_typer(sca_app, name="sca")
@@ -44,11 +51,11 @@ def convert(
     text: str = typer.Argument(help="Phonetic string to convert"),
     from_fmt: str = typer.Option(
         "asciipa", "--from", "-f",
-        help="Input format: asciipa, ipa",
+        help="Input format: asciipa (asc), ipa",
     ),
     to_fmt: str = typer.Option(
         "ipa", "--to", "-t",
-        help="Output format: asciipa, ipa, xsampa, kirshenbaum",
+        help="Output format: asciipa (asc), ipa, xsampa (xs), kirshenbaum (kir)",
     ),
     chars: bool = typer.Option(
         False, "--chars", "-c",
@@ -78,7 +85,7 @@ def convert(
     # Step 1: Convert input to Unicode IPA
     from conlang.phonology.asciipa import asciipa_to_ipa, ipa_to_asciipa
 
-    fmt = from_fmt.lower().strip()
+    fmt = FMT_ALIASES.get(from_fmt.lower().strip(), from_fmt.lower().strip())
     if fmt == "asciipa":
         ipa = asciipa_to_ipa(text)
     elif fmt == "ipa":
@@ -109,7 +116,7 @@ def convert(
         return
 
     # Step 4: Convert IPA to target format
-    target = to_fmt.lower().strip()
+    target = FMT_ALIASES.get(to_fmt.lower().strip(), to_fmt.lower().strip())
     if target == "ipa":
         typer.echo(ipa)
     elif target == "asciipa":
@@ -170,7 +177,7 @@ def speak(
     text: str = typer.Argument(help="Phonetic string to speak"),
     fmt: str = typer.Option(
         "asciipa", "--format", "-f",
-        help="Input format: asciipa, ipa, or kirshenbaum",
+        help="Input format: asciipa (asc), ipa, or kirshenbaum (kir)",
     ),
     output: str | None = typer.Option(
         None, "--output", "-o",
@@ -213,10 +220,11 @@ def speak(
         typer.echo("Error: specify --output or --play (or both).", err=True)
         raise typer.Exit(code=1)
 
+    resolved_fmt = FMT_ALIASES.get(fmt.lower().strip(), fmt.lower().strip())
     try:
         wav = tts_speak(
             text,
-            input_format=fmt,
+            input_format=resolved_fmt,
             output=output,
             play=play,
             language=language,

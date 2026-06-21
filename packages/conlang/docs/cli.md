@@ -6,30 +6,12 @@
 
 ```bash
 conlang version                                         # 查看版本
-conlang asciipa encode "θɪŋk"                          # IPA → ASCIIPA
-conlang asciipa decode "{th}I{ng}k"                     # ASCIIPA → IPA
+conlang convert "{th}I{ng}k"                            # ASCIIPA → IPA（默认）
+conlang convert "θɪŋk" -f ipa -t asc                   # IPA → ASCIIPA
 conlang tokenize "p^h a . {ng} o"                       # Token 拆解
 conlang speak "p^h a . t a"                             # 发音（需要 eSpeak-NG）
 conlang speak "θɪŋk" -f ipa -o think.wav               # IPA 输入，保存 .wav
 conlang sca run --rules rules.sca --lexicon words.yaml  # 运行音变
-```
-
-### `conlang asciipa encode`
-
-将 Unicode IPA 字符串转换为 ASCIIPA 编码。
-
-```bash
-$ conlang asciipa encode "θɪŋk"
-{th} I {ng} k
-```
-
-### `conlang asciipa decode`
-
-将 ASCIIPA 字符串转换回 Unicode IPA。
-
-```bash
-$ conlang asciipa decode "{th}I{ng}k"
-θɪŋk
 ```
 
 ### `conlang tokenize`
@@ -46,6 +28,41 @@ Tokens (5):
   '{ng}'  base='{ng}'  mods=()
   'o'  base='o'  mods=()
 ```
+
+### `conlang convert`
+
+在多种音标表示法之间互转。所有转换均经由 Unicode IPA 作为中间格式。
+
+```bash
+# ASCIIPA → IPA（默认）
+$ conlang convert "{th}I{ng}k"
+θɪŋk
+
+# IPA → ASCIIPA
+$ conlang convert "həlˈoʊ" -f ipa -t asciipa
+
+# IPA → Kirshenbaum
+$ conlang convert "həlˈəʊ" -f ipa -t kir
+
+# IPA → X-SAMPA
+$ conlang convert "həlˈəʊ" -f ipa -t xs
+
+# 逐字符描述
+$ conlang convert "həlˈəʊ" -f ipa --chars
+
+# 校验 IPA 合法性
+$ conlang convert "həlˈəʊ" -f ipa --check
+```
+
+**格式别名**：以下缩写可替代完整格式名使用：
+
+| 别名 | 完整名 |
+|:---|:---|
+| `kir` | `kirshenbaum` |
+| `xs` | `xsampa` |
+| `asc` | `asciipa` |
+
+> 参见 [`docs/asciipa-vs-xsampa.md`](./asciipa-vs-xsampa.md) 了解各方案的设计差异。
 
 ### `conlang sca run`
 
@@ -86,7 +103,7 @@ $ conlang speak "p^h a . t a"
 # IPA 格式输入
 $ conlang speak "həlˈoʊ" --format ipa
 
-# Kirshenbaum 格式（eSpeak-NG 内部格式）
+# Kirshenbaum 格式（eSpeak-NG 内部格式；缩写 -f kir 亦可）
 $ conlang speak "h @ l 'o U" -f kirshenbaum
 ```
 
@@ -105,7 +122,7 @@ $ conlang speak "k^w a" -o output.wav
 | 参数 | 缩写 | 说明 | 默认值 |
 |:---|:---|:---|:---|
 | `text` | — | 音标字符串（必填） | — |
-| `--format` | `-f` | 输入格式：`asciipa`、`ipa`、`kirshenbaum` | `asciipa` |
+| `--format` | `-f` | 输入格式：`asciipa` (`asc`)、`ipa`、`kirshenbaum` (`kir`) | `asciipa` |
 | `--output` | `-o` | 输出 .wav 文件路径 | 不保存 |
 | `--play` / `--no-play` | — | 是否播放音频 | `--play` |
 | `--language` | `-l` | eSpeak 语言代码（搭嘴音用 `zu`） | `en` |

@@ -57,3 +57,8 @@ p^h_o   送气 + 清化 p （可自由组合）
 | 附加特征 | 后置修饰符堆叠，顺序无规范 | 前置/上标/下标，正交可组合 |
 | 多特征音素 | 需预定义或手动堆叠 | 自由组合 + 花括号封装 |
 | 符号冲突处理 | 无机制 | `@bind` 作用域隔离 |
+
+## 其他 ASCII-IPA 方案
+
+- [Kirshenbaum (Usenet ASCII-IPA)](https://en.wikipedia.org/wiki/Usenet_ASCII-IPA_transcription) — 维基百科
+- [Kirshenbaum ASCII-IPA 详细规范 (PDF)](https://web.archive.org/web/20110927070959/http://www.kirshenbaum.net/IPA/ascii-ipa.pdf) — Internet Archive
