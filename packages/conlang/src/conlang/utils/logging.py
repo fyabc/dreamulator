@@ -1,4 +1,4 @@
-"""Logging setup for dreamulator.
+"""Logging setup for conlang.
 
 Uses rich logging handler when available for colored, structured output.
 Falls back to standard logging otherwise.
@@ -8,7 +8,7 @@ import logging
 
 
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
-    """Configure the dreamulator logger.
+    """Configure the conlang logger.
 
     When ``rich`` is installed, uses :class:`rich.logging.RichHandler` for
     colored output and installs rich traceback rendering.  Falls back to
@@ -34,4 +34,4 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         kwargs["handlers"] = [RichHandler()]
 
     logging.basicConfig(datefmt="%m/%d %H:%M:%S", level=level, **kwargs)
-    return logging.getLogger("dreamulator")
+    return logging.getLogger("conlang")

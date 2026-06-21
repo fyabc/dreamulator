@@ -84,10 +84,10 @@ sudo apt install espeak-ng
 $ conlang speak "p^h a . t a"
 
 # IPA 格式输入
-$ conlang speak "θɪŋk" --format ipa
+$ conlang speak "həlˈoʊ" --format ipa
 
-# X-SAMPA 格式输入
-$ conlang speak "p_h a N o" -f xsampa
+# Kirshenbaum 格式（eSpeak-NG 内部格式）
+$ conlang speak "h @ l 'o U" -f kirshenbaum
 ```
 
 **保存到文件**：
@@ -105,7 +105,7 @@ $ conlang speak "k^w a" -o output.wav
 | 参数 | 缩写 | 说明 | 默认值 |
 |:---|:---|:---|:---|
 | `text` | — | 音标字符串（必填） | — |
-| `--format` | `-f` | 输入格式：`asciipa`、`ipa`、`xsampa` | `asciipa` |
+| `--format` | `-f` | 输入格式：`asciipa`、`ipa`、`kirshenbaum` | `asciipa` |
 | `--output` | `-o` | 输出 .wav 文件路径 | 不保存 |
 | `--play` / `--no-play` | — | 是否播放音频 | `--play` |
 | `--language` | `-l` | eSpeak 语言代码（搭嘴音用 `zu`） | `en` |
@@ -117,16 +117,19 @@ $ conlang speak "k^w a" -o output.wav
 - Windows：PowerShell `SoundPlayer`
 - Linux：`aplay`（ALSA）→ `paplay`（PulseAudio）→ `ffplay`
 
-**格式转换**：输入会先转换为 X-SAMPA 再传给 eSpeak-NG。转换过程对修饰符进行正确分解：
+**格式转换**：输入会先转换为 Kirshenbaum 格式（eSpeak-NG 的内部音标系统）再传给引擎。映射数据提取自 [ipapy](https://github.com/pettarin/ipapy)（MIT 许可证）。
 
-| 输入（ASCIIPA） | 转换后（X-SAMPA） |
-|:---|:---|
-| `p^h` | `p_h` |
-| `t^w` | `t_w` |
-| `<b` | `b_<` |
-| `p'` | `p_>` |
-| `{sh}` | `S` |
-| `{ng}` | `N` |
+| 输入（ASCIIPA） | IPA | Kirshenbaum | 说明 |
+|:---|:---|:---|:---|
+| `p^h` | pʰ | `p<h>` | 送气修饰 |
+| `{sh}` | ʃ | `S` | 花括号宏 |
+| `{ng}` | ŋ | `N` | 花括号宏 |
+| `{th}` | θ | `T` | 花括号宏 |
+| `<b` | ɓ | `b`` | 内爆音 |
+| `p'` | pʼ | `p`` | 挤喉音 |
+| `{!}` | ǃ | `c!` | 搭嘴音（花括号） |
+| `\e` | ə | `@` | 转义/倒置 |
+| `!` | ˈ | `'` | 主重音（结构性） |
 
 ## Dreamulator 集成
 

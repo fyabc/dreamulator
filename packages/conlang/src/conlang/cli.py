@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import typer
 
 app = typer.Typer(
@@ -15,6 +17,20 @@ sca_app = typer.Typer(help="Sound Change Applier (SCA) tools.")
 asciipa_app = typer.Typer(help="ASCIIPA encoding/decoding tools.")
 app.add_typer(sca_app, name="sca")
 app.add_typer(asciipa_app, name="asciipa")
+
+
+@app.callback()
+def main(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="Enable debug logging.",
+    ),
+) -> None:
+    """Global options applied to all subcommands."""
+    from conlang.utils.logging import setup_logging
+
+    level = logging.DEBUG if verbose else logging.INFO
+    setup_logging(level)
 
 
 @app.command()
@@ -90,7 +106,7 @@ def speak(
     text: str = typer.Argument(help="Phonetic string to speak"),
     fmt: str = typer.Option(
         "asciipa", "--format", "-f",
-        help="Input format: asciipa, ipa, or xsampa",
+        help="Input format: asciipa, ipa, or kirshenbaum",
     ),
     output: str | None = typer.Option(
         None, "--output", "-o",
@@ -113,21 +129,21 @@ def speak(
         help="Pitch (0–99)",
     ),
 ) -> None:
-    """Synthesize and play a phonetic string.
+    """Synthesize and play a phonetic string via eSpeak-NG (Kirshenbaum format).
 
-    Default input format is ASCIIPA. Use --format to specify IPA or X-SAMPA.
+    Default input format is ASCIIPA. Use --format to specify IPA or Kirshenbaum.
 
     Examples:
 
       conlang speak "p^h a . t a"
 
-      conlang speak "θɪŋk" --format ipa
+      conlang speak "həlˈoʊ" --format ipa
 
-      conlang speak "p_h a t a" --format xsampa -o out.wav
+      conlang speak "h @ l ' o U" -f kirshenbaum -o out.wav
 
       conlang speak "!a:55" --language zu
     """
-    from conlang.phonology.xsampa import speak as tts_speak
+    from conlang.phonology.espeak_ng import speak as tts_speak
 
     if output is None and not play:
         typer.echo("Error: specify --output or --play (or both).", err=True)

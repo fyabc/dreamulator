@@ -36,7 +36,7 @@ from dataclasses import dataclass
 #   2. Turned bases:       \a, \e, \v, \m, \r, \h, \w, \y + modifiers
 #   3. Implosive/mirror:   <b, <d, <g, <e, <A + modifiers
 #   4. Lateral click:      ||
-#   5. Single-char base:   a-zA-Z, !, |, = + modifier chain (^h, _o, ~, ', >)
+#   5. Single-char base:   a-zA-Z, |, = + modifier chain (^h, _o, ~, ', >)
 #   6. Structural tokens:  syllable dot (.), tone (:NN), stress (!), directives
 TOKEN_PATTERN = re.compile(
     r"""
@@ -45,10 +45,11 @@ TOKEN_PATTERN = re.compile(
     |\\[a-zA-Z](?:[\^_~'>][a-zA-Z0-9]*)*    # 2. turned base + modifiers
     |<[a-zA-Z](?:[\^_~'>][a-zA-Z0-9]*)*     # 3. implosive/mirror + modifiers
     |\|\|                                    # 4. lateral click
-    |[a-zA-Z!|=](?:[\^_~'>][a-zA-Z0-9]*)*   # 5. single base + modifiers
-    |:[0-9]+                                 # 6a. tone/length
-    |\.[0-9]*                                # 6b. syllable dot
-    |@[a-z]+                                 # 6c. directives
+    |[a-zA-Z|=](?:[\^_~'>][a-zA-Z0-9]*)*    # 5. single base + modifiers
+    |!                                       # 6a. stress marker (always)
+    |:[0-9]+                                 # 6b. tone/length
+    |\.[0-9]*                                # 6c. syllable dot
+    |@[a-z]+                                 # 6d. directives
     )
     """,
     re.VERBOSE,
@@ -105,7 +106,7 @@ class ASCIIPATokenizer:
 
     def _parse_token(self, raw: str) -> Token:
         """Parse a raw string into a Token."""
-        # Brace macro
+        # Brace macro (must be checked before structural markers)
         if raw.startswith("{") and raw.endswith("}"):
             return Token(raw=raw, base=raw, is_macro=True)
 
@@ -114,6 +115,8 @@ class ASCIIPATokenizer:
             return Token(raw=raw, base=raw, is_structural=True)
         if raw.startswith("@"):
             return Token(raw=raw, base=raw, is_structural=True)
+        if raw == "!":
+            return Token(raw=raw, base="!", is_structural=True)
 
         # Lateral click
         if raw == "||":
@@ -201,6 +204,9 @@ def ipa_to_asciipa(ipa: str) -> str:
 def asciipa_to_ipa(asciipa_str: str) -> str:
     """Convert an ASCIIPA string to IPA notation.
 
+    Decomposes tokens into base + modifiers and converts each part
+    separately, then concatenates the results.
+
     Args:
         asciipa_str: ASCIIPA-encoded string.
 
@@ -213,15 +219,29 @@ def asciipa_to_ipa(asciipa_str: str) -> str:
     tokens = tokenizer.tokenize(asciipa_str)
     result: list[str] = []
     for tok in tokens:
-        mapped = ASCIIPA_TO_IPA_MAP.get(tok.raw)
-        if mapped:
-            result.append(mapped)
-        elif tok.is_structural:
-            # Convert structural markers
+        if tok.is_structural:
             if tok.raw == ".":
                 result.append(".")
+            elif tok.raw == ":":
+                result.append("ː")
+            elif tok.raw.startswith("!"):
+                result.append("ˈ")
             else:
                 result.append(tok.raw)
-        else:
-            result.append(tok.raw)
+            continue
+
+        # Try whole-token match first
+        whole = ASCIIPA_TO_IPA_MAP.get(tok.raw)
+        if whole is not None:
+            result.append(whole)
+            continue
+
+        # Decompose: convert base, then each modifier
+        base_ipa = ASCIIPA_TO_IPA_MAP.get(tok.base, tok.base)
+        parts = [base_ipa]
+        for mod in tok.modifiers:
+            mod_ipa = ASCIIPA_TO_IPA_MAP.get(mod, "")
+            if mod_ipa:
+                parts.append(mod_ipa)
+        result.append("".join(parts))
     return "".join(result)

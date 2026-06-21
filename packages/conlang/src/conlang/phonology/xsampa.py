@@ -1,8 +1,13 @@
-"""ASCIIPA ↔ X-SAMPA conversion and eSpeak-NG TTS integration.
+"""ASCIIPA ↔ X-SAMPA conversion (legacy module).
 
-X-SAMPA is the ASCII encoding natively understood by eSpeak-NG.
-This module bridges ASCIIPA tokens to X-SAMPA strings, enabling
-direct audio synthesis of ASCIIPA-encoded words.
+.. note::
+    For TTS with eSpeak-NG, use :mod:`conlang.phonology.espeak_ng` instead.
+    eSpeak-NG uses the Kirshenbaum system internally, NOT X-SAMPA.
+    This module is kept for backward compatibility and for tools that
+    specifically require X-SAMPA format.
+
+X-SAMPA is a standardized ASCII encoding of IPA symbols.
+This module bridges ASCIIPA tokens to X-SAMPA strings.
 
 Usage::
 
