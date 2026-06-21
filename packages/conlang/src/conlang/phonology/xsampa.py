@@ -198,12 +198,12 @@ def ipa_to_xsampa(ipa_str: str, *, wrap: bool = False) -> str:
             if mapped is not None:
                 parts.append(mapped)
             elif ch == " ":
-                parts.append(" ")
+                pass  # skip spaces
             else:
                 parts.append(ch)
             i += 1
 
-    result = " ".join(parts)
+    result = "".join(parts)
     if wrap:
         return "[[" + result + "]]"
     return result
