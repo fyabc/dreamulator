@@ -84,6 +84,7 @@ results = sca.apply_all()
 ## 文档
 
 - [ASCIIPA 语法速查表](docs/asciipa-reference.md) —— 辅音、修饰符、文档级指令的完整语法
+- [ASCIIPA vs. X-SAMPA](docs/asciipa-vs-xsampa.md) —— 可读性与可扩展性对比
 - [命令行工具](docs/cli.md) —— 独立 CLI 和 Dreamulator 集成命令参考
 - [项目结构](docs/project-structure.md) —— 模块说明与文件职责
 - [开发指南](docs/development.md) —— 测试、lint、构建
