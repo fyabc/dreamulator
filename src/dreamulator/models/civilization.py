@@ -50,6 +50,10 @@ class Culture(BaseModel):
     id: str = Field(description="Unique identifier, e.g. 'culture_northern_tribes'")
     name: str
     language_family: str = Field(default="", description="Language family grouping")
+    language_id: str = Field(
+        default="",
+        description="Conlang language ID (references layers/civilization/input/languages/<id>/)",
+    )
     religion: str = ""
     customs: list[str] = Field(default_factory=list)
     description: str = ""

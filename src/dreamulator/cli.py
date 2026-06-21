@@ -22,6 +22,10 @@ console = Console()
 branch_app = typer.Typer(help="Manage world branches.")
 app.add_typer(branch_app, name="branch")
 
+# Conlang subcommand group
+conlang_app = typer.Typer(help="Conlang tools for language design and sound change simulation.")
+app.add_typer(conlang_app, name="conlang")
+
 
 @app.command()
 def version() -> None:
@@ -654,6 +658,74 @@ def branch_promote(
     except FileExistsError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1)
+
+
+# --- Conlang subcommands ---
+
+
+@conlang_app.command("evolve")
+def conlang_evolve(
+    world: str = typer.Argument(help="World name"),
+    language: str = typer.Argument(help="Language ID (directory name under languages/)"),
+    generations: int = typer.Option(5, "--generations", "-g", help="Number of generations"),
+    seed: int | None = typer.Option(None, help="Override RNG seed"),
+) -> None:
+    """Run SCA sound change on a language's lexicon."""
+    from conlang.phonology.sca import SCAEngine
+
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1)
+
+    lang_dir = world_dir / "layers" / "civilization" / "input" / "languages" / language
+    rules_file = lang_dir / "sca_rules.sca"
+    lexicon_file = lang_dir / "lexicon.yaml"
+
+    if not rules_file.exists():
+        console.print(f"[red]SCA rules file not found: {rules_file}[/red]")
+        raise typer.Exit(code=1)
+    if not lexicon_file.exists():
+        console.print(f"[red]Lexicon file not found: {lexicon_file}[/red]")
+        raise typer.Exit(code=1)
+
+    engine = SCAEngine(seed=seed)
+    engine.load_rules_file(rules_file)
+    engine.load_lexicon_file(lexicon_file)
+
+    console.print(
+        f"[cyan]Evolving language '{language}' in '{world}' "
+        f"for {generations} generation(s)...[/cyan]"
+    )
+
+    history = engine.simulate_generations(generations)
+
+    table = Table(title=f"Sound Change: {language}")
+    table.add_column("Proto", style="cyan")
+    for gen in range(generations + 1):
+        table.add_column(f"Gen {gen}")
+
+    for proto, forms in history.items():
+        table.add_row(proto, *forms)
+
+    console.print(table)
+
+
+@conlang_app.command("tokenize")
+def conlang_tokenize(
+    word: str = typer.Argument(help="ASCIIPA word to tokenize"),
+) -> None:
+    """Show the token breakdown of an ASCIIPA word."""
+    from conlang.phonology.asciipa import ASCIIPATokenizer
+
+    tokenizer = ASCIIPATokenizer()
+    tokens = tokenizer.tokenize(word)
+    console.print(f"[cyan]ASCIIPA:[/cyan] {word}")
+    console.print(f"[cyan]Tokens ({len(tokens)}):[/cyan]")
+    for tok in tokens:
+        console.print(f"  {tok.raw!r}  base={tok.base!r}  mods={tok.modifiers}")
 
 
 if __name__ == "__main__":

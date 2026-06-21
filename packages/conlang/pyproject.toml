@@ -3,52 +3,31 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dreamulator"
+name = "conlang"
 version = "0.1.0"
-description = "Fantasy world building and simulation tool grounded in real science"
+description = "Conlang (constructed language) toolkit: ASCIIPA, SCA, morphology, and lexicon"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.11",
-    "typer>=0.15",
-    "rich>=13.0",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.34",
-    "numpy>=2.0",
-    "scipy>=1.14",
-    "astropy>=7.0",
     "pyyaml>=6.0",
-    "jsonschema>=4.23",
-    "jinja2>=3.1",
-    "conlang",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
-    "hypothesis>=6.0",
     "mypy>=1.14",
     "ruff>=0.9",
-    "pre-commit>=4.0",
-    "httpx>=0.28",
 ]
-narrate = [
-    "anthropic>=0.40",
-]
+tts = ["py-espeak-ng>=0.1"]
 
 [project.scripts]
-dreamulator = "dreamulator.cli:app"
+conlang = "conlang.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dreamulator"]
-
-[tool.uv.workspace]
-members = ["packages/*"]
-
-[tool.uv.sources]
-conlang = { workspace = true }
+packages = ["src/conlang"]
 
 [tool.ruff]
 target-version = "py312"
