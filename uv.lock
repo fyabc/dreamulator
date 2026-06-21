@@ -6,6 +6,12 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "conlang",
+    "dreamulator",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -177,6 +183,38 @@ wheels = [
 ]
 
 [[package]]
+name = "conlang"
+version = "0.1.0"
+source = { editable = "packages/conlang" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+tts = [
+    { name = "py-espeak-ng" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14" },
+    { name = "py-espeak-ng", marker = "extra == 'tts'", specifier = ">=0.1" },
+    { name = "pydantic", specifier = ">=2.11" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
+]
+provides-extras = ["dev", "tts"]
+
+[[package]]
 name = "coverage"
 version = "7.14.1"
 source = { registry = "https://pypi.org/simple" }
@@ -293,6 +331,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
+    { name = "conlang" },
     { name = "fastapi" },
     { name = "jinja2" },
     { name = "jsonschema" },
@@ -323,6 +362,7 @@ narrate = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'narrate'", specifier = ">=0.40" },
     { name = "astropy", specifier = ">=7.0" },
+    { name = "conlang", editable = "packages/conlang" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.0" },
@@ -908,6 +948,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8e/22/2de9408ac81acbb8a7d05d4cc064a152ccf33b3d480ebe0cd292153db239/pre_commit-4.6.0.tar.gz", hash = "sha256:718d2208cef53fdc38206e40524a6d4d9576d103eb16f0fec11c875e7716e9d9", size = 198525, upload-time = "2026-04-21T20:31:41.613Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/6e/4b28b62ecb6aae56769c34a8ff1d661473ec1e9519e2d5f8b2c150086b26/pre_commit-4.6.0-py2.py3-none-any.whl", hash = "sha256:e2cf246f7299edcabcf15f9b0571fdce06058527f0a06535068a86d38089f29b", size = 226472, upload-time = "2026-04-21T20:31:40.092Z" },
+]
+
+[[package]]
+name = "py-espeak-ng"
+version = "0.1.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/bf/24720747e9cba86b971a4d47383ab162d5e9c27dccbae7730f728a64edac/py-espeak-ng-0.1.8.tar.gz", hash = "sha256:749f7c802caf2d314e0091552c689325da31ded738bfdfef4c1ae0cb5ecfbddd", size = 11375, upload-time = "2019-03-19T06:53:20.742Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/84/cef855b15184bfcc3666ece53399373d4dc02585b5206d8a4ab62ae1ad83/py_espeak_ng-0.1.8-py2.py3-none-any.whl", hash = "sha256:f50bfdbfaf4f54a24019e7ef7d36bffe76d99e25875fc33d90912b394936c94b", size = 6288, upload-time = "2019-03-19T06:53:19.001Z" },
 ]
 
 [[package]]
