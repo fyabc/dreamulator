@@ -38,7 +38,7 @@ class TestBranchMetadata:
     def test_serialization(self):
         branch = BranchMetadata(
             name="test",
-            fork_layer=Layer.STELLAR,
+            fork_layer=Layer.ASTRONOMY,
         )
         json_str = branch.model_dump_json()
         restored = BranchMetadata.model_validate_json(json_str)

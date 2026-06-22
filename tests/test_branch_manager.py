@@ -19,14 +19,14 @@ class TestBranchManager:
 
     def test_create_branch_pre_fork_layers_not_created(self, tmp_path):
         mgr = BranchManager(tmp_path)
-        branch_dir = mgr.create_branch("alt_stellar", Layer.STELLAR)
+        branch_dir = mgr.create_branch("alt_astronomy", Layer.ASTRONOMY)
 
         # Layers before fork should not exist
         assert not (branch_dir / "layers" / "physics").exists()
         assert not (branch_dir / "layers" / "chemistry").exists()
         # Fork layer and after should exist
-        assert (branch_dir / "layers" / "stellar").exists()
-        assert (branch_dir / "layers" / "orbital").exists()
+        assert (branch_dir / "layers" / "astronomy").exists()
+        assert (branch_dir / "layers" / "geological").exists()
 
     def test_create_duplicate_branch_fails(self, tmp_path):
         mgr = BranchManager(tmp_path)

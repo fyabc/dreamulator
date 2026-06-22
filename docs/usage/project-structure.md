@@ -82,7 +82,7 @@ dreamulator/
 世界数据按学科层级组织，从最基础到最衍生：
 
 ```
-physics → chemistry → stellar → orbital → geological → climate → ecology → civilization
+physics → chemistry → astronomy → geological → climate → ecology → civilization
 ```
 
 每个世界使用 `layers/` 目录结构，每个层包含 `input/`（YAML，人写的创意设定）和 `derived/`（JSON，引擎计算的物理结果）。
@@ -91,7 +91,7 @@ physics → chemistry → stellar → orbital → geological → climate → eco
 
 分支类似 git branch，在某一特定层分叉，共享该层之上的所有数据：
 
-- 在 `stellar` 层分叉 → 相同物理/化学定律下的不同恒星系
+- 在 `astronomy` 层分叉 → 相同物理/化学定律下的不同恒星系
 - 在 `geological` 层分叉 → 相同恒星系/轨道下的不同海陆分布
 
 分支仅存储分叉层及之后的数据，之前的层从父世界继承。

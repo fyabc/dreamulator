@@ -20,12 +20,9 @@ layers:
   chemistry:
     configured: false
     engine: ""
-  stellar:
+  astronomy:
     configured: true
-    engine: stellar
-  orbital:
-    configured: false
-    engine: orbital
+    engine: astronomy
   geological:
     configured: true
     engine: geological

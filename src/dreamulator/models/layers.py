@@ -4,7 +4,7 @@ Layers are ordered from most fundamental to most derived. Each layer represents
 a scientific discipline that builds upon the layers below it.
 
 The layer hierarchy:
-    physics → chemistry → stellar → orbital → geological → climate → ecology → civilization
+    physics → chemistry → astronomy → geological → climate → ecology → civilization
 """
 
 from enum import Enum
@@ -20,8 +20,7 @@ class Layer(str, Enum):
 
     PHYSICS = "physics"
     CHEMISTRY = "chemistry"
-    STELLAR = "stellar"
-    ORBITAL = "orbital"
+    ASTRONOMY = "astronomy"
     GEOLOGICAL = "geological"
     CLIMATE = "climate"
     ECOLOGY = "ecology"
@@ -32,8 +31,7 @@ class Layer(str, Enum):
 LAYER_ORDER: list[Layer] = [
     Layer.PHYSICS,
     Layer.CHEMISTRY,
-    Layer.STELLAR,
-    Layer.ORBITAL,
+    Layer.ASTRONOMY,
     Layer.GEOLOGICAL,
     Layer.CLIMATE,
     Layer.ECOLOGY,
@@ -44,8 +42,7 @@ LAYER_ORDER: list[Layer] = [
 LAYER_ENGINES: dict[Layer, list[str]] = {
     Layer.PHYSICS: [],
     Layer.CHEMISTRY: [],
-    Layer.STELLAR: ["stellar"],
-    Layer.ORBITAL: ["orbital"],
+    Layer.ASTRONOMY: ["astronomy"],
     Layer.GEOLOGICAL: ["geological"],
     Layer.CLIMATE: ["climate"],
     Layer.ECOLOGY: ["ecology"],
@@ -56,10 +53,9 @@ LAYER_ENGINES: dict[Layer, list[str]] = {
 LAYER_DEPENDENCIES: dict[Layer, list[Layer]] = {
     Layer.PHYSICS: [],
     Layer.CHEMISTRY: [Layer.PHYSICS],
-    Layer.STELLAR: [Layer.PHYSICS, Layer.CHEMISTRY],
-    Layer.ORBITAL: [Layer.STELLAR],
-    Layer.GEOLOGICAL: [Layer.ORBITAL],
-    Layer.CLIMATE: [Layer.ORBITAL, Layer.GEOLOGICAL],
+    Layer.ASTRONOMY: [Layer.PHYSICS, Layer.CHEMISTRY],
+    Layer.GEOLOGICAL: [Layer.ASTRONOMY],
+    Layer.CLIMATE: [Layer.ASTRONOMY, Layer.GEOLOGICAL],
     Layer.ECOLOGY: [Layer.CLIMATE, Layer.GEOLOGICAL],
     Layer.CIVILIZATION: [Layer.ECOLOGY, Layer.GEOLOGICAL, Layer.CLIMATE],
 }

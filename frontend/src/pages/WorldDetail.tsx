@@ -7,7 +7,7 @@ import BranchSelector from '../components/BranchSelector'
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
-  const [activeTab, setActiveTab] = useState<'overview' | 'stellar' | 'planets' | 'narrate'>(
+  const [activeTab, setActiveTab] = useState<'overview' | 'astronomy' | 'planets' | 'narrate'>(
     'overview',
   )
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
@@ -23,9 +23,9 @@ export default function WorldDetail() {
   })
 
   const { data: stellarSystem } = useQuery({
-    queryKey: ['stellar', worldName],
+    queryKey: ['astronomy', worldName],
     queryFn: () => api.getStellarSystem(worldName!),
-    enabled: !!worldName && activeTab === 'stellar',
+    enabled: !!worldName && activeTab === 'astronomy',
   })
 
   const { data: planets } = useQuery({
@@ -126,7 +126,7 @@ export default function WorldDetail() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 border-b border-space-border">
-              {(['overview', 'stellar', 'planets', 'narrate'] as const).map((tab) => (
+              {(['overview', 'astronomy', 'planets', 'narrate'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -138,8 +138,8 @@ export default function WorldDetail() {
                 >
                   {tab === 'overview'
                     ? '概览'
-                    : tab === 'stellar'
-                      ? '恒星系'
+                    : tab === 'astronomy'
+                      ? '天文学'
                       : tab === 'planets'
                         ? '行星'
                         : '叙述'}
@@ -203,10 +203,10 @@ export default function WorldDetail() {
               </div>
             )}
 
-            {activeTab === 'stellar' && (
+            {activeTab === 'astronomy' && (
               <div className="glass-panel p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  恒星系
+                  天文学
                 </h2>
                 {stellarSystem ? (
                   <div>

@@ -114,7 +114,7 @@ def info(
     # Try to load stellar data from layer file
     try:
         stellar = load_layer_input(
-            world_dir, "stellar", "stellar.yaml", StellarSystem, branch=branch
+            world_dir, "astronomy", "stellar.yaml", StellarSystem, branch=branch
         )
         star_table = Table(title="Stars")
         star_table.add_column("ID")
@@ -130,7 +130,7 @@ def info(
             )
         console.print(star_table)
     except FileNotFoundError:
-        console.print("[dim]No stellar data configured[/dim]")
+        console.print("[dim]No astronomy data configured[/dim]")
 
     # Layer summary
     if config.layers:
@@ -313,9 +313,11 @@ def narrate(
     else:
         # Streaming mode — print text as it arrives
         import sys
+        from io import TextIOWrapper
 
         # Ensure UTF-8 output (Windows defaults to GBK)
-        sys.stdout.reconfigure(encoding="utf-8")
+        if isinstance(sys.stdout, TextIOWrapper):
+            sys.stdout.reconfigure(encoding="utf-8")
 
         def on_text_delta(delta: str) -> None:
             sys.stdout.write(delta)

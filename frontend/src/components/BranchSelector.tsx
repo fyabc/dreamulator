@@ -10,8 +10,7 @@ interface BranchSelectorProps {
 const LAYER_LABELS: Record<string, string> = {
   physics: '物理定律',
   chemistry: '化学',
-  stellar: '恒星系',
-  orbital: '轨道力学',
+  astronomy: '天文学',
   geological: '地质',
   climate: '气候',
   ecology: '生态',

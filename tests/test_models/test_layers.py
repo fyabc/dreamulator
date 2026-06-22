@@ -31,7 +31,7 @@ class TestLayerFunctions:
         assert get_layer_index(Layer.CIVILIZATION) == len(LAYER_ORDER) - 1
 
     def test_get_layer_index_from_string(self):
-        assert get_layer_index("stellar") == 2
+        assert get_layer_index("astronomy") == 2
 
     def test_get_layer_index_invalid(self):
         with pytest.raises(ValueError, match="Unknown layer"):
@@ -43,18 +43,17 @@ class TestLayerFunctions:
         assert Layer.CLIMATE in layers
         assert Layer.ECOLOGY in layers
         assert Layer.CIVILIZATION in layers
-        assert Layer.STELLAR not in layers
+        assert Layer.ASTRONOMY not in layers
 
     def test_get_layers_before(self):
         layers = get_layers_before(Layer.GEOLOGICAL)
         assert Layer.PHYSICS in layers
-        assert Layer.STELLAR in layers
-        assert Layer.ORBITAL in layers
+        assert Layer.ASTRONOMY in layers
         assert Layer.GEOLOGICAL not in layers
 
     def test_get_layer_dependencies(self):
         deps = get_layer_dependencies(Layer.CLIMATE)
-        assert Layer.ORBITAL in deps
+        assert Layer.ASTRONOMY in deps
         assert Layer.GEOLOGICAL in deps
 
     def test_get_layer_dependencies_root(self):
@@ -62,7 +61,7 @@ class TestLayerFunctions:
         assert deps == []
 
     def test_validate_layer_order_valid(self):
-        assert validate_layer_order([Layer.PHYSICS, Layer.STELLAR, Layer.GEOLOGICAL])
+        assert validate_layer_order([Layer.PHYSICS, Layer.ASTRONOMY, Layer.GEOLOGICAL])
 
     def test_validate_layer_order_invalid(self):
         assert not validate_layer_order([Layer.GEOLOGICAL, Layer.PHYSICS])
@@ -78,9 +77,9 @@ class TestLayerSummary:
 
     def test_with_values(self):
         summary = LayerSummary(
-            layer=Layer.STELLAR,
+            layer=Layer.ASTRONOMY,
             configured=True,
-            engine="stellar",
+            engine="astronomy",
         )
-        assert summary.layer == Layer.STELLAR
+        assert summary.layer == Layer.ASTRONOMY
         assert summary.configured is True

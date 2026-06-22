@@ -14,7 +14,7 @@ class TestWorldManager:
         assert world_dir.exists()
         assert (world_dir / "world.yaml").exists()
         assert (world_dir / "layers").exists()
-        assert (world_dir / "layers" / "stellar" / "input").exists()
+        assert (world_dir / "layers" / "astronomy" / "input").exists()
 
         # List should contain the world
         worlds = mgr.list_worlds()
@@ -34,8 +34,8 @@ class TestWorldManager:
         config = mgr.load_world("test_world")
         assert config.metadata.name == "test_world"
         assert config.seed.seed == 42
-        assert "stellar" in config.layers
-        assert config.layers["stellar"].configured is True
+        assert "astronomy" in config.layers
+        assert config.layers["astronomy"].configured is True
 
     def test_delete_world(self, tmp_worlds_dir):
         mgr = WorldManager(worlds_dir=tmp_worlds_dir)
