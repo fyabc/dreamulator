@@ -1,8 +1,20 @@
-# Gaia-M 行星/卫星物理参数 — 待填写
-#
-# 后续将包含：
-# - 巨行星 Aegis（1.6 M_J，气态巨行星，自转 ~10 h，有效温度 130 K）
-# - 卫星 Gaia-M（1.20 M⊕，1.07 R⊕，潮汐锁定于 Aegis）
-#   - 大气、水圈、岩石圈参数
-#   - 潮汐参数：Love numbers h₂=0.6, k₂=0.3，耗散因子 Q=100
-# - 外侧巨行星 2、3（共振系统成员）
+# Gaia-M 行星物理参数
+planets:
+  - id: planet_aegis
+    name: Aegis
+    orbits: star_gaia_primary
+    planet_type: gas_giant
+    mass: 508.5                   # 1.6 M_J × 317.83 M⊕/M_J
+    radius: 11.2                  # ~1.0 R_J (Fortney et al. 2007, 1.6 M_J 冷气态巨行星)
+    rotation_period_days: 0.4167  # ~10 hours
+    axial_tilt_deg: 3.0
+    albedo: 0.343                 # Jupiter-like Bond albedo
+    atmosphere:
+      surface_pressure_atm: 1000.0
+      composition:
+        H2: 0.86
+        He: 0.135
+        CH4: 0.003
+        NH3: 0.002
+      greenhouse_factor: 0.0
+    magnetic_field_strength: 400.0  # ~8× Jupiter (质量更大 + 快速自转)

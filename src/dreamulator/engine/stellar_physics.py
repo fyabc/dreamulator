@@ -209,6 +209,7 @@ def invert_mass_from_luminosity(
     Returns:
         Estimated mass in solar masses (M☉).
     """
+    from numpy import float64
     from scipy.optimize import brentq  # type: ignore[import-untyped]
 
     z = math.pow(10.0, metallicity_dex)
@@ -223,7 +224,8 @@ def invert_mass_from_luminosity(
         return forward_l(mass) - luminosity
 
     # Bracket: [0.08 M☉ (hydrogen-burning limit), 120 M☉ (upper MS)]
-    return float(brentq(f, 0.08, 120.0, xtol=1e-8, rtol=1e-10))
+    root = brentq(f, 0.08, 120.0, xtol=1e-8, rtol=float64(1e-10), full_output=False)
+    return float(root)  # type: ignore[arg-type]
 
 
 # ===================================================================
@@ -344,6 +346,59 @@ def habitable_zone_boundaries(luminosity: float, t_eff: float) -> dict[str, floa
         result[f"{name}_au"] = round(d_au, 6)
 
     return result
+
+
+def habitable_zone_center(luminosity: float, t_eff: float) -> float:
+    """Compute conservative habitable zone center distance.
+
+    Defined as the geometric mean of the inner (runaway greenhouse) and outer
+    (maximum greenhouse) flux boundaries in flux-space, converted to distance:
+
+        S_center = √(S_eff_inner × S_eff_outer)
+        d_center = √(L / S_center)
+
+    This log-mean flux center is the most physically meaningful midpoint,
+    as it represents the average insolation level across the conservative HZ.
+
+    Ref: Kopparapu, R. K., et al. (2013). ApJ, 765(2), 131.
+
+    Args:
+        luminosity: Stellar luminosity in L☉.
+        t_eff: Stellar effective temperature in K.
+
+    Returns:
+        HZ center distance in AU.
+    """
+    hz = habitable_zone_boundaries(luminosity, t_eff)
+    d_inner = hz["runaway_greenhouse_au"]
+    d_outer = hz["max_greenhouse_au"]
+    # Convert distances back to flux, take geometric mean, convert to distance
+    s_inner = luminosity / (d_inner * d_inner)
+    s_outer = luminosity / (d_outer * d_outer)
+    s_center = math.sqrt(s_inner * s_outer)
+    return round(math.sqrt(luminosity / s_center), 6)
+
+
+def kepler_orbital_period(semi_major_axis_au: float, central_mass_solar: float) -> float:
+    """Compute orbital period from Kepler's third law.
+
+    P = 2π √(a³ / GM)
+
+    In solar units this simplifies to:
+
+        P_days = 365.25 × √(a_AU³ / M_star_M☉)
+
+    Ref: Carroll, B. W., & Ostlie, D. A. (2017). An Introduction to Modern
+         Astrophysics (2nd ed.). Cambridge University Press.
+
+    Args:
+        semi_major_axis_au: Semi-major axis in AU.
+        central_mass_solar: Central body mass in solar masses (M☉).
+
+    Returns:
+        Orbital period in Earth days.
+    """
+    return 365.25 * math.sqrt(math.pow(semi_major_axis_au, 3) / central_mass_solar)
 
 
 # ===================================================================

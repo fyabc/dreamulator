@@ -12,9 +12,11 @@ from dreamulator.engine.stellar_physics import (
     equilibrium_temperature,
     evolution_progress,
     habitable_zone_boundaries,
+    habitable_zone_center,
     instellation,
     instellation_earth_units,
     invert_mass_from_luminosity,
+    kepler_orbital_period,
     main_sequence_lifetime,
     mass_luminosity_zams,
     mass_radius_zams,
@@ -283,3 +285,39 @@ class TestCondensationLines:
         lines_4 = condensation_lines(4.0)
         ratio = lines_4["water_snow_line_au"] / lines_1["water_snow_line_au"]
         assert ratio == pytest.approx(2.0, rel=0.01)
+
+
+class TestHabitableZoneCenter:
+    def test_solar_hz_center(self):
+        """Solar HZ center ≈ 1.29 AU (log-mean of 0.976 and 1.707 AU)."""
+        d = habitable_zone_center(1.0, 5772.0)
+        assert d == pytest.approx(1.29, rel=0.02)
+
+    def test_gaia_m_hz_center(self):
+        """Gaia-M HZ center ≈ 0.28 AU."""
+        d = habitable_zone_center(0.0357, 3858.0)
+        assert d == pytest.approx(0.2795, rel=0.01)
+
+    def test_between_boundaries(self):
+        """HZ center must lie between inner and outer boundaries."""
+        hz = habitable_zone_boundaries(1.0, 5772.0)
+        d = habitable_zone_center(1.0, 5772.0)
+        assert hz["runaway_greenhouse_au"] < d < hz["max_greenhouse_au"]
+
+
+class TestKeplerOrbitalPeriod:
+    def test_earth(self):
+        """Earth: a=1 AU, M=1 M☉ → P=365.25 days."""
+        P = kepler_orbital_period(1.0, 1.0)
+        assert P == pytest.approx(365.25, rel=1e-4)
+
+    def test_aegis(self):
+        """Aegis: a=0.2795 AU, M=0.4499 M☉ → P≈80.45 days."""
+        P = kepler_orbital_period(0.2795, 0.4499)
+        assert P == pytest.approx(80.45, rel=0.01)
+
+    def test_scales_correctly(self):
+        """Doubling semi-major axis → P increases by 2^1.5 ≈ 2.83."""
+        P1 = kepler_orbital_period(1.0, 1.0)
+        P2 = kepler_orbital_period(2.0, 1.0)
+        assert P2 / P1 == pytest.approx(2.0**1.5, rel=1e-4)

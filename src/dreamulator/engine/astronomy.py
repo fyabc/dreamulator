@@ -16,6 +16,7 @@ from dreamulator.engine.stellar_physics import (
     compute_stellar_parameters,
     condensation_lines,
     habitable_zone_boundaries,
+    habitable_zone_center,
 )
 from dreamulator.io.loader import load_yaml_model
 from dreamulator.models.layers import Layer
@@ -107,12 +108,14 @@ class AstronomyEngine(BaseEngine):
             lum = float(params["luminosity"])
             t_eff = float(params["temperature"])
             hz = habitable_zone_boundaries(lum, t_eff)
+            hz_center = habitable_zone_center(lum, t_eff)
             cl = condensation_lines(lum)
             hz_data.append(
                 {
                     "id": star.id,
                     "name": star.name,
                     "habitable_zone": hz,
+                    "habitable_zone_center_au": hz_center,
                     "condensation_lines": cl,
                 }
             )
