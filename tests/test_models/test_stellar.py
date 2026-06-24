@@ -44,7 +44,42 @@ class TestStar:
                 id="star_bad",
                 name="Bad",
                 spectral_class=SpectralClass.G,
-                mass=-1.0,  # invalid
+                mass=-1.0,  # invalid: must be > 0
+            )
+
+    def test_star_luminosity_only(self):
+        """Hybrid mode: luminosity as sole input (no mass)."""
+        star = Star(
+            id="star_m",
+            name="M Dwarf",
+            spectral_class=SpectralClass.M,
+            mass=None,
+            luminosity=0.027,
+        )
+        assert star.mass is None
+        assert star.luminosity == 0.027
+
+    def test_star_both_mass_and_luminosity(self):
+        """Hybrid mode: both mass and luminosity provided."""
+        star = Star(
+            id="star_both",
+            name="Both",
+            spectral_class=SpectralClass.G,
+            mass=1.0,
+            luminosity=1.0,
+        )
+        assert star.mass == 1.0
+        assert star.luminosity == 1.0
+
+    def test_star_neither_mass_nor_luminosity(self):
+        """Reject: neither mass nor luminosity provided."""
+        with pytest.raises(ValidationError, match="at least one"):
+            Star(
+                id="star_empty",
+                name="Empty",
+                spectral_class=SpectralClass.G,
+                mass=None,
+                luminosity=None,
             )
 
 

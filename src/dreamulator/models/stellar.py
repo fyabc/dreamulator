@@ -31,17 +31,30 @@ class LuminosityClass(str, Enum):
 
 
 class Star(BaseModel):
-    """A star in a stellar system."""
+    """A star in a stellar system.
+
+    Supports hybrid input mode: provide either mass, luminosity, or both.
+    - mass only: engine computes luminosity, radius, temperature.
+    - luminosity only: engine inverts mass-luminosity relation to derive mass,
+      then computes radius and temperature.
+    - both: mass takes priority; luminosity is used as override with consistency
+      warning if deviation > 20%.
+    """
 
     id: str = Field(description="Unique identifier within the system, e.g. 'star_sol'")
     name: str = Field(description="Display name of the star")
     spectral_class: SpectralClass
     luminosity_class: LuminosityClass = LuminosityClass.V
-    mass: SolarMass
+    mass: SolarMass | None = Field(
+        default=None,
+        description="Stellar mass in M_sun. Required unless luminosity is provided.",
+    )
 
     # Optional authored fields — engines compute these if not provided
     luminosity: SolarLuminosity | None = Field(
-        default=None, description="Bolometric luminosity in L_sun (computed if omitted)"
+        default=None,
+        description="Bolometric luminosity in L_sun. "
+        "Can be used as alternative input (instead of mass).",
     )
     temperature: Kelvin | None = Field(
         default=None, description="Effective surface temperature in K (computed if omitted)"
@@ -55,6 +68,15 @@ class Star(BaseModel):
     position: Vec3 = Field(
         default_factory=Vec3, description="Position in system barycentric frame (AU)"
     )
+
+    @model_validator(mode="after")
+    def _check_mass_or_luminosity(self) -> "Star":
+        if self.mass is None and self.luminosity is None:
+            raise ValueError(
+                "Star requires at least one of: mass, luminosity. "
+                "Provide mass for forward computation, or luminosity to invert."
+            )
+        return self
 
 
 class OrbitalElements(BaseModel):

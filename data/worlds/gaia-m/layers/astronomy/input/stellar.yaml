@@ -1,0 +1,25 @@
+# Gaia-M 恒星系统
+# 以光度为自变量（混合输入模式范例），引擎通过数值反演推算质量
+name: "Gaia System"
+stars:
+  - id: star_gaia_primary
+    name: "Gaia Primary"
+    spectral_class: M
+    luminosity_class: V
+    luminosity: 0.0357
+    metallicity: 0.0
+    age_gyr: 5.90
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+orbits:
+  - body_id: planet_aegis
+    parent_id: star_gaia_primary
+    semi_major_axis_au: 0.2795    # HZ log-mean center (recalculated)
+    eccentricity: 0.005
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
