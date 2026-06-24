@@ -138,18 +138,26 @@ class TestInvertMassFromLuminosity:
 
     def test_low_luminosity(self):
         M = invert_mass_from_luminosity(0.01)
-        assert 0.1 < M < 0.4  # Should be in the low-mass segment
+        assert 0.1 < M < 0.5
 
     def test_high_luminosity(self):
         M = invert_mass_from_luminosity(1000.0)
-        assert M > 2.0  # Should be in the mid-mass segment
+        assert M > 2.0
 
-    @pytest.mark.parametrize("mass_in", [0.2, 0.5, 1.0, 2.0, 10.0])
-    def test_roundtrip(self, mass_in):
-        """Forward → inverse roundtrip should recover mass within 10%."""
-        L = mass_luminosity_zams(mass_in)
-        M_out = invert_mass_from_luminosity(L)
-        assert M_out == pytest.approx(mass_in, rel=0.10)
+    @pytest.mark.parametrize("mass_in", [0.2, 0.5, 1.0, 2.5, 10.0])
+    def test_roundtrip_with_age(self, mass_in):
+        """Forward (with age) → inverse roundtrip should recover mass exactly."""
+        p = compute_stellar_parameters(mass=mass_in, age_gyr=3.0)
+        M_out = invert_mass_from_luminosity(p["luminosity"], age_gyr=3.0)
+        assert M_out == pytest.approx(mass_in, rel=1e-4)
+
+    def test_age_matters(self):
+        """Same luminosity at different ages → different masses."""
+        M_young = invert_mass_from_luminosity(1.0, age_gyr=1.0)
+        M_old = invert_mass_from_luminosity(1.0, age_gyr=8.0)
+        # Older star must be less massive to have the same luminosity
+        # (because age brightening makes even lower-mass stars reach L=1)
+        assert M_young != pytest.approx(M_old, rel=0.01)
 
 
 class TestComputeStellarParameters:
@@ -169,10 +177,23 @@ class TestComputeStellarParameters:
         assert p["ms_lifetime_gyr"] > 50
 
     def test_luminosity_input_mode(self):
-        """Provide only luminosity → engine inverts to mass."""
+        """Provide only luminosity → engine inverts to mass, roundtrip is exact."""
         p = compute_stellar_parameters(luminosity=1.0, age_gyr=4.6)
-        assert p["mass"] == pytest.approx(1.0, rel=0.05)
+        assert p["mass"] == pytest.approx(1.0, rel=1e-4)
+        assert p["luminosity"] == pytest.approx(1.0, rel=1e-4)
         assert p["input_mode"] == "luminosity"
+
+    @pytest.mark.parametrize(
+        "mass_in,age", [(0.2, 1.0), (0.45, 5.0), (1.0, 4.6), (2.5, 0.5), (5.0, 0.1)]
+    )
+    def test_luminosity_roundtrip_exact(self, mass_in, age):
+        """Forward → luminosity-only input should recover the same mass."""
+        forward = compute_stellar_parameters(mass=mass_in, age_gyr=age)
+        inverse = compute_stellar_parameters(
+            luminosity=forward["luminosity"], age_gyr=age
+        )
+        assert inverse["mass"] == pytest.approx(mass_in, rel=1e-4)
+        assert inverse["luminosity"] == pytest.approx(forward["luminosity"], rel=1e-4)
 
     def test_both_mode(self):
         """Provide both mass and luminosity."""

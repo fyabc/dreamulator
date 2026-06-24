@@ -185,38 +185,45 @@ def effective_temperature(luminosity: float, radius: float) -> float:
 # Inverts the Kippenhahn four-segment MLR
 # ===================================================================
 
-# Segment boundaries in luminosity space (precomputed from ZAMS MLR)
-# L at M=0.43: 0.23 * 0.43^2.3 ≈ 0.03384
-# L at M=2.0:  2.0^4 = 16.0
-# L at M=55:   1.4 * 55^3.5 ≈ 1_842_688
-_L_BOUND_LOW: float = 0.23 * math.pow(0.43, 2.3)
-_L_BOUND_MID: float = 16.0
-_L_BOUND_HIGH: float = 1.4 * math.pow(55.0, 3.5)
 
+def invert_mass_from_luminosity(
+    luminosity: float,
+    age_gyr: float = 4.6,
+    metallicity_dex: float = 0.0,
+) -> float:
+    """Derive stellar mass from luminosity, age, and metallicity via numerical root-finding.
 
-def invert_mass_from_luminosity(luminosity: float) -> float:
-    """Invert the Kippenhahn MLR to derive mass from luminosity.
+    The forward relation L(M, age, Z) includes age-evolution and metallicity
+    corrections that make analytic inversion impractical (the equation
+    a·M^b·(1 + c·M^2.5) = target has no closed-form solution).
 
-    Uses piecewise inversion of the four-segment relation.
+    Instead, we solve f(M) = L_forward(M) - L_target = 0 using Brent's method,
+    which is guaranteed to converge for monotonic functions on a bracketed
+    interval.  L(M) is monotonically increasing, so this is safe.
 
     Args:
-        luminosity: Luminosity in solar luminosities (L☉).
+        luminosity: Target luminosity in solar luminosities (L☉).
+        age_gyr: Stellar age in Gyr (default 4.6).
+        metallicity_dex: Metallicity [Fe/H] in dex (default 0.0 = solar).
 
     Returns:
         Estimated mass in solar masses (M☉).
     """
-    if luminosity < _L_BOUND_LOW:
-        # L = 0.23 * M^2.3  →  M = (L / 0.23)^(1/2.3)
-        return math.pow(luminosity / 0.23, 1.0 / 2.3)
-    elif luminosity < _L_BOUND_MID:
-        # L = M^4  →  M = L^0.25
-        return math.pow(luminosity, 0.25)
-    elif luminosity < _L_BOUND_HIGH:
-        # L = 1.4 * M^3.5  →  M = (L / 1.4)^(1/3.5)
-        return math.pow(luminosity / 1.4, 1.0 / 3.5)
-    else:
-        # L = 32000 * M  →  M = L / 32000
-        return luminosity / 32000.0
+    from scipy.optimize import brentq  # type: ignore[import-untyped]
+
+    z = math.pow(10.0, metallicity_dex)
+
+    def forward_l(mass: float) -> float:
+        l_z = mass_luminosity_zams(mass)
+        tau = min(age_gyr / main_sequence_lifetime(mass), 1.0)
+        l_out, _ = apply_age_metallicity(l_z, 1.0, tau, z)
+        return l_out
+
+    def f(mass: float) -> float:
+        return forward_l(mass) - luminosity
+
+    # Bracket: [0.08 M☉ (hydrogen-burning limit), 120 M☉ (upper MS)]
+    return float(brentq(f, 0.08, 120.0, xtol=1e-8, rtol=1e-10))
 
 
 # ===================================================================
@@ -261,7 +268,7 @@ def compute_stellar_parameters(
     else:
         input_mode = "luminosity"
         assert luminosity is not None
-        mass = invert_mass_from_luminosity(luminosity)
+        mass = invert_mass_from_luminosity(luminosity, age_gyr, metallicity_dex)
 
     # Convert [Fe/H] to relative metallicity
     z = math.pow(10.0, metallicity_dex)
