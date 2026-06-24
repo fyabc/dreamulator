@@ -1,7 +1,16 @@
-# Gaia-M 恒星系统 — 待填写
-#
-# 后续将包含：
-# - M2V 主星（0.45 M☉, 0.027 L☉, 3540 K）
-# - 三颗巨行星轨道（Aegis 0.235 AU，外侧行星 0.373 AU / 0.592 AU）
-# - 1:2:4 拉普拉斯共振关系
-# - Gaia-M 卫星绕 Aegis 的轨道（半长轴 ~740,332 km，周期 78 h）
+# Gaia-M 恒星系统
+# 以光度为自变量（混合输入模式范例），引擎通过数值反演推算质量
+name: "Gaia System"
+stars:
+  - id: star_gaia_primary
+    name: "Gaia Primary"
+    spectral_class: M
+    luminosity_class: V
+    luminosity: 0.0357
+    metallicity: 0.0
+    age_gyr: 5.90
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+orbits: []
