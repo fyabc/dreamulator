@@ -38,7 +38,7 @@ frontend/dist/
 frontend/.vite/
 
 # Project specific
-data/worlds/*/derived/
+data/**/derived/
 data/worlds/*/simulations/
 *.log
 /private/
