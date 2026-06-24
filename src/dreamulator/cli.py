@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 
@@ -122,14 +123,15 @@ def info(
         star_table.add_column("Type")
         star_table.add_column("Mass (M_sun)")
         for star in stellar.stars:
+            mass_str = f"{star.mass:.2f}" if star.mass is not None else "—"
             star_table.add_row(
                 star.id,
                 star.name,
                 f"{star.spectral_class.value}{star.luminosity_class.value}",
-                f"{star.mass:.2f}",
+                mass_str,
             )
         console.print(star_table)
-    except FileNotFoundError:
+    except (FileNotFoundError, ValidationError):
         console.print("[dim]No astronomy data configured[/dim]")
 
     # Layer summary
