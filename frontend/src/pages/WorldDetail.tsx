@@ -1,15 +1,21 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
+import { isStaticMode } from '../api/mode'
 import { useState } from 'react'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
-  const [activeTab, setActiveTab] = useState<'overview' | 'astronomy' | 'planets' | 'narrate'>(
-    'overview',
-  )
+  const staticMode = isStaticMode()
+
+  type TabType = 'overview' | 'astronomy' | 'planets' | 'narrate'
+  const availableTabs: TabType[] = staticMode
+    ? ['overview', 'astronomy', 'planets']
+    : ['overview', 'astronomy', 'planets', 'narrate']
+
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
 
   const {
@@ -26,12 +32,14 @@ export default function WorldDetail() {
     queryKey: ['astronomy', worldName],
     queryFn: () => api.getStellarSystem(worldName!),
     enabled: !!worldName && activeTab === 'astronomy',
+    retry: false,
   })
 
   const { data: planets } = useQuery({
     queryKey: ['planets', worldName],
     queryFn: () => api.getPlanets(worldName!),
     enabled: !!worldName && activeTab === 'planets',
+    retry: false,
   })
 
   const buildMutation = useMutation({
@@ -41,6 +49,13 @@ export default function WorldDetail() {
   const validateMutation = useMutation({
     mutationFn: () => api.validateWorld(worldName!),
   })
+
+  const TAB_LABELS: Record<TabType, string> = {
+    overview: '概览',
+    astronomy: '天文学',
+    planets: '行星',
+    narrate: '叙述',
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -74,6 +89,11 @@ export default function WorldDetail() {
               <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
                 {worldName}
               </h1>
+              {staticMode && (
+                <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
+                  只读模式
+                </span>
+              )}
             </div>
 
             <div className="mb-4">
@@ -84,22 +104,25 @@ export default function WorldDetail() {
               />
             </div>
 
-            <div className="flex gap-3 mb-6">
-              <button
-                onClick={() => validateMutation.mutate()}
-                disabled={validateMutation.isPending}
-                className="px-4 py-2 rounded-lg font-medium transition-all bg-space-surface text-gray-300 border border-space-border hover:border-neon-cyan/30 disabled:opacity-50"
-              >
-                {validateMutation.isPending ? '验证中...' : '验证'}
-              </button>
-              <button
-                onClick={() => buildMutation.mutate()}
-                disabled={buildMutation.isPending}
-                className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
-              >
-                {buildMutation.isPending ? '构建中...' : '构建'}
-              </button>
-            </div>
+            {/* Build/Validate buttons — only in API mode */}
+            {!staticMode && (
+              <div className="flex gap-3 mb-6">
+                <button
+                  onClick={() => validateMutation.mutate()}
+                  disabled={validateMutation.isPending}
+                  className="px-4 py-2 rounded-lg font-medium transition-all bg-space-surface text-gray-300 border border-space-border hover:border-neon-cyan/30 disabled:opacity-50"
+                >
+                  {validateMutation.isPending ? '验证中...' : '验证'}
+                </button>
+                <button
+                  onClick={() => buildMutation.mutate()}
+                  disabled={buildMutation.isPending}
+                  className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+                >
+                  {buildMutation.isPending ? '构建中...' : '构建'}
+                </button>
+              </div>
+            )}
 
             {validateMutation.data && (
               <div
@@ -126,7 +149,7 @@ export default function WorldDetail() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 border-b border-space-border">
-              {(['overview', 'astronomy', 'planets', 'narrate'] as const).map((tab) => (
+              {availableTabs.map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -136,13 +159,7 @@ export default function WorldDetail() {
                       : 'border-transparent text-gray-500 hover:text-gray-300'
                   }`}
                 >
-                  {tab === 'overview'
-                    ? '概览'
-                    : tab === 'astronomy'
-                      ? '天文学'
-                      : tab === 'planets'
-                        ? '行星'
-                        : '叙述'}
+                  {TAB_LABELS[tab]}
                 </button>
               ))}
             </div>
@@ -232,18 +249,18 @@ export default function WorldDetail() {
                             </p>
                             <p>
                               <span className="text-gray-500">质量：</span>
-                              {star.mass} M☉
+                              {star.derived?.computed_mass ?? star.mass ?? 'N/A'} M☉
                             </p>
-                            {star.temperature && (
+                            {(star.derived?.computed_temperature ?? star.temperature) && (
                               <p>
                                 <span className="text-gray-500">温度：</span>
-                                {star.temperature} K
+                                {star.derived?.computed_temperature ?? star.temperature} K
                               </p>
                             )}
-                            {star.luminosity && (
+                            {(star.derived?.computed_luminosity ?? star.luminosity) && (
                               <p>
                                 <span className="text-gray-500">光度：</span>
-                                {star.luminosity} L☉
+                                {star.derived?.computed_luminosity ?? star.luminosity} L☉
                               </p>
                             )}
                           </div>
@@ -252,7 +269,7 @@ export default function WorldDetail() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-500">加载中...</p>
+                  <p className="text-gray-500">无恒星系数据</p>
                 )}
               </div>
             )}
@@ -298,12 +315,12 @@ export default function WorldDetail() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-gray-500">加载中...</p>
+                  <p className="text-gray-500">无行星数据</p>
                 )}
               </div>
             )}
 
-            {activeTab === 'narrate' && (
+            {activeTab === 'narrate' && !staticMode && (
               <NarratorPanel worldName={worldName!} branch={selectedBranch} />
             )}
           </>

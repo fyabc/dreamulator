@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { isStaticMode } from '../api/mode'
 
 /**
  * Circuit-node decoration between "dream" and "ulator".
@@ -33,6 +34,8 @@ interface MenuItem {
 }
 
 export default function HomePage() {
+  const staticMode = isStaticMode()
+
   const menuItems: MenuItem[] = [
     {
       label: '世界信息',
@@ -41,8 +44,8 @@ export default function HomePage() {
       active: true,
     },
     {
-      label: '世界管理',
-      description: '创建、编辑、删除世界',
+      label: staticMode ? '世界浏览' : '世界管理',
+      description: staticMode ? '浏览已导出的世界数据' : '创建、编辑、删除世界',
       to: '/worlds',
       active: true,
     },

@@ -1,3 +1,6 @@
+import { isStaticMode } from './mode'
+import { staticApi } from './staticClient'
+
 const API_BASE = '/api'
 
 interface ApiResponse<T> {
@@ -34,6 +37,10 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return body as T
 }
 
+// ---------------------------------------------------------------------------
+// SSE narration (API mode only)
+// ---------------------------------------------------------------------------
+
 export interface NarrateUsage {
   input_tokens: number
   output_tokens: number
@@ -49,6 +56,7 @@ export interface NarrateStreamOptions {
 /**
  * Stream narration for a world via SSE.
  * Returns a cleanup function that aborts the stream when called.
+ * Only available in API mode — throws in static mode.
  */
 export function narrateWorldStream(
   name: string,
@@ -57,6 +65,11 @@ export function narrateWorldStream(
   onError: (error: string) => void,
   options?: NarrateStreamOptions,
 ): () => void {
+  if (isStaticMode()) {
+    onError('AI narration is not available in static mode')
+    return () => {}
+  }
+
   const controller = new AbortController()
 
   ;(async () => {
@@ -120,12 +133,12 @@ export function narrateWorldStream(
   return () => controller.abort()
 }
 
-export const api = {
-  // World operations
-  listWorlds: () => fetchJson<string[]>('/worlds'),
+// ---------------------------------------------------------------------------
+// Unified API object — delegates to static or live API based on mode
+// ---------------------------------------------------------------------------
 
-  getWorld: (name: string) => fetchJson<any>(`/worlds/${name}`),
-
+/** Write operations that are only available in API mode. */
+const liveOnlyApi = {
   createWorld: (name: string, template: string = 'minimal', seed?: number) =>
     fetchJson<any>('/worlds', {
       method: 'POST',
@@ -138,27 +151,63 @@ export const api = {
   validateWorld: (name: string) =>
     fetchJson<{ ok: boolean; errors: string[] }>(`/worlds/${name}/validate`),
 
-  // Build and simulation
   buildWorld: (name: string, engine?: string) =>
     fetchJson<{ status: string }>(`/worlds/${name}/build`, {
       method: 'POST',
       body: JSON.stringify({ engine }),
     }),
+}
 
-  // Data access
-  getWorldData: (name: string, path: string) =>
-    fetchJson<any>(`/worlds/${name}/data/${path}`),
+/** Read operations available in both modes. */
+const readApi = {
+  listWorlds: () =>
+    isStaticMode() ? staticApi.listWorlds() : fetchJson<string[]>('/worlds'),
+
+  getWorld: (name: string) =>
+    isStaticMode() ? staticApi.getWorld(name) : fetchJson<any>(`/worlds/${name}`),
 
   getStellarSystem: (name: string) =>
-    fetchJson<any>(`/worlds/${name}/stellar`),
+    isStaticMode()
+      ? staticApi.getStellarSystem(name)
+      : fetchJson<any>(`/worlds/${name}/stellar`),
 
   getPlanets: (name: string) =>
-    fetchJson<any[]>(`/worlds/${name}/planets`),
+    isStaticMode()
+      ? staticApi.getPlanets(name)
+      : fetchJson<any[]>(`/worlds/${name}/planets`),
 
   getPlanet: (name: string, planetId: string) =>
-    fetchJson<any>(`/worlds/${name}/planets/${planetId}`),
+    isStaticMode()
+      ? Promise.reject(new Error('getPlanet not available in static mode'))
+      : fetchJson<any>(`/worlds/${name}/planets/${planetId}`),
 
-  // Branches
   listBranches: (name: string) =>
-    fetchJson<any[]>(`/worlds/${name}/branches`),
+    isStaticMode()
+      ? staticApi.listBranches(name)
+      : fetchJson<any[]>(`/worlds/${name}/branches`),
+}
+
+export const api = {
+  ...readApi,
+
+  // Write operations — only work in API mode, gracefully fail in static mode
+  createWorld: (...args: Parameters<typeof liveOnlyApi.createWorld>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.createWorld(...args),
+
+  deleteWorld: (...args: Parameters<typeof liveOnlyApi.deleteWorld>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.deleteWorld(...args),
+
+  validateWorld: (...args: Parameters<typeof liveOnlyApi.validateWorld>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.validateWorld(...args),
+
+  buildWorld: (...args: Parameters<typeof liveOnlyApi.buildWorld>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.buildWorld(...args),
 }

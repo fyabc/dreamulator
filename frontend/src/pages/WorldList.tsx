@@ -2,12 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { api } from '../api/client'
+import { isStaticMode } from '../api/mode'
 
 export default function WorldList() {
   const queryClient = useQueryClient()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [newWorldName, setNewWorldName] = useState('')
   const [newWorldTemplate, setNewWorldTemplate] = useState('minimal')
+  const staticMode = isStaticMode()
 
   const { data: worlds, isLoading, error } = useQuery({
     queryKey: ['worlds'],
@@ -44,13 +46,17 @@ export default function WorldList() {
 
       <div className="relative z-10 px-6 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">世界管理</h1>
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 hover:shadow-[0_0_12px_rgba(0,212,255,0.15)]"
-          >
-            + 新建世界
-          </button>
+          <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
+            {staticMode ? '世界浏览' : '世界管理'}
+          </h1>
+          {!staticMode && (
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 hover:shadow-[0_0_12px_rgba(0,212,255,0.15)]"
+            >
+              + 新建世界
+            </button>
+          )}
         </div>
 
         {isLoading && <div className="text-center py-12 text-gray-400">加载中...</div>}
@@ -75,16 +81,18 @@ export default function WorldList() {
                   >
                     打开
                   </Link>
-                  <button
-                    onClick={() => {
-                      if (confirm(`确定删除世界 "${worldName}"？`)) {
-                        deleteMutation.mutate(worldName)
-                      }
-                    }}
-                    className="text-sm px-3 py-1.5 rounded transition-all bg-red-900/30 text-red-400 border border-red-500/20 hover:bg-red-900/50"
-                  >
-                    删除
-                  </button>
+                  {!staticMode && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`确定删除世界 "${worldName}"？`)) {
+                          deleteMutation.mutate(worldName)
+                        }
+                      }}
+                      className="text-sm px-3 py-1.5 rounded transition-all bg-red-900/30 text-red-400 border border-red-500/20 hover:bg-red-900/50"
+                    >
+                      删除
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -93,17 +101,21 @@ export default function WorldList() {
 
         {!isLoading && !error && worlds && worlds.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-lg mb-4 text-gray-400">暂无世界</p>
-            <button
-              onClick={() => setShowCreateDialog(true)}
-              className="px-6 py-3 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25"
-            >
-              创建你的第一个世界
-            </button>
+            <p className="text-lg mb-4 text-gray-400">
+              {staticMode ? '暂无已导出的世界数据' : '暂无世界'}
+            </p>
+            {!staticMode && (
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="px-6 py-3 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25"
+              >
+                创建你的第一个世界
+              </button>
+            )}
           </div>
         )}
 
-        {showCreateDialog && (
+        {showCreateDialog && !staticMode && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
             <div className="bg-space-panel border border-space-border rounded-xl p-6 w-full max-w-md shadow-[0_0_40px_rgba(0,212,255,0.08)]">
               <h2 className="text-2xl font-bold mb-4 text-neon-cyan neon-glow-subtle">

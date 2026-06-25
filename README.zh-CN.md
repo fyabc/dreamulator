@@ -110,6 +110,63 @@ npx tsc --noEmit
 npm run build
 ```
 
+## 部署
+
+前端支持两种部署模式，通过 `VITE_STATIC_MODE` 环境变量控制：
+
+| 模式 | `VITE_STATIC_MODE` | 是否需要后端 | 适用场景 |
+|------|--------------------|-------------|---------|
+| **API 模式**（默认） | `false` | 需要 (FastAPI) | 本地开发、云服务器 (VPS) |
+| **静态模式** | `true` | 不需要 | GitHub Pages、静态托管 |
+
+### 静态站点（GitHub Pages）
+
+静态模式在构建时将所有世界数据预导出为 JSON。生成的站点为只读——创建世界、运行引擎、AI 叙述等功能不可用。
+
+```bash
+cd frontend
+
+# 1. 将世界数据导出为静态 JSON
+python ../scripts/export_static.py
+
+# 2. 以静态模式构建（使用 .env.static 中的 base path）
+npx vite build --mode static
+
+# 3. dist/ 目录可部署到任意静态托管服务
+```
+
+或使用合并脚本：
+
+```bash
+cd frontend && npm run build:static
+```
+
+**本地预览**静态构建结果：
+
+```bash
+cd frontend
+npm run build:static:local    # 以 base path '/' 构建
+npm run preview:static         # 在 http://localhost:4173 提供服务
+```
+
+**GitHub Pages 部署**已通过 GitHub Actions 自动化（`.github/workflows/deploy-pages.yml`）。推送到 `main` 分支后，在仓库设置中启用 Pages（Source: GitHub Actions）即可。
+
+> **注意**：`.env.static` 中的默认 base path 为 `/dreamulator/`——请根据你的仓库名修改，或通过环境变量设置 `VITE_BASE_PATH`。
+
+### 云服务器（全栈部署）
+
+如需完整功能的部署（所有操作均可用），使用普通构建 + Nginx 反向代理：
+
+```bash
+# 构建前端（API 模式）
+cd frontend && npm run build
+
+# 启动后端（同时提供 API 和前端静态文件）
+uv run dreamulator serve
+```
+
+详见 `private/plans/deploy-plan-b-china-cloud.md` 中的 Docker + Nginx 部署指南。
+
 ## 路线图
 
 - [x] **Phase 1** — 项目骨架、数据模型、CLI、世界管理、前端骨架

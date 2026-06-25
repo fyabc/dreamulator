@@ -35,6 +35,11 @@ dreamulator/
 │       ├── pages/           # 页面
 │       ├── stores/          # Zustand 状态管理
 │       └── viewers/         # 3D/2D 可视化（Phase 3）
+├── scripts/
+│   └── export_static.py     # 静态站点数据导出脚本
+├── .github/
+│   └── workflows/
+│       └── deploy-pages.yml # GitHub Pages 自动部署
 ├── .claude/
 │   └── commands/            # Claude Code 自定义技能
 │       └── narrate.md       # /narrate 技能（调用 narrate 后端）
@@ -88,17 +93,28 @@ uv run mypy src/
 
 ### TypeScript 前端
 
+前端支持两种模式：**API 模式**（默认，需要后端）和**静态模式**（GitHub Pages，只读）。
+
 ```bash
 cd frontend
 
 # 安装依赖
 npm install
 
-# 开发（Vite HMR，自动代理 /api → FastAPI :8000）
+# 开发（API 模式：Vite HMR，自动代理 /api → FastAPI :8000）
 npm run dev
 
-# 构建静态文件（构建后由 `dreamulator serve` 统一提供）
+# 构建（API 模式：构建后由 `dreamulator serve` 统一提供）
 npm run build
+
+# 导出世界数据为静态 JSON（静态模式前置步骤）
+npm run export
+
+# 构建静态站点（GitHub Pages，只读模式，base path 由 .env.static 控制）
+npm run build:static
+
+# 本地预览静态构建结果
+npm run build:static:local && npm run preview:static
 
 # 类型检查
 npx tsc --noEmit
@@ -109,6 +125,10 @@ npm run lint
 
 > **单命令启动**：`npm run build` 后，`uv run dreamulator serve` 同时提供 API 和前端。
 > 开发时仍可单独 `npm run dev` 使用 Vite HMR（代理到 :8000）。
+>
+> **静态模式**：`VITE_STATIC_MODE=true` 时前端读取预导出的 JSON（`scripts/export_static.py`），
+> 不依赖后端，但创建/删除/构建/验证/叙述等写操作不可用。
+> GitHub Pages 部署通过 `.github/workflows/deploy-pages.yml` 自动化。
 
 ### Claude Code 自定义技能
 

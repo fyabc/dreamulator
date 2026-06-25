@@ -110,6 +110,63 @@ npx tsc --noEmit
 npm run build
 ```
 
+## Deployment
+
+The frontend supports two deployment modes controlled by the `VITE_STATIC_MODE` environment variable:
+
+| Mode | `VITE_STATIC_MODE` | Backend required | Use case |
+|------|--------------------|------------------|----------|
+| **API mode** (default) | `false` | Yes (FastAPI) | Local dev, cloud server (VPS) |
+| **Static mode** | `true` | No | GitHub Pages, static hosting |
+
+### Static site (GitHub Pages)
+
+The static mode pre-exports all world data as JSON at build time. The resulting site is read-only — world creation, simulation, and AI narration are disabled.
+
+```bash
+cd frontend
+
+# 1. Export world data to static JSON
+python ../scripts/export_static.py
+
+# 2. Build with static mode (uses .env.static for base path)
+npx vite build --mode static
+
+# 3. The output in dist/ can be deployed to any static host
+```
+
+Or use the combined script:
+
+```bash
+cd frontend && npm run build:static
+```
+
+**Local preview** of the static build:
+
+```bash
+cd frontend
+npm run build:static:local    # builds with base path '/'
+npm run preview:static         # serves dist/ at http://localhost:4173
+```
+
+**GitHub Pages deployment** is automated via GitHub Actions (`.github/workflows/deploy-pages.yml`). Push to `main` and enable Pages in repository settings (Source: GitHub Actions).
+
+> **Note:** The default base path in `.env.static` is `/dreamulator/` — update it to match your repository name, or set `VITE_BASE_PATH` in your environment.
+
+### Cloud server (full-stack)
+
+For a full-featured deployment with all operations available, build normally and serve behind Nginx:
+
+```bash
+# Build frontend (API mode)
+cd frontend && npm run build
+
+# Start backend (serves both API and frontend dist/)
+uv run dreamulator serve
+```
+
+See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx deployment guide.
+
 ## Roadmap
 
 - [x] **Phase 1** — Project scaffolding, data models, CLI, world management, frontend skeleton
