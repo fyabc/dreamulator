@@ -26,11 +26,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Python dependencies
-        run: pip install pyyaml
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run engines to compute derived data
+        run: |
+          for world in data/worlds/*/; do
+            name=$(basename "$world")
+            echo "=== Building world: $name ==="
+            uv run dreamulator build "$name" || echo "WARNING: build failed for $name (continuing)"
+          done
 
       - name: Export static data
-        run: python scripts/export_static.py
+        run: uv run python scripts/export_static.py
 
       - name: Set up Node
         uses: actions/setup-node@v4
