@@ -5,7 +5,9 @@
  * Only supports read operations; write operations throw.
  */
 
-const DATA_BASE = '/data'
+// Vite replaces BASE_URL at build time with the configured base path
+// e.g. '/' for local preview, '/dreamulator/' for GitHub Pages
+const DATA_BASE = `${import.meta.env.BASE_URL}data`
 
 async function fetchStaticJson<T>(path: string): Promise<T> {
   const response = await fetch(`${DATA_BASE}${path}`)
