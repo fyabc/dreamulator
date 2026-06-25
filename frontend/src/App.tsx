@@ -1,13 +1,18 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import WorldInfo from './pages/WorldInfo'
 import WorldList from './pages/WorldList'
 import WorldDetail from './pages/WorldDetail'
+import { isStaticMode } from './api/mode'
 
 function App() {
+  // HashRouter for GitHub Pages (no server-side SPA fallback),
+  // BrowserRouter for local dev with FastAPI backend.
+  const Router = isStaticMode() ? HashRouter : BrowserRouter
+
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
@@ -16,7 +21,7 @@ function App() {
           <Route path="worlds/:worldName" element={<WorldDetail />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </Router>
   )
 }
 

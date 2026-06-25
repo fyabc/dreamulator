@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:static": "python ../scripts/export_static.py && tsc && vite build --mode static",
+    "build:static:local": "python ../scripts/export_static.py && tsc && vite build --mode static-local",
+    "export": "python ../scripts/export_static.py",
     "preview": "vite preview",
+    "preview:static": "vite preview --mode static-local",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "type-check": "tsc --noEmit"
   },
