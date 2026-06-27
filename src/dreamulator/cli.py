@@ -127,7 +127,7 @@ def info(
             star_table.add_row(
                 star.id,
                 star.name,
-                f"{star.spectral_class.value}{star.luminosity_class.value}",
+                f"{star.spectral_class}{star.luminosity_class.value}",
                 mass_str,
             )
         console.print(star_table)
@@ -173,9 +173,7 @@ def info(
 def build(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch to build"),
-    layer: str | None = typer.Option(
-        None, "--layer", "-l", help="Start building from this layer"
-    ),
+    layer: str | None = typer.Option(None, "--layer", "-l", help="Start building from this layer"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-run even if outputs exist"),
     only: str | None = typer.Option(
         None, "--only", help="Run only this engine and its dependencies"
@@ -259,16 +257,17 @@ def narrate(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch to narrate"),
     model: str | None = typer.Option(
-        None, "--model", "-m",
+        None,
+        "--model",
+        "-m",
         help="Claude model ID (default: resolved from env / settings.json)",
     ),
     max_tokens: int = typer.Option(
-        32768, "--max-tokens",
+        32768,
+        "--max-tokens",
         help="Maximum number of output tokens",
     ),
-    no_stream: bool = typer.Option(
-        False, "--no-stream", help="Disable streaming output"
-    ),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming output"),
 ) -> None:
     """Generate a conversational description of a world using Claude."""
     from rich.markdown import Markdown
@@ -279,9 +278,7 @@ def narrate(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1) from None
 
-    console.print(
-        "[yellow]WARNING:[/yellow] 此命令将调用大语言模型 API，会消耗 token。"
-    )
+    console.print("[yellow]WARNING:[/yellow] 此命令将调用大语言模型 API，会消耗 token。")
 
     model_label = model or "auto"
     console.print(
@@ -294,9 +291,7 @@ def narrate(
     if no_stream:
         # Non-streaming mode
         try:
-            result = generate_narration(
-                world, branch=branch, model=model, max_tokens=max_tokens
-            )
+            result = generate_narration(world, branch=branch, model=model, max_tokens=max_tokens)
         except FileNotFoundError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=1) from None

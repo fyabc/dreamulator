@@ -18,6 +18,12 @@
           "title": "Language Family",
           "type": "string"
         },
+        "language_id": {
+          "default": "",
+          "description": "Conlang language ID (references layers/civilization/input/languages/<id>/)",
+          "title": "Language Id",
+          "type": "string"
+        },
         "religion": {
           "default": "",
           "title": "Religion",

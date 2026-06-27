@@ -87,22 +87,8 @@
       "title": "OrbitalElements",
       "type": "object"
     },
-    "SpectralClass": {
-      "description": "Morgan–Keenan spectral classification.",
-      "enum": [
-        "O",
-        "B",
-        "A",
-        "F",
-        "G",
-        "K",
-        "M"
-      ],
-      "title": "SpectralClass",
-      "type": "string"
-    },
     "Star": {
-      "description": "A star in a stellar system.",
+      "description": "A star in a stellar system.\n\nSupports hybrid input mode: provide either mass, luminosity, or both.\n- mass only: engine computes luminosity, radius, temperature.\n- luminosity only: engine inverts mass-luminosity relation to derive mass,\n  then computes radius and temperature.\n- both: mass takes priority; luminosity is used as override with consistency\n  warning if deviation > 20%.",
       "properties": {
         "id": {
           "description": "Unique identifier within the system, e.g. 'star_sol'",
@@ -115,17 +101,28 @@
           "type": "string"
         },
         "spectral_class": {
-          "$ref": "#/$defs/SpectralClass"
+          "description": "Morgan–Keenan spectral type, e.g. 'G2', 'M1', or coarse 'G', 'M'",
+          "title": "Spectral Class",
+          "type": "string"
         },
         "luminosity_class": {
           "$ref": "#/$defs/LuminosityClass",
           "default": "V"
         },
         "mass": {
-          "description": "Mass in solar masses (M_sun)",
-          "exclusiveMinimum": 0,
-          "title": "Mass",
-          "type": "number"
+          "anyOf": [
+            {
+              "description": "Mass in solar masses (M_sun)",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stellar mass in M_sun. Required unless luminosity is provided.",
+          "title": "Mass"
         },
         "luminosity": {
           "anyOf": [
@@ -139,7 +136,7 @@
             }
           ],
           "default": null,
-          "description": "Bolometric luminosity in L_sun (computed if omitted)",
+          "description": "Bolometric luminosity in L_sun. Can be used as alternative input (instead of mass).",
           "title": "Luminosity"
         },
         "temperature": {
@@ -193,8 +190,7 @@
       "required": [
         "id",
         "name",
-        "spectral_class",
-        "mass"
+        "spectral_class"
       ],
       "title": "Star",
       "type": "object"

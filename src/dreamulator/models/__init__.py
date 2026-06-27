@@ -27,7 +27,7 @@ from .layers import (
 )
 from .planet import Atmosphere, Hydrosphere, Lithosphere, Planet, PlanetType
 from .simulation import ComputationManifest, EngineInfo, SimulationRun, SimulationSeed, StepRecord
-from .stellar import LuminosityClass, OrbitalElements, SpectralClass, Star, StellarSystem
+from .stellar import LuminosityClass, OrbitalElements, Star, StellarSystem
 from .world import WorldConfig, WorldMetadata
 
 __all__ = [
@@ -44,7 +44,6 @@ __all__ = [
     # stellar
     "LuminosityClass",
     "OrbitalElements",
-    "SpectralClass",
     "Star",
     "StellarSystem",
     # planet

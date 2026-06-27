@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from dreamulator.models.stellar import (
     LuminosityClass,
     OrbitalElements,
-    SpectralClass,
     Star,
     StellarSystem,
 )
@@ -17,7 +16,7 @@ class TestStar:
         star = Star(
             id="star_sol",
             name="Sol",
-            spectral_class=SpectralClass.G,
+            spectral_class="G2",
             luminosity_class=LuminosityClass.V,
             mass=1.0,
         )
@@ -29,7 +28,7 @@ class TestStar:
         star = Star(
             id="star_sol",
             name="Sol",
-            spectral_class=SpectralClass.G,
+            spectral_class="G2",
             mass=1.0,
             luminosity=1.0,
             temperature=5778.0,
@@ -38,12 +37,32 @@ class TestStar:
         assert star.luminosity == 1.0
         assert star.temperature == 5778.0
 
+    def test_star_coarse_spectral_class(self):
+        """Coarse spectral class (letter only, no digit) is still valid."""
+        star = Star(
+            id="star_coarse",
+            name="Coarse",
+            spectral_class="G",
+            mass=1.0,
+        )
+        assert star.spectral_class == "G"
+
+    def test_star_invalid_spectral_class(self):
+        """Reject spectral class that doesn't match MK pattern."""
+        with pytest.raises(ValidationError, match="spectral_class"):
+            Star(
+                id="star_bad_type",
+                name="BadType",
+                spectral_class="X9",
+                mass=1.0,
+            )
+
     def test_star_invalid_mass(self):
         with pytest.raises(ValidationError):
             Star(
                 id="star_bad",
                 name="Bad",
-                spectral_class=SpectralClass.G,
+                spectral_class="G2",
                 mass=-1.0,  # invalid: must be > 0
             )
 
@@ -52,7 +71,7 @@ class TestStar:
         star = Star(
             id="star_m",
             name="M Dwarf",
-            spectral_class=SpectralClass.M,
+            spectral_class="M1",
             mass=None,
             luminosity=0.027,
         )
@@ -64,7 +83,7 @@ class TestStar:
         star = Star(
             id="star_both",
             name="Both",
-            spectral_class=SpectralClass.G,
+            spectral_class="G2",
             mass=1.0,
             luminosity=1.0,
         )
@@ -77,7 +96,7 @@ class TestStar:
             Star(
                 id="star_empty",
                 name="Empty",
-                spectral_class=SpectralClass.G,
+                spectral_class="G2",
                 mass=None,
                 luminosity=None,
             )
@@ -108,9 +127,7 @@ class TestStellarSystem:
     def test_valid_system(self):
         system = StellarSystem(
             name="Solar System",
-            stars=[
-                Star(id="star_sol", name="Sol", spectral_class=SpectralClass.G, mass=1.0)
-            ],
+            stars=[Star(id="star_sol", name="Sol", spectral_class="G2", mass=1.0)],
         )
         assert len(system.stars) == 1
 
@@ -119,7 +136,7 @@ class TestStellarSystem:
             StellarSystem(
                 name="Bad System",
                 stars=[
-                    Star(id="star_a", name="A", spectral_class=SpectralClass.G, mass=1.0),
-                    Star(id="star_a", name="A2", spectral_class=SpectralClass.K, mass=0.8),
+                    Star(id="star_a", name="A", spectral_class="G2", mass=1.0),
+                    Star(id="star_a", name="A2", spectral_class="K5", mass=0.8),
                 ],
             )

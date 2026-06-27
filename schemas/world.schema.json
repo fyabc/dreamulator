@@ -1,5 +1,123 @@
 {
   "$defs": {
+    "BranchMetadata": {
+      "description": "Metadata for a world branch.\n\nA branch represents a variant of a world that diverges at a specific layer.\n- parent: None means this is the root world (not a branch)\n- fork_layer: The layer where this branch diverges from its parent",
+      "properties": {
+        "name": {
+          "description": "Branch name (unique within a world)",
+          "title": "Name",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parent world or branch name. None for root world.",
+          "title": "Parent"
+        },
+        "fork_layer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Layer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Layer where this branch forks from parent. None for root world."
+        },
+        "description": {
+          "default": "",
+          "description": "Human-readable description",
+          "title": "Description",
+          "type": "string"
+        },
+        "created": {
+          "description": "Creation timestamp",
+          "format": "date-time",
+          "title": "Created",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Tags for categorization",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "BranchMetadata",
+      "type": "object"
+    },
+    "Layer": {
+      "description": "World building layers, ordered from fundamental to derived.",
+      "enum": [
+        "physics",
+        "chemistry",
+        "astronomy",
+        "geological",
+        "climate",
+        "ecology",
+        "civilization"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "LayerSummary": {
+      "description": "Summary information about a layer in a world.\n\nThe layer name is the dict key in WorldConfig.layers, so the 'layer'\nfield here is optional — it can be populated from the key at load time.",
+      "properties": {
+        "layer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Layer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Layer identifier (from dict key)"
+        },
+        "configured": {
+          "default": false,
+          "description": "Whether this layer has custom input data",
+          "title": "Configured",
+          "type": "boolean"
+        },
+        "engine": {
+          "default": "",
+          "description": "Engine that processes this layer",
+          "title": "Engine",
+          "type": "string"
+        },
+        "inherited_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parent world/branch this layer is inherited from",
+          "title": "Inherited From"
+        }
+      },
+      "title": "LayerSummary",
+      "type": "object"
+    },
     "LuminosityClass": {
       "description": "Morgan–Keenan luminosity class.",
       "enum": [
@@ -103,22 +221,8 @@
       "title": "SimulationSeed",
       "type": "object"
     },
-    "SpectralClass": {
-      "description": "Morgan–Keenan spectral classification.",
-      "enum": [
-        "O",
-        "B",
-        "A",
-        "F",
-        "G",
-        "K",
-        "M"
-      ],
-      "title": "SpectralClass",
-      "type": "string"
-    },
     "Star": {
-      "description": "A star in a stellar system.",
+      "description": "A star in a stellar system.\n\nSupports hybrid input mode: provide either mass, luminosity, or both.\n- mass only: engine computes luminosity, radius, temperature.\n- luminosity only: engine inverts mass-luminosity relation to derive mass,\n  then computes radius and temperature.\n- both: mass takes priority; luminosity is used as override with consistency\n  warning if deviation > 20%.",
       "properties": {
         "id": {
           "description": "Unique identifier within the system, e.g. 'star_sol'",
@@ -131,17 +235,28 @@
           "type": "string"
         },
         "spectral_class": {
-          "$ref": "#/$defs/SpectralClass"
+          "description": "Morgan–Keenan spectral type, e.g. 'G2', 'M1', or coarse 'G', 'M'",
+          "title": "Spectral Class",
+          "type": "string"
         },
         "luminosity_class": {
           "$ref": "#/$defs/LuminosityClass",
           "default": "V"
         },
         "mass": {
-          "description": "Mass in solar masses (M_sun)",
-          "exclusiveMinimum": 0,
-          "title": "Mass",
-          "type": "number"
+          "anyOf": [
+            {
+              "description": "Mass in solar masses (M_sun)",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stellar mass in M_sun. Required unless luminosity is provided.",
+          "title": "Mass"
         },
         "luminosity": {
           "anyOf": [
@@ -155,7 +270,7 @@
             }
           ],
           "default": null,
-          "description": "Bolometric luminosity in L_sun (computed if omitted)",
+          "description": "Bolometric luminosity in L_sun. Can be used as alternative input (instead of mass).",
           "title": "Luminosity"
         },
         "temperature": {
@@ -209,8 +324,7 @@
       "required": [
         "id",
         "name",
-        "spectral_class",
-        "mass"
+        "spectral_class"
       ],
       "title": "Star",
       "type": "object"
@@ -332,8 +446,37 @@
     "seed": {
       "$ref": "#/$defs/SimulationSeed"
     },
+    "branch": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BranchMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Branch metadata. None for root world."
+    },
     "stellar_system": {
-      "$ref": "#/$defs/StellarSystem"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StellarSystem"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Stellar system data (legacy; prefer layers/stellar/input/stellar.yaml)"
+    },
+    "layers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/LayerSummary"
+      },
+      "description": "Summary of each layer's configuration status",
+      "title": "Layers",
+      "type": "object"
     },
     "planet_ids": {
       "description": "IDs of planets defined in separate planets.yaml file",
@@ -346,8 +489,7 @@
   },
   "required": [
     "metadata",
-    "seed",
-    "stellar_system"
+    "seed"
   ],
   "title": "WorldConfig",
   "type": "object"

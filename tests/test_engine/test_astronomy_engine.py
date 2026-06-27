@@ -22,7 +22,7 @@ def earth_like_world(tmp_path: Path) -> Path:
             {
                 "id": "star_test",
                 "name": "Test Star",
-                "spectral_class": "G",
+                "spectral_class": "G2",
                 "luminosity_class": "V",
                 "mass": 1.0,
                 "luminosity": 1.0,
@@ -67,7 +67,7 @@ def luminosity_only_world(tmp_path: Path) -> Path:
             {
                 "id": "star_lum",
                 "name": "Lum Star",
-                "spectral_class": "M",
+                "spectral_class": "M1",
                 "luminosity_class": "V",
                 "mass": None,
                 "luminosity": 0.027,
@@ -97,7 +97,7 @@ def inconsistent_world(tmp_path: Path) -> Path:
             {
                 "id": "star_inc",
                 "name": "Inc Star",
-                "spectral_class": "G",
+                "spectral_class": "G2",
                 "luminosity_class": "V",
                 "mass": 1.0,
                 "luminosity": 5.0,  # Way too high for M=1

@@ -1,22 +1,16 @@
 """Stellar and orbital models — stars, spectral types, orbital elements."""
 
+from __future__ import annotations
+
+import re
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .common import AU, Kelvin, SolarLuminosity, SolarMass, SolarRadius, Vec3
 
-
-class SpectralClass(str, Enum):
-    """Morgan–Keenan spectral classification."""
-
-    O = "O"
-    B = "B"
-    A = "A"
-    F = "F"
-    G = "G"
-    K = "K"
-    M = "M"
+# Morgan–Keenan spectral type: letter (O B A F G K M) + optional numeric subtype (0–9)
+_SPECTRAL_TYPE_RE = re.compile(r"^[OBAFGKM]\d?$")
 
 
 class LuminosityClass(str, Enum):
@@ -43,8 +37,20 @@ class Star(BaseModel):
 
     id: str = Field(description="Unique identifier within the system, e.g. 'star_sol'")
     name: str = Field(description="Display name of the star")
-    spectral_class: SpectralClass
+    spectral_class: str = Field(
+        description="Morgan–Keenan spectral type, e.g. 'G2', 'M1', or coarse 'G', 'M'"
+    )
     luminosity_class: LuminosityClass = LuminosityClass.V
+
+    @field_validator("spectral_class", mode="before")
+    @classmethod
+    def _validate_spectral_class(cls, v: object) -> str:
+        if not isinstance(v, str) or not _SPECTRAL_TYPE_RE.match(v):
+            raise ValueError(
+                f"spectral_class must match pattern [OBAFGKM] with optional digit 0–9, got {v!r}"
+            )
+        return v
+
     mass: SolarMass | None = Field(
         default=None,
         description="Stellar mass in M_sun. Required unless luminosity is provided.",

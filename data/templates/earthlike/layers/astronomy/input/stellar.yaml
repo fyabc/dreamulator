@@ -3,7 +3,7 @@ name: "Helios System"
 stars:
   - id: "star_helios"
     name: "Helios"
-    spectral_class: "G"
+    spectral_class: "G2"
     luminosity_class: "V"
     mass: 1.0
     luminosity: 1.0

@@ -4,7 +4,7 @@ name: "Gaia System"
 stars:
   - id: star_gaia_primary
     name: "Gaia Primary"
-    spectral_class: M
+    spectral_class: M1
     luminosity_class: V
     luminosity: 0.0357
     metallicity: 0.0

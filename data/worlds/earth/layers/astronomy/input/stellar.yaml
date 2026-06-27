@@ -2,8 +2,8 @@
 name: Solar System
 stars:
   - id: star_sol
-    name: Sol
-    spectral_class: G
+    name: Sun
+    spectral_class: G2
     luminosity_class: V
     mass: 1.0
     luminosity: 1.0

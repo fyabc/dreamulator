@@ -92,7 +92,7 @@ class AstronomyEngine(BaseEngine):
                 {
                     "id": star.id,
                     "name": star.name,
-                    "spectral_class": star.spectral_class.value,
+                    "spectral_class": star.spectral_class,
                     "input_mode": params["input_mode"],
                     "computed_mass": params["mass"],
                     "computed_luminosity": params["luminosity"],
