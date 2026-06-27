@@ -444,6 +444,12 @@ def serve(
 
     import uvicorn
 
+    from dreamulator.world_manager import _data_dir
+
+    resolved = _data_dir()
+    source = "[cyan]env[/cyan]" if os.environ.get("DREAMULATOR_DATA_DIR") else "[dim]default[/dim]"
+    console.print(f"[dim]data dir: {resolved} ({source})[/dim]")
+
     url = f"http://{host}:{port}"
     console.print(f"[cyan]Starting dreamulator server at {url}[/cyan]")
 
