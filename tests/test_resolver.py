@@ -120,3 +120,158 @@ class TestLayerResolverBranch:
         resolver = LayerResolver(tmp_path, "nonexistent")
         with pytest.raises(FileNotFoundError):
             resolver.resolve_all_layers()
+
+
+class TestLayerResolverInherit:
+    """Tests for _inherit: true branch data merge."""
+
+    def _setup_branch(self, tmp_path, root_yaml: str, branch_yaml: str):
+        """Helper: create root + branch astronomy/input/stellar.yaml."""
+        root_input = tmp_path / "layers" / "astronomy" / "input"
+        root_input.mkdir(parents=True)
+        (root_input / "stellar.yaml").write_text(root_yaml, encoding="utf-8")
+
+        branch_mgr = BranchManager(tmp_path)
+        branch_mgr.create_branch("test_branch", Layer.ASTRONOMY)
+
+        branch_input = (
+            tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
+        )
+        branch_input.mkdir(parents=True, exist_ok=True)
+        (branch_input / "stellar.yaml").write_text(branch_yaml, encoding="utf-8")
+
+    def test_no_inherit_returns_branch_only(self, tmp_path):
+        self._setup_branch(
+            tmp_path,
+            root_yaml="stars:\n  - id: star_a\n    name: Alpha\n",
+            branch_yaml="stars:\n  - id: star_b\n    name: Beta\n",
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert len(data["stars"]) == 1
+        assert data["stars"][0]["id"] == "star_b"
+
+    def test_inherit_merges_lists(self, tmp_path):
+        self._setup_branch(
+            tmp_path,
+            root_yaml=(
+                "stars:\n"
+                "  - id: star_a\n"
+                "    name: Alpha\n"
+                "bodies:\n"
+                "  - id: body_x\n"
+                "    name: X\n"
+            ),
+            branch_yaml=(
+                "_inherit: true\n"
+                "bodies:\n"
+                "  - id: body_y\n"
+                "    name: Y\n"
+            ),
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        # Stars inherited from root
+        assert len(data["stars"]) == 1
+        assert data["stars"][0]["id"] == "star_a"
+        # Bodies merged: root's body_x + branch's body_y
+        assert len(data["bodies"]) == 2
+        ids = {b["id"] for b in data["bodies"]}
+        assert ids == {"body_x", "body_y"}
+
+    def test_inherit_override_by_id(self, tmp_path):
+        self._setup_branch(
+            tmp_path,
+            root_yaml="bodies:\n  - id: body_x\n    name: Original\n    mass: 1.0\n",
+            branch_yaml=(
+                "_inherit: true\n"
+                "bodies:\n"
+                "  - id: body_x\n"
+                "    name: Overridden\n"
+                "    mass: 2.0\n"
+            ),
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert len(data["bodies"]) == 1
+        assert data["bodies"][0]["name"] == "Overridden"
+        assert data["bodies"][0]["mass"] == 2.0
+
+    def test_inherit_scalar_override(self, tmp_path):
+        self._setup_branch(
+            tmp_path,
+            root_yaml="name: Root System\ncount: 5\n",
+            branch_yaml="_inherit: true\nname: Branch System\n",
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert data["name"] == "Branch System"
+        assert data["count"] == 5  # inherited
+
+    def test_inherit_missing_parent_file(self, tmp_path):
+        # Root has no stellar.yaml, only branch has it
+        branch_mgr = BranchManager(tmp_path)
+        branch_mgr.create_branch("test_branch", Layer.ASTRONOMY)
+
+        branch_input = (
+            tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
+        )
+        branch_input.mkdir(parents=True, exist_ok=True)
+        (branch_input / "stellar.yaml").write_text(
+            "_inherit: true\nstars:\n  - id: star_a\n    name: Alpha\n",
+            encoding="utf-8",
+        )
+
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert data is not None
+        assert len(data["stars"]) == 1
+        assert "_inherit" not in data
+
+    def test_inherit_strips_key(self, tmp_path):
+        self._setup_branch(
+            tmp_path,
+            root_yaml="name: Root\n",
+            branch_yaml="_inherit: true\nextra: value\n",
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert "_inherit" not in data
+        assert data["name"] == "Root"
+        assert data["extra"] == "value"
+
+    def test_no_file_returns_none(self, tmp_path):
+        resolver = LayerResolver(tmp_path)
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+        assert data is None
+
+    def test_merge_by_body_id(self, tmp_path):
+        """body_id (used by orbits) is also recognized as an ID key."""
+        self._setup_branch(
+            tmp_path,
+            root_yaml=(
+                "orbits:\n"
+                "  - body_id: planet_a\n"
+                "    parent_id: star\n"
+                "    semi_major_axis_au: 1.0\n"
+            ),
+            branch_yaml=(
+                "_inherit: true\n"
+                "orbits:\n"
+                "  - body_id: planet_b\n"
+                "    parent_id: star\n"
+                "    semi_major_axis_au: 2.0\n"
+            ),
+        )
+        resolver = LayerResolver(tmp_path, "test_branch")
+        data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+        assert len(data["orbits"]) == 2
+        ids = {o["body_id"] for o in data["orbits"]}
+        assert ids == {"planet_a", "planet_b"}

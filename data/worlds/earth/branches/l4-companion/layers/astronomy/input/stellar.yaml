@@ -1,40 +1,9 @@
 # The Solar System — with L4 Companion asteroid (branch override)
-# Extends root world's stellar data with a Trojan companion at Earth-Moon L4
-name: Solar System
-stars:
-  - id: star_sol
-    name: Sun
-    spectral_class: G2
-    luminosity_class: V
-    mass: 1.0
-    luminosity: 1.0
-    temperature: 5772.0
-    radius: 1.0
-    metallicity: 0.0
-    age_gyr: 4.57
-    position:
-      x: 0.0
-      y: 0.0
-      z: 0.0
+# Inherits root world's stellar data (Sun, Earth orbit, Moon) via _inherit,
+# then adds a Trojan companion at Earth-Moon L4.
+_inherit: true
+
 orbits:
-  - body_id: planet_earth
-    parent_id: star_sol
-    semi_major_axis_au: 1.0
-    eccentricity: 0.0167
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 348.74
-    argument_of_periapsis_deg: 114.21
-    mean_anomaly_epoch_deg: 357.52
-    epoch_year: 0.0
-  - body_id: satellite_moon
-    parent_id: planet_earth
-    semi_major_axis_au: 0.002569    # 384,399 km
-    eccentricity: 0.0549
-    inclination_deg: 5.145           # to ecliptic
-    longitude_ascending_node_deg: 125.08
-    argument_of_periapsis_deg: 318.15
-    mean_anomaly_epoch_deg: 135.27
-    epoch_year: 0.0
   - body_id: satellite_companion
     parent_id: planet_earth
     semi_major_axis_au: 0.002569     # same orbit as Moon (384,399 km)
@@ -44,18 +13,8 @@ orbits:
     argument_of_periapsis_deg: 318.15
     mean_anomaly_epoch_deg: 75.27    # 60° ahead of Moon (135.27 - 60)
     epoch_year: 0.0
+
 bodies:
-  - id: satellite_moon
-    name: Moon
-    body_type: natural_satellite
-    mass_earth: 0.0123               # 7.342e22 kg (1/81.3 of Earth)
-    radius_km: 1737.4
-    rotation_period_days: 27.3217    # tidally locked
-    axial_tilt_deg: 6.687
-    albedo: 0.136                    # geometric albedo
-    surface:
-      composition: silicate_regolith
-      has_atmosphere: false
   - id: satellite_companion
     name: Companion
     body_type: trojan_asteroid

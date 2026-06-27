@@ -41,21 +41,28 @@ export const staticApi = {
   // Build and simulation — not available in static mode
   buildWorld: () => notAvailable('buildWorld'),
 
-  // Data access
-  getStellarSystem: (name: string) =>
-    fetchStaticJson<any>(`/worlds/${name}/stellar.json`),
+  // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
+  getStellarSystem: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/stellar.json`)
+      : fetchStaticJson<any>(`/worlds/${name}/stellar.json`),
 
-  getHabitableZones: (name: string) =>
-    fetchStaticJson<any>(`/worlds/${name}/habitable_zones.json`),
+  getHabitableZones: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/habitable_zones.json`)
+      : fetchStaticJson<any>(`/worlds/${name}/habitable_zones.json`),
 
-  getPlanets: (name: string) =>
-    fetchStaticJson<any[]>(`/worlds/${name}/planets.json`),
+  getPlanets: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any[]>(`/worlds/${name}/branches/${branch}/planets.json`)
+      : fetchStaticJson<any[]>(`/worlds/${name}/planets.json`),
 
   // Branches
   listBranches: (name: string) =>
     fetchStaticJson<any[]>(`/worlds/${name}/branches.json`),
 
-  // Civilization data
-  getCivilizations: (name: string) =>
-    fetchStaticJson<any>(`/worlds/${name}/civilizations.json`),
+  getCivilizations: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/civilizations.json`)
+      : fetchStaticJson<any>(`/worlds/${name}/civilizations.json`),
 }

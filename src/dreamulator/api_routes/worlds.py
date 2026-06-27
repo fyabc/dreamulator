@@ -143,6 +143,16 @@ def _resolve_layer_dir(
     return None
 
 
+def _load_layer_yaml(
+    world_dir: Path, layer: str, filename: str, branch: str | None = None
+) -> dict[str, Any] | list | None:
+    """Load a layer YAML file with _inherit: true merge support."""
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+    return resolver.load_layer_yaml(layer, filename)
+
+
 _KM_PER_EARTH_RADIUS = 6371.0
 
 
@@ -186,12 +196,8 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Load stellar input data
-    input_dir = _resolve_layer_dir(world_dir, "astronomy", "input", branch)
-    if input_dir is None:
-        raise HTTPException(status_code=404, detail="No astronomy data found")
-
-    stellar_input: dict[str, Any] = _load_yaml(input_dir / "stellar.yaml")
+    # Load stellar input data (with _inherit: true merge support)
+    stellar_input = _load_layer_yaml(world_dir, "astronomy", "stellar.yaml", branch)
     if stellar_input is None:
         raise HTTPException(status_code=404, detail="stellar.yaml not found")
 
@@ -226,11 +232,7 @@ def get_planets(world_name: str, branch: str | None = None) -> list[dict[str, An
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    input_dir = _resolve_layer_dir(world_dir, "geological", "input", branch)
-    if input_dir is None:
-        raise HTTPException(status_code=404, detail="No geological data found")
-
-    planets_data: dict[str, Any] | None = _load_yaml(input_dir / "planets.yaml")
+    planets_data = _load_layer_yaml(world_dir, "geological", "planets.yaml", branch)
     if planets_data is None:
         raise HTTPException(status_code=404, detail="planets.yaml not found")
 
@@ -274,11 +276,7 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    input_dir = _resolve_layer_dir(world_dir, "civilization", "input", branch)
-    if input_dir is None:
-        raise HTTPException(status_code=404, detail="No civilization data found")
-
-    civ_data: dict[str, Any] | None = _load_yaml(input_dir / "civilizations.yaml")
+    civ_data = _load_layer_yaml(world_dir, "civilization", "civilizations.yaml", branch)
     if civ_data is None:
         raise HTTPException(status_code=404, detail="civilizations.yaml not found")
 

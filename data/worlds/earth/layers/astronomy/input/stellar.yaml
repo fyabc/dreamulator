@@ -42,7 +42,7 @@ bodies:
     radius_km: 1737.4
     rotation_period_days: 27.3217    # tidally locked
     axial_tilt_deg: 6.687
-    albedo: 0.136                    # geometric albedo
+    albedo: 0.123                    # geometric albedo
     surface:
       composition: silicate_regolith
       has_atmosphere: false

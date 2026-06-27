@@ -4,9 +4,62 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import yaml  # type: ignore[import-untyped]
 
 from .models.branch import BranchMetadata
 from .models.layers import LAYER_ORDER, Layer
+
+
+# ---------------------------------------------------------------------------
+# Merge helpers for _inherit: true branch data
+# ---------------------------------------------------------------------------
+
+_ID_KEYS = ("id", "body_id")
+
+
+def _merge_list_by_id(base: list, override: list) -> list:
+    """Merge two lists, matching items by 'id' or 'body_id' field.
+
+    - Items with matching IDs: override replaces base item
+    - New IDs in override: appended to result
+    - Items without ID keys: appended unconditionally
+    """
+    merged = list(base)
+    for item in override:
+        item_id = next((item.get(k) for k in _ID_KEYS if k in item), None)
+        if item_id is not None:
+            for i, existing in enumerate(merged):
+                if any(existing.get(k) == item_id for k in _ID_KEYS):
+                    merged[i] = item
+                    break
+            else:
+                merged.append(item)
+        else:
+            merged.append(item)
+    return merged
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override dict into base dict.
+
+    - Dicts: recursive merge
+    - Lists: merge by ID (via _merge_list_by_id)
+    - Scalars: override wins
+    """
+    result = dict(base)
+    for key, value in override.items():
+        if key in result:
+            if isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = _deep_merge(result[key], value)
+            elif isinstance(result[key], list) and isinstance(value, list):
+                result[key] = _merge_list_by_id(result[key], value)
+            else:
+                result[key] = value
+        else:
+            result[key] = value
+    return result
 
 
 @dataclass
@@ -179,3 +232,67 @@ class LayerResolver:
         """
         metadata = self.get_branch_metadata()
         return metadata.fork_layer if metadata else None
+
+    # -------------------------------------------------------------------
+    # Inheritance-aware YAML loading
+    # -------------------------------------------------------------------
+
+    def load_layer_yaml(self, layer: Layer | str, filename: str) -> dict | list | None:
+        """Load a YAML file with ``_inherit: true`` merge support.
+
+        Walks the inheritance chain (branch → … → root).  If a level's file
+        contains ``_inherit: true``, its data is merged on top of the parent
+        level's data (lists merged by ``id``/``body_id``, dicts merged
+        recursively, scalars overridden).  The ``_inherit`` key is stripped
+        from the result.
+
+        If no level contains ``_inherit``, the first file found in the chain
+        is returned as-is (current behaviour).
+
+        Args:
+            layer: Layer to load.
+            filename: YAML file name inside the layer's ``input/`` directory.
+
+        Returns:
+            Merged data dict/list, or ``None`` if no file found.
+        """
+        if isinstance(layer, str):
+            layer = Layer(layer)
+
+        chain = self._get_branch_chain()
+
+        # Collect (dir_path, yaml_path) pairs from most-specific to root
+        levels: list[tuple[Path, Path]] = []
+        for _meta, dir_path in chain:
+            yaml_path = dir_path / "layers" / layer.value / "input" / filename
+            if yaml_path.exists():
+                levels.append((dir_path, yaml_path))
+
+        if not levels:
+            return None
+
+        # Walk from root (most general) → most specific, merging as we go.
+        # levels[0] is most specific, levels[-1] is root → reverse for bottom-up.
+        result: Any = None
+        for _dir, yaml_path in reversed(levels):
+            with yaml_path.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+
+            if data is None:
+                continue
+
+            if result is None:
+                # First (root-most) file — use as base
+                if isinstance(data, dict):
+                    data.pop("_inherit", None)
+                result = data
+                continue
+
+            # Parent data already in `result`.  Does this level request merge?
+            if isinstance(data, dict) and data.pop("_inherit", False):
+                result = _deep_merge(result, data)
+            else:
+                # No _inherit → this level fully replaces parent
+                result = data
+
+        return result

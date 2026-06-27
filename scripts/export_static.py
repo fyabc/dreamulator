@@ -18,6 +18,22 @@ from pathlib import Path
 
 import yaml
 
+# Ensure dreamulator package is importable when running as a script
+_SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _ensure_importable() -> None:
+    """Add src/ to sys.path so we can import dreamulator."""
+    root = _SCRIPT_DIR.parent
+    src = root / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+
+
+_ensure_importable()
+
+from dreamulator.resolver import LayerResolver  # noqa: E402
+
 
 def find_project_root() -> Path:
     """Find the project root (contains pyproject.toml)."""
@@ -59,15 +75,73 @@ def _normalize_body(body: dict, orbit_lookup: dict) -> dict:
     return normalized
 
 
+def _export_layer_data(
+    world_dir: Path, branch: str | None = None
+) -> dict:
+    """Export layer data for a world or branch using the resolver.
+
+    Handles _inherit: true merge for input files.
+    Returns a dict with keys: stellar, habitable_zones, planets, civilizations.
+    """
+    resolver = LayerResolver(world_dir, branch)
+    result: dict = {}
+
+    # 1. Stellar system (input + derived merged)
+    stellar_input = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+    if stellar_input and isinstance(stellar_input, dict):
+        stellar = dict(stellar_input)
+
+        # Merge derived star data if available
+        derived_dir = resolver.get_derived_dir("astronomy")
+        if derived_dir is not None:
+            stellar_derived = load_yaml(derived_dir / "stellar_derived.yaml")
+            if stellar_derived and "stars" in stellar_derived:
+                derived_by_id = {
+                    s["id"]: s for s in stellar_derived["stars"] if "id" in s
+                }
+                if "stars" in stellar:
+                    for star in stellar["stars"]:
+                        star_id = star.get("id")
+                        if star_id and star_id in derived_by_id:
+                            star["derived"] = derived_by_id[star_id]
+
+        result["stellar"] = stellar
+
+        # Normalize bodies (moons, asteroids) to planet-compatible format
+        bodies = stellar.get("bodies", [])
+        if bodies:
+            orbit_lookup = {
+                o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o
+            }
+            stellar["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
+
+    # 2. Habitable zones (derived only — no inheritance)
+    derived_dir = resolver.get_derived_dir("astronomy")
+    if derived_dir is not None:
+        hz_data = load_yaml(derived_dir / "habitable_zones.yaml")
+        if hz_data:
+            result["habitable_zones"] = hz_data
+
+    # 3. Planets
+    planets_data = resolver.load_layer_yaml("geological", "planets.yaml")
+    if planets_data and isinstance(planets_data, dict) and "planets" in planets_data:
+        result["planets"] = planets_data["planets"]
+
+    # 4. Civilizations
+    civ_data = resolver.load_layer_yaml("civilization", "civilizations.yaml")
+    if civ_data:
+        result["civilizations"] = civ_data
+
+    return result
+
+
 def export_world(world_dir: Path) -> dict:
-    """Export all data for a single world.
+    """Export all data for a single world (root, no branch).
 
     Returns a dict with keys:
       - world: world.yaml contents
       - branches: list of branch metadata
-      - stellar: stellar system data (input + derived merged)
-      - habitable_zones: habitable zone data (if computed)
-      - planets: list of planet definitions
+      - stellar, habitable_zones, planets, civilizations (from _export_layer_data)
     """
     result: dict = {}
 
@@ -78,7 +152,7 @@ def export_world(world_dir: Path) -> dict:
         return result
     result["world"] = world_data
 
-    # 2. Branches
+    # 2. Branches metadata
     branches: list[dict] = []
     branches_dir = world_dir / "branches"
     if branches_dir.exists():
@@ -92,44 +166,8 @@ def export_world(world_dir: Path) -> dict:
                     branches.append(branch_data)
     result["branches"] = branches
 
-    # 3. Stellar system (merge input + derived)
-    stellar_input = load_yaml(world_dir / "layers" / "astronomy" / "input" / "stellar.yaml")
-    stellar_derived = load_yaml(
-        world_dir / "layers" / "astronomy" / "derived" / "stellar_derived.yaml"
-    )
-    if stellar_input:
-        # Merge derived data into input for a complete view
-        stellar = dict(stellar_input)
-        if stellar_derived and "stars" in stellar_derived:
-            # Create a lookup of derived star data by id
-            derived_by_id = {s["id"]: s for s in stellar_derived["stars"] if "id" in s}
-            if "stars" in stellar:
-                for star in stellar["stars"]:
-                    star_id = star.get("id")
-                    if star_id and star_id in derived_by_id:
-                        star["derived"] = derived_by_id[star_id]
-        result["stellar"] = stellar
-
-        # Normalize bodies (moons, asteroids) to planet-compatible format
-        bodies = stellar.get("bodies", [])
-        if bodies:
-            orbit_lookup = {o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o}
-            stellar["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
-
-    # 4. Habitable zones
-    hz_data = load_yaml(world_dir / "layers" / "astronomy" / "derived" / "habitable_zones.yaml")
-    if hz_data:
-        result["habitable_zones"] = hz_data
-
-    # 5. Planets
-    planets_input = load_yaml(world_dir / "layers" / "geological" / "input" / "planets.yaml")
-    if planets_input and "planets" in planets_input:
-        result["planets"] = planets_input["planets"]
-
-    # 6. Civilization data (if exists)
-    civ_input = load_yaml(world_dir / "layers" / "civilization" / "input" / "civilizations.yaml")
-    if civ_input:
-        result["civilizations"] = civ_input
+    # 3. Layer data (root world, no branch)
+    result.update(_export_layer_data(world_dir, branch=None))
 
     return result
 
@@ -199,7 +237,25 @@ def main() -> None:
             with out_file.open("w", encoding="utf-8") as f:
                 json.dump(value, f, ensure_ascii=False, indent=2, default=str)
 
-        print(f"OK ({len(data)} files)")
+        # Export per-branch data (with _inherit: true merge)
+        branch_count = 0
+        branches_dir = world_dir / "branches"
+        if branches_dir.exists():
+            for branch_dir in sorted(branches_dir.iterdir()):
+                if not branch_dir.is_dir():
+                    continue
+                branch_name = branch_dir.name
+                branch_data = _export_layer_data(world_dir, branch=branch_name)
+                if branch_data:
+                    branch_out_dir = world_out_dir / "branches" / branch_name
+                    branch_out_dir.mkdir(parents=True, exist_ok=True)
+                    for key, value in branch_data.items():
+                        out_file = branch_out_dir / f"{key}.json"
+                        with out_file.open("w", encoding="utf-8") as f:
+                            json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                    branch_count += 1
+
+        print(f"OK ({len(data)} files, {branch_count} branch(es))")
 
     # Write worlds index
     index_file = output_dir / "worlds.json"
