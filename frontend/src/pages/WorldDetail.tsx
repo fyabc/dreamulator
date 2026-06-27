@@ -30,22 +30,22 @@ export default function WorldDetail() {
   })
 
   const { data: stellarSystem } = useQuery({
-    queryKey: ['astronomy', worldName],
-    queryFn: () => api.getStellarSystem(worldName!),
+    queryKey: ['astronomy', worldName, selectedBranch],
+    queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
     enabled: !!worldName && (activeTab === 'astronomy' || activeTab === 'viewer3d'),
     retry: false,
   })
 
   const { data: planets } = useQuery({
-    queryKey: ['planets', worldName],
-    queryFn: () => api.getPlanets(worldName!),
+    queryKey: ['planets', worldName, selectedBranch],
+    queryFn: () => api.getPlanets(worldName!, selectedBranch),
     enabled: !!worldName && (activeTab === 'planets' || activeTab === 'viewer3d'),
     retry: false,
   })
 
   const { data: habitableZones } = useQuery({
-    queryKey: ['habitable-zones', worldName],
-    queryFn: () => api.getHabitableZones(worldName!),
+    queryKey: ['habitable-zones', worldName, selectedBranch],
+    queryFn: () => api.getHabitableZones(worldName!, selectedBranch),
     enabled: !!worldName && activeTab === 'viewer3d',
     retry: false,
   })

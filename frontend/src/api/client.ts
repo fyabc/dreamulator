@@ -166,20 +166,26 @@ const readApi = {
   getWorld: (name: string) =>
     isStaticMode() ? staticApi.getWorld(name) : fetchJson<any>(`/worlds/${name}`),
 
-  getStellarSystem: (name: string) =>
+  getStellarSystem: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getStellarSystem(name)
-      : fetchJson<any>(`/worlds/${name}/stellar`),
+      : fetchJson<any>(
+          `/worlds/${name}/stellar${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
 
-  getPlanets: (name: string) =>
+  getPlanets: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getPlanets(name)
-      : fetchJson<any[]>(`/worlds/${name}/planets`),
+      : fetchJson<any[]>(
+          `/worlds/${name}/planets${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
 
-  getHabitableZones: (name: string) =>
+  getHabitableZones: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getHabitableZones(name)
-      : fetchJson<any>(`/worlds/${name}/habitable-zones`),
+      : fetchJson<any>(
+          `/worlds/${name}/habitable-zones${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
 
   getPlanet: (name: string, planetId: string) =>
     isStaticMode()
