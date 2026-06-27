@@ -266,6 +266,27 @@ def get_habitable_zones(world_name: str, branch: str | None = None) -> dict[str,
     return hz_data
 
 
+@router.get("/{world_name}/civilizations")
+def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[str, Any]]:
+    """Get civilization data from the civilization layer input."""
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    input_dir = _resolve_layer_dir(world_dir, "civilization", "input", branch)
+    if input_dir is None:
+        raise HTTPException(status_code=404, detail="No civilization data found")
+
+    civ_data: dict[str, Any] | None = _load_yaml(input_dir / "civilizations.yaml")
+    if civ_data is None:
+        raise HTTPException(status_code=404, detail="civilizations.yaml not found")
+
+    if isinstance(civ_data, dict) and "civilizations" in civ_data:
+        return civ_data["civilizations"]
+    return civ_data if isinstance(civ_data, list) else []
+
+
 # ---------------------------------------------------------------------------
 # Build endpoint — run the engine pipeline
 # ---------------------------------------------------------------------------

@@ -187,6 +187,13 @@ const readApi = {
           `/worlds/${name}/habitable-zones${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
+  getCivilizations: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getCivilizations(name)
+      : fetchJson<any[]>(
+          `/worlds/${name}/civilizations${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
   getPlanet: (name: string, planetId: string) =>
     isStaticMode()
       ? Promise.reject(new Error('getPlanet not available in static mode'))
