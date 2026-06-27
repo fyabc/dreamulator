@@ -61,7 +61,7 @@ export default function WorldDetail() {
   const TAB_LABELS: Record<TabType, string> = {
     overview: '概览',
     astronomy: '天文学',
-    planets: '天体',
+    planets: '地质',
     viewer3d: '3D 视图',
     narrate: '叙述',
   }
@@ -378,7 +378,7 @@ export default function WorldDetail() {
             {activeTab === 'planets' && (
               <div className="glass-panel p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  天体
+                  地质
                 </h2>
                 {planets ? (
                   <div className="space-y-4">
@@ -471,11 +471,11 @@ export default function WorldDetail() {
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500">未定义天体</p>
+                      <p className="text-gray-500">未定义地质数据</p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-gray-500">无天体数据</p>
+                  <p className="text-gray-500">无地质层数据</p>
                 )}
               </div>
             )}
