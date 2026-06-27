@@ -53,8 +53,8 @@ interface PlanetMeshProps {
   /** Number of satellites orbiting this body (shown in subtitle) */
   satelliteCount?: number
   onSelect?: (planet: PlanetData) => void
-  /** Double-click: fly camera to this body */
-  onFocus?: (position: [number, number, number]) => void
+  /** Double-click: fly camera to this body (radius in AU for zoom-limit) */
+  onFocus?: (position: [number, number, number], radiusAU: number) => void
   isSelected?: boolean
 }
 
@@ -133,7 +133,7 @@ export default function PlanetMesh({
         }}
         onDoubleClick={(e) => {
           e.stopPropagation()
-          onFocus?.(position)
+          onFocus?.(position, realRadiusAU)
         }}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -169,7 +169,7 @@ export default function PlanetMesh({
         selected={isSelected}
         visible={labelVisible}
         onClick={() => onSelect?.(planet)}
-        onDoubleClick={() => onFocus?.(position)}
+        onDoubleClick={() => onFocus?.(position, realRadiusAU)}
       />
     </group>
   )

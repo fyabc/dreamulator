@@ -47,7 +47,7 @@ export default function Label({
   onHover,
 }: LabelProps) {
   const glow = glowColor ?? color
-  const lineH = selected ? 32 : 48
+  const lineH = 48
 
   if (!visible) return null
 

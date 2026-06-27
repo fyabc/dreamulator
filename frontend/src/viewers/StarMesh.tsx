@@ -41,8 +41,8 @@ interface StarData {
 interface StarMeshProps {
   star: StarData
   onSelect?: (star: StarData) => void
-  /** Double-click: fly camera to this body */
-  onFocus?: (position: [number, number, number]) => void
+  /** Double-click: fly camera to this body (radius in AU for zoom-limit) */
+  onFocus?: (position: [number, number, number], radiusAU: number) => void
   isSelected?: boolean
 }
 
@@ -91,7 +91,7 @@ export default function StarMesh({ star, onSelect, onFocus, isSelected }: StarMe
         }}
         onDoubleClick={(e) => {
           e.stopPropagation()
-          onFocus?.(pos)
+          onFocus?.(pos, realRadiusAU)
         }}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -145,7 +145,7 @@ export default function StarMesh({ star, onSelect, onFocus, isSelected }: StarMe
         subtitle={typeLabel}
         selected={isSelected}
         onClick={() => onSelect?.(star)}
-        onDoubleClick={() => onFocus?.(pos)}
+        onDoubleClick={() => onFocus?.(pos, realRadiusAU)}
       />
     </group>
   )

@@ -77,10 +77,27 @@ export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
   const staticMode = isStaticMode()
 
-  type TabType = 'overview' | 'astronomy' | 'planets' | 'civilization' | 'viewer3d' | 'narrate'
+  type TabType =
+    | 'overview'
+    | 'astronomy'
+    | 'planets'
+    | 'climate'
+    | 'ecology'
+    | 'civilization'
+    | 'viewer3d'
+    | 'narrate'
   const availableTabs: TabType[] = staticMode
-    ? ['overview', 'astronomy', 'planets', 'civilization', 'viewer3d']
-    : ['overview', 'astronomy', 'planets', 'civilization', 'viewer3d', 'narrate']
+    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'viewer3d']
+    : [
+        'overview',
+        'astronomy',
+        'planets',
+        'climate',
+        'ecology',
+        'civilization',
+        'viewer3d',
+        'narrate',
+      ]
 
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
@@ -123,6 +140,20 @@ export default function WorldDetail() {
     retry: false,
   })
 
+  const { data: climateData } = useQuery({
+    queryKey: ['climate', worldName, selectedBranch],
+    queryFn: () => api.getClimate(worldName!, selectedBranch),
+    enabled: !!worldName && activeTab === 'climate',
+    retry: false,
+  })
+
+  const { data: ecologyData } = useQuery({
+    queryKey: ['ecology', worldName, selectedBranch],
+    queryFn: () => api.getEcology(worldName!, selectedBranch),
+    enabled: !!worldName && activeTab === 'ecology',
+    retry: false,
+  })
+
   const buildMutation = useMutation({
     mutationFn: () => api.buildWorld(worldName!),
   })
@@ -135,6 +166,8 @@ export default function WorldDetail() {
     overview: '概览',
     astronomy: '天文学',
     planets: '地质',
+    climate: '气候',
+    ecology: '生态',
     civilization: '文明',
     viewer3d: '3D 视图',
     narrate: '叙述',
@@ -253,6 +286,23 @@ export default function WorldDetail() {
                   <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                     元数据
                   </h2>
+                  {world.metadata?.description && (
+                    <p className="text-gray-300 text-sm leading-relaxed mb-4">
+                      {world.metadata.description}
+                    </p>
+                  )}
+                  {world.metadata?.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {world.metadata.tags.map((tag: string) => (
+                        <span
+                          key={tag}
+                          className="text-xs px-2 py-1 rounded bg-space-surface/60 text-gray-300 border border-space-border"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <dl className="grid grid-cols-2 gap-4">
                     <div>
                       <dt className="text-gray-500 text-sm">创建时间</dt>
@@ -580,6 +630,36 @@ export default function WorldDetail() {
                   </div>
                 ) : (
                   <p className="text-gray-500">无地质层数据</p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'climate' && (
+              <div className="glass-panel p-6">
+                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
+                  气候
+                </h2>
+                {climateData ? (
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
+                    {JSON.stringify(climateData, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-gray-500">无气候层数据</p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'ecology' && (
+              <div className="glass-panel p-6">
+                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
+                  生态
+                </h2>
+                {ecologyData ? (
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
+                    {JSON.stringify(ecologyData, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-gray-500">无生态层数据</p>
                 )}
               </div>
             )}

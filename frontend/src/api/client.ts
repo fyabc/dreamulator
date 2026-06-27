@@ -194,6 +194,20 @@ const readApi = {
           `/worlds/${name}/civilizations${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
+  getClimate: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getClimate(name, branch)
+      : fetchJson<any>(
+          `/worlds/${name}/climate${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getEcology: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getEcology(name, branch)
+      : fetchJson<any>(
+          `/worlds/${name}/ecology${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
   getPlanet: (name: string, planetId: string) =>
     isStaticMode()
       ? Promise.reject(new Error('getPlanet not available in static mode'))

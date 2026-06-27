@@ -83,7 +83,7 @@ def _export_layer_data(
     """Export layer data for a world or branch using the resolver.
 
     Handles _inherit: true merge for input files.
-    Returns a dict with keys: stellar, habitable_zones, planets, civilizations.
+    Returns a dict with keys: stellar, habitable_zones, planets, climate, ecology, civilizations.
     """
     resolver = LayerResolver(world_dir, branch)
     result: dict = {}
@@ -129,7 +129,17 @@ def _export_layer_data(
     if planets_data and isinstance(planets_data, dict) and "planets" in planets_data:
         result["planets"] = planets_data["planets"]
 
-    # 4. Civilizations
+    # 4. Climate
+    climate_data = resolver.load_layer_yaml("climate", "climate.yaml")
+    if climate_data:
+        result["climate"] = climate_data
+
+    # 5. Ecology
+    ecology_data = resolver.load_layer_yaml("ecology", "ecology.yaml")
+    if ecology_data:
+        result["ecology"] = ecology_data
+
+    # 6. Civilizations
     civ_data = resolver.load_layer_yaml("civilization", "civilizations.yaml")
     if civ_data:
         result["civilizations"] = civ_data
@@ -143,7 +153,7 @@ def export_world(world_dir: Path) -> dict:
     Returns a dict with keys:
       - world: world.yaml contents
       - branches: list of branch metadata
-      - stellar, habitable_zones, planets, civilizations (from _export_layer_data)
+      - stellar, habitable_zones, planets, climate, ecology, civilizations (from _export_layer_data)
     """
     result: dict = {}
 

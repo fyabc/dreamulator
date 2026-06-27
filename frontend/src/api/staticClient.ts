@@ -65,4 +65,14 @@ export const staticApi = {
     branch
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/civilizations.json`)
       : fetchStaticJson<any>(`/worlds/${name}/civilizations.json`),
+
+  getClimate: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/climate.json`)
+      : fetchStaticJson<any>(`/worlds/${name}/climate.json`),
+
+  getEcology: (name: string, branch?: string | null) =>
+    branch
+      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/ecology.json`)
+      : fetchStaticJson<any>(`/worlds/${name}/ecology.json`),
 }

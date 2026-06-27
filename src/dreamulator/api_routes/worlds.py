@@ -287,6 +287,36 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
     return civ_data if isinstance(civ_data, list) else []
 
 
+@router.get("/{world_name}/climate")
+def get_climate(world_name: str, branch: str | None = None) -> dict[str, Any] | None:
+    """Get climate data from the climate layer input.
+
+    Returns null when no climate.yaml exists yet (layer not populated).
+    """
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    data = _load_layer_yaml(world_dir, "climate", "climate.yaml", branch)
+    return data if isinstance(data, dict) else None
+
+
+@router.get("/{world_name}/ecology")
+def get_ecology(world_name: str, branch: str | None = None) -> dict[str, Any] | None:
+    """Get ecology data from the ecology layer input.
+
+    Returns null when no ecology.yaml exists yet (layer not populated).
+    """
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    data = _load_layer_yaml(world_dir, "ecology", "ecology.yaml", branch)
+    return data if isinstance(data, dict) else None
+
+
 # ---------------------------------------------------------------------------
 # Build endpoint — run the engine pipeline
 # ---------------------------------------------------------------------------

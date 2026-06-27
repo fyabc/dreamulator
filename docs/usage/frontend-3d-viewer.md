@@ -6,7 +6,7 @@
 
 - **真实比例渲染**：所有距离以 AU 为单位，天体半径按真实物理尺寸
 - **Leader line 标注系统**：十字准星 + 引线 + 文字标签，确保亚像素级天体可定位
-- **极端缩放**：从 200 AU 系统全景到 0.001 AU 近距观察
+- **动态缩放极限**：从 200 AU 系统全景到聚焦天体半径的 1.5 倍（自适应，避免穿入大天体或看不清小天体）
 - **宜居带可视化**：半透明绿色环 + 凝结线标记
 - **天体信息面板**：点击标签查看详情（光谱类型、温度、质量等）
 - **分支感知**：自动加载分支世界的恒星/行星数据
@@ -53,7 +53,7 @@ API / 静态 JSON
 WorldDetail.tsx  ──useQuery──→  stellar / planets / habitableZones
     ↓
 StellarSystemViewer
-    ├── allBodies = planets[] + stellar.bodies[]   ← 合并行星 + 卫星/小行星
+    ├── allBodies = planets[] + stellar.bodies[]   ← 合并行星 + 卫星/小行星（按 id 去重，planets 优先）
     ├── positionMap = resolvePositions(stars, allBodies, orbits)
     ├── StarMesh[]        ← stellar.stars[]
     ├── OrbitLine[]       ← stellar.orbits[] + parentPosition
@@ -69,7 +69,7 @@ StellarSystemViewer
 主容器组件，负责：
 - `<Canvas>` 设置（`logarithmicDepthBuffer`、相机参数、色调映射）
 - 场景灯光和背景星场（drei `<Stars>`）
-- `<OrbitControls>` 相机控制（minDistance: 0.001 AU, maxDistance: 200 AU）
+- `<OrbitControls>` 相机控制（maxDistance: 200 AU；minDistance 动态计算：聚焦天体时 = 1.5 × 天体真实半径，无焦点时 = 0.005 AU）
 - **双击聚焦**：`focusTargetRef` + `useFrame` 中 `controls.target.lerp()` 平滑飞向目标天体
 - 组装所有子组件
 - HUD 覆盖层（视距显示、图例）
@@ -97,7 +97,7 @@ StellarSystemViewer
 屏幕空间标注组件（参考 Space Engine / Celestia 的做法）：
 - 使用 drei `<Html>` 将 3D 世界坐标投影到屏幕
 - 结构：文字标签 → 引线 → 十字准星
-- 引线长度随选中状态变化（选中 32px / 默认 48px）
+- 引线长度固定 48px（不随选中状态变化，避免标签跳动影响双击定位）
 - 十字准星为白色细线（Space Engine 风格），选中时略大且更亮
 - 支持 subtitle 行（显示光谱类型/温度/行星类型等）
 - 单击触发 `onClick`（选中天体），双击触发 `onDoubleClick`（聚焦镜头）
@@ -146,7 +146,7 @@ StellarSystemViewer
 | 最小 glow 壳（仅恒星） | Universe Sandbox | 0.008 AU 的 additive blending 球体 |
 | 外层软光晕 | Space Engine | 2.5× 最小半径的 BackSide 渲染 |
 | `logarithmicDepthBuffer` | Three.js best practice | 处理 near=0.00001 / far=5000 的极端比 |
-| 极端缩放范围 | Space Engine | 0.001–200 AU，用户可自由 zoom |
+| 动态缩放范围 | Space Engine | 1.5× 天体半径 – 200 AU，minDistance 随聚焦目标自适应 |
 | 视距 HUD | Space Engine | 实时显示当前观察距离（AU/km 自适应） |
 | 标签去重叠 | Space Engine, Universe Sandbox | 角大小阈值隐藏子天体标签，父天体显示聚合计数 |
 

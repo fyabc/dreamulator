@@ -200,6 +200,7 @@ function Scene({
   controlsRef,
   onControlsChange,
   focusTargetRef,
+  focusedRadiusRef,
 }: {
   stellar: StellarSystemData | null | undefined
   allBodies: PlanetData[]
@@ -212,6 +213,7 @@ function Scene({
   controlsRef: React.MutableRefObject<any>
   onControlsChange: () => void
   focusTargetRef: React.MutableRefObject<THREE.Vector3 | null>
+  focusedRadiusRef: React.MutableRefObject<number | null>
 }) {
   const orbits = stellar?.orbits ?? []
   const hzData = useMemo(() => resolveHZ(habitableZones), [habitableZones])
@@ -249,11 +251,20 @@ function Scene({
     }
   })
 
-  // Smoothly fly camera target to focused body each frame
+  // Smoothly fly camera target to focused body each frame,
+  // and sync OrbitControls.minDistance with the focused body's radius.
   useFrame(() => {
     const controls = controlsRef.current
+    if (!controls) return
+
+    // Dynamic zoom limit: 1.5× the focused body's real radius (AU).
+    // Prevents entering large bodies (stars) while allowing close-up on
+    // small bodies (asteroids, small moons).  Default covers Sun-sized.
+    const focusedR = focusedRadiusRef.current
+    controls.minDistance = focusedR != null ? focusedR * 1.5 : 0.005
+
     const target = focusTargetRef.current
-    if (controls && target) {
+    if (target) {
       controls.target.lerp(target, 0.06)
       // Snap when close enough to avoid endless micro-movement
       if (controls.target.distanceTo(target) < 0.0001) {
@@ -263,9 +274,10 @@ function Scene({
     }
   })
 
-  const handleFocus = useCallback((pos: [number, number, number]) => {
+  const handleFocus = useCallback((pos: [number, number, number], radiusAU: number) => {
     focusTargetRef.current = new THREE.Vector3(pos[0], pos[1], pos[2])
-  }, [focusTargetRef])
+    focusedRadiusRef.current = radiusAU
+  }, [])
 
   return (
     <>
@@ -329,7 +341,7 @@ function Scene({
         makeDefault
         enableDamping
         dampingFactor={0.08}
-        minDistance={0.001}
+        minDistance={0.005}
         maxDistance={200}
         maxPolarAngle={Math.PI * 0.9}
         zoomSpeed={1.5}
@@ -354,13 +366,24 @@ export default function StellarSystemViewer({
   const [selected, setSelected] = useState<SelectedBody>(null)
   const controlsRef = useRef<any>(null)
   const focusTargetRef = useRef<THREE.Vector3 | null>(null)
+  // Radius (AU) of the body the camera is flying toward; null = no focus.
+  // Drives dynamic OrbitControls.minDistance so small bodies remain reachable
+  // and large bodies (stars) can't be zoomed into.
+  const focusedRadiusRef = useRef<number | null>(null)
   const [cameraDist, setCameraDist] = useState(0)
 
-  // Merge planets + stellar bodies (moons, asteroids) into one list
+  // Merge planets + stellar bodies (moons, asteroids) into one list.
+  // Deduplicate by id: planets (geological layer) take priority over
+  // stellar bodies (astronomy layer) since they carry richer data
+  // (atmosphere, hydrosphere, etc.).  Without dedup, worlds that list
+  // all bodies in both stellar.yaml and planets.yaml would render
+  // duplicate labels at the same position.
   const allBodies = useMemo(() => {
     const planetList = planets ?? []
     const bodyList = stellar?.bodies ?? []
-    return [...planetList, ...bodyList]
+    const planetIds = new Set(planetList.map((p) => p.id))
+    const uniqueBodies = bodyList.filter((b) => !planetIds.has(b.id))
+    return [...planetList, ...uniqueBodies]
   }, [planets, stellar?.bodies])
 
   const orbits = stellar?.orbits ?? []
@@ -428,7 +451,10 @@ export default function StellarSystemViewer({
             toneMappingExposure: 1.2,
           }}
           style={{ background: '#030308', borderRadius: '0.75rem' }}
-          onPointerMissed={() => setSelected(null)}
+          onPointerMissed={() => {
+            setSelected(null)
+            focusedRadiusRef.current = null
+          }}
         >
           <Scene
             stellar={stellar}
@@ -442,6 +468,7 @@ export default function StellarSystemViewer({
             controlsRef={controlsRef}
             onControlsChange={handleControlsChange}
             focusTargetRef={focusTargetRef}
+            focusedRadiusRef={focusedRadiusRef}
           />
         </Canvas>
       </Suspense>
