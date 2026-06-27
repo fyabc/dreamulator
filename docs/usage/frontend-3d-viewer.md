@@ -133,7 +133,7 @@ StellarSystemViewer
 | Earth | 0.0000426 | 6,371 km |
 | Jupiter | 0.000477 | 71,492 km |
 | Earth 轨道 | 1.0 | 149,597,871 km |
-| Gaia Primary | 0.00197 | M 型红矮星 |
+| Ignis | 0.00197 | M 型红矮星 |
 | Aegis 轨道 | 0.2795 | 宜居带内 |
 
 在 1 AU 距离观察 Sol，视角约 0.53° — 仅约 1 像素。这是物理正确的，Space Engine 和 Universe Sandbox 行为一致。

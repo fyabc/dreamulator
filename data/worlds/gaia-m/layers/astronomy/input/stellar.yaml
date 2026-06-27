@@ -1,25 +1,198 @@
-# Gaia-M 恒星系统
-# 以光度为自变量（混合输入模式范例），引擎通过数值反演推算质量
+# Gaia-M 恒星系统 — 6 行星 + 1 宜居卫星，含 1:2:4 拉普拉斯共振链
+# 以光度为自变量（混合输入模式），引擎通过数值反演推算质量
 name: "Gaia System"
+
+description: |
+  系统形成史（基于 Izidoro et al. 2017 共振链迁移理论，四阶段演化）：
+
+  阶段 1 — 核吸积期 (0–5 Myr)
+  - 水雪线 (~0.5 AU) 外侧冰质星子快速吸积，形成 ~10 M⊕ 固态核心
+  - 触发失控气体吸积，3–5 Myr 内增长至 1.6 M_J (Aegis)
+  - 雪线内侧仅形成 0.1–1.0 M⊕ 岩石胚胎，未达气态吸积临界质量
+
+  阶段 2 — II 型迁移与共振链捕获 (5–10 Myr)
+  - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (0.28 AU)
+  - 外缘两颗胚胎被"牧羊犬效应"推动，发生会聚迁移
+  - 穿过 2:1 / 4:1 共振后被永久锁定 → Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
+  - 迁移扫清 0.05–0.2 AU 区间所有原始胚胎
+
+  阶段 3 — 盘消散后碎片重组 (10–200 Myr)
+  - 气体盘消散后，Aegis 轨道内侧残余星子缓慢吸积，重组为两颗小岩石行星 (Ember, Crucible)
+  - 一颗散射体被弹射至远轨道 (Sentinel, e=0.18, i=7°)
+
+  阶段 4 — 长期潮汐演化 (200 Myr–6 Gyr)
+  - 内行星被恒星潮汐锁定
+  - Gaia-M 在 Aegis 子盘中形成并缓慢外迁 10%
+  - 系统进入当前稳定态
+
 stars:
-  - id: star_gaia_primary
-    name: "Gaia Primary"
+  - id: star_ignis
+    name: "Ignis"
     spectral_class: M1
     luminosity_class: V
-    luminosity: 0.0357
+    luminosity: 0.0357        # L☉ — 自变量；引擎反演 M≈0.450 M☉
     metallicity: 0.0
     age_gyr: 5.90
     position:
       x: 0.0
       y: 0.0
       z: 0.0
+
 orbits:
+  # ---- 内行星（Aegis 迁移后残余碎片重组） ----
+  - body_id: planet_ember
+    parent_id: star_ignis
+    semi_major_axis_au: 0.046
+    eccentricity: 0.0
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  - body_id: planet_crucible
+    parent_id: star_ignis
+    semi_major_axis_au: 0.098
+    eccentricity: 0.0
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  # ---- 气态巨行星（宜居带中心） ----
   - body_id: planet_aegis
-    parent_id: star_gaia_primary
-    semi_major_axis_au: 0.2795    # HZ log-mean center (recalculated)
+    parent_id: star_ignis
+    semi_major_axis_au: 0.2795    # HZ log-mean center (engine: 0.279455 AU)
     eccentricity: 0.005
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
+
+  # ---- 共振链（会聚迁移捕获，1:2:4 拉普拉斯共振） ----
+  - body_id: planet_boreal
+    parent_id: star_ignis
+    semi_major_axis_au: 0.4437    # 2:1 with Aegis → 0.2795 × 2^(2/3)
+    eccentricity: 0.0
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  - body_id: planet_glacis
+    parent_id: star_ignis
+    semi_major_axis_au: 0.7043    # 4:1 with Aegis → 0.2795 × 4^(2/3)
+    eccentricity: 0.0
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  # ---- 远轨道散射体（Aegis 迁移弹射遗孤） ----
+  - body_id: planet_sentinel
+    parent_id: star_ignis
+    semi_major_axis_au: 3.68
+    eccentricity: 0.18            # 高偏心率 — 散射弹射的直接证据
+    inclination_deg: 7.0          # 高倾角 — 散射弹射的直接证据
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  # ---- 宜居卫星（环绕 Aegis） ----
+  - body_id: satellite_gaiam
+    parent_id: planet_aegis
+    semi_major_axis_au: 0.00494   # 739,748 km（由 P=78h 开普勒定律计算）
+    eccentricity: 0.0025          # 共振泵浦维持（潮汐加热之源）
+    inclination_deg: 9.0          # 相对 Aegis 赤道面
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+bodies:
+  # ---- 行星 I：余烬 ----
+  - id: planet_ember
+    name: "Ember"
+    body_type: "planet"
+    mass_earth: 0.35
+    radius_km: 4014               # 0.63 R⊕ — ρ=7.8 g/cm³（铁核残骸 + 重力压缩）
+    rotation_period_days: 5.37    # 潮汐锁定于恒星
+    axial_tilt_deg: 0.0
+    albedo: 0.10                  # 裸露金属表面
+    surface:
+      description: "被剥夺大部分地幔的铁核残骸（ρ=7.8 g/cm³），昼侧灼热裸露岩石（380-504°C），铅锌矿脉半熔融；夜侧凝固金属霜，无大气"
+
+  # ---- 行星 II：熔炉 ----
+  - id: planet_crucible
+    name: "Crucible"
+    body_type: "planet"
+    mass_earth: 0.90
+    radius_km: 6180               # 0.97 R⊕
+    rotation_period_days: 16.6    # 潮汐锁定于恒星
+    axial_tilt_deg: 0.0
+    albedo: 0.15                  # 暗色玄武岩表面
+    surface:
+      description: "90 bar CO₂ 超临界温室大气，表面 ~620 K，玄武岩平原与硫磺湖泊"
+
+  # ---- 行星 III：神盾（气态巨行星） ----
+  - id: planet_aegis
+    name: "Aegis"
+    body_type: "planet"
+    mass_earth: 508.5             # 1.6 M_J × 317.83 M⊕/M_J
+    radius_km: 71355              # 11.2 R⊕
+    rotation_period_days: 0.4167  # ~10 小时（远快于卫星公转，确保角动量正向传递）
+    axial_tilt_deg: 3.0
+    albedo: 0.34                  # 类木星 Bond albedo
+
+  # ---- 行星 IV：凛风（共振链 2:1） ----
+  - id: planet_boreal
+    name: "Boreal"
+    body_type: "planet"
+    mass_earth: 159.3             # 0.5 M_J
+    radius_km: 60562              # 9.5 R⊕ (~0.85 R_J)
+    rotation_period_days: 0.50    # ~12 小时
+    axial_tilt_deg: 2.0
+    albedo: 0.30
+    surface:
+      description: "水冰凝结线附近，H₂-He 大气富含水冰云与氨冰云，淡蓝色外观"
+
+  # ---- 行星 V：冰棱（共振链 4:1） ----
+  - id: planet_glacis
+    name: "Glacis"
+    body_type: "planet"
+    mass_earth: 17.1              # ~0.054 M_J（海王星级）
+    radius_km: 24719              # 3.88 R⊕
+    rotation_period_days: 0.72    # ~17 小时
+    axial_tilt_deg: 5.0
+    albedo: 0.25
+    surface:
+      description: "冰巨星，H₂-He 大气富含 CH₄，深青色；外侧碎片盘的内牧羊犬"
+
+  # ---- 行星 VI：哨兵（散射遗孤） ----
+  - id: planet_sentinel
+    name: "Sentinel"
+    body_type: "planet"
+    mass_earth: 8.5
+    radius_km: 15290              # 2.4 R⊕
+    rotation_period_days: 0.625   # ~15 小时
+    axial_tilt_deg: 15.0
+    albedo: 0.20                  # 冰质表面
+    surface:
+      description: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分"
+
+  # ---- 宜居卫星：Gaia-M ----
+  - id: satellite_gaiam
+    name: "Gaia-M"
+    body_type: "natural_satellite"
+    mass_earth: 1.20
+    radius_km: 6817               # 1.07 R⊕
+    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
+    axial_tilt_deg: 0.0           # 自转轴垂直于轨道面（被 Aegis 锁定）
+    albedo: 0.30
+    surface:
+      description: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"

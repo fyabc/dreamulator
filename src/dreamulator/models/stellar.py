@@ -143,6 +143,10 @@ class StellarSystem(BaseModel):
     """A system of one or more stars and their orbiting bodies."""
 
     name: str = Field(description="Name of the stellar system")
+    description: str | None = Field(
+        default=None,
+        description="Free-form narrative: system description, formation history, lore, etc.",
+    )
     stars: list[Star] = Field(min_length=1, description="Stars in the system")
     orbits: list[OrbitalElements] = Field(
         default_factory=list, description="Orbital elements for planets and other bodies"

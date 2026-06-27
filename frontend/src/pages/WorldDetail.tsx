@@ -250,6 +250,57 @@ export default function WorldDetail() {
                       {stellarSystem.name}
                     </p>
 
+                    {/* System description / formation history */}
+                    {stellarSystem.description && (
+                      <section className="mb-6 bg-space-surface/40 rounded-lg p-5 border border-space-border">
+                        {(() => {
+                          const desc: string = (stellarSystem.description as string).trim()
+                          const sections = desc.split(/\n\s*\n/).filter(Boolean)
+                          const intro = sections[0] ?? ''
+                          const rest = sections.slice(1)
+                          return (
+                            <>
+                              <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line mb-3">
+                                {intro}
+                              </p>
+                              {rest.map((section: string, i: number) => {
+                                const lines = section.split('\n').map((l: string) => l.trim())
+                                const header = lines[0]?.replace(/[：:]\s*$/, '') ?? ''
+                                const bullets = lines
+                                  .slice(1)
+                                  .filter((l: string) => l.startsWith('- ') || l.startsWith('— '))
+                                  .map((l: string) => l.replace(/^[-—]\s*/, ''))
+                                const hasBullets = bullets.length > 0
+                                return (
+                                  <div key={i} className="mt-3">
+                                    <h4 className="text-sm font-semibold text-amber-300 mb-1.5">
+                                      {header}
+                                    </h4>
+                                    {hasBullets ? (
+                                      <ul className="space-y-1.5 text-sm text-gray-300">
+                                        {bullets.map((b: string, j: number) => (
+                                          <li key={j} className="flex gap-2">
+                                            <span className="text-amber-500/60 mt-0.5 shrink-0">
+                                              ›
+                                            </span>
+                                            <span className="leading-relaxed">{b}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
+                                        {lines.join('\n')}
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </>
+                          )
+                        })()}
+                      </section>
+                    )}
+
                     {/* Orbit hierarchy — tree view */}
                     {(() => {
                       const orbits: any[] = stellarSystem.orbits ?? []

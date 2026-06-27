@@ -1,8 +1,47 @@
-# Gaia-M 行星物理参数
+# Gaia-M 恒星系 — 行星物理参数
+# 含 6 颗行星 + 1 颗宜居卫星
 planets:
+  # ================================================================
+  # 行星 I：余烬 Ember — 被剥夺地幔的铁核残骸
+  # ================================================================
+  - id: planet_ember
+    name: "Ember"
+    orbits: star_ignis
+    planet_type: terrestrial
+    mass: 0.35                    # M⊕
+    radius: 0.63                  # R⊕ — ρ=7.8 g/cm³（参照水星 5.4 + 重力压缩）
+    rotation_period_days: 5.37    # 潮汐锁定于恒星
+    axial_tilt_deg: 0.0
+    albedo: 0.10                  # 裸露金属表面
+    magnetic_field_strength: 5.0  # 残余铁核微弱磁场 (μT)
+
+  # ================================================================
+  # 行星 II：熔炉 Crucible — 温室炼狱中的次生岩石世界
+  # ================================================================
+  - id: planet_crucible
+    name: "Crucible"
+    orbits: star_ignis
+    planet_type: terrestrial
+    mass: 0.90                    # M⊕
+    radius: 0.97                  # R⊕
+    rotation_period_days: 16.6    # 潮汐锁定于恒星
+    axial_tilt_deg: 0.0
+    albedo: 0.15                  # 暗色玄武岩表面
+    atmosphere:
+      surface_pressure_atm: 90.0
+      composition:
+        CO2: 0.90
+        SO2: 0.05
+        N2: 0.05
+      greenhouse_factor: 248.0    # T_eq 372 K → 实际表面 ~620 K
+    volcanic_activity: 5.0        # 极高火山活动
+
+  # ================================================================
+  # 行星 III：神盾 Aegis — 宜居带气态巨行星
+  # ================================================================
   - id: planet_aegis
-    name: Aegis
-    orbits: star_gaia_primary
+    name: "Aegis"
+    orbits: star_ignis
     planet_type: gas_giant
     mass: 508.5                   # 1.6 M_J × 317.83 M⊕/M_J
     radius: 11.2                  # ~1.0 R_J (Fortney et al. 2007, 1.6 M_J 冷气态巨行星)
@@ -18,3 +57,88 @@ planets:
         NH3: 0.002
       greenhouse_factor: 0.0
     magnetic_field_strength: 400.0  # ~8× Jupiter (质量更大 + 快速自转)
+    satellite_ids:
+      - satellite_gaiam
+
+  # ================================================================
+  # 行星 IV：凛风 Boreal — 共振链次级气态巨行星 (2:1)
+  # ================================================================
+  - id: planet_boreal
+    name: "Boreal"
+    orbits: star_ignis
+    planet_type: gas_giant
+    mass: 159.3                   # 0.5 M_J (M⊕)
+    radius: 9.5                   # R⊕ (~0.85 R_J)
+    rotation_period_days: 0.50    # ~12 hours
+    axial_tilt_deg: 2.0
+    albedo: 0.30
+    atmosphere:
+      surface_pressure_atm: 500.0
+      composition:
+        H2: 0.84
+        He: 0.14
+        H2O: 0.01
+        NH3: 0.01
+      greenhouse_factor: 0.0
+
+  # ================================================================
+  # 行星 V：冰棱 Glacis — 共振链末端冰巨星 (4:1)
+  # ================================================================
+  - id: planet_glacis
+    name: "Glacis"
+    orbits: star_ignis
+    planet_type: ice_giant
+    mass: 17.1                    # M⊕ (~0.054 M_J，海王星级)
+    radius: 3.88                  # R⊕
+    rotation_period_days: 0.72    # ~17 hours
+    axial_tilt_deg: 5.0
+    albedo: 0.25
+    atmosphere:
+      surface_pressure_atm: 100.0
+      composition:
+        H2: 0.80
+        He: 0.15
+        CH4: 0.05
+      greenhouse_factor: 0.0
+
+  # ================================================================
+  # 行星 VI：哨兵 Sentinel — 迁移弹射遗孤
+  # ================================================================
+  - id: planet_sentinel
+    name: "Sentinel"
+    orbits: star_ignis
+    planet_type: ice_giant
+    mass: 8.5                     # M⊕
+    radius: 2.4                   # R⊕
+    rotation_period_days: 0.625   # ~15 hours
+    axial_tilt_deg: 15.0
+    albedo: 0.20                  # 冰质表面
+
+  # ================================================================
+  # 宜居卫星：Gaia-M — 环绕 Aegis
+  # ================================================================
+  - id: satellite_gaiam
+    name: "Gaia-M"
+    orbits: planet_aegis
+    planet_type: ocean_world
+    mass: 1.20                    # M⊕
+    radius: 1.07                  # R⊕ (6817 km)
+    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
+    axial_tilt_deg: 0.0           # 自转轴垂直于轨道面
+    albedo: 0.30
+    atmosphere:
+      surface_pressure_atm: 1.0
+      composition:
+        N2: 0.78
+        O2: 0.21
+        Ar: 0.01
+      greenhouse_factor: 33.0     # 类似地球
+    hydrosphere:
+      water_coverage: 0.72
+      salinity_ppt: 35.0
+      ocean_depth_km: 4.0         # 平均深度 4000 m
+    lithosphere:
+      has_plate_tectonics: true
+      num_plates: 20              # 潮汐加热 → 更活跃的板块构造
+      volcanic_activity: 3.0      # 地球的 3 倍（潮汐驱动）
+    magnetic_field_strength: 30.0 # 潮汐加热维持熔融地核 → 发电机效应
