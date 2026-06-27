@@ -137,6 +137,16 @@ export function narrateWorldStream(
 // Unified API object — delegates to static or live API based on mode
 // ---------------------------------------------------------------------------
 
+/** Fetch a binary blob from the API. */
+async function fetchBlob(url: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${url}`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return response.blob()
+}
+
 /** Write operations that are only available in API mode. */
 const liveOnlyApi = {
   createWorld: (name: string, template: string = 'minimal', seed?: number) =>
@@ -156,6 +166,54 @@ const liveOnlyApi = {
       method: 'POST',
       body: JSON.stringify({ engine }),
     }),
+
+  // ---- Map write operations ----
+
+  saveElevation: (world: string, planetId: string, pngBlob: Blob, branch?: string | null) => {
+    const formData = new FormData()
+    formData.append('file', pngBlob, 'elevation.png')
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetch(`/api/worlds/${world}/maps/${planetId}/elevation${params}`, {
+      method: 'POST',
+      body: formData,
+    }).then((r) => r.json())
+  },
+
+  saveVoronoi: (world: string, planetId: string, network: any, branch?: string | null) => {
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<any>(`/worlds/${world}/maps/${planetId}/voronoi${params}`, {
+      method: 'POST',
+      body: JSON.stringify(network),
+    })
+  },
+
+  savePlates: (world: string, planetId: string, plates: any[], branch?: string | null) => {
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<any>(`/worlds/${world}/maps/${planetId}/plates${params}`, {
+      method: 'POST',
+      body: JSON.stringify(plates),
+    })
+  },
+
+  generateTerrain: (
+    world: string,
+    planetId: string,
+    params: Record<string, any> = {},
+    branch?: string | null,
+  ) => {
+    const qs = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<any>(`/worlds/${world}/maps/${planetId}/generate${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  },
+
+  deleteMap: (world: string, planetId: string, branch?: string | null) => {
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<void>(`/worlds/${world}/maps/${planetId}${params}`, {
+      method: 'DELETE',
+    })
+  },
 }
 
 /** Read operations available in both modes. */
@@ -217,6 +275,57 @@ const readApi = {
     isStaticMode()
       ? staticApi.listBranches(name)
       : fetchJson<any[]>(`/worlds/${name}/branches`),
+
+  // ---- Map read operations ----
+
+  listMapPlanets: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.resolve([] as string[])
+      : fetchJson<string[]>(
+          `/worlds/${name}/maps${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getMapMeta: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : fetchJson<any>(
+          `/worlds/${name}/maps/${planetId}/meta${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getElevationBlob: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : fetchBlob(
+          `/worlds/${name}/maps/${planetId}/elevation${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getVoronoi: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : fetchJson<any>(
+          `/worlds/${name}/maps/${planetId}/voronoi${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getPlates: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.resolve([] as any[])
+      : fetchJson<any[]>(
+          `/worlds/${name}/maps/${planetId}/plates${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getFeatures: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.resolve([] as any[])
+      : fetchJson<any[]>(
+          `/worlds/${name}/maps/${planetId}/features${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getMapLayer: (name: string, planetId: string, layerType: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : fetchBlob(
+          `/worlds/${name}/maps/${planetId}/layer/${layerType}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
 }
 
 export const api = {
@@ -242,4 +351,30 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.buildWorld(...args),
+
+  // Map write operations
+  saveElevation: (...args: Parameters<typeof liveOnlyApi.saveElevation>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.saveElevation(...args),
+
+  saveVoronoi: (...args: Parameters<typeof liveOnlyApi.saveVoronoi>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.saveVoronoi(...args),
+
+  savePlates: (...args: Parameters<typeof liveOnlyApi.savePlates>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.savePlates(...args),
+
+  generateTerrain: (...args: Parameters<typeof liveOnlyApi.generateTerrain>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.generateTerrain(...args),
+
+  deleteMap: (...args: Parameters<typeof liveOnlyApi.deleteMap>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.deleteMap(...args),
 }

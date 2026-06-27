@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import WorldInfo from './pages/WorldInfo'
 import WorldList from './pages/WorldList'
 import WorldDetail from './pages/WorldDetail'
+import MapEditorPage from './pages/MapEditorPage'
 import { isStaticMode } from './api/mode'
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
           <Route path="world-info" element={<WorldInfo />} />
           <Route path="worlds" element={<WorldList />} />
           <Route path="worlds/:worldName" element={<WorldDetail />} />
+          <Route path="worlds/:worldName/map" element={<MapEditorPage />} />
+          <Route path="worlds/:worldName/map/:planetId" element={<MapEditorPage />} />
         </Route>
       </Routes>
     </Router>

@@ -1,0 +1,383 @@
+"""Map manager — CRUD operations for planet map data with branch inheritance.
+
+Integrates with the LayerResolver to support branch inheritance: a branch
+that forks at the geological layer inherits (or overrides) map data from
+the root world.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import json
+
+import numpy as np
+import yaml  # type: ignore[import-untyped]
+
+from dreamulator.resolver import LayerResolver
+
+from .elevation_codec import decode_elevation, encode_elevation
+from .models import (
+    MapFeature,
+    MapLayerType,
+    MapMetadata,
+    TectonicPlate,
+    VoronoiNetwork,
+)
+
+
+class MapManager:
+    """Manages map data for all planets in a world.
+
+    Args:
+        world_dir: Path to the world root directory.
+        branch: Branch name (None for root world).
+    """
+
+    def __init__(self, world_dir: Path, branch: str | None = None) -> None:
+        self.world_dir = world_dir
+        self.branch = branch
+        self._resolver = LayerResolver(world_dir, branch)
+
+    # -------------------------------------------------------------------
+    # Path resolution
+    # -------------------------------------------------------------------
+
+    def _map_input_dir(self, planet_id: str) -> Path | None:
+        """Resolve the effective input directory for a planet's map data."""
+        input_dir = self._resolver.get_input_dir("geological")
+        if input_dir is None:
+            return None
+        maps_dir = input_dir / "maps" / planet_id
+        if maps_dir.exists() and any(maps_dir.iterdir()):
+            return maps_dir
+        return None
+
+    def _map_derived_dir(self, planet_id: str, layer: str = "geological") -> Path | None:
+        """Resolve the effective derived directory for a planet's map data."""
+        derived_dir = self._resolver.get_derived_dir(layer)
+        if derived_dir is None:
+            return None
+        maps_dir = derived_dir / "maps" / planet_id
+        if maps_dir.exists():
+            return maps_dir
+        return None
+
+    def _ensure_input_dir(self, planet_id: str) -> Path:
+        """Create and return the input directory for a planet's map data."""
+        # Always write to the branch's own input directory (not inherited)
+        if self.branch is not None:
+            base = self.world_dir / "branches" / self.branch / "layers"
+        else:
+            base = self.world_dir / "layers"
+        maps_dir = base / "geological" / "input" / "maps" / planet_id
+        maps_dir.mkdir(parents=True, exist_ok=True)
+        return maps_dir
+
+    def _ensure_derived_dir(self, planet_id: str, layer: str = "geological") -> Path:
+        """Create and return the derived directory for a planet's map data."""
+        if self.branch is not None:
+            base = self.world_dir / "branches" / self.branch / "layers"
+        else:
+            base = self.world_dir / "layers"
+        maps_dir = base / layer / "derived" / "maps" / planet_id
+        maps_dir.mkdir(parents=True, exist_ok=True)
+        return maps_dir
+
+    # -------------------------------------------------------------------
+    # Metadata
+    # -------------------------------------------------------------------
+
+    def get_map_metadata(self, planet_id: str) -> MapMetadata | None:
+        """Load map metadata for a planet."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return None
+        yaml_path = map_dir / "map.yaml"
+        if not yaml_path.exists():
+            return None
+        with yaml_path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if data is None:
+            return None
+        return MapMetadata.model_validate(data)
+
+    def save_map_metadata(self, planet_id: str, metadata: MapMetadata) -> None:
+        """Save map metadata for a planet."""
+        map_dir = self._ensure_input_dir(planet_id)
+        yaml_path = map_dir / "map.yaml"
+        with yaml_path.open("w", encoding="utf-8") as f:
+            yaml.dump(
+                metadata.model_dump(mode="json"),
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
+
+    # -------------------------------------------------------------------
+    # Elevation (raster)
+    # -------------------------------------------------------------------
+
+    def get_elevation(self, planet_id: str) -> np.ndarray | None:
+        """Load the elevation heightmap for a planet.
+
+        Returns:
+            Normalised 2-D numpy array [0, 1], or None if not found.
+        """
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return None
+        png_path = map_dir / "elevation.png"
+        if not png_path.exists():
+            return None
+        with png_path.open("rb") as f:
+            return decode_elevation(f.read())
+
+    def save_elevation(self, planet_id: str, elevation: np.ndarray) -> None:
+        """Save the elevation heightmap for a planet.
+
+        Uses the current map metadata for min/max elevation.
+        If no metadata exists, defaults are used.
+        """
+        metadata = self.get_map_metadata(planet_id)
+        min_m = metadata.elevation_min_m if metadata else -11_000.0
+        max_m = metadata.elevation_max_m if metadata else 9_000.0
+
+        map_dir = self._ensure_input_dir(planet_id)
+        png_path = map_dir / "elevation.png"
+        with png_path.open("wb") as f:
+            f.write(encode_elevation(elevation, min_m, max_m))
+
+    # -------------------------------------------------------------------
+    # Voronoi network
+    # -------------------------------------------------------------------
+
+    def get_voronoi(self, planet_id: str) -> VoronoiNetwork | None:
+        """Load the Voronoi network for a planet."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return None
+        json_path = map_dir / "voronoi.json"
+        if not json_path.exists():
+            return None
+        with json_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data is None:
+            return None
+        return VoronoiNetwork.model_validate(data)
+
+    def save_voronoi(self, planet_id: str, network: VoronoiNetwork) -> None:
+        """Save the Voronoi network for a planet."""
+        map_dir = self._ensure_input_dir(planet_id)
+        json_path = map_dir / "voronoi.json"
+        with json_path.open("w", encoding="utf-8") as f:
+            json.dump(
+                network.model_dump(mode="json"),
+                f,
+                ensure_ascii=False,
+            )
+
+    # -------------------------------------------------------------------
+    # Tectonic plates
+    # -------------------------------------------------------------------
+
+    def get_plates(self, planet_id: str) -> list[TectonicPlate]:
+        """Load tectonic plate definitions for a planet."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return []
+        json_path = map_dir / "plates.json"
+        if not json_path.exists():
+            return []
+        with json_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data is None or not isinstance(data, dict):
+            return []
+        plates_data = data.get("plates", [])
+        return [TectonicPlate.model_validate(p) for p in plates_data]
+
+    def save_plates(self, planet_id: str, plates: list[TectonicPlate]) -> None:
+        """Save tectonic plate definitions for a planet."""
+        map_dir = self._ensure_input_dir(planet_id)
+        json_path = map_dir / "plates.json"
+        data = {"plates": [p.model_dump(mode="json") for p in plates]}
+        with json_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+    # -------------------------------------------------------------------
+    # Features (rivers, ridges, coastlines, …)
+    # -------------------------------------------------------------------
+
+    def get_features(self, planet_id: str) -> list[MapFeature]:
+        """Load map features for a planet."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return []
+        json_path = map_dir / "features.json"
+        if not json_path.exists():
+            return []
+        with json_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data is None or not isinstance(data, dict):
+            return []
+        features_data = data.get("features", [])
+        return [MapFeature.model_validate(feat) for feat in features_data]
+
+    def save_features(self, planet_id: str, features: list[MapFeature]) -> None:
+        """Save map features for a planet."""
+        map_dir = self._ensure_input_dir(planet_id)
+        json_path = map_dir / "features.json"
+        data = {"features": [f.model_dump(mode="json") for f in features]}
+        with json_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+    # -------------------------------------------------------------------
+    # Derived layer images
+    # -------------------------------------------------------------------
+
+    def get_layer_image(
+        self, planet_id: str, layer_type: MapLayerType, layer: str = "geological"
+    ) -> bytes | None:
+        """Load a derived raster layer as PNG bytes.
+
+        Args:
+            planet_id: Planet identifier.
+            layer_type: Which layer to load (e.g. TERRAIN, BIOMES).
+            layer: Which engine layer to look in (geological, climate, ecology).
+
+        Returns:
+            PNG bytes, or None if not found.
+        """
+        derived_dir = self._map_derived_dir(planet_id, layer)
+        if derived_dir is None:
+            return None
+        png_path = derived_dir / f"{layer_type.value}.png"
+        if not png_path.exists():
+            return None
+        with png_path.open("rb") as f:
+            return f.read()
+
+    # -------------------------------------------------------------------
+    # Listing & queries
+    # -------------------------------------------------------------------
+
+    def list_planets_with_maps(self) -> list[str]:
+        """List planet IDs that have map data.
+
+        Searches the geological input directory for map subdirectories.
+        """
+        input_dir = self._resolver.get_input_dir("geological")
+        if input_dir is None:
+            return []
+        maps_dir = input_dir / "maps"
+        if not maps_dir.exists():
+            return []
+        return sorted(
+            d.name
+            for d in maps_dir.iterdir()
+            if d.is_dir() and (d / "elevation.png").exists()
+        )
+
+    def has_map(self, planet_id: str) -> bool:
+        """Check if a planet has map data."""
+        return self._map_input_dir(planet_id) is not None
+
+    # -------------------------------------------------------------------
+    # Sync operations
+    # -------------------------------------------------------------------
+
+    def sync_voronoi_from_elevation(self, planet_id: str) -> None:
+        """Re-sample Voronoi cell elevations from the current heightmap.
+
+        Call this after the heightmap is edited to keep the Voronoi network
+        in sync.
+        """
+        from .voronoi_generator import sample_heightmap
+
+        elevation = self.get_elevation(planet_id)
+        network = self.get_voronoi(planet_id)
+        if elevation is None or network is None:
+            return
+
+        metadata = self.get_map_metadata(planet_id)
+        min_m = metadata.elevation_min_m if metadata else -11_000.0
+        max_m = metadata.elevation_max_m if metadata else 9_000.0
+
+        updated = sample_heightmap(network, elevation, min_m, max_m)
+        self.save_voronoi(planet_id, updated)
+
+    # -------------------------------------------------------------------
+    # Full generation
+    # -------------------------------------------------------------------
+
+    def generate_map(
+        self,
+        planet_id: str,
+        *,
+        seed: int | None = None,
+        num_continents: int = 3,
+        mountaininess: float = 0.5,
+        num_plates: int = 10,
+        width: int = 2048,
+        height: int = 1024,
+        voronoi_num_cells: int = 5000,
+    ) -> MapMetadata:
+        """Generate a complete map (raster + Voronoi + plates) for a planet.
+
+        Args:
+            planet_id: Planet identifier.
+            seed: RNG seed (uses world seed if None).
+            num_continents: Approximate number of continents.
+            mountaininess: Terrain roughness parameter.
+            num_plates: Number of tectonic plates.
+            width: Raster width.
+            height: Raster height.
+            voronoi_num_cells: Number of Voronoi cells.
+
+        Returns:
+            The generated MapMetadata.
+        """
+        from .terrain_generator import TerrainParams, generate_terrain
+        from .voronoi_generator import assign_cells_to_plates, generate_voronoi, sample_heightmap
+
+        # Resolve seed
+        if seed is None:
+            from dreamulator.io.loader import load_world
+
+            config = load_world(self.world_dir)
+            seed = config.seed.seed
+
+        # 1. Generate terrain raster
+        params = TerrainParams(
+            num_continents=num_continents,
+            mountaininess=mountaininess,
+        )
+        terrain = generate_terrain(width, height, seed, params)
+
+        # 2. Generate Voronoi network
+        network = generate_voronoi(width, height, seed, voronoi_num_cells)
+        network = sample_heightmap(network, terrain)
+
+        # 3. Assign plates
+        rng = np.random.default_rng(seed)
+        plates = assign_cells_to_plates(network, num_plates, sea_level=0.4, rng=rng)
+
+        # 4. Create metadata
+        metadata = MapMetadata(
+            planet_id=planet_id,
+            width=width,
+            height=height,
+            voronoi_seed=seed,
+            voronoi_num_cells=voronoi_num_cells,
+            sea_level=0.4,
+        )
+
+        # 5. Save everything
+        self.save_map_metadata(planet_id, metadata)
+        self.save_elevation(planet_id, terrain)
+        self.save_voronoi(planet_id, network)
+        self.save_plates(planet_id, plates)
+
+        return metadata

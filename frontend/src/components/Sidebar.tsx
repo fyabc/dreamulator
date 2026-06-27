@@ -15,11 +15,23 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation()
 
+  // Extract world name from path if we're in a world context
+  const worldMatch = location.pathname.match(/^\/worlds\/([^/]+)/)
+  const currentWorld = worldMatch ? worldMatch[1] : null
+
   const navItems = [
     { path: '/', label: '首页', icon: '🏠' },
     { path: '/world-info', label: '世界信息', icon: '📋' },
     { path: '/worlds', label: '世界管理', icon: '🌍' },
   ]
+
+  // World-specific nav items (shown when viewing a world)
+  const worldNavItems = currentWorld
+    ? [
+        { path: `/worlds/${currentWorld}`, label: '概览', icon: '📋' },
+        { path: `/worlds/${currentWorld}/map`, label: '地图', icon: '🗺️' },
+      ]
+    : []
 
   return (
     <aside
@@ -89,6 +101,39 @@ export default function Sidebar({
             </Link>
           )
         })}
+
+        {/* World-specific nav items */}
+        {worldNavItems.length > 0 && (
+          <>
+            <div className={['pt-3 mt-3 border-t border-space-border', collapsed ? 'md:hidden' : ''].join(' ')}>
+              <span className="text-xs text-gray-600 uppercase tracking-wide">{currentWorld}</span>
+            </div>
+            {worldNavItems.map((item) => {
+              const isActive = location.pathname === item.path
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={onClose}
+                  title={collapsed ? item.label : undefined}
+                  className={[
+                    'flex items-center rounded-lg transition-all duration-200',
+                    collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
+                    'px-4 py-2.5 gap-3',
+                    isActive
+                      ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 shadow-[0_0_12px_rgba(0,212,255,0.08)]'
+                      : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
+                  ].join(' ')}
+                >
+                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                  <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
+                    {item.label}
+                  </span>
+                </Link>
+              )
+            })}
+          </>
+        )}
       </nav>
 
       {/* Footer with collapse toggle */}

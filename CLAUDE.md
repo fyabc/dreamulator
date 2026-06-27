@@ -19,9 +19,16 @@ dreamulator/
 │   │   ├── layers.py        # 层级定义和工具函数
 │   │   └── branch.py        # 分支元数据模型
 │   ├── engine/              # 模拟引擎（DAG pipeline）
+│   ├── map/                 # 地图子系统（栅格高度图 + Voronoi 语义网络）
+│   │   ├── models.py        # 地图数据模型（MapMetadata, VoronoiCell, TectonicPlate）
+│   │   ├── elevation_codec.py  # 高度图 PNG ↔ numpy 编解码
+│   │   ├── voronoi_generator.py # Voronoi 网络生成 + Lloyd relaxation
+│   │   ├── terrain_generator.py # 程序化地形生成（多频率高斯噪声）
+│   │   ├── feature_extractor.py # 特征提取（海岸线、河流、山脊）
+│   │   └── manager.py       # 地图 CRUD + 分支继承 + 同步
 │   ├── io/                  # 文件读写层
 │   ├── api.py               # FastAPI 应用
-│   ├── api_routes/          # API 路由模块
+│   ├── api_routes/          # API 路由模块（worlds、narrate、maps）
 │   ├── branch_manager.py    # 分支 CRUD 操作
 │   ├── resolver.py          # 层级数据解析器
 │   ├── narrator.py          # AI 叙述后端（Claude API）
@@ -31,10 +38,10 @@ dreamulator/
 ├── frontend/                # TypeScript SPA（Vite + React）
 │   └── src/
 │       ├── api/             # API 客户端
-│       ├── components/      # UI 组件
-│       ├── pages/           # 页面
+│       ├── components/      # UI 组件（含 map/ 地图编辑器组件）
+│       ├── pages/           # 页面（含 MapEditorPage 全页地图编辑器）
 │       ├── stores/          # Zustand 状态管理
-│       └── viewers/         # 3D 恒星系可视化器（Three.js，真实天文比例）
+│       └── viewers/         # 3D 恒星系 + 2D 地图可视化器（Three.js）
 ├── scripts/
 │   └── export_static.py     # 静态站点数据导出脚本
 ├── .github/

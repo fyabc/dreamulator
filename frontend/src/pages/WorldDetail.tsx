@@ -1,12 +1,14 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
+import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
+import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
 function bodyIcon(planetType: string | undefined, massEarth: number | undefined) {
@@ -75,6 +77,7 @@ function renderNarrative(text: string) {
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
+  const navigate = useNavigate()
   const staticMode = isStaticMode()
 
   type TabType =
@@ -153,6 +156,39 @@ export default function WorldDetail() {
     enabled: !!worldName && activeTab === 'ecology',
     retry: false,
   })
+
+  // Map preview data (always loaded for overview tab)
+  const { data: mapPlanets } = useQuery({
+    queryKey: ['mapPlanets', worldName, selectedBranch],
+    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
+    enabled: !!worldName,
+    retry: false,
+  })
+
+  const firstMapPlanet = mapPlanets && mapPlanets.length > 0 ? mapPlanets[0] : null
+
+  const { data: mapMeta } = useQuery({
+    queryKey: ['mapMeta', worldName, firstMapPlanet, selectedBranch],
+    queryFn: () => api.getMapMeta(worldName!, firstMapPlanet!, selectedBranch),
+    enabled: !!worldName && !!firstMapPlanet,
+    retry: false,
+  })
+
+  const { data: mapElevationBlob } = useQuery({
+    queryKey: ['previewElevation', worldName, firstMapPlanet, selectedBranch],
+    queryFn: () => api.getElevationBlob(worldName!, firstMapPlanet!, selectedBranch),
+    enabled: !!worldName && !!firstMapPlanet,
+    retry: false,
+  })
+
+  const [previewElevation, setPreviewElevation] = useState<Float32Array | null>(null)
+  useEffect(() => {
+    if (!mapElevationBlob) {
+      setPreviewElevation(null)
+      return
+    }
+    decodePngToFloat32(mapElevationBlob).then(({ data }) => setPreviewElevation(data))
+  }, [mapElevationBlob])
 
   const buildMutation = useMutation({
     mutationFn: () => api.buildWorld(worldName!),
@@ -350,6 +386,51 @@ export default function WorldDetail() {
                     </p>
                   </section>
                 )}
+
+                {/* Map preview card */}
+                <section className="glass-panel p-6">
+                  <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
+                    🗺️ 地图
+                  </h2>
+                  {firstMapPlanet ? (
+                    <div>
+                      <div
+                        className="relative cursor-pointer group rounded-lg overflow-hidden"
+                        onClick={() => navigate(`/worlds/${worldName}/map/${firstMapPlanet}`)}
+                      >
+                        <MapPreviewCanvas
+                          elevation={previewElevation}
+                          width={mapMeta?.width ?? 2048}
+                          height={mapMeta?.height ?? 1024}
+                          seaLevel={mapMeta?.sea_level ?? 0.4}
+                          className="w-full"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-lg">
+                          <span className="text-neon-cyan font-medium">
+                            打开地图编辑器 →
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-2">
+                        {firstMapPlanet} · {mapMeta?.width ?? '?'}×{mapMeta?.height ?? '?'}
+                        {' · '}
+                        点击查看和编辑行星地图
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6">
+                      <p className="text-gray-500 mb-3">暂无地图数据</p>
+                      {!staticMode && (
+                        <Link
+                          to={`/worlds/${worldName}/map`}
+                          className="inline-block px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 transition-colors"
+                        >
+                          生成第一张地图 →
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </section>
               </div>
             )}
 

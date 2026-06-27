@@ -95,7 +95,7 @@ dreamulator/
 physics → chemistry → astronomy → geological → climate → ecology → civilization
 ```
 
-每个世界使用 `layers/` 目录结构，每个层包含 `input/`（YAML，人写的创意设定）和 `derived/`（JSON，引擎计算的物理结果）。
+每个世界使用 `layers/` 目录结构，每个层包含 `input/`（YAML，人写的创意设定）和 `derived/`（YAML，引擎计算的物理结果）。
 
 ### 分支系统
 
