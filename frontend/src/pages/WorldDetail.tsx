@@ -5,15 +5,16 @@ import { isStaticMode } from '../api/mode'
 import { useState } from 'react'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
+import StellarSystemViewer from '../viewers/StellarSystemViewer'
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
   const staticMode = isStaticMode()
 
-  type TabType = 'overview' | 'astronomy' | 'planets' | 'narrate'
+  type TabType = 'overview' | 'astronomy' | 'planets' | 'viewer3d' | 'narrate'
   const availableTabs: TabType[] = staticMode
-    ? ['overview', 'astronomy', 'planets']
-    : ['overview', 'astronomy', 'planets', 'narrate']
+    ? ['overview', 'astronomy', 'planets', 'viewer3d']
+    : ['overview', 'astronomy', 'planets', 'viewer3d', 'narrate']
 
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
@@ -31,14 +32,21 @@ export default function WorldDetail() {
   const { data: stellarSystem } = useQuery({
     queryKey: ['astronomy', worldName],
     queryFn: () => api.getStellarSystem(worldName!),
-    enabled: !!worldName && activeTab === 'astronomy',
+    enabled: !!worldName && (activeTab === 'astronomy' || activeTab === 'viewer3d'),
     retry: false,
   })
 
   const { data: planets } = useQuery({
     queryKey: ['planets', worldName],
     queryFn: () => api.getPlanets(worldName!),
-    enabled: !!worldName && activeTab === 'planets',
+    enabled: !!worldName && (activeTab === 'planets' || activeTab === 'viewer3d'),
+    retry: false,
+  })
+
+  const { data: habitableZones } = useQuery({
+    queryKey: ['habitable-zones', worldName],
+    queryFn: () => api.getHabitableZones(worldName!),
+    enabled: !!worldName && activeTab === 'viewer3d',
     retry: false,
   })
 
@@ -54,6 +62,7 @@ export default function WorldDetail() {
     overview: '概览',
     astronomy: '天文学',
     planets: '行星',
+    viewer3d: '3D 视图',
     narrate: '叙述',
   }
 
@@ -317,6 +326,19 @@ export default function WorldDetail() {
                 ) : (
                   <p className="text-gray-500">无行星数据</p>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'viewer3d' && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
+                  恒星系 3D 可视化
+                </h2>
+                <StellarSystemViewer
+                  stellar={stellarSystem}
+                  planets={planets}
+                  habitableZones={habitableZones}
+                />
               </div>
             )}
 

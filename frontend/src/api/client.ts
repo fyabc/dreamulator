@@ -176,6 +176,11 @@ const readApi = {
       ? staticApi.getPlanets(name)
       : fetchJson<any[]>(`/worlds/${name}/planets`),
 
+  getHabitableZones: (name: string) =>
+    isStaticMode()
+      ? staticApi.getHabitableZones(name)
+      : fetchJson<any>(`/worlds/${name}/habitable-zones`),
+
   getPlanet: (name: string, planetId: string) =>
     isStaticMode()
       ? Promise.reject(new Error('getPlanet not available in static mode'))
