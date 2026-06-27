@@ -16,6 +16,25 @@ stars:
       y: 0.0
       z: 0.0
 orbits:
+  # --- Planets (J2000 mean orbital elements, NASA JPL Horizons) ---
+  - body_id: planet_mercury
+    parent_id: star_sol
+    semi_major_axis_au: 0.38710
+    eccentricity: 0.20563
+    inclination_deg: 7.005
+    longitude_ascending_node_deg: 48.331
+    argument_of_periapsis_deg: 29.124
+    mean_anomaly_epoch_deg: 174.796
+    epoch_year: 0.0
+  - body_id: planet_venus
+    parent_id: star_sol
+    semi_major_axis_au: 0.72333
+    eccentricity: 0.00677
+    inclination_deg: 3.395
+    longitude_ascending_node_deg: 76.680
+    argument_of_periapsis_deg: 54.884
+    mean_anomaly_epoch_deg: 50.115
+    epoch_year: 0.0
   - body_id: planet_earth
     parent_id: star_sol
     semi_major_axis_au: 1.0
@@ -25,6 +44,62 @@ orbits:
     argument_of_periapsis_deg: 114.21
     mean_anomaly_epoch_deg: 357.52
     epoch_year: 0.0
+  - body_id: planet_mars
+    parent_id: star_sol
+    semi_major_axis_au: 1.52368
+    eccentricity: 0.09341
+    inclination_deg: 1.850
+    longitude_ascending_node_deg: 49.558
+    argument_of_periapsis_deg: 286.502
+    mean_anomaly_epoch_deg: 19.373
+    epoch_year: 0.0
+  - body_id: planet_jupiter
+    parent_id: star_sol
+    semi_major_axis_au: 5.20260
+    eccentricity: 0.04839
+    inclination_deg: 1.303
+    longitude_ascending_node_deg: 100.464
+    argument_of_periapsis_deg: 273.867
+    mean_anomaly_epoch_deg: 20.020
+    epoch_year: 0.0
+  - body_id: planet_saturn
+    parent_id: star_sol
+    semi_major_axis_au: 9.55491
+    eccentricity: 0.05415
+    inclination_deg: 2.485
+    longitude_ascending_node_deg: 113.665
+    argument_of_periapsis_deg: 339.392
+    mean_anomaly_epoch_deg: 317.020
+    epoch_year: 0.0
+  - body_id: planet_uranus
+    parent_id: star_sol
+    semi_major_axis_au: 19.21845
+    eccentricity: 0.04717
+    inclination_deg: 0.773
+    longitude_ascending_node_deg: 74.006
+    argument_of_periapsis_deg: 96.999
+    mean_anomaly_epoch_deg: 142.238
+    epoch_year: 0.0
+  - body_id: planet_neptune
+    parent_id: star_sol
+    semi_major_axis_au: 30.11039
+    eccentricity: 0.00859
+    inclination_deg: 1.770
+    longitude_ascending_node_deg: 131.784
+    argument_of_periapsis_deg: 276.336
+    mean_anomaly_epoch_deg: 256.228
+    epoch_year: 0.0
+  # --- Dwarf planets ---
+  - body_id: planet_pluto
+    parent_id: star_sol
+    semi_major_axis_au: 39.482
+    eccentricity: 0.2488            # highly eccentric, crosses Neptune's orbit
+    inclination_deg: 17.16          # high inclination
+    longitude_ascending_node_deg: 110.299
+    argument_of_periapsis_deg: 113.834
+    mean_anomaly_epoch_deg: 14.53
+    epoch_year: 0.0
+  # --- Satellites ---
   - body_id: satellite_moon
     parent_id: planet_earth
     semi_major_axis_au: 0.002569    # 384,399 km
@@ -35,6 +110,85 @@ orbits:
     mean_anomaly_epoch_deg: 135.27
     epoch_year: 0.0
 bodies:
+  # --- Planets (NASA Planetary Fact Sheet 2024) ---
+  - id: planet_mercury
+    name: Mercury
+    body_type: planet
+    mass_earth: 0.0553               # 3.3011e23 kg
+    radius_km: 2439.7
+    rotation_period_days: 58.646     # 3:2 spin-orbit resonance
+    axial_tilt_deg: 0.034
+    albedo: 0.142                    # geometric albedo
+    surface:
+      composition: silicate_metal
+      has_atmosphere: false
+  - id: planet_venus
+    name: Venus
+    body_type: planet
+    mass_earth: 0.815                # 4.8675e24 kg
+    radius_km: 6051.8
+    rotation_period_days: 243.025    # retrograde (axial_tilt > 90°)
+    axial_tilt_deg: 177.36           # >90° = retrograde
+    albedo: 0.689                    # geometric albedo (cloud deck)
+    surface:
+      composition: basaltic
+      has_atmosphere: true
+  - id: planet_mars
+    name: Mars
+    body_type: planet
+    mass_earth: 0.107                # 6.4171e23 kg
+    radius_km: 3389.5
+    rotation_period_days: 1.026      # sol = 24h 37m
+    axial_tilt_deg: 25.19
+    albedo: 0.170                    # geometric albedo
+    surface:
+      composition: basaltic_iron_oxide
+      has_atmosphere: true
+  - id: planet_jupiter
+    name: Jupiter
+    body_type: gas_giant
+    mass_earth: 317.8                # 1.8982e27 kg
+    radius_km: 69911                 # volumetric mean (1 bar level)
+    rotation_period_days: 0.4135     # ~9h 55m (fastest in Solar System)
+    axial_tilt_deg: 3.13
+    albedo: 0.538                    # geometric albedo
+  - id: planet_saturn
+    name: Saturn
+    body_type: gas_giant
+    mass_earth: 95.16                # 5.6834e26 kg
+    radius_km: 58232                 # volumetric mean (1 bar level)
+    rotation_period_days: 0.4440     # ~10h 39m
+    axial_tilt_deg: 26.73
+    albedo: 0.499                    # geometric albedo
+  - id: planet_uranus
+    name: Uranus
+    body_type: ice_giant
+    mass_earth: 14.54                # 8.6810e25 kg
+    radius_km: 25362
+    rotation_period_days: 0.7183     # retrograde (axial_tilt > 90°)
+    axial_tilt_deg: 97.77            # nearly sideways, >90° = retrograde
+    albedo: 0.488                    # geometric albedo
+  - id: planet_neptune
+    name: Neptune
+    body_type: ice_giant
+    mass_earth: 17.15                # 1.02413e26 kg
+    radius_km: 24622
+    rotation_period_days: 0.6713     # ~16h 6m
+    axial_tilt_deg: 28.32
+    albedo: 0.442                    # geometric albedo
+  # --- Dwarf planets ---
+  - id: planet_pluto
+    name: Pluto
+    body_type: dwarf_planet
+    mass_earth: 0.00218              # 1.303e22 kg
+    radius_km: 1188.3
+    rotation_period_days: 6.387      # retrograde (axial_tilt > 90°)
+    axial_tilt_deg: 122.53           # retrograde
+    albedo: 0.52                     # geometric albedo (N₂ ice surface)
+    surface:
+      composition: nitrogen_ice
+      has_atmosphere: true           # thin N₂ atmosphere, seasonal
+  # --- Satellites ---
   - id: satellite_moon
     name: Moon
     body_type: natural_satellite
