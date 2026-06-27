@@ -2,7 +2,7 @@
  * Label — screen-space annotation with leader line for celestial bodies.
  *
  * Inspired by Space Engine / Celestia / Universe Sandbox:
- * - A colored dot marks the body's projected screen position.
+ * - A white crosshair marks the body's projected screen position.
  * - A thin leader line extends upward to a text label.
  * - The label stays visible even when the body is sub-pixel at system scale.
  * - When zoomed in close enough that the body geometry is visible, the
@@ -51,79 +51,90 @@ export default function Label({
 
   if (!visible) return null
 
+  const crossSize = selected ? 14 : 10
+  const crossColor = selected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'
+
   return (
     <Html
-      center
       zIndexRange={[100, 0]}
       style={{ pointerEvents: 'none', overflow: 'visible' }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          transform: 'translateY(-8px)',
-          userSelect: 'none',
-        }}
-      >
-        {/* Text label */}
+      {/*
+       * Layout: crosshair center = body position (anchor point).
+       * Text + leader line are absolutely positioned above the crosshair.
+       */}
+      <div style={{ position: 'relative', userSelect: 'none' }}>
+        {/* Text + leader line — anchored to crosshair center, grows upward */}
         <div
-          onClick={(e) => {
-            e.stopPropagation()
-            onClick?.()
-          }}
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            onDoubleClick?.()
-          }}
-          onPointerEnter={() => onHover?.(true)}
-          onPointerLeave={() => onHover?.(false)}
           style={{
-            pointerEvents: 'auto',
-            cursor: onClick ? 'pointer' : 'default',
-            textAlign: 'center',
-            marginBottom: 2,
+            position: 'absolute',
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
           }}
         >
+          {/* Text label */}
           <div
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick?.()
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              onDoubleClick?.()
+            }}
+            onPointerEnter={() => onHover?.(true)}
+            onPointerLeave={() => onHover?.(false)}
             style={{
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: 'Inter, system-ui, sans-serif',
-              textShadow: `0 0 4px ${glow}, 0 0 8px rgba(0,0,0,0.9)`,
-              whiteSpace: 'nowrap',
-              letterSpacing: '0.03em',
+              pointerEvents: 'auto',
+              cursor: onClick ? 'pointer' : 'default',
+              textAlign: 'center',
+              marginBottom: 2,
             }}
           >
-            {name}
-          </div>
-          {subtitle && (
             <div
               style={{
-                color: 'rgba(255,255,255,0.45)',
-                fontSize: 9,
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 600,
                 fontFamily: 'Inter, system-ui, sans-serif',
-                textShadow: '0 0 4px rgba(0,0,0,0.9)',
+                textShadow: `0 0 4px ${glow}, 0 0 8px rgba(0,0,0,0.9)`,
                 whiteSpace: 'nowrap',
-                marginTop: 1,
+                letterSpacing: '0.03em',
               }}
             >
-              {subtitle}
+              {name}
             </div>
-          )}
+            {subtitle && (
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.45)',
+                  fontSize: 9,
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  textShadow: '0 0 4px rgba(0,0,0,0.9)',
+                  whiteSpace: 'nowrap',
+                  marginTop: 1,
+                }}
+              >
+                {subtitle}
+              </div>
+            )}
+          </div>
+
+          {/* Leader line — bottom edge meets crosshair center */}
+          <div
+            style={{
+              width: 1,
+              height: lineH,
+              background: `linear-gradient(to bottom, ${color}55, ${color}08)`,
+            }}
+          />
         </div>
 
-        {/* Leader line */}
-        <div
-          style={{
-            width: 1,
-            height: lineH,
-            background: `linear-gradient(to bottom, ${color}55, ${color}08)`,
-          }}
-        />
-
-        {/* Dot at body position */}
+        {/* Crosshair — centered at body position (Space Engine style) */}
         <div
           onClick={(e) => {
             e.stopPropagation()
@@ -141,14 +152,37 @@ export default function Label({
           style={{
             pointerEvents: 'auto',
             cursor: onClick ? 'pointer' : 'default',
-            width: selected ? 8 : 6,
-            height: selected ? 8 : 6,
-            borderRadius: '50%',
-            background: color,
-            boxShadow: `0 0 6px ${glow}, 0 0 14px ${glow}66`,
-            border: selected ? '1px solid rgba(255,255,255,0.5)' : 'none',
+            position: 'relative',
+            width: crossSize,
+            height: crossSize,
+            transform: 'translate(-50%, -50%)',
           }}
-        />
+        >
+          {/* Horizontal line */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: 0,
+              right: 0,
+              height: 1,
+              marginTop: -0.5,
+              background: crossColor,
+            }}
+          />
+          {/* Vertical line */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: 0,
+              bottom: 0,
+              width: 1,
+              marginLeft: -0.5,
+              background: crossColor,
+            }}
+          />
+        </div>
       </div>
     </Html>
   )

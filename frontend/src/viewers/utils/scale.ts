@@ -46,6 +46,37 @@ export function earthRadiiToAU(rEarth: number): number {
  * 0.008 AU ≈ 1.7× the Sun's real radius — large enough to click on,
  * small enough to not obscure inner planet orbits.
  */
+// ---------------------------------------------------------------------------
+// Display formatting — human-friendly radius/mass values
+// ---------------------------------------------------------------------------
+
+const KM_PER_EARTH_RADIUS_DISPLAY = 6371
+
+/**
+ * Format a radius in Earth radii for display.
+ * Large bodies (≥ 0.01 R⊕ ≈ 64 km) shown in R⊕; small bodies in km.
+ */
+export function formatRadius(rEarth: number): string {
+  if (rEarth >= 0.01) {
+    return `${parseFloat(rEarth.toPrecision(3))} R⊕`
+  }
+  const km = rEarth * KM_PER_EARTH_RADIUS_DISPLAY
+  return `${parseFloat(km.toPrecision(3))} km`
+}
+
+/**
+ * Format a mass in Earth masses for display.
+ * Large bodies (≥ 0.001 M⊕) shown in M⊕; small bodies in kg.
+ */
+export function formatMass(mEarth: number): string {
+  if (mEarth >= 0.001) {
+    return `${parseFloat(mEarth.toPrecision(3))} M⊕`
+  }
+  // Convert to kg: 1 M⊕ = 5.9722e24 kg
+  const kg = mEarth * 5.9722e24
+  return `${kg.toExponential(2)} kg`
+}
+
 export const MIN_VISUAL_RADIUS_AU = 0.008
 
 /**

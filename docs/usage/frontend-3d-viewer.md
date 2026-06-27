@@ -5,7 +5,7 @@
 ## 功能概览
 
 - **真实比例渲染**：所有距离以 AU 为单位，天体半径按真实物理尺寸
-- **Leader line 标注系统**：dot + 引线 + 文字标签，确保亚像素级天体可定位
+- **Leader line 标注系统**：十字准星 + 引线 + 文字标签，确保亚像素级天体可定位
 - **极端缩放**：从 200 AU 系统全景到 0.001 AU 近距观察
 - **宜居带可视化**：半透明绿色环 + 凝结线标记
 - **天体信息面板**：点击标签查看详情（光谱类型、温度、质量等）
@@ -96,9 +96,9 @@ StellarSystemViewer
 
 屏幕空间标注组件（参考 Space Engine / Celestia 的做法）：
 - 使用 drei `<Html>` 将 3D 世界坐标投影到屏幕
-- 结构：文字标签 → 引线 → 圆点标记
+- 结构：文字标签 → 引线 → 十字准星
 - 引线长度随选中状态变化（选中 32px / 默认 48px）
-- 圆点带发光效果，颜色与天体匹配
+- 十字准星为白色细线（Space Engine 风格），选中时略大且更亮
 - 支持 subtitle 行（显示光谱类型/温度/行星类型等）
 - 单击触发 `onClick`（选中天体），双击触发 `onDoubleClick`（聚焦镜头）
 
@@ -143,7 +143,7 @@ StellarSystemViewer
 | 技术 | 参考来源 | 作用 |
 |------|---------|------|
 | Leader line 标注 | Celestia, Space Engine | dot + 引线 + 文字，任意缩放级别可见 |
-| 最小 glow 壳 | Universe Sandbox | 0.008 AU 的 additive blending 球体 |
+| 最小 glow 壳（仅恒星） | Universe Sandbox | 0.008 AU 的 additive blending 球体 |
 | 外层软光晕 | Space Engine | 2.5× 最小半径的 BackSide 渲染 |
 | `logarithmicDepthBuffer` | Three.js best practice | 处理 near=0.00001 / far=5000 的极端比 |
 | 极端缩放范围 | Space Engine | 0.001–200 AU，用户可自由 zoom |

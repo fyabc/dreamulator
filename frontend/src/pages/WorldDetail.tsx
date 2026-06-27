@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import { useState } from 'react'
+import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
@@ -301,11 +302,11 @@ export default function WorldDetail() {
                                     </p>
                                     <p>
                                       <span className="text-gray-500">质量：</span>
-                                      {body.mass?.toFixed(4)} M⊕
+                                      {body.mass != null ? formatMass(body.mass) : '—'}
                                     </p>
                                     <p>
                                       <span className="text-gray-500">半径：</span>
-                                      {body.radius?.toFixed(4)} R⊕
+                                      {body.radius != null ? formatRadius(body.radius) : '—'}
                                     </p>
                                   </>
                                 )}
@@ -408,11 +409,11 @@ export default function WorldDetail() {
                             </p>
                             <p>
                               <span className="text-gray-500">质量：</span>
-                              {planet.mass} M⊕
+                              {formatMass(planet.mass)}
                             </p>
                             <p>
                               <span className="text-gray-500">半径：</span>
-                              {planet.radius} R⊕
+                              {formatRadius(planet.radius)}
                             </p>
                             <p>
                               <span className="text-gray-500">反照率：</span>

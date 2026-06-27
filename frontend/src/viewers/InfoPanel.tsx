@@ -4,6 +4,7 @@
 
 import type { StarData } from './StarMesh'
 import type { PlanetData } from './PlanetMesh'
+import { formatRadius, formatMass } from './utils/scale'
 
 type SelectedBody =
   | { type: 'star'; data: StarData }
@@ -86,8 +87,8 @@ export default function InfoPanel({ selected, onClose }: InfoPanelProps) {
           return (
             <div className="space-y-0.5">
               <InfoRow label="类型" value={typeLabel} />
-              <InfoRow label="质量" value={`${planet.mass} M⊕`} />
-              <InfoRow label="半径" value={`${planet.radius} R⊕`} />
+              <InfoRow label="质量" value={formatMass(planet.mass)} />
+              <InfoRow label="半径" value={formatRadius(planet.radius)} />
               <InfoRow label="反照率" value={planet.albedo} />
               <InfoRow label="轴倾角" value={planet.axial_tilt_deg != null ? `${planet.axial_tilt_deg}°` : undefined} />
               <InfoRow label="自转周期" value={planet.rotation_period_days != null ? `${planet.rotation_period_days} 天` : undefined} />

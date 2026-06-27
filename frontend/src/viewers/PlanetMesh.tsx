@@ -4,17 +4,14 @@
  * The sphere geometry uses the actual planetary radius in AU
  * (e.g. Earth ≈ 0.0000426 AU — truly tiny at system scale).
  *
- * A minimum-size glow shell ensures the planet is always findable,
- * and the Label component (dot + leader line) marks its position.
+ * The Label component (dot + leader line) marks the body's position
+ * and keeps it findable at any zoom level.
  */
 
 import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import {
-  earthRadiiToAU,
-  effectiveVisualRadius,
-} from './utils/scale'
+import { earthRadiiToAU, formatRadius, formatMass } from './utils/scale'
 import Label from './Label'
 
 interface PlanetData {
@@ -103,7 +100,6 @@ export default function PlanetMesh({
   const planetRef = useRef<THREE.Mesh>(null)
 
   const realRadiusAU = earthRadiiToAU(planet.radius)
-  const visualRadiusAU = effectiveVisualRadius(realRadiusAU)
   const color = useMemo(() => getPlanetColor(planet), [planet])
   const axialTilt = ((planet.axial_tilt_deg ?? 0) * Math.PI) / 180
 
@@ -123,7 +119,7 @@ export default function PlanetMesh({
 
   const typeLabel = PLANET_TYPE_LABELS[planet.planet_type ?? ''] ?? planet.planet_type ?? ''
   const satLabel = satelliteCount > 0 ? ` · ${satelliteCount} satellite${satelliteCount > 1 ? 's' : ''}` : ''
-  const subtitle = `${typeLabel} · ${planet.radius} R⊕ · ${planet.mass} M⊕${satLabel}`
+  const subtitle = `${typeLabel} · ${formatRadius(planet.radius)} · ${formatMass(planet.mass)}${satLabel}`
 
   return (
     <group position={position}>
@@ -149,18 +145,6 @@ export default function PlanetMesh({
       >
         <sphereGeometry args={[realRadiusAU, 24, 24]} />
         <meshStandardMaterial color={color} roughness={0.8} metalness={0.1} />
-      </mesh>
-
-      {/* Minimum-size glow marker — visible at system scale */}
-      <mesh>
-        <sphereGeometry args={[visualRadiusAU, 12, 12]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.2}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
       </mesh>
 
       {/* Atmosphere shell */}
