@@ -215,34 +215,23 @@ def _export_map_data(
                 ) as f:
                     json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
 
-        # Export voronoi network
-        voronoi_json = planet_dir / "voronoi.json"
-        if voronoi_json.exists():
-            with voronoi_json.open("r", encoding="utf-8") as src:
-                data = json.load(src)
-            with planet_out.joinpath("voronoi.json").open(
-                "w", encoding="utf-8"
-            ) as dst:
-                json.dump(data, dst, ensure_ascii=False, indent=2)
-
-        # Export tectonic plates
-        plates_json = planet_dir / "plates.json"
-        if plates_json.exists():
-            with plates_json.open("r", encoding="utf-8") as src:
-                data = json.load(src)
-            with planet_out.joinpath("plates.json").open(
-                "w", encoding="utf-8"
-            ) as dst:
-                json.dump(data, dst, ensure_ascii=False, indent=2)
-
-        # Export features (optional — may not exist)
-        features_json = planet_dir / "features.json"
-        if features_json.exists():
-            with features_json.open("r", encoding="utf-8") as src:
-                data = json.load(src)
-            with planet_out.joinpath("features.json").open(
-                "w", encoding="utf-8"
-            ) as dst:
+        # Export JSON map files (voronoi, plates, features).
+        # Each is read-validated-rewritten to catch LFS pointers or corrupt
+        # files early instead of crashing the whole export.
+        for filename in ("voronoi.json", "plates.json", "features.json"):
+            src_path = planet_dir / filename
+            if not src_path.exists():
+                continue
+            try:
+                with src_path.open("r", encoding="utf-8") as src:
+                    data = json.load(src)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print(
+                    f"\n  WARNING: {src_path} is not valid JSON "
+                    f"(possible LFS pointer) — skipping",
+                )
+                continue
+            with planet_out.joinpath(filename).open("w", encoding="utf-8") as dst:
                 json.dump(data, dst, ensure_ascii=False, indent=2)
 
     # Write maps index
