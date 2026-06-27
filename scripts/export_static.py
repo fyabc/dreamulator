@@ -147,6 +147,113 @@ def _export_layer_data(
     return result
 
 
+def _export_map_data(
+    world_dir: Path,
+    maps_out_dir: Path,
+    branch: str | None = None,
+) -> list[str]:
+    """Export map data for a world or branch.
+
+    Scans the geological input directory for planets with maps and copies
+    their data (elevation PNG, metadata, voronoi, plates, features) to the
+    static output directory.
+
+    Args:
+        world_dir: Path to the world root directory.
+        maps_out_dir: Output directory for map data.
+        branch: Branch name (None for root world).
+
+    Returns:
+        List of planet IDs that have map data.
+    """
+    resolver = LayerResolver(world_dir, branch)
+    input_dir = resolver.get_input_dir("geological")
+    if input_dir is None:
+        return []
+
+    # For branches, only export if the geological data is branch-owned,
+    # not inherited from root — avoids duplicating the same map files.
+    if branch is not None:
+        branch_dir = world_dir / "branches" / branch
+        try:
+            input_dir.relative_to(branch_dir)
+        except ValueError:
+            # Resolved to root or parent — maps already exported there
+            return []
+
+    maps_dir = input_dir / "maps"
+    if not maps_dir.exists():
+        return []
+
+    planets_with_maps: list[str] = []
+
+    for planet_dir in sorted(maps_dir.iterdir()):
+        if not planet_dir.is_dir():
+            continue
+        elevation_png = planet_dir / "elevation.png"
+        if not elevation_png.exists():
+            continue
+
+        planet_id = planet_dir.name
+        planets_with_maps.append(planet_id)
+
+        planet_out = maps_out_dir / planet_id
+        planet_out.mkdir(parents=True, exist_ok=True)
+
+        # Copy elevation PNG (binary)
+        planet_out.joinpath("elevation.png").write_bytes(
+            elevation_png.read_bytes()
+        )
+
+        # Export map metadata (map.yaml → meta.json)
+        map_yaml = planet_dir / "map.yaml"
+        if map_yaml.exists():
+            meta = load_yaml(map_yaml)
+            if meta:
+                with planet_out.joinpath("meta.json").open(
+                    "w", encoding="utf-8"
+                ) as f:
+                    json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
+
+        # Export voronoi network
+        voronoi_json = planet_dir / "voronoi.json"
+        if voronoi_json.exists():
+            with voronoi_json.open("r", encoding="utf-8") as src:
+                data = json.load(src)
+            with planet_out.joinpath("voronoi.json").open(
+                "w", encoding="utf-8"
+            ) as dst:
+                json.dump(data, dst, ensure_ascii=False, indent=2)
+
+        # Export tectonic plates
+        plates_json = planet_dir / "plates.json"
+        if plates_json.exists():
+            with plates_json.open("r", encoding="utf-8") as src:
+                data = json.load(src)
+            with planet_out.joinpath("plates.json").open(
+                "w", encoding="utf-8"
+            ) as dst:
+                json.dump(data, dst, ensure_ascii=False, indent=2)
+
+        # Export features (optional — may not exist)
+        features_json = planet_dir / "features.json"
+        if features_json.exists():
+            with features_json.open("r", encoding="utf-8") as src:
+                data = json.load(src)
+            with planet_out.joinpath("features.json").open(
+                "w", encoding="utf-8"
+            ) as dst:
+                json.dump(data, dst, ensure_ascii=False, indent=2)
+
+    # Write maps index
+    if planets_with_maps:
+        maps_out_dir.mkdir(parents=True, exist_ok=True)
+        with maps_out_dir.joinpath("maps.json").open("w", encoding="utf-8") as f:
+            json.dump(planets_with_maps, f, ensure_ascii=False, indent=2)
+
+    return planets_with_maps
+
+
 def export_world(world_dir: Path) -> dict:
     """Export all data for a single world (root, no branch).
 
@@ -252,6 +359,10 @@ def main() -> None:
             with out_file.open("w", encoding="utf-8") as f:
                 json.dump(value, f, ensure_ascii=False, indent=2, default=str)
 
+        # Export root map data (elevation PNG + metadata)
+        maps_out_dir = world_out_dir / "maps"
+        map_planets = _export_map_data(world_dir, maps_out_dir, branch=None)
+
         # Export per-branch data (with _inherit: true merge)
         branch_count = 0
         branches_dir = world_dir / "branches"
@@ -261,16 +372,25 @@ def main() -> None:
                     continue
                 branch_name = branch_dir.name
                 branch_data = _export_layer_data(world_dir, branch=branch_name)
+                branch_out_dir = world_out_dir / "branches" / branch_name
                 if branch_data:
-                    branch_out_dir = world_out_dir / "branches" / branch_name
                     branch_out_dir.mkdir(parents=True, exist_ok=True)
                     for key, value in branch_data.items():
                         out_file = branch_out_dir / f"{key}.json"
                         with out_file.open("w", encoding="utf-8") as f:
                             json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                # Export branch-specific map data
+                branch_maps_out = branch_out_dir / "maps"
+                branch_map_planets = _export_map_data(
+                    world_dir, branch_maps_out, branch=branch_name
+                )
+                if branch_data or branch_map_planets:
                     branch_count += 1
 
-        print(f"OK ({len(data)} files, {branch_count} branch(es))")
+        print(
+            f"OK ({len(data)} files, {len(map_planets)} map(s), "
+            f"{branch_count} branch(es))"
+        )
 
     # Write worlds index
     index_file = output_dir / "worlds.json"

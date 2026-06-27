@@ -280,49 +280,49 @@ const readApi = {
 
   listMapPlanets: (name: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.resolve([] as string[])
+      ? staticApi.listMapPlanets(name, branch)
       : fetchJson<string[]>(
           `/worlds/${name}/maps${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getMapMeta: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.reject(new Error('Not available in static mode'))
+      ? staticApi.getMapMeta(name, planetId, branch)
       : fetchJson<any>(
           `/worlds/${name}/maps/${planetId}/meta${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getElevationBlob: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.reject(new Error('Not available in static mode'))
+      ? staticApi.getElevationBlob(name, planetId, branch)
       : fetchBlob(
           `/worlds/${name}/maps/${planetId}/elevation${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getVoronoi: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.reject(new Error('Not available in static mode'))
+      ? staticApi.getVoronoi(name, planetId, branch)
       : fetchJson<any>(
           `/worlds/${name}/maps/${planetId}/voronoi${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getPlates: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.resolve([] as any[])
+      ? staticApi.getPlates(name, planetId, branch)
       : fetchJson<any[]>(
           `/worlds/${name}/maps/${planetId}/plates${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getFeatures: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.resolve([] as any[])
+      ? staticApi.getFeatures(name, planetId, branch)
       : fetchJson<any[]>(
           `/worlds/${name}/maps/${planetId}/features${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   getMapLayer: (name: string, planetId: string, layerType: string, branch?: string | null) =>
     isStaticMode()
-      ? Promise.reject(new Error('Not available in static mode'))
+      ? Promise.reject(new Error('Derived map layers not available in static mode'))
       : fetchBlob(
           `/worlds/${name}/maps/${planetId}/layer/${layerType}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),

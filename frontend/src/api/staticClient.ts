@@ -17,6 +17,58 @@ async function fetchStaticJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
+async function fetchStaticBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${DATA_BASE}${path}`)
+  if (!response.ok) {
+    throw new Error(`Static data not found: ${path} (HTTP ${response.status})`)
+  }
+  return response.blob()
+}
+
+/**
+ * Try fetching JSON from the branch path first, then fall back to root.
+ * Returns null if neither path has the data.
+ */
+async function fetchBranchAwareJson<T>(
+  name: string,
+  branch: string | null | undefined,
+  branchPath: string,
+  rootPath: string,
+): Promise<T | null> {
+  if (branch) {
+    try {
+      return await fetchStaticJson<T>(`/worlds/${name}/branches/${branch}${branchPath}`)
+    } catch {
+      // Fall through to root
+    }
+  }
+  try {
+    return await fetchStaticJson<T>(`/worlds/${name}${rootPath}`)
+  } catch {
+    return null
+  }
+}
+
+async function fetchBranchAwareBlob(
+  name: string,
+  branch: string | null | undefined,
+  branchPath: string,
+  rootPath: string,
+): Promise<Blob | null> {
+  if (branch) {
+    try {
+      return await fetchStaticBlob(`/worlds/${name}/branches/${branch}${branchPath}`)
+    } catch {
+      // Fall through to root
+    }
+  }
+  try {
+    return await fetchStaticBlob(`/worlds/${name}${rootPath}`)
+  } catch {
+    return null
+  }
+}
+
 function notAvailable(operation: string): never {
   throw new Error(`${operation} is not available in static mode`)
 }
@@ -75,4 +127,69 @@ export const staticApi = {
     branch
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/ecology.json`)
       : fetchStaticJson<any>(`/worlds/${name}/ecology.json`),
+
+  // ---- Map read operations (branch-aware with root fallback) ----
+
+  listMapPlanets: async (name: string, branch?: string | null): Promise<string[]> => {
+    const result = await fetchBranchAwareJson<string[]>(
+      name,
+      branch,
+      '/maps/maps.json',
+      '/maps/maps.json',
+    )
+    return result ?? []
+  },
+
+  getMapMeta: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<any>(
+      name,
+      branch,
+      `/maps/${planetId}/meta.json`,
+      `/maps/${planetId}/meta.json`,
+    )
+    if (result === null) throw new Error(`No static map metadata for ${planetId}`)
+    return result
+  },
+
+  getElevationBlob: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareBlob(
+      name,
+      branch,
+      `/maps/${planetId}/elevation.png`,
+      `/maps/${planetId}/elevation.png`,
+    )
+    if (result === null) throw new Error(`No static elevation data for ${planetId}`)
+    return result
+  },
+
+  getVoronoi: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<any>(
+      name,
+      branch,
+      `/maps/${planetId}/voronoi.json`,
+      `/maps/${planetId}/voronoi.json`,
+    )
+    if (result === null) throw new Error(`No static voronoi data for ${planetId}`)
+    return result
+  },
+
+  getPlates: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<{ plates?: any[] }>(
+      name,
+      branch,
+      `/maps/${planetId}/plates.json`,
+      `/maps/${planetId}/plates.json`,
+    )
+    return result?.plates ?? []
+  },
+
+  getFeatures: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<{ features?: any[] }>(
+      name,
+      branch,
+      `/maps/${planetId}/features.json`,
+      `/maps/${planetId}/features.json`,
+    )
+    return result?.features ?? []
+  },
 }
