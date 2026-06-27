@@ -138,6 +138,12 @@ class OrbitingBody(BaseModel):
         default=None, description="Surface properties (composition, atmosphere, etc.)"
     )
 
+    # Extensible narrative descriptions (surface, interior, history, etc.)
+    description: dict[str, str] | None = Field(
+        default=None,
+        description="Free-form narrative keyed by aspect (e.g. 'surface', 'interior', 'history')",
+    )
+
 
 class StellarSystem(BaseModel):
     """A system of one or more stars and their orbiting bodies."""

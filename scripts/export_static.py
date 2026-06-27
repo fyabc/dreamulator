@@ -72,6 +72,8 @@ def _normalize_body(body: dict, orbit_lookup: dict) -> dict:
             normalized[key] = body[key]
     if "surface" in body:
         normalized["surface"] = body["surface"]
+    if "description" in body:
+        normalized["description"] = body["description"]
     return normalized
 
 

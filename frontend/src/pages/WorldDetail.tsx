@@ -8,6 +8,71 @@ import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 
+/** Pick a Unicode glyph + color class based on body type and mass. */
+function bodyIcon(planetType: string | undefined, massEarth: number | undefined) {
+  switch (planetType) {
+    case 'natural_satellite':
+      return { glyph: '☽', cls: 'text-gray-400' }
+    case 'gas_giant':
+      return { glyph: '●', cls: 'text-orange-400' }
+    case 'ice_giant':
+      return { glyph: '●', cls: 'text-cyan-400' }
+    case 'ocean_world':
+      return { glyph: '●', cls: 'text-blue-400' }
+    case 'terrestrial':
+      return { glyph: '●', cls: 'text-stone-400' }
+    case 'dwarf':
+      return { glyph: '·', cls: 'text-gray-500' }
+    default:
+      // Fallback: mass-based heuristic for bodies with generic "planet" type
+      if (massEarth != null && massEarth >= 50) return { glyph: '●', cls: 'text-orange-400' }
+      if (massEarth != null && massEarth >= 5) return { glyph: '●', cls: 'text-cyan-400' }
+      return { glyph: '●', cls: 'text-stone-400' }
+  }
+}
+
+/** Render free-form narrative text with section headers and bullet points. */
+function renderNarrative(text: string) {
+  const sections = text.trim().split(/\n\s*\n/).filter(Boolean)
+  const intro = sections[0] ?? ''
+  const rest = sections.slice(1)
+  return (
+    <>
+      <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line mb-3">
+        {intro}
+      </p>
+      {rest.map((section: string, i: number) => {
+        const lines = section.split('\n').map((l: string) => l.trim())
+        const header = lines[0]?.replace(/[：:]\s*$/, '') ?? ''
+        const bullets = lines
+          .slice(1)
+          .filter((l: string) => l.startsWith('- ') || l.startsWith('— '))
+          .map((l: string) => l.replace(/^[-—]\s*/, ''))
+        const hasBullets = bullets.length > 0
+        return (
+          <div key={i} className="mt-3">
+            <h4 className="text-sm font-semibold text-amber-300 mb-1.5">{header}</h4>
+            {hasBullets ? (
+              <ul className="space-y-1.5 text-sm text-gray-300">
+                {bullets.map((b: string, j: number) => (
+                  <li key={j} className="flex gap-2">
+                    <span className="text-amber-500/60 mt-0.5 shrink-0">›</span>
+                    <span className="leading-relaxed">{b}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
+                {lines.join('\n')}
+              </p>
+            )}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
   const staticMode = isStaticMode()
@@ -253,51 +318,7 @@ export default function WorldDetail() {
                     {/* System description / formation history */}
                     {stellarSystem.description && (
                       <section className="mb-6 bg-space-surface/40 rounded-lg p-5 border border-space-border">
-                        {(() => {
-                          const desc: string = (stellarSystem.description as string).trim()
-                          const sections = desc.split(/\n\s*\n/).filter(Boolean)
-                          const intro = sections[0] ?? ''
-                          const rest = sections.slice(1)
-                          return (
-                            <>
-                              <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line mb-3">
-                                {intro}
-                              </p>
-                              {rest.map((section: string, i: number) => {
-                                const lines = section.split('\n').map((l: string) => l.trim())
-                                const header = lines[0]?.replace(/[：:]\s*$/, '') ?? ''
-                                const bullets = lines
-                                  .slice(1)
-                                  .filter((l: string) => l.startsWith('- ') || l.startsWith('— '))
-                                  .map((l: string) => l.replace(/^[-—]\s*/, ''))
-                                const hasBullets = bullets.length > 0
-                                return (
-                                  <div key={i} className="mt-3">
-                                    <h4 className="text-sm font-semibold text-amber-300 mb-1.5">
-                                      {header}
-                                    </h4>
-                                    {hasBullets ? (
-                                      <ul className="space-y-1.5 text-sm text-gray-300">
-                                        {bullets.map((b: string, j: number) => (
-                                          <li key={j} className="flex gap-2">
-                                            <span className="text-amber-500/60 mt-0.5 shrink-0">
-                                              ›
-                                            </span>
-                                            <span className="leading-relaxed">{b}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
-                                        {lines.join('\n')}
-                                      </p>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </>
-                          )
-                        })()}
+                        {renderNarrative(stellarSystem.description as string)}
                       </section>
                     )}
 
@@ -327,6 +348,11 @@ export default function WorldDetail() {
                               style={{ marginLeft: indent }}
                             >
                               <div className="flex items-center gap-2 mb-1">
+                                {body && (
+                                  <span className={bodyIcon(body.planet_type, body.mass).cls}>
+                                    {bodyIcon(body.planet_type, body.mass).glyph}
+                                  </span>
+                                )}
                                 <span className="font-semibold text-neon-cyan">
                                   {body?.name ?? bodyId}
                                 </span>
@@ -370,6 +396,21 @@ export default function WorldDetail() {
                                   </>
                                 )}
                               </div>
+                              {/* Body description (surface, etc.) */}
+                              {body?.description &&
+                                Object.entries(body.description as Record<string, string>).map(
+                                  ([key, text]) => (
+                                    <div
+                                      key={key}
+                                      className="mt-2 pt-2 border-t border-space-border/50"
+                                    >
+                                      <h5 className="text-xs font-medium text-amber-400/70 uppercase tracking-wide mb-1">
+                                        {key}
+                                      </h5>
+                                      {renderNarrative(text)}
+                                    </div>
+                                  ),
+                                )}
                             </div>
                             {/* Recursive children */}
                             {children.map((child: any) =>
@@ -449,6 +490,9 @@ export default function WorldDetail() {
                           className="bg-space-surface/60 rounded-lg p-4 border border-space-border"
                         >
                           <div className="flex items-center gap-2 mb-3">
+                            <span className={bodyIcon(planet.planet_type, planet.mass).cls}>
+                              {bodyIcon(planet.planet_type, planet.mass).glyph}
+                            </span>
                             <span className="font-semibold text-neon-cyan">
                               {planet.name}
                             </span>

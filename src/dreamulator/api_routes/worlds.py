@@ -179,6 +179,8 @@ def _normalize_body(
             normalized[key] = body[key]
     if "surface" in body:
         normalized["surface"] = body["surface"]
+    if "description" in body:
+        normalized["description"] = body["description"]
     return normalized
 
 

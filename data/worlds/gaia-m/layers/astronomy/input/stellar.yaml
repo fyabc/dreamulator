@@ -124,8 +124,8 @@ bodies:
     rotation_period_days: 5.37    # 潮汐锁定于恒星
     axial_tilt_deg: 0.0
     albedo: 0.10                  # 裸露金属表面
-    surface:
-      description: "被剥夺大部分地幔的铁核残骸（ρ=7.8 g/cm³），昼侧灼热裸露岩石（380-504°C），铅锌矿脉半熔融；夜侧凝固金属霜，无大气"
+    description:
+      surface: "被剥夺大部分地幔的铁核残骸（ρ=7.8 g/cm³），昼侧灼热裸露岩石（380-504°C），铅锌矿脉半熔融；夜侧凝固金属霜，无大气"
 
   # ---- 行星 II：熔炉 ----
   - id: planet_crucible
@@ -136,8 +136,8 @@ bodies:
     rotation_period_days: 16.6    # 潮汐锁定于恒星
     axial_tilt_deg: 0.0
     albedo: 0.15                  # 暗色玄武岩表面
-    surface:
-      description: "90 bar CO₂ 超临界温室大气，表面 ~620 K，玄武岩平原与硫磺湖泊"
+    description:
+      surface: "90 bar CO₂ 超临界温室大气，表面 ~620 K，玄武岩平原与硫磺湖泊"
 
   # ---- 行星 III：神盾（气态巨行星） ----
   - id: planet_aegis
@@ -158,8 +158,8 @@ bodies:
     rotation_period_days: 0.50    # ~12 小时
     axial_tilt_deg: 2.0
     albedo: 0.30
-    surface:
-      description: "水冰凝结线附近，H₂-He 大气富含水冰云与氨冰云，淡蓝色外观"
+    description:
+      surface: "水冰凝结线附近，H₂-He 大气富含水冰云与氨冰云，淡蓝色外观"
 
   # ---- 行星 V：冰棱（共振链 4:1） ----
   - id: planet_glacis
@@ -170,8 +170,8 @@ bodies:
     rotation_period_days: 0.72    # ~17 小时
     axial_tilt_deg: 5.0
     albedo: 0.25
-    surface:
-      description: "冰巨星，H₂-He 大气富含 CH₄，深青色；外侧碎片盘的内牧羊犬"
+    description:
+      surface: "冰巨星，H₂-He 大气富含 CH₄，深青色；外侧碎片盘的内牧羊犬"
 
   # ---- 行星 VI：哨兵（散射遗孤） ----
   - id: planet_sentinel
@@ -182,8 +182,8 @@ bodies:
     rotation_period_days: 0.625   # ~15 小时
     axial_tilt_deg: 15.0
     albedo: 0.20                  # 冰质表面
-    surface:
-      description: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分"
+    description:
+      surface: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分"
 
   # ---- 宜居卫星：Gaia-M ----
   - id: satellite_gaiam
@@ -194,5 +194,5 @@ bodies:
     rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
     axial_tilt_deg: 0.0           # 自转轴垂直于轨道面（被 Aegis 锁定）
     albedo: 0.30
-    surface:
-      description: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
+    description:
+      surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"

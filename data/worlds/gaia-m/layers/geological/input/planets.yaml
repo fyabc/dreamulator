@@ -2,6 +2,35 @@
 # 含 6 颗行星 + 1 颗宜居卫星
 planets:
   # ================================================================
+  # 宜居卫星：Gaia-M — 环绕 Aegis
+  # ================================================================
+  - id: satellite_gaiam
+    name: "Gaia-M"
+    orbits: planet_aegis
+    planet_type: ocean_world
+    mass: 1.20                    # M⊕
+    radius: 1.07                  # R⊕ (6817 km)
+    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
+    axial_tilt_deg: 0.0           # 自转轴垂直于轨道面
+    albedo: 0.30
+    atmosphere:
+      surface_pressure_atm: 1.0
+      composition:
+        N2: 0.78
+        O2: 0.21
+        Ar: 0.01
+      greenhouse_factor: 33.0     # 类似地球
+    hydrosphere:
+      water_coverage: 0.72
+      salinity_ppt: 35.0
+      ocean_depth_km: 4.0         # 平均深度 4000 m
+    lithosphere:
+      has_plate_tectonics: true
+      num_plates: 20              # 潮汐加热 → 更活跃的板块构造
+      volcanic_activity: 3.0      # 地球的 3 倍（潮汐驱动）
+    magnetic_field_strength: 30.0 # 潮汐加热维持熔融地核 → 发电机效应
+
+  # ================================================================
   # 行星 I：余烬 Ember — 被剥夺地幔的铁核残骸
   # ================================================================
   - id: planet_ember
@@ -113,32 +142,3 @@ planets:
     rotation_period_days: 0.625   # ~15 hours
     axial_tilt_deg: 15.0
     albedo: 0.20                  # 冰质表面
-
-  # ================================================================
-  # 宜居卫星：Gaia-M — 环绕 Aegis
-  # ================================================================
-  - id: satellite_gaiam
-    name: "Gaia-M"
-    orbits: planet_aegis
-    planet_type: ocean_world
-    mass: 1.20                    # M⊕
-    radius: 1.07                  # R⊕ (6817 km)
-    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 0.0           # 自转轴垂直于轨道面
-    albedo: 0.30
-    atmosphere:
-      surface_pressure_atm: 1.0
-      composition:
-        N2: 0.78
-        O2: 0.21
-        Ar: 0.01
-      greenhouse_factor: 33.0     # 类似地球
-    hydrosphere:
-      water_coverage: 0.72
-      salinity_ppt: 35.0
-      ocean_depth_km: 4.0         # 平均深度 4000 m
-    lithosphere:
-      has_plate_tectonics: true
-      num_plates: 20              # 潮汐加热 → 更活跃的板块构造
-      volcanic_activity: 3.0      # 地球的 3 倍（潮汐驱动）
-    magnetic_field_strength: 30.0 # 潮汐加热维持熔融地核 → 发电机效应
