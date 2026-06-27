@@ -25,6 +25,8 @@ interface LabelProps {
   subtitle?: string
   /** Whether this body is currently selected */
   selected?: boolean
+  /** Whether the label should be visible (false = hidden for decluttering) */
+  visible?: boolean
   /** Click handler */
   onClick?: () => void
   /** Double-click handler — triggers camera focus */
@@ -39,12 +41,15 @@ export default function Label({
   glowColor,
   subtitle,
   selected,
+  visible = true,
   onClick,
   onDoubleClick,
   onHover,
 }: LabelProps) {
   const glow = glowColor ?? color
   const lineH = selected ? 32 : 48
+
+  if (!visible) return null
 
   return (
     <Html

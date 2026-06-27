@@ -53,9 +53,11 @@ API / 静态 JSON
 WorldDetail.tsx  ──useQuery──→  stellar / planets / habitableZones
     ↓
 StellarSystemViewer
+    ├── allBodies = planets[] + stellar.bodies[]   ← 合并行星 + 卫星/小行星
+    ├── positionMap = resolvePositions(stars, allBodies, orbits)
     ├── StarMesh[]        ← stellar.stars[]
-    ├── OrbitLine[]       ← stellar.orbits[]
-    ├── PlanetMesh[]      ← planets[] + orbit lookup
+    ├── OrbitLine[]       ← stellar.orbits[] + parentPosition
+    ├── PlanetMesh[]      ← allBodies + positionMap + declutter
     ├── HabitableZoneRing ← habitableZones
     └── InfoPanel         ← selected body state
 ```
@@ -82,11 +84,13 @@ StellarSystemViewer
 
 #### PlanetMesh
 
-渲染单颗行星：
+渲染行星、卫星、小行星等所有非恒星天体：
 - **真实半径几何体**：`earthRadiiToAU(radius)` → AU
 - **类型着色**：terrestrial（蓝绿）、gas_giant（橙棕）、ice_giant（青蓝）等
 - **大气层光晕**：有大气层的行星显示半透明外壳
-- **开普勒轨道定位**：从 `OrbitalElements` 计算当前位置
+- **预计算位置**：接收 `position` 属性（由 `resolvePositions` 计算），不自行求解轨道
+- **标签可见性**：接收 `labelVisible` 属性（由去重叠算法控制）
+- **卫星计数**：接收 `satelliteCount` 属性，在 subtitle 中显示 "· N satellite(s)"
 
 #### Label
 
@@ -144,6 +148,95 @@ StellarSystemViewer
 | `logarithmicDepthBuffer` | Three.js best practice | 处理 near=0.00001 / far=5000 的极端比 |
 | 极端缩放范围 | Space Engine | 0.001–200 AU，用户可自由 zoom |
 | 视距 HUD | Space Engine | 实时显示当前观察距离（AU/km 自适应） |
+| 标签去重叠 | Space Engine, Universe Sandbox | 角大小阈值隐藏子天体标签，父天体显示聚合计数 |
+
+## 卫星与层级轨道
+
+### 数据模型
+
+卫星（月球、小行星等）定义在天文学层的 `stellar.yaml` 中，与行星的地质层分离：
+
+- **`StellarSystem.orbits[]`**：所有轨道力学数据（行星绕恒星、卫星绕行星），通过 `parent_id` 建立层级关系
+- **`StellarSystem.bodies[]`**：非恒星天体的物理属性（`OrbitingBody` 模型）
+- **`Planet.satellite_ids`**：地质层中的引用列表，指向天文学层的卫星 ID
+
+### 单位归一化
+
+`OrbitingBody` 使用适合小球体的单位（`mass_earth`、`radius_km`），而前端 `PlanetMesh` 期望地球单位（`mass` M⊕、`radius` R⊕）。API 端点和静态导出脚本在返回数据前进行归一化：
+
+| 原始字段 | 归一化字段 | 换算 |
+|----------|-----------|------|
+| `mass_earth` | `mass` | 直接使用（已是 M⊕） |
+| `radius_km` | `radius` | ÷ 6371.0 km → R⊕ |
+| `body_type` | `planet_type` | 字段重命名 |
+| orbit `parent_id` | `orbits` | 从轨道表查找 |
+
+### 层级位置解算
+
+`resolvePositions()` 使用递归算法计算所有天体的绝对 3D 位置：
+
+1. **种子**：恒星位置（来自 `star.position`，通常为 `[0, 0, 0]`）
+2. **递归**：对每个天体，先递归解算父天体位置，再叠加 `computeOrbitalPosition()` 的相对偏移
+3. **记忆化**：`positions: Map<string, Vec3>` 缓存已解算的位置，避免重复计算
+4. **循环检测**：`visited: Set<string>` 防止循环引用
+
+```
+star_sol [0, 0, 0]
+  └── planet_earth = star_pos + earth_orbit ≈ [−0.18, 0, 0.97] AU
+        └── satellite_moon = earth_pos + moon_orbit ≈ [−0.18, 0.0002, 0.97] AU
+```
+
+### OrbitLine 父天体平移
+
+轨道线路径由 `computeOrbitPath()` 在原点周围生成。对于绕行星运行的卫星，整个路径需要平移到父天体的绝对位置：
+
+```tsx
+// OrbitLine.tsx
+const path = computeOrbitPath(orbit, 128)
+if (parentPosition) {
+  return path.map(([x, y, z]) => [
+    x + parentPosition[0], y + parentPosition[1], z + parentPosition[2],
+  ])
+}
+```
+
+## 标签去重叠（Label Decluttering）
+
+### 问题
+
+真实比例下，地月距离（0.00257 AU）远小于日地距离（1.0 AU）。在系统尺度观察时，月球标签与地球标签在屏幕上几乎重合，难以点击。
+
+### 方案
+
+采用 **角大小阈值** 方案（参考 Space Engine / Universe Sandbox）：
+
+每帧计算每个子天体（卫星）相对于父天体的角大小。当角大小低于阈值时，隐藏子天体标签，在父天体 subtitle 中显示卫星计数。
+
+```
+angularSize = orbit.semi_major_axis_au / cameraDistanceToParent
+```
+
+| 缩放级别 | 地月角大小 | 行为 |
+|---------|-----------|------|
+| 系统全景（~2 AU） | ~0.001 rad | 月球标签隐藏，地球显示 "· 1 satellite" |
+| 中等距离（~0.1 AU） | ~0.026 rad | 月球标签仍隐藏 |
+| 近距离（~0.05 AU） | ~0.051 rad | 月球标签显示（超过阈值 0.04） |
+
+### 实现细节
+
+- **阈值**：`DECLUTTER_THRESHOLD = 0.04` rad（约 2.3°，50° FOV 的 ~4.6%）
+- **位置**：Scene 组件内的 `useFrame` 钩子，每帧计算
+- **性能**：使用 ref 比较（`prevVisRef`），仅在可见性状态实际变化时调用 `setState`，避免不必要的重渲染
+- **聚合标签**：父天体 subtitle 动态显示 `N satellite(s)` 计数，无论子标签是否可见
+
+### 各引擎对比
+
+| 引擎 | 去重叠方案 |
+|------|-----------|
+| Space Engine | 层级 LOD + 信息面板卫星列表 |
+| Universe Sandbox | 像素距离裁剪 |
+| Celestia | 视星等过滤 |
+| dreamulator | 角大小阈值 + 聚合 subtitle |
 
 ## 后端 API 端点
 
@@ -160,7 +253,7 @@ StellarSystemViewer
 ## 扩展方向
 
 - **多恒星系统**：当前已支持多星渲染（`stellar.stars[]`），但轨道力学仅处理行星绕单星
-- **卫星**：地球的月球数据已定义但尚未在 3D 中渲染
+- **~~卫星~~**：✅ 已实现 — `StellarSystem.bodies[]` + 层级位置解算 + 标签去重叠
 - **时间动画**：轨道运动动画（当前只显示 epoch 位置）
 - **大气光谱**：根据大气成分渲染行星大气层颜色
 - **表面纹理**：程序化生成行星表面（水/陆/冰分布）

@@ -151,6 +151,27 @@ function computeInitialCameraDistance(
   return Math.max(2, maxAU * 2.2)
 }
 
+/**
+ * Build a map of body_id → number of satellites orbiting it.
+ */
+function buildSatelliteCountMap(orbits: OrbitalElementsData[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const orbit of orbits) {
+    const count = map.get(orbit.parent_id) ?? 0
+    map.set(orbit.parent_id, count + 1)
+  }
+  return map
+}
+
+/**
+ * Angular size threshold (radians) below which a child body's label is hidden.
+ *
+ * When a moon's orbit subtends less than this angle from the camera,
+ * its label overlaps the parent's label and is suppressed.
+ * ~0.04 rad ≈ 2.3° ≈ 4% of a 50° FOV viewport.
+ */
+const DECLUTTER_THRESHOLD = 0.04
+
 // ---------------------------------------------------------------------------
 // Scale display — shows current view distance in AU
 // ---------------------------------------------------------------------------
@@ -171,6 +192,8 @@ function Scene({
   stellar,
   allBodies,
   positionMap,
+  satelliteCountMap,
+  orbitMap,
   habitableZones,
   selected,
   onSelect,
@@ -181,6 +204,8 @@ function Scene({
   stellar: StellarSystemData | null | undefined
   allBodies: PlanetData[]
   positionMap: Map<string, Vec3>
+  satelliteCountMap: Map<string, number>
+  orbitMap: Map<string, OrbitalElementsData>
   habitableZones: HabitableZoneData | null | undefined
   selected: SelectedBody
   onSelect: (body: SelectedBody) => void
@@ -190,6 +215,39 @@ function Scene({
 }) {
   const orbits = stellar?.orbits ?? []
   const hzData = useMemo(() => resolveHZ(habitableZones), [habitableZones])
+
+  // Label decluttering — hide child labels when angular size is too small
+  const [labelVisibility, setLabelVisibility] = useState<Record<string, boolean>>({})
+  const prevVisRef = useRef<string>('')
+  useFrame(({ camera }) => {
+    const next: Record<string, boolean> = {}
+    for (const body of allBodies) {
+      const orbit = orbitMap.get(body.id)
+      if (!orbit) {
+        next[body.id] = true
+        continue
+      }
+      const parentPos = positionMap.get(orbit.parent_id)
+      if (!parentPos) {
+        next[body.id] = true
+        continue
+      }
+      const camPos = camera.position
+      const camDist = Math.sqrt(
+        (camPos.x - parentPos[0]) ** 2 +
+        (camPos.y - parentPos[1]) ** 2 +
+        (camPos.z - parentPos[2]) ** 2,
+      )
+      const angularSize = orbit.semi_major_axis_au / Math.max(camDist, 0.001)
+      next[body.id] = angularSize >= DECLUTTER_THRESHOLD
+    }
+    // Only setState when visibility actually changed (avoids per-frame re-renders)
+    const key = JSON.stringify(next)
+    if (key !== prevVisRef.current) {
+      prevVisRef.current = key
+      setLabelVisibility(next)
+    }
+  })
 
   // Smoothly fly camera target to focused body each frame
   useFrame(() => {
@@ -254,6 +312,8 @@ function Scene({
           key={body.id}
           planet={body}
           position={positionMap.get(body.id) ?? [1, 0, 0]}
+          labelVisible={labelVisibility[body.id] ?? true}
+          satelliteCount={satelliteCountMap.get(body.id) ?? 0}
           onSelect={(p) => onSelect({ type: 'planet', data: p })}
           onFocus={handleFocus}
           isSelected={selected?.type === 'planet' && selected.data.id === body.id}
@@ -305,6 +365,7 @@ export default function StellarSystemViewer({
 
   const orbits = stellar?.orbits ?? []
   const orbitMap = useMemo(() => buildOrbitLookup(orbits), [orbits])
+  const satelliteCountMap = useMemo(() => buildSatelliteCountMap(orbits), [orbits])
   const positionMap = useMemo(
     () => resolvePositions(stellar?.stars ?? [], allBodies, orbitMap),
     [stellar?.stars, allBodies, orbitMap],
@@ -373,6 +434,8 @@ export default function StellarSystemViewer({
             stellar={stellar}
             allBodies={allBodies}
             positionMap={positionMap}
+            satelliteCountMap={satelliteCountMap}
+            orbitMap={orbitMap}
             habitableZones={habitableZones}
             selected={selected}
             onSelect={setSelected}

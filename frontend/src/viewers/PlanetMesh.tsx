@@ -51,6 +51,10 @@ interface PlanetMeshProps {
   planet: PlanetData
   /** Pre-computed absolute position in AU (resolved hierarchically) */
   position: [number, number, number]
+  /** Whether the label should be visible (controlled by parent declutter) */
+  labelVisible?: boolean
+  /** Number of satellites orbiting this body (shown in subtitle) */
+  satelliteCount?: number
   onSelect?: (planet: PlanetData) => void
   /** Double-click: fly camera to this body */
   onFocus?: (position: [number, number, number]) => void
@@ -90,6 +94,8 @@ function getPlanetColor(planet: PlanetData): THREE.Color {
 export default function PlanetMesh({
   planet,
   position,
+  labelVisible = true,
+  satelliteCount = 0,
   onSelect,
   onFocus,
   isSelected,
@@ -116,7 +122,8 @@ export default function PlanetMesh({
     (planet.atmosphere.surface_pressure_atm ?? 0) > 0.01
 
   const typeLabel = PLANET_TYPE_LABELS[planet.planet_type ?? ''] ?? planet.planet_type ?? ''
-  const subtitle = `${typeLabel} · ${planet.radius} R⊕ · ${planet.mass} M⊕`
+  const satLabel = satelliteCount > 0 ? ` · ${satelliteCount} satellite${satelliteCount > 1 ? 's' : ''}` : ''
+  const subtitle = `${typeLabel} · ${planet.radius} R⊕ · ${planet.mass} M⊕${satLabel}`
 
   return (
     <group position={position}>
@@ -176,6 +183,7 @@ export default function PlanetMesh({
         color={`#${color.getHexString()}`}
         subtitle={subtitle}
         selected={isSelected}
+        visible={labelVisible}
         onClick={() => onSelect?.(planet)}
         onDoubleClick={() => onFocus?.(position)}
       />
