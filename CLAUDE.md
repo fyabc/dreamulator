@@ -34,7 +34,7 @@ dreamulator/
 │       ├── components/      # UI 组件
 │       ├── pages/           # 页面
 │       ├── stores/          # Zustand 状态管理
-│       └── viewers/         # 3D/2D 可视化（Phase 3）
+│       └── viewers/         # 3D 恒星系可视化器（Three.js，真实天文比例）
 ├── scripts/
 │   └── export_static.py     # 静态站点数据导出脚本
 ├── .github/

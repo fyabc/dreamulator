@@ -1,13 +1,25 @@
 /**
- * StarMesh — renders a single star as a glowing sphere with black-body color.
+ * StarMesh — renders a star at real astronomical proportions.
+ *
+ * The sphere geometry uses the actual stellar radius converted to AU
+ * (e.g. Sol ≈ 0.00465 AU). At system-view distances this is sub-pixel,
+ * which is physically correct — Space Engine behaves the same way.
+ *
+ * Visibility is handled by:
+ * 1. A glow shell at MIN_VISUAL_RADIUS (always seeable/clickable).
+ * 2. A PointLight that illuminates nearby planets at any zoom.
+ * 3. The Label component (dot + leader line + name) via <Html>.
  */
 
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { temperatureToColor, luminosityToGlowIntensity } from './utils/starColor'
-import { starRadiusScale, distanceScale } from './utils/scale'
+import {
+  solarRadiiToAU,
+  effectiveVisualRadius,
+} from './utils/scale'
+import Label from './Label'
 
 interface StarData {
   id: string
@@ -29,54 +41,57 @@ interface StarData {
 interface StarMeshProps {
   star: StarData
   onSelect?: (star: StarData) => void
+  /** Double-click: fly camera to this body */
+  onFocus?: (position: [number, number, number]) => void
   isSelected?: boolean
 }
 
-export default function StarMesh({ star, onSelect, isSelected }: StarMeshProps) {
-  const meshRef = useRef<THREE.Mesh>(null)
+export default function StarMesh({ star, onSelect, onFocus, isSelected }: StarMeshProps) {
   const glowRef = useRef<THREE.Mesh>(null)
 
-  // Resolve temperature and radius from input or derived
+  // Resolve from input or derived
   const temperature = star.derived?.computed_temperature ?? star.temperature ?? 5772
-  const radius = star.derived?.computed_radius ?? star.radius ?? 1.0
+  const radiusSun = star.derived?.computed_radius ?? star.radius ?? 1.0
   const luminosity = star.derived?.computed_luminosity ?? star.luminosity ?? 1.0
 
   const color = temperatureToColor(temperature)
-  const visualRadius = starRadiusScale(radius)
+  const realRadiusAU = solarRadiiToAU(radiusSun)
+  const visualRadiusAU = effectiveVisualRadius(realRadiusAU)
   const glowIntensity = luminosityToGlowIntensity(luminosity)
 
-  // Star position in scene units
+  // Position in AU
   const pos: [number, number, number] = star.position
-    ? [
-        distanceScale(star.position.x) || 0,
-        distanceScale(star.position.y) || 0,
-        distanceScale(star.position.z) || 0,
-      ]
+    ? [star.position.x, star.position.y, star.position.z]
     : [0, 0, 0]
 
-  // Gentle rotation animation for the glow shell
+  // Subtle rotation for the glow shell
   useFrame((_, delta) => {
     if (glowRef.current) {
-      glowRef.current.rotation.y += delta * 0.1
+      glowRef.current.rotation.y += delta * 0.05
     }
   })
 
+  const typeLabel = `${star.spectral_class ?? ''}${star.luminosity_class ?? ''} · ${Math.round(temperature)} K`
+
   return (
     <group position={pos}>
-      {/* Point light from the star */}
+      {/* Point light — illuminates planets regardless of zoom */}
       <pointLight
         color={color}
-        intensity={Math.min(5, glowIntensity * 2)}
-        distance={50}
+        intensity={Math.min(8, glowIntensity * 3)}
+        distance={100}
         decay={1.5}
       />
 
-      {/* Core star sphere */}
+      {/* Real-scale star sphere */}
       <mesh
-        ref={meshRef}
         onClick={(e) => {
           e.stopPropagation()
           onSelect?.(star)
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          onFocus?.(pos)
         }}
         onPointerOver={(e) => {
           e.stopPropagation()
@@ -86,59 +101,52 @@ export default function StarMesh({ star, onSelect, isSelected }: StarMeshProps) 
           document.body.style.cursor = 'default'
         }}
       >
-        <sphereGeometry args={[visualRadius, 32, 32]} />
+        <sphereGeometry args={[realRadiusAU, 32, 32]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={glowIntensity}
+          emissiveIntensity={glowIntensity * 1.5}
           roughness={1}
           metalness={0}
         />
       </mesh>
 
-      {/* Glow shell — slightly larger, semi-transparent */}
-      <mesh ref={glowRef} scale={1.3}>
-        <sphereGeometry args={[visualRadius, 16, 16]} />
+      {/* Minimum-size glow shell — ensures star is visible at system scale.
+          Uses additive blending for a soft corona look. */}
+      <mesh ref={glowRef}>
+        <sphereGeometry args={[visualRadiusAU, 16, 16]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={0.15}
+          opacity={0.25}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Outer soft glow */}
+      <mesh>
+        <sphereGeometry args={[visualRadiusAU * 2.5, 12, 12]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.06}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
           side={THREE.BackSide}
         />
       </mesh>
 
-      {/* Selection indicator */}
-      {isSelected && (
-        <mesh scale={1.6}>
-          <ringGeometry args={[visualRadius * 0.9, visualRadius * 1.1, 32]} />
-          <meshBasicMaterial
-            color="#00d4ff"
-            transparent
-            opacity={0.6}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      )}
-
-      {/* Label */}
-      <Html
-        position={[0, visualRadius + 0.5, 0]}
-        center
-        style={{ pointerEvents: 'none' }}
-      >
-        <div
-          style={{
-            color: '#00d4ff',
-            fontSize: '12px',
-            fontWeight: 600,
-            textShadow: '0 0 8px rgba(0,212,255,0.8)',
-            whiteSpace: 'nowrap',
-            userSelect: 'none',
-          }}
-        >
-          {star.name}
-        </div>
-      </Html>
+      {/* Label with leader line */}
+      <Label
+        name={star.name}
+        color={`#${color.getHexString()}`}
+        glowColor={`#${color.getHexString()}`}
+        subtitle={typeLabel}
+        selected={isSelected}
+        onClick={() => onSelect?.(star)}
+        onDoubleClick={() => onFocus?.(pos)}
+      />
     </group>
   )
 }

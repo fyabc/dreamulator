@@ -1,12 +1,11 @@
 /**
  * HabitableZoneRing — renders a translucent ring showing the habitable zone
- * and optional condensation line markers.
+ * and condensation line markers, in real AU coordinates.
  */
 
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { Line } from '@react-three/drei'
-import { distanceScale } from './utils/scale'
 
 interface HabitableZoneData {
   habitable_zone?: {
@@ -26,12 +25,11 @@ interface HabitableZoneData {
 
 interface HabitableZoneRingProps {
   data: HabitableZoneData
-  /** Y offset to avoid z-fighting with orbit lines */
   yOffset?: number
 }
 
 /**
- * Create a flat ring geometry between inner and outer radii.
+ * Flat ring between inner and outer radii (both in AU).
  */
 function FlatRing({
   innerRadius,
@@ -48,9 +46,8 @@ function FlatRing({
 }) {
   const geometry = useMemo(() => {
     const shape = new THREE.Shape()
-    const segments = 64
+    const segments = 96
 
-    // Outer circle
     for (let i = 0; i <= segments; i++) {
       const angle = (i / segments) * Math.PI * 2
       const x = Math.cos(angle) * outerRadius
@@ -59,7 +56,6 @@ function FlatRing({
       else shape.lineTo(x, y)
     }
 
-    // Inner circle (hole)
     const hole = new THREE.Path()
     for (let i = 0; i <= segments; i++) {
       const angle = (i / segments) * Math.PI * 2
@@ -71,7 +67,6 @@ function FlatRing({
     shape.holes.push(hole)
 
     const geom = new THREE.ShapeGeometry(shape, segments)
-    // Rotate to lie in XZ plane
     geom.rotateX(-Math.PI / 2)
     return geom
   }, [innerRadius, outerRadius])
@@ -90,7 +85,7 @@ function FlatRing({
 }
 
 /**
- * Thin circle line at a given radius.
+ * Thin circle line at a given AU radius.
  */
 function CircleLine({
   radius,
@@ -107,14 +102,10 @@ function CircleLine({
 }) {
   const points = useMemo(() => {
     const pts: [number, number, number][] = []
-    const segments = 64
+    const segments = 96
     for (let i = 0; i <= segments; i++) {
       const angle = (i / segments) * Math.PI * 2
-      pts.push([
-        Math.cos(angle) * radius,
-        yOffset,
-        Math.sin(angle) * radius,
-      ])
+      pts.push([Math.cos(angle) * radius, yOffset, Math.sin(angle) * radius])
     }
     return pts
   }, [radius, yOffset])
@@ -127,15 +118,15 @@ function CircleLine({
       opacity={opacity}
       lineWidth={1}
       dashed={dashed}
-      dashSize={dashed ? 0.3 : undefined}
-      gapSize={dashed ? 0.2 : undefined}
+      dashSize={dashed ? radius * 0.04 : undefined}
+      gapSize={dashed ? radius * 0.025 : undefined}
     />
   )
 }
 
 export default function HabitableZoneRing({
   data,
-  yOffset = -0.05,
+  yOffset = -0.002,
 }: HabitableZoneRingProps) {
   const hz = data.habitable_zone
   if (!hz) return null
@@ -145,44 +136,29 @@ export default function HabitableZoneRing({
 
   if (innerAU <= 0 || outerAU <= innerAU) return null
 
-  const innerR = distanceScale(innerAU)
-  const outerR = distanceScale(outerAU)
-
   const condensation = data.condensation_lines
 
   return (
     <group>
-      {/* Main habitable zone ring — green tint */}
+      {/* Habitable zone fill */}
       <FlatRing
-        innerRadius={innerR}
-        outerRadius={outerR}
+        innerRadius={innerAU}
+        outerRadius={outerAU}
         color="#22aa44"
-        opacity={0.08}
+        opacity={0.07}
         yOffset={yOffset}
       />
 
-      {/* Inner edge line */}
-      <CircleLine
-        radius={innerR}
-        color="#22aa44"
-        opacity={0.3}
-        yOffset={yOffset}
-      />
-
-      {/* Outer edge line */}
-      <CircleLine
-        radius={outerR}
-        color="#22aa44"
-        opacity={0.3}
-        yOffset={yOffset}
-      />
+      {/* HZ boundary lines */}
+      <CircleLine radius={innerAU} color="#22aa44" opacity={0.25} yOffset={yOffset} />
+      <CircleLine radius={outerAU} color="#22aa44" opacity={0.25} yOffset={yOffset} />
 
       {/* Condensation lines */}
       {condensation?.water_snow_line_au && (
         <CircleLine
-          radius={distanceScale(condensation.water_snow_line_au)}
+          radius={condensation.water_snow_line_au}
           color="#4488cc"
-          opacity={0.2}
+          opacity={0.15}
           yOffset={yOffset}
           dashed
         />
@@ -190,9 +166,9 @@ export default function HabitableZoneRing({
 
       {condensation?.rock_line_au && (
         <CircleLine
-          radius={distanceScale(condensation.rock_line_au)}
+          radius={condensation.rock_line_au}
           color="#cc6633"
-          opacity={0.2}
+          opacity={0.15}
           yOffset={yOffset}
           dashed
         />

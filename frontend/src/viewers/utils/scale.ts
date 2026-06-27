@@ -1,57 +1,64 @@
 /**
  * Scale functions and orbital math for 3D stellar system visualization.
  *
- * Real astronomical distances and sizes span enormous ranges
- * (star radius ~0.005 AU, planet orbit ~0.3–30 AU). These functions
- * compress the range logarithmically so everything remains visible
- * in the same scene.
- */
-
-// ---------------------------------------------------------------------------
-// Distance scaling — maps AU distances to scene units
-// ---------------------------------------------------------------------------
-
-const DISTANCE_SCALE_FACTOR = 8
-
-/**
- * Convert an AU distance to scene units using logarithmic scaling.
+ * All distances and sizes use real astronomical proportions in AU.
+ * Visibility of small bodies at system scale is handled by the Label
+ * component (leader lines + dots) and minimum apparent-size glow,
+ * NOT by distorting proportions.
  *
- * Linear AU ratios make inner planets invisible (e.g. 0.28 AU vs 1.0 AU).
- * Log scaling preserves ordering while compressing the visual range.
+ * Reference scales (real):
+ *   Sun radius:    0.00465 AU   (696,340 km)
+ *   Earth radius:  0.0000426 AU (6,371 km)
+ *   Earth orbit:   1.0 AU
+ *   Jupiter orbit: 5.2 AU
  *
- * Examples (factor=8):
- *   0.1 AU → ~3.4 units
- *   0.28 AU → ~5.0 units  (gaia-m Aegis)
- *   1.0 AU → ~8.3 units   (Earth)
- *   5.0 AU → ~13.9 units  (Jupiter)
+ * At 1 AU viewing distance, the Sun subtends ~0.5° — barely a pixel.
+ * This is correct; Space Engine and Universe Sandbox behave the same way.
+ * Labels and leader lines make small bodies findable.
  */
-export function distanceScale(au: number): number {
-  return Math.log10(1 + au * 10) * DISTANCE_SCALE_FACTOR
+
+// ---------------------------------------------------------------------------
+// Unit conversions → AU (the single scene unit)
+// ---------------------------------------------------------------------------
+
+const KM_PER_AU = 149_597_870.7
+const SOLAR_RADIUS_KM = 696_340
+const EARTH_RADIUS_KM = 6_371
+
+/** Convert solar radii (R☉) to AU. */
+export function solarRadiiToAU(rSun: number): number {
+  return (rSun * SOLAR_RADIUS_KM) / KM_PER_AU
+}
+
+/** Convert Earth radii (R⊕) to AU. */
+export function earthRadiiToAU(rEarth: number): number {
+  return (rEarth * EARTH_RADIUS_KM) / KM_PER_AU
 }
 
 // ---------------------------------------------------------------------------
-// Body radius scaling
+// Minimum apparent size — ensures bodies are never truly invisible
 // ---------------------------------------------------------------------------
 
 /**
- * Scale a stellar radius (in solar radii) to scene units.
- * Stars are rendered small relative to orbits — sqrt compresses the range.
+ * Minimum visual radius in AU so that bodies always have a clickable
+ * region even when their real radius is sub-pixel at the current zoom.
+ *
+ * 0.008 AU ≈ 1.7× the Sun's real radius — large enough to click on,
+ * small enough to not obscure inner planet orbits.
  */
-export function starRadiusScale(rSun: number): number {
-  return Math.sqrt(Math.max(0.05, rSun)) * 0.8
-}
+export const MIN_VISUAL_RADIUS_AU = 0.008
 
 /**
- * Scale a planet radius (in Earth radii) to scene units.
- * Log scaling handles the huge range from dwarf planets (~0.2 R⊕)
- * to gas giants (~11 R⊕).
+ * Get an effective visual radius that is at least MIN_VISUAL_RADIUS_AU.
+ * The real geometry is at `realRadiusAU`; the returned value is what
+ * glow shells and click targets should use.
  */
-export function planetRadiusScale(rEarth: number): number {
-  return Math.log2(1 + Math.max(0.1, rEarth)) * 0.12
+export function effectiveVisualRadius(realRadiusAU: number): number {
+  return Math.max(realRadiusAU, MIN_VISUAL_RADIUS_AU)
 }
 
 // ---------------------------------------------------------------------------
-// Orbital position computation
+// Orbital position computation (real AU, no scaling)
 // ---------------------------------------------------------------------------
 
 interface OrbitalElements {
@@ -64,31 +71,30 @@ interface OrbitalElements {
 }
 
 /**
- * Solve Kepler's equation M = E - e·sin(E) via Newton-Raphson iteration.
+ * Solve Kepler's equation M = E - e·sin(E) via Newton-Raphson.
  *
  * @param M - Mean anomaly in radians
  * @param e - Eccentricity (0 ≤ e < 1)
  * @returns Eccentric anomaly E in radians
  */
 function solveKepler(M: number, e: number): number {
-  // Initial guess
   let E = M
   for (let i = 0; i < 20; i++) {
     const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
     E -= dE
-    if (Math.abs(dE) < 1e-8) break
+    if (Math.abs(dE) < 1e-10) break
   }
   return E
 }
 
 /**
- * Compute the 3D position of an orbiting body from its orbital elements.
+ * Compute the 3D position of an orbiting body in AU.
  *
- * Returns [x, y, z] in scene units (after distance scaling).
- * The orbit lies in the XZ plane (Y=0) with inclination tilting around X axis.
+ * Coordinate system: XZ is the reference plane, Y is "up".
  *
  * @param elements - Keplerian orbital elements
- * @param timeAnomalyDeg - Additional mean anomaly offset in degrees (0 = epoch position)
+ * @param timeAnomalyDeg - Additional mean anomaly offset in degrees (0 = epoch)
+ * @returns [x, y, z] in AU
  */
 export function computeOrbitalPosition(
   elements: OrbitalElements,
@@ -102,34 +108,24 @@ export function computeOrbitalPosition(
   const M0 = ((elements.mean_anomaly_epoch_deg ?? 0) * Math.PI) / 180
   const M = M0 + (timeAnomalyDeg * Math.PI) / 180
 
-  // Solve Kepler's equation for eccentric anomaly
   const E = solveKepler(M, e)
 
-  // True anomaly
-  const cosV =
-    (Math.cos(E) - e) / (1 - e * Math.cos(E))
-  const sinV =
-    (Math.sqrt(1 - e * e) * Math.sin(E)) / (1 - e * Math.cos(E))
+  const cosV = (Math.cos(E) - e) / (1 - e * Math.cos(E))
+  const sinV = (Math.sqrt(1 - e * e) * Math.sin(E)) / (1 - e * Math.cos(E))
   const v = Math.atan2(sinV, cosV)
 
-  // Distance from focus
   const r = a * (1 - e * Math.cos(E))
 
   // Position in orbital plane
   const xOrb = r * Math.cos(v + omega)
   const yOrb = r * Math.sin(v + omega)
 
-  // Rotate by longitude of ascending node and inclination
+  // Rotate by ascending node longitude and inclination
   const x = xOrb * Math.cos(Omega) - yOrb * Math.sin(Omega) * Math.cos(i)
   const z = xOrb * Math.sin(Omega) + yOrb * Math.cos(Omega) * Math.cos(i)
   const y = yOrb * Math.sin(i)
 
-  // Apply distance scaling
-  const dist = Math.sqrt(x * x + y * y + z * z)
-  const scaledDist = distanceScale(dist)
-  const scale = dist > 0 ? scaledDist / dist : 1
-
-  return [x * scale, y * scale, z * scale]
+  return [x, y, z]
 }
 
 /**
@@ -137,7 +133,7 @@ export function computeOrbitalPosition(
  *
  * @param elements - Keplerian orbital elements
  * @param segments - Number of line segments (default 128)
- * @returns Array of [x, y, z] points in scene units
+ * @returns Array of [x, y, z] points in AU
  */
 export function computeOrbitPath(
   elements: OrbitalElements,

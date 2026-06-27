@@ -33,6 +33,15 @@ dreamulator/
 │       ├── api/             # API 客户端
 │       ├── components/      # UI 组件（Layout、Sidebar）
 │       ├── pages/           # 页面（HomePage、WorldInfo、WorldList、WorldDetail）
+│       ├── viewers/         # 3D/2D 可视化组件（Three.js）
+│       │   ├── StellarSystemViewer.tsx  # 主容器（Canvas + 场景）
+│       │   ├── StarMesh.tsx             # 恒星渲染
+│       │   ├── PlanetMesh.tsx           # 行星渲染
+│       │   ├── OrbitLine.tsx            # 轨道路径
+│       │   ├── HabitableZoneRing.tsx    # 宜居带
+│       │   ├── Label.tsx                # 标注系统（dot + 引线）
+│       │   ├── InfoPanel.tsx            # 天体详情面板
+│       │   └── utils/                   # 黑体颜色、单位换算、轨道力学
 │       └── stores/          # Zustand 状态管理
 ├── private/                 # 私有设计资源（logo 风格说明等）
 └── tests/                   # Python 测试
@@ -70,9 +79,10 @@ dreamulator/
 
 | 目录 | 职责 |
 |------|------|
-| `api/` | 与后端 REST API 通信的客户端 |
-| `components/` | 全局 UI 组件（Layout 布局、Sidebar 侧边栏） |
+| `api/` | 与后端 REST API 通信的客户端（自动切换 API 模式 / 静态模式） |
+| `components/` | 全局 UI 组件（Layout 布局、Sidebar 侧边栏、BranchSelector） |
 | `pages/` | 页面组件：首页、世界信息、世界管理、世界详情 |
+| `viewers/` | 3D/2D 可视化组件（Three.js 恒星系查看器，详见 `frontend-3d-viewer.md`） |
 | `stores/` | Zustand 全局状态管理 |
 
 ## 核心概念

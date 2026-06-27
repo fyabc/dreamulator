@@ -1,5 +1,5 @@
 /**
- * OrbitLine — renders an orbital ellipse path from Keplerian elements.
+ * OrbitLine — renders an orbital ellipse path in real AU coordinates.
  */
 
 import { useMemo } from 'react'
@@ -25,17 +25,12 @@ interface OrbitLineProps {
 
 export default function OrbitLine({
   orbit,
-  color = '#2a2a5a',
-  opacity = 0.5,
+  color = '#3a3a7a',
+  opacity = 0.35,
 }: OrbitLineProps) {
-  const points = useMemo(() => {
-    return computeOrbitPath(orbit, 128)
-  }, [orbit])
-
-  // Convert to flat array of [x,y,z] tuples for drei Line
   const linePoints = useMemo(() => {
-    return points.map(([x, y, z]) => [x, y, z] as [number, number, number])
-  }, [points])
+    return computeOrbitPath(orbit, 128) as [number, number, number][]
+  }, [orbit])
 
   return (
     <Line
