@@ -231,11 +231,16 @@ export default function StellarSystemViewer({
   const orbits = stellar?.orbits ?? []
   const initialDist = useMemo(() => computeInitialCameraDistance(orbits), [orbits])
 
-  // Update displayed camera distance on each control change
+  // Update displayed camera distance on each control change.
+  // Use distance from camera to orbit target (what the user is looking at),
+  // NOT distance to world origin — otherwise zooming into a planet far from
+  // the star gives misleading values that can increase while zooming in.
   const handleControlsChange = useCallback(() => {
-    if (controlsRef.current) {
-      const cam = controlsRef.current.object as THREE.Camera
-      setCameraDist(cam.position.length())
+    const controls = controlsRef.current
+    if (controls) {
+      const cam = controls.object as THREE.Camera
+      const target = controls.target as THREE.Vector3
+      setCameraDist(cam.position.distanceTo(target))
     }
   }, [])
 
