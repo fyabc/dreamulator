@@ -88,6 +88,12 @@ uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 # 启动服务器（API + 前端，一条命令）
 uv run dreamulator serve --open              # 启动并打开浏览器
 uv run dreamulator serve --reload             # 开发模式（热重载）
+uv run dreamulator serve --data-dir private/worlds  # 使用自定义数据目录
+
+# 数据目录配置
+# 所有 CLI 命令和 API 服务支持 --data-dir 参数或 DREAMULATOR_DATA_DIR 环境变量
+# 来覆盖默认的 data/worlds/ 数据目录。开发时建议使用 private/worlds/
+# （已在 .gitignore 中排除），避免编辑地图等操作污染 git 工作区。
 
 # 运行测试
 uv run pytest

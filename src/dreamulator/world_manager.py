@@ -13,7 +13,18 @@ from dreamulator.models.world import WorldConfig
 
 
 def _data_dir() -> Path:
-    """Return the project-level data/worlds directory."""
+    """Return the worlds data directory.
+
+    Resolution order:
+    1. ``DREAMULATOR_DATA_DIR`` environment variable (absolute or relative path)
+    2. ``<project_root>/data/worlds/`` (default for bundled template worlds)
+    """
+    import os
+
+    env_dir = os.environ.get("DREAMULATOR_DATA_DIR")
+    if env_dir:
+        return Path(env_dir).resolve()
+
     # Walk up from this file to find the project root (has pyproject.toml)
     current = Path(__file__).resolve().parent
     while current != current.parent:

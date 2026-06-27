@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -11,6 +12,12 @@ from rich.table import Table
 
 from dreamulator import __version__
 from dreamulator.world_manager import WorldManager
+
+
+def _set_data_dir(data_dir: Path | None) -> None:
+    """Override the worlds data directory via environment variable."""
+    if data_dir is not None:
+        os.environ["DREAMULATOR_DATA_DIR"] = str(data_dir.resolve())
 
 app = typer.Typer(
     name="dreamulator",
@@ -39,8 +46,10 @@ def init(
     name: str = typer.Argument(help="World name (used as directory name)"),
     seed: int | None = typer.Option(None, help="RNG seed (random if omitted)"),
     template: str = typer.Option("minimal", help="Starting template: minimal, earthlike"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Create a new world with template configuration files."""
+    _set_data_dir(data_dir)
     mgr = WorldManager()
     try:
         world_dir = mgr.create_world(name, seed=seed, template=template)
@@ -54,8 +63,11 @@ def init(
 
 
 @app.command(name="list")
-def list_worlds() -> None:
+def list_worlds(
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
     """List all available worlds."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
 
     mgr = WorldManager()
@@ -92,8 +104,10 @@ def list_worlds() -> None:
 def info(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Show detailed information about a world or branch."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
     from dreamulator.io.loader import load_layer_input
     from dreamulator.models.stellar import StellarSystem
@@ -179,8 +193,10 @@ def build(
         None, "--only", help="Run only this engine and its dependencies"
     ),
     seed: int | None = typer.Option(None, help="Override RNG seed"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Run the simulation pipeline for a world or branch."""
+    _set_data_dir(data_dir)
     from dreamulator.engine.pipeline import run_pipeline
     from dreamulator.models.layers import Layer
 
@@ -268,8 +284,10 @@ def narrate(
         help="Maximum number of output tokens",
     ),
     no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming output"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Generate a conversational description of a world using Claude."""
+    _set_data_dir(data_dir)
     from rich.markdown import Markdown
 
     try:
@@ -356,8 +374,10 @@ def narrate(
 def validate(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Validate a specific branch"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Validate a world's files against expected structure and schemas."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
     from dreamulator.resolver import LayerResolver
 
@@ -415,8 +435,10 @@ def serve(
     port: int = typer.Option(8000, help="Port to listen on"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
     open_browser: bool = typer.Option(False, "--open", help="Open browser on start"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Start the server (API + frontend)."""
+    _set_data_dir(data_dir)
     import threading
     import webbrowser
 
@@ -442,8 +464,10 @@ def delete(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Delete a branch instead"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Delete a world or branch."""
+    _set_data_dir(data_dir)
     mgr = WorldManager()
     try:
         if branch is not None:
@@ -478,8 +502,10 @@ def branch_create(
     name: str = typer.Argument(help="Branch name"),
     at: str = typer.Option(..., "--at", help="Layer to fork at"),
     description: str = typer.Option("", "--description", "-d", help="Branch description"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Create a new branch at the specified layer."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
     from dreamulator.models.layers import Layer
 
@@ -509,8 +535,10 @@ def branch_create(
 @branch_app.command("list")
 def branch_list(
     world: str = typer.Argument(help="World name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """List all branches for a world."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
 
     mgr = WorldManager()
@@ -550,8 +578,10 @@ def branch_list(
 def branch_info(
     world: str = typer.Argument(help="World name"),
     name: str = typer.Argument(help="Branch name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Show detailed information about a branch."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
     from dreamulator.resolver import LayerResolver
 
@@ -599,8 +629,10 @@ def branch_delete(
     world: str = typer.Argument(help="World name"),
     name: str = typer.Argument(help="Branch name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Delete a branch."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
 
     mgr = WorldManager()
@@ -631,8 +663,10 @@ def branch_promote(
         None, "--as", help="New world name (defaults to branch name)"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Promote a branch to a standalone world."""
+    _set_data_dir(data_dir)
     from dreamulator.branch_manager import BranchManager
 
     mgr = WorldManager()
@@ -668,8 +702,10 @@ def conlang_evolve(
     language: str = typer.Argument(help="Language ID (directory name under languages/)"),
     generations: int = typer.Option(5, "--generations", "-g", help="Number of generations"),
     seed: int | None = typer.Option(None, help="Override RNG seed"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Run SCA sound change on a language's lexicon."""
+    _set_data_dir(data_dir)
     from conlang.phonology.sca import SCAEngine
 
     mgr = WorldManager()

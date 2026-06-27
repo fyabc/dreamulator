@@ -200,8 +200,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    import os
+
     root = find_project_root()
-    worlds_dir = root / "data" / "worlds"
+    env_dir = os.environ.get("DREAMULATOR_DATA_DIR")
+    worlds_dir = Path(env_dir).resolve() if env_dir else root / "data" / "worlds"
     output_dir = args.output or (root / "frontend" / "public" / "data")
 
     if not worlds_dir.exists():
