@@ -191,9 +191,7 @@ class TestComputeStellarParameters:
     def test_luminosity_roundtrip_exact(self, mass_in, age):
         """Forward → luminosity-only input should recover the same mass."""
         forward = compute_stellar_parameters(mass=mass_in, age_gyr=age)
-        inverse = compute_stellar_parameters(
-            luminosity=forward["luminosity"], age_gyr=age
-        )
+        inverse = compute_stellar_parameters(luminosity=forward["luminosity"], age_gyr=age)
         assert inverse["mass"] == pytest.approx(mass_in, rel=1e-4)
         assert inverse["luminosity"] == pytest.approx(forward["luminosity"], rel=1e-4)
 

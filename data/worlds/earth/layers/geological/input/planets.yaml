@@ -26,20 +26,5 @@ planets:
       num_plates: 15
       volcanic_activity: 1.0
     magnetic_field_strength: 50.0 # ~25-65 μT, average ~50 μT
-    satellites:
-      - id: satellite_moon
-        name: Moon
-        orbits: planet_earth
-        body_type: natural_satellite
-        mass_earth: 0.0123       # 7.342e22 kg (1/81.3 of Earth)
-        radius_km: 1737.4
-        semi_major_axis_km: 384399
-        eccentricity: 0.0549
-        inclination_deg: 5.145   # to ecliptic
-        orbital_period_days: 27.3217  # sidereal
-        rotation_period_days: 27.3217 # tidally locked
-        albedo: 0.136            # geometric albedo
-        axial_tilt_deg: 6.687
-        surface:
-          composition: silicate_regolith
-          has_atmosphere: false
+    satellite_ids:
+      - satellite_moon

@@ -174,9 +174,7 @@ def run_pipeline(
     return results
 
 
-def _collect_dependencies(
-    engine_name: str, sorted_engines: list[type[BaseEngine]]
-) -> set[str]:
+def _collect_dependencies(engine_name: str, sorted_engines: list[type[BaseEngine]]) -> set[str]:
     """Collect transitive dependencies for an engine."""
     by_name = {e.name: e for e in sorted_engines}
     needed: set[str] = set()

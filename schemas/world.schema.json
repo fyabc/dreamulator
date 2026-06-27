@@ -205,6 +205,106 @@
       "title": "OrbitalElements",
       "type": "object"
     },
+    "OrbitingBody": {
+      "description": "A non-star body in the stellar system: moon, asteroid, comet, etc.\n\nPhysical properties live here; orbital elements are in StellarSystem.orbits\n(matched by id == body_id). This keeps all orbital mechanics in the\nastronomy layer while allowing rich physical descriptions.",
+      "properties": {
+        "id": {
+          "description": "Unique identifier, e.g. 'satellite_moon'",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name",
+          "title": "Name",
+          "type": "string"
+        },
+        "body_type": {
+          "default": "natural_satellite",
+          "description": "Classification: natural_satellite, asteroid, comet, dwarf_planet",
+          "title": "Body Type",
+          "type": "string"
+        },
+        "mass_earth": {
+          "description": "Mass in Earth masses (M⊕)",
+          "exclusiveMinimum": 0,
+          "title": "Mass Earth",
+          "type": "number"
+        },
+        "radius_km": {
+          "description": "Mean radius in km",
+          "exclusiveMinimum": 0,
+          "title": "Radius Km",
+          "type": "number"
+        },
+        "rotation_period_days": {
+          "anyOf": [
+            {
+              "description": "Time in Earth days",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sidereal rotation period in days",
+          "title": "Rotation Period Days"
+        },
+        "axial_tilt_deg": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Axial obliquity in degrees",
+          "title": "Axial Tilt Deg"
+        },
+        "albedo": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Geometric albedo",
+          "title": "Albedo"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Surface properties (composition, atmosphere, etc.)",
+          "title": "Surface"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mass_earth",
+        "radius_km"
+      ],
+      "title": "OrbitingBody",
+      "type": "object"
+    },
     "SimulationSeed": {
       "description": "Reproducible randomness seed.",
       "properties": {
@@ -352,6 +452,14 @@
             "$ref": "#/$defs/OrbitalElements"
           },
           "title": "Orbits",
+          "type": "array"
+        },
+        "bodies": {
+          "description": "Non-star bodies (moons, asteroids, etc.) with physical properties. Orbital elements are in the orbits list, matched by id.",
+          "items": {
+            "$ref": "#/$defs/OrbitingBody"
+          },
+          "title": "Bodies",
           "type": "array"
         }
       },

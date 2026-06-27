@@ -42,9 +42,7 @@ class Species(BaseModel):
         default_factory=list, description="Biomes this species inhabits"
     )
     description: str = ""
-    traits: dict[str, str] = Field(
-        default_factory=dict, description="Key biological traits"
-    )
+    traits: dict[str, str] = Field(default_factory=dict, description="Key biological traits")
 
 
 class FoodWeb(BaseModel):

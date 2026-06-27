@@ -75,6 +75,7 @@ class WorldManager:
         # Generate seed if needed (must be plain int, not numpy int)
         if seed is None:
             import time
+
             seed = int(time.time_ns() % (2**31))
 
         # Update world.yaml with actual values

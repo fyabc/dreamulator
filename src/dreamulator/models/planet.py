@@ -90,3 +90,8 @@ class Planet(BaseModel):
     magnetic_field_strength: float | None = Field(
         default=None, ge=0, description="Surface magnetic field strength in microtesla"
     )
+
+    satellite_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs of natural satellites (defined in astronomy layer's stellar.yaml)",
+    )

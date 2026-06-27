@@ -143,12 +143,43 @@ def _resolve_layer_dir(
     return None
 
 
+_KM_PER_EARTH_RADIUS = 6371.0
+
+
+def _normalize_body(
+    body: dict[str, Any], orbit_lookup: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Normalize an OrbitingBody dict to PlanetData-compatible format.
+
+    Converts units and field names so the frontend can render bodies
+    (moons, asteroids) using the same PlanetMesh component as planets.
+    """
+    orbit = orbit_lookup.get(body.get("id", ""), {})
+    normalized: dict[str, Any] = {
+        "id": body.get("id"),
+        "name": body.get("name"),
+        "planet_type": body.get("body_type", "natural_satellite"),
+        "mass": body.get("mass_earth", 0),
+        "radius": body.get("radius_km", 0) / _KM_PER_EARTH_RADIUS,
+        "orbits": orbit.get("parent_id", ""),
+    }
+    # Pass through optional fields
+    for key in ("rotation_period_days", "axial_tilt_deg", "albedo"):
+        if key in body and body[key] is not None:
+            normalized[key] = body[key]
+    if "surface" in body:
+        normalized["surface"] = body["surface"]
+    return normalized
+
+
 @router.get("/{world_name}/stellar")
 def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, Any]:
     """Get stellar system data (input + derived merged).
 
     Returns the stellar.yaml input data with derived star parameters
     merged in, matching the format used by the static export.
+    Non-star bodies (moons, asteroids) are normalized to planet-compatible
+    units and included under the 'bodies' key.
     """
     try:
         world_dir = _manager.world_dir(world_name)
@@ -167,9 +198,7 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
     # Merge derived data if available
     derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
     if derived_dir is not None:
-        stellar_derived: dict[str, Any] | None = _load_yaml(
-            derived_dir / "stellar_derived.yaml"
-        )
+        stellar_derived: dict[str, Any] | None = _load_yaml(derived_dir / "stellar_derived.yaml")
         if stellar_derived and "stars" in stellar_derived:
             derived_by_id: dict[str, dict[str, Any]] = {
                 s["id"]: s for s in stellar_derived["stars"] if "id" in s
@@ -179,6 +208,12 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
                     star_id = star.get("id")
                     if star_id and star_id in derived_by_id:
                         star["derived"] = derived_by_id[star_id]
+
+    # Normalize bodies (moons, asteroids) to planet-compatible format
+    bodies = stellar_input.get("bodies", [])
+    if bodies:
+        orbit_lookup = {o["body_id"]: o for o in stellar_input.get("orbits", []) if "body_id" in o}
+        stellar_input["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
 
     return stellar_input
 
@@ -207,9 +242,7 @@ def get_planets(world_name: str, branch: str | None = None) -> list[dict[str, An
 
 
 @router.get("/{world_name}/habitable-zones")
-def get_habitable_zones(
-    world_name: str, branch: str | None = None
-) -> dict[str, Any]:
+def get_habitable_zones(world_name: str, branch: str | None = None) -> dict[str, Any]:
     """Get habitable zone data from the astronomy derived layer."""
     try:
         world_dir = _manager.world_dir(world_name)
@@ -218,15 +251,11 @@ def get_habitable_zones(
 
     derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
     if derived_dir is None:
-        raise HTTPException(
-            status_code=404, detail="No astronomy derived data found"
-        )
+        raise HTTPException(status_code=404, detail="No astronomy derived data found")
 
     hz_data: dict[str, Any] | None = _load_yaml(derived_dir / "habitable_zones.yaml")
     if hz_data is None:
-        raise HTTPException(
-            status_code=404, detail="habitable_zones.yaml not found"
-        )
+        raise HTTPException(status_code=404, detail="habitable_zones.yaml not found")
 
     # Return first star's HZ data (matching static export format)
     if isinstance(hz_data, dict) and "stars" in hz_data:

@@ -148,9 +148,7 @@ class LayerSummary(BaseModel):
     """
 
     layer: Layer | None = Field(default=None, description="Layer identifier (from dict key)")
-    configured: bool = Field(
-        default=False, description="Whether this layer has custom input data"
-    )
+    configured: bool = Field(default=False, description="Whether this layer has custom input data")
     engine: str = Field(default="", description="Engine that processes this layer")
     inherited_from: str | None = Field(
         default=None, description="Parent world/branch this layer is inherited from"

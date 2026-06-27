@@ -62,9 +62,7 @@ class LayerResolver:
             while current_branch is not None:
                 branch_yaml = current_dir / "branch.yaml"
                 if not branch_yaml.exists():
-                    raise FileNotFoundError(
-                        f"Branch '{current_branch}' not found at {current_dir}"
-                    )
+                    raise FileNotFoundError(f"Branch '{current_branch}' not found at {current_dir}")
 
                 with branch_yaml.open("r", encoding="utf-8") as f:
                     metadata = BranchMetadata.model_validate_json(f.read())

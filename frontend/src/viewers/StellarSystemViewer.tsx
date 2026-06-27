@@ -23,9 +23,12 @@ import PlanetMesh from './PlanetMesh'
 import OrbitLine from './OrbitLine'
 import HabitableZoneRing from './HabitableZoneRing'
 import InfoPanel from './InfoPanel'
+import { computeOrbitalPosition } from './utils/scale'
 import type { StarData } from './StarMesh'
 import type { PlanetData, OrbitalElementsData } from './PlanetMesh'
 import type { SelectedBody } from './InfoPanel'
+
+type Vec3 = [number, number, number]
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +38,7 @@ interface StellarSystemData {
   name?: string
   stars?: StarData[]
   orbits?: OrbitalElementsData[]
+  bodies?: PlanetData[]  // normalized OrbitingBody (moons, asteroids)
 }
 
 interface HabitableZoneData {
@@ -70,6 +74,62 @@ function buildOrbitLookup(orbits: OrbitalElementsData[]): Map<string, OrbitalEle
     map.set(orbit.body_id, orbit)
   }
   return map
+}
+
+/**
+ * Resolve absolute 3D positions for all bodies in the system.
+ *
+ * Handles hierarchical orbits: a moon orbiting a planet has its position
+ * computed as planet_position + moon_relative_position.
+ * Uses recursive lookup with memoization to resolve chains like
+ * star → planet → moon.
+ */
+function resolvePositions(
+  stars: StarData[],
+  allBodies: PlanetData[],
+  orbitMap: Map<string, OrbitalElementsData>,
+): Map<string, Vec3> {
+  const positions = new Map<string, Vec3>()
+  const ORIGIN: Vec3 = [0, 0, 0]
+
+  // Seed star positions
+  for (const star of stars) {
+    const pos: Vec3 = star.position
+      ? [star.position.x, star.position.y, star.position.z]
+      : ORIGIN
+    positions.set(star.id, pos)
+  }
+
+  /** Recursively resolve a body's absolute position. */
+  function resolve(bodyId: string, visited: Set<string>): Vec3 {
+    const cached = positions.get(bodyId)
+    if (cached) return cached
+
+    // Guard against circular references
+    if (visited.has(bodyId)) return ORIGIN
+    visited.add(bodyId)
+
+    const orbit = orbitMap.get(bodyId)
+    if (!orbit) return ORIGIN
+
+    // Recursively resolve parent position first
+    const parentPos = resolve(orbit.parent_id, visited)
+    const relative = computeOrbitalPosition(orbit)
+    const abs: Vec3 = [
+      parentPos[0] + relative[0],
+      parentPos[1] + relative[1],
+      parentPos[2] + relative[2],
+    ]
+    positions.set(bodyId, abs)
+    return abs
+  }
+
+  // Resolve each body (recursion handles parent-first ordering)
+  for (const body of allBodies) {
+    resolve(body.id, new Set())
+  }
+
+  return positions
 }
 
 function resolveHZ(hz: HabitableZoneData | null | undefined): HabitableZoneData | null {
@@ -109,7 +169,8 @@ function ScaleIndicator() {
 
 function Scene({
   stellar,
-  planets,
+  allBodies,
+  positionMap,
   habitableZones,
   selected,
   onSelect,
@@ -118,7 +179,8 @@ function Scene({
   focusTargetRef,
 }: {
   stellar: StellarSystemData | null | undefined
-  planets: PlanetData[] | null | undefined
+  allBodies: PlanetData[]
+  positionMap: Map<string, Vec3>
   habitableZones: HabitableZoneData | null | undefined
   selected: SelectedBody
   onSelect: (body: SelectedBody) => void
@@ -127,7 +189,6 @@ function Scene({
   focusTargetRef: React.MutableRefObject<THREE.Vector3 | null>
 }) {
   const orbits = stellar?.orbits ?? []
-  const orbitMap = useMemo(() => buildOrbitLookup(orbits), [orbits])
   const hzData = useMemo(() => resolveHZ(habitableZones), [habitableZones])
 
   // Smoothly fly camera target to focused body each frame
@@ -175,20 +236,27 @@ function Scene({
         />
       ))}
 
-      {/* Orbit lines (real AU) */}
-      {orbits.map((orbit) => (
-        <OrbitLine key={orbit.body_id} orbit={orbit} />
-      ))}
+      {/* Orbit lines (real AU) — translated to parent body position */}
+      {orbits.map((orbit) => {
+        const parentPos = positionMap.get(orbit.parent_id) ?? null
+        return (
+          <OrbitLine
+            key={orbit.body_id}
+            orbit={orbit}
+            parentPosition={parentPos}
+          />
+        )
+      })}
 
-      {/* Planets */}
-      {planets?.map((planet) => (
+      {/* All bodies (planets + moons + asteroids) */}
+      {allBodies.map((body) => (
         <PlanetMesh
-          key={planet.id}
-          planet={planet}
-          orbit={orbitMap.get(planet.id) ?? null}
+          key={body.id}
+          planet={body}
+          position={positionMap.get(body.id) ?? [1, 0, 0]}
           onSelect={(p) => onSelect({ type: 'planet', data: p })}
           onFocus={handleFocus}
-          isSelected={selected?.type === 'planet' && selected.data.id === planet.id}
+          isSelected={selected?.type === 'planet' && selected.data.id === body.id}
         />
       ))}
 
@@ -228,7 +296,19 @@ export default function StellarSystemViewer({
   const focusTargetRef = useRef<THREE.Vector3 | null>(null)
   const [cameraDist, setCameraDist] = useState(0)
 
+  // Merge planets + stellar bodies (moons, asteroids) into one list
+  const allBodies = useMemo(() => {
+    const planetList = planets ?? []
+    const bodyList = stellar?.bodies ?? []
+    return [...planetList, ...bodyList]
+  }, [planets, stellar?.bodies])
+
   const orbits = stellar?.orbits ?? []
+  const orbitMap = useMemo(() => buildOrbitLookup(orbits), [orbits])
+  const positionMap = useMemo(
+    () => resolvePositions(stellar?.stars ?? [], allBodies, orbitMap),
+    [stellar?.stars, allBodies, orbitMap],
+  )
   const initialDist = useMemo(() => computeInitialCameraDistance(orbits), [orbits])
 
   // Update displayed camera distance on each control change.
@@ -291,7 +371,8 @@ export default function StellarSystemViewer({
         >
           <Scene
             stellar={stellar}
-            planets={planets}
+            allBodies={allBodies}
+            positionMap={positionMap}
             habitableZones={habitableZones}
             selected={selected}
             onSelect={setSelected}

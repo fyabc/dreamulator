@@ -229,6 +229,14 @@
       "default": null,
       "description": "Surface magnetic field strength in microtesla",
       "title": "Magnetic Field Strength"
+    },
+    "satellite_ids": {
+      "description": "IDs of natural satellites (defined in astronomy layer's stellar.yaml)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Satellite Ids",
+      "type": "array"
     }
   },
   "required": [

@@ -1,4 +1,5 @@
-# The Solar System — stellar data
+# The Solar System — with L4 Companion asteroid (branch override)
+# Extends root world's stellar data with a Trojan companion at Earth-Moon L4
 name: Solar System
 stars:
   - id: star_sol
@@ -34,6 +35,15 @@ orbits:
     argument_of_periapsis_deg: 318.15
     mean_anomaly_epoch_deg: 135.27
     epoch_year: 0.0
+  - body_id: satellite_companion
+    parent_id: planet_earth
+    semi_major_axis_au: 0.002569     # same orbit as Moon (384,399 km)
+    eccentricity: 0.0549
+    inclination_deg: 5.145
+    longitude_ascending_node_deg: 125.08
+    argument_of_periapsis_deg: 318.15
+    mean_anomaly_epoch_deg: 75.27    # 60° ahead of Moon (135.27 - 60)
+    epoch_year: 0.0
 bodies:
   - id: satellite_moon
     name: Moon
@@ -46,3 +56,15 @@ bodies:
     surface:
       composition: silicate_regolith
       has_atmosphere: false
+  - id: satellite_companion
+    name: Companion
+    body_type: trojan_asteroid
+    mass_earth: 1.5e-11              # ~9e13 kg, negligible
+    radius_km: 12.0                  # diameter ~24 km
+    rotation_period_days: 8.5        # irregular rotation
+    albedo: 0.20                     # S-type geometric albedo
+    surface:
+      composition: silicate_metal    # S-type: olivine + pyroxene + metal
+      has_atmosphere: false
+      spectral_class: S              # silicate-rich stony asteroid
+      color_index_BV: 0.92           # typical S-type B-V color

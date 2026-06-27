@@ -14,7 +14,6 @@ import * as THREE from 'three'
 import {
   earthRadiiToAU,
   effectiveVisualRadius,
-  computeOrbitalPosition,
 } from './utils/scale'
 import Label from './Label'
 
@@ -50,7 +49,8 @@ interface OrbitalElementsData {
 
 interface PlanetMeshProps {
   planet: PlanetData
-  orbit: OrbitalElementsData | null
+  /** Pre-computed absolute position in AU (resolved hierarchically) */
+  position: [number, number, number]
   onSelect?: (planet: PlanetData) => void
   /** Double-click: fly camera to this body */
   onFocus?: (position: [number, number, number]) => void
@@ -89,7 +89,7 @@ function getPlanetColor(planet: PlanetData): THREE.Color {
 
 export default function PlanetMesh({
   planet,
-  orbit,
+  position,
   onSelect,
   onFocus,
   isSelected,
@@ -100,12 +100,6 @@ export default function PlanetMesh({
   const visualRadiusAU = effectiveVisualRadius(realRadiusAU)
   const color = useMemo(() => getPlanetColor(planet), [planet])
   const axialTilt = ((planet.axial_tilt_deg ?? 0) * Math.PI) / 180
-
-  // Compute orbital position in AU
-  const position: [number, number, number] = useMemo(() => {
-    if (!orbit) return [1, 0, 0]
-    return computeOrbitalPosition(orbit)
-  }, [orbit])
 
   // Slow self-rotation
   useFrame((_, delta) => {

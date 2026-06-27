@@ -19,9 +19,7 @@ class DummyEngineA(BaseEngine):
         out = self.output_path("a.json")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("{}", encoding="utf-8")
-        return EngineResult(
-            engine_name=self.name, success=True, output_files=["a.json"]
-        )
+        return EngineResult(engine_name=self.name, success=True, output_files=["a.json"])
 
 
 class DummyEngineB(BaseEngine):
@@ -36,9 +34,7 @@ class DummyEngineB(BaseEngine):
         out = self.output_path("b.json")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("{}", encoding="utf-8")
-        return EngineResult(
-            engine_name=self.name, success=True, output_files=["b.json"]
-        )
+        return EngineResult(engine_name=self.name, success=True, output_files=["b.json"])
 
 
 class TestTopologicalSort:
@@ -95,7 +91,5 @@ class TestRunPipeline:
         (layer_derived / "a.json").write_text("{}", encoding="utf-8")
         (layer_derived / "b.json").write_text("{}", encoding="utf-8")
 
-        results = run_pipeline(
-            [DummyEngineA, DummyEngineB], tmp_path, seed=42, force=True
-        )
+        results = run_pipeline([DummyEngineA, DummyEngineB], tmp_path, seed=42, force=True)
         assert len(results) == 2

@@ -19,18 +19,31 @@ interface OrbitalElementsData {
 
 interface OrbitLineProps {
   orbit: OrbitalElementsData
+  /** Absolute position of the parent body — orbit path is translated by this */
+  parentPosition?: [number, number, number] | null
   color?: string
   opacity?: number
 }
 
 export default function OrbitLine({
   orbit,
+  parentPosition,
   color = '#3a3a7a',
   opacity = 0.35,
 }: OrbitLineProps) {
   const linePoints = useMemo(() => {
-    return computeOrbitPath(orbit, 128) as [number, number, number][]
-  }, [orbit])
+    const path = computeOrbitPath(orbit, 128) as [number, number, number][]
+    if (!parentPosition) return path
+    // Translate orbit path to parent body's absolute position
+    return path.map(
+      ([x, y, z]) =>
+        [x + parentPosition[0], y + parentPosition[1], z + parentPosition[2]] as [
+          number,
+          number,
+          number,
+        ],
+    )
+  }, [orbit, parentPosition])
 
   return (
     <Line

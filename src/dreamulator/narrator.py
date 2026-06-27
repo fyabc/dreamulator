@@ -93,6 +93,7 @@ def _resolve_api_config(model_override: str | None = None) -> _ApiConfig:
 
     return _ApiConfig(api_key=api_key, base_url=base_url, model=resolved_model)
 
+
 # ruff: noqa: E501
 _SYSTEM_PROMPT = """\
 你是一位架空世界设定顾问。你的任务是使用正式、流畅的中文，系统性地描述一个虚构世界的主要特征。

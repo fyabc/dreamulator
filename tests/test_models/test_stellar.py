@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from dreamulator.models.stellar import (
     LuminosityClass,
     OrbitalElements,
+    OrbitingBody,
     Star,
     StellarSystem,
 )
@@ -140,3 +141,67 @@ class TestStellarSystem:
                     Star(id="star_a", name="A2", spectral_class="K5", mass=0.8),
                 ],
             )
+
+
+class TestOrbitingBody:
+    def test_valid_moon(self):
+        body = OrbitingBody(
+            id="satellite_moon",
+            name="Moon",
+            mass_earth=0.0123,
+            radius_km=1737.4,
+            rotation_period_days=27.3217,
+            axial_tilt_deg=6.687,
+            albedo=0.136,
+        )
+        assert body.id == "satellite_moon"
+        assert body.body_type == "natural_satellite"
+        assert body.mass_earth == 0.0123
+        assert body.radius_km == 1737.4
+
+    def test_asteroid_with_surface(self):
+        body = OrbitingBody(
+            id="satellite_companion",
+            name="Companion",
+            body_type="trojan_asteroid",
+            mass_earth=1.5e-11,
+            radius_km=12.0,
+            surface={"composition": "silicate_metal", "has_atmosphere": False},
+        )
+        assert body.body_type == "trojan_asteroid"
+        assert body.surface is not None
+        assert body.surface["composition"] == "silicate_metal"
+
+    def test_system_with_bodies(self):
+        """StellarSystem accepts both orbits and bodies for moons."""
+        system = StellarSystem(
+            name="Solar System",
+            stars=[Star(id="star_sol", name="Sol", spectral_class="G2", mass=1.0)],
+            orbits=[
+                OrbitalElements(
+                    body_id="planet_earth",
+                    parent_id="star_sol",
+                    semi_major_axis_au=1.0,
+                    eccentricity=0.017,
+                ),
+                OrbitalElements(
+                    body_id="satellite_moon",
+                    parent_id="planet_earth",
+                    semi_major_axis_au=0.00257,
+                    eccentricity=0.0549,
+                ),
+            ],
+            bodies=[
+                OrbitingBody(id="satellite_moon", name="Moon", mass_earth=0.0123, radius_km=1737.4),
+            ],
+        )
+        assert len(system.bodies) == 1
+        assert system.bodies[0].id == "satellite_moon"
+
+    def test_system_without_bodies(self):
+        """StellarSystem works fine without bodies (backward compatible)."""
+        system = StellarSystem(
+            name="Simple",
+            stars=[Star(id="star_s", name="S", spectral_class="G", mass=1.0)],
+        )
+        assert system.bodies == []

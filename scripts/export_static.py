@@ -37,6 +37,28 @@ def load_yaml(path: Path) -> dict | list | None:
         return yaml.safe_load(f)
 
 
+_KM_PER_EARTH_RADIUS = 6371.0
+
+
+def _normalize_body(body: dict, orbit_lookup: dict) -> dict:
+    """Normalize an OrbitingBody to PlanetData-compatible format for frontend."""
+    orbit = orbit_lookup.get(body.get("id", ""), {})
+    normalized = {
+        "id": body.get("id"),
+        "name": body.get("name"),
+        "planet_type": body.get("body_type", "natural_satellite"),
+        "mass": body.get("mass_earth", 0),
+        "radius": body.get("radius_km", 0) / _KM_PER_EARTH_RADIUS,
+        "orbits": orbit.get("parent_id", ""),
+    }
+    for key in ("rotation_period_days", "axial_tilt_deg", "albedo"):
+        if key in body and body[key] is not None:
+            normalized[key] = body[key]
+    if "surface" in body:
+        normalized["surface"] = body["surface"]
+    return normalized
+
+
 def export_world(world_dir: Path) -> dict:
     """Export all data for a single world.
 
@@ -88,6 +110,12 @@ def export_world(world_dir: Path) -> dict:
                         star["derived"] = derived_by_id[star_id]
         result["stellar"] = stellar
 
+        # Normalize bodies (moons, asteroids) to planet-compatible format
+        bodies = stellar.get("bodies", [])
+        if bodies:
+            orbit_lookup = {o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o}
+            stellar["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
+
     # 4. Habitable zones
     hz_data = load_yaml(world_dir / "layers" / "astronomy" / "derived" / "habitable_zones.yaml")
     if hz_data:
@@ -99,9 +127,7 @@ def export_world(world_dir: Path) -> dict:
         result["planets"] = planets_input["planets"]
 
     # 6. Civilization data (if exists)
-    civ_input = load_yaml(
-        world_dir / "layers" / "civilization" / "input" / "civilizations.yaml"
-    )
+    civ_input = load_yaml(world_dir / "layers" / "civilization" / "input" / "civilizations.yaml")
     if civ_input:
         result["civilizations"] = civ_input
 

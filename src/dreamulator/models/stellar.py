@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .common import AU, Kelvin, SolarLuminosity, SolarMass, SolarRadius, Vec3
+from .common import AU, Day, EarthMass, Kelvin, SolarLuminosity, SolarMass, SolarRadius, Vec3
 
 # Morgan–Keenan spectral type: letter (O B A F G K M) + optional numeric subtype (0–9)
 _SPECTRAL_TYPE_RE = re.compile(r"^[OBAFGKM]\d?$")
@@ -105,6 +106,39 @@ class OrbitalElements(BaseModel):
     epoch_year: float = Field(default=0.0, description="Epoch of orbital elements")
 
 
+class OrbitingBody(BaseModel):
+    """A non-star body in the stellar system: moon, asteroid, comet, etc.
+
+    Physical properties live here; orbital elements are in StellarSystem.orbits
+    (matched by id == body_id). This keeps all orbital mechanics in the
+    astronomy layer while allowing rich physical descriptions.
+    """
+
+    id: str = Field(description="Unique identifier, e.g. 'satellite_moon'")
+    name: str = Field(description="Display name")
+    body_type: str = Field(
+        default="natural_satellite",
+        description="Classification: natural_satellite, asteroid, comet, dwarf_planet",
+    )
+
+    # Physical properties (units chosen for non-stellar-scale objects)
+    mass_earth: EarthMass = Field(description="Mass in Earth masses (M⊕)")
+    radius_km: float = Field(gt=0, description="Mean radius in km")
+
+    rotation_period_days: Day | None = Field(
+        default=None, description="Sidereal rotation period in days"
+    )
+    axial_tilt_deg: float | None = Field(
+        default=None, ge=0, le=180, description="Axial obliquity in degrees"
+    )
+    albedo: float | None = Field(default=None, ge=0, le=1, description="Geometric albedo")
+
+    # Extensible surface properties (composition, atmosphere presence, etc.)
+    surface: dict[str, Any] | None = Field(
+        default=None, description="Surface properties (composition, atmosphere, etc.)"
+    )
+
+
 class StellarSystem(BaseModel):
     """A system of one or more stars and their orbiting bodies."""
 
@@ -112,6 +146,11 @@ class StellarSystem(BaseModel):
     stars: list[Star] = Field(min_length=1, description="Stars in the system")
     orbits: list[OrbitalElements] = Field(
         default_factory=list, description="Orbital elements for planets and other bodies"
+    )
+    bodies: list[OrbitingBody] = Field(
+        default_factory=list,
+        description="Non-star bodies (moons, asteroids, etc.) with physical properties. "
+        "Orbital elements are in the orbits list, matched by id.",
     )
 
     @model_validator(mode="after")
