@@ -1,12 +1,13 @@
 /**
- * MapViewer — main map container combining Canvas 2D terrain + SVG overlay.
+ * MapViewer — main map container combining Three.js terrain + SVG overlay.
  *
- * Manages zoom/pan, projects between geographic and screen coordinates,
+ * Manages camera zoom/pan, projects between geographic and screen coordinates,
  * and dispatches interaction events to child components.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import useTerrainCanvas, { type ColorMode } from '../../viewers/map/TerrainPlane'
+import { Canvas } from '@react-three/fiber'
+import TerrainPlane, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import MapSvgOverlay from './MapSvgOverlay'
 import { normalisedToMeters } from '../../viewers/map/utils/projection'
 import type {
@@ -79,38 +80,11 @@ export default function MapViewer({
   selectedCells,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const terrainCanvasRef = useRef<HTMLCanvasElement>(null)
   const [containerSize, setContainerSize] = useState({ width: 800, height: 400 })
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
-
-  // Map dimensions (must be before useTerrainCanvas hook)
-  const mapW = metadata?.width ?? 2048
-  const mapH = metadata?.height ?? 1024
-  const seaLevel = metadata?.sea_level ?? 0.4
-
-  // Pre-render terrain to an OffscreenCanvas (Canvas 2D, no Three.js)
-  const terrainImage = useTerrainCanvas({
-    elevation,
-    width: mapW,
-    height: mapH,
-    seaLevel,
-    colorMode,
-    hillshadeStrength,
-  })
-
-  // Draw the pre-rendered terrain onto the visible canvas
-  useEffect(() => {
-    const canvas = terrainCanvasRef.current
-    if (!canvas || !terrainImage) return
-    canvas.width = mapW
-    canvas.height = mapH
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(terrainImage, 0, 0)
-  }, [terrainImage, mapW, mapH])
 
   // Observe container size
   useEffect(() => {
@@ -126,6 +100,10 @@ export default function MapViewer({
     return () => observer.disconnect()
   }, [])
 
+  // Map dimensions
+  const mapW = metadata?.width ?? 2048
+  const mapH = metadata?.height ?? 1024
+  const seaLevel = metadata?.sea_level ?? 0.4
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
 
@@ -227,6 +205,17 @@ export default function MapViewer({
 
   const handleMouseUp = useCallback(() => setIsDragging(false), [])
 
+  // Three.js camera setup for 2D view
+  const cameraProps = useMemo(
+    () => ({
+      position: [0, 5, 0] as [number, number, number],
+      fov: 50,
+      near: 0.01,
+      far: 100,
+    }),
+    [],
+  )
+
   return (
     <div
       ref={containerRef}
@@ -241,19 +230,25 @@ export default function MapViewer({
         onCursorMove?.(null)
       }}
     >
-      {/* Terrain canvas (Canvas 2D — no Three.js) */}
-      <canvas
-        ref={terrainCanvasRef}
-        className="absolute"
-        style={{
-          width: planeWidth * zoom,
-          height: planeHeight * zoom,
-          left: '50%',
-          top: '50%',
-          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px))`,
-          imageRendering: zoom > 3 ? 'pixelated' : 'auto',
-        }}
-      />
+      {/* Three.js terrain canvas */}
+      <Canvas
+        className="absolute inset-0"
+        camera={cameraProps}
+        gl={{ antialias: true, alpha: false }}
+        style={{ background: '#0a0a1a' }}
+      >
+        <ambientLight intensity={1} />
+        <TerrainPlane
+          elevation={elevation}
+          width={mapW}
+          height={mapH}
+          seaLevel={seaLevel}
+          colorMode={colorMode}
+          planeWidth={planeWidth}
+          planeHeight={planeHeight}
+          hillshadeStrength={hillshadeStrength}
+        />
+      </Canvas>
 
       {/* SVG overlay */}
       <MapSvgOverlay
