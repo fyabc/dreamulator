@@ -1,12 +1,14 @@
 /**
- * MapViewer — main map container combining Canvas 2D terrain + SVG overlay.
+ * MapViewer — main map container combining Three.js terrain + SVG overlay.
  *
- * Manages zoom/pan, projects between geographic and screen coordinates,
+ * Manages camera zoom/pan, projects between geographic and screen coordinates,
  * and dispatches interaction events to child components.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import useTerrainCanvas, { type ColorMode } from '../../viewers/map/TerrainPlane'
+import * as THREE from 'three'
+import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer.js'
+import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import MapSvgOverlay from './MapSvgOverlay'
 import { normalisedToMeters } from '../../viewers/map/utils/projection'
 import type {
@@ -30,7 +32,6 @@ interface MapViewerProps {
   showVoronoi: boolean
   showPlates: boolean
   showFeatures: boolean
-  hillshadeStrength: number
   readOnly?: boolean
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
@@ -70,7 +71,6 @@ export default function MapViewer({
   showVoronoi,
   showPlates,
   showFeatures,
-  hillshadeStrength,
   readOnly: _readOnly = false,
   onCursorMove,
   onCellHover,
@@ -79,38 +79,17 @@ export default function MapViewer({
   selectedCells,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const terrainCanvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const rendererRef = useRef<InstanceType<typeof WebGPURenderer> | null>(null)
+  const sceneRef = useRef<THREE.Scene | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const meshRef = useRef<THREE.Mesh | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 800, height: 400 })
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
-
-  // Map dimensions (must be before useTerrainCanvas hook)
-  const mapW = metadata?.width ?? 2048
-  const mapH = metadata?.height ?? 1024
-  const seaLevel = metadata?.sea_level ?? 0.4
-
-  // Pre-render terrain to an OffscreenCanvas (Canvas 2D, no Three.js)
-  const terrainImage = useTerrainCanvas({
-    elevation,
-    width: mapW,
-    height: mapH,
-    seaLevel,
-    colorMode,
-    hillshadeStrength,
-  })
-
-  // Draw the pre-rendered terrain onto the visible canvas
-  useEffect(() => {
-    const canvas = terrainCanvasRef.current
-    if (!canvas || !terrainImage) return
-    canvas.width = mapW
-    canvas.height = mapH
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(terrainImage, 0, 0)
-  }, [terrainImage, mapW, mapH])
+  const [webgpuReady, setWebgpuReady] = useState(false)
 
   // Observe container size
   useEffect(() => {
@@ -126,8 +105,106 @@ export default function MapViewer({
     return () => observer.disconnect()
   }, [])
 
+  // Map dimensions
+  const mapW = metadata?.width ?? 2048
+  const mapH = metadata?.height ?? 1024
+  const seaLevel = metadata?.sea_level ?? 0.4
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
+
+  // Pre-render terrain to a CanvasTexture (CPU-side, no custom shader)
+  const terrainTexture = useTerrainTexture({
+    elevation,
+    width: mapW,
+    height: mapH,
+    seaLevel,
+    colorMode,
+    hillshadeStrength: 0.7,
+  })
+
+  // Initialize WebGPURenderer + scene
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    let disposed = false
+    const renderer = new WebGPURenderer({ canvas, antialias: true })
+    rendererRef.current = renderer
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#0a0a1a')
+    sceneRef.current = scene
+
+    const camera = new THREE.PerspectiveCamera(50, 2, 0.01, 100)
+    camera.position.set(0, 5, 0)
+    camera.lookAt(0, 0, 0)
+    cameraRef.current = camera
+
+    ;(async () => {
+      try {
+        await renderer.init()
+        if (!disposed) setWebgpuReady(true)
+      } catch (e) {
+        console.warn('WebGPU init failed:', e)
+      }
+    })()
+
+    return () => {
+      disposed = true
+      try { renderer.dispose() } catch { /* backend not ready */ }
+      scene.clear()
+      rendererRef.current = null
+      sceneRef.current = null
+      cameraRef.current = null
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update mesh when texture or dimensions change
+  useEffect(() => {
+    if (!webgpuReady || !sceneRef.current || !cameraRef.current || !rendererRef.current) return
+    const scene = sceneRef.current
+    const camera = cameraRef.current
+    const renderer = rendererRef.current
+
+    // Remove old mesh
+    if (meshRef.current) {
+      scene.remove(meshRef.current)
+      meshRef.current.geometry.dispose()
+      if (meshRef.current.material instanceof THREE.Material) {
+        meshRef.current.material.dispose()
+      }
+    }
+
+    if (!terrainTexture) return
+
+    const aspect = mapW / mapH
+    const fitH = containerSize.height * 0.9
+    const fitW = containerSize.width * 0.9
+    const h = fitH
+    const w = h * aspect
+    const pw = w > fitW ? fitW : w
+    const ph = pw / PLANE_ASPECT
+
+    // Convert pixel dimensions to world units (camera at y=5, fov=50)
+    const visibleH = 2 * 5 * Math.tan(THREE.MathUtils.degToRad(25))
+    const visibleW = visibleH * (containerSize.width / containerSize.height)
+    const worldW = (pw / containerSize.width) * visibleW
+    const worldH = (ph / containerSize.height) * visibleH
+
+    const geo = new THREE.PlaneGeometry(worldW, worldH)
+    const mat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.rotation.x = -Math.PI / 2
+    scene.add(mesh)
+    meshRef.current = mesh
+
+    // Update camera aspect
+    camera.aspect = containerSize.width / containerSize.height
+    camera.updateProjectionMatrix()
+
+    renderer.setSize(containerSize.width, containerSize.height)
+    renderer.render(scene, camera)
+  }, [webgpuReady, terrainTexture, mapW, mapH, containerSize])
 
   // Plane dimensions (maintain aspect ratio within container)
   const planeWidth = useMemo(() => {
@@ -227,6 +304,25 @@ export default function MapViewer({
 
   const handleMouseUp = useCallback(() => setIsDragging(false), [])
 
+  // Re-render on zoom/pan changes
+  useEffect(() => {
+    if (!webgpuReady || !rendererRef.current || !sceneRef.current || !cameraRef.current || !meshRef.current) return
+    const camera = cameraRef.current
+    const mesh = meshRef.current
+
+    // Apply zoom by adjusting camera distance
+    camera.position.y = 5 / zoom
+    camera.lookAt(0, 0, 0)
+
+    // Apply pan by moving mesh (convert pixel pan to world units)
+    const visibleH = 2 * (5 / zoom) * Math.tan(THREE.MathUtils.degToRad(25))
+    const visibleW = visibleH * (containerSize.width / containerSize.height)
+    mesh.position.x = -(pan.x / containerSize.width) * visibleW
+    mesh.position.z = -(pan.y / containerSize.height) * visibleH
+
+    rendererRef.current.render(sceneRef.current, camera)
+  }, [webgpuReady, zoom, pan, containerSize])
+
   return (
     <div
       ref={containerRef}
@@ -241,18 +337,11 @@ export default function MapViewer({
         onCursorMove?.(null)
       }}
     >
-      {/* Terrain canvas (Canvas 2D — no Three.js) */}
+      {/* WebGPU terrain canvas */}
       <canvas
-        ref={terrainCanvasRef}
-        className="absolute"
-        style={{
-          width: planeWidth * zoom,
-          height: planeHeight * zoom,
-          left: '50%',
-          top: '50%',
-          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px))`,
-          imageRendering: zoom > 3 ? 'pixelated' : 'auto',
-        }}
+        ref={canvasRef}
+        className="absolute inset-0"
+        style={{ background: '#0a0a1a' }}
       />
 
       {/* SVG overlay */}

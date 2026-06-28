@@ -16,6 +16,15 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    // Support top-level await (required by Three.js WebGPU module)
+    build: {
+      target: ['chrome89', 'edge89', 'firefox89', 'safari15'],
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        target: 'es2022',
+      },
+    },
     server: {
       port: 5173,
       proxy: {

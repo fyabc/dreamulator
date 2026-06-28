@@ -1,13 +1,13 @@
 /**
- * TerrainPlane — pre-renders a heightmap to an OffscreenCanvas using
- * Canvas 2D (color ramp + hillshading + water darkening).
+ * useTerrainTexture — pre-renders a heightmap to a THREE.CanvasTexture
+ * using Canvas 2D (color ramp + hillshading + water darkening).
  *
- * The caller (MapViewer) draws the canvas into the viewport using
- * CSS positioning, completely bypassing Three.js UV-mapping issues
- * on certain GPU/driver combinations.
+ * The texture is applied to a MeshBasicMaterial displayed via
+ * WebGPURenderer (bypasses the ANGLE/D3D11 vertex attribute bug).
  */
 
 import { useMemo } from 'react'
+import * as THREE from 'three'
 import { generateLut, TERRAIN_SCALE, ELEVATION_SCALE, LANDSEA_SCALE, SLOPE_SCALE } from './utils/colorScales'
 
 // ---------------------------------------------------------------------------
@@ -16,20 +16,13 @@ import { generateLut, TERRAIN_SCALE, ELEVATION_SCALE, LANDSEA_SCALE, SLOPE_SCALE
 
 export type ColorMode = 'terrain' | 'elevation' | 'landsea' | 'slope'
 
-export interface TerrainPlaneProps {
-  /** Elevation data as Float32Array [0, 1]. */
+export interface TerrainTextureOptions {
   elevation: Float32Array | null
-  /** Raster width. */
   width: number
-  /** Raster height. */
   height: number
-  /** Normalised sea level [0, 1]. */
   seaLevel: number
-  /** Color mode for the ramp. */
   colorMode?: ColorMode
-  /** Hillshade strength [0, 1]. */
   hillshadeStrength?: number
-  /** Water depth darkening factor [0, 1]. */
   waterDepthFactor?: number
 }
 
@@ -44,10 +37,10 @@ function sampleElev(elev: Float32Array, w: number, h: number, x: number, y: numb
 }
 
 // ---------------------------------------------------------------------------
-// Hook: pre-render terrain to an OffscreenCanvas
+// Hook
 // ---------------------------------------------------------------------------
 
-export default function useTerrainCanvas({
+export default function useTerrainTexture({
   elevation,
   width,
   height,
@@ -55,7 +48,7 @@ export default function useTerrainCanvas({
   colorMode = 'terrain',
   hillshadeStrength = 0.7,
   waterDepthFactor = 0.5,
-}: TerrainPlaneProps): OffscreenCanvas | null {
+}: TerrainTextureOptions): THREE.CanvasTexture | null {
   return useMemo(() => {
     if (!elevation) return null
 
@@ -85,7 +78,6 @@ export default function useTerrainCanvas({
         let g = lut[lutIdx * 3 + 1]
         let b = lut[lutIdx * 3 + 2]
 
-        // Hillshading
         if (hillshadeStrength > 0) {
           const dx =
             sampleElev(elevation, width, height, x + 1, y) -
@@ -103,7 +95,6 @@ export default function useTerrainCanvas({
           b = Math.min(255, Math.round(b * shade))
         }
 
-        // Water depth darkening
         if (elev < seaLevel) {
           const depth = (seaLevel - elev) / Math.max(seaLevel, 0.001)
           const factor = 1.0 - waterDepthFactor * depth
@@ -121,6 +112,11 @@ export default function useTerrainCanvas({
     }
 
     ctx.putImageData(imageData, 0, 0)
-    return canvas
+
+    const tex = new THREE.CanvasTexture(canvas as any)
+    tex.minFilter = THREE.LinearFilter
+    tex.magFilter = THREE.LinearFilter
+    tex.needsUpdate = true
+    return tex
   }, [elevation, width, height, seaLevel, colorMode, hillshadeStrength, waterDepthFactor])
 }
