@@ -164,8 +164,10 @@ export default function MapSvgOverlay({
           if (myPlate && nbPlate && myPlate !== nbPlate) {
             const nb = voronoiCells[nbId]
             if (nb) {
-              // Skip segments that cross the antimeridian (would draw a line across the whole map)
+              // Skip segments that cross the antimeridian or span unrealistic latitude ranges
+              // (Voronoi neighbors at lon ≈ ±180° can be pole-to-pole apart in equirectangular projection)
               if (Math.abs(cell.lon - nb.lon) > 180) return
+              if (Math.abs(cell.lat - nb.lat) > 20) return
               rawSegments.push({
                 lon1: cell.lon, lat1: cell.lat,
                 lon2: nb.lon, lat2: nb.lat,
@@ -176,6 +178,9 @@ export default function MapSvgOverlay({
       })
     })
 
+    // Map width in screen pixels (for culling stretched wrap-around segments)
+    const mapScreenWidth = Math.abs(project(180, 0).x - project(-180, 0).x)
+
     // Render each segment at dynamic longitude offsets for seamless wrapping
     const lines: React.ReactNode[] = []
     let idx = 0
@@ -183,6 +188,8 @@ export default function MapSvgOverlay({
       for (const offset of wrapOffsets) {
         const p1 = project(seg.lon1 + offset, seg.lat1)
         const p2 = project(seg.lon2 + offset, seg.lat2)
+        // Skip segments that span more than half the map width (wrap-around artifacts)
+        if (Math.abs(p1.x - p2.x) > mapScreenWidth * 0.5) continue
         // Cull segments fully outside viewport
         if (p1.x < -50 && p2.x < -50) continue
         if (p1.x > viewWidth + 50 && p2.x > viewWidth + 50) continue
