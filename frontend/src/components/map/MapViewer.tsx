@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { WebGLRenderer } from 'three'
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer.js'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import MapSvgOverlay from './MapSvgOverlay'
@@ -80,7 +81,8 @@ export default function MapViewer({
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const rendererRef = useRef<InstanceType<typeof WebGPURenderer> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- union of WebGPURenderer | WebGLRenderer
+  const rendererRef = useRef<any>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const meshRef = useRef<THREE.Mesh | null>(null)
@@ -145,13 +147,18 @@ export default function MapViewer({
         await renderer.init()
         if (!disposed) setWebgpuReady(true)
       } catch (e) {
-        console.warn('WebGPU init failed:', e)
+        console.warn('WebGPU init failed, falling back to WebGL:', e)
+        try { renderer.dispose() } catch { /* ignore */ }
+        if (disposed) return
+        const fallback = new WebGLRenderer({ canvas, antialias: true })
+        rendererRef.current = fallback
+        if (!disposed) setWebgpuReady(true)
       }
     })()
 
     return () => {
       disposed = true
-      try { renderer.dispose() } catch { /* backend not ready */ }
+      try { rendererRef.current?.dispose() } catch { /* ignore */ }
       scene.clear()
       rendererRef.current = null
       sceneRef.current = null
@@ -337,7 +344,7 @@ export default function MapViewer({
         onCursorMove?.(null)
       }}
     >
-      {/* WebGPU terrain canvas */}
+      {/* Terrain canvas (WebGPU with WebGL fallback) */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0"
