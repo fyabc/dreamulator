@@ -34,6 +34,7 @@ interface MapViewerProps {
   showPlates: boolean
   showFeatures: boolean
   readOnly?: boolean
+  onZoomChange?: (zoom: number) => void
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
   onCellClick?: (cellId: number, shiftKey: boolean) => void
@@ -54,7 +55,6 @@ export interface CursorInfo {
 // Constants
 // ---------------------------------------------------------------------------
 
-const MIN_ZOOM = 0.5
 const MAX_ZOOM = 20
 const PLANE_ASPECT = 2 // equirectangular 2:1
 
@@ -73,6 +73,7 @@ export default function MapViewer({
   showPlates,
   showFeatures,
   readOnly: _readOnly = false,
+  onZoomChange,
   onCursorMove,
   onCellHover,
   onCellClick,
@@ -86,6 +87,8 @@ export default function MapViewer({
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const meshRef = useRef<THREE.Mesh | null>(null)
+  const ghostLeftRef = useRef<THREE.Mesh | null>(null)
+  const ghostRightRef = useRef<THREE.Mesh | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 800, height: 400 })
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -113,6 +116,25 @@ export default function MapViewer({
   const seaLevel = metadata?.sea_level ?? 0.4
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
+
+  // Clamp zoom and pan when container size changes
+  useEffect(() => {
+    const aspect = mapW / mapH
+    const wByH = containerSize.height * aspect
+    const pw = wByH < containerSize.width ? containerSize.width : wByH
+    const ph = pw / PLANE_ASPECT
+    const minZoom = Math.max(containerSize.width / pw, containerSize.height / ph)
+    const clampedZoom = Math.max(minZoom, Math.min(MAX_ZOOM, zoom))
+
+    setZoom(clampedZoom)
+    setPan((p) => {
+      const mapHScreen = ph * clampedZoom
+      const maxPanY = mapHScreen > containerSize.height
+        ? (mapHScreen - containerSize.height) / 2
+        : 0
+      return { x: p.x, y: Math.max(-maxPanY, Math.min(maxPanY, p.y)) }
+    })
+  }, [containerSize, mapW, mapH]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-render terrain to a CanvasTexture (CPU-side, no custom shader)
   const terrainTexture = useTerrainTexture({
@@ -163,6 +185,9 @@ export default function MapViewer({
       rendererRef.current = null
       sceneRef.current = null
       cameraRef.current = null
+      meshRef.current = null
+      ghostLeftRef.current = null
+      ghostRightRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -173,23 +198,22 @@ export default function MapViewer({
     const camera = cameraRef.current
     const renderer = rendererRef.current
 
-    // Remove old mesh
-    if (meshRef.current) {
-      scene.remove(meshRef.current)
-      meshRef.current.geometry.dispose()
-      if (meshRef.current.material instanceof THREE.Material) {
-        meshRef.current.material.dispose()
+    // Remove old mesh + ghosts
+    for (const m of [meshRef.current, ghostLeftRef.current, ghostRightRef.current]) {
+      if (m) {
+        scene.remove(m)
+        m.geometry.dispose()
+        if (m.material instanceof THREE.Material) m.material.dispose()
       }
     }
+    ghostLeftRef.current = null
+    ghostRightRef.current = null
 
     if (!terrainTexture) return
 
     const aspect = mapW / mapH
-    const fitH = containerSize.height * 0.9
-    const fitW = containerSize.width * 0.9
-    const h = fitH
-    const w = h * aspect
-    const pw = w > fitW ? fitW : w
+    const wByH = containerSize.height * aspect
+    const pw = wByH < containerSize.width ? containerSize.width : wByH
     const ph = pw / PLANE_ASPECT
 
     // Convert pixel dimensions to world units (camera at y=5, fov=50)
@@ -205,6 +229,19 @@ export default function MapViewer({
     scene.add(mesh)
     meshRef.current = mesh
 
+    // Ghost meshes for seamless horizontal wrapping (cylindrical projection)
+    const ghostMat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    const ghostLeft = new THREE.Mesh(geo, ghostMat)
+    ghostLeft.rotation.x = -Math.PI / 2
+    scene.add(ghostLeft)
+    ghostLeftRef.current = ghostLeft
+
+    const ghostRightMat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    const ghostRight = new THREE.Mesh(geo, ghostRightMat)
+    ghostRight.rotation.x = -Math.PI / 2
+    scene.add(ghostRight)
+    ghostRightRef.current = ghostRight
+
     // Update camera aspect
     camera.aspect = containerSize.width / containerSize.height
     camera.updateProjectionMatrix()
@@ -213,15 +250,11 @@ export default function MapViewer({
     renderer.render(scene, camera)
   }, [webgpuReady, terrainTexture, mapW, mapH, containerSize])
 
-  // Plane dimensions (maintain aspect ratio within container)
+  // Plane dimensions (cover container — map always fills viewport, excess is clipped)
   const planeWidth = useMemo(() => {
     const aspect = mapW / mapH
-    const fitH = containerSize.height * 0.9
-    const fitW = containerSize.width * 0.9
-    const h = fitH
-    const w = h * aspect
-    if (w > fitW) return fitW
-    return w
+    const wByH = containerSize.height * aspect
+    return wByH < containerSize.width ? containerSize.width : wByH
   }, [mapW, mapH, containerSize])
   const planeHeight = planeWidth / PLANE_ASPECT
 
@@ -251,6 +284,18 @@ export default function MapViewer({
     [planeWidth, planeHeight, zoom, pan, containerSize],
   )
 
+  // Clamp pan to keep map within vertical bounds (cylindrical projection: horizontal wraps)
+  const clampPan = useCallback(
+    (px: number, py: number) => {
+      const mapH = planeHeight * zoom
+      const maxPanY = mapH > containerSize.height
+        ? (mapH - containerSize.height) / 2
+        : 0
+      return { x: px, y: Math.max(-maxPanY, Math.min(maxPanY, py)) }
+    },
+    [planeHeight, zoom, containerSize.height],
+  )
+
   // Mouse move handler
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -260,10 +305,9 @@ export default function MapViewer({
       const py = e.clientY - rect.top
 
       if (isDragging) {
-        setPan({
-          x: dragStart.current.panX + (px - dragStart.current.x),
-          y: dragStart.current.panY + (py - dragStart.current.y),
-        })
+        const rawX = dragStart.current.panX + (px - dragStart.current.x)
+        const rawY = dragStart.current.panY + (py - dragStart.current.y)
+        setPan(clampPan(rawX, rawY))
         return
       }
 
@@ -285,7 +329,7 @@ export default function MapViewer({
         pixelY,
       })
     },
-    [elevation, mapW, mapH, unproject, isDragging, elevMin, elevMax, onCursorMove],
+    [elevation, mapW, mapH, unproject, isDragging, clampPan, elevMin, elevMax, onCursorMove],
   )
 
   // Zoom handler
@@ -293,17 +337,28 @@ export default function MapViewer({
     (e: React.WheelEvent) => {
       e.preventDefault()
       const factor = e.deltaY > 0 ? 0.9 : 1.1
-      setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z * factor)))
+      const minZoom = Math.max(
+        containerSize.width / planeWidth,
+        containerSize.height / planeHeight,
+      )
+      setZoom((z) => Math.max(minZoom, Math.min(MAX_ZOOM, z * factor)))
     },
-    [],
+    [containerSize, planeWidth, planeHeight],
   )
 
   // Drag handlers
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button === 0 || e.button === 1) {
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (!rect) return
         setIsDragging(true)
-        dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+        dragStart.current = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+          panX: pan.x,
+          panY: pan.y,
+        }
       }
     },
     [pan],
@@ -317,18 +372,47 @@ export default function MapViewer({
     const camera = cameraRef.current
     const mesh = meshRef.current
 
+    // Compute effective zoom (clamp to min that fills viewport)
+    const minZoom = Math.max(
+      containerSize.width / planeWidth,
+      containerSize.height / planeHeight,
+    )
+    const effectiveZoom = Math.max(minZoom, zoom)
+
+    // Clamp pan.y to keep map within vertical bounds
+    const mapHScreen = planeHeight * effectiveZoom
+    const maxPanY = mapHScreen > containerSize.height
+      ? (mapHScreen - containerSize.height) / 2
+      : 0
+    const clampedPanY = Math.max(-maxPanY, Math.min(maxPanY, pan.y))
+
     // Apply zoom by adjusting camera distance
-    camera.position.y = 5 / zoom
+    camera.position.y = 5 / effectiveZoom
     camera.lookAt(0, 0, 0)
 
     // Apply pan by moving mesh (convert pixel pan to world units)
-    const visibleH = 2 * (5 / zoom) * Math.tan(THREE.MathUtils.degToRad(25))
+    // Camera at (0, h, 0) looking down with up=(0,1,0):
+    //   lookAt resolves degenerate case → camera right = world +X, camera up = world -Z
+    //   So: meshScreenX = +meshX × f/h, meshScreenY = -meshZ × f/h
+    const visibleH = 2 * (5 / effectiveZoom) * Math.tan(THREE.MathUtils.degToRad(25))
     const visibleW = visibleH * (containerSize.width / containerSize.height)
-    mesh.position.x = -(pan.x / containerSize.width) * visibleW
-    mesh.position.z = -(pan.y / containerSize.height) * visibleH
+    const meshX = (pan.x / containerSize.width) * visibleW
+    const meshZ = -(clampedPanY / containerSize.height) * visibleH
+    mesh.position.x = meshX
+    mesh.position.z = meshZ
+
+    // Position ghost meshes for seamless horizontal wrapping
+    const worldW = (mesh.geometry as THREE.PlaneGeometry).parameters.width
+    if (ghostLeftRef.current) {
+      ghostLeftRef.current.position.set(meshX - worldW, 0, meshZ)
+    }
+    if (ghostRightRef.current) {
+      ghostRightRef.current.position.set(meshX + worldW, 0, meshZ)
+    }
 
     rendererRef.current.render(sceneRef.current, camera)
-  }, [webgpuReady, zoom, pan, containerSize])
+    onZoomChange?.(effectiveZoom)
+  }, [webgpuReady, zoom, pan, containerSize, planeWidth, planeHeight, onZoomChange])
 
   return (
     <div
@@ -370,10 +454,6 @@ export default function MapViewer({
         colorByPlate={showPlates}
       />
 
-      {/* Zoom indicator */}
-      <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-black/50 px-2 py-1 rounded font-mono z-20">
-        {zoom.toFixed(1)}x
-      </div>
     </div>
   )
 }

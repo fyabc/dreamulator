@@ -57,6 +57,9 @@ export default function MapEditorPage() {
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
 
+  // Effective zoom (reported by MapViewer for status bar display)
+  const [displayZoom, setDisplayZoom] = useState(1)
+
   // Onboarding guide
   const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDismissed())
 
@@ -303,9 +306,10 @@ export default function MapEditorPage() {
                     onCellClick={handleCellClick}
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
+                    onZoomChange={setDisplayZoom}
                   />
                 </div>
-                <MapStatusBar cursor={cursor} zoom={1} />
+                <MapStatusBar cursor={cursor} zoom={displayZoom} />
               </>
             )}
           </div>
@@ -435,9 +439,10 @@ export default function MapEditorPage() {
                     onCellClick={handleCellClick}
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
+                    onZoomChange={setDisplayZoom}
                   />
                 </div>
-                <MapStatusBar cursor={cursor} zoom={1} />
+                <MapStatusBar cursor={cursor} zoom={displayZoom} />
               </>
             )}
           </div>
