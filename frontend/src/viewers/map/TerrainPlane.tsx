@@ -1,77 +1,14 @@
 /**
- * TerrainPlane — R3F component that renders a heightmap as a textured plane.
+ * TerrainPlane — pre-renders a heightmap to an OffscreenCanvas using
+ * Canvas 2D (color ramp + hillshading + water darkening).
  *
- * Uses a custom ShaderMaterial with:
- * - Elevation texture (single-channel, from PNG)
- * - 1-D color ramp LUT for hypsometric tinting
- * - Hillshading (simulated directional light)
- * - Water depth darkening
+ * The caller (MapViewer) draws the canvas into the viewport using
+ * CSS positioning, completely bypassing Three.js UV-mapping issues
+ * on certain GPU/driver combinations.
  */
 
-import { useMemo, useRef } from 'react'
-import * as THREE from 'three'
+import { useMemo } from 'react'
 import { generateLut, TERRAIN_SCALE, ELEVATION_SCALE, LANDSEA_SCALE, SLOPE_SCALE } from './utils/colorScales'
-
-// Inline shaders (avoids Vite GLSL import issues)
-const vertexShader = /* glsl */ `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`
-
-const fragmentShader = /* glsl */ `
-uniform sampler2D uElevation;
-uniform sampler2D uColorRamp;
-uniform float uSeaLevel;
-uniform float uHillshadeStrength;
-uniform float uWaterDepthFactor;
-uniform vec2 uResolution;
-
-varying vec2 vUv;
-
-float sampleElev(vec2 uv, vec2 offset, vec2 texelSize) {
-  vec2 suv = uv + offset * texelSize;
-  // Wrap horizontally for seamless longitude
-  suv.x = fract(suv.x);
-  suv.y = clamp(suv.y, 0.0, 1.0);
-  return texture2D(uElevation, suv).r;
-}
-
-void main() {
-  float elev = texture2D(uElevation, vUv).r;
-
-  // Base color from ramp
-  vec3 baseColor = texture2D(uColorRamp, vec2(elev, 0.5)).rgb;
-
-  // Hillshading
-  vec2 texelSize = 1.0 / uResolution;
-  float dx = sampleElev(vUv, vec2(1.0, 0.0), texelSize)
-           - sampleElev(vUv, vec2(-1.0, 0.0), texelSize);
-  float dy = sampleElev(vUv, vec2(0.0, 1.0), texelSize)
-           - sampleElev(vUv, vec2(0.0, -1.0), texelSize);
-
-  vec3 lightDir = normalize(vec3(-1.0, 1.0, 1.0));
-  vec3 normal = normalize(vec3(-dx * uHillshadeStrength * 8.0,
-                                -dy * uHillshadeStrength * 8.0,
-                                1.0));
-  float shade = max(dot(normal, lightDir), 0.0);
-  shade = 0.4 + 0.6 * shade;
-
-  vec3 color = baseColor * shade;
-
-  // Water depth darkening
-  if (elev < uSeaLevel) {
-    float depth = (uSeaLevel - elev) / max(uSeaLevel, 0.001);
-    color *= mix(1.0, 1.0 - 0.5, depth);
-    float spec = pow(max(dot(normal, lightDir), 0.0), 32.0);
-    color += vec3(0.05, 0.08, 0.12) * spec;
-  }
-
-  gl_FragColor = vec4(color, 1.0);
-}
-`
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,16 +31,23 @@ export interface TerrainPlaneProps {
   hillshadeStrength?: number
   /** Water depth darkening factor [0, 1]. */
   waterDepthFactor?: number
-  /** Three.js plane dimensions in world units. */
-  planeWidth?: number
-  planeHeight?: number
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Helpers
 // ---------------------------------------------------------------------------
 
-export default function TerrainPlane({
+function sampleElev(elev: Float32Array, w: number, h: number, x: number, y: number): number {
+  const wx = ((x % w) + w) % w
+  const wy = Math.max(0, Math.min(h - 1, y))
+  return elev[wy * w + wx]
+}
+
+// ---------------------------------------------------------------------------
+// Hook: pre-render terrain to an OffscreenCanvas
+// ---------------------------------------------------------------------------
+
+export default function useTerrainCanvas({
   elevation,
   width,
   height,
@@ -111,32 +55,10 @@ export default function TerrainPlane({
   colorMode = 'terrain',
   hillshadeStrength = 0.7,
   waterDepthFactor = 0.5,
-  planeWidth = 4,
-  planeHeight = 2,
-}: TerrainPlaneProps) {
-  const materialRef = useRef<THREE.ShaderMaterial>(null)
-
-  // Create elevation DataTexture from Float32Array
-  const elevationTexture = useMemo(() => {
+}: TerrainPlaneProps): OffscreenCanvas | null {
+  return useMemo(() => {
     if (!elevation) return null
-    const data = new Float32Array(elevation.buffer.slice(0))
-    const tex = new THREE.DataTexture(
-      data as any,
-      width,
-      height,
-      THREE.RedFormat,
-      THREE.FloatType,
-    )
-    tex.minFilter = THREE.LinearFilter
-    tex.magFilter = THREE.LinearFilter
-    tex.wrapS = THREE.RepeatWrapping // horizontal wrap for seamless longitude
-    tex.wrapT = THREE.ClampToEdgeWrapping
-    tex.needsUpdate = true
-    return tex
-  }, [elevation, width, height])
 
-  // Create 1-D color ramp texture
-  const colorRampTexture = useMemo(() => {
     const scaleMap: Record<ColorMode, typeof TERRAIN_SCALE> = {
       terrain: TERRAIN_SCALE,
       elevation: ELEVATION_SCALE,
@@ -145,53 +67,60 @@ export default function TerrainPlane({
     }
     const scale = scaleMap[colorMode] || TERRAIN_SCALE
     const lut = generateLut(scale, 256)
-    // Convert RGB to RGBA for Three.js DataTexture
-    const rgba = new Uint8Array(256 * 4)
-    for (let i = 0; i < 256; i++) {
-      rgba[i * 4 + 0] = lut[i * 3 + 0]
-      rgba[i * 4 + 1] = lut[i * 3 + 1]
-      rgba[i * 4 + 2] = lut[i * 3 + 2]
-      rgba[i * 4 + 3] = 255
+
+    const canvas = new OffscreenCanvas(width, height)
+    const ctx = canvas.getContext('2d')!
+    const imageData = ctx.createImageData(width, height)
+    const px = imageData.data
+
+    const lx = -1 / Math.sqrt(3)
+    const ly = 1 / Math.sqrt(3)
+    const lz = 1 / Math.sqrt(3)
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const elev = elevation[y * width + x]
+        const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+        let r = lut[lutIdx * 3 + 0]
+        let g = lut[lutIdx * 3 + 1]
+        let b = lut[lutIdx * 3 + 2]
+
+        // Hillshading
+        if (hillshadeStrength > 0) {
+          const dx =
+            sampleElev(elevation, width, height, x + 1, y) -
+            sampleElev(elevation, width, height, x - 1, y)
+          const dy =
+            sampleElev(elevation, width, height, x, y + 1) -
+            sampleElev(elevation, width, height, x, y - 1)
+          const nx = -dx * hillshadeStrength * 8
+          const ny = -dy * hillshadeStrength * 8
+          const nz = 1
+          const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz)
+          const shade = 0.4 + 0.6 * Math.max(0, (nx * lx + ny * ly + nz * lz) / nLen)
+          r = Math.min(255, Math.round(r * shade))
+          g = Math.min(255, Math.round(g * shade))
+          b = Math.min(255, Math.round(b * shade))
+        }
+
+        // Water depth darkening
+        if (elev < seaLevel) {
+          const depth = (seaLevel - elev) / Math.max(seaLevel, 0.001)
+          const factor = 1.0 - waterDepthFactor * depth
+          r = Math.round(r * factor)
+          g = Math.round(g * factor)
+          b = Math.round(b * factor)
+        }
+
+        const idx = (y * width + x) * 4
+        px[idx] = r
+        px[idx + 1] = g
+        px[idx + 2] = b
+        px[idx + 3] = 255
+      }
     }
-    const tex = new THREE.DataTexture(
-      rgba as any,
-      256,
-      1,
-      THREE.RGBAFormat,
-      THREE.UnsignedByteType,
-    )
-    tex.minFilter = THREE.LinearFilter
-    tex.magFilter = THREE.LinearFilter
-    tex.needsUpdate = true
-    return tex
-  }, [colorMode])
 
-  // Shader uniforms
-  const uniforms = useMemo(
-    () => ({
-      uElevation: { value: elevationTexture },
-      uColorRamp: { value: colorRampTexture },
-      uSeaLevel: { value: seaLevel },
-      uHillshadeStrength: { value: hillshadeStrength },
-      uWaterDepthFactor: { value: waterDepthFactor },
-      uResolution: { value: new THREE.Vector2(width, height) },
-    }),
-    [elevationTexture, colorRampTexture, seaLevel, hillshadeStrength, waterDepthFactor, width, height],
-  )
-
-  if (!elevation || !elevationTexture) {
-    return null
-  }
-
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[planeWidth, planeHeight, 1, 1]} />
-      <shaderMaterial
-        ref={materialRef}
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        uniforms={uniforms}
-      />
-    </mesh>
-  )
+    ctx.putImageData(imageData, 0, 0)
+    return canvas
+  }, [elevation, width, height, seaLevel, colorMode, hillshadeStrength, waterDepthFactor])
 }

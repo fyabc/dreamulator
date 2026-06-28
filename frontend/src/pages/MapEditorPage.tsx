@@ -39,7 +39,7 @@ export default function MapEditorPage() {
   const [layerState, setLayerState] = useState<LayerState>({
     colorMode: 'terrain',
     showVoronoi: false,
-    showPlates: true,
+    showPlates: false,
     showFeatures: false,
     hillshadeStrength: 0.7,
   })
@@ -317,6 +317,7 @@ export default function MapEditorPage() {
                   showVoronoi={layerState.showVoronoi}
                   showPlates={layerState.showPlates}
                   showFeatures={layerState.showFeatures}
+                  hillshadeStrength={layerState.hillshadeStrength}
                   readOnly={staticMode}
                   onCursorMove={setCursor}
                   onCellHover={setHoveredCell}

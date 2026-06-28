@@ -41,7 +41,7 @@ dreamulator/
 │       ├── components/      # UI 组件（含 map/ 地图编辑器组件）
 │       ├── pages/           # 页面（含 MapEditorPage 全页地图编辑器）
 │       ├── stores/          # Zustand 状态管理
-│       └── viewers/         # 3D 恒星系 + 2D 地图可视化器（Three.js）
+│       └── viewers/         # 3D 恒星系可视化器（Three.js）+ 2D 地图渲染（Canvas 2D）
 ├── scripts/
 │   └── export_static.py     # 静态站点数据导出脚本
 ├── .github/
