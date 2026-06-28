@@ -35,6 +35,7 @@ interface MapViewerProps {
   showFeatures: boolean
   readOnly?: boolean
   onZoomChange?: (zoom: number) => void
+  onViewStateChange?: (state: { pan: { x: number; y: number }; zoom: number; containerWidth: number; containerHeight: number; planeWidth: number; planeHeight: number }) => void
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
   onCellClick?: (cellId: number, shiftKey: boolean) => void
@@ -74,6 +75,7 @@ export default function MapViewer({
   showFeatures,
   readOnly: _readOnly = false,
   onZoomChange,
+  onViewStateChange,
   onCursorMove,
   onCellHover,
   onCellClick,
@@ -94,6 +96,7 @@ export default function MapViewer({
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+  const panWrapOffset = useRef(0) // cumulative offset from horizontal wrapping
   const [webgpuReady, setWebgpuReady] = useState(false)
 
   // Observe container size
@@ -259,13 +262,13 @@ export default function MapViewer({
   const planeHeight = planeWidth / PLANE_ASPECT
 
   // Projection: (lon, lat) → screen (px, py)
+  // Uses unwrapped pan.x so SVG elements stay at continuous screen positions
   const project = useCallback(
     (lon: number, lat: number) => {
-      // Map to normalised [0, 1]
       const nx = (lon + 180) / 360
       const ny = (90 - lat) / 180
-      // Map to screen pixels (centred, with zoom and pan)
-      const x = (nx - 0.5) * planeWidth * zoom + containerSize.width / 2 + pan.x
+      const unwrappedPanX = pan.x + panWrapOffset.current
+      const x = (nx - 0.5) * planeWidth * zoom + containerSize.width / 2 + unwrappedPanX
       const y = (ny - 0.5) * planeHeight * zoom + containerSize.height / 2 + pan.y
       return { x, y }
     },
@@ -275,7 +278,8 @@ export default function MapViewer({
   // Inverse projection: screen (px, py) → (lon, lat)
   const unproject = useCallback(
     (px: number, py: number) => {
-      const nx = (px - containerSize.width / 2 - pan.x) / (planeWidth * zoom) + 0.5
+      const unwrappedPanX = pan.x + panWrapOffset.current
+      const nx = (px - containerSize.width / 2 - unwrappedPanX) / (planeWidth * zoom) + 0.5
       const ny = (py - containerSize.height / 2 - pan.y) / (planeHeight * zoom) + 0.5
       const lon = nx * 360 - 180
       const lat = 90 - ny * 180
@@ -307,7 +311,19 @@ export default function MapViewer({
       if (isDragging) {
         const rawX = dragStart.current.panX + (px - dragStart.current.x)
         const rawY = dragStart.current.panY + (py - dragStart.current.y)
-        setPan(clampPan(rawX, rawY))
+
+        // Wrap horizontal pan to stay within ±1 map width (seamless cylindrical projection)
+        const mapWidthPx = planeWidth * zoom
+        const halfW = mapWidthPx / 2
+        let wrappedX = rawX
+        if (mapWidthPx > 0) {
+          wrappedX = ((rawX + halfW) % mapWidthPx + mapWidthPx) % mapWidthPx - halfW
+        }
+        // Track cumulative offset so SVG projection stays continuous
+        panWrapOffset.current += rawX - wrappedX
+
+        const clamped = clampPan(wrappedX, rawY)
+        setPan(clamped)
         return
       }
 
@@ -392,12 +408,12 @@ export default function MapViewer({
 
     // Apply pan by moving mesh (convert pixel pan to world units)
     // Camera at (0, h, 0) looking down with up=(0,1,0):
-    //   lookAt resolves degenerate case → camera right = world +X, camera up = world -Z
-    //   So: meshScreenX = +meshX × f/h, meshScreenY = -meshZ × f/h
+    //   lookAt resolves degenerate case → camera right = +X, camera up = -Z
+    //   Projection: screenX ∝ +meshX, screenY ∝ +meshZ (screen Y points down)
     const visibleH = 2 * (5 / effectiveZoom) * Math.tan(THREE.MathUtils.degToRad(25))
     const visibleW = visibleH * (containerSize.width / containerSize.height)
     const meshX = (pan.x / containerSize.width) * visibleW
-    const meshZ = -(clampedPanY / containerSize.height) * visibleH
+    const meshZ = (clampedPanY / containerSize.height) * visibleH
     mesh.position.x = meshX
     mesh.position.z = meshZ
 
@@ -412,7 +428,12 @@ export default function MapViewer({
 
     rendererRef.current.render(sceneRef.current, camera)
     onZoomChange?.(effectiveZoom)
-  }, [webgpuReady, zoom, pan, containerSize, planeWidth, planeHeight, onZoomChange])
+    onViewStateChange?.({
+      pan, zoom: effectiveZoom,
+      containerWidth: containerSize.width, containerHeight: containerSize.height,
+      planeWidth, planeHeight,
+    })
+  }, [webgpuReady, zoom, pan, containerSize, planeWidth, planeHeight, onZoomChange, onViewStateChange])
 
   return (
     <div

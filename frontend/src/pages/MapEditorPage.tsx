@@ -18,6 +18,7 @@ import MapStatusBar from '../components/map/MapStatusBar'
 import MapOnboardingGuide, {
   isOnboardingDismissed,
 } from '../components/map/MapOnboardingGuide'
+import MapMinimap from '../components/map/MapMinimap'
 import { decodePngToFloat32, encodeFloat32ToPng } from '../viewers/map/utils/imageCodec'
 import type { BrushConfig, VoronoiCell, TectonicPlate } from '../viewers/map/types'
 
@@ -59,6 +60,16 @@ export default function MapEditorPage() {
 
   // Effective zoom (reported by MapViewer for status bar display)
   const [displayZoom, setDisplayZoom] = useState(1)
+
+  // View state for minimap (reported by MapViewer)
+  const [viewState, setViewState] = useState({
+    pan: { x: 0, y: 0 },
+    zoom: 1,
+    containerWidth: 800,
+    containerHeight: 400,
+    planeWidth: 800,
+    planeHeight: 400,
+  })
 
   // Onboarding guide
   const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDismissed())
@@ -307,6 +318,7 @@ export default function MapEditorPage() {
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
                     onZoomChange={setDisplayZoom}
+                    onViewStateChange={setViewState}
                   />
                 </div>
                 <MapStatusBar cursor={cursor} zoom={displayZoom} />
@@ -440,6 +452,7 @@ export default function MapEditorPage() {
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
                     onZoomChange={setDisplayZoom}
+                    onViewStateChange={setViewState}
                   />
                 </div>
                 <MapStatusBar cursor={cursor} zoom={displayZoom} />
@@ -447,28 +460,52 @@ export default function MapEditorPage() {
             )}
           </div>
 
-          {/* Right panel: cell inspector */}
-          <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              单元格详情
-            </h3>
-            <MapCellInspector
-              cell={hoveredCellData}
-              plate={hoveredPlate}
-              elevMinM={meta?.elevation_min_m ?? -11000}
-              elevMaxM={meta?.elevation_max_m ?? 9000}
-            />
-            {selectedCells.size > 0 && (
-              <div className="mt-4 pt-3 border-t border-space-border">
+          {/* Right panel: cell inspector + minimap */}
+          <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
+            {/* Scrollable inspector area */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                单元格详情
+              </h3>
+              <MapCellInspector
+                cell={hoveredCellData}
+                plate={hoveredPlate}
+                elevMinM={meta?.elevation_min_m ?? -11000}
+                elevMaxM={meta?.elevation_max_m ?? 9000}
+              />
+              {selectedCells.size > 0 && (
+                <div className="mt-4 pt-3 border-t border-space-border">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    已选择
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    {selectedCells.size} 个单元格
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1 italic">
+                    即将推出：省份划分等批量操作
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Minimap — pinned at bottom */}
+            {localElevation && (
+              <div className="shrink-0 border-t border-space-border p-3">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  已选择
+                  鸟瞰图
                 </h3>
-                <p className="text-xs text-gray-400">
-                  {selectedCells.size} 个单元格
-                </p>
-                <p className="text-xs text-gray-600 mt-1 italic">
-                  即将推出：省份划分等批量操作
-                </p>
+                <MapMinimap
+                  elevation={localElevation}
+                  width={meta?.width ?? 2048}
+                  height={meta?.height ?? 1024}
+                  seaLevel={meta?.sea_level ?? 0.4}
+                  pan={viewState.pan}
+                  zoom={viewState.zoom}
+                  containerWidth={viewState.containerWidth}
+                  containerHeight={viewState.containerHeight}
+                  planeWidth={viewState.planeWidth}
+                  planeHeight={viewState.planeHeight}
+                />
               </div>
             )}
           </div>
