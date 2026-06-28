@@ -20,8 +20,11 @@ export default function MapCellInspector({
 }: MapCellInspectorProps) {
   if (!cell) {
     return (
-      <div className="text-xs text-gray-600 italic p-2">
-        悬停地图上的单元格查看详情
+      <div className="text-xs text-gray-600 p-2 space-y-2">
+        <p className="italic">悬停地图上的单元格查看详情</p>
+        <p className="text-gray-700">
+          提示：需要先在左侧面板开启「Voronoi 网格」叠加层，才能在地图上悬停和查看单元格属性。
+        </p>
       </div>
     )
   }

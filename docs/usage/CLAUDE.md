@@ -6,6 +6,8 @@
 
 - `project-structure.md` — 项目目录结构和各模块职责说明
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器的架构、操作指南和设计说明
+- `map-system.md` — 地图系统架构设计（数据模型、渲染技术、API 端点）
+- `map-editor-guide.md` — 地图编辑器使用指南（快速入门、功能详解、即将推出的功能）
 
 ## 规划中的文档
 

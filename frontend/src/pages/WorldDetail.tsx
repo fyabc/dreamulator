@@ -419,7 +419,10 @@ export default function WorldDetail() {
                     </div>
                   ) : (
                     <div className="text-center py-6">
-                      <p className="text-gray-500 mb-3">暂无地图数据</p>
+                      <p className="text-gray-500 mb-2">暂无地图数据</p>
+                      <p className="text-xs text-gray-600 mb-3">
+                        程序化生成地形、Voronoi 网格和构造板块
+                      </p>
                       {!staticMode && (
                         <Link
                           to={`/worlds/${worldName}/map`}

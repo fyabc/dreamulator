@@ -16,7 +16,8 @@ export default function MapStatusBar({ cursor, zoom }: MapStatusBarProps) {
         <span>经度: —</span>
         <span>纬度: —</span>
         <span>海拔: —</span>
-        <span className="ml-auto">缩放: {zoom.toFixed(1)}x</span>
+        <span className="ml-auto text-gray-600">拖拽平移 · 滚轮缩放</span>
+        <span className="text-gray-500">缩放: {zoom.toFixed(1)}x</span>
       </div>
     )
   }

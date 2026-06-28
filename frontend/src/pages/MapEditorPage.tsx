@@ -15,6 +15,9 @@ import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapEditingTools from '../components/map/MapEditingTools'
 import MapCellInspector from '../components/map/MapCellInspector'
 import MapStatusBar from '../components/map/MapStatusBar'
+import MapOnboardingGuide, {
+  isOnboardingDismissed,
+} from '../components/map/MapOnboardingGuide'
 import { decodePngToFloat32, encodeFloat32ToPng } from '../viewers/map/utils/imageCodec'
 import type { BrushConfig, VoronoiCell, TectonicPlate } from '../viewers/map/types'
 
@@ -51,6 +54,9 @@ export default function MapEditorPage() {
   // Local elevation data (for unsaved changes tracking)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // Onboarding guide
+  const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDismissed())
 
   // --- Data fetching ---
 
@@ -236,6 +242,15 @@ export default function MapEditorPage() {
             只读
           </span>
         )}
+
+        {/* Help button */}
+        <button
+          onClick={() => setShowOnboarding(true)}
+          className="text-gray-500 hover:text-neon-cyan transition-colors w-6 h-6 flex items-center justify-center rounded border border-space-border hover:border-neon-cyan/40 text-xs font-bold"
+          title="使用指南"
+        >
+          ?
+        </button>
       </div>
 
       {/* Main content */}
@@ -334,10 +349,18 @@ export default function MapEditorPage() {
               <p className="text-xs text-gray-400">
                 {selectedCells.size} 个单元格
               </p>
+              <p className="text-xs text-gray-600 mt-1 italic">
+                即将推出：省份划分等批量操作
+              </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Onboarding guide overlay */}
+      {showOnboarding && (
+        <MapOnboardingGuide onClose={() => setShowOnboarding(false)} />
+      )}
     </div>
   )
 }
