@@ -41,7 +41,6 @@ export default function MapEditorPage() {
     showVoronoi: false,
     showPlates: false,
     showFeatures: false,
-    hillshadeStrength: 0.7,
   })
 
   const [brushConfig, setBrushConfig] = useState<BrushConfig>({
@@ -317,7 +316,6 @@ export default function MapEditorPage() {
                   showVoronoi={layerState.showVoronoi}
                   showPlates={layerState.showPlates}
                   showFeatures={layerState.showFeatures}
-                  hillshadeStrength={layerState.hillshadeStrength}
                   readOnly={staticMode}
                   onCursorMove={setCursor}
                   onCellHover={setHoveredCell}

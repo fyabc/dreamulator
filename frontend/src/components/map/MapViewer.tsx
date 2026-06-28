@@ -32,7 +32,6 @@ interface MapViewerProps {
   showVoronoi: boolean
   showPlates: boolean
   showFeatures: boolean
-  hillshadeStrength: number
   readOnly?: boolean
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
@@ -72,7 +71,6 @@ export default function MapViewer({
   showVoronoi,
   showPlates,
   showFeatures,
-  hillshadeStrength,
   readOnly: _readOnly = false,
   onCursorMove,
   onCellHover,
@@ -121,7 +119,7 @@ export default function MapViewer({
     height: mapH,
     seaLevel,
     colorMode,
-    hillshadeStrength,
+    hillshadeStrength: 0.7,
   })
 
   // Initialize WebGPURenderer + scene

@@ -9,7 +9,6 @@ interface LayerState {
   showVoronoi: boolean
   showPlates: boolean
   showFeatures: boolean
-  hillshadeStrength: number
 }
 
 interface MapLayerPanelProps {
@@ -88,29 +87,6 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
         </div>
       </div>
 
-      {/* Hillshade strength */}
-      <div>
-        <label
-          className="text-xs text-gray-400 flex justify-between"
-          title="控制山体阴影的强度，0% 为关闭，100% 为最强"
-        >
-          <span>山体阴影</span>
-          <span className="font-mono">{Math.round(state.hillshadeStrength * 100)}%</span>
-        </label>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(state.hillshadeStrength * 100)}
-          onChange={(e) =>
-            onChange({
-              ...state,
-              hillshadeStrength: parseInt(e.target.value) / 100,
-            })
-          }
-          className="w-full h-1 accent-neon-cyan"
-        />
-      </div>
     </div>
   )
 }
