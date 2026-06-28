@@ -170,8 +170,8 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 ## Roadmap
 
 - [x] **Phase 1** — Project scaffolding, data models, CLI, world management, frontend skeleton
-- [ ] **Phase 2** — Simulation engines + knowledge base documents
-- [ ] **Phase 3** — Frontend visualization (3D star system, multi-layer 2D maps)
+- [x] **Phase 2** — Frontend visualization (3D star system, multi-layer 2D maps)
+- [ ] **Phase 3** — Simulation engines + knowledge base documents
 
 ## License
 
