@@ -54,6 +54,9 @@ export default function MapEditorPage() {
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
+  // Left panel drawer (mobile only)
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false)
+
   // Onboarding guide
   const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDismissed())
 
@@ -253,106 +256,217 @@ export default function MapEditorPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left panel: layers + editing tools */}
-        <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
-          <MapLayerPanel state={layerState} onChange={setLayerState} />
-          {!staticMode && (
-            <div className="border-t border-space-border pt-4">
-              <MapEditingTools
-                config={brushConfig}
-                onChange={setBrushConfig}
-                onGenerate={() =>
-                  generateMutation.mutate({
-                    num_continents: 3,
-                    mountaininess: 0.5,
-                    num_plates: 15,
-                  })
-                }
-                onSave={() => saveMutation.mutate()}
-                isGenerating={generateMutation.isPending}
-                isSaving={saveMutation.isPending}
-                hasUnsavedChanges={hasUnsavedChanges}
+      <div className="flex flex-1 min-h-0 relative">
+        {/* === Mobile layout (default, hidden ≥ md) === */}
+        <div className="flex flex-col flex-1 min-w-0 md:hidden">
+          {/* Map area — full width */}
+          <div className="flex-1 flex flex-col min-h-0">
+            {loadingElevation ? (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                加载地图数据...
+              </div>
+            ) : !localElevation ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
+                <p>该行星暂无地图数据</p>
+                {!staticMode && (
+                  <button
+                    onClick={() =>
+                      generateMutation.mutate({
+                        num_continents: 3,
+                        mountaininess: 0.5,
+                        num_plates: 15,
+                      })
+                    }
+                    disabled={generateMutation.isPending}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+                  >
+                    {generateMutation.isPending ? '生成中...' : '🌍 生成第一张地图'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 min-h-0">
+                  <MapViewer
+                    metadata={meta}
+                    elevation={localElevation}
+                    voronoiCells={voronoiCells}
+                    plates={tectonicPlates}
+                    features={(features as any[]) ?? []}
+                    colorMode={layerState.colorMode}
+                    showVoronoi={layerState.showVoronoi}
+                    showPlates={layerState.showPlates}
+                    showFeatures={layerState.showFeatures}
+                    readOnly={staticMode}
+                    onCursorMove={setCursor}
+                    onCellHover={setHoveredCell}
+                    onCellClick={handleCellClick}
+                    hoveredCell={hoveredCell}
+                    selectedCells={selectedCells}
+                  />
+                </div>
+                <MapStatusBar cursor={cursor} zoom={1} />
+              </>
+            )}
+          </div>
+
+          {/* Floating toggle button (mobile only, visible when drawer closed) */}
+          {!leftPanelOpen && (
+            <button
+              onClick={() => setLeftPanelOpen(true)}
+              className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
+              title="图层设置"
+            >
+              ☰
+            </button>
+          )}
+
+          {/* Left panel drawer overlay */}
+          {leftPanelOpen && (
+            <>
+              <div
+                className="absolute inset-0 bg-black/50 z-40"
+                onClick={() => setLeftPanelOpen(false)}
               />
-            </div>
+              <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    图层与工具
+                  </span>
+                  <button
+                    onClick={() => setLeftPanelOpen(false)}
+                    className="text-gray-500 hover:text-gray-300 text-lg leading-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <MapLayerPanel state={layerState} onChange={setLayerState} />
+                {!staticMode && (
+                  <div className="border-t border-space-border pt-4">
+                    <MapEditingTools
+                      config={brushConfig}
+                      onChange={setBrushConfig}
+                      onGenerate={() =>
+                        generateMutation.mutate({
+                          num_continents: 3,
+                          mountaininess: 0.5,
+                          num_plates: 15,
+                        })
+                      }
+                      onSave={() => saveMutation.mutate()}
+                      isGenerating={generateMutation.isPending}
+                      isSaving={saveMutation.isPending}
+                      hasUnsavedChanges={hasUnsavedChanges}
+                    />
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Center: map viewer */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {loadingElevation ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-              加载地图数据...
-            </div>
-          ) : !localElevation ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-              <p>该行星暂无地图数据</p>
-              {!staticMode && (
-                <button
-                  onClick={() =>
+        {/* === Desktop layout (≥ md, hidden by default) === */}
+        <div className="hidden md:flex flex-1 min-h-0">
+          {/* Left panel: layers + editing tools */}
+          <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
+            <MapLayerPanel state={layerState} onChange={setLayerState} />
+            {!staticMode && (
+              <div className="border-t border-space-border pt-4">
+                <MapEditingTools
+                  config={brushConfig}
+                  onChange={setBrushConfig}
+                  onGenerate={() =>
                     generateMutation.mutate({
                       num_continents: 3,
                       mountaininess: 0.5,
                       num_plates: 15,
                     })
                   }
-                  disabled={generateMutation.isPending}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
-                >
-                  {generateMutation.isPending ? '生成中...' : '🌍 生成第一张地图'}
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="flex-1 min-h-0">
-                <MapViewer
-                  metadata={meta}
-                  elevation={localElevation}
-                  voronoiCells={voronoiCells}
-                  plates={tectonicPlates}
-                  features={(features as any[]) ?? []}
-                  colorMode={layerState.colorMode}
-                  showVoronoi={layerState.showVoronoi}
-                  showPlates={layerState.showPlates}
-                  showFeatures={layerState.showFeatures}
-                  readOnly={staticMode}
-                  onCursorMove={setCursor}
-                  onCellHover={setHoveredCell}
-                  onCellClick={handleCellClick}
-                  hoveredCell={hoveredCell}
-                  selectedCells={selectedCells}
+                  onSave={() => saveMutation.mutate()}
+                  isGenerating={generateMutation.isPending}
+                  isSaving={saveMutation.isPending}
+                  hasUnsavedChanges={hasUnsavedChanges}
                 />
               </div>
-              <MapStatusBar cursor={cursor} zoom={1} />
-            </>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Right panel: cell inspector */}
-        <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            单元格详情
-          </h3>
-          <MapCellInspector
-            cell={hoveredCellData}
-            plate={hoveredPlate}
-            elevMinM={meta?.elevation_min_m ?? -11000}
-            elevMaxM={meta?.elevation_max_m ?? 9000}
-          />
-          {selectedCells.size > 0 && (
-            <div className="mt-4 pt-3 border-t border-space-border">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                已选择
-              </h3>
-              <p className="text-xs text-gray-400">
-                {selectedCells.size} 个单元格
-              </p>
-              <p className="text-xs text-gray-600 mt-1 italic">
-                即将推出：省份划分等批量操作
-              </p>
-            </div>
-          )}
+          {/* Center: map viewer */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {loadingElevation ? (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                加载地图数据...
+              </div>
+            ) : !localElevation ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
+                <p>该行星暂无地图数据</p>
+                {!staticMode && (
+                  <button
+                    onClick={() =>
+                      generateMutation.mutate({
+                        num_continents: 3,
+                        mountaininess: 0.5,
+                        num_plates: 15,
+                      })
+                    }
+                    disabled={generateMutation.isPending}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+                  >
+                    {generateMutation.isPending ? '生成中...' : '🌍 生成第一张地图'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 min-h-0">
+                  <MapViewer
+                    metadata={meta}
+                    elevation={localElevation}
+                    voronoiCells={voronoiCells}
+                    plates={tectonicPlates}
+                    features={(features as any[]) ?? []}
+                    colorMode={layerState.colorMode}
+                    showVoronoi={layerState.showVoronoi}
+                    showPlates={layerState.showPlates}
+                    showFeatures={layerState.showFeatures}
+                    readOnly={staticMode}
+                    onCursorMove={setCursor}
+                    onCellHover={setHoveredCell}
+                    onCellClick={handleCellClick}
+                    hoveredCell={hoveredCell}
+                    selectedCells={selectedCells}
+                  />
+                </div>
+                <MapStatusBar cursor={cursor} zoom={1} />
+              </>
+            )}
+          </div>
+
+          {/* Right panel: cell inspector */}
+          <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              单元格详情
+            </h3>
+            <MapCellInspector
+              cell={hoveredCellData}
+              plate={hoveredPlate}
+              elevMinM={meta?.elevation_min_m ?? -11000}
+              elevMaxM={meta?.elevation_max_m ?? 9000}
+            />
+            {selectedCells.size > 0 && (
+              <div className="mt-4 pt-3 border-t border-space-border">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  已选择
+                </h3>
+                <p className="text-xs text-gray-400">
+                  {selectedCells.size} 个单元格
+                </p>
+                <p className="text-xs text-gray-600 mt-1 italic">
+                  即将推出：省份划分等批量操作
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
