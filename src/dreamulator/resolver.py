@@ -210,6 +210,21 @@ class LayerResolver:
         source = self.resolve_layer(layer)
         return source.derived_dir
 
+    def list_input_files(self, layer: Layer | str, pattern: str = "*") -> list[Path]:
+        """List files matching a glob pattern in the effective input directory.
+
+        Args:
+            layer: Layer to query.
+            pattern: Glob pattern (e.g. ``"*.md"``, ``"*.yaml"``).
+
+        Returns:
+            Sorted list of matching file paths. Empty if directory not found.
+        """
+        input_dir = self.get_input_dir(layer)
+        if input_dir is None or not input_dir.exists():
+            return []
+        return sorted(input_dir.glob(pattern))
+
     def get_branch_metadata(self) -> BranchMetadata | None:
         """Get metadata for the current branch.
 

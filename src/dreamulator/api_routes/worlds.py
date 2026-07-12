@@ -287,6 +287,103 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
     return civ_data if isinstance(civ_data, list) else []
 
 
+# ---------------------------------------------------------------------------
+# Civilization document endpoints — serve .md files from the input directory
+# ---------------------------------------------------------------------------
+
+
+def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Parse YAML frontmatter from a markdown string.
+
+    Returns (frontmatter_dict, body_without_frontmatter).
+    If no frontmatter found, returns ({}, original_text).
+    """
+    import re
+
+    match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)", text, re.DOTALL)
+    if not match:
+        return {}, text
+
+    try:
+        fm = yaml.safe_load(match.group(1))
+        if not isinstance(fm, dict):
+            fm = {}
+    except yaml.YAMLError:
+        fm = {}
+    return fm, match.group(2)
+
+
+@router.get("/{world_name}/civilization-documents")
+def list_civilization_documents(
+    world_name: str, branch: str | None = None
+) -> list[dict[str, Any]]:
+    """List .md files in the civilization layer input directory.
+
+    Returns metadata extracted from YAML frontmatter for each file.
+    """
+    from dreamulator.resolver import LayerResolver
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    resolver = LayerResolver(world_dir, branch)
+    md_files = resolver.list_input_files("civilization", "*.md")
+
+    documents = []
+    for fp in md_files:
+        with fp.open("r", encoding="utf-8") as f:
+            content = f.read()
+        fm, _body = _parse_frontmatter(content)
+        documents.append(
+            {
+                "filename": fp.name,
+                "title": fm.get("title", fp.stem),
+                "type": fm.get("type", ""),
+                "period": fm.get("period", ""),
+                "tags": fm.get("tags", []),
+            }
+        )
+    return documents
+
+
+@router.get("/{world_name}/civilization-documents/{filename}")
+def get_civilization_document(
+    world_name: str, filename: str, branch: str | None = None
+) -> dict[str, Any]:
+    """Read a specific .md file from the civilization layer input directory."""
+    from dreamulator.resolver import LayerResolver
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    resolver = LayerResolver(world_dir, branch)
+    md_files = resolver.list_input_files("civilization", "*.md")
+
+    target = None
+    for fp in md_files:
+        if fp.name == filename:
+            target = fp
+            break
+
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Document '{filename}' not found")
+
+    with target.open("r", encoding="utf-8") as f:
+        content = f.read()
+
+    fm, body = _parse_frontmatter(content)
+    return {
+        "filename": target.name,
+        "title": fm.get("title", target.stem),
+        "frontmatter": fm,
+        "content": body,
+    }
+
+
 @router.get("/{world_name}/climate")
 def get_climate(world_name: str, branch: str | None = None) -> dict[str, Any] | None:
     """Get climate data from the climate layer input.
