@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { api } from '../api/client'
 
 interface CivilizationDocumentsProps {
@@ -142,6 +143,7 @@ export default function CivilizationDocuments({
             [&_tr:hover_td]:bg-space-surface/20
           ">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ href, children, ...props }) => (
                   <a href={href} onClick={handleLinkClick} {...props}>
