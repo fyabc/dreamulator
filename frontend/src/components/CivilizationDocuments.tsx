@@ -150,6 +150,27 @@ export default function CivilizationDocuments({
                     {children}
                   </a>
                 ),
+                // Auto-link inline code like `territory.md` to document navigation
+                code: ({ className, children, ...props }) => {
+                  const text = String(children).replace(/\n$/, '')
+                  const isDocRef = /^[a-zA-Z0-9_-]+\.md$/.test(text)
+                  const docExists = isDocRef && documents?.some((d: any) => d.filename === text)
+                  if (docExists) {
+                    return (
+                      <button
+                        onClick={() => setSelectedDoc(text)}
+                        className="text-neon-cyan hover:underline cursor-pointer bg-space-surface/60 px-1 py-0.5 rounded text-xs font-mono"
+                      >
+                        {text}
+                      </button>
+                    )
+                  }
+                  return (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  )
+                },
               }}
             >
               {activeDoc.content}
