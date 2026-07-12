@@ -1,10 +1,13 @@
-name: byzantine-if
-parent: null
-fork_layer: civilization
-description: 1341年两约翰内战迅速结束，拜占庭帝国避免衰亡并延续至现代的架空历史分支。从坎塔库泽努斯兵不血刃入主君堡开始，经历中兴、大分裂、光复、革命、世界大战，最终蜕变为现代的第二罗马共和国。
-created: 2026-07-13T00:00:00
-tags:
-  - alternate-history
-  - byzantine
-  - civilization
-  - what-if
+{
+  "name": "byzantine-if",
+  "parent": null,
+  "fork_layer": "civilization",
+  "description": "1341年两约翰内战迅速结束，拜占庭帝国避免衰亡并延续至现代的架空历史分支。从坎塔库泽努斯兵不血刃入主君堡开始，经历中兴、大分裂、光复、革命、世界大战，最终蜕变为现代的第二罗马共和国。",
+  "created": "2026-07-13T00:00:00",
+  "tags": [
+    "alternate-history",
+    "byzantine",
+    "civilization",
+    "what-if"
+  ]
+}
