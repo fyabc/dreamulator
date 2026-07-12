@@ -1,14 +1,14 @@
 ---
 title: 罗马共和国领土与疆域变迁
 type: territory
-branch: byzantine-if
+branch: ERE-if
 dependencies: [geo_europe, geo_middle_east, geo_overseas]
 tags: [territory, borders, geopolitics, byzantine]
 ---
 
 # 罗马共和国领土与疆域变迁
 
-本文件记录第二罗马共和国（拜占庭帝国继承国）从1341年至今的领土演变。罗马的疆域经历了中兴扩张、大分裂收缩、光复重建、帝国主义狂飙、一战剥夺、最终稳定为现代版图的漫长过程。
+本文件记录第二罗马共和国（东罗马帝国继承国）从1341年至今的领土演变。罗马的疆域经历了中兴扩张、大分裂收缩、光复重建、帝国主义狂飙、一战剥夺、最终稳定为现代版图的漫长过程。
 
 → 总览见 `_overview.md`；王朝更迭见 `dynasties.md`
 
