@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
+import CivilizationDocuments from '../components/CivilizationDocuments'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
@@ -749,14 +750,15 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'civilization' && (
-              <div className="glass-panel p-6">
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  文明
-                </h2>
-                {civilizations ? (
-                  <div className="space-y-4">
-                    {civilizations.length > 0 ? (
-                      civilizations.map((civ: any) => {
+              <div className="space-y-6">
+                {/* Structured civilizations.yaml cards (if any) */}
+                {civilizations && civilizations.length > 0 && (
+                  <div className="glass-panel p-6">
+                    <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
+                      文明
+                    </h2>
+                    <div className="space-y-4">
+                      {civilizations.map((civ: any) => {
                         // Parse description into intro + sections with bullet points
                         const desc: string = (civ.description ?? '').trim()
                         const sections = desc.split(/\n\s*\n/).filter(Boolean)
@@ -849,14 +851,13 @@ export default function WorldDetail() {
                             })}
                           </div>
                         )
-                      })
-                    ) : (
-                      <p className="text-gray-500">未定义文明数据</p>
-                    )}
+                      })}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-gray-500">无文明层数据</p>
                 )}
+
+                {/* Markdown document viewer — shows docs or nothing */}
+                <CivilizationDocuments worldName={worldName!} branch={selectedBranch} />
               </div>
             )}
 

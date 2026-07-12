@@ -118,6 +118,13 @@ export const staticApi = {
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/civilizations.json`)
       : fetchStaticJson<any>(`/worlds/${name}/civilizations.json`),
 
+  // Civilization documents (.md files) — not exported in static mode yet
+  listCivilizationDocuments: (_name: string, _branch?: string | null) =>
+    Promise.resolve([] as any[]),
+
+  getCivilizationDocument: (_name: string, _filename: string, _branch?: string | null) =>
+    Promise.reject(new Error('Civilization documents not available in static mode')),
+
   getClimate: (name: string, branch?: string | null) =>
     branch
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/climate.json`)

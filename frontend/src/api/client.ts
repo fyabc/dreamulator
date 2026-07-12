@@ -276,6 +276,20 @@ const readApi = {
       ? staticApi.listBranches(name)
       : fetchJson<any[]>(`/worlds/${name}/branches`),
 
+  listCivilizationDocuments: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.listCivilizationDocuments(name, branch)
+      : fetchJson<any[]>(
+          `/worlds/${name}/civilization-documents${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getCivilizationDocument: (name: string, filename: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getCivilizationDocument(name, filename, branch)
+      : fetchJson<any>(
+          `/worlds/${name}/civilization-documents/${encodeURIComponent(filename)}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
   // ---- Map read operations ----
 
   listMapPlanets: (name: string, branch?: string | null) =>
