@@ -144,6 +144,11 @@ def _export_layer_data(
     if civ_data:
         result["civilizations"] = civ_data
 
+    # 7. CivMap territory data (countries, snapshots, assignments)
+    civ_territory = resolver.load_layer_yaml("civilization", "civ_territory.yaml")
+    if civ_territory:
+        result["civ_territory"] = civ_territory
+
     return result
 
 
@@ -241,6 +246,69 @@ def _export_map_data(
             json.dump(planets_with_maps, f, ensure_ascii=False, indent=2)
 
     return planets_with_maps
+
+
+def _export_civmap_reference(
+    world_dir: Path,
+    world_out_dir: Path,
+    branch: str | None = None,
+) -> None:
+    """Export CivMap reference GeoJSON data and country→province mapping.
+
+    Reference GeoJSON is shared across branches (stored under geological layer),
+    so we only export it once per world. The mapping is derived from ADM1 data.
+    """
+    resolver = LayerResolver(world_dir, branch)
+    input_dir = resolver.get_input_dir("geological")
+    if input_dir is None:
+        return
+
+    ref_dir = input_dir / "maps" / "earth_reference"
+    if not ref_dir.exists():
+        return
+
+    civmap_out = world_out_dir / "civmap"
+    civmap_out.mkdir(parents=True, exist_ok=True)
+
+    # Copy GeoJSON files (adm0, adm1, adm2)
+    for level in ("adm0", "adm1", "adm2"):
+        src = ref_dir / f"{level}.geojson"
+        if src.exists():
+            dst = civmap_out / f"{level}.geojson"
+            # Read-write to validate JSON (catch LFS pointers)
+            try:
+                with src.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                with dst.open("w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print(f"\n  WARNING: {src} is not valid JSON — skipping")
+
+    # Copy metadata
+    meta_src = ref_dir / "metadata.json"
+    if meta_src.exists():
+        with meta_src.open("r", encoding="utf-8") as f:
+            meta = json.load(f)
+        with civmap_out.joinpath("metadata.json").open("w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+    # Generate and export country→province mapping from ADM1
+    adm1_path = ref_dir / "adm1.geojson"
+    if adm1_path.exists():
+        try:
+            with adm1_path.open("r", encoding="utf-8") as f:
+                adm1 = json.load(f)
+            mapping: dict[str, list[str]] = {}
+            for feature in adm1.get("features", []):
+                props = feature.get("properties", {})
+                iso_a2 = props.get("iso_a2")
+                adm1_code = feature.get("id")
+                if iso_a2 and adm1_code:
+                    mapping.setdefault(iso_a2, []).append(adm1_code)
+            with civmap_out.joinpath("mapping.json").open("w", encoding="utf-8") as f:
+                json.dump(mapping, f, ensure_ascii=False)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
 
 
 def export_world(world_dir: Path) -> dict:
@@ -351,6 +419,9 @@ def main() -> None:
         # Export root map data (elevation PNG + metadata)
         maps_out_dir = world_out_dir / "maps"
         map_planets = _export_map_data(world_dir, maps_out_dir, branch=None)
+
+        # Export CivMap reference data (GeoJSON + mapping)
+        _export_civmap_reference(world_dir, world_out_dir, branch=None)
 
         # Export per-branch data (with _inherit: true merge)
         branch_count = 0

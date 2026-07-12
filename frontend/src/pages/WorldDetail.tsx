@@ -7,6 +7,7 @@ import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import CivilizationDocuments from '../components/CivilizationDocuments'
+import CivMapPreview from '../components/civmap/CivMapPreview'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
@@ -855,6 +856,9 @@ export default function WorldDetail() {
                     </div>
                   </div>
                 )}
+
+                {/* Civilization Map preview */}
+                <CivMapPreview worldName={worldName!} branch={selectedBranch} />
 
                 {/* Markdown document viewer — shows docs or nothing */}
                 <CivilizationDocuments worldName={worldName!} branch={selectedBranch} />

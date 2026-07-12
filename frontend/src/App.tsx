@@ -5,6 +5,7 @@ import WorldInfo from './pages/WorldInfo'
 import WorldList from './pages/WorldList'
 import WorldDetail from './pages/WorldDetail'
 import MapEditorPage from './pages/MapEditorPage'
+import CivMapEditorPage from './pages/CivMapEditorPage'
 import { isStaticMode } from './api/mode'
 
 function App() {
@@ -23,6 +24,9 @@ function App() {
           <Route path="worlds/:worldName/map" element={<MapEditorPage />} />
           <Route path="worlds/:worldName/map/:planetId" element={<MapEditorPage />} />
         </Route>
+        {/* Full-page editors (no Layout wrapper) */}
+        <Route path="worlds/:worldName/civmap" element={<CivMapEditorPage />} />
+        <Route path="worlds/:worldName/civmap/:branchName" element={<CivMapEditorPage />} />
       </Routes>
     </Router>
   )

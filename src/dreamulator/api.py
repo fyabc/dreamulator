@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
+from dreamulator.api_routes.civmap import router as civmap_router
 from dreamulator.api_routes.maps import router as maps_router
 from dreamulator.api_routes.narrate import router as narrate_router
 from dreamulator.api_routes.worlds import router as worlds_router
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(worlds_router)
 app.include_router(narrate_router)
 app.include_router(maps_router)
+app.include_router(civmap_router)
 
 
 @app.get("/api/health")

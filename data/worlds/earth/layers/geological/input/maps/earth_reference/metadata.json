@@ -1,0 +1,15 @@
+{
+  "source": "Natural Earth",
+  "license": "Public Domain",
+  "url": "https://www.naturalearthdata.com",
+  "levels": {
+    "adm0": {
+      "features": 258,
+      "file_size_mb": 13.0
+    },
+    "adm1": {
+      "features": 4596,
+      "file_size_mb": 31.8
+    }
+  }
+}

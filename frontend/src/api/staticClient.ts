@@ -199,4 +199,51 @@ export const staticApi = {
     )
     return result?.features ?? []
   },
+
+  // ---- CivMap read operations ----
+
+  getCivBoundaries: async (name: string, level: string): Promise<any> => {
+    try {
+      return await fetchStaticJson(`/worlds/${name}/civmap/${level}.geojson`)
+    } catch {
+      return null
+    }
+  },
+
+  getCivMapping: async (name: string): Promise<Record<string, string[]>> => {
+    try {
+      return await fetchStaticJson(`/worlds/${name}/civmap/mapping.json`)
+    } catch {
+      return {}
+    }
+  },
+
+  getCivTerritory: async (name: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<any>(
+      name,
+      branch,
+      '/civ_territory.json',
+      '/civ_territory.json',
+    )
+    return result ?? { countries: [], snapshots: [], active_snapshot: null, assignments: {} }
+  },
+
+  getCivAvailableLevels: async (name: string): Promise<string[]> => {
+    // Check which GeoJSON files exist by trying to fetch metadata
+    try {
+      const meta = await fetchStaticJson<any>(`/worlds/${name}/civmap/metadata.json`)
+      return Object.keys(meta.levels || {})
+    } catch {
+      return []
+    }
+  },
+
+  // CivMap write operations — not available in static mode
+  saveCivTerritory: () => notAvailable('saveCivTerritory'),
+  upsertCivCountry: () => notAvailable('upsertCivCountry'),
+  deleteCivCountry: () => notAvailable('deleteCivCountry'),
+  createCivSnapshot: () => notAvailable('createCivSnapshot'),
+  updateCivSnapshot: () => notAvailable('updateCivSnapshot'),
+  deleteCivSnapshot: () => notAvailable('deleteCivSnapshot'),
+  patchCivAssignments: () => notAvailable('patchCivAssignments'),
 }

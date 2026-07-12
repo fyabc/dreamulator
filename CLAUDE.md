@@ -26,9 +26,12 @@ dreamulator/
 │   │   ├── terrain_generator.py # 程序化地形生成（多频率高斯噪声）
 │   │   ├── feature_extractor.py # 特征提取（海岸线、河流、山脊）
 │   │   └── manager.py       # 地图 CRUD + 分支继承 + 同步
+│   ├── civmap/              # 文明地图子系统（真实地球行政区划 + 架空领土涂色）
+│   │   ├── models.py        # 数据模型（CivCountry, CivSnapshot, CivTerritory）
+│   │   └── manager.py       # CRUD + 分支继承 + 国家/省份映射
 │   ├── io/                  # 文件读写层
 │   ├── api.py               # FastAPI 应用
-│   ├── api_routes/          # API 路由模块（worlds、narrate、maps）
+│   ├── api_routes/          # API 路由模块（worlds、narrate、maps、civmap）
 │   ├── branch_manager.py    # 分支 CRUD 操作
 │   ├── resolver.py          # 层级数据解析器
 │   ├── narrator.py          # AI 叙述后端（Claude API）
@@ -43,7 +46,8 @@ dreamulator/
 │       ├── stores/          # Zustand 状态管理
 │       └── viewers/         # 3D 恒星系 + 2D 地图可视化器（Three.js / WebGPU）
 ├── scripts/
-│   └── export_static.py     # 静态站点数据导出脚本
+│   ├── export_static.py     # 静态站点数据导出脚本
+│   └── prepare_civmap_data.py # 文明地图底图数据下载与预处理
 ├── .github/
 │   └── workflows/
 │       └── deploy-pages.yml # GitHub Pages 自动部署
@@ -83,6 +87,9 @@ uv run dreamulator schema
 uv sync --extra narrate                        # 安装可选依赖（仅需一次）
 uv run dreamulator narrate myworld
 uv run dreamulator narrate myworld --branch pangea
+
+# 文明地图底图数据（首次使用前运行一次）
+uv run python scripts/prepare_civmap_data.py   # 下载 Natural Earth 行政区划 GeoJSON
 uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 
 # 启动服务器（API + 前端，一条命令）
