@@ -51,6 +51,22 @@ countries:
   name: 阿塞拜疆
   color: '#1abc9c'
   description: ''
+- id: civ_mrjh2udf
+  name: 伊拉克
+  color: '#bc421a'
+  description: ''
+- id: civ_mrjh3vj0
+  name: 约旦
+  color: '#d847eb'
+  description: ''
+- id: civ_mrjh4k1i
+  name: 以色列
+  color: '#dcd5d0'
+  description: ''
+- id: civ_mrjh55ja
+  name: 新国家
+  color: '#e74c3c'
+  description: ''
 snapshots:
 - id: snap_mridfcwi
   year: 2026
@@ -560,7 +576,7 @@ assignments:
   - province_id: TUR-3047
     country_id: civ_mridzy0w
   - province_id: TUR-3044
-    country_id: civ_mridzy0w
+    country_id: civ_mridyad0
   - province_id: AZE-2419
     country_id: civ_mridzy0w
   - province_id: AZE-2420
@@ -1195,3 +1211,75 @@ assignments:
     country_id: civ_mriezpr1
   - province_id: AZE-5564
     country_id: civ_mriezpr1
+  - province_id: IRQ-3046
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3050
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3222
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3223
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3242
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3243
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3227
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3226
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3471
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3061
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3051
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3052
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3049
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3063
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3472
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3224
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3225
+    country_id: civ_mrjh2udf
+  - province_id: IRQ-3062
+    country_id: civ_mrjh2udf
+  - province_id: JOR-854
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-858
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-859
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-852
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-849
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-857
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-850
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-853
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-851
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-860
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-855
+    country_id: civ_mrjh3vj0
+  - province_id: JOR-856
+    country_id: civ_mrjh3vj0
+  - province_id: ISR-3053
+    country_id: civ_mrjh4k1i
+  - province_id: ISR-3056
+    country_id: civ_mrjh4k1i
+  - province_id: ISR-3054
+    country_id: civ_mrjh4k1i
+  - province_id: ISR-3055
+    country_id: civ_mrjh4k1i
+  - province_id: ISR-3058
+    country_id: civ_mrjh4k1i
+  - province_id: ISR-3057
+    country_id: civ_mrjh4k1i

@@ -1,4 +1,4 @@
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
@@ -104,8 +104,32 @@ export default function WorldDetail() {
         'narrate',
       ]
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState<TabType>(
+    () => (searchParams.get('tab') as TabType) || 'overview',
+  )
+
+  // Branch and tab persisted in URL search params (?branch=ERE-if&tab=civilization)
+  const selectedBranch = searchParams.get('branch') || null
+  const setSelectedBranch = (branch: string | null) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (branch) next.set('branch', branch)
+      else next.delete('branch')
+      return next
+    }, { replace: true })
+  }
+
+  // Sync activeTab to URL
+  const setActiveTabAndPersist = (tab: TabType) => {
+    setActiveTab(tab)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (tab === 'overview') next.delete('tab')
+      else next.set('tab', tab)
+      return next
+    }, { replace: true })
+  }
 
   const {
     data: world,
@@ -306,7 +330,7 @@ export default function WorldDetail() {
               {availableTabs.map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => setActiveTabAndPersist(tab)}
                   className={`px-4 py-2 font-medium transition-colors border-b-2 ${
                     activeTab === tab
                       ? 'border-neon-cyan text-neon-cyan neon-glow-subtle'
