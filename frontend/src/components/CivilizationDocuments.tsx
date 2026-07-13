@@ -119,7 +119,7 @@ export default function CivilizationDocuments({
         {/* Sidebar — drawer on mobile, fixed on desktop */}
         <nav className={`
           fixed lg:static inset-y-0 left-0 z-50 lg:z-auto
-          w-64 lg:w-56 shrink-0 bg-space-dark lg:bg-transparent
+          w-64 lg:w-56 shrink-0 bg-gray-900 lg:bg-transparent
           space-y-4 overflow-y-auto max-h-[80vh] lg:max-h-none
           p-4 lg:p-0 lg:sticky lg:top-4 lg:self-start
           transition-transform duration-200 ease-in-out
