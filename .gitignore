@@ -40,7 +40,6 @@ frontend/.vite/
 # Project specific
 data/**/derived/
 data/worlds/*/simulations/
-data/**/earth_reference/*.geojson
 *.log
 /private/
 .env

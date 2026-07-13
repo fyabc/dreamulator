@@ -248,54 +248,6 @@ def _export_map_data(
     return planets_with_maps
 
 
-# Properties to keep in the static export GeoJSON (strip everything else)
-_CIVMAP_ADM0_KEEP_PROPS = frozenset({
-    "ISO_A2", "ISO_A3", "NAME", "NAME_LONG", "CONTINENT",
-    "POP_EST", "GDP_MD", "TYPE", "ADMIN", "SOVEREIGNT",
-})
-_CIVMAP_ADM1_KEEP_PROPS = frozenset({
-    "adm1_code", "iso_a2", "name", "name_en", "name_zh",
-    "admin", "name_local", "type_en", "region",
-    "latitude", "longitude",
-})
-
-
-def _round_coords(coords, decimals: int = 4):
-    """Recursively round coordinate values to reduce file size."""
-    if isinstance(coords, (int, float)):
-        return round(coords, decimals)
-    return [_round_coords(c, decimals) for c in coords]
-
-
-def _optimize_geojson(data: dict, keep_props: frozenset, decimals: int = 4) -> dict:
-    """Optimize GeoJSON for web delivery.
-
-    Strips non-essential properties, rounds coordinates to reduce file size.
-    """
-    optimized_features = []
-    for feature in data.get("features", []):
-        # Strip unnecessary properties
-        props = feature.get("properties", {})
-        stripped_props = {k: v for k, v in props.items() if k in keep_props}
-
-        # Round coordinates
-        geometry = feature.get("geometry")
-        if geometry and "coordinates" in geometry:
-            geometry = dict(geometry)
-            geometry["coordinates"] = _round_coords(
-                geometry["coordinates"], decimals
-            )
-
-        optimized_features.append({
-            "type": "Feature",
-            "id": feature.get("id"),
-            "properties": stripped_props,
-            "geometry": geometry,
-        })
-
-    return {"type": "FeatureCollection", "features": optimized_features}
-
-
 def _export_civmap_reference(
     world_dir: Path,
     world_out_dir: Path,
@@ -303,8 +255,8 @@ def _export_civmap_reference(
 ) -> None:
     """Export CivMap reference GeoJSON data and country→province mapping.
 
-    Optimizes GeoJSON for web delivery by stripping non-essential properties
-    and rounding coordinates. Reduces file sizes by ~60-70%.
+    GeoJSON files are stored in the repo with Git LFS and copied as-is
+    to the static output. No download or optimization needed.
     """
     resolver = LayerResolver(world_dir, branch)
     input_dir = resolver.get_input_dir("geological")
@@ -318,31 +270,12 @@ def _export_civmap_reference(
     civmap_out = world_out_dir / "civmap"
     civmap_out.mkdir(parents=True, exist_ok=True)
 
-    # Level → keep properties mapping
-    level_props = {
-        "adm0": _CIVMAP_ADM0_KEEP_PROPS,
-        "adm1": _CIVMAP_ADM1_KEEP_PROPS,
-        "adm2": _CIVMAP_ADM1_KEEP_PROPS,
-    }
-
-    # Export optimized GeoJSON files
+    # Copy GeoJSON files as-is (stored in repo via Git LFS)
     for level in ("adm0", "adm1", "adm2"):
         src = ref_dir / f"{level}.geojson"
-        if not src.exists():
-            continue
-        try:
-            with src.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            print(f"\n  WARNING: {src} is not valid JSON — skipping")
-            continue
-
-        optimized = _optimize_geojson(data, level_props[level], decimals=4)
-        dst = civmap_out / f"{level}.geojson"
-        # Compact separators (no spaces) for minimal file size
-        with dst.open("w", encoding="utf-8") as f:
-            json.dump(optimized, f, ensure_ascii=False, separators=(",", ":"))
-        print(f" {level}:{dst.stat().st_size // 1024}KB", end="")
+        if src.exists():
+            dst = civmap_out / f"{level}.geojson"
+            dst.write_bytes(src.read_bytes())
 
     # Copy metadata
     meta_src = ref_dir / "metadata.json"

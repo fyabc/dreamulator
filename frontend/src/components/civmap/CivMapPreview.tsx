@@ -219,9 +219,7 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
       >
         {dataLoading && !hasGeoJson && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-[1000]">
-            <div className="text-white text-sm">
-              {staticMode ? '正在下载地图数据 (33MB)...' : '加载地图中...'}
-            </div>
+            <div className="text-white text-sm">加载地图数据中...</div>
           </div>
         )}
         {mapError && (
