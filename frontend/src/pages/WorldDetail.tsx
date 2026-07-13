@@ -240,7 +240,7 @@ export default function WorldDetail() {
       <div className="starfield" />
       <div className="nebula" />
 
-      <div className="relative z-10 px-6 py-8">
+      <div className="relative z-10 px-3 sm:px-6 py-4 sm:py-8">
         {!worldName && (
           <div className="text-center py-12 text-gray-400">未选择世界</div>
         )}
@@ -325,13 +325,13 @@ export default function WorldDetail() {
               </div>
             )}
 
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6 border-b border-space-border">
+            {/* Tabs — horizontally scrollable on mobile */}
+            <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-space-border overflow-x-auto">
               {availableTabs.map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTabAndPersist(tab)}
-                  className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+                  className={`px-3 sm:px-4 py-2 font-medium transition-colors border-b-2 whitespace-nowrap shrink-0 ${
                     activeTab === tab
                       ? 'border-neon-cyan text-neon-cyan neon-glow-subtle'
                       : 'border-transparent text-gray-500 hover:text-gray-300'
@@ -344,7 +344,7 @@ export default function WorldDetail() {
 
             {activeTab === 'overview' && world && (
               <div className="space-y-6">
-                <section className="glass-panel p-6">
+                <section className="glass-panel p-4 sm:p-6">
                   <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                     元数据
                   </h2>
@@ -394,7 +394,7 @@ export default function WorldDetail() {
                 </section>
 
                 {world.stellar_system && (
-                  <section className="glass-panel p-6">
+                  <section className="glass-panel p-4 sm:p-6">
                     <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                       恒星系
                     </h2>
@@ -414,7 +414,7 @@ export default function WorldDetail() {
                 )}
 
                 {/* Map preview card */}
-                <section className="glass-panel p-6">
+                <section className="glass-panel p-4 sm:p-6">
                   <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                     🗺️ 地图
                   </h2>
@@ -464,7 +464,7 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'astronomy' && (
-              <div className="glass-panel p-6">
+              <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   天文学
                 </h2>
@@ -637,7 +637,7 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'planets' && (
-              <div className="glass-panel p-6">
+              <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   地质
                 </h2>
@@ -745,7 +745,7 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'climate' && (
-              <div className="glass-panel p-6">
+              <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   气候
                 </h2>
@@ -760,7 +760,7 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'ecology' && (
-              <div className="glass-panel p-6">
+              <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   生态
                 </h2>
@@ -778,7 +778,7 @@ export default function WorldDetail() {
               <div className="space-y-6">
                 {/* Structured civilizations.yaml cards (if any) */}
                 {civilizations && civilizations.length > 0 && (
-                  <div className="glass-panel p-6">
+                  <div className="glass-panel p-4 sm:p-6">
                     <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                       文明
                     </h2>

@@ -42,6 +42,7 @@ export default function CivMapEditorPage() {
   const [hoveredProvince, setHoveredProvince] = useState<ProvinceInfo | null>(null)
   const [editingCountry, setEditingCountry] = useState<CivCountry | null>(null)
   const [editingSnapshot, setEditingSnapshot] = useState<CivSnapshot | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // ---------------------------------------------------------------------------
   // Data fetching
@@ -279,7 +280,17 @@ export default function CivMapEditorPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
       {/* Top bar */}
-      <header className="flex items-center gap-4 px-4 py-2 bg-gray-800 border-b border-gray-700 shrink-0">
+      <header className="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 bg-gray-800 border-b border-gray-700 shrink-0">
+        {/* Mobile sidebar toggle */}
+        {!staticMode && (
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="lg:hidden text-gray-400 hover:text-white p-1"
+            title="工具栏"
+          >
+            ☰
+          </button>
+        )}
         <button
           onClick={() => navigate(`/worlds/${world}`)}
           className="text-gray-400 hover:text-white text-sm"
@@ -297,8 +308,8 @@ export default function CivMapEditorPage() {
         </h1>
 
         {/* Level selector */}
-        <div className="ml-auto flex items-center gap-2">
-          <label className="text-sm text-gray-400">层级:</label>
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <label className="hidden sm:inline text-sm text-gray-400">层级:</label>
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as BoundaryLevel)}
@@ -319,9 +330,31 @@ export default function CivMapEditorPage() {
       </header>
 
       {/* Main content: 3-panel layout */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left panel: Country palette + tools */}
-        <aside className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col overflow-y-auto shrink-0">
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Mobile sidebar backdrop */}
+        {sidebarOpen && (
+          <div
+            className="lg:hidden fixed inset-0 bg-black/50 z-40"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Left panel: Country palette + tools — drawer on mobile, fixed on desktop */}
+        <aside className={`
+          fixed lg:static inset-y-0 left-0 z-50 lg:z-auto
+          w-64 bg-gray-800 border-r border-gray-700 flex flex-col overflow-y-auto shrink-0
+          transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          {/* Mobile close button */}
+          <div className="lg:hidden flex justify-end p-2 border-b border-gray-700">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-gray-400 hover:text-white text-lg"
+            >
+              ✕
+            </button>
+          </div>
           {/* Tools */}
           <div className="p-3 border-b border-gray-700">
             <h2 className="text-xs uppercase text-gray-500 mb-2">工具</h2>
@@ -467,8 +500,8 @@ export default function CivMapEditorPage() {
           />
         </main>
 
-        {/* Right panel: Province inspector */}
-        <aside className="w-56 bg-gray-800 border-l border-gray-700 p-3 overflow-y-auto shrink-0">
+        {/* Right panel: Province inspector — hidden on mobile */}
+        <aside className="hidden lg:block w-56 bg-gray-800 border-l border-gray-700 p-3 overflow-y-auto shrink-0">
           <h2 className="text-xs uppercase text-gray-500 mb-2">
             {level === 'adm0' ? '国家信息' : '省区信息'}
           </h2>
@@ -538,8 +571,19 @@ export default function CivMapEditorPage() {
       </div>
 
       {/* Status bar */}
-      <footer className="flex items-center gap-4 px-4 py-1 bg-gray-800 border-t border-gray-700 text-xs text-gray-400 shrink-0">
-        <span>
+      <footer className="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-1 bg-gray-800 border-t border-gray-700 text-xs text-gray-400 shrink-0 overflow-hidden">
+        {/* Mobile: show hovered province info (right panel hidden) */}
+        {hoveredProvince && (
+          <span className="lg:hidden truncate">
+            📍 {hoveredProvince.name}
+            {hoveredProvince.country_name && (
+              <span className="ml-1" style={{ color: hoveredProvince.country_color || undefined }}>
+                · {hoveredProvince.country_name}
+              </span>
+            )}
+          </span>
+        )}
+        <span className={hoveredProvince ? 'hidden lg:inline' : ''}>
           {selectedCountry
             ? `🖌️ 涂色: ${selectedCountry.name}`
             : toolMode === 'erase'

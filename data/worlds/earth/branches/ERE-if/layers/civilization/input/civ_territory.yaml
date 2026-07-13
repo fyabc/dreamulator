@@ -17,7 +17,7 @@ countries:
   description: ''
 - id: civ_mrie1mq1
   name: 伊朗
-  color: '#2c812e'
+  color: '#3b813d'
   description: ''
 - id: civ_mrie2d8y
   name: 保加利亚
@@ -64,8 +64,32 @@ countries:
   color: '#dcd5d0'
   description: ''
 - id: civ_mrjh55ja
-  name: 新国家
-  color: '#e74c3c'
+  name: 巴勒斯坦
+  color: '#4c40e7'
+  description: ''
+- id: civ_mrjh6zox
+  name: 沙特阿拉伯
+  color: '#04481e'
+  description: ''
+- id: civ_mrjh8w5x
+  name: 利比亚
+  color: '#cc2e65'
+  description: ''
+- id: civ_mrjhat9c
+  name: 意大利
+  color: '#12d9d6'
+  description: ''
+- id: civ_mrjhe9em
+  name: 俄罗斯
+  color: '#b6b472'
+  description: ''
+- id: civ_mrjhhc9o
+  name: 乌克兰
+  color: '#1e315a'
+  description: ''
+- id: civ_mrjhiid2
+  name: 摩尔多瓦
+  color: '#e7365a'
   description: ''
 snapshots:
 - id: snap_mridfcwi
@@ -258,7 +282,7 @@ assignments:
   - province_id: MKD-2952
     country_id: civ_mridfqhv
   - province_id: MKD-2955
-    country_id: civ_mrie6fsi
+    country_id: civ_mridfqhv
   - province_id: MKD-2962
     country_id: civ_mrie6fsi
   - province_id: MKD-2895
@@ -290,9 +314,9 @@ assignments:
   - province_id: MKD-2896
     country_id: civ_mridfqhv
   - province_id: MKD-2920
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-2926
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2948
     country_id: civ_mrie6fsi
   - province_id: MKD-2908
@@ -308,13 +332,13 @@ assignments:
   - province_id: MKD-2959
     country_id: civ_mrie6fsi
   - province_id: MKD-2906
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-4846
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-2910
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-2943
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-3005
     country_id: civ_mridfqhv
   - province_id: MKD-3006
@@ -334,15 +358,15 @@ assignments:
   - province_id: MKD-2909
     country_id: civ_mridfqhv
   - province_id: MKD-2935
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-5883
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2921
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2913
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2923
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2950
     country_id: civ_mridfqhv
   - province_id: MKD-2928
@@ -360,23 +384,23 @@ assignments:
   - province_id: MKD-2953
     country_id: civ_mridfqhv
   - province_id: MKD-2929
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2942
     country_id: civ_mridfqhv
   - province_id: MKD-2897
     country_id: civ_mridfqhv
   - province_id: MKD-2937
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2912
     country_id: civ_mridfqhv
   - province_id: MKD-2938
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2904
     country_id: civ_mridfqhv
   - province_id: MKD-2925
     country_id: civ_mridfqhv
   - province_id: MKD-2919
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2917
     country_id: civ_mridfqhv
   - province_id: MKD-2954
@@ -394,9 +418,9 @@ assignments:
   - province_id: MKD-2930
     country_id: civ_mridfqhv
   - province_id: MKD-2940
-    country_id: civ_mridfqhv
+    country_id: civ_mrie4j6v
   - province_id: MKD-2933
-    country_id: civ_mridfqhv
+    country_id: civ_mrie6fsi
   - province_id: MKD-2934
     country_id: civ_mridfqhv
   - province_id: MKD-2911
@@ -420,7 +444,7 @@ assignments:
   - province_id: MKD-2932
     country_id: civ_mridfqhv
   - province_id: ALB-1526
-    country_id: civ_mrie6fsi
+    country_id: civ_mridfqhv
   - province_id: ALB-1521
     country_id: civ_mridfqhv
   - province_id: ALB-1524
@@ -898,7 +922,7 @@ assignments:
   - province_id: KOS-5902
     country_id: civ_mrie6fsi
   - province_id: KOS-5907
-    country_id: civ_mrie6fsi
+    country_id: civ_mrie4j6v
   - province_id: KOS-5886
     country_id: civ_mrie6fsi
   - province_id: KOS-5891
@@ -928,7 +952,7 @@ assignments:
   - province_id: KOS-5912
     country_id: civ_mrie6fsi
   - province_id: KOS-5895
-    country_id: civ_mrie6fsi
+    country_id: civ_mrie4j6v
   - province_id: HRV-1609
     country_id: civ_mrie6tij
   - province_id: HRV-1606
@@ -1283,3 +1307,599 @@ assignments:
     country_id: civ_mrjh4k1i
   - province_id: ISR-3057
     country_id: civ_mrjh4k1i
+  - province_id: GAZ+00?
+    country_id: civ_mrjh55ja
+  - province_id: WEB+00?
+    country_id: civ_mrjh55ja
+  - province_id: SAU-1098
+    country_id: civ_mrjh6zox
+  - province_id: SAU-861
+    country_id: civ_mrjh6zox
+  - province_id: SAU-862
+    country_id: civ_mrjh6zox
+  - province_id: SAU-1096
+    country_id: civ_mrjh6zox
+  - province_id: SAU-886
+    country_id: civ_mrjh6zox
+  - province_id: SAU-887
+    country_id: civ_mrjh6zox
+  - province_id: SAU-848
+    country_id: civ_mrjh6zox
+  - province_id: SAU-845
+    country_id: civ_mrjh6zox
+  - province_id: SAU-888
+    country_id: civ_mrjh6zox
+  - province_id: SAU-1097
+    country_id: civ_mrjh6zox
+  - province_id: SAU-846
+    country_id: civ_mrjh6zox
+  - province_id: SAU-847
+    country_id: civ_mrjh6zox
+  - province_id: SAU-885
+    country_id: civ_mrjh6zox
+  - province_id: LBY-2882
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2974
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2965
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2969
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2987
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2983
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2967
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2968
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2985
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2970
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2966
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2978
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2975
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2986
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2982
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2981
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2984
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2973
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2976
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2964
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-2971
+    country_id: civ_mrjh8w5x
+  - province_id: LBY-5488
+    country_id: civ_mrjh8w5x
+  - province_id: ITA-5442
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5437
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5451
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5452
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5444
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5459
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5369
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5441
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5434
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5366
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5428
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5467
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5455
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5457
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5458
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5461
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5463
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5462
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5363
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5364
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5365
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5427
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5429
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5430
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5431
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5419
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5418
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5421
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5401
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5404
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5405
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5403
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5406
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5407
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5408
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5389
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5391
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5392
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5393
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5395
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5394
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5390
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5400
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5397
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5396
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5426
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5422
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5423
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5379
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5380
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5381
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5383
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5382
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5370
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5367
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5368
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5409
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5411
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5410
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5417
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5416
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5415
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5414
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5413
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5371
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5374
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5376
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5375
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5373
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5372
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5378
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5377
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5412
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5398
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5440
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5443
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5445
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5447
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5446
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5450
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5453
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5454
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5448
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5388
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5387
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5386
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5436
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5449
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5424
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5438
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5439
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5460
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5465
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5464
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5466
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5361
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5360
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5359
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5358
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5362
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5384
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5433
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5432
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5425
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5399
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5420
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5456
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5402
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5435
+    country_id: civ_mrjhat9c
+  - province_id: ITA-5385
+    country_id: civ_mrjhat9c
+  - province_id: RUS-2400
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2335
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2371
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2280
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2304
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2305
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2303
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2416
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2417
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2333
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2353
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2336
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2324
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2343
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2342
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2362
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2370
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2377
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2367
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2606
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2605
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2610
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2609
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2613
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2614
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2611
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2398
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2380
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2397
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2403
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2379
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2399
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2391
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2393
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2388
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2369
+    country_id: civ_mrjhe9em
+  - province_id: RUS-283
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2615
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2616
+    country_id: civ_mrjhe9em
+  - province_id: RUS-5482
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2321
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2382
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2381
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2612
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2337
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2354
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2603
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2390
+    country_id: civ_mrjhe9em
+  - province_id: RUS-3468
+    country_id: civ_mrjhe9em
+  - province_id: RUS+99?
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2378
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2386
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2396
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2363
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2375
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2167
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2394
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2395
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2373
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2401
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2366
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2602
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2402
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2372
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2361
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2356
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2360
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2376
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2374
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2355
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2357
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2368
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2389
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2359
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2334
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2358
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2364
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2365
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2385
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2384
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2387
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2383
+    country_id: civ_mrjhe9em
+  - province_id: RUS-3200
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2392
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2306
+    country_id: civ_mrjhe9em
+  - province_id: RUS-2279
+    country_id: civ_mrjhe9em
+  - province_id: UKR-285
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-318
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-286
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-324
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-321
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-293
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-288
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-289
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-322
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-323
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-291
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-325
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-328
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-329
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-327
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-4827
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-331
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-284
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-330
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-290
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-292
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-326
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-319
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-320
+    country_id: civ_mrjhhc9o
+  - province_id: UKR-4826
+    country_id: civ_mrjhhc9o
+  - province_id: MDA-1613
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1615
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1617
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1621
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1620
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1623
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1642
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1639
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1641
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1631
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1624
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1616
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1614
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1653
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1652
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1645
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1628
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1637
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1650
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1651
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1649
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1633
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1630
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1625
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1626
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1634
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1647
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1629
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1643
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1638
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1627
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1648
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1646
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1635
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1644
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1640
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1632
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1619
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1622
+    country_id: civ_mrjhiid2
+  - province_id: MDA-1618
+    country_id: civ_mrjhiid2
