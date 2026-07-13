@@ -162,13 +162,6 @@ export default function WorldDetail() {
     retry: false,
   })
 
-  const { data: civilizations } = useQuery({
-    queryKey: ['civilizations', worldName, selectedBranch],
-    queryFn: () => api.getCivilizations(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'civilization',
-    retry: false,
-  })
-
   const { data: climateData } = useQuery({
     queryKey: ['climate', worldName, selectedBranch],
     queryFn: () => api.getClimate(worldName!, selectedBranch),
@@ -776,111 +769,6 @@ export default function WorldDetail() {
 
             {activeTab === 'civilization' && (
               <div className="space-y-6">
-                {/* Structured civilizations.yaml cards (if any) */}
-                {civilizations && civilizations.length > 0 && (
-                  <div className="glass-panel p-4 sm:p-6">
-                    <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                      文明
-                    </h2>
-                    <div className="space-y-4">
-                      {civilizations.map((civ: any) => {
-                        // Parse description into intro + sections with bullet points
-                        const desc: string = (civ.description ?? '').trim()
-                        const sections = desc.split(/\n\s*\n/).filter(Boolean)
-                        const intro = sections[0] ?? ''
-                        const rest = sections.slice(1)
-
-                        return (
-                          <div
-                            key={civ.id}
-                            className="bg-space-surface/60 rounded-lg p-5 border border-space-border"
-                          >
-                            {/* Header: name + tags */}
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg font-semibold text-neon-cyan">
-                                  {civ.name}
-                                </span>
-                                <span className="text-xs text-gray-600 font-mono">
-                                  {civ.id}
-                                </span>
-                              </div>
-                              {civ.tags?.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 shrink-0">
-                                  {civ.tags.map((tag: string) => (
-                                    <span
-                                      key={tag}
-                                      className="text-xs px-2 py-0.5 rounded-full bg-purple-900/30 text-purple-300 border border-purple-800/30"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Intro paragraph */}
-                            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line mb-3">
-                              {intro}
-                            </p>
-
-                            {/* Remaining sections (e.g. "核心信仰：" with bullets) */}
-                            {rest.map((section: string, i: number) => {
-                              const lines = section.split('\n').map((l: string) => l.trim())
-                              const header = lines[0]?.replace(/：$/, '') ?? ''
-                              const bullets = lines
-                                .slice(1)
-                                .filter((l: string) => l.startsWith('- ') || l.startsWith('— '))
-                                .map((l: string) => l.replace(/^[-—]\s*/, ''))
-                              const hasBullets = bullets.length > 0
-
-                              return (
-                                <div key={i} className="mt-3">
-                                  <h4 className="text-sm font-semibold text-amber-300 mb-1.5">
-                                    {header}
-                                  </h4>
-                                  {hasBullets ? (
-                                    <ul className="space-y-1.5 text-sm text-gray-300">
-                                      {bullets.map((b: string, j: number) => {
-                                        // Split "title：detail" for bold formatting
-                                        const colonIdx = b.search(/[：:]/)
-                                        const hasTitle = colonIdx > 0 && colonIdx < 20
-                                        return (
-                                          <li key={j} className="flex gap-2">
-                                            <span className="text-amber-500/60 mt-0.5 shrink-0">
-                                              ›
-                                            </span>
-                                            <span className="leading-relaxed">
-                                              {hasTitle ? (
-                                                <>
-                                                  <span className="text-gray-100 font-medium">
-                                                    {b.slice(0, colonIdx + 1)}
-                                                  </span>
-                                                  {b.slice(colonIdx + 1)}
-                                                </>
-                                              ) : (
-                                                b
-                                              )}
-                                            </span>
-                                          </li>
-                                        )
-                                      })}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
-                                      {lines.join('\n')}
-                                    </p>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 {/* Civilization Map preview */}
                 <CivMapPreview worldName={worldName!} branch={selectedBranch} />
 

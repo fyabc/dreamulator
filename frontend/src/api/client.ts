@@ -245,13 +245,6 @@ const readApi = {
           `/worlds/${name}/habitable-zones${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
-  getCivilizations: (name: string, branch?: string | null) =>
-    isStaticMode()
-      ? staticApi.getCivilizations(name, branch)
-      : fetchJson<any[]>(
-          `/worlds/${name}/civilizations${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
-        ),
-
   getClimate: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getClimate(name, branch)

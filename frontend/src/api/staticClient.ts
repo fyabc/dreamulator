@@ -113,16 +113,6 @@ export const staticApi = {
   listBranches: (name: string) =>
     fetchStaticJson<any[]>(`/worlds/${name}/branches.json`),
 
-  getCivilizations: async (name: string, branch?: string | null) => {
-    const data = await (branch
-      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/civilizations.json`)
-      : fetchStaticJson<any>(`/worlds/${name}/civilizations.json`))
-    // Unwrap { civilizations: [...] } to match API endpoint format
-    if (data && typeof data === 'object' && 'civilizations' in data) {
-      return data.civilizations
-    }
-    return data
-  },
 
   // Civilization documents (.md files)
   listCivilizationDocuments: async (name: string, branch?: string | null) => {

@@ -182,12 +182,7 @@ def _export_layer_data(
     if ecology_data:
         result["ecology"] = ecology_data
 
-    # 6. Civilizations
-    civ_data = resolver.load_layer_yaml("civilization", "civilizations.yaml")
-    if civ_data:
-        result["civilizations"] = civ_data
-
-    # 7. CivMap territory data (countries, snapshots, assignments)
+    # 6. CivMap territory data (countries, snapshots, assignments)
     civ_territory = resolver.load_layer_yaml("civilization", "civ_territory.yaml")
     if civ_territory:
         result["civ_territory"] = civ_territory
