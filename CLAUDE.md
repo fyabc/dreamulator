@@ -264,3 +264,26 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 - 物理单位: 在字段名中显式标注（`_au`, `_km`, `_kg`, `_days`）
 - 使用枚举而非自由字符串（`SpectralClass.G` 而非 `"G-type"`）
 - 嵌套深度不超过 4 层
+
+## 开发注意事项
+
+### 静态导出同步
+
+新增 API 端点或数据字段时，**必须同步更新**以下三个文件，否则 GitHub Pages 部署后对应功能不可用：
+1. `scripts/export_static.py` — 添加新数据到导出流程
+2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
+3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
+
+### React Hooks 规则
+
+React 组件中的 hooks（`useState`、`useEffect`、`useMemo`、`useQuery` 等）**必须在每次渲染中以相同顺序调用**。禁止在 hooks 之间放置条件 `return`：
+
+```tsx
+// ❌ 错误：hooks 之间有 early return，导致 hook 调用顺序不一致
+if (!data) return null
+const computed = useMemo(() => ..., [data])  // 当 data 为 null 时不会被调用
+
+// ✅ 正确：所有 hooks 在 early return 之前调用
+const computed = useMemo(() => ..., [data])
+if (!data) return null
+```
