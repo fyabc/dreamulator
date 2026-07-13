@@ -3,9 +3,12 @@
  *
  * Shows a compact Leaflet map with current territory assignments,
  * plus stats and a link to the full editor.
+ *
+ * Always renders (provides navigation to the editor), shows loading state
+ * while data is being fetched.
  */
 
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import L from 'leaflet'
@@ -29,6 +32,7 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
   const leafletMapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.GeoJSON | null>(null)
   const staticMode = isStaticMode()
+  const [mapError, setMapError] = useState<string | null>(null)
 
   // Fetch territory data
   const { data: territory } = useQuery({
@@ -41,23 +45,27 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
   })
 
   // Fetch ADM1 GeoJSON
-  const { data: adm1Geojson } = useQuery({
+  const { data: adm1Geojson, isLoading: adm1Loading } = useQuery({
     queryKey: ['civmap', 'boundaries', worldName, 'adm1', branch],
     queryFn: () =>
       staticMode
         ? staticApi.getCivBoundaries(worldName, 'adm1')
         : api.getBoundaries(worldName, 'adm1', branch),
     enabled: !!worldName,
+    retry: 2,
+    retryDelay: 1000,
   })
 
   // Fetch ADM0 GeoJSON (borders)
-  const { data: adm0Geojson } = useQuery({
+  const { data: adm0Geojson, isLoading: adm0Loading } = useQuery({
     queryKey: ['civmap', 'boundaries', worldName, 'adm0', branch],
     queryFn: () =>
       staticMode
         ? staticApi.getCivBoundaries(worldName, 'adm0')
         : api.getBoundaries(worldName, 'adm0', branch),
     enabled: !!worldName,
+    retry: 2,
+    retryDelay: 1000,
   })
 
   const countries: CivCountry[] = territory?.countries || []
@@ -89,94 +97,95 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
     return counts
   }, [assignments])
 
+  const dataLoading = adm1Loading || adm0Loading
+  const hasGeoJson = adm1Geojson?.features?.length > 0
+
   // Initialize mini map
   useEffect(() => {
     if (!mapRef.current || leafletMapRef.current) return
 
-    const map = L.map(mapRef.current, {
-      center: [35, 25],
-      zoom: 3,
-      zoomControl: false,
-      attributionControl: false,
-      preferCanvas: true,
-      dragging: true,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-    })
+    try {
+      const map = L.map(mapRef.current, {
+        center: [35, 25],
+        zoom: 3,
+        zoomControl: false,
+        attributionControl: false,
+        preferCanvas: true,
+        dragging: true,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+      })
 
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-      { subdomains: 'abcd', maxZoom: 8 },
-    ).addTo(map)
+      L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        { subdomains: 'abcd', maxZoom: 8 },
+      ).addTo(map)
 
-    leafletMapRef.current = map
+      leafletMapRef.current = map
+    } catch (err) {
+      setMapError(`Leaflet initialization failed: ${err}`)
+    }
 
     return () => {
-      map.remove()
-      leafletMapRef.current = null
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove()
+        leafletMapRef.current = null
+      }
     }
   }, [])
 
-  // Update layers
+  // Update layers when GeoJSON data loads
   useEffect(() => {
     const map = leafletMapRef.current
-    if (!map) return
+    if (!map || !hasGeoJson) return
+
+    setMapError(null)
 
     if (layerRef.current) {
       map.removeLayer(layerRef.current)
       layerRef.current = null
     }
 
-    if (!adm1Geojson?.features?.length) return
-
-    const adm1Layer = L.geoJSON(adm1Geojson as GeoBoundaryCollection, {
-      style: (feature) => {
-        if (!feature) return {}
-        const id = (feature.id as string) || ''
-        const cid = assignmentMap.get(id)
-        const c = cid ? countryMap.get(cid) : undefined
-        return {
-          fillColor: c?.color || '#333',
-          fillOpacity: c ? 0.7 : 0.2,
-          color: '#444',
-          weight: 0.3,
-          opacity: 0.5,
-        }
-      },
-      interactive: false,
-    }).addTo(map)
-
-    // Add ADM0 borders on top
-    if (adm0Geojson?.features?.length) {
-      const adm0Layer = L.geoJSON(adm0Geojson as GeoBoundaryCollection, {
-        style: () => ({
-          fillColor: 'transparent',
-          fillOpacity: 0,
-          color: '#888',
-          weight: 1,
-          opacity: 0.7,
-        }),
+    try {
+      const adm1Layer = L.geoJSON(adm1Geojson as GeoBoundaryCollection, {
+        style: (feature) => {
+          if (!feature) return {}
+          const id = (feature.id as string) || ''
+          const cid = assignmentMap.get(id)
+          const c = cid ? countryMap.get(cid) : undefined
+          return {
+            fillColor: c?.color || '#333',
+            fillOpacity: c ? 0.7 : 0.2,
+            color: '#444',
+            weight: 0.3,
+            opacity: 0.5,
+          }
+        },
         interactive: false,
       }).addTo(map)
 
-      // Group both layers
-      const group = L.featureGroup([adm1Layer, adm0Layer])
-      layerRef.current = group as any
-    } else {
-      layerRef.current = adm1Layer
+      // Add ADM0 borders on top
+      if (adm0Geojson?.features?.length) {
+        const adm0Layer = L.geoJSON(adm0Geojson as GeoBoundaryCollection, {
+          style: () => ({
+            fillColor: 'transparent',
+            fillOpacity: 0,
+            color: '#888',
+            weight: 1,
+            opacity: 0.7,
+          }),
+          interactive: false,
+        }).addTo(map)
+
+        const group = L.featureGroup([adm1Layer, adm0Layer])
+        layerRef.current = group as any
+      } else {
+        layerRef.current = adm1Layer
+      }
+    } catch (err) {
+      setMapError(`Failed to render map: ${err}`)
     }
-  }, [adm1Geojson, adm0Geojson, assignmentMap, countryMap])
-
-  // No data state
-  if (!territory && !adm1Geojson) {
-    return null
-  }
-
-  const hasData = countries.length > 0 || (adm1Geojson?.features?.length ?? 0) > 0
-
-  if (!hasData) {
-    return null
-  }
+  }, [adm1Geojson, adm0Geojson, assignmentMap, countryMap, hasGeoJson])
 
   return (
     <div className="glass-panel p-6">
@@ -205,9 +214,24 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
       {/* Mini map */}
       <div
         ref={mapRef}
-        className="w-full rounded-lg overflow-hidden border border-space-border"
+        className="w-full rounded-lg overflow-hidden border border-space-border relative"
         style={{ height: '360px', background: '#1a1a2e' }}
-      />
+      >
+        {dataLoading && !hasGeoJson && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-[1000]">
+            <div className="text-white text-sm">
+              {staticMode ? '正在下载地图数据 (33MB)...' : '加载地图中...'}
+            </div>
+          </div>
+        )}
+        {mapError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-[1000]">
+            <div className="text-yellow-300 text-sm px-4 text-center">
+              ⚠️ {mapError}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Country legend + stats */}
       {countries.length > 0 && (
@@ -247,6 +271,7 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
       {staticMode && (
         <p className="mt-3 text-xs text-gray-600">
           只读模式 — 地图编辑仅在 API 模式下可用
+          {dataLoading && ' | 地图数据加载中...'}
         </p>
       )}
     </div>
