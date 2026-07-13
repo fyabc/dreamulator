@@ -297,6 +297,31 @@ def _export_map_data(
     return planets_with_maps
 
 
+def _write_branch_defaults(branch_out_dir: Path, branch_data: dict) -> None:
+    """Write empty placeholder JSON files for data a branch doesn't have.
+
+    Prevents 404 console noise when the frontend queries for optional data
+    (civ_territory, civ_documents, maps) on branches that don't have it.
+    """
+    defaults = {
+        "civ_territory": {"countries": [], "snapshots": [], "active_snapshot": None, "assignments": {}},
+        "civ_documents": [],
+    }
+    for key, default_value in defaults.items():
+        if key not in branch_data:
+            out_file = branch_out_dir / f"{key}.json"
+            if not out_file.exists():
+                with out_file.open("w", encoding="utf-8") as f:
+                    json.dump(default_value, f, ensure_ascii=False)
+
+    # maps/maps.json (inside maps/ subdirectory)
+    maps_json = branch_out_dir / "maps" / "maps.json"
+    if not maps_json.exists():
+        maps_json.parent.mkdir(parents=True, exist_ok=True)
+        with maps_json.open("w", encoding="utf-8") as f:
+            json.dump([], f)
+
+
 def _export_civmap_reference(
     world_dir: Path,
     world_out_dir: Path,
@@ -475,12 +500,15 @@ def main() -> None:
                 branch_name = branch_dir.name
                 branch_data = _export_layer_data(world_dir, branch=branch_name)
                 branch_out_dir = world_out_dir / "branches" / branch_name
-                if branch_data:
-                    branch_out_dir.mkdir(parents=True, exist_ok=True)
-                    for key, value in branch_data.items():
-                        out_file = branch_out_dir / f"{key}.json"
-                        with out_file.open("w", encoding="utf-8") as f:
-                            json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                # Always create branch dir with empty placeholders
+                # to avoid 404 console noise in static mode
+                branch_out_dir.mkdir(parents=True, exist_ok=True)
+                for key, value in branch_data.items():
+                    out_file = branch_out_dir / f"{key}.json"
+                    with out_file.open("w", encoding="utf-8") as f:
+                        json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                # Write empty defaults for missing data
+                _write_branch_defaults(branch_out_dir, branch_data)
                 # Export branch-specific map data
                 branch_maps_out = branch_out_dir / "maps"
                 branch_map_planets = _export_map_data(

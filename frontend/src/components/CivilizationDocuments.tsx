@@ -33,6 +33,7 @@ export default function CivilizationDocuments({
   branch,
 }: CivilizationDocumentsProps) {
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
+  const [navOpen, setNavOpen] = useState(false)
 
   // Fetch document list
   const { data: documents } = useQuery({
@@ -91,36 +92,77 @@ export default function CivilizationDocuments({
   if (!documents?.length) return null
 
   return (
-    <div className="flex gap-4 min-h-[600px]">
-      {/* Sidebar */}
-      <nav className="w-56 shrink-0 space-y-4 overflow-y-auto max-h-[80vh] sticky top-4 self-start">
-        {grouped.map((group) => (
-          <div key={group.key}>
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
-              {group.label}
-            </h4>
-            <ul className="space-y-0.5">
-              {group.docs.map((doc: any) => (
-                <li key={doc.filename}>
-                  <button
-                    onClick={() => setSelectedDoc(doc.filename)}
-                    className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
-                      effectiveDoc === doc.filename
-                        ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
-                        : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
-                    }`}
-                  >
-                    {doc.title || doc.filename}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </nav>
+    <div className="min-h-[600px]">
+      {/* Mobile: TOC toggle button */}
+      <button
+        onClick={() => setNavOpen(!navOpen)}
+        className="lg:hidden flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-sm
+          bg-space-surface/60 text-gray-300 border border-space-border hover:bg-space-surface/80 transition-colors"
+      >
+        <span>📑</span>
+        <span>目录</span>
+        <span className="text-gray-500 text-xs ml-auto">
+          {effectiveDoc ? (documents.find((d: any) => d.filename === effectiveDoc)?.title || effectiveDoc) : '选择文档'}
+        </span>
+        <span className="text-gray-500">{navOpen ? '▲' : '▼'}</span>
+      </button>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0 glass-panel p-6 overflow-auto">
+      {/* Mobile nav backdrop */}
+      {navOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+
+      <div className="flex gap-4">
+        {/* Sidebar — drawer on mobile, fixed on desktop */}
+        <nav className={`
+          fixed lg:static inset-y-0 left-0 z-50 lg:z-auto
+          w-64 lg:w-56 shrink-0 bg-space-dark lg:bg-transparent
+          space-y-4 overflow-y-auto max-h-[80vh] lg:max-h-none
+          p-4 lg:p-0 lg:sticky lg:top-4 lg:self-start
+          transition-transform duration-200 ease-in-out
+          ${navOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          {/* Mobile close */}
+          <div className="lg:hidden flex justify-between items-center mb-3 pb-2 border-b border-space-border">
+            <span className="text-sm font-semibold text-gray-300">文档目录</span>
+            <button
+              onClick={() => setNavOpen(false)}
+              className="text-gray-400 hover:text-white text-lg"
+            >
+              ✕
+            </button>
+          </div>
+
+          {grouped.map((group) => (
+            <div key={group.key}>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
+                {group.label}
+              </h4>
+              <ul className="space-y-0.5">
+                {group.docs.map((doc: any) => (
+                  <li key={doc.filename}>
+                    <button
+                      onClick={() => { setSelectedDoc(doc.filename); setNavOpen(false) }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                        effectiveDoc === doc.filename
+                          ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
+                      }`}
+                    >
+                      {doc.title || doc.filename}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 glass-panel p-4 sm:p-6 overflow-auto">
         {activeDoc ? (
           <article className="prose prose-invert prose-sm max-w-none
             prose-headings:text-neon-cyan prose-headings:font-semibold
@@ -181,6 +223,7 @@ export default function CivilizationDocuments({
             选择左侧文档
           </div>
         )}
+      </div>
       </div>
     </div>
   )
