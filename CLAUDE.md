@@ -148,6 +148,12 @@ npm run lint
 > **静态模式**：`VITE_STATIC_MODE=true` 时前端读取预导出的 JSON（`scripts/export_static.py`），
 > 不依赖后端，但创建/删除/构建/验证/叙述等写操作不可用。
 > GitHub Pages 部署通过 `.github/workflows/deploy-pages.yml` 自动化。
+>
+> **⚠️ 静态导出同步**：新增 API 端点或数据字段时，**必须同步更新**以下三个文件，
+> 否则 GitHub Pages 部署后对应功能将不可用：
+> 1. `scripts/export_static.py` — 添加新数据到导出流程
+> 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
+> 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
 
 ### Claude Code 自定义技能
 

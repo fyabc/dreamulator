@@ -75,6 +75,12 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
       ? territory.assignments[activeSnapshotId]
       : []
 
+  // Only show preview for branches that actually have civmap data
+  // (territory still loading → wait; loaded but empty → hide; loaded with data → show)
+  if (territory && countries.length === 0 && (territory?.snapshots?.length ?? 0) === 0) {
+    return null
+  }
+
   // Build assignment map
   const assignmentMap = useMemo(() => {
     const m = new Map<string, string>()

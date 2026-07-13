@@ -77,6 +77,49 @@ def _normalize_body(body: dict, orbit_lookup: dict) -> dict:
     return normalized
 
 
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from markdown text."""
+    import re
+
+    match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)", text, re.DOTALL)
+    if not match:
+        return {}, text
+    try:
+        fm = yaml.safe_load(match.group(1))
+        if not isinstance(fm, dict):
+            fm = {}
+    except yaml.YAMLError:
+        fm = {}
+    return fm, match.group(2)
+
+
+def _export_civilization_documents(resolver: LayerResolver) -> list[dict] | None:
+    """Export .md files from the civilization layer input directory.
+
+    Returns a list of document metadata dicts with frontmatter, filename,
+    and full content. Returns None if no documents found.
+    """
+    md_files = resolver.list_input_files("civilization", "*.md")
+    if not md_files:
+        return None
+
+    documents = []
+    for fp in md_files:
+        with fp.open("r", encoding="utf-8") as f:
+            content = f.read()
+        fm, body = _parse_frontmatter(content)
+        documents.append({
+            "filename": fp.name,
+            "title": fm.get("title", fp.stem),
+            "type": fm.get("type", ""),
+            "period": fm.get("period", ""),
+            "tags": fm.get("tags", []),
+            "frontmatter": fm,
+            "content": body,
+        })
+    return documents
+
+
 def _export_layer_data(
     world_dir: Path, branch: str | None = None
 ) -> dict:
@@ -148,6 +191,12 @@ def _export_layer_data(
     civ_territory = resolver.load_layer_yaml("civilization", "civ_territory.yaml")
     if civ_territory:
         result["civ_territory"] = civ_territory
+        result["has_civmap"] = True
+
+    # 8. Civilization documents (.md files)
+    civ_docs = _export_civilization_documents(resolver)
+    if civ_docs:
+        result["civ_documents"] = civ_docs
 
     return result
 

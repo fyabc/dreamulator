@@ -118,12 +118,36 @@ export const staticApi = {
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/civilizations.json`)
       : fetchStaticJson<any>(`/worlds/${name}/civilizations.json`),
 
-  // Civilization documents (.md files) — not exported in static mode yet
-  listCivilizationDocuments: (_name: string, _branch?: string | null) =>
-    Promise.resolve([] as any[]),
+  // Civilization documents (.md files)
+  listCivilizationDocuments: async (name: string, branch?: string | null) => {
+    const data = await fetchBranchAwareJson<any>(
+      name, branch, '/civ_documents.json', '/civ_documents.json',
+    )
+    if (!data) return [] as any[]
+    // Return just the metadata (without content) to match API format
+    return data.map((d: any) => ({
+      filename: d.filename,
+      title: d.title,
+      type: d.type,
+      period: d.period,
+      tags: d.tags || [],
+    }))
+  },
 
-  getCivilizationDocument: (_name: string, _filename: string, _branch?: string | null) =>
-    Promise.reject(new Error('Civilization documents not available in static mode')),
+  getCivilizationDocument: async (name: string, filename: string, branch?: string | null) => {
+    const data = await fetchBranchAwareJson<any[]>(
+      name, branch, '/civ_documents.json', '/civ_documents.json',
+    )
+    if (!data) throw new Error('No civilization documents in static data')
+    const doc = data.find((d: any) => d.filename === filename)
+    if (!doc) throw new Error(`Document '${filename}' not found`)
+    return {
+      filename: doc.filename,
+      title: doc.title,
+      frontmatter: doc.frontmatter || {},
+      content: doc.content,
+    }
+  },
 
   getClimate: (name: string, branch?: string | null) =>
     branch
