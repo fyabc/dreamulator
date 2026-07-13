@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-14
+
+### Added
+
+**文明地图（CivMap）系统**
+- 基于真实地球行政区划的文明层地图涂色
+- Leaflet 嵌入式地图组件 + GeoJSON 渲染
+- 国家面积（km²）显示、省份计数
+- 分支感知的文明数据查询
+- GeoJSON 底图数据通过 Git LFS 存储
+
+**文明层文档系统**
+- Markdown 文档查看器（remark-gfm 表格渲染）
+- 自动链接反引号引用的 .md 文件
+- ERE-if 架空历史分支（东罗马文明 IF）
+
+**前端交互增强**
+- 分支选择与活动标签页持久化到 URL search params
+- WorldDetail、CivMapEditor、CivilizationDocuments 响应式移动端布局
+
+### Changed
+
+- l4-companion 分支迁移至 Markdown 格式，移除 civilization YAML 渲染
+- CLAUDE.md 新增静态导出同步规则和 React Hooks 规则文档
+
+### Fixed
+
+- CivMapPreview hooks 规则违反导致页面崩溃
+- 静态模式下文明数据解包错误
+- 文明文档加入静态导出 + 条件 CivMapPreview 渲染
+- 静态 civmap GeoJSON 导出优化与错误处理
+- 移动端导航抽屉背景透明问题
+- 分支 404 错误消除
+
 ## [0.2.0] — 2026-06-29
 
 ### Added
@@ -81,5 +115,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - GitHub Pages 静态站点部署
 - 学科知识库文档框架
 
+[0.3.0]: https://github.com/user/dreamulator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/user/dreamulator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/user/dreamulator/releases/tag/v0.1.0
