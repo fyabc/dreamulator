@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import CivLeafletMap from '../components/civmap/CivLeafletMap'
+import { geoJsonAreaKm2, formatArea } from '../components/civmap/areaUtils'
 import type {
   BoundaryLevel,
   CivCountry,
@@ -251,14 +252,23 @@ export default function CivMapEditorPage() {
     }
   }, [editingCountry, upsertCountryMutation])
 
-  // Count assignments per fictional country (for stats)
-  const assignmentCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const a of assignments) {
-      counts.set(a.country_id, (counts.get(a.country_id) || 0) + 1)
+  // Calculate area (km²) per fictional country from assigned provinces
+  const areaCounts = useMemo(() => {
+    const areas = new Map<string, number>()
+    if (!adm1Geojson?.features) return areas
+    const featureMap = new Map<string, any>()
+    for (const f of adm1Geojson.features) {
+      if (f.id) featureMap.set(f.id as string, f)
     }
-    return counts
-  }, [assignments])
+    for (const a of assignments) {
+      const feature = featureMap.get(a.province_id)
+      if (feature) {
+        const area = geoJsonAreaKm2(feature.geometry)
+        areas.set(a.country_id, (areas.get(a.country_id) || 0) + area)
+      }
+    }
+    return areas
+  }, [assignments, adm1Geojson])
 
   // ---------------------------------------------------------------------------
   // Render
@@ -376,7 +386,7 @@ export default function CivMapEditorPage() {
                     />
                     <span className="truncate">{c.name}</span>
                     <span className="text-xs text-gray-500 shrink-0">
-                      {assignmentCounts.get(c.id) || 0}
+                      {(areaCounts.get(c.id) ?? 0) > 0 ? `${formatArea(areaCounts.get(c.id)!)} km²` : ''}
                     </span>
                   </button>
                   <button

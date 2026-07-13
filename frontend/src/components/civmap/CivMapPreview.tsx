@@ -15,6 +15,7 @@ import type {
   GeoBoundaryCollection,
   TerritoryAssignment,
 } from './types'
+import { geoJsonAreaKm2, formatArea } from './areaUtils'
 import * as api from '../../api/civmapClient'
 import { isStaticMode } from '../../api/mode'
 import { staticApi } from '../../api/staticClient'
@@ -81,13 +82,27 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
     return m
   }, [countries])
 
-  const paintCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const a of assignments) {
-      counts.set(a.country_id, (counts.get(a.country_id) || 0) + 1)
+  // Calculate area (km²) per fictional country from assigned provinces
+  const areaCounts = useMemo(() => {
+    const areas = new Map<string, number>()
+    if (!adm1Geojson?.features) return areas
+
+    // Build feature lookup by ID
+    const featureMap = new Map<string, any>()
+    for (const f of adm1Geojson.features) {
+      if (f.id) featureMap.set(f.id as string, f)
     }
-    return counts
-  }, [assignments])
+
+    // Sum area of each assigned province
+    for (const a of assignments) {
+      const feature = featureMap.get(a.province_id)
+      if (feature) {
+        const area = geoJsonAreaKm2(feature.geometry)
+        areas.set(a.country_id, (areas.get(a.country_id) || 0) + area)
+      }
+    }
+    return areas
+  }, [assignments, adm1Geojson])
 
   const hasCivMapData = countries.length > 0 || (territory?.snapshots?.length ?? 0) > 0
   const hasGeoJson = !!adm1Geojson?.features?.length
@@ -205,7 +220,7 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
         style={{ height: '360px', background: '#1a1a2e' }}
       />
 
-      {/* Country legend + stats */}
+      {/* Country legend + area */}
       {countries.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-3">
           {countries.map((c) => (
@@ -215,9 +230,11 @@ export default function CivMapPreview({ worldName, branch }: CivMapPreviewProps)
                 style={{ backgroundColor: c.color }}
               />
               <span className="text-gray-300">{c.name}</span>
-              <span className="text-gray-600 text-xs">
-                ({paintCounts.get(c.id) || 0} 省)
-              </span>
+              {(areaCounts.get(c.id) ?? 0) > 0 && (
+                <span className="text-gray-500 text-xs">
+                  {formatArea(areaCounts.get(c.id)!)} km²
+                </span>
+              )}
             </div>
           ))}
           {assignments.length === 0 && (
