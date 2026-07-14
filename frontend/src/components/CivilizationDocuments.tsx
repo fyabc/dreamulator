@@ -16,6 +16,7 @@ const CATEGORY_ORDER: [string, string][] = [
   ['thematic', '专题'],
   ['geopolitical', '地缘政治'],
   ['microhistory', '微观史'],
+  ['creative', '创作素材'],
   // Fallback for any other type
   ['', '其他'],
 ]
@@ -24,8 +25,8 @@ function getCategory(type: string): string {
   for (const [key] of CATEGORY_ORDER) {
     if (key && type.startsWith(key)) return key
   }
-  // Special handling: _overview is always "overview"
-  return type || ''
+  // Unknown types fall into the catch-all '' (其他) category
+  return ''
 }
 
 export default function CivilizationDocuments({
