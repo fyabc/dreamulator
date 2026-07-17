@@ -8,6 +8,8 @@
 
 A fantasy world building and simulation tool grounded in real science. Starting from stellar systems and physical laws, Dreamulator leverages knowledge across scientific disciplines to rigorously design and simulate fictional worlds.
 
+> **Live Demo:** https://fyabc.github.io/dreamulator/ (read-only static version — world creation, simulation, and AI narration are disabled)
+
 ## Features
 
 - **Science-based world building** — Define stars, planets, atmospheres, and biospheres using real astrophysical and geological parameters
