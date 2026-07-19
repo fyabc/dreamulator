@@ -6,7 +6,8 @@
 docs/
 ├── knowledge/       # 学科知识库（天体物理、地质、气候等真实科学知识）
 ├── worldbuilding/   # 架空世界创建思路与方法论
-└── usage/           # 项目用法指南（CLI、API、前端操作说明）
+├── usage/           # 项目用法指南（CLI、API、前端操作说明）
+└── design/          # 架构设计文档（面向开发者，含设计决策记录）
 ```
 
 ## knowledge/ — 学科知识库

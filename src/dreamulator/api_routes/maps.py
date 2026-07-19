@@ -200,6 +200,62 @@ async def save_elevation(
     }
 
 
+@router.post("/{world_name}/maps/{planet_id}/import-elevation")
+async def import_elevation(
+    world_name: str,
+    planet_id: str,
+    file: UploadFile = File(...),
+    branch: str | None = None,
+) -> dict[str, Any]:
+    """Import a heightmap from an external tool (PNG/TIFF).
+
+    Auto-detects format, normalises to [0, 1], and optionally resamples to
+    match the project's target resolution.  After import the Voronoi network
+    is automatically re-sampled from the new elevation data.
+
+    Supported formats: 16-bit PNG, 16-bit TIFF, 32-bit float TIFF.
+    """
+    from ..map.importer import import_heightmap
+
+    mgr = _get_map_manager(world_name, branch)
+    meta = mgr.get_map_metadata(planet_id)
+
+    data = await file.read()
+    filename = file.filename or ""
+
+    # Determine target resolution
+    target_w = meta.width if meta else None
+    target_h = meta.height if meta else None
+
+    result = import_heightmap(
+        data,
+        filename=filename,
+        target_width=target_w,
+        target_height=target_h,
+    )
+
+    mgr.save_elevation(planet_id, result.elevation)
+    mgr.sync_voronoi_from_elevation(planet_id)
+
+    # Update layer registry and mark downstream layers as stale
+    registry = mgr.update_registry_on_elevation_change(planet_id)
+    stale_layers = [
+        name
+        for name, meta in {**registry.raster_layers, **registry.vector_layers}.items()
+        if meta.stale
+    ]
+
+    return {
+        "ok": True,
+        "source_format": result.source_format,
+        "source_resolution": [result.source_width, result.source_height],
+        "output_resolution": list(result.elevation.shape[::-1]),
+        "was_resampled": result.was_resampled,
+        "range": [float(result.elevation.min()), float(result.elevation.max())],
+        "stale_layers": stale_layers,
+    }
+
+
 @router.post("/{world_name}/maps/{planet_id}/voronoi")
 def save_voronoi(
     world_name: str,

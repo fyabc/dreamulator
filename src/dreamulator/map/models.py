@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Projection & metadata
@@ -190,3 +190,119 @@ class MapLayerType(str, Enum):
     PLATES = "plates"  # editable
     PROVINCES = "provinces"  # editable (civilisation layer)
     FEATURES = "features"  # editable / derived
+
+
+# ---------------------------------------------------------------------------
+# Layer registry — unified tracking of all map layers per planet
+# ---------------------------------------------------------------------------
+
+
+class RasterLayerMeta(BaseModel):
+    """Metadata for a raster map layer (PNG/TIFF heightmap-like)."""
+
+    layer_type: MapLayerType = Field(description="Which layer this represents")
+    source: Literal["editable", "engine-derived", "imported"] = Field(
+        description="How this layer was created"
+    )
+    file_path: str = Field(
+        description="Relative path from maps/<planet_id>/ (e.g. 'input/elevation.png')"
+    )
+    resolution: tuple[int, int] = Field(
+        description="(width, height) in pixels"
+    )
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="Layer type names this layer depends on",
+    )
+    stale: bool = Field(
+        default=False,
+        description="True if an upstream layer changed and this needs recomputation",
+    )
+
+
+class VectorLayerMeta(BaseModel):
+    """Metadata for a vector map layer (JSON/GeoJSON)."""
+
+    layer_id: str = Field(description="Identifier for this vector layer")
+    format: Literal["geojson", "voronoi-json", "plates-json"] = Field(
+        description="File format"
+    )
+    file_path: str = Field(
+        description="Relative path from maps/<planet_id>/"
+    )
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="Layer type names this layer depends on",
+    )
+    stale: bool = Field(
+        default=False,
+        description="True if an upstream layer changed and this needs recomputation",
+    )
+
+
+class MapLayerRegistry(BaseModel):
+    """Registry of all map layers for a planet.
+
+    Stored as ``registry.yaml`` alongside the map data.  Tracks layer sources,
+    dependencies, and staleness so that re-importing an elevation heightmap can
+    cascade updates to all downstream layers.
+
+    Dependency DAG::
+
+        elevation (editable/imported)
+            ├── plates (engine: assign_cells_to_plates)
+            │   └── provinces (engine: voronoi → GeoJSON)
+            │       └── civ_territory (manual: civmap painting)
+            ├── features (engine: feature_extractor)
+            ├── temperature (engine: climate engine)
+            │   └── biomes (engine: ecology engine)
+            └── moisture (engine: climate engine)
+    """
+
+    planet_id: str = Field(description="Planet this registry belongs to")
+    raster_layers: dict[str, RasterLayerMeta] = Field(
+        default_factory=dict,
+        description="Raster layers keyed by MapLayerType value",
+    )
+    vector_layers: dict[str, VectorLayerMeta] = Field(
+        default_factory=dict,
+        description="Vector layers keyed by layer_id",
+    )
+
+    def mark_downstream_stale(self, changed_layer: str) -> list[str]:
+        """Mark all layers that depend on *changed_layer* as stale.
+
+        Performs a transitive closure: if A depends on B and B depends on
+        the changed layer, both A and B are marked stale.
+
+        Returns:
+            List of layer names that were marked stale.
+        """
+        # Build reverse dependency map
+        all_layers: dict[str, list[str]] = {}
+        for name, meta in self.raster_layers.items():
+            all_layers[name] = meta.depends_on
+        for name, meta in self.vector_layers.items():
+            all_layers[name] = meta.depends_on
+
+        # BFS to find all transitively affected layers
+        affected: list[str] = []
+        queue = [changed_layer]
+        visited: set[str] = set()
+
+        while queue:
+            current = queue.pop(0)
+            for name, deps in all_layers.items():
+                if current in deps and name not in visited:
+                    visited.add(name)
+                    affected.append(name)
+                    queue.append(name)
+
+        # Apply stale flags
+        for name in affected:
+            if name in self.raster_layers:
+                self.raster_layers[name].stale = True
+            if name in self.vector_layers:
+                self.vector_layers[name].stale = True
+
+        return affected
