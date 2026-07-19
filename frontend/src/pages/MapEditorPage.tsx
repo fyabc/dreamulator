@@ -12,15 +12,15 @@ import { isStaticMode } from '../api/mode'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
-import MapEditingTools from '../components/map/MapEditingTools'
+import MapTools from '../components/map/MapEditingTools'
 import MapCellInspector from '../components/map/MapCellInspector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapOnboardingGuide, {
   isOnboardingDismissed,
 } from '../components/map/MapOnboardingGuide'
 import MapMinimap from '../components/map/MapMinimap'
-import { decodePngToFloat32, encodeFloat32ToPng } from '../viewers/map/utils/imageCodec'
-import type { BrushConfig, VoronoiCell, TectonicPlate } from '../viewers/map/types'
+import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
+import type { VoronoiCell, TectonicPlate } from '../viewers/map/types'
 
 export default function MapEditorPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -44,16 +44,8 @@ export default function MapEditorPage() {
     showFeatures: false,
   })
 
-  const [brushConfig, setBrushConfig] = useState<BrushConfig>({
-    tool: 'raise',
-    radius: 20,
-    strength: 0.3,
-    hardness: 0.5,
-  })
-
-  // Local elevation data (for unsaved changes tracking)
+  // Decoded elevation data (for rendering)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
@@ -82,12 +74,25 @@ export default function MapEditorPage() {
     enabled: !!worldName,
   })
 
+  // World planet definitions (for default planet ID when no maps exist yet)
+  const { data: worldPlanets } = useQuery({
+    queryKey: ['worldPlanets', worldName, selectedBranch],
+    queryFn: () => api.getPlanets(worldName!, selectedBranch),
+    enabled: !!worldName,
+  })
+
   // Auto-select first planet if none selected
   useEffect(() => {
-    if (!selectedPlanet && mapPlanets && mapPlanets.length > 0) {
-      setSelectedPlanet(mapPlanets[0])
+    if (!selectedPlanet) {
+      if (mapPlanets && mapPlanets.length > 0) {
+        // Use first planet that already has map data
+        setSelectedPlanet(mapPlanets[0])
+      } else if (worldPlanets && worldPlanets.length > 0) {
+        // No maps exist yet — use first defined planet as default for generation
+        setSelectedPlanet(worldPlanets[0].id)
+      }
     }
-  }, [mapPlanets, selectedPlanet])
+  }, [mapPlanets, worldPlanets, selectedPlanet])
 
   const { data: meta } = useQuery({
     queryKey: ['mapMeta', worldName, selectedPlanet, selectedBranch],
@@ -102,7 +107,7 @@ export default function MapEditorPage() {
     retry: false,
   })
 
-  // Decode elevation blob to Float32Array
+  // Decode elevation blob to Float32Array for rendering
   useEffect(() => {
     if (!elevationBlob) {
       setLocalElevation(null)
@@ -110,7 +115,6 @@ export default function MapEditorPage() {
     }
     decodePngToFloat32(elevationBlob).then(({ data }) => {
       setLocalElevation(data)
-      setHasUnsavedChanges(false)
     })
   }, [elevationBlob])
 
@@ -159,16 +163,19 @@ export default function MapEditorPage() {
     },
   })
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!localElevation || !meta) return
-      const pngBlob = await encodeFloat32ToPng(localElevation, meta.width, meta.height)
-      return api.saveElevation(worldName!, selectedPlanet, pngBlob, selectedBranch)
-    },
+  // Import heightmap from external tool (PNG/TIFF)
+  const importMutation = useMutation({
+    mutationFn: (file: File) =>
+      api.importElevation(worldName!, selectedPlanet, file, selectedBranch),
     onSuccess: () => {
-      setHasUnsavedChanges(false)
       queryClient.invalidateQueries({
-        queryKey: ['elevationBlob', worldName, selectedPlanet],
+        queryKey: ['elevationBlob', worldName, selectedPlanet, selectedBranch],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['voronoi', worldName, selectedPlanet, selectedBranch],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
       })
     },
   })
@@ -207,6 +214,26 @@ export default function MapEditorPage() {
     return tectonicPlates.find((p) => p.id === hoveredCellData.plate_id) ?? null
   }, [tectonicPlates, hoveredCellData])
 
+  // Display name for the currently selected planet
+  const currentPlanetName = useMemo(() => {
+    if (!selectedPlanet || !worldPlanets) return null
+    const p = worldPlanets.find((pl: { id: string }) => pl.id === selectedPlanet)
+    return p?.name ?? null
+  }, [selectedPlanet, worldPlanets])
+
+  const handleImportClick = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.png,.tif,.tiff'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (file) {
+        importMutation.mutate(file)
+      }
+    }
+    input.click()
+  }, [importMutation])
+
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">未选择世界</div>
   }
@@ -222,14 +249,14 @@ export default function MapEditorPage() {
           ← 返回
         </Link>
         <h1 className="text-lg font-bold text-neon-cyan neon-glow-subtle">
-          {selectedPlanet || '地图'}
+          {currentPlanetName ?? selectedPlanet ?? '地图'}
         </h1>
         <span className="text-xs text-gray-600">地图编辑器</span>
 
         <div className="flex-1" />
 
-        {/* Planet selector */}
-        {mapPlanets && mapPlanets.length > 0 && (
+        {/* Planet selector — show all defined planets, mark which have maps */}
+        {worldPlanets && worldPlanets.length > 0 && (
           <select
             value={selectedPlanet}
             onChange={(e) => {
@@ -238,9 +265,10 @@ export default function MapEditorPage() {
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
-            {mapPlanets.map((p: string) => (
-              <option key={p} value={p}>
-                {p}
+            {worldPlanets.map((p: { id: string; name?: string }) => (
+              <option key={p.id} value={p.id}>
+                {p.name ?? p.id}
+                {mapPlanets?.includes(p.id) ? '' : ' (无地图)'}
               </option>
             ))}
           </select>
@@ -281,7 +309,11 @@ export default function MapEditorPage() {
               </div>
             ) : !localElevation ? (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-                <p>该行星暂无地图数据</p>
+                <p>
+                  {selectedPlanet
+                    ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
+                    : '该行星暂无地图数据'}
+                </p>
                 {!staticMode && (
                   <button
                     onClick={() =>
@@ -291,10 +323,12 @@ export default function MapEditorPage() {
                         num_plates: 15,
                       })
                     }
-                    disabled={generateMutation.isPending}
+                    disabled={generateMutation.isPending || !selectedPlanet}
                     className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
                   >
-                    {generateMutation.isPending ? '生成中...' : '🌍 生成第一张地图'}
+                    {generateMutation.isPending
+                      ? '生成中...'
+                      : `🌍 为 ${currentPlanetName ?? selectedPlanet ?? '...'} 生成地图`}
                   </button>
                 )}
               </div>
@@ -359,20 +393,10 @@ export default function MapEditorPage() {
                 <MapLayerPanel state={layerState} onChange={setLayerState} />
                 {!staticMode && (
                   <div className="border-t border-space-border pt-4">
-                    <MapEditingTools
-                      config={brushConfig}
-                      onChange={setBrushConfig}
-                      onGenerate={() =>
-                        generateMutation.mutate({
-                          num_continents: 3,
-                          mountaininess: 0.5,
-                          num_plates: 15,
-                        })
-                      }
-                      onSave={() => saveMutation.mutate()}
-                      isGenerating={generateMutation.isPending}
-                      isSaving={saveMutation.isPending}
-                      hasUnsavedChanges={hasUnsavedChanges}
+                    <MapTools
+                      onImport={handleImportClick}
+                      isImporting={importMutation.isPending}
+                      hasElevation={!!localElevation}
                     />
                   </div>
                 )}
@@ -383,25 +407,15 @@ export default function MapEditorPage() {
 
         {/* === Desktop layout (≥ md, hidden by default) === */}
         <div className="hidden md:flex flex-1 min-h-0">
-          {/* Left panel: layers + editing tools */}
+          {/* Left panel: layers + tools */}
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <MapLayerPanel state={layerState} onChange={setLayerState} />
             {!staticMode && (
               <div className="border-t border-space-border pt-4">
-                <MapEditingTools
-                  config={brushConfig}
-                  onChange={setBrushConfig}
-                  onGenerate={() =>
-                    generateMutation.mutate({
-                      num_continents: 3,
-                      mountaininess: 0.5,
-                      num_plates: 15,
-                    })
-                  }
-                  onSave={() => saveMutation.mutate()}
-                  isGenerating={generateMutation.isPending}
-                  isSaving={saveMutation.isPending}
-                  hasUnsavedChanges={hasUnsavedChanges}
+                <MapTools
+                  onImport={handleImportClick}
+                  isImporting={importMutation.isPending}
+                  hasElevation={!!localElevation}
                 />
               </div>
             )}
@@ -415,7 +429,11 @@ export default function MapEditorPage() {
               </div>
             ) : !localElevation ? (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-                <p>该行星暂无地图数据</p>
+                <p>
+                  {selectedPlanet
+                    ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
+                    : '该行星暂无地图数据'}
+                </p>
                 {!staticMode && (
                   <button
                     onClick={() =>
@@ -425,10 +443,12 @@ export default function MapEditorPage() {
                         num_plates: 15,
                       })
                     }
-                    disabled={generateMutation.isPending}
+                    disabled={generateMutation.isPending || !selectedPlanet}
                     className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
                   >
-                    {generateMutation.isPending ? '生成中...' : '🌍 生成第一张地图'}
+                    {generateMutation.isPending
+                      ? '生成中...'
+                      : `🌍 为 ${currentPlanetName ?? selectedPlanet ?? '...'} 生成地图`}
                   </button>
                 )}
               </div>

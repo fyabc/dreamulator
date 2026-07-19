@@ -7,10 +7,8 @@ the root world.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
 import json
+from pathlib import Path
 
 import numpy as np
 import yaml  # type: ignore[import-untyped]
@@ -20,9 +18,12 @@ from dreamulator.resolver import LayerResolver
 from .elevation_codec import decode_elevation, encode_elevation
 from .models import (
     MapFeature,
+    MapLayerRegistry,
     MapLayerType,
     MapMetadata,
+    RasterLayerMeta,
     TectonicPlate,
+    VectorLayerMeta,
     VoronoiNetwork,
 )
 
@@ -307,6 +308,117 @@ class MapManager:
 
         updated = sample_heightmap(network, elevation, min_m, max_m)
         self.save_voronoi(planet_id, updated)
+
+    # -------------------------------------------------------------------
+    # Layer registry
+    # -------------------------------------------------------------------
+
+    def get_registry(self, planet_id: str) -> MapLayerRegistry | None:
+        """Load the layer registry for a planet.
+
+        If no registry file exists, returns ``None`` (callers may create one
+        via :meth:`build_registry`).
+        """
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None:
+            return None
+        yaml_path = map_dir / "registry.yaml"
+        if not yaml_path.exists():
+            return None
+        with yaml_path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if data is None:
+            return None
+        return MapLayerRegistry.model_validate(data)
+
+    def save_registry(self, planet_id: str, registry: MapLayerRegistry) -> None:
+        """Save the layer registry for a planet."""
+        map_dir = self._ensure_input_dir(planet_id)
+        yaml_path = map_dir / "registry.yaml"
+        with yaml_path.open("w", encoding="utf-8") as f:
+            yaml.dump(
+                registry.model_dump(mode="json"),
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
+
+    def build_registry(self, planet_id: str) -> MapLayerRegistry:
+        """Build a fresh layer registry by scanning existing map data.
+
+        This creates or rebuilds the registry from the actual files on disk.
+        """
+        meta = self.get_map_metadata(planet_id)
+        resolution = (meta.width, meta.height) if meta else (2048, 1024)
+
+        registry = MapLayerRegistry(planet_id=planet_id)
+
+        # Elevation raster
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir and (map_dir / "elevation.png").exists():
+            registry.raster_layers[MapLayerType.ELEVATION.value] = RasterLayerMeta(
+                layer_type=MapLayerType.ELEVATION,
+                source="imported",
+                file_path="input/elevation.png",
+                resolution=resolution,
+            )
+
+        # Voronoi network
+        if map_dir and (map_dir / "voronoi.json").exists():
+            registry.vector_layers["voronoi"] = VectorLayerMeta(
+                layer_id="voronoi",
+                format="voronoi-json",
+                file_path="input/voronoi.json",
+                depends_on=[MapLayerType.ELEVATION.value],
+            )
+
+        # Tectonic plates
+        if map_dir and (map_dir / "plates.json").exists():
+            registry.vector_layers["plates"] = VectorLayerMeta(
+                layer_id="plates",
+                format="plates-json",
+                file_path="input/plates.json",
+                depends_on=["voronoi"],
+            )
+
+        # Features
+        if map_dir and (map_dir / "features.json").exists():
+            registry.vector_layers["features"] = VectorLayerMeta(
+                layer_id="features",
+                format="voronoi-json",
+                file_path="input/features.json",
+                depends_on=[MapLayerType.ELEVATION.value],
+            )
+
+        self.save_registry(planet_id, registry)
+        return registry
+
+    def update_registry_on_elevation_change(self, planet_id: str) -> MapLayerRegistry:
+        """Update the registry after the elevation heightmap changes.
+
+        Marks all downstream layers as stale and updates the elevation entry.
+        """
+        registry = self.get_registry(planet_id)
+        if registry is None:
+            registry = self.build_registry(planet_id)
+
+        meta = self.get_map_metadata(planet_id)
+        resolution = (meta.width, meta.height) if meta else (2048, 1024)
+
+        # Update elevation entry
+        registry.raster_layers[MapLayerType.ELEVATION.value] = RasterLayerMeta(
+            layer_type=MapLayerType.ELEVATION,
+            source="imported",
+            file_path="input/elevation.png",
+            resolution=resolution,
+        )
+
+        # Mark downstream layers as stale
+        registry.mark_downstream_stale(MapLayerType.ELEVATION.value)
+
+        self.save_registry(planet_id, registry)
+        return registry
 
     # -------------------------------------------------------------------
     # Full generation

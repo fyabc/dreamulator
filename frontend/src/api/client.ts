@@ -179,6 +179,16 @@ const liveOnlyApi = {
     }).then((r) => r.json())
   },
 
+  importElevation: (world: string, planetId: string, file: File, branch?: string | null) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetch(`/api/worlds/${world}/maps/${planetId}/import-elevation${params}`, {
+      method: 'POST',
+      body: formData,
+    }).then((r) => r.json())
+  },
+
   saveVoronoi: (world: string, planetId: string, network: any, branch?: string | null) => {
     const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
     return fetchJson<any>(`/worlds/${world}/maps/${planetId}/voronoi${params}`, {
@@ -364,6 +374,11 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.saveElevation(...args),
+
+  importElevation: (...args: Parameters<typeof liveOnlyApi.importElevation>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.importElevation(...args),
 
   saveVoronoi: (...args: Parameters<typeof liveOnlyApi.saveVoronoi>) =>
     isStaticMode()

@@ -1,6 +1,8 @@
 # 地图系统
 
-dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地图，支持查看、编辑和多图层切换。
+dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地图，支持地形导入、多图层查看和 Voronoi 语义管理。
+
+> **使用指南**：完整的 Gaea 设计 → 导入 → 查看工作流见 [map-workflow.md](map-workflow.md)。
 
 ## 参考项目
 
@@ -175,8 +177,8 @@ layers/
 | `map/models.py` | Pydantic 数据模型 | — |
 | `map/elevation_codec.py` | 高度图 PNG ↔ numpy 编解码 | Pillow 16-bit PNG I/O |
 | `map/voronoi_generator.py` | Voronoi 网络生成 + Lloyd relaxation | [Red Blob Games](https://www.redblobgames.com/x/2022-voronoi-maps-tutorial/)、scipy.spatial.Voronoi |
-| `map/terrain_generator.py` | 多频率高斯噪声地形生成 | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
-| `map/feature_extractor.py` | 从高度图提取海岸线、河流、山脊 | QGIS DEM 分析工具 |
+| `map/terrain_generator.py` | 程序化地形生成（快速原型，推荐用 Gaea 替代） | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
+| `map/importer.py` | 外部高度图导入（Gaea/World Machine 输出格式解码） | — |
 | `map/manager.py` | 地图 CRUD + 分支继承 + 同步 | dreamulator LayerResolver |
 
 ## API 端点
@@ -186,10 +188,14 @@ layers/
 | GET | `/api/worlds/{w}/maps` | 列出有地图的行星 |
 | GET | `/api/worlds/{w}/maps/{p}/meta` | 地图元数据 |
 | GET | `/api/worlds/{w}/maps/{p}/elevation` | 高度图 PNG |
+| GET | `/api/worlds/{w}/maps/{p}/layer/{type}` | 指定图层数据 |
 | GET | `/api/worlds/{w}/maps/{p}/voronoi` | Voronoi 网络 JSON |
 | GET | `/api/worlds/{w}/maps/{p}/plates` | 板块分组 JSON |
-| GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON |
-| POST | `/api/worlds/{w}/maps/{p}/elevation` | 上传高度图 |
+| GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON（预留） |
+| POST | `/api/worlds/{w}/maps/{p}/elevation` | 上传原始高度数组 |
+| POST | `/api/worlds/{w}/maps/{p}/import-elevation` | 从文件导入高度图 |
+| POST | `/api/worlds/{w}/maps/{p}/voronoi` | 更新 Voronoi 网络 |
+| POST | `/api/worlds/{w}/maps/{p}/plates` | 更新板块分组 |
 | POST | `/api/worlds/{w}/maps/{p}/generate` | 程序化生成 |
 | DELETE | `/api/worlds/{w}/maps/{p}` | 删除地图 |
 
@@ -237,24 +243,25 @@ layers/
 
 ## 使用流程
 
-### 生成第一张地图
+> 完整的 Gaea → Dreamulator 工作流详见 [map-workflow.md](map-workflow.md)。
 
-1. 进入世界详情页 → 点击 "生成第一张地图"
-2. 或进入地图编辑器 → 点击 "🌍 生成地形"
-3. 后端使用行星参数（板块数、火山活动等）生成地形 + Voronoi + 板块
+### 创建地图
 
-### 编辑地图
+有两种方式：
 
-1. 在地图编辑器中选择画笔工具（升起/降低/平滑/平坦）
-2. 调节画笔大小和强度
-3. 在地图上拖动鼠标修改地形
-4. 点击 "💾 保存修改" 上传到后端
+**方式 A：从外部工具导入（推荐）**
 
-### 图层切换
+在 Gaea 等外部工具中设计地形，导出 16-bit TIFF，然后在地图编辑器中点击「📥 导入高度图」。
+
+**方式 B：程序化生成（快速原型）**
+
+进入地图编辑器 → 点击「🌍 生成地形」，后端使用多频率高斯噪声生成基础海陆分布 + Voronoi + 板块。
+
+### 查看地图
 
 - 左侧面板中切换着色模式（地形/海拔/海陆/坡度）
-- 开关矢量叠加层（Voronoi 网格、板块边界、河流）
-- 调节山体阴影强度
+- 开关矢量叠加层（Voronoi 网格、板块边界、河流/山脊）
+- 悬停 Voronoi 单元格查看属性（经纬度、海拔、板块等）
 
 ## 分支继承
 

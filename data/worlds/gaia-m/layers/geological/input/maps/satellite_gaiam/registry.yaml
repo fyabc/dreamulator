@@ -1,0 +1,26 @@
+planet_id: satellite_gaiam
+raster_layers:
+  elevation:
+    layer_type: elevation
+    source: imported
+    file_path: input/elevation.png
+    resolution:
+    - 2048
+    - 1024
+    depends_on: []
+    stale: false
+vector_layers:
+  voronoi:
+    layer_id: voronoi
+    format: voronoi-json
+    file_path: input/voronoi.json
+    depends_on:
+    - elevation
+    stale: false
+  plates:
+    layer_id: plates
+    format: plates-json
+    file_path: input/plates.json
+    depends_on:
+    - voronoi
+    stale: false
