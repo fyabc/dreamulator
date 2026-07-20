@@ -93,13 +93,15 @@ def _parse_frontmatter(text: str) -> tuple[dict, str]:
     return fm, match.group(2)
 
 
-def _export_civilization_documents(resolver: LayerResolver) -> list[dict] | None:
-    """Export .md files from the civilization layer input directory.
+def _export_dir_documents(directory: Path) -> list[dict] | None:
+    """Export .md files from a directory.
 
     Returns a list of document metadata dicts with frontmatter, filename,
     and full content. Returns None if no documents found.
     """
-    md_files = resolver.list_input_files("civilization", "*.md")
+    if not directory.exists():
+        return None
+    md_files = sorted(directory.glob("*.md"))
     if not md_files:
         return None
 
@@ -118,6 +120,18 @@ def _export_civilization_documents(resolver: LayerResolver) -> list[dict] | None
             "content": body,
         })
     return documents
+
+
+def _export_layer_documents(resolver: LayerResolver, layer: str) -> list[dict] | None:
+    """Export .md files from any layer's input directory.
+
+    Returns a list of document metadata dicts with frontmatter, filename,
+    and full content. Returns None if no documents found.
+    """
+    md_files = resolver.list_input_files(layer, "*.md")
+    if not md_files:
+        return None
+    return _export_dir_documents(md_files[0].parent)
 
 
 def _export_layer_data(
@@ -188,10 +202,22 @@ def _export_layer_data(
         result["civ_territory"] = civ_territory
         result["has_civmap"] = True
 
-    # 8. Civilization documents (.md files)
-    civ_docs = _export_civilization_documents(resolver)
-    if civ_docs:
-        result["civ_documents"] = civ_docs
+    # 8. Layer documents (.md files) — export for all layers
+    for layer in ("astronomy", "geological", "climate", "ecology", "civilization"):
+        layer_docs = _export_layer_documents(resolver, layer)
+        if layer_docs:
+            result[f"{layer}_documents"] = layer_docs
+
+    # 9. Design notes (non-layer, from design-notes/ directory)
+    dn_dir = world_dir / "design-notes"
+    if branch:
+        branch_dn = world_dir / "branches" / branch / "design-notes"
+        if branch_dn.exists():
+            dn_dir = branch_dn
+    if dn_dir.exists():
+        dn_docs = _export_dir_documents(dn_dir)
+        if dn_docs:
+            result["design-notes_documents"] = dn_docs
 
     return result
 
@@ -300,7 +326,12 @@ def _write_branch_defaults(branch_out_dir: Path, branch_data: dict) -> None:
     """
     defaults = {
         "civ_territory": {"countries": [], "snapshots": [], "active_snapshot": None, "assignments": {}},
-        "civ_documents": [],
+        "astronomy_documents": [],
+        "geological_documents": [],
+        "climate_documents": [],
+        "ecology_documents": [],
+        "civilization_documents": [],
+        "design-notes_documents": [],
     }
     for key, default_value in defaults.items():
         if key not in branch_data:
@@ -528,3 +559,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

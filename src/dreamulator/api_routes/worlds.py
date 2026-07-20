@@ -288,7 +288,7 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
 
 
 # ---------------------------------------------------------------------------
-# Civilization document endpoints — serve .md files from the input directory
+# Layer document endpoints — serve .md files from any layer's input directory
 # ---------------------------------------------------------------------------
 
 
@@ -313,26 +313,31 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     return fm, match.group(2)
 
 
-@router.get("/{world_name}/civilization-documents")
-def list_civilization_documents(
-    world_name: str, branch: str | None = None
-) -> list[dict[str, Any]]:
-    """List .md files in the civilization layer input directory.
+def _resolve_design_notes_dir(world_dir: Path, branch: str | None) -> Path | None:
+    """Resolve the design-notes directory, walking branch chain."""
+    if branch:
+        from dreamulator.branch_manager import BranchManager
 
-    Returns metadata extracted from YAML frontmatter for each file.
-    """
-    from dreamulator.resolver import LayerResolver
+        bm = BranchManager(world_dir)
+        try:
+            branch_info = bm.get_branch(branch)
+            branch_dir = world_dir / "branches" / branch_info.path_name
+            dn_dir = branch_dir / "design-notes"
+            if dn_dir.exists():
+                return dn_dir
+        except (FileNotFoundError, KeyError):
+            pass
+    dn_dir = world_dir / "design-notes"
+    return dn_dir if dn_dir.exists() else None
 
-    try:
-        world_dir = _manager.world_dir(world_name)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
-    resolver = LayerResolver(world_dir, branch)
-    md_files = resolver.list_input_files("civilization", "*.md")
+def _list_md_documents(directory: Path | None) -> list[dict[str, Any]]:
+    """List .md files in a directory, returning frontmatter metadata."""
+    if directory is None or not directory.exists():
+        return []
 
     documents = []
-    for fp in md_files:
+    for fp in sorted(directory.glob("*.md")):
         with fp.open("r", encoding="utf-8") as f:
             content = f.read()
         fm, _body = _parse_frontmatter(content)
@@ -348,23 +353,13 @@ def list_civilization_documents(
     return documents
 
 
-@router.get("/{world_name}/civilization-documents/{filename}")
-def get_civilization_document(
-    world_name: str, filename: str, branch: str | None = None
-) -> dict[str, Any]:
-    """Read a specific .md file from the civilization layer input directory."""
-    from dreamulator.resolver import LayerResolver
-
-    try:
-        world_dir = _manager.world_dir(world_name)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    resolver = LayerResolver(world_dir, branch)
-    md_files = resolver.list_input_files("civilization", "*.md")
+def _get_md_document(directory: Path | None, filename: str) -> dict[str, Any]:
+    """Read a specific .md file from a directory."""
+    if directory is None or not directory.exists():
+        raise HTTPException(status_code=404, detail=f"Document '{filename}' not found")
 
     target = None
-    for fp in md_files:
+    for fp in directory.glob("*.md"):
         if fp.name == filename:
             target = fp
             break
@@ -382,6 +377,109 @@ def get_civilization_document(
         "frontmatter": fm,
         "content": body,
     }
+
+
+# --- Valid layer names for the generalized endpoint ---
+_VALID_LAYERS = frozenset(
+    [
+        "physics", "chemistry", "astronomy", "geological",
+        "climate", "ecology", "civilization", "design-notes",
+    ]
+)
+
+
+@router.get("/{world_name}/layer-documents/{layer}")
+def list_layer_documents(
+    world_name: str, layer: str, branch: str | None = None
+) -> list[dict[str, Any]]:
+    """List .md files in any layer's input directory.
+
+    Returns metadata extracted from YAML frontmatter for each file.
+    Also accepts 'design-notes' to read from the design-notes/ directory.
+    """
+    if layer not in _VALID_LAYERS:
+        raise HTTPException(status_code=400, detail=f"Invalid layer: {layer}")
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if layer == "design-notes":
+        doc_dir = _resolve_design_notes_dir(world_dir, branch)
+    else:
+        doc_dir = _resolve_layer_dir(world_dir, layer, "input", branch)
+    return _list_md_documents(doc_dir)
+
+
+@router.get("/{world_name}/layer-documents/{layer}/{filename}")
+def get_layer_document(
+    world_name: str, layer: str, filename: str, branch: str | None = None
+) -> dict[str, Any]:
+    """Read a specific .md file from any layer's input directory."""
+    if layer not in _VALID_LAYERS:
+        raise HTTPException(status_code=400, detail=f"Invalid layer: {layer}")
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if layer == "design-notes":
+        doc_dir = _resolve_design_notes_dir(world_dir, branch)
+    else:
+        doc_dir = _resolve_layer_dir(world_dir, layer, "input", branch)
+    return _get_md_document(doc_dir, filename)
+
+
+# --- Design notes endpoints (non-layer, cross-cutting design documents) ---
+
+
+@router.get("/{world_name}/design-documents")
+def list_design_documents(
+    world_name: str, branch: str | None = None
+) -> list[dict[str, Any]]:
+    """List .md files in the design-notes directory."""
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    dn_dir = _resolve_design_notes_dir(world_dir, branch)
+    return _list_md_documents(dn_dir)
+
+
+@router.get("/{world_name}/design-documents/{filename}")
+def get_design_document(
+    world_name: str, filename: str, branch: str | None = None
+) -> dict[str, Any]:
+    """Read a specific .md file from the design-notes directory."""
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    dn_dir = _resolve_design_notes_dir(world_dir, branch)
+    return _get_md_document(dn_dir, filename)
+
+
+# --- Legacy civilization-documents endpoints (backward compatibility) ---
+
+
+@router.get("/{world_name}/civilization-documents")
+def list_civilization_documents(
+    world_name: str, branch: str | None = None
+) -> list[dict[str, Any]]:
+    """List .md files in the civilization layer input directory. (Legacy endpoint.)"""
+    return list_layer_documents(world_name, "civilization", branch)
+
+
+@router.get("/{world_name}/civilization-documents/{filename}")
+def get_civilization_document(
+    world_name: str, filename: str, branch: str | None = None
+) -> dict[str, Any]:
+    """Read a specific .md file from the civilization layer input directory. (Legacy.)"""
+    return get_layer_document(world_name, "civilization", filename, branch)
 
 
 @router.get("/{world_name}/climate")

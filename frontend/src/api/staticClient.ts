@@ -114,13 +114,19 @@ export const staticApi = {
     fetchStaticJson<any[]>(`/worlds/${name}/branches.json`),
 
 
-  // Civilization documents (.md files)
-  listCivilizationDocuments: async (name: string, branch?: string | null) => {
-    const data = await fetchBranchAwareJson<any>(
-      name, branch, '/civ_documents.json', '/civ_documents.json',
-    )
+  // Legacy civilization documents (delegate to generic layer-documents)
+  listCivilizationDocuments: (name: string, branch?: string | null) =>
+    staticApi.listLayerDocuments(name, 'civilization', branch),
+
+  getCivilizationDocument: (name: string, filename: string, branch?: string | null) =>
+    staticApi.getLayerDocument(name, 'civilization', filename, branch),
+
+  // ---- Layer documents (generalized for any layer) ----
+
+  listLayerDocuments: async (name: string, layer: string, branch?: string | null) => {
+    const jsonFile = `/${layer}_documents.json`
+    const data = await fetchBranchAwareJson<any>(name, branch, jsonFile, jsonFile)
     if (!data) return [] as any[]
-    // Return just the metadata (without content) to match API format
     return data.map((d: any) => ({
       filename: d.filename,
       title: d.title,
@@ -130,11 +136,41 @@ export const staticApi = {
     }))
   },
 
-  getCivilizationDocument: async (name: string, filename: string, branch?: string | null) => {
-    const data = await fetchBranchAwareJson<any[]>(
-      name, branch, '/civ_documents.json', '/civ_documents.json',
+  getLayerDocument: async (name: string, layer: string, filename: string, branch?: string | null) => {
+    const jsonFile = `/${layer}_documents.json`
+    const data = await fetchBranchAwareJson<any[]>(name, branch, jsonFile, jsonFile)
+    if (!data) throw new Error(`No ${layer} documents in static data`)
+    const doc = data.find((d: any) => d.filename === filename)
+    if (!doc) throw new Error(`Document '${filename}' not found`)
+    return {
+      filename: doc.filename,
+      title: doc.title,
+      frontmatter: doc.frontmatter || {},
+      content: doc.content,
+    }
+  },
+
+  // ---- Design documents (non-layer, cross-cutting design notes) ----
+
+  listDesignDocuments: async (name: string, branch?: string | null) => {
+    const data = await fetchBranchAwareJson<any>(
+      name, branch, '/design-notes_documents.json', '/design-notes_documents.json',
     )
-    if (!data) throw new Error('No civilization documents in static data')
+    if (!data) return [] as any[]
+    return data.map((d: any) => ({
+      filename: d.filename,
+      title: d.title,
+      type: d.type,
+      period: d.period,
+      tags: d.tags || [],
+    }))
+  },
+
+  getDesignDocument: async (name: string, filename: string, branch?: string | null) => {
+    const data = await fetchBranchAwareJson<any[]>(
+      name, branch, '/design-notes_documents.json', '/design-notes_documents.json',
+    )
+    if (!data) throw new Error('No design documents in static data')
     const doc = data.find((d: any) => d.filename === filename)
     if (!doc) throw new Error(`Document '${filename}' not found`)
     return {
@@ -267,3 +303,4 @@ export const staticApi = {
   deleteCivSnapshot: () => notAvailable('deleteCivSnapshot'),
   patchCivAssignments: () => notAvailable('patchCivAssignments'),
 }
+

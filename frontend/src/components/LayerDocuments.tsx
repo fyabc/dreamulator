@@ -4,19 +4,46 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../api/client'
 
-interface CivilizationDocumentsProps {
+interface LayerDocumentsProps {
   worldName: string
+  layer: string
   branch: string | null
 }
 
-/** Category labels for grouping documents in the sidebar. */
+/** Category labels for grouping documents in the sidebar.
+ *  Covers all layer types. The getCategory() function uses prefix matching,
+ *  so `stellar_params` matches `stellar`, `climate_zones` matches `climate`, etc.
+ */
 const CATEGORY_ORDER: [string, string][] = [
+  // Universal
   ['overview', '总览'],
+
+  // Astronomy layer
+  ['stellar', '恒星系统'],
+  ['orbital', '轨道动力学'],
+  ['satellite', '卫星系统'],
+
+  // Geological layer
+  ['physical', '物理参数'],
+  ['tidal', '潮汐效应'],
+  ['tectonic', '地质构造'],
+  ['hydro', '水文'],
+
+  // Climate layer
+  ['dynamics', '流体动力学'],
+  ['climate', '气候带'],
+
+  // Ecology layer
+  ['species', '物种'],
+  ['ecosystem', '生态系统'],
+
+  // Civilization layer
   ['timeline', '编年史'],
   ['thematic', '专题'],
   ['geopolitical', '地缘政治'],
   ['microhistory', '微观史'],
   ['creative', '创作素材'],
+
   // Fallback for any other type
   ['', '其他'],
 ]
@@ -29,18 +56,23 @@ function getCategory(type: string): string {
   return ''
 }
 
-export default function CivilizationDocuments({
+export default function LayerDocuments({
   worldName,
+  layer,
   branch,
-}: CivilizationDocumentsProps) {
+}: LayerDocumentsProps) {
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
 
-  // Fetch document list
+  // Fetch document list (design-notes has its own endpoint)
+  const isDesignNotes = layer === 'design-notes'
   const { data: documents } = useQuery({
-    queryKey: ['civ-documents', worldName, branch],
-    queryFn: () => api.listCivilizationDocuments(worldName, branch),
-    enabled: !!worldName,
+    queryKey: ['layer-documents', worldName, layer, branch],
+    queryFn: () =>
+      isDesignNotes
+        ? api.listDesignDocuments(worldName, branch)
+        : api.listLayerDocuments(worldName, layer, branch),
+    enabled: !!worldName && !!layer,
     retry: false,
   })
 
@@ -52,11 +84,14 @@ export default function CivilizationDocuments({
     return documents[0].filename
   }, [selectedDoc, documents])
 
-  // Fetch selected document content
+  // Fetch selected document content (design-notes has its own endpoint)
   const { data: activeDoc } = useQuery({
-    queryKey: ['civ-document', worldName, effectiveDoc, branch],
-    queryFn: () => api.getCivilizationDocument(worldName, effectiveDoc!, branch),
-    enabled: !!worldName && !!effectiveDoc,
+    queryKey: ['layer-document', worldName, layer, effectiveDoc, branch],
+    queryFn: () =>
+      isDesignNotes
+        ? api.getDesignDocument(worldName, effectiveDoc!, branch)
+        : api.getLayerDocument(worldName, layer, effectiveDoc!, branch),
+    enabled: !!worldName && !!layer && !!effectiveDoc,
     retry: false,
   })
 

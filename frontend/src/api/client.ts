@@ -279,18 +279,43 @@ const readApi = {
       ? staticApi.listBranches(name)
       : fetchJson<any[]>(`/worlds/${name}/branches`),
 
+  // Legacy civilization document methods (delegate to generic layer-documents)
   listCivilizationDocuments: (name: string, branch?: string | null) =>
-    isStaticMode()
-      ? staticApi.listCivilizationDocuments(name, branch)
-      : fetchJson<any[]>(
-          `/worlds/${name}/civilization-documents${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
-        ),
+    readApi.listLayerDocuments(name, 'civilization', branch),
 
   getCivilizationDocument: (name: string, filename: string, branch?: string | null) =>
+    readApi.getLayerDocument(name, 'civilization', filename, branch),
+
+  // ---- Layer documents (generalized for any layer) ----
+
+  listLayerDocuments: (name: string, layer: string, branch?: string | null) =>
     isStaticMode()
-      ? staticApi.getCivilizationDocument(name, filename, branch)
+      ? staticApi.listLayerDocuments(name, layer, branch)
+      : fetchJson<any[]>(
+          `/worlds/${name}/layer-documents/${layer}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getLayerDocument: (name: string, layer: string, filename: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getLayerDocument(name, layer, filename, branch)
       : fetchJson<any>(
-          `/worlds/${name}/civilization-documents/${encodeURIComponent(filename)}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+          `/worlds/${name}/layer-documents/${layer}/${encodeURIComponent(filename)}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  // ---- Design documents (non-layer, cross-cutting design notes) ----
+
+  listDesignDocuments: (name: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.listDesignDocuments(name, branch)
+      : fetchJson<any[]>(
+          `/worlds/${name}/design-documents${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
+
+  getDesignDocument: (name: string, filename: string, branch?: string | null) =>
+    isStaticMode()
+      ? staticApi.getDesignDocument(name, filename, branch)
+      : fetchJson<any>(
+          `/worlds/${name}/design-documents/${encodeURIComponent(filename)}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
   // ---- Map read operations ----
@@ -400,3 +425,5 @@ export const api = {
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.deleteMap(...args),
 }
+
+

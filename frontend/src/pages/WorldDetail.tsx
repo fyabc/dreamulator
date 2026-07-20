@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
-import CivilizationDocuments from '../components/CivilizationDocuments'
+import LayerDocuments from '../components/LayerDocuments'
 import CivMapPreview from '../components/civmap/CivMapPreview'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
@@ -89,10 +89,11 @@ export default function WorldDetail() {
     | 'climate'
     | 'ecology'
     | 'civilization'
+    | 'design-notes'
     | 'viewer3d'
     | 'narrate'
   const availableTabs: TabType[] = staticMode
-    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'viewer3d']
+    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes', 'viewer3d']
     : [
         'overview',
         'astronomy',
@@ -100,6 +101,7 @@ export default function WorldDetail() {
         'climate',
         'ecology',
         'civilization',
+        'design-notes',
         'viewer3d',
         'narrate',
       ]
@@ -224,6 +226,7 @@ export default function WorldDetail() {
     climate: '气候',
     ecology: '生态',
     civilization: '文明',
+    'design-notes': '设计笔记',
     viewer3d: '3D 视图',
     narrate: '叙述',
   }
@@ -457,6 +460,7 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'astronomy' && (
+              <div className="space-y-6">
               <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   天文学
@@ -627,9 +631,12 @@ export default function WorldDetail() {
                   <p className="text-gray-500">无恒星系数据</p>
                 )}
               </div>
+              <LayerDocuments worldName={worldName!} layer="astronomy" branch={selectedBranch} />
+              </div>
             )}
 
             {activeTab === 'planets' && (
+              <div className="space-y-6">
               <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   地质
@@ -735,9 +742,12 @@ export default function WorldDetail() {
                   <p className="text-gray-500">无地质层数据</p>
                 )}
               </div>
+              <LayerDocuments worldName={worldName!} layer="geological" branch={selectedBranch} />
+              </div>
             )}
 
             {activeTab === 'climate' && (
+              <div className="space-y-6">
               <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   气候
@@ -750,9 +760,12 @@ export default function WorldDetail() {
                   <p className="text-gray-500">无气候层数据</p>
                 )}
               </div>
+              <LayerDocuments worldName={worldName!} layer="climate" branch={selectedBranch} />
+              </div>
             )}
 
             {activeTab === 'ecology' && (
+              <div className="space-y-6">
               <div className="glass-panel p-4 sm:p-6">
                 <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                   生态
@@ -765,6 +778,8 @@ export default function WorldDetail() {
                   <p className="text-gray-500">无生态层数据</p>
                 )}
               </div>
+              <LayerDocuments worldName={worldName!} layer="ecology" branch={selectedBranch} />
+              </div>
             )}
 
             {activeTab === 'civilization' && (
@@ -773,8 +788,12 @@ export default function WorldDetail() {
                 <CivMapPreview worldName={worldName!} branch={selectedBranch} />
 
                 {/* Markdown document viewer — shows docs or nothing */}
-                <CivilizationDocuments worldName={worldName!} branch={selectedBranch} />
+                <LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />
               </div>
+            )}
+
+            {activeTab === 'design-notes' && (
+              <LayerDocuments worldName={worldName!} layer="design-notes" branch={selectedBranch} />
             )}
 
             {activeTab === 'viewer3d' && (

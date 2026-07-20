@@ -43,7 +43,7 @@ orbits:
   - body_id: planet_ember
     parent_id: star_ignis
     semi_major_axis_au: 0.046
-    eccentricity: 0.0
+    eccentricity: 0.005           # 5.9 Gyr 恒星潮汐圆化残余（TRAPPIST-1b 类比）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
@@ -53,7 +53,7 @@ orbits:
   - body_id: planet_crucible
     parent_id: star_ignis
     semi_major_axis_au: 0.098
-    eccentricity: 0.0
+    eccentricity: 0.010           # 距恒星较远，潮汐圆化效率低于 Ember
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
@@ -75,7 +75,7 @@ orbits:
   - body_id: planet_boreal
     parent_id: star_ignis
     semi_major_axis_au: 0.4437    # 2:1 with Aegis → 0.2795 × 2^(2/3)
-    eccentricity: 0.0
+    eccentricity: 0.010           # 2:1 MMR 强制偏心率（GJ 876 共振链类比）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
@@ -85,7 +85,7 @@ orbits:
   - body_id: planet_glacis
     parent_id: star_ignis
     semi_major_axis_au: 0.7043    # 4:1 with Aegis → 0.2795 × 4^(2/3)
-    eccentricity: 0.0
+    eccentricity: 0.015           # Laplace 共振链最外端强制偏心率最高
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
