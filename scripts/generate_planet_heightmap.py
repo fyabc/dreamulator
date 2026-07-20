@@ -17,14 +17,24 @@ Architecture:
     8. Noise detail: multi-octave 3D Simplex fBm on sphere
 
 Usage:
-    python generate_planet_heightmap.py --config path/to/heightmap_config.yaml --output output/
-    python generate_planet_heightmap.py --config cfg.yaml --output out/ --resolution 4096 2048
-    python generate_planet_heightmap.py --config cfg.yaml --output out/ --cubemap --preview
+    uv run python scripts/generate_planet_heightmap.py \\
+        -c data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \\
+        -o output/gaiam/ --preview
+
+    # Override resolution and seed
+    uv run python scripts/generate_planet_heightmap.py -c cfg.yaml -o out/ \\
+        -W 4096 -H 2048 -s 99
+
+    # Include cube map faces for Gaea
+    uv run python scripts/generate_planet_heightmap.py -c cfg.yaml -o out/ \\
+        --cubemap --cubemap-res 2048
+
+Optional dependencies (for noise + preview):
+    uv sync --extra heightmap
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import math
 import sys
@@ -34,6 +44,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import typer
 import yaml
 from PIL import Image
 
@@ -1372,86 +1383,91 @@ def load_planet_config(path: Path) -> PlanetConfig:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CLI
+# CLI (typer)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+app = typer.Typer(
+    help="Generate a procedural planet heightmap on the sphere.",
+    add_completion=False,
+)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Generate a procedural planet heightmap on the sphere.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Generate from YAML config (recommended)
-  python generate_planet_heightmap.py \\
-    --config data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \\
-    --output output/gaiam/ --preview
 
-  # Override resolution from CLI
-  python generate_planet_heightmap.py --config cfg.yaml --output out/ \\
-    --resolution 4096 2048
+@app.command()
+def generate(
+    config: Path = typer.Option(
+        ..., "-c", "--config",
+        help="Path to planet YAML configuration file.",
+        exists=True,
+        readable=True,
+    ),
+    output: Path = typer.Option(
+        Path("output/heightmap"), "-o", "--output",
+        help="Output directory.",
+    ),
+    width: int = typer.Option(
+        None, "-W", "--width",
+        help="Override output width in pixels (default: from config).",
+    ),
+    height: int = typer.Option(
+        None, "-H", "--height",
+        help="Override output height in pixels (default: from config).",
+    ),
+    seed: int = typer.Option(
+        None, "-s", "--seed",
+        help="Override random seed (default: from config).",
+    ),
+    cubemap: bool = typer.Option(
+        False, "--cubemap",
+        help="Generate cube map faces for Gaea.",
+    ),
+    cubemap_res: int = typer.Option(
+        2048, "--cubemap-res",
+        help="Cube map face resolution.",
+    ),
+    preview: bool = typer.Option(
+        False, "-p", "--preview",
+        help="Generate color preview PNG (requires matplotlib).",
+    ),
+) -> None:
+    """Generate a spherical planet heightmap from a YAML config file.
 
-  # Include cube map faces for Gaea
-  python generate_planet_heightmap.py --config cfg.yaml --output out/ \\
-    --cubemap --cubemap-res 2048
-        """,
-    )
-    parser.add_argument(
-        "--config", type=Path, required=True,
-        help="Path to planet YAML configuration file",
-    )
-    parser.add_argument(
-        "--output", type=Path, default=Path("output/heightmap"),
-        help="Output directory (default: output/heightmap)",
-    )
-    parser.add_argument(
-        "--resolution", nargs=2, type=int, default=None,
-        metavar=("WIDTH", "HEIGHT"),
-        help="Override output resolution (default: from config file)",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=None,
-        help="Override random seed (default: from config file)",
-    )
-    parser.add_argument("--cubemap", action="store_true", help="Generate cube map faces")
-    parser.add_argument(
-        "--cubemap-res", type=int, default=2048,
-        help="Cube map face resolution (default: 2048)",
-    )
-    parser.add_argument("--preview", action="store_true", help="Generate color preview PNG")
+    Example:
 
-    args = parser.parse_args()
-
+        uv run python scripts/generate_planet_heightmap.py \\
+            -c data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \\
+            -o output/gaiam/ --preview
+    """
     # Load config from YAML
-    config = load_planet_config(args.config)
+    planet_config = load_planet_config(config)
 
     # Apply CLI overrides
-    if args.seed is not None:
-        config.seed = args.seed
-    if args.resolution is not None:
-        config.width = args.resolution[0]
-        config.height = args.resolution[1]
+    if seed is not None:
+        planet_config.seed = seed
+    if width is not None:
+        planet_config.width = width
+    if height is not None:
+        planet_config.height = height
 
     # Create output directory
-    args.output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True)
 
     # Generate
-    generator = SphericalHeightmapGenerator(config)
+    generator = SphericalHeightmapGenerator(planet_config)
     result = generator.generate()
 
     # Export
-    print("\nExporting...")
-    result.export_elevation_png(args.output / "elevation.png")
-    result.export_metadata_json(args.output / "metadata.json")
+    typer.echo("\nExporting...")
+    result.export_elevation_png(output / "elevation.png")
+    result.export_metadata_json(output / "metadata.json")
 
-    if args.cubemap:
-        result.export_cubemap_pngs(args.output, generator, args.cubemap_res)
+    if cubemap:
+        result.export_cubemap_pngs(output, generator, cubemap_res)
 
-    if args.preview:
-        result.export_preview(args.output / "preview.png")
+    if preview:
+        result.export_preview(output / "preview.png")
 
-    print("\nDone!")
+    typer.echo("\nDone!")
 
 
 if __name__ == "__main__":
-    main()
+    app()
