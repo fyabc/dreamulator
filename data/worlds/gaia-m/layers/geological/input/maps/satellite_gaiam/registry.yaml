@@ -16,11 +16,11 @@ vector_layers:
     file_path: input/voronoi.json
     depends_on:
     - elevation
-    stale: false
+    stale: true
   plates:
     layer_id: plates
     format: plates-json
     file_path: input/plates.json
     depends_on:
     - voronoi
-    stale: false
+    stale: true

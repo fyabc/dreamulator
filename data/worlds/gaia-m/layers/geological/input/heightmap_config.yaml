@@ -1,0 +1,387 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gaia-M 行星高度图生成配置
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# 用于 scripts/generate_planet_heightmap.py 的世界配置文件。
+# 所有与 Gaia-M 世界相关的参数均在此定义，主脚本不绑定任何特定世界。
+#
+# 用法:
+#   python scripts/generate_planet_heightmap.py \
+#     --config data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \
+#     --output output/gaiam/ --preview
+#
+# 坐标系约定:
+#   - 纬度 lat_deg:  -90（南极）到 +90（北极）
+#   - 经度 lon_deg:  -180 到 +180（0 = 亚木星点）
+#   - 所有角度参数使用度（degrees），脚本内部转为弧度
+#
+# 数据来源:
+#   geography.md       — 海陆分布（文明时代）
+#   geological_history.md — 地质演化史
+#   planets.yaml       — 行星物理参数
+#   tidal_effects.md   — 潮汐效应
+#   land_sea.md        — 海陆分布详细
+
+# ── 行星基本参数 ──────────────────────────────────────────────────────────────
+# 来源: planets.yaml, physical_params.md
+planet:
+  name: "Gaia-M"
+  seed: 42
+  radius_km: 6817.0            # 1.07 R⊕
+  gravity_m_s2: 10.28          # 1.05g（G·1.2M⊕/(1.07R⊕)²）
+  rotation_period_days: 3.25   # 潮汐锁定于 Aegis 巨行星
+
+# ── 高程参数 ──────────────────────────────────────────────────────────────────
+elevation:
+  min_m: -11000.0              # 最深海沟
+  max_m: 9000.0                # 最高山峰
+  sea_level_m: 0.0             # 海平面参考高度
+
+# ── 大陆形态传输函数 ──────────────────────────────────────────────────────────
+# continent_field（大陆场）到物理高程的映射:
+#   field > coast_threshold → 大陆（幂律曲线，平坦内部+陡峭海岸）
+#   0 < field < threshold   → 大陆架（极浅）
+#   field ≤ 0               → 洋底（线性深度）
+continent_profile:
+  continent_elev_m: 3500.0     # 大陆特征高度
+  ocean_depth_m: 5500.0        # 海洋特征深度
+  continent_elev_power: 0.7    # 幂律指数（<1 = 更多低地/平原，>1 = 更多高山）
+  shelf_fraction: 0.12         # 大陆架宽度系数
+  coast_threshold_fraction: 0.10  # 海岸阈值 = continent_elev_m × 此值
+                                # 增大使海岸线收缩，减小使海岸线扩张
+
+# ── 潮汐形变 ──────────────────────────────────────────────────────────────────
+# 来源: tidal_effects.md
+# Gaia-M 潮汐锁定于 Aegis 巨行星，产生永久地壳潮汐隆起。
+# P₂ Legendre 多项式: (3cos²θ - 1)/2，在亚木星点和反木星点均为正隆起。
+# 地壳峰-谷差 ~2034m → 振幅 ~1000m
+tidal:
+  bulge_amplitude_m: 1000.0    # 潮汐隆起振幅（米）
+  bulge_lon_deg: 0.0           # 亚木星点经度（= Aegis 方向）
+
+# ── 构造板块 ──────────────────────────────────────────────────────────────────
+# 来源: geography.md（12主板块 + 8小板 = 20）, geology.md
+# plate_speed: 15-25 cm/yr（地球的 3-5 倍，潮汐加热驱动）
+# 每个板块定义:
+#   name          — 板块名称
+#   lat/lon       — 种子点位置（Voronoi 中心）
+#   type          — continental / oceanic / mixed
+#   velocity      — 运动速度 (cm/yr)
+#   direction     — 运动方向 (度，正北=0，顺时针)
+plates:
+  num_plates: 20
+  boundary_influence_km: 300.0   # 边界效应影响半径
+  convergent_elev_m: 1500.0      # 汇聚边界山脉高度
+  divergent_elev_m: -1200.0      # 离散边界裂谷深度
+
+  seeds:
+    # ── 主板块（来源: geology.md）──
+    - name: "Aegis"
+      lat_deg: 0
+      lon_deg: 0
+      type: "continental"
+      velocity_cm_yr: 3.0
+      direction_deg: 45          # 向东北运动
+
+    - name: "Anti-Aegis"
+      lat_deg: 0
+      lon_deg: 180
+      type: "continental"
+      velocity_cm_yr: 2.5
+      direction_deg: 315         # 向西北运动
+
+    - name: "Northern Ocean"
+      lat_deg: 55
+      lon_deg: -45
+      type: "oceanic"
+      velocity_cm_yr: 6.0
+      direction_deg: 180         # 向南俯冲
+
+    - name: "Southern Ocean"
+      lat_deg: -55
+      lon_deg: 45
+      type: "oceanic"
+      velocity_cm_yr: 5.0
+      direction_deg: 0           # 向北运动
+
+    - name: "Pacific Analog"
+      lat_deg: 0
+      lon_deg: 90
+      type: "oceanic"
+      velocity_cm_yr: 8.0        # 最快板块
+      direction_deg: 270         # 向西运动
+
+    - name: "Arctic"
+      lat_deg: 80
+      lon_deg: 0
+      type: "continental"
+      velocity_cm_yr: 1.0        # 近静止
+      direction_deg: 90
+
+    - name: "Rift Zone"
+      lat_deg: 15
+      lon_deg: 0
+      type: "oceanic"
+      velocity_cm_yr: 2.0
+      direction_deg: 90          # Aegis 裂谷，向东离散
+
+    # ── 辅助板块（填充球面）──
+    - name: "South Pacific"
+      lat_deg: -40
+      lon_deg: -120
+      type: "oceanic"
+      velocity_cm_yr: 7.0
+      direction_deg: 315
+
+    - name: "North Pacific"
+      lat_deg: 40
+      lon_deg: 120
+      type: "oceanic"
+      velocity_cm_yr: 6.5
+      direction_deg: 225
+
+    - name: "Indian Analog"
+      lat_deg: -25
+      lon_deg: 70
+      type: "oceanic"
+      velocity_cm_yr: 5.5
+      direction_deg: 0
+
+    - name: "Far Western"
+      lat_deg: 10
+      lon_deg: -150
+      type: "oceanic"
+      velocity_cm_yr: 4.0
+      direction_deg: 270
+
+    - name: "Far Eastern"
+      lat_deg: -10
+      lon_deg: -30
+      type: "oceanic"
+      velocity_cm_yr: 5.0
+      direction_deg: 90
+
+    - name: "Anti-Aegis South"
+      lat_deg: -35
+      lon_deg: 160
+      type: "mixed"
+      velocity_cm_yr: 3.5
+      direction_deg: 45
+
+    - name: "Anti-Aegis North"
+      lat_deg: 35
+      lon_deg: -160
+      type: "mixed"
+      velocity_cm_yr: 3.0
+      direction_deg: 135
+
+    - name: "Equatorial West"
+      lat_deg: 0
+      lon_deg: -90
+      type: "oceanic"
+      velocity_cm_yr: 6.0
+      direction_deg: 0
+
+    - name: "Subpolar South"
+      lat_deg: -65
+      lon_deg: -90
+      type: "oceanic"
+      velocity_cm_yr: 4.0
+      direction_deg: 90
+
+    - name: "Aegis East"
+      lat_deg: 20
+      lon_deg: 40
+      type: "continental"
+      velocity_cm_yr: 2.5
+      direction_deg: 60
+
+    - name: "Aegis West"
+      lat_deg: -20
+      lon_deg: -40
+      type: "continental"
+      velocity_cm_yr: 2.0
+      direction_deg: 300
+
+    - name: "Mid-South"
+      lat_deg: -45
+      lon_deg: 135
+      type: "oceanic"
+      velocity_cm_yr: 5.0
+      direction_deg: 45
+
+    - name: "Mid-North"
+      lat_deg: 50
+      lon_deg: -135
+      type: "oceanic"
+      velocity_cm_yr: 4.5
+      direction_deg: 225
+
+# ── 大陆特征（椭圆高斯） ──────────────────────────────────────────────────────
+# 每个特征是球面上的一个椭圆高斯分布:
+#   elevation = amplitude × exp(-r^falloff_power)
+#   r = sqrt((dlon/semi_lon)² + (dlat/semi_lat)²)
+#
+# 正 amplitude → 大陆/高原隆起
+# 负 amplitude → 裂谷/海盆凹陷
+# falloff_power 越大 → 边缘越陡峭（2.0=柔和，3.5=陡峭）
+continent_features:
+  # ── Aegis 大陆（亚木星点，0° 经线赤道）──
+  # 来源: geography.md — ~0.81×10⁸ km²（欧亚大陆 1.8 倍）
+  - name: "Aegis"
+    lat_deg: 0
+    lon_deg: 0
+    semi_lon_deg: 40           # 东西半轴（经度方向）
+    semi_lat_deg: 30           # 南北半轴（纬度方向）
+    amplitude_m: 3500
+    rotation_deg: 0
+    falloff_power: 2.5
+
+  # ── Anti-Aegis 大陆（反木星点，180° 经线赤道）──
+  # 来源: geography.md — 面积与 Aegis 相当
+  - name: "Anti-Aegis"
+    lat_deg: 0
+    lon_deg: 180
+    semi_lon_deg: 40
+    semi_lat_deg: 30
+    amplitude_m: 3500
+    rotation_deg: 0
+    falloff_power: 2.5
+
+  # ── 北极孤立大陆 ──
+  # 来源: geography.md — 中心位于北极点，平均海拔 1000-2000m
+  - name: "Arctic Continent"
+    lat_deg: 85
+    lon_deg: 0
+    semi_lon_deg: 20
+    semi_lat_deg: 12
+    amplitude_m: 2500
+    rotation_deg: 0
+    falloff_power: 2.5
+
+  # ── Aegis 裂谷海（负特征：大陆内部凹陷）──
+  # 来源: geography.md — 宽 600km (~5°) × 长 8000km (~67°)
+  - name: "Aegis Rift Sea"
+    lat_deg: 0
+    lon_deg: 0
+    semi_lon_deg: 4            # 窄（东西方向 ~5°）
+    semi_lat_deg: 35           # 长（南北方向 ~67°）
+    amplitude_m: -3000
+    rotation_deg: 0
+    falloff_power: 3.0         # 陡峭边缘（裂谷壁）
+
+  # ── Anti-Aegis 岛弧（火山岛链）──
+  # 来源: geography.md — 连绵 1.2 万 km 海岸山脉 + 外侧火山岛弧
+  - name: "Anti-Aegis Arc (north)"
+    lat_deg: 25
+    lon_deg: 115
+    semi_lon_deg: 30
+    semi_lat_deg: 8
+    amplitude_m: 1500
+    rotation_deg: -20
+    falloff_power: 3.0
+
+  - name: "Anti-Aegis Arc (south)"
+    lat_deg: -25
+    lon_deg: 115
+    semi_lon_deg: 30
+    semi_lat_deg: 8
+    amplitude_m: 1500
+    rotation_deg: 20
+    falloff_power: 3.0
+
+  # ── 北纬 45° 地峡 ──
+  # 来源: geography.md — 宽 300km (~2.5°)，部分阻断中高纬度经向洋流
+  - name: "N45 Isthmus (east)"
+    lat_deg: 45
+    lon_deg: 90
+    semi_lon_deg: 40
+    semi_lat_deg: 3            # 极窄（~2.5°）
+    amplitude_m: 1500
+    rotation_deg: 0
+    falloff_power: 3.5         # 非常陡峭的边缘
+
+  - name: "N45 Isthmus (west)"
+    lat_deg: 45
+    lon_deg: -90
+    semi_lon_deg: 40
+    semi_lat_deg: 3
+    amplitude_m: 1500
+    rotation_deg: 0
+    falloff_power: 3.5
+
+  # ── 深海盆地（负特征：加深远洋区域）──
+  - name: "Southern Deep Ocean"
+    lat_deg: -55
+    lon_deg: 90
+    semi_lon_deg: 60
+    semi_lat_deg: 25
+    amplitude_m: -3000
+    rotation_deg: 0
+    falloff_power: 2.0
+
+  - name: "Northern Deep Ocean"
+    lat_deg: 55
+    lon_deg: -90
+    semi_lon_deg: 60
+    semi_lat_deg: 20
+    amplitude_m: -2000
+    rotation_deg: 0
+    falloff_power: 2.0
+
+# ── 地幔柱热点 ────────────────────────────────────────────────────────────────
+# 来源: geography.md — 全球 5 个地幔柱热点（类似黄石超级破火山口）
+# 坐标来源: geology.md
+# has_caldera: true 时，中心有凹陷（破火山口），叠加在隆起之上
+hotspots:
+  - name: "Aegis Shield"
+    lat_deg: 0
+    lon_deg: 15
+    radius_km: 400             # 大火成岩省
+    amplitude_m: 2000
+    has_caldera: false
+
+  - name: "Anti-Aegis Plume"
+    lat_deg: -5
+    lon_deg: -170
+    radius_km: 350
+    amplitude_m: 1800
+    has_caldera: false
+
+  - name: "Northern Track"
+    lat_deg: 45
+    lon_deg: -90
+    radius_km: 300
+    amplitude_m: 1500
+    has_caldera: false
+
+  - name: "Southern Caldera"
+    lat_deg: -35
+    lon_deg: 30
+    radius_km: 400
+    amplitude_m: 2000
+    has_caldera: true          # 超级火山破火山口
+    caldera_radius_km: 80     # 80km 直径
+    caldera_depth_m: 1500
+
+  - name: "Arctic Vent"
+    lat_deg: 85
+    lon_deg: 0
+    radius_km: 250
+    amplitude_m: 1200
+    has_caldera: false
+
+# ── 噪声参数 ──────────────────────────────────────────────────────────────────
+# 3D Simplex fBm (分形布朗运动) 在球面上采样
+noise:
+  scale: 2.0                   # 基础空间频率（越高 = 地形越碎）
+  octaves: 6                   # 倍频层数
+  persistence: 0.5             # 每层振幅衰减（0.5 = 经典 1/f 噪声）
+  lacunarity: 2.0              # 每层频率倍增
+  continent_noise_amp_m: 500   # 大陆区域噪声振幅
+  ocean_noise_amp_m: 250       # 海洋区域噪声振幅
+
+# ── 输出设置 ──────────────────────────────────────────────────────────────────
+output:
+  width: 2048                  # 等距圆柱投影宽度（像素）
+  height: 1024                 # 等距圆柱投影高度（像素）= width / 2
