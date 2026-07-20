@@ -40,6 +40,10 @@ dev = [
 narrate = [
     "anthropic>=0.40",
 ]
+heightmap = [
+    "opensimplex>=0.4",
+    "matplotlib>=3.8",
+]
 
 [project.scripts]
 dreamulator = "dreamulator.cli:app"
