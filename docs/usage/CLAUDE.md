@@ -7,7 +7,8 @@
 - `project-structure.md` — 项目目录结构和各模块职责说明
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器的架构、操作指南和设计说明
 - `map-system.md` — 地图系统架构设计（数据模型、渲染技术、API 端点）
-- `map-workflow.md` — 地图工作流指南（Gaea 地形设计 → 导入 Dreamulator → 编辑器查看的完整流程）
+- `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 编辑器查看 → 可选 Gaea 精细化的完整流程）
+- `terrain-pipeline.md` — 行星地形生成管线技术参考（各阶段算法原理、数学公式、论文解读）
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
 
 ## 规划中的文档
