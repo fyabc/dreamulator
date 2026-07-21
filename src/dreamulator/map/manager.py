@@ -46,7 +46,17 @@ class MapManager:
     # -------------------------------------------------------------------
 
     def _map_input_dir(self, planet_id: str) -> Path | None:
-        """Resolve the effective input directory for a planet's map data."""
+        """Resolve the effective input directory for a planet's map data.
+
+        Checks derived directory first (CVT pipeline output), then input.
+        """
+        # Check derived directory first (new CVT pipeline output)
+        derived_dir = self._resolver.get_derived_dir("geological")
+        if derived_dir is not None:
+            maps_dir = derived_dir / "maps" / planet_id
+            if maps_dir.exists() and any(maps_dir.iterdir()):
+                return maps_dir
+        # Fall back to input directory
         input_dir = self._resolver.get_input_dir("geological")
         if input_dir is None:
             return None
@@ -194,9 +204,15 @@ class MapManager:
             return []
         with json_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        if data is None or not isinstance(data, dict):
+        if data is None:
             return []
-        plates_data = data.get("plates", [])
+        # Support both formats: plain list and {"plates": [...]}
+        if isinstance(data, list):
+            plates_data = data
+        elif isinstance(data, dict):
+            plates_data = data.get("plates", [])
+        else:
+            return []
         return [TectonicPlate.model_validate(p) for p in plates_data]
 
     def save_plates(self, planet_id: str, plates: list[TectonicPlate]) -> None:
@@ -267,19 +283,29 @@ class MapManager:
     def list_planets_with_maps(self) -> list[str]:
         """List planet IDs that have map data.
 
-        Searches the geological input directory for map subdirectories.
+        Searches both derived (CVT pipeline output) and input directories.
         """
+        planets: set[str] = set()
+
+        # Check derived directory first (CVT pipeline output)
+        derived_dir = self._resolver.get_derived_dir("geological")
+        if derived_dir is not None:
+            maps_dir = derived_dir / "maps"
+            if maps_dir.exists():
+                for d in maps_dir.iterdir():
+                    if d.is_dir() and (d / "elevation.png").exists():
+                        planets.add(d.name)
+
+        # Also check input directory
         input_dir = self._resolver.get_input_dir("geological")
-        if input_dir is None:
-            return []
-        maps_dir = input_dir / "maps"
-        if not maps_dir.exists():
-            return []
-        return sorted(
-            d.name
-            for d in maps_dir.iterdir()
-            if d.is_dir() and (d / "elevation.png").exists()
-        )
+        if input_dir is not None:
+            maps_dir = input_dir / "maps"
+            if maps_dir.exists():
+                for d in maps_dir.iterdir():
+                    if d.is_dir() and (d / "elevation.png").exists():
+                        planets.add(d.name)
+
+        return sorted(planets)
 
     def has_map(self, planet_id: str) -> bool:
         """Check if a planet has map data."""

@@ -368,6 +368,13 @@ const readApi = {
       : fetchBlob(
           `/worlds/${name}/maps/${planetId}/layer/${layerType}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
+
+  getCvtMesh: (name: string, planetId: string, branch?: string | null) =>
+    isStaticMode()
+      ? Promise.reject(new Error('CVT mesh not available in static mode'))
+      : fetchJson<any>(
+          `/worlds/${name}/maps/${planetId}/cvt-mesh${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
+        ),
 }
 
 export const api = {

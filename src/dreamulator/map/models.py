@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
 
 # ---------------------------------------------------------------------------
 # Projection & metadata
@@ -26,8 +28,8 @@ class MapMetadata(BaseModel):
         default=MapProjection.EQUIRECTANGULAR,
         description="Map projection type",
     )
-    width: int = Field(default=2048, gt=0, description="Raster width in pixels")
-    height: int = Field(default=1024, gt=0, description="Raster height in pixels")
+    width: int = Field(default=4096, gt=0, description="Raster width in pixels")
+    height: int = Field(default=2048, gt=0, description="Raster height in pixels")
     elevation_min_m: float = Field(
         default=-11_000.0,
         description="Minimum elevation in metres (e.g. Mariana Trench)",
@@ -36,65 +38,144 @@ class MapMetadata(BaseModel):
         default=9_000.0,
         description="Maximum elevation in metres (e.g. Everest)",
     )
-    sea_level: float = Field(
+    sea_level_m: float = Field(
         default=0.0,
-        description="Sea level as a normalised value in [0, 1] "
-        "(fraction of the elevation range)",
+        description="Sea level in metres (absolute)",
     )
     voronoi_seed: int | None = Field(
         default=None,
         description="RNG seed for Voronoi network generation (None = use world seed)",
     )
     voronoi_num_cells: int = Field(
-        default=5000,
+        default=100_000,
         gt=0,
         description="Target number of Voronoi cells",
+    )
+    cvt_jitter_sigma: float = Field(
+        default=0.3,
+        ge=0,
+        description="Random jitter applied to initial Fibonacci lattice (σ in cell radii)",
+    )
+    cvt_lloyd_iterations: int = Field(
+        default=8,
+        ge=0,
+        description="Number of Lloyd relaxation iterations for CVT mesh",
     )
 
 
 # ---------------------------------------------------------------------------
-# Voronoi network
+# Voronoi network (spherical CVT)
 # ---------------------------------------------------------------------------
 
 
 class VoronoiCell(BaseModel):
-    """A single cell in the Voronoi network."""
+    """A single cell in the spherical CVT Voronoi network."""
 
     id: int = Field(description="Unique cell identifier (0-based)")
+
+    # Geographic coordinates (backward compatible)
     lon: float = Field(ge=-180, le=180, description="Centre longitude in degrees")
     lat: float = Field(ge=-90, le=90, description="Centre latitude in degrees")
+
+    # 3D spherical coordinates (unit sphere)
+    x: float = Field(default=0.0, description="Unit sphere x-coordinate")
+    y: float = Field(default=0.0, description="Unit sphere y-coordinate (north)")
+    z: float = Field(default=0.0, description="Unit sphere z-coordinate")
+
+    # Geometric properties
+    area_km2: float = Field(default=0.0, ge=0, description="Cell area in km²")
+
+    # Elevation (absolute metres, no longer normalised)
     elevation: float = Field(
         default=0.0,
-        ge=0,
-        le=1,
-        description="Normalised elevation sampled from the raster heightmap [0, 1]",
+        description="Elevation in metres above planetary datum",
     )
+
+    # Crust classification
+    crust_type: str = Field(
+        default="oceanic",
+        description="Crust type: 'continental', 'oceanic', or 'transitional'",
+    )
+
+    # Distance to nearest plate boundary
+    distance_to_boundary_km: float = Field(
+        default=float("inf"),
+        description="Distance to nearest plate boundary in km",
+    )
+
+    # Tectonic plate membership
+    plate_id: str | None = Field(
+        default=None,
+        description="ID of the tectonic plate this cell belongs to",
+    )
+
+    # Tectonic boundary properties
+    boundary_type: str | None = Field(
+        default=None,
+        description="Boundary type: 'convergent', 'divergent', 'transform', or None",
+    )
+    convergence_rate_cm_yr: float = Field(
+        default=0.0,
+        description="Convergence rate at boundary (cm/year, positive=convergent)",
+    )
+
+    # Climate properties (filled by climate simulator — TODO)
+    temperature_C: float | None = Field(
+        default=None,
+        description="Mean annual temperature in °C",
+    )
+    precipitation_mm: float | None = Field(
+        default=None,
+        description="Annual precipitation in mm",
+    )
+    koppen_class: str | None = Field(
+        default=None,
+        description="Köppen climate classification code",
+    )
+
+    # Hydrology properties (filled by river generator — TODO)
+    flow_accumulation: float = Field(
+        default=0.0,
+        description="Upstream drainage area (number of cells)",
+    )
+    river_id: str | None = Field(
+        default=None,
+        description="ID of the river this cell belongs to",
+    )
+
+    # Moisture (legacy, may be replaced by precipitation_mm)
     moisture: float = Field(
         default=0.0,
         ge=0,
         le=1,
         description="Normalised moisture value [0, 1]",
     )
-    neighbors: list[int] = Field(
-        default_factory=list,
-        description="IDs of adjacent cells",
-    )
-    plate_id: str | None = Field(
-        default=None,
-        description="ID of the tectonic plate this cell belongs to",
-    )
+
+    # Ecology
     biome: str | None = Field(
         default=None,
         description="Biome classification (filled by ecology engine)",
     )
+
+    # Neighbours
+    neighbors: list[int] = Field(
+        default_factory=list,
+        description="IDs of adjacent cells",
+    )
+
+    # Civilisation layer
     province_id: str | None = Field(
         default=None,
-        description="ID of the province this cell belongs to (civilisation layer)",
+        description="ID of the province this cell belongs to",
     )
 
 
 class VoronoiNetwork(BaseModel):
-    """Complete Voronoi network for a planet map."""
+    """Complete Voronoi network for a planet map.
+
+    Legacy model — prefer CVTMesh for the new spherical CVT pipeline.
+    Retained for backward compatibility with existing data files.
+    """
 
     seed: int = Field(description="RNG seed used for generation")
     num_cells: int = Field(gt=0, description="Number of cells in the network")
@@ -104,6 +185,27 @@ class VoronoiNetwork(BaseModel):
         description="Number of Lloyd relaxation iterations applied",
     )
     cells: list[VoronoiCell] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Euler pole (rigid body rotation on sphere)
+# ---------------------------------------------------------------------------
+
+
+class EulerPole(BaseModel):
+    """Euler pole describing rigid-body rotation of a tectonic plate.
+
+    The rotation axis is a unit vector (x, y, z) and the angular velocity
+    is ``omega_rad_yr`` radians per year.  The velocity of any point P on
+    the plate is: v(P) = ω × P, where ω = (x, y, z) * omega_rad_yr.
+    """
+
+    x: float = Field(description="Rotation axis unit vector x-component")
+    y: float = Field(description="Rotation axis unit vector y-component")
+    z: float = Field(description="Rotation axis unit vector z-component")
+    omega_rad_yr: float = Field(
+        description="Angular velocity in radians per year",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +222,10 @@ class PlateType(str, Enum):
 
 
 class PlateVelocity(BaseModel):
-    """Plate motion vector (degrees per Myr, arbitrary scale for now)."""
+    """Plate motion vector (legacy — prefer EulerPole).
+
+    Retained for backward compatibility with existing data files.
+    """
 
     dx: float = Field(default=0.0, description="Eastward component")
     dy: float = Field(default=0.0, description="Northward component")
@@ -136,9 +241,54 @@ class TectonicPlate(BaseModel):
         default_factory=list,
         description="IDs of Voronoi cells belonging to this plate",
     )
-    velocity: PlateVelocity = Field(
-        default_factory=PlateVelocity,
-        description="Plate motion vector",
+    euler_pole: EulerPole = Field(
+        description="Euler pole describing plate rotation",
+    )
+    velocity: PlateVelocity | None = Field(
+        default=None,
+        description="Legacy plate motion vector (optional, for backward compat)",
+    )
+    growth_speed_multiplier: float = Field(
+        default=1.0,
+        gt=0,
+        description="Speed multiplier for flood-fill plate growth",
+    )
+
+
+# ---------------------------------------------------------------------------
+# CVT Mesh — top-level container for the spherical CVT pipeline output
+# ---------------------------------------------------------------------------
+
+
+class CVTMesh(BaseModel):
+    """Spherical CVT mesh — primary data structure for the terrain pipeline.
+
+    Contains all cell data, adjacency information, SphericalVoronoi vertices,
+    and region-to-vertex mappings for polygon rendering.
+    """
+
+    seed: int = Field(description="RNG seed used for generation")
+    num_cells: int = Field(gt=0, description="Number of cells in the mesh")
+    jitter_sigma: float = Field(default=0.3, description="Jitter applied to initial lattice")
+    lloyd_iterations: int = Field(default=8, description="Number of Lloyd relaxation iterations")
+
+    cells: list[VoronoiCell] = Field(
+        default_factory=list,
+        description="All Voronoi cells",
+    )
+    adjacency: dict[str, list[int]] = Field(
+        default_factory=dict,
+        description="Cell adjacency graph (cell_id as string → neighbor IDs)",
+    )
+
+    # SphericalVoronoi vertex data for polygon rendering
+    vertices: list[list[float]] = Field(
+        default_factory=list,
+        description="Voronoi vertices as [x, y, z] on unit sphere",
+    )
+    regions: list[list[int]] = Field(
+        default_factory=list,
+        description="Per-cell vertex indices (cell i → vertices[regions[i][j]])",
     )
 
 
@@ -185,11 +335,14 @@ class MapLayerType(str, Enum):
     TEMPERATURE = "temperature"  # engine-derived
     PRECIPITATION = "precipitation"  # engine-derived
     BIOMES = "biomes"  # engine-derived
+    PLATES_RASTER = "plates_raster"  # engine-derived (plate IDs as raster)
+    BOUNDARIES = "boundaries"  # engine-derived
 
     # Vector layers
     PLATES = "plates"  # editable
     PROVINCES = "provinces"  # editable (civilisation layer)
     FEATURES = "features"  # editable / derived
+    CVT_MESH = "cvt_mesh"  # engine-derived (full CVT mesh JSON)
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +377,7 @@ class VectorLayerMeta(BaseModel):
     """Metadata for a vector map layer (JSON/GeoJSON)."""
 
     layer_id: str = Field(description="Identifier for this vector layer")
-    format: Literal["geojson", "voronoi-json", "plates-json"] = Field(
+    format: Literal["geojson", "voronoi-json", "plates-json", "cvt-json"] = Field(
         description="File format"
     )
     file_path: str = Field(
@@ -249,14 +402,16 @@ class MapLayerRegistry(BaseModel):
 
     Dependency DAG::
 
-        elevation (editable/imported)
-            ├── plates (engine: assign_cells_to_plates)
+        cvt_mesh (engine: CVT generation)
+            ├── plates (engine: plate generator)
+            │   ├── boundaries (engine: boundary detector)
+            │   │   └── elevation (engine: terrain synthesiser)
+            │   │       ├── temperature (engine: climate simulator — TODO)
+            │   │       │   └── biomes (engine: ecology engine — TODO)
+            │   │       └── flow_accumulation (engine: river generator — TODO)
             │   └── provinces (engine: voronoi → GeoJSON)
             │       └── civ_territory (manual: civmap painting)
-            ├── features (engine: feature_extractor)
-            ├── temperature (engine: climate engine)
-            │   └── biomes (engine: ecology engine)
-            └── moisture (engine: climate engine)
+            └── features (engine: feature_extractor)
     """
 
     planet_id: str = Field(description="Planet this registry belongs to")

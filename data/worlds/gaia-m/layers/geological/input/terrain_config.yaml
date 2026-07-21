@@ -1,0 +1,70 @@
+# Gaia-M 地形生成管线配置 (CVT Pipeline v2.0)
+#
+# 用于 dreamulator terrain generate 命令的配置文件。
+# 替代旧的 heightmap_config.yaml (已废弃)。
+#
+# 用法:
+#   uv run dreamulator terrain generate gaia-m --planet satellite_gaiam \
+#     --config data/worlds/gaia-m/layers/geological/input/terrain_config.yaml
+#
+# 数据来源:
+#   planets.yaml       — 行星物理参数
+#   land_sea.md        — 海陆分布详细设定 (TODO: 后续迭代将整合)
+#   geography.md       — 海陆分布概览
+#   geological_history.md — 地质演化史
+#   tidal_effects.md   — 潮汐效应
+#
+# TODO: 当前版本使用随机生成的大陆/海洋分布。
+#       后续迭代将根据 land_sea.md 中的世界观设定，通过手动指定
+#       板块种子和大陆场特征来还原 Aegis 大陆、Anti-Aegis 大陆、
+#       北极孤立大陆、Aegis 裂谷海等设定地形。
+
+# ── 行星基本参数 ──────────────────────────────────────────────────────────────
+planet:
+  seed: 42
+  radius_km: 6817.0            # 1.07 R_earth
+  gravity_m_s2: 10.28          # 1.05g (G*1.2M_earth/(1.07R_earth)^2)
+  rotation_period_days: 3.25   # 潮汐锁定于 Aegis 巨行星
+
+# ── CVT 网格 ──────────────────────────────────────────────────────────────────
+terrain:
+  num_nodes: 100000            # 10 万个 Voronoi cell
+  jitter_sigma: 0.3
+  lloyd_iterations: 8
+
+# ── 构造板块 ──────────────────────────────────────────────────────────────────
+# 来源: geography.md (12主板块 + 8小板 = 20)
+# 板块速度: 15-25 cm/yr (地球的 3-5 倍, 潮汐加热驱动)
+plates:
+  num_plates: 20
+  plate_speed_min_cm_yr: 3.0   # 最慢板块
+  plate_speed_max_cm_yr: 15.0  # 最快板块 (潮汐加热驱动更活跃的板块运动)
+
+# ── 地形合成 ──────────────────────────────────────────────────────────────────
+terrain:
+  continental_elevation_m: 850.0
+  oceanic_elevation_m: -3800.0 # Gaia-M 海洋平均深度 ~4000m
+  boundary_influence_km: 400.0
+  convergent_uplift_m: 4000.0
+  divergent_depth_m: 2000.0
+
+# ── 噪声参数 ──────────────────────────────────────────────────────────────────
+noise:
+  noise_scale: 2.0
+  noise_octaves: 6
+  noise_persistence: 0.5
+  noise_lacunarity: 2.0
+  noise_amplitude_land_m: 600.0
+  noise_amplitude_ocean_m: 300.0
+
+# ── 海平面 ────────────────────────────────────────────────────────────────────
+# Gaia-M 水覆盖率 72% (land_sea.md)
+# 海平面设为 0m, 大陆/海洋比例由随机板块生成决定
+# TODO: 后续调整 sea_level_m 以精确匹配 72% 水覆盖率
+terrain:
+  sea_level_m: 0.0
+
+# ── 导出设置 ──────────────────────────────────────────────────────────────────
+export:
+  export_width: 4096
+  export_height: 2048

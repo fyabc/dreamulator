@@ -14,7 +14,7 @@ import { generateLut, TERRAIN_SCALE, ELEVATION_SCALE, LANDSEA_SCALE, SLOPE_SCALE
 // Types
 // ---------------------------------------------------------------------------
 
-export type ColorMode = 'terrain' | 'elevation' | 'landsea' | 'slope'
+export type ColorMode = 'terrain' | 'elevation' | 'landsea' | 'slope' | 'plates' | 'boundaries'
 
 export interface TerrainTextureOptions {
   elevation: Float32Array | null
@@ -57,6 +57,9 @@ export default function useTerrainTexture({
       elevation: ELEVATION_SCALE,
       landsea: LANDSEA_SCALE,
       slope: SLOPE_SCALE,
+      // 'plates' and 'boundaries' use terrain as the base; SVG overlay provides the coloring
+      plates: TERRAIN_SCALE,
+      boundaries: TERRAIN_SCALE,
     }
     const scale = scaleMap[colorMode] || TERRAIN_SCALE
     const lut = generateLut(scale, 256)

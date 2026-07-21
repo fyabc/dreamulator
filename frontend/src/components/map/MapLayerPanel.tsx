@@ -3,6 +3,7 @@
  */
 
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import { PROJECTIONS, type ProjectionType } from '../../viewers/map/utils/projection'
 
 interface LayerState {
   colorMode: ColorMode
@@ -14,6 +15,10 @@ interface LayerState {
 interface MapLayerPanelProps {
   state: LayerState
   onChange: (state: LayerState) => void
+  /** Current projection type. */
+  projection?: ProjectionType
+  /** Called when the user selects a different projection. */
+  onProjectionChange?: (projection: ProjectionType) => void
 }
 
 const COLOR_MODES: { id: ColorMode; label: string; description: string }[] = [
@@ -21,6 +26,8 @@ const COLOR_MODES: { id: ColorMode; label: string; description: string }[] = [
   { id: 'elevation', label: '海拔', description: '灰度梯度，黑色为低处、白色为高处' },
   { id: 'landsea', label: '海陆', description: '二值着色，区分海洋和陆地，查看海陆比例' },
   { id: 'slope', label: '坡度', description: '坡度梯度，蓝(平坦) → 绿(缓坡) → 红(陡峭)' },
+  { id: 'plates', label: '板块', description: '按构造板块 ID 随机着色，区分不同板块区域' },
+  { id: 'boundaries', label: '边界类型', description: '显示板块边界类型：汇聚(红) · 离散(绿) · 转换(黄)' },
 ]
 
 const VECTOR_LAYERS: { key: keyof LayerState; label: string; description: string; disabled?: boolean }[] = [
@@ -29,9 +36,37 @@ const VECTOR_LAYERS: { key: keyof LayerState; label: string; description: string
   { key: 'showFeatures', label: '河流 / 山脊', description: '显示从高度图提取的河流（蓝）和山脊线（橙）', disabled: true },
 ]
 
-export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({
+  state,
+  onChange,
+  projection = 'equirectangular',
+  onProjectionChange,
+}: MapLayerPanelProps) {
   return (
     <div className="space-y-4">
+      {/* Projection selector */}
+      {onProjectionChange && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            投影方式
+          </h3>
+          <p className="text-[10px] text-gray-600 mb-2">
+            选择地图的球面投影方式
+          </p>
+          <select
+            value={projection}
+            onChange={(e) => onProjectionChange(e.target.value as ProjectionType)}
+            className="w-full px-2 py-1.5 rounded text-sm bg-space-surface/60 text-gray-300 border border-space-border focus:border-neon-cyan/40 outline-none"
+          >
+            {PROJECTIONS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Color mode */}
       <div>
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">

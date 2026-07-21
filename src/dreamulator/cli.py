@@ -34,6 +34,12 @@ app.add_typer(branch_app, name="branch")
 conlang_app = typer.Typer(help="Conlang tools for language design and sound change simulation.")
 app.add_typer(conlang_app, name="conlang")
 
+# Terrain subcommand group
+terrain_app = typer.Typer(
+    help="Terrain generation pipeline (CVT mesh -> plates -> terrain -> export).",
+)
+app.add_typer(terrain_app, name="terrain")
+
 
 @app.command()
 def version() -> None:
@@ -767,6 +773,278 @@ def conlang_tokenize(
     console.print(f"[cyan]Tokens ({len(tokens)}):[/cyan]")
     for tok in tokens:
         console.print(f"  {tok.raw!r}  base={tok.base!r}  mods={tok.modifiers}")
+
+
+# --- Terrain subcommands ---
+
+
+def _load_terrain_config(
+    world_dir: Path,
+    planet: str | None,
+    branch: str | None,
+    config_path: Path | None,
+) -> tuple:
+    """Load terrain pipeline config from YAML or planet data.
+
+    Returns (TerrainPipelineConfig, planet_id, output_dir).
+    """
+    import yaml as _yaml
+
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+
+    # Find planet ID
+    planet_id = planet
+    if planet_id is None:
+        # Auto-detect from planets.yaml
+        geological_dir = resolver.get_input_dir("geological")
+        if geological_dir:
+            planets_file = geological_dir / "planets.yaml"
+            if planets_file.exists():
+                with open(planets_file, encoding="utf-8") as f:
+                    data = _yaml.safe_load(f) or {}
+                bodies = data.get("bodies", [])
+                for body in bodies:
+                    if body.get("type") == "planet":
+                        planet_id = body["id"]
+                        break
+        if planet_id is None:
+            planet_id = "earth"
+
+    # Load config
+    if config_path and config_path.exists():
+        cfg = TerrainPipelineConfig.from_yaml(config_path)
+    else:
+        # Try to find terrain config in geological layer
+        geological_input = resolver.get_input_dir("geological")
+        cfg = TerrainPipelineConfig()
+        if geological_input:
+            # Check for terrain config YAML
+            terrain_cfg_path = geological_input / "terrain_config.yaml"
+            if terrain_cfg_path.exists():
+                cfg = TerrainPipelineConfig.from_yaml(terrain_cfg_path)
+            else:
+                # Try to load from planets.yaml
+                planets_file = geological_input / "planets.yaml"
+                if planets_file.exists():
+                    with open(planets_file, encoding="utf-8") as f:
+                        data = _yaml.safe_load(f) or {}
+                    for body in data.get("bodies", []):
+                        if body.get("id") == planet_id:
+                            cfg = TerrainPipelineConfig.from_planet_config(body)
+                            break
+
+    # Determine output directory (input/maps/ for persistent storage)
+    input_dir = resolver.get_input_dir("geological")
+    if input_dir is None:
+        input_dir = world_dir / "layers" / "geological" / "input"
+    output_dir = input_dir / "maps" / planet_id
+
+    return cfg, planet_id, output_dir
+
+
+@terrain_app.command("generate")
+def terrain_generate(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID (auto-detect if omitted)"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="YAML config file override"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    stages: str | None = typer.Option(
+        None, "--stages", "-s",
+        help="Comma-separated stages: mesh,plates,boundaries,terrain,climate,rivers,erosion,export",
+    ),
+    num_nodes: int | None = typer.Option(None, "--num-nodes", "-n", help="Override number of CVT nodes"),
+    num_plates: int | None = typer.Option(None, "--num-plates", help="Override number of plates"),
+    seed: int | None = typer.Option(None, "--seed", help="Override RNG seed"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Run the terrain generation pipeline (CVT mesh -> plates -> terrain -> export)."""
+    import logging
+
+    _set_data_dir(data_dir)
+
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1)
+
+    from dreamulator.map.terrain_pipeline import run_terrain_pipeline
+
+    cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, config)
+
+    # Apply overrides
+    if num_nodes is not None:
+        cfg.num_nodes = num_nodes
+    if num_plates is not None:
+        cfg.num_plates = num_plates
+    if seed is not None:
+        cfg.seed = seed
+
+    # Parse stages
+    stage_list = None
+    if stages:
+        stage_list = [s.strip() for s in stages.split(",")]
+
+    console.print(
+        f"[cyan]Generating terrain for '{world}' planet '{planet_id}'[/cyan]"
+        + (f" branch '{branch}'" if branch else "")
+        + f"\n  Nodes: {cfg.num_nodes:,}  Plates: {cfg.num_plates}  Seed: {cfg.seed}"
+    )
+
+    try:
+        result = run_terrain_pipeline(cfg, output_dir, stages=stage_list)
+    except RuntimeError as e:
+        console.print(f"[red]Pipeline error: {e}[/red]")
+        raise typer.Exit(code=1)
+
+    # Report results
+    console.print(f"\n[bold green]Pipeline complete[/bold green] in {result.elapsed_seconds:.1f}s")
+    console.print(f"  Stages: {' -> '.join(result.stages_completed)}")
+    if result.elevation_grid is not None:
+        import numpy as np
+
+        console.print(
+            f"  Elevation: [{result.elevation_grid.min():.0f}, {result.elevation_grid.max():.0f}] m"
+        )
+    console.print(f"  Output: {output_dir}")
+
+
+@terrain_app.command("info")
+def terrain_info(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Show summary of generated terrain data."""
+    import json
+
+    _set_data_dir(data_dir)
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1)
+
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+
+    planet_id = planet or "earth"
+
+    # Check input first, then derived
+    map_dir = None
+    for get_dir in (resolver.get_input_dir, resolver.get_derived_dir):
+        base_dir = get_dir("geological")
+        if base_dir is not None:
+            candidate = base_dir / "maps" / planet_id
+            if candidate.exists():
+                map_dir = candidate
+                break
+
+    if map_dir is None:
+        console.print(f"[yellow]No terrain data for planet '{planet_id}'[/yellow]")
+        raise typer.Exit(code=1)
+
+    # Read metadata
+    meta_file = map_dir / "metadata.json"
+    if meta_file.exists():
+        with open(meta_file, encoding="utf-8") as f:
+            meta = json.load(f)
+        console.print(f"[bold]Terrain Data: {world} / {planet_id}[/bold]")
+        console.print(f"  Seed: {meta.get('seed', 'N/A')}")
+        console.print(f"  Nodes: {meta.get('num_nodes', 'N/A'):,}")
+        console.print(f"  Plates: {meta.get('num_plates', 'N/A')}")
+        console.print(f"  Pipeline: {meta.get('pipeline_version', 'unknown')}")
+        elev_range = meta.get("elevation_range_m", [])
+        if elev_range:
+            console.print(f"  Elevation: [{elev_range[0]:.0f}, {elev_range[1]:.0f}] m")
+        res = meta.get("export_resolution", [])
+        if res:
+            console.print(f"  Resolution: {res[0]}x{res[1]}")
+    else:
+        console.print("[yellow]No metadata.json found[/yellow]")
+
+    # List files
+    table = Table(title="Output Files")
+    table.add_column("File", style="cyan")
+    table.add_column("Size", justify="right")
+
+    import os
+
+    for f in sorted(os.listdir(map_dir)):
+        size = os.path.getsize(map_dir / f)
+        if size > 1_000_000:
+            size_str = f"{size / 1_000_000:.1f} MB"
+        elif size > 1_000:
+            size_str = f"{size / 1_000:.1f} KB"
+        else:
+            size_str = f"{size} B"
+        table.add_row(f, size_str)
+
+    console.print(table)
+
+
+@terrain_app.command("export")
+def terrain_export(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    output: Path = typer.Option(Path("export/"), "--output", "-o", help="Output directory"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Export terrain data to standard formats (PNG, JSON)."""
+    import shutil
+
+    _set_data_dir(data_dir)
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1)
+
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+
+    planet_id = planet or "earth"
+
+    # Check input first, then derived
+    map_dir = None
+    for get_dir in (resolver.get_input_dir, resolver.get_derived_dir):
+        base_dir = get_dir("geological")
+        if base_dir is not None:
+            candidate = base_dir / "maps" / planet_id
+            if candidate.exists():
+                map_dir = candidate
+                break
+
+    if map_dir is None:
+        console.print(f"[red]No terrain data for planet '{planet_id}'[/red]")
+        console.print("Run 'dreamulator terrain generate' first.")
+        raise typer.Exit(code=1)
+
+    # Copy all files to output directory
+    output.mkdir(parents=True, exist_ok=True)
+    for f in map_dir.iterdir():
+        if f.is_file():
+            shutil.copy2(f, output / f.name)
+
+    console.print(f"[green]Exported terrain data to {output}[/green]")
+    for f in sorted(output.iterdir()):
+        console.print(f"  {f.name}")
 
 
 if __name__ == "__main__":

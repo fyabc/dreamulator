@@ -1,9 +1,11 @@
 planet_id: satellite_gaiam
 projection: equirectangular
-width: 2048
-height: 1024
-elevation_min_m: -5844.0
-elevation_max_m: 6542.0
-sea_level: 0.4718
+width: 4096
+height: 2048
+elevation_min_m: -11000.0
+elevation_max_m: 9000.0
+sea_level_m: 0.0
 voronoi_seed: 42
-voronoi_num_cells: 1000
+voronoi_num_cells: 100000
+cvt_jitter_sigma: 0.3
+cvt_lloyd_iterations: 8

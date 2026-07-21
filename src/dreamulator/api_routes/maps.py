@@ -23,15 +23,19 @@ _manager = WorldManager()
 
 
 class GenerateRequest(BaseModel):
-    """Request body for procedural terrain generation."""
+    """Request body for procedural terrain generation (CVT pipeline)."""
 
     seed: int | None = Field(default=None, description="RNG seed (world seed if omitted)")
-    num_continents: int = Field(default=3, ge=1, le=10)
-    mountaininess: float = Field(default=0.5, ge=0, le=1)
-    num_plates: int = Field(default=10, ge=1, le=50)
-    width: int = Field(default=2048, ge=256, le=8192)
-    height: int = Field(default=1024, ge=128, le=4096)
-    voronoi_num_cells: int = Field(default=5000, ge=100, le=50000)
+    num_nodes: int = Field(default=100_000, ge=100, le=1_000_000)
+    num_plates: int = Field(default=20, ge=1, le=100)
+    jitter_sigma: float = Field(default=0.3, ge=0, le=2.0)
+    lloyd_iterations: int = Field(default=8, ge=0, le=30)
+    export_width: int = Field(default=4096, ge=256, le=8192)
+    export_height: int = Field(default=2048, ge=128, le=4096)
+    # Legacy fields (ignored by new pipeline)
+    num_continents: int | None = Field(default=None, description="Legacy — ignored")
+    mountaininess: float | None = Field(default=None, description="Legacy — ignored")
+    voronoi_num_cells: int | None = Field(default=None, description="Legacy — ignored")
 
 
 class MapListResponse(BaseModel):
@@ -170,6 +174,31 @@ def get_features(
     return [f.model_dump(mode="json") for f in features]
 
 
+@router.get("/{world_name}/maps/{planet_id}/cvt-mesh")
+def get_cvt_mesh(
+    world_name: str,
+    planet_id: str,
+    branch: str | None = None,
+) -> dict[str, Any]:
+    """Get the CVT mesh data (cells, adjacency, vertices, regions)."""
+    import json
+
+    mgr = _get_map_manager(world_name, branch)
+    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
+    if map_dir is None:
+        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
+
+    mesh_file = map_dir / "cvt_mesh.json"
+    if not mesh_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No CVT mesh data for '{planet_id}'. Run terrain generation first.",
+        )
+
+    with open(mesh_file, encoding="utf-8") as f:
+        return json.load(f)
+
+
 # ---------------------------------------------------------------------------
 # Write endpoints
 # ---------------------------------------------------------------------------
@@ -295,21 +324,70 @@ def generate_map(
     req: GenerateRequest | None = None,
     branch: str | None = None,
 ) -> dict[str, Any]:
-    """Procedurally generate terrain, Voronoi network, and plates."""
-    mgr = _get_map_manager(world_name, branch)
+    """Procedurally generate terrain using the CVT pipeline.
+
+    Runs: CVT mesh -> plates -> boundaries -> terrain synthesis -> export.
+    Climate, rivers, and erosion stages are skipped (not yet implemented).
+    """
+    import logging
+
+    logging.basicConfig(level=logging.WARNING)
+
+    from ..map.pipeline_types import TerrainPipelineConfig
+    from ..map.terrain_pipeline import run_terrain_pipeline
+
     params = req or GenerateRequest()
 
-    meta = mgr.generate_map(
-        planet_id,
-        seed=params.seed,
-        num_continents=params.num_continents,
-        mountaininess=params.mountaininess,
+    # Resolve world seed if not provided
+    if params.seed is None:
+        try:
+            config = _manager.load_world(world_name)
+            effective_seed = config.seed.seed
+        except Exception:
+            effective_seed = 42
+    else:
+        effective_seed = params.seed
+
+    cfg = TerrainPipelineConfig(
+        seed=effective_seed,
+        num_nodes=params.num_nodes,
         num_plates=params.num_plates,
-        width=params.width,
-        height=params.height,
-        voronoi_num_cells=params.voronoi_num_cells,
+        jitter_sigma=params.jitter_sigma,
+        lloyd_iterations=params.lloyd_iterations,
+        export_width=params.export_width,
+        export_height=params.export_height,
     )
-    return {"ok": True, **meta.model_dump(mode="json")}
+
+    # Determine output directory (input/maps/ for persistent storage)
+    mgr = _get_map_manager(world_name, branch)
+    output_dir = mgr._ensure_input_dir(planet_id)  # noqa: SLF001
+
+    # Skip export stage in API mode (we save via manager instead)
+    result = run_terrain_pipeline(
+        cfg, output_dir,
+        stages=["mesh", "plates", "boundaries", "terrain", "export"],
+    )
+
+    # Build response
+    elev_range = [0.0, 0.0]
+    if result.elevation_grid is not None:
+        elev_range = [
+            float(result.elevation_grid.min()),
+            float(result.elevation_grid.max()),
+        ]
+
+    return {
+        "ok": True,
+        "planet_id": planet_id,
+        "seed": effective_seed,
+        "num_nodes": cfg.num_nodes,
+        "num_plates": cfg.num_plates,
+        "num_cells": result.mesh.num_cells if result.mesh else 0,
+        "num_boundary_cells": len(result.boundary_cell_ids),
+        "elevation_range_m": elev_range,
+        "stages_completed": result.stages_completed,
+        "elapsed_seconds": round(result.elapsed_seconds, 1),
+    }
 
 
 @router.delete("/{world_name}/maps/{planet_id}")

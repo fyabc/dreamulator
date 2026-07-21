@@ -3,6 +3,8 @@
  * Mirrors the Python models in src/dreamulator/map/models.py.
  */
 
+import type { ProjectionType } from './utils/projection'
+
 // ---------------------------------------------------------------------------
 // Metadata
 // ---------------------------------------------------------------------------
@@ -20,6 +22,9 @@ export interface MapMetadata {
   voronoi_seed: number | null
   voronoi_num_cells: number
 }
+
+// Re-export ProjectionType for convenience
+export type { ProjectionType }
 
 // ---------------------------------------------------------------------------
 // Voronoi network
@@ -98,6 +103,21 @@ export type MapLayerType =
   | 'features'
 
 // ---------------------------------------------------------------------------
+// Color modes (for terrain rendering + overlay coloring)
+// ---------------------------------------------------------------------------
+
+/**
+ * Color modes available in the map viewer.
+ * - 'terrain': hypsometric tint (natural appearance)
+ * - 'elevation': grayscale gradient
+ * - 'landsea': binary land/sea
+ * - 'slope': slope gradient
+ * - 'plates': color cells by plate_id (random categorical colors)
+ * - 'boundaries': show boundary_type (convergent=red, divergent=green, transform=yellow)
+ */
+export type ViewerColorMode = 'terrain' | 'elevation' | 'landsea' | 'slope' | 'plates' | 'boundaries'
+
+// ---------------------------------------------------------------------------
 // Layer visibility state
 // ---------------------------------------------------------------------------
 
@@ -109,28 +129,37 @@ export interface LayerConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Edit tools
+// CVT mesh (centroidal Voronoi tessellation, from Python backend)
 // ---------------------------------------------------------------------------
 
-export type EditTool = 'raise' | 'lower' | 'smooth' | 'flatten' | 'select'
+/** Boundary type between two adjacent plates. */
+export type BoundaryType = 'convergent' | 'divergent' | 'transform'
 
-export interface BrushConfig {
-  tool: EditTool
-  radius: number // pixels
-  strength: number // 0..1
-  hardness: number // 0..1
+/** A vertex in the CVT mesh (Voronoi polygon corner). */
+export interface CVTVertex {
+  /** Vertex index. */
+  id: number
+  /** Longitude in degrees. */
+  lon: number
+  /** Latitude in degrees. */
+  lat: number
 }
 
-// ---------------------------------------------------------------------------
-// Generate params
-// ---------------------------------------------------------------------------
+/** A Voronoi region (polygon) in the CVT mesh. */
+export interface CVTRegion {
+  /** Cell ID (matches VoronoiCell.id). */
+  id: number
+  /** Ordered vertex indices defining the polygon boundary. */
+  vertex_ids: number[]
+  /** Plate ID this cell belongs to. */
+  plate_id: string | null
+  /** Boundary types for edges shared with neighboring cells.
+   *  Keyed by neighbor cell ID. */
+  boundaries: Record<string, BoundaryType> | null
+}
 
-export interface GenerateParams {
-  seed?: number
-  num_continents?: number
-  mountaininess?: number
-  num_plates?: number
-  width?: number
-  height?: number
-  voronoi_num_cells?: number
+/** Complete CVT mesh output from the backend. */
+export interface CVTMesh {
+  vertices: CVTVertex[]
+  regions: CVTRegion[]
 }

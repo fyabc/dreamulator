@@ -1,41 +1,36 @@
 /**
- * MapEditorPage — full-page map editor with Three.js terrain + SVG overlay.
+ * MapViewerPage — full-page read-only map viewer with Three.js terrain + SVG overlay.
  *
  * Route: /worlds/:worldName/map and /worlds/:worldName/map/:planetId
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { isStaticMode } from '../api/mode'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
-import MapTools from '../components/map/MapEditingTools'
 import MapCellInspector from '../components/map/MapCellInspector'
 import MapStatusBar from '../components/map/MapStatusBar'
-import MapOnboardingGuide, {
-  isOnboardingDismissed,
-} from '../components/map/MapOnboardingGuide'
 import MapMinimap from '../components/map/MapMinimap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
-import type { VoronoiCell, TectonicPlate } from '../viewers/map/types'
+import type { ProjectionType } from '../viewers/map/utils/projection'
+import type { VoronoiCell, TectonicPlate, CVTMesh } from '../viewers/map/types'
 
-export default function MapEditorPage() {
+export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
     worldName: string
     planetId?: string
   }>()
   const navigate = useNavigate()
-  const staticMode = isStaticMode()
-  const queryClient = useQueryClient()
 
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
   const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
+  const [projection, setProjection] = useState<ProjectionType>('equirectangular')
 
   const [layerState, setLayerState] = useState<LayerState>({
     colorMode: 'terrain',
@@ -63,9 +58,6 @@ export default function MapEditorPage() {
     planeHeight: 400,
   })
 
-  // Onboarding guide
-  const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDismissed())
-
   // --- Data fetching ---
 
   const { data: mapPlanets } = useQuery({
@@ -74,7 +66,7 @@ export default function MapEditorPage() {
     enabled: !!worldName,
   })
 
-  // World planet definitions (for default planet ID when no maps exist yet)
+  // World planet definitions (for default planet ID)
   const { data: worldPlanets } = useQuery({
     queryKey: ['worldPlanets', worldName, selectedBranch],
     queryFn: () => api.getPlanets(worldName!, selectedBranch),
@@ -85,10 +77,8 @@ export default function MapEditorPage() {
   useEffect(() => {
     if (!selectedPlanet) {
       if (mapPlanets && mapPlanets.length > 0) {
-        // Use first planet that already has map data
         setSelectedPlanet(mapPlanets[0])
       } else if (worldPlanets && worldPlanets.length > 0) {
-        // No maps exist yet — use first defined planet as default for generation
         setSelectedPlanet(worldPlanets[0].id)
       }
     }
@@ -139,45 +129,12 @@ export default function MapEditorPage() {
     retry: false,
   })
 
-  // --- Mutations ---
-
-  const generateMutation = useMutation({
-    mutationFn: (params: Record<string, any>) =>
-      api.generateTerrain(worldName!, selectedPlanet, params, selectedBranch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['elevationBlob', worldName, selectedPlanet],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['voronoi', worldName, selectedPlanet],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['plates', worldName, selectedPlanet],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['mapMeta', worldName, selectedPlanet],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['mapPlanets', worldName],
-      })
-    },
-  })
-
-  // Import heightmap from external tool (PNG/TIFF)
-  const importMutation = useMutation({
-    mutationFn: (file: File) =>
-      api.importElevation(worldName!, selectedPlanet, file, selectedBranch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['elevationBlob', worldName, selectedPlanet, selectedBranch],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['voronoi', worldName, selectedPlanet, selectedBranch],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
-      })
-    },
+  // CVT mesh data for polygon rendering
+  const { data: cvtMesh } = useQuery({
+    queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
+    queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
+    enabled: !!worldName && !!selectedPlanet,
+    retry: false,
   })
 
   // --- Interaction handlers ---
@@ -221,19 +178,6 @@ export default function MapEditorPage() {
     return p?.name ?? null
   }, [selectedPlanet, worldPlanets])
 
-  const handleImportClick = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.png,.tif,.tiff'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (file) {
-        importMutation.mutate(file)
-      }
-    }
-    input.click()
-  }, [importMutation])
-
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">未选择世界</div>
   }
@@ -251,11 +195,22 @@ export default function MapEditorPage() {
         <h1 className="text-lg font-bold text-neon-cyan neon-glow-subtle">
           {currentPlanetName ?? selectedPlanet ?? '地图'}
         </h1>
-        <span className="text-xs text-gray-600">地图编辑器</span>
+        <span className="text-xs text-gray-600">地图查看器</span>
 
         <div className="flex-1" />
 
-        {/* Planet selector — show all defined planets, mark which have maps */}
+        {/* Projection selector */}
+        <select
+          value={projection}
+          onChange={(e) => setProjection(e.target.value as ProjectionType)}
+          className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
+        >
+          <option value="equirectangular">等距圆柱</option>
+          <option value="mollweide">摩尔威德</option>
+          <option value="robinson">罗宾逊</option>
+        </select>
+
+        {/* Planet selector */}
         {worldPlanets && worldPlanets.length > 0 && (
           <select
             value={selectedPlanet}
@@ -281,20 +236,9 @@ export default function MapEditorPage() {
           onSelect={setSelectedBranch}
         />
 
-        {staticMode && (
-          <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
-            只读
-          </span>
-        )}
-
-        {/* Help button */}
-        <button
-          onClick={() => setShowOnboarding(true)}
-          className="text-gray-500 hover:text-neon-cyan transition-colors w-6 h-6 flex items-center justify-center rounded border border-space-border hover:border-neon-cyan/40 text-xs font-bold"
-          title="使用指南"
-        >
-          ?
-        </button>
+        <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
+          只读
+        </span>
       </div>
 
       {/* Main content */}
@@ -314,23 +258,6 @@ export default function MapEditorPage() {
                     ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
                     : '该行星暂无地图数据'}
                 </p>
-                {!staticMode && (
-                  <button
-                    onClick={() =>
-                      generateMutation.mutate({
-                        num_continents: 3,
-                        mountaininess: 0.5,
-                        num_plates: 15,
-                      })
-                    }
-                    disabled={generateMutation.isPending || !selectedPlanet}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
-                  >
-                    {generateMutation.isPending
-                      ? '生成中...'
-                      : `🌍 为 ${currentPlanetName ?? selectedPlanet ?? '...'} 生成地图`}
-                  </button>
-                )}
               </div>
             ) : (
               <>
@@ -341,11 +268,12 @@ export default function MapEditorPage() {
                     voronoiCells={voronoiCells}
                     plates={tectonicPlates}
                     features={(features as any[]) ?? []}
+                    cvtMesh={cvtMesh as CVTMesh | null}
                     colorMode={layerState.colorMode}
+                    projection={projection}
                     showVoronoi={layerState.showVoronoi}
                     showPlates={layerState.showPlates}
                     showFeatures={layerState.showFeatures}
-                    readOnly={staticMode}
                     onCursorMove={setCursor}
                     onCellHover={setHoveredCell}
                     onCellClick={handleCellClick}
@@ -381,7 +309,7 @@ export default function MapEditorPage() {
               <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    图层与工具
+                    图层设置
                   </span>
                   <button
                     onClick={() => setLeftPanelOpen(false)}
@@ -390,16 +318,12 @@ export default function MapEditorPage() {
                     ✕
                   </button>
                 </div>
-                <MapLayerPanel state={layerState} onChange={setLayerState} />
-                {!staticMode && (
-                  <div className="border-t border-space-border pt-4">
-                    <MapTools
-                      onImport={handleImportClick}
-                      isImporting={importMutation.isPending}
-                      hasElevation={!!localElevation}
-                    />
-                  </div>
-                )}
+                <MapLayerPanel
+                  state={layerState}
+                  onChange={setLayerState}
+                  projection={projection}
+                  onProjectionChange={setProjection}
+                />
               </div>
             </>
           )}
@@ -407,18 +331,14 @@ export default function MapEditorPage() {
 
         {/* === Desktop layout (≥ md, hidden by default) === */}
         <div className="hidden md:flex flex-1 min-h-0">
-          {/* Left panel: layers + tools */}
+          {/* Left panel: layers */}
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
-            <MapLayerPanel state={layerState} onChange={setLayerState} />
-            {!staticMode && (
-              <div className="border-t border-space-border pt-4">
-                <MapTools
-                  onImport={handleImportClick}
-                  isImporting={importMutation.isPending}
-                  hasElevation={!!localElevation}
-                />
-              </div>
-            )}
+            <MapLayerPanel
+              state={layerState}
+              onChange={setLayerState}
+              projection={projection}
+              onProjectionChange={setProjection}
+            />
           </div>
 
           {/* Center: map viewer */}
@@ -434,23 +354,6 @@ export default function MapEditorPage() {
                     ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
                     : '该行星暂无地图数据'}
                 </p>
-                {!staticMode && (
-                  <button
-                    onClick={() =>
-                      generateMutation.mutate({
-                        num_continents: 3,
-                        mountaininess: 0.5,
-                        num_plates: 15,
-                      })
-                    }
-                    disabled={generateMutation.isPending || !selectedPlanet}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
-                  >
-                    {generateMutation.isPending
-                      ? '生成中...'
-                      : `🌍 为 ${currentPlanetName ?? selectedPlanet ?? '...'} 生成地图`}
-                  </button>
-                )}
               </div>
             ) : (
               <>
@@ -461,11 +364,12 @@ export default function MapEditorPage() {
                     voronoiCells={voronoiCells}
                     plates={tectonicPlates}
                     features={(features as any[]) ?? []}
+                    cvtMesh={cvtMesh as CVTMesh | null}
                     colorMode={layerState.colorMode}
+                    projection={projection}
                     showVoronoi={layerState.showVoronoi}
                     showPlates={layerState.showPlates}
                     showFeatures={layerState.showFeatures}
-                    readOnly={staticMode}
                     onCursorMove={setCursor}
                     onCellHover={setHoveredCell}
                     onCellClick={handleCellClick}
@@ -501,9 +405,6 @@ export default function MapEditorPage() {
                   <p className="text-xs text-gray-400">
                     {selectedCells.size} 个单元格
                   </p>
-                  <p className="text-xs text-gray-600 mt-1 italic">
-                    即将推出：省份划分等批量操作
-                  </p>
                 </div>
               )}
             </div>
@@ -531,11 +432,6 @@ export default function MapEditorPage() {
           </div>
         </div>
       </div>
-
-      {/* Onboarding guide overlay */}
-      {showOnboarding && (
-        <MapOnboardingGuide onClose={() => setShowOnboarding(false)} />
-      )}
     </div>
   )
 }

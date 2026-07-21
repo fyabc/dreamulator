@@ -11,12 +11,18 @@ import { WebGLRenderer } from 'three'
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer.js'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import MapSvgOverlay from './MapSvgOverlay'
-import { normalisedToMeters } from '../../viewers/map/utils/projection'
+import {
+  normalisedToMeters,
+  projectForward,
+  projectInverse,
+  type ProjectionType,
+} from '../../viewers/map/utils/projection'
 import type {
   MapMetadata,
   VoronoiCell,
   TectonicPlate,
   MapFeature,
+  CVTMesh,
 } from '../../viewers/map/types'
 
 // ---------------------------------------------------------------------------
@@ -29,11 +35,14 @@ interface MapViewerProps {
   voronoiCells: VoronoiCell[]
   plates: TectonicPlate[]
   features: MapFeature[]
+  /** CVT mesh data for polygon rendering (optional). */
+  cvtMesh?: CVTMesh | null
   colorMode: ColorMode
+  /** Map projection to use for coordinate conversion. */
+  projection?: ProjectionType
   showVoronoi: boolean
   showPlates: boolean
   showFeatures: boolean
-  readOnly?: boolean
   onZoomChange?: (zoom: number) => void
   onViewStateChange?: (state: { pan: { x: number; y: number }; zoom: number; containerWidth: number; containerHeight: number; planeWidth: number; planeHeight: number }) => void
   onCursorMove?: (info: CursorInfo | null) => void
@@ -69,11 +78,12 @@ export default function MapViewer({
   voronoiCells,
   plates,
   features,
+  cvtMesh,
   colorMode,
+  projection = 'equirectangular',
   showVoronoi,
   showPlates,
   showFeatures,
-  readOnly: _readOnly = false,
   onZoomChange,
   onViewStateChange,
   onCursorMove,
@@ -265,14 +275,13 @@ export default function MapViewer({
   // Uses unwrapped pan.x so SVG elements stay at continuous screen positions
   const project = useCallback(
     (lon: number, lat: number) => {
-      const nx = (lon + 180) / 360
-      const ny = (90 - lat) / 180
+      const { nx, ny } = projectForward(projection, lon, lat)
       const unwrappedPanX = pan.x + panWrapOffset.current
       const x = (nx - 0.5) * planeWidth * zoom + containerSize.width / 2 + unwrappedPanX
       const y = (ny - 0.5) * planeHeight * zoom + containerSize.height / 2 + pan.y
       return { x, y }
     },
-    [planeWidth, planeHeight, zoom, pan, containerSize],
+    [projection, planeWidth, planeHeight, zoom, pan, containerSize],
   )
 
   // Inverse projection: screen (px, py) → (lon, lat)
@@ -281,11 +290,10 @@ export default function MapViewer({
       const unwrappedPanX = pan.x + panWrapOffset.current
       const nx = (px - containerSize.width / 2 - unwrappedPanX) / (planeWidth * zoom) + 0.5
       const ny = (py - containerSize.height / 2 - pan.y) / (planeHeight * zoom) + 0.5
-      const lon = nx * 360 - 180
-      const lat = 90 - ny * 180
+      const { lon, lat } = projectInverse(projection, nx, ny)
       return { lon, lat, nx, ny }
     },
-    [planeWidth, planeHeight, zoom, pan, containerSize],
+    [projection, planeWidth, planeHeight, zoom, pan, containerSize],
   )
 
   // Clamp pan to keep map within vertical bounds (cylindrical projection: horizontal wraps)
@@ -465,6 +473,7 @@ export default function MapViewer({
         voronoiCells={voronoiCells}
         plates={plates}
         features={features}
+        cvtMesh={cvtMesh}
         showVoronoi={showVoronoi}
         showPlates={showPlates}
         showFeatures={showFeatures}
@@ -472,7 +481,7 @@ export default function MapViewer({
         selectedCells={selectedCells}
         onCellHover={onCellHover ?? (() => {})}
         onCellClick={onCellClick ?? (() => {})}
-        colorByPlate={showPlates}
+        colorMode={colorMode}
       />
 
     </div>
