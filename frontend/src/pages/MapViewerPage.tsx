@@ -16,7 +16,7 @@ import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import type { ProjectionType } from '../viewers/map/utils/projection'
-import type { VoronoiCell, TectonicPlate, CVTMesh } from '../viewers/map/types'
+import type { VoronoiCell, TectonicPlate } from '../viewers/map/types'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -34,9 +34,6 @@ export default function MapViewerPage() {
 
   const [layerState, setLayerState] = useState<LayerState>({
     colorMode: 'terrain',
-    showVoronoi: false,
-    showPlates: false,
-    showFeatures: false,
   })
 
   // Decoded elevation data (for rendering)
@@ -122,13 +119,6 @@ export default function MapViewerPage() {
     retry: false,
   })
 
-  const { data: features } = useQuery({
-    queryKey: ['features', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getFeatures(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
   // CVT mesh data for polygon rendering
   const { data: cvtMesh } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
@@ -151,9 +141,10 @@ export default function MapViewerPage() {
     })
   }, [])
 
+  // Use cvtMesh.cells (rich property set) when available; fall back to voronoi endpoint
   const voronoiCells: VoronoiCell[] = useMemo(
-    () => voronoi?.cells ?? [],
-    [voronoi],
+    () => cvtMesh?.cells ?? voronoi?.cells ?? [],
+    [cvtMesh, voronoi],
   )
 
   const tectonicPlates: TectonicPlate[] = useMemo(
@@ -236,9 +227,6 @@ export default function MapViewerPage() {
           onSelect={setSelectedBranch}
         />
 
-        <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
-          只读
-        </span>
       </div>
 
       {/* Main content */}
@@ -266,14 +254,10 @@ export default function MapViewerPage() {
                     metadata={meta}
                     elevation={localElevation}
                     voronoiCells={voronoiCells}
-                    plates={tectonicPlates}
-                    features={(features as any[]) ?? []}
-                    cvtMesh={cvtMesh as CVTMesh | null}
+                    cvtMesh={cvtMesh}
                     colorMode={layerState.colorMode}
                     projection={projection}
-                    showVoronoi={layerState.showVoronoi}
-                    showPlates={layerState.showPlates}
-                    showFeatures={layerState.showFeatures}
+
                     onCursorMove={setCursor}
                     onCellHover={setHoveredCell}
                     onCellClick={handleCellClick}
@@ -283,7 +267,7 @@ export default function MapViewerPage() {
                     onViewStateChange={setViewState}
                   />
                 </div>
-                <MapStatusBar cursor={cursor} zoom={displayZoom} />
+                <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
               </>
             )}
           </div>
@@ -321,8 +305,6 @@ export default function MapViewerPage() {
                 <MapLayerPanel
                   state={layerState}
                   onChange={setLayerState}
-                  projection={projection}
-                  onProjectionChange={setProjection}
                 />
               </div>
             </>
@@ -336,8 +318,6 @@ export default function MapViewerPage() {
             <MapLayerPanel
               state={layerState}
               onChange={setLayerState}
-              projection={projection}
-              onProjectionChange={setProjection}
             />
           </div>
 
@@ -362,14 +342,10 @@ export default function MapViewerPage() {
                     metadata={meta}
                     elevation={localElevation}
                     voronoiCells={voronoiCells}
-                    plates={tectonicPlates}
-                    features={(features as any[]) ?? []}
-                    cvtMesh={cvtMesh as CVTMesh | null}
+                    cvtMesh={cvtMesh}
                     colorMode={layerState.colorMode}
                     projection={projection}
-                    showVoronoi={layerState.showVoronoi}
-                    showPlates={layerState.showPlates}
-                    showFeatures={layerState.showFeatures}
+
                     onCursorMove={setCursor}
                     onCellHover={setHoveredCell}
                     onCellClick={handleCellClick}
@@ -379,7 +355,7 @@ export default function MapViewerPage() {
                     onViewStateChange={setViewState}
                   />
                 </div>
-                <MapStatusBar cursor={cursor} zoom={displayZoom} />
+                <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
               </>
             )}
           </div>
@@ -394,8 +370,8 @@ export default function MapViewerPage() {
               <MapCellInspector
                 cell={hoveredCellData}
                 plate={hoveredPlate}
-                elevMinM={meta?.elevation_min_m ?? -11000}
-                elevMaxM={meta?.elevation_max_m ?? 9000}
+                cvtMesh={cvtMesh ?? null}
+                planetName={currentPlanetName}
               />
               {selectedCells.size > 0 && (
                 <div className="mt-4 pt-3 border-t border-space-border">

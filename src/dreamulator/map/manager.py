@@ -166,18 +166,63 @@ class MapManager:
     # -------------------------------------------------------------------
 
     def get_voronoi(self, planet_id: str) -> VoronoiNetwork | None:
-        """Load the Voronoi network for a planet."""
+        """Load the Voronoi network for a planet.
+
+        Supports both legacy voronoi.json and new CVT mesh format.
+        """
         map_dir = self._map_input_dir(planet_id)
         if map_dir is None:
             return None
+
+        # Try legacy voronoi.json first
         json_path = map_dir / "voronoi.json"
-        if not json_path.exists():
-            return None
-        with json_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if data is None:
-            return None
-        return VoronoiNetwork.model_validate(data)
+        if json_path.exists():
+            with json_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data is not None:
+                return VoronoiNetwork.model_validate(data)
+
+        # Fall back to CVT mesh format — convert to VoronoiNetwork
+        cvt_path = map_dir / "cvt_mesh.json"
+        if cvt_path.exists():
+            with cvt_path.open("r", encoding="utf-8") as f:
+                cvt_data = json.load(f)
+            if cvt_data is not None:
+                return self._cvt_mesh_to_voronoi_network(cvt_data)
+
+        return None
+
+    @staticmethod
+    def _cvt_mesh_to_voronoi_network(cvt_data: dict) -> VoronoiNetwork:
+        """Convert CVT mesh JSON to legacy VoronoiNetwork format."""
+        from .models import VoronoiCell
+
+        cells = []
+        for c in cvt_data.get("cells", []):
+            cell = VoronoiCell(
+                id=c["id"],
+                lon=c.get("lon", 0.0),
+                lat=c.get("lat", 0.0),
+                x=c.get("x", 0.0),
+                y=c.get("y", 0.0),
+                z=c.get("z", 0.0),
+                elevation=c.get("elevation", 0.0),
+                crust_type=c.get("crust_type", "oceanic"),
+                plate_id=c.get("plate_id"),
+                boundary_type=c.get("boundary_type"),
+                convergence_rate_cm_yr=c.get("convergence_rate_cm_yr", 0.0),
+                distance_to_boundary_km=c.get("distance_to_boundary_km", float("inf")),
+                biome=c.get("biome"),
+                neighbors=c.get("neighbors", []),
+            )
+            cells.append(cell)
+
+        return VoronoiNetwork(
+            seed=cvt_data.get("seed", 0),
+            num_cells=cvt_data.get("num_cells", len(cells)),
+            relaxation_iterations=cvt_data.get("lloyd_iterations", 0),
+            cells=cells,
+        )
 
     def save_voronoi(self, planet_id: str, network: VoronoiNetwork) -> None:
         """Save the Voronoi network for a planet."""

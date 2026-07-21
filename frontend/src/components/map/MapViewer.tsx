@@ -10,6 +10,7 @@ import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
 import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer.js'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
+import useCellIdMap from '../../viewers/map/useCellIdMap'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
   normalisedToMeters,
@@ -20,10 +21,9 @@ import {
 import type {
   MapMetadata,
   VoronoiCell,
-  TectonicPlate,
-  MapFeature,
   CVTMesh,
 } from '../../viewers/map/types'
+import { buildCellKDTree, type KDTree3D } from './utils/kdtree'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -33,16 +33,11 @@ interface MapViewerProps {
   metadata: MapMetadata | null
   elevation: Float32Array | null
   voronoiCells: VoronoiCell[]
-  plates: TectonicPlate[]
-  features: MapFeature[]
   /** CVT mesh data for polygon rendering (optional). */
   cvtMesh?: CVTMesh | null
   colorMode: ColorMode
   /** Map projection to use for coordinate conversion. */
   projection?: ProjectionType
-  showVoronoi: boolean
-  showPlates: boolean
-  showFeatures: boolean
   onZoomChange?: (zoom: number) => void
   onViewStateChange?: (state: { pan: { x: number; y: number }; zoom: number; containerWidth: number; containerHeight: number; planeWidth: number; planeHeight: number }) => void
   onCursorMove?: (info: CursorInfo | null) => void
@@ -66,7 +61,14 @@ export interface CursorInfo {
 // ---------------------------------------------------------------------------
 
 const MAX_ZOOM = 20
-const PLANE_ASPECT = 2 // equirectangular 2:1
+/** Compute aspect ratio for a given projection. */
+function projectionAspect(p: ProjectionType): number {
+  switch (p) {
+    case 'robinson': return 2.662
+    case 'mollweide': return 2.0
+    default: return 2.0 // equirectangular
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -76,14 +78,9 @@ export default function MapViewer({
   metadata,
   elevation,
   voronoiCells,
-  plates,
-  features,
   cvtMesh,
   colorMode,
   projection = 'equirectangular',
-  showVoronoi,
-  showPlates,
-  showFeatures,
   onZoomChange,
   onViewStateChange,
   onCursorMove,
@@ -103,11 +100,42 @@ export default function MapViewer({
   const ghostRightRef = useRef<THREE.Mesh | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 800, height: 400 })
   const [zoom, setZoom] = useState(1)
+
+  // Map dimensions (early — needed by hooks below)
+  const mapW = metadata?.width ?? 2048
+  const mapH = metadata?.height ?? 1024
+  const seaLevel = metadata?.sea_level ?? 0.4
+  const elevMin = metadata?.elevation_min_m ?? -11000
+  const elevMax = metadata?.elevation_max_m ?? 9000
+
+  // Build KD-tree from cell positions for O(log n) hit-testing
+  const kdTree = useMemo<KDTree3D | null>(() => {
+    if (!voronoiCells || voronoiCells.length === 0) return null
+    return buildCellKDTree(voronoiCells)
+  }, [voronoiCells])
+
+  // Pre-compute cell-ID map for fast palette-based cell rendering
+  // (depends only on cvtMesh + dimensions, not on colorMode or projection)
+  const cellIdMap = useCellIdMap({ cvtMesh, width: mapW, height: mapH })
+
+  // Loading indicator for projection/colorMode/cellIdMap changes
+  const [isRendering, setIsRendering] = useState(false)
+  const prevRenderKey = useRef('')
+  const renderKey = `${projection}_${colorMode}_${cellIdMap ? 'ready' : 'pending'}`
+  if (prevRenderKey.current !== renderKey) {
+    prevRenderKey.current = renderKey
+    setIsRendering(true)
+    requestAnimationFrame(() => setIsRendering(false))
+  }
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const panWrapOffset = useRef(0) // cumulative offset from horizontal wrapping
   const [webgpuReady, setWebgpuReady] = useState(false)
+
+  // rAF throttle for mousemove
+  const rafRef = useRef<number>(0)
+  const lastMousePos = useRef<{ px: number; py: number } | null>(null)
 
   // Observe container size
   useEffect(() => {
@@ -123,19 +151,12 @@ export default function MapViewer({
     return () => observer.disconnect()
   }, [])
 
-  // Map dimensions
-  const mapW = metadata?.width ?? 2048
-  const mapH = metadata?.height ?? 1024
-  const seaLevel = metadata?.sea_level ?? 0.4
-  const elevMin = metadata?.elevation_min_m ?? -11000
-  const elevMax = metadata?.elevation_max_m ?? 9000
-
   // Clamp zoom and pan when container size changes
   useEffect(() => {
     const aspect = mapW / mapH
     const wByH = containerSize.height * aspect
     const pw = wByH < containerSize.width ? containerSize.width : wByH
-    const ph = pw / PLANE_ASPECT
+    const ph = pw / projectionAspect(projection)
     const minZoom = Math.max(containerSize.width / pw, containerSize.height / ph)
     const clampedZoom = Math.max(minZoom, Math.min(MAX_ZOOM, zoom))
 
@@ -155,8 +176,13 @@ export default function MapViewer({
     width: mapW,
     height: mapH,
     seaLevel,
+    elevMinM: elevMin,
+    elevMaxM: elevMax,
     colorMode,
     hillshadeStrength: 0.7,
+    cvtMesh,
+    cellIdMap,
+    projection,
   })
 
   // Initialize WebGPURenderer + scene
@@ -227,7 +253,7 @@ export default function MapViewer({
     const aspect = mapW / mapH
     const wByH = containerSize.height * aspect
     const pw = wByH < containerSize.width ? containerSize.width : wByH
-    const ph = pw / PLANE_ASPECT
+    const ph = pw / projectionAspect(projection)
 
     // Convert pixel dimensions to world units (camera at y=5, fov=50)
     const visibleH = 2 * 5 * Math.tan(THREE.MathUtils.degToRad(25))
@@ -264,12 +290,12 @@ export default function MapViewer({
   }, [webgpuReady, terrainTexture, mapW, mapH, containerSize])
 
   // Plane dimensions (cover container — map always fills viewport, excess is clipped)
+  const projAspect = projectionAspect(projection)
   const planeWidth = useMemo(() => {
-    const aspect = mapW / mapH
-    const wByH = containerSize.height * aspect
+    const wByH = containerSize.height * projAspect
     return wByH < containerSize.width ? containerSize.width : wByH
-  }, [mapW, mapH, containerSize])
-  const planeHeight = planeWidth / PLANE_ASPECT
+  }, [projAspect, containerSize])
+  const planeHeight = planeWidth / projAspect
 
   // Projection: (lon, lat) → screen (px, py)
   // Uses unwrapped pan.x so SVG elements stay at continuous screen positions
@@ -308,11 +334,11 @@ export default function MapViewer({
     [planeHeight, zoom, containerSize.height],
   )
 
-  // Mouse move handler
+  // Mouse move handler with rAF throttling + KD-tree cell lookup
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect || !elevation) return
+      if (!rect) return
       const px = e.clientX - rect.left
       const py = e.clientY - rect.top
 
@@ -335,25 +361,49 @@ export default function MapViewer({
         return
       }
 
-      const { lon, lat, nx, ny } = unproject(px, py)
-      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) {
-        onCursorMove?.(null)
-        return
-      }
+      // rAF throttle: only process the latest mouse position per frame
+      lastMousePos.current = { px, py }
+      if (rafRef.current) return
 
-      const pixelX = Math.floor(nx * mapW)
-      const pixelY = Math.floor(ny * mapH)
-      const elev = elevation[pixelY * mapW + pixelX] ?? 0
-      onCursorMove?.({
-        lon: Math.round(lon * 100) / 100,
-        lat: Math.round(lat * 100) / 100,
-        elevation: elev,
-        elevationM: Math.round(normalisedToMeters(elev, elevMin, elevMax)),
-        pixelX,
-        pixelY,
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0
+        const pos = lastMousePos.current
+        if (!pos || !elevation) return
+
+        const { lon, lat, nx, ny } = unproject(pos.px, pos.py)
+        if (nx < 0 || nx > 1 || ny < 0 || ny > 1) {
+          onCursorMove?.(null)
+          onCellHover?.(null)
+          return
+        }
+
+        // Cursor info for status bar
+        const pixelX = Math.floor(nx * mapW)
+        const pixelY = Math.floor(ny * mapH)
+        const elev = elevation[pixelY * mapW + pixelX] ?? 0
+        onCursorMove?.({
+          lon: Math.round(lon * 100) / 100,
+          lat: Math.round(lat * 100) / 100,
+          elevation: elev,
+          elevationM: Math.round(normalisedToMeters(elev, elevMin, elevMax)),
+          pixelX,
+          pixelY,
+        })
+
+        // KD-tree cell lookup: lon/lat → 3D → nearest cell
+        if (kdTree) {
+          const lonRad = (lon * Math.PI) / 180
+          const latRad = (lat * Math.PI) / 180
+          const cosLat = Math.cos(latRad)
+          const qx = cosLat * Math.cos(lonRad)
+          const qy = Math.sin(latRad)
+          const qz = cosLat * Math.sin(lonRad)
+          const cellId = kdTree.nearest(qx, qy, qz)
+          onCellHover?.(cellId >= 0 ? cellId : null)
+        }
       })
     },
-    [elevation, mapW, mapH, unproject, isDragging, clampPan, elevMin, elevMax, onCursorMove],
+    [elevation, mapW, mapH, unproject, isDragging, clampPan, elevMin, elevMax, onCursorMove, onCellHover, kdTree],
   )
 
   // Zoom handler
@@ -389,6 +439,30 @@ export default function MapViewer({
   )
 
   const handleMouseUp = useCallback(() => setIsDragging(false), [])
+
+  // Click handler using KD-tree for cell lookup
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!kdTree || !onCellClick) return
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const px = e.clientX - rect.left
+      const py = e.clientY - rect.top
+      const { lon, lat } = unproject(px, py)
+
+      const lonRad = (lon * Math.PI) / 180
+      const latRad = (lat * Math.PI) / 180
+      const cosLat = Math.cos(latRad)
+      const qx = cosLat * Math.cos(lonRad)
+      const qy = Math.sin(latRad)
+      const qz = cosLat * Math.sin(lonRad)
+      const cellId = kdTree.nearest(qx, qy, qz)
+      if (cellId >= 0) {
+        onCellClick(cellId, e.shiftKey)
+      }
+    },
+    [kdTree, unproject, onCellClick],
+  )
 
   // Re-render on zoom/pan changes
   useEffect(() => {
@@ -452,9 +526,15 @@ export default function MapViewer({
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onClick={handleClick}
       onMouseLeave={() => {
         handleMouseUp()
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current)
+          rafRef.current = 0
+        }
         onCursorMove?.(null)
+        onCellHover?.(null)
       }}
     >
       {/* Terrain canvas (WebGPU with WebGL fallback) */}
@@ -464,24 +544,23 @@ export default function MapViewer({
         style={{ background: '#0a0a1a' }}
       />
 
-      {/* SVG overlay */}
+      {/* Loading overlay during texture regeneration */}
+      {isRendering && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0a0a1a]/70">
+          <div className="text-gray-400 text-sm animate-pulse">渲染中...</div>
+        </div>
+      )}
+
+      {/* SVG overlay (visual highlights only — hit-testing via KD-tree) */}
       <MapSvgOverlay
         viewWidth={containerSize.width}
         viewHeight={containerSize.height}
         project={project}
         zoom={zoom}
         voronoiCells={voronoiCells}
-        plates={plates}
-        features={features}
         cvtMesh={cvtMesh}
-        showVoronoi={showVoronoi}
-        showPlates={showPlates}
-        showFeatures={showFeatures}
         hoveredCell={hoveredCell}
         selectedCells={selectedCells}
-        onCellHover={onCellHover ?? (() => {})}
-        onCellClick={onCellClick ?? (() => {})}
-        colorMode={colorMode}
       />
 
     </div>

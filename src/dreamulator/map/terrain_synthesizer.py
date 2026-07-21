@@ -240,8 +240,10 @@ def synthesize_terrain(
 
     Pipeline:
         1. Bimodal base elevation
+        1b. Per-plate random offset (inter-plate variation)
         2. Tectonic boundary effects (Gaussian)
-        3. Multi-octave 3D fBm noise
+        3a. Low-frequency regional noise (intra-plate variation)
+        3b. High-frequency detail noise
         4. Sea/land classification
 
     Args:
@@ -253,18 +255,56 @@ def synthesize_terrain(
     n = mesh.num_cells
 
     # 1. Bimodal base elevation
-    logger.info("  Step 1/4: Bimodal base elevation")
+    logger.info("  Step 1/5: Bimodal base elevation")
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
             base[i] = config.continental_elevation_m
 
+    # 1b. Per-plate random elevation offset
+    # Each plate gets a random offset to create large-scale variation.
+    # Continental plates shift up/down, oceanic plates shift up/down independently.
+    logger.info("  Step 2/5: Per-plate elevation offset (spread=%.0fm)", config.plate_elevation_spread_m)
+    rng = np.random.default_rng(config.seed + 100)
+    plate_offsets: dict[str, float] = {}
+    for plate in plates:
+        # Random offset uniformly distributed in [-spread, +spread]
+        plate_offsets[plate.id] = rng.uniform(
+            -config.plate_elevation_spread_m,
+            config.plate_elevation_spread_m,
+        )
+
+    # Apply offsets to base elevation
+    for i, cell in enumerate(mesh.cells):
+        if cell.plate_id and cell.plate_id in plate_offsets:
+            base[i] += plate_offsets[cell.plate_id]
+
     # 2. Tectonic boundary effects
-    logger.info("  Step 2/4: Tectonic boundary effects")
+    logger.info("  Step 3/5: Tectonic boundary effects")
     boundary_delta = apply_boundary_effects(mesh, config)
 
-    # 3. Multi-octave fBm noise
-    logger.info("  Step 3/4: Multi-octave 3D fBm noise (%d octaves)", config.noise_octaves)
+    # 3a. Low-frequency regional noise (creates broad elevation trends within plates)
+    logger.info("  Step 4/5: Regional noise (scale=%.1f) + detail noise (%d octaves)",
+                config.regional_noise_scale, config.noise_octaves)
+
+    # Regional noise: very low frequency, high amplitude
+    regional_config = TerrainPipelineConfig(
+        seed=config.seed + 200,
+        noise_scale=config.regional_noise_scale,
+        noise_octaves=3,  # fewer octaves for regional component
+        noise_persistence=0.6,
+        noise_lacunarity=2.0,
+    )
+    regional_fbm = generate_fbm_on_cells(mesh, regional_config)
+
+    regional_amplitude = np.where(
+        base >= config.sea_level_m,
+        config.regional_noise_amplitude_land_m,
+        config.regional_noise_amplitude_ocean_m,
+    )
+    regional_contribution = regional_fbm * regional_amplitude
+
+    # 3b. High-frequency detail noise (existing)
     fbm = generate_fbm_on_cells(mesh, config)
 
     # Amplitude-modulated by terrain type
@@ -279,16 +319,15 @@ def synthesize_terrain(
     interior_factor = np.ones(n, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.distance_to_boundary_km < 3 * sigma:
-            # Near boundary: extra roughness
             d = cell.distance_to_boundary_km
             proximity = np.exp(-(d * d) / (2 * sigma * sigma))
             interior_factor[i] = 1.0 + 0.5 * proximity
 
-    noise_contribution = fbm * noise_amplitude * interior_factor
+    detail_contribution = fbm * noise_amplitude * interior_factor
 
     # 4. Combine all components
-    logger.info("  Step 4/4: Combining elevation components")
-    elevation = base + boundary_delta + noise_contribution
+    logger.info("  Step 5/5: Combining elevation components")
+    elevation = base + boundary_delta + regional_contribution + detail_contribution
 
     # Write back to cells
     for i, cell in enumerate(mesh.cells):

@@ -1,7 +1,62 @@
 import { isStaticMode } from './mode'
 import { staticApi } from './staticClient'
+import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 
 const API_BASE = '/api'
+
+// ---------------------------------------------------------------------------
+// CVT mesh adapter — converts backend raw format to frontend typed format
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapt the raw backend CVT mesh JSON to the frontend CVTMesh type.
+ *
+ * Backend sends:
+ * - vertices: [[x,y,z], ...] — raw 3D Cartesian arrays on unit sphere
+ * - regions:  [[v0,v1,...], ...] — raw vertex index arrays
+ * - cells:    VoronoiCell objects (full property set)
+ *
+ * Frontend expects:
+ * - vertices: CVTVertex[] — {id, lon, lat}
+ * - regions:  CVTRegion[] — {id, vertex_ids, plate_id, boundaries}
+ */
+function adaptCvtMesh(raw: any): CVTMesh | null {
+  if (!raw || !raw.cells) return null
+
+  // Convert vertices: [x,y,z] → {id, lon, lat}
+  const vertices: CVTVertex[] = (raw.vertices || []).map(
+    (v: number[], i: number) => {
+      const [x, y, z] = v
+      const r = Math.sqrt(x * x + y * y + z * z)
+      const lat =
+        Math.asin(Math.max(-1, Math.min(1, y / Math.max(r, 1e-12)))) *
+        (180 / Math.PI)
+      const lon = Math.atan2(z, x) * (180 / Math.PI)
+      return { id: i, lon, lat }
+    },
+  )
+
+  // Convert regions: [v0,v1,...] → {id, vertex_ids, plate_id, boundaries}
+  const regions: CVTRegion[] = (raw.regions || []).map(
+    (r: number[], i: number) => ({
+      id: i,
+      vertex_ids: r,
+      plate_id: (raw.cells[i] as VoronoiCell | undefined)?.plate_id ?? null,
+      boundaries: null,
+    }),
+  )
+
+  return {
+    seed: raw.seed ?? 0,
+    num_cells: raw.num_cells ?? 0,
+    jitter_sigma: raw.jitter_sigma,
+    lloyd_iterations: raw.lloyd_iterations,
+    cells: (raw.cells ?? []) as VoronoiCell[],
+    adjacency: (raw.adjacency ?? {}) as Record<string, number[]>,
+    vertices,
+    regions,
+  }
+}
 
 interface ApiResponse<T> {
   ok: boolean
@@ -369,12 +424,12 @@ const readApi = {
           `/worlds/${name}/maps/${planetId}/layer/${layerType}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
-  getCvtMesh: (name: string, planetId: string, branch?: string | null) =>
+  getCvtMesh: (name: string, planetId: string, branch?: string | null): Promise<CVTMesh | null> =>
     isStaticMode()
       ? Promise.reject(new Error('CVT mesh not available in static mode'))
       : fetchJson<any>(
           `/worlds/${name}/maps/${planetId}/cvt-mesh${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
-        ),
+        ).then(adaptCvtMesh),
 }
 
 export const api = {

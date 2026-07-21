@@ -5,7 +5,6 @@
  * - Geographic: (lon, lat) in degrees
  * - Normalised: (nx, ny) in [0, 1] range
  * - Pixel: (x, y) in raster pixels
- * - World: (x, y, z) in Three.js scene coordinates
  */
 
 // ---------------------------------------------------------------------------
@@ -23,6 +22,68 @@ export const PROJECTIONS: { id: ProjectionType; label: string }[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const DEG2RAD = Math.PI / 180
+const RAD2DEG = 180 / Math.PI
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v
+}
+
+// ---------------------------------------------------------------------------
+// Mollweide helpers
+// ---------------------------------------------------------------------------
+
+const SQRT2 = Math.SQRT2
+
+function mollweideTheta(latRad: number): number {
+  const piSinPhi = Math.PI * Math.sin(latRad)
+  let theta = latRad
+  for (let i = 0; i < 20; i++) {
+    const twoTheta = 2 * theta
+    const f = twoTheta + Math.sin(twoTheta) - piSinPhi
+    const fPrime = 2 + 2 * Math.cos(twoTheta)
+    if (Math.abs(fPrime) < 1e-12) break
+    const delta = f / fPrime
+    theta -= delta
+    if (Math.abs(delta) < 1e-10) break
+  }
+  return theta
+}
+
+// ---------------------------------------------------------------------------
+// Robinson table (5° intervals, 0° to 90°)
+// [plen, pdfe]
+// ---------------------------------------------------------------------------
+
+const ROBINSON_TABLE: [number, number][] = [
+  [1.0000, 0.0000], [0.9986, 0.0620], [0.9954, 0.1240], [0.9900, 0.1860],
+  [0.9822, 0.2480], [0.9730, 0.3100], [0.9600, 0.3720], [0.9427, 0.4340],
+  [0.9216, 0.4958], [0.8962, 0.5571], [0.8679, 0.6176], [0.8350, 0.6769],
+  [0.7986, 0.7346], [0.7597, 0.7903], [0.7186, 0.8435], [0.6732, 0.8936],
+  [0.6213, 0.9394], [0.5722, 0.9761], [0.5322, 1.0000],
+]
+
+const ROBINSON_X_SCALE = 0.8473
+const ROBINSON_X_MAX = ROBINSON_X_SCALE * Math.PI // ≈ 2.6618
+const ROBINSON_Y_MAX = 1.0
+
+function robinsonInterp(absLatDeg: number): [number, number] {
+  const lat = clamp(absLatDeg, 0, 90)
+  const idx = Math.floor(lat / 5)
+  if (idx >= ROBINSON_TABLE.length - 1) {
+    const last = ROBINSON_TABLE[ROBINSON_TABLE.length - 1]
+    return [last[0], last[1]]
+  }
+  const frac = (lat - idx * 5) / 5
+  const lo = ROBINSON_TABLE[idx]
+  const hi = ROBINSON_TABLE[idx + 1]
+  return [lo[0] + frac * (hi[0] - lo[0]), lo[1] + frac * (hi[1] - lo[1])]
+}
+
+// ---------------------------------------------------------------------------
 // Projection forward/inverse (lon,lat ↔ normalised)
 // ---------------------------------------------------------------------------
 
@@ -37,53 +98,29 @@ export function projectForward(
   switch (projection) {
     case 'equirectangular':
       return {
-        nx: (lon + 180) / 360,
-        ny: (90 - lat) / 180,
+        nx: (clamp(lon, -180, 180) + 180) / 360,
+        ny: (90 - clamp(lat, -90, 90)) / 180,
       }
     case 'mollweide': {
-      // Mollweide projection: x ∈ [-2√2, 2√2], y ∈ [-√2, √2]
-      const latRad = (lat * Math.PI) / 180
-      const lonRad = (lon * Math.PI) / 180
-      // Solve auxiliary angle θ via Newton-Raphson
-      let theta = latRad
-      for (let i = 0; i < 10; i++) {
-        const dTheta =
-          (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(latRad)) /
-          (2 + 2 * Math.cos(2 * theta))
-        theta -= dTheta
-        if (Math.abs(dTheta) < 1e-7) break
-      }
-      const mx = (2 * Math.SQRT2 * lonRad * Math.cos(theta)) / Math.PI
-      const my = Math.SQRT2 * Math.sin(theta)
-      // Normalise: x ∈ [-2√2, 2√2] → [0,1], y ∈ [-√2, √2] → [0,1]
+      const phiRad = clamp(lat, -90, 90) * DEG2RAD
+      const lamRad = clamp(lon, -180, 180) * DEG2RAD
+      const theta = mollweideTheta(phiRad)
+      const xRaw = (2 * SQRT2 / Math.PI) * lamRad * Math.cos(theta)
+      const yRaw = SQRT2 * Math.sin(theta)
       return {
-        nx: (mx / (2 * Math.SQRT2) + 1) / 2,
-        ny: (1 - my / Math.SQRT2) / 2,
+        nx: clamp((xRaw / (2 * SQRT2) + 1) / 2, 0, 1),
+        ny: clamp((1 - yRaw / SQRT2) / 2, 0, 1),
       }
     }
     case 'robinson': {
-      // Robinson projection (tabular interpolation)
-      const latRad = (lat * Math.PI) / 180
-      const absLat = Math.abs(latRad)
-      // Robinson table at 5° intervals
-      const table = [
-        [1.0000, 0.0000], [0.9986, 0.0620], [0.9954, 0.1240], [0.9900, 0.1860],
-        [0.9822, 0.2480], [0.9730, 0.3100], [0.9600, 0.3720], [0.9420, 0.4340],
-        [0.9162, 0.4958], [0.8800, 0.5571], [0.8310, 0.6176], [0.7700, 0.6769],
-        [0.6950, 0.7346], [0.6032, 0.7903], [0.4920, 0.8435], [0.3550, 0.8936],
-        [0.1800, 0.9394], [0.0000, 0.9761], [0.0000, 1.0000],
-      ]
-      const idx = Math.min(17, Math.floor(absLat / (5 * Math.PI / 180)))
-      const frac = (absLat / (5 * Math.PI / 180)) - idx
-      const plen = table[idx][0] * (1 - frac) + table[idx + 1][0] * frac
-      const pdfe = table[idx][1] * (1 - frac) + table[idx + 1][1] * frac
-      const sign = lat >= 0 ? 1 : -1
-      const rx = 0.8487 * plen * (lon * Math.PI) / 180
-      const ry = 1.3523 * pdfe * sign
-      // Normalise to [0,1]: Robinson x range ≈ [-2.67, 2.67], y ≈ [-1.35, 1.35]
+      const clon = clamp(lon, -180, 180)
+      const clat = clamp(lat, -90, 90)
+      const [plen, pdfe] = robinsonInterp(Math.abs(clat))
+      const xRaw = ROBINSON_X_SCALE * clon * DEG2RAD * plen
+      const yRaw = pdfe * Math.sign(clat)
       return {
-        nx: (rx / 5.34 + 0.5),
-        ny: (1 - ry / 2.7046) / 2,
+        nx: clamp((xRaw / ROBINSON_X_MAX + 1) / 2, 0, 1),
+        ny: clamp((1 - yRaw / ROBINSON_Y_MAX) / 2, 0, 1),
       }
     }
   }
@@ -100,52 +137,48 @@ export function projectInverse(
   switch (projection) {
     case 'equirectangular':
       return {
-        lon: nx * 360 - 180,
-        lat: 90 - ny * 180,
+        lon: clamp(nx, 0, 1) * 360 - 180,
+        lat: 90 - clamp(ny, 0, 1) * 180,
       }
     case 'mollweide': {
-      const mx = (nx * 2 - 1) * 2 * Math.SQRT2
-      const my = (1 - ny * 2) * Math.SQRT2
-      const theta = Math.asin(Math.max(-1, Math.min(1, my / Math.SQRT2)))
-      const lat = Math.asin(
-        Math.max(-1, Math.min(1, (2 * theta + Math.sin(2 * theta)) / Math.PI)),
-      )
+      const cx = clamp(nx, 0, 1)
+      const cy = clamp(ny, 0, 1)
+      const xRaw = (2 * cx - 1) * 2 * SQRT2
+      const yRaw = (1 - 2 * cy) * SQRT2
+      const theta = Math.asin(clamp(yRaw / SQRT2, -1, 1))
       const cosTheta = Math.cos(theta)
-      const lon =
-        cosTheta !== 0
-          ? (Math.PI * mx) / (2 * Math.SQRT2 * cosTheta)
-          : 0
-      return {
-        lon: Math.max(-180, Math.min(180, (lon * 180) / Math.PI)),
-        lat: (lat * 180) / Math.PI,
-      }
+      const sinPhi = (2 * theta + Math.sin(2 * theta)) / Math.PI
+      const lat = Math.asin(clamp(sinPhi, -1, 1)) * RAD2DEG
+      const lon = Math.abs(cosTheta) < 1e-10
+        ? 0
+        : (Math.PI * xRaw) / (2 * SQRT2 * cosTheta) * RAD2DEG
+      return { lon: clamp(lon, -180, 180), lat: clamp(lat, -90, 90) }
     }
     case 'robinson': {
-      // Approximate inverse via iterative refinement
-      const targetX = (nx - 0.5) * 5.34
-      const targetY = (0.5 - ny) * 2.7046
-      // Invert y first (Robinson y is monotonic in latitude)
-      const table = [
-        [1.0000, 0.0000], [0.9986, 0.0620], [0.9954, 0.1240], [0.9900, 0.1860],
-        [0.9822, 0.2480], [0.9730, 0.3100], [0.9600, 0.3720], [0.9420, 0.4340],
-        [0.9162, 0.4958], [0.8800, 0.5571], [0.8310, 0.6176], [0.7700, 0.6769],
-        [0.6950, 0.7346], [0.6032, 0.7903], [0.4920, 0.8435], [0.3550, 0.8936],
-        [0.1800, 0.9394], [0.0000, 0.9761], [0.0000, 1.0000],
-      ]
-      const absNormY = Math.abs(targetY) / 1.3523
-      let latIdx = 0
-      for (let i = 0; i < 18; i++) {
-        if (table[i + 1][1] >= absNormY) { latIdx = i; break }
+      const cx = clamp(nx, 0, 1)
+      const cy = clamp(ny, 0, 1)
+      const xRaw = (2 * cx - 1) * ROBINSON_X_MAX
+      const yRaw = (1 - 2 * cy) * ROBINSON_Y_MAX
+      const absPdfe = Math.abs(yRaw)
+
+      // Invert table to find latitude
+      let absLatDeg = 90
+      for (let i = 0; i < ROBINSON_TABLE.length - 1; i++) {
+        const loPdfe = ROBINSON_TABLE[i][1]
+        const hiPdfe = ROBINSON_TABLE[i + 1][1]
+        if (absPdfe >= loPdfe && absPdfe <= hiPdfe) {
+          const frac = (absPdfe - loPdfe) / (hiPdfe - loPdfe || 1)
+          absLatDeg = i * 5 + frac * 5
+          break
+        }
       }
-      const yFrac = (absNormY - table[latIdx][1]) / (table[latIdx + 1][1] - table[latIdx][1] || 1)
-      const absLat = (latIdx + yFrac) * 5
-      const lat = targetY >= 0 ? absLat : -absLat
-      const plen = table[latIdx][0] * (1 - yFrac) + table[latIdx + 1][0] * yFrac
-      const lon = plen > 0.001 ? (targetX / (0.8487 * plen)) * (180 / Math.PI) : 0
-      return {
-        lon: Math.max(-180, Math.min(180, lon)),
-        lat: Math.max(-90, Math.min(90, lat)),
-      }
+      const lat = absLatDeg * Math.sign(yRaw)
+
+      const [plen] = robinsonInterp(absLatDeg)
+      const lon = Math.abs(plen) < 1e-10
+        ? 0
+        : (xRaw / (ROBINSON_X_SCALE * plen)) * RAD2DEG
+      return { lon: clamp(lon, -180, 180), lat: clamp(lat, -90, 90) }
     }
   }
 }
@@ -156,10 +189,8 @@ export function projectInverse(
 
 /** Convert (lon, lat) → pixel (x, y) using the given projection. */
 export function lonLatToPixel(
-  lon: number,
-  lat: number,
-  width: number,
-  height: number,
+  lon: number, lat: number,
+  width: number, height: number,
   projection: ProjectionType = 'equirectangular',
 ): { x: number; y: number } {
   const { nx, ny } = projectForward(projection, lon, lat)
@@ -168,73 +199,20 @@ export function lonLatToPixel(
 
 /** Convert pixel (x, y) → (lon, lat) using the given projection. */
 export function pixelToLonLat(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
+  x: number, y: number,
+  width: number, height: number,
   projection: ProjectionType = 'equirectangular',
 ): { lon: number; lat: number } {
   return projectInverse(projection, x / width, y / height)
 }
 
-/** Convert (lon, lat) → Three.js world coordinates on the terrain plane.
- *
- * The terrain plane is centred at the origin, with:
- * - x-axis = longitude (east positive)
- * - y-axis = up (not used for 2D view)
- * - z-axis = latitude (north positive, inverted for screen coords)
- */
-export function lonLatToWorld(
-  lon: number,
-  lat: number,
-  planeWidth: number,
-  planeHeight: number,
-): { x: number; y: number; z: number } {
-  const x = (lon / 180) * (planeWidth / 2)
-  const z = -(lat / 90) * (planeHeight / 2)
-  return { x, y: 0, z }
-}
-
-/** Convert Three.js world coordinates → (lon, lat). */
-export function worldToLonLat(
-  wx: number,
-  wz: number,
-  planeWidth: number,
-  planeHeight: number,
-): { lon: number; lat: number } {
-  const lon = (wx / (planeWidth / 2)) * 180
-  const lat = -(wz / (planeHeight / 2)) * 90
-  return { lon, lat }
-}
-
-/** Convert pixel → Three.js world coordinates. */
-export function pixelToWorld(
-  px: number,
-  py: number,
-  rasterWidth: number,
-  rasterHeight: number,
-  planeWidth: number,
-  planeHeight: number,
-): { x: number; y: number; z: number } {
-  const { lon, lat } = pixelToLonLat(px, py, rasterWidth, rasterHeight)
-  return lonLatToWorld(lon, lat, planeWidth, planeHeight)
-}
-
 /** Convert elevation in metres to a normalised [0, 1] value. */
-export function metersToNormalised(
-  meters: number,
-  minM: number,
-  maxM: number,
-): number {
+export function metersToNormalised(meters: number, minM: number, maxM: number): number {
   if (maxM <= minM) return 0.5
   return Math.max(0, Math.min(1, (meters - minM) / (maxM - minM)))
 }
 
 /** Convert normalised [0, 1] elevation to metres. */
-export function normalisedToMeters(
-  normalised: number,
-  minM: number,
-  maxM: number,
-): number {
+export function normalisedToMeters(normalised: number, minM: number, maxM: number): number {
   return minM + normalised * (maxM - minM)
 }

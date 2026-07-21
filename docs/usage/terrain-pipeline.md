@@ -2720,6 +2720,92 @@ class BiomeData(BaseModel):
 | 分块处理 | 将球面分成 8 个八分面，独立计算后拼接 | 内存减半 |
 | 增量 LOD | 先生成 10K 低分辨率预览，按需细化 | 交互响应 <1s |
 
+### 前端渲染性能
+
+10 万节点的 CVT 网格在前端渲染时面临两大挑战：
+
+| 问题 | 根因 | 解决方案 | 效果 |
+|------|------|---------|------|
+| hover 延迟 ~500ms | SVG hit-test 为每个 cell 创建不可见 `<polygon>` DOM 节点，数千个节点导致浏览器 hit-test 缓慢 | **KD-tree 数学命中测试**：3D 笛卡尔坐标构建 KD 树，`mousemove` 时投影逆变换 → 3D 坐标 → `O(log n)` 最近邻查询 | hover 延迟 ~5ms |
+| 点击 Voronoi 网格后浏览器冻结 | SVG 同时渲染 10 万个 polygon DOM 节点 | **删除 Voronoi 网格显示选项**；SVG overlay 仅渲染 hover/select 的 1-2 个高亮 polygon | DOM 节点降至个位数 |
+
+#### KD-tree 命中测试架构
+
+```
+mousemove 事件
+    ↓
+requestAnimationFrame 节流 (每帧最多一次)
+    ↓
+投影逆变换: screen (px, py) → geographic (lon, lat)
+    ↓
+球面坐标转换: (lon, lat) → 3D Cartesian (x, y, z)
+    ↓
+KD-tree nearest(x, y, z) → cell ID    [O(log n)]
+    ↓
+onCellHover(cellId) → React 状态更新 → SVG 高亮 1 个 polygon
+```
+
+**关键设计决策：**
+- 使用 3D 笛卡尔坐标（而非 lon/lat）构建 KD-tree，避免 ±180° 经度环绕问题
+- `requestAnimationFrame` 节流确保每帧最多处理一次鼠标事件，避免事件堆积
+- SVG overlay 设为 `pointer-events: none`，所有交互由 MapViewer 容器的 `onMouseMove` / `onClick` 处理
+- 视觉反馈（hover 高亮、select 高亮）仍通过 SVG polygon 渲染，但仅 1-2 个节点，无性能问题
+
+#### Cell-ID 贴图预计算 + 调色板查找
+
+板块/边界类型的着色需要为每个像素确定所属的 CVT cell。直接方案是每像素查询 KD-tree（O(log n)），但在 4096×2048 纹理上意味着 ~800 万次查询，导致切换图层模式时卡顿 5-10 秒。
+
+优化方案：**预计算 cell-ID 贴图**，将几何查询与着色分离。
+
+```
+┌─────────────────────────────────────────────────┐
+│  一次性计算（cvtMesh/dimensions 变化时触发）       │
+│                                                   │
+│  每像素 → (lon,lat) → 3D → KD-tree → cell ID     │
+│  存入 cellIdMap: Uint32Array[width × height]      │
+│  耗时: ~5-10s（4096×2048 × O(log 100K)）         │
+├─────────────────────────────────────────────────┤
+│  每次切换图层模式（colorMode 变化时触发）           │
+│                                                   │
+│  构建调色板: cell_id → packed RGB                  │
+│  每像素 → cellIdMap[pixel] → palette[cell_id]     │
+│  耗时: <0.5s（4096×2048 × O(1) 数组查找）        │
+└─────────────────────────────────────────────────┘
+```
+
+**性能提升：**
+
+| 操作 | 优化前 | 优化后 | 提升 |
+|------|--------|--------|------|
+| 首次加载 | ~5-10s（KD-tree 查询） | ~5-10s（同） | — |
+| 切换板块/边界模式 | ~5-10s（重新 KD-tree） | **<0.5s**（调色板查找） | **10-20×** |
+| 切换投影 | ~5-10s | ~5-10s（同） | — |
+| 平移/缩放 | <16ms | <16ms（无纹理操作） | — |
+
+**设计模式参考：**
+
+此方案遵循游戏引擎和 GIS 中广泛使用的 **调色板索引纹理（palette-indexed texture）** 模式：
+
+- **id Software**（Doom/Quake）：预计算光照贴图（lightmap）按表面 ID 索引，渲染时通过查找表着色
+- **Unreal Engine**：虚拟纹理（Virtual Texturing）使用间接表（indirection table）将 UV 映射到物理页
+- **Mapbox GL JS**：瓦片级要素 ID 纹理（feature-ID texture）用于拾取和高亮，避免重新遍历几何体
+- **QGIS**：栅格像元值图 + 分类渲染器（categorized renderer），像元值 → 调色板颜色
+- ** deferred rendering**：G-buffer ID 通道——几何体渲染一次到 ID 缓冲区，后续着色通道通过查找表应用材质
+
+共同原理：**几何遍历（昂贵）与着色查找（廉价）分离**。cell-ID 贴图等价于 G-buffer 中的 object-ID 通道。
+
+**缓存失效规则：**
+- `cellIdMap` 仅依赖 `(cvtMesh, width, height)`
+- 与 `colorMode`、`projection`、`elevation` 数据无关
+- 因此切换图层模式时复用已缓存的 cellIdMap
+
+**实现文件：**
+- `frontend/src/components/map/utils/kdtree.ts` — 3D KD-tree（build O(n log n), query O(log n)）
+- `frontend/src/viewers/map/useCellIdMap.ts` — cell-ID 贴图预计算 hook（useMemo 缓存）
+- `frontend/src/viewers/map/TerrainPlane.tsx` — 调色板查找着色（cell-ID → packed RGB）
+- `frontend/src/components/map/MapViewer.tsx` — 集成 KD-tree + rAF 节流 + cellIdMap 传递
+- `frontend/src/components/map/MapSvgOverlay.tsx` — 纯视觉反馈（无事件处理）
+
 ---
 
 ## 16. 已知限制与未来工作

@@ -34,12 +34,28 @@ export interface VoronoiCell {
   id: number
   lon: number
   lat: number
+  /** Elevation in metres above planetary datum. */
   elevation: number
   moisture: number
   neighbors: number[]
   plate_id: string | null
   biome: string | null
   province_id: string | null
+
+  // Extended fields from CVT mesh (backend VoronoiCell model)
+  x?: number
+  y?: number
+  z?: number
+  area_km2?: number
+  crust_type?: string
+  distance_to_boundary_km?: number
+  boundary_type?: string | null
+  convergence_rate_cm_yr?: number
+  temperature_C?: number | null
+  precipitation_mm?: number | null
+  koppen_class?: string | null
+  flow_accumulation?: number
+  river_id?: string | null
 }
 
 export interface VoronoiNetwork {
@@ -92,7 +108,6 @@ export interface MapFeature {
 // ---------------------------------------------------------------------------
 
 export type MapLayerType =
-  | 'elevation'
   | 'moisture'
   | 'terrain'
   | 'temperature'
@@ -100,7 +115,6 @@ export type MapLayerType =
   | 'biomes'
   | 'plates'
   | 'provinces'
-  | 'features'
 
 // ---------------------------------------------------------------------------
 // Color modes (for terrain rendering + overlay coloring)
@@ -108,21 +122,19 @@ export type MapLayerType =
 
 /**
  * Color modes available in the map viewer.
- * - 'terrain': hypsometric tint (natural appearance)
- * - 'elevation': grayscale gradient
+ * - 'terrain': adaptive hypsometric tint (natural appearance)
  * - 'landsea': binary land/sea
- * - 'slope': slope gradient
- * - 'plates': color cells by plate_id (random categorical colors)
+ * - 'plates': color cells by plate_id (categorical colors)
  * - 'boundaries': show boundary_type (convergent=red, divergent=green, transform=yellow)
  */
-export type ViewerColorMode = 'terrain' | 'elevation' | 'landsea' | 'slope' | 'plates' | 'boundaries'
+export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries'
 
 // ---------------------------------------------------------------------------
 // Layer visibility state
 // ---------------------------------------------------------------------------
 
 export interface LayerConfig {
-  id: MapLayerType | 'landsea' | 'slope' | 'voronoi'
+  id: MapLayerType | 'landsea' | 'voronoi'
   label: string
   visible: boolean
   opacity: number
@@ -160,6 +172,12 @@ export interface CVTRegion {
 
 /** Complete CVT mesh output from the backend. */
 export interface CVTMesh {
+  seed: number
+  num_cells: number
+  jitter_sigma?: number
+  lloyd_iterations?: number
+  cells: VoronoiCell[]
+  adjacency: Record<string, number[]>
   vertices: CVTVertex[]
   regions: CVTRegion[]
 }

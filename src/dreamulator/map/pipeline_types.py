@@ -50,6 +50,8 @@ class TerrainPipelineConfig:
     boundary_influence_km: float = 500.0
     convergent_uplift_m: float = 4000.0
     divergent_depth_m: float = 2000.0
+    # Per-plate random base elevation offset (creates inter-plate variation)
+    plate_elevation_spread_m: float = 1500.0
 
     # Noise
     noise_scale: float = 2.0
@@ -58,6 +60,10 @@ class TerrainPipelineConfig:
     noise_lacunarity: float = 2.0
     noise_amplitude_land_m: float = 600.0
     noise_amplitude_ocean_m: float = 300.0
+    # Low-frequency regional noise (large-scale variation within plates)
+    regional_noise_scale: float = 0.5  # much lower than detail noise_scale
+    regional_noise_amplitude_land_m: float = 1200.0
+    regional_noise_amplitude_ocean_m: float = 800.0
 
     # Sea level
     sea_level_m: float = 0.0

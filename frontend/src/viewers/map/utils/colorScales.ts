@@ -28,26 +28,12 @@ export const TERRAIN_SCALE: ColorStop[] = [
   { value: 1.0, color: [255, 255, 255] }, // peak snow
 ]
 
-/** Simple elevation gradient: dark → light. */
-export const ELEVATION_SCALE: ColorStop[] = [
-  { value: 0.0, color: [0, 0, 0] },
-  { value: 1.0, color: [255, 255, 255] },
-]
-
 /** Binary land/sea. */
 export const LANDSEA_SCALE: ColorStop[] = [
   { value: 0.0, color: [30, 60, 120] }, // water
   { value: 0.39, color: [30, 60, 120] }, // water up to sea level
   { value: 0.40, color: [80, 140, 60] }, // land at sea level
   { value: 1.0, color: [80, 140, 60] }, // land
-]
-
-/** Slope gradient: flat (green) → steep (red). */
-export const SLOPE_SCALE: ColorStop[] = [
-  { value: 0.0, color: [60, 130, 40] }, // flat
-  { value: 0.3, color: [180, 160, 60] }, // moderate
-  { value: 0.7, color: [180, 80, 40] }, // steep
-  { value: 1.0, color: [200, 40, 20] }, // very steep / cliff
 ]
 
 // ---------------------------------------------------------------------------
@@ -64,6 +50,98 @@ export const PLATE_COLORS: string[] = [
 /** Get a hex colour for a plate index. */
 export function plateColor(index: number): string {
   return PLATE_COLORS[index % PLATE_COLORS.length]
+}
+
+// ---------------------------------------------------------------------------
+// Utility helpers
+// ---------------------------------------------------------------------------
+
+/** Parse a hex color string to an [r, g, b] tuple (0–255). */
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '')
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16),
+  ]
+}
+
+// ---------------------------------------------------------------------------
+// Adaptive hypsometric tint
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate an adaptive 256-entry RGBA lookup table based on the actual
+ * elevation range of the dataset.
+ *
+ * The LUT is normalized so that index 0 = minElev and index 255 = maxElev.
+ * Color scheme:
+ *   Deep ocean  → shallow ocean → coast → lowland → midland →
+ *   highland → mountain → peak
+ *
+ * @param minElev  Minimum elevation in metres (may be negative).
+ * @param maxElev  Maximum elevation in metres.
+ * @param seaLevel Sea-level elevation in metres (typically 0).
+ */
+export function generateAdaptiveTerrainScale(
+  minElev: number,
+  maxElev: number,
+  seaLevel: number,
+): Uint8Array {
+  const range = maxElev - minElev || 1
+
+  // Color breakpoints in metres
+  const colorBreaks: { elev: number; color: [number, number, number] }[] = [
+    { elev: minElev, color: hexToRgb('#0a1a3f') },
+    { elev: minElev + range * 0.15, color: hexToRgb('#0d2b6b') },
+    { elev: minElev + range * 0.30, color: hexToRgb('#1a4494') },
+    { elev: seaLevel - Math.max(range * 0.03, 1), color: hexToRgb('#2980b9') },
+    { elev: seaLevel - Math.max(range * 0.005, 0.5), color: hexToRgb('#5dade2') },
+    { elev: seaLevel, color: hexToRgb('#7ec8e3') },
+    { elev: seaLevel + Math.max(range * 0.005, 0.5), color: hexToRgb('#c8e6c9') },
+    { elev: seaLevel + range * 0.02, color: hexToRgb('#2e7d32') },
+    { elev: seaLevel + range * 0.10, color: hexToRgb('#4caf50') },
+    { elev: seaLevel + range * 0.20, color: hexToRgb('#81c784') },
+    { elev: seaLevel + range * 0.35, color: hexToRgb('#c5e1a5') },
+    { elev: seaLevel + range * 0.45, color: hexToRgb('#fff9c4') },
+    { elev: seaLevel + range * 0.55, color: hexToRgb('#f0c27b') },
+    { elev: seaLevel + range * 0.65, color: hexToRgb('#d4a053') },
+    { elev: seaLevel + range * 0.75, color: hexToRgb('#8d6e63') },
+    { elev: seaLevel + range * 0.85, color: hexToRgb('#6d4c41') },
+    { elev: seaLevel + range * 0.92, color: hexToRgb('#7b1fa2') },
+    { elev: maxElev, color: hexToRgb('#9c27b0') },
+  ]
+
+  // Sort by elevation (should already be sorted, but be safe)
+  colorBreaks.sort((a, b) => a.elev - b.elev)
+
+  const lut = new Uint8Array(256 * 4)
+
+  for (let i = 0; i < 256; i++) {
+    // Map LUT index to elevation in metres
+    const elev = minElev + (i / 255) * range
+
+    // Find surrounding color stops
+    let lower = colorBreaks[0]
+    let upper = colorBreaks[colorBreaks.length - 1]
+    for (let s = 0; s < colorBreaks.length - 1; s++) {
+      if (elev >= colorBreaks[s].elev && elev <= colorBreaks[s + 1].elev) {
+        lower = colorBreaks[s]
+        upper = colorBreaks[s + 1]
+        break
+      }
+    }
+
+    const segRange = upper.elev - lower.elev
+    const t = segRange > 0 ? (elev - lower.elev) / segRange : 0
+
+    lut[i * 4 + 0] = Math.round(lower.color[0] + t * (upper.color[0] - lower.color[0]))
+    lut[i * 4 + 1] = Math.round(lower.color[1] + t * (upper.color[1] - lower.color[1]))
+    lut[i * 4 + 2] = Math.round(lower.color[2] + t * (upper.color[2] - lower.color[2]))
+    lut[i * 4 + 3] = 255
+  }
+
+  return lut
 }
 
 // ---------------------------------------------------------------------------
