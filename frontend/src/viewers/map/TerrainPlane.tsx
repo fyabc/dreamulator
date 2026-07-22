@@ -1,5 +1,5 @@
 /**
- * useTerrainTexture — pre-renders a heightmap to a THREE.CanvasTexture
+ * useTerrainTexture — pre-renders a heightmap to a THREE.DataTexture
  * using Canvas 2D (color ramp + hillshading + water darkening).
  *
  * Supports elevation-based modes (terrain, landsea) via LUT color scales,
@@ -186,7 +186,7 @@ export default function useTerrainTexture({
   cvtMesh,
   cellIdMap,
   projection = 'equirectangular',
-}: TerrainTextureOptions): THREE.CanvasTexture | null {
+}: TerrainTextureOptions): THREE.Texture | null {
   return useMemo(() => {
     if (!elevation) return null
 
@@ -485,8 +485,17 @@ export default function useTerrainTexture({
     const gridCtx = finalCanvas.getContext('2d')!
     drawGraticule(gridCtx, finalW, finalH, projection)
 
-    const tex = new THREE.CanvasTexture(finalCanvas as any)
-    tex.colorSpace = THREE.NoColorSpace // match DataTexture (GPU path) — raw sRGB bytes
+    // Extract raw RGBA pixels and upload as DataTexture (same pipeline as
+    // the GPU path).  Avoids CanvasTexture's implicit sRGB colour management
+    // that mutes the palette vs the equirectangular DataTexture path.
+    const imageData = gridCtx.getImageData(0, 0, finalW, finalH)
+    const rgba = new Uint8Array(imageData.data) // copy out of Uint8ClampedArray
+    const tex = new THREE.DataTexture(
+      rgba as unknown as BufferSource, finalW, finalH, THREE.RGBAFormat,
+    )
+    tex.flipY = true // row 0 = lat 90° (north) → v=1 (screen top)
+    tex.wrapS = THREE.ClampToEdgeWrapping
+    tex.wrapT = THREE.ClampToEdgeWrapping
     tex.minFilter = THREE.LinearFilter
     tex.magFilter = THREE.LinearFilter
     tex.needsUpdate = true

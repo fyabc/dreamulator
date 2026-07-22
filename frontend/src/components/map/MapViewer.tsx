@@ -193,6 +193,11 @@ export default function MapViewer({
     const canvas = canvasRef.current
     if (!canvas) return
     const renderer = new WebGLRenderer({ canvas, antialias: true })
+    // Disable built-in sRGB output encoding so that MeshBasicMaterial (CPU path)
+    // and ShaderMaterial (GPU path) both pass pre-encoded sRGB values straight
+    // to the framebuffer.  Without this, MeshBasicMaterial applies linearToSRGB
+    // on top of our already-sRGB data, washing out Mollweide/Robinson colours.
+    renderer.outputColorSpace = THREE.LinearSRGBColorSpace
     rendererRef.current = renderer
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#0a0a1a')
