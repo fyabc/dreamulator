@@ -1,0 +1,8 @@
+{
+  "name": "terrain-dev",
+  "parent": null,
+  "fork_layer": "geological",
+  "description": "Terrain pipeline and frontend development branch (4096 nodes)",
+  "created": "2026-07-22T23:40:01.733173",
+  "tags": []
+}

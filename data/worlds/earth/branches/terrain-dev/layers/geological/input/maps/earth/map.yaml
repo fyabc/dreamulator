@@ -1,0 +1,11 @@
+planet_id: earth
+projection: equirectangular
+width: 2048
+height: 1024
+elevation_min_m: -11000.0
+elevation_max_m: 9000.0
+sea_level_m: 0.0
+voronoi_seed: 42
+voronoi_num_cells: 4096
+cvt_jitter_sigma: 0.3
+cvt_lloyd_iterations: 8

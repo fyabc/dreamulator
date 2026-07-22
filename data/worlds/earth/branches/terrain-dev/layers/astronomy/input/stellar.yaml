@@ -1,0 +1,28 @@
+# 太阳系 (Sol System) — 用于地形开发分支
+# 天文数据与真实地球一致
+name: "Sol System"
+stars:
+  - id: "star_sol"
+    name: "Sol (太阳)"
+    spectral_class: "G2"
+    luminosity_class: "V"
+    mass: 1.0           # M_sun
+    luminosity: 1.0     # L_sun
+    temperature: 5778.0 # K
+    radius: 1.0         # R_sun
+    metallicity: 0.0    # [Fe/H]
+    age_gyr: 4.6
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+orbits:
+  - body_id: "earth"
+    parent_id: "star_sol"
+    semi_major_axis_au: 1.0
+    eccentricity: 0.017
+    inclination_deg: 0.0
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 102.9
+    mean_anomaly_epoch_deg: 357.5
+    epoch_year: 0.0

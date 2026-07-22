@@ -8,9 +8,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
-import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/WebGPURenderer.js'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
+import useGPUTerrain from '../../viewers/map/useGPUTerrain'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
   normalisedToMeters,
@@ -170,8 +170,23 @@ export default function MapViewer({
     })
   }, [containerSize, mapW, mapH]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pre-render terrain to a CanvasTexture (CPU-side, no custom shader)
-  const terrainTexture = useTerrainTexture({
+  // GPU terrain material (preferred — fragment shader does all per-pixel work)
+  const gpuMaterial = useGPUTerrain({
+    elevation,
+    width: mapW,
+    height: mapH,
+    seaLevel,
+    elevMinM: elevMin,
+    elevMaxM: elevMax,
+    colorMode,
+    hillshadeStrength: 0.7,
+    cvtMesh,
+    cellIdMap,
+  })
+
+  // CPU fallback: pre-render terrain to a CanvasTexture (for non-equirectangular
+  // projections or when GPU float textures are unsupported)
+  const cpuTexture = useTerrainTexture({
     elevation,
     width: mapW,
     height: mapH,
@@ -185,13 +200,20 @@ export default function MapViewer({
     projection,
   })
 
-  // Initialize WebGPURenderer + scene
+  // Use GPU material for equirectangular; fall back to CPU for other projections
+  // (GPU path currently only handles equirectangular UV mapping)
+  const useGPU = gpuMaterial !== null && projection === 'equirectangular'
+  const terrainTexture = useGPU ? null : cpuTexture
+
+  // Initialize WebGLRenderer + scene
+  // Note: We use WebGLRenderer (not WebGPURenderer) because our GPU terrain
+  // uses GLSL ShaderMaterial, which is incompatible with WebGPU's NodeMaterial.
+  // WebGLRenderer supports both ShaderMaterial and MeshBasicMaterial.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    let disposed = false
-    const renderer = new WebGPURenderer({ canvas, antialias: true })
+    const renderer = new WebGLRenderer({ canvas, antialias: true })
     rendererRef.current = renderer
 
     const scene = new THREE.Scene()
@@ -203,22 +225,9 @@ export default function MapViewer({
     camera.lookAt(0, 0, 0)
     cameraRef.current = camera
 
-    ;(async () => {
-      try {
-        await renderer.init()
-        if (!disposed) setWebgpuReady(true)
-      } catch (e) {
-        console.warn('WebGPU init failed, falling back to WebGL:', e)
-        try { renderer.dispose() } catch { /* ignore */ }
-        if (disposed) return
-        const fallback = new WebGLRenderer({ canvas, antialias: true })
-        rendererRef.current = fallback
-        if (!disposed) setWebgpuReady(true)
-      }
-    })()
+    setWebgpuReady(true)
 
     return () => {
-      disposed = true
       try { rendererRef.current?.dispose() } catch { /* ignore */ }
       scene.clear()
       rendererRef.current = null
@@ -248,7 +257,7 @@ export default function MapViewer({
     ghostLeftRef.current = null
     ghostRightRef.current = null
 
-    if (!terrainTexture) return
+    if (!terrainTexture && !useGPU) return
 
     const aspect = mapW / mapH
     const wByH = containerSize.height * aspect
@@ -262,20 +271,28 @@ export default function MapViewer({
     const worldH = (ph / containerSize.height) * visibleH
 
     const geo = new THREE.PlaneGeometry(worldW, worldH)
-    const mat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    // GPU: use ShaderMaterial (elevation DataTexture + fragment shader)
+    // CPU: use MeshBasicMaterial (pre-rendered CanvasTexture)
+    const mat = useGPU
+      ? gpuMaterial!
+      : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide })
     const mesh = new THREE.Mesh(geo, mat)
     mesh.rotation.x = -Math.PI / 2
     scene.add(mesh)
     meshRef.current = mesh
 
     // Ghost meshes for seamless horizontal wrapping (cylindrical projection)
-    const ghostMat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    const ghostMat = useGPU
+      ? gpuMaterial!
+      : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide })
     const ghostLeft = new THREE.Mesh(geo, ghostMat)
     ghostLeft.rotation.x = -Math.PI / 2
     scene.add(ghostLeft)
     ghostLeftRef.current = ghostLeft
 
-    const ghostRightMat = new THREE.MeshBasicMaterial({ map: terrainTexture, side: THREE.DoubleSide })
+    const ghostRightMat = useGPU
+      ? gpuMaterial!
+      : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide })
     const ghostRight = new THREE.Mesh(geo, ghostRightMat)
     ghostRight.rotation.x = -Math.PI / 2
     scene.add(ghostRight)
@@ -287,7 +304,7 @@ export default function MapViewer({
 
     renderer.setSize(containerSize.width, containerSize.height)
     renderer.render(scene, camera)
-  }, [webgpuReady, terrainTexture, mapW, mapH, containerSize])
+  }, [webgpuReady, terrainTexture, useGPU, gpuMaterial, mapW, mapH, containerSize])
 
   // Plane dimensions (cover container — map always fills viewport, excess is clipped)
   const projAspect = projectionAspect(projection)

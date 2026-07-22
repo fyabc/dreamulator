@@ -1,0 +1,20 @@
+{
+  "seed": 42,
+  "num_nodes": 4096,
+  "num_plates": 15,
+  "radius_km": 6371.0,
+  "elevation_range_m": [
+    -5617.976269260469,
+    7154.349923847515
+  ],
+  "png_elevation_range_m": [
+    -11000,
+    9000
+  ],
+  "sea_level_m": 0.0,
+  "export_resolution": [
+    2048,
+    1024
+  ],
+  "pipeline_version": "2.0-cvt"
+}

@@ -1,0 +1,46 @@
+# Earth 地形生成管线配置 — 开发用 (4096 节点, 快速迭代)
+#
+# 用法:
+#   uv run dreamulator terrain generate earth --planet earth \
+#     --branch terrain-dev \
+#     --config data/worlds/earth/branches/terrain-dev/layers/geological/input/terrain_config.yaml
+#
+# 4096 节点约为 100K 节点的 1/25, 管线耗时 ~3s (vs ~90s)
+
+planet:
+  seed: 42
+  radius_km: 6371.0
+  gravity_m_s2: 9.81
+  rotation_period_days: 1.0
+
+terrain:
+  num_nodes: 4096
+  jitter_sigma: 0.3
+  lloyd_iterations: 8
+  continental_elevation_m: 850.0
+  oceanic_elevation_m: -3800.0
+  boundary_influence_km: 500.0
+  convergent_uplift_m: 4000.0
+  divergent_depth_m: 2000.0
+  plate_elevation_spread_m: 1500.0
+  sea_level_m: 0.0
+
+plates:
+  num_plates: 15
+  plate_speed_min_cm_yr: 1.0
+  plate_speed_max_cm_yr: 10.0
+
+noise:
+  noise_scale: 2.0
+  noise_octaves: 6
+  noise_persistence: 0.5
+  noise_lacunarity: 2.0
+  noise_amplitude_land_m: 600.0
+  noise_amplitude_ocean_m: 300.0
+  regional_noise_scale: 0.5
+  regional_noise_amplitude_land_m: 1200.0
+  regional_noise_amplitude_ocean_m: 800.0
+
+export:
+  export_width: 2048
+  export_height: 1024
