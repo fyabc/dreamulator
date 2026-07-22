@@ -8,7 +8,6 @@ import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
 import CivMapPreview from '../components/civmap/CivMapPreview'
-import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 
@@ -90,10 +89,9 @@ export default function WorldDetail() {
     | 'ecology'
     | 'civilization'
     | 'design-notes'
-    | 'viewer3d'
     | 'narrate'
   const availableTabs: TabType[] = staticMode
-    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes', 'viewer3d']
+    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
     : [
         'overview',
         'astronomy',
@@ -102,7 +100,6 @@ export default function WorldDetail() {
         'ecology',
         'civilization',
         'design-notes',
-        'viewer3d',
         'narrate',
       ]
 
@@ -146,21 +143,14 @@ export default function WorldDetail() {
   const { data: stellarSystem } = useQuery({
     queryKey: ['astronomy', worldName, selectedBranch],
     queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
-    enabled: !!worldName && (activeTab === 'astronomy' || activeTab === 'viewer3d'),
+    enabled: !!worldName && activeTab === 'astronomy',
     retry: false,
   })
 
   const { data: planets } = useQuery({
     queryKey: ['planets', worldName, selectedBranch],
     queryFn: () => api.getPlanets(worldName!, selectedBranch),
-    enabled: !!worldName && (activeTab === 'planets' || activeTab === 'viewer3d'),
-    retry: false,
-  })
-
-  const { data: habitableZones } = useQuery({
-    queryKey: ['habitable-zones', worldName, selectedBranch],
-    queryFn: () => api.getHabitableZones(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'viewer3d',
+    enabled: !!worldName && activeTab === 'planets',
     retry: false,
   })
 
@@ -227,7 +217,6 @@ export default function WorldDetail() {
     ecology: '生态',
     civilization: '文明',
     'design-notes': '设计笔记',
-    viewer3d: '3D 视图',
     narrate: '叙述',
   }
 
@@ -797,19 +786,6 @@ export default function WorldDetail() {
 
             {activeTab === 'design-notes' && (
               <LayerDocuments worldName={worldName!} layer="design-notes" branch={selectedBranch} />
-            )}
-
-            {activeTab === 'viewer3d' && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  恒星系 3D 可视化
-                </h2>
-                <StellarSystemViewer
-                  stellar={stellarSystem}
-                  planets={planets}
-                  habitableZones={habitableZones}
-                />
-              </div>
             )}
 
             {activeTab === 'narrate' && !staticMode && (

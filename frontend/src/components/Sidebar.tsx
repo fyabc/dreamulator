@@ -21,7 +21,7 @@ export default function Sidebar({
 
   const navItems = [
     { path: '/', label: '首页', icon: '🏠' },
-    { path: '/world-info', label: '世界信息', icon: '📋' },
+    { path: '/world-info', label: '世界信息', icon: '📖' },
     { path: '/worlds', label: '世界管理', icon: '🌍' },
   ]
 
@@ -32,6 +32,7 @@ export default function Sidebar({
     ? [
         { path: `/worlds/${currentWorld}${search}`, label: '概览', icon: '📋' },
         { path: `/worlds/${currentWorld}/map${search}`, label: '地图', icon: '🗺️' },
+        { path: `/worlds/${currentWorld}/viewer3d${search}`, label: '3D 视图', icon: '🔭' },
       ]
     : []
 
