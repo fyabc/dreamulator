@@ -6,6 +6,9 @@
  * single-channel red channel from the decoded RGBA image.
  */
 
+import * as THREE from 'three'
+import { generateAdaptiveTerrainScale } from './colorScales'
+
 /**
  * Decode a PNG Blob to a Float32Array with normalised [0, 1] values.
  *
@@ -139,4 +142,65 @@ export function createThumbnail(
 
   ctx.putImageData(imageData, 0, 0)
   return canvas.toDataURL('image/png')
+}
+
+/**
+ * Generate a low-resolution planet texture from elevation data using the
+ * adaptive hypsometric colour scale.
+ *
+ * Used by the stellar system viewer (Route C) to display real terrain colours
+ * on planet spheres instead of procedural solid colours.
+ *
+ * @param elevation  Normalised [0, 1] elevation Float32Array (width × height).
+ * @param srcW       Source image width (pixels).
+ * @param srcH       Source image height (pixels).
+ * @param elevMinM   Minimum elevation in metres.
+ * @param elevMaxM   Maximum elevation in metres.
+ * @param seaLevelM  Sea level in metres.
+ * @param thumbW     Desired texture width (height = thumbW × srcH / srcW).
+ * @returns A THREE.DataTexture suitable for `.map` on a sphere material.
+ */
+export function generatePlanetTexture(
+  elevation: Float32Array,
+  srcW: number,
+  srcH: number,
+  elevMinM: number,
+  elevMaxM: number,
+  seaLevelM: number,
+  thumbW = 256,
+): THREE.DataTexture {
+  const thumbH = Math.max(1, Math.round(thumbW * (srcH / srcW)))
+  const lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevelM)
+  const buf = new Uint8Array(thumbW * thumbH * 4)
+
+  const scaleX = (srcW - 1) / thumbW
+  const scaleY = (srcH - 1) / thumbH
+
+  for (let ty = 0; ty < thumbH; ty++) {
+    const sy = Math.round(ty * scaleY)
+    const rowOff = sy * srcW
+    const tRowOff = ty * thumbW * 4
+    for (let tx = 0; tx < thumbW; tx++) {
+      const sx = Math.round(tx * scaleX)
+      const elev = elevation[rowOff + sx]
+      const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+      const pi = tRowOff + tx * 4
+      buf[pi] = lut[lutIdx * 4]
+      buf[pi + 1] = lut[lutIdx * 4 + 1]
+      buf[pi + 2] = lut[lutIdx * 4 + 2]
+      buf[pi + 3] = 255
+    }
+  }
+
+  const tex = new THREE.DataTexture(
+    buf as unknown as BufferSource, thumbW, thumbH, THREE.RGBAFormat,
+  )
+  tex.flipY = true
+  tex.colorSpace = THREE.NoColorSpace
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.minFilter = THREE.LinearFilter
+  tex.magFilter = THREE.LinearFilter
+  tex.needsUpdate = true
+  return tex
 }

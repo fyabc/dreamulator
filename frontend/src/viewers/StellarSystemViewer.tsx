@@ -62,6 +62,8 @@ interface StellarSystemViewerProps {
   stellar: StellarSystemData | null | undefined
   planets: PlanetData[] | null | undefined
   habitableZones: HabitableZoneData | null | undefined
+  /** Planet ID → terrain texture (equirectangular).  Populated by the page. */
+  planetTextures?: Map<string, THREE.Texture>
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +197,7 @@ function Scene({
   satelliteCountMap,
   orbitMap,
   habitableZones,
+  planetTextures,
   selected,
   onSelect,
   controlsRef,
@@ -208,6 +211,7 @@ function Scene({
   satelliteCountMap: Map<string, number>
   orbitMap: Map<string, OrbitalElementsData>
   habitableZones: HabitableZoneData | null | undefined
+  planetTextures?: Map<string, THREE.Texture>
   selected: SelectedBody
   onSelect: (body: SelectedBody) => void
   controlsRef: React.MutableRefObject<any>
@@ -324,6 +328,7 @@ function Scene({
           key={body.id}
           planet={body}
           position={positionMap.get(body.id) ?? [1, 0, 0]}
+          terrainTexture={planetTextures?.get(body.id)}
           labelVisible={labelVisibility[body.id] ?? true}
           satelliteCount={satelliteCountMap.get(body.id) ?? 0}
           onSelect={(p) => onSelect({ type: 'planet', data: p })}
@@ -362,6 +367,7 @@ export default function StellarSystemViewer({
   stellar,
   planets,
   habitableZones,
+  planetTextures,
 }: StellarSystemViewerProps) {
   const [selected, setSelected] = useState<SelectedBody>(null)
   const controlsRef = useRef<any>(null)
@@ -463,6 +469,7 @@ export default function StellarSystemViewer({
             satelliteCountMap={satelliteCountMap}
             orbitMap={orbitMap}
             habitableZones={habitableZones}
+            planetTextures={planetTextures}
             selected={selected}
             onSelect={setSelected}
             controlsRef={controlsRef}

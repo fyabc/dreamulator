@@ -48,6 +48,8 @@ interface PlanetMeshProps {
   planet: PlanetData
   /** Pre-computed absolute position in AU (resolved hierarchically) */
   position: [number, number, number]
+  /** Optional terrain texture (equirectangular) — enables textured rendering. */
+  terrainTexture?: THREE.Texture | null
   /** Whether the label should be visible (controlled by parent declutter) */
   labelVisible?: boolean
   /** Number of satellites orbiting this body (shown in subtitle) */
@@ -91,6 +93,7 @@ function getPlanetColor(planet: PlanetData): THREE.Color {
 export default function PlanetMesh({
   planet,
   position,
+  terrainTexture,
   labelVisible = true,
   satelliteCount = 0,
   onSelect,
@@ -144,7 +147,11 @@ export default function PlanetMesh({
         }}
       >
         <sphereGeometry args={[realRadiusAU, 24, 24]} />
-        <meshStandardMaterial color={color} roughness={0.8} metalness={0.1} />
+        {terrainTexture ? (
+          <meshBasicMaterial map={terrainTexture} />
+        ) : (
+          <meshStandardMaterial color={color} roughness={0.8} metalness={0.1} />
+        )}
       </mesh>
 
       {/* Atmosphere shell */}

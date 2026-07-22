@@ -273,13 +273,16 @@ layers/
 
 ## 后续阶段
 
-### Phase 2：气候 & 生态图层 + 3D 球体
+### Phase 2：气候 & 生态图层 + 3D 球体 + 行星纹理
 
-> **参考**：[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 climate/biome 图层；[Google Earth](https://earth.google.com/) 的 3D 球体渲染
+> **参考**：[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 climate/biome 图层；[Google Earth](https://earth.google.com/) 的 3D 球体渲染；[戴森球计划](https://www.dysonprogram.com/) 的行星/星际双视图
 
 - 气候引擎读取栅格+Voronoi → 逐 cell 计算温度/降水
 - 生态引擎 → Whittaker biome 分类
-- 3D 球体视图：等距纹理贴 SphereGeometry
+- **3D 球体视图**：等距纹理贴 SphereGeometry（Phase 1，待实现）
+- **行星纹理（路线 C，已实现）**：恒星系 3D 视图中，有地图数据的行星自动加载
+  地形纹理（`generatePlanetTexture`），使用与地图查看器相同的 ETOPO1+ESRI 混合配色。
+  设计决策详见源码注释和 `docs/design/map_system_design.md`。
 
 ### Phase 3：文明图层
 
