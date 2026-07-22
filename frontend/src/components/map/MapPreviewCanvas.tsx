@@ -37,6 +37,12 @@ export default function MapPreviewCanvas({
     const imageData = ctx.createImageData(thumbW, thumbH)
     const lut = generateLut(TERRAIN_SCALE, 256)
 
+    // seaLevel is in metres; convert to normalised [0, 1] for comparison
+    // (The elevation data is already normalised [0, 1] by decodePngToFloat32.)
+    // This is a simplified preview — the actual elevMinM/elevMaxM aren't available here.
+    // Use a reasonable normalised sea level ≈ 0.55 for standard elevation range.
+    const normSea = 0.55
+
     for (let ty = 0; ty < thumbH; ty++) {
       for (let tx = 0; tx < thumbW; tx++) {
         const sx = Math.min(width - 1, Math.round((tx / thumbW) * width))
@@ -49,9 +55,9 @@ export default function MapPreviewCanvas({
         let g = lut[lutIdx * 3 + 1]
         let b = lut[lutIdx * 3 + 2]
 
-        // Water depth darkening
-        if (val < seaLevel) {
-          const depth = (seaLevel - val) / Math.max(seaLevel, 0.001)
+        // Water depth darkening (both values normalised [0, 1])
+        if (val < normSea) {
+          const depth = (normSea - val) / Math.max(normSea, 0.001)
           const factor = 1 - depth * 0.5
           r = Math.round(r * factor)
           g = Math.round(g * factor)

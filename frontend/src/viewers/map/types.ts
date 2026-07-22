@@ -18,7 +18,7 @@ export interface MapMetadata {
   height: number
   elevation_min_m: number
   elevation_max_m: number
-  sea_level: number
+  sea_level_m: number
   voronoi_seed: number | null
   voronoi_num_cells: number
 }

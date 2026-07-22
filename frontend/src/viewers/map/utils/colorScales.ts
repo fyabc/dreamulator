@@ -14,18 +14,25 @@ export interface ColorStop {
 // Terrain color scale (hypsometric tint)
 // ---------------------------------------------------------------------------
 
-/** Classic hypsometric tint: deep ocean → shallow → beach → grass → forest → rock → snow. */
+/**
+ * Mixed hypsometric tint (static fallback).
+ * Ocean: NOAA ETOPO1 palette.  Land: ESRI Natural Earth style.
+ */
 export const TERRAIN_SCALE: ColorStop[] = [
-  { value: 0.0, color: [10, 30, 80] }, // deep ocean
-  { value: 0.25, color: [20, 60, 130] }, // mid ocean
-  { value: 0.38, color: [40, 100, 170] }, // shallow water
-  { value: 0.40, color: [194, 178, 129] }, // beach / coast
-  { value: 0.42, color: [100, 160, 60] }, // lowland grass
-  { value: 0.55, color: [60, 130, 40] }, // forest
-  { value: 0.70, color: [120, 100, 60] }, // highland / rock
-  { value: 0.85, color: [160, 140, 120] }, // mountain
-  { value: 0.95, color: [230, 230, 240] }, // snow
-  { value: 1.0, color: [255, 255, 255] }, // peak snow
+  { value: 0.00, color: hexToRgb('#023858') },  // deepest ocean
+  { value: 0.15, color: hexToRgb('#045A8D') },  // deep ocean
+  { value: 0.30, color: hexToRgb('#2B8CBE') },  // mid ocean
+  { value: 0.42, color: hexToRgb('#74A9CF') },  // shallow water
+  { value: 0.49, color: hexToRgb('#A8D8EA') },  // very shallow / shelf
+  { value: 0.50, color: hexToRgb('#C8B898') },  // sand / beach
+  { value: 0.51, color: hexToRgb('#7DAF5A') },  // coastal green
+  { value: 0.53, color: hexToRgb('#2F7A3C') },  // forest green
+  { value: 0.60, color: hexToRgb('#A0B040') },  // yellow-green hills
+  { value: 0.70, color: hexToRgb('#C8A858') },  // yellow-brown plateau
+  { value: 0.82, color: hexToRgb('#8B5E3C') },  // mountain brown
+  { value: 0.88, color: hexToRgb('#A08078') },  // grey-brown high mt
+  { value: 0.93, color: hexToRgb('#D8D0C8') },  // snow grey
+  { value: 1.00, color: hexToRgb('#FFFFFF') },  // peak white
 ]
 
 /** Binary land/sea. */
@@ -90,26 +97,30 @@ export function generateAdaptiveTerrainScale(
 ): Uint8Array {
   const range = maxElev - minElev || 1
 
-  // Color breakpoints in metres
+  // Mixed hypsometric palette:
+  //   Ocean: NOAA ETOPO1 v2.64 scientific palette (deep→shallow blues)
+  //   Land:  ESRI / ArcGIS Natural Earth style (green→brown→grey→white)
+  //
+  // Colour scheme research and references documented in
+  //   docs/usage/map-workflow.md § 配色方案
   const colorBreaks: { elev: number; color: [number, number, number] }[] = [
-    { elev: minElev, color: hexToRgb('#0a1a3f') },
-    { elev: minElev + range * 0.15, color: hexToRgb('#0d2b6b') },
-    { elev: minElev + range * 0.30, color: hexToRgb('#1a4494') },
-    { elev: seaLevel - Math.max(range * 0.03, 1), color: hexToRgb('#2980b9') },
-    { elev: seaLevel - Math.max(range * 0.005, 0.5), color: hexToRgb('#5dade2') },
-    { elev: seaLevel, color: hexToRgb('#7ec8e3') },
-    { elev: seaLevel + Math.max(range * 0.005, 0.5), color: hexToRgb('#c8e6c9') },
-    { elev: seaLevel + range * 0.02, color: hexToRgb('#2e7d32') },
-    { elev: seaLevel + range * 0.10, color: hexToRgb('#4caf50') },
-    { elev: seaLevel + range * 0.20, color: hexToRgb('#81c784') },
-    { elev: seaLevel + range * 0.35, color: hexToRgb('#c5e1a5') },
-    { elev: seaLevel + range * 0.45, color: hexToRgb('#fff9c4') },
-    { elev: seaLevel + range * 0.55, color: hexToRgb('#f0c27b') },
-    { elev: seaLevel + range * 0.65, color: hexToRgb('#d4a053') },
-    { elev: seaLevel + range * 0.75, color: hexToRgb('#8d6e63') },
-    { elev: seaLevel + range * 0.85, color: hexToRgb('#6d4c41') },
-    { elev: seaLevel + range * 0.92, color: hexToRgb('#7b1fa2') },
-    { elev: maxElev, color: hexToRgb('#9c27b0') },
+    // ---- Ocean: NOAA ETOPO1 ----
+    { elev: minElev, color: hexToRgb('#023858') },
+    { elev: minElev + range * 0.15, color: hexToRgb('#045A8D') },
+    { elev: minElev + range * 0.30, color: hexToRgb('#2B8CBE') },
+    { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#74A9CF') },
+    { elev: seaLevel - Math.max(range * 0.005, 50), color: hexToRgb('#A8D8EA') },
+    // ---- Shoreline ----
+    { elev: seaLevel, color: hexToRgb('#C8B898') },
+    // ---- Land: ESRI Natural Earth style ----
+    { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#7DAF5A') },
+    { elev: seaLevel + range * 0.02, color: hexToRgb('#2F7A3C') },
+    { elev: seaLevel + range * 0.08, color: hexToRgb('#A0B040') },
+    { elev: seaLevel + range * 0.18, color: hexToRgb('#C8A858') },
+    { elev: seaLevel + range * 0.30, color: hexToRgb('#8B5E3C') },
+    { elev: seaLevel + range * 0.35, color: hexToRgb('#A08078') },
+    { elev: seaLevel + range * 0.40, color: hexToRgb('#D8D0C8') },
+    { elev: maxElev, color: hexToRgb('#FFFFFF') },
   ]
 
   // Sort by elevation (should already be sorted, but be safe)

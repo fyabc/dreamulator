@@ -416,7 +416,7 @@ export default function MapViewerPage() {
                   elevation={localElevation}
                   width={meta?.width ?? 2048}
                   height={meta?.height ?? 1024}
-                  seaLevel={meta?.sea_level ?? 0.4}
+                  seaLevel={meta?.sea_level_m ?? 0.0}
                   mapCenter={viewState.mapCenter}
                   zoom={viewState.zoom}
                   containerWidth={viewState.containerWidth}

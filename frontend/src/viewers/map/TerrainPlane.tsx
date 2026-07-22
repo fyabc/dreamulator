@@ -15,7 +15,6 @@ import {
   generateLut,
   generateAdaptiveTerrainScale,
   TERRAIN_SCALE,
-  LANDSEA_SCALE,
   PLATE_COLORS,
 } from './utils/colorScales'
 import { projectForward, projectInverse, type ProjectionType } from './utils/projection'
@@ -209,6 +208,10 @@ export default function useTerrainTexture({
     // Cell-based modes use polygon rendering
     const isCellMode = colorMode === 'plates' || colorMode === 'boundaries'
 
+    // Compute normalised sea level from absolute metres
+    const range = elevMaxM - elevMinM || 1
+    const normSeaLevel = (seaLevel - elevMinM) / range
+
     if (!isCellMode) {
       // ------------------------------------------------------------------
       // Elevation-based modes: LUT + hillshading + water darkening
@@ -222,7 +225,17 @@ export default function useTerrainTexture({
         lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
         isRgba = true
       } else if (colorMode === 'landsea') {
-        lut = generateLut(LANDSEA_SCALE, 256)
+        // Dynamic binary LUT: sharp water/land boundary at the true sea level
+        lut = new Uint8Array(256 * 3)
+        const WATER: [number, number, number] = [30, 60, 120]
+        const LAND: [number, number, number] = [80, 140, 60]
+        const cutoff = Math.round(normSeaLevel * 255)
+        for (let i = 0; i < 256; i++) {
+          const c = i <= cutoff ? WATER : LAND
+          lut[i * 3 + 0] = c[0]
+          lut[i * 3 + 1] = c[1]
+          lut[i * 3 + 2] = c[2]
+        }
       } else {
         // Fallback to static terrain scale
         lut = generateLut(TERRAIN_SCALE, 256)
@@ -251,8 +264,8 @@ export default function useTerrainTexture({
             b = lut[lutIdx * 3 + 2]
           }
 
-          // Hillshading
-          if (hillshadeStrength > 0) {
+          // Hillshading — skip for landsea (flat binary colours)
+          if (hillshadeStrength > 0 && colorMode !== 'landsea') {
             const dx =
               sampleElev(elevation, width, height, x + 1, y) -
               sampleElev(elevation, width, height, x - 1, y)
@@ -269,9 +282,9 @@ export default function useTerrainTexture({
             b = Math.min(255, Math.round(b * shade))
           }
 
-          // Water depth darkening
-          if (elev < seaLevel) {
-            const depth = (seaLevel - elev) / Math.max(seaLevel, 0.001)
+          // Water depth darkening — skip for landsea (single ocean colour)
+          if (elev < normSeaLevel && colorMode !== 'landsea') {
+            const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
             const factor = 1.0 - waterDepthFactor * depth
             r = Math.round(r * factor)
             g = Math.round(g * factor)

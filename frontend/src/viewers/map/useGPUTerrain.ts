@@ -20,7 +20,6 @@ import {
   generateLut,
   generateAdaptiveTerrainScale,
   TERRAIN_SCALE,
-  LANDSEA_SCALE,
   PLATE_COLORS,
 } from './utils/colorScales'
 
@@ -138,6 +137,10 @@ export default function useGPUTerrain({
     const totalPixels = width * height
     const buf = new Uint8Array(totalPixels * 4)
 
+    // Compute normalised sea level from absolute metres
+    const range = elevMaxM - elevMinM || 1
+    const normSeaLevel = (seaLevel - elevMinM) / range
+
     // --- Step 1: Build LUT ---
     let lut: Uint8Array
     let isRgbaLut = false
@@ -145,7 +148,17 @@ export default function useGPUTerrain({
       lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
       isRgbaLut = true
     } else if (colorMode === 'landsea') {
-      lut = generateLut(LANDSEA_SCALE, 256)
+      // Dynamic binary LUT: sharp water/land boundary at the true sea level
+      lut = new Uint8Array(256 * 3)
+      const WATER: [number, number, number] = [30, 60, 120]
+      const LAND: [number, number, number] = [80, 140, 60]
+      const cutoff = Math.round(normSeaLevel * 255)
+      for (let i = 0; i < 256; i++) {
+        const c = i <= cutoff ? WATER : LAND
+        lut[i * 3 + 0] = c[0]
+        lut[i * 3 + 1] = c[1]
+        lut[i * 3 + 2] = c[2]
+      }
     } else {
       lut = generateLut(TERRAIN_SCALE, 256)
     }
@@ -204,7 +217,7 @@ export default function useGPUTerrain({
           continue
         }
 
-        // Elevation-based modes: LUT + hillshading + water depth
+        // Elevation-based modes: LUT + (optional) hillshading + water depth
         const elev = elevation[i]
         const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
 
@@ -219,8 +232,8 @@ export default function useGPUTerrain({
           b = lut[lutIdx * 3 + 2]
         }
 
-        // Hillshading
-        if (hillshadeStrength > 0) {
+        // Hillshading — skip for landsea (flat binary colours)
+        if (hillshadeStrength > 0 && colorMode !== 'landsea') {
           const dx = sampleElev(elevation, width, height, x + 1, y) -
                      sampleElev(elevation, width, height, x - 1, y)
           const dy = sampleElev(elevation, width, height, x, y + 1) -
@@ -234,9 +247,9 @@ export default function useGPUTerrain({
           b = Math.min(255, Math.round(b * shade))
         }
 
-        // Water depth darkening
-        if (elev < seaLevel) {
-          const depth = (seaLevel - elev) / Math.max(seaLevel, 0.001)
+        // Water depth darkening — skip for landsea (single ocean colour)
+        if (elev < normSeaLevel && colorMode !== 'landsea') {
+          const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
           const factor = 1 - waterDepthFactor * depth
           r = Math.round(r * factor)
           g = Math.round(g * factor)

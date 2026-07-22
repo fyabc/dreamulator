@@ -465,6 +465,42 @@ uv run dreamulator serve --open
 > **自适应配色**：地形模式的色标根据行星实际高程范围自动计算断点，
 > 无需手动调整。海洋从深蓝（最深）到浅蓝（海岸），陆地进行类似渐变。
 
+#### 配色方案
+
+地形模式的混合 hypsometric tint 配色，参考了下表所列三种业界常用方案后，
+选取了 **海洋 C + 陆地 B** 的混合方案：
+
+| 方案 | 来源 | 风格 | 特点 |
+|------|------|------|------|
+| **A** | 经典 Bartholomew | 制图传统 | 绿色→黄色→棕色→灰色→白色，教科书标准 |
+| **B** | ESRI / ArcGIS Natural Earth | 现代 GIS | 色彩鲜明，分层设色对比度强 |
+| **C** | NOAA ETOPO1 v2.64 | 科研出版物 | 海洋冷暖渐变精细，强调物理深度感 |
+
+**配色表**（`colorScales.ts` → `generateAdaptiveTerrainScale`）：
+
+| 高程 | 颜色 | Hex | 说明 |
+|------|------|-----|------|
+| 最深点 (minElev) | ██ | `#023858` | 深海沟 — C |
+| +15% range | ██ | `#045A8D` | 深海 — C |
+| +30% range | ██ | `#2B8CBE` | 中海 — C |
+| 海平面 -2% (≥200m) | ██ | `#74A9CF` | 浅海 — C |
+| 海平面 -0.5% (≥50m) | ██ | `#A8D8EA` | 近海 — C |
+| 海平面 (0m) | ██ | `#C8B898` | 沙色海岸线 |
+| +0.5% (≥50m) | ██ | `#7DAF5A` | 滨海绿 — B |
+| +2% range | ██ | `#2F7A3C` | 森林深绿 — B |
+| +8% range | ██ | `#A0B040` | 丘陵黄绿 — B |
+| +18% range | ██ | `#C8A858` | 台地黄棕 — B |
+| +30% range | ██ | `#8B5E3C` | 山地棕 — B |
+| +35% range | ██ | `#A08078` | 高山灰棕 — B |
+| +40% range | ██ | `#D8D0C8` | 积雪灰 — B |
+| 最高点 (maxElev) | ██ | `#FFFFFF` | 山顶白 — B |
+
+**参考来源**：
+- Thuillier et al. (2024) *Colour Palettes for Digital Elevation Models*. Zenodo. [DOI: 10.5281/zenodo.10530295](https://doi.org/10.5281/zenodo.10530295)
+- Patterson, T. *Cross-blended Hypsometric Tints*. [shadedrelief.com](http://www.shadedrelief.com/hypsometric/)
+- Wikipedia: [Hypsometric tints](https://en.wikipedia.org/wiki/Hypsometric_tints)
+- NOAA NCEI: [ETOPO1 Global Relief Model](https://www.ngdc.noaa.gov/mgg/global/)
+
 ### 5.4 投影切换
 
 右上角下拉菜单支持 3 种地图投影：

@@ -427,7 +427,7 @@ export default function WorldDetail() {
                           elevation={previewElevation}
                           width={mapMeta?.width ?? 2048}
                           height={mapMeta?.height ?? 1024}
-                          seaLevel={mapMeta?.sea_level ?? 0.4}
+                          seaLevel={mapMeta?.sea_level_m ?? 0.0}
                           className="w-full"
                         />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-lg">

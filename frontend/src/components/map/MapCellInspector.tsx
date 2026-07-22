@@ -25,6 +25,18 @@ const BOUNDARY_COLORS: Record<string, string> = {
   transform: 'bg-yellow-900/40 text-yellow-300',
 }
 
+const CRUST_LABELS: Record<string, string> = {
+  continental: '大陆地壳',
+  oceanic: '海洋地壳',
+  transitional: '过渡地壳',
+}
+
+const BOUNDARY_LABELS: Record<string, string> = {
+  convergent: '汇聚边界',
+  divergent: '离散边界',
+  transform: '转换边界',
+}
+
 function formatNumber(n: number | undefined, decimals = 0): string {
   if (n === undefined || n === null) return '—'
   if (!isFinite(n)) return '∞'
@@ -167,7 +179,7 @@ function CellDetails({
 
         <div className="flex justify-between">
           <dt className="text-gray-500">地壳类型</dt>
-          <dd className="font-mono">{cell.crust_type ?? '—'}</dd>
+          <dd className="font-mono">{CRUST_LABELS[cell.crust_type ?? ''] ?? cell.crust_type ?? '—'}</dd>
         </div>
         <div className="flex justify-between">
           <dt className="text-gray-500">板块</dt>
@@ -180,7 +192,7 @@ function CellDetails({
           <dd>
             {cell.boundary_type ? (
               <span className={`text-xs px-1.5 py-0.5 rounded ${boundaryClass}`}>
-                {cell.boundary_type}
+                {BOUNDARY_LABELS[cell.boundary_type] ?? cell.boundary_type}
               </span>
             ) : (
               <span className="text-gray-600">—</span>

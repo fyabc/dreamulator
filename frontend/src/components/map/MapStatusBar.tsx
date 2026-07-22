@@ -8,6 +8,12 @@
 import type { CursorInfo } from './MapViewer'
 import type { VoronoiCell } from '../../viewers/map/types'
 
+const CRUST_LABELS: Record<string, string> = {
+  continental: '大陆地壳',
+  oceanic: '海洋地壳',
+  transitional: '过渡地壳',
+}
+
 interface MapStatusBarProps {
   cursor: CursorInfo | null
   zoom: number
@@ -52,7 +58,7 @@ export default function MapStatusBar({
         <>
           <span className="text-gray-600">|</span>
           <span className="text-amber-300/80">
-            地壳: {hoveredCell.crust_type ?? '—'}
+            地壳: {CRUST_LABELS[hoveredCell.crust_type ?? ''] ?? hoveredCell.crust_type ?? '—'}
           </span>
           <span className="text-gray-600">|</span>
           <span className="text-amber-300/80">

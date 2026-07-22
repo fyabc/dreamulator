@@ -123,7 +123,7 @@ export default function MapViewer({
   // Map dimensions
   const mapW = metadata?.width ?? 2048
   const mapH = metadata?.height ?? 1024
-  const seaLevel = metadata?.sea_level ?? 0.4
+  const seaLevel = metadata?.sea_level_m ?? 0.0
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
 
@@ -321,11 +321,16 @@ export default function MapViewer({
         camera.lookAt(0, 0, 0)
 
         // Mesh displacement: mapCentre lon/lat → world X/Z.
-        // Rotation -π/2 around X: world = (lx+meshX, 0, -ly+meshZ).
-        // For lon=L at screen centre: lx = L/360*W → meshX = -lx.
-        // For lat=L at screen centre: ly = L/180*H → meshZ = ly = L/180*H.
-        mesh.position.x = -(mc.lon / 360) * visW
-        mesh.position.z = (mc.lat / 180) * BASE_VIS_H
+        // Rotation -π/2 around X: world = (lx+meshX, 0, ly+meshZ).
+        // meshX = -(nx - 0.5) * visW, meshZ = -(ny - 0.5) * BASE_VIS_H
+        if (projection === 'equirectangular') {
+          mesh.position.x = -(mc.lon / 360) * visW
+          mesh.position.z = (mc.lat / 180) * BASE_VIS_H
+        } else {
+          const pc = projectForward(projection, mc.lon, mc.lat)
+          mesh.position.x = -(pc.nx - 0.5) * visW
+          mesh.position.z = -(pc.ny - 0.5) * BASE_VIS_H
+        }
 
         const worldW = (mesh.geometry as THREE.PlaneGeometry).parameters.width
         if (ghostLeftRef.current)
@@ -378,11 +383,16 @@ export default function MapViewer({
         // Clamp lat so the map never shows blank space above/below
         const vMargin = 90 / zoom
         const clampedLat = Math.max(-90 + vMargin, Math.min(90 - vMargin, next.mapCenter.lat))
-        // Non-cylindrical projections (Mollweide/Robinson): clamp lon too
+        // Non-cylindrical projections: clamp in projection space (nonlinear lon→nx)
         let clampedLon = next.mapCenter.lon
         if (projection !== 'equirectangular') {
-          const hMargin = 180 / zoom
-          clampedLon = Math.max(-180 + hMargin, Math.min(180 - hMargin, next.mapCenter.lon))
+          const nxt = projectForward(projection, next.mapCenter.lon, clampedLat)
+          const nMargin = 0.5 / zoom
+          const clampedNx = Math.max(nMargin, Math.min(1 - nMargin, nxt.nx))
+          if (Math.abs(clampedNx - nxt.nx) > 1e-10) {
+            const back = projectInverse(projection, clampedNx, nxt.ny)
+            clampedLon = back.lon
+          }
         }
         setMapCenter({ lon: clampedLon, lat: clampedLat })
         return
