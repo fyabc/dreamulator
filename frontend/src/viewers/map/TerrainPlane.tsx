@@ -18,7 +18,7 @@ import {
   LANDSEA_SCALE,
   PLATE_COLORS,
 } from './utils/colorScales'
-import { projectInverse, type ProjectionType } from './utils/projection'
+import { projectForward, projectInverse, type ProjectionType } from './utils/projection'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 
@@ -324,13 +324,22 @@ export default function useTerrainTexture({
           const { lon, lat } = projectInverse(projection, nx, ny)
 
           // Check if the inverse projection returned valid coordinates
-          if (isNaN(lon) || isNaN(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-            // Outside projection boundary — transparent
+          const outside = isNaN(lon) || isNaN(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90
+          // Round-trip check: projectInverse clamps edge values for non-cylindrical
+          // projections (Mollweide ellipse corners, Robinson curved edges).  Forward-
+          // project the result and compare — a mismatch means the pixel is outside
+          // the projection's valid area.
+          if (!outside) {
+            const fwd = projectForward(projection, lon, lat)
+            if (Math.abs(fwd.nx - nx) > 0.02 || Math.abs(fwd.ny - ny) > 0.02) {
+              const idx = (oy * outW + ox) * 4
+              outPx[idx] = 0; outPx[idx + 1] = 0; outPx[idx + 2] = 0; outPx[idx + 3] = 0
+              continue
+            }
+          }
+          if (outside) {
             const idx = (oy * outW + ox) * 4
-            outPx[idx] = 0
-            outPx[idx + 1] = 0
-            outPx[idx + 2] = 0
-            outPx[idx + 3] = 0
+            outPx[idx] = 0; outPx[idx + 1] = 0; outPx[idx + 2] = 0; outPx[idx + 3] = 0
             continue
           }
 

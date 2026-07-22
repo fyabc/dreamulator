@@ -229,19 +229,35 @@ export default function MapViewer({
 
     const visW = BASE_VIS_H * (containerSize.width / containerSize.height)
     const geo = new THREE.PlaneGeometry(visW, BASE_VIS_H)
-    const mat = useGPU ? gpuMaterial! : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide })
+    const mat = useGPU
+      ? gpuMaterial!
+      : new THREE.MeshBasicMaterial({
+          map: terrainTexture!,
+          side: THREE.DoubleSide,
+          transparent: projection !== 'equirectangular', // show alpha edges for Mollweide/Robinson
+        })
 
     const mesh = new THREE.Mesh(geo, mat)
     mesh.rotation.x = -Math.PI / 2
     scene.add(mesh)
     meshRef.current = mesh
 
-    for (const dir of [-1, 1]) {
-      const g = new THREE.Mesh(geo, useGPU ? gpuMaterial! : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide }))
-      g.rotation.x = -Math.PI / 2
-      scene.add(g)
-      if (dir === -1) ghostLeftRef.current = g
-      else ghostRightRef.current = g
+    // Ghost meshes only for equirectangular (cylindrical projection wraps horizontally).
+    // Non-equirectangular projections (Mollweide, Robinson) have natural edges
+    // — ghost meshes would create artificial left-right connection.
+    if (projection === 'equirectangular') {
+      for (const dir of [-1, 1]) {
+        const g = new THREE.Mesh(geo, useGPU
+          ? gpuMaterial!
+          : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide }))
+        g.rotation.x = -Math.PI / 2
+        scene.add(g)
+        if (dir === -1) ghostLeftRef.current = g
+        else ghostRightRef.current = g
+      }
+    } else {
+      ghostLeftRef.current = null
+      ghostRightRef.current = null
     }
 
     camera.aspect = containerSize.width / containerSize.height
@@ -360,9 +376,15 @@ export default function MapViewer({
         }
         const next = applyDrag(startState, { dx, dy }, vp)
         // Clamp lat so the map never shows blank space above/below
-        const margin = 90 / zoom
-        const clampedLat = Math.max(-90 + margin, Math.min(90 - margin, next.mapCenter.lat))
-        setMapCenter({ lon: next.mapCenter.lon, lat: clampedLat })
+        const vMargin = 90 / zoom
+        const clampedLat = Math.max(-90 + vMargin, Math.min(90 - vMargin, next.mapCenter.lat))
+        // Non-cylindrical projections (Mollweide/Robinson): clamp lon too
+        let clampedLon = next.mapCenter.lon
+        if (projection !== 'equirectangular') {
+          const hMargin = 180 / zoom
+          clampedLon = Math.max(-180 + hMargin, Math.min(180 - hMargin, next.mapCenter.lon))
+        }
+        setMapCenter({ lon: clampedLon, lat: clampedLat })
         return
       }
 
@@ -375,8 +397,8 @@ export default function MapViewer({
         if (!pos || !elevation) return
 
         const ll = unproject(pos.px, pos.py)
-        // Clamp lat; lon is always valid (already wrapped)
-        if (ll.lat < -90 || ll.lat > 90) {
+        // Outside projection boundary (non-equirectangular) or out of lat range
+        if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) {
           onCursorMove?.(null)
           onCellHover?.(null)
           return
@@ -432,6 +454,8 @@ export default function MapViewer({
         e.clientX - rect.left,
         e.clientY - rect.top,
       )
+      // Outside projection boundary (non-equirectangular) — ignore
+      if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
       const lonRad = (ll.lon * Math.PI) / 180
       const latRad = (ll.lat * Math.PI) / 180
       const cosLat = Math.cos(latRad)
