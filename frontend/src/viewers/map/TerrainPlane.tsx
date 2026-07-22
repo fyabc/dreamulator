@@ -486,6 +486,7 @@ export default function useTerrainTexture({
     drawGraticule(gridCtx, finalW, finalH, projection)
 
     const tex = new THREE.CanvasTexture(finalCanvas as any)
+    tex.colorSpace = THREE.NoColorSpace // match DataTexture (GPU path) — raw sRGB bytes
     tex.minFilter = THREE.LinearFilter
     tex.magFilter = THREE.LinearFilter
     tex.needsUpdate = true
