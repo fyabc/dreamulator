@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-07-23
+
+### Added
+
+**地图查看器 — 3D 恒星系 + 星球纹理**
+- 3D 恒星系视图从世界详情页抽离为独立页面 + 侧边栏一级入口
+- 恒星系中有地图的行星自动显示真实地形纹理（ETOPO1+ESRI 混合配色）
+- 多投影支持：等距圆柱 / Mollweide / Robinson，含经纬线网格
+- GPU 地形渲染：CPU 预计算纹理 + ShaderMaterial 直出
+
+**地图查看器 — 交互增强**
+- 双击选中单元格（替代单击），避免拖拽误触
+- KD-tree 球面最近邻命中测试 (O(log n))
+- Cell-ID 贴图预计算 + 调色板查找，图层切换 10-20× 提速
+- URL 持久化分支参数 (?branch=)
+
+**地图查看器 — 坐标系统重构**
+- mapCenter (lon/lat) + zoom 统一坐标模型，替代 pan/panWrapOffset
+- 24 个单元测试覆盖核心坐标转换函数
+
+**配色 & 视觉**
+- 海洋 NOAA ETOPO1 + 陆地 ESRI Natural Earth 混合 hypsometric tint
+- 海陆图层动态二值 LUT（基于真实 sea_level_m）
+- 输出色彩空间统一（LinearSRGBColorSpace），消除非等距圆柱投影偏浅
+- 地壳类型/边界类型中文化标签
+
+**3D 恒星系可视化**
+- 3D 视图独立路由 `/worlds/:worldName/viewer3d`
+- 现有 `feat/terrain-sphere-view` 分支为后续 3D 球面地球视图准备
+
+### Changed
+
+- 地图设计文档精简，重定向到 `docs/usage/` 现行文档
+- 旧 2D Voronoi 管线保留为 fallback，主路径切换为 CVT 球面网格
+
 ## [0.3.0] — 2026-07-14
 
 ### Added
