@@ -418,7 +418,10 @@ export default function WorldDetail() {
                     <div>
                       <div
                         className="relative cursor-pointer group rounded-lg overflow-hidden"
-                        onClick={() => navigate(`/worlds/${worldName}/map/${firstMapPlanet}`)}
+                        onClick={() => {
+                          const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+                          navigate(`/worlds/${worldName}/map/${firstMapPlanet}${qs}`)
+                        }}
                       >
                         <MapPreviewCanvas
                           elevation={previewElevation}
@@ -447,7 +450,7 @@ export default function WorldDetail() {
                       </p>
                       {!staticMode && (
                         <Link
-                          to={`/worlds/${worldName}/map`}
+                          to={`/worlds/${worldName}/map${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
                           className="inline-block px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 transition-colors"
                         >
                           生成第一张地图 →

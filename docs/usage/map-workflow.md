@@ -469,11 +469,46 @@ uv run dreamulator serve --open
 
 右上角下拉菜单支持 3 种地图投影：
 
-| 投影 | 特点 | 适合场景 |
-|------|------|---------|
-| **等距圆柱** | 2:1 比例，水平环绕 | 默认视图，全面概览 |
-| **Mollweide** | 等积投影，椭圆外形 | 面积分析（海陆比例） |
-| **Robinson** | 折中投影，美观 | 展示用途 |
+| 投影 | 类型 | 特点 | 适合场景 | 参考 |
+|------|------|------|---------|------|
+| **等距圆柱** (Equirectangular) | 圆柱投影 | 2:1 矩形，水平环绕，经纬线正交 | 默认视图，GPU 渲染，全面概览 | [ArcGIS 文档](https://desktop.arcgis.com/zh-cn/arcmap/latest/map/projections/equidistant-cylindrical.htm) |
+| **Mollweide** | 伪圆柱投影（等积） | 2:1 椭圆外形，面积准确但形状畸变 | 面积分析（海陆比例、气候带） | [ArcGIS 文档](https://desktop.arcgis.com/zh-cn/arcmap/latest/map/projections/mollweide.htm) |
+| **Robinson** | 伪圆柱投影（折中） | 约 2.66:1，曲线边缘，视觉美观 | 展示用途，曾为《国家地理》标准 | [ArcGIS 文档](https://desktop.arcgis.com/zh-cn/arcmap/latest/map/projections/robinson.htm) |
+
+#### 投影与交互语义
+
+三种投影共享相同的**地理坐标级**平移/缩放模型（`mapCenter.lon/lat` + `zoom`）——即平移改
+变地图中心的地理经纬度，缩放改变视口覆盖的度数范围。投影仅在 `project`/`unproject`
+（地理 ↔ 屏幕坐标）层面产生差异。
+
+具体行为：
+
+| 操作 | 等距圆柱 | Mollweide / Robinson |
+|------|---------|---------------------|
+| **左右平移** | 经度绕回，无缝循环 | 经度绕回，但投影边缘有透明区域 |
+| **上下平移** | 到极点自然截止 | 到极点自然截止；离中央经线远时畸变大 |
+| **缩放** | 以屏幕中心为锚点缩放 | 同左，地图占据的视口面积变化 |
+| **投影边界** | 填满视口（矩形） | 非矩形 — 边缘外为透明/背景色 |
+
+**关键设计决策**：伪圆柱投影的边缘透明区域**保留**，不做额外裁剪或 fit-to-viewport。
+这遵循 QGIS / ArcGIS 的标准行为——让用户直观看到投影的形状特征。如需填满视口，
+切换到等距圆柱即可。
+
+#### 坐标系统设计
+
+前端使用统一的坐标模块 `mapCoords.ts`（24 个单元测试）：
+
+```
+视图状态 ViewState = { mapCenter: {lon, lat}, zoom }
+屏幕坐标 screen = project(geo, viewState, viewport)
+地理坐标 geo     = unproject(screen, viewState, viewport)
+平移后的新状态    = applyDrag(state, {dx, dy}, viewport)
+缩放后的新状态    = applyZoom(state, factor, anchor, viewport)
+```
+
+`mapCenter.lon` 始终保持在 `[-180, 180]`（取模绕回），不累积溢出。所有计算与
+投影类型解耦——切换投影只改变 `project`/`unproject` 的实现（GPU 路径用等距圆柱
+公式快速计算，CPU 路径走 `projectForward`/`projectInverse`）。
 
 ### 5.5 单元格详情（右面板）
 

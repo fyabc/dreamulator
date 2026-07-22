@@ -14,12 +14,10 @@ interface MapMinimapProps {
   width: number
   height: number
   seaLevel: number
-  pan: { x: number; y: number }
+  mapCenter: { lon: number; lat: number }
   zoom: number
   containerWidth: number
   containerHeight: number
-  planeWidth: number
-  planeHeight: number
 }
 
 export default function MapMinimap({
@@ -27,12 +25,10 @@ export default function MapMinimap({
   width: mapW,
   height: mapH,
   seaLevel,
-  pan,
+  mapCenter,
   zoom,
-  containerWidth,
-  containerHeight,
-  planeWidth,
-  planeHeight,
+  containerWidth: _cw,
+  containerHeight: _ch,
 }: MapMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const thumbW = 180
@@ -80,39 +76,40 @@ export default function MapMinimap({
 
   // Compute viewport rectangle in minimap pixel coordinates
   const getViewportRects = () => {
-    if (!planeWidth || !planeHeight || zoom <= 0) return []
+    if (zoom <= 0) return []
 
-    // Screen edges → normalised map coords
-    const nxL = (-containerWidth / 2 - pan.x) / (planeWidth * zoom) + 0.5
-    const nxR = (containerWidth / 2 - pan.x) / (planeWidth * zoom) + 0.5
-    const nyT = (-containerHeight / 2 - pan.y) / (planeHeight * zoom) + 0.5
-    const nyB = (containerHeight / 2 - pan.y) / (planeHeight * zoom) + 0.5
+    const halfW = 180 / zoom  // half the viewport width in degrees
+    const halfH = 90 / zoom   // half the viewport height in degrees
 
-    // Convert to minimap pixels
-    const left = nxL * thumbW
-    const right = nxR * thumbW
-    const top = nyT * thumbH
-    const bottom = nyB * thumbH
+    const lonL = mapCenter.lon - halfW
+    const lonR = mapCenter.lon + halfW
+    const latT = mapCenter.lat + halfH  // top = higher latitude
+    const latB = mapCenter.lat - halfH  // bottom = lower latitude
 
+    // Normalised [0,1] → minimap pixels
+    const nxL = ((lonL + 180) / 360) * thumbW
+    const nxR = ((lonR + 180) / 360) * thumbW
+    const nyT = ((90 - latT) / 180) * thumbH
+    const nyB = ((90 - latB) / 180) * thumbH
+
+    const left = Math.min(nxL, nxR)
+    const right = Math.max(nxL, nxR)
+    const top = Math.min(nyT, nyB)
+    const bottom = Math.max(nyT, nyB)
     const w = right - left
     const h = bottom - top
 
     // Split into rects for horizontal wrapping
     const rects: { x: number; y: number; w: number; h: number }[] = []
-
     if (left >= 0 && right <= thumbW) {
-      // Fully inside
       rects.push({ x: left, y: top, w, h })
     } else if (left < 0) {
-      // Wraps on the left side
       rects.push({ x: left + thumbW, y: top, w: -left, h })
       rects.push({ x: 0, y: top, w: right, h })
     } else if (right > thumbW) {
-      // Wraps on the right side
       rects.push({ x: left, y: top, w: thumbW - left, h })
       rects.push({ x: 0, y: top, w: right - thumbW, h })
     }
-
     return rects
   }
 

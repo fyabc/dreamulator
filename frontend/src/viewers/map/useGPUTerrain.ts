@@ -258,6 +258,11 @@ export default function useGPUTerrain({
     const colorTex = new THREE.DataTexture(
       buf as unknown as BufferSource, width, height, THREE.RGBAFormat,
     )
+    // Three.js r162+ changed DataTexture default flipY to false.
+    // Our buffer is row-major with row 0 = lat 90° (north) at the top.
+    // flipY = true ensures row 0 maps to v=1 (screen top), matching
+    // the SVG overlay's project() convention (ny=0 → lat=90°).
+    colorTex.flipY = true
     colorTex.wrapS = THREE.RepeatWrapping
     colorTex.wrapT = THREE.ClampToEdgeWrapping
     colorTex.minFilter = filterType

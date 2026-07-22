@@ -26,10 +26,12 @@ export default function Sidebar({
   ]
 
   // World-specific nav items (shown when viewing a world)
+  // Carry search params (e.g. ?branch=xxx) to preserve branch selection
+  const search = location.search
   const worldNavItems = currentWorld
     ? [
-        { path: `/worlds/${currentWorld}`, label: '概览', icon: '📋' },
-        { path: `/worlds/${currentWorld}/map`, label: '地图', icon: '🗺️' },
+        { path: `/worlds/${currentWorld}${search}`, label: '概览', icon: '📋' },
+        { path: `/worlds/${currentWorld}/map${search}`, label: '地图', icon: '🗺️' },
       ]
     : []
 

@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import BranchSelector from '../components/BranchSelector'
@@ -24,9 +24,26 @@ export default function MapViewerPage() {
     planetId?: string
   }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null)
+  // Initialize branch from URL search params (persists across refresh/navigation)
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(
+    () => searchParams.get('branch') ?? null
+  )
   const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
+
+  // Sync branch selection to URL
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (selectedBranch) {
+        next.set('branch', selectedBranch)
+      } else {
+        next.delete('branch')
+      }
+      return next
+    }, { replace: true })
+  }, [selectedBranch, setSearchParams])
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
@@ -46,13 +63,16 @@ export default function MapViewerPage() {
   const [displayZoom, setDisplayZoom] = useState(1)
 
   // View state for minimap (reported by MapViewer)
-  const [viewState, setViewState] = useState({
-    pan: { x: 0, y: 0 },
+  const [viewState, setViewState] = useState<{
+    mapCenter: { lon: number; lat: number }
+    zoom: number
+    containerWidth: number
+    containerHeight: number
+  }>({
+    mapCenter: { lon: 0, lat: 0 },
     zoom: 1,
     containerWidth: 800,
     containerHeight: 400,
-    planeWidth: 800,
-    planeHeight: 400,
   })
 
   // --- Data fetching ---
@@ -207,7 +227,8 @@ export default function MapViewerPage() {
             value={selectedPlanet}
             onChange={(e) => {
               setSelectedPlanet(e.target.value)
-              navigate(`/worlds/${worldName}/map/${e.target.value}`)
+              const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+              navigate(`/worlds/${worldName}/map/${e.target.value}${qs}`)
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
@@ -396,12 +417,10 @@ export default function MapViewerPage() {
                   width={meta?.width ?? 2048}
                   height={meta?.height ?? 1024}
                   seaLevel={meta?.sea_level ?? 0.4}
-                  pan={viewState.pan}
+                  mapCenter={viewState.mapCenter}
                   zoom={viewState.zoom}
                   containerWidth={viewState.containerWidth}
                   containerHeight={viewState.containerHeight}
-                  planeWidth={viewState.planeWidth}
-                  planeHeight={viewState.planeHeight}
                 />
               </div>
             )}

@@ -20,6 +20,8 @@ interface MapSvgOverlayProps {
   project: (lon: number, lat: number) => { x: number; y: number }
   /** Current zoom level (for stroke width scaling). */
   zoom: number
+  /** Cumulative longitude offset from horizontal wrapping (degrees). */
+  panWrapOffset: number
 
   // Data
   voronoiCells: VoronoiCell[]
@@ -36,6 +38,7 @@ export default function MapSvgOverlay({
   viewHeight,
   project,
   zoom,
+  panWrapOffset,
   voronoiCells,
   cvtMesh,
   hoveredCell,
@@ -60,23 +63,9 @@ export default function MapSvgOverlay({
   // Stroke width scales inversely with zoom
   const strokeWidth = Math.max(0.5, 1.5 / zoom)
 
-  // Dynamic longitude offsets for seamless horizontal wrapping
-  const wrapOffsets = useMemo(() => {
-    const pLeft = project(-180, 0)
-    const pRight = project(180, 0)
-    const mapPxWidth = pRight.x - pLeft.x
-    const centerPx = viewWidth / 2
-    const lonAtCenter = mapPxWidth > 0
-      ? -180 + ((centerPx - pLeft.x) / mapPxWidth) * 360
-      : 0
-    const centerOffset = Math.round(lonAtCenter / 360) * 360
-    const extraCopies = Math.ceil(viewWidth / (mapPxWidth || 1)) + 1
-    const result: number[] = []
-    for (let i = -extraCopies; i <= extraCopies; i++) {
-      result.push(centerOffset + i * 360)
-    }
-    return result
-  }, [project, viewWidth])
+  // Unified wrap offset: -panWrapOffset cancels unwrappedPanX in project(),
+  // leaving only pan.x (wrapped). Keeps highlights on-screen at any pan distance.
+  const wrapOffset = -panWrapOffset
 
   // Visual highlights for hovered/selected cells ONLY (no hit-test, no events)
   const highlightElements = useMemo(() => {
@@ -93,40 +82,37 @@ export default function MapSvgOverlay({
         const region = regionByCell.get(cell.id)
         if (!region || !region.vertex_ids || region.vertex_ids.length < 3) return []
 
-        const polygons: React.ReactNode[] = []
-        for (const offset of wrapOffsets) {
-          const projectedPoints = region.vertex_ids
-            .map((vid) => {
-              const v = vertexLookup.get(vid)
-              if (!v) return null
-              return project(v.lon + offset, v.lat)
-            })
-            .filter((p): p is { x: number; y: number } => p !== null)
+        const offset = wrapOffset
+        const projectedPoints = region.vertex_ids
+          .map((vid) => {
+            const v = vertexLookup.get(vid)
+            if (!v) return null
+            return project(v.lon + offset, v.lat)
+          })
+          .filter((p): p is { x: number; y: number } => p !== null)
 
-          if (projectedPoints.length < 3) continue
+        if (projectedPoints.length < 3) return []
 
-          // Viewport culling
-          const minX = Math.min(...projectedPoints.map((p) => p.x))
-          const maxX = Math.max(...projectedPoints.map((p) => p.x))
-          const minY = Math.min(...projectedPoints.map((p) => p.y))
-          const maxY = Math.max(...projectedPoints.map((p) => p.y))
-          if (maxX < -20 || minX > viewWidth + 20 || maxY < -20 || minY > viewHeight + 20) continue
-          if (maxX - minX > viewWidth * 0.8) continue
+        // Viewport culling
+        const minX = Math.min(...projectedPoints.map((p) => p.x))
+        const maxX = Math.max(...projectedPoints.map((p) => p.x))
+        const minY = Math.min(...projectedPoints.map((p) => p.y))
+        const maxY = Math.max(...projectedPoints.map((p) => p.y))
+        if (maxX < -20 || minX > viewWidth + 20 || maxY < -20 || minY > viewHeight + 20) return []
+        if (maxX - minX > viewWidth * 0.8) return []
 
-          const pointsStr = projectedPoints.map((p) => `${p.x},${p.y}`).join(' ')
+        const pointsStr = projectedPoints.map((p) => `${p.x},${p.y}`).join(' ')
 
-          polygons.push(
-            <polygon
-              key={`${cell.id}_${offset}`}
-              points={pointsStr}
-              fill={isSelected ? 'rgba(255,255,0,0.1)' : 'rgba(0,255,255,0.08)'}
-              stroke={isSelected ? '#ff0' : '#0ff'}
-              strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
-              strokeOpacity={isSelected ? 1 : 0.8}
-            />,
-          )
-        }
-        return polygons
+        return (
+          <polygon
+            key={cell.id}
+            points={pointsStr}
+            fill={isSelected ? 'rgba(255,255,0,0.1)' : 'rgba(0,255,255,0.08)'}
+            stroke={isSelected ? '#ff0' : '#0ff'}
+            strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
+            strokeOpacity={isSelected ? 1 : 0.8}
+          />
+        )
       })
     }
 
@@ -136,28 +122,25 @@ export default function MapSvgOverlay({
       const isSelected = selectedCells.has(cell.id)
       if (!isHovered && !isSelected) return []
 
-      const circles: React.ReactNode[] = []
-      for (const offset of wrapOffsets) {
-        const p = project(cell.lon + offset, cell.lat)
-        if (p.x < -20 || p.x > viewWidth + 20 || p.y < -20 || p.y > viewHeight + 20) continue
+      const offset = wrapOffset
+      const p = project(cell.lon + offset, cell.lat)
+      if (p.x < -20 || p.x > viewWidth + 20 || p.y < -20 || p.y > viewHeight + 20) return []
 
-        circles.push(
-          <circle
-            key={`${cell.id}_${offset}`}
-            cx={p.x}
-            cy={p.y}
-            r={Math.max(3, 6 / zoom)}
-            fill={isSelected ? 'rgba(255,255,0,0.15)' : 'rgba(0,255,255,0.1)'}
-            stroke={isSelected ? '#ff0' : '#0ff'}
-            strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
-            strokeOpacity={isSelected ? 1 : 0.8}
-          />,
-        )
-      }
-      return circles
+      return (
+        <circle
+          key={cell.id}
+          cx={p.x}
+          cy={p.y}
+          r={Math.max(3, 6 / zoom)}
+          fill={isSelected ? 'rgba(255,255,0,0.15)' : 'rgba(0,255,255,0.1)'}
+          stroke={isSelected ? '#ff0' : '#0ff'}
+          strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
+          strokeOpacity={isSelected ? 1 : 0.8}
+        />
+      )
     })
   }, [
-    voronoiCells, project, zoom, viewWidth, viewHeight, wrapOffsets,
+    voronoiCells, project, zoom, viewWidth, viewHeight, wrapOffset,
     hoveredCell, selectedCells, strokeWidth, vertexLookup, regionByCell,
   ])
 
