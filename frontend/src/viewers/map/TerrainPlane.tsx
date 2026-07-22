@@ -80,6 +80,97 @@ const BOUNDARY_COLORS: Record<BoundaryType, [number, number, number]> = {
 }
 
 // ---------------------------------------------------------------------------
+// Graticule (grid lines)
+// ---------------------------------------------------------------------------
+
+const GRID_STEP = 30 // degrees
+const GRID_ALPHA = 0.10 // faint white
+const GRID_SAMPLE_STEP = 0.5 // degrees (sampling resolution for curved lines)
+
+/**
+ * Draw latitude/longitude grid lines on the final canvas.
+ *
+ * For equirectangular the lines are straight, drawn directly with Canvas 2D.
+ * For Mollweide/Robinson each line is sampled via projectForward and drawn as
+ * a polyline — the path breaks at projection boundaries (round-trip mismatch).
+ */
+function drawGraticule(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  w: number,
+  h: number,
+  projection: ProjectionType,
+): void {
+  ctx.save()
+  ctx.strokeStyle = `rgba(255, 255, 255, ${GRID_ALPHA})`
+  ctx.lineWidth = 1
+
+  if (projection === 'equirectangular') {
+    // --- Equirectangular: straight horizontal & vertical lines ----------
+    // Latitude lines (exclude ±90° edges)
+    for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
+      const y = ((90 - lat) / 180) * h
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(w, y)
+      ctx.stroke()
+    }
+    // Longitude lines (exclude ±180° edges)
+    for (let lon = -180 + GRID_STEP; lon < 180; lon += GRID_STEP) {
+      const x = ((lon + 180) / 360) * w
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, h)
+      ctx.stroke()
+    }
+  } else {
+    // --- Mollweide / Robinson: curved projected lines ------------------
+    // Latitude lines (vary lon at fixed lat)
+    for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
+      ctx.beginPath()
+      let started = false
+      for (let lon = -180; lon <= 180; lon += GRID_SAMPLE_STEP) {
+        const fwd = projectForward(projection, lon, lat)
+        const x = fwd.nx * w
+        const y = fwd.ny * h
+        // Round-trip check: is this point inside the projection boundary?
+        const inv = projectInverse(projection, fwd.nx, fwd.ny)
+        const back = projectForward(projection, inv.lon, inv.lat)
+        const valid = Math.abs(back.nx - fwd.nx) < 0.02 && Math.abs(back.ny - fwd.ny) < 0.02
+        if (valid) {
+          if (!started) { ctx.moveTo(x, y); started = true }
+          else { ctx.lineTo(x, y) }
+        } else {
+          started = false // break the path at projection edge
+        }
+      }
+      ctx.stroke()
+    }
+    // Longitude lines (vary lat at fixed lon)
+    for (let lon = -180; lon < 180; lon += GRID_STEP) {
+      ctx.beginPath()
+      let started = false
+      for (let lat = -90; lat <= 90; lat += GRID_SAMPLE_STEP) {
+        const fwd = projectForward(projection, lon, lat)
+        const x = fwd.nx * w
+        const y = fwd.ny * h
+        const inv = projectInverse(projection, fwd.nx, fwd.ny)
+        const back = projectForward(projection, inv.lon, inv.lat)
+        const valid = Math.abs(back.nx - fwd.nx) < 0.02 && Math.abs(back.ny - fwd.ny) < 0.02
+        if (valid) {
+          if (!started) { ctx.moveTo(x, y); started = true }
+          else { ctx.lineTo(x, y) }
+        } else {
+          started = false
+        }
+      }
+      ctx.stroke()
+    }
+  }
+
+  ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -374,6 +465,12 @@ export default function useTerrainTexture({
 
       outCtx.putImageData(outData, 0, 0)
     }
+
+    // ---- Draw latitude/longitude grid lines -------------------------------
+    const finalW = isReprojected ? outW : width
+    const finalH = isReprojected ? outH : height
+    const gridCtx = finalCanvas.getContext('2d')!
+    drawGraticule(gridCtx, finalW, finalH, projection)
 
     const tex = new THREE.CanvasTexture(finalCanvas as any)
     tex.minFilter = THREE.LinearFilter
