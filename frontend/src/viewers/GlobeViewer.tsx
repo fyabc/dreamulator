@@ -34,18 +34,11 @@ const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
 // Types
 // ---------------------------------------------------------------------------
 
-/** Minimal vertex data for polygon rendering on the globe. */
-export interface GlobeVertex {
-  id: number
-  lon: number
-  lat: number
-}
+/** A CVT vertex — raw 3D position on the unit sphere (from backend JSON). */
+export type GlobeVertex = [number, number, number]
 
-/** A cell region with ordered vertex IDs. */
-export interface GlobeRegion {
-  id: number
-  vertex_ids: number[]
-}
+/** A CVT region — array of vertex indices into the vertices array. */
+export type GlobeRegion = number[]
 
 interface GlobeViewerProps {
   texture: THREE.Texture | null
@@ -72,14 +65,6 @@ function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
   const lat = Math.asin(THREE.MathUtils.clamp(n.y, -1, 1)) * THREE.MathUtils.RAD2DEG
   const lon = Math.atan2(n.z, n.x) * THREE.MathUtils.RAD2DEG
   return { lon, lat }
-}
-
-/** Convert lon/lat (degrees) → 3D unit-sphere position. */
-function lonLatTo3D(lon: number, lat: number): [number, number, number] {
-  const phi = THREE.MathUtils.degToRad(lat)
-  const theta = THREE.MathUtils.degToRad(lon)
-  const cosLat = Math.cos(phi)
-  return [cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)]
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +166,9 @@ interface CellPolygonProps {
 /** Renders a single Voronoi cell as a coloured polygon patch on the sphere. */
 function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonProps) {
   const geometry = useMemo(() => {
-    const pts3D = region.vertex_ids
-      .map((vid) => {
-        const v = vertices.find((vx) => vx.id === vid)
-        if (!v) return null
-        return lonLatTo3D(v.lon, v.lat)
-      })
+    // vertices are [x, y, z] unit-sphere arrays; region is an array of indices
+    const pts3D = region
+      .map((idx) => vertices[idx])
       .filter(Boolean) as [number, number, number][]
 
     if (pts3D.length < 3) return null
@@ -198,7 +180,6 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
     })
 
     const positions: number[] = []
-    // Fan triangulation from first vertex
     for (let i = 1; i < scaled.length - 1; i++) {
       positions.push(...scaled[0], ...scaled[i], ...scaled[i + 1])
     }
@@ -214,12 +195,8 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
   return (
     <mesh geometry={geometry} renderOrder={1}>
       <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={opacity}
-        depthTest
-        depthWrite={false}
-        side={THREE.DoubleSide}
+        color={color} transparent opacity={opacity}
+        depthTest depthWrite={false} side={THREE.DoubleSide}
       />
     </mesh>
   )
@@ -248,21 +225,15 @@ function GlobeScene({
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
-  // Build region lookup: cellId → region
-  const regionMap = useMemo(() => {
-    const m = new Map<number, GlobeRegion>()
-    if (regions) for (const r of regions) m.set(r.id, r)
-    return m
-  }, [regions])
-
-  const HoverHighlight = hoveredCellId != null && vertices && regionMap.has(hoveredCellId) && (
-    <CellPolygon vertices={vertices} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
+  // Region lookup: cell ID → vertex index array (regions[cellId])
+  const HoverHighlight = hoveredCellId != null && vertices && regions && regions[hoveredCellId] && (
+    <CellPolygon vertices={vertices} region={regions[hoveredCellId]} color="#4da6ff" opacity={0.5} />
   )
 
-  const SelectionHighlights = selectedCellIds && vertices && [...selectedCellIds]
-    .filter((id) => regionMap.has(id))
+  const SelectionHighlights = selectedCellIds && vertices && regions && [...selectedCellIds]
+    .filter((id) => regions[id])
     .map((id) => (
-      <CellPolygon key={`sel-${id}`} vertices={vertices} region={regionMap.get(id)!} color="#f0c040" opacity={0.55} />
+      <CellPolygon key={`sel-${id}`} vertices={vertices} region={regions[id]} color="#f0c040" opacity={0.55} />
     ))
 
   return (

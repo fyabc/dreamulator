@@ -44,19 +44,25 @@ export default function MapSvgOverlay({
   hoveredCell,
   selectedCells,
 }: MapSvgOverlayProps) {
-  // Build vertex lookup from CVT mesh
+  // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
     if (!cvtMesh) return null
     const map = new Map<number, { lon: number; lat: number }>()
-    cvtMesh.vertices.forEach((v) => map.set(v.id, { lon: v.lon, lat: v.lat }))
+    cvtMesh.vertices.forEach(([x, y, z], idx) => {
+      const lat = Math.asin(y) * (180 / Math.PI)
+      const lon = Math.atan2(z, x) * (180 / Math.PI)
+      map.set(idx, { lon, lat })
+    })
     return map
   }, [cvtMesh])
 
-  // Build region lookup from CVT mesh
+  // Build region lookup from CVT mesh: cellId → vertex index array
   const regionByCell = useMemo(() => {
     if (!cvtMesh) return null
-    const map = new Map<number, (typeof cvtMesh.regions)[0]>()
-    cvtMesh.regions.forEach((r) => map.set(r.id, r))
+    const map = new Map<number, number[]>()
+    cvtMesh.regions.forEach((region, cellId) => {
+      map.set(cellId, region)
+    })
     return map
   }, [cvtMesh])
 
@@ -80,24 +86,24 @@ export default function MapSvgOverlay({
         if (!isHovered && !isSelected) return []
 
         const region = regionByCell.get(cell.id)
-        if (!region || !region.vertex_ids || region.vertex_ids.length < 3) return []
+        if (!region || region.length < 3) return []
 
         const offset = wrapOffset
-        const projectedPoints = region.vertex_ids
-          .map((vid) => {
+        const projectedPoints = region
+          .map((vid: number) => {
             const v = vertexLookup.get(vid)
             if (!v) return null
             return project(v.lon + offset, v.lat)
           })
-          .filter((p): p is { x: number; y: number } => p !== null)
+          .filter((p: { x: number; y: number } | null): p is { x: number; y: number } => p !== null)
 
         if (projectedPoints.length < 3) return []
 
         // Viewport culling
-        const minX = Math.min(...projectedPoints.map((p) => p.x))
-        const maxX = Math.max(...projectedPoints.map((p) => p.x))
-        const minY = Math.min(...projectedPoints.map((p) => p.y))
-        const maxY = Math.max(...projectedPoints.map((p) => p.y))
+        const minX = Math.min(...projectedPoints.map((p: { x: number; y: number }) => p.x))
+        const maxX = Math.max(...projectedPoints.map((p: { x: number; y: number }) => p.x))
+        const minY = Math.min(...projectedPoints.map((p: { x: number; y: number }) => p.y))
+        const maxY = Math.max(...projectedPoints.map((p: { x: number; y: number }) => p.y))
         if (maxX < -20 || minX > viewWidth + 20 || maxY < -20 || minY > viewHeight + 20) return []
         if (maxX - minX > viewWidth * 0.8) return []
 

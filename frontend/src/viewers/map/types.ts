@@ -147,28 +147,12 @@ export interface LayerConfig {
 /** Boundary type between two adjacent plates. */
 export type BoundaryType = 'convergent' | 'divergent' | 'transform'
 
-/** A vertex in the CVT mesh (Voronoi polygon corner). */
-export interface CVTVertex {
-  /** Vertex index. */
-  id: number
-  /** Longitude in degrees. */
-  lon: number
-  /** Latitude in degrees. */
-  lat: number
-}
+/** A vertex in the CVT mesh — [x, y, z] unit-sphere position. */
+export type CVTVertex = [number, number, number]
 
-/** A Voronoi region (polygon) in the CVT mesh. */
-export interface CVTRegion {
-  /** Cell ID (matches VoronoiCell.id). */
-  id: number
-  /** Ordered vertex indices defining the polygon boundary. */
-  vertex_ids: number[]
-  /** Plate ID this cell belongs to. */
-  plate_id: string | null
-  /** Boundary types for edges shared with neighboring cells.
-   *  Keyed by neighbor cell ID. */
-  boundaries: Record<string, BoundaryType> | null
-}
+/** A Voronoi region — ordered vertex indices into the vertices array.
+ *  Indexed by cell ID: regions[cellId] = [v0, v1, v2, ...]. */
+export type CVTRegion = number[]
 
 /** Complete CVT mesh output from the backend. */
 export interface CVTMesh {
