@@ -264,6 +264,34 @@ export default function useGPUTerrain({
       }
     }
 
+    // --- Step 3.5: Draw graticule (lat/lon grid lines) ---
+    const GRID_STEP = 30
+    const GRID_ALPHA = 0.08
+
+    // Latitude lines (horizontal in equirectangular buffer)
+    for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
+      const y = Math.round(((90 - lat) / 180) * height)
+      if (y < 0 || y >= height) continue
+      for (let x = 0; x < width; x++) {
+        const pi = (y * width + x) * 4
+        buf[pi] = Math.round(buf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+      }
+    }
+
+    // Longitude lines (vertical in equirectangular buffer)
+    for (let lon = -180 + GRID_STEP; lon < 180; lon += GRID_STEP) {
+      const x = Math.round(((lon + 180) / 360) * width)
+      if (x < 0 || x >= width) continue
+      for (let y = 0; y < height; y++) {
+        const pi = (y * width + x) * 4
+        buf[pi] = Math.round(buf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+      }
+    }
+
     // --- Step 4: Upload as DataTexture, display with trivial shader ---
     // Use NearestFilter for cell-based modes (sharp plate boundaries)
     // Use LinearFilter for elevation modes (smooth terrain gradients)

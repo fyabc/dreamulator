@@ -14,9 +14,9 @@
  *   - Zoom out far enough → "转入星系视图" transition → onTransition
  */
 
-import { Suspense, useRef, useState, useEffect, useCallback } from 'react'
+import { Suspense, useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Stars } from '@react-three/drei'
+import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 
 // ---------------------------------------------------------------------------
@@ -117,6 +117,130 @@ function SphereInteraction({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Graticule — latitude / longitude lines on the sphere
+// ---------------------------------------------------------------------------
+
+const GRID_STEP = 30
+const GRID_COLOR = 'rgba(255,255,255,0.12)'
+const GRID_R = SPHERE_RADIUS * 1.003
+
+function Graticule() {
+  const lines = useMemo(() => {
+    const result: { points: [number, number, number][]; key: string }[] = []
+
+    // Latitude lines (circles parallel to equator)
+    for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
+      const phi = THREE.MathUtils.degToRad(lat)
+      const r = GRID_R * Math.cos(phi)
+      const y = GRID_R * Math.sin(phi)
+      const pts: [number, number, number][] = []
+      for (let i = 0; i <= 128; i++) {
+        const theta = (i / 128) * Math.PI * 2
+        pts.push([r * Math.cos(theta), y, r * Math.sin(theta)])
+      }
+      result.push({ points: pts, key: `lat-${lat}` })
+    }
+
+    // Longitude lines (great circles through poles)
+    for (let lon = -180; lon < 180; lon += GRID_STEP) {
+      const theta = THREE.MathUtils.degToRad(lon)
+      const pts: [number, number, number][] = []
+      for (let i = 0; i <= 128; i++) {
+        const phi = (i / 128) * Math.PI         // 0 (north) → π (south)
+        const r = GRID_R * Math.sin(phi)
+        const y = GRID_R * Math.cos(phi)
+        pts.push([r * Math.cos(theta), y, r * Math.sin(theta)])
+      }
+      result.push({ points: pts, key: `lon-${lon}` })
+    }
+
+    return result
+  }, [])
+
+  return (
+    <group>
+      {lines.map(({ points, key }) => (
+        <line key={key}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              array={new Float32Array(points.flat())}
+              count={points.length}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color={GRID_COLOR} transparent opacity={0.25} depthTest={true} />
+        </line>
+      ))}
+    </group>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Polar axis — red N / blue S markers
+// ---------------------------------------------------------------------------
+
+const AXIS_R = SPHERE_RADIUS * 1.08
+
+function PolarAxis() {
+  const axisPoints = useMemo(() => new Float32Array([
+    0, -AXIS_R, 0,
+    0, AXIS_R, 0,
+  ]), [])
+
+  return (
+    <group>
+      {/* Axis line */}
+      <line>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            array={axisPoints}
+            count={2}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial color="#444466" transparent opacity={0.5} />
+      </line>
+
+      {/* North marker (red) */}
+      <mesh position={[0, AXIS_R, 0]}>
+        <coneGeometry args={[0.025, 0.08, 8, 4]} />
+        <meshBasicMaterial color="#e53935" />
+      </mesh>
+      <Text
+        position={[0, AXIS_R + 0.1, 0]}
+        fontSize={0.12}
+        color="#e53935"
+        anchorX="center" anchorY="middle"
+        font={undefined}  // use default
+      >
+        N
+      </Text>
+
+      {/* South marker (blue) */}
+      <mesh position={[0, -AXIS_R, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.025, 0.08, 8, 4]} />
+        <meshBasicMaterial color="#42a5f5" />
+      </mesh>
+      <Text
+        position={[0, -AXIS_R - 0.1, 0]}
+        fontSize={0.12}
+        color="#42a5f5"
+        anchorX="center" anchorY="middle"
+        font={undefined}
+      >
+        S
+      </Text>
+    </group>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Scene (inside Canvas)
+// ---------------------------------------------------------------------------
+
 function GlobeScene({
   texture,
   distanceRef,
@@ -156,6 +280,12 @@ function GlobeScene({
           <meshBasicMaterial color="#f0c040" />
         </mesh>
       ))}
+
+      {/* Graticule (lat/lon lines) */}
+      <Graticule />
+
+      {/* Polar axis + N/S markers */}
+      <PolarAxis />
 
       {/* Atmosphere shell */}
       <mesh scale={1.015}>
