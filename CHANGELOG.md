@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-07-24
+
+### Added
+
+**3D 球面地球视图**
+- 全新 3D 球面地形可视化：equirectangular 纹理贴 SphereGeometry
+- R3F Canvas + OrbitControls（旋转/缩放/倾斜）+ 星空背景 + 大气辉光壳
+- 缩小过渡特效（Dyson Sphere Program 风格）：持续缩小出现 "转入星系视图" 进度条，满条自动跳转
+- 进入恒星系视图时自动聚焦来源行星（?focus= 参数）
+
+**恒星系行星纹理（路线 C）**
+- 恒星系 3D 视图中有地图的行星自动加载真实地形纹理
+- ETOPO1 + ESRI 混合配色，256×128 DataTexture 贴球体
+
+**3D 视图独立路由**
+- 3D 恒星系视图从 WorldDetail tab 抽离为侧边栏一级入口
+- 新增 `/worlds/:worldName/viewer3d` 路由
+
+### Fixed
+
+- CI: package-lock.json 镜像源兼容 + vitest 降级（vite 5 兼容）
+
 ## [0.4.0] — 2026-07-23
 
 ### Added
