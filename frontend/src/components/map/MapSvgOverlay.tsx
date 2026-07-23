@@ -48,10 +48,16 @@ export default function MapSvgOverlay({
   const vertexLookup = useMemo(() => {
     if (!cvtMesh || !Array.isArray(cvtMesh.vertices)) return null
     const map = new Map<number, { lon: number; lat: number }>()
-    cvtMesh.vertices.forEach(([x, y, z], idx) => {
-      const lat = Math.asin(y) * (180 / Math.PI)
-      const lon = Math.atan2(z, x) * (180 / Math.PI)
-      map.set(idx, { lon, lat })
+    // Handle both new format [x,y,z] and legacy format {lon, lat}
+    const first = cvtMesh.vertices[0]
+    const isVec3 = Array.isArray(first)
+    cvtMesh.vertices.forEach((v: any, idx: number) => {
+      if (isVec3) {
+        const [x, y, z] = v as [number, number, number]
+        map.set(idx, { lon: Math.atan2(z, x) * (180 / Math.PI), lat: Math.asin(y) * (180 / Math.PI) })
+      } else if (v && typeof v.lon === 'number' && typeof v.lat === 'number') {
+        map.set(idx, { lon: v.lon, lat: v.lat })
+      }
     })
     return map
   }, [cvtMesh])
@@ -60,8 +66,14 @@ export default function MapSvgOverlay({
   const regionByCell = useMemo(() => {
     if (!cvtMesh || !Array.isArray(cvtMesh.regions)) return null
     const map = new Map<number, number[]>()
-    cvtMesh.regions.forEach((region, cellId) => {
-      map.set(cellId, region)
+    const firstR = cvtMesh.regions[0]
+    const isVecR = Array.isArray(firstR)
+    cvtMesh.regions.forEach((r: any, idx: number) => {
+      if (isVecR) {
+        map.set(idx, r as number[])      // new format: array index = cell ID
+      } else if (r && typeof r.id === 'number' && Array.isArray(r.vertex_ids)) {
+        map.set(r.id, r.vertex_ids)      // legacy format: {id, vertex_ids}
+      }
     })
     return map
   }, [cvtMesh])
