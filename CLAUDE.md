@@ -274,6 +274,24 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
 
+### 知识库与设计模式文档同步
+
+引入新的学科知识（公式、参数、模型）或设计模式时，**必须同步更新**对应文档：
+
+1. **学科知识** → `docs/knowledge/<discipline>/`：
+   - 新的物理公式、化学方程式、地质参数、气候模型、生态分类等
+   - 参考现有格式：公式 + 参数表 + 源码引用 + 学术参考
+   - 各学科子目录的 `CLAUDE.md` 索引文件也需更新
+
+2. **设计模式** → `docs/worldbuilding/design_patterns.md`：
+   - 新的 YAML/JSON 配置模板、分支工作流、数据编码方式
+   - 每个模式包含：概念说明 + YAML 示例 + 源码引用路径
+
+3. **路线图/架构变更** → `docs/design/roadmap-analysis.md`：
+   - 竞品分析更新、Phase 优先级调整、新功能提案
+
+**原则**：代码是"实现"，文档是"解释"。代码变更无文档同步 = 技术债务。
+
 ### React Hooks 规则
 
 React 组件中的 hooks（`useState`、`useEffect`、`useMemo`、`useQuery` 等）**必须在每次渲染中以相同顺序调用**。禁止在 hooks 之间放置条件 `return`：
