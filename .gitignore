@@ -47,3 +47,4 @@ data/worlds/*/simulations/
 # Claude Code
 .claude/settings.local.json
 .claude/notes/
+private/plans/video/
