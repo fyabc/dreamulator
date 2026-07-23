@@ -41,8 +41,8 @@ interface GlobeViewerProps {
   transitionLabel?: string
   /** Called when the cursor moves over the globe. */
   onCellHover?: (lon: number, lat: number) => void
-  /** Called on double-click with the cursor's lon/lat. */
-  onCellClick?: (lon: number, lat: number) => void
+  /** Called on double-click with the cursor's lon/lat and Ctrl/Meta key state. */
+  onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
   /** Hovered cell position (unit sphere xyz) — blue marker. */
   hoveredCellPosition?: [number, number, number] | null
   /** Selected cell positions (unit sphere xyz) — yellow markers. */
@@ -69,7 +69,7 @@ interface GlobeSceneProps {
   texture: THREE.Texture | null
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
-  onCellClick?: (lon: number, lat: number) => void
+  onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
   hoveredCellPosition?: [number, number, number] | null
   selectedCellPositions?: [number, number, number][]
 }
@@ -226,7 +226,11 @@ function GlobeScene({
         }}
         onDoubleClick={(e: any) => {
           const pt = e.point as THREE.Vector3 | undefined
-          if (pt) { const { lon, lat } = sphereToLonLat(pt); onCellClick?.(lon, lat) }
+          if (pt) {
+            const { lon, lat } = sphereToLonLat(pt)
+            const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
+            onCellClick?.(lon, lat, ctrl)
+          }
         }}
       >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />

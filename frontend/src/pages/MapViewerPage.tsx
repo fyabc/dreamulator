@@ -149,15 +149,17 @@ export default function MapViewerPage() {
 
   // --- Interaction handlers ---
 
-  const handleCellClick = useCallback((cellId: number, shiftKey: boolean) => {
+  const handleCellClick = useCallback((cellId: number, ctrlKey: boolean) => {
     setSelectedCells((prev) => {
-      const next = new Set(shiftKey ? prev : [])
-      if (prev.has(cellId) && shiftKey) {
-        next.delete(cellId)
-      } else {
-        next.add(cellId)
+      if (ctrlKey) {
+        // Ctrl+double-click → toggle this cell in/out of selection
+        const next = new Set(prev)
+        if (prev.has(cellId)) next.delete(cellId)
+        else next.add(cellId)
+        return next
       }
-      return next
+      // Plain double-click → replace selection with this cell
+      return new Set([cellId])
     })
   }, [])
 

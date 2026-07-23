@@ -196,7 +196,7 @@ export default function GlobeViewerPage() {
     }
   }, [elevData, meta, elevMin, elevMax, kdTree])
 
-  const handleCellClick = useCallback((lon: number, lat: number) => {
+  const handleCellClick = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
     if (!kdTree) return
     const rad = THREE.MathUtils.degToRad(lat)
     const cosLat = Math.cos(rad)
@@ -207,10 +207,15 @@ export default function GlobeViewerPage() {
     )
     if (cellId < 0) return
     setSelectedCells((prev) => {
-      const next = new Set(prev)
-      if (prev.has(cellId)) next.delete(cellId)
-      else next.add(cellId)
-      return next
+      if (ctrlKey) {
+        // Ctrl+double-click → toggle
+        const next = new Set(prev)
+        if (prev.has(cellId)) next.delete(cellId)
+        else next.add(cellId)
+        return next
+      }
+      // Plain double-click → replace
+      return new Set([cellId])
     })
   }, [kdTree])
 

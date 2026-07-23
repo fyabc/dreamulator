@@ -59,7 +59,7 @@ interface MapViewerProps {
   }) => void
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
-  onCellClick?: (cellId: number, shiftKey: boolean) => void
+  onCellClick?: (cellId: number, ctrlKey: boolean) => void
   hoveredCell: number | null
   selectedCells: Set<number>
 }
@@ -478,7 +478,7 @@ export default function MapViewer({
       const qy = Math.sin(latRad)
       const qz = cosLat * Math.sin(lonRad)
       const cellId = kdTree.nearest(qx, qy, qz)
-      if (cellId >= 0) onCellClick(cellId, e.shiftKey)
+      if (cellId >= 0) onCellClick(cellId, e.ctrlKey || e.metaKey)
     },
     [kdTree, unproject, onCellClick],
   )
