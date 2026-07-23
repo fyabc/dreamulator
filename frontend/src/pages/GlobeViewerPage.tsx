@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import * as THREE from 'three'
 import { api } from '../api/client'
-import GlobeViewer from '../viewers/GlobeViewer'
+import GlobeViewer, { type GlobeVertex, type GlobeRegion } from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
@@ -25,17 +25,6 @@ import { normalisedToMeters } from '../viewers/map/utils/projection'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
 import type { VoronoiCell } from '../viewers/map/types'
 import type { CursorInfo } from '../components/map/MapViewer'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function lonLatTo3D(lon: number, lat: number): [number, number, number] {
-  const phi = THREE.MathUtils.degToRad(lat)
-  const theta = THREE.MathUtils.degToRad(lon)
-  const cosLat = Math.cos(phi)
-  return [cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)]
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -147,20 +136,9 @@ export default function GlobeViewerPage() {
     return ((plates as any[]) ?? []).find((p) => p.id === hoveredCellData.plate_id) ?? null
   }, [plates, hoveredCellData])
 
-  // --- 3D markers ---
-  const hoveredPosition = useMemo<[number, number, number] | null>(() => {
-    if (!hoveredCellData) return null
-    return lonLatTo3D(hoveredCellData.lon, hoveredCellData.lat)
-  }, [hoveredCellData])
-
-  const selectedCellPositions = useMemo<[number, number, number][]>(() => {
-    const positions: [number, number, number][] = []
-    selectedCells.forEach((id) => {
-      const cell = voronoiCells.find((c) => c.id === id)
-      if (cell) positions.push(lonLatTo3D(cell.lon, cell.lat))
-    })
-    return positions
-  }, [voronoiCells, selectedCells])
+  // --- CVT mesh data for polygon highlights ---
+  const globeVertices = useMemo<GlobeVertex[] | undefined>(() => cvtMesh?.vertices, [cvtMesh])
+  const globeRegions = useMemo<GlobeRegion[] | undefined>(() => cvtMesh?.regions, [cvtMesh])
 
   // --- Handlers ---
 
@@ -266,8 +244,10 @@ export default function GlobeViewerPage() {
               onTransition={handleTransition}
               onCellHover={handleCellHover}
               onCellClick={handleCellClick}
-              hoveredCellPosition={hoveredPosition}
-              selectedCellPositions={selectedCellPositions}
+              vertices={globeVertices}
+              regions={globeRegions}
+              hoveredCellId={hoveredCellId}
+              selectedCellIds={selectedCells}
             />
           </div>
           <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />

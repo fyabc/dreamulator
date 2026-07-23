@@ -9,8 +9,9 @@
  *   - Left drag: rotate
  *   - Right drag / Ctrl+drag: pan
  *   - Scroll: zoom
- *   - Hover: cell info via onCellHover callback
- *   - Double-click: select cell via onCellClick callback
+ *   - Hover: blue polygon highlight on sphere
+ *   - Ctrl+Double-click: toggle cell selection (yellow polygon)
+ *   - Double-click: replace cell selection
  *   - Zoom out far enough → "转入星系视图" transition → onTransition
  */
 
@@ -27,33 +28,45 @@ const SPHERE_RADIUS = 1
 const TRANSITION_START_DIST = 4.5
 const TRANSITION_END_DIST = 8
 const DIST_POLL_MS = 80
+const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** Minimal vertex data for polygon rendering on the globe. */
+export interface GlobeVertex {
+  id: number
+  lon: number
+  lat: number
+}
+
+/** A cell region with ordered vertex IDs. */
+export interface GlobeRegion {
+  id: number
+  vertex_ids: number[]
+}
+
 interface GlobeViewerProps {
-  /** Equirectangular terrain texture (2:1). */
   texture: THREE.Texture | null
-  /** Called when the zoom-out transition completes. */
   onTransition?: () => void
-  /** Transition prompt label. */
   transitionLabel?: string
-  /** Called when the cursor moves over the globe. */
   onCellHover?: (lon: number, lat: number) => void
-  /** Called on double-click with the cursor's lon/lat and Ctrl/Meta key state. */
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
-  /** Hovered cell position (unit sphere xyz) — blue marker. */
-  hoveredCellPosition?: [number, number, number] | null
-  /** Selected cell positions (unit sphere xyz) — yellow markers. */
-  selectedCellPositions?: [number, number, number][]
+  /** CVT vertices (lon/lat). */
+  vertices?: GlobeVertex[]
+  /** CVT regions (cell → vertex IDs). */
+  regions?: GlobeRegion[]
+  /** Currently hovered cell ID (blue highlight). */
+  hoveredCellId?: number | null
+  /** Selected cell IDs (yellow highlight). */
+  selectedCellIds?: Set<number>
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert a 3D world-space point (any distance from origin) to lon/lat. */
 function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
   const n = point.clone().normalize()
   const lat = Math.asin(THREE.MathUtils.clamp(n.y, -1, 1)) * THREE.MathUtils.RAD2DEG
@@ -61,32 +74,25 @@ function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
   return { lon, lat }
 }
 
-// ---------------------------------------------------------------------------
-// Scene (inside Canvas)
-// ---------------------------------------------------------------------------
-
-interface GlobeSceneProps {
-  texture: THREE.Texture | null
-  distanceRef: React.MutableRefObject<number>
-  onCellHover?: (lon: number, lat: number) => void
-  onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
-  hoveredCellPosition?: [number, number, number] | null
-  selectedCellPositions?: [number, number, number][]
+/** Convert lon/lat (degrees) → 3D unit-sphere position. */
+function lonLatTo3D(lon: number, lat: number): [number, number, number] {
+  const phi = THREE.MathUtils.degToRad(lat)
+  const theta = THREE.MathUtils.degToRad(lon)
+  const cosLat = Math.cos(phi)
+  return [cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)]
 }
 
 // ---------------------------------------------------------------------------
-// Graticule — latitude / longitude lines on the sphere
+// Graticule
 // ---------------------------------------------------------------------------
 
 const GRID_STEP = 30
-const GRID_COLOR = 'rgba(255,255,255,0.12)'
 const GRID_R = SPHERE_RADIUS * 1.003
 
 function Graticule() {
   const lines = useMemo(() => {
     const result: { points: [number, number, number][]; key: string }[] = []
 
-    // Latitude lines (circles parallel to equator)
     for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
       const phi = THREE.MathUtils.degToRad(lat)
       const r = GRID_R * Math.cos(phi)
@@ -99,19 +105,17 @@ function Graticule() {
       result.push({ points: pts, key: `lat-${lat}` })
     }
 
-    // Longitude lines (great circles through poles)
     for (let lon = -180; lon < 180; lon += GRID_STEP) {
       const theta = THREE.MathUtils.degToRad(lon)
       const pts: [number, number, number][] = []
       for (let i = 0; i <= 128; i++) {
-        const phi = (i / 128) * Math.PI         // 0 (north) → π (south)
+        const phi = (i / 128) * Math.PI
         const r = GRID_R * Math.sin(phi)
         const y = GRID_R * Math.cos(phi)
         pts.push([r * Math.cos(theta), y, r * Math.sin(theta)])
       }
       result.push({ points: pts, key: `lon-${lon}` })
     }
-
     return result
   }, [])
 
@@ -123,11 +127,10 @@ function Graticule() {
             <bufferAttribute
               attach="attributes-position"
               array={new Float32Array(points.flat())}
-              count={points.length}
-              itemSize={3}
+              count={points.length} itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial color={GRID_COLOR} transparent opacity={0.25} depthTest={true} />
+          <lineBasicMaterial color="rgba(255,255,255,0.12)" transparent opacity={0.25} depthTest />
         </line>
       ))}
     </group>
@@ -135,82 +138,132 @@ function Graticule() {
 }
 
 // ---------------------------------------------------------------------------
-// Polar axis — red N / blue S markers
+// Polar axis
 // ---------------------------------------------------------------------------
 
 const AXIS_R = SPHERE_RADIUS * 1.08
 
 function PolarAxis() {
-  const axisPoints = useMemo(() => new Float32Array([
-    0, -AXIS_R, 0,
-    0, AXIS_R, 0,
-  ]), [])
-
+  const axisPoints = useMemo(() => new Float32Array([0, -AXIS_R, 0, 0, AXIS_R, 0]), [])
   return (
     <group>
-      {/* Axis line */}
       <line>
         <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            array={axisPoints}
-            count={2}
-            itemSize={3}
-          />
+          <bufferAttribute attach="attributes-position" array={axisPoints} count={2} itemSize={3} />
         </bufferGeometry>
         <lineBasicMaterial color="#444466" transparent opacity={0.5} />
       </line>
-
-      {/* North marker (red) */}
       <mesh position={[0, AXIS_R, 0]}>
         <coneGeometry args={[0.025, 0.08, 8, 4]} />
         <meshBasicMaterial color="#e53935" />
       </mesh>
-      <Text
-        position={[0, AXIS_R + 0.1, 0]}
-        fontSize={0.12}
-        color="#e53935"
-        anchorX="center" anchorY="middle"
-        font={undefined}  // use default
-      >
-        N
-      </Text>
-
-      {/* South marker (blue) */}
+      <Text position={[0, AXIS_R + 0.1, 0]} fontSize={0.12} color="#e53935" anchorX="center" anchorY="middle" font={undefined}>N</Text>
       <mesh position={[0, -AXIS_R, 0]} rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[0.025, 0.08, 8, 4]} />
         <meshBasicMaterial color="#42a5f5" />
       </mesh>
-      <Text
-        position={[0, -AXIS_R - 0.1, 0]}
-        fontSize={0.12}
-        color="#42a5f5"
-        anchorX="center" anchorY="middle"
-        font={undefined}
-      >
-        S
-      </Text>
+      <Text position={[0, -AXIS_R - 0.1, 0]} fontSize={0.12} color="#42a5f5" anchorX="center" anchorY="middle" font={undefined}>S</Text>
     </group>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Scene (inside Canvas)
+// Cell polygon highlight
 // ---------------------------------------------------------------------------
 
+interface CellPolygonProps {
+  vertices: GlobeVertex[]
+  region: GlobeRegion
+  color: string
+  opacity?: number
+}
+
+/** Renders a single Voronoi cell as a coloured polygon patch on the sphere. */
+function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonProps) {
+  const geometry = useMemo(() => {
+    const pts3D = region.vertex_ids
+      .map((vid) => {
+        const v = vertices.find((vx) => vx.id === vid)
+        if (!v) return null
+        return lonLatTo3D(v.lon, v.lat)
+      })
+      .filter(Boolean) as [number, number, number][]
+
+    if (pts3D.length < 3) return null
+
+    // Scale to highlight radius and build fan-triangulated geometry
+    const scaled = pts3D.map(([x, y, z]) => {
+      const len = Math.sqrt(x * x + y * y + z * z)
+      return [x / len * HIGHLIGHT_R, y / len * HIGHLIGHT_R, z / len * HIGHLIGHT_R] as const
+    })
+
+    const positions: number[] = []
+    // Fan triangulation from first vertex
+    for (let i = 1; i < scaled.length - 1; i++) {
+      positions.push(...scaled[0], ...scaled[i], ...scaled[i + 1])
+    }
+
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    geo.computeVertexNormals()
+    return geo
+  }, [vertices, region])
+
+  if (!geometry) return null
+
+  return (
+    <mesh geometry={geometry} renderOrder={1}>
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={opacity}
+        depthTest
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Scene
+// ---------------------------------------------------------------------------
+
+interface GlobeSceneProps {
+  texture: THREE.Texture | null
+  distanceRef: React.MutableRefObject<number>
+  onCellHover?: (lon: number, lat: number) => void
+  onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
+  vertices?: GlobeVertex[]
+  regions?: GlobeRegion[]
+  hoveredCellId?: number | null
+  selectedCellIds?: Set<number>
+}
+
 function GlobeScene({
-  texture,
-  distanceRef,
-  onCellHover,
-  onCellClick,
-  hoveredCellPosition,
-  selectedCellPositions,
+  texture, distanceRef, onCellHover, onCellClick,
+  vertices, regions, hoveredCellId, selectedCellIds,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
 
-  useFrame(({ camera }) => {
-    distanceRef.current = camera.position.length()
-  })
+  useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
+
+  // Build region lookup: cellId → region
+  const regionMap = useMemo(() => {
+    const m = new Map<number, GlobeRegion>()
+    if (regions) for (const r of regions) m.set(r.id, r)
+    return m
+  }, [regions])
+
+  const HoverHighlight = hoveredCellId != null && vertices && regionMap.has(hoveredCellId) && (
+    <CellPolygon vertices={vertices} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
+  )
+
+  const SelectionHighlights = selectedCellIds && vertices && [...selectedCellIds]
+    .filter((id) => regionMap.has(id))
+    .map((id) => (
+      <CellPolygon key={`sel-${id}`} vertices={vertices} region={regionMap.get(id)!} color="#f0c040" opacity={0.55} />
+    ))
 
   return (
     <>
@@ -218,7 +271,7 @@ function GlobeScene({
       <ambientLight intensity={0.25} />
       <directionalLight position={[5, 2, 5]} intensity={1.2} />
 
-      {/* Visible planet sphere — also handles pointer events for cell picking */}
+      {/* Planet sphere with pointer events */}
       <mesh
         onPointerMove={(e: any) => {
           const pt = e.point as THREE.Vector3 | undefined
@@ -241,52 +294,29 @@ function GlobeScene({
         )}
       </mesh>
 
-      {/* Hovered cell marker (blue) */}
-      {hoveredCellPosition && (
-        <mesh position={[hoveredCellPosition[0] * 1.012, hoveredCellPosition[1] * 1.012, hoveredCellPosition[2] * 1.012]}>
-          <sphereGeometry args={[0.009, 8, 4]} />
-          <meshBasicMaterial color="#4da6ff" />
-        </mesh>
-      )}
+      {/* Cell polygon highlights */}
+      {HoverHighlight}
+      {SelectionHighlights}
 
-      {/* Selected cell markers (yellow) */}
-      {selectedCellPositions?.map((pos, i) => (
-        <mesh key={`sel-${i}`} position={[pos[0] * 1.012, pos[1] * 1.012, pos[2] * 1.012]}>
-          <sphereGeometry args={[0.009, 8, 4]} />
-          <meshBasicMaterial color="#f0c040" />
-        </mesh>
-      ))}
-
-      {/* Graticule (lat/lon lines) */}
       <Graticule />
-
-      {/* Polar axis + N/S markers */}
       <PolarAxis />
 
       {/* Atmosphere shell */}
       <mesh scale={1.015}>
         <sphereGeometry args={[SPHERE_RADIUS, 48, 24]} />
-        <meshBasicMaterial
-          color={new THREE.Color(0.4, 0.6, 1.0)}
-          transparent opacity={0.08}
-          side={THREE.BackSide} depthWrite={false}
-        />
+        <meshBasicMaterial color={new THREE.Color(0.4, 0.6, 1.0)} transparent opacity={0.08}
+          side={THREE.BackSide} depthWrite={false} />
       </mesh>
 
-      <OrbitControls
-        ref={controlsRef}
-        enableDamping dampingFactor={0.08}
-        minDistance={SPHERE_RADIUS * 1.05}
-        maxDistance={TRANSITION_END_DIST}
-        maxPolarAngle={Math.PI * 0.85}
-        target={[0, 0, 0]}
-      />
+      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08}
+        minDistance={SPHERE_RADIUS * 1.05} maxDistance={TRANSITION_END_DIST}
+        maxPolarAngle={Math.PI * 0.85} target={[0, 0, 0]} />
     </>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Transition overlay (outside Canvas)
+// Transition overlay
 // ---------------------------------------------------------------------------
 
 function TransitionPrompt({ progress, label }: { progress: number; label: string }) {
@@ -297,10 +327,8 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
       <div className="flex flex-col items-center gap-2">
         <span className="text-xs text-neon-cyan/80 tracking-wider animate-pulse">{label}</span>
         <div className="w-48 h-1.5 rounded-full bg-white/10 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-neon-cyan/60 to-neon-cyan transition-[width] duration-75 ease-linear"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="h-full rounded-full bg-gradient-to-r from-neon-cyan/60 to-neon-cyan transition-[width] duration-75 ease-linear"
+            style={{ width: `${pct}%` }} />
         </div>
         <span className="text-[10px] text-gray-500 font-mono tabular-nums">{pct}%</span>
       </div>
@@ -313,13 +341,9 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 // ---------------------------------------------------------------------------
 
 export default function GlobeViewer({
-  texture,
-  onTransition,
-  transitionLabel = '转入星系视图',
-  onCellHover,
-  onCellClick,
-  hoveredCellPosition,
-  selectedCellPositions,
+  texture, onTransition, transitionLabel = '转入星系视图',
+  onCellHover, onCellClick,
+  vertices, regions, hoveredCellId, selectedCellIds,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -352,12 +376,10 @@ export default function GlobeViewer({
           style={{ background: '#030308', borderRadius: '0.75rem' }}
         >
           <GlobeScene
-            texture={texture}
-            distanceRef={distanceRef}
-            onCellHover={onCellHover}
-            onCellClick={onCellClick}
-            hoveredCellPosition={hoveredCellPosition}
-            selectedCellPositions={selectedCellPositions}
+            texture={texture} distanceRef={distanceRef}
+            onCellHover={onCellHover} onCellClick={onCellClick}
+            vertices={vertices} regions={regions}
+            hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
           />
         </Canvas>
       </Suspense>
