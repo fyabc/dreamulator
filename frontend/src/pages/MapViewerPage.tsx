@@ -221,6 +221,17 @@ export default function MapViewerPage() {
           <option value="robinson">罗宾逊</option>
         </select>
 
+        {/* 3D Globe button */}
+        {selectedPlanet && (
+          <Link
+            to={`/worlds/${worldName}/globe/${selectedPlanet}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
+            className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+            title="3D 球面视图"
+          >
+            🌐 3D
+          </Link>
+        )}
+
         {/* Planet selector */}
         {worldPlanets && worldPlanets.length > 0 && (
           <select

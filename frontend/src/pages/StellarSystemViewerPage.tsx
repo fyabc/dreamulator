@@ -184,6 +184,9 @@ export default function StellarSystemViewerPage() {
             planets={planets}
             habitableZones={habitableZones}
             planetTextures={planetTextures}
+            worldName={worldName}
+            branchQS={selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}
+            mapPlanetIds={mapPlanetIds ? new Set(mapPlanetIds) : undefined}
           />
         )}
       </div>

@@ -2,6 +2,7 @@
  * InfoPanel — HTML overlay showing details of the selected star or planet.
  */
 
+import { Link } from 'react-router-dom'
 import type { StarData } from './StarMesh'
 import type { PlanetData } from './PlanetMesh'
 import { formatRadius, formatMass } from './utils/scale'
@@ -14,6 +15,12 @@ type SelectedBody =
 interface InfoPanelProps {
   selected: SelectedBody
   onClose: () => void
+  /** World name — enables the "3D globe" link when a planet is selected. */
+  worldName?: string
+  /** Current branch search-param string (e.g. "?branch=foo"). */
+  branchQS?: string
+  /** Set of planet IDs that have 2D map / globe data. */
+  mapPlanetIds?: Set<string>
 }
 
 const PLANET_TYPE_LABELS: Record<string, string> = {
@@ -34,7 +41,7 @@ function InfoRow({ label, value }: { label: string; value: string | number | und
   )
 }
 
-export default function InfoPanel({ selected, onClose }: InfoPanelProps) {
+export default function InfoPanel({ selected, onClose, worldName, branchQS, mapPlanetIds }: InfoPanelProps) {
   if (!selected) return null
 
   return (
@@ -101,6 +108,30 @@ export default function InfoPanel({ selected, onClose }: InfoPanelProps) {
             </div>
           )
         })()}
+
+        {/* Action buttons */}
+        {selected.type === 'planet' && worldName && (
+          <div className="mt-2 pt-2 border-t border-space-border flex gap-2">
+            {mapPlanetIds?.has(selected.data.id) && (
+              <Link
+                to={`/worlds/${worldName}/globe/${selected.data.id}${branchQS ?? ''}`}
+                onClick={onClose}
+                className="flex-1 text-center px-2 py-1.5 text-xs rounded bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+              >
+                🌐 3D 球面
+              </Link>
+            )}
+            {mapPlanetIds?.has(selected.data.id) && (
+              <Link
+                to={`/worlds/${worldName}/map/${selected.data.id}${branchQS ?? ''}`}
+                onClick={onClose}
+                className="flex-1 text-center px-2 py-1.5 text-xs rounded bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+              >
+                🗺️ 2D 地图
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* ID */}
         <div className="mt-2 pt-2 border-t border-space-border">

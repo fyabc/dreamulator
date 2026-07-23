@@ -64,6 +64,12 @@ interface StellarSystemViewerProps {
   habitableZones: HabitableZoneData | null | undefined
   /** Planet ID → terrain texture (equirectangular).  Populated by the page. */
   planetTextures?: Map<string, THREE.Texture>
+  /** World name — enables globe + map links in InfoPanel. */
+  worldName?: string
+  /** Branch query-string fragment, e.g. "?branch=foo". */
+  branchQS?: string
+  /** IDs of planets that have map / globe data. */
+  mapPlanetIds?: Set<string>
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +374,9 @@ export default function StellarSystemViewer({
   planets,
   habitableZones,
   planetTextures,
+  worldName,
+  branchQS,
+  mapPlanetIds,
 }: StellarSystemViewerProps) {
   const [selected, setSelected] = useState<SelectedBody>(null)
   const controlsRef = useRef<any>(null)
@@ -481,7 +490,13 @@ export default function StellarSystemViewer({
       </Suspense>
 
       {/* Info panel overlay */}
-      <InfoPanel selected={selected} onClose={() => setSelected(null)} />
+      <InfoPanel
+        selected={selected}
+        onClose={() => setSelected(null)}
+        worldName={worldName}
+        branchQS={branchQS}
+        mapPlanetIds={mapPlanetIds}
+      />
 
       {/* HUD overlays */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none space-y-1">
