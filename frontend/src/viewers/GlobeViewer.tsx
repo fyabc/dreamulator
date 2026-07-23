@@ -31,14 +31,11 @@ const DIST_POLL_MS = 80
 const HIGHLIGHT_R = SPHERE_RADIUS * 1.008
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (mirror CVTVertex / CVTRegion from types.ts — transformed by adaptCvtMesh)
 // ---------------------------------------------------------------------------
 
-/** A CVT vertex — raw 3D position on the unit sphere (from backend JSON). */
-export type GlobeVertex = [number, number, number]
-
-/** A CVT region — array of vertex indices into the vertices array. */
-export type GlobeRegion = number[]
+export interface GlobeVertex { id: number; lon: number; lat: number }
+export interface GlobeRegion { id: number; vertex_ids: number[] }
 
 interface GlobeViewerProps {
   texture: THREE.Texture | null
@@ -168,10 +165,22 @@ interface CellPolygonProps {
 /** Renders a single Voronoi cell as a coloured polygon patch on the sphere. */
 function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonProps) {
   const geometry = useMemo(() => {
-    if (!Array.isArray(region) || region.length < 3) return null
-    const pts3D = region
-      .map((idx) => vertices[idx])
-      .filter(Boolean) as [number, number, number][]
+    const vids = region.vertex_ids
+    if (!vids || vids.length < 3) return null
+
+    // vertices are {id, lon, lat} — build lookup and convert to 3D
+    const vLookup = new Map<number, GlobeVertex>()
+    for (const v of vertices) vLookup.set(v.id, v)
+
+    const pts3D: [number, number, number][] = []
+    for (const vid of vids) {
+      const v = vLookup.get(vid)
+      if (!v) continue
+      const phi = THREE.MathUtils.degToRad(v.lat)
+      const theta = THREE.MathUtils.degToRad(v.lon)
+      const cosLat = Math.cos(phi)
+      pts3D.push([cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)])
+    }
 
     if (pts3D.length < 3) return null
 
@@ -236,16 +245,18 @@ function GlobeScene({
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
-  // Highlights: polygon if vertex data available, otherwise dot fallback
+  // Build region lookup: cellId → region
+  const regionMap = useMemo(() => {
+    const m = new Map<number, GlobeRegion>()
+    if (regions) for (const r of regions) m.set(r.id, r)
+    return m
+  }, [regions])
+
   const hasPolyData = !!(vertices && vertices.length && regions && regions.length)
-  if (hoveredCellId != null && hasPolyData) {
-    const r = regions![hoveredCellId]
-    console.log('[GlobeScene] hover check', { hoveredCellId, isArray: Array.isArray(r), regionValue: r?.slice?.(0, 3), regionLen: r?.length })
-  }
 
   const HoverHighlight = hoveredCellId != null && (
-    hasPolyData && Array.isArray(regions![hoveredCellId])
-      ? <CellPolygon vertices={vertices!} region={regions![hoveredCellId]} color="#4da6ff" opacity={0.5} />
+    hasPolyData && regionMap.has(hoveredCellId)
+      ? <CellPolygon vertices={vertices!} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
       : cellPositions?.has(hoveredCellId)
         ? <mesh position={cellDot(...cellPositions.get(hoveredCellId)!)}>
             <sphereGeometry args={[0.009, 8, 4]} />
@@ -255,8 +266,8 @@ function GlobeScene({
   )
 
   const SelectionHighlights = selectedCellIds && [...selectedCellIds].map((id) => {
-    if (hasPolyData && Array.isArray(regions![id])) {
-      return <CellPolygon key={`sel-${id}`} vertices={vertices!} region={regions![id]} color="#f0c040" opacity={0.55} />
+    if (hasPolyData && regionMap.has(id)) {
+      return <CellPolygon key={`sel-${id}`} vertices={vertices!} region={regionMap.get(id)!} color="#f0c040" opacity={0.55} />
     }
     if (cellPositions?.has(id)) {
       const pos = cellDot(...cellPositions.get(id)!)

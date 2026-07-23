@@ -46,35 +46,21 @@ export default function MapSvgOverlay({
 }: MapSvgOverlayProps) {
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
-    if (!cvtMesh || !Array.isArray(cvtMesh.vertices)) return null
+    if (!cvtMesh) return null
     const map = new Map<number, { lon: number; lat: number }>()
-    // Handle both new format [x,y,z] and legacy format {lon, lat}
-    const first = cvtMesh.vertices[0]
-    const isVec3 = Array.isArray(first)
-    cvtMesh.vertices.forEach((v: any, idx: number) => {
-      if (isVec3) {
-        const [x, y, z] = v as [number, number, number]
-        map.set(idx, { lon: Math.atan2(z, x) * (180 / Math.PI), lat: Math.asin(y) * (180 / Math.PI) })
-      } else if (v && typeof v.lon === 'number' && typeof v.lat === 'number') {
-        map.set(idx, { lon: v.lon, lat: v.lat })
-      }
-    })
+    for (const v of cvtMesh.vertices) {
+      map.set(v.id, { lon: v.lon, lat: v.lat })
+    }
     return map
   }, [cvtMesh])
 
   // Build region lookup from CVT mesh: cellId → vertex index array
   const regionByCell = useMemo(() => {
-    if (!cvtMesh || !Array.isArray(cvtMesh.regions)) return null
+    if (!cvtMesh) return null
     const map = new Map<number, number[]>()
-    const firstR = cvtMesh.regions[0]
-    const isVecR = Array.isArray(firstR)
-    cvtMesh.regions.forEach((r: any, idx: number) => {
-      if (isVecR) {
-        map.set(idx, r as number[])      // new format: array index = cell ID
-      } else if (r && typeof r.id === 'number' && Array.isArray(r.vertex_ids)) {
-        map.set(r.id, r.vertex_ids)      // legacy format: {id, vertex_ids}
-      }
-    })
+    for (const r of cvtMesh.regions) {
+      map.set(r.id, r.vertex_ids)
+    }
     return map
   }, [cvtMesh])
 
