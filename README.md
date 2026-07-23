@@ -175,6 +175,7 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 
 - [x] **Phase 1** — Project scaffolding, data models, CLI, world management, frontend skeleton
 - [x] **Phase 2** — Frontend visualization: 3D star system, 3D globe view, multi-projection 2D maps, GPU terrain rendering, planet terrain textures, graticule overlays, adaptive hypsometric coloring
+- [ ] **Phase 2.5** — Terrain realism enhancement (continent shape optimization, mountain/coastal features, noise calibration, regression tests)
 - [ ] **Phase 3A** — Climate & fluid engine (EBM, atmospheric circulation, orographic effects, ocean currents)
 - [ ] **Phase 3B** — Erosion & river generation (D8 flow, hydraulic erosion, sediment transport)
 - [ ] **Phase 3C** — Civilization semi-structured modeling (Entities + Modifiers → Event Stream → LLM-compiled Wiki; pluggable HANDY/SDT/Tainter strategies)
