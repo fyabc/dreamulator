@@ -13,11 +13,13 @@ A fantasy world building and simulation tool grounded in real science. Starting 
 ## Features
 
 - **Science-based world building** — Define stars, planets, atmospheres, and biospheres using real astrophysical and geological parameters
-- **Deterministic simulation pipeline** — Engines compute physical consequences (orbital mechanics, climate, ecology, civilizations) from your creative inputs via a DAG-based pipeline
-- **Reproducible results** — Seeded RNG and checksum-tracked computation manifests ensure the same inputs always produce the same outputs
-- **LLM-friendly architecture** — Structured YAML/JSON data, JSON Schema validation, and hierarchical `CLAUDE.md` documentation minimize hallucinations during AI-assisted world building
-- **CLI + Web UI** — Manage worlds from the command line or explore them through a TypeScript SPA frontend with 3D star system visualization and multi-layer 2D maps
+- **Deterministic simulation pipeline** — Engines compute physical consequences from your creative inputs via a DAG-based pipeline
+- **Git-style branching** — Fork worlds at any layer (astronomy, geology, climate...) and explore "what-if" scenarios without affecting the main timeline
+- **Reproducible results** — Seeded RNG and checksum-tracked manifests ensure identical inputs always produce identical outputs
+- **3D globe & star system** — Interactive 3D globe view with terrain textures, star system visualization, and a Dyson-Sphere-Program-style zoom-out transition between planet and system views
+- **Multi-projection 2D maps** — Equirectangular / Mollweide / Robinson projections with GPU-accelerated terrain rendering, adaptive hypsometric coloring, and graticule overlays
 - **AI narration** — Generate conversational descriptions of your worlds via the Claude API (`dreamulator narrate`)
+- **LLM-friendly architecture** — Structured YAML/JSON data, JSON Schema validation, and hierarchical documentation minimize hallucinations during AI-assisted world building
 
 ## Tech Stack
 
@@ -172,8 +174,14 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 ## Roadmap
 
 - [x] **Phase 1** — Project scaffolding, data models, CLI, world management, frontend skeleton
-- [x] **Phase 2** — Frontend visualization (3D star system, multi-layer 2D maps)
-- [ ] **Phase 3** — Simulation engines + knowledge base documents
+- [x] **Phase 2** — Frontend visualization: 3D star system, 3D globe view, multi-projection 2D maps, GPU terrain rendering, planet terrain textures, graticule overlays, adaptive hypsometric coloring
+- [ ] **Phase 3A** — Climate & fluid engine (EBM, atmospheric circulation, orographic effects, ocean currents)
+- [ ] **Phase 3B** — Erosion & river generation (D8 flow, hydraulic erosion, sediment transport)
+- [ ] **Phase 3C** — Civilization semi-structured modeling (Entities + Modifiers → Event Stream → LLM-compiled Wiki; pluggable HANDY/SDT/Tainter strategies)
+- [ ] **Phase 3D** — Branch diff & chaos visualization (DAG impact radius, Lyapunov exponent warnings)
+- [ ] **Phase 3E** — LLM narrative bridge (structured data → epic storytelling)
+
+See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for detailed competitive analysis and design references.
 
 ## License
 

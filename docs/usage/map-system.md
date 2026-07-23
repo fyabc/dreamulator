@@ -273,21 +273,19 @@ layers/
 
 ## 后续阶段
 
-### Phase 2：气候 & 生态图层 + 3D 球体 + 行星纹理
+> 完整路线图详见 [`docs/design/roadmap-analysis.md`](../design/roadmap-analysis.md)。
 
-> **参考**：[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 climate/biome 图层；[Google Earth](https://earth.google.com/) 的 3D 球体渲染；[戴森球计划](https://www.dysonprogram.com/) 的行星/星际双视图
+### 已完成（v0.5.0）
 
-- 气候引擎读取栅格+Voronoi → 逐 cell 计算温度/降水
-- 生态引擎 → Whittaker biome 分类
-- **3D 球体视图**：等距纹理贴 SphereGeometry（Phase 1，待实现）
-- **行星纹理（路线 C，已实现）**：恒星系 3D 视图中，有地图数据的行星自动加载
-  地形纹理（`generatePlanetTexture`），使用与地图查看器相同的 ETOPO1+ESRI 混合配色。
-  设计决策详见源码注释和 `docs/design/map_system_design.md`。
+- ✅ **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls
+- ✅ **缩小过渡特效** — 类似《戴森球计划》的球面→恒星系过渡
+- ✅ **行星纹理（路线 C）** — 恒星系中有地图的行星显示真实地形纹理
+- ✅ **多投影 2D 地图** — 等距圆柱 / Mollweide / Robinson + GPU 渲染 + 经纬线网格
 
-### Phase 3：文明图层
+### 计划中
 
-> **参考**：[Paradox EU4/CK3](https://eu4.paradoxwikis.com/Map_modding) 的 province system
-
-- Voronoi cell 分组为省份/国家（类似 Paradox 的 province 着色）
-- 定居点放置工具（结合 cell 属性约束）
-- 贸易路线（cell 间连线）
+- [ ] **气候与流体引擎**（Phase 3A）— 能量平衡模型、大气环流、地形雨影、洋流
+- [ ] **侵蚀与河流生成**（Phase 3B）— D8 流向、水力侵蚀、沉积物搬运
+- [ ] **文明半格式化管理**（Phase 3C）— Entities+Modifiers → Event Stream → LLM 编译 Wiki
+- [ ] **分支差异可视化**（Phase 3D）— DAG 影响半径、混沌预警
+- [ ] **LLM 叙事引擎**（Phase 3E）— 结构化数据 → 史诗叙事
