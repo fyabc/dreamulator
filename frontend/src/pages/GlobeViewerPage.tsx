@@ -86,9 +86,10 @@ export default function GlobeViewerPage() {
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
 
   // Zoom-out transition → navigate to stellar system view
+  const stellarQS = `${branchQS}${branchQS ? '&' : '?'}focus=${encodeURIComponent(planetId!)}`
   const handleTransition = useCallback(() => {
-    navigate(`/worlds/${worldName}/viewer3d${branchQS}`)
-  }, [navigate, worldName, branchQS])
+    navigate(`/worlds/${worldName}/viewer3d${stellarQS}`)
+  }, [navigate, worldName, stellarQS])
 
   // --- Render ---
 
@@ -124,7 +125,7 @@ export default function GlobeViewerPage() {
 
           {/* Back to stellar system */}
           <Link
-            to={`/worlds/${worldName}/viewer3d${branchQS}`}
+            to={`/worlds/${worldName}/viewer3d${stellarQS}`}
             className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
           >
             🔭 恒星系

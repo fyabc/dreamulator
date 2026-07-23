@@ -24,6 +24,7 @@ export default function StellarSystemViewerPage() {
   const { worldName } = useParams<{ worldName: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedBranch = searchParams.get('branch') || null
+  const focusPlanetId = searchParams.get('focus') || undefined
 
   const setSelectedBranch = (branch: string | null) => {
     setSearchParams((prev) => {
@@ -187,6 +188,7 @@ export default function StellarSystemViewerPage() {
             worldName={worldName}
             branchQS={selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}
             mapPlanetIds={mapPlanetIds ? new Set(mapPlanetIds) : undefined}
+            focusPlanetId={focusPlanetId}
           />
         )}
       </div>

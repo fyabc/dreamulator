@@ -14,7 +14,7 @@
  * (camera at 10 AU viewing objects at 0.00004 AU radius).
  */
 
-import { useState, useMemo, Suspense, useRef, useCallback } from 'react'
+import { useState, useMemo, Suspense, useRef, useCallback, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
@@ -23,7 +23,7 @@ import PlanetMesh from './PlanetMesh'
 import OrbitLine from './OrbitLine'
 import HabitableZoneRing from './HabitableZoneRing'
 import InfoPanel from './InfoPanel'
-import { computeOrbitalPosition } from './utils/scale'
+import { computeOrbitalPosition, earthRadiiToAU } from './utils/scale'
 import type { StarData } from './StarMesh'
 import type { PlanetData, OrbitalElementsData } from './PlanetMesh'
 import type { SelectedBody } from './InfoPanel'
@@ -70,6 +70,8 @@ interface StellarSystemViewerProps {
   branchQS?: string
   /** IDs of planets that have map / globe data. */
   mapPlanetIds?: Set<string>
+  /** Planet ID to auto-focus camera on when the scene loads. */
+  focusPlanetId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +212,10 @@ function Scene({
   onControlsChange,
   focusTargetRef,
   focusedRadiusRef,
+  focusPlanetId,
 }: {
+  /** Planet ID to auto-focus on initial load. */
+  focusPlanetId?: string
   stellar: StellarSystemData | null | undefined
   allBodies: PlanetData[]
   positionMap: Map<string, Vec3>
@@ -288,6 +293,21 @@ function Scene({
     focusTargetRef.current = new THREE.Vector3(pos[0], pos[1], pos[2])
     focusedRadiusRef.current = radiusAU
   }, [])
+
+  // Auto-focus on a specific planet when navigating from globe view
+  useEffect(() => {
+    if (!focusPlanetId) return
+    const pos = positionMap.get(focusPlanetId)
+    if (!pos) return
+    const body = allBodies.find((b) => b.id === focusPlanetId)
+    if (!body) return
+    // Small delay to let the scene initialise before flying
+    const id = setTimeout(() => {
+      focusTargetRef.current = new THREE.Vector3(pos[0], pos[1], pos[2])
+      focusedRadiusRef.current = earthRadiiToAU(body.radius)
+    }, 200)
+    return () => clearTimeout(id)
+  }, [focusPlanetId, positionMap, allBodies, focusTargetRef, focusedRadiusRef])
 
   return (
     <>
@@ -377,6 +397,7 @@ export default function StellarSystemViewer({
   worldName,
   branchQS,
   mapPlanetIds,
+  focusPlanetId,
 }: StellarSystemViewerProps) {
   const [selected, setSelected] = useState<SelectedBody>(null)
   const controlsRef = useRef<any>(null)
@@ -479,6 +500,7 @@ export default function StellarSystemViewer({
             orbitMap={orbitMap}
             habitableZones={habitableZones}
             planetTextures={planetTextures}
+            focusPlanetId={focusPlanetId}
             selected={selected}
             onSelect={setSelected}
             controlsRef={controlsRef}
