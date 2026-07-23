@@ -3,9 +3,7 @@
  *
  * Route: /worlds/:worldName/globe/:planetId
  *
- * Loads elevation data + metadata for the selected planet, generates
- * an equirectangular terrain texture via the same pipeline as the 2D
- * map viewer (useGPUTerrain), and renders it on a 3D sphere.
+ * Shares cell interaction, colour modes, and status bar with the 2D MapViewer.
  */
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
@@ -15,8 +13,31 @@ import * as THREE from 'three'
 import { api } from '../api/client'
 import GlobeViewer from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
+import MapStatusBar from '../components/map/MapStatusBar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
+import useCellIdMap from '../viewers/map/useCellIdMap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
+import { normalisedToMeters } from '../viewers/map/utils/projection'
+import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
+import type { ColorMode } from '../viewers/map/TerrainPlane'
+import type { VoronoiCell } from '../viewers/map/types'
+import type { CursorInfo } from '../components/map/MapViewer'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Convert lon/lat to 3D unit-sphere position. */
+function lonLatTo3D(lon: number, lat: number): [number, number, number] {
+  const phi = THREE.MathUtils.degToRad(lat)
+  const theta = THREE.MathUtils.degToRad(lon)
+  const cosLat = Math.cos(phi)
+  return [cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)]
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function GlobeViewerPage() {
   const { worldName, planetId } = useParams<{ worldName: string; planetId: string }>()
@@ -33,6 +54,12 @@ export default function GlobeViewerPage() {
     }, { replace: true })
   }
 
+  // --- State ---
+  const [colorMode, setColorMode] = useState<ColorMode>('terrain')
+  const [cursor, setCursor] = useState<CursorInfo | null>(null)
+  const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
+  const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
+
   // --- Map metadata ---
   const { data: meta } = useQuery({
     queryKey: ['mapMeta', worldName, planetId, selectedBranch],
@@ -40,15 +67,17 @@ export default function GlobeViewerPage() {
     enabled: !!worldName && !!planetId,
   })
 
-  // --- Elevation PNG ---
-  const { data: elevationBlob, isLoading: loadingElev } = useQuery({
+  const elevMin = meta?.elevation_min_m ?? -11000
+  const elevMax = meta?.elevation_max_m ?? 9000
+  const seaLevel = meta?.sea_level_m ?? 0
+
+  // --- Elevation ---
+  const { data: elevationBlob } = useQuery({
     queryKey: ['elevationBlob', worldName, planetId, selectedBranch],
     queryFn: () => api.getElevationBlob(worldName!, planetId!, selectedBranch),
-    enabled: !!worldName && !!planetId,
-    retry: false,
+    enabled: !!worldName && !!planetId, retry: false,
   })
 
-  // Decode elevation
   const [elevData, setElevData] = useState<Float32Array | null>(null)
   const [elevDims, setElevDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
 
@@ -61,98 +90,169 @@ export default function GlobeViewerPage() {
     return () => { cancelled = true }
   }, [elevationBlob])
 
-  // --- GPU terrain texture ---
-  const elevMin = meta?.elevation_min_m ?? -11000
-  const elevMax = meta?.elevation_max_m ?? 9000
-  const seaLevel = meta?.sea_level_m ?? 0
-
-  const gpuMaterial = useGPUTerrain({
-    elevation: elevData,
-    width: elevDims.w,
-    height: elevDims.h,
-    seaLevel,
-    elevMinM: elevMin,
-    elevMaxM: elevMax,
-    colorMode: 'terrain',
+  // --- CVT mesh (for plates/boundaries modes + cell lookup) ---
+  const { data: cvtMesh } = useQuery({
+    queryKey: ['cvtMesh', worldName, planetId, selectedBranch],
+    queryFn: () => api.getCvtMesh(worldName!, planetId!, selectedBranch),
+    enabled: !!worldName && !!planetId, retry: false,
   })
 
-  // Extract the texture from the gpuMaterial's uniform
+  const cellIdMap = useCellIdMap({
+    cvtMesh: cvtMesh ?? null,
+    width: meta?.width ?? 2048,
+    height: meta?.height ?? 1024,
+  })
+
+  // --- GPU texture ---
+  const terrainMaterial = useGPUTerrain({
+    elevation: elevData,
+    width: elevDims.w, height: elevDims.h,
+    seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
+    colorMode,
+    cvtMesh: cvtMesh ?? null,
+    cellIdMap: cellIdMap ?? null,
+  })
+
   const terrainTexture = useMemo(() => {
-    if (!gpuMaterial) return null
-    return (gpuMaterial.uniforms.u_colorMap?.value as THREE.Texture) ?? null
-  }, [gpuMaterial])
+    if (!terrainMaterial) return null
+    return (terrainMaterial.uniforms.u_colorMap?.value as THREE.Texture) ?? null
+  }, [terrainMaterial])
 
-  // --- Branch-aware search string for links ---
+  // --- KD-tree for cell hit-testing ---
+  const kdTree = useMemo<KDTree3D | null>(() => {
+    const cells = cvtMesh?.cells
+    if (!cells || cells.length === 0) return null
+    return buildCellKDTree(cells as VoronoiCell[])
+  }, [cvtMesh])
+
+  const voronoiCells: VoronoiCell[] = useMemo(
+    () => (cvtMesh?.cells as VoronoiCell[]) ?? [],
+    [cvtMesh],
+  )
+
+  const hoveredCell = useMemo(() => {
+    if (hoveredCellId === null) return null
+    return voronoiCells.find((c) => c.id === hoveredCellId) ?? null
+  }, [voronoiCells, hoveredCellId])
+
+  const selectedCellPositions = useMemo<[number, number, number][]>(() => {
+    const positions: [number, number, number][] = []
+    selectedCells.forEach((id) => {
+      const cell = voronoiCells.find((c) => c.id === id)
+      if (cell) positions.push(lonLatTo3D(cell.lon, cell.lat))
+    })
+    return positions
+  }, [voronoiCells, selectedCells])
+
+  // --- Handlers ---
+
+  const handleCellHover = useCallback((lon: number, lat: number) => {
+    // Elevation lookup
+    const mapW = meta?.width ?? 2048
+    const mapH = meta?.height ?? 1024
+    const px = Math.round(((lon + 180) / 360) * (mapW - 1))
+    const py = Math.round(((90 - lat) / 180) * (mapH - 1))
+    const elev = elevData ? (elevData?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0) : 0
+
+    setCursor({
+      lon: Math.round(lon * 100) / 100,
+      lat: Math.round(lat * 100) / 100,
+      elevation: elev,
+      elevationM: normalisedToMeters(elev, elevMin, elevMax),
+      pixelX: px,
+      pixelY: py,
+    })
+
+    // KD-tree cell lookup
+    if (kdTree) {
+      const rad = THREE.MathUtils.degToRad(lat)
+      const cosLat = Math.cos(rad)
+      const qx = cosLat * Math.cos(THREE.MathUtils.degToRad(lon))
+      const qy = Math.sin(rad)
+      const qz = cosLat * Math.sin(THREE.MathUtils.degToRad(lon))
+      const cellId = kdTree.nearest(qx, qy, qz)
+      setHoveredCellId(cellId >= 0 ? cellId : null)
+    } else {
+      setHoveredCellId(null)
+    }
+  }, [elevData, meta, elevMin, elevMax, kdTree])
+
+  const handleCellClick = useCallback((lon: number, lat: number) => {
+    if (!kdTree) return
+    const rad = THREE.MathUtils.degToRad(lat)
+    const cosLat = Math.cos(rad)
+    const qx = cosLat * Math.cos(THREE.MathUtils.degToRad(lon))
+    const qy = Math.sin(rad)
+    const qz = cosLat * Math.sin(THREE.MathUtils.degToRad(lon))
+    const cellId = kdTree.nearest(qx, qy, qz)
+    if (cellId < 0) return
+    setSelectedCells((prev) => {
+      const next = new Set(prev)
+      if (prev.has(cellId)) next.delete(cellId)
+      else next.add(cellId)
+      return next
+    })
+  }, [kdTree])
+
+  // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-
-  // Zoom-out transition → navigate to stellar system view
   const stellarQS = `${branchQS}${branchQS ? '&' : '?'}focus=${encodeURIComponent(planetId!)}`
   const handleTransition = useCallback(() => {
     navigate(`/worlds/${worldName}/viewer3d${stellarQS}`)
   }, [navigate, worldName, stellarQS])
 
   // --- Render ---
-
   if (!worldName || !planetId) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-500">
-        未选择世界或行星
-      </div>
-    )
+    return <div className="flex items-center justify-center h-full text-gray-500">未选择世界或行星</div>
   }
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-space-border">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-space-border shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold text-neon-cyan neon-glow-subtle">
-            3D 球面视图
-          </h1>
-          <span className="text-sm text-gray-500 font-mono">
-            {planetId}
-          </span>
+          <h1 className="text-xl font-semibold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
+          <span className="text-sm text-gray-500 font-mono">{planetId}</span>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Back to 2D map */}
-          <Link
-            to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
-            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+          {/* Colour mode */}
+          <select
+            value={colorMode}
+            onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
+            <option value="terrain">地形</option>
+            <option value="landsea">海陆</option>
+            <option value="plates">板块</option>
+            <option value="boundaries">边界类型</option>
+          </select>
+
+          <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
+            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
             🗺️ 2D 地图
           </Link>
-
-          {/* Back to stellar system */}
-          <Link
-            to={`/worlds/${worldName}/viewer3d${stellarQS}`}
-            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-          >
+          <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
+            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
             🔭 恒星系
           </Link>
-
-          <BranchSelector
-            worldName={worldName}
-            selectedBranch={selectedBranch}
-            onSelect={setSelectedBranch}
-          />
+          <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
         </div>
       </div>
 
-      {/* Viewer */}
+      {/* Globe */}
       <div className="flex-1 relative">
-        {loadingElev || (elevData && !gpuMaterial) ? (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            {loadingElev ? '加载高度图中...' : '生成纹理中...'}
-          </div>
-        ) : elevData === null && !loadingElev ? (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            该行星无地图数据
-          </div>
-        ) : (
-          <GlobeViewer texture={terrainTexture} onTransition={handleTransition} />
-        )}
+        <GlobeViewer
+          texture={terrainTexture}
+          onTransition={handleTransition}
+          onCellHover={handleCellHover}
+          onCellClick={handleCellClick}
+          selectedCellPositions={selectedCellPositions}
+        />
       </div>
+
+      {/* Status bar */}
+      <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCell} />
     </div>
   )
 }
