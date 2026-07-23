@@ -139,12 +139,6 @@ export default function GlobeViewerPage() {
   // --- CVT mesh data for polygon highlights ---
   const globeVertices = useMemo<GlobeVertex[] | undefined>(() => cvtMesh?.vertices, [cvtMesh])
   const globeRegions = useMemo<GlobeRegion[] | undefined>(() => cvtMesh?.regions, [cvtMesh])
-  const cellPositions = useMemo(() => {
-    const m = new Map<number, [number, number]>()
-    if (cvtMesh?.cells) for (const c of cvtMesh.cells) m.set(c.id, [c.lon, c.lat])
-    return m
-  }, [cvtMesh])
-
   // --- Handlers ---
 
   const handleCellHover = useCallback((lon: number, lat: number) => {
@@ -258,7 +252,6 @@ export default function GlobeViewerPage() {
                 onCellClick={handleCellClick}
                 vertices={globeVertices}
                 regions={globeRegions}
-                cellPositions={cellPositions}
                 hoveredCellId={hoveredCellId}
                 selectedCellIds={selectedCells}
               />

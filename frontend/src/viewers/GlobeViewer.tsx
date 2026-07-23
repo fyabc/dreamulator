@@ -49,8 +49,6 @@ interface GlobeViewerProps {
   regions?: GlobeRegion[]
   /** Currently hovered cell ID (blue highlight). */
   hoveredCellId?: number | null
-  /** Fallback: cell positions as [lon, lat] → dot markers when no polygon data. */
-  cellPositions?: Map<number, [number, number]>
   /** Selected cell IDs (yellow highlight). */
   selectedCellIds?: Set<number>
 }
@@ -223,23 +221,13 @@ interface GlobeSceneProps {
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
   vertices?: GlobeVertex[]
   regions?: GlobeRegion[]
-  /** Fallback: cell positions as [lon, lat] for dot markers when no polygon data. */
-  cellPositions?: Map<number, [number, number]>
   hoveredCellId?: number | null
   selectedCellIds?: Set<number>
 }
 
-/** Convert lon/lat to 3D unit-sphere position at HIGHLIGHT_R. */
-function cellDot(lon: number, lat: number): [number, number, number] {
-  const phi = THREE.MathUtils.degToRad(lat)
-  const theta = THREE.MathUtils.degToRad(lon)
-  const cosLat = Math.cos(phi)
-  return [cosLat * Math.cos(theta) * HIGHLIGHT_R, Math.sin(phi) * HIGHLIGHT_R, cosLat * Math.sin(theta) * HIGHLIGHT_R]
-}
-
 function GlobeScene({
   texture, distanceRef, onCellHover, onCellClick,
-  vertices, regions, cellPositions, hoveredCellId, selectedCellIds,
+  vertices, regions, hoveredCellId, selectedCellIds,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
 
@@ -254,30 +242,15 @@ function GlobeScene({
 
   const hasPolyData = !!(vertices && vertices.length && regions && regions.length)
 
-  const HoverHighlight = hoveredCellId != null && (
-    hasPolyData && regionMap.has(hoveredCellId)
-      ? <CellPolygon vertices={vertices!} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
-      : cellPositions?.has(hoveredCellId)
-        ? <mesh position={cellDot(...cellPositions.get(hoveredCellId)!)}>
-            <sphereGeometry args={[0.009, 8, 4]} />
-            <meshBasicMaterial color="#4da6ff" />
-          </mesh>
-        : null
+  const HoverHighlight = hoveredCellId != null && hasPolyData && regionMap.has(hoveredCellId) && (
+    <CellPolygon vertices={vertices!} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
   )
 
-  const SelectionHighlights = selectedCellIds && [...selectedCellIds].map((id) => {
-    if (hasPolyData && regionMap.has(id)) {
-      return <CellPolygon key={`sel-${id}`} vertices={vertices!} region={regionMap.get(id)!} color="#f0c040" opacity={0.55} />
-    }
-    if (cellPositions?.has(id)) {
-      const pos = cellDot(...cellPositions.get(id)!)
-      return <mesh key={`sel-${id}`} position={pos}>
-        <sphereGeometry args={[0.01, 8, 4]} />
-        <meshBasicMaterial color="#f0c040" />
-      </mesh>
-    }
-    return null
-  })
+  const SelectionHighlights = selectedCellIds && hasPolyData && [...selectedCellIds]
+    .filter((id) => regionMap.has(id))
+    .map((id) => (
+      <CellPolygon key={`sel-${id}`} vertices={vertices!} region={regionMap.get(id)!} color="#f0c040" opacity={0.55} />
+    ))
 
   return (
     <>
@@ -357,7 +330,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 export default function GlobeViewer({
   texture, onTransition, transitionLabel = '转入星系视图',
   onCellHover, onCellClick,
-  vertices, regions, cellPositions, hoveredCellId, selectedCellIds,
+  vertices, regions, hoveredCellId, selectedCellIds,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -392,7 +365,7 @@ export default function GlobeViewer({
           <GlobeScene
             texture={texture} distanceRef={distanceRef}
             onCellHover={onCellHover} onCellClick={onCellClick}
-            vertices={vertices} regions={regions} cellPositions={cellPositions}
+            vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
           />
         </Canvas>
