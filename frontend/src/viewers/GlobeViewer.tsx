@@ -168,18 +168,12 @@ interface CellPolygonProps {
 /** Renders a single Voronoi cell as a coloured polygon patch on the sphere. */
 function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonProps) {
   const geometry = useMemo(() => {
-    if (!Array.isArray(region) || region.length < 3) {
-      console.warn('[CellPolygon] invalid region', { isArray: Array.isArray(region), len: (region as any)?.length })
-      return null
-    }
+    if (!Array.isArray(region) || region.length < 3) return null
     const pts3D = region
       .map((idx) => vertices[idx])
       .filter(Boolean) as [number, number, number][]
 
-    if (pts3D.length < 3) {
-      console.warn('[CellPolygon] not enough valid pts', { regionLen: region.length, ptsLen: pts3D.length })
-      return null
-    }
+    if (pts3D.length < 3) return null
 
     const scaled = pts3D.map(([x, y, z]) => {
       const len = Math.sqrt(x * x + y * y + z * z)
@@ -191,7 +185,6 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
       positions.push(...scaled[0], ...scaled[i], ...scaled[i + 1])
     }
 
-    console.log('[CellPolygon] geometry created', { ptsLen: pts3D.length, triCount: scaled.length - 2, first: scaled[0] })
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     geo.computeVertexNormals()
@@ -199,8 +192,6 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
   }, [vertices, region])
 
   if (!geometry) return null
-
-  console.log('[CellPolygon] rendering mesh', { color, opacity })
 
   return (
     <mesh geometry={geometry} renderOrder={1}>
@@ -246,13 +237,11 @@ function GlobeScene({
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
   // Highlights: polygon if vertex data available, otherwise dot fallback
-  const hasPolyData = vertices && regions
-  console.log('[GlobeScene] render', {
-    hasVertices: !!vertices, vLen: vertices?.length,
-    hasRegions: !!regions, rLen: regions?.length,
-    hasPolyData, hovered: hoveredCellId,
-    sampleRegion: hoveredCellId != null ? regions?.[hoveredCellId] : null,
-  })
+  const hasPolyData = !!(vertices && vertices.length && regions && regions.length)
+  if (hoveredCellId != null && hasPolyData) {
+    const r = regions![hoveredCellId]
+    console.log('[GlobeScene] hover check', { hoveredCellId, isArray: Array.isArray(r), regionValue: r?.slice?.(0, 3), regionLen: r?.length })
+  }
 
   const HoverHighlight = hoveredCellId != null && (
     hasPolyData && Array.isArray(regions![hoveredCellId])
