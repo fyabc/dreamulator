@@ -14,7 +14,7 @@
  *   - Zoom out far enough → "转入星系视图" transition → onTransition
  */
 
-import { Suspense, useRef, useState, useEffect, useCallback, useMemo } from 'react'
+import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -53,11 +53,11 @@ interface GlobeViewerProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert a 3D point on the unit sphere to lon/lat (degrees). */
+/** Convert a 3D world-space point (any distance from origin) to lon/lat. */
 function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
-  const y = THREE.MathUtils.clamp(point.y, -1, 1)
-  const lat = Math.asin(y) * THREE.MathUtils.RAD2DEG
-  const lon = Math.atan2(point.z, point.x) * THREE.MathUtils.RAD2DEG
+  const n = point.clone().normalize()
+  const lat = Math.asin(THREE.MathUtils.clamp(n.y, -1, 1)) * THREE.MathUtils.RAD2DEG
+  const lon = Math.atan2(n.z, n.x) * THREE.MathUtils.RAD2DEG
   return { lon, lat }
 }
 
@@ -72,52 +72,6 @@ interface GlobeSceneProps {
   onCellClick?: (lon: number, lat: number) => void
   hoveredCellPosition?: [number, number, number] | null
   selectedCellPositions?: [number, number, number][]
-}
-
-/** Picks on the sphere and reports lon/lat.  Wrapped in its own component
- *  so `useThree()` gives us the correct R3F context. */
-function SphereInteraction({
-  onCellHover,
-  onCellClick,
-}: {
-  onCellHover?: (lon: number, lat: number) => void
-  onCellClick?: (lon: number, lat: number) => void
-}) {
-  const sphereRef = useRef<THREE.Mesh>(null)
-
-  const handlePointerMove = useCallback(
-    (e: any) => {
-      const pt = e.point as THREE.Vector3 | undefined
-      if (pt) {
-        const { lon, lat } = sphereToLonLat(pt)
-        onCellHover?.(lon, lat)
-      }
-    },
-    [onCellHover],
-  )
-
-  const handleDoubleClick = useCallback(
-    (e: any) => {
-      const pt = e.point as THREE.Vector3 | undefined
-      if (pt) {
-        const { lon, lat } = sphereToLonLat(pt)
-        onCellClick?.(lon, lat)
-      }
-    },
-    [onCellClick],
-  )
-
-  return (
-    <mesh
-      ref={sphereRef}
-      visible={false}
-      onPointerMove={handlePointerMove}
-      onDoubleClick={handleDoubleClick}
-    >
-      <sphereGeometry args={[SPHERE_RADIUS * 1.01, 32, 16]} />
-      <meshBasicMaterial visible={false} />
-    </mesh>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -264,8 +218,17 @@ function GlobeScene({
       <ambientLight intensity={0.25} />
       <directionalLight position={[5, 2, 5]} intensity={1.2} />
 
-      {/* Visible planet sphere */}
-      <mesh>
+      {/* Visible planet sphere — also handles pointer events for cell picking */}
+      <mesh
+        onPointerMove={(e: any) => {
+          const pt = e.point as THREE.Vector3 | undefined
+          if (pt) { const { lon, lat } = sphereToLonLat(pt); onCellHover?.(lon, lat) }
+        }}
+        onDoubleClick={(e: any) => {
+          const pt = e.point as THREE.Vector3 | undefined
+          if (pt) { const { lon, lat } = sphereToLonLat(pt); onCellClick?.(lon, lat) }
+        }}
+      >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />
         {texture ? (
           <meshStandardMaterial map={texture} roughness={0.9} metalness={0.05} />
@@ -273,9 +236,6 @@ function GlobeScene({
           <meshStandardMaterial color="#4488aa" roughness={0.8} metalness={0.1} />
         )}
       </mesh>
-
-      {/* Invisible hit-target sphere for raycasting */}
-      <SphereInteraction onCellHover={onCellHover} onCellClick={onCellClick} />
 
       {/* Hovered cell marker (blue) */}
       {hoveredCellPosition && (
