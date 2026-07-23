@@ -43,7 +43,9 @@ interface GlobeViewerProps {
   onCellHover?: (lon: number, lat: number) => void
   /** Called on double-click with the cursor's lon/lat. */
   onCellClick?: (lon: number, lat: number) => void
-  /** Selected cell positions (unit sphere xyz) for marker rendering. */
+  /** Hovered cell position (unit sphere xyz) — blue marker. */
+  hoveredCellPosition?: [number, number, number] | null
+  /** Selected cell positions (unit sphere xyz) — yellow markers. */
   selectedCellPositions?: [number, number, number][]
 }
 
@@ -68,6 +70,7 @@ interface GlobeSceneProps {
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number) => void
+  hoveredCellPosition?: [number, number, number] | null
   selectedCellPositions?: [number, number, number][]
 }
 
@@ -246,6 +249,7 @@ function GlobeScene({
   distanceRef,
   onCellHover,
   onCellClick,
+  hoveredCellPosition,
   selectedCellPositions,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
@@ -273,10 +277,18 @@ function GlobeScene({
       {/* Invisible hit-target sphere for raycasting */}
       <SphereInteraction onCellHover={onCellHover} onCellClick={onCellClick} />
 
-      {/* Selected cell markers */}
+      {/* Hovered cell marker (blue) */}
+      {hoveredCellPosition && (
+        <mesh position={[hoveredCellPosition[0] * 1.012, hoveredCellPosition[1] * 1.012, hoveredCellPosition[2] * 1.012]}>
+          <sphereGeometry args={[0.009, 8, 4]} />
+          <meshBasicMaterial color="#4da6ff" />
+        </mesh>
+      )}
+
+      {/* Selected cell markers (yellow) */}
       {selectedCellPositions?.map((pos, i) => (
-        <mesh key={i} position={[pos[0] * 1.012, pos[1] * 1.012, pos[2] * 1.012]}>
-          <sphereGeometry args={[0.008, 8, 4]} />
+        <mesh key={`sel-${i}`} position={[pos[0] * 1.012, pos[1] * 1.012, pos[2] * 1.012]}>
+          <sphereGeometry args={[0.009, 8, 4]} />
           <meshBasicMaterial color="#f0c040" />
         </mesh>
       ))}
@@ -342,6 +354,7 @@ export default function GlobeViewer({
   transitionLabel = '转入星系视图',
   onCellHover,
   onCellClick,
+  hoveredCellPosition,
   selectedCellPositions,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
@@ -379,6 +392,7 @@ export default function GlobeViewer({
             distanceRef={distanceRef}
             onCellHover={onCellHover}
             onCellClick={onCellClick}
+            hoveredCellPosition={hoveredCellPosition}
             selectedCellPositions={selectedCellPositions}
           />
         </Canvas>

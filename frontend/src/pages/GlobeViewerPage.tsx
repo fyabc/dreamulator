@@ -3,7 +3,9 @@
  *
  * Route: /worlds/:worldName/globe/:planetId
  *
- * Shares cell interaction, colour modes, and status bar with the 2D MapViewer.
+ * Shares cell interaction, colour modes, sidebar panels, and status bar
+ * with the 2D MapViewer.  Layout mirrors MapViewerPage:
+ *   left panel (layers) · centre (globe) · right panel (inspector)
  */
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
@@ -14,12 +16,13 @@ import { api } from '../api/client'
 import GlobeViewer from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
+import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
+import MapCellInspector from '../components/map/MapCellInspector'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import { normalisedToMeters } from '../viewers/map/utils/projection'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
-import type { ColorMode } from '../viewers/map/TerrainPlane'
 import type { VoronoiCell } from '../viewers/map/types'
 import type { CursorInfo } from '../components/map/MapViewer'
 
@@ -27,7 +30,6 @@ import type { CursorInfo } from '../components/map/MapViewer'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert lon/lat to 3D unit-sphere position. */
 function lonLatTo3D(lon: number, lat: number): [number, number, number] {
   const phi = THREE.MathUtils.degToRad(lat)
   const theta = THREE.MathUtils.degToRad(lon)
@@ -54,13 +56,13 @@ export default function GlobeViewerPage() {
     }, { replace: true })
   }
 
-  // --- State ---
-  const [colorMode, setColorMode] = useState<ColorMode>('terrain')
+  // --- UI State ---
+  const [layerState, setLayerState] = useState<LayerState>({ colorMode: 'terrain' })
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
 
-  // --- Map metadata ---
+  // --- Data ---
   const { data: meta } = useQuery({
     queryKey: ['mapMeta', worldName, planetId, selectedBranch],
     queryFn: () => api.getMapMeta(worldName!, planetId!, selectedBranch),
@@ -71,7 +73,6 @@ export default function GlobeViewerPage() {
   const elevMax = meta?.elevation_max_m ?? 9000
   const seaLevel = meta?.sea_level_m ?? 0
 
-  // --- Elevation ---
   const { data: elevationBlob } = useQuery({
     queryKey: ['elevationBlob', worldName, planetId, selectedBranch],
     queryFn: () => api.getElevationBlob(worldName!, planetId!, selectedBranch),
@@ -90,10 +91,16 @@ export default function GlobeViewerPage() {
     return () => { cancelled = true }
   }, [elevationBlob])
 
-  // --- CVT mesh (for plates/boundaries modes + cell lookup) ---
+  // CVT mesh (for plates/boundaries modes + cell lookup)
   const { data: cvtMesh } = useQuery({
     queryKey: ['cvtMesh', worldName, planetId, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, planetId!, selectedBranch),
+    enabled: !!worldName && !!planetId, retry: false,
+  })
+
+  const { data: plates } = useQuery({
+    queryKey: ['plates', worldName, planetId, selectedBranch],
+    queryFn: () => api.getPlates(worldName!, planetId!, selectedBranch),
     enabled: !!worldName && !!planetId, retry: false,
   })
 
@@ -108,7 +115,7 @@ export default function GlobeViewerPage() {
     elevation: elevData,
     width: elevDims.w, height: elevDims.h,
     seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode,
+    colorMode: layerState.colorMode,
     cvtMesh: cvtMesh ?? null,
     cellIdMap: cellIdMap ?? null,
   })
@@ -118,7 +125,7 @@ export default function GlobeViewerPage() {
     return (terrainMaterial.uniforms.u_colorMap?.value as THREE.Texture) ?? null
   }, [terrainMaterial])
 
-  // --- KD-tree for cell hit-testing ---
+  // --- KD-tree ---
   const kdTree = useMemo<KDTree3D | null>(() => {
     const cells = cvtMesh?.cells
     if (!cells || cells.length === 0) return null
@@ -130,10 +137,21 @@ export default function GlobeViewerPage() {
     [cvtMesh],
   )
 
-  const hoveredCell = useMemo(() => {
+  const hoveredCellData = useMemo(() => {
     if (hoveredCellId === null) return null
     return voronoiCells.find((c) => c.id === hoveredCellId) ?? null
   }, [voronoiCells, hoveredCellId])
+
+  const hoveredPlate = useMemo(() => {
+    if (!hoveredCellData?.plate_id) return null
+    return ((plates as any[]) ?? []).find((p) => p.id === hoveredCellData.plate_id) ?? null
+  }, [plates, hoveredCellData])
+
+  // --- 3D markers ---
+  const hoveredPosition = useMemo<[number, number, number] | null>(() => {
+    if (!hoveredCellData) return null
+    return lonLatTo3D(hoveredCellData.lon, hoveredCellData.lat)
+  }, [hoveredCellData])
 
   const selectedCellPositions = useMemo<[number, number, number][]>(() => {
     const positions: [number, number, number][] = []
@@ -147,12 +165,13 @@ export default function GlobeViewerPage() {
   // --- Handlers ---
 
   const handleCellHover = useCallback((lon: number, lat: number) => {
-    // Elevation lookup
     const mapW = meta?.width ?? 2048
     const mapH = meta?.height ?? 1024
     const px = Math.round(((lon + 180) / 360) * (mapW - 1))
     const py = Math.round(((90 - lat) / 180) * (mapH - 1))
-    const elev = elevData ? (elevData?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0) : 0
+    const elev = elevData
+      ? (elevData?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
+      : 0
 
     setCursor({
       lon: Math.round(lon * 100) / 100,
@@ -163,14 +182,14 @@ export default function GlobeViewerPage() {
       pixelY: py,
     })
 
-    // KD-tree cell lookup
     if (kdTree) {
       const rad = THREE.MathUtils.degToRad(lat)
       const cosLat = Math.cos(rad)
-      const qx = cosLat * Math.cos(THREE.MathUtils.degToRad(lon))
-      const qy = Math.sin(rad)
-      const qz = cosLat * Math.sin(THREE.MathUtils.degToRad(lon))
-      const cellId = kdTree.nearest(qx, qy, qz)
+      const cellId = kdTree.nearest(
+        cosLat * Math.cos(THREE.MathUtils.degToRad(lon)),
+        Math.sin(rad),
+        cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
+      )
       setHoveredCellId(cellId >= 0 ? cellId : null)
     } else {
       setHoveredCellId(null)
@@ -181,10 +200,11 @@ export default function GlobeViewerPage() {
     if (!kdTree) return
     const rad = THREE.MathUtils.degToRad(lat)
     const cosLat = Math.cos(rad)
-    const qx = cosLat * Math.cos(THREE.MathUtils.degToRad(lon))
-    const qy = Math.sin(rad)
-    const qz = cosLat * Math.sin(THREE.MathUtils.degToRad(lon))
-    const cellId = kdTree.nearest(qx, qy, qz)
+    const cellId = kdTree.nearest(
+      cosLat * Math.cos(THREE.MathUtils.degToRad(lon)),
+      Math.sin(rad),
+      cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
+    )
     if (cellId < 0) return
     setSelectedCells((prev) => {
       const next = new Set(prev)
@@ -207,52 +227,57 @@ export default function GlobeViewerPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-space-border shrink-0">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
-          <span className="text-sm text-gray-500 font-mono">{planetId}</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Colour mode */}
-          <select
-            value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-          >
-            <option value="terrain">地形</option>
-            <option value="landsea">海陆</option>
-            <option value="plates">板块</option>
-            <option value="boundaries">边界类型</option>
-          </select>
-
-          <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
-            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
-            🗺️ 2D 地图
-          </Link>
-          <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
-            className="px-3 py-1.5 text-xs rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
-            🔭 恒星系
-          </Link>
-          <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
-        </div>
+    <div className="flex flex-col h-[calc(100vh-56px)]">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
+        <Link to={`/worlds/${worldName}`}
+          className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">← 返回</Link>
+        <h1 className="text-lg font-bold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
+        <span className="text-xs text-gray-600 font-mono">{planetId}</span>
+        <div className="flex-1" />
+        <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
+          className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          🗺️ 2D 地图
+        </Link>
+        <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
+          className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          🔭 恒星系
+        </Link>
+        <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
       </div>
 
-      {/* Globe */}
-      <div className="flex-1 relative">
-        <GlobeViewer
-          texture={terrainTexture}
-          onTransition={handleTransition}
-          onCellHover={handleCellHover}
-          onCellClick={handleCellClick}
-          selectedCellPositions={selectedCellPositions}
-        />
-      </div>
+      {/* Main content — three-panel layout (mirrors MapViewerPage) */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left panel: layers */}
+        <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
+          <MapLayerPanel state={layerState} onChange={setLayerState} />
+        </div>
 
-      {/* Status bar */}
-      <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCell} />
+        {/* Centre: globe */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 min-h-0 relative">
+            <GlobeViewer
+              texture={terrainTexture}
+              onTransition={handleTransition}
+              onCellHover={handleCellHover}
+              onCellClick={handleCellClick}
+              hoveredCellPosition={hoveredPosition}
+              selectedCellPositions={selectedCellPositions}
+            />
+          </div>
+          <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />
+        </div>
+
+        {/* Right panel: cell inspector */}
+        <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
+          <MapCellInspector
+            cell={hoveredCellData}
+            plate={hoveredPlate}
+            cvtMesh={cvtMesh ?? null}
+            planetName={planetId}
+          />
+        </div>
+      </div>
     </div>
   )
 }
