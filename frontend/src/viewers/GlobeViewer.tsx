@@ -166,6 +166,7 @@ interface CellPolygonProps {
 /** Renders a single Voronoi cell as a coloured polygon patch on the sphere. */
 function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonProps) {
   const geometry = useMemo(() => {
+    if (!Array.isArray(region) || region.length < 3) return null
     // vertices are [x, y, z] unit-sphere arrays; region is an array of indices
     const pts3D = region
       .map((idx) => vertices[idx])
@@ -226,12 +227,13 @@ function GlobeScene({
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
   // Region lookup: cell ID → vertex index array (regions[cellId])
-  const HoverHighlight = hoveredCellId != null && vertices && regions && regions[hoveredCellId] && (
+  const HoverHighlight = hoveredCellId != null && vertices && regions
+    && Array.isArray(regions[hoveredCellId]) && (
     <CellPolygon vertices={vertices} region={regions[hoveredCellId]} color="#4da6ff" opacity={0.5} />
   )
 
   const SelectionHighlights = selectedCellIds && vertices && regions && [...selectedCellIds]
-    .filter((id) => regions[id])
+    .filter((id) => Array.isArray(regions[id]))
     .map((id) => (
       <CellPolygon key={`sel-${id}`} vertices={vertices} region={regions[id]} color="#f0c040" opacity={0.55} />
     ))
