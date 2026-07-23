@@ -8,9 +8,9 @@
  * map viewer (useGPUTerrain), and renders it on a 3D sphere.
  */
 
-import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import * as THREE from 'three'
 import { api } from '../api/client'
 import GlobeViewer from '../viewers/GlobeViewer'
@@ -21,6 +21,7 @@ import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 export default function GlobeViewerPage() {
   const { worldName, planetId } = useParams<{ worldName: string; planetId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const selectedBranch = searchParams.get('branch') || null
 
   const setSelectedBranch = (branch: string | null) => {
@@ -84,6 +85,11 @@ export default function GlobeViewerPage() {
   // --- Branch-aware search string for links ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
 
+  // Zoom-out transition → navigate to stellar system view
+  const handleTransition = useCallback(() => {
+    navigate(`/worlds/${worldName}/viewer3d${branchQS}`)
+  }, [navigate, worldName, branchQS])
+
   // --- Render ---
 
   if (!worldName || !planetId) {
@@ -143,7 +149,7 @@ export default function GlobeViewerPage() {
             该行星无地图数据
           </div>
         ) : (
-          <GlobeViewer texture={terrainTexture} />
+          <GlobeViewer texture={terrainTexture} onTransition={handleTransition} />
         )}
       </div>
     </div>
