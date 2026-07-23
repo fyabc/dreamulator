@@ -28,7 +28,7 @@ const SPHERE_RADIUS = 1
 const TRANSITION_START_DIST = 4.5
 const TRANSITION_END_DIST = 8
 const DIST_POLL_MS = 80
-const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
+const HIGHLIGHT_R = SPHERE_RADIUS * 1.008
 
 // ---------------------------------------------------------------------------
 // Types
@@ -199,7 +199,7 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
     <mesh geometry={geometry} renderOrder={1}>
       <meshBasicMaterial
         color={color} transparent opacity={opacity}
-        depthTest depthWrite={false} side={THREE.DoubleSide}
+        depthTest={false} depthWrite={false} side={THREE.DoubleSide}
       />
     </mesh>
   )
