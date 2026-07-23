@@ -863,13 +863,11 @@ def terrain_generate(
 ) -> None:
     """Run the terrain generation pipeline (CVT mesh -> plates -> terrain -> export)."""
     import logging
+    from dreamulator.utils.logging import setup_logging
 
     _set_data_dir(data_dir)
 
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
-    else:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    setup_logging(level=logging.DEBUG if verbose else logging.INFO)
 
     mgr = WorldManager()
     try:
