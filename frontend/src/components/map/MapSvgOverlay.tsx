@@ -46,7 +46,7 @@ export default function MapSvgOverlay({
 }: MapSvgOverlayProps) {
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
-    if (!cvtMesh) return null
+    if (!cvtMesh || !Array.isArray(cvtMesh.vertices)) return null
     const map = new Map<number, { lon: number; lat: number }>()
     cvtMesh.vertices.forEach(([x, y, z], idx) => {
       const lat = Math.asin(y) * (180 / Math.PI)
@@ -58,7 +58,7 @@ export default function MapSvgOverlay({
 
   // Build region lookup from CVT mesh: cellId → vertex index array
   const regionByCell = useMemo(() => {
-    if (!cvtMesh) return null
+    if (!cvtMesh || !Array.isArray(cvtMesh.regions)) return null
     const map = new Map<number, number[]>()
     cvtMesh.regions.forEach((region, cellId) => {
       map.set(cellId, region)
