@@ -264,46 +264,45 @@ export default function useGPUTerrain({
       }
     }
 
-    // --- Step 3.5: Draw graticule (lat/lon grid lines) ---
+    // --- Flip rows so row 0 = south pole (lat -90°), matching UV v=0 ---
+    let outBuf = new Uint8Array(totalPixels * 4)
+    for (let y = 0; y < height; y++) {
+      const srcRow = (height - 1 - y) * width * 4
+      outBuf.set(buf.subarray(srcRow, srcRow + width * 4), y * width * 4)
+    }
+    // `outBuf` has row 0 = south pole.
+    // Default DataTexture.flipY=false → row 0 maps to v=0 → south pole.  Correct.
+
+    // --- Step 3.5: Draw graticule on flipped buffer ---
+    // Row → lat:  lat = y / height * 180 - 90   (row 0 = lat -90°)
     const GRID_STEP = 30
     const GRID_ALPHA = 0.08
-
-    // Latitude lines (horizontal in equirectangular buffer)
     for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
-      const y = Math.round(((90 - lat) / 180) * height)
+      const y = Math.round(((90 + lat) / 180) * height)
       if (y < 0 || y >= height) continue
       for (let x = 0; x < width; x++) {
         const pi = (y * width + x) * 4
-        buf[pi] = Math.round(buf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi] = Math.round(outBuf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi + 1] = Math.round(outBuf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi + 2] = Math.round(outBuf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
       }
     }
-
-    // Longitude lines (vertical in equirectangular buffer)
     for (let lon = -180 + GRID_STEP; lon < 180; lon += GRID_STEP) {
       const x = Math.round(((lon + 180) / 360) * width)
       if (x < 0 || x >= width) continue
       for (let y = 0; y < height; y++) {
         const pi = (y * width + x) * 4
-        buf[pi] = Math.round(buf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi] = Math.round(outBuf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi + 1] = Math.round(outBuf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
+        outBuf[pi + 2] = Math.round(outBuf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
       }
     }
 
-    // --- Step 4: Upload as DataTexture, display with trivial shader ---
-    // Use NearestFilter for cell-based modes (sharp plate boundaries)
-    // Use LinearFilter for elevation modes (smooth terrain gradients)
+    // --- Step 4: Upload as DataTexture ---
     const filterType = isCellMode ? THREE.NearestFilter : THREE.LinearFilter
     const colorTex = new THREE.DataTexture(
-      buf as unknown as BufferSource, width, height, THREE.RGBAFormat,
+      outBuf as unknown as BufferSource, width, height, THREE.RGBAFormat,
     )
-    // Three.js r162+ changed DataTexture default flipY to false.
-    // Our buffer is row-major with row 0 = lat 90° (north) at the top.
-    // flipY = true ensures row 0 maps to v=1 (screen top), matching
-    // the SVG overlay's project() convention (ny=0 → lat=90°).
-    colorTex.flipY = true
     colorTex.wrapS = THREE.RepeatWrapping
     colorTex.wrapT = THREE.ClampToEdgeWrapping
     colorTex.minFilter = filterType
