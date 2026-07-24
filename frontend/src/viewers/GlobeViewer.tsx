@@ -231,11 +231,6 @@ function GlobeScene({
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
 
-  // DEBUG: test 180° horizontal texture shift on sphere
-  useEffect(() => {
-    if (texture) { texture.wrapS = THREE.RepeatWrapping; texture.offset.x = 0.5 }
-  }, [texture])
-
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
   // Build region lookup: cellId → region

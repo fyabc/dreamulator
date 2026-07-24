@@ -264,14 +264,24 @@ export default function useGPUTerrain({
       }
     }
 
-    // --- Flip rows so row 0 = south pole (lat -90°), matching UV v=0 ---
+    // --- Reverse rows + columns to match SphereGeometry UV convention ---
+    // SphereGeometry default: u=0→lon=180°, u=0.5→lon=0°.
+    // Our buffer:        col 0→lon=-180°(=180°), col w/2→lon=0°.
+    // The UV mapping is mirrored: sphere_lon(u)=90° at u=0.25 but texture_lon(u)=-90°.
+    // Fix: horizontally mirror (reverse columns) + vertically flip (reverse rows).
     let outBuf = new Uint8Array(totalPixels * 4)
     for (let y = 0; y < height; y++) {
       const srcRow = (height - 1 - y) * width * 4
-      outBuf.set(buf.subarray(srcRow, srcRow + width * 4), y * width * 4)
+      const dstRow = y * width * 4
+      for (let x = 0; x < width; x++) {
+        const srcX = (width - 1 - x) * 4
+        const dstX = x * 4
+        outBuf[dstRow + dstX] = buf[srcRow + srcX]
+        outBuf[dstRow + dstX + 1] = buf[srcRow + srcX + 1]
+        outBuf[dstRow + dstX + 2] = buf[srcRow + srcX + 2]
+        outBuf[dstRow + dstX + 3] = buf[srcRow + srcX + 3]
+      }
     }
-    // `outBuf` has row 0 = south pole.
-    // Default DataTexture.flipY=false → row 0 maps to v=0 → south pole.  Correct.
 
     // --- Step 3.5: Draw graticule on flipped buffer ---
     // Row → lat:  lat = y / height * 180 - 90   (row 0 = lat -90°)
