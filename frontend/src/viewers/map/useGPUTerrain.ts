@@ -264,6 +264,34 @@ export default function useGPUTerrain({
       }
     }
 
+    // --- Coastline detection (land/sea boundary edge) ---
+    if (colorMode === 'terrain') {
+      const COAST_COLOR = [20, 20, 20] as const // near-black coastline
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = y * width + x
+          const isLand = elevation[i] >= normSeaLevel
+          // Check right neighbor
+          const rx = x + 1
+          if (rx < width && isLand !== (elevation[y * width + rx] >= normSeaLevel)) {
+            const pi = i * 4
+            buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
+            // Also mark the neighbor for symmetry
+            const npi = (y * width + rx) * 4
+            buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+          }
+          // Check bottom neighbor
+          const by = y + 1
+          if (by < height && isLand !== (elevation[by * width + x] >= normSeaLevel)) {
+            const pi = i * 4
+            buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
+            const npi = (by * width + x) * 4
+            buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+          }
+        }
+      }
+    }
+
     // --- Reverse rows + columns to match SphereGeometry UV convention ---
     // SphereGeometry default: u=0→lon=180°, u=0.5→lon=0°.
     // Our buffer:        col 0→lon=-180°(=180°), col w/2→lon=0°.
