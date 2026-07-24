@@ -177,12 +177,12 @@ export default function MapViewer({
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode, hillshadeStrength: 0.7, cvtMesh, cellIdMap,
+    colorMode, cvtMesh, cellIdMap,
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode, hillshadeStrength: 0.7, cvtMesh, cellIdMap,
+    colorMode, cvtMesh, cellIdMap,
     projection,
   })
   const useGPU = gpuMaterial !== null && projection === 'equirectangular'

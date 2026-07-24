@@ -181,7 +181,7 @@ export default function useTerrainTexture({
   elevMinM = -11000,
   elevMaxM = 9000,
   colorMode = 'terrain',
-  hillshadeStrength = 0.7,
+  hillshadeStrength = 0,
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
