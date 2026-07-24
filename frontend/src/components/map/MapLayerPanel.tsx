@@ -1,18 +1,16 @@
 /**
- * MapLayerPanel — layer visibility and color mode controls.
+ * MapLayerPanel — per-layer opacity controls (sliders).
  *
- * Base layer: terrain / landsea (radio — mutually exclusive).
- * Overlays:   plates, boundaries (checkboxes — composite on top).
+ * Each of the 4 layers (terrain, landsea, plates, boundaries) can be
+ * independently shown at any opacity.  Layers are composited in order.
  */
 
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 
+type LayerOpacities = Record<ColorMode, number>
+
 interface LayerState {
-  colorMode: ColorMode
-  /** Show plate colours as semi-transparent overlay on terrain. */
-  showPlateOverlay: boolean
-  /** Show boundary-type colours as semi-transparent overlay on terrain. */
-  showBoundaryOverlay: boolean
+  layers: LayerOpacities
 }
 
 interface MapLayerPanelProps {
@@ -20,76 +18,42 @@ interface MapLayerPanelProps {
   onChange: (state: LayerState) => void
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const LAYERS: { id: ColorMode; label: string; desc: string; defaultOpacity: number }[] = [
+  { id: 'terrain', label: '地形', desc: '自适应海拔着色', defaultOpacity: 1 },
+  { id: 'landsea', label: '海陆', desc: '二值海陆着色', defaultOpacity: 0 },
+  { id: 'plates', label: '板块', desc: '按构造板块着色', defaultOpacity: 0 },
+  { id: 'boundaries', label: '边界类型', desc: '汇聚(红)·离散(绿)·转换(黄)', defaultOpacity: 0 },
+]
 
 export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
-  const isOverlay = state.colorMode === 'terrain'
-
   return (
-    <div className="space-y-4">
-      {/* Base layer — radio style */}
-      <div>
-        <h3 className="text-[10px] font-medium text-gray-600 uppercase tracking-widest mb-1.5">基底图层</h3>
-        <div className="space-y-1">
-          {(['terrain', 'landsea'] as const).map((mode) => {
-            const label = mode === 'terrain' ? '地形' : '海陆'
-            const desc = mode === 'terrain' ? '自适应海拔着色' : '二值海陆着色'
-            return (
-              <button
-                key={mode}
-                onClick={() => onChange({ ...state, colorMode: mode, showPlateOverlay: false, showBoundaryOverlay: false })}
-                title={desc}
-                className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                  state.colorMode === mode ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-400 hover:bg-space-surface/40 hover:text-gray-300'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Overlays — checkboxes (only available when terrain is base) */}
-      <div>
-        <h3 className="text-[10px] font-medium text-gray-600 uppercase tracking-widest mb-1.5">
-          叠加图层{!isOverlay && <span className="text-neon-cyan/50 ml-1">（需地形基底）</span>}
-        </h3>
-        <div className="space-y-1">
-          {([
-            ['plates', '板块', '按构造板块着色，半透明叠加'],
-            ['boundaries', '边界类型', '汇聚(红) · 离散(绿) · 转换(黄)'],
-          ] as const).map(([key, label, desc]) => {
-            const checked = key === 'plates' ? state.showPlateOverlay : state.showBoundaryOverlay
-            return (
-              <label
-                key={key}
-                title={desc}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm cursor-pointer transition-colors ${
-                  !isOverlay ? 'opacity-40 pointer-events-none text-gray-600' :
-                  checked ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-gray-400 hover:bg-space-surface/40'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!isOverlay}
-                  onChange={() => {
-                    if (key === 'plates') onChange({ ...state, showPlateOverlay: !state.showPlateOverlay })
-                    else onChange({ ...state, showBoundaryOverlay: !state.showBoundaryOverlay })
-                  }}
-                  className="accent-neon-cyan"
-                />
-                {label}
-              </label>
-            )
-          })}
-        </div>
-      </div>
+    <div className="space-y-3">
+      {LAYERS.map(({ id, label, desc, defaultOpacity }) => {
+        const opacity = state.layers[id] ?? defaultOpacity
+        const pct = Math.round(opacity * 100)
+        return (
+          <div key={id} className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">{label}</span>
+              <span className={`text-[10px] font-mono tabular-nums ${opacity > 0 ? 'text-neon-cyan' : 'text-gray-600'}`}>
+                {pct}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0" max="100" value={pct}
+              onChange={(e) => {
+                const v = parseInt(e.target.value) / 100
+                onChange({ layers: { ...state.layers, [id]: v } })
+              }}
+              className="w-full h-1 accent-neon-cyan cursor-pointer"
+              title={desc}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-export type { LayerState }
+export type { LayerState, LayerOpacities }

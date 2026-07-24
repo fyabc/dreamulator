@@ -17,9 +17,7 @@ import type { ColorMode } from './TerrainPlane'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import {
-  generateLut,
   generateAdaptiveTerrainScale,
-  TERRAIN_SCALE,
   PLATE_COLORS,
 } from './utils/colorScales'
 
@@ -40,12 +38,6 @@ const BOUNDARY_COLORS: Record<BoundaryType, [number, number, number]> = {
   convergent: hexRgb('#e53935'),
   divergent: hexRgb('#43a047'),
   transform: hexRgb('#fdd835'),
-}
-
-function sampleElev(elev: Float32Array, w: number, h: number, x: number, y: number): number {
-  const wx = ((x % w) + w) % w
-  const wy = Math.max(0, Math.min(h - 1, y))
-  return elev[wy * w + wx]
 }
 
 // ---------------------------------------------------------------------------
@@ -78,9 +70,7 @@ interface CacheEntry {
   elevation: Float32Array
   width: number
   height: number
-  colorMode: ColorMode
-  showPlateOverlay: boolean
-  showBoundaryOverlay: boolean
+  layers: Record<ColorMode, number>
   cellIdMap: CellIdMap | null | undefined
   cvtMesh: CVTMesh | null | undefined
   // Cached result
@@ -100,9 +90,8 @@ interface UseGPUTerrainOptions {
   seaLevel: number
   elevMinM?: number
   elevMaxM?: number
-  colorMode?: ColorMode
-  showPlateOverlay?: boolean
-  showBoundaryOverlay?: boolean
+  /** Per-layer opacity: { terrain: 0-1, landsea: 0-1, plates: 0-1, boundaries: 0-1 } */
+  layers?: Record<ColorMode, number>
   hillshadeStrength?: number
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
@@ -116,9 +105,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  colorMode = 'terrain',
-  showPlateOverlay = false,
-  showBoundaryOverlay = false,
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0 },
   hillshadeStrength = 0,
   waterDepthFactor = 0.5,
   cvtMesh,
@@ -133,9 +120,10 @@ export default function useGPUTerrain({
       lastCache.elevation === elevation &&
       lastCache.width === width &&
       lastCache.height === height &&
-      lastCache.colorMode === colorMode &&
-      lastCache.showPlateOverlay === showPlateOverlay &&
-      lastCache.showBoundaryOverlay === showBoundaryOverlay &&
+      lastCache.layers.terrain === layers.terrain &&
+      lastCache.layers.landsea === layers.landsea &&
+      lastCache.layers.plates === layers.plates &&
+      lastCache.layers.boundaries === layers.boundaries &&
       lastCache.cellIdMap === cellIdMap &&
       lastCache.cvtMesh === cvtMesh
     ) {
@@ -149,131 +137,97 @@ export default function useGPUTerrain({
     const range = elevMaxM - elevMinM || 1
     const normSeaLevel = (seaLevel - elevMinM) / range
 
-    // --- Step 1: Build LUT ---
-    let lut: Uint8Array
-    let isRgbaLut = false
-    if (colorMode === 'terrain') {
-      lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
-      isRgbaLut = true
-    } else if (colorMode === 'landsea') {
-      // Dynamic binary LUT: sharp water/land boundary at the true sea level
-      lut = new Uint8Array(1024 * 3)
-      const WATER: [number, number, number] = [30, 60, 120]
-      const LAND: [number, number, number] = [80, 140, 60]
-      const cutoff = Math.round(normSeaLevel * 1023)
-      for (let i = 0; i < 1024; i++) {
-        const c = i <= cutoff ? WATER : LAND
-        lut[i * 3 + 0] = c[0]
-        lut[i * 3 + 1] = c[1]
-        lut[i * 3 + 2] = c[2]
-      }
-    } else {
-      lut = generateLut(TERRAIN_SCALE, 256)
-    }
+    // --- Step 1: Precompute LUTs for all active layers ---
+    const activeModes = (Object.keys(layers) as ColorMode[]).filter((k) => layers[k] > 0)
+    const terrainLut = activeModes.includes('terrain')
+      ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
+    const landseaLut = activeModes.includes('landsea')
+      ? (() => {
+          const l = new Uint8Array(1024 * 3)
+          const cutoff = Math.round(normSeaLevel * 1023)
+          for (let i = 0; i < 1024; i++) {
+            const c = i <= cutoff ? [30, 60, 120] : [80, 140, 60]
+            l[i*3]=c[0]; l[i*3+1]=c[1]; l[i*3+2]=c[2]
+          }
+          return l
+        })() : null
 
-    // --- Step 2: Build cell colour palette (for plates/boundaries) ---
-    const isCellMode = colorMode === 'plates' || colorMode === 'boundaries'
-    const cellColor = new Map<number, [number, number, number]>()
-
-    if (isCellMode && cvtMesh) {
-      if (colorMode === 'plates') {
+    // --- Step 2: Build cell colour palettes ---
+    const platesColor = new Map<number, [number, number, number]>()
+    const boundariesColor = new Map<number, [number, number, number]>()
+    if (cvtMesh && (activeModes.includes('plates') || activeModes.includes('boundaries'))) {
+      if (activeModes.includes('plates')) {
         const plateIds = [...new Set(cvtMesh.cells.map((c) => c.plate_id).filter(Boolean))]
-        const plateColorMap = new Map<string, [number, number, number]>()
+        const palette = new Map<string, [number, number, number]>()
         plateIds.forEach((pid, idx) => {
-          plateColorMap.set(pid!, hexRgb(PLATE_COLORS[idx % PLATE_COLORS.length]))
+          palette.set(pid!, hexRgb(PLATE_COLORS[idx % PLATE_COLORS.length]))
         })
         for (const cell of cvtMesh.cells) {
           if (cell.plate_id) {
-            const c = plateColorMap.get(cell.plate_id)
-            if (c) cellColor.set(cell.id, c)
+            const c = palette.get(cell.plate_id)
+            if (c) platesColor.set(cell.id, c)
           }
         }
-      } else if (colorMode === 'boundaries') {
+      }
+      if (activeModes.includes('boundaries')) {
         for (const cell of cvtMesh.cells) {
           const bType = cell.boundary_type as BoundaryType | null
-          if (bType) cellColor.set(cell.id, BOUNDARY_COLORS[bType])
+          if (bType) boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
         }
       }
     }
 
-    // --- Step 3: Render every pixel ---
-    const lx = -1 / Math.sqrt(3)
-    const ly = 1 / Math.sqrt(3)
-    const lz = 1 / Math.sqrt(3)
+    // --- Step 3: Composite all active layers per pixel ---
+    // Alpha-blend helper
+    const blend = (dst: number[], src: [number, number, number], alpha: number) => {
+      dst[0] = Math.round(dst[0] * (1 - alpha) + src[0] * alpha)
+      dst[1] = Math.round(dst[1] * (1 - alpha) + src[1] * alpha)
+      dst[2] = Math.round(dst[2] * (1 - alpha) + src[2] * alpha)
+    }
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = y * width + x
+    for (let i = 0; i < totalPixels; i++) {
+      const elev = elevation[i]
+      const cellId = cellIdMap?.[i]
+      const accum = [0, 0, 0] // RGB accumulator
 
-        // Cell-based modes: use plate/boundary colour directly (flat, no gradients)
-        if (isCellMode && cellIdMap && cellIdMap.length === totalPixels) {
-          const cc = cellColor.get(cellIdMap[i])
-          const pi = i * 4
-          if (cc) {
-            buf[pi] = cc[0]
-            buf[pi + 1] = cc[1]
-            buf[pi + 2] = cc[2]
-          } else {
-            // No colour for this cell — use terrain base
-            const elev = elevation[i]
-            const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-            buf[pi] = lut[lutIdx * 3 + 0]
-            buf[pi + 1] = lut[lutIdx * 3 + 1]
-            buf[pi + 2] = lut[lutIdx * 3 + 2]
-          }
-          buf[pi + 3] = 255
-          continue
-        }
-
-        // Elevation-based modes: LUT + (optional) hillshading + water depth
-        const elev = elevation[i]
-        const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-
-        let r: number, g: number, b: number
-        if (isRgbaLut) {
-          r = lut[lutIdx * 4 + 0]
-          g = lut[lutIdx * 4 + 1]
-          b = lut[lutIdx * 4 + 2]
-        } else {
-          r = lut[lutIdx * 3 + 0]
-          g = lut[lutIdx * 3 + 1]
-          b = lut[lutIdx * 3 + 2]
-        }
-
-        // Hillshading — skip for landsea (flat binary colours)
-        if (hillshadeStrength > 0 && colorMode !== 'landsea') {
-          const dx = sampleElev(elevation, width, height, x + 1, y) -
-                     sampleElev(elevation, width, height, x - 1, y)
-          const dy = sampleElev(elevation, width, height, x, y + 1) -
-                     sampleElev(elevation, width, height, x, y - 1)
-          const nx = -dx * hillshadeStrength * 8
-          const ny = -dy * hillshadeStrength * 8
-          const nLen = Math.sqrt(nx * nx + ny * ny + 1)
-          const shade = 0.4 + 0.6 * Math.max(0, (nx * lx + ny * ly + lz) / nLen)
-          r = Math.min(255, Math.round(r * shade))
-          g = Math.min(255, Math.round(g * shade))
-          b = Math.min(255, Math.round(b * shade))
-        }
-
-        // Water depth darkening — skip for landsea (single ocean colour)
-        if (elev < normSeaLevel && colorMode !== 'landsea') {
+      // Layer 1: Terrain
+      if (terrainLut) {
+        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
+        const c: [number, number, number] = [terrainLut[idx*4], terrainLut[idx*4+1], terrainLut[idx*4+2]]
+        // Water depth darkening
+        if (elev < normSeaLevel) {
           const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
-          const factor = 1 - waterDepthFactor * depth
-          r = Math.round(r * factor)
-          g = Math.round(g * factor)
-          b = Math.round(b * factor)
+          const f = 1 - waterDepthFactor * depth
+          c[0] = Math.round(c[0] * f); c[1] = Math.round(c[1] * f); c[2] = Math.round(c[2] * f)
         }
-
-        const pi = i * 4
-        buf[pi] = r
-        buf[pi + 1] = g
-        buf[pi + 2] = b
-        buf[pi + 3] = 255
+        blend(accum, c, layers.terrain)
       }
+
+      // Layer 2: Land/sea
+      if (landseaLut) {
+        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
+        const c: [number, number, number] = [landseaLut[idx*3], landseaLut[idx*3+1], landseaLut[idx*3+2]]
+        blend(accum, c, layers.landsea)
+      }
+
+      // Layer 3: Plates
+      if (layers.plates > 0 && cellId != null) {
+        const pc = platesColor.get(cellId)
+        if (pc) blend(accum, pc, layers.plates)
+      }
+
+      // Layer 4: Boundaries
+      if (layers.boundaries > 0 && cellId != null) {
+        const bc = boundariesColor.get(cellId)
+        if (bc) blend(accum, bc, layers.boundaries)
+      }
+
+      const pi = i * 4
+      buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
     // --- Coastline detection (land/sea boundary edge) ---
-    if (colorMode === 'terrain') {
+    if (layers.terrain > 0) {
       const COAST_COLOR = [20, 20, 20] as const // near-black coastline
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -295,60 +249,6 @@ export default function useGPUTerrain({
             buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
             const npi = (by * width + x) * 4
             buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
-          }
-        }
-      }
-    }
-
-    // --- Overlay compositing (plates / boundaries on terrain base) ---
-    const canOverlay = (showPlateOverlay || showBoundaryOverlay)
-      && cvtMesh && cellIdMap && cellIdMap.length === totalPixels
-    if (canOverlay && colorMode === 'terrain') {
-      // Build plate color palette (same as cell-based mode)
-      const plateIds = [...new Set(cvtMesh!.cells.map((c) => c.plate_id).filter(Boolean))]
-      const platePalette = new Map<string, number>()
-      plateIds.forEach((pid, idx) => {
-        const [r, g, b] = hexRgb(PLATE_COLORS[idx % PLATE_COLORS.length])
-        platePalette.set(pid!, (r << 16) | (g << 8) | b)
-      })
-      const cellToPlateColor = new Map<number, number>()
-      const cellToBoundaryColor = new Map<number, number>()
-      for (const cell of cvtMesh!.cells) {
-        if (cell.plate_id) {
-          const c = platePalette.get(cell.plate_id)
-          if (c !== undefined) cellToPlateColor.set(cell.id, c)
-        }
-        const bType = cell.boundary_type as BoundaryType | null
-        if (bType) {
-          const [br, bg, bb] = BOUNDARY_COLORS[bType]
-          cellToBoundaryColor.set(cell.id, (br << 16) | (bg << 8) | bb)
-        }
-      }
-
-      const PLATE_ALPHA = 0.35
-      const BOUNDARY_ALPHA = 0.55
-
-      for (let i = 0; i < totalPixels; i++) {
-        const cellId = cellIdMap![i]
-        const pi = i * 4
-
-        if (showPlateOverlay) {
-          const packed = cellToPlateColor.get(cellId)
-          if (packed !== undefined) {
-            const or = (packed >> 16) & 0xff, og = (packed >> 8) & 0xff, ob = packed & 0xff
-            buf[pi] = Math.round(buf[pi] * (1 - PLATE_ALPHA) + or * PLATE_ALPHA)
-            buf[pi + 1] = Math.round(buf[pi + 1] * (1 - PLATE_ALPHA) + og * PLATE_ALPHA)
-            buf[pi + 2] = Math.round(buf[pi + 2] * (1 - PLATE_ALPHA) + ob * PLATE_ALPHA)
-          }
-        }
-
-        if (showBoundaryOverlay) {
-          const packed = cellToBoundaryColor.get(cellId)
-          if (packed !== undefined) {
-            const or = (packed >> 16) & 0xff, og = (packed >> 8) & 0xff, ob = packed & 0xff
-            buf[pi] = Math.round(buf[pi] * (1 - BOUNDARY_ALPHA) + or * BOUNDARY_ALPHA)
-            buf[pi + 1] = Math.round(buf[pi + 1] * (1 - BOUNDARY_ALPHA) + og * BOUNDARY_ALPHA)
-            buf[pi + 2] = Math.round(buf[pi + 2] * (1 - BOUNDARY_ALPHA) + ob * BOUNDARY_ALPHA)
           }
         }
       }
@@ -399,7 +299,8 @@ export default function useGPUTerrain({
     }
 
     // --- Step 4: Upload as DataTexture ---
-    const filterType = isCellMode ? THREE.NearestFilter : THREE.LinearFilter
+    const hasCellLayers = layers.plates > 0 || layers.boundaries > 0
+    const filterType = hasCellLayers ? THREE.NearestFilter : THREE.LinearFilter
     const colorTex = new THREE.DataTexture(
       outBuf as unknown as BufferSource, width, height, THREE.RGBAFormat,
     )
@@ -417,12 +318,12 @@ export default function useGPUTerrain({
     })
 
     // Save to module-level cache (survives component unmount/remount)
-    lastCache = { elevation, width, height, colorMode, showPlateOverlay, showBoundaryOverlay, cellIdMap, cvtMesh, material }
+    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, material }
 
     return material
   }, [
     elevation, width, height, seaLevel,
-    elevMinM, elevMaxM, colorMode, showPlateOverlay, showBoundaryOverlay,
+    elevMinM, elevMaxM, layers,
     hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap,
   ])
 }

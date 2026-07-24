@@ -48,9 +48,7 @@ interface MapViewerProps {
   elevation: Float32Array | null
   voronoiCells: VoronoiCell[]
   cvtMesh?: CVTMesh | null
-  colorMode: ColorMode
-  showPlateOverlay?: boolean
-  showBoundaryOverlay?: boolean
+  layers?: Record<ColorMode, number>
   projection?: ProjectionType // equirectangular (GPU) | mollweide | robinson (CPU)
   onZoomChange?: (zoom: number) => void
   onViewStateChange?: (state: {
@@ -92,9 +90,7 @@ export default function MapViewer({
   elevation,
   voronoiCells,
   cvtMesh,
-  colorMode,
-  showPlateOverlay = false,
-  showBoundaryOverlay = false,
+  layers,
   projection = 'equirectangular',
   onZoomChange,
   onViewStateChange,
@@ -143,7 +139,7 @@ export default function MapViewer({
   // Loading indicator
   const [isRendering, setIsRendering] = useState(false)
   const prevRenderKey = useRef('')
-  const renderKey = `eqr_${colorMode}_${cellIdMap ? 'ready' : 'pending'}`
+  const renderKey = `eqr_${JSON.stringify(layers)}_${cellIdMap ? 'ready' : 'pending'}`
   if (prevRenderKey.current !== renderKey) {
     prevRenderKey.current = renderKey
     setIsRendering(true)
@@ -181,12 +177,12 @@ export default function MapViewer({
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode, showPlateOverlay, showBoundaryOverlay, cvtMesh, cellIdMap,
+    layers, cvtMesh, cellIdMap,
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode, cvtMesh, cellIdMap,
+    colorMode: layers?.terrain ? 'terrain' : 'landsea', cvtMesh, cellIdMap,
     projection,
   })
   const useGPU = gpuMaterial !== null && projection === 'equirectangular'

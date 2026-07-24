@@ -50,9 +50,7 @@ export default function MapViewerPage() {
   const [projection, setProjection] = useState<ProjectionType>('equirectangular')
 
   const [layerState, setLayerState] = useState<LayerState>({
-    colorMode: 'terrain',
-    showPlateOverlay: false,
-    showBoundaryOverlay: false,
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0 },
   })
 
   // Decoded elevation data (for rendering)
@@ -291,9 +289,7 @@ export default function MapViewerPage() {
                     elevation={localElevation}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
-                    colorMode={layerState.colorMode}
-                    showPlateOverlay={layerState.showPlateOverlay}
-                    showBoundaryOverlay={layerState.showBoundaryOverlay}
+                    layers={layerState.layers}
                     projection={projection}
 
                     onCursorMove={setCursor}
@@ -381,9 +377,7 @@ export default function MapViewerPage() {
                     elevation={localElevation}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
-                    colorMode={layerState.colorMode}
-                    showPlateOverlay={layerState.showPlateOverlay}
-                    showBoundaryOverlay={layerState.showBoundaryOverlay}
+                    layers={layerState.layers}
                     projection={projection}
 
                     onCursorMove={setCursor}
