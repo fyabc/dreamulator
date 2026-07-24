@@ -28,7 +28,7 @@ const SPHERE_RADIUS = 1
 const TRANSITION_START_DIST = 4.5
 const TRANSITION_END_DIST = 8
 const DIST_POLL_MS = 80
-const HIGHLIGHT_R = SPHERE_RADIUS * 1.008
+const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
 
 // ---------------------------------------------------------------------------
 // Types (mirror CVTVertex / CVTRegion from types.ts — transformed by adaptCvtMesh)
@@ -204,7 +204,8 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
     <mesh geometry={geometry} renderOrder={1}>
       <meshBasicMaterial
         color={color} transparent opacity={opacity}
-        depthTest={false} depthWrite={false} side={THREE.DoubleSide}
+        depthTest depthWrite={false} side={THREE.DoubleSide}
+        polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2}
       />
     </mesh>
   )
