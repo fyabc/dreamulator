@@ -182,7 +182,7 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 - [ ] **Phase 3D** — Branch diff & chaos visualization (DAG impact radius, Lyapunov exponent warnings)
 - [ ] **Phase 3E** — LLM narrative bridge (structured data → epic storytelling)
 
-See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for detailed competitive analysis and design references.
+See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for detailed competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
 
 ## License
 
