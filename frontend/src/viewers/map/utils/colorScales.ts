@@ -23,8 +23,9 @@ export const TERRAIN_SCALE: ColorStop[] = [
   { value: 0.15, color: hexToRgb('#045A8D') },  // deep ocean
   { value: 0.30, color: hexToRgb('#2B8CBE') },  // mid ocean
   { value: 0.42, color: hexToRgb('#74A9CF') },  // shallow water
-  { value: 0.49, color: hexToRgb('#A8D8EA') },  // very shallow / shelf
-  { value: 0.50, color: hexToRgb('#C8B898') },  // sand / beach
+  { value: 0.49, color: hexToRgb('#5EA8D0') },  // mid-shallow (cool blue)
+  { value: 0.498, color: hexToRgb('#A0D0E8') }, // water's edge (clean light blue)
+  { value: 0.50, color: hexToRgb('#D0C8A0') },  // sand / beach
   { value: 0.51, color: hexToRgb('#7DAF5A') },  // coastal green
   { value: 0.53, color: hexToRgb('#2F7A3C') },  // forest green
   { value: 0.60, color: hexToRgb('#A0B040') },  // yellow-green hills
@@ -109,9 +110,10 @@ export function generateAdaptiveTerrainScale(
     { elev: minElev + range * 0.15, color: hexToRgb('#045A8D') },
     { elev: minElev + range * 0.30, color: hexToRgb('#2B8CBE') },
     { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#74A9CF') },
-    { elev: seaLevel - Math.max(range * 0.005, 50), color: hexToRgb('#A8D8EA') },
+    { elev: seaLevel - Math.max(range * 0.005, 50), color: hexToRgb('#5EA8D0') },
+    { elev: seaLevel - Math.max(range * 0.0015, 15), color: hexToRgb('#A0D0E8') },
     // ---- Shoreline ----
-    { elev: seaLevel, color: hexToRgb('#C8B898') },
+    { elev: seaLevel, color: hexToRgb('#D0C8A0') },
     // ---- Land: ESRI Natural Earth style ----
     { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#7DAF5A') },
     { elev: seaLevel + range * 0.02, color: hexToRgb('#2F7A3C') },
