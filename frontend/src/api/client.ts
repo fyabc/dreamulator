@@ -426,7 +426,7 @@ const readApi = {
 
   getCvtMesh: (name: string, planetId: string, branch?: string | null): Promise<CVTMesh | null> =>
     isStaticMode()
-      ? Promise.reject(new Error('CVT mesh not available in static mode'))
+      ? staticApi.getCvtMesh(name, planetId, branch).then(adaptCvtMesh)
       : fetchJson<any>(
           `/worlds/${name}/maps/${planetId}/cvt-mesh${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ).then(adaptCvtMesh),

@@ -226,13 +226,59 @@ export const staticApi = {
   },
 
   getVoronoi: async (name: string, planetId: string, branch?: string | null) => {
+    // Try voronoi.json first
     const result = await fetchBranchAwareJson<any>(
       name,
       branch,
       `/maps/${planetId}/voronoi.json`,
       `/maps/${planetId}/voronoi.json`,
     )
-    if (result === null) throw new Error(`No static voronoi data for ${planetId}`)
+    if (result !== null) return result
+
+    // Fall back to cvt_mesh.json (same as backend API)
+    const cvtData = await fetchBranchAwareJson<any>(
+      name,
+      branch,
+      `/maps/${planetId}/cvt_mesh.json`,
+      `/maps/${planetId}/cvt_mesh.json`,
+    )
+    if (cvtData === null) throw new Error(`No static voronoi data for ${planetId}`)
+
+    // Convert CVT mesh cells to VoronoiNetwork format
+    return {
+      seed: cvtData.seed ?? 0,
+      num_cells: cvtData.num_cells ?? 0,
+      relaxation_iterations: cvtData.lloyd_iterations ?? 0,
+      cells: (cvtData.cells || []).map((c: any) => ({
+        id: c.id,
+        lon: c.lon,
+        lat: c.lat,
+        x: c.x,
+        y: c.y,
+        z: c.z,
+        elevation: c.elevation,
+        moisture: c.moisture ?? 0,
+        neighbors: c.neighbors ?? [],
+        plate_id: c.plate_id ?? null,
+        biome: c.biome ?? null,
+        province_id: c.province_id ?? null,
+        area_km2: c.area_km2,
+        crust_type: c.crust_type,
+        distance_to_boundary_km: c.distance_to_boundary_km,
+        boundary_type: c.boundary_type ?? null,
+        convergence_rate_cm_yr: c.convergence_rate_cm_yr,
+      })),
+    }
+  },
+
+  getCvtMesh: async (name: string, planetId: string, branch?: string | null) => {
+    const result = await fetchBranchAwareJson<any>(
+      name,
+      branch,
+      `/maps/${planetId}/cvt_mesh.json`,
+      `/maps/${planetId}/cvt_mesh.json`,
+    )
+    if (result === null) throw new Error(`No static CVT mesh data for ${planetId}`)
     return result
   },
 

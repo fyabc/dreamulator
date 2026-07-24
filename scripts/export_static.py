@@ -293,7 +293,7 @@ def _export_map_data(
         # Export JSON map files (voronoi, plates, features).
         # Each is read-validated-rewritten to catch LFS pointers or corrupt
         # files early instead of crashing the whole export.
-        for filename in ("voronoi.json", "plates.json", "features.json"):
+        for filename in ("voronoi.json", "cvt_mesh.json", "plates.json", "features.json"):
             src_path = planet_dir / filename
             if not src_path.exists():
                 continue
