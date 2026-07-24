@@ -19,15 +19,9 @@ export default function Layout() {
   }, [])
 
   const handleToggle = useCallback(() => {
-    // Mobile: toggle overlay; Desktop: toggle collapse
-    if (window.innerWidth >= 768) {
-      toggleCollapse()
-    } else if (sidebarOpen) {
-      closeSidebar()
-    } else {
-      openSidebar()
-    }
-  }, [sidebarOpen, openSidebar, closeSidebar, toggleCollapse])
+    if (sidebarOpen) closeSidebar()
+    else openSidebar()
+  }, [sidebarOpen, openSidebar, closeSidebar])
 
   return (
     <div className="flex min-h-screen bg-space-bg text-gray-100">
@@ -47,23 +41,21 @@ export default function Layout() {
       />
 
       <div className="flex flex-col flex-1 min-w-0">
-        {/* Top bar */}
-        <header className="flex items-center gap-3 px-4 py-3 bg-space-panel border-b border-space-border sticky top-0 z-20">
+        {/* Top bar — mobile only. Desktop: sidebar collapse is self-contained. */}
+        <header className="md:hidden flex items-center gap-2 px-3 py-2 bg-space-panel border-b border-space-border sticky top-0 z-20">
           <button
             onClick={handleToggle}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-space-surface transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-space-surface transition-colors"
             aria-label="切换菜单"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          {/* Title — mobile only (desktop already shows logo in sidebar) */}
-          <h1 className="md:hidden text-base font-bold">
+          <h1 className="text-sm font-bold">
             <span className="logo-dream">dream</span>
-            <span className="logo-ulator text-xs">ulator</span>
+            <span className="logo-ulator text-[10px]">ulator</span>
           </h1>
-          <div className="flex-1 md:hidden" />
         </header>
 
         <main className="flex-1 overflow-auto relative">
