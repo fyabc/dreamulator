@@ -49,6 +49,8 @@ interface MapViewerProps {
   voronoiCells: VoronoiCell[]
   cvtMesh?: CVTMesh | null
   colorMode: ColorMode
+  showPlateOverlay?: boolean
+  showBoundaryOverlay?: boolean
   projection?: ProjectionType // equirectangular (GPU) | mollweide | robinson (CPU)
   onZoomChange?: (zoom: number) => void
   onViewStateChange?: (state: {
@@ -91,6 +93,8 @@ export default function MapViewer({
   voronoiCells,
   cvtMesh,
   colorMode,
+  showPlateOverlay = false,
+  showBoundaryOverlay = false,
   projection = 'equirectangular',
   onZoomChange,
   onViewStateChange,
@@ -177,7 +181,7 @@ export default function MapViewer({
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode, cvtMesh, cellIdMap,
+    colorMode, showPlateOverlay, showBoundaryOverlay, cvtMesh, cellIdMap,
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,

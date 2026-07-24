@@ -1,12 +1,18 @@
 /**
  * MapLayerPanel — layer visibility and color mode controls.
- * Organized into conceptual groups: 地理, 地质.
+ *
+ * Base layer: terrain / landsea (radio — mutually exclusive).
+ * Overlays:   plates, boundaries (checkboxes — composite on top).
  */
 
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 
 interface LayerState {
   colorMode: ColorMode
+  /** Show plate colours as semi-transparent overlay on terrain. */
+  showPlateOverlay: boolean
+  /** Show boundary-type colours as semi-transparent overlay on terrain. */
+  showBoundaryOverlay: boolean
 }
 
 interface MapLayerPanelProps {
@@ -15,71 +21,73 @@ interface MapLayerPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Grouped mode definitions
-// ---------------------------------------------------------------------------
-
-interface ModeItem {
-  id: ColorMode
-  label: string
-  description: string
-}
-
-interface ModeGroup {
-  title: string
-  items: ModeItem[]
-}
-
-const MODE_GROUPS: ModeGroup[] = [
-  {
-    title: '地理',
-    items: [
-      { id: 'terrain', label: '地形', description: '自适应海拔着色 + 山体阴影，模拟自然地貌外观' },
-      { id: 'landsea', label: '海陆', description: '二值着色，区分海洋和陆地，查看海陆比例' },
-    ],
-  },
-  {
-    title: '地质',
-    items: [
-      { id: 'plates', label: '板块', description: '按构造板块 ID 着色，区分不同板块区域' },
-      { id: 'boundaries', label: '边界类型', description: '显示板块边界类型：汇聚(红) · 离散(绿) · 转换(黄)' },
-    ],
-  },
-]
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function MapLayerPanel({
-  state,
-  onChange,
-}: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
+  const isOverlay = state.colorMode === 'terrain'
+
   return (
     <div className="space-y-4">
-      {/* Grouped color modes */}
-      {MODE_GROUPS.map((group) => (
-        <div key={group.title}>
-          <h3 className="text-[10px] font-medium text-gray-600 uppercase tracking-widest mb-1.5">
-            {group.title}
-          </h3>
-          <div className="space-y-1">
-            {group.items.map((mode) => (
+      {/* Base layer — radio style */}
+      <div>
+        <h3 className="text-[10px] font-medium text-gray-600 uppercase tracking-widest mb-1.5">基底图层</h3>
+        <div className="space-y-1">
+          {(['terrain', 'landsea'] as const).map((mode) => {
+            const label = mode === 'terrain' ? '地形' : '海陆'
+            const desc = mode === 'terrain' ? '自适应海拔着色' : '二值海陆着色'
+            return (
               <button
-                key={mode.id}
-                onClick={() => onChange({ ...state, colorMode: mode.id })}
-                title={mode.description}
+                key={mode}
+                onClick={() => onChange({ ...state, colorMode: mode, showPlateOverlay: false, showBoundaryOverlay: false })}
+                title={desc}
                 className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                  state.colorMode === mode.id
-                    ? 'bg-neon-cyan/20 text-neon-cyan'
-                    : 'text-gray-400 hover:bg-space-surface/40 hover:text-gray-300'
+                  state.colorMode === mode ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-400 hover:bg-space-surface/40 hover:text-gray-300'
                 }`}
               >
-                {mode.label}
+                {label}
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
-      ))}
+      </div>
+
+      {/* Overlays — checkboxes (only available when terrain is base) */}
+      <div>
+        <h3 className="text-[10px] font-medium text-gray-600 uppercase tracking-widest mb-1.5">
+          叠加图层{!isOverlay && <span className="text-neon-cyan/50 ml-1">（需地形基底）</span>}
+        </h3>
+        <div className="space-y-1">
+          {([
+            ['plates', '板块', '按构造板块着色，半透明叠加'],
+            ['boundaries', '边界类型', '汇聚(红) · 离散(绿) · 转换(黄)'],
+          ] as const).map(([key, label, desc]) => {
+            const checked = key === 'plates' ? state.showPlateOverlay : state.showBoundaryOverlay
+            return (
+              <label
+                key={key}
+                title={desc}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm cursor-pointer transition-colors ${
+                  !isOverlay ? 'opacity-40 pointer-events-none text-gray-600' :
+                  checked ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-gray-400 hover:bg-space-surface/40'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!isOverlay}
+                  onChange={() => {
+                    if (key === 'plates') onChange({ ...state, showPlateOverlay: !state.showPlateOverlay })
+                    else onChange({ ...state, showBoundaryOverlay: !state.showBoundaryOverlay })
+                  }}
+                  className="accent-neon-cyan"
+                />
+                {label}
+              </label>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

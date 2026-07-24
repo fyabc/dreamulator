@@ -79,6 +79,8 @@ interface CacheEntry {
   width: number
   height: number
   colorMode: ColorMode
+  showPlateOverlay: boolean
+  showBoundaryOverlay: boolean
   cellIdMap: CellIdMap | null | undefined
   cvtMesh: CVTMesh | null | undefined
   // Cached result
@@ -99,6 +101,8 @@ interface UseGPUTerrainOptions {
   elevMinM?: number
   elevMaxM?: number
   colorMode?: ColorMode
+  showPlateOverlay?: boolean
+  showBoundaryOverlay?: boolean
   hillshadeStrength?: number
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
@@ -113,6 +117,8 @@ export default function useGPUTerrain({
   elevMinM = -11000,
   elevMaxM = 9000,
   colorMode = 'terrain',
+  showPlateOverlay = false,
+  showBoundaryOverlay = false,
   hillshadeStrength = 0,
   waterDepthFactor = 0.5,
   cvtMesh,
@@ -128,6 +134,8 @@ export default function useGPUTerrain({
       lastCache.width === width &&
       lastCache.height === height &&
       lastCache.colorMode === colorMode &&
+      lastCache.showPlateOverlay === showPlateOverlay &&
+      lastCache.showBoundaryOverlay === showBoundaryOverlay &&
       lastCache.cellIdMap === cellIdMap &&
       lastCache.cvtMesh === cvtMesh
     ) {
@@ -292,6 +300,60 @@ export default function useGPUTerrain({
       }
     }
 
+    // --- Overlay compositing (plates / boundaries on terrain base) ---
+    const canOverlay = (showPlateOverlay || showBoundaryOverlay)
+      && cvtMesh && cellIdMap && cellIdMap.length === totalPixels
+    if (canOverlay && colorMode === 'terrain') {
+      // Build plate color palette (same as cell-based mode)
+      const plateIds = [...new Set(cvtMesh!.cells.map((c) => c.plate_id).filter(Boolean))]
+      const platePalette = new Map<string, number>()
+      plateIds.forEach((pid, idx) => {
+        const [r, g, b] = hexRgb(PLATE_COLORS[idx % PLATE_COLORS.length])
+        platePalette.set(pid!, (r << 16) | (g << 8) | b)
+      })
+      const cellToPlateColor = new Map<number, number>()
+      const cellToBoundaryColor = new Map<number, number>()
+      for (const cell of cvtMesh!.cells) {
+        if (cell.plate_id) {
+          const c = platePalette.get(cell.plate_id)
+          if (c !== undefined) cellToPlateColor.set(cell.id, c)
+        }
+        const bType = cell.boundary_type as BoundaryType | null
+        if (bType) {
+          const [br, bg, bb] = BOUNDARY_COLORS[bType]
+          cellToBoundaryColor.set(cell.id, (br << 16) | (bg << 8) | bb)
+        }
+      }
+
+      const PLATE_ALPHA = 0.35
+      const BOUNDARY_ALPHA = 0.55
+
+      for (let i = 0; i < totalPixels; i++) {
+        const cellId = cellIdMap![i]
+        const pi = i * 4
+
+        if (showPlateOverlay) {
+          const packed = cellToPlateColor.get(cellId)
+          if (packed !== undefined) {
+            const or = (packed >> 16) & 0xff, og = (packed >> 8) & 0xff, ob = packed & 0xff
+            buf[pi] = Math.round(buf[pi] * (1 - PLATE_ALPHA) + or * PLATE_ALPHA)
+            buf[pi + 1] = Math.round(buf[pi + 1] * (1 - PLATE_ALPHA) + og * PLATE_ALPHA)
+            buf[pi + 2] = Math.round(buf[pi + 2] * (1 - PLATE_ALPHA) + ob * PLATE_ALPHA)
+          }
+        }
+
+        if (showBoundaryOverlay) {
+          const packed = cellToBoundaryColor.get(cellId)
+          if (packed !== undefined) {
+            const or = (packed >> 16) & 0xff, og = (packed >> 8) & 0xff, ob = packed & 0xff
+            buf[pi] = Math.round(buf[pi] * (1 - BOUNDARY_ALPHA) + or * BOUNDARY_ALPHA)
+            buf[pi + 1] = Math.round(buf[pi + 1] * (1 - BOUNDARY_ALPHA) + og * BOUNDARY_ALPHA)
+            buf[pi + 2] = Math.round(buf[pi + 2] * (1 - BOUNDARY_ALPHA) + ob * BOUNDARY_ALPHA)
+          }
+        }
+      }
+    }
+
     // --- Reverse rows + columns to match SphereGeometry UV convention ---
     // SphereGeometry default: u=0→lon=180°, u=0.5→lon=0°.
     // Our buffer:        col 0→lon=-180°(=180°), col w/2→lon=0°.
@@ -355,12 +417,12 @@ export default function useGPUTerrain({
     })
 
     // Save to module-level cache (survives component unmount/remount)
-    lastCache = { elevation, width, height, colorMode, cellIdMap, cvtMesh, material }
+    lastCache = { elevation, width, height, colorMode, showPlateOverlay, showBoundaryOverlay, cellIdMap, cvtMesh, material }
 
     return material
   }, [
     elevation, width, height, seaLevel,
-    elevMinM, elevMaxM, colorMode, hillshadeStrength, waterDepthFactor,
-    cvtMesh, cellIdMap,
+    elevMinM, elevMaxM, colorMode, showPlateOverlay, showBoundaryOverlay,
+    hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap,
   ])
 }

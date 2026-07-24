@@ -51,6 +51,8 @@ export default function MapViewerPage() {
 
   const [layerState, setLayerState] = useState<LayerState>({
     colorMode: 'terrain',
+    showPlateOverlay: false,
+    showBoundaryOverlay: false,
   })
 
   // Decoded elevation data (for rendering)
@@ -290,6 +292,8 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     colorMode={layerState.colorMode}
+                    showPlateOverlay={layerState.showPlateOverlay}
+                    showBoundaryOverlay={layerState.showBoundaryOverlay}
                     projection={projection}
 
                     onCursorMove={setCursor}
@@ -378,6 +382,8 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     colorMode={layerState.colorMode}
+                    showPlateOverlay={layerState.showPlateOverlay}
+                    showBoundaryOverlay={layerState.showBoundaryOverlay}
                     projection={projection}
 
                     onCursorMove={setCursor}

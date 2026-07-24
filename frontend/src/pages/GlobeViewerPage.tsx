@@ -46,7 +46,7 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  const [layerState, setLayerState] = useState<LayerState>({ colorMode: 'terrain' })
+  const [layerState, setLayerState] = useState<LayerState>({ colorMode: 'terrain', showPlateOverlay: false, showBoundaryOverlay: false })
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
@@ -105,6 +105,8 @@ export default function GlobeViewerPage() {
     width: elevDims.w, height: elevDims.h,
     seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
     colorMode: layerState.colorMode,
+    showPlateOverlay: layerState.showPlateOverlay,
+    showBoundaryOverlay: layerState.showBoundaryOverlay,
     cvtMesh: cvtMesh ?? null,
     cellIdMap: cellIdMap ?? null,
   })
