@@ -246,35 +246,6 @@ function GlobeScene({
     <CellPolygon vertices={vertices!} region={regionMap.get(hoveredCellId)!} color="#4da6ff" opacity={0.5} />
   )
 
-  // DEBUG: render cell center as bright red dot alongside polygon
-  const hoverDebugDot = hoveredCellId != null && hasPolyData && (
-    (() => {
-      // Find the cell center lon/lat from the cell data
-      // We don't have cells here, but we can compute the centroid of the polygon vertices
-      const region = regionMap.get(hoveredCellId!)
-      if (!region) return null
-      let sumLon = 0, sumLat = 0, count = 0
-      for (const vid of region.vertex_ids) {
-        const v = vertices!.find(vx => vx.id === vid)
-        if (v) { sumLon += v.lon; sumLat += v.lat; count++ }
-      }
-      if (count === 0) return null
-      const lon = sumLon / count, lat = sumLat / count
-      const phi = THREE.MathUtils.degToRad(lat)
-      const theta = THREE.MathUtils.degToRad(lon)
-      const cosLat = Math.cos(phi)
-      const cx = cosLat * Math.cos(theta) * 1.012
-      const cy = Math.sin(phi) * 1.012
-      const cz = cosLat * Math.sin(theta) * 1.012
-      return (
-        <mesh position={[cx, cy, cz]}>
-          <sphereGeometry args={[0.015, 8, 4]} />
-          <meshBasicMaterial color="red" depthTest={false} />
-        </mesh>
-      )
-    })()
-  )
-
   const SelectionHighlights = selectedCellIds && hasPolyData && [...selectedCellIds]
     .filter((id) => regionMap.has(id))
     .map((id) => (
@@ -313,8 +284,6 @@ function GlobeScene({
       {/* Cell polygon highlights */}
       {HoverHighlight}
       {SelectionHighlights}
-      {/* DEBUG: red dot at hovered cell centroid */}
-      {hoverDebugDot}
 
       <Graticule />
       <PolarAxis />
