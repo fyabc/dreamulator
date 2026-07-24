@@ -203,6 +203,9 @@ export default function GlobeViewerPage() {
     navigate(`/worlds/${worldName}/viewer3d${stellarQS}`)
   }, [navigate, worldName, stellarQS])
 
+  // --- Mobile panel state ---
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false)
+
   // --- Render ---
   if (!worldName || !planetId) {
     return <div className="flex items-center justify-center h-full text-gray-500">未选择世界或行星</div>
@@ -211,39 +214,35 @@ export default function GlobeViewerPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-56px)]">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link to={`/worlds/${worldName}`}
           className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">← 返回</Link>
-        <h1 className="text-lg font-bold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
-        <span className="text-xs text-gray-600 font-mono">{planetId}</span>
+        <h1 className="text-base sm:text-lg font-bold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
+        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{planetId}</span>
         <div className="flex-1" />
         <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
-          className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
-          🗺️ 2D 地图
+          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          🗺️ 2D
         </Link>
         <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
-          className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
           🔭 恒星系
         </Link>
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
       </div>
 
-      {/* Main content — three-panel layout (mirrors MapViewerPage) */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left panel: layers */}
-        <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
-          <MapLayerPanel state={layerState} onChange={setLayerState} />
-        </div>
-
-        {/* Centre: globe */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 min-h-0 relative">
-            {!terrainTexture ? (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                {elevationBlob && !elevData ? '解码高度图中...'
-                  : elevationBlob && elevData ? '生成纹理中...'
-                  : '加载地图数据...'}
-              </div>
+      {/* Main content */}
+      <div className="flex flex-1 min-h-0 relative">
+        {/* === Mobile layout (default, hidden ≥ md) === */}
+        <div className="flex flex-col flex-1 min-w-0 md:hidden">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 min-h-0 relative">
+              {!terrainTexture ? (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                  {elevationBlob && !elevData ? '解码高度图中...'
+                    : elevationBlob && elevData ? '生成纹理中...'
+                    : '加载地图数据...'}
+                </div>
             ) : (
               <GlobeViewer
                 texture={terrainTexture}
@@ -260,16 +259,75 @@ export default function GlobeViewerPage() {
           <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />
         </div>
 
-        {/* Right panel: cell inspector */}
-        <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
-          <MapCellInspector
-            cell={hoveredCellData}
-            plate={hoveredPlate}
-            cvtMesh={cvtMesh ?? null}
-            planetName={planetId}
-          />
-        </div>
+        {/* Floating toggle (mobile only) */}
+        {!leftPanelOpen && (
+          <button
+            onClick={() => setLeftPanelOpen(true)}
+            className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
+            title="图层设置"
+          >
+            ☰
+          </button>
+        )}
+
+        {/* Left panel drawer overlay (mobile only) */}
+        {leftPanelOpen && (
+          <>
+            <div className="absolute inset-0 bg-black/50 z-40" onClick={() => setLeftPanelOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">图层设置</span>
+                <button onClick={() => setLeftPanelOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
+              </div>
+              <MapLayerPanel state={layerState} onChange={setLayerState} />
+            </div>
+          </>
+        )}
       </div>
     </div>
-  )
+
+    {/* === Desktop layout (≥ md) === */}
+    <div className="hidden md:flex flex-1 min-h-0">
+      {/* Left panel: layers */}
+      <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
+        <MapLayerPanel state={layerState} onChange={setLayerState} />
+      </div>
+
+      {/* Centre: globe */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 min-h-0 relative">
+          {!terrainTexture ? (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+              {elevationBlob && !elevData ? '解码高度图中...'
+                : elevationBlob && elevData ? '生成纹理中...'
+                : '加载地图数据...'}
+            </div>
+          ) : (
+            <GlobeViewer
+              texture={terrainTexture}
+              onTransition={handleTransition}
+              onCellHover={handleCellHover}
+              onCellClick={handleCellClick}
+              vertices={globeVertices}
+              regions={globeRegions}
+              hoveredCellId={hoveredCellId}
+              selectedCellIds={selectedCells}
+            />
+          )}
+        </div>
+        <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />
+      </div>
+
+      {/* Right panel: cell inspector */}
+      <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
+        <MapCellInspector
+          cell={hoveredCellData}
+          plate={hoveredPlate}
+          cvtMesh={cvtMesh ?? null}
+          planetName={planetId}
+        />
+      </div>
+    </div>
+  </div>
+)
 }
