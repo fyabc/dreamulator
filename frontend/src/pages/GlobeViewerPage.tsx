@@ -232,9 +232,9 @@ export default function GlobeViewerPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0 relative">
-        {/* === Mobile layout (default, hidden ≥ md) === */}
-        <div className="flex flex-col flex-1 min-w-0 md:hidden">
+      <div className="flex-1 min-h-0 relative">
+        {/* === Mobile layout (visible only < md) === */}
+        <div className="flex flex-col min-h-0 md:hidden absolute inset-0">
           <div className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 min-h-0 relative">
               {!terrainTexture ? (
@@ -284,14 +284,13 @@ export default function GlobeViewerPage() {
           </>
         )}
       </div>
-    </div>
 
-    {/* === Desktop layout (≥ md) === */}
-    <div className="hidden md:flex flex-1 min-h-0">
-      {/* Left panel: layers */}
-      <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
-        <MapLayerPanel state={layerState} onChange={setLayerState} />
-      </div>
+        {/* === Desktop layout (≥ md) === */}
+        <div className="hidden md:flex absolute inset-0">
+          {/* Left panel: layers */}
+          <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
+            <MapLayerPanel state={layerState} onChange={setLayerState} />
+          </div>
 
       {/* Centre: globe */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -328,6 +327,7 @@ export default function GlobeViewerPage() {
         />
       </div>
     </div>
+  </div>
   </div>
 )
 }
