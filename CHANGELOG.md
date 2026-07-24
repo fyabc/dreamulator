@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-07-24
+
+### Added
+
+**3D 球面 — 多边形高亮与图层叠加**
+- Voronoi cell 多边形高亮（蓝色悬停 + 黄色选中），渲染真实球面多边形边界
+- 四层独立透明度滑块（地形/海陆/板块/边界），任意组合叠加
+- 海岸线自动检测：海陆异号像素边缘绘制黑线
+- 球面经纬线网格 + 极轴（北红/南蓝 + N/S 文字）
+
+**配色升级**
+- LUT 精度 256→1024 级，色彩渐变更平滑
+- 浅海色调修正：消除沙滩过渡区的黄色偏色
+
+### Fixed
+
+- 修复 3D 球面纹理映射（行列反转匹配 SphereGeometry UV）
+- 修复 CVTVertex/CVTRegion 类型与实际数据格式不一致
+- 修复 cli terrain generate 日志丢失 rich 彩色输出
+- 修复桌面端移动端响应式布局（3D 球面对齐 2D 地图）
+- 统一 2D/3D 单元格选择逻辑（Ctrl+双击复选）
+
 ## [0.5.0] — 2026-07-24
 
 ### Added
