@@ -485,6 +485,31 @@ export default function useTerrainTexture({
     const gridCtx = finalCanvas.getContext('2d')!
     drawGraticule(gridCtx, finalW, finalH, projection)
 
+    // ---- Coastline detection (equirectangular only — reprojected paths
+    //      would need per-pixel inverse projection which is too slow here) ----
+    if (!isReprojected && colorMode === 'terrain') {
+      const coastData = gridCtx.getImageData(0, 0, finalW, finalH)
+      const cPx = coastData.data
+      const COAST = [20, 20, 20, 255] as const
+      for (let y = 0; y < finalH; y++) {
+        for (let x = 0; x < finalW; x++) {
+          const i = y * finalW + x
+          const isLand = elevation[i] >= normSeaLevel
+          // Right neighbour
+          if (x + 1 < finalW && isLand !== (elevation[y * finalW + x + 1] >= normSeaLevel)) {
+            const pi = i * 4; cPx[pi] = COAST[0]; cPx[pi + 1] = COAST[1]; cPx[pi + 2] = COAST[2]
+            const ni = (y * finalW + x + 1) * 4; cPx[ni] = COAST[0]; cPx[ni + 1] = COAST[1]; cPx[ni + 2] = COAST[2]
+          }
+          // Bottom neighbour
+          if (y + 1 < finalH && isLand !== (elevation[(y + 1) * finalW + x] >= normSeaLevel)) {
+            const pi = i * 4; cPx[pi] = COAST[0]; cPx[pi + 1] = COAST[1]; cPx[pi + 2] = COAST[2]
+            const ni = ((y + 1) * finalW + x) * 4; cPx[ni] = COAST[0]; cPx[ni + 1] = COAST[1]; cPx[ni + 2] = COAST[2]
+          }
+        }
+      }
+      gridCtx.putImageData(coastData, 0, 0)
+    }
+
     // Extract raw RGBA pixels and upload as DataTexture (same pipeline as
     // the GPU path).  Avoids CanvasTexture's implicit sRGB colour management
     // that mutes the palette vs the equirectangular DataTexture path.
