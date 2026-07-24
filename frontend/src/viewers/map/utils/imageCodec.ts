@@ -183,7 +183,7 @@ export function generatePlanetTexture(
     for (let tx = 0; tx < thumbW; tx++) {
       const sx = Math.round(tx * scaleX)
       const elev = elevation[rowOff + sx]
-      const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+      const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
       const pi = tRowOff + tx * 4
       buf[pi] = lut[lutIdx * 4]
       buf[pi + 1] = lut[lutIdx * 4 + 1]

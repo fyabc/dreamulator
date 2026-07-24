@@ -128,11 +128,12 @@ export function generateAdaptiveTerrainScale(
   // Sort by elevation (should already be sorted, but be safe)
   colorBreaks.sort((a, b) => a.elev - b.elev)
 
-  const lut = new Uint8Array(256 * 4)
+  const LUT_SIZE = 1024
+  const lut = new Uint8Array(LUT_SIZE * 4)
 
-  for (let i = 0; i < 256; i++) {
+  for (let i = 0; i < LUT_SIZE; i++) {
     // Map LUT index to elevation in metres
-    const elev = minElev + (i / 255) * range
+    const elev = minElev + (i / (LUT_SIZE - 1)) * range
 
     // Find surrounding color stops
     let lower = colorBreaks[0]
@@ -171,7 +172,7 @@ export function generateAdaptiveTerrainScale(
  */
 export function generateLut(
   scale: ColorStop[],
-  resolution: number = 256,
+  resolution: number = 1024,
 ): Uint8Array {
   const lut = new Uint8Array(resolution * 3)
   const stops = [...scale].sort((a, b) => a.value - b.value)

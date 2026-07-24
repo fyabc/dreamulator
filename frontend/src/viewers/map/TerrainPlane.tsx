@@ -251,7 +251,7 @@ export default function useTerrainTexture({
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const elev = elevation[y * width + x]
-          const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+          const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
           let r: number, g: number, b: number
 
           if (isRgba) {
@@ -352,7 +352,7 @@ export default function useTerrainTexture({
 
           // Base terrain color
           const elev = elevation[rowOff + px2]
-          const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+          const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
           let r = baseLut[lutIdx * 3 + 0]
           let g = baseLut[lutIdx * 3 + 1]
           let b = baseLut[lutIdx * 3 + 2]
@@ -384,7 +384,7 @@ export default function useTerrainTexture({
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const elev = elevation[y * width + x]
-          const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+          const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
           const r = lut[lutIdx * 3 + 0]
           const g = lut[lutIdx * 3 + 1]
           const b = lut[lutIdx * 3 + 2]

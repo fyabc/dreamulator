@@ -149,11 +149,11 @@ export default function useGPUTerrain({
       isRgbaLut = true
     } else if (colorMode === 'landsea') {
       // Dynamic binary LUT: sharp water/land boundary at the true sea level
-      lut = new Uint8Array(256 * 3)
+      lut = new Uint8Array(1024 * 3)
       const WATER: [number, number, number] = [30, 60, 120]
       const LAND: [number, number, number] = [80, 140, 60]
-      const cutoff = Math.round(normSeaLevel * 255)
-      for (let i = 0; i < 256; i++) {
+      const cutoff = Math.round(normSeaLevel * 1023)
+      for (let i = 0; i < 1024; i++) {
         const c = i <= cutoff ? WATER : LAND
         lut[i * 3 + 0] = c[0]
         lut[i * 3 + 1] = c[1]
@@ -208,7 +208,7 @@ export default function useGPUTerrain({
           } else {
             // No colour for this cell — use terrain base
             const elev = elevation[i]
-            const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+            const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
             buf[pi] = lut[lutIdx * 3 + 0]
             buf[pi + 1] = lut[lutIdx * 3 + 1]
             buf[pi + 2] = lut[lutIdx * 3 + 2]
@@ -219,7 +219,7 @@ export default function useGPUTerrain({
 
         // Elevation-based modes: LUT + (optional) hillshading + water depth
         const elev = elevation[i]
-        const lutIdx = Math.min(255, Math.max(0, Math.round(elev * 255)))
+        const lutIdx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
 
         let r: number, g: number, b: number
         if (isRgbaLut) {
