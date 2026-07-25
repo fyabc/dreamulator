@@ -217,11 +217,17 @@ function CellDetails({
               : '—'}
           </dd>
         </div>
-        {cell.hotspot_id && (
+        {(cell.hotspot_id || cell.landform) && (
           <div className="flex justify-between">
-            <dt className="text-gray-500" title="地幔热点火山链 (Wilson 1963)">热点链</dt>
-            <dd className="font-mono text-fuchsia-400">
-              {cell.hotspot_id}
+            <dt className="text-gray-500" title="特殊地壳类型：热点链 (Wilson 1963) / 古造山带 (Şengör 1990) / 裂谷 (Burke & Dewey 1973)">特殊地壳</dt>
+            <dd className={`font-mono text-xs ${
+              cell.hotspot_id ? 'text-fuchsia-400' :
+              cell.landform === 'orogeny' ? 'text-amber-400' :
+              'text-teal-400'
+            }`}>
+              {cell.hotspot_id ? `热点链 ${cell.hotspot_id}` :
+               cell.landform === 'orogeny' ? '古造山带' :
+               cell.landform === 'rift' ? '裂谷' : ''}
             </dd>
           </div>
         )}
