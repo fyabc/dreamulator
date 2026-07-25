@@ -60,7 +60,7 @@ Gaea 可作为可选的局部精细化工具使用。
                                                │
                         ┌──────────────────────▼───────────────────────────────────┐
                         │           Phase 1: Tectonic Plates                        │
-                        │  Random Seeds → Flood-Fill BFS (variable speed)          │
+                        │  Poisson-disc Seeds → Voronoi BFS (Cortial 2019)         │
                         │  → Plate Assignment + Crust Type                          │
                         │  Output: plate_id[], crust_type[]                         │
                         └──────────────────────┬───────────────────────────────────┘
@@ -365,55 +365,41 @@ def select_plate_seeds(mesh: CVTMesh, num_plates: int, rng) -> list[int]:
     return seeds
 ```
 
-### 3.2 洪水填充生长
+### 3.2 球面 Voronoi 剖分（Cortial 2019）
 
-每个板块从其种子出发，通过 BFS 向外扩张。**可变速度**模拟不同板块的扩张能力差异：
+遵循 [Cortial et al. (2019)](https://doi.org/10.1111/cgf.13614) *Procedural Tectonic Planets*
+的球面 Voronoi 板块剖分方法。
+
+**算法**：同步多源 BFS。所有种子从各自的 FIFO 队列逐层扩展（每轮每 plate 扩 1 层）。
+每个 cell 归属于第一个到达的 wavefront，产生球面 Voronoi 图。Voronoi 区域在图上
+天然凸 → 板块永不包围彼此。CVT 网格的不规则拓扑天然提供有机边界。
 
 ```python
-def flood_fill_plates(
+def _voronoi_partition(
     mesh: CVTMesh,
     seeds: list[int],
-    speeds: list[float],        # per-plate growth speed (0.5 - 2.0)
-    rng,
-) -> np.ndarray:
-    """Assign each CVT node to a plate via competitive flood fill.
+) -> dict[int, str]:
+    """Spherical Voronoi on the CVT graph — synchronous multi-source BFS."""
+    queues = [deque([s]) for s in seeds]
+    cell_plate_map = {s: f"plate_{i:03d}" for i, s in enumerate(seeds)}
+    total = len(seeds)
 
-    Variable speed means some plates grow faster than others,
-    producing irregular, non-convex boundaries.
-
-    Returns:
-        plate_ids: (N,) int array, one plate ID per node.
-    """
-    plate_ids = np.full(mesh.num_nodes, -1, dtype=np.int32)
-    # Priority queue: (arrival_time, node_id, plate_id)
-    heap = []
-
-    for i, seed in enumerate(seeds):
-        plate_ids[seed] = i
-        heapq.heappush(heap, (0.0, seed, i))
-
-    while heap:
-        time, node, plate = heapq.heappop(heap)
-        # Skip if already claimed by another plate
-        if plate_ids[node] != plate:
-            continue
-        # Expand to neighbors
-        for neighbor in mesh.adjacency[node]:
-            if plate_ids[neighbor] >= 0:
+    while total < mesh.num_cells:
+        for plate_idx, q in enumerate(queues):
+            if not q:
                 continue
-            # Edge weight: angular distance / plate speed
-            edge_len = angular_distance_xyz(mesh.nodes[node], mesh.nodes[neighbor])
-            # Add small random perturbation for irregularity
-            jitter = 1.0 + rng.uniform(-0.1, 0.1)
-            arrival = time + (edge_len / speeds[plate]) * jitter
-
-            plate_ids[neighbor] = plate
-            heapq.heappush(heap, (arrival, neighbor, plate))
-
-    return plate_ids
+            plate_id = f"plate_{plate_idx:03d}"
+            for _ in range(len(q)):           # one layer
+                for nid in mesh.cells[q.popleft()].neighbors:
+                    if nid not in cell_plate_map:
+                        cell_plate_map[nid] = plate_id
+                        q.append(nid)
+                        total += 1
+    return cell_plate_map
 ```
 
-**速度范围**：0.5× – 2.0× 基准速度。速度越快的板块占据的面积越大。
+板面积由 Poisson-disc 种子分布和球面 Voronoi 几何自然决定，无需额外的
+目标尺寸（Pareto）或速度参数。
 
 ### 3.3 地壳类型分配
 

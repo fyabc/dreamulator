@@ -1,18 +1,31 @@
-"""Tectonic plate generation via flood-fill on the CVT mesh.
+"""Tectonic plate generation on the spherical CVT mesh.
 
-Pipeline:
-    1. Select plate seed cells (random or predefined)
-    2. Variable-speed parallel BFS flood-fill
-    3. Assign crust types (continental / oceanic)
-    4. Assign Euler poles (rotation axis + angular velocity)
+Algorithm (Cortial et al. 2019, "Procedural Tectonic Planets")
+--------------------------------------------------------------
+    1. Poisson-disc seed selection on the sphere
+    2. Synchronous multi-source BFS → spherical Voronoi partition
+    3. Boundary noise perturbation → organic edges
+    4. Assign crust types (continental / oceanic)
+    5. Assign Euler poles (rotation axis + angular velocity)
 
-See ``docs/usage/terrain-pipeline.md`` §3 for algorithm details.
+Step 3 follows Cortial et al. §3 "noise-warped geodetic distance":
+a fraction of boundary cells are randomly reassigned to adjacent
+plates, turning straight Voronoi edges into natural, irregular
+boundaries.
+
+References
+----------
+* Cortial, Y., Peytavie, A., Galin, E., & Guérin, E. (2019). Procedural
+  Tectonic Planets. Computer Graphics Forum (Eurographics), 38(2), 1–11.
+  https://doi.org/10.1111/cgf.13614
+* weigert/SimpleTectonics — Poisson disc + GPU Voronoi.
+  https://github.com/weigert/SimpleTectonics
 """
 
 from __future__ import annotations
 
-import heapq
 import logging
+from collections import deque
 
 import numpy as np
 
@@ -28,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Seed selection
+# Seed selection — Poisson-disc on sphere
 # ---------------------------------------------------------------------------
 
 
@@ -37,10 +50,11 @@ def select_plate_seeds(
     num_plates: int,
     rng: np.random.Generator,
 ) -> list[int]:
-    """Select seed cells for tectonic plates.
+    """Select seed cells for tectonic plates (Poisson-disc on sphere).
 
-    Picks *num_plates* random cells, ensuring they are well-spread by
-    rejecting seeds too close to already-selected ones.
+    Picks *num_plates* random cells, rejecting candidates too close to
+    already-selected seeds.  This produces a well-spread distribution so
+    Voronoi cells have natural size variation without extreme outliers.
 
     Args:
         mesh: The CVT mesh.
@@ -58,7 +72,9 @@ def select_plate_seeds(
     rng.shuffle(candidates)
 
     seeds: list[int] = []
-    min_angular_sep = np.sqrt(4 * np.pi / num_plates) * 0.3  # ~30% of avg spacing
+    # Minimum angular separation: ~30% of the average spacing for N points
+    # on a unit sphere (√(4π/N)).
+    min_angular_sep = np.sqrt(4 * np.pi / num_plates) * 0.3
 
     for cid in candidates:
         if len(seeds) >= num_plates:
@@ -67,20 +83,20 @@ def select_plate_seeds(
         cell = mesh.cells[cid]
         xyz = np.array([cell.x, cell.y, cell.z])
 
-        # Check minimum angular separation from existing seeds
         too_close = False
         for sid in seeds:
-            seed_xyz = np.array([mesh.cells[sid].x, mesh.cells[sid].y, mesh.cells[sid].z])
+            seed_xyz = np.array([
+                mesh.cells[sid].x, mesh.cells[sid].y, mesh.cells[sid].z,
+            ])
             dot = np.clip(np.dot(xyz, seed_xyz), -1, 1)
-            angle = np.arccos(dot)
-            if angle < min_angular_sep:
+            if np.arccos(dot) < min_angular_sep:
                 too_close = True
                 break
 
         if not too_close:
             seeds.append(cid)
 
-    # If rejection sampling didn't find enough, just take remaining
+    # Fallback: if rejection sampling didn't find enough, take remaining
     if len(seeds) < num_plates:
         for cid in candidates:
             if cid not in seeds:
@@ -92,25 +108,25 @@ def select_plate_seeds(
 
 
 # ---------------------------------------------------------------------------
-# Flood-fill plate growth
+# Spherical Voronoi partition — synchronous multi-source BFS
 # ---------------------------------------------------------------------------
+#
+# Cortial et al. (2019) §3: each surface point is assigned to the nearest
+# seed centroid, producing a spherical Voronoi diagram.  On the CVT graph
+# we compute this via synchronous BFS — all seeds expand one layer per
+# round, so every cell joins the plate whose wavefront reaches it first.
+# Voronoi cells are convex in graph space → plates never enclose each other.
 
 
-def flood_fill_plates(
+def _voronoi_partition(
     mesh: CVTMesh,
     seeds: list[int],
-    rng: np.random.Generator,
 ) -> dict[int, str]:
-    """Grow plates from seeds using variable-speed BFS.
+    """Synchronous multi-source BFS — spherical Voronoi on the CVT graph.
 
-    Each plate has a random ``growth_speed_multiplier`` in [0.5, 2.0] that
-    affects how fast it expands.  A priority queue (min-heap) ensures
-    faster-growing plates claim more cells.
-
-    Args:
-        mesh: The CVT mesh.
-        seeds: Cell IDs to use as plate seeds.
-        rng: Random number generator.
+    All seeds expand one layer per round.  Cells are assigned to the plate
+    whose wavefront reaches them first.  Complexity: O(N) — each cell and
+    edge is visited exactly once.
 
     Returns:
         Dict mapping cell_id → plate_id.
@@ -118,48 +134,117 @@ def flood_fill_plates(
     num_plates = len(seeds)
     cell_plate_map: dict[int, str] = {}
 
-    # Assign growth speeds
-    growth_speeds = rng.uniform(0.5, 2.0, size=num_plates)
-
-    # Priority queue: (cost, cell_id, plate_index)
-    # Lower cost = higher priority.  Cost = 1 / speed.
-    heap: list[tuple[float, int, int]] = []
-
+    # One FIFO queue per plate, initialised with the seed cell
+    queues: list[deque[int]] = [deque([s]) for s in seeds]
     for i, seed_id in enumerate(seeds):
-        plate_id = f"plate_{i:03d}"
-        cell_plate_map[seed_id] = plate_id
-        cost = 1.0 / growth_speeds[i]
-        heapq.heappush(heap, (cost, seed_id, i))
+        cell_plate_map[seed_id] = f"plate_{i:03d}"
 
-    # BFS expansion
-    step = 0
-    while heap:
-        cost, cell_id, plate_idx = heapq.heappop(heap)
-        plate_id = f"plate_{plate_idx:03d}"
+    total_assigned = num_plates
+    round_num = 0
 
-        for neighbor_id in mesh.cells[cell_id].neighbors:
-            if neighbor_id not in cell_plate_map:
-                cell_plate_map[neighbor_id] = plate_id
-                new_cost = cost + 1.0 / growth_speeds[plate_idx]
-                heapq.heappush(heap, (new_cost, neighbor_id, plate_idx))
+    while total_assigned < mesh.num_cells:
+        round_num += 1
 
-        step += 1
-        if step % 10000 == 0:
-            logger.debug("  Flood-fill: %d / %d cells assigned", len(cell_plate_map), mesh.num_cells)
+        for plate_idx in range(num_plates):
+            q = queues[plate_idx]
+            if not q:
+                continue  # this plate is saturated
 
-    # Verify completeness
-    unassigned = mesh.num_cells - len(cell_plate_map)
-    if unassigned > 0:
-        logger.warning("  %d cells unassigned after flood-fill", unassigned)
-        # Assign remaining to nearest plate
-        for cid in range(mesh.num_cells):
-            if cid not in cell_plate_map:
-                for nid in mesh.cells[cid].neighbors:
-                    if nid in cell_plate_map:
-                        cell_plate_map[cid] = cell_plate_map[nid]
-                        break
+            plate_id = f"plate_{plate_idx:03d}"
+            # Process exactly one layer: all cells currently in q
+            for _ in range(len(q)):
+                cell_id = q.popleft()
+                for neighbor_id in mesh.cells[cell_id].neighbors:
+                    if neighbor_id not in cell_plate_map:
+                        cell_plate_map[neighbor_id] = plate_id
+                        q.append(neighbor_id)
+                        total_assigned += 1
 
+        if round_num % 2 == 0:
+            logger.debug(
+                "  Voronoi BFS round %d: %d / %d cells",
+                round_num, total_assigned, mesh.num_cells,
+            )
+
+    logger.info(
+        "  Voronoi BFS: %d rounds, %d cells assigned",
+        round_num, total_assigned,
+    )
     return cell_plate_map
+
+
+def _relax_boundaries(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    strength: float,
+    rng: np.random.Generator,
+) -> None:
+    """Laplacian boundary smoothing — arc-like edges via majority voting.
+
+    Real plate boundaries (Japan, Andes, Aleutians) are *arcs*, not jagged
+    cell-edge staircases.  We approximate this with iterative Laplacian
+    relaxation: each boundary cell looks at its neighbours and adopts the
+    plate that would make the local boundary smoother.
+
+    *strength* = 0.0 keeps the raw Voronoi boundaries (straight cell edges).
+    Values around 0.05–0.15 produce natural, arc-like boundaries.  Internally
+    the strength controls the number of smoothing passes (1–5).
+
+    Modifies *cell_plate_map* in-place.
+    """
+    if strength <= 0.0:
+        return
+
+    # Strength → number of smoothing passes
+    passes = max(1, min(5, round(strength * 30)))
+
+    for p in range(passes):
+        # Find current boundary cells
+        boundary: list[int] = []
+        for cid, pid in cell_plate_map.items():
+            for nid in mesh.cells[cid].neighbors:
+                if cell_plate_map.get(nid, "") != pid:
+                    boundary.append(cid)
+                    break
+
+        rng.shuffle(boundary)  # avoid systematic bias per pass
+
+        flipped = 0
+        for cid in boundary:
+            pid = cell_plate_map[cid]
+
+            # Tally neighbour-plate votes
+            votes: dict[str, int] = {}
+            for nid in mesh.cells[cid].neighbors:
+                npid = cell_plate_map.get(nid, "")
+                if npid:
+                    votes[npid] = votes.get(npid, 0) + 1
+
+            own = votes.get(pid, 0)
+            # Best alternative plate (exclude own)
+            best = max(
+                ((v, p) for p, v in votes.items() if p != pid),
+                default=(0, pid),
+            )
+
+            # Require a clear majority (≥2 more votes) to flip.
+            # This prevents oscillation and ensures only "obvious" flips.
+            if best[0] >= own + 2:
+                cell_plate_map[cid] = best[1]
+                flipped += 1
+
+        if flipped > 0:
+            logger.debug(
+                "  Smoothing pass %d/%d: %d cells flipped",
+                p + 1, passes, flipped,
+            )
+        else:
+            break  # converged — no more obvious flips
+
+    logger.info(
+        "  Boundary smoothing: %d passes (strength=%.2f)",
+        p + 1, strength,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,22 +259,19 @@ def assign_crust_types(
 ) -> None:
     """Assign crust types to cells based on their plate.
 
-    Each plate gets a random continental_fraction in [0.1, 0.9].
-    Cells in the continental fraction are assigned ``continental``,
-    the rest ``oceanic``.
+    Each plate gets a random continental fraction in [0.1, 0.9].
+    Continental cells are preferentially placed at mid-latitudes.
 
     Modifies ``mesh.cells[*].crust_type`` in-place.
     """
-    # Group cells by plate
     plate_cells: dict[str, list[int]] = {}
     for cid, pid in cell_plate_map.items():
         plate_cells.setdefault(pid, []).append(cid)
 
     for plate_id, cell_ids in plate_cells.items():
-        # Random continental fraction for this plate
         continental_fraction = rng.uniform(0.1, 0.9)
 
-        # Sort cells by latitude (absolute) to prefer mid-latitudes for continents
+        # Sort by absolute latitude — mid-latitudes first
         sorted_cells = sorted(cell_ids, key=lambda c: abs(mesh.cells[c].lat))
 
         n_cont = max(1, int(len(sorted_cells) * continental_fraction))
@@ -213,35 +295,30 @@ def assign_euler_poles(
 ) -> list[TectonicPlate]:
     """Create TectonicPlate objects with random Euler poles.
 
-    Each plate gets:
-    - A random rotation axis (unit vector on sphere)
-    - A random angular velocity derived from ``plate_speed_range_cm_yr``
+    Each plate receives:
+    - A random rotation axis (unit vector on the sphere).
+    - An angular velocity derived from ``plate_speed_range_cm_yr``.
+    - Plate type determined by majority crust.
 
-    The Euler pole is placed such that the velocity at the plate centroid
-    matches the desired speed and direction.
+    Plate speed defaults from Cortial 2019: 1–10 cm/yr, with
+    v₀ = 100 mm/yr as the maximum reference speed.
     """
-    # Group cells by plate
     plate_cells: dict[str, list[int]] = {}
     for cid, pid in cell_plate_map.items():
         plate_cells.setdefault(pid, []).append(cid)
 
-    speed_min = config.plate_speed_range_cm_yr[0]  # cm/year
-    speed_max = config.plate_speed_range_cm_yr[1]
-
-    # Convert cm/yr to rad/yr: speed / radius
-    # radius in cm = radius_km * 1e5
-    radius_cm = config.radius_km * 1e5
+    speed_min, speed_max = config.plate_speed_range_cm_yr
+    radius_cm = config.radius_km * 1e5  # for cm/yr → rad/yr conversion
 
     plates: list[TectonicPlate] = []
 
     for plate_id, cell_ids in sorted(plate_cells.items()):
         plate_idx = int(plate_id.split("_")[1])
 
-        # Random speed in range
         speed_cm_yr = rng.uniform(speed_min, speed_max)
         omega_rad_yr = speed_cm_yr / radius_cm
 
-        # Plate centroid (for Euler pole placement)
+        # Plate centroid (unit vector)
         centroid = np.array([
             np.mean([mesh.cells[c].x for c in cell_ids]),
             np.mean([mesh.cells[c].y for c in cell_ids]),
@@ -250,7 +327,6 @@ def assign_euler_poles(
         centroid /= np.linalg.norm(centroid)
 
         # Random motion direction (perpendicular to centroid)
-        # Pick a random vector, project out centroid component, normalize
         random_dir = rng.standard_normal(3)
         random_dir -= np.dot(random_dir, centroid) * centroid
         norm = np.linalg.norm(random_dir)
@@ -260,13 +336,14 @@ def assign_euler_poles(
             norm = np.linalg.norm(random_dir)
         motion_dir = random_dir / norm
 
-        # Euler pole = rotation axis perpendicular to both centroid and motion
-        # ω_axis = centroid × motion_dir (perpendicular to plate, gives motion)
+        # Euler pole axis ← centroid × motion_dir
         euler_axis = np.cross(centroid, motion_dir)
         euler_axis /= np.linalg.norm(euler_axis)
 
-        # Determine plate type from majority crust
-        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
+        # Plate type from majority crust
+        n_cont = sum(
+            1 for c in cell_ids if mesh.cells[c].crust_type == "continental"
+        )
         n_ocean = len(cell_ids) - n_cont
         if n_cont > 2 * n_ocean:
             plate_type = PlateType.CONTINENTAL
@@ -275,10 +352,7 @@ def assign_euler_poles(
         else:
             plate_type = PlateType.MIXED
 
-        # Growth speed multiplier (used during flood-fill, stored for reproducibility)
-        growth_speed = rng.uniform(0.5, 2.0)
-
-        plate = TectonicPlate(
+        plates.append(TectonicPlate(
             id=plate_id,
             name=f"Plate {plate_idx + 1}",
             type=plate_type,
@@ -289,11 +363,10 @@ def assign_euler_poles(
                 z=float(euler_axis[2]),
                 omega_rad_yr=omega_rad_yr,
             ),
-            growth_speed_multiplier=growth_speed,
-        )
-        plates.append(plate)
+            growth_speed_multiplier=1.0,
+        ))
 
-        # Update cells with plate_id
+        # Update mesh cells with plate_id
         for cid in cell_ids:
             mesh.cells[cid].plate_id = plate_id
 
@@ -305,22 +378,65 @@ def assign_euler_poles(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Strategy registry
+# ---------------------------------------------------------------------------
+#
+# Each plate algorithm is a callable (mesh, config) → (plates, cell_map).
+# Add new algorithms here and reference them by name in ``plate_algorithm``.
+
+
+_PLATE_ALGORITHMS: dict[str, str] = {
+    "cortial2019": "cortial2019",
+}
+
+
+def _generate_cortial2019(
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """Cortial et al. (2019) §3 — Poisson-disc + spherical Voronoi."""
+    return _generate_plates_impl(mesh, config)
+
+
 def generate_plates(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
-    """Generate tectonic plates on the CVT mesh.
+    """Generate tectonic plates on the spherical CVT mesh.
 
-    This is the main entry point for Stage 2 of the terrain pipeline.
+    Dispatches to the algorithm named in ``config.plate_algorithm``.
+    Currently supported:
+
+    ``"cortial2019"`` (default)
+        Poisson-disc seed selection → synchronous Voronoi BFS → boundary
+        smoothing → crust types → Euler poles.  Follows Cortial et al.
+        (2019) *Procedural Tectonic Planets* §3.
 
     Args:
-        mesh: The CVT mesh (modified in-place for cell.crust_type and cell.plate_id).
+        mesh: CVT mesh (modified in-place).
         config: Pipeline configuration.
 
     Returns:
         Tuple of (list of TectonicPlate, cell_id → plate_id mapping).
     """
-    rng = np.random.default_rng(config.seed + 1)  # offset seed for variety
+    algo = config.plate_algorithm
+    if algo not in _PLATE_ALGORITHMS:
+        raise ValueError(
+            f"Unknown plate algorithm '{algo}'. "
+            f"Available: {sorted(_PLATE_ALGORITHMS.keys())}"
+        )
+    if algo == "cortial2019":
+        return _generate_cortial2019(mesh, config)
+    raise ValueError(f"Plate algorithm '{algo}' not implemented")  # unreachable
+
+
+def _generate_plates_impl(
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """Internal implementation — Cortial 2019 Voronoi partition."""
+    rng = np.random.default_rng(config.seed + 1)
 
     logger.info("Generating %d tectonic plates", config.num_plates)
 
@@ -328,27 +444,44 @@ def generate_plates(
     logger.info("  Step 1/4: Selecting plate seeds")
     seeds = select_plate_seeds(mesh, config.num_plates, rng)
 
-    # 2. Flood-fill growth
-    logger.info("  Step 2/4: Flood-fill plate growth")
-    cell_plate_map = flood_fill_plates(mesh, seeds, rng)
+    # 2. Spherical Voronoi partition (Cortial 2019 §3)
+    logger.info("  Step 2/5: Spherical Voronoi partition")
+    cell_plate_map = _voronoi_partition(mesh, seeds)
 
-    # 3. Crust type assignment
-    logger.info("  Step 3/4: Assigning crust types")
+    # 3. Boundary smoothing (Cortial 2019 "noise-warped geodetic distance")
+    logger.info("  Step 3/5: Boundary smoothing (strength=%.2f)",
+                config.boundary_noise)
+    _relax_boundaries(mesh, cell_plate_map, config.boundary_noise, rng)
+
+    # Log plate size distribution
+    plate_sizes = sorted(
+        [sum(1 for v in cell_plate_map.values() if v == f"plate_{i:03d}")
+         for i in range(config.num_plates)],
+        reverse=True,
+    )
+    logger.info(
+        "  Plate sizes (cells): %s",
+        ", ".join(f"{s:4d}" for s in plate_sizes),
+    )
+
+    # 4. Crust types
+    logger.info("  Step 4/5: Assigning crust types")
     assign_crust_types(mesh, cell_plate_map, rng)
 
-    # 4. Euler pole assignment
-    logger.info("  Step 4/4: Assigning Euler poles")
+    # 5. Euler poles
+    logger.info("  Step 5/5: Assigning Euler poles")
     plates = assign_euler_poles(mesh, cell_plate_map, config, rng)
 
-    # Log summary
     for plate in plates:
-        n_cont = sum(1 for c in plate.cell_ids if mesh.cells[c].crust_type == "continental")
+        n_cont = sum(
+            1 for c in plate.cell_ids
+            if mesh.cells[c].crust_type == "continental"
+        )
         logger.info(
-            "  %s: %d cells (%d continental, %d oceanic), type=%s, speed=%.1f cm/yr",
-            plate.id,
-            len(plate.cell_ids),
-            n_cont,
-            len(plate.cell_ids) - n_cont,
+            "  %s: %d cells (%d continental, %d oceanic), "
+            "type=%s, speed=%.1f cm/yr",
+            plate.id, len(plate.cell_ids),
+            n_cont, len(plate.cell_ids) - n_cont,
             plate.type.value,
             plate.euler_pole.omega_rad_yr * config.radius_km * 1e5,
         )

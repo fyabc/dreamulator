@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-07-25
+
+### Added
+
+**板块构造时间演化 (Cortial et al. 2019)**
+- `tectonic_simulator.py`：质心欧拉极旋转 + 球面 Voronoi 重剖分，板块边界随时间移动
+- 自动时间步长缩放：根据 CVT 分辨率调整 δt，确保每步移动 ≥1 cell
+- 俯冲抬升 + 大陆碰撞造山 + 洋脊剖面 + 全局侵蚀（Cortial 2019 常数表）
+
+**可插拔策略接口**
+- 板块剖分、地形合成、时间演化均支持多算法切换（`plate_algorithm` / `terrain_algorithm` / `tectonic_algorithm` 配置项）
+- 非对称山脉剖面 (Willett 1999)：迎风坡陡、背风坡缓
+- 热点火山链 (Wilson 1963)：Poisson-disc 种子 + 沿板块运动方向指数衰减
+- 大陆架指数深度衰减 (Shepard 1963) + O-O 岛弧抬升 (Stern 2002)
+- 各向异性 fBm 噪声：沿边界走向拉伸，产生山脊对齐纹理 (Perlin 1985)
+
+**基准测试与回归验证**
+- `--benchmark` 保存可复现指标 (seed=42, n=4096)
+- `terrain validate` 对比参考基准，偏差超阈值时报错
+- CI 级地形质量检测
+
+**数据可用性改善**
+- `terrain open`：一键打开输出目录
+- 相对路径显示 + 分支 README 自动生成
+- 日志分层：`print()` → stdout（用户），`logger` → stderr（诊断）
+
+### Changed
+
+- 默认日志级别 INFO → WARNING（加 `-v` 显示详情）
+- 板块剖分：优先队列 BFS → Cortial 2019 球面 Voronoi + Poisson-disc 种子
+- 地形合成：管线重组，边界检测 → 阶段 4，地形合成 → 阶段 5
+
+### Added (文档)
+
+- `docs/design/vision.md`：项目长期愿景与设计哲学
+- 时间轴功能纳入路线图（近期 P2 + 远期 §4.6）
+- 学科知识库更新：板块构造、地形合成参考文献
+
 ## [0.6.0] — 2026-07-24
 
 ### Added

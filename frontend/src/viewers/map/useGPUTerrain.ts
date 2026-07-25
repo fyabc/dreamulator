@@ -40,6 +40,13 @@ const BOUNDARY_COLORS: Record<BoundaryType, [number, number, number]> = {
   transform: hexRgb('#fdd835'),
 }
 
+/** Crust colours for interior cells (no boundary type) in the boundaries layer. */
+const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
+  continental:   hexRgb('#c8a96e'),  // warm beige
+  oceanic:       hexRgb('#4a7a9e'),  // muted blue
+  transitional:  hexRgb('#8ea87a'),  // olive green
+}
+
 // ---------------------------------------------------------------------------
 // Minimal shaders — just display the pre-computed texture
 // ---------------------------------------------------------------------------
@@ -172,7 +179,14 @@ export default function useGPUTerrain({
       if (activeModes.includes('boundaries')) {
         for (const cell of cvtMesh.cells) {
           const bType = cell.boundary_type as BoundaryType | null
-          if (bType) boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
+          if (bType) {
+            boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
+          } else {
+            // Interior cell — colour by crust type
+            const crust = (cell as any).crust_type || 'oceanic'
+            const cc = CRUST_INTERIOR_COLORS[crust] ?? CRUST_INTERIOR_COLORS.oceanic
+            boundariesColor.set(cell.id, cc)
+          }
         }
       }
     }

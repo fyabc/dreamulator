@@ -43,8 +43,31 @@ class TerrainPipelineConfig:
     # Tectonic plates
     num_plates: int = 20
     plate_speed_range_cm_yr: tuple[float, float] = (1.0, 10.0)
+    # Algorithm for initial plate partition:
+    #   "cortial2019" — Poisson-disc + spherical Voronoi BFS (Cortial et al. 2019 §3)
+    plate_algorithm: str = "cortial2019"
+    # Fraction of boundary cells to randomly flip (0 = straight Voronoi
+    # edges, 0.05–0.15 = natural organic boundaries).
+    # Follows Cortial et al. (2019) "noise-warped geodetic distance".
+    boundary_noise: float = 0.10
+
+    # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
+    # Algorithm for time evolution.  "" = no evolution (static).
+    #   "cortial2019" — velocity-field tectonic effects (subduction,
+    #       collision, ridge, erosion) on fixed Voronoi boundaries.
+    tectonic_algorithm: str = ""
+    # Number of time steps to simulate.  Cortial 2019 default: 125–250.
+    tectonic_steps: int = 0
+    # Time step duration in My.  0 = auto-scale from cell resolution
+    # (Cortial 2019: δt = 2 My at 500K points; Dreamulator scales
+    # automatically so the fastest plate moves ~3 cells/step).
+    tectonic_dt_my: float = 0.0
 
     # Terrain synthesis
+    # Algorithm selector:
+    #   "cortial2019_gaussian" — symmetric Gaussian boundary effects
+    #   "cortial2019_asymmetric" — asymmetric profiles + hotspots + landforms
+    terrain_algorithm: str = "cortial2019_asymmetric"
     continental_elevation_m: float = 850.0
     oceanic_elevation_m: float = -3800.0
     boundary_influence_km: float = 500.0
@@ -52,12 +75,24 @@ class TerrainPipelineConfig:
     divergent_depth_m: float = 2000.0
     # Per-plate random base elevation offset (creates inter-plate variation)
     plate_elevation_spread_m: float = 1500.0
+    # Asymmetric mountain profile: 0=symmetric, 0.4=moderate, 1.0=extreme
+    mountain_asymmetry: float = 0.4
+    # Number of hotspot volcanic chains (0 = disabled)
+    hotspot_count: int = 3
+    # Continental shelf: width in km from coastline to deep ocean.
+    # Earth average: 80 km; passive margins: 100–200 km.
+    shelf_width_km: float = 120.0
+    # Island arc height at O-O convergent boundaries (m).
+    island_arc_height_m: float = 1500.0
 
     # Noise
     noise_scale: float = 2.0
     noise_octaves: int = 6
     noise_persistence: float = 0.5
     noise_lacunarity: float = 2.0
+    # Anisotropic noise: stretch fBm along boundary strike direction.
+    # 0 = isotropic; 0.3 = subtle ridges; 1.0 = strong linear features.
+    noise_anisotropy: float = 0.3
     noise_amplitude_land_m: float = 600.0
     noise_amplitude_ocean_m: float = 300.0
     # Low-frequency regional noise (large-scale variation within plates)

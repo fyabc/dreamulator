@@ -18,16 +18,21 @@ $$\mathbf{v}(P) = \boldsymbol{\omega} \times \mathbf{P}$$
 
 ---
 
-## 板块生成（洪水填充）
+## 板块生成（球面 Voronoi 剖分）
 
-1. **种子选取**：随机选 `num_plates` 个 cell，最小角距 ≥ 平均间距 × 0.3
-2. **优先队列 BFS**：每个板块有随机 `growth_speed_multiplier ∈ [0.5, 2.0]`
-   - 成本 = 1.0 / growth_speed（快速板块抢占更多 cell）
-3. **未分配回退**：最近邻分配
+遵循 [Cortial et al. (2019)](https://doi.org/10.1111/cgf.13614) *Procedural Tectonic Planets* 的方法：
+
+1. **种子选取**：Poisson-disc 采样，随机选 `num_plates` 个 cell，最小角距 ≥ 平均间距 × 0.3
+2. **同步多源 BFS（球面 Voronoi 剖分）**：所有种子等速逐层扩展，每 cell 归属先到达的 wavefront
+   - Voronoi 区域在图上天然凸 → 板块永不包围
+   - CVT 网格的不规则拓扑天然提供有机边界，无需额外噪声扭曲
+3. 板块面积由 Poisson-disc 种子分布和球面 Voronoi 几何自然决定
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `num_plates` | 20 | 板块数量 |
+
+**参考实现**：[weigert/SimpleTectonics](https://github.com/weigert/SimpleTectonics) — Poisson disc + GPU Voronoi
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -857,7 +858,15 @@ def terrain_generate(
     ),
     num_nodes: int | None = typer.Option(None, "--num-nodes", "-n", help="Override number of CVT nodes"),
     num_plates: int | None = typer.Option(None, "--num-plates", help="Override number of plates"),
+    tectonic_steps: int | None = typer.Option(
+        None, "--tectonic-steps",
+        help="Number of tectonic time steps (Cortial 2019: 125-250 steps × 2 My)",
+    ),
     seed: int | None = typer.Option(None, "--seed", help="Override RNG seed"),
+    benchmark: bool = typer.Option(
+        False, "--benchmark",
+        help="Save benchmark.json for regression testing",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
@@ -867,7 +876,7 @@ def terrain_generate(
 
     _set_data_dir(data_dir)
 
-    setup_logging(level=logging.DEBUG if verbose else logging.INFO)
+    setup_logging(level=logging.DEBUG if verbose else logging.WARNING)
 
     mgr = WorldManager()
     try:
@@ -885,6 +894,8 @@ def terrain_generate(
         cfg.num_nodes = num_nodes
     if num_plates is not None:
         cfg.num_plates = num_plates
+    if tectonic_steps is not None:
+        cfg.tectonic_steps = tectonic_steps
     if seed is not None:
         cfg.seed = seed
 
@@ -909,12 +920,289 @@ def terrain_generate(
     console.print(f"\n[bold green]Pipeline complete[/bold green] in {result.elapsed_seconds:.1f}s")
     console.print(f"  Stages: {' -> '.join(result.stages_completed)}")
     if result.elevation_grid is not None:
-        import numpy as np
-
         console.print(
             f"  Elevation: [{result.elevation_grid.min():.0f}, {result.elevation_grid.max():.0f}] m"
         )
-    console.print(f"  Output: {output_dir}")
+    # Show output path relative to data dir for readability
+    data_root = os.environ.get("DREAMULATOR_DATA_DIR", "")
+    if data_root:
+        try:
+            rel = output_dir.resolve().relative_to(Path(data_root).resolve())
+            console.print(f"  Output: {rel}")
+        except ValueError:
+            console.print(f"  Output: {output_dir}")
+    else:
+        console.print(f"  Output: {output_dir}")
+
+    # Save benchmark for regression testing
+    if benchmark:
+        _save_benchmark(result, cfg, output_dir)
+
+    # Auto-generate branch README to help users navigate
+    _write_branch_readme(output_dir, world, planet_id, branch)
+
+
+def _save_benchmark(
+    result: object,   # TerrainPipelineResult
+    config: object,   # TerrainPipelineConfig
+    output_dir: Path,
+) -> None:
+    """Save a benchmark.json for regression testing."""
+    import json
+    import numpy as np
+
+    # Collect elevation stats from mesh cells (same source as validate uses)
+    mesh = getattr(result, "mesh", None)
+    elev_stats = {}
+    if mesh is not None:
+        elevs = np.array([c.elevation for c in mesh.cells])
+        sea = getattr(config, "sea_level_m", 0.0)
+        elev_stats = {
+            "min_m": float(np.min(elevs)),
+            "max_m": float(np.max(elevs)),
+            "mean_m": round(float(np.mean(elevs)), 1),
+            "land_pct": round(float(np.sum(elevs > sea) / elevs.size * 100), 1),
+        }
+
+    # Collect plate stats
+    plates = getattr(result, "plates", [])
+    plate_sizes = sorted([len(p.cell_ids) for p in plates], reverse=True)
+
+    benchmark = {
+        "seed": getattr(config, "seed", 0),
+        "num_nodes": getattr(config, "num_nodes", 0),
+        "num_plates": len(plates),
+        "terrain_algorithm": getattr(config, "terrain_algorithm", ""),
+        "tectonic_algorithm": getattr(config, "tectonic_algorithm", ""),
+        "tectonic_steps": getattr(config, "tectonic_steps", 0),
+        "elevation": elev_stats,
+        "plate_sizes": plate_sizes,
+        "stages_completed": getattr(result, "stages_completed", []),
+        "elapsed_seconds": round(getattr(result, "elapsed_seconds", 0.0), 1),
+    }
+
+    bench_path = output_dir / "benchmark.json"
+    bench_path.write_text(
+        json.dumps(benchmark, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    console.print(f"  [dim]Benchmark saved: {bench_path.name}[/dim]")
+
+
+@terrain_app.command("validate")
+def terrain_validate(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    reference: Path | None = typer.Option(
+        None, "--reference",
+        help="Path to reference benchmark.json (auto-detect if omitted)",
+    ),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Validate terrain output against a benchmark reference.
+
+    Re-generates terrain with the parameters from the reference benchmark,
+    then compares elevation stats and plate distribution.  Exits non-zero
+    if the deviation exceeds tolerance.
+    """
+    import json
+
+    _set_data_dir(data_dir)
+
+    # Auto-detect reference benchmark
+    if reference is None:
+        mgr = WorldManager()
+        try:
+            world_dir = mgr.world_dir(world)
+        except FileNotFoundError:
+            console.print(f"[red]World '{world}' not found[/red]")
+            raise typer.Exit(code=1)
+        cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, None)
+        bench_path = output_dir / "benchmark.json"
+    else:
+        bench_path = reference
+
+    if not bench_path.exists():
+        console.print(
+            f"[red]No benchmark found at {bench_path}[/red]\n"
+            f"  Run [cyan]dreamulator terrain generate {world} --benchmark[/cyan] first."
+        )
+        raise typer.Exit(code=1)
+
+    ref = json.loads(bench_path.read_text(encoding="utf-8"))
+
+    # Re-generate with same params
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.map.terrain_pipeline import run_terrain_pipeline
+
+    cfg = TerrainPipelineConfig(
+        seed=ref["seed"],
+        num_nodes=ref["num_nodes"],
+        num_plates=ref["num_plates"],
+        terrain_algorithm=ref.get("terrain_algorithm", "cortial2019_asymmetric"),
+        tectonic_algorithm=ref.get("tectonic_algorithm", ""),
+        tectonic_steps=ref.get("tectonic_steps", 0),
+    )
+
+    console.print(f"Validating against [cyan]{bench_path.name}[/cyan]...")
+    console.print(f"  seed={cfg.seed}, nodes={cfg.num_nodes}, plates={cfg.num_plates}")
+
+    result = run_terrain_pipeline(
+        cfg, output_dir=None,
+        stages=["mesh", "plates", "tectonics", "boundaries", "terrain"],
+    )
+
+    # Compare — read from mesh cells (no export needed)
+    import numpy as np
+    elevs = np.array([c.elevation for c in result.mesh.cells])
+    cur = {
+        "min_m": float(np.min(elevs)),
+        "max_m": float(np.max(elevs)),
+        "mean_m": float(np.mean(elevs)),
+        "land_pct": round(float(np.sum(elevs > 0) / elevs.size * 100), 1),
+    }
+    ref_elev = ref.get("elevation", {})
+    cur_plates = sorted(
+        [len(p.cell_ids) for p in getattr(result, "plates", [])], reverse=True,
+    )
+    ref_plates = ref.get("plate_sizes", [])
+
+    def _delta(label: str, ref_val: float, cur_val: float, tol_pct: float) -> bool:
+        delta = abs(cur_val - ref_val) / max(abs(ref_val), 1.0) * 100
+        ok = delta <= tol_pct
+        status = "[green]OK[/green]" if ok else "[red]FAIL[/red]"
+        console.print(
+            f"  {status} {label}: ref={ref_val:.1f} cur={cur_val:.1f} "
+            f"({delta:+.1f}%)"
+        )
+        return ok
+
+    all_ok = True
+    all_ok &= _delta("elev_min", ref_elev.get("min_m", 0), cur["min_m"], 15)
+    all_ok &= _delta("elev_max", ref_elev.get("max_m", 0), cur["max_m"], 15)
+    all_ok &= _delta("elev_mean", ref_elev.get("mean_m", 0), cur["mean_m"], 10)
+    all_ok &= _delta("land_pct", ref_elev.get("land_pct", 0), cur["land_pct"], 20)
+
+    if len(cur_plates) == len(ref_plates):
+        for i, (rc, cc) in enumerate(zip(ref_plates, cur_plates)):
+            delta = abs(cc - rc) / max(rc, 1) * 100
+            if delta > 30:
+                all_ok = False
+                console.print(f"  [red]FAIL[/red] plate_{i:02d} size: ref={rc} cur={cc} ({delta:+.0f}%)")
+        console.print(f"  Plate sizes: ref={ref_plates[:5]}..., cur={cur_plates[:5]}...")
+    else:
+        console.print(f"  [red]FAIL[/red] plate count: ref={len(ref_plates)} cur={len(cur_plates)}")
+        all_ok = False
+
+    if all_ok:
+        console.print("\n[bold green]Validation passed[/bold green]")
+    else:
+        console.print("\n[bold red]Validation failed — see details above[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@terrain_app.command("open")
+def terrain_open(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Open the terrain output directory in the file explorer."""
+    import subprocess
+    import sys
+
+    _set_data_dir(data_dir)
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1)
+
+    cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, None)
+
+    if not output_dir.exists():
+        console.print(f"[yellow]Output directory does not exist yet.[/yellow]")
+        console.print(f"  Run [cyan]dreamulator terrain generate {world}[/cyan] first.")
+        raise typer.Exit(code=1)
+
+    console.print(f"Opening [cyan]{output_dir}[/cyan]")
+    if sys.platform == "win32":
+        subprocess.run(["explorer", str(output_dir)])
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(output_dir)])
+    else:
+        subprocess.run(["xdg-open", str(output_dir)])
+
+
+def _write_branch_readme(
+    output_dir: Path,
+    world: str,
+    planet_id: str,
+    branch: str | None,
+) -> None:
+    """Auto-generate a README in the branch root explaining the layout."""
+    # Walk up to find the branch root
+    # output_dir = .../layers/geological/input/maps/earth
+    # branch_root = output_dir.parents[4]  (= layers -> geological -> input -> maps -> earth)
+    # Actually: .../branches/terrain-dev/layers/geological/input/maps/earth
+    p = output_dir
+    # Walk up to the branch directory (contains branch.yaml)
+    branch_root = None
+    for _ in range(10):
+        if (p / "branch.yaml").exists():
+            branch_root = p
+            break
+        p = p.parent
+
+    if branch_root is None:
+        return
+
+    readme = branch_root / "README.md"
+    existing = ""
+    if readme.exists():
+        existing = readme.read_text(encoding="utf-8")
+
+    # Only write if the terrain section isn't already there
+    marker = "## 🗺️ Terrain Data"
+    if marker in existing:
+        return
+
+    # Build relative paths from branch root
+    maps_rel = output_dir.relative_to(branch_root)
+    branch_name = branch or "main"
+
+    new_section = f"""
+{marker}
+
+Terrain generation output for **{world}** · planet `{planet_id}` · branch `{branch_name}`.
+
+```
+{branch_root.name}/
+└── layers/geological/input/maps/{planet_id}/
+    ├── elevation.png      ← heightmap (16-bit PNG)
+    ├── cvt_mesh.json      ← spherical Voronoi mesh
+    ├── plates.json        ← tectonic plate definitions
+    ├── metadata.json      ← pipeline parameters
+    └── timeline/          ← time-evolution snapshots (when enabled)
+```
+
+### Quick access
+
+```bash
+# Open in file explorer
+dreamulator terrain open {world} --planet {planet_id} --branch {branch_name}
+
+# View info
+dreamulator terrain info {world} --planet {planet_id} --branch {branch_name}
+```
+"""
+    new_content = existing.rstrip() + "\n" + new_section
+    readme.write_text(new_content, encoding="utf-8")
+    logger = logging.getLogger("cli")
+    logger.info("  Auto-generated README: %s", readme)
 
 
 @terrain_app.command("info")

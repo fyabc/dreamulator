@@ -7,7 +7,7 @@ Falls back to standard logging otherwise.
 import logging
 
 
-def setup_logging(level: int = logging.INFO) -> logging.Logger:
+def setup_logging(level: int = logging.WARNING) -> logging.Logger:
     """Configure the dreamulator logger.
 
     When ``rich`` is installed, uses :class:`rich.logging.RichHandler` for
@@ -15,7 +15,8 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     standard :func:`logging.basicConfig` otherwise.
 
     Args:
-        level: Logging level (default: INFO).
+        level: Logging level (default: WARNING — user-facing CLI).
+            Pass ``logging.INFO`` or ``logging.DEBUG`` for verbose mode.
 
     Returns:
         Configured logger instance.
@@ -31,7 +32,7 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         pass
     else:
         kwargs["format"] = "%(message)s"
-        kwargs["handlers"] = [RichHandler()]
+        kwargs["handlers"] = [RichHandler(markup=True)]
 
     logging.basicConfig(datefmt="%m/%d %H:%M:%S", level=level, **kwargs)
     return logging.getLogger("dreamulator")
