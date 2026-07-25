@@ -967,7 +967,7 @@ def _apply_continental_shelf(
         shelf_dist[cid] = 0.0
         q.append(cid)
 
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     while q:
         cid = q.popleft()
         d = shelf_dist[cid]
@@ -1027,6 +1027,8 @@ def _apply_coastal_plain(
     """
     n = mesh.num_cells
     plain_width = config.coastal_plain_width_km
+    if plain_width <= 0.0:
+        plain_width = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     if plain_width <= 0:
         return elevation
 
@@ -1051,7 +1053,7 @@ def _apply_coastal_plain(
         inland_dist[cid] = 0.0
         q.append(cid)
 
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     while q:
         cid = q.popleft()
         d = inland_dist[cid]
@@ -1129,7 +1131,7 @@ def _apply_island_arcs(
         arc_affected[cid] = 0.0
         q.append(cid)
 
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     arc_width_km = 200.0  # arc-trench gap + arc width
 
     while q:
@@ -1260,7 +1262,7 @@ def _apply_interior_landforms(
             amplitude = rng.uniform(500.0, 1500.0)
             # Width of the belt (Gaussian sigma in km)
             sigma_km = rng.uniform(80.0, 200.0)
-            cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+            cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
 
             belt_count = 0
             for i in interior:

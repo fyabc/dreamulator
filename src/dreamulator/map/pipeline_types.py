@@ -83,8 +83,8 @@ class TerrainPipelineConfig:
     # Earth average: 80 km; passive margins: 100–200 km.
     shelf_width_km: float = 120.0
     # Coastal plain: width in km from coastline inland for gentle
-    # elevation ramp-down.  Prevents km-scale cliffs at shorelines.
-    coastal_plain_width_km: float = 60.0
+    # elevation ramp-down.  Set to 0 to auto-scale (≈ 1 cell width).
+    coastal_plain_width_km: float = 0.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
     # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
