@@ -228,63 +228,77 @@ export default function useGPUTerrain({
     }
 
     // --- Step 3: Composite all active layers per pixel ---
-    console.time('composite')
-    // Alpha-blend helper
-    const blend = (dst: number[], src: [number, number, number], alpha: number) => {
-      dst[0] = Math.round(dst[0] * (1 - alpha) + src[0] * alpha)
-      dst[1] = Math.round(dst[1] * (1 - alpha) + src[1] * alpha)
-      dst[2] = Math.round(dst[2] * (1 - alpha) + src[2] * alpha)
-    }
+    const hasLayers = layers.terrain > 0 || layers.landsea > 0 || layers.plates > 0 || layers.boundaries > 0
+    const justTerrain = layers.terrain > 0 && !(layers.landsea > 0 || layers.plates > 0 || layers.boundaries > 0)
 
-    for (let i = 0; i < totalPixels; i++) {
-      const elev = elevation[i]
-      const cellId = cellIdMap?.[i]
-      const accum = [0, 0, 0] // RGB accumulator
+    if (hasLayers) {
+      for (let i = 0; i < totalPixels; i++) {
+        const elev = elevation[i]
+        const pi = i * 4
 
-      // Layer 1: Terrain
-      if (terrainLut) {
-        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-        const c: [number, number, number] = [terrainLut[idx*4], terrainLut[idx*4+1], terrainLut[idx*4+2]]
-        // Water depth darkening
-        if (elev < normSeaLevel) {
-          const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
-          const f = 1 - waterDepthFactor * depth
-          c[0] = Math.round(c[0] * f); c[1] = Math.round(c[1] * f); c[2] = Math.round(c[2] * f)
+        if (justTerrain && terrainLut) {
+          // Fast path: terrain-only (most common case) — direct copy, no blend
+          const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
+          buf[pi]   = terrainLut[idx * 4]
+          buf[pi+1] = terrainLut[idx * 4 + 1]
+          buf[pi+2] = terrainLut[idx * 4 + 2]
+          if (elev < normSeaLevel) {
+            const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
+            const f = 1 - waterDepthFactor * depth
+            buf[pi]   = Math.round(buf[pi]   * f)
+            buf[pi+1] = Math.round(buf[pi+1] * f)
+            buf[pi+2] = Math.round(buf[pi+2] * f)
+          }
+          buf[pi+3] = 255
+        } else {
+          // General path: alpha-blend multiple layers (rare)
+          let r = 0, g = 0, b = 0
+          const cellId = cellIdMap?.[i]
+
+          if (terrainLut) {
+            const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
+            let tr = terrainLut[idx*4], tg = terrainLut[idx*4+1], tb = terrainLut[idx*4+2]
+            if (elev < normSeaLevel) {
+              const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
+              const f = 1 - waterDepthFactor * depth
+              tr = Math.round(tr*f); tg = Math.round(tg*f); tb = Math.round(tb*f)
+            }
+            const a = layers.terrain
+            r = Math.round(tr * a); g = Math.round(tg * a); b = Math.round(tb * a)
+          }
+
+          if (landseaLut) {
+            const cid = cellIdMap?.[i]
+            const isLand = cid != null ? (cellLand[cid] === 1) : (elev >= normSeaLevel)
+            const [lr, lg, lb] = isLand ? [80, 140, 60] : [30, 60, 120]
+            const a = layers.landsea, ia = 1 - a
+            r = Math.round(r * ia + lr * a); g = Math.round(g * ia + lg * a); b = Math.round(b * ia + lb * a)
+          }
+
+          if (layers.plates > 0 && cellId != null) {
+            const pc = platesColor.get(cellId)
+            if (pc) {
+              const a = layers.plates, ia = 1 - a
+              r = Math.round(r * ia + pc[0] * a); g = Math.round(g * ia + pc[1] * a); b = Math.round(b * ia + pc[2] * a)
+            }
+          }
+
+          if (layers.boundaries > 0 && cellId != null) {
+            const bc = boundariesColor.get(cellId)
+            if (bc) {
+              const a = layers.boundaries, ia = 1 - a
+              r = Math.round(r * ia + bc[0] * a); g = Math.round(g * ia + bc[1] * a); b = Math.round(b * ia + bc[2] * a)
+            }
+          }
+
+          buf[pi] = r; buf[pi+1] = g; buf[pi+2] = b; buf[pi+3] = 255
         }
-        blend(accum, c, layers.terrain)
       }
-
-      // Layer 2: Land/sea (cell-level, avoids pixel nearest-neighbor artifacts)
-      if (landseaLut) {
-        const cid = cellIdMap?.[i]
-        const isLand = cid != null ? (cellLand[cid] === 1) : (elev >= normSeaLevel)
-        const c: [number, number, number] = isLand ? [80, 140, 60] : [30, 60, 120]
-        blend(accum, c, layers.landsea)
-      }
-
-      // Layer 3: Plates
-      if (layers.plates > 0 && cellId != null) {
-        const pc = platesColor.get(cellId)
-        if (pc) blend(accum, pc, layers.plates)
-      }
-
-      // Layer 4: Boundaries
-      if (layers.boundaries > 0 && cellId != null) {
-        const bc = boundariesColor.get(cellId)
-        if (bc) blend(accum, bc, layers.boundaries)
-      }
-
-      const pi = i * 4
-      buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
-
-    console.timeEnd('composite')
 
     // --- Coastline detection: fast pixel-level filter + cell-level verification ---
     if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
-      console.time('coastline')
       const COAST_COLOR = [20, 20, 20] as const
-      let candidates = 0; let verified = 0; let drawn = 0
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
@@ -294,18 +308,14 @@ export default function useGPUTerrain({
           if (rx < width) {
             const ni = y * width + rx
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
-              candidates++
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
-                verified++
                 if (cellLand[cid] !== cellLand[nCid]) {
-                  drawn++
                   const pi = i * 4; const npi = ni * 4
                   buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                   buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
                 }
               } else {
-                drawn++
                 const pi = i * 4; const npi = ni * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                 buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
@@ -317,18 +327,14 @@ export default function useGPUTerrain({
           if (by < height) {
             const ni = by * width + x
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
-              candidates++
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
-                verified++
                 if (cellLand[cid] !== cellLand[nCid]) {
-                  drawn++
                   const pi = i * 4; const npi = ni * 4
                   buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                   buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
                 }
               } else {
-                drawn++
                 const pi = i * 4; const npi = ni * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                 buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
@@ -337,8 +343,6 @@ export default function useGPUTerrain({
           }
         }
       }
-      console.timeEnd('coastline')
-      console.log(`coastline: ${candidates} candidates, ${verified} verified, ${drawn} drawn`)
     }
 
     // --- Highlight overlay: blend highlight colour for hovered/selected cells ---
