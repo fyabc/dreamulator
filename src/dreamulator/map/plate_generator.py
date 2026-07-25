@@ -298,7 +298,7 @@ def assign_crust_types(
 
         if _has_noise:
             # Spatial noise: coherent values for adjacent cells
-            noise_seed = rng.integers(0, 2**31 - 1)
+            noise_seed = rng.integers(0, 1 << 20)  # < 2^20 avoids opensimplex overflow warning
             opensimplex.seed(noise_seed)
             # Noise scale: ~1 cell → large coherent blobs
             scale = 0.6
