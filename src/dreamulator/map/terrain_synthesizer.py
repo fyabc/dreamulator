@@ -447,7 +447,7 @@ def _synthesize_asymmetric(
     # 2. Asymmetric boundary effects
     logger.info("  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)",
                 config.mountain_asymmetry)
-    boundary_delta = _asymmetric_boundary_effects(mesh, config)
+    boundary_delta, transform_boost = _asymmetric_boundary_effects(mesh, config)
 
     # 3. Hotspot volcanic chains
     hotspot_delta = np.zeros(n, dtype=np.float64)
@@ -498,7 +498,7 @@ def _synthesize_asymmetric(
     elevation = (
         base + boundary_delta + hotspot_delta
         + regional_fbm * regional_amp
-        + fbm * noise_amp * interior_factor
+        + fbm * noise_amp * interior_factor * transform_boost
     )
 
     for i, cell in enumerate(mesh.cells):
@@ -524,22 +524,44 @@ def _asymmetric_boundary_effects(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
 ) -> np.ndarray:
-    """Asymmetric boundary mountain profiles.
+    """Boundary-type-specific elevation profiles.
 
-    Convergent: steep windward face + gentle leeward slope.
-    Each boundary cell's asymmetry direction is determined by the
-    local convergence normal (which side is the overriding plate).
+    Convergent (C-C / C-O / O-O)
+        Asymmetric mountain range on the overriding plate: steep front
+        (σ ≈ 200 km) facing the trench, gentle back-slope (σ ≈ 700 km).
+        Oceanic trench at 100–150 km from the peak on the subducting side.
 
-    References:
-      Cortial 2019 §4.1 — uplift formula with elevation-dependent feedback.
-      Willett 1999 — orographic asymmetry from prevailing wind erosion.
+    Divergent (continental rift / mid-ocean ridge)
+        Continental: deep central rift valley with flanking highlands
+        (e.g. East African Rift).  Oceanic: broad submarine ridge rising
+        ~1300 m above the abyssal plain (peak ≈ −2500 m), occasionally
+        breaking the surface (Iceland-type).
+
+    Transform
+        No systematic elevation change.  Instead, a narrow band of
+        enhanced roughness (±50 % noise boost within ~200 km) creates
+        linear valleys and shutter ridges characteristic of strike-slip
+        fault zones (e.g. San Andreas, North Anatolian).
+
+    References
+    ----------
+    * Cortial et al. (2019) §4.1 — subduction uplift with velocity-dependent
+      amplitude and squared-elevation feedback.
+    * Willett (1999) — windward/leeward asymmetry from orographic precipitation.
+    * Wilson (1963) — hotspot volcanic chains from plate motion over fixed plume.
+    * Frisch, W., Meschede, M., & Blakey, R. (2011). *Plate Tectonics*.
+      Springer. — mid-ocean ridge morphology, transform fault features.
     """
     n = mesh.num_cells
     delta_h = np.zeros(n, dtype=np.float64)
     asym = config.mountain_asymmetry  # [0, 1]
     sigma = config.boundary_influence_km
 
-    ref_rate = 10.0  # cm/yr reference
+    # Reference convergence rate for normalisation.
+    # Earth: fast plates (Pacific) ~10 cm/yr, slow (Africa) ~1 cm/yr,
+    # median ~5 cm/yr.  Using the median as reference ensures most
+    # boundaries operate near full strength.
+    ref_rate = 5.0  # cm/yr — median plate speed
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
@@ -550,54 +572,108 @@ def _asymmetric_boundary_effects(
         d = cell.distance_to_boundary_km
         rate = abs(cell.convergence_rate_cm_yr)
         rate_factor = min(rate / ref_rate, 1.0)
+        crust = getattr(cell, "crust_type", "")
 
         if cell.boundary_type == "convergent":
-            # Asymmetric profile: steep front (windward) + gentle back
-            sigma_front = sigma * (1.0 - asym * 0.5)  # narrower
-            sigma_back = sigma * (1.0 + asym * 1.0)   # wider
+            # ---- Convergent: asymmetric mountain + trench ----------------
+            # Narrower sigma for convergent belts (more focused deformation)
+            sigma_conv = sigma * 0.8  # 400 km
+            sigma_front = sigma_conv * (1.0 - asym * 0.5)  # steep side
+            sigma_back = sigma_conv * (1.0 + asym * 1.0)   # gentle side
 
-            # Determine if cell is on the overriding (mountain) side
-            # or subducting (trench) side using convergence rate sign
-            front = np.exp(-(d * d) / (2 * sigma_front * sigma_front))
-            back = np.exp(-(d * d) / (2 * sigma_back * sigma_back))
-
-            # Mountain peak offset toward overriding plate
-            peak_offset = asym * sigma * 0.3
+            # Mountain peak offset toward overriding plate (50–150 km)
+            peak_offset = asym * sigma_conv * 0.25
             dist_from_peak = abs(d - peak_offset)
             mountain = np.exp(
                 -(dist_from_peak * dist_from_peak) / (2 * sigma_front * sigma_front)
             )
 
             # Crust-type-dependent amplitude
-            crust = getattr(cell, "crust_type", "")
             if crust == "continental":
-                amp = config.convergent_uplift_m * 1.3  # C-C or C-O
+                amp = config.convergent_uplift_m * 1.3  # C-C collision
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
             delta_h[i] = amp * mountain * rate_factor
 
-            # Trench on the subducting side (negative elevation)
-            if d > sigma * 0.5:
-                trench_dist = abs(d - sigma)
-                trench = -config.divergent_depth_m * 0.8 * np.exp(
-                    -(trench_dist * trench_dist) / (2 * (sigma * 0.3) ** 2)
+            # Oceanic trench on the subducting side (100–200 km from peak)
+            trench_dist_km = sigma_conv * 0.35  # ~140 km
+            if d > trench_dist_km:
+                dist_from_trench = abs(d - trench_dist_km - peak_offset)
+                trench_sigma = sigma_conv * 0.25  # narrow, sharp trench
+                trench = -config.divergent_depth_m * 0.7 * np.exp(
+                    -(dist_from_trench * dist_from_trench) / (2 * trench_sigma * trench_sigma)
                 )
                 delta_h[i] += trench * rate_factor
 
         elif cell.boundary_type == "divergent":
-            # Rift valley + flanking ridges
-            rift = -config.divergent_depth_m * 0.5 * np.exp(
-                -(d * d) / (2 * (sigma * 0.3) ** 2)
-            )
-            ridge = config.divergent_depth_m * 0.8 * np.exp(
-                -(abs(d - sigma * 0.4) ** 2) / (2 * (sigma * 0.5) ** 2)
-            )
-            delta_h[i] = (rift + ridge) * rate_factor
+            # ---- Divergent: rift + ridge, crust-aware ---------------------
+            sigma_div = sigma * 0.6  # 300 km — narrower rift zone
 
-        # Transform: no elevation change (only roughness, applied later)
+            if crust == "oceanic":
+                # Mid-ocean ridge: broad submarine rise, shallow central graben.
+                # Rising from ~-3800 m (abyssal plain) to ~-2500 m (ridge crest).
+                ridge_amp = config.divergent_depth_m * 0.65  # ~1300 m uplift
+                ridge = ridge_amp * np.exp(
+                    -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                )
+                # Shallow central rift (only ~300 m deeper than the ridge flanks)
+                rift = -config.divergent_depth_m * 0.15 * np.exp(
+                    -(d * d) / (2 * (sigma_div * 0.2) ** 2)
+                )
+                delta_h[i] = (rift + ridge) * rate_factor
+            else:
+                # Continental rift: deep central valley + flanking highlands
+                # (East African Rift, Baikal).  The rift floor can drop below
+                # sea level (Dead Sea, Danakil Depression).
+                rift = -config.divergent_depth_m * 0.5 * np.exp(
+                    -(d * d) / (2 * (sigma_div * 0.25) ** 2)
+                )
+                ridge = config.divergent_depth_m * 0.7 * np.exp(
+                    -(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                )
+                delta_h[i] = (rift + ridge) * rate_factor
 
-    return delta_h
+    # ---- Transform: roughness-only (no systematic elevation change) ----
+    # Collect transform boundary cells for a narrow roughness boost.
+    # Strike-slip fault zones (San Andreas, North Anatolian) feature
+    # linear valleys, shutter ridges, and sag ponds — local roughness
+    # ~1.5× within ~200 km of the fault trace.
+    transform_cells: list[int] = []
+    for i, cell in enumerate(mesh.cells):
+        if cell.boundary_type == "transform":
+            transform_cells.append(i)
+            mesh.cells[i].landform = (
+                "transform" if not mesh.cells[i].landform else mesh.cells[i].landform
+            )
+
+    # BFS from transform boundary cells (narrow band: σ × 0.4 ≈ 200 km)
+    transform_boost = np.ones(n, dtype=np.float64)
+    if transform_cells:
+        sigma_trans = sigma * 0.4  # 200 km — transform faults are linear, narrow
+        from collections import deque
+        tq: deque[int] = deque()
+        tdist: dict[int, float] = {}
+        for cid in transform_cells:
+            tdist[cid] = 0.0
+            tq.append(cid)
+
+        cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+        while tq:
+            cid = tq.popleft()
+            d_t = tdist[cid]
+            if d_t >= 3 * sigma_trans:
+                continue
+            # Boost factor: 1.5 at the fault trace, decaying to 1.0 at 200 km
+            transform_boost[cid] = 1.0 + 0.5 * np.exp(
+                -(d_t * d_t) / (2 * sigma_trans * sigma_trans)
+            )
+            for nid in mesh.cells[cid].neighbors:
+                if nid not in tdist:
+                    tdist[nid] = d_t + cell_km
+                    tq.append(nid)
+
+    return delta_h, transform_boost
 
 
 def _generate_hotspots(
