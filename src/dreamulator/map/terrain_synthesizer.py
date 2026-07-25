@@ -1028,7 +1028,8 @@ def _apply_coastal_plain(
     n = mesh.num_cells
     plain_width = config.coastal_plain_width_km
     if plain_width <= 0.0:
-        plain_width = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+        # Cover at least 2 cells from coast to smooth the transition
+        plain_width = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2.5
     if plain_width <= 0:
         return elevation
 
@@ -1066,12 +1067,11 @@ def _apply_coastal_plain(
 
     # 3. Linear ramp: z → sea_level as d → 0
     for cid, d_km in inland_dist.items():
-        if d_km <= 0:
-            continue
         t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
         orig_z = elevation[cid]
-        # Blend from sea level (t=0) to original elevation (t=1)
-        elevation[cid] = config.sea_level_m * (1.0 - t) + orig_z * t
+        # Blend toward sea level, but keep coast at least ~5 m above sea
+        target_z = config.sea_level_m + max(0.0, 5.0 - d_km * 0.05)
+        elevation[cid] = target_z * (1.0 - t) + orig_z * t
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km",
