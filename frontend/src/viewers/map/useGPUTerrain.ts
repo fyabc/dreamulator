@@ -50,6 +50,12 @@ const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
 /** Hotspot chain colour — magenta-pink, distinct from convergent red. */
 const HOTSPOT_COLOR: [number, number, number] = hexRgb('#e040fb')
 
+/** Interior landform colours — paleo-orogeny (brown) and rift (teal). */
+const LANDFORM_COLORS: Record<string, [number, number, number]> = {
+  orogeny: hexRgb('#b8860b'),  // dark goldenrod
+  rift:    hexRgb('#008080'),  // teal
+}
+
 // ---------------------------------------------------------------------------
 // Minimal shaders — just display the pre-computed texture
 // ---------------------------------------------------------------------------
@@ -197,8 +203,12 @@ export default function useGPUTerrain({
           if (bType) {
             boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
           } else if ((cell as any).hotspot_id) {
-            // Hotspot chain — bright orange (overrides crust colour)
+            // Hotspot chain — magenta (overrides crust colour)
             boundariesColor.set(cell.id, HOTSPOT_COLOR)
+          } else if ((cell as any).landform) {
+            // Interior landform — orogeny (brown) or rift (teal)
+            const lc = LANDFORM_COLORS[(cell as any).landform]
+            if (lc) boundariesColor.set(cell.id, lc)
           } else {
             // Interior cell — colour by crust type
             const crust = (cell as any).crust_type || 'oceanic'

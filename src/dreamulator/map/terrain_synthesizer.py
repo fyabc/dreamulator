@@ -1210,6 +1210,7 @@ def _apply_interior_landforms(
                     # Add noise perturbation along the belt for natural look
                     noise = rng.uniform(-0.15, 0.15)
                     elevation[i] += amplitude * weight * (1.0 + noise)
+                    mesh.cells[i].landform = "orogeny"
                     belt_count += 1
 
             total_affected += belt_count
@@ -1242,6 +1243,7 @@ def _apply_interior_landforms(
                         if dist_km < 3 * sigma_km:
                             weight = np.exp(-(dist_km**2) / (2 * sigma_km**2))
                             elevation[i] -= rift_depth * weight
+                            mesh.cells[i].landform = "rift"
                             total_affected += 1
 
     if total_affected > 0:

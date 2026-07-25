@@ -146,6 +146,10 @@ class VoronoiCell(BaseModel):
         default=None,
         description="Hotspot chain ID (e.g. 'hs_0') if this cell is part of a volcanic hotspot chain",
     )
+    landform: str | None = Field(
+        default=None,
+        description="Interior landform type: 'orogeny', 'rift', or None",
+    )
 
     # Moisture (legacy, may be replaced by precipitation_mm)
     moisture: float = Field(
