@@ -225,20 +225,28 @@ def apply_boundary_effects(
 def classify_sea_land(
     mesh: CVTMesh,
     sea_level_m: float,
+    *,
+    buffer_m: float = 10.0,
 ) -> None:
     """Update crust_type based on final elevation vs sea level.
 
-    Cells above sea level with oceanic crust become ``transitional``
-    (islands, seamounts).  Cells below sea level with continental crust
-    become ``transitional`` (continental shelf, submarine canyons).
+    Cells within ±*buffer_m* of sea level are marked ``transitional``
+    regardless of original crust type — this prevents near-sea-level
+    shelf cells from appearing as deep ocean.
+
+    Cells far above sea level with oceanic crust become ``transitional``
+    (islands, seamounts).  Cells far below sea level with continental
+    crust become ``transitional`` (continental shelf, submarine canyons).
 
     Modifies cells in-place.
     """
     for cell in mesh.cells:
-        above_sea = cell.elevation > sea_level_m
-        if above_sea and cell.crust_type == "oceanic":
+        near_sea = abs(cell.elevation - sea_level_m) <= buffer_m
+        if near_sea:
             cell.crust_type = "transitional"
-        elif not above_sea and cell.crust_type == "continental":
+        elif cell.elevation > sea_level_m and cell.crust_type == "oceanic":
+            cell.crust_type = "transitional"
+        elif cell.elevation < sea_level_m and cell.crust_type == "continental":
             cell.crust_type = "transitional"
 
 
