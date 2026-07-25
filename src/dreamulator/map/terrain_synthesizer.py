@@ -226,7 +226,7 @@ def classify_sea_land(
     mesh: CVTMesh,
     sea_level_m: float,
     *,
-    buffer_m: float = 10.0,
+    buffer_m: float = 50.0,
 ) -> None:
     """Update crust_type based on final elevation vs sea level.
 
@@ -1091,26 +1091,15 @@ def _apply_coastal_plain(
                 q.append(nid)
 
     # 3. Ramp: elevation → gentle coastal plain as d → 0
-    sample_ids = [8377, 8610]  # debug: check specific cells
     for cid, d_km in inland_dist.items():
         t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        if cid in sample_ids:
-            logger.warning(
-                "  DEBUG plain: cell %d d=%.0fkm t=%.2f before=%.0fm",
-                cid, d_km, t, elevation[cid],
-            )
         if elevation[cid] > config.sea_level_m:
             coast_target = rng.uniform(10.0, 50.0)
-            blend = t * t * (3.0 - 2.0 * t)
+            blend = t * t * (3.0 - 2.0 * t)  # smoothstep
             elevation[cid] = max(
                 coast_target,
                 elevation[cid] * blend + coast_target * (1.0 - blend),
             )
-            if cid in sample_ids:
-                logger.warning(
-                    "  DEBUG plain: cell %d after=%.0fm target=%.0f",
-                    cid, elevation[cid], coast_target,
-                )
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km",
