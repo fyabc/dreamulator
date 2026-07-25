@@ -221,11 +221,13 @@ export default function GlobeViewerPage() {
         <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{planetId}</span>
         <div className="flex-1" />
         <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
-          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+          title="切换到 2D 地图视图（等距圆柱 / Mollweide / Robinson 投影）">
           🗺️ 2D
         </Link>
         <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
-          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors">
+          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+          title="切换到恒星系 3D 视图（行星轨道、宜居带）">
           🔭 恒星系
         </Link>
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />

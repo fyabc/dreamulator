@@ -42,6 +42,7 @@ export default function BranchSelector({
           value={selectedBranch ?? ''}
           onChange={(e) => onSelect(e.target.value || null)}
           className="bg-space-bg border border-space-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neon-cyan transition-colors"
+          title="切换世界线分支。在某一 DAG 层分叉，共享上层数据。类似于 Git branch。"
         >
           <option value="">基础世界</option>
           {branches.map((b) => (

@@ -178,17 +178,17 @@ function CellDetails({
         <div className="border-t border-space-border pt-1 mt-1" />
 
         <div className="flex justify-between">
-          <dt className="text-gray-500">地壳类型</dt>
+          <dt className="text-gray-500" title="continental=大陆, oceanic=海洋, transitional=过渡带">地壳类型</dt>
           <dd className="font-mono">{CRUST_LABELS[cell.crust_type ?? ''] ?? cell.crust_type ?? '—'}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-gray-500">板块</dt>
+          <dt className="text-gray-500" title="该 cell 所属的构造板块">板块</dt>
           <dd className="text-amber-300">
             {plate?.name ?? cell.plate_id ?? '—'}
           </dd>
         </div>
         <div className="flex justify-between items-center">
-          <dt className="text-gray-500">边界类型</dt>
+          <dt className="text-gray-500" title="汇聚(红)=板块挤压, 离散(绿)=板块张裂, 转换(黄)=水平错动">边界类型</dt>
           <dd>
             {cell.boundary_type ? (
               <span className={`text-xs px-1.5 py-0.5 rounded ${boundaryClass}`}>
@@ -200,7 +200,7 @@ function CellDetails({
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-gray-500">汇聚速率</dt>
+          <dt className="text-gray-500" title="两板块相对运动速度的法向分量">汇聚速率</dt>
           <dd className="font-mono">
             {cell.convergence_rate_cm_yr !== undefined
               ? `${formatNumber(cell.convergence_rate_cm_yr, 1)} cm/yr`
@@ -208,7 +208,7 @@ function CellDetails({
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-gray-500">距边界距离</dt>
+          <dt className="text-gray-500" title="到最近板块边界的球面距离">距边界距离</dt>
           <dd className="font-mono">
             {cell.distance_to_boundary_km !== undefined
               ? isFinite(cell.distance_to_boundary_km)
