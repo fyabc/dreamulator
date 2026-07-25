@@ -268,22 +268,44 @@ def assign_crust_types(
     for cid, pid in cell_plate_map.items():
         plate_cells.setdefault(pid, []).append(cid)
 
+    # Spatial noise generator for coherent crust assignment.
+    # Using 3D simplex noise at cell positions ensures neighbouring cells
+    # get similar values → contiguous continental blocks, not salt-and-pepper.
+    try:
+        import opensimplex
+        _has_noise = True
+    except ImportError:
+        _has_noise = False
+
     for plate_id, cell_ids in plate_cells.items():
         continental_fraction = rng.uniform(0.1, 0.9)
-
-        # Latitude-weighted random assignment — avoids hard latitudinal
-        # cutoffs that produce straight horizontal coastlines.
-        # Lower latitudes are more likely to be continental (Earth-like),
-        # but random jitter breaks the sharp boundary.
-        weights = np.array([
-            max(0.0, 1.0 - 0.5 * abs(mesh.cells[c].lat) / 90.0
-                + rng.uniform(-0.2, 0.2))
-            for c in cell_ids
-        ])
-
-        # Weighted selection: highest weights → continental
         n_cont = max(1, int(len(cell_ids) * continental_fraction))
-        sorted_idx = np.argsort(weights)[::-1]
+
+        if _has_noise:
+            # Spatial noise: coherent values for adjacent cells
+            noise_seed = rng.integers(0, 2**31 - 1)
+            opensimplex.seed(noise_seed)
+            # Noise scale: ~1 cell → large coherent blobs
+            scale = 0.6
+            # Latitude bias: equatorial preference (Earth-like)
+            noise_vals = np.array([
+                opensimplex.noise3(
+                    float(mesh.cells[c].x * scale),
+                    float(mesh.cells[c].y * scale),
+                    float(mesh.cells[c].z * scale),
+                ) - 0.3 * abs(mesh.cells[c].lat) / 90.0
+                for c in cell_ids
+            ])
+        else:
+            # Fallback: latitude-weighted + mild spatial jitter
+            noise_vals = np.array([
+                1.0 - 0.5 * abs(mesh.cells[c].lat) / 90.0
+                + rng.uniform(-0.15, 0.15)
+                for c in cell_ids
+            ])
+
+        # Top N by noise value → continental (threshold varies per plate)
+        sorted_idx = np.argsort(noise_vals)[::-1]
         for rank, idx in enumerate(sorted_idx):
             cid = cell_ids[idx]
             if rank < n_cont:
