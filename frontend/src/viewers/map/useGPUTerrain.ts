@@ -169,11 +169,12 @@ export default function useGPUTerrain({
     const activeModes = (Object.keys(layers) as ColorMode[]).filter((k) => layers[k] > 0)
     const terrainLut = activeModes.includes('terrain')
       ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
-    // Cell-level land/sea map (avoids pixel-level nearest-neighbor artifacts)
-    const cellLand = new Map<number, boolean>()
+    // Cell-level land/sea (typed array for O(1) lookup — faster than Map)
+    const maxCellId = cvtMesh?.cells.length ?? 0
+    const cellLand = new Uint8Array(maxCellId)
     if (cvtMesh && (activeModes.includes('landsea') || activeModes.includes('boundaries') || activeModes.includes('terrain'))) {
       for (const cell of cvtMesh.cells) {
-        cellLand.set(cell.id, cell.elevation >= seaLevel)
+        cellLand[cell.id] = cell.elevation >= seaLevel ? 1 : 0
       }
     }
     const landseaLut = activeModes.includes('landsea')
@@ -255,7 +256,7 @@ export default function useGPUTerrain({
       // Layer 2: Land/sea (cell-level, avoids pixel nearest-neighbor artifacts)
       if (landseaLut) {
         const cid = cellIdMap?.[i]
-        const isLand = cid != null ? (cellLand.get(cid) ?? false) : (elev >= normSeaLevel)
+        const isLand = cid != null ? (cellLand[cid] === 1) : (elev >= normSeaLevel)
         const c: [number, number, number] = isLand ? [80, 140, 60] : [30, 60, 120]
         blend(accum, c, layers.landsea)
       }
@@ -277,22 +278,21 @@ export default function useGPUTerrain({
     }
 
     // --- Coastline detection: cell-level (reuses cellLand map above) ---
-    if (layers.terrain > 0 && cellIdMap && cellLand.size > 0) {
+    if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
       const COAST_COLOR = [20, 20, 20] as const
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
           const cid = cellIdMap[i]
           if (cid == null) continue
-          const isLand = cellLand.get(cid)
-          if (isLand == null) continue
+          const isLand = cellLand[cid]
           // Check right neighbor
           const rx = x + 1
           if (rx < width) {
             const nCid = cellIdMap[y * width + rx]
             if (nCid != null && nCid !== cid) {
-              const nLand = cellLand.get(nCid)
-              if (nLand != null && isLand !== nLand) {
+              const nLand = cellLand[nCid]
+              if (isLand !== nLand) {
                 const pi = i * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
                 const npi = (y * width + rx) * 4
@@ -305,8 +305,8 @@ export default function useGPUTerrain({
           if (by < height) {
             const nCid = cellIdMap[by * width + x]
             if (nCid != null && nCid !== cid) {
-              const nLand = cellLand.get(nCid)
-              if (nLand != null && isLand !== nLand) {
+              const nLand = cellLand[nCid]
+              if (isLand !== nLand) {
                 const pi = i * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
                 const npi = (by * width + x) * 4
