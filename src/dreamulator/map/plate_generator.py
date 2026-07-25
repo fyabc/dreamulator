@@ -5,7 +5,8 @@ Algorithm (Cortial et al. 2019, "Procedural Tectonic Planets")
     1. Poisson-disc seed selection on the sphere
     2. Synchronous multi-source BFS → spherical Voronoi partition
     3. Boundary noise perturbation → organic edges
-    4. Assign crust types (continental / oceanic)
+    4. Assign crust types via 5-octave fBm (continental / oceanic)
+       — fractal coastlines with detail at all resolvable scales
     5. Assign Euler poles (rotation axis + angular velocity)
 
 Step 3 follows Cortial et al. §3 "noise-warped geodetic distance":
@@ -18,6 +19,10 @@ References
 * Cortial, Y., Peytavie, A., Galin, E., & Guérin, E. (2019). Procedural
   Tectonic Planets. Computer Graphics Forum (Eurographics), 38(2), 1–11.
   https://doi.org/10.1111/cgf.13614
+* Mandelbrot, B.B. (1967). "How Long Is the Coast of Britain? Statistical
+  Self-Similarity and Fractional Dimension." *Science*, 156(3775), 636–638.
+  — coastlines are fractal; fBm noise produces statistically self-similar
+  crust boundaries (step 4, ``assign_crust_types``).
 * weigert/SimpleTectonics — Poisson disc + GPU Voronoi.
   https://github.com/weigert/SimpleTectonics
 """
@@ -278,22 +283,29 @@ def assign_crust_types(
     """Assign crust types to cells based on their plate.
 
     Each plate gets a random continental fraction in [0.1, 0.9].
-    3D simplex noise (OpenSimplex) sampled at cell positions produces
-    spatially coherent continental blocks — adjacent cells get similar
-    noise values, so continents are contiguous, not scattered.
+    Fractal Brownian Motion (fBm) — 5 octaves of 3D simplex noise with
+    1/f amplitude scaling (persistence=0.5, lacunarity=2.5) — produces
+    statistically self-similar crust boundaries.  Cells near the
+    continental/oceanic threshold exhibit fractal coastlines with
+    detail at all resolvable scales (fjords, peninsulas, rias).
 
     Latitude bias: lower latitudes are weighted toward continental
     (Earth-like continent distribution).
 
     References
     ----------
+    * Mandelbrot, B.B. (1967). "How Long Is the Coast of Britain?
+      Statistical Self-Similarity and Fractional Dimension." *Science*,
+      156(3775), 636–638. — coastlines are fractal; their measured
+      length grows as the measurement scale shrinks.
+    * Musgrave, F.K., Kolb, C.E., & Mace, R.S. (1989). "The synthesis
+      and rendering of eroded fractal terrains." *SIGGRAPH '89*.
+      — fBm as the standard model for natural terrain; 1/f noise
+      produces fractal surfaces whose roughness is scale-invariant.
     * Perlin, K. (2001). "Noise Hardware." In *Real-Time Shading*
       (SIGGRAPH Course Notes). — original simplex noise algorithm.
     * Spencer, K. (2014). OpenSimplex — patent-free simplex noise
       implementation. https://github.com/KdotJPG/OpenSimplex2
-    * Musgrave, F.K., Kolb, C.E., & Mace, R.S. (1989). "The synthesis
-      and rendering of eroded fractal terrains." *SIGGRAPH '89*.
-      — using coherent noise for natural-looking terrain features.
 
     Modifies ``mesh.cells[*].crust_type`` in-place.
     """
@@ -315,29 +327,44 @@ def assign_crust_types(
         n_cont = max(1, int(len(cell_ids) * continental_fraction))
 
         if _has_noise:
-            # Spatial noise: coherent values for adjacent cells
+            # 5-octave fBm: 1/f amplitude scaling (persistence=0.5) produces
+            # statistically self-similar crust boundaries — fractal coastlines
+            # with detail at all resolvable scales.  Reseeding per octave
+            # ensures independent noise layers (same pattern as terrain fBm).
             import warnings as _w
             noise_seed = rng.integers(0, 1 << 20)
-            with _w.catch_warnings():
-                _w.filterwarnings("ignore", message="overflow encountered")
-                opensimplex.seed(noise_seed)
-            # Two-octave noise: low-freq for continent-scale blobs,
-            # high-freq to roughen coastlines (scale auto-adjusts per plate size)
             n_cells = len(cell_ids)
-            low_scale = 2.0 / max(n_cells, 1) ** 0.15  # larger plate → lower freq
-            hi_scale = low_scale * 4.0  # high-freq coastline detail
+            base_freq = 2.0 / max(n_cells, 1) ** 0.15  # scale to plate size
+            octaves = 5
+            persistence = 0.5
+            lacunarity = 2.5
+
+            noise_vals = np.zeros(n_cells, dtype=np.float64)
+            amplitude = 1.0
+            frequency = base_freq
+
+            for octave in range(octaves):
+                octave_seed = noise_seed + octave * 1000
+                with _w.catch_warnings():
+                    _w.filterwarnings("ignore", message="overflow encountered")
+                    opensimplex.seed(octave_seed)
+                for i, c in enumerate(cell_ids):
+                    cell = mesh.cells[c]
+                    noise_vals[i] += amplitude * opensimplex.noise3(
+                        float(cell.x * frequency),
+                        float(cell.y * frequency),
+                        float(cell.z * frequency),
+                    )
+                amplitude *= persistence
+                frequency *= lacunarity
+
+            # Normalize to [-1, 1]: geometric series max amplitude
+            # Σ_{k=0}^{4} p^k = (1 - p^5) / (1 - p) = 1.9375 for p=0.5
+            noise_vals /= (1.0 - persistence ** octaves) / (1.0 - persistence)
+
             # Latitude bias: equatorial preference (Earth-like)
-            noise_vals = np.array([
-                0.7 * opensimplex.noise3(
-                    float(mesh.cells[c].x * low_scale),
-                    float(mesh.cells[c].y * low_scale),
-                    float(mesh.cells[c].z * low_scale),
-                ) + 0.3 * opensimplex.noise3(
-                    float(mesh.cells[c].x * hi_scale),
-                    float(mesh.cells[c].y * hi_scale),
-                    float(mesh.cells[c].z * hi_scale),
-                ) - 0.3 * abs(mesh.cells[c].lat) / 90.0
-                for c in cell_ids
+            noise_vals -= 0.3 * np.array([
+                abs(mesh.cells[c].lat) / 90.0 for c in cell_ids
             ])
         else:
             # Fallback: latitude-weighted + mild spatial jitter

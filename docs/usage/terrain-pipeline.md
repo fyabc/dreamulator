@@ -403,31 +403,31 @@ def _voronoi_partition(
 
 ### 3.3 地壳类型分配
 
-每个板块分配地壳类型（大陆/大洋/混合）：
+每个 cell 的地壳类型（大陆/大洋）通过 **5-octave 分形布朗运动（fBm）** 在板块内分配。
+这替代了早期设计中按板块整体分配的方法，实现了更真实的大陆形状。
 
-```python
-def assign_crust_types(
-    plate_ids: np.ndarray,
-    num_plates: int,
-    rng,
-    continental_fraction: float = 0.35,
-) -> list[str]:
-    """Assign crust types to plates.
+**算法**：
 
-    Earth-like distribution: ~35% continental, ~65% oceanic.
-    Mixed plates have both continental and oceanic regions.
-    """
-    types = []
-    for i in range(num_plates):
-        r = rng.random()
-        if r < continental_fraction * 0.6:
-            types.append("continental")
-        elif r < continental_fraction * 0.6 + continental_fraction * 0.4:
-            types.append("mixed")
-        else:
-            types.append("oceanic")
-    return types
-```
+1. 每个板块获得随机大陆比例 f ∈ [0.1, 0.9]
+2. 对板块内所有 cell，使用 3D simplex noise（OpenSimplex）在 cell 的球面坐标 (x, y, z) 上采样
+3. 5-octave fBm 叠加：`noise = Σ amplitude_k · noise3(x · f_k, y · f_k, z · f_k)`
+   - persistence = 0.5（1/f 振幅衰减）
+   - lacunarity = 2.5（频率倍增系数）
+   - base_freq ∝ 1 / N_cells^0.15（自动适配板块大小）
+4. 归一化后施加纬度偏差：`noise -= 0.3 · |lat| / 90°`（赤道偏向大陆）
+5. 按 noise 值降序排列，前 f×100% 的 cell 标记为 continental，其余为 oceanic
+
+**分形海岸线原理**：
+
+fBm 具有 1/f 功率谱（Mandelbrot 1967），因此 noise 等值面——即大陆/大洋
+边界——在所有可分辨尺度上表现出统计自相似性。随着 CVT 分辨率提高（更多 cell），
+海岸线自动呈现更多细节，无需额外参数调整。
+
+> **参考文献**：
+> * Mandelbrot, B.B. (1967). "How Long Is the Coast of Britain? Statistical
+>   Self-Similarity and Fractional Dimension." *Science*, 156(3775), 636–638.
+> * Musgrave, F.K. et al. (1989). "The synthesis and rendering of eroded
+>   fractal terrains." *SIGGRAPH '89*.
 
 ### 3.4 手动板块指定
 
@@ -1149,6 +1149,60 @@ def synthesize_terrain(
 | `noise_lacunarity` | 2.0 | 1.5 – 3.0 | fBm 频率增长率 |
 | `noise_scale` | 2.0 | 0.5 – 5.0 | fBm 基础空间频率 |
 | `interior_boost` | 0.3 | 0.0 – 0.5 | 板块内部噪声增强 |
+
+### 6.7 内部地貌：古造山带、山间盆地与裂谷
+
+板块内部（距边界 >600 km 的大陆区域）放置 1–3 条线性构造带，模拟
+古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。
+
+#### 沿走向高度调制
+
+传统方法在整个造山带上施加**均匀 Gaussian 脊线**——高度和宽度处处相同。
+真实造山带沿走向有显著的高度变化（Allen et al. 1995; Kröner 1981）。
+
+每条 belt 用 **1D simplex 噪声沿大圆弧采样**，调制各段的振幅：
+
+```
+t ∈ [0,1] — 沿 belt 的参数化位置
+noise(t) = OpenSimplex.noise2(t × 8, belt_seed)
+振幅(t) ∈ [base × 0.3, base × 1.7]  (沿走向变化)
+```
+
+**效果**：造山带中有高峰和鞍部，而非均匀脊线。std ~1000m 的高度变化
+（在 100K 分辨率下）。
+
+#### 山间盆地
+
+当沿走向噪声值低于阈值（`interior_basin_chance`, 默认 0.25），
+该段成为**断陷盆地**而非山脊——模拟拉分盆地和断块差异沉降：
+
+- 吐鲁番盆地（天山内部，−154 m）——周围山体 3000–5000 m
+- 费尔干纳盆地（天山-帕米尔）——断块差异运动
+- Basin and Range（美国西部）——伸展环境地堑
+
+盆地深度可达 `interior_basin_depth_max_m`（默认 600 m），
+部分盆地底部低于海平面（100K 测试中 ~272 个 cell）。
+
+**参考文献**：
+- Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar,
+  Turpan and Alakol basins as Late Permian to Early Triassic
+  extensional structures." *Journal of the Geological Society*,
+  152, 327–338.
+- Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
+
+#### 裂谷
+
+30% 概率/板块，独立的线性凹陷（深 300–800 m，σ=40–100 km），
+也使用沿走向深度调制。
+
+### 内部地貌参数
+
+| 参数 | 默认值 | 范围 | 含义 |
+|------|--------|------|------|
+| `interior_orogeny_count` | 2 | 0–5 | 每板块 belt 数（0=禁用） |
+| `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
+| `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
+| `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
 
 ---
 

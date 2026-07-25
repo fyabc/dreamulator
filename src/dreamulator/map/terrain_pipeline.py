@@ -18,11 +18,13 @@ See ``docs/usage/terrain-pipeline.md`` for complete algorithm reference.
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from rich.console import Console
 
 from .boundary_detector import detect_boundaries
 from .cvt_mesh import generate_cvt_mesh
@@ -33,6 +35,7 @@ from .plate_generator import generate_plates
 from .terrain_synthesizer import synthesize_terrain
 
 logger = logging.getLogger(__name__)
+_console = Console(highlight=False)
 
 # Valid stage names for partial pipeline execution
 VALID_STAGES = frozenset({
@@ -61,20 +64,23 @@ _STAGE_NAMES: dict[str, str] = {
 }
 
 
-def _stage_header(stage: str) -> None:
-    """Print a user-facing stage header to stdout (not a log line)."""
+def _stage_begin(stage: str) -> None:
+    """Print a user-facing stage header."""
     name = _STAGE_NAMES.get(stage, stage)
-    print(f">> {name}", flush=True)
+    _console.print(f"[bold bright_cyan]>>[/] [bold]{name}[/]")
 
 
-def _stage_timing(msg: str, elapsed: float) -> None:
-    """Log timing detail (diagnostic)."""
-    logger.debug("  %s: %.1fs", msg, elapsed)
-
-
-def _stage_timing(msg: str, elapsed: float) -> None:
-    """Log timing detail (diagnostic, not user-facing)."""
-    logger.debug("  %s: %.1fs", msg, elapsed)
+def _stage_end(elapsed: float) -> None:
+    """Print elapsed time for the just-completed stage."""
+    if elapsed < 1.0:
+        timing = f"{elapsed * 1000:.0f}ms"
+    elif elapsed < 60:
+        timing = f"{elapsed:.1f}s"
+    else:
+        mins = int(elapsed // 60)
+        secs = elapsed % 60
+        timing = f"{mins}m {secs:.0f}s"
+    _console.print(f"  [bold green]done[/] [dim italic]({timing})[/]")
 
 
 @dataclass
@@ -151,22 +157,22 @@ def run_terrain_pipeline(
 
     # ---- Stage 1: CVT Mesh ----
     if "mesh" in ordered:
-        _stage_header("mesh")
+        _stage_begin("mesh")
         t = time.time()
         result.mesh = generate_cvt_mesh(config)
         result.stages_completed.append("mesh")
-        _stage_timing("Mesh generation", time.time() - t)
+        _stage_end(time.time() - t)
 
     if result.mesh is None:
         raise RuntimeError("CVT mesh is required for subsequent stages. Run 'mesh' stage first.")
 
     # ---- Stage 2: Plate Tectonics ----
     if "plates" in ordered:
-        _stage_header("plates")
+        _stage_begin("plates")
         t = time.time()
         result.plates, cell_plate_map = generate_plates(result.mesh, config)
         result.stages_completed.append("plates")
-        _stage_timing("Plate generation", time.time() - t)
+        _stage_end(time.time() - t)
     else:
         # Reconstruct cell_plate_map from existing plate data
         cell_plate_map = {}
@@ -182,7 +188,7 @@ def run_terrain_pipeline(
                 "Run 'plates' stage first."
             )
 
-        _stage_header("tectonics")
+        _stage_begin("tectonics")
         t = time.time()
         from .tectonic_simulator import run_tectonic_evolution
 
@@ -199,7 +205,7 @@ def run_terrain_pipeline(
                 transient=True,
             )
             task_id = _progress.add_task(
-                "[bright_red]>> 3/9  Tectonic Evolution[/]",
+                "  Tectonic steps",
                 total=config.tectonic_steps,
             )
             _progress.start()
@@ -218,80 +224,77 @@ def run_terrain_pipeline(
         if _progress is not None:
             _progress.stop()
         result.stages_completed.append("tectonics")
-        _stage_timing("Tectonic evolution", time.time() - t)
+        _stage_end(time.time() - t)
 
     # ---- Stage 4: Boundary Detection ----
     if "boundaries" in ordered:
         if not result.plates:
             raise RuntimeError("Plates are required for boundary detection. Run 'plates' stage first.")
 
-        _stage_header("boundaries")
+        _stage_begin("boundaries")
         t = time.time()
         result.boundary_cell_ids = detect_boundaries(
             result.mesh, result.plates, cell_plate_map, config
         )
         result.stages_completed.append("boundaries")
-        _stage_timing("Boundary detection", time.time() - t)
+        _stage_end(time.time() - t)
 
     # ---- Stage 5: Terrain Synthesis ----
     if "terrain" in ordered:
         if not result.plates:
             raise RuntimeError("Plates are required for terrain synthesis. Run 'plates' stage first.")
 
-        _stage_header("terrain")
+        _stage_begin("terrain")
         t = time.time()
         synthesize_terrain(result.mesh, result.plates, config)
         result.stages_completed.append("terrain")
-        _stage_timing("Terrain synthesis", time.time() - t)
+        _stage_end(time.time() - t)
 
     # ---- Stage 6: Climate (TODO) ----
     if "climate" in ordered:
-        _stage_header("climate")
+        _stage_begin("climate")
         try:
             from .climate_simulator import simulate_climate
 
             t = time.time()
             simulate_climate(result.mesh, config)
             result.stages_completed.append("climate")
-            _stage_timing("Climate simulation", time.time() - t)
+            _stage_end(time.time() - t)
         except NotImplementedError as e:
-            print(f"  skipped: {type(e).__name__}", flush=True)
-            # Full detail in log (verbose-only); user sees print() above
+            _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
     # ---- Stage 7: Rivers (TODO) ----
     if "rivers" in ordered:
-        _stage_header("rivers")
+        _stage_begin("rivers")
         try:
             from .river_generator import generate_rivers
 
             t = time.time()
             generate_rivers(result.mesh, config)
             result.stages_completed.append("rivers")
-            _stage_timing("River generation", time.time() - t)
+            _stage_end(time.time() - t)
         except NotImplementedError as e:
-            print(f"  skipped: {type(e).__name__}", flush=True)
-            # Full detail in log (verbose-only); user sees print() above
+            _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
     # ---- Stage 8: Erosion (TODO) ----
     if "erosion" in ordered:
-        _stage_header("erosion")
+        _stage_begin("erosion")
         try:
             from .erosion import apply_erosion
 
             t = time.time()
             apply_erosion(result.mesh, config)
             result.stages_completed.append("erosion")
-            _stage_timing("Erosion", time.time() - t)
+            _stage_end(time.time() - t)
         except NotImplementedError as e:
-            print(f"  skipped: {type(e).__name__}", flush=True)
-            # Full detail in log (verbose-only); user sees print() above
+            _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
     # ---- Stage 9: Export ----
     if "export" in ordered:
-        _stage_header("export")
+        _stage_begin("export")
         t = time.time()
         result.elevation_grid = export_equirectangular(
             result.mesh,
@@ -311,13 +314,19 @@ def run_terrain_pipeline(
             result.output_dir = output_dir
 
         result.stages_completed.append("export")
-        _stage_timing("Export", time.time() - t)
+        _stage_end(time.time() - t)
 
     result.elapsed_seconds = time.time() - t_start
-    print(
-        f"Pipeline complete ({' -> '.join(result.stages_completed)}"
-        f" in {result.elapsed_seconds:.1f}s)",
-        flush=True,
+    if result.elapsed_seconds < 60:
+        total_timing = f"{result.elapsed_seconds:.1f}s"
+    else:
+        mins = int(result.elapsed_seconds // 60)
+        secs = result.elapsed_seconds % 60
+        total_timing = f"{mins}m {secs:.0f}s"
+    _console.print(
+        f"[bold green]Pipeline complete[/] "
+        f"({' -> '.join(result.stages_completed)}) "
+        f"[dim italic](total {total_timing})[/]",
     )
 
     return result

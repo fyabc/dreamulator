@@ -145,13 +145,24 @@ def lloyd_relaxation(
         Relaxed points on unit sphere.
     """
     try:
-        from rich.progress import track
-        it = track(range(iterations), description="  Lloyd relaxation")
+        from rich.progress import Progress, BarColumn, TextColumn
+        _prog = Progress(
+            TextColumn("  Lloyd relaxation"),
+            BarColumn(),
+            TextColumn("[dim]{task.completed}/{task.total}[/dim]"),
+            transient=True,
+        )
+        _task = _prog.add_task("", total=iterations)
+        _prog.start()
+        for i in range(iterations):
+            logger.debug("Lloyd relaxation step %d/%d", i + 1, iterations)
+            points = lloyd_relaxation_step(points)
+            _prog.update(_task, completed=i + 1)
+        _prog.stop()
     except ImportError:
-        it = range(iterations)
-    for i in it:
-        logger.debug("Lloyd relaxation step %d/%d", i + 1, iterations)
-        points = lloyd_relaxation_step(points)
+        for i in range(iterations):
+            logger.debug("Lloyd relaxation step %d/%d", i + 1, iterations)
+            points = lloyd_relaxation_step(points)
     return points
 
 

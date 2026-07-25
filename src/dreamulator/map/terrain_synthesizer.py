@@ -192,13 +192,13 @@ def apply_boundary_effects(
     sigma_sq_2 = 2 * sigma * sigma
 
     # Reference convergence rate for normalization (10 cm/yr is very fast)
-    ref_rate = 10.0  # cm/yr
+    ref_rate = 5.0  # cm/yr — median plate speed
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 3 * sigma:
-            continue  # Beyond 3σ, effect is negligible
+        if cell.distance_to_boundary_km > 1.2 * sigma:
+            continue  # Gaussian ~4-11% of peak at 1.5σ  # Beyond 3σ, effect is negligible
 
         # Gaussian distance falloff
         d = cell.distance_to_boundary_km
@@ -206,7 +206,7 @@ def apply_boundary_effects(
 
         # Rate factor (how fast the plates are converging/diverging)
         rate = abs(cell.convergence_rate_cm_yr)
-        rate_factor = min(rate / ref_rate, 1.0)
+        rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
 
         if cell.boundary_type == "convergent":
             delta_h[i] = config.convergent_uplift_m * falloff * rate_factor
@@ -367,14 +367,15 @@ def _synthesize_gaussian(
         config.noise_amplitude_ocean_m,
     )
 
-    # Distance-to-boundary modulation: more mountainous near boundaries
+    # Distance-to-boundary modulation: more mountainous near boundaries,
+    # with a 1.2× base noise floor in plate interiors.
     sigma = config.boundary_influence_km
-    interior_factor = np.ones(n, dtype=np.float64)
+    interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 3 * sigma:
+        if cell.distance_to_boundary_km < 1.2 * sigma:
             d = cell.distance_to_boundary_km
             proximity = np.exp(-(d * d) / (2 * sigma * sigma))
-            interior_factor[i] = 1.0 + 0.5 * proximity
+            interior_factor[i] = 1.2 + 0.3 * proximity
 
     detail_contribution = fbm * noise_amplitude * interior_factor
 
@@ -446,7 +447,7 @@ def _synthesize_asymmetric(
     # 2. Asymmetric boundary effects
     logger.info("  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)",
                 config.mountain_asymmetry)
-    boundary_delta = _asymmetric_boundary_effects(mesh, config)
+    boundary_delta, transform_boost = _asymmetric_boundary_effects(mesh, config)
 
     # 3. Hotspot volcanic chains
     hotspot_delta = np.zeros(n, dtype=np.float64)
@@ -480,13 +481,15 @@ def _synthesize_asymmetric(
         config.noise_amplitude_ocean_m,
     )
 
-    # Boundary-proximity factor (same as gaussian)
+    # Boundary-proximity factor.
+    # Near boundaries: up to 1.5× noise (rugged mountains).
+    # Plate interiors: 1.2× base noise (enough texture on high plateaus).
     sigma = config.boundary_influence_km
-    interior_factor = np.ones(n, dtype=np.float64)
+    interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 3 * sigma:
+        if cell.distance_to_boundary_km < 1.2 * sigma:
             d = cell.distance_to_boundary_km
-            interior_factor[i] = 1.0 + 0.5 * np.exp(
+            interior_factor[i] = 1.2 + 0.3 * np.exp(
                 -(d * d) / (2 * sigma * sigma)
             )
 
@@ -495,7 +498,7 @@ def _synthesize_asymmetric(
     elevation = (
         base + boundary_delta + hotspot_delta
         + regional_fbm * regional_amp
-        + fbm * noise_amp * interior_factor
+        + fbm * noise_amp * interior_factor * transform_boost
     )
 
     for i, cell in enumerate(mesh.cells):
@@ -521,80 +524,159 @@ def _asymmetric_boundary_effects(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
 ) -> np.ndarray:
-    """Asymmetric boundary mountain profiles.
+    """Boundary-type-specific elevation profiles.
 
-    Convergent: steep windward face + gentle leeward slope.
-    Each boundary cell's asymmetry direction is determined by the
-    local convergence normal (which side is the overriding plate).
+    Convergent (C-C / C-O / O-O)
+        Asymmetric mountain range on the overriding plate: steep front
+        (σ ≈ 200 km) facing the trench, gentle back-slope (σ ≈ 700 km).
+        Oceanic trench at 100–150 km from the peak on the subducting side.
 
-    References:
-      Cortial 2019 §4.1 — uplift formula with elevation-dependent feedback.
-      Willett 1999 — orographic asymmetry from prevailing wind erosion.
+    Divergent (continental rift / mid-ocean ridge)
+        Continental: deep central rift valley with flanking highlands
+        (e.g. East African Rift).  Oceanic: broad submarine ridge rising
+        ~1300 m above the abyssal plain (peak ≈ −2500 m), occasionally
+        breaking the surface (Iceland-type).
+
+    Transform
+        No systematic elevation change.  Instead, a narrow band of
+        enhanced roughness (±50 % noise boost within ~200 km) creates
+        linear valleys and shutter ridges characteristic of strike-slip
+        fault zones (e.g. San Andreas, North Anatolian).
+
+    References
+    ----------
+    * Cortial et al. (2019) §4.1 — subduction uplift with velocity-dependent
+      amplitude and squared-elevation feedback.
+    * Willett (1999) — windward/leeward asymmetry from orographic precipitation.
+    * Wilson (1963) — hotspot volcanic chains from plate motion over fixed plume.
+    * Frisch, W., Meschede, M., & Blakey, R. (2011). *Plate Tectonics*.
+      Springer. — mid-ocean ridge morphology, transform fault features.
     """
     n = mesh.num_cells
     delta_h = np.zeros(n, dtype=np.float64)
     asym = config.mountain_asymmetry  # [0, 1]
     sigma = config.boundary_influence_km
 
-    ref_rate = 10.0  # cm/yr reference
+    # Reference convergence rate for normalisation.
+    # Earth: fast plates (Pacific) ~10 cm/yr, slow (Africa) ~1 cm/yr,
+    # median ~5 cm/yr.  Using the median as reference, then taking the
+    # square root, gives a sub-linear saturating curve:
+    #   1 cm/yr → 0.45   5 cm/yr → 1.0   10 cm/yr → 1.41   14 cm/yr → 1.67
+    # This matches the geological observation that mountain height grows
+    # with convergence rate but with diminishing returns (no hard cap).
+    ref_rate = 5.0  # cm/yr — median plate speed
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 3 * sigma:
-            continue
+        if cell.distance_to_boundary_km > 1.2 * sigma:
+            continue  # Gaussian ~4-11% of peak at 1.5σ
 
         d = cell.distance_to_boundary_km
         rate = abs(cell.convergence_rate_cm_yr)
-        rate_factor = min(rate / ref_rate, 1.0)
+        rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
+        crust = getattr(cell, "crust_type", "")
 
         if cell.boundary_type == "convergent":
-            # Asymmetric profile: steep front (windward) + gentle back
-            sigma_front = sigma * (1.0 - asym * 0.5)  # narrower
-            sigma_back = sigma * (1.0 + asym * 1.0)   # wider
+            # ---- Convergent: asymmetric mountain + trench ----------------
+            # Narrower sigma for convergent belts (more focused deformation)
+            sigma_conv = sigma * 0.8  # 400 km
+            sigma_front = sigma_conv * (1.0 - asym * 0.5)  # steep side
+            sigma_back = sigma_conv * (1.0 + asym * 1.0)   # gentle side
 
-            # Determine if cell is on the overriding (mountain) side
-            # or subducting (trench) side using convergence rate sign
-            front = np.exp(-(d * d) / (2 * sigma_front * sigma_front))
-            back = np.exp(-(d * d) / (2 * sigma_back * sigma_back))
-
-            # Mountain peak offset toward overriding plate
-            peak_offset = asym * sigma * 0.3
+            # Mountain peak offset toward overriding plate (50–150 km)
+            peak_offset = asym * sigma_conv * 0.25
             dist_from_peak = abs(d - peak_offset)
             mountain = np.exp(
                 -(dist_from_peak * dist_from_peak) / (2 * sigma_front * sigma_front)
             )
 
             # Crust-type-dependent amplitude
-            crust = getattr(cell, "crust_type", "")
             if crust == "continental":
-                amp = config.convergent_uplift_m * 1.3  # C-C or C-O
+                amp = config.convergent_uplift_m * 1.3  # C-C collision
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
             delta_h[i] = amp * mountain * rate_factor
 
-            # Trench on the subducting side (negative elevation)
-            if d > sigma * 0.5:
-                trench_dist = abs(d - sigma)
-                trench = -config.divergent_depth_m * 0.8 * np.exp(
-                    -(trench_dist * trench_dist) / (2 * (sigma * 0.3) ** 2)
+            # Oceanic trench on the subducting side (100–200 km from peak)
+            trench_dist_km = sigma_conv * 0.35  # ~140 km
+            if d > trench_dist_km:
+                dist_from_trench = abs(d - trench_dist_km - peak_offset)
+                trench_sigma = sigma_conv * 0.25  # narrow, sharp trench
+                trench = -config.divergent_depth_m * 0.7 * np.exp(
+                    -(dist_from_trench * dist_from_trench) / (2 * trench_sigma * trench_sigma)
                 )
                 delta_h[i] += trench * rate_factor
 
         elif cell.boundary_type == "divergent":
-            # Rift valley + flanking ridges
-            rift = -config.divergent_depth_m * 0.5 * np.exp(
-                -(d * d) / (2 * (sigma * 0.3) ** 2)
-            )
-            ridge = config.divergent_depth_m * 0.8 * np.exp(
-                -(abs(d - sigma * 0.4) ** 2) / (2 * (sigma * 0.5) ** 2)
-            )
-            delta_h[i] = (rift + ridge) * rate_factor
+            # ---- Divergent: rift + ridge, crust-aware ---------------------
+            sigma_div = sigma * 0.6  # 300 km — narrower rift zone
 
-        # Transform: no elevation change (only roughness, applied later)
+            if crust == "oceanic":
+                # Mid-ocean ridge: broad submarine rise, shallow central graben.
+                # Rising from ~-3800 m (abyssal plain) to ~-2500 m (ridge crest).
+                ridge_amp = config.divergent_depth_m * 0.65  # ~1300 m uplift
+                ridge = ridge_amp * np.exp(
+                    -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                )
+                # Shallow central rift (only ~300 m deeper than the ridge flanks)
+                rift = -config.divergent_depth_m * 0.15 * np.exp(
+                    -(d * d) / (2 * (sigma_div * 0.2) ** 2)
+                )
+                delta_h[i] = (rift + ridge) * rate_factor
+            else:
+                # Continental rift: deep central valley + flanking highlands
+                # (East African Rift, Baikal).  The rift floor can drop below
+                # sea level (Dead Sea, Danakil Depression).
+                rift = -config.divergent_depth_m * 0.5 * np.exp(
+                    -(d * d) / (2 * (sigma_div * 0.25) ** 2)
+                )
+                ridge = config.divergent_depth_m * 0.7 * np.exp(
+                    -(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                )
+                delta_h[i] = (rift + ridge) * rate_factor
 
-    return delta_h
+    # ---- Transform: roughness-only (no systematic elevation change) ----
+    # Collect transform boundary cells for a narrow roughness boost.
+    # Strike-slip fault zones (San Andreas, North Anatolian) feature
+    # linear valleys, shutter ridges, and sag ponds — local roughness
+    # ~1.5× within ~200 km of the fault trace.
+    transform_cells: list[int] = []
+    for i, cell in enumerate(mesh.cells):
+        if cell.boundary_type == "transform":
+            transform_cells.append(i)
+            mesh.cells[i].landform = (
+                "transform" if not mesh.cells[i].landform else mesh.cells[i].landform
+            )
+
+    # BFS from transform boundary cells (narrow band: σ × 0.4 ≈ 200 km)
+    transform_boost = np.ones(n, dtype=np.float64)
+    if transform_cells:
+        sigma_trans = sigma * 0.4  # 200 km — transform faults are linear, narrow
+        from collections import deque
+        tq: deque[int] = deque()
+        tdist: dict[int, float] = {}
+        for cid in transform_cells:
+            tdist[cid] = 0.0
+            tq.append(cid)
+
+        cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+        while tq:
+            cid = tq.popleft()
+            d_t = tdist[cid]
+            if d_t >= 1.2 * sigma_trans:
+                continue
+            # Boost factor: 1.5 at the fault trace, decaying to 1.0 at 200 km
+            transform_boost[cid] = 1.0 + 0.5 * np.exp(
+                -(d_t * d_t) / (2 * sigma_trans * sigma_trans)
+            )
+            for nid in mesh.cells[cid].neighbors:
+                if nid not in tdist:
+                    tdist[nid] = d_t + cell_km
+                    tq.append(nid)
+
+    return delta_h, transform_boost
 
 
 def _generate_hotspots(
@@ -1038,10 +1120,17 @@ def _apply_coastal_plain(
 ) -> np.ndarray:
     """Gentle coastal plain on the land side of coastlines.
 
-    High-elevation terrain reaching directly to the shoreline produces
-    unrealistic km-scale coastal cliffs.  This applies a linear ramp
-    from the coast inland: elevation is gradually reduced to sea level
-    over *coastal_plain_width_km*.
+    Low-lying land gets the full *coastal_plain_width_km* smoothing.
+    High-elevation coastal mountains (e.g. Andes) get a narrower but
+    non-zero transition strip — at minimum 1 cell wide — so that no
+    cell sits at 5000m+ directly on the shoreline.
+
+    The effective width shrinks with elevation above sea level, from
+    *coastal_plain_width_km* at 0 m to ~1.0 cell at
+    *coastal_plain_max_elevation_m* and above.  This follows Inman &
+    Nordstrom's (1971) distinction between gentle coastal plains and
+    steep tectonic coasts, while ensuring even the steepest coasts
+    have at least a minimal lowland transition.
 
     Combines with *_apply_continental_shelf* (ocean side) to produce
     a smooth land→coast→shelf→deep ocean transition.
@@ -1073,39 +1162,74 @@ def _apply_coastal_plain(
     if not coastline:
         return elevation
 
-    # 2. BFS inland from coastline
+    # 2. BFS inland from coastline.
+    #    Extend BFS range to cover the minimum coastal strip even for
+    #    high-elevation mountains (at least 1 cell inland).
     from collections import deque
+
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+    # Minimum coastal strip: at least 1 cell wide, up to 150 km absolute cap
+    min_strip_km = min(150.0, max(cell_km * 1.2, plain_width * 0.2))
+    max_bfs_width = max(plain_width, min_strip_km)
+
     inland_dist: dict[int, float] = {}
     q: deque[int] = deque()
     for cid in coastline:
         inland_dist[cid] = 0.0
         q.append(cid)
 
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     while q:
         cid = q.popleft()
         d = inland_dist[cid]
-        if d >= plain_width:
+        if d >= max_bfs_width:
             continue
         for nid in mesh.cells[cid].neighbors:
             if nid not in inland_dist and elevation[nid] > config.sea_level_m:
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Ramp: elevation → gentle coastal plain as d → 0
+    # 3. Variable-width coastal plain with elevation-dependent blend target.
+    #    Low-lying cells blend toward ~30 m (classic coastal plain).
+    #    High-elevation cells (coastal mountains) blend toward ~40% of their
+    #    original elevation — creating a narrow but not-flat transition
+    #    (cf. Chilean Cordillera de la Costa, ~2000–3000 m at the coast).
+    max_plain_elev = config.coastal_plain_max_elevation_m  # 500 m default
+    mountain_coast_ratio = 0.40  # mountain cells retain ~40% of elev at the coast
+
     for cid, d_km in inland_dist.items():
-        t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        if elevation[cid] > config.sea_level_m:
-            coast_target = rng.uniform(10.0, 50.0)
-            blend = t * t * (3.0 - 2.0 * t)  # smoothstep
-            elevation[cid] = max(
-                coast_target,
-                elevation[cid] * blend + coast_target * (1.0 - blend),
-            )
+        if elevation[cid] <= config.sea_level_m:
+            continue
+
+        elev_above_sea = elevation[cid] - config.sea_level_m
+
+        # Elevation factor: 1.0 at sea level → 0.0 at max_plain_elev+
+        elev_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
+
+        # Coast elevation target: 30 m for lowlands, 40% of original for mountains
+        lowland_target = rng.uniform(10.0, 50.0)
+        mountain_target = elevation[cid] * mountain_coast_ratio
+        coast_target = (
+            lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
+        )
+
+        # Effective width: shrinks from plain_width (sea level) to min_strip_km
+        # (~1 cell) for cells at max_plain_elev and above.
+        width_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
+        effective_width = min_strip_km + (plain_width - min_strip_km) * width_factor
+
+        if d_km >= effective_width:
+            continue
+
+        t = d_km / max(effective_width, 1.0)  # 0 at coast → 1 at effective limit
+        blend = t * t * (3.0 - 2.0 * t)  # smoothstep
+        elevation[cid] = max(
+            lowland_target,
+            elevation[cid] * blend + coast_target * (1.0 - blend),
+        )
 
     logger.info(
-        "  Coastal plain: %d land cells, width=%.0f km",
-        len(inland_dist), plain_width,
+        "  Coastal plain: %d land cells, width=%.0f km (min strip %.0f km / %.1f cells)",
+        len(inland_dist), plain_width, min_strip_km, min_strip_km / max(cell_km, 1.0),
     )
     return elevation
 
@@ -1208,27 +1332,35 @@ def _apply_interior_landforms(
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Paleo-orogeny belts, rift valleys, and cratonic basins in plate interiors.
+    """Paleo-orogeny belts, rift valleys, and intermontane basins.
 
     Plate interiors far from active boundaries can appear too flat.
     On Earth, ancient collision zones (Urals, Appalachians) and failed
-    rift arms persist as linear highlands long after the plate boundary
-    has migrated away.  Cratonic basins add gentle long-wavelength
-    undulation.
+    rift arms persist as linear features long after the plate boundary
+    has migrated away.
 
-    For each continental plate, this places 1–3 linear orogenic belts
-    at random orientation across the interior, plus optional rifts.
+    For each continental plate, this places 1–3 linear belts at random
+    orientation across the interior.  Each belt has **along-strike height
+    variation** via 1D simplex noise — producing natural peaks, passes,
+    and sunken intermontane basins (pull-apart / fault-block depressions
+    like the Turpan Depression at −154 m or the Fergana Valley).
 
     References
     ----------
     * Şengör, A.M.C. (1990). "Plate tectonics and orogenic research
       after 25 years: A Tethyan perspective." *Earth-Science Reviews*,
-      27(1–2), 1–201. — classifies orogenic belts, notes that sutures
-      can lie far from active boundaries.
+      27(1–2), 1–201.
     * Burke, K. & Dewey, J.F. (1973). "Plume-generated triple
       junctions: Key indicators in applying plate tectonics to old
       rocks." *Journal of Geology*, 81(4), 406–433.
-      — failed rift arms (aulacogens) become intraplate basins/highs.
+    * Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
+      — ancient orogenic belts as linear weak zones reactivated over
+      multiple orogenic cycles.
+    * Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar,
+      Turpan and Alakol basins as Late Permian to Early Triassic
+      extensional structures in a sinistral shear zone." *Journal of
+      the Geological Society*, 152, 327–338. — pull-apart intermontane
+      basin formation in the Tianshan range.
 
     Modifies *elevation* in-place.
     """
@@ -1237,6 +1369,12 @@ def _apply_interior_landforms(
     if num_orogenies <= 0:
         return elevation
 
+    try:
+        import opensimplex
+        _has_noise = True
+    except ImportError:
+        _has_noise = False
+
     # Group cells by plate and identify interiors
     plate_cells: dict[str, list[int]] = {}
     for i, cell in enumerate(mesh.cells):
@@ -1244,7 +1382,10 @@ def _apply_interior_landforms(
         if pid:
             plate_cells.setdefault(pid, []).append(i)
 
-    total_affected = 0
+    total_orogeny = 0
+    total_basin = 0
+    total_rift = 0
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
 
     for pid, cell_indices in plate_cells.items():
         # Only add orogenies to continental or mixed plates
@@ -1253,21 +1394,26 @@ def _apply_interior_landforms(
             if getattr(mesh.cells[i], "crust_type", "") == "continental"
         )
         if n_cont < len(cell_indices) * 0.2:
-            continue  # too oceanic — skip
+            continue
 
-        # Find interior cells (far from any boundary)
+        # Find interior cells (beyond the boundary influence zone)
+        interior_threshold = config.boundary_influence_km * 1.2
         interior = [
             i for i in cell_indices
-            if mesh.cells[i].distance_to_boundary_km > 800
+            if mesh.cells[i].distance_to_boundary_km > interior_threshold
             and getattr(mesh.cells[i], "crust_type", "") == "continental"
         ]
         if len(interior) < 10:
             continue
 
-        # Place 1–3 orogenic belts per plate
-        n_belts = min(num_orogenies, max(1, len(interior) // 30))
-        for _ in range(n_belts):
-            # Pick two seed cells in the interior to define the belt line
+        # ---- Orogenic belts: count scales with interior area ----
+        # Base count from config, plus 1 extra belt per ~300 interior cells
+        n_belts = config.interior_orogeny_count + max(
+            0, len(interior) // 300 - 1
+        )
+        belt_seed_base = int(pid.split("_")[-1]) if "_" in pid else 0
+
+        for belt_idx in range(n_belts):
             if len(interior) < 3:
                 continue
             a_idx = interior[rng.integers(0, len(interior))]
@@ -1281,86 +1427,147 @@ def _apply_interior_landforms(
             b_pos = np.array([
                 mesh.cells[b_idx].x, mesh.cells[b_idx].y, mesh.cells[b_idx].z,
             ])
-            # Direction vector of the belt (on sphere → great-circle arc)
-            belt_dir = b_pos - a_pos
-            belt_len = np.linalg.norm(belt_dir)
-            if belt_len < 1e-12:
-                continue
-            belt_dir /= belt_len
 
-            # Orogeny amplitude: 500–1500 m, varies per belt
-            amplitude = rng.uniform(500.0, 1500.0)
-            # Width of the belt (Gaussian sigma in km)
+            # Great-circle arc: normal vector
+            gc_normal = np.cross(a_pos, b_pos)
+            gc_norm = np.linalg.norm(gc_normal)
+            if gc_norm < 1e-12:
+                continue
+            gc_normal /= gc_norm
+
+            # Angular length of the belt
+            angle_ab = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+
+            # Belt parameters
+            base_amplitude = rng.uniform(500.0, 1500.0)
             sigma_km = rng.uniform(80.0, 200.0)
-            cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+            height_var = config.interior_height_variation
+            basin_chance = config.interior_basin_chance
+            basin_depth_max = config.interior_basin_depth_max_m
+
+            # Noise seed for this belt's along-strike modulation
+            belt_noise_seed = (belt_seed_base * 100 + belt_idx + 1) * 1000
 
             belt_count = 0
+            basin_count = 0
+
             for i in interior:
                 cell = mesh.cells[i]
                 pos = np.array([cell.x, cell.y, cell.z])
-                # Distance from point to the great-circle arc defined by a→b
-                # Approximate: distance to the line segment in 3D, projected
-                # to angular distance on the sphere
-                vec = pos - a_pos
-                proj = np.dot(vec, belt_dir)
-                proj = max(0.0, min(belt_len, proj))  # clamp to segment
-                closest = a_pos + proj * belt_dir
-                closest_norm = np.linalg.norm(closest)
-                if closest_norm < 1e-12:
+
+                # Project cell onto the great-circle plane → closest point on arc
+                p_proj = pos - np.dot(pos, gc_normal) * gc_normal
+                p_norm = np.linalg.norm(p_proj)
+                if p_norm < 1e-12:
                     continue
-                closest /= closest_norm  # project back to unit sphere
+                p_proj /= p_norm
+
+                # Position along the belt: t ∈ [0, 1]
+                angle_ap = np.arccos(np.clip(np.dot(a_pos, p_proj), -1.0, 1.0))
+                t = np.clip(angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
 
                 # Angular distance from cell to the belt line
-                dot = np.clip(np.dot(pos, closest), -1.0, 1.0)
-                ang_dist_rad = np.arccos(dot)
-                dist_km = ang_dist_rad * config.radius_km
+                dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
+                dist_km = np.arccos(dot_to_arc) * config.radius_km
 
-                if dist_km < 3 * sigma_km:
-                    # Gaussian profile
-                    weight = np.exp(-(dist_km * dist_km) / (2 * sigma_km * sigma_km))
-                    # Add noise perturbation along the belt for natural look
-                    noise = rng.uniform(-0.15, 0.15)
-                    elevation[i] += amplitude * weight * (1.0 + noise)
-                    mesh.cells[i].landform = "orogeny"
+                if dist_km >= 2.0 * sigma_km:
+                    continue
+
+                # ---- Along-strike height modulation via 1D noise ----
+                if _has_noise:
+                    import warnings as _w
+                    with _w.catch_warnings():
+                        _w.filterwarnings("ignore", message="overflow encountered")
+                        opensimplex.seed(belt_noise_seed)
+                    # t * 8 → ~8 cycles along the belt for visible variation
+                    strike_noise = opensimplex.noise2(t * 8.0, belt_noise_seed * 0.01)
+                else:
+                    strike_noise = rng.uniform(-1.0, 1.0)
+
+                # Determine segment type and amplitude
+                if strike_noise < -(1.0 - basin_chance * 2):
+                    # Intermontane basin: subsidence instead of uplift
+                    basin_depth = basin_depth_max * abs(strike_noise)
+                    local_amp = -basin_depth
+                    landform_type = "basin"
+                    basin_count += 1
+                else:
+                    # Orogenic ridge with height variation
+                    # Map noise [-1, 1] → [0.3, 1.7] multiplier (30%–170% of base)
+                    amp_mult = 0.3 + height_var * (strike_noise + 1.0) / 2.0
+                    local_amp = base_amplitude * amp_mult
+                    landform_type = "orogeny"
                     belt_count += 1
 
-            total_affected += belt_count
+                # Gaussian cross-section
+                weight = np.exp(-(dist_km * dist_km) / (2 * sigma_km * sigma_km))
+                # Small random jitter for natural texture
+                jitter = rng.uniform(-0.10, 0.10)
+                elevation[i] += local_amp * weight * (1.0 + jitter)
 
-        # Optional: rift valley (1 per plate, 30% chance)
+                # Only overwrite landform if not already set by a stronger feature
+                if not mesh.cells[i].landform:
+                    mesh.cells[i].landform = landform_type
+
+            total_orogeny += belt_count
+            total_basin += basin_count
+
+        # ---- Rift valleys (1 per plate, 30% chance, also with along-strike variation) ----
         if rng.random() < 0.3 and len(interior) > 20:
             a_idx = interior[rng.integers(0, len(interior))]
             b_idx = interior[rng.integers(0, len(interior))]
             if a_idx != b_idx:
                 a_pos = np.array([mesh.cells[a_idx].x, mesh.cells[a_idx].y, mesh.cells[a_idx].z])
                 b_pos = np.array([mesh.cells[b_idx].x, mesh.cells[b_idx].y, mesh.cells[b_idx].z])
-                rift_dir = b_pos - a_pos
-                rift_len = np.linalg.norm(rift_dir)
-                if rift_len > 1e-12:
-                    rift_dir /= rift_len
-                    rift_depth = rng.uniform(300.0, 800.0)
-                    sigma_km = rng.uniform(40.0, 100.0)
+                gc_normal = np.cross(a_pos, b_pos)
+                gc_norm = np.linalg.norm(gc_normal)
+                if gc_norm > 1e-12:
+                    gc_normal /= gc_norm
+                    angle_ab = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+                    rift_sigma = rng.uniform(40.0, 100.0)
+                    rift_depth_base = rng.uniform(300.0, 800.0)
+                    rift_noise_seed = (belt_seed_base * 100 + 99) * 1000
+
                     for i in interior:
                         pos = np.array([mesh.cells[i].x, mesh.cells[i].y, mesh.cells[i].z])
-                        vec = pos - a_pos
-                        proj = np.dot(vec, rift_dir)
-                        proj = max(0.0, min(rift_len, proj))
-                        closest = a_pos + proj * rift_dir
-                        norm = np.linalg.norm(closest)
-                        if norm < 1e-12:
+                        p_proj = pos - np.dot(pos, gc_normal) * gc_normal
+                        p_norm = np.linalg.norm(p_proj)
+                        if p_norm < 1e-12:
                             continue
-                        closest /= norm
-                        dot = np.clip(np.dot(pos, closest), -1.0, 1.0)
-                        dist_km = np.arccos(dot) * config.radius_km
-                        if dist_km < 3 * sigma_km:
-                            weight = np.exp(-(dist_km**2) / (2 * sigma_km**2))
-                            elevation[i] -= rift_depth * weight
-                            mesh.cells[i].landform = "rift"
-                            total_affected += 1
+                        p_proj /= p_norm
+                        angle_ap = np.arccos(np.clip(np.dot(a_pos, p_proj), -1.0, 1.0))
+                        t = np.clip(angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
+                        dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
+                        dist_km = np.arccos(dot_to_arc) * config.radius_km
 
-    if total_affected > 0:
+                        if dist_km >= 2.0 * rift_sigma:
+                            continue
+
+                        # Along-strike depth modulation for rifts
+                        if _has_noise:
+                            import warnings as _w
+                            with _w.catch_warnings():
+                                _w.filterwarnings("ignore", message="overflow encountered")
+                                opensimplex.seed(rift_noise_seed)
+                            strike_noise = opensimplex.noise2(t * 6.0, rift_noise_seed * 0.01)
+                        else:
+                            strike_noise = rng.uniform(-1.0, 1.0)
+                        depth_mult = 0.4 + 0.6 * (strike_noise + 1.0) / 2.0
+                        local_depth = rift_depth_base * depth_mult
+
+                        weight = np.exp(-(dist_km**2) / (2 * rift_sigma**2))
+                        jitter = rng.uniform(-0.10, 0.10)
+                        elevation[i] -= local_depth * weight * (1.0 + jitter)
+                        if not mesh.cells[i].landform:
+                            mesh.cells[i].landform = "rift"
+                        total_rift += 1
+
+    if total_orogeny > 0 or total_basin > 0 or total_rift > 0:
         logger.info(
-            "  Interior landforms: %d cells (orogenies=%d/plate, rifts 30%% chance)",
-            total_affected, num_orogenies,
+            "  Interior landforms: %d orogeny, %d basin, %d rift cells "
+            "(%d belts/plate, basin chance %.0f%%)",
+            total_orogeny, total_basin, total_rift,
+            num_orogenies, config.interior_basin_chance * 100,
         )
 
     return elevation
