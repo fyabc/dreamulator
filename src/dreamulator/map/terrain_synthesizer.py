@@ -377,10 +377,10 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    # Post-processing (shared with asymmetric)
+    # Post-processing (shared with asymmetric: shelf/plain must run last)
+    elevation = _apply_island_arcs(mesh, elevation, config)
     elevation = _apply_continental_shelf(mesh, elevation, config)
     elevation = _apply_coastal_plain(mesh, elevation, config)
-    elevation = _apply_island_arcs(mesh, elevation, config)
 
     # Classify sea/land
     classify_sea_land(mesh, config.sea_level_m)
@@ -488,11 +488,12 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    # Post-processing
-    elevation = _apply_continental_shelf(mesh, elevation, config)
-    elevation = _apply_coastal_plain(mesh, elevation, config)
+    # Post-processing (order matters: arcs/orogeny add elevation,
+    # shelf/plain must run last to not be overwritten)
     elevation = _apply_island_arcs(mesh, elevation, config)
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
+    elevation = _apply_continental_shelf(mesh, elevation, config)
+    elevation = _apply_coastal_plain(mesh, elevation, config)
 
     classify_sea_land(mesh, config.sea_level_m)
     _log_synthesis_stats(elevation, config.sea_level_m, n)
