@@ -192,7 +192,7 @@ def apply_boundary_effects(
     sigma_sq_2 = 2 * sigma * sigma
 
     # Reference convergence rate for normalization (10 cm/yr is very fast)
-    ref_rate = 10.0  # cm/yr
+    ref_rate = 5.0  # cm/yr — median plate speed
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
@@ -206,7 +206,7 @@ def apply_boundary_effects(
 
         # Rate factor (how fast the plates are converging/diverging)
         rate = abs(cell.convergence_rate_cm_yr)
-        rate_factor = min(rate / ref_rate, 1.0)
+        rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
 
         if cell.boundary_type == "convergent":
             delta_h[i] = config.convergent_uplift_m * falloff * rate_factor
@@ -559,8 +559,11 @@ def _asymmetric_boundary_effects(
 
     # Reference convergence rate for normalisation.
     # Earth: fast plates (Pacific) ~10 cm/yr, slow (Africa) ~1 cm/yr,
-    # median ~5 cm/yr.  Using the median as reference ensures most
-    # boundaries operate near full strength.
+    # median ~5 cm/yr.  Using the median as reference, then taking the
+    # square root, gives a sub-linear saturating curve:
+    #   1 cm/yr → 0.45   5 cm/yr → 1.0   10 cm/yr → 1.41   14 cm/yr → 1.67
+    # This matches the geological observation that mountain height grows
+    # with convergence rate but with diminishing returns (no hard cap).
     ref_rate = 5.0  # cm/yr — median plate speed
 
     for i, cell in enumerate(mesh.cells):
@@ -571,7 +574,7 @@ def _asymmetric_boundary_effects(
 
         d = cell.distance_to_boundary_km
         rate = abs(cell.convergence_rate_cm_yr)
-        rate_factor = min(rate / ref_rate, 1.0)
+        rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
         crust = getattr(cell, "crust_type", "")
 
         if cell.boundary_type == "convergent":
