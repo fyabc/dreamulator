@@ -1038,15 +1038,17 @@ def _apply_coastal_plain(
 ) -> np.ndarray:
     """Gentle coastal plain on the land side of coastlines.
 
-    High-elevation terrain reaching directly to the shoreline produces
-    unrealistic km-scale coastal cliffs.  This applies a distance-based
-    elevation ramp from the coast inland over *coastal_plain_width_km*.
+    Low-lying land gets the full *coastal_plain_width_km* smoothing.
+    High-elevation coastal mountains (e.g. Andes) get a narrower but
+    non-zero transition strip — at minimum 1 cell wide — so that no
+    cell sits at 5000m+ directly on the shoreline.
 
-    The effect is **elevation-attenuated**: cells far above sea level
-    (coastal mountains like the Andes) receive little to no smoothing,
-    while low-lying land gets the full coastal plain treatment.  This
-    follows Inman & Nordstrom's (1971) distinction between steep
-    tectonic coasts and gentle coastal plains.
+    The effective width shrinks with elevation above sea level, from
+    *coastal_plain_width_km* at 0 m to ~1.0 cell at
+    *coastal_plain_max_elevation_m* and above.  This follows Inman &
+    Nordstrom's (1971) distinction between gentle coastal plains and
+    steep tectonic coasts, while ensuring even the steepest coasts
+    have at least a minimal lowland transition.
 
     Combines with *_apply_continental_shelf* (ocean side) to produce
     a smooth land→coast→shelf→deep ocean transition.
@@ -1078,52 +1080,74 @@ def _apply_coastal_plain(
     if not coastline:
         return elevation
 
-    # 2. BFS inland from coastline
+    # 2. BFS inland from coastline.
+    #    Extend BFS range to cover the minimum coastal strip even for
+    #    high-elevation mountains (at least 1 cell inland).
     from collections import deque
+
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+    # Minimum coastal strip: at least 1 cell wide, up to 150 km absolute cap
+    min_strip_km = min(150.0, max(cell_km * 1.2, plain_width * 0.2))
+    max_bfs_width = max(plain_width, min_strip_km)
+
     inland_dist: dict[int, float] = {}
     q: deque[int] = deque()
     for cid in coastline:
         inland_dist[cid] = 0.0
         q.append(cid)
 
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     while q:
         cid = q.popleft()
         d = inland_dist[cid]
-        if d >= plain_width:
+        if d >= max_bfs_width:
             continue
         for nid in mesh.cells[cid].neighbors:
             if nid not in inland_dist and elevation[nid] > config.sea_level_m:
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Ramp: elevation → gentle coastal plain as d → 0.
-    #    Elevation attenuation: high coastal mountains (e.g. Andes at a
-    #    convergent margin) should keep their relief; only low-lying land
-    #    gets the full coastal plain treatment.
-    max_plain_elev = config.coastal_plain_max_elevation_m
+    # 3. Variable-width coastal plain with elevation-dependent blend target.
+    #    Low-lying cells blend toward ~30 m (classic coastal plain).
+    #    High-elevation cells (coastal mountains) blend toward ~40% of their
+    #    original elevation — creating a narrow but not-flat transition
+    #    (cf. Chilean Cordillera de la Costa, ~2000–3000 m at the coast).
+    max_plain_elev = config.coastal_plain_max_elevation_m  # 500 m default
+    mountain_coast_ratio = 0.40  # mountain cells retain ~40% of elev at the coast
+
     for cid, d_km in inland_dist.items():
         if elevation[cid] <= config.sea_level_m:
             continue
+
         elev_above_sea = elevation[cid] - config.sea_level_m
-        if elev_above_sea >= max_plain_elev:
-            continue  # coastal mountain — preserve original elevation
-        # Elevation attenuation: 1.0 at sea level → 0.0 at max_plain_elev
-        elev_factor = 1.0 - elev_above_sea / max_plain_elev
-        t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        coast_target = rng.uniform(10.0, 50.0)
+
+        # Elevation factor: 1.0 at sea level → 0.0 at max_plain_elev+
+        elev_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
+
+        # Coast elevation target: 30 m for lowlands, 40% of original for mountains
+        lowland_target = rng.uniform(10.0, 50.0)
+        mountain_target = elevation[cid] * mountain_coast_ratio
+        coast_target = (
+            lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
+        )
+
+        # Effective width: shrinks from plain_width (sea level) to min_strip_km
+        # (~1 cell) for cells at max_plain_elev and above.
+        width_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
+        effective_width = min_strip_km + (plain_width - min_strip_km) * width_factor
+
+        if d_km >= effective_width:
+            continue
+
+        t = d_km / max(effective_width, 1.0)  # 0 at coast → 1 at effective limit
         blend = t * t * (3.0 - 2.0 * t)  # smoothstep
-        # Attenuate blend: high-elevation cells use a blend closer to 1
-        # (keep original), low cells use the full smoothstep ramp.
-        blend = blend * elev_factor + (1.0 - elev_factor)  # blend → 1 as elev_factor → 0
         elevation[cid] = max(
-            coast_target,
+            lowland_target,
             elevation[cid] * blend + coast_target * (1.0 - blend),
         )
 
     logger.info(
-        "  Coastal plain: %d land cells, width=%.0f km",
-        len(inland_dist), plain_width,
+        "  Coastal plain: %d land cells, width=%.0f km (min strip %.0f km / %.1f cells)",
+        len(inland_dist), plain_width, min_strip_km, min_strip_km / max(cell_km, 1.0),
     )
     return elevation
 
