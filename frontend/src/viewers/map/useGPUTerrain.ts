@@ -220,82 +220,100 @@ export default function useGPUTerrain({
     }
 
     // --- Step 3: Composite all active layers per pixel ---
+    // Alpha-blend helper
+    const blend = (dst: number[], src: [number, number, number], alpha: number) => {
+      dst[0] = Math.round(dst[0] * (1 - alpha) + src[0] * alpha)
+      dst[1] = Math.round(dst[1] * (1 - alpha) + src[1] * alpha)
+      dst[2] = Math.round(dst[2] * (1 - alpha) + src[2] * alpha)
+    }
+
     for (let i = 0; i < totalPixels; i++) {
       const elev = elevation[i]
       const cellId = cellIdMap?.[i]
-      const accum = [0, 0, 0]
+      const accum = [0, 0, 0] // RGB accumulator
 
       // Layer 1: Terrain
       if (terrainLut) {
         const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
         const c: [number, number, number] = [terrainLut[idx*4], terrainLut[idx*4+1], terrainLut[idx*4+2]]
+        // Water depth darkening
         if (elev < normSeaLevel) {
           const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
           const f = 1 - waterDepthFactor * depth
           c[0] = Math.round(c[0] * f); c[1] = Math.round(c[1] * f); c[2] = Math.round(c[2] * f)
         }
-        const a = layers.terrain
-        accum[0] = Math.round(c[0] * a); accum[1] = Math.round(c[1] * a); accum[2] = Math.round(c[2] * a)
+        blend(accum, c, layers.terrain)
       }
 
       // Layer 2: Land/sea
       if (landseaLut) {
         const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
         const c: [number, number, number] = [landseaLut[idx*3], landseaLut[idx*3+1], landseaLut[idx*3+2]]
-        const a = layers.landsea, ia = 1 - a
-        accum[0] = Math.round(accum[0] * ia + c[0] * a)
-        accum[1] = Math.round(accum[1] * ia + c[1] * a)
-        accum[2] = Math.round(accum[2] * ia + c[2] * a)
+        blend(accum, c, layers.landsea)
       }
 
       // Layer 3: Plates
       if (layers.plates > 0 && cellId != null) {
         const pc = platesColor.get(cellId)
-        if (pc) {
-          const a = layers.plates, ia = 1 - a
-          accum[0] = Math.round(accum[0] * ia + pc[0] * a)
-          accum[1] = Math.round(accum[1] * ia + pc[1] * a)
-          accum[2] = Math.round(accum[2] * ia + pc[2] * a)
-        }
+        if (pc) blend(accum, pc, layers.plates)
       }
 
       // Layer 4: Boundaries
       if (layers.boundaries > 0 && cellId != null) {
         const bc = boundariesColor.get(cellId)
-        if (bc) {
-          const a = layers.boundaries, ia = 1 - a
-          accum[0] = Math.round(accum[0] * ia + bc[0] * a)
-          accum[1] = Math.round(accum[1] * ia + bc[1] * a)
-          accum[2] = Math.round(accum[2] * ia + bc[2] * a)
-        }
+        if (bc) blend(accum, bc, layers.boundaries)
       }
 
       const pi = i * 4
-      buf[pi] = accum[0]; buf[pi+1] = accum[1]; buf[pi+2] = accum[2]; buf[pi+3] = 255
+      buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
-    // --- Coastline detection (land/sea boundary edge) ---
-    if (layers.terrain > 0) {
+    // --- Coastline detection: cell-level, not pixel-level ---
+    // Pixels are assigned to the nearest CVT cell (KD-tree).  Two adjacent
+    // pixels may belong to *different* cells.  Draw the coastline only when
+    // the two cells are on opposite sides of the sea-level line — this
+    // prevents false coastlines within a single coastal-plain cell.
+    if (layers.terrain > 0 && cvtMesh && cellIdMap) {
       const COAST_COLOR = [20, 20, 20] as const
+      // Pre-compute land/ocean per cell
+      const cellLand = new Map<number, boolean>()
+      for (const cell of cvtMesh.cells) {
+        cellLand.set(cell.id, cell.elevation >= seaLevel)
+      }
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
-          const isLand = elevation[i] >= normSeaLevel
+          const cid = cellIdMap[i]
+          if (cid == null) continue
+          const isLand = cellLand.get(cid)
+          if (isLand == null) continue
           // Check right neighbor
           const rx = x + 1
-          if (rx < width && isLand !== (elevation[y * width + rx] >= normSeaLevel)) {
-            const pi = i * 4
-            buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-            const npi = (y * width + rx) * 4
-            buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+          if (rx < width) {
+            const nCid = cellIdMap[y * width + rx]
+            if (nCid != null && nCid !== cid) {
+              const nLand = cellLand.get(nCid)
+              if (nLand != null && isLand !== nLand) {
+                const pi = i * 4
+                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
+                const npi = (y * width + rx) * 4
+                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+              }
+            }
           }
           // Check bottom neighbor
           const by = y + 1
-          if (by < height && isLand !== (elevation[by * width + x] >= normSeaLevel)) {
-            const pi = i * 4
-            buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-            const npi = (by * width + x) * 4
-            buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+          if (by < height) {
+            const nCid = cellIdMap[by * width + x]
+            if (nCid != null && nCid !== cid) {
+              const nLand = cellLand.get(nCid)
+              if (nLand != null && isLand !== nLand) {
+                const pi = i * 4
+                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
+                const npi = (by * width + x) * 4
+                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+              }
+            }
           }
         }
       }
