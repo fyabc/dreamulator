@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] — 2026-07-26
+
+### Added
+
+**分形海岸线**
+- 5-octave fBm 地壳类型噪声（Mandelbrot 1967），海岸线复杂度 +40%
+- 沿走向高度调制的古造山带（1D simplex 噪声），伴有山间盆地（吐鲁番型断陷盆地）
+- 造山带数量随板块内部面积缩放
+
+### Changed
+
+**边界效应优化**
+- 汇聚/离散/转换边界分别配置不同的 sigma（400/300/200 km）
+- 转换边界粗糙度增强（断层迹线 200km 内 1.5 倍噪声）
+- 速率因子改用亚线性幂律（`sqrt(rate/ref)`），消除硬截断
+- 边界类型传播至影响半径内所有 cell
+- 影响半径收紧至 1.2σ（600 km）
+
+**海岸平原改进**
+- 变宽平滑：高山海岸保留 40% 高度 + 至少 1 cell 过渡带
+- 最高海岸 cell 从 5947m 降至 2629m
+
+**噪声增强**
+- 陆地噪声振幅 +50%（900m 细节 / 1800m 区域）
+- 板块内部噪声基底 1.2×（原 1.0×）
+
+### Fixed
+- npm 脚本使用 `uv run python` 而非系统 `python`
+- terrain 管道每步显示 Rich 着色耗时
+
 ## [0.7.0] — 2026-07-25
 
 ### Added
