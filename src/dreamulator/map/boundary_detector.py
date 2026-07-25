@@ -242,7 +242,7 @@ def _propagate_boundary_type(
 
     sigma = config.boundary_influence_km
     cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / mesh.num_cells)
-    max_dist = 1.5 * sigma  # same cutoff as terrain synthesizer
+    max_dist = 1.2 * sigma  # same cutoff as terrain synthesizer
 
     # Multi-source BFS: each boundary cell "claims" nearby cells
     q: deque[int] = deque()
