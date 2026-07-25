@@ -379,6 +379,7 @@ def _synthesize_gaussian(
 
     # Post-processing (shared with asymmetric)
     elevation = _apply_continental_shelf(mesh, elevation, config)
+    elevation = _apply_coastal_plain(mesh, elevation, config)
     elevation = _apply_island_arcs(mesh, elevation, config)
 
     # Classify sea/land
@@ -489,6 +490,7 @@ def _synthesize_asymmetric(
 
     # Post-processing
     elevation = _apply_continental_shelf(mesh, elevation, config)
+    elevation = _apply_coastal_plain(mesh, elevation, config)
     elevation = _apply_island_arcs(mesh, elevation, config)
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
 
@@ -995,6 +997,83 @@ def _apply_continental_shelf(
     logger.info(
         "  Continental shelf: %d cells, width=%.0f km, λ=%.0f km",
         shelf_cells, shelf_width, e_fold,
+    )
+    return elevation
+
+
+def _apply_coastal_plain(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Gentle coastal plain on the land side of coastlines.
+
+    High-elevation terrain reaching directly to the shoreline produces
+    unrealistic km-scale coastal cliffs.  This applies a linear ramp
+    from the coast inland: elevation is gradually reduced to sea level
+    over *coastal_plain_width_km*.
+
+    Combines with *_apply_continental_shelf* (ocean side) to produce
+    a smooth land→coast→shelf→deep ocean transition.
+
+    References
+    ----------
+    * Inman, D.L. & Nordstrom, C.E. (1971). "On the tectonic and
+      morphologic classification of coasts." *Journal of Geology*,
+      79(1), 1–21. — coastal geomorphology, distinction between
+      coastal plains and steep (tectonic) coasts.
+
+    Modifies *elevation* in-place.
+    """
+    n = mesh.num_cells
+    plain_width = config.coastal_plain_width_km
+    if plain_width <= 0:
+        return elevation
+
+    # 1. Identify coastline cells (land with at least one ocean neighbour)
+    coastline: set[int] = set()
+    for i, cell in enumerate(mesh.cells):
+        if elevation[i] <= config.sea_level_m:
+            continue
+        for nid in cell.neighbors:
+            if elevation[nid] <= config.sea_level_m:
+                coastline.add(i)
+                break
+
+    if not coastline:
+        return elevation
+
+    # 2. BFS inland from coastline
+    from collections import deque
+    inland_dist: dict[int, float] = {}
+    q: deque[int] = deque()
+    for cid in coastline:
+        inland_dist[cid] = 0.0
+        q.append(cid)
+
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+    while q:
+        cid = q.popleft()
+        d = inland_dist[cid]
+        if d >= plain_width:
+            continue
+        for nid in mesh.cells[cid].neighbors:
+            if nid not in inland_dist and elevation[nid] > config.sea_level_m:
+                inland_dist[nid] = d + cell_km
+                q.append(nid)
+
+    # 3. Linear ramp: z → sea_level as d → 0
+    for cid, d_km in inland_dist.items():
+        if d_km <= 0:
+            continue
+        t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
+        orig_z = elevation[cid]
+        # Blend from sea level (t=0) to original elevation (t=1)
+        elevation[cid] = config.sea_level_m * (1.0 - t) + orig_z * t
+
+    logger.info(
+        "  Coastal plain: %d land cells, width=%.0f km",
+        len(inland_dist), plain_width,
     )
     return elevation
 
