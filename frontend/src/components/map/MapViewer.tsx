@@ -536,17 +536,20 @@ export default function MapViewer({
         </div>
       )}
 
-      <MapSvgOverlay
-        viewWidth={containerSize.width}
-        viewHeight={containerSize.height}
-        project={project}
-        zoom={zoom}
-        panWrapOffset={0} // no longer needed — mapCoords handles wrapping natively
-        voronoiCells={voronoiCells}
-        cvtMesh={cvtMesh}
-        hoveredCell={hoveredCell}
-        selectedCells={selectedCells}
-      />
+      {/* SVG overlay only for non-equirectangular (equirectangular uses GPU-texture highlights) */}
+      {projection !== 'equirectangular' && (
+        <MapSvgOverlay
+          viewWidth={containerSize.width}
+          viewHeight={containerSize.height}
+          project={project}
+          zoom={zoom}
+          panWrapOffset={0}
+          voronoiCells={voronoiCells}
+          cvtMesh={cvtMesh}
+          hoveredCell={hoveredCell}
+          selectedCells={selectedCells}
+        />
+      )}
     </div>
   )
 }

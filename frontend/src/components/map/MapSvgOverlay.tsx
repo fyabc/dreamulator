@@ -153,7 +153,7 @@ export default function MapSvgOverlay({
       className="absolute inset-0 pointer-events-none"
       width={viewWidth}
       height={viewHeight}
-      style={{ zIndex: 10, outline: '1px solid rgba(255,0,0,0.3)' }}
+      style={{ zIndex: 10, outline: '3px solid rgba(255,0,0,0.8)', boxShadow: 'inset 0 0 0 3px rgba(255,0,0,0.8)' }}
     >
       {/* Diagnostic crosshair at centre */}
       <line x1={viewWidth/2 - 20} y1={viewHeight/2} x2={viewWidth/2 + 20} y2={viewHeight/2} stroke="red" strokeWidth="2" opacity="0.8" />
