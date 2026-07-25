@@ -382,6 +382,10 @@ def _synthesize_gaussian(
     elevation = _apply_continental_shelf(mesh, elevation, config)
     elevation = _apply_coastal_plain(mesh, elevation, config)
 
+    # Write post-processed elevation back to cells
+    for i, cell in enumerate(mesh.cells):
+        cell.elevation = float(elevation[i])
+
     # Classify sea/land
     classify_sea_land(mesh, config.sea_level_m)
 
@@ -494,6 +498,10 @@ def _synthesize_asymmetric(
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
     elevation = _apply_continental_shelf(mesh, elevation, config)
     elevation = _apply_coastal_plain(mesh, elevation, config)
+
+    # Write post-processed elevation back to cells
+    for i, cell in enumerate(mesh.cells):
+        cell.elevation = float(elevation[i])
 
     classify_sea_land(mesh, config.sea_level_m)
     _log_synthesis_stats(elevation, config.sea_level_m, n)
