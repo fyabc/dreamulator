@@ -177,9 +177,7 @@ export default function useGPUTerrain({
 
     // --- Step 0b: Coastline FIRST (fast ~12ms) so it appears before terrain fills ---
     const coastlineSet = new Uint8Array(totalPixels)  // 1 = coastline pixel
-    const debugCells = new Set([45391, 45768, 45912])
     if (activeModes.some(m => m === 'terrain') && cellIdMap && cellLand.length > 0) {
-      console.time('coastline')
       const COAST_COLOR: [number, number, number] = [20, 20, 20]
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -190,12 +188,12 @@ export default function useGPUTerrain({
             const ni = y * width + rx
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
-              const draw = (cid != null && nCid != null && cid !== nCid)
-                ? (cellLand[cid] !== cellLand[nCid])
+              // Same cell → use cell-level status (no coastline within one cell)
+              // Different cells → verify land/ocean differ
+              // Unknown → trust pixel-level crossing
+              const draw = (cid != null && nCid != null)
+                ? (cid !== nCid ? cellLand[cid] !== cellLand[nCid] : false)
                 : true
-              if (debugCells.has(cid!) || debugCells.has(nCid!)) {
-                console.log(`coast: cells ${cid}(${cellLand[cid!]?'L':'O'})↔${nCid}(${cellLand[nCid!]?'L':'O'}) elev=${elevation[i].toFixed(3)}↔${elevation[ni].toFixed(3)} sl=${normSeaLevel.toFixed(3)} draw=${draw}`)
-              }
               if (draw) {
                 coastlineSet[i] = 1; coastlineSet[ni] = 1
                 const pi = i * 4; const npi = ni * 4
@@ -209,12 +207,12 @@ export default function useGPUTerrain({
             const ni = by * width + x
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
-              const draw = (cid != null && nCid != null && cid !== nCid)
-                ? (cellLand[cid] !== cellLand[nCid])
+              // Same cell → use cell-level status (no coastline within one cell)
+              // Different cells → verify land/ocean differ
+              // Unknown → trust pixel-level crossing
+              const draw = (cid != null && nCid != null)
+                ? (cid !== nCid ? cellLand[cid] !== cellLand[nCid] : false)
                 : true
-              if (debugCells.has(cid!) || debugCells.has(nCid!)) {
-                console.log(`coast: cells ${cid}(${cellLand[cid!]?'L':'O'})↔${nCid}(${cellLand[nCid!]?'L':'O'}) elev=${elevation[i].toFixed(3)}↔${elevation[ni].toFixed(3)} sl=${normSeaLevel.toFixed(3)} draw=${draw}`)
-              }
               if (draw) {
                 coastlineSet[i] = 1; coastlineSet[ni] = 1
                 const pi = i * 4; const npi = ni * 4
