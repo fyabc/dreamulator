@@ -1379,10 +1379,11 @@ def _apply_interior_landforms(
         if n_cont < len(cell_indices) * 0.2:
             continue  # too oceanic — skip
 
-        # Find interior cells (far from any boundary)
+        # Find interior cells (beyond the boundary influence zone)
+        interior_threshold = config.boundary_influence_km * 1.2  # matches cutoff
         interior = [
             i for i in cell_indices
-            if mesh.cells[i].distance_to_boundary_km > 800
+            if mesh.cells[i].distance_to_boundary_km > interior_threshold
             and getattr(mesh.cells[i], "crust_type", "") == "continental"
         ]
         if len(interior) < 10:
