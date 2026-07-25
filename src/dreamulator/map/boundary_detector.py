@@ -219,6 +219,70 @@ def compute_boundary_distance(
 
 
 # ---------------------------------------------------------------------------
+# Boundary type propagation
+# ---------------------------------------------------------------------------
+
+
+def _propagate_boundary_type(
+    mesh: CVTMesh,
+    boundary_cell_ids: set[int],
+    config: TerrainPipelineConfig,
+) -> None:
+    """Propagate boundary_type and convergence_rate from boundary cells outward.
+
+    Boundary cells sit right on the plate edge.  Cells one hop away have
+    ``distance_to_boundary_km`` set but ``boundary_type=None``, which causes
+    the terrain synthesizer to skip them — producing sharp elevation cliffs.
+
+    This BFS copies the nearest boundary cell's type and rate to all cells
+    within the influence radius, so the Gaussian mountain/trench/rift profiles
+    extend smoothly across the landscape.
+    """
+    from collections import deque
+
+    sigma = config.boundary_influence_km
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / mesh.num_cells)
+    max_dist = 3 * sigma  # same cutoff as _asymmetric_boundary_effects
+
+    # Multi-source BFS: each boundary cell "claims" nearby cells
+    q: deque[int] = deque()
+    # source_boundary[cid] = (boundary_cell_id, distance)
+    source_boundary: dict[int, tuple[int, float]] = {}
+    for cid in boundary_cell_ids:
+        source_boundary[cid] = (cid, 0.0)
+        q.append(cid)
+
+    propagated = 0
+    while q:
+        cid = q.popleft()
+        src_id, d = source_boundary[cid]
+        if d >= max_dist:
+            continue
+
+        # Copy boundary properties from source if not already set
+        src = mesh.cells[src_id]
+        cell = mesh.cells[cid]
+        if cid != src_id:
+            if cell.boundary_type is None:
+                cell.boundary_type = src.boundary_type
+                propagated += 1
+            if cell.convergence_rate_cm_yr == 0.0:
+                cell.convergence_rate_cm_yr = src.convergence_rate_cm_yr
+
+        for nid in cell.neighbors:
+            if nid not in source_boundary:
+                new_d = d + cell_km
+                source_boundary[nid] = (src_id, new_d)
+                q.append(nid)
+
+    if propagated > 0:
+        logger.info(
+            "  Propagated boundary type to %d nearby cells (within %.0f km)",
+            propagated, max_dist,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -255,12 +319,12 @@ def detect_boundaries(
     plate_map: dict[str, TectonicPlate] = {p.id: p for p in plates}
 
     # 1. Find boundary edges
-    logger.info("  Step 1/4: Finding boundary edges")
+    logger.info("  Step 1/5: Finding boundary edges")
     boundary_edges = find_boundary_cells(mesh, cell_plate_map)
     logger.info("  Found %d boundary edges", len(boundary_edges))
 
     # 2. Compute velocities and classify
-    logger.info("  Step 2/4: Computing velocities and classifying boundaries")
+    logger.info("  Step 2/5: Computing velocities and classifying boundaries")
     boundary_cell_ids: set[int] = set()
     # Convert radius to cm for velocity calculations
     radius_cm = config.radius_km * 1e5
@@ -305,7 +369,7 @@ def detect_boundaries(
         cell_btype.setdefault(cell_id, []).append(btype)
 
     # 3. Write boundary properties to cells
-    logger.info("  Step 3/4: Writing boundary properties to cells")
+    logger.info("  Step 3/5: Writing boundary properties to cells")
     for cid in boundary_cell_ids:
         # Average convergence rate
         rates = cell_v_n.get(cid, [0.0])
@@ -318,8 +382,17 @@ def detect_boundaries(
         mesh.cells[cid].boundary_type = Counter(types).most_common(1)[0][0]
 
     # 4. BFS distance from boundary
-    logger.info("  Step 4/4: Computing boundary distances (BFS)")
+    logger.info("  Step 4/5: Computing boundary distances (BFS)")
     compute_boundary_distance(mesh, boundary_cell_ids, config.radius_km)
+
+    # 5. Propagate boundary type + convergence rate to all cells within
+    #    the influence radius (3σ).  Without this step, cells just off the
+    #    plate edge have distance_to_boundary_km set but boundary_type=None,
+    #    so the terrain synthesizer skips them — creating sharp cliffs where
+    #    a boundary cell gets full uplift and its immediate neighbour gets
+    #    none.
+    logger.info("  Step 5/5: Propagating boundary types to nearby cells")
+    _propagate_boundary_type(mesh, boundary_cell_ids, config)
 
     # Summary
     n_convergent = sum(1 for c in boundary_cell_ids if mesh.cells[c].boundary_type == "convergent")
