@@ -284,7 +284,10 @@ export default function MapViewer({
   const project = useCallback(
     (lon: number, lat: number) => {
       if (projection === 'equirectangular') {
-        return lonLatToScreen({ lon, lat }, { mapCenter, zoom }, vp)
+        // GPU texture is horizontally flipped (u=0→lon=180°, u=1→lon=-180°)
+        // to match SphereGeometry UV convention.  SVG must mirror to match.
+        const p = lonLatToScreen({ lon: -lon, lat }, { mapCenter: { ...mapCenter, lon: -mapCenter.lon }, zoom }, vp)
+        return p
       }
       // Non-equirectangular: centre view around mapCenter
       const { nx, ny } = projectForward(projection, lon, lat)
@@ -299,7 +302,8 @@ export default function MapViewer({
   const unproject = useCallback(
     (px: number, py: number) => {
       if (projection === 'equirectangular') {
-        return screenToLonLat(px, py, { mapCenter, zoom }, vp)
+        const r = screenToLonLat(px, py, { mapCenter: { ...mapCenter, lon: -mapCenter.lon }, zoom }, vp)
+        return { lon: -r.lon, lat: r.lat }
       }
       const nx = (px - containerSize.width / 2) / (containerSize.width * zoom) + projCenter.nx
       const ny = (py - containerSize.height / 2) / (containerSize.height * zoom) + projCenter.ny
