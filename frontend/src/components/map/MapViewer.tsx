@@ -295,8 +295,8 @@ export default function MapViewer({
       const { nx, ny } = projectForward(projection, lon, lat)
       const csW = containerRef2.current.width
       const csH = containerRef2.current.height
-      const x = (nx - pc.nx) * csW * z + csW / 2
-      const y = (ny - pc.ny) * csH * z + csH / 2
+      const x = Math.round((nx - pc.nx) * csW * z + csW / 2)
+      const y = Math.round((ny - pc.ny) * csH * z + csH / 2)
       return { x, y }
     },
     // Refs used inside for accuracy (no 1-frame lag), but mapCenter/zoom
