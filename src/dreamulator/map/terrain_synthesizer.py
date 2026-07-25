@@ -961,10 +961,9 @@ def _apply_continental_shelf(
       — global average continental shelf width ~80 km, depth ~200 m.
     """
     n = mesh.num_cells
-    cell_spacing = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     shelf_width = config.shelf_width_km
-    if shelf_width <= 0.0:
-        shelf_width = cell_spacing * rng.uniform(2.0, 5.0)
+    if shelf_width <= 0:
+        return elevation
 
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
@@ -1051,10 +1050,6 @@ def _apply_coastal_plain(
     """
     n = mesh.num_cells
     plain_width = config.coastal_plain_width_km
-    cell_spacing = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-    if plain_width <= 0.0:
-        # Cover 1–3 cells inland, randomised per coast segment
-        plain_width = cell_spacing * rng.uniform(1.0, 3.0)
     if plain_width <= 0:
         return elevation
 

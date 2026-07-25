@@ -80,11 +80,11 @@ class TerrainPipelineConfig:
     # Number of hotspot volcanic chains (0 = disabled)
     hotspot_count: int = 3
     # Continental shelf: width in km from coastline into ocean.
-    # 0 = auto-scale (2-5 cell widths). Earth average: 80 km.
-    shelf_width_km: float = 0.0
+    # Earth average: 80 km; passive margins: 100–200 km.
+    shelf_width_km: float = 150.0
     # Coastal plain: width in km from coastline inland for gentle
-    # elevation ramp-down.  Set to 0 to auto-scale (≈ 1 cell width).
-    coastal_plain_width_km: float = 0.0
+    # elevation ramp-down.  Earth average: 50–100 km.
+    coastal_plain_width_km: float = 80.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
     # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
