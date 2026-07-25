@@ -1024,8 +1024,8 @@ def _apply_continental_shelf(
         shelf_cells += 1
 
     logger.info(
-        "  Continental shelf: %d cells, width=%.0f km, λ=%.0f km",
-        shelf_cells, shelf_width, e_fold,
+        "  Continental shelf: %d cells, width=%.0f km",
+        shelf_cells, shelf_width,
     )
     return elevation
 
