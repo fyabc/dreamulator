@@ -290,15 +290,13 @@ export default function MapViewer({
         // Use ref for zoom to stay in sync with render loop (no 1-frame lag)
         return lonLatToScreen({ lon, lat }, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
       }
-      // Non-equirectangular: use ref values for the same reason.
+      // Non-equirectangular: refs for pan/zoom (instant sync), state for size
       const mc = mapCenterRef.current
       const z = zoomRef.current
       const pc = projectForward(projection, mc.lon, mc.lat)
       const { nx, ny } = projectForward(projection, lon, lat)
-      const csW = containerRef2.current.width
-      const csH = containerRef2.current.height
-      const x = (nx - pc.nx) * csW * z + csW / 2
-      const y = (ny - pc.ny) * csH * z + csH / 2
+      const x = (nx - pc.nx) * containerSize.width * z + containerSize.width / 2
+      const y = (ny - pc.ny) * containerSize.height * z + containerSize.height / 2
       return { x, y }
     },
     // Refs used inside for accuracy (no 1-frame lag), but mapCenter/zoom
@@ -315,10 +313,8 @@ export default function MapViewer({
       const mc = mapCenterRef.current
       const z = zoomRef.current
       const pc = projectForward(projection, mc.lon, mc.lat)
-      const csW = containerRef2.current.width
-      const csH = containerRef2.current.height
-      const nx = (px - csW / 2) / (csW * z) + pc.nx
-      const ny = (py - csH / 2) / (csH * z) + pc.ny
+      const nx = (px - containerSize.width / 2) / (containerSize.width * z) + pc.nx
+      const ny = (py - containerSize.height / 2) / (containerSize.height * z) + pc.ny
       return projectInverse(projection, nx, ny)
     },
     [projection, vp, mapCenter, zoom, containerSize],
@@ -470,7 +466,8 @@ export default function MapViewer({
     (e: React.WheelEvent) => {
       e.preventDefault()
       const factor = e.deltaY > 0 ? 0.9 : 1.1
-      syncZoom(Math.max(1, Math.min(MAX_ZOOM, zoom * factor)))
+      const newZoom = Math.max(1, Math.min(MAX_ZOOM, zoomRef.current * factor))
+      syncZoom(newZoom)
     },
     [],
   )
