@@ -260,7 +260,22 @@ def assign_crust_types(
     """Assign crust types to cells based on their plate.
 
     Each plate gets a random continental fraction in [0.1, 0.9].
-    Continental cells are preferentially placed at mid-latitudes.
+    3D simplex noise (OpenSimplex) sampled at cell positions produces
+    spatially coherent continental blocks — adjacent cells get similar
+    noise values, so continents are contiguous, not scattered.
+
+    Latitude bias: lower latitudes are weighted toward continental
+    (Earth-like continent distribution).
+
+    References
+    ----------
+    * Perlin, K. (2001). "Noise Hardware." In *Real-Time Shading*
+      (SIGGRAPH Course Notes). — original simplex noise algorithm.
+    * Spencer, K. (2014). OpenSimplex — patent-free simplex noise
+      implementation. https://github.com/KdotJPG/OpenSimplex2
+    * Musgrave, F.K., Kolb, C.E., & Mace, R.S. (1989). "The synthesis
+      and rendering of eroded fractal terrains." *SIGGRAPH '89*.
+      — using coherent noise for natural-looking terrain features.
 
     Modifies ``mesh.cells[*].crust_type`` in-place.
     """
