@@ -277,25 +277,29 @@ export default function useGPUTerrain({
       buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
-    // --- Coastline detection: cell-level (reuses cellLand map above) ---
+    // --- Coastline detection: fast pixel-level + cell-level verification ---
+    // Pixel-level check finds candidates (fast Float32Array compare).
+    // Cell-level check eliminates false positives within the same CVT cell
+    // (pixels assigned to different ocean cells adjacent to a land cell).
     if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
       const COAST_COLOR = [20, 20, 20] as const
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
-          const cid = cellIdMap[i]
-          if (cid == null) continue
-          const isLand = cellLand[cid]
+          const isLand = elevation[i] >= normSeaLevel
           // Check right neighbor
           const rx = x + 1
           if (rx < width) {
-            const nCid = cellIdMap[y * width + rx]
-            if (nCid != null && nCid !== cid) {
-              const nLand = cellLand[nCid]
-              if (isLand !== nLand) {
+            const ni = y * width + rx
+            if (isLand !== (elevation[ni] >= normSeaLevel)) {
+              // Pixel-level hit — verify with cell-level
+              const cid = cellIdMap[i]
+              const nCid = cellIdMap[ni]
+              if (cid != null && nCid != null && cid !== nCid) {
+                // Different cells — true coastline
                 const pi = i * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = (y * width + rx) * 4
+                const npi = ni * 4
                 buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
               }
             }
@@ -303,13 +307,14 @@ export default function useGPUTerrain({
           // Check bottom neighbor
           const by = y + 1
           if (by < height) {
-            const nCid = cellIdMap[by * width + x]
-            if (nCid != null && nCid !== cid) {
-              const nLand = cellLand[nCid]
-              if (isLand !== nLand) {
+            const ni = by * width + x
+            if (isLand !== (elevation[ni] >= normSeaLevel)) {
+              const cid = cellIdMap[i]
+              const nCid = cellIdMap[ni]
+              if (cid != null && nCid != null && cid !== nCid) {
                 const pi = i * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = (by * width + x) * 4
+                const npi = ni * 4
                 buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
               }
             }
