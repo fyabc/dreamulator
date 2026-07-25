@@ -622,7 +622,8 @@ def _generate_hotspots(
     hotspot_height = 3000.0  # m — active hotspot volcano height
     decay_per_cell = 0.85  # exponential decay per cell along chain
 
-    for seed in hotspot_seeds:
+    for hs_idx, seed in enumerate(hotspot_seeds):
+        hs_id = f"hs_{hs_idx}"
         cell = mesh.cells[seed]
         pid = cell.plate_id
         plate = plate_dict.get(pid or "")
@@ -640,9 +641,13 @@ def _generate_hotspots(
         height = hotspot_height
         visited: set[int] = {seed}
 
+        # Tag the seed cell
+        mesh.cells[seed].hotspot_id = hs_id
+
         for step in range(max_chain_cells):
             current = mesh.cells[current_cid]
             hotspot_field[current_cid] += height
+            mesh.cells[current_cid].hotspot_id = hs_id
 
             # Find neighbor cell most aligned with velocity direction
             best_dot = -2.0

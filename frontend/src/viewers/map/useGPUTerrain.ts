@@ -47,6 +47,9 @@ const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
   transitional:  hexRgb('#8ea87a'),  // olive green
 }
 
+/** Hotspot chain colour — bright orange, overrides crust colour. */
+const HOTSPOT_COLOR: [number, number, number] = hexRgb('#ff6d2e')
+
 // ---------------------------------------------------------------------------
 // Minimal shaders — just display the pre-computed texture
 // ---------------------------------------------------------------------------
@@ -181,6 +184,9 @@ export default function useGPUTerrain({
           const bType = cell.boundary_type as BoundaryType | null
           if (bType) {
             boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
+          } else if ((cell as any).hotspot_id) {
+            // Hotspot chain — bright orange (overrides crust colour)
+            boundariesColor.set(cell.id, HOTSPOT_COLOR)
           } else {
             // Interior cell — colour by crust type
             const crust = (cell as any).crust_type || 'oceanic'
