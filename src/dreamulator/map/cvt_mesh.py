@@ -144,7 +144,12 @@ def lloyd_relaxation(
     Returns:
         Relaxed points on unit sphere.
     """
-    for i in range(iterations):
+    try:
+        from rich.progress import track
+        it = track(range(iterations), description="  Lloyd relaxation")
+    except ImportError:
+        it = range(iterations)
+    for i in it:
         logger.debug("Lloyd relaxation step %d/%d", i + 1, iterations)
         points = lloyd_relaxation_step(points)
     return points

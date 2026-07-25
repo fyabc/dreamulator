@@ -142,16 +142,28 @@ def _voronoi_partition(
     total_assigned = num_plates
     round_num = 0
 
+    # Rich progress bar
+    try:
+        from rich.progress import Progress, BarColumn, TextColumn
+        _progress = Progress(
+            TextColumn("  Voronoi BFS [dim]{task.description}[/dim]"),
+            BarColumn(), TextColumn("[dim]{task.completed}/{task.total}[/dim]"),
+            transient=True,
+        )
+        _task = _progress.add_task("", total=mesh.num_cells)
+        _progress.start()
+    except ImportError:
+        _progress = None
+
     while total_assigned < mesh.num_cells:
         round_num += 1
 
         for plate_idx in range(num_plates):
             q = queues[plate_idx]
             if not q:
-                continue  # this plate is saturated
+                continue
 
             plate_id = f"plate_{plate_idx:03d}"
-            # Process exactly one layer: all cells currently in q
             for _ in range(len(q)):
                 cell_id = q.popleft()
                 for neighbor_id in mesh.cells[cell_id].neighbors:
@@ -160,11 +172,17 @@ def _voronoi_partition(
                         q.append(neighbor_id)
                         total_assigned += 1
 
-        if round_num % 2 == 0:
+        if _progress is not None:
+            _progress.update(_task, completed=total_assigned,
+                           description=f"round {round_num}")
+        elif round_num % 2 == 0:
             logger.debug(
                 "  Voronoi BFS round %d: %d / %d cells",
                 round_num, total_assigned, mesh.num_cells,
             )
+
+    if _progress is not None:
+        _progress.stop()
 
     logger.info(
         "  Voronoi BFS: %d rounds, %d cells assigned",
