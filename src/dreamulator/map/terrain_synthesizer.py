@@ -999,21 +999,28 @@ def _apply_continental_shelf(
                 shelf_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Apply exponential depth profile with random variation
+    # 3. Two-stage shelf profile: shallow platform → shelf break → deep ocean
     shelf_edge_depth = rng.uniform(-5.0, -1.0)  # near-surface at coast
-    e_fold = shelf_width / 3.0  # λ — e-folding distance
+    shelf_break_depth = -200.0  # typical shelf-break depth (m)
+    drop_fold = 30.0  # e-folding for the drop beyond the shelf break (km)
     shelf_cells = 0
 
     for cid, d_km in shelf_dist.items():
         if d_km <= 0:
             continue
-        t = 1.0 - np.exp(-d_km / e_fold)  # 0 at coast → 1 at deep ocean
-        # Add random variation to avoid uniform shelf edge
-        noise = rng.uniform(-0.08, 0.08)
-        t = max(0.0, min(1.0, t + noise))
         orig_z = elevation[cid]
-        z_shelf = shelf_edge_depth * (1.0 - t) + orig_z * t
-        elevation[cid] = z_shelf
+        if d_km <= shelf_width:
+            # Shelf platform: linear ramp from coast to shelf break
+            t_ramp = d_km / shelf_width
+            z_shelf = shelf_edge_depth + t_ramp * (shelf_break_depth - shelf_edge_depth)
+        else:
+            # Below shelf break: exponential drop to original ocean depth
+            d_below = d_km - shelf_width
+            t_drop = 1.0 - np.exp(-d_below / drop_fold)
+            z_shelf = shelf_break_depth * (1.0 - t_drop) + orig_z * t_drop
+        # Random ±5% variation
+        noise = 1.0 + rng.uniform(-0.05, 0.05)
+        elevation[cid] = z_shelf * noise
         shelf_cells += 1
 
     logger.info(
