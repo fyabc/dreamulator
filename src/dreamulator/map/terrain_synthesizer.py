@@ -42,7 +42,6 @@ logger = logging.getLogger(__name__)
 # Check for opensimplex
 try:
     import opensimplex
-
     _HAS_OPENSIMPLEX = True
 except ImportError:
     _HAS_OPENSIMPLEX = False
@@ -73,7 +72,10 @@ def _compute_noise_elementwise_xyz(
     if not _HAS_OPENSIMPLEX:
         return _fallback_noise_xyz(x, y, z, frequency, seed)
 
-    opensimplex.seed(seed)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="overflow encountered")
+        opensimplex.seed(seed)
     fx = (x * frequency).ravel()
     fy = (y * frequency).ravel()
     fz = (z * frequency).ravel()
