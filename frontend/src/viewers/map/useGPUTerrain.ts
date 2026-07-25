@@ -277,45 +277,55 @@ export default function useGPUTerrain({
       buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
-    // --- Coastline detection: fast pixel-level + cell-level verification ---
-    // Pixel-level check finds candidates (fast Float32Array compare).
-    // Cell-level check eliminates false positives within the same CVT cell
-    // (pixels assigned to different ocean cells adjacent to a land cell).
+    // --- Coastline detection: fast pixel-level filter + cell-level verification ---
+    // 1. Pixel-level: find adjacent pixels straddling sea level (fast Float32Array)
+    // 2. Cell-level: only at candidates, verify the two cells are land vs ocean
+    //    (eliminates false positives where nearest-neighbor assigns a land pixel
+    //     to an ocean cell or vice versa within a single coastal-plain cell)
     if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
       const COAST_COLOR = [20, 20, 20] as const
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
-          const isLand = elevation[i] >= normSeaLevel
-          // Check right neighbor
+          const isLandPx = elevation[i] >= normSeaLevel
+          // Right neighbor
           const rx = x + 1
           if (rx < width) {
             const ni = y * width + rx
-            if (isLand !== (elevation[ni] >= normSeaLevel)) {
-              // Pixel-level hit — verify with cell-level
-              const cid = cellIdMap[i]
-              const nCid = cellIdMap[ni]
+            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
+              // Candidate — verify both pixels' cells agree on land/ocean
+              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
-                // Different cells — true coastline
-                const pi = i * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = ni * 4
-                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+                // Different cells: use cell-level land/ocean
+                if (cellLand[cid] !== cellLand[nCid]) {
+                  const pi = i * 4; const npi = ni * 4
+                  buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
+                  buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
+                }
+              } else {
+                // Same cell or unknown — trust pixel-level (coastal cell spanning sea level)
+                const pi = i * 4; const npi = ni * 4
+                buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
+                buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
               }
             }
           }
-          // Check bottom neighbor
+          // Bottom neighbor
           const by = y + 1
           if (by < height) {
             const ni = by * width + x
-            if (isLand !== (elevation[ni] >= normSeaLevel)) {
-              const cid = cellIdMap[i]
-              const nCid = cellIdMap[ni]
+            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
+              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
-                const pi = i * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = ni * 4
-                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
+                if (cellLand[cid] !== cellLand[nCid]) {
+                  const pi = i * 4; const npi = ni * 4
+                  buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
+                  buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
+                }
+              } else {
+                const pi = i * 4; const npi = ni * 4
+                buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
+                buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
               }
             }
           }
