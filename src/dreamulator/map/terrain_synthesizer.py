@@ -197,8 +197,8 @@ def apply_boundary_effects(
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 2 * sigma:
-            continue  # Gaussian is < 2% of peak beyond 2σ  # Beyond 3σ, effect is negligible
+        if cell.distance_to_boundary_km > 1.5 * sigma:
+            continue  # Gaussian ~4-11% of peak at 1.5σ  # Beyond 3σ, effect is negligible
 
         # Gaussian distance falloff
         d = cell.distance_to_boundary_km
@@ -372,7 +372,7 @@ def _synthesize_gaussian(
     sigma = config.boundary_influence_km
     interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 2 * sigma:
+        if cell.distance_to_boundary_km < 1.5 * sigma:
             d = cell.distance_to_boundary_km
             proximity = np.exp(-(d * d) / (2 * sigma * sigma))
             interior_factor[i] = 1.2 + 0.3 * proximity
@@ -487,7 +487,7 @@ def _synthesize_asymmetric(
     sigma = config.boundary_influence_km
     interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 2 * sigma:
+        if cell.distance_to_boundary_km < 1.5 * sigma:
             d = cell.distance_to_boundary_km
             interior_factor[i] = 1.2 + 0.3 * np.exp(
                 -(d * d) / (2 * sigma * sigma)
@@ -569,8 +569,8 @@ def _asymmetric_boundary_effects(
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 2 * sigma:
-            continue  # Gaussian is < 2% of peak beyond 2σ
+        if cell.distance_to_boundary_km > 1.5 * sigma:
+            continue  # Gaussian ~4-11% of peak at 1.5σ
 
         d = cell.distance_to_boundary_km
         rate = abs(cell.convergence_rate_cm_yr)
@@ -665,7 +665,7 @@ def _asymmetric_boundary_effects(
         while tq:
             cid = tq.popleft()
             d_t = tdist[cid]
-            if d_t >= 2 * sigma_trans:
+            if d_t >= 1.5 * sigma_trans:
                 continue
             # Boost factor: 1.5 at the fault trace, decaying to 1.0 at 200 km
             transform_boost[cid] = 1.0 + 0.5 * np.exp(
