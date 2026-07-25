@@ -1406,8 +1406,11 @@ def _apply_interior_landforms(
         if len(interior) < 10:
             continue
 
-        # ---- Orogenic belts with along-strike modulation ----
-        n_belts = min(num_orogenies, max(1, len(interior) // 30))
+        # ---- Orogenic belts: count scales with interior area ----
+        # Base count from config, plus 1 extra belt per ~300 interior cells
+        n_belts = config.interior_orogeny_count + max(
+            0, len(interior) // 300 - 1
+        )
         belt_seed_base = int(pid.split("_")[-1]) if "_" in pid else 0
 
         for belt_idx in range(n_belts):

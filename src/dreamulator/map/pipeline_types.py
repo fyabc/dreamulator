@@ -93,8 +93,9 @@ class TerrainPipelineConfig:
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
     # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
-    # 0 = disabled.  Plate interiors (far from active boundaries) get
-    # 1–3 linear orogenic remnants per continental plate.
+    # 0 = disabled.  Base number of orogenic belts per continental plate.
+    # Scales with plate interior area: larger plates get more belts
+    # (1 additional belt per ~300 interior cells beyond the first).
     interior_orogeny_count: int = 2
     # Probability (0–1) that a segment along an orogenic belt becomes a
     # sunken intermontane basin (pull-apart / fault-block depression)
