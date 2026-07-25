@@ -7,6 +7,8 @@
  * TODO: searchable, Markdown-rendered help system.
  */
 
+import { LAYER_HELP, CONTROL_HELP, CONCEPT_HELP } from '../components/map/helpContent'
+
 export default function HelpPage() {
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
@@ -36,16 +38,10 @@ export default function HelpPage() {
       <section>
         <h2 className="text-lg font-bold text-neon-cyan mb-3">地图操作</h2>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          {[
-            ['拖拽', '平移地图'],
-            ['滚轮', '缩放'],
-            ['悬停 cell', '右侧面板显示属性'],
-            ['双击 cell', '选中（Shift 多选）'],
-            ['Ctrl + 双击', '切换选中'],
-          ].map(([key, desc]) => (
-            <div key={key} className="flex gap-2 bg-space-surface rounded px-3 py-2">
-              <span className="text-neon-cyan font-mono shrink-0">{key}</span>
-              <span className="text-gray-400">{desc}</span>
+          {CONTROL_HELP.map((c) => (
+            <div key={c.action} className="flex gap-2 bg-space-surface rounded px-3 py-2">
+              <span className="text-neon-cyan font-mono shrink-0">{c.action}</span>
+              <span className="text-gray-400">{c.description}</span>
             </div>
           ))}
         </div>
@@ -55,15 +51,10 @@ export default function HelpPage() {
       <section>
         <h2 className="text-lg font-bold text-neon-cyan mb-3">图层说明</h2>
         <div className="space-y-2 text-sm">
-          {[
-            ['地形', '自适应海拔着色 — 默认开启。从深海蓝到高山白，基于 hypsometric tint。'],
-            ['海陆', '二值蓝/绿着色 — 快速区分海洋和陆地。'],
-            ['板块', '按构造板块着色 — 每种颜色代表一个独立的构造板块。'],
-            ['地壳与边界', '板块内部：大陆(褐) / 海洋(蓝)；边界：汇聚(红) / 离散(绿) / 转换(黄)。'],
-          ].map(([name, desc]) => (
-            <div key={name} className="bg-space-surface rounded-lg p-3">
-              <span className="text-neon-cyan font-semibold">{name}</span>
-              <span className="text-gray-500"> — {desc}</span>
+          {LAYER_HELP.map((l) => (
+            <div key={l.id} className="bg-space-surface rounded-lg p-3">
+              <span className="text-neon-cyan font-semibold">{l.label}</span>
+              <span className="text-gray-500"> — {l.detail}</span>
             </div>
           ))}
         </div>
@@ -72,42 +63,13 @@ export default function HelpPage() {
       {/* --- Concepts --- */}
       <section>
         <h2 className="text-lg font-bold text-neon-cyan mb-3">核心概念</h2>
-
         <div className="space-y-4">
-          <div className="bg-space-surface rounded-lg p-4">
-            <h3 className="text-gray-200 font-semibold mb-1">DAG 层级架构</h3>
-            <p className="text-sm text-gray-500">
-              世界数据按学科层级组织：physics → chemistry → astronomy → geological →
-              climate → ecology → civilization。上游层级的输入决定下游层级的输出，
-              形成有向无环图（DAG）推演管线。
-            </p>
-          </div>
-
-          <div className="bg-space-surface rounded-lg p-4">
-            <h3 className="text-gray-200 font-semibold mb-1">分支系统</h3>
-            <p className="text-sm text-gray-500">
-              类似 Git branch。在某一 DAG 层分叉，共享上层数据，仅存储分叉层及之后的数据。
-              同一行星的不同分支可以有不同的海陆分布、气候或文明演化。
-            </p>
-          </div>
-
-          <div className="bg-space-surface rounded-lg p-4">
-            <h3 className="text-gray-200 font-semibold mb-1">CVT 球面网格</h3>
-            <p className="text-sm text-gray-500">
-              Centroidal Voronoi Tessellation — 使用 Fibonacci 螺旋 + Lloyd 松弛
-              生成的球面均匀网格。所有模拟（构造、气候、水文）直接在球面网格上运行，
-              仅在最终可视化时投影为 2D 栅格。
-            </p>
-          </div>
-
-          <div className="bg-space-surface rounded-lg p-4">
-            <h3 className="text-gray-200 font-semibold mb-1">Cortial 2019 板块构造</h3>
-            <p className="text-sm text-gray-500">
-              板块剖分和时间演化遵循 Cortial et al. (2019) <em>Procedural Tectonic
-              Planets</em> 的方法：Poisson-disc 种子 → 球面 Voronoi 剖分 → Euler
-              极旋转 → 边界重检测 → 俯冲/碰撞/侵蚀。
-            </p>
-          </div>
+          {CONCEPT_HELP.map((c) => (
+            <div key={c.title} className="bg-space-surface rounded-lg p-4">
+              <h3 className="text-gray-200 font-semibold mb-1">{c.title}</h3>
+              <p className="text-sm text-gray-500">{c.summary}</p>
+            </div>
+          ))}
         </div>
       </section>
 

@@ -10,6 +10,7 @@
 
 import { useCallback, useRef } from 'react'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import { LAYER_HELP } from './helpContent'
 
 type LayerOpacities = Record<ColorMode, number>
 
@@ -21,13 +22,6 @@ interface MapLayerPanelProps {
   state: LayerState
   onChange: (state: LayerState) => void
 }
-
-const LAYERS: { id: ColorMode; label: string; desc: string; defaultOpacity: number }[] = [
-  { id: 'terrain', label: '地形', desc: '自适应海拔着色', defaultOpacity: 1 },
-  { id: 'landsea', label: '海陆', desc: '二值海陆着色', defaultOpacity: 0 },
-  { id: 'plates', label: '板块', desc: '按构造板块着色', defaultOpacity: 0 },
-  { id: 'boundaries', label: '地壳与边界', desc: '大陆(褐)·海洋(蓝)·汇聚(红)·离散(绿)·转换(黄)', defaultOpacity: 0 },
-]
 
 /* Inline SVG icons — avoids an icon-library dependency for two tiny paths. */
 
@@ -67,7 +61,7 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
 
   return (
     <div className="space-y-3">
-      {LAYERS.map(({ id, label, desc, defaultOpacity }) => {
+      {LAYER_HELP.map(({ id, label, desc, defaultOpacity }) => {
         const opacity = state.layers[id] ?? defaultOpacity
         const pct = Math.round(opacity * 100)
         const isVisible = opacity > 0
