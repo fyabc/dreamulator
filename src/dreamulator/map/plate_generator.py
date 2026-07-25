@@ -303,14 +303,21 @@ def assign_crust_types(
             with _w.catch_warnings():
                 _w.filterwarnings("ignore", message="overflow encountered")
                 opensimplex.seed(noise_seed)
-            # Noise scale: ~1 cell → large coherent blobs
-            scale = 0.6
+            # Two-octave noise: low-freq for continent-scale blobs,
+            # high-freq to roughen coastlines (scale auto-adjusts per plate size)
+            n_cells = len(cell_ids)
+            low_scale = 2.0 / max(n_cells, 1) ** 0.15  # larger plate → lower freq
+            hi_scale = low_scale * 4.0  # high-freq coastline detail
             # Latitude bias: equatorial preference (Earth-like)
             noise_vals = np.array([
-                opensimplex.noise3(
-                    float(mesh.cells[c].x * scale),
-                    float(mesh.cells[c].y * scale),
-                    float(mesh.cells[c].z * scale),
+                0.7 * opensimplex.noise3(
+                    float(mesh.cells[c].x * low_scale),
+                    float(mesh.cells[c].y * low_scale),
+                    float(mesh.cells[c].z * low_scale),
+                ) + 0.3 * opensimplex.noise3(
+                    float(mesh.cells[c].x * hi_scale),
+                    float(mesh.cells[c].y * hi_scale),
+                    float(mesh.cells[c].z * hi_scale),
                 ) - 0.3 * abs(mesh.cells[c].lat) / 90.0
                 for c in cell_ids
             ])
