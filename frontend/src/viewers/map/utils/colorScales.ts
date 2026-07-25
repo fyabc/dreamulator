@@ -109,12 +109,11 @@ export function generateAdaptiveTerrainScale(
     { elev: minElev, color: hexToRgb('#023858') },
     { elev: minElev + range * 0.15, color: hexToRgb('#045A8D') },
     { elev: minElev + range * 0.30, color: hexToRgb('#2B8CBE') },
-    { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#5B9ECF') }, // shallow water
-    { elev: seaLevel - 50, color: hexToRgb('#4A90B8') },  // mid-shallow
-    { elev: seaLevel - 15, color: hexToRgb('#78B8DF') },  // water edge (light blue, clearly ocean)
-    { elev: seaLevel - 5,  color: hexToRgb('#90CCE8') },  // shelf shallows (pale blue, distinct from land)
+    { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#74A9CF') },
+    { elev: seaLevel - Math.max(range * 0.005, 50), color: hexToRgb('#4A8DB5') }, // mid-shallow (darker)
+    { elev: seaLevel - Math.max(range * 0.0015, 15), color: hexToRgb('#6AACD8') }, // water edge
     // ---- Shoreline ----
-    { elev: seaLevel, color: hexToRgb('#C8B060') },  // sand (warm brown)
+    { elev: seaLevel, color: hexToRgb('#C8B060') },  // sand (warm brown, clearly land)
     // ---- Land: ESRI Natural Earth style ----
     { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#6B9E40') },
     { elev: seaLevel + Math.max(range * 0.01, 100), color: hexToRgb('#4A8A2E') },
