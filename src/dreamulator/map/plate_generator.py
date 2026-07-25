@@ -271,12 +271,22 @@ def assign_crust_types(
     for plate_id, cell_ids in plate_cells.items():
         continental_fraction = rng.uniform(0.1, 0.9)
 
-        # Sort by absolute latitude — mid-latitudes first
-        sorted_cells = sorted(cell_ids, key=lambda c: abs(mesh.cells[c].lat))
+        # Latitude-weighted random assignment — avoids hard latitudinal
+        # cutoffs that produce straight horizontal coastlines.
+        # Lower latitudes are more likely to be continental (Earth-like),
+        # but random jitter breaks the sharp boundary.
+        weights = np.array([
+            max(0.0, 1.0 - 0.5 * abs(mesh.cells[c].lat) / 90.0
+                + rng.uniform(-0.2, 0.2))
+            for c in cell_ids
+        ])
 
-        n_cont = max(1, int(len(sorted_cells) * continental_fraction))
-        for i, cid in enumerate(sorted_cells):
-            if i < n_cont:
+        # Weighted selection: highest weights → continental
+        n_cont = max(1, int(len(cell_ids) * continental_fraction))
+        sorted_idx = np.argsort(weights)[::-1]
+        for rank, idx in enumerate(sorted_idx):
+            cid = cell_ids[idx]
+            if rank < n_cont:
                 mesh.cells[cid].crust_type = "continental"
             else:
                 mesh.cells[cid].crust_type = "oceanic"
