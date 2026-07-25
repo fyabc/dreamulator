@@ -18,6 +18,7 @@ import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapCellInspector from '../components/map/MapCellInspector'
+import HelpPanel from '../components/map/HelpPanel'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
@@ -205,6 +206,7 @@ export default function GlobeViewerPage() {
 
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // --- Render ---
   if (!worldName || !planetId) {
@@ -231,6 +233,19 @@ export default function GlobeViewerPage() {
           🔭 恒星系
         </Link>
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
+
+        {/* Help button */}
+        <button
+          onClick={() => setHelpOpen((v) => !v)}
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border transition-colors ${
+            helpOpen
+              ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40'
+              : 'bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30'
+          }`}
+          title="帮助"
+        >
+          ?
+        </button>
       </div>
 
       {/* Main content */}
@@ -329,6 +344,9 @@ export default function GlobeViewerPage() {
         />
       </div>
     </div>
+
+    {/* Help panel overlay */}
+    {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
   </div>
   </div>
 )
