@@ -106,6 +106,8 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
+  /** Flip texture horizontally (needed for SphereGeometry; set false for PlaneGeometry). */
+  flipHorizontal?: boolean
 }
 
 export default function useGPUTerrain({
@@ -120,6 +122,7 @@ export default function useGPUTerrain({
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
+  flipHorizontal = true,
 }: UseGPUTerrainOptions): THREE.ShaderMaterial | null {
   return useMemo(() => {
     if (!elevation || width <= 0 || height <= 0) return null
@@ -274,17 +277,15 @@ export default function useGPUTerrain({
       }
     }
 
-    // --- Reverse rows + columns to match SphereGeometry UV convention ---
-    // SphereGeometry default: u=0→lon=180°, u=0.5→lon=0°.
-    // Our buffer:        col 0→lon=-180°(=180°), col w/2→lon=0°.
-    // The UV mapping is mirrored: sphere_lon(u)=90° at u=0.25 but texture_lon(u)=-90°.
-    // Fix: horizontally mirror (reverse columns) + vertically flip (reverse rows).
+    // --- Reverse rows (always) + optionally reverse columns ---
+    // Column flip: needed for SphereGeometry (globe, u=0→lon=180°).
+    // NOT needed for PlaneGeometry (map, u=0→left edge→lon=-180°).
     let outBuf = new Uint8Array(totalPixels * 4)
     for (let y = 0; y < height; y++) {
       const srcRow = (height - 1 - y) * width * 4
       const dstRow = y * width * 4
       for (let x = 0; x < width; x++) {
-        const srcX = (width - 1 - x) * 4
+        const srcX = flipHorizontal ? (width - 1 - x) * 4 : x * 4
         const dstX = x * 4
         outBuf[dstRow + dstX] = buf[srcRow + srcX]
         outBuf[dstRow + dstX + 1] = buf[srcRow + srcX + 1]

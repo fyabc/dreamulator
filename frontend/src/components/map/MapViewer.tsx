@@ -178,6 +178,7 @@ export default function MapViewer({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers, cvtMesh, cellIdMap,
+    flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
@@ -284,15 +285,21 @@ export default function MapViewer({
   const project = useCallback(
     (lon: number, lat: number) => {
       if (projection === 'equirectangular') {
-        // GPU texture is horizontally flipped (u=0→lon=180°, u=1→lon=-180°)
-        // to match SphereGeometry UV convention.  SVG must mirror to match.
-        const p = lonLatToScreen({ lon: -lon, lat }, { mapCenter: { ...mapCenter, lon: -mapCenter.lon }, zoom }, vp)
-        return p
+        return lonLatToScreen({ lon, lat }, { mapCenter, zoom }, vp)
       }
-      // Non-equirectangular: centre view around mapCenter
+      // Non-equirectangular: CPU texture is rendered at projection-native
+      // aspect ratio (Mollweide 2.0, Robinson 2.662) and stretched to fill
+      // the container.  SVG must match the stretch to align with the texture.
       const { nx, ny } = projectForward(projection, lon, lat)
-      const x = (nx - projCenter.nx) * containerSize.width * zoom + containerSize.width / 2
-      const y = (ny - projCenter.ny) * containerSize.height * zoom + containerSize.height / 2
+      const projAspect = projection === 'robinson' ? 2.662 : 2.0
+      const texH = Math.round(Math.sqrt(
+        containerSize.width * containerSize.height / projAspect,
+      ))
+      const texW = Math.round(texH * projAspect)
+      const sx = containerSize.width / texW
+      const sy = containerSize.height / texH
+      const x = (nx - projCenter.nx) * texW * zoom * sx + containerSize.width / 2
+      const y = (ny - projCenter.ny) * texH * zoom * sy + containerSize.height / 2
       return { x, y }
     },
     [projection, mapCenter, zoom, vp, projCenter, containerSize],
@@ -302,8 +309,7 @@ export default function MapViewer({
   const unproject = useCallback(
     (px: number, py: number) => {
       if (projection === 'equirectangular') {
-        const r = screenToLonLat(px, py, { mapCenter: { ...mapCenter, lon: -mapCenter.lon }, zoom }, vp)
-        return { lon: -r.lon, lat: r.lat }
+        return screenToLonLat(px, py, { mapCenter, zoom }, vp)
       }
       const nx = (px - containerSize.width / 2) / (containerSize.width * zoom) + projCenter.nx
       const ny = (py - containerSize.height / 2) / (containerSize.height * zoom) + projCenter.ny
