@@ -285,37 +285,41 @@ export default function MapViewer({
   const project = useCallback(
     (lon: number, lat: number) => {
       if (projection === 'equirectangular') {
-        return lonLatToScreen({ lon, lat }, { mapCenter, zoom }, vp)
+        // Use ref for zoom to stay in sync with render loop (no 1-frame lag)
+        return lonLatToScreen({ lon, lat }, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
       }
-      // Non-equirectangular: CPU texture is rendered at projection-native
-      // aspect ratio (Mollweide 2.0, Robinson 2.662) and stretched to fill
-      // the container.  SVG must match the stretch to align with the texture.
+      // Non-equirectangular: use ref values for the same reason.
+      const mc = mapCenterRef.current
+      const z = zoomRef.current
+      const pc = projectForward(projection, mc.lon, mc.lat)
       const { nx, ny } = projectForward(projection, lon, lat)
-      const projAspect = projection === 'robinson' ? 2.662 : 2.0
-      const texH = Math.round(Math.sqrt(
-        containerSize.width * containerSize.height / projAspect,
-      ))
-      const texW = Math.round(texH * projAspect)
-      const sx = containerSize.width / texW
-      const sy = containerSize.height / texH
-      const x = (nx - projCenter.nx) * texW * zoom * sx + containerSize.width / 2
-      const y = (ny - projCenter.ny) * texH * zoom * sy + containerSize.height / 2
+      const csW = containerRef2.current.width
+      const csH = containerRef2.current.height
+      const x = (nx - pc.nx) * csW * z + csW / 2
+      const y = (ny - pc.ny) * csH * z + csH / 2
       return { x, y }
     },
-    [projection, mapCenter, zoom, vp, projCenter, containerSize],
+    // Refs used inside for accuracy (no 1-frame lag), but mapCenter/zoom
+    // in deps to trigger SVG re-render on pan.
+    [projection, vp, mapCenter, zoom, containerSize],
   )
 
   // --- Reverse projection (screen → geographic) ---
   const unproject = useCallback(
     (px: number, py: number) => {
       if (projection === 'equirectangular') {
-        return screenToLonLat(px, py, { mapCenter, zoom }, vp)
+        return screenToLonLat(px, py, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
       }
-      const nx = (px - containerSize.width / 2) / (containerSize.width * zoom) + projCenter.nx
-      const ny = (py - containerSize.height / 2) / (containerSize.height * zoom) + projCenter.ny
+      const mc = mapCenterRef.current
+      const z = zoomRef.current
+      const pc = projectForward(projection, mc.lon, mc.lat)
+      const csW = containerRef2.current.width
+      const csH = containerRef2.current.height
+      const nx = (px - csW / 2) / (csW * z) + pc.nx
+      const ny = (py - csH / 2) / (csH * z) + pc.ny
       return projectInverse(projection, nx, ny)
     },
-    [projection, mapCenter, zoom, vp, projCenter, containerSize],
+    [projection, vp, mapCenter, zoom, containerSize],
   )
 
   // --- Continuous render loop ---
