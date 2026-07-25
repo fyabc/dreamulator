@@ -65,14 +65,13 @@ _STAGE_NAMES: dict[str, str] = {
 
 
 def _stage_begin(stage: str) -> None:
-    """Print a user-facing stage header (no newline — timing follows)."""
+    """Print a user-facing stage header."""
     name = _STAGE_NAMES.get(stage, stage)
-    _console.print(f"[bold bright_cyan]>>[/] [bold]{name}[/]", end="")
-    sys.stdout.flush()
+    _console.print(f"[bold bright_cyan]>>[/] [bold]{name}[/]")
 
 
 def _stage_end(elapsed: float) -> None:
-    """Append elapsed time to the current stage line."""
+    """Print elapsed time for the just-completed stage."""
     if elapsed < 1.0:
         timing = f"{elapsed * 1000:.0f}ms"
     elif elapsed < 60:
@@ -81,7 +80,7 @@ def _stage_end(elapsed: float) -> None:
         mins = int(elapsed // 60)
         secs = elapsed % 60
         timing = f"{mins}m {secs:.0f}s"
-    _console.print(f"  [dim italic]({timing})[/]")
+    _console.print(f"  [bold green]done[/] [dim italic]({timing})[/]")
 
 
 @dataclass
