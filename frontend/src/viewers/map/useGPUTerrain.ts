@@ -169,6 +169,13 @@ export default function useGPUTerrain({
     const activeModes = (Object.keys(layers) as ColorMode[]).filter((k) => layers[k] > 0)
     const terrainLut = activeModes.includes('terrain')
       ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
+    // Cell-level land/sea map (avoids pixel-level nearest-neighbor artifacts)
+    const cellLand = new Map<number, boolean>()
+    if (cvtMesh && (activeModes.includes('landsea') || activeModes.includes('boundaries'))) {
+      for (const cell of cvtMesh.cells) {
+        cellLand.set(cell.id, cell.elevation >= seaLevel)
+      }
+    }
     const landseaLut = activeModes.includes('landsea')
       ? (() => {
           const l = new Uint8Array(1024 * 3)
@@ -245,10 +252,11 @@ export default function useGPUTerrain({
         blend(accum, c, layers.terrain)
       }
 
-      // Layer 2: Land/sea
+      // Layer 2: Land/sea (cell-level, avoids pixel nearest-neighbor artifacts)
       if (landseaLut) {
-        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-        const c: [number, number, number] = [landseaLut[idx*3], landseaLut[idx*3+1], landseaLut[idx*3+2]]
+        const cid = cellIdMap?.[i]
+        const isLand = cid != null ? (cellLand.get(cid) ?? false) : (elev >= normSeaLevel)
+        const c: [number, number, number] = isLand ? [80, 140, 60] : [30, 60, 120]
         blend(accum, c, layers.landsea)
       }
 
@@ -268,18 +276,9 @@ export default function useGPUTerrain({
       buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
-    // --- Coastline detection: cell-level, not pixel-level ---
-    // Pixels are assigned to the nearest CVT cell (KD-tree).  Two adjacent
-    // pixels may belong to *different* cells.  Draw the coastline only when
-    // the two cells are on opposite sides of the sea-level line — this
-    // prevents false coastlines within a single coastal-plain cell.
-    if (layers.terrain > 0 && cvtMesh && cellIdMap) {
+    // --- Coastline detection: cell-level (reuses cellLand map above) ---
+    if (layers.terrain > 0 && cellIdMap && cellLand.size > 0) {
       const COAST_COLOR = [20, 20, 20] as const
-      // Pre-compute land/ocean per cell
-      const cellLand = new Map<number, boolean>()
-      for (const cell of cvtMesh.cells) {
-        cellLand.set(cell.id, cell.elevation >= seaLevel)
-      }
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
