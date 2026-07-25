@@ -228,6 +228,7 @@ export default function useGPUTerrain({
     }
 
     // --- Step 3: Composite all active layers per pixel ---
+    console.time('composite')
     // Alpha-blend helper
     const blend = (dst: number[], src: [number, number, number], alpha: number) => {
       dst[0] = Math.round(dst[0] * (1 - alpha) + src[0] * alpha)
@@ -277,13 +278,13 @@ export default function useGPUTerrain({
       buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
     }
 
+    console.timeEnd('composite')
+
     // --- Coastline detection: fast pixel-level filter + cell-level verification ---
-    // 1. Pixel-level: find adjacent pixels straddling sea level (fast Float32Array)
-    // 2. Cell-level: only at candidates, verify the two cells are land vs ocean
-    //    (eliminates false positives where nearest-neighbor assigns a land pixel
-    //     to an ocean cell or vice versa within a single coastal-plain cell)
     if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
+      console.time('coastline')
       const COAST_COLOR = [20, 20, 20] as const
+      let candidates = 0; let verified = 0; let drawn = 0
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x
@@ -293,17 +294,18 @@ export default function useGPUTerrain({
           if (rx < width) {
             const ni = y * width + rx
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
-              // Candidate — verify both pixels' cells agree on land/ocean
+              candidates++
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
-                // Different cells: use cell-level land/ocean
+                verified++
                 if (cellLand[cid] !== cellLand[nCid]) {
+                  drawn++
                   const pi = i * 4; const npi = ni * 4
                   buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                   buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
                 }
               } else {
-                // Same cell or unknown — trust pixel-level (coastal cell spanning sea level)
+                drawn++
                 const pi = i * 4; const npi = ni * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                 buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
@@ -315,14 +317,18 @@ export default function useGPUTerrain({
           if (by < height) {
             const ni = by * width + x
             if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
+              candidates++
               const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
               if (cid != null && nCid != null && cid !== nCid) {
+                verified++
                 if (cellLand[cid] !== cellLand[nCid]) {
+                  drawn++
                   const pi = i * 4; const npi = ni * 4
                   buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                   buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
                 }
               } else {
+                drawn++
                 const pi = i * 4; const npi = ni * 4
                 buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
                 buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
@@ -331,6 +337,8 @@ export default function useGPUTerrain({
           }
         }
       }
+      console.timeEnd('coastline')
+      console.log(`coastline: ${candidates} candidates, ${verified} verified, ${drawn} drawn`)
     }
 
     // --- Highlight overlay: blend highlight colour for hovered/selected cells ---
