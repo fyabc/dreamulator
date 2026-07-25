@@ -47,8 +47,8 @@ const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
   transitional:  hexRgb('#8ea87a'),  // olive green
 }
 
-/** Hotspot chain colour — bright orange, overrides crust colour. */
-const HOTSPOT_COLOR: [number, number, number] = hexRgb('#ff6d2e')
+/** Hotspot chain colour — magenta-pink, distinct from convergent red. */
+const HOTSPOT_COLOR: [number, number, number] = hexRgb('#e040fb')
 
 // ---------------------------------------------------------------------------
 // Minimal shaders — just display the pre-computed texture

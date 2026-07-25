@@ -217,6 +217,14 @@ function CellDetails({
               : '—'}
           </dd>
         </div>
+        {cell.hotspot_id && (
+          <div className="flex justify-between">
+            <dt className="text-gray-500" title="地幔热点火山链 (Wilson 1963)">热点链</dt>
+            <dd className="font-mono text-fuchsia-400">
+              {cell.hotspot_id}
+            </dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt className="text-gray-500">面积</dt>
           <dd className="font-mono">
