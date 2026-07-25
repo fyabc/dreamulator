@@ -83,6 +83,8 @@ interface CacheEntry {
   layers: Record<ColorMode, number>
   cellIdMap: CellIdMap | null | undefined
   cvtMesh: CVTMesh | null | undefined
+  hoveredCell: number | null | undefined
+  selectedCells: Set<number> | undefined
   // Cached result
   material: THREE.ShaderMaterial
 }
@@ -126,6 +128,8 @@ export default function useGPUTerrain({
   cvtMesh,
   cellIdMap,
   flipHorizontal = true,
+  hoveredCell = null,
+  selectedCells,
 }: UseGPUTerrainOptions): THREE.ShaderMaterial | null {
   return useMemo(() => {
     if (!elevation || width <= 0 || height <= 0) return null
@@ -141,7 +145,9 @@ export default function useGPUTerrain({
       lastCache.layers.plates === layers.plates &&
       lastCache.layers.boundaries === layers.boundaries &&
       lastCache.cellIdMap === cellIdMap &&
-      lastCache.cvtMesh === cvtMesh
+      lastCache.cvtMesh === cvtMesh &&
+      lastCache.hoveredCell === hoveredCell &&
+      lastCache.selectedCells === selectedCells
     ) {
       return lastCache.material
     }
@@ -280,6 +286,25 @@ export default function useGPUTerrain({
       }
     }
 
+    // --- Highlight overlay: blend highlight colour for hovered/selected cells ---
+    if (cellIdMap && (hoveredCell != null || (selectedCells && selectedCells.size > 0))) {
+      const HOVER_COLOR: [number, number, number] = [40, 120, 255]   // blue
+      const SELECT_COLOR: [number, number, number] = [255, 220, 50]  // yellow
+      for (let i = 0; i < totalPixels; i++) {
+        const cid = cellIdMap[i]
+        if (cid == null) continue
+        const isSelected = selectedCells?.has(cid)
+        const isHovered = cid === hoveredCell
+        if (!isSelected && !isHovered) continue
+        const [hr, hg, hb] = isSelected ? SELECT_COLOR : HOVER_COLOR
+        const alpha = 0.55
+        const pi = i * 4
+        buf[pi]     = Math.round(buf[pi]     * (1 - alpha) + hr * alpha)
+        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - alpha) + hg * alpha)
+        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - alpha) + hb * alpha)
+      }
+    }
+
     // --- Reverse rows (always) + optionally reverse columns ---
     // Column flip: needed for SphereGeometry (globe, u=0→lon=180°).
     // NOT needed for PlaneGeometry (map, u=0→left edge→lon=-180°).
@@ -342,7 +367,7 @@ export default function useGPUTerrain({
     })
 
     // Save to module-level cache (survives component unmount/remount)
-    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, material }
+    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, hoveredCell, selectedCells, material }
 
     return material
   }, [

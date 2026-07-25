@@ -187,6 +187,7 @@ export default function MapViewer({
     elevMinM: elevMin, elevMaxM: elevMax,
     layers, cvtMesh, cellIdMap,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
+    hoveredCell, selectedCells,
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,

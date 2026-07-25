@@ -46,6 +46,9 @@ export interface TerrainTextureOptions {
   /** Map projection (default: equirectangular). Non-equirectangular projections
    *  re-sample the source data into the target projection's canvas. */
   projection?: ProjectionType
+  /** Cell IDs to highlight — rendered directly in the texture. */
+  hoveredCell?: number | null
+  selectedCells?: Set<number>
 }
 
 // ---------------------------------------------------------------------------
