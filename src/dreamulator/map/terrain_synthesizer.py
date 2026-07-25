@@ -1068,10 +1068,11 @@ def _apply_coastal_plain(
     # 3. Linear ramp: z → sea_level as d → 0
     for cid, d_km in inland_dist.items():
         t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        orig_z = elevation[cid]
-        # Blend toward sea level, but keep coast at least ~5 m above sea
-        target_z = config.sea_level_m + max(0.0, 5.0 - d_km * 0.05)
-        elevation[cid] = target_z * (1.0 - t) + orig_z * t
+        if elevation[cid] > config.sea_level_m + 5.0:
+            elevation[cid] = max(
+                config.sea_level_m + 5.0,
+                elevation[cid] * t + config.sea_level_m * (1.0 - t),
+            )
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km",
