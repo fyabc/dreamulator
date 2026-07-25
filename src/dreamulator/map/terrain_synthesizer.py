@@ -1039,9 +1039,14 @@ def _apply_coastal_plain(
     """Gentle coastal plain on the land side of coastlines.
 
     High-elevation terrain reaching directly to the shoreline produces
-    unrealistic km-scale coastal cliffs.  This applies a linear ramp
-    from the coast inland: elevation is gradually reduced to sea level
-    over *coastal_plain_width_km*.
+    unrealistic km-scale coastal cliffs.  This applies a distance-based
+    elevation ramp from the coast inland over *coastal_plain_width_km*.
+
+    The effect is **elevation-attenuated**: cells far above sea level
+    (coastal mountains like the Andes) receive little to no smoothing,
+    while low-lying land gets the full coastal plain treatment.  This
+    follows Inman & Nordstrom's (1971) distinction between steep
+    tectonic coasts and gentle coastal plains.
 
     Combines with *_apply_continental_shelf* (ocean side) to produce
     a smooth land→coast→shelf→deep ocean transition.
@@ -1092,16 +1097,29 @@ def _apply_coastal_plain(
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Ramp: elevation → gentle coastal plain as d → 0
+    # 3. Ramp: elevation → gentle coastal plain as d → 0.
+    #    Elevation attenuation: high coastal mountains (e.g. Andes at a
+    #    convergent margin) should keep their relief; only low-lying land
+    #    gets the full coastal plain treatment.
+    max_plain_elev = config.coastal_plain_max_elevation_m
     for cid, d_km in inland_dist.items():
+        if elevation[cid] <= config.sea_level_m:
+            continue
+        elev_above_sea = elevation[cid] - config.sea_level_m
+        if elev_above_sea >= max_plain_elev:
+            continue  # coastal mountain — preserve original elevation
+        # Elevation attenuation: 1.0 at sea level → 0.0 at max_plain_elev
+        elev_factor = 1.0 - elev_above_sea / max_plain_elev
         t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        if elevation[cid] > config.sea_level_m:
-            coast_target = rng.uniform(10.0, 50.0)
-            blend = t * t * (3.0 - 2.0 * t)  # smoothstep
-            elevation[cid] = max(
-                coast_target,
-                elevation[cid] * blend + coast_target * (1.0 - blend),
-            )
+        coast_target = rng.uniform(10.0, 50.0)
+        blend = t * t * (3.0 - 2.0 * t)  # smoothstep
+        # Attenuate blend: high-elevation cells use a blend closer to 1
+        # (keep original), low cells use the full smoothstep ramp.
+        blend = blend * elev_factor + (1.0 - elev_factor)  # blend → 1 as elev_factor → 0
+        elevation[cid] = max(
+            coast_target,
+            elevation[cid] * blend + coast_target * (1.0 - blend),
+        )
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km",

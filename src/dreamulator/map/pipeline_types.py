@@ -85,6 +85,11 @@ class TerrainPipelineConfig:
     # Coastal plain: width in km from coastline inland for gentle
     # elevation ramp-down.  Earth average: 50–100 km.
     coastal_plain_width_km: float = 80.0
+    # Maximum elevation (m) for coastal plain smoothing.  Cells above this
+    # are treated as coastal mountains (e.g. Andes, Big Sur) and left
+    # largely untouched.  The smoothing effect fades linearly from full
+    # strength at sea level to zero at this elevation.
+    coastal_plain_max_elevation_m: float = 500.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
     # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
