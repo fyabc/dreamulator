@@ -1150,6 +1150,60 @@ def synthesize_terrain(
 | `noise_scale` | 2.0 | 0.5 – 5.0 | fBm 基础空间频率 |
 | `interior_boost` | 0.3 | 0.0 – 0.5 | 板块内部噪声增强 |
 
+### 6.7 内部地貌：古造山带、山间盆地与裂谷
+
+板块内部（距边界 >600 km 的大陆区域）放置 1–3 条线性构造带，模拟
+古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。
+
+#### 沿走向高度调制
+
+传统方法在整个造山带上施加**均匀 Gaussian 脊线**——高度和宽度处处相同。
+真实造山带沿走向有显著的高度变化（Allen et al. 1995; Kröner 1981）。
+
+每条 belt 用 **1D simplex 噪声沿大圆弧采样**，调制各段的振幅：
+
+```
+t ∈ [0,1] — 沿 belt 的参数化位置
+noise(t) = OpenSimplex.noise2(t × 8, belt_seed)
+振幅(t) ∈ [base × 0.3, base × 1.7]  (沿走向变化)
+```
+
+**效果**：造山带中有高峰和鞍部，而非均匀脊线。std ~1000m 的高度变化
+（在 100K 分辨率下）。
+
+#### 山间盆地
+
+当沿走向噪声值低于阈值（`interior_basin_chance`, 默认 0.25），
+该段成为**断陷盆地**而非山脊——模拟拉分盆地和断块差异沉降：
+
+- 吐鲁番盆地（天山内部，−154 m）——周围山体 3000–5000 m
+- 费尔干纳盆地（天山-帕米尔）——断块差异运动
+- Basin and Range（美国西部）——伸展环境地堑
+
+盆地深度可达 `interior_basin_depth_max_m`（默认 600 m），
+部分盆地底部低于海平面（100K 测试中 ~272 个 cell）。
+
+**参考文献**：
+- Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar,
+  Turpan and Alakol basins as Late Permian to Early Triassic
+  extensional structures." *Journal of the Geological Society*,
+  152, 327–338.
+- Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
+
+#### 裂谷
+
+30% 概率/板块，独立的线性凹陷（深 300–800 m，σ=40–100 km），
+也使用沿走向深度调制。
+
+### 内部地貌参数
+
+| 参数 | 默认值 | 范围 | 含义 |
+|------|--------|------|------|
+| `interior_orogeny_count` | 2 | 0–5 | 每板块 belt 数（0=禁用） |
+| `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
+| `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
+| `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
+
 ---
 
 ## 7. 阶段 6: 海平面与基础分类

@@ -96,6 +96,18 @@ class TerrainPipelineConfig:
     # 0 = disabled.  Plate interiors (far from active boundaries) get
     # 1–3 linear orogenic remnants per continental plate.
     interior_orogeny_count: int = 2
+    # Probability (0–1) that a segment along an orogenic belt becomes a
+    # sunken intermontane basin (pull-apart / fault-block depression)
+    # instead of an elevated ridge.
+    interior_basin_chance: float = 0.25
+    # Maximum subsidence depth (m) for intermontane basins.  Reference:
+    # Turpan Depression −154 m, Fergana Valley ~400 m above sea level,
+    # Basin and Range grabens 500–2000 m below surrounding ranges.
+    interior_basin_depth_max_m: float = 600.0
+    # Along-strike height variation strength (0 = uniform ridge, 1 = full
+    # range).  Controls how much the orogenic belt amplitude varies along
+    # its length via 1D noise modulation.
+    interior_height_variation: float = 0.7
 
     # Noise
     noise_scale: float = 2.0
