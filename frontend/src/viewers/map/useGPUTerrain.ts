@@ -165,18 +165,63 @@ export default function useGPUTerrain({
     const range = elevMaxM - elevMinM || 1
     const normSeaLevel = (seaLevel - elevMinM) / range
 
-    // --- Step 1: Precompute LUTs for all active layers ---
+    // --- Step 0: Cell-level land/sea map ---
     const activeModes = (Object.keys(layers) as ColorMode[]).filter((k) => layers[k] > 0)
-    const terrainLut = activeModes.includes('terrain')
-      ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
-    // Cell-level land/sea (typed array for O(1) lookup — faster than Map)
     const maxCellId = cvtMesh?.cells.length ?? 0
     const cellLand = new Uint8Array(maxCellId)
-    if (cvtMesh && (activeModes.includes('landsea') || activeModes.includes('boundaries') || activeModes.includes('terrain'))) {
+    if (cvtMesh && (activeModes.some(m => m === 'landsea' || m === 'boundaries' || m === 'terrain'))) {
       for (const cell of cvtMesh.cells) {
         cellLand[cell.id] = cell.elevation >= seaLevel ? 1 : 0
       }
     }
+
+    // --- Step 0b: Coastline FIRST (fast ~12ms) so it appears before terrain fills ---
+    const coastlineSet = new Uint8Array(totalPixels)  // 1 = coastline pixel
+    if (activeModes.some(m => m === 'terrain') && cellIdMap && cellLand.length > 0) {
+      const COAST_COLOR: [number, number, number] = [20, 20, 20]
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = y * width + x
+          const isLandPx = elevation[i] >= normSeaLevel
+          const rx = x + 1
+          if (rx < width) {
+            const ni = y * width + rx
+            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
+              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
+              const draw = (cid != null && nCid != null && cid !== nCid)
+                ? (cellLand[cid] !== cellLand[nCid])
+                : true
+              if (draw) {
+                coastlineSet[i] = 1; coastlineSet[ni] = 1
+                const pi = i * 4; const npi = ni * 4
+                buf[pi]=COAST_COLOR[0]; buf[pi+1]=COAST_COLOR[1]; buf[pi+2]=COAST_COLOR[2]; buf[pi+3]=255
+                buf[npi]=COAST_COLOR[0]; buf[npi+1]=COAST_COLOR[1]; buf[npi+2]=COAST_COLOR[2]; buf[npi+3]=255
+              }
+            }
+          }
+          const by = y + 1
+          if (by < height) {
+            const ni = by * width + x
+            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
+              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
+              const draw = (cid != null && nCid != null && cid !== nCid)
+                ? (cellLand[cid] !== cellLand[nCid])
+                : true
+              if (draw) {
+                coastlineSet[i] = 1; coastlineSet[ni] = 1
+                const pi = i * 4; const npi = ni * 4
+                buf[pi]=COAST_COLOR[0]; buf[pi+1]=COAST_COLOR[1]; buf[pi+2]=COAST_COLOR[2]; buf[pi+3]=255
+                buf[npi]=COAST_COLOR[0]; buf[npi+1]=COAST_COLOR[1]; buf[npi+2]=COAST_COLOR[2]; buf[npi+3]=255
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // --- Step 1: Precompute LUTs for all active layers ---
+    const terrainLut = activeModes.includes('terrain')
+      ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
     const landseaLut = activeModes.includes('landsea')
       ? (() => {
           const l = new Uint8Array(1024 * 3)
@@ -237,7 +282,9 @@ export default function useGPUTerrain({
         const pi = i * 4
 
         if (justTerrain && terrainLut) {
-          // Fast path: terrain-only (most common case) — direct copy, no blend
+          // Skip coastline pixels (already rendered in fast first pass)
+          if (coastlineSet[i]) { buf[pi+3] = 255; continue }
+          // Fast path: terrain-only (most common case) — direct copy
           const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
           buf[pi]   = terrainLut[idx * 4]
           buf[pi+1] = terrainLut[idx * 4 + 1]
@@ -252,6 +299,7 @@ export default function useGPUTerrain({
           buf[pi+3] = 255
         } else {
           // General path: alpha-blend multiple layers (rare)
+          if (coastlineSet[i]) { buf[pi+3] = 255; continue }
           let r = 0, g = 0, b = 0
           const cellId = cellIdMap?.[i]
 
@@ -292,55 +340,6 @@ export default function useGPUTerrain({
           }
 
           buf[pi] = r; buf[pi+1] = g; buf[pi+2] = b; buf[pi+3] = 255
-        }
-      }
-    }
-
-    // --- Coastline detection: fast pixel-level filter + cell-level verification ---
-    if (layers.terrain > 0 && cellIdMap && cellLand.length > 0) {
-      const COAST_COLOR = [20, 20, 20] as const
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const i = y * width + x
-          const isLandPx = elevation[i] >= normSeaLevel
-          // Right neighbor
-          const rx = x + 1
-          if (rx < width) {
-            const ni = y * width + rx
-            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
-              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
-              if (cid != null && nCid != null && cid !== nCid) {
-                if (cellLand[cid] !== cellLand[nCid]) {
-                  const pi = i * 4; const npi = ni * 4
-                  buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
-                  buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
-                }
-              } else {
-                const pi = i * 4; const npi = ni * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
-                buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
-              }
-            }
-          }
-          // Bottom neighbor
-          const by = y + 1
-          if (by < height) {
-            const ni = by * width + x
-            if (isLandPx !== (elevation[ni] >= normSeaLevel)) {
-              const cid = cellIdMap[i]; const nCid = cellIdMap[ni]
-              if (cid != null && nCid != null && cid !== nCid) {
-                if (cellLand[cid] !== cellLand[nCid]) {
-                  const pi = i * 4; const npi = ni * 4
-                  buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
-                  buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
-                }
-              } else {
-                const pi = i * 4; const npi = ni * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi+1] = COAST_COLOR[1]; buf[pi+2] = COAST_COLOR[2]
-                buf[npi] = COAST_COLOR[0]; buf[npi+1] = COAST_COLOR[1]; buf[npi+2] = COAST_COLOR[2]
-              }
-            }
-          }
         }
       }
     }
