@@ -297,6 +297,7 @@ def _synthesize_gaussian(
     """Cortial 2019 §4 — symmetric Gaussian boundary mountain profiles."""
     logger.info("Synthesizing terrain elevation")
     n = mesh.num_cells
+    rng = np.random.default_rng(config.seed + 100)
 
     # 1. Bimodal base elevation
     logger.info("  Step 1/5: Bimodal base elevation")
@@ -379,8 +380,8 @@ def _synthesize_gaussian(
 
     # Post-processing (shared with asymmetric: shelf/plain must run last)
     elevation = _apply_island_arcs(mesh, elevation, config)
-    elevation = _apply_continental_shelf(mesh, elevation, config)
-    elevation = _apply_coastal_plain(mesh, elevation, config)
+    elevation = _apply_continental_shelf(mesh, elevation, config, rng)
+    elevation = _apply_coastal_plain(mesh, elevation, config, rng)
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
@@ -496,8 +497,8 @@ def _synthesize_asymmetric(
     # shelf/plain must run last to not be overwritten)
     elevation = _apply_island_arcs(mesh, elevation, config)
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
-    elevation = _apply_continental_shelf(mesh, elevation, config)
-    elevation = _apply_coastal_plain(mesh, elevation, config)
+    elevation = _apply_continental_shelf(mesh, elevation, config, rng)
+    elevation = _apply_coastal_plain(mesh, elevation, config, rng)
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
@@ -937,6 +938,7 @@ def _apply_continental_shelf(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    rng: np.random.Generator,
 ) -> np.ndarray:
     """Exponential continental shelf depth profile from coastline.
 
@@ -951,7 +953,10 @@ def _apply_continental_shelf(
       — global average continental shelf width ~80 km, depth ~200 m.
     """
     n = mesh.num_cells
+    cell_spacing = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     shelf_width = config.shelf_width_km
+    if shelf_width <= 0.0:
+        shelf_width = cell_spacing * rng.uniform(2.0, 5.0)
 
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
@@ -987,17 +992,18 @@ def _apply_continental_shelf(
                 shelf_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Apply exponential depth profile
-    # Reference depth: -200m at coastline, deepening to full ocean depth
-    shelf_edge_depth = -200.0
+    # 3. Apply exponential depth profile with random variation
+    shelf_edge_depth = rng.uniform(-5.0, -1.0)  # near-surface at coast
     e_fold = shelf_width / 3.0  # λ — e-folding distance
     shelf_cells = 0
 
     for cid, d_km in shelf_dist.items():
         if d_km <= 0:
             continue
-        # Exponential transition from shelf_edge_depth to original ocean depth
         t = 1.0 - np.exp(-d_km / e_fold)  # 0 at coast → 1 at deep ocean
+        # Add random variation to avoid uniform shelf edge
+        noise = rng.uniform(-0.08, 0.08)
+        t = max(0.0, min(1.0, t + noise))
         orig_z = elevation[cid]
         z_shelf = shelf_edge_depth * (1.0 - t) + orig_z * t
         elevation[cid] = z_shelf
@@ -1014,6 +1020,7 @@ def _apply_coastal_plain(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    rng: np.random.Generator,
 ) -> np.ndarray:
     """Gentle coastal plain on the land side of coastlines.
 
@@ -1036,9 +1043,10 @@ def _apply_coastal_plain(
     """
     n = mesh.num_cells
     plain_width = config.coastal_plain_width_km
+    cell_spacing = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
     if plain_width <= 0.0:
-        # Cover at least 2 cells from coast to smooth the transition
-        plain_width = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2.5
+        # Cover 1–3 cells inland, randomised per coast segment
+        plain_width = cell_spacing * rng.uniform(1.0, 3.0)
     if plain_width <= 0:
         return elevation
 
@@ -1074,13 +1082,17 @@ def _apply_coastal_plain(
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
-    # 3. Linear ramp: z → sea_level as d → 0
+    # 3. Ramp: elevation → gentle coastal plain as d → 0
     for cid, d_km in inland_dist.items():
         t = min(1.0, d_km / plain_width)  # 0 at coast → 1 at inland limit
-        if elevation[cid] > config.sea_level_m + 5.0:
+        if elevation[cid] > config.sea_level_m:
+            # Target elevation at coast: 10–50 m (random per cell for variation)
+            coast_target = rng.uniform(10.0, 50.0)
+            # Smoothstep blend for more natural transition
+            blend = t * t * (3.0 - 2.0 * t)  # smoothstep
             elevation[cid] = max(
-                config.sea_level_m + 5.0,
-                elevation[cid] * t + config.sea_level_m * (1.0 - t),
+                coast_target,
+                elevation[cid] * blend + coast_target * (1.0 - blend),
             )
 
     logger.info(
