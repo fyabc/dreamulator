@@ -8,6 +8,7 @@ import MapViewerPage from './pages/MapViewerPage'
 import StellarSystemViewerPage from './pages/StellarSystemViewerPage'
 import GlobeViewerPage from './pages/GlobeViewerPage'
 import CivMapEditorPage from './pages/CivMapEditorPage'
+import HelpPage from './pages/HelpPage'
 import { isStaticMode } from './api/mode'
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
           <Route path="worlds/:worldName/map/:planetId" element={<MapViewerPage />} />
           <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
           <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
+          <Route path="help" element={<HelpPage />} />
         </Route>
         {/* Full-page editors (no Layout wrapper) */}
         <Route path="worlds/:worldName/civmap" element={<CivMapEditorPage />} />

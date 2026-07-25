@@ -23,6 +23,7 @@ export default function Sidebar({
     { path: '/', label: '首页', icon: '🏠' },
     { path: '/world-info', label: '世界信息', icon: '📖' },
     { path: '/worlds', label: '世界管理', icon: '🌍' },
+    { path: '/help', label: '帮助', icon: '❓' },
   ]
 
   // World-specific nav items (shown when viewing a world)
