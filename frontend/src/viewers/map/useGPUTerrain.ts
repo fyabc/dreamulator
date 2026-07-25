@@ -171,7 +171,7 @@ export default function useGPUTerrain({
       ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
     // Cell-level land/sea map (avoids pixel-level nearest-neighbor artifacts)
     const cellLand = new Map<number, boolean>()
-    if (cvtMesh && (activeModes.includes('landsea') || activeModes.includes('boundaries'))) {
+    if (cvtMesh && (activeModes.includes('landsea') || activeModes.includes('boundaries') || activeModes.includes('terrain'))) {
       for (const cell of cvtMesh.cells) {
         cellLand.set(cell.id, cell.elevation >= seaLevel)
       }
