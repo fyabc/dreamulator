@@ -84,6 +84,10 @@ class TerrainPipelineConfig:
     shelf_width_km: float = 120.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
+    # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
+    # 0 = disabled.  Plate interiors (far from active boundaries) get
+    # 1–3 linear orogenic remnants per continental plate.
+    interior_orogeny_count: int = 2
 
     # Noise
     noise_scale: float = 2.0

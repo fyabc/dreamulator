@@ -488,6 +488,7 @@ def _synthesize_asymmetric(
     # Post-processing
     elevation = _apply_continental_shelf(mesh, elevation, config)
     elevation = _apply_island_arcs(mesh, elevation, config)
+    elevation = _apply_interior_landforms(mesh, elevation, config, rng)
 
     classify_sea_land(mesh, config.sea_level_m)
     _log_synthesis_stats(elevation, config.sea_level_m, n)
@@ -1080,6 +1081,173 @@ def _apply_island_arcs(
         "  Island arcs: %d boundary cells → %d arc cells (height=%.0f m)",
         len(arc_cells), arc_count, arc_height,
     )
+    return elevation
+
+
+# =========================================================================
+# Interior landforms: paleo-orogeny, rifts, cratonic basins
+# =========================================================================
+
+
+def _apply_interior_landforms(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Paleo-orogeny belts, rift valleys, and cratonic basins in plate interiors.
+
+    Plate interiors far from active boundaries can appear too flat.
+    On Earth, ancient collision zones (Urals, Appalachians) and failed
+    rift arms persist as linear highlands long after the plate boundary
+    has migrated away.  Cratonic basins add gentle long-wavelength
+    undulation.
+
+    For each continental plate, this places 1–3 linear orogenic belts
+    at random orientation across the interior, plus optional rifts.
+
+    References
+    ----------
+    * Şengör, A.M.C. (1990). "Plate tectonics and orogenic research
+      after 25 years: A Tethyan perspective." *Earth-Science Reviews*,
+      27(1–2), 1–201. — classifies orogenic belts, notes that sutures
+      can lie far from active boundaries.
+    * Burke, K. & Dewey, J.F. (1973). "Plume-generated triple
+      junctions: Key indicators in applying plate tectonics to old
+      rocks." *Journal of Geology*, 81(4), 406–433.
+      — failed rift arms (aulacogens) become intraplate basins/highs.
+
+    Modifies *elevation* in-place.
+    """
+    n = mesh.num_cells
+    num_orogenies = config.interior_orogeny_count
+    if num_orogenies <= 0:
+        return elevation
+
+    # Group cells by plate and identify interiors
+    plate_cells: dict[str, list[int]] = {}
+    for i, cell in enumerate(mesh.cells):
+        pid = cell.plate_id or ""
+        if pid:
+            plate_cells.setdefault(pid, []).append(i)
+
+    total_affected = 0
+
+    for pid, cell_indices in plate_cells.items():
+        # Only add orogenies to continental or mixed plates
+        n_cont = sum(
+            1 for i in cell_indices
+            if getattr(mesh.cells[i], "crust_type", "") == "continental"
+        )
+        if n_cont < len(cell_indices) * 0.2:
+            continue  # too oceanic — skip
+
+        # Find interior cells (far from any boundary)
+        interior = [
+            i for i in cell_indices
+            if mesh.cells[i].distance_to_boundary_km > 800
+            and getattr(mesh.cells[i], "crust_type", "") == "continental"
+        ]
+        if len(interior) < 10:
+            continue
+
+        # Place 1–3 orogenic belts per plate
+        n_belts = min(num_orogenies, max(1, len(interior) // 30))
+        for _ in range(n_belts):
+            # Pick two seed cells in the interior to define the belt line
+            if len(interior) < 3:
+                continue
+            a_idx = interior[rng.integers(0, len(interior))]
+            b_idx = interior[rng.integers(0, len(interior))]
+            if a_idx == b_idx:
+                continue
+
+            a_pos = np.array([
+                mesh.cells[a_idx].x, mesh.cells[a_idx].y, mesh.cells[a_idx].z,
+            ])
+            b_pos = np.array([
+                mesh.cells[b_idx].x, mesh.cells[b_idx].y, mesh.cells[b_idx].z,
+            ])
+            # Direction vector of the belt (on sphere → great-circle arc)
+            belt_dir = b_pos - a_pos
+            belt_len = np.linalg.norm(belt_dir)
+            if belt_len < 1e-12:
+                continue
+            belt_dir /= belt_len
+
+            # Orogeny amplitude: 500–1500 m, varies per belt
+            amplitude = rng.uniform(500.0, 1500.0)
+            # Width of the belt (Gaussian sigma in km)
+            sigma_km = rng.uniform(80.0, 200.0)
+            cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n) * 2
+
+            belt_count = 0
+            for i in interior:
+                cell = mesh.cells[i]
+                pos = np.array([cell.x, cell.y, cell.z])
+                # Distance from point to the great-circle arc defined by a→b
+                # Approximate: distance to the line segment in 3D, projected
+                # to angular distance on the sphere
+                vec = pos - a_pos
+                proj = np.dot(vec, belt_dir)
+                proj = max(0.0, min(belt_len, proj))  # clamp to segment
+                closest = a_pos + proj * belt_dir
+                closest_norm = np.linalg.norm(closest)
+                if closest_norm < 1e-12:
+                    continue
+                closest /= closest_norm  # project back to unit sphere
+
+                # Angular distance from cell to the belt line
+                dot = np.clip(np.dot(pos, closest), -1.0, 1.0)
+                ang_dist_rad = np.arccos(dot)
+                dist_km = ang_dist_rad * config.radius_km
+
+                if dist_km < 3 * sigma_km:
+                    # Gaussian profile
+                    weight = np.exp(-(dist_km * dist_km) / (2 * sigma_km * sigma_km))
+                    # Add noise perturbation along the belt for natural look
+                    noise = rng.uniform(-0.15, 0.15)
+                    elevation[i] += amplitude * weight * (1.0 + noise)
+                    belt_count += 1
+
+            total_affected += belt_count
+
+        # Optional: rift valley (1 per plate, 30% chance)
+        if rng.random() < 0.3 and len(interior) > 20:
+            a_idx = interior[rng.integers(0, len(interior))]
+            b_idx = interior[rng.integers(0, len(interior))]
+            if a_idx != b_idx:
+                a_pos = np.array([mesh.cells[a_idx].x, mesh.cells[a_idx].y, mesh.cells[a_idx].z])
+                b_pos = np.array([mesh.cells[b_idx].x, mesh.cells[b_idx].y, mesh.cells[b_idx].z])
+                rift_dir = b_pos - a_pos
+                rift_len = np.linalg.norm(rift_dir)
+                if rift_len > 1e-12:
+                    rift_dir /= rift_len
+                    rift_depth = rng.uniform(300.0, 800.0)
+                    sigma_km = rng.uniform(40.0, 100.0)
+                    for i in interior:
+                        pos = np.array([mesh.cells[i].x, mesh.cells[i].y, mesh.cells[i].z])
+                        vec = pos - a_pos
+                        proj = np.dot(vec, rift_dir)
+                        proj = max(0.0, min(rift_len, proj))
+                        closest = a_pos + proj * rift_dir
+                        norm = np.linalg.norm(closest)
+                        if norm < 1e-12:
+                            continue
+                        closest /= norm
+                        dot = np.clip(np.dot(pos, closest), -1.0, 1.0)
+                        dist_km = np.arccos(dot) * config.radius_km
+                        if dist_km < 3 * sigma_km:
+                            weight = np.exp(-(dist_km**2) / (2 * sigma_km**2))
+                            elevation[i] -= rift_depth * weight
+                            total_affected += 1
+
+    if total_affected > 0:
+        logger.info(
+            "  Interior landforms: %d cells (orogenies=%d/plate, rifts 30%% chance)",
+            total_affected, num_orogenies,
+        )
+
     return elevation
 
 
