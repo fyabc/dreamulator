@@ -367,14 +367,15 @@ def _synthesize_gaussian(
         config.noise_amplitude_ocean_m,
     )
 
-    # Distance-to-boundary modulation: more mountainous near boundaries
+    # Distance-to-boundary modulation: more mountainous near boundaries,
+    # with a 1.2× base noise floor in plate interiors.
     sigma = config.boundary_influence_km
-    interior_factor = np.ones(n, dtype=np.float64)
+    interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.distance_to_boundary_km < 3 * sigma:
             d = cell.distance_to_boundary_km
             proximity = np.exp(-(d * d) / (2 * sigma * sigma))
-            interior_factor[i] = 1.0 + 0.5 * proximity
+            interior_factor[i] = 1.2 + 0.3 * proximity
 
     detail_contribution = fbm * noise_amplitude * interior_factor
 
@@ -480,13 +481,15 @@ def _synthesize_asymmetric(
         config.noise_amplitude_ocean_m,
     )
 
-    # Boundary-proximity factor (same as gaussian)
+    # Boundary-proximity factor.
+    # Near boundaries: up to 1.5× noise (rugged mountains).
+    # Plate interiors: 1.2× base noise (enough texture on high plateaus).
     sigma = config.boundary_influence_km
-    interior_factor = np.ones(n, dtype=np.float64)
+    interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.distance_to_boundary_km < 3 * sigma:
             d = cell.distance_to_boundary_km
-            interior_factor[i] = 1.0 + 0.5 * np.exp(
+            interior_factor[i] = 1.2 + 0.3 * np.exp(
                 -(d * d) / (2 * sigma * sigma)
             )
 

@@ -105,12 +105,15 @@ class TerrainPipelineConfig:
     # Anisotropic noise: stretch fBm along boundary strike direction.
     # 0 = isotropic; 0.3 = subtle ridges; 1.0 = strong linear features.
     noise_anisotropy: float = 0.3
-    noise_amplitude_land_m: float = 600.0
-    noise_amplitude_ocean_m: float = 300.0
+    noise_amplitude_land_m: float = 900.0
+    noise_amplitude_ocean_m: float = 450.0
     # Low-frequency regional noise (large-scale variation within plates)
     regional_noise_scale: float = 0.5  # much lower than detail noise_scale
-    regional_noise_amplitude_land_m: float = 1200.0
-    regional_noise_amplitude_ocean_m: float = 800.0
+    # Regional noise amplitudes should be ~1.5–2× the detail noise so
+    # broad intra-plate swells are visible even on high-elevation plates
+    # (plate_elevation_spread_m can push base elevation to 2000m+).
+    regional_noise_amplitude_land_m: float = 1800.0
+    regional_noise_amplitude_ocean_m: float = 1200.0
 
     # Sea level
     sea_level_m: float = 0.0
