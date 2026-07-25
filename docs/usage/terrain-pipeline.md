@@ -403,31 +403,31 @@ def _voronoi_partition(
 
 ### 3.3 地壳类型分配
 
-每个板块分配地壳类型（大陆/大洋/混合）：
+每个 cell 的地壳类型（大陆/大洋）通过 **5-octave 分形布朗运动（fBm）** 在板块内分配。
+这替代了早期设计中按板块整体分配的方法，实现了更真实的大陆形状。
 
-```python
-def assign_crust_types(
-    plate_ids: np.ndarray,
-    num_plates: int,
-    rng,
-    continental_fraction: float = 0.35,
-) -> list[str]:
-    """Assign crust types to plates.
+**算法**：
 
-    Earth-like distribution: ~35% continental, ~65% oceanic.
-    Mixed plates have both continental and oceanic regions.
-    """
-    types = []
-    for i in range(num_plates):
-        r = rng.random()
-        if r < continental_fraction * 0.6:
-            types.append("continental")
-        elif r < continental_fraction * 0.6 + continental_fraction * 0.4:
-            types.append("mixed")
-        else:
-            types.append("oceanic")
-    return types
-```
+1. 每个板块获得随机大陆比例 f ∈ [0.1, 0.9]
+2. 对板块内所有 cell，使用 3D simplex noise（OpenSimplex）在 cell 的球面坐标 (x, y, z) 上采样
+3. 5-octave fBm 叠加：`noise = Σ amplitude_k · noise3(x · f_k, y · f_k, z · f_k)`
+   - persistence = 0.5（1/f 振幅衰减）
+   - lacunarity = 2.5（频率倍增系数）
+   - base_freq ∝ 1 / N_cells^0.15（自动适配板块大小）
+4. 归一化后施加纬度偏差：`noise -= 0.3 · |lat| / 90°`（赤道偏向大陆）
+5. 按 noise 值降序排列，前 f×100% 的 cell 标记为 continental，其余为 oceanic
+
+**分形海岸线原理**：
+
+fBm 具有 1/f 功率谱（Mandelbrot 1967），因此 noise 等值面——即大陆/大洋
+边界——在所有可分辨尺度上表现出统计自相似性。随着 CVT 分辨率提高（更多 cell），
+海岸线自动呈现更多细节，无需额外参数调整。
+
+> **参考文献**：
+> * Mandelbrot, B.B. (1967). "How Long Is the Coast of Britain? Statistical
+>   Self-Similarity and Fractional Dimension." *Science*, 156(3775), 636–638.
+> * Musgrave, F.K. et al. (1989). "The synthesis and rendering of eroded
+>   fractal terrains." *SIGGRAPH '89*.
 
 ### 3.4 手动板块指定
 
