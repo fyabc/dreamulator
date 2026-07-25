@@ -108,6 +108,9 @@ interface UseGPUTerrainOptions {
   cellIdMap?: CellIdMap | null
   /** Flip texture horizontally (needed for SphereGeometry; set false for PlaneGeometry). */
   flipHorizontal?: boolean
+  /** Cell IDs to highlight in blue (hover) or yellow (selected). */
+  hoveredCell?: number | null
+  selectedCells?: Set<number>
 }
 
 export default function useGPUTerrain({

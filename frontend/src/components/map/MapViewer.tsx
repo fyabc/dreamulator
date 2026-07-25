@@ -113,12 +113,22 @@ export default function MapViewer({
 
   // --- View state ---
   const [mapCenter, setMapCenter] = useState<LonLat>({ lon: 0, lat: 0 })
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoomState] = useState(1)
 
-  // --- Refs for render loop ---
+  // --- Refs for render loop (updated synchronously with state) ---
   const mapCenterRef = useRef<LonLat>({ lon: 0, lat: 0 })
   const zoomRef = useRef(1)
   const containerRef2 = useRef({ width: 800, height: 400 })
+
+  // Sync helpers: update BOTH state and ref immediately
+  const syncMapCenter = useCallback((mc: LonLat) => {
+    mapCenterRef.current = mc
+    setMapCenter(mc)
+  }, [])
+  const syncZoom = useCallback((z: number) => {
+    zoomRef.current = z
+    setZoomState(z)
+  }, [])
 
   // Map dimensions
   const mapW = metadata?.width ?? 2048
@@ -154,12 +164,10 @@ export default function MapViewer({
   const rafRef = useRef<number>(0)
   const lastMousePos = useRef<{ px: number; py: number } | null>(null)
 
-  // --- Sync refs ---
+  // --- Sync container ref (mapCenter/zoom are synced directly via sync helpers) ---
   useEffect(() => {
-    mapCenterRef.current = mapCenter
-    zoomRef.current = zoom
     containerRef2.current = containerSize
-  }, [mapCenter, zoom, containerSize])
+  }, [containerSize])
 
   // --- Container resize observer ---
   useEffect(() => {
@@ -275,12 +283,6 @@ export default function MapViewer({
   // --- Viewport (used by mapCoords functions) ---
   const vp: Viewport = { width: containerSize.width, height: containerSize.height }
 
-  // Normalised projection centre (only changes when mapCenter or projection changes)
-  const projCenter = useMemo(
-    () => projectForward(projection, mapCenter.lon, mapCenter.lat),
-    [projection, mapCenter],
-  )
-
   // --- Forward projection (for SVG overlay) ---
   const project = useCallback(
     (lon: number, lat: number) => {
@@ -295,8 +297,8 @@ export default function MapViewer({
       const { nx, ny } = projectForward(projection, lon, lat)
       const csW = containerRef2.current.width
       const csH = containerRef2.current.height
-      const x = Math.round((nx - pc.nx) * csW * z + csW / 2)
-      const y = Math.round((ny - pc.ny) * csH * z + csH / 2)
+      const x = (nx - pc.nx) * csW * z + csW / 2
+      const y = (ny - pc.ny) * csH * z + csH / 2
       return { x, y }
     },
     // Refs used inside for accuracy (no 1-frame lag), but mapCenter/zoom
@@ -413,7 +415,7 @@ export default function MapViewer({
             clampedLon = back.lon
           }
         }
-        setMapCenter({ lon: clampedLon, lat: clampedLat })
+        syncMapCenter({ lon: clampedLon, lat: clampedLat })
         return
       }
 
@@ -468,7 +470,7 @@ export default function MapViewer({
     (e: React.WheelEvent) => {
       e.preventDefault()
       const factor = e.deltaY > 0 ? 0.9 : 1.1
-      setZoom((z) => Math.max(1, Math.min(MAX_ZOOM, z * factor)))
+      syncZoom(Math.max(1, Math.min(MAX_ZOOM, zoom * factor)))
     },
     [],
   )
