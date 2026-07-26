@@ -14,6 +14,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { CursorStack } from './utils/cursorStack'
 import { temperatureToColor, luminosityToGlowIntensity } from './utils/starColor'
 import {
   solarRadiiToAU,
@@ -95,10 +96,10 @@ export default function StarMesh({ star, onSelect, onFocus, isSelected }: StarMe
         }}
         onPointerOver={(e) => {
           e.stopPropagation()
-          document.body.style.cursor = 'pointer'
+          CursorStack.enter('pointer')
         }}
         onPointerOut={() => {
-          document.body.style.cursor = 'default'
+          CursorStack.leave()
         }}
       >
         <sphereGeometry args={[realRadiusAU, 32, 32]} />

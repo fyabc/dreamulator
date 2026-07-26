@@ -10,10 +10,14 @@ import * as THREE from 'three'
 import { generateAdaptiveTerrainScale } from './colorScales'
 
 /**
- * Decode a PNG Blob to a Float32Array with normalised [0, 1] values.
+ * Decode a 16-bit grayscale PNG Blob to Float32Array with normalised [0, 1] values.
  *
- * Uses an Image element + Canvas to decode the PNG, then extracts
- * the red channel as a single-channel float array.
+ * Uses Canvas 2D + ImageBitmap for decoding.  The browser converts 16-bit
+ * grayscale values to RGBA by storing the high byte in R and the low byte
+ * in G (B mirrors G).  We reconstruct: val = R*256 + G, then normalise.
+ *
+ * This gives the full 16-bit range (65535 levels) rather than the 8-bit
+ * (256 levels) that reading only the R channel would provide.
  *
  * @param blob PNG file blob.
  * @returns Promise of { data, width, height }.
@@ -24,22 +28,18 @@ export async function decodePngToFloat32(
   const bitmap = await createImageBitmap(blob)
   const { width, height } = bitmap
 
-  // Decode via offscreen canvas
   const canvas = new OffscreenCanvas(width, height)
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
   ctx.drawImage(bitmap, 0, 0)
   const imageData = ctx.getImageData(0, 0, width, height)
+  bitmap.close()
 
-  // Extract red channel (first byte of each RGBA pixel) as normalised float
+  // Reconstruct 16-bit from R (high byte) and G (low byte)
   const rgba = imageData.data
   const floats = new Float32Array(width * height)
   for (let i = 0; i < width * height; i++) {
-    // For 16-bit PNGs loaded via Canvas, the value may be in the high byte
-    // or split across R and G channels.  Use R as primary.
-    floats[i] = rgba[i * 4] / 255
+    floats[i] = (rgba[i * 4] * 256 + rgba[i * 4 + 1]) / 65535
   }
-
-  bitmap.close()
   return { data: floats, width, height }
 }
 

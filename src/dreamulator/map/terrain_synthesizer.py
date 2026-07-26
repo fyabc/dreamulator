@@ -235,8 +235,8 @@ def classify_sea_land(
     shelf cells from appearing as deep ocean.
 
     Cells far above sea level with oceanic crust become ``transitional``
-    (islands, seamounts).  Cells far below sea level with continental
-    crust become ``transitional`` (continental shelf, submarine canyons).
+    (islands, seamounts).  Submerged continental crust is left as
+    ``continental`` (the geological definition of continental shelves).
 
     Modifies cells in-place.
     """
@@ -245,8 +245,6 @@ def classify_sea_land(
         if near_sea:
             cell.crust_type = "transitional"
         elif cell.elevation > sea_level_m and cell.crust_type == "oceanic":
-            cell.crust_type = "transitional"
-        elif cell.elevation < sea_level_m and cell.crust_type == "continental":
             cell.crust_type = "transitional"
 
 
@@ -387,6 +385,12 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
+    # Sea level auto-calibration ("倒水")
+    if config.sea_level_auto:
+        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        for i, cell in enumerate(mesh.cells):
+            cell.elevation = float(elevation[i])
+
     # Post-processing (shared with asymmetric: shelf/plain must run last)
     elevation = _apply_island_arcs(mesh, elevation, config)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
@@ -503,6 +507,12 @@ def _synthesize_asymmetric(
 
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
+
+    # Sea level auto-calibration ("倒水")
+    if config.sea_level_auto:
+        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        for i, cell in enumerate(mesh.cells):
+            cell.elevation = float(elevation[i])
 
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
@@ -1020,6 +1030,69 @@ def _compute_quality_metrics(
 
 
 # =========================================================================
+# Sea level calibration ("倒水") — volume-driven binary search
+# =========================================================================
+
+
+def _apply_sea_level_calibration(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Calibrate sea level to match the target land fraction.
+
+    Collects per-cell area and performs binary search on the elevation range
+    to find the sea level *h* such that the fraction of planetary surface area
+    above *h* equals ``config.target_land_fraction``.
+
+    The implied water budget (volume needed to fill all basins below *h*,
+    expressed as equivalent uniform depth) is computed and logged.
+
+    Complexity: O(60 n) ≈ O(n)  (60 binary-search iterations over n cells).
+    """
+    n = mesh.num_cells
+    areas = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+    total_area = np.sum(areas)
+
+    target_land_area = config.target_land_fraction * total_area
+
+    # Binary search for sea level h in [min(elev), max(elev)]
+    lo = float(np.min(elevation))
+    hi = float(np.max(elevation))
+
+    for _ in range(60):
+        mid = (lo + hi) * 0.5
+        land_area = np.sum(areas[elevation > mid])
+        if land_area > target_land_area:
+            lo = mid  # need higher sea level → less land
+        else:
+            hi = mid  # need lower sea level → more land
+
+    sea_level = (lo + hi) * 0.5
+
+    # Compute implied water budget
+    depths = np.maximum(0.0, sea_level - elevation)  # m
+    water_km3 = np.sum(depths / 1000.0 * areas)
+    surface_km2 = total_area
+    implied_budget_km = water_km3 / surface_km2
+
+    land_area_final = np.sum(areas[elevation > sea_level])
+    land_pct = 100.0 * land_area_final / surface_km2
+    cell_pct = 100.0 * np.sum(elevation > sea_level) / n
+
+    logger.warning(
+        "  Water calibration: target %.1f%% land → sea level %.0f m → "
+        "%.1f%% land by area (%.1f%% by cells), "
+        "implied water budget %.2f km (%.1f million km^3)",
+        config.target_land_fraction * 100, sea_level,
+        land_pct, cell_pct,
+        implied_budget_km, water_km3 / 1e6,
+    )
+
+    return elevation - sea_level
+
+
+# =========================================================================
 # Shared post-processing: continental shelf + island arcs
 # =========================================================================
 
@@ -1408,10 +1481,12 @@ def _apply_interior_landforms(
 
         # ---- Orogenic belts: count scales with interior area ----
         # Base count from config, plus 1 extra belt per ~300 interior cells
+        # Scale belt count with interior area, but cap to prevent clutter
         n_belts = config.interior_orogeny_count + max(
-            0, len(interior) // 300 - 1
+            0, len(interior) // 800 - 1
         )
-        belt_seed_base = int(pid.split("_")[-1]) if "_" in pid else 0
+        n_belts = min(n_belts, 4)  # hard cap: at most 4 belts per plate
+        belt_seed_base = abs(hash(pid)) % 10000
 
         for belt_idx in range(n_belts):
             if len(interior) < 3:
@@ -1435,8 +1510,9 @@ def _apply_interior_landforms(
                 continue
             gc_normal /= gc_norm
 
-            # Angular length of the belt
-            angle_ab = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+            # Angular length of the belt — cap at 30° to avoid spanning half the planet
+            angle_ab_raw = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+            angle_ab = min(angle_ab_raw, np.radians(30))
 
             # Belt parameters
             base_amplitude = rng.uniform(500.0, 1500.0)
@@ -1466,7 +1542,14 @@ def _apply_interior_landforms(
                 angle_ap = np.arccos(np.clip(np.dot(a_pos, p_proj), -1.0, 1.0))
                 t = np.clip(angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
 
-                # Angular distance from cell to the belt line
+                # Along-strike wobble: sinusoidal perturbation makes belts curve
+                if _has_noise:
+                    wobble = opensimplex.noise2(belt_noise_seed + 0.5, t * 6.0) * 0.2
+                    cos_w = np.cos(wobble)
+                    sin_w = np.sin(wobble)
+                    p_proj = p_proj * cos_w + np.cross(gc_normal, p_proj) * sin_w
+
+                # Angular distance from cell to the (wobbled) belt line
                 dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
                 dist_km = np.arccos(dot_to_arc) * config.radius_km
 

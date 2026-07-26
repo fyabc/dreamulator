@@ -399,7 +399,12 @@ function InfoRow({
   return (
     <div className={wide ? 'sm:col-span-2' : ''}>
       <dt className="text-gray-500 text-sm">{label}</dt>
-      <dd className="text-gray-200 font-medium mt-0.5">{value || 'N/A'}</dd>
+      <dd
+        className="text-gray-200 font-medium mt-0.5 truncate max-w-md"
+        title={value || undefined}
+      >
+        {value || 'N/A'}
+      </dd>
     </div>
   )
 }

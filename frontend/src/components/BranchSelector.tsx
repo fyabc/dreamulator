@@ -37,11 +37,13 @@ export default function BranchSelector({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
-        <label className="text-sm text-gray-500">分支</label>
+        <label htmlFor="branch-select" className="text-sm text-gray-500">分支</label>
         <select
+          id="branch-select"
           value={selectedBranch ?? ''}
           onChange={(e) => onSelect(e.target.value || null)}
           className="bg-space-bg border border-space-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neon-cyan transition-colors"
+          aria-label="选择分支"
           title="切换世界线分支。在某一 DAG 层分叉，共享上层数据。类似于 Git branch。"
         >
           <option value="">基础世界</option>
@@ -57,13 +59,16 @@ export default function BranchSelector({
       </div>
 
       {selectedMeta && (
-        <div className="text-sm text-gray-400 flex flex-wrap gap-x-4">
-          <span>
+        <div className="text-sm text-gray-400 flex flex-wrap items-start gap-x-4">
+          <span className="shrink-0">
             <span className="text-gray-600">分叉层：</span>
             {LAYER_LABELS[selectedMeta.fork_layer] ?? selectedMeta.fork_layer}
           </span>
           {selectedMeta.description && (
-            <span>
+            <span
+              className="truncate max-w-[240px]"
+              title={selectedMeta.description}
+            >
               <span className="text-gray-600">描述：</span>
               {selectedMeta.description}
             </span>

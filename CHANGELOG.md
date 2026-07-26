@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-07-27
+
+### Added
+
+**海平面自动校准 ("倒水")**
+- 新增 `_apply_sea_level_calibration()`: 对 elevation × area 分布进行二分查找,匹配 `target_land_fraction`,O(n) 无排序
+- 新增 config: `sea_level_auto` (bool, 默认 true), `target_land_fraction` (float, 默认 0.29)
+- 隐含水预算在日志中以 km 等效深度 + million km³ 绝对体积报告
+
+**板块裂解 (Cortial 2019 §4.4)**
+- 超板块概率加成: 面积 > 2× 均值的板块有 1.5–3× 加成
+- 10-step BFS 冷却期防止碎片化
+- `rift_base_rate` / `rift_min_pieces` / `rift_max_pieces` 配置参数
+
+**前端**
+- Bartholomew 经典分层设色方案 (蓝→青→绿→黄→棕→白)
+- 16-bit PNG 解码获取精确高程值
+- 3D 地球: SunLight 动态光照恢复, 相机防止进入球体内部
+- 状态栏和 cell inspector 统一高程数据源
+- 全局异常边界 (ErrorBoundary)
+
+**CLI**
+- `terrain generate` 自动记录生成命令到 `generation_command.json`
+
+### Changed
+
+- 造山带改为**大圆弧曲线**并设置 30° 长度上限
+- 内陆造山带每板块上限为 4 条, 面积缩放调整为每 800 cell
+- 海岸低地与中海拔高原颜色可区分
+
+### Fixed
+
+- `classify_sea_land()`: 被淹没的大陆地壳不再错误重分类为 transitional, 大陆地壳比例现在地质正确 (> 露出陆地)
+- gaia-m 星球 ID 修正 + 3D 球面实时缩放显示
+- `onDistanceChange` 低于过渡阈值时不再被忽略
+- PNG 量化不再导致海岸线颜色渗色
+- 海洋深度色标方向修正
+
 ## [0.7.3] — 2026-07-26
 
 ### Fixed

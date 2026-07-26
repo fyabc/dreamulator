@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -938,6 +939,12 @@ def terrain_generate(
     if benchmark:
         _save_benchmark(result, cfg, output_dir)
 
+    # Record the exact command used (helps reproduce results later)
+    _save_command_record(
+        output_dir, sys.argv,
+        world=world, planet_id=planet_id, branch=branch, data_dir=data_dir,
+    )
+
     # Auto-generate branch README to help users navigate
     _write_branch_readme(output_dir, world, planet_id, branch)
 
@@ -987,6 +994,44 @@ def _save_benchmark(
         encoding="utf-8",
     )
     console.print(f"  [dim]Benchmark saved: {bench_path.name}[/dim]")
+
+
+def _save_command_record(
+    output_dir: Path,
+    argv: list[str],
+    *,
+    world: str,
+    planet_id: str,
+    branch: str | None,
+    data_dir: Path | None,
+) -> None:
+    """Save a small JSON recording the exact CLI command for reproducibility."""
+    import json
+    from datetime import datetime, timezone
+
+    # Reconstruct a portable command (strip venv prefix)
+    cmd_parts = []
+    skip = True
+    for a in argv:
+        if skip and ("dreamulator" in a or a.endswith("/dreamulator") or a.endswith("\\dreamulator")):
+            cmd_parts.append("dreamulator")
+            skip = False
+        elif not skip:
+            cmd_parts.append(a)
+        elif a in ("terrain", "generate"):
+            cmd_parts.append(a)
+            skip = False
+    record = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "world": world,
+        "planet": planet_id,
+        "branch": branch,
+        "data_dir": str(data_dir.resolve()) if data_dir else "(default)",
+        "command": " ".join(cmd_parts) if cmd_parts else " ".join(argv),
+    }
+    path = output_dir / "generation_command.json"
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+    console.print(f"  [dim]Command saved: {path.name}[/dim]")
 
 
 @terrain_app.command("validate")

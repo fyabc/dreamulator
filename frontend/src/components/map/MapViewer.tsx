@@ -146,15 +146,13 @@ export default function MapViewer({
   // Cell-ID map
   const cellIdMap = useCellIdMap({ cvtMesh, width: mapW, height: mapH })
 
-  // Loading indicator
+  // Loading indicator (useEffect avoids rAF in render body, enables cleanup)
   const [isRendering, setIsRendering] = useState(false)
-  const prevRenderKey = useRef('')
-  const renderKey = `eqr_${JSON.stringify(layers)}_${cellIdMap ? 'ready' : 'pending'}`
-  if (prevRenderKey.current !== renderKey) {
-    prevRenderKey.current = renderKey
+  useEffect(() => {
     setIsRendering(true)
-    requestAnimationFrame(() => setIsRendering(false))
-  }
+    const rafId = requestAnimationFrame(() => setIsRendering(false))
+    return () => cancelAnimationFrame(rafId)
+  }, [layers, cellIdMap])
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false)
@@ -279,6 +277,18 @@ export default function MapViewer({
     camera.updateProjectionMatrix()
     renderer.setSize(containerSize.width, containerSize.height)
     renderer.render(scene, camera)
+
+    return () => {
+      // Cleanup meshes on unmount / re-creation
+      for (const ref of [meshRef, ghostLeftRef, ghostRightRef]) {
+        const m = ref.current
+        if (m) {
+          scene.remove(m)
+          m.geometry?.dispose()
+          if (m.material instanceof THREE.Material) m.material.dispose()
+        }
+      }
+    }
   }, [webgpuReady, terrainTexture, useGPU, gpuMaterial, mapW, mapH, containerSize])
 
   // --- Viewport (used by mapCoords functions) ---

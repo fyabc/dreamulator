@@ -198,7 +198,13 @@ export default function WorldDetail() {
       setPreviewElevation(null)
       return
     }
-    decodePngToFloat32(mapElevationBlob).then(({ data }) => setPreviewElevation(data))
+    let cancelled = false
+    decodePngToFloat32(mapElevationBlob).then(({ data }) => {
+      if (!cancelled) setPreviewElevation(data)
+    }).catch(() => {
+      if (!cancelled) setPreviewElevation(null)
+    })
+    return () => { cancelled = true }
   }, [mapElevationBlob])
 
   const buildMutation = useMutation({
@@ -409,7 +415,7 @@ export default function WorldDetail() {
                         className="relative cursor-pointer group rounded-lg overflow-hidden"
                         onClick={() => {
                           const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-                          navigate(`/worlds/${worldName}/globe/${firstMapPlanet}${qs}`)
+                          navigate(`/worlds/${worldName}/globe/${encodeURIComponent(firstMapPlanet)}${qs}`)
                         }}
                       >
                         <MapPreviewCanvas

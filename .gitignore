@@ -48,3 +48,6 @@ data/worlds/*/simulations/
 .claude/settings.local.json
 .claude/notes/
 private/plans/video/
+
+# Generated terrain command record (machine-specific, not for publishing)
+data/**/maps/*/generation_command.json

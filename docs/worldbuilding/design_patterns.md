@@ -282,4 +282,55 @@ elevation → temperature → biomes
 
 ---
 
+## 模式 6：PID 自适应参数调节
+
+**概念**：比例-积分-微分控制器（PID controller）是工业控制中的经典算法，
+在 dreamulator 中用于自动调节模拟参数，使系统在变化条件下保持目标状态。
+核心思想：**测量当前值 → 与目标比较 → 微调参数 → 重复**。
+
+与一步到位的参数设定不同，PID 提供**缓慢适应**——模拟真实地质/物理过程的惯性。
+
+**算法伪代码**：
+
+```python
+def adaptive_pid(current_value, target, base_rate, history):
+    # 滑动平均平滑噪声
+    avg = mean(history[-window:])
+
+    # 比例响应（P 项）：偏差越大，调整越强
+    if avg < target * 0.6:      # 严重偏低
+        rate = min(base_rate * 5, rate * 1.25)   # 加速但设上限
+    elif avg > target * 1.5:    # 严重偏高
+        rate = max(base_rate * 0.2, rate * 0.80) # 减速但设下限
+    else:                        # 正常范围
+        rate += (base_rate - rate) * 0.1          # 向基准衰减
+
+    return rate
+```
+
+**关键参数**：
+
+| 参数 | 含义 | 推荐值 |
+|------|------|--------|
+| 窗口大小 | 滑动平均的步数 | 5（平衡响应速度与噪声过滤） |
+| 触发阈值 | 离目标多远才调整 | 0.6× / 1.5×（避免频繁微调） |
+| 调整速率 | 每次调整的幅度 | ×1.25 / ×0.80（缓慢修正） |
+| 上限/下限 | 防止失控 | ×5 / ×0.2（绝对不许裂解归零或暴增） |
+| 衰减速率 | 正常时向基准回归 | 0.1（每步回归 10%） |
+
+**代码库中的使用**：
+
+| 模块 | 文件 | 调节目标 | PID 参数 |
+|------|------|---------|----------|
+| 构造演化 | `tectonic_simulator.py:489-502` | 板块数量稳定在 12-15 | λ₀ (裂解率) |
+| （建议） | 地形合成 | 目标海陆比 70:30 | sea_level_m |
+| （建议） | 气候模拟 | 目标全球均温 | atmosphere_factor |
+
+**参考**：
+- `docs/usage/terrain-pipeline.md` §D.12 — 板块裂解 PID 实现细节
+- `src/dreamulator/map/tectonic_simulator.py` — `_evolve_cortial2019()` 中的 PID 控制器
+- Matthews et al. (2016) — 地球 410 My 板块数量参考数据
+
+---
+
 *模式将持续从代码库中提取和补充。每个模式的 "参考" 给出了源码位置以便查阅。*

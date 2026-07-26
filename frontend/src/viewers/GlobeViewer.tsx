@@ -43,6 +43,10 @@ interface GlobeViewerProps {
   transitionLabel?: string
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
+  /** Called when the pointer leaves the globe surface. */
+  onHoverOut?: () => void
+  /** Called with current camera distance (planet radii). */
+  onDistanceChange?: (dist: number) => void
   /** CVT vertices (lon/lat). */
   vertices?: GlobeVertex[]
   /** CVT regions (cell → vertex IDs). */
@@ -51,6 +55,10 @@ interface GlobeViewerProps {
   hoveredCellId?: number | null
   /** Selected cell IDs (yellow highlight). */
   selectedCellIds?: Set<number>
+  /** Sun longitude in degrees (0 = noon at prime meridian). */
+  sunLongitudeDeg?: number
+  /** Planet axial tilt in degrees. */
+  axialTiltDeg?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +70,26 @@ function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
   const lat = Math.asin(THREE.MathUtils.clamp(n.y, -1, 1)) * THREE.MathUtils.RAD2DEG
   const lon = Math.atan2(n.z, n.x) * THREE.MathUtils.RAD2DEG
   return { lon, lat }
+}
+
+// ---------------------------------------------------------------------------
+// SunLight — directional light positioned by sun longitude + axial tilt
+// ---------------------------------------------------------------------------
+
+const SUN_DIST = 8
+const SUN_INTENSITY = 1.2
+
+function SunLight({ sunLongitudeDeg = 0, axialTiltDeg = 0 }: { sunLongitudeDeg?: number; axialTiltDeg?: number }) {
+  const lightPos = useMemo(() => {
+    const lonRad = (sunLongitudeDeg * Math.PI) / 180
+    const tiltRad = (axialTiltDeg * Math.PI) / 180
+    const dir = new THREE.Vector3(-Math.cos(lonRad), 0, -Math.sin(lonRad))
+    dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), tiltRad)
+    dir.multiplyScalar(SUN_DIST)
+    return [dir.x, dir.y, dir.z] as [number, number, number]
+  }, [sunLongitudeDeg, axialTiltDeg])
+
+  return <directionalLight position={lightPos} intensity={SUN_INTENSITY} />
 }
 
 // ---------------------------------------------------------------------------
@@ -220,19 +248,76 @@ interface GlobeSceneProps {
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
+  onHoverOut?: () => void
   vertices?: GlobeVertex[]
   regions?: GlobeRegion[]
   hoveredCellId?: number | null
   selectedCellIds?: Set<number>
+  sunLongitudeDeg?: number
+  axialTiltDeg?: number
+}
+
+// North-pole fly animation duration (ms)
+const NORTH_ANIM_DURATION = 600
+// Default view: camera on +Z axis, north pole (+Y) = top of screen
+const NORTH_VIEW_POS = new THREE.Vector3(0, 0, 2.8)
+const NORTH_VIEW_TARGET = new THREE.Vector3(0, 0, 0)
+
+interface NorthAnimState {
+  startTime: number
+  startPos: THREE.Vector3
+  startTarget: THREE.Vector3
 }
 
 function GlobeScene({
-  texture, distanceRef, onCellHover, onCellClick,
+  texture, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
+  sunLongitudeDeg, axialTiltDeg,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
+  const northAnimRef = useRef<NorthAnimState | null>(null)
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
+
+  // Smooth camera animation (north-pole fly)
+  useFrame(({ camera }) => {
+    const anim = northAnimRef.current
+    if (!anim) return
+    const controls = controlsRef.current
+    if (!controls) return
+
+    const elapsed = performance.now() - anim.startTime
+    const t = Math.min(1, elapsed / NORTH_ANIM_DURATION)
+    const ease = 1 - (1 - t) ** 3
+
+    camera.position.lerpVectors(anim.startPos, NORTH_VIEW_POS, ease)
+    controls.target.lerpVectors(anim.startTarget, NORTH_VIEW_TARGET, ease)
+    controls.update()
+
+    if (t >= 1) northAnimRef.current = null
+  })
+
+  // Keyboard shortcut: N → reset to default view (north pole = top of screen)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'n' && e.key !== 'N') return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      const controls = controlsRef.current
+      if (!controls) return
+      const camera = controls.object as THREE.Camera
+
+      northAnimRef.current = {
+        startTime: performance.now(),
+        startPos: camera.position.clone(),
+        startTarget: controls.target.clone(),
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // Build region lookup: cellId → region
   const regionMap = useMemo(() => {
@@ -257,7 +342,7 @@ function GlobeScene({
     <>
       <Stars radius={50} depth={30} count={2000} factor={4} saturation={0} fade speed={0.2} />
       <ambientLight intensity={0.25} />
-      <directionalLight position={[5, 2, 5]} intensity={1.2} />
+      <SunLight sunLongitudeDeg={sunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
 
       {/* Planet sphere with pointer events */}
       <mesh
@@ -265,6 +350,7 @@ function GlobeScene({
           const pt = e.point as THREE.Vector3 | undefined
           if (pt) { const { lon, lat } = sphereToLonLat(pt); onCellHover?.(lon, lat) }
         }}
+        onPointerOut={() => onHoverOut?.()}
         onDoubleClick={(e: any) => {
           const pt = e.point as THREE.Vector3 | undefined
           if (pt) {
@@ -297,8 +383,9 @@ function GlobeScene({
       </mesh>
 
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08}
-        minDistance={SPHERE_RADIUS * 1.05} maxDistance={TRANSITION_END_DIST}
-        maxPolarAngle={Math.PI * 0.85} target={[0, 0, 0]} />
+        minDistance={SPHERE_RADIUS * 1.2} maxDistance={TRANSITION_END_DIST}
+        maxPolarAngle={Math.PI} target={[0, 0, 0]}
+        zoomSpeed={0.8} />
     </>
   )
 }
@@ -330,8 +417,9 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 
 export default function GlobeViewer({
   texture, onTransition, transitionLabel = '转入星系视图',
-  onCellHover, onCellClick,
+  onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
+  sunLongitudeDeg, axialTiltDeg,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -340,6 +428,7 @@ export default function GlobeViewer({
   useEffect(() => {
     const interval = setInterval(() => {
       const dist = distanceRef.current
+      onDistanceChange?.(dist)
       if (dist <= TRANSITION_START_DIST) { setProgress(0); return }
       const p = Math.min(1, (dist - TRANSITION_START_DIST) / (TRANSITION_END_DIST - TRANSITION_START_DIST))
       setProgress(p)
@@ -350,7 +439,7 @@ export default function GlobeViewer({
       if (p < 0.98) navigateRef.current = false
     }, DIST_POLL_MS)
     return () => clearInterval(interval)
-  }, [onTransition])
+  }, [onTransition, onDistanceChange])
 
   useEffect(() => { setProgress(0); navigateRef.current = false }, [texture])
 
@@ -366,8 +455,10 @@ export default function GlobeViewer({
           <GlobeScene
             texture={texture} distanceRef={distanceRef}
             onCellHover={onCellHover} onCellClick={onCellClick}
+            onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
+            sunLongitudeDeg={sunLongitudeDeg} axialTiltDeg={axialTiltDeg}
           />
         </Canvas>
       </Suspense>

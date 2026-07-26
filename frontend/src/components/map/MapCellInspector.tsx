@@ -66,26 +66,46 @@ function PlanetSummary({
   const cells = cvtMesh.cells
   const totalCells = cells.length
 
-  // Land/sea ratio (elevation > 0 = land in absolute metres)
-  const landCount = cells.filter((c) => c.elevation > 0).length
-  const landPct = totalCells > 0 ? ((landCount / totalCells) * 100).toFixed(1) : '0'
-  const seaPct = totalCells > 0 ? (((totalCells - landCount) / totalCells) * 100).toFixed(1) : '0'
-
-  // Elevation range
+  // Aggregate stats over all cells
+  let landCount = 0
+  let landArea = 0
+  let oceanArea = 0
+  let continentalArea = 0
+  let oceanicArea = 0
   let elevMin = Infinity
   let elevMax = -Infinity
+  const plateIds = new Set<string>()
+
   for (const c of cells) {
+    const area = c.area_km2 ?? 0
+    if (c.elevation > 0) {
+      landCount++
+      landArea += area
+    } else {
+      oceanArea += area
+    }
+    if (c.crust_type === 'continental') continentalArea += area
+    else oceanicArea += area
     if (c.elevation < elevMin) elevMin = c.elevation
     if (c.elevation > elevMax) elevMax = c.elevation
+    if (c.plate_id) plateIds.add(c.plate_id)
   }
   if (!isFinite(elevMin)) elevMin = 0
   if (!isFinite(elevMax)) elevMax = 0
 
-  // Unique plate count
-  const plateIds = new Set<string>()
-  for (const c of cells) {
-    if (c.plate_id) plateIds.add(c.plate_id)
-  }
+  const totalCellsNum = totalCells
+  const landPct = totalCellsNum > 0 ? ((landCount / totalCellsNum) * 100).toFixed(1) : '0'
+  const seaPct = totalCellsNum > 0 ? (((totalCellsNum - landCount) / totalCellsNum) * 100).toFixed(1) : '0'
+  const totalArea = landArea + oceanArea
+  const crustPct = totalArea > 0 ? (continentalArea / totalArea * 100).toFixed(1) : '0'
+  const seaLevel = 0
+  const peakProminence = elevMax - seaLevel
+  const maxOceanDepth = seaLevel - elevMin
+
+  const fmtKm2 = (km2: number) =>
+    km2 > 1_000_000
+      ? `${(km2 / 1_000_000).toFixed(1)}M km²`
+      : `${km2.toLocaleString(undefined, { maximumFractionDigits: 0 })} km²`
 
   return (
     <div className="space-y-3">
@@ -106,10 +126,36 @@ function PlanetSummary({
           </dd>
         </div>
         <div className="flex justify-between">
+          <dt className="text-gray-500">陆地面积</dt>
+          <dd className="font-mono text-right text-green-400">{fmtKm2(landArea)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-gray-500">海洋面积</dt>
+          <dd className="font-mono text-right text-blue-400">{fmtKm2(oceanArea)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-gray-500">总表面积</dt>
+          <dd className="font-mono text-right">{fmtKm2(totalArea)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-gray-500">陆壳 / 洋壳</dt>
+          <dd className="font-mono text-right">
+            {crustPct}% / {(100 - Number(crustPct)).toFixed(1)}%
+          </dd>
+        </div>
+        <div className="flex justify-between">
           <dt className="text-gray-500">高程范围</dt>
           <dd className="font-mono text-right">
             {formatNumber(Math.round(elevMin))} ~ {formatNumber(Math.round(elevMax))} m
           </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-gray-500">最高点</dt>
+          <dd className="font-mono text-right">{formatNumber(Math.round(peakProminence))} m</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-gray-500">最深海</dt>
+          <dd className="font-mono text-right">{formatNumber(Math.round(maxOceanDepth))} m</dd>
         </div>
         <div className="flex justify-between">
           <dt className="text-gray-500">板块数</dt>

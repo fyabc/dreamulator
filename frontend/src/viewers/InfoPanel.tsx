@@ -3,9 +3,11 @@
  */
 
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import type { StarData } from './StarMesh'
 import type { PlanetData } from './PlanetMesh'
 import { formatRadius, formatMass } from './utils/scale'
+import type { CVTMesh } from './map/types'
 
 type SelectedBody =
   | { type: 'star'; data: StarData }
@@ -21,6 +23,8 @@ interface InfoPanelProps {
   branchQS?: string
   /** Set of planet IDs that have 2D map / globe data. */
   mapPlanetIds?: Set<string>
+  /** CVT mesh for the selected planet — enables terrain summary section. */
+  cvtMesh?: CVTMesh | null
 }
 
 const PLANET_TYPE_LABELS: Record<string, string> = {
@@ -34,14 +38,16 @@ const PLANET_TYPE_LABELS: Record<string, string> = {
 function InfoRow({ label, value }: { label: string; value: string | number | undefined }) {
   if (value == null) return null
   return (
-    <div className="flex justify-between gap-4 text-sm py-0.5">
+    <div className="flex justify-between gap-4 text-sm py-px">
       <span className="text-gray-500">{label}</span>
       <span className="text-gray-200 font-mono text-right">{value}</span>
     </div>
   )
 }
 
-export default function InfoPanel({ selected, onClose, worldName, branchQS, mapPlanetIds }: InfoPanelProps) {
+export default function InfoPanel({ selected, onClose, worldName, branchQS, mapPlanetIds, cvtMesh }: InfoPanelProps) {
+  const [terrainOpen, setTerrainOpen] = useState(false)
+
   if (!selected) return null
 
   return (
@@ -92,20 +98,87 @@ export default function InfoPanel({ selected, onClose, worldName, branchQS, mapP
           const planet = selected.data
           const typeLabel = PLANET_TYPE_LABELS[planet.planet_type ?? ''] ?? planet.planet_type ?? 'N/A'
           return (
-            <div className="space-y-0.5">
-              <InfoRow label="类型" value={typeLabel} />
-              <InfoRow label="质量" value={formatMass(planet.mass)} />
-              <InfoRow label="半径" value={formatRadius(planet.radius)} />
-              <InfoRow label="反照率" value={planet.albedo} />
-              <InfoRow label="轴倾角" value={planet.axial_tilt_deg != null ? `${planet.axial_tilt_deg}°` : undefined} />
-              <InfoRow label="自转周期" value={planet.rotation_period_days != null ? `${planet.rotation_period_days} 天` : undefined} />
-              {planet.atmosphere && (
-                <InfoRow label="大气压" value={`${planet.atmosphere.surface_pressure_atm ?? 1} atm`} />
-              )}
-              {planet.hydrosphere && (
-                <InfoRow label="水覆盖率" value={`${Math.round((planet.hydrosphere.water_coverage ?? 0) * 100)}%`} />
-              )}
-            </div>
+            <>
+              <div className="space-y-0.5">
+                <InfoRow label="类型" value={typeLabel} />
+                <InfoRow label="质量" value={formatMass(planet.mass)} />
+                <InfoRow label="半径" value={formatRadius(planet.radius)} />
+                <InfoRow label="反照率" value={planet.albedo} />
+                <InfoRow label="轴倾角" value={planet.axial_tilt_deg != null ? `${planet.axial_tilt_deg}°` : undefined} />
+                <InfoRow label="自转周期" value={planet.rotation_period_days != null ? `${planet.rotation_period_days} 天` : undefined} />
+                {planet.atmosphere && (
+                  <InfoRow label="大气压" value={`${planet.atmosphere.surface_pressure_atm ?? 1} atm`} />
+                )}
+                {planet.hydrosphere && (
+                  <InfoRow label="水覆盖率" value={`${Math.round((planet.hydrosphere.water_coverage ?? 0) * 100)}%`} />
+                )}
+              </div>
+
+              {/* Terrain summary (collapsible, when CVT mesh data is available) */}
+              {cvtMesh?.cells && cvtMesh.cells.length > 0 && (() => {
+                const cells = cvtMesh.cells
+                const totalCells = cells.length
+                let landArea = 0
+                let oceanArea = 0
+                let continentalArea = 0
+                let oceanicArea = 0
+                let elevMin = Infinity
+                let elevMax = -Infinity
+                const plateIds = new Set<string>()
+
+                for (const c of cells) {
+                  const area = c.area_km2 ?? 0
+                  if (c.elevation > 0) landArea += area
+                  else oceanArea += area
+                  if (c.crust_type === 'continental') continentalArea += area
+                  else oceanicArea += area
+                  if (c.elevation < elevMin) elevMin = c.elevation
+                  if (c.elevation > elevMax) elevMax = c.elevation
+                  if (c.plate_id) plateIds.add(c.plate_id)
+                }
+                if (!isFinite(elevMin)) elevMin = 0
+                if (!isFinite(elevMax)) elevMax = 0
+
+                const totalArea = landArea + oceanArea
+                const landPct = totalArea > 0 ? (landArea / totalArea * 100).toFixed(1) : '0'
+                const seaPct = totalArea > 0 ? (oceanArea / totalArea * 100).toFixed(1) : '0'
+                const crustPct = totalArea > 0 ? (continentalArea / totalArea * 100).toFixed(1) : '0'
+                const seaLevel = 0
+                const peakProminence = elevMax - seaLevel
+                const maxOceanDepth = seaLevel - elevMin
+
+                const fmtKm2 = (km2: number) =>
+                  km2 > 1_000_000
+                    ? `${(km2 / 1_000_000).toFixed(1)}M km²`
+                    : `${km2.toLocaleString(undefined, { maximumFractionDigits: 0 })} km²`
+
+                return (
+                  <div className="mt-2 pt-2 border-t border-space-border">
+                    <button
+                      onClick={() => setTerrainOpen((v) => !v)}
+                      className="flex items-center gap-1 text-xs text-gray-500 font-semibold hover:text-neon-cyan transition-colors w-full text-left"
+                    >
+                      <span className="font-mono text-[10px]">{terrainOpen ? '▾' : '▸'}</span>
+                      🌍 地形数据
+                    </button>
+                    {terrainOpen && (
+                      <div className="mt-1 space-y-0">
+                        <InfoRow label="海陆比例" value={`${landPct}% / ${seaPct}%`} />
+                        <InfoRow label="陆地面积" value={fmtKm2(landArea)} />
+                        <InfoRow label="海洋面积" value={fmtKm2(oceanArea)} />
+                        <InfoRow label="陆壳 / 洋壳" value={`${crustPct}% / ${(100 - Number(crustPct)).toFixed(1)}%`} />
+                        <InfoRow label="高程范围" value={`${Math.round(elevMin)} ~ ${Math.round(elevMax)} m`} />
+                        <InfoRow label="最高点" value={`${Math.round(peakProminence)} m`} />
+                        <InfoRow label="最深海" value={`${Math.round(maxOceanDepth)} m`} />
+                        <InfoRow label="板块数" value={plateIds.size} />
+                        <InfoRow label="网格单元" value={totalCells.toLocaleString()} />
+                        <InfoRow label="Seed" value={cvtMesh.seed} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </>
           )
         })()}
 

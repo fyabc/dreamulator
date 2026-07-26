@@ -18,6 +18,7 @@ import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapCellInspector from '../components/map/MapCellInspector'
+import SunControl from '../components/map/SunControl'
 import HelpPanel from '../components/map/HelpPanel'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useCellIdMap from '../viewers/map/useCellIdMap'
@@ -53,17 +54,36 @@ export default function GlobeViewerPage() {
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
 
   // --- Data ---
-  const { data: meta } = useQuery({
+  const { data: meta, isError: metaError } = useQuery({
     queryKey: ['mapMeta', worldName, planetId, selectedBranch],
     queryFn: () => api.getMapMeta(worldName!, planetId!, selectedBranch),
     enabled: !!worldName && !!planetId,
   })
 
+  // Planet definitions (for axial tilt, name, etc.)
+  const { data: planets } = useQuery({
+    queryKey: ['planets', worldName, selectedBranch],
+    queryFn: () => api.getPlanets(worldName!, selectedBranch),
+    enabled: !!worldName,
+    retry: false,
+  })
+
+  const currentPlanet = useMemo(() => {
+    if (!planets || !planetId) return null
+    return planets.find((p: any) => p.id === planetId) ?? null
+  }, [planets, planetId])
+
+  const axialTiltDeg = currentPlanet?.axial_tilt_deg ?? 0
+
+  // --- Sun lighting state ---
+  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(0)
+  const [globeZoom, setGlobeZoom] = useState(1)
+
   const elevMin = meta?.elevation_min_m ?? -11000
   const elevMax = meta?.elevation_max_m ?? 9000
   const seaLevel = meta?.sea_level_m ?? 0
 
-  const { data: elevationBlob } = useQuery({
+  const { data: elevationBlob, isError: elevError } = useQuery({
     queryKey: ['elevationBlob', worldName, planetId, selectedBranch],
     queryFn: () => api.getElevationBlob(worldName!, planetId!, selectedBranch),
     enabled: !!worldName && !!planetId, retry: false,
@@ -82,7 +102,7 @@ export default function GlobeViewerPage() {
   }, [elevationBlob])
 
   // CVT mesh (for plates/boundaries modes + cell lookup)
-  const { data: cvtMesh } = useQuery({
+  const { data: cvtMesh, isError: cvtMeshError } = useQuery({
     queryKey: ['cvtMesh', worldName, planetId, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, planetId!, selectedBranch),
     enabled: !!worldName && !!planetId, retry: false,
@@ -151,15 +171,6 @@ export default function GlobeViewerPage() {
       ? (elevData?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
       : 0
 
-    setCursor({
-      lon: Math.round(lon * 100) / 100,
-      lat: Math.round(lat * 100) / 100,
-      elevation: elev,
-      elevationM: normalisedToMeters(elev, elevMin, elevMax),
-      pixelX: px,
-      pixelY: py,
-    })
-
     if (kdTree) {
       const rad = THREE.MathUtils.degToRad(lat)
       const cosLat = Math.cos(rad)
@@ -169,10 +180,29 @@ export default function GlobeViewerPage() {
         cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
       )
       setHoveredCellId(cellId >= 0 ? cellId : null)
+
+      // Use CVT mesh elevation directly — same source as the right panel
+      const meshElev = cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
+      setCursor({
+        lon: Math.round(lon * 100) / 100,
+        lat: Math.round(lat * 100) / 100,
+        elevation: meshElev ?? elev,
+        elevationM: meshElev != null ? Math.round(meshElev) : Math.round(normalisedToMeters(elev, elevMin, elevMax)),
+        pixelX: px,
+        pixelY: py,
+      })
     } else {
       setHoveredCellId(null)
+      setCursor({
+        lon: Math.round(lon * 100) / 100,
+        lat: Math.round(lat * 100) / 100,
+        elevation: elev,
+        elevationM: Math.round(normalisedToMeters(elev, elevMin, elevMax)),
+        pixelX: px,
+        pixelY: py,
+      })
     }
-  }, [elevData, meta, elevMin, elevMax, kdTree])
+  }, [elevData, meta, elevMin, elevMax, kdTree, voronoiCells])
 
   const handleCellClick = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
     if (!kdTree) return
@@ -220,7 +250,7 @@ export default function GlobeViewerPage() {
         <Link to={`/worlds/${worldName}`}
           className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">← 返回</Link>
         <h1 className="text-base sm:text-lg font-bold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
-        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{planetId}</span>
+        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{currentPlanet?.name ?? planetId}</span>
         <div className="flex-1" />
         <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
           className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
@@ -248,6 +278,13 @@ export default function GlobeViewerPage() {
         </button>
       </div>
 
+      {/* Error banner */}
+      {(metaError || elevError || cvtMeshError) && (
+        <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
+          部分数据加载失败，请检查网络连接或切换分支重试。
+        </div>
+      )}
+
       {/* Main content */}
       <div className="flex-1 min-h-0 relative">
         {/* === Mobile layout (visible only < md) === */}
@@ -256,7 +293,9 @@ export default function GlobeViewerPage() {
             <div className="flex-1 min-h-0 relative">
               {!terrainTexture ? (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                  {elevationBlob && !elevData ? '解码高度图中...'
+                  {elevError
+                    ? '该行星暂无地图数据'
+                    : elevationBlob && !elevData ? '解码高度图中...'
                     : elevationBlob && elevData ? '生成纹理中...'
                     : '加载地图数据...'}
                 </div>
@@ -266,14 +305,18 @@ export default function GlobeViewerPage() {
                 onTransition={handleTransition}
                 onCellHover={handleCellHover}
                 onCellClick={handleCellClick}
+                onHoverOut={() => { setHoveredCellId(null); setCursor(null) }}
+                onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
                 regions={globeRegions}
                 hoveredCellId={hoveredCellId}
                 selectedCellIds={selectedCells}
+                sunLongitudeDeg={sunLongitudeDeg}
+                axialTiltDeg={axialTiltDeg}
               />
             )}
           </div>
-          <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
         </div>
 
         {/* Floating toggle (mobile only) */}
@@ -297,6 +340,9 @@ export default function GlobeViewerPage() {
                 <button onClick={() => setLeftPanelOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
               </div>
               <MapLayerPanel state={layerState} onChange={setLayerState} />
+              <div className="mt-3 pt-3 border-t border-space-border">
+                <SunControl sunLongitudeDeg={sunLongitudeDeg} onChange={setSunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
+              </div>
             </div>
           </>
         )}
@@ -307,6 +353,9 @@ export default function GlobeViewerPage() {
           {/* Left panel: layers */}
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
             <MapLayerPanel state={layerState} onChange={setLayerState} />
+            <div className="mt-3 pt-3 border-t border-space-border">
+              <SunControl sunLongitudeDeg={sunLongitudeDeg} onChange={setSunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
+            </div>
           </div>
 
       {/* Centre: globe */}
@@ -314,7 +363,9 @@ export default function GlobeViewerPage() {
         <div className="flex-1 min-h-0 relative">
           {!terrainTexture ? (
             <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-              {elevationBlob && !elevData ? '解码高度图中...'
+              {elevError
+                ? '该行星暂无地图数据'
+                : elevationBlob && !elevData ? '解码高度图中...'
                 : elevationBlob && elevData ? '生成纹理中...'
                 : '加载地图数据...'}
             </div>
@@ -324,14 +375,18 @@ export default function GlobeViewerPage() {
               onTransition={handleTransition}
               onCellHover={handleCellHover}
               onCellClick={handleCellClick}
+              onHoverOut={() => { setHoveredCellId(null); setCursor(null) }}
+              onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
               regions={globeRegions}
               hoveredCellId={hoveredCellId}
               selectedCellIds={selectedCells}
+              sunLongitudeDeg={sunLongitudeDeg}
+              axialTiltDeg={axialTiltDeg}
             />
           )}
         </div>
-        <MapStatusBar cursor={cursor} zoom={1} hoveredCell={hoveredCellData} />
+        <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
       </div>
 
       {/* Right panel: cell inspector */}
@@ -340,7 +395,7 @@ export default function GlobeViewerPage() {
           cell={hoveredCellData}
           plate={hoveredPlate}
           cvtMesh={cvtMesh ?? null}
-          planetName={planetId}
+          planetName={currentPlanet?.name ?? planetId}
         />
       </div>
     </div>

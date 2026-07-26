@@ -15,6 +15,7 @@ import MapCellInspector from '../components/map/MapCellInspector'
 import HelpPanel from '../components/map/HelpPanel'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
+import { PROJECTION_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell, TectonicPlate } from '../viewers/map/types'
@@ -27,24 +28,17 @@ export default function MapViewerPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Initialize branch from URL search params (persists across refresh/navigation)
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(
-    () => searchParams.get('branch') ?? null
-  )
-  const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
-
-  // Sync branch selection to URL
-  useEffect(() => {
+  // Derive branch from URL (not local state) — stays in sync with browser back/forward
+  const selectedBranch = searchParams.get('branch') || null
+  const setSelectedBranch = (branch: string | null) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (selectedBranch) {
-        next.set('branch', selectedBranch)
-      } else {
-        next.delete('branch')
-      }
+      if (branch) next.set('branch', branch)
+      else next.delete('branch')
       return next
     }, { replace: true })
-  }, [selectedBranch, setSearchParams])
+  }
+  const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
@@ -86,7 +80,7 @@ export default function MapViewerPage() {
   })
 
   // World planet definitions (for default planet ID)
-  const { data: worldPlanets } = useQuery({
+  const { data: worldPlanets, isError: worldPlanetsError } = useQuery({
     queryKey: ['worldPlanets', worldName, selectedBranch],
     queryFn: () => api.getPlanets(worldName!, selectedBranch),
     enabled: !!worldName,
@@ -122,9 +116,14 @@ export default function MapViewerPage() {
       setLocalElevation(null)
       return
     }
+    let cancelled = false
     decodePngToFloat32(elevationBlob).then(({ data }) => {
-      setLocalElevation(data)
+      if (!cancelled) setLocalElevation(data)
+    }).catch(() => {
+      // Decode failure (e.g. corrupted PNG) → treat as no data
+      if (!cancelled) setLocalElevation(null)
     })
+    return () => { cancelled = true }
   }, [elevationBlob])
 
   const { data: voronoi } = useQuery({
@@ -220,9 +219,9 @@ export default function MapViewerPage() {
           onChange={(e) => setProjection(e.target.value as ProjectionType)}
           className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
         >
-          <option value="equirectangular">等距圆柱</option>
-          <option value="mollweide">摩尔威德</option>
-          <option value="robinson">罗宾逊</option>
+          {PROJECTION_HELP.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
         </select>
 
         {/* 3D Globe button */}
@@ -277,6 +276,13 @@ export default function MapViewerPage() {
         </button>
 
       </div>
+
+      {/* Error banner */}
+      {worldPlanetsError && (
+        <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
+          行星数据加载失败，请检查网络连接或切换分支重试。
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0 relative">

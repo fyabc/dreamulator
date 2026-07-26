@@ -33,7 +33,7 @@ import logging
 
 import numpy as np
 
-from .models import CVTMesh, TectonicPlate
+from .models import CVTMesh, EulerPole, TectonicPlate
 from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -390,10 +390,9 @@ def run_tectonic_evolution(
         (plates, cell_plate_map).
     """
     algo = config.tectonic_algorithm
-    # Auto-enable if steps > 0 but no algorithm specified
+    # Backward compatibility: auto-select if YAML overrides default to ""
     if not algo and config.tectonic_steps > 0:
         algo = "cortial2019"
-        logger.info("  Auto-selected tectonic algorithm: %s", algo)
     if not algo or config.tectonic_steps <= 0:
         # No evolution — reconstruct cell map from plate data
         cell_map: dict[int, str] = {}
@@ -412,6 +411,91 @@ def run_tectonic_evolution(
             mesh, plates, config, progress_callback=progress_callback,
         )
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
+
+
+def _spawn_oceanic_crust(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    rng: np.random.Generator,
+    *,
+    step: int,
+    plate_birth_step: dict[str, int] | None = None,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """At divergent boundaries, occasionally spawn small oceanic plates.
+
+    Does NOT modify mesh topology — reassigns existing cells to new plate IDs.
+    New plates get a cooldown (recorded in plate_birth_step) to prevent
+    immediate re-absorption.  Triggers roughly every 25-40 steps.
+    """
+    # Trigger every 12-18 steps (roughly twice per 50-step run)
+    if step < 5 or step % rng.integers(12, 19) != 0:
+        return plates, cell_plate_map
+
+    # Collect boundary cells (neighbor has a different plate ID)
+    boundary: list[int] = []
+    for cid in range(mesh.num_cells):
+        pid = cell_plate_map.get(cid, "")
+        if not pid:
+            continue
+        for nid in mesh.cells[cid].neighbors:
+            npid = cell_plate_map.get(nid, "")
+            if npid and npid != pid:
+                boundary.append(cid)
+                break
+    if len(boundary) < 5:
+        return plates, cell_plate_map
+
+    # Pick a seed and expand a small cluster (~20-50 cells)
+    seed = int(rng.choice(boundary))
+    new_cells: list[int] = [seed]
+    frontier = [seed]
+    visited = {seed}
+    for _ in range(5):  # 5 layers of BFS → ~80-120 cells (big enough to survive)
+        next_frontier: list[int] = []
+        for cid in frontier:
+            for nid in mesh.cells[cid].neighbors:
+                if nid not in visited and len(new_cells) < 120:
+                    visited.add(nid)
+                    next_frontier.append(nid)
+                    new_cells.append(nid)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    if len(new_cells) < 10:
+        return plates, cell_plate_map  # too small
+
+    # Create new plate — inherit Euler pole from current owner with perturbation
+    parent_id = cell_plate_map.get(seed, "")
+    parent = next((p for p in plates if p.id == parent_id), None)
+    if parent is None:
+        return plates, cell_plate_map
+
+    # Fresh Euler pole: small perturbation from parent
+    ax = rng.standard_normal(3); ax /= np.linalg.norm(ax)
+    new_pole = EulerPole(
+        x=float(ax[0]), y=float(ax[1]), z=float(ax[2]),
+        omega_rad_yr=parent.euler_pole.omega_rad_yr * rng.uniform(0.7, 1.3),
+    )
+
+    new_id = f"oceanic_s{step:04d}"
+    new_plate = TectonicPlate(
+        id=new_id, name=f"新生洋壳 t={step}",
+        type="oceanic", cell_ids=new_cells, euler_pole=new_pole,
+    )
+    plates.append(new_plate)
+    if plate_birth_step is not None:
+        plate_birth_step[new_id] = step
+    for cid in new_cells:
+        cell_plate_map[cid] = new_id
+
+    logger.info(
+        "  Spawned oceanic crust: %d cells → plate %s at divergent boundary",
+        len(new_cells), new_id,
+    )
+    return plates, cell_plate_map
 
 
 def _rodrigues_rotate(
@@ -468,6 +552,8 @@ def _evolve_cortial2019(
     num_steps = config.tectonic_steps
     dt_my = _auto_compute_dt(mesh, config)
     radius_km = config.radius_km
+    rng = np.random.default_rng(config.seed)
+    logger.info("Tectonic evolution: seed=%d, steps=%d, rift_rate=%.4f", config.seed, num_steps, config.rift_base_rate)
 
     # Initial cell→plate map
     cell_plate_map: dict[int, str] = {}
@@ -486,6 +572,13 @@ def _evolve_cortial2019(
     )
 
     prev_cell_map = cell_plate_map
+    plate_birth_step: dict[str, int] = {p.id: 0 for p in plates}
+    COOLDOWN = max(1, num_steps // 20)  # ~5% of total run
+    # Only resample Voronoi after rifting events (Cortial 2019 strategy).
+    # Between rifts, cell ownership is stable — fragments survive to grow.
+    RESAMPLE_EVERY = 10
+    needs_resample = True
+    last_rifting_step = -RESAMPLE_EVERY
 
     for step in range(num_steps):
         # 1. Rotate centroids → find new seeds
@@ -510,8 +603,22 @@ def _evolve_cortial2019(
             new_c = _rodrigues_rotate(centroid, axis, angle_rad)
             new_seeds.append(_find_nearest_cell(new_c, mesh))
 
-        # 2. Re-run Voronoi
-        new_cell_map = _voronoi_partition(mesh, new_seeds)
+        # 2. Re-run Voronoi (only every N steps or after a rift)
+        # Protect newborn plates: lock their cells so they survive long enough to grow
+        needs_resample = (step - last_rifting_step >= RESAMPLE_EVERY)
+        if needs_resample:
+            locked: dict[int, str] = {}
+            NEWBORN_COOLDOWN = COOLDOWN * 5  # ~25 steps — give oceanic plates time to grow
+            for pid, birth in plate_birth_step.items():
+                if pid.startswith("oceanic") and step - birth < NEWBORN_COOLDOWN:
+                    for cid in range(mesh.num_cells):
+                        if cell_plate_map.get(cid) == pid:
+                            locked[cid] = pid
+            if locked:
+                logger.info("  Voronoi: %d cells locked for %d oceanic newborn(s)", len(locked), len({v for v in locked.values()}))
+            new_cell_map = _voronoi_partition(mesh, new_seeds, locked=locked)
+        else:
+            new_cell_map = prev_cell_map
 
         n_changed = sum(
             1 for cid in range(mesh.num_cells)
@@ -545,7 +652,21 @@ def _evolve_cortial2019(
         )
         _erosion(mesh, dt_my)
 
-        # 5. Update for next step
+        # 5. Plate rifting + cleanup orphan cells
+        n_before = len(plates)
+        plates, new_cell_map = _rift_plates(
+            mesh, new_cell_map, plates, config, rng,
+            step=step, plate_birth_step=plate_birth_step,
+        )
+        if len(plates) != n_before:
+            last_rifting_step = step
+        # Remove plates that ended up with 0 cells (Voronoi consolidation)
+        plates, new_cell_map = _cleanup_empty(
+            mesh, new_cell_map, plates,
+            step=step, plate_birth_step=plate_birth_step, cooldown=COOLDOWN,
+        )
+
+        # 6. Update for next step
         prev_cell_map = new_cell_map
         _rebuild_plate_cells(mesh, new_cell_map, plates)
 
@@ -561,8 +682,352 @@ def _evolve_cortial2019(
             )
 
     # Finalise
-    logger.info("Tectonic evolution complete: %d steps", num_steps)
+    logger.info(
+        "Tectonic evolution complete: %d steps, %d plates, %d cells",
+        num_steps, len(plates), mesh.num_cells,
+    )
     return plates, prev_cell_map
+
+
+def _rift_plates(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    rng: np.random.Generator,
+    *,
+    step: int = 0,
+    plate_birth_step: dict[str, int] | None = None,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """Cortial 2019 §4.4 — probabilistic plate rifting.
+
+    Larger plates are more likely to rift.  Cooldown prevents immediate
+    re-rifting of fragments.  Cells are refreshed from the current map
+    before partitioning to account for Voronoi boundary shifts.
+
+    Returns updated (plates, cell_plate_map).
+    """
+    if config.rift_base_rate <= 0 or len(plates) < 2:
+        return plates, cell_plate_map
+
+    lambda_0 = config.rift_base_rate
+    min_pieces = config.rift_min_pieces
+    max_pieces = config.rift_max_pieces
+
+    total_cells = mesh.num_cells
+    COOLDOWN = 5  # steps before a new plate can rift again
+    # Refresh cell counts from current map (Voronoi may have shifted boundaries)
+    for plate in plates:
+        plate.cell_ids = [cid for cid, pid in cell_plate_map.items() if pid == plate.id]
+    plate_areas = {p.id: len(p.cell_ids) for p in plates}
+    avg_cells = total_cells / len(plates)
+
+    for plate in list(plates):  # iterate a copy because we may mutate
+        n_cells = plate_areas[plate.id]
+        if n_cells < avg_cells * 0.5:
+            continue  # too small to rift (half the average size)
+
+        # Cooldown: normal plates must wait; super-plates (>2× avg) skip cooldown.
+        # Gondwana broke into 7 fragments over 4 phases in ~140 My — large plates
+        # rift repeatedly until they reach a stable size.
+        if plate_birth_step is not None:
+            birth = plate_birth_step.get(plate.id, -COOLDOWN)
+            if step - birth < COOLDOWN and n_cells <= avg_cells * 2:
+                continue  # only small/normal plates respect cooldown
+
+        # Super-plate boost: larger plates rift more often.
+        # Capped at 3× to prevent runaway fragmentation.
+        lam = lambda_0 * n_cells / avg_cells
+        if n_cells > avg_cells * 2:
+            boost = min(3.0, n_cells / avg_cells - 1.0)
+            lam *= boost
+        elif n_cells > avg_cells * 1.5:
+            lam *= 1.3
+        if lam < 0.001:
+            continue
+        r = rng.random()
+        if r >= lam:
+            continue
+
+        n_pieces = rng.integers(min_pieces, max_pieces + 1)
+        logger.info(
+            "  Rifting plate %s (%d cells, λ=%.3f, r=%.4f) → %d pieces",
+            plate.name, n_cells, lam, r, n_pieces,
+        )
+
+        # Pick n_pieces random seed cells from the plate
+        seed_ids = list(rng.choice(plate.cell_ids, size=min(n_pieces, n_cells), replace=False))
+        # BFS from each seed to partition the plate's cells
+        new_ids = _partition_cells(mesh, plate.cell_ids, seed_ids, rng)
+        # Filter out empty partitions (can happen with edge-positioned seeds)
+        new_ids = [g for g in new_ids if g]
+
+        if len(new_ids) < 2:
+            continue  # not enough non-empty pieces to split
+
+        # Remove old plate, add new sub-plates
+        plates.remove(plate)
+        if plate_birth_step is not None:
+            plate_birth_step.pop(plate.id, None)
+        old_id = plate.id
+        added = 0
+        assigned_total = 0
+        for i, new_id in enumerate(new_ids):
+            if not new_id:
+                continue  # skip empty partitions
+            sub_name = f"{plate.name}_{chr(65 + i)}"
+            sub_id = f"{old_id}_{chr(97 + i)}"
+            # Perturb Euler pole so fragments have distinct motion.
+            # Mild rotation (±10-20°) + ω variation (±15%) gives ~2-5 cm/yr
+            # relative motion between adjacent fragments — detectable by the
+            # boundary classifier (threshold 0.5 cm/yr) without causing the
+            # sub-plates to drift so fast that Voronoi reassigns all their cells.
+            perturb_axis = rng.standard_normal(3)
+            perturb_axis /= np.linalg.norm(perturb_axis)
+            angle_rad = rng.uniform(0.15, 0.35)  # ~10-20°
+            parent_axis = np.array([plate.euler_pole.x, plate.euler_pole.y, plate.euler_pole.z])
+            new_axis = parent_axis * np.cos(angle_rad) + np.cross(perturb_axis, parent_axis) * np.sin(angle_rad)
+            new_axis /= np.linalg.norm(new_axis)
+            new_pole = EulerPole(
+                x=float(new_axis[0]), y=float(new_axis[1]), z=float(new_axis[2]),
+                omega_rad_yr=plate.euler_pole.omega_rad_yr * rng.uniform(0.85, 1.15),
+            )
+            sub_plate = TectonicPlate(
+                id=sub_id, name=sub_name, type=plate.type,
+                cell_ids=new_id,
+                euler_pole=new_pole,
+                growth_speed_multiplier=plate.growth_speed_multiplier,
+            )
+            plates.append(sub_plate)
+            if plate_birth_step is not None:
+                plate_birth_step[sub_id] = step
+            for cid in new_id:
+                cell_plate_map[cid] = sub_id
+            added += 1
+            assigned_total += len(new_id)
+        # Safety: if total assigned != parent cells, revert the rift
+        if assigned_total != n_cells:
+            logger.warning(
+                "  Rift partition lost cells: %d assigned, %d expected — reverting",
+                assigned_total, n_cells,
+            )
+            # Restore parent plate (without the incomplete sub-plates)
+            for i in range(added):
+                plates.pop()
+            plate.cell_ids = list(plate.cell_ids)  # ensure mutable
+            plates.append(plate)
+            if plate_birth_step is not None:
+                plate_birth_step[plate.id] = -COOLDOWN  # don't try again soon
+            for cid in plate.cell_ids:
+                cell_plate_map[cid] = plate.id
+            continue
+
+    return plates, cell_plate_map
+
+
+def _partition_cells(
+    mesh: CVTMesh,
+    plate_cells: list[int],
+    seeds: list[int],
+    rng: np.random.Generator,
+) -> list[list[int]]:
+    """Partition *plate_cells* into *len(seeds)* groups via synchronous BFS.
+
+    Each seed starts a wavefront; cells are claimed by the first wave to reach them.
+    """
+    from collections import deque
+
+    cell_set = set(plate_cells)
+    queues = [deque([s]) for s in seeds]
+    assigned: dict[int, int | None] = {s: i for i, s in enumerate(seeds)}
+    total = len(seeds)
+
+    while total < len(plate_cells):
+        progress = 0
+        for i, q in enumerate(queues):
+            if not q:
+                continue
+            for _ in range(len(q)):
+                cid = q.popleft()
+                for nid in mesh.cells[cid].neighbors:
+                    if nid in cell_set and nid not in assigned:
+                        assigned[nid] = i
+                        q.append(nid)
+                        total += 1
+                        progress += 1
+        if progress == 0:
+            # Stranded cells — assign to nearest seed
+            for cid in plate_cells:
+                if cid not in assigned:
+                    assigned[cid] = 0  # fallback
+            break
+
+    result: list[list[int]] = [[] for _ in seeds]
+    for cid, idx in assigned.items():
+        if idx is not None:
+            result[idx].append(cid)
+    return result
+
+
+def _cleanup_empty(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    *,
+    absorb: bool = False,
+    cooldown: int = 5,
+    step: int = 0,
+    plate_birth_step: dict[str, int] | None = None,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """Remove plates with 0 cells; optionally absorb very tiny plates into neighbours.
+
+    Threshold: < 0.15% of surface (~0.75 M km² for Earth).  This is half the
+    size of the smallest recognised plate (Scotia: ~1.6 M km² = 0.31%).
+    """
+    if len(plates) <= 2:
+        return plates, cell_plate_map
+
+    removed = 0
+    absorbed = 0
+    tiny_threshold = max(1, int(mesh.num_cells * 0.0015))
+
+    for plate in list(plates):
+        if len(plates) <= 2:
+            break  # never go below 2 plates
+        n_cells = len(plate.cell_ids)
+        # Newborn oceanic plates get double cooldown protection
+        if plate_birth_step is not None and plate.id.startswith("oceanic"):
+            birth = plate_birth_step.get(plate.id, 0)
+            if step - birth < cooldown * 2:
+                continue
+        if n_cells == 0:
+            plates.remove(plate)
+            removed += 1
+            continue
+
+        if not absorb or n_cells >= tiny_threshold:
+            continue
+
+        # Absorb tiny plate into a neighbour
+        neighbour_counts: dict[str, int] = {}
+        for cid in plate.cell_ids:
+            for nid in mesh.cells[cid].neighbors:
+                npid = cell_plate_map.get(nid, "")
+                if npid and npid != plate.id:
+                    neighbour_counts[npid] = neighbour_counts.get(npid, 0) + 1
+        if neighbour_counts:
+            target = max(neighbour_counts, key=lambda k: neighbour_counts[k])
+            for cid in plate.cell_ids:
+                cell_plate_map[cid] = target
+            plates.remove(plate)
+            absorbed += 1
+
+    if removed or absorbed:
+        logger.debug("  Cleanup: %d empty removed, %d tiny absorbed", removed, absorbed)
+    return plates, cell_plate_map
+
+
+def _consume_small_plates(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    *,
+    step: int = 0,
+    plate_birth_step: dict[str, int] | None = None,
+    cooldown: int = 1,
+) -> tuple[list[TectonicPlate], dict[int, str]]:
+    """Absorb very small plates into neighbours — subduction-completion balance.
+
+    When an oceanic plate is almost fully subducted, its remaining cells are
+    reassigned to the adjacent plate with the longest shared boundary.
+    This prevents runaway fragmentation from the rifting step.
+
+    Threshold: plates with < 3% of the world surface area (~15 M km² for Earth).
+    Real-world examples: the Farallon plate was ~100 M km² then shrank to the
+    tiny Juan de Fuca (~0.25 M km²) and Cocos (~2.9 M km²) remnants.
+    """
+    if len(plates) <= 2:
+        return plates, cell_plate_map  # never reduce below 2 plates
+
+    total_cells = mesh.num_cells
+    # Hard floor: plates below ~0.3% of surface (~1.5 M km² for Earth)
+    # are consumed.  This is roughly the Scotia plate (1.6 M km²) —
+    # the smallest recognised tectonic plate on Earth.
+    # No auto-balance scaling: this threshold is invariant.
+    HARD_MIN_CELLS = 50  # absolute floor: never consume plates with >50 cells
+    min_cells = max(HARD_MIN_CELLS, int(total_cells * 0.003))
+
+    plate_dict = {p.id: p for p in plates}
+
+    # Phase 1: absorb plates that are too small
+    active_ids = {p.id for p in plates}
+    for plate in list(plates):
+        n_cells = len(plate.cell_ids)
+        if n_cells >= min_cells:
+            continue
+        # Cooldown: skip newly created plates
+        if plate_birth_step is not None and cooldown > 0:
+            birth = plate_birth_step.get(plate.id, 0)
+            if birth + cooldown > step:
+                continue
+
+        # Build neighbour-count map (only count neighbours that still exist)
+        neighbour_counts: dict[str, int] = {}
+        for cid in plate.cell_ids:
+            for nid in mesh.cells[cid].neighbors:
+                npid = cell_plate_map.get(nid, "")
+                if npid and npid != plate.id and npid in active_ids:
+                    neighbour_counts[npid] = neighbour_counts.get(npid, 0) + 1
+
+        if not neighbour_counts:
+            continue  # isolated plate — keep it
+
+        target_id = max(neighbour_counts, key=lambda k: neighbour_counts[k])
+        logger.info(
+            "  Absorbing %s (%d cells, %.1f%%) → %s",
+            plate.name, n_cells,
+            n_cells / total_cells * 100,
+            plate_dict[target_id].name if target_id in plate_dict else target_id,
+        )
+
+        # Reassign cells
+        for cid in plate.cell_ids:
+            cell_plate_map[cid] = target_id
+        plates.remove(plate)
+        active_ids.discard(plate.id)
+
+    # Phase 2: Re-parent orphan cells (assigned to a removed plate id).
+    # This happens when an absorbed plate's target was itself later absorbed.
+    # Run multiple passes until stable (chain absorption).
+    for _pass in range(5):
+        current_ids = {p.id for p in plates}
+        orphan_count = 0
+        for cid, pid in list(cell_plate_map.items()):
+            if pid not in current_ids:
+                # Find nearest surviving plate via neighbor BFS
+                for nid in mesh.cells[cid].neighbors:
+                    npid = cell_plate_map.get(nid, "")
+                    if npid and npid in current_ids:
+                        cell_plate_map[cid] = npid
+                        orphan_count += 1
+                        break
+                else:
+                    # No surviving neighbor found — assign to first surviving plate
+                    if current_ids:
+                        cell_plate_map[cid] = next(iter(current_ids))
+                        orphan_count += 1
+        if orphan_count:
+            logger.info("  Consumed: re-parented %d orphan cells (pass %d)", orphan_count, _pass + 1)
+        else:
+            break
+
+    # Phase 3: Remove plates that ended up with 0 cells
+    for plate in list(plates):
+        if len(plate.cell_ids) == 0:
+            plates.remove(plate)
+
+    return plates, cell_plate_map
 
 
 def _rebuild_plate_cells(

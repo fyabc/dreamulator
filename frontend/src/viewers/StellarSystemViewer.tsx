@@ -23,10 +23,12 @@ import PlanetMesh from './PlanetMesh'
 import OrbitLine from './OrbitLine'
 import HabitableZoneRing from './HabitableZoneRing'
 import InfoPanel from './InfoPanel'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { computeOrbitalPosition, earthRadiiToAU } from './utils/scale'
 import type { StarData } from './StarMesh'
 import type { PlanetData, OrbitalElementsData } from './PlanetMesh'
 import type { SelectedBody } from './InfoPanel'
+import type { CVTMesh } from './map/types'
 
 type Vec3 = [number, number, number]
 
@@ -72,6 +74,10 @@ interface StellarSystemViewerProps {
   mapPlanetIds?: Set<string>
   /** Planet ID to auto-focus camera on when the scene loads. */
   focusPlanetId?: string
+  /** CVT mesh for the currently selected planet — enables terrain summary in InfoPanel. */
+  selectedPlanetCvtMesh?: CVTMesh | null
+  /** Called when the user selects or deselects a body. */
+  onSelectionChange?: (body: SelectedBody) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +404,8 @@ export default function StellarSystemViewer({
   branchQS,
   mapPlanetIds,
   focusPlanetId,
+  selectedPlanetCvtMesh,
+  onSelectionChange,
 }: StellarSystemViewerProps) {
   const [selected, setSelected] = useState<SelectedBody>(null)
   const controlsRef = useRef<any>(null)
@@ -466,58 +474,68 @@ export default function StellarSystemViewer({
 
   return (
     <div className="relative w-full" style={{ height: '70vh', minHeight: '500px' }}>
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center h-full text-gray-500">
-            加载 3D 场景...
-          </div>
-        }
-      >
-        <Canvas
-          camera={{
-            position: [0, initialDist * 0.4, initialDist],
-            fov: 50,
-            near: 0.00001,
-            far: 5000,
-          }}
-          gl={{
-            logarithmicDepthBuffer: true,
-            antialias: true,
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.2,
-          }}
-          style={{ background: '#030308', borderRadius: '0.75rem' }}
-          onPointerMissed={() => {
-            setSelected(null)
-            focusedRadiusRef.current = null
-          }}
+      <ErrorBoundary message="3D 场景渲染失败，请尝试刷新页面。">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-full text-gray-500">
+              加载 3D 场景...
+            </div>
+          }
         >
-          <Scene
-            stellar={stellar}
-            allBodies={allBodies}
-            positionMap={positionMap}
-            satelliteCountMap={satelliteCountMap}
-            orbitMap={orbitMap}
-            habitableZones={habitableZones}
-            planetTextures={planetTextures}
-            focusPlanetId={focusPlanetId}
-            selected={selected}
-            onSelect={setSelected}
-            controlsRef={controlsRef}
-            onControlsChange={handleControlsChange}
-            focusTargetRef={focusTargetRef}
-            focusedRadiusRef={focusedRadiusRef}
-          />
-        </Canvas>
-      </Suspense>
+          <Canvas
+            camera={{
+              position: [0, initialDist * 0.4, initialDist],
+              fov: 50,
+              near: 0.00001,
+              far: 5000,
+            }}
+            gl={{
+              logarithmicDepthBuffer: true,
+              antialias: true,
+              toneMapping: THREE.ACESFilmicToneMapping,
+              toneMappingExposure: 1.2,
+            }}
+            style={{ background: '#030308', borderRadius: '0.75rem' }}
+            onPointerMissed={() => {
+              setSelected(null)
+              onSelectionChange?.(null)
+              focusedRadiusRef.current = null
+            }}
+          >
+            <Scene
+              stellar={stellar}
+              allBodies={allBodies}
+              positionMap={positionMap}
+              satelliteCountMap={satelliteCountMap}
+              orbitMap={orbitMap}
+              habitableZones={habitableZones}
+              planetTextures={planetTextures}
+              focusPlanetId={focusPlanetId}
+              selected={selected}
+              onSelect={(body) => {
+                setSelected(body)
+                onSelectionChange?.(body)
+              }}
+              controlsRef={controlsRef}
+              onControlsChange={handleControlsChange}
+              focusTargetRef={focusTargetRef}
+              focusedRadiusRef={focusedRadiusRef}
+            />
+          </Canvas>
+        </Suspense>
+      </ErrorBoundary>
 
       {/* Info panel overlay */}
       <InfoPanel
         selected={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null)
+          onSelectionChange?.(null)
+        }}
         worldName={worldName}
         branchQS={branchQS}
         mapPlanetIds={mapPlanetIds}
+        cvtMesh={selectedPlanetCvtMesh}
       />
 
       {/* HUD overlays */}

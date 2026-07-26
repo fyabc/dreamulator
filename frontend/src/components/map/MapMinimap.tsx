@@ -130,9 +130,9 @@ export default function MapMinimap({
         width={thumbW}
         height={thumbH}
       >
-        {rects.map((r, i) => (
+        {rects.map((r) => (
           <rect
-            key={i}
+            key={`${r.x}-${r.y}`}
             x={r.x}
             y={r.y}
             width={r.w}

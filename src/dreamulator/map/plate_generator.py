@@ -126,40 +126,35 @@ def select_plate_seeds(
 def _voronoi_partition(
     mesh: CVTMesh,
     seeds: list[int],
+    *,
+    locked: dict[int, str] | None = None,
 ) -> dict[int, str]:
-    """Synchronous multi-source BFS — spherical Voronoi on the CVT graph.
+    """Synchronous BFS Voronoi.  Cells in *locked* keep their current plate.
 
-    All seeds expand one layer per round.  Cells are assigned to the plate
-    whose wavefront reaches them first.  Complexity: O(N) — each cell and
-    edge is visited exactly once.
-
-    Returns:
-        Dict mapping cell_id → plate_id.
+    *locked* maps cell_id → plate_id.  These cells are never reassigned —
+    useful for protecting newborn plates during their growth phase.
     """
     num_plates = len(seeds)
     cell_plate_map: dict[int, str] = {}
 
+    # Pre-assign locked cells
+    locked_count = 0
+    if locked:
+        for cid, pid in locked.items():
+            cell_plate_map[cid] = pid
+            locked_count += 1
+
     # One FIFO queue per plate, initialised with the seed cell
     queues: list[deque[int]] = [deque([s]) for s in seeds]
     for i, seed_id in enumerate(seeds):
-        cell_plate_map[seed_id] = f"plate_{i:03d}"
+        pid = f"plate_{i:03d}"
+        if seed_id not in cell_plate_map:
+            cell_plate_map[seed_id] = pid
 
-    total_assigned = num_plates
+    total_assigned = len(cell_plate_map)
     round_num = 0
 
-    # Rich progress bar
-    try:
-        from rich.progress import Progress, BarColumn, TextColumn
-        _progress = Progress(
-            TextColumn("  Voronoi BFS [dim]{task.description}[/dim]"),
-            BarColumn(), TextColumn("[dim]{task.completed}/{task.total}[/dim]"),
-            transient=True,
-        )
-        _task = _progress.add_task("", total=mesh.num_cells)
-        _progress.start()
-    except ImportError:
-        _progress = None
-
+    prev_assigned = 0
     while total_assigned < mesh.num_cells:
         round_num += 1
 
@@ -172,22 +167,19 @@ def _voronoi_partition(
             for _ in range(len(q)):
                 cell_id = q.popleft()
                 for neighbor_id in mesh.cells[cell_id].neighbors:
-                    if neighbor_id not in cell_plate_map:
+                    if neighbor_id not in cell_plate_map and neighbor_id not in (locked or {}):
                         cell_plate_map[neighbor_id] = plate_id
                         q.append(neighbor_id)
                         total_assigned += 1
 
-        if _progress is not None:
-            _progress.update(_task, completed=total_assigned,
-                           description=f"round {round_num}")
-        elif round_num % 2 == 0:
-            logger.debug(
-                "  Voronoi BFS round %d: %d / %d cells",
-                round_num, total_assigned, mesh.num_cells,
+        # Safety: if no progress was made this round, the mesh is disconnected
+        if total_assigned == prev_assigned:
+            logger.warning(
+                "Voronoi BFS stalled at %d/%d cells (mesh may be disconnected)",
+                total_assigned, mesh.num_cells,
             )
-
-    if _progress is not None:
-        _progress.stop()
+            break
+        prev_assigned = total_assigned
 
     logger.info(
         "  Voronoi BFS: %d rounds, %d cells assigned",
@@ -367,12 +359,19 @@ def assign_crust_types(
 
         # Top N by score → continental (threshold varies per plate)
         sorted_idx = np.argsort(score)[::-1]
+        actual = 0
         for rank, idx in enumerate(sorted_idx):
             cid = cell_ids[idx]
             if rank < n_cont:
                 mesh.cells[cid].crust_type = "continental"
+                actual += 1
             else:
                 mesh.cells[cid].crust_type = "oceanic"
+        logger.warning(
+            "  ASSIGNED: %s n_cont=%d actual=%d cells=%d lat_bias=%.2f score_range=[%.3f,%.3f]",
+            plate_id, n_cont, actual, n_cells, _lat_weight,
+            float(np.min(score)), float(np.max(score)),
+        )
 
 
 # ---------------------------------------------------------------------------

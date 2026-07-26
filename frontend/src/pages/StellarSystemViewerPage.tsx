@@ -19,12 +19,14 @@ import { api } from '../api/client'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import BranchSelector from '../components/BranchSelector'
 import { decodePngToFloat32, generatePlanetTexture } from '../viewers/map/utils/imageCodec'
+import type { SelectedBody } from '../viewers/InfoPanel'
 
 export default function StellarSystemViewerPage() {
   const { worldName } = useParams<{ worldName: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedBranch = searchParams.get('branch') || null
   const focusPlanetId = searchParams.get('focus') || undefined
+  const [selectedBody, setSelectedBody] = useState<SelectedBody>(null)
 
   const setSelectedBranch = (branch: string | null) => {
     setSearchParams((prev) => {
@@ -37,21 +39,29 @@ export default function StellarSystemViewerPage() {
 
   // --- Stellar system data ---
 
-  const { data: stellarSystem, isLoading: loadingStellar } = useQuery({
+  const {
+    data: stellarSystem,
+    isLoading: loadingStellar,
+    isError: stellarError,
+  } = useQuery({
     queryKey: ['astronomy', worldName, selectedBranch],
     queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
     enabled: !!worldName,
     retry: false,
   })
 
-  const { data: planets, isLoading: loadingPlanets } = useQuery({
+  const {
+    data: planets,
+    isLoading: loadingPlanets,
+    isError: planetsError,
+  } = useQuery({
     queryKey: ['planets', worldName, selectedBranch],
     queryFn: () => api.getPlanets(worldName!, selectedBranch),
     enabled: !!worldName,
     retry: false,
   })
 
-  const { data: habitableZones } = useQuery({
+  const { data: habitableZones, isError: hzError } = useQuery({
     queryKey: ['habitable-zones', worldName, selectedBranch],
     queryFn: () => api.getHabitableZones(worldName!, selectedBranch),
     enabled: !!worldName,
@@ -68,7 +78,19 @@ export default function StellarSystemViewerPage() {
     retry: false,
   })
 
-  // 2. Batch-load map metadata for each planet that has a map
+  // 2. Fetch CVT mesh for the selected planet (enables terrain summary in InfoPanel)
+  const selectedPlanetId =
+    selectedBody?.type === 'planet' ? selectedBody.data.id : null
+  const selectedHasMap =
+    selectedPlanetId != null && (mapPlanetIds ?? []).includes(selectedPlanetId)
+  const { data: selectedPlanetCvtMesh } = useQuery({
+    queryKey: ['cvtMesh', worldName, selectedPlanetId, selectedBranch] as const,
+    queryFn: () => api.getCvtMesh(worldName!, selectedPlanetId!, selectedBranch),
+    enabled: !!worldName && selectedHasMap,
+    retry: false,
+  })
+
+  // 3. Batch-load map metadata for each planet that has a map
   const metaQueries = useQueries({
     queries: (mapPlanetIds ?? []).map((pid) => ({
       queryKey: ['mapMeta', worldName, pid, selectedBranch] as const,
@@ -78,7 +100,7 @@ export default function StellarSystemViewerPage() {
     })),
   })
 
-  // 3. Batch-load elevation PNG blobs
+  // 4. Batch-load elevation PNG blobs
   const elevQueries = useQueries({
     queries: (mapPlanetIds ?? []).map((pid) => ({
       queryKey: ['elevationBlob', worldName, pid, selectedBranch] as const,
@@ -88,7 +110,7 @@ export default function StellarSystemViewerPage() {
     })),
   })
 
-  // 4. Async: decode each loaded PNG blob → Float32Array, then store
+  // 5. Async: decode each loaded PNG blob → Float32Array, then store
   const [elevData, setElevData] = useState<Map<string, Float32Array>>(new Map())
   const [elevDataDims, setElevDataDims] = useState<Map<string, { w: number; h: number }>>(new Map())
 
@@ -124,7 +146,7 @@ export default function StellarSystemViewerPage() {
     return () => { cancelled = true }
   }, [mapPlanetIds, elevQueries])
 
-  // 5. Generate DataTextures from decoded elevation data + metadata
+  // 6. Generate DataTextures from decoded elevation data + metadata
   const planetTextures = useMemo(() => {
     const map = new Map<string, THREE.Texture>()
     if (!mapPlanetIds) return map
@@ -175,7 +197,14 @@ export default function StellarSystemViewerPage() {
 
       {/* Viewer */}
       <div className="flex-1 relative">
-        {isLoading ? (
+        {stellarError || planetsError || hzError ? (
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+            <div className="glass-panel p-6 text-center">
+              <p className="text-red-400 font-semibold mb-2">数据加载失败</p>
+              <p className="text-sm">恒星系数据无法加载，请检查网络连接或世界配置。</p>
+            </div>
+          </div>
+        ) : isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center text-gray-500">
             加载中...
           </div>
@@ -189,6 +218,8 @@ export default function StellarSystemViewerPage() {
             branchQS={selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}
             mapPlanetIds={mapPlanetIds ? new Set(mapPlanetIds) : undefined}
             focusPlanetId={focusPlanetId}
+            selectedPlanetCvtMesh={selectedPlanetCvtMesh ?? null}
+            onSelectionChange={setSelectedBody}
           />
         )}
       </div>

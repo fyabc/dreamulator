@@ -1,0 +1,48 @@
+{
+  "seed": 42,
+  "num_nodes": 32768,
+  "num_plates": 25,
+  "terrain_algorithm": "cortial2019_asymmetric",
+  "tectonic_algorithm": "",
+  "tectonic_steps": 50,
+  "elevation": {
+    "min_m": -5774.071083180172,
+    "max_m": 4730.379771644659,
+    "mean_m": -2135.9,
+    "land_pct": 25.6
+  },
+  "plate_sizes": [
+    3,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "stages_completed": [
+    "mesh",
+    "plates",
+    "tectonics",
+    "terrain"
+  ],
+  "elapsed_seconds": 76.9
+}

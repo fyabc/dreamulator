@@ -67,7 +67,7 @@ terrain:
   #   - 100,000: 正式生产（~90s），cell 平均面积 ≈ 51,000 km² (地球陆地面积/100K)
   #   - 500,000: 高精度（Cortial 2019 论文量级）
   # 时间复杂度: O(N log N) for Lloyd, O(N²) for spherical Voronoi.
-  num_nodes: 4096
+  num_nodes: 32768
 
   # 初始采样点相对于 Fibonacci 球面格点的随机抖动强度 (σ, 单位: 格点半间距)。
   #   - 0.0: 完美 Fibonacci 格点 (无随机性)
@@ -225,18 +225,28 @@ plates:
   #   - 0.0: 无纬度偏好 (纯噪声分配)
   lat_bias: 0.7
 
+  # ---- 海平面自动校准 ("倒水") -------------------------------------------
+  # 启用后，通过二分查找确定海平面高度，使得露出水面的陆地面积比例
+  # 恰好等于 target_land_fraction。海平面自动成为 0 m 基准面。
+  # 关闭后使用固定的双峰基底 (continental_elevation_m / oceanic_elevation_m)。
+  # 隐含水预算（等效均匀深度）在校准日志中报告。
+  sea_level_auto: true
+  # 目标露出陆地比例 [0, 1]。地球 ≈ 0.29。
+  target_land_fraction: 0.28
+
   # ---- 构造时间演化 -------------------------------------------------------
   # 控制板块随时间演化的算法。影响板块运动、碰撞、俯冲和侵蚀。
   #   - "" (空字符串): 无演化 (静态板块)
   #   - "cortial2019": Cortial et al. (2019) §4–5 的速度场方法
-  #     包括: 板块旋转 + 俯冲 + 碰撞 + 侵蚀，使用固定 Voronoi 边界
-  tectonic_algorithm: ""
+  #     包括: 板块旋转 + 俯冲 + 碰撞 + 侵蚀 + 裂解 + 小板块吸收
+  tectonic_algorithm: "cortial2019"
 
   # 构造演化时间步数。
-  #   - 0: 不演化 (静态，配合 tectonic_algorithm="" 使用)
-  #   - 125–250: Cortial 2019 论文的默认范围
+  #   - 0: 不演化 (静态)
+  #   - 50–125: 快速预览
+  #   - 125–250: Cortial 2019 论文的默认范围 (500K 点, δt=2My)
   # 每步模拟 δt My (见 tectonic_dt_my) 的构造过程。
-  tectonic_steps: 0
+  tectonic_steps: 50
 
   # 每步时间长度 (百万年, My)。
   #   - 0.0: 自动缩放 (最快板块每步移动 ~3 个 cell)

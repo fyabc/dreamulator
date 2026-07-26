@@ -4,7 +4,7 @@
  * Route: /worlds/:worldName/civmap/:branchName
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import CivLeafletMap from '../components/civmap/CivLeafletMap'
@@ -149,16 +149,20 @@ export default function CivMapEditorPage() {
   })
 
   const createSnapshotMutation = useMutation({
-    mutationFn: (snapshot: { id: string; year: number | null; description: string }) =>
-      api.createSnapshot(world, snapshot, branch),
+    mutationFn: (snapshot: { id: string; year: number | null; description: string }) => {
+      if (staticMode) return Promise.resolve(territory!)
+      return api.createSnapshot(world, snapshot, branch)
+    },
     onSuccess: (newTerritory) => {
       queryClient.setQueryData(['civmap', 'territory', world, branch], newTerritory)
     },
   })
 
   const updateSnapshotMutation = useMutation({
-    mutationFn: ({ snapshotId, snapshot }: { snapshotId: string; snapshot: CivSnapshot }) =>
-      api.updateSnapshot(world, snapshotId, snapshot, branch),
+    mutationFn: ({ snapshotId, snapshot }: { snapshotId: string; snapshot: CivSnapshot }) => {
+      if (staticMode) return Promise.resolve(territory!)
+      return api.updateSnapshot(world, snapshotId, snapshot, branch)
+    },
     onSuccess: (newTerritory) => {
       queryClient.setQueryData(['civmap', 'territory', world, branch], newTerritory)
       setEditingSnapshot(null)
@@ -166,7 +170,10 @@ export default function CivMapEditorPage() {
   })
 
   const upsertCountryMutation = useMutation({
-    mutationFn: (country: CivCountry) => api.upsertCountry(world, country, branch),
+    mutationFn: (country: CivCountry) => {
+      if (staticMode) return Promise.resolve(territory!)
+      return api.upsertCountry(world, country, branch)
+    },
     onSuccess: (newTerritory) => {
       queryClient.setQueryData(['civmap', 'territory', world, branch], newTerritory)
     },
@@ -185,6 +192,10 @@ export default function CivMapEditorPage() {
   // Handlers
   // ---------------------------------------------------------------------------
 
+  // Keep latest snapshot ID in a ref to avoid stale closures in paint handler
+  const activeSnapshotRef = useRef(activeSnapshotId)
+  activeSnapshotRef.current = activeSnapshotId
+
   /**
    * Level-aware paint handler.
    * Always receives a province adm1_code (from the ADM1 fill layer).
@@ -193,7 +204,8 @@ export default function CivMapEditorPage() {
    */
   const handleProvincePaint = useCallback(
     (provinceId: string) => {
-      if (staticMode || !activeSnapshotId) return
+      const snapId = activeSnapshotRef.current
+      if (staticMode || !snapId) return
 
       let provinceIds: string[]
       if (level === 'adm0') {
@@ -263,7 +275,7 @@ export default function CivMapEditorPage() {
     }
     for (const a of assignments) {
       const feature = featureMap.get(a.province_id)
-      if (feature) {
+      if (feature?.geometry) {
         const area = geoJsonAreaKm2(feature.geometry)
         areas.set(a.country_id, (areas.get(a.country_id) || 0) + area)
       }

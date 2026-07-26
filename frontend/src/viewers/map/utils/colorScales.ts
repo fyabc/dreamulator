@@ -22,14 +22,15 @@ export const TERRAIN_SCALE: ColorStop[] = [
   { value: 0.00, color: hexToRgb('#023858') },  // deepest ocean
   { value: 0.15, color: hexToRgb('#045A8D') },  // deep ocean
   { value: 0.30, color: hexToRgb('#2B8CBE') },  // mid ocean
-  { value: 0.42, color: hexToRgb('#74A9CF') },  // shallow water
-  { value: 0.49, color: hexToRgb('#5EA8D0') },  // mid-shallow (cool blue)
-  { value: 0.498, color: hexToRgb('#A0D0E8') }, // water's edge (clean light blue)
-  { value: 0.50, color: hexToRgb('#D0C8A0') },  // sand / beach
+  { value: 0.42, color: hexToRgb('#2B8CBE') },  // shelf edge
+  { value: 0.47, color: hexToRgb('#5BA8D0') },  // shallow
+  { value: 0.49, color: hexToRgb('#90D0E8') },  // near-shore
+  { value: 0.498, color: hexToRgb('#C8E8F8') }, // water edge
+  { value: 0.50, color: hexToRgb('#A8D8B0') },  // pale green coastline
   { value: 0.51, color: hexToRgb('#7DAF5A') },  // coastal green
   { value: 0.53, color: hexToRgb('#2F7A3C') },  // forest green
   { value: 0.60, color: hexToRgb('#A0B040') },  // yellow-green hills
-  { value: 0.70, color: hexToRgb('#C8A858') },  // yellow-brown plateau
+  { value: 0.70, color: hexToRgb('#B89058') },  // brown plateau
   { value: 0.82, color: hexToRgb('#8B5E3C') },  // mountain brown
   { value: 0.88, color: hexToRgb('#A08078') },  // grey-brown high mt
   { value: 0.93, color: hexToRgb('#D8D0C8') },  // snow grey
@@ -109,17 +110,18 @@ export function generateAdaptiveTerrainScale(
     { elev: minElev, color: hexToRgb('#023858') },
     { elev: minElev + range * 0.15, color: hexToRgb('#045A8D') },
     { elev: minElev + range * 0.30, color: hexToRgb('#2B8CBE') },
-    { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#74A9CF') },
-    { elev: seaLevel - Math.max(range * 0.005, 50), color: hexToRgb('#4A8DB5') }, // mid-shallow (darker)
-    { elev: seaLevel - Math.max(range * 0.0015, 15), color: hexToRgb('#6AACD8') }, // water edge
+    { elev: seaLevel - Math.max(range * 0.02, 200), color: hexToRgb('#2B8CBE') },  // shelf edge
+    { elev: seaLevel - Math.max(range * 0.008, 80), color: hexToRgb('#5BA8D0') },  // shallow
+    { elev: seaLevel - Math.max(range * 0.003, 30), color: hexToRgb('#90D0E8') },  // near-shore
+    { elev: seaLevel - Math.max(range * 0.001, 10), color: hexToRgb('#C8E8F8') },  // water edge
     // ---- Shoreline ----
-    { elev: seaLevel, color: hexToRgb('#C8B060') },  // sand (warm brown, clearly land)
+    { elev: seaLevel, color: hexToRgb('#A8D8B0') },  // pale green (coastal transition)
     // ---- Land: ESRI Natural Earth style ----
     { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#6B9E40') },
     { elev: seaLevel + Math.max(range * 0.01, 100), color: hexToRgb('#4A8A2E') },
     { elev: seaLevel + range * 0.02, color: hexToRgb('#2F7A3C') },
     { elev: seaLevel + range * 0.08, color: hexToRgb('#A0B040') },
-    { elev: seaLevel + range * 0.18, color: hexToRgb('#C8A858') },
+    { elev: seaLevel + range * 0.18, color: hexToRgb('#B89058') },  // brown plateau (darker)
     { elev: seaLevel + range * 0.30, color: hexToRgb('#8B5E3C') },
     { elev: seaLevel + range * 0.35, color: hexToRgb('#A08078') },
     { elev: seaLevel + range * 0.40, color: hexToRgb('#D8D0C8') },

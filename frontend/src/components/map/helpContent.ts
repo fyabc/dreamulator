@@ -64,11 +64,16 @@ export interface ControlHelpEntry {
 }
 
 export const CONTROL_HELP: ControlHelpEntry[] = [
-  { action: '拖拽', description: '平移地图' },
+  { action: '拖拽', description: '平移地图（2D）/ 旋转球体（3D）' },
+  { action: '右拖 / Ctrl+拖', description: '平移 3D 球体视图' },
   { action: '滚轮', description: '缩放' },
+  { action: 'N 键', description: '3D 球面视图：重置为默认视角（北极在画面上方，正视赤道）。仿《戴森球计划》。' },
+  { action: '光照滑块', description: '调整太阳直射经度（0° = 本初子午线正午）。光照自动考虑地轴倾角。仅 3D 球面视图。' },
   { action: '悬停 cell', description: '右侧面板显示 cell 属性（坐标、海拔、地壳类型、板块、边界）' },
-  { action: '双击 cell', description: '选中 cell（Shift+双击多选）' },
-  { action: 'Ctrl + 双击', description: '切换选中状态' },
+  { action: '悬停离开', description: '指针移出球面/地图后，右侧面板恢复行星摘要' },
+  { action: '双击 cell', description: '选中 cell（Ctrl+双击切换选中状态）' },
+  { action: '单击行星', description: '3D 恒星系视图中，弹出信息面板。如有地形数据，可展开"🌍 地形数据"查看摘要。' },
+  { action: '双击行星', description: '3D 恒星系视图中，相机飞向该行星' },
 ]
 
 // ---------------------------------------------------------------------------

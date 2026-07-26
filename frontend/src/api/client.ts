@@ -148,7 +148,8 @@ export function narrateWorldStream(
         return
       }
 
-      const reader = response.body!.getReader()
+      if (!response.body) { onError('服务器返回空响应'); return }
+      const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
 

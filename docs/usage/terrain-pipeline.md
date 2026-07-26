@@ -1199,7 +1199,7 @@ noise(t) = OpenSimplex.noise2(t × 8, belt_seed)
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
-| `interior_orogeny_count` | 2 | 0–5 | 每板块 belt 数（0=禁用） |
+| `interior_orogeny_count` | 2 | 0–5 | 基准 belt 数，随 inland cell 数缩放（每 800 cell +1），硬上限 4 |
 | `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
 | `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
 | `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
@@ -3535,6 +3535,46 @@ $$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathb
 | Slab pull 反馈 | §17.3.B 俯冲消亡 | § 进阶功能 |
 | 大陆碰撞造山 | §17.3.C 大陆拼合 | § 进阶功能 |
 | 洋壳创生 + 年龄 | §17.3.A 洋壳创生 | § 进阶功能 |
+| 板块裂解 | `tectonic_simulator.py::_rift_plates` | ✓ 已实现 (§D.11) |
+
+### D.11 dreamulator 板块裂解实现
+
+**算法** (`tectonic_simulator.py::_rift_plates`):
+
+1. **Poisson 概率模型**: P ∝ λ₀ · (A/A₀)，λ₀ = `rift_base_rate` (默认 **0.01**)
+2. **超大盘 boost**: 板 >2× 均值时线性提权（max 3×），＞1.5× 时温和提权（1.3×）。确保半板块级别的超大陆不可避免地裂解（Gondwana 模式）
+3. **冷却期**: 正常板 5 步内不再裂解；超大板（>2× 均值）豁免冷却期
+4. **cell 刷新**: 裂解前用当前 map 刷新 cell_ids，消除 Voronoi 边界漂移
+5. **BFS 分区**: 随机 2-3 种子，同步 BFS 分配，空 partition 自动过滤
+6. **分区安全网**: 分区后 cell 数不完整 → 回退恢复父板块
+7. **子板块欧拉极扰动**: 轴偏转 ~10-20°、ω 变幅 ±15% → 相邻子板 >2 cm/yr → 边界检测可识别
+8. **微板块清理**: `_cleanup_empty` 每步移除 0-cell 空壳（≥2 板保护）
+9. **重分区间隔**: 固定 10 步（与总步数无关），仅在裂解后重分
+
+### D.12 自适应裂解率与真实地球数据
+
+#### 参考数据：地球板块数量历史
+
+基于 Matthews et al. (2016) 的 410 My 全球板块重建：
+
+| 时期 | 板块数 | 状态 |
+|------|:---:|------|
+| 410–260 Ma | 16–20 | 分散状态 |
+| 260–160 Ma（Pangea 聚合） | **9** | 超大陆极值 |
+| 150 Ma–现今 | 20–45 | 裂解+分散 |
+| 现今 | ~15 | 7-8 大板 + 若干小板 |
+
+**关键规律**：板块数在 9–45 之间随超大陆旋回自然振荡。大板（≥10⁷·⁵ km²）始终约 5–8 块，小板数量波动更大。
+系统稳定目标：平均 ~15 板，可接受 8–25 板的自然波动。
+
+*Matthewset al. (2016). "Global plate boundary evolution and kinematics since the late Paleozoic." Global and Planetary Change, 146, 226–250. https://doi.org/10.1016/j.gloplacha.2016.10.002*
+*Cao et al. (2024). "Earth's tectonic and plate boundary evolution over 1.8 billion years." Geoscience Frontiers, 15(6), 101922. https://doi.org/10.1016/j.gsf.2024.101922*
+
+#### PID 控制器（实验性，当前未启用）
+
+超大盘 boost（§D.11-2）已提供足够的自稳定性，无需全局 PID。
+如需启用，PID 实现代码已就绪：`tectonic_simulator.py` 中可按步调节
+`config.rift_base_rate`。设计模式参考 `docs/worldbuilding/design_patterns.md` §模式 6。
 | 板块裂解 Poisson | §17.3.D 板块裂解 | § 进阶功能 |
 | 侵蚀/衰减 | §10 侵蚀 | 基础版已覆盖 |
 | 放大管线 | §13 Gaea 局部精细化 | 使用 Gaea 替代 |

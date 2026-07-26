@@ -66,17 +66,42 @@ class TerrainPipelineConfig:
     # rotating bodies have weak latitude preference → set lower (0.3–0.5).
     lat_bias: float = 0.7
 
+    # Sea level auto-calibration ("倒水")
+    # True  = determine sea level from target land fraction (binary search on
+    #         elevation × area distribution).  The elevation datum is shifted
+    #         so the water surface becomes exactly 0 m, and the implied water
+    #         budget is reported.
+    # False = keep fixed bimodal base (continental_elevation_m /
+    #         oceanic_elevation_m), sea level at 0 (current behavior).
+    sea_level_auto: bool = True
+    # Target emergent land fraction [0, 1] when sea_level_auto is True.
+    # Earth ≈ 0.29 (29% of surface is dry land).
+    #   < 0.1 → water world (only highlands emerge)
+    #   0.25–0.35 → Earth-like balance
+    #   > 0.5 → dry world (small seas, mostly land)
+    target_land_fraction: float = 0.29
+
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).
     #   "cortial2019" — velocity-field tectonic effects (subduction,
-    #       collision, ridge, erosion) on fixed Voronoi boundaries.
-    tectonic_algorithm: str = ""
+    #       collision, ridge, erosion, rifting) on fixed Voronoi boundaries.
+    tectonic_algorithm: str = "cortial2019"
     # Number of time steps to simulate.  Cortial 2019 default: 125–250.
     tectonic_steps: int = 0
     # Time step duration in My.  0 = auto-scale from cell resolution
     # (Cortial 2019: δt = 2 My at 500K points; Dreamulator scales
     # automatically so the fastest plate moves ~3 cells/step).
     tectonic_dt_my: float = 0.0
+    # ---- Plate rifting (Cortial 2019 §4.4) ----
+    # Base Poisson rate λ₀ for plate rifting (Cortial 2019 §4.4).
+    # P = λ·e^{-λ} where λ = λ₀ · A/A₀ (A₀ = world mean plate area).
+    # 0 = disable rifting.  Per-step base probability × (A/A₀).
+    #  With 3× cap boost + 10-step Voronoi interval, produces:
+    #    0.01 → 30-40 plates at 100 steps, ~60 at 200 steps
+    rift_base_rate: float = 0.01
+    # Number of sub-plates created per rifting event (2-4 in the paper).
+    rift_min_pieces: int = 2
+    rift_max_pieces: int = 3
 
     # Terrain synthesis
     # Algorithm selector:

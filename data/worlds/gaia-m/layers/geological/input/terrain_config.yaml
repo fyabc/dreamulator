@@ -50,13 +50,22 @@ plates:
   plate_speed_min_cm_yr: 3.0   # 最慢板块
   plate_speed_max_cm_yr: 15.0  # 最快板块 (潮汐加热驱动更活跃的板块运动)
   plate_algorithm: cortial2019  # plate partition strategy
-  tectonic_algorithm: ""        # time-evolution (""=none, "cortial2019")
-  tectonic_steps: 0             # evolution steps (0 = static)
+  tectonic_algorithm: "cortial2019"  # time-evolution (""=none, "cortial2019")
+  tectonic_steps: 50                # evolution steps (50=preview, 125-250=full)
   # tectonic_dt_my: 0.0         # My/step (0 = auto-scale to resolution)
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
 
   lat_bias: 0.33  # tidally-locked, weak latitude preference
+
+  # ---- 海平面自动校准 ("倒水") -------------------------------------------
+  # 启用后，通过二分查找确定海平面高度，使得露出水面的陆地面积比例
+  # 恰好等于 target_land_fraction。海平面自动成为 0 m 基准面。
+  # 关闭后使用固定的双峰基底 (continental_elevation_m / oceanic_elevation_m)。
+  # 隐含水预算（等效均匀深度）在校准日志中报告。
+  sea_level_auto: true
+  # 目标露出陆地比例 [0, 1]。Gaia-M 设定为海洋世界，陆地较少。
+  target_land_fraction: 0.28
 
 # ── 噪声参数 ──────────────────────────────────────────────────────────────────
 noise:

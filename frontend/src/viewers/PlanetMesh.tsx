@@ -12,6 +12,7 @@ import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { earthRadiiToAU, formatRadius, formatMass } from './utils/scale'
+import { CursorStack } from './utils/cursorStack'
 import Label from './Label'
 
 interface PlanetData {
@@ -140,10 +141,10 @@ export default function PlanetMesh({
         }}
         onPointerOver={(e) => {
           e.stopPropagation()
-          document.body.style.cursor = 'pointer'
+          CursorStack.enter('pointer')
         }}
         onPointerOut={() => {
-          document.body.style.cursor = 'default'
+          CursorStack.leave()
         }}
       >
         <sphereGeometry args={[realRadiusAU, 24, 24]} />
