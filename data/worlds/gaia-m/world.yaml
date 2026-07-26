@@ -1,7 +1,6 @@
 metadata:
   name: gaia-m
   description: M2V红矮星宜居带内的潮汐锁定卫星，围绕巨行星Aegis运行
-  version: 0.1.0
   dreamulator_version: 0.1.0
   created: '2026-06-25T00:00:00+00:00'
   modified: '2026-06-25T00:00:00+00:00'

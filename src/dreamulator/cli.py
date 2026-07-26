@@ -1293,24 +1293,35 @@ def terrain_info(
         console.print(f"[yellow]No terrain data for planet '{planet_id}'[/yellow]")
         raise typer.Exit(code=1)
 
-    # Read metadata
-    meta_file = map_dir / "metadata.json"
-    if meta_file.exists():
-        with open(meta_file, encoding="utf-8") as f:
-            meta = json.load(f)
+    # Read metadata from map.yaml (with fallback to legacy metadata.json)
+    import yaml as _yaml_info
+
+    map_yaml_file = map_dir / "map.yaml"
+    meta: dict = {}
+    if map_yaml_file.exists():
+        with open(map_yaml_file, encoding="utf-8") as f:
+            meta = _yaml_info.safe_load(f) or {}
+    else:
+        meta_file = map_dir / "metadata.json"
+        if meta_file.exists():
+            with open(meta_file, encoding="utf-8") as f:
+                meta = json.load(f)
+
+    if meta:
         console.print(f"[bold]Terrain Data: {world} / {planet_id}[/bold]")
-        console.print(f"  Seed: {meta.get('seed', 'N/A')}")
-        console.print(f"  Nodes: {meta.get('num_nodes', 'N/A'):,}")
+        console.print(f"  Seed: {meta.get('voronoi_seed', meta.get('seed', 'N/A'))}")
+        console.print(f"  Nodes: {meta.get('voronoi_num_cells', meta.get('num_nodes', 'N/A')):,}")
         console.print(f"  Plates: {meta.get('num_plates', 'N/A')}")
         console.print(f"  Pipeline: {meta.get('pipeline_version', 'unknown')}")
         elev_range = meta.get("elevation_range_m", [])
         if elev_range:
             console.print(f"  Elevation: [{elev_range[0]:.0f}, {elev_range[1]:.0f}] m")
-        res = meta.get("export_resolution", [])
-        if res:
-            console.print(f"  Resolution: {res[0]}x{res[1]}")
+        w = meta.get("width", "")
+        h = meta.get("height", "")
+        if w and h:
+            console.print(f"  Resolution: {w}x{h}")
     else:
-        console.print("[yellow]No metadata.json found[/yellow]")
+        console.print("[yellow]No map.yaml or metadata.json found[/yellow]")
 
     # List files
     table = Table(title="Output Files")

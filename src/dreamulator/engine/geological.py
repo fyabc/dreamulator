@@ -27,7 +27,6 @@ class GeologicalEngine(BaseEngine):
     """
 
     name = "geological"
-    version = "0.1.0"
     layer = Layer.GEOLOGICAL
     requires: list[str] = ["astronomy"]
     input_files = ["terrain_config.yaml"]
@@ -35,7 +34,7 @@ class GeologicalEngine(BaseEngine):
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.json",
         "maps/{planet_id}/plates.json",
-        "maps/{planet_id}/metadata.json",
+        "maps/{planet_id}/map.yaml",
     ]
 
     def run(self, parameters: dict[str, object] | None = None) -> EngineResult:
@@ -64,7 +63,7 @@ class GeologicalEngine(BaseEngine):
 
         # ---- Determine planet ID and output directory ----
         planet_id = str(pars.get("planet_id", "")) or self._detect_planet_id()
-        output_dir = self.layer_output_dir / "maps" / planet_id
+        output_dir = self.maps_output_dir / planet_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # ---- Parse optional stage list ----
@@ -104,7 +103,7 @@ class GeologicalEngine(BaseEngine):
             f"maps/{planet_id}/elevation.png",
             f"maps/{planet_id}/cvt_mesh.json",
             f"maps/{planet_id}/plates.json",
-            f"maps/{planet_id}/metadata.json",
+            f"maps/{planet_id}/map.yaml",
         ]
 
         return EngineResult(

@@ -124,8 +124,10 @@ def run_pipeline(
         if branch is not None:
             branch_dir = world_dir / "branches" / branch
             layer_output_dir = branch_dir / "layers" / engine_cls.layer.value / "derived"
+            maps_output_dir = branch_dir / "maps"
         else:
             layer_output_dir = world_dir / "layers" / engine_cls.layer.value / "derived"
+            maps_output_dir = world_dir / "maps"
 
         # Ensure output directory exists
         layer_output_dir.mkdir(parents=True, exist_ok=True)
@@ -136,6 +138,7 @@ def run_pipeline(
             layer_input_dirs=layer_input_dirs,
             layer_derived_dirs=layer_derived_dirs,
             layer_output_dir=layer_output_dir,
+            maps_output_dir=maps_output_dir,
         )
 
         # Skip if all outputs exist and force is False
@@ -159,16 +162,15 @@ def run_pipeline(
             break
 
         logger.info(
-            "Running engine: %s v%s (layer: %s)",
+            "Running engine: %s (layer: %s)",
             engine.name,
-            engine.version,
             engine.layer.value,
         )
 
         # Rich progress output
         _console.print(
             f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]"
-            f"  [dim]({engine.name} v{engine.version})[/dim]"
+            f"  [dim]({engine.name})[/dim]"
         )
         import time as _time
 

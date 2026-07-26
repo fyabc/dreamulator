@@ -32,7 +32,6 @@ class AstronomyEngine(BaseEngine):
     """Computes derived stellar parameters, habitable zones, and condensation lines."""
 
     name = "astronomy"
-    version = "0.1.0"
     layer = Layer.ASTRONOMY
     requires: list[str] = []
     input_files = ["stellar.yaml"]

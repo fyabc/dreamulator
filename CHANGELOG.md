@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-07-27
+
+### Changed (Breaking)
+
+- **统一 maps/ 目录结构**：地图数据从 `layers/{layer}/input|derived/maps/{planet}/` 迁移到顶层 `maps/{planet}/`。一个行星的所有空间数据（地形 + 气候）集中在一个目录。
+- **metadata.json 废弃**：生成参数合并到 `map.yaml`（单一元数据来源）
+- **branch.yaml 格式**：从 JSON 改为真正的 YAML（读取兼容旧 JSON 格式）
+- **.gitignore**：移除 `data/**/derived/` 规则，公开数据全部 git 追踪
+
+### Removed
+
+- `BaseEngine.version` 字段（仅用于日志，无逻辑依赖）
+- `WorldMetadata.version` 字段（"数据格式版本"，从未用于迁移）
+- `metadata.json` 文件（内容合并到 map.yaml）
+
+### Fixed
+
+- 分支不再需要手动复制 `planets.yaml`/`stellar.yaml`（LayerResolver 正确继承父世界）
+- `terrain info` 从 map.yaml 读取元数据（fallback 到旧 metadata.json）
+
+---
+
 ## [0.9.1] — 2026-07-27
 
 ### Added

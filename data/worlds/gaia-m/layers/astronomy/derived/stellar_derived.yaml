@@ -1,0 +1,12 @@
+stars:
+- id: star_ignis
+  name: Ignis
+  spectral_class: M1
+  input_mode: luminosity
+  computed_mass: 0.449864
+  computed_luminosity: 0.0357
+  computed_radius: 0.42299
+  computed_temperature: 3857.7
+  ms_lifetime_gyr: 73.671
+  evolution_progress: 0.0801
+  metallicity_z: 1.0

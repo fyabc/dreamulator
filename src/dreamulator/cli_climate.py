@@ -219,7 +219,6 @@ def climate_import_elevation(
         download_etopo1,
         extract_etopo1_to_raster,
         save_elevation_png,
-        save_metadata,
         save_yaml_map,
     )
 
@@ -242,8 +241,7 @@ def climate_import_elevation(
 
     # Save
     save_elevation_png(elevation, output_dir, elev_min, elev_max)
-    save_yaml_map(output_dir, res_w, res_h, elev_min, elev_max)
-    save_metadata(output_dir, elev_min, elev_max, provenance)
+    save_yaml_map(output_dir, res_w, res_h, elev_min, elev_max, provenance)
 
     # CVT mesh
     if not skip_mesh:

@@ -13,7 +13,6 @@ class WorldMetadata(BaseModel):
 
     name: str = Field(description="World name (also used as directory name)")
     description: str = Field(default="", description="Brief description of the world")
-    version: str = Field(default="0.1.0", description="World data format version")
     dreamulator_version: str = Field(
         default="0.1.0", description="Version of dreamulator that created this world"
     )

@@ -1,0 +1,14 @@
+stars:
+- id: star_sol
+  name: Sol
+  habitable_zone:
+    recent_venus_au: 0.750548
+    runaway_greenhouse_au: 0.975695
+    max_greenhouse_au: 1.706315
+    early_mars_au: 1.768641
+  habitable_zone_center_au: 1.290288
+  condensation_lines:
+    rock_line_au: 0.034844
+    water_snow_line_au: 2.712803
+    co2_ice_line_au: 16.0
+    co_snow_line_au: 196.0

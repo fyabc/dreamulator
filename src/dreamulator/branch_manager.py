@@ -6,6 +6,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+import yaml  # type: ignore[import-untyped]
+
 from .models.branch import BranchMetadata
 from .models.layers import Layer, get_layers_from
 
@@ -75,7 +77,13 @@ class BranchManager:
         )
         branch_yaml = branch_dir / "branch.yaml"
         with branch_yaml.open("w", encoding="utf-8") as f:
-            f.write(metadata.model_dump_json(indent=2))
+            yaml.dump(
+                metadata.model_dump(mode="json"),
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
 
         return branch_dir
 
@@ -98,7 +106,8 @@ class BranchManager:
                 continue
 
             with branch_yaml.open("r", encoding="utf-8") as f:
-                metadata = BranchMetadata.model_validate_json(f.read())
+                data = yaml.safe_load(f)
+                metadata = BranchMetadata.model_validate(data)
                 branches.append(metadata)
 
         return branches
@@ -122,7 +131,8 @@ class BranchManager:
             raise FileNotFoundError(f"Branch '{name}' not found")
 
         with branch_yaml.open("r", encoding="utf-8") as f:
-            return BranchMetadata.model_validate_json(f.read())
+            data = yaml.safe_load(f)
+            return BranchMetadata.model_validate(data)
 
     def branch_dir(self, name: str) -> Path:
         """Get the directory path for a branch.
@@ -183,12 +193,19 @@ class BranchManager:
         branch_yaml = target_dir / "branch.yaml"
         if branch_yaml.exists():
             with branch_yaml.open("r", encoding="utf-8") as f:
-                metadata = BranchMetadata.model_validate_json(f.read())
+                data = yaml.safe_load(f)
+                metadata = BranchMetadata.model_validate(data)
 
             # Clear parent since it's now a standalone world
             metadata.parent = None
 
             with branch_yaml.open("w", encoding="utf-8") as f:
-                f.write(metadata.model_dump_json(indent=2))
+                yaml.dump(
+                    metadata.model_dump(mode="json"),
+                    f,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
 
         return target_dir

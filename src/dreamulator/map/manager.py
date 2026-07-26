@@ -45,56 +45,81 @@ class MapManager:
     # Path resolution
     # -------------------------------------------------------------------
 
-    def _map_input_dir(self, planet_id: str) -> Path | None:
-        """Resolve the effective input directory for a planet's map data.
+    def _maps_dir(self, planet_id: str) -> Path | None:
+        """Resolve the effective maps directory for a planet.
 
-        Checks derived directory first (CVT pipeline output), then input.
+        Resolution order:
+        1. Branch's own maps/ directory (if branch)
+        2. Parent world's maps/ directory
+        3. Fallback: old layer-based locations (backward compatibility)
         """
-        # Check derived directory first (new CVT pipeline output)
-        derived_dir = self._resolver.get_derived_dir("geological")
-        if derived_dir is not None:
-            maps_dir = derived_dir / "maps" / planet_id
-            if maps_dir.exists() and any(maps_dir.iterdir()):
-                return maps_dir
-        # Fall back to input directory
+        # 1. Branch's own maps/
+        if self.branch is not None:
+            branch_maps = self.world_dir / "branches" / self.branch / "maps" / planet_id
+            if branch_maps.exists() and any(branch_maps.iterdir()):
+                return branch_maps
+
+        # 2. Parent world's maps/
+        root_maps = self.world_dir / "maps" / planet_id
+        if root_maps.exists() and any(root_maps.iterdir()):
+            return root_maps
+
+        # 3. Fallback: old locations (geological derived → input → climate derived)
+        for layer in ("geological", "climate"):
+            derived_dir = self._resolver.get_derived_dir(layer)
+            if derived_dir is not None:
+                old_dir = derived_dir / "maps" / planet_id
+                if old_dir.exists() and any(old_dir.iterdir()):
+                    return old_dir
         input_dir = self._resolver.get_input_dir("geological")
-        if input_dir is None:
-            return None
-        maps_dir = input_dir / "maps" / planet_id
-        if maps_dir.exists() and any(maps_dir.iterdir()):
-            return maps_dir
+        if input_dir is not None:
+            old_dir = input_dir / "maps" / planet_id
+            if old_dir.exists() and any(old_dir.iterdir()):
+                return old_dir
+
         return None
+
+    # Backward-compatible aliases
+    def _map_input_dir(self, planet_id: str) -> Path | None:
+        """Resolve the effective directory for a planet's map data."""
+        return self._maps_dir(planet_id)
 
     def _map_derived_dir(self, planet_id: str, layer: str = "geological") -> Path | None:
-        """Resolve the effective derived directory for a planet's map data."""
-        derived_dir = self._resolver.get_derived_dir(layer)
-        if derived_dir is None:
-            return None
-        maps_dir = derived_dir / "maps" / planet_id
-        if maps_dir.exists():
-            return maps_dir
-        return None
+        """Resolve the effective directory for a planet's derived map data.
 
-    def _ensure_input_dir(self, planet_id: str) -> Path:
-        """Create and return the input directory for a planet's map data."""
-        # Always write to the branch's own input directory (not inherited)
+        For climate layer, checks climate-specific files in the unified maps dir.
+        """
+        maps_dir = self._maps_dir(planet_id)
+        if maps_dir is None:
+            return None
+        # For climate layer, verify climate files exist
+        if layer == "climate":
+            if (maps_dir / "temperature.png").exists() or (maps_dir / "koppen.json").exists():
+                return maps_dir
+            return None
+        return maps_dir
+
+    def _ensure_maps_dir(self, planet_id: str) -> Path:
+        """Create and return the maps directory for a planet.
+
+        Always writes to the branch's own maps/ (or root maps/ if no branch).
+        """
         if self.branch is not None:
-            base = self.world_dir / "branches" / self.branch / "layers"
+            base = self.world_dir / "branches" / self.branch
         else:
-            base = self.world_dir / "layers"
-        maps_dir = base / "geological" / "input" / "maps" / planet_id
+            base = self.world_dir
+        maps_dir = base / "maps" / planet_id
         maps_dir.mkdir(parents=True, exist_ok=True)
         return maps_dir
+
+    # Backward-compatible aliases for old code paths
+    def _ensure_input_dir(self, planet_id: str) -> Path:
+        """Create and return the maps directory for a planet."""
+        return self._ensure_maps_dir(planet_id)
 
     def _ensure_derived_dir(self, planet_id: str, layer: str = "geological") -> Path:
-        """Create and return the derived directory for a planet's map data."""
-        if self.branch is not None:
-            base = self.world_dir / "branches" / self.branch / "layers"
-        else:
-            base = self.world_dir / "layers"
-        maps_dir = base / layer / "derived" / "maps" / planet_id
-        maps_dir.mkdir(parents=True, exist_ok=True)
-        return maps_dir
+        """Create and return the maps directory for a planet."""
+        return self._ensure_maps_dir(planet_id)
 
     # -------------------------------------------------------------------
     # Metadata
@@ -328,27 +353,42 @@ class MapManager:
     def list_planets_with_maps(self) -> list[str]:
         """List planet IDs that have map data.
 
-        Searches both derived (CVT pipeline output) and input directories.
+        Searches unified maps/ directory first, then old layer-based locations.
         """
         planets: set[str] = set()
 
-        # Check derived directory first (CVT pipeline output)
-        derived_dir = self._resolver.get_derived_dir("geological")
-        if derived_dir is not None:
-            maps_dir = derived_dir / "maps"
-            if maps_dir.exists():
-                for d in maps_dir.iterdir():
-                    if d.is_dir() and (d / "elevation.png").exists():
-                        planets.add(d.name)
+        # 1. New unified maps/ directory (branch overlay → root)
+        search_roots: list[Path] = []
+        if self.branch is not None:
+            branch_maps = self.world_dir / "branches" / self.branch / "maps"
+            if branch_maps.exists():
+                search_roots.append(branch_maps)
+        root_maps = self.world_dir / "maps"
+        if root_maps.exists():
+            search_roots.append(root_maps)
 
-        # Also check input directory
-        input_dir = self._resolver.get_input_dir("geological")
-        if input_dir is not None:
-            maps_dir = input_dir / "maps"
-            if maps_dir.exists():
-                for d in maps_dir.iterdir():
-                    if d.is_dir() and (d / "elevation.png").exists():
-                        planets.add(d.name)
+        for maps_root in search_roots:
+            for d in maps_root.iterdir():
+                if d.is_dir() and (d / "elevation.png").exists():
+                    planets.add(d.name)
+
+        # 2. Fallback: old layer-based locations
+        if not planets:
+            for layer in ("geological", "climate"):
+                derived_dir = self._resolver.get_derived_dir(layer)
+                if derived_dir is not None:
+                    maps_dir = derived_dir / "maps"
+                    if maps_dir.exists():
+                        for d in maps_dir.iterdir():
+                            if d.is_dir() and (d / "elevation.png").exists():
+                                planets.add(d.name)
+            input_dir = self._resolver.get_input_dir("geological")
+            if input_dir is not None:
+                maps_dir = input_dir / "maps"
+                if maps_dir.exists():
+                    for d in maps_dir.iterdir():
+                        if d.is_dir() and (d / "elevation.png").exists():
+                            planets.add(d.name)
 
         return sorted(planets)
 

@@ -35,7 +35,6 @@ class BaseEngine(ABC):
     """
 
     name: str = "base"
-    version: str = "0.1.0"
     layer: Layer = Layer.PHYSICS  # Which layer this engine belongs to
     requires: list[str] = []
     input_files: list[str] = []
@@ -49,6 +48,7 @@ class BaseEngine(ABC):
         layer_input_dirs: dict[str, Path] | None = None,
         layer_derived_dirs: dict[str, Path] | None = None,
         layer_output_dir: Path | None = None,
+        maps_output_dir: Path | None = None,
     ) -> None:
         """Initialize engine with layer-aware paths.
 
@@ -58,6 +58,7 @@ class BaseEngine(ABC):
             layer_input_dirs: Map of layer name -> effective input path (resolved).
             layer_derived_dirs: Map of layer name -> derived path (from prior engines).
             layer_output_dir: Path to write derived output for this engine's layer.
+            maps_output_dir: Path to write spatial map data (maps/{planet_id}/).
         """
         self.world_dir = world_dir
         self.seed = seed
@@ -69,6 +70,8 @@ class BaseEngine(ABC):
         self.layer_output_dir = layer_output_dir or (
             world_dir / "layers" / self.layer.value / "derived"
         )
+        # Unified maps output directory (top-level maps/ for the world or branch)
+        self.maps_output_dir = maps_output_dir or (world_dir / "maps")
 
     def find_input(self, relative_path: str) -> Path | None:
         """Find an input file by searching layer input and derived directories.

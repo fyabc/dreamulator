@@ -46,7 +46,6 @@ class ClimateEngine(BaseEngine):
     """
 
     name = "climate"
-    version = "0.1.0"
     layer = Layer.CLIMATE
     requires = ["astronomy"]  # geological data is loaded via maps, not DAG
     input_files = [
@@ -125,6 +124,7 @@ class ClimateEngine(BaseEngine):
         # ---- 4. Load CVT mesh with elevation ----
         mesh, mwarnings = _load_cvt_mesh_from_geological(
             self.layer_derived_dirs, self.layer_input_dirs,
+            maps_dir=self.maps_output_dir,
         )
         warnings.extend(mwarnings)
         if mesh is None:
@@ -171,7 +171,7 @@ class ClimateEngine(BaseEngine):
         self._update_source_mesh(mesh)
 
         # ---- 6. Export outputs ----
-        export_dir = self.layer_output_dir / "maps" / planet.id
+        export_dir = self.maps_output_dir / planet.id
         export_dir.mkdir(parents=True, exist_ok=True)
 
         from dreamulator.map.export import export_climate_layers
@@ -226,10 +226,20 @@ class ClimateEngine(BaseEngine):
     def _update_source_mesh(self, mesh: object) -> None:
         """Write climate-populated mesh back to the source cvt_mesh.json.
 
-        NOTE: This is a cross-layer write (climate → geological). The frontend
-        reads cvt_mesh.json from the geological layer and expects climate fields
-        to be populated. This is a known architectural debt to be resolved later.
+        Searches the unified maps/ directory first, then falls back to
+        old layer-based locations for backward compatibility.
         """
+        # Search in unified maps/ directory (new structure)
+        for mesh_path in self.maps_output_dir.glob("*/cvt_mesh.json"):
+            try:
+                with mesh_path.open("w", encoding="utf-8") as f:
+                    json.dump(mesh.model_dump(), f, default=str)
+                logger.info("Updated source mesh with climate data: %s", mesh_path)
+                return
+            except Exception as e:
+                logger.warning("Failed to update %s: %s", mesh_path, e)
+
+        # Fallback: old layer-based locations
         search_dirs: list[Path] = []
         for layer_dirs in (self.layer_derived_dirs, self.layer_input_dirs):
             geo_dir = layer_dirs.get("geological")
@@ -321,19 +331,37 @@ def _load_orbital_distance(planet_path: Path, planet: Planet) -> float:
 def _load_cvt_mesh_from_geological(
     layer_derived_dirs: dict[str, Path],
     layer_input_dirs: dict[str, Path] | None = None,
+    maps_dir: Path | None = None,
 ) -> tuple[object | None, list[str]]:
-    """Load the CVT mesh from the geological layer's derived or input directories.
+    """Load the CVT mesh from the unified maps/ directory or old layer locations.
 
-    Searches for ``cvt_mesh.json`` in maps/<planet_id>/ under both derived
-    and input directories (terrain pipeline may write to either).
+    Searches for ``cvt_mesh.json`` in:
+    1. Unified maps/{planet_id}/ directory (new structure)
+    2. Old layer-based directories (backward compatibility)
 
     Args:
         layer_derived_dirs: Map of layer name → derived directory.
         layer_input_dirs: Map of layer name → input directory.
+        maps_dir: Unified maps output directory (new structure).
 
     Returns:
         (CVTMesh | None, warnings).
     """
+    # 1. Search unified maps/ directory first
+    if maps_dir is not None and maps_dir.exists():
+        mesh_paths = list(maps_dir.glob("*/cvt_mesh.json"))
+        if mesh_paths:
+            mesh_path = mesh_paths[0]
+            try:
+                from dreamulator.map.models import CVTMesh
+
+                with mesh_path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return CVTMesh(**data), []
+            except Exception as e:
+                return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
+
+    # 2. Fallback: old layer-based locations
     search_dirs: list[Path] = []
 
     geo_derived = layer_derived_dirs.get("geological")
@@ -346,7 +374,7 @@ def _load_cvt_mesh_from_geological(
             search_dirs.append(geo_input)
 
     if not search_dirs:
-        return None, ["No geological derived or input directory found"]
+        return None, ["No maps directory or geological layer directories found"]
 
     # Search for cvt_mesh.json in maps/<planet_id>/
     mesh_paths: list[Path] = []
@@ -355,7 +383,7 @@ def _load_cvt_mesh_from_geological(
 
     if not mesh_paths:
         return None, [
-            f"No cvt_mesh.json found in geological directories: {[str(d) for d in search_dirs]}"
+            f"No cvt_mesh.json found in: {[str(d) for d in search_dirs]}"
         ]
 
     # Use the first one found

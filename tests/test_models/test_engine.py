@@ -9,7 +9,6 @@ from dreamulator.models.layers import Layer
 
 class DummyEngineA(BaseEngine):
     name = "engine_a"
-    version = "0.1.0"
     layer = Layer.PHYSICS
     requires = []
     input_files = []
@@ -24,7 +23,6 @@ class DummyEngineA(BaseEngine):
 
 class DummyEngineB(BaseEngine):
     name = "engine_b"
-    version = "0.1.0"
     layer = Layer.PHYSICS
     requires = ["engine_a"]
     input_files = ["a.json"]

@@ -254,8 +254,11 @@ def save_elevation_png(
     print(f"  Saved elevation PNG: {png_path} ({img.size[0]}×{img.size[1]})")
 
 
-def save_yaml_map(output_dir: Path, width: int, height: int, elev_min: float, elev_max: float) -> None:
-    """Save map.yaml with elevation range for frontend decoding."""
+def save_yaml_map(
+    output_dir: Path, width: int, height: int, elev_min: float, elev_max: float,
+    provenance: dict | None = None,
+) -> None:
+    """Save map.yaml with elevation range and generation metadata."""
     import yaml
 
     map_data = {
@@ -266,25 +269,16 @@ def save_yaml_map(output_dir: Path, width: int, height: int, elev_min: float, el
         "elevation_min_m": elev_min,
         "elevation_max_m": elev_max,
         "sea_level_m": 0.0,
+        "elevation_range_m": [round(elev_min, 1), round(elev_max, 1)],
+        "pipeline_version": "etopo1-import",
     }
+    if provenance:
+        map_data["source"] = provenance.get("source", "")
+        map_data["source_resolution"] = provenance.get("source_resolution", "")
     yaml_path = output_dir / "map.yaml"
     with yaml_path.open("w", encoding="utf-8") as f:
         yaml.dump(map_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
     print(f"  Saved map.yaml: {yaml_path}")
-
-
-def save_metadata(output_dir: Path, elev_min: float, elev_max: float, provenance: dict) -> None:
-    """Save metadata.json with provenance and encoding parameters."""
-    metadata = {
-        "elevation_range_m": [elev_min, elev_max],
-        "png_elevation_range_m": [elev_min, elev_max],
-        "sea_level_m": 0.0,
-        **provenance,
-    }
-    meta_path = output_dir / "metadata.json"
-    with meta_path.open("w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-    print(f"  Saved metadata.json: {meta_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +404,7 @@ def main() -> None:
 
     # --- Save PNG + metadata ---
     save_elevation_png(elevation, output_dir, elev_min, elev_max)
-    save_yaml_map(output_dir, res_w, res_h, elev_min, elev_max)
-    save_metadata(output_dir, elev_min, elev_max, provenance)
+    save_yaml_map(output_dir, res_w, res_h, elev_min, elev_max, provenance)
 
     # --- Build CVT mesh ---
     if not args.skip_mesh:
