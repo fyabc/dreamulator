@@ -247,7 +247,11 @@ def save_outputs(
         json.dump(metadata, f, indent=2)
     logger.info("  Saved metadata: %s", output_dir / "metadata.json")
 
-    # 5. Sync map.yaml elevation range to match PNG encoding
+    # 5. Climate layers (if available)
+    if _climate_data_available(mesh):
+        export_climate_layers(mesh, output_dir, config)
+
+    # 6. Sync map.yaml elevation range to match PNG encoding
     #    The frontend decodes elevation.png using map.yaml's elevation_min_m /
     #    elevation_max_m.  These MUST match the PNG's actual encoding range
     #    (png_min / png_max) or colours will be wrong — cells above sea level
@@ -266,3 +270,112 @@ def save_outputs(
         logger.info(
             "  Synced map.yaml elevation range: [%.1f, %.1f] m", png_min, png_max
         )
+
+
+# ---------------------------------------------------------------------------
+# Climate layer export (Phase 3A)
+# ---------------------------------------------------------------------------
+
+
+def _climate_data_available(mesh: CVTMesh) -> bool:
+    """Check if climate simulation has populated the mesh cells."""
+    if mesh.num_cells == 0:
+        return False
+    return mesh.cells[0].temperature_C is not None
+
+
+def export_climate_layers(
+    mesh: CVTMesh,
+    output_dir: Path,
+    config: TerrainPipelineConfig,
+) -> None:
+    """Export climate raster and vector layers.
+
+    Produces:
+        - temperature.png (16-bit PNG, range [-40, +50] °C)
+        - precipitation.png (16-bit PNG, range [0, 6000] mm/yr)
+        - koppen.json (per-cell Köppen class codes)
+        - climate_metadata.json
+
+    Args:
+        mesh: CVT mesh with climate fields populated.
+        output_dir: Output directory.
+        config: Pipeline configuration.
+    """
+    import json
+
+    width = config.export_width
+    height = config.export_height
+
+    # 1. Temperature raster
+    temp_grid = export_equirectangular(mesh, width, height, field="temperature_C")
+    t_min, t_max = _nice_range(float(np.nanmin(temp_grid)), float(np.nanmax(temp_grid)), -40.0, 50.0)
+    export_layer_png(temp_grid, output_dir / "temperature.png", t_min, t_max)
+    logger.info("  Exported temperature.png [%.0f, %.0f] °C", t_min, t_max)
+
+    # 2. Precipitation raster
+    precip_grid = export_equirectangular(mesh, width, height, field="precipitation_mm")
+    p_min, p_max = _nice_range(float(np.nanmin(precip_grid)), float(np.nanmax(precip_grid)), 0.0, 6000.0)
+    export_layer_png(precip_grid, output_dir / "precipitation.png", p_min, p_max)
+    logger.info("  Exported precipitation.png [%.0f, %.0f] mm/yr", p_min, p_max)
+
+    # 3. Köppen classification vector data (per cell)
+    koppen_by_cell = {}
+    for c in mesh.cells:
+        if c.koppen_class is not None:
+            koppen_by_cell[str(c.id)] = c.koppen_class
+
+    # Aggregate Köppen class counts for climate summary
+    from collections import Counter
+
+    koppen_counter = Counter(koppen_by_cell.values())
+
+    koppen_data = {
+        "cells": koppen_by_cell,
+        "summary": dict(koppen_counter),
+        "num_cells": mesh.num_cells,
+    }
+    koppen_path = output_dir / "koppen.json"
+    with koppen_path.open("w", encoding="utf-8") as _f:
+        json.dump(koppen_data, _f, indent=2)
+    logger.info("  Exported koppen.json (%d classes)", len(koppen_counter))
+
+    # 4. Climate metadata
+    climate_meta = {
+        "temperature_range_c": [t_min, t_max],
+        "precipitation_range_mm": [p_min, p_max],
+        "koppen_classes": sorted(koppen_counter.keys()),
+        "export_resolution": [width, height],
+        "stellar_luminosity_sol": config.stellar_luminosity_sol,
+        "orbital_distance_au": config.orbital_distance_au,
+        "axial_tilt_deg": config.axial_tilt_deg,
+        "greenhouse_warming_K": config.greenhouse_warming_K,
+    }
+    meta_path = output_dir / "climate_metadata.json"
+    with meta_path.open("w", encoding="utf-8") as _f:
+        json.dump(climate_meta, _f, indent=2)
+    logger.info("  Exported climate_metadata.json")
+
+
+def _nice_range(
+    data_min: float,
+    data_max: float,
+    fallback_min: float,
+    fallback_max: float,
+) -> tuple[float, float]:
+    """Round a data range to nice round numbers for PNG encoding.
+
+    Args:
+        data_min: Actual minimum value.
+        data_max: Actual maximum value.
+        fallback_min: Floor if data is within this range.
+        fallback_max: Ceiling if data is within this range.
+
+    Returns:
+        (nice_min, nice_max) rounded to the nearest 10.
+    """
+    import math
+
+    rmin = math.floor(min(data_min, fallback_min) / 10.0) * 10.0
+    rmax = math.ceil(max(data_max, fallback_max) / 10.0) * 10.0
+    return rmin, rmax

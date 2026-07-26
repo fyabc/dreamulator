@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-07-27
+
+### Added
+
+**气候引擎 (Phase 3A)**
+- `climate_physics.py`: 12 个纯物理函数（EBM 温度、纬度梯度、海拔递减率、季节周期、Hadley/Ferrel/Polar 风带、蒸发率、地形降水、ITCZ、Ekman 洋流、Koppen 分类）
+- `climate_simulator.py`: CVT mesh 上的完整气候模拟（温度 → 风场 → BFS 水汽输送 → 降水 → Koppen）
+- `ClimateEngine`: BaseEngine 封装，支持 `dreamulator build --only climate`
+- 输出: temperature.png, precipitation.png, koppen.json, climate_metadata.json
+
+**地质引擎封装**
+- `GeologicalEngine`: 将 terrain pipeline 封装为 BaseEngine，支持 `dreamulator build --only geological`
+- DAG 拓扑序: astronomy → geological → climate
+
+**气候验证体系**
+- `scripts/import_earth_elevation.py`: 导入 ETOPO1 真实地球高程
+- `scripts/convert_koppen_map.py`: 转换 Beck et al. (2018) Koppen 参考数据
+- `scripts/validate_climate.py`: zonal 加权 RMSE + 逐 cell 空间对比 + Cohen's Kappa
+- `earth/climate-dev` 分支: 32768 cell 真实地球 CVT mesh + Koppen 参考
+
+**CLI 重构**
+- `dreamulator climate info|validate|import-elevation` 子命令组
+- `dreamulator build` 增加 rich 进度输出（每层计时 + 状态）
+- `build` 成为唯一推演构建入口，`terrain generate` 定位为开发调试工具
+
+**文档**
+- `docs/usage/climate-engine.md`: 气候引擎架构 + 数据驱动改进路线图
+- `docs/usage/climate-validation.md`: 验证指南 + 数据下载说明
+- `docs/knowledge/climatology/`: 气候学知识库（EBM 公式 + 参数参考）
+- `docs/usage/cli.md`: 新增 build + climate 命令参考
+
+### Changed
+
+- `pipeline_types.py`: 新增 16 个气候配置参数
+- `export.py`: 新增气候图层导出（temperature/precipitation PNG + koppen JSON）
+- `pyproject.toml`: 新增 `validation` extra（xarray, netCDF4, tifffile）
+- 前端 3D 球体视图移除水平镜像（`flipHorizontal` 默认改为 false）
+
+### Fixed
+
+- ETOPO1 纬度轴方向（CF 约定升序 -90→+90，非降序）
+- 海拔递减率不再错误应用到海底（海洋使用 SST 模型）
+- 降水 BFS 不再跨 pass 累积（每 pass 重置水汽）
+- 3D 球体视图东西方向镜像
+
+### Validated
+
+- 全球均温 15.0 °C（匹配地球）
+- 陆地比例 29.1%（匹配地球 29%）
+- 降水 RMSE 493 mm/yr（通过 <800 阈值）
+- gaia-m 完整构建 6m44s 全部通过
+
+---
+
 ## [0.8.0] — 2026-07-27
 
 ### Added

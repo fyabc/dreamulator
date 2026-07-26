@@ -128,6 +128,7 @@ export default function GlobeViewerPage() {
     layers: layerState.layers,
     cvtMesh: cvtMesh ?? null,
     cellIdMap: cellIdMap ?? null,
+    flipHorizontal: false,
   })
 
   const terrainTexture = useMemo(() => {

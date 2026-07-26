@@ -168,6 +168,25 @@ class TerrainPipelineConfig:
     regional_noise_amplitude_land_m: float = 1800.0
     regional_noise_amplitude_ocean_m: float = 1200.0
 
+    # Climate simulation (Phase 3A: Energy Balance Model + wind + precipitation)
+    # Stellar / orbital inputs for EBM
+    stellar_luminosity_sol: float = 1.0   # L_sun (1.0 = Sun)
+    orbital_distance_au: float = 1.0      # AU
+    axial_tilt_deg: float = 23.44         # obliquity
+    # Atmosphere
+    atmosphere_factor: float = 1.0   # greenhouse multiplier (1.0 = Earth, 0 = none)
+    greenhouse_warming_K: float = 33.0   # additional greenhouse warming (K)
+    lapse_rate_c_km: float = 6.5         # moist adiabatic lapse rate (°C/km)
+    lat_gradient_c: float = 45.0         # equator-to-pole temperature difference (°C)
+    # Wind
+    wind_blocking_height_m: float = 3000.0  # mountains above this block wind
+    # Precipitation
+    evaporation_base_mm: float = 2000.0  # annual evaporation at tropical ocean surface
+    orographic_efficiency: float = 0.5   # fraction of moisture converted to rain per km uplift
+    itcz_lag_days: int = 30              # ITCZ lag behind subsolar point (thermal inertia)
+    # Ocean
+    num_gyres: int = 5                   # number of major ocean gyres
+
     # Export
     export_width: int = 4096
     export_height: int = 2048
@@ -184,18 +203,18 @@ class TerrainPipelineConfig:
         """Create config from a dictionary (e.g. parsed YAML).
 
         Supports nested ``planet:``, ``terrain:``, ``plates:``, ``noise:``,
-        ``export:`` sections or flat keys.
+        ``climate:``, ``export:`` sections or flat keys.
         """
         flat: dict[str, Any] = {}
 
         # Flatten nested sections
-        for section in ("planet", "terrain", "plates", "noise", "export"):
+        for section in ("planet", "terrain", "plates", "noise", "climate", "export"):
             if section in data and isinstance(data[section], dict):
                 flat.update(data[section])
 
         # Top-level keys override sections
         for k, v in data.items():
-            if k not in ("planet", "terrain", "plates", "noise", "export"):
+            if k not in ("planet", "terrain", "plates", "noise", "climate", "export"):
                 flat[k] = v
 
         # Map common aliases

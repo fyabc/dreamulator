@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dreamulator"
-version = "0.8.0"
+version = "0.9.0"
 description = "Fantasy world building and simulation tool grounded in real science"
 readme = "README.md"
 license = "MIT"
@@ -43,6 +43,11 @@ narrate = [
 ]
 heightmap = [
     "matplotlib>=3.8",
+]
+validation = [
+    "xarray>=2024.0",
+    "netCDF4>=1.7",
+    "tifffile>=2024.0",
 ]
 
 [project.scripts]

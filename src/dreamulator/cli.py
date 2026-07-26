@@ -42,6 +42,11 @@ terrain_app = typer.Typer(
 )
 app.add_typer(terrain_app, name="terrain")
 
+# Climate subcommand group
+from dreamulator.cli_climate import climate_app
+
+app.add_typer(climate_app, name="climate")
+
 
 @app.command()
 def version() -> None:

@@ -1,0 +1,7 @@
+planet_id: earth
+projection: equirectangular
+width: 2048
+height: 1024
+elevation_min_m: -10456.806268328251
+elevation_max_m: 7003.259347507337
+sea_level_m: 0.0

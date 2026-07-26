@@ -114,7 +114,8 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
-  /** Flip texture horizontally (needed for SphereGeometry; set false for PlaneGeometry). */
+  /** Flip texture horizontally. Default false — data is already in standard
+   *  equirectangular orientation (left=-180°, right=+180°). */
   flipHorizontal?: boolean
   /** Cell IDs to highlight in blue (hover) or yellow (selected). */
   hoveredCell?: number | null
@@ -133,7 +134,7 @@ export default function useGPUTerrain({
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
-  flipHorizontal = true,
+  flipHorizontal = false,
   hoveredCell = null,
   selectedCells,
 }: UseGPUTerrainOptions): THREE.ShaderMaterial | null {

@@ -12,6 +12,10 @@ from .base import BaseEngine, EngineResult
 
 logger = setup_logging()
 
+from rich.console import Console
+
+_console = Console()
+
 
 def topological_sort(engines: list[type[BaseEngine]]) -> list[type[BaseEngine]]:
     """Sort engines by dependency order (topological sort).
@@ -136,6 +140,7 @@ def run_pipeline(
 
         # Skip if all outputs exist and force is False
         if not force and _outputs_exist(engine):
+            _console.print(f"  [dim]{engine.layer.value}: up-to-date, skipped[/dim]")
             logger.info("Skipping %s (outputs up-to-date)", engine.name)
             continue
 
@@ -159,13 +164,25 @@ def run_pipeline(
             engine.version,
             engine.layer.value,
         )
+
+        # Rich progress output
+        _console.print(
+            f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]"
+            f"  [dim]({engine.name} v{engine.version})[/dim]"
+        )
+        import time as _time
+
+        _t0 = _time.time()
         result = engine.run()
+        _elapsed = _time.time() - _t0
         results.append(result)
 
         if not result.success:
+            _console.print(f"  [red]FAILED[/red] ({_elapsed:.1f}s)")
             logger.error("Engine %s failed", engine.name)
             break
 
+        _console.print(f"  [green]done[/green] [dim]({_elapsed:.1f}s)[/dim]")
         logger.info("Engine %s completed successfully", engine.name)
 
         # Register this engine's output as a derived source for subsequent engines

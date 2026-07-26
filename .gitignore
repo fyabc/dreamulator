@@ -51,3 +51,10 @@ private/plans/video/
 
 # Generated terrain command record (machine-specific, not for publishing)
 data/**/maps/*/generation_command.json
+
+# Validation reports (regeneratable via scripts/validate_climate.py)
+reports/
+
+# Raw reference data downloads (use scripts to re-download)
+*.grd
+*.grd.gz

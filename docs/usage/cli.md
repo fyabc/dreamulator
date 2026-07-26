@@ -96,6 +96,105 @@ dreamulator terrain validate earth --planet earth --branch terrain-dev
 
 ---
 
+## 构建（Build）
+
+### 完整构建
+
+```bash
+dreamulator build gaia-m --data-dir private/worlds
+```
+
+按 DAG 拓扑序执行所有引擎：`astronomy → geological → climate`。每层输出保存到对应的 `layers/<layer>/derived/` 目录。
+
+### 按层构建
+
+```bash
+dreamulator build gaia-m --only geological   # 只跑地质层（地形生成）
+dreamulator build gaia-m --only climate      # 只跑气候层
+dreamulator build gaia-m --layer climate     # 从气候层开始（跳过已完成的层）
+```
+
+### 分支构建
+
+```bash
+dreamulator build earth --branch climate-dev --only climate
+```
+
+在分支上构建，输出保存到 `branches/<branch>/layers/<layer>/derived/`。
+
+### 选项
+
+| 选项 | 说明 | 示例 |
+|------|------|------|
+| `--only, -o` | 只运行指定引擎 | `--only climate` |
+| `--layer, -l` | 从指定层开始 | `--layer climate` |
+| `--force, -f` | 强制重算（忽略缓存） | `--force` |
+| `--seed` | 覆盖随机种子 | `--seed 123` |
+| `--data-dir` | 自定义数据目录 | `--data-dir private/worlds` |
+
+### build vs terrain generate
+
+| | `build` | `terrain generate` |
+|---|---------|-------------------|
+| 定位 | **生产构建**（唯一推演入口） | **开发调试**（细粒度控制） |
+| 粒度 | 按层（geological / climate） | 按阶段（mesh, plates, terrain...） |
+| 输出 | `layers/<layer>/derived/` | `layers/geological/input/maps/` |
+| DAG 集成 | ✅ 自动处理层间依赖 | ❌ 独立运行 |
+
+---
+
+## 气候工具
+
+### 查看气候状态
+
+```bash
+dreamulator climate info gaia-m --data-dir private/worlds
+dreamulator climate info earth --branch climate-dev
+```
+
+显示温度/降水范围、Koppen 分类分布、输出文件列表。
+
+### 验证气候精度
+
+```bash
+dreamulator climate validate earth --branch climate-dev
+dreamulator climate validate earth --branch climate-dev --spatial  # 含逐 cell 空间对比
+```
+
+对比 ERA5 温度、GPCP 降水、Beck et al. Koppen 参考数据。输出 RMSE、R²、匹配率。
+
+需要验证依赖：`uv sync --extra validation`
+
+### 导入真实高程
+
+```bash
+dreamulator climate import-elevation earth --branch climate-dev
+dreamulator climate import-elevation earth --branch climate-dev -n 100000  # 更多节点
+```
+
+下载 ETOPO1 全球 DEM（~400 MB，首次），重采样为等距矩形栅格 + CVT mesh。
+
+### 典型工作流
+
+```bash
+# 1. 创建气候开发分支
+dreamulator branch create earth climate-dev --at geological
+
+# 2. 导入真实高程
+dreamulator climate import-elevation earth --branch climate-dev
+
+# 3. 构建气候层
+dreamulator build earth --branch climate-dev --only climate
+
+# 4. 验证精度
+dreamulator climate validate earth --branch climate-dev --spatial
+
+# 5. 查看结果
+dreamulator climate info earth --branch climate-dev
+```
+
+---
+
 ## AI 叙述
 
 ```bash
