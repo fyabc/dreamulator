@@ -57,8 +57,14 @@ class TerrainPipelineConfig:
     #   0.1–0.5 → mostly ocean world (e.g. island chains)
     #   0.3–0.7 → Earth-like (balanced)
     #   0.6–0.9 → supercontinent / Pangaea-like
-    continental_fraction_min: float = 0.25
-    continental_fraction_max: float = 0.65
+    continental_fraction_min: float = 0.28
+    continental_fraction_max: float = 0.36
+    # Latitude bias for crust-type assignment (0–1).  Higher values
+    # concentrate continental crust near the equator.  Qualitatively,
+    # faster-rotating planets have stronger Coriolis-driven latitude
+    # banding → set higher (e.g. 0.8–0.9).  Tidally-locked or slowly
+    # rotating bodies have weak latitude preference → set lower (0.3–0.5).
+    lat_bias: float = 0.7
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).

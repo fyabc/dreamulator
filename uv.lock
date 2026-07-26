@@ -402,7 +402,7 @@ wheels = [
 
 [[package]]
 name = "dreamulator"
-version = "0.7.2"
+version = "0.7.3"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
@@ -411,6 +411,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "numpy" },
+    { name = "opensimplex" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-multipart" },
@@ -434,7 +435,6 @@ dev = [
 ]
 heightmap = [
     { name = "matplotlib" },
-    { name = "opensimplex" },
 ]
 narrate = [
     { name = "anthropic" },
@@ -453,7 +453,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'heightmap'", specifier = ">=3.8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14" },
     { name = "numpy", specifier = ">=2.0" },
-    { name = "opensimplex", marker = "extra == 'heightmap'", specifier = ">=0.4" },
+    { name = "opensimplex", specifier = ">=0.4" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pydantic", specifier = ">=2.11" },

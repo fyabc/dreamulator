@@ -56,6 +56,8 @@ plates:
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
 
+  lat_bias: 0.33  # tidally-locked, weak latitude preference
+
 # ── 噪声参数 ──────────────────────────────────────────────────────────────────
 noise:
   noise_scale: 2.0

@@ -281,16 +281,16 @@ def assign_crust_types(
     rng: np.random.Generator,
     continental_fraction_min: float = 0.25,
     continental_fraction_max: float = 0.65,
+    lat_bias: float = 0.7,
 ) -> None:
     """Assign crust types to cells based on their plate.
 
     Each plate gets a random continental fraction uniformly in
     ``[continental_fraction_min, continental_fraction_max]``.
     Fractal Brownian Motion (fBm) — 5 octaves of 3D simplex noise with
-    1/f amplitude scaling (persistence=0.5, lacunarity=2.5) — produces
-    statistically self-similar crust boundaries.  Cells near the
-    continental/oceanic threshold exhibit fractal coastlines with
-    detail at all resolvable scales (fjords, peninsulas, rias).
+    gentle amplitude scaling (persistence=0.45, lacunarity=2.0).  This
+    keeps the fractal coastline character while suppressing the single-cell
+    checkerboard artefacts that higher-octave noise introduces.
 
     Latitude bias: lower latitudes are weighted toward continental
     (Earth-like continent distribution).
@@ -316,69 +316,57 @@ def assign_crust_types(
     for cid, pid in cell_plate_map.items():
         plate_cells.setdefault(pid, []).append(cid)
 
-    # Spatial noise generator for coherent crust assignment.
-    # Using 3D simplex noise at cell positions ensures neighbouring cells
-    # get similar values → contiguous continental blocks, not salt-and-pepper.
-    try:
-        import opensimplex
-        _has_noise = True
-    except ImportError:
-        _has_noise = False
+    # Latitude-primary, fBm-texture crust assignment.
+    #
+    # Latitude score (weight 0.7) is the *primary* signal — equatorial
+    # cells are systematically favoured for continental crust.  fBm noise
+    # (weight 0.3) is a *texture perturbation* that adds fractal boundary
+    # detail without creating single-cell checkerboard artefacts.
+    import opensimplex
+    import warnings as _w
 
     for plate_id, cell_ids in plate_cells.items():
         continental_fraction = rng.uniform(continental_fraction_min, continental_fraction_max)
         n_cont = max(1, int(len(cell_ids) * continental_fraction))
 
-        if _has_noise:
-            # 5-octave fBm: 1/f amplitude scaling (persistence=0.5) produces
-            # statistically self-similar crust boundaries — fractal coastlines
-            # with detail at all resolvable scales.  Reseeding per octave
-            # ensures independent noise layers (same pattern as terrain fBm).
-            import warnings as _w
-            noise_seed = rng.integers(0, 1 << 20)
-            n_cells = len(cell_ids)
-            base_freq = 2.0 / max(n_cells, 1) ** 0.15  # scale to plate size
-            octaves = 5
-            persistence = 0.5
-            lacunarity = 2.5
+        noise_seed = rng.integers(0, 1 << 20)
+        n_cells = len(cell_ids)
+        base_freq = 2.0 / max(n_cells, 1) ** 0.15
+        octaves = 5
+        lacunarity = 2.5
+        persistence = 0.5
+        _lat_weight = lat_bias
 
-            noise_vals = np.zeros(n_cells, dtype=np.float64)
-            amplitude = 1.0
-            frequency = base_freq
+        # fBm noise, normalised to [-1, 1]
+        noise_vals = np.zeros(n_cells, dtype=np.float64)
+        amplitude = 1.0
+        frequency = base_freq
+        for octave in range(octaves):
+            octave_seed = noise_seed + octave * 1000
+            with _w.catch_warnings():
+                _w.filterwarnings("ignore", message="overflow encountered")
+                opensimplex.seed(octave_seed)
+            for i, c in enumerate(cell_ids):
+                cell = mesh.cells[c]
+                noise_vals[i] += amplitude * opensimplex.noise3(
+                    float(cell.x * frequency),
+                    float(cell.y * frequency),
+                    float(cell.z * frequency),
+                )
+            amplitude *= persistence
+            frequency *= lacunarity
+        noise_vals /= (1.0 - persistence ** octaves) / (1.0 - persistence)
 
-            for octave in range(octaves):
-                octave_seed = noise_seed + octave * 1000
-                with _w.catch_warnings():
-                    _w.filterwarnings("ignore", message="overflow encountered")
-                    opensimplex.seed(octave_seed)
-                for i, c in enumerate(cell_ids):
-                    cell = mesh.cells[c]
-                    noise_vals[i] += amplitude * opensimplex.noise3(
-                        float(cell.x * frequency),
-                        float(cell.y * frequency),
-                        float(cell.z * frequency),
-                    )
-                amplitude *= persistence
-                frequency *= lacunarity
+        # Latitude score: 1.0 at equator, 0.0 at poles
+        lat_score = np.array([
+            1.0 - abs(mesh.cells[c].lat) / 90.0 for c in cell_ids
+        ])
 
-            # Normalize to [-1, 1]: geometric series max amplitude
-            # Σ_{k=0}^{4} p^k = (1 - p^5) / (1 - p) = 1.9375 for p=0.5
-            noise_vals /= (1.0 - persistence ** octaves) / (1.0 - persistence)
+        # Combined: latitude dominates, fBm adds fractal texture
+        score = _lat_weight * lat_score + (1.0 - _lat_weight) * noise_vals
 
-            # Latitude bias: equatorial preference (Earth-like)
-            noise_vals -= 0.3 * np.array([
-                abs(mesh.cells[c].lat) / 90.0 for c in cell_ids
-            ])
-        else:
-            # Fallback: latitude-weighted + mild spatial jitter
-            noise_vals = np.array([
-                1.0 - 0.5 * abs(mesh.cells[c].lat) / 90.0
-                + rng.uniform(-0.15, 0.15)
-                for c in cell_ids
-            ])
-
-        # Top N by noise value → continental (threshold varies per plate)
-        sorted_idx = np.argsort(noise_vals)[::-1]
+        # Top N by score → continental (threshold varies per plate)
+        sorted_idx = np.argsort(score)[::-1]
         for rank, idx in enumerate(sorted_idx):
             cid = cell_ids[idx]
             if rank < n_cont:
@@ -575,6 +563,7 @@ def _generate_plates_impl(
         mesh, cell_plate_map, rng,
         config.continental_fraction_min,
         config.continental_fraction_max,
+        config.lat_bias,
     )
 
     # 5. Euler poles

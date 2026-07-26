@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dreamulator"
-version = "0.7.2"
+version = "0.7.3"
 description = "Fantasy world building and simulation tool grounded in real science"
 readme = "README.md"
 license = "MIT"
@@ -23,6 +23,7 @@ dependencies = [
     "jinja2>=3.1",
     "conlang",
     "pillow>=10.0",
+    "opensimplex>=0.4",
     "python-multipart>=0.0.9",
     "tifffile>=2026.7.14",
 ]
@@ -41,7 +42,6 @@ narrate = [
     "anthropic>=0.40",
 ]
 heightmap = [
-    "opensimplex>=0.4",
     "matplotlib>=3.8",
 ]
 

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] — 2026-07-26
+
+### Fixed
+
+**关键修复：大陆碎片化**
+- 5-octave fBm 地壳分配产生 checkerboard 碎片——根因是 opensimplex 未安装，fBm 路径从未执行，回退到纯纬度排序
+- 安装 opensimplex 并改为**纬度主导 (0.7) + fBm 纹理 (0.3)** 的混合分配策略，mis-placed 从 29.9% → 2.7%
+- 移除 fallback 代码，opensimplex 升为核心依赖
+
+### Added
+
+**lat_bias 参数**
+- 新增 `lat_bias` 配置项 (0–1)，控制大陆地壳向赤道集中的权重
+- 快速自转行星设高值 (0.7–0.9)，潮汐锁定设低值 (0.3–0.5)
+
+### Changed
+
+- `continental_fraction_min/max` 默认值: `[0.25, 0.65]` → `[0.28, 0.36]`
+- gaia-m: `lat_bias=0.33`, earth/terrain-dev: `lat_bias=0.7`
+- `opensimplex>=0.4` 从 heightmap 可选依赖移入核心依赖
+
 ## [0.7.2] — 2026-07-26
 
 ### Added
