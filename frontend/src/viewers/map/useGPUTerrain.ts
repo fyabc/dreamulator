@@ -115,8 +115,9 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
-  /** Flip texture horizontally. Default false — data is already in standard
-   *  equirectangular orientation (left=-180°, right=+180°). */
+  /** Flip texture horizontally. Set true for SphereGeometry (Three.js sphere
+   *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
+   *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
   flipHorizontal?: boolean
   /** Cell IDs to highlight in blue (hover) or yellow (selected). */
   hoveredCell?: number | null

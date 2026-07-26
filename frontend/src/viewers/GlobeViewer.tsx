@@ -65,12 +65,9 @@ interface GlobeViewerProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function sphereToLonLat(point: THREE.Vector3): { lon: number; lat: number } {
-  const n = point.clone().normalize()
-  const lat = Math.asin(THREE.MathUtils.clamp(n.y, -1, 1)) * THREE.MathUtils.RAD2DEG
-  const lon = Math.atan2(n.z, n.x) * THREE.MathUtils.RAD2DEG
-  return { lon, lat }
-}
+// sphereToLonLat removed — UV-based lookup used instead (matches texture mapping).
+// Old: lon = atan2(z, x), lat = asin(y). This gave 3D positions that don't match
+// the equirectangular texture UV mapping on SphereGeometry.
 
 // ---------------------------------------------------------------------------
 // SunLight — directional light positioned by sun longitude + axial tilt
@@ -205,7 +202,9 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
       const phi = THREE.MathUtils.degToRad(v.lat)
       const theta = THREE.MathUtils.degToRad(v.lon)
       const cosLat = Math.cos(phi)
-      pts3D.push([cosLat * Math.cos(theta), Math.sin(phi), cosLat * Math.sin(theta)])
+      // Negate z to match SphereGeometry UV mapping:
+      // texture pixel (lon,lat) displays at 3D position (cos*cos, sin, -cos*sin)
+      pts3D.push([cosLat * Math.cos(theta), Math.sin(phi), -cosLat * Math.sin(theta)])
     }
 
     if (pts3D.length < 3) return null
@@ -347,14 +346,21 @@ function GlobeScene({
       {/* Planet sphere with pointer events */}
       <mesh
         onPointerMove={(e: any) => {
-          const pt = e.point as THREE.Vector3 | undefined
-          if (pt) { const { lon, lat } = sphereToLonLat(pt); onCellHover?.(lon, lat) }
+          // Use UV coordinates to match the texture's equirectangular mapping.
+          // This ensures the hovered cell matches the displayed koppen/terrain color.
+          const uv = e.uv as { x: number; y: number } | undefined
+          if (uv) {
+            const lon = uv.x * 360 - 180
+            const lat = uv.y * 180 - 90
+            onCellHover?.(lon, lat)
+          }
         }}
         onPointerOut={() => onHoverOut?.()}
         onDoubleClick={(e: any) => {
-          const pt = e.point as THREE.Vector3 | undefined
-          if (pt) {
-            const { lon, lat } = sphereToLonLat(pt)
+          const uv = e.uv as { x: number; y: number } | undefined
+          if (uv) {
+            const lon = uv.x * 360 - 180
+            const lat = uv.y * 180 - 90
             const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
             onCellClick?.(lon, lat, ctrl)
           }

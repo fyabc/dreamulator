@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] — 2026-07-27
+
+### Added
+
+- **Köppen 气候图层**：前端地图新增 Köppen-Geiger 气候分类着色（Beck et al. 2018 标准色），支持 2D 和 3D 视图
+- **单元格气候信息**：右侧 inspector 显示 Köppen 气候中文名 + 英文缩写、年均温、年降水
+
+### Fixed
+
+- **3D 球体对齐**：鼠标 picking 改用纹理 UV 坐标（替代 sphereToLonLat），高亮多边形 z 坐标取反匹配 SphereGeometry UV 映射
+- **GeologicalEngine planet_id**：自动从 planets.yaml 检测，不再硬编码 "earth"（修复 gaia-m 等非地球世界的 build 输出路径）
+- **ClimateEngine 数据回写**：气候模拟后将 koppen_class/temperature_C/precipitation_mm 写回 cvt_mesh.json，前端可渲染
+
+---
+
 ## [0.9.0] — 2026-07-27
 
 ### Added
