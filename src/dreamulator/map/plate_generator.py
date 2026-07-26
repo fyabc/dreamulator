@@ -279,10 +279,13 @@ def assign_crust_types(
     mesh: CVTMesh,
     cell_plate_map: dict[int, str],
     rng: np.random.Generator,
+    continental_fraction_min: float = 0.25,
+    continental_fraction_max: float = 0.65,
 ) -> None:
     """Assign crust types to cells based on their plate.
 
-    Each plate gets a random continental fraction in [0.1, 0.9].
+    Each plate gets a random continental fraction uniformly in
+    ``[continental_fraction_min, continental_fraction_max]``.
     Fractal Brownian Motion (fBm) — 5 octaves of 3D simplex noise with
     1/f amplitude scaling (persistence=0.5, lacunarity=2.5) — produces
     statistically self-similar crust boundaries.  Cells near the
@@ -323,7 +326,7 @@ def assign_crust_types(
         _has_noise = False
 
     for plate_id, cell_ids in plate_cells.items():
-        continental_fraction = rng.uniform(0.1, 0.9)
+        continental_fraction = rng.uniform(continental_fraction_min, continental_fraction_max)
         n_cont = max(1, int(len(cell_ids) * continental_fraction))
 
         if _has_noise:
@@ -568,7 +571,11 @@ def _generate_plates_impl(
 
     # 4. Crust types
     logger.info("  Step 4/5: Assigning crust types")
-    assign_crust_types(mesh, cell_plate_map, rng)
+    assign_crust_types(
+        mesh, cell_plate_map, rng,
+        config.continental_fraction_min,
+        config.continental_fraction_max,
+    )
 
     # 5. Euler poles
     logger.info("  Step 5/5: Assigning Euler poles")

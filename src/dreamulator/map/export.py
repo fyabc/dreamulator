@@ -239,10 +239,30 @@ def save_outputs(
         "radius_km": config.radius_km,
         "elevation_range_m": [elev_min, elev_max],
         "png_elevation_range_m": [png_min, png_max],
-        "sea_level_m": config.sea_level_m,
+        "sea_level_m": 0.0,
         "export_resolution": [config.export_width, config.export_height],
         "pipeline_version": "2.0-cvt",
     }
     with open(output_dir / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
     logger.info("  Saved metadata: %s", output_dir / "metadata.json")
+
+    # 5. Sync map.yaml elevation range to match PNG encoding
+    #    The frontend decodes elevation.png using map.yaml's elevation_min_m /
+    #    elevation_max_m.  These MUST match the PNG's actual encoding range
+    #    (png_min / png_max) or colours will be wrong — cells above sea level
+    #    will render as ocean if the max is underestimated.
+    import yaml as _yaml
+
+    map_yaml_path = output_dir / "map.yaml"
+    if map_yaml_path.exists():
+        with map_yaml_path.open("r", encoding="utf-8") as _f:
+            _map_data = _yaml.safe_load(_f) or {}
+        _map_data["elevation_min_m"] = png_min
+        _map_data["elevation_max_m"] = png_max
+        _map_data["sea_level_m"] = 0.0
+        with map_yaml_path.open("w", encoding="utf-8") as _f:
+            _yaml.dump(_map_data, _f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        logger.info(
+            "  Synced map.yaml elevation range: [%.1f, %.1f] m", png_min, png_max
+        )

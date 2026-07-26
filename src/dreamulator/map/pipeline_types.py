@@ -50,6 +50,15 @@ class TerrainPipelineConfig:
     # edges, 0.05–0.15 = natural organic boundaries).
     # Follows Cortial et al. (2019) "noise-warped geodetic distance".
     boundary_noise: float = 0.10
+    # Per-plate continental fraction range.  Each plate is assigned a random
+    # continental cell ratio uniformly in [min, max].  Earth ≈ 0.29 land
+    # (emergent), but the crust-type continental fraction should be higher
+    # since some continental crust is submerged (continental shelves).
+    #   0.1–0.5 → mostly ocean world (e.g. island chains)
+    #   0.3–0.7 → Earth-like (balanced)
+    #   0.6–0.9 → supercontinent / Pangaea-like
+    continental_fraction_min: float = 0.25
+    continental_fraction_max: float = 0.65
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).
@@ -127,9 +136,6 @@ class TerrainPipelineConfig:
     # (plate_elevation_spread_m can push base elevation to 2000m+).
     regional_noise_amplitude_land_m: float = 1800.0
     regional_noise_amplitude_ocean_m: float = 1200.0
-
-    # Sea level
-    sea_level_m: float = 0.0
 
     # Export
     export_width: int = 4096

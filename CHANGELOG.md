@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] — 2026-07-26
+
+### Added
+
+**海陆比例控制**
+- 新增 `continental_fraction_min` / `continental_fraction_max` 参数,替代硬编码的 `[0.1, 0.9]`
+- `terrain info` 子命令新增面积加权海陆比例报告 (细胞数 + km²)
+- earth/terrain-dev 配置文件完整参数注释文档 (30+ 参数)
+
+### Changed
+
+**移除 `sea_level_m` 参数**
+- 从 `TerrainPipelineConfig` 中移除 `sea_level_m`，硬编码为 0.0 (海岸平原/大陆架计算依赖于 sea_level=0)
+
+**默认地图跳转 2D → 3D**
+- "打开地图编辑器" 链接从 `/map/` (2D) 改为 `/globe/` (3D 球面)
+
+### Fixed
+
+**地图色彩异常 (关键修复)**
+- 地形管线生成后自动同步 `map.yaml` 到正确的 PNG 编码范围
+- gaia-m 高程范围 `[-11000, 9000]` → `[-11000, 11632]`,修复 +1000m 以上陆地渲染为海洋的问题
+- earth/terrain-dev 高程范围 `[-11000, 9000]` → `[-11000, 9802]`
+
+**YAML 配置修复**
+- gaia-m `terrain_config.yaml` 合并三个重复的 `terrain:` 键 (YAML 键覆盖导致参数丢失)
+
+### Removed
+
+- 前端静态数据中残留的旧格式 `voronoi.json` (已被 `cvt_mesh.json` 取代)
+- `data/worlds/earth/layers/geological/input/maps/earth/benchmark.json` (开发调试临时文件)
+
 ## [0.7.1] — 2026-07-26
 
 ### Added

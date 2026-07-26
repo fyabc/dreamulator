@@ -26,11 +26,21 @@ planet:
   gravity_m_s2: 10.28          # 1.05g (G*1.2M_earth/(1.07R_earth)^2)
   rotation_period_days: 3.25   # 潮汐锁定于 Aegis 巨行星
 
-# ── CVT 网格 ──────────────────────────────────────────────────────────────────
+# ── CVT 网格 + 地形合成 ───────────────────────────────────────────────────────
 terrain:
   num_nodes: 100000            # 10 万个 Voronoi cell
   jitter_sigma: 0.3
   lloyd_iterations: 8
+  continental_elevation_m: 850.0
+  oceanic_elevation_m: -3800.0 # Gaia-M 海洋平均深度 ~4000m
+  boundary_influence_km: 400.0
+  convergent_uplift_m: 4000.0
+  divergent_depth_m: 2000.0
+  plate_elevation_spread_m: 1500.0
+  boundary_noise: 0.10
+  # terrain_algorithm: cortial2019_asymmetric  # terrain synthesis strategy
+  # mountain_asymmetry: 0.4                    # 0=symmetric, 1=strongly asymmetric
+  # hotspot_count: 3                           # volcanic hotspot chains (0=off)
 
 # ── 构造板块 ──────────────────────────────────────────────────────────────────
 # 来源: geography.md (12主板块 + 8小板 = 20)
@@ -39,14 +49,12 @@ plates:
   num_plates: 20
   plate_speed_min_cm_yr: 3.0   # 最慢板块
   plate_speed_max_cm_yr: 15.0  # 最快板块 (潮汐加热驱动更活跃的板块运动)
-
-# ── 地形合成 ──────────────────────────────────────────────────────────────────
-terrain:
-  continental_elevation_m: 850.0
-  oceanic_elevation_m: -3800.0 # Gaia-M 海洋平均深度 ~4000m
-  boundary_influence_km: 400.0
-  convergent_uplift_m: 4000.0
-  divergent_depth_m: 2000.0
+  plate_algorithm: cortial2019  # plate partition strategy
+  tectonic_algorithm: ""        # time-evolution (""=none, "cortial2019")
+  tectonic_steps: 0             # evolution steps (0 = static)
+  # tectonic_dt_my: 0.0         # My/step (0 = auto-scale to resolution)
+  continental_fraction_min: 0.28   # target ~28% emergent land
+  continental_fraction_max: 0.36
 
 # ── 噪声参数 ──────────────────────────────────────────────────────────────────
 noise:
@@ -56,13 +64,9 @@ noise:
   noise_lacunarity: 2.0
   noise_amplitude_land_m: 600.0
   noise_amplitude_ocean_m: 300.0
-
-# ── 海平面 ────────────────────────────────────────────────────────────────────
-# Gaia-M 水覆盖率 72% (land_sea.md)
-# 海平面设为 0m, 大陆/海洋比例由随机板块生成决定
-# TODO: 后续调整 sea_level_m 以精确匹配 72% 水覆盖率
-terrain:
-  sea_level_m: 0.0
+  regional_noise_scale: 0.5
+  regional_noise_amplitude_land_m: 1200.0
+  regional_noise_amplitude_ocean_m: 800.0
 
 # ── 导出设置 ──────────────────────────────────────────────────────────────────
 export:

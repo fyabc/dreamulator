@@ -351,7 +351,7 @@ def _synthesize_gaussian(
     regional_fbm = generate_fbm_on_cells(mesh, regional_config)
 
     regional_amplitude = np.where(
-        base >= config.sea_level_m,
+        base >= 0.0,
         config.regional_noise_amplitude_land_m,
         config.regional_noise_amplitude_ocean_m,
     )
@@ -362,7 +362,7 @@ def _synthesize_gaussian(
 
     # Amplitude-modulated by terrain type
     noise_amplitude = np.where(
-        base >= config.sea_level_m,
+        base >= 0.0,
         config.noise_amplitude_land_m,
         config.noise_amplitude_ocean_m,
     )
@@ -397,10 +397,10 @@ def _synthesize_gaussian(
         cell.elevation = float(elevation[i])
 
     # Classify sea/land
-    classify_sea_land(mesh, config.sea_level_m)
+    classify_sea_land(mesh, 0.0)
 
-    _log_synthesis_stats(elevation, config.sea_level_m, n)
-    _compute_quality_metrics(mesh, config.sea_level_m)
+    _log_synthesis_stats(elevation, 0.0, n)
+    _compute_quality_metrics(mesh, 0.0)
 
 
 # =========================================================================
@@ -466,7 +466,7 @@ def _synthesize_asymmetric(
     )
     regional_fbm = generate_fbm_on_cells(mesh, regional_cfg)
     regional_amp = np.where(
-        base >= config.sea_level_m,
+        base >= 0.0,
         config.regional_noise_amplitude_land_m,
         config.regional_noise_amplitude_ocean_m,
     )
@@ -476,7 +476,7 @@ def _synthesize_asymmetric(
     strike = _compute_boundary_strike(mesh) if config.noise_anisotropy > 0 else None
     fbm = _anisotropic_fbm(mesh, config, strike) if strike else generate_fbm_on_cells(mesh, config)
     noise_amp = np.where(
-        base >= config.sea_level_m,
+        base >= 0.0,
         config.noise_amplitude_land_m,
         config.noise_amplitude_ocean_m,
     )
@@ -515,9 +515,9 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    classify_sea_land(mesh, config.sea_level_m)
-    _log_synthesis_stats(elevation, config.sea_level_m, n)
-    _compute_quality_metrics(mesh, config.sea_level_m)
+    classify_sea_land(mesh, 0.0)
+    _log_synthesis_stats(elevation, 0.0, n)
+    _compute_quality_metrics(mesh, 0.0)
 
 
 def _asymmetric_boundary_effects(
@@ -1050,10 +1050,10 @@ def _apply_continental_shelf(
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
-        if elevation[i] <= config.sea_level_m:
+        if elevation[i] <= 0.0:
             continue
         for nid in cell.neighbors:
-            if elevation[nid] <= config.sea_level_m:
+            if elevation[nid] <= 0.0:
                 coastline.add(i)
                 break
 
@@ -1077,7 +1077,7 @@ def _apply_continental_shelf(
         if d >= shelf_width:
             continue
         for nid in mesh.cells[cid].neighbors:
-            if nid not in shelf_dist and elevation[nid] <= config.sea_level_m:
+            if nid not in shelf_dist and elevation[nid] <= 0.0:
                 shelf_dist[nid] = d + cell_km
                 q.append(nid)
 
@@ -1152,10 +1152,10 @@ def _apply_coastal_plain(
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
-        if elevation[i] <= config.sea_level_m:
+        if elevation[i] <= 0.0:
             continue
         for nid in cell.neighbors:
-            if elevation[nid] <= config.sea_level_m:
+            if elevation[nid] <= 0.0:
                 coastline.add(i)
                 break
 
@@ -1184,7 +1184,7 @@ def _apply_coastal_plain(
         if d >= max_bfs_width:
             continue
         for nid in mesh.cells[cid].neighbors:
-            if nid not in inland_dist and elevation[nid] > config.sea_level_m:
+            if nid not in inland_dist and elevation[nid] > 0.0:
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
@@ -1197,10 +1197,10 @@ def _apply_coastal_plain(
     mountain_coast_ratio = 0.40  # mountain cells retain ~40% of elev at the coast
 
     for cid, d_km in inland_dist.items():
-        if elevation[cid] <= config.sea_level_m:
+        if elevation[cid] <= 0.0:
             continue
 
-        elev_above_sea = elevation[cid] - config.sea_level_m
+        elev_above_sea = elevation[cid] - 0.0
 
         # Elevation factor: 1.0 at sea level → 0.0 at max_plain_elev+
         elev_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
@@ -1311,7 +1311,7 @@ def _apply_island_arcs(
             elevation[cid] += dz
             arc_count += 1
         # If this lifts above sea level, mark as transitional (island)
-        if elevation[cid] > config.sea_level_m:
+        if elevation[cid] > 0.0:
             mesh.cells[cid].crust_type = "transitional"
 
     logger.info(

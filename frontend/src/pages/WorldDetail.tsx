@@ -409,7 +409,7 @@ export default function WorldDetail() {
                         className="relative cursor-pointer group rounded-lg overflow-hidden"
                         onClick={() => {
                           const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-                          navigate(`/worlds/${worldName}/map/${firstMapPlanet}${qs}`)
+                          navigate(`/worlds/${worldName}/globe/${firstMapPlanet}${qs}`)
                         }}
                       >
                         <MapPreviewCanvas

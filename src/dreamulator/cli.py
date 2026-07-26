@@ -956,7 +956,7 @@ def _save_benchmark(
     elev_stats = {}
     if mesh is not None:
         elevs = np.array([c.elevation for c in mesh.cells])
-        sea = getattr(config, "sea_level_m", 0.0)
+        sea = 0.0
         elev_stats = {
             "min_m": float(np.min(elevs)),
             "max_m": float(np.max(elevs)),
@@ -1280,6 +1280,53 @@ def terrain_info(
         table.add_row(f, size_str)
 
     console.print(table)
+
+    # ---- Land / sea ratio (from cvt_mesh.json) ----
+    mesh_file = map_dir / "cvt_mesh.json"
+    if mesh_file.exists():
+        console.print("[bold]Land / Sea Ratio[/bold]")
+        with open(mesh_file, encoding="utf-8") as f:
+            mesh = json.load(f)
+        cells = mesh.get("cells", [])
+        if cells:
+            total = len(cells)
+            total_area = 0.0
+            land_area = 0.0
+            continental_area = 0.0
+            elevs = []
+            for c in cells:
+                elev = c.get("elevation", 0)
+                area = c.get("area_km2", 0)
+                elevs.append(elev)
+                total_area += area
+                if elev > 0:
+                    land_area += area
+                if c.get("crust_type") == "continental":
+                    continental_area += area
+
+            land_pct = land_area / total_area * 100
+            crust_pct = continental_area / total_area * 100
+            elev_min = min(elevs)
+            elev_max = max(elevs)
+
+            console.print(f"  Total cells:         {total:,}")
+            console.print(f"  Total surface area:  {total_area:,.0f} km2")
+            console.print(f"  Emergent land:       {land_area:,.0f} km2 ({land_pct:.1f}%)")
+            console.print(f"  Ocean (<=0 m):       {total_area - land_area:,.0f} km2 ({100 - land_pct:.1f}%)")
+            console.print(f"  Continental crust:   {continental_area:,.0f} km2 ({crust_pct:.1f}%)")
+            console.print(f"  Oceanic crust:       {total_area - continental_area:,.0f} km2 ({100 - crust_pct:.1f}%)")
+            console.print(f"  Elevation range:     [{elev_min:.0f}, {elev_max:.0f}] m")
+
+            # Quality metrics
+            sea_level = 0.0
+            peak_prominence = elev_max - sea_level
+            abyss_depth = sea_level - elev_min
+            console.print(
+                f"  Peak prominence:     {peak_prominence:.0f} m above sea level"
+            )
+            console.print(
+                f"  Max ocean depth:     {abyss_depth:.0f} m below sea level"
+            )
 
 
 @terrain_app.command("export")
