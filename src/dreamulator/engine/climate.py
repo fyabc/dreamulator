@@ -165,6 +165,11 @@ class ClimateEngine(BaseEngine):
 
         simulate_climate(mesh, config)
 
+        # ---- 5b. Write climate data back to source cvt_mesh.json ----
+        # The frontend reads cvt_mesh.json (geological layer) and expects
+        # koppen_class / temperature_C / precipitation_mm to be populated.
+        self._update_source_mesh(mesh)
+
         # ---- 6. Export outputs ----
         export_dir = self.layer_output_dir / "maps" / planet.id
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -217,6 +222,31 @@ class ClimateEngine(BaseEngine):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def _update_source_mesh(self, mesh: object) -> None:
+        """Write climate-populated mesh back to the source cvt_mesh.json.
+
+        NOTE: This is a cross-layer write (climate → geological). The frontend
+        reads cvt_mesh.json from the geological layer and expects climate fields
+        to be populated. This is a known architectural debt to be resolved later.
+        """
+        search_dirs: list[Path] = []
+        for layer_dirs in (self.layer_derived_dirs, self.layer_input_dirs):
+            geo_dir = layer_dirs.get("geological")
+            if geo_dir:
+                search_dirs.append(geo_dir)
+
+        for d in search_dirs:
+            for mesh_path in d.glob("maps/*/cvt_mesh.json"):
+                try:
+                    with mesh_path.open("w", encoding="utf-8") as f:
+                        json.dump(mesh.model_dump(), f, default=str)
+                    logger.info("Updated source mesh with climate data: %s", mesh_path)
+                    return
+                except Exception as e:
+                    logger.warning("Failed to update %s: %s", mesh_path, e)
+
+        logger.warning("No source cvt_mesh.json found to update with climate data")
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,19 @@ const BOUNDARY_LABELS: Record<string, string> = {
   transform: '转换边界',
 }
 
+const KOPPEN_NAMES: Record<string, string> = {
+  Af: '热带雨林', Am: '热带季风', Aw: '热带草原',
+  BWh: '热带沙漠', BWk: '冷沙漠', BSh: '热带草原(半干旱)', BSk: '冷草原(半干旱)',
+  Csa: '地中海(热夏)', Csb: '地中海(温夏)', Csc: '地中海(冷夏)',
+  Cwa: '亚热带季风(热夏)', Cwb: '亚热带季风(温夏)', Cwc: '亚热带季风(冷夏)',
+  Cfa: '湿润亚热带(热夏)', Cfb: '海洋性(温夏)', Cfc: '海洋性(冷夏)',
+  Dsa: '大陆性地中海(热夏)', Dsb: '大陆性地中海(温夏)', Dsc: '大陆性地中海(冷夏)', Dsd: '大陆性地中海(严冬)',
+  Dwa: '大陆性季风(热夏)', Dwb: '大陆性季风(温夏)', Dwc: '大陆性季风(冷夏)', Dwd: '大陆性季风(严冬)',
+  Dfa: '湿润大陆性(热夏)', Dfb: '湿润大陆性(温夏)', Dfc: '亚寒带', Dfd: '极端大陆性',
+  ET: '苔原', EF: '冰原',
+  Ocean: '海洋',
+}
+
 function formatNumber(n: number | undefined, decimals = 0): string {
   if (n === undefined || n === null) return '—'
   if (!isFinite(n)) return '∞'
@@ -285,6 +298,33 @@ function CellDetails({
               : '—'}
           </dd>
         </div>
+
+        {(cell.koppen_class || cell.temperature_C != null) && (
+          <>
+            <div className="border-t border-space-border pt-1 mt-1" />
+            {cell.koppen_class && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title="Köppen-Geiger 气候分类 (Beck et al. 2018)">Köppen 气候</dt>
+                <dd className="text-cyan-300">
+                  {KOPPEN_NAMES[cell.koppen_class] ?? cell.koppen_class}
+                  <span className="text-gray-500 ml-1">({cell.koppen_class})</span>
+                </dd>
+              </div>
+            )}
+            {cell.temperature_C != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">年均温</dt>
+                <dd className="font-mono">{cell.temperature_C.toFixed(1)} °C</dd>
+              </div>
+            )}
+            {cell.precipitation_mm != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">年降水</dt>
+                <dd className="font-mono">{Math.round(cell.precipitation_mm)} mm</dd>
+              </div>
+            )}
+          </>
+        )}
 
         {cell.biome && (
           <>
