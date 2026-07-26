@@ -62,6 +62,30 @@ export function plateColor(index: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Köppen-Geiger climate classification colors (Beck et al. 2018)
+// ---------------------------------------------------------------------------
+
+/** Standard Köppen-Geiger color palette. Source: Beck et al. (2018) legend. */
+export const KOPPEN_COLORS: Record<string, string> = {
+  // A: Tropical (blues)
+  Af: '#0000ff', Am: '#0078ff', Aw: '#46aafa',
+  // B: Arid (reds/oranges)
+  BWh: '#ff0000', BWk: '#ff9696', BSh: '#f5a500', BSk: '#ffdc64',
+  // C: Temperate (yellows/greens)
+  Csa: '#ffff00', Csb: '#c8c800', Csc: '#969600',
+  Cwa: '#96ff96', Cwb: '#64c864', Cwc: '#329632',
+  Cfa: '#c8ff50', Cfb: '#64ff50', Cfc: '#32c800',
+  // D: Continental (purples/cyans)
+  Dsa: '#ff00ff', Dsb: '#c800c8', Dsc: '#963296', Dsd: '#966496',
+  Dwa: '#aab4ff', Dwb: '#5a78dc', Dwc: '#4b50b4', Dwd: '#320087',
+  Dfa: '#00ffff', Dfb: '#37c8ff', Dfc: '#007d7d', Dfd: '#00465f',
+  // E: Polar (greys)
+  ET: '#b2b2b2', EF: '#666666',
+  // Ocean / unclassified
+  Ocean: '#1a5276',
+}
+
+// ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
 

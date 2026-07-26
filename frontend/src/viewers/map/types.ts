@@ -129,7 +129,7 @@ export type MapLayerType =
  * - 'plates': color cells by plate_id (categorical colors)
  * - 'boundaries': show boundary_type (convergent=red, divergent=green, transform=yellow)
  */
-export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries'
+export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen'
 
 // ---------------------------------------------------------------------------
 // Layer visibility state

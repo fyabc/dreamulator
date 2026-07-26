@@ -45,7 +45,7 @@ export default function MapViewerPage() {
   const [projection, setProjection] = useState<ProjectionType>('equirectangular')
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
   })
 
   // Decoded elevation data (for rendering)

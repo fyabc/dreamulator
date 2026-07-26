@@ -19,6 +19,7 @@ import type { CellIdMap } from './useCellIdMap'
 import {
   generateAdaptiveTerrainScale,
   PLATE_COLORS,
+  KOPPEN_COLORS,
 } from './utils/colorScales'
 
 // ---------------------------------------------------------------------------
@@ -129,7 +130,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
   hillshadeStrength = 0,
   waterDepthFactor = 0.5,
   cvtMesh,
@@ -151,6 +152,7 @@ export default function useGPUTerrain({
       lastCache.layers.landsea === layers.landsea &&
       lastCache.layers.plates === layers.plates &&
       lastCache.layers.boundaries === layers.boundaries &&
+      lastCache.layers.koppen === layers.koppen &&
       lastCache.cellIdMap === cellIdMap &&
       lastCache.cvtMesh === cvtMesh &&
       lastCache.hoveredCell === hoveredCell &&
@@ -184,7 +186,8 @@ export default function useGPUTerrain({
     // --- Step 2: Build cell colour palettes ---
     const platesColor = new Map<number, [number, number, number]>()
     const boundariesColor = new Map<number, [number, number, number]>()
-    if (cvtMesh && (activeModes.includes('plates') || activeModes.includes('boundaries'))) {
+    const koppenColor = new Map<number, [number, number, number]>()
+    if (cvtMesh && (activeModes.includes('plates') || activeModes.includes('boundaries') || activeModes.includes('koppen'))) {
       if (activeModes.includes('plates')) {
         const plateIds = [...new Set(cvtMesh.cells.map((c) => c.plate_id).filter(Boolean))]
         const palette = new Map<string, [number, number, number]>()
@@ -215,6 +218,17 @@ export default function useGPUTerrain({
             const crust = (cell as any).crust_type || 'oceanic'
             const cc = CRUST_INTERIOR_COLORS[crust] ?? CRUST_INTERIOR_COLORS.oceanic
             boundariesColor.set(cell.id, cc)
+          }
+        }
+      }
+      if (activeModes.includes('koppen')) {
+        for (const cell of cvtMesh.cells) {
+          const kc = cell.koppen_class
+          if (kc && KOPPEN_COLORS[kc]) {
+            koppenColor.set(cell.id, hexRgb(KOPPEN_COLORS[kc]))
+          } else if (cell.elevation < 0) {
+            // Ocean cells without explicit koppen_class
+            koppenColor.set(cell.id, hexRgb(KOPPEN_COLORS['Ocean']))
           }
         }
       }
@@ -263,6 +277,12 @@ export default function useGPUTerrain({
       if (layers.boundaries > 0 && cellId != null) {
         const bc = boundariesColor.get(cellId)
         if (bc) blend(accum, bc, layers.boundaries)
+      }
+
+      // Layer 5: Koppen climate classification
+      if (layers.koppen > 0 && cellId != null) {
+        const kc = koppenColor.get(cellId)
+        if (kc) blend(accum, kc, layers.koppen)
       }
 
       const pi = i * 4
@@ -382,7 +402,7 @@ export default function useGPUTerrain({
     }
 
     // --- Step 4: Upload as DataTexture ---
-    const hasCellLayers = layers.plates > 0 || layers.boundaries > 0
+    const hasCellLayers = layers.plates > 0 || layers.boundaries > 0 || layers.koppen > 0
     const filterType = hasCellLayers ? THREE.NearestFilter : THREE.LinearFilter
     const colorTex = new THREE.DataTexture(
       outBuf as unknown as BufferSource, width, height, THREE.RGBAFormat,

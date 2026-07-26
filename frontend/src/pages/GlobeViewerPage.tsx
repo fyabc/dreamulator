@@ -48,7 +48,7 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0 } })
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 } })
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
