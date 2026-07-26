@@ -63,7 +63,7 @@ class GeologicalEngine(BaseEngine):
             )
 
         # ---- Determine planet ID and output directory ----
-        planet_id = str(pars.get("planet_id", "earth"))
+        planet_id = str(pars.get("planet_id", "")) or self._detect_planet_id()
         output_dir = self.layer_output_dir / "maps" / planet_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -159,3 +159,32 @@ class GeologicalEngine(BaseEngine):
                 setattr(cfg, key, pars[key])
 
         return cfg
+
+    def _detect_planet_id(self) -> str:
+        """Auto-detect planet ID from planets.yaml or existing map directories.
+
+        Returns:
+            Planet ID string (e.g. 'satellite_gaiam', 'earth').
+        """
+        import yaml
+
+        # Try planets.yaml first
+        planets_path = self.find_input("planets.yaml")
+        if planets_path is not None:
+            with planets_path.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            planets = data.get("planets", [])
+            if planets and isinstance(planets[0], dict) and "id" in planets[0]:
+                return str(planets[0]["id"])
+
+        # Fallback: check existing maps directories
+        for layer_dirs in (self.layer_input_dirs, self.layer_derived_dirs):
+            geo_dir = layer_dirs.get("geological")
+            if geo_dir:
+                maps_dir = geo_dir / "maps"
+                if maps_dir.exists():
+                    for d in maps_dir.iterdir():
+                        if d.is_dir() and (d / "cvt_mesh.json").exists():
+                            return d.name
+
+        return "earth"
