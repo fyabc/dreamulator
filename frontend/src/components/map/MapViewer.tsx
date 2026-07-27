@@ -17,7 +17,7 @@ import { WebGLRenderer } from 'three'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
-import { createReprojectMaterial } from '../../viewers/map/gpuReproject'
+import { createReprojectMaterial, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
   normalisedToMeters,
@@ -203,8 +203,9 @@ export default function MapViewer({
   // gpuMaterial) used to keep baked hover/selection highlights OUT of the source
   // texture — those come from the SVG overlay for non-equirectangular views, so
   // baking them too would double-draw.
+  const reprojectable = projection === 'mollweide' || projection === 'robinson'
   const willGPUReproject =
-    projection === 'mollweide' && elevation !== null && !forceCpuReproject
+    reprojectable && elevation !== null && !forceCpuReproject
 
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
@@ -217,12 +218,12 @@ export default function MapViewer({
   })
 
   // GPU Mollweide reprojection material (inverse warp of the equirect texture).
-  const useGPUReproject = projection === 'mollweide' && gpuMaterial !== null && !forceCpuReproject
+  const useGPUReproject = reprojectable && gpuMaterial !== null && !forceCpuReproject
   const reprojectMaterial = useMemo(() => {
     if (!useGPUReproject) return null
     const eqTex = gpuMaterial!.uniforms.u_colorMap.value as THREE.Texture
-    return createReprojectMaterial('mollweide', eqTex)
-  }, [useGPUReproject, gpuMaterial])
+    return createReprojectMaterial(projection as ReprojectableProjection, eqTex)
+  }, [useGPUReproject, gpuMaterial, projection])
 
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
