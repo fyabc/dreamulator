@@ -19,6 +19,7 @@ import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapCellInspector from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
+import { solarDeclinationDeg } from '../viewers/utils/solar'
 import HelpPanel from '../components/map/HelpPanel'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useCellIdMap from '../viewers/map/useCellIdMap'
@@ -77,7 +78,12 @@ export default function GlobeViewerPage() {
 
   // --- Sun lighting state ---
   const [sunLongitudeDeg, setSunLongitudeDeg] = useState(0)
+  // Season (orbital position): 0° = vernal equinox, 90° = N. summer solstice.
+  const [seasonDeg, setSeasonDeg] = useState(0)
   const [globeZoom, setGlobeZoom] = useState(1)
+
+  // Solar declination (subsolar latitude) varies with season + axial tilt.
+  const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
 
   const elevMin = meta?.elevation_min_m ?? -11000
   const elevMax = meta?.elevation_max_m ?? 9000
@@ -313,7 +319,7 @@ export default function GlobeViewerPage() {
                 hoveredCellId={hoveredCellId}
                 selectedCellIds={selectedCells}
                 sunLongitudeDeg={sunLongitudeDeg}
-                axialTiltDeg={axialTiltDeg}
+                solarDeclinationDeg={solarDeclination}
               />
             )}
           </div>
@@ -342,7 +348,13 @@ export default function GlobeViewerPage() {
               </div>
               <MapLayerPanel state={layerState} onChange={setLayerState} />
               <div className="mt-3 pt-3 border-t border-space-border">
-                <SunControl sunLongitudeDeg={sunLongitudeDeg} onChange={setSunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
+                <SunControl
+                  sunLongitudeDeg={sunLongitudeDeg}
+                  onLongitudeChange={setSunLongitudeDeg}
+                  seasonDeg={seasonDeg}
+                  onSeasonChange={setSeasonDeg}
+                  axialTiltDeg={axialTiltDeg}
+                />
               </div>
             </div>
           </>
@@ -355,7 +367,13 @@ export default function GlobeViewerPage() {
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
             <MapLayerPanel state={layerState} onChange={setLayerState} />
             <div className="mt-3 pt-3 border-t border-space-border">
-              <SunControl sunLongitudeDeg={sunLongitudeDeg} onChange={setSunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
+              <SunControl
+                  sunLongitudeDeg={sunLongitudeDeg}
+                  onLongitudeChange={setSunLongitudeDeg}
+                  seasonDeg={seasonDeg}
+                  onSeasonChange={setSeasonDeg}
+                  axialTiltDeg={axialTiltDeg}
+                />
             </div>
           </div>
 
@@ -383,7 +401,7 @@ export default function GlobeViewerPage() {
               hoveredCellId={hoveredCellId}
               selectedCellIds={selectedCells}
               sunLongitudeDeg={sunLongitudeDeg}
-              axialTiltDeg={axialTiltDeg}
+              solarDeclinationDeg={solarDeclination}
             />
           )}
         </div>

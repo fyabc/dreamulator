@@ -20,6 +20,8 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 
+import { sunDirection } from './utils/solar'
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -57,8 +59,8 @@ interface GlobeViewerProps {
   selectedCellIds?: Set<number>
   /** Sun longitude in degrees (0 = noon at prime meridian). */
   sunLongitudeDeg?: number
-  /** Planet axial tilt in degrees. */
-  axialTiltDeg?: number
+  /** Solar declination (subsolar latitude) in degrees — varies with season. */
+  solarDeclinationDeg?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -70,21 +72,23 @@ interface GlobeViewerProps {
 // the equirectangular texture UV mapping on SphereGeometry.
 
 // ---------------------------------------------------------------------------
-// SunLight — directional light positioned by sun longitude + axial tilt
+// SunLight — directional light positioned by sun longitude + declination
 // ---------------------------------------------------------------------------
 
 const SUN_DIST = 8
 const SUN_INTENSITY = 1.2
 
-function SunLight({ sunLongitudeDeg = 0, axialTiltDeg = 0 }: { sunLongitudeDeg?: number; axialTiltDeg?: number }) {
+/**
+ * Directional light aimed from the subsolar point. The sun longitude drives the
+ * diurnal (day/night) rotation; the solar declination — derived from the season
+ * and axial tilt upstream — tilts the terminator so the poles get midnight-sun
+ * / polar-night behaviour across the year.
+ */
+function SunLight({ sunLongitudeDeg = 0, solarDeclinationDeg = 0 }: { sunLongitudeDeg?: number; solarDeclinationDeg?: number }) {
   const lightPos = useMemo(() => {
-    const lonRad = (sunLongitudeDeg * Math.PI) / 180
-    const tiltRad = (axialTiltDeg * Math.PI) / 180
-    const dir = new THREE.Vector3(-Math.cos(lonRad), 0, -Math.sin(lonRad))
-    dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), tiltRad)
-    dir.multiplyScalar(SUN_DIST)
-    return [dir.x, dir.y, dir.z] as [number, number, number]
-  }, [sunLongitudeDeg, axialTiltDeg])
+    const [x, y, z] = sunDirection(sunLongitudeDeg, solarDeclinationDeg)
+    return [x * SUN_DIST, y * SUN_DIST, z * SUN_DIST] as [number, number, number]
+  }, [sunLongitudeDeg, solarDeclinationDeg])
 
   return <directionalLight position={lightPos} intensity={SUN_INTENSITY} />
 }
@@ -253,7 +257,7 @@ interface GlobeSceneProps {
   hoveredCellId?: number | null
   selectedCellIds?: Set<number>
   sunLongitudeDeg?: number
-  axialTiltDeg?: number
+  solarDeclinationDeg?: number
 }
 
 // North-pole fly animation duration (ms)
@@ -271,7 +275,7 @@ interface NorthAnimState {
 function GlobeScene({
   texture, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
-  sunLongitudeDeg, axialTiltDeg,
+  sunLongitudeDeg, solarDeclinationDeg,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const northAnimRef = useRef<NorthAnimState | null>(null)
@@ -341,7 +345,7 @@ function GlobeScene({
     <>
       <Stars radius={50} depth={30} count={2000} factor={4} saturation={0} fade speed={0.2} />
       <ambientLight intensity={0.25} />
-      <SunLight sunLongitudeDeg={sunLongitudeDeg} axialTiltDeg={axialTiltDeg} />
+      <SunLight sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg} />
 
       {/* Planet sphere with pointer events */}
       <mesh
@@ -425,7 +429,7 @@ export default function GlobeViewer({
   texture, onTransition, transitionLabel = '转入星系视图',
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
-  sunLongitudeDeg, axialTiltDeg,
+  sunLongitudeDeg, solarDeclinationDeg,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -464,7 +468,7 @@ export default function GlobeViewer({
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
-            sunLongitudeDeg={sunLongitudeDeg} axialTiltDeg={axialTiltDeg}
+            sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
           />
         </Canvas>
       </Suspense>
