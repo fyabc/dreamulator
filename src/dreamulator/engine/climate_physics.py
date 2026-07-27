@@ -90,7 +90,7 @@ def surface_temperature(
 def latitude_temperature(
     t_surface_mean_c: np.ndarray | float,
     lat_rad: np.ndarray,
-    lat_gradient_c: float = 45.0,
+    lat_gradient_c: float = 40.0,
 ) -> np.ndarray:
     """Apply latitude-dependent temperature gradient.
 
@@ -145,12 +145,20 @@ def seasonal_temperature(
     axial_tilt_deg: float = 23.44,
     orbital_period_days: float = 365.25,
     day_of_year: float = 0.0,
-    seasonal_amplitude_c: float = 15.0,
+    seasonal_amplitude_c: float = 35.0,
 ) -> dict[str, np.ndarray]:
     """Compute seasonal temperature at a given day of year.
 
     The seasonal cycle is driven by the planet's axial tilt (obliquity ε).
     The solar declination varies between -ε and +ε over the orbital period.
+
+    The effective seasonal deviation from mean is:
+        deviation = seasonal_amplitude_c * sin²(lat) * √sin(ε)
+
+    Earth calibration (seasonal_amplitude_c=30):
+        60°N: deviation ≈ 14.2°C (T_hot ≈ 10-12°C → D climate)
+        45°N: deviation ≈ 9.5°C
+        30°N: deviation ≈ 4.7°C
 
     Args:
         t_mean_c: Mean annual temperature (°C), shape (N,).
@@ -158,7 +166,8 @@ def seasonal_temperature(
         axial_tilt_deg: Axial obliquity in degrees.
         orbital_period_days: Length of year in days.
         day_of_year: Day of year (0 = northern winter solstice).
-        seasonal_amplitude_c: Amplitude of seasonal cycle at poles (°C).
+        seasonal_amplitude_c: Base amplitude scaling factor (°C).
+            Earth: 30. Higher values → larger seasonal swings.
 
     Returns:
         dict with keys:
@@ -173,8 +182,8 @@ def seasonal_temperature(
     solar_dec = epsilon * np.sin(2.0 * np.pi * day_of_year / orbital_period_days)
 
     # Seasonal temperature amplitude at each latitude.
-    # Maximum at poles, zero at equator.  The amplitude scales with sin(lat)
-    # and with axial tilt.
+    # Effective deviation = amplitude * sin(lat) = A * sin²(lat) * √sin(ε)
+    # This gives ~14°C at 60°N, ~9.5°C at 45°N for Earth (A=30).
     amplitude = seasonal_amplitude_c * np.abs(np.sin(lat_rad)) * (np.sin(epsilon) ** 0.5)
 
     # Temperature today = mean + amplitude * sin(solar_dec) * sin(lat)
@@ -666,7 +675,7 @@ def compute_mean_annual_temperature(
     orbital_distance_au: float = 1.0,
     albedo: float = 0.306,
     greenhouse_warming_K: float = 33.0,
-    lat_gradient_c: float = 45.0,
+    lat_gradient_c: float = 40.0,
     lapse_rate_c_km: float = 6.5,
 ) -> np.ndarray:
     """End-to-end mean annual temperature computation.

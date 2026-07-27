@@ -142,7 +142,12 @@ def run_pipeline(
         )
 
         # Skip if all outputs exist and force is False
-        if not force and _outputs_exist(engine):
+        # Skip if outputs exist and not forced.
+        # When --only is specified, only force the target engine;
+        # dependencies still use cache (avoid re-running geological
+        # when user only wants to re-run climate).
+        should_force = force and (only_engine is None or engine.name == only_engine)
+        if not should_force and _outputs_exist(engine):
             _console.print(f"  [dim]{engine.layer.value}: up-to-date, skipped[/dim]")
             logger.info("Skipping %s (outputs up-to-date)", engine.name)
             continue
@@ -212,5 +217,11 @@ def _collect_dependencies(engine_name: str, sorted_engines: list[type[BaseEngine
 
 
 def _outputs_exist(engine: BaseEngine) -> bool:
-    """Check if all declared output files already exist."""
+    """Check if all declared output files already exist.
+
+    Uses the engine's custom outputs_exist() method if defined,
+    otherwise checks output_files relative to layer_output_dir.
+    """
+    if hasattr(engine, "outputs_exist"):
+        return engine.outputs_exist()
     return all(engine.output_path(f).exists() for f in engine.output_files)

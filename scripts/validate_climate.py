@@ -123,21 +123,24 @@ def _find_project_root() -> Path:
 def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> object | None:
     """Load CVT mesh from a world's map directory.
 
-    Searches in geological input/derived, including branch directories.
+    Searches unified maps/ directory first, then old layer-based locations.
     """
     from dreamulator.map.models import CVTMesh
 
-    # Determine base directory
+    # Determine base directories (branch overlay → root)
     if branch:
         branch_dir = world_dir / "branches" / branch
-        search_dirs = [branch_dir]
-        # Also search parent (root world) for inherited layers
-        search_dirs.append(world_dir)
+        search_dirs = [branch_dir, world_dir]
     else:
         search_dirs = [world_dir]
 
+    # Build search paths: new maps/ structure first, then old locations
     search_paths = []
     for base in search_dirs:
+        # New unified structure
+        search_paths.append(base / "maps" / planet_id / "cvt_mesh.json")
+    for base in search_dirs:
+        # Old layer-based structure (backward compat)
         for sub in ("derived", "input"):
             search_paths.append(
                 base / "layers" / "geological" / sub / "maps" / planet_id / "cvt_mesh.json",
@@ -500,6 +503,7 @@ def run_validation(
     branch: str | None = None,
     output_dir: Path | None = None,
     quick: bool = False,
+    data_dir: str | None = None,
 ) -> dict:
     """Run the full climate validation pipeline.
 
@@ -516,9 +520,12 @@ def run_validation(
     project_root = _find_project_root()
 
     # Determine world directory
-    world_dir = project_root / "data" / "worlds" / world_name
-    if not world_dir.exists():
-        world_dir = project_root / "private" / "worlds" / world_name
+    if data_dir:
+        world_dir = project_root / data_dir / world_name
+    else:
+        world_dir = project_root / "data" / "worlds" / world_name
+        if not world_dir.exists():
+            world_dir = project_root / "private" / "worlds" / world_name
 
     if not world_dir.exists():
         return {"error": f"World directory not found: {world_dir}"}
@@ -612,8 +619,10 @@ def run_validation(
     print("=" * 60)
     print("3b. Koppen Spatial Accuracy (cell-by-cell vs Beck 2018)")
     print("-" * 60)
-    # Look for koppen_obs.json in climate reference directory
+    # Look for koppen_obs.json in maps/ or old climate reference directory
     obs_candidates = [
+        world_dir / "branches" / (branch or "") / "maps" / planet_id / "koppen_obs.json",
+        world_dir / "maps" / planet_id / "koppen_obs.json",
         world_dir / "branches" / (branch or "") / "layers" / "climate" / "reference" / "koppen_obs.json",
         world_dir / "layers" / "climate" / "reference" / "koppen_obs.json",
     ]
@@ -713,6 +722,7 @@ def main() -> None:
         branch=args.branch,
         output_dir=Path(args.output_dir) if args.output_dir else None,
         quick=args.quick,
+        data_dir=args.data_dir,
     )
 
     if "error" in report:

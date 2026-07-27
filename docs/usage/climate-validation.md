@@ -151,8 +151,8 @@ curl --proxy http://127.0.0.1:10808 \
 ### 4.1 快速验证（推荐首次运行）
 
 ```bash
-# 对 terrain-dev 分支运行快速验证
-uv run python scripts/validate_climate.py earth --branch terrain-dev
+# 对 climate-dev 分支运行快速验证
+uv run python scripts/validate_climate.py earth --branch climate-dev
 
 # 对主世界运行
 uv run python scripts/validate_climate.py earth

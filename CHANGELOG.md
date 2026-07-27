@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-07-27
+
+### Added
+
+- **`climate_seasonality.py`**：光照驱动季节模块（月度光照→温度振幅→ITCZ 迁移→降水分配），支持行星/卫星/高偏心率三种模式
+- **气候模拟 5 阶段 rich 进度输出**：Temperature → Wind → Precipitation → Köppen → Write，含计时
+
+### Changed
+
+- **气候模型调参**（验证指标提升）：
+  - 季节振幅 15→35，纬度梯度 45→40
+  - ITCZ 增强 700→1200 mm，热带对流 ×2，热带降水底线 800mm
+  - 副高抑制移至 convection 之后，蒸散 30%→40%
+- **ClimateEngine 依赖**：`requires = ["astronomy"]` → `["astronomy", "geological"]`
+
+### Fixed
+
+- `--only X --force`：只强制目标引擎，依赖走缓存跳过
+- `GeologicalEngine.outputs_exist()`：检查 `maps/` 目录（适配新数据结构）
+- validate_climate.py：支持 `--data-dir`，搜索新 `maps/` 路径
+- import_earth_elevation.py：planet_id 从目录名推断（不再硬编码 "earth"）
+
+### Metrics (earth/climate-dev, 32K cells, vs Beck 2018)
+
+| 指标 | v0.9.0 | v0.11.0 |
+|------|--------|---------|
+| A 类准确率 | 13.3% | 33.3% |
+| D 类群组准确率 | 0% | 48.3% |
+| 总群组准确率 | 40.8% | 53.9% |
+| Cohen's Kappa | 0.102 | 0.209 |
+
+---
+
 ## [0.10.0] — 2026-07-27
 
 ### Changed (Breaking)

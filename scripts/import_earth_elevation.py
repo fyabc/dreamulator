@@ -256,13 +256,17 @@ def save_elevation_png(
 
 def save_yaml_map(
     output_dir: Path, width: int, height: int, elev_min: float, elev_max: float,
-    provenance: dict | None = None,
+    provenance: dict | None = None, planet_id: str | None = None,
 ) -> None:
     """Save map.yaml with elevation range and generation metadata."""
     import yaml
 
+    # Infer planet_id from output directory name if not specified
+    if planet_id is None:
+        planet_id = output_dir.name
+
     map_data = {
-        "planet_id": "earth",
+        "planet_id": planet_id,
         "projection": "equirectangular",
         "width": width,
         "height": height,

@@ -177,7 +177,7 @@ class TerrainPipelineConfig:
     atmosphere_factor: float = 1.0   # greenhouse multiplier (1.0 = Earth, 0 = none)
     greenhouse_warming_K: float = 33.0   # additional greenhouse warming (K)
     lapse_rate_c_km: float = 6.5         # moist adiabatic lapse rate (°C/km)
-    lat_gradient_c: float = 45.0         # equator-to-pole temperature difference (°C)
+    lat_gradient_c: float = 40.0         # equator-to-pole temperature difference (°C)
     # Wind
     wind_blocking_height_m: float = 3000.0  # mountains above this block wind
     # Precipitation

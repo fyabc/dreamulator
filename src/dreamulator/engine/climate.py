@@ -47,7 +47,7 @@ class ClimateEngine(BaseEngine):
 
     name = "climate"
     layer = Layer.CLIMATE
-    requires = ["astronomy"]  # geological data is loaded via maps, not DAG
+    requires = ["astronomy", "geological"]  # geological data is loaded via maps, not DAG
     input_files = [
         "stellar.yaml",        # → astronomy input (star luminosity, orbits)
         "stellar_derived.yaml",  # → astronomy derived (computed stellar params)

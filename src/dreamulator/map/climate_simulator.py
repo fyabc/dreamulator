@@ -38,6 +38,12 @@ if TYPE_CHECKING:
     from .models import CVTMesh
     from .pipeline_types import TerrainPipelineConfig
 
+import time as _time
+
+from rich.console import Console as _Console
+
+_console = _Console()
+
 # ---------------------------------------------------------------------------
 # Thresholds
 # ---------------------------------------------------------------------------
@@ -113,6 +119,8 @@ def simulate_climate(
     # ------------------------------------------------------------------
     # Stage 1: Temperature
     # ------------------------------------------------------------------
+    _t0 = _time.time()
+    _console.print("  [dim]1/5  Temperature (EBM + latitude + altitude)[/dim]")
     teq_K = equilibrium_temperature(
         stellar_luminosity_sol=config.stellar_luminosity_sol,
         orbital_distance_au=config.orbital_distance_au,
@@ -150,6 +158,9 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 2: Wind
+    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    _t0 = _time.time()
+    _console.print("  [dim]2/5  Wind field (geostrophic + Hadley cells)[/dim]")
     # ------------------------------------------------------------------
     # Geostrophic wind from pressure gradient + Coriolis
     pressure_hpa = pressure_from_temperature(t_mean_C, elevation_m)
@@ -169,6 +180,9 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 3: Precipitation (multi-pass BFS moisture transport)
+    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    _t0 = _time.time()
+    _console.print("  [dim]3/5  Precipitation (BFS moisture transport)[/dim]")
     # ------------------------------------------------------------------
     precipitation_mm = _compute_precipitation_bfs(
         mesh=mesh,
@@ -183,6 +197,9 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification
+    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    _t0 = _time.time()
+    _console.print("  [dim]4/5  Koppen classification[/dim]")
     # ------------------------------------------------------------------
     # Estimate driest and wettest month from annual + seasonal patterns
     p_annual = precipitation_mm
@@ -206,23 +223,27 @@ def simulate_climate(
     # ------------------------------------------------------------------
     # Write back to cells
     # ------------------------------------------------------------------
+    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    _t0 = _time.time()
+    _console.print("  [dim]5/5  Write results to mesh[/dim]")
+
     for i in range(n):
         mesh.cells[i].temperature_C = float(t_mean_C[i])
         mesh.cells[i].precipitation_mm = float(precipitation_mm[i])
         mesh.cells[i].koppen_class = koppen_codes[i]
 
-    # Log summary for debugging
+    # Summary
     n_land = int(is_land.sum())
     if n_land > 0:
         t_land_min = float(t_mean_C[is_land].min())
         t_land_max = float(t_mean_C[is_land].max())
         p_land_min = float(precipitation_mm[is_land].min())
         p_land_max = float(precipitation_mm[is_land].max())
-        print(
-            "Climate simulation complete: "
-            f"T={t_land_min:.0f}-{t_land_max:.0f} C, "
-            f"P={p_land_min:.0f}-{p_land_max:.0f} mm/yr "
-            f"({n_land} land cells, {len(set(koppen_codes)) - 1} Koppen classes)"
+        _console.print(
+            f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]\n"
+            f"  T={t_land_min:.0f}~{t_land_max:.0f} C, "
+            f"P={p_land_min:.0f}~{p_land_max:.0f} mm/yr, "
+            f"{n_land} land cells, {len(set(koppen_codes)) - 1} Koppen classes"
         )
 
 
@@ -425,8 +446,8 @@ def _compute_precipitation_bfs(
 
     # Step 1: Base moisture from ocean evaporation
     ocean_moisture = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
-    # Land evapotranspiration: ~30% of ocean rate (soil + vegetation recycling)
-    land_moisture = np.where(is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.30), 0.0)
+    # Land evapotranspiration: ~40% of ocean rate (soil + vegetation recycling)
+    land_moisture = np.where(is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0)
 
     # Step 2: Multi-pass advection
     # Each pass: start from ocean + land moisture, then BFS downwind.
@@ -559,14 +580,10 @@ def _compute_precipitation_bfs(
         lag_days=float(config.itcz_lag_days),
     )
     # Wide Gaussian: σ=12° covers 20°N–20°S with significant rain
-    itcz_enhancement = 700.0 * np.exp(-0.5 * ((lat_deg - itcz_lat) / 12.0) ** 2)
+    # ITCZ: strong convective rainfall band, wider coverage for tropics
+    itcz_enhancement = 1200.0 * np.exp(-0.5 * ((lat_deg - itcz_lat) / 15.0) ** 2)
     # Apply to both land and ocean (ITCZ rains over ocean too)
     precip += itcz_enhancement
-
-    # Subtropical suppression: descending air at ~30°N/S suppresses precipitation
-    subtropical_suppression = 0.5 + 0.5 * np.cos(np.pi * (np.abs(lat_deg) - 30.0) / 15.0)
-    subtropical_mask = (np.abs(lat_deg) > 20.0) & (np.abs(lat_deg) < 40.0)
-    precip[subtropical_mask] *= np.clip(subtropical_suppression[subtropical_mask], 0.3, 1.0)
 
     # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
     for i in range(n):
@@ -583,8 +600,22 @@ def _compute_precipitation_bfs(
     # Temperature > 10 °C → thermal convection produces background precipitation.
     # This fills in continental interiors that BFS moisture can't reach.
     conv_trigger = np.maximum(temperature_c - 10.0, 0.0)  # °C above 10 °C
-    conv_precip = 15.0 * conv_trigger  # ~15 mm/yr per °C above 10 °C
+    conv_precip = 30.0 * conv_trigger  # ~30 mm/yr per °C above 10 °C
     precip[is_land] += conv_precip[is_land]
+
+    # Step 6: Subtropical suppression (descending air at ~30°N/S)
+    # Applied AFTER convection to ensure deserts stay dry.
+    subtropical_suppression = 0.5 + 0.5 * np.cos(np.pi * (np.abs(lat_deg) - 30.0) / 15.0)
+    subtropical_mask = (np.abs(lat_deg) > 18.0) & (np.abs(lat_deg) < 40.0)
+    precip[subtropical_mask] *= np.clip(subtropical_suppression[subtropical_mask], 0.2, 1.0)
+
+    # Step 7: Tropical precipitation floor
+    # Deep tropics (|lat| < 15°, T > 20°C) always get at least 800 mm/yr.
+    # This prevents inland tropical areas from being classified as arid (B)
+    # when BFS moisture transport can't reach them.
+    # Real Earth: Congo/Amazon interior gets 1500-2000 mm even far from coast.
+    tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
+    precip[tropical_land] = np.maximum(precip[tropical_land], 800.0)
 
     # Step 6: Minimum precipitation floor for all land cells
     # Even the driest deserts get ~20 mm/yr. Semi-arid steppes get ~100-200.

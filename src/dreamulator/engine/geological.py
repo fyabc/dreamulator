@@ -121,6 +121,13 @@ class GeologicalEngine(BaseEngine):
             },
         )
 
+    def outputs_exist(self) -> bool:
+        """Check if geological outputs already exist in maps/ directory."""
+        if not self.maps_output_dir.exists():
+            return False
+        # Any planet directory with cvt_mesh.json counts as "done"
+        return any(self.maps_output_dir.glob("*/cvt_mesh.json"))
+
     def _load_config(self, pars: dict[str, object]) -> "object | None":
         """Load TerrainPipelineConfig from terrain_config.yaml or defaults.
 
