@@ -347,6 +347,39 @@ const temperature = tMin + normalized * (tMax - tMin);  // from climate_metadata
 
 ---
 
+### Phase 3A.5：海洋气候分区（Longhurst 简化）
+
+**目标**：替换单一 "Ocean" 标签，为海洋 cell 赋予有意义的气候/生态分区。
+
+**参考系统**：Longhurst (1995/2007) 生物地球化学省份 — 海洋学中等价于 Köppen 的分类体系。
+详见 `docs/knowledge/climatology/ocean_provinces.md`。
+
+#### Phase 1：4 Biome 分类（不依赖洋流，立即可做）
+
+| Biome | 判定条件 | 地球对应 |
+|-------|---------|---------|
+| POLAR | \|lat\| > 60° 或 SST < 4°C | 北冰洋、南大洋 |
+| WESTERLIES | 30° < \|lat\| < 60° | 北大西洋、南大洋温带 |
+| TRADES | \|lat\| < 30°（开阔大洋） | 副热带环流、赤道带 |
+| COASTAL | 距海岸 < 500 km | 大陆架、沿岸流 |
+
+#### Phase 2：子省分类（依赖 3A.3 洋流）
+
+| 子省 | 判定条件 | 地球对应 |
+|------|---------|---------|
+| COASTAL_WBC | 西边界 + 暖流 | Gulf Stream、黑潮 |
+| COASTAL_EBC | 东边界 + 寒流/上升流 | Humboldt、加那利 |
+| COASTAL_SHELF | 浅水大陆架 | 北海、东海 |
+| GYRE_CENTER | 副热带环流中心 | 太平洋垃圾带（极寡营养） |
+| EQUATORIAL | \|lat\| < 5° + 上升流 | 赤道太平洋 |
+| POLAR_ICE | 永久海冰 | 北极中心 |
+
+**输出**：`VoronoiCell.ocean_province: str`（如 `"TRADES_GYRE"`）
+**前端**：新增 "海洋省份" 图层（categorical 着色）
+**预计工期**：Phase 1: 2 天 / Phase 2: 3 天（洋流完成后）
+
+---
+
 ### 里程碑与验收标准
 
 | 里程碑 | 验收标准 | 预计时间 |

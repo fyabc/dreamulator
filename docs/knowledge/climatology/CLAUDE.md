@@ -7,6 +7,7 @@
 - `precipitation.md` — 水汽输送、地形降水、ITCZ、雨影效应
 - `ocean_currents.md` — 风生流、Ekman 输运、热盐环流、大洋环流
 - `koppen_classification.md` — Köppen 气候分类系统
+- `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
 
 ## 关键参考
 
