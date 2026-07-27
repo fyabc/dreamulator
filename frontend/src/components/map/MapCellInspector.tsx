@@ -84,7 +84,6 @@ function PlanetSummary({
   let landArea = 0
   let oceanArea = 0
   let continentalArea = 0
-  let oceanicArea = 0
   let elevMin = Infinity
   let elevMax = -Infinity
   const plateIds = new Set<string>()
@@ -98,7 +97,6 @@ function PlanetSummary({
       oceanArea += area
     }
     if (c.crust_type === 'continental') continentalArea += area
-    else oceanicArea += area
     if (c.elevation < elevMin) elevMin = c.elevation
     if (c.elevation > elevMax) elevMax = c.elevation
     if (c.plate_id) plateIds.add(c.plate_id)

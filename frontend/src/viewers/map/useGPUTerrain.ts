@@ -363,7 +363,7 @@ export default function useGPUTerrain({
     // --- Reverse rows (always) + optionally reverse columns ---
     // Column flip: needed for SphereGeometry (globe, u=0→lon=180°).
     // NOT needed for PlaneGeometry (map, u=0→left edge→lon=-180°).
-    let outBuf = new Uint8Array(totalPixels * 4)
+    const outBuf = new Uint8Array(totalPixels * 4)
     for (let y = 0; y < height; y++) {
       const srcRow = (height - 1 - y) * width * 4
       const dstRow = y * width * 4

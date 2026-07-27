@@ -165,8 +165,8 @@ export function lonLatToPixel(
   mapH: number,
 ): { px: number; py: number } | null {
   if (ll.lat < -90 || ll.lat > 90) return null
-  let wLon = ((ll.lon + 180) % 360 + 360) % 360
-  let px = Math.floor((wLon / 360) * mapW) % mapW
+  const wLon = ((ll.lon + 180) % 360 + 360) % 360
+  const px = Math.floor((wLon / 360) * mapW) % mapW
   let py = Math.floor(((90 - ll.lat) / 180) * mapH)
   py = Math.max(0, Math.min(mapH - 1, py))
   return { px, py }
