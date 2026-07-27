@@ -232,6 +232,9 @@ export default function MapViewerPage() {
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
   const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
 
+  // A/B flag: ?reproject=cpu forces the legacy CPU reprojection (Mollweide/Robinson).
+  const forceCpuReproject = searchParams.get('reproject') === 'cpu'
+
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">未选择世界</div>
   }
@@ -361,6 +364,7 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
+                    forceCpuReproject={forceCpuReproject}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
@@ -474,6 +478,7 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
+                    forceCpuReproject={forceCpuReproject}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
