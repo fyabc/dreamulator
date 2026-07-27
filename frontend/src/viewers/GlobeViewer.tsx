@@ -61,6 +61,8 @@ interface GlobeViewerProps {
   sunLongitudeDeg?: number
   /** Solar declination (subsolar latitude) in degrees — varies with season. */
   solarDeclinationDeg?: number
+  /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
+  dayNight?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +260,7 @@ interface GlobeSceneProps {
   selectedCellIds?: Set<number>
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
+  dayNight?: boolean
 }
 
 // North-pole fly animation duration (ms)
@@ -275,7 +278,7 @@ interface NorthAnimState {
 function GlobeScene({
   texture, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
-  sunLongitudeDeg, solarDeclinationDeg,
+  sunLongitudeDeg, solarDeclinationDeg, dayNight,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const northAnimRef = useRef<NorthAnimState | null>(null)
@@ -344,8 +347,10 @@ function GlobeScene({
   return (
     <>
       <Stars radius={50} depth={30} count={2000} factor={4} saturation={0} fade speed={0.2} />
-      <ambientLight intensity={0.25} />
-      <SunLight sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg} />
+      <ambientLight intensity={dayNight ? 0.25 : 1.0} />
+      {dayNight && (
+        <SunLight sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg} />
+      )}
 
       {/* Planet sphere with pointer events */}
       <mesh
@@ -429,7 +434,7 @@ export default function GlobeViewer({
   texture, onTransition, transitionLabel = '转入星系视图',
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
-  sunLongitudeDeg, solarDeclinationDeg,
+  sunLongitudeDeg, solarDeclinationDeg, dayNight,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -469,6 +474,7 @@ export default function GlobeViewer({
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
+            dayNight={dayNight}
           />
         </Canvas>
       </Suspense>

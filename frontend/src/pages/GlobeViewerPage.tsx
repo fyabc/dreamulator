@@ -76,11 +76,33 @@ export default function GlobeViewerPage() {
 
   const axialTiltDeg = currentPlanet?.axial_tilt_deg ?? 0
 
-  // --- Sun lighting state ---
-  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(0)
+  // --- Sun lighting state (synced to URL: ?sun=&season=, shared with 2D map) ---
+  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(() => {
+    const v = Number(searchParams.get('sun'))
+    return Number.isFinite(v) ? v : 0
+  })
   // Season (orbital position): 0° = vernal equinox, 90° = N. summer solstice.
-  const [seasonDeg, setSeasonDeg] = useState(0)
+  const [seasonDeg, setSeasonDeg] = useState(() => {
+    const v = Number(searchParams.get('season'))
+    return Number.isFinite(v) ? v : 0
+  })
   const [globeZoom, setGlobeZoom] = useState(1)
+  // Day/night lighting toggle — default off; synced to URL ?night=1 (shared with 2D).
+  const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
+
+  // Write sun/season/night back to the URL so lighting carries across 2D↔3D nav.
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
+      else next.delete('sun')
+      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
+      else next.delete('season')
+      if (dayNightEnabled) next.set('night', '1')
+      else next.delete('night')
+      return next
+    }, { replace: true })
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   // Solar declination (subsolar latitude) varies with season + axial tilt.
   const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
@@ -237,6 +259,8 @@ export default function GlobeViewerPage() {
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
   const stellarQS = `${branchQS}${branchQS ? '&' : '?'}focus=${encodeURIComponent(planetId!)}`
+  // Forward current lighting (sun/season) + branch when switching to the 2D map.
+  const mapQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
   const handleTransition = useCallback(() => {
     navigate(`/worlds/${worldName}/viewer3d${stellarQS}`)
   }, [navigate, worldName, stellarQS])
@@ -259,7 +283,7 @@ export default function GlobeViewerPage() {
         <h1 className="text-base sm:text-lg font-bold text-neon-cyan neon-glow-subtle">3D 球面视图</h1>
         <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{currentPlanet?.name ?? planetId}</span>
         <div className="flex-1" />
-        <Link to={`/worlds/${worldName}/map/${planetId}${branchQS}`}
+        <Link to={`/worlds/${worldName}/map/${planetId}${mapQS}`}
           className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
           title="切换到 2D 地图视图（等距圆柱 / Mollweide / Robinson 投影）">
           🗺️ 2D
@@ -320,6 +344,7 @@ export default function GlobeViewerPage() {
                 selectedCellIds={selectedCells}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
+                dayNight={dayNightEnabled}
               />
             )}
           </div>
@@ -354,6 +379,8 @@ export default function GlobeViewerPage() {
                   seasonDeg={seasonDeg}
                   onSeasonChange={setSeasonDeg}
                   axialTiltDeg={axialTiltDeg}
+                  enabled={dayNightEnabled}
+                  onEnabledChange={setDayNightEnabled}
                 />
               </div>
             </div>
@@ -373,6 +400,8 @@ export default function GlobeViewerPage() {
                   seasonDeg={seasonDeg}
                   onSeasonChange={setSeasonDeg}
                   axialTiltDeg={axialTiltDeg}
+                  enabled={dayNightEnabled}
+                  onEnabledChange={setDayNightEnabled}
                 />
             </div>
           </div>
@@ -402,6 +431,7 @@ export default function GlobeViewerPage() {
               selectedCellIds={selectedCells}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
+              dayNight={dayNightEnabled}
             />
           )}
         </div>

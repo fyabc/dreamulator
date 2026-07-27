@@ -11,7 +11,7 @@
  * - Pan/zoom: <1ms (just re-display the texture)
  */
 
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import type { ColorMode } from './TerrainPlane'
 import type { CVTMesh, BoundaryType } from './types'
@@ -72,9 +72,26 @@ void main() {
 const fragmentShader = /* glsl */ `
 precision highp float;
 uniform sampler2D u_colorMap;
+uniform float u_sunLonRad;  // subsolar longitude (radians)
+uniform float u_sunDecRad;  // solar declination (radians)
+uniform float u_dayNight;   // 0 = off, 1 = on
 varying vec2 vUv;
 void main() {
-  gl_FragColor = texture2D(u_colorMap, vUv);
+  vec4 color = texture2D(u_colorMap, vUv);
+  if (u_dayNight > 0.5) {
+    // vUv -> geographic (PlaneGeometry + DataTexture flipY=false):
+    //   lon = vUv.x*360 - 180, lat = vUv.y*180 - 90
+    float lonRad = vUv.x * 6.28318530718 - 3.14159265359;
+    float latRad = vUv.y * 3.14159265359 - 1.57079632679;
+    float h = lonRad - u_sunLonRad;
+    float cz = sin(latRad) * sin(u_sunDecRad)
+             + cos(latRad) * cos(u_sunDecRad) * cos(h);
+    // Twilight smoothstep + cool night tint — mirrors solar.ts constants.
+    float t = smoothstep(-0.1, 0.1, cz);
+    vec3 night = color.rgb * vec3(0.16, 0.20, 0.34);
+    color.rgb = mix(night, color.rgb, t);
+  }
+  gl_FragColor = color;
 }
 `
 
@@ -122,6 +139,12 @@ interface UseGPUTerrainOptions {
   /** Cell IDs to highlight in blue (hover) or yellow (selected). */
   hoveredCell?: number | null
   selectedCells?: Set<number>
+  /** Subsolar longitude in radians — drives the day/night overlay. */
+  sunLonRad?: number
+  /** Solar declination in radians — drives the day/night overlay. */
+  sunDecRad?: number
+  /** 1 = enable day/night overlay, 0 = off. */
+  dayNight?: number
 }
 
 export default function useGPUTerrain({
@@ -139,8 +162,11 @@ export default function useGPUTerrain({
   flipHorizontal = false,
   hoveredCell = null,
   selectedCells,
+  sunLonRad = 0,
+  sunDecRad = 0,
+  dayNight = 0,
 }: UseGPUTerrainOptions): THREE.ShaderMaterial | null {
-  return useMemo(() => {
+  const material = useMemo(() => {
     if (!elevation || width <= 0 || height <= 0) return null
 
     // Check module-level cache: if inputs match, reuse material instantly
@@ -417,7 +443,12 @@ export default function useGPUTerrain({
     const material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
-      uniforms: { u_colorMap: { value: colorTex } },
+      uniforms: {
+        u_colorMap: { value: colorTex },
+        u_sunLonRad: { value: sunLonRad },
+        u_sunDecRad: { value: sunDecRad },
+        u_dayNight: { value: dayNight },
+      },
       side: THREE.DoubleSide,
     })
 
@@ -430,4 +461,15 @@ export default function useGPUTerrain({
     elevMinM, elevMaxM, layers,
     hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap,
   ])
+
+  // Update sun uniforms reactively WITHOUT re-baking the (cached) colour
+  // texture — keeps the day/night slider smooth (uniform changes are cheap).
+  useEffect(() => {
+    if (!material) return
+    material.uniforms.u_sunLonRad.value = sunLonRad
+    material.uniforms.u_sunDecRad.value = sunDecRad
+    material.uniforms.u_dayNight.value = dayNight
+  }, [material, sunLonRad, sunDecRad, dayNight])
+
+  return material
 }

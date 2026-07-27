@@ -15,6 +15,8 @@ import MapCellInspector from '../components/map/MapCellInspector'
 import HelpPanel from '../components/map/HelpPanel'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
+import SunControl from '../components/map/SunControl'
+import { solarDeclinationDeg } from '../viewers/utils/solar'
 import { PROJECTION_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import type { ProjectionType } from '../viewers/map/utils/projection'
@@ -43,6 +45,31 @@ export default function MapViewerPage() {
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
   const [projection, setProjection] = useState<ProjectionType>('equirectangular')
+
+  // --- Sun / day-night state (synced to URL: ?sun=&season=&night=) ---
+  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(() => {
+    const v = Number(searchParams.get('sun'))
+    return Number.isFinite(v) ? v : 0
+  })
+  const [seasonDeg, setSeasonDeg] = useState(() => {
+    const v = Number(searchParams.get('season'))
+    return Number.isFinite(v) ? v : 0
+  })
+  const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
+
+  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav.
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
+      else next.delete('sun')
+      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
+      else next.delete('season')
+      if (dayNightEnabled) next.set('night', '1')
+      else next.delete('night')
+      return next
+    }, { replace: true })
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
     layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
@@ -192,6 +219,19 @@ export default function MapViewerPage() {
     return p?.name ?? null
   }, [selectedPlanet, worldPlanets])
 
+  // Planet axial tilt (amplitude of seasonal declination) + current declination.
+  const axialTiltDeg = useMemo(() => {
+    if (!worldPlanets) return 0
+    const p = worldPlanets.find(
+      (pl: { id: string; axial_tilt_deg?: number }) => pl.id === selectedPlanet,
+    )
+    return p?.axial_tilt_deg ?? 0
+  }, [worldPlanets, selectedPlanet])
+  const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
+
+  // Forward current lighting (sun/season/night) + branch to the 3D globe link.
+  const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
+
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">未选择世界</div>
   }
@@ -227,7 +267,7 @@ export default function MapViewerPage() {
         {/* 3D Globe button */}
         {selectedPlanet && (
           <Link
-            to={`/worlds/${worldName}/globe/${selectedPlanet}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
+            to={`/worlds/${worldName}/globe/${selectedPlanet}${globeQS}`}
             className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
             title="3D 球面视图"
           >
@@ -318,6 +358,9 @@ export default function MapViewerPage() {
                     onCellClick={handleCellClick}
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
+                    sunLongitudeDeg={sunLongitudeDeg}
+                    solarDeclinationDeg={solarDeclination}
+                    dayNight={dayNightEnabled}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
@@ -361,6 +404,17 @@ export default function MapViewerPage() {
                   state={layerState}
                   onChange={setLayerState}
                 />
+                <div className="pt-3 border-t border-space-border">
+                  <SunControl
+                    sunLongitudeDeg={sunLongitudeDeg}
+                    onLongitudeChange={setSunLongitudeDeg}
+                    seasonDeg={seasonDeg}
+                    onSeasonChange={setSeasonDeg}
+                    axialTiltDeg={axialTiltDeg}
+                    enabled={dayNightEnabled}
+                    onEnabledChange={setDayNightEnabled}
+                  />
+                </div>
               </div>
             </>
           )}
@@ -374,6 +428,17 @@ export default function MapViewerPage() {
               state={layerState}
               onChange={setLayerState}
             />
+            <div className="pt-3 border-t border-space-border">
+              <SunControl
+                sunLongitudeDeg={sunLongitudeDeg}
+                onLongitudeChange={setSunLongitudeDeg}
+                seasonDeg={seasonDeg}
+                onSeasonChange={setSeasonDeg}
+                axialTiltDeg={axialTiltDeg}
+                enabled={dayNightEnabled}
+                onEnabledChange={setDayNightEnabled}
+              />
+            </div>
           </div>
 
           {/* Center: map viewer */}
@@ -406,6 +471,9 @@ export default function MapViewerPage() {
                     onCellClick={handleCellClick}
                     hoveredCell={hoveredCell}
                     selectedCells={selectedCells}
+                    sunLongitudeDeg={sunLongitudeDeg}
+                    solarDeclinationDeg={solarDeclination}
+                    dayNight={dayNightEnabled}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />

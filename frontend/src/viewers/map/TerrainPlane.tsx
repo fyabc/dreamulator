@@ -18,6 +18,7 @@ import {
   PLATE_COLORS,
 } from './utils/colorScales'
 import { projectForward, projectInverse, type ProjectionType } from './utils/projection'
+import { applyDayNightEquirect } from '../utils/solar'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 
@@ -49,6 +50,15 @@ export interface TerrainTextureOptions {
   /** Cell IDs to highlight — rendered directly in the texture. */
   hoveredCell?: number | null
   selectedCells?: Set<number>
+  /** Subsolar longitude in radians — drives the day/night overlay. */
+  sunLonRad?: number
+  /** Solar declination in radians — drives the day/night overlay. */
+  sunDecRad?: number
+  /** 1 = enable day/night overlay, 0 = off. */
+  dayNight?: number
+  /** Set false to skip rendering entirely (returns null) — avoids the CPU
+   *  reproject work when the GPU equirectangular path is the one on screen. */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -189,9 +199,13 @@ export default function useTerrainTexture({
   cvtMesh,
   cellIdMap,
   projection = 'equirectangular',
+  sunLonRad = 0,
+  sunDecRad = 0,
+  dayNight = 0,
+  enabled = true,
 }: TerrainTextureOptions): THREE.Texture | null {
   return useMemo(() => {
-    if (!elevation) return null
+    if (!enabled || !elevation) return null
 
     // Compute output canvas dimensions based on projection
     const isReprojected = projection !== 'equirectangular'
@@ -403,6 +417,16 @@ export default function useTerrainTexture({
     }
 
     // ------------------------------------------------------------------
+    // Day/night overlay — applied to the equirectangular base so that
+    // reprojected views (Mollweide/Robinson) inherit it through sampling.
+    // ------------------------------------------------------------------
+    if (dayNight > 0) {
+      const dnImg = eqCtx.getImageData(0, 0, width, height)
+      applyDayNightEquirect(dnImg.data, width, height, sunLonRad, sunDecRad)
+      eqCtx.putImageData(dnImg, 0, 0)
+    }
+
+    // ------------------------------------------------------------------
     // Projection re-sampling: warp equirectangular → target projection
     // ------------------------------------------------------------------
     let finalCanvas: OffscreenCanvas
@@ -528,5 +552,5 @@ export default function useTerrainTexture({
     tex.magFilter = THREE.LinearFilter
     tex.needsUpdate = true
     return tex
-  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, colorMode, hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap, projection])
+  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, colorMode, hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap, projection, sunLonRad, sunDecRad, dayNight, enabled])
 }

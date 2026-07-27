@@ -62,6 +62,12 @@ interface MapViewerProps {
   onCellClick?: (cellId: number, ctrlKey: boolean) => void
   hoveredCell: number | null
   selectedCells: Set<number>
+  /** Subsolar longitude in degrees (day/night overlay). */
+  sunLongitudeDeg?: number
+  /** Solar declination in degrees (day/night overlay). */
+  solarDeclinationDeg?: number
+  /** Enable the day/night overlay. */
+  dayNight?: boolean
 }
 
 export interface CursorInfo {
@@ -99,6 +105,9 @@ export default function MapViewer({
   onCellClick,
   hoveredCell,
   selectedCells,
+  sunLongitudeDeg = 0,
+  solarDeclinationDeg = 0,
+  dayNight = false,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -179,6 +188,11 @@ export default function MapViewer({
     return () => observer.disconnect()
   }, [])
 
+  // --- Day/night sun params (radians for the shaders / CPU pass) ---
+  const sunLonRad = (sunLongitudeDeg * Math.PI) / 180
+  const sunDecRad = (solarDeclinationDeg * Math.PI) / 180
+  const dayNightNum = dayNight ? 1 : 0
+
   // --- GPU / CPU materials ---
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
@@ -186,12 +200,17 @@ export default function MapViewer({
     layers, cvtMesh, cellIdMap,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     hoveredCell, selectedCells,
+    sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     colorMode: layers?.terrain ? 'terrain' : 'landsea', cvtMesh, cellIdMap,
     projection,
+    sunLonRad, sunDecRad, dayNight: dayNightNum,
+    // Equirectangular uses the GPU path — skip the (unused) CPU texture render
+    // so dragging the sun slider doesn't trigger a full CPU re-bake.
+    enabled: projection !== 'equirectangular',
   })
   const useGPU = gpuMaterial !== null && projection === 'equirectangular'
   const terrainTexture = useGPU ? null : cpuTexture

@@ -1,5 +1,5 @@
 /**
- * SunControl — directional lighting controls for the 3D globe.
+ * SunControl — directional lighting controls for the globe / map.
  *
  * Two independent controls drive the sun direction:
  *   - Sun longitude (0–360°): the diurnal (daily) rotation — where the sun is
@@ -8,6 +8,10 @@
  *     axial tilt this sets the solar declination — the latitude where the sun is
  *     directly overhead — so the terminator tilts across the year (midnight sun /
  *     polar night at the poles). 0° = vernal equinox, 90° = N. summer solstice.
+ *
+ * On the 3D globe lighting is always on (a lit sphere always has a terminator).
+ * On the 2D map the day/night overlay is optional — pass `enabled` /
+ * `onEnabledChange` to render an on/off toggle; omit them for always-on.
  */
 
 import { useCallback } from 'react'
@@ -21,6 +25,9 @@ interface SunControlProps {
   onSeasonChange: (deg: number) => void
   /** Axial tilt in degrees — sets the amplitude of the seasonal declination. */
   axialTiltDeg?: number
+  /** When provided (2D map), renders an on/off toggle for the overlay. */
+  enabled?: boolean
+  onEnabledChange?: (enabled: boolean) => void
 }
 
 /** Simple sun icon as inline SVG. */
@@ -54,6 +61,8 @@ export default function SunControl({
   seasonDeg,
   onSeasonChange,
   axialTiltDeg = 0,
+  enabled = true,
+  onEnabledChange,
 }: SunControlProps) {
   const handleLongitude = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => onLongitudeChange(parseInt(e.target.value)),
@@ -65,6 +74,9 @@ export default function SunControl({
   )
 
   const declination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
+  const hasToggle = onEnabledChange != null
+  // Sliders are active when the overlay is on (or always, if there's no toggle).
+  const active = hasToggle ? enabled : true
 
   return (
     <div className="space-y-3">
@@ -75,66 +87,87 @@ export default function SunControl({
         </span>
         <span className="text-xs text-gray-400">光照</span>
         {axialTiltDeg !== 0 && (
-          <span className="text-[10px] font-mono tabular-nums ml-auto text-gray-500">
+          <span
+            className={`text-[10px] font-mono tabular-nums text-gray-500 ${hasToggle ? '' : 'ml-auto'}`}
+          >
             倾角 {axialTiltDeg}°
           </span>
         )}
+        {hasToggle && (
+          <button
+            type="button"
+            onClick={() => onEnabledChange?.(!enabled)}
+            className={`ml-auto relative w-7 h-4 shrink-0 rounded-full transition-colors ${
+              enabled ? 'bg-amber-400/80' : 'bg-gray-600'
+            }`}
+            title={enabled ? '关闭昼夜光照' : '开启昼夜光照'}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                enabled ? 'translate-x-3' : ''
+              }`}
+            />
+          </button>
+        )}
       </div>
 
-      {/* Time of day (sun longitude) */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-gray-500">时刻（周日）</span>
-          <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
-            {sunLongitudeDeg}°
-          </span>
+      <div className={active ? '' : 'opacity-40'}>
+        {/* Time of day (sun longitude) */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-gray-500">时刻（周日）</span>
+            <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
+              {sunLongitudeDeg}°
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            value={sunLongitudeDeg}
+            onChange={handleLongitude}
+            disabled={!active}
+            className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
+            title="太阳直射经度（0° = 本初子午线正午）"
+          />
+          <div className="flex justify-between text-[9px] text-gray-600 font-mono">
+            <span>0°</span>
+            <span>90°</span>
+            <span>180°</span>
+            <span>270°</span>
+            <span>360°</span>
+          </div>
         </div>
-        <input
-          type="range"
-          min="0"
-          max="360"
-          value={sunLongitudeDeg}
-          onChange={handleLongitude}
-          className="w-full h-1 accent-amber-400 cursor-pointer"
-          title="太阳直射经度（0° = 本初子午线正午）"
-        />
-        <div className="flex justify-between text-[9px] text-gray-600 font-mono">
-          <span>0°</span>
-          <span>90°</span>
-          <span>180°</span>
-          <span>270°</span>
-          <span>360°</span>
-        </div>
-      </div>
 
-      {/* Season (orbital position → solar declination) */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-gray-500">季节（周年）</span>
-          <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
-            直射 {formatDeclination(declination)}
-          </span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="360"
-          value={seasonDeg}
-          onChange={handleSeason}
-          className="w-full h-1 accent-amber-400 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          disabled={axialTiltDeg === 0}
-          title={
-            axialTiltDeg === 0
-              ? '该行星无地轴倾角，无季节变化'
-              : '轨道位置（0° = 春分，90° = 北半球夏至）'
-          }
-        />
-        <div className="flex justify-between text-[9px] text-gray-600">
-          <span>春分</span>
-          <span>夏至</span>
-          <span>秋分</span>
-          <span>冬至</span>
-          <span>春分</span>
+        {/* Season (orbital position → solar declination) */}
+        <div className="space-y-1 mt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-gray-500">季节（周年）</span>
+            <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
+              直射 {formatDeclination(declination)}
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            value={seasonDeg}
+            onChange={handleSeason}
+            className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
+            disabled={!active || axialTiltDeg === 0}
+            title={
+              axialTiltDeg === 0
+                ? '该行星无地轴倾角，无季节变化'
+                : '轨道位置（0° = 春分，90° = 北半球夏至）'
+            }
+          />
+          <div className="flex justify-between text-[9px] text-gray-600">
+            <span>春分</span>
+            <span>夏至</span>
+            <span>秋分</span>
+            <span>冬至</span>
+            <span>春分</span>
+          </div>
         </div>
       </div>
     </div>
