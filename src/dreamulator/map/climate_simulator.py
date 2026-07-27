@@ -609,13 +609,20 @@ def _compute_precipitation_bfs(
     subtropical_mask = (np.abs(lat_deg) > 18.0) & (np.abs(lat_deg) < 40.0)
     precip[subtropical_mask] *= np.clip(subtropical_suppression[subtropical_mask], 0.2, 1.0)
 
-    # Step 7: Tropical precipitation floor
-    # Deep tropics (|lat| < 15°, T > 20°C) always get at least 800 mm/yr.
-    # This prevents inland tropical areas from being classified as arid (B)
-    # when BFS moisture transport can't reach them.
-    # Real Earth: Congo/Amazon interior gets 1500-2000 mm even far from coast.
+    # Step 7: Tropical precipitation boost (soft, with natural variation)
+    # Deep tropics (|lat| < 15°, T > 20°C) get boosted toward a target that
+    # varies by latitude (equator wetter, edges drier). This prevents inland
+    # tropical areas from being classified as arid (B) when BFS can't reach them,
+    # while avoiding an artificial spike at a single value.
+    # Real Earth: Congo/Amazon interior 1500-2000mm, Sahel 400-800mm.
     tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
-    precip[tropical_land] = np.maximum(precip[tropical_land], 800.0)
+    if tropical_land.any():
+        # Target decreases from equator (1200mm) to 15° latitude (700mm)
+        tropical_target = 1200.0 - 500.0 * (np.abs(lat_deg[tropical_land]) / 15.0)
+        # Soft boost: move 70% of the way toward target (preserves BFS variation)
+        current = precip[tropical_land]
+        deficit = np.maximum(tropical_target - current, 0.0)
+        precip[tropical_land] = current + deficit * 0.7
 
     # Step 6: Minimum precipitation floor for all land cells
     # Even the driest deserts get ~20 mm/yr. Semi-arid steppes get ~100-200.

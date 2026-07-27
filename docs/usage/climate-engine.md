@@ -332,6 +332,53 @@ const temperature = tMin + normalized * (tMax - tMin);  // from climate_metadata
 
 ---
 
+### Phase 3A.3d：降水物理改进（BFS 水汽输送）
+
+**目标**：修复 BFS 水汽输送的物理缺陷，删除人工热带底线。
+
+#### 山脉屏障衰减
+
+当前问题：BFS 遇到山脉时，所有水汽做地形降水后传给"最佳下风邻居"。没有翻山衰减和绕流。
+安第斯案例：东坡雨林 vs 西坡阿塔卡马沙漠——当前无法正确模拟。
+
+```python
+# 修复：翻山阻挡系数
+if elev_gain > 500:
+    blocking = min(0.8, elev_gain / 3000)  # 3000m 山阻挡 80% 水汽
+    passed_moisture = (moisture - rain) * (1 - blocking)
+```
+
+| 子任务 | 说明 | 验证目标 |
+|--------|------|---------|
+| 翻山衰减 | elev_gain > 500m 时按高度比例阻挡水汽 | 安第斯西坡 P < 100mm |
+| 连续山脉累积 | 多跳连续爬升 → 指数衰减（每跳 ×0.5） | 喜马拉雅南侧 vs 青藏高原 |
+| 雨影区识别 | 山脉下风方 200-500km 内降水骤降 | 巴塔哥尼亚干旱 |
+
+#### 潜在植被蒸散循环（一步参数化，无迭代）
+
+鸡蛋问题：植被→蒸腾→水汽→降水→植被。
+解法：**潜在自然植被参数化**（EMIC 标准做法）——从无反馈气候推断"能否长森林"，一步加入蒸散。
+
+```python
+def potential_recycling_rate(T_mean, P_initial):
+    t_factor = sigmoid((T_mean - 5.0) / 3.0)   # > 5°C 支持木本
+    p_factor = sigmoid((P_initial - 400.0) / 200.0)  # > 400mm 支持森林
+    return 0.50 * t_factor * p_factor  # 热带雨林最大 50% 循环
+```
+
+| 子任务 | 说明 | 验证目标 |
+|--------|------|---------|
+| 潜在植被推断 | 从 T_mean + P_initial 推断 recycling_rate | 亚马逊 50%，撒哈拉 0% |
+| 接入 BFS | 每个 land cell 的蒸发 = base_rate × (1 + recycling_rate) | 内陆热带 P 自然 > 800mm |
+| 删除热带底线 | 移除 Step 7 人工 max(precip, target) | 无 800mm 尖峰 |
+| 阈值可配置 | T_threshold, P_threshold, max_recycling 写入 config | Gaia-M 可调整 |
+
+**预计工期**：3–5 天
+
+**完成标志**：删除热带底线后，Aw 准确率仍 > 30%，无 800mm 人工尖峰。
+
+---
+
 ### Phase 3A.4：空间格局精细化
 
 **目标**：空间准确率 >55%，Kappa >0.4。
