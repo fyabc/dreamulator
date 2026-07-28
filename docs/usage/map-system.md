@@ -227,6 +227,44 @@ layers/
   - 河流/山脊（polyline）
 - **鸟瞰图**：`MapMinimap` 组件，Canvas 2D 缩略图 + SVG 视口矩形
 
+### 多投影渲染与调试路径（v0.12.0）
+
+2D 地图支持三种投影：**等距圆柱**（Plate Carrée）、**Mollweide**、**Robinson**。
+
+**渲染架构（默认全 GPU）**：
+
+| 投影 | 渲染方式 | 实现 |
+|------|----------|------|
+| 等距圆柱 | GPU 纹理直贴 | `useGPUTerrain` 预渲染等距圆柱纹理 → `ShaderMaterial` 直接显示 |
+| Mollweide / Robinson | GPU 逆 warp shader | `gpuReproject.ts`：片元着色器对每个像素跑投影逆变换，采样等距圆柱纹理 |
+
+三种投影的昼夜光照、经纬网、单元格高亮均在叠加层 / shader 中计算（不烘焙进纹理）：
+
+- **昼夜**：着色器内按太阳天顶角 `cos θz = sinφ·sinδ + cosφ·cosδ·cos(λ−λ☉)` 计算，晨昏线 smoothstep 柔化 + 夜间冷色调。
+- **经纬网**：SVG 叠加层按 `project()` 实时绘制（等距圆柱为直线、Mollweide/Robinson 为平滑曲线）。
+- **单元格高亮**：SVG 叠加层（蓝=悬停 / 黄=选中），三投影行为一致。
+
+**CPU 重投影调试路径（`?reproject=cpu`）**：
+
+URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素重投影**
+（`useTerrainTexture`：在 OffscreenCanvas 上对每个输出像素跑投影逆变换 + 双线性采样等距圆柱源）。
+
+- **用途**：与 GPU 逆 warp 结果做 **A/B 对照验证**——排查重投影正确性时的参照基准。
+- **⚠️ 这不是"无 GPU 兜底"**：无论 GPU 还是 CPU 路径，最终都通过 WebGL 显示纹理；没有
+  WebGL 的环境**整个地图都无法渲染**。CPU 路径只是把"重投影计算"挪到 CPU，显示仍依赖 GPU。
+- CPU 路径明显慢于 GPU（逐像素 JS 循环），仅作调试，不作常规使用。
+
+**相关 URL 参数**：
+
+| 参数 | 说明 |
+|------|------|
+| `?reproject=cpu` | Mollweide/Robinson 强制走 CPU 重投影（调试对照，非无 GPU 兜底） |
+| `?sun=<经度>` | 太阳直射经度（0–360°，周日变化） |
+| `?season=<角度>` | 轨道位置（0=春分 / 90=夏至 / 180=秋分 / 270=冬至，驱动太阳赤纬） |
+| `?night=1` | 开启 2D 昼夜光照叠加（默认关） |
+
+> 光照参数（`sun`/`season`/`night`）在 2D↔3D 视图间通过 URL 同步、可分享。
+
 ### 图层系统
 
 > **参考**：[Paradox 游戏](https://www.paradoxinteractive.com/) 的 Map Modes 系统（EU4 有 20+ 种 map mode）
@@ -280,7 +318,14 @@ layers/
 - ✅ **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls
 - ✅ **缩小过渡特效** — 类似《戴森球计划》的球面→恒星系过渡
 - ✅ **行星纹理（路线 C）** — 恒星系中有地图的行星显示真实地形纹理
-- ✅ **多投影 2D 地图** — 等距圆柱 / Mollweide / Robinson + GPU 渲染 + 经纬线网格
+- ✅ **多投影 2D 地图** — 等距圆柱（GPU 纹理）/ Mollweide / Robinson（CPU 重投影）+ 经纬线网格
+
+### 已完成（v0.12.0）
+
+- ✅ **Mollweide / Robinson GPU 重投影** — 从 CPU 逐像素重投影改为 GPU 逆 warp shader（`gpuReproject.ts`）
+- ✅ **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
+- ✅ **SVG 单元格高亮 + 经纬网** — 三投影统一叠加层，经纬网为干净投影曲线
+- ✅ **CPU 重投影调试路径** — `?reproject=cpu` 保留为 A/B 对照（见上文"多投影渲染与调试路径"）
 
 ### 计划中
 
