@@ -199,22 +199,17 @@ export default function MapViewer({
   const dayNightNum = dayNight ? 1 : 0
 
   // --- GPU / CPU materials ---
-  // Mollweide can be reprojected on the GPU by inverse-warping the baked
-  // equirectangular texture.  `willGPUReproject` is a pre-check (independent of
-  // gpuMaterial) used to keep baked hover/selection highlights OUT of the source
-  // texture — those come from the SVG overlay for non-equirectangular views, so
-  // baking them too would double-draw.
+  // Mollweide/Robinson are reprojected on the GPU by inverse-warping the baked
+  // equirectangular texture (gpuReproject.ts).  Cell hover/selection highlights
+  // are drawn by the SVG overlay for ALL projections (not baked into the
+  // texture), so hovering never triggers a texture re-bake.
   const reprojectable = projection === 'mollweide' || projection === 'robinson'
-  const willGPUReproject =
-    reprojectable && elevation !== null && !forceCpuReproject
 
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers, cvtMesh, cellIdMap,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
-    hoveredCell: willGPUReproject ? null : hoveredCell,
-    selectedCells: willGPUReproject ? undefined : selectedCells,
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
 
@@ -430,7 +425,10 @@ export default function MapViewer({
     }
     rafId = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafId)
-  }, [])
+    // `projection` must be live: the loop positions the mesh per-projection, so a
+    // stale capture (e.g. always 'equirectangular') mis-positions Mollweide/Robinson
+    // vertically (linear-in-lat instead of the projection's non-linear ny).
+  }, [projection])
 
   // --- Mouse handlers ---
 
@@ -604,20 +602,20 @@ export default function MapViewer({
         </div>
       )}
 
-      {/* SVG overlay only for non-equirectangular (equirectangular uses GPU-texture highlights) */}
-      {projection !== 'equirectangular' && (
-        <MapSvgOverlay
-          viewWidth={containerSize.width}
-          viewHeight={containerSize.height}
-          project={project}
-          zoom={zoom}
-          panWrapOffset={0}
-          voronoiCells={voronoiCells}
-          cvtMesh={cvtMesh}
-          hoveredCell={hoveredCell}
-          selectedCells={selectedCells}
-        />
-      )}
+      {/* Cell hover/selection highlights — SVG overlay for all projections.
+          (Equirectangular previously baked these into the GPU texture; the SVG
+          overlay avoids a full texture re-bake on every hover.) */}
+      <MapSvgOverlay
+        viewWidth={containerSize.width}
+        viewHeight={containerSize.height}
+        project={project}
+        zoom={zoom}
+        panWrapOffset={0}
+        voronoiCells={voronoiCells}
+        cvtMesh={cvtMesh}
+        hoveredCell={hoveredCell}
+        selectedCells={selectedCells}
+      />
     </div>
   )
 }

@@ -107,8 +107,6 @@ interface CacheEntry {
   layers: Record<ColorMode, number>
   cellIdMap: CellIdMap | null | undefined
   cvtMesh: CVTMesh | null | undefined
-  hoveredCell: number | null | undefined
-  selectedCells: Set<number> | undefined
   // Cached result
   material: THREE.ShaderMaterial
 }
@@ -136,9 +134,6 @@ interface UseGPUTerrainOptions {
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
   flipHorizontal?: boolean
-  /** Cell IDs to highlight in blue (hover) or yellow (selected). */
-  hoveredCell?: number | null
-  selectedCells?: Set<number>
   /** Subsolar longitude in radians — drives the day/night overlay. */
   sunLonRad?: number
   /** Solar declination in radians — drives the day/night overlay. */
@@ -160,8 +155,6 @@ export default function useGPUTerrain({
   cvtMesh,
   cellIdMap,
   flipHorizontal = false,
-  hoveredCell = null,
-  selectedCells,
   sunLonRad = 0,
   sunDecRad = 0,
   dayNight = 0,
@@ -181,9 +174,7 @@ export default function useGPUTerrain({
       lastCache.layers.boundaries === layers.boundaries &&
       lastCache.layers.koppen === layers.koppen &&
       lastCache.cellIdMap === cellIdMap &&
-      lastCache.cvtMesh === cvtMesh &&
-      lastCache.hoveredCell === hoveredCell &&
-      lastCache.selectedCells === selectedCells
+      lastCache.cvtMesh === cvtMesh
     ) {
       return lastCache.material
     }
@@ -367,25 +358,6 @@ export default function useGPUTerrain({
       }
     }
 
-    // --- Highlight overlay: blend highlight colour for hovered/selected cells ---
-    if (cellIdMap && (hoveredCell != null || (selectedCells && selectedCells.size > 0))) {
-      const HOVER_COLOR: [number, number, number] = [40, 120, 255]   // blue
-      const SELECT_COLOR: [number, number, number] = [255, 220, 50]  // yellow
-      for (let i = 0; i < totalPixels; i++) {
-        const cid = cellIdMap[i]
-        if (cid == null) continue
-        const isSelected = selectedCells?.has(cid)
-        const isHovered = cid === hoveredCell
-        if (!isSelected && !isHovered) continue
-        const [hr, hg, hb] = isSelected ? SELECT_COLOR : HOVER_COLOR
-        const alpha = 0.55
-        const pi = i * 4
-        buf[pi]     = Math.round(buf[pi]     * (1 - alpha) + hr * alpha)
-        buf[pi + 1] = Math.round(buf[pi + 1] * (1 - alpha) + hg * alpha)
-        buf[pi + 2] = Math.round(buf[pi + 2] * (1 - alpha) + hb * alpha)
-      }
-    }
-
     // --- Reverse rows (always) + optionally reverse columns ---
     // Column flip: needed for SphereGeometry (globe, u=0→lon=180°).
     // NOT needed for PlaneGeometry (map, u=0→left edge→lon=-180°).
@@ -453,7 +425,7 @@ export default function useGPUTerrain({
     })
 
     // Save to module-level cache (survives component unmount/remount)
-    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, hoveredCell, selectedCells, material }
+    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, material }
 
     return material
   }, [

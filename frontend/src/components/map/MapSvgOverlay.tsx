@@ -111,8 +111,8 @@ export default function MapSvgOverlay({
           <polygon
             key={cell.id}
             points={pointsStr}
-            fill={isSelected ? 'rgba(255,255,0,0.1)' : 'rgba(0,255,255,0.08)'}
-            stroke={isSelected ? '#ff0' : '#0ff'}
+            fill={isSelected ? 'rgba(255,220,50,0.15)' : 'rgba(40,120,255,0.15)'}
+            stroke={isSelected ? '#ffdc32' : '#2878ff'}
             strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
             strokeOpacity={isSelected ? 1 : 0.8}
           />
@@ -136,8 +136,8 @@ export default function MapSvgOverlay({
           cx={p.x}
           cy={p.y}
           r={Math.max(3, 6 / zoom)}
-          fill={isSelected ? 'rgba(255,255,0,0.15)' : 'rgba(0,255,255,0.1)'}
-          stroke={isSelected ? '#ff0' : '#0ff'}
+          fill={isSelected ? 'rgba(255,220,50,0.2)' : 'rgba(40,120,255,0.15)'}
+          stroke={isSelected ? '#ffdc32' : '#2878ff'}
           strokeWidth={isSelected ? strokeWidth * 2.5 : strokeWidth * 2}
           strokeOpacity={isSelected ? 1 : 0.8}
         />
