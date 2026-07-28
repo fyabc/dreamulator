@@ -15,12 +15,32 @@ import type { ColorMode } from '../../viewers/map/TerrainPlane'
 // Layers
 // ---------------------------------------------------------------------------
 
+/**
+ * Layers come in two kinds:
+ *  - `basemap` — whole-map colorings that are effectively mutually exclusive
+ *    (Paradox-style "map modes"); rendered as a single-select chip strip.
+ *  - `overlay` — freely composable feature layers, grouped into collapsible
+ *    sections (GIS-style layer tree).
+ */
+export type LayerKind = 'basemap' | 'overlay'
+
+/** Overlay group labels (basemaps are chips, not grouped). */
+export const LAYER_GROUPS: { id: string; label: string }[] = [
+  { id: 'geology', label: '地质构造' },
+  { id: 'climate', label: '气候' },
+  { id: 'hydro', label: '水文' },
+  { id: 'annotation', label: '标注' },
+]
+
 export interface LayerHelpEntry {
   id: ColorMode
   label: string
   desc: string         // one-liner for tooltip / slider
   detail: string       // full description for help panel
   defaultOpacity: number
+  kind: LayerKind
+  /** Overlay group id (from LAYER_GROUPS); undefined for basemaps. */
+  group?: string
 }
 
 export const LAYER_HELP: LayerHelpEntry[] = [
@@ -30,6 +50,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '自适应海拔着色',
     detail: '基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 沙滩黄 → 低地绿 → 高地棕 → 雪山白。默认开启。',
     defaultOpacity: 1,
+    kind: 'basemap',
   },
   {
     id: 'landsea',
@@ -37,6 +58,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '二值海陆着色',
     detail: '二值蓝／绿着色，快速区分海洋和陆地。海平面以下为深蓝，以上为绿色。',
     defaultOpacity: 0,
+    kind: 'basemap',
   },
   {
     id: 'plates',
@@ -44,6 +66,8 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '按构造板块着色',
     detail: '每个构造板块用一种颜色标识。板块由 Cortial (2019) 球面 Voronoi 剖分生成，Poisson-disc 种子 + 同步 BFS。颜色从 15 色调色板循环分配。',
     defaultOpacity: 0,
+    kind: 'overlay',
+    group: 'geology',
   },
   {
     id: 'boundaries',
@@ -51,6 +75,8 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '大陆(褐)·海洋(蓝)·汇聚(红)·离散(绿)·转换(黄)',
     detail: '板块内部按地壳类型着色：大陆 = 暖褐，海洋 = 灰蓝，过渡带 = 橄榄绿。热点火山链 = 品红。古造山带 = 暗金。裂谷 = 青。板块边界按类型着色：汇聚 = 红（俯冲/碰撞），离散 = 绿（洋中脊/裂谷），转换 = 黄（水平错动）。',
     defaultOpacity: 0,
+    kind: 'overlay',
+    group: 'geology',
   },
   {
     id: 'koppen',
@@ -58,6 +84,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '气候分类着色（Beck 2018 标准色）',
     detail: '按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。颜色方案来自 Beck et al. (2018) 标准图例。',
     defaultOpacity: 0.85,
+    kind: 'basemap',
   },
 ]
 

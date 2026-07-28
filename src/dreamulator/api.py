@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
+from dreamulator import __version__
 from dreamulator.api_routes.civmap import router as civmap_router
 from dreamulator.api_routes.maps import router as maps_router
 from dreamulator.api_routes.narrate import router as narrate_router
@@ -16,7 +17,7 @@ from dreamulator.api_routes.worlds import router as worlds_router
 app = FastAPI(
     title="Dreamulator API",
     description="Fantasy world building and simulation tool",
-    version="0.12.0",
+    version=__version__,
 )
 
 # CORS for frontend dev server
