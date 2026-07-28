@@ -1,12 +1,17 @@
 /**
- * useTerrainTexture — pre-renders a heightmap to a THREE.DataTexture
- * using Canvas 2D (color ramp + hillshading + water darkening).
+ * useTerrainTexture — pre-renders map imagery to a THREE.DataTexture using
+ * Canvas 2D (color ramp + hillshading + water darkening + graticule).
  *
- * Supports elevation-based modes (terrain, landsea) via LUT color scales,
- * and cell-based modes (plates, boundaries) via CVT mesh polygon rendering.
+ * Supports elevation-based modes (terrain, landsea) via LUT color scales, and
+ * cell-based modes (plates, boundaries) via CVT mesh polygon rendering.  For
+ * non-equirectangular projections it also reprojects the equirectangular base
+ * into the target projection (per-pixel inverse warp on the CPU).
  *
- * The texture is applied to a MeshBasicMaterial displayed via
- * WebGPURenderer (bypasses the ANGLE/D3D11 vertex attribute bug).
+ * NOTE: the baked texture is still displayed through WebGL (MapViewer's
+ * WebGLRenderer).  Mollweide/Robinson reprojection has moved to the GPU
+ * (see gpuReproject.ts inverse warp); this CPU path is retained only as a
+ * debug / A-B comparison fallback selected via ?reproject=cpu.  It is NOT a
+ * no-GPU rendering path — the map display always requires WebGL.
  */
 
 import { useMemo } from 'react'

@@ -69,7 +69,8 @@ interface MapViewerProps {
   solarDeclinationDeg?: number
   /** Enable the day/night overlay. */
   dayNight?: boolean
-  /** Force the legacy CPU reprojection for Mollweide/Robinson (A/B testing). */
+  /** Force the legacy CPU reprojection for Mollweide/Robinson (?reproject=cpu).
+   *  Debug / A-B comparison only — NOT a no-GPU fallback (display needs WebGL). */
   forceCpuReproject?: boolean
 }
 

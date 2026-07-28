@@ -232,7 +232,9 @@ export default function MapViewerPage() {
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
   const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
 
-  // A/B flag: ?reproject=cpu forces the legacy CPU reprojection (Mollweide/Robinson).
+  // Debug / A-B flag: ?reproject=cpu forces the legacy CPU reprojection
+  // (Mollweide/Robinson) for comparison with the GPU result.  NOT a no-GPU
+  // fallback — the map display always requires WebGL.
   const forceCpuReproject = searchParams.get('reproject') === 'cpu'
 
   if (!worldName) {
