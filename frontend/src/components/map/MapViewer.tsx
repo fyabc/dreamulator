@@ -345,7 +345,12 @@ export default function MapViewer({
   }, [webgpuReady, terrainTexture, useGPU, gpuReprojectOn, reprojectMaterial, gpuMaterial, projection, mapW, mapH, containerSize])
 
   // --- Viewport (used by mapCoords functions) ---
-  const vp: Viewport = { width: containerSize.width, height: containerSize.height }
+  // Memoised so `project` (and the SVG graticule that depends on it) only
+  // recompute on pan/zoom/resize, not on every hover re-render.
+  const vp: Viewport = useMemo(
+    () => ({ width: containerSize.width, height: containerSize.height }),
+    [containerSize],
+  )
 
   // --- Forward projection (for SVG overlay) ---
   const project = useCallback(

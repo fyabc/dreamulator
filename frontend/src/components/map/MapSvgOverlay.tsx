@@ -64,6 +64,41 @@ export default function MapSvgOverlay({
     return map
   }, [cvtMesh])
 
+  // Graticule: lat/lon grid lines drawn as polylines via project().  Straight for
+  // equirectangular, smooth curves for Mollweide/Robinson (this replaces the old
+  // texture-baked grid, which warped coarsely when reprojected).  Rendered under
+  // the cell highlights.  Recomputes only when `project` changes (pan/zoom/resize).
+  const graticuleElements = useMemo(() => {
+    const STEP = 30   // degrees between grid lines
+    const SAMPLE = 2  // degrees between samples along a line
+    const lines: JSX.Element[] = []
+    // Latitude lines (constant lat, sample lon)
+    for (let lat = -90 + STEP; lat < 90; lat += STEP) {
+      const pts: string[] = []
+      for (let lon = -180; lon <= 180; lon += SAMPLE) {
+        const p = project(lon, lat)
+        pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      }
+      lines.push(
+        <polyline key={`lat${lat}`} points={pts.join(' ')} fill="none"
+          stroke="rgba(255,255,255,0.16)" strokeWidth={1} />,
+      )
+    }
+    // Longitude lines (constant lon, sample lat)
+    for (let lon = -180 + STEP; lon < 180; lon += STEP) {
+      const pts: string[] = []
+      for (let lat = -90; lat <= 90; lat += SAMPLE) {
+        const p = project(lon, lat)
+        pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      }
+      lines.push(
+        <polyline key={`lon${lon}`} points={pts.join(' ')} fill="none"
+          stroke="rgba(255,255,255,0.16)" strokeWidth={1} />,
+      )
+    }
+    return lines
+  }, [project])
+
   // Stroke width scales inversely with zoom
   const strokeWidth = Math.max(0.5, 1.5 / zoom)
 
@@ -155,6 +190,7 @@ export default function MapSvgOverlay({
       height={viewHeight}
       style={{ zIndex: 10 }}
     >
+      <g className="pointer-events-none">{graticuleElements}</g>
       <g className="pointer-events-none">{highlightElements}</g>
     </svg>
   )

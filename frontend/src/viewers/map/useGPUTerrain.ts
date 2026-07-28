@@ -375,30 +375,8 @@ export default function useGPUTerrain({
       }
     }
 
-    // --- Step 3.5: Draw graticule on flipped buffer ---
-    // Row → lat:  lat = y / height * 180 - 90   (row 0 = lat -90°)
-    const GRID_STEP = 30
-    const GRID_ALPHA = 0.08
-    for (let lat = -90 + GRID_STEP; lat < 90; lat += GRID_STEP) {
-      const y = Math.round(((90 + lat) / 180) * height)
-      if (y < 0 || y >= height) continue
-      for (let x = 0; x < width; x++) {
-        const pi = (y * width + x) * 4
-        outBuf[pi] = Math.round(outBuf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        outBuf[pi + 1] = Math.round(outBuf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        outBuf[pi + 2] = Math.round(outBuf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-      }
-    }
-    for (let lon = -180 + GRID_STEP; lon < 180; lon += GRID_STEP) {
-      const x = Math.round(((lon + 180) / 360) * width)
-      if (x < 0 || x >= width) continue
-      for (let y = 0; y < height; y++) {
-        const pi = (y * width + x) * 4
-        outBuf[pi] = Math.round(outBuf[pi] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        outBuf[pi + 1] = Math.round(outBuf[pi + 1] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-        outBuf[pi + 2] = Math.round(outBuf[pi + 2] * (1 - GRID_ALPHA) + 255 * GRID_ALPHA)
-      }
-    }
+    // (Graticule is drawn by the SVG overlay, not baked into the texture — the
+    //  baked version warped coarsely when reprojected to Mollweide/Robinson.)
 
     // --- Step 4: Upload as DataTexture ---
     const hasCellLayers = layers.plates > 0 || layers.boundaries > 0 || layers.koppen > 0
