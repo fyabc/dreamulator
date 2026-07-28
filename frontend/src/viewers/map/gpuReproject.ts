@@ -12,6 +12,12 @@
  * works — this uses the exact same primitives (vUv → texture2D), only with a
  * computed UV.  Mollweide inverse is closed-form; Robinson uses a small LUT.
  *
+ * Day/night is computed IN the reproject shader from the recovered (lon, lat),
+ * with the same model as useGPUTerrain (solar.ts constants) — so all three
+ * projections share one consistent, uniform-driven (smooth) day/night.  The sun
+ * is passed as uniforms updated by useGPUReproject's effect, so dragging the
+ * slider never recompiles the shader.
+ *
  * Convention (matches utils/projection.ts):
  *   nx = vUv.x        (0 = left = lon −180°, 1 = right = lon +180°)
  *   ny = 1 − vUv.y    (0 = top = north, 1 = bottom = south — canvas convention)
@@ -19,6 +25,7 @@
  *   flipY=false so v=0 ↔ lat −90° (row 0), matching that mapping.
  */
 
+import { useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import { ROBINSON_TABLE, robinsonInterp } from './utils/projection'
 
@@ -27,6 +34,23 @@ varying vec2 vUv;
 void main() {
   vUv = uv;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+
+/**
+ * Day/night model — mirrors solar.ts (TWILIGHT ±0.1, cool night tint).  Declared
+ * in each fragment shader; fed by u_sunLonRad / u_sunDecRad / u_dayNight uniforms.
+ */
+const dayNightChunk = /* glsl */ `
+uniform float u_sunLonRad;
+uniform float u_sunDecRad;
+uniform float u_dayNight;
+vec3 applyDayNight(vec3 color, float lonRad, float latRad) {
+  float cz = sin(latRad) * sin(u_sunDecRad)
+           + cos(latRad) * cos(u_sunDecRad) * cos(lonRad - u_sunLonRad);
+  float t = smoothstep(-0.1, 0.1, cz);
+  vec3 night = color * vec3(0.16, 0.20, 0.34);
+  return mix(night, color, t);
 }
 `
 
@@ -44,6 +68,8 @@ varying vec2 vUv;
 
 const float SQRT2 = 1.41421356237;
 const float PI = 3.14159265359;
+
+${dayNightChunk}
 
 void main() {
   float nx = vUv.x;
@@ -63,7 +89,9 @@ void main() {
   lon = clamp(lon, -PI, PI);
 
   vec2 eqUV = vec2((lon + PI) / (2.0 * PI), (lat + 0.5 * PI) / PI);
-  gl_FragColor = texture2D(u_colorMap, eqUV);
+  vec3 color = texture2D(u_colorMap, eqUV).rgb;
+  if (u_dayNight > 0.5) color = applyDayNight(color, lon, lat);
+  gl_FragColor = vec4(color, 1.0);
 }
 `
 
@@ -85,6 +113,8 @@ const float PI = 3.14159265359;
 const float X_SCALE = 0.8473;
 const float X_MAX = 0.8473 * 3.14159265359;  // X_SCALE · π
 
+${dayNightChunk}
+
 void main() {
   float nx = vUv.x;
   float ny = 1.0 - vUv.y;
@@ -103,7 +133,9 @@ void main() {
   float lat = absLat * sign(yRaw) * PI / 180.0;
 
   vec2 eqUV = vec2((lon + PI) / (2.0 * PI), (lat + 0.5 * PI) / PI);
-  gl_FragColor = texture2D(u_colorMap, eqUV);
+  vec3 color = texture2D(u_colorMap, eqUV).rgb;
+  if (u_dayNight > 0.5) color = applyDayNight(color, lon, lat);
+  gl_FragColor = vec4(color, 1.0);
 }
 `
 
@@ -161,17 +193,26 @@ function getRobinsonLUT(): THREE.DataTexture {
 
 /**
  * Build a ShaderMaterial that renders `colorMap` (an equirectangular texture)
- * reprojected to the target projection via inverse warping.
+ * reprojected to the target projection via inverse warping, with day/night
+ * uniforms initialised to the given sun state (updated reactively by the hook).
  */
 export function createReprojectMaterial(
   projection: ReprojectableProjection,
   colorMap: THREE.Texture,
+  sunLonRad = 0,
+  sunDecRad = 0,
+  dayNight = 0,
 ): THREE.ShaderMaterial | null {
+  const sunUniforms = {
+    u_sunLonRad: { value: sunLonRad },
+    u_sunDecRad: { value: sunDecRad },
+    u_dayNight: { value: dayNight },
+  }
   if (projection === 'mollweide') {
     return new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader: mollweideFragmentShader,
-      uniforms: { u_colorMap: { value: colorMap } },
+      uniforms: { u_colorMap: { value: colorMap }, ...sunUniforms },
       side: THREE.DoubleSide,
     })
   }
@@ -182,9 +223,41 @@ export function createReprojectMaterial(
       uniforms: {
         u_colorMap: { value: colorMap },
         u_robinsonLUT: { value: getRobinsonLUT() },
+        ...sunUniforms,
       },
       side: THREE.DoubleSide,
     })
   }
   return null
+}
+
+/**
+ * Reactively-managed reproject material (symmetric to useGPUTerrain).
+ *
+ * Builds the material only when `projection` is a reprojectable one and a source
+ * texture is available.  The sun is delivered as uniforms updated in an effect,
+ * so changing the sun never rebuilds/recompiles the shader — smooth slider drag.
+ */
+export function useGPUReproject(
+  projection: ReprojectableProjection | null,
+  colorMap: THREE.Texture | null,
+  sunLonRad: number,
+  sunDecRad: number,
+  dayNight: number,
+): THREE.ShaderMaterial | null {
+  const material = useMemo(() => {
+    if (!projection || !colorMap) return null
+    return createReprojectMaterial(projection, colorMap, sunLonRad, sunDecRad, dayNight)
+    // Sun intentionally excluded from deps: updated via the effect below so the
+    // shader is never recompiled on slider drag (exhaustive-deps is off in this repo).
+  }, [projection, colorMap])
+
+  useEffect(() => {
+    if (!material) return
+    material.uniforms.u_sunLonRad.value = sunLonRad
+    material.uniforms.u_sunDecRad.value = sunDecRad
+    material.uniforms.u_dayNight.value = dayNight
+  }, [material, sunLonRad, sunDecRad, dayNight])
+
+  return material
 }

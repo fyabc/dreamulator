@@ -17,7 +17,7 @@ import { WebGLRenderer } from 'three'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
-import { createReprojectMaterial, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
+import { useGPUReproject, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
   normalisedToMeters,
@@ -217,13 +217,21 @@ export default function MapViewer({
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
 
-  // GPU Mollweide reprojection material (inverse warp of the equirect texture).
-  const useGPUReproject = reprojectable && gpuMaterial !== null && !forceCpuReproject
-  const reprojectMaterial = useMemo(() => {
-    if (!useGPUReproject) return null
-    const eqTex = gpuMaterial!.uniforms.u_colorMap.value as THREE.Texture
-    return createReprojectMaterial(projection as ReprojectableProjection, eqTex)
-  }, [useGPUReproject, gpuMaterial, projection])
+  // GPU reprojection (Mollweide/Robinson): inverse-warp the baked equirect
+  // texture.  useGPUReproject manages the material and keeps the sun uniforms
+  // updated reactively, so the day/night slider never recompiles the shader.
+  const reprojectSource = gpuMaterial
+    ? (gpuMaterial.uniforms.u_colorMap.value as THREE.Texture)
+    : null
+  const gpuReprojectActive = reprojectable && !forceCpuReproject
+  const reprojectMaterial = useGPUReproject(
+    gpuReprojectActive ? (projection as ReprojectableProjection) : null,
+    reprojectSource,
+    sunLonRad,
+    sunDecRad,
+    dayNightNum,
+  )
+  const gpuReprojectOn = gpuReprojectActive && reprojectMaterial !== null
 
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
@@ -234,10 +242,10 @@ export default function MapViewer({
     // CPU texture is only needed for the CPU paths: Robinson always, and
     // Mollweide when GPU reproject is disabled (?reproject=cpu).  Equirectangular
     // always uses the GPU path.
-    enabled: projection !== 'equirectangular' && !useGPUReproject,
+    enabled: projection !== 'equirectangular' && !gpuReprojectOn,
   })
   const useGPU = gpuMaterial !== null && projection === 'equirectangular'
-  const terrainTexture = useGPU || useGPUReproject ? null : cpuTexture
+  const terrainTexture = useGPU || gpuReprojectOn ? null : cpuTexture
 
   // --- WebGL init ---
   useEffect(() => {
@@ -284,7 +292,7 @@ export default function MapViewer({
     let mat: THREE.Material | null
     if (useGPU) {
       mat = gpuMaterial!
-    } else if (useGPUReproject) {
+    } else if (gpuReprojectOn) {
       mat = reprojectMaterial
     } else if (terrainTexture) {
       mat = new THREE.MeshBasicMaterial({
@@ -338,7 +346,7 @@ export default function MapViewer({
         }
       }
     }
-  }, [webgpuReady, terrainTexture, useGPU, useGPUReproject, reprojectMaterial, gpuMaterial, projection, mapW, mapH, containerSize])
+  }, [webgpuReady, terrainTexture, useGPU, gpuReprojectOn, reprojectMaterial, gpuMaterial, projection, mapW, mapH, containerSize])
 
   // --- Viewport (used by mapCoords functions) ---
   const vp: Viewport = { width: containerSize.width, height: containerSize.height }
