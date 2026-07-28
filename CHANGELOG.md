@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] — 2026-07-29
+
+### Added
+
+- **图层面板重构**：底图（地形 / 陆海 / Köppen）改为单选 chip 条（P社 map mode 式，点一个其余归 0）；
+  叠加层按学科分组、可折叠，组头三态复选框（整组开关 / Ctrl+点重置为默认），无可见层的组默认折叠。
+  图层元数据（`helpContent`）新增 `kind`（basemap/overlay）/ `group` 字段，为后续 12~15 个图层
+  （气候 / 水文 / 文明）上线做准备。数据模型不变（layers 不透明度表仍是唯一事实来源）。
+
+### Changed
+
+- **版本号单一来源**：`pyproject.toml` 为 Python 侧唯一版本源，`__init__.py` / `api.py` 改用
+  `importlib.metadata.version("dreamulator")` 运行时读取，升级版本无需再手动同步这两处
+  （配合 `uv version --bump`，会同步 `uv.lock`）。`frontend/package.json`（JS 侧独立生态）仍需单独同步。
+
+### Docs
+
+- 记录多投影 GPU 渲染架构与 `?reproject=cpu` 调试路径（明确其非"无 GPU 兜底"——显示始终依赖 WebGL）。
+
+---
+
 ## [0.12.0] — 2026-07-28
 
 ### Added
