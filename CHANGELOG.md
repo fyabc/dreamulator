@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] — 2026-07-28
+
+### Added
+
+- **GPU 重投影**：Mollweide / Robinson 投影从 CPU 逐像素重投影改为 GPU 片元着色器逆 warp
+  - Mollweide 闭式逆变换 + 椭圆边界；Robinson 预烘焙 1D 查找纹理（pdfe → 纬度 / plen）查表
+  - `?reproject=cpu` 保留为调试对照（非无 GPU 兜底——显示始终需 WebGL）
+- **昼夜光照（2D + 3D）**：
+  - 2D 三种投影与 3D 球面均在着色器内计算昼夜（太阳天顶角 cos θz），晨昏线 smoothstep 柔化 + 夜间冷色调
+  - 季节滑块驱动太阳赤纬（周年变化：春分 / 夏至 / 秋分 / 冬至），时刻滑块驱动直射经度（周日变化）
+  - 光照设置经 URL（`?sun=&season=&night=`）在 2D↔3D 间同步、可分享；2D 光照开关默认关
+- **经纬网 SVG 叠加层**：等距圆柱干净直线、Mollweide / Robinson 平滑曲线（取代烘焙纹理网格），垫在单元格高亮之下
+
+### Changed
+
+- **单元格高亮统一为 SVG 叠加层**：移除烘焙进 GPU 纹理的高亮，三种投影行为一致；高亮色蓝（悬停）/ 黄（选中）
+
+### Fixed
+
+- **等距圆柱悬停 / 选中高亮消失**：`hoveredCell` / `selectedCells` 不在 `useGPUTerrain` 的 `useMemo` 依赖里，悬停时纹理永不重烘焙
+- **Mollweide / Robinson 垂直拖动高亮偏移**：渲染循环 effect 依赖为 `[]`，闭包 `projection` 永远停留在挂载初值 `'equirectangular'`，mesh 一直用等距圆柱公式定位（垂直对纬度线性），与 SVG 高亮的非线性投影速率不一致，偏移随垂直拖动累积
+
+### Chore
+
+- 恢复前端 ESLint 配置（`.eslintrc.cjs`），`npm run lint` 可用（`--max-warnings 0`）
+
+---
+
 ## [0.11.0] — 2026-07-27
 
 ### Added
