@@ -17,6 +17,7 @@ import { WebGLRenderer } from 'three'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
+import { useGPUReproject, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
   normalisedToMeters,
@@ -68,6 +69,9 @@ interface MapViewerProps {
   solarDeclinationDeg?: number
   /** Enable the day/night overlay. */
   dayNight?: boolean
+  /** Force the legacy CPU reprojection for Mollweide/Robinson (?reproject=cpu).
+   *  Debug / A-B comparison only — NOT a no-GPU fallback (display needs WebGL). */
+  forceCpuReproject?: boolean
 }
 
 export interface CursorInfo {
@@ -108,6 +112,7 @@ export default function MapViewer({
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
+  forceCpuReproject = false,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -194,26 +199,54 @@ export default function MapViewer({
   const dayNightNum = dayNight ? 1 : 0
 
   // --- GPU / CPU materials ---
+  // Mollweide can be reprojected on the GPU by inverse-warping the baked
+  // equirectangular texture.  `willGPUReproject` is a pre-check (independent of
+  // gpuMaterial) used to keep baked hover/selection highlights OUT of the source
+  // texture — those come from the SVG overlay for non-equirectangular views, so
+  // baking them too would double-draw.
+  const reprojectable = projection === 'mollweide' || projection === 'robinson'
+  const willGPUReproject =
+    reprojectable && elevation !== null && !forceCpuReproject
+
   const gpuMaterial = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers, cvtMesh, cellIdMap,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
-    hoveredCell, selectedCells,
+    hoveredCell: willGPUReproject ? null : hoveredCell,
+    selectedCells: willGPUReproject ? undefined : selectedCells,
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
+
+  // GPU reprojection (Mollweide/Robinson): inverse-warp the baked equirect
+  // texture.  useGPUReproject manages the material and keeps the sun uniforms
+  // updated reactively, so the day/night slider never recompiles the shader.
+  const reprojectSource = gpuMaterial
+    ? (gpuMaterial.uniforms.u_colorMap.value as THREE.Texture)
+    : null
+  const gpuReprojectActive = reprojectable && !forceCpuReproject
+  const reprojectMaterial = useGPUReproject(
+    gpuReprojectActive ? (projection as ReprojectableProjection) : null,
+    reprojectSource,
+    sunLonRad,
+    sunDecRad,
+    dayNightNum,
+  )
+  const gpuReprojectOn = gpuReprojectActive && reprojectMaterial !== null
+
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     colorMode: layers?.terrain ? 'terrain' : 'landsea', cvtMesh, cellIdMap,
     projection,
     sunLonRad, sunDecRad, dayNight: dayNightNum,
-    // Equirectangular uses the GPU path — skip the (unused) CPU texture render
-    // so dragging the sun slider doesn't trigger a full CPU re-bake.
-    enabled: projection !== 'equirectangular',
+    // CPU texture is only needed for the CPU paths: Robinson always, and
+    // Mollweide when GPU reproject is disabled (?reproject=cpu).  Equirectangular
+    // always uses the GPU path.
+    enabled: projection !== 'equirectangular' && !gpuReprojectOn,
   })
   const useGPU = gpuMaterial !== null && projection === 'equirectangular'
-  const terrainTexture = useGPU ? null : cpuTexture
+  const terrainTexture = useGPU || gpuReprojectOn ? null : cpuTexture
 
   // --- WebGL init ---
   useEffect(() => {
@@ -257,18 +290,24 @@ export default function MapViewer({
       if (m) { scene.remove(m); m.geometry.dispose(); if (m.material instanceof THREE.Material) m.material.dispose() }
     }
     ghostLeftRef.current = null; ghostRightRef.current = null
-    if (!terrainTexture && !useGPU) return
+    let mat: THREE.Material | null
+    if (useGPU) {
+      mat = gpuMaterial!
+    } else if (gpuReprojectOn) {
+      mat = reprojectMaterial
+    } else if (terrainTexture) {
+      mat = new THREE.MeshBasicMaterial({
+        map: terrainTexture,
+        side: THREE.DoubleSide,
+        transparent: projection !== 'equirectangular', // alpha edges for Robinson
+      })
+    } else {
+      mat = null
+    }
+    if (!mat) return
 
     const visW = BASE_VIS_H * (containerSize.width / containerSize.height)
     const geo = new THREE.PlaneGeometry(visW, BASE_VIS_H)
-    const mat = useGPU
-      ? gpuMaterial!
-      : new THREE.MeshBasicMaterial({
-          map: terrainTexture!,
-          side: THREE.DoubleSide,
-          transparent: projection !== 'equirectangular', // show alpha edges for Mollweide/Robinson
-        })
-
     const mesh = new THREE.Mesh(geo, mat)
     mesh.rotation.x = -Math.PI / 2
     scene.add(mesh)
@@ -308,7 +347,7 @@ export default function MapViewer({
         }
       }
     }
-  }, [webgpuReady, terrainTexture, useGPU, gpuMaterial, mapW, mapH, containerSize])
+  }, [webgpuReady, terrainTexture, useGPU, gpuReprojectOn, reprojectMaterial, gpuMaterial, projection, mapW, mapH, containerSize])
 
   // --- Viewport (used by mapCoords functions) ---
   const vp: Viewport = { width: containerSize.width, height: containerSize.height }

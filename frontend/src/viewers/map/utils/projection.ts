@@ -58,7 +58,7 @@ function mollweideTheta(latRad: number): number {
 // [plen, pdfe]
 // ---------------------------------------------------------------------------
 
-const ROBINSON_TABLE: [number, number][] = [
+export const ROBINSON_TABLE: [number, number][] = [
   [1.0000, 0.0000], [0.9986, 0.0620], [0.9954, 0.1240], [0.9900, 0.1860],
   [0.9822, 0.2480], [0.9730, 0.3100], [0.9600, 0.3720], [0.9427, 0.4340],
   [0.9216, 0.4958], [0.8962, 0.5571], [0.8679, 0.6176], [0.8350, 0.6769],
@@ -66,11 +66,11 @@ const ROBINSON_TABLE: [number, number][] = [
   [0.6213, 0.9394], [0.5722, 0.9761], [0.5322, 1.0000],
 ]
 
-const ROBINSON_X_SCALE = 0.8473
-const ROBINSON_X_MAX = ROBINSON_X_SCALE * Math.PI // ≈ 2.6618
-const ROBINSON_Y_MAX = 1.0
+export const ROBINSON_X_SCALE = 0.8473
+export const ROBINSON_X_MAX = ROBINSON_X_SCALE * Math.PI // ≈ 2.6618
+export const ROBINSON_Y_MAX = 1.0
 
-function robinsonInterp(absLatDeg: number): [number, number] {
+export function robinsonInterp(absLatDeg: number): [number, number] {
   const lat = clamp(absLatDeg, 0, 90)
   const idx = Math.floor(lat / 5)
   if (idx >= ROBINSON_TABLE.length - 1) {
