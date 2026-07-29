@@ -275,6 +275,14 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
 
+**改动后必须本地验证静态站**（历史教训：v0.10.0 的 `maps/` 目录迁移未同步到导出脚本，
+导致 Pages 地图长期 404）：
+
+```bash
+cd frontend && npm run build:static:local && npm run preview:static
+# 打开 http://localhost:4173，确认页面功能正常、控制台无 404
+```
+
 ### 知识库与设计模式文档同步
 
 引入新的学科知识（公式、参数、模型）或设计模式时，**必须同步更新**对应文档：

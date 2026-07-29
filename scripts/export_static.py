@@ -229,9 +229,15 @@ def _export_map_data(
 ) -> list[str]:
     """Export map data for a world or branch.
 
-    Scans the geological input directory for planets with maps and copies
-    their data (elevation PNG, metadata, voronoi, plates, features) to the
-    static output directory.
+    Since v0.10.0, map data lives in a top-level ``maps/{planet_id}/``
+    directory: ``{world}/maps/`` for root worlds and
+    ``{world}/branches/{branch}/maps/`` for branches. Copies each planet's
+    data (elevation PNG, map.yaml → meta.json, cvt_mesh, plates, features)
+    to the static output directory.
+
+    Branches without their own ``maps/`` directory inherit the root world's
+    maps at view time — the static frontend falls back to the root URL, so
+    no duplication is needed here.
 
     Args:
         world_dir: Path to the world root directory.
@@ -241,22 +247,10 @@ def _export_map_data(
     Returns:
         List of planet IDs that have map data.
     """
-    resolver = LayerResolver(world_dir, branch)
-    input_dir = resolver.get_input_dir("geological")
-    if input_dir is None:
-        return []
-
-    # For branches, only export if the geological data is branch-owned,
-    # not inherited from root — avoids duplicating the same map files.
     if branch is not None:
-        branch_dir = world_dir / "branches" / branch
-        try:
-            input_dir.relative_to(branch_dir)
-        except ValueError:
-            # Resolved to root or parent — maps already exported there
-            return []
-
-    maps_dir = input_dir / "maps"
+        maps_dir = world_dir / "branches" / branch / "maps"
+    else:
+        maps_dir = world_dir / "maps"
     if not maps_dir.exists():
         return []
 
@@ -265,6 +259,8 @@ def _export_map_data(
     for planet_dir in sorted(maps_dir.iterdir()):
         if not planet_dir.is_dir():
             continue
+        # Only planet directories have elevation.png — this also skips
+        # non-planet subdirectories such as earth_reference/ (civmap GeoJSON)
         elevation_png = planet_dir / "elevation.png"
         if not elevation_png.exists():
             continue
@@ -358,12 +354,9 @@ def _export_civmap_reference(
     GeoJSON files are stored in the repo with Git LFS and copied as-is
     to the static output. No download or optimization needed.
     """
-    resolver = LayerResolver(world_dir, branch)
-    input_dir = resolver.get_input_dir("geological")
-    if input_dir is None:
-        return
-
-    ref_dir = input_dir / "maps" / "earth_reference"
+    # Since v0.10.0, reference GeoJSON lives in the top-level maps/ directory
+    # alongside planet map data (world root only; branches reuse root data).
+    ref_dir = world_dir / "maps" / "earth_reference"
     if not ref_dir.exists():
         return
 

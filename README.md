@@ -145,13 +145,15 @@ Or use the combined script:
 cd frontend && npm run build:static
 ```
 
-**Local preview** of the static build:
+**Local preview** of the static build (`build:static:local` runs the static export automatically):
 
 ```bash
 cd frontend
-npm run build:static:local    # builds with base path '/'
-npm run preview:static         # serves dist/ at http://localhost:4173
+npm run build:static:local    # export all worlds + typecheck + build with base path '/'
+npm run preview:static        # serves dist/ at http://localhost:4173
 ```
+
+Open e.g. `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` to verify maps and other features (check the console for 404s). For quick iteration, export a single world only: `uv run python scripts/export_static.py --worlds earth` (from the repo root).
 
 **GitHub Pages deployment** is automated via GitHub Actions (`.github/workflows/deploy-pages.yml`). Push to `main` and enable Pages in repository settings (Source: GitHub Actions).
 

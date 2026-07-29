@@ -145,13 +145,15 @@ npx vite build --mode static
 cd frontend && npm run build:static
 ```
 
-**本地预览**静态构建结果：
+**本地预览**静态构建结果（`build:static:local` 会自动先运行静态导出）：
 
 ```bash
 cd frontend
-npm run build:static:local    # 以 base path '/' 构建
-npm run preview:static         # 在 http://localhost:4173 提供服务
+npm run build:static:local    # 导出全部世界 + 类型检查 + 以 base path '/' 构建
+npm run preview:static        # 在 http://localhost:4173 提供服务
 ```
+
+打开形如 `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` 的地址验证地图等功能（检查控制台无 404）。快速迭代时只需导出单个世界：在仓库根目录运行 `uv run python scripts/export_static.py --worlds earth`。
 
 **GitHub Pages 部署**已通过 GitHub Actions 自动化（`.github/workflows/deploy-pages.yml`）。推送到 `main` 分支后，在仓库设置中启用 Pages（Source: GitHub Actions）即可。
 
