@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.13.1] — 2026-07-30
+
+### Fixed
+
+- **静态站（GitHub Pages）地图 404 关键修复**：`scripts/export_static.py` 的 `_export_map_data()`
+  仍按 v0.10.0 之前的旧布局（`layers/geological/input/maps/`）查找地图，v0.10.0 以来静态导出
+  不含任何地图文件。改为按顶层 `maps/{planet}/` 布局导出（分支自有地图导出到
+  `branches/{b}/maps/`，分支无自有地图时由前端回退根路径）。
+- `_export_civmap_reference()` 同步修正：civmap 底图 GeoJSON 也随 v0.10.0 迁移到顶层
+  `maps/earth_reference/`，静态导出同样缺失。
+- `staticClient.ts` `getVoronoi` 改为优先 `cvt_mesh.json`，legacy `voronoi.json` 降为兜底——
+  消除每个行星两个必 404 请求。
+- 新增 `frontend/public/favicon.svg`，`index.html` 引用由从未存在的 `/vite.svg` 改指
+  `/favicon.svg`。
 
 ### Docs
 
@@ -19,7 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 两个 README 的路线图改为状态摘要 + 引用，单一事实来源为 `roadmap-analysis.md`。
 - 重写文档索引（`docs/CLAUDE.md`、`usage/CLAUDE.md`，新增 `design/CLAUDE.md`）；
   全仓库跨文件引用同步更新（源码 docstring、`HelpPage.tsx`、scripts、knowledge/worldbuilding
-  文档），校验零断链。纯文档变更，不涉及行为变化，不 bump 版本。
+  文档），校验零断链。
+- 两个 README 与根 CLAUDE.md 补充静态站本地验证流程
+  （`npm run build:static:local && npm run preview:static`）——导出脚本改动后的强制自检，
+  本次 bug 的历史教训。
 
 ---
 
