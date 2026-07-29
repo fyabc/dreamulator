@@ -2,7 +2,7 @@
 
 **Status: NOT YET IMPLEMENTED**
 
-Planned features (see ``docs/usage/terrain-pipeline.md`` §9):
+Planned features (see ``docs/design/terrain-pipeline.md`` §9):
     - Flow direction: steepest descent on CVT adjacency graph
     - Flow accumulation: topological sort + upstream area accumulation
     - River thresholding: cells with accumulation > threshold → river
@@ -35,5 +35,5 @@ def generate_rivers(mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         "Planned algorithm: topological sort on CVT adjacency graph + "
         "steepest-descent flow direction + flow accumulation + "
         "endorheic basin detection.\n"
-        "See docs/usage/terrain-pipeline.md §9 for the complete algorithm design."
+        "See docs/design/terrain-pipeline.md §9 for the complete algorithm design."
     )

@@ -1,7 +1,7 @@
 # 竞品分析与后续开发路线图
 
 > 基于 `private/chats/chat-多人共创世界观项目实例.txt` 开发讨论 + 网络调研。  
-> 最后更新：2026-07-27（v0.9.0 气候引擎合并）  
+> 最后更新：2026-07-29（v0.13.0；路线图完成状态已与 CHANGELOG 核对）  
 > 项目长期愿景与设计哲学见 [vision.md](vision.md)。
 
 ---
@@ -38,7 +38,7 @@
 
 ## 二、后续开发方向（细化）
 
-### Phase 2.5：地形真实感增强（当前优先级最高）
+### Phase 2.5：地形真实感增强 ✅（v0.7.0–0.8.0 完成）
 
 **目标**：修复 terrain-dev 等测试数据中暴露的地形生成问题，提升陆地真实感。
 
@@ -50,7 +50,7 @@
 #### 2.5a：大陆形状与分布优化
 
 > **板块剖分已改为 Cortial et al. (2019) 完整方案** — Poisson-disc + 球面 Voronoi + Euler 极旋转 + 重 Voronoi 时间演化。
-> 见 `tectonic_simulator.py`。参考文献见 `../usage/terrain-pipeline.md` §3.2。
+> 见 `tectonic_simulator.py`。参考文献见 [terrain-pipeline.md](terrain-pipeline.md) §3.2。
 
 | 问题 | 改进方向 |
 |------|---------|
@@ -101,9 +101,9 @@
 
 ---
 
-### Phase 3A：气候与流体引擎 🚧
+### Phase 3A：气候与流体引擎 🚧（核心已合并 v0.9.0，精度调优进行中）
 
-**状态**：核心已实现（`feat/climate-engine`），精度验证中。详见 `docs/usage/climate-engine.md`。
+**状态**：核心已合并（v0.9.0），热带降水修正已合并（v0.11.0），季节模块已实现、集成中。详见 [climate-engine.md](climate-engine.md)。
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
@@ -113,11 +113,15 @@
 | 地形降水 + 雨影 | ✅ 已实现 | BFS 水汽传输，降水 RMSE 493 mm/yr |
 | 陆地蒸散循环 | ✅ 已实现 | 土壤+植被蒸发回收 |
 | ITCZ 对流降水 | ✅ 已实现 | 热带辐合带 + 局地热对流 |
-| Köppen 气候分类 | ✅ 已实现 | 匹配率 48.3% |
+| Köppen 气候分类 | ✅ 已实现 | 群组准确率 53.9%（v0.11.0，vs Beck 2018） |
 | ETOPO1 真实地球验证 | ✅ 已实现 | `earth/climate-dev` 分支 + `scripts/validate_climate.py` |
-| 季节变化（降水/风场） | 📋 待实现 | [Phase 3A.3](usage/climate-engine.md#61-季节变化phase-3a3) |
-| 洋流热量输送 | 📋 待实现 | [Phase 3A.1](usage/climate-engine.md#62-温度模型改进phase-3a1) |
-| 冰盖反照率 + 云反馈 | 📋 待实现 | [Phase 3A.1](usage/climate-engine.md#62-温度模型改进phase-3a1) |
+| 热带降水修正（3A.1） | ✅ 核心已合并 | v0.11.0：ITCZ 增强、热带对流 ×2、降水底线；A 类准确率 13.3% → 33.3% |
+| 季节变化（3A.2） | 🚧 进行中 | v0.11.0 已实现光照驱动季节模块（`climate_seasonality.py`），尚未完全集成到模拟器；D 类群组准确率 0% → 48.3% |
+| 洋流 + 温度精细化（3A.3） | 📋 待实现 | 风生洋流 / 冰盖反照率 / 云反馈 |
+| 空间格局精细化（3A.4） | 📋 待实现 | 西岸/东岸不对称、雨影精确化、内陆干旱梯度 |
+| 海洋气候分区（3A.5，Longhurst） | 📋 待实现 | 海洋省份分类 |
+
+各子阶段详情与验收标准见 [climate-engine.md § 改进路线图](climate-engine.md#6-改进路线图数据驱动)。
 
 **输出**：temperature.png, precipitation.png, koppen.json, climate_metadata.json  
 **竞品对比**：当用户问"如果自转反向会怎样"，Azgaar 无法回答，Dreamulator 可精确模拟。
@@ -320,14 +324,14 @@ civ_model:
 |--------|------|-----------|--------|
 | **P0** | **~~地形真实感增强（Phase 2.5）~~** | ✅ 已完成 | ★★★★★ |
 | **P0** | **气候引擎核心（Phase 3A）** | ✅ v0.9.0 已合并 | ★★★★★ |
-| P0 | 气候 3A.1：热带降水修正 | 1–1.5 周 | ★★★★★ |
-| P0 | 气候 3A.2：季节变化（解锁 D/C 类） | 2–3 周 | ★★★★★ |
+| P0 | ~~气候 3A.1：热带降水修正~~ | ✅ v0.11.0 核心已合并（残留修补） | ★★★★★ |
+| P0 | 气候 3A.2：季节变化集成（解锁 D/C 类） | 🚧 模块已实现（v0.11.0），集成中 | ★★★★★ |
 | P0 | 气候 3A.3：温度精细化（冰盖/云/洋流） | 2 周 | ★★★★ |
 | P0 | 气候 3A.4：空间格局精细化 | 1.5–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema | 1–2 周 | ★★★★ |
-| P1 | 前端气候可视化（色阶 + 风场箭头） | 1–2 周 | ★★★★ |
-| P1 | **CLI + 前端帮助系统** | 1 周 | ★★★★ |
-| P1 | LLM 叙事桥 | 1 周 | ★★★★ |
+| P1 | 前端气候可视化 | 🚧 Köppen 图层 / 昼夜光照 / 图层面板已完成；风场箭头未做 | ★★★★ |
+| P1 | ~~CLI + 前端帮助系统~~ | ✅ 已实现（HelpPage + 图层帮助内容） | ★★★★ |
+| P1 | LLM 叙事桥 | 🚧 基础 narrate 已实现；史诗叙事桥未做 | ★★★★ |
 | P2 | 水力侵蚀 + 河流（Phase 3B） | 2–3 周 | ★★★ |
 | P2 | **地质时间轴可视化**（板块漂移回放） | 3–4 周 | ★★★ |
 | P2 | 世界线 Diff 可视化 | 2 周 | ★★★ |
@@ -336,7 +340,7 @@ civ_model:
 | P3 | 实时协作 | 3–4 周 | ★★ |
 | P3 | 世界导出包 | 1 周 | ★★ |
 
-### 四、可扩展的酷炫功能
+### 四、可扩展的酷炫功能（续）
 
 #### 4.6 多层级时间轴（长期愿景）
 
@@ -393,11 +397,13 @@ civ_model:
 
 ### 内部文档
 
+- `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
+- `docs/design/terrain-pipeline.md` — 地形生成管线技术参考
+- `docs/design/map-system.md` — 地图系统架构
+- `docs/design/climate-engine.md` — 气候引擎实现架构
 - `docs/usage/map-workflow.md` — 地图工作流指南
-- `docs/usage/terrain-pipeline.md` — 地形生成管线技术参考
 - `docs/usage/civmap-guide.md` — 文明地图使用指南
-- `docs/usage/project-structure.md` — 层级架构与分支管理
-- `docs/design/map_system_design.md` — 历史 ADR
+- `docs/design/map_system_design.md` — 早期 ADR（已归档）
 - `private/chats/chat-多人共创世界观项目实例.txt` — 原始讨论记录
 
 ---

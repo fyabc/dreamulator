@@ -1,7 +1,7 @@
 # 板块构造模型
 
 > 从 `src/dreamulator/map/plate_generator.py` 和 `boundary_detector.py` 抽取。  
-> 详细算法参考：`docs/usage/terrain-pipeline.md` §3–4
+> 详细算法参考：`docs/design/terrain-pipeline.md` §3–4
 
 ---
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Docs
+
+- **文档结构整理：design/ 与 usage/ 按读者分离**。`usage/project-structure.md` 迁为
+  `design/architecture.md` 并更新至当前项目结构（补 map/、civmap/、scripts/、packages/ 等，
+  统一 derived/ 格式描述，新增前端双模式、地图子系统两节）；`map-system.md`、`terrain-pipeline.md`、
+  `climate-engine.md`、`climate-validation.md` 迁入 `design/`；`usage/` 保留 cli、map-workflow、
+  civmap-guide、frontend-3d-viewer 四个操作指南。
+- `design/roadmap-analysis.md` 与 CHANGELOG 核对补齐完成状态（Phase 2.5 完成、3A 核心与 3A.1
+  已合并、季节模块、帮助系统等），修复失效锚点与重复标题。
+- 两个 README 的路线图改为状态摘要 + 引用，单一事实来源为 `roadmap-analysis.md`。
+- 重写文档索引（`docs/CLAUDE.md`、`usage/CLAUDE.md`，新增 `design/CLAUDE.md`）；
+  全仓库跨文件引用同步更新（源码 docstring、`HelpPage.tsx`、scripts、knowledge/worldbuilding
+  文档），校验零断链。纯文档变更，不涉及行为变化，不 bump 版本。
+
+---
+
 ## [0.13.0] — 2026-07-29
 
 ### Added

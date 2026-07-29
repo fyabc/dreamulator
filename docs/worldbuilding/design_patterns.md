@@ -39,7 +39,7 @@ description: "盘古大陆分支 — 在 geological 层分叉"
 ```
 
 **参考**：
-- `docs/usage/project-structure.md` — 层级架构与分支管理
+- `docs/design/architecture.md` — 层级架构与分支管理
 - `src/dreamulator/resolver.py` — LayerResolver 实现
 - `src/dreamulator/branch_manager.py` — Branch CRUD
 
@@ -171,7 +171,7 @@ lloyd_iterations: 8   # Lloyd 松弛迭代次数（越高 cell 越均匀）
 **参考**：
 - `src/dreamulator/map/pipeline_types.py` — TerrainPipelineConfig
 - `src/dreamulator/map/cvt_mesh.py` — `generate_cvt_mesh()`, `fibonacci_sphere()`
-- `docs/usage/terrain-pipeline.md` §2 — CVT 网格生成算法
+- `docs/design/terrain-pipeline.md` §2 — CVT 网格生成算法
 
 ---
 
@@ -253,7 +253,7 @@ elevation → temperature → biomes
 **参考**：
 - `src/dreamulator/map/manager.py` — `mark_downstream_stale()`
 - `src/dreamulator/map/models.py` — MapMetadata, MapLayerRegistry
-- `docs/usage/map-system.md` — 图层依赖关系 DAG
+- `docs/design/map-system.md` — 图层依赖关系 DAG
 
 ---
 
@@ -327,7 +327,7 @@ def adaptive_pid(current_value, target, base_rate, history):
 | （建议） | 气候模拟 | 目标全球均温 | atmosphere_factor |
 
 **参考**：
-- `docs/usage/terrain-pipeline.md` §D.12 — 板块裂解 PID 实现细节
+- `docs/design/terrain-pipeline.md` §D.12 — 板块裂解 PID 实现细节
 - `src/dreamulator/map/tectonic_simulator.py` — `_evolve_cortial2019()` 中的 PID 控制器
 - Matthews et al. (2016) — 地球 410 My 板块数量参考数据
 

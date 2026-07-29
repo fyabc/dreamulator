@@ -93,7 +93,7 @@ cd frontend && npm run dev
 
 ## 项目结构与设计原则
 
-详见 [docs/usage/project-structure.md](docs/usage/project-structure.md)。
+详见 [docs/design/architecture.md](docs/design/architecture.md)。
 
 ## 开发
 
@@ -173,16 +173,9 @@ uv run dreamulator serve
 
 ## 路线图
 
-- [x] **Phase 1** — 项目骨架、数据模型、CLI、世界管理、前端骨架
-- [x] **Phase 2** — 前端可视化：3D 恒星系、3D 球面视图、多投影 2D 地图、GPU 地形渲染、行星纹理、经纬线网格、自适应分层设色
-- [ ] **Phase 2.5** — 地形真实感增强（大陆形状优化、山脉/海岸特征、噪声标定、回归测试）
-- [ ] **Phase 3A** — 气候与流体引擎（能量平衡模型、大气环流、地形雨影效应、洋流）
-- [ ] **Phase 3B** — 侵蚀与河流生成（D8 流向、水力侵蚀、沉积物搬运）
-- [ ] **Phase 3C** — 文明半格式化管理（实体+修饰器 → 事件流 → LLM 编译 Wiki；可插拔 HANDY/SDT/Tainter 策略）
-- [ ] **Phase 3D** — 分支差异可视化与混沌预警（DAG 影响半径、李雅普诺夫指数）
-- [ ] **Phase 3E** — LLM 叙事桥（结构化数据 → 史诗叙事）
+**当前状态**：Phase 1–2.5 已完成（项目骨架、CLI、3D/2D 可视化、地形真实感增强）；Phase 3A 气候引擎核心已合并（能量平衡、三圈环流风带、地形降水、Köppen 分类、季节模块、真实地球验证），精度调优进行中。后续方向：侵蚀与河流（3B）、文明半格式化管理（3C）、世界线 Diff（3D）、LLM 叙事桥（3E）。
 
-详见 [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md)（竞品分析与设计参考）。
+完整路线图、竞品分析与设计参考见 [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md)；项目长期愿景见 [docs/design/vision.md](docs/design/vision.md)。
 
 ## 许可证
 

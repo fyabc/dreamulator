@@ -2,14 +2,14 @@
 
 **Status: NOT YET IMPLEMENTED**
 
-Planned features (see ``docs/usage/terrain-pipeline.md`` §10):
+Planned features (see ``docs/design/terrain-pipeline.md`` §10):
     - Thermal erosion: talus angle iterative smoothing
     - Water erosion textures: flow accumulation → normal perturbation (visual)
     - Sediment transport: erosion amount → downstream deposition
     - Temperature-driven surface weathering
 
 Note: Fine-scale erosion is intended for Gaea local refinement
-(docs/usage/terrain-pipeline.md §12). This module handles global
+(docs/design/terrain-pipeline.md §12). This module handles global
 simplified erosion only.
 """
 
@@ -33,5 +33,5 @@ def apply_erosion(mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         "Erosion simulation is not yet implemented.\n"
         "Planned algorithm: talus angle thermal erosion + "
         "visual water erosion textures + sediment transport.\n"
-        "See docs/usage/terrain-pipeline.md §10 for the complete algorithm design."
+        "See docs/design/terrain-pipeline.md §10 for the complete algorithm design."
     )

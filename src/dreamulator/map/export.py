@@ -3,7 +3,7 @@
 Converts scattered CVT cell data (on the sphere) to regular lat/lon grids
 suitable for PNG export, map visualization, and Gaea import.
 
-See ``docs/usage/terrain-pipeline.md`` §11 for algorithm details.
+See ``docs/design/terrain-pipeline.md`` §11 for algorithm details.
 """
 
 from __future__ import annotations

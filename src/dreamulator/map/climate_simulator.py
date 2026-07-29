@@ -3,7 +3,7 @@
 Phase 3A implementation — Energy Balance Model + geostrophic wind + BFS moisture
 transport + orographic rainfall + Köppen classification.
 
-Algorithm reference: ``docs/usage/terrain-pipeline.md`` §8.
+Algorithm reference: ``docs/design/terrain-pipeline.md`` §8.
 
 Physical constants and composable functions are in
 ``src/dreamulator/engine/climate_physics.py``.  This module orchestrates them

@@ -9,7 +9,7 @@ the output against observed climatological data:
     - Köppen: cell-by-cell match rate against Beck et al. (2018) observed map
 
 Usage:
-    # Full validation (requires downloaded data — see docs/usage/climate-validation.md)
+    # Full validation (requires downloaded data — see docs/design/climate-validation.md)
     uv run python scripts/validate_climate.py earth --branch terrain-dev
 
     # Quick validation (zonal statistics only, no downloads needed)

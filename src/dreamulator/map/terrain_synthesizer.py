@@ -25,7 +25,7 @@ Select via ``config.terrain_algorithm``:
       Wilson (1963) "A possible origin of the Hawaiian Islands" —
         hotspot theory with plate motion over fixed mantle plume.
 
-See ``docs/usage/terrain-pipeline.md`` §5 for detailed algorithm reference.
+See ``docs/design/terrain-pipeline.md`` §5 for detailed algorithm reference.
 """
 
 from __future__ import annotations

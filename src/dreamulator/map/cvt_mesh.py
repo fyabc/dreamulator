@@ -8,7 +8,7 @@ Pipeline:
     5. Adjacency graph construction (Delaunay dual)
     6. Cell area computation (spherical polygon excess)
 
-See ``docs/usage/terrain-pipeline.md`` §2 for algorithm details.
+See ``docs/design/terrain-pipeline.md`` §2 for algorithm details.
 """
 
 from __future__ import annotations

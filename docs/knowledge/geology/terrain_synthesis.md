@@ -1,7 +1,7 @@
 # 地形合成
 
 > 从 `src/dreamulator/map/terrain_synthesizer.py` 抽取。  
-> 详细算法参考：`docs/usage/terrain-pipeline.md` §6
+> 详细算法参考：`docs/design/terrain-pipeline.md` §6
 
 ---
 

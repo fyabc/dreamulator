@@ -7,7 +7,7 @@ Pipeline:
     4. Classify boundary type
     5. BFS distance-from-boundary for all cells
 
-See ``docs/usage/terrain-pipeline.md`` §4 for algorithm details.
+See ``docs/design/terrain-pipeline.md`` §4 for algorithm details.
 
 Key formulas:
     v(P) = ω × P          (rigid-body velocity from Euler pole)

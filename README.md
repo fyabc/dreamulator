@@ -93,7 +93,7 @@ The frontend runs at `http://localhost:5173` and proxies `/api` requests to the 
 
 ## Project Structure & Design Principles
 
-See [docs/usage/project-structure.md](docs/usage/project-structure.md).
+See [docs/design/architecture.md](docs/design/architecture.md).
 
 ## Development
 
@@ -173,16 +173,9 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 
 ## Roadmap
 
-- [x] **Phase 1** — Project scaffolding, data models, CLI, world management, frontend skeleton
-- [x] **Phase 2** — Frontend visualization: 3D star system, 3D globe view, multi-projection 2D maps, GPU terrain rendering, planet terrain textures, graticule overlays, adaptive hypsometric coloring
-- [x] **Phase 2.5** — Terrain realism enhancement (Cortial 2019 Voronoi plates, asymmetric mountains, hotspots, continental shelf, island arcs, anisotropic noise, benchmark)
-- [ ] **Phase 3A** — Climate & fluid engine (EBM, atmospheric circulation, orographic effects, ocean currents)
-- [ ] **Phase 3B** — Erosion & river generation (D8 flow, hydraulic erosion, sediment transport)
-- [ ] **Phase 3C** — Civilization semi-structured modeling (Entities + Modifiers → Event Stream → LLM-compiled Wiki; pluggable HANDY/SDT/Tainter strategies)
-- [ ] **Phase 3D** — Branch diff & chaos visualization (DAG impact radius, Lyapunov exponent warnings)
-- [ ] **Phase 3E** — LLM narrative bridge (structured data → epic storytelling)
+**Current status**: Phases 1–2.5 complete (scaffolding, CLI, 3D/2D visualization, terrain realism enhancement); Phase 3A climate engine core merged (EBM, three-cell wind belts, orographic precipitation, Köppen classification, seasonality module, real-Earth validation) with accuracy tuning in progress. Up next: erosion & rivers (3B), civilization semi-structured modeling (3C), world-line diff visualization (3D), LLM narrative bridge (3E).
 
-See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for detailed competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
+See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for the full roadmap, competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
 
 ## License
 

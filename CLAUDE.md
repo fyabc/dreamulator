@@ -9,7 +9,8 @@ dreamulator/
 ├── docs/
 │   ├── knowledge/           # 学科知识库（天体物理、地质、气候、生态、社会）
 │   ├── worldbuilding/       # 架空世界创建思路与方法论
-│   └── usage/               # 项目用法指南（CLI、API、前端）
+│   ├── usage/               # 用法指南（CLI、地图工作流、前端操作）
+│   └── design/              # 架构设计文档（架构、愿景、路线图、子系统设计文档）
 ├── data/
 │   ├── templates/           # 世界模板（minimal, earthlike）
 │   └── worlds/              # 世界实例

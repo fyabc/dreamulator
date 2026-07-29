@@ -1,7 +1,7 @@
 # CVT 球面网格生成
 
 > 从 `src/dreamulator/map/cvt_mesh.py` 抽取。  
-> 详细算法参考：`docs/usage/terrain-pipeline.md` §2
+> 详细算法参考：`docs/design/terrain-pipeline.md` §2
 
 ---
 

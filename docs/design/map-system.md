@@ -2,7 +2,7 @@
 
 dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地图，支持地形导入、多图层查看和 Voronoi 语义管理。
 
-> **使用指南**：完整的 Gaea 设计 → 导入 → 查看工作流见 [map-workflow.md](map-workflow.md)。
+> **使用指南**：完整的 Gaea 设计 → 导入 → 查看工作流见 [map-workflow.md](../usage/map-workflow.md)。
 
 ## 参考项目
 
@@ -281,7 +281,7 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 
 ## 使用流程
 
-> 完整的 Gaea → Dreamulator 工作流详见 [map-workflow.md](map-workflow.md)。
+> 完整的 Gaea → Dreamulator 工作流详见 [map-workflow.md](../usage/map-workflow.md)。
 
 ### 创建地图
 
@@ -311,7 +311,7 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 
 ## 后续阶段
 
-> 完整路线图详见 [`docs/design/roadmap-analysis.md`](../design/roadmap-analysis.md)。
+> 完整路线图详见 [`docs/design/roadmap-analysis.md`](roadmap-analysis.md)。
 
 ### 已完成（v0.5.0）
 

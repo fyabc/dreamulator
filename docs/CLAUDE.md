@@ -31,11 +31,22 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 
 ## usage/ — 项目用法指南
 
-存放 dreamulator 工具本身的使用说明。包括：
+存放 dreamulator 工具本身的使用说明（面向用户的操作指南）。包括：
 
-- CLI 命令详解
-- API 接口说明
-- 前端操作指南
-- 工作流示例
+- CLI 命令参考（`cli.md`）
+- 地图工作流指南（`map-workflow.md`）
+- 文明地图使用指南（`civmap-guide.md`）
+- 3D 恒星系可视化器操作（`frontend-3d-viewer.md`）
 
 详见 `usage/CLAUDE.md`。
+
+## design/ — 架构设计文档
+
+存放面向开发者的架构与设计文档。包括：
+
+- 项目架构（`architecture.md`）：目录结构、模块职责、核心设计概念
+- 项目愿景（`vision.md`）与路线图/竞品分析（`roadmap-analysis.md`）
+- 子系统设计文档与技术参考：地形管线（`terrain-pipeline.md`）、地图系统（`map-system.md`）、气候引擎（`climate-engine.md`）及其验证（`climate-validation.md`）
+- 早期架构决策记录（`map_system_design.md`，已归档）
+
+详见 `design/CLAUDE.md`。

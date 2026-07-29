@@ -1,19 +1,20 @@
 # 项目用法指南
 
-本目录存放 dreamulator 工具本身的使用说明。
+本目录存放 dreamulator 工具本身的使用说明（面向最终用户的操作指南）。
+架构设计、算法技术参考等面向开发者的文档位于 [`../design/`](../design/)
+（2026-07-29 文档整理时迁入）。
 
-## 已有文档
+## 文档列表
 
-- `project-structure.md` — 项目目录结构和各模块职责说明
-- `frontend-3d-viewer.md` — 3D 恒星系可视化器的架构、操作指南和设计说明
-- `map-system.md` — 地图系统架构设计（数据模型、渲染技术、API 端点）
-- `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 编辑器查看 → 可选 Gaea 精细化的完整流程）
-- `terrain-pipeline.md` — 行星地形生成管线技术参考（各阶段算法原理、数学公式、论文解读）
-- `cli.md` — CLI 命令详解（init、list、info、validate、branch、terrain、narrate、serve）
+- `cli.md` — CLI 命令参考（init、list、info、validate、branch、terrain、build、climate、narrate、serve）
+- `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 查看器检查 → 可选 Gaea 精细化的完整流程）
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
+- `frontend-3d-viewer.md` — 3D 恒星系可视化器（操作指南 + 架构设计说明）
 
-## 规划中的文档
-- `api.md` — REST API 接口说明
-- `frontend.md` — 前端操作指南（页面导航、世界管理、分支切换）
-- `templates.md` — 世界模板说明和自定义方法
-- `workflow_examples.md` — 典型工作流示例（创建世界、迭代调整、运行模拟）
+## 相关设计文档（../design/）
+
+- `architecture.md` — 项目目录结构与模块职责
+- `terrain-pipeline.md` — 地形生成管线技术参考（算法原理、数学公式、论文解读）
+- `map-system.md` — 地图系统架构（数据模型、多投影渲染、API 端点）
+- `climate-engine.md` — 气候引擎实现架构与改进路线图
+- `climate-validation.md` — 真实地球数据验证方法

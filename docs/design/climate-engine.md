@@ -213,7 +213,7 @@ const temperature = tMin + normalized * (tMax - tMin);  // from climate_metadata
 
 ## 5. 验证方法
 
-见 [`docs/usage/climate-validation.md`](climate-validation.md)。
+见 [`docs/design/climate-validation.md`](climate-validation.md)。
 
 **当前精度**（v0.2.0，ETOPO1 真实高程输入，earth/climate-dev 分支）：
 

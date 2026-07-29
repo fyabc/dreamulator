@@ -12,7 +12,7 @@ Runs the complete CVT terrain generation pipeline:
     8. Erosion (TODO)
     9. Export (equirectangular raster + PNG + JSON)
 
-See ``docs/usage/terrain-pipeline.md`` for complete algorithm reference.
+See ``docs/design/terrain-pipeline.md`` for complete algorithm reference.
 """
 
 from __future__ import annotations
