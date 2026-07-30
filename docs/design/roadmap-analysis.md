@@ -116,10 +116,12 @@
 | Köppen 气候分类 | ✅ 已实现 | 群组准确率 53.9%（v0.11.0，vs Beck 2018） |
 | ETOPO1 真实地球验证 | ✅ 已实现 | `earth/climate-dev` 分支 + `scripts/validate_climate.py` |
 | 热带降水修正（3A.1） | ✅ 核心已合并 | v0.11.0：ITCZ 增强、热带对流 ×2、降水底线；A 类准确率 13.3% → 33.3% |
-| 季节变化（3A.2） | 🚧 进行中 | v0.11.0 已实现光照驱动季节模块（`climate_seasonality.py`），尚未完全集成到模拟器；D 类群组准确率 0% → 48.3% |
+| 季节变化（3A.2） | 🚧 进行中 | v0.11.0 已实现光照驱动季节模块（`climate_seasonality.py`），但全仓库零引用（孤儿模块），未接入模拟器；D 类群组准确率 0% → 48.3% |
 | 洋流 + 温度精细化（3A.3） | 📋 待实现 | 风生洋流 / 冰盖反照率 / 云反馈 |
 | 空间格局精细化（3A.4） | 📋 待实现 | 西岸/东岸不对称、雨影精确化、内陆干旱梯度 |
 | 海洋气候分区（3A.5，Longhurst） | 📋 待实现 | 海洋省份分类 |
+| 恒星/轨道参数查找（3A.6） | 📋 待实现 | `_load_orbital_distance` 硬编码 1.0 AU（代码注释 "Phase 3B+ TODO"）；光度查找对卫星失配 → 静默回退 1.0 L☉。非 1 AU / 非太阳恒星的世界得到"1 AU 绕太阳"气候而无任何提示。详见 §五 |
+| 潮汐锁定经度效应（3A.7） | 📋 待实现 | 无昼夜半球 / 次恒星点热源 / 经度不对称；自转周期仅进入科氏力。潮汐锁定世界（如 gaia-m）当前只能产出纬向对称近似气候 |
 
 各子阶段详情与验收标准见 [climate-engine.md § 改进路线图](climate-engine.md#6-改进路线图数据驱动)。
 
@@ -405,6 +407,42 @@ civ_model:
 - `docs/usage/civmap-guide.md` — 文明地图使用指南
 - `docs/design/map_system_design.md` — 早期 ADR（已归档）
 - `private/chats/chat-多人共创世界观项目实例.txt` — 原始讨论记录
+
+---
+
+## 六、已知技术债务
+
+2026-07-31 审计确认（v0.13.2 后）。按"功能性 → 工程卫生"排序。
+
+### 功能性
+
+1. **气候引擎恒星/轨道参数查找硬编码**（Phase 3A.6）— `engine/climate.py`：
+   `_load_orbital_distance` 硬编码 `return 1.0`（注释自认 "Phase 3B+ TODO"）；
+   `_load_stellar_luminosity` 用 `planet.orbits` 查恒星 ID，对卫星世界必然失配 →
+   静默回退 1.0 L☉。非 1 AU 轨道 / 非太阳恒星的世界静默得到"1 AU 绕太阳"气候。
+   **耦合风险**：日后补上查找时，gaia-m 必须同时重校温室参数——真实日照
+   （0.0357 L☉ @ 0.2795 AU ≈ 46% 地球）+ 当前 33 K 温室 ≈ −30 °C 全球冰封。
+   影响范围与近似说明见 `data/worlds/gaia-m/design-notes/climate_data_status.md`。
+2. **`climate_seasonality.py` 孤儿模块**（Phase 3A.2）— 复合倾角（为 Gaia-M 写的
+   "Moon compound obliquity"）与光照驱动季节已实现，但全仓库零引用；当前活动
+   路径只用 `climate_simulator` 内的简化季节项。
+3. **潮汐锁定经度效应缺失**（Phase 3A.7）— 无昼夜半球 / 次恒星点热源 / 经度
+   不对称，潮汐锁定世界只能产出纬向对称近似气候。
+4. **`dreamulator terrain generate` 旧版输出路径** — CLI 仍写
+   `layers/geological/input/maps/`（cli.py），与 v0.10.0 统一的顶层 `maps/`
+   布局不一致，会产出与正式数据不混用的重复副本。补气候数据请用
+   `dreamulator build <world> --only climate`，勿用此命令。
+
+### 工程卫生
+
+1. **`engine/climate.py` 12 个存量 mypy 错误** — mesh 加载辅助函数返回
+   无注解的 `object`、`mesh_paths` 重复定义等。补齐 `CVTMesh` 类型注解可
+   消除大部分。
+2. **全仓约 30 个存量 ruff 告警** — 集中在 `cli.py` / `api_routes/*`
+   （B904 `raise ... from`、B008 `typer.Option` / `File(...)` 默认值）与
+   map 子系统 UP042（str-Enum → StrEnum）。注意：**UP042 改变 `__str__`
+   语义**（Python 3.12 StrEnum），不可批量自动修；B008 多为框架惯用法
+   误报，宜按规则配置 per-file ignore 而非逐处改码。
 
 ---
 
