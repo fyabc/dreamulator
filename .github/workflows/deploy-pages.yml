@@ -3,6 +3,16 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Only redeploy when site-relevant files change; docs-only commits skip
+    # the deploy entirely. Manual runs remain available via workflow_dispatch.
+    paths:
+      - 'frontend/**'
+      - 'scripts/export_static.py'
+      - 'data/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,13 +44,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run engines to compute derived data
-        run: |
-          for world in data/worlds/*/; do
-            name=$(basename "$world")
-            echo "=== Building world: $name ==="
-            uv run dreamulator build "$name" || echo "WARNING: build failed for $name (continuing)"
-          done
+      # Engine builds are intentionally NOT run here: derived data is committed
+      # to the repo (git-tracked since v0.10.0), and the static export consumes
+      # it as-is. This saves minutes per world on every deploy. To rebuild
+      # derived data, run `uv run dreamulator build <world>` locally
+      # (add `--branch <b>` for branches) and commit the results.
 
       - name: Export static data
         run: uv run python scripts/export_static.py
