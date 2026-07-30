@@ -61,6 +61,27 @@ export default function GlobeViewerPage() {
     enabled: !!worldName && !!planetId,
   })
 
+  // Planets that actually have map data in the current branch (branch overlay
+  // + root fallback).  Map IDs differ per branch (e.g. climate-dev stores
+  // "planet_earth" while terrain-dev stores "earth"), so after a branch
+  // switch the mapId in the URL path may no longer exist — redirect to the
+  // branch's first available map instead of showing permanent 404s.
+  const { data: mapPlanets } = useQuery({
+    queryKey: ['mapPlanets', worldName, selectedBranch],
+    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
+    enabled: !!worldName,
+  })
+
+  useEffect(() => {
+    if (!mapPlanets || !planetId) return
+    if (mapPlanets.includes(planetId) || mapPlanets.length === 0) return
+    const qs = searchParams.toString()
+    navigate(
+      `/worlds/${worldName}/globe/${mapPlanets[0]}${qs ? `?${qs}` : ''}`,
+      { replace: true },
+    )
+  }, [mapPlanets, planetId, navigate, worldName, searchParams])
+
   // Planet definitions (for axial tilt, name, etc.)
   const { data: planets } = useQuery({
     queryKey: ['planets', worldName, selectedBranch],

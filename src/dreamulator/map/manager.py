@@ -8,7 +8,7 @@ the root world.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml  # type: ignore[import-untyped]
@@ -26,6 +26,9 @@ from .models import (
     VectorLayerMeta,
     VoronoiNetwork,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class MapManager:
@@ -218,7 +221,7 @@ class MapManager:
         return None
 
     @staticmethod
-    def _cvt_mesh_to_voronoi_network(cvt_data: dict) -> VoronoiNetwork:
+    def _cvt_mesh_to_voronoi_network(cvt_data: dict[str, Any]) -> VoronoiNetwork:
         """Convert CVT mesh JSON to legacy VoronoiNetwork format."""
         from .models import VoronoiCell
 
@@ -356,8 +359,21 @@ class MapManager:
         """List planet IDs that have map data.
 
         Searches unified maps/ directory first, then old layer-based locations.
+        The branch's own maps come first (matching ``_maps_dir`` resolution
+        priority), followed by root-world maps, so the first entry is always
+        the most specific map available for the current branch.
         """
-        planets: set[str] = set()
+        ordered: list[str] = []
+        seen: set[str] = set()
+
+        def _collect(maps_root: Path) -> None:
+            names = sorted(
+                d.name for d in maps_root.iterdir() if d.is_dir() and (d / "elevation.png").exists()
+            )
+            for name in names:
+                if name not in seen:
+                    seen.add(name)
+                    ordered.append(name)
 
         # 1. New unified maps/ directory (branch overlay → root)
         search_roots: list[Path] = []
@@ -370,29 +386,23 @@ class MapManager:
             search_roots.append(root_maps)
 
         for maps_root in search_roots:
-            for d in maps_root.iterdir():
-                if d.is_dir() and (d / "elevation.png").exists():
-                    planets.add(d.name)
+            _collect(maps_root)
 
         # 2. Fallback: old layer-based locations
-        if not planets:
+        if not ordered:
             for layer in ("geological", "climate"):
                 derived_dir = self._resolver.get_derived_dir(layer)
                 if derived_dir is not None:
                     maps_dir = derived_dir / "maps"
                     if maps_dir.exists():
-                        for d in maps_dir.iterdir():
-                            if d.is_dir() and (d / "elevation.png").exists():
-                                planets.add(d.name)
+                        _collect(maps_dir)
             input_dir = self._resolver.get_input_dir("geological")
             if input_dir is not None:
                 maps_dir = input_dir / "maps"
                 if maps_dir.exists():
-                    for d in maps_dir.iterdir():
-                        if d.is_dir() and (d / "elevation.png").exists():
-                            planets.add(d.name)
+                    _collect(maps_dir)
 
-        return sorted(planets)
+        return ordered
 
     def has_map(self, planet_id: str) -> bool:
         """Check if a planet has map data."""

@@ -113,16 +113,30 @@ export default function MapViewerPage() {
     enabled: !!worldName,
   })
 
-  // Auto-select first planet if none selected
+  // Auto-select / reconcile the active planet:
+  // - none selected → first available map (or first defined planet if no maps)
+  // - selected planet has no map data in the current branch → redirect to the
+  //   branch's first available map.  Map IDs differ per branch (e.g.
+  //   climate-dev stores "planet_earth" while terrain-dev stores "earth"),
+  //   so a branch switch can leave a stale ID in the URL that 404s.
   useEffect(() => {
-    if (!selectedPlanet) {
-      if (mapPlanets && mapPlanets.length > 0) {
-        setSelectedPlanet(mapPlanets[0])
-      } else if (worldPlanets && worldPlanets.length > 0) {
-        setSelectedPlanet(worldPlanets[0].id)
-      }
+    if (selectedPlanet && mapPlanets && mapPlanets.includes(selectedPlanet)) return
+    if (selectedPlanet && !mapPlanets) return // list not loaded yet — wait
+
+    if (mapPlanets && mapPlanets.length > 0) {
+      const target = mapPlanets[0]
+      setSelectedPlanet(target)
+      const qs = searchParams.toString()
+      navigate(`/worlds/${worldName}/map/${target}${qs ? `?${qs}` : ''}`, {
+        replace: true,
+      })
+      return
     }
-  }, [mapPlanets, worldPlanets, selectedPlanet])
+    // No maps available anywhere — fall back to a defined planet ID
+    if (!selectedPlanet && worldPlanets && worldPlanets.length > 0) {
+      setSelectedPlanet(worldPlanets[0].id)
+    }
+  }, [mapPlanets, worldPlanets, selectedPlanet, navigate, worldName, searchParams])
 
   const { data: meta } = useQuery({
     queryKey: ['mapMeta', worldName, selectedPlanet, selectedBranch],
