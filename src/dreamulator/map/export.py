@@ -220,13 +220,15 @@ def save_outputs(
     export_elevation_png(elevation_grid, output_dir / "elevation.png", png_min, png_max)
 
     # 2. CVT Mesh JSON
-    mesh_data = mesh.model_dump()
+    from .models import sanitize_nonfinite
+
+    mesh_data = sanitize_nonfinite(mesh.model_dump())
     with open(output_dir / "cvt_mesh.json", "w", encoding="utf-8") as f:
         json.dump(mesh_data, f, indent=2, default=str)
     logger.info("  Saved CVT mesh: %s", output_dir / "cvt_mesh.json")
 
     # 3. Plates JSON
-    plates_data = [p.model_dump() for p in plates]
+    plates_data = sanitize_nonfinite([p.model_dump() for p in plates])
     with open(output_dir / "plates.json", "w", encoding="utf-8") as f:
         json.dump(plates_data, f, indent=2, default=str)
     logger.info("  Saved plates: %s", output_dir / "plates.json")

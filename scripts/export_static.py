@@ -33,6 +33,7 @@ def _ensure_importable() -> None:
 _ensure_importable()
 
 from dreamulator.resolver import LayerResolver  # noqa: E402
+from dreamulator.map.models import sanitize_nonfinite  # noqa: E402
 
 
 def find_project_root() -> Path:
@@ -297,7 +298,7 @@ def _export_map_data(
                 continue
             try:
                 with src_path.open("r", encoding="utf-8") as src:
-                    data = json.load(src)
+                    data = sanitize_nonfinite(json.load(src))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 print(
                     f"\n  WARNING: {src_path} is not valid JSON "

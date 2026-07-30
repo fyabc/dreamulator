@@ -251,11 +251,13 @@ class MapManager:
 
     def save_voronoi(self, planet_id: str, network: VoronoiNetwork) -> None:
         """Save the Voronoi network for a planet."""
+        from .models import sanitize_nonfinite
+
         map_dir = self._ensure_input_dir(planet_id)
         json_path = map_dir / "voronoi.json"
         with json_path.open("w", encoding="utf-8") as f:
             json.dump(
-                network.model_dump(mode="json"),
+                sanitize_nonfinite(network.model_dump(mode="json")),
                 f,
                 ensure_ascii=False,
             )

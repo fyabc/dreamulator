@@ -10,6 +10,32 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
+# JSON safety
+# ---------------------------------------------------------------------------
+
+
+def sanitize_nonfinite(value):
+    """Recursively replace non-finite floats (NaN / ±Inf) with None.
+
+    JSON has no representation for NaN/Infinity; Python's :mod:`json` emits them
+    as the non-standard literals ``NaN``/``Infinity``, which a browser's
+    ``JSON.parse`` rejects — silently breaking every client that reads the file.
+    The concrete trigger: a mesh with no plate boundaries (e.g. an imported
+    real-Earth elevation) gets ``distance_to_boundary_km = inf`` for *every*
+    cell, which made ``cvt_mesh.json`` unparseable in the browser and took down
+    the whole map view (Köppen / coastlines / highlights all depend on it).
+    Sanitising at the serialization boundary guarantees strict-JSON output.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: sanitize_nonfinite(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [sanitize_nonfinite(v) for v in value]
+    return value
+
+
+# ---------------------------------------------------------------------------
 # Projection & metadata
 # ---------------------------------------------------------------------------
 
@@ -97,10 +123,12 @@ class VoronoiCell(BaseModel):
         description="Crust type: 'continental', 'oceanic', or 'transitional'",
     )
 
-    # Distance to nearest plate boundary
-    distance_to_boundary_km: float = Field(
+    # Distance to nearest plate boundary. Optional because meshes without any
+    # plate boundary (e.g. imported real-Earth elevations) have no finite value;
+    # such cells serialise as null (JSON has no Infinity — see sanitize_nonfinite).
+    distance_to_boundary_km: float | None = Field(
         default=float("inf"),
-        description="Distance to nearest plate boundary in km",
+        description="Distance to nearest plate boundary in km (None if no boundary)",
     )
 
     # Tectonic plate membership
