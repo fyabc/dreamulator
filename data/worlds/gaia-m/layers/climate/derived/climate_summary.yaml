@@ -1,0 +1,46 @@
+planet:
+  id: satellite_gaiam
+  name: Gaia-M
+temperature_C:
+  global:
+    mean: 14.3174930418965
+    min: -69.54346554375964
+    max: 27.99999999170471
+  land:
+    mean: 8.431967933868506
+    min: -69.54346554375964
+    max: 27.114119217342047
+  ocean:
+    mean: 16.687950859505346
+    min: -1.8000240085210188
+    max: 27.99999999170471
+precipitation_mm:
+  global:
+    mean: 1230.9601618951995
+    min: 2.3701785305609108e-06
+    max: 20185.58099754663
+  land:
+    mean: 1457.0747706809848
+    min: 20.0
+    max: 20185.58099754663
+  ocean:
+    mean: 1139.890098946913
+    min: 2.3701785305609108e-06
+    max: 6678.277689702832
+koppen_classes:
+  EF: 7223
+  ET: 6054
+  Cfb: 4736
+  BWk: 253
+  BSk: 1994
+  Cwb: 104
+  Af: 6873
+  Aw: 456
+  Am: 284
+  BSh: 731
+  BWh: 4
+simulation_parameters:
+  axial_tilt_deg: 0.0
+  stellar_luminosity_sol: 1.0
+  orbital_distance_au: 1.0
+  greenhouse_warming_K: 33.0
