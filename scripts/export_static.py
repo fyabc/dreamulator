@@ -284,7 +284,9 @@ def _export_map_data(
                 with planet_out.joinpath("meta.json").open(
                     "w", encoding="utf-8"
                 ) as f:
-                    json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
+                    json.dump(
+                        meta, f, ensure_ascii=False, separators=(",", ":"), default=str
+                    )
 
         # Export JSON map files (voronoi, plates, features).
         # Each is read-validated-rewritten to catch LFS pointers or corrupt
@@ -303,13 +305,24 @@ def _export_map_data(
                 )
                 continue
             with planet_out.joinpath(filename).open("w", encoding="utf-8") as dst:
-                json.dump(data, dst, ensure_ascii=False, indent=2)
+                json.dump(data, dst, ensure_ascii=False, separators=(",", ":"))
 
-    # Write maps index
-    if planets_with_maps:
-        maps_out_dir.mkdir(parents=True, exist_ok=True)
-        with maps_out_dir.joinpath("maps.json").open("w", encoding="utf-8") as f:
-            json.dump(planets_with_maps, f, ensure_ascii=False, indent=2)
+        # Write placeholders for optional files the frontend may request
+        # (avoids 404 console noise — same philosophy as _write_branch_defaults)
+        for placeholder_name, placeholder in (
+            ("plates.json", {"plates": []}),
+            ("features.json", {"features": []}),
+        ):
+            placeholder_path = planet_out / placeholder_name
+            if not placeholder_path.exists():
+                with placeholder_path.open("w", encoding="utf-8") as f:
+                    json.dump(placeholder, f)
+
+    # Write maps index (always, even when empty — the frontend's branch→root
+    # fallback requests this path and a missing file is pure 404 noise)
+    maps_out_dir.mkdir(parents=True, exist_ok=True)
+    with maps_out_dir.joinpath("maps.json").open("w", encoding="utf-8") as f:
+        json.dump(planets_with_maps, f, ensure_ascii=False)
 
     return planets_with_maps
 
@@ -376,7 +389,7 @@ def _export_civmap_reference(
         with meta_src.open("r", encoding="utf-8") as f:
             meta = json.load(f)
         with civmap_out.joinpath("metadata.json").open("w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            json.dump(meta, f, ensure_ascii=False, separators=(",", ":"))
 
     # Generate and export country→province mapping from ADM1
     adm1_path = ref_dir / "adm1.geojson"
@@ -500,7 +513,7 @@ def main() -> None:
         for key, value in data.items():
             out_file = world_out_dir / f"{key}.json"
             with out_file.open("w", encoding="utf-8") as f:
-                json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                json.dump(value, f, ensure_ascii=False, separators=(",", ":"), default=str)
 
         # Export root map data (elevation PNG + metadata)
         maps_out_dir = world_out_dir / "maps"
@@ -525,7 +538,7 @@ def main() -> None:
                 for key, value in branch_data.items():
                     out_file = branch_out_dir / f"{key}.json"
                     with out_file.open("w", encoding="utf-8") as f:
-                        json.dump(value, f, ensure_ascii=False, indent=2, default=str)
+                        json.dump(value, f, ensure_ascii=False, separators=(",", ":"), default=str)
                 # Write empty defaults for missing data
                 _write_branch_defaults(branch_out_dir, branch_data)
                 # Export branch-specific map data
@@ -544,7 +557,7 @@ def main() -> None:
     # Write worlds index
     index_file = output_dir / "worlds.json"
     with index_file.open("w", encoding="utf-8") as f:
-        json.dump(all_worlds, f, ensure_ascii=False, indent=2)
+        json.dump(all_worlds, f, ensure_ascii=False)
 
     print(f"\nDone! Worlds index: {index_file}")
     print(f"Total: {len(all_worlds)} world(s) exported.")

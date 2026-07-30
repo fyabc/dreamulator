@@ -9,8 +9,16 @@
 // e.g. '/' for local preview, '/dreamulator/' for GitHub Pages
 const DATA_BASE = `${import.meta.env.BASE_URL}data`
 
+// Data URLs are NOT content-hashed, so use conditional revalidation
+// (cache: 'no-cache') instead of trusting the browser cache: GitHub Pages
+// serves 200s with max-age=600 (stale data after redeploy) and 404s with
+// no Cache-Control at all (undefined browser caching — stale 404 replays
+// were observed to break map loading). Revalidation costs one cheap
+// conditional request per file; unchanged large meshes answer 304.
+const FETCH_INIT: RequestInit = { cache: 'no-cache' }
+
 async function fetchStaticJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${DATA_BASE}${path}`)
+  const response = await fetch(`${DATA_BASE}${path}`, FETCH_INIT)
   if (!response.ok) {
     throw new Error(`Static data not found: ${path} (HTTP ${response.status})`)
   }
@@ -18,7 +26,7 @@ async function fetchStaticJson<T>(path: string): Promise<T> {
 }
 
 async function fetchStaticBlob(path: string): Promise<Blob> {
-  const response = await fetch(`${DATA_BASE}${path}`)
+  const response = await fetch(`${DATA_BASE}${path}`, FETCH_INIT)
   if (!response.ok) {
     throw new Error(`Static data not found: ${path} (HTTP ${response.status})`)
   }
