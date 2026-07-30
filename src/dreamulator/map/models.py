@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import math
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # JSON safety
 # ---------------------------------------------------------------------------
 
 
-def sanitize_nonfinite(value):
+def sanitize_nonfinite(value: Any) -> Any:
     """Recursively replace non-finite floats (NaN / ±Inf) with None.
 
     JSON has no representation for NaN/Infinity; Python's :mod:`json` emits them
@@ -396,9 +395,7 @@ class RasterLayerMeta(BaseModel):
     file_path: str = Field(
         description="Relative path from maps/<planet_id>/ (e.g. 'input/elevation.png')"
     )
-    resolution: tuple[int, int] = Field(
-        description="(width, height) in pixels"
-    )
+    resolution: tuple[int, int] = Field(description="(width, height) in pixels")
     depends_on: list[str] = Field(
         default_factory=list,
         description="Layer type names this layer depends on",
@@ -416,9 +413,7 @@ class VectorLayerMeta(BaseModel):
     format: Literal["geojson", "voronoi-json", "plates-json", "cvt-json"] = Field(
         description="File format"
     )
-    file_path: str = Field(
-        description="Relative path from maps/<planet_id>/"
-    )
+    file_path: str = Field(description="Relative path from maps/<planet_id>/")
     depends_on: list[str] = Field(
         default_factory=list,
         description="Layer type names this layer depends on",
@@ -471,10 +466,10 @@ class MapLayerRegistry(BaseModel):
         """
         # Build reverse dependency map
         all_layers: dict[str, list[str]] = {}
-        for name, meta in self.raster_layers.items():
-            all_layers[name] = meta.depends_on
-        for name, meta in self.vector_layers.items():
-            all_layers[name] = meta.depends_on
+        for name, raster_meta in self.raster_layers.items():
+            all_layers[name] = raster_meta.depends_on
+        for name, vector_meta in self.vector_layers.items():
+            all_layers[name] = vector_meta.depends_on
 
         # BFS to find all transitively affected layers
         affected: list[str] = []

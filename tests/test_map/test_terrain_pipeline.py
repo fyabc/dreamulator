@@ -8,13 +8,11 @@ import numpy as np
 import pytest
 
 from dreamulator.map.cvt_mesh import (
-    build_adjacency_graph,
     fibonacci_sphere,
     generate_cvt_mesh,
     jitter_points,
     lloyd_relaxation,
 )
-from dreamulator.map.models import CVTMesh, EulerPole, VoronoiCell
 from dreamulator.map.pipeline_types import (
     TerrainPipelineConfig,
     lonlat_to_xyz,
@@ -22,12 +20,9 @@ from dreamulator.map.pipeline_types import (
     xyz_to_lonlat,
 )
 from dreamulator.map.plate_generator import (
-    assign_crust_types,
-    flood_fill_plates,
     generate_plates,
     select_plate_seeds,
 )
-
 
 # ---------------------------------------------------------------------------
 # Coordinate utilities
@@ -217,13 +212,6 @@ class TestPlateGeneration:
         assert len(seeds) == 8
         assert len(set(seeds)) == 8  # all unique
 
-    def test_flood_fill_completeness(self, small_mesh):
-        """All cells should be assigned to a plate."""
-        rng = np.random.default_rng(42)
-        seeds = select_plate_seeds(small_mesh, 8, rng)
-        cell_plate_map = flood_fill_plates(small_mesh, seeds, rng)
-        assert len(cell_plate_map) == small_mesh.num_cells
-
     def test_generate_plates(self, small_mesh):
         """Full plate generation should work."""
         cfg = TerrainPipelineConfig(num_nodes=200, seed=42, num_plates=8)
@@ -232,6 +220,11 @@ class TestPlateGeneration:
         assert len(plates) == 8
         assert len(cell_plate_map) == 200
 
+        # Every cell should be assigned, to one of the 8 generated plates
+        # (completeness of the Voronoi partition that replaced flood fill)
+        assert set(cell_plate_map) == set(range(200))
+        assert len(set(cell_plate_map.values())) == 8
+
         # All cells should have a plate_id
         for cell in small_mesh.cells:
             assert cell.plate_id is not None
@@ -239,11 +232,7 @@ class TestPlateGeneration:
         # All plates should have Euler poles
         for plate in plates:
             assert plate.euler_pole is not None
-            norm = math.sqrt(
-                plate.euler_pole.x**2
-                + plate.euler_pole.y**2
-                + plate.euler_pole.z**2
-            )
+            norm = math.sqrt(plate.euler_pole.x**2 + plate.euler_pole.y**2 + plate.euler_pole.z**2)
             assert abs(norm - 1.0) < 0.01, f"Euler pole not unit vector: norm={norm}"
 
 
@@ -289,10 +278,13 @@ class TestTerrainPipeline:
         # Stages
         assert "mesh" in result.stages_completed
         assert "plates" in result.stages_completed
+        assert "tectonics" in result.stages_completed
         assert "terrain" in result.stages_completed
+        assert "climate" in result.stages_completed
         assert "export" in result.stages_completed
-        # climate, rivers, erosion should be skipped
-        assert "climate" not in result.stages_completed
+        # rivers / erosion are not implemented yet — skipped gracefully
+        assert "rivers" not in result.stages_completed
+        assert "erosion" not in result.stages_completed
 
     def test_partial_stages(self):
         """Should be able to run only specific stages."""
@@ -311,8 +303,12 @@ class TestTerrainPipeline:
         from dreamulator.map.terrain_pipeline import run_terrain_pipeline
 
         cfg = TerrainPipelineConfig(
-            num_nodes=100, seed=99, lloyd_iterations=1, num_plates=4,
-            export_width=64, export_height=32,
+            num_nodes=100,
+            seed=99,
+            lloyd_iterations=1,
+            num_plates=4,
+            export_width=64,
+            export_height=32,
         )
 
         r1 = run_terrain_pipeline(cfg)
