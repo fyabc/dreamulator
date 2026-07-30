@@ -15,27 +15,50 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml  # type: ignore[import-untyped]
 
 from dreamulator.engine.base import BaseEngine, EngineResult
-from dreamulator.engine.climate_physics import (
-    altitude_lapse_rate,
-    equilibrium_temperature,
-    hadley_cell_wind,
-    itcz_latitude,
-    koppen_classify,
-    latitude_temperature,
-    seasonal_temperature,
-    surface_temperature,
-    terrain_wind_blocking,
-)
 from dreamulator.models.layers import Layer
 from dreamulator.models.planet import Planet  # noqa: TCH001 — used at runtime
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
 logger = logging.getLogger(__name__)
+
+
+def _build_terrain_config(
+    planet: Planet,
+    stellar_luminosity: float,
+    orbital_distance_au: float,
+) -> TerrainPipelineConfig:
+    """Build the simulation config from planet + stellar data.
+
+    Planet values pass through unchanged.  The ``is not None`` guards only
+    cover Optional model variants — an explicit ``0.0`` (e.g. a tidally
+    locked body's axial tilt) must NOT be replaced with Earth-like
+    fallbacks (a previous truthiness check silently gave every zero-tilt
+    world Earth's 23.44° obliquity and thus fictitious seasons).
+    """
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
+    config = TerrainPipelineConfig()
+    config.stellar_luminosity_sol = stellar_luminosity
+    config.orbital_distance_au = orbital_distance_au
+    config.axial_tilt_deg = planet.axial_tilt_deg if planet.axial_tilt_deg is not None else 23.44
+    config.rotation_period_days = (
+        planet.rotation_period_days if planet.rotation_period_days is not None else 1.0
+    )
+    config.radius_km = float(planet.radius) * 6371.0
+
+    if planet.atmosphere is not None:
+        config.greenhouse_warming_K = planet.atmosphere.greenhouse_factor
+    return config
 
 
 class ClimateEngine(BaseEngine):
@@ -49,9 +72,9 @@ class ClimateEngine(BaseEngine):
     layer = Layer.CLIMATE
     requires = ["astronomy", "geological"]  # geological data is loaded via maps, not DAG
     input_files = [
-        "stellar.yaml",        # → astronomy input (star luminosity, orbits)
+        "stellar.yaml",  # → astronomy input (star luminosity, orbits)
         "stellar_derived.yaml",  # → astronomy derived (computed stellar params)
-        "planets.yaml",        # → geological input (planet physical parameters)
+        "planets.yaml",  # → geological input (planet physical parameters)
     ]
     output_files = [
         "climate_summary.yaml",
@@ -123,7 +146,8 @@ class ClimateEngine(BaseEngine):
 
         # ---- 4. Load CVT mesh with elevation ----
         mesh, mwarnings = _load_cvt_mesh_from_geological(
-            self.layer_derived_dirs, self.layer_input_dirs,
+            self.layer_derived_dirs,
+            self.layer_input_dirs,
             maps_dir=self.maps_output_dir,
         )
         warnings.extend(mwarnings)
@@ -136,18 +160,8 @@ class ClimateEngine(BaseEngine):
 
         # ---- 5. Run climate simulation ----
         from dreamulator.map.climate_simulator import simulate_climate
-        from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
-        # Build a minimal config from planet + stellar data
-        config = TerrainPipelineConfig()
-        config.stellar_luminosity_sol = stellar_luminosity
-        config.orbital_distance_au = orbital_distance_au
-        config.axial_tilt_deg = planet.axial_tilt_deg if planet.axial_tilt_deg else 23.44
-        config.rotation_period_days = planet.rotation_period_days if planet.rotation_period_days else 1.0
-        config.radius_km = float(planet.radius) * 6371.0
-
-        if planet.atmosphere is not None:
-            config.greenhouse_warming_K = planet.atmosphere.greenhouse_factor
+        config = _build_terrain_config(planet, stellar_luminosity, orbital_distance_au)
 
         # Override from parameters dict
         pars = parameters or {}
@@ -382,9 +396,7 @@ def _load_cvt_mesh_from_geological(
         mesh_paths.extend(d.glob("maps/*/cvt_mesh.json"))
 
     if not mesh_paths:
-        return None, [
-            f"No cvt_mesh.json found in: {[str(d) for d in search_dirs]}"
-        ]
+        return None, [f"No cvt_mesh.json found in: {[str(d) for d in search_dirs]}"]
 
     # Use the first one found
     mesh_path = mesh_paths[0]
@@ -415,7 +427,7 @@ def _build_climate_summary(
         Dict suitable for YAML serialization.
     """
     cells = mesh.cells
-    n = len(cells)
+    len(cells)
 
     # Extract arrays
     elev = np.array([c.elevation for c in cells], dtype=np.float64)
