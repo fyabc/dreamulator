@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.2] — 2026-07-31
+
+### Fixed
+
+- **分支切换后地图加载 404**：不同分支的地图 ID 互不相同（climate-dev 为
+  `planet_earth`，terrain-dev 为 `earth`），切换分支只改 `?branch=` 查询参数，
+  URL 路径中的 mapId 在目标分支不存在 → 3D 球面视图与 2D 地图视图的
+  meta/elevation/cvt-mesh 全量 404，页面卡在错误状态（手动刷新或重新导航才恢复）。
+  `GlobeViewerPage` / `MapViewerPage` 现会核对当前分支实际可用的地图列表，
+  mapId 过期时自动重定向到该分支第一个可用地图（保留 branch/sun/season/night
+  等查询参数）；失效的深链/书签同样自愈。
+- `MapManager.list_planets_with_maps()` 改为分支自有地图优先排序（与
+  `_maps_dir` 解析优先级一致），保证重定向目标优先选分支自己的地图。
+
+### Changed
+
+- **统一地球地图 ID 为 `planet_earth`**：与行星定义（`stellar.yaml` /
+  `planets.yaml` 的 `planet_earth`）及 `MapMetadata.planet_id` 字段约定
+  （"matches Planet.id"）对齐。此前 terrain-dev 目录为 `earth`、climate-dev
+  目录为 `planet_earth` 而其 `map.yaml` 又写 `earth`，四处命名两两不一致。
+  terrain-dev `maps/earth` → `maps/planet_earth`（git rename 保留历史）；
+  两分支 `map.yaml` 的 `planet_id` 一并统一。跨分支 URL 路径从此恒定
+  （`/globe/planet_earth`），旧链接由上述重定向逻辑自愈。
+
+### Chore
+
+- 修复 `tests/test_map/test_terrain_pipeline.py` 长期收集即报错的问题
+  （`flood_fill_plates` 早已被 Voronoi 分区取代）：清理死导入，分区完整性
+  断言改经公开 API `generate_plates` 覆盖，阶段预期对齐现状（climate 已实现，
+  rivers/erosion 仍跳过）。
+- `manager.py` / `models.py` 存量 ruff（TC003）与 mypy 告警清零。
+
 ## [0.13.1] — 2026-07-30
 
 ### Fixed
