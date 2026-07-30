@@ -39,6 +39,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.13.1] — 2026-07-30
+
+### Fixed
+
+- **静态站地图 404**：`export_static.py` 跟上 v0.10.0 的 `maps/{planet}/` 顶层布局（此前仍读旧的
+  `layers/.../maps/`，导致静态导出完全不含地图文件）；为 climate-dev 补跑气候引擎并回写柯本/温度/降水数据。
+- **无板块边界的 mesh 在浏览器与 API 下整页崩溃**（黑屏，柯本/海岸线/悬停高亮全失）：这类 mesh
+  （如真实地球 ETOPO1 导入）的 `distance_to_boundary_km` 全为 `inf`，Python 将其序列化为非标准
+  `Infinity` 字面量，浏览器 `JSON.parse` 直接抛错 → `cvtMesh` 为 null → 依赖它的所有图层与悬停高亮
+  失效并触发视图崩溃。新增 `sanitize_nonfinite` 在序列化边界把 `NaN/±Inf` 转 `null`，并将该字段放宽为
+  `float | None`；清洗已提交的 climate-dev mesh。该问题在 API 模式同样存在，一并修复。
+
+### Changed
+
+- 静态数据获取加 `cache: 'no-cache'` 条件再验证，规避 GitHub Pages 的 `max-age=600` 缓存与无
+  `Cache-Control` 的 404 回放造成的陈旧数据/陈旧 404；为每行星补 `plates.json`/`features.json` 占位、
+  `maps.json` 恒写以消除回退路径噪声；导出 JSON 改紧凑格式（cvt_mesh 41.7 → 25.7MB）。
+- CI（`deploy-pages`）提速：`on.push.paths` 限定站点相关文件（纯文档提交不再触发部署）；移除冗余的
+  `dreamulator build` 步骤（derived 已随仓库提交），保留 `workflow_dispatch` 手动入口。
+
 ## [0.13.0] — 2026-07-29
 
 ### Added
