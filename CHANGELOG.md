@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.3] — 2026-07-31
+
+### Fixed
+
+- **气候引擎 falsy-zero bug**：`planet.axial_tilt_deg if planet.axial_tilt_deg
+  else 23.44` 的真值判断把显式的 `0.0`（潮汐锁定天体）当作未设置，静默替换为
+  地球倾角并凭空造出季节；`rotation_period_days` 同模式。改为 `is not None`
+  守卫，config 构建抽出纯函数 `_build_terrain_config` 并新增回归测试。
+  对 gaia-m 的影响：柯本分类 14 → 11（无季节即无 D 类），极地冰原扩大，
+  年均温不变。
+- **earth 世界三分支 fork_layer 修正**：`fork_layer` 是 build 起始层，不只是
+  展示标签。climate-dev `geological → climate`（实际只持有气候层，旧标注使
+  build 从程序化地质引擎起跑，有干扰手工导入地形的风险）；l4-companion
+  `geological → astronomy`（自带天文输入，旧标注跳过天文引擎，伴星衍生物
+  从未计算）；terrain-dev 删除创建初期的 28 行简化版 `stellar.yaml`（body_id
+  仍用旧方案 `earth`）——它挡在继承链上，使该分支的星系视图/轴倾角一直用
+  简化版而非根世界完整太阳系，也是地图 ID 曾叫 `earth` 的源头。
+
+### Added
+
+- **gaia-m 首份气候数据**：`dreamulator build gaia-m --only climate` 全量产出
+  （climate_summary + 温度/降水栅格 + 柯本分类 + 10 万 cell mesh 回写）。
+  T = −70~27 °C，11 个柯本类（Af 热带雨林为最大类，与设定一致）。近似点已
+  记录于 `data/worlds/gaia-m/design-notes/climate_data_status.md`：轨道参数
+  查找未实现（按 L=1.0 L☉、d=1.0 AU 计算），潮汐锁定仅纬向对称近似——
+  数据可展示、数值自洽，非设定级正式气候。
+
+### Docs
+
+- `roadmap-analysis.md` 新增 §六 已知技术债务：功能性 4 项（轨道参数查找
+  硬编码及其温室参数耦合风险、`climate_seasonality.py` 孤儿模块、潮汐锁定
+  经度效应缺失、`terrain generate` 旧版输出路径）+ 工程卫生 2 项（climate.py
+  存量 mypy 错误、全仓 ruff 告警，注明 UP042 不可批量自动修的原因）；
+  Phase 3A 表新增 3A.6（恒星/轨道参数查找）、3A.7（潮汐锁定经度效应）。
+
 ## [0.13.2] — 2026-07-31
 
 ### Fixed
