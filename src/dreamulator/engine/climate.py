@@ -13,7 +13,6 @@ Output files (written to ``layers/climate/derived/``):
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -210,12 +209,15 @@ class ClimateEngine(BaseEngine):
 
         Searches the unified maps/ directory first, then falls back to
         old layer-based locations for backward compatibility.
+
+        Uses the pydantic-core serializer (Rust, ~5x faster than
+        model_dump() + json.dump()); non-finite floats serialize as null.
         """
+        mesh_bytes = mesh.model_dump_json()  # type: ignore[union-attr]
         # Search in unified maps/ directory (new structure)
         for mesh_path in self.maps_output_dir.glob("*/cvt_mesh.json"):
             try:
-                with mesh_path.open("w", encoding="utf-8") as f:
-                    json.dump(mesh.model_dump(), f, default=str)
+                mesh_path.write_bytes(mesh_bytes)
                 logger.info("Updated source mesh with climate data: %s", mesh_path)
                 return
             except Exception as e:
@@ -231,8 +233,7 @@ class ClimateEngine(BaseEngine):
         for d in search_dirs:
             for mesh_path in d.glob("maps/*/cvt_mesh.json"):
                 try:
-                    with mesh_path.open("w", encoding="utf-8") as f:
-                        json.dump(mesh.model_dump(), f, default=str)
+                    mesh_path.write_bytes(mesh_bytes)
                     logger.info("Updated source mesh with climate data: %s", mesh_path)
                     return
                 except Exception as e:
@@ -271,11 +272,14 @@ def _load_cvt_mesh_from_geological(
         if mesh_paths:
             mesh_path = mesh_paths[0]
             try:
+                from pydantic import TypeAdapter
+
                 from dreamulator.map.models import CVTMesh
 
-                with mesh_path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                return CVTMesh(**data), []
+                # pydantic-core JSON parser (Rust) — faster than
+                # json.load() + CVTMesh(**data) for the 80+ MB mesh.
+                mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
+                return mesh, []
             except Exception as e:
                 return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
 
@@ -305,11 +309,11 @@ def _load_cvt_mesh_from_geological(
     # Use the first one found
     mesh_path = mesh_paths[0]
     try:
+        from pydantic import TypeAdapter
+
         from dreamulator.map.models import CVTMesh
 
-        with mesh_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        mesh = CVTMesh(**data)
+        mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
         return mesh, []
     except Exception as e:
         return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]

@@ -74,6 +74,23 @@ class GeologicalEngine(BaseEngine):
             elif isinstance(stages_val, list):
                 stage_list = [str(s) for s in stages_val]
 
+        if stage_list is None:
+            # Stage 0.0a: the climate engine is authoritative for climate
+            # fields; skip the terrain pipeline's in-line climate pass
+            # (~123 s at 100k cells + duplicated climate raster export).
+            # Rivers/erosion stay listed (they skip until implemented); when
+            # they land and need climate forcing, re-add "climate" here.
+            stage_list = [
+                "mesh",
+                "plates",
+                "tectonics",
+                "boundaries",
+                "terrain",
+                "rivers",
+                "erosion",
+                "export",
+            ]
+
         # ---- Run pipeline ----
         logger.info(
             "Running terrain pipeline: %d nodes, %d plates, seed=%d",

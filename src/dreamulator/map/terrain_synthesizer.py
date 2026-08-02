@@ -1001,14 +1001,27 @@ def _compute_quality_metrics(
     ocean_peak = np.median(ocean_elev) if len(ocean_elev) > 0 else 0.0
     bimodality = land_peak - ocean_peak  # larger = more distinct bimodal
 
-    # 2. RMS roughness (local cell-to-cell variance)
-    roughness = []
-    for cell in mesh.cells:
-        nb_elevs = [mesh.cells[n].elevation for n in cell.neighbors]
-        if nb_elevs:
-            local_var = np.var([cell.elevation] + nb_elevs)
-            roughness.append(np.sqrt(local_var))
-    rms_roughness = np.mean(roughness) if roughness else 0.0
+    # 2. RMS roughness (local cell-to-cell variance), vectorized over the
+    #    adjacency graph via np.add.at accumulation (previously a per-cell
+    #    Python loop calling np.var on tiny lists).
+    offsets = np.fromiter(
+        (len(cell.neighbors) for cell in mesh.cells), dtype=np.int64, count=n
+    )
+    rows = np.repeat(np.arange(n), offsets)
+    cols = np.fromiter(
+        (nb for cell in mesh.cells for nb in cell.neighbors),
+        dtype=np.int64,
+        count=int(offsets.sum()),
+    )
+    counts = np.ones(n, dtype=np.float64)
+    sums = elevations.copy()
+    sq_sums = elevations**2
+    np.add.at(counts, rows, 1.0)
+    np.add.at(sums, rows, elevations[cols])
+    np.add.at(sq_sums, rows, elevations[cols] ** 2)
+    means = sums / counts
+    variances = np.maximum(sq_sums / counts - means**2, 0.0)
+    rms_roughness = float(np.sqrt(variances).mean()) if n else 0.0
 
     # 3. Peak statistics
     high_peaks = int(np.sum(elevations > 3000))

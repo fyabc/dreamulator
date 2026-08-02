@@ -1034,8 +1034,8 @@ def generate_fbm_on_cvt(
     return result
 ```
 
-**性能优化**：使用 `pyfastnoise`（C 扩展）替代纯 Python `opensimplex`，
-10 万节点 × 6 octave 的采样时间从 ~120s 降至 ~5s。
+**性能优化**：使用 Numba JIT 噪声内核（原 pyfastnoise 方案失效——不在 PyPI）
+替代纯 Python `opensimplex`，10 万节点 × 6 octave 的采样时间从 ~60s 降至 ~2s（见 §15 实测修正）。
 
 ### 6.5 热点/地幔柱
 
@@ -2720,6 +2720,13 @@ class BiomeData(BaseModel):
 
 ## 15. 性能考量
 
+> **实测修正（2026-08-03，perf/profiling-and-optimization 分支）**：
+> 本节原估算（总计 ~70s）偏差较大——实测 gaia-m（100K 胞、构造 ×50）全量构建
+> **532s**（geological 388s + climate 143s + astronomy <1s）。
+> pyfastnoise 路线已失效：**该包不在 PyPI**（uv 解析失败、无 py3.12 wheel）；
+> `opensimplex.noise3array` 是纯 Python 循环（21µs/点，仅比标量 44µs/次快 2 倍）。
+> 噪声后端改为 **Numba JIT 内核**。详见 `private/plans/perf-profiling-and-optimization.md`。
+
 ### 瓶颈分析
 
 | 操作 | 复杂度 | 100K 节点耗时 | 瓶颈原因 |
@@ -2730,7 +2737,7 @@ class BiomeData(BaseModel):
 | 欧拉极速度场 | O(N) | <0.1s | 向量化叉积 |
 | 边界检测 | O(N) | <0.1s | 邻接扫描 |
 | 边界效应计算 | O(N·B) | ~15s | B = 边界节点数 |
-| fBm 噪声 (6 oct) | O(N·O) | ~120s (纯 Python) / ~5s (pyfastnoise) | 逐点 Simplex |
+| fBm 噪声 (6+3 oct) | O(N·O) | ~60s（纯 Python 实测）/ ~2s（Numba JIT 预期） | 逐点 Simplex（实测 44µs/次，约 140 万次调用） |
 | 海平面二分 | O(N·log(precision)) | <0.01s | 无 |
 | 温度计算 | O(N) | <0.1s | 向量化 |
 | 风场计算 | O(N·k) | ~2s | k = 平均邻居数 |
@@ -2739,11 +2746,11 @@ class BiomeData(BaseModel):
 | 汇水累积 | O(N) | ~1s | 拓扑排序 |
 | 热侵蚀 (×10) | O(k·N·I) | ~10s | 迭代松弛 |
 | 等距投影插值 | O(N·log N) | ~5s | scipy griddata |
-| **总计** | | **~70s** (pyfastnoise) | |
+| **总计** | | **实测 532s**（2026-08-03，含气候引擎与构造 ×50） | |
 
 ### 优化策略
 
-1. **pyfastnoise 替代 opensimplex**：fBm 从 120s 降至 5s（24× 加速）
+1. **Numba JIT 噪声内核替代 opensimplex**（~~pyfastnoise~~ 已失效——不在 PyPI）：逐点调用 44µs → ~100ns（≈400×），fBm ~60s → ~2s
 2. **NumPy 向量化**：所有 O(N) 操作使用向量化而非 Python 循环
 3. **分块计算**：边界效应使用 KD-tree 范围查询，避免 O(N·B) 全扫描
 4. **增量计算**：分支系统仅重跑受影响的阶段
@@ -3051,7 +3058,7 @@ R: 球体半径
 | `angular_distance_xyz()` | ✅ 直接复用 | 3D 向量角距离 |
 | `smooth_step()` | ✅ 直接复用 | Hermite 平滑插值 |
 | `generate_fbm_3d()` | ⚠️ 改造 | 改为在 CVT 节点 3D 坐标上采样，而非等距网格 |
-| `_compute_noise_elementwise()` | ⚠️ 改造 | 向量化改造或用 pyfastnoise 替代 |
+| `_compute_noise_elementwise()` | ⚠️ 改造 | 向量化改造或用 Numba JIT 噪声内核替代 |
 | `_fallback_fbm()` | ❌ 废弃 | CVT 管线不需要 2D fallback |
 | `_compute_continent_field()` | ❌ 废弃 | 被 CVT 基准高程 + 洪水填充替代 |
 | `_elliptical_gaussian()` | ⚠️ 可选保留 | 可用于 CVT 上的局部特征叠加 |
@@ -3098,7 +3105,7 @@ R: 球体半径
 
 - [ ] 创建 `src/dreamulator/map/cvt_models.py` — 新数据模型
 - [ ] 创建 `src/dreamulator/map/cvt_generator.py` — Fibonacci + Lloyd + 网格构建
-- [ ] 添加 `pyfastnoise` 到可选依赖 (`pyproject.toml`)
+- [ ] Numba JIT 噪声内核（`map/noise_kernels.py`，`cache=True`）——见 §15 实测修正
 - [ ] 单元测试：CVT 网格面积总和 ≈ 4π、邻接图对称性
 - [ ] 可视化：Three.js 渲染 CVT 网格（debug 用）
 

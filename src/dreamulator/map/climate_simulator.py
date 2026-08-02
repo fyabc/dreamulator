@@ -440,7 +440,6 @@ def _compute_precipitation_bfs(
        d. If elevation rises → orographic rain.
        e. If elevation falls → rain shadow (minimal precipitation).
     3. Add convective (ITCZ) precipitation in tropical regions.
-    4. Rain over ocean also contributes to coastal precipitation.
 
     Args:
         mesh: CVT mesh.
@@ -470,16 +469,6 @@ def _compute_precipitation_bfs(
         # Reset moisture to ocean evaporation + land recycling for this pass
         moisture = ocean_moisture.copy()
         moisture[is_land] += land_moisture[is_land]
-
-        # Find coastal cells for seeding
-        coastal = np.zeros(n, dtype=bool)
-        for i in range(n):
-            if not is_ocean[i]:
-                continue
-            for j in mesh.cells[i].neighbors:
-                if j >= 0 and j < n and is_land[j]:
-                    coastal[i] = True
-                    break
 
         # BFS queue: propagate from ocean cells downwind
         queue: deque[int] = deque()
