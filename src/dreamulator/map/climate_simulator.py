@@ -21,6 +21,7 @@ import numpy as np
 from dreamulator.engine.climate_physics import (
     altitude_lapse_rate,
     coriolis_parameter,
+    equilibrium_temperature,
     evaporation_rate,
     hadley_cell_wind,
     itcz_latitude,
@@ -31,7 +32,6 @@ from dreamulator.engine.climate_physics import (
     seasonal_temperature,
     surface_temperature,
     terrain_wind_blocking,
-    equilibrium_temperature,
 )
 
 if TYPE_CHECKING:
@@ -124,7 +124,7 @@ def simulate_climate(
     teq_K = equilibrium_temperature(
         stellar_luminosity_sol=config.stellar_luminosity_sol,
         orbital_distance_au=config.orbital_distance_au,
-        albedo=0.306,  # Earth default; could be per-cell later
+        albedo=config.albedo,
     )
     t_surf_K = surface_temperature(teq_K, config.greenhouse_warming_K)
     t_surf_C = t_surf_K - 273.15
@@ -139,9 +139,10 @@ def simulate_climate(
         config.lapse_rate_c_km,
     )
     # Ocean surface temperature: damped latitude gradient (maritime moderation)
-    # SST ranges ~28°C (tropics) to ~-2°C (polar), much narrower than land
+    # anchored to the planet's global-mean surface temperature (Earth profile
+    # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
     t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
-        t_mean_C[~land_mask_arr], lat_rad[~land_mask_arr],
+        lat_rad[~land_mask_arr], t_surf_C,
     )
 
     # Seasonal extremes
@@ -149,7 +150,7 @@ def simulate_climate(
         t_mean_C,
         lat_rad,
         axial_tilt_deg=config.axial_tilt_deg,
-        orbital_period_days=365.25,
+        orbital_period_days=config.orbital_period_days,
     )
     t_jan_C = seasonal["jan"]
     t_jul_C = seasonal["jul"]
@@ -163,7 +164,9 @@ def simulate_climate(
     _console.print("  [dim]2/5  Wind field (geostrophic + Hadley cells)[/dim]")
     # ------------------------------------------------------------------
     # Geostrophic wind from pressure gradient + Coriolis
-    pressure_hpa = pressure_from_temperature(t_mean_C, elevation_m)
+    pressure_hpa = pressure_from_temperature(
+        t_mean_C, elevation_m, config.gravity_m_s2, config.surface_pressure_hpa
+    )
     grad_p = _compute_graph_gradient(mesh, pressure_hpa, nodes_xyz)
     f_coriolis = coriolis_parameter(lat_rad, config.rotation_period_days)
 
@@ -362,25 +365,37 @@ def _geostrophic_wind(
 
 
 def _ocean_surface_temperature(
-    t_lat_c: np.ndarray,
     lat_rad: np.ndarray,
+    t_surf_c: float,
 ) -> np.ndarray:
-    """Estimate sea surface temperature (SST) from latitude-band air temperature.
+    """Estimate sea surface temperature (SST) from latitude.
 
     Oceans have a much narrower temperature range than land (~30 °C range
-    vs ~60 °C for land).  Uses a sigmoid transition to sea-ice temperature
-    (-1.8 °C) at high latitudes.
+    vs ~60 °C for land).  The latitude profile is Earth-calibrated
+    (28 °C equator → −2 °C at ~60°) and shifted by
+    ``t_surf_c − t_surf_earth_ref`` so that other stellar forcings or
+    greenhouse levels move SST one-for-one with the global-mean surface
+    temperature while keeping the maritime-moderation shape.
+    ``t_surf_earth_ref`` is the model's own Earth value (1 L☉, 1 AU,
+    albedo 0.306, +33 K greenhouse), so Earth is reproduced exactly.
+    Uses a sigmoid transition to sea-ice temperature (-1.8 °C) at high
+    latitudes.
 
     Args:
-        t_lat_c: Latitude-only temperature (°C) for ocean cells.
         lat_rad: Latitude in radians.
+        t_surf_c: Global-mean surface temperature (°C), i.e. equilibrium
+            temperature + greenhouse warming.
 
     Returns:
         SST estimate (°C), shape matches inputs.
     """
     abs_lat = np.abs(lat_rad)
-    # Open-ocean SST: 30 °C range from equator (28 °C) to ~60° lat (-2 °C)
-    sst_open = 28.0 - 30.0 * np.sin(abs_lat) ** 2
+    t_surf_earth_ref = float(
+        surface_temperature(equilibrium_temperature(1.0, 1.0, 0.306), 33.0) - 273.15
+    )
+    # Open-ocean SST: 30 °C range from equator (28 °C) to ~60° lat (-2 °C),
+    # shifted by the planet's surface temperature relative to Earth's
+    sst_open = 28.0 + (t_surf_c - t_surf_earth_ref) - 30.0 * np.sin(abs_lat) ** 2
 
     # Sea-ice transition: sigmoid from open-ocean SST → -1.8 °C
     # Transition centered at ~70° latitude, width ~8°
@@ -575,9 +590,10 @@ def _compute_precipitation_bfs(
 
     # ITCZ Gaussian centered on mean position with ~12° width
     itcz_lat = itcz_latitude(
-        day_of_year=182.0,
+        day_of_year=config.orbital_period_days / 2.0,  # northern summer solstice
         axial_tilt_deg=config.axial_tilt_deg,
         lag_days=float(config.itcz_lag_days),
+        orbital_period_days=config.orbital_period_days,
     )
     # Wide Gaussian: σ=12° covers 20°N–20°S with significant rain
     # ITCZ: strong convective rainfall band, wider coverage for tropics

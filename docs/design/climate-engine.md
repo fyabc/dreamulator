@@ -427,6 +427,35 @@ def potential_recycling_rate(T_mean, P_initial):
 
 ---
 
+### Phase 3A.6：方案常数行星化与工程清理
+
+来源：2026-08-03 性能优化（`perf/profiling-and-optimization` 分支 0.0c）期间的
+气候代码 hard-code 系统审计。**行星相关硬编码已在 0.0c 修复**：反照率（planets.yaml
+注入）、轨道周期（开普勒第三定律 `P = 365.25·√(a³/M★)` 从已解析量导出）、重力/标高与
+海平面气压（行星质量/半径 + 大气压）、SST 纬度剖面锚定（地球剖面 + `t_surf − t_surf⊕`
+整体平移，地球比特级复现、异星随强迫 1:1 响应）。
+
+以下为**地球调优的方案常数**——不是数据错误，但影响异星保真度：
+
+| 项 | 现状（地球硬编码） | 行星化方向 | 位置 |
+|---|---|---|---|
+| 三胞环流边界 | Hadley 0–30° / Ferrel 30–60° / Polar 60–90° 固定 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½：慢自转 → Hadley 胞加宽（gaia-m Ω=0.31⊕ → ~50°+，当前方案形式上越界） | `climate_physics.py::hadley_cell_wind`（296-310） |
+| 季节振幅 | `seasonal_amplitude_c=35` 常数（docstring 写 30，不一致） | 依赖热惯性 / 年长 / 海洋占比；修正 docstring | `climate_physics.py::seasonal_temperature`（148） |
+| 降水封顶次序 | `np.minimum(precip, 12000)` 在 ITCZ/季风加成**之前**，封顶失效（gaia-m 实测 Pmax 19800）；12000 为地球值 | 移到全部加成之后；封顶可配置或按气候态设定 | `climate_simulator.py:571` vs 584-597 |
+| 季风方案 | 系数 1.5/1.3、纬度阈 20°/35° 固定 | 依赖海陆热力对比 / ITCZ 振幅 | `climate_simulator.py`（589-597） |
+| 次行星半球强迫（卫星世界） | 无经度强迫：温度场 = 纬向平均 + 地形 | 行星反照（~2 W/m²）+ 热红外（~1.4 W/m²）+ 食遮蔽 → 潮汐锁定坐标系下准静态强迫场（78h 太阳日相位调制 + 食季）；gaia-m 上产生次 Aegis 半球夜侧 ~1–2°C 增温与大陆干涸不对称（`climate_zones.md` 设定，物理自洽） | `climate_simulator.py` Stage 1（新强迫场） |
+| 柯本月分配 | `seasonality=0.4` 常数 | 由倾角 / 轨道偏心率驱动干湿月对比 | `climate_simulator.py:209` |
+| 蒸发/BFS 调优参数 | 陆面系数 0.40、BFS 12 趟、逐跳 4%/90%、海洋上限 5000 | 与 3A.3d 降水物理改进联合标定 | `climate_simulator.py`（61, 450, 556-559） |
+| 工程清理 | 太阳常数三处重复定义（1361.0）；`climate_seasonality.py` 为死模块（全库零引用）但含正规日照日长模型 | 常数并入 `utils/constants`；死模块删除或转正为 NLO 季节变化（配合 3A.2） | `climate_physics.py:28`、`climate_seasonality.py:31`、`stellar_physics.py:28` |
+
+**与 EFT 架构纪律的关系**（见 `private/plans/perf-profiling-and-optimization.md` §4.0）：
+环流胞宽度是"纬向平均气候"有效理论的 NLO 修正——快速自转类地行星上当前硬编码在适用域内；
+慢自转 / 高倾角行星越界，验证器应告警（与气候代理的适用域元数据机制一致）。
+
+**预计工期**：Hadley 行星化 2 天；其余随 3A.3d 联合标定（~3 天）
+
+---
+
 ### 里程碑与验收标准
 
 | 里程碑 | 验收标准 | 预计时间 |

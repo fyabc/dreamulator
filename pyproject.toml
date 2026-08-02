@@ -76,4 +76,8 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb=short -q"
+addopts = "--tb=short -q -m \"not slow and not benchmark\""
+markers = [
+    "slow: long-running tests (deselect with '-m \"not slow\"')",
+    "benchmark: performance benchmarks (deselect with '-m \"not benchmark\"')",
+]

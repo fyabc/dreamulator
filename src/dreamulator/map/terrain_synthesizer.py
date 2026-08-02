@@ -31,6 +31,7 @@ See ``docs/design/terrain-pipeline.md`` §5 for detailed algorithm reference.
 from __future__ import annotations
 
 import logging
+import zlib
 
 import numpy as np
 
@@ -1486,7 +1487,10 @@ def _apply_interior_landforms(
             0, len(interior) // 800 - 1
         )
         n_belts = min(n_belts, 4)  # hard cap: at most 4 belts per plate
-        belt_seed_base = abs(hash(pid)) % 10000
+        # Stable per-plate seed: the built-in hash() is salted per process
+        # (PYTHONHASHSEED), which made terrain non-reproducible across runs.
+        # crc32 is deterministic across processes, platforms, and versions.
+        belt_seed_base = zlib.crc32(pid.encode("utf-8")) % 10000
 
         for belt_idx in range(n_belts):
             if len(interior) < 3:
