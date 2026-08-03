@@ -119,6 +119,10 @@ def run_pipeline(
             layer_derived_dirs[layer.value] = source.derived_dir
 
     results: list[EngineResult] = []
+    profile_records: list[dict] = []
+    import time as _time
+
+    t_build_start = _time.time()
     for engine_cls in sorted_engines:
         # Determine output directory for this engine's layer
         if branch is not None:
@@ -177,23 +181,64 @@ def run_pipeline(
             f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]"
             f"  [dim]({engine.name})[/dim]"
         )
-        import time as _time
-
         _t0 = _time.time()
         result = engine.run()
         _elapsed = _time.time() - _t0
         results.append(result)
 
+        record: dict = {
+            "engine": engine.name,
+            "layer": engine.layer.value,
+            "wall_seconds": round(_elapsed, 3),
+            "success": bool(result.success),
+        }
+        metadata = getattr(result, "metadata", None) or {}
+        stages = metadata.get("stage_timings") or metadata.get("phase_timings")
+        if isinstance(stages, dict):
+            record["stages"] = {k: round(float(v), 3) for k, v in stages.items()}
+
         if not result.success:
             _console.print(f"  [red]FAILED[/red] ({_elapsed:.1f}s)")
             logger.error("Engine %s failed", engine.name)
+            profile_records.append(record)
             break
 
         _console.print(f"  [green]done[/green] [dim]({_elapsed:.1f}s)[/dim]")
         logger.info("Engine %s completed successfully", engine.name)
+        profile_records.append(record)
 
         # Register this engine's output as a derived source for subsequent engines
         layer_derived_dirs[engine_cls.layer.value] = layer_output_dir
+
+    # ---- Build profile (M0 instrumentation) ----
+    total = _time.time() - t_build_start
+    profile = {
+        "world": world_dir.name,
+        "branch": branch,
+        "seed": seed,
+        "total_wall_seconds": round(total, 3),
+        "engines": profile_records,
+    }
+    try:
+        import json
+
+        profile_path = world_dir / "build_profile.json"
+        with profile_path.open("w", encoding="utf-8") as f:
+            json.dump(profile, f, indent=2, ensure_ascii=False)
+        logger.info("Build profile written: %s", profile_path)
+    except OSError as e:
+        logger.warning("Failed to write build profile: %s", e)
+
+    _console.print(
+        f"\n[bold]Build profile[/bold] (total {total:.1f}s, saved to build_profile.json)"
+    )
+    for rec in profile_records:
+        share = rec["wall_seconds"] / max(total, 1e-9)
+        status = "[green]ok[/green]" if rec["success"] else "[red]FAILED[/red]"
+        _console.print(f"  {rec['engine']:<12} {rec['wall_seconds']:6.1f}s  {share:4.0%}  {status}")
+        for name, secs in sorted((rec.get("stages") or {}).items(), key=lambda kv: -kv[1]):
+            if secs >= 0.05 * total:
+                _console.print(f"    [dim]{name:<22} {secs:6.1f}s[/dim]")
 
     return results
 

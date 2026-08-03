@@ -144,7 +144,8 @@ class ClimateEngine(BaseEngine):
             if key in pars:
                 setattr(config, key, pars[key])
 
-        simulate_climate(mesh, config)
+        # simulate_climate returns per-phase wall-clock timings (M0)
+        phase_timings = simulate_climate(mesh, config)
 
         # ---- 5b. Write climate data back to source cvt_mesh.json ----
         # The frontend reads cvt_mesh.json (geological layer) and expects
@@ -194,6 +195,7 @@ class ClimateEngine(BaseEngine):
                 "num_cells": mesh.num_cells,
                 "num_land_cells": n_land,
                 "koppen_class_counts": koppen_counts,
+                "phase_timings": phase_timings,
             },
         )
 

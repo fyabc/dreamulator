@@ -96,6 +96,8 @@ def simulate_climate(
     if n == 0:
         return
 
+    phase_timings: dict[str, float] = {}
+
     # ------------------------------------------------------------------
     # Extract data from CVT mesh
     # ------------------------------------------------------------------
@@ -159,7 +161,8 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 2: Wind
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["temperature"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['temperature']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]2/5  Wind field (geostrophic + Hadley cells)[/dim]")
     # ------------------------------------------------------------------
@@ -183,7 +186,8 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 3: Precipitation (multi-pass BFS moisture transport)
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["wind"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['wind']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]3/5  Precipitation (BFS moisture transport)[/dim]")
     # ------------------------------------------------------------------
@@ -200,7 +204,8 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["precipitation"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['precipitation']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]4/5  Koppen classification[/dim]")
     # ------------------------------------------------------------------
@@ -226,7 +231,8 @@ def simulate_climate(
     # ------------------------------------------------------------------
     # Write back to cells
     # ------------------------------------------------------------------
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["koppen"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['koppen']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]5/5  Write results to mesh[/dim]")
 
@@ -242,12 +248,15 @@ def simulate_climate(
         t_land_max = float(t_mean_C[is_land].max())
         p_land_min = float(precipitation_mm[is_land].min())
         p_land_max = float(precipitation_mm[is_land].max())
+        phase_timings["writeback"] = _time.time() - _t0
         _console.print(
-            f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]\n"
+            f"  [green]done[/green] [dim]({phase_timings['writeback']:.1f}s)[/dim]\n"
             f"  T={t_land_min:.0f}~{t_land_max:.0f} C, "
             f"P={p_land_min:.0f}~{p_land_max:.0f} mm/yr, "
             f"{n_land} land cells, {len(set(koppen_codes)) - 1} Koppen classes"
         )
+
+    return phase_timings
 
 
 # ---------------------------------------------------------------------------

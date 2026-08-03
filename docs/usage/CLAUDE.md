@@ -8,6 +8,7 @@
 
 - `cli.md` — CLI 命令参考（init、list、info、validate、branch、terrain、build、climate、narrate、serve）
 - `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 查看器检查 → 可选 Gaea 精细化的完整流程）
+- `profiling.md` — 性能分析工作流（build_profile.json、py-spy 火焰图、Scalene、基准测试）
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器（操作指南 + 架构设计说明）
 

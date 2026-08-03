@@ -133,6 +133,7 @@ class GeologicalEngine(BaseEngine):
                 "num_plates": config.num_plates,
                 "seed": config.seed,
                 "stages_completed": result.stages_completed,
+                "stage_timings": result.stage_timings,
                 "elapsed_seconds": result.elapsed_seconds,
             },
         )
