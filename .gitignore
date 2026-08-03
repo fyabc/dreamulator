@@ -50,6 +50,7 @@ private/plans/video/
 
 # Generated terrain command record (machine-specific, not for publishing)
 data/**/maps/*/generation_command.json
+data/**/build_profile.json
 
 # Validation reports (regeneratable via scripts/validate_climate.py)
 reports/

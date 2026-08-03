@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] — 2026-08-04
+
+### Added
+
+- **性能：gaia-m 全量构建 532s → 98s（−81.5%）**
+  - Numba JIT 噪声内核（`map/noise_kernels.py` 新模块）：标准 Perlin 梯度噪声
+    + fBm，44µs→9.6ns/call（~4600×），`parallel=True` 且逐点独立 → 严格确定
+  - 构造演化：cKDTree 批量最近邻（消除 ~1 亿次 Python 点积）、高程数组规范化
+    表示、变更检测/侵蚀/新生板块锁定向量化（97→39s）
+  - 气候：BFS 水汽输送用风向候选表 CSR 预计算（88→3.3s，27×）；图梯度与
+    地转风全向量化（14.3→4.1s）
+  - CVT 网格：Lloyd 质心与球面多边形面积向量化（37.8→15.2s，面积守恒
+    1.000000×4πR²）
+  - 引擎构建流移除重复气候阶段：climate 引擎为唯一权威（−123s），导出栅格
+    cKDTree 复用
+  - mesh JSON 改 pydantic-core Rust 序列化（88MB 读 2.0→1.1s、写 1.8→0.4s）
+- **M0 profiling 仪表**：每次构建自动落盘 `build_profile.json`（引擎/阶段墙钟）；
+  `scripts/profile_build.py`（子进程档案表 / `--memory` tracemalloc 模式）；
+  `docs/usage/profiling.md`（py-spy 火焰图 / Scalene / VizTracer 工作流）
+- **基准 harness**：`benchmarks/`（pytest-benchmark：噪声 / CVT / 气候 / mesh IO
+  微基准 + 4096 地形宏基准；slow/benchmark markers 与默认套件隔离）+ GitHub
+  Actions 基准回归工作流（github-action-benchmark，`perf-dashboard` 分支）
+- **验证套件** `tests/validation/`：T3 物理合理性（L/GHG/反照率单调性、无大气
+  极限、倾角季节响应、3 个 xfail 占位）+ T2 太阳系端元复现（Venus / Mars /
+  裸岩 / gaia-m HZ 中心）；慢速确定性回归测试（跨进程 hash 种子比对）
+- **验证策略**（climate-validation.md §7）：针对"仅以现代地球验证"的过拟合
+  风险，建立多线证据框架（PMIP 古气候 / THAI 系外比对 / 太阳系端元 / 过程
+  诊断）与 T2–T5 分层计划
+- **共享物理参数解析**（`engine/physical_inputs.py`）：卫星感知恒星查找
+  （卫星→主行星→恒星父链），轨道周期由开普勒第三定律导出（gaia-m 80.47 天，
+  与设定吻合）；config 新增 albedo / orbital_period_days / surface_pressure_hpa
+- **文档**：climate-engine.md Phase 3A.6（方案常数行星化 8 项：Hadley 自转
+  依赖、次行星半球强迫等）；gaia-m 新增 long_term_cycles.md（米兰科维奇式
+  变率谱）；terrain-pipeline.md §15 实测修正（基线、噪声路线）
+- 新依赖：`numba>=0.61`
+
+### Changed
+
+- **噪声后端 OpenSimplex → Numba Perlin**：统计相似但非比特一致——重建任何
+  世界地形细节会变化（预期内；同一代码版本内严格可复现）
+- **gaia-m 气候物理修正**：greenhouse 33→72K（HZ 中心定位，比地球等价值低
+  6K，预留次行星半球加温 2–4K）；恒星辐射按 0.0357 L☉@0.2795 AU ≈ 0.458 S⊕
+  计算（此前误用地球默认 1 L☉@1 AU，日照高估 2.2×）。修正后年均温 9.2°C、
+  9 个柯本类（EF 冰原 37% / Cfb 温带 23% / Af 热带雨林 11%）
+- gaia-m 派生数据已用新引擎重建（本版本随附提交）
+
+### Fixed
+
+- **构建确定性**：`terrain_synthesizer` 曾用 `abs(hash(pid))` 作噪声种子——
+  Python 字符串 hash 每进程随机加盐（PYTHONHASHSEED），导致同一世界每次
+  构建地形都不同。改用 `zlib.crc32`，并新增 slow 回归测试
+- **气候引擎 mesh 回写静默失败**：`model_dump_json()` 返回 str 而非 bytes，
+  `write_bytes()` 抛异常被吞掉，气候字段未写入 cvt_mesh.json（前端读到过期
+  气候）→ `.encode("utf-8")`
+- **物理参数分叉**：geological 引擎管线内气候曾按地球默认参数运行（倾角
+  23.44°、1 L☉@1 AU、地球重力/气压），与 climate 引擎不一致（14 vs 11 柯本
+  根因）→ 统一为 planets.yaml + stellar 共享解析
+- `_anisotropic_fbm` 各向同性分支潜在崩溃（双重频率缩放 + 缺 seed 参数）
+- 降水 BFS 的 `x not in ndarray` 为 O(n) 全扫描成员检查 → 直接索引
+- 死代码清理：BFS 未使用的 coastal 循环（白跑 12 次）、构造演化 `if True`
+  重复汇聚扫描、`climate_seasonality.py` 死模块（468 行零 import）、
+  `_fallback_noise_xyz`、opensimplex 可用性探针
+
 ## [0.13.3] — 2026-07-31
 
 ### Fixed
