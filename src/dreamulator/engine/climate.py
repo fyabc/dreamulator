@@ -215,7 +215,8 @@ class ClimateEngine(BaseEngine):
         Uses the pydantic-core serializer (Rust, ~5x faster than
         model_dump() + json.dump()); non-finite floats serialize as null.
         """
-        mesh_bytes = mesh.model_dump_json()  # type: ignore[union-attr]
+        # model_dump_json() returns str; write_bytes needs bytes.
+        mesh_bytes = mesh.model_dump_json().encode("utf-8")  # type: ignore[union-attr]
         # Search in unified maps/ directory (new structure)
         for mesh_path in self.maps_output_dir.glob("*/cvt_mesh.json"):
             try:
