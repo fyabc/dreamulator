@@ -13,6 +13,7 @@ See ``docs/design/terrain-pipeline.md`` §2 for algorithm details.
 
 from __future__ import annotations
 
+import itertools
 import logging
 from collections import defaultdict
 
@@ -110,23 +111,32 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
     sv = SphericalVoronoi(points, radius=1.0, center=np.zeros(3))
     sv.sort_vertices_of_regions()
 
-    new_points = np.empty_like(points)
-    for i, region in enumerate(sv.regions):
-        if not region or -1 in region:
-            # Degenerate region — keep original point
-            new_points[i] = points[i]
-            continue
+    n = len(points)
+    regions = sv.regions
 
-        # Euclidean centroid of the region's vertices
-        verts = sv.vertices[region]
-        centroid = verts.mean(axis=0)
+    # Stage 1.4: vectorized region centroids (was a per-region Python loop
+    # with small numpy gathers — 8 × 100k iterations on gaia-m).
+    region_lens = np.fromiter((len(r) for r in regions), dtype=np.int64, count=n)
+    bad = region_lens == 0
+    if not bad.all():
+        bad |= np.fromiter(((-1 in r) for r in regions), dtype=bool, count=n)
+    good_ids = np.where(~bad)[0]
 
-        # Project back to unit sphere
-        norm = np.linalg.norm(centroid)
-        if norm < 1e-12:
-            new_points[i] = points[i]
-        else:
-            new_points[i] = centroid / norm
+    new_points = points.copy()  # degenerate regions keep original points
+    if len(good_ids) > 0:
+        counts = region_lens[good_ids]
+        cell_of_flat = np.repeat(good_ids, counts)
+        flat_idx = np.fromiter(
+            itertools.chain.from_iterable(regions[i] for i in good_ids),
+            dtype=np.int64,
+            count=int(counts.sum()),
+        )
+        sums = np.zeros((n, 3), dtype=np.float64)
+        np.add.at(sums, cell_of_flat, sv.vertices[flat_idx])
+        centroids = sums[good_ids] / counts[:, None]
+        norms = np.linalg.norm(centroids, axis=1)
+        ok = norms >= 1e-12
+        new_points[good_ids[ok]] = centroids[ok] / norms[ok, None]
 
     return new_points
 
@@ -145,7 +155,7 @@ def lloyd_relaxation(
         Relaxed points on unit sphere.
     """
     try:
-        from rich.progress import Progress, BarColumn, TextColumn
+        from rich.progress import BarColumn, Progress, TextColumn
         _prog = Progress(
             TextColumn("  Lloyd relaxation"),
             BarColumn(),
@@ -211,49 +221,6 @@ def build_adjacency_graph(sv: SphericalVoronoi) -> dict[int, list[int]]:
 # ---------------------------------------------------------------------------
 # Cell area computation
 # ---------------------------------------------------------------------------
-
-
-def _spherical_polygon_area(vertices: np.ndarray, radius_km: float) -> float:
-    """Compute area of a spherical polygon using the spherical excess formula.
-
-    Uses the formula: Area = R² × |Σ angles - (n-2)π|
-    where angles are the interior angles of the polygon.
-
-    For small cells, a simpler approach using the solid angle
-    (projected area on unit sphere × R²) is used.
-
-    Args:
-        vertices: (n, 3) vertices of the polygon on unit sphere, ordered.
-        radius_km: Planet radius in km.
-
-    Returns:
-        Area in km².
-    """
-    n = len(vertices)
-    if n < 3:
-        return 0.0
-
-    # Solid angle via L'Huilier's theorem applied to triangle fan
-    # Decompose polygon into triangles from first vertex
-    total_solid_angle = 0.0
-    v0 = vertices[0]
-    for i in range(1, n - 1):
-        v1 = vertices[i]
-        v2 = vertices[i + 1]
-
-        # Signed solid angle of triangle (v0, v1, v2)
-        numerator = np.dot(v0, np.cross(v1, v2))
-        denominator = (
-            1.0
-            + np.dot(v0, v1)
-            + np.dot(v1, v2)
-            + np.dot(v0, v2)
-        )
-        if abs(denominator) < 1e-15:
-            continue
-        total_solid_angle += 2.0 * np.arctan2(numerator, denominator)
-
-    return abs(total_solid_angle) * radius_km**2
 
 
 # ---------------------------------------------------------------------------
@@ -335,20 +302,50 @@ def _build_cells(
     radius_km: float,
 ) -> list[VoronoiCell]:
     """Create VoronoiCell objects from generator points and SphericalVoronoi."""
-    cells: list[VoronoiCell] = []
+    n = len(points)
+    regions = sv.regions
 
-    for i in range(len(points)):
+    # Stage 1.4: vectorized spherical polygon areas via a flat triangle-fan
+    # table across all cells (was a per-cell _spherical_polygon_area call
+    # with an inner per-triangle numpy-scalar loop).
+    region_lens = np.fromiter((len(r) for r in regions), dtype=np.int64, count=n)
+    bad = region_lens == 0
+    if not bad.all():
+        bad |= np.fromiter(((-1 in r) for r in regions), dtype=bool, count=n)
+    good_ids = np.where(~bad)[0]
+
+    areas = np.zeros(n, dtype=np.float64)
+    if len(good_ids) > 0:
+        tri_owner: list[int] = []
+        tri_idx: list[int] = []
+        for i in good_ids:
+            r = regions[i]
+            for k in range(1, len(r) - 1):
+                tri_owner.append(i)
+                tri_idx.extend((r[0], r[k], r[k + 1]))
+        owner = np.asarray(tri_owner, dtype=np.int64)
+        tv = np.asarray(tri_idx, dtype=np.int64).reshape(-1, 3)
+        v0 = sv.vertices[tv[:, 0]]
+        v1 = sv.vertices[tv[:, 1]]
+        v2 = sv.vertices[tv[:, 2]]
+        # Signed solid angle of each triangle (v0, v1, v2) — L'Huilier form
+        numerator = np.einsum("ij,ij->i", v0, np.cross(v1, v2))
+        denominator = (
+            1.0
+            + np.einsum("ij,ij->i", v0, v1)
+            + np.einsum("ij,ij->i", v1, v2)
+            + np.einsum("ij,ij->i", v0, v2)
+        )
+        tri_area = np.zeros(len(owner), dtype=np.float64)
+        ok = np.abs(denominator) >= 1e-15
+        tri_area[ok] = 2.0 * np.arctan2(numerator[ok], denominator[ok])
+        np.add.at(areas, owner, tri_area)
+        areas = np.abs(areas) * radius_km**2
+
+    cells: list[VoronoiCell] = []
+    for i in range(n):
         x, y, z = float(points[i, 0]), float(points[i, 1]), float(points[i, 2])
         lon, lat = xyz_to_lonlat(x, y, z)
-
-        # Compute cell area
-        region = sv.regions[i]
-        if region and -1 not in region:
-            verts = sv.vertices[region]
-            area = _spherical_polygon_area(verts, radius_km)
-        else:
-            area = 0.0
-
         cell = VoronoiCell(
             id=i,
             lon=float(lon),
@@ -356,7 +353,7 @@ def _build_cells(
             x=x,
             y=y,
             z=z,
-            area_km2=area,
+            area_km2=float(areas[i]),
             neighbors=adjacency.get(i, []),
         )
         cells.append(cell)

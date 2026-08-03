@@ -13,7 +13,6 @@ Output files (written to ``layers/climate/derived/``):
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -21,44 +20,17 @@ import numpy as np
 import yaml  # type: ignore[import-untyped]
 
 from dreamulator.engine.base import BaseEngine, EngineResult
+from dreamulator.engine.physical_inputs import (
+    load_planets,
+    resolve_and_apply_physical_parameters,
+)
 from dreamulator.models.layers import Layer
 from dreamulator.models.planet import Planet  # noqa: TCH001 — used at runtime
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from dreamulator.map.pipeline_types import TerrainPipelineConfig
-
 logger = logging.getLogger(__name__)
-
-
-def _build_terrain_config(
-    planet: Planet,
-    stellar_luminosity: float,
-    orbital_distance_au: float,
-) -> TerrainPipelineConfig:
-    """Build the simulation config from planet + stellar data.
-
-    Planet values pass through unchanged.  The ``is not None`` guards only
-    cover Optional model variants — an explicit ``0.0`` (e.g. a tidally
-    locked body's axial tilt) must NOT be replaced with Earth-like
-    fallbacks (a previous truthiness check silently gave every zero-tilt
-    world Earth's 23.44° obliquity and thus fictitious seasons).
-    """
-    from dreamulator.map.pipeline_types import TerrainPipelineConfig
-
-    config = TerrainPipelineConfig()
-    config.stellar_luminosity_sol = stellar_luminosity
-    config.orbital_distance_au = orbital_distance_au
-    config.axial_tilt_deg = planet.axial_tilt_deg if planet.axial_tilt_deg is not None else 23.44
-    config.rotation_period_days = (
-        planet.rotation_period_days if planet.rotation_period_days is not None else 1.0
-    )
-    config.radius_km = float(planet.radius) * 6371.0
-
-    if planet.atmosphere is not None:
-        config.greenhouse_warming_K = planet.atmosphere.greenhouse_factor
-    return config
 
 
 class ClimateEngine(BaseEngine):
@@ -123,7 +95,7 @@ class ClimateEngine(BaseEngine):
                 warnings=["planets.yaml not found"],
             )
 
-        planets, pwarnings = _load_planets(planet_path)
+        planets, pwarnings = load_planets(planet_path)
         warnings.extend(pwarnings)
 
         if not planets:
@@ -132,17 +104,14 @@ class ClimateEngine(BaseEngine):
         # Use the first terrestrial planet
         planet = planets[0]
 
-        # ---- 2. Load stellar data ----
-        stellar_luminosity = 1.0  # default Sun
-        stellar_path = self.find_input("stellar_derived.yaml")
-        if stellar_path is None:
-            stellar_path = self.find_input("stellar.yaml")
+        # ---- 2-3. Resolve physical parameters (shared with geological engine) ----
+        # Stellar luminosity and heliocentric distance come from the astronomy
+        # layer (satellite-aware: moons resolve against their host star);
+        # planet physics (tilt/rotation/radius/greenhouse) from planets.yaml.
+        from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
-        if stellar_path is not None:
-            stellar_luminosity = _load_stellar_luminosity(stellar_path, planet.orbits)
-
-        # ---- 3. Determine orbital distance ----
-        orbital_distance_au = _load_orbital_distance(planet_path, planet)
+        config = TerrainPipelineConfig()
+        warnings.extend(resolve_and_apply_physical_parameters(self, config, planet=planet))
 
         # ---- 4. Load CVT mesh with elevation ----
         mesh, mwarnings = _load_cvt_mesh_from_geological(
@@ -161,8 +130,6 @@ class ClimateEngine(BaseEngine):
         # ---- 5. Run climate simulation ----
         from dreamulator.map.climate_simulator import simulate_climate
 
-        config = _build_terrain_config(planet, stellar_luminosity, orbital_distance_au)
-
         # Override from parameters dict
         pars = parameters or {}
         for key in (
@@ -177,7 +144,8 @@ class ClimateEngine(BaseEngine):
             if key in pars:
                 setattr(config, key, pars[key])
 
-        simulate_climate(mesh, config)
+        # simulate_climate returns per-phase wall-clock timings (M0)
+        phase_timings = simulate_climate(mesh, config)
 
         # ---- 5b. Write climate data back to source cvt_mesh.json ----
         # The frontend reads cvt_mesh.json (geological layer) and expects
@@ -227,6 +195,7 @@ class ClimateEngine(BaseEngine):
                 "num_cells": mesh.num_cells,
                 "num_land_cells": n_land,
                 "koppen_class_counts": koppen_counts,
+                "phase_timings": phase_timings,
             },
         )
 
@@ -242,12 +211,16 @@ class ClimateEngine(BaseEngine):
 
         Searches the unified maps/ directory first, then falls back to
         old layer-based locations for backward compatibility.
+
+        Uses the pydantic-core serializer (Rust, ~5x faster than
+        model_dump() + json.dump()); non-finite floats serialize as null.
         """
+        # model_dump_json() returns str; write_bytes needs bytes.
+        mesh_bytes = mesh.model_dump_json().encode("utf-8")  # type: ignore[union-attr]
         # Search in unified maps/ directory (new structure)
         for mesh_path in self.maps_output_dir.glob("*/cvt_mesh.json"):
             try:
-                with mesh_path.open("w", encoding="utf-8") as f:
-                    json.dump(mesh.model_dump(), f, default=str)
+                mesh_path.write_bytes(mesh_bytes)
                 logger.info("Updated source mesh with climate data: %s", mesh_path)
                 return
             except Exception as e:
@@ -263,8 +236,7 @@ class ClimateEngine(BaseEngine):
         for d in search_dirs:
             for mesh_path in d.glob("maps/*/cvt_mesh.json"):
                 try:
-                    with mesh_path.open("w", encoding="utf-8") as f:
-                        json.dump(mesh.model_dump(), f, default=str)
+                    mesh_path.write_bytes(mesh_bytes)
                     logger.info("Updated source mesh with climate data: %s", mesh_path)
                     return
                 except Exception as e:
@@ -276,70 +248,6 @@ class ClimateEngine(BaseEngine):
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _load_planets(path: Path) -> tuple[list[Planet], list[str]]:
-    """Load planets from planets.yaml."""
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    planets_raw = data.get("planets", []) if isinstance(data, dict) else []
-    planets: list[Planet] = []
-    warnings: list[str] = []
-
-    for pdata in planets_raw:
-        if not isinstance(pdata, dict):
-            continue
-        try:
-            planets.append(Planet(**pdata))
-        except Exception as e:
-            warnings.append(f"Failed to parse planet {pdata.get('id', '?')}: {e}")
-
-    return planets, warnings
-
-
-def _load_stellar_luminosity(stellar_path: Path, star_id: str) -> float:
-    """Extract stellar luminosity from stellar_derived.yaml or stellar.yaml.
-
-    Args:
-        stellar_path: Path to stellar YAML file.
-        star_id: ID of the star the planet orbits.
-
-    Returns:
-        Stellar luminosity in solar units (default 1.0 if not found).
-    """
-    with stellar_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-
-    stars = data.get("stars", [])
-    for star in stars:
-        if not isinstance(star, dict):
-            continue
-        if star.get("id") == star_id:
-            # Prefer computed luminosity, then authored, then default
-            lum = star.get("computed_luminosity") or star.get("luminosity")
-            if lum is not None:
-                return float(lum)
-
-    return 1.0
-
-
-def _load_orbital_distance(planet_path: Path, planet: Planet) -> float:
-    """Extract orbital distance for the planet from the same file that defines it.
-
-    Currently returns 1.0 AU as default.  In Phase 3B+ this should read orbital
-    elements from stellar.yaml.
-
-    Args:
-        planet_path: Path to the YAML file containing planet definitions.
-        planet: The planet object.
-
-    Returns:
-        Orbital semi-major axis in AU.
-    """
-    # For now, Earth-like default.  Orbital data lives in astronomy layer;
-    # full integration requires cross-referencing StellarSystem.orbits.
-    return 1.0
 
 
 def _load_cvt_mesh_from_geological(
@@ -367,11 +275,14 @@ def _load_cvt_mesh_from_geological(
         if mesh_paths:
             mesh_path = mesh_paths[0]
             try:
+                from pydantic import TypeAdapter
+
                 from dreamulator.map.models import CVTMesh
 
-                with mesh_path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                return CVTMesh(**data), []
+                # pydantic-core JSON parser (Rust) — faster than
+                # json.load() + CVTMesh(**data) for the 80+ MB mesh.
+                mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
+                return mesh, []
             except Exception as e:
                 return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
 
@@ -401,11 +312,11 @@ def _load_cvt_mesh_from_geological(
     # Use the first one found
     mesh_path = mesh_paths[0]
     try:
+        from pydantic import TypeAdapter
+
         from dreamulator.map.models import CVTMesh
 
-        with mesh_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        mesh = CVTMesh(**data)
+        mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
         return mesh, []
     except Exception as e:
         return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]

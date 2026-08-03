@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
 
 from .models import CVTMesh, TectonicPlate
 from .pipeline_types import TerrainPipelineConfig, make_equirect_grid
+
+if TYPE_CHECKING:
+    from scipy.spatial import cKDTree  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +29,25 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def build_export_tree(mesh: CVTMesh) -> "cKDTree":
+    """Build the unit-sphere KD-tree for equirectangular export.
+
+    Callers exporting multiple fields for the same mesh should build this
+    once and pass it to ``export_equirectangular`` (Stage 0.3: avoids
+    rebuilding the tree per field).
+    """
+    from scipy.spatial import cKDTree  # type: ignore[import-untyped]
+
+    cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+    return cKDTree(cell_xyz)
+
+
 def export_equirectangular(
     mesh: CVTMesh,
     width: int = 4096,
     height: int = 2048,
     field: str = "elevation",
+    tree: "cKDTree | None" = None,
 ) -> np.ndarray:
     """Interpolate CVT cell data onto a regular equirectangular grid.
 
@@ -45,8 +63,6 @@ def export_equirectangular(
     Returns:
         2D array of shape (height, width).
     """
-    from scipy.spatial import cKDTree
-
     logger.info(
         "Exporting '%s' to equirectangular grid (%d×%d)",
         field,
@@ -54,9 +70,10 @@ def export_equirectangular(
         height,
     )
 
-    # Build KD-tree on unit sphere for fast nearest-neighbor lookup
-    cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells])
-    tree = cKDTree(cell_xyz)
+    # KD-tree on unit sphere for fast nearest-neighbor lookup (reused
+    # across fields when the caller passes a pre-built tree)
+    if tree is None:
+        tree = build_export_tree(mesh)
 
     # Create output grid
     lat_grid, lon_grid = make_equirect_grid(width, height)
@@ -110,6 +127,7 @@ def export_multiple_fields(
     if fields is None:
         fields = ["elevation"]
 
+    tree = build_export_tree(mesh)
     results = {}
     for field_name in fields:
         results[field_name] = export_equirectangular(
@@ -117,6 +135,7 @@ def export_multiple_fields(
             config.export_width,
             config.export_height,
             field=field_name,
+            tree=tree,
         )
     return results
 
@@ -219,15 +238,20 @@ def save_outputs(
     png_max = max(9_000, elev_max)
     export_elevation_png(elevation_grid, output_dir / "elevation.png", png_min, png_max)
 
-    # 2. CVT Mesh JSON
-    from .models import sanitize_nonfinite
+    # 2. CVT Mesh JSON — pydantic-core serializer (Rust, ~5x faster than
+    #    model_dump() + json.dump()); non-finite floats serialize as null,
+    #    same semantics as the previous sanitize_nonfinite pass.
+    from pydantic import TypeAdapter
 
-    mesh_data = sanitize_nonfinite(mesh.model_dump())
-    with open(output_dir / "cvt_mesh.json", "w", encoding="utf-8") as f:
-        json.dump(mesh_data, f, indent=2, default=str)
+    from .models import CVTMesh
+
+    mesh_bytes = TypeAdapter(CVTMesh).dump_json(mesh, indent=2)
+    (output_dir / "cvt_mesh.json").write_bytes(mesh_bytes)
     logger.info("  Saved CVT mesh: %s", output_dir / "cvt_mesh.json")
 
     # 3. Plates JSON
+    from .models import sanitize_nonfinite
+
     plates_data = sanitize_nonfinite([p.model_dump() for p in plates])
     with open(output_dir / "plates.json", "w", encoding="utf-8") as f:
         json.dump(plates_data, f, indent=2, default=str)
@@ -295,15 +319,16 @@ def export_climate_layers(
 
     width = config.export_width
     height = config.export_height
+    tree = build_export_tree(mesh)  # Stage 0.3: shared across both rasters
 
     # 1. Temperature raster
-    temp_grid = export_equirectangular(mesh, width, height, field="temperature_C")
+    temp_grid = export_equirectangular(mesh, width, height, field="temperature_C", tree=tree)
     t_min, t_max = _nice_range(float(np.nanmin(temp_grid)), float(np.nanmax(temp_grid)), -40.0, 50.0)
     export_layer_png(temp_grid, output_dir / "temperature.png", t_min, t_max)
     logger.info("  Exported temperature.png [%.0f, %.0f] °C", t_min, t_max)
 
     # 2. Precipitation raster
-    precip_grid = export_equirectangular(mesh, width, height, field="precipitation_mm")
+    precip_grid = export_equirectangular(mesh, width, height, field="precipitation_mm", tree=tree)
     p_min, p_max = _nice_range(float(np.nanmin(precip_grid)), float(np.nanmax(precip_grid)), 0.0, 6000.0)
     export_layer_png(precip_grid, output_dir / "precipitation.png", p_min, p_max)
     logger.info("  Exported precipitation.png [%.0f, %.0f] mm/yr", p_min, p_max)

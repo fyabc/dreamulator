@@ -19,7 +19,7 @@ planets:
         N2: 0.78
         O2: 0.21
         Ar: 0.01
-      greenhouse_factor: 33.0     # 类似地球
+      greenhouse_factor: 72.0     # HZ 中心定位：比地球等价值（~78K）低 6K；预留次行星半球加温 2–4K；隐含厚 CO₂ 大气
     hydrosphere:
       water_coverage: 0.72
       salinity_ppt: 35.0

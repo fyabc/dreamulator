@@ -133,6 +133,7 @@ def _subduction_uplift(
     radius_km: float,
     dt_my: float,
     convergent_set: set[int],
+    elev_m: np.ndarray,
 ) -> float:
     """Cortial 2019 §4.1 — uplift at convergent boundaries.
 
@@ -165,14 +166,14 @@ def _subduction_uplift(
         g_v = max(0.1, min(1.0, v_cm_yr / 10.0))
 
         # h(z̃) — squared elevation above sea level
-        z_km = getattr(mesh.cells[cid], "elevation", 0.0) / 1000.0
+        z_km = elev_m[cid] / 1000.0
         z_above = max(0.0, z_km)
         h_z = (z_above / _Z_C_KM) ** 2 if _Z_C_KM > 0 else 0.0
 
         dz_km = u0_km_yr * f_d * g_v * (1.0 + h_z) * dt_yr
         # Cap: don't push above z_c (10 km) or below z_t (-10 km)
-        cur_m = getattr(mesh.cells[cid], "elevation", 0.0)
-        mesh.cells[cid].elevation = max(
+        cur_m = elev_m[cid]
+        elev_m[cid] = max(
             _Z_T_KM * 1000.0,
             min(_Z_C_KM * 1000.0, cur_m + dz_km * 1000.0),
         )
@@ -187,6 +188,8 @@ def _collision_orogeny(
     radius_km: float,
     dt_my: float,
     convergent_set: set[int],
+    elev_m: np.ndarray,
+    crust_arr: np.ndarray,
 ) -> float:
     """Cortial 2019 §4.2 — continental collision mountain building.
 
@@ -200,14 +203,13 @@ def _collision_orogeny(
     # Find convergent cells with continental crust on both sides
     collision_cells: list[int] = []
     for cid in convergent_set:
-        cell = mesh.cells[cid]
-        if getattr(cell, "crust_type", "") != "continental":
+        if crust_arr[cid] != "continental":
             continue
         pid = cell_plate_map.get(cid, "")
-        for nid in cell.neighbors:
+        for nid in mesh.cells[cid].neighbors:
             npid = cell_plate_map.get(nid, "")
             if npid and npid != pid:
-                if getattr(mesh.cells[nid], "crust_type", "") == "continental":
+                if crust_arr[nid] == "continental":
                     collision_cells.append(cid)
                     break
 
@@ -223,9 +225,7 @@ def _collision_orogeny(
         weight = (1.0 - d_norm) ** 4
         area_km2 = cell_km**2
         dz_km = _DELTA_C_PER_KM * area_km2 * weight * dt_my / 2.0
-        mesh.cells[cid].elevation = getattr(
-            mesh.cells[cid], "elevation", 0.0
-        ) + dz_km * 1000.0
+        elev_m[cid] += dz_km * 1000.0
         total_km += dz_km
 
     return total_km
@@ -257,26 +257,23 @@ def _ridge_profile(
 def _erosion(
     mesh: CVTMesh,
     dt_my: float,
+    elev_m: np.ndarray,
+    crust_arr: np.ndarray,
 ) -> None:
-    """Cortial 2019 §5 — erosion / subsidence / sedimentation per cell."""
+    """Cortial 2019 §5 — erosion / subsidence / sedimentation (vectorized)."""
     dt_yr = dt_my * 1e6
 
-    for cell in mesh.cells:
-        z_km = getattr(cell, "elevation", 0.0) / 1000.0
-        crust = getattr(cell, "crust_type", "")
+    z_km = elev_m / 1000.0
+    continental = crust_arr == "continental"
+    dz_km = np.where(
+        continental,
+        (z_km / _Z_C_KM) * _EPSILON_C_MM_YR * 1e-6 * dt_yr,
+        (1.0 - z_km / _Z_T_KM) * _EPSILON_O_MM_YR * 1e-6 * dt_yr,
+    )
+    elev_m -= dz_km * 1000.0
 
-        if crust == "continental":
-            dz = (z_km / _Z_C_KM) * _EPSILON_C_MM_YR * 1e-6 * dt_yr
-        else:
-            dz = (1.0 - z_km / _Z_T_KM) * _EPSILON_O_MM_YR * 1e-6 * dt_yr
-
-        cell.elevation = getattr(cell, "elevation", 0.0) - dz * 1000.0
-
-        # Trench sedimentation (deep cells)
-        if z_km < -5.0:
-            cell.elevation = getattr(
-                cell, "elevation", 0.0
-            ) + _EPSILON_T_MM_YR * 1e-6 * dt_yr * 1000.0
+    # Trench sedimentation (deep cells) — judged on pre-erosion depth
+    elev_m[z_km < -5.0] += _EPSILON_T_MM_YR * 1e-6 * dt_yr * 1000.0
 
 
 # =============================================================================
@@ -511,16 +508,6 @@ def _rodrigues_rotate(
     )
 
 
-def _find_nearest_cell(xyz: np.ndarray, mesh: CVTMesh) -> int:
-    """Find CVT cell closest to a 3D point on the sphere (dot-product distance)."""
-    best_id, best_dot = 0, -2.0
-    for i, c in enumerate(mesh.cells):
-        dot = xyz[0] * c.x + xyz[1] * c.y + xyz[2] * c.z
-        if dot > best_dot:
-            best_dot, best_id = dot, i
-    return best_id
-
-
 def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
     """Scale δt so the fastest plate moves ~3 cells per step.
 
@@ -564,6 +551,17 @@ def _evolve_cortial2019(
     if num_steps <= 0:
         return plates, cell_plate_map
 
+    # Stage 1.2: canonical elevation/crust arrays for the whole evolution
+    # (written back to cells once at the end) + cKDTree for nearest-cell
+    # queries (was O(n) Python dot products per plate per step).
+    from scipy.spatial import cKDTree
+
+    _n = mesh.num_cells
+    _cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    _tree = cKDTree(_cell_xyz)
+    elev_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
+    crust_arr = np.array([c.crust_type for c in mesh.cells])
+
     logger.info(
         "Tectonic evolution: %d steps × %.1f My = %.0f My total "
         "(cell ~%.0f km, δt auto-scaled to move ~3 cells/step)",
@@ -581,8 +579,9 @@ def _evolve_cortial2019(
     last_rifting_step = -RESAMPLE_EVERY
 
     for step in range(num_steps):
-        # 1. Rotate centroids → find new seeds
-        new_seeds: list[int] = []
+        # 1. Rotate centroids → find new seeds (Stage 1.2: batched cKDTree
+        #    query; was 20 plates × O(n) Python dot products per step)
+        rotated_centroids: list[np.ndarray] = []
         for plate in plates:
             ep = plate.euler_pole
             axis = np.array([ep.x, ep.y, ep.z])
@@ -600,8 +599,11 @@ def _evolve_cortial2019(
             else:
                 centroid = np.array([1.0, 0.0, 0.0])  # fallback
 
-            new_c = _rodrigues_rotate(centroid, axis, angle_rad)
-            new_seeds.append(_find_nearest_cell(new_c, mesh))
+            rotated_centroids.append(_rodrigues_rotate(centroid, axis, angle_rad))
+        if rotated_centroids:
+            new_seeds = _tree.query(np.array(rotated_centroids))[1].tolist()
+        else:
+            new_seeds = []
 
         # 2. Re-run Voronoi (only every N steps or after a rift)
         # Protect newborn plates: lock their cells so they survive long enough to grow
@@ -609,10 +611,25 @@ def _evolve_cortial2019(
         if needs_resample:
             locked: dict[int, str] = {}
             NEWBORN_COOLDOWN = COOLDOWN * 5  # ~25 steps — give oceanic plates time to grow
-            for pid, birth in plate_birth_step.items():
-                if pid.startswith("oceanic") and step - birth < NEWBORN_COOLDOWN:
-                    for cid in range(mesh.num_cells):
-                        if cell_plate_map.get(cid) == pid:
+            newborn_pids = [
+                pid for pid, birth in plate_birth_step.items()
+                if pid.startswith("oceanic") and step - birth < NEWBORN_COOLDOWN
+            ]
+            if newborn_pids:
+                # Stage 1.2: one O(n) coding pass + np.where per newborn plate
+                # (was an O(n) full scan PER newborn plate)
+                pid_code: dict[str, int] = {}
+                cur_codes = np.empty(_n, dtype=np.int64)
+                for i in range(_n):
+                    pid = cell_plate_map.get(i, "")
+                    code = pid_code.get(pid)
+                    if code is None:
+                        code = pid_code[pid] = len(pid_code)
+                    cur_codes[i] = code
+                for pid in newborn_pids:
+                    code = pid_code.get(pid)
+                    if code is not None:
+                        for cid in np.where(cur_codes == code)[0].tolist():
                             locked[cid] = pid
             if locked:
                 logger.info("  Voronoi: %d cells locked for %d oceanic newborn(s)", len(locked), len({v for v in locked.values()}))
@@ -620,37 +637,38 @@ def _evolve_cortial2019(
         else:
             new_cell_map = prev_cell_map
 
-        n_changed = sum(
-            1 for cid in range(mesh.num_cells)
-            if prev_cell_map.get(cid, "") != new_cell_map.get(cid, "")
-        )
+        # 3. Detect changed cells → convergent set (Stage 1.2: vectorized;
+        #    identical maps between resamples skip the scan entirely)
+        if needs_resample:
+            all_pids: dict[str, int] = {}
 
-        # 3. Detect changed cells → convergent/divergent
-        convergent: set[int] = set()
-        divergent: set[int] = set()
-        for cid in range(mesh.num_cells):
-            old_pid = prev_cell_map.get(cid, "")
-            new_pid = new_cell_map.get(cid, "")
-            if old_pid and new_pid and old_pid != new_pid:
-                # Cell gained by new_pid → convergent (subduction)
-                convergent.add(cid) if True else None  # both cells are convergent at this boundary
+            def _codes(m: dict[int, str], codes_out: dict[str, int]) -> np.ndarray:
+                arr = np.empty(_n, dtype=np.int64)
+                for i in range(_n):
+                    pid = m.get(i, "")
+                    code = codes_out.get(pid)
+                    if code is None:
+                        code = codes_out[pid] = len(codes_out)
+                    arr[i] = code
+                return arr
 
-        # Treat all changed cells as convergent for now
-        # (proper divergence detection would track which plate lost cells)
-        for cid in range(mesh.num_cells):
-            old_pid = prev_cell_map.get(cid, "")
-            new_pid = new_cell_map.get(cid, "")
-            if old_pid and new_pid and old_pid != new_pid:
-                convergent.add(cid)
+            changed_mask = _codes(prev_cell_map, all_pids) != _codes(new_cell_map, all_pids)
+            n_changed = int(changed_mask.sum())
+            # Treat all changed cells as convergent for now
+            # (proper divergence detection would track which plate lost cells)
+            convergent = set(np.where(changed_mask)[0].tolist())
+        else:
+            n_changed = 0
+            convergent = set()
 
-        # 4. Apply elevation effects
+        # 4. Apply elevation effects (array-backed, Stage 1.2)
         _subduction_uplift(
-            mesh, new_cell_map, plates, radius_km, dt_my, convergent,
+            mesh, new_cell_map, plates, radius_km, dt_my, convergent, elev_m,
         )
         _collision_orogeny(
-            mesh, new_cell_map, radius_km, dt_my, convergent,
+            mesh, new_cell_map, radius_km, dt_my, convergent, elev_m, crust_arr,
         )
-        _erosion(mesh, dt_my)
+        _erosion(mesh, dt_my, elev_m, crust_arr)
 
         # 5. Plate rifting + cleanup orphan cells
         n_before = len(plates)
@@ -681,7 +699,9 @@ def _evolve_cortial2019(
                 step + 1, num_steps, n_changed,
             )
 
-    # Finalise
+    # Finalise — write the canonical elevation array back to cells once
+    for i, c in enumerate(mesh.cells):
+        c.elevation = float(elev_m[i])
     logger.info(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
         num_steps, len(plates), mesh.num_cells,

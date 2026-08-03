@@ -34,6 +34,9 @@ class TerrainPipelineConfig:
     radius_km: float = 6371.0
     gravity_m_s2: float = 9.81
     rotation_period_days: float = 1.0
+    albedo: float = 0.306  # Bond albedo (Earth ≈ 0.306)
+    orbital_period_days: float = 365.25
+    surface_pressure_hpa: float = 1013.25
 
     # CVT mesh generation
     num_nodes: int = 100_000

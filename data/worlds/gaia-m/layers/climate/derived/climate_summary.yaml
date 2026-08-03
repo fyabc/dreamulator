@@ -3,44 +3,42 @@ planet:
   name: Gaia-M
 temperature_C:
   global:
-    mean: 14.3174930418965
-    min: -69.54346554375964
-    max: 27.99999999170471
+    mean: 9.2382642881615
+    min: -77.78188692921344
+    max: 22.28265517243079
   land:
-    mean: 8.431967933868506
-    min: -69.54346554375964
-    max: 27.114119217342047
+    mean: 3.102981706214449
+    min: -77.78188692921344
+    max: 21.426076159543157
   ocean:
-    mean: 16.687950859505346
-    min: -1.8000240085210188
-    max: 27.99999999170471
+    mean: 11.67780012962053
+    min: -2.0
+    max: 22.28265517243079
 precipitation_mm:
   global:
-    mean: 1230.9601618951995
+    mean: 956.873759980721
     min: 2.3701785305609108e-06
-    max: 20185.58099754663
+    max: 19942.673436241912
   land:
-    mean: 1457.0747706809848
+    mean: 1140.1930804969631
     min: 20.0
-    max: 20185.58099754663
+    max: 19942.673436241912
   ocean:
-    mean: 1139.890098946913
+    mean: 883.9815913058494
     min: 2.3701785305609108e-06
-    max: 6678.277689702832
+    max: 6799.423489519947
 koppen_classes:
-  EF: 7223
-  ET: 6054
-  Cfb: 4736
-  BWk: 253
-  BSk: 1994
-  Cwb: 104
-  Af: 6873
-  Aw: 456
-  Am: 284
-  BSh: 731
-  BWh: 4
+  EF: 9439
+  ET: 6961
+  BSk: 1900
+  Cfb: 6463
+  Cwb: 133
+  Am: 96
+  Af: 3051
+  Aw: 131
+  BWk: 276
 simulation_parameters:
   axial_tilt_deg: 0.0
-  stellar_luminosity_sol: 1.0
-  orbital_distance_au: 1.0
-  greenhouse_warming_K: 33.0
+  stellar_luminosity_sol: 0.0357
+  orbital_distance_au: 0.2795
+  greenhouse_warming_K: 72.0

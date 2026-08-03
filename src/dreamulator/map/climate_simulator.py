@@ -12,7 +12,6 @@ on the CVT mesh and writes results into `VoronoiCell` fields in-place.
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from typing import TYPE_CHECKING
 
@@ -21,6 +20,7 @@ import numpy as np
 from dreamulator.engine.climate_physics import (
     altitude_lapse_rate,
     coriolis_parameter,
+    equilibrium_temperature,
     evaporation_rate,
     hadley_cell_wind,
     itcz_latitude,
@@ -31,7 +31,6 @@ from dreamulator.engine.climate_physics import (
     seasonal_temperature,
     surface_temperature,
     terrain_wind_blocking,
-    equilibrium_temperature,
 )
 
 if TYPE_CHECKING:
@@ -96,6 +95,8 @@ def simulate_climate(
     if n == 0:
         return
 
+    phase_timings: dict[str, float] = {}
+
     # ------------------------------------------------------------------
     # Extract data from CVT mesh
     # ------------------------------------------------------------------
@@ -124,7 +125,7 @@ def simulate_climate(
     teq_K = equilibrium_temperature(
         stellar_luminosity_sol=config.stellar_luminosity_sol,
         orbital_distance_au=config.orbital_distance_au,
-        albedo=0.306,  # Earth default; could be per-cell later
+        albedo=config.albedo,
     )
     t_surf_K = surface_temperature(teq_K, config.greenhouse_warming_K)
     t_surf_C = t_surf_K - 273.15
@@ -139,9 +140,10 @@ def simulate_climate(
         config.lapse_rate_c_km,
     )
     # Ocean surface temperature: damped latitude gradient (maritime moderation)
-    # SST ranges ~28°C (tropics) to ~-2°C (polar), much narrower than land
+    # anchored to the planet's global-mean surface temperature (Earth profile
+    # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
     t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
-        t_mean_C[~land_mask_arr], lat_rad[~land_mask_arr],
+        lat_rad[~land_mask_arr], t_surf_C,
     )
 
     # Seasonal extremes
@@ -149,7 +151,7 @@ def simulate_climate(
         t_mean_C,
         lat_rad,
         axial_tilt_deg=config.axial_tilt_deg,
-        orbital_period_days=365.25,
+        orbital_period_days=config.orbital_period_days,
     )
     t_jan_C = seasonal["jan"]
     t_jul_C = seasonal["jul"]
@@ -158,12 +160,15 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 2: Wind
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["temperature"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['temperature']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]2/5  Wind field (geostrophic + Hadley cells)[/dim]")
     # ------------------------------------------------------------------
     # Geostrophic wind from pressure gradient + Coriolis
-    pressure_hpa = pressure_from_temperature(t_mean_C, elevation_m)
+    pressure_hpa = pressure_from_temperature(
+        t_mean_C, elevation_m, config.gravity_m_s2, config.surface_pressure_hpa
+    )
     grad_p = _compute_graph_gradient(mesh, pressure_hpa, nodes_xyz)
     f_coriolis = coriolis_parameter(lat_rad, config.rotation_period_days)
 
@@ -180,7 +185,8 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 3: Precipitation (multi-pass BFS moisture transport)
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["wind"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['wind']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]3/5  Precipitation (BFS moisture transport)[/dim]")
     # ------------------------------------------------------------------
@@ -197,7 +203,8 @@ def simulate_climate(
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["precipitation"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['precipitation']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]4/5  Koppen classification[/dim]")
     # ------------------------------------------------------------------
@@ -223,7 +230,8 @@ def simulate_climate(
     # ------------------------------------------------------------------
     # Write back to cells
     # ------------------------------------------------------------------
-    _console.print(f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]")
+    phase_timings["koppen"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['koppen']:.1f}s)[/dim]")
     _t0 = _time.time()
     _console.print("  [dim]5/5  Write results to mesh[/dim]")
 
@@ -239,12 +247,15 @@ def simulate_climate(
         t_land_max = float(t_mean_C[is_land].max())
         p_land_min = float(precipitation_mm[is_land].min())
         p_land_max = float(precipitation_mm[is_land].max())
+        phase_timings["writeback"] = _time.time() - _t0
         _console.print(
-            f"  [green]done[/green] [dim]({_time.time()-_t0:.1f}s)[/dim]\n"
+            f"  [green]done[/green] [dim]({phase_timings['writeback']:.1f}s)[/dim]\n"
             f"  T={t_land_min:.0f}~{t_land_max:.0f} C, "
             f"P={p_land_min:.0f}~{p_land_max:.0f} mm/yr, "
             f"{n_land} land cells, {len(set(koppen_codes)) - 1} Koppen classes"
         )
+
+    return phase_timings
 
 
 # ---------------------------------------------------------------------------
@@ -271,46 +282,47 @@ def _compute_graph_gradient(
         Gradient vectors tangent to sphere, shape (N, 3).
     """
     n = mesh.num_cells
+
+    # Stage 1.3: vectorized over a flat directed-edge table (was per-cell,
+    # per-neighbour scalar numpy ops).
+    _src: list[int] = []
+    _dst: list[int] = []
+    for _i, _cell in enumerate(mesh.cells):
+        for _j in _cell.neighbors:
+            if 0 <= _j < n:
+                _src.append(_i)
+                _dst.append(_j)
+    src = np.asarray(_src, dtype=np.int64)
+    dst = np.asarray(_dst, dtype=np.int64)
+
+    node_i = nodes_xyz[src]
+    node_j = nodes_xyz[dst]
+
+    # Angular distance (radians)
+    dot = np.clip(np.einsum("ij,ij->i", node_i, node_j), -1.0, 1.0)
+    dist = np.arccos(dot)
+
+    # Direction from i to j (tangent to sphere)
+    direction = node_j - node_i
+    radial = np.einsum("ij,ij->i", direction, node_i)
+    direction = direction - radial[:, None] * node_i
+    dir_norm = np.linalg.norm(direction, axis=1)
+    valid = (dist >= 1e-9) & (dir_norm >= 1e-9)
+
+    # Weight = 1/distance (closer neighbours more influential); invalid
+    # edges contribute zero weight, so their direction need not be unit.
+    weight = np.zeros_like(dist)
+    weight[valid] = 1.0 / dist[valid]
+
+    diff = scalar[dst] - scalar[src]
+    contrib = (weight * diff)[:, None] * direction
+
     grad = np.zeros((n, 3), dtype=np.float64)
-
-    for i in range(n):
-        neighbors = mesh.cells[i].neighbors
-        if not neighbors:
-            continue
-
-        node_i = nodes_xyz[i]
-        g = np.zeros(3, dtype=np.float64)
-        total_weight = 0.0
-
-        for j in neighbors:
-            if j < 0 or j >= n:
-                continue
-            node_j = nodes_xyz[j]
-
-            # Angular distance (radians)
-            dot = np.clip(np.dot(node_i, node_j), -1.0, 1.0)
-            dist = math.acos(float(dot))
-            if dist < 1e-9:
-                continue
-
-            # Direction from i to j (tangent to sphere)
-            direction = node_j - node_i
-            # Remove radial component
-            radial_component = np.dot(direction, node_i)
-            direction = direction - radial_component * node_i
-            dir_norm = np.linalg.norm(direction)
-            if dir_norm < 1e-9:
-                continue
-            direction /= dir_norm
-
-            # Weight = 1/distance (closer neighbours more influential)
-            weight = 1.0 / dist
-            diff = scalar[j] - scalar[i]
-            g += weight * diff * direction
-            total_weight += weight
-
-        if total_weight > 1e-9:
-            grad[i] = g / total_weight
+    np.add.at(grad, src, contrib)
+    weight_sum = np.zeros(n, dtype=np.float64)
+    np.add.at(weight_sum, src, weight)
+    mask = weight_sum > 1e-9
+    grad[mask] /= weight_sum[mask, None]
 
     return grad
 
@@ -336,51 +348,55 @@ def _geostrophic_wind(
     Returns:
         Geostrophic wind vectors (m/s), shape (N, 3).
     """
-    n = len(grad_p)
-    wind = np.zeros((n, 3), dtype=np.float64)
     rho = 1.225  # air density kg/m³
 
-    for i in range(n):
-        if abs(f_coriolis[i]) < 1e-8:
-            # Near equator: geostrophic approximation fails.
-            # Fall back to direct down-gradient flow (simplified trade winds).
-            wind[i] = -grad_p[i] * 0.3
-            continue
-
-        # k̂ × ∇P, where k̂ is the local radial direction
-        k_hat = nodes_xyz[i]
-        # k_hat × grad_p[i] (right-hand rule)
-        wind[i] = np.cross(k_hat, grad_p[i]) / (f_coriolis[i] * rho)
+    # Stage 1.3: fully vectorized (was two per-cell loops).
+    weak = np.abs(f_coriolis) < 1e-8
+    wind = np.cross(nodes_xyz, grad_p) / (f_coriolis[:, None] * rho)
+    # Near equator the geostrophic approximation fails — fall back to
+    # direct down-gradient flow (simplified trade winds).
+    wind[weak] = -grad_p[weak] * 0.3
 
     # Clamp to reasonable wind speeds (0–30 m/s at surface)
-    for i in range(n):
-        speed = np.linalg.norm(wind[i])
-        if speed > 30.0:
-            wind[i] *= 30.0 / speed
+    speed = np.linalg.norm(wind, axis=1)
+    over = speed > 30.0
+    wind[over] *= (30.0 / speed[over])[:, None]
 
     return wind
 
 
 def _ocean_surface_temperature(
-    t_lat_c: np.ndarray,
     lat_rad: np.ndarray,
+    t_surf_c: float,
 ) -> np.ndarray:
-    """Estimate sea surface temperature (SST) from latitude-band air temperature.
+    """Estimate sea surface temperature (SST) from latitude.
 
     Oceans have a much narrower temperature range than land (~30 °C range
-    vs ~60 °C for land).  Uses a sigmoid transition to sea-ice temperature
-    (-1.8 °C) at high latitudes.
+    vs ~60 °C for land).  The latitude profile is Earth-calibrated
+    (28 °C equator → −2 °C at ~60°) and shifted by
+    ``t_surf_c − t_surf_earth_ref`` so that other stellar forcings or
+    greenhouse levels move SST one-for-one with the global-mean surface
+    temperature while keeping the maritime-moderation shape.
+    ``t_surf_earth_ref`` is the model's own Earth value (1 L☉, 1 AU,
+    albedo 0.306, +33 K greenhouse), so Earth is reproduced exactly.
+    Uses a sigmoid transition to sea-ice temperature (-1.8 °C) at high
+    latitudes.
 
     Args:
-        t_lat_c: Latitude-only temperature (°C) for ocean cells.
         lat_rad: Latitude in radians.
+        t_surf_c: Global-mean surface temperature (°C), i.e. equilibrium
+            temperature + greenhouse warming.
 
     Returns:
         SST estimate (°C), shape matches inputs.
     """
     abs_lat = np.abs(lat_rad)
-    # Open-ocean SST: 30 °C range from equator (28 °C) to ~60° lat (-2 °C)
-    sst_open = 28.0 - 30.0 * np.sin(abs_lat) ** 2
+    t_surf_earth_ref = float(
+        surface_temperature(equilibrium_temperature(1.0, 1.0, 0.306), 33.0) - 273.15
+    )
+    # Open-ocean SST: 30 °C range from equator (28 °C) to ~60° lat (-2 °C),
+    # shifted by the planet's surface temperature relative to Earth's
+    sst_open = 28.0 + (t_surf_c - t_surf_earth_ref) - 30.0 * np.sin(abs_lat) ** 2
 
     # Sea-ice transition: sigmoid from open-ocean SST → -1.8 °C
     # Transition centered at ~70° latitude, width ~8°
@@ -425,7 +441,6 @@ def _compute_precipitation_bfs(
        d. If elevation rises → orographic rain.
        e. If elevation falls → rain shadow (minimal precipitation).
     3. Add convective (ITCZ) precipitation in tropical regions.
-    4. Rain over ocean also contributes to coastal precipitation.
 
     Args:
         mesh: CVT mesh.
@@ -449,22 +464,51 @@ def _compute_precipitation_bfs(
     # Land evapotranspiration: ~40% of ocean rate (soil + vegetation recycling)
     land_moisture = np.where(is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0)
 
+    # Stage 1.3 precompute: the wind field is invariant across passes, so
+    # build the directed-edge table and per-cell downwind candidate lists
+    # ONCE. Each cell's candidates are its valid neighbours sorted by wind
+    # alignment (descending, dot > −0.3 kept) — this exactly reproduces the
+    # original "best unvisited downwind neighbour" selection: the original
+    # picks the highest-alignment unvisited neighbour, i.e. the first
+    # unvisited entry in this sorted list.
+    wind_speed_all = np.linalg.norm(wind, axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        wind_unit = wind / np.maximum(wind_speed_all, 1e-9)[:, None]
+
+    _src: list[int] = []
+    _dst: list[int] = []
+    for _i, _cell in enumerate(mesh.cells):
+        for _j in _cell.neighbors:
+            if 0 <= _j < n:
+                _src.append(_i)
+                _dst.append(_j)
+    src = np.asarray(_src, dtype=np.int64)
+    dst = np.asarray(_dst, dtype=np.int64)
+    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
+    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
+    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
+    edge_norm = np.linalg.norm(edge_vec, axis=1)
+    valid_edge = edge_norm >= 1e-9
+    edge_dir = np.zeros_like(edge_vec)
+    edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
+    align = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, wind_unit[src]), -1.0)
+
+    # CSR layout: per-cell candidates sorted by alignment (descending).
+    keep = align > -0.3
+    src_k = src[keep]
+    align_k = align[keep]
+    order = np.lexsort((-align_k, src_k))  # src asc, align desc (stable ties)
+    cand_dst = dst[keep][order]
+    counts = np.bincount(src_k[order], minlength=n)
+    offsets = np.zeros(n + 1, dtype=np.int64)
+    np.cumsum(counts, out=offsets[1:])
+
     # Step 2: Multi-pass advection
     # Each pass: start from ocean + land moisture, then BFS downwind.
     for _pass in range(_MOISTURE_ADVECTION_STEPS):
         # Reset moisture to ocean evaporation + land recycling for this pass
         moisture = ocean_moisture.copy()
         moisture[is_land] += land_moisture[is_land]
-
-        # Find coastal cells for seeding
-        coastal = np.zeros(n, dtype=bool)
-        for i in range(n):
-            if not is_ocean[i]:
-                continue
-            for j in mesh.cells[i].neighbors:
-                if j >= 0 and j < n and is_land[j]:
-                    coastal[i] = True
-                    break
 
         # BFS queue: propagate from ocean cells downwind
         queue: deque[int] = deque()
@@ -490,37 +534,17 @@ def _compute_precipitation_bfs(
             cell_moisture = pass_moisture[node] if is_land[node] else moisture[node]
             moisture[node] = cell_moisture  # sync for tracking
 
-            wind_i = wind[node]
-            wind_speed = float(np.linalg.norm(wind_i))
-
-            if wind_speed < _MIN_WIND_SPEED or cell_moisture < 1.0:
+            if wind_speed_all[node] < _MIN_WIND_SPEED or cell_moisture < 1.0:
                 continue
 
-            # Find the best downwind neighbour
+            # Best downwind neighbour = first unvisited candidate (the list
+            # is pre-sorted by wind alignment; see precompute above).
             best_neighbor = -1
-            best_dot = -0.3  # minimum alignment to consider "downwind"
-
-            for j in mesh.cells[node].neighbors:
-                if j < 0 or j >= n:
-                    continue
-                if visited[j]:
-                    continue
-
-                # Edge direction from node to neighbour
-                edge = nodes_xyz[j] - nodes_xyz[node]
-                # Remove radial component
-                radial = np.dot(edge, nodes_xyz[node])
-                edge = edge - radial * nodes_xyz[node]
-                edge_norm = float(np.linalg.norm(edge))
-                if edge_norm < 1e-9:
-                    continue
-                edge /= edge_norm
-
-                # Alignment with wind direction
-                dot = float(np.dot(wind_i / max(wind_speed, 1e-9), edge))
-                if dot > best_dot:
-                    best_dot = dot
+            for k in range(offsets[node], offsets[node + 1]):
+                j = cand_dst[k]
+                if not visited[j]:
                     best_neighbor = j
+                    break
 
             if best_neighbor < 0:
                 continue
@@ -562,7 +586,8 @@ def _compute_precipitation_bfs(
                 # Ocean → ocean: no net precipitation
                 pass
 
-            if best_neighbor not in visited:
+            # NB: direct index check — `x not in ndarray` is an O(n) scan
+            if not visited[best_neighbor]:
                 queue.append(best_neighbor)
 
         # After pass: accumulate precipitation into global totals
@@ -575,9 +600,10 @@ def _compute_precipitation_bfs(
 
     # ITCZ Gaussian centered on mean position with ~12° width
     itcz_lat = itcz_latitude(
-        day_of_year=182.0,
+        day_of_year=config.orbital_period_days / 2.0,  # northern summer solstice
         axial_tilt_deg=config.axial_tilt_deg,
         lag_days=float(config.itcz_lag_days),
+        orbital_period_days=config.orbital_period_days,
     )
     # Wide Gaussian: σ=12° covers 20°N–20°S with significant rain
     # ITCZ: strong convective rainfall band, wider coverage for tropics
@@ -586,15 +612,15 @@ def _compute_precipitation_bfs(
     precip += itcz_enhancement
 
     # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
-    for i in range(n):
-        if not is_land[i] or abs(lat_deg[i]) > 35.0:
-            continue
-        has_ocean_neighbor = any(
-            j >= 0 and j < n and is_ocean[j] for j in mesh.cells[i].neighbors
-        )
-        if has_ocean_neighbor:
-            monsoon_factor = 1.5 if abs(lat_deg[i]) < 20.0 else 1.3
-            precip[i] *= monsoon_factor
+    # (vectorized over the edge table, Stage 1.3)
+    abs_lat = np.abs(lat_deg)
+    tropical_land = is_land & (abs_lat <= 35.0)
+    coastal_edges = tropical_land[src] & is_ocean[dst]
+    has_ocean_neighbor = np.zeros(n, dtype=bool)
+    has_ocean_neighbor[src[coastal_edges]] = True
+    monsoon_cells = tropical_land & has_ocean_neighbor
+    precip[monsoon_cells & (abs_lat < 20.0)] *= 1.5
+    precip[monsoon_cells & (abs_lat >= 20.0)] *= 1.3
 
     # Step 5: Local convection (afternoon thunderstorms over warm land)
     # Temperature > 10 °C → thermal convection produces background precipitation.

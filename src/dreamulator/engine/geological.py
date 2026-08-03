@@ -11,7 +11,6 @@ For fine-grained stage control during development, use
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.models.layers import Layer
@@ -46,19 +45,19 @@ class GeologicalEngine(BaseEngine):
         Returns:
             EngineResult describing the outcome.
         """
-        from dreamulator.map.pipeline_types import TerrainPipelineConfig
         from dreamulator.map.terrain_pipeline import run_terrain_pipeline
 
         warnings: list[str] = []
         pars = parameters or {}
 
         # ---- Load configuration ----
-        config = self._load_config(pars)
+        config, config_warnings = self._load_config(pars)
+        warnings.extend(config_warnings)
         if config is None:
             return EngineResult(
                 engine_name=self.name,
                 success=False,
-                warnings=["terrain_config.yaml not found in any layer input directory"],
+                warnings=warnings + ["terrain_config.yaml not found in any layer input directory"],
             )
 
         # ---- Determine planet ID and output directory ----
@@ -74,6 +73,23 @@ class GeologicalEngine(BaseEngine):
                 stage_list = [s.strip() for s in stages_val.split(",")]
             elif isinstance(stages_val, list):
                 stage_list = [str(s) for s in stages_val]
+
+        if stage_list is None:
+            # Stage 0.0a: the climate engine is authoritative for climate
+            # fields; skip the terrain pipeline's in-line climate pass
+            # (~123 s at 100k cells + duplicated climate raster export).
+            # Rivers/erosion stay listed (they skip until implemented); when
+            # they land and need climate forcing, re-add "climate" here.
+            stage_list = [
+                "mesh",
+                "plates",
+                "tectonics",
+                "boundaries",
+                "terrain",
+                "rivers",
+                "erosion",
+                "export",
+            ]
 
         # ---- Run pipeline ----
         logger.info(
@@ -117,6 +133,7 @@ class GeologicalEngine(BaseEngine):
                 "num_plates": config.num_plates,
                 "seed": config.seed,
                 "stages_completed": result.stages_completed,
+                "stage_timings": result.stage_timings,
                 "elapsed_seconds": result.elapsed_seconds,
             },
         )
@@ -128,16 +145,28 @@ class GeologicalEngine(BaseEngine):
         # Any planet directory with cvt_mesh.json counts as "done"
         return any(self.maps_output_dir.glob("*/cvt_mesh.json"))
 
-    def _load_config(self, pars: dict[str, object]) -> "object | None":
-        """Load TerrainPipelineConfig from terrain_config.yaml or defaults.
+    def _load_config(self, pars: dict[str, object]) -> tuple[object | None, list[str]]:
+        """Load TerrainPipelineConfig and canonical physical parameters.
+
+        Terrain-generation knobs come from ``terrain_config.yaml`` (or planet
+        defaults); physical forcing parameters (stellar luminosity, orbital
+        distance, tilt, rotation, radius, greenhouse) are resolved exactly as
+        the climate engine does (shared ``physical_inputs`` module), so the
+        in-pipeline climate pass and the climate engine can never diverge.
 
         Args:
             pars: Optional parameter overrides.
 
         Returns:
-            TerrainPipelineConfig or None if not found.
+            (config, warnings).
         """
+        from dreamulator.engine.physical_inputs import (
+            PHYSICAL_CONFIG_FIELDS,
+            resolve_and_apply_physical_parameters,
+        )
         from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
+        warnings: list[str] = []
 
         # Try to find terrain_config.yaml
         config_path = self.find_input("terrain_config.yaml")
@@ -159,12 +188,32 @@ class GeologicalEngine(BaseEngine):
             else:
                 cfg = TerrainPipelineConfig()
 
-        # Apply parameter overrides
+        # Apply parameter overrides (terrain knobs from CLI/API)
         for key in ("num_nodes", "num_plates", "seed", "tectonic_steps"):
             if key in pars:
                 setattr(cfg, key, pars[key])
 
-        return cfg
+        # Canonical physical parameters from planets.yaml + stellar data
+        # (satellite-aware stellar lookup — see physical_inputs docstring).
+        planet_id = str(pars.get("planet_id") or "") or None
+        before = {key: getattr(cfg, key) for key in PHYSICAL_CONFIG_FIELDS}
+        warnings.extend(resolve_and_apply_physical_parameters(self, cfg, planet_id=planet_id))
+
+        # Flag terrain_config physical values overridden by canonical inputs
+        # (consistency-check pattern: warn only beyond a 20% divergence).
+        defaults = TerrainPipelineConfig()
+        for key in PHYSICAL_CONFIG_FIELDS:
+            old = before[key]
+            new = getattr(cfg, key)
+            if old != new and old != getattr(defaults, key):
+                rel = abs(old - new) / max(abs(new), 1e-9)
+                if rel > 0.2:
+                    warnings.append(
+                        f"terrain_config {key}={old} differs from canonical "
+                        f"planets/stellar value {new} ({rel:.0%}); using canonical value"
+                    )
+
+        return cfg, warnings
 
     def _detect_planet_id(self) -> str:
         """Auto-detect planet ID from planets.yaml or existing map directories.

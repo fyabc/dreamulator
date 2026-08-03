@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dreamulator"
-version = "0.13.3"
+version = "0.14.0"
 description = "Fantasy world building and simulation tool grounded in real science"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ dependencies = [
     "conlang",
     "pillow>=10.0",
     "opensimplex>=0.4",
+    "numba>=0.61",
     "python-multipart>=0.0.9",
     "tifffile>=2026.7.14",
 ]
@@ -32,6 +33,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
+    "pytest-benchmark>=4.0",
     "hypothesis>=6.0",
     "mypy>=1.14",
     "ruff>=0.9",
@@ -76,4 +78,8 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb=short -q"
+addopts = "--tb=short -q -m \"not slow and not benchmark\""
+markers = [
+    "slow: long-running tests (deselect with '-m \"not slow\"')",
+    "benchmark: performance benchmarks (deselect with '-m \"not benchmark\"')",
+]

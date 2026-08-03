@@ -314,8 +314,7 @@ def assign_crust_types(
     # cells are systematically favoured for continental crust.  fBm noise
     # (weight 0.3) is a *texture perturbation* that adds fractal boundary
     # detail without creating single-cell checkerboard artefacts.
-    import opensimplex
-    import warnings as _w
+    from .noise_kernels import noise_on_points
 
     for plate_id, cell_ids in plate_cells.items():
         continental_fraction = rng.uniform(continental_fraction_min, continental_fraction_max)
@@ -329,22 +328,19 @@ def assign_crust_types(
         persistence = 0.5
         _lat_weight = lat_bias
 
-        # fBm noise, normalised to [-1, 1]
+        # fBm noise, normalised to [-1, 1] (Stage 1.1: Numba kernel;
+        # per-plate rng draw order unchanged → deterministic).
+        px = np.fromiter((mesh.cells[c].x for c in cell_ids), dtype=np.float64, count=n_cells)
+        py = np.fromiter((mesh.cells[c].y for c in cell_ids), dtype=np.float64, count=n_cells)
+        pz = np.fromiter((mesh.cells[c].z for c in cell_ids), dtype=np.float64, count=n_cells)
         noise_vals = np.zeros(n_cells, dtype=np.float64)
         amplitude = 1.0
         frequency = base_freq
         for octave in range(octaves):
             octave_seed = noise_seed + octave * 1000
-            with _w.catch_warnings():
-                _w.filterwarnings("ignore", message="overflow encountered")
-                opensimplex.seed(octave_seed)
-            for i, c in enumerate(cell_ids):
-                cell = mesh.cells[c]
-                noise_vals[i] += amplitude * opensimplex.noise3(
-                    float(cell.x * frequency),
-                    float(cell.y * frequency),
-                    float(cell.z * frequency),
-                )
+            noise_vals += amplitude * noise_on_points(
+                px * frequency, py * frequency, pz * frequency, octave_seed
+            )
             amplitude *= persistence
             frequency *= lacunarity
         noise_vals /= (1.0 - persistence ** octaves) / (1.0 - persistence)

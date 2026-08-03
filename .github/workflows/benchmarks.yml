@@ -1,0 +1,59 @@
+# Performance regression tracking (M0.3, perf plan §3.4).
+#
+# Runs the pytest-benchmark micro suite on PRs and compares against the
+# baseline stored on the `perf-dashboard` branch. Zero-SaaS choice per the
+# perf plan; if shared-runner noise (σ≈5% wall clock) becomes a problem,
+# migrate to CodSpeed (instruction-count measurement, drop-in replacement).
+#
+# Note: the repo's `gh-pages` branch hosts the static site, so benchmark
+# data lives on a dedicated `perf-dashboard` branch (charts viewable via
+# https://raw.githack.com/ or a second Pages config if needed later).
+
+name: benchmarks
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmarks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmarks.yml"
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run micro benchmarks (slow excluded)
+        run: uv run pytest benchmarks -m "benchmark and not slow" --benchmark-json bench.json
+
+      - name: Track results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: pytest
+          output-file-path: bench.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false
+          gh-pages-branch: perf-dashboard
+          benchmark-data-dir-path: .
+          # Only push new baseline data on main (PRs compare against the
+          # last pushed baseline without writing).
+          auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}

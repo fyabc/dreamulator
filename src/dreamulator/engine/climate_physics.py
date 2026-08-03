@@ -231,6 +231,8 @@ def coriolis_parameter(
 def pressure_from_temperature(
     temperature_c: np.ndarray,
     elevation_m: np.ndarray,
+    gravity_m_s2: float = 9.81,
+    surface_pressure_hpa: float = 1013.25,
 ) -> np.ndarray:
     """Approximate surface pressure from temperature and elevation.
 
@@ -239,19 +241,22 @@ def pressure_from_temperature(
 
     P(h) = P₀ exp(-h / H) - δP_T(T)
 
-    where H ≈ 8500 m (scale height) and δP_T is the thermal pressure
+    where H ≈ 8500 m × (9.81/g) is the scale height (isothermal,
+    Earth-composition air; H ∝ 1/g) and δP_T is the thermal pressure
     reduction (warmer air → lower pressure).
 
     Args:
         temperature_c: Temperature in °C, shape (N,).
         elevation_m: Elevation in metres, shape (N,).
+        gravity_m_s2: Surface gravity (m/s²).  Sets the scale height.
+        surface_pressure_hpa: Sea-level pressure P₀ (hPa).
 
     Returns:
         Approximate surface pressure in hPa, shape (N,).
     """
     # Barometric formula
-    scale_height_m = 8500.0  # m
-    p_barometric = 1013.25 * np.exp(-elevation_m / scale_height_m)
+    scale_height_m = 8500.0 * (9.81 / gravity_m_s2)
+    p_barometric = surface_pressure_hpa * np.exp(-elevation_m / scale_height_m)
 
     # Normalise temperature for thermal pressure correction
     t_min, t_max = temperature_c.min(), temperature_c.max()
@@ -262,7 +267,7 @@ def pressure_from_temperature(
     # Thermal low: warm air expands → lower pressure
     p_thermal = p_barometric - 20.0 * t_normalized
 
-    return np.clip(p_thermal, 500.0, 1080.0)  # hPa
+    return np.clip(p_thermal, 0.5 * surface_pressure_hpa, 1.07 * surface_pressure_hpa)
 
 
 def hadley_cell_wind(

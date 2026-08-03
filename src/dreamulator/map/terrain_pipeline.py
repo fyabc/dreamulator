@@ -92,6 +92,7 @@ class TerrainPipelineResult:
     boundary_cell_ids: list[int] = field(default_factory=list)
     elevation_grid: np.ndarray | None = None
     stages_completed: list[str] = field(default_factory=list)
+    stage_timings: dict[str, float] = field(default_factory=dict)
     elapsed_seconds: float = 0.0
     output_dir: Path | None = None
 
@@ -161,7 +162,8 @@ def run_terrain_pipeline(
         t = time.time()
         result.mesh = generate_cvt_mesh(config)
         result.stages_completed.append("mesh")
-        _stage_end(time.time() - t)
+        result.stage_timings["mesh"] = time.time() - t
+        _stage_end(result.stage_timings["mesh"])
 
     if result.mesh is None:
         raise RuntimeError("CVT mesh is required for subsequent stages. Run 'mesh' stage first.")
@@ -172,7 +174,8 @@ def run_terrain_pipeline(
         t = time.time()
         result.plates, cell_plate_map = generate_plates(result.mesh, config)
         result.stages_completed.append("plates")
-        _stage_end(time.time() - t)
+        result.stage_timings["plates"] = time.time() - t
+        _stage_end(result.stage_timings["plates"])
     else:
         # Reconstruct cell_plate_map from existing plate data
         cell_plate_map = {}
@@ -224,7 +227,8 @@ def run_terrain_pipeline(
         if _progress is not None:
             _progress.stop()
         result.stages_completed.append("tectonics")
-        _stage_end(time.time() - t)
+        result.stage_timings["tectonics"] = time.time() - t
+        _stage_end(result.stage_timings["tectonics"])
 
     # ---- Stage 4: Boundary Detection ----
     if "boundaries" in ordered:
@@ -237,7 +241,8 @@ def run_terrain_pipeline(
             result.mesh, result.plates, cell_plate_map, config
         )
         result.stages_completed.append("boundaries")
-        _stage_end(time.time() - t)
+        result.stage_timings["boundaries"] = time.time() - t
+        _stage_end(result.stage_timings["boundaries"])
 
     # ---- Stage 5: Terrain Synthesis ----
     if "terrain" in ordered:
@@ -248,7 +253,8 @@ def run_terrain_pipeline(
         t = time.time()
         synthesize_terrain(result.mesh, result.plates, config)
         result.stages_completed.append("terrain")
-        _stage_end(time.time() - t)
+        result.stage_timings["terrain"] = time.time() - t
+        _stage_end(result.stage_timings["terrain"])
 
     # ---- Stage 6: Climate (TODO) ----
     if "climate" in ordered:
@@ -259,7 +265,8 @@ def run_terrain_pipeline(
             t = time.time()
             simulate_climate(result.mesh, config)
             result.stages_completed.append("climate")
-            _stage_end(time.time() - t)
+            result.stage_timings["climate"] = time.time() - t
+            _stage_end(result.stage_timings["climate"])
         except NotImplementedError as e:
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
@@ -273,7 +280,8 @@ def run_terrain_pipeline(
             t = time.time()
             generate_rivers(result.mesh, config)
             result.stages_completed.append("rivers")
-            _stage_end(time.time() - t)
+            result.stage_timings["rivers"] = time.time() - t
+            _stage_end(result.stage_timings["rivers"])
         except NotImplementedError as e:
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
@@ -287,7 +295,8 @@ def run_terrain_pipeline(
             t = time.time()
             apply_erosion(result.mesh, config)
             result.stages_completed.append("erosion")
-            _stage_end(time.time() - t)
+            result.stage_timings["erosion"] = time.time() - t
+            _stage_end(result.stage_timings["erosion"])
         except NotImplementedError as e:
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
@@ -314,7 +323,8 @@ def run_terrain_pipeline(
             result.output_dir = output_dir
 
         result.stages_completed.append("export")
-        _stage_end(time.time() - t)
+        result.stage_timings["export"] = time.time() - t
+        _stage_end(result.stage_timings["export"])
 
     result.elapsed_seconds = time.time() - t_start
     if result.elapsed_seconds < 60:
