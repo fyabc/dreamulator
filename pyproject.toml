@@ -24,6 +24,7 @@ dependencies = [
     "conlang",
     "pillow>=10.0",
     "opensimplex>=0.4",
+    "numba>=0.61",
     "python-multipart>=0.0.9",
     "tifffile>=2026.7.14",
 ]

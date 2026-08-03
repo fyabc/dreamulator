@@ -40,14 +40,6 @@ from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
-# Check for opensimplex
-try:
-    import opensimplex
-    _HAS_OPENSIMPLEX = True
-except ImportError:
-    _HAS_OPENSIMPLEX = False
-
-
 # ---------------------------------------------------------------------------
 # fBm noise on CVT cells
 # ---------------------------------------------------------------------------
@@ -60,7 +52,10 @@ def _compute_noise_elementwise_xyz(
     frequency: float,
     seed: int,
 ) -> np.ndarray:
-    """Compute 3D Simplex noise at scattered points on the sphere.
+    """Compute 3D noise at scattered points on the sphere.
+
+    Stage 1.1: Numba-JIT Perlin kernel (``noise_kernels``) replaces the
+    former per-cell scalar ``opensimplex.noise3`` calls (~44 µs → ~0.1 µs).
 
     Args:
         x, y, z: (n,) coordinates on unit sphere.
@@ -70,49 +65,14 @@ def _compute_noise_elementwise_xyz(
     Returns:
         (n,) noise values approximately in [-1, 1].
     """
-    if not _HAS_OPENSIMPLEX:
-        return _fallback_noise_xyz(x, y, z, frequency, seed)
+    from .noise_kernels import noise_on_points
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="overflow encountered")
-        opensimplex.seed(seed)
-    fx = (x * frequency).ravel()
-    fy = (y * frequency).ravel()
-    fz = (z * frequency).ravel()
-
-    n = len(fx)
-    result = np.empty(n, dtype=np.float64)
-
-    # Process in chunks for memory efficiency
-    chunk_size = 50_000
-    for start in range(0, n, chunk_size):
-        end = min(start + chunk_size, n)
-        for j in range(start, end):
-            result[j] = opensimplex.noise3(float(fx[j]), float(fy[j]), float(fz[j]))
-
-    return result
-
-
-def _fallback_noise_xyz(
-    x: np.ndarray,
-    y: np.ndarray,
-    z: np.ndarray,
-    frequency: float,
-    seed: int,
-) -> np.ndarray:
-    """Fallback pseudo-noise using random hash when opensimplex unavailable."""
-    rng = np.random.default_rng(seed)
-    # Use a simple hash-based approach
-    n = len(x)
-    # Quantize coordinates to grid and hash
-    ix = np.floor(x * frequency * 100).astype(np.int64)
-    iy = np.floor(y * frequency * 100).astype(np.int64)
-    iz = np.floor(z * frequency * 100).astype(np.int64)
-    # Hash to pseudo-random values
-    h = (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791) ^ seed
-    h = (h * h) >> 8
-    return ((h & 0xFFFF).astype(np.float64) / 32768.0 - 1.0)
+    return noise_on_points(
+        (x * frequency).ravel(),
+        (y * frequency).ravel(),
+        (z * frequency).ravel(),
+        seed,
+    )
 
 
 def generate_fbm_on_cells(
@@ -829,47 +789,39 @@ def _anisotropic_fbm(
     z = np.array([c.z for c in mesh.cells], dtype=np.float64)
 
     anisotropy = config.noise_anisotropy
-    if anisotropy <= 0.0 or boundary_strike is None:
-        # Fall through to isotropic fBm
-        pass
+
+    # Vectorized strike frame (Stage 1.1): boundary_strike dict → (n, 3) array
+    # once, outside the octave loop (formerly re-looked-up per cell per octave).
+    strike_arr: np.ndarray | None = None
+    if anisotropy > 0.0 and boundary_strike is not None:
+        strike_arr = np.zeros((n, 3), dtype=np.float64)
+        for i, s in boundary_strike.items():
+            strike_arr[i] = s
 
     result = np.zeros(n, dtype=np.float64)
     amplitude = 1.0
     frequency = config.noise_scale
 
     for octave in range(config.noise_octaves):
-        if anisotropy > 0.0 and boundary_strike is not None:
-            # Stretch coordinates along local strike direction
-            fx = np.zeros(n, dtype=np.float64)
-            fy = np.zeros(n, dtype=np.float64)
-            fz = np.zeros(n, dtype=np.float64)
+        if strike_arr is not None:
+            # Stretch coordinates along local strike direction (vectorized)
+            sx = strike_arr[:, 0]
+            sy = strike_arr[:, 1]
+            sz = strike_arr[:, 2]
+            has_strike = np.any(strike_arr != 0.0, axis=1)
 
-            for i in range(n):
-                strike = boundary_strike.get(i)
-                if strike is not None:
-                    # strike = direction vector of boundary chain at this cell
-                    sx, sy, sz = strike
-                    # Tangential stretch (along strike): compress
-                    stretch_along = 1.0 / (1.0 + anisotropy)
-                    # Perpendicular stretch: expand
-                    stretch_across = 1.0 + anisotropy
+            along = x * sx + y * sy + z * sz
+            px = x - along * sx
+            py = y - along * sy
+            pz = z - along * sz
+            across = np.sqrt(px * px + py * py + pz * pz)
 
-                    # Project coordinates onto strike frame
-                    pos = np.array([x[i], y[i], z[i]])
-                    along = np.dot(pos, [sx, sy, sz])
-                    across = np.linalg.norm(pos - along * np.array([sx, sy, sz]))
-
-                    # Apply anisotropic stretch
-                    fa = along * stretch_along
-                    fb = across * stretch_across
-                    # Reconstruct stretched position (approximate)
-                    fx[i] = fa * sx + fb * (x[i] - along * sx)
-                    fy[i] = fa * sy + fb * (y[i] - along * sy)
-                    fz[i] = fa * sz + fb * (z[i] - along * sz)
-                else:
-                    fx[i] = x[i]
-                    fy[i] = y[i]
-                    fz[i] = z[i]
+            # Tangential compress / perpendicular expand
+            fa = along / (1.0 + anisotropy)
+            fb = across * (1.0 + anisotropy)
+            fx = np.where(has_strike, fa * sx + fb * px, x)
+            fy = np.where(has_strike, fa * sy + fb * py, y)
+            fz = np.where(has_strike, fa * sz + fb * pz, z)
 
             noise = _compute_noise_elementwise_xyz(
                 fx, fy, fz,
@@ -878,7 +830,8 @@ def _anisotropic_fbm(
             )
         else:
             noise = _compute_noise_elementwise_xyz(
-                x * frequency, y * frequency, z * frequency,
+                x, y, z,
+                frequency,
                 config.seed + octave * 1000,
             )
 

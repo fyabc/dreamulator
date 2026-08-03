@@ -12,7 +12,6 @@ on the CVT mesh and writes results into `VoronoiCell` fields in-place.
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from typing import TYPE_CHECKING
 
@@ -283,46 +282,47 @@ def _compute_graph_gradient(
         Gradient vectors tangent to sphere, shape (N, 3).
     """
     n = mesh.num_cells
+
+    # Stage 1.3: vectorized over a flat directed-edge table (was per-cell,
+    # per-neighbour scalar numpy ops).
+    _src: list[int] = []
+    _dst: list[int] = []
+    for _i, _cell in enumerate(mesh.cells):
+        for _j in _cell.neighbors:
+            if 0 <= _j < n:
+                _src.append(_i)
+                _dst.append(_j)
+    src = np.asarray(_src, dtype=np.int64)
+    dst = np.asarray(_dst, dtype=np.int64)
+
+    node_i = nodes_xyz[src]
+    node_j = nodes_xyz[dst]
+
+    # Angular distance (radians)
+    dot = np.clip(np.einsum("ij,ij->i", node_i, node_j), -1.0, 1.0)
+    dist = np.arccos(dot)
+
+    # Direction from i to j (tangent to sphere)
+    direction = node_j - node_i
+    radial = np.einsum("ij,ij->i", direction, node_i)
+    direction = direction - radial[:, None] * node_i
+    dir_norm = np.linalg.norm(direction, axis=1)
+    valid = (dist >= 1e-9) & (dir_norm >= 1e-9)
+
+    # Weight = 1/distance (closer neighbours more influential); invalid
+    # edges contribute zero weight, so their direction need not be unit.
+    weight = np.zeros_like(dist)
+    weight[valid] = 1.0 / dist[valid]
+
+    diff = scalar[dst] - scalar[src]
+    contrib = (weight * diff)[:, None] * direction
+
     grad = np.zeros((n, 3), dtype=np.float64)
-
-    for i in range(n):
-        neighbors = mesh.cells[i].neighbors
-        if not neighbors:
-            continue
-
-        node_i = nodes_xyz[i]
-        g = np.zeros(3, dtype=np.float64)
-        total_weight = 0.0
-
-        for j in neighbors:
-            if j < 0 or j >= n:
-                continue
-            node_j = nodes_xyz[j]
-
-            # Angular distance (radians)
-            dot = np.clip(np.dot(node_i, node_j), -1.0, 1.0)
-            dist = math.acos(float(dot))
-            if dist < 1e-9:
-                continue
-
-            # Direction from i to j (tangent to sphere)
-            direction = node_j - node_i
-            # Remove radial component
-            radial_component = np.dot(direction, node_i)
-            direction = direction - radial_component * node_i
-            dir_norm = np.linalg.norm(direction)
-            if dir_norm < 1e-9:
-                continue
-            direction /= dir_norm
-
-            # Weight = 1/distance (closer neighbours more influential)
-            weight = 1.0 / dist
-            diff = scalar[j] - scalar[i]
-            g += weight * diff * direction
-            total_weight += weight
-
-        if total_weight > 1e-9:
-            grad[i] = g / total_weight
+    np.add.at(grad, src, contrib)
+    weight_sum = np.zeros(n, dtype=np.float64)
+    np.add.at(weight_sum, src, weight)
+    mask = weight_sum > 1e-9
+    grad[mask] /= weight_sum[mask, None]
 
     return grad
 
@@ -348,27 +348,19 @@ def _geostrophic_wind(
     Returns:
         Geostrophic wind vectors (m/s), shape (N, 3).
     """
-    n = len(grad_p)
-    wind = np.zeros((n, 3), dtype=np.float64)
     rho = 1.225  # air density kg/m³
 
-    for i in range(n):
-        if abs(f_coriolis[i]) < 1e-8:
-            # Near equator: geostrophic approximation fails.
-            # Fall back to direct down-gradient flow (simplified trade winds).
-            wind[i] = -grad_p[i] * 0.3
-            continue
-
-        # k̂ × ∇P, where k̂ is the local radial direction
-        k_hat = nodes_xyz[i]
-        # k_hat × grad_p[i] (right-hand rule)
-        wind[i] = np.cross(k_hat, grad_p[i]) / (f_coriolis[i] * rho)
+    # Stage 1.3: fully vectorized (was two per-cell loops).
+    weak = np.abs(f_coriolis) < 1e-8
+    wind = np.cross(nodes_xyz, grad_p) / (f_coriolis[:, None] * rho)
+    # Near equator the geostrophic approximation fails — fall back to
+    # direct down-gradient flow (simplified trade winds).
+    wind[weak] = -grad_p[weak] * 0.3
 
     # Clamp to reasonable wind speeds (0–30 m/s at surface)
-    for i in range(n):
-        speed = np.linalg.norm(wind[i])
-        if speed > 30.0:
-            wind[i] *= 30.0 / speed
+    speed = np.linalg.norm(wind, axis=1)
+    over = speed > 30.0
+    wind[over] *= (30.0 / speed[over])[:, None]
 
     return wind
 
@@ -472,6 +464,45 @@ def _compute_precipitation_bfs(
     # Land evapotranspiration: ~40% of ocean rate (soil + vegetation recycling)
     land_moisture = np.where(is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0)
 
+    # Stage 1.3 precompute: the wind field is invariant across passes, so
+    # build the directed-edge table and per-cell downwind candidate lists
+    # ONCE. Each cell's candidates are its valid neighbours sorted by wind
+    # alignment (descending, dot > −0.3 kept) — this exactly reproduces the
+    # original "best unvisited downwind neighbour" selection: the original
+    # picks the highest-alignment unvisited neighbour, i.e. the first
+    # unvisited entry in this sorted list.
+    wind_speed_all = np.linalg.norm(wind, axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        wind_unit = wind / np.maximum(wind_speed_all, 1e-9)[:, None]
+
+    _src: list[int] = []
+    _dst: list[int] = []
+    for _i, _cell in enumerate(mesh.cells):
+        for _j in _cell.neighbors:
+            if 0 <= _j < n:
+                _src.append(_i)
+                _dst.append(_j)
+    src = np.asarray(_src, dtype=np.int64)
+    dst = np.asarray(_dst, dtype=np.int64)
+    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
+    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
+    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
+    edge_norm = np.linalg.norm(edge_vec, axis=1)
+    valid_edge = edge_norm >= 1e-9
+    edge_dir = np.zeros_like(edge_vec)
+    edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
+    align = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, wind_unit[src]), -1.0)
+
+    # CSR layout: per-cell candidates sorted by alignment (descending).
+    keep = align > -0.3
+    src_k = src[keep]
+    align_k = align[keep]
+    order = np.lexsort((-align_k, src_k))  # src asc, align desc (stable ties)
+    cand_dst = dst[keep][order]
+    counts = np.bincount(src_k[order], minlength=n)
+    offsets = np.zeros(n + 1, dtype=np.int64)
+    np.cumsum(counts, out=offsets[1:])
+
     # Step 2: Multi-pass advection
     # Each pass: start from ocean + land moisture, then BFS downwind.
     for _pass in range(_MOISTURE_ADVECTION_STEPS):
@@ -503,37 +534,17 @@ def _compute_precipitation_bfs(
             cell_moisture = pass_moisture[node] if is_land[node] else moisture[node]
             moisture[node] = cell_moisture  # sync for tracking
 
-            wind_i = wind[node]
-            wind_speed = float(np.linalg.norm(wind_i))
-
-            if wind_speed < _MIN_WIND_SPEED or cell_moisture < 1.0:
+            if wind_speed_all[node] < _MIN_WIND_SPEED or cell_moisture < 1.0:
                 continue
 
-            # Find the best downwind neighbour
+            # Best downwind neighbour = first unvisited candidate (the list
+            # is pre-sorted by wind alignment; see precompute above).
             best_neighbor = -1
-            best_dot = -0.3  # minimum alignment to consider "downwind"
-
-            for j in mesh.cells[node].neighbors:
-                if j < 0 or j >= n:
-                    continue
-                if visited[j]:
-                    continue
-
-                # Edge direction from node to neighbour
-                edge = nodes_xyz[j] - nodes_xyz[node]
-                # Remove radial component
-                radial = np.dot(edge, nodes_xyz[node])
-                edge = edge - radial * nodes_xyz[node]
-                edge_norm = float(np.linalg.norm(edge))
-                if edge_norm < 1e-9:
-                    continue
-                edge /= edge_norm
-
-                # Alignment with wind direction
-                dot = float(np.dot(wind_i / max(wind_speed, 1e-9), edge))
-                if dot > best_dot:
-                    best_dot = dot
+            for k in range(offsets[node], offsets[node + 1]):
+                j = cand_dst[k]
+                if not visited[j]:
                     best_neighbor = j
+                    break
 
             if best_neighbor < 0:
                 continue
@@ -575,7 +586,8 @@ def _compute_precipitation_bfs(
                 # Ocean → ocean: no net precipitation
                 pass
 
-            if best_neighbor not in visited:
+            # NB: direct index check — `x not in ndarray` is an O(n) scan
+            if not visited[best_neighbor]:
                 queue.append(best_neighbor)
 
         # After pass: accumulate precipitation into global totals
@@ -600,15 +612,15 @@ def _compute_precipitation_bfs(
     precip += itcz_enhancement
 
     # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
-    for i in range(n):
-        if not is_land[i] or abs(lat_deg[i]) > 35.0:
-            continue
-        has_ocean_neighbor = any(
-            j >= 0 and j < n and is_ocean[j] for j in mesh.cells[i].neighbors
-        )
-        if has_ocean_neighbor:
-            monsoon_factor = 1.5 if abs(lat_deg[i]) < 20.0 else 1.3
-            precip[i] *= monsoon_factor
+    # (vectorized over the edge table, Stage 1.3)
+    abs_lat = np.abs(lat_deg)
+    tropical_land = is_land & (abs_lat <= 35.0)
+    coastal_edges = tropical_land[src] & is_ocean[dst]
+    has_ocean_neighbor = np.zeros(n, dtype=bool)
+    has_ocean_neighbor[src[coastal_edges]] = True
+    monsoon_cells = tropical_land & has_ocean_neighbor
+    precip[monsoon_cells & (abs_lat < 20.0)] *= 1.5
+    precip[monsoon_cells & (abs_lat >= 20.0)] *= 1.3
 
     # Step 5: Local convection (afternoon thunderstorms over warm land)
     # Temperature > 10 °C → thermal convection produces background precipitation.
