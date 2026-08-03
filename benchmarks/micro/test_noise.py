@@ -37,7 +37,10 @@ def test_kernel_noise_100k(benchmark):
     rng = np.random.default_rng(0)
     pts = rng.random((100_000, 3))
     x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
-    benchmark.pedantic(lambda: noise_on_points(x, y, z, 42), rounds=5, iterations=1)
+    # warmup_rounds=1 absorbs the one-time Numba JIT compilation
+    benchmark.pedantic(
+        lambda: noise_on_points(x, y, z, 42), rounds=5, iterations=1, warmup_rounds=1
+    )
 
 
 def test_kernel_fbm_100k_6oct(benchmark):
@@ -48,4 +51,5 @@ def test_kernel_fbm_100k_6oct(benchmark):
         lambda: fbm_on_points(x, y, z, 42, 6, lacunarity=2.0, persistence=0.5),
         rounds=5,
         iterations=1,
+        warmup_rounds=1,
     )
