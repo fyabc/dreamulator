@@ -9,10 +9,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
+
+if TYPE_CHECKING:
+    from .geography import GeographySpec
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +86,16 @@ class TerrainPipelineConfig:
     #   0.25–0.35 → Earth-like balance
     #   > 0.5 → dry world (small seas, mostly land)
     target_land_fraction: float = 0.29
+
+    # ---- Authored geography (continent anchoring, map/geography.py) ----
+    # GeographySpec loaded from geography.yaml by the engine. None = pure
+    # procedural (per-plate crust fractions). When present, crust is assigned
+    # from a per-cell land-bias field via global threshold instead.
+    geography: GeographySpec | None = None
+    # Blend weight of the authored land-bias field vs fBm texture when
+    # geography is present: score = w*field + (1-w)*fbm.
+    # 1.0 = hard anchors (sharp), 0.0 = pure noise (anchors ignored).
+    anchor_weight: float = 0.6
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).

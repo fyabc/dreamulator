@@ -453,7 +453,93 @@ plates:
   # ... 更多板块
 ```
 
-### 3.5 与现有模型集成
+### 3.5 地理锚定（geography.yaml）
+
+默认的地壳分配（§3.3）是**纯程序化**的——大陆落在哪里完全由纬度偏好 + fBm
+噪声决定，作者无法控制。对于"样板世界"（如 gaia-m），世界构建者往往已经在
+设定文档里写死了海陆格局（哪个大陆在哪、多大的洋），需要让引擎**按设定生成**。
+
+**业界先例**：Gleba 支持"自定义陆块概率图导入"来引导大陆生成；Azgaar 用
+heightmap 模板/手绘高度图控制陆地。Dreamulator 的等价物是**机器可读的地理规格
+→ 逐 cell 陆地偏置场 → 全局阈值**，实现在 `src/dreamulator/map/geography.py`。
+
+#### 规格文件
+
+`data/worlds/<world>/layers/geological/input/geography.yaml`（可选；缺省时管线
+行为与 §3.3 完全一致）。由 `GeologicalEngine._load_config` 经
+`load_geography_spec()` 载入并挂到 `config.geography`。
+
+```yaml
+version: 1
+land_fraction_target: 0.28      # 缺省则用 config.target_land_fraction
+hemisphere_land_bias: 0.10      # >0 北半球偏陆（按 sin(lat) 平滑加权）
+reapply_after_tectonics: true   # 构造演化后重新锚定（见下）
+features:
+  - name: 世界岛
+    kind: continent             # 语义标签：continent / archipelago / plateau /
+                                #   ocean_basin / rift_sea / shallow_sea / isthmus
+    lon: -90.0
+    lat: 0.0
+    radius_deg: 35.0            # 圆半径；拉长特征 = 半短轴（半宽）
+    strength: 0.85              # + 陆地 … − 海洋；|strength|>1 用于"切开"大陆
+    elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
+    bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
+```
+
+#### 陆地偏置场
+
+对每个 cell（单位球面坐标 **p**），把各 feature 的贡献叠加成偏置场
+`field ∈ [-1, 1]`（正=陆地、负=海洋）：
+
+1. 计算到 feature 中心 **c** 的大圆距 `d = arccos(p·c)`。
+2. **圆/极点特征**：`q = d / radius`。
+3. **拉长特征**（裂谷海、地峡）：在中心切平面内把偏移分解为沿半长轴分量
+   `along` 与垂直分量 `across`，取椭圆度量
+   `q = √((along/a)² + (across/b)²)`（`a = radius·elongation`、`b = radius`）。
+   注意：切平面投影在**对跖点**会退化（偏移→0 → q→0，产生假性满强度），
+   因此先令 `d > a` 的 cell 直接为 0——这同时排除了对跖点。
+4. 核函数为余弦钟形（边缘 C¹ 连续）：`kernel(q) = 0.5(1 + cos(πq))`（q<1），
+   否则 0。贡献 = `strength · kernel`。
+5. 叠加全部 feature，再加 `hemisphere_land_bias · sin(lat)`，clamp 到 [-1, 1]。
+
+#### 地壳赋值（全局阈值）
+
+有 spec 时，`apply_geography_crust()` 用**全局阈值**替代 §3.3 的"每板块随机
+比例"：
+
+```
+score = anchor_weight · field + (1 − anchor_weight) · fBm
+```
+
+`anchor_weight`（`config.anchor_weight`，默认 0.6）混合锚定场与 fBm 纹理；
+fBm 的 seed = `config.seed + 500`（确定性）。按 score 降序取前
+`land_fraction_target × N` 个 cell 为 continental，其余 oceanic。这样：
+
+- 命名大陆（正场强）稳定落在锚点；命名大洋（负场）被压到阈值以下。
+- fBm 让海岸线保持分形、让弱场区（如破碎群岛）碎成岛链。
+- 全局海陆比精确命中 `land_fraction_target`。
+
+#### 注入点与构造漂移
+
+- **plates 阶段**：`_generate_plates_impl` 检测到 `config.geography` 时改走
+  `apply_geography_crust`（板块仍照常生成，供 tectonics/boundaries 使用，
+  只有地壳被锚定）。
+- **tectonics 阶段后**：板块运动会带着地壳漂移（crust 粘在 cell 上），大陆会
+  离开锚点。若 `reapply_after_tectonics: true`，演化结束后用**同一 seed-确定场**
+  重新锚定一次，大陆回到设定位置；而 tectonics 产生的边界/造山数据
+  （`boundary_type`、`distance_to_boundary_km`、`convergence_rate_cm_yr`）独立存储，
+  山脉得以保留。
+
+#### 已知限制
+
+- **海岸线偏直**：海陆判定在 cell 粒度（~76 km @ 100k cells），海岸线沿 cell
+  边、过于平直。改进方向：更高 cell 密度 / 海岸带高频噪声扰动 / sub-cell 阈值化。
+- **浅海深度**：`shallow_sea` 目前只锚定"此处为洋"，水深仍是双峰基准
+  （oceanic ≈ −3800 m），无法表达陆缘浅海（<200 m），需后续海底高程控制。
+- **参数需调优**：feature 的 radius/strength/elongation 是作者旋钮，需按渲染
+  结果迭代（如"切开大陆"要求裂谷 `|strength|` 超过下伏大陆 strength）。
+
+### 3.6 与现有模型集成
 
 新板块模型映射到现有 `TectonicPlate`（`src/dreamulator/map/models.py`）：
 

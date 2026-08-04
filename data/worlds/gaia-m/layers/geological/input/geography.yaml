@@ -1,0 +1,98 @@
+# Gaia-M 海陆分布锚定规格（机器可读）
+#
+# 与 geography.md（2026-08 修改后的不对称混合案）一一对应。地形管线的
+# plate 阶段读取本文件，把每个 feature 叠加成逐 cell 的"陆地偏置场"
+# ([-1,+1]：正=陆地、负=海洋)，再以全局阈值替代默认的"每板块随机大陆比例"，
+# 让命名大陆/大洋真正落到指定位置。构造演化后按 reapply_after_tectonics
+# 重新锚定，防止大陆随板块漂移离开锚点。
+#
+# 字段语义（见 src/dreamulator/map/geography.py）：
+#   kind          语义标签（continent/archipelago/plateau/ocean_basin/
+#                 rift_sea/shallow_sea/isthmus）
+#   lon/lat       锚点中心（度）。极点特征 lon 任意
+#   radius_deg    圆半径；拉长特征 = 半短轴（半宽）
+#   strength      +1 强陆地 … −1 强海洋
+#   elongation    半长轴/半短轴（≥1，1=圆）
+#   bearing_deg   半长轴朝向（0=北，90=东）
+#
+# 角度→距离换算（R=6817 km，1°≈119 km）：
+#   世界岛 0.9×10^8 km² ≈ 表面积 15%；大裂谷海 600 km 宽×8000 km 长。
+# 注：以下数值为首轮初值，需在重建后按地貌对照 geography.md 迭代微调。
+# 已知局限：shallow_sea 的"浅"（水深<200 m）暂无法由二值地壳表达，
+# 需后续海底高程控制；本轮仅保证海陆格局正确。
+
+version: 1
+land_fraction_target: 0.28      # 与 terrain_config.target_land_fraction 对齐
+hemisphere_land_bias: 0.10      # 北半球偏陆（设定：北半球占 62% 陆地）
+reapply_after_tectonics: true   # 构造演化后重锚定，保住正典大陆
+
+features:
+  # ---- 陆块（侧点 + 极点）----
+  - name: 世界岛
+    kind: continent
+    lon: -90.0                  # 后随点 ~90°W
+    lat: 0.0
+    radius_deg: 35.0            # 半短轴；拉长后面积约 15% 表面积
+    strength: 0.85              # <裂谷强度，保证裂谷能切开（见大裂谷海）
+    elongation: 1.6
+    bearing_deg: 0.0            # 南北向拉长（首轮初值，待调）
+
+  - name: 大裂谷海
+    kind: rift_sea
+    lon: -90.0                  # 纵贯世界岛中部
+    lat: 0.0
+    radius_deg: 3.0             # 半宽 ~360 km（保证中分辨率可分辨，全分辨率更清晰）
+    strength: -2.0              # 强度须显著超过世界岛(+0.85)才能切穿 → 净场强负
+    elongation: 11.0            # 半长轴 ~33° → 总长 ~8000 km
+    bearing_deg: 0.0            # 南北向
+
+  - name: 破碎群岛带
+    kind: archipelago
+    lon: 90.0                   # 前导点 ~90°E
+    lat: 0.0
+    radius_deg: 25.0
+    strength: 0.20              # 弱正场 → cell 落在阈值附近，噪声碎成群岛
+    elongation: 1.0
+    bearing_deg: 0.0
+
+  - name: 北极孤立大陆
+    kind: plateau
+    lon: 0.0                    # 极点，lon 任意
+    lat: 90.0
+    radius_deg: 18.0
+    strength: 1.0
+    elongation: 1.0
+
+  - name: 北纬45度地峡
+    kind: isthmus
+    lon: -90.0                  # 连接世界岛与北极大陆
+    lat: 55.0
+    radius_deg: 1.5             # 半宽 ~180 km（总宽 ~300 km 量级）
+    strength: 0.7
+    elongation: 15.0            # 南北向陆桥
+    bearing_deg: 0.0
+
+  # ---- 大洋（向星 / 背星点 + 南极浅海）----
+  - name: Aegis深渊洋
+    kind: ocean_basin
+    lon: 0.0                    # 向星点
+    lat: 0.0
+    radius_deg: 45.0
+    strength: -1.0              # 最深海洋
+    elongation: 1.0
+
+  - name: 虚空洋
+    kind: ocean_basin
+    lon: 180.0                  # 背星点
+    lat: 0.0
+    radius_deg: 40.0
+    strength: -0.8
+    elongation: 1.0
+
+  - name: 南极浅海
+    kind: shallow_sea
+    lon: 0.0                    # 极点，lon 任意
+    lat: -90.0
+    radius_deg: 20.0
+    strength: -0.2              # 弱海洋（浅海，打破南北对称）；水深待后续
+    elongation: 1.0

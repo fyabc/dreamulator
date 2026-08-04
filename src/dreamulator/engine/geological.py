@@ -28,7 +28,7 @@ class GeologicalEngine(BaseEngine):
     name = "geological"
     layer = Layer.GEOLOGICAL
     requires: list[str] = ["astronomy"]
-    input_files = ["terrain_config.yaml"]
+    input_files = ["terrain_config.yaml", "geography.yaml"]
     output_files = [
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.json",
@@ -192,6 +192,12 @@ class GeologicalEngine(BaseEngine):
         for key in ("num_nodes", "num_plates", "seed", "tectonic_steps"):
             if key in pars:
                 setattr(cfg, key, pars[key])
+
+        # Authored geography (continent anchoring). Optional: absent → pure
+        # procedural crust assignment. See map/geography.py.
+        from dreamulator.map.geography import load_geography_spec
+
+        cfg.geography = load_geography_spec(self.find_input("geography.yaml"))
 
         # Canonical physical parameters from planets.yaml + stellar data
         # (satellite-aware stellar lookup — see physical_inputs docstring).

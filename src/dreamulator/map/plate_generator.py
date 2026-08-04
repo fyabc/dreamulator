@@ -553,13 +553,22 @@ def _generate_plates_impl(
     )
 
     # 4. Crust types
-    logger.info("  Step 4/5: Assigning crust types")
-    assign_crust_types(
-        mesh, cell_plate_map, rng,
-        config.continental_fraction_min,
-        config.continental_fraction_max,
-        config.lat_bias,
-    )
+    if config.geography is not None:
+        # Authored geography: assign crust from the land-bias field via a
+        # global threshold (realizes named continents/oceans). Plates are still
+        # generated above for tectonics/boundaries; only crust is anchored.
+        logger.info("  Step 4/5: Assigning crust types (authored geography)")
+        from .geography import apply_geography_crust
+
+        apply_geography_crust(mesh, config)
+    else:
+        logger.info("  Step 4/5: Assigning crust types")
+        assign_crust_types(
+            mesh, cell_plate_map, rng,
+            config.continental_fraction_min,
+            config.continental_fraction_max,
+            config.lat_bias,
+        )
 
     # 5. Euler poles
     logger.info("  Step 5/5: Assigning Euler poles")

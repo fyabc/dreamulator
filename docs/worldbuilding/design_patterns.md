@@ -333,4 +333,64 @@ def adaptive_pid(current_value, target, base_rate, history):
 
 ---
 
+## 模式 7：地理锚定（geography.yaml）
+
+**概念**：默认地形是纯程序化的（大陆落在哪由纬度偏好 + fBm 决定，作者无法控制）。
+对于已经在设定文档里写死海陆格局的"样板世界"，用机器可读的 `geography.yaml`
+把命名地貌编码为**锚点**，引擎据此构建逐 cell 陆地偏置场并以全局阈值分配地壳，
+让"世界岛在 90°W、深渊洋在 0°"这类设定真正落地。
+
+这是"受控想象引擎"的典型范例：作者给定宏观格局（锚点），程序补全微观细节
+（fBm 海岸线、岛链碎裂），两者经一个混合权重 (`anchor_weight`) 调和。
+
+**业界先例**：Gleba 的"自定义陆块概率图导入"、Azgaar 的 heightmap 模板/手绘。
+
+```yaml
+# layers/geological/input/geography.yaml
+version: 1
+land_fraction_target: 0.28      # 缺省则用 terrain_config.target_land_fraction
+hemisphere_land_bias: 0.10      # >0 北半球偏陆（sin(lat) 平滑加权）
+reapply_after_tectonics: true   # 构造演化后重新锚定（防大陆随板块漂移）
+
+features:
+  - name: 世界岛
+    kind: continent             # continent/archipelago/plateau/ocean_basin/
+    lon: -90.0                  #   rift_sea/shallow_sea/isthmus
+    lat: 0.0
+    radius_deg: 35.0            # 圆半径；拉长特征 = 半短轴（半宽）
+    strength: 0.85              # + 陆地 … − 海洋；|s|>1 可"切开"下伏大陆
+    elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
+    bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
+
+  - name: 大裂谷海
+    kind: rift_sea
+    lon: -90.0
+    lat: 0.0
+    radius_deg: 3.0
+    strength: -2.0              # 强度须超过世界岛(+0.85)才能切穿
+    elongation: 11.0            # 狭长裂谷
+    bearing_deg: 0.0
+```
+
+**调参要点**：
+
+| 目标 | 做法 |
+|------|------|
+| 大陆落在指定位置 | 正 strength 锚点，半径按目标面积反推 |
+| 大洋保持无陆 | 负 strength 锚点覆盖该区域 |
+| 裂谷切开大陆 | rift_sea 的 `|strength|` 须大于下伏大陆 strength |
+| 群岛而非整块大陆 | 弱正 strength（~0.1–0.2），让 fBm 噪声把陆地碎成岛链 |
+| 全球海陆比 | `land_fraction_target`（全局阈值精确命中） |
+
+**已知限制**：
+- 海岸线偏直（海陆判定在 cell 粒度 ~76 km，见 terrain-pipeline.md §3.5）
+- `shallow_sea` 只锚定"此处为洋"，水深仍是双峰基准，无法表达陆缘浅海
+
+**参考**：
+- `docs/design/terrain-pipeline.md` §3.5 — 地理锚定算法与注入点
+- `src/dreamulator/map/geography.py` — `GeographySpec` / `build_land_bias_field()` / `apply_geography_crust()`
+- `data/worlds/gaia-m/layers/geological/input/geography.yaml` — gaia-m 实例
+
+---
+
 *模式将持续从代码库中提取和补充。每个模式的 "参考" 给出了源码位置以便查阅。*

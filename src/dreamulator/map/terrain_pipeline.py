@@ -226,6 +226,17 @@ def run_terrain_pipeline(
         )
         if _progress is not None:
             _progress.stop()
+
+        # Re-anchor crust to authored geography: tectonics moves plates (crust
+        # sticks to cells and drifts), so continents would wander off their
+        # authored anchors.  Re-stamp from the same seed-deterministic field —
+        # boundary/mountain data (boundary_type, distance_to_boundary_km,
+        # convergence_rate) is stored independently and is preserved.
+        if config.geography is not None and config.geography.reapply_after_tectonics:
+            from .geography import apply_geography_crust
+
+            apply_geography_crust(result.mesh, config)
+
         result.stages_completed.append("tectonics")
         result.stage_timings["tectonics"] = time.time() - t
         _stage_end(result.stage_timings["tectonics"])

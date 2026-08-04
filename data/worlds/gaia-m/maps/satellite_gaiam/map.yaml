@@ -3,7 +3,7 @@ projection: equirectangular
 width: 4096
 height: 2048
 elevation_min_m: -11000
-elevation_max_m: 11188.045515442387
+elevation_max_m: 11593.174095138591
 sea_level_m: 0.0
 voronoi_seed: 42
 voronoi_num_cells: 100000
@@ -12,6 +12,6 @@ cvt_lloyd_iterations: 8
 num_plates: 20
 radius_km: 6816.97
 elevation_range_m:
-- -5320.9
-- 11188.0
+- -4877.7
+- 11593.2
 pipeline_version: 2.0-cvt
