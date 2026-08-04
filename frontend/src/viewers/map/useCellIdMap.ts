@@ -45,6 +45,15 @@ interface UseCellIdMapOptions {
 }
 
 /**
+ * Module-level single-entry cache.  The build is an O(W × H × log N) KD-tree
+ * query pass (~seconds at 4096×2048); mobile+desktop map viewers are mounted
+ * simultaneously and would otherwise each rebuild the identical map.  The
+ * result is deterministic for a given (mesh, width, height), so sharing one
+ * array across consumers is safe.
+ */
+let cellIdCache: { mesh: CVTMesh; width: number; height: number; map: CellIdMap } | null = null
+
+/**
  * Build and cache the cell-ID map.
  *
  * Recomputes only when cvtMesh, width, or height changes.
@@ -57,6 +66,15 @@ export default function useCellIdMap({
 }: UseCellIdMapOptions): CellIdMap | null {
   return useMemo(() => {
     if (!cvtMesh || !cvtMesh.cells.length || width <= 0 || height <= 0) return null
+
+    if (
+      cellIdCache &&
+      cellIdCache.mesh === cvtMesh &&
+      cellIdCache.width === width &&
+      cellIdCache.height === height
+    ) {
+      return cellIdCache.map
+    }
 
     const kdTree = buildCellKDTree(cvtMesh.cells)
     const map = new Uint32Array(width * height)
@@ -81,6 +99,7 @@ export default function useCellIdMap({
       }
     }
 
+    cellIdCache = { mesh: cvtMesh, width, height, map }
     return map
   }, [cvtMesh, width, height])
 }

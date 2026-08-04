@@ -1,16 +1,19 @@
 /**
- * MapLayerPanel — grouped, collapsible layer controls.
+ * MapLayerPanel — grouped layer tree with slot semantics.
  *
- * Layers come in two kinds (see helpContent.ts):
- *  - basemaps — mutually-exclusive whole-map colorings (Paradox-style "map
- *    modes"), rendered as a single-select chip strip.
- *  - overlays — freely composable feature layers, grouped into collapsible
- *    sections with a tri-state (all / some / none) group checkbox (GIS-style).
+ * Every layer has a KIND (see helpContent.ts) that defines how it stacks:
+ *  - `base`     — opaque canvas, exactly one active (radio, slot:base)
+ *  - `thematic` — whole-map coloring over the base, at most one active
+ *                 (radio with a "none" option, slot:thematic)
+ *  - `fill` / `feature` — freely stackable overlays (eye toggle + opacity
+ *                 slider, GIS-style), grouped with a tri-state group checkbox
+ *
+ * Groups (地形·海陆 / 地质构造 / 气候 / …) are thematic UI organisation
+ * only; compositing z-order is kind-driven: base → thematic → fill → feature.
  *
  * The flat `layers: Record<ColorMode, number>` opacity map remains the single
- * source of truth — this panel is a pure view over it, so it scales to the
- * 12–15 layers planned for climate / hydrology / civilization without the old
- * flat list overflowing the narrow sidebar.
+ * source of truth — this panel enforces the slot constraints on change, so
+ * downstream (renderer, URL-free state, static mode) is unaffected.
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -28,11 +31,19 @@ interface MapLayerPanelProps {
   onChange: (state: LayerState) => void
 }
 
-/** An overlay group with its member layers. */
+/** A group with its member layers, split by interaction style. */
 interface LayerGroup {
   id: string
   label: string
-  layers: LayerHelpEntry[]
+  /** base + thematic members (radio rows). */
+  radioMembers: LayerHelpEntry[]
+  /** fill + feature members (eye toggle + slider rows). */
+  toggleMembers: LayerHelpEntry[]
+}
+
+/** True when the layer kind participates in a single-slot (radio) UI. */
+function isRadioKind(l: LayerHelpEntry): boolean {
+  return l.kind === 'base' || l.kind === 'thematic'
 }
 
 /* ------------------------------------------------------------------ */
@@ -92,13 +103,16 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
 
-  const basemaps = useMemo(() => LAYER_HELP.filter((l) => l.kind === 'basemap'), [])
   const groups = useMemo<LayerGroup[]>(
     () =>
-      LAYER_GROUPS.map((g) => ({
-        ...g,
-        layers: LAYER_HELP.filter((l) => l.kind === 'overlay' && l.group === g.id),
-      })).filter((g) => g.layers.length > 0),
+      LAYER_GROUPS.map((g) => {
+        const members = LAYER_HELP.filter((l) => l.group === g.id)
+        return {
+          ...g,
+          radioMembers: members.filter(isRadioKind),
+          toggleMembers: members.filter((l) => !isRadioKind(l)),
+        }
+      }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
     [],
   )
 
@@ -107,51 +121,67 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
     [state.layers],
   )
 
-  /** The active basemap = the one with the highest non-zero opacity. */
-  const activeBasemapId = useMemo(() => {
-    let best: string | null = null
-    let bestOp = 0
-    for (const b of basemaps) {
-      const op = opacityOf(b)
-      if (op > bestOp) {
-        best = b.id
-        bestOp = op
+  /**
+   * Apply an opacity patch enforcing slot constraints: turning ON a
+   * base/thematic layer turns OFF every other layer of the same kind.
+   * fill/feature layers are unconstrained.
+   */
+  const applyPatch = useCallback(
+    (patch: Partial<LayerOpacities>) => {
+      const next: LayerOpacities = { ...state.layers, ...patch }
+      for (const [id, v] of Object.entries(patch)) {
+        if (!v || v <= 0) continue
+        const entry = LAYER_HELP.find((l) => l.id === id)
+        if (!entry || !isRadioKind(entry)) continue
+        for (const other of LAYER_HELP) {
+          if (other.kind === entry.kind && other.id !== id) {
+            next[other.id] = 0
+          }
+        }
       }
-    }
-    return best
-  }, [basemaps, opacityOf])
+      onChange({ layers: next })
+    },
+    [state.layers, onChange],
+  )
 
-  /** Groups with no visible layer start collapsed; the rest start open. */
+  /** Groups with nothing visible start collapsed; the rest start open. */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {}
     for (const g of groups) {
-      const anyVisible = g.layers.some((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0)
+      const members = [...g.radioMembers, ...g.toggleMembers]
+      const anyVisible = members.some((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0)
       init[g.id] = !anyVisible
     }
     return init
   })
 
-  /** Single-select a basemap: it gets its default opacity, all others → 0. */
-  const selectBasemap = useCallback(
-    (b: LayerHelpEntry) => {
-      const next = { ...state.layers }
-      for (const bm of basemaps) {
-        next[bm.id] = bm.id === b.id ? (b.defaultOpacity > 0 ? b.defaultOpacity : 1) : 0
-      }
-      onChange({ layers: next })
+  /** Select a base/thematic layer into its slot. */
+  const selectSlotLayer = useCallback(
+    (l: LayerHelpEntry) => {
+      const op = l.defaultOpacity > 0 ? l.defaultOpacity : l.kind === 'base' ? 1 : 0.85
+      applyPatch({ [l.id]: op })
     },
-    [state.layers, basemaps, onChange],
+    [applyPatch],
   )
+
+  /** Clear the thematic slot ("none" option). */
+  const clearThematic = useCallback(() => {
+    const patch: Partial<LayerOpacities> = {}
+    for (const l of LAYER_HELP) {
+      if (l.kind === 'thematic') patch[l.id] = 0
+    }
+    onChange({ layers: { ...state.layers, ...patch } })
+  }, [state.layers, onChange])
 
   const setLayerOpacity = useCallback(
     (id: ColorMode, v: number) => {
       if (v > 0) lastNonZero.current[id] = v
-      onChange({ layers: { ...state.layers, [id]: v } })
+      applyPatch({ [id]: v })
     },
-    [state.layers, onChange],
+    [applyPatch],
   )
 
-  /** Eye toggle: 0 ↔ last non-zero opacity. */
+  /** Eye toggle (fill/feature): 0 ↔ last non-zero opacity. */
   const toggleLayer = useCallback(
     (l: LayerHelpEntry) => {
       const cur = state.layers[l.id] ?? l.defaultOpacity
@@ -161,64 +191,43 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
     [state.layers, setLayerOpacity],
   )
 
-  /** Group checkbox: all-visible → hide all; else → show all. Ctrl/Cmd+click resets to defaults. */
+  /** Group tri-state (fill/feature members only): all-visible → hide all;
+   *  else → show all. Ctrl/Cmd+click resets members to defaults. */
   const toggleGroup = useCallback(
     (g: LayerGroup, e: React.MouseEvent) => {
-      const visCount = g.layers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length
-      const allVisible = visCount === g.layers.length
-      const next = { ...state.layers }
-      for (const l of g.layers) {
+      const visCount = g.toggleMembers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length
+      const allVisible = visCount === g.toggleMembers.length
+      const patch: Partial<LayerOpacities> = {}
+      for (const l of g.toggleMembers) {
         if (e.ctrlKey || e.metaKey) {
-          next[l.id] = l.defaultOpacity
+          patch[l.id] = l.defaultOpacity
         } else if (allVisible) {
-          next[l.id] = 0
+          patch[l.id] = 0
         } else {
-          next[l.id] = lastNonZero.current[l.id] ?? (l.defaultOpacity > 0 ? l.defaultOpacity : 0.8)
+          patch[l.id] = lastNonZero.current[l.id] ?? (l.defaultOpacity > 0 ? l.defaultOpacity : 0.8)
         }
       }
-      onChange({ layers: next })
+      applyPatch(patch)
     },
-    [state.layers, onChange],
+    [state.layers, applyPatch],
   )
 
   const toggleCollapse = useCallback((gid: string) => {
     setCollapsed((c) => ({ ...c, [gid]: !c[gid] }))
   }, [])
 
+  /** One-line summary for radio-only group headers (active member or 无). */
+  const radioSummary = (g: LayerGroup): string =>
+    g.radioMembers.find((l) => opacityOf(l) > 0)?.label ?? '无'
+
   return (
     <div className="space-y-4">
-      {/* ---- basemap chip strip (single-select "map modes") ---- */}
-      <section>
-        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-          底图
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {basemaps.map((b) => {
-            const active = activeBasemapId === b.id
-            return (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => selectBasemap(b)}
-                title={b.desc}
-                className={`px-2.5 py-1 rounded-full text-[11px] border transition-all duration-150 ${
-                  active
-                    ? 'bg-neon-cyan/15 border-neon-cyan/60 text-neon-cyan shadow-[0_0_8px_rgba(34,211,238,0.25)]'
-                    : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
-                }`}
-              >
-                {b.label}
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ---- overlay groups (collapsible, tri-state) ---- */}
       {groups.map((g) => {
-        const visCount = g.layers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length
-        const checkState = visCount === 0 ? 'none' : visCount === g.layers.length ? 'all' : 'some'
+        const hasToggles = g.toggleMembers.length > 0
+        const visCount = g.toggleMembers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length
+        const checkState = visCount === 0 ? 'none' : visCount === g.toggleMembers.length ? 'all' : 'some'
         const open = !collapsed[g.id]
+        const thematicActive = g.radioMembers.some((l) => l.kind === 'thematic' && opacityOf(l) > 0)
         return (
           <section key={g.id}>
             <div className="flex items-center gap-1 select-none">
@@ -230,14 +239,16 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
               >
                 <Chevron open={open} />
               </button>
-              <button
-                type="button"
-                onClick={(e) => toggleGroup(g, e)}
-                className="p-0.5 rounded hover:bg-gray-700/40"
-                title="整组开/关（Ctrl/⌘+点击：重置为默认）"
-              >
-                <GroupCheck state={checkState} />
-              </button>
+              {hasToggles && (
+                <button
+                  type="button"
+                  onClick={(e) => toggleGroup(g, e)}
+                  className="p-0.5 rounded hover:bg-gray-700/40"
+                  title="整组开/关（Ctrl/⌘+点击：重置为默认）"
+                >
+                  <GroupCheck state={checkState} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => toggleCollapse(g.id)}
@@ -245,14 +256,54 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
               >
                 {g.label}
               </button>
-              <span className="text-[10px] font-mono tabular-nums text-gray-600">
-                {visCount}/{g.layers.length}
-              </span>
+              {hasToggles ? (
+                <span className="text-[10px] font-mono tabular-nums text-gray-600">
+                  {visCount}/{g.toggleMembers.length}
+                </span>
+              ) : (
+                <span className="text-[10px] text-gray-600 truncate max-w-[72px]">
+                  {radioSummary(g)}
+                </span>
+              )}
             </div>
 
             {open && (
               <div className="mt-1.5 ml-[7px] pl-2.5 border-l border-gray-800 space-y-1.5">
-                {g.layers.map((l) => {
+                {/* Thematic groups get a "none" radio (slot may be empty). */}
+                {g.radioMembers.some((l) => l.kind === 'thematic') && (
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="layerslot-thematic"
+                      checked={!thematicActive}
+                      onChange={clearThematic}
+                      className="h-3 w-3 accent-neon-cyan cursor-pointer"
+                    />
+                    <span className="text-[11px] text-gray-400">无</span>
+                  </label>
+                )}
+
+                {/* Radio rows (base / thematic slots). */}
+                {g.radioMembers.map((l) => {
+                  const active = opacityOf(l) > 0
+                  return (
+                    <label key={l.id} className="flex items-center gap-1.5 cursor-pointer" title={l.desc}>
+                      <input
+                        type="radio"
+                        name={`layerslot-${l.kind}`}
+                        checked={active}
+                        onChange={() => selectSlotLayer(l)}
+                        className="h-3 w-3 accent-neon-cyan cursor-pointer"
+                      />
+                      <span className={`text-[11px] ${active ? 'text-gray-200' : 'text-gray-500'}`}>
+                        {l.label}
+                      </span>
+                    </label>
+                  )
+                })}
+
+                {/* Eye + slider rows (fill / feature overlays). */}
+                {g.toggleMembers.map((l) => {
                   const op = opacityOf(l)
                   const pct = Math.round(op * 100)
                   const visible = op > 0

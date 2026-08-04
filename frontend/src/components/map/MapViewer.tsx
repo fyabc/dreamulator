@@ -17,6 +17,7 @@ import { WebGLRenderer } from 'three'
 import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
+import useRafCoalesced from '../../viewers/map/useRafCoalesced'
 import { useGPUReproject, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
 import MapSvgOverlay from './MapSvgOverlay'
 import {
@@ -205,20 +206,30 @@ export default function MapViewer({
   // texture), so hovering never triggers a texture re-bake.
   const reprojectable = projection === 'mollweide' || projection === 'robinson'
 
-  const gpuMaterial = useGPUTerrain({
+  // Opacity sliders fire many events per frame; coalesce so the composite
+  // pass (and any data-driven re-bake) runs at most once per animation frame.
+  const renderLayers = useRafCoalesced(layers)
+
+  const { material: gpuMaterial, texture: gpuTexture, renderComposite: gpuRenderComposite } = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    layers, cvtMesh, cellIdMap,
+    layers: renderLayers, cvtMesh, cellIdMap,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
 
+  // Ref so the (stable) rAF render loop always sees the current callback.
+  const gpuCompositeRef = useRef(gpuRenderComposite)
+  gpuCompositeRef.current = gpuRenderComposite
+
   // GPU reprojection (Mollweide/Robinson): inverse-warp the baked equirect
   // texture.  useGPUReproject manages the material and keeps the sun uniforms
   // updated reactively, so the day/night slider never recompiles the shader.
-  const reprojectSource = gpuMaterial
-    ? (gpuMaterial.uniforms.u_colorMap.value as THREE.Texture)
-    : null
+  // Sample whatever the hook exposes as the current colour source: the FBO
+  // composite while overlays are active, otherwise the plain base texture.
+  // (The FBO is only rendered while overlays are active, so sampling it in the
+  // no-overlay case would read a stale target.)
+  const reprojectSource = gpuTexture
   const gpuReprojectActive = reprojectable && !forceCpuReproject
   const reprojectMaterial = useGPUReproject(
     gpuReprojectActive ? (projection as ReprojectableProjection) : null,
@@ -232,7 +243,7 @@ export default function MapViewer({
   const cpuTexture = useTerrainTexture({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode: layers?.terrain ? 'terrain' : 'landsea', cvtMesh, cellIdMap,
+    colorMode: (renderLayers?.landsea ?? 0) > 0 ? 'landsea' : 'terrain', cvtMesh, cellIdMap,
     projection,
     sunLonRad, sunDecRad, dayNight: dayNightNum,
     // CPU texture is only needed for the CPU paths: Robinson always, and
@@ -329,6 +340,7 @@ export default function MapViewer({
     camera.aspect = containerSize.width / containerSize.height
     camera.updateProjectionMatrix()
     renderer.setSize(containerSize.width, containerSize.height)
+    gpuCompositeRef.current?.(renderer)
     renderer.render(scene, camera)
 
     return () => {
@@ -424,6 +436,8 @@ export default function MapViewer({
         if (ghostRightRef.current)
           ghostRightRef.current.position.set(mesh.position.x + worldW, 0, mesh.position.z)
 
+        // Compose layer textures into the shared target (cheap fullscreen quad).
+        gpuCompositeRef.current?.(renderer)
         renderer.render(scene, camera)
       }
       rafId = requestAnimationFrame(loop)

@@ -22,6 +22,7 @@ import SunControl from '../components/map/SunControl'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
 import HelpPanel from '../components/map/HelpPanel'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
+import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import { normalisedToMeters } from '../viewers/map/utils/projection'
@@ -170,20 +171,19 @@ export default function GlobeViewerPage() {
   })
 
   // --- GPU texture ---
-  const terrainMaterial = useGPUTerrain({
+  // Opacity sliders fire many events per frame; coalesce so the composite
+  // pass (and any data-driven re-bake) runs at most once per animation frame.
+  const renderLayers = useRafCoalesced(layerState.layers)
+
+  const { texture: terrainTexture, renderComposite } = useGPUTerrain({
     elevation: elevData,
     width: elevDims.w, height: elevDims.h,
     seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
-    layers: layerState.layers,
+    layers: renderLayers,
     cvtMesh: cvtMesh ?? null,
     cellIdMap: cellIdMap ?? null,
     flipHorizontal: false,
   })
-
-  const terrainTexture = useMemo(() => {
-    if (!terrainMaterial) return null
-    return (terrainMaterial.uniforms.u_colorMap?.value as THREE.Texture) ?? null
-  }, [terrainMaterial])
 
   // --- KD-tree ---
   const kdTree = useMemo<KDTree3D | null>(() => {
@@ -354,6 +354,7 @@ export default function GlobeViewerPage() {
             ) : (
               <GlobeViewer
                 texture={terrainTexture}
+                renderComposite={renderComposite}
                 onTransition={handleTransition}
                 onCellHover={handleCellHover}
                 onCellClick={handleCellClick}
@@ -441,6 +442,7 @@ export default function GlobeViewerPage() {
           ) : (
             <GlobeViewer
               texture={terrainTexture}
+              renderComposite={renderComposite}
               onTransition={handleTransition}
               onCellHover={handleCellHover}
               onCellClick={handleCellClick}

@@ -1,64 +1,38 @@
 /**
- * useGPUTerrain — GPU-accelerated terrain rendering.
+ * useGPUTerrain — GPU-composited layer rendering (Step 3 of the layer
+ * refactor, see private/plans/map-layer-refactor.md).
  *
- * All color modes (terrain, landsea, plates, boundaries) pre-compute the
- * FULL RGBA colour buffer on the CPU, then upload as a single DataTexture.
- * The fragment shader simply displays the texture — guaranteed no black screen.
+ * Bake/display separation:
+ *  - `layerBakes.getLayerTextures()` bakes one DataTexture PER LAYER, keyed
+ *    only by DATA dependencies (elevation / mesh / cell-id map / sizing) —
+ *    cached at module level so route navigation never re-bakes.
+ *  - A tiny full-screen-quad pass composites the layers
+ *    (base → thematic → fill → feature) into a WebGLRenderTarget, applying
+ *    per-layer opacity on the GPU.
+ *  - The returned display material shows the composited texture.  The public
+ *    interface is unchanged from the old single-texture design:
+ *    `material.uniforms.u_colorMap.value` IS the composited texture, so
+ *    reprojection (Mollweide/Robinson) and the 3D globe consume it as-is.
  *
- * Performance:
- * - terrain/landsea: ~200ms (LUT + hillshading per pixel)
- * - plates/boundaries: ~100ms (cellIdMap palette lookup per pixel)
- * - Pan/zoom: <1ms (just re-display the texture)
+ * Opacity slider drag = uniform update + one cheap GPU composite pass — no
+ * CPU re-bake (the old pipeline re-baked ~8.4M pixels per drag event).
+ *
+ * Usage: call `renderComposite(renderer)` once per frame BEFORE the main
+ * `renderer.render(...)`.  The pass always renders (one fullscreen quad,
+ * ~0.1–0.5 ms) — no shared dirty-flag gating, so pages with several canvases
+ * (mobile + desktop globe layouts, two GL contexts) each refresh their own
+ * framebuffer without racing over one flag.
  */
 
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
 import type { ColorMode } from './TerrainPlane'
-import type { CVTMesh, BoundaryType } from './types'
+import type { CVTMesh } from './types'
 import type { CellIdMap } from './useCellIdMap'
-import {
-  generateAdaptiveTerrainScale,
-  PLATE_COLORS,
-  KOPPEN_COLORS,
-} from './utils/colorScales'
+import { getLayerTextures, type LayerTextures } from './layerBakes'
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function hexRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  return [
-    parseInt(h.substring(0, 2), 16),
-    parseInt(h.substring(2, 4), 16),
-    parseInt(h.substring(4, 6), 16),
-  ]
-}
-
-const BOUNDARY_COLORS: Record<BoundaryType, [number, number, number]> = {
-  convergent: hexRgb('#e53935'),
-  divergent: hexRgb('#43a047'),
-  transform: hexRgb('#fdd835'),
-}
-
-/** Crust colours for interior cells (no boundary type) in the boundaries layer. */
-const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
-  continental:   hexRgb('#c8a96e'),  // warm beige
-  oceanic:       hexRgb('#4a7a9e'),  // muted blue
-  transitional:  hexRgb('#8ea87a'),  // olive green
-}
-
-/** Hotspot chain colour — magenta-pink, distinct from convergent red. */
-const HOTSPOT_COLOR: [number, number, number] = hexRgb('#e040fb')
-
-/** Interior landform colours — paleo-orogeny (brown) and rift (teal). */
-const LANDFORM_COLORS: Record<string, [number, number, number]> = {
-  orogeny: hexRgb('#b8860b'),  // dark goldenrod
-  rift:    hexRgb('#008080'),  // teal
-}
-
-// ---------------------------------------------------------------------------
-// Minimal shaders — just display the pre-computed texture
+// Shaders
 // ---------------------------------------------------------------------------
 
 const vertexShader = /* glsl */ `
@@ -69,17 +43,54 @@ void main() {
 }
 `
 
-const fragmentShader = /* glsl */ `
+/** Composite pass: blend layer textures in kind z-order. */
+const compositeFragmentShader = /* glsl */ `
 precision highp float;
-uniform sampler2D u_colorMap;
+uniform sampler2D u_base;      // opaque canvas (terrain or landsea)
+uniform sampler2D u_thematic;  // e.g. Köppen (alpha=0 where no data)
+uniform sampler2D u_fill;      // e.g. plates
+uniform sampler2D u_feature;   // e.g. boundaries
+uniform float u_thematicOp;
+uniform float u_fillOp;
+uniform float u_featureOp;
+varying vec2 vUv;
+
+vec3 blendLayer(vec3 dst, vec4 src, float op) {
+  float a = src.a * op;
+  return mix(dst, src.rgb, a);
+}
+
+void main() {
+  vec3 color = texture2D(u_base, vUv).rgb;
+  color = blendLayer(color, texture2D(u_thematic, vUv), u_thematicOp);
+  color = blendLayer(color, texture2D(u_fill, vUv), u_fillOp);
+  color = blendLayer(color, texture2D(u_feature, vUv), u_featureOp);
+  gl_FragColor = vec4(color, 1.0);
+}
+`
+
+/**
+ * Display pass: show the active colour source (+ optional day/night).
+ * u_useComposite = 0 → sample the baked base texture DIRECTLY.  This is the
+ * pre-refactor code path, used whenever no overlay layer is active (the common
+ * "plain elevation map" view): zero per-frame composite cost, byte-identical
+ * colours.  u_useComposite = 1 → sample the FBO-composited texture (overlays).
+ */
+const displayFragmentShader = /* glsl */ `
+precision highp float;
+uniform sampler2D u_colorMap;    // FBO-composited texture (overlays active)
+uniform sampler2D u_directBase;  // baked base texture (no overlays)
+uniform float u_useComposite;
 uniform float u_sunLonRad;  // subsolar longitude (radians)
 uniform float u_sunDecRad;  // solar declination (radians)
 uniform float u_dayNight;   // 0 = off, 1 = on
 varying vec2 vUv;
 void main() {
-  vec4 color = texture2D(u_colorMap, vUv);
+  vec4 color = u_useComposite > 0.5
+    ? texture2D(u_colorMap, vUv)
+    : texture2D(u_directBase, vUv);
   if (u_dayNight > 0.5) {
-    // vUv -> geographic (PlaneGeometry + DataTexture flipY=false):
+    // vUv -> geographic (PlaneGeometry + compositing target flipY=false):
     //   lon = vUv.x*360 - 180, lat = vUv.y*180 - 90
     float lonRad = vUv.x * 6.28318530718 - 3.14159265359;
     float latRad = vUv.y * 3.14159265359 - 1.57079632679;
@@ -94,24 +105,6 @@ void main() {
   gl_FragColor = color;
 }
 `
-
-// ---------------------------------------------------------------------------
-// Module-level cache — survives component unmount/remount (React Router nav)
-// ---------------------------------------------------------------------------
-
-interface CacheEntry {
-  // Cache key fields
-  elevation: Float32Array
-  width: number
-  height: number
-  layers: Record<ColorMode, number>
-  cellIdMap: CellIdMap | null | undefined
-  cvtMesh: CVTMesh | null | undefined
-  // Cached result
-  material: THREE.ShaderMaterial
-}
-
-let lastCache: CacheEntry | null = null
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -142,6 +135,28 @@ interface UseGPUTerrainOptions {
   dayNight?: number
 }
 
+/** Internal composite state (one per bake/size). */
+interface CompositeState {
+  target: THREE.WebGLRenderTarget
+  compMat: THREE.ShaderMaterial
+  displayMat: THREE.ShaderMaterial
+  scene: THREE.Scene
+  camera: THREE.OrthographicCamera
+  quad: THREE.Mesh
+}
+
+export interface GPUTerrainResult {
+  /** Display material for the equirectangular path. Null when no elevation
+   *  data is available. */
+  material: THREE.ShaderMaterial | null
+  /** Texture to sample for reprojection / 3D globe: the FBO composite while
+   *  overlays are active, otherwise the plain baked base texture. */
+  texture: THREE.Texture | null
+  /** Composite pass — call once per frame before the main render. No-op while
+   *  no overlay layer is active; safe to call from multiple canvases. */
+  renderComposite: (renderer: THREE.WebGLRenderer) => void
+}
+
 export default function useGPUTerrain({
   elevation,
   width,
@@ -150,7 +165,6 @@ export default function useGPUTerrain({
   elevMinM = -11000,
   elevMaxM = 9000,
   layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
-  hillshadeStrength = 0,
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -158,243 +172,57 @@ export default function useGPUTerrain({
   sunLonRad = 0,
   sunDecRad = 0,
   dayNight = 0,
-}: UseGPUTerrainOptions): THREE.ShaderMaterial | null {
-  const material = useMemo(() => {
+}: UseGPUTerrainOptions): GPUTerrainResult {
+  // --- Bake per-layer textures (DATA-driven only; opacity-independent) ---
+  const baked: LayerTextures | null = useMemo(() => {
     if (!elevation || width <= 0 || height <= 0) return null
+    return getLayerTextures({
+      elevation, width, height, seaLevel, elevMinM, elevMaxM,
+      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap,
+    })
+  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM,
+      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap])
 
-    // Check module-level cache: if inputs match, reuse material instantly
-    if (
-      lastCache &&
-      lastCache.elevation === elevation &&
-      lastCache.width === width &&
-      lastCache.height === height &&
-      lastCache.layers.terrain === layers.terrain &&
-      lastCache.layers.landsea === layers.landsea &&
-      lastCache.layers.plates === layers.plates &&
-      lastCache.layers.boundaries === layers.boundaries &&
-      lastCache.layers.koppen === layers.koppen &&
-      lastCache.cellIdMap === cellIdMap &&
-      lastCache.cvtMesh === cvtMesh
-    ) {
-      return lastCache.material
-    }
+  // --- Composite target + materials (one per bake/size) ---
+  const composite = useMemo<CompositeState | null>(() => {
+    if (!baked) return null
 
-    const totalPixels = width * height
-    const buf = new Uint8Array(totalPixels * 4)
+    const target = new THREE.WebGLRenderTarget(width, height, {
+      depthBuffer: false,
+      stencilBuffer: false,
+    })
+    target.texture.wrapS = THREE.RepeatWrapping
+    target.texture.wrapT = THREE.ClampToEdgeWrapping
+    target.texture.flipY = false
 
-    // Compute normalised sea level from absolute metres
-    const range = elevMaxM - elevMinM || 1
-    const normSeaLevel = (seaLevel - elevMinM) / range
-
-    // --- Step 1: Precompute LUTs for all active layers ---
-    const activeModes = (Object.keys(layers) as ColorMode[]).filter((k) => layers[k] > 0)
-    const terrainLut = activeModes.includes('terrain')
-      ? generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel) : null
-    const landseaLut = activeModes.includes('landsea')
-      ? (() => {
-          const l = new Uint8Array(1024 * 3)
-          const cutoff = Math.round(normSeaLevel * 1023)
-          for (let i = 0; i < 1024; i++) {
-            const c = i <= cutoff ? [30, 60, 120] : [80, 140, 60]
-            l[i*3]=c[0]; l[i*3+1]=c[1]; l[i*3+2]=c[2]
-          }
-          return l
-        })() : null
-
-    // --- Step 2: Build cell colour palettes ---
-    const platesColor = new Map<number, [number, number, number]>()
-    const boundariesColor = new Map<number, [number, number, number]>()
-    const koppenColor = new Map<number, [number, number, number]>()
-    if (cvtMesh && (activeModes.includes('plates') || activeModes.includes('boundaries') || activeModes.includes('koppen'))) {
-      if (activeModes.includes('plates')) {
-        const plateIds = [...new Set(cvtMesh.cells.map((c) => c.plate_id).filter(Boolean))]
-        const palette = new Map<string, [number, number, number]>()
-        plateIds.forEach((pid, idx) => {
-          palette.set(pid!, hexRgb(PLATE_COLORS[idx % PLATE_COLORS.length]))
-        })
-        for (const cell of cvtMesh.cells) {
-          if (cell.plate_id) {
-            const c = palette.get(cell.plate_id)
-            if (c) platesColor.set(cell.id, c)
-          }
-        }
-      }
-      if (activeModes.includes('boundaries')) {
-        for (const cell of cvtMesh.cells) {
-          const bType = cell.boundary_type as BoundaryType | null
-          if (bType) {
-            boundariesColor.set(cell.id, BOUNDARY_COLORS[bType])
-          } else if ((cell as any).hotspot_id) {
-            // Hotspot chain — magenta (overrides crust colour)
-            boundariesColor.set(cell.id, HOTSPOT_COLOR)
-          } else if ((cell as any).landform) {
-            // Interior landform — orogeny (brown) or rift (teal)
-            const lc = LANDFORM_COLORS[(cell as any).landform]
-            if (lc) boundariesColor.set(cell.id, lc)
-          } else {
-            // Interior cell — colour by crust type
-            const crust = (cell as any).crust_type || 'oceanic'
-            const cc = CRUST_INTERIOR_COLORS[crust] ?? CRUST_INTERIOR_COLORS.oceanic
-            boundariesColor.set(cell.id, cc)
-          }
-        }
-      }
-      if (activeModes.includes('koppen')) {
-        for (const cell of cvtMesh.cells) {
-          const kc = cell.koppen_class
-          if (kc && KOPPEN_COLORS[kc]) {
-            koppenColor.set(cell.id, hexRgb(KOPPEN_COLORS[kc]))
-          } else if (cell.elevation < 0) {
-            // Ocean cells without explicit koppen_class
-            koppenColor.set(cell.id, hexRgb(KOPPEN_COLORS['Ocean']))
-          }
-        }
-      }
-    }
-
-    // --- Step 3: Composite all active layers per pixel ---
-    // Alpha-blend helper
-    const blend = (dst: number[], src: [number, number, number], alpha: number) => {
-      dst[0] = Math.round(dst[0] * (1 - alpha) + src[0] * alpha)
-      dst[1] = Math.round(dst[1] * (1 - alpha) + src[1] * alpha)
-      dst[2] = Math.round(dst[2] * (1 - alpha) + src[2] * alpha)
-    }
-
-    for (let i = 0; i < totalPixels; i++) {
-      const elev = elevation[i]
-      const cellId = cellIdMap?.[i]
-      const accum = [0, 0, 0] // RGB accumulator
-
-      // Layer 1: Terrain
-      if (terrainLut) {
-        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-        const c: [number, number, number] = [terrainLut[idx*4], terrainLut[idx*4+1], terrainLut[idx*4+2]]
-        // Water depth darkening
-        if (elev < normSeaLevel) {
-          const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
-          const f = 1 - waterDepthFactor * depth
-          c[0] = Math.round(c[0] * f); c[1] = Math.round(c[1] * f); c[2] = Math.round(c[2] * f)
-        }
-        blend(accum, c, layers.terrain)
-      }
-
-      // Layer 2: Land/sea
-      if (landseaLut) {
-        const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-        const c: [number, number, number] = [landseaLut[idx*3], landseaLut[idx*3+1], landseaLut[idx*3+2]]
-        blend(accum, c, layers.landsea)
-      }
-
-      // Layer 3: Plates
-      if (layers.plates > 0 && cellId != null) {
-        const pc = platesColor.get(cellId)
-        if (pc) blend(accum, pc, layers.plates)
-      }
-
-      // Layer 4: Boundaries
-      if (layers.boundaries > 0 && cellId != null) {
-        const bc = boundariesColor.get(cellId)
-        if (bc) blend(accum, bc, layers.boundaries)
-      }
-
-      // Layer 5: Koppen climate classification
-      if (layers.koppen > 0 && cellId != null) {
-        const kc = koppenColor.get(cellId)
-        if (kc) blend(accum, kc, layers.koppen)
-      }
-
-      const pi = i * 4
-      buf[pi] = accum[0]; buf[pi + 1] = accum[1]; buf[pi + 2] = accum[2]; buf[pi + 3] = 255
-    }
-
-    // --- Coastline detection: cell-level, not pixel-level ---
-    // Pixels are assigned to the nearest CVT cell (KD-tree).  Two adjacent
-    // pixels may belong to *different* cells.  Draw the coastline only when
-    // the two cells are on opposite sides of the sea-level line — this
-    // prevents false coastlines within a single coastal-plain cell.
-    if (layers.terrain > 0 && cvtMesh && cellIdMap) {
-      const COAST_COLOR = [20, 20, 20] as const
-      // Pre-compute land/ocean per cell
-      const cellLand = new Map<number, boolean>()
-      for (const cell of cvtMesh.cells) {
-        cellLand.set(cell.id, cell.elevation >= seaLevel)
-      }
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const i = y * width + x
-          const cid = cellIdMap[i]
-          if (cid == null) continue
-          const isLand = cellLand.get(cid)
-          if (isLand == null) continue
-          // Check right neighbor
-          const rx = x + 1
-          if (rx < width) {
-            const nCid = cellIdMap[y * width + rx]
-            if (nCid != null && nCid !== cid) {
-              const nLand = cellLand.get(nCid)
-              if (nLand != null && isLand !== nLand) {
-                const pi = i * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = (y * width + rx) * 4
-                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
-              }
-            }
-          }
-          // Check bottom neighbor
-          const by = y + 1
-          if (by < height) {
-            const nCid = cellIdMap[by * width + x]
-            if (nCid != null && nCid !== cid) {
-              const nLand = cellLand.get(nCid)
-              if (nLand != null && isLand !== nLand) {
-                const pi = i * 4
-                buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-                const npi = (by * width + x) * 4
-                buf[npi] = COAST_COLOR[0]; buf[npi + 1] = COAST_COLOR[1]; buf[npi + 2] = COAST_COLOR[2]
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // --- Reverse rows (always) + optionally reverse columns ---
-    // Column flip: needed for SphereGeometry (globe, u=0→lon=180°).
-    // NOT needed for PlaneGeometry (map, u=0→left edge→lon=-180°).
-    const outBuf = new Uint8Array(totalPixels * 4)
-    for (let y = 0; y < height; y++) {
-      const srcRow = (height - 1 - y) * width * 4
-      const dstRow = y * width * 4
-      for (let x = 0; x < width; x++) {
-        const srcX = flipHorizontal ? (width - 1 - x) * 4 : x * 4
-        const dstX = x * 4
-        outBuf[dstRow + dstX] = buf[srcRow + srcX]
-        outBuf[dstRow + dstX + 1] = buf[srcRow + srcX + 1]
-        outBuf[dstRow + dstX + 2] = buf[srcRow + srcX + 2]
-        outBuf[dstRow + dstX + 3] = buf[srcRow + srcX + 3]
-      }
-    }
-
-    // (Graticule is drawn by the SVG overlay, not baked into the texture — the
-    //  baked version warped coarsely when reprojected to Mollweide/Robinson.)
-
-    // --- Step 4: Upload as DataTexture ---
-    const hasCellLayers = layers.plates > 0 || layers.boundaries > 0 || layers.koppen > 0
-    const filterType = hasCellLayers ? THREE.NearestFilter : THREE.LinearFilter
-    const colorTex = new THREE.DataTexture(
-      outBuf as unknown as BufferSource, width, height, THREE.RGBAFormat,
-    )
-    colorTex.wrapS = THREE.RepeatWrapping
-    colorTex.wrapT = THREE.ClampToEdgeWrapping
-    colorTex.minFilter = filterType
-    colorTex.magFilter = filterType
-    colorTex.needsUpdate = true
-
-    const material = new THREE.ShaderMaterial({
+    const compMat = new THREE.ShaderMaterial({
       vertexShader,
-      fragmentShader,
+      fragmentShader: compositeFragmentShader,
       uniforms: {
-        u_colorMap: { value: colorTex },
+        u_base: { value: baked.terrain },
+        u_thematic: { value: baked.koppen },
+        u_fill: { value: baked.plates },
+        u_feature: { value: baked.boundaries },
+        u_thematicOp: { value: layers.koppen ?? 0 },
+        u_fillOp: { value: layers.plates ?? 0 },
+        u_featureOp: { value: layers.boundaries ?? 0 },
+      },
+      depthTest: false,
+      depthWrite: false,
+    })
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compMat)
+    scene.add(quad)
+
+    const displayMat = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader: displayFragmentShader,
+      uniforms: {
+        u_colorMap: { value: target.texture },
+        u_directBase: { value: baked.terrain },
+        u_useComposite: { value: 0 },
         u_sunLonRad: { value: sunLonRad },
         u_sunDecRad: { value: sunDecRad },
         u_dayNight: { value: dayNight },
@@ -402,24 +230,78 @@ export default function useGPUTerrain({
       side: THREE.DoubleSide,
     })
 
-    // Save to module-level cache (survives component unmount/remount)
-    lastCache = { elevation, width, height, layers, cellIdMap, cvtMesh, material }
+    return { target, compMat, displayMat, scene, camera, quad }
+    // Sun intentionally excluded from deps: updated via the effect below.
+  }, [baked, width, height])
 
-    return material
-  }, [
-    elevation, width, height, seaLevel,
-    elevMinM, elevMaxM, layers,
-    hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap,
-  ])
+  // --- Layer-derived state (recomputed on every opacity/base change) ---
+  const overlayActive =
+    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0
+  const activeBaseTex = baked
+    ? ((layers.landsea ?? 0) > 0 ? baked.landsea : baked.terrain)
+    : null
 
-  // Update sun uniforms reactively WITHOUT re-baking the (cached) colour
-  // texture — keeps the day/night slider smooth (uniform changes are cheap).
+  // Dispose composite resources when they are replaced / on unmount.
   useEffect(() => {
-    if (!material) return
-    material.uniforms.u_sunLonRad.value = sunLonRad
-    material.uniforms.u_sunDecRad.value = sunDecRad
-    material.uniforms.u_dayNight.value = dayNight
-  }, [material, sunLonRad, sunDecRad, dayNight])
+    return () => {
+      if (!composite) return
+      composite.target.dispose()
+      composite.compMat.dispose()
+      composite.displayMat.dispose()
+      composite.quad.geometry.dispose()
+    }
+  }, [composite])
 
-  return material
+  // --- Layer opacities / base selection → uniforms (no re-bake) ---
+  useEffect(() => {
+    if (!composite || !baked) return
+    const u = composite.compMat.uniforms
+    u.u_base.value = activeBaseTex
+    u.u_thematicOp.value = layers.koppen ?? 0
+    u.u_fillOp.value = layers.plates ?? 0
+    u.u_featureOp.value = layers.boundaries ?? 0
+    const d = composite.displayMat.uniforms
+    d.u_directBase.value = activeBaseTex
+    d.u_useComposite.value = overlayActive ? 1 : 0
+    // Sample the composited image with Nearest when any cell layer is visible —
+    // keeps crisp cell edges (matches the old single-texture behaviour).
+    const filter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
+    composite.target.texture.minFilter = filter
+    composite.target.texture.magFilter = filter
+  }, [composite, baked, layers, activeBaseTex, overlayActive])
+
+  // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
+  useEffect(() => {
+    if (!composite) return
+    composite.displayMat.uniforms.u_sunLonRad.value = sunLonRad
+    composite.displayMat.uniforms.u_sunDecRad.value = sunDecRad
+    composite.displayMat.uniforms.u_dayNight.value = dayNight
+  }, [composite, sunLonRad, sunDecRad, dayNight])
+
+  // --- Composite pass — consumers call it once per frame, before the main render. ---
+  // Re-composites only while overlay layers are active (one fullscreen quad,
+  // ~0.1–0.5 ms). With no overlays the display samples the baked base texture
+  // directly and this is a no-op. No shared dirty flag: GlobeViewerPage keeps
+  // mobile+desktop canvases mounted (two GL contexts), and a single flag cleared
+  // by one would leave the other's framebuffer stale.
+  const renderComposite = useCallback(
+    (renderer: THREE.WebGLRenderer) => {
+      if (!composite || !overlayActive) return
+      renderer.setRenderTarget(composite.target)
+      renderer.render(composite.scene, composite.camera)
+      renderer.setRenderTarget(null)
+    },
+    [composite, overlayActive],
+  )
+
+  /** The texture consumers (reprojection, 3D globe) should sample: the FBO
+   *  composite while overlays are active, otherwise the plain base texture
+   *  (byte-identical to the pre-refactor single-texture pipeline). */
+  const texture: THREE.Texture | null = !baked
+    ? null
+    : overlayActive
+      ? composite?.target.texture ?? null
+      : activeBaseTex
+
+  return { material: composite?.displayMat ?? null, texture, renderComposite }
 }

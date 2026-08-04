@@ -41,6 +41,9 @@ export interface GlobeRegion { id: number; vertex_ids: number[] }
 
 interface GlobeViewerProps {
   texture: THREE.Texture | null
+  /** Layer-composite pass (useGPUTerrain) — called once per frame before the
+   *  scene renders; refreshes the shared composited texture when dirty. */
+  renderComposite?: (renderer: THREE.WebGLRenderer) => void
   onTransition?: () => void
   transitionLabel?: string
   onCellHover?: (lon: number, lat: number) => void
@@ -250,6 +253,7 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
 
 interface GlobeSceneProps {
   texture: THREE.Texture | null
+  renderComposite?: (renderer: THREE.WebGLRenderer) => void
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
@@ -276,12 +280,16 @@ interface NorthAnimState {
 }
 
 function GlobeScene({
-  texture, distanceRef, onCellHover, onCellClick, onHoverOut,
+  texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const northAnimRef = useRef<NorthAnimState | null>(null)
+
+  // Refresh the composited layer texture before the globe renders it
+  // (negative priority → runs ahead of the default useFrame subscribers).
+  useFrame(({ gl }) => { renderComposite?.(gl) }, -1)
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
@@ -431,7 +439,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 // ---------------------------------------------------------------------------
 
 export default function GlobeViewer({
-  texture, onTransition, transitionLabel = '转入星系视图',
+  texture, renderComposite, onTransition, transitionLabel = '转入星系视图',
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -468,7 +476,7 @@ export default function GlobeViewer({
           style={{ background: '#030308', borderRadius: '0.75rem' }}
         >
           <GlobeScene
-            texture={texture} distanceRef={distanceRef}
+            texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
             onCellHover={onCellHover} onCellClick={onCellClick}
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}

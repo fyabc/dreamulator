@@ -16,16 +16,24 @@ import type { ColorMode } from '../../viewers/map/TerrainPlane'
 // ---------------------------------------------------------------------------
 
 /**
- * Layers come in two kinds:
- *  - `basemap` — whole-map colorings that are effectively mutually exclusive
- *    (Paradox-style "map modes"); rendered as a single-select chip strip.
- *  - `overlay` — freely composable feature layers, grouped into collapsible
- *    sections (GIS-style layer tree).
+ * Layer KIND defines rendering semantics (z-order + exclusivity); the
+ * thematic GROUP below is purely UI organisation.  See
+ * private/plans/map-layer-refactor.md for the full model.
+ *
+ *  - `base`     — whole-map opaque canvas (底图). Exactly ONE active at a
+ *                 time (slot:base); always composited first.
+ *  - `thematic` — whole-map thematic coloring (专题着色), alpha-blended over
+ *                 the base. At most ONE active (slot:thematic), may be none.
+ *  - `fill`     — per-cell categorical fill (分类填充), freely stackable.
+ *  - `feature`  — lines/arrows (特征线), freely stackable, always on top.
+ *
+ * Compositing z-order: base → thematic → fill → feature.
  */
-export type LayerKind = 'basemap' | 'overlay'
+export type LayerKind = 'base' | 'thematic' | 'fill' | 'feature'
 
-/** Overlay group labels (basemaps are chips, not grouped). */
+/** Thematic layer groups (UI organisation only). */
 export const LAYER_GROUPS: { id: string; label: string }[] = [
+  { id: 'terrain', label: '地形·海陆' },
   { id: 'geology', label: '地质构造' },
   { id: 'climate', label: '气候' },
   { id: 'hydro', label: '水文' },
@@ -39,52 +47,55 @@ export interface LayerHelpEntry {
   detail: string       // full description for help panel
   defaultOpacity: number
   kind: LayerKind
-  /** Overlay group id (from LAYER_GROUPS); undefined for basemaps. */
-  group?: string
+  /** Group id from LAYER_GROUPS. */
+  group: string
 }
 
 export const LAYER_HELP: LayerHelpEntry[] = [
   {
     id: 'terrain',
     label: '地形',
-    desc: '自适应海拔着色',
-    detail: '基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 沙滩黄 → 低地绿 → 高地棕 → 雪山白。默认开启。',
+    desc: '自适应海拔着色（底图画布）',
+    detail: '基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 沙滩黄 → 低地绿 → 高地棕 → 雪山白。作为不透明底图画布，专题层叠加其上。默认开启。',
     defaultOpacity: 1,
-    kind: 'basemap',
+    kind: 'base',
+    group: 'terrain',
   },
   {
     id: 'landsea',
     label: '海陆',
-    desc: '二值海陆着色',
-    detail: '二值蓝／绿着色，快速区分海洋和陆地。海平面以下为深蓝，以上为绿色。',
-    defaultOpacity: 0,
-    kind: 'basemap',
+    desc: '二值海陆着色（底图画布）',
+    detail: '二值蓝／绿着色，快速区分海洋和陆地。海平面以下为深蓝，以上为绿色。与"地形"互斥（底图槽位唯一）。',
+    defaultOpacity: 1,
+    kind: 'base',
+    group: 'terrain',
   },
   {
     id: 'plates',
     label: '板块',
     desc: '按构造板块着色',
-    detail: '每个构造板块用一种颜色标识。板块由 Cortial (2019) 球面 Voronoi 剖分生成，Poisson-disc 种子 + 同步 BFS。颜色从 15 色调色板循环分配。',
-    defaultOpacity: 0,
-    kind: 'overlay',
+    detail: '每个构造板块用一种颜色标识。板块由 Cortial (2019) 球面 Voronoi 剖分生成，Poisson-disc 种子 + 同步 BFS。颜色从 15 色调色板循环分配。可叠加在任意底图/专题层之上。',
+    defaultOpacity: 0.8,
+    kind: 'fill',
     group: 'geology',
   },
   {
     id: 'boundaries',
     label: '地壳与边界',
     desc: '大陆(褐)·海洋(蓝)·汇聚(红)·离散(绿)·转换(黄)',
-    detail: '板块内部按地壳类型着色：大陆 = 暖褐，海洋 = 灰蓝，过渡带 = 橄榄绿。热点火山链 = 品红。古造山带 = 暗金。裂谷 = 青。板块边界按类型着色：汇聚 = 红（俯冲/碰撞），离散 = 绿（洋中脊/裂谷），转换 = 黄（水平错动）。',
-    defaultOpacity: 0,
-    kind: 'overlay',
+    detail: '板块内部按地壳类型着色：大陆 = 暖褐，海洋 = 灰蓝，过渡带 = 橄榄绿。热点火山链 = 品红。古造山带 = 暗金。裂谷 = 青。板块边界按类型着色：汇聚 = 红（俯冲/碰撞），离散 = 绿（洋中脊/裂谷），转换 = 黄（水平错动）。特征线永远置顶。',
+    defaultOpacity: 0.8,
+    kind: 'feature',
     group: 'geology',
   },
   {
     id: 'koppen',
     label: 'Köppen 气候',
     desc: '气候分类着色（Beck 2018 标准色）',
-    detail: '按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。颜色方案来自 Beck et al. (2018) 标准图例。',
+    detail: '按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。颜色方案来自 Beck et al. (2018) 标准图例。作为专题层以 85% 不透明度叠在底图之上（可隐约看到地形）；与其他专题层（未来的降水/温度/洋流）互斥。',
     defaultOpacity: 0.85,
-    kind: 'basemap',
+    kind: 'thematic',
+    group: 'climate',
   },
 ]
 
