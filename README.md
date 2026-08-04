@@ -177,7 +177,7 @@ See `private/plans/deploy-plan-b-china-cloud.md` for a detailed Docker + Nginx d
 
 **Current status**: Phases 1–2.5 complete (scaffolding, CLI, 3D/2D visualization, terrain realism enhancement); Phase 3A climate engine core merged (EBM, three-cell wind belts, orographic precipitation, Köppen classification, seasonality module, real-Earth validation) with accuracy tuning in progress. Up next: erosion & rivers (3B), civilization semi-structured modeling (3C), world-line diff visualization (3D), LLM narrative bridge (3E).
 
-See [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md) for the full roadmap, competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
+See [docs/design/roadmap.md](docs/design/roadmap.md) for the full roadmap, competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
 
 ## License
 

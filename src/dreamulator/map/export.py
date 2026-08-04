@@ -257,7 +257,12 @@ def save_outputs(
         json.dump(plates_data, f, indent=2, default=str)
     logger.info("  Saved plates: %s", output_dir / "plates.json")
 
-    # 4. Update map.yaml with generation metadata (replaces metadata.json)
+    # 4. Write map.yaml with full generation metadata (replaces metadata.json).
+    #    All identity/provenance fields are (re)written on every export:
+    #    regenerating a world from scratch must produce a map.yaml that
+    #    satisfies MapMetadata on its own (the old "update-only" behaviour
+    #    left out planet_id etc. when no prior map.yaml existed, crashing
+    #    the API with a pydantic ValidationError).
     import yaml as _yaml
 
     map_yaml_path = output_dir / "map.yaml"
@@ -266,6 +271,15 @@ def save_outputs(
         with map_yaml_path.open("r", encoding="utf-8") as _f:
             map_data = _yaml.safe_load(_f) or {}
 
+    # Identity + generation provenance (output_dir is maps/<planet_id>/)
+    map_data["planet_id"] = output_dir.name
+    map_data["projection"] = "equirectangular"
+    map_data["width"] = config.export_width
+    map_data["height"] = config.export_height
+    map_data["voronoi_seed"] = config.seed
+    map_data["voronoi_num_cells"] = config.num_nodes
+    map_data["cvt_jitter_sigma"] = config.jitter_sigma
+    map_data["cvt_lloyd_iterations"] = config.lloyd_iterations
     # Sync PNG encoding range (frontend uses these to decode elevation.png)
     map_data["elevation_min_m"] = png_min
     map_data["elevation_max_m"] = png_max

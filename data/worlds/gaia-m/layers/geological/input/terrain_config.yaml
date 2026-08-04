@@ -9,15 +9,14 @@
 #
 # 数据来源:
 #   planets.yaml       — 行星物理参数
-#   land_sea.md        — 海陆分布详细设定 (TODO: 后续迭代将整合)
-#   geography.md       — 海陆分布概览
+#   geography.md       — 海陆分布设定（2026-08 翻案后的不对称混合案）
 #   geological_history.md — 地质演化史
 #   tidal_effects.md   — 潮汐效应
 #
 # TODO: 当前版本使用随机生成的大陆/海洋分布。
-#       后续迭代将根据 land_sea.md 中的世界观设定，通过手动指定
-#       板块种子和大陆场特征来还原 Aegis 大陆、Anti-Aegis 大陆、
-#       北极孤立大陆、Aegis 裂谷海等设定地形。
+#       后续迭代将根据 geography.md 中的世界观设定，通过手动指定
+#       板块种子和大陆场特征来还原 Aegis 深渊洋、虚空洋、世界岛、
+#       破碎群岛带、北极孤立大陆、大裂谷海等设定地形。
 
 # ── 行星基本参数 ──────────────────────────────────────────────────────────────
 planet:
@@ -78,6 +77,15 @@ noise:
   regional_noise_scale: 0.5
   regional_noise_amplitude_land_m: 1200.0
   regional_noise_amplitude_ocean_m: 800.0
+
+# ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────
+# Gaia-M 自转 Ω=0.31 Ω⊕（78h）：科氏力弱 → 经向热输送更强 →
+# 赤道-极地温差小于地球的 40°C；Hadley 胞向极地扩展（~Ω^-1/2 标度），
+# 与 climate_zones.md 的"副热带沉降带 30°–55°、极锋 ~60°"设定一致。
+climate:
+  lat_gradient_c: 30.0        # 地球默认 40.0
+  hadley_extent_deg: 55.0     # 地球默认 30.0
+  polar_cell_start_deg: 75.0  # 地球默认 60.0
 
 # ── 导出设置 ──────────────────────────────────────────────────────────────────
 export:

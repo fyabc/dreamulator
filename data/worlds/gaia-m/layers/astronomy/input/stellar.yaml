@@ -1,4 +1,6 @@
-# Gaia-M 恒星系统 — 6 行星 + 1 宜居卫星，含 1:2:4 拉普拉斯共振链
+# Gaia-M 恒星系统 — 6 行星 + 3 卫星（Aegis 系统）
+# 行星层：Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
+# 卫星层：Gaia-M : Cadence : Vigil = 1:2:4 拉普拉斯共振链（维持 Gaia-M 偏心率）
 # 以光度为自变量（混合输入模式），引擎通过数值反演推算质量
 name: "Gaia System"
 
@@ -22,7 +24,11 @@ description: |
 
   阶段 4 — 长期潮汐演化 (200 Myr–6 Gyr)
   - 内行星被恒星潮汐锁定
-  - Gaia-M 在 Aegis 子盘中形成并缓慢外迁 10%
+  - Gaia-M 在 Aegis 子盘中形成并缓慢外迁 10%（672,727 → 739,013 km）
+  - 外迁过程中会聚迁移捕获两颗外卫星胚胎 → Gaia-M : Cadence : Vigil = 1:2:4
+    卫星拉普拉斯共振链（机制与阶段 2 的行星共振链捕获完全对称）
+  - 共振链持续泵浦 Gaia-M 的偏心率 e=0.0025（否则潮汐阻尼将在 ~Myr 尺度抹平），
+    维持潮汐加热 → 板块构造与碳-硅酸盐循环
   - 系统进入当前稳定态
 
 stars:
@@ -60,10 +66,10 @@ orbits:
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
 
-  # ---- 气态巨行星（宜居带中心） ----
+  # ---- 气态巨行星（宜居带，混合变暖校准后位置） ----
   - body_id: planet_aegis
     parent_id: star_ignis
-    semi_major_axis_au: 0.2795    # HZ log-mean center (engine: 0.279455 AU)
+    semi_major_axis_au: 0.2722    # 混合变暖路径：原 HZ 中心 0.2795 内移 2.7%（温室 72→75K 补足其余份额）；HZ 范围 0.207–0.377 AU
     eccentricity: 0.005
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
@@ -74,7 +80,7 @@ orbits:
   # ---- 共振链（会聚迁移捕获，1:2:4 拉普拉斯共振） ----
   - body_id: planet_boreal
     parent_id: star_ignis
-    semi_major_axis_au: 0.4437    # 2:1 with Aegis → 0.2795 × 2^(2/3)
+    semi_major_axis_au: 0.4321    # 2:1 with Aegis → 0.2722 × 2^(2/3)（随链同步内移）
     eccentricity: 0.010           # 2:1 MMR 强制偏心率（GJ 876 共振链类比）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
@@ -84,7 +90,7 @@ orbits:
 
   - body_id: planet_glacis
     parent_id: star_ignis
-    semi_major_axis_au: 0.7043    # 4:1 with Aegis → 0.2795 × 4^(2/3)
+    semi_major_axis_au: 0.6859    # 4:1 with Aegis → 0.2722 × 4^(2/3)（随链同步内移）
     eccentricity: 0.015           # Laplace 共振链最外端强制偏心率最高
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
@@ -103,12 +109,34 @@ orbits:
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
 
-  # ---- 宜居卫星（环绕 Aegis） ----
+  # ---- 宜居卫星（环绕 Aegis，1:2:4 卫星拉普拉斯共振链） ----
   - body_id: satellite_gaiam
     parent_id: planet_aegis
-    semi_major_axis_au: 0.00494   # 739,748 km（由 P=78h 开普勒定律计算）
-    eccentricity: 0.0025          # 共振泵浦维持（潮汐加热之源）
-    inclination_deg: 9.0          # 相对 Aegis 赤道面
+    semi_major_axis_au: 0.00494   # 739,013 km（P=78h，开普勒第三定律）
+    eccentricity: 0.0025          # Cadence/Vigil 共振链泵浦维持（潮汐加热之源）
+    inclination_deg: 9.0          # 相对黄道面（Aegis 绕恒星轨道面，系统参考平面）
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  # ---- 共振卫星（2:1 with Gaia-M，拉普拉斯链内环） ----
+  - body_id: satellite_cadence
+    parent_id: planet_aegis
+    semi_major_axis_au: 0.007842  # 1,173,113 km = 739,013 × 2^(2/3)，精确 2:1 → P=6.50 d
+    eccentricity: 0.005           # 共振平衡值（泵浦 vs 潮汐阻尼）
+    inclination_deg: 9.0          # 与 Gaia-M 共面（相互倾角 ~0，链稳定性要求）
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+
+  # ---- 共振卫星（4:1 with Gaia-M / 2:1 with Cadence，拉普拉斯链外环） ----
+  - body_id: satellite_vigil
+    parent_id: planet_aegis
+    semi_major_axis_au: 0.012448  # 1,862,241 km = 739,013 × 4^(2/3)，精确 4:1 → P=13.0 d
+    eccentricity: 0.008           # 链外端共振强制值略高（仍 <0.01 稳定性约束）
+    inclination_deg: 9.0          # 与 Gaia-M 共面
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
     mean_anomaly_epoch_deg: 0.0
@@ -192,7 +220,31 @@ bodies:
     mass_earth: 1.20
     radius_km: 6817               # 1.07 R⊕
     rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 0.0           # 自转轴垂直于轨道面（被 Aegis 锁定）
+    axial_tilt_deg: 9.0           # 相对黄道面的有效倾角 = 轨道倾角 9°（自转轴 ⊥ 绕 Aegis 轨道面）；驱动气候引擎季节项
     albedo: 0.30
     description:
       surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
+
+  # ---- 共振卫星：Cadence（2:1 with Gaia-M，P=6.50 d） ----
+  - id: satellite_cadence
+    name: "Cadence"
+    body_type: "natural_satellite"
+    mass_earth: 0.05              # 共振链内环泵浦者
+    radius_km: 2840               # ~0.45 R⊕，ρ≈3.1 g/cm³（岩质）
+    rotation_period_days: 6.50    # 同步自转
+    axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
+    albedo: 0.25
+    description:
+      surface: "岩质共振卫星，与 Gaia-M 锁定 2:1 共振，持续泵浦其偏心率；天空中间歇性出现的'节拍之月'"
+
+  # ---- 共振卫星：Vigil（4:1 with Gaia-M，P=13.0 d） ----
+  - id: satellite_vigil
+    name: "Vigil"
+    body_type: "natural_satellite"
+    mass_earth: 0.03              # 共振链外环节拍器
+    radius_km: 2470               # ~0.39 R⊕，ρ≈2.8 g/cm³（冰岩混合）
+    rotation_period_days: 13.0    # 同步自转
+    axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
+    albedo: 0.35                  # 富冰表面
+    description:
+      surface: "冰岩混合共振卫星，拉普拉斯链最外端；与 Cadence 共同维持 Gaia-M 的潮汐加热"

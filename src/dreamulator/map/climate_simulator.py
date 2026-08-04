@@ -174,8 +174,15 @@ def simulate_climate(
 
     wind_geostrophic = _geostrophic_wind(grad_p, f_coriolis, nodes_xyz)
 
-    # Overlay three-cell circulation (Hadley / Ferrel / Polar)
-    wind_cell = hadley_cell_wind(lat_rad, nodes_xyz)
+    # Overlay three-cell circulation (Hadley / Ferrel / Polar); cell
+    # boundaries are planet parameters (3A.3a — slow rotators get an
+    # expanded Hadley cell).
+    wind_cell = hadley_cell_wind(
+        lat_rad,
+        nodes_xyz,
+        hadley_extent_deg=config.hadley_extent_deg,
+        polar_cell_start_deg=config.polar_cell_start_deg,
+    )
 
     # Combine: 40% geostrophic + 60% cell circulation
     wind = 0.4 * wind_geostrophic + 0.6 * wind_cell

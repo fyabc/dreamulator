@@ -311,7 +311,7 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 
 ## 后续阶段
 
-> 完整路线图详见 [`docs/design/roadmap-analysis.md`](roadmap-analysis.md)。
+> 完整路线图详见 [`docs/design/roadmap.md`](roadmap.md)。
 
 ### 已完成（v0.5.0）
 

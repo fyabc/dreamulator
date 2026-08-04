@@ -296,7 +296,7 @@ cd frontend && npm run build:static:local && npm run preview:static
    - 新的 YAML/JSON 配置模板、分支工作流、数据编码方式
    - 每个模式包含：概念说明 + YAML 示例 + 源码引用路径
 
-3. **路线图/架构变更** → `docs/design/roadmap-analysis.md`：
+3. **路线图/架构变更** → `docs/design/roadmap.md`：
    - 竞品分析更新、Phase 优先级调整、新功能提案
 
 **原则**：代码是"实现"，文档是"解释"。代码变更无文档同步 = 技术债务。

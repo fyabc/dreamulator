@@ -181,6 +181,12 @@ class TerrainPipelineConfig:
     greenhouse_warming_K: float = 33.0   # additional greenhouse warming (K)
     lapse_rate_c_km: float = 6.5         # moist adiabatic lapse rate (°C/km)
     lat_gradient_c: float = 40.0         # equator-to-pole temperature difference (°C)
+    # Circulation cell boundaries (3A.3a).  Earth: Hadley 0–30°, Ferrel 30–60°,
+    # Polar 60–90°.  Slow rotators (weak Coriolis) get an expanded Hadley cell
+    # (~Ω^-1/2 scaling) and stronger meridional heat transport → smaller
+    # lat_gradient_c.  Keep hadley_extent_deg < polar_cell_start_deg.
+    hadley_extent_deg: float = 30.0      # Hadley cell poleward boundary (°)
+    polar_cell_start_deg: float = 60.0   # Polar cell equatorward boundary (°)
     # Wind
     wind_blocking_height_m: float = 3000.0  # mountains above this block wind
     # Precipitation

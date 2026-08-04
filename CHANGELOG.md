@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-08-04
+
+### Added
+
+- **气候 3A.3a 慢自转参数化**：config 新增 `hadley_extent_deg` /
+  `polar_cell_start_deg`（默认 30/60 保持地球行为）；`hadley_cell_wind()`
+  环流胞边界广义化（慢自转行星 Hadley 胞扩展 ~Ω^-1/2 标度）；回归测试
+  `tests/test_map/test_export.py`
+- **文档**：竞品分析与文明层设计拆分为独立文档（`competitor-analysis.md`、
+  `civilization-layer.md`）；扩展功能 backlog 并入 vision.md §9
+
+### Changed
+
+- **climate 引擎与地质管线共读 `terrain_config.yaml` 气候调优项**——独立
+  `build --only climate` 与管线内气候阶段不再可能分叉；canonical 物理强迫
+  （光度/距离/倾角/温室）仍以 planets.yaml + stellar 为准
+- **gaia-m 样板世界全面改造**（物理自洽化）：
+  - 天文：新增 4:2:1 拉普拉斯卫星链 **Cadence**（0.05 M⊕, 6.5 d）/
+    **Vigil**（0.03 M⊕, 13.0 d），补上 e_m=0.0025 的 60 亿年共振泵浦机制
+    （此前设定无泵浦源）；Aegis 轨道内移 0.2795→0.2722 AU（混合变暖路径），
+    Boreal/Glacis 随共振链同步缩放
+  - 温室 72→75 K（余 3 K 预留次行星半球加温 3A.7）；有效倾角 9° 启用季节项
+    （此前 0°，季节恒关）
+  - 气候再校准：均温 9.2→**14.4 °C**、最高 28.1 °C、Köppen 类 9→**13**
+    （首现热荒漠 BWh）、冰原+苔原 16.4%→11.0%
+  - **海陆分布翻案**：依据潮汐物理（向星/背星点为深海、侧点/极点偏陆）改为
+    不对称混合案——Aegis 深渊洋、虚空洋、世界岛（超大陆裂解 + 大裂谷海）、
+    破碎群岛带（撞击遗迹）、北极孤立大陆保留、南极改浅海；旧"大潮点大陆"
+    设定推翻
+  - 级联更新约 10 个设定文档；合并重复文档 land_sea.md、red_abyss.md
+- **roadmap-analysis.md → roadmap.md** 改名重组：状态快照更新至 v0.15.0、
+  Phase 状态表、技术债务刷新（3A.6/孤儿模块已清偿；新增热带直减率偏冷、
+  均匀高原与板块合并两项）
+
+### Fixed
+
+- **map.yaml 导出回归**（v0.14.0 重构引入）：导出仅"增量更新" map.yaml，
+  从零重建的世界缺 `planet_id` 等必填字段，maps API 抛 pydantic
+  ValidationError；现每次导出完整写入标识字段（planet_id / projection /
+  尺寸 / voronoi 参数）
+- gaia-m 设定数据不一致：轨道年 80.5→77.3 d、季节 20.1→19.3 d、极点极夜
+  31→38.7 d、次行星半球加温 1.5–2.0→~1 °C（按辐射收支核算）
+
 ## [0.14.0] — 2026-08-04
 
 ### Added

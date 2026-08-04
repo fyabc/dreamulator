@@ -273,45 +273,53 @@ def pressure_from_temperature(
 def hadley_cell_wind(
     lat_rad: np.ndarray,
     mesh_nodes_xyz: np.ndarray,
+    hadley_extent_deg: float = 30.0,
+    polar_cell_start_deg: float = 60.0,
 ) -> np.ndarray:
     """Simplified Hadley / Ferrel / Polar cell wind circulation.
 
     Produces zonally-averaged meridional (N-S) and zonal (E-W) wind
     components from the three-cell model of atmospheric circulation.
 
-    Cell boundaries:
-        0°–30°: Hadley cell  → surface trade winds (E→W in tropics)
-        30°–60°: Ferrel cell → surface westerlies (W→E in mid-latitudes)
-        60°–90°: Polar cell  → surface easterlies (E→W near poles)
+    Cell boundaries (parameterized, 3A.3a):
+        0°–H: Hadley cell  → surface trade winds (E→W in tropics)
+        H°–P°: Ferrel cell → surface westerlies (W→E in mid-latitudes)
+        P°–90°: Polar cell  → surface easterlies (E→W near poles)
+
+    Earth defaults H=30°, P=60°.  Slow rotators (weak Coriolis) have an
+    expanded Hadley cell (~Ω^-1/2 scaling); gaia-m uses H=55°, P=75°.
 
     Args:
         lat_rad: Latitude in radians, shape (N,).
         mesh_nodes_xyz: Unit sphere coordinates, shape (N, 3).
+        hadley_extent_deg: Hadley cell poleward boundary H (°).
+        polar_cell_start_deg: Polar cell equatorward boundary P (°).
 
     Returns:
         Wind velocity vectors (m/s) tangent to sphere, shape (N, 3).
     """
     n = len(lat_rad)
     lat_deg = np.degrees(lat_rad)
+    h = float(hadley_extent_deg)
+    p = float(polar_cell_start_deg)
 
     # Zonal (E-W) wind speed: positive = eastward (westerly), negative = westward (easterly)
     zonal_speed = np.zeros(n, dtype=np.float64)
 
-    # Hadley cell: equator → 30°: trade winds (easterly)
-    hadley_mask = np.abs(lat_deg) < 30.0
-    # Strength peaks at ~15° latitude, fades at equator and 30°
-    zonal_speed[hadley_mask] = -5.0 * np.cos(np.pi * lat_deg[hadley_mask] / 60.0)
+    # Hadley cell: equator → H: trade winds (easterly), peak at equator
+    hadley_mask = np.abs(lat_deg) < h
+    zonal_speed[hadley_mask] = -5.0 * np.cos(np.pi * lat_deg[hadley_mask] / (2.0 * h))
 
-    # Ferrel cell: 30° → 60°: westerlies
-    ferrel_mask = (np.abs(lat_deg) >= 30.0) & (np.abs(lat_deg) < 60.0)
+    # Ferrel cell: H → P: westerlies, peak at cell centre
+    ferrel_mask = (np.abs(lat_deg) >= h) & (np.abs(lat_deg) < p)
     zonal_speed[ferrel_mask] = 8.0 * np.cos(
-        np.pi * (np.abs(lat_deg[ferrel_mask]) - 45.0) / 30.0
+        np.pi * (np.abs(lat_deg[ferrel_mask]) - (h + p) / 2.0) / (p - h)
     )
 
-    # Polar cell: 60° → 90°: polar easterlies
-    polar_mask = np.abs(lat_deg) >= 60.0
+    # Polar cell: P → 90°: polar easterlies, peak at pole
+    polar_mask = np.abs(lat_deg) >= p
     zonal_speed[polar_mask] = -3.0 * np.cos(
-        np.pi * (90.0 - np.abs(lat_deg[polar_mask])) / 60.0
+        np.pi * (90.0 - np.abs(lat_deg[polar_mask])) / (2.0 * (90.0 - p))
     )
 
     # Convert zonal wind to 3D tangent vectors

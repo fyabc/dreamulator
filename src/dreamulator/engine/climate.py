@@ -47,6 +47,7 @@ class ClimateEngine(BaseEngine):
         "stellar.yaml",  # → astronomy input (star luminosity, orbits)
         "stellar_derived.yaml",  # → astronomy derived (computed stellar params)
         "planets.yaml",  # → geological input (planet physical parameters)
+        "terrain_config.yaml",  # → geological input (climate tuning knobs)
     ]
     output_files = [
         "climate_summary.yaml",
@@ -110,7 +111,18 @@ class ClimateEngine(BaseEngine):
         # planet physics (tilt/rotation/radius/greenhouse) from planets.yaml.
         from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
-        config = TerrainPipelineConfig()
+        # Climate tuning knobs (lat_gradient_c, circulation cell boundaries,
+        # precipitation efficiencies, ...) live in terrain_config.yaml — the
+        # same file the geological engine's in-pipeline climate pass reads,
+        # so the standalone climate build and the terrain pipeline cannot
+        # diverge.  Canonical physical forcing (luminosity, distance, tilt,
+        # rotation, greenhouse) is still resolved from planets.yaml/stellar
+        # below and overrides anything in terrain_config.yaml.
+        terrain_config_path = self.find_input("terrain_config.yaml")
+        if terrain_config_path is not None:
+            config = TerrainPipelineConfig.from_yaml(terrain_config_path)
+        else:
+            config = TerrainPipelineConfig()
         warnings.extend(resolve_and_apply_physical_parameters(self, config, planet=planet))
 
         # ---- 4. Load CVT mesh with elevation ----
@@ -135,6 +147,8 @@ class ClimateEngine(BaseEngine):
         for key in (
             "lapse_rate_c_km",
             "lat_gradient_c",
+            "hadley_extent_deg",
+            "polar_cell_start_deg",
             "greenhouse_warming_K",
             "evaporation_base_mm",
             "orographic_efficiency",

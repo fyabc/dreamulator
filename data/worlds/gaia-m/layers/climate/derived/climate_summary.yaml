@@ -3,42 +3,46 @@ planet:
   name: Gaia-M
 temperature_C:
   global:
-    mean: 9.2382642881615
-    min: -77.78188692921344
-    max: 22.28265517243079
+    mean: 14.439372937070685
+    min: -68.68794319234195
+    max: 28.070824031910426
   land:
-    mean: 3.102981706214449
-    min: -77.78188692921344
-    max: 21.426076159543157
+    mean: 8.081413320627812
+    min: -68.68794319234195
+    max: 23.88173456066597
   ocean:
-    mean: 11.67780012962053
-    min: -2.0
-    max: 22.28265517243079
+    mean: 16.967450520408207
+    min: -1.800011596342515
+    max: 28.070824031910426
 precipitation_mm:
   global:
-    mean: 956.873759980721
-    min: 2.3701785305609108e-06
-    max: 19942.673436241912
+    mean: 1218.8400464466372
+    min: 3.6951075624403837e-07
+    max: 20045.173752690233
   land:
-    mean: 1140.1930804969631
+    mean: 1343.7054227176372
     min: 20.0
-    max: 19942.673436241912
+    max: 20045.173752690233
   ocean:
-    mean: 883.9815913058494
-    min: 2.3701785305609108e-06
-    max: 6799.423489519947
+    mean: 1169.1905711858415
+    min: 3.6951075624403837e-07
+    max: 8167.291772523478
 koppen_classes:
-  EF: 9439
-  ET: 6961
-  BSk: 1900
-  Cfb: 6463
-  Cwb: 133
-  Am: 96
-  Af: 3051
-  Aw: 131
-  BWk: 276
+  ET: 7353
+  EF: 3646
+  BSk: 3125
+  Dwb: 32
+  Dfb: 65
+  BWk: 742
+  Cwb: 326
+  Cfb: 7417
+  BSh: 580
+  Aw: 610
+  Af: 4219
+  Am: 138
+  BWh: 197
 simulation_parameters:
-  axial_tilt_deg: 0.0
+  axial_tilt_deg: 9.0
   stellar_luminosity_sol: 0.0357
-  orbital_distance_au: 0.2795
-  greenhouse_warming_K: 72.0
+  orbital_distance_au: 0.2722
+  greenhouse_warming_K: 75.0

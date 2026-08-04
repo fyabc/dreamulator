@@ -177,7 +177,7 @@ uv run dreamulator serve
 
 **当前状态**：Phase 1–2.5 已完成（项目骨架、CLI、3D/2D 可视化、地形真实感增强）；Phase 3A 气候引擎核心已合并（能量平衡、三圈环流风带、地形降水、Köppen 分类、季节模块、真实地球验证），精度调优进行中。后续方向：侵蚀与河流（3B）、文明半格式化管理（3C）、世界线 Diff（3D）、LLM 叙事桥（3E）。
 
-完整路线图、竞品分析与设计参考见 [docs/design/roadmap-analysis.md](docs/design/roadmap-analysis.md)；项目长期愿景见 [docs/design/vision.md](docs/design/vision.md)。
+完整路线图、竞品分析与设计参考见 [docs/design/roadmap.md](docs/design/roadmap.md)；项目长期愿景见 [docs/design/vision.md](docs/design/vision.md)。
 
 ## 许可证
 

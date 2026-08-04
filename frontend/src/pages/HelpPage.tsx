@@ -79,7 +79,7 @@ export default function HelpPage() {
         <ul className="space-y-1 text-sm text-gray-400">
           <li>📄 <span className="text-gray-300">docs/usage/cli.md</span> — CLI 命令参考</li>
           <li>📄 <span className="text-gray-300">docs/design/terrain-pipeline.md</span> — 地形管线技术参考</li>
-          <li>📄 <span className="text-gray-300">docs/design/roadmap-analysis.md</span> — 开发路线图</li>
+          <li>📄 <span className="text-gray-300">docs/design/roadmap.md</span> — 开发路线图</li>
           <li>📄 <span className="text-gray-300">docs/design/vision.md</span> — 项目长期愿景</li>
         </ul>
       </section>

@@ -278,7 +278,7 @@ elevation → temperature → biomes
 
 **参考**：
 - `src/viewers/map/utils/colorScales.ts` — `generateAdaptiveTerrainScale()`
-- `docs/design/roadmap-analysis.md` — 配色方案调研
+- `docs/design/roadmap.md` — 配色方案调研
 
 ---
 
