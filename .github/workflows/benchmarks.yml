@@ -30,6 +30,9 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push benchmark data to perf-dashboard branch
+      pull-requests: write  # comment on PR when regression alert fires
     steps:
       - uses: actions/checkout@v4
 
