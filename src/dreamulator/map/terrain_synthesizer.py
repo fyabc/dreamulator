@@ -40,6 +40,12 @@ from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
+# Subduction-trench relief below the abyssal floor.  Earth's trenches reach
+# ~−11 km (Mariana) while the abyssal plain sits near −4 km, so a ~7 km relief
+# on the subducting side reproduces trench depths.  Applied only to oceanic
+# crust on the oceanward side of convergent boundaries.
+_TRENCH_RELIEF_M = 7000.0
+
 # ---------------------------------------------------------------------------
 # fBm noise on CVT cells
 # ---------------------------------------------------------------------------
@@ -570,12 +576,15 @@ def _asymmetric_boundary_effects(
 
             delta_h[i] = amp * mountain * rate_factor
 
-            # Oceanic trench on the subducting side (100–200 km from peak)
+            # Oceanic trench on the subducting side (100–200 km from peak).
+            # Only oceanic crust subducts and forms a trench; continental
+            # collision has no trench.  Deepened to ~6 km relief so trenches
+            # reach abyssal-trench depths (~−10 km; Mariana ≈ −11 km).
             trench_dist_km = sigma_conv * 0.35  # ~140 km
-            if d > trench_dist_km:
+            if d > trench_dist_km and crust == "oceanic":
                 dist_from_trench = abs(d - trench_dist_km - peak_offset)
                 trench_sigma = sigma_conv * 0.25  # narrow, sharp trench
-                trench = -config.divergent_depth_m * 0.7 * np.exp(
+                trench = -_TRENCH_RELIEF_M * np.exp(
                     -(dist_from_trench * dist_from_trench) / (2 * trench_sigma * trench_sigma)
                 )
                 delta_h[i] += trench * rate_factor

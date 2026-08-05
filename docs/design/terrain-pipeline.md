@@ -398,8 +398,21 @@ def _voronoi_partition(
     return cell_plate_map
 ```
 
-板面积由 Poisson-disc 种子分布和球面 Voronoi 几何自然决定，无需额外的
-目标尺寸（Pareto）或速度参数。
+板面积由 **可变密度 Poisson-disc 种子**与球面 Voronoi 几何共同决定：
+`select_plate_seeds` 中每个种子抽取对数均匀 size-factor（e^{U(-0.8, 0.8)}≈0.45–2.2）
+缩放其最小间距——大间距种子周围形成大板块、小间距种子挤成小板块，初始剖分
+即呈偏态（gaia-m 实测 CV≈0.44）。无需额外的目标尺寸（Pareto）或速度参数。
+
+> **偏态的保持（构造重采样）**：构造演化的周期性重分区若是无权重的
+> "最近种子" Voronoi，则等价于 Lloyd 迭代——其吸引子是等面积的质心
+> Voronoi 剖分（CVT），会把初始偏态洗掉（gaia-m 实测 50 步后 CV 0.44→0.22）。
+> 因此重采样改用**乘法加权 Voronoi**（power diagram 的图版本）：每个板块
+> 持有出生时确定的持久权重 wᵢ（初始板块取初始面积、裂解碎片取碎片面积），
+> 波前 i 进入 cell 的代价为 cost/wᵢ，面积比 ∝ 权重比。规定权重后迭代吸引子
+> 变为**加权 CVT**（等面积只是 w≡const 的特例），偏态在质心旋转/边界迁移
+> 过程中保持。实现见 `plate_generator.py::voronoi_partition_warped`
+> （`plate_speed` 参数）与 `tectonic_simulator.py::_evolve_cortial2019`
+> （`plate_weight` 字典，随裂解/清理同步）。
 
 ### 3.3 地壳类型分配
 
@@ -3638,11 +3651,21 @@ $$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathb
 2. **超大盘 boost**: 板 >2× 均值时线性提权（max 3×），＞1.5× 时温和提权（1.3×）。确保半板块级别的超大陆不可避免地裂解（Gondwana 模式）
 3. **冷却期**: 正常板 5 步内不再裂解；超大板（>2× 均值）豁免冷却期
 4. **cell 刷新**: 裂解前用当前 map 刷新 cell_ids，消除 Voronoi 边界漂移
-5. **BFS 分区**: 随机 2-3 种子，同步 BFS 分配，空 partition 自动过滤
+5. **加权 Dijkstra 分区**: 随机 2-3 种子，每个种子抽取对数均匀生长权重
+   （e^{U(-0.9,0.9)}），多源 Dijkstra 产生**不等大碎片**（一两个大碎片 + 若干小碎片），
+   避免均匀 BFS 的等大碎片；空 partition 自动过滤
 6. **分区安全网**: 分区后 cell 数不完整 → 回退恢复父板块
 7. **子板块欧拉极扰动**: 轴偏转 ~10-20°、ω 变幅 ±15% → 相邻子板 >2 cm/yr → 边界检测可识别
 8. **微板块清理**: `_cleanup_empty` 每步移除 0-cell 空壳（≥2 板保护）
-9. **重分区间隔**: 固定 10 步（与总步数无关），仅在裂解后重分
+9. **重分区间隔**: 固定 10 步（与总步数无关），裂解后立即重分
+10. **加权 Voronoi 重分区（保持大小偏态）**: 重分区不是无权重的最近种子
+    Voronoi（= Lloyd 迭代，吸引子为等面积 CVT，会洗掉偏态），而是**乘法加权
+    Voronoi**：每个板块持有出生时确定的持久权重（初始板块取初始剖分面积、
+    裂解碎片取碎片面积，`plate_weight` 字典随裂解/清理同步），波前代价
+    cost/wᵢ，面积比 ∝ 权重比。规定权重的 Lloyd 型迭代吸引子是**加权 CVT**，
+    偏态在质心旋转/边界迁移中保持。最终的 boundary warp 也传入同一权重，
+    避免末次重分区再次均匀化。实现：`plate_generator.py::voronoi_partition_warped`
+    （`plate_speed`/`locked` 参数）、`tectonic_simulator.py::_plate_speeds`
 
 ### D.12 自适应裂解率与真实地球数据
 

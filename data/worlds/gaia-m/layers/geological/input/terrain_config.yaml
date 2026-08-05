@@ -54,9 +54,14 @@ plates:
   tectonic_algorithm: "cortial2019"  # time-evolution (""=none, "cortial2019")
   tectonic_steps: 50                # evolution steps (50=preview, 125-250=full)
   # tectonic_dt_my: 0.0         # My/step (0 = auto-scale to resolution)
-  # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界，0.5–0.8=不规则锯齿/弧形边界。
-  # 让岛弧/造山带弯曲分段，而非绵延平直（见 terrain-pipeline.md §3.2）。
-  boundary_warp: 0.6
+  # 板块大小偏态：select_plate_seeds 用可变密度采样使初始剖分偏态（CV≈0.44），
+  # 裂解用加权 Dijkstra 产生不等大碎片，裂解率调低避免大盘被过度拆解。
+  # 构造重采样为乘法加权 Voronoi（plate_weight 持久权重 = 出生面积），
+  # 偏态在 Lloyd 型迭代中保持而非被洗掉（见 roadmap #6、terrain-pipeline.md §3.2）。
+  rift_base_rate: 0.005
+  # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界；低频 fBm 扭曲使边界弯曲成
+  # 弧形（岛弧/造山带分段弯曲），而非绵延平直（见 terrain-pipeline.md §3.2）。
+  boundary_warp: 0.9
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
 

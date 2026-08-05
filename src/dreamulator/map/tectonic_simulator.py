@@ -140,6 +140,10 @@ def _subduction_uplift(
 
     uⱼ(p) = u₀ · f(d) · g(v) · (1 + h(z̃)) · δt
 
+    Note: the oceanward trench itself is carved during terrain synthesis
+    (``terrain_synthesizer._asymmetric_boundary_effects``), which is the stage
+    that sets final elevations.
+
     Returns total uplift applied (km, summed over all cells).
     """
     if not convergent_set:
@@ -398,7 +402,10 @@ def run_tectonic_evolution(
             for cid in p.cell_ids:
                 cell_map[cid] = p.id
         if config.boundary_warp > 0:
-            cell_map = warp_boundaries(mesh, cell_map, config)
+            # Weight by current area so the warp preserves the (possibly
+            # skewed) size distribution of the initial partition.
+            weights = {p.id: float(max(len(p.cell_ids), 1)) for p in plates}
+            cell_map = warp_boundaries(mesh, cell_map, config, plate_weights=weights)
             _rebuild_plate_cells(mesh, cell_map, plates)
         return plates, cell_map
 
@@ -408,13 +415,14 @@ def run_tectonic_evolution(
             f"Available: {sorted(_TECTONIC_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
-        plates_out, cell_map = _evolve_cortial2019(
+        plates_out, cell_map, plate_weight = _evolve_cortial2019(
             mesh, plates, config, progress_callback=progress_callback,
         )
         # Noise-warp the FINAL partition (Cortial 2019 §3) — irregular
-        # boundaries instead of straight geodesic arcs.
+        # boundaries instead of straight geodesic arcs.  Pass the persistent
+        # size weights so the warp doesn't re-uniformise plate areas.
         if config.boundary_warp > 0:
-            cell_map = warp_boundaries(mesh, cell_map, config)
+            cell_map = warp_boundaries(mesh, cell_map, config, plate_weights=plate_weight)
             _rebuild_plate_cells(mesh, cell_map, plates_out)
         return plates_out, cell_map
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
@@ -533,18 +541,52 @@ def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
     return max(1.0, dt_my)
 
 
+def _plate_speeds(
+    plate_ids: list[str],
+    plate_weight: dict[str, float],
+    fallback_areas: list[int] | None = None,
+) -> np.ndarray:
+    """Per-plate expansion speed for the weighted re-partition.
+
+    Speed = the persistent size weight normalised to mean 1 (only ratios
+    matter).  A plate missing a weight — should not happen, the roster is
+    reconciled after every rift/cleanup — falls back to its current area.
+    """
+    w = np.array(
+        [
+            max(
+                plate_weight.get(
+                    pid,
+                    float(max(fallback_areas[i], 1)) if fallback_areas else 1.0,
+                ),
+                1.0,
+            )
+            for i, pid in enumerate(plate_ids)
+        ],
+        dtype=np.float64,
+    )
+    mean = float(w.mean())
+    return w / mean if mean > 0 else w
+
+
 def _evolve_cortial2019(
     mesh: CVTMesh,
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
     *,
     progress_callback: object | None = None,
-) -> tuple[list[TectonicPlate], dict[int, str]]:
+) -> tuple[list[TectonicPlate], dict[int, str], dict[str, float]]:
     """Cortial et al. (2019) original — centroid rotation + re-Voronoi.
 
     Each step: rotate plate centroids → Voronoi → boundaries shift → elevation.
+
+    Returns ``(plates, cell_plate_map, plate_weight)``.  ``plate_weight``
+    maps plate id → persistent size weight (area at birth, arbitrary scale):
+    the re-partition uses it as a multiplicatively-weighted Voronoi so the
+    skewed size distribution survives the Lloyd-style iteration instead of
+    relaxing to near-equal areas (see ``voronoi_partition_warped``).
     """
-    from .plate_generator import _voronoi_partition
+    from .plate_generator import voronoi_partition_warped
 
     num_steps = config.tectonic_steps
     dt_my = _auto_compute_dt(mesh, config)
@@ -558,8 +600,16 @@ def _evolve_cortial2019(
         for cid in p.cell_ids:
             cell_plate_map[cid] = p.id
 
+    # Persistent per-plate size weights — area at birth.  The re-partition
+    # divides space proportionally to these (multiplicatively weighted
+    # Voronoi), so the birth-time size skew survives the Lloyd-style
+    # centroid→Voronoi iteration instead of relaxing toward equal areas.
+    plate_weight: dict[str, float] = {
+        p.id: float(max(len(p.cell_ids), 1)) for p in plates
+    }
+
     if num_steps <= 0:
-        return plates, cell_plate_map
+        return plates, cell_plate_map, plate_weight
 
     # Stage 1.2: canonical elevation/crust arrays for the whole evolution
     # (written back to cells once at the end) + cKDTree for nearest-cell
@@ -582,6 +632,7 @@ def _evolve_cortial2019(
     prev_cell_map = cell_plate_map
     plate_birth_step: dict[str, int] = {p.id: 0 for p in plates}
     COOLDOWN = max(1, num_steps // 20)  # ~5% of total run
+    unit_cost = np.ones(mesh.num_cells, dtype=np.float64)
     # Re-partition the Voronoi every RESAMPLE_EVERY steps (so boundaries track
     # the moving centroids), and once immediately after a rifting event so
     # newborn fragments get a clean partition.  Between resamples cell
@@ -652,8 +703,16 @@ def _evolve_cortial2019(
                 logger.info("  Voronoi: %d cells locked for %d oceanic newborn(s)", len(locked), len({v for v in locked.values()}))
             # Pass the real plate ids (new_seeds[i] ↔ plates[i]) so rifted
             # plates keep their identity; index-based naming would orphan cells.
-            new_cell_map = _voronoi_partition(
-                mesh, new_seeds, locked=locked, plate_ids=[p.id for p in plates],
+            # Weighted by persistent plate size: unit-speed (plain) Voronoi of
+            # moving centroids is Lloyd iteration and relaxes sizes toward
+            # equal; speeds ∝ birth area pin the skewed distribution.
+            new_cell_map = voronoi_partition_warped(
+                mesh, new_seeds, [p.id for p in plates], unit_cost,
+                plate_speed=_plate_speeds(
+                    [p.id for p in plates], plate_weight,
+                    [len(p.cell_ids) for p in plates],
+                ),
+                locked=locked,
             )
             last_resample_step = step
             rifted_since_last_resample = False
@@ -707,6 +766,16 @@ def _evolve_cortial2019(
             step=step, plate_birth_step=plate_birth_step, cooldown=COOLDOWN,
         )
 
+        # Keep size weights in sync with the plate roster: removed plates
+        # drop their weight; newborn fragments get their BIRTH area (the rift
+        # partition's weighted Dijkstra already made them unequal-sized).
+        alive = {p.id for p in plates}
+        for pid in [k for k in plate_weight if k not in alive]:
+            del plate_weight[pid]
+        for p in plates:
+            if p.id not in plate_weight:
+                plate_weight[p.id] = float(max(len(p.cell_ids), 1))
+
         # 6. Update for next step
         prev_cell_map = new_cell_map
         _rebuild_plate_cells(mesh, new_cell_map, plates)
@@ -729,7 +798,7 @@ def _evolve_cortial2019(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
         num_steps, len(plates), mesh.num_cells,
     )
-    return plates, prev_cell_map
+    return plates, prev_cell_map, plate_weight
 
 
 def _rift_plates(
@@ -874,41 +943,51 @@ def _partition_cells(
     seeds: list[int],
     rng: np.random.Generator,
 ) -> list[list[int]]:
-    """Partition *plate_cells* into *len(seeds)* groups via synchronous BFS.
+    """Partition *plate_cells* into *len(seeds)* groups via weighted multi-source
+    Dijkstra.
 
-    Each seed starts a wavefront; cells are claimed by the first wave to reach them.
+    Each seed expands with a random per-seed growth weight, so fragments come out
+    **unequal-sized** (one or two large fragments plus smaller ones) instead of the
+    near-equal regions a uniform synchronous BFS produces.  Repeated rifting of the
+    large fragments then yields a skewed, power-law-like plate-size distribution
+    closer to Earth's (a few great plates + many small plates), rather than the
+    uniform sizes a plain Voronoi partition gives.
     """
-    from collections import deque
+    import heapq
 
     cell_set = set(plate_cells)
-    queues = [deque([s]) for s in seeds]
-    assigned: dict[int, int | None] = {s: i for i, s in enumerate(seeds)}
-    total = len(seeds)
+    n_seeds = len(seeds)
+    # Per-seed growth weight: a seed with a larger weight claims cells faster and
+    # thus a larger fragment.  Log-uniform spread gives a wide size range.
+    weights = [float(np.exp(rng.uniform(-0.9, 0.9))) for _ in range(n_seeds)]
 
-    while total < len(plate_cells):
-        progress = 0
-        for i, q in enumerate(queues):
-            if not q:
-                continue
-            for _ in range(len(q)):
-                cid = q.popleft()
-                for nid in mesh.cells[cid].neighbors:
-                    if nid in cell_set and nid not in assigned:
-                        assigned[nid] = i
-                        q.append(nid)
-                        total += 1
-                        progress += 1
-        if progress == 0:
-            # Stranded cells — assign to nearest seed
-            for cid in plate_cells:
-                if cid not in assigned:
-                    assigned[cid] = 0  # fallback
-            break
+    dist: dict[int, float] = {}
+    owner: dict[int, int] = {}
+    heap: list[tuple[float, int, int]] = []
+    for i, s in enumerate(seeds):
+        dist[s] = 0.0
+        owner[s] = i
+        heapq.heappush(heap, (0.0, s, i))
+
+    while heap:
+        d, cid, i = heapq.heappop(heap)
+        if d > dist.get(cid, float("inf")):
+            continue  # stale heap entry
+        step_cost = 1.0 / weights[i]
+        for nid in mesh.cells[cid].neighbors:
+            if nid in cell_set and nid not in dist:
+                dist[nid] = d + step_cost
+                owner[nid] = i
+                heapq.heappush(heap, (dist[nid], nid, i))
+
+    # Stranded cells (disconnected) — assign to the first seed as a fallback.
+    for cid in plate_cells:
+        if cid not in owner:
+            owner[cid] = 0
 
     result: list[list[int]] = [[] for _ in seeds]
-    for cid, idx in assigned.items():
-        if idx is not None:
-            result[idx].append(cid)
+    for cid, idx in owner.items():
+        result[idx].append(cid)
     return result
 
 
@@ -1124,6 +1203,7 @@ def warp_boundaries(
     mesh: CVTMesh,
     cell_plate_map: dict[int, str],
     config: TerrainPipelineConfig,
+    plate_weights: dict[str, float] | None = None,
 ) -> dict[int, str]:
     """Re-partition as a noise-warped Voronoi of the current plate positions.
 
@@ -1133,6 +1213,11 @@ def warp_boundaries(
     instead of running unnaturally long and straight.  Plate shapes are preserved
     (the partition is still the Voronoi of the same plate centroids); only the
     boundaries are warped.
+
+    ``plate_weights`` (plate id → persistent size weight) carries the size
+    skew into the warp: without it this final re-partition would be an
+    unweighted Voronoi and partially re-uniformise the plate areas that the
+    weighted tectonic resamples preserved.
     """
     from scipy.spatial import cKDTree
 
@@ -1141,6 +1226,7 @@ def warp_boundaries(
     present = sorted(set(cell_plate_map.values()))
     centroids: list[np.ndarray] = []
     plate_ids: list[str] = []
+    areas: list[int] = []
     for pid in present:
         cids = [cid for cid, p in cell_plate_map.items() if p == pid]
         if not cids:
@@ -1151,12 +1237,18 @@ def warp_boundaries(
         norm = float(np.sqrt(cx * cx + cy * cy + cz * cz)) or 1.0
         centroids.append(np.array([cx / norm, cy / norm, cz / norm]))
         plate_ids.append(pid)
+        areas.append(len(cids))
 
     cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
     tree = cKDTree(cell_xyz)
     seeds = _assign_distinct_seeds(tree, centroids)
     cost = build_cell_cost(mesh, config.seed + 7777, config.boundary_warp)
-    warped = voronoi_partition_warped(mesh, seeds, plate_ids, cost)
+    speed = (
+        _plate_speeds(plate_ids, plate_weights, areas)
+        if plate_weights is not None
+        else None
+    )
+    warped = voronoi_partition_warped(mesh, seeds, plate_ids, cost, plate_speed=speed)
     logger.info(
         "  Boundary warp: %d plates, amplitude=%.2f", len(plate_ids), config.boundary_warp
     )

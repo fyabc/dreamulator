@@ -55,11 +55,14 @@ def select_plate_seeds(
     num_plates: int,
     rng: np.random.Generator,
 ) -> list[int]:
-    """Select seed cells for tectonic plates (Poisson-disc on sphere).
+    """Select seed cells for tectonic plates (variable-density Poisson-disc).
 
     Picks *num_plates* random cells, rejecting candidates too close to
-    already-selected seeds.  This produces a well-spread distribution so
-    Voronoi cells have natural size variation without extreme outliers.
+    already-selected seeds.  Each seed draws a random "size factor" that scales
+    its minimum spacing, so seeds land at NON-uniform density and the resulting
+    Voronoi plates have a skewed size distribution (a few large plates + several
+    small ones), closer to Earth's power-law plate-size distribution than the
+    near-equal sizes a uniform Poisson-disc sampling gives.
 
     Args:
         mesh: The CVT mesh.
@@ -77,9 +80,12 @@ def select_plate_seeds(
     rng.shuffle(candidates)
 
     seeds: list[int] = []
-    # Minimum angular separation: ~30% of the average spacing for N points
-    # on a unit sphere (√(4π/N)).
-    min_angular_sep = np.sqrt(4 * np.pi / num_plates) * 0.3
+    seed_sep: list[float] = []
+    # Base minimum angular separation: ~30% of the average spacing for N points
+    # on a unit sphere (√(4π/N)).  Each seed scales this by a log-uniform size
+    # factor — a large factor keeps neighbours far away (big plate), a small one
+    # allows close packing (small plate).
+    base_sep = np.sqrt(4 * np.pi / num_plates) * 0.3
 
     for cid in candidates:
         if len(seeds) >= num_plates:
@@ -87,6 +93,8 @@ def select_plate_seeds(
 
         cell = mesh.cells[cid]
         xyz = np.array([cell.x, cell.y, cell.z])
+        size_factor = float(np.exp(rng.uniform(-0.8, 0.8)))  # ~0.45–2.2
+        sep = base_sep * size_factor
 
         too_close = False
         for sid in seeds:
@@ -94,12 +102,16 @@ def select_plate_seeds(
                 mesh.cells[sid].x, mesh.cells[sid].y, mesh.cells[sid].z,
             ])
             dot = np.clip(np.dot(xyz, seed_xyz), -1, 1)
-            if np.arccos(dot) < min_angular_sep:
+            # Use the candidate's own spacing: small-spacing seeds can nestle
+            # close to existing seeds (small plates), large-spacing seeds keep
+            # clear (large plates) → skewed size distribution.
+            if np.arccos(dot) < sep:
                 too_close = True
                 break
 
         if not too_close:
             seeds.append(cid)
+            seed_sep.append(sep)
 
     # Fallback: if rejection sampling didn't find enough, take remaining
     if len(seeds) < num_plates:
@@ -204,23 +216,36 @@ def _voronoi_partition(
 # noise so boundaries weave into irregular, arc-like shapes.  We implement that
 # as a multi-source Dijkstra where the cost of entering each cell is perturbed
 # by deterministic per-cell noise: wavefronts advance unevenly, so the
-# resulting plate boundaries are jagged instead of straight.
+# resulting plate boundaries curve and segment instead of running straight.
+#
+# The noise is LOW-FREQUENCY fBm (wavelength comparable to a plate) so boundaries
+# bend into smooth, island-arc-like curves rather than fine-grained jaggies.
 
 
-def build_cell_cost(mesh: CVTMesh, rng_seed: int, amplitude: float) -> np.ndarray:
+def build_cell_cost(
+    mesh: CVTMesh,
+    rng_seed: int,
+    amplitude: float,
+    base_freq: float = 0.6,
+) -> np.ndarray:
     """Per-cell traversal cost for the noise-warped partition.
 
     Returns ``1 + amplitude * noise`` (clamped to stay positive), where noise
-    ∈ [-1, 1] is deterministic fBm sampled at each cell's 3D position.  Low-cost
-    cells attract boundaries, high-cost cells repel them, warping the edges.
+    ∈ [-1, 1] is deterministic LOW-frequency fBm sampled at each cell's 3D
+    position.  Low-cost cells attract boundaries, high-cost cells repel them,
+    warping the edges.  ``base_freq`` < 1 gives wavelengths larger than a
+    typical plate, so boundaries bend into smooth arcs instead of jaggies.
     """
-    from .noise_kernels import noise_on_points
+    from .noise_kernels import fbm_on_points
 
     n = mesh.num_cells
     x = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
     y = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
     z = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
-    noise = noise_on_points(x, y, z, int(rng_seed))
+    noise = fbm_on_points(
+        x, y, z, int(rng_seed), octaves=3, lacunarity=2.0, persistence=0.5,
+        base_freq=base_freq,
+    )
     cost = 1.0 + float(amplitude) * noise
     return np.maximum(cost, 0.05)
 
@@ -230,6 +255,9 @@ def voronoi_partition_warped(
     seeds: list[int],
     plate_ids: list[str],
     cell_cost: np.ndarray,
+    *,
+    plate_speed: np.ndarray | None = None,
+    locked: dict[int, str] | None = None,
 ) -> dict[int, str]:
     """Noise-warped spherical Voronoi — multi-source Dijkstra.
 
@@ -238,6 +266,21 @@ def voronoi_partition_warped(
     wavefront reaches it with the smallest accumulated cost.  Produces
     irregular, jagged boundaries (vs. the straight geodesic edges of the
     uniform BFS above).
+
+    ``plate_speed`` (optional): per-plate expansion multiplier — a
+    MULTIPLICATIVELY WEIGHTED Voronoi diagram (graph analogue of the
+    Apollonius diagram).  Wavefront ``i`` pays ``cell_cost[v] / speed[i]``
+    to enter cell ``v``, so a plate with speed 2 expands twice as fast and
+    claims roughly twice the area.  This is what lets a re-partition PRESERVE
+    a skewed size distribution: plain (unit-speed) Voronoi of moving
+    centroids is Lloyd iteration, whose attractor is a centroidal Voronoi
+    tessellation with near-EQUAL cell areas; prescribed speeds move the
+    attractor to a *weighted* CVT whose area ratios match the speeds.
+
+    ``locked`` (optional): cell_id → plate_id assignments that are never
+    reassigned (newborn-plate protection during tectonic resamples).  Locked
+    cells keep their owner and are opaque to the wavefronts — matching the
+    uniform-BFS locked semantics.
     """
     import heapq
 
@@ -246,25 +289,50 @@ def voronoi_partition_warped(
     dist = np.full(n, inf, dtype=np.float64)
     owner = np.full(n, -1, dtype=np.int64)
 
-    heap: list[tuple[float, int]] = []
+    is_locked: np.ndarray | None = None
+    if locked:
+        pid_idx = {pid: i for i, pid in enumerate(plate_ids)}
+        is_locked = np.zeros(n, dtype=np.bool_)
+        for cid, pid in locked.items():
+            idx = pid_idx.get(pid)
+            if idx is not None:
+                owner[cid] = idx
+                is_locked[cid] = True
+
+    if plate_speed is None:
+        inv_speed = None
+    else:
+        # Clamp away from zero — a zero/negative speed would strand the seed.
+        inv_speed = 1.0 / np.maximum(np.asarray(plate_speed, dtype=np.float64), 1e-6)
+
+    # Heap entries carry the PROPAGATING plate index explicitly: when a seed
+    # falls on a locked cell the lock keeps the cell, but the wavefront still
+    # emanates from it (matches the uniform BFS, where every seed starts a
+    # queue regardless of pre-assignment).
+    heap: list[tuple[float, int, int]] = []
     for i, s in enumerate(seeds):
+        if is_locked is not None and is_locked[s]:
+            heapq.heappush(heap, (0.0, s, i))
+            continue
         if dist[s] > 0.0:  # first seed at this cell wins
             dist[s] = 0.0
             owner[s] = i
-            heapq.heappush(heap, (0.0, s))
+            heapq.heappush(heap, (0.0, s, i))
 
     neighbors = [c.neighbors for c in mesh.cells]
     while heap:
-        d, u = heapq.heappop(heap)
+        d, u, i = heapq.heappop(heap)
         if d > dist[u]:
             continue  # stale heap entry
-        ou = owner[u]
+        step_scale = 1.0 if inv_speed is None else inv_speed[i]
         for v in neighbors[u]:
-            nd = d + cell_cost[v]
+            if is_locked is not None and is_locked[v]:
+                continue
+            nd = d + cell_cost[v] * step_scale
             if nd < dist[v]:
                 dist[v] = nd
-                owner[v] = ou
-                heapq.heappush(heap, (nd, v))
+                owner[v] = i
+                heapq.heappush(heap, (nd, v, i))
 
     cell_plate_map: dict[int, str] = {}
     for c in range(n):
