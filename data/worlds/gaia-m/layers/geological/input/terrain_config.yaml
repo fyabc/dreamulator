@@ -10,7 +10,7 @@
 # 数据来源:
 #   planets.yaml       — 行星物理参数
 #   geography.yaml     — 机器可读海陆锚定规格（大陆/大洋锚点，驱动地壳分配）
-#   geography.md       — 海陆分布设定（2026-08 翻案后的不对称混合案）
+#   geography.md       — 海陆分布设定（2026-08 更新后的不对称混合案）
 #   geological_history.md — 地质演化史
 #   tidal_effects.md   — 潮汐效应
 #
@@ -54,6 +54,9 @@ plates:
   tectonic_algorithm: "cortial2019"  # time-evolution (""=none, "cortial2019")
   tectonic_steps: 50                # evolution steps (50=preview, 125-250=full)
   # tectonic_dt_my: 0.0         # My/step (0 = auto-scale to resolution)
+  # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界，0.5–0.8=不规则锯齿/弧形边界。
+  # 让岛弧/造山带弯曲分段，而非绵延平直（见 terrain-pipeline.md §3.2）。
+  boundary_warp: 0.6
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
 

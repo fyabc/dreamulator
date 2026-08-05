@@ -59,12 +59,14 @@ class GeographyFeature(BaseModel):
     radius_deg: float = Field(gt=0.0, le=90.0)
     #: Bias amplitude. + = land, − = ocean. Magnitudes above 1 let a "cutting"
     #: feature (rift_sea, isthmus gap) overwhelm an underlying continent so the
-    #: net field goes negative there (e.g. rift −1.5 over continent +1.0).
-    strength: float = Field(default=1.0, ge=-2.0, le=2.0)
+    #: net field goes negative there (e.g. rift −1.8 over continent +0.85).
+    #: Values down to −3 express anomalously deep collapse basins.
+    strength: float = Field(default=1.0, ge=-3.0, le=3.0)
     #: Semi-major / semi-minor axis ratio (≥1; 1 = circular).
     elongation: float = Field(default=1.0, ge=1.0)
-    #: Semi-major axis bearing in degrees (0 = north, 90 = east).
-    bearing_deg: float = Field(default=0.0, ge=0.0, lt=360.0)
+    #: Semi-major axis bearing in degrees (0 = north, 90 = east). Negative
+    #: values tilt the opposite way (−12 ≡ 348); cos/sin handle either sign.
+    bearing_deg: float = Field(default=0.0, ge=-360.0, le=360.0)
 
 
 class GeographySpec(BaseModel):

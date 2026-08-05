@@ -30,6 +30,7 @@ All constants from Cortial et al. 2019 Table 1 (see Appendix D.7).
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 
@@ -396,6 +397,9 @@ def run_tectonic_evolution(
         for p in plates:
             for cid in p.cell_ids:
                 cell_map[cid] = p.id
+        if config.boundary_warp > 0:
+            cell_map = warp_boundaries(mesh, cell_map, config)
+            _rebuild_plate_cells(mesh, cell_map, plates)
         return plates, cell_map
 
     if algo not in _TECTONIC_ALGORITHMS:
@@ -404,9 +408,15 @@ def run_tectonic_evolution(
             f"Available: {sorted(_TECTONIC_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
-        return _evolve_cortial2019(
+        plates_out, cell_map = _evolve_cortial2019(
             mesh, plates, config, progress_callback=progress_callback,
         )
+        # Noise-warp the FINAL partition (Cortial 2019 §3) — irregular
+        # boundaries instead of straight geodesic arcs.
+        if config.boundary_warp > 0:
+            cell_map = warp_boundaries(mesh, cell_map, config)
+            _rebuild_plate_cells(mesh, cell_map, plates_out)
+        return plates_out, cell_map
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
 
 
@@ -572,11 +582,13 @@ def _evolve_cortial2019(
     prev_cell_map = cell_plate_map
     plate_birth_step: dict[str, int] = {p.id: 0 for p in plates}
     COOLDOWN = max(1, num_steps // 20)  # ~5% of total run
-    # Only resample Voronoi after rifting events (Cortial 2019 strategy).
-    # Between rifts, cell ownership is stable — fragments survive to grow.
+    # Re-partition the Voronoi every RESAMPLE_EVERY steps (so boundaries track
+    # the moving centroids), and once immediately after a rifting event so
+    # newborn fragments get a clean partition.  Between resamples cell
+    # ownership is stable (Cortial 2019 strategy).
     RESAMPLE_EVERY = 10
-    needs_resample = True
-    last_rifting_step = -RESAMPLE_EVERY
+    last_resample_step = -RESAMPLE_EVERY  # triggers a resample at step 0
+    rifted_since_last_resample = False
 
     for step in range(num_steps):
         # 1. Rotate centroids → find new seeds (Stage 1.2: batched cKDTree
@@ -601,13 +613,18 @@ def _evolve_cortial2019(
 
             rotated_centroids.append(_rodrigues_rotate(centroid, axis, angle_rad))
         if rotated_centroids:
-            new_seeds = _tree.query(np.array(rotated_centroids))[1].tolist()
+            # Distinct seeds — duplicate seeds (two centroids rounding to the
+            # same cell) make a plate lose all its cells and get removed by
+            # _cleanup_empty (the artificial plate-count collapse).
+            new_seeds = _assign_distinct_seeds(_tree, rotated_centroids)
         else:
             new_seeds = []
 
-        # 2. Re-run Voronoi (only every N steps or after a rift)
+        # 2. Re-run Voronoi (every N steps, or right after a rift)
         # Protect newborn plates: lock their cells so they survive long enough to grow
-        needs_resample = (step - last_rifting_step >= RESAMPLE_EVERY)
+        needs_resample = (
+            step - last_resample_step >= RESAMPLE_EVERY or rifted_since_last_resample
+        )
         if needs_resample:
             locked: dict[int, str] = {}
             NEWBORN_COOLDOWN = COOLDOWN * 5  # ~25 steps — give oceanic plates time to grow
@@ -633,7 +650,13 @@ def _evolve_cortial2019(
                             locked[cid] = pid
             if locked:
                 logger.info("  Voronoi: %d cells locked for %d oceanic newborn(s)", len(locked), len({v for v in locked.values()}))
-            new_cell_map = _voronoi_partition(mesh, new_seeds, locked=locked)
+            # Pass the real plate ids (new_seeds[i] ↔ plates[i]) so rifted
+            # plates keep their identity; index-based naming would orphan cells.
+            new_cell_map = _voronoi_partition(
+                mesh, new_seeds, locked=locked, plate_ids=[p.id for p in plates],
+            )
+            last_resample_step = step
+            rifted_since_last_resample = False
         else:
             new_cell_map = prev_cell_map
 
@@ -677,7 +700,7 @@ def _evolve_cortial2019(
             step=step, plate_birth_step=plate_birth_step,
         )
         if len(plates) != n_before:
-            last_rifting_step = step
+            rifted_since_last_resample = True
         # Remove plates that ended up with 0 cells (Voronoi consolidation)
         plates, new_cell_map = _cleanup_empty(
             mesh, new_cell_map, plates,
@@ -1064,3 +1087,77 @@ def _rebuild_plate_cells(
         p.cell_ids = sorted(plate_cells.get(p.id, []))
         for cid in p.cell_ids:
             mesh.cells[cid].plate_id = p.id
+
+
+def _assign_distinct_seeds(
+    tree: Any,
+    centroids: list[np.ndarray],
+    k: int = 8,
+) -> list[int]:
+    """Map each centroid to a DISTINCT nearest cell.
+
+    Duplicate seeds are the root cause of plate loss during re-partitioning:
+    when two rotated centroids round to the same cell, one plate claims the
+    shared cell and the other gets nothing, then is removed by
+    ``_cleanup_empty`` (the artificial 20→6 collapse).  Querying the k nearest
+    cells and greedily picking an unused one keeps every plate alive.
+    """
+    if not centroids:
+        return []
+    _, idx = tree.query(np.array(centroids), k=k)
+    idx = np.atleast_2d(idx)
+    used: set[int] = set()
+    seeds: list[int] = []
+    for i in range(idx.shape[0]):
+        chosen = int(idx[i, 0])
+        for j in range(idx.shape[1]):
+            cand = int(idx[i, j])
+            if cand not in used:
+                chosen = cand
+                break
+        used.add(chosen)
+        seeds.append(chosen)
+    return seeds
+
+
+def warp_boundaries(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    config: TerrainPipelineConfig,
+) -> dict[int, str]:
+    """Re-partition as a noise-warped Voronoi of the current plate positions.
+
+    Cortial et al. (2019) §3 "geodetic distance + noise warp".  Applied once to
+    the FINAL partition (after tectonics) so straight geodesic boundaries become
+    irregular, arc-like — making island arcs / mountain belts curve and segment
+    instead of running unnaturally long and straight.  Plate shapes are preserved
+    (the partition is still the Voronoi of the same plate centroids); only the
+    boundaries are warped.
+    """
+    from scipy.spatial import cKDTree
+
+    from .plate_generator import build_cell_cost, voronoi_partition_warped
+
+    present = sorted(set(cell_plate_map.values()))
+    centroids: list[np.ndarray] = []
+    plate_ids: list[str] = []
+    for pid in present:
+        cids = [cid for cid, p in cell_plate_map.items() if p == pid]
+        if not cids:
+            continue
+        cx = float(np.mean([mesh.cells[c].x for c in cids]))
+        cy = float(np.mean([mesh.cells[c].y for c in cids]))
+        cz = float(np.mean([mesh.cells[c].z for c in cids]))
+        norm = float(np.sqrt(cx * cx + cy * cy + cz * cz)) or 1.0
+        centroids.append(np.array([cx / norm, cy / norm, cz / norm]))
+        plate_ids.append(pid)
+
+    cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    tree = cKDTree(cell_xyz)
+    seeds = _assign_distinct_seeds(tree, centroids)
+    cost = build_cell_cost(mesh, config.seed + 7777, config.boundary_warp)
+    warped = voronoi_partition_warped(mesh, seeds, plate_ids, cost)
+    logger.info(
+        "  Boundary warp: %d plates, amplitude=%.2f", len(plate_ids), config.boundary_warp
+    )
+    return warped

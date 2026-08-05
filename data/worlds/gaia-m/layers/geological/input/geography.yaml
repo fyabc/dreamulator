@@ -37,14 +37,83 @@ features:
     elongation: 1.6
     bearing_deg: 0.0            # 南北向拉长（首轮初值，待调）
 
-  - name: 大裂谷海
+  # ---- 大裂谷海：多段错列（en échelon）裂谷，仿东非大裂谷/红海 ----
+  # 不用单一拉长偏置场（会产出笔直经向裂谷）；改用多段沿蜿蜒路径错列排布，
+  # 走向左右摆动、宽窄不一，并叠加断块隆起（正场）与异常塌陷（更强负场）。
+  - name: 大裂谷海·南段
     kind: rift_sea
-    lon: -90.0                  # 纵贯世界岛中部
-    lat: 0.0
-    radius_deg: 3.0             # 半宽 ~360 km（保证中分辨率可分辨，全分辨率更清晰）
-    strength: -2.0              # 强度须显著超过世界岛(+0.85)才能切穿 → 净场强负
-    elongation: 11.0            # 半长轴 ~33° → 总长 ~8000 km
-    bearing_deg: 0.0            # 南北向
+    lon: -92.0
+    lat: -25.0
+    radius_deg: 2.5
+    strength: -1.8              # 须超过世界岛(+0.85)才能切穿
+    elongation: 4.0             # 半长轴 ~10°，各段首尾相接成蜿蜒裂谷
+    bearing_deg: 15.0           # 段轴向左右摆动 → 蜿蜒走向
+  - name: 大裂谷海·中南段
+    kind: rift_sea
+    lon: -88.5
+    lat: -14.0
+    radius_deg: 2.8
+    strength: -1.9
+    elongation: 4.0
+    bearing_deg: -12.0
+  - name: 大裂谷海·中段
+    kind: rift_sea
+    lon: -91.0
+    lat: -3.0
+    radius_deg: 2.5
+    strength: -1.8
+    elongation: 4.2
+    bearing_deg: 22.0
+  - name: 大裂谷海·中北段
+    kind: rift_sea
+    lon: -87.5
+    lat: 8.0
+    radius_deg: 2.7
+    strength: -1.9
+    elongation: 4.0
+    bearing_deg: -18.0
+  - name: 大裂谷海·北段
+    kind: rift_sea
+    lon: -90.5
+    lat: 19.0
+    radius_deg: 2.4
+    strength: -1.7
+    elongation: 4.0
+    bearing_deg: 12.0
+  # 断块隆起（正场小丘，裂谷肩抬升 / 未裂透的断块）
+  - name: 裂谷肩断块隆起·南
+    kind: plateau
+    lon: -85.5
+    lat: -9.0
+    radius_deg: 1.3
+    strength: 0.7               # 弱正场 → 裂谷边缘断块隆起
+    elongation: 2.0
+    bearing_deg: -25.0
+  - name: 裂谷肩断块隆起·北
+    kind: plateau
+    lon: -93.5
+    lat: 12.0
+    radius_deg: 1.2
+    strength: 0.8
+    elongation: 2.2
+    bearing_deg: 20.0
+  # 异常塌陷（更强负场，裂谷内局部深陷 / 拉分盆地）
+  - name: 裂谷塌陷盆地·中
+    kind: rift_sea
+    lon: -89.5
+    lat: 2.0
+    radius_deg: 1.4
+    strength: -2.4              # 比裂谷主体更深 → 局部深陷
+    elongation: 2.5
+    bearing_deg: 15.0
+  - name: 裂谷塌陷盆地·北
+    kind: rift_sea
+    lon: -89.0
+    lat: 14.0
+    radius_deg: 1.2
+    strength: -2.2
+    elongation: 2.0
+    bearing_deg: -18.0
 
   - name: 破碎群岛带
     kind: archipelago

@@ -128,13 +128,21 @@ def _voronoi_partition(
     seeds: list[int],
     *,
     locked: dict[int, str] | None = None,
+    plate_ids: list[str] | None = None,
 ) -> dict[int, str]:
     """Synchronous BFS Voronoi.  Cells in *locked* keep their current plate.
 
     *locked* maps cell_id → plate_id.  These cells are never reassigned —
     useful for protecting newborn plates during their growth phase.
+
+    *plate_ids* (optional) gives the plate id for ``seeds[i]``.  When omitted,
+    plates are named ``plate_{i:03d}`` by seed index.  During tectonic
+    re-partitioning the caller MUST pass the actual plate ids — naming by index
+    mismatches rifted plates (e.g. ``plate_011_a``) and silently orphans their
+    cells, which is what collapsed the plate count.
     """
     num_plates = len(seeds)
+    ids = plate_ids if plate_ids is not None else [f"plate_{i:03d}" for i in range(num_plates)]
     cell_plate_map: dict[int, str] = {}
 
     # Pre-assign locked cells
@@ -147,7 +155,7 @@ def _voronoi_partition(
     # One FIFO queue per plate, initialised with the seed cell
     queues: list[deque[int]] = [deque([s]) for s in seeds]
     for i, seed_id in enumerate(seeds):
-        pid = f"plate_{i:03d}"
+        pid = ids[i]
         if seed_id not in cell_plate_map:
             cell_plate_map[seed_id] = pid
 
@@ -163,7 +171,7 @@ def _voronoi_partition(
             if not q:
                 continue
 
-            plate_id = f"plate_{plate_idx:03d}"
+            plate_id = ids[plate_idx]
             for _ in range(len(q)):
                 cell_id = q.popleft()
                 for neighbor_id in mesh.cells[cell_id].neighbors:
@@ -185,6 +193,83 @@ def _voronoi_partition(
         "  Voronoi BFS: %d rounds, %d cells assigned",
         round_num, total_assigned,
     )
+    return cell_plate_map
+
+
+# ---------------------------------------------------------------------------
+# Noise-warped Voronoi (Cortial 2019 §3 "geodetic distance + noise warp")
+# ---------------------------------------------------------------------------
+# The synchronous BFS above produces geodesic (great-circle) plate boundaries
+# — long and unnaturally straight.  The paper warps the distance metric with
+# noise so boundaries weave into irregular, arc-like shapes.  We implement that
+# as a multi-source Dijkstra where the cost of entering each cell is perturbed
+# by deterministic per-cell noise: wavefronts advance unevenly, so the
+# resulting plate boundaries are jagged instead of straight.
+
+
+def build_cell_cost(mesh: CVTMesh, rng_seed: int, amplitude: float) -> np.ndarray:
+    """Per-cell traversal cost for the noise-warped partition.
+
+    Returns ``1 + amplitude * noise`` (clamped to stay positive), where noise
+    ∈ [-1, 1] is deterministic fBm sampled at each cell's 3D position.  Low-cost
+    cells attract boundaries, high-cost cells repel them, warping the edges.
+    """
+    from .noise_kernels import noise_on_points
+
+    n = mesh.num_cells
+    x = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
+    y = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
+    z = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
+    noise = noise_on_points(x, y, z, int(rng_seed))
+    cost = 1.0 + float(amplitude) * noise
+    return np.maximum(cost, 0.05)
+
+
+def voronoi_partition_warped(
+    mesh: CVTMesh,
+    seeds: list[int],
+    plate_ids: list[str],
+    cell_cost: np.ndarray,
+) -> dict[int, str]:
+    """Noise-warped spherical Voronoi — multi-source Dijkstra.
+
+    ``seeds[i]`` is the seed cell for plate ``plate_ids[i]``.  The cost of
+    entering cell ``v`` is ``cell_cost[v]``; each cell joins the plate whose
+    wavefront reaches it with the smallest accumulated cost.  Produces
+    irregular, jagged boundaries (vs. the straight geodesic edges of the
+    uniform BFS above).
+    """
+    import heapq
+
+    n = mesh.num_cells
+    inf = float("inf")
+    dist = np.full(n, inf, dtype=np.float64)
+    owner = np.full(n, -1, dtype=np.int64)
+
+    heap: list[tuple[float, int]] = []
+    for i, s in enumerate(seeds):
+        if dist[s] > 0.0:  # first seed at this cell wins
+            dist[s] = 0.0
+            owner[s] = i
+            heapq.heappush(heap, (0.0, s))
+
+    neighbors = [c.neighbors for c in mesh.cells]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist[u]:
+            continue  # stale heap entry
+        ou = owner[u]
+        for v in neighbors[u]:
+            nd = d + cell_cost[v]
+            if nd < dist[v]:
+                dist[v] = nd
+                owner[v] = ou
+                heapq.heappush(heap, (nd, v))
+
+    cell_plate_map: dict[int, str] = {}
+    for c in range(n):
+        o = owner[c]
+        cell_plate_map[c] = plate_ids[o] if o >= 0 else plate_ids[0]
     return cell_plate_map
 
 

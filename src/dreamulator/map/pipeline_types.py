@@ -56,6 +56,12 @@ class TerrainPipelineConfig:
     # edges, 0.05–0.15 = natural organic boundaries).
     # Follows Cortial et al. (2019) "noise-warped geodetic distance".
     boundary_noise: float = 0.10
+    # Voronoi boundary warp amplitude (Cortial et al. 2019 §3 "geodetic
+    # distance + noise warp").  0 = straight geodesic Voronoi edges;
+    # ~0.5–0.8 = irregular, jagged plate boundaries (realistic arcs/segments
+    # instead of long straight lines).  Applied to the FINAL partition (after
+    # tectonics) via a noise-weighted multi-source Dijkstra.
+    boundary_warp: float = 0.0
     # Per-plate continental fraction range.  Each plate is assigned a random
     # continental cell ratio uniformly in [min, max].  Earth ≈ 0.29 land
     # (emergent), but the crust-type continental fraction should be higher
