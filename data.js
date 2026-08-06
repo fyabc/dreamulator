@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785851937267,
+  "lastUpdate": 1786024575732,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -118,6 +118,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004200962984674447",
             "extra": "mean: 4.23285200000123 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "432c8f533d31cb59870e6cddb9b9a4fb44e5bad5",
+          "message": "Release v0.16.0: 地理锚定 + 板块大小偏态化 + 测试 CI\n\n三大主题：\n- 地理锚定（geography.yaml 机器可读规格 + 陆地偏置场 + 构造后重锚定），\n  命名海陆落到指定位置；含\"锚定静默丢失\"回归的修复（terrain generate\n  同源加载 + 输出到正式 maps/）。\n- 板块构造真实感：板块数坍缩修复、板块大小偏态化（乘法加权 Voronoi\n  重分区保持出生偏态，roadmap #6）、边界低频 fBm 弯曲（#7）、俯冲海沟\n  仅洋壳 7 km relief（#8，gaia-m 最深 −10484 m）。\n- 测试 CI（tests.yml）：pytest 硬门槛 + ruff F,E9 硬门槛 + mypy 报告档；\n  F 类 lint 存量清零。\n\n前端图层系统重构（kind 分组多选 + 烘焙/显示分离）随本版本发布。\ngaia-m 全量重建：26 板 CV=0.97、均温 12.7 °C、13 Köppen 类。\n\n版本 0.15.0 → 0.16.0（pyproject.toml + uv.lock + frontend/package.json），\nCHANGELOG 已更新。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T21:53:55+08:00",
+          "tree_id": "3204f2428eecb7d1039e43e618d6e83212004ba7",
+          "url": "https://github.com/fyabc/dreamulator/commit/432c8f533d31cb59870e6cddb9b9a4fb44e5bad5"
+        },
+        "date": 1786024575244,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 78.52015390138631,
+            "unit": "iter/sec",
+            "range": "stddev: 0.006126476190625739",
+            "extra": "mean: 12.735583799999972 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.0331371684898745,
+            "unit": "iter/sec",
+            "range": "stddev: 0.042303721016219424",
+            "extra": "mean: 198.68324000000115 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.935062484270611,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8286436977474092",
+            "extra": "mean: 516.7791779999978 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 972.5626461580641,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011046939189672695",
+            "extra": "mean: 1.0282114000062847 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 232.00482421554798,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001032920158270437",
+            "extra": "mean: 4.310255199999347 msec\nrounds: 5"
           }
         ]
       }
