@@ -5,10 +5,10 @@
 >
 > | 文档 | 说明 |
 > |------|------|
-> | [`docs/usage/map-workflow.md`](../usage/map-workflow.md) | 地图工作流指南（CVT 网格 → 板块 → 地形 → 前端查看器） |
-> | [`docs/design/terrain-pipeline.md`](terrain-pipeline.md) | 行星地形生成管线技术参考（算法原理、数学公式） |
-> | [`docs/design/map-system.md`](map-system.md) | 地图子系统架构（数据模型、渲染技术、API 端点） |
-> | [`docs/usage/civmap-guide.md`](../usage/civmap-guide.md) | 文明地图使用指南 |
+> | [`docs/usage/map-workflow.md`](../../usage/map-workflow.md) | 地图工作流指南（CVT 网格 → 板块 → 地形 → 前端查看器） |
+> | [`docs/design/terrain-pipeline.md`](../terrain-pipeline.md) | 行星地形生成管线技术参考（算法原理、数学公式） |
+> | [`docs/design/map-system.md`](../map-system.md) | 地图子系统架构（数据模型、渲染技术、API 端点） |
+> | [`docs/usage/civmap-guide.md`](../../usage/civmap-guide.md) | 文明地图使用指南 |
 
 ---
 
