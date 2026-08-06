@@ -239,7 +239,8 @@ C >30%、Kappa >0.3）→ M3 温度精细（RMSE <8°C、B→C 混淆消除）�
    含微板块 ≈8000×）；最大板 10909 cell（~2.7× 均值）+ 完整小板尾
    （1969→6 cell；6 cell≈3.5 万 km²，复活节岛微板块尺度）。
    若需更强偏律：加大种子 size-factor / 裂解权重范围，或直接按截断幂律抽取
-   出生权重——机制已就位，只差参数（见 terrain-pipeline.md §3.2、§D.11）。
+   出生权重——机制已就位，只差参数（见 terrain-pipeline.md §3.2、
+   knowledge/geology/cortial_2019_notes.md §D.11）。
 7. **板块边界曲率增强（已完成）** — ✅ 已修复（2026-08-06）。两层机制：
    (a) boundary_warp 用**低频 fBm**（波长≈板块尺度）扭曲距离度量，边界不再
    细碎锯齿；(b) **小圆弧涌现机制**（Frank 1968 / Tovish 1978）：Voronoi 平分线

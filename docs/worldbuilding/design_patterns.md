@@ -327,7 +327,7 @@ def adaptive_pid(current_value, target, base_rate, history):
 | （建议） | 气候模拟 | 目标全球均温 | atmosphere_factor |
 
 **参考**：
-- `docs/design/terrain-pipeline.md` §D.12 — 板块裂解 PID 实现细节
+- `docs/knowledge/geology/cortial_2019_notes.md` §D.12 — 板块裂解 PID 实现细节
 - `src/dreamulator/map/tectonic_simulator.py` — `_evolve_cortial2019()` 中的 PID 控制器
 - Matthews et al. (2016) — 地球 410 My 板块数量参考数据
 

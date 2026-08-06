@@ -19,7 +19,11 @@ Fibonacci 球面螺旋 → 随机扰动 → Lloyd 松弛 (迭代) → SphericalV
 
 $$\varphi_k = \arccos\left(1 - \frac{2(k+0.5)}{N}\right), \quad \theta_k = \frac{2\pi k}{\Phi}$$
 
-其中 $\varphi$ 为余纬（极角），$\theta$ 为经度。
+其中 $\varphi$ 为余纬（极角），$\theta$ 为经度，$k = 0, 1, \dots, N-1$。
+笛卡尔坐标（y 轴朝北极）见下文坐标转换。
+
+**优点**：确定性（无需 RNG）、O(N) 生成、面积近似均匀（每点约 $4\pi/N$
+球面度）、无极点聚集。
 
 ---
 
@@ -69,6 +73,14 @@ $$\Omega = \sum_i 2\arctan\left(\frac{\mathbf{n} \cdot (\mathbf{v}_i \times \mat
 
 面积 = $|\Omega| \cdot R^2$（R = 行星半径 km）
 
+**等价形式（球面角盈 / spherical excess）**（自 design/terrain-pipeline.md 附录 A.7
+上浮，2026-08）：
+
+$$A = \left|\sum_{i=1}^{n}\theta_i - (n-2)\pi\right| \cdot R^2$$
+
+其中 $\theta_i$ 为第 $i$ 个顶点的球面内角，$n$ 为顶点数；
+立体角 $\Omega = A / R^2$（steradians）。
+
 ---
 
 ## 坐标转换
@@ -78,6 +90,18 @@ $$\Omega = \sum_i 2\arctan\left(\frac{\mathbf{n} \cdot (\mathbf{v}_i \times \mat
 $$\begin{aligned} (x,y,z) &= (r\cos\phi\cos\theta,\; r\sin\phi,\; r\cos\phi\sin\theta) \\ (\phi,\theta) &= (\arcsin(y/r),\; \arctan2(z,x)) \end{aligned}$$
 
 角距离：$\Delta\alpha = \arccos(\mathbf{p}_1 \cdot \mathbf{p}_2)$
+
+---
+
+## 角距离（Haversine）
+
+（自 design/terrain-pipeline.md 附录 A.1 上浮，2026-08）
+
+$$d(\varphi_1,\lambda_1,\varphi_2,\lambda_2) = 2\arcsin\sqrt{\sin^2\frac{\Delta\varphi}{2} + \cos\varphi_1\cos\varphi_2\,\sin^2\frac{\Delta\lambda}{2}}$$
+
+其中 $\Delta\varphi = \varphi_2 - \varphi_1$，$\Delta\lambda = \lambda_2 - \lambda_1$。
+单位球面上 $d$ 即角距离（rad），乘行星半径得大圆距离。
+Haversine 形式在小距离下比 $\arccos(\mathbf{p}_1\cdot\mathbf{p}_2)$ 数值更稳定。
 
 ---
 

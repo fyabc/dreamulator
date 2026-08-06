@@ -186,6 +186,58 @@ dreamulator.engine.climate_physics.seasonal_temperature(
 
 ---
 
+## 7. 降水与水循环
+
+（自 design/terrain-pipeline.md §8.3 上浮，2026-08。风场部分见
+`atmospheric_circulation.md`；专设的 `precipitation.md` 建立后本节可并入）
+
+**核心机制**：海洋蒸发 → 风场输送水汽 → 地形抬升降水（迎风坡）→ 雨影效应
+（背风坡）。
+
+### 海洋蒸发（水汽源）
+
+暖洋面蒸发更强，初始水汽通量按温度线性增强：
+
+```
+moisture_ocean ≈ evaporation_base × (1 + 0.03 · T)     # mm/yr，T 单位 °C
+```
+
+`evaporation_base` 默认 2000 mm/yr（热带海洋年蒸发量；地球热带海洋实际约
+1500–2500 mm/yr）。
+
+### 沿风水汽平流与地形降水
+
+水汽沿风向在邻接图上多轮平流（实现为 BFS/多遍平流），逐 cell 处理：
+
+- **地形抬升**（迎风坡）：空气被迫上升时按比例凝结成雨，
+  `rain = moisture × min(Δh / 1000 m, orographic_efficiency)`，
+  效率上限 `orographic_efficiency`（默认 0.5/km）；
+- **下沉**（背风坡）：仅少量降水（雨影），大部分水汽保留；
+- **平地/洋面**：按固定比例逐渐失去水汽。
+
+### ITCZ 季节性迁移
+
+热带辐合带（ITCZ）随太阳直射点移动，并因海洋热惯性滞后 ~1–2 个月；
+其迁移驱动热带季风：
+
+$$\delta_\odot = \varepsilon \sin\left(2\pi\,\frac{d - 80}{P_{orb}}\right), \qquad \phi_{ITCZ} \approx 0.7\,\delta_\odot + 5°$$
+
+其中 $\delta_\odot$ 为太阳赤纬，$\varepsilon$ 为轴倾角，$d$ 为年积日，
+$P_{orb}$ 为轨道周期（地球取 365.25 d）。+5° 偏置对应地球 ITCZ 的北偏
+（滞后天数由 `itcz_lag_days` 控制，默认 30）。热带地区另叠加对流性降水增强
+（ITCZ 雨带）。
+
+### 对应源码
+
+```
+dreamulator.map.climate_simulator._compute_precipitation_bfs   # 多轮 BFS 平流 + 雨影
+dreamulator.engine.climate_physics.itcz_latitude               # ITCZ 纬度
+dreamulator.engine.climate_physics.orographic_precipitation
+dreamulator.engine.climate_physics.evaporation_rate
+```
+
+---
+
 ## 参考资料
 
 - Hartmann, D.L. (2016). *Global Physical Climatology* (2nd ed.). Elsevier. Ch. 2–4.

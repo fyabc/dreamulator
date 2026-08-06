@@ -585,120 +585,27 @@ speed_multiplier    →      (新增字段)
 
 ### 4.1 欧拉极分配
 
-每个板块的运动由一个**欧拉极**（Euler pole）描述——球面上的一个旋转轴。
-在惯性参考系中，板块 P 绕欧拉极 `ê` 以角速度 ω 做刚体旋转。
+每个板块的运动由一个**欧拉极**（Euler pole）描述——球面上的一个旋转轴；
+在惯性参考系中板块绕该轴做刚体旋转。
 
-```python
-def assign_euler_poles(
-    num_plates: int,
-    mesh: CVTMesh,
-    plate_seeds: list[int],
-    rng,
-) -> list[EulerPole]:
-    """Assign random Euler poles to each plate.
+> 运动学公式已上浮至
+> [knowledge/geology/plate_tectonics.md](../knowledge/geology/plate_tectonics.md)
+> §欧拉极运动学：角速度换算 ω = v/R 与地球板块速度参考表、速度场
+> v(P) = ω·(ê×P) 及其大小 |v| = ωR·sin α、边界相对速度与法向/切向分解、
+> 无净旋转（no-net-rotation）参考系。
 
-    The Euler pole is a random unit vector (rotation axis).
-    For more realism, bias it perpendicular to the plate's
-    "dominant motion direction".
-    """
-    poles = []
-    for i in range(num_plates):
-        # Random rotation axis on unit sphere
-        axis = rng.standard_normal(3)
-        axis /= linalg.norm(axis)
-        poles.append(EulerPole(axis=axis, omega=0.0))  # omega set in next step
-    return poles
-```
+**实现要点**（`tectonic_simulator.py` / `plate_generator.py`）：
 
-### 4.2 角速度
-
-角速度 ω 控制板块运动速率。地球板块运动速度约 1-10 cm/yr。
-
-```
-ω = v / R
-
-v: 板块线速度 (m/yr)
-R: 行星半径 (m)
-```
-
-| 速度 (cm/yr) | ω (rad/yr) | 描述 |
-|--------------|------------|------|
-| 1.0 | 1.57 × 10⁻⁹ | 慢速（如非洲板块） |
-| 5.0 | 7.85 × 10⁻⁹ | 中等（如北美板块） |
-| 10.0 | 1.57 × 10⁻⁸ | 快速（如太平洋板块） |
-
-```python
-def assign_angular_velocities(
-    poles: list[EulerPole],
-    rng,
-    speed_range_cm_yr: tuple = (1.0, 10.0),
-    radius_km: float = 6371.0,
-) -> None:
-    """Assign angular velocities to Euler poles."""
-    for pole in poles:
-        v_cm_yr = rng.uniform(*speed_range_cm_yr)
-        v_m_yr = v_cm_yr * 0.01
-        pole.omega = v_m_yr / (radius_km * 1000)  # rad/yr
-```
-
-### 4.3 速度场
-
-给定欧拉极 `ê` 和角速度 ω，球面上任意点 P 的速度由刚体旋转公式给出：
-
-```
-v(P) = ω · (ê × P)
-```
-
-其中 P 是单位球面上的位置矢量，`×` 是向量叉积。
-
-**推导**：
-
-设旋转角速度矢量为 **Ω** = ω · **ê**（方向为旋转轴，大小为角速度）。
-对于球面上位置矢量 **r**（|**r**| = R），速度为：
-
-```
-v = Ω × r
-```
-
-速度大小：`|v| = ω · R · sin(α)`，其中 α 是 P 到欧拉极的角距离。
-在欧拉极处速度为零，在 90° 处速度最大。
-
-```python
-def compute_velocity_field(
-    nodes_xyz: np.ndarray,       # (N, 3) unit sphere positions
-    euler_axis: np.ndarray,      # (3,) unit rotation axis
-    omega: float,                # angular velocity (rad/yr)
-    radius_km: float = 6371.0,
-) -> np.ndarray:
-    """Compute velocity at each node.
-
-    Returns:
-        (N, 3) velocity vectors in m/yr (tangent to sphere).
-    """
-    omega_vec = euler_axis * omega  # (3,)
-    # v = omega_vec × r  for each node
-    velocities = np.cross(omega_vec, nodes_xyz)  # (N, 3) via broadcasting
-    # Scale: unit sphere → real radius
-    velocities *= radius_km * 1000  # m/yr
-    return velocities
-```
-
-### 4.4 参考系
-
-上述速度在惯性参考系（"地幔固定"框架）中定义。可选地，可以减去全球净旋转
-（net rotation），使平均角动量为零：
-
-```python
-def remove_net_rotation(
-    all_velocities: np.ndarray,   # (num_plates, N, 3)
-    areas: np.ndarray,            # (N,) cell areas
-) -> np.ndarray:
-    """Remove net lithospheric rotation (no-net-rotation frame)."""
-    # Weighted mean velocity
-    weights = areas / areas.sum()
-    mean_v = (all_velocities * weights[np.newaxis, :, np.newaxis]).sum(axis=(0, 1))
-    return all_velocities - mean_v
-```
+- **欧拉极分配**：每板块随机单位旋转轴（高斯采样后归一化），角速度由
+  `speed_min_cm_yr`–`speed_max_cm_yr` 均匀采样后经 ω = v/R 换算。
+- **速度场**：向量化叉积一次算出全部节点速度（单位球坐标 → 乘
+  `radius_km × 1000` 得 m/yr）。
+- **参考系**：可选移除岩石圈净旋转（按 cell 面积加权平均速度后扣除），
+  由配置键 `remove_net_rotation` 控制。
+- **时间演化的 δt 自动缩放**（实现行为，见 §17 与
+  `tectonic_simulator.py::_auto_compute_dt`）：
+  `δt = 3 · √(4πR²/N) / v_max`——令最快板块每步移动 ~3 个 cell
+  （100K cells 时 δt ≈ 2 My；`tectonic_dt_my > 0` 时显式覆盖）。
 
 ### 参数表
 
@@ -712,150 +619,34 @@ def remove_net_rotation(
 
 ## 5. 阶段 4: 边界检测与分类
 
-### 5.1 邻接扫描
+在 CVT 网格的邻接图上扫描所有边，两端属于不同板块的边即为**板块边界**段。
 
-遍历 CVT 网格的所有边，检测两个端点属于不同板块的边——这些就是**板块边界**。
+> 边界运动学与地质学依据已上浮至
+> [knowledge/geology/plate_tectonics.md](../knowledge/geology/plate_tectonics.md)
+> §边界检测与分类：相对速度
+> v_rel = (Ω_A − Ω_B) × P · R 及其法向/切向分解（v_n 汇聚为正、v_t 走滑），
+> 各边界类型的地质效应（山脉/海沟/火山弧、洋中脊/裂谷、走滑断层）与
+> 汇聚子类型（陆-陆碰撞、洋-洋俯冲、安第斯型俯冲）。
 
-```python
-def detect_boundaries(
-    mesh: CVTMesh,
-    plate_ids: np.ndarray,
-) -> list[BoundarySegment]:
-    """Scan all edges to find plate boundaries.
+**实现要点**（`boundary_detector.py`）：
 
-    Returns list of BoundarySegment, each describing one
-    boundary edge between two plates.
-    """
-    segments = []
-    seen_edges = set()
+1. **邻接扫描**：遍历邻接表，以 `(min(a,b), max(a,b))` 去重，收集
+   `BoundarySegment`（两端节点、两侧板块、中点坐标、`v_normal_m_yr`、
+   `v_tangential_m_yr`、`influence_radius_km` 等字段）。
+2. **相对速度分解**：先把 v_rel 投影到中点切平面（扣除径向分量），再沿
+   边界法向分解；边界法向近似取 plate_A 质心 → plate_B 质心方向（投影到切平面）。
+3. **分类**：按 `velocity_threshold_cm_yr`（默认 0.5 cm/yr）划分
+   convergent / divergent / transform / inactive，并按两侧地壳组合细化
+   汇聚子类型（`subduction_type`）。
+4. **边界链追踪**：将共享节点的同类边界段贪心连成链（`BoundaryChain`），
+   供山脉走向、海沟线等线性特征生成使用。
 
-    for node_a in range(mesh.num_nodes):
-        for node_b in mesh.adjacency[node_a]:
-            edge_key = (min(node_a, node_b), max(node_a, node_b))
-            if edge_key in seen_edges:
-                continue
-            seen_edges.add(edge_key)
-
-            if plate_ids[node_a] != plate_ids[node_b]:
-                segments.append(BoundarySegment(
-                    node_a=node_a,
-                    node_b=node_b,
-                    plate_a=plate_ids[node_a],
-                    plate_b=plate_ids[node_b],
-                    midpoint=(mesh.nodes[node_a] + mesh.nodes[node_b]) / 2,
-                ))
-
-    return segments
-```
-
-### 5.2 相对速度
-
-对于每个边界段，计算两侧板块在边界中点处的相对速度：
-
-```python
-def compute_relative_velocity(
-    midpoint: np.ndarray,         # (3,) position on unit sphere
-    euler_a: EulerPole,
-    euler_b: EulerPole,
-    radius_km: float,
-) -> np.ndarray:
-    """v_rel = v_A(P) - v_B(P) at boundary midpoint P."""
-    v_a = np.cross(euler_a.axis * euler_a.omega, midpoint) * radius_km * 1000
-    v_b = np.cross(euler_b.axis * euler_b.omega, midpoint) * radius_km * 1000
-    return v_a - v_b  # m/yr
-```
-
-### 5.3 速度分解
-
-将相对速度分解为法向分量（垂直于边界）和切向分量（平行于边界）：
-
-```python
-def decompose_velocity(
-    v_rel: np.ndarray,            # (3,) relative velocity
-    boundary_normal: np.ndarray,  # (3,) unit normal (tangent to sphere, ⊥ boundary)
-    midpoint: np.ndarray,         # (3,) position (for radial projection)
-) -> tuple[float, float]:
-    """Decompose v_rel into normal and tangential components.
-
-    Project velocities onto the tangent plane at midpoint first.
-
-    Returns:
-        (v_n, v_t): normal (convergent+) and tangential (transform) components.
-    """
-    # Project v_rel onto tangent plane (remove radial component)
-    v_tangent = v_rel - np.dot(v_rel, midpoint) * midpoint
-
-    # Normal component (along boundary normal, in tangent plane)
-    v_n = np.dot(v_tangent, boundary_normal)
-
-    # Tangential component (remainder)
-    v_t_vec = v_tangent - v_n * boundary_normal
-    v_t = linalg.norm(v_t_vec)
-
-    return float(v_n), float(v_t)
-```
-
-**边界法向量**近似为从 plate_A 质心指向 plate_B 质心的方向（投影到切平面）。
-
-### 5.4 边界类型
-
-根据法向分量 `v_n` 的符号和大小分类：
-
-| 条件 | 类型 | 地质效应 |
-|------|------|----------|
-| `v_n > threshold` | **Convergent** (汇聚) | 山脉、海沟、火山弧 |
-| `v_n < -threshold` | **Divergent** (离散) | 洋中脊、裂谷 |
-| `\|v_n\| ≤ threshold` 且 `v_t > threshold` | **Transform** (转换) | 走滑断层 |
-| `\|v_n\| ≤ threshold` 且 `v_t ≤ threshold` | **Inactive** (非活动) | 无明显效应 |
-
-其中 `threshold ≈ 0.5 cm/yr`（地质不活跃阈值）。
-
-**子类型细化**（汇聚边界）：
-
-| 板块组合 | 子类型 | 典型地貌 |
-|----------|--------|----------|
-| 大陆-大陆 | Continental collision | 高原（喜马拉雅） |
-| 大洋-大洋 | Oceanic subduction | 岛弧 + 海沟（日本） |
-| 大陆-大洋 | Andean subduction | 海岸山脉 + 海沟（安第斯） |
-
-### 5.5 边界元数据
-
-每个边界段存储以下信息：
-
-```python
-@dataclass
-class BoundarySegment:
-    node_a: int
-    node_b: int
-    plate_a: int
-    plate_b: int
-    midpoint: np.ndarray              # (3,) Cartesian
-    boundary_type: str                # convergent | divergent | transform
-    subduction_type: str | None       # oceanic-oceanic | continental-oceanic | ...
-    v_normal_m_yr: float              # normal velocity component (m/yr)
-    v_tangential_m_yr: float          # tangential velocity component
-    influence_radius_km: float        # boundary effect radius
-```
-
-> **Cortial 2019 俯冲上隆公式**（详见[附录 D.4](#d4-四大构造现象)）：
+> **Cortial 2019 俯冲上隆公式**（详见
+> [knowledge/geology/cortial_2019_notes.md](../knowledge/geology/cortial_2019_notes.md) §D.4）：
 > $u_j(p) = u_0 \cdot f(d) \cdot g(v) \cdot h(\tilde{z})$
 > 其中 $u_0 = 0.6$ mm/y, $r_s = 1800$ km, $h(\tilde{z}) = \tilde{z}^2$。
 > 我们的 §6 地形合成使用类似的高斯衰减函数，但简化为距离的指数衰减。
 > 实现时间演化后（§17），应切换到 Cortial 的完整公式。
-
-**边界链追踪**：将相邻的同类边界段连接成链（chain），用于生成线性特征（山脉走向、海沟线）：
-
-```python
-def trace_boundary_chains(
-    segments: list[BoundarySegment],
-    mesh: CVTMesh,
-) -> list[BoundaryChain]:
-    """Connect adjacent boundary segments into chains."""
-    # Build boundary graph: segments sharing a node
-    # Greedy chain tracing: start from unvisited segment,
-    # follow neighbors of same type
-    ...
-```
 
 ### 参数表
 
@@ -868,376 +659,33 @@ def trace_boundary_chains(
 
 ## 6. 阶段 5: 地形合成
 
-### 6.1 地壳基准高程
-
-地球的高程分布呈**双峰分布**（hypsometric curve）：大陆平均 ~840m，海底平均 ~-3800m。
-新方案在 CVT 节点上直接分配基准高程：
-
-```python
-def assign_base_elevation(
-    plate_ids: np.ndarray,
-    crust_types: list[str],
-    mesh: CVTMesh,
-    rng,
-) -> np.ndarray:
-    """Assign base elevation per node based on crust type.
-
-    Bimodal distribution:
-        Continental: ~850m ± 200m (Gaussian)
-        Oceanic: ~-3800m ± 500m (Gaussian)
-        Mixed: depends on local plate context
-
-    Returns:
-        (N,) elevation in meters.
-    """
-    elev = np.zeros(mesh.num_nodes)
-    for i in range(mesh.num_nodes):
-        ct = crust_types[plate_ids[i]]
-        if ct == "continental":
-            elev[i] = rng.normal(850, 200)
-        elif ct == "oceanic":
-            elev[i] = rng.normal(-3800, 500)
-        else:  # mixed
-            # Use noise to determine local type
-            elev[i] = rng.choice([
-                rng.normal(850, 200),
-                rng.normal(-3800, 500),
-            ])
-    return elev
-```
-
-**双峰高程分布**：
-
-```
-频率
- ▲
- │        大陆 (~850m)
- │       ╱╲
- │      ╱  ╲
- │     ╱    ╲
- │────╱──────╲──────────────────── 海面 (0m)
- │   ╱        ╲
- │  ╱          ╲     海底 (~-3800m)
- │ ╱            ╲   ╱╲
- │╱              ╲ ╱  ╲
- └────────────────╳────╲───────► 高程 (m)
-  -5000  -3000  -1000  0  1000  3000
-```
-
-### 6.2 边界地形效应
-
-板块边界是地球上最剧烈的地形塑造力量。每种边界类型产生特征性的地形信号：
-
-#### 汇聚边界 (Convergent)
-
-```
-地形剖面（垂直于边界）：
-
-               ▲ 山脉 (+1500 ~ +4000m)
-              ╱╲
-             ╱  ╲
-            ╱    ╲
-───────────╱──────╲──────────── 基准面
-          ╱        ╲
-         ╱          ╲
-                  ───╲───────
-                      ╲
-                       ▼ 海沟 (-2000 ~ -5000m)
-
-影响半径: 200-500 km (山脉), 100-300 km (海沟)
-```
-
-**公式**：
-
-```python
-def convergent_effect(distance_km, v_normal, crust_a, crust_b):
-    """Elevation contribution from convergent boundary.
-
-    Args:
-        distance_km: signed distance from boundary (positive = overriding plate side)
-        v_normal: convergence rate (m/yr, positive)
-        crust_a, crust_b: crust types of the two plates
-
-    Returns:
-        elevation adjustment (m)
-    """
-    sigma_mountain = 250.0  # km
-    sigma_trench = 150.0    # km
-
-    # Mountain range on overriding plate side
-    rate_factor = min(v_normal / 5.0, 2.5)  # cap at 2.5× for extreme convergence
-    mountain_amp = 2500 * rate_factor  # base amplitude (m)
-    if crust_a == "continental" and crust_b == "continental":
-        mountain_amp *= 1.6  # continental collision → taller mountains (Himalayas)
-    mountain = mountain_amp * exp(-(max(distance_km, 0) / sigma_mountain) ** 2)
-
-    # Trench on subducting plate side
-    trench_amp = -3500 * rate_factor
-    trench = trench_amp * exp(-(max(-distance_km, 0) / sigma_trench) ** 2)
-
-    return mountain + trench
-```
-
-**沿弧分段调制（2026-08-06，日本列岛式岛链）**：实现
-（`terrain_synthesizer._asymmetric_boundary_effects`）在垂直剖面之上叠加
-~800 km 波长的沿弧 fBm 调制：隆起幅度系数 ∈ [−0.25, 1.35]、带宽度 ×0.7–1.3。
-高值段成主岛/山结，中值段成小岛/浅滩，负值段沉降为弧间断陷海——汇聚带不再
-是均匀缎带。（上节伪代码为早期示意，实际公式以源码为准。）
-
-#### 离散边界 (Divergent)
-
-```
-地形剖面：
-
-     山脊 (+500~+1500m)
-      ╱╲        ╱╲
-     ╱  ╲      ╱  ╲
-    ╱    ╲    ╱    ╲
-───╱──────╲──╱──────╲──── 基准面
-          ╲╱
-          裂谷 (-500~-1500m)
-
-影响半径: 100-300 km
-```
-
-```python
-def divergent_effect(distance_km, v_normal):
-    """Elevation contribution from divergent boundary."""
-    rate_factor = min(abs(v_normal) / 3.0, 2.0)
-    sigma_rift = 100.0   # km
-    sigma_ridge = 200.0  # km
-
-    # Central rift valley
-    rift = -1000 * rate_factor * exp(-(distance_km / sigma_rift) ** 2)
-
-    # Flanking ridges (symmetric)
-    ridge = 1000 * rate_factor * exp(-((abs(distance_km) - 200) / sigma_ridge) ** 2)
-
-    return rift + ridge
-```
-
-#### 转换边界 (Transform)
-
-转换断层不产生显著高程变化，但增加地形粗糙度：
-
-```python
-def transform_effect(roughness_base, distance_km):
-    """Multiply roughness near transform boundaries."""
-    sigma = 200.0  # km
-    factor = 1.0 + 1.0 * exp(-(distance_km / sigma) ** 2)  # up to 2× roughness
-    return roughness_base * factor
-```
-
-#### 边界效应公式汇总
-
-| 边界类型 | 正效应 | 负效应 | σ (km) | 速率因子 |
-|----------|--------|--------|--------|----------|
-| Convergent (C-C) | +4000m 山脉 | -5000m 海沟 | 250/150 | v_n/5.0 × 1.6 |
-| Convergent (O-O) | +2500m 岛弧 | -3500m 海沟 | 250/150 | v_n/5.0 |
-| Convergent (C-O) | +3000m 海岸山 | -4000m 海沟 | 250/150 | v_n/5.0 |
-| Divergent | +1500m 山脊 | -1500m 裂谷 | 200/100 | |v_n|/3.0 |
-| Transform | — | — | 200 | 粗糙度 ×2.0 |
-
-### 6.3 距边界距离调制
-
-距板块边界的距离影响地形粗糙度——边界附近地形更崎岖：
-
-```python
-def distance_to_boundary(
-    mesh: CVTMesh,
-    boundary_nodes: set[int],
-) -> np.ndarray:
-    """BFS distance from each node to nearest boundary node.
-
-    Returns:
-        (N,) distance in km (angular distance × radius).
-    """
-    dist = np.full(mesh.num_nodes, inf)
-    queue = deque()
-    for bn in boundary_nodes:
-        dist[bn] = 0.0
-        queue.append(bn)
-
-    while queue:
-        node = queue.popleft()
-        for neighbor in mesh.adjacency[node]:
-            edge_len = angular_distance_xyz(
-                mesh.nodes[node], mesh.nodes[neighbor]
-            ) * mesh.radius_km
-            if dist[node] + edge_len < dist[neighbor]:
-                dist[neighbor] = dist[node] + edge_len
-                queue.append(neighbor)
-
-    return dist
-
-def roughness_modulation(dist_km: np.ndarray, A: float = 1.0, lambda_km: float = 300.0):
-    """Roughness multiplier based on distance to boundary.
-
-    roughness = base × (1 + A · exp(-d / λ))
-
-    Near boundary: up to (1+A)× roughness.
-    Far from boundary: ~1× (no effect).
-    """
-    return 1.0 + A * np.exp(-dist_km / lambda_km)
-```
-
-### 6.4 多频率 3D Simplex fBm
-
-fBm（fractional Brownian motion）提供多尺度地形细节。**关键**：在 CVT 节点的 3D 坐标上采样，
-而非 2D 网格——这完全消除了极点畸变和经度接缝问题。
-
-**参数**：
-
-| Octave | 频率 f | 振幅 A (m) | 累积振幅 | 物理含义 |
-|--------|--------|-----------|----------|----------|
-| 1 | 1.0 | 1000.0 | 1000.0 | 大区域起伏（~6000 km） |
-| 2 | 2.0 | 500.0 | 1500.0 | 次大陆起伏（~3000 km） |
-| 3 | 4.0 | 250.0 | 1750.0 | 山脉尺度（~1500 km） |
-| 4 | 8.0 | 125.0 | 1875.0 | 山岭尺度（~750 km） |
-| 5 | 16.0 | 62.5 | 1937.5 | 丘陵尺度（~375 km） |
-| 6 | 32.0 | 31.25 | 1968.75 | 细节起伏（~190 km） |
-
-`persistence = 0.5`，`lacunarity = 2.0`
-
-```python
-def generate_fbm_on_cvt(
-    nodes_xyz: np.ndarray,        # (N, 3) unit sphere positions
-    seed: int,
-    noise_scale: float = 2.0,
-    octaves: int = 6,
-    persistence: float = 0.5,
-    lacunarity: float = 2.0,
-) -> np.ndarray:
-    """Multi-octave 3D Simplex noise sampled at CVT node positions.
-
-    Each node's (x, y, z) is used directly as the noise sampling point.
-    No projection artifacts.
-
-    Returns:
-        (N,) noise values in approximately [-1, 1].
-    """
-    result = np.zeros(len(nodes_xyz))
-    amplitude = 1.0
-    frequency = noise_scale
-
-    for octave in range(octaves):
-        # Sample 3D Simplex noise at each node
-        scaled = nodes_xyz * frequency
-        noise = np.array([
-            opensimplex.noise3(p[0], p[1], p[2])
-            for p in scaled
-        ])
-        result += amplitude * noise
-        amplitude *= persistence
-        frequency *= lacunarity
-
-    # Normalize to [-1, 1]
-    max_val = np.max(np.abs(result))
-    if max_val > 0:
-        result /= max_val
-
-    return result
-```
-
-**性能优化**：使用 Numba JIT 噪声内核（原 pyfastnoise 方案失效——不在 PyPI）
-替代纯 Python `opensimplex`，10 万节点 × 6 octave 的采样时间从 ~60s 降至 ~2s（见 §15 实测修正）。
-
-### 6.5 热点/地幔柱
-
-地幔柱（mantle plume）从深部地幔上升，在地表产生火山热点。参考 Gleba 的
-"mantle superswells" 设计——大型地幔上涌可以产生直径数千公里的隆起区域。
-
-```python
-def compute_hotspot_uplift(
-    nodes_xyz: np.ndarray,
-    hotspots: list[HotspotConfig],
-    radius_km: float,
-) -> np.ndarray:
-    """Compute hotspot uplift at each CVT node.
-
-    Each hotspot produces:
-    1. Broad Gaussian uplift (superswell)
-    2. Optional central caldera depression
-
-    Reference: Gleba mantle superswell model — large plumes
-    can uplift regions >2000 km diameter.
-    """
-    uplift = np.zeros(len(nodes_xyz))
-
-    for hs in hotspots:
-        # Hotspot position on unit sphere
-        lat0 = radians(hs.lat_deg)
-        lon0 = radians(hs.lon_deg)
-        hs_xyz = array([cos(lat0)*cos(lon0), sin(lat0), cos(lat0)*sin(lon0)])
-
-        # Angular distance to each node
-        dots = np.clip(nodes_xyz @ hs_xyz, -1, 1)
-        angular_dist = arccos(dots)
-        dist_km = angular_dist * radius_km
-
-        # Broad uplift (Gaussian)
-        sigma = hs.radius_km
-        uplift += hs.amplitude_m * exp(-(dist_km / sigma) ** 2)
-
-        # Optional caldera (central depression)
-        if hs.has_caldera and hs.caldera_radius_km > 0:
-            cal_sigma = hs.caldera_radius_km
-            uplift -= hs.caldera_depth_m * exp(-(dist_km / cal_sigma) ** 2)
-
-    return uplift
-```
-
-### 6.6 合成公式
-
-最终的节点高程由以下各项叠加：
-
-```
-elevation[i] = base_elev[i]
-             + boundary_effect[i]
-             + hotspot_uplift[i]
-             + fBm_3d[i] × amplitude × interior_factor[i]
-             + tidal_deformation[i]       # 仅潮汐锁定天体
-
-其中:
-    interior_factor = 1.0 + 0.3 × (dist_to_boundary / max_dist)
-    # 板块内部噪声稍大（大陆内部高原/盆地）
-```
-
-```python
-def synthesize_terrain(
-    mesh: CVTMesh,
-    base_elev: np.ndarray,
-    boundary_elev: np.ndarray,
-    hotspot_elev: np.ndarray,
-    fbm_noise: np.ndarray,
-    noise_amplitude_m: float = 600.0,
-    dist_to_boundary_km: np.ndarray | None = None,
-    tidal_elev: np.ndarray | None = None,
-) -> np.ndarray:
-    """Combine all terrain contributions.
-
-    Returns:
-        (N,) final elevation in meters.
-    """
-    # Distance-based interior modulation
-    if dist_to_boundary_km is not None:
-        max_dist = dist_to_boundary_km.max()
-        interior_factor = 1.0 + 0.3 * (dist_to_boundary_km / max(max_dist, 1))
-    else:
-        interior_factor = np.ones(mesh.num_nodes)
-
-    elevation = (
-        base_elev
-        + boundary_elev
-        + hotspot_elev
-        + fbm_noise * noise_amplitude_m * interior_factor
-    )
-
-    if tidal_elev is not None:
-        elevation += tidal_elev
-
-    return elevation
-```
+节点高程 = 双峰基准 + 边界构造效应 + 热点隆起 + 多频 3D fBm × 内部调制
+（+ 潮汐形变，仅潮汐锁定天体）。
+
+> 地球物理依据与公式已上浮至
+> [knowledge/geology/terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md)：
+> 双峰高程分布依据（§1）、三类边界剖面公式与速率因子汇总表（§2）、
+> 距边界粗糙度调制（§2）、fBm octave 物理尺度表（§3）、热点/地幔柱高斯隆起
+> 与高程合成叠加式（§6），以及内陆古造山带/山间盆地的地貌学依据（§4.3）。
+
+**实现要点**（`terrain_synthesizer.py`，策略由 `terrain_algorithm` 配置键选择）：
+
+1. **基准高程**：按地壳类型双峰高斯分配——continental `normal(850, 200)`、
+   oceanic `normal(-3800, 500)`，mixed 按局部噪声二选一；每板块再叠加
+   均匀偏移 ±`plate_elevation_spread_m`。
+2. **边界效应**：`_asymmetric_boundary_effects` 按边界类型叠加高斯剖面
+   （σ 由 `boundary_influence_km` 控制，振幅 × min(|v_n|/10, 1) 速率因子）。
+   **沿弧分段调制（2026-08-06，日本列岛式岛链）**：在垂直剖面之上叠加
+   ~800 km 波长的沿弧 fBm 调制：隆起幅度系数 ∈ [−0.25, 1.35]、带宽度 ×0.7–1.3。
+   高值段成主岛/山结，中值段成小岛/浅滩，负值段沉降为弧间断陷海——汇聚带不再
+   是均匀缎带。
+3. **距边界距离**：多源 BFS 沿邻接图传播（球面距离 = 角距离 × 半径），
+   结果同时用于粗糙度调制与 `distance_to_boundary_km` 输出字段。
+4. **fBm**：3D Simplex 在节点 (x, y, z) 上采样（无投影畸变、无极点接缝），
+   使用 Numba JIT 噪声内核（见 §15 实测修正：~60s → ~2s）。
+5. **热点/地幔柱**：宽尺度高斯隆起 + 可选中央破火山口凹陷。
+6. **合成**：按上述叠加式逐节点求和，`interior_factor` 使板块内部噪声稍大
+   （大陆内部高原/盆地）。
 
 ### 参数表
 
@@ -1259,46 +707,18 @@ def synthesize_terrain(
 
 板块内部（距边界 >600 km 的大陆区域）放置 1–3 条线性构造带，模拟
 古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。
+地貌学依据（造山带沿走向高度变化、山间断陷盆地实例、裂谷臂）已上浮至
+[knowledge/geology/terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md) §4.3。
 
-#### 沿走向高度调制
+**实现要点**：
 
-传统方法在整个造山带上施加**均匀 Gaussian 脊线**——高度和宽度处处相同。
-真实造山带沿走向有显著的高度变化（Allen et al. 1995; Kröner 1981）。
-
-每条 belt 用 **1D simplex 噪声沿大圆弧采样**，调制各段的振幅：
-
-```
-t ∈ [0,1] — 沿 belt 的参数化位置
-noise(t) = OpenSimplex.noise2(t × 8, belt_seed)
-振幅(t) ∈ [base × 0.3, base × 1.7]  (沿走向变化)
-```
-
-**效果**：造山带中有高峰和鞍部，而非均匀脊线。std ~1000m 的高度变化
-（在 100K 分辨率下）。
-
-#### 山间盆地
-
-当沿走向噪声值低于阈值（`interior_basin_chance`, 默认 0.25），
-该段成为**断陷盆地**而非山脊——模拟拉分盆地和断块差异沉降：
-
-- 吐鲁番盆地（天山内部，−154 m）——周围山体 3000–5000 m
-- 费尔干纳盆地（天山-帕米尔）——断块差异运动
-- Basin and Range（美国西部）——伸展环境地堑
-
-盆地深度可达 `interior_basin_depth_max_m`（默认 600 m），
-部分盆地底部低于海平面（100K 测试中 ~272 个 cell）。
-
-**参考文献**：
-- Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar,
-  Turpan and Alakol basins as Late Permian to Early Triassic
-  extensional structures." *Journal of the Geological Society*,
-  152, 327–338.
-- Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
-
-#### 裂谷
-
-30% 概率/板块，独立的线性凹陷（深 300–800 m，σ=40–100 km），
-也使用沿走向深度调制。
+- **沿走向调制**：每条 belt 用 1D simplex 噪声沿大圆弧采样，调制各段振幅
+  （`noise2(t × 8, belt_seed)`，振幅 ∈ [base × 0.3, base × 1.7]），
+  造山带呈高峰 + 鞍部而非均匀脊线。
+- **山间盆地**：沿走向噪声低于阈值时（`interior_basin_chance`）该段成为
+  断陷盆地，深度上限 `interior_basin_depth_max_m`（部分盆底低于海平面）。
+- **裂谷**：30% 概率/板块，独立线性凹陷（深 300–800 m，σ=40–100 km），
+  同样使用沿走向深度调制。
 
 ### 内部地貌参数
 
@@ -1442,452 +862,32 @@ def check_polar_configuration(
 
 气候模拟在 CVT 网格上进行，利用图的邻接关系进行空间传播（风场、水汽输送）。
 
-### 8.1 温度
-
-**太阳辐射基础温度**：
-
-```
-T_base = (L_star / (16π σ_SB d²))^(1/4) - 273.15    [°C]
-
-L_star: 恒星光度 (W)
-d: 行星轨道距离 (m)
-σ_SB: Stefan-Boltzmann 常数 (5.67 × 10⁻⁸ W/m²/K⁴)
-```
-
-**纬度修正**：
-
-```
-T_lat = T_equator - ΔT_lat × sin²(φ)
-
-φ: 纬度
-ΔT_lat ≈ 30-60°C（赤道-极地温差，取决于大气成分和自转速率）
-```
-
-**海拔递减率**：
-
-```
-T_elev = T_surface - Γ × h
-
-Γ ≈ 6.5 °C/km（湿绝热递减率）
-h: 海拔 (km)
-```
-
-**季节变化**（需要轴倾角和轨道周期）：
-
-```
-T_season = T_mean + A_season × cos(2π t / P_orb) × sin(φ) × sin(ε)
-
-A_season: 季节振幅 (~5-15°C)
-P_orb: 轨道周期 (days)
-ε: 轴倾角 (radians)
-t: 时间 (days)
-```
-
-```python
-def compute_temperature(
-    mesh: CVTMesh,
-    elevation_m: np.ndarray,
-    is_land: np.ndarray,
-    stellar_luminosity_sol: float = 1.0,   # L☉
-    orbital_distance_au: float = 1.0,
-    axial_tilt_deg: float = 23.5,
-    rotation_period_days: float = 1.0,
-    orbital_period_days: float = 365.25,
-    atmosphere_factor: float = 1.0,
-) -> dict[str, np.ndarray]:
-    """Compute temperature at each CVT node.
-
-    Returns:
-        dict with keys: 'mean', 'jan', 'jul', 'annual_range'
-        Values are (N,) arrays in °C.
-    """
-    # Extract latitude from node positions
-    lat = arcsin(clip(nodes_xyz[:, 1], -1, 1))
-
-    # Base equilibrium temperature
-    T_eq = 255 * (stellar_luminosity_sol / orbital_distance_au**2)**0.25
-    T_eq_celsius = T_eq - 273.15
-
-    # Greenhouse + atmosphere correction
-    T_surface_base = T_eq_celsius + 33 * atmosphere_factor  # ~15°C for Earth
-
-    # Latitude gradient
-    delta_lat = 45.0 * atmosphere_factor
-    T_lat = T_surface_base - delta_lat * sin(lat)**2
-
-    # Altitude lapse rate
-    elev_km = elevation_m / 1000
-    T_with_elev = T_lat - 6.5 * elev_km
-
-    # Continental vs oceanic climate (land has larger annual range)
-    annual_range = where(is_land, 25.0, 10.0) * sin(lat)**2
-
-    # Seasonal temperatures
-    epsilon = radians(axial_tilt_deg)
-    T_jan = T_with_elev + annual_range/2 * sign(-lat) * sin(epsilon)
-    T_jul = T_with_elev - annual_range/2 * sign(-lat) * sin(epsilon)
-
-    return {
-        "mean": T_with_elev,
-        "jan": T_jan,
-        "jul": T_jul,
-        "annual_range": annual_range,
-    }
-```
-
-### 8.2 风场
-
-**地转风近似**（Geostrophic wind）：
-
-参考 Gleba devlog #3 的设计决策——使用地转风近似而非完整的 Navier-Stokes 求解。
-在大尺度上，风场主要由气压梯度力和科里奥利力的平衡决定。
-
-**科里奥利参数**：
-
-```
-f = 2Ω · sin(φ)
-
-Ω: 行星自转角速度 (rad/s)
-φ: 纬度
-```
-
-**气压梯度**（简化）：
-
-气压主要由温度决定（理想气体定律）。高温 → 低压，低温 → 高压。
-
-```python
-def compute_wind_field(
-    mesh: CVTMesh,
-    temperature: np.ndarray,
-    elevation_m: np.ndarray,
-    is_land: np.ndarray,
-    rotation_period_days: float = 1.0,
-) -> np.ndarray:
-    """Compute simplified geostrophic wind on CVT graph.
-
-    Implementation:
-    1. Compute pressure proxy from temperature
-    2. Compute pressure gradient on graph (finite differences)
-    3. Apply geostrophic balance: v_g = (1/fρ) × ∇p × ẑ
-    4. Simplify Hadley/Ferrel/Polar cells
-    5. Apply terrain blocking (high mountains deflect wind)
-
-    Returns:
-        (N, 3) wind velocity vectors (m/s) tangent to sphere.
-    """
-    # Pressure proxy (lower T → higher P, simplified)
-    pressure = 1013.25 * exp(-elevation_m / 8500)  # barometric formula
-    T_normalized = (temperature - temperature.min()) / (temperature.max() - temperature.min() + 1e-6)
-    pressure -= 20 * T_normalized  # thermal low
-
-    # Compute gradient on graph
-    grad_p = compute_graph_gradient(mesh, pressure)
-
-    # Coriolis parameter
-    lat = arcsin(clip(mesh.nodes[:, 1], -1, 1))
-    omega_planet = 2 * pi / (rotation_period_days * 86400)
-    f = 2 * omega_planet * sin(lat)
-
-    # Geostrophic wind (perpendicular to pressure gradient)
-    # In NH: wind blows parallel to isobars with low P to left
-    # In SH: reversed
-    rho = 1.225  # air density kg/m³
-    wind = np.zeros((mesh.num_nodes, 3))
-    for i in range(mesh.num_nodes):
-        if abs(f[i]) < 1e-6:  # near equator, geostrophic breaks down
-            wind[i] = -grad_p[i] * 0.5  # simplified trade winds
-        else:
-            # Cross product with local vertical for geostrophic
-            k_hat = mesh.nodes[i]  # local vertical = radial direction
-            wind[i] = np.cross(k_hat, grad_p[i]) / (f[i] * rho)
-
-    # Simplified Hadley/Ferrel/Polar cell overlay
-    wind += compute_cell_circulation(lat, mesh.nodes)
-
-    # Terrain blocking: high mountains reduce wind speed
-    blocking = 1.0 - 0.5 * exp(-elevation_m / 3000)  # 50% reduction at 3000m
-    wind *= blocking[:, np.newaxis]
-
-    return wind
-```
-
-**简化环流单元**（Hadley/Ferrel/Polar）：
-
-```
-纬度    │ 环流单元    │ 地面风方向
-────────┼────────────┼──────────────
-0°-30°  │ Hadley     │ 东北信风 (NH) / 东南信风 (SH)
-30°-60° │ Ferrel     │ 西南风 (NH) / 西北风 (SH)
-60°-90° │ Polar      │ 东北风 (NH) / 东南风 (SH)
-```
-
-### 8.3 降水与水循环
-
-**核心机制**：海洋蒸发 → 风场输送水汽 → 地形抬升降水（迎风坡）→ 雨影效应（背风坡）
-
-```python
-def compute_precipitation(
-    mesh: CVTMesh,
-    is_land: np.ndarray,
-    temperature: np.ndarray,
-    wind: np.ndarray,
-    elevation_m: np.ndarray,
-) -> np.ndarray:
-    """Compute annual precipitation via BFS moisture transport.
-
-    Algorithm:
-    1. Initialize moisture: ocean cells = f(temperature), land = 0
-    2. BFS along wind direction:
-       - Transport moisture from upwind cells
-       - When air rises (elevation increases), condense → rain
-       - When air descends, moisture capacity increases (rain shadow)
-    3. ITCZ seasonal migration: shift moisture source toward warm hemisphere
-
-    Reference: Gleba ITCZ model — the Intertropical Convergence Zone
-    migrates seasonally, bringing monsoon patterns to tropical regions.
-
-    Returns:
-        (N,) annual precipitation in mm.
-    """
-    # Step 1: Evaporation from ocean
-    # Warmer water → more evaporation
-    moisture = np.zeros(mesh.num_nodes)
-    ocean_mask = ~is_land
-    moisture[ocean_mask] = 2000 * (1 + 0.03 * temperature[ocean_mask])  # mm/yr base
-
-    # Step 2: BFS moisture transport
-    # Process cells in wind-advection order
-    precip = np.zeros(mesh.num_nodes)
-    visited = set()
-
-    # Start from ocean cells, propagate along wind
-    queue = deque()
-    for i in range(mesh.num_nodes):
-        if ocean_mask[i]:
-            queue.append(i)
-
-    while queue:
-        node = queue.popleft()
-        if node in visited:
-            continue
-        visited.add(node)
-
-        # Find downwind neighbor
-        wind_dir = wind[node]
-        if linalg.norm(wind_dir) < 1e-6:
-            continue
-
-        best_neighbor = None
-        best_dot = -1
-        for n in mesh.adjacency[node]:
-            edge_dir = mesh.nodes[n] - mesh.nodes[node]
-            edge_dir /= (linalg.norm(edge_dir) + 1e-12)
-            dot = np.dot(wind_dir, edge_dir)
-            if dot > best_dot:
-                best_dot = dot
-                best_neighbor = n
-
-        if best_neighbor is None or best_dot < 0.3:
-            continue
-
-        # Orographic effect: rising air → precipitation
-        elev_diff = elevation_m[best_neighbor] - elevation_m[node]
-        if elev_diff > 0 and is_land[best_neighbor]:
-            # Air forced to rise → condensation → rain
-            rain = moisture[node] * min(elev_diff / 1000, 0.5)
-            precip[best_neighbor] += rain
-            moisture[best_neighbor] = moisture[node] - rain
-        elif elev_diff < 0 and is_land[best_neighbor]:
-            # Descending air → rain shadow (less precipitation)
-            precip[best_neighbor] += moisture[node] * 0.05
-            moisture[best_neighbor] = moisture[node] * 0.95
-        else:
-            # Flat terrain / ocean: gradual moisture loss
-            moisture[best_neighbor] = moisture[node] * 0.9
-            precip[best_neighbor] += moisture[node] * 0.1
-
-        if best_neighbor not in visited:
-            queue.append(best_neighbor)
-
-    # Step 3: Convective precipitation in tropics
-    lat = arcsin(clip(mesh.nodes[:, 1], -1, 1))
-    tropical = abs(lat) < radians(23.5)
-    precip[tropical] += 500  # ITCZ-enhanced tropical rainfall
-
-    return precip
-```
-
-**ITCZ 季节性迁移**：
-
-```python
-def itcz_latitude(day_of_year: int, axial_tilt_deg: float = 23.5) -> float:
-    """Approximate ITCZ latitude as a function of season.
-
-    The ITCZ lags the subsolar point by ~1-2 months due to
-    thermal inertia of oceans.
-
-    Reference: Gleba — ITCZ migration drives monsoon cycles.
-    """
-    # Subsolar point
-    epsilon = radians(axial_tilt_deg)
-    solar_declination = epsilon * sin(2 * pi * (day_of_year - 80) / 365.25)
-
-    # ITCZ lags by ~30 days and is damped
-    itcz_offset = radians(5)  # mean ITCZ offset (NH bias on Earth)
-    itcz_lat = 0.7 * solar_declination + itcz_offset
-
-    return degrees(itcz_lat)
-```
-
-### 8.4 洋流（简化）
-
-洋流对气候的影响通过简化的表面流模型实现：
-
-```python
-def compute_surface_currents(
-    mesh: CVTMesh,
-    wind: np.ndarray,
-    is_land: np.ndarray,
-) -> np.ndarray:
-    """Simplified surface ocean currents.
-
-    Surface currents are driven by wind (Ekman transport),
-    deflected by continents, and organized into gyres.
-
-    Simplification:
-    - Current direction ≈ 45° deflected from wind (Ekman spiral)
-    - Currents blocked by land
-    - Western boundary intensification (Gulf Stream, Kuroshio)
-
-    Returns:
-        (N, 3) current velocity vectors (m/s).
-    """
-    # Ekman transport: ~45° deflection from wind
-    # In NH: deflected right; in SH: deflected left
-    lat = arcsin(clip(mesh.nodes[:, 1], -1, 1))
-    deflection_angle = sign(lat) * radians(45)
-
-    currents = np.zeros_like(wind)
-    ocean_mask = ~is_land
-
-    for i in range(mesh.num_nodes):
-        if not ocean_mask[i]:
-            continue
-        # Rotate wind vector by deflection angle
-        # (in the tangent plane at this node)
-        w = wind[i]
-        if linalg.norm(w) < 1e-6:
-            continue
-        # ... rotation in tangent plane ...
-        currents[i] = rotate_tangent(w, mesh.nodes[i], deflection_angle) * 0.02
-        # 0.02: current speed ≈ 2% of wind speed
-
-    return currents
-```
-
-**洋流热输送**：
-
-```python
-def apply_ocean_heat_transport(
-    temperature: np.ndarray,
-    currents: np.ndarray,
-    mesh: CVTMesh,
-    is_land: np.ndarray,
-) -> np.ndarray:
-    """Apply ocean current heat transport to coastal temperatures.
-
-    Warm currents → coastal warming
-    Cold currents → coastal cooling (e.g., Humboldt, California)
-    """
-    # Find coastal nodes (land adjacent to ocean)
-    coastal = find_coastal_nodes(mesh, is_land)
-
-    # Propagate temperature along current direction
-    T_adjusted = temperature.copy()
-    for node in coastal:
-        # Average temperature of upcurrent ocean nodes
-        T_ocean_avg = average_upcurrent_temperature(node, currents, mesh, temperature)
-        # Coastal moderation: ±2-5°C from current
-        T_adjusted[node] += 0.3 * (T_ocean_avg - temperature[node])
-
-    return T_adjusted
-```
-
-### 8.5 Köppen 气候分类
-
-从 `(temperature, precipitation)` 直接映射到 Köppen 气候类型：
-
-```python
-def koppen_classify(
-    T_mean: np.ndarray,
-    T_cold: np.ndarray,        # coldest month mean
-    T_hot: np.ndarray,         # hottest month mean
-    P_annual: np.ndarray,      # annual precipitation (mm)
-    P_dry: np.ndarray,         # driest month precipitation
-    P_wet: np.ndarray,         # wettest month precipitation
-) -> list[str]:
-    """Köppen climate classification for each CVT node.
-
-    5 main groups:
-    A: Tropical (T_cold > 18°C)
-    B: Arid (P < threshold based on T)
-    C: Temperate (T_cold ∈ [-3, 18]°C, T_hot > 10°C)
-    D: Continental (T_cold < -3°C, T_hot > 10°C)
-    E: Polar (T_hot < 10°C)
-
-    Sub-classification based on precipitation seasonality.
-
-    Returns:
-        List of Köppen codes (e.g., 'Cfa', 'BWh', 'ET').
-    """
-    classes = []
-    for i in range(len(T_mean)):
-        tc, th, ta = T_cold[i], T_hot[i], T_mean[i]
-        pa, pd, pw = P_annual[i], P_dry[i], P_wet[i]
-
-        # Group E: Polar
-        if th < 10:
-            if th > 0:
-                classes.append("ET")  # Tundra
-            else:
-                classes.append("EF")  # Ice cap
-
-        # Group B: Arid
-        elif pa < 20 * ta + (280 if pw > 2*pd else 140 if pd > 2*pw else 0):
-            if ta > 18:
-                classes.append("BWh" if pa < 10*ta else "BSh")
-            else:
-                classes.append("BWk" if pa < 10*ta else "BSk")
-
-        # Group A: Tropical
-        elif tc > 18:
-            if pd > 60:
-                classes.append("Af")   # Tropical rainforest
-            elif pa - pw > pa * 0.5:
-                classes.append("Aw")   # Tropical savanna
-            else:
-                classes.append("Am")   # Tropical monsoon
-
-        # Group C: Temperate
-        elif tc > -3:
-            if pw > 3*pd and pw > 40:
-                classes.append("Cs")   # Mediterranean
-            elif pd > 30:
-                classes.append("Cf")   # Humid subtropical (if th>22: Cfa, else Cfb)
-            else:
-                classes.append("Cw")   # Dry winter
-
-        # Group D: Continental
-        else:
-            if pw > 3*pd:
-                classes.append("Ds")   # Dry summer continental
-            elif pd > 30:
-                classes.append("Df")   # Humid continental
-            else:
-                classes.append("Dw")   # Dry winter continental
-
-    return classes
-```
+> 物理公式已上浮至知识库（去重，不再于本文重复）：
+>
+> - **温度（原 §8.1）**：EBM 平衡温度、温室增温、纬度梯度（sin²φ）、
+>   海拔递减率、季节变化 →
+>   [knowledge/climatology/energy_balance.md](../knowledge/climatology/energy_balance.md) §1–5
+> - **风场（原 §8.2）**：科里奥利参数、三胞环流、地转风、温度→气压耦合 →
+>   [knowledge/climatology/atmospheric_circulation.md](../knowledge/climatology/atmospheric_circulation.md)
+> - **降水（原 §8.3）**：海洋蒸发 → BFS 水汽平流 → 地形雨/雨影、ITCZ 季节迁移 →
+>   [knowledge/climatology/energy_balance.md](../knowledge/climatology/energy_balance.md) §7
+> - **洋流（原 §8.4）**：Ekman 45° 偏转、西边界强化、热输送 →
+>   [knowledge/climatology/ocean_currents.md](../knowledge/climatology/ocean_currents.md)
+> - **Köppen 分类（原 §8.5 / 附录 A.5）**：五主群 + 亚型阈值 →
+>   [knowledge/climatology/koppen_classification.md](../knowledge/climatology/koppen_classification.md)
+
+**实现要点**（`map/climate_simulator.py::simulate_climate`；物理常数与纯函数在
+`engine/climate_physics.py`；模块架构见 `design/climate-engine.md`）：
+
+1. **温度**（stage 1）：平衡黑体 → 纬度梯度 → 海拔递减率 → 季节极值，
+   写入 cell 的 `temperature_C` 与 1 月/7 月温度。
+2. **风场**（stage 2）：0.4× 地转风 + 0.6× 三胞风叠加，再经地形阻挡
+   （`wind_blocking_height_m` 以上山体衰减风速）。
+3. **降水**（stage 3）：海洋蒸发初始化 → 沿风向多轮 BFS 平流
+   （`_MOISTURE_ADVECTION_STEPS = 12`）→ 地形抬升凝结
+   （效率 `orographic_efficiency`）→ 雨影，另加 ITCZ/季风/局地对流/
+   副热带高压抑制修正。
+4. **Köppen 分类**（stage 4）：由年均/季节温度 + 降水映射 `koppen_class`。
 
 ### 参数表
 
@@ -3052,82 +2052,19 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 ## 附录 A: 数学公式参考
 
-### A.1 Haversine 角距离
+> 本附录公式已上浮至知识库，以下为指针清单。
 
-```
-d(φ₁,λ₁, φ₂,λ₂) = 2 · arcsin(√(sin²(Δφ/2) + cos(φ₁)·cos(φ₂)·sin²(Δλ/2)))
+| 条目 | 内容 | 上浮位置 |
+|------|------|----------|
+| A.1 Haversine 角距离 | 大圆距离公式 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §角距离 |
+| A.2 Fibonacci 球面格点 | 极角/方位角 + 笛卡尔坐标 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §Fibonacci 球面螺旋 |
+| A.3 欧拉极运动学 | v = ω × P、速度大小、相对速度与 v_n/v_t 分解 | [plate_tectonics.md](../knowledge/geology/plate_tectonics.md) §欧拉极运动学 / §边界检测与分类 |
+| A.4 fBm | octave 叠加公式与归一化 | [terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md) §3 fBm 噪声 |
+| A.5 Köppen 气候阈值 | 五主群 + 亚型判据 | [koppen_classification.md](../knowledge/climatology/koppen_classification.md) |
+| A.7 球面多边形面积 | 球面角盈公式 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §Cell 面积 |
 
-其中 Δφ = φ₂ - φ₁, Δλ = λ₂ - λ₁
-```
-
-### A.2 Fibonacci 球面格点
-
-```
-φ_k = arccos(1 - 2(k + 0.5) / N)          k = 0, 1, ..., N-1
-θ_k = 2πk / Φ                              Φ = (1 + √5) / 2
-
-x_k = sin(φ_k) · cos(θ_k)
-y_k = cos(φ_k)
-z_k = sin(φ_k) · sin(θ_k)
-```
-
-### A.3 欧拉极运动学
-
-```
-设欧拉极方向为 ê (单位向量)，角速度为 ω (rad/yr)。
-
-角速度矢量：Ω = ω · ê
-
-球面上点 P 的速度（在半径 R 的球面上）：
-    v(P) = Ω × P · R                      [m/yr]
-
-速度大小：
-    |v(P)| = ω · R · sin(α)
-
-其中 α = arccos(ê · P) 是 P 到欧拉极的角距离。
-```
-
-**相对速度（边界处）**：
-
-```
-v_rel(P) = v_A(P) - v_B(P)
-         = (Ω_A - Ω_B) × P · R
-
-分解为法向和切向分量：
-    v_n = v_rel · n̂                        （法向：汇聚为正）
-    v_t = |v_rel - v_n · n̂|               （切向：走滑）
-
-n̂：边界法向量（在切平面内，从 plate_A 指向 plate_B）
-```
-
-### A.4 fBm (Fractional Brownian Motion)
-
-```
-fBm(P) = Σᵢ₌₀ᴼ⁻¹ Aᵢ · noise3(P · fᵢ)
-
-O: octaves (default 6)
-Aᵢ = persistence^i                         (default 0.5^i)
-fᵢ = noise_scale · lacunarity^i            (default 2.0 · 2.0^i)
-
-noise3: 3D Simplex noise function
-P: (x, y, z) 球面上的 3D 坐标
-
-归一化：fBm /= max(|fBm|) → range ≈ [-1, 1]
-```
-
-### A.5 Köppen 气候阈值
-
-| 组 | 条件 | 子类型条件 |
-|----|------|-----------|
-| A (热带) | T_cold > 18°C | f: P_dry > 60mm; m: monsoon; w: dry winter |
-| B (干旱) | P < 20·T + C | W: desert (P < 10·T); S: steppe |
-| C (温带) | -3 < T_cold < 18, T_hot > 10 | f: no dry season; s: dry summer; w: dry winter |
-| D (大陆) | T_cold < -3, T_hot > 10 | f: no dry season; s: dry summer; w: dry winter |
-| E (极地) | T_hot < 10 | T: tundra (T_hot > 0); F: ice cap |
-
-B 组的 C 值：C = 280 如果 P_wet > 2·P_dry; C = 140 如果 P_dry > 2·P_wet; C = 0 其他。
-
-### A.6 汇水累积
+**A.6 汇水累积**（水文学知识文档尚待建立，见 `knowledge/geology/CLAUDE.md`
+规划清单；实现见 §9.2）：
 
 ```
 accum(i) = area(i) + Σ accum(j) for j in upstream(i)
@@ -3135,18 +2072,6 @@ accum(i) = area(i) + Σ accum(j) for j in upstream(i)
 其中 upstream(i) = {j | flow_dir(j) = i}
 
 计算顺序：拓扑排序（从源头到河口）
-```
-
-### A.7 球面多边形面积
-
-```
-A = |Σᵢ₌₁ⁿ θᵢ - (n - 2)·π| · R²
-
-θᵢ: 多边形第 i 个顶点的内角（球面角）
-n: 顶点数
-R: 球体半径
-
-立体角（steradians）：Ω = A / R²
 ```
 
 ---
@@ -3479,270 +2404,12 @@ For t = 0 to T_end step Δt (= 2 My):
 
 > **引用**: Yann Cortial, Adrien Peytavie, Éric Galin, Éric Guérin.
 > *Procedural Tectonic Planets*. Computer Graphics Forum (Eurographics 2019),
-> Vol. 38, No. 2. DOI: [10.1111/cgf.13614](https://doi.org/10.1111/cgf.13614)
+> Vol. 38, No. 2. DOI: [10.1111/cgf.13614](https://doi.org/10.1111/cgf.13614) ·
+> [HAL 全文](https://hal.science/hal-02136820/) ·
+> [视频](https://www.youtube.com/watch?v=GJQVl6Xld0w)
 >
-> **HAL 全文**: [hal-02136820](https://hal.science/hal-02136820/)
-> **视频**: [Eurographics 2019 Presentation (YouTube)](https://www.youtube.com/watch?v=GJQVl6Xld0w)
-> **后续**: Cortial 获 2020 CNRS 最佳博士论文奖，现为 Arkane Studios 图形程序员。
+> 论文解读全文（原 D.1–D.15：论文定位、网格与地壳参数化、四大构造现象公式、
+> 侵蚀/衰减 ε 常数、完整常数表、性能数据、已知局限，以及与 dreamulator 的
+> 实现对照、板块裂解实现细节、自适应裂解率与研究谱系）已整体移入
+> [knowledge/geology/cortial_2019_notes.md](../knowledge/geology/cortial_2019_notes.md)。
 
-### D.1 论文定位
-
-这篇论文是**程序化星球生成**领域的里程碑工作。它不追求物理精确模拟（不计算地幔对流 PDE），
-而是用**现象学方法（phenomenological approach）** 捕捉板块构造的大尺度地貌效应。
-核心贡献：
-
-1. **首次实现完整的交互式程序化板块星球**：用户可实时控制板块运动、触发裂解事件
-2. **四大构造现象的程序化建模**：俯冲、大陆碰撞、洋壳创生、板块裂解
-3. **双层放大管线**：粗分辨率构造模型 → GPU 放大至 ~100m 分辨率
-
-### D.2 网格与数据结构
-
-#### 球面采样与三角剖分
-
-- **Fibonacci 采样**：近似均匀的球面点分布
-- **STRIPACK 算法**（Renka 1997）：全局球面 Delaunay 三角剖分
-- **默认 500,000 采样点**（6,370km 半径行星 → ~35km 分辨率）
-- 三角剖分按 Voronoi cell 归属划分为板块
-
-#### 重采样策略（关键设计决策）
-
-- 采样/网格化作为**离线预处理**完成
-- **不在每步重新网格化**（太贵），而是每 10-60 步执行一次全局重采样
-- 离散板块之间的新点从洋壳生成方法获取参数
-- 其他点使用重心插值从所属板块获取
-
-### D.3 地壳参数化
-
-每个板块上的每个采样点存储以下属性：
-
-| 属性 | 海洋地壳 | 大陆地壳 |
-|------|---------|---------|
-| 地壳类型 $x_C$ | oceanic | continental |
-| 地壳厚度 $e$ | ~7km | ~35-50km |
-| 地形高程 $z$ | -1 到 -10km | 0 到 10km |
-| 地壳年龄 $a_o$ | ✓（自洋中脊创生） | — |
-| 洋脊方向 $r$ | ✓ | — |
-| 造山年龄 $a_c$ | — | ✓ |
-| 造山类型 $o$ | — | Andean / Himalayan |
-| 褶皱方向 $f$ | — | ✓ |
-
-### D.4 四大构造现象
-
-#### 俯冲（Subduction）
-
-**触发条件**：
-- 洋-洋汇聚 → 较老板块俯冲
-- 洋-陆汇聚 → 洋壳始终俯冲
-- 陆-陆汇聚 → 部分强制俯冲，随后转为碰撞
-
-**上隆公式**（上方板块点 $p$ 的高程增量）：
-
-$$u_j(p) = u_0 \cdot f(d(p)) \cdot g(v(p)) \cdot h(\tilde{z}_i(p))$$
-
-其中：
-- $u_0 = 0.6$ mm/y — 基准上隆速率
-- $f(d)$ — 分段三次曲线：在控制距离处达峰值，在 $r_s = 1800$ km 处衰减至 0
-- $g(v) = v / v_0$ — 线性速度传递（$v_0 = 100$ mm/y 为最大板块速度）
-- $h(\tilde{z}_i) = \tilde{z}_i^2$ — **二次**高程影响（海平面以上特征主导）
-
-**Slab Pull（欧拉极修改）**：
-
-$$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathbf{c}_i \times \mathbf{q}_k}{\|\mathbf{c}_i \times \mathbf{q}_k\|} \cdot \delta t$$
-
-俯冲带动态修改板块旋转轴，使长俯冲前线对板块运动方向产生显著影响。
-
-#### 大陆碰撞（Continental Collision）
-
-- **触发**：两板块互穿距离 > 300km
-- **影响半径**：$r = r_c \cdot \sqrt{v/v_0} \cdot (A/A_0)^\beta$，$r_c = 4200$ km
-- **离散高程跃升**：$\Delta z(p) = \Delta_c \cdot A \cdot (1 - d/r)^2{}^2$，$\Delta_c = 1.3 \times 10^{-5}$ km$^{-1}$
-- **地体缝合**：碰撞地体从俯冲板块脱离，附着到上覆板块
-
-#### 洋壳创生（Oceanic Crust Generation）
-
-- 在离散边界自动形成洋中脊
-- **高程混合**：$z = \alpha \cdot \bar{z} + (1-\alpha) \cdot z_\Gamma$
-  - $\bar{z}$：两板块间线性插值
-  - $z_\Gamma$：模板洋中脊剖面函数
-  - $\alpha$：到洋脊距离 / (到洋脊距离 + 到最近板块边界距离)
-- 每 10-60 步执行一次（涉及采样和网格化）
-
-#### 板块裂解（Plate Rifting）
-
-- **Poisson 概率模型**：$P = \lambda e^{-\lambda}$，$\lambda = \lambda_0 \cdot f(x_P) \cdot A/A_0$
-- 大板块更容易裂解（防止超级大陆永久存在）
-- 裂解为 2-4 个子板块，各自获得随机离散方向
-- 支持用户手动触发（指定位置、断裂线、时机）
-
-### D.5 侵蚀与衰减
-
-**每步**应用的简化模型：
-
-| 过程 | 公式 | 常数 |
-|------|------|------|
-| 大陆侵蚀 | $z \mathrel{-}= (z/z_c) \cdot \varepsilon_c \cdot \delta t$ | $\varepsilon_c = 0.03$ mm/y, $z_c = 10$ km |
-| 洋壳沉降 | $z \mathrel{-}= (1 - z/z_t) \cdot \varepsilon_o \cdot \delta t$ | $\varepsilon_o = 0.04$ mm/y, $z_t = -10$ km |
-| 海沟沉积 | $z \mathrel{+}= \varepsilon_t \cdot \delta t$ | $\varepsilon_t = 0.3$ mm/y |
-
-**无**水力侵蚀、热侵蚀、冰川侵蚀或风蚀——设计为与后续侵蚀方法兼容。
-
-### D.6 放大管线（Amplification）
-
-| 区域 | 方法 | 技术 |
-|------|------|------|
-| 海洋地壳 | 程序化 | 3D Gabor 噪声（沿洋脊方向定向，模拟转换断层）+ 高频梯度噪声 |
-| 大陆地形 | 基于样例 | USGS SRTM90 真实地形原语，按造山类型分类（Andean/Himalayan/古山/平原），沿褶皱方向旋转对齐 |
-
-使用 19 个真实地形样例集：7 个喜马拉雅型、11 个安第斯型、6 个古山脉。
-
-### D.7 完整常数表
-
-| 符号 | 含义 | 值 |
-|------|------|-----|
-| $\delta t$ | 时间步长 | 2 My |
-| $R$ | 行星半径 | 6,370 km |
-| $z_r$ | 洋中脊最高高程 | -1 km |
-| $z_a$ | 深海平原高程 | -6 km |
-| $z_t$ | 海沟高程 | -10 km |
-| $z_c$ | 大陆最高海拔 | 10 km |
-| $r_s$ | 俯冲影响距离 | 1,800 km |
-| $r_c$ | 碰撞影响距离 | 4,200 km |
-| $\Delta_c$ | 碰撞系数 | $1.3 \times 10^{-5}$ km$^{-1}$ |
-| $v_0$ | 最大板块速度 | 100 mm/y |
-| $\varepsilon_o$ | 洋壳沉降率 | $0.04$ mm/y |
-| $\varepsilon_c$ | 大陆侵蚀率 | $0.03$ mm/y |
-| $\varepsilon_t$ | 海沟沉积率 | $0.3$ mm/y |
-| $u_0$ | 俯冲上隆率 | $0.6$ mm/y |
-
-### D.8 性能数据
-
-| 指标 | 值 |
-|------|-----|
-| 语言 | C++（CPU 构造计算）+ GPU（放大渲染） |
-| 硬件 | Intel i7-6700K @ 4GHz, 16GB RAM, GTX 1080 |
-| 分辨率 | 35-500km（构造层），~100m（放大层） |
-| 默认采样 | 500,000 点 |
-| 完成行星 | ~125-250 步（≈250-500 My 模拟时间） |
-| 帧率 | 37-145 Hz（自适应网格 + GPU 渲染） |
-| 每步耗时 (35km) | 1.9s 总计（俯冲 0.65s + 碰撞 0.63s + 高程 0.62s） |
-| 洋壳生成 | 13.1s（每 20-120 My 执行一次） |
-| 板块裂解 | 7.7s（离散事件） |
-
-### D.9 已知局限（作者自评 + 地质专家评审）
-
-1. **无热点**：不生成火山岛链（如夏威夷），但可作为特殊采样点实现
-2. **无被动大陆边缘**：未建模大陆架浅水区
-3. **无排水网络**：但与现有河流生成方法兼容
-4. **无气候/大气模型**：明确列为未来工作
-5. **过度强制俯冲**：大型地体的俯冲检测/防止计算成本过高
-6. **板块裂解不够自然**：旋转轴沿裂谷线，非真实物理断裂
-
-### D.10 对 dreamulator 的启示
-
-| Cortial 2019 特性 | dreamulator 对应 | 状态 |
-|-------------------|-----------------|------|
-| Euler pole 运动学 | §4 欧拉极与板块运动学 | ✓ 基础管线已覆盖 |
-| 地壳参数化表 | §14 数据模型变更 | ✓ 已设计 |
-| 俯冲上隆公式 | §5 边界检测 + §6 地形合成 | ✓ 已覆盖（简化版） |
-| Slab pull 反馈 | §17.3.B 俯冲消亡 | § 进阶功能 |
-| 大陆碰撞造山 | §17.3.C 大陆拼合 | § 进阶功能 |
-| 洋壳创生 + 年龄 | §17.3.A 洋壳创生 | § 进阶功能 |
-| 板块裂解 | `tectonic_simulator.py::_rift_plates` | ✓ 已实现 (§D.11) |
-
-### D.11 dreamulator 板块裂解实现
-
-**算法** (`tectonic_simulator.py::_rift_plates`):
-
-1. **Poisson 概率模型**: P ∝ λ₀ · (A/A₀)，λ₀ = `rift_base_rate` (默认 **0.01**)
-2. **超大盘 boost**: 板 >2× 均值时线性提权（max 3×），＞1.5× 时温和提权（1.3×）。确保半板块级别的超大陆不可避免地裂解（Gondwana 模式）
-3. **冷却期**: 正常板 5 步内不再裂解；超大板（>2× 均值）豁免冷却期
-4. **cell 刷新**: 裂解前用当前 map 刷新 cell_ids，消除 Voronoi 边界漂移
-5. **加权 Dijkstra 分区**: 随机 2-3 种子，每个种子抽取对数均匀生长权重
-   （e^{U(-0.9,0.9)}），多源 Dijkstra 产生**不等大碎片**（一两个大碎片 + 若干小碎片），
-   避免均匀 BFS 的等大碎片；空 partition 自动过滤
-6. **分区安全网**: 分区后 cell 数不完整 → 回退恢复父板块
-7. **子板块欧拉极扰动**: 轴偏转 ~10-20°、ω 变幅 ±15% → 相邻子板 >2 cm/yr → 边界检测可识别
-8. **微板块清理**: `_cleanup_empty` 每步移除 0-cell 空壳（≥2 板保护）
-9. **重分区间隔**: 固定 10 步（与总步数无关），裂解后立即重分
-10. **加权 Voronoi 重分区（保持大小偏态）**: 重分区不是无权重的最近种子
-    Voronoi（= Lloyd 迭代，吸引子为等面积 CVT，会洗掉偏态），而是**乘法加权
-    Voronoi**：每个板块持有出生时确定的持久权重（初始板块取初始剖分面积、
-    裂解碎片取碎片面积，`plate_weight` 字典随裂解/清理同步），波前代价
-    cost/wᵢ，面积比 ∝ 权重比。规定权重的 Lloyd 型迭代吸引子是**加权 CVT**，
-    偏态在质心旋转/边界迁移中保持。最终的 boundary warp 也传入同一权重，
-    避免末次重分区再次均匀化。实现：`plate_generator.py::voronoi_partition_warped`
-    （`plate_speed`/`locked` 参数）、`tectonic_simulator.py::_plate_speeds`
-11. **海沟/造山带小圆弧（Frank 1968 / Tovish 1978，涌现式）**: Voronoi 平分线
-    只能是测地线，产不出岛弧的小圆弧——真实机制是俯冲刚性球壳与球面的交线
-    （Frank 1968 *Curvature of Island Arcs*），弧半径与俯冲角/汇聚速率相关
-    （Tovish 1978）。每次 resample 后 `_trench_arc_relaxation` 从**当前**运动学
-    状态推断目标弧（欧拉极相对速度 → 汇聚速率 → 倾角 → 弧矢比 0.10–0.30），
-    把汇聚边界段松弛向该弧：洋壳俯冲凸向俯冲板（日本/阿留申式），陆陆碰撞
-    凸向 indenter（喜马拉雅/阿尔卑斯式，弧矢 ×0.7）。弧矢在 arc_state 中逐步
-    生长（每次 resample ×0.3 松弛）→ 弧度随演化涌现而非初始规定。弯折边界
-    先经 `_split_bent_segment` 在拐点拆成更直子段、各带独立弧。配置
-    `trench_arc`（0=关，默认 1）。gaia-m 实测：plate_002/016 碰撞带
-    sagitta/chord 0.14 → 0.18+（日本弧类比 ≈0.2）。
-
-### D.12 自适应裂解率与真实地球数据
-
-#### 参考数据：地球板块数量历史
-
-基于 Matthews et al. (2016) 的 410 My 全球板块重建：
-
-| 时期 | 板块数 | 状态 |
-|------|:---:|------|
-| 410–260 Ma | 16–20 | 分散状态 |
-| 260–160 Ma（Pangea 聚合） | **9** | 超大陆极值 |
-| 150 Ma–现今 | 20–45 | 裂解+分散 |
-| 现今 | ~15 | 7-8 大板 + 若干小板 |
-
-**关键规律**：板块数在 9–45 之间随超大陆旋回自然振荡。大板（≥10⁷·⁵ km²）始终约 5–8 块，小板数量波动更大。
-系统稳定目标：平均 ~15 板，可接受 8–25 板的自然波动。
-
-*Matthewset al. (2016). "Global plate boundary evolution and kinematics since the late Paleozoic." Global and Planetary Change, 146, 226–250. https://doi.org/10.1016/j.gloplacha.2016.10.002*
-*Cao et al. (2024). "Earth's tectonic and plate boundary evolution over 1.8 billion years." Geoscience Frontiers, 15(6), 101922. https://doi.org/10.1016/j.gsf.2024.101922*
-
-#### PID 控制器（实验性，当前未启用）
-
-超大盘 boost（§D.11-2）已提供足够的自稳定性，无需全局 PID。
-如需启用，PID 实现代码已就绪：`tectonic_simulator.py` 中可按步调节
-`config.rift_base_rate`。设计模式参考 `docs/worldbuilding/design_patterns.md` §模式 6。
-| 板块裂解 Poisson | §17.3.D 板块裂解 | § 进阶功能 |
-| 侵蚀/衰减 | §10 侵蚀 | 基础版已覆盖 |
-| 放大管线 | §13 Gaea 局部精细化 | 使用 Gaea 替代 |
-| 热点 | 未来工作 | ✗ |
-| 气候/大气 | §8 气候模拟 | ✓ 基础管线已覆盖 |
-| 河流网络 | §9 河流水文 | ✓ 基础管线已覆盖 |
-
-### D.11 研究谱系
-
-```
-2016  Cordonnier et al. — 构造隆起 + 河流侵蚀（高度图，非球面）
-       Eurographics 2016 / CGF 35(2)
-  ▼
-2019  Cortial et al. — 完整球面交互式板块星球 ← 本文
-       Eurographics 2019 / CGF 38(2)
-  ▼
-2020  Cortial et al. — 实时超放大（低分辨率行星 → 高分辨率细节）
-       The Visual Computer 36(10-12)
-  ▼
-2026  Borg et al. — 扩散模型生成类地行星（ML + 四叉球）
-       Eurographics 2026 / CGF 45(2)
-```
-
-### D.12 相关开源实现
-
-| 项目 | 语言 | 与论文关系 |
-|------|------|-----------|
-| [Arches-Team/Real-Time-Hyper-Amplification-of-Planets](https://github.com/Arches-Team/Real-Time-Hyper-Amplification-of-Planets) | C++/GLSL | 官方 2020 后续论文代码（仅放大，非构造引擎） |
-| [FioDev/Procedural-Tectonics](https://github.com/FioDev/Procedural-Tectonics) | C#/HLSL | 社区实现，模拟板块族 + 俯冲 + 岛链 |
-| [hecubah/driftworld-tectonics](https://github.com/hecubah/driftworld-tectonics) | Unity/C# | 明确引用 Cortial 2019 |
-| [SecondSystem Plate Tectonics](https://second-system.de/2022/03/01/tectonics_1) | — | "深受 Cortial 启发"，统一 Delaunay 网格 + 弹簧-阻尼力 |
-| Blender Tectonic Tools | Python | 明确引用论文方法论 |
-
-### D.13 科普与可视化资源
-
-| 资源 | 链接 | 与本项目的关系 |
-|------|------|---------------|
-| **Fractal Philosophy**: *Maps: Fractals, Tectonics and the Fourth Dimension* | [B站中字](https://www.bilibili.com/video/BV1n2i7BrEmq)（BV1n2i7BrEmq） | 系统讲解分形几何、板块动力学模拟与高维空间映射的科普视频。其中关于地貌特征如何受数学规则驱动、板块运动的可视化呈现，与本管线的 fBm 噪声叠加（§6.4）和板块构造模拟（§3-§5）思路高度契合。对本项目的设计理念有较大启发。 |
