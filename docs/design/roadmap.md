@@ -169,8 +169,10 @@
    （2026-08-06 实际踩中：直接调 `run_terrain_pipeline` 重建 gaia-m 后地理特征
    全部丢失）。现 `_load_terrain_config` 与引擎同源加载 geography.yaml，输出改
    顶层 `maps/`（branch 同理）。
-3. **无测试 CI** — pytest 仅本地运行；CI 只有 benchmarks.yml 与 deploy-pages.yml。
-   建议新增 tests.yml（pytest + ruff + mypy）。
+3. ~~无测试 CI~~ → ✅ 已修复（2026-08-06）。新增 `.github/workflows/tests.yml`：
+   pytest 硬门槛（全量、--all-extras）+ ruff 硬门槛（F,E9 基线，先清完 19 个
+   F 类存量使门槛可立）+ mypy 报告档（~140 项注解债务清偿后转硬门槛，见工程
+   卫生 #2）。触发：src/tests/pyproject/uv.lock 变更的 PR 与 main 推送。
 4. **热带高地温度偏冷（直减率标定）** — 6.5 °C/km 全球统一，赤道 2500 m
    即算出 ET（gaia-m cell #50021 实例）；地球同位置为 Cfb/Cwb（基多 2850 m
    13.5 °C），热带有效直减率仅 ~4.4–5 °C/km（潜热释放），ET 边界实际在
@@ -226,6 +228,9 @@
    B008(29)、E501(29)、UP*(36)、TC*(26)、SIM*(21)。注意：**UP042 改变
    `__str__` 语义**（Python 3.12 StrEnum），不可批量自动修；B008 多为框架惯用法
    误报，宜按规则配置 per-file ignore 而非逐处改码。
+   **2026-08-06 进展**：F 类（未用变量/导入、F541）19 项已清零，tests.yml 以
+   `--select F,E9` 立硬门槛防回潮；下一步可按 E501→SIM→TC 顺序逐族清偿并
+   收紧门槛。
 2. **mypy 存量 147 项 / 30 文件** — 热点：terrain_synthesizer.py(27)、
    narrator.py(13)、engine/climate.py(13)、cli.py(9)、api_routes/worlds.py(9)。
    补齐 `CVTMesh` / mesh 加载辅助函数的类型注解可消除大部分。

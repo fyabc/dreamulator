@@ -45,13 +45,13 @@ class TestEquilibriumTemperature:
         """Brighter star → higher equilibrium temperature."""
         t_dim = equilibrium_temperature(stellar_luminosity_sol=0.5)
         t_bright = equilibrium_temperature(stellar_luminosity_sol=2.0)
-        assert t_dim < t_bright, f"Brighter star should give higher temperature"
+        assert t_dim < t_bright, "Brighter star should give higher temperature"
 
     def test_farther_orbit_colder(self) -> None:
         """Farther orbit → colder temperature (inverse-square law)."""
         t_near = equilibrium_temperature(orbital_distance_au=0.5)
         t_far = equilibrium_temperature(orbital_distance_au=2.0)
-        assert t_near > t_far, f"Farther orbit should be colder"
+        assert t_near > t_far, "Farther orbit should be colder"
 
     def test_lower_albedo_higher_temp(self) -> None:
         """Low albedo → more absorption → higher temperature."""
@@ -197,6 +197,7 @@ class TestPressureFromTemperature:
         p_high = pressure_from_temperature(np.array([15.0]), np.array([5000.0]))
         # 5000 m → ~540 hPa
         assert p_high[0] < 600.0
+        assert p_low[0] > p_high[0]  # pressure decreases with altitude
 
     def test_hot_air_thermal_low(self) -> None:
         """Warmer air → slightly lower pressure (thermal low)."""

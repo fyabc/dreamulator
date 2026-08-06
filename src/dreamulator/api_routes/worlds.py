@@ -66,7 +66,7 @@ def list_worlds() -> WorldListResponse:
 def create_world(req: WorldCreateRequest) -> WorldInfoResponse:
     """Create a new world from a template."""
     try:
-        world_dir = _manager.create_world(req.name, seed=req.seed, template=req.template)
+        _manager.create_world(req.name, seed=req.seed, template=req.template)
         config = _manager.load_world(req.name)
         return WorldInfoResponse(data=config.model_dump(mode="json"))
     except FileExistsError as e:

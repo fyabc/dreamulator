@@ -1,0 +1,78 @@
+# Test & lint gate (roadmap 功能性 #3).
+#
+# - pytest: hard gate — full suite with all extras (mirrors local dev env).
+# - ruff:   hard gate at the F,E9 baseline (real bugs: unused/undefined,
+#   syntax errors).  pyproject's full lint select still carries style debt
+#   (roadmap 工程卫生 #1); widen this gate as the debt clears.
+# - mypy:   report-only for now — strict mode has ~140 items of annotation
+#   debt (roadmap 工程卫生 #2).  Flip continue-on-error off once cleared.
+#
+# No LFS checkout needed: the only data/worlds file the tests read is
+# geography.yaml (plain YAML; mesh-heavy tests build small meshes in code).
+
+name: tests
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run test suite
+        run: uv run pytest tests/ -q -p no:warnings
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff (F,E9 baseline gate)
+        run: uv run ruff check --select F,E9 src/ tests/
+
+  mypy:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # annotation debt — see roadmap 工程卫生 #2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: mypy (report)
+        run: uv run mypy src/

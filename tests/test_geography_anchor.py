@@ -15,7 +15,6 @@ from dreamulator.map.geography import (
     build_land_bias_field,
     load_geography_spec,
 )
-from dreamulator.map.models import CVTMesh
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

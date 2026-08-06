@@ -18,7 +18,6 @@ See ``docs/design/terrain-pipeline.md`` for complete algorithm reference.
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path

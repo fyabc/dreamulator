@@ -559,7 +559,6 @@ def _asymmetric_boundary_effects(
             # Narrower sigma for convergent belts (more focused deformation)
             sigma_conv = sigma * 0.8  # 400 km
             sigma_front = sigma_conv * (1.0 - asym * 0.5)  # steep side
-            sigma_back = sigma_conv * (1.0 + asym * 1.0)   # gentle side
 
             # Mountain peak offset toward overriding plate (50–150 km)
             peak_offset = asym * sigma_conv * 0.25
@@ -1413,7 +1412,6 @@ def _apply_interior_landforms(
 
     Modifies *elevation* in-place.
     """
-    n = mesh.num_cells
     num_orogenies = config.interior_orogeny_count
     if num_orogenies <= 0:
         return elevation
@@ -1434,7 +1432,6 @@ def _apply_interior_landforms(
     total_orogeny = 0
     total_basin = 0
     total_rift = 0
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
 
     for pid, cell_indices in plate_cells.items():
         # Only add orogenies to continental or mixed plates

@@ -103,8 +103,6 @@ def simulate_climate(
     elevation_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
     lat_deg = np.array([c.lat for c in mesh.cells], dtype=np.float64)
     lat_rad = np.radians(lat_deg)
-    lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
-    lon_rad = np.radians(lon_deg)
 
     # Build land/ocean mask from elevation (sea level at 0 m)
     is_land = np.array(elevation_m >= 0.0, dtype=bool)

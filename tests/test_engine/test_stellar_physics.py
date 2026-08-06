@@ -1,6 +1,5 @@
 """Tests for stellar_physics pure computation module."""
 
-import math
 
 import pytest
 

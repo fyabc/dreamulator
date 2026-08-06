@@ -6,8 +6,7 @@ boundary_detector, terrain_synthesizer, export, terrain_pipeline).
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 

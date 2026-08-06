@@ -1188,7 +1188,7 @@ def terrain_open(
     cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, None)
 
     if not output_dir.exists():
-        console.print(f"[yellow]Output directory does not exist yet.[/yellow]")
+        console.print("[yellow]Output directory does not exist yet.[/yellow]")
         console.print(f"  Run [cyan]dreamulator terrain generate {world}[/cyan] first.")
         raise typer.Exit(code=1)
 
@@ -1234,8 +1234,6 @@ def _write_branch_readme(
     if marker in existing:
         return
 
-    # Build relative paths from branch root
-    maps_rel = output_dir.relative_to(branch_root)
     branch_name = branch or "main"
 
     new_section = f"""

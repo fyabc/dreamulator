@@ -16,7 +16,7 @@ from .elevation_codec import lon_lat_to_pixel
 from .models import VoronoiCell, VoronoiNetwork
 
 if TYPE_CHECKING:
-    from .models import MapMetadata, TectonicPlate
+    from .models import TectonicPlate
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,6 @@ References:
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 
@@ -461,8 +460,7 @@ def itcz_latitude(
     solar_declination = epsilon * np.sin(
         2.0 * np.pi * (day_of_year - 80.0) / orbital_period_days
     )
-    # ITCZ lags and is damped
-    itcz_offset = np.radians(5.0)  # NH bias (more land → warmer)
+    # ITCZ lags and is damped; +5.0° mean NH bias (more land → warmer) below
     itcz = 0.7 * solar_declination + np.sin(
         2.0 * np.pi * (day_of_year - 80.0 - lag_days) / orbital_period_days
     ) * epsilon * 0.7
@@ -504,9 +502,8 @@ def ekman_current_direction(
         # Deflection angle: ±45° depending on hemisphere
         angle = np.sign(lat_rad[i]) * np.radians(45.0)
 
-        # Rotate wind vector by deflection angle around local vertical
-        node = np.array([0.0, 0.0, 1.0])  # placeholder — caller should use local normal
-        # Simplified: rotate in the east-north plane
+        # Rotate wind vector by deflection angle — simplified: rotate in the
+        # east-north plane (a proper implementation would use the local normal)
         w_east = wind[i, 0]  # x → lon direction at given point
         w_north = -wind[i, 2]  # z → lat direction (subtle: depends on mesh convention)
 

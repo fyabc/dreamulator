@@ -6,7 +6,6 @@ import pytest
 import yaml
 
 from dreamulator.engine.astronomy import AstronomyEngine
-from dreamulator.models.layers import Layer
 
 
 @pytest.fixture
