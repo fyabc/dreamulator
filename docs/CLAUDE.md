@@ -47,6 +47,6 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 - 项目架构（`architecture.md`）：目录结构、模块职责、核心设计概念
 - 项目愿景（`vision.md`）、开发路线图（`roadmap.md`）、竞品分析（`competitor-analysis.md`）、文明层设计（`civilization-layer.md`）
 - 子系统设计文档与技术参考：地形管线（`terrain-pipeline.md`）、地图系统（`map-system.md`）、气候引擎（`climate-engine.md`）及其验证（`climate-validation.md`）
-- 早期架构决策记录（`map_system_design.md`，已归档）
+- 早期架构决策记录（`design/archive/map_system_design.md`，已归档）
 
 详见 `design/CLAUDE.md`。

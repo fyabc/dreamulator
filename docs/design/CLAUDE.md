@@ -11,9 +11,9 @@
 - `civilization-layer.md` — 文明层半格式化管理设计（Phase 3C 详细提案，2026-08 从 roadmap 拆出）
 - `terrain-pipeline.md` — 行星地形生成管线技术参考（12 阶段算法、数学公式、Cortial 2019 论文解读）
 - `map-system.md` — 地图系统架构（栅格 + Voronoi 混合、多投影 GPU 渲染、API 端点）
-- `climate-engine.md` — 气候引擎实现架构（模块职责、数据流、输出格式、Phase 3A 改进路线图）
-- `climate-validation.md` — 气候引擎验证指南（ETOPO1 / Beck 2018 / ERA5 数据下载与验证脚本；§7 多线证据验证策略与反过拟合分层计划）
-- `map_system_design.md` — 早期架构决策记录（ADR-001–004，已归档，不再维护）
+- `climate-engine.md` — 气候引擎实现架构（模块职责、数据流、输出格式、已知限制；路线图已收敛至 `roadmap.md` §4）
+- `climate-validation.md` — 气候验证设计（数据源清单、指标、§7 多线证据策略；操作步骤见 `../usage/validation-workflow.md`）
+- `archive/map_system_design.md` — 早期架构决策记录（ADR-001–004，已归档，不再维护）
 
 ## 写作原则
 

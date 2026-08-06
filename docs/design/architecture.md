@@ -154,7 +154,7 @@ LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理�
 - [map-system.md](map-system.md) — 地图系统架构（数据模型、多投影 GPU 渲染、API 端点）
 - [climate-engine.md](climate-engine.md) — 气候引擎实现架构与改进路线图
 - [climate-validation.md](climate-validation.md) — 真实地球数据验证方法
-- [map_system_design.md](map_system_design.md) — 早期架构决策记录（ADR，已归档）
+- [archive/map_system_design.md](archive/map_system_design.md) — 早期架构决策记录（ADR，已归档）
 
 操作指南见 [../usage/map-workflow.md](../usage/map-workflow.md) 和 [../usage/civmap-guide.md](../usage/civmap-guide.md)。
 
