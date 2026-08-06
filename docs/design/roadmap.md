@@ -1,12 +1,12 @@
 # 开发路线图
 
-> 最后更新：2026-08-04（v0.15.0；gaia-m 样板世界改造进行中）
+> 最后更新：2026-08-06（v0.16.0；地理锚定 + 板块偏态化 + 测试 CI）
 > 长期愿景与设计哲学见 [vision.md](vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](civilization-layer.md)。
 
 ---
 
-## 一、当前状态快照（v0.15.0）
+## 一、当前状态快照（v0.16.0）
 
 | 维度 | 状态 |
 |------|------|
@@ -14,7 +14,7 @@
 | 性能 | gaia-m（100k 节点）全量构建 532 s → **98 s**（Numba JIT 噪声内核 + 全面向量化）；`build_profile.json` 仪表 + pytest-benchmark CI（`perf-dashboard` 分支） |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
 | 气候精度 | Köppen 群组准确率 53.9%（vs Beck 2018；A 类 33.3%、D 类 48.3%）；降水 RMSE 493 mm/yr |
-| 样板世界 | gaia-m：100k 节点、72% 海洋、13 个 Köppen 类；均温 14.4 °C（v0.15.0 校准，见 §六） |
+| 样板世界 | gaia-m：100k 节点、72% 海洋、13 个 Köppen 类；均温 12.7 °C（v0.16.0 地理锚定重建，见 §六）；26 板 CV=0.97（偏态化）、海洋最深 −10484 m |
 | 网格规模决策 | 保持 100k 节点（≈76 km/胞，已达世界构建工具上限、中分辨率 GCM 水平）；优先投入模型保真度而非分辨率 |
 
 ---
