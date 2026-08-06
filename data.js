@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786024575732,
+  "lastUpdate": 1786027625650,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -177,6 +177,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001032920158270437",
             "extra": "mean: 4.310255199999347 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "15ff7d9aa34f9212c644597f8586e4f13d67176a",
+          "message": "feat(tectonics): 岛弧/造山带小圆弧涌现机制（Frank 1968 / Tovish 1978）\n\n问题：plate_002/016 等边界平直，岛链/山脉不真实。根因是结构性的——\nVoronoi 平分线（点种子的最近邻/加权平分）几何上只能是测地线或\nApollonius 弧，无论种子怎么动都产不出岛弧的小圆弧；噪声扭曲只能加\n抖动，加不出系统弧度（频率扫描实测：base_freq 0.6→6 弯曲度不变）。\n\n机制（涌现式，非初始规定）：\n- Frank (1968)：俯冲板作为刚性球壳嵌入球面，交线为小圆弧——岛弧曲率\n  的几何起源；Tovish (1978)/Heuret & Lallemand (2005)：弧半径 ↔ 俯冲角\n  ↔ 汇聚速率经验相关。\n- 每次构造 resample 后 _trench_arc_relaxation 从*当前*运动学状态推断目标\n  弧：欧拉极相对速度 → 汇聚速率 → 倾角（30–70°）→ 弧矢比 0.10–0.30；\n  俯冲边界凸向俯冲板（日本/阿留申式），陆陆碰撞凸向 indenter（喜马拉雅/\n  阿尔卑斯式，×0.7）。弧矢在 arc_state 逐 resample 松弛生长 → 弧度随演化\n  涌现；最终 boundary warp 会重直化边界，故 warp 后再应用一次已发育弧矢。\n- 弯折边界（L/Z 形）经 _split_bent_segment 拐点拆分为更直子段、各带独立弧；\n  法向量改用 cross(mid, chord) 保证垂直弦（边均值差在弯折段会平行于弦）。\n\n配置：trench_arc（0=关，默认 1）。\n\ngaia-m 实测：plate_002/016 碰撞带 sagitta/chord 0.139 → 0.184（日本弧\n≈0.2 区间）；整体边界呈\"分段弧+折点\"形态；偏态保持（21 板 CV=0.84）。\n全量测试 253 通过；ruff F,E9 绿；新代码 mypy 零错误。\n\n文档：terrain-pipeline.md §D.11-11、roadmap #7 更新。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T22:45:39+08:00",
+          "tree_id": "396dd76c970179584ff77fd6a115ff0bb334fdf7",
+          "url": "https://github.com/fyabc/dreamulator/commit/15ff7d9aa34f9212c644597f8586e4f13d67176a"
+        },
+        "date": 1786027624838,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 52.78859724067992,
+            "unit": "iter/sec",
+            "range": "stddev: 0.008908999369397347",
+            "extra": "mean: 18.943485000002624 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.706031496401712,
+            "unit": "iter/sec",
+            "range": "stddev: 0.056211390637919384",
+            "extra": "mean: 269.8304104999991 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.431038279615696,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1186744714313963",
+            "extra": "mean: 698.7933266666696 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 935.8049063846895,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007313048983674819",
+            "extra": "mean: 1.0685988000034286 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 194.83967130539205,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00024141409925759194",
+            "extra": "mean: 5.132425000002172 msec\nrounds: 5"
           }
         ]
       }
