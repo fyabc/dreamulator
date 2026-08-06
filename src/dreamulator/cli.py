@@ -843,11 +843,25 @@ def _load_terrain_config(
                             cfg = TerrainPipelineConfig.from_planet_config(body)
                             break
 
-    # Determine output directory (input/maps/ for persistent storage)
-    input_dir = resolver.get_input_dir("geological")
-    if input_dir is None:
-        input_dir = world_dir / "layers" / "geological" / "input"
-    output_dir = input_dir / "maps" / planet_id
+    # Authored geography (continent anchoring) — same lookup as the geological
+    # engine (engine/geological.py).  Without this `terrain generate` silently
+    # ignores geography.yaml and falls back to random per-plate continents,
+    # losing all named landmasses (regression of 2026-08-06).
+    from dreamulator.map.geography import load_geography_spec
+
+    geo_input_dir = resolver.get_input_dir("geological")
+    cfg.geography = load_geography_spec(
+        (geo_input_dir / "geography.yaml") if geo_input_dir is not None else None
+    )
+
+    # Determine output directory — the canonical map registry (world maps/),
+    # the same location the geological engine and MapManager read/write.
+    # (Previously the legacy layers/geological/input/maps/, which the
+    # frontend/API never consulted, so generated maps appeared to vanish.)
+    if branch:
+        output_dir = world_dir / "branches" / branch / "maps" / planet_id
+    else:
+        output_dir = world_dir / "maps" / planet_id
 
     return cfg, planet_id, output_dir
 

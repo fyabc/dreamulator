@@ -162,10 +162,13 @@
 1. **潮汐锁定经度效应缺失**（Phase 3A.7）— 无昼夜半球 / 次恒星点热源 / 经度
    不对称，潮汐锁定世界只能产出纬向对称近似气候。gaia-m 温室预算已预留 +3 K
    等待该效应落地。
-2. **`dreamulator terrain generate` 旧版输出路径** — CLI 仍写
-   `layers/geological/input/maps/`（cli.py），与 v0.10.0 统一的顶层 `maps/`
-   布局不一致，会产出与正式数据不混用的重复副本。补气候数据请用
-   `dreamulator build <world> --only climate`，勿用此命令。
+2. ~~`dreamulator terrain generate` 旧版输出路径~~ → ✅ 已修复（2026-08-06）。
+   两处问题：(a) 输出写 legacy `layers/geological/input/maps/`，与顶层 `maps/`
+   布局不一致；(b) **不加载 geography.yaml**——只有 geological 引擎
+   （`engine/geological.py`）加载，绕过 DAG 的生成会静默丢失全部命名海陆锚定
+   （2026-08-06 实际踩中：直接调 `run_terrain_pipeline` 重建 gaia-m 后地理特征
+   全部丢失）。现 `_load_terrain_config` 与引擎同源加载 geography.yaml，输出改
+   顶层 `maps/`（branch 同理）。
 3. **无测试 CI** — pytest 仅本地运行；CI 只有 benchmarks.yml 与 deploy-pages.yml。
    建议新增 tests.yml（pytest + ruff + mypy）。
 4. **热带高地温度偏冷（直减率标定）** — 6.5 °C/km 全球统一，赤道 2500 m
@@ -211,6 +214,11 @@
    bearing=0），产生笔直经向裂谷。应似东非大裂谷/红海：蜿蜒走向、不规则边界、
    局部断块隆起/异常塌陷。已用"多段错列偏置场"初步缓解（见 gaia-m
    geography.yaml）；彻底方案需 geography 逻辑支持"弯曲裂谷带"原语。
+   **另一脆弱机制（2026-08-06 实测）**：锚定只钉住地壳类型，地形合成阶段的
+   汇聚边界造山抬升可叠加在锚定的海洋/裂谷 cell 上——gaia-m 重建中大裂谷海
+   中南段恰有汇聚边界横穿（距 78 km、汇聚 5.9 cm/yr），+4000 m 级抬升把裂谷
+   推上海面（+927 m）。方向：地形合成对强负偏置场（authored 裂谷/海盆）抑制
+   汇聚抬升，让锚定贯通到高程而不仅是地壳类型。
 
 ### 工程卫生
 
@@ -221,6 +229,11 @@
 2. **mypy 存量 147 项 / 30 文件** — 热点：terrain_synthesizer.py(27)、
    narrator.py(13)、engine/climate.py(13)、cli.py(9)、api_routes/worlds.py(9)。
    补齐 `CVTMesh` / mesh 加载辅助函数的类型注解可消除大部分。
+3. **build 跳过判定只看输出存在** — `pipeline._outputs_exist` 不校验输入指纹
+   （terrain_config.yaml / geography.yaml / 代码变更均不触发失效），输入变化后
+   输出不会自动重生，必须 `--force`。`ComputationManifest` 模型已定义但未接入
+   跳过判定。2026-08-06 实际踩中：手动重建地图后 build 把 geological 跳过，
+   气候引擎在错误地图上运行。
 
 ### 已清偿（v0.14.0）
 
