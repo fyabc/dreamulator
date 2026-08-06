@@ -282,7 +282,7 @@ elevation → temperature → biomes
 
 ---
 
-## 模式 6：PID 自适应参数调节
+## 模式 8：PID 自适应参数调节
 
 **概念**：比例-积分-微分控制器（PID controller）是工业控制中的经典算法，
 在 dreamulator 中用于自动调节模拟参数，使系统在变化条件下保持目标状态。
@@ -333,7 +333,7 @@ def adaptive_pid(current_value, target, base_rate, history):
 
 ---
 
-## 模式 7：地理锚定（geography.yaml）
+## 模式 9：地理锚定（geography.yaml）
 
 **概念**：默认地形是纯程序化的（大陆落在哪由纬度偏好 + fBm 决定，作者无法控制）。
 对于已经在设定文档里写死海陆格局的"样板世界"，用机器可读的 `geography.yaml`

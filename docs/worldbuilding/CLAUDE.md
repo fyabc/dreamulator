@@ -5,6 +5,7 @@
 ## 已有文档
 
 - `design_patterns.md` — 架空世界数据编码模式（特洛伊天体与拉格朗日点等）
+- `map_design_guide.md` — 地图设计指导（海陆比例、板块、生态、城市选址；⚠️ 部分内容停留在旧 2D Voronoi 时代，待重写，见 docs 重组计划 Phase 4）
 
 ## 规划中的文档
 

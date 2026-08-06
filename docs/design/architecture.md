@@ -55,8 +55,8 @@ dreamulator/
 | 模块 | 职责 |
 |------|------|
 | `models/` | Pydantic 数据模型：世界（`WorldConfig`）、分支元数据、层级定义、恒星系、地图数据模型等 |
-| `engine/` | 模拟引擎。每个引擎继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`；`pipeline.py` 拓扑排序后按序执行。已实现：`astronomy`（含纯函数模块 `stellar_physics.py`）、`geological`（封装地形管线）、`climate`（含纯函数模块 `climate_physics.py`、季节模块 `climate_seasonality.py`） |
-| `map/` | 地图子系统：CVT 网格生成、板块构造（Cortial 2019）、地形合成、气候模拟、特征提取、栅格编解码、地图 CRUD + 分支继承。算法原理见 [terrain-pipeline.md](terrain-pipeline.md)，系统架构见 [map-system.md](map-system.md) |
+| `engine/` | 模拟引擎。每个引擎继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`；`pipeline.py` 拓扑排序后按序执行。已实现：`astronomy`（含纯函数模块 `stellar_physics.py`）、`geological`（封装地形管线）、`climate`（含纯函数模块 `climate_physics.py`）；`physical_inputs.py` 统一解析卫星感知物理参数 |
+| `map/` | 地图子系统：CVT 网格生成、板块构造（Cortial 2019 时间演化）、地形合成、边界检测、地理锚定、气候模拟、栅格编解码、外部高度图导入、地图 CRUD + 分支继承。算法原理见 [terrain-pipeline.md](terrain-pipeline.md)，系统架构见 [map-system.md](map-system.md) |
 | `civmap/` | 文明地图：真实地球国家/省份底图上的架空领土涂色与时间快照 |
 | `io/` | YAML 文件加载（支持分支继承链查找）和 JSON Schema 生成 |
 | `api.py` / `api_routes/` | FastAPI 应用与路由（worlds、narrate、maps、civmap），同时 serve `frontend/dist/` |
@@ -71,11 +71,12 @@ dreamulator/
 | 脚本 | 用途 |
 |------|------|
 | `export_static.py` | 将世界数据导出为静态 JSON（GitHub Pages 静态模式前置步骤） |
-| `validate_climate.py` | 气候引擎精度验证（zonal 加权 RMSE、Cohen's Kappa），见 [climate-validation.md](climate-validation.md) |
-| `import_earth_elevation.py` | 导入 ETOPO1 真实地球高程 |
+| `validate_climate.py` | 气候验证 CLI 薄壳（实现在 `dreamulator.validate_climate`；zonal 加权 RMSE、Cohen's Kappa），见 [climate-validation.md](climate-validation.md) |
+| `import_earth_elevation.py` | ETOPO1 导入 CLI 薄壳（实现在 `dreamulator.import_earth_elevation`） |
 | `convert_koppen_map.py` | 转换 Beck et al. (2018) Köppen 参考数据 |
 | `prepare_civmap_data.py` | 文明地图底图数据下载与预处理 |
-| `generate_planet_heightmap.py` | 行星高度图生成工具 |
+| `generate_planet_heightmap.py` | 行星高度图生成工具（CVT 管线前的原型，见地形工作流文档） |
+| `profile_build.py` | 构建性能剖析 + 基准 harness（见 [../usage/profiling.md](../usage/profiling.md)） |
 
 ### frontend/src/
 

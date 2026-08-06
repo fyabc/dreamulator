@@ -29,9 +29,27 @@ dreamulator branch create earth pangea --at geological   # 在地质层分叉
 dreamulator branch list earth                            # 列出分支
 dreamulator branch info earth pangea                     # 分支详情
 dreamulator branch delete earth pangea                   # 删除分支
+dreamulator branch promote earth pangea                  # 将分支提升为独立世界
 ```
 
 分支类似 Git——在某一层分叉，共享上层数据，仅存储分叉层及之后的数据。
+
+### 其他基础命令
+
+```bash
+dreamulator version                 # 显示版本号
+dreamulator schema                  # 从 Pydantic 模型生成 JSON Schema
+dreamulator delete earth            # 删除世界（--branch 可删分支）
+```
+
+---
+
+## 人工语言（conlang）
+
+```bash
+dreamulator conlang evolve <world> <lang>   # 对词汇表运行 SCA 音变
+dreamulator conlang tokenize <word>         # 显示 ASCIIPA 词的 token 分解
+```
 
 ---
 

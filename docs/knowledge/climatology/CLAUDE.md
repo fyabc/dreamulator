@@ -3,11 +3,14 @@
 ## 已有文档
 
 - `energy_balance.md` — 能量平衡模型（EBM）、温室效应、纬度温度梯度
-- `atmospheric_circulation.md` — 地转风、Hadley/Ferrel/Polar 环流、科里奥利力
-- `precipitation.md` — 水汽输送、地形降水、ITCZ、雨影效应
-- `ocean_currents.md` — 风生流、Ekman 输运、热盐环流、大洋环流
-- `koppen_classification.md` — Köppen 气候分类系统
 - `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
+
+## 规划中的文档（尚未创建；下表列出预期覆盖的引擎实现）
+
+- `atmospheric_circulation.md` — 地转风、Hadley/Ferrel/Polar 环流、科里奥利力（引擎已实现，待反写）
+- `koppen_classification.md` — Köppen 气候分类系统（引擎已实现，待反写）
+- `precipitation.md` — 水汽输送、地形降水、ITCZ、雨影效应（BFS 水汽已实现，待反写）
+- `ocean_currents.md` — 风生流、Ekman 输运、热盐环流、大洋环流（洋流模型未实现，见 roadmap 3A.3）
 
 ## 关键参考
 

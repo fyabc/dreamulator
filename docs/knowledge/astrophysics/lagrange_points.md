@@ -54,7 +54,7 @@ orbits:
 ## 相关文档
 
 - `knowledge/astrophysics/orbital_mechanics.md`（待创建）
-- `knowledge/astrophysics/stellar_physics.md`（待创建）
+- `knowledge/astrophysics/stellar_physics.md`
 
 ## 参考资料
 

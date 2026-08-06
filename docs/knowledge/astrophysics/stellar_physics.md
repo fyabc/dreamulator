@@ -95,7 +95,7 @@ $$T_{\text{eff}} = T_\odot \cdot \left(\frac{L}{R^2}\right)^{1/4}$$
 ## 相关文档
 
 - `knowledge/astrophysics/orbital_mechanics.md`（待创建）
-- `knowledge/planetary_science/`（待创建）
+- `knowledge/planetary_science/planet_models.md`
 - 代码：`src/dreamulator/engine/stellar_physics.py`
 
 ## 参考资料

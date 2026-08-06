@@ -13,5 +13,6 @@
 
 ## 关键参考
 
-- Kippenhahn, R., & Weigert, A. (2012). *Stellar Structure and Evolution*. Springer.
-- Turchin, P. (2003). *Historical Dynamics*. Princeton University Press.
+- Cortial, Y., Peytavie, A., Galin, E., & Guérin, E. (2019). *Procedural Tectonic Planets*. Computer Graphics Forum, 38(2).（`tectonic_simulator.py` 的算法来源）
+- Frank, F. (1968). *Curvature of Island Arcs*. Nature.（海沟小圆弧涌现机制）
+- Tovish, A., & Schubert, G. (1978). *Island Arc Curvature, Subducting Slab Dip*.（弧矢标定）

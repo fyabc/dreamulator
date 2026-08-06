@@ -20,13 +20,18 @@ dreamulator/
 │   │   ├── layers.py        # 层级定义和工具函数
 │   │   └── branch.py        # 分支元数据模型
 │   ├── engine/              # 模拟引擎（DAG pipeline）
-│   ├── map/                 # 地图子系统（栅格高度图 + Voronoi 语义网络）
-│   │   ├── models.py        # 地图数据模型（MapMetadata, VoronoiCell, TectonicPlate）
+│   ├── map/                 # 地图子系统（球面 CVT 网格 + 板块构造管线）
+│   │   ├── models.py        # 地图数据模型（MapMetadata, CVTMesh, VoronoiCell, TectonicPlate）
+│   │   ├── cvt_mesh.py      # CVT 球面网格（Fibonacci 螺旋 + Lloyd 松弛）
+│   │   ├── plate_generator.py  # 板块剖分（Cortial 2019）+ 地理锚定地壳切分
+│   │   ├── tectonic_simulator.py # 构造时间演化（旋转/俯冲/碰撞/裂解/海沟弧）
+│   │   ├── terrain_synthesizer.py # 地形合成（边界效应 + fBm + 海平面校准）
+│   │   ├── geography.py     # 配置化海陆锚定（geography.yaml 偏置场）
+│   │   ├── climate_simulator.py # EBM 温度 + 地转风 + BFS 水汽 + Köppen
 │   │   ├── elevation_codec.py  # 高度图 PNG ↔ numpy 编解码
-│   │   ├── voronoi_generator.py # Voronoi 网络生成 + Lloyd relaxation
-│   │   ├── terrain_generator.py # 程序化地形生成（多频率高斯噪声）
-│   │   ├── feature_extractor.py # 特征提取（海岸线、河流、山脊）
-│   │   └── manager.py       # 地图 CRUD + 分支继承 + 同步
+│   │   ├── importer.py      # 外部高度图导入（PNG/TIFF 解码 + 重采样）
+│   │   ├── export.py        # CVT → 等距圆柱栅格导出
+│   │   └── manager.py       # 地图 CRUD + 分支继承 + 图层注册表
 │   ├── civmap/              # 文明地图子系统（真实地球行政区划 + 架空领土涂色）
 │   │   ├── models.py        # 数据模型（CivCountry, CivSnapshot, CivTerritory）
 │   │   └── manager.py       # CRUD + 分支继承 + 国家/省份映射
@@ -43,7 +48,7 @@ dreamulator/
 │   └── src/
 │       ├── api/             # API 客户端
 │       ├── components/      # UI 组件（含 map/ 地图编辑器组件）
-│       ├── pages/           # 页面（含 MapEditorPage 全页地图编辑器）
+│       ├── pages/           # 页面（含 MapViewerPage 全页地图查看器）
 │       ├── stores/          # Zustand 状态管理
 │       └── viewers/         # 3D 恒星系 + 2D 地图可视化器（Three.js / WebGPU）
 ├── scripts/
