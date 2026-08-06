@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786030440588,
+  "lastUpdate": 1786030457882,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -295,6 +295,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008918128377638019",
             "extra": "mean: 5.102999600001112 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e1d7fcda5a48d0be2185b9f443d8004262ae5eaf",
+          "message": "Release v0.17.0: 岛弧小圆弧涌现 + 汇聚带沿弧分段 + 交织/裂谷修复\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T23:33:11+08:00",
+          "tree_id": "ed73ebb295ef2495637024bcea14e56ab3e7c4ae",
+          "url": "https://github.com/fyabc/dreamulator/commit/e1d7fcda5a48d0be2185b9f443d8004262ae5eaf"
+        },
+        "date": 1786030457001,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 53.72663234002158,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007747069801161366",
+            "extra": "mean: 18.612742999994225 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.527426862935449,
+            "unit": "iter/sec",
+            "range": "stddev: 0.07609193820729437",
+            "extra": "mean: 283.49276650000377 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4446897579020244,
+            "unit": "iter/sec",
+            "range": "stddev: 1.104012815638267",
+            "extra": "mean: 692.1901359999936 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 987.8962945948161,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006270708987377095",
+            "extra": "mean: 1.0122520000038548 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.00727066848532,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009538170762109891",
+            "extra": "mean: 5.05031960000224 msec\nrounds: 5"
           }
         ]
       }
