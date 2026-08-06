@@ -66,8 +66,8 @@ _MOISTURE_ADVECTION_STEPS: int = 12
 
 
 def simulate_climate(
-    mesh: "CVTMesh",
-    config: "TerrainPipelineConfig",
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
 ) -> None:
     """Run climate simulation on the CVT mesh, filling cell climate fields.
 
@@ -141,7 +141,8 @@ def simulate_climate(
     # anchored to the planet's global-mean surface temperature (Earth profile
     # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
     t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
-        lat_rad[~land_mask_arr], t_surf_C,
+        lat_rad[~land_mask_arr],
+        t_surf_C,
     )
 
     # Seasonal extremes
@@ -269,7 +270,7 @@ def simulate_climate(
 
 
 def _compute_graph_gradient(
-    mesh: "CVTMesh",
+    mesh: CVTMesh,
     scalar: np.ndarray,
     nodes_xyz: np.ndarray,
 ) -> np.ndarray:
@@ -426,14 +427,14 @@ def _sigmoid(x: np.ndarray, center: float, width: float) -> np.ndarray:
 
 
 def _compute_precipitation_bfs(
-    mesh: "CVTMesh",
+    mesh: CVTMesh,
     wind: np.ndarray,
     is_land: np.ndarray,
     is_ocean: np.ndarray,
     elevation_m: np.ndarray,
     temperature_c: np.ndarray,
     nodes_xyz: np.ndarray,
-    config: "TerrainPipelineConfig",
+    config: TerrainPipelineConfig,
 ) -> np.ndarray:
     """Multi-pass BFS moisture transport with orographic precipitation.
 
@@ -467,7 +468,9 @@ def _compute_precipitation_bfs(
     # Step 1: Base moisture from ocean evaporation
     ocean_moisture = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
     # Land evapotranspiration: ~40% of ocean rate (soil + vegetation recycling)
-    land_moisture = np.where(is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0)
+    land_moisture = np.where(
+        is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0
+    )
 
     # Stage 1.3 precompute: the wind field is invariant across passes, so
     # build the directed-edge table and per-cell downwind candidate lists
@@ -566,26 +569,30 @@ def _compute_precipitation_bfs(
                 )
                 pass_precip[best_neighbor] += rain
                 pass_moisture[best_neighbor] = min(
-                    pass_moisture[best_neighbor] + remaining, 5000.0,
+                    pass_moisture[best_neighbor] + remaining,
+                    5000.0,
                 )
             elif elev_diff < 0.0 and is_land[best_neighbor]:
                 # Descending air → rain shadow (minimal precip, most passes through)
                 pass_precip[best_neighbor] += cell_moisture * 0.02
                 pass_moisture[best_neighbor] = min(
-                    pass_moisture[best_neighbor] + cell_moisture * 0.92, 5000.0,
+                    pass_moisture[best_neighbor] + cell_moisture * 0.92,
+                    5000.0,
                 )
             elif is_land[best_neighbor]:
                 # Flat terrain: slow moisture loss, most passes inland
                 pass_precip[best_neighbor] += cell_moisture * 0.05
                 pass_moisture[best_neighbor] = min(
-                    pass_moisture[best_neighbor] + cell_moisture * 0.90, 5000.0,
+                    pass_moisture[best_neighbor] + cell_moisture * 0.90,
+                    5000.0,
                 )
             elif is_ocean[best_neighbor]:
                 # Ocean → ocean: gradual moisture loss (precip over ocean)
                 ocean_rain = cell_moisture * 0.04  # ~4% per hop
                 pass_precip[best_neighbor] += ocean_rain
                 pass_moisture[best_neighbor] = min(
-                    pass_moisture[best_neighbor] + cell_moisture * 0.90, 5000.0,
+                    pass_moisture[best_neighbor] + cell_moisture * 0.90,
+                    5000.0,
                 )
             else:
                 # Ocean → ocean: no net precipitation

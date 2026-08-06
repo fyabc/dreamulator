@@ -108,9 +108,7 @@ def generate_fbm_on_cells(
     frequency = config.noise_scale
 
     for i in range(config.noise_octaves):
-        noise = _compute_noise_elementwise_xyz(
-            x, y, z, frequency, config.seed + i * 1000
-        )
+        noise = _compute_noise_elementwise_xyz(x, y, z, frequency, config.seed + i * 1000)
         result += amplitude * noise
         amplitude *= config.noise_persistence
         frequency *= config.noise_lacunarity
@@ -209,9 +207,7 @@ def classify_sea_land(
     """
     for cell in mesh.cells:
         near_sea = abs(cell.elevation - sea_level_m) <= buffer_m
-        if near_sea:
-            cell.crust_type = "transitional"
-        elif cell.elevation > sea_level_m and cell.crust_type == "oceanic":
+        if near_sea or cell.elevation > sea_level_m and cell.crust_type == "oceanic":
             cell.crust_type = "transitional"
 
 
@@ -248,8 +244,7 @@ def synthesize_terrain(
     algo = config.terrain_algorithm
     if algo not in _TERRAIN_ALGORITHMS:
         raise ValueError(
-            f"Unknown terrain algorithm '{algo}'. "
-            f"Available: {sorted(_TERRAIN_ALGORITHMS.keys())}"
+            f"Unknown terrain algorithm '{algo}'. Available: {sorted(_TERRAIN_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019_gaussian":
         _synthesize_gaussian(mesh, plates, config)
@@ -282,7 +277,9 @@ def _synthesize_gaussian(
     # 1b. Per-plate random elevation offset
     # Each plate gets a random offset to create large-scale variation.
     # Continental plates shift up/down, oceanic plates shift up/down independently.
-    logger.info("  Step 2/5: Per-plate elevation offset (spread=%.0fm)", config.plate_elevation_spread_m)
+    logger.info(
+        "  Step 2/5: Per-plate elevation offset (spread=%.0fm)", config.plate_elevation_spread_m
+    )
     rng = np.random.default_rng(config.seed + 100)
     plate_offsets: dict[str, float] = {}
     for plate in plates:
@@ -302,8 +299,11 @@ def _synthesize_gaussian(
     boundary_delta = apply_boundary_effects(mesh, config)
 
     # 3a. Low-frequency regional noise (creates broad elevation trends within plates)
-    logger.info("  Step 4/5: Regional noise (scale=%.1f) + detail noise (%d octaves)",
-                config.regional_noise_scale, config.noise_octaves)
+    logger.info(
+        "  Step 4/5: Regional noise (scale=%.1f) + detail noise (%d octaves)",
+        config.regional_noise_scale,
+        config.noise_octaves,
+    )
 
     # Regional noise: very low frequency, high amplitude
     regional_config = TerrainPipelineConfig(
@@ -409,31 +409,33 @@ def _synthesize_asymmetric(
     plate_offsets: dict[str, float] = {}
     for plate in plates:
         plate_offsets[plate.id] = rng.uniform(
-            -config.plate_elevation_spread_m, config.plate_elevation_spread_m,
+            -config.plate_elevation_spread_m,
+            config.plate_elevation_spread_m,
         )
     for i, cell in enumerate(mesh.cells):
         if cell.plate_id and cell.plate_id in plate_offsets:
             base[i] += plate_offsets[cell.plate_id]
 
     # 2. Asymmetric boundary effects
-    logger.info("  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)",
-                config.mountain_asymmetry)
+    logger.info(
+        "  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)", config.mountain_asymmetry
+    )
     boundary_delta, transform_boost = _asymmetric_boundary_effects(mesh, config)
 
     # 3. Hotspot volcanic chains
     hotspot_delta = np.zeros(n, dtype=np.float64)
     if config.hotspot_count > 0:
-        logger.info("  Step 3/6: Hotspot chains (%d hotspots)",
-                    config.hotspot_count)
+        logger.info("  Step 3/6: Hotspot chains (%d hotspots)", config.hotspot_count)
         hotspot_delta = _generate_hotspots(mesh, plates, config, rng)
 
     # 4–5. Regional + detail noise (reuse)
-    logger.info("  Step 4/6: Regional noise (scale=%.1f)",
-                config.regional_noise_scale)
+    logger.info("  Step 4/6: Regional noise (scale=%.1f)", config.regional_noise_scale)
     regional_cfg = TerrainPipelineConfig(
         seed=config.seed + 200,
         noise_scale=config.regional_noise_scale,
-        noise_octaves=3, noise_persistence=0.6, noise_lacunarity=2.0,
+        noise_octaves=3,
+        noise_persistence=0.6,
+        noise_lacunarity=2.0,
     )
     regional_fbm = generate_fbm_on_cells(mesh, regional_cfg)
     regional_amp = np.where(
@@ -442,8 +444,11 @@ def _synthesize_asymmetric(
         config.regional_noise_amplitude_ocean_m,
     )
 
-    logger.info("  Step 5/6: Detail noise (%d octaves, anisotropy=%.2f)",
-                config.noise_octaves, config.noise_anisotropy)
+    logger.info(
+        "  Step 5/6: Detail noise (%d octaves, anisotropy=%.2f)",
+        config.noise_octaves,
+        config.noise_anisotropy,
+    )
     strike = _compute_boundary_strike(mesh) if config.noise_anisotropy > 0 else None
     fbm = _anisotropic_fbm(mesh, config, strike) if strike else generate_fbm_on_cells(mesh, config)
     noise_amp = np.where(
@@ -460,14 +465,14 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         if cell.distance_to_boundary_km < 1.2 * sigma:
             d = cell.distance_to_boundary_km
-            interior_factor[i] = 1.2 + 0.3 * np.exp(
-                -(d * d) / (2 * sigma * sigma)
-            )
+            interior_factor[i] = 1.2 + 0.3 * np.exp(-(d * d) / (2 * sigma * sigma))
 
     # 6. Combine
     logger.info("  Step 6/6: Combining components")
     elevation = (
-        base + boundary_delta + hotspot_delta
+        base
+        + boundary_delta
+        + hotspot_delta
         + regional_fbm * regional_amp
         + fbm * noise_amp * interior_factor * transform_boost
     )
@@ -553,8 +558,14 @@ def _asymmetric_boundary_effects(
     py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
     pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
     arc_noise = fbm_on_points(
-        px, py, pz, int(config.seed) + 5150, octaves=2, lacunarity=2.0,
-        persistence=0.5, base_freq=8.0,
+        px,
+        py,
+        pz,
+        int(config.seed) + 5150,
+        octaves=2,
+        lacunarity=2.0,
+        persistence=0.5,
+        base_freq=8.0,
     )
     arc_u = 0.5 * (arc_noise + 1.0)  # [0, 1]
 
@@ -586,9 +597,7 @@ def _asymmetric_boundary_effects(
             # Mountain peak offset toward overriding plate (50–150 km)
             peak_offset = asym * sigma_conv * 0.25
             dist_from_peak = abs(d - peak_offset)
-            mountain = np.exp(
-                -(dist_from_peak * dist_from_peak) / (2 * sigma_front * sigma_front)
-            )
+            mountain = np.exp(-(dist_from_peak * dist_from_peak) / (2 * sigma_front * sigma_front))
 
             # Crust-type-dependent amplitude
             if crust == "continental":
@@ -623,19 +632,25 @@ def _asymmetric_boundary_effects(
                     -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
                 )
                 # Shallow central rift (only ~300 m deeper than the ridge flanks)
-                rift = -config.divergent_depth_m * 0.15 * np.exp(
-                    -(d * d) / (2 * (sigma_div * 0.2) ** 2)
+                rift = (
+                    -config.divergent_depth_m
+                    * 0.15
+                    * np.exp(-(d * d) / (2 * (sigma_div * 0.2) ** 2))
                 )
                 delta_h[i] = (rift + ridge) * rate_factor
             else:
                 # Continental rift: deep central valley + flanking highlands
                 # (East African Rift, Baikal).  The rift floor can drop below
                 # sea level (Dead Sea, Danakil Depression).
-                rift = -config.divergent_depth_m * 0.5 * np.exp(
-                    -(d * d) / (2 * (sigma_div * 0.25) ** 2)
+                rift = (
+                    -config.divergent_depth_m
+                    * 0.5
+                    * np.exp(-(d * d) / (2 * (sigma_div * 0.25) ** 2))
                 )
-                ridge = config.divergent_depth_m * 0.7 * np.exp(
-                    -(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                ridge = (
+                    config.divergent_depth_m
+                    * 0.7
+                    * np.exp(-(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2))
                 )
                 delta_h[i] = (rift + ridge) * rate_factor
 
@@ -657,6 +672,7 @@ def _asymmetric_boundary_effects(
     if transform_cells:
         sigma_trans = sigma * 0.4  # 200 km — transform faults are linear, narrow
         from collections import deque
+
         tq: deque[int] = deque()
         tdist: dict[int, float] = {}
         for cid in transform_cells:
@@ -763,9 +779,13 @@ def _generate_hotspots(
                 if nid in visited:
                     continue
                 nc = mesh.cells[nid]
-                dir_to_neighbor = np.array([
-                    nc.x - current.x, nc.y - current.y, nc.z - current.z,
-                ])
+                dir_to_neighbor = np.array(
+                    [
+                        nc.x - current.x,
+                        nc.y - current.y,
+                        nc.z - current.z,
+                    ]
+                )
                 norm = np.linalg.norm(dir_to_neighbor)
                 if norm < 1e-12:
                     continue
@@ -783,7 +803,8 @@ def _generate_hotspots(
 
     logger.info(
         "  Hotspots: %d chains, total %d cells affected",
-        num_hotspots, int(np.sum(hotspot_field > 0)),
+        num_hotspots,
+        int(np.sum(hotspot_field > 0)),
     )
     return hotspot_field
 
@@ -855,13 +876,17 @@ def _anisotropic_fbm(
             fz = np.where(has_strike, fa * sz + fb * pz, z)
 
             noise = _compute_noise_elementwise_xyz(
-                fx, fy, fz,
+                fx,
+                fy,
+                fz,
                 frequency,
                 config.seed + octave * 1000,
             )
         else:
             noise = _compute_noise_elementwise_xyz(
-                x, y, z,
+                x,
+                y,
+                z,
                 frequency,
                 config.seed + octave * 1000,
             )
@@ -988,9 +1013,7 @@ def _compute_quality_metrics(
     # 2. RMS roughness (local cell-to-cell variance), vectorized over the
     #    adjacency graph via np.add.at accumulation (previously a per-cell
     #    Python loop calling np.var on tiny lists).
-    offsets = np.fromiter(
-        (len(cell.neighbors) for cell in mesh.cells), dtype=np.int64, count=n
-    )
+    offsets = np.fromiter((len(cell.neighbors) for cell in mesh.cells), dtype=np.int64, count=n)
     rows = np.repeat(np.arange(n), offsets)
     cols = np.fromiter(
         (nb for cell in mesh.cells for nb in cell.neighbors),
@@ -1013,17 +1036,20 @@ def _compute_quality_metrics(
     trenches = int(np.sum(elevations < -5000))
 
     # 4. Peak-to-valley ratio
-    p2v = (
-        (np.max(elevations) - sea_level_m)
-        / max(1.0, sea_level_m - np.min(elevations))
-    )
+    p2v = (np.max(elevations) - sea_level_m) / max(1.0, sea_level_m - np.min(elevations))
 
     logger.info(
         "  Quality metrics: bimodality=%.0f m (land %.0f / ocean %.0f), "
         "roughness=%.0f m RMS, "
         "peaks >3km=%d, >5km=%d, trenches <-5km=%d, P/V ratio=%.2f",
-        bimodality, land_peak, ocean_peak,
-        rms_roughness, high_peaks, very_high, trenches, p2v,
+        bimodality,
+        land_peak,
+        ocean_peak,
+        rms_roughness,
+        high_peaks,
+        very_high,
+        trenches,
+        p2v,
     )
 
 
@@ -1082,9 +1108,12 @@ def _apply_sea_level_calibration(
         "  Water calibration: target %.1f%% land → sea level %.0f m → "
         "%.1f%% land by area (%.1f%% by cells), "
         "implied water budget %.2f km (%.1f million km^3)",
-        config.target_land_fraction * 100, sea_level,
-        land_pct, cell_pct,
-        implied_budget_km, water_km3 / 1e6,
+        config.target_land_fraction * 100,
+        sea_level,
+        land_pct,
+        cell_pct,
+        implied_budget_km,
+        water_km3 / 1e6,
     )
 
     return elevation - sea_level
@@ -1178,7 +1207,8 @@ def _apply_continental_shelf(
 
     logger.info(
         "  Continental shelf: %d cells, width=%.0f km",
-        shelf_cells, shelf_width,
+        shelf_cells,
+        shelf_width,
     )
     return elevation
 
@@ -1279,9 +1309,7 @@ def _apply_coastal_plain(
         # Coast elevation target: 30 m for lowlands, 40% of original for mountains
         lowland_target = rng.uniform(10.0, 50.0)
         mountain_target = elevation[cid] * mountain_coast_ratio
-        coast_target = (
-            lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
-        )
+        coast_target = lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
 
         # Effective width: shrinks from plain_width (sea level) to min_strip_km
         # (~1 cell) for cells at max_plain_elev and above.
@@ -1300,7 +1328,10 @@ def _apply_coastal_plain(
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km (min strip %.0f km / %.1f cells)",
-        len(inland_dist), plain_width, min_strip_km, min_strip_km / max(cell_km, 1.0),
+        len(inland_dist),
+        plain_width,
+        min_strip_km,
+        min_strip_km / max(cell_km, 1.0),
     )
     return elevation
 
@@ -1387,7 +1418,9 @@ def _apply_island_arcs(
 
     logger.info(
         "  Island arcs: %d boundary cells → %d arc cells (height=%.0f m)",
-        len(arc_cells), arc_count, arc_height,
+        len(arc_cells),
+        arc_count,
+        arc_height,
     )
     return elevation
 
@@ -1441,6 +1474,7 @@ def _apply_interior_landforms(
 
     try:
         import opensimplex
+
         _has_noise = True
     except ImportError:
         _has_noise = False
@@ -1459,8 +1493,7 @@ def _apply_interior_landforms(
     for pid, cell_indices in plate_cells.items():
         # Only add orogenies to continental or mixed plates
         n_cont = sum(
-            1 for i in cell_indices
-            if getattr(mesh.cells[i], "crust_type", "") == "continental"
+            1 for i in cell_indices if getattr(mesh.cells[i], "crust_type", "") == "continental"
         )
         if n_cont < len(cell_indices) * 0.2:
             continue
@@ -1468,7 +1501,8 @@ def _apply_interior_landforms(
         # Find interior cells (beyond the boundary influence zone)
         interior_threshold = config.boundary_influence_km * 1.2
         interior = [
-            i for i in cell_indices
+            i
+            for i in cell_indices
             if mesh.cells[i].distance_to_boundary_km > interior_threshold
             and getattr(mesh.cells[i], "crust_type", "") == "continental"
         ]
@@ -1478,9 +1512,7 @@ def _apply_interior_landforms(
         # ---- Orogenic belts: count scales with interior area ----
         # Base count from config, plus 1 extra belt per ~300 interior cells
         # Scale belt count with interior area, but cap to prevent clutter
-        n_belts = config.interior_orogeny_count + max(
-            0, len(interior) // 800 - 1
-        )
+        n_belts = config.interior_orogeny_count + max(0, len(interior) // 800 - 1)
         n_belts = min(n_belts, 4)  # hard cap: at most 4 belts per plate
         # Stable per-plate seed: the built-in hash() is salted per process
         # (PYTHONHASHSEED), which made terrain non-reproducible across runs.
@@ -1495,12 +1527,20 @@ def _apply_interior_landforms(
             if a_idx == b_idx:
                 continue
 
-            a_pos = np.array([
-                mesh.cells[a_idx].x, mesh.cells[a_idx].y, mesh.cells[a_idx].z,
-            ])
-            b_pos = np.array([
-                mesh.cells[b_idx].x, mesh.cells[b_idx].y, mesh.cells[b_idx].z,
-            ])
+            a_pos = np.array(
+                [
+                    mesh.cells[a_idx].x,
+                    mesh.cells[a_idx].y,
+                    mesh.cells[a_idx].z,
+                ]
+            )
+            b_pos = np.array(
+                [
+                    mesh.cells[b_idx].x,
+                    mesh.cells[b_idx].y,
+                    mesh.cells[b_idx].z,
+                ]
+            )
 
             # Great-circle arc: normal vector
             gc_normal = np.cross(a_pos, b_pos)
@@ -1558,6 +1598,7 @@ def _apply_interior_landforms(
                 # ---- Along-strike height modulation via 1D noise ----
                 if _has_noise:
                     import warnings as _w
+
                     with _w.catch_warnings():
                         _w.filterwarnings("ignore", message="overflow encountered")
                         opensimplex.seed(belt_noise_seed)
@@ -1628,6 +1669,7 @@ def _apply_interior_landforms(
                         # Along-strike depth modulation for rifts
                         if _has_noise:
                             import warnings as _w
+
                             with _w.catch_warnings():
                                 _w.filterwarnings("ignore", message="overflow encountered")
                                 opensimplex.seed(rift_noise_seed)
@@ -1648,8 +1690,11 @@ def _apply_interior_landforms(
         logger.info(
             "  Interior landforms: %d orogeny, %d basin, %d rift cells "
             "(%d belts/plate, basin chance %.0f%%)",
-            total_orogeny, total_basin, total_rift,
-            num_orogenies, config.interior_basin_chance * 100,
+            total_orogeny,
+            total_basin,
+            total_rift,
+            num_orogenies,
+            config.interior_basin_chance * 100,
         )
 
     return elevation
@@ -1663,8 +1708,9 @@ def _log_synthesis_stats(
     """Consistent summary logging for all terrain algorithms."""
     above = np.sum(elevation > sea_level_m)
     logger.info(
-        "Terrain synthesis complete: elev range [%.0f, %.0f] m, "
-        "%.1f%% land, %.1f%% ocean",
-        np.min(elevation), np.max(elevation),
-        100 * above / n, 100 * (n - above) / n,
+        "Terrain synthesis complete: elev range [%.0f, %.0f] m, %.1f%% land, %.1f%% ocean",
+        np.min(elevation),
+        np.max(elevation),
+        100 * above / n,
+        100 * (n - above) / n,
     )

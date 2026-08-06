@@ -10,13 +10,9 @@ Pillow's ``I;16`` mode is used for 16-bit grayscale I/O.
 from __future__ import annotations
 
 import io
-from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
-
-if TYPE_CHECKING:
-    pass
 
 # 16-bit quantisation range
 _UINT16_MAX = np.uint16(65535)
@@ -50,7 +46,7 @@ def encode_elevation(
     clamped = np.clip(elevation, 0.0, 1.0)
     quantised = (clamped * _UINT16_MAX_F).astype(np.uint16)
 
-    img = Image.fromarray(quantised, mode="I;16")
+    img = Image.fromarray(quantised)  # uint16 -> I;16 natively (mode= deprecated)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
     return buf.getvalue()

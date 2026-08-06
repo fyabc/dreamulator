@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def build_export_tree(mesh: CVTMesh) -> "cKDTree":
+def build_export_tree(mesh: CVTMesh) -> cKDTree:
     """Build the unit-sphere KD-tree for equirectangular export.
 
     Callers exporting multiple fields for the same mesh should build this
@@ -47,7 +47,7 @@ def export_equirectangular(
     width: int = 4096,
     height: int = 2048,
     field: str = "elevation",
-    tree: "cKDTree | None" = None,
+    tree: cKDTree | None = None,
 ) -> np.ndarray:
     """Interpolate CVT cell data onto a regular equirectangular grid.
 
@@ -85,11 +85,13 @@ def export_equirectangular(
     grid_z = cos_lat * np.sin(lon_grid)
 
     # Flatten for KD-tree query
-    grid_flat = np.column_stack([
-        grid_x.ravel(),
-        grid_y.ravel(),
-        grid_z.ravel(),
-    ])
+    grid_flat = np.column_stack(
+        [
+            grid_x.ravel(),
+            grid_y.ravel(),
+            grid_z.ravel(),
+        ]
+    )
 
     # Query nearest cell for each grid point
     _, indices = tree.query(grid_flat)
@@ -164,10 +166,11 @@ def export_elevation_png(
     # Normalize to [0, 1]
     normalized = np.clip((elevation - min_m) / (max_m - min_m), 0, 1)
 
-    # Convert to 16-bit
+    # Convert to 16-bit (uint16 array maps natively to Pillow's I;16 mode;
+    # explicit mode= is deprecated and removed in Pillow 13)
     data_16 = (normalized * 65535).astype(np.uint16)
 
-    img = Image.fromarray(data_16, mode="I;16")
+    img = Image.fromarray(data_16)
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(path))
     logger.info("  Saved elevation PNG: %s", path)
@@ -193,7 +196,7 @@ def export_layer_png(
         normalized = np.clip((data - min_val) / (max_val - min_val), 0, 1)
 
     data_16 = (normalized * 65535).astype(np.uint16)
-    img = Image.fromarray(data_16, mode="I;16")
+    img = Image.fromarray(data_16)
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(path))
     logger.info("  Saved layer PNG: %s", path)
@@ -337,13 +340,17 @@ def export_climate_layers(
 
     # 1. Temperature raster
     temp_grid = export_equirectangular(mesh, width, height, field="temperature_C", tree=tree)
-    t_min, t_max = _nice_range(float(np.nanmin(temp_grid)), float(np.nanmax(temp_grid)), -40.0, 50.0)
+    t_min, t_max = _nice_range(
+        float(np.nanmin(temp_grid)), float(np.nanmax(temp_grid)), -40.0, 50.0
+    )
     export_layer_png(temp_grid, output_dir / "temperature.png", t_min, t_max)
     logger.info("  Exported temperature.png [%.0f, %.0f] °C", t_min, t_max)
 
     # 2. Precipitation raster
     precip_grid = export_equirectangular(mesh, width, height, field="precipitation_mm", tree=tree)
-    p_min, p_max = _nice_range(float(np.nanmin(precip_grid)), float(np.nanmax(precip_grid)), 0.0, 6000.0)
+    p_min, p_max = _nice_range(
+        float(np.nanmin(precip_grid)), float(np.nanmax(precip_grid)), 0.0, 6000.0
+    )
     export_layer_png(precip_grid, output_dir / "precipitation.png", p_min, p_max)
     logger.info("  Exported precipitation.png [%.0f, %.0f] mm/yr", p_min, p_max)
 

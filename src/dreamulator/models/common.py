@@ -4,7 +4,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Semantic unit aliases — these are plain floats at runtime, but the type
 # alias documents the expected physical unit and enables static checking.

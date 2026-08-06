@@ -77,7 +77,7 @@ class Star(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_mass_or_luminosity(self) -> "Star":
+    def _check_mass_or_luminosity(self) -> Star:
         if self.mass is None and self.luminosity is None:
             raise ValueError(
                 "Star requires at least one of: mass, luminosity. "
@@ -164,7 +164,7 @@ class StellarSystem(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_unique_star_ids(self) -> "StellarSystem":
+    def _check_unique_star_ids(self) -> StellarSystem:
         ids = [s.id for s in self.stars]
         if len(ids) != len(set(ids)):
             raise ValueError("Star IDs must be unique within a system")

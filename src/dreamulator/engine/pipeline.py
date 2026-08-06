@@ -178,8 +178,7 @@ def run_pipeline(
 
         # Rich progress output
         _console.print(
-            f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]"
-            f"  [dim]({engine.name})[/dim]"
+            f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]  [dim]({engine.name})[/dim]"
         )
         _t0 = _time.time()
         result = engine.run()

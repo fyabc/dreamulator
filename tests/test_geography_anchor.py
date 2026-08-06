@@ -18,10 +18,7 @@ from dreamulator.map.geography import (
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-GAIA_M_GEOGRAPHY = (
-    REPO_ROOT
-    / "data/worlds/gaia-m/layers/geological/input/geography.yaml"
-)
+GAIA_M_GEOGRAPHY = REPO_ROOT / "data/worlds/gaia-m/layers/geological/input/geography.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -63,37 +60,33 @@ def test_load_missing_returns_none() -> None:
 
 
 def test_land_anchor_positive_core_zero_falloff(mesh) -> None:
-    spec = GeographySpec(
-        features=[GeographyFeature(name="c", lon=0.0, lat=0.0, radius_deg=30.0)]
-    )
+    spec = GeographySpec(features=[GeographyFeature(name="c", lon=0.0, lat=0.0, radius_deg=30.0)])
     field = build_land_bias_field(mesh, spec)
     assert field.shape == (len(mesh.cells),)
 
     def field_at(lon: float, lat: float) -> float:
         # nearest cell to the probe point
         lon_r, lat_r = np.radians(lon), np.radians(lat)
-        p = np.array([np.cos(lat_r) * np.cos(lon_r), np.sin(lat_r),
-                      np.cos(lat_r) * np.sin(lon_r)])
+        p = np.array([np.cos(lat_r) * np.cos(lon_r), np.sin(lat_r), np.cos(lat_r) * np.sin(lon_r)])
         dots = np.array([c.x * p[0] + c.y * p[1] + c.z * p[2] for c in mesh.cells])
         return float(field[int(np.argmax(dots))])
 
-    assert field_at(0.0, 0.0) > 0.9          # anchor core ≈ +1
+    assert field_at(0.0, 0.0) > 0.9  # anchor core ≈ +1
     assert field_at(15.0, 0.0) > field_at(28.0, 0.0)  # monotone falloff
-    assert abs(field_at(60.0, 0.0)) < 1e-9   # outside radius → 0
+    assert abs(field_at(60.0, 0.0)) < 1e-9  # outside radius → 0
 
 
 def test_ocean_anchor_negative(mesh) -> None:
     spec = GeographySpec(
         features=[
             GeographyFeature(name="land", lon=0.0, lat=0.0, radius_deg=30.0),
-            GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=30.0,
-                             strength=-1.0),
+            GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=30.0, strength=-1.0),
         ]
     )
     field = build_land_bias_field(mesh, spec)
     xs = np.array([c.x for c in mesh.cells])
-    west = field[xs > 0.9]     # near lon 0 (25.8° cap; kernel decays to edge)
-    east = field[xs < -0.9]    # near lon 180
+    west = field[xs > 0.9]  # near lon 0 (25.8° cap; kernel decays to edge)
+    east = field[xs < -0.9]  # near lon 180
     assert west.mean() > 0.3
     assert east.mean() < -0.3
 
@@ -103,35 +96,33 @@ def test_elongated_feature_extends_along_axis(mesh) -> None:
     # meridian than along the parallel.
     spec = GeographySpec(
         features=[
-            GeographyFeature(name="r", lon=0.0, lat=0.0, radius_deg=5.0,
-                             elongation=4.0, bearing_deg=0.0)
+            GeographyFeature(
+                name="r", lon=0.0, lat=0.0, radius_deg=5.0, elongation=4.0, bearing_deg=0.0
+            )
         ]
     )
     field = build_land_bias_field(mesh, spec)
 
     def field_at(lon: float, lat: float) -> float:
         lon_r, lat_r = np.radians(lon), np.radians(lat)
-        p = np.array([np.cos(lat_r) * np.cos(lon_r), np.sin(lat_r),
-                      np.cos(lat_r) * np.sin(lon_r)])
+        p = np.array([np.cos(lat_r) * np.cos(lon_r), np.sin(lat_r), np.cos(lat_r) * np.sin(lon_r)])
         dots = np.array([c.x * p[0] + c.y * p[1] + c.z * p[2] for c in mesh.cells])
         return float(field[int(np.argmax(dots))])
 
     # Extends along the N–S axis (still strong at 8°) but is cut off across
     # the short axis (semi-minor 5°): this is what proves elongation.
-    along_axis = field_at(0.0, 8.0)     # 8° north along the axis
-    across_axis = field_at(8.0, 0.0)    # 8° east, beyond semi-minor (5°)
+    along_axis = field_at(0.0, 8.0)  # 8° north along the axis
+    across_axis = field_at(8.0, 0.0)  # 8° east, beyond semi-minor (5°)
     assert along_axis > 0.3
-    assert abs(across_axis) < 1e-9      # beyond semi-minor → 0
+    assert abs(across_axis) < 1e-9  # beyond semi-minor → 0
 
 
 def test_polar_anchor(mesh) -> None:
-    spec = GeographySpec(
-        features=[GeographyFeature(name="p", lon=0.0, lat=90.0, radius_deg=20.0)]
-    )
+    spec = GeographySpec(features=[GeographyFeature(name="p", lon=0.0, lat=90.0, radius_deg=20.0)])
     field = build_land_bias_field(mesh, spec)
     ys = np.array([c.y for c in mesh.cells])
     # ys > 0.94 = 20° polar cap (matches feature radius): all field > 0.
-    assert field[ys > 0.94].mean() > 0.3   # north polar cap → land bias
+    assert field[ys > 0.94].mean() > 0.3  # north polar cap → land bias
     assert abs(field[ys < 0.0].mean()) < 0.15  # southern half ~ unaffected
 
 
@@ -163,8 +154,7 @@ def test_apply_crust_respects_anchors(mesh) -> None:
         land_fraction_target=0.3,
         features=[
             GeographyFeature(name="land", lon=0.0, lat=0.0, radius_deg=35.0),
-            GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=35.0,
-                             strength=-1.0),
+            GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=35.0, strength=-1.0),
         ],
     )
     cfg = _config_with(spec)

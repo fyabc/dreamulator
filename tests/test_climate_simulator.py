@@ -172,9 +172,7 @@ class TestClimateSimulatorEndToEnd:
         assert t_min > -80.0, f"Temperatures implausibly cold: min {t_min:.1f} °C"
         assert t_max < 55.0, f"Temperatures implausibly hot: max {t_max:.1f} °C"
 
-    def test_equator_warmer_than_poles(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig
-    ) -> None:
+    def test_equator_warmer_than_poles(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """Equatorial cells should be warmer than polar cells."""
         from dreamulator.map.climate_simulator import simulate_climate
 
@@ -190,9 +188,7 @@ class TestClimateSimulatorEndToEnd:
             f"Expected equator ({eq_mean:.1f} °C) warmer than poles ({pol_mean:.1f} °C)"
         )
 
-    def test_high_altitude_colder(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig
-    ) -> None:
+    def test_high_altitude_colder(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """High-elevation cells should be colder than nearby low-elevation cells."""
         from dreamulator.map.climate_simulator import simulate_climate
 
@@ -215,9 +211,12 @@ class TestClimateSimulatorEndToEnd:
                     total_comparisons += 1
                     elev_diff = c.elevation - n_cell.elevation
                     temp_diff = n_cell.temperature_C - c.temperature_C  # type: ignore[operator]
-                    if elev_diff > 200.0 and temp_diff > 0.3:
-                        colder_count += 1
-                    elif elev_diff < -200.0 and temp_diff < -0.3:
+                    if (
+                        elev_diff > 200.0
+                        and temp_diff > 0.3
+                        or elev_diff < -200.0
+                        and temp_diff < -0.3
+                    ):
                         colder_count += 1
 
         # With a small synthetic mesh (100 cells, ±250m elevation noise),
@@ -240,7 +239,9 @@ class TestClimateSimulatorEndToEnd:
                 f"Negative precipitation at cell {c.id}: {c.precipitation_mm}"
             )
 
-    def test_koppen_classes_include_ocean(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_koppen_classes_include_ocean(
+        self, mesh: CVTMesh, config: TerrainPipelineConfig
+    ) -> None:
         """Ocean cells should be classified as 'Ocean'."""
         from dreamulator.map.climate_simulator import simulate_climate
 
@@ -270,9 +271,7 @@ class TestClimateSimulatorEndToEnd:
         # At least some land cells should have classifications
         assert land_with_class > 0, "No land cells received Köppen classification"
 
-    def test_deterministic_output(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig
-    ) -> None:
+    def test_deterministic_output(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """Same input → same output (no RNG dependence)."""
         from dreamulator.map.climate_simulator import simulate_climate
 
@@ -284,10 +283,14 @@ class TestClimateSimulatorEndToEnd:
         simulate_climate(mesh2, config)
 
         for i in range(mesh1.num_cells):
-            assert mesh1.cells[i].temperature_C == pytest.approx(mesh2.cells[i].temperature_C, abs=1e-6), (  # type: ignore[arg-type]
+            assert mesh1.cells[i].temperature_C == pytest.approx(
+                mesh2.cells[i].temperature_C, abs=1e-6
+            ), (  # type: ignore[arg-type]
                 f"Non-deterministic temperature at cell {i}"
             )
-            assert mesh1.cells[i].precipitation_mm == pytest.approx(mesh2.cells[i].precipitation_mm, abs=1e-6), (  # type: ignore[arg-type]
+            assert mesh1.cells[i].precipitation_mm == pytest.approx(
+                mesh2.cells[i].precipitation_mm, abs=1e-6
+            ), (  # type: ignore[arg-type]
                 f"Non-deterministic precipitation at cell {i}"
             )
 
@@ -297,9 +300,9 @@ class TestClimateSimulatorEndToEnd:
         """Climate raster export should produce valid PNG files."""
         from dreamulator.map.climate_simulator import simulate_climate
         from dreamulator.map.export import (
+            _climate_data_available,
             export_climate_layers,
             export_equirectangular,
-            _climate_data_available,
         )
 
         simulate_climate(mesh, config)

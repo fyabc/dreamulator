@@ -411,12 +411,14 @@ def run_tectonic_evolution(
 
     if algo not in _TECTONIC_ALGORITHMS:
         raise ValueError(
-            f"Unknown tectonic algorithm '{algo}'. "
-            f"Available: {sorted(_TECTONIC_ALGORITHMS.keys())}"
+            f"Unknown tectonic algorithm '{algo}'. Available: {sorted(_TECTONIC_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
         plates_out, cell_map, plate_weight, arc_state = _evolve_cortial2019(
-            mesh, plates, config, progress_callback=progress_callback,
+            mesh,
+            plates,
+            config,
+            progress_callback=progress_callback,
         )
         # Noise-warp the FINAL partition (Cortial 2019 §3) — irregular
         # boundaries instead of straight geodesic arcs.  Pass the persistent
@@ -427,8 +429,12 @@ def run_tectonic_evolution(
         # re-straightens the trench arcs developed during evolution — re-apply
         # them on the final map before terrain synthesis.
         cell_map = _trench_arc_relaxation(
-            mesh, cell_map, plates_out, config.radius_km,
-            config.trench_arc, arc_state,
+            mesh,
+            cell_map,
+            plates_out,
+            config.radius_km,
+            config.trench_arc,
+            arc_state,
             smooth_rng=np.random.default_rng(config.seed + 909),
         )
         _rebuild_plate_cells(mesh, cell_map, plates_out)
@@ -497,16 +503,22 @@ def _spawn_oceanic_crust(
         return plates, cell_plate_map
 
     # Fresh Euler pole: small perturbation from parent
-    ax = rng.standard_normal(3); ax /= np.linalg.norm(ax)
+    ax = rng.standard_normal(3)
+    ax /= np.linalg.norm(ax)
     new_pole = EulerPole(
-        x=float(ax[0]), y=float(ax[1]), z=float(ax[2]),
+        x=float(ax[0]),
+        y=float(ax[1]),
+        z=float(ax[2]),
         omega_rad_yr=parent.euler_pole.omega_rad_yr * rng.uniform(0.7, 1.3),
     )
 
     new_id = f"oceanic_s{step:04d}"
     new_plate = TectonicPlate(
-        id=new_id, name=f"新生洋壳 t={step}",
-        type="oceanic", cell_ids=new_cells, euler_pole=new_pole,
+        id=new_id,
+        name=f"新生洋壳 t={step}",
+        type="oceanic",
+        cell_ids=new_cells,
+        euler_pole=new_pole,
     )
     plates.append(new_plate)
     if plate_birth_step is not None:
@@ -516,22 +528,21 @@ def _spawn_oceanic_crust(
 
     logger.info(
         "  Spawned oceanic crust: %d cells → plate %s at divergent boundary",
-        len(new_cells), new_id,
+        len(new_cells),
+        new_id,
     )
     return plates, cell_plate_map
 
 
 def _rodrigues_rotate(
-    xyz: np.ndarray, axis: np.ndarray, angle_rad: float,
+    xyz: np.ndarray,
+    axis: np.ndarray,
+    angle_rad: float,
 ) -> np.ndarray:
     """Rodrigues rotation of a point on the unit sphere."""
     axis = axis / np.linalg.norm(axis)
     cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-    return (
-        xyz * cos_a
-        + np.cross(axis, xyz) * sin_a
-        + axis * np.dot(axis, xyz) * (1.0 - cos_a)
-    )
+    return xyz * cos_a + np.cross(axis, xyz) * sin_a + axis * np.dot(axis, xyz) * (1.0 - cos_a)
 
 
 def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
@@ -602,7 +613,12 @@ def _evolve_cortial2019(
     dt_my = _auto_compute_dt(mesh, config)
     radius_km = config.radius_km
     rng = np.random.default_rng(config.seed)
-    logger.info("Tectonic evolution: seed=%d, steps=%d, rift_rate=%.4f", config.seed, num_steps, config.rift_base_rate)
+    logger.info(
+        "Tectonic evolution: seed=%d, steps=%d, rift_rate=%.4f",
+        config.seed,
+        num_steps,
+        config.rift_base_rate,
+    )
 
     # Initial cell→plate map
     cell_plate_map: dict[int, str] = {}
@@ -614,9 +630,7 @@ def _evolve_cortial2019(
     # divides space proportionally to these (multiplicatively weighted
     # Voronoi), so the birth-time size skew survives the Lloyd-style
     # centroid→Voronoi iteration instead of relaxing toward equal areas.
-    plate_weight: dict[str, float] = {
-        p.id: float(max(len(p.cell_ids), 1)) for p in plates
-    }
+    plate_weight: dict[str, float] = {p.id: float(max(len(p.cell_ids), 1)) for p in plates}
     # Developed trench-arc sagitta per (subducting, overriding) pair.
     arc_state: dict[tuple[str, str], float] = {}
 
@@ -637,7 +651,9 @@ def _evolve_cortial2019(
     logger.info(
         "Tectonic evolution: %d steps × %.1f My = %.0f My total "
         "(cell ~%.0f km, δt auto-scaled to move ~3 cells/step)",
-        num_steps, dt_my, num_steps * dt_my,
+        num_steps,
+        dt_my,
+        num_steps * dt_my,
         np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells),
     )
 
@@ -685,14 +701,13 @@ def _evolve_cortial2019(
 
         # 2. Re-run Voronoi (every N steps, or right after a rift)
         # Protect newborn plates: lock their cells so they survive long enough to grow
-        needs_resample = (
-            step - last_resample_step >= RESAMPLE_EVERY or rifted_since_last_resample
-        )
+        needs_resample = step - last_resample_step >= RESAMPLE_EVERY or rifted_since_last_resample
         if needs_resample:
             locked: dict[int, str] = {}
             NEWBORN_COOLDOWN = COOLDOWN * 5  # ~25 steps — give oceanic plates time to grow
             newborn_pids = [
-                pid for pid, birth in plate_birth_step.items()
+                pid
+                for pid, birth in plate_birth_step.items()
                 if pid.startswith("oceanic") and step - birth < NEWBORN_COOLDOWN
             ]
             if newborn_pids:
@@ -712,16 +727,24 @@ def _evolve_cortial2019(
                         for cid in np.where(cur_codes == code)[0].tolist():
                             locked[cid] = pid
             if locked:
-                logger.info("  Voronoi: %d cells locked for %d oceanic newborn(s)", len(locked), len({v for v in locked.values()}))
+                logger.info(
+                    "  Voronoi: %d cells locked for %d oceanic newborn(s)",
+                    len(locked),
+                    len({v for v in locked.values()}),
+                )
             # Pass the real plate ids (new_seeds[i] ↔ plates[i]) so rifted
             # plates keep their identity; index-based naming would orphan cells.
             # Weighted by persistent plate size: unit-speed (plain) Voronoi of
             # moving centroids is Lloyd iteration and relaxes sizes toward
             # equal; speeds ∝ birth area pin the skewed distribution.
             new_cell_map = voronoi_partition_warped(
-                mesh, new_seeds, [p.id for p in plates], unit_cost,
+                mesh,
+                new_seeds,
+                [p.id for p in plates],
+                unit_cost,
                 plate_speed=_plate_speeds(
-                    [p.id for p in plates], plate_weight,
+                    [p.id for p in plates],
+                    plate_weight,
                     [len(p.cell_ids) for p in plates],
                 ),
                 locked=locked,
@@ -731,8 +754,13 @@ def _evolve_cortial2019(
             # small-circle arc implied by the current kinematics so arcs
             # develop over the evolution.
             new_cell_map = _trench_arc_relaxation(
-                mesh, new_cell_map, plates, radius_km,
-                config.trench_arc, arc_state, locked=locked,
+                mesh,
+                new_cell_map,
+                plates,
+                radius_km,
+                config.trench_arc,
+                arc_state,
+                locked=locked,
             )
             last_resample_step = step
             rifted_since_last_resample = False
@@ -765,25 +793,46 @@ def _evolve_cortial2019(
 
         # 4. Apply elevation effects (array-backed, Stage 1.2)
         _subduction_uplift(
-            mesh, new_cell_map, plates, radius_km, dt_my, convergent, elev_m,
+            mesh,
+            new_cell_map,
+            plates,
+            radius_km,
+            dt_my,
+            convergent,
+            elev_m,
         )
         _collision_orogeny(
-            mesh, new_cell_map, radius_km, dt_my, convergent, elev_m, crust_arr,
+            mesh,
+            new_cell_map,
+            radius_km,
+            dt_my,
+            convergent,
+            elev_m,
+            crust_arr,
         )
         _erosion(mesh, dt_my, elev_m, crust_arr)
 
         # 5. Plate rifting + cleanup orphan cells
         n_before = len(plates)
         plates, new_cell_map = _rift_plates(
-            mesh, new_cell_map, plates, config, rng,
-            step=step, plate_birth_step=plate_birth_step,
+            mesh,
+            new_cell_map,
+            plates,
+            config,
+            rng,
+            step=step,
+            plate_birth_step=plate_birth_step,
         )
         if len(plates) != n_before:
             rifted_since_last_resample = True
         # Remove plates that ended up with 0 cells (Voronoi consolidation)
         plates, new_cell_map = _cleanup_empty(
-            mesh, new_cell_map, plates,
-            step=step, plate_birth_step=plate_birth_step, cooldown=COOLDOWN,
+            mesh,
+            new_cell_map,
+            plates,
+            step=step,
+            plate_birth_step=plate_birth_step,
+            cooldown=COOLDOWN,
         )
 
         # Keep size weights in sync with the plate roster: removed plates
@@ -808,7 +857,9 @@ def _evolve_cortial2019(
         elif step % 10 == 0 or step == num_steps - 1:
             logger.info(
                 "  Step %3d/%d: %d cells changed plate",
-                step + 1, num_steps, n_changed,
+                step + 1,
+                num_steps,
+                n_changed,
             )
 
     # Finalise — write the canonical elevation array back to cells once
@@ -816,7 +867,9 @@ def _evolve_cortial2019(
         c.elevation = float(elev_m[i])
     logger.info(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
-        num_steps, len(plates), mesh.num_cells,
+        num_steps,
+        len(plates),
+        mesh.num_cells,
     )
     return plates, prev_cell_map, plate_weight, arc_state
 
@@ -884,7 +937,11 @@ def _rift_plates(
         n_pieces = rng.integers(min_pieces, max_pieces + 1)
         logger.info(
             "  Rifting plate %s (%d cells, λ=%.3f, r=%.4f) → %d pieces",
-            plate.name, n_cells, lam, r, n_pieces,
+            plate.name,
+            n_cells,
+            lam,
+            r,
+            n_pieces,
         )
 
         # Pick n_pieces random seed cells from the plate
@@ -918,14 +975,20 @@ def _rift_plates(
             perturb_axis /= np.linalg.norm(perturb_axis)
             angle_rad = rng.uniform(0.15, 0.35)  # ~10-20°
             parent_axis = np.array([plate.euler_pole.x, plate.euler_pole.y, plate.euler_pole.z])
-            new_axis = parent_axis * np.cos(angle_rad) + np.cross(perturb_axis, parent_axis) * np.sin(angle_rad)
+            new_axis = parent_axis * np.cos(angle_rad) + np.cross(
+                perturb_axis, parent_axis
+            ) * np.sin(angle_rad)
             new_axis /= np.linalg.norm(new_axis)
             new_pole = EulerPole(
-                x=float(new_axis[0]), y=float(new_axis[1]), z=float(new_axis[2]),
+                x=float(new_axis[0]),
+                y=float(new_axis[1]),
+                z=float(new_axis[2]),
                 omega_rad_yr=plate.euler_pole.omega_rad_yr * rng.uniform(0.85, 1.15),
             )
             sub_plate = TectonicPlate(
-                id=sub_id, name=sub_name, type=plate.type,
+                id=sub_id,
+                name=sub_name,
+                type=plate.type,
                 cell_ids=new_id,
                 euler_pole=new_pole,
                 growth_speed_multiplier=plate.growth_speed_multiplier,
@@ -941,7 +1004,8 @@ def _rift_plates(
         if assigned_total != n_cells:
             logger.warning(
                 "  Rift partition lost cells: %d assigned, %d expected — reverting",
-                assigned_total, n_cells,
+                assigned_total,
+                n_cells,
             )
             # Restore parent plate (without the incomplete sub-plates)
             for i in range(added):
@@ -1128,7 +1192,8 @@ def _consume_small_plates(
         target_id = max(neighbour_counts, key=lambda k: neighbour_counts[k])
         logger.info(
             "  Absorbing %s (%d cells, %.1f%%) → %s",
-            plate.name, n_cells,
+            plate.name,
+            n_cells,
             n_cells / total_cells * 100,
             plate_dict[target_id].name if target_id in plate_dict else target_id,
         )
@@ -1160,7 +1225,9 @@ def _consume_small_plates(
                         cell_plate_map[cid] = next(iter(current_ids))
                         orphan_count += 1
         if orphan_count:
-            logger.info("  Consumed: re-parented %d orphan cells (pass %d)", orphan_count, _pass + 1)
+            logger.info(
+                "  Consumed: re-parented %d orphan cells (pass %d)", orphan_count, _pass + 1
+            )
         else:
             break
 
@@ -1278,10 +1345,7 @@ def _trench_arc_relaxation(
     for (pa, pb), cells in pair_cells.items():
         boundary_len[pa] = boundary_len.get(pa, 0) + len(cells)
         boundary_len[pb] = boundary_len.get(pb, 0) + len(cells)
-    widths = {
-        pid: area_cells.get(pid, 0) / max(1, boundary_len.get(pid, 1))
-        for pid in area_cells
-    }
+    widths = {pid: area_cells.get(pid, 0) / max(1, boundary_len.get(pid, 1)) for pid in area_cells}
 
     for (pa, pb), cells in pair_cells.items():
         pla, plb = plate_dict.get(pa), plate_dict.get(pb)
@@ -1308,8 +1372,17 @@ def _trench_arc_relaxation(
                 if len(sub_seg) < 12:
                     continue
                 _relax_segment(
-                    mesh, new_map, sub_seg, pla, plb, radius_km, cell_km,
-                    strength, arc_state, locked, widths,
+                    mesh,
+                    new_map,
+                    sub_seg,
+                    pla,
+                    plb,
+                    radius_km,
+                    cell_km,
+                    strength,
+                    arc_state,
+                    locked,
+                    widths,
                 )
 
     # Enclave guard: arc flips can sever thin boundary protrusions into
@@ -1366,7 +1439,9 @@ def _trench_arc_relaxation(
 
 
 def _split_bent_segment(
-    mesh: CVTMesh, seg: list[int], depth: int,
+    mesh: CVTMesh,
+    seg: list[int],
+    depth: int,
 ) -> list[list[int]]:
     """Recursively split a boundary segment at its corner cell.
 
@@ -1446,6 +1521,7 @@ def _relax_segment(
     continent–continent collision the orogen arcs convex toward the indenter
     (Himalaya, Alps), approximated by the faster-converging plate.
     """
+
     # Oceanic fraction per side decides the regime.
     def ocean_frac(pid: str) -> float:
         n = 0
@@ -1483,16 +1559,20 @@ def _relax_segment(
         return
     t3 = (e1 - e0) / chord
 
-    side_ret = np.array([
-        np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == retreat.id]),
-        np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == retreat.id]),
-        np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == retreat.id]),
-    ])
-    side_oth = np.array([
-        np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == other.id]),
-        np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == other.id]),
-        np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == other.id]),
-    ])
+    side_ret = np.array(
+        [
+            np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == retreat.id]),
+            np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == retreat.id]),
+            np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == retreat.id]),
+        ]
+    )
+    side_oth = np.array(
+        [
+            np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == other.id]),
+            np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == other.id]),
+            np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == other.id]),
+        ]
+    )
     # Normal = perpendicular to the chord in the local tangent plane (a side-
     # mean difference can be parallel to the chord on bent segments).  Sign it
     # toward the other (non-retreat) side.
@@ -1569,13 +1649,18 @@ def _relax_segment(
     if flipped:
         logger.info(
             "  Trench arc: %s→%s dip=%.0f° sag=%.0f km, %d cells retreated",
-            retreat.id, other.id, dip_deg, sag * radius_km, flipped,
+            retreat.id,
+            other.id,
+            dip_deg,
+            sag * radius_km,
+            flipped,
         )
 
 
 def _seg_mid(mesh: CVTMesh, seg: list[int]) -> np.ndarray:
     v = np.mean(
-        [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg], axis=0,
+        [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg],
+        axis=0,
     )
     return v / np.linalg.norm(v)
 
@@ -1624,13 +1709,7 @@ def warp_boundaries(
     tree = cKDTree(cell_xyz)
     seeds = _assign_distinct_seeds(tree, centroids)
     cost = build_cell_cost(mesh, config.seed + 7777, config.boundary_warp)
-    speed = (
-        _plate_speeds(plate_ids, plate_weights, areas)
-        if plate_weights is not None
-        else None
-    )
+    speed = _plate_speeds(plate_ids, plate_weights, areas) if plate_weights is not None else None
     warped = voronoi_partition_warped(mesh, seeds, plate_ids, cost, plate_speed=speed)
-    logger.info(
-        "  Boundary warp: %d plates, amplitude=%.2f", len(plate_ids), config.boundary_warp
-    )
+    logger.info("  Boundary warp: %d plates, amplitude=%.2f", len(plate_ids), config.boundary_warp)
     return warped

@@ -200,28 +200,28 @@ class TerrainPipelineConfig:
 
     # Climate simulation (Phase 3A: Energy Balance Model + wind + precipitation)
     # Stellar / orbital inputs for EBM
-    stellar_luminosity_sol: float = 1.0   # L_sun (1.0 = Sun)
-    orbital_distance_au: float = 1.0      # AU
-    axial_tilt_deg: float = 23.44         # obliquity
+    stellar_luminosity_sol: float = 1.0  # L_sun (1.0 = Sun)
+    orbital_distance_au: float = 1.0  # AU
+    axial_tilt_deg: float = 23.44  # obliquity
     # Atmosphere
-    atmosphere_factor: float = 1.0   # greenhouse multiplier (1.0 = Earth, 0 = none)
-    greenhouse_warming_K: float = 33.0   # additional greenhouse warming (K)
-    lapse_rate_c_km: float = 6.5         # moist adiabatic lapse rate (°C/km)
-    lat_gradient_c: float = 40.0         # equator-to-pole temperature difference (°C)
+    atmosphere_factor: float = 1.0  # greenhouse multiplier (1.0 = Earth, 0 = none)
+    greenhouse_warming_K: float = 33.0  # additional greenhouse warming (K)
+    lapse_rate_c_km: float = 6.5  # moist adiabatic lapse rate (°C/km)
+    lat_gradient_c: float = 40.0  # equator-to-pole temperature difference (°C)
     # Circulation cell boundaries (3A.3a).  Earth: Hadley 0–30°, Ferrel 30–60°,
     # Polar 60–90°.  Slow rotators (weak Coriolis) get an expanded Hadley cell
     # (~Ω^-1/2 scaling) and stronger meridional heat transport → smaller
     # lat_gradient_c.  Keep hadley_extent_deg < polar_cell_start_deg.
-    hadley_extent_deg: float = 30.0      # Hadley cell poleward boundary (°)
-    polar_cell_start_deg: float = 60.0   # Polar cell equatorward boundary (°)
+    hadley_extent_deg: float = 30.0  # Hadley cell poleward boundary (°)
+    polar_cell_start_deg: float = 60.0  # Polar cell equatorward boundary (°)
     # Wind
     wind_blocking_height_m: float = 3000.0  # mountains above this block wind
     # Precipitation
     evaporation_base_mm: float = 2000.0  # annual evaporation at tropical ocean surface
-    orographic_efficiency: float = 0.5   # fraction of moisture converted to rain per km uplift
-    itcz_lag_days: int = 30              # ITCZ lag behind subsolar point (thermal inertia)
+    orographic_efficiency: float = 0.5  # fraction of moisture converted to rain per km uplift
+    itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
     # Ocean
-    num_gyres: int = 5                   # number of major ocean gyres
+    num_gyres: int = 5  # number of major ocean gyres
 
     # Export
     export_width: int = 4096

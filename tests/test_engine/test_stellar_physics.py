@@ -1,6 +1,5 @@
 """Tests for stellar_physics pure computation module."""
 
-
 import pytest
 
 from dreamulator.engine.stellar_physics import (
@@ -29,7 +28,7 @@ class TestMassLuminosityZAMS:
         """Fully convective low-mass star (M < 0.43)."""
         L = mass_luminosity_zams(0.2)
         expected = 0.23 * 0.2**2.3
-        assert L == pytest.approx(expected, rel=1e-6)
+        assert pytest.approx(expected, rel=1e-6) == L
 
     def test_solar_mass(self):
         """Solar-type star (0.43 ≤ M < 2): L = M^4."""
@@ -39,13 +38,13 @@ class TestMassLuminosityZAMS:
         """Mid-mass star (2 ≤ M < 55)."""
         L = mass_luminosity_zams(5.0)
         expected = 1.4 * 5.0**3.5
-        assert L == pytest.approx(expected, rel=1e-6)
+        assert pytest.approx(expected, rel=1e-6) == L
 
     def test_high_mass(self):
         """Very massive star (M ≥ 55), radiation-pressure dominated."""
         L = mass_luminosity_zams(60.0)
         expected = 32000.0 * 60.0
-        assert L == pytest.approx(expected, rel=1e-6)
+        assert pytest.approx(expected, rel=1e-6) == L
 
     def test_boundary_continuity_low(self):
         """Continuity at M = 0.43 boundary."""
@@ -71,12 +70,12 @@ class TestMassRadiusZAMS:
     def test_low_mass(self):
         R = mass_radius_zams(0.5)
         expected = 0.5**0.945
-        assert R == pytest.approx(expected, rel=1e-6)
+        assert pytest.approx(expected, rel=1e-6) == R
 
     def test_high_mass(self):
         R = mass_radius_zams(3.0)
         expected = 1.25 * 3.0**0.555
-        assert R == pytest.approx(expected, rel=1e-6)
+        assert pytest.approx(expected, rel=1e-6) == R
 
 
 class TestMainSequenceLifetime:
@@ -110,8 +109,8 @@ class TestAgeMetallicity:
         """M=1, t=4.6 Gyr → L=1.0, R=1.0 (solar normalisation)."""
         tau = evolution_progress(4.6, 1.0)
         L, R = apply_age_metallicity(1.0, 1.0, tau, z=1.0)
-        assert L == pytest.approx(1.0, rel=0.01)
-        assert R == pytest.approx(1.0, rel=0.01)
+        assert pytest.approx(1.0, rel=0.01) == L
+        assert pytest.approx(1.0, rel=0.01) == R
 
     def test_low_metallicity_hotter(self):
         """Low metallicity → slightly higher luminosity, smaller radius."""
@@ -124,7 +123,7 @@ class TestAgeMetallicity:
 class TestEffectiveTemperature:
     def test_sun(self):
         T = effective_temperature(1.0, 1.0)
-        assert T == pytest.approx(5772.0, rel=1e-6)
+        assert pytest.approx(5772.0, rel=1e-6) == T
 
     def test_hotter_star(self):
         """Higher L/R² → higher T."""
@@ -135,7 +134,7 @@ class TestEffectiveTemperature:
 class TestInvertMassFromLuminosity:
     def test_solar(self):
         M = invert_mass_from_luminosity(1.0)
-        assert M == pytest.approx(1.0, rel=1e-3)
+        assert pytest.approx(1.0, rel=1e-3) == M
 
     def test_low_luminosity(self):
         M = invert_mass_from_luminosity(0.01)
@@ -231,13 +230,13 @@ class TestInstellation:
     def test_solar_constant(self):
         """Earth receives ~1361 W/m² from the Sun."""
         S = instellation(1.0, 1.0)
-        assert S == pytest.approx(1361.0, rel=0.01)
+        assert pytest.approx(1361.0, rel=0.01) == S
 
     def test_inverse_square(self):
         """Doubling distance → 1/4 flux."""
         S1 = instellation(1.0, 1.0)
         S2 = instellation(1.0, 2.0)
-        assert S2 == pytest.approx(S1 / 4.0, rel=1e-6)
+        assert pytest.approx(S1 / 4.0, rel=1e-6) == S2
 
     def test_earth_units(self):
         assert instellation_earth_units(1.0, 1.0) == pytest.approx(1.0, rel=1e-6)
@@ -248,7 +247,7 @@ class TestEquilibriumTemperature:
     def test_earth(self):
         """Earth's equilibrium temperature ≈ 255 K (full redistribution)."""
         T = equilibrium_temperature(1.0, 1.0, albedo=0.3, f_redist=16.0)
-        assert T == pytest.approx(255.0, rel=0.02)
+        assert pytest.approx(255.0, rel=0.02) == T
 
     def test_dayside_only(self):
         """Dayside-only redistribution → higher temperature."""
@@ -306,15 +305,15 @@ class TestKeplerOrbitalPeriod:
     def test_earth(self):
         """Earth: a=1 AU, M=1 M☉ → P=365.25 days."""
         P = kepler_orbital_period(1.0, 1.0)
-        assert P == pytest.approx(365.25, rel=1e-4)
+        assert pytest.approx(365.25, rel=1e-4) == P
 
     def test_aegis(self):
         """Aegis: a=0.2795 AU, M=0.4499 M☉ → P≈80.45 days."""
         P = kepler_orbital_period(0.2795, 0.4499)
-        assert P == pytest.approx(80.45, rel=0.01)
+        assert pytest.approx(80.45, rel=0.01) == P
 
     def test_scales_correctly(self):
         """Doubling semi-major axis → P increases by 2^1.5 ≈ 2.83."""
         P1 = kepler_orbital_period(1.0, 1.0)
         P2 = kepler_orbital_period(2.0, 1.0)
-        assert P2 / P1 == pytest.approx(2.0**1.5, rel=1e-4)
+        assert pytest.approx(2.0**1.5, rel=1e-4) == P2 / P1

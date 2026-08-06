@@ -6,7 +6,6 @@ from the fork point onwards can have custom data.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,11 +21,11 @@ class BranchMetadata(BaseModel):
     """
 
     name: str = Field(description="Branch name (unique within a world)")
-    parent: Optional[str] = Field(
+    parent: str | None = Field(
         default=None,
         description="Parent world or branch name. None for root world.",
     )
-    fork_layer: Optional[Layer] = Field(
+    fork_layer: Layer | None = Field(
         default=None,
         description="Layer where this branch forks from parent. None for root world.",
     )

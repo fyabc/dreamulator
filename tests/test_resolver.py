@@ -134,9 +134,7 @@ class TestLayerResolverInherit:
         branch_mgr = BranchManager(tmp_path)
         branch_mgr.create_branch("test_branch", Layer.ASTRONOMY)
 
-        branch_input = (
-            tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
-        )
+        branch_input = tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
         branch_input.mkdir(parents=True, exist_ok=True)
         (branch_input / "stellar.yaml").write_text(branch_yaml, encoding="utf-8")
 
@@ -156,19 +154,9 @@ class TestLayerResolverInherit:
         self._setup_branch(
             tmp_path,
             root_yaml=(
-                "stars:\n"
-                "  - id: star_a\n"
-                "    name: Alpha\n"
-                "bodies:\n"
-                "  - id: body_x\n"
-                "    name: X\n"
+                "stars:\n  - id: star_a\n    name: Alpha\nbodies:\n  - id: body_x\n    name: X\n"
             ),
-            branch_yaml=(
-                "_inherit: true\n"
-                "bodies:\n"
-                "  - id: body_y\n"
-                "    name: Y\n"
-            ),
+            branch_yaml=("_inherit: true\nbodies:\n  - id: body_y\n    name: Y\n"),
         )
         resolver = LayerResolver(tmp_path, "test_branch")
         data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
@@ -186,11 +174,7 @@ class TestLayerResolverInherit:
             tmp_path,
             root_yaml="bodies:\n  - id: body_x\n    name: Original\n    mass: 1.0\n",
             branch_yaml=(
-                "_inherit: true\n"
-                "bodies:\n"
-                "  - id: body_x\n"
-                "    name: Overridden\n"
-                "    mass: 2.0\n"
+                "_inherit: true\nbodies:\n  - id: body_x\n    name: Overridden\n    mass: 2.0\n"
             ),
         )
         resolver = LayerResolver(tmp_path, "test_branch")
@@ -217,9 +201,7 @@ class TestLayerResolverInherit:
         branch_mgr = BranchManager(tmp_path)
         branch_mgr.create_branch("test_branch", Layer.ASTRONOMY)
 
-        branch_input = (
-            tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
-        )
+        branch_input = tmp_path / "branches" / "test_branch" / "layers" / "astronomy" / "input"
         branch_input.mkdir(parents=True, exist_ok=True)
         (branch_input / "stellar.yaml").write_text(
             "_inherit: true\nstars:\n  - id: star_a\n    name: Alpha\n",
@@ -256,10 +238,7 @@ class TestLayerResolverInherit:
         self._setup_branch(
             tmp_path,
             root_yaml=(
-                "orbits:\n"
-                "  - body_id: planet_a\n"
-                "    parent_id: star\n"
-                "    semi_major_axis_au: 1.0\n"
+                "orbits:\n  - body_id: planet_a\n    parent_id: star\n    semi_major_axis_au: 1.0\n"
             ),
             branch_yaml=(
                 "_inherit: true\n"

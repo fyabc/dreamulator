@@ -119,7 +119,8 @@ class TestSeasonalTemperature:
         lat_rad = np.array([0.0, np.pi / 4])
         t_mean = np.array([25.0, 10.0])
         result = seasonal_temperature(
-            t_mean, lat_rad,
+            t_mean,
+            lat_rad,
             axial_tilt_deg=0.0,
         )
         # Jan and Jul should be identical (no seasonal cycle)
@@ -130,7 +131,8 @@ class TestSeasonalTemperature:
         lat_rad = np.array([0.0, np.pi / 3])
         t_mean = np.array([25.0, 0.0])
         result = seasonal_temperature(
-            t_mean, lat_rad,
+            t_mean,
+            lat_rad,
             axial_tilt_deg=23.44,
             seasonal_amplitude_c=15.0,
         )
@@ -142,7 +144,8 @@ class TestSeasonalTemperature:
         lat_rad = np.array([np.pi / 4, -np.pi / 4])  # 45°N, 45°S
         t_mean = np.array([15.0, 15.0])
         result = seasonal_temperature(
-            t_mean, lat_rad,
+            t_mean,
+            lat_rad,
             axial_tilt_deg=23.44,
             day_of_year=182.0,  # Northern summer
         )
@@ -373,32 +376,48 @@ class TestKoppenClassify:
     def test_tropical_rainforest(self) -> None:
         """Af: hot all year, no dry month."""
         kc = self._classify_point(
-            t_mean=27.0, t_cold=25.0, t_hot=28.0,
-            p_annual=2500.0, p_dry=150.0, p_wet=300.0,
+            t_mean=27.0,
+            t_cold=25.0,
+            t_hot=28.0,
+            p_annual=2500.0,
+            p_dry=150.0,
+            p_wet=300.0,
         )
         assert kc == "Af", f"Expected Af, got {kc}"
 
     def test_tropical_monsoon(self) -> None:
         """Am: hot all year, short dry season."""
         kc = self._classify_point(
-            t_mean=27.0, t_cold=24.0, t_hot=29.0,
-            p_annual=2200.0, p_dry=30.0, p_wet=500.0,
+            t_mean=27.0,
+            t_cold=24.0,
+            t_hot=29.0,
+            p_annual=2200.0,
+            p_dry=30.0,
+            p_wet=500.0,
         )
         assert kc == "Am", f"Expected Am, got {kc}"
 
     def test_hot_desert(self) -> None:
         """BWh: arid, t_annual > 18 °C."""
         kc = self._classify_point(
-            t_mean=25.0, t_cold=15.0, t_hot=35.0,
-            p_annual=50.0, p_dry=0.0, p_wet=15.0,
+            t_mean=25.0,
+            t_cold=15.0,
+            t_hot=35.0,
+            p_annual=50.0,
+            p_dry=0.0,
+            p_wet=15.0,
         )
         assert kc == "BWh", f"Expected BWh, got {kc}"
 
     def test_mediterranean(self) -> None:
         """Csa: temperate, dry summer."""
         kc = self._classify_point(
-            t_mean=17.0, t_cold=8.0, t_hot=26.0,
-            p_annual=700.0, p_dry=5.0, p_wet=140.0,
+            t_mean=17.0,
+            t_cold=8.0,
+            t_hot=26.0,
+            p_annual=700.0,
+            p_dry=5.0,
+            p_wet=140.0,
         )
         # Cs{a,b}: dry summer temperate. 700 mm/yr avoids arid threshold.
         assert kc.startswith("Cs"), f"Expected Cs*, got {kc}"
@@ -406,24 +425,36 @@ class TestKoppenClassify:
     def test_humid_subtropical(self) -> None:
         """Cfa: temperate, fully humid, hot summer."""
         kc = self._classify_point(
-            t_mean=18.0, t_cold=5.0, t_hot=27.0,
-            p_annual=1200.0, p_dry=60.0, p_wet=150.0,
+            t_mean=18.0,
+            t_cold=5.0,
+            t_hot=27.0,
+            p_annual=1200.0,
+            p_dry=60.0,
+            p_wet=150.0,
         )
         assert kc == "Cfa", f"Expected Cfa, got {kc}"
 
     def test_tundra(self) -> None:
         """ET: polar tundra, t_hot 0–10 °C."""
         kc = self._classify_point(
-            t_mean=-5.0, t_cold=-25.0, t_hot=5.0,
-            p_annual=200.0, p_dry=10.0, p_wet=30.0,
+            t_mean=-5.0,
+            t_cold=-25.0,
+            t_hot=5.0,
+            p_annual=200.0,
+            p_dry=10.0,
+            p_wet=30.0,
         )
         assert kc == "ET", f"Expected ET, got {kc}"
 
     def test_ice_cap(self) -> None:
         """EF: polar ice cap, t_hot < 0 °C."""
         kc = self._classify_point(
-            t_mean=-30.0, t_cold=-50.0, t_hot=-10.0,
-            p_annual=50.0, p_dry=2.0, p_wet=10.0,
+            t_mean=-30.0,
+            t_cold=-50.0,
+            t_hot=-10.0,
+            p_annual=50.0,
+            p_dry=2.0,
+            p_wet=10.0,
         )
         assert kc == "EF", f"Expected EF, got {kc}"
 
@@ -443,8 +474,12 @@ class TestKoppenClassify:
     def test_humid_continental(self) -> None:
         """Dfa/Dfb: continental, cold winter, fully humid."""
         kc = self._classify_point(
-            t_mean=8.0, t_cold=-10.0, t_hot=22.0,
-            p_annual=800.0, p_dry=40.0, p_wet=90.0,
+            t_mean=8.0,
+            t_cold=-10.0,
+            t_hot=22.0,
+            p_annual=800.0,
+            p_dry=40.0,
+            p_wet=90.0,
         )
         # Fully humid continental: no dry summer (pw not >> pd), no dry winter (pd not too low)
         assert kc.startswith("Df"), f"Expected Df*, got {kc}"

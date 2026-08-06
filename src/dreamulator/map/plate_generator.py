@@ -98,9 +98,13 @@ def select_plate_seeds(
 
         too_close = False
         for sid in seeds:
-            seed_xyz = np.array([
-                mesh.cells[sid].x, mesh.cells[sid].y, mesh.cells[sid].z,
-            ])
+            seed_xyz = np.array(
+                [
+                    mesh.cells[sid].x,
+                    mesh.cells[sid].y,
+                    mesh.cells[sid].z,
+                ]
+            )
             dot = np.clip(np.dot(xyz, seed_xyz), -1, 1)
             # Use the candidate's own spacing: small-spacing seeds can nestle
             # close to existing seeds (small plates), large-spacing seeds keep
@@ -196,14 +200,16 @@ def _voronoi_partition(
         if total_assigned == prev_assigned:
             logger.warning(
                 "Voronoi BFS stalled at %d/%d cells (mesh may be disconnected)",
-                total_assigned, mesh.num_cells,
+                total_assigned,
+                mesh.num_cells,
             )
             break
         prev_assigned = total_assigned
 
     logger.info(
         "  Voronoi BFS: %d rounds, %d cells assigned",
-        round_num, total_assigned,
+        round_num,
+        total_assigned,
     )
     return cell_plate_map
 
@@ -243,7 +249,13 @@ def build_cell_cost(
     y = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
     z = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
     noise = fbm_on_points(
-        x, y, z, int(rng_seed), octaves=3, lacunarity=2.0, persistence=0.5,
+        x,
+        y,
+        z,
+        int(rng_seed),
+        octaves=3,
+        lacunarity=2.0,
+        persistence=0.5,
         base_freq=base_freq,
     )
     cost = 1.0 + float(amplitude) * noise
@@ -404,14 +416,17 @@ def _relax_boundaries(
         if flipped > 0:
             logger.debug(
                 "  Smoothing pass %d/%d: %d cells flipped",
-                p + 1, passes, flipped,
+                p + 1,
+                passes,
+                flipped,
             )
         else:
             break  # converged — no more obvious flips
 
     logger.info(
         "  Boundary smoothing: %d passes (strength=%.2f)",
-        p + 1, strength,
+        p + 1,
+        strength,
     )
 
 
@@ -496,12 +511,10 @@ def assign_crust_types(
             )
             amplitude *= persistence
             frequency *= lacunarity
-        noise_vals /= (1.0 - persistence ** octaves) / (1.0 - persistence)
+        noise_vals /= (1.0 - persistence**octaves) / (1.0 - persistence)
 
         # Latitude score: 1.0 at equator, 0.0 at poles
-        lat_score = np.array([
-            1.0 - abs(mesh.cells[c].lat) / 90.0 for c in cell_ids
-        ])
+        lat_score = np.array([1.0 - abs(mesh.cells[c].lat) / 90.0 for c in cell_ids])
 
         # Combined: latitude dominates, fBm adds fractal texture
         score = _lat_weight * lat_score + (1.0 - _lat_weight) * noise_vals
@@ -518,8 +531,13 @@ def assign_crust_types(
                 mesh.cells[cid].crust_type = "oceanic"
         logger.warning(
             "  ASSIGNED: %s n_cont=%d actual=%d cells=%d lat_bias=%.2f score_range=[%.3f,%.3f]",
-            plate_id, n_cont, actual, n_cells, _lat_weight,
-            float(np.min(score)), float(np.max(score)),
+            plate_id,
+            n_cont,
+            actual,
+            n_cells,
+            _lat_weight,
+            float(np.min(score)),
+            float(np.max(score)),
         )
 
 
@@ -560,11 +578,13 @@ def assign_euler_poles(
         omega_rad_yr = speed_cm_yr / radius_cm
 
         # Plate centroid (unit vector)
-        centroid = np.array([
-            np.mean([mesh.cells[c].x for c in cell_ids]),
-            np.mean([mesh.cells[c].y for c in cell_ids]),
-            np.mean([mesh.cells[c].z for c in cell_ids]),
-        ])
+        centroid = np.array(
+            [
+                np.mean([mesh.cells[c].x for c in cell_ids]),
+                np.mean([mesh.cells[c].y for c in cell_ids]),
+                np.mean([mesh.cells[c].z for c in cell_ids]),
+            ]
+        )
         centroid /= np.linalg.norm(centroid)
 
         # Random motion direction (perpendicular to centroid)
@@ -582,9 +602,7 @@ def assign_euler_poles(
         euler_axis /= np.linalg.norm(euler_axis)
 
         # Plate type from majority crust
-        n_cont = sum(
-            1 for c in cell_ids if mesh.cells[c].crust_type == "continental"
-        )
+        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
         n_ocean = len(cell_ids) - n_cont
         if n_cont > 2 * n_ocean:
             plate_type = PlateType.CONTINENTAL
@@ -593,19 +611,21 @@ def assign_euler_poles(
         else:
             plate_type = PlateType.MIXED
 
-        plates.append(TectonicPlate(
-            id=plate_id,
-            name=f"Plate {plate_idx + 1}",
-            type=plate_type,
-            cell_ids=sorted(cell_ids),
-            euler_pole=EulerPole(
-                x=float(euler_axis[0]),
-                y=float(euler_axis[1]),
-                z=float(euler_axis[2]),
-                omega_rad_yr=omega_rad_yr,
-            ),
-            growth_speed_multiplier=1.0,
-        ))
+        plates.append(
+            TectonicPlate(
+                id=plate_id,
+                name=f"Plate {plate_idx + 1}",
+                type=plate_type,
+                cell_ids=sorted(cell_ids),
+                euler_pole=EulerPole(
+                    x=float(euler_axis[0]),
+                    y=float(euler_axis[1]),
+                    z=float(euler_axis[2]),
+                    omega_rad_yr=omega_rad_yr,
+                ),
+                growth_speed_multiplier=1.0,
+            )
+        )
 
         # Update mesh cells with plate_id
         for cid in cell_ids:
@@ -664,8 +684,7 @@ def generate_plates(
     algo = config.plate_algorithm
     if algo not in _PLATE_ALGORITHMS:
         raise ValueError(
-            f"Unknown plate algorithm '{algo}'. "
-            f"Available: {sorted(_PLATE_ALGORITHMS.keys())}"
+            f"Unknown plate algorithm '{algo}'. Available: {sorted(_PLATE_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
         return _generate_cortial2019(mesh, config)
@@ -690,14 +709,15 @@ def _generate_plates_impl(
     cell_plate_map = _voronoi_partition(mesh, seeds)
 
     # 3. Boundary smoothing (Cortial 2019 "noise-warped geodetic distance")
-    logger.info("  Step 3/5: Boundary smoothing (strength=%.2f)",
-                config.boundary_noise)
+    logger.info("  Step 3/5: Boundary smoothing (strength=%.2f)", config.boundary_noise)
     _relax_boundaries(mesh, cell_plate_map, config.boundary_noise, rng)
 
     # Log plate size distribution
     plate_sizes = sorted(
-        [sum(1 for v in cell_plate_map.values() if v == f"plate_{i:03d}")
-         for i in range(config.num_plates)],
+        [
+            sum(1 for v in cell_plate_map.values() if v == f"plate_{i:03d}")
+            for i in range(config.num_plates)
+        ],
         reverse=True,
     )
     logger.info(
@@ -717,7 +737,9 @@ def _generate_plates_impl(
     else:
         logger.info("  Step 4/5: Assigning crust types")
         assign_crust_types(
-            mesh, cell_plate_map, rng,
+            mesh,
+            cell_plate_map,
+            rng,
             config.continental_fraction_min,
             config.continental_fraction_max,
             config.lat_bias,
@@ -728,15 +750,13 @@ def _generate_plates_impl(
     plates = assign_euler_poles(mesh, cell_plate_map, config, rng)
 
     for plate in plates:
-        n_cont = sum(
-            1 for c in plate.cell_ids
-            if mesh.cells[c].crust_type == "continental"
-        )
+        n_cont = sum(1 for c in plate.cell_ids if mesh.cells[c].crust_type == "continental")
         logger.info(
-            "  %s: %d cells (%d continental, %d oceanic), "
-            "type=%s, speed=%.1f cm/yr",
-            plate.id, len(plate.cell_ids),
-            n_cont, len(plate.cell_ids) - n_cont,
+            "  %s: %d cells (%d continental, %d oceanic), type=%s, speed=%.1f cm/yr",
+            plate.id,
+            len(plate.cell_ids),
+            n_cont,
+            len(plate.cell_ids) - n_cont,
             plate.type.value,
             plate.euler_pole.omega_rad_yr * config.radius_km * 1e5,
         )

@@ -16,7 +16,9 @@ from scipy.ndimage import gaussian_filter
 class TerrainParams:
     """Parameters controlling terrain generation."""
 
-    num_continents: int = field(default=3, metadata={"description": "Approximate number of continents"})
+    num_continents: int = field(
+        default=3, metadata={"description": "Approximate number of continents"}
+    )
     continent_scale: float = field(
         default=0.15,
         metadata={"description": "Base scale of continents as fraction of map width"},

@@ -11,7 +11,6 @@ import yaml  # type: ignore[import-untyped]
 from .models.branch import BranchMetadata
 from .models.layers import LAYER_ORDER, Layer
 
-
 # ---------------------------------------------------------------------------
 # Merge helpers for _inherit: true branch data
 # ---------------------------------------------------------------------------

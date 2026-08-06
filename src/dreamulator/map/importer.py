@@ -250,7 +250,7 @@ def _resample(
 
     # Convert to 16-bit for PIL (preserves precision during resampling)
     quantised = (np.clip(elevation, 0.0, 1.0) * _UINT16_MAX_F).astype(np.uint16)
-    img = Image.fromarray(quantised, mode="I;16")
+    img = Image.fromarray(quantised)  # uint16 -> I;16 natively (mode= deprecated)
 
     is_downscale = (target_width < src_w) or (target_height < src_h)
     resample = Image.LANCZOS if is_downscale else Image.BILINEAR

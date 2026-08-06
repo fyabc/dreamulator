@@ -21,6 +21,7 @@ def _set_data_dir(data_dir: Path | None) -> None:
     if data_dir is not None:
         os.environ["DREAMULATOR_DATA_DIR"] = str(data_dir.resolve())
 
+
 app = typer.Typer(
     name="dreamulator",
     help="Fantasy world building and simulation tool grounded in real science.",
@@ -43,6 +44,8 @@ terrain_app = typer.Typer(
 app.add_typer(terrain_app, name="terrain")
 
 # Climate subcommand group
+from datetime import UTC
+
 from dreamulator.cli_climate import climate_app
 
 app.add_typer(climate_app, name="climate")
@@ -869,22 +872,30 @@ def _load_terrain_config(
 @terrain_app.command("generate")
 def terrain_generate(
     world: str = typer.Argument(help="World name"),
-    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID (auto-detect if omitted)"),
+    planet: str | None = typer.Option(
+        None, "--planet", "-p", help="Planet ID (auto-detect if omitted)"
+    ),
     config: Path | None = typer.Option(None, "--config", "-c", help="YAML config file override"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
     stages: str | None = typer.Option(
-        None, "--stages", "-s",
+        None,
+        "--stages",
+        "-s",
         help="Comma-separated stages: mesh,plates,boundaries,terrain,climate,rivers,erosion,export",
     ),
-    num_nodes: int | None = typer.Option(None, "--num-nodes", "-n", help="Override number of CVT nodes"),
+    num_nodes: int | None = typer.Option(
+        None, "--num-nodes", "-n", help="Override number of CVT nodes"
+    ),
     num_plates: int | None = typer.Option(None, "--num-plates", help="Override number of plates"),
     tectonic_steps: int | None = typer.Option(
-        None, "--tectonic-steps",
+        None,
+        "--tectonic-steps",
         help="Number of tectonic time steps (Cortial 2019: 125-250 steps × 2 My)",
     ),
     seed: int | None = typer.Option(None, "--seed", help="Override RNG seed"),
     benchmark: bool = typer.Option(
-        False, "--benchmark",
+        False,
+        "--benchmark",
         help="Save benchmark.json for regression testing",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
@@ -892,6 +903,7 @@ def terrain_generate(
 ) -> None:
     """Run the terrain generation pipeline (CVT mesh -> plates -> terrain -> export)."""
     import logging
+
     from dreamulator.utils.logging import setup_logging
 
     _set_data_dir(data_dir)
@@ -960,8 +972,12 @@ def terrain_generate(
 
     # Record the exact command used (helps reproduce results later)
     _save_command_record(
-        output_dir, sys.argv,
-        world=world, planet_id=planet_id, branch=branch, data_dir=data_dir,
+        output_dir,
+        sys.argv,
+        world=world,
+        planet_id=planet_id,
+        branch=branch,
+        data_dir=data_dir,
     )
 
     # Auto-generate branch README to help users navigate
@@ -969,12 +985,13 @@ def terrain_generate(
 
 
 def _save_benchmark(
-    result: object,   # TerrainPipelineResult
-    config: object,   # TerrainPipelineConfig
+    result: object,  # TerrainPipelineResult
+    config: object,  # TerrainPipelineConfig
     output_dir: Path,
 ) -> None:
     """Save a benchmark.json for regression testing."""
     import json
+
     import numpy as np
 
     # Collect elevation stats from mesh cells (same source as validate uses)
@@ -1026,13 +1043,15 @@ def _save_command_record(
 ) -> None:
     """Save a small JSON recording the exact CLI command for reproducibility."""
     import json
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     # Reconstruct a portable command (strip venv prefix)
     cmd_parts = []
     skip = True
     for a in argv:
-        if skip and ("dreamulator" in a or a.endswith("/dreamulator") or a.endswith("\\dreamulator")):
+        if skip and (
+            "dreamulator" in a or a.endswith("/dreamulator") or a.endswith("\\dreamulator")
+        ):
             cmd_parts.append("dreamulator")
             skip = False
         elif not skip:
@@ -1041,7 +1060,7 @@ def _save_command_record(
             cmd_parts.append(a)
             skip = False
     record = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "world": world,
         "planet": planet_id,
         "branch": branch,
@@ -1059,7 +1078,8 @@ def terrain_validate(
     planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
     reference: Path | None = typer.Option(
-        None, "--reference",
+        None,
+        "--reference",
         help="Path to reference benchmark.json (auto-detect if omitted)",
     ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
@@ -1113,12 +1133,14 @@ def terrain_validate(
     console.print(f"  seed={cfg.seed}, nodes={cfg.num_nodes}, plates={cfg.num_plates}")
 
     result = run_terrain_pipeline(
-        cfg, output_dir=None,
+        cfg,
+        output_dir=None,
         stages=["mesh", "plates", "tectonics", "boundaries", "terrain"],
     )
 
     # Compare — read from mesh cells (no export needed)
     import numpy as np
+
     elevs = np.array([c.elevation for c in result.mesh.cells])
     cur = {
         "min_m": float(np.min(elevs)),
@@ -1128,7 +1150,8 @@ def terrain_validate(
     }
     ref_elev = ref.get("elevation", {})
     cur_plates = sorted(
-        [len(p.cell_ids) for p in getattr(result, "plates", [])], reverse=True,
+        [len(p.cell_ids) for p in getattr(result, "plates", [])],
+        reverse=True,
     )
     ref_plates = ref.get("plate_sizes", [])
 
@@ -1136,10 +1159,7 @@ def terrain_validate(
         delta = abs(cur_val - ref_val) / max(abs(ref_val), 1.0) * 100
         ok = delta <= tol_pct
         status = "[green]OK[/green]" if ok else "[red]FAIL[/red]"
-        console.print(
-            f"  {status} {label}: ref={ref_val:.1f} cur={cur_val:.1f} "
-            f"({delta:+.1f}%)"
-        )
+        console.print(f"  {status} {label}: ref={ref_val:.1f} cur={cur_val:.1f} ({delta:+.1f}%)")
         return ok
 
     all_ok = True
@@ -1153,7 +1173,9 @@ def terrain_validate(
             delta = abs(cc - rc) / max(rc, 1) * 100
             if delta > 30:
                 all_ok = False
-                console.print(f"  [red]FAIL[/red] plate_{i:02d} size: ref={rc} cur={cc} ({delta:+.0f}%)")
+                console.print(
+                    f"  [red]FAIL[/red] plate_{i:02d} size: ref={rc} cur={cc} ({delta:+.0f}%)"
+                )
         console.print(f"  Plate sizes: ref={ref_plates[:5]}..., cur={cur_plates[:5]}...")
     else:
         console.print(f"  [red]FAIL[/red] plate count: ref={len(ref_plates)} cur={len(cur_plates)}")
@@ -1385,21 +1407,21 @@ def terrain_info(
             console.print(f"  Total cells:         {total:,}")
             console.print(f"  Total surface area:  {total_area:,.0f} km2")
             console.print(f"  Emergent land:       {land_area:,.0f} km2 ({land_pct:.1f}%)")
-            console.print(f"  Ocean (<=0 m):       {total_area - land_area:,.0f} km2 ({100 - land_pct:.1f}%)")
+            console.print(
+                f"  Ocean (<=0 m):       {total_area - land_area:,.0f} km2 ({100 - land_pct:.1f}%)"
+            )
             console.print(f"  Continental crust:   {continental_area:,.0f} km2 ({crust_pct:.1f}%)")
-            console.print(f"  Oceanic crust:       {total_area - continental_area:,.0f} km2 ({100 - crust_pct:.1f}%)")
+            console.print(
+                f"  Oceanic crust:       {total_area - continental_area:,.0f} km2 ({100 - crust_pct:.1f}%)"
+            )
             console.print(f"  Elevation range:     [{elev_min:.0f}, {elev_max:.0f}] m")
 
             # Quality metrics
             sea_level = 0.0
             peak_prominence = elev_max - sea_level
             abyss_depth = sea_level - elev_min
-            console.print(
-                f"  Peak prominence:     {peak_prominence:.0f} m above sea level"
-            )
-            console.print(
-                f"  Max ocean depth:     {abyss_depth:.0f} m below sea level"
-            )
+            console.print(f"  Peak prominence:     {peak_prominence:.0f} m above sea level")
+            console.print(f"  Max ocean depth:     {abyss_depth:.0f} m below sea level")
 
 
 @terrain_app.command("export")

@@ -364,7 +364,8 @@ def generate_map(
 
     # Skip export stage in API mode (we save via manager instead)
     result = run_terrain_pipeline(
-        cfg, output_dir,
+        cfg,
+        output_dir,
         stages=["mesh", "plates", "boundaries", "terrain", "export"],
     )
 

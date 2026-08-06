@@ -69,7 +69,9 @@ def climate_info(
     maps_dir = derived_dir / "maps" / planet
     summary_path = derived_dir / "climate_summary.yaml"
 
-    console.print(f"[bold]Climate layer status[/bold] — {world}" + (f" / {branch}" if branch else ""))
+    console.print(
+        f"[bold]Climate layer status[/bold] — {world}" + (f" / {branch}" if branch else "")
+    )
     console.print(f"  Derived dir: {derived_dir}")
 
     if summary_path.exists():
@@ -88,10 +90,15 @@ def climate_info(
 
         if temp:
             table.add_row("Mean Temperature", f"{temp.get('mean', '?'):.1f} C")
-            table.add_row("Temperature Range", f"{temp.get('min', '?'):.0f} to {temp.get('max', '?'):.0f} C")
+            table.add_row(
+                "Temperature Range", f"{temp.get('min', '?'):.0f} to {temp.get('max', '?'):.0f} C"
+            )
         if precip:
             table.add_row("Mean Precipitation", f"{precip.get('mean', '?'):.0f} mm/yr")
-            table.add_row("Precipitation Range", f"{precip.get('min', '?'):.0f} to {precip.get('max', '?'):.0f} mm/yr")
+            table.add_row(
+                "Precipitation Range",
+                f"{precip.get('min', '?'):.0f} to {precip.get('max', '?'):.0f} mm/yr",
+            )
         if koppen:
             table.add_row("Koppen Classes", f"{len(koppen)} types")
             top3 = sorted(koppen.items(), key=lambda x: -x[1])[:3]
@@ -109,7 +116,7 @@ def climate_info(
         for f in sorted(files):
             size = f.stat().st_size
             if size > 1024 * 1024:
-                console.print(f"    {f.name} ({size / (1024*1024):.1f} MB)")
+                console.print(f"    {f.name} ({size / (1024 * 1024):.1f} MB)")
             else:
                 console.print(f"    {f.name} ({size / 1024:.0f} KB)")
     else:
@@ -126,7 +133,9 @@ def climate_validate(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
     planet: str = typer.Option("earth", "--planet", "-p", help="Planet ID"),
-    spatial: bool = typer.Option(False, "--spatial", help="Include cell-by-cell spatial comparison"),
+    spatial: bool = typer.Option(
+        False, "--spatial", help="Include cell-by-cell spatial comparison"
+    ),
     output_dir: Path | None = typer.Option(None, "--output-dir", "-o", help="Save report JSON"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
@@ -196,7 +205,9 @@ def climate_import_elevation(
 
     # Determine output directory
     if branch:
-        output_dir = world_dir / "branches" / branch / "layers" / "geological" / "input" / "maps" / planet
+        output_dir = (
+            world_dir / "branches" / branch / "layers" / "geological" / "input" / "maps" / planet
+        )
     else:
         output_dir = world_dir / "layers" / "geological" / "input" / "maps" / planet
 
@@ -214,6 +225,8 @@ def climate_import_elevation(
     import sys
 
     sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+    import tempfile
+
     from import_earth_elevation import (
         build_cvt_mesh_from_grid,
         download_etopo1,
@@ -221,8 +234,6 @@ def climate_import_elevation(
         save_elevation_png,
         save_yaml_map,
     )
-
-    import tempfile
 
     # Download
     tmp_dir = Path(tempfile.gettempdir()) / "dreamulator_etopo1"
@@ -250,7 +261,11 @@ def climate_import_elevation(
         mesh_path = output_dir / "cvt_mesh.json"
         with mesh_path.open("w", encoding="utf-8") as f:
             json.dump(mesh_json, f, indent=2, default=str)
-        console.print(f"  Saved CVT mesh: {mesh_path.name} ({mesh_path.stat().st_size / (1024*1024):.1f} MB)")
+        console.print(
+            f"  Saved CVT mesh: {mesh_path.name} ({mesh_path.stat().st_size / (1024 * 1024):.1f} MB)"
+        )
 
     console.print(f"\n[green]Done![/green] Output: {output_dir}")
-    console.print(f"  Next: [cyan]dreamulator build {world} --only climate --branch {branch or '...'}[/cyan]")
+    console.print(
+        f"  Next: [cyan]dreamulator build {world} --only climate --branch {branch or '...'}[/cyan]"
+    )

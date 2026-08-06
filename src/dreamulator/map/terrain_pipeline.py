@@ -37,29 +37,31 @@ logger = logging.getLogger(__name__)
 _console = Console(highlight=False)
 
 # Valid stage names for partial pipeline execution
-VALID_STAGES = frozenset({
-    "mesh",
-    "plates",
-    "tectonics",
-    "boundaries",
-    "terrain",
-    "climate",
-    "rivers",
-    "erosion",
-    "export",
-})
+VALID_STAGES = frozenset(
+    {
+        "mesh",
+        "plates",
+        "tectonics",
+        "boundaries",
+        "terrain",
+        "climate",
+        "rivers",
+        "erosion",
+        "export",
+    }
+)
 
 # Stage display names for stdout
 _STAGE_NAMES: dict[str, str] = {
-    "mesh":       "1/9  CVT Mesh",
-    "plates":     "2/9  Plate Tectonics",
-    "tectonics":  "3/9  Tectonic Evolution",
+    "mesh": "1/9  CVT Mesh",
+    "plates": "2/9  Plate Tectonics",
+    "tectonics": "3/9  Tectonic Evolution",
     "boundaries": "4/9  Boundary Detection",
-    "terrain":    "5/9  Terrain Synthesis",
-    "climate":    "6/9  Climate Simulation",
-    "rivers":     "7/9  River Generation",
-    "erosion":    "8/9  Erosion",
-    "export":     "9/9  Export",
+    "terrain": "5/9  Terrain Synthesis",
+    "climate": "6/9  Climate Simulation",
+    "rivers": "7/9  River Generation",
+    "erosion": "8/9  Erosion",
+    "export": "9/9  Export",
 }
 
 
@@ -120,9 +122,7 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
     # Validate
     for s in requested:
         if s not in VALID_STAGES:
-            raise ValueError(
-                f"Unknown stage '{s}'. Valid stages: {sorted(VALID_STAGES)}"
-            )
+            raise ValueError(f"Unknown stage '{s}'. Valid stages: {sorted(VALID_STAGES)}")
 
     # Return in pipeline order, only including requested
     return [s for s in all_stages if s in requested]
@@ -152,7 +152,9 @@ def run_terrain_pipeline(
     ordered = _resolve_stages(stages)
     logger.info(
         "Starting terrain pipeline: %s (seed=%d, nodes=%d)",
-        " → ".join(ordered), config.seed, config.num_nodes,
+        " → ".join(ordered),
+        config.seed,
+        config.num_nodes,
     )
 
     # ---- Stage 1: CVT Mesh ----
@@ -186,8 +188,7 @@ def run_terrain_pipeline(
     if "tectonics" in ordered:
         if not result.plates:
             raise RuntimeError(
-                "Plates are required for tectonic evolution. "
-                "Run 'plates' stage first."
+                "Plates are required for tectonic evolution. Run 'plates' stage first."
             )
 
         _stage_begin("tectonics")
@@ -198,7 +199,8 @@ def run_terrain_pipeline(
         progress_cb = None
         _progress = None
         try:
-            from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+            from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+
             _progress = Progress(
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
@@ -215,12 +217,15 @@ def run_terrain_pipeline(
             def _cb(step: int, _total: int) -> None:
                 if _progress is not None:
                     _progress.update(task_id, completed=step)
+
             progress_cb = _cb
         except ImportError:
             pass
 
         result.plates, cell_plate_map = run_tectonic_evolution(
-            result.mesh, result.plates, config,
+            result.mesh,
+            result.plates,
+            config,
             progress_callback=progress_cb,
         )
         if _progress is not None:
@@ -243,7 +248,9 @@ def run_terrain_pipeline(
     # ---- Stage 4: Boundary Detection ----
     if "boundaries" in ordered:
         if not result.plates:
-            raise RuntimeError("Plates are required for boundary detection. Run 'plates' stage first.")
+            raise RuntimeError(
+                "Plates are required for boundary detection. Run 'plates' stage first."
+            )
 
         _stage_begin("boundaries")
         t = time.time()
@@ -257,7 +264,9 @@ def run_terrain_pipeline(
     # ---- Stage 5: Terrain Synthesis ----
     if "terrain" in ordered:
         if not result.plates:
-            raise RuntimeError("Plates are required for terrain synthesis. Run 'plates' stage first.")
+            raise RuntimeError(
+                "Plates are required for terrain synthesis. Run 'plates' stage first."
+            )
 
         _stage_begin("terrain")
         t = time.time()

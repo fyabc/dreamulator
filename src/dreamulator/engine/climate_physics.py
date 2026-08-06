@@ -13,7 +13,6 @@ References:
 
 from __future__ import annotations
 
-
 import numpy as np
 
 # ---------------------------------------------------------------------------
@@ -62,7 +61,7 @@ def equilibrium_temperature(
         Equilibrium temperature in Kelvin.
     """
     # Stellar flux at planet distance
-    flux = SOLAR_CONSTANT * stellar_luminosity_sol / (orbital_distance_au ** 2)
+    flux = SOLAR_CONSTANT * stellar_luminosity_sol / (orbital_distance_au**2)
     # Absorbed flux (after albedo)
     absorbed = flux * (1.0 - albedo) / 4.0  # factor 1/4 for sphere vs disk
     return (absorbed / SIGMA_SB) ** 0.25
@@ -457,13 +456,14 @@ def itcz_latitude(
     """
     epsilon = np.radians(axial_tilt_deg)
     # Subsolar point
-    solar_declination = epsilon * np.sin(
-        2.0 * np.pi * (day_of_year - 80.0) / orbital_period_days
-    )
+    solar_declination = epsilon * np.sin(2.0 * np.pi * (day_of_year - 80.0) / orbital_period_days)
     # ITCZ lags and is damped; +5.0° mean NH bias (more land → warmer) below
-    itcz = 0.7 * solar_declination + np.sin(
-        2.0 * np.pi * (day_of_year - 80.0 - lag_days) / orbital_period_days
-    ) * epsilon * 0.7
+    itcz = (
+        0.7 * solar_declination
+        + np.sin(2.0 * np.pi * (day_of_year - 80.0 - lag_days) / orbital_period_days)
+        * epsilon
+        * 0.7
+    )
     return np.degrees(itcz) + 5.0  # mean NH offset
 
 

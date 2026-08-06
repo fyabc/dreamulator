@@ -216,9 +216,7 @@ class CivMapManager:
         territory.countries = [c for c in territory.countries if c.id != country_id]
         # Remove assignments referencing this country
         for snap_id, assignments in territory.assignments.items():
-            territory.assignments[snap_id] = [
-                a for a in assignments if a.country_id != country_id
-            ]
+            territory.assignments[snap_id] = [a for a in assignments if a.country_id != country_id]
         self.save_territory(territory)
         return territory
 
@@ -246,9 +244,7 @@ class CivMapManager:
         territory.snapshots = [s for s in territory.snapshots if s.id != snapshot_id]
         territory.assignments.pop(snapshot_id, None)
         if territory.active_snapshot == snapshot_id:
-            territory.active_snapshot = (
-                territory.snapshots[0].id if territory.snapshots else None
-            )
+            territory.active_snapshot = territory.snapshots[0].id if territory.snapshots else None
         self.save_territory(territory)
         return territory
 

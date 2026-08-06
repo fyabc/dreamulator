@@ -1,10 +1,12 @@
 # Test & lint gate (roadmap 功能性 #3).
 #
-# - pytest: hard gate — full suite with all extras (mirrors local dev env).
-# - ruff:   hard gate at the F,E9 baseline (real bugs: unused/undefined,
+# - pytest:        hard gate — full suite with all extras (mirrors local dev env).
+# - ruff check:    hard gate at the F,E9 baseline (real bugs: unused/undefined,
 #   syntax errors).  pyproject's full lint select still carries style debt
 #   (roadmap 工程卫生 #1); widen this gate as the debt clears.
-# - mypy:   report-only for now — strict mode has ~140 items of annotation
+# - ruff format:   hard gate — formatting debt cleared 2026-08 (Sprint A);
+#   keeps it at zero.
+# - mypy:          report-only for now — strict mode has ~150 items of annotation
 #   debt (roadmap 工程卫生 #2).  Flip continue-on-error off once cleared.
 #
 # No LFS checkout needed: the only data/worlds file the tests read is
@@ -60,6 +62,9 @@ jobs:
 
       - name: Ruff (F,E9 baseline gate)
         run: uv run ruff check --select F,E9 src/ tests/
+
+      - name: Ruff format (hard gate)
+        run: uv run ruff format --check src/ tests/
 
   mypy:
     runs-on: ubuntu-latest

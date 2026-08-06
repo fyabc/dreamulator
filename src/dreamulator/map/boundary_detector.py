@@ -278,7 +278,8 @@ def _propagate_boundary_type(
     if propagated > 0:
         logger.info(
             "  Propagated boundary type to %d nearby cells (within %.0f km)",
-            propagated, max_dist,
+            propagated,
+            max_dist,
         )
 
 

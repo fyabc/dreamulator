@@ -227,17 +227,27 @@
 
 ### 工程卫生
 
-1. **全仓 ruff 存量 266 项**（ruff 0.15.15）— 以风格类为主：N806(51)、B904(48)、
-   B008(29)、E501(29)、UP*(36)、TC*(26)、SIM*(21)。注意：**UP042 改变
-   `__str__` 语义**（Python 3.12 StrEnum），不可批量自动修；B008 多为框架惯用法
-   误报，宜按规则配置 per-file ignore 而非逐处改码。
+1. **全仓 ruff 存量 187 项**（2026-08-07 实测；原 266）— 以风格类为主：
+   N806(51)、B904(48)、B008(29)、E501(余)、UP*、TC*(26)、SIM*(21)。注意：
+   **UP042 改变 `__str__` 语义**（Python 3.12 StrEnum），不可批量自动修；B008
+   多为框架惯用法误报，宜按规则配置 per-file ignore 而非逐处改码。
    **2026-08-06 进展**：F 类（未用变量/导入、F541）19 项已清零，tests.yml 以
-   `--select F,E9` 立硬门槛防回潮；下一步可按 E501→SIM→TC 顺序逐族清偿并
-   收紧门槛。
-2. **mypy 存量 147 项 / 30 文件** — 热点：terrain_synthesizer.py(27)、
-   narrator.py(13)、engine/climate.py(13)、cli.py(9)、api_routes/worlds.py(9)。
-   补齐 `CVTMesh` / mesh 加载辅助函数的类型注解可消除大部分。
-3. **build 跳过判定只看输出存在** — `pipeline._outputs_exist` 不校验输入指纹
+   `--select F,E9` 立硬门槛防回潮。
+   **2026-08-07 进展（Sprint A，chore/sprint-a-format-lint 分支）**：
+   `ruff format` 24 文件清零 + 44 项安全自动修（I001/UP017/合并行等），
+   tests.yml 新增 `ruff format --check` 硬门槛防格式回潮；剩余 187 项按
+   E501→SIM→TC→B904 顺序逐族清偿并收紧门槛（计划见
+   `private/plans/tech-debt-cleanup-plan.md`）。
+2. **mypy 存量 150 项 / 30 文件**（2026-08-07 实测；原记 147，回涨 3）—
+   热点：terrain_synthesizer.py(27)、narrator.py(13)、engine/climate.py(13)、
+   cli.py(9)、api_routes/worlds.py(9)。补齐 `CVTMesh` / mesh 加载辅助函数的
+   类型注解可消除大部分；`cli.py:1345-1353` 疑似真 bug 需人工复核
+   （TextIOWrapper/str/Path 类型混乱）。
+3. **Pillow `mode="I;16"` 弃用（Pillow 13，2026-10-15 移除）** — ✅ 已修复
+   （Sprint A）：`map/export.py`×2、`map/elevation_codec.py`、`map/importer.py`
+   共 4 处去掉显式 mode 参数（uint16 数组原生映射 I;16），测试 253 全绿、
+   往返不变。
+4. **build 跳过判定只看输出存在** — `pipeline._outputs_exist` 不校验输入指纹
    （terrain_config.yaml / geography.yaml / 代码变更均不触发失效），输入变化后
    输出不会自动重生，必须 `--force`。`ComputationManifest` 模型已定义但未接入
    跳过判定。2026-08-06 实际踩中：手动重建地图后 build 把 geological 跳过，

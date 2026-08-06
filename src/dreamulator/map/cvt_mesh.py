@@ -156,6 +156,7 @@ def lloyd_relaxation(
     """
     try:
         from rich.progress import BarColumn, Progress, TextColumn
+
         _prog = Progress(
             TextColumn("  Lloyd relaxation"),
             BarColumn(),

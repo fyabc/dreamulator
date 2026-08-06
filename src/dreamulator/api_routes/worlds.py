@@ -382,8 +382,14 @@ def _get_md_document(directory: Path | None, filename: str) -> dict[str, Any]:
 # --- Valid layer names for the generalized endpoint ---
 _VALID_LAYERS = frozenset(
     [
-        "physics", "chemistry", "astronomy", "geological",
-        "climate", "ecology", "civilization", "design-notes",
+        "physics",
+        "chemistry",
+        "astronomy",
+        "geological",
+        "climate",
+        "ecology",
+        "civilization",
+        "design-notes",
     ]
 )
 
@@ -436,9 +442,7 @@ def get_layer_document(
 
 
 @router.get("/{world_name}/design-documents")
-def list_design_documents(
-    world_name: str, branch: str | None = None
-) -> list[dict[str, Any]]:
+def list_design_documents(world_name: str, branch: str | None = None) -> list[dict[str, Any]]:
     """List .md files in the design-notes directory."""
     try:
         world_dir = _manager.world_dir(world_name)
@@ -467,9 +471,7 @@ def get_design_document(
 
 
 @router.get("/{world_name}/civilization-documents")
-def list_civilization_documents(
-    world_name: str, branch: str | None = None
-) -> list[dict[str, Any]]:
+def list_civilization_documents(world_name: str, branch: str | None = None) -> list[dict[str, Any]]:
     """List .md files in the civilization layer input directory. (Legacy endpoint.)"""
     return list_layer_documents(world_name, "civilization", branch)
 

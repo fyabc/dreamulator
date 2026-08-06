@@ -126,9 +126,7 @@ def test_missing_stellar_mass_keeps_default_period(tmp_path: Path) -> None:
         "stellar.yaml",
         {
             "stars": [{"id": "star_sol", "luminosity": 1.0}],  # no mass
-            "orbits": [
-                {"body_id": "planet_x", "parent_id": "star_sol", "semi_major_axis_au": 1.0}
-            ],
+            "orbits": [{"body_id": "planet_x", "parent_id": "star_sol", "semi_major_axis_au": 1.0}],
         },
     )
     engine = _StubEngine({"stellar.yaml": stellar})

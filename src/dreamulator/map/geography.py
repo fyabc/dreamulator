@@ -204,9 +204,7 @@ def build_land_bias_field(mesh: CVTMesh, spec: GeographySpec) -> np.ndarray:
         field += _feature_contribution(px, py, pz, feature)
 
     if spec.hemisphere_land_bias != 0.0:
-        lat_rad = np.fromiter(
-            (np.radians(c.lat) for c in mesh.cells), dtype=np.float64, count=n
-        )
+        lat_rad = np.fromiter((np.radians(c.lat) for c in mesh.cells), dtype=np.float64, count=n)
         field += spec.hemisphere_land_bias * np.sin(lat_rad)
 
     return np.clip(field, -1.0, 1.0)
@@ -254,7 +252,13 @@ def apply_geography_crust(
     pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
     noise_seed = int(config.seed) + _GEOGRAPHY_NOISE_SEED_OFFSET
     fbm = fbm_on_points(
-        px, py, pz, noise_seed, octaves=5, lacunarity=2.5, persistence=0.5,
+        px,
+        py,
+        pz,
+        noise_seed,
+        octaves=5,
+        lacunarity=2.5,
+        persistence=0.5,
         base_freq=2.0,
     )
 
