@@ -55,7 +55,7 @@ def climate_info(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     resolver = LayerResolver(world_dir, branch)
     derived_dir = resolver.get_derived_dir("climate")
@@ -165,7 +165,7 @@ def climate_validate(
 
     if "error" in report:
         console.print(f"[red]ERROR: {report['error']}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     if not report.get("overall_passed", False):
         raise typer.Exit(code=2)
@@ -201,7 +201,7 @@ def climate_import_elevation(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Determine output directory
     if branch:
@@ -261,9 +261,8 @@ def climate_import_elevation(
         mesh_path = output_dir / "cvt_mesh.json"
         with mesh_path.open("w", encoding="utf-8") as f:
             json.dump(mesh_json, f, indent=2, default=str)
-        console.print(
-            f"  Saved CVT mesh: {mesh_path.name} ({mesh_path.stat().st_size / (1024 * 1024):.1f} MB)"
-        )
+        mesh_size_mb = mesh_path.stat().st_size / (1024 * 1024)
+        console.print(f"  Saved CVT mesh: {mesh_path.name} ({mesh_size_mb:.1f} MB)")
 
     console.print(f"\n[green]Done![/green] Output: {output_dir}")
     console.print(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -39,7 +39,7 @@ def sanitize_nonfinite(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-class MapProjection(str, Enum):
+class MapProjection(StrEnum):
     """Supported map projections."""
 
     EQUIRECTANGULAR = "equirectangular"
@@ -171,7 +171,9 @@ class VoronoiCell(BaseModel):
     )
     hotspot_id: str | None = Field(
         default=None,
-        description="Hotspot chain ID (e.g. 'hs_0') if this cell is part of a volcanic hotspot chain",
+        description=(
+            "Hotspot chain ID (e.g. 'hs_0') if this cell is part of a volcanic hotspot chain"
+        ),
     )
     landform: str | None = Field(
         default=None,
@@ -248,7 +250,7 @@ class EulerPole(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PlateType(str, Enum):
+class PlateType(StrEnum):
     """Classification of tectonic plates."""
 
     OCEANIC = "oceanic"
@@ -332,7 +334,7 @@ class CVTMesh(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class FeatureType(str, Enum):
+class FeatureType(StrEnum):
     """Classification of map features."""
 
     RIVER = "river"
@@ -360,7 +362,7 @@ class MapFeature(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class MapLayerType(str, Enum):
+class MapLayerType(StrEnum):
     """Raster and vector map layer identifiers."""
 
     # Raster layers

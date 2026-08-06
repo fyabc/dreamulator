@@ -43,10 +43,11 @@ terrain_app = typer.Typer(
 )
 app.add_typer(terrain_app, name="terrain")
 
-# Climate subcommand group
-from datetime import UTC
+# Climate subcommand group — imported late to avoid a circular import
+# (cli_climate registers commands on this module's `app`).
+from datetime import UTC  # noqa: E402
 
-from dreamulator.cli_climate import climate_app
+from dreamulator.cli_climate import climate_app  # noqa: E402
 
 app.add_typer(climate_app, name="climate")
 
@@ -72,10 +73,10 @@ def init(
         console.print(f"[green]Created world '{name}' at {world_dir}[/green]")
     except FileExistsError as e:
         console.print(f"[red]Error: {e}[/red]", style="bold")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]", style="bold")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @app.command(name="list")
@@ -134,7 +135,7 @@ def info(
         config = mgr.load_world(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     meta = config.metadata
     console.print(f"\n[bold cyan]{meta.name}[/bold cyan]")
@@ -222,7 +223,7 @@ def build(
         config = mgr.load_world(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     effective_seed = seed if seed is not None else config.seed.seed
 
@@ -241,7 +242,7 @@ def build(
         except ValueError:
             valid = [L.value for L in Layer]
             console.print(f"[red]Unknown layer '{layer}'. Valid layers: {valid}[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     console.print(
         f"[cyan]Building '{world}'"
@@ -281,7 +282,7 @@ def build(
     )
 
     if fail_count > 0:
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @app.command()
@@ -402,7 +403,7 @@ def validate(
         errors = mgr.validate_world(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Additional branch validation
     if branch is not None:
@@ -423,7 +424,7 @@ def validate(
         console.print(f"[red]Validation failed with {len(errors)} error(s):[/red]")
         for err in errors:
             console.print(f"  [red]x[/red] {err}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     else:
         target = f"'{world}' branch '{branch}'" if branch else f"'{world}'"
         console.print(f"[green]√[/green] World {target} is valid")
@@ -512,7 +513,7 @@ def delete(
             console.print(f"[green]Deleted world '{world}'[/green]")
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 # --- Branch subcommands ---
@@ -536,14 +537,14 @@ def branch_create(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     try:
         fork_layer = Layer(at)
     except ValueError:
         valid = [L.value for L in Layer]
         console.print(f"[red]Unknown layer '{at}'. Valid layers: {valid}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     try:
         branch_mgr = BranchManager(world_dir)
@@ -551,7 +552,7 @@ def branch_create(
         console.print(f"[green]Created branch '{name}' at layer '{at}' in {branch_dir}[/green]")
     except FileExistsError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @branch_app.command("list")
@@ -568,7 +569,7 @@ def branch_list(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     branch_mgr = BranchManager(world_dir)
     branches = branch_mgr.list_branches()
@@ -612,14 +613,14 @@ def branch_info(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     try:
         branch_mgr = BranchManager(world_dir)
         metadata = branch_mgr.get_branch(name)
     except FileNotFoundError:
         console.print(f"[red]Branch '{name}' not found in '{world}'[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     console.print(f"\n[bold cyan]{metadata.name}[/bold cyan] (branch of {world})")
     if metadata.description:
@@ -662,7 +663,7 @@ def branch_delete(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     try:
         branch_mgr = BranchManager(world_dir)
@@ -674,7 +675,7 @@ def branch_delete(
         console.print(f"[green]Deleted branch '{name}' from '{world}'[/green]")
     except FileNotFoundError:
         console.print(f"[red]Branch '{name}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @branch_app.command("promote")
@@ -696,7 +697,7 @@ def branch_promote(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     try:
         branch_mgr = BranchManager(world_dir)
@@ -709,10 +710,10 @@ def branch_promote(
         console.print(f"[green]Promoted branch '{name}' to world at {new_dir}[/green]")
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except FileExistsError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 # --- Conlang subcommands ---
@@ -735,7 +736,7 @@ def conlang_evolve(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     lang_dir = world_dir / "layers" / "civilization" / "input" / "languages" / language
     rules_file = lang_dir / "sca_rules.sca"
@@ -743,10 +744,10 @@ def conlang_evolve(
 
     if not rules_file.exists():
         console.print(f"[red]SCA rules file not found: {rules_file}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     if not lexicon_file.exists():
         console.print(f"[red]Lexicon file not found: {lexicon_file}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     engine = SCAEngine(seed=seed)
     engine.load_rules_file(rules_file)
@@ -915,7 +916,7 @@ def terrain_generate(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     from dreamulator.map.terrain_pipeline import run_terrain_pipeline
 
@@ -946,7 +947,7 @@ def terrain_generate(
         result = run_terrain_pipeline(cfg, output_dir, stages=stage_list)
     except RuntimeError as e:
         console.print(f"[red]Pipeline error: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Report results
     console.print(f"\n[bold green]Pipeline complete[/bold green] in {result.elapsed_seconds:.1f}s")
@@ -1101,7 +1102,7 @@ def terrain_validate(
             world_dir = mgr.world_dir(world)
         except FileNotFoundError:
             console.print(f"[red]World '{world}' not found[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, None)
         bench_path = output_dir / "benchmark.json"
     else:
@@ -1112,7 +1113,7 @@ def terrain_validate(
             f"[red]No benchmark found at {bench_path}[/red]\n"
             f"  Run [cyan]dreamulator terrain generate {world} --benchmark[/cyan] first."
         )
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     ref = json.loads(bench_path.read_text(encoding="utf-8"))
 
@@ -1169,7 +1170,7 @@ def terrain_validate(
     all_ok &= _delta("land_pct", ref_elev.get("land_pct", 0), cur["land_pct"], 20)
 
     if len(cur_plates) == len(ref_plates):
-        for i, (rc, cc) in enumerate(zip(ref_plates, cur_plates)):
+        for i, (rc, cc) in enumerate(zip(ref_plates, cur_plates, strict=True)):
             delta = abs(cc - rc) / max(rc, 1) * 100
             if delta > 30:
                 all_ok = False
@@ -1185,7 +1186,7 @@ def terrain_validate(
         console.print("\n[bold green]Validation passed[/bold green]")
     else:
         console.print("\n[bold red]Validation failed — see details above[/bold red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @terrain_app.command("open")
@@ -1205,14 +1206,14 @@ def terrain_open(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     cfg, planet_id, output_dir = _load_terrain_config(world_dir, planet, branch, None)
 
     if not output_dir.exists():
         console.print("[yellow]Output directory does not exist yet.[/yellow]")
         console.print(f"  Run [cyan]dreamulator terrain generate {world}[/cyan] first.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     console.print(f"Opening [cyan]{output_dir}[/cyan]")
     if sys.platform == "win32":
@@ -1305,7 +1306,7 @@ def terrain_info(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     from dreamulator.resolver import LayerResolver
 
@@ -1325,7 +1326,7 @@ def terrain_info(
 
     if map_dir is None:
         console.print(f"[yellow]No terrain data for planet '{planet_id}'[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Read metadata from map.yaml (with fallback to legacy metadata.json)
     import yaml as _yaml_info
@@ -1411,8 +1412,9 @@ def terrain_info(
                 f"  Ocean (<=0 m):       {total_area - land_area:,.0f} km2 ({100 - land_pct:.1f}%)"
             )
             console.print(f"  Continental crust:   {continental_area:,.0f} km2 ({crust_pct:.1f}%)")
+            oceanic_area = total_area - continental_area
             console.print(
-                f"  Oceanic crust:       {total_area - continental_area:,.0f} km2 ({100 - crust_pct:.1f}%)"
+                f"  Oceanic crust:       {oceanic_area:,.0f} km2 ({100 - crust_pct:.1f}%)"
             )
             console.print(f"  Elevation range:     [{elev_min:.0f}, {elev_max:.0f}] m")
 
@@ -1441,7 +1443,7 @@ def terrain_export(
         world_dir = mgr.world_dir(world)
     except FileNotFoundError:
         console.print(f"[red]World '{world}' not found[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     from dreamulator.resolver import LayerResolver
 
@@ -1462,7 +1464,7 @@ def terrain_export(
     if map_dir is None:
         console.print(f"[red]No terrain data for planet '{planet_id}'[/red]")
         console.print("Run 'dreamulator terrain generate' first.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # Copy all files to output directory
     output.mkdir(parents=True, exist_ok=True)

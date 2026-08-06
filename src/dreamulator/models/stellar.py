@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -14,7 +14,7 @@ from .common import AU, Day, EarthMass, Kelvin, SolarLuminosity, SolarMass, Sola
 _SPECTRAL_TYPE_RE = re.compile(r"^[OBAFGKM]\d?$")
 
 
-class LuminosityClass(str, Enum):
+class LuminosityClass(StrEnum):
     """Morgan–Keenan luminosity class."""
 
     Ia = "Ia"  # Bright supergiant

@@ -206,7 +206,8 @@ class TestClimateSimulatorEndToEnd:
                 n_cell = mesh.cells[n_id]
                 if n_cell.temperature_C is None:
                     continue
-                # Higher elevation should be colder (within ±5° latitude to control for lat gradient)
+                # Higher elevation should be colder (within ±5° latitude
+                # to control for lat gradient)
                 if abs(c.lat - n_cell.lat) < 5.0:
                     total_comparisons += 1
                     elev_diff = c.elevation - n_cell.elevation

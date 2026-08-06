@@ -1,9 +1,8 @@
 # Test & lint gate (roadmap 功能性 #3).
 #
 # - pytest:        hard gate — full suite with all extras (mirrors local dev env).
-# - ruff check:    hard gate at the F,E9 baseline (real bugs: unused/undefined,
-#   syntax errors).  pyproject's full lint select still carries style debt
-#   (roadmap 工程卫生 #1); widen this gate as the debt clears.
+# - ruff check:    hard gate at pyproject's FULL select (Sprint B, 2026-08 —
+#   all 266 legacy items cleared or consciously exempted via per-file-ignores).
 # - ruff format:   hard gate — formatting debt cleared 2026-08 (Sprint A);
 #   keeps it at zero.
 # - mypy:          report-only for now — strict mode has ~150 items of annotation
@@ -60,8 +59,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Ruff (F,E9 baseline gate)
-        run: uv run ruff check --select F,E9 src/ tests/
+      - name: Ruff (full lint gate)
+        run: uv run ruff check src/ tests/
 
       - name: Ruff format (hard gate)
         run: uv run ruff format --check src/ tests/

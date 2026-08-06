@@ -32,11 +32,14 @@ from __future__ import annotations
 
 import logging
 import zlib
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .models import CVTMesh, TectonicPlate
 from .pipeline_types import TerrainPipelineConfig
+
+if TYPE_CHECKING:
+    from .models import CVTMesh, TectonicPlate
 
 logger = logging.getLogger(__name__)
 
@@ -767,7 +770,7 @@ def _generate_hotspots(
         # Tag the seed cell
         mesh.cells[seed].hotspot_id = hs_id
 
-        for step in range(max_chain_cells):
+        for _ in range(max_chain_cells):
             current = mesh.cells[current_cid]
             hotspot_field[current_cid] += height
             mesh.cells[current_cid].hotspot_id = hs_id

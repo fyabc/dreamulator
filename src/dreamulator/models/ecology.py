@@ -1,11 +1,11 @@
 """Ecology models — species, ecosystems, biomes, food webs."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class BiomeType(str, Enum):
+class BiomeType(StrEnum):
     """Whittaker biome classification."""
 
     TROPICAL_RAINFOREST = "tropical_rainforest"
@@ -21,7 +21,7 @@ class BiomeType(str, Enum):
     POLAR_ICE = "polar_ice"
 
 
-class TrophicLevel(str, Enum):
+class TrophicLevel(StrEnum):
     """Trophic level in a food web."""
 
     PRODUCER = "producer"

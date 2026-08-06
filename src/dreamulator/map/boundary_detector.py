@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .models import CVTMesh, TectonicPlate
-from .pipeline_types import TerrainPipelineConfig
+if TYPE_CHECKING:
+    from .models import CVTMesh, TectonicPlate
+    from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 

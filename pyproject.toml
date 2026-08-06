@@ -71,6 +71,21 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 
+[tool.ruff.lint.per-file-ignores]
+# Unit-suffixed names (_K/_C, per CLAUDE.md convention "units in field names")
+# and physics symbols (L, T, R, M, …) are deliberate; N rules would fight them.
+"src/dreamulator/engine/climate_physics.py" = ["N803", "N806"]
+"src/dreamulator/map/climate_simulator.py" = ["N806"]
+"src/dreamulator/map/models.py" = ["N815"]
+"src/dreamulator/map/pipeline_types.py" = ["N815"]
+"tests/test_engine/test_stellar_physics.py" = ["N806"]
+"tests/test_map/test_terrain_pipeline.py" = ["N806"]
+# Typer Option()/Annotated defaults and FastAPI Depends() are framework
+# idioms; B008 (function call in default argument) misfires on them.
+"src/dreamulator/cli.py" = ["B008"]
+"src/dreamulator/cli_climate.py" = ["B008"]
+"src/dreamulator/api_routes/maps.py" = ["B008"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

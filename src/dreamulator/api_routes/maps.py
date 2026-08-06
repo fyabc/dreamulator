@@ -53,7 +53,7 @@ def _get_map_manager(world_name: str, branch: str | None = None) -> MapManager:
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return MapManager(world_dir, branch)
 
 
@@ -116,7 +116,7 @@ def get_map_layer(
     try:
         lt = MapLayerType(layer_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown layer type: {layer_type}")
+        raise HTTPException(status_code=400, detail=f"Unknown layer type: {layer_type}") from None
 
     # Determine which engine layer to look in
     layer_map = {

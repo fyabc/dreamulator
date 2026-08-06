@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml  # type: ignore[import-untyped]
 
 from .models.branch import BranchMetadata
 from .models.layers import LAYER_ORDER, Layer
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Merge helpers for _inherit: true branch data

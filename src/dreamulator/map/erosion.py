@@ -15,8 +15,11 @@ simplified erosion only.
 
 from __future__ import annotations
 
-from .models import CVTMesh
-from .pipeline_types import TerrainPipelineConfig
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import CVTMesh
+    from .pipeline_types import TerrainPipelineConfig
 
 
 def apply_erosion(mesh: CVTMesh, config: TerrainPipelineConfig) -> None:

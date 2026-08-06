@@ -5,11 +5,14 @@ from __future__ import annotations
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
 from dreamulator import __version__
-from dreamulator.models.world import WorldConfig
+
+if TYPE_CHECKING:
+    from dreamulator.models.world import WorldConfig
 
 
 def _data_dir() -> Path:

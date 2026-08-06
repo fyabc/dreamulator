@@ -1,13 +1,13 @@
 """Planet models — planets, atmospheres, hydrospheres, lithospheres."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
 from .common import Day, EarthMass, EarthRadius
 
 
-class PlanetType(str, Enum):
+class PlanetType(StrEnum):
     """Classification of planet types."""
 
     TERRESTRIAL = "terrestrial"

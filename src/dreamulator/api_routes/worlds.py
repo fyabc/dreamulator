@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml  # type: ignore[import-untyped]
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from dreamulator.world_manager import WorldManager
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 router = APIRouter(prefix="/api/worlds", tags=["worlds"])
 
@@ -70,9 +72,9 @@ def create_world(req: WorldCreateRequest) -> WorldInfoResponse:
         config = _manager.load_world(req.name)
         return WorldInfoResponse(data=config.model_dump(mode="json"))
     except FileExistsError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/{world_name}", response_model=WorldInfoResponse)
@@ -82,7 +84,7 @@ def get_world(world_name: str) -> WorldInfoResponse:
         config = _manager.load_world(world_name)
         return WorldInfoResponse(data=config.model_dump(mode="json"))
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.delete("/{world_name}", status_code=204)
@@ -91,7 +93,7 @@ def delete_world(world_name: str) -> None:
     try:
         _manager.delete_world(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/{world_name}/validate")
@@ -101,7 +103,7 @@ def validate_world(world_name: str) -> dict[str, Any]:
         errors = _manager.validate_world(world_name)
         return {"ok": len(errors) == 0, "errors": errors}
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/{world_name}/branches")
@@ -118,7 +120,7 @@ def list_branches(world_name: str) -> dict[str, Any]:
             "data": [b.model_dump(mode="json") for b in branches],
         }
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +198,7 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     # Load stellar input data (with _inherit: true merge support)
     stellar_input = _load_layer_yaml(world_dir, "astronomy", "stellar.yaml", branch)
@@ -232,7 +234,7 @@ def get_planets(world_name: str, branch: str | None = None) -> list[dict[str, An
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     planets_data = _load_layer_yaml(world_dir, "geological", "planets.yaml", branch)
     if planets_data is None:
@@ -251,7 +253,7 @@ def get_habitable_zones(world_name: str, branch: str | None = None) -> dict[str,
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
     if derived_dir is None:
@@ -276,7 +278,7 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     civ_data = _load_layer_yaml(world_dir, "civilization", "civilizations.yaml", branch)
     if civ_data is None:
@@ -409,7 +411,7 @@ def list_layer_documents(
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     if layer == "design-notes":
         doc_dir = _resolve_design_notes_dir(world_dir, branch)
@@ -429,7 +431,7 @@ def get_layer_document(
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     if layer == "design-notes":
         doc_dir = _resolve_design_notes_dir(world_dir, branch)
@@ -447,7 +449,7 @@ def list_design_documents(world_name: str, branch: str | None = None) -> list[di
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     dn_dir = _resolve_design_notes_dir(world_dir, branch)
     return _list_md_documents(dn_dir)
@@ -461,7 +463,7 @@ def get_design_document(
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     dn_dir = _resolve_design_notes_dir(world_dir, branch)
     return _get_md_document(dn_dir, filename)
@@ -493,7 +495,7 @@ def get_climate(world_name: str, branch: str | None = None) -> dict[str, Any] | 
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     data = _load_layer_yaml(world_dir, "climate", "climate.yaml", branch)
     return data if isinstance(data, dict) else None
@@ -508,7 +510,7 @@ def get_ecology(world_name: str, branch: str | None = None) -> dict[str, Any] | 
     try:
         world_dir = _manager.world_dir(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     data = _load_layer_yaml(world_dir, "ecology", "ecology.yaml", branch)
     return data if isinstance(data, dict) else None
@@ -537,7 +539,7 @@ def build_world(world_name: str, req: BuildRequest | None = None) -> dict[str, A
         world_dir = _manager.world_dir(world_name)
         config = _manager.load_world(world_name)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     engines = get_all_engines()
     if not engines:
@@ -557,7 +559,7 @@ def build_world(world_name: str, req: BuildRequest | None = None) -> dict[str, A
             branch=branch,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Build failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Build failed: {e}") from e
 
     success_count = sum(1 for r in results if r.success)
     fail_count = sum(1 for r in results if not r.success)

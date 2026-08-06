@@ -188,7 +188,7 @@ class TestGenerateCvtMesh:
         mesh1 = generate_cvt_mesh(cfg)
         mesh2 = generate_cvt_mesh(cfg)
 
-        for c1, c2 in zip(mesh1.cells, mesh2.cells):
+        for c1, c2 in zip(mesh1.cells, mesh2.cells, strict=True):
             assert c1.lon == c2.lon
             assert c1.lat == c2.lat
             assert c1.x == c2.x

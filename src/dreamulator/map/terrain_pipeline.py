@@ -20,18 +20,23 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
 from rich.console import Console
 
 from .boundary_detector import detect_boundaries
 from .cvt_mesh import generate_cvt_mesh
 from .export import export_equirectangular, save_outputs
-from .models import CVTMesh, TectonicPlate
-from .pipeline_types import TerrainPipelineConfig
 from .plate_generator import generate_plates
 from .terrain_synthesizer import synthesize_terrain
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import numpy as np
+
+    from .models import CVTMesh, TectonicPlate
+    from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 _console = Console(highlight=False)

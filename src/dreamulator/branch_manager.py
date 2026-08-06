@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml  # type: ignore[import-untyped]
 
 from .models.branch import BranchMetadata
 from .models.layers import Layer, get_layers_from
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class BranchManager:

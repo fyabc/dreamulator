@@ -29,13 +29,16 @@ All constants from Cortial et al. 2019 Table 1 (see Appendix D.7).
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from .models import CVTMesh, EulerPole, TectonicPlate
-from .pipeline_types import TerrainPipelineConfig
+
+if TYPE_CHECKING:
+    from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -213,10 +216,9 @@ def _collision_orogeny(
         pid = cell_plate_map.get(cid, "")
         for nid in mesh.cells[cid].neighbors:
             npid = cell_plate_map.get(nid, "")
-            if npid and npid != pid:
-                if crust_arr[nid] == "continental":
-                    collision_cells.append(cid)
-                    break
+            if npid and npid != pid and crust_arr[nid] == "continental":
+                collision_cells.append(cid)
+                break
 
     if not collision_cells:
         return 0.0
@@ -659,14 +661,14 @@ def _evolve_cortial2019(
 
     prev_cell_map = cell_plate_map
     plate_birth_step: dict[str, int] = {p.id: 0 for p in plates}
-    COOLDOWN = max(1, num_steps // 20)  # ~5% of total run
+    cooldown = max(1, num_steps // 20)  # ~5% of total run
     unit_cost = np.ones(mesh.num_cells, dtype=np.float64)
-    # Re-partition the Voronoi every RESAMPLE_EVERY steps (so boundaries track
+    # Re-partition the Voronoi every resample_every steps (so boundaries track
     # the moving centroids), and once immediately after a rifting event so
     # newborn fragments get a clean partition.  Between resamples cell
     # ownership is stable (Cortial 2019 strategy).
-    RESAMPLE_EVERY = 10
-    last_resample_step = -RESAMPLE_EVERY  # triggers a resample at step 0
+    resample_every = 10
+    last_resample_step = -resample_every  # triggers a resample at step 0
     rifted_since_last_resample = False
 
     for step in range(num_steps):
@@ -691,24 +693,21 @@ def _evolve_cortial2019(
                 centroid = np.array([1.0, 0.0, 0.0])  # fallback
 
             rotated_centroids.append(_rodrigues_rotate(centroid, axis, angle_rad))
-        if rotated_centroids:
-            # Distinct seeds — duplicate seeds (two centroids rounding to the
-            # same cell) make a plate lose all its cells and get removed by
-            # _cleanup_empty (the artificial plate-count collapse).
-            new_seeds = _assign_distinct_seeds(_tree, rotated_centroids)
-        else:
-            new_seeds = []
+        # Distinct seeds — duplicate seeds (two centroids rounding to the
+        # same cell) make a plate lose all its cells and get removed by
+        # _cleanup_empty (the artificial plate-count collapse).
+        new_seeds = _assign_distinct_seeds(_tree, rotated_centroids) if rotated_centroids else []
 
         # 2. Re-run Voronoi (every N steps, or right after a rift)
         # Protect newborn plates: lock their cells so they survive long enough to grow
-        needs_resample = step - last_resample_step >= RESAMPLE_EVERY or rifted_since_last_resample
+        needs_resample = step - last_resample_step >= resample_every or rifted_since_last_resample
         if needs_resample:
             locked: dict[int, str] = {}
-            NEWBORN_COOLDOWN = COOLDOWN * 5  # ~25 steps — give oceanic plates time to grow
+            newborn_cooldown = cooldown * 5  # ~25 steps — give oceanic plates time to grow
             newborn_pids = [
                 pid
                 for pid, birth in plate_birth_step.items()
-                if pid.startswith("oceanic") and step - birth < NEWBORN_COOLDOWN
+                if pid.startswith("oceanic") and step - birth < newborn_cooldown
             ]
             if newborn_pids:
                 # Stage 1.2: one O(n) coding pass + np.where per newborn plate
@@ -832,7 +831,7 @@ def _evolve_cortial2019(
             plates,
             step=step,
             plate_birth_step=plate_birth_step,
-            cooldown=COOLDOWN,
+            cooldown=cooldown,
         )
 
         # Keep size weights in sync with the plate roster: removed plates
@@ -850,10 +849,9 @@ def _evolve_cortial2019(
         _rebuild_plate_cells(mesh, new_cell_map, plates)
 
         if progress_callback is not None:
-            try:
+            # A faulty progress callback must never kill the simulation
+            with contextlib.suppress(Exception):
                 progress_callback(step + 1, num_steps)  # type: ignore[call-arg]
-            except Exception:
-                pass
         elif step % 10 == 0 or step == num_steps - 1:
             logger.info(
                 "  Step %3d/%d: %d cells changed plate",
@@ -900,7 +898,7 @@ def _rift_plates(
     max_pieces = config.rift_max_pieces
 
     total_cells = mesh.num_cells
-    COOLDOWN = 5  # steps before a new plate can rift again
+    cooldown = 5  # steps before a new plate can rift again
     # Refresh cell counts from current map (Voronoi may have shifted boundaries)
     for plate in plates:
         plate.cell_ids = [cid for cid, pid in cell_plate_map.items() if pid == plate.id]
@@ -916,8 +914,8 @@ def _rift_plates(
         # Gondwana broke into 7 fragments over 4 phases in ~140 My — large plates
         # rift repeatedly until they reach a stable size.
         if plate_birth_step is not None:
-            birth = plate_birth_step.get(plate.id, -COOLDOWN)
-            if step - birth < COOLDOWN and n_cells <= avg_cells * 2:
+            birth = plate_birth_step.get(plate.id, -cooldown)
+            if step - birth < cooldown and n_cells <= avg_cells * 2:
                 continue  # only small/normal plates respect cooldown
 
         # Super-plate boost: larger plates rift more often.
@@ -1008,12 +1006,12 @@ def _rift_plates(
                 n_cells,
             )
             # Restore parent plate (without the incomplete sub-plates)
-            for i in range(added):
+            for _ in range(added):
                 plates.pop()
             plate.cell_ids = list(plate.cell_ids)  # ensure mutable
             plates.append(plate)
             if plate_birth_step is not None:
-                plate_birth_step[plate.id] = -COOLDOWN  # don't try again soon
+                plate_birth_step[plate.id] = -cooldown  # don't try again soon
             for cid in plate.cell_ids:
                 cell_plate_map[cid] = plate.id
             continue
@@ -1161,8 +1159,8 @@ def _consume_small_plates(
     # are consumed.  This is roughly the Scotia plate (1.6 M km²) —
     # the smallest recognised tectonic plate on Earth.
     # No auto-balance scaling: this threshold is invariant.
-    HARD_MIN_CELLS = 50  # absolute floor: never consume plates with >50 cells
-    min_cells = max(HARD_MIN_CELLS, int(total_cells * 0.003))
+    hard_min_cells = 50  # absolute floor: never consume plates with >50 cells
+    min_cells = max(hard_min_cells, int(total_cells * 0.003))
 
     plate_dict = {p.id: p for p in plates}
 
@@ -1339,7 +1337,7 @@ def _trench_arc_relaxation(
     # retreat plate's width would pinch small plates into braided slivers
     # (interweave regression, 2026-08-06).
     area_cells: dict[str, int] = {}
-    for cid, pid in cell_plate_map.items():
+    for _cid, pid in cell_plate_map.items():
         area_cells[pid] = area_cells.get(pid, 0) + 1
     boundary_len: dict[str, int] = {}
     for (pa, pb), cells in pair_cells.items():

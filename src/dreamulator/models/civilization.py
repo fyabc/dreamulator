@@ -1,13 +1,13 @@
 """Civilization models — cultures, governments, settlements."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 from .common import Vec3
 
 
-class GovernmentType(str, Enum):
+class GovernmentType(StrEnum):
     """Forms of government."""
 
     TRIBAL = "tribal"
@@ -20,7 +20,7 @@ class GovernmentType(str, Enum):
     EMPIRE = "empire"
 
 
-class TechLevel(str, Enum):
+class TechLevel(StrEnum):
     """Technological development level."""
 
     STONE_AGE = "stone_age"
@@ -33,7 +33,7 @@ class TechLevel(str, Enum):
     FUTURE = "future"
 
 
-class SettlementType(str, Enum):
+class SettlementType(StrEnum):
     """Size classification for settlements."""
 
     HAMLET = "hamlet"

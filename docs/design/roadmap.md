@@ -227,17 +227,13 @@
 
 ### 工程卫生
 
-1. **全仓 ruff 存量 187 项**（2026-08-07 实测；原 266）— 以风格类为主：
-   N806(51)、B904(48)、B008(29)、E501(余)、UP*、TC*(26)、SIM*(21)。注意：
-   **UP042 改变 `__str__` 语义**（Python 3.12 StrEnum），不可批量自动修；B008
-   多为框架惯用法误报，宜按规则配置 per-file ignore 而非逐处改码。
-   **2026-08-06 进展**：F 类（未用变量/导入、F541）19 项已清零，tests.yml 以
-   `--select F,E9` 立硬门槛防回潮。
-   **2026-08-07 进展（Sprint A，chore/sprint-a-format-lint 分支）**：
-   `ruff format` 24 文件清零 + 44 项安全自动修（I001/UP017/合并行等），
-   tests.yml 新增 `ruff format --check` 硬门槛防格式回潮；剩余 187 项按
-   E501→SIM→TC→B904 顺序逐族清偿并收紧门槛（计划见
-   `private/plans/tech-debt-cleanup-plan.md`）。
+1. ~~全仓 ruff 存量 266 项~~ → ✅ 已清偿（Sprint B，2026-08-07）。
+   `ruff check` 全 select（E,F,W,I,N,UP,B,A,SIM,TCH）通过，tests.yml 升级为
+   全 select 硬门槛。处置：E501/SIM/TC/B904/B007/B905/E402 逐族人工+自动修
+   （TC 移动导入后以 FastAPI 路由强制注解求值验证）；UP042/UP047 在核实无
+   `str()` 运行时语义依赖后转 StrEnum + PEP 695 泛型；N 族单位后缀命名
+   （`_K`/`_C`，项目约定）与 B008 框架惯用法以 per-file-ignores 豁免
+   （pyproject `[tool.ruff.lint.per-file-ignores]`，附理由）——约定优先于规则。
 2. **mypy 存量 150 项 / 30 文件**（2026-08-07 实测；原记 147，回涨 3）—
    热点：terrain_synthesizer.py(27)、narrator.py(13)、engine/climate.py(13)、
    cli.py(9)、api_routes/worlds.py(9)。补齐 `CVTMesh` / mesh 加载辅助函数的

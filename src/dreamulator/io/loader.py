@@ -11,7 +11,7 @@ from dreamulator.models.world import WorldConfig
 T = TypeVar("T", bound=BaseModel)
 
 
-def load_yaml_model(path: Path, model_class: type[T]) -> T:
+def load_yaml_model[T: BaseModel](path: Path, model_class: type[T]) -> T:
     """Load a YAML file and validate it against a Pydantic model.
 
     Args:
@@ -49,7 +49,7 @@ def load_world(world_dir: Path) -> WorldConfig:
     return load_yaml_model(world_dir / "world.yaml", WorldConfig)
 
 
-def load_layer_input(
+def load_layer_input[T: BaseModel](
     world_dir: Path,
     layer: str,
     filename: str,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+from rich.console import Console
 
 from dreamulator.models.layers import LAYER_ORDER, Layer, get_layer_index
 from dreamulator.resolver import LayerResolver
@@ -10,9 +12,10 @@ from dreamulator.utils.logging import setup_logging
 
 from .base import BaseEngine, EngineResult
 
-logger = setup_logging()
+if TYPE_CHECKING:
+    from pathlib import Path
 
-from rich.console import Console
+logger = setup_logging()
 
 _console = Console()
 

@@ -9,17 +9,19 @@ See ``docs/design/terrain-pipeline.md`` §11 for algorithm details.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
 
-from .models import CVTMesh, TectonicPlate
 from .pipeline_types import TerrainPipelineConfig, make_equirect_grid
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from scipy.spatial import cKDTree  # type: ignore[import-untyped]
+
+    from .models import CVTMesh, TectonicPlate
 
 logger = logging.getLogger(__name__)
 

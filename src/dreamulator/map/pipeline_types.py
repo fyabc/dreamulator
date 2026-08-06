@@ -7,13 +7,14 @@ boundary_detector, terrain_synthesizer, export, terrain_pipeline).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .geography import GeographySpec
 
 

@@ -7,7 +7,7 @@ The layer hierarchy:
     physics → chemistry → astronomy → geological → climate → ecology → civilization
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import TypeVar
 
 from pydantic import BaseModel, Field
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 
-class Layer(str, Enum):
+class Layer(StrEnum):
     """World building layers, ordered from fundamental to derived."""
 
     PHYSICS = "physics"
@@ -78,7 +78,7 @@ def get_layer_index(layer: Layer | str) -> int:
             layer = Layer(layer)
         except ValueError:
             valid = [L.value for L in Layer]
-            raise ValueError(f"Unknown layer '{layer}'. Valid layers: {valid}")
+            raise ValueError(f"Unknown layer '{layer}'. Valid layers: {valid}") from None
     return LAYER_ORDER.index(layer)
 
 
