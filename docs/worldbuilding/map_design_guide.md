@@ -1,6 +1,10 @@
 # 地图设计指导
 
-本文档为架空世界的地图设计提供科学指导和工作流建议。
+本文档为架空世界的地图设计提供科学指导与工作流建议（CVT 管线时代版，
+2026-08 重写；旧版"内置编辑器"工作流已随 ADR-001 废弃）。
+
+操作层面的完整流程见 [`../usage/map-workflow.md`](../usage/map-workflow.md)；
+算法原理见 [`../design/terrain-pipeline.md`](../design/terrain-pipeline.md)。
 
 ## 参考资源
 
@@ -20,65 +24,76 @@
 
 地图数据应与天文学和地质学层保持一致：
 
-- **行星参数约束**：行星的 `water_coverage`（水圈）决定了海陆比例；`num_plates`（岩石圈）决定板块数量
-- **恒星光照约束**：宜居带位置影响温度分布（后续气候层）
-- **自转/倾角约束**：`axial_tilt_deg` 影响季节性和纬度温差
+- **行星参数约束**：`planets.yaml` 的半径/重力/水圈设定决定高程标度与海陆预算；
+  板块数量由 `terrain_config.yaml: num_plates` 给出（地球主板块 ~15）
+- **恒星光照约束**：宜居带位置与光度影响温度分布（气候层消费）
+- **自转/倾角约束**：`axial_tilt_deg` 与自转周期影响季节、纬度温差与
+  Hadley 胞宽度（慢自转行星环流圈显著加宽，见
+  `../knowledge/climatology/atmospheric_circulation.md`）
 
 ### 自底向上
 
-遵循层级架构的设计哲学：
-
 ```
-天文学参数 → 地质地图 → 气候推演 → 生态分布 → 文明布局
+天文学参数 → 地质地图（geography 锚定 + 构造演化）→ 气候推演 → 生态分布 → 文明布局
 ```
 
 先确定海陆分布和板块构造，再推演气候和生态，最后设定文明要素。
 
 ## 地质层地图设计
 
-### 海陆分布
+### 海陆分布：配置化锚定
 
-- **水陆比例**：参考 `hydrosphere.water_coverage`（地球约 71%）
-- **大陆形状**：自然大陆有不规则的海岸线和大陆架
-- **大陆位置**：赤道附近大陆更宽，高纬度地区更窄碎
+当前管线的"画笔"是 `geography.yaml` 的 feature 列表（椭圆余弦核偏置场），
+而非逐像素绘制：
+
+- **水陆比例**：`land_fraction_target`（地球 ~0.29 露出陆地）
+- **大陆/海盆/裂谷/地峡**：`features` 的 kind（continent / ocean_basin /
+  rift_sea / isthmus / shallow_sea / archipelago / plateau）+ lon/lat/radius/
+  strength/elongation/bearing
+- **半球不对称**：`hemisphere_land_bias`
+- 锚定只钉地壳类型；构造演化后可按 `reapply_after_tectonics` 重锚。
+  **已知限制**：锚定不钉高程（汇聚抬升可盖过锚定裂谷）、浅海深度控制待补——
+  见 `../design/roadmap.md` 功能性 #9 与
+  `private/plans/heightmap-import-vs-geography-config.md`
+
+需要"手绘形状"时，走高度图导入模式（外部灰度图 → 偏置场或最终高程），
+同一份计划文档给出了双模式谱系。
 
 ### 板块构造
 
-> 参考：[USGS Plate Tectonics](https://pubs.usgs.gov/gip/dynamic/tectonic.html)；[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 plate system
+> 参考：[USGS Plate Tectonics](https://pubs.usgs.gov/gip/dynamic/tectonic.html)；
+> Cortial et al. (2019)（管线实现，见 `../knowledge/geology/plate_tectonics.md`）
 
-- **板块数量**：参考 `lithosphere.num_plates`（地球约 15 个）
-- **板块类型**：
-  - 大洋板块（oceanic）：低海拔、高密度
-  - 大陆板块（continental）：高海拔、低密度
-  - 混合板块（mixed）：含大陆和海洋部分
-- **板块边界**：
-  - 汇聚边界 → 山脉、海沟
-  - 离散边界 → 洋中脊、裂谷
-  - 转换边界 → 断层线
+- **板块数量与大小**：偏态分布是真实特征（地球主板块面积 CV≈0.9）——
+  管线已内置裂解 + 加权重分区机制，不要追求等大面积
+- **板块类型**：oceanic（低海拔、高密度）/ continental（高海拔、低密度）
+- **边界地貌组合**：汇聚 → 山脉+海沟（洋壳俯冲侧）；离散 → 洋中脊+裂谷；
+  转换 → 断层谷地。岛弧小圆弧会随演化涌现（Frank 1968 机制）
 
-### 地形特征
+### 地形特征检查单
 
-- **山脉**：通常位于板块碰撞带，呈线性分布
-- **平原**：大陆内部或板块中心区域
-- **高原**：大面积隆起，可能与地幔柱有关
-- **海沟**：大洋板块俯冲带
-- **火山**：板块边界或热点
+- 山脉线性分布于碰撞带；高原与地幔柱/古造山带关联
+- 海沟仅出现在洋壳俯冲侧（~−7 km 减压，地球海沟 −8~−11 km）
+- 热点火山链年龄递变（夏威夷型）；大陆架指数衰减剖面
 
 ## 气候层预期
 
-地图编辑完成后，气候引擎将基于以下因素自动推演：
+地图定稿后气候引擎自动推演（EBM + 三胞环流 + BFS 水汽 + Köppen，见
+`../knowledge/climatology/` 各篇）。设计地图时可预判：
 
-- **纬度**：赤道热、极地冷
-- **海拔**：每升高 1000m 降温约 6.5°C
-- **海陆分布**：海洋性气候 vs 大陆性气候
-- **洋流**：暖流增温增湿，寒流降温减湿
-- **风带**：信风、西风带、极地东风
-
-柯本气候分类将自动映射到每个 Voronoi cell。
+- **纬度**：赤道热、极地冷；**海拔**：~6.5°C/km（热带有效直减率更低，
+  当前模型把热带苔原线压低 ~1200 m——已知限制）
+- **雨影**：>3000 m 山脉背风侧干旱（安第斯型东西坡分异）
+- **洋流**（3A.3 落地后）：西边界暖流增温增湿、东边界寒流降温减湿、
+  上升流沿岸干冷
+- **临界地理**：窄浅海峡（<200 m）是气候临界态的天然开关——
+  冰期海平面、火山岛、沉积都可触发"开/合"跃迁
+  （科学机制见 `../knowledge/climatology/ocean_currents.md` §3）
 
 ## 生态层预期
 
-基于温度和降水，[Whittaker 生物群系分类](https://en.wikipedia.org/wiki/Biome#Whittaker)（参考 [Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 biome 分配逻辑）：
+基于温度和降水的 Whittaker 群系映射（ecology 引擎未实现，当前为 input 设定；
+规划见 `../knowledge/ecology/CLAUDE.md`）：
 
 | 温度 | 高降水 | 中降水 | 低降水 |
 |------|--------|--------|--------|
@@ -86,52 +101,45 @@
 | 温带 | 温带雨林 | 温带森林 | 温带草原 |
 | 寒带 | 针叶林 | 苔原 | 极地冰盖 |
 
+特殊生态位值得为剧情设计：潮间带巨进退带（大潮世界）、雨影荒漠的
+refugia（气候振荡期的物种蓄水池）。
+
 ## 文明层指导
 
-> 参考：[Paradox EU4](https://eu4.paradoxwikis.com/Map_modding) 的 province/development 系统；[CK3](https://ck3.paradoxwikis.com/Map_modding) 的 holding/county 系统
-
-文明布局受地理约束：
+> 参考：[EU4 province 系统](https://eu4.paradoxwikis.com/Map_modding)；
+> 动力学模型见 `../knowledge/sociology/CLAUDE.md`（HANDY/SDT/Tainter）
 
 ### 城市选址
 
-优先选择以下地理条件的 Voronoi cell：
-
-- **河流交汇处**：交通便利、水源充足
-- **海岸港湾**：贸易港口
-- **平原中心**：农业腹地
-- **山口/关隘**：军事要塞
+优先选择以下地理条件的 cell：河流交汇处（交通+水源）、海岸港湾（贸易）、
+平原中心（农业腹地）、山口关隘（军事）。文明起源锚点应与气候带耦合
+（季风河谷农业、群岛航海、极地游牧等生态位分化）。
 
 ### 政治边界
 
-- 自然边界：山脉、河流、海岸
-- 文化边界：语言、宗教分界线
-- 历史边界：战争、条约结果
+自然边界（山脉、河流、海岸）> 文化边界（语言、宗教）> 历史边界（战争、条约）。
+"曼荼罗式"松散圈层政体适合前现代东南亚型设定。
 
 ### 资源分布
 
-- 矿产：山脉附近（金属矿）
-- 农田：平原、河谷（冲积平原）
-- 渔场：大陆架浅海区域
-- 木材：森林覆盖区域
+矿产近山脉、农田在河谷冲积平原、渔场在大陆架浅海、木材随森林带。
 
-## 工具使用建议
+## 命名与呈现（世界内真实感）
 
-### 程序化生成
+- **按"谁命名的"分域选风格**：自然地理用中文意译（大裂谷海、破碎群岛带），
+  西方地域用合成词音译，体制/工程用编号功能名（第二留守区、微分一号），
+  天体用神话典故——命名本身在做世界观
+- **机构化包装**：地图导出为"世界内机构出版物"（附件编号、钢印、落款、
+  界内纪年），真实感远高于裸地图
+- 详见 `narrative-craft.md` 与 `private/plans/video/leyi-ajax-map-presentation-analysis.md`
 
-1. 先用 "🌍 生成地形" 创建基础地形
-2. 调整参数（大陆数、山脉度、板块数）多次生成，直到满意
-3. 生成结果会自动创建 Voronoi 网络和板块分配
+## 工作流（CVT 时代）
 
-### 手动编辑
-
-1. 使用升起/降低工具调整局部地形
-2. 使用平滑工具消除突兀的高程变化
-3. 使用平坦工具创建平原和高原
-4. 编辑后记得保存
-
-### 迭代优化
-
-1. 查看板块分配是否合理
-2. 检查板块边界是否对应山脉位置
-3. 确认海陆比例与行星参数一致
-4. 反复调整直到地质设定自洽
+1. **配置生成**：`dreamulator terrain generate`（或 `build --only geological`），
+   编辑 `terrain_config.yaml` + `geography.yaml` 迭代海陆格局
+2. **检查**：MapViewer 看板块/边界/高程图层；对照本文检查单
+3. **气候联调**：`build --only climate` 后看 Köppen 分布是否符合直觉
+4. **可选精细化**：Gaea 局部往返（design/terrain-pipeline.md §13，纸面阶段）
+   或高度图导入模式
+5. **定稿入库**：地图产物 LFS 入库；定稿才进 `data/worlds/`（提交纪律，
+   见 `private/plans/lfs-history-optimization.md`）
