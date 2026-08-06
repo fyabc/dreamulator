@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] — 2026-08-06
+
+### Added
+
+- **岛弧/造山带小圆弧涌现机制**（Frank 1968 *Curvature of Island Arcs* /
+  Tovish 1978）：Voronoi 平分线几何上产不出岛弧的小圆弧；现每次构造 resample
+  从当前运动学状态（欧拉极相对速度 → 汇聚速率 → 俯冲角 → 弧矢比 0.10–0.30）
+  把俯冲/碰撞边界松弛向小圆弧，弧矢随演化逐步生长（涌现而非初始规定）。
+  洋壳俯冲凸向俯冲板（日本/阿留申式），陆陆碰撞凸向 indenter（喜马拉雅/
+  阿尔卑斯式）。配置 `trench_arc`（0=关，默认 1）。gaia-m 碰撞带
+  sagitta/chord 0.14–0.27（日本弧 ≈0.2）
+- **汇聚带沿弧分段**（日本列岛式）：~800 km 波长 fBm 调制隆起幅度
+  [−0.25, 1.35]× 与带宽 0.7–1.3× → 主岛 + 小岛 + 弧间断陷海，替代均匀缎带
+
+### Fixed
+
+- **板块交织**（互插窄连接，如 plate_006/018/019）：根因为加权 Voronoi 与弧
+  翻转两个边界决定方同尺度叠加、小盘被两弧对夹、无最小宽度约束。连续拆分
+  （BFS 序）+ 贴边界翻转带 + 弧矢局部宽度封顶 + 最终边界平滑 + enclave 守卫；
+  重建后 enclave=0、边界干净、弧度保持
+- **裂谷海碎成湖泊串**：geography.yaml 裂谷 radius ×1.7、strength 加强、中段加
+  西支分叉（仿东非 Western Rift）；裂谷走廊水体成单一连通陆间海
+
+### gaia-m 重建实测
+
+22 板 CV=0.83；最长边界弧 sagitta/chord 0.145–0.272；用户可视化验证通过。
+
 ## [0.16.0] — 2026-08-06
 
 ### Added
