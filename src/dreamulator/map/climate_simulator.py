@@ -68,7 +68,7 @@ _MOISTURE_ADVECTION_STEPS: int = 12
 def simulate_climate(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
-) -> None:
+) -> dict[str, float]:
     """Run climate simulation on the CVT mesh, filling cell climate fields.
 
     Modifies *mesh.cells* in-place, setting ``temperature_C``,
@@ -93,7 +93,7 @@ def simulate_climate(
     n = mesh.num_cells
 
     if n == 0:
-        return
+        return {}
 
     phase_timings: dict[str, float] = {}
 
@@ -409,7 +409,7 @@ def _ocean_surface_temperature(
     ice_weight = _sigmoid(np.degrees(abs_lat), center=70.0, width=8.0)
     sst = sst_open * (1.0 - ice_weight) + (-1.8) * ice_weight
 
-    return np.clip(sst, -2.0, 30.0)
+    return np.asarray(np.clip(sst, -2.0, 30.0))
 
 
 def _sigmoid(x: np.ndarray, center: float, width: float) -> np.ndarray:

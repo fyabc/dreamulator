@@ -64,7 +64,7 @@ def _lerp(a: float, b: float, t: float) -> float:
 @njit(cache=True)
 def _grad(h: int, x: float, y: float, z: float) -> float:
     g = _GRADS[h & 11]
-    return g[0] * x + g[1] * y + g[2] * z
+    return float(g[0] * x + g[1] * y + g[2] * z)
 
 
 @njit(cache=True)
@@ -105,7 +105,7 @@ def perlin3(x: float, y: float, z: float, perm: np.ndarray) -> float:
 def _noise_points(xs: np.ndarray, ys: np.ndarray, zs: np.ndarray, perm: np.ndarray) -> np.ndarray:
     n = len(xs)
     out = np.empty(n, dtype=np.float64)
-    for i in prange(n):
+    for i in prange(n):  # type: ignore[no-untyped-call,attr-defined]
         out[i] = perlin3(xs[i], ys[i], zs[i], perm)
     return out
 
@@ -123,7 +123,7 @@ def _fbm_points(
 ) -> np.ndarray:
     n = len(xs)
     out = np.empty(n, dtype=np.float64)
-    for i in prange(n):
+    for i in prange(n):  # type: ignore[no-untyped-call,attr-defined]
         total = 0.0
         norm = 0.0
         amp = 1.0

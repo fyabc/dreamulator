@@ -21,7 +21,7 @@ import logging
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:

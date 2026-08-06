@@ -64,7 +64,7 @@ def equilibrium_temperature(
     flux = SOLAR_CONSTANT * stellar_luminosity_sol / (orbital_distance_au**2)
     # Absorbed flux (after albedo)
     absorbed = flux * (1.0 - albedo) / 4.0  # factor 1/4 for sphere vs disk
-    return (absorbed / SIGMA_SB) ** 0.25
+    return float((absorbed / SIGMA_SB) ** 0.25)
 
 
 def surface_temperature(
@@ -113,7 +113,7 @@ def latitude_temperature(
     t_surface = np.asarray(t_surface_mean_c, dtype=np.float64)
     # Convert global mean to equatorial baseline
     t_equator = t_surface + lat_gradient_c / 3.0
-    return t_equator - lat_gradient_c * np.sin(lat_rad) ** 2
+    return np.asarray(t_equator - lat_gradient_c * np.sin(lat_rad) ** 2)
 
 
 def altitude_lapse_rate(
@@ -223,7 +223,7 @@ def coriolis_parameter(
         Coriolis parameter f (rad/s), shape (N,).
     """
     omega = 2.0 * np.pi / (rotation_period_days * 86400.0)  # rad/s
-    return 2.0 * omega * np.sin(lat_rad)
+    return np.asarray(2.0 * omega * np.sin(lat_rad))
 
 
 def pressure_from_temperature(
@@ -265,7 +265,7 @@ def pressure_from_temperature(
     # Thermal low: warm air expands → lower pressure
     p_thermal = p_barometric - 20.0 * t_normalized
 
-    return np.clip(p_thermal, 0.5 * surface_pressure_hpa, 1.07 * surface_pressure_hpa)
+    return np.asarray(np.clip(p_thermal, 0.5 * surface_pressure_hpa, 1.07 * surface_pressure_hpa))
 
 
 def hadley_cell_wind(
@@ -405,7 +405,7 @@ def orographic_precipitation(
     moisture_in: np.ndarray,
     elev_diff_m: float,
     efficiency: float = 0.5,
-) -> tuple[float, float]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Compute precipitation from orographic uplift.
 
     When moisture-laden air is forced to rise over terrain, it cools
@@ -425,7 +425,7 @@ def orographic_precipitation(
     """
     if elev_diff_m <= 0.0:
         # Descending or flat: no orographic precipitation, moisture conserved
-        return 0.0, moisture_in
+        return np.zeros_like(moisture_in), moisture_in
 
     # Fraction of moisture that condenses
     rain_fraction = min(efficiency * (elev_diff_m / 1000.0), 0.9)
@@ -464,7 +464,7 @@ def itcz_latitude(
         * epsilon
         * 0.7
     )
-    return np.degrees(itcz) + 5.0  # mean NH offset
+    return float(np.degrees(itcz) + 5.0)  # mean NH offset
 
 
 # ---------------------------------------------------------------------------

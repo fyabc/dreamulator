@@ -39,6 +39,7 @@ dev = [
     "ruff>=0.9",
     "pre-commit>=4.0",
     "httpx>=0.28",
+    "types-PyYAML>=6.0",
 ]
 narrate = [
     "anthropic>=0.40",
@@ -49,7 +50,6 @@ heightmap = [
 validation = [
     "xarray>=2024.0",
     "netCDF4>=1.7",
-    "tifffile>=2024.0",
 ]
 
 [project.scripts]
@@ -90,6 +90,15 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+# Libraries without py.typed / stubs; we only use small stable surfaces.
+# scipy-stubs was tried (2026-08) but its SphericalVoronoi stubs disagree with
+# the runtime API (regions/vertices), so we suppress instead.
+# anthropic / xarray / netCDF4 live in optional extras (narrate / validation)
+# and are absent from the base dev environment.
+[[tool.mypy.overrides]]
+module = ["astropy.*", "opensimplex", "scipy.*", "anthropic", "xarray", "netCDF4"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

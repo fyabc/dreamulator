@@ -17,13 +17,16 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-import yaml  # type: ignore[import-untyped]
+import yaml
+from pydantic import TypeAdapter
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.physical_inputs import (
     load_planets,
     resolve_and_apply_physical_parameters,
 )
+from dreamulator.map.models import CVTMesh
+from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.models.layers import Layer
 from dreamulator.models.planet import Planet  # noqa: TCH001 — used at runtime
 
@@ -109,8 +112,6 @@ class ClimateEngine(BaseEngine):
         # Stellar luminosity and heliocentric distance come from the astronomy
         # layer (satellite-aware: moons resolve against their host star);
         # planet physics (tilt/rotation/radius/greenhouse) from planets.yaml.
-        from dreamulator.map.pipeline_types import TerrainPipelineConfig
-
         # Climate tuning knobs (lat_gradient_c, circulation cell boundaries,
         # precipitation efficiencies, ...) live in terrain_config.yaml — the
         # same file the geological engine's in-pipeline climate pass reads,
@@ -180,7 +181,7 @@ class ClimateEngine(BaseEngine):
 
         n_cells = mesh.num_cells
         n_land = sum(1 for c in mesh.cells if c.elevation >= 0.0)
-        koppen_counts = {}
+        koppen_counts: dict[str, int] = {}
         for c in mesh.cells:
             if c.koppen_class:
                 koppen_counts[c.koppen_class] = koppen_counts.get(c.koppen_class, 0) + 1
@@ -220,7 +221,7 @@ class ClimateEngine(BaseEngine):
         with path.open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-    def _update_source_mesh(self, mesh: object) -> None:
+    def _update_source_mesh(self, mesh: CVTMesh) -> None:
         """Write climate-populated mesh back to the source cvt_mesh.json.
 
         Searches the unified maps/ directory first, then falls back to
@@ -230,7 +231,7 @@ class ClimateEngine(BaseEngine):
         model_dump() + json.dump()); non-finite floats serialize as null.
         """
         # model_dump_json() returns str; write_bytes needs bytes.
-        mesh_bytes = mesh.model_dump_json().encode("utf-8")  # type: ignore[union-attr]
+        mesh_bytes = mesh.model_dump_json().encode("utf-8")
         # Search in unified maps/ directory (new structure)
         for mesh_path in self.maps_output_dir.glob("*/cvt_mesh.json"):
             try:
@@ -268,7 +269,7 @@ def _load_cvt_mesh_from_geological(
     layer_derived_dirs: dict[str, Path],
     layer_input_dirs: dict[str, Path] | None = None,
     maps_dir: Path | None = None,
-) -> tuple[object | None, list[str]]:
+) -> tuple[CVTMesh | None, list[str]]:
     """Load the CVT mesh from the unified maps/ directory or old layer locations.
 
     Searches for ``cvt_mesh.json`` in:
@@ -289,10 +290,6 @@ def _load_cvt_mesh_from_geological(
         if mesh_paths:
             mesh_path = mesh_paths[0]
             try:
-                from pydantic import TypeAdapter
-
-                from dreamulator.map.models import CVTMesh
-
                 # pydantic-core JSON parser (Rust) — faster than
                 # json.load() + CVTMesh(**data) for the 80+ MB mesh.
                 mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
@@ -316,7 +313,7 @@ def _load_cvt_mesh_from_geological(
         return None, ["No maps directory or geological layer directories found"]
 
     # Search for cvt_mesh.json in maps/<planet_id>/
-    mesh_paths: list[Path] = []
+    mesh_paths = []
     for d in search_dirs:
         mesh_paths.extend(d.glob("maps/*/cvt_mesh.json"))
 
@@ -326,10 +323,6 @@ def _load_cvt_mesh_from_geological(
     # Use the first one found
     mesh_path = mesh_paths[0]
     try:
-        from pydantic import TypeAdapter
-
-        from dreamulator.map.models import CVTMesh
-
         mesh = TypeAdapter(CVTMesh).validate_json(mesh_path.read_bytes())
         return mesh, []
     except Exception as e:
@@ -337,9 +330,9 @@ def _load_cvt_mesh_from_geological(
 
 
 def _build_climate_summary(
-    mesh: object,
+    mesh: CVTMesh,
     planet: Planet,
-    config: object,
+    config: TerrainPipelineConfig,
 ) -> dict[str, object]:
     """Build a structured summary of the climate simulation.
 

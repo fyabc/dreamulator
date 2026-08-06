@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
@@ -88,7 +88,7 @@ def run_pipeline(
     if start_layer is not None:
         if isinstance(start_layer, str):
             start_layer = Layer(start_layer)
-        effective_start = start_layer
+        effective_start: Layer | None = start_layer
     elif branch is not None:
         # For branches, start from the fork layer
         resolver = LayerResolver(world_dir, branch)
@@ -122,7 +122,7 @@ def run_pipeline(
             layer_derived_dirs[layer.value] = source.derived_dir
 
     results: list[EngineResult] = []
-    profile_records: list[dict] = []
+    profile_records: list[dict[str, Any]] = []
     import time as _time
 
     t_build_start = _time.time()
@@ -188,7 +188,7 @@ def run_pipeline(
         _elapsed = _time.time() - _t0
         results.append(result)
 
-        record: dict = {
+        record: dict[str, Any] = {
             "engine": engine.name,
             "layer": engine.layer.value,
             "wall_seconds": round(_elapsed, 3),
@@ -270,5 +270,5 @@ def _outputs_exist(engine: BaseEngine) -> bool:
     otherwise checks output_files relative to layer_output_dir.
     """
     if hasattr(engine, "outputs_exist"):
-        return engine.outputs_exist()
+        return bool(engine.outputs_exist())
     return all(engine.output_path(f).exists() for f in engine.output_files)

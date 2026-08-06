@@ -508,7 +508,7 @@ def assign_crust_types(
         amplitude = 1.0
         frequency = base_freq
         for octave in range(octaves):
-            octave_seed = noise_seed + octave * 1000
+            octave_seed = int(noise_seed) + octave * 1000
             noise_vals += amplitude * noise_on_points(
                 px * frequency, py * frequency, pz * frequency, octave_seed
             )

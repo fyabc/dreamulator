@@ -9,7 +9,7 @@ See ``docs/design/terrain-pipeline.md`` §11 for algorithm details.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image
@@ -19,7 +19,7 @@ from .pipeline_types import TerrainPipelineConfig, make_equirect_grid
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from scipy.spatial import cKDTree  # type: ignore[import-untyped]
+    from scipy.spatial import cKDTree
 
     from .models import CVTMesh, TectonicPlate
 
@@ -38,7 +38,7 @@ def build_export_tree(mesh: CVTMesh) -> cKDTree:
     once and pass it to ``export_equirectangular`` (Stage 0.3: avoids
     rebuilding the tree per field).
     """
-    from scipy.spatial import cKDTree  # type: ignore[import-untyped]
+    from scipy.spatial import cKDTree
 
     cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells])
     return cKDTree(cell_xyz)
@@ -271,7 +271,7 @@ def save_outputs(
     import yaml as _yaml
 
     map_yaml_path = output_dir / "map.yaml"
-    map_data: dict = {}
+    map_data: dict[str, Any] = {}
     if map_yaml_path.exists():
         with map_yaml_path.open("r", encoding="utf-8") as _f:
             map_data = _yaml.safe_load(_f) or {}

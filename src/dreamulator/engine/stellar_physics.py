@@ -210,7 +210,7 @@ def invert_mass_from_luminosity(
         Estimated mass in solar masses (M☉).
     """
     from numpy import float64
-    from scipy.optimize import brentq  # type: ignore[import-untyped]
+    from scipy.optimize import brentq
 
     z = math.pow(10.0, metallicity_dex)
 
@@ -225,7 +225,7 @@ def invert_mass_from_luminosity(
 
     # Bracket: [0.08 M☉ (hydrogen-burning limit), 120 M☉ (upper MS)]
     root = brentq(f, 0.08, 120.0, xtol=1e-8, rtol=float64(1e-10), full_output=False)
-    return float(root)  # type: ignore[arg-type]
+    return float(root)
 
 
 # ===================================================================

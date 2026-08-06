@@ -1,6 +1,7 @@
 """Simulation models — seeds, runs, computation manifests for provenance tracking."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ class EngineInfo(BaseModel):
 
     name: str
     version: str
-    parameters: dict = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class StepRecord(BaseModel):
@@ -29,7 +30,7 @@ class StepRecord(BaseModel):
     output_files: dict[str, str] = Field(
         default_factory=dict, description="Mapping of file path -> sha256 checksum"
     )
-    parameters: dict = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
     started: datetime
     completed: datetime
     success: bool
@@ -54,8 +55,10 @@ class SimulationRun(BaseModel):
     """A time-series simulation run."""
 
     run_id: str = Field(description="Unique run identifier")
-    config: dict = Field(default_factory=dict, description="Parameters for this run")
+    config: dict[str, Any] = Field(default_factory=dict, description="Parameters for this run")
     manifest: ComputationManifest | None = None
     num_steps: int = Field(default=0, ge=0)
     dt_years: float = Field(default=1.0, gt=0, description="Time step size in years")
-    summary: dict = Field(default_factory=dict, description="Aggregated results and metrics")
+    summary: dict[str, Any] = Field(
+        default_factory=dict, description="Aggregated results and metrics"
+    )

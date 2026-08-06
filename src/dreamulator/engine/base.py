@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ class EngineResult(BaseModel):
     success: bool
     output_files: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-    metadata: dict = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BaseEngine(ABC):
@@ -133,7 +134,7 @@ class BaseEngine(ABC):
         return self.layer_output_dir / relative_path
 
     @abstractmethod
-    def run(self, parameters: dict | None = None) -> EngineResult:
+    def run(self, parameters: dict[str, object] | None = None) -> EngineResult:
         """Execute the computation.
 
         Must be a pure function of inputs + seed — no side effects beyond

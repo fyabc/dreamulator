@@ -253,7 +253,7 @@ def _resample(
     img = Image.fromarray(quantised)  # uint16 -> I;16 natively (mode= deprecated)
 
     is_downscale = (target_width < src_w) or (target_height < src_h)
-    resample = Image.LANCZOS if is_downscale else Image.BILINEAR
+    resample = Image.Resampling.LANCZOS if is_downscale else Image.Resampling.BILINEAR
 
     img_resized = img.resize((target_width, target_height), resample)
     result = np.array(img_resized, dtype=np.uint16).astype(np.float64) / _UINT16_MAX_F

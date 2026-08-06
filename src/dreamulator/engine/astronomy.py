@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.stellar_physics import (

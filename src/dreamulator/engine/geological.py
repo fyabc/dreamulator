@@ -11,9 +11,13 @@ For fine-grained stage control during development, use
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.models.layers import Layer
+
+if TYPE_CHECKING:
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +149,9 @@ class GeologicalEngine(BaseEngine):
         # Any planet directory with cvt_mesh.json counts as "done"
         return any(self.maps_output_dir.glob("*/cvt_mesh.json"))
 
-    def _load_config(self, pars: dict[str, object]) -> tuple[object | None, list[str]]:
+    def _load_config(
+        self, pars: dict[str, object]
+    ) -> tuple[TerrainPipelineConfig | None, list[str]]:
         """Load TerrainPipelineConfig and canonical physical parameters.
 
         Terrain-generation knobs come from ``terrain_config.yaml`` (or planet

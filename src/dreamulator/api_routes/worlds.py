@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -147,7 +147,7 @@ def _resolve_layer_dir(
 
 def _load_layer_yaml(
     world_dir: Path, layer: str, filename: str, branch: str | None = None
-) -> dict[str, Any] | list | None:
+) -> dict[str, Any] | list[Any] | None:
     """Load a layer YAML file with _inherit: true merge support."""
     from dreamulator.resolver import LayerResolver
 
@@ -204,6 +204,8 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
     stellar_input = _load_layer_yaml(world_dir, "astronomy", "stellar.yaml", branch)
     if stellar_input is None:
         raise HTTPException(status_code=404, detail="stellar.yaml not found")
+    if not isinstance(stellar_input, dict):
+        raise HTTPException(status_code=500, detail="stellar.yaml must be a mapping")
 
     # Merge derived data if available
     derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
@@ -285,7 +287,8 @@ def get_civilizations(world_name: str, branch: str | None = None) -> list[dict[s
         raise HTTPException(status_code=404, detail="civilizations.yaml not found")
 
     if isinstance(civ_data, dict) and "civilizations" in civ_data:
-        return civ_data["civilizations"]
+        civs: list[dict[str, Any]] = civ_data["civilizations"]
+        return civs
     return civ_data if isinstance(civ_data, list) else []
 
 
@@ -323,7 +326,7 @@ def _resolve_design_notes_dir(world_dir: Path, branch: str | None) -> Path | Non
         bm = BranchManager(world_dir)
         try:
             branch_info = bm.get_branch(branch)
-            branch_dir = world_dir / "branches" / branch_info.path_name
+            branch_dir = world_dir / "branches" / branch_info.name
             dn_dir = branch_dir / "design-notes"
             if dn_dir.exists():
                 return dn_dir

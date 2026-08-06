@@ -13,7 +13,7 @@ import json
 from pathlib import Path  # noqa: TC003 — used at runtime
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from dreamulator.resolver import LayerResolver
 

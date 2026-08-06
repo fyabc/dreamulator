@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import typer
 from pydantic import ValidationError
@@ -14,6 +15,9 @@ from rich.table import Table
 
 from dreamulator import __version__
 from dreamulator.world_manager import WorldManager
+
+if TYPE_CHECKING:
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 
 def _set_data_dir(data_dir: Path | None) -> None:
@@ -794,7 +798,7 @@ def _load_terrain_config(
     planet: str | None,
     branch: str | None,
     config_path: Path | None,
-) -> tuple:
+) -> tuple[TerrainPipelineConfig, str, Path]:
     """Load terrain pipeline config from YAML or planet data.
 
     Returns (TerrainPipelineConfig, planet_id, output_dir).
@@ -1142,6 +1146,10 @@ def terrain_validate(
     # Compare — read from mesh cells (no export needed)
     import numpy as np
 
+    if result.mesh is None:
+        console.print("[red]Pipeline produced no mesh[/red]")
+        raise typer.Exit(code=1) from None
+
     elevs = np.array([c.elevation for c in result.mesh.cells])
     cur = {
         "min_m": float(np.min(elevs)),
@@ -1332,7 +1340,7 @@ def terrain_info(
     import yaml as _yaml_info
 
     map_yaml_file = map_dir / "map.yaml"
-    meta: dict = {}
+    meta: dict[str, Any] = {}
     if map_yaml_file.exists():
         with open(map_yaml_file, encoding="utf-8") as f:
             meta = _yaml_info.safe_load(f) or {}
@@ -1365,15 +1373,15 @@ def terrain_info(
 
     import os
 
-    for f in sorted(os.listdir(map_dir)):
-        size = os.path.getsize(map_dir / f)
+    for fname in sorted(os.listdir(map_dir)):
+        size = os.path.getsize(map_dir / fname)
         if size > 1_000_000:
             size_str = f"{size / 1_000_000:.1f} MB"
         elif size > 1_000:
             size_str = f"{size / 1_000:.1f} KB"
         else:
             size_str = f"{size} B"
-        table.add_row(f, size_str)
+        table.add_row(fname, size_str)
 
     console.print(table)
 

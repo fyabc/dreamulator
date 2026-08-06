@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from .models.branch import BranchMetadata
 from .models.layers import LAYER_ORDER, Layer
@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 _ID_KEYS = ("id", "body_id")
 
 
-def _merge_list_by_id(base: list, override: list) -> list:
+def _merge_list_by_id(
+    base: list[dict[str, Any]], override: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Merge two lists, matching items by 'id' or 'body_id' field.
 
     - Items with matching IDs: override replaces base item
@@ -42,7 +44,7 @@ def _merge_list_by_id(base: list, override: list) -> list:
     return merged
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge override dict into base dict.
 
     - Dicts: recursive merge
@@ -254,7 +256,9 @@ class LayerResolver:
     # Inheritance-aware YAML loading
     # -------------------------------------------------------------------
 
-    def load_layer_yaml(self, layer: Layer | str, filename: str) -> dict | list | None:
+    def load_layer_yaml(
+        self, layer: Layer | str, filename: str
+    ) -> dict[str, Any] | list[Any] | None:
         """Load a YAML file with ``_inherit: true`` merge support.
 
         Walks the inheritance chain (branch → … → root).  If a level's file
@@ -312,4 +316,5 @@ class LayerResolver:
                 # No _inherit → this level fully replaces parent
                 result = data
 
-        return result
+        out: dict[str, Any] | list[Any] = result
+        return out

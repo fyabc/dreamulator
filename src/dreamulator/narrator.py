@@ -7,6 +7,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .models.layers import LAYER_ORDER
 from .resolver import LayerResolver
@@ -42,12 +43,13 @@ class NarrateResult:
         return self.input_tokens + self.output_tokens
 
 
-def _read_claude_settings() -> dict:
+def _read_claude_settings() -> dict[str, Any]:
     """Read ~/.claude/settings.json if it exists."""
     settings_path = Path.home() / ".claude" / "settings.json"
     if settings_path.exists():
         with settings_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            data: dict[str, Any] = json.load(f)
+            return data
     return {}
 
 

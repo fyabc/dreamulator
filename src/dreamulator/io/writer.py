@@ -2,12 +2,13 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel
 
 
-def _model_to_dict(model: BaseModel) -> dict:
+def _model_to_dict(model: BaseModel) -> dict[str, Any]:
     """Convert a Pydantic model to a plain dict for serialization."""
     return model.model_dump(mode="json", exclude_none=True)
 

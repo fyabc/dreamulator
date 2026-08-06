@@ -38,6 +38,8 @@ import numpy as np
 from .models import CVTMesh, EulerPole, TectonicPlate
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -379,7 +381,7 @@ def run_tectonic_evolution(
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
     *,
-    progress_callback: object | None = None,
+    progress_callback: Callable[[int, int], object] | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Run tectonic time evolution (dispatches to configured algorithm).
 
@@ -544,7 +546,9 @@ def _rodrigues_rotate(
     """Rodrigues rotation of a point on the unit sphere."""
     axis = axis / np.linalg.norm(axis)
     cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-    return xyz * cos_a + np.cross(axis, xyz) * sin_a + axis * np.dot(axis, xyz) * (1.0 - cos_a)
+    return np.asarray(
+        xyz * cos_a + np.cross(axis, xyz) * sin_a + axis * np.dot(axis, xyz) * (1.0 - cos_a)
+    )
 
 
 def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
@@ -559,7 +563,7 @@ def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
     cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / mesh.num_cells)
     v_max_km_my = 100.0  # 10 cm/yr → 100 km/My
     dt_my = 3.0 * cell_km / v_max_km_my
-    return max(1.0, dt_my)
+    return float(max(1.0, dt_my))
 
 
 def _plate_speeds(
@@ -595,7 +599,7 @@ def _evolve_cortial2019(
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
     *,
-    progress_callback: object | None = None,
+    progress_callback: Callable[[int, int], object] | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str], dict[str, float], dict[tuple[str, str], float]]:
     """Cortial et al. (2019) original — centroid rotation + re-Voronoi.
 
@@ -851,7 +855,7 @@ def _evolve_cortial2019(
         if progress_callback is not None:
             # A faulty progress callback must never kill the simulation
             with contextlib.suppress(Exception):
-                progress_callback(step + 1, num_steps)  # type: ignore[call-arg]
+                progress_callback(step + 1, num_steps)
         elif step % 10 == 0 or step == num_steps - 1:
             logger.info(
                 "  Step %3d/%d: %d cells changed plate",
@@ -943,7 +947,11 @@ def _rift_plates(
         )
 
         # Pick n_pieces random seed cells from the plate
-        seed_ids = list(rng.choice(plate.cell_ids, size=min(n_pieces, n_cells), replace=False))
+        seed_ids = list(
+            rng.choice(  # type: ignore[call-overload]
+                np.asarray(plate.cell_ids), size=min(n_pieces, n_cells), replace=False
+            )
+        )
         # BFS from each seed to partition the plate's cells
         new_ids = _partition_cells(mesh, plate.cell_ids, seed_ids, rng)
         # Filter out empty partitions (can happen with edge-positioned seeds)
@@ -1401,9 +1409,9 @@ def _trench_arc_relaxation(
                 continue
             comp = [s]
             seen.add(s)
-            q = deque([s])
-            while q:
-                u = q.popleft()
+            bq = deque([s])
+            while bq:
+                u = bq.popleft()
                 for v in mesh.cells[u].neighbors:
                     if v in cs and v not in seen:
                         seen.add(v)
@@ -1660,7 +1668,7 @@ def _seg_mid(mesh: CVTMesh, seg: list[int]) -> np.ndarray:
         [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg],
         axis=0,
     )
-    return v / np.linalg.norm(v)
+    return np.asarray(v / np.linalg.norm(v))
 
 
 def warp_boundaries(

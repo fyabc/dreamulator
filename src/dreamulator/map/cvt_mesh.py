@@ -16,6 +16,7 @@ from __future__ import annotations
 import itertools
 import logging
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
 from scipy.spatial import SphericalVoronoi
@@ -87,7 +88,7 @@ def jitter_points(
     # Add noise and re-project to unit sphere
     displaced = points + noise
     norms = np.linalg.norm(displaced, axis=1, keepdims=True)
-    return displaced / np.maximum(norms, 1e-12)
+    return np.asarray(displaced / np.maximum(norms, 1e-12))
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
     Returns:
         Relaxed points on unit sphere, shape (n, 3).
     """
-    sv = SphericalVoronoi(points, radius=1.0, center=np.zeros(3))
+    sv: Any = SphericalVoronoi(points, radius=1.0, center=np.zeros(3))
     sv.sort_vertices_of_regions()
 
     n = len(points)
@@ -182,7 +183,7 @@ def lloyd_relaxation(
 # ---------------------------------------------------------------------------
 
 
-def build_adjacency_graph(sv: SphericalVoronoi) -> dict[int, list[int]]:
+def build_adjacency_graph(sv: Any) -> dict[int, list[int]]:
     """Build cell adjacency graph from SphericalVoronoi (Delaunay dual).
 
     Two cells are adjacent if their Voronoi regions share an edge
@@ -260,7 +261,7 @@ def generate_cvt_mesh(config: TerrainPipelineConfig) -> CVTMesh:
 
     # 4. SphericalVoronoi computation
     logger.info("  Step 4/6: SphericalVoronoi computation")
-    sv = SphericalVoronoi(points, radius=1.0, center=np.zeros(3))
+    sv: Any = SphericalVoronoi(points, radius=1.0, center=np.zeros(3))
     sv.sort_vertices_of_regions()
 
     # 5. Adjacency graph
@@ -298,7 +299,7 @@ def generate_cvt_mesh(config: TerrainPipelineConfig) -> CVTMesh:
 
 def _build_cells(
     points: np.ndarray,
-    sv: SphericalVoronoi,
+    sv: Any,
     adjacency: dict[int, list[int]],
     radius_km: float,
 ) -> list[VoronoiCell]:

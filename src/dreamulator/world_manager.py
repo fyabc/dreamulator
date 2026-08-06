@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -95,7 +95,7 @@ class WorldManager:
         # Update world.yaml with actual values
         now = datetime.now(UTC).isoformat()
         world_yaml = world_dir / "world.yaml"
-        data: dict = {}
+        data: dict[str, Any] = {}
         if world_yaml.exists():
             with world_yaml.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
@@ -195,8 +195,8 @@ class WorldManager:
                 if input_dir.exists():
                     for yaml_file in input_dir.glob("*.yaml"):
                         try:
-                            with yaml_file.open("r", encoding="utf-8") as f:
-                                yaml.safe_load(f)
+                            with yaml_file.open("r", encoding="utf-8") as fh:
+                                yaml.safe_load(fh)
                         except Exception as e:
                             errors.append(
                                 f"layers/{layer_dir.name}/input/{yaml_file.name} parse error: {e}"

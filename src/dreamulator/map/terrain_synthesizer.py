@@ -165,11 +165,11 @@ def apply_boundary_effects(
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 1.2 * sigma:
+        d = cell.distance_to_boundary_km
+        if d is None or d > 1.2 * sigma:
             continue  # Gaussian ~4-11% of peak at 1.5σ  # Beyond 3σ, effect is negligible
 
         # Gaussian distance falloff
-        d = cell.distance_to_boundary_km
         falloff = np.exp(-(d * d) / sigma_sq_2)
 
         # Rate factor (how fast the plates are converging/diverging)
@@ -340,8 +340,8 @@ def _synthesize_gaussian(
     sigma = config.boundary_influence_km
     interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 1.2 * sigma:
-            d = cell.distance_to_boundary_km
+        d = cell.distance_to_boundary_km
+        if d is not None and d < 1.2 * sigma:
             proximity = np.exp(-(d * d) / (2 * sigma * sigma))
             interior_factor[i] = 1.2 + 0.3 * proximity
 
@@ -466,8 +466,8 @@ def _synthesize_asymmetric(
     sigma = config.boundary_influence_km
     interior_factor = np.full(n, 1.2, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
-        if cell.distance_to_boundary_km < 1.2 * sigma:
-            d = cell.distance_to_boundary_km
+        d = cell.distance_to_boundary_km
+        if d is not None and d < 1.2 * sigma:
             interior_factor[i] = 1.2 + 0.3 * np.exp(-(d * d) / (2 * sigma * sigma))
 
     # 6. Combine
@@ -508,7 +508,7 @@ def _synthesize_asymmetric(
 def _asymmetric_boundary_effects(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """Boundary-type-specific elevation profiles.
 
     Convergent (C-C / C-O / O-O)
@@ -575,10 +575,10 @@ def _asymmetric_boundary_effects(
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
-        if cell.distance_to_boundary_km > 1.2 * sigma:
+        d = cell.distance_to_boundary_km
+        if d is None or d > 1.2 * sigma:
             continue  # Gaussian ~4-11% of peak at 1.5σ
 
-        d = cell.distance_to_boundary_km
         rate = abs(cell.convergence_rate_cm_yr)
         rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
         crust = getattr(cell, "crust_type", "")
@@ -1506,7 +1506,8 @@ def _apply_interior_landforms(
         interior = [
             i
             for i in cell_indices
-            if mesh.cells[i].distance_to_boundary_km > interior_threshold
+            if (dist_i := mesh.cells[i].distance_to_boundary_km) is not None
+            and dist_i > interior_threshold
             and getattr(mesh.cells[i], "crust_type", "") == "continental"
         ]
         if len(interior) < 10:

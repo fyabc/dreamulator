@@ -362,7 +362,7 @@ def angular_distance_xyz(
         Angular distance in radians.
     """
     dot = np.clip(np.sum(xyz1 * xyz2, axis=-1), -1, 1)
-    return np.arccos(dot)
+    return np.asarray(np.arccos(dot))
 
 
 def smooth_step(

@@ -234,11 +234,19 @@
    `str()` 运行时语义依赖后转 StrEnum + PEP 695 泛型；N 族单位后缀命名
    （`_K`/`_C`，项目约定）与 B008 框架惯用法以 per-file-ignores 豁免
    （pyproject `[tool.ruff.lint.per-file-ignores]`，附理由）——约定优先于规则。
-2. **mypy 存量 150 项 / 30 文件**（2026-08-07 实测；原记 147，回涨 3）—
-   热点：terrain_synthesizer.py(27)、narrator.py(13)、engine/climate.py(13)、
-   cli.py(9)、api_routes/worlds.py(9)。补齐 `CVTMesh` / mesh 加载辅助函数的
-   类型注解可消除大部分；`cli.py:1345-1353` 疑似真 bug 需人工复核
-   （TextIOWrapper/str/Path 类型混乱）。
+2. ~~mypy 存量 150 项 / 30 文件~~ → ✅ 已清零（Sprint C，2026-08-07）。
+   `mypy --strict` 66 文件 0 错误，tests.yml 翻转为硬门槛。主体是注解补齐
+   （mesh 加载返回 `CVTMesh`、裸 `dict/list` 参数化、Optional 收窄）；
+   **过程中 mypy 抓出并修复的真 bug**：① `api_routes/worlds.py` 设计笔记分支
+   目录用了不存在的 `BranchMetadata.path_name`（应为 `name`，该路径一旦触发
+   即 AttributeError）；② `map/voronoi_generator.py` legacy 路径构造
+   `TectonicPlate` 缺必填 `euler_pole`；③ cli/cli_climate/world_manager 三处
+   循环变量与 `with ... as f` 文件句柄重名（TextIOWrapper/str 互踩）；
+   ④ `climate_physics.orographic_precipitation` 返回类型注解与实现不符；
+   ⑤ `climate_simulator.simulate_climate` 声明 `-> None` 却返回 timings；
+   ⑥ `importer.py` 用了 Pillow 已移除别名的 `Image.LANCZOS`
+   （改为 `Image.Resampling.LANCZOS`）。无 stubs 库（astropy/opensimplex/
+   scipy/可选 extras）以 mypy overrides 抑制，理由见 pyproject 注释。
 3. **Pillow `mode="I;16"` 弃用（Pillow 13，2026-10-15 移除）** — ✅ 已修复
    （Sprint A）：`map/export.py`×2、`map/elevation_codec.py`、`map/importer.py`
    共 4 处去掉显式 mode 参数（uint16 数组原生映射 I;16），测试 253 全绿、

@@ -77,7 +77,7 @@ def compute_relative_velocity(
     Returns:
         Relative velocity vector (3,).
     """
-    return plate_velocity_at(point_xyz, plate_a) - plate_velocity_at(point_xyz, plate_b)
+    return np.asarray(plate_velocity_at(point_xyz, plate_a) - plate_velocity_at(point_xyz, plate_b))
 
 
 def compute_boundary_normal(
@@ -101,7 +101,7 @@ def compute_boundary_normal(
     norm = np.linalg.norm(direction)
     if norm < 1e-12:
         return np.zeros(3)
-    return direction / norm
+    return np.asarray(direction / norm)
 
 
 # ---------------------------------------------------------------------------

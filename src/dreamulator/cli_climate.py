@@ -113,12 +113,12 @@ def climate_info(
     if maps_dir.exists():
         files = list(maps_dir.iterdir())
         console.print(f"\n  Output files ({maps_dir}):")
-        for f in sorted(files):
-            size = f.stat().st_size
+        for rf in sorted(files):
+            size = rf.stat().st_size
             if size > 1024 * 1024:
-                console.print(f"    {f.name} ({size / (1024 * 1024):.1f} MB)")
+                console.print(f"    {rf.name} ({size / (1024 * 1024):.1f} MB)")
             else:
-                console.print(f"    {f.name} ({size / 1024:.0f} KB)")
+                console.print(f"    {rf.name} ({size / 1024:.0f} KB)")
     else:
         console.print(f"\n  [dim]No map outputs at {maps_dir}[/dim]")
 
@@ -147,13 +147,7 @@ def climate_validate(
     """
     _set_data_dir(data_dir)
 
-    # Import and run the validation logic
-    import sys
-
-    # Build args for the validation script logic
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-
-    from validate_climate import run_validation
+    from dreamulator.validate_climate import run_validation
 
     report = run_validation(
         world_name=world,
@@ -222,12 +216,9 @@ def climate_import_elevation(
     )
 
     # Call the import logic
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
     import tempfile
 
-    from import_earth_elevation import (
+    from dreamulator.import_earth_elevation import (
         build_cvt_mesh_from_grid,
         download_etopo1,
         extract_etopo1_to_raster,

@@ -5,6 +5,7 @@ Falls back to standard logging otherwise.
 """
 
 import logging
+from typing import Any
 
 
 def setup_logging(level: int = logging.WARNING) -> logging.Logger:
@@ -21,7 +22,7 @@ def setup_logging(level: int = logging.WARNING) -> logging.Logger:
     Returns:
         Configured logger instance.
     """
-    kwargs: dict = {}
+    kwargs: dict[str, Any] = {}
 
     try:
         from rich.logging import RichHandler

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -12,6 +12,9 @@ from dreamulator.world_manager import WorldManager
 
 from ..map.manager import MapManager
 from ..map.models import MapLayerType
+
+if TYPE_CHECKING:
+    from dreamulator.map.models import RasterLayerMeta, VectorLayerMeta
 
 router = APIRouter(prefix="/api/worlds", tags=["maps"])
 _manager = WorldManager()
@@ -196,7 +199,8 @@ def get_cvt_mesh(
         )
 
     with open(mesh_file, encoding="utf-8") as f:
-        return json.load(f)
+        data: dict[str, Any] = json.load(f)
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -268,11 +272,11 @@ async def import_elevation(
 
     # Update layer registry and mark downstream layers as stale
     registry = mgr.update_registry_on_elevation_change(planet_id)
-    stale_layers = [
-        name
-        for name, meta in {**registry.raster_layers, **registry.vector_layers}.items()
-        if meta.stale
-    ]
+    metas: dict[str, RasterLayerMeta | VectorLayerMeta] = {
+        **registry.raster_layers,
+        **registry.vector_layers,
+    }
+    stale_layers = [name for name, meta in metas.items() if meta.stale]
 
     return {
         "ok": True,

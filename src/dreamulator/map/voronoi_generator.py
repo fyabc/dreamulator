@@ -13,7 +13,7 @@ import numpy as np
 from scipy.spatial import Delaunay, Voronoi
 
 from .elevation_codec import lon_lat_to_pixel
-from .models import VoronoiCell, VoronoiNetwork
+from .models import EulerPole, VoronoiCell, VoronoiNetwork
 
 if TYPE_CHECKING:
     from .models import TectonicPlate
@@ -278,6 +278,7 @@ def assign_cells_to_plates(
                 id=f"plate_{plate_idx}",
                 name=f"Plate {plate_idx}",
                 type=plate_type,
+                euler_pole=EulerPole(x=0.0, y=1.0, z=0.0, omega_rad_yr=0.0),
                 cell_ids=cells,
                 velocity=PlateVelocity(
                     dx=float(rng.uniform(-0.05, 0.05)),
