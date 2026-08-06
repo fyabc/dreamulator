@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786027625650,
+  "lastUpdate": 1786030440588,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -236,6 +236,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00024141409925759194",
             "extra": "mean: 5.132425000002172 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8dc3614573c7664b2eaa7226e1fe57fb65d7d844",
+          "message": "fix(tectonics): 弧交织修复 + 汇聚带沿弧分段 + 裂谷海加强与分叉\n\n用户可视化验证后的三组修复：\n\n1. 岛弧交织（板块互插、窄连接，如 plate_006/018/019）——根因：加权 Voronoi\n   与弧翻转两个独立边界决定方在同一尺度叠加；小盘被两侧弧对夹成辫状；无\n   最小宽度约束。对策：\n   - _split_bent_segment 改 BFS 序连续拆分（按弦投影拆分把 Z/U 形边界的两臂\n     交错混入子段，弧翻转散射成飞地）；\n   - 翻转带贴真实边界（BFS 窄带）——弦贴透镜会在弯折处切下尖端成 enclave；\n   - 弧矢按撤退板局部宽度封顶（窄板弧自动减弱，杜绝两弧对夹）；\n   - 最终多数票边界平滑（_relax_boundaries）溶解 <3 cell 辫带；\n   - enclave 守卫吸收 <600 cell 碎片。\n   验证：enclave=0、边界干净、弧 sag/chord 0.145–0.272 保持。\n\n2. 汇聚带沿弧分段（日本列岛式）：~800 km 波长 fBm 调制隆起幅度\n   [−0.25, 1.35]× 与带宽 0.7–1.3× → 主岛 + 小岛 + 弧间断陷海，替代均匀缎带。\n\n3. 裂谷海加强（geography.yaml）：radius 整体 ×1.7、strength 加强（首版太弱\n   碎成湖泊串）；中段加西支分叉（仿东非大裂谷 Western Rift）。验证：裂谷\n   走廊水体 100% 连通——单一陆间海。\n\ngaia-m 重建：22 板 CV=0.83，用户可视化验证通过。\n文档：terrain-pipeline.md §6.2 沿弧分段调制说明。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T23:30:28+08:00",
+          "tree_id": "fe382d4f15e1343842381b8a271edac75373aebd",
+          "url": "https://github.com/fyabc/dreamulator/commit/8dc3614573c7664b2eaa7226e1fe57fb65d7d844"
+        },
+        "date": 1786030439756,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 53.83478236648647,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007878804953173337",
+            "extra": "mean: 18.575351399999818 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6833940758473913,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05582772722639379",
+            "extra": "mean: 271.4887355000002 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3995259907168218,
+            "unit": "iter/sec",
+            "range": "stddev: 1.145303250254322",
+            "extra": "mean: 714.5276376666724 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 951.0675733562902,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004189360223655554",
+            "extra": "mean: 1.0514499999942473 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.96317428670423,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008918128377638019",
+            "extra": "mean: 5.102999600001112 msec\nrounds: 5"
           }
         ]
       }
