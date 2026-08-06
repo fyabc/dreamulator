@@ -543,6 +543,21 @@ def _asymmetric_boundary_effects(
     # with convergence rate but with diminishing returns (no hard cap).
     ref_rate = 5.0  # cm/yr — median plate speed
 
+    # Along-arc heterogeneity (Japan-type arcs: main island + islets +
+    # graben seas).  A medium-wavelength fBm (~800 km) modulates uplift
+    # amplitude AND belt width, so convergent belts segment instead of
+    # running as uniform ribbons.
+    from .noise_kernels import fbm_on_points
+
+    px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
+    py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
+    pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
+    arc_noise = fbm_on_points(
+        px, py, pz, int(config.seed) + 5150, octaves=2, lacunarity=2.0,
+        persistence=0.5, base_freq=8.0,
+    )
+    arc_u = 0.5 * (arc_noise + 1.0)  # [0, 1]
+
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
@@ -558,7 +573,15 @@ def _asymmetric_boundary_effects(
             # ---- Convergent: asymmetric mountain + trench ----------------
             # Narrower sigma for convergent belts (more focused deformation)
             sigma_conv = sigma * 0.8  # 400 km
-            sigma_front = sigma_conv * (1.0 - asym * 0.5)  # steep side
+            # Along-arc segmentation: belt width varies 0.7–1.3× and the
+            # amplitude factor spans [-0.25, 1.35] — high segments become
+            # main islands/mountain knots, low ones islets or shelf, negative
+            # ones subside into graben seas between arc segments.
+            u = arc_u[i]
+            seg_mod = 1.6 * u - 0.25
+            sigma_front = (
+                sigma_conv * (1.0 - asym * 0.5) * (0.7 + 0.6 * u)  # steep side
+            )
 
             # Mountain peak offset toward overriding plate (50–150 km)
             peak_offset = asym * sigma_conv * 0.25
@@ -573,7 +596,7 @@ def _asymmetric_boundary_effects(
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
-            delta_h[i] = amp * mountain * rate_factor
+            delta_h[i] = amp * mountain * rate_factor * seg_mod
 
             # Oceanic trench on the subducting side (100–200 km from peak).
             # Only oceanic crust subducts and forms a trench; continental

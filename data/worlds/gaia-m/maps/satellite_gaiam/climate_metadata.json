@@ -1,11 +1,11 @@
 {
   "temperature_range_c": [
-    -70.0,
+    -50.0,
     50.0
   ],
   "precipitation_range_mm": [
     0.0,
-    20090.0
+    20030.0
   ],
   "koppen_classes": [
     "Af",

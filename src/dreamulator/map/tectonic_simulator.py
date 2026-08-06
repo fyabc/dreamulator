@@ -429,6 +429,7 @@ def run_tectonic_evolution(
         cell_map = _trench_arc_relaxation(
             mesh, cell_map, plates_out, config.radius_km,
             config.trench_arc, arc_state,
+            smooth_rng=np.random.default_rng(config.seed + 909),
         )
         _rebuild_plate_cells(mesh, cell_map, plates_out)
         return plates_out, cell_map
@@ -1226,6 +1227,7 @@ def _trench_arc_relaxation(
     strength: float,
     arc_state: dict[tuple[str, str], float],
     locked: dict[int, str] | None = None,
+    smooth_rng: np.random.Generator | None = None,
 ) -> dict[int, str]:
     """Bend subduction boundaries into small-circle arcs (Frank 1968).
 
@@ -1265,6 +1267,22 @@ def _trench_arc_relaxation(
                 pair_cells.setdefault(key, []).append(cid)
                 break
 
+    # Local width of each plate (area / boundary length, in cells).  The arc
+    # sagitta is capped by this below: an arc deeper than a quarter of the
+    # retreat plate's width would pinch small plates into braided slivers
+    # (interweave regression, 2026-08-06).
+    area_cells: dict[str, int] = {}
+    for cid, pid in cell_plate_map.items():
+        area_cells[pid] = area_cells.get(pid, 0) + 1
+    boundary_len: dict[str, int] = {}
+    for (pa, pb), cells in pair_cells.items():
+        boundary_len[pa] = boundary_len.get(pa, 0) + len(cells)
+        boundary_len[pb] = boundary_len.get(pb, 0) + len(cells)
+    widths = {
+        pid: area_cells.get(pid, 0) / max(1, boundary_len.get(pid, 1))
+        for pid in area_cells
+    }
+
     for (pa, pb), cells in pair_cells.items():
         pla, plb = plate_dict.get(pa), plate_dict.get(pb)
         if pla is None or plb is None:
@@ -1291,8 +1309,59 @@ def _trench_arc_relaxation(
                     continue
                 _relax_segment(
                     mesh, new_map, sub_seg, pla, plb, radius_km, cell_km,
-                    strength, arc_state, locked,
+                    strength, arc_state, locked, widths,
                 )
+
+    # Enclave guard: arc flips can sever thin boundary protrusions into
+    # flying islands.  Absorb any disconnected fragment < 600 cells into its
+    # surrounding majority plate.  Only merges DISCONNECTED fragments of the
+    # same plate — standalone microplates (single component) are untouched.
+    from collections import deque
+
+    by_plate: dict[str, list[int]] = {}
+    for cid, pid in new_map.items():
+        by_plate.setdefault(pid, []).append(cid)
+    for pid, cells in by_plate.items():
+        cs = set(cells)
+        seen: set[int] = set()
+        comps: list[list[int]] = []
+        for s in cs:
+            if s in seen:
+                continue
+            comp = [s]
+            seen.add(s)
+            q = deque([s])
+            while q:
+                u = q.popleft()
+                for v in mesh.cells[u].neighbors:
+                    if v in cs and v not in seen:
+                        seen.add(v)
+                        comp.append(v)
+                        q.append(v)
+            comps.append(comp)
+        if len(comps) < 2:
+            continue
+        comps.sort(key=len, reverse=True)
+        for comp in comps[1:]:
+            if len(comp) >= 600:
+                continue
+            votes: dict[str, int] = {}
+            for cid in comp:
+                for v in mesh.cells[cid].neighbors:
+                    npid = new_map.get(v, "")
+                    if npid and npid != pid:
+                        votes[npid] = votes.get(npid, 0) + 1
+            target = max(votes, key=lambda k: votes[k]) if votes else pid
+            for cid in comp:
+                new_map[cid] = target
+
+    # Final boundary smoothing (only on the last application): dissolves
+    # residual <3-cell braids left by the arc/Voronoi superposition while
+    # preserving the wide arcs (majority-vote Laplacian, Cortial 2019 §3).
+    if smooth_rng is not None:
+        from .plate_generator import _relax_boundaries
+
+        _relax_boundaries(mesh, new_map, 0.12, smooth_rng)
     return new_map
 
 
@@ -1304,6 +1373,11 @@ def _split_bent_segment(
     A segment whose cells deviate from the endpoint chord by more than
     30% of the chord is bent; splitting at the farthest cell yields
     straighter sub-segments that each admit a small-circle arc fit.
+
+    The split is CONTIGUOUS along the boundary polyline (BFS order from one
+    endpoint): splitting by chord projection would interleave the arms of
+    Z/U-shaped boundaries into both children, giving garbage chord frames
+    and scattering arc flips into enclaves (regression of 2026-08-06).
     """
     if len(seg) < 24 or depth >= 2:
         return [seg]
@@ -1324,11 +1398,31 @@ def _split_bent_segment(
     k = int(np.argmax(np.abs(perp)))
     if abs(perp[k]) < 0.3 * chord:
         return [seg]
-    t_k = float((pts[k] - e0) @ t3)
-    a = [c for c, p in zip(seg, pts) if ((p - e0) @ t3) < t_k]
-    b = [c for c, p in zip(seg, pts) if ((p - e0) @ t3) >= t_k]
-    if not a or not b:
+
+    # Order the polyline contiguously from endpoint seg[i] (BFS within seg).
+    from collections import deque
+
+    segset = set(seg)
+    order: list[int] = [seg[int(i)]]
+    seen = {order[0]}
+    q: deque[int] = deque(order)
+    while q:
+        u = q.popleft()
+        for v in mesh.cells[u].neighbors:
+            if v in segset and v not in seen:
+                seen.add(v)
+                order.append(v)
+                q.append(v)
+    if len(order) != len(seg):
+        return [seg]  # fragmented polyline — keep as one, arcs skipped safely
+    try:
+        idx = order.index(seg[int(k)])
+    except ValueError:
         return [seg]
+    if idx < 6 or idx > len(order) - 6:
+        return [seg]
+    a = order[: idx + 1]
+    b = order[idx:]
     return _split_bent_segment(mesh, a, depth + 1) + _split_bent_segment(mesh, b, depth + 1)
 
 
@@ -1343,6 +1437,7 @@ def _relax_segment(
     strength: float,
     arc_state: dict[tuple[str, str], float],
     locked: dict[int, str],
+    widths: dict[str, float] | None = None,
 ) -> None:
     """Relax one boundary segment toward its kinematic small-circle arc.
 
@@ -1436,9 +1531,26 @@ def _relax_segment(
         return
     sag = cur * chord  # radians
 
-    # Cells of the retreat-side plate within 2× sagitta of the boundary.
-    sources = {c for c in seg if cell_map.get(c) == retreat.id}
-    band = _bfs_distance(mesh, sources, 2.0 * sag * radius_km, cell_km)
+    # Cap the arc on NARROW retreat plates (area/boundary ≈ half-strip-width).
+    # An arc comparable to the plate width pinches a small plate sandwiched
+    # between two larger ones into braided slivers with narrow necks
+    # (interweave regression of 2026-08-06): the two flanking arcs bulge
+    # toward each other and nearly touch across it.  Wide plates keep their
+    # full kinematic arc.
+    if widths is not None:
+        half_w = widths.get(retreat.id, 1e9)
+        if half_w < 12.0:
+            cell_ang = float(np.sqrt(4.0 * np.pi / mesh.num_cells))
+            sag = min(sag, 0.5 * half_w * cell_ang)
+            if sag < 0.01:
+                return
+
+    # Flip band hugs the ACTUAL boundary (BFS from boundary cells of both
+    # sides): on bent sub-segments the chord cuts across the bend interior,
+    # and a chord-anchored lens would sever the bend tip into an enclave
+    # (regression of 2026-08-06).  Kinks keep their raw corners — realistic.
+    sources = set(seg)
+    band = _bfs_distance(mesh, sources, 1.5 * sag * radius_km, cell_km)
 
     flipped = 0
     for cid in band:

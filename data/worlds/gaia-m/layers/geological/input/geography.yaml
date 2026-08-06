@@ -40,78 +40,97 @@ features:
   # ---- 大裂谷海：多段错列（en échelon）裂谷，仿东非大裂谷/红海 ----
   # 不用单一拉长偏置场（会产出笔直经向裂谷）；改用多段沿蜿蜒路径错列排布，
   # 走向左右摆动、宽窄不一，并叠加断块隆起（正场）与异常塌陷（更强负场）。
+  # 2026-08-06 v2：用户验证后整体 ×1.7 放大并加强（首版裂谷太弱，碎成湖泊串
+  # 而非陆间海）；各段仍拉开幅度，并有东非式分叉（西支）。
   - name: 大裂谷海·南段
     kind: rift_sea
     lon: -92.0
     lat: -25.0
-    radius_deg: 2.5
-    strength: -1.8              # 须超过世界岛(+0.85)才能切穿
-    elongation: 4.0             # 半长轴 ~10°，各段首尾相接成蜿蜒裂谷
-    bearing_deg: 15.0           # 段轴向左右摆动 → 蜿蜒走向
+    radius_deg: 5.4             # 宽深海段（红海型）
+    strength: -2.6              # 须超过世界岛(+0.85)才能切穿
+    elongation: 3.0
+    bearing_deg: 25.0           # 段轴向左右摆动 → 蜿蜒走向
   - name: 大裂谷海·中南段
     kind: rift_sea
-    lon: -88.5
+    lon: -88.0
     lat: -14.0
-    radius_deg: 2.8
-    strength: -1.9
-    elongation: 4.0
-    bearing_deg: -12.0
+    radius_deg: 3.1             # 窄弱段（半裂谷/夭折裂谷）
+    strength: -2.0
+    elongation: 5.0
+    bearing_deg: -30.0
   - name: 大裂谷海·中段
     kind: rift_sea
-    lon: -91.0
+    lon: -91.5
     lat: -3.0
-    radius_deg: 2.5
-    strength: -1.8
-    elongation: 4.2
-    bearing_deg: 22.0
+    radius_deg: 4.4
+    strength: -3.0              # 强切穿段
+    elongation: 3.5
+    bearing_deg: 40.0
   - name: 大裂谷海·中北段
     kind: rift_sea
-    lon: -87.5
+    lon: -87.0
     lat: 8.0
-    radius_deg: 2.7
-    strength: -1.9
-    elongation: 4.0
-    bearing_deg: -18.0
+    radius_deg: 2.6             # 最窄段
+    strength: -1.8              # 最弱段
+    elongation: 4.5
+    bearing_deg: -15.0
   - name: 大裂谷海·北段
     kind: rift_sea
     lon: -90.5
     lat: 19.0
+    radius_deg: 4.9
+    strength: -2.4
+    elongation: 2.6
+    bearing_deg: 30.0
+  # 西支分叉（仿东非大裂谷 Western Rift：从中段向 WNW 分出）
+  - name: 大裂谷海·西支南段
+    kind: rift_sea
+    lon: -97.5
+    lat: -1.0
+    radius_deg: 3.0
+    strength: -2.2
+    elongation: 3.0
+    bearing_deg: -70.0
+  - name: 大裂谷海·西支北段
+    kind: rift_sea
+    lon: -103.0
+    lat: 3.0
     radius_deg: 2.4
-    strength: -1.7
-    elongation: 4.0
-    bearing_deg: 12.0
+    strength: -1.8
+    elongation: 2.8
+    bearing_deg: -75.0
   # 断块隆起（正场小丘，裂谷肩抬升 / 未裂透的断块）
   - name: 裂谷肩断块隆起·南
     kind: plateau
     lon: -85.5
     lat: -9.0
-    radius_deg: 1.3
-    strength: 0.7               # 弱正场 → 裂谷边缘断块隆起
-    elongation: 2.0
+    radius_deg: 2.7
+    strength: 0.9               # 弱正场 → 裂谷边缘断块隆起
+    elongation: 2.4
     bearing_deg: -25.0
   - name: 裂谷肩断块隆起·北
     kind: plateau
     lon: -93.5
     lat: 12.0
-    radius_deg: 1.2
-    strength: 0.8
-    elongation: 2.2
+    radius_deg: 1.7
+    strength: 0.5
+    elongation: 1.8
     bearing_deg: 20.0
   # 异常塌陷（更强负场，裂谷内局部深陷 / 拉分盆地）
   - name: 裂谷塌陷盆地·中
     kind: rift_sea
     lon: -89.5
     lat: 2.0
-    radius_deg: 1.4
-    strength: -2.4              # 比裂谷主体更深 → 局部深陷
+    radius_deg: 3.1
+    strength: -3.0              # 比裂谷主体更深 → 局部深陷（模型下限 −3）
     elongation: 2.5
     bearing_deg: 15.0
   - name: 裂谷塌陷盆地·北
     kind: rift_sea
     lon: -89.0
     lat: 14.0
-    radius_deg: 1.2
-    strength: -2.2
+    radius_deg: 1.7
+    strength: -2.4
     elongation: 2.0
     bearing_deg: -18.0
 

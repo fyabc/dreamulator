@@ -978,6 +978,12 @@ def convergent_effect(distance_km, v_normal, crust_a, crust_b):
     return mountain + trench
 ```
 
+**沿弧分段调制（2026-08-06，日本列岛式岛链）**：实现
+（`terrain_synthesizer._asymmetric_boundary_effects`）在垂直剖面之上叠加
+~800 km 波长的沿弧 fBm 调制：隆起幅度系数 ∈ [−0.25, 1.35]、带宽度 ×0.7–1.3。
+高值段成主岛/山结，中值段成小岛/浅滩，负值段沉降为弧间断陷海——汇聚带不再
+是均匀缎带。（上节伪代码为早期示意，实际公式以源码为准。）
+
 #### 离散边界 (Divergent)
 
 ```
