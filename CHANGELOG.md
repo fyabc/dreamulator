@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] — 2026-08-06
+
+### Added
+
+- **地理锚定（geography.yaml）**：把命名地貌（大陆/洋盆/群岛/裂谷海/地峡/
+  高原…）编码为机器可读锚点 → 逐 cell 陆地偏置场 + 全局阈值分配地壳，命名
+  海陆落到指定位置；构造演化后自动重锚定（`reapply_after_tectonics`），
+  大陆不随板块漂移离开锚点。删除 geography.yaml 即回退随机大陆
+- **测试 CI**（`.github/workflows/tests.yml`）：pytest 硬门槛（全量、
+  --all-extras）+ ruff F,E9 硬门槛 + mypy 报告档（roadmap 功能性 #3 清偿）
+- `terrain generate` CLI 与 geological 引擎同源加载 geography.yaml，输出改
+  顶层 `maps/`（此前写 legacy 目录且从不加载锚定）
+
+### Changed
+
+- **板块大小偏态化**（roadmap #6 清偿）：可变密度 Poisson-disc 种子
+  （对数均匀 size-factor）→ 初始剖分偏态；裂解改加权 Dijkstra → 不等大碎片；
+  构造重采样改**乘法加权 Voronoi**（power diagram 图版本）——每板持出生面积
+  为持久权重、波前代价 ∝ 1/w。修复无权"质心→最近种子"重采样（= Lloyd 迭代，
+  吸引子为等面积 CVT）洗掉偏态的问题；最终 boundary warp 同传权重。
+  gaia-m 实测：26 板、CV 0.22→0.97、max/min ≈2000（地球主板块 ≈100×）
+- **板块边界曲率**（roadmap #7 清偿）：boundary_warp 噪声改低频 fBm
+  （base_freq=0.6，波长≈板块尺度），边界弯曲成岛弧状而非细碎锯齿
+- **前端图层系统重构**：kind 分组多选面板 + 烘焙/显示分离
+
+### Fixed
+
+- **板块数坍缩**：重分区按索引命名与裂解板块错位 + needs_resample 每步触发
+  → 板块流失至 6；现透传真实 plate_ids、种子去重、每 10 步/裂解后重分区
+- **地理锚定静默丢失**（2026-08-06 回归）：绕过 DAG 的生成路径不加载
+  geography.yaml，命名海陆全部丢失；修复加载链并记录 build 跳过判定
+  （`_outputs_exist` 只看输出存在）陷阱
+- **俯冲海沟缺失**（roadmap #8 清偿）：海沟凹陷仅限洋壳（陆陆碰撞无海沟），
+  relief 1.4→7 km；gaia-m 海洋最深 −4758→−10484 m（地球海沟 −8~−11 km）
+- F 类 lint 存量 19 项清零（未用变量/导入、无占位 f-string），
+  tests.yml 以 F,E9 门槛防回潮
+
+### gaia-m 重建实测
+
+26 板（CV=0.97）；海洋最深 −10484 m、最高峰 11737 m；均温 12.7 °C、
+13 个 Köppen 类；16 个锚定特征空间抽查 10 个完全命中、裂谷 7 段中 6 段
+中心为海（中南段为汇聚边界造山叠加残留，见 roadmap #9）
+
 ## [0.15.0] — 2026-08-04
 
 ### Added
