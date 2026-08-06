@@ -3666,6 +3666,17 @@ $$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathb
     偏态在质心旋转/边界迁移中保持。最终的 boundary warp 也传入同一权重，
     避免末次重分区再次均匀化。实现：`plate_generator.py::voronoi_partition_warped`
     （`plate_speed`/`locked` 参数）、`tectonic_simulator.py::_plate_speeds`
+11. **海沟/造山带小圆弧（Frank 1968 / Tovish 1978，涌现式）**: Voronoi 平分线
+    只能是测地线，产不出岛弧的小圆弧——真实机制是俯冲刚性球壳与球面的交线
+    （Frank 1968 *Curvature of Island Arcs*），弧半径与俯冲角/汇聚速率相关
+    （Tovish 1978）。每次 resample 后 `_trench_arc_relaxation` 从**当前**运动学
+    状态推断目标弧（欧拉极相对速度 → 汇聚速率 → 倾角 → 弧矢比 0.10–0.30），
+    把汇聚边界段松弛向该弧：洋壳俯冲凸向俯冲板（日本/阿留申式），陆陆碰撞
+    凸向 indenter（喜马拉雅/阿尔卑斯式，弧矢 ×0.7）。弧矢在 arc_state 中逐步
+    生长（每次 resample ×0.3 松弛）→ 弧度随演化涌现而非初始规定。弯折边界
+    先经 `_split_bent_segment` 在拐点拆成更直子段、各带独立弧。配置
+    `trench_arc`（0=关，默认 1）。gaia-m 实测：plate_002/016 碰撞带
+    sagitta/chord 0.14 → 0.18+（日本弧类比 ≈0.2）。
 
 ### D.12 自适应裂解率与真实地球数据
 

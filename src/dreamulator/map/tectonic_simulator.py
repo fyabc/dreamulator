@@ -415,7 +415,7 @@ def run_tectonic_evolution(
             f"Available: {sorted(_TECTONIC_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
-        plates_out, cell_map, plate_weight = _evolve_cortial2019(
+        plates_out, cell_map, plate_weight, arc_state = _evolve_cortial2019(
             mesh, plates, config, progress_callback=progress_callback,
         )
         # Noise-warp the FINAL partition (Cortial 2019 §3) — irregular
@@ -423,7 +423,14 @@ def run_tectonic_evolution(
         # size weights so the warp doesn't re-uniformise plate areas.
         if config.boundary_warp > 0:
             cell_map = warp_boundaries(mesh, cell_map, config, plate_weights=plate_weight)
-            _rebuild_plate_cells(mesh, cell_map, plates_out)
+        # The warp re-partitions from centroids (geodesic bisectors) and thus
+        # re-straightens the trench arcs developed during evolution — re-apply
+        # them on the final map before terrain synthesis.
+        cell_map = _trench_arc_relaxation(
+            mesh, cell_map, plates_out, config.radius_km,
+            config.trench_arc, arc_state,
+        )
+        _rebuild_plate_cells(mesh, cell_map, plates_out)
         return plates_out, cell_map
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
 
@@ -575,16 +582,18 @@ def _evolve_cortial2019(
     config: TerrainPipelineConfig,
     *,
     progress_callback: object | None = None,
-) -> tuple[list[TectonicPlate], dict[int, str], dict[str, float]]:
+) -> tuple[list[TectonicPlate], dict[int, str], dict[str, float], dict[tuple[str, str], float]]:
     """Cortial et al. (2019) original — centroid rotation + re-Voronoi.
 
     Each step: rotate plate centroids → Voronoi → boundaries shift → elevation.
 
-    Returns ``(plates, cell_plate_map, plate_weight)``.  ``plate_weight``
-    maps plate id → persistent size weight (area at birth, arbitrary scale):
-    the re-partition uses it as a multiplicatively-weighted Voronoi so the
-    skewed size distribution survives the Lloyd-style iteration instead of
-    relaxing to near-equal areas (see ``voronoi_partition_warped``).
+    Returns ``(plates, cell_plate_map, plate_weight, arc_state)``.
+    ``plate_weight`` maps plate id → persistent size weight (area at birth,
+    arbitrary scale): the re-partition uses it as a multiplicatively-weighted
+    Voronoi so the skewed size distribution survives the Lloyd-style iteration
+    instead of relaxing to near-equal areas (see ``voronoi_partition_warped``).
+    ``arc_state`` carries the developed trench-arc sagittae so the final
+    boundary warp can re-apply the arcs it re-straightens.
     """
     from .plate_generator import voronoi_partition_warped
 
@@ -607,9 +616,11 @@ def _evolve_cortial2019(
     plate_weight: dict[str, float] = {
         p.id: float(max(len(p.cell_ids), 1)) for p in plates
     }
+    # Developed trench-arc sagitta per (subducting, overriding) pair.
+    arc_state: dict[tuple[str, str], float] = {}
 
     if num_steps <= 0:
-        return plates, cell_plate_map, plate_weight
+        return plates, cell_plate_map, plate_weight, arc_state
 
     # Stage 1.2: canonical elevation/crust arrays for the whole evolution
     # (written back to cells once at the end) + cKDTree for nearest-cell
@@ -714,6 +725,14 @@ def _evolve_cortial2019(
                 ),
                 locked=locked,
             )
+            # Frank (1968) trench arcs: the Voronoi bisector above is a
+            # geodesic; relax convergent oceanic boundaries toward the
+            # small-circle arc implied by the current kinematics so arcs
+            # develop over the evolution.
+            new_cell_map = _trench_arc_relaxation(
+                mesh, new_cell_map, plates, radius_km,
+                config.trench_arc, arc_state, locked=locked,
+            )
             last_resample_step = step
             rifted_since_last_resample = False
         else:
@@ -798,7 +817,7 @@ def _evolve_cortial2019(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
         num_steps, len(plates), mesh.num_cells,
     )
-    return plates, prev_cell_map, plate_weight
+    return plates, prev_cell_map, plate_weight, arc_state
 
 
 def _rift_plates(
@@ -1197,6 +1216,256 @@ def _assign_distinct_seeds(
         used.add(chosen)
         seeds.append(chosen)
     return seeds
+
+
+def _trench_arc_relaxation(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    radius_km: float,
+    strength: float,
+    arc_state: dict[tuple[str, str], float],
+    locked: dict[int, str] | None = None,
+) -> dict[int, str]:
+    """Bend subduction boundaries into small-circle arcs (Frank 1968).
+
+    A subducting slab peels off the surface as a rigid spherical cap; its edge
+    (the trench) is the intersection of that cap with the sphere — a SMALL
+    CIRCLE.  That geometry is the origin of island-arc curvature (Frank 1968),
+    with arc radius correlated to slab dip and convergence rate (Tovish 1978;
+    Heuret & Lallemand 2005).  A Voronoi re-partition can NEVER produce it —
+    bisectors of point seeds are geodesics/Apollonius arcs — so after each
+    resample every convergent oceanic boundary segment is relaxed toward the
+    small-circle arc implied by the CURRENT kinematic state:
+
+        convergence rate (Euler poles) → slab dip (Tovish) → sagitta
+        sagitta develops gradually (arc_state relaxation) → the arc EMERGES
+        over the evolution instead of being authored up front.
+
+    The arc bulges OCEANWARD (into the subducting plate), as real trenches do
+    (Japan, Aleutians, Tonga).  Collision (continent–continent) segments are
+    left to the orogeny model.
+    """
+    if strength <= 0.0:
+        return cell_plate_map
+
+    locked = locked or {}
+    plate_dict = {p.id: p for p in plates}
+    new_map = dict(cell_plate_map)
+
+    cell_km = np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells)
+
+    # ---- boundary cells grouped by plate pair ----------------------------
+    pair_cells: dict[tuple[str, str], list[int]] = {}
+    for cid, pid in cell_plate_map.items():
+        for nid in mesh.cells[cid].neighbors:
+            npid = cell_plate_map.get(nid, "")
+            if npid and npid != pid:
+                key = (pid, npid) if pid < npid else (npid, pid)
+                pair_cells.setdefault(key, []).append(cid)
+                break
+
+    for (pa, pb), cells in pair_cells.items():
+        pla, plb = plate_dict.get(pa), plate_dict.get(pb)
+        if pla is None or plb is None:
+            continue
+        bset = set(cells)
+        # Connected segments within this pair's boundary
+        while bset:
+            start = next(iter(bset))
+            seg = [start]
+            bset.remove(start)
+            q = [start]
+            while q:
+                u = q.pop()
+                for v in mesh.cells[u].neighbors:
+                    if v in bset:
+                        bset.remove(v)
+                        seg.append(v)
+                        q.append(v)
+            # Long boundaries are often bent (L/Z-shaped); a single chord
+            # frame can't carry one arc — split at the corner into straighter
+            # sub-segments, each developing its own arc.
+            for sub_seg in _split_bent_segment(mesh, seg, depth=0):
+                if len(sub_seg) < 12:
+                    continue
+                _relax_segment(
+                    mesh, new_map, sub_seg, pla, plb, radius_km, cell_km,
+                    strength, arc_state, locked,
+                )
+    return new_map
+
+
+def _split_bent_segment(
+    mesh: CVTMesh, seg: list[int], depth: int,
+) -> list[list[int]]:
+    """Recursively split a boundary segment at its corner cell.
+
+    A segment whose cells deviate from the endpoint chord by more than
+    30% of the chord is bent; splitting at the farthest cell yields
+    straighter sub-segments that each admit a small-circle arc fit.
+    """
+    if len(seg) < 24 or depth >= 2:
+        return [seg]
+    pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg])
+    d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+    i, j = np.unravel_index(int(np.argmax(d2)), d2.shape)
+    e0, e1 = pts[i], pts[j]
+    chord = float(np.sqrt(d2[i, j])) + 1e-12
+    t3 = (e1 - e0) / chord
+    m = (e0 + e1) / 2.0
+    m /= np.linalg.norm(m)
+    n = np.cross(m, t3)
+    nn = np.linalg.norm(n)
+    if nn < 1e-9:
+        return [seg]
+    n /= nn
+    perp = (pts - e0) @ n
+    k = int(np.argmax(np.abs(perp)))
+    if abs(perp[k]) < 0.3 * chord:
+        return [seg]
+    t_k = float((pts[k] - e0) @ t3)
+    a = [c for c, p in zip(seg, pts) if ((p - e0) @ t3) < t_k]
+    b = [c for c, p in zip(seg, pts) if ((p - e0) @ t3) >= t_k]
+    if not a or not b:
+        return [seg]
+    return _split_bent_segment(mesh, a, depth + 1) + _split_bent_segment(mesh, b, depth + 1)
+
+
+def _relax_segment(
+    mesh: CVTMesh,
+    cell_map: dict[int, str],
+    seg: list[int],
+    pla: TectonicPlate,
+    plb: TectonicPlate,
+    radius_km: float,
+    cell_km: float,
+    strength: float,
+    arc_state: dict[tuple[str, str], float],
+    locked: dict[int, str],
+) -> None:
+    """Relax one boundary segment toward its kinematic small-circle arc.
+
+    The boundary bulges into the *retreat side*: for oceanic subduction that
+    is the subducting plate (trench rollback, Japan/Aleutians); for
+    continent–continent collision the orogen arcs convex toward the indenter
+    (Himalaya, Alps), approximated by the faster-converging plate.
+    """
+    # Oceanic fraction per side decides the regime.
+    def ocean_frac(pid: str) -> float:
+        n = 0
+        o = 0
+        for cid in seg:
+            if cell_map.get(cid) == pid:
+                n += 1
+                if mesh.cells[cid].crust_type == "oceanic":
+                    o += 1
+        return o / n if n else 0.0
+
+    fa, fb = ocean_frac(pla.id), ocean_frac(plb.id)
+    mid0 = _seg_mid(mesh, seg)
+    va = float(np.linalg.norm(_plate_velocity_cm_yr(pla, mid0, radius_km)))
+    vb = float(np.linalg.norm(_plate_velocity_cm_yr(plb, mid0, radius_km)))
+    if abs(fa - fb) > 0.2:
+        # One side oceanic → subduction: boundary retreats into the oceanic
+        # (subducting) plate.
+        retreat, other = (pla, plb) if fa > fb else (plb, pla)
+    elif max(fa, fb) >= 0.6:
+        # Ocean–ocean: the faster plate subducts.
+        retreat, other = (pla, plb) if va > vb else (plb, pla)
+    else:
+        # Continent–continent collision: orogen bulges toward the indenter
+        # (faster plate).  Gentler arcs than trenches.
+        retreat, other = (pla, plb) if va > vb else (plb, pla)
+
+    # Endpoints (diameter of the segment) and chord frame
+    pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg])
+    d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+    i, j = np.unravel_index(int(np.argmax(d2)), d2.shape)
+    e0, e1 = pts[i], pts[j]
+    chord = float(np.sqrt(d2[i, j]))
+    if chord < 0.15:  # < ~1000 km — too short to carry a meaningful arc
+        return
+    t3 = (e1 - e0) / chord
+
+    side_ret = np.array([
+        np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == retreat.id]),
+        np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == retreat.id]),
+        np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == retreat.id]),
+    ])
+    side_oth = np.array([
+        np.mean([mesh.cells[c].x for c in seg if cell_map.get(c) == other.id]),
+        np.mean([mesh.cells[c].y for c in seg if cell_map.get(c) == other.id]),
+        np.mean([mesh.cells[c].z for c in seg if cell_map.get(c) == other.id]),
+    ])
+    # Normal = perpendicular to the chord in the local tangent plane (a side-
+    # mean difference can be parallel to the chord on bent segments).  Sign it
+    # toward the other (non-retreat) side.
+    mid0 = (e0 + e1) / 2.0
+    mid0 /= np.linalg.norm(mid0)
+    n_so = np.cross(mid0, t3)
+    nn = np.linalg.norm(n_so)
+    if nn < 1e-9:
+        return
+    n_so /= nn
+    if (side_oth - side_ret) @ n_so < 0:
+        n_so = -n_so
+
+    # Convergence rate at the midpoint (cm/yr) → slab dip → target sagitta.
+    mid = (e0 + e1) / 2.0
+    mid /= np.linalg.norm(mid)
+    v_ret = _plate_velocity_cm_yr(retreat, mid, radius_km)
+    v_oth = _plate_velocity_cm_yr(other, mid, radius_km)
+    approach = float((v_ret - v_oth) @ n_so)
+    if approach < 0.5:
+        return  # not convergent (transform/divergent) — no arc forcing
+    # Tovish (1978): faster convergence → steeper dip → tighter arc.
+    dip_deg = float(np.clip(70.0 - 1.5 * approach, 30.0, 70.0))
+    cc = max(fa, fb) < 0.6
+    s_target = strength * (0.10 + 0.20 * (dip_deg - 30.0) / 40.0)
+    if cc:
+        s_target *= 0.7  # collision orogens arc gentler than trenches
+
+    # Develop gradually: the arc grows over successive resamples instead of
+    # appearing in one step (emergent in time, not authored).
+    key = (retreat.id, other.id)
+    cur = arc_state.get(key, 0.0)
+    cur += (s_target - cur) * 0.3
+    arc_state[key] = cur
+    if cur < 0.03:
+        return
+    sag = cur * chord  # radians
+
+    # Cells of the retreat-side plate within 2× sagitta of the boundary.
+    sources = {c for c in seg if cell_map.get(c) == retreat.id}
+    band = _bfs_distance(mesh, sources, 2.0 * sag * radius_km, cell_km)
+
+    flipped = 0
+    for cid in band:
+        if locked and cid in locked:
+            continue
+        if cell_map.get(cid) != retreat.id:
+            continue
+        p = np.array([mesh.cells[cid].x, mesh.cells[cid].y, mesh.cells[cid].z])
+        rel = p - e0
+        t = float(np.clip((rel @ t3) / chord, 0.0, 1.0))
+        h = float(rel @ n_so)  # >0 toward the other side
+        h_arc = -4.0 * sag * t * (1.0 - t)  # parabola: 0 at ends, -sag mid
+        if h_arc < h < 0.0 and 0.02 < t < 0.98:
+            cell_map[cid] = other.id
+            flipped += 1
+    if flipped:
+        logger.info(
+            "  Trench arc: %s→%s dip=%.0f° sag=%.0f km, %d cells retreated",
+            retreat.id, other.id, dip_deg, sag * radius_km, flipped,
+        )
+
+
+def _seg_mid(mesh: CVTMesh, seg: list[int]) -> np.ndarray:
+    v = np.mean(
+        [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg], axis=0,
+    )
+    return v / np.linalg.norm(v)
 
 
 def warp_boundaries(

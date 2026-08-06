@@ -203,11 +203,14 @@
    （1969→6 cell；6 cell≈3.5 万 km²，复活节岛微板块尺度）。
    若需更强偏律：加大种子 size-factor / 裂解权重范围，或直接按截断幂律抽取
    出生权重——机制已就位，只差参数（见 terrain-pipeline.md §3.2、§D.11）。
-7. **板块边界曲率增强（已完成）** — ✅ 已修复（2026-08-06）。板块边界原是
-   Voronoi 测地边（长而平直）；现 boundary_warp 用**低频 fBm**（波长≈板块尺度）
-   扭曲距离度量（`build_cell_cost`），边界弯曲成岛弧状弧形而非细碎锯齿
-   （gaia-m boundary_warp=0.9）。（注：板块数过少 bug 已修——重分区命名错配 +
-   needs_resample 每步触发，修后 6→25 板。）
+7. **板块边界曲率增强（已完成）** — ✅ 已修复（2026-08-06）。两层机制：
+   (a) boundary_warp 用**低频 fBm**（波长≈板块尺度）扭曲距离度量，边界不再
+   细碎锯齿；(b) **小圆弧涌现机制**（Frank 1968 / Tovish 1978）：Voronoi 平分线
+   几何上产不出岛弧，现每次 resample 从当前运动学（汇聚速率→倾角→弧矢）把
+   俯冲/碰撞边界松弛向小圆弧，弧矢随演化逐步生长（`_trench_arc_relaxation`，
+   config `trench_arc`）。gaia-m plate_002/016 碰撞带 sagitta/chord
+   0.14→**0.184**（日本弧 ≈0.2）。（注：板块数过少 bug 已修——重分区命名
+   错配 + needs_resample 每步触发。）
 8. ~~缺少俯冲海沟，海洋最大深度偏低~~ → ✅ 已修复（2026-08-05）。原
    `_asymmetric_boundary_effects` 海沟仅 −1400 m 且未限定洋壳；现改为仅洋壳、
    俯冲侧 ~7 km 减压（`_TRENCH_RELIEF_M`），gaia-m 海洋最深 −4758 → −10484 m

@@ -61,6 +61,15 @@ class TerrainPipelineConfig:
     # instead of long straight lines).  Applied to the FINAL partition (after
     # tectonics) via a noise-weighted multi-source Dijkstra.
     boundary_warp: float = 0.0
+    # Trench arc curvature — Frank (1968) small-circle mechanism: a subducting
+    # slab indents the surface as a rigid spherical cap, so the trench traces a
+    # SMALL CIRCLE (island-arc curvature; radius ↔ slab dip ↔ convergence rate,
+    # Tovish 1978).  Voronoi bisectors can never produce this, so convergent
+    # oceanic boundaries are relaxed toward the arc after each tectonic
+    # resample; the arc DEVELOPS over the evolution from the current kinematic
+    # state (not authored).  0 = off; 1 = full dip-dependent sagitta
+    # (0.10–0.30 × chord, bulging oceanward).
+    trench_arc: float = 1.0
     # Per-plate continental fraction range.  Each plate is assigned a random
     # continental cell ratio uniformly in [min, max].  Earth ≈ 0.29 land
     # (emergent), but the crust-type continental fraction should be higher
