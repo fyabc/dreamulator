@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786062476410,
+  "lastUpdate": 1786064674421,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -470,6 +470,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000055842645879541065",
             "extra": "mean: 5.100518199998305 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "3adc2cbb81de255e221fb807f5e7182f9659aaee",
+          "message": "feat(maps): 高度图导入 UI + map.yaml 导入溯源（问题 1 阶段 1）\n\n- 前端：MapViewerPage 顶栏 ImportElevationButton（隐藏 file input +\n  覆盖确认 + 导入中态）；成功后 invalidate elevation/voronoi/cvtMesh/\n  plates/mapMeta 五个 query（staleTime 5min 必须主动失效）；结果 banner\n  展示 source_format/输出分辨率/stale_layers；plates 404 时左栏空态提示；\n  静态模式按钮禁用（client.ts 既有 liveOnly 守卫）\n- 后端：import-elevation 端点 +notes Form 参数；新增\n  ElevationImportProvenance 模型与 MapManager.record_elevation_import，\n  溯源写入 map.yaml（导入图不含板块构造数据的机器可读标记）\n- 测试：test_import_elevation.py（importer 形状/重采样/溯源落盘）\n- 文档：usage/map-workflow.md §10、CHANGELOG\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T09:03:45+08:00",
+          "tree_id": "bef0a3d87a2e80ff393f18a36c120f79c0bc076d",
+          "url": "https://github.com/fyabc/dreamulator/commit/3adc2cbb81de255e221fb807f5e7182f9659aaee"
+        },
+        "date": 1786064673927,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 78.69441557672307,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0066069605741811",
+            "extra": "mean: 12.707381999997835 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.8173332042095405,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05758010541445486",
+            "extra": "mean: 207.58373099999972 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9734917600242676,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8160236920474656",
+            "extra": "mean: 506.71607566666665 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1028.4142633688389,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000815446260597983",
+            "extra": "mean: 972.3707999967246 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 261.6177099702568,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007088999060446752",
+            "extra": "mean: 3.8223711999989973 msec\nrounds: 5"
           }
         ]
       }
