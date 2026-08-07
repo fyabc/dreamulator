@@ -601,6 +601,15 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
   与 feature 叠用（raster 定大形、feature 钉裂谷/地峡高程）；
 - 分支友好：raster 存 geological input，分支可替换/继承（resolver 逐层向上搜）。
 
+**格式与采样**（作者向完整规范见 `../usage/map-workflow.md` §10 格式规范）：
+等距圆柱、任意分辨率；`sample_raster_at_cells` 按 cell 中心
+`lon_lat_to_pixel`（像素中心约定，不 wrap）最近像素采样。解码经
+`importer.import_heightmap`：16-bit PNG 全精度、16-bit TIFF、32-bit float TIFF
+（越界 min-max 归一）、8-bit PNG（256 级，警告）、多通道取首通道；
+灰度 [0,1] → bias = 2v−1。上传端点统一重编码 `encode_elevation(…, 0, 1)`
+落 16-bit PNG。仅 `config.geography is not None` 时参与（`geography.yaml`
+可零 features）。
+
 #### 海平面偏移旋钮（sea_level_offset_m）
 
 `terrain_config.yaml` 新增 `sea_level_offset_m`（默认 0）。校准（"倒水"）仍按
