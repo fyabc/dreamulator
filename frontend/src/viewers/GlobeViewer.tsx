@@ -67,7 +67,7 @@ interface GlobeViewerProps {
   /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
   dayNight?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
-  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null) | null>
+  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ interface GlobeSceneProps {
   solarDeclinationDeg?: number
   dayNight?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
-  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null) | null>
+  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
 
 // North-pole fly animation duration (ms)
@@ -325,10 +325,15 @@ function GlobeScene({
       // screen projection degenerates).  Fade them to avoid visual noise.
       const edgeFade = Math.min(1, facing * 4)  // 0=barely visible, 1=center
       const screenPos = worldPos.clone().project(camera)
+      // At default dist≈5: scale=0.6 (3D globe shows entire planet → arrows smaller).
+      // Zoomed in: grows to cap 2.5×.  Zoomed out: floor 0.3×.
+      const dist = camera.position.length()
+      const zoomScale = Math.max(0.3, Math.min(2.5, 3.0 / Math.max(dist, 1.0)))
       return {
         x: (screenPos.x * 0.5 + 0.5) * w,
         y: (-screenPos.y * 0.5 + 0.5) * h,
         edgeFade,
+        zoomScale,
       }
     }
   })

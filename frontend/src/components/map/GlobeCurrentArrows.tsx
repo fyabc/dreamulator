@@ -5,7 +5,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { VoronoiCell } from '../../viewers/map/types'
 
-type ProjectFn = (lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null
+type ProjectFn = (lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null
 
 interface Props {
   projectRef: React.MutableRefObject<ProjectFn | null>
@@ -16,7 +16,7 @@ interface Props {
 const WARM = '#e040fb'
 const COLD = '#00bcd4'
 const GRID_STEP = 4.5
-const ARROW_SCALE = 0.42
+const ARROW_SCALE = 1.0
 
 export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOpacity }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -24,6 +24,7 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
 
   // Pre-sampled arrow data (computed only when cells/opacity change)
   const arrowsRef = useRef<{ lon: number; lat: number; u: number; v: number; warm: boolean }[]>([])
+  const maxSpdRef = useRef(0)
 
   // Rebuild arrow sample set when cells or opacity change
   useEffect(() => {
@@ -45,8 +46,10 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
     }
     if (ocean.length === 0 || maxSpd < 1e-9) {
       arrowsRef.current = []
+      maxSpdRef.current = 0
       return
     }
+    maxSpdRef.current = maxSpd
 
     // 2° bin → fastest cell
     const bins = new Map<string, OC>()
@@ -68,7 +71,7 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
         const oc = bins.get(key)
         if (!oc) continue
         const speed = Math.sqrt(oc.u * oc.u + oc.v * oc.v)
-        if (speed < maxSpd * 0.01) continue
+        if (speed < 1e-9) continue
         sampled.push({ lon: oc.lon, lat: oc.lat, u: oc.u, v: oc.v, warm: oc.sstAnom > 0 })
       }
     }
@@ -110,7 +113,8 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
       ctx.globalAlpha = currentOpacity * p.edgeFade
       const angle = Math.atan2(a.v, a.u)
       const speed = Math.sqrt(a.u * a.u + a.v * a.v)
-      const len = Math.max(8, speed * 80 * ARROW_SCALE)
+      const speedFrac = speed / (maxSpdRef.current || 1)
+      const len = (1.5 + 13.5 * Math.sqrt(Math.min(speedFrac, 1))) * ARROW_SCALE * (p.zoomScale ?? 1)
       const tipX = p.x + Math.cos(angle) * len
       const tipY = p.y - Math.sin(angle) * len
 

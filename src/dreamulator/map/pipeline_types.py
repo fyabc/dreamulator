@@ -244,6 +244,10 @@ class TerrainPipelineConfig:
     evaporation_base_mm: float = 2000.0  # annual evaporation at tropical ocean surface
     orographic_efficiency: float = 0.5  # fraction of moisture converted to rain per km uplift
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
+    # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)
+    sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for gaia-m)
+    sub_planet_longitude_deg: float = 0.0  # longitude of the sub-planet point
+
     # Ocean
     ocean_currents_enabled: bool = True  # compute wind-driven surface currents (3A.3)
     ocean_drag_coefficient: float = 1.2e-3  # surface drag C_D

@@ -97,6 +97,13 @@ climate:
   lat_gradient_c: 30.0        # 地球默认 40.0
   hadley_extent_deg: 55.0     # 地球默认 30.0
   polar_cell_start_deg: 75.0  # 地球默认 60.0
+  # Sub-Aegis hemisphere warming: tidally-locked to gas giant →
+  # Aegis IR + reflected starlight ≈ 1–1.5 W/m² → ~1°C warmer
+  # on the permanently planet-facing side.  This fixed longitudinal
+  # temperature gradient drives wind & ocean currents on a slow
+  # rotator where Coriolis-driven circulation is inherently weak.
+  sub_planet_warming_c: 1.0
+  sub_planet_longitude_deg: 0.0  # Aegis深渊洋 = 向星点 (geography.yaml)
 
 # ── 导出设置 ──────────────────────────────────────────────────────────────────
 export:

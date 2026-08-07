@@ -210,7 +210,7 @@ export default function MapSvgOverlay({
 
     // Fixed lat/lon grid — uniform spatial density, textbook quiver-plot look
     const gridStep = 4.5  // degrees
-    const arrowScale = 0.42  // 0.6 × 0.7
+    const arrowScale = 1.0  // fixed pixel size, no zoom scaling
     const elements: JSX.Element[] = []
 
     // 2°-bin spatial index → fastest ocean cell in each bin
@@ -235,17 +235,19 @@ export default function MapSvgOverlay({
         if (idx === undefined) continue
         const oc = oceanCells[idx]
         const speed = Math.sqrt(oc.u * oc.u + oc.v * oc.v)
-        if (speed < maxSpd * 0.01) continue
+        if (speed < 1e-9) continue  // skip only truly still water
 
       const angle = Math.atan2(oc.v, oc.u)  // flow direction (radians)
 
       const p = project(oc.lon, oc.lat)
       if (p.x < -80 || p.x > viewWidth + 80 || p.y < -80 || p.y > viewHeight + 80) continue
 
-      // Arrow geometry
+      // Arrow geometry — sqrt stretch, scales with zoom, ~original size at 1x
       const speedFrac = Math.min(speed / maxSpd, 1.0)
-      const baseLen = 10 + speedFrac * 25
-      const len = Math.min(baseLen * zoom * arrowScale, 45)
+      const len = Math.min(
+        (1.5 + 13.5 * Math.sqrt(speedFrac)) * zoom * arrowScale,
+        50,
+      )
       const tipX = p.x + Math.cos(angle) * len
       const tipY = p.y - Math.sin(angle) * len  // SVG y down
 

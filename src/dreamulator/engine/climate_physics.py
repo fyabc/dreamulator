@@ -273,25 +273,44 @@ def hadley_cell_wind(
     mesh_nodes_xyz: np.ndarray,
     hadley_extent_deg: float = 30.0,
     polar_cell_start_deg: float = 60.0,
+    rotation_period_days: float = 1.0,
 ) -> np.ndarray:
-    """Simplified Hadley / Ferrel / Polar cell wind circulation.
+    """Three-cell atmospheric circulation: zonal + meridional surface winds.
 
-    Produces zonally-averaged meridional (N-S) and zonal (E-W) wind
-    components from the three-cell model of atmospheric circulation.
+    Cell boundaries (parameterized, roadmap 3A.3a):
+        0°–H: Hadley cell  → surface equatorward + easterly (trade winds)
+        H°–P°: Ferrel cell → surface poleward + westerly
+        P°–90°: Polar cell  → surface equatorward + easterly
 
-    Cell boundaries (parameterized, 3A.3a):
-        0°–H: Hadley cell  → surface trade winds (E→W in tropics)
-        H°–P°: Ferrel cell → surface westerlies (W→E in mid-latitudes)
-        P°–90°: Polar cell  → surface easterlies (E→W near poles)
+    Earth reference: H=30°, P=60°.  Slow rotators (weak Coriolis) have an
+    expanded Hadley cell.
 
-    Earth defaults H=30°, P=60°.  Slow rotators (weak Coriolis) have an
-    expanded Hadley cell (~Ω^-1/2 scaling); gaia-m uses H=55°, P=75°.
+    Wind speeds scale with rotation rate as Ω^(-1/3) (Hill et al. 2019,
+    J. Atmos. Sci. 76, doi:10.1175/JAS-D-18-0180.1 — both Hadley cell
+    width and strength scale identically with Ω).  The scaling factor is
+    (P_planet / P_earth)^(1/3).
+
+    Meridional (N-S) surface wind direction follows the three-cell model:
+    Hadley and Polar cells transport air equatorward at the surface; the
+    Ferrel cell transports air poleward.  This is the primary source of
+    ∂τ_north/∂x_east in the wind-stress curl that drives ocean gyres.
+
+    References:
+        Hill, S. A., S. Bordoni, and J. L. Mitchell (2019). "Constraints
+        from invariant subtropical vertical velocities on the scalings of
+        Hadley cell strength and downdraft width with rotation rate."
+        J. Atmos. Sci., 76, doi:10.1175/JAS-D-18-0180.1.
+        Held, I. M., and A. Y. Hou (1980). "Nonlinear axially symmetric
+        circulations in a nearly inviscid atmosphere." J. Atmos. Sci.,
+        37, 515–533.
 
     Args:
         lat_rad: Latitude in radians, shape (N,).
         mesh_nodes_xyz: Unit sphere coordinates, shape (N, 3).
         hadley_extent_deg: Hadley cell poleward boundary H (°).
         polar_cell_start_deg: Polar cell equatorward boundary P (°).
+        rotation_period_days: Rotation period in Earth days (1.0 = Earth).
+            Used for Ω^(-1/3) wind-speed scaling.
 
     Returns:
         Wind velocity vectors (m/s) tangent to sphere, shape (N, 3).
@@ -301,35 +320,88 @@ def hadley_cell_wind(
     h = float(hadley_extent_deg)
     p = float(polar_cell_start_deg)
 
-    # Zonal (E-W) wind speed: positive = eastward (westerly), negative = westward (easterly)
+    # ── Ω^(-1/3) wind-speed scaling (Hill et al. 2019) ──
+    omega_scale = rotation_period_days ** (1.0 / 3.0)  # (P/P⊕)^(1/3)
+
+    # ── Zonal (E-W) wind ──
+    # positive = eastward (westerly), negative = westward (easterly)
     zonal_speed = np.zeros(n, dtype=np.float64)
+    # Base speeds (Earth, Ω=Ω⊕); scaled by omega_scale for other rotators.
+    Z_HADLEY = -5.0 * omega_scale     # peak easterly (trade winds) at equator
+    Z_FERREL = 8.0 * omega_scale      # peak westerly at cell centre
+    Z_POLAR = -3.0 * omega_scale      # peak easterly at pole
 
-    # Hadley cell: equator → H: trade winds (easterly), peak at equator
+    # Hadley: equator → H — easterly, peak at equator
     hadley_mask = np.abs(lat_deg) < h
-    zonal_speed[hadley_mask] = -5.0 * np.cos(np.pi * lat_deg[hadley_mask] / (2.0 * h))
+    zonal_speed[hadley_mask] = Z_HADLEY * np.cos(
+        np.pi * lat_deg[hadley_mask] / (2.0 * h)
+    )
 
-    # Ferrel cell: H → P: westerlies, peak at cell centre
+    # Ferrel: H → P — westerly, peak at cell centre
     ferrel_mask = (np.abs(lat_deg) >= h) & (np.abs(lat_deg) < p)
-    zonal_speed[ferrel_mask] = 8.0 * np.cos(
+    zonal_speed[ferrel_mask] = Z_FERREL * np.cos(
         np.pi * (np.abs(lat_deg[ferrel_mask]) - (h + p) / 2.0) / (p - h)
     )
 
-    # Polar cell: P → 90°: polar easterlies, peak at pole
+    # Polar: P → 90° — easterly, peak at pole
     polar_mask = np.abs(lat_deg) >= p
-    zonal_speed[polar_mask] = -3.0 * np.cos(
+    zonal_speed[polar_mask] = Z_POLAR * np.cos(
         np.pi * (90.0 - np.abs(lat_deg[polar_mask])) / (2.0 * (90.0 - p))
     )
 
-    # Convert zonal wind to 3D tangent vectors
+    # ── Meridional (N-S) wind ──
+    # positive = northward, negative = southward
+    # Base magnitude (Earth); scaled by omega_scale.
+    M = 3.0 * omega_scale  # m/s, peak meridional surface wind
+
+    merid_speed = np.zeros(n, dtype=np.float64)
+
+    # Hadley: surface branch flows equatorward
+    #   NH (lat>0): equatorward = south → negative (−M)
+    #   SH (lat<0): equatorward = north → positive (+M)
+    #   Profile: sin(π·|lat|/h), peaks at h/2
+    merid_speed[hadley_mask] = (
+        -np.sign(lat_deg[hadley_mask])
+        * M
+        * np.sin(np.pi * np.abs(lat_deg[hadley_mask]) / h)
+    )
+
+    # Ferrel: surface branch flows poleward (opposite of Hadley)
+    #   NH: poleward = north → positive (+M)
+    #   SH: poleward = south → negative (−M)
+    merid_speed[ferrel_mask] = (
+        np.sign(lat_deg[ferrel_mask])
+        * M
+        * 0.6  # Ferrel meridional is weaker than Hadley
+        * np.sin(
+            np.pi
+            * (np.abs(lat_deg[ferrel_mask]) - h)
+            / (p - h)
+        )
+    )
+
+    # Polar: surface branch flows equatorward (same direction as Hadley)
+    #   NH: south → negative; SH: north → positive
+    merid_speed[polar_mask] = (
+        -np.sign(lat_deg[polar_mask])
+        * M
+        * 0.5  # polar meridional is weaker still
+        * np.sin(
+            np.pi
+            * (90.0 - np.abs(lat_deg[polar_mask]))
+            / (90.0 - p)
+        )
+    )
+
+    # ── Combine zonal + meridional into 3D tangent vectors ──
     wind = np.zeros((n, 3), dtype=np.float64)
     for i in range(n):
-        if abs(zonal_speed[i]) < 1e-9:
+        if abs(zonal_speed[i]) < 1e-9 and abs(merid_speed[i]) < 1e-9:
             continue
-        # East direction at this point: tangent to the latitude circle
         node = mesh_nodes_xyz[i]
         # Local north: (0, 1, 0) projected to tangent plane
-        north = np.array([0.0, 1.0, 0.0], dtype=np.float64)
-        north_tangent = north - np.dot(north, node) * node
+        north_vec = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        north_tangent = north_vec - np.dot(north_vec, node) * node
         north_norm = np.linalg.norm(north_tangent)
         if north_norm < 1e-9:
             continue
@@ -340,7 +412,7 @@ def hadley_cell_wind(
         if east_norm < 1e-9:
             continue
         east /= east_norm
-        wind[i] = east * zonal_speed[i]
+        wind[i] = east * zonal_speed[i] + north_tangent * merid_speed[i]
 
     return wind
 

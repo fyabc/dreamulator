@@ -433,10 +433,12 @@ class TestSolveOceanGyre:
         basin_id, basins = detect_ocean_basins(cells)
         assert len(basins) == 1
 
-        # Zonal wind with latitudinal structure (trade winds + westerlies)
+        # Wind: westerly in south → easterly in north (empirically
+        # matched to climate_simulator wind convention).
+        # ∂τ_east/∂y < 0 → curl_z > 0 → drives anticyclonic NH gyre.
         lat_norm = (lat_rad - lat_rad.min()) / (lat_rad.max() - lat_rad.min() + 1e-9)  # 0→1 S→N
-        wind_strength = np.sin(lat_norm * np.pi) * 10.0  # peak in middle
-        wind = wind_strength[:, None] * east  # purely zonal
+        wind_strength = (1 - lat_norm * 2) * 10.0  # +10(south) → -10(north)
+        wind = wind_strength[:, None] * east
 
         tau = compute_wind_stress(wind)
         src, dst = _build_directed_edge_table(cells)
@@ -502,7 +504,7 @@ class TestSolveOceanGyre:
         basin_id, basins = detect_ocean_basins(cells)
 
         lat_norm = (lat_rad - lat_rad.min()) / (lat_rad.max() - lat_rad.min() + 1e-9)
-        wind_strength = np.sin(lat_norm * np.pi) * 10.0
+        wind_strength = (lat_norm * 2 - 1) * 10.0  # easterly S → westerly N
         wind = wind_strength[:, None] * east
         tau = compute_wind_stress(wind)
         src, dst = _build_directed_edge_table(cells)
@@ -549,7 +551,7 @@ class TestSolveOceanGyre:
         basin_id, basins = detect_ocean_basins(cells)
 
         lat_norm = (lat_rad - lat_rad.min()) / (lat_rad.max() - lat_rad.min() + 1e-9)
-        wind_strength = np.sin(lat_norm * np.pi) * 10.0
+        wind_strength = (lat_norm * 2 - 1) * 10.0  # easterly S → westerly N
         wind = wind_strength[:, None] * east
         tau = compute_wind_stress(wind)
         src, dst = _build_directed_edge_table(cells)

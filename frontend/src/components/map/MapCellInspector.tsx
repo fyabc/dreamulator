@@ -324,6 +324,13 @@ function CellDetails({
           </>
         )}
 
+        {(cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null) && (
+          <>
+            <div className="border-t border-space-border pt-1 mt-1" />
+            <OceanCurrentDetail u={cell.ocean_current_east_m_s} v={cell.ocean_current_north_m_s} sstAnom={cell.sst_anomaly_c ?? 0} />
+          </>
+        )}
+
         {cell.biome && (
           <>
             <div className="border-t border-space-border pt-1 mt-1" />
@@ -341,6 +348,45 @@ function CellDetails({
         )}
       </dl>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Ocean current detail (inserted into CellDetails for ocean cells)
+// ---------------------------------------------------------------------------
+
+const DIR_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+
+function OceanCurrentDetail({ u, v, sstAnom }: { u: number; v: number; sstAnom: number }) {
+  const speed = Math.sqrt(u * u + v * v) * 100  // m/s → cm/s
+  const dirIdx = Math.round((Math.atan2(v, u) * 180 / Math.PI + 360) % 360 / 45) % 8
+  const warm = sstAnom > 0
+  const color = warm ? '#e040fb' : '#00bcd4'
+  const label = warm ? '暖流' : '寒流'
+  const uc = u * 100; const vc = v * 100
+  return (
+    <>
+      <div className="flex justify-between">
+        <dt className="text-gray-500">洋流方向</dt>
+        <dd className="font-mono" style={{ color }}>
+          {DIR_LABELS[dirIdx]}（{label}）
+        </dd>
+      </div>
+      <div className="flex justify-between">
+        <dt className="text-gray-500">流速</dt>
+        <dd className="font-mono" style={{ color }}>
+          {speed.toFixed(2)} cm/s
+        </dd>
+      </div>
+      <div className="flex justify-between">
+        <dt className="text-gray-500">东分量</dt>
+        <dd className="font-mono">{uc >= 0 ? '+' : ''}{uc.toFixed(1)}</dd>
+      </div>
+      <div className="flex justify-between">
+        <dt className="text-gray-500">北分量</dt>
+        <dd className="font-mono">{vc >= 0 ? '+' : ''}{vc.toFixed(1)}</dd>
+      </div>
+    </>
   )
 }
 

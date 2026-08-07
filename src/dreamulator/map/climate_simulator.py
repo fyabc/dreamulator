@@ -145,6 +145,14 @@ def simulate_climate(
         t_surf_C,
     )
 
+    # Sub-planet hemisphere warming (e.g. gaia-m: Aegis IR + reflected light)
+    if config.sub_planet_warming_c > 0:
+        lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
+        # Cosine falloff from sub-planet point, zero on anti-planet side
+        cos_lon = np.cos(lon_rad - np.radians(config.sub_planet_longitude_deg))
+        warming = config.sub_planet_warming_c * np.maximum(0, cos_lon)
+        t_mean_C += warming
+
     # Seasonal extremes
     seasonal = seasonal_temperature(
         t_mean_C,
@@ -181,6 +189,7 @@ def simulate_climate(
         nodes_xyz,
         hadley_extent_deg=config.hadley_extent_deg,
         polar_cell_start_deg=config.polar_cell_start_deg,
+        rotation_period_days=config.rotation_period_days,
     )
 
     # Combine: 40% geostrophic + 60% cell circulation
