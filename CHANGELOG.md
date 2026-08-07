@@ -7,12 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-08-08
+
+### Added
+
+- **基础洋流系统（roadmap 3A.3）**：Stommel 正压流函数模型，GMRES 在 CVT 球面网格上求解
+  - 纯计算模块 `ocean_circulation.py`：风应力 / curl_z（梯度-分量方式，零边几何）/
+    盆地 BFS 检测 / 图 Laplacian + 东向梯度算子稀疏组装 / 每盆地 GMRES 求解
+  - 管线集成：climate_simulator stage 2.5（风→curl→Stommel→SST 沿流平流松弛）
+  - 27 单元测试（矩形盆地 gyre 方向/WBC 强化/确定性/Ekman 上升流/SST 平流）
+- **Hadley 环流经向风 + Ω^(-1/3) 风速标度**：修复纯纬向风模板，添加地表信风
+  equatorward 分量（Hadley/Ferrel/Polar）；引用 Hill et al. (2019) / Held & Hou (1980)
+- **gaia-m 次行星半球经度暖化**：`sub_planet_warming_c` 参数化 Aegis 红外+反射光
+  加热（~1°C 半球均值）
+- **洋流前端可视化**：
+  - 2D: SVG 矢量箭头（4.5° 网格，品红暖流/青绿寒流，sqrt 拉伸，zoom 自适应）
+  - 3D: Canvas rAF 箭头叠加（半球剔除+边缘淡出+zoomScale）
+  - 右侧面板洋流详情：方向/流速(cm/s)/暖寒流标注
+  - 5th shader uniform slot (u_currents)
+
 ### Fixed
 
 - **无 geography.yaml 的世界无法构建**（v0.16.0 回归）：`BaseEngine` 新增
-  `optional_input_files`（缺省合法、引擎回退默认）；geological 引擎的
-  terrain_config.yaml / geography.yaml 改为可选；earth/terrain-dev 恢复可构建
-  并以 v0.18.0 真实感机制重建
+  `optional_input_files`（缺省合法、引擎回退默认）
+- **陆地海拔色阶反转**：海平面改为深绿 #1E6B3A，随海拔升高渐变浅绿/黄/棕
+- **CG→GMRES**：Stommel 算子非对称（β·G_east 项），CG 对 ~23k 细胞盆地不收敛
+- **east 方向修正**：`r̂×k̂` 替代 `k̂×r̂`（后者指向西）
 
 ## [0.18.0] — 2026-08-07
 
