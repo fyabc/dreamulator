@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786108936747,
+  "lastUpdate": 1786111499094,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1119,6 +1119,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007517071232248478",
             "extra": "mean: 5.102101599999287 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "d76ca52d6ec51a35dacd7846b2101aff92335535",
+          "message": "chore: bump v0.19.0 — 基础洋流系统\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T22:04:02+08:00",
+          "tree_id": "0f208fc633ddef7dca9939c1b95a8bd3001ae6d4",
+          "url": "https://github.com/fyabc/dreamulator/commit/d76ca52d6ec51a35dacd7846b2101aff92335535"
+        },
+        "date": 1786111498365,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 33.15558073906946,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03555396276822785",
+            "extra": "mean: 30.160834999992403 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.045091754229618,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05789274419250301",
+            "extra": "mean: 247.21318100000644 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5873575630723789,
+            "unit": "iter/sec",
+            "range": "stddev: 1.010928050636308",
+            "extra": "mean: 629.9777840000141 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 836.6888740644272,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010427127915666995",
+            "extra": "mean: 1.1951873999976215 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 187.0965076716419,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0003941290400538387",
+            "extra": "mean: 5.344835199997533 msec\nrounds: 5"
           }
         ]
       }
