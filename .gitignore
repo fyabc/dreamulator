@@ -58,3 +58,4 @@ reports/
 # Raw reference data downloads (use scripts to re-download)
 *.grd
 *.grd.gz
+data/worlds/*/layers/ecology/derived/

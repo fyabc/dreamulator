@@ -54,15 +54,15 @@ Voronoi 网络 (语义分组)           ← 参考 Azgaar 的 Voronoi cell 方�
 
 ### 渲染：WebGPU 地形 + SVG 叠加
 
-> **参考**：[Paradox 游戏](https://www.paradoxinteractive.com/) 的 terrain + overlay 渲染分离；[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 SVG 图层系统
+> **参考**：[Paradox 游戏](https://www.paradoxinteractive.com/) 的 terrain + overlay 渲染分离；
+> [Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 SVG 图层系统
 
-- **WebGPU**（Three.js `WebGPURenderer`）渲染地形：CPU 预渲染纹理 + GPU 显示
-  - 颜色映射 + 山体阴影 + 水面效果在 CPU 端 Canvas 2D 预渲染
-  - 预渲染结果作为 `CanvasTexture` 贴在 `PlaneGeometry` + `MeshBasicMaterial` 上
+- **WebGPU**（Three.js `WebGPURenderer`）渲染：CPU 预烘焙纹理 + GPU slot-based 合成
+  - 底图/专题/填充/特征四个槽位依次合成，opacity 控制为 GPU uniform（零重烘）
+  - 半分辨率 cell 贴图（~4 px/cell），NearestFilter 保持锐利边缘
   - WebGPU 在 Windows 上使用 D3D12 后端，不受 ANGLE/D3D11 bug 影响
-  - 若 WebGPU 不可用，自动 fallback 到 WebGL 后端
-- **SVG 叠加**渲染矢量特征：Voronoi cells 交互（hover/click）在 DOM 层实现更简单
-- **双层分离**：地形着色和矢量叠加独立控制，可单独开关
+- **SVG 叠加**渲染矢量特征（洋流箭头）：DOM 层，任意缩放清晰
+- **槽位分离**：slot-based 架构确保互斥层不会同时激活
 
 > **架构变更说明**（2026-06）：
 > 1. 原方案使用 Three.js (R3F) + 自定义 GLSL shader。在 AMD 集显 + Windows ANGLE/D3D11
@@ -265,19 +265,25 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 
 > 光照参数（`sun`/`season`/`night`）在 2D↔3D 视图间通过 URL 同步、可分享。
 
-### 图层系统
+### 图层系统（Slot-based Map Modes）
 
-> **参考**：[Paradox 游戏](https://www.paradoxinteractive.com/) 的 Map Modes 系统（EU4 有 20+ 种 map mode）
+> **参考**：[Paradox](https://www.paradoxinteractive.com/) 的 map modes（EU4 20+ 模式）、
+> [Azgaar FMG](https://azgaar.github.io/Fantasy-Map-Generator/) 的 Style 下拉、
+> Gleba 的单选色彩叠加。
 
-| 图层 | 来源 | 渲染方式 |
-|------|------|----------|
-| 地形 | elevation.png | 海拔着色 + 山体阴影 |
-| 海陆 | elevation + sea_level | 二值着色 |
-| 海拔 | elevation.png | 灰度梯度 |
-| 坡度 | elevation 梯度 | 梯度着色 |
-| Voronoi | voronoi.json | SVG circles + 属性着色 |
-| 板块 | plates.json | SVG 边界线 |
-| 河流/海岸 | features.json | SVG polyline |
+所有图层按渲染语义分四个槽位（slot），合成顺序固定为
+**底图 → 专题 → 填充 → 特征**：
+
+| 槽位 | 选择 | 语义 | 示例 |
+|------|------|------|------|
+| **底图** (base) | 恰好 1 个（radio） | 不透明画布 | 地形、海陆 |
+| **专题着色** (thematic) | 0 或 1 个（radio） | 全表面着色，alpha 叠在底图上 | Köppen、Whittaker 群系、NPP、文明摇篮 |
+| **分类填充** (fill) | 0–N（多选叠加） | 半透明 cell 着色 | 板块 |
+| **特征标注** (feature) | 0–N（多选叠加，永远置顶） | 线/箭头/高亮 | 地壳边界、洋流 |
+
+UI 组织为四个面板组：**底图** / **专题着色** / **地质构造** / **叠加标注**。
+专题着色组内四个选项互斥（radio）——这与 Azgaar 的 Style 下拉和 P 社的 map mode 切换逻辑一致，
+用户一次只能看到一个"地图模式"，不会出现两个全表面涂色叠加导致的视觉混乱。
 
 ## 使用流程
 

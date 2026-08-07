@@ -16,29 +16,25 @@ import type { ColorMode } from '../../viewers/map/TerrainPlane'
 // ---------------------------------------------------------------------------
 
 /**
- * Layer KIND defines rendering semantics (z-order + exclusivity); the
- * thematic GROUP below is purely UI organisation.  See
- * private/plans/map-layer-refactor.md for the full model.
+ * Layer taxonomy — mirrors the slot-based compositing model (§3.1):
  *
- *  - `base`     — whole-map opaque canvas (底图). Exactly ONE active at a
- *                 time (slot:base); always composited first.
- *  - `thematic` — whole-map thematic coloring (专题着色), alpha-blended over
- *                 the base. At most ONE active (slot:thematic), may be none.
- *  - `fill`     — per-cell categorical fill (分类填充), freely stackable.
- *  - `feature`  — lines/arrows (特征线), freely stackable, always on top.
+ *   Slot 1  base      底图     exactly 1 active (radio), opaque canvas
+ *   Slot 2  thematic  专题着色   0 or 1 active (radio), alpha-blended over base
+ *   Slot 3  fill      分类填充   0..N (stackable), semi-transparent cell-fill
+ *   Slot 4  feature   特征标注   0..N (stackable), always on top
  *
- * Compositing z-order: base → thematic → fill → feature.
+ * Groups below are UI organisation only.  Azgaar, Paradox, and Gleba all follow
+ * the same pattern: ONE "map mode" (our thematic slot) active at a time, plus
+ * optional overlays.
  */
 export type LayerKind = 'base' | 'thematic' | 'fill' | 'feature'
 
-/** Thematic layer groups (UI organisation only). */
+/** UI layer groups (organisation only — not compositing order). */
 export const LAYER_GROUPS: { id: string; label: string }[] = [
-  { id: 'terrain', label: '地形·海陆' },
+  { id: 'terrain', label: '底图' },
+  { id: 'thematic', label: '专题着色' },
   { id: 'geology', label: '地质构造' },
-  { id: 'climate', label: '气候' },
-  { id: 'ecology', label: '生态' },
-  { id: 'hydro', label: '水文' },
-  { id: 'annotation', label: '标注' },
+  { id: 'overlay', label: '叠加标注' },
 ]
 
 export interface LayerHelpEntry {
@@ -93,47 +89,46 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     id: 'koppen',
     label: 'Köppen 气候',
     desc: '气候分类着色（Beck 2018 标准色）',
-    detail: '按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。颜色方案来自 Beck et al. (2018) 标准图例。作为专题层以 85% 不透明度叠在底图之上（可隐约看到地形）；与其他专题层（未来的降水/温度）互斥。洋流见下方叠加层。',
+    detail: '按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。与下方三个生态专题互斥（同一专题槽位，四选一）。',
     defaultOpacity: 0.85,
     kind: 'thematic',
-    group: 'climate',
+    group: 'thematic',
   },
-  {
-    id: 'currents',
-    label: '洋流',
-    desc: '表层洋流矢量箭头（品红=暖流·青绿=寒流，SVG矢量）',
-    detail: 'Stommel 风生环流模型解算的表面流场。SVG 矢量箭头：方向=流向、长度∝流速。品红=暖流（向极热输送）·青绿=寒流（向赤道/上升流）。箭头按 ~8° 网格空间采样，任意缩放清晰。配色参考乐意Ajax《季风世界》EP1 f_0312。可与其他图层自由叠加。',
-    defaultOpacity: 0.75,
-    kind: 'feature',
-    group: 'climate',
-  },
-  // --- Ecology layers (P0: Whittaker biome + Miami NPP + domesticable tags) ---
   {
     id: 'biomes',
     label: 'Whittaker 群系',
     desc: '温度-降水生物群系分类（12 类 + 海洋）',
-    detail: '基于 Whittaker (1975) 温度-降水二维分类。热带雨林=深绿·热带草原=浅黄绿·荒漠=米色·温带森林=中绿·温带草原=金黄·北方针叶林=蓝灰·冻原=灰褐·冰原=白·海洋=深蓝。与 Köppen 气候分类共用专题槽位，二者选一。',
+    detail: '基于 Whittaker (1975) 温度-降水二维分类。热带雨林=深绿·热带草原=浅黄绿·荒漠=米色·温带森林=中绿·温带草原=金黄·北方针叶林=蓝灰·冻原=灰褐·冰原=白·海洋=深蓝。与 Köppen 互斥，四选一。',
     defaultOpacity: 0.85,
     kind: 'thematic',
-    group: 'ecology',
+    group: 'thematic',
   },
   {
     id: 'npp',
     label: '净初级生产力',
-    desc: 'NPP 热力图（Miami 模型，gC/m²/yr）',
-    detail: 'Miami 模型 (Lieth 1975) 估算的净初级生产力。暖米色=低产（荒漠 <200）→ 深绿=高产（雨林 >2000）。基于年均温+降水量计算，取两者限制的最小值。归一化到 0–3000 gC/m²/yr。',
+    desc: 'NPP 热力图（Miami 模型，暖米→深绿）',
+    detail: 'Miami 模型 (Lieth 1975) 估算的净初级生产力。暖米色=低产（荒漠 <200）→ 深绿=高产（雨林 >2000）。归一化到 0–3000 gC/m²/yr。',
     defaultOpacity: 0.85,
     kind: 'thematic',
-    group: 'ecology',
+    group: 'thematic',
   },
   {
     id: 'domesticable',
     label: '文明摇篮',
     desc: '高驯化潜力区域高亮（食草动物/作物/役用）',
-    detail: '基于 Whittaker 群系查表标注驯化潜力（Diamond 1997 框架）。金色=高大型食草动物+高主食作物（最优农业区）·橙色=仅高食草动物（游牧潜力）·浅绿=仅高作物（农业潜力）·透明=低潜力区域。温带草原为全高（文明摇篮）。',
+    detail: '基于 Whittaker 群系查表标注驯化潜力（Diamond 1997 框架）。金色=高食草动物+高作物·橙色=仅高食草动物·浅绿=仅高作物·透明=低潜力。温带草原为全高。',
     defaultOpacity: 0.85,
     kind: 'thematic',
-    group: 'ecology',
+    group: 'thematic',
+  },
+  {
+    id: 'currents',
+    label: '洋流',
+    desc: '表层洋流箭头（品红=暖·青绿=寒，SVG矢量）',
+    detail: 'Stommel 风生环流模型解算的表面流场。方向=流向、长度∝流速、品红=暖流·青绿=寒流。按 ~8° 网格空间采样，任意缩放清晰。可自由叠加。',
+    defaultOpacity: 0.75,
+    kind: 'feature',
+    group: 'overlay',
   },
 ]
 
