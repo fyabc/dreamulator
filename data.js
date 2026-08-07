@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786075723429,
+  "lastUpdate": 1786076216543,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -765,6 +765,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006446395459312598",
             "extra": "mean: 5.124463799995738 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "39d195391163137fb2f90066ff9f728a0bb97703",
+          "message": "fix(engine): 无 geography.yaml 的世界无法构建（v0.16.0 回归）+ terrain-dev 重建\n\n- BaseEngine 新增 optional_input_files（缺省合法、回退默认）；geological\n  的 terrain_config.yaml / geography.yaml 改可选（CLI 本就有\n  from_planet_config 回退，engine 校验却把它们当必需）\n- earth/terrain-dev 以 v0.18.0 真实感机制 force 重建（geological+climate）\n- CHANGELOG [Unreleased] 记录\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T12:16:03+08:00",
+          "tree_id": "9c0bef72f2ec04e1e9bde6caeff4b1262f0dbe0e",
+          "url": "https://github.com/fyabc/dreamulator/commit/39d195391163137fb2f90066ff9f728a0bb97703"
+        },
+        "date": 1786076216209,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 53.721503428506765,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007997614954856782",
+            "extra": "mean: 18.614519999999857 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6535443489508475,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05522033664346736",
+            "extra": "mean: 273.70681850000267 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4280514770687096,
+            "unit": "iter/sec",
+            "range": "stddev: 1.121010575008916",
+            "extra": "mean: 700.254868999996 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 967.8477118744229,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006716317847315574",
+            "extra": "mean: 1.0332203999979583 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.74321990902425,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004793054744585714",
+            "extra": "mean: 5.057063399999606 msec\nrounds: 5"
           }
         ]
       }
