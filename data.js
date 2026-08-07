@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786075302954,
+  "lastUpdate": 1786075723429,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -706,6 +706,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006550653536772002",
             "extra": "mean: 5.057959999999184 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "9dd5ad850acef5664fb7c5dfdfcda829c2a1a11b",
+          "message": "Release v0.18.0: 高程锚定与 Gleba 模式 + 真实感批次 + CI 全硬门槛 + docs 重组\n\nAdded:\n- 地理高程锚定（elevation_target_m/pin_strength）+ 海平面偏移旋钮\n- 高度图导入 UI + map.yaml 导入溯源\n- 密集偏置场导入 / Gleba 模式（geography_raster.png + raster_weight）\n- 大陆与边界真实感批次（克拉通低地化、洋中脊归位、泄漏重标、边界平滑、\n  古造山带 meander、per-plate 地壳下限、gaia-m 南方大陆/南大洋环/钉扎）\n- docs 重组全 Phase（terrain-pipeline 瘦身、knowledge 扩充、路线图单点收敛）\n\nChanged:\n- CI 全硬门槛（ruff 全规则 + format + mypy strict）；技术债三连清偿\n\nFixed:\n- roadmap #9 锚定裂谷推上海面；Pillow 13 弃用；scripts 下沉包内\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T12:07:51+08:00",
+          "tree_id": "a865b06a1874423c37948255d430d739e45140f5",
+          "url": "https://github.com/fyabc/dreamulator/commit/9dd5ad850acef5664fb7c5dfdfcda829c2a1a11b"
+        },
+        "date": 1786075722588,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 59.303721411711706,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007544488151502081",
+            "extra": "mean: 16.862348199998678 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7469015442624816,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05768583697012882",
+            "extra": "mean: 266.8871834999962 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5331805530836995,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0418239868016814",
+            "extra": "mean: 652.2389016666637 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 942.4010153799987,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008239176889564799",
+            "extra": "mean: 1.0611194000006208 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.14236787092375,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006446395459312598",
+            "extra": "mean: 5.124463799995738 msec\nrounds: 5"
           }
         ]
       }
