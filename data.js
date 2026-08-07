@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786064674421,
+  "lastUpdate": 1786066187394,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -529,6 +529,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007088999060446752",
             "extra": "mean: 3.8223711999989973 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8f18f814690e1e8ac1d41506c9ee7efd68374f6d",
+          "message": "feat(geography): 密集偏置场导入 / Gleba 模式（问题 1 阶段 3）\n\n- geography_raster.png 约定：灰度 [0,1] → bias [−1,1]（中灰中立），\n  与 feature 场同级叠加（raster_weight 调和，GeographySpec 新字段）\n- 导入场同等待遇：参与 plates 地壳切分、tectonics 后重锚、合成阶段\n  抬升抑制/基准服从/钉扎；bias 经 sample_raster_at_cells 最近像素采样，\n  run_terrain_pipeline 一次计算三处共用（纯函数确定性不变）\n- 穿线：run_terrain_pipeline(geography_raster=) → generate_plates/\n  apply_geography_crust/synthesize_terrain（keyword-only，默认 None 逐位不变）\n- 加载：engine find_input + CLI _load_geography_raster（resolver 逐层向上搜，\n  分支可替换/继承）\n- API：POST /api/worlds/{w}/geography-raster（校验可解码后重编码 16-bit PNG）\n- 前端：GeographyRasterButton（顶栏，静态模式禁用）+ client.uploadGeographyRaster\n- 测试 +7：采样/加载往返/中灰无扰/raster-only 地壳/端到端 authored 海保持水下\n- 文档：terrain-pipeline §3.5 密集偏置场小节、design_patterns 模式 9、\n  map-workflow §10、CHANGELOG\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T09:28:51+08:00",
+          "tree_id": "f733f1923bf5f66f8609b7ff40733e37947221c4",
+          "url": "https://github.com/fyabc/dreamulator/commit/8f18f814690e1e8ac1d41506c9ee7efd68374f6d"
+        },
+        "date": 1786066186940,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 53.56712655723319,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007904073444840273",
+            "extra": "mean: 18.66816579999977 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7032640988237664,
+            "unit": "iter/sec",
+            "range": "stddev: 0.053094955385671445",
+            "extra": "mean: 270.03205099998695 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.428800247529165,
+            "unit": "iter/sec",
+            "range": "stddev: 1.119355226781997",
+            "extra": "mean: 699.8878966666666 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 974.2236022668997,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008316322554390367",
+            "extra": "mean: 1.0264583999742172 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 199.28166135221366,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000060935382312260014",
+            "extra": "mean: 5.018023200000243 msec\nrounds: 5"
           }
         ]
       }
