@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786066187394,
+  "lastUpdate": 1786074352004,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -588,6 +588,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000060935382312260014",
             "extra": "mean: 5.018023200000243 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "87d2b9ca492eb26d477116af596b928c3b63a890",
+          "message": "feat(terrain): 大陆与边界真实感批次 + gaia-m 重建（2026-08 用户反馈）\n\n代码：\n- 克拉通低地化：continental_undulation_m（多尺度动态地形起伏）+\n  板块内部 0.4× 均匀偏差（_PLATE_OFFSET_LAND_FRACTION）\n- 洋中脊 0.35× + 板块偏差解耦（-0.6×off），脊顶回 -2500 m\n- _relabel_leaked_crust：top-N 地壳泄漏孤立陆块重标洋壳，\n  洒点岛屿改为仅岛弧/热点/钉扎涌现\n- _smooth_partition 边界多数投票平滑（4 轮；二-hop 试过回退）+\n  _merge_plate_enclaves 飞地合并\n- 古造山带/裂谷：双频 meander 路径 + 沿走向宽度 0.55-1.45× 变化\n- warp 成本场 octaves 3→1（边界更顺）\n\ngaia-m：\n- geography.yaml：南大洋四环洋带（压制设计外自发出陆南方大陆）、\n  南极浅海 -120 m / 地峡 +120 m 钉扎\n- terrain_config：boundary_warp 0.9→0.3、boundary_uplift_noise 0.8\n- 全量重建数据（LFS）\n\n效果：>2000m 陆地 29.7%→12.3%（地球 10-15%），均陆高 1615→1238 m，\n点名边界出水 23%→0%，边界切向转角 76.5°→38.4°/步\n\n文档：terrain-pipeline §6.1 真实感批次、roadmap #5 状态、CHANGELOG\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T11:44:36+08:00",
+          "tree_id": "1577d9ff8aacb6b0d4824181b68899502472fa4a",
+          "url": "https://github.com/fyabc/dreamulator/commit/87d2b9ca492eb26d477116af596b928c3b63a890"
+        },
+        "date": 1786074351647,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 57.70155858373678,
+            "unit": "iter/sec",
+            "range": "stddev: 0.008598039291761018",
+            "extra": "mean: 17.33055439999589 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7054119191839465,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05856347669373421",
+            "extra": "mean: 269.87552850000895 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5122170884412451,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0567110622440405",
+            "extra": "mean: 661.2807166666622 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 956.9088628512847,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006273277335751149",
+            "extra": "mean: 1.0450316000003568 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.05616554309657,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000521293447830728",
+            "extra": "mean: 5.100579199995536 msec\nrounds: 5"
           }
         ]
       }
