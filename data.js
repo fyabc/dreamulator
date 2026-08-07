@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786030457882,
+  "lastUpdate": 1786061494067,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -354,6 +354,63 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009538170762109891",
             "extra": "mean: 5.05031960000224 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "fyabc",
+            "username": "fyabc",
+            "email": "fyabc@mail.ustc.edu.cn"
+          },
+          "committer": {
+            "name": "fyabc",
+            "username": "fyabc",
+            "email": "fyabc@mail.ustc.edu.cn"
+          },
+          "id": "ed2c4c86889541f384d85bddda0099865e6d4b43",
+          "message": "docs: 重组 Phase 2——terrain-pipeline 原位瘦身 3748→2415 行（−35.6%）\n\n- 22 个二级标题（§1–§17、附录 A–D）编号与文字冻结保留，源码 § 引用不失效\n- 附录 A 改指针清单；附录 D 整体上浮为 knowledge/geology/cortial_2019_notes.md\n  （顺修重复编号 D.11/D.12 与截断表尾行）\n- §4/§5/§6 科学推导并入 plate_tectonics/terrain_synthesis；§8 物理并入\n  energy_balance §7 降水 + 指向新气候学三篇；原位留实现摘要+指针\n- 残留对齐：geology 索引列入 cortial 笔记；roadmap/design_patterns 的\n  §D.11/§D.12 引用改指新文件\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-06T19:34:30Z",
+          "url": "https://github.com/fyabc/dreamulator/commit/ed2c4c86889541f384d85bddda0099865e6d4b43"
+        },
+        "date": 1786061493181,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 53.88279240409717,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007799085428403021",
+            "extra": "mean: 18.55880060002164 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7495786949948906,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05095743593291544",
+            "extra": "mean: 266.6966294999611 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4345893923955175,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1152733215252442",
+            "extra": "mean: 697.063567666684 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 977.8522336095449,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008914439367232689",
+            "extra": "mean: 1.0226494000107778 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.53798342101533,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004347043959701638",
+            "extra": "mean: 5.088075000026038 msec\nrounds: 5"
           }
         ]
       }
