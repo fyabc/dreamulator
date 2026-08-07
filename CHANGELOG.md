@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   洋中脊 0.35× + 板块偏差解耦（脊顶回 −2500 m）；top-N 地壳泄漏重标
   （洒点岛屿仅岛弧/热点/钉扎涌现）；边界多数投票平滑 + 飞地合并
   （犬牙转角 76.5°→38.4°/步）；古造山带/裂谷双频 meander + 沿走向宽度变化
-  （0.55–1.45×）。gaia-m：南大洋四环洋带、南极浅海/地峡钉扎、
+  （0.55–1.45×）；**per-plate 地壳下限** `crust_plate_floor`（默认 0.10，
+  authored 洋豁免）避免整板同型地壳。gaia-m：南大洋四环洋带、南极浅海/地峡
+  钉扎、南方大陆×2（澳洲/南美类似，南半球陆地 15.1%→16.9%，地球 ~19%）、
   boundary_warp 0.3、boundary_uplift_noise 0.8；>2000 m 陆地 29.7%→12.3%
 - **密集偏置场导入 / Gleba 模式**（问题 1 阶段 3）：`geography_raster.png`
   灰度概率图叠进锚定场（`raster_weight` 调和），与 feature 同等待遇参与

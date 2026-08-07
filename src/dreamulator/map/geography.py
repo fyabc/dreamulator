@@ -376,6 +376,37 @@ def apply_geography_crust(
     for pos in order[n_land:]:
         mesh.cells[int(pos)].crust_type = "oceanic"
 
+    # Per-plate continental floor: the global top-N threshold can leave whole
+    # plates near-zero continental crust (Earth has ~40% mostly-oceanic
+    # plates, not ~64%).  Promote each non-exempt plate's highest-scoring
+    # oceanic cells up to the floor.  Plates whose authored bias is decisively
+    # oceanic (mean field < -0.3, e.g. the southern-ocean ring) are exempt.
+    # The global land fraction is re-absorbed by sea-level calibration.
+    floor = config.crust_plate_floor
+    if floor > 0.0:
+        by_plate: dict[str, list[int]] = {}
+        for i, c in enumerate(mesh.cells):
+            if c.plate_id:
+                by_plate.setdefault(c.plate_id, []).append(i)
+        floored = 0
+        for idxs in by_plate.values():
+            if len(idxs) < 8:
+                continue
+            mean_bias = float(np.mean(field[np.asarray(idxs, dtype=np.int64)]))
+            if mean_bias < -0.3:
+                continue  # decisively authored ocean
+            n_cont = sum(1 for i in idxs if mesh.cells[i].crust_type == "continental")
+            need = int(floor * len(idxs)) - n_cont
+            if need <= 0:
+                continue
+            oceanic = [i for i in idxs if mesh.cells[i].crust_type == "oceanic"]
+            oceanic.sort(key=lambda i: -score[i])
+            for i in oceanic[:need]:
+                mesh.cells[i].crust_type = "continental"
+                floored += 1
+        if floored:
+            logger.info("  Crust floor: %d cells promoted across plates", floored)
+
     logger.info(
         "Geography anchoring: %d/%d cells continental (target %.1f%%)",
         n_land,

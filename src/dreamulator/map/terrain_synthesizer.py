@@ -65,7 +65,7 @@ _ANCHOR_SUPPRESS_FLOOR = 0.1
 _PLATE_OFFSET_LAND_FRACTION = 0.4
 
 
-def _relabel_leaked_crust(mesh: CVTMesh) -> None:
+def _relabel_leaked_crust(mesh: CVTMesh, geography_bias: np.ndarray | None = None) -> None:
     """Relabel isolated top-N crust-leakage cells to oceanic.
 
     The global top-N crust threshold sprinkles a few continental cells into
@@ -76,13 +76,20 @@ def _relabel_leaked_crust(mesh: CVTMesh) -> None:
     (cont_frac < 0.5, i.e. clusters smaller than ~4 cells) are relabelled
     oceanic before the base stage; boundary uplifts and pins can still lift
     them into hierarchical archipelagos afterwards.
+
+    Only authored-ocean cells (bias < −0.3) are relabelled: isolated
+    continental cells elsewhere may be the per-plate crust floor
+    (``crust_plate_floor``), which must survive.
     """
     cont_frac = _neighbor_continental_fraction(mesh)
     n_relabeled = 0
     for i, c in enumerate(mesh.cells):
-        if c.crust_type == "continental" and cont_frac[i] < 0.5:
-            c.crust_type = "oceanic"
-            n_relabeled += 1
+        if c.crust_type != "continental" or cont_frac[i] >= 0.5:
+            continue
+        if geography_bias is not None and geography_bias[i] >= -0.3:
+            continue  # crust-floor cell in an unauthored region — keep
+        c.crust_type = "oceanic"
+        n_relabeled += 1
     if n_relabeled:
         logger.info("  Crust leakage cleanup: %d isolated cells relabelled oceanic", n_relabeled)
 
@@ -454,7 +461,7 @@ def _synthesize_gaussian(
 
     # 1. Bimodal base elevation
     logger.info("  Step 1/5: Bimodal base elevation")
-    _relabel_leaked_crust(mesh)
+    _relabel_leaked_crust(mesh, geography_bias)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
@@ -617,7 +624,7 @@ def _synthesize_asymmetric(
     _apply_base_override(base, geography_bias, config)
 
     logger.info("  Step 1/6: Base elevation + plate offsets")
-    _relabel_leaked_crust(mesh)
+    _relabel_leaked_crust(mesh, geography_bias)
     plate_offsets: dict[str, float] = {}
     for plate in plates:
         plate_offsets[plate.id] = rng.uniform(

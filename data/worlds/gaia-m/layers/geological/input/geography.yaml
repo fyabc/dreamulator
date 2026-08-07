@@ -189,6 +189,25 @@ features:
     elevation_target_m: -120.0  # 钉扎：120 m 水深陆缘浅海（冰期海退敏感带）
     pin_strength: 1.0
 
+  # ---- 南方大陆（地球南半球 19% 陆地来自南美/澳洲；打破南大洋单调、
+  #   让板块地壳构成接近地球：~5 陆 / ~6 洋 / 其余混合）----
+  - name: 南方大陆·澳洲类似
+    kind: continent
+    lon: 120.0
+    lat: -35.0
+    radius_deg: 12.0
+    strength: 0.6
+    elongation: 1.4
+    bearing_deg: 30.0
+  - name: 南方大陆·南美类似
+    kind: continent
+    lon: -50.0
+    lat: -35.0
+    radius_deg: 10.0
+    strength: 0.5
+    elongation: 1.6
+    bearing_deg: 0.0
+
   # ---- 南大洋（geography.md：南半球中纬度为洋；四环近似纬向洋带，
   #   否则 fBm 在此自发出陆，形成设计外大陆，边界横穿成"露出洋中脊"假象）----
   - name: 南大洋·0

@@ -759,6 +759,11 @@ speed_multiplier    →      (新增字段)
 - **边界去犬牙**：最终分区多数投票平滑 `_smooth_partition`（4 轮，切向量转角
   76.5°→38.4°/步；地球 5–15°，残余为格子下界）+ 飞地合并 `_merge_plate_enclaves`。
   二-hop 投票试过因块状阶梯回退（38.6°→46.1°）。
+- **per-plate 地壳下限**（`crust_plate_floor`，默认 0.10）：global top-N 阈值
+  会让整板近零陆壳（gaia-m 曾 64% 板块 <20% 陆，地球 ~40%）；对 mean bias
+  ≥ −0.3 的板块把板内最高分洋壳 cell 提升到下限；authored 洋（南大洋环）豁免；
+  全局海陆比由倒水校准吸收。与 `_relabel_leaked_crust` 的交互：relabel 只清
+  authored 洋（bias < −0.3）内的泄漏，floor cell 在未注解区保留。
 - **古造山带/裂谷去条带化**：belt 路径改双频 meander（0.35+0.12 rad），宽度沿
   走向 0.55–1.45× 变化（与幅度正相关——碰撞节点宽而高，转换段窄）。
 - **gaia-m 配置**：南大洋四环洋带（压制设计外自发出陆南方大陆）、南极浅海

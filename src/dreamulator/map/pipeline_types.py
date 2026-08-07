@@ -127,6 +127,13 @@ class TerrainPipelineConfig:
     # plus craton-scale swells; without it plate-interior continents are
     # unrealistically flat tablelands (gaia-m 2026-08 feedback).
     continental_undulation_m: float = 600.0
+    # Per-plate continental-crust floor (fraction of the plate's cells).
+    # The global top-N crust threshold can leave whole plates (and their
+    # neighbours) with near-zero continental crust — Earth has ~40% mostly-
+    # oceanic plates, not 64%.  Plates whose mean authored bias < −0.3
+    # (decisively authored ocean, e.g. the southern-ocean ring) are exempt;
+    # the global land fraction is re-absorbed by sea-level calibration.
+    crust_plate_floor: float = 0.10
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).
