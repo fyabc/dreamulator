@@ -29,6 +29,9 @@ class BaseEngine(ABC):
     - layer: which layer this engine belongs to
     - requires: list of engine names that must run before this one
     - input_files: paths relative to layer input dir that this engine reads
+      (required: missing file fails validation)
+    - optional_input_files: like input_files but absence is valid (the engine
+      falls back to defaults, e.g. geography.yaml absent = random continents)
     - output_files: paths relative to layer derived dir that this engine writes
 
     Engines must be deterministic: given the same inputs and seed, they must
@@ -39,6 +42,7 @@ class BaseEngine(ABC):
     layer: Layer = Layer.PHYSICS  # Which layer this engine belongs to
     requires: list[str] = []
     input_files: list[str] = []
+    optional_input_files: list[str] = []
     output_files: list[str] = []
 
     def __init__(

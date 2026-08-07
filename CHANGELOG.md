@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **无 geography.yaml 的世界无法构建**（v0.16.0 回归）：`BaseEngine` 新增
+  `optional_input_files`（缺省合法、引擎回退默认）；geological 引擎的
+  terrain_config.yaml / geography.yaml 改为可选；earth/terrain-dev 恢复可构建
+  并以 v0.18.0 真实感机制重建
+
 ## [0.18.0] — 2026-08-07
 
 ### Added

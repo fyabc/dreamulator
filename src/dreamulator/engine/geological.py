@@ -32,7 +32,10 @@ class GeologicalEngine(BaseEngine):
     name = "geological"
     layer = Layer.GEOLOGICAL
     requires: list[str] = ["astronomy"]
-    input_files = ["terrain_config.yaml", "geography.yaml"]
+    # Both optional: absent terrain_config falls back to planet-derived
+    # defaults; absent geography.yaml = unauthored (random) continents.
+    input_files: list[str] = []
+    optional_input_files = ["terrain_config.yaml", "geography.yaml"]
     output_files = [
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.json",

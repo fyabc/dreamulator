@@ -1,0 +1,49 @@
+planet:
+  id: earth
+  name: Earth
+temperature_C:
+  global:
+    mean: 15.208832011915776
+    min: -46.76747808062016
+    max: 27.99999893708462
+  land:
+    mean: 14.552657166412203
+    min: -46.76747808062016
+    max: 27.143969560994634
+  ocean:
+    mean: 15.466022670743417
+    min: -1.8000240086862256
+    max: 27.99999893708462
+precipitation_mm:
+  global:
+    mean: 1185.0294065220135
+    min: 5.868802770079025e-13
+    max: 18788.036889028725
+  land:
+    mean: 1515.0579403658717
+    min: 20.0
+    max: 18788.036889028725
+  ocean:
+    mean: 1055.673249953589
+    min: 5.868802770079025e-13
+    max: 7044.178356579477
+koppen_classes:
+  ET: 997
+  Dwb: 148
+  EF: 258
+  Dfb: 185
+  Cfb: 1545
+  BSk: 1466
+  Cwb: 75
+  Cfa: 168
+  Aw: 1488
+  BSh: 763
+  Am: 101
+  Af: 1219
+  BWk: 735
+  BWh: 79
+simulation_parameters:
+  axial_tilt_deg: 23.44
+  stellar_luminosity_sol: 1.0
+  orbital_distance_au: 1.0
+  greenhouse_warming_K: 33.0

@@ -1,0 +1,35 @@
+{
+  "temperature_range_c": [
+    -50.0,
+    50.0
+  ],
+  "precipitation_range_mm": [
+    0.0,
+    18790.0
+  ],
+  "koppen_classes": [
+    "Af",
+    "Am",
+    "Aw",
+    "BSh",
+    "BSk",
+    "BWh",
+    "BWk",
+    "Cfa",
+    "Cfb",
+    "Cwb",
+    "Dfb",
+    "Dwb",
+    "EF",
+    "ET",
+    "Ocean"
+  ],
+  "export_resolution": [
+    2048,
+    1024
+  ],
+  "stellar_luminosity_sol": 1.0,
+  "orbital_distance_au": 1.0,
+  "axial_tilt_deg": 23.44,
+  "greenhouse_warming_K": 33.0
+}

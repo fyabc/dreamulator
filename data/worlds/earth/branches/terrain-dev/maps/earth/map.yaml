@@ -1,0 +1,17 @@
+planet_id: earth
+projection: equirectangular
+width: 2048
+height: 1024
+voronoi_seed: 42
+voronoi_num_cells: 32768
+cvt_jitter_sigma: 0.3
+cvt_lloyd_iterations: 8
+elevation_min_m: -12518.713920605398
+elevation_max_m: 9000
+sea_level_m: 0.0
+num_plates: 15
+radius_km: 6371.0
+elevation_range_m:
+- -12518.7
+- 7421.4
+pipeline_version: 2.0-cvt
