@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786105979814,
+  "lastUpdate": 1786108936747,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1060,6 +1060,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0003193582100228753",
             "extra": "mean: 11.759414000005108 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "ea5af29b02fdef5a22fb56d57f42ab5d47d6c598",
+          "message": "fix(climate): hadley_cell_wind 加经向分量 + Ω^(-1/3) 风速标度\n\n修复三个算法缺陷:\n1. 添加地表信风的 equatorward 经向分量 (Hadley/Ferrel/Polar)\n   - 这是 ∂τ_n/∂x_e 旋度源的主要来源\n2. 风速按 (P_planet/P_earth)^(1/3) 标度 (Hill et al. 2019)\n   - gaia-m 1.48x → easterly -7.4 m/s (原 -5.0 m/s)\n3. 参考文献: Held & Hou (1980), Hill et al. (2019)\n\n结果:\n- Earth: 洋流方向无回归\n- gaia-m: max speed 0.028→0.035 m/s (+24%), mean +10%\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T21:20:37+08:00",
+          "tree_id": "0f41c83143074fb2d6e02931bddded620612d87e",
+          "url": "https://github.com/fyabc/dreamulator/commit/ea5af29b02fdef5a22fb56d57f42ab5d47d6c598"
+        },
+        "date": 1786108935801,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 29.80770039016455,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03700607133409649",
+            "extra": "mean: 33.54837800000041 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.577347439694337,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06305206467569588",
+            "extra": "mean: 279.53672849999833 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3972101674512427,
+            "unit": "iter/sec",
+            "range": "stddev: 1.146519157675584",
+            "extra": "mean: 715.7119403333402 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 936.18653030042,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008064651393397733",
+            "extra": "mean: 1.0681631999972296 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.9976649622461,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007517071232248478",
+            "extra": "mean: 5.102101599999287 msec\nrounds: 5"
           }
         ]
       }
