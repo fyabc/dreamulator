@@ -17,6 +17,8 @@ from dreamulator import __version__
 from dreamulator.world_manager import WorldManager
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 
@@ -874,6 +876,17 @@ def _load_terrain_config(
     return cfg, planet_id, output_dir
 
 
+def _load_geography_raster(world_dir: Path, branch: str | None) -> np.ndarray | None:
+    """Load the optional dense bias raster (geography_raster.png), if present."""
+    from dreamulator.map.geography import load_geography_raster
+    from dreamulator.resolver import LayerResolver
+
+    geo_input_dir = LayerResolver(world_dir, branch).get_input_dir("geological")
+    if geo_input_dir is None:
+        return None
+    return load_geography_raster(geo_input_dir / "geography_raster.png")
+
+
 @terrain_app.command("generate")
 def terrain_generate(
     world: str = typer.Argument(help="World name"),
@@ -948,7 +961,12 @@ def terrain_generate(
     )
 
     try:
-        result = run_terrain_pipeline(cfg, output_dir, stages=stage_list)
+        result = run_terrain_pipeline(
+            cfg,
+            output_dir,
+            stages=stage_list,
+            geography_raster=_load_geography_raster(world_dir, branch),
+        )
     except RuntimeError as e:
         console.print(f"[red]Pipeline error: {e}[/red]")
         raise typer.Exit(code=1) from None
@@ -1141,6 +1159,7 @@ def terrain_validate(
         cfg,
         output_dir=None,
         stages=["mesh", "plates", "tectonics", "boundaries", "terrain"],
+        geography_raster=_load_geography_raster(world_dir, branch),
     )
 
     # Compare — read from mesh cells (no export needed)

@@ -582,6 +582,25 @@ elevation += strength · clip(2·weight, 0, 1) · (target − elevation)
   时 −80 m 的海峡钉扎出露 → 海峡"冰期关闭"（临界洋流剧情的前提）；
 - 无 target 时返回 None，管线逐位不变（默认行为保持）。
 
+#### 密集偏置场导入（geography_raster.png，Gleba 模式，2026-08）
+
+`layers/geological/input/geography_raster.png`（可选；上传端点
+`POST /api/worlds/{world}/geography-raster`，或地图页"⬆ 锚定灰度图"按钮）
+把整幅灰度图作为**密集陆地偏置场**叠进锚定：灰度 [0,1] 映射到 bias [−1,1]
+（中灰=中立），与 feature 场同级叠加后 clip：
+
+```
+field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_bias)
+```
+
+- `raster_weight`（GeographySpec，默认 1.0，0=禁用）调和手绘形状与 feature；
+- 导入场与 feature 场**同等待遇**：参与 plates 地壳切分、tectonics 后重锚、
+  合成阶段的抬升抑制/基准服从/钉扎（bias 经 `sample_raster_at_cells` 按 cell
+  最近像素采样，一次计算三处共用，纯函数确定性不变）；
+- 典型用法：手绘大陆轮廓灰度图 → "形状是我的、地貌细节是物理的"混合世界；
+  与 feature 叠用（raster 定大形、feature 钉裂谷/地峡高程）；
+- 分支友好：raster 存 geological input，分支可替换/继承（resolver 逐层向上搜）。
+
 #### 海平面偏移旋钮（sea_level_offset_m）
 
 `terrain_config.yaml` 新增 `sea_level_offset_m`（默认 0）。校准（"倒水"）仍按

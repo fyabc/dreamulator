@@ -27,6 +27,7 @@ from rich.console import Console
 from .boundary_detector import detect_boundaries
 from .cvt_mesh import generate_cvt_mesh
 from .export import export_equirectangular, save_outputs
+from .geography import sample_raster_at_cells
 from .plate_generator import generate_plates
 from .terrain_synthesizer import synthesize_terrain
 
@@ -138,6 +139,7 @@ def run_terrain_pipeline(
     output_dir: Path | None = None,
     *,
     stages: list[str] | None = None,
+    geography_raster: np.ndarray | None = None,
 ) -> TerrainPipelineResult:
     """Run the terrain generation pipeline.
 
@@ -174,11 +176,21 @@ def run_terrain_pipeline(
     if result.mesh is None:
         raise RuntimeError("CVT mesh is required for subsequent stages. Run 'mesh' stage first.")
 
+    # Dense authored raster bias (Gleba-style probability map), sampled once
+    # per mesh and shared by crust anchoring, uplift suppression and pins.
+    raster_bias = (
+        sample_raster_at_cells(result.mesh, geography_raster)
+        if geography_raster is not None and config.geography is not None
+        else None
+    )
+
     # ---- Stage 2: Plate Tectonics ----
     if "plates" in ordered:
         _stage_begin("plates")
         t = time.time()
-        result.plates, cell_plate_map = generate_plates(result.mesh, config)
+        result.plates, cell_plate_map = generate_plates(
+            result.mesh, config, raster_bias=raster_bias
+        )
         result.stages_completed.append("plates")
         result.stage_timings["plates"] = time.time() - t
         _stage_end(result.stage_timings["plates"])
@@ -244,7 +256,7 @@ def run_terrain_pipeline(
         if config.geography is not None and config.geography.reapply_after_tectonics:
             from .geography import apply_geography_crust
 
-            apply_geography_crust(result.mesh, config)
+            apply_geography_crust(result.mesh, config, raster_bias=raster_bias)
 
         result.stages_completed.append("tectonics")
         result.stage_timings["tectonics"] = time.time() - t
@@ -275,7 +287,7 @@ def run_terrain_pipeline(
 
         _stage_begin("terrain")
         t = time.time()
-        synthesize_terrain(result.mesh, result.plates, config)
+        synthesize_terrain(result.mesh, result.plates, config, raster_bias=raster_bias)
         result.stages_completed.append("terrain")
         result.stage_timings["terrain"] = time.time() - t
         _stage_end(result.stage_timings["terrain"])

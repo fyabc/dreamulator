@@ -880,8 +880,9 @@ A: 目前没有直接混合功能。但你可以通过分支系统分别生成�
 - **导入的高度图不含板块构造数据**：plates 图层为空（左栏有提示），
   boundaries 图层回落到地壳底色。需要构造叙事时，用 geography 锚定 +
   管线生成（§2–§4），或把导入图当作"最终高程"接受无板块设定。
-- 想"形状手绘、地貌物理补全"的中间路线：把灰度图作为密集偏置场喂给
-  geography 锚定（见 `design/terrain-pipeline.md` §3.5 与
-  `private/plans/heightmap-import-vs-geography-config.md` 阶段 3）。
+- 想"形状手绘、地貌物理补全"的中间路线：顶栏"⬆ 锚定灰度图"上传灰度概率图
+  （存 `geography_raster.png`，白=陆/黑=海/中灰=中立），下次生成时与
+  geography.yaml 叠加（`raster_weight` 调和）——形状是你的，地貌细节是物理的
+  （见 `design/terrain-pipeline.md` §3.5 密集偏置场小节）。
 - 静态模式（GitHub Pages）为只读，按钮禁用。
 

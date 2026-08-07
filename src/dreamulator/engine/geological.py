@@ -104,7 +104,15 @@ class GeologicalEngine(BaseEngine):
         )
 
         try:
-            result = run_terrain_pipeline(config, output_dir, stages=stage_list)
+            raster_path = self.find_input("geography_raster.png")
+            raster = None
+            if raster_path is not None:
+                from dreamulator.map.geography import load_geography_raster
+
+                raster = load_geography_raster(raster_path)
+            result = run_terrain_pipeline(
+                config, output_dir, stages=stage_list, geography_raster=raster
+            )
         except RuntimeError as e:
             return EngineResult(
                 engine_name=self.name,

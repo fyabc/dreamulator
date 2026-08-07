@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **密集偏置场导入 / Gleba 模式**（问题 1 阶段 3）：`geography_raster.png`
+  灰度概率图叠进锚定场（`raster_weight` 调和），与 feature 同等待遇参与
+  地壳切分/重锚/抬升抑制/钉扎；API `POST /worlds/{w}/geography-raster` +
+  地图页"⬆ 锚定灰度图"按钮；管线穿线 run_terrain_pipeline→plates/synthesize
 - **高度图导入 UI**（问题 1 阶段 1）：地图查看器顶栏"⬆ 导入高度图"
   （16-bit PNG / TIFF 自动识别、重采样、覆盖确认、导入结果 banner、
   无板块数据空态提示、静态模式禁用）；导入溯源写入 `map.yaml` 的

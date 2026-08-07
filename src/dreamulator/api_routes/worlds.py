@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from dreamulator.world_manager import WorldManager
@@ -578,4 +578,49 @@ def build_world(world_name: str, req: BuildRequest | None = None) -> dict[str, A
         "success": success_count,
         "failed": fail_count,
         "errors": errors,
+    }
+
+
+@router.post("/{world_name}/geography-raster")
+async def upload_geography_raster(
+    world_name: str,
+    file: UploadFile = File(...),
+    branch: str | None = None,
+) -> dict[str, Any]:
+    """Upload a dense land-bias raster (Gleba-style probability map).
+
+    The grayscale is normalised to [0, 1] and re-encoded as 16-bit PNG at
+    ``layers/geological/input/geography_raster.png``; the terrain pipeline
+    maps it to a [-1, 1] bias (mid-grey neutral) and superposes it onto the
+    geography.yaml feature field (weight ``raster_weight``).
+    """
+    from dreamulator.map.elevation_codec import encode_elevation
+    from dreamulator.map.importer import import_heightmap
+    from dreamulator.resolver import LayerResolver
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    resolver = LayerResolver(world_dir, branch)
+    geo_input_dir = resolver.get_input_dir("geological")
+    if geo_input_dir is None:
+        geo_input_dir = world_dir / "layers" / "geological" / "input"
+        geo_input_dir.mkdir(parents=True, exist_ok=True)
+
+    data = await file.read()
+    try:
+        result = import_heightmap(data, filename=file.filename or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    target = geo_input_dir / "geography_raster.png"
+    target.write_bytes(encode_elevation(result.elevation, 0.0, 1.0))
+
+    return {
+        "ok": True,
+        "source_format": result.source_format,
+        "source_resolution": [result.source_width, result.source_height],
+        "saved": str(target.relative_to(world_dir)),
     }

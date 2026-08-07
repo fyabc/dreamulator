@@ -9,6 +9,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import ImportElevationButton, { type ImportElevationResult } from '../components/map/ImportElevationButton'
+import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
@@ -333,6 +334,22 @@ export default function MapViewerPage() {
             onImported={handleImported}
           />
         )}
+
+        {/* Upload dense anchoring grayscale (next generation run) */}
+        <GeographyRasterButton
+          worldName={worldName!}
+          branch={selectedBranch}
+          onUploaded={(r) =>
+            setImportMsg(
+              r.ok
+                ? {
+                    ok: true,
+                    text: `锚定灰度图已保存（${r.source_format ?? ''}）。将于下次地形生成时与 geography.yaml 叠加生效。`,
+                  }
+                : { ok: false, text: `上传失败：${r.detail ?? '未知错误'}` }
+            )
+          }
+        />
 
         {/* Planet selector */}
         {worldPlanets && worldPlanets.length > 0 && (

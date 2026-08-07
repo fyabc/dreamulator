@@ -89,6 +89,10 @@ class GeographySpec(BaseModel):
     #: Re-stamp crust from the anchor field after tectonic evolution so
     #: authored continents do not drift with their plates.
     reapply_after_tectonics: bool = True
+    #: Weight of the optional dense raster bias (geography_raster.png,
+    #: Gleba-style probability map) when superposed onto the feature field.
+    #: 0 disables the raster even if present.
+    raster_weight: float = Field(default=1.0, ge=0.0, le=3.0)
     features: list[GeographyFeature] = Field(default_factory=list)
 
 
@@ -207,11 +211,18 @@ def _feature_contribution(
     return feature.strength * _feature_kernel(px, py, pz, feature)
 
 
-def build_land_bias_field(mesh: CVTMesh, spec: GeographySpec) -> np.ndarray:
+def build_land_bias_field(
+    mesh: CVTMesh,
+    spec: GeographySpec,
+    *,
+    raster_bias: np.ndarray | None = None,
+) -> np.ndarray:
     """Build the per-cell land-bias field in [-1, 1].
 
     Positive values favour continental crust, negative oceanic.  Pure function
-    of (mesh, spec) — no randomness.
+    of (mesh, spec[, raster_bias]) — no randomness.  When a dense raster bias
+    (Gleba-style probability map, [-1, 1] per cell) is given, it is superposed
+    with weight ``spec.raster_weight`` — same treatment as the feature field.
     """
     n = len(mesh.cells)
     px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
@@ -226,7 +237,42 @@ def build_land_bias_field(mesh: CVTMesh, spec: GeographySpec) -> np.ndarray:
         lat_rad = np.fromiter((np.radians(c.lat) for c in mesh.cells), dtype=np.float64, count=n)
         field += spec.hemisphere_land_bias * np.sin(lat_rad)
 
+    if raster_bias is not None and spec.raster_weight != 0.0:
+        field += spec.raster_weight * raster_bias
+
     return np.clip(field, -1.0, 1.0)
+
+
+def load_geography_raster(path: Path | None) -> np.ndarray | None:
+    """Load the optional dense bias raster (grayscale heightmap convention).
+
+    The raster is stored as ``geography_raster.png`` next to geography.yaml
+    (any importer-supported format works).  Grayscale [0, 1] is mapped to a
+    bias in [-1, 1] (mid-grey = neutral).  Returns None when absent.
+    """
+    if path is None:
+        return None
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        logger.warning("geography raster unreadable (%s): %s", path, exc)
+        return None
+    from .importer import import_heightmap
+
+    result = import_heightmap(data, filename=path.name)
+    return np.asarray(2.0 * result.elevation - 1.0)
+
+
+def sample_raster_at_cells(mesh: CVTMesh, raster: np.ndarray) -> np.ndarray:
+    """Nearest-pixel sampling of a (H, W) equirectangular raster at cells."""
+    from .elevation_codec import lon_lat_to_pixel
+
+    h, w = raster.shape
+    out = np.empty(len(mesh.cells), dtype=np.float64)
+    for i, cell in enumerate(mesh.cells):
+        x, y = lon_lat_to_pixel(cell.lon, cell.lat, w, h)
+        out[i] = raster[y, x]
+    return out
 
 
 def build_elevation_pins(
@@ -276,6 +322,7 @@ def apply_geography_crust(
     config: TerrainPipelineConfig,
     *,
     anchor_weight: float | None = None,
+    raster_bias: np.ndarray | None = None,
 ) -> None:
     """Set per-cell crust_type from the authored geography.
 
@@ -289,7 +336,7 @@ def apply_geography_crust(
     from .noise_kernels import fbm_on_points
 
     spec: GeographySpec | None = config.geography
-    if spec is None or not spec.features:
+    if spec is None or (not spec.features and raster_bias is None):
         return
 
     n = len(mesh.cells)
@@ -301,7 +348,7 @@ def apply_geography_crust(
 
     target_fraction = spec.land_fraction_target or config.target_land_fraction
 
-    field = build_land_bias_field(mesh, spec)
+    field = build_land_bias_field(mesh, spec, raster_bias=raster_bias)
 
     px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
     py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)

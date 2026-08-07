@@ -658,14 +658,18 @@ _PLATE_ALGORITHMS: dict[str, str] = {
 def _generate_cortial2019(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    *,
+    raster_bias: np.ndarray | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Cortial et al. (2019) §3 — Poisson-disc + spherical Voronoi."""
-    return _generate_plates_impl(mesh, config)
+    return _generate_plates_impl(mesh, config, raster_bias=raster_bias)
 
 
 def generate_plates(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    *,
+    raster_bias: np.ndarray | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Generate tectonic plates on the spherical CVT mesh.
 
@@ -690,13 +694,15 @@ def generate_plates(
             f"Unknown plate algorithm '{algo}'. Available: {sorted(_PLATE_ALGORITHMS.keys())}"
         )
     if algo == "cortial2019":
-        return _generate_cortial2019(mesh, config)
+        return _generate_cortial2019(mesh, config, raster_bias=raster_bias)
     raise ValueError(f"Plate algorithm '{algo}' not implemented")  # unreachable
 
 
 def _generate_plates_impl(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    *,
+    raster_bias: np.ndarray | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Internal implementation — Cortial 2019 Voronoi partition."""
     rng = np.random.default_rng(config.seed + 1)
@@ -736,7 +742,7 @@ def _generate_plates_impl(
         logger.info("  Step 4/5: Assigning crust types (authored geography)")
         from .geography import apply_geography_crust
 
-        apply_geography_crust(mesh, config)
+        apply_geography_crust(mesh, config, raster_bias=raster_bias)
     else:
         logger.info("  Step 4/5: Assigning crust types")
         assign_crust_types(

@@ -312,6 +312,8 @@ def synthesize_terrain(
     mesh: CVTMesh,
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
+    *,
+    raster_bias: np.ndarray | None = None,
 ) -> None:
     """Synthesize terrain elevation (dispatches to configured algorithm).
 
@@ -328,12 +330,14 @@ def synthesize_terrain(
         raise ValueError(
             f"Unknown terrain algorithm '{algo}'. Available: {sorted(_TERRAIN_ALGORITHMS.keys())}"
         )
-    # Authored land-bias field (pure function of (mesh, spec), identical to the
-    # one used for crust anchoring) so convergent uplift can be damped inside
-    # authored ocean basins / rift seas.
+    # Authored land-bias field (pure function of (mesh, spec[, raster]),
+    # identical to the one used for crust anchoring) so convergent uplift can
+    # be damped inside authored ocean basins / rift seas.
     spec = config.geography
     geography_bias = (
-        build_land_bias_field(mesh, spec) if spec is not None and spec.features else None
+        build_land_bias_field(mesh, spec, raster_bias=raster_bias)
+        if spec is not None and (spec.features or raster_bias is not None)
+        else None
     )
     if algo == "cortial2019_gaussian":
         _synthesize_gaussian(mesh, plates, config, geography_bias=geography_bias)

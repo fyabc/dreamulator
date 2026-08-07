@@ -393,6 +393,7 @@ features:
 | 陆缘浅海 / 地峡高度 | `elevation_target_m` 钉扎（负=水深、正=陆高，相对校准海面） |
 | 临界海峡（冰期关闭） | 浅海钉扎 + `terrain_config.yaml: sea_level_offset_m: -120` |
 | 裂谷不被横穿造山抬出海面 | 自动：强负偏置场抑制汇聚抬升（无需作者干预） |
+| 手绘大陆大形 | 上传 `geography_raster.png` 灰度概率图，与 feature 叠加（Gleba 模式） |
 
 **已知限制**：
 - 海岸线偏直（海陆判定在 cell 粒度 ~76 km，见 terrain-pipeline.md §3.5）
