@@ -31,8 +31,7 @@ export type LayerKind = 'base' | 'thematic' | 'fill' | 'feature'
 
 /** UI layer groups (organisation only — not compositing order). */
 export const LAYER_GROUPS: { id: string; label: string }[] = [
-  { id: 'terrain', label: '底图' },
-  { id: 'thematic', label: '专题着色' },
+  { id: 'thematic', label: '地图模式' },
   { id: 'geology', label: '地质构造' },
   { id: 'overlay', label: '叠加标注' },
 ]
@@ -52,20 +51,20 @@ export const LAYER_HELP: LayerHelpEntry[] = [
   {
     id: 'terrain',
     label: '地形',
-    desc: '自适应海拔着色（底图画布）',
-    detail: '基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 沙滩黄 → 低地绿 → 高地棕 → 雪山白。作为不透明底图画布，专题层叠加其上。默认开启。',
+    desc: '自适应海拔着色（默认专题图层）',
+    detail: '基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 低地绿 → 高地棕 → 雪山白。与其他专题层互斥。默认开启。',
     defaultOpacity: 1,
-    kind: 'base',
-    group: 'terrain',
+    kind: 'thematic',
+    group: 'thematic',
   },
   {
     id: 'landsea',
     label: '海陆',
-    desc: '二值海陆着色（底图画布）',
-    detail: '二值蓝／绿着色，快速区分海洋和陆地。海平面以下为深蓝，以上为绿色。与"地形"互斥（底图槽位唯一）。',
+    desc: '二值海陆着色（蓝色=海洋，绿色=陆地）',
+    detail: '二值蓝／绿着色，快速区分海洋和陆地。与其他专题层互斥。',
     defaultOpacity: 1,
-    kind: 'base',
-    group: 'terrain',
+    kind: 'thematic',
+    group: 'thematic',
   },
   {
     id: 'plates',
@@ -127,6 +126,15 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     desc: '表层洋流箭头（品红=暖·青绿=寒，SVG矢量）',
     detail: 'Stommel 风生环流模型解算的表面流场。方向=流向、长度∝流速、品红=暖流·青绿=寒流。按 ~8° 网格空间采样，任意缩放清晰。可自由叠加。',
     defaultOpacity: 0.75,
+    kind: 'feature',
+    group: 'overlay',
+  },
+  {
+    id: 'coastlines',
+    label: '海岸线',
+    desc: '海岸线轮廓（默认开启）',
+    detail: '海平面附近 ±200m 范围的 cell 渲染为浅灰蓝轮廓线。叠加在所有专题层之上，帮助在 NPP/文明摇篮等缺少地形参考的图层中定位海陆边界。默认开启。',
+    defaultOpacity: 0.6,
     kind: 'feature',
     group: 'overlay',
   },

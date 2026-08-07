@@ -46,14 +46,15 @@ void main() {
 /** Composite pass: blend layer textures in kind z-order. */
 const compositeFragmentShader = /* glsl */ `
 precision highp float;
-uniform sampler2D u_base;      // opaque canvas (terrain or landsea)
-uniform sampler2D u_thematic;  // e.g. Köppen (alpha=0 where no data)
-uniform sampler2D u_fill;      // e.g. plates
-uniform sampler2D u_feature;   // e.g. boundaries
-uniform sampler2D u_currents;  // ocean currents (speed heatmap)
+uniform sampler2D u_thematic;   // map mode (terrain / Köppen / Whittaker / NPP / cradle)
+uniform sampler2D u_fill;       // plates
+uniform sampler2D u_feature;    // boundaries (crust/plate)
+uniform sampler2D u_coastlines; // coastline outline
+uniform sampler2D u_currents;   // ocean current arrows
 uniform float u_thematicOp;
 uniform float u_fillOp;
 uniform float u_featureOp;
+uniform float u_coastlinesOp;
 uniform float u_currentsOp;
 varying vec2 vUv;
 
@@ -63,10 +64,12 @@ vec3 blendLayer(vec3 dst, vec4 src, float op) {
 }
 
 void main() {
-  vec3 color = texture2D(u_base, vUv).rgb;
+  // Neutral dark background — visible when no thematic is active.
+  vec3 color = vec3(0.12, 0.16, 0.22);
   color = blendLayer(color, texture2D(u_thematic, vUv), u_thematicOp);
   color = blendLayer(color, texture2D(u_fill, vUv), u_fillOp);
   color = blendLayer(color, texture2D(u_feature, vUv), u_featureOp);
+  color = blendLayer(color, texture2D(u_coastlines, vUv), u_coastlinesOp);
   color = blendLayer(color, texture2D(u_currents, vUv), u_currentsOp);
   gl_FragColor = vec4(color, 1.0);
 }
@@ -167,7 +170,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -202,19 +205,22 @@ export default function useGPUTerrain({
       vertexShader,
       fragmentShader: compositeFragmentShader,
       uniforms: {
-        u_base: { value: baked.terrain },
-        u_thematic: { value: baked.koppen },
+        u_thematic: { value: baked.terrainThematic },
         u_fill: { value: baked.plates },
         u_feature: { value: baked.boundaries },
+        u_coastlines: { value: baked.coastlines },
         u_currents: { value: baked.currents },
-        u_thematicOp: { value: layers.koppen ?? 0 },
+        u_thematicOp: { value: layers.terrain ?? 1 },
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
+        u_coastlinesOp: { value: layers.coastlines ?? 1 },
         u_currentsOp: { value: layers.currents ?? 0 },
-        // Ecology textures (dynamic — set by opacity effect)
-        _biomesTex: { value: baked.biomes },
-        _nppTex: { value: baked.npp },
-        _domesticableTex: { value: baked.domesticable },
+        _terrainThematic: { value: baked.terrainThematic },
+        _landseaThematic: { value: baked.landseaThematic },
+        _koppen: { value: baked.koppen },
+        _biomes: { value: baked.biomes },
+        _npp: { value: baked.npp },
+        _domesticable: { value: baked.domesticable },
       },
       depthTest: false,
       depthWrite: false,
@@ -230,7 +236,7 @@ export default function useGPUTerrain({
       fragmentShader: displayFragmentShader,
       uniforms: {
         u_colorMap: { value: target.texture },
-        u_directBase: { value: baked.terrain },
+        u_directBase: { value: baked.terrainThematic },
         u_useComposite: { value: 0 },
         u_sunLonRad: { value: sunLonRad },
         u_sunDecRad: { value: sunDecRad },
@@ -244,13 +250,24 @@ export default function useGPUTerrain({
   }, [baked, width, height])
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
+  // overlayActive: triggers the composite pass and u_useComposite for 2D display.
   const overlayActive =
-    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
-    (layers.currents ?? 0) > 0 || (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
+    (layers.koppen ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
+    (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
+    (layers.coastlines ?? 1) > 0 || (layers.currents ?? 0) > 0 ||
+    (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
     (layers.domesticable ?? 0) > 0
-  const activeBaseTex = baked
-    ? ((layers.landsea ?? 0) > 0 ? baked.landsea : baked.terrain)
-    : null
+
+  // needsFboForGlobe: like overlayActive but excludes coastlines.
+  // The FBO colour-space round-trip shifts hues in the 3D globe's PBR
+  // pipeline — until that is fixed, skip the FBO when coastlines are the
+  // only overlay so the globe samples terrainThematic directly.
+  const needsFboForGlobe =
+    (layers.koppen ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
+    (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
+    (layers.currents ?? 0) > 0 ||
+    (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
+    (layers.domesticable ?? 0) > 0
 
   // Dispose composite resources when they are replaced / on unmount.
   useEffect(() => {
@@ -263,42 +280,43 @@ export default function useGPUTerrain({
     }
   }, [composite])
 
-  // --- Layer opacities / base selection → uniforms (no re-bake) ---
+  // --- Layer opacities → uniforms (no re-bake) ---
   useEffect(() => {
     if (!composite || !baked) return
     const u = composite.compMat.uniforms
-    u.u_base.value = activeBaseTex
 
-    // Determine active thematic texture: Köppen, biomes, NPP, or domesticable
+    // Determine active thematic texture: terrain (default), landsea, Köppen, biomes, NPP, domesticable
     const thematicLayers: [number | undefined, THREE.DataTexture][] = [
+      [layers.terrain, baked.terrainThematic],
+      [layers.landsea, baked.landseaThematic],
       [layers.koppen, baked.koppen],
       [layers.biomes, baked.biomes],
       [layers.npp, baked.npp],
       [layers.domesticable, baked.domesticable],
     ]
-    let activeThematic = baked.koppen
-    let thematicOp = 0
+    let activeThematic = baked.terrainThematic
+    let thematicOp = 1.0  // default: terrain on
     for (const [op, tex] of thematicLayers) {
       if ((op ?? 0) > 0) {
         activeThematic = tex
         thematicOp = op ?? 0
-        break  // first nonzero wins (radio-exclusive by convention)
+        break
       }
     }
     u.u_thematic.value = activeThematic
     u.u_thematicOp.value = thematicOp
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
+    u.u_coastlinesOp.value = layers.coastlines ?? 1
     u.u_currentsOp.value = layers.currents ?? 0
     const d = composite.displayMat.uniforms
-    d.u_directBase.value = activeBaseTex
     d.u_useComposite.value = overlayActive ? 1 : 0
     // Sample the composited image with Nearest when any cell layer is visible —
     // keeps crisp cell edges (matches the old single-texture behaviour).
     const filter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.minFilter = filter
     composite.target.texture.magFilter = filter
-  }, [composite, baked, layers, activeBaseTex, overlayActive])
+  }, [composite, baked, layers, overlayActive])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {
@@ -317,21 +335,38 @@ export default function useGPUTerrain({
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
       if (!composite || !overlayActive) return
+      // The composite pass is just layer blending, not a final render.
+      // Disable all colour transforms (tone mapping + sRGB encoding) so the
+      // FBO stores the same values as the source DataTextures.  Without this,
+      // an SRGBColorSpace renderer (3D globe) double-encodes the sRGB data,
+      // and the downstream sampler decodes it only once — shifting colours.
+      const prevTM = renderer.toneMapping
+      const prevExp = renderer.toneMappingExposure
+      const prevOCS = renderer.outputColorSpace
+      renderer.toneMapping = THREE.NoToneMapping
+      renderer.toneMappingExposure = 1.0
+      renderer.outputColorSpace = THREE.NoColorSpace
       renderer.setRenderTarget(composite.target)
       renderer.render(composite.scene, composite.camera)
       renderer.setRenderTarget(null)
+      renderer.toneMapping = prevTM
+      renderer.toneMappingExposure = prevExp
+      renderer.outputColorSpace = prevOCS
+      composite.target.texture.colorSpace = THREE.NoColorSpace
     },
     [composite, overlayActive],
   )
 
   /** The texture consumers (reprojection, 3D globe) should sample: the FBO
-   *  composite while overlays are active, otherwise the plain base texture
-   *  (byte-identical to the pre-refactor single-texture pipeline). */
+   *  composite while substantive overlays are active, otherwise the plain
+   *  base texture (byte-identical to the pre-refactor single-texture
+   *  pipeline).  Coastlines alone do NOT force the FBO path — the globe's
+   *  PBR pipeline doesn't round-trip through the FBO correctly yet. */
   const texture: THREE.Texture | null = !baked
     ? null
-    : overlayActive
-      ? composite?.target.texture ?? null
-      : activeBaseTex
+    : needsFboForGlobe
+      ? (composite?.target.texture ?? null)
+      : baked.terrainWithCoastlines
 
   return { material: composite?.displayMat ?? null, texture, renderComposite }
 }

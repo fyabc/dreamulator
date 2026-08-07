@@ -164,15 +164,6 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
     [applyPatch],
   )
 
-  /** Clear the thematic slot ("none" option). */
-  const clearThematic = useCallback(() => {
-    const patch: Partial<LayerOpacities> = {}
-    for (const l of LAYER_HELP) {
-      if (l.kind === 'thematic') patch[l.id] = 0
-    }
-    onChange({ layers: { ...state.layers, ...patch } })
-  }, [state.layers, onChange])
-
   const setLayerOpacity = useCallback(
     (id: ColorMode, v: number) => {
       if (v > 0) lastNonZero.current[id] = v
@@ -227,7 +218,6 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
         const visCount = g.toggleMembers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length
         const checkState = visCount === 0 ? 'none' : visCount === g.toggleMembers.length ? 'all' : 'some'
         const open = !collapsed[g.id]
-        const thematicActive = g.radioMembers.some((l) => l.kind === 'thematic' && opacityOf(l) > 0)
         return (
           <section key={g.id}>
             <div className="flex items-center gap-1 select-none">
@@ -269,21 +259,7 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
 
             {open && (
               <div className="mt-1.5 ml-[7px] pl-2.5 border-l border-gray-800 space-y-1.5">
-                {/* Thematic groups get a "none" radio (slot may be empty). */}
-                {g.radioMembers.some((l) => l.kind === 'thematic') && (
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="layerslot-thematic"
-                      checked={!thematicActive}
-                      onChange={clearThematic}
-                      className="h-3 w-3 accent-neon-cyan cursor-pointer"
-                    />
-                    <span className="text-[11px] text-gray-400">无</span>
-                  </label>
-                )}
-
-                {/* Radio rows (base / thematic slots). */}
+                {/* Radio rows (thematic slots). */}
                 {g.radioMembers.map((l) => {
                   const active = opacityOf(l) > 0
                   return (

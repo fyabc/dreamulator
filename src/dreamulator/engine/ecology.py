@@ -88,7 +88,7 @@ class EcologyEngine(BaseEngine):
         # ---- 3. Classify every cell ----
         biome_counts: dict[str, int] = {}
         for cell in mesh.cells:
-            is_ocean = cell.crust_type in ("oceanic", "transitional") and cell.elevation < 0.0
+            is_ocean = cell.elevation < 0.0
             eco = classify_cell_ecology(
                 temperature_c=cell.temperature_C,
                 precipitation_mm=cell.precipitation_mm,

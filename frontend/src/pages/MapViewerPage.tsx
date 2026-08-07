@@ -74,7 +74,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
   })
 
   // Decoded elevation data (for rendering)
@@ -146,7 +146,7 @@ export default function MapViewerPage() {
     enabled: !!worldName && !!selectedPlanet,
   })
 
-  const { data: elevationBlob, isLoading: loadingElevation } = useQuery({
+  const { data: elevationBlob } = useQuery({
     queryKey: ['elevationBlob', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getElevationBlob(worldName!, selectedPlanet, selectedBranch),
     enabled: !!worldName && !!selectedPlanet,
@@ -419,19 +419,7 @@ export default function MapViewerPage() {
         <div className="flex flex-col flex-1 min-w-0 md:hidden">
           {/* Map area — full width */}
           <div className="flex-1 flex flex-col min-h-0">
-            {loadingElevation ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500">
-                加载地图数据...
-              </div>
-            ) : !localElevation ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-                <p>
-                  {selectedPlanet
-                    ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
-                    : '该行星暂无地图数据'}
-                </p>
-              </div>
-            ) : (
+            {localElevation ? (
               <>
                 <div className="flex-1 min-h-0">
                   <MapViewer
@@ -457,6 +445,10 @@ export default function MapViewerPage() {
                 </div>
                 <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
               </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                加载地图数据...
+              </div>
             )}
           </div>
 
@@ -543,19 +535,7 @@ export default function MapViewerPage() {
 
           {/* Center: map viewer */}
           <div className="flex-1 flex flex-col min-w-0">
-            {loadingElevation ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500">
-                加载地图数据...
-              </div>
-            ) : !localElevation ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-                <p>
-                  {selectedPlanet
-                    ? `${currentPlanetName ?? selectedPlanet} 暂无地图数据`
-                    : '该行星暂无地图数据'}
-                </p>
-              </div>
-            ) : (
+            {localElevation ? (
               <>
                 <div className="flex-1 min-h-0">
                   <MapViewer
@@ -581,6 +561,10 @@ export default function MapViewerPage() {
                 </div>
                 <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
               </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                加载地图数据...
+              </div>
             )}
           </div>
 

@@ -24,11 +24,11 @@ import * as THREE from 'three'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import {
-  generateAdaptiveTerrainScale,
   PLATE_COLORS,
   KOPPEN_COLORS,
   WHITTAKER_COLORS,
   NPP_SCALE,
+  generateAdaptiveTerrainScale,
 } from './utils/colorScales'
 
 // ---------------------------------------------------------------------------
@@ -66,23 +66,26 @@ const LANDFORM_COLORS: Record<string, [number, number, number]> = {
   rift:    hexRgb('#008080'),  // teal
 }
 
-const COAST_COLOR = [20, 20, 20] as const
-
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
 export interface LayerTextures {
-  /** Opaque base canvas — hypsometric tint. */
-  terrain: THREE.DataTexture
-  /** Opaque base canvas — binary land/sea. */
-  landsea: THREE.DataTexture
+  /** Hypsometric tint per-cell (thematic, half-res). Default map mode. */
+  terrainThematic: THREE.DataTexture
+  /** terrainThematic with coastlines baked in — used by the 3D globe so it
+   *  doesn't need the FBO composite pass just for coastline overlay. */
+  terrainWithCoastlines: THREE.DataTexture
+  /** Binary land/sea per-cell (thematic, half-res). */
+  landseaThematic: THREE.DataTexture
   /** Per-cell thematic colour (Köppen), alpha=0 where no data. Half res. */
   koppen: THREE.DataTexture
   /** Per-cell fill colour (plates), alpha=0 where no data. Half res. */
   plates: THREE.DataTexture
   /** Per-cell feature colour (boundaries/crust), alpha=0 where no data. Half res. */
   boundaries: THREE.DataTexture
+  /** Coastline outline (feature, half-res). Always-on by default. */
+  coastlines: THREE.DataTexture
   /** Arrow-field overlay — warm=magenta, cold=cyan arrows. Half res. */
   currents: THREE.DataTexture
   /** Whittaker biome thematic (per-cell categorical). Half res. */
@@ -142,9 +145,10 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
   // Dispose stale GPU textures before replacing.
   if (bakeCache) {
     const t = bakeCache.textures
-    t.terrain.dispose(); t.landsea.dispose(); t.koppen.dispose()
-    t.plates.dispose(); t.boundaries.dispose(); t.currents.dispose()
+    t.terrainThematic.dispose(); t.landseaThematic.dispose(); t.koppen.dispose()
+    t.plates.dispose(); t.boundaries.dispose(); t.coastlines.dispose(); t.currents.dispose()
     t.biomes.dispose(); t.npp.dispose(); t.domesticable.dispose()
+    t.terrainWithCoastlines.dispose()
   }
 
   const textures = bakeAll(inputs)
@@ -185,111 +189,6 @@ function makeTexture(buf: Uint8Array, width: number, height: number, nearest: bo
   return tex
 }
 
-/**
- * Cell-level coastline detection (single pass over all pixels).  Returns a
- * mask (1 = coastline pixel) shared by BOTH base bakes — previously the
- * detection ran twice (once per base), doubling an already expensive pass.
- */
-function computeCoastMask(
-  width: number,
-  height: number,
-  cvtMesh: CVTMesh,
-  cellIdMap: CellIdMap,
-  seaLevel: number,
-): Uint8Array {
-  const mask = new Uint8Array(width * height)
-  const cellLand = new Map<number, boolean>()
-  for (const cell of cvtMesh.cells) {
-    cellLand.set(cell.id, cell.elevation >= seaLevel)
-  }
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = y * width + x
-      const cid = cellIdMap[i]
-      if (cid == null) continue
-      const isLand = cellLand.get(cid)
-      if (isLand == null) continue
-      // Right neighbour
-      if (x + 1 < width) {
-        const nCid = cellIdMap[y * width + x + 1]
-        if (nCid != null && nCid !== cid) {
-          const nLand = cellLand.get(nCid)
-          if (nLand != null && isLand !== nLand) {
-            mask[i] = 1
-            mask[y * width + x + 1] = 1
-          }
-        }
-      }
-      // Bottom neighbour
-      if (y + 1 < height) {
-        const nCid = cellIdMap[(y + 1) * width + x]
-        if (nCid != null && nCid !== cid) {
-          const nLand = cellLand.get(nCid)
-          if (nLand != null && isLand !== nLand) {
-            mask[i] = 1
-            mask[(y + 1) * width + x] = 1
-          }
-        }
-      }
-    }
-  }
-  return mask
-}
-
-function bakeTerrainBase(inp: BakeInputs, coastMask: Uint8Array | null): Uint8Array {
-  const { elevation, width, height, elevMinM, elevMaxM, waterDepthFactor, flipHorizontal, seaLevel } = inp
-  const totalPixels = width * height
-  const buf = new Uint8Array(totalPixels * 4)
-  const lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
-  const range = elevMaxM - elevMinM || 1
-  const normSeaLevel = (seaLevel - elevMinM) / range
-
-  for (let i = 0; i < totalPixels; i++) {
-    const elev = elevation[i]
-    const idx = Math.min(1023, Math.max(0, Math.round(elev * 1023)))
-    let r = lut[idx * 4], g = lut[idx * 4 + 1], b = lut[idx * 4 + 2]
-    if (elev < normSeaLevel) {
-      const depth = (normSeaLevel - elev) / Math.max(normSeaLevel, 0.001)
-      const f = 1 - waterDepthFactor * depth
-      r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f)
-    }
-    const pi = i * 4
-    if (coastMask && coastMask[i]) {
-      buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-    } else {
-      buf[pi] = r; buf[pi + 1] = g; buf[pi + 2] = b
-    }
-    buf[pi + 3] = 255
-  }
-
-  return flipBuffer(buf, width, height, flipHorizontal)
-}
-
-function bakeLandseaBase(inp: BakeInputs, coastMask: Uint8Array | null): Uint8Array {
-  const { elevation, width, height, seaLevel, elevMinM, elevMaxM, flipHorizontal } = inp
-  const totalPixels = width * height
-  const buf = new Uint8Array(totalPixels * 4)
-  const range = elevMaxM - elevMinM || 1
-  const normSeaLevel = (seaLevel - elevMinM) / range
-  const cutoff = Math.round(normSeaLevel * 1023)
-
-  for (let i = 0; i < totalPixels; i++) {
-    const idx = Math.min(1023, Math.max(0, Math.round(elevation[i] * 1023)))
-    const water = idx <= cutoff
-    const pi = i * 4
-    if (coastMask && coastMask[i]) {
-      buf[pi] = COAST_COLOR[0]; buf[pi + 1] = COAST_COLOR[1]; buf[pi + 2] = COAST_COLOR[2]
-    } else if (water) {
-      buf[pi] = 30; buf[pi + 1] = 60; buf[pi + 2] = 120
-    } else {
-      buf[pi] = 80; buf[pi + 1] = 140; buf[pi + 2] = 60
-    }
-    buf[pi + 3] = 255
-  }
-
-  return flipBuffer(buf, width, height, flipHorizontal)
-}
-
 /** Per-cell colour palettes keyed by cell id (ported from useGPUTerrain). */
 /** Look up a colour from a sequential scale by normalised value [0,1]. */
 function sequentialColor(value: number, scale: typeof NPP_SCALE): [number, number, number] {
@@ -309,18 +208,30 @@ function sequentialColor(value: number, scale: typeof NPP_SCALE): [number, numbe
   return scale[0].color
 }
 
-function buildCellPalettes(cvtMesh: CVTMesh): {
+function buildCellPalettes(
+  cvtMesh: CVTMesh,
+  elevMinM: number,
+  elevMaxM: number,
+  seaLevel: number,
+  waterDepthFactor: number,
+): {
+  terrainThematic: Map<number, [number, number, number]>
+  landseaThematic: Map<number, [number, number, number]>
   koppen: Map<number, [number, number, number]>
   plates: Map<number, [number, number, number]>
   boundaries: Map<number, [number, number, number]>
+  coastlines: Map<number, [number, number, number]>
   currents: Map<number, [number, number, number]>
   biomes: Map<number, [number, number, number]>
   npp: Map<number, [number, number, number]>
   domesticable: Map<number, [number, number, number]>
 } {
+  const terrainThematic = new Map<number, [number, number, number]>()
+  const landseaThematic = new Map<number, [number, number, number]>()
   const koppen = new Map<number, [number, number, number]>()
   const plates = new Map<number, [number, number, number]>()
   const boundaries = new Map<number, [number, number, number]>()
+  const coastlines = new Map<number, [number, number, number]>()
   const currents = new Map<number, [number, number, number]>()
   const biomes = new Map<number, [number, number, number]>()
   const npp = new Map<number, [number, number, number]>()
@@ -328,6 +239,24 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
 
   // NPP range for normalisation (Miami model bounded by [0, 3000] gC/m^2/yr)
   const NPP_MAX = 3000
+
+  // Build adaptive hypsometric LUT (NOAA ETOPO1 ocean + ESRI Natural Earth land).
+  const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
+  const lutSize = terrainLut.length / 4
+  const elevRange = elevMaxM - elevMinM || 1
+  function terrainColor(elevM: number): [number, number, number] {
+    const idx = Math.round(((elevM - elevMinM) / elevRange) * (lutSize - 1))
+    const clampedIdx = Math.max(0, Math.min(lutSize - 1, idx))
+    const i = clampedIdx * 4
+    let r = terrainLut[i], g = terrainLut[i + 1], b = terrainLut[i + 2]
+    // Water depth darkening — matches pre-refactor bakeTerrainBase behaviour.
+    if (elevM < seaLevel) {
+      const depthFrac = Math.min(1, (seaLevel - elevM) / Math.max(1, seaLevel - elevMinM))
+      const f = 1 - waterDepthFactor * depthFrac
+      r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f)
+    }
+    return [r, g, b]
+  }
 
   // Compute max ocean current speed for normalisation
   let maxSpeed = 0
@@ -347,6 +276,11 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
   })
 
   for (const cell of cvtMesh.cells) {
+    // Terrain thematic — hypsometric tint per cell
+    terrainThematic.set(cell.id, terrainColor(cell.elevation))
+    // Landsea thematic — binary
+    landseaThematic.set(cell.id, cell.elevation >= seaLevel ? [76, 175, 80] : [21, 101, 192])
+
     // Köppen thematic
     const kc = cell.koppen_class
     if (kc && KOPPEN_COLORS[kc]) {
@@ -439,7 +373,72 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
     }
   }
 
-  return { koppen, plates, boundaries, currents, biomes, npp, domesticable }
+  return { terrainThematic, landseaThematic, koppen, plates, boundaries,
+           coastlines, currents, biomes, npp, domesticable }
+}
+
+/**
+ * Coastline mask at HALF resolution — pixel-level detection (same algorithm
+ * as the original computeCoastMask).  Two adjacent half-res pixels that belong
+ * to DIFFERENT cells where one is land and the other ocean → both pixels are
+ * coastline.
+ */
+function bakeCoastlineMask(
+  width: number,
+  height: number,
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  seaLevel: number,
+  flipHorizontal: boolean,
+): Uint8Array {
+  const w2 = Math.max(1, width >> 1)
+  const h2 = Math.max(1, height >> 1)
+  const buf = new Uint8Array(w2 * h2 * 4)
+
+  const cellLand = new Map<number, boolean>()
+  for (const cell of cvtMesh.cells) {
+    cellLand.set(cell.id, cell.elevation >= seaLevel)
+  }
+
+  for (let y = 0; y < h2; y++) {
+    const srcRow = (2 * y) * width
+    for (let x = 0; x < w2; x++) {
+      const cid = cellIdMap[srcRow + 2 * x]
+      if (cid == null) continue
+      const isLand = cellLand.get(cid)
+      if (isLand == null) continue
+
+      // Right neighbour
+      if (x + 1 < w2) {
+        const nCid = cellIdMap[srcRow + 2 * (x + 1)]
+        if (nCid != null && nCid !== cid) {
+          const nLand = cellLand.get(nCid)
+          if (nLand != null && isLand !== nLand) {
+            const pi = (y * w2 + x) * 4
+            buf[pi] = 20; buf[pi + 1] = 20; buf[pi + 2] = 20; buf[pi + 3] = 255
+            const ni = (y * w2 + x + 1) * 4
+            buf[ni] = 20; buf[ni + 1] = 20; buf[ni + 2] = 20; buf[ni + 3] = 255
+          }
+        }
+      }
+      // Bottom neighbour
+      if (y + 1 < h2) {
+        const nextRow = (2 * (y + 1)) * width
+        const nCid = cellIdMap[nextRow + 2 * x]
+        if (nCid != null && nCid !== cid) {
+          const nLand = cellLand.get(nCid)
+          if (nLand != null && isLand !== nLand) {
+            const pi = (y * w2 + x) * 4
+            buf[pi] = 20; buf[pi + 1] = 20; buf[pi + 2] = 20; buf[pi + 3] = 255
+            const ni = ((y + 1) * w2 + x) * 4
+            buf[ni] = 20; buf[ni + 1] = 20; buf[ni + 2] = 20; buf[ni + 3] = 255
+          }
+        }
+      }
+    }
+  }
+
+  return flipBuffer(buf, w2, h2, flipHorizontal)
 }
 
 /**
@@ -455,7 +454,7 @@ function bakeCellLayer(
 ): Uint8Array {
   const w2 = Math.max(1, width >> 1)
   const h2 = Math.max(1, height >> 1)
-  const buf = new Uint8Array(w2 * h2 * 4)  // alpha stays 0 where no colour
+  const buf = new Uint8Array(w2 * h2 * 4)
   for (let y = 0; y < h2; y++) {
     const srcRow = (2 * y) * width
     for (let x = 0; x < w2; x++) {
@@ -475,40 +474,58 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   const w2 = Math.max(1, width >> 1)
   const h2 = Math.max(1, height >> 1)
 
-  const coastMask = (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap)
-    ? computeCoastMask(width, height, cvtMesh, cellIdMap, inp.seaLevel)
-    : null
-  const terrainBuf = bakeTerrainBase(inp, coastMask)
-  const landseaBuf = bakeLandseaBase(inp, coastMask)
-
-  // 1x1 transparent fallback when no cell data is available.
+  // 1x1 transparent fallback
   const empty: Uint8Array = new Uint8Array([0, 0, 0, 0])
+  let terrainThemBuf: Uint8Array = empty
+  let landseaThemBuf: Uint8Array = empty
   let koppenBuf: Uint8Array = empty
   let platesBuf: Uint8Array = empty
   let boundariesBuf: Uint8Array = empty
+  let coastlinesBuf: Uint8Array = empty
   let currentsBuf: Uint8Array = empty
   let biomesBuf: Uint8Array = empty
   let nppBuf: Uint8Array = empty
   let domesticableBuf: Uint8Array = empty
   let kw = 1, kh = 1
   if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
-    const palettes = buildCellPalettes(cvtMesh)
+    const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
+    terrainThemBuf = bakeCellLayer(palettes.terrainThematic, width, height, cellIdMap, flipHorizontal)
+    landseaThemBuf = bakeCellLayer(palettes.landseaThematic, width, height, cellIdMap, flipHorizontal)
     koppenBuf = bakeCellLayer(palettes.koppen, width, height, cellIdMap, flipHorizontal)
     platesBuf = bakeCellLayer(palettes.plates, width, height, cellIdMap, flipHorizontal)
     boundariesBuf = bakeCellLayer(palettes.boundaries, width, height, cellIdMap, flipHorizontal)
+    coastlinesBuf = bakeCoastlineMask(width, height, cvtMesh, cellIdMap, inp.seaLevel, flipHorizontal)
     biomesBuf = bakeCellLayer(palettes.biomes, width, height, cellIdMap, flipHorizontal)
     nppBuf = bakeCellLayer(palettes.npp, width, height, cellIdMap, flipHorizontal)
     domesticableBuf = bakeCellLayer(palettes.domesticable, width, height, cellIdMap, flipHorizontal)
-    // currentsBuf: left transparent — ocean arrows rendered as SVG vectors
     kw = w2; kh = h2
   }
 
+  // Merge terrain + coastlines → a self-contained texture for the 3D globe
+  // so it doesn't need the FBO composite pass just for coastline overlay.
+  const terrainWithCoastBuf = new Uint8Array(terrainThemBuf.length)
+  for (let i = 0; i < terrainThemBuf.length; i += 4) {
+    if (coastlinesBuf[i + 3] > 0) {
+      terrainWithCoastBuf[i] = coastlinesBuf[i]
+      terrainWithCoastBuf[i + 1] = coastlinesBuf[i + 1]
+      terrainWithCoastBuf[i + 2] = coastlinesBuf[i + 2]
+      terrainWithCoastBuf[i + 3] = 255
+    } else {
+      terrainWithCoastBuf[i] = terrainThemBuf[i]
+      terrainWithCoastBuf[i + 1] = terrainThemBuf[i + 1]
+      terrainWithCoastBuf[i + 2] = terrainThemBuf[i + 2]
+      terrainWithCoastBuf[i + 3] = 255
+    }
+  }
+
   return {
-    terrain: makeTexture(terrainBuf, width, height, false),
-    landsea: makeTexture(landseaBuf, width, height, false),
+    terrainThematic: makeTexture(terrainThemBuf, kw, kh, true),
+    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, kw, kh, true),
+    landseaThematic: makeTexture(landseaThemBuf, kw, kh, true),
     koppen: makeTexture(koppenBuf, kw, kh, true),
     plates: makeTexture(platesBuf, kw, kh, true),
     boundaries: makeTexture(boundariesBuf, kw, kh, true),
+    coastlines: makeTexture(coastlinesBuf, kw, kh, true),
     currents: makeTexture(currentsBuf, kw, kh, true),
     biomes: makeTexture(biomesBuf, kw, kh, true),
     npp: makeTexture(nppBuf, kw, kh, true),
