@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786061494067,
+  "lastUpdate": 1786062476410,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -411,6 +411,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004347043959701638",
             "extra": "mean: 5.088075000026038 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7d0eb4104fbaa4eff0b17bfc08b16c58a274cec7",
+          "message": "feat(geography): 高程锚定——钉扎 + 汇聚抬升抑制 + 双峰基准服从作者 + 海平面旋钮\n\n问题 1 阶段 2（roadmap #9 修复）。默认行为（无 geography/无 target/offset=0）\n逐位不变；268 测试全绿（+15 锚定测试）。\n\n- GeographyFeature +elevation_target_m/pin_strength：校准与全部后处理之后的\n  凸组合钉扎（核心饱和、边缘平滑）；shallow_sea/isthmus 可表达水深/陆高\n- 汇聚抬升抑制：强负偏置场（bias<−0.5）对汇聚正抬升与岛弧乘连续阻尼\n  clip(2·bias+2, 0.1, 1.0)；正常造山带无感\n- _apply_base_override：|bias|>0.5 处双峰基准服从作者——top-N 地壳泄漏的\n  continental cell 不再于 authored 海洋内隆起成高原（gaia-m 裂谷核心曾\n  +2050 m，现权威海核全 <0，裂谷海 ~−100 m）\n- sea_level_offset_m：水面标量移动（冰期海退 −120 m → (−120,0] 出露）；\n  大陆架/沿海平原/岛弧/分类/气候陆海掩膜参数化\n- 文档同步：terrain-pipeline §3.5、roadmap #9、design_patterns 模式 9、\n  CHANGELOG [Unreleased]\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T08:27:11+08:00",
+          "tree_id": "9a55461de4500cc40a4ab11d7af4cb364e92572d",
+          "url": "https://github.com/fyabc/dreamulator/commit/7d0eb4104fbaa4eff0b17bfc08b16c58a274cec7"
+        },
+        "date": 1786062475847,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 52.639858365938274,
+            "unit": "iter/sec",
+            "range": "stddev: 0.008953227148576073",
+            "extra": "mean: 18.99701159999836 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.598315020623512,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05884567452482062",
+            "extra": "mean: 277.9078525000074 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.390382828202577,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1522824541515868",
+            "extra": "mean: 719.2263739999968 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 927.7733976595229,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021896481391052227",
+            "extra": "mean: 1.0778493999964667 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.05851029025487,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000055842645879541065",
+            "extra": "mean: 5.100518199998305 msec\nrounds: 5"
           }
         ]
       }
