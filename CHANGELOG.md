@@ -5,10 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.18.0] — 2026-08-07
 
 ### Added
 
+- **docs 重组（全 Phase）**：terrain-pipeline.md 原位瘦身 3748→2415 行
+  （科学内容上浮 knowledge/，§ 编号冻结保护 13 处代码引用）；气候验证操作
+  步骤下沉 usage/validation-workflow.md；路线图单点收敛（climate-engine §6
+  移除）；knowledge 新增 ocean_currents / atmospheric_circulation /
+  koppen_classification + ecology/ / sociology/ 目录；早期 ADR 归档；
+  map_design_guide 重写为 CVT 版；narrative-craft 世界史讲述方法论
 - **大陆与边界真实感批次**（2026-08 用户反馈）：克拉通低地化
   （`continental_undulation_m` 多尺度动态地形起伏，板块内部 0.4× 偏差）；
   洋中脊 0.35× + 板块偏差解耦（脊顶回 −2500 m）；top-N 地壳泄漏重标
@@ -34,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   水面标量移动而地形数组不动（冰期海退：−120 m 时 (−120, 0] 出露成陆）；
   大陆架/沿海平原/岛弧/海陆分类/气候陆海掩膜全部参数化
 
+### Changed
+
+- **CI 全硬门槛**：ruff check 全规则 + ruff format + mypy strict 全部转为
+  硬门槛（原 F,E9 基线 + mypy 报告档）；技术债三连 Sprint 清偿：
+  mypy 150→0、ruff 266→0、format 24 文件清零
+
 ### Fixed
 
 - **锚定裂谷被推上海面**（roadmap #9；gaia-m 大裂谷海曾 +927 m）：地形合成
@@ -41,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)），岛弧同处理；且 |bias|>0.5 处
   双峰基准服从作者（top-N 地壳泄漏的 continental cell 不再拿 +850 m 基准隆起
   成高原）；正常造山带无感
+- **Pillow 13 弃用**：4 处 `Image.fromarray(..., mode="I;16")` 改原生
+  uint16 映射（2026-10-15 Pillow 13 移除前）
+- **scripts 下沉**：validate_climate / import_earth_elevation 进包
+  （`dreamulator.validate_climate` / `dreamulator.import_earth_elevation`），
+  cli_climate 的 sys.path hack 移除；narrator anthropic 类型修复
 
 ## [0.17.0] — 2026-08-06
 
