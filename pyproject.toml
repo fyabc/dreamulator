@@ -76,10 +76,12 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 # and physics symbols (L, T, R, M, …) are deliberate; N rules would fight them.
 "src/dreamulator/engine/climate_physics.py" = ["N803", "N806"]
 "src/dreamulator/map/climate_simulator.py" = ["N806"]
+"src/dreamulator/map/ocean_circulation.py" = ["N803", "N806"]  # maths: A (matrix), L (Laplacian), G_east, D_beta
 "src/dreamulator/map/models.py" = ["N815"]
 "src/dreamulator/map/pipeline_types.py" = ["N815"]
 "tests/test_engine/test_stellar_physics.py" = ["N806"]
 "tests/test_map/test_terrain_pipeline.py" = ["N806"]
+"tests/test_map/test_ocean_circulation.py" = ["N806", "E501", "UP037"]  # maths + long comments + TYPE_CHECKING quotes
 # Typer Option()/Annotated defaults and FastAPI Depends() are framework
 # idioms; B008 (function call in default argument) misfires on them.
 "src/dreamulator/cli.py" = ["B008"]
