@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786098568018,
+  "lastUpdate": 1786099150652,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -883,6 +883,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00011440055350819627",
             "extra": "mean: 5.197245399995154 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "35dc66b71becc2a87336a44b99e207f23a49d600",
+          "message": "fix(ocean): CG→GMRES (Stommel op非对称) + Windows GBK编码修复\n\n- ocean_circulation.py: cg→gmres (Stommel A=β·G+R·L 的 G_east 非对称)\n- climate_simulator.py: Köppen→Koppen (GBK console)\n- climate.py: terrain_config.yaml→optional_input_files (earth/climate-dev缺该文件)\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T18:38:14+08:00",
+          "tree_id": "31b87980aa39d50bf1e3b94a90a17d519fc482c7",
+          "url": "https://github.com/fyabc/dreamulator/commit/35dc66b71becc2a87336a44b99e207f23a49d600"
+        },
+        "date": 1786099149984,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 48.7169134210861,
+            "unit": "iter/sec",
+            "range": "stddev: 0.024942689486837196",
+            "extra": "mean: 20.526751999997828 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.775197781321509,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03767542994751061",
+            "extra": "mean: 173.15424299999904 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.2593123591245576,
+            "unit": "iter/sec",
+            "range": "stddev: 0.713803079391755",
+            "extra": "mean: 442.6125479999949 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1089.965299860278,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006847989011920933",
+            "extra": "mean: 917.4604000037334 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 271.75227497410685,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00003130358008210983",
+            "extra": "mean: 3.679822000000854 msec\nrounds: 5"
           }
         ]
       }
