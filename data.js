@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786074352004,
+  "lastUpdate": 1786075302954,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -647,6 +647,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000521293447830728",
             "extra": "mean: 5.100579199995536 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "6c3c8ac46af4b61a12e7801edc7c4d984da4d063",
+          "message": "feat(geography): per-plate 地壳下限 + gaia-m 南方大陆（板块构成接近地球）\n\n- crust_plate_floor（默认 0.10）：global top-N 阈值下整板近零陆壳问题\n  （gaia-m 曾 64% 板块 <20% 陆，地球 ~40%）；mean bias ≥ −0.3 的板块\n  板内最高分洋壳提升到下限；authored 洋豁免；全局比由倒水校准吸收\n- _relabel_leaked_crust 加 authored 门（仅清 bias < −0.3 区域泄漏，\n  与 floor 交互不互斥）\n- gaia-m 预设：南方大陆×2（澳洲/南美类似，strength 0.5–0.6）——地球\n  南半球 19% 陆地来自南方大陆，纯洋环设计无法接近地球板块构成\n\n效果：NH 41.3% / SH 16.9% / global 29.1%（地球 39/19/29）；\n板块构成 >50% 陆 2→5、混合 7→12、<20% 陆 16→15(32 板)\n\n文档：terrain-pipeline §6.1 补 floor 说明；CHANGELOG\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T12:00:36+08:00",
+          "tree_id": "62f4be9b6cedc31c1a89b512d40635aadb62887d",
+          "url": "https://github.com/fyabc/dreamulator/commit/6c3c8ac46af4b61a12e7801edc7c4d984da4d063"
+        },
+        "date": 1786075302656,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 55.42032012194861,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007216214308398754",
+            "extra": "mean: 18.04392320000261 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7992578241022814,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0511557503935967",
+            "extra": "mean: 263.2093019999999 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.469499818558405,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0867966560032722",
+            "extra": "mean: 680.5036566666681 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 984.6213953506623,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007070557028750603",
+            "extra": "mean: 1.0156187999996291 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.7081669289914,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006550653536772002",
+            "extra": "mean: 5.057959999999184 msec\nrounds: 5"
           }
         ]
       }
