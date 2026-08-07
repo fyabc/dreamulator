@@ -8,9 +8,11 @@
 knowledge/
 ├── astrophysics/        # 天体物理（恒星分类、轨道力学、恒星演化）
 ├── planetary_science/   # 行星科学（行星形成、潮汐加热、磁场）
+├── astrobiology/        # 天体生物学（替代溶剂、无氧产能、界面生命起源）
 ├── geology/             # 地质学（板块构造、火山、地貌）
 ├── climatology/         # 气候学（大气环流、洋流、气候分类）
 ├── ecology/             # 生态学（生物群落、食物网、种群动态）
+├── linguistics/         # 语言学（语言/文字分类、语序类型学、历时演化、核心词表）
 └── sociology/           # 社会学（聚落模式、政治制度、文化演化）
 ```
 
