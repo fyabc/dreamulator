@@ -190,11 +190,110 @@ def simulate_climate(
     wind = terrain_wind_blocking(wind, elevation_m, config.wind_blocking_height_m)
 
     # ------------------------------------------------------------------
-    # Stage 3: Precipitation (multi-pass BFS moisture transport)
+    # Stage 2.5: Ocean currents (Stommel gyres + SST correction)
     phase_timings["wind"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['wind']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]3/5  Precipitation (BFS moisture transport)[/dim]")
+    _console.print("  [dim]3/6  Ocean currents (Stommel gyres + SST)[/dim]")
+    # ------------------------------------------------------------------
+    if config.ocean_currents_enabled:
+        from dreamulator.map.ocean_circulation import (
+            DEFAULT_BOTTOM_FRICTION,
+            DEFAULT_H_ML,
+            DEFAULT_COASTAL_INFLUENCE_KM,
+            DEFAULT_SST_PASSES,
+            DEFAULT_SST_RELAXATION,
+            advect_sst_relaxation,
+            compute_curl_z,
+            compute_upwelling_index,
+            compute_wind_stress,
+            detect_ocean_basins,
+            east_north_basis,
+            solve_ocean_gyre,
+            _build_directed_edge_table,
+        )
+
+        east, north = east_north_basis(nodes_xyz)
+        tau = compute_wind_stress(wind, c_d=config.ocean_drag_coefficient)
+        src, dst = _build_directed_edge_table(mesh.cells)
+        curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
+
+        # Planetary β = 2Ω cos(φ) / a
+        omega = 2.0 * np.pi / (config.rotation_period_days * 86400.0)
+        radius_m = config.radius_km * 1000.0
+        beta = 2.0 * omega * np.cos(lat_rad) / radius_m
+
+        # Detect ocean basins
+        basin_id, basins = detect_ocean_basins(mesh.cells, config.sea_level_offset_m)
+
+        if basins:
+            # Per-basin Stommel solve
+            areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+            all_psi: dict[int, np.ndarray] = {}
+            all_velocity: dict[int, np.ndarray] = {}
+
+            h_ml = config.ocean_mixed_layer_depth_m
+            R = config.ocean_bottom_friction_s
+
+            for b_idx, b_cells in enumerate(basins):
+                n_b = len(b_cells)
+                _console.print(
+                    f"    [dim]Basin {b_idx + 1}/{len(basins)} ({n_b} cells)[/dim]"
+                )
+                psi, vel = solve_ocean_gyre(
+                    b_cells,
+                    mesh.cells,
+                    nodes_xyz,
+                    areas_km2,
+                    curl_z,
+                    beta,
+                    bottom_friction=R,
+                    h_ml=h_ml,
+                    east=east,
+                    sea_level_m=config.sea_level_offset_m,
+                )
+                all_psi[b_idx] = psi
+                all_velocity[b_idx] = vel
+
+                # SST correction (per-basin to keep memory bounded)
+                sst_corrected, sst_anom = advect_sst_relaxation(
+                    t_mean_C,
+                    vel,
+                    b_cells,
+                    mesh.cells,
+                    nodes_xyz,
+                    n_passes=config.ocean_sst_advection_passes,
+                    relaxation_rate=config.ocean_sst_relaxation_rate,
+                    coastal_influence_km=config.ocean_coastal_influence_km,
+                )
+                t_mean_C = sst_corrected  # feeds into stage 3 (BFS evaporation) + stage 4 (Köppen)
+                # Write per-cell ocean fields
+                for li, gi in enumerate(b_cells):
+                    c = mesh.cells[gi]
+                    c.ocean_current_east_m_s = float(
+                        np.dot(vel[li], east[gi])
+                    )
+                    c.ocean_current_north_m_s = float(
+                        np.dot(vel[li], north[gi])
+                    )
+                    c.sst_anomaly_c = float(sst_anom[gi])
+
+            # Upwelling diagnostic (optional, for future use)
+            if config.ocean_upwelling_enabled:
+                _upw = compute_upwelling_index(
+                    wind, mesh.cells, nodes_xyz, east, north, lat_rad
+                )
+        else:
+            _console.print("    [dim]No ocean basins detected[/dim]")
+    else:
+        _console.print("    [dim]Skipped (ocean_currents_enabled=false)[/dim]")
+
+    # ------------------------------------------------------------------
+    # Stage 3: Precipitation (multi-pass BFS moisture transport)
+    phase_timings["ocean"] = _time.time() - _t0
+    _console.print(f"  [green]done[/green] [dim]({phase_timings['ocean']:.1f}s)[/dim]")
+    _t0 = _time.time()
+    _console.print("  [dim]4/6  Precipitation (BFS moisture transport)[/dim]")
     # ------------------------------------------------------------------
     precipitation_mm = _compute_precipitation_bfs(
         mesh=mesh,
@@ -212,7 +311,7 @@ def simulate_climate(
     phase_timings["precipitation"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['precipitation']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]4/5  Koppen classification[/dim]")
+    _console.print("  [dim]5/6  Koppen classification[/dim]")
     # ------------------------------------------------------------------
     # Estimate driest and wettest month from annual + seasonal patterns
     p_annual = precipitation_mm
@@ -239,7 +338,7 @@ def simulate_climate(
     phase_timings["koppen"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['koppen']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]5/5  Write results to mesh[/dim]")
+    _console.print("  [dim]6/6  Write results to mesh[/dim]")
 
     for i in range(n):
         mesh.cells[i].temperature_C = float(t_mean_C[i])

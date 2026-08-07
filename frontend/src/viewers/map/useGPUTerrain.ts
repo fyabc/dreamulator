@@ -50,9 +50,11 @@ uniform sampler2D u_base;      // opaque canvas (terrain or landsea)
 uniform sampler2D u_thematic;  // e.g. Köppen (alpha=0 where no data)
 uniform sampler2D u_fill;      // e.g. plates
 uniform sampler2D u_feature;   // e.g. boundaries
+uniform sampler2D u_currents;  // ocean currents (speed heatmap)
 uniform float u_thematicOp;
 uniform float u_fillOp;
 uniform float u_featureOp;
+uniform float u_currentsOp;
 varying vec2 vUv;
 
 vec3 blendLayer(vec3 dst, vec4 src, float op) {
@@ -65,6 +67,7 @@ void main() {
   color = blendLayer(color, texture2D(u_thematic, vUv), u_thematicOp);
   color = blendLayer(color, texture2D(u_fill, vUv), u_fillOp);
   color = blendLayer(color, texture2D(u_feature, vUv), u_featureOp);
+  color = blendLayer(color, texture2D(u_currents, vUv), u_currentsOp);
   gl_FragColor = vec4(color, 1.0);
 }
 `
@@ -164,7 +167,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -203,9 +206,11 @@ export default function useGPUTerrain({
         u_thematic: { value: baked.koppen },
         u_fill: { value: baked.plates },
         u_feature: { value: baked.boundaries },
+        u_currents: { value: baked.currents },
         u_thematicOp: { value: layers.koppen ?? 0 },
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
+        u_currentsOp: { value: layers.currents ?? 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -236,7 +241,7 @@ export default function useGPUTerrain({
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
   const overlayActive =
-    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0
+    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 || (layers.currents ?? 0) > 0
   const activeBaseTex = baked
     ? ((layers.landsea ?? 0) > 0 ? baked.landsea : baked.terrain)
     : null
@@ -260,6 +265,7 @@ export default function useGPUTerrain({
     u.u_thematicOp.value = layers.koppen ?? 0
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
+    u.u_currentsOp.value = layers.currents ?? 0
     const d = composite.displayMat.uniforms
     d.u_directBase.value = activeBaseTex
     d.u_useComposite.value = overlayActive ? 1 : 0

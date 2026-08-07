@@ -16,7 +16,7 @@
  */
 
 import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -66,6 +66,8 @@ interface GlobeViewerProps {
   solarDeclinationDeg?: number
   /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
   dayNight?: boolean
+  /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
+  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null) | null>
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +267,8 @@ interface GlobeSceneProps {
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
+  /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
+  globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null) | null>
 }
 
 // North-pole fly animation duration (ms)
@@ -283,8 +287,10 @@ function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  globeProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
+  const { camera, gl } = useThree()
   const northAnimRef = useRef<NorthAnimState | null>(null)
 
   // Refresh the composited layer texture before the globe renders it
@@ -292,6 +298,40 @@ function GlobeScene({
   useFrame(({ gl }) => { renderComposite?.(gl) }, -1)
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
+
+  // Update the globe→screen projector for SVG overlay (ocean arrows, etc.)
+  useFrame(() => {
+    if (!globeProjectRef) return
+    const el = gl.domElement
+    const w = el.clientWidth
+    const h = el.clientHeight
+    globeProjectRef.current = (lon: number, lat: number) => {
+      camera.updateMatrixWorld()
+      const u = (lon + 180) / 360
+      const phi = (90 - lat) / 180 * Math.PI  // 0=north pole (top), PI=south pole (bottom)
+      const theta = u * 2 * Math.PI
+      const r = SPHERE_RADIUS
+      const worldPos = new THREE.Vector3(
+        -r * Math.cos(theta) * Math.sin(phi),
+        r * Math.cos(phi),
+        r * Math.sin(theta) * Math.sin(phi),
+      )
+      // Hemisphere cull: surface normal must face camera
+      const normal = worldPos.clone().normalize()
+      const toCamera = camera.position.clone().sub(worldPos).normalize()
+      const facing = normal.dot(toCamera)
+      if (facing < 0) return null
+      // Edge fade: arrows near the silhouette are compressed (tangent →
+      // screen projection degenerates).  Fade them to avoid visual noise.
+      const edgeFade = Math.min(1, facing * 4)  // 0=barely visible, 1=center
+      const screenPos = worldPos.clone().project(camera)
+      return {
+        x: (screenPos.x * 0.5 + 0.5) * w,
+        y: (-screenPos.y * 0.5 + 0.5) * h,
+        edgeFade,
+      }
+    }
+  })
 
   // Smooth camera animation (north-pole fly)
   useFrame(({ camera }) => {
@@ -443,6 +483,7 @@ export default function GlobeViewer({
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  globeProjectRef,
 }: GlobeViewerProps) {
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
@@ -483,6 +524,7 @@ export default function GlobeViewer({
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
+            globeProjectRef={globeProjectRef}
           />
         </Canvas>
       </Suspense>

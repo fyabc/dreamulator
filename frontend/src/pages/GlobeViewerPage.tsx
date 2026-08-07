@@ -10,7 +10,7 @@
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as THREE from 'three'
 import { api } from '../api/client'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion } from '../viewers/GlobeViewer'
@@ -29,6 +29,9 @@ import { normalisedToMeters } from '../viewers/map/utils/projection'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
 import type { VoronoiCell } from '../viewers/map/types'
 import type { CursorInfo } from '../components/map/MapViewer'
+import GlobeCurrentArrows from '../components/map/GlobeCurrentArrows'
+import ImportElevationButton, { type ImportElevationResult } from '../components/map/ImportElevationButton'
+import GeographyRasterButton from '../components/map/GeographyRasterButton'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -50,7 +53,8 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 } })
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0 } })
+  const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number } | null) | null>(null)
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
@@ -289,6 +293,16 @@ export default function GlobeViewerPage() {
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const handleImported = useCallback(
+    (r: ImportElevationResult) => {
+      setImportMsg(r.ok
+        ? { ok: true, text: '已导入高度图。请刷新页面查看。' }
+        : { ok: false, text: `导入失败：${r.detail ?? '未知错误'}` },
+      )
+    },
+    [],
+  )
 
   // --- Render ---
   if (!worldName || !planetId) {
@@ -314,6 +328,29 @@ export default function GlobeViewerPage() {
           title="切换到恒星系 3D 视图（行星轨道、宜居带）">
           🔭 恒星系
         </Link>
+
+        {/* Import elevation (same position as 2D toolbar) */}
+        {planetId && (
+          <ImportElevationButton
+            worldName={worldName!}
+            planetId={planetId}
+            branch={selectedBranch}
+            onImported={handleImported}
+          />
+        )}
+        {/* Upload geography raster */}
+        <GeographyRasterButton
+          worldName={worldName!}
+          branch={selectedBranch}
+          onUploaded={(r) =>
+            setImportMsg(
+              r.ok
+                ? { ok: true, text: `锚定灰度图已保存。下次生成时生效。` }
+                : { ok: false, text: `上传失败：${r.detail ?? '未知错误'}` },
+            )
+          }
+        />
+
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
 
         {/* Help button */}
@@ -330,7 +367,14 @@ export default function GlobeViewerPage() {
         </button>
       </div>
 
-      {/* Error banner */}
+      {/* Error / info banner */}
+      {importMsg && (
+        <div className={`border-b px-4 py-2 text-sm text-center ${
+          importMsg.ok ? 'bg-green-900/20 border-green-700/30 text-green-300' : 'bg-red-900/20 border-red-700/30 text-red-300'
+        }`}>
+          {importMsg.text}
+        </div>
+      )}
       {(metaError || elevError || cvtMeshError) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
           部分数据加载失败，请检查网络连接或切换分支重试。
@@ -367,8 +411,14 @@ export default function GlobeViewerPage() {
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
+                globeProjectRef={globeProjectRef}
               />
             )}
+            <GlobeCurrentArrows
+              projectRef={globeProjectRef}
+              voronoiCells={voronoiCells}
+              currentOpacity={layerState.layers.currents ?? 0}
+            />
           </div>
           <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
         </div>
@@ -455,8 +505,14 @@ export default function GlobeViewerPage() {
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}
+              globeProjectRef={globeProjectRef}
             />
           )}
+          <GlobeCurrentArrows
+            projectRef={globeProjectRef}
+            voronoiCells={voronoiCells}
+            currentOpacity={layerState.layers.currents ?? 0}
+          />
         </div>
         <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
       </div>

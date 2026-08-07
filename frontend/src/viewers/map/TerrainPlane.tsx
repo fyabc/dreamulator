@@ -31,7 +31,7 @@ import type { CellIdMap } from './useCellIdMap'
 // Types
 // ---------------------------------------------------------------------------
 
-export type ColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen'
+export type ColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen' | 'currents'
 
 export interface TerrainTextureOptions {
   elevation: Float32Array | null

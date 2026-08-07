@@ -138,14 +138,15 @@ export function generateAdaptiveTerrainScale(
     { elev: seaLevel - Math.max(range * 0.008, 80), color: hexToRgb('#5BA8D0') },  // shallow
     { elev: seaLevel - Math.max(range * 0.003, 30), color: hexToRgb('#90D0E8') },  // near-shore
     { elev: seaLevel - Math.max(range * 0.001, 10), color: hexToRgb('#C8E8F8') },  // water edge
-    // ---- Shoreline ----
-    { elev: seaLevel, color: hexToRgb('#A8D8B0') },  // pale green (coastal transition)
-    // ---- Land: ESRI Natural Earth style ----
-    { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#6B9E40') },
+    // ---- Shoreline: deepest green at sea level (lush lowland) ----
+    { elev: seaLevel, color: hexToRgb('#1E6B3A') },  // dark forest green
+    { elev: seaLevel + Math.max(range * 0.005, 50), color: hexToRgb('#2F7A3C') },
     { elev: seaLevel + Math.max(range * 0.01, 100), color: hexToRgb('#4A8A2E') },
-    { elev: seaLevel + range * 0.02, color: hexToRgb('#2F7A3C') },
-    { elev: seaLevel + range * 0.08, color: hexToRgb('#A0B040') },
-    { elev: seaLevel + range * 0.18, color: hexToRgb('#B89058') },  // brown plateau (darker)
+    { elev: seaLevel + range * 0.02, color: hexToRgb('#6B9E40') },
+    // ---- Mid elevation: lighter green → yellow-green ----
+    { elev: seaLevel + range * 0.05, color: hexToRgb('#A0B040') },
+    { elev: seaLevel + range * 0.12, color: hexToRgb('#C8B050') },  // golden
+    { elev: seaLevel + range * 0.20, color: hexToRgb('#B89058') },  // brown plateau
     { elev: seaLevel + range * 0.30, color: hexToRgb('#8B5E3C') },
     { elev: seaLevel + range * 0.35, color: hexToRgb('#A08078') },
     { elev: seaLevel + range * 0.40, color: hexToRgb('#D8D0C8') },

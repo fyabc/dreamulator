@@ -54,6 +54,9 @@ export interface VoronoiCell {
   temperature_C?: number | null
   precipitation_mm?: number | null
   koppen_class?: string | null
+  ocean_current_east_m_s?: number | null
+  ocean_current_north_m_s?: number | null
+  sst_anomaly_c?: number | null
   flow_accumulation?: number
   river_id?: string | null
   hotspot_id?: string | null
@@ -129,7 +132,7 @@ export type MapLayerType =
  * - 'plates': color cells by plate_id (categorical colors)
  * - 'boundaries': show boundary_type (convergent=red, divergent=green, transform=yellow)
  */
-export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen'
+export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen' | 'currents'
 
 // ---------------------------------------------------------------------------
 // Layer visibility state

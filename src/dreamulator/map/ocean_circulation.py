@@ -9,7 +9,7 @@ from ``VoronoiCell`` lists — they never touch the filesystem or RNG.
 
 References
 ----------
-- Stommel (1948): β ψ_x + R ∇²ψ = −curl_z(τ) / (ρ₀ H)
+- Stommel (1948): β ψ_x + R ∇²ψ = curl_z(τ) / (ρ₀ H)
 - MPAS-Ocean / TRiSK: SCVT grids are the standard for global ocean modelling
   (we only need the barotropic streamfunction, not the full C-grid scheme).
 - ``docs/knowledge/climatology/ocean_currents.md`` §1–3 (physical basis).
@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import cg
+from scipy.sparse.linalg import gmres
 
 if TYPE_CHECKING:
     from dreamulator.map.models import VoronoiCell
@@ -565,7 +565,7 @@ def solve_ocean_gyre(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Solve the Stommel streamfunction and derive current velocity for one basin.
 
-    Equation:  β ∂ψ/∂x + R ∇²ψ = −curl_z(τ) / (ρ_w H_ml)
+    Equation:  β ∂ψ/∂x + R ∇²ψ = curl_z(τ) / (ρ_w H_ml)
 
     ψ = 0 at coastal cells (Dirichlet BC).  The system is solved via
     conjugate gradient (CG).
@@ -605,18 +605,20 @@ def solve_ocean_gyre(
     )
 
     # ---- RHS ----
-    rhs = -curl_z[basin_cells] / (RHO_WATER * h_ml)
+    rhs = curl_z[basin_cells] / (RHO_WATER * h_ml)
 
     # ---- Dirichlet BC at coastal cells ----
     A, rhs = apply_dirichlet_coastal(A, rhs, basin_cells, cells, sea_level_m)
 
-    # ---- solve CG ----
-    psi, info = cg(A, rhs, rtol=1e-6, atol=1e-12)
+    # ---- solve (GMRES — Stommel op is non-symmetric) ----
+    psi, info = gmres(
+        A, rhs, rtol=1e-6, atol=1e-12, maxiter=min(n_local * 5, 50000),
+    )
     if info != 0:
         import logging as _logging  # noqa: F811
 
         _logging.getLogger(__name__).warning(
-            "CG did not converge to tolerance for basin of %d cells (info=%d); "
+            "GMRES did not converge for basin of %d cells (info=%d); "
             "result may be approximate.",
             n_local,
             info,

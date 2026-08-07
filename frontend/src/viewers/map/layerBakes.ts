@@ -81,6 +81,8 @@ export interface LayerTextures {
   plates: THREE.DataTexture
   /** Per-cell feature colour (boundaries/crust), alpha=0 where no data. Half res. */
   boundaries: THREE.DataTexture
+  /** Arrow-field overlay — warm=magenta, cold=cyan arrows. Half res. */
+  currents: THREE.DataTexture
 }
 
 export interface BakeInputs {
@@ -133,7 +135,7 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
   if (bakeCache) {
     const t = bakeCache.textures
     t.terrain.dispose(); t.landsea.dispose(); t.koppen.dispose()
-    t.plates.dispose(); t.boundaries.dispose()
+    t.plates.dispose(); t.boundaries.dispose(); t.currents.dispose()
   }
 
   const textures = bakeAll(inputs)
@@ -284,10 +286,23 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
   koppen: Map<number, [number, number, number]>
   plates: Map<number, [number, number, number]>
   boundaries: Map<number, [number, number, number]>
+  currents: Map<number, [number, number, number]>
 } {
   const koppen = new Map<number, [number, number, number]>()
   const plates = new Map<number, [number, number, number]>()
   const boundaries = new Map<number, [number, number, number]>()
+  const currents = new Map<number, [number, number, number]>()
+
+  // Compute max ocean current speed for normalisation
+  let maxSpeed = 0
+  for (const cell of cvtMesh.cells) {
+    const u = cell.ocean_current_east_m_s
+    const v = cell.ocean_current_north_m_s
+    if (u != null && v != null) {
+      const s = Math.sqrt(u * u + v * v)
+      if (s > maxSpeed) maxSpeed = s
+    }
+  }
 
   const plateIds = [...new Set(cvtMesh.cells.map((c) => c.plate_id).filter(Boolean))]
   const palette = new Map<string, [number, number, number]>()
@@ -321,9 +336,41 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
       const crust = (cell as any).crust_type || 'oceanic'
       boundaries.set(cell.id, CRUST_INTERIOR_COLORS[crust] ?? CRUST_INTERIOR_COLORS.oceanic)
     }
+    // Ocean current — direction-coloured (色相环 = 流向, 亮度 = 流速)
+    const u = cell.ocean_current_east_m_s
+    const v = cell.ocean_current_north_m_s
+    // Fallback tint for ocean cells without current data
+    if (cell.elevation < 0 && u == null && v == null) {
+      currents.set(cell.id, [30, 100, 180])
+    }
+    if (u != null && v != null && maxSpeed > 1e-9) {
+      const speed = Math.sqrt(u * u + v * v)
+      const t = Math.min(speed / maxSpeed, 1.0)
+      // Hue = flow direction  (0°=east=red, 90°=north=green, 180°=west=cyan, 270°=south=yellow)
+      const hue = (Math.atan2(v, u) * (180 / Math.PI) + 360) % 360
+      // Lightness ramps from dark (slow) to bright (fast)
+      const L = 30 + 45 * Math.sqrt(t)  // 30 (slow) → 75 (fast)
+      const S = 70  // saturation
+      // HSL → RGB
+      const h = hue / 60
+      const chr = (1 - Math.abs(2 * L / 100 - 1)) * S / 100
+      const x = chr * (1 - Math.abs((h % 2) - 1))
+      const m = L / 100 - chr / 2
+      let r1: number, g1: number, b1: number
+      if (h < 1) { r1 = chr; g1 = x; b1 = 0 }
+      else if (h < 2) { r1 = x; g1 = chr; b1 = 0 }
+      else if (h < 3) { r1 = 0; g1 = chr; b1 = x }
+      else if (h < 4) { r1 = 0; g1 = x; b1 = chr }
+      else if (h < 5) { r1 = x; g1 = 0; b1 = chr }
+      else { r1 = chr; g1 = 0; b1 = x }
+      const r = Math.round((r1 + m) * 255)
+      const g = Math.round((g1 + m) * 255)
+      const b = Math.round((b1 + m) * 255)
+      currents.set(cell.id, [r, g, b])
+    }
   }
 
-  return { koppen, plates, boundaries }
+  return { koppen, plates, boundaries, currents }
 }
 
 /**
@@ -370,12 +417,14 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let koppenBuf: Uint8Array = empty
   let platesBuf: Uint8Array = empty
   let boundariesBuf: Uint8Array = empty
+  let currentsBuf: Uint8Array = empty
   let kw = 1, kh = 1
   if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
     const palettes = buildCellPalettes(cvtMesh)
     koppenBuf = bakeCellLayer(palettes.koppen, width, height, cellIdMap, flipHorizontal)
     platesBuf = bakeCellLayer(palettes.plates, width, height, cellIdMap, flipHorizontal)
     boundariesBuf = bakeCellLayer(palettes.boundaries, width, height, cellIdMap, flipHorizontal)
+    // currentsBuf: left transparent — ocean arrows rendered as SVG vectors
     kw = w2; kh = h2
   }
 
@@ -385,5 +434,6 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     koppen: makeTexture(koppenBuf, kw, kh, true),
     plates: makeTexture(platesBuf, kw, kh, true),
     boundaries: makeTexture(boundariesBuf, kw, kh, true),
+    currents: makeTexture(currentsBuf, kw, kh, true),
   }
 }

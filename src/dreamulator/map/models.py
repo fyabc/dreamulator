@@ -182,6 +182,20 @@ class VoronoiCell(BaseModel):
         description="Köppen climate classification code",
     )
 
+    # Ocean current properties (filled by climate simulator — stage 2.5)
+    ocean_current_east_m_s: float | None = Field(
+        default=None,
+        description="Surface ocean current east component (m/s)",
+    )
+    ocean_current_north_m_s: float | None = Field(
+        default=None,
+        description="Surface ocean current north component (m/s)",
+    )
+    sst_anomaly_c: float | None = Field(
+        default=None,
+        description="SST anomaly from ocean heat transport (°C, rel. latitude profile)",
+    )
+
     # Hydrology properties (filled by river generator — TODO)
     flow_accumulation: float = Field(
         default=0.0,

@@ -31,6 +31,9 @@ interface MapSvgOverlayProps {
   // Visual state (read-only — no event handlers)
   hoveredCell: number | null
   selectedCells: Set<number>
+
+  /** Ocean current arrow opacity (0 = hidden). */
+  currentOpacity?: number
 }
 
 export default function MapSvgOverlay({
@@ -43,6 +46,7 @@ export default function MapSvgOverlay({
   cvtMesh,
   hoveredCell,
   selectedCells,
+  currentOpacity = 0,
 }: MapSvgOverlayProps) {
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
@@ -183,6 +187,107 @@ export default function MapSvgOverlay({
     hoveredCell, selectedCells, strokeWidth, vertexLookup, regionByCell,
   ])
 
+  // Ocean current arrows — per-cell stride sampling, filtered.
+  const currentArrowElements = useMemo(() => {
+    if (currentOpacity <= 0 || voronoiCells.length === 0) return null
+
+    // Collect ocean cells with current data, compute max speed
+    type OceanCell = { lon: number; lat: number; u: number; v: number; sstAnom: number }
+    const oceanCells: OceanCell[] = []
+    let maxSpd = 0
+    for (const c of voronoiCells) {
+      const u = c.ocean_current_east_m_s
+      const v = c.ocean_current_north_m_s
+      if (u == null || v == null) continue
+      const s = Math.sqrt(u * u + v * v)
+      if (s > maxSpd) maxSpd = s
+      oceanCells.push({
+        lon: c.lon ?? 0, lat: c.lat ?? 0,
+        u, v, sstAnom: c.sst_anomaly_c ?? 0,
+      })
+    }
+    if (oceanCells.length === 0 || maxSpd < 1e-9) return null
+
+    // Fixed lat/lon grid — uniform spatial density, textbook quiver-plot look
+    const gridStep = 4.5  // degrees
+    const arrowScale = 0.42  // 0.6 × 0.7
+    const elements: JSX.Element[] = []
+
+    // 2°-bin spatial index → fastest ocean cell in each bin
+    const bins = new Map<string, number>()
+    for (let i = 0; i < oceanCells.length; i++) {
+      const oc = oceanCells[i]
+      const blon = Math.round(oc.lon / 2) * 2
+      const blat = Math.round(oc.lat / 2) * 2
+      const key = `${blon},${blat}`
+      const prev = bins.get(key)
+      if (prev === undefined) { bins.set(key, i) }
+      else {
+        const ps = Math.sqrt(oceanCells[prev].u ** 2 + oceanCells[prev].v ** 2)
+        if (Math.sqrt(oc.u ** 2 + oc.v ** 2) > ps) bins.set(key, i)
+      }
+    }
+
+    for (let lat = -90 + gridStep; lat < 90; lat += gridStep) {
+      for (let lon = -180 + gridStep; lon < 180; lon += gridStep) {
+        const key = `${Math.round(lon / 2) * 2},${Math.round(lat / 2) * 2}`
+        const idx = bins.get(key)
+        if (idx === undefined) continue
+        const oc = oceanCells[idx]
+        const speed = Math.sqrt(oc.u * oc.u + oc.v * oc.v)
+        if (speed < maxSpd * 0.01) continue
+
+      const angle = Math.atan2(oc.v, oc.u)  // flow direction (radians)
+
+      const p = project(oc.lon, oc.lat)
+      if (p.x < -80 || p.x > viewWidth + 80 || p.y < -80 || p.y > viewHeight + 80) continue
+
+      // Arrow geometry
+      const speedFrac = Math.min(speed / maxSpd, 1.0)
+      const baseLen = 10 + speedFrac * 25
+      const len = Math.min(baseLen * zoom * arrowScale, 45)
+      const tipX = p.x + Math.cos(angle) * len
+      const tipY = p.y - Math.sin(angle) * len  // SVG y down
+
+      // Colour
+      const warm = oc.sstAnom > 0
+      const color = warm ? '#e040fb' : '#00bcd4'
+      const strokeW = Math.max(0.8, len * 0.13)  // shaft ~13% of length
+      const headLen = len * 0.38  // arrowhead ~38% of length
+      const ha = 0.45  // ~26° half-angle (radians)
+
+      // Shaft: ends BEFORE the tip so arrowhead is clearly visible
+      const shaftEndX = tipX - Math.cos(angle) * headLen * 0.5
+      const shaftEndY = tipY + Math.sin(angle) * headLen * 0.5
+      const shaftStartX = p.x - Math.cos(angle) * len * 0.3
+      const shaftStartY = p.y + Math.sin(angle) * len * 0.3
+      elements.push(
+        <line key={`shaft-${oc.lon}-${oc.lat}`}
+          x1={shaftStartX} y1={shaftStartY} x2={shaftEndX} y2={shaftEndY}
+          stroke={color} strokeWidth={strokeW} strokeLinecap="round"
+          opacity={0.8} />,
+      )
+
+      // Arrowhead: filled triangle at the tip
+      const hx1 = tipX - Math.cos(angle - ha) * headLen
+      const hy1 = tipY + Math.sin(angle - ha) * headLen
+      const hx2 = tipX - Math.cos(angle + ha) * headLen
+      const hy2 = tipY + Math.sin(angle + ha) * headLen
+      elements.push(
+        <polygon key={`head-${oc.lon}-${oc.lat}`}
+          points={`${tipX},${tipY} ${hx1.toFixed(1)},${hy1.toFixed(1)} ${hx2.toFixed(1)},${hy2.toFixed(1)}`}
+          fill={color} stroke="none" opacity={0.85} />,
+      )
+    }
+    }
+
+    return (
+      <g className="pointer-events-none" opacity={currentOpacity}>
+        {elements}
+      </g>
+    )
+  }, [currentOpacity, voronoiCells, project, viewWidth, viewHeight, zoom])
+
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
@@ -191,6 +296,7 @@ export default function MapSvgOverlay({
       style={{ zIndex: 10 }}
     >
       <g className="pointer-events-none">{graticuleElements}</g>
+      <g className="pointer-events-none">{currentArrowElements}</g>
       <g className="pointer-events-none">{highlightElements}</g>
     </svg>
   )

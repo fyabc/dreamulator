@@ -245,7 +245,14 @@ class TerrainPipelineConfig:
     orographic_efficiency: float = 0.5  # fraction of moisture converted to rain per km uplift
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
     # Ocean
-    num_gyres: int = 5  # number of major ocean gyres
+    ocean_currents_enabled: bool = True  # compute wind-driven surface currents (3A.3)
+    ocean_drag_coefficient: float = 1.2e-3  # surface drag C_D
+    ocean_mixed_layer_depth_m: float = 50.0  # H_ml (m)
+    ocean_bottom_friction_s: float = 1e-6  # Stommel R (s⁻¹), tune for WBC ratio
+    ocean_sst_advection_passes: int = 8
+    ocean_sst_relaxation_rate: float = 0.1
+    ocean_coastal_influence_km: float = 500.0
+    ocean_upwelling_enabled: bool = True
 
     # Export
     export_width: int = 4096

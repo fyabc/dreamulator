@@ -634,6 +634,7 @@ export default function MapViewer({
         cvtMesh={cvtMesh}
         hoveredCell={hoveredCell}
         selectedCells={selectedCells}
+        currentOpacity={layers?.currents ?? 0}
       />
     </div>
   )

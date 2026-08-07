@@ -74,7 +74,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0 },
   })
 
   // Decoded elevation data (for rendering)
@@ -303,6 +303,17 @@ export default function MapViewerPage() {
 
         <div className="flex-1" />
 
+        {/* 3D Globe button (leftmost in the view-switch group) */}
+        {selectedPlanet && (
+          <Link
+            to={`/worlds/${worldName}/globe/${selectedPlanet}${globeQS}`}
+            className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
+            title="3D 球面视图"
+          >
+            🌐 3D
+          </Link>
+        )}
+
         {/* Projection selector */}
         <select
           value={projection}
@@ -313,17 +324,6 @@ export default function MapViewerPage() {
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
         </select>
-
-        {/* 3D Globe button */}
-        {selectedPlanet && (
-          <Link
-            to={`/worlds/${worldName}/globe/${selectedPlanet}${globeQS}`}
-            className="px-3 py-1 text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-            title="3D 球面视图"
-          >
-            🌐 3D
-          </Link>
-        )}
 
         {/* Import external heightmap (live mode only) */}
         {selectedPlanet && (

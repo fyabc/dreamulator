@@ -50,7 +50,9 @@ class ClimateEngine(BaseEngine):
         "stellar.yaml",  # → astronomy input (star luminosity, orbits)
         "stellar_derived.yaml",  # → astronomy derived (computed stellar params)
         "planets.yaml",  # → geological input (planet physical parameters)
-        "terrain_config.yaml",  # → geological input (climate tuning knobs)
+    ]
+    optional_input_files = [
+        "terrain_config.yaml",  # → geological input (climate tuning knobs; defaults ok)
     ]
     output_files = [
         "climate_summary.yaml",
