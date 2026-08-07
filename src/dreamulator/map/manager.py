@@ -17,6 +17,7 @@ from dreamulator.resolver import LayerResolver
 
 from .elevation_codec import decode_elevation, encode_elevation
 from .models import (
+    ElevationImportProvenance,
     MapFeature,
     MapLayerRegistry,
     MapLayerType,
@@ -154,6 +155,20 @@ class MapManager:
                 allow_unicode=True,
                 sort_keys=False,
             )
+
+    def record_elevation_import(
+        self, planet_id: str, provenance: ElevationImportProvenance
+    ) -> None:
+        """Record heightmap import provenance in map.yaml.
+
+        Marks the map as externally imported (no pipeline plate/tectonic
+        data).  Creates a minimal metadata record when none exists yet.
+        """
+        metadata = self.get_map_metadata(planet_id)
+        if metadata is None:
+            metadata = MapMetadata(planet_id=planet_id)
+        metadata.elevation_import = provenance
+        self.save_map_metadata(planet_id, metadata)
 
     # -------------------------------------------------------------------
     # Elevation (raster)

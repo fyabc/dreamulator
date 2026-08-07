@@ -6,8 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
+import ImportElevationButton, { type ImportElevationResult } from '../components/map/ImportElevationButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
@@ -174,7 +175,7 @@ export default function MapViewerPage() {
     retry: false,
   })
 
-  const { data: plates } = useQuery({
+  const { data: plates, isError: platesError } = useQuery({
     queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getPlates(worldName!, selectedPlanet, selectedBranch),
     enabled: !!worldName && !!selectedPlanet,
@@ -188,6 +189,35 @@ export default function MapViewerPage() {
     enabled: !!worldName && !!selectedPlanet,
     retry: false,
   })
+
+  // --- Heightmap import (write op; live mode only) ---
+  const queryClient = useQueryClient()
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const handleImported = useCallback(
+    (r: ImportElevationResult) => {
+      if (r.ok) {
+        for (const key of ['elevationBlob', 'voronoi', 'cvtMesh', 'plates', 'mapMeta']) {
+          queryClient.invalidateQueries({
+            queryKey: [key, worldName, selectedPlanet, selectedBranch],
+          })
+        }
+        const res = r.output_resolution
+          ? `，输出 ${r.output_resolution[0]}×${r.output_resolution[1]}`
+          : ''
+        const stale = r.stale_layers?.length
+          ? `；已标记过期：${r.stale_layers.join('、')}`
+          : ''
+        setImportMsg({
+          ok: true,
+          text: `已导入 ${r.source_format ?? '高度图'}${res}${stale}。导入的高度图不含板块构造数据。`,
+        })
+      } else {
+        setImportMsg({ ok: false, text: `导入失败：${r.detail ?? '未知错误（格式不支持？）'}` })
+      }
+    },
+    [queryClient, worldName, selectedPlanet, selectedBranch]
+  )
 
   // --- Interaction handlers ---
 
@@ -294,6 +324,16 @@ export default function MapViewerPage() {
           </Link>
         )}
 
+        {/* Import external heightmap (live mode only) */}
+        {selectedPlanet && (
+          <ImportElevationButton
+            worldName={worldName!}
+            planetId={selectedPlanet}
+            branch={selectedBranch}
+            onImported={handleImported}
+          />
+        )}
+
         {/* Planet selector */}
         {worldPlanets && worldPlanets.length > 0 && (
           <select
@@ -340,6 +380,19 @@ export default function MapViewerPage() {
       {worldPlanetsError && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
           行星数据加载失败，请检查网络连接或切换分支重试。
+        </div>
+      )}
+
+      {/* Import result banner */}
+      {importMsg && (
+        <div
+          className={`${
+            importMsg.ok
+              ? 'bg-green-900/20 border-green-700/30 text-green-300'
+              : 'bg-red-900/20 border-red-700/30 text-red-300'
+          } border-b px-4 py-2 text-sm text-center`}
+        >
+          {importMsg.text}
         </div>
       )}
 
@@ -424,6 +477,11 @@ export default function MapViewerPage() {
                   state={layerState}
                   onChange={setLayerState}
                 />
+                {platesError && selectedPlanet && (
+                  <div className="text-xs text-gray-500 pt-2">
+                    该地图无板块构造数据（导入的高度图不含 plates）。
+                  </div>
+                )}
                 <div className="pt-3 border-t border-space-border">
                   <SunControl
                     sunLongitudeDeg={sunLongitudeDeg}
@@ -448,6 +506,11 @@ export default function MapViewerPage() {
               state={layerState}
               onChange={setLayerState}
             />
+            {platesError && selectedPlanet && (
+              <div className="text-xs text-gray-500 pt-2">
+                该地图无板块构造数据（导入的高度图不含 plates）。
+              </div>
+            )}
             <div className="pt-3 border-t border-space-border">
               <SunControl
                 sunLongitudeDeg={sunLongitudeDeg}

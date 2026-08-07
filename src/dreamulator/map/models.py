@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -43,6 +44,24 @@ class MapProjection(StrEnum):
     """Supported map projections."""
 
     EQUIRECTANGULAR = "equirectangular"
+
+
+class ElevationImportProvenance(BaseModel):
+    """Provenance of an externally imported elevation heightmap.
+
+    Recorded in map.yaml by the import-elevation endpoint so an imported
+    (authored / real-world) raster is distinguishable from pipeline-generated
+    terrain — imported maps carry no plate/tectonic data.
+    """
+
+    source_format: str = Field(description="png-16bit / tiff-uint16 / tiff-float32")
+    source_filename: str = ""
+    source_resolution: list[int] = Field(default_factory=list)
+    output_resolution: list[int] = Field(default_factory=list)
+    was_resampled: bool = False
+    range_normalized: list[float] = Field(default_factory=list)
+    notes: str | None = None
+    imported_at: datetime = Field(default_factory=datetime.now)
 
 
 class MapMetadata(BaseModel):
@@ -86,6 +105,9 @@ class MapMetadata(BaseModel):
         ge=0,
         description="Number of Lloyd relaxation iterations for CVT mesh",
     )
+    #: Set when the elevation raster was imported from an external tool
+    #: (absent for pipeline-generated terrain).
+    elevation_import: ElevationImportProvenance | None = None
 
 
 # ---------------------------------------------------------------------------

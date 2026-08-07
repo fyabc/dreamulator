@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **高度图导入 UI**（问题 1 阶段 1）：地图查看器顶栏"⬆ 导入高度图"
+  （16-bit PNG / TIFF 自动识别、重采样、覆盖确认、导入结果 banner、
+  无板块数据空态提示、静态模式禁用）；导入溯源写入 `map.yaml` 的
+  `elevation_import` 块（`ElevationImportProvenance`）；usage/map-workflow.md §10
 - **地理高程锚定**：`geography.yaml` feature 新增 `elevation_target_m`
   （相对校准海面：负=水深、正=陆高）与 `pin_strength`（0–1）。在海平面校准与
   全部后处理之后施加凸组合钉扎——`shallow_sea`/`isthmus` 从此能表达

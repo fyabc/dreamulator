@@ -868,3 +868,20 @@ A: 生成时间会显著增加（500K 节点约需 5~8 分钟），JSON 文件�
 
 A: 目前没有直接混合功能。但你可以通过分支系统分别生成两个版本，然后手动将某个分支的 `voronoi.json` 复制到另一个分支。更优雅的方案是使用手动板块配置（§7.3）来精确控制板块位置，从而在一个种子下重现想要的布局。
 
+## 10. 导入外部高度图
+
+地图查看器顶栏的 **⬆ 导入高度图** 按钮（仅 API 模式）接受外部工具的
+高度图：16-bit PNG、16-bit TIFF、32-bit float TIFF（自动识别），按当前地图
+元数据分辨率重采样后覆盖 `elevation.png` 并重采样 Voronoi 网络。
+
+- 导入会记录溯源到 `map.yaml` 的 `elevation_import` 块（来源格式/分辨率/
+  是否重采样/备注/时间），并在 `registry.yaml` 把 elevation 标为 `imported`、
+  下游图层（气候等）标为 stale——导入后请按提示重建气候层。
+- **导入的高度图不含板块构造数据**：plates 图层为空（左栏有提示），
+  boundaries 图层回落到地壳底色。需要构造叙事时，用 geography 锚定 +
+  管线生成（§2–§4），或把导入图当作"最终高程"接受无板块设定。
+- 想"形状手绘、地貌物理补全"的中间路线：把灰度图作为密集偏置场喂给
+  geography 锚定（见 `design/terrain-pipeline.md` §3.5 与
+  `private/plans/heightmap-import-vs-geography-config.md` 阶段 3）。
+- 静态模式（GitHub Pages）为只读，按钮禁用。
+

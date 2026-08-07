@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -239,6 +239,7 @@ async def import_elevation(
     planet_id: str,
     file: UploadFile = File(...),
     branch: str | None = None,
+    notes: str | None = Form(None),
 ) -> dict[str, Any]:
     """Import a heightmap from an external tool (PNG/TIFF).
 
@@ -269,6 +270,23 @@ async def import_elevation(
 
     mgr.save_elevation(planet_id, result.elevation)
     mgr.sync_voronoi_from_elevation(planet_id)
+
+    # Record import provenance in map.yaml (imported rasters carry no
+    # pipeline plate/tectonic data — the UI surfaces this to the author).
+    from ..map.models import ElevationImportProvenance
+
+    mgr.record_elevation_import(
+        planet_id,
+        ElevationImportProvenance(
+            source_format=result.source_format,
+            source_filename=filename,
+            source_resolution=[result.source_width, result.source_height],
+            output_resolution=list(result.elevation.shape[::-1]),
+            was_resampled=result.was_resampled,
+            range_normalized=[float(result.elevation.min()), float(result.elevation.max())],
+            notes=notes,
+        ),
+    )
 
     # Update layer registry and mark downstream layers as stale
     registry = mgr.update_registry_on_elevation_change(planet_id)
