@@ -61,6 +61,10 @@ export interface VoronoiCell {
   river_id?: string | null
   hotspot_id?: string | null
   landform?: string | null
+
+  // Ecology fields (from EcologyEngine P0)
+  npp_gc_m2_yr?: number | null
+  domesticable_tags?: string[]
 }
 
 export interface VoronoiNetwork {
