@@ -417,17 +417,24 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
       npp.set(cell.id, sequentialColor(nppVal / NPP_MAX, NPP_SCALE))
     }
 
-    // Civilization cradle — selective highlight
-    const tags: string[] | undefined = (cell as any).domesticable_tags
-    if (tags && tags.length > 0) {
-      const hasHerb = tags.includes('large_herbivores_high')
-      const hasCrop = tags.includes('staple_crops_high')
-      if (hasHerb && hasCrop) {
-        domesticable.set(cell.id, [255, 215, 0])
-      } else if (hasHerb) {
-        domesticable.set(cell.id, [255, 138, 101])
-      } else if (hasCrop) {
-        domesticable.set(cell.id, [129, 199, 132])
+    // Civilization cradle — all land gets a neutral dark fill so the
+    // base terrain doesn't bleed through where highlight is absent.
+    if (cell.elevation >= 0) {
+      const tags: string[] | undefined = (cell as any).domesticable_tags
+      if (tags && tags.length > 0) {
+        const hasHerb = tags.includes('large_herbivores_high')
+        const hasCrop = tags.includes('staple_crops_high')
+        if (hasHerb && hasCrop) {
+          domesticable.set(cell.id, [255, 215, 0])       // gold: both
+        } else if (hasHerb) {
+          domesticable.set(cell.id, [255, 138, 101])      // orange: pastoral
+        } else if (hasCrop) {
+          domesticable.set(cell.id, [129, 199, 132])      // green: agricultural
+        } else {
+          domesticable.set(cell.id, [45, 48, 55])         // neutral dark: low potential
+        }
+      } else {
+        domesticable.set(cell.id, [45, 48, 55])           // neutral dark: no tags
       }
     }
   }
