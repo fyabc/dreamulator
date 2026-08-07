@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **地理高程锚定**：`geography.yaml` feature 新增 `elevation_target_m`
+  （相对校准海面：负=水深、正=陆高）与 `pin_strength`（0–1）。在海平面校准与
+  全部后处理之后施加凸组合钉扎——`shallow_sea`/`isthmus` 从此能表达
+  <200 m 水深与地峡高度上限
+- **海平面偏移旋钮**：`terrain_config.yaml: sea_level_offset_m`（默认 0）。
+  水面标量移动而地形数组不动（冰期海退：−120 m 时 (−120, 0] 出露成陆）；
+  大陆架/沿海平原/岛弧/海陆分类/气候陆海掩膜全部参数化
+
+### Fixed
+
+- **锚定裂谷被推上海面**（roadmap #9；gaia-m 大裂谷海曾 +927 m）：地形合成
+  对强负偏置场（authored 裂谷/海盆）的汇聚正抬升乘连续阻尼
+  （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)），岛弧同处理；且 |bias|>0.5 处
+  双峰基准服从作者（top-N 地壳泄漏的 continental cell 不再拿 +850 m 基准隆起
+  成高原）；正常造山带无感
+
 ## [0.17.0] — 2026-08-06
 
 ### Added

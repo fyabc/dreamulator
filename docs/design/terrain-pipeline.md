@@ -497,6 +497,8 @@ features:
     strength: 0.85              # + 陆地 … − 海洋；|strength|>1 用于"切开"大陆
     elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
     bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
+    elevation_target_m: -120.0  # 可选：高程钉扎（相对校准海面 0 m；负=水深）
+    pin_strength: 1.0           # 可选：钉扎信任度 0–1（核提供空间软边）
 ```
 
 #### 陆地偏置场
@@ -541,14 +543,63 @@ fBm 的 seed = `config.seed + 500`（确定性）。按 score 降序取前
   离开锚点。若 `reapply_after_tectonics: true`，演化结束后用**同一 seed-确定场**
   重新锚定一次，大陆回到设定位置；而 tectonics 产生的边界/造山数据
   （`boundary_type`、`distance_to_boundary_km`、`convergence_rate_cm_yr`）独立存储，
-  山脉得以保留。
+  山脉得以保留。注意：重锚只重盖**地壳类型**（此时刻高程尚不存在）；
+  高程锚定统一在地形合成阶段完成（见下）。
+
+#### 汇聚抬升抑制（roadmap #9 修复，2026-08）
+
+锚定只钉地壳的脆弱机制：横穿 authored 裂谷/海盆的汇聚边界会把 +4000 m 级
+抬升加在洋壳 cell 上，把裂谷推上海面（gaia-m 大裂谷海曾测得 +927 m）。
+修复：合成阶段在入口重算偏置场（纯函数，与地壳锚定逐位一致），对**正抬升项**
+乘阻尼
+
+```
+damp = clip(2·bias + 2, 0.1, 1.0)   （bias < −0.5 时；否则 1.0，阈值处连续）
+```
+
+作用于 gaussian/asymmetric 两种边界效应的汇聚分支与岛弧后处理；海沟负项与
+离散分支不动。数值核对：裂谷 bias=−1 走 O-O 幅度，抬升 ≤ 0.1×（≈+350 m），
+叠最坏基底仍 <0。正常造山带（bias ≥ −0.5）完全无感。
+
+仅有阻尼还不够：top-N 地壳阈值总会向 authored 海洋泄漏少量 continental cell
+（gaia-m 裂谷核心 ~13%），它们拿 +850 m 双峰基准 + 板块偏移（±1500 m）直接
+隆起成高原。因此 |bias| > 0.5 处**双峰基准服从作者**（负侧用 oceanic 基准、
+正侧用 continental 基准，`_apply_base_override`），锚定贯通到高程而不仅是
+地壳类型——这正是 roadmap #9 的验收要求。
+
+#### 高程钉扎（elevation_target_m）
+
+带 `elevation_target_m` 的 feature 经 `build_elevation_pins()` 生成核加权的
+(weight, target, strength) 场；合成阶段在**海平面校准与全部后处理（岛弧/内部
+地貌/大陆架/沿海平原）之后**、海陆分类之前施加：
+
+```
+elevation += strength · clip(2·weight, 0, 1) · (target − elevation)
+```
+
+- 凸组合，不过冲；核在 w≥0.5 的核心饱和（离散网格上作者意图决定性），边缘平滑；
+- target 相对**校准海面（间冰期 0 m）**钉住海底/陆地：`sea_level_offset_m = −120`
+  时 −80 m 的海峡钉扎出露 → 海峡"冰期关闭"（临界洋流剧情的前提）；
+- 无 target 时返回 None，管线逐位不变（默认行为保持）。
+
+#### 海平面偏移旋钮（sea_level_offset_m）
+
+`terrain_config.yaml` 新增 `sea_level_offset_m`（默认 0）。校准（"倒水"）仍按
+`target_land_fraction` 求 datum；offset 移动**水面标量**而非地形数组——冰期是水体
+移动不是地形移动。大陆架/沿海平原/岛弧 transitional 判定/海陆分类/气候陆海掩膜
+（`climate_simulator.py`）均读该值。前端色标仍假设 0 m——定位为实验旋钮。
 
 #### 已知限制
 
 - **海岸线偏直**：海陆判定在 cell 粒度（~76 km @ 100k cells），海岸线沿 cell
   边、过于平直。改进方向：更高 cell 密度 / 海岸带高频噪声扰动 / sub-cell 阈值化。
-- **浅海深度**：`shallow_sea` 目前只锚定"此处为洋"，水深仍是双峰基准
-  （oceanic ≈ −3800 m），无法表达陆缘浅海（<200 m），需后续海底高程控制。
+- **~~浅海深度~~**：已由高程钉扎解决（`shallow_sea` + `elevation_target_m: -120`
+  表达陆缘浅海，2026-08）。
+- **offset 下游假设**：前端色标/河流生成（TODO）按水面 0 m 假设；
+  `sea_level_offset_m ≠ 0` 仅用于实验性重建。
+- **钉扎与海陆比**：钉扎只动核支撑区，对 `land_fraction_target` 的扰动 ≤
+  核面积占比（gaia-m 地峡 ≈0.3pp）；大陆级钉扎（>5% 表面）需自行调 target。
+  钉扎后不重跑校准（全局平移会放大局部操作且 target 相对水面→迭代不适定）。
 - **参数需调优**：feature 的 radius/strength/elongation 是作者旋钮，需按渲染
   结果迭代（如"切开大陆"要求裂谷 `|strength|` 超过下伏大陆 strength）。
 

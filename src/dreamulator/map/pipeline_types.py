@@ -101,6 +101,12 @@ class TerrainPipelineConfig:
     #   0.25–0.35 → Earth-like balance
     #   > 0.5 → dry world (small seas, mostly land)
     target_land_fraction: float = 0.29
+    # Sea level offset relative to the calibrated datum (metres). 0 = water
+    # surface at exactly 0 m (default). −120 = glacial lowstand: cells in
+    # (−120, 0] emerge as land.  Experimental knob for ice-age / critical-
+    # strait scenarios; terrain post-processing and the climate land mask read
+    # it, but frontend colour scales still assume a 0 m surface.
+    sea_level_offset_m: float = 0.0
 
     # ---- Authored geography (continent anchoring, map/geography.py) ----
     # GeographySpec loaded from geography.yaml by the engine. None = pure

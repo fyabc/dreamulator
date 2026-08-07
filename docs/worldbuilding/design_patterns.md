@@ -370,6 +370,15 @@ features:
     strength: -2.0              # 强度须超过世界岛(+0.85)才能切穿
     elongation: 11.0            # 狭长裂谷
     bearing_deg: 0.0
+
+  - name: 南极浅海
+    kind: shallow_sea
+    lon: 0.0
+    lat: -90.0
+    radius_deg: 20.0
+    strength: -0.2
+    elevation_target_m: -120.0  # 高程钉扎：陆缘浅海 120 m 水深
+    pin_strength: 1.0           # 0–1；核提供空间软边
 ```
 
 **调参要点**：
@@ -381,10 +390,14 @@ features:
 | 裂谷切开大陆 | rift_sea 的 `|strength|` 须大于下伏大陆 strength |
 | 群岛而非整块大陆 | 弱正 strength（~0.1–0.2），让 fBm 噪声把陆地碎成岛链 |
 | 全球海陆比 | `land_fraction_target`（全局阈值精确命中） |
+| 陆缘浅海 / 地峡高度 | `elevation_target_m` 钉扎（负=水深、正=陆高，相对校准海面） |
+| 临界海峡（冰期关闭） | 浅海钉扎 + `terrain_config.yaml: sea_level_offset_m: -120` |
+| 裂谷不被横穿造山抬出海面 | 自动：强负偏置场抑制汇聚抬升（无需作者干预） |
 
 **已知限制**：
 - 海岸线偏直（海陆判定在 cell 粒度 ~76 km，见 terrain-pipeline.md §3.5）
-- `shallow_sea` 只锚定"此处为洋"，水深仍是双峰基准，无法表达陆缘浅海
+- 钉扎后不重跑校准：大陆级钉扎（>5% 表面）会偏离 `land_fraction_target`，需自调
+- `sea_level_offset_m ≠ 0` 时前端色标仍按 0 m（实验旋钮定位）
 
 **参考**：
 - `docs/design/terrain-pipeline.md` §3.5 — 地理锚定算法与注入点

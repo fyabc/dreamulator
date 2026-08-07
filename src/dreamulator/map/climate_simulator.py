@@ -104,8 +104,8 @@ def simulate_climate(
     lat_deg = np.array([c.lat for c in mesh.cells], dtype=np.float64)
     lat_rad = np.radians(lat_deg)
 
-    # Build land/ocean mask from elevation (sea level at 0 m)
-    is_land = np.array(elevation_m >= 0.0, dtype=bool)
+    # Build land/ocean mask from elevation (sea surface at the offset datum)
+    is_land = np.array(elevation_m >= config.sea_level_offset_m, dtype=bool)
     is_ocean = ~is_land
 
     # 3D unit-sphere node positions for vector operations

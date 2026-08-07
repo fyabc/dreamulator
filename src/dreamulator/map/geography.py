@@ -67,6 +67,15 @@ class GeographyFeature(BaseModel):
     #: Semi-major axis bearing in degrees (0 = north, 90 = east). Negative
     #: values tilt the opposite way (−12 ≡ 348); cos/sin handle either sign.
     bearing_deg: float = Field(default=0.0, ge=-360.0, le=360.0)
+    #: Target elevation relative to the calibrated sea surface at 0 m
+    #: (metres): positive = land height, negative = water depth (e.g.
+    #: shallow_sea −120, isthmus +120).  Absolute against the datum — a
+    #: sea_level_offset_m of −120 exposes a −80 m pin (glacial strait
+    #: closure).  None = crust-only anchoring (legacy behaviour).
+    elevation_target_m: float | None = None
+    #: How strongly the pin pulls elevation toward the target (0–1); the
+    #: spatial soft edge is provided by the feature kernel itself.
+    pin_strength: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class GeographySpec(BaseModel):
@@ -144,13 +153,13 @@ def _cosine_kernel(q: np.ndarray) -> np.ndarray:
     return out
 
 
-def _feature_contribution(
+def _feature_kernel(
     px: np.ndarray,
     py: np.ndarray,
     pz: np.ndarray,
     feature: GeographyFeature,
 ) -> np.ndarray:
-    """Per-cell bias contribution of one feature (array of shape (N,))."""
+    """Per-cell kernel of one feature: 1 at the centre → 0 at the edge (N,)."""
     c = _lonlat_to_xyz(feature.lon, feature.lat)
     p = np.stack([px, py, pz], axis=1)
     dot = np.clip(p @ c, -1.0, 1.0)
@@ -161,7 +170,7 @@ def _feature_contribution(
     polar = abs(abs(feature.lat) - 90.0) < 1e-6
     if feature.elongation <= 1.0 + 1e-9 or polar:
         q = d / radius_rad
-        return feature.strength * _cosine_kernel(q)
+        return _cosine_kernel(q)
 
     # Elongated feature: elliptic metric in the tangent plane at the centre.
     semi_major = radius_rad * feature.elongation
@@ -185,7 +194,17 @@ def _feature_contribution(
     across = v @ perp
     q = np.sqrt((along / semi_major) ** 2 + (across / semi_minor) ** 2)
     result[within] = _cosine_kernel(q[within])
-    return feature.strength * result
+    return result
+
+
+def _feature_contribution(
+    px: np.ndarray,
+    py: np.ndarray,
+    pz: np.ndarray,
+    feature: GeographyFeature,
+) -> np.ndarray:
+    """Per-cell bias contribution of one feature (array of shape (N,))."""
+    return feature.strength * _feature_kernel(px, py, pz, feature)
 
 
 def build_land_bias_field(mesh: CVTMesh, spec: GeographySpec) -> np.ndarray:
@@ -208,6 +227,43 @@ def build_land_bias_field(mesh: CVTMesh, spec: GeographySpec) -> np.ndarray:
         field += spec.hemisphere_land_bias * np.sin(lat_rad)
 
     return np.clip(field, -1.0, 1.0)
+
+
+def build_elevation_pins(
+    mesh: CVTMesh, spec: GeographySpec
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Kernel-weighted elevation pins for features with ``elevation_target_m``.
+
+    Returns ``(weight, target_m, strength)`` arrays of shape (N,), or None when
+    no feature declares a target (callers then skip pinning entirely and the
+    pipeline behaves exactly as before).  Overlapping pins blend by kernel
+    weight.  Pure function of (mesh, spec) — no randomness.
+    """
+    pinned = [f for f in spec.features if f.elevation_target_m is not None]
+    if not pinned:
+        return None
+
+    n = len(mesh.cells)
+    px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
+    py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
+    pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
+
+    w_sum = np.zeros(n, dtype=np.float64)
+    wt = np.zeros(n, dtype=np.float64)
+    ws = np.zeros(n, dtype=np.float64)
+    for feature in pinned:
+        target_m = feature.elevation_target_m
+        if target_m is None:  # narrowed by the filter above; mypy guard
+            continue
+        k = _feature_kernel(px, py, pz, feature)
+        w_sum += k
+        wt += k * target_m
+        ws += k * feature.pin_strength
+
+    weight = np.clip(w_sum, 0.0, 1.0)
+    target = np.divide(wt, w_sum, out=np.zeros(n), where=w_sum > 0.0)
+    strength = np.divide(ws, w_sum, out=np.zeros(n), where=w_sum > 0.0)
+    return weight, target, strength
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .geography import build_elevation_pins, build_land_bias_field
 from .pipeline_types import TerrainPipelineConfig
 
 if TYPE_CHECKING:
@@ -48,6 +49,45 @@ logger = logging.getLogger(__name__)
 # on the subducting side reproduces trench depths.  Applied only to oceanic
 # crust on the oceanward side of convergent boundaries.
 _TRENCH_RELIEF_M = 7000.0
+
+# Authored-geography uplift suppression (roadmap #9): cells inside authored
+# ocean basins / rift seas (strong negative land-bias) must not be lifted out
+# of the water by a convergent boundary that happens to cross them.  Damping
+# is continuous at the threshold (1.0 at bias = −0.5, i.e. normal orogeny is
+# untouched) and floors at 0.1 for bias ≤ −1.
+_ANCHOR_SUPPRESS_BIAS_THRESHOLD = -0.5
+_ANCHOR_SUPPRESS_FLOOR = 0.1
+
+
+def _apply_base_override(
+    base: np.ndarray,
+    geography_bias: np.ndarray | None,
+    config: TerrainPipelineConfig,
+) -> None:
+    """Where the authored bias is decisive (|bias| > 0.5), the bimodal base
+    follows the author, not the crust label.
+
+    The top-N crust threshold always leaks a few continental cells into
+    authored seas (and oceanic holes into authored continents); without this
+    override those cells receive the +850 m continental base plus plate
+    offsets and rise thousands of metres inside an authored rift sea
+    (roadmap #9).  Anchoring thus reaches elevation, not just crust type.
+    """
+    if geography_bias is None:
+        return
+    oceanic = geography_bias < _ANCHOR_SUPPRESS_BIAS_THRESHOLD
+    continental = geography_bias > -_ANCHOR_SUPPRESS_BIAS_THRESHOLD
+    base[oceanic] = config.oceanic_elevation_m
+    base[continental] = config.continental_elevation_m
+
+
+def _anchor_uplift_damping(geography_bias: np.ndarray | None, n: int) -> np.ndarray:
+    """Per-cell multiplier for positive convergent uplift (1.0 = unauthored)."""
+    if geography_bias is None:
+        return np.ones(n, dtype=np.float64)
+    damp = np.clip(2.0 * geography_bias + 2.0, _ANCHOR_SUPPRESS_FLOOR, 1.0)
+    return np.asarray(np.where(geography_bias < _ANCHOR_SUPPRESS_BIAS_THRESHOLD, damp, 1.0))
+
 
 # ---------------------------------------------------------------------------
 # fBm noise on CVT cells
@@ -135,6 +175,8 @@ def generate_fbm_on_cells(
 def apply_boundary_effects(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    *,
+    geography_bias: np.ndarray | None = None,
 ) -> np.ndarray:
     """Apply tectonic boundary elevation effects.
 
@@ -161,6 +203,7 @@ def apply_boundary_effects(
 
     # Reference convergence rate for normalization (10 cm/yr is very fast)
     ref_rate = 5.0  # cm/yr — median plate speed
+    damp = _anchor_uplift_damping(geography_bias, n)
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
@@ -177,7 +220,7 @@ def apply_boundary_effects(
         rate_factor = (rate / ref_rate) ** 0.5  # sub-linear power law
 
         if cell.boundary_type == "convergent":
-            delta_h[i] = config.convergent_uplift_m * falloff * rate_factor
+            delta_h[i] = config.convergent_uplift_m * falloff * rate_factor * damp[i]
         elif cell.boundary_type == "divergent":
             delta_h[i] = config.divergent_depth_m * falloff * rate_factor
         # Transform boundaries: no systematic elevation change
@@ -212,6 +255,42 @@ def classify_sea_land(
         near_sea = abs(cell.elevation - sea_level_m) <= buffer_m
         if near_sea or cell.elevation > sea_level_m and cell.crust_type == "oceanic":
             cell.crust_type = "transitional"
+
+
+def _apply_geography_pins(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Pull elevation toward authored ``elevation_target_m`` values.
+
+    Applied after sea-level calibration and all post-processing (shelf, arcs,
+    plains) so procedural stages cannot overwrite a pinned strait depth or
+    isthmus height — the author's intent is the final arbiter.  Targets are
+    relative to the *calibrated* (interglacial) sea surface at 0 m, i.e. they
+    pin the seabed/land in absolute terms; ``sea_level_offset_m`` then moves
+    the water against the pinned floor — a −80 m strait pin emerges (and the
+    strait closes) under a −120 m glacial offset.  The blend ``s·w ∈ [0,1]``
+    is a convex combination (no overshoot), with the feature kernel providing
+    the spatial soft edge and ``pin_strength`` the trust.
+
+    No-op (returns *elevation* unchanged) when no feature declares a target.
+    """
+    spec = config.geography
+    if spec is None:
+        return elevation
+    pins = build_elevation_pins(mesh, spec)
+    if pins is None:
+        return elevation
+    weight, target, strength = pins
+    # Decisive core, soft edge: the kernel rarely hits exactly 1 on a discrete
+    # mesh, so saturate the blend factor at w ≥ 0.5 — the author's target is
+    # authoritative at the feature core while the rim still fades smoothly.
+    factor = strength * np.asarray(np.clip(2.0 * weight, 0.0, 1.0))
+    pulled = elevation + factor * (target - elevation)
+    n_pinned = int(np.count_nonzero(weight > 0.0))
+    logger.info("  Geography pins: %d cells pulled toward authored targets", n_pinned)
+    return np.asarray(pulled)
 
 
 # ---------------------------------------------------------------------------
@@ -249,10 +328,17 @@ def synthesize_terrain(
         raise ValueError(
             f"Unknown terrain algorithm '{algo}'. Available: {sorted(_TERRAIN_ALGORITHMS.keys())}"
         )
+    # Authored land-bias field (pure function of (mesh, spec), identical to the
+    # one used for crust anchoring) so convergent uplift can be damped inside
+    # authored ocean basins / rift seas.
+    spec = config.geography
+    geography_bias = (
+        build_land_bias_field(mesh, spec) if spec is not None and spec.features else None
+    )
     if algo == "cortial2019_gaussian":
-        _synthesize_gaussian(mesh, plates, config)
+        _synthesize_gaussian(mesh, plates, config, geography_bias=geography_bias)
     elif algo == "cortial2019_asymmetric":
-        _synthesize_asymmetric(mesh, plates, config)
+        _synthesize_asymmetric(mesh, plates, config, geography_bias=geography_bias)
 
 
 # =========================================================================
@@ -264,6 +350,8 @@ def _synthesize_gaussian(
     mesh: CVTMesh,
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
+    *,
+    geography_bias: np.ndarray | None = None,
 ) -> None:
     """Cortial 2019 §4 — symmetric Gaussian boundary mountain profiles."""
     logger.info("Synthesizing terrain elevation")
@@ -276,6 +364,7 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
             base[i] = config.continental_elevation_m
+    _apply_base_override(base, geography_bias, config)
 
     # 1b. Per-plate random elevation offset
     # Each plate gets a random offset to create large-scale variation.
@@ -299,7 +388,7 @@ def _synthesize_gaussian(
 
     # 2. Tectonic boundary effects
     logger.info("  Step 3/5: Tectonic boundary effects")
-    boundary_delta = apply_boundary_effects(mesh, config)
+    boundary_delta = apply_boundary_effects(mesh, config, geography_bias=geography_bias)
 
     # 3a. Low-frequency regional noise (creates broad elevation trends within plates)
     logger.info(
@@ -362,19 +451,25 @@ def _synthesize_gaussian(
             cell.elevation = float(elevation[i])
 
     # Post-processing (shared with asymmetric: shelf/plain must run last)
-    elevation = _apply_island_arcs(mesh, elevation, config)
+    sea_level = config.sea_level_offset_m
+    elevation = _apply_island_arcs(mesh, elevation, config, geography_bias=geography_bias)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+
+    # Author elevation pins: the author's final word on elevation, applied
+    # after every procedural stage so shelf/arcs cannot overwrite a pinned
+    # strait depth or isthmus height.
+    elevation = _apply_geography_pins(mesh, elevation, config)
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
     # Classify sea/land
-    classify_sea_land(mesh, 0.0)
+    classify_sea_land(mesh, sea_level)
 
-    _log_synthesis_stats(elevation, 0.0, n)
-    _compute_quality_metrics(mesh, 0.0)
+    _log_synthesis_stats(elevation, sea_level, n)
+    _compute_quality_metrics(mesh, sea_level)
 
 
 # =========================================================================
@@ -396,6 +491,8 @@ def _synthesize_asymmetric(
     mesh: CVTMesh,
     plates: list[TectonicPlate],
     config: TerrainPipelineConfig,
+    *,
+    geography_bias: np.ndarray | None = None,
 ) -> None:
     """Cortial 2019 — asymmetric mountain profiles + hotspots + landforms."""
     logger.info("Synthesizing terrain (asymmetric)")
@@ -407,6 +504,7 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
             base[i] = config.continental_elevation_m
+    _apply_base_override(base, geography_bias, config)
 
     logger.info("  Step 1/6: Base elevation + plate offsets")
     plate_offsets: dict[str, float] = {}
@@ -423,7 +521,9 @@ def _synthesize_asymmetric(
     logger.info(
         "  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)", config.mountain_asymmetry
     )
-    boundary_delta, transform_boost = _asymmetric_boundary_effects(mesh, config)
+    boundary_delta, transform_boost = _asymmetric_boundary_effects(
+        mesh, config, geography_bias=geography_bias
+    )
 
     # 3. Hotspot volcanic chains
     hotspot_delta = np.zeros(n, dtype=np.float64)
@@ -491,23 +591,29 @@ def _synthesize_asymmetric(
 
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
-    elevation = _apply_island_arcs(mesh, elevation, config)
+    sea_level = config.sea_level_offset_m
+    elevation = _apply_island_arcs(mesh, elevation, config, geography_bias=geography_bias)
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+
+    # Author elevation pins (final word; see _apply_geography_pins)
+    elevation = _apply_geography_pins(mesh, elevation, config)
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    classify_sea_land(mesh, 0.0)
-    _log_synthesis_stats(elevation, 0.0, n)
-    _compute_quality_metrics(mesh, 0.0)
+    classify_sea_land(mesh, sea_level)
+    _log_synthesis_stats(elevation, sea_level, n)
+    _compute_quality_metrics(mesh, sea_level)
 
 
 def _asymmetric_boundary_effects(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    *,
+    geography_bias: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Boundary-type-specific elevation profiles.
 
@@ -541,6 +647,7 @@ def _asymmetric_boundary_effects(
     delta_h = np.zeros(n, dtype=np.float64)
     asym = config.mountain_asymmetry  # [0, 1]
     sigma = config.boundary_influence_km
+    damp = _anchor_uplift_damping(geography_bias, n)
 
     # Reference convergence rate for normalisation.
     # Earth: fast plates (Pacific) ~10 cm/yr, slow (Africa) ~1 cm/yr,
@@ -608,7 +715,7 @@ def _asymmetric_boundary_effects(
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
-            delta_h[i] = amp * mountain * rate_factor * seg_mod
+            delta_h[i] = amp * mountain * rate_factor * seg_mod * damp[i]
 
             # Oceanic trench on the subducting side (100–200 km from peak).
             # Only oceanic crust subducts and forms a trench; continental
@@ -1149,14 +1256,15 @@ def _apply_continental_shelf(
     shelf_width = config.shelf_width_km
     if shelf_width <= 0:
         return elevation
+    sea_level = config.sea_level_offset_m
 
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
-        if elevation[i] <= 0.0:
+        if elevation[i] <= sea_level:
             continue
         for nid in cell.neighbors:
-            if elevation[nid] <= 0.0:
+            if elevation[nid] <= sea_level:
                 coastline.add(i)
                 break
 
@@ -1180,13 +1288,13 @@ def _apply_continental_shelf(
         if d >= shelf_width:
             continue
         for nid in mesh.cells[cid].neighbors:
-            if nid not in shelf_dist and elevation[nid] <= 0.0:
+            if nid not in shelf_dist and elevation[nid] <= sea_level:
                 shelf_dist[nid] = d + cell_km
                 q.append(nid)
 
     # 3. Two-stage shelf profile: shallow platform → shelf break → deep ocean
-    shelf_edge_depth = rng.uniform(-5.0, -1.0)  # near-surface at coast
-    shelf_break_depth = -200.0  # typical shelf-break depth (m)
+    shelf_edge_depth = sea_level + rng.uniform(-5.0, -1.0)  # near-surface
+    shelf_break_depth = sea_level - 200.0  # typical shelf-break depth (m)
     drop_fold = 30.0  # e-folding for the drop beyond the shelf break (km)
     shelf_cells = 0
 
@@ -1253,13 +1361,15 @@ def _apply_coastal_plain(
     if plain_width <= 0:
         return elevation
 
+    sea_level = config.sea_level_offset_m
+
     # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
-        if elevation[i] <= 0.0:
+        if elevation[i] <= sea_level:
             continue
         for nid in cell.neighbors:
-            if elevation[nid] <= 0.0:
+            if elevation[nid] <= sea_level:
                 coastline.add(i)
                 break
 
@@ -1288,7 +1398,7 @@ def _apply_coastal_plain(
         if d >= max_bfs_width:
             continue
         for nid in mesh.cells[cid].neighbors:
-            if nid not in inland_dist and elevation[nid] > 0.0:
+            if nid not in inland_dist and elevation[nid] > sea_level:
                 inland_dist[nid] = d + cell_km
                 q.append(nid)
 
@@ -1301,16 +1411,17 @@ def _apply_coastal_plain(
     mountain_coast_ratio = 0.40  # mountain cells retain ~40% of elev at the coast
 
     for cid, d_km in inland_dist.items():
-        if elevation[cid] <= 0.0:
+        if elevation[cid] <= sea_level:
             continue
 
-        elev_above_sea = elevation[cid] - 0.0
+        elev_above_sea = elevation[cid] - sea_level
 
         # Elevation factor: 1.0 at sea level → 0.0 at max_plain_elev+
         elev_factor = max(0.0, 1.0 - elev_above_sea / max_plain_elev)
 
-        # Coast elevation target: 30 m for lowlands, 40% of original for mountains
-        lowland_target = rng.uniform(10.0, 50.0)
+        # Coast elevation target: ~30 m above sea for lowlands, 40% of
+        # original for mountains
+        lowland_target = sea_level + rng.uniform(10.0, 50.0)
         mountain_target = elevation[cid] * mountain_coast_ratio
         coast_target = lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
 
@@ -1343,6 +1454,8 @@ def _apply_island_arcs(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    *,
+    geography_bias: np.ndarray | None = None,
 ) -> np.ndarray:
     """Island arc uplift at O-O convergent boundaries.
 
@@ -1408,15 +1521,17 @@ def _apply_island_arcs(
     peak_dist = arc_width_km * 0.35
     arc_count = 0
 
+    damp = _anchor_uplift_damping(geography_bias, len(elevation))
+    sea_level = config.sea_level_offset_m
     for cid, d_km in arc_affected.items():
         weight = np.exp(-((d_km - peak_dist) ** 2) / (2 * sigma * sigma))
-        dz = arc_height * weight
+        dz = arc_height * weight * damp[cid]
         # Only uplift cells that are oceanic (don't push continental crust)
         if getattr(mesh.cells[cid], "crust_type", "") != "continental":
             elevation[cid] += dz
             arc_count += 1
         # If this lifts above sea level, mark as transitional (island)
-        if elevation[cid] > 0.0:
+        if elevation[cid] > sea_level:
             mesh.cells[cid].crust_type = "transitional"
 
     logger.info(
