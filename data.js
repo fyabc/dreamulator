@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786076216543,
+  "lastUpdate": 1786098568018,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -824,6 +824,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004793054744585714",
             "extra": "mean: 5.057063399999606 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "0e45e0ecab8fc2472fb0f3285fbbcc6ffd80779d",
+          "message": "feat(ocean): P1 管线集成 + 最小前端图层\n\n后端:\n- VoronoiCell +3 字段: ocean_current_east_m_s, ocean_current_north_m_s, sst_anomaly_c\n- climate_simulator stage 2.5 (风→洋流→SST修正→BFS→Koppen)\n- pipeline_types: ocean_* 配置段替换死参数 num_gyres\n- 回写自动通过 model_dump_json() (字段在 CVTMesh.cells 中)\n\n前端:\n- ColorMode + currents, 5th shader slot (u_currents)\n- layerBakes: speed heatmap (蓝→青→黄→红) + LayerTextures.currents\n- MapLayerPanel: 气候组 feature 叠加层\n- helpContent: 洋流条目 + koppen 措辞更新\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T18:28:37+08:00",
+          "tree_id": "23366e16c6501a2605a783976189fa0de161f480",
+          "url": "https://github.com/fyabc/dreamulator/commit/0e45e0ecab8fc2472fb0f3285fbbcc6ffd80779d"
+        },
+        "date": 1786098566916,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 29.375812685515825,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0380711533112873",
+            "extra": "mean: 34.041611400016336 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.534094785390636,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06506129374521309",
+            "extra": "mean: 282.957888999988 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3767430722037317,
+            "unit": "iter/sec",
+            "range": "stddev: 1.167520413728339",
+            "extra": "mean: 726.3519390000018 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 912.6262572741251,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008726106206928906",
+            "extra": "mean: 1.0957388000065293 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.40961760261166,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011440055350819627",
+            "extra": "mean: 5.197245399995154 msec\nrounds: 5"
           }
         ]
       }
