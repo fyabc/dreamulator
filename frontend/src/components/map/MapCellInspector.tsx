@@ -50,6 +50,34 @@ const KOPPEN_NAMES: Record<string, string> = {
   Ocean: '海洋',
 }
 
+const BIOME_LABELS: Record<string, string> = {
+  tropical_rainforest: '热带雨林',
+  tropical_seasonal_forest: '热带季雨林',
+  tropical_savanna: '热带稀树草原',
+  tropical_desert: '热带荒漠',
+  temperate_rainforest: '温带雨林',
+  temperate_forest: '温带森林',
+  temperate_grassland: '温带草原',
+  temperate_desert: '温带荒漠',
+  boreal_forest: '北方森林',
+  boreal_shrubland: '北方灌丛',
+  tundra: '冻原',
+  ice: '冰原',
+  ocean: '海洋',
+}
+
+const TAG_LABELS: Record<string, string> = {
+  large_herbivores_high: '大型食草动物',
+  large_herbivores_moderate: '食草动物(中)',
+  large_herbivores_low: '食草动物(低)',
+  staple_crops_high: '主食作物',
+  staple_crops_moderate: '作物(中)',
+  staple_crops_low: '作物(低)',
+  draft_animals_high: '役用动物',
+  draft_animals_moderate: '役用(中)',
+  draft_animals_low: '役用(低)',
+}
+
 function formatNumber(n: number | undefined, decimals = 0): string {
   if (n === undefined || n === null) return '—'
   if (!isFinite(n)) return '∞'
@@ -335,9 +363,26 @@ function CellDetails({
           <>
             <div className="border-t border-space-border pt-1 mt-1" />
             <div className="flex justify-between">
-              <dt className="text-gray-500">生态</dt>
-              <dd>{cell.biome}</dd>
+              <dt className="text-gray-500">Whittaker 群系</dt>
+              <dd className="text-green-300">{BIOME_LABELS[cell.biome] ?? cell.biome}</dd>
             </div>
+            {cell.npp_gc_m2_yr != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">NPP</dt>
+                <dd className="font-mono">{cell.npp_gc_m2_yr.toFixed(0)} gC/m²/yr</dd>
+              </div>
+            )}
+            {cell.domesticable_tags && cell.domesticable_tags.length > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">驯化潜力</dt>
+                <dd className="text-xs text-amber-300">
+                  {cell.domesticable_tags
+                    .filter((t: string) => t.endsWith('_high'))
+                    .map((t: string) => TAG_LABELS[t] ?? t)
+                    .join(' · ') || '—'}
+                </dd>
+              </div>
+            )}
           </>
         )}
         {cell.province_id && (

@@ -167,7 +167,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -211,6 +211,10 @@ export default function useGPUTerrain({
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
         u_currentsOp: { value: layers.currents ?? 0 },
+        // Ecology textures (dynamic — set by opacity effect)
+        _biomesTex: { value: baked.biomes },
+        _nppTex: { value: baked.npp },
+        _domesticableTex: { value: baked.domesticable },
       },
       depthTest: false,
       depthWrite: false,
@@ -241,7 +245,9 @@ export default function useGPUTerrain({
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
   const overlayActive =
-    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 || (layers.currents ?? 0) > 0
+    (layers.koppen ?? 0) > 0 || (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
+    (layers.currents ?? 0) > 0 || (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
+    (layers.domesticable ?? 0) > 0
   const activeBaseTex = baked
     ? ((layers.landsea ?? 0) > 0 ? baked.landsea : baked.terrain)
     : null
@@ -262,7 +268,25 @@ export default function useGPUTerrain({
     if (!composite || !baked) return
     const u = composite.compMat.uniforms
     u.u_base.value = activeBaseTex
-    u.u_thematicOp.value = layers.koppen ?? 0
+
+    // Determine active thematic texture: Köppen, biomes, NPP, or domesticable
+    const thematicLayers: [number | undefined, THREE.DataTexture][] = [
+      [layers.koppen, baked.koppen],
+      [layers.biomes, baked.biomes],
+      [layers.npp, baked.npp],
+      [layers.domesticable, baked.domesticable],
+    ]
+    let activeThematic = baked.koppen
+    let thematicOp = 0
+    for (const [op, tex] of thematicLayers) {
+      if ((op ?? 0) > 0) {
+        activeThematic = tex
+        thematicOp = op ?? 0
+        break  // first nonzero wins (radio-exclusive by convention)
+      }
+    }
+    u.u_thematic.value = activeThematic
+    u.u_thematicOp.value = thematicOp
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
     u.u_currentsOp.value = layers.currents ?? 0

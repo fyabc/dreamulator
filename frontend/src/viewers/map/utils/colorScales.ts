@@ -66,6 +66,37 @@ export function plateColor(index: number): string {
 // ---------------------------------------------------------------------------
 
 /** Standard Köppen-Geiger color palette. Source: Beck et al. (2018) legend. */
+// Whittaker biome colors (categorical, 12 land + ocean).
+// Perceptually-sorted: greens=tropical, warm=arid, cool=boreal, grey=cold.
+export const WHITTAKER_COLORS: Record<string, string> = {
+  tropical_rainforest:       '#1B5E20',
+  tropical_seasonal_forest:  '#43A047',
+  tropical_savanna:          '#AED581',
+  tropical_desert:           '#F9A825',
+  temperate_rainforest:      '#2E7D32',
+  temperate_forest:          '#66BB6A',
+  temperate_grassland:       '#FDD835',
+  temperate_desert:          '#D7CCC8',
+  boreal_forest:             '#455A64',
+  boreal_shrubland:          '#90A4AE',
+  tundra:                    '#A1887F',
+  ice:                       '#ECEFF1',
+  ocean:                     '#1565C0',
+}
+
+// NPP sequential heatmap: warm-beige (low) → deep green (high).
+// Normalised to gaia-m range [0, 3000] gC/m^2/yr.
+export const NPP_SCALE: ColorStop[] = [
+  { value: 0.00, color: [214, 175, 125] },
+  { value: 0.15, color: [230, 184, 109] },
+  { value: 0.30, color: [224, 204, 104] },
+  { value: 0.45, color: [178, 210,  97] },
+  { value: 0.60, color: [129, 197,  86] },
+  { value: 0.75, color: [ 67, 167,  72] },
+  { value: 0.90, color: [ 27, 135,  55] },
+  { value: 1.00, color: [  0,  94,  32] },
+]
+
 export const KOPPEN_COLORS: Record<string, string> = {
   // A: Tropical (blues)
   Af: '#0000ff', Am: '#0078ff', Aw: '#46aafa',

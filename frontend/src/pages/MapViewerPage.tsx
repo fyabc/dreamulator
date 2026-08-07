@@ -74,7 +74,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, koppen: 0, currents: 0, biomes: 0, npp: 0, domesticable: 0 },
   })
 
   // Decoded elevation data (for rendering)

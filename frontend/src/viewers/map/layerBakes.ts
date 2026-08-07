@@ -27,6 +27,8 @@ import {
   generateAdaptiveTerrainScale,
   PLATE_COLORS,
   KOPPEN_COLORS,
+  WHITTAKER_COLORS,
+  NPP_SCALE,
 } from './utils/colorScales'
 
 // ---------------------------------------------------------------------------
@@ -83,6 +85,12 @@ export interface LayerTextures {
   boundaries: THREE.DataTexture
   /** Arrow-field overlay — warm=magenta, cold=cyan arrows. Half res. */
   currents: THREE.DataTexture
+  /** Whittaker biome thematic (per-cell categorical). Half res. */
+  biomes: THREE.DataTexture
+  /** NPP heatmap thematic (per-cell continuous). Half res. */
+  npp: THREE.DataTexture
+  /** Civilization cradle thematic (per-cell highlight). Half res. */
+  domesticable: THREE.DataTexture
 }
 
 export interface BakeInputs {
@@ -136,6 +144,7 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
     const t = bakeCache.textures
     t.terrain.dispose(); t.landsea.dispose(); t.koppen.dispose()
     t.plates.dispose(); t.boundaries.dispose(); t.currents.dispose()
+    t.biomes.dispose(); t.npp.dispose(); t.domesticable.dispose()
   }
 
   const textures = bakeAll(inputs)
@@ -282,16 +291,43 @@ function bakeLandseaBase(inp: BakeInputs, coastMask: Uint8Array | null): Uint8Ar
 }
 
 /** Per-cell colour palettes keyed by cell id (ported from useGPUTerrain). */
+/** Look up a colour from a sequential scale by normalised value [0,1]. */
+function sequentialColor(value: number, scale: typeof NPP_SCALE): [number, number, number] {
+  const t = Math.max(0, Math.min(1, value))
+  for (let i = scale.length - 1; i >= 0; i--) {
+    if (t >= scale[i].value) {
+      if (i === scale.length - 1) return scale[i].color
+      const s = scale[i], e = scale[i + 1]
+      const frac = (t - s.value) / (e.value - s.value)
+      return [
+        Math.round(s.color[0] + (e.color[0] - s.color[0]) * frac),
+        Math.round(s.color[1] + (e.color[1] - s.color[1]) * frac),
+        Math.round(s.color[2] + (e.color[2] - s.color[2]) * frac),
+      ]
+    }
+  }
+  return scale[0].color
+}
+
 function buildCellPalettes(cvtMesh: CVTMesh): {
   koppen: Map<number, [number, number, number]>
   plates: Map<number, [number, number, number]>
   boundaries: Map<number, [number, number, number]>
   currents: Map<number, [number, number, number]>
+  biomes: Map<number, [number, number, number]>
+  npp: Map<number, [number, number, number]>
+  domesticable: Map<number, [number, number, number]>
 } {
   const koppen = new Map<number, [number, number, number]>()
   const plates = new Map<number, [number, number, number]>()
   const boundaries = new Map<number, [number, number, number]>()
   const currents = new Map<number, [number, number, number]>()
+  const biomes = new Map<number, [number, number, number]>()
+  const npp = new Map<number, [number, number, number]>()
+  const domesticable = new Map<number, [number, number, number]>()
+
+  // NPP range for normalisation (Miami model bounded by [0, 3000] gC/m^2/yr)
+  const NPP_MAX = 3000
 
   // Compute max ocean current speed for normalisation
   let maxSpeed = 0
@@ -368,9 +404,35 @@ function buildCellPalettes(cvtMesh: CVTMesh): {
       const b = Math.round((b1 + m) * 255)
       currents.set(cell.id, [r, g, b])
     }
+
+    // Whittaker biome — categorical
+    const bm: string | null = (cell as any).biome ?? null
+    if (bm && WHITTAKER_COLORS[bm]) {
+      biomes.set(cell.id, hexRgb(WHITTAKER_COLORS[bm]))
+    }
+
+    // NPP heatmap — continuous
+    const nppVal: number | null = (cell as any).npp_gc_m2_yr ?? null
+    if (nppVal != null) {
+      npp.set(cell.id, sequentialColor(nppVal / NPP_MAX, NPP_SCALE))
+    }
+
+    // Civilization cradle — selective highlight
+    const tags: string[] | undefined = (cell as any).domesticable_tags
+    if (tags && tags.length > 0) {
+      const hasHerb = tags.includes('large_herbivores_high')
+      const hasCrop = tags.includes('staple_crops_high')
+      if (hasHerb && hasCrop) {
+        domesticable.set(cell.id, [255, 215, 0])
+      } else if (hasHerb) {
+        domesticable.set(cell.id, [255, 138, 101])
+      } else if (hasCrop) {
+        domesticable.set(cell.id, [129, 199, 132])
+      }
+    }
   }
 
-  return { koppen, plates, boundaries, currents }
+  return { koppen, plates, boundaries, currents, biomes, npp, domesticable }
 }
 
 /**
@@ -418,12 +480,18 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let platesBuf: Uint8Array = empty
   let boundariesBuf: Uint8Array = empty
   let currentsBuf: Uint8Array = empty
+  let biomesBuf: Uint8Array = empty
+  let nppBuf: Uint8Array = empty
+  let domesticableBuf: Uint8Array = empty
   let kw = 1, kh = 1
   if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
     const palettes = buildCellPalettes(cvtMesh)
     koppenBuf = bakeCellLayer(palettes.koppen, width, height, cellIdMap, flipHorizontal)
     platesBuf = bakeCellLayer(palettes.plates, width, height, cellIdMap, flipHorizontal)
     boundariesBuf = bakeCellLayer(palettes.boundaries, width, height, cellIdMap, flipHorizontal)
+    biomesBuf = bakeCellLayer(palettes.biomes, width, height, cellIdMap, flipHorizontal)
+    nppBuf = bakeCellLayer(palettes.npp, width, height, cellIdMap, flipHorizontal)
+    domesticableBuf = bakeCellLayer(palettes.domesticable, width, height, cellIdMap, flipHorizontal)
     // currentsBuf: left transparent — ocean arrows rendered as SVG vectors
     kw = w2; kh = h2
   }
@@ -435,5 +503,8 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     plates: makeTexture(platesBuf, kw, kh, true),
     boundaries: makeTexture(boundariesBuf, kw, kh, true),
     currents: makeTexture(currentsBuf, kw, kh, true),
+    biomes: makeTexture(biomesBuf, kw, kh, true),
+    npp: makeTexture(nppBuf, kw, kh, true),
+    domesticable: makeTexture(domesticableBuf, kw, kh, true),
   }
 }

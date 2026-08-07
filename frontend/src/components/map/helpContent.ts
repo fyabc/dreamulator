@@ -36,6 +36,7 @@ export const LAYER_GROUPS: { id: string; label: string }[] = [
   { id: 'terrain', label: '地形·海陆' },
   { id: 'geology', label: '地质构造' },
   { id: 'climate', label: '气候' },
+  { id: 'ecology', label: '生态' },
   { id: 'hydro', label: '水文' },
   { id: 'annotation', label: '标注' },
 ]
@@ -105,6 +106,34 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     defaultOpacity: 0.75,
     kind: 'feature',
     group: 'climate',
+  },
+  // --- Ecology layers (P0: Whittaker biome + Miami NPP + domesticable tags) ---
+  {
+    id: 'biomes',
+    label: 'Whittaker 群系',
+    desc: '温度-降水生物群系分类（12 类 + 海洋）',
+    detail: '基于 Whittaker (1975) 温度-降水二维分类。热带雨林=深绿·热带草原=浅黄绿·荒漠=米色·温带森林=中绿·温带草原=金黄·北方针叶林=蓝灰·冻原=灰褐·冰原=白·海洋=深蓝。与 Köppen 气候分类共用专题槽位，二者选一。',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'ecology',
+  },
+  {
+    id: 'npp',
+    label: '净初级生产力',
+    desc: 'NPP 热力图（Miami 模型，gC/m²/yr）',
+    detail: 'Miami 模型 (Lieth 1975) 估算的净初级生产力。暖米色=低产（荒漠 <200）→ 深绿=高产（雨林 >2000）。基于年均温+降水量计算，取两者限制的最小值。归一化到 0–3000 gC/m²/yr。',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'ecology',
+  },
+  {
+    id: 'domesticable',
+    label: '文明摇篮',
+    desc: '高驯化潜力区域高亮（食草动物/作物/役用）',
+    detail: '基于 Whittaker 群系查表标注驯化潜力（Diamond 1997 框架）。金色=高大型食草动物+高主食作物（最优农业区）·橙色=仅高食草动物（游牧潜力）·浅绿=仅高作物（农业潜力）·透明=低潜力区域。温带草原为全高（文明摇篮）。',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'ecology',
   },
 ]
 
