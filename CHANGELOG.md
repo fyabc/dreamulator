@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **大陆与边界真实感批次**（2026-08 用户反馈）：克拉通低地化
+  （`continental_undulation_m` 多尺度动态地形起伏，板块内部 0.4× 偏差）；
+  洋中脊 0.35× + 板块偏差解耦（脊顶回 −2500 m）；top-N 地壳泄漏重标
+  （洒点岛屿仅岛弧/热点/钉扎涌现）；边界多数投票平滑 + 飞地合并
+  （犬牙转角 76.5°→38.4°/步）；古造山带/裂谷双频 meander + 沿走向宽度变化
+  （0.55–1.45×）。gaia-m：南大洋四环洋带、南极浅海/地峡钉扎、
+  boundary_warp 0.3、boundary_uplift_noise 0.8；>2000 m 陆地 29.7%→12.3%
 - **密集偏置场导入 / Gleba 模式**（问题 1 阶段 3）：`geography_raster.png`
   灰度概率图叠进锚定场（`raster_weight` 调和），与 feature 同等待遇参与
   地壳切分/重锚/抬升抑制/钉扎；API `POST /worlds/{w}/geography-raster` +

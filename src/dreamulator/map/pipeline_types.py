@@ -117,6 +117,16 @@ class TerrainPipelineConfig:
     # geography is present: score = w*field + (1-w)*fbm.
     # 1.0 = hard anchors (sharp), 0.0 = pure noise (anchors ignored).
     anchor_weight: float = 0.6
+    # Low-frequency stochastic modulation of divergent-ridge and island-arc
+    # uplift (0 = deterministic).  Multiplier range [1−v, 1+v]: some ridge/arc
+    # segments emerge as main islands, neighbours stay submerged or become
+    # satellite islets — hierarchical archipelagos instead of uniform chains.
+    boundary_uplift_noise: float = 0.6
+    # Multi-scale long-wavelength relief amplitude for continental interiors
+    # (metres).  Analog of dynamic topography (mantle-driven ±500 m on Earth)
+    # plus craton-scale swells; without it plate-interior continents are
+    # unrealistically flat tablelands (gaia-m 2026-08 feedback).
+    continental_undulation_m: float = 600.0
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).

@@ -159,6 +159,8 @@ features:
     strength: 0.7
     elongation: 15.0            # 南北向陆桥
     bearing_deg: 0.0
+    elevation_target_m: 120.0   # 钉扎：陆桥顶 ≤120 m（低矮到未来海侵可淹没）
+    pin_strength: 1.0
 
   # ---- 大洋（向星 / 背星点 + 南极浅海）----
   - name: Aegis深渊洋
@@ -182,5 +184,34 @@ features:
     lon: 0.0                    # 极点，lon 任意
     lat: -90.0
     radius_deg: 20.0
-    strength: -0.2              # 弱海洋（浅海，打破南北对称）；水深待后续
+    strength: -0.8              # 强负偏置：触发基准服从，抑制泄漏陆块（打破南北对称）
     elongation: 1.0
+    elevation_target_m: -120.0  # 钉扎：120 m 水深陆缘浅海（冰期海退敏感带）
+    pin_strength: 1.0
+
+  # ---- 南大洋（geography.md：南半球中纬度为洋；四环近似纬向洋带，
+  #   否则 fBm 在此自发出陆，形成设计外大陆，边界横穿成"露出洋中脊"假象）----
+  - name: 南大洋·0
+    kind: ocean_basin
+    lon: 0.0
+    lat: -40.0
+    radius_deg: 28.0
+    strength: -0.8
+  - name: 南大洋·90
+    kind: ocean_basin
+    lon: 90.0
+    lat: -40.0
+    radius_deg: 28.0
+    strength: -0.8
+  - name: 南大洋·180
+    kind: ocean_basin
+    lon: 180.0
+    lat: -40.0
+    radius_deg: 28.0
+    strength: -0.8
+  - name: 南大洋·-90
+    kind: ocean_basin
+    lon: -90.0
+    lat: -40.0
+    radius_deg: 28.0
+    strength: -0.8

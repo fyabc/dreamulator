@@ -59,6 +59,67 @@ _ANCHOR_SUPPRESS_BIAS_THRESHOLD = -0.5
 _ANCHOR_SUPPRESS_FLOOR = 0.1
 
 
+# Plate-interior continental cells receive only this fraction of the uniform
+# per-plate offset; the rest is replaced by multi-scale undulation so cratons
+# stay low while plates still differ (Earth: cratons 0–800 m, not +2 km shelves).
+_PLATE_OFFSET_LAND_FRACTION = 0.4
+
+
+def _relabel_leaked_crust(mesh: CVTMesh) -> None:
+    """Relabel isolated top-N crust-leakage cells to oceanic.
+
+    The global top-N crust threshold sprinkles a few continental cells into
+    oceanic regions (fBm blobs).  On Earth, oceanic islands are arc /
+    hotspot / shelf features, not random sprinkles; islands here should
+    likewise emerge only where island-arc / hotspot uplift or an author pin
+    raises the seafloor.  Cells with a mostly-oceanic neighbourhood
+    (cont_frac < 0.5, i.e. clusters smaller than ~4 cells) are relabelled
+    oceanic before the base stage; boundary uplifts and pins can still lift
+    them into hierarchical archipelagos afterwards.
+    """
+    cont_frac = _neighbor_continental_fraction(mesh)
+    n_relabeled = 0
+    for i, c in enumerate(mesh.cells):
+        if c.crust_type == "continental" and cont_frac[i] < 0.5:
+            c.crust_type = "oceanic"
+            n_relabeled += 1
+    if n_relabeled:
+        logger.info("  Crust leakage cleanup: %d isolated cells relabelled oceanic", n_relabeled)
+
+
+def _neighbor_continental_fraction(mesh: CVTMesh) -> np.ndarray:
+    """Per-cell fraction of continental crust among self + neighbours.
+
+    Used to distinguish true continental rifts (East-Africa style, embedded
+    in continental crust) from top-N crust *leakage* cells sitting on an
+    oceanic divergent boundary — the latter must follow the oceanic ridge
+    profile, not the +1400 m continental-rift one.
+    """
+    isc = np.array([c.crust_type == "continental" for c in mesh.cells], dtype=np.float64)
+    out = np.empty(len(isc), dtype=np.float64)
+    for i, c in enumerate(mesh.cells):
+        nb = c.neighbors
+        out[i] = (isc[i] + float(isc[np.asarray(nb, dtype=np.int64)].sum())) / (1 + len(nb))
+    return out
+
+
+def _continental_undulation(mesh: CVTMesh, config: TerrainPipelineConfig) -> np.ndarray:
+    """Multi-scale long-wavelength relief for continental interiors.
+
+    Analog of dynamic topography (mantle convection ±500 m on Earth; Flament
+    et al. 2013) plus craton-scale swells and shields.  Without it,
+    plate-interior continents are unrealistically flat tablelands.
+    """
+    und_cfg = TerrainPipelineConfig(
+        seed=config.seed + 600,
+        noise_scale=config.regional_noise_scale,
+        noise_octaves=3,
+        noise_persistence=0.55,
+        noise_lacunarity=2.2,
+    )
+    return generate_fbm_on_cells(mesh, und_cfg) * config.continental_undulation_m
+
+
 def _apply_base_override(
     base: np.ndarray,
     geography_bias: np.ndarray | None,
@@ -177,6 +238,9 @@ def apply_boundary_effects(
     config: TerrainPipelineConfig,
     *,
     geography_bias: np.ndarray | None = None,
+    uplift_mod: np.ndarray | None = None,
+    plate_offsets: dict[str, float] | None = None,
+    cont_frac: np.ndarray | None = None,
 ) -> np.ndarray:
     """Apply tectonic boundary elevation effects.
 
@@ -204,6 +268,7 @@ def apply_boundary_effects(
     # Reference convergence rate for normalization (10 cm/yr is very fast)
     ref_rate = 5.0  # cm/yr — median plate speed
     damp = _anchor_uplift_damping(geography_bias, n)
+    mod = uplift_mod if uplift_mod is not None else np.ones(n, dtype=np.float64)
 
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
@@ -222,7 +287,15 @@ def apply_boundary_effects(
         if cell.boundary_type == "convergent":
             delta_h[i] = config.convergent_uplift_m * falloff * rate_factor * damp[i]
         elif cell.boundary_type == "divergent":
-            delta_h[i] = config.divergent_depth_m * falloff * rate_factor
+            # 0.35×: Earth ridge crests sit ~1300 m above the abyss but
+            # ~2500 m BELOW sea level; full-depth uplift pushed ridge crests
+            # to the surface after plate offsets + sea-level calibration.
+            # −0.6×off partially decouples ridge depth from the plate offset
+            # so crests stay near −2500 m on high- and low-offset plates alike.
+            off_i = plate_offsets.get(cell.plate_id or "", 0.0) if plate_offsets else 0.0
+            delta_h[i] = (
+                0.35 * config.divergent_depth_m * falloff * rate_factor * mod[i] - 0.6 * off_i
+            )
         # Transform boundaries: no systematic elevation change
 
     return delta_h
@@ -339,10 +412,26 @@ def synthesize_terrain(
         if spec is not None and (spec.features or raster_bias is not None)
         else None
     )
+    # Low-frequency stochastic modulation for divergent-ridge / island-arc
+    # uplift (hierarchical islands instead of uniform chains).
+    uplift_mod: np.ndarray | None = None
+    if config.boundary_uplift_noise > 0:
+        mod_cfg = TerrainPipelineConfig(
+            seed=config.seed + 400,
+            noise_scale=config.regional_noise_scale,
+            noise_octaves=2,
+            noise_persistence=0.55,
+            noise_lacunarity=2.0,
+        )
+        uplift_mod = 1.0 + config.boundary_uplift_noise * generate_fbm_on_cells(mesh, mod_cfg)
     if algo == "cortial2019_gaussian":
-        _synthesize_gaussian(mesh, plates, config, geography_bias=geography_bias)
+        _synthesize_gaussian(
+            mesh, plates, config, geography_bias=geography_bias, uplift_mod=uplift_mod
+        )
     elif algo == "cortial2019_asymmetric":
-        _synthesize_asymmetric(mesh, plates, config, geography_bias=geography_bias)
+        _synthesize_asymmetric(
+            mesh, plates, config, geography_bias=geography_bias, uplift_mod=uplift_mod
+        )
 
 
 # =========================================================================
@@ -356,6 +445,7 @@ def _synthesize_gaussian(
     config: TerrainPipelineConfig,
     *,
     geography_bias: np.ndarray | None = None,
+    uplift_mod: np.ndarray | None = None,
 ) -> None:
     """Cortial 2019 §4 — symmetric Gaussian boundary mountain profiles."""
     logger.info("Synthesizing terrain elevation")
@@ -364,6 +454,7 @@ def _synthesize_gaussian(
 
     # 1. Bimodal base elevation
     logger.info("  Step 1/5: Bimodal base elevation")
+    _relabel_leaked_crust(mesh)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
@@ -371,8 +462,8 @@ def _synthesize_gaussian(
     _apply_base_override(base, geography_bias, config)
 
     # 1b. Per-plate random elevation offset
-    # Each plate gets a random offset to create large-scale variation.
-    # Continental plates shift up/down, oceanic plates shift up/down independently.
+    # Oceanic plates shift fully; continental interiors keep only a fraction
+    # of the uniform offset plus multi-scale undulation (cratons stay low).
     logger.info(
         "  Step 2/5: Per-plate elevation offset (spread=%.0fm)", config.plate_elevation_spread_m
     )
@@ -385,14 +476,26 @@ def _synthesize_gaussian(
             config.plate_elevation_spread_m,
         )
 
+    und = _continental_undulation(mesh, config)
     # Apply offsets to base elevation
     for i, cell in enumerate(mesh.cells):
         if cell.plate_id and cell.plate_id in plate_offsets:
-            base[i] += plate_offsets[cell.plate_id]
+            off = plate_offsets[cell.plate_id]
+            if cell.crust_type == "continental":
+                base[i] += _PLATE_OFFSET_LAND_FRACTION * off + und[i]
+            else:
+                base[i] += off
 
     # 2. Tectonic boundary effects
     logger.info("  Step 3/5: Tectonic boundary effects")
-    boundary_delta = apply_boundary_effects(mesh, config, geography_bias=geography_bias)
+    boundary_delta = apply_boundary_effects(
+        mesh,
+        config,
+        geography_bias=geography_bias,
+        uplift_mod=uplift_mod,
+        plate_offsets=plate_offsets,
+        cont_frac=_neighbor_continental_fraction(mesh),
+    )
 
     # 3a. Low-frequency regional noise (creates broad elevation trends within plates)
     logger.info(
@@ -456,7 +559,9 @@ def _synthesize_gaussian(
 
     # Post-processing (shared with asymmetric: shelf/plain must run last)
     sea_level = config.sea_level_offset_m
-    elevation = _apply_island_arcs(mesh, elevation, config, geography_bias=geography_bias)
+    elevation = _apply_island_arcs(
+        mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
+    )
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
 
@@ -497,6 +602,7 @@ def _synthesize_asymmetric(
     config: TerrainPipelineConfig,
     *,
     geography_bias: np.ndarray | None = None,
+    uplift_mod: np.ndarray | None = None,
 ) -> None:
     """Cortial 2019 — asymmetric mountain profiles + hotspots + landforms."""
     logger.info("Synthesizing terrain (asymmetric)")
@@ -511,22 +617,33 @@ def _synthesize_asymmetric(
     _apply_base_override(base, geography_bias, config)
 
     logger.info("  Step 1/6: Base elevation + plate offsets")
+    _relabel_leaked_crust(mesh)
     plate_offsets: dict[str, float] = {}
     for plate in plates:
         plate_offsets[plate.id] = rng.uniform(
             -config.plate_elevation_spread_m,
             config.plate_elevation_spread_m,
         )
+    und = _continental_undulation(mesh, config)
     for i, cell in enumerate(mesh.cells):
         if cell.plate_id and cell.plate_id in plate_offsets:
-            base[i] += plate_offsets[cell.plate_id]
+            off = plate_offsets[cell.plate_id]
+            if cell.crust_type == "continental":
+                base[i] += _PLATE_OFFSET_LAND_FRACTION * off + und[i]
+            else:
+                base[i] += off
 
     # 2. Asymmetric boundary effects
     logger.info(
         "  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)", config.mountain_asymmetry
     )
     boundary_delta, transform_boost = _asymmetric_boundary_effects(
-        mesh, config, geography_bias=geography_bias
+        mesh,
+        config,
+        geography_bias=geography_bias,
+        uplift_mod=uplift_mod,
+        plate_offsets=plate_offsets,
+        cont_frac=_neighbor_continental_fraction(mesh),
     )
 
     # 3. Hotspot volcanic chains
@@ -596,7 +713,9 @@ def _synthesize_asymmetric(
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
     sea_level = config.sea_level_offset_m
-    elevation = _apply_island_arcs(mesh, elevation, config, geography_bias=geography_bias)
+    elevation = _apply_island_arcs(
+        mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
+    )
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
@@ -618,6 +737,9 @@ def _asymmetric_boundary_effects(
     config: TerrainPipelineConfig,
     *,
     geography_bias: np.ndarray | None = None,
+    uplift_mod: np.ndarray | None = None,
+    plate_offsets: dict[str, float] | None = None,
+    cont_frac: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Boundary-type-specific elevation profiles.
 
@@ -652,6 +774,7 @@ def _asymmetric_boundary_effects(
     asym = config.mountain_asymmetry  # [0, 1]
     sigma = config.boundary_influence_km
     damp = _anchor_uplift_damping(geography_bias, n)
+    mod = uplift_mod if uplift_mod is not None else np.ones(n, dtype=np.float64)
 
     # Reference convergence rate for normalisation.
     # Earth: fast plates (Pacific) ~10 cm/yr, slow (Africa) ~1 cm/yr,
@@ -737,11 +860,19 @@ def _asymmetric_boundary_effects(
         elif cell.boundary_type == "divergent":
             # ---- Divergent: rift + ridge, crust-aware ---------------------
             sigma_div = sigma * 0.6  # 300 km — narrower rift zone
+            # Top-N crust leakage on an oceanic boundary (neighbourhood mostly
+            # oceanic) follows the oceanic ridge profile, not the +1400 m
+            # continental-rift one; −0.6×off decouples ridge depth from the
+            # plate offset so crests stay near −2500 m (Earth-like).
+            leaked = crust == "continental" and cont_frac is not None and cont_frac[i] < 0.5
+            off_i = plate_offsets.get(cell.plate_id or "", 0.0) if plate_offsets else 0.0
 
-            if crust == "oceanic":
+            if crust == "oceanic" or leaked:
                 # Mid-ocean ridge: broad submarine rise, shallow central graben.
-                # Rising from ~-3800 m (abyssal plain) to ~-2500 m (ridge crest).
-                ridge_amp = config.divergent_depth_m * 0.65  # ~1300 m uplift
+                # Earth: ridge crest ~1300 m above the abyss, ~-2500 m below sea
+                # level.  0.35× keeps crests submerged even on high-offset
+                # oceanic plates after sea-level calibration (2026-08 feedback).
+                ridge_amp = config.divergent_depth_m * 0.35
                 ridge = ridge_amp * np.exp(
                     -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
                 )
@@ -751,7 +882,7 @@ def _asymmetric_boundary_effects(
                     * 0.15
                     * np.exp(-(d * d) / (2 * (sigma_div * 0.2) ** 2))
                 )
-                delta_h[i] = (rift + ridge) * rate_factor
+                delta_h[i] = (rift + ridge) * rate_factor * mod[i] - 0.6 * off_i
             else:
                 # Continental rift: deep central valley + flanking highlands
                 # (East African Rift, Baikal).  The rift floor can drop below
@@ -766,7 +897,7 @@ def _asymmetric_boundary_effects(
                     * 0.7
                     * np.exp(-(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2))
                 )
-                delta_h[i] = (rift + ridge) * rate_factor
+                delta_h[i] = (rift + ridge) * rate_factor * mod[i]
 
     # ---- Transform: roughness-only (no systematic elevation change) ----
     # Collect transform boundary cells for a narrow roughness boost.
@@ -1460,6 +1591,7 @@ def _apply_island_arcs(
     config: TerrainPipelineConfig,
     *,
     geography_bias: np.ndarray | None = None,
+    uplift_mod: np.ndarray | None = None,
 ) -> np.ndarray:
     """Island arc uplift at O-O convergent boundaries.
 
@@ -1526,10 +1658,11 @@ def _apply_island_arcs(
     arc_count = 0
 
     damp = _anchor_uplift_damping(geography_bias, len(elevation))
+    mod = uplift_mod if uplift_mod is not None else np.ones(len(elevation), dtype=np.float64)
     sea_level = config.sea_level_offset_m
     for cid, d_km in arc_affected.items():
         weight = np.exp(-((d_km - peak_dist) ** 2) / (2 * sigma * sigma))
-        dz = arc_height * weight * damp[cid]
+        dz = arc_height * weight * damp[cid] * mod[cid]
         # Only uplift cells that are oceanic (don't push continental crust)
         if getattr(mesh.cells[cid], "crust_type", "") != "continental":
             elevation[cid] += dz
@@ -1565,11 +1698,14 @@ def _apply_interior_landforms(
     rift arms persist as linear features long after the plate boundary
     has migrated away.
 
-    For each continental plate, this places 1–3 linear belts at random
-    orientation across the interior.  Each belt has **along-strike height
-    variation** via 1D simplex noise — producing natural peaks, passes,
-    and sunken intermontane basins (pull-apart / fault-block depressions
-    like the Turpan Depression at −154 m or the Fergana Valley).
+    For each continental plate, this places 1–3 belts at random orientation
+    across the interior.  Each belt meanders along a two-frequency path and
+    varies in **both height and width** along strike (0.55–1.45×, correlated
+    with amplitude — collision knots broad and high, transfer segments
+    narrow) via 1D simplex noise — producing natural peaks, passes, and
+    sunken intermontane basins (pull-apart / fault-block depressions like
+    the Turpan Depression at −154 m or the Fergana Valley).  Rift valleys
+    get the same meander + width variation (straight stripes read as fake).
 
     References
     ----------
@@ -1704,21 +1840,18 @@ def _apply_interior_landforms(
                 angle_ap = np.arccos(np.clip(np.dot(a_pos, p_proj), -1.0, 1.0))
                 t = np.clip(angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
 
-                # Along-strike wobble: sinusoidal perturbation makes belts curve
+                # Along-strike wobble: low-frequency meander + higher-frequency
+                # ripple make the belt curve like a real orogen (not a stripe)
                 if _has_noise:
-                    wobble = opensimplex.noise2(belt_noise_seed + 0.5, t * 6.0) * 0.2
+                    wobble = (
+                        opensimplex.noise2(belt_noise_seed + 0.5, t * 2.5) * 0.35
+                        + opensimplex.noise2(belt_noise_seed + 1.5, t * 7.0) * 0.12
+                    )
                     cos_w = np.cos(wobble)
                     sin_w = np.sin(wobble)
                     p_proj = p_proj * cos_w + np.cross(gc_normal, p_proj) * sin_w
 
-                # Angular distance from cell to the (wobbled) belt line
-                dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
-                dist_km = np.arccos(dot_to_arc) * config.radius_km
-
-                if dist_km >= 2.0 * sigma_km:
-                    continue
-
-                # ---- Along-strike height modulation via 1D noise ----
+                # ---- Along-strike modulation via 1D noise (height + width) ----
                 if _has_noise:
                     import warnings as _w
 
@@ -1729,6 +1862,17 @@ def _apply_interior_landforms(
                     strike_noise = opensimplex.noise2(t * 8.0, belt_noise_seed * 0.01)
                 else:
                     strike_noise = rng.uniform(-1.0, 1.0)
+
+                # Along-strike width variation (0.55–1.45×): collision knots are
+                # broad, transfer segments narrow — real belts are not stripes.
+                local_sigma = sigma_km * (0.55 + 0.9 * (strike_noise + 1.0) / 2.0)
+
+                # Angular distance from cell to the (wobbled) belt line
+                dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
+                dist_km = np.arccos(dot_to_arc) * config.radius_km
+
+                if dist_km >= 2.0 * local_sigma:
+                    continue
 
                 # Determine segment type and amplitude
                 if strike_noise < -(1.0 - basin_chance * 2):
@@ -1745,8 +1889,8 @@ def _apply_interior_landforms(
                     landform_type = "orogeny"
                     belt_count += 1
 
-                # Gaussian cross-section
-                weight = np.exp(-(dist_km * dist_km) / (2 * sigma_km * sigma_km))
+                # Gaussian cross-section (width varies along strike)
+                weight = np.exp(-(dist_km * dist_km) / (2 * local_sigma * local_sigma))
                 # Small random jitter for natural texture
                 jitter = rng.uniform(-0.10, 0.10)
                 elevation[i] += local_amp * weight * (1.0 + jitter)
@@ -1783,13 +1927,18 @@ def _apply_interior_landforms(
                         p_proj /= p_norm
                         angle_ap = np.arccos(np.clip(np.dot(a_pos, p_proj), -1.0, 1.0))
                         t = np.clip(angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
-                        dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
-                        dist_km = np.arccos(dot_to_arc) * config.radius_km
 
-                        if dist_km >= 2.0 * rift_sigma:
-                            continue
+                        # Meander like the orogen belts (not a straight stripe)
+                        if _has_noise:
+                            wobble = (
+                                opensimplex.noise2(rift_noise_seed + 0.5, t * 2.5) * 0.35
+                                + opensimplex.noise2(rift_noise_seed + 1.5, t * 7.0) * 0.12
+                            )
+                            cos_w = np.cos(wobble)
+                            sin_w = np.sin(wobble)
+                            p_proj = p_proj * cos_w + np.cross(gc_normal, p_proj) * sin_w
 
-                        # Along-strike depth modulation for rifts
+                        # Along-strike depth + width modulation for rifts
                         if _has_noise:
                             import warnings as _w
 
@@ -1801,8 +1950,15 @@ def _apply_interior_landforms(
                             strike_noise = rng.uniform(-1.0, 1.0)
                         depth_mult = 0.4 + 0.6 * (strike_noise + 1.0) / 2.0
                         local_depth = rift_depth_base * depth_mult
+                        local_rift_sigma = rift_sigma * (0.55 + 0.9 * (strike_noise + 1.0) / 2.0)
 
-                        weight = np.exp(-(dist_km**2) / (2 * rift_sigma**2))
+                        dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
+                        dist_km = np.arccos(dot_to_arc) * config.radius_km
+
+                        if dist_km >= 2.0 * local_rift_sigma:
+                            continue
+
+                        weight = np.exp(-(dist_km**2) / (2 * local_rift_sigma**2))
                         jitter = rng.uniform(-0.10, 0.10)
                         elevation[i] -= local_depth * weight * (1.0 + jitter)
                         if not mesh.cells[i].landform:

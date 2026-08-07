@@ -256,7 +256,7 @@ def build_cell_cost(
         y,
         z,
         int(rng_seed),
-        octaves=3,
+        octaves=1,
         lacunarity=2.0,
         persistence=0.5,
         base_freq=base_freq,

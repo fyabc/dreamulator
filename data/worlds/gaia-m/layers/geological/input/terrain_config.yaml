@@ -61,7 +61,8 @@ plates:
   rift_base_rate: 0.005
   # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界；低频 fBm 扭曲使边界弯曲成
   # 弧形（岛弧/造山带分段弯曲），而非绵延平直（见 terrain-pipeline.md §3.2）。
-  boundary_warp: 0.9
+  boundary_warp: 0.3              # 0.9→0.6 仍犬牙交错，再降（2026-08 用户反馈）
+  boundary_uplift_noise: 0.8      # 岛弧/洋脊隆起低频随机调制 → 大岛+附属岛层级
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
 

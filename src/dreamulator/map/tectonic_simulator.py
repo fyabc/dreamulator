@@ -441,6 +441,8 @@ def run_tectonic_evolution(
             arc_state,
             smooth_rng=np.random.default_rng(config.seed + 909),
         )
+        cell_map = _smooth_partition(mesh, cell_map)
+        cell_map = _merge_plate_enclaves(mesh, cell_map)
         _rebuild_plate_cells(mesh, cell_map, plates_out)
         return plates_out, cell_map
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
@@ -1669,6 +1671,84 @@ def _seg_mid(mesh: CVTMesh, seg: list[int]) -> np.ndarray:
         axis=0,
     )
     return np.asarray(v / np.linalg.norm(v))
+
+
+def _smooth_partition(mesh: CVTMesh, cell_map: dict[int, str], rounds: int = 4) -> dict[int, str]:
+    """Majority-vote smoothing of the final partition (removes dog-teeth).
+
+    The cell-lattice Voronoi re-partition makes boundaries staircase-zigzag
+    (mean turn angle ~76° per cell step vs ~5–15° for real Earth boundaries).
+    A cell whose strict neighbour majority belongs to another plate is a
+    tooth and is reassigned; four rounds remove 1–2-cell teeth while keeping
+    genuine corners and triple junctions (interior cells of a ≥2-cell-wide
+    band never reach a strict opposite majority).  Two-hop voting was tried
+    and rejected (blocky staircases, metric regressed 38.6° → 46.1°).
+    """
+    from collections import Counter
+
+    for _ in range(rounds):
+        new_map = dict(cell_map)
+        for cid, cell in enumerate(mesh.cells):
+            pid = cell_map[cid]
+            votes = Counter(cell_map[v] for v in cell.neighbors)
+            top_pid, top_n = votes.most_common(1)[0]
+            if top_pid != pid and top_n * 2 > len(cell.neighbors):
+                new_map[cid] = top_pid
+        cell_map = new_map
+    return cell_map
+
+
+def _merge_plate_enclaves(mesh: CVTMesh, cell_map: dict[int, str]) -> dict[int, str]:
+    """Reassign tiny disconnected plate enclaves to the surrounding plate.
+
+    The final boundary warp re-partitions from centroids and can carve
+    single-cell exclaves ("dog-teeth"); rifting children (``plate_xxx_b``)
+    may also leave enclaves.  Connected components smaller than
+    max(20, 0.5% of the plate) are merged into the neighbour-majority
+    plate, restoring connectivity without moving the large-scale partition.
+    """
+    from collections import Counter, deque
+
+    by_plate: dict[str, list[int]] = {}
+    for cid, pid in cell_map.items():
+        by_plate.setdefault(pid, []).append(cid)
+
+    new_map = dict(cell_map)
+    for pid, cids in by_plate.items():
+        cellset = set(cids)
+        seen: set[int] = set()
+        comps: list[list[int]] = []
+        for s in cids:
+            if s in seen:
+                continue
+            comp = [s]
+            seen.add(s)
+            q: deque[int] = deque([s])
+            while q:
+                u = q.popleft()
+                for v in mesh.cells[u].neighbors:
+                    if v in cellset and v not in seen:
+                        seen.add(v)
+                        comp.append(v)
+                        q.append(v)
+            comps.append(comp)
+        if len(comps) < 2:
+            continue
+        comps.sort(key=len, reverse=True)
+        min_keep = max(20, int(0.005 * len(cids)))
+        for comp in comps[1:]:
+            if len(comp) >= min_keep:
+                continue
+            votes: Counter[str] = Counter()
+            for u in comp:
+                for v in mesh.cells[u].neighbors:
+                    p2 = new_map.get(v)
+                    if p2 is not None and p2 != pid:
+                        votes[p2] += 1
+            target = votes.most_common(1)[0][0] if votes else pid
+            for u in comp:
+                new_map[u] = target
+    return new_map
 
 
 def warp_boundaries(
