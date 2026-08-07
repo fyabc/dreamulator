@@ -15,6 +15,7 @@
 
 - `drafts/conlang-world-drafts.md` — 架空语言文字草案（6 个草案：OSV 认知文明、多轨和声语法、能量梯度语序、宿命论语序、硅基纯表意文字、种族语音对立）
 - `drafts/alternative-solvent-world-drafts.md` — 替代溶剂世界草案（9 个草案：氨海超级地球、乙烷湖行星、温水双洋、冷海双洋、硫火世界、冰-油-卤水三层世界、CO₂ 干冰穿梭、富氯行星、富碳辛烷油海）
+- `drafts/reversing-river-wonder.md` — "赤渊"倒流河奇观（原 gaia-m 设定，因当前地形不支持封闭裂谷盆地而移出；待后续异星世界复用）
 
 ## 规划中的文档
 

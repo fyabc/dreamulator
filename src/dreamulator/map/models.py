@@ -196,6 +196,20 @@ class VoronoiCell(BaseModel):
         description="SST anomaly from ocean heat transport (°C, rel. latitude profile)",
     )
 
+    # Ecology properties (filled by ecology engine — P0)
+    biome: str | None = Field(
+        default=None,
+        description="Whittaker biome classification (e.g. 'tropical_rainforest')",
+    )
+    npp_gc_m2_yr: float | None = Field(
+        default=None,
+        description="Net Primary Productivity in gC / m² / yr (Miami model)",
+    )
+    domesticable_tags: list[str] = Field(
+        default_factory=list,
+        description="Domestication potential tags (e.g. ['large_herbivores_high', ...])",
+    )
+
     # Hydrology properties (filled by river generator — TODO)
     flow_accumulation: float = Field(
         default=0.0,
