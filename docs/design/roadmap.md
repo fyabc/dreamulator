@@ -28,6 +28,7 @@
 | 2.5 | 地形真实感增强 | ✅ v0.7.0–0.8.0 | 板块剖分（Cortial 2019）、地形合成、海岸线、噪声标定；见 §三 |
 | 3A | 气候与流体引擎 | 🚧 | 核心已合并（v0.9.0），调优进行中；见 §四 |
 | 3B | 侵蚀与河流生成 | 📋 | D8 流向 / 流量累积 / 水力侵蚀 / 沉积物搬运（`river_generator.py`、`erosion.py` 为占位） |
+| 3B.5 | 生态层：气候→群系→承载力 | 📋 | Whittaker 映射 + 代谢标度 NPP + 可驯化标签（P0）；区域连通物种分布（P1）；简单食物网（P2）；异星物种推演（P3）。设计见 [ecology-layer-design.md](../../private/plans/ecology-layer-design.md)，数学模型见 `docs/knowledge/ecology/ecological_mathematical_models.md` |
 | 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](civilization-layer.md) |
 | 3D | 世界线合并可视化 Diff | 📋 | DAG 影响半径分析 / Lyapunov 混沌预警 / 蒙特卡洛不确定性 |
 | 3E | LLM 叙事引擎 | 🚧 | 基础 `narrate` 已实现；史诗叙事桥（`narrative_bridge.py`）未做 |
@@ -180,6 +181,7 @@ C >30%、Kappa >0.3）→ M3 温度精细（RMSE <8°C、B→C 混淆消除）�
 | P0 | 气候 3A.3：温度精细化（冰盖/云/洋流） | 2 周 | ★★★★ |
 | P1 | 气候 3A.7：潮汐锁定经度效应（次行星半球加温） | 1–2 周 | ★★★★ |
 | P1 | 气候 3A.4：空间格局精细化 | 1.5–2 周 | ★★★★ |
+| P1 | 生态层 P0：气候→群系桥接（Whittaker + NPP + 可驯化标签） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 前端气候可视化补全（风场箭头） | 1 周 | ★★★★ |
 | ~~地图图层系统重构~~ | ✅ 已完成（2026-08-05）：kind z 序合成 + 分组多选面板（底图/专题 radio + 填充/特征多选）+ 烘焙-显示分离（每层独立 DataTexture，透明度=uniform 零重烘；无叠加层时直采底图与旧管线逐字节一致）。含加载去重（KD-tree/烘焙缓存共享、海岸线单 pass），见 `private/plans/map-layer-refactor.md` | — | ★★★★★ |
