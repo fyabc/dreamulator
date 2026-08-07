@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786104946940,
+  "lastUpdate": 1786105979814,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1001,6 +1001,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007509850569825057",
             "extra": "mean: 5.191356600005292 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "43e00444ff77686755f4e6d8b4047372d41ffab3",
+          "message": "feat(ocean): P1 管线集成 + 2D/3D 前端箭头 + 色阶/工具栏修复\n\n后端:\n- VoronoiCell +3 字段: ocean_current_east_m_s, ocean_current_north_m_s, sst_anomaly_c\n- climate_simulator stage 2.5: 风→curl→Stommel GMRES 求解 + SST 平流 + 回写\n- pipeline_types: ocean_* 配置段 (替换 num_gyres)\n- RHS 符号修正 (curl_z/(ρH))\n- climate engine: terrain_config.yaml→optional_input_files\n\n前端:\n- 2D: MapSvgOverlay SVG 矢量箭头 (4.5° 网格, 品红暖流/青绿寒流)\n- 3D: GlobeCurrentArrows rAF canvas (背面剔除 + 边缘淡出)\n- GlobeViewer 新增 globeProjectRef (lon,lat)→screen 投影\n- layerBakes currents 槽 + 5th shader uniform\n- ColorMode + currents, helpContent, panel entry\n- 陆地色阶: 海岸线深绿→高原浅绿/棕 (修正海平面附近过浅)\n- 3D 工具栏: 导入高度图+锚定灰度图按钮顺序对齐 2D\n\n内部修复:\n- CG→GMRES (Stommel op 非对称)\n- east = r̂×k̂ (修正西向错误)\n- Windows GBK 编码: Köppen→Koppen\n- 测试: 矩形盆地 gyre 方向/WBC 强化/确定性\n\n验证: earth/climate-dev 洋流方向正确\n  湾流(北流暖)·黑潮(北流暖)·秘鲁(北流=向赤道寒)·加那利(南流寒)\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-07T20:32:10+08:00",
+          "tree_id": "219cc1f30c5647a72c39886fd94b09361ed99bba",
+          "url": "https://github.com/fyabc/dreamulator/commit/43e00444ff77686755f4e6d8b4047372d41ffab3"
+        },
+        "date": 1786105979336,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 26.12633763648052,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04827380988568517",
+            "extra": "mean: 38.275552200002494 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.762486443831906,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05046666281448282",
+            "extra": "mean: 265.78168849999884 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4510689185521632,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1011240390846342",
+            "extra": "mean: 689.1471433333246 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 990.4942268979439,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004716554365964065",
+            "extra": "mean: 1.009597000006579 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 85.03825105567043,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0003193582100228753",
+            "extra": "mean: 11.759414000005108 msec\nrounds: 5"
           }
         ]
       }
