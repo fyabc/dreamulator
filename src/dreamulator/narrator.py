@@ -7,11 +7,14 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .models.layers import LAYER_ORDER
 from .resolver import LayerResolver
 from .world_manager import WorldManager
+
+if TYPE_CHECKING:
+    from anthropic.types import MessageParam
 
 # Type alias for the streaming text callback.
 # Called with each incremental text delta as it arrives.
@@ -234,9 +237,9 @@ def narrate(
     api_config = _resolve_api_config(model_override=model)
 
     summary = collect_world_summary(world_name, branch)
-    messages = build_prompt(summary)
+    messages = cast("list[MessageParam]", build_prompt(summary))
 
-    client_kwargs: dict[str, str] = {"api_key": api_config.api_key}
+    client_kwargs: dict[str, Any] = {"api_key": api_config.api_key}
     if api_config.base_url:
         client_kwargs["base_url"] = api_config.base_url
 

@@ -110,7 +110,7 @@ def export_equirectangular(
         np.min(result),
         np.max(result),
     )
-    return result
+    return np.asarray(result)
 
 
 def export_multiple_fields(

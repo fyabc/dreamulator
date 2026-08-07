@@ -161,7 +161,7 @@ def _make_noise(
     smin, smax = smoothed.min(), smoothed.max()
     if smax > smin:
         smoothed = (smoothed - smin) / (smax - smin)
-    return smoothed
+    return np.asarray(smoothed)
 
 
 def _blend_horizontal_wrap(arr: np.ndarray, blend_width: int) -> None:
