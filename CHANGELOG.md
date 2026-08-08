@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-08-08
+
+### Added
+
+- **生态层 P0（roadmap 3A.5）**：Whittaker 生物群系分类 + Miami NPP 模型 + Diamond 可驯化标签
+  - 纯计算模块 `ecology_physics.py`：3 温度带 / 4 降水阈值 → 13 群系 +
+    海上 NPP（Lieth 1975）+ 大食草动物/主粮/役畜标签
+  - 管线集成：`EcologyEngine` 在气候引擎后运行，写出 `ecology_summary.yaml`
+  - 35 单元测试 + 5 纬度带合理性检查
+- **生态前端可视化**：
+  - Whittaker 群系（13 色分类）、NPP 热力图（暖米→深绿）、文明摇篮（金/橙/绿高亮）
+  - 右侧面板显示群系名/NPP/可驯化标签
+- **图层系统重构为 slot-based**：
+  - 槽位架构：thematic（radio 互斥）/ fill（多选堆叠）/ feature（多选堆叠）
+  - 地形/海陆移至 thematic 槽位，移除 base 槽位
+  - 图层组精简为"地图模式 / 地质构造 / 叠加标注"
+- **海岸线特征叠加层**：像素级半分辨率检测，默认开启，颜色 #141414
+
+### Changed
+
+- **地形色阶**：`generateAdaptiveTerrainScale` LUT（NOAA ETOPO1 海洋 + ESRI Natural Earth 陆地）
+- **水深暗化**：恢复 `waterDepthFactor` 倍乘（与重构前一致）
+- **3D globe 独立纹理**：`terrainWithCoastlines` 直接采样，避免 FBO PBR 色彩空间往返
+
+### Fixed
+
+- **大陆架海洋误判**：`is_ocean` 改为纯 elevation 判定（`cell.elevation < 0.0`）
+- **地图加载文本持续显示**：`localElevation` 条件替代 loadingElevation
+- **3D globe 色彩偏淡**：renderComposite 禁用 toneMapping + outputColorSpace
+
 ## [0.19.0] — 2026-08-08
 
 ### Added
