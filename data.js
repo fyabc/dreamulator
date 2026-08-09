@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786252399151,
+  "lastUpdate": 1786295344088,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1473,6 +1473,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0005970448949908346",
             "extra": "mean: 4.5555895999982 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "c9cea3bd9f8d5c8c47abd72c151b654da8904304",
+          "message": "@\ndata: gaia-m 重建 — 3A.3 + 3A.4 全部气候特性启用\n\n- auto_lat_gradient + diffusive_heat_transport (3A.3a)\n- ice_albedo_feedback (3A.3, M dwarf max 3C)\n- variable_lapse_rate (3A.3, tropical highland +3.5C)\n- upwelling SST correction (3A.3)\n- Gaussian subtropical suppression (3A.4)\n- inland aridity + BFS auto-scale + coast asymmetry + Fohn (3A.4)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-10T01:06:14+08:00",
+          "tree_id": "6dcaf11880477557694c9e5f3517218f2bed52e1",
+          "url": "https://github.com/fyabc/dreamulator/commit/c9cea3bd9f8d5c8c47abd72c151b654da8904304"
+        },
+        "date": 1786295343556,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 18.51276310616477,
+            "unit": "iter/sec",
+            "range": "stddev: 0.038687034539188134",
+            "extra": "mean: 54.01678800000411 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.51011910737991,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06817494016831639",
+            "extra": "mean: 284.8906174999968 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4182864904066703,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1286344668398756",
+            "extra": "mean: 705.0761653333287 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 983.8228048514384,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006795288626462968",
+            "extra": "mean: 1.0164432000038914 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.07402616737295,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007257252159179125",
+            "extra": "mean: 5.074235400005023 msec\nrounds: 5"
           }
         ]
       }
