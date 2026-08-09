@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786251321767,
+  "lastUpdate": 1786251751095,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1355,6 +1355,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00012604244778405282",
             "extra": "mean: 5.084647200010295 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8d855849a18e36a35df0bc00e92c346f49679ee1",
+          "message": "@\nfix(ci): ruff format 格式化 + uv.lock 清除清华镜像 URL\n\n- ruff format: 6 文件之前未格式化，现已格式化为 ruff 标准风格\n- uv.lock: 删除全部 1567 个清华镜像 URL，改为 PyPI 官方源。\n  CI (GitHub Actions US runner) 访问 tuna.tsinghua.edu.cn 被 403 拒绝。\n  本地 UV_INDEX_URL/DEFAULT_INDEX 环境变量指向清华镜像，uv lock 时\n  需显式重写为 pypi.org/simple 防止 URL 泄露到 lock 文件中。\n  见 benchmarks.yml 已有的防御性 `git checkout -- uv.lock` 步骤。\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-09T13:01:39+08:00",
+          "tree_id": "4b80e981664b8920bd6ff07f1278d8f6914703ed",
+          "url": "https://github.com/fyabc/dreamulator/commit/8d855849a18e36a35df0bc00e92c346f49679ee1"
+        },
+        "date": 1786251750616,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 29.966125512602474,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03751110956501074",
+            "extra": "mean: 33.37101419999868 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7748128736550184,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05238757566125647",
+            "extra": "mean: 264.9137940000017 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4714503948667266,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0876666967133264",
+            "extra": "mean: 679.6015710000015 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 167.76214790032537,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0014764694804969322",
+            "extra": "mean: 5.960820200002104 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.72550971391024,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010148589772052245",
+            "extra": "mean: 5.032066600003304 msec\nrounds: 5"
           }
         ]
       }
