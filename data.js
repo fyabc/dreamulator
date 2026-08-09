@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786309546178,
+  "lastUpdate": 1786309700771,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1591,6 +1591,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007981990791495348",
             "extra": "mean: 5.035413800000299 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "6b5a0e497202621014f9405d586fb816c6beb0f3",
+          "message": "@\nfix(ci): ruff format + HZ center 测试适配无降水底线\n\n- climate_simulator.py: ruff format\n- test_end_members: 放宽\"可居住\"条件 A|C → A|B|C\n  (去掉 20mm 降水底线后,HZ center 正确输出 B 类干旱气候,\n  B=干旱但仍为液态水气候)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-10T05:07:50+08:00",
+          "tree_id": "c191dd4837ef58f0d871ef2a37e2a9688d0786df",
+          "url": "https://github.com/fyabc/dreamulator/commit/6b5a0e497202621014f9405d586fb816c6beb0f3"
+        },
+        "date": 1786309699744,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 22.654338218096463,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03656471907801122",
+            "extra": "mean: 44.141655800000024 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.30556768888452,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04814858788776942",
+            "extra": "mean: 232.257409999999 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6962258378601602,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9435947295497696",
+            "extra": "mean: 589.5441383333307 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 856.9096308242273,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000876131271172812",
+            "extra": "mean: 1.1669842000003428 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 203.09935299452826,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011157460275993697",
+            "extra": "mean: 4.923698599999682 msec\nrounds: 5"
           }
         ]
       }
