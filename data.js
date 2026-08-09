@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786233938731,
+  "lastUpdate": 1786251321767,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1296,6 +1296,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000043834125590227766",
             "extra": "mean: 3.7003960000106417 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "652a68a497d83af1cde7039c7106070cc3965494",
+          "message": "@\nfix(lint): 修复 CI ruff 25 错误 + benchmark uv.lock 冲突\n\n- ruff --fix 自动修复 15 项（import 排序、未用导入移除）\n- 手动修复 10 项：\n  - ecology.py: Path → TYPE_CHECKING 块, 2× E501 行过长\n  - ecology_physics.py: 移除未用 field/ClassVar 导入\n  - climate_simulator.py: 移除 5 个未用导入\n  - pipeline_types.py: 2× E501 行过长\n  - terrain_synthesizer.py: 移除未用 INF 变量\n  - test_ecology_physics.py: 2× E501 行过长\n  - test_ecology_zonal_sanity.py: B028 加 stacklevel=2\n- uv.lock: 同步版本号 0.22.0→0.23.0（e95e0bd 版本 bump 时遗漏）\n- benchmarks.yml: uv sync 后 git checkout uv.lock 防止 branch switch 冲突\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-09T12:54:25+08:00",
+          "tree_id": "da0f3c70b0c51f4b1c7c0dd15173a70b284e3f6a",
+          "url": "https://github.com/fyabc/dreamulator/commit/652a68a497d83af1cde7039c7106070cc3965494"
+        },
+        "date": 1786251321119,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 30.035994114127174,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03664011863943383",
+            "extra": "mean: 33.29338779999489 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.721508226059239,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05450868952961901",
+            "extra": "mean: 268.7082599999826 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4532480623174822,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1002022131011824",
+            "extra": "mean: 688.1137680000128 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 979.2149868588493,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006874498597461688",
+            "extra": "mean: 1.0212261999868133 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.670478926832,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012604244778405282",
+            "extra": "mean: 5.084647200010295 msec\nrounds: 5"
           }
         ]
       }
