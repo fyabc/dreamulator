@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786251751095,
+  "lastUpdate": 1786252399151,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1414,6 +1414,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010148589772052245",
             "extra": "mean: 5.032066600003304 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "1dbc0f430984feb723a47a49566103ca05ef1a66",
+          "message": "@\nfix(ci): uv.lock 真正清除清华镜像 URL + 永久防护方案\n\n**根因**：上次提交 8d85584 的 grep 验证在临时 shell 环境中通过，\n但提交时的文件已被后续 uv 命令用清华镜像重新生成。\n\n**修复**：\n- uv.lock: 重新生成，全部 1567 个包 URL 指向 pypi.org/simple\n- uv.toml: 项目级 uv 配置锁定 PyPI 为默认索引。\n  注意：UV_INDEX_URL 环境变量优先级高于 uv.toml——\n  如果全局设置了 UV_INDEX_URL=tsinghua，uv lock 仍会污染 lock 文件。\n  建议移除全局 UV_INDEX_URL，改用 ~/.config/uv/uv.toml 配置镜像。\n- CI workflows: 所有 `uv sync` 添加 --frozen 标志，防止 lock 文件漂移\n\n**本地开发建议**：\n- 移除 shell 中的 UV_INDEX_URL / UV_DEFAULT_INDEX 环境变量\n- 在 ~/.config/uv/uv.toml 中配置清华镜像（仅影响其他项目）\n- 本项目 uv.toml 会覆盖用户级配置，确保 lock 文件干净\n- 更新依赖时用：UV_INDEX_URL=https://pypi.org/simple uv lock\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-09T13:12:48+08:00",
+          "tree_id": "0d3c78cecbaf81dfd54f9222a426b5a5bf1f32f0",
+          "url": "https://github.com/fyabc/dreamulator/commit/1dbc0f430984feb723a47a49566103ca05ef1a66"
+        },
+        "date": 1786252398116,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 38.634818296314926,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03225689205444128",
+            "extra": "mean: 25.883388200000468 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.862964091233693,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04430764537065233",
+            "extra": "mean: 205.63590049999902 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9623418282823244,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8112832312902626",
+            "extra": "mean: 509.5952120000007 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 941.4768570877935,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008830820779161181",
+            "extra": "mean: 1.0621609999986958 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 219.51055468218541,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0005970448949908346",
+            "extra": "mean: 4.5555895999982 msec\nrounds: 5"
           }
         ]
       }
