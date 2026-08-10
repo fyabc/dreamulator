@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786309700771,
+  "lastUpdate": 1786395800256,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1650,6 +1650,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00011157460275993697",
             "extra": "mean: 4.923698599999682 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "12090ea37d0d973145455610e896c94d80f428ee",
+          "message": "@\nperf: cvt_mesh.json压缩导出(compact + 浮点截断)\n\n- 移除JSON indent=2 → compact格式(省~15%空格)\n- 浮点精度截断至4位小数(lat/lon≈7.8m, 远超71km网格分辨率)\n- 三个写入路径统一: geological导出 + climate写回 + ecology写回\n- 效果: gaia-m 100k 108MB→85MB(-21%), gzip传输 27MB→13.7MB(-49%)\n- 200k预估: raw~175MB, gzip~28MB, 前端可加载\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T05:02:50+08:00",
+          "tree_id": "559558ec8ccf167397f1d35dd2eb6201d5af1882",
+          "url": "https://github.com/fyabc/dreamulator/commit/12090ea37d0d973145455610e896c94d80f428ee"
+        },
+        "date": 1786395799744,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 17.35161537934638,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04635531097597164",
+            "extra": "mean: 57.631521799999064 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5707657161606567,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06023702308231124",
+            "extra": "mean: 280.0519775000012 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4007839368703014,
+            "unit": "iter/sec",
+            "range": "stddev: 1.144812510023032",
+            "extra": "mean: 713.8859703333319 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 852.0234619966816,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00019201232183650583",
+            "extra": "mean: 1.1736766000041143 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.44465042317722,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000060810538975433724",
+            "extra": "mean: 5.090492400000812 msec\nrounds: 5"
           }
         ]
       }
