@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786412622263,
+  "lastUpdate": 1786413303438,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1886,6 +1886,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009011087832242106",
             "extra": "mean: 5.162006199998359 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "c5494122bbdd22edc9123273a465400617e0c71b",
+          "message": "@\nfix(geography): 展宽边缘噪声 + 全局rift噪声0.3→0.5 + 南极高纬pin 0.12→0.3 noise 0.4→0.8\n\n- edge_weight: 4k(1-k)→2sqrt(k(1-k)), 更宽峰覆盖更多海岸线cell\n- 南极高纬群岛: 提高pin降低海拔+增强noise打破圆形轮廓\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T09:54:37+08:00",
+          "tree_id": "1d01bbb1500874ba8876c1b49afb389945e65aeb",
+          "url": "https://github.com/fyabc/dreamulator/commit/c5494122bbdd22edc9123273a465400617e0c71b"
+        },
+        "date": 1786413302554,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 20.2161438126974,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03693251056537033",
+            "extra": "mean: 49.46541780000189 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.8040776239004956,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05284151770867677",
+            "extra": "mean: 262.87581350000266 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.569787724795595,
+            "unit": "iter/sec",
+            "range": "stddev: 1.010439643941251",
+            "extra": "mean: 637.0288060000036 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 680.791084687002,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00018607173688572779",
+            "extra": "mean: 1.4688793999994232 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 168.50765776308276,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010070207657548399",
+            "extra": "mean: 5.934448400000747 msec\nrounds: 5"
           }
         ]
       }
