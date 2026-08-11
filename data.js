@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786420966572,
+  "lastUpdate": 1786469273814,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2358,6 +2358,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00029440786974193364",
             "extra": "mean: 3.9449262000005088 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "c48ce2b66bb4132a96294ed715c9d8215ee09506",
+          "message": "@\nchore: bump version 0.24.0 → 0.25.0 + update CHANGELOG\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-12T01:26:47+08:00",
+          "tree_id": "7895cdee1427ef64919a02c042ad5962b1c71cc8",
+          "url": "https://github.com/fyabc/dreamulator/commit/c48ce2b66bb4132a96294ed715c9d8215ee09506"
+        },
+        "date": 1786469273253,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.43450178572244,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04142461770189759",
+            "extra": "mean: 51.45488219999805 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.464381364865434,
+            "unit": "iter/sec",
+            "range": "stddev: 0.07393873371185629",
+            "extra": "mean: 288.65182399999514 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4317783256652559,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1135879545226315",
+            "extra": "mean: 698.432139999999 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 914.7207659359306,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008042304595984549",
+            "extra": "mean: 1.0932298000000173 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.25576846128985,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007878229504992115",
+            "extra": "mean: 5.201404400000342 msec\nrounds: 5"
           }
         ]
       }
