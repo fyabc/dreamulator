@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786415199355,
+  "lastUpdate": 1786416675309,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2122,6 +2122,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000732158577676709",
             "extra": "mean: 5.136090999998544 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7e06addd617c6e3cccf8f6681d63bc2d4932366a",
+          "message": "@\nperf(ocean): GMRES容差放宽(1e-6→1e-4) + maxiter减半 + 跳过<20cell小海盆\n\n- rtol 1e-6→1e-4: 10x宽松, 大盆地迭代数减少3-5x\n- maxiter: n*5→n*2(上限50k→20k)\n- 跳过海盆<20 cells: 无可见洋流, 节省稀疏矩阵组装成本\n\ndata: 删除亚南极岛屿(海岸线始终太圆)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T10:50:45+08:00",
+          "tree_id": "3e6c9e7b066440333cf60259b125e4209206da8b",
+          "url": "https://github.com/fyabc/dreamulator/commit/7e06addd617c6e3cccf8f6681d63bc2d4932366a"
+        },
+        "date": 1786416673979,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 31.319223901861807,
+            "unit": "iter/sec",
+            "range": "stddev: 0.026642328068400424",
+            "extra": "mean: 31.92927140000279 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.046393127960932,
+            "unit": "iter/sec",
+            "range": "stddev: 0.2539087967714346",
+            "extra": "mean: 328.2570430000078 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.291763351865455,
+            "unit": "iter/sec",
+            "range": "stddev: 0.7021657552293623",
+            "extra": "mean: 436.3452269999944 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 893.2354918898791,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00044187423468413826",
+            "extra": "mean: 1.1195256000007703 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 267.74541651977233,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00013010645460386584",
+            "extra": "mean: 3.734891199999879 msec\nrounds: 5"
           }
         ]
       }
