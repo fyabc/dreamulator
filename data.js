@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786409660675,
+  "lastUpdate": 1786411251325,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1768,6 +1768,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007486882838966503",
             "extra": "mean: 5.042347199997721 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "26aa58ff65d245d249662473902e4fba9afe877c",
+          "message": "@\nfeat(geography): rift_sea偏置场注入fBm噪声, 使裂谷海岸线自然蜿蜒\n\n- GeographyFeature新增noise_amplitude字段(0-1, 默认0)\n- _feature_contribution: noise>0时 kernel×(1+noise×fBm(seed)), seed=hash(name)\n- 所有rift_sea特征noise_amplitude=0.3\n- 南极高纬群岛简化为单个弱特征(21°E,-53°, pin_strength=0.12)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T09:20:14+08:00",
+          "tree_id": "2bf9832bd18e3024549ab5ec5e3333e372568f23",
+          "url": "https://github.com/fyabc/dreamulator/commit/26aa58ff65d245d249662473902e4fba9afe877c"
+        },
+        "date": 1786411250291,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.567897767907297,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04133574532253489",
+            "extra": "mean: 51.104110000005676 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.475078332392185,
+            "unit": "iter/sec",
+            "range": "stddev: 0.07100865645177476",
+            "extra": "mean: 287.76329750000684 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5242318182833434,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0479947669884961",
+            "extra": "mean: 656.0681833333225 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 942.8776437082665,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009375430092009496",
+            "extra": "mean: 1.0605830000031347 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.0067159742919,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005198391431831801",
+            "extra": "mean: 5.101865999995425 msec\nrounds: 5"
           }
         ]
       }
