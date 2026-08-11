@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786413942433,
+  "lastUpdate": 1786414158161,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2004,6 +2004,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00523952829727722",
             "extra": "mean: 8.794736999999486 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2fa81e09cf9c7a3eba1e8395f1fec27e93ee58eb",
+          "message": "@\nfix(geography): noise seed从feature.name改为(lon,lat,kind,radius)哈希\n\n理由: 重命名特征不应改变地形——噪声应由物理位置决定, 而非标签。\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T10:08:52+08:00",
+          "tree_id": "9149253766ad48ed863fb0de5fb196c55e3510be",
+          "url": "https://github.com/fyabc/dreamulator/commit/2fa81e09cf9c7a3eba1e8395f1fec27e93ee58eb"
+        },
+        "date": 1786414157619,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.769236548539165,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04050017525802196",
+            "extra": "mean: 50.583642799999495 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4631701568016537,
+            "unit": "iter/sec",
+            "range": "stddev: 0.054516223045291204",
+            "extra": "mean: 288.7527769999991 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.462670747630517,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0957870332957669",
+            "extra": "mean: 683.680863666666 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 822.7391949654798,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00028713610874140706",
+            "extra": "mean: 1.2154520000009938 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 193.4918250671299,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010522781676476749",
+            "extra": "mean: 5.168177000000185 msec\nrounds: 5"
           }
         ]
       }
