@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786395800256,
+  "lastUpdate": 1786409660675,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1709,6 +1709,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000060810538975433724",
             "extra": "mean: 5.090492400000812 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "3a6fa1a172fa7c20f184b4da806cc69ac81d7384",
+          "message": "@\nfix(climate): ocean SST修正通过图扩散传播至沿岸陆地\n\n- 在ocean current+upwelling SST校正后追加1次弱扩散(0.25×强度)\n- 修复洋流温度只影响海洋不传导至沿岸陆地的问题\n\ndata: 200k下北方内海裂谷北移57.5→59.0, 缩小变浅20%\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T08:53:46+08:00",
+          "tree_id": "e4320aff485c8c70792792bbe73d6db1a3fa55f3",
+          "url": "https://github.com/fyabc/dreamulator/commit/3a6fa1a172fa7c20f184b4da806cc69ac81d7384"
+        },
+        "date": 1786409659584,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 18.23772536521312,
+            "unit": "iter/sec",
+            "range": "stddev: 0.039174033928435915",
+            "extra": "mean: 54.83139920000184 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5230844604451708,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06728790299558522",
+            "extra": "mean: 283.84218749999593 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4140457839866487,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1306087441290418",
+            "extra": "mean: 707.1906803333334 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 960.5723474272341,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005146521191959665",
+            "extra": "mean: 1.0410460000002786 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.32033779832773,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007486882838966503",
+            "extra": "mean: 5.042347199997721 msec\nrounds: 5"
           }
         ]
       }
