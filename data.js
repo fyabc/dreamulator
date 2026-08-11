@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786414158161,
+  "lastUpdate": 1786415199355,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2063,6 +2063,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010522781676476749",
             "extra": "mean: 5.168177000000185 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e734b0628ea5e861e92df1daf37d0c6ac6f21baa",
+          "message": "@\nrefactor(geography): 回退bias场噪声注入, 改用高程噪声+强pin实现海岸曲折\n\n- geography.py: 移除noise_amplitude噪声注入逻辑, 回归纯kernel×strength\n- geography.yaml: 清除全部noise_amplitude字段; 亚南极岛屿迁至(12,-45),\n  pin_strength 0.8+elevation_target 50m→压在近海平面, undulation自然产生曲折\n- terrain_config: noise_amplitude_land 600→800, regional 1200→1600\n  → 全局高程噪声+30%, 海岸线浅陆cell随机越过海平面\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T10:26:09+08:00",
+          "tree_id": "143661afe22e2d9fddb34d0449605e51b5c5b398",
+          "url": "https://github.com/fyabc/dreamulator/commit/e734b0628ea5e861e92df1daf37d0c6ac6f21baa"
+        },
+        "date": 1786415198316,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 17.895186745936844,
+            "unit": "iter/sec",
+            "range": "stddev: 0.047665993069035247",
+            "extra": "mean: 55.880948000000785 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.3454055750428005,
+            "unit": "iter/sec",
+            "range": "stddev: 0.08996612208024715",
+            "extra": "mean: 298.9174189999986 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4577049567121536,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0981657946674026",
+            "extra": "mean: 686.0098783333323 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 934.1539190455121,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000850773139673977",
+            "extra": "mean: 1.070487400001241 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 194.70060012571497,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000732158577676709",
+            "extra": "mean: 5.136090999998544 msec\nrounds: 5"
           }
         ]
       }
