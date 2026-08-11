@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786411251325,
+  "lastUpdate": 1786412622263,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1827,6 +1827,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005198391431831801",
             "extra": "mean: 5.101865999995425 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "a24a007ded01bc09ee576fc16b912a51e09f8056",
+          "message": "@\nfix(geography): 噪声从乘性改为加性, 峰值在特征边缘(kernel≈0.5)\n\n根因: 旧公式 bias=strength×kernel×(1+noise) → 边缘kernel≈0时噪声也为0\n修复: edge_weight=4k(1-k) 在kernel=0.5处峰值=1, 作为加性噪声权重\n      bias = strength × (kernel + noise×amp×edge_weight)\n效果: 噪声现在在海岸线附近最强, 特征中心和远处不受影响\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-11T09:43:16+08:00",
+          "tree_id": "b2dda619f5bd811a96156eec2762b9379444dba6",
+          "url": "https://github.com/fyabc/dreamulator/commit/a24a007ded01bc09ee576fc16b912a51e09f8056"
+        },
+        "date": 1786412621693,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.741480651873758,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04051257289238617",
+            "extra": "mean: 50.654761800001324 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5719061033825286,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06882499616018403",
+            "extra": "mean: 279.9625665000036 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4966818705115497,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0701633159393078",
+            "extra": "mean: 668.1446603333351 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 904.6517009480643,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009297054651385182",
+            "extra": "mean: 1.105397800006358 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 193.72313035972678,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009011087832242106",
+            "extra": "mean: 5.162006199998359 msec\nrounds: 5"
           }
         ]
       }
