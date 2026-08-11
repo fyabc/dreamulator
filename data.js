@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786469273814,
+  "lastUpdate": 1786470077379,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2417,6 +2417,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007878229504992115",
             "extra": "mean: 5.201404400000342 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8d8dfd4b7a120559dcec4fa629495293419f4d2b",
+          "message": "@\nfix: resolve mypy [no-any-return] and ruff E501/F401/F811/I001 issues\n\n- terrain_synthesizer: add type: ignore[no-any-return] for numpy dual falloff\n- validate_climate: break long lines, fix duplicate __future__ import\n- cli: remove unused sys import\n- generate_baseline/test_regression: break long dict values and test assertions\n- package-lock: sync version 0.20.0 → 0.25.0\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-12T01:40:42+08:00",
+          "tree_id": "89bfa63cfef0048ae74de40b5bb9e4c78eb13301",
+          "url": "https://github.com/fyabc/dreamulator/commit/8d8dfd4b7a120559dcec4fa629495293419f4d2b"
+        },
+        "date": 1786470076306,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.59581568666477,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04042458910797849",
+            "extra": "mean: 51.03130259999915 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4912260444680885,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06990013151487592",
+            "extra": "mean: 286.432327 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4323323260680603,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1186771416395673",
+            "extra": "mean: 698.1619990000022 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 933.3977751140378,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007220691537891814",
+            "extra": "mean: 1.0713546000019392 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 193.89767562062764,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009815293310879694",
+            "extra": "mean: 5.157359399998995 msec\nrounds: 5"
           }
         ]
       }
