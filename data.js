@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786543205717,
+  "lastUpdate": 1786545256469,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2712,6 +2712,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007652242764791774",
             "extra": "mean: 5.122180000000753 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2ea20988427b8d3f174d22d2d1b3cf9edcb4f912",
+          "message": "@\nfix: test regressions from force param and falsy distance check\n\n- test_engine: DummyEngine.run() now accepts *, force=False\n- terrain_synthesizer: fix \"dist or 1e9\" treating 0.0 as null\n  (0.0 is a valid distance_to_boundary_km value but falsy in Python)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-12T22:33:42+08:00",
+          "tree_id": "f7cbcd626820be6f1a4e09f0ec43a7dcd01e5443",
+          "url": "https://github.com/fyabc/dreamulator/commit/2ea20988427b8d3f174d22d2d1b3cf9edcb4f912"
+        },
+        "date": 1786545255575,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 22.276740733368175,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0106938830708676",
+            "extra": "mean: 44.889870200002235 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.437646020460301,
+            "unit": "iter/sec",
+            "range": "stddev: 0.08071776218044802",
+            "extra": "mean: 290.8967340000004 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5154977413261637,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0552386979784738",
+            "extra": "mean: 659.8492183333325 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 940.6082989115366,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008012029158390394",
+            "extra": "mean: 1.0631418000002668 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 194.86991692541446,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006748805424844585",
+            "extra": "mean: 5.131628399999499 msec\nrounds: 5"
           }
         ]
       }
