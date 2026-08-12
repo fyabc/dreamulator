@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786545256469,
+  "lastUpdate": 1786545989253,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2771,6 +2771,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006748805424844585",
             "extra": "mean: 5.131628399999499 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "18fb3cb1020d7a26f5d491ba6ac1fd639c32bd10",
+          "message": "docs(ecology): sync roadmap + fix ecology mesh write-back to target planet\n\n- engine/ecology.py: _write_mesh_with_ecology now resolves planet_id via\n  load_planet_for_engine and targets maps/{planet_id}/cvt_mesh.json instead\n  of globbing all planets (matches climate engine's _update_source_mesh);\n  _build_ecology_summary uses the resolved planet id/name\n- map/models.py: drop stale TODO on climate/ecology engines in the registry DAG\n- roadmap.md: fill v0.20.0 placeholder + mark ecology P0 done\n- ecology-layer.md: status -> P0 implemented, update diagnosis section\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-12T22:45:20+08:00",
+          "tree_id": "5790a856414d42701c74ebf93abefd472cd7b2cf",
+          "url": "https://github.com/fyabc/dreamulator/commit/18fb3cb1020d7a26f5d491ba6ac1fd639c32bd10"
+        },
+        "date": 1786545988325,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 20.284809270254218,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011068795960157935",
+            "extra": "mean: 49.2979740000024 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.5472768696427903,
+            "unit": "iter/sec",
+            "range": "stddev: 0.22817011488598932",
+            "extra": "mean: 392.5760925000006 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3610227841601832,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1816423514007257",
+            "extra": "mean: 734.7415573333317 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 952.6614885062237,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006747223613543016",
+            "extra": "mean: 1.0496908000007465 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.3638905655379,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010714935177640808",
+            "extra": "mean: 5.092586000002086 msec\nrounds: 5"
           }
         ]
       }
