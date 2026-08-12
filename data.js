@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786508998307,
+  "lastUpdate": 1786543205717,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2653,6 +2653,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000053788751396187154",
             "extra": "mean: 5.062461399998597 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "26653d8de168e3d054bfeae9a9c7a3480d59ac6e",
+          "message": "@\nfix: unify planet_id, migrate data, upgrade climate-dev to 200k\n\n- uv: remove duplicate [[tool.uv.index]] from pyproject.toml\n- climate: _update_source_mesh writes to specific {planet_id}/ dir\n  instead of globbing all */cvt_mesh.json\n- planet_id: unify all earth branch planet IDs to \"planet_earth\"\n- terrain-dev: lat_bias 0.7→0.4, add regional_noise_scale + isostasy\n- earth base: replace random generated map with ETOPO1 import (100k)\n- climate-dev: upgrade mesh 32k→200k, Köppen distribution match\n  48.3%→57.2% (first time passing 55% threshold)\n- data: add koppen.json to LFS, gitignore import artifacts\n- docs: update Köppen accuracy in climate-engine.md and roadmap.md\n- baseline: regenerate gaia-m-200k regression snapshot\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n@",
+          "timestamp": "2026-08-12T21:58:15+08:00",
+          "tree_id": "5ae474e76eadfff4289def7962309b00e05d365a",
+          "url": "https://github.com/fyabc/dreamulator/commit/26653d8de168e3d054bfeae9a9c7a3480d59ac6e"
+        },
+        "date": 1786543205089,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 22.361656492660234,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010735851017184026",
+            "extra": "mean: 44.71940619999373 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5375995617820943,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06442532968438051",
+            "extra": "mean: 282.6775564999906 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4615484399793544,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0953958573023537",
+            "extra": "mean: 684.2058550000066 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 944.9154007855497,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006921052073908215",
+            "extra": "mean: 1.0582957999929477 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.22937499265018,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007652242764791774",
+            "extra": "mean: 5.122180000000753 msec\nrounds: 5"
           }
         ]
       }
