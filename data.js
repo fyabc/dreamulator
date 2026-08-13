@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786641351697,
+  "lastUpdate": 1786652527943,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3125,6 +3125,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005741809219764062",
             "extra": "mean: 5.022678599998187 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2617f3621c29a3ad80308cdbd4b680bc1711c60a",
+          "message": "feat(geological): derive plate speed from tidal heating\n\nWire tidal heating (Peale & Cassen 1978) through an empirical v ∝ q^β\nscaling so the fastest plate speed and ocean half-spreading rate are derived\nfrom the satellite's eccentricity, semi-major axis and parent mass instead of\nbeing hardcoded.  gaia-m reproduces 15 cm/yr / 6 cm/yr (β=1.0, k₂/Q=3×10⁻³).\n\nAlso finalize the tidal analysis this coupling depends on: e=0.002\nforced-resonance eccentricity, tidal_effects.md rewrite (157 TW, ~44 m\nresonance tide, 1.6 Myr damping), the 67-day large-tide phase drift,\nmulti-body tidal rhythm, and a sidereal/solar-day knowledge doc.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T04:20:55+08:00",
+          "tree_id": "b0f5f7e3dd012656a615e187aab6d3feffe5690a",
+          "url": "https://github.com/fyabc/dreamulator/commit/2617f3621c29a3ad80308cdbd4b680bc1711c60a"
+        },
+        "date": 1786652527395,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 21.423665653979008,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011666583317179303",
+            "extra": "mean: 46.67735279999903 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.3942875186501644,
+            "unit": "iter/sec",
+            "range": "stddev: 0.07222750418868336",
+            "extra": "mean: 294.6126380000003 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4304174442680124,
+            "unit": "iter/sec",
+            "range": "stddev: 1.122124037222777",
+            "extra": "mean: 699.0966196666667 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 885.3322926559433,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008528702861057569",
+            "extra": "mean: 1.1295193999984576 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 193.23833556401965,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001098405035437489",
+            "extra": "mean: 5.174956599999803 msec\nrounds: 5"
           }
         ]
       }
