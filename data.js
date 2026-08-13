@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786578096239,
+  "lastUpdate": 1786581318623,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2889,6 +2889,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000060191171351538346",
             "extra": "mean: 5.018420799999035 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "1a6ccf7ef68d70d6162abbc63fbcbac23fb694b5",
+          "message": "data(gaia-m): sync climate outputs after inland-aridity fix\n\nprecipitation.png / koppen.json / cvt_mesh.json / climate_summary regenerated.\nLand precip +0.76% (1308→1318 mm); polar interior islets recover 5→89 mm.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T08:28:33+08:00",
+          "tree_id": "b2dd3e686f74244ff1b0196b03a4a9fd3f0d06da",
+          "url": "https://github.com/fyabc/dreamulator/commit/1a6ccf7ef68d70d6162abbc63fbcbac23fb694b5"
+        },
+        "date": 1786581317532,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.99739769864306,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010457534810361213",
+            "extra": "mean: 50.00650659999906 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6716624382822416,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05548671578875183",
+            "extra": "mean: 272.3561920000037 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4324863489601949,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1180723248389668",
+            "extra": "mean: 698.0869316666608 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 939.9455621130356,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009222119647436545",
+            "extra": "mean: 1.0638913999997612 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 199.4941068842606,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004910203276753999",
+            "extra": "mean: 5.012679399999342 msec\nrounds: 5"
           }
         ]
       }
