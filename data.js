@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786581318623,
+  "lastUpdate": 1786583918966,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2948,6 +2948,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004910203276753999",
             "extra": "mean: 5.012679399999342 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "0245f347a242f542c92e8b88451f0c3fce9a3ded",
+          "message": "chore(climate): lower Köppen match threshold 55% → 50%\n\nAfter the Köppen B-group fix the distribution match is 55.0%, below the\nold 55% threshold. Lower to 50% as a stopgap; spatial-pattern tuning will\nfollow.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-13T09:10:37+08:00",
+          "tree_id": "fe7bc347baba2fb374952d7be5c0959d1504a103",
+          "url": "https://github.com/fyabc/dreamulator/commit/0245f347a242f542c92e8b88451f0c3fce9a3ded"
+        },
+        "date": 1786583916953,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 20.63938912164077,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009888955308262984",
+            "extra": "mean: 48.45104639998681 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7171443262486914,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05327536590274931",
+            "extra": "mean: 269.0237214999911 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4547292949462043,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0987452640587183",
+            "extra": "mean: 687.4131176666651 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 977.2354946157707,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006273596823278534",
+            "extra": "mean: 1.023294799983887 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 184.4577725433965,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0009223112363351325",
+            "extra": "mean: 5.421294999996462 msec\nrounds: 5"
           }
         ]
       }
