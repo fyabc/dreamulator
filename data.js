@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786652527943,
+  "lastUpdate": 1786682480059,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3184,6 +3184,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001098405035437489",
             "extra": "mean: 5.174956599999803 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "713074da049a793791724d5844efaa0c52a12213",
+          "message": "chore: bump version 0.26.0 → 0.27.0\n\nSeasonal energy-balance model (North & Coakley 1979) + Köppen s/w/B-group\nfixes + gaia-m climate tuning + spatial diagnostic + ai civ design.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-14T12:37:03+08:00",
+          "tree_id": "d3a6aa70154f87192ab1b60ac3df024edfb9fd0d",
+          "url": "https://github.com/fyabc/dreamulator/commit/713074da049a793791724d5844efaa0c52a12213"
+        },
+        "date": 1786682479501,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.391160680571303,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011446126165644926",
+            "extra": "mean: 51.569888800000285 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5851860828095488,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05600916587667589",
+            "extra": "mean: 278.92555000000027 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3949490597314924,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1428960830271007",
+            "extra": "mean: 716.8720556666675 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 923.5404551347267,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007878383061594039",
+            "extra": "mean: 1.0827896000009218 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.73011619836637,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009045403821777706",
+            "extra": "mean: 5.109075799998664 msec\nrounds: 5"
           }
         ]
       }
