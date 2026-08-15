@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786760998380,
+  "lastUpdate": 1786806240404,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3420,6 +3420,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0004230639686980071",
             "extra": "mean: 5.396547799999496 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2cda078edde8d3e665a74545d2ef3880b6e2299e",
+          "message": "chore: bump version 0.27.0 → 0.28.0\n\nCHANGELOG 切出 [0.28.0] 段（补写 #22② 文档渲染、i18n 扫尾 + 语言切换器、\n诊断四件套 ②③、审计产物五件套、interlude 入库、gaia-m 命名体系/天象全景、\n死代码清理 −527 行、诊断基准 climate-dev 200k、文档一致性 9 处修复）；\nroadmap 版本引用同步；诊断脚本 ruff 格式化。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T23:00:47+08:00",
+          "tree_id": "b33e8a65a84338c28c0bd04bd36c740c563a3949",
+          "url": "https://github.com/fyabc/dreamulator/commit/2cda078edde8d3e665a74545d2ef3880b6e2299e"
+        },
+        "date": 1786806239860,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 21.72468200996322,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010852030155226976",
+            "extra": "mean: 46.030593200001135 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6370976225025893,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06283384303773688",
+            "extra": "mean: 274.94450349999863 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5111924336819333,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0507716558897535",
+            "extra": "mean: 661.7290939999995 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 940.6415664629475,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009054624554665703",
+            "extra": "mean: 1.0631041999985769 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.26552186131698,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008510961668255517",
+            "extra": "mean: 5.121231800001169 msec\nrounds: 5"
           }
         ]
       }
