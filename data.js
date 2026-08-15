@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786752154924,
+  "lastUpdate": 1786760998380,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3361,6 +3361,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000747104307072907",
             "extra": "mean: 5.0636353999991 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "57151ec9e79b7a1a9baa4a65c5fffd5057ec3422",
+          "message": "Merge feat/doc-template-render: 世界文档 Jinja2 模板渲染 + 天文 tab 去重 + 设计笔记公式渲染\n\n- 文档模板渲染（roadmap #22 ②）：读取/导出时从 world_parameters.yaml 渲染，产物不落盘\n- 天文 tab 天体百科去重并按从属关系嵌套（Gaia-M 挂在 Aegis 下）\n- 设计笔记：修复标题缺失 + KaTeX LaTeX 公式渲染\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-15T10:28:43+08:00",
+          "tree_id": "01412969e3130416ae17becff0cf0c901b8eebb2",
+          "url": "https://github.com/fyabc/dreamulator/commit/57151ec9e79b7a1a9baa4a65c5fffd5057ec3422"
+        },
+        "date": 1786760997826,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.637943638183,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01050600470553179",
+            "extra": "mean: 50.92182859999923 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.534288432017238,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0627857088649346",
+            "extra": "mean: 282.9423854999966 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4308488834850046,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1184652656498997",
+            "extra": "mean: 698.8858233333347 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 966.6098171191587,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006881193705492315",
+            "extra": "mean: 1.03454360000228 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 185.30364912177623,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0004230639686980071",
+            "extra": "mean: 5.396547799999496 msec\nrounds: 5"
           }
         ]
       }
