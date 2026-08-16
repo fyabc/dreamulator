@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786909223235,
+  "lastUpdate": 1786918973583,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3715,6 +3715,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00024194894801119482",
             "extra": "mean: 5.243162799999368 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "c0812751f1ad887040d49b752970bedfd8632ee1",
+          "message": "feat(frontend): 文档选中持久化到 URL 参数\n\n- LayerDocuments 读/写 ?doc=<filename>，刷新/分享还原选中文档\n- WorldDetail 切 tab 时清除 doc（选中文档属于旧 tab 的层）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T06:21:33+08:00",
+          "tree_id": "c0d221fa038e8ab2be29bfa2502f97ca0e4a3dac",
+          "url": "https://github.com/fyabc/dreamulator/commit/c0812751f1ad887040d49b752970bedfd8632ee1"
+        },
+        "date": 1786918972790,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 34.46418717748064,
+            "unit": "iter/sec",
+            "range": "stddev: 0.007070650160877163",
+            "extra": "mean: 29.015627000001132 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.667900619642386,
+            "unit": "iter/sec",
+            "range": "stddev: 0.039290224247864804",
+            "extra": "mean: 176.4321690000088 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.382751316592836,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6736198562454022",
+            "extra": "mean: 419.6829073333295 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1093.524084758132,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006715751515874098",
+            "extra": "mean: 914.4746000004034 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 272.346403709925,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000350665410193625",
+            "extra": "mean: 3.671794399991768 msec\nrounds: 5"
           }
         ]
       }
