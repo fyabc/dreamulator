@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786876716508,
+  "lastUpdate": 1786909223235,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3656,6 +3656,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00037910852495495284",
             "extra": "mean: 5.254122200000211 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "d6eaaee354fc024f4771414be98f2ca3be1cb56b",
+          "message": "release: v0.30.0 — 守护轴 + 卫星系统 + 文明种子 + 间奏曲 #2–#9\n\n- 守护轴（Harness）设计总纲 + agent-engineering 知识库 + vision/architecture/roadmap/README\n- 8 颗新卫星 + 决策记录 0004（卫星系统设计）\n- 文明种子拷问修正 + 补 6 文明 + /grill-world skill + 决策记录 0005/0006\n- 轨道倾角/宜居保护/geography 重写/num_plates 单一数据源/sky_phenomena 修复/宜居卫星参照\n- /read-map skill + 地图图层 headless 导出 CLI 登记 roadmap\n- 发版前修复（ruff E501/测试路径）+ 版本 bump 0.29.0 → 0.30.0\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-17T03:39:37+08:00",
+          "tree_id": "905717a01f51a8b67a5944b3acc4de3b72981106",
+          "url": "https://github.com/fyabc/dreamulator/commit/d6eaaee354fc024f4771414be98f2ca3be1cb56b"
+        },
+        "date": 1786909222091,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 18.89727970521745,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010901036716294757",
+            "extra": "mean: 52.9176693999986 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.140132016519628,
+            "unit": "iter/sec",
+            "range": "stddev: 0.025485184104386802",
+            "extra": "mean: 318.4579484999972 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.2953276341398705,
+            "unit": "iter/sec",
+            "range": "stddev: 1.2473361475610887",
+            "extra": "mean: 772.0054553333332 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 952.6705642325525,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006510046382857454",
+            "extra": "mean: 1.0496807999999191 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 190.72457563212046,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00024194894801119482",
+            "extra": "mean: 5.243162799999368 msec\nrounds: 5"
           }
         ]
       }
