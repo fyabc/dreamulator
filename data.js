@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786845877682,
+  "lastUpdate": 1786849580369,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3538,6 +3538,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00013437234000033787",
             "extra": "mean: 4.381018400000869 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "d335a21d507be613d7af24fecf041eb9e20e0714",
+          "message": "docs(gaia-m): 单圈环流概念文档修订 + 生态文档合并\n\n- 三圈环流 → 单圈（atmospheric_dynamics / climate_zones / climate_portrait /\n  geography / terrain_config 注释）\n- climate_zones 机制改「温度归因」（Cfb 取代雨林 = 温度偏凉，非下沉支在极地）\n- 生态 4 文档合并为单一 ecology.md（环境约束 + 生活方式 + 气候带关联待精校）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-16T11:02:49+08:00",
+          "tree_id": "69b909a22e78dc9ddf3d77fc23cc108d5c0eaadb",
+          "url": "https://github.com/fyabc/dreamulator/commit/d335a21d507be613d7af24fecf041eb9e20e0714"
+        },
+        "date": 1786849579679,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 21.605381288614897,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010751903546301227",
+            "extra": "mean: 46.284765199999356 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6643336886192035,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05745973816263384",
+            "extra": "mean: 272.9009104999989 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4779979883875856,
+            "unit": "iter/sec",
+            "range": "stddev: 1.082750646547406",
+            "extra": "mean: 676.5909073333347 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 959.9650419142883,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006804536403575757",
+            "extra": "mean: 1.0417045999986385 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.06767482844194,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007499517937332603",
+            "extra": "mean: 5.12642599999964 msec\nrounds: 5"
           }
         ]
       }
