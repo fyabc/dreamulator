@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787015568622,
+  "lastUpdate": 1787069532114,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3833,6 +3833,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008373731663705974",
             "extra": "mean: 4.056825399999298 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "ab3a336552b2a0652357881c1598a16b16f5d714",
+          "message": "docs(harness): 补 §1.4 引擎即环境（苦涩的教训的正确读法）\n\n- 确定性引擎 = 环境（RL 定位）；知识进环境（对）vs 知识进 LLM（错）\n- 完整三角：搜索（引擎）+ 学习（LLM）+ 对账（守护轴）\n- 推论：守护轴核心在确定性验证器，不在给 LLM 事实库\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T00:11:39+08:00",
+          "tree_id": "030e80252efb45913963fd8cda6963fef7eab9c1",
+          "url": "https://github.com/fyabc/dreamulator/commit/ab3a336552b2a0652357881c1598a16b16f5d714"
+        },
+        "date": 1787069531017,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 18.797240519976846,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010870026356623446",
+            "extra": "mean: 53.19929800000409 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.528688921083077,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0666376985112712",
+            "extra": "mean: 283.39137350000954 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.435219989491417,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1145750718420642",
+            "extra": "mean: 696.7572966666656 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 978.5522866907854,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006899510783798962",
+            "extra": "mean: 1.021917799999983 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.12733432313365,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009537657931465795",
+            "extra": "mean: 5.072863199990252 msec\nrounds: 5"
           }
         ]
       }
