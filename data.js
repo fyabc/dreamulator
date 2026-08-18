@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787069532114,
+  "lastUpdate": 1787074999644,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3892,6 +3892,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009537657931465795",
             "extra": "mean: 5.072863199990252 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "abbeb7cc0b914226ec24ea7fbc0c1314ba67f3e9",
+          "message": "chore: bump version 0.30.0 → 0.31.0（守护轴实现落地）\n\n- pyproject.toml + frontend/package.json + uv.lock 版本 bump\n- CHANGELOG 补 0.31.0 条目（守护轴 P0–P3 + guard CLI + 文档/草案）\n- roadmap 守护轴 P0 标 ✅、快照与「最后更新」至 v0.31.0\n- harness.md §15 分阶段落地表标 ✅（P3 的 ai critique CLI 留 ai 命令组）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T01:42:47+08:00",
+          "tree_id": "0171fe544feda3a70bce48e0b6c2e061fd23cc22",
+          "url": "https://github.com/fyabc/dreamulator/commit/abbeb7cc0b914226ec24ea7fbc0c1314ba67f3e9"
+        },
+        "date": 1787074998326,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 19.49094820094855,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011835198634418216",
+            "extra": "mean: 51.30586720000281 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.5841528002903473,
+            "unit": "iter/sec",
+            "range": "stddev: 0.061003565724005324",
+            "extra": "mean: 279.0059619999994 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4168610731512208,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1313938708395674",
+            "extra": "mean: 705.7854993333356 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 970.0022911461596,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006166262914918084",
+            "extra": "mean: 1.0309253999992052 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.18150238854295,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006348086860563686",
+            "extra": "mean: 5.045879600001513 msec\nrounds: 5"
           }
         ]
       }
