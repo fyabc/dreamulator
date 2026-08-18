@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786918973583,
+  "lastUpdate": 1787015568622,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3774,6 +3774,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000350665410193625",
             "extra": "mean: 3.671794399991768 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "4fc873a35c9b9d270ed803734212d428ab8e6ef3",
+          "message": "feat(harness): P1d+P1.5 ADR 状态机 + 台账容量上限\n\n- guard/adr.py：accept/supersede/deprecate 状态机 + count_accepted/archive\n- accept 超限拒绝写入 + archive 强制剪枝（Hermes 容量上限，默认 20 条）\n- stale.py read_baseline 公开；cli.py 新增 guard accept/supersede/deprecate/archive 命令\n- docs/usage/cli.md 守护轴章节（三级检测 + ADR 状态机 + 容量上限）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-18T09:10:56+08:00",
+          "tree_id": "279e30d2f835259cb4e957734dc774605d8876a1",
+          "url": "https://github.com/fyabc/dreamulator/commit/4fc873a35c9b9d270ed803734212d428ab8e6ef3"
+        },
+        "date": 1787015567380,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 27.341437149383623,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00841100698888003",
+            "extra": "mean: 36.57452219999868 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.397782902606991,
+            "unit": "iter/sec",
+            "range": "stddev: 0.054699659979356566",
+            "extra": "mean: 227.38730450000233 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.8844196118028815,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8493213173433912",
+            "extra": "mean: 530.6673703333355 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1201.4693489557585,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007239454560081081",
+            "extra": "mean: 832.3141999994732 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 246.49816085261475,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008373731663705974",
+            "extra": "mean: 4.056825399999298 msec\nrounds: 5"
           }
         ]
       }
