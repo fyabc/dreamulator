@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787074999644,
+  "lastUpdate": 1787148051100,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -3951,6 +3951,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006348086860563686",
             "extra": "mean: 5.045879600001513 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "40cbd2469efbd58059ecc748f8718516c4b78aff",
+          "message": "chore: bump version 0.31.0 → 0.32.0（地图图层 headless 导出 + Seed 探索器）\n\n- CHANGELOG：新增 0.32.0（headless 导出 CLI + Seed 探索器 CLI）\n- roadmap：标记两条 P1 完成，头/快照版本同步\n- ruff format：三处行折叠（cli_export/palettes/cli_explore_seeds）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T21:58:27+08:00",
+          "tree_id": "50edbc4e7f737bb26bbde25239c67ff63a3b0292",
+          "url": "https://github.com/fyabc/dreamulator/commit/40cbd2469efbd58059ecc748f8718516c4b78aff"
+        },
+        "date": 1787148049980,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 18.443948337481828,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011050366120914793",
+            "extra": "mean: 54.218325800002276 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.3305485395791945,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06794695833546055",
+            "extra": "mean: 300.25084100000754 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3310075603003841,
+            "unit": "iter/sec",
+            "range": "stddev: 1.2046324668572304",
+            "extra": "mean: 751.310533333348 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 904.5150496812292,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006242858000352377",
+            "extra": "mean: 1.105564800002412 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 189.53502093490766,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009351988494145361",
+            "extra": "mean: 5.276069800015648 msec\nrounds: 5"
           }
         ]
       }
