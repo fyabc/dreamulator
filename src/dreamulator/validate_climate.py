@@ -325,6 +325,7 @@ def _find_project_root() -> Path:
 
 
 _MONTHLY_REF_CACHE: dict[str, Any] | None = None
+_LGM_REF_CACHE: dict[str, Any] | None = None
 
 
 def _load_monthly_reference() -> dict[str, Any]:
@@ -352,6 +353,34 @@ def _load_monthly_reference() -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         _MONTHLY_REF_CACHE = json.load(f)
     return _MONTHLY_REF_CACHE
+
+
+def _load_lgm_reference() -> dict[str, Any]:
+    """Load the LGM (~21 ka) annual zonal-mean reference (CHELSA-TraCE21k).
+
+    Returns a dict with ``temperature_c`` and ``precipitation_mm_yr`` (90 2°
+    bands, 90N → 88S).  The top three polar bands are ``None`` — the raster's
+    top edge sits at 84N.  Empty dict when the file is missing.  Cached after
+    first load.
+
+    Regenerate with ``scripts/generate_lgm_reference.py``.
+    """
+    global _LGM_REF_CACHE
+    if _LGM_REF_CACHE is not None:
+        return _LGM_REF_CACHE
+    path = (
+        _find_project_root()
+        / "tests"
+        / "validation"
+        / "reference"
+        / "lgm_zonal_reference.json"
+    )
+    if not path.exists():
+        _LGM_REF_CACHE = {}
+        return _LGM_REF_CACHE
+    with path.open("r", encoding="utf-8") as f:
+        _LGM_REF_CACHE = json.load(f)
+    return _LGM_REF_CACHE
 
 
 def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> CVTMesh | None:
