@@ -51,6 +51,7 @@ heightmap = [
 validation = [
     "xarray>=2024.0",
     "netCDF4>=1.7",
+    "imagecodecs>=2024.0",
 ]
 
 [project.scripts]
