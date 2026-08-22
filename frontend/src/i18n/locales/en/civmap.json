@@ -1,0 +1,82 @@
+{
+  "title": {
+    "toolbar": "Toolbar",
+    "editorTitle": "Civ Map — {{world}}",
+    "readonly": "Read-only",
+    "previewMap": "🏛️ Civilization Map"
+  },
+  "tool": {
+    "paint": "Paint",
+    "erase": "Erase",
+    "select": "Select"
+  },
+  "level": {
+    "adm0": "National",
+    "adm1": "Province",
+    "adm2": "District"
+  },
+  "panel": {
+    "countryInfo": "Country Info",
+    "provinceInfo": "Province Info",
+    "hoverHint": "Hover over a",
+    "hoverHintCountry": "country",
+    "hoverHintProvince": "province",
+    "hoverHintSuffix": "to view details",
+    "provinceCount": "{{count}} provinces",
+    "tools": "Tools",
+    "countries": "Countries",
+    "snapshots": "Snapshots",
+    "stats": "Stats",
+    "unassigned": "Unassigned",
+    "paintedCount": "Provinces: {{painted}}/{{total}} painted"
+  },
+  "action": {
+    "back": "← Back",
+    "edit": "Edit",
+    "newCountry": "New Country",
+    "newSnapshot": "New Snapshot",
+    "deleteConfirm": "Delete this country? All associated territory assignments will also be removed.",
+    "add": "+ Add",
+    "cancel": "Cancel",
+    "save": "Save",
+    "deleteCountry": "Delete country",
+    "editMap": "Edit map →",
+    "fullscreen": "Fullscreen"
+  },
+  "label": {
+    "optional": "Optional",
+    "loading": "Loading...",
+    "loadingMap": "Loading map data...",
+    "level": "Level:",
+    "paintByCountry": "⚡ Painting by country",
+    "year": "Year",
+    "yearSuffix": "",
+    "description": "Description",
+    "name": "Name",
+    "color": "Color",
+    "noDescription": "(no description)"
+  },
+  "hint": {
+    "addCountry": "Click \"+ Add\" to create a fictional country",
+    "addSnapshot": "Click \"+ Add\" to create a snapshot",
+    "createSnapshotFirst": "⚠️ Create a snapshot first to paint",
+    "notPaintedStatic": "Not painted yet — edit in API mode",
+    "notPaintedLive": "Not painted yet — click \"Edit map\" to start",
+    "readonly": "Read-only mode — map editing is only available in API mode"
+  },
+  "status": {
+    "painting": "🖌️ Painting: {{name}}",
+    "erasing": "🧹 Erase mode",
+    "selecting": "👆 Select mode",
+    "currentSnapshot": "📅 Current snapshot: {{id}}"
+  },
+  "stats": {
+    "countries": "Countries: {{count}}",
+    "assignedProvinces": "Assigned provinces: {{count}}",
+    "snapshots": "Snapshots: {{count}}"
+  },
+  "dialog": {
+    "editSnapshotTitle": "Edit Snapshot",
+    "editCountryTitle": "Edit Country"
+  }
+}

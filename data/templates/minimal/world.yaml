@@ -1,0 +1,37 @@
+metadata:
+  name: template
+  description: Minimal world template — a single G-type star with one rocky planet.
+  version: "0.1.0"
+  dreamulator_version: "0.1.0"
+  created: ""
+  modified: ""
+  tags: []
+
+seed:
+  seed: 42
+
+layers:
+  physics:
+    configured: false
+    engine: ""
+  chemistry:
+    configured: false
+    engine: ""
+  astronomy:
+    configured: true
+    engine: astronomy
+  geological:
+    configured: true
+    engine: geological
+  climate:
+    configured: false
+    engine: climate
+  ecology:
+    configured: false
+    engine: ecology
+  civilization:
+    configured: false
+    engine: civilization
+
+planet_ids:
+  - "planet_terra"

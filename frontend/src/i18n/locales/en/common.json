@@ -1,0 +1,67 @@
+{
+  "app": {
+    "title": "dreamulator",
+    "subtitle": "Fantasy World Builder"
+  },
+  "nav": {
+    "home": "Home",
+    "worlds": "Worlds",
+    "help": "Help",
+    "overview": "Overview",
+    "map": "Map",
+    "viewer3d": "3D View"
+  },
+  "action": {
+    "back": "← Back",
+    "create": "Create",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "build": "Build",
+    "validate": "Validate",
+    "refresh": "Refresh",
+    "close": "Close",
+    "collapseSidebar": "Collapse Sidebar",
+    "retry": "Retry",
+    "expandSidebar": "Expand sidebar",
+    "toggleMenu": "Toggle menu"
+  },
+  "status": {
+    "loading": "Loading...",
+    "error": "Load failed",
+    "empty": "No data",
+    "noWorld": "No world selected"
+  },
+  "error": {
+    "renderError": "Render error",
+    "fallbackMessage": "This component failed to render. Please try refreshing the page."
+  },
+  "stellar": {
+    "title": "Stellar System 3D",
+    "selectPlanet": "Select planet...",
+    "loadFailed": "Data load failed",
+    "loadFailedDetail": "Stellar system data could not be loaded. Check your network or world configuration."
+  },
+  "help": {
+    "toc": "Contents",
+    "footerDocs": "See more technical docs in the",
+    "footerDocsSuffix": "directory.",
+    "footerCli": "CLI reference:",
+    "footerPeriod": "."
+  },
+  "home": {
+    "menuWorldsDescStatic": "Browse exported world data",
+    "menuWorldsDescLive": "Create, edit and delete worlds",
+    "menuHelpDesc": "CLI reference, map workflow, usage guide",
+    "featuresTitle": "Key Capabilities",
+    "quickStartTitle": "Quick Start",
+    "step1Title": "Create a world",
+    "step1Desc": "Pick a template (minimal / earthlike) and set a random seed",
+    "step2Title": "Run the simulation",
+    "step2Desc": "Generate terrain, climate and ecology data",
+    "step3Title": "Explore visually",
+    "step3Desc": "Open the map viewer, 3D globe or stellar system view from the world detail page",
+    "myWorlds": "My Worlds",
+    "footerBuilt": "Built on"
+  }
+}

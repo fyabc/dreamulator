@@ -1,0 +1,39 @@
+metadata:
+  name: earth
+  description: Earth — our home world in the Solar System, used as the reference baseline.
+  dreamulator_version: 0.1.0
+  created: '2026-05-29T17:26:20.139700+00:00'
+  modified: '2026-05-30T00:00:00+00:00'
+  tags:
+    - reference
+    - earth
+    - baseline
+
+seed:
+  seed: 42
+
+layers:
+  physics:
+    configured: false
+    engine: ""
+  chemistry:
+    configured: false
+    engine: ""
+  astronomy:
+    configured: true
+    engine: astronomy
+  geological:
+    configured: true
+    engine: geological
+  climate:
+    configured: false
+    engine: climate
+  ecology:
+    configured: false
+    engine: ecology
+  civilization:
+    configured: true
+    engine: civilization
+
+planet_ids:
+  - planet_earth

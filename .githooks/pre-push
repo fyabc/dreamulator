@@ -1,0 +1,70 @@
+#!/bin/sh
+# pre-push hook: lint gates before pushing to origin/main.
+# Blocks the push when ruff format, ruff check, or mypy fail.
+# Git LFS pre-push runs afterwards (only if lint passes).
+#
+# To skip (emergencies only):
+#   git push --no-verify
+# Or set the env var: SKIP_LINT=1 git push
+
+set -e
+
+# ---- allow skip in emergencies ------------------------------------------
+if [ "${SKIP_LINT}" = "1" ]; then
+    echo "[pre-push] SKIP_LINT=1 — skipping lint gates"
+    command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "$@"
+    exit 0
+fi
+
+# ---- only gate pushes to main -------------------------------------------
+REMOTE="$1"
+REMOTE_URL="$2"
+
+# Parse target ref while reading stdin; the hook receives multiple lines
+# (one per ref), but we just need to check the remote branch name.
+GATING=0
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    case "${REMOTE_REF}" in
+        refs/heads/main) GATING=1 ;;
+    esac
+done
+
+if [ "$GATING" -eq 0 ]; then
+    # Not pushing to main — skip lint (keeps feature-branch flow fast).
+    command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "$@"
+    exit 0
+fi
+
+echo ""
+echo "============================================="
+echo " pre-push: lint gates for main"
+echo "============================================="
+
+# ---- ruff format --------------------------------------------------------
+echo ""
+echo "→ ruff format --check src/ tests/"
+uv run ruff format --check src/ tests/
+echo "  ✓ format ok"
+
+# ---- ruff check ---------------------------------------------------------
+echo ""
+echo "→ ruff check src/ tests/"
+uv run ruff check src/ tests/
+echo "  ✓ lint ok"
+
+# ---- mypy ---------------------------------------------------------------
+echo ""
+echo "→ mypy src/"
+uv run mypy src/
+echo "  ✓ mypy ok"
+
+echo ""
+echo "============================================="
+echo " pre-push: all gates passed"
+echo "============================================="
+echo ""
+
+# ---- Git LFS ------------------------------------------------------------
+command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "$@"
+
+exit 0

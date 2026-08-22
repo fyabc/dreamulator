@@ -1,0 +1,155 @@
+{
+  "$defs": {
+    "ComputationManifest": {
+      "description": "Tracks the full computation history for a world's derived data.",
+      "properties": {
+        "world_name": {
+          "title": "World Name",
+          "type": "string"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/StepRecord"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "input_checksum": {
+          "default": "",
+          "description": "Combined checksum of all input files",
+          "title": "Input Checksum",
+          "type": "string"
+        },
+        "generated": {
+          "format": "date-time",
+          "title": "Generated",
+          "type": "string"
+        },
+        "reproducible": {
+          "default": true,
+          "description": "True if all steps used seeded RNG and deterministic algorithms",
+          "title": "Reproducible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "world_name",
+        "seed",
+        "generated"
+      ],
+      "title": "ComputationManifest",
+      "type": "object"
+    },
+    "StepRecord": {
+      "description": "Record of a single computation step in the pipeline.",
+      "properties": {
+        "engine": {
+          "description": "Engine name that ran this step",
+          "title": "Engine",
+          "type": "string"
+        },
+        "input_files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Mapping of file path -> sha256 checksum",
+          "title": "Input Files",
+          "type": "object"
+        },
+        "output_files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Mapping of file path -> sha256 checksum",
+          "title": "Output Files",
+          "type": "object"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "started": {
+          "format": "date-time",
+          "title": "Started",
+          "type": "string"
+        },
+        "completed": {
+          "format": "date-time",
+          "title": "Completed",
+          "type": "string"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine",
+        "started",
+        "completed",
+        "success"
+      ],
+      "title": "StepRecord",
+      "type": "object"
+    }
+  },
+  "description": "A time-series simulation run.",
+  "properties": {
+    "run_id": {
+      "description": "Unique run identifier",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "config": {
+      "additionalProperties": true,
+      "description": "Parameters for this run",
+      "title": "Config",
+      "type": "object"
+    },
+    "manifest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComputationManifest"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "num_steps": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Num Steps",
+      "type": "integer"
+    },
+    "dt_years": {
+      "default": 1.0,
+      "description": "Time step size in years",
+      "exclusiveMinimum": 0,
+      "title": "Dt Years",
+      "type": "number"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "description": "Aggregated results and metrics",
+      "title": "Summary",
+      "type": "object"
+    }
+  },
+  "required": [
+    "run_id"
+  ],
+  "title": "SimulationRun",
+  "type": "object"
+}

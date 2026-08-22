@@ -1,0 +1,195 @@
+{
+  "title": {
+    "list": "世界管理",
+    "browse": "世界浏览",
+    "info": "世界信息",
+    "detail": "概览"
+  },
+  "tab": {
+    "overview": "概览",
+    "astronomy": "天文学",
+    "planets": "地质",
+    "climate": "气候",
+    "ecology": "生态",
+    "civilization": "文明",
+    "designNotes": "设计笔记",
+    "narrate": "叙述"
+  },
+  "layer": {
+    "physics": "物理定律",
+    "chemistry": "化学",
+    "astronomy": "天文学",
+    "geological": "地质",
+    "climate": "气候",
+    "ecology": "生态",
+    "civilization": "文明"
+  },
+  "layerDag": {
+    "title": "层级架构",
+    "forkPoint": "分叉点",
+    "branchData": "分支数据",
+    "configured": "已配置",
+    "unconfigured": "未配置"
+  },
+  "branch": {
+    "label": "分支",
+    "hint": "切换世界线分支。在某一 DAG 层分叉，共享上层数据。类似于 Git branch。",
+    "forkLayer": "分叉层：",
+    "description": "描述："
+  },
+  "action": {
+    "back": "← 返回",
+    "newWorld": "新建世界",
+    "openWorld": "打开",
+    "deleteWorld": "删除",
+    "goCreate": "去创建一个 →",
+    "buildWorld": "构建",
+    "validateWorld": "验证",
+    "generateFirstMap": "生成第一张地图 →",
+    "create": "创建",
+    "cancel": "取消",
+    "creating": "创建中...",
+    "createFirstWorld": "创建你的第一个世界"
+  },
+  "status": {
+    "noWorlds": "暂无世界",
+    "noWorldsStatic": "暂无已导出的世界数据",
+    "noMapData": "暂无地图数据",
+    "mapGenerateHint": "程序化生成地形、Voronoi 网格和构造板块",
+    "documentNotRendered": "参数模板未渲染：缺少 system_catalog.yaml（该分支未构建或为 fresh clone），{{ … }} 占位符按源码显示。请先运行 dreamulator build。",
+    "loading": "加载中...",
+    "loadError": "加载失败",
+    "createError": "错误",
+    "cannotConnect": "无法连接后端服务",
+    "noWorld": "未选择世界",
+    "validating": "验证中...",
+    "building": "构建中..."
+  },
+  "label": {
+    "selectWorld": "选择世界",
+    "selectBranch": "选择分支",
+    "baseWorld": "基础世界",
+    "noWorldsYet": "暂无世界，请先创建一个世界",
+    "pickWorldToView": "选择一个世界以查看其配置信息",
+    "loadingWorldData": "加载世界数据...",
+    "clickToView": "点击查看和编辑行星地图",
+    "openMapEditor": "打开地图编辑器 →",
+    "worldName": "世界名称",
+    "template": "模板",
+    "pleaseSelect": "— 请选择 —",
+    "forkedAt": "（{{layer}} 分叉）"
+  },
+  "detail": {
+    "metadata": "元数据",
+    "created": "创建时间",
+    "version": "版本",
+    "seed": "种子",
+    "dreamulatorVersion": "Dreamulator 版本",
+    "starSystem": "恒星系",
+    "map": "🗺️ 地图",
+    "readonly": "只读模式",
+    "valid": "✓ 有效",
+    "invalid": "✗ 无效",
+    "bodyEncyclopedia": "天体百科",
+    "bodyEncyclopediaHint": "自动合并 stellar.yaml + planets.yaml 生成",
+    "targetBody": "目标天体",
+    "tidallyLocked": "潮汐锁定",
+    "inHabitableZone": "宜居带内",
+    "orbiting": "（绕 {{parent}}）",
+    "greenhouse": "（温室 +{{k}} K）",
+    "noStarSystem": "无恒星系数据",
+    "noGeologyData": "未定义地质数据",
+    "noGeologyLayer": "无地质层数据",
+    "noClimateData": "无气候层数据",
+    "noEcologyData": "无生态层数据"
+  },
+  "field": {
+    "name": "名称：",
+    "systemName": "系统名称：",
+    "stars": "恒星：",
+    "orbit": "轨道：",
+    "luminosity": "光度：",
+    "mass": "质量：",
+    "radius": "半径：",
+    "temperature": "温度：",
+    "age": "年龄：",
+    "msLifetime": "主序寿命：",
+    "evolutionProgress": "演化进度：",
+    "habitableZoneCenter": "宜居带中心：",
+    "gravity": "重力：",
+    "rotation": "自转：",
+    "rotationPeriod": "自转周期：",
+    "tilt": "倾角：",
+    "axialTilt": "轴倾角：",
+    "albedo": "反照率：",
+    "orbitalPeriod": "公转：",
+    "eccentricity": "离心率：",
+    "inclination": "轨道倾角：",
+    "instellation": "日照：",
+    "equilibriumTemp": "平衡温度：",
+    "solarDay": "太阳日：",
+    "daysPerYear": "一年：",
+    "atmosphere": "大气：",
+    "waterCoverage": "水覆盖：",
+    "magneticField": "磁场："
+  },
+  "badge": {
+    "atmosphere": "大气",
+    "hydrosphere": "水圈",
+    "lithosphere": "岩石圈",
+    "plates": "板块",
+    "noPlates": "无板块",
+    "satellites": "卫星"
+  },
+  "unit": {
+    "days": "地球日",
+    "earthRatio": "×地球",
+    "solarDays": "太阳日"
+  },
+  "docCategory": {
+    "overview": "总览",
+    "stellar": "恒星系统",
+    "orbital": "轨道动力学",
+    "satellite": "卫星系统",
+    "physical": "物理参数",
+    "tidal": "潮汐效应",
+    "tectonic": "地质构造",
+    "hydro": "水文",
+    "dynamics": "流体动力学",
+    "climate": "气候带",
+    "species": "物种",
+    "ecosystem": "生态系统",
+    "timeline": "编年史",
+    "thematic": "专题",
+    "geopolitical": "地缘政治",
+    "microhistory": "微观史",
+    "creative": "创作素材",
+    "other": "其他"
+  },
+  "doc": {
+    "toc": "目录",
+    "selectDoc": "选择文档",
+    "docToc": "文档目录",
+    "selectLeftDoc": "选择左侧文档"
+  },
+  "narrate": {
+    "generate": "生成叙述",
+    "regenerate": "重新生成",
+    "generating": "生成中...",
+    "stop": "停止",
+    "connecting": "正在连接...",
+    "warning": "警告：此操作将调用大语言模型 API，会消耗 token",
+    "tokenUsage": "Token 使用：input={{input}}, output={{output}}, total={{total}}",
+    "emptyResponse": "服务器返回空响应"
+  },
+  "note": {
+    "branchFork": "分支从 {{layer}} 层开始分叉",
+    "engineOrder": "引擎按以下顺序推演：从基础物理到文明演化"
+  },
+  "dialog": {
+    "createWorldTitle": "创建新世界"
+  },
+  "confirm": {
+    "deleteWorld": "确定删除世界 \"{{name}}\"？"
+  }
+}

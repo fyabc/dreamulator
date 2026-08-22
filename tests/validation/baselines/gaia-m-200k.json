@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "world": "gaia-m",
+  "planet": "satellite_gaiam",
+  "seed": 42,
+  "mesh_cells": 200000,
+  "temperature": {
+    "global_mean_c": 19.08,
+    "land_mean_c": 11.63,
+    "ocean_mean_c": 22.08,
+    "min_c": -28.44,
+    "max_c": 31.0
+  },
+  "precipitation": {
+    "global_mean_mm": 2310.3,
+    "land_mean_mm": 1761.5
+  },
+  "koppen": {
+    "class_counts": {
+      "Af": 6121,
+      "Am": 1642,
+      "Aw": 3561,
+      "BSh": 504,
+      "BSk": 4263,
+      "BWh": 293,
+      "BWk": 4325,
+      "Cfb": 9194,
+      "Csb": 5065,
+      "Cwb": 1481,
+      "EF": 3238,
+      "ET": 17707
+    },
+    "group_distribution": {
+      "A": 0.197,
+      "B": 0.164,
+      "C": 0.274,
+      "D": 0.0,
+      "E": 0.365
+    },
+    "n_classes": 12,
+    "n_land_cells": 57394
+  },
+  "land_fraction": 0.287
+}

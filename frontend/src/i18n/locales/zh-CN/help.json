@@ -1,0 +1,123 @@
+{
+  "layerGroup": {
+    "terrain": "地形",
+    "climate": "气候",
+    "ecology": "生态",
+    "civilization": "文明",
+    "geology": "地质构造",
+    "overlay": "叠加标注"
+  },
+  "layer": {
+    "terrain": { "label": "地形", "desc": "自适应海拔着色（默认专题图层）", "detail": "基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 低地绿 → 高地棕 → 雪山白。与其他专题层互斥。默认开启。" },
+    "landsea": { "label": "海陆", "desc": "二值海陆着色（蓝色=海洋，绿色=陆地）", "detail": "二值蓝／绿着色，快速区分海洋和陆地。与其他专题层互斥。" },
+    "plates": { "label": "板块", "desc": "按构造板块着色", "detail": "每个构造板块用一种颜色标识。板块由 Cortial (2019) 球面 Voronoi 剖分生成，Poisson-disc 种子 + 同步 BFS。颜色从 15 色调色板循环分配。可叠加在任意底图/专题层之上。" },
+    "boundaries": { "label": "地壳与边界", "desc": "大陆(褐)·海洋(蓝)·汇聚(红)·离散(绿)·转换(黄)", "detail": "板块内部按地壳类型着色：大陆 = 暖褐，海洋 = 灰蓝，过渡带 = 橄榄绿。热点火山链 = 品红。古造山带 = 暗金。裂谷 = 青。板块边界按类型着色：汇聚 = 红（俯冲/碰撞），离散 = 绿（洋中脊/裂谷），转换 = 黄（水平错动）。特征线永远置顶。" },
+    "koppen": { "label": "Köppen 气候", "desc": "气候分类着色（Beck 2018 标准色）", "detail": "按 Köppen-Geiger 气候分类着色。A=热带(蓝)·B=干旱(红/橙)·C=温带(绿/黄)·D=大陆性(紫/青)·E=极地(灰)·海洋=深蓝。与其他专题图层互斥（同一专题槽位，单选）。" },
+    "temperature": { "label": "温度", "desc": "年均温着色（蓝=冷 → 白=0°C → 红=热）", "detail": "年均温（°C）diverging 色标。固定物理范围 −40…+40°C，0°C（冰点）落在色标正中——低温深蓝、0°C 白、高温深红。跨世界可比，海洋透明（显示底图）。与其他专题图层互斥（单选）。" },
+    "precipitation": { "label": "降水", "desc": "年降水着色（黄=干 → 绿 → 蓝=湿，对数）", "detail": "年降水（mm/yr）sequential 色标。对数归一化（0…30000mm），因为降水跨越五个数量级、线性会压缩 95% 的细胞到低端。浅黄=干(0mm)→黄绿=~100mm→蓝绿=~1000mm→深蓝=湿(>10000mm)。海洋透明。与其他专题图层互斥（单选）。" },
+    "biomes": { "label": "Whittaker 群系", "desc": "温度-降水生物群系分类（12 类 + 海洋）", "detail": "基于 Whittaker (1975) 温度-降水二维分类。热带雨林=深绿·热带草原=浅黄绿·荒漠=米色·温带森林=中绿·温带草原=金黄·北方针叶林=蓝灰·冻原=灰褐·冰原=白·海洋=深蓝。与 Köppen 互斥，四选一。" },
+    "npp": { "label": "净初级生产力", "desc": "NPP 热力图（Miami 模型，暖米→深绿）", "detail": "Miami 模型 (Lieth 1975) 估算的净初级生产力。暖米色=低产（荒漠 <200）→ 深绿=高产（雨林 >2000）。归一化到 0–3000 gC/m²/yr。" },
+    "domesticable": { "label": "驯化潜力", "desc": "高驯化潜力区域高亮（食草动物/作物/役用）", "detail": "基于 Whittaker 群系查表标注驯化潜力（Diamond 1997 框架）。金色=高食草动物+高作物·橙色=仅高食草动物·浅绿=仅高作物·透明=低潜力。温带草原为全高。" },
+    "soil": { "label": "土壤类型", "desc": "USDA 土纲分类（12 纲）", "detail": "基于母岩 + 气候（温度/降水）推导的 USDA 土纲。软土=深绿（温带草原，高肥力）·淋溶土=橄榄·氧化土/老成土=红（热带/亚热带强风化，贫瘠）·干旱土=黄·灰土/冻土=灰·始成土/新成土=浅灰（年轻土）。肥力是农业潜力的直接输入。" },
+    "provinces": { "label": "生物地理省", "desc": "生物地理分区（realm → province）", "detail": "基于大陆连通性（realm）+ 同群系连续区（province）的两级分区。颜色循环自板块色板，同色=同一生物地理省。参考 Wallace/Udvardy 区系。" },
+    "habitable": { "label": "宜居等级", "desc": "宜居性分级 0–100（温度生态位带 × 降水）", "detail": "宜居等级 = 温度(不对称人类气候生态位带，峰值 13°C，Xu 2020) × 降水(干旱 ramp)。海岸是正交维度（distance_to_coast_km），不混入分数。暗色=极地/干旱·棕=边缘·琥珀=一般·绿=良好·青=极佳温带湿润。无硬零——凉湿海洋性 ET（法罗型）居中档：宜居但不产粮。与其他专题图层互斥（单选）。" },
+    "agriculture": { "label": "农业等级", "desc": "农业适宜性分级 0–100（林线以下=0）", "detail": "农业等级 = 最热月 >10°C（Köppen C/D 林线）以下硬零；以上用 生长度日×降水×土壤肥力 分级（GDD 基温 10°C，McMaster 1997）。暗灰=不产粮·米=边缘·黄=一般·金=优质农田。与宜居等级独立——凉湿海岸 ET 宜居但不产粮。与其他专题图层互斥（单选）。" },
+    "flow": { "label": "水系", "desc": "汇水面积着色（深蓝=源头 → 白=干流，对数）", "detail": "上游汇水面积（km²）sequential 色标，对数归一化（动态最大值）。深蓝=源头/小流域 → 中蓝 → 浅蓝 → 白=大陆级干流。反映地表水往哪汇、流域结构。闭合内陆湖用浅青色标出，海洋透明（显示底图）。可自由叠加在任意图层之上。" },
+    "currents": { "label": "洋流", "desc": "表层洋流箭头（品红=暖·青绿=寒，SVG矢量）", "detail": "Stommel 风生环流模型解算的表面流场。方向=流向、长度∝流速、品红=暖流·青绿=寒流。按 ~8° 网格空间采样，任意缩放清晰。可自由叠加。" },
+    "winds": { "label": "风场", "desc": "地表风箭头（蓝=冷·红=暖，温度着色）", "detail": "三胞环流 + 地转风合成的近地表风场。方向=风向、长度∝风速、颜色=温度（蓝=−20°C→绿=0°C→红=+35°C）。可直观看出暖风输热/寒潮路径。按 ~8° 网格空间采样。" },
+    "coastlines": { "label": "海岸线", "desc": "海岸线轮廓（默认开启）", "detail": "海平面附近 ±200m 范围的 cell 渲染为浅灰蓝轮廓线。叠加在所有专题层之上，帮助在 NPP/驯化潜力等缺少地形参考的图层中定位海陆边界。默认开启。" }
+  },
+  "control": {
+    "drag": { "action": "拖拽", "description": "平移地图（2D）/ 旋转球体（3D）" },
+    "rightDrag": { "action": "右拖 / Ctrl+拖", "description": "平移 3D 球体视图" },
+    "scroll": { "action": "滚轮", "description": "缩放" },
+    "nKey": { "action": "N 键", "description": "3D 球面视图：重置为默认视角（北极在画面上方，正视赤道）。仿《戴森球计划》。" },
+    "sunTime": { "action": "光照·时刻滑块", "description": "调整太阳直射经度（周日变化，0° = 本初子午线正午），即昼夜明暗界线的位置。需先打开光照开关（默认关）。" },
+    "sunSeason": { "action": "光照·季节滑块", "description": "调整轨道位置（周年变化，0° = 春分，90° = 北半球夏至）。结合地轴倾角改变太阳直射纬度，使明暗界线随季节倾斜（极地出现极昼/极夜）。无倾角的行星无季节变化。2D 三种投影（等距圆柱 / Mollweide / Robinson）与 3D 球面均支持。" },
+    "sunToggle": { "action": "光照开关", "description": "2D/3D 左侧面板：开/关昼夜光照（默认关，不影响常规阅图）。2D 三种投影（等距圆柱 / Mollweide / Robinson）与 3D 均走 GPU、拖动顺滑。设置经 URL（?sun=&season=&night=）在 2D↔3D 间同步、可分享。" },
+    "debugReproject": { "action": "调试·CPU 重投影", "description": "URL 加 ?reproject=cpu 强制 Mollweide/Robinson 走旧的 CPU 重投影，用于与 GPU 结果对照验证。仅调试用途——主地图显示始终依赖 WebGL，这不是无 GPU 兜底。" },
+    "hoverCell": { "action": "悬停 cell", "description": "右侧面板显示 cell 属性。如有选中 cell 则优先显示选中信息" },
+    "hoverLeave": { "action": "悬停离开", "description": "无选中 cell 时恢复行星摘要；有选中时面板锁定（不跳回摘要）" },
+    "ctrlClick": { "action": "Ctrl+单击 cell", "description": "追加/移除选中（不替换已有选中）。标准桌面应用风格" },
+    "dblClick": { "action": "双击 cell", "description": "选中该 cell（清除其他选中）；如已是唯一选中则取消选中" },
+    "esc": { "action": "Esc", "description": "清除全部选中 cell" },
+    "clickPlanet": { "action": "单击行星", "description": "3D 恒星系视图中，弹出信息面板。如有地形数据，可展开\"🌍 地形数据\"查看摘要。" },
+    "dblClickPlanet": { "action": "双击行星", "description": "3D 恒星系视图中，相机飞向该行星" }
+  },
+  "projection": {
+    "equirectangular": { "label": "等距圆柱", "description": "经纬线正交，极区拉伸。最简单的投影，适合数据处理。" },
+    "mollweide": { "label": "摩尔威德", "description": "等面积伪圆柱投影，椭圆外形。适合面积对比。" },
+    "robinson": { "label": "罗宾逊", "description": "折中方案，视觉舒适。国家地理等出版物的常用投影。" }
+  },
+  "concept": {
+    "dag": { "title": "DAG 层级架构", "summary": "世界数据按学科层级组织：physics → chemistry → astronomy → geological → climate → ecology → civilization。上游层级的输入决定下游层级的输出，形成有向无环图（DAG）推演管线。" },
+    "branch": { "title": "分支系统", "summary": "类似 Git branch。在某一 DAG 层分叉，共享上层数据，仅存储分叉层及之后的数据。同一行星的不同分支可以有不同的海陆分布、气候或文明演化。" },
+    "cvt": { "title": "CVT 球面网格", "summary": "Centroidal Voronoi Tessellation — 使用 Fibonacci 螺旋 + Lloyd 松弛生成的球面均匀网格。所有模拟（构造、气候、水文）直接在球面网格上运行，仅在最终可视化时投影为 2D 栅格。" },
+    "cortial": { "title": "Cortial 2019 板块构造", "summary": "板块剖分和时间演化遵循 Cortial et al. (2019) Procedural Tectonic Planets 的方法：Poisson-disc 种子 → 球面 Voronoi 剖分 → Euler 极旋转 → 边界重检测 → 俯冲/碰撞/侵蚀。参考文献见 terrain-pipeline.md。" }
+  },
+  "section": {
+    "cli": {
+      "title": "CLI 快速入门",
+      "entries": [
+        { "title": "创建世界", "content": "`dreamulator init <name> --template earthlike`\n\n使用模板创建新世界。可用模板：`minimal`（最小配置）、`earthlike`（类地行星）。" },
+        { "title": "运行推演", "content": "`dreamulator build <world>`\n\n按 DAG 管线顺序运行所有引擎：天文 → 地质（地形+板块）→ 气候 → 生态。\n\n`dreamulator build <world> --only climate`\n\n仅运行指定层及之前未运行的层。\n\n`dreamulator build <world> --force`\n\n强制重新运行所有引擎（即使输出已存在）。" },
+        { "title": "地形生成", "content": "`dreamulator terrain generate <world> -p <planet> -n 100000 --seed 42`\n\n生成 CVT 球面网格 + 板块剖分 + 构造演化 + 地形合成 + 栅格导出。\n\n`dreamulator terrain generate <world> -p <planet> -n 4096`\n\n低分辨率快速迭代（~30 s vs 100k 的 ~100 s）。\n\n`dreamulator terrain generate <world> -p <planet> --tectonic-steps 125`\n\n时间演化步数（每步 2 My，默认 50 步 = 100 My）。\n\n`dreamulator terrain info <world> -p <planet>`\n\n查看地形摘要（海陆比、高程统计）。" },
+        { "title": "启动服务", "content": "`dreamulator serve --open`\n\n启动 FastAPI 服务器并打开浏览器。前端 Vite HMR 开发模式见 README。\n\n`dreamulator serve --data-dir <path>`\n\n使用自定义数据目录。" },
+        { "title": "分支管理", "content": "`dreamulator branch create <world> <name> --at <layer>`\n\n在指定层级分叉创建分支。例如 `--at geological` → 相同天文参数下的不同海陆分布。\n\n`dreamulator branch list <world>`\n\n列出所有分支。\n\n`dreamulator build <world> --branch <name>`\n\n在指定分支上运行推演。\n\n`dreamulator branch promote <world> <name> --as <new-world>`\n\n将分支提升为独立世界。" },
+        { "title": "气候验证", "content": "`dreamulator climate validate <world>`\n\n对比真实地球观测数据验证气候引擎精度（Köppen 群组准确率、降水 RMSE、Cohen's Kappa）。需要 ETOPO1 真实高程数据。" },
+        { "title": "AI 叙世", "content": "`dreamulator narrate <world>`\n\n使用 Claude API 生成世界的口语化描述。\n\n`dreamulator narrate <world> --branch <name>`\n\n描述指定分支。\n\n`dreamulator narrate <world> -m <model>`\n\n指定 Anthropic 模型。" }
+      ]
+    },
+    "worlds": {
+      "title": "世界管理",
+      "entries": [
+        { "title": "创建世界", "content": "在 \"世界管理\" 页面点击\"新建世界\"按钮。选择一个模板（`minimal` 或 `earthlike`），设置名称和随机种子。种子决定所有程序化生成的结果——相同种子 + 相同输入 = 完全一致的世界。" },
+        { "title": "世界结构", "content": "每个世界按学科层级组织数据：\n\n```\nphysics → chemistry → astronomy → geological → climate → ecology → civilization\n```\n\n每层包含 `input/`（YAML，人工创意设定）和 `derived/`（JSON，引擎计算结果）。引擎只从 input 读取、只向 derived 写入——LLM 不能\"幻想\"物理结果。" },
+        { "title": "分支系统", "content": "分支类似 Git branch。在某一 DAG 层分叉后，共享上层全部数据，仅存储分叉层及之后的数据。\n\n- 在 `astronomy` 层分叉 → 相同物理定律下的不同恒星系\n- 在 `geological` 层分叉 → 相同恒星系下的不同海陆分布\n- 在 `climate` 层分叉 → 相同地质条件下的不同气候\n\n分支通过 URL 参数 `?branch=<name>` 切换，影响所有 API 查询和页面渲染。" },
+        { "title": "构建与验证", "content": "在世界详情页点击\"构建\"按钮运行推演管线。构建输出包括：\n\n- `maps/<planet>/` — 地形高度图、CVT 网格、板块数据、气候栅格\n- `layers/<layer>/derived/` — 引擎计算结果（JSON/YAML）\n- `build_profile.json` — 各引擎/阶段耗时统计\n\n\"验证\"按钮检查世界文件完整性（schema 校验、必需字段检查）。" }
+      ]
+    },
+    "mapControls": { "title": "地图操作" },
+    "mapProjections": { "title": "地图投影" },
+    "stellarViewer": {
+      "title": "恒星系 3D 视图",
+      "entries": [
+        { "title": "基本操作", "content": "**拖拽** — 旋转视角\n**滚轮** — 缩放\n**右键拖拽** — 平移\n\n单击行星弹出信息面板（含地形摘要）。双击行星 → 相机飞向该行星。" },
+        { "title": "行星纹理", "content": "有地图数据的行星自动加载地形纹理贴球，显示真实海陆颜色（非纯色球体）。纹理从高度图 PNG 解码后生成低分辨率等距圆柱投影贴图。" },
+        { "title": "宜居带", "content": "绿色半透明环带标识恒星宜居带（液态水可存在于行星表面）。宜居带内外边界由恒星光度 + 行星反照率 + 温室效应参数计算。" },
+        { "title": "行星信息面板", "content": "单击行星后弹出 InfoPanel：\n\n- 轨道参数（半长轴、偏心率、周期）\n- 物理参数（质量、半径、密度）\n- 如有地形数据：海拔范围、海平面、cell 数量" }
+      ]
+    },
+    "globeViewer": {
+      "title": "3D 球面视图",
+      "entries": [
+        { "title": "基本操作", "content": "**拖拽** — 旋转球体\n**滚轮** — 缩放\n**右键拖拽 / Ctrl+拖拽** — 平移\n**N 键** — 重置为默认视角（北极在上、正视赤道）\n\n**Ctrl+单击** → 追加/移除选中 cell\n**双击** → 选中 cell（清除其他）；如已是唯一选中则取消\n**Esc** → 清除全部选中。" },
+        { "title": "图层系统", "content": "左侧面板控制图层显示。四槽合成模型：\n\n1. **底图** — 地形着色（固定）\n2. **专题着色** — Köppen 气候 / Whittaker 群系 / NPP / 驯化潜力（四选一）\n3. **分类填充** — 板块着色（可叠加在专题层之上）\n4. **特征标注** — 板块边界、海岸线、洋流箭头（始终置顶）\n\n每个图层独立控制透明度。无叠加层时直采底图，零额外渲染开销。" },
+        { "title": "昼夜光照", "content": "左侧面板 SunControl：\n\n- **光照开关**（默认关）— 启用 GPU 昼夜着色\n- **时刻滑块** — 调整太阳直射经度（周日变化）\n- **季节滑块** — 调整轨道位置（周年变化，需地轴倾角 > 0）\n\n设置经 URL（`?sun=&season=&night=`）在 2D↔3D 间同步。" },
+        { "title": "Cell 检查器", "content": "右侧面板根据选中状态自动切换：\n\n**0 个选中** — 显示悬停 cell 详情（坐标、海拔、地壳、板块、气候）；鼠标离开 → 行星摘要\n**1 个选中** — 锁定显示该 cell（鼠标离开不跳回摘要），方便固定查看\n**>1 个选中** — 显示多选统计（数量、面积、海拔范围/均值、平均气温/降水、主导 Köppen）\n\n选中 cell 在球面上以黄色高亮显示，悬停 cell 以蓝色高亮。" }
+      ]
+    },
+    "civmap": {
+      "title": "文明地图",
+      "entries": [
+        { "title": "概述", "content": "文明地图（CivMap）在真实地球行政区划底图上叠加架空领土涂色。使用 Leaflet 渲染 GeoJSON 边界数据，支持 ADM0（国家）/ ADM1（省/州）两级行政边界。" },
+        { "title": "基本操作", "content": "**单击国家** — 选中并高亮该国边界\n**涂色模式** — 选择颜色后点击国家即可涂色（模拟领土划分）\n**快照管理** — 创建/切换时间快照，每个快照保存当时的领土分配\n\n数据存储在 GeoJSON + LFS 中，支持分支继承。" }
+      ]
+    },
+    "concepts": { "title": "核心概念" },
+    "docs": {
+      "title": "设计文档索引",
+      "entries": [
+        { "title": "架构与设计", "content": "- `docs/design/architecture.md` — 项目架构（层级架构与分支管理）\n- `docs/design/vision.md` — 长期愿景与设计哲学\n- `docs/design/roadmap.md` — 开发路线图\n- `docs/design/terrain-pipeline.md` — 地形生成管线技术参考\n- `docs/design/map-system.md` — 地图系统架构\n- `docs/design/climate-engine.md` — 气候引擎实现架构\n- `docs/design/climate-validation.md` — 气候引擎验证指南\n- `docs/design/ecology-layer.md` — 生态层设计方案\n- `docs/design/ocean-currents-model.md` — 洋流系统设计方案\n- `docs/design/civilization-layer.md` — 文明层详细架构" },
+        { "title": "用户指南", "content": "- `docs/usage/cli.md` — CLI 命令参考\n- `docs/usage/map-workflow.md` — 地图工作流指南\n- `docs/usage/civmap-guide.md` — 文明地图使用指南\n- `docs/usage/profiling.md` — 性能剖析与基准测试\n- `docs/usage/frontend-3d-viewer.md` — 3D 查看器指南" },
+        { "title": "知识库", "content": "- `docs/knowledge/astrophysics/` — 恒星物理、拉格朗日点\n- `docs/knowledge/climatology/` — 大气环流、能量平衡、Köppen 分类、洋流\n- `docs/knowledge/geology/` — 板块构造、CVT 网格、地形合成\n- `docs/knowledge/ecology/` — 生态数学模型\n- `docs/knowledge/astrobiology/` — 替代溶剂与异星生命\n- `docs/knowledge/linguistics/` — 语言设计指南" },
+        { "title": "世界构建", "content": "- `docs/worldbuilding/map_design_guide.md` — 地图设计指导\n- `docs/worldbuilding/narrative-craft.md` — 世界史讲述方法论\n- `docs/worldbuilding/design_patterns.md` — YAML/JSON 配置设计模式" }
+      ]
+    }
+  },
+  "layerEntrySuffix": "默认透明度：{{opacity}}%  |  类型：{{kind}}",
+  "kindThematic": "专题着色（单选）",
+  "kindFill": "分类填充（可叠加）",
+  "kindFeature": "特征标注（置顶）",
+  "kindBase": "底图"
+}

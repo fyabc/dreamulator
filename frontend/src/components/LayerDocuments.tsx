@@ -1,0 +1,302 @@
+import { useState, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
+import { api } from '../api/client'
+
+interface LayerDocumentsProps {
+  worldName: string
+  layer: string
+  branch: string | null
+}
+
+/** Category labels for grouping documents in the sidebar.
+ *  Covers all layer types. The getCategory() function uses prefix matching,
+ *  so `stellar_params` matches `stellar`, `climate_zones` matches `climate`, etc.
+ */
+const CATEGORY_ORDER: [string, string][] = [
+  // Universal
+  ['overview', 'docCategory.overview'],
+
+  // Astronomy layer
+  ['stellar', 'docCategory.stellar'],
+  ['orbital', 'docCategory.orbital'],
+  ['satellite', 'docCategory.satellite'],
+
+  // Geological layer
+  ['physical', 'docCategory.physical'],
+  ['tidal', 'docCategory.tidal'],
+  ['tectonic', 'docCategory.tectonic'],
+  ['hydro', 'docCategory.hydro'],
+
+  // Climate layer
+  ['dynamics', 'docCategory.dynamics'],
+  ['climate', 'docCategory.climate'],
+
+  // Ecology layer
+  ['species', 'docCategory.species'],
+  ['ecosystem', 'docCategory.ecosystem'],
+
+  // Civilization layer
+  ['timeline', 'docCategory.timeline'],
+  ['thematic', 'docCategory.thematic'],
+  ['geopolitical', 'docCategory.geopolitical'],
+  ['microhistory', 'docCategory.microhistory'],
+  ['creative', 'docCategory.creative'],
+
+  // Fallback for any other type
+  ['', 'docCategory.other'],
+]
+
+function getCategory(type: string): string {
+  for (const [key] of CATEGORY_ORDER) {
+    if (key && type.startsWith(key)) return key
+  }
+  // Unknown types fall into the catch-all '' (其他) category
+  return ''
+}
+
+export default function LayerDocuments({
+  worldName,
+  layer,
+  branch,
+}: LayerDocumentsProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [navOpen, setNavOpen] = useState(false)
+  const { t } = useTranslation('worlds')
+
+  // Selected document is persisted in the URL (?doc=<filename>) so a refresh
+  // or a shared link restores the same document.
+  const docParam = searchParams.get('doc')
+
+  // Fetch document list (design-notes has its own endpoint)
+  const isDesignNotes = layer === 'design-notes'
+  const { data: documents } = useQuery({
+    queryKey: ['layer-documents', worldName, layer, branch],
+    queryFn: () =>
+      isDesignNotes
+        ? api.listDesignDocuments(worldName, branch)
+        : api.listLayerDocuments(worldName, layer, branch),
+    enabled: !!worldName && !!layer,
+    retry: false,
+  })
+
+  // Resolve the effective document: the URL param if it names a doc in this
+  // layer, else _overview.md, else the first doc.  A stale `doc` (e.g. a shared
+  // link whose `tab` points at another layer) silently falls back.
+  const effectiveDoc = useMemo(() => {
+    if (docParam && documents?.some((d: any) => d.filename === docParam)) return docParam
+    if (!documents || documents.length === 0) return null
+    if (documents.some((d: any) => d.filename === '_overview.md')) return '_overview.md'
+    return documents[0].filename
+  }, [docParam, documents])
+
+  const selectDoc = useCallback(
+    (filename: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('doc', filename)
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  // Fetch selected document content (design-notes has its own endpoint)
+  const { data: activeDoc } = useQuery({
+    queryKey: ['layer-document', worldName, layer, effectiveDoc, branch],
+    queryFn: () =>
+      isDesignNotes
+        ? api.getDesignDocument(worldName, effectiveDoc!, branch)
+        : api.getLayerDocument(worldName, layer, effectiveDoc!, branch),
+    enabled: !!worldName && !!layer && !!effectiveDoc,
+    retry: false,
+  })
+
+  // Group documents by category
+  const grouped = useMemo(() => {
+    if (!documents?.length) return []
+    const groups: Record<string, any[]> = {}
+    for (const doc of documents) {
+      const cat = getCategory(doc.type)
+      if (!groups[cat]) groups[cat] = []
+      groups[cat].push(doc)
+    }
+    return CATEGORY_ORDER.filter(([key]) => groups[key]).map(([key, labelKey]) => ({
+      key,
+      label: t(labelKey),
+      docs: groups[key],
+    }))
+  }, [documents])
+
+  // Handle cross-reference clicks (links like `filename.md`)
+  const handleLinkClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      const href = e.currentTarget.getAttribute('href') || ''
+      // Match cross-references to other .md files
+      const mdMatch = href.match(/^([a-zA-Z0-9_-]+\.md)$/)
+      if (mdMatch && documents?.some((d: any) => d.filename === mdMatch[1])) {
+        e.preventDefault()
+        selectDoc(mdMatch[1])
+      }
+    },
+    [documents, selectDoc],
+  )
+
+  if (!documents?.length) return null
+
+  return (
+    <div className="min-h-[600px]">
+      {/* Mobile: TOC toggle button */}
+      <button
+        onClick={() => setNavOpen(!navOpen)}
+        className="lg:hidden flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-sm
+          bg-space-surface/60 text-gray-300 border border-space-border hover:bg-space-surface/80 transition-colors"
+      >
+        <span>📑</span>
+        <span>{t('doc.toc')}</span>
+        <span className="text-gray-500 text-xs ml-auto">
+          {effectiveDoc ? (documents.find((d: any) => d.filename === effectiveDoc)?.title || effectiveDoc) : t('doc.selectDoc')}
+        </span>
+        <span className="text-gray-500">{navOpen ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Mobile nav backdrop */}
+      {navOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+
+      <div className="flex gap-4">
+        {/* Sidebar — drawer on mobile, fixed on desktop */}
+        <nav className={`
+          fixed lg:static inset-y-0 left-0 z-50 lg:z-auto
+          w-64 lg:w-56 shrink-0 bg-gray-900 lg:bg-transparent
+          space-y-4 overflow-y-auto max-h-[80vh] lg:max-h-none
+          p-4 lg:p-0 lg:sticky lg:top-4 lg:self-start
+          transition-transform duration-200 ease-in-out
+          ${navOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          {/* Mobile close */}
+          <div className="lg:hidden flex justify-between items-center mb-3 pb-2 border-b border-space-border">
+            <span className="text-sm font-semibold text-gray-300">{t('doc.docToc')}</span>
+            <button
+              onClick={() => setNavOpen(false)}
+              className="text-gray-400 hover:text-white text-lg"
+            >
+              ✕
+            </button>
+          </div>
+
+          {grouped.map((group) => (
+            <div key={group.key}>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
+                {group.label}
+              </h4>
+              <ul className="space-y-0.5">
+                {group.docs.map((doc: any) => (
+                  <li key={doc.filename}>
+                    <button
+                      onClick={() => { selectDoc(doc.filename); setNavOpen(false) }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                        effectiveDoc === doc.filename
+                          ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
+                      }`}
+                    >
+                      {doc.title || doc.filename}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 glass-panel p-4 sm:p-6 overflow-auto">
+        {activeDoc ? (
+          <>
+          {activeDoc.rendered === false && (
+            <div className="mb-3 px-3 py-2 rounded-lg text-xs border border-amber-500/40
+              bg-amber-500/10 text-amber-300"
+            >
+              {t('status.documentNotRendered')}
+            </div>
+          )}
+          <article className="prose prose-invert prose-sm max-w-none
+            prose-headings:text-neon-cyan prose-headings:font-semibold
+            prose-h1:text-xl prose-h1:neon-glow-subtle prose-h1:mb-4 prose-h1:pb-2 prose-h1:border-b prose-h1:border-space-border
+            prose-h2:text-lg prose-h2:text-neon-cyan/90 prose-h2:mt-6 prose-h2:mb-3
+            prose-h3:text-base prose-h3:text-amber-300 prose-h3:mt-4 prose-h3:mb-2
+            prose-h4:text-sm prose-h4:text-amber-400/80 prose-h4:mt-3 prose-h4:mb-1.5
+            prose-p:text-gray-300 prose-p:leading-relaxed prose-p:my-2
+            prose-li:text-gray-300 prose-li:leading-relaxed
+            prose-strong:text-gray-100
+            prose-em:text-gray-400
+            prose-a:text-neon-cyan prose-a:no-underline hover:prose-a:underline
+            prose-code:text-amber-300 prose-code:bg-space-surface/60 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+            prose-pre:bg-space-surface/80 prose-pre:border prose-pre:border-space-border prose-pre:rounded-lg
+            prose-blockquote:border-l-neon-cyan/40 prose-blockquote:text-gray-400 prose-blockquote:italic
+            prose-hr:border-space-border
+            [&_table]:w-full [&_table]:text-sm [&_table]:border-collapse [&_table]:my-3
+            [&_th]:text-left [&_th]:text-amber-300 [&_th]:font-semibold [&_th]:px-3 [&_th]:py-2 [&_th]:border-b [&_th]:border-space-border [&_th]:bg-space-surface/40
+            [&_td]:px-3 [&_td]:py-2 [&_td]:border-b [&_td]:border-space-border/40 [&_td]:text-gray-300
+            [&_tr:hover_td]:bg-space-surface/20
+          ">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={{
+                a: ({ href, children, ...props }) => (
+                  <a href={href} onClick={handleLinkClick} {...props}>
+                    {children}
+                  </a>
+                ),
+                // Auto-link inline code like `territory.md` to document navigation
+                code: ({ className, children, ...props }) => {
+                  const text = String(children).replace(/\n$/, '')
+                  const isDocRef = /^[a-zA-Z0-9_-]+\.md$/.test(text)
+                  const docExists = isDocRef && documents?.some((d: any) => d.filename === text)
+                  if (docExists) {
+                    return (
+                      <button
+                        onClick={() => selectDoc(text)}
+                        className="text-neon-cyan hover:underline cursor-pointer bg-space-surface/60 px-1 py-0.5 rounded text-xs font-mono"
+                      >
+                        {text}
+                      </button>
+                    )
+                  }
+                  return (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  )
+                },
+              }}
+            >
+              {activeDoc.content}
+            </ReactMarkdown>
+          </article>
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-64 text-gray-500">
+            {t('doc.selectLeftDoc')}
+          </div>
+        )}
+      </div>
+      </div>
+    </div>
+  )
+}

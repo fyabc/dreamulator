@@ -1,0 +1,16 @@
+# dreamulator — lock file MUST use PyPI (not Tsinghua mirror).
+#
+# GitHub Actions runners (US-based) cannot reach pypi.tuna.tsinghua.edu.cn
+# (403/404 errors).  The uv.lock file hardcodes per-package download URLs,
+# so it must be generated against PyPI and committed without mirror URLs.
+#
+# For local Tsinghua mirror speed on OTHER projects, create
+# %APPDATA%/uv/uv.toml (~/.config/uv/uv.toml on Linux/macOS) instead.
+# This project-level file overrides the user-level config.
+#
+# CI workflows use `uv sync --frozen` to prevent accidental lock-file drift.
+
+[[index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
