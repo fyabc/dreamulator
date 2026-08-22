@@ -299,6 +299,11 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    让用户检查结果后再合并。
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
 6. **合并到 main 后再推送**：用户验证通过 → merge 到 main → `git push`。
+7. **LFS 大文件纪律**：`cvt_mesh.json`（已 gzip 存储，~31.6MB）、PNG 等大文件走 Git LFS，
+   LFS 存完整对象不做增量。调参期间**只在 `private/worlds` 构建**，发版前最后一次才同步
+   `data/worlds` 并 commit，否则反复重建+commit 会撑爆 LFS 配额（v0.27.0、v0.33.0 两次踩坑）。
+   读取 mesh 用 `decompress_mesh_bytes`（透明解压，兼容纯 JSON）；push 被 `GH008 unknown LFS
+   objects` 拒绝时，先 `git lfs push --all origin` 再 `git push`。
 
 ### 气候修改差异对比
 
