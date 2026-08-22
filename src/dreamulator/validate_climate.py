@@ -324,6 +324,36 @@ def _find_project_root() -> Path:
     return Path.cwd()
 
 
+_MONTHLY_REF_CACHE: dict[str, Any] | None = None
+
+
+def _load_monthly_reference() -> dict[str, Any]:
+    """Load the monthly zonal-mean reference (NCEP temp + GPCP precip).
+
+    Returns a dict with ``temperature_c`` (12×90) and
+    ``precipitation_mm_per_month`` (12×90); month-major (0=Jan), band-major
+    (90N → 88S).  Empty dict when the file is missing.  Cached after first load.
+
+    Regenerate with ``scripts/generate_monthly_reference.py``.
+    """
+    global _MONTHLY_REF_CACHE
+    if _MONTHLY_REF_CACHE is not None:
+        return _MONTHLY_REF_CACHE
+    path = (
+        _find_project_root()
+        / "tests"
+        / "validation"
+        / "reference"
+        / "monthly_zonal_reference.json"
+    )
+    if not path.exists():
+        _MONTHLY_REF_CACHE = {}
+        return _MONTHLY_REF_CACHE
+    with path.open("r", encoding="utf-8") as f:
+        _MONTHLY_REF_CACHE = json.load(f)
+    return _MONTHLY_REF_CACHE
+
+
 def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> CVTMesh | None:
     """Load CVT mesh from a world's map directory.
 
@@ -526,6 +556,105 @@ def validate_zonal_precipitation(mesh: CVTMesh) -> dict[str, Any]:
         "passed": passed,
         "n_bands": int(valid.sum()),
     }
+
+
+def _score_monthly_zonal(
+    monthly: np.ndarray, lats: np.ndarray, ref: np.ndarray
+) -> dict[str, Any]:
+    """Score a simulated monthly field against the monthly zonal reference.
+
+    ``monthly`` is (N, 12), ``ref`` is (12, 90) in month-major order (0=Jan).
+    Bins cells into 2° latitude bands and compares per-month zonal profiles
+    against the reference.  Reports RMSE, bias, correlation, and
+    seasonal-amplitude RMSE (per-band annual range — the monsoon/seasonality
+    signal).
+    """
+    n_bands = 90
+    n_months = ref.shape[0]
+    sim_zonal = np.full((n_months, n_bands), np.nan, dtype=np.float64)
+    band_counts = np.zeros(n_bands, dtype=int)
+
+    for b in range(n_bands):
+        lat_center = 90.0 - b * 2.0
+        mask = (lats >= lat_center - 1.0) & (lats < lat_center + 1.0)
+        n_cells = int(mask.sum())
+        band_counts[b] = n_cells
+        if n_cells > 0:
+            sim_zonal[:, b] = monthly[mask].mean(axis=0)
+
+    valid = ~np.isnan(sim_zonal)
+    if int(valid.sum()) < 10 * n_months:
+        return {"error": "Too few valid latitude bands for monthly comparison"}
+
+    diff = sim_zonal[valid] - ref[valid]
+    rmse = float(np.sqrt(np.mean(diff**2)))
+    bias = float(np.mean(diff))
+    r = float(np.corrcoef(sim_zonal[valid], ref[valid])[0, 1])
+
+    sim_amp = np.nanmax(sim_zonal, axis=0) - np.nanmin(sim_zonal, axis=0)
+    ref_amp = np.nanmax(ref, axis=0) - np.nanmin(ref, axis=0)
+    amp_valid = ~np.isnan(sim_amp)
+    amp_rmse = float(np.sqrt(np.mean((sim_amp[amp_valid] - ref_amp[amp_valid]) ** 2)))
+
+    return {
+        "rmse": round(rmse, 2),
+        "bias": round(bias, 2),
+        "r": round(r, 3),
+        "seasonal_amplitude_rmse": round(amp_rmse, 2),
+        "n_months": n_months,
+        "n_valid_bands": int(np.isfinite(sim_zonal).any(axis=0).sum()),
+    }
+
+
+def validate_seasonal_temperature(mesh: CVTMesh) -> dict[str, Any]:
+    """Compare simulated monthly temperature against NCEP monthly ltm.
+
+    Requires cells to carry ``temperature_monthly_c`` (N, 12) in °C — populated
+    by the climate engine in Phase 4.  Returns a skipped result until then.
+    """
+    cells = mesh.cells
+    temps = [getattr(c, "temperature_monthly_c", None) for c in cells]
+    valid = [(c.lat, t) for c, t in zip(cells, temps, strict=True) if t is not None]
+    if not valid:
+        return {
+            "status": "skipped",
+            "reason": "temperature_monthly_c not populated (Phase 4 monthly export)",
+        }
+    lats = np.array([lat for lat, _ in valid], dtype=np.float64)
+    monthly = np.array([t for _, t in valid], dtype=np.float64)
+    ref = np.asarray(_load_monthly_reference().get("temperature_c", []), dtype=np.float64)
+    if monthly.ndim != 2 or monthly.shape[1] != 12 or ref.shape != (12, 90):
+        return {"error": "Unexpected monthly temperature shapes"}
+    result = _score_monthly_zonal(monthly, lats, ref)
+    result["unit"] = "celsius"
+    return result
+
+
+def validate_seasonal_precipitation(mesh: CVTMesh) -> dict[str, Any]:
+    """Compare simulated monthly precipitation against GPCP monthly climatology.
+
+    Requires cells to carry ``precipitation_monthly_mm`` (N, 12) in mm/month —
+    populated by the climate engine in Phase 4.  Returns a skipped result until
+    then.
+    """
+    cells = mesh.cells
+    precips = [getattr(c, "precipitation_monthly_mm", None) for c in cells]
+    valid = [(c.lat, p) for c, p in zip(cells, precips, strict=True) if p is not None]
+    if not valid:
+        return {
+            "status": "skipped",
+            "reason": "precipitation_monthly_mm not populated (Phase 4 monthly export)",
+        }
+    lats = np.array([lat for lat, _ in valid], dtype=np.float64)
+    monthly = np.array([p for _, p in valid], dtype=np.float64)
+    ref = np.asarray(
+        _load_monthly_reference().get("precipitation_mm_per_month", []), dtype=np.float64
+    )
+    if monthly.ndim != 2 or monthly.shape[1] != 12 or ref.shape != (12, 90):
+        return {"error": "Unexpected monthly precipitation shapes"}
+    result = _score_monthly_zonal(monthly, lats, ref)
+    result["unit"] = "mm/month"
+    return result
 
 
 def validate_koppen_distribution(mesh: CVTMesh) -> dict[str, Any]:
