@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787420009763,
+  "lastUpdate": 1787420464422,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4069,6 +4069,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010218123147027283",
             "extra": "mean: 5.176071200000365 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "337e2e49c6981a25137599251aee3c5427b7c37c",
+          "message": "style: ruff format 修复 3 个未格式化文件\n\npre-push hook 拦截的 formatting 遗留（climate_simulator / erosion / precip_proxy）。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-23T01:32:48+08:00",
+          "tree_id": "ca04b1db6cb60456359c8d0f5d5c44436f92c171",
+          "url": "https://github.com/fyabc/dreamulator/commit/337e2e49c6981a25137599251aee3c5427b7c37c"
+        },
+        "date": 1787420463283,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 11.152432310245153,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00924987362350598",
+            "extra": "mean: 89.6665384000002 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.139901573384725,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05602754570324017",
+            "extra": "mean: 241.55163649999878 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.712908603306204,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9378539765643384",
+            "extra": "mean: 583.8023103333304 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 900.6292516450524,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000069941235025133",
+            "extra": "mean: 1.1103348000006008 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 182.26486328944927,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0005787585216104002",
+            "extra": "mean: 5.486521000001687 msec\nrounds: 5"
           }
         ]
       }
