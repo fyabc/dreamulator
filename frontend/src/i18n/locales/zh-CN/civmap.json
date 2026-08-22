@@ -1,0 +1,82 @@
+{
+  "title": {
+    "toolbar": "工具栏",
+    "editorTitle": "文明地图 — {{world}}",
+    "readonly": "只读",
+    "previewMap": "🏛️ 文明地图"
+  },
+  "tool": {
+    "paint": "涂色",
+    "erase": "擦除",
+    "select": "选择"
+  },
+  "level": {
+    "adm0": "国界",
+    "adm1": "省/州",
+    "adm2": "区/县"
+  },
+  "panel": {
+    "countryInfo": "国家信息",
+    "provinceInfo": "省区信息",
+    "hoverHint": "将鼠标移到地图上的",
+    "hoverHintCountry": "国家",
+    "hoverHintProvince": "省区",
+    "hoverHintSuffix": "查看详情",
+    "provinceCount": "{{count}} 个省区",
+    "tools": "工具",
+    "countries": "国家",
+    "snapshots": "时间快照",
+    "stats": "统计",
+    "unassigned": "未分配",
+    "paintedCount": "省份: {{painted}}/{{total}} 已涂色"
+  },
+  "action": {
+    "back": "← 返回",
+    "edit": "编辑",
+    "newCountry": "新国家",
+    "newSnapshot": "新快照",
+    "deleteConfirm": "确定删除该国家？所有相关领土分配也会被清除。",
+    "add": "+ 新增",
+    "cancel": "取消",
+    "save": "保存",
+    "deleteCountry": "删除国家",
+    "editMap": "编辑地图 →",
+    "fullscreen": "全屏查看"
+  },
+  "label": {
+    "optional": "可选",
+    "loading": "加载中...",
+    "loadingMap": "加载地图数据中...",
+    "level": "层级:",
+    "paintByCountry": "⚡ 以国家为单位涂色",
+    "year": "年份",
+    "yearSuffix": "年",
+    "description": "描述",
+    "name": "名称",
+    "color": "颜色",
+    "noDescription": "(无描述)"
+  },
+  "hint": {
+    "addCountry": "点击 \"+ 新增\" 创建架空国家",
+    "addSnapshot": "点击 \"+ 新增\" 创建时间快照",
+    "createSnapshotFirst": "⚠️ 请先创建时间快照才能涂色",
+    "notPaintedStatic": "尚未涂色 — 请在 API 模式下编辑",
+    "notPaintedLive": "尚未涂色 — 点击「编辑地图」开始",
+    "readonly": "只读模式 — 地图编辑仅在 API 模式下可用"
+  },
+  "status": {
+    "painting": "🖌️ 涂色: {{name}}",
+    "erasing": "🧹 擦除模式",
+    "selecting": "👆 选择模式",
+    "currentSnapshot": "📅 当前快照: {{id}}"
+  },
+  "stats": {
+    "countries": "国家: {{count}}",
+    "assignedProvinces": "已分配省区: {{count}}",
+    "snapshots": "快照: {{count}}"
+  },
+  "dialog": {
+    "editSnapshotTitle": "编辑快照",
+    "editCountryTitle": "编辑国家"
+  }
+}

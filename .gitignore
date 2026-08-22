@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+_cache/
+koppen_obs.json
+
+# Node.js (frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Project specific
+data/worlds/*/simulations/
+*.log
+/private/
+.env
+
+# Claude Code
+.claude/settings.local.json
+.claude/notes/
+private/plans/video/
+
+# Generated terrain command record (machine-specific, not for publishing)
+data/**/maps/*/generation_command.json
+data/**/build_profile.json
+
+# Validation reports (regeneratable via scripts/validate_climate.py)
+reports/
+
+# Raw reference data downloads (use scripts to re-download)
+*.grd
+*.grd.gz
+data/worlds/*/layers/ecology/derived/
+
+# Import artifacts (duplicates of maps/, staging area for import-elevation)
+layers/geological/input/maps/
+
+# Backup files
+*.bak

@@ -1,0 +1,42 @@
+# Earth-Moon system with L4 Companion asteroid
+# Forked from root world at geological layer
+# Moon and Companion orbital data lives in the astronomy layer (stellar.yaml)
+planets:
+  - id: planet_earth
+    name: Earth
+    orbits: star_sol
+    planet_type: terrestrial
+    mass: 1.0                    # 5.9722e24 kg
+    radius: 1.0                  # 6371.0 km
+    rotation_period_days: 0.9973 # sidereal day = 23h 56m 4s
+    axial_tilt_deg: 23.44
+    albedo: 0.306                # Bond albedo
+    atmosphere:
+      surface_pressure_atm: 1.01325
+      composition:
+        N2: 0.7808
+        O2: 0.2095
+        Ar: 0.0093
+        CO2: 0.0004
+      greenhouse_factor: 33.0    # ~33 K greenhouse warming
+    hydrosphere:
+      water_coverage: 0.708
+      salinity_ppt: 35.0
+      ocean_depth_km: 3.688
+    lithosphere:
+      has_plate_tectonics: true
+      num_plates: 15
+      volcanic_activity: 1.0
+    magnetic_field_strength: 50.0 # ~25-65 uT, average ~50 uT
+    satellite_ids:
+      - satellite_moon
+      - satellite_companion
+
+# Notes on the Companion (satellite_companion):
+# - Defined in astronomy layer as a body orbiting Earth
+# - L4 Trojan of the Earth-Moon system, 60 degrees ahead of the Moon
+# - At 384,399 km distance, the 24 km body has angular diameter ~13 arcsec
+# - Naked eye cannot resolve disk (< 60 arcsec resolution limit)
+# - Appears as an extremely bright star, V ~ -2.5 at full phase
+# - Dynamically stable: Earth-Moon mass ratio (81.3) >> critical ratio (24.96)
+# - Phase cycle mirrors lunar cycle with ~4.9 day advance

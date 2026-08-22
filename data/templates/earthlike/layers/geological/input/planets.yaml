@@ -1,0 +1,28 @@
+# Planets for the earthlike template
+planets:
+  - id: "planet_gaia"
+    name: "Gaia"
+    orbits: "star_helios"
+    planet_type: "terrestrial"
+    mass: 1.0
+    radius: 1.0
+    rotation_period_days: 1.0
+    axial_tilt_deg: 23.4
+    albedo: 0.306
+    atmosphere:
+      surface_pressure_atm: 1.0
+      composition:
+        N2: 0.7808
+        O2: 0.2095
+        Ar: 0.0093
+        CO2: 0.0004
+      greenhouse_factor: 33.0
+    hydrosphere:
+      water_coverage: 0.708
+      salinity_ppt: 35.0
+      ocean_depth_km: 3.688
+    lithosphere:
+      has_plate_tectonics: true
+      num_plates: 15
+      volcanic_activity: 1.0
+    magnetic_field_strength: 50.0

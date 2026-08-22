@@ -1,0 +1,4 @@
+# Civilization seeds for the earthlike template
+# Add civilization definitions here — the civilization engine will use
+# these as starting points and generate additional details.
+civilizations: []

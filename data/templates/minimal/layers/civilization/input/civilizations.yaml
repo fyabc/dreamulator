@@ -1,0 +1,4 @@
+# No civilization seeds defined yet.
+# The civilization engine will generate settlements and political entities
+# based on ecological and geographical data during the build phase.
+civilizations: []

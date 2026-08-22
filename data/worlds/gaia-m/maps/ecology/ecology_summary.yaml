@@ -1,0 +1,49 @@
+planet:
+  id: satellite_gaiam
+  name: Nacrea
+n_cells: 200000
+n_land: 55387
+n_ocean: 144613
+biome_counts:
+  tundra: 10147
+  ice: 384
+  ocean: 142606
+  boreal_shrubland: 761
+  boreal_forest: 921
+  temperate_desert: 11737
+  temperate_grassland: 7210
+  temperate_forest: 6865
+  temperate_rainforest: 6689
+  tropical_seasonal_forest: 5429
+  tropical_rainforest: 4656
+  tropical_savanna: 2090
+  tropical_desert: 505
+npp_gc_m2_yr:
+  land:
+    mean: 601.1912833965563
+    min: 0.0
+    max: 1650.034955007243
+  ocean:
+    mean: 1055.8801334533912
+soil:
+  orders:
+    gelisol: 4900
+    aridisol: 17788
+    inceptisol: 404
+    spodosol: 546
+    mollisol: 7067
+    alfisol: 6664
+    ultisol: 10931
+    oxisol: 3543
+    vertisol: 2163
+  fertility:
+    low: 37708
+    medium: 404
+    high: 15894
+biogeography:
+  n_realms: 29
+  n_provinces: 29
+domesticable_highlights:
+  high_large_herbivores: 8993
+  high_staple_crops: 18795
+  high_draft_animals: 7067

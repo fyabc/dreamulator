@@ -1,0 +1,36 @@
+{
+  "temperature_range_c": [
+    -40.0,
+    50.0
+  ],
+  "precipitation_range_mm": [
+    0.0,
+    30290.0
+  ],
+  "koppen_classes": [
+    "Af",
+    "Am",
+    "Aw",
+    "BSh",
+    "BSk",
+    "BWh",
+    "BWk",
+    "Cfb",
+    "Csb",
+    "EF",
+    "ET",
+    "Ocean"
+  ],
+  "export_resolution": [
+    4096,
+    2048
+  ],
+  "stellar_luminosity_sol": 0.0414,
+  "orbital_distance_au": 0.2504,
+  "orbital_period_days": 67.0068412964005,
+  "axial_tilt_deg": 9.0,
+  "greenhouse_warming_K": 62.0,
+  "rotation_period_days": 3.25,
+  "albedo": 0.3,
+  "eccentricity": 0.005
+}

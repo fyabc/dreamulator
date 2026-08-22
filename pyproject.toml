@@ -1,0 +1,117 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dreamulator"
+version = "0.32.0"
+description = "Fantasy world building and simulation tool grounded in real science"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.11",
+    "typer>=0.15",
+    "rich>=13.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "astropy>=7.0",
+    "pyyaml>=6.0",
+    "jsonschema>=4.23",
+    "jinja2>=3.1",
+    "conlang",
+    "pillow>=10.0",
+    "opensimplex>=0.4",
+    "numba>=0.61",
+    "python-multipart>=0.0.9",
+    "tifffile>=2026.7.14",
+    "msgpack>=1.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "pytest-benchmark>=4.0",
+    "hypothesis>=6.0",
+    "mypy>=1.14",
+    "ruff>=0.9",
+    "pre-commit>=4.0",
+    "httpx>=0.28",
+    "types-PyYAML>=6.0",
+]
+narrate = [
+    "anthropic>=0.40",
+]
+heightmap = [
+    "matplotlib>=3.8",
+]
+validation = [
+    "xarray>=2024.0",
+    "netCDF4>=1.7",
+]
+
+[project.scripts]
+dreamulator = "dreamulator.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dreamulator"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+conlang = { workspace = true }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
+
+[tool.ruff.lint.per-file-ignores]
+# Unit-suffixed names (_K/_C, per CLAUDE.md convention "units in field names")
+# and physics symbols (L, T, R, M, …) are deliberate; N rules would fight them.
+"src/dreamulator/engine/climate_physics.py" = ["N803", "N806"]
+"src/dreamulator/map/climate_simulator.py" = ["N806"]
+"src/dreamulator/map/ocean_circulation.py" = ["N803", "N806"]  # maths: A (matrix), L (Laplacian), G_east, D_beta
+"src/dreamulator/map/models.py" = ["N815"]
+"src/dreamulator/map/pipeline_types.py" = ["N815"]
+"tests/test_engine/test_stellar_physics.py" = ["N806"]
+"tests/test_map/test_terrain_pipeline.py" = ["N806"]
+"tests/test_map/test_ocean_circulation.py" = ["N806", "E501", "UP037"]  # maths + long comments + TYPE_CHECKING quotes
+# Typer Option()/Annotated defaults and FastAPI Depends() are framework
+# idioms; B008 (function call in default argument) misfires on them.
+"src/dreamulator/cli.py" = ["B008"]
+"src/dreamulator/cli_climate.py" = ["B008"]
+"src/dreamulator/cli_export.py" = ["B008"]
+# Typer evaluates `Path`/`Path | None` annotations at runtime (inspect.get_annotations),
+# so the import is a genuine runtime dependency, not a type-checking-only one.
+"src/dreamulator/cli_explore_seeds.py" = ["B008", "TC003"]
+"src/dreamulator/api_routes/maps.py" = ["B008"]
+"src/dreamulator/api_routes/worlds.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+# Libraries without py.typed / stubs; we only use small stable surfaces.
+# scipy-stubs was tried (2026-08) but its SphericalVoronoi stubs disagree with
+# the runtime API (regions/vertices), so we suppress instead.
+# anthropic / xarray / netCDF4 live in optional extras (narrate / validation)
+# and are absent from the base dev environment.
+[[tool.mypy.overrides]]
+module = ["astropy.*", "opensimplex", "scipy.*", "anthropic", "xarray", "netCDF4", "msgpack"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short -q -m \"not slow and not benchmark\""
+markers = [
+    "slow: long-running tests (deselect with '-m \"not slow\"')",
+    "benchmark: performance benchmarks (deselect with '-m \"not benchmark\"')",
+]

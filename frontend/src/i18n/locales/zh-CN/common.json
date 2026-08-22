@@ -1,0 +1,67 @@
+{
+  "app": {
+    "title": "dreamulator",
+    "subtitle": "架空世界推演工具"
+  },
+  "nav": {
+    "home": "首页",
+    "worlds": "世界管理",
+    "help": "帮助",
+    "overview": "概览",
+    "map": "地图",
+    "viewer3d": "3D 视图"
+  },
+  "action": {
+    "back": "← 返回",
+    "create": "创建",
+    "delete": "删除",
+    "save": "保存",
+    "cancel": "取消",
+    "build": "构建",
+    "validate": "验证",
+    "refresh": "刷新",
+    "close": "关闭",
+    "collapseSidebar": "收起侧边栏",
+    "retry": "重试",
+    "expandSidebar": "展开侧边栏",
+    "toggleMenu": "切换菜单"
+  },
+  "status": {
+    "loading": "加载中...",
+    "error": "加载失败",
+    "empty": "暂无数据",
+    "noWorld": "未选择世界"
+  },
+  "error": {
+    "renderError": "渲染错误",
+    "fallbackMessage": "此组件在渲染时发生了错误。请尝试刷新页面。"
+  },
+  "stellar": {
+    "title": "恒星系 3D 可视化",
+    "selectPlanet": "选择行星...",
+    "loadFailed": "数据加载失败",
+    "loadFailedDetail": "恒星系数据无法加载，请检查网络连接或世界配置。"
+  },
+  "help": {
+    "toc": "帮助目录",
+    "footerDocs": "更多技术文档见",
+    "footerDocsSuffix": "目录。",
+    "footerCli": "CLI 命令参考",
+    "footerPeriod": "。"
+  },
+  "home": {
+    "menuWorldsDescStatic": "浏览已导出的世界数据",
+    "menuWorldsDescLive": "创建、编辑、删除世界",
+    "menuHelpDesc": "CLI 参考、地图工作流、操作指南",
+    "featuresTitle": "核心能力",
+    "quickStartTitle": "快速开始",
+    "step1Title": "创建世界",
+    "step1Desc": "选择模板（minimal / earthlike），设置随机种子",
+    "step2Title": "运行推演",
+    "step2Desc": "生成地形/气候/生态数据",
+    "step3Title": "可视化探索",
+    "step3Desc": "在世界详情页打开地图查看器、3D 球面或恒星系视图",
+    "myWorlds": "我的世界",
+    "footerBuilt": "构建于"
+  }
+}

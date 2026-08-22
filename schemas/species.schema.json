@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "BiomeType": {
+      "description": "Whittaker biome classification.",
+      "enum": [
+        "tropical_rainforest",
+        "tropical_seasonal_forest",
+        "temperate_rainforest",
+        "temperate_seasonal_forest",
+        "temperate_grassland",
+        "boreal_forest",
+        "tundra",
+        "savanna",
+        "desert",
+        "mediterranean",
+        "polar_ice"
+      ],
+      "title": "BiomeType",
+      "type": "string"
+    },
+    "TrophicLevel": {
+      "description": "Trophic level in a food web.",
+      "enum": [
+        "producer",
+        "primary_consumer",
+        "secondary_consumer",
+        "tertiary_consumer",
+        "decomposer"
+      ],
+      "title": "TrophicLevel",
+      "type": "string"
+    }
+  },
+  "description": "A species in the world.",
+  "properties": {
+    "id": {
+      "description": "Unique identifier, e.g. 'species_oak_tree'",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "description": "Common name",
+      "title": "Name",
+      "type": "string"
+    },
+    "scientific_name": {
+      "default": "",
+      "description": "Binomial nomenclature",
+      "title": "Scientific Name",
+      "type": "string"
+    },
+    "trophic_level": {
+      "$ref": "#/$defs/TrophicLevel"
+    },
+    "biomes": {
+      "description": "Biomes this species inhabits",
+      "items": {
+        "$ref": "#/$defs/BiomeType"
+      },
+      "title": "Biomes",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "traits": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Key biological traits",
+      "title": "Traits",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "trophic_level"
+  ],
+  "title": "Species",
+  "type": "object"
+}

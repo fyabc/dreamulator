@@ -1,0 +1,14 @@
+stars:
+- id: star_ignis
+  name: 烬星 · Ignis
+  habitable_zone:
+    recent_venus_au: 0.163148
+    runaway_greenhouse_au: 0.221799
+    max_greenhouse_au: 0.404211
+    early_mars_au: 0.420124
+  habitable_zone_center_au: 0.299422
+  condensation_lines:
+    rock_line_au: 0.00709
+    water_snow_line_au: 0.551974
+    co2_ice_line_au: 3.255518
+    co_snow_line_au: 39.8801

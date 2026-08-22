@@ -1,0 +1,12 @@
+stars:
+- id: star_sol
+  name: Sun
+  spectral_class: G2
+  input_mode: both
+  computed_mass: 1.0
+  computed_luminosity: 1.0
+  computed_radius: 0.999209
+  computed_temperature: 5774.3
+  ms_lifetime_gyr: 10.0
+  evolution_progress: 0.457
+  metallicity_z: 1.0

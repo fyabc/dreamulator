@@ -1,0 +1,195 @@
+{
+  "title": {
+    "list": "Worlds",
+    "browse": "Browse Worlds",
+    "info": "World Info",
+    "detail": "Overview"
+  },
+  "tab": {
+    "overview": "Overview",
+    "astronomy": "Astronomy",
+    "planets": "Geology",
+    "climate": "Climate",
+    "ecology": "Ecology",
+    "civilization": "Civilization",
+    "designNotes": "Design Notes",
+    "narrate": "Narrate"
+  },
+  "layer": {
+    "physics": "Physics",
+    "chemistry": "Chemistry",
+    "astronomy": "Astronomy",
+    "geological": "Geology",
+    "climate": "Climate",
+    "ecology": "Ecology",
+    "civilization": "Civilization"
+  },
+  "layerDag": {
+    "title": "Layer Architecture",
+    "forkPoint": "Fork point",
+    "branchData": "Branch data",
+    "configured": "Configured",
+    "unconfigured": "Unconfigured"
+  },
+  "branch": {
+    "label": "Branch",
+    "hint": "Switch worldline branch. Forks at a DAG layer, sharing data above it. Similar to a Git branch.",
+    "forkLayer": "Fork layer: ",
+    "description": "Description: "
+  },
+  "action": {
+    "back": "← Back",
+    "newWorld": "New World",
+    "openWorld": "Open",
+    "deleteWorld": "Delete",
+    "goCreate": "Create one →",
+    "buildWorld": "Build",
+    "validateWorld": "Validate",
+    "generateFirstMap": "Generate first map →",
+    "create": "Create",
+    "cancel": "Cancel",
+    "creating": "Creating...",
+    "createFirstWorld": "Create your first world"
+  },
+  "status": {
+    "noWorlds": "No worlds",
+    "noWorldsStatic": "No exported world data",
+    "noMapData": "No map data",
+    "mapGenerateHint": "Procedurally generate terrain, Voronoi mesh and tectonic plates",
+    "documentNotRendered": "Template not rendered: system_catalog.yaml is missing (branch not built or a fresh clone), so {{ … }} placeholders are shown as source. Run 'dreamulator build' first.",
+    "loading": "Loading...",
+    "loadError": "Load failed",
+    "createError": "Error",
+    "cannotConnect": "Cannot connect to backend service",
+    "noWorld": "No world selected",
+    "validating": "Validating...",
+    "building": "Building..."
+  },
+  "label": {
+    "selectWorld": "Select world",
+    "selectBranch": "Select branch",
+    "baseWorld": "Base world",
+    "noWorldsYet": "No worlds yet. Create one first.",
+    "pickWorldToView": "Select a world to view its configuration",
+    "loadingWorldData": "Loading world data...",
+    "clickToView": "Click to view and edit planet maps",
+    "openMapEditor": "Open map editor →",
+    "worldName": "World name",
+    "template": "Template",
+    "pleaseSelect": "— Select —",
+    "forkedAt": " (forked at {{layer}})"
+  },
+  "detail": {
+    "metadata": "Metadata",
+    "created": "Created",
+    "version": "Version",
+    "seed": "Seed",
+    "dreamulatorVersion": "Dreamulator Version",
+    "starSystem": "Star System",
+    "map": "🗺️ Map",
+    "readonly": "Read-only",
+    "valid": "✓ Valid",
+    "invalid": "✗ Invalid",
+    "bodyEncyclopedia": "Body Encyclopedia",
+    "bodyEncyclopediaHint": "Auto-merged from stellar.yaml + planets.yaml",
+    "targetBody": "Target body",
+    "tidallyLocked": "Tidally locked",
+    "inHabitableZone": "In habitable zone",
+    "orbiting": " (around {{parent}})",
+    "greenhouse": " (greenhouse +{{k}} K)",
+    "noStarSystem": "No stellar system data",
+    "noGeologyData": "No geology data defined",
+    "noGeologyLayer": "No geology layer data",
+    "noClimateData": "No climate layer data",
+    "noEcologyData": "No ecology layer data"
+  },
+  "field": {
+    "name": "Name: ",
+    "systemName": "System name: ",
+    "stars": "Stars: ",
+    "orbit": "Orbit: ",
+    "luminosity": "Luminosity: ",
+    "mass": "Mass: ",
+    "radius": "Radius: ",
+    "temperature": "Temperature: ",
+    "age": "Age: ",
+    "msLifetime": "Main-sequence lifetime: ",
+    "evolutionProgress": "Evolution progress: ",
+    "habitableZoneCenter": "Habitable zone center: ",
+    "gravity": "Gravity: ",
+    "rotation": "Rotation: ",
+    "rotationPeriod": "Rotation period: ",
+    "tilt": "Tilt: ",
+    "axialTilt": "Axial tilt: ",
+    "albedo": "Albedo: ",
+    "orbitalPeriod": "Orbital period: ",
+    "eccentricity": "Eccentricity: ",
+    "inclination": "Inclination: ",
+    "instellation": "Instellation: ",
+    "equilibriumTemp": "Equilibrium temperature: ",
+    "solarDay": "Solar day: ",
+    "daysPerYear": "Year: ",
+    "atmosphere": "Atmosphere: ",
+    "waterCoverage": "Water coverage: ",
+    "magneticField": "Magnetic field: "
+  },
+  "badge": {
+    "atmosphere": "Atmosphere",
+    "hydrosphere": "Hydrosphere",
+    "lithosphere": "Lithosphere",
+    "plates": "plates",
+    "noPlates": "no plates",
+    "satellites": "satellites"
+  },
+  "unit": {
+    "days": "days",
+    "earthRatio": "×Earth",
+    "solarDays": "solar days"
+  },
+  "docCategory": {
+    "overview": "Overview",
+    "stellar": "Stellar system",
+    "orbital": "Orbital dynamics",
+    "satellite": "Satellite system",
+    "physical": "Physical parameters",
+    "tidal": "Tidal effects",
+    "tectonic": "Tectonics",
+    "hydro": "Hydrology",
+    "dynamics": "Fluid dynamics",
+    "climate": "Climate zones",
+    "species": "Species",
+    "ecosystem": "Ecosystem",
+    "timeline": "Timeline",
+    "thematic": "Thematic",
+    "geopolitical": "Geopolitics",
+    "microhistory": "Microhistory",
+    "creative": "Creative material",
+    "other": "Other"
+  },
+  "doc": {
+    "toc": "Contents",
+    "selectDoc": "Select document",
+    "docToc": "Document contents",
+    "selectLeftDoc": "Select a document on the left"
+  },
+  "narrate": {
+    "generate": "Generate narration",
+    "regenerate": "Regenerate",
+    "generating": "Generating...",
+    "stop": "Stop",
+    "connecting": "Connecting...",
+    "warning": "Warning: this calls the LLM API and consumes tokens",
+    "tokenUsage": "Token usage: input={{input}}, output={{output}}, total={{total}}",
+    "emptyResponse": "Server returned an empty response"
+  },
+  "note": {
+    "branchFork": "Branch forks from the {{layer}} layer",
+    "engineOrder": "The engine simulates in this order: from fundamental physics to civilization"
+  },
+  "dialog": {
+    "createWorldTitle": "Create New World"
+  },
+  "confirm": {
+    "deleteWorld": "Delete world \"{{name}}\"?"
+  }
+}

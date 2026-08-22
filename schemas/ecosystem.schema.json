@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "BiomeType": {
+      "description": "Whittaker biome classification.",
+      "enum": [
+        "tropical_rainforest",
+        "tropical_seasonal_forest",
+        "temperate_rainforest",
+        "temperate_seasonal_forest",
+        "temperate_grassland",
+        "boreal_forest",
+        "tundra",
+        "savanna",
+        "desert",
+        "mediterranean",
+        "polar_ice"
+      ],
+      "title": "BiomeType",
+      "type": "string"
+    },
+    "FoodWeb": {
+      "description": "A food web connecting species in an ecosystem.",
+      "properties": {
+        "biome": {
+          "$ref": "#/$defs/BiomeType"
+        },
+        "predator_prey": {
+          "description": "Pairs of (predator_species_id, prey_species_id)",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Predator Prey",
+          "type": "array"
+        }
+      },
+      "required": [
+        "biome"
+      ],
+      "title": "FoodWeb",
+      "type": "object"
+    }
+  },
+  "description": "An ecosystem within a region.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "biome": {
+      "$ref": "#/$defs/BiomeType"
+    },
+    "species_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Species Ids",
+      "type": "array"
+    },
+    "food_web": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FoodWeb"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "productivity": {
+      "default": 1.0,
+      "description": "Net primary productivity relative to Earth average",
+      "minimum": 0,
+      "title": "Productivity",
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "biome"
+  ],
+  "title": "Ecosystem",
+  "type": "object"
+}

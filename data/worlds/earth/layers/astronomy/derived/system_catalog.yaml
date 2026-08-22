@@ -1,0 +1,425 @@
+# system_catalog.yaml — 恒星系天体统一目录（自动生成，勿手编辑）
+# 由 dreamulator build 的天文引擎合并 stellar.yaml（天文层：恒星/轨道/
+# 叙事描述）与 planets.yaml（地质层：权威物理参数 + 大气/水圈/岩石圈）
+# 而成。共享物理字段以 planets.yaml 为权威，漂移会以 warning 报出。
+# 前端 3D 视图与天体百科应消费本文件，不再自行合并两个输入。
+stars:
+- id: star_sol
+  name: Sun
+  spectral_class: G2
+  luminosity_class: V
+  position:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  luminosity_sol: 1.0
+  mass_sol: 1.0
+  radius_sol: 0.999209
+  temperature_k: 5774.3
+  age_gyr: 4.57
+  ms_lifetime_gyr: 10.0
+  evolution_progress: 0.457
+  habitable_zone:
+    recent_venus_au: 0.750548
+    runaway_greenhouse_au: 0.975695
+    max_greenhouse_au: 1.706315
+    early_mars_au: 1.768641
+  habitable_zone_center_au: 1.290288
+orbits:
+- body_id: planet_mercury
+  parent_id: star_sol
+  semi_major_axis_au: 0.3871
+  eccentricity: 0.20563
+  inclination_deg: 7.005
+  longitude_ascending_node_deg: 48.331
+  argument_of_periapsis_deg: 29.124
+  mean_anomaly_epoch_deg: 174.796
+  epoch_year: 0.0
+- body_id: planet_venus
+  parent_id: star_sol
+  semi_major_axis_au: 0.72333
+  eccentricity: 0.00677
+  inclination_deg: 3.395
+  longitude_ascending_node_deg: 76.68
+  argument_of_periapsis_deg: 54.884
+  mean_anomaly_epoch_deg: 50.115
+  epoch_year: 0.0
+- body_id: planet_earth
+  parent_id: star_sol
+  semi_major_axis_au: 1.0
+  eccentricity: 0.0167
+  inclination_deg: 0.0
+  longitude_ascending_node_deg: 348.74
+  argument_of_periapsis_deg: 114.21
+  mean_anomaly_epoch_deg: 357.52
+  epoch_year: 0.0
+- body_id: planet_mars
+  parent_id: star_sol
+  semi_major_axis_au: 1.52368
+  eccentricity: 0.09341
+  inclination_deg: 1.85
+  longitude_ascending_node_deg: 49.558
+  argument_of_periapsis_deg: 286.502
+  mean_anomaly_epoch_deg: 19.373
+  epoch_year: 0.0
+- body_id: planet_jupiter
+  parent_id: star_sol
+  semi_major_axis_au: 5.2026
+  eccentricity: 0.04839
+  inclination_deg: 1.303
+  longitude_ascending_node_deg: 100.464
+  argument_of_periapsis_deg: 273.867
+  mean_anomaly_epoch_deg: 20.02
+  epoch_year: 0.0
+- body_id: planet_saturn
+  parent_id: star_sol
+  semi_major_axis_au: 9.55491
+  eccentricity: 0.05415
+  inclination_deg: 2.485
+  longitude_ascending_node_deg: 113.665
+  argument_of_periapsis_deg: 339.392
+  mean_anomaly_epoch_deg: 317.02
+  epoch_year: 0.0
+- body_id: planet_uranus
+  parent_id: star_sol
+  semi_major_axis_au: 19.21845
+  eccentricity: 0.04717
+  inclination_deg: 0.773
+  longitude_ascending_node_deg: 74.006
+  argument_of_periapsis_deg: 96.999
+  mean_anomaly_epoch_deg: 142.238
+  epoch_year: 0.0
+- body_id: planet_neptune
+  parent_id: star_sol
+  semi_major_axis_au: 30.11039
+  eccentricity: 0.00859
+  inclination_deg: 1.77
+  longitude_ascending_node_deg: 131.784
+  argument_of_periapsis_deg: 276.336
+  mean_anomaly_epoch_deg: 256.228
+  epoch_year: 0.0
+- body_id: planet_pluto
+  parent_id: star_sol
+  semi_major_axis_au: 39.482
+  eccentricity: 0.2488
+  inclination_deg: 17.16
+  longitude_ascending_node_deg: 110.299
+  argument_of_periapsis_deg: 113.834
+  mean_anomaly_epoch_deg: 14.53
+  epoch_year: 0.0
+- body_id: satellite_moon
+  parent_id: planet_earth
+  semi_major_axis_au: 0.002569
+  eccentricity: 0.0549
+  inclination_deg: 5.145
+  longitude_ascending_node_deg: 125.08
+  argument_of_periapsis_deg: 318.15
+  mean_anomaly_epoch_deg: 135.27
+  epoch_year: 0.0
+bodies:
+- id: planet_mercury
+  name: Mercury
+  body_type: planet
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 0.3871
+    eccentricity: 0.20563
+    inclination_deg: 7.0
+    period_days: 87.9681
+  physical:
+    mass_earth: 0.0553
+    radius_km: 2439.7
+    radius_earth: 0.3829
+    gravity_m_s2: 3.699
+    rotation_period_days: 58.646
+    axial_tilt_deg: 0.03
+    albedo: 0.142
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 9083.49
+    instellation_earth_ratio: 6.6735
+    equilibrium_temperature_k: 430.5
+    solar_day_days: 175.9418
+    days_per_year: 0.5
+    season_length_days: 21.99
+    polar_circle_latitude_deg: 89.97
+    polar_day_at_pole_days: 43.98
+    in_conservative_habitable_zone: false
+- id: planet_venus
+  name: Venus
+  body_type: planet
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 0.72333
+    eccentricity: 0.00677
+    inclination_deg: 3.4
+    period_days: 224.6958
+  physical:
+    mass_earth: 0.815
+    radius_km: 6051.8
+    radius_earth: 0.9499
+    gravity_m_s2: 8.861
+    rotation_period_days: 243.025
+    axial_tilt_deg: 177.36
+    albedo: 0.689
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 2601.51
+    instellation_earth_ratio: 1.9113
+    equilibrium_temperature_k: 244.4
+    solar_day_days: 2979.2176
+    days_per_year: 0.08
+    season_length_days: 56.17
+    polar_circle_latitude_deg: -87.36
+    polar_day_at_pole_days: 112.35
+    in_conservative_habitable_zone: false
+- id: planet_mars
+  name: Mars
+  body_type: planet
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 1.52368
+    eccentricity: 0.09341
+    inclination_deg: 1.85
+    period_days: 686.9591
+  physical:
+    mass_earth: 0.107
+    radius_km: 3389.5
+    radius_earth: 0.532
+    gravity_m_s2: 3.708
+    rotation_period_days: 1.026
+    axial_tilt_deg: 25.19
+    albedo: 0.17
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 586.29
+    instellation_earth_ratio: 0.4307
+    equilibrium_temperature_k: 215.2
+    solar_day_days: 1.0275
+    days_per_year: 668.55
+    season_length_days: 171.74
+    polar_circle_latitude_deg: 64.81
+    polar_day_at_pole_days: 343.48
+    in_conservative_habitable_zone: true
+- id: planet_jupiter
+  name: Jupiter
+  body_type: gas_giant
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 5.2026
+    eccentricity: 0.04839
+    inclination_deg: 1.3
+    period_days: 4334.3191
+  physical:
+    mass_earth: 317.8
+    radius_km: 69911.0
+    radius_earth: 10.9733
+    gravity_m_s2: 25.891
+    rotation_period_days: 0.4135
+    axial_tilt_deg: 3.13
+    albedo: 0.538
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 50.29
+    instellation_earth_ratio: 0.0369
+    equilibrium_temperature_k: 100.6
+    solar_day_days: 0.4135
+    days_per_year: 10481.03
+    season_length_days: 1083.58
+    polar_circle_latitude_deg: 86.87
+    polar_day_at_pole_days: 2167.16
+    in_conservative_habitable_zone: false
+- id: planet_saturn
+  name: Saturn
+  body_type: gas_giant
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 9.55491
+    eccentricity: 0.05415
+    inclination_deg: 2.48
+    period_days: 10787.7314
+  physical:
+    mass_earth: 95.16
+    radius_km: 58232.0
+    radius_earth: 9.1402
+    gravity_m_s2: 11.174
+    rotation_period_days: 0.444
+    axial_tilt_deg: 26.73
+    albedo: 0.499
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 14.91
+    instellation_earth_ratio: 0.011
+    equilibrium_temperature_k: 75.8
+    solar_day_days: 0.444
+    days_per_year: 24295.69
+    season_length_days: 2696.93
+    polar_circle_latitude_deg: 63.27
+    polar_day_at_pole_days: 5393.87
+    in_conservative_habitable_zone: false
+- id: planet_uranus
+  name: Uranus
+  body_type: ice_giant
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 19.21845
+    eccentricity: 0.04717
+    inclination_deg: 0.77
+    period_days: 30772.853
+  physical:
+    mass_earth: 14.54
+    radius_km: 25362.0
+    radius_earth: 3.9809
+    gravity_m_s2: 9.001
+    rotation_period_days: 0.7183
+    axial_tilt_deg: 97.77
+    albedo: 0.488
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 3.69
+    instellation_earth_ratio: 0.0027
+    equilibrium_temperature_k: 53.7
+    solar_day_days: 0.7183
+    days_per_year: 42840.23
+    season_length_days: 7693.21
+    polar_circle_latitude_deg: -7.77
+    polar_day_at_pole_days: 15386.43
+    in_conservative_habitable_zone: false
+- id: planet_neptune
+  name: Neptune
+  body_type: ice_giant
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 30.11039
+    eccentricity: 0.00859
+    inclination_deg: 1.77
+    period_days: 60348.266
+  physical:
+    mass_earth: 17.15
+    radius_km: 24622.0
+    radius_earth: 3.8647
+    gravity_m_s2: 11.264
+    rotation_period_days: 0.6713
+    axial_tilt_deg: 28.32
+    albedo: 0.442
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 1.5
+    instellation_earth_ratio: 0.0011
+    equilibrium_temperature_k: 43.8
+    solar_day_days: 0.6713
+    days_per_year: 89896.61
+    season_length_days: 15087.07
+    polar_circle_latitude_deg: 61.68
+    polar_day_at_pole_days: 30174.13
+    in_conservative_habitable_zone: false
+- id: planet_pluto
+  name: Pluto
+  body_type: dwarf_planet
+  in_planets_yaml: false
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 39.482
+    eccentricity: 0.2488
+    inclination_deg: 17.16
+    period_days: 90612.6728
+  physical:
+    mass_earth: 0.00218
+    radius_km: 1188.3
+    radius_earth: 0.1865
+    gravity_m_s2: 0.615
+    rotation_period_days: 6.387
+    axial_tilt_deg: 122.53
+    albedo: 0.52
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 0.87
+    instellation_earth_ratio: 0.0006
+    equilibrium_temperature_k: 36.9
+    solar_day_days: 6.3875
+    days_per_year: 14186.05
+    season_length_days: 22653.17
+    polar_circle_latitude_deg: -32.53
+    polar_day_at_pole_days: 45306.34
+    in_conservative_habitable_zone: false
+- id: satellite_moon
+  name: Moon
+  body_type: natural_satellite
+  in_planets_yaml: false
+  parent_id: planet_earth
+  orbit:
+    semi_major_axis_au: 0.002569
+    eccentricity: 0.0549
+    inclination_deg: 5.14
+  physical:
+    mass_earth: 0.0123
+    radius_km: 1737.4
+    radius_earth: 0.2727
+    gravity_m_s2: 1.623
+    rotation_period_days: 27.3217
+    axial_tilt_deg: 6.69
+    albedo: 0.123
+  derived:
+    instellation_w_m2: 1361.13
+    instellation_earth_ratio: 1.0
+    equilibrium_temperature_k: 269.3
+    solar_day_days: 29.5307
+    days_per_year: 12.37
+    season_length_days: 91.31
+    polar_circle_latitude_deg: 83.31
+    polar_day_at_pole_days: 182.62
+    in_conservative_habitable_zone: true
+- id: planet_earth
+  name: Earth
+  body_type: terrestrial
+  in_planets_yaml: true
+  parent_id: star_sol
+  orbit:
+    semi_major_axis_au: 1.0
+    eccentricity: 0.0167
+    inclination_deg: 0.0
+    period_days: 365.25
+  physical:
+    mass_earth: 1.0
+    radius_km: 6371.0
+    radius_earth: 1.0
+    gravity_m_s2: 9.81
+    rotation_period_days: 0.9973
+    axial_tilt_deg: 23.44
+    albedo: 0.306
+  atmosphere:
+    surface_pressure_atm: 1.01325
+    composition:
+      N2: 0.7808
+      O2: 0.2095
+      Ar: 0.0093
+      CO2: 0.0004
+    greenhouse_factor: 33.0
+  hydrosphere:
+    water_coverage: 0.708
+    salinity_ppt: 35.0
+    ocean_depth_km: 3.688
+  lithosphere:
+    has_plate_tectonics: true
+    num_plates: 15
+    volcanic_activity: 1.0
+  magnetic_field_strength_ut: 50.0
+  derived:
+    tidally_locked: false
+    instellation_w_m2: 1361.13
+    instellation_earth_ratio: 1.0
+    equilibrium_temperature_k: 254.0
+    solar_day_days: 1.0
+    days_per_year: 365.24
+    season_length_days: 91.31
+    polar_circle_latitude_deg: 66.56
+    polar_day_at_pole_days: 182.62
+    in_conservative_habitable_zone: true
+target_body_id: planet_earth

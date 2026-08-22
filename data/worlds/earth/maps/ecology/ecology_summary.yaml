@@ -1,0 +1,31 @@
+planet:
+  id: unknown
+  name: unknown
+n_cells: 100000
+n_land: 32335
+n_ocean: 67665
+biome_counts:
+  ocean: 70571
+  boreal_forest: 1634
+  temperate_forest: 1461
+  temperate_rainforest: 1132
+  boreal_shrubland: 737
+  ice: 1865
+  tundra: 3211
+  temperate_grassland: 2103
+  temperate_desert: 5428
+  tropical_seasonal_forest: 2051
+  tropical_rainforest: 1528
+  tropical_savanna: 6735
+  tropical_desert: 1544
+npp_gc_m2_yr:
+  land:
+    mean: 822.0984329304996
+    min: 0.0
+    max: 2600.591605442679
+  ocean:
+    mean: 1141.075238516436
+domesticable_highlights:
+  high_large_herbivores: 8803
+  high_staple_crops: 5388
+  high_draft_animals: 2087
