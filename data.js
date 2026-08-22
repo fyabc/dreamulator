@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787422895530,
+  "lastUpdate": 1787423219190,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4187,6 +4187,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006319647954605583",
             "extra": "mean: 5.103806399999655 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7f051bf92158645cb1a97e3c5cc0d6ae2868d62c",
+          "message": "baseline: 项目快照（历史 squash，清 LFS 膨胀）\n\n将 570 个 commit squash 为单个基线，清除历史中反复重建 mesh 累积的\nLFS 大对象（原始 cvt_mesh.json ~234MB × 数十版本）。当前状态 mesh 已用\ngzip 存储（~31.6MB），后续提交遵守「只在 private 构建、最后确认才同步\ndata/worlds」纪律。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-23T02:25:57+08:00",
+          "tree_id": "bea9ae481c7d7d253d0d9158c44572c551555689",
+          "url": "https://github.com/fyabc/dreamulator/commit/7f051bf92158645cb1a97e3c5cc0d6ae2868d62c"
+        },
+        "date": 1787423218607,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 8.518335044939494,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011501353435905694",
+            "extra": "mean: 117.39383279999913 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4537105077852437,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0733331144314402",
+            "extra": "mean: 289.5436654999983 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4980828703929356,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0647901363132786",
+            "extra": "mean: 667.5198146666664 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 845.1483666411268,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0002953853184588581",
+            "extra": "mean: 1.1832241999996995 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 194.6441179500907,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007186048914015399",
+            "extra": "mean: 5.137581400001068 msec\nrounds: 5"
           }
         ]
       }
