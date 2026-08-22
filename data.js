@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787420464422,
+  "lastUpdate": 1787422895530,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4128,6 +4128,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0005787585216104002",
             "extra": "mean: 5.486521000001687 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "94f1de753981cadde7577b4a44d440b2afbc0ebf",
+          "message": "feat(map): cvt_mesh.json 存储改 gzip + deploy LFS 缓存\n\ncvt_mesh.json 从 ~234MB 原始 JSON 改为 gzip 存储（~31.6MB，7.4×），\n读取处用 decompress_mesh_bytes 透明解压（按 gzip magic 透传纯 JSON，向后兼容），\n写处（export/climate/ecology/civilization 等 6 处）用 compress_mesh_bytes。\ndata/worlds + private/worlds 共 8 个 mesh 就地迁移。\n\n同时 deploy-pages.yml 从 lfs:true 改为 actions/cache 缓存 .git/lfs +\n手动 git lfs pull，避免每次 deploy 全量 fetch 吃光 LFS 月带宽。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-23T02:18:07+08:00",
+          "tree_id": "bea9ae481c7d7d253d0d9158c44572c551555689",
+          "url": "https://github.com/fyabc/dreamulator/commit/94f1de753981cadde7577b4a44d440b2afbc0ebf"
+        },
+        "date": 1787422894976,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 8.920400055393682,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010550811440562786",
+            "extra": "mean: 112.10259559999827 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.531518533634378,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0643664220326429",
+            "extra": "mean: 283.16430750000166 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5155653326112164,
+            "unit": "iter/sec",
+            "range": "stddev: 1.054179399427594",
+            "extra": "mean: 659.8197903333324 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 951.9280159654692,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007290162198211529",
+            "extra": "mean: 1.0504995999994549 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.9321968012085,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006319647954605583",
+            "extra": "mean: 5.103806399999655 msec\nrounds: 5"
           }
         ]
       }
