@@ -13,5 +13,5 @@ num_plates: 25
 radius_km: 6816.97
 elevation_range_m:
 - -12399.8
-- 7368.1
+- 7001.8
 pipeline_version: 2.0-cvt

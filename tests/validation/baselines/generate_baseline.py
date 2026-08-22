@@ -45,8 +45,9 @@ def _load_mesh(world_dir: Path, planet_id: str) -> dict | None:
     if not mesh_path.exists():
         print(f"ERROR: Mesh not found at {mesh_path}", file=sys.stderr)
         return None
-    with mesh_path.open("r", encoding="utf-8") as f:
-        return json.load(f)  # type: ignore[no-any-return]
+    from dreamulator.map.export import decompress_mesh_bytes
+
+    return json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
