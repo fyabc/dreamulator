@@ -535,34 +535,46 @@ def monthly_temperature(
 
 
 def itcz_latitude_monthly(
-    q_monthly: np.ndarray,
-    lat_rad: np.ndarray,
+    obliquity_deg: float,
     lag_months: int = 1,
     damping: float = 0.6,
+    orbital_period_days: float = 365.25,
+    eccentricity: float = 0.0,
+    perihelion_day: float = 0.0,
 ) -> np.ndarray:
-    """Compute ITCZ latitude for each month from the insolation maximum.
+    """Compute ITCZ latitude for each month from the subsolar point (declination).
 
-    The ITCZ follows the latitude of maximum insolation (thermal equator), but
-    is **damped** relative to the subsolar point by ocean thermal inertia: the
-    ocean's heat capacity smooths the surface-temperature response, so the
-    thermal equator migrates less than the subsolar point.  For Earth the
-    subsolar point swings ±23.44°, but the zonal-mean ITCZ only ~±14°
+    The ITCZ follows the subsolar point — the latitude where the sun is directly
+    overhead, i.e. the solar declination — **damped** by ocean thermal inertia.
+    For Earth the declination swings ±23.44°, but the zonal-mean ITCZ only ~±14°
     (``damping ≈ 0.6``); the ~1-month ``lag_months`` captures the phase delay.
 
+    Note (2026-08 fix): this previously took the ``argmax`` of the monthly
+    insolation field, but the daily-mean insolation at the *summer pole* exceeds
+    the subsolar point (24-hour daylight), so ``argmax`` snapped to ±90° and
+    produced a discontinuous ITCZ of ±54° instead of ±14° — over-seasoning the
+    precipitation factor.  Using the declination directly is the intended,
+    first-principles definition (the thermal equator follows the subsolar point).
+
     Args:
-        q_monthly: Monthly insolation, shape (N, 12).
-        lat_rad: Latitude in radians, shape (N,).
+        obliquity_deg: Effective obliquity in degrees.
         lag_months: Lag in whole months applied to the ITCZ position.
         damping: Fraction of the subsolar-point latitude reached by the ITCZ
             (ocean thermal-inertia damping; Earth ≈ 0.6).
+        orbital_period_days: Length of year in days.
+        eccentricity: Orbital eccentricity (0 = circular).
+        perihelion_day: Day of perihelion passage (relative to vernal equinox).
 
     Returns:
         ITCZ latitude in degrees for each month, shape (12,).
     """
     itcz_lat = np.zeros(12, dtype=np.float64)
     for month in range(12):
-        idx_max = int(np.argmax(q_monthly[:, month]))
-        itcz_lat[month] = np.degrees(lat_rad[idx_max]) * damping
+        day = (month + 0.5) * orbital_period_days / 12.0
+        decl = solar_declination(
+            day, obliquity_deg, orbital_period_days, eccentricity, perihelion_day
+        )
+        itcz_lat[month] = np.degrees(decl) * damping
     return np.roll(itcz_lat, lag_months)
 
 
@@ -748,7 +760,12 @@ def compute_seasonal_climate(
     t_cold = t_monthly.min(axis=1)
     t_hot = t_monthly.max(axis=1)
 
-    itcz_lat = itcz_latitude_monthly(q_monthly, lat_rad)
+    itcz_lat = itcz_latitude_monthly(
+        obliquity_deg=obliquity_deg,
+        orbital_period_days=orbital_period_days,
+        eccentricity=eccentricity,
+        perihelion_day=perihelion_day,
+    )
 
     lat_deg = np.degrees(lat_rad)
     p_factor = monthly_precipitation_factor(lat_deg, itcz_lat, is_land)

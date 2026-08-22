@@ -498,7 +498,16 @@ def simulate_climate(
     # the BFS annual total.  Real driest/wettest months and the warm/cold-half
     # split un-dead-code the Köppen third letter (s/w/f/m) and B-group offset.
     p_annual = precipitation_mm
-    p_monthly = p_annual[:, None] * p_factor
+    # Convective (afternoon-thunderstorm) precipitation is temperature-driven and
+    # year-round, NOT ITCZ-driven — subjecting it to the ITCZ-migration seasonal
+    # factor over-seasons the tropics and turns inland Af into Aw (driest month
+    # < 60 mm).  Split it out: the seasonal factor applies only to the ITCZ-driven
+    # (advective + orographic + frontal) remainder, while the convective floor is
+    # uniform year-round.  Matches Step 5 in `_compute_precipitation_bfs`; exact
+    # for cells within the 500 km inland-decay threshold (the Af region).
+    _conv_precip = np.where(is_land, 30.0 * np.maximum(t_mean_C - 10.0, 0.0), 0.0)
+    _seasonal_annual = p_annual - _conv_precip
+    p_monthly = _seasonal_annual[:, None] * p_factor + _conv_precip[:, None] / 12.0
     p_dry_mm = p_monthly.min(axis=1)
     p_wet_mm = p_monthly.max(axis=1)
     p_warm_mm, p_cold_mm = warm_cold_half_precip(t_monthly_C, p_monthly)
@@ -777,6 +786,73 @@ def _graph_distance_to_coast(
                 heapq.heappush(heap, (nd, j))
 
     return dist
+
+
+def _upwind_distance_to_coast(
+    cells: list[VoronoiCell],
+    n: int,
+    is_land: np.ndarray,
+    wind: np.ndarray,
+    nodes_xyz: np.ndarray,
+    *,
+    radius_km: float = 6371.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Upwind distance from each cell to the nearest ocean (km), following the wind.
+
+    Multi-source Dijkstra that only relaxes *downwind* edges — from cell ``i``
+    we move to neighbour ``j`` only when the surface wind at ``i`` blows toward
+    ``j`` (``wind[i] · e(i→j) > 0``).  This traces the path moisture actually
+    travels from the ocean inland, so the distance is directional (moisture
+    travels along the wind, not isotropically) and resolution-independent
+    (great-circle arc length in km, not a hop count).
+
+    Returns:
+        dist:   upwind distance in km (ocean cells = 0; unreachable land = inf).
+        source: index of the upwind ocean cell the moisture came from
+            (ocean cells = own index; unreachable = -1).
+    """
+    import heapq
+
+    dist = np.full(n, np.inf, dtype=np.float64)
+    source = np.full(n, -1, dtype=np.int64)
+    visited = np.zeros(n, dtype=bool)
+    heap: list[tuple[float, int]] = []
+    for i in range(n):
+        if not is_land[i]:
+            dist[i] = 0.0
+            source[i] = i
+            heapq.heappush(heap, (0.0, i))
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        wind_unit = wind / np.maximum(np.linalg.norm(wind, axis=1), 1e-9)[:, None]
+
+    while heap:
+        d, i = heapq.heappop(heap)
+        if visited[i]:
+            continue
+        visited[i] = True
+        ci = nodes_xyz[i]
+        for j in cells[i].neighbors:
+            if j < 0 or j >= n or visited[j]:
+                continue
+            cj = nodes_xyz[j]
+            edge_vec = cj - ci
+            edge_vec = edge_vec - float(np.dot(edge_vec, ci)) * ci
+            en = float(np.linalg.norm(edge_vec))
+            if en < 1e-9:
+                continue
+            edge_dir = edge_vec / en
+            if float(np.dot(wind_unit[i], edge_dir)) <= 0.0:
+                continue  # j is not downwind of i — moisture does not reach it
+            dot = max(-1.0, min(1.0, float(np.dot(ci, cj))))
+            edge_km = radius_km * float(np.arccos(dot))
+            nd = d + edge_km
+            if nd < dist[j]:
+                dist[j] = nd
+                source[j] = source[i]
+                heapq.heappush(heap, (nd, j))
+
+    return dist, source
 
 
 def _detect_coastal_cells(
@@ -1102,14 +1178,24 @@ def _compute_precipitation_bfs(
         precip += pass_precip
         precip = np.minimum(precip, 12000.0)
 
-    # Step 3: Baseline precipitation (moisture recycling).  A fraction of the
-    # diffused moisture rains out locally even without large-scale convergence —
-    # marine stratocumulus, the weak-subsidence rain under the subtropical high,
-    # and land evapotranspiration recycling.  This keeps the subtropical
-    # divergence zone from drying to absolute zero: the observed zonal mean there
-    # is still ~1000 mm/yr, not 0.  ``q_new`` is the diffused moisture from the
-    # BFS pass above (mm/yr, high over the warm ocean).
-    precip += config.recycling_fraction * q_new
+    # Step 3: Baseline precipitation from directional (upwind) moisture transport.
+    # Replaces the isotropic short-range diffusion (q_new) for the baseline: the
+    # moisture available at a cell is the upwind-ocean evaporation decayed over
+    # the physical upwind distance (rainout e-folding L_rain, resolution-independent
+    # in km).  This lets moisture penetrate far inland along the trade winds —
+    # the Amazon/Congo get ocean moisture thousands of km upwind, which the
+    # ~50 km isotropic diffusion could never reach.  Ocean cells keep their full
+    # evaporation (upwind distance 0).
+    _upwind_dist, _upwind_src = _upwind_distance_to_coast(
+        mesh.cells, n, is_land, wind, nodes_xyz, radius_km=config.radius_km
+    )
+    _l_rain_km = 1000.0  # physical rainout e-folding distance (tropical moisture)
+    _directional = np.zeros(n, dtype=np.float64)
+    _reachable = _upwind_src >= 0
+    _directional[_reachable] = ocean_moisture[_upwind_src[_reachable]] * np.exp(
+        -_upwind_dist[_reachable] / _l_rain_km
+    )
+    precip += config.recycling_fraction * _directional
 
     # Step 3.5: Convergence-driven enhancement.  Rising air (convergence,
     # −∇·u > 0) condenses additional column water vapour on top of the baseline;
