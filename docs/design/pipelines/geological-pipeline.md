@@ -2,7 +2,7 @@
 
 > **状态**: 设计草案 · 2026-07-21
 
-> **本文档是 [地图工作流指南](../usage/map-workflow.md) 的技术参考**。工作流指南描述"怎么做"，本文档解释"为什么这么做"以及各阶段的算法细节。
+> **本文档是 [地图工作流指南](../../usage/map-workflow.md) 的技术参考**。工作流指南描述"怎么做"，本文档解释"为什么这么做"以及各阶段的算法细节。
 
 本文档描述 dreamulator **地质层**生成管线的完整技术方案。
 **球面质心 Voronoi 镶嵌（CVT Mesh）是一等公民数据，等距圆柱投影高度图是派生导出产物**。
@@ -258,7 +258,6 @@ A = Σᵢ αᵢ - (n - 2)π
 | `num_nodes` | 100,000 | 10K – 1M | CVT 节点数（分辨率；gaia-m 主力用 200,000） |
 | `jitter_sigma` | 0.3 | 0.0 – 0.5 | 随机扰动强度（× d_mean） |
 | `lloyd_iterations` | 8 | 0 – 20 | Lloyd 松弛迭代次数 |
-| `lloyd_tolerance` | 1e-4 | 1e-6 – 1e-2 | 收敛判据（× d_mean） |
 | `seed` | (world seed) | 任意 int | RNG 种子 |
 | `radius_km` | 6371.0 | 100 – 100,000 | 行星半径 |
 
@@ -565,7 +564,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 - **分支整层覆盖**：在地质层分叉的分支会整体覆写根世界的地质 input，须一并携带
   `geography.yaml`（及 `planets.yaml` / `geography_raster.png`），否则大陆退化为
   随机分布。这是分支系统的预期语义（见
-  [audit/wave3-architecture.md](audit/wave3-architecture.md) §4）。
+  [audit/wave3-architecture.md](../audit/wave3-architecture.md) §4）。
 
 ### 3.6 与现有模型集成
 
@@ -580,7 +579,7 @@ crust_type          →      type (PlateType enum)
 cell_ids            →      cell_ids (CVT node IDs)
 euler_pole[3]       →      (新增字段)
 omega_rad_yr        →      (新增字段)
-speed_multiplier    →      (新增字段)
+growth_speed_multiplier →  (新增字段)
 ```
 
 `PlateVelocity(dx, dy)` 已移除，板块运动统一用 Euler pole 表示。
@@ -590,9 +589,8 @@ speed_multiplier    →      (新增字段)
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
 | `num_plates` | 20 | 5 – 50 | 构造板块数量 |
-| `speed_range` | (0.5, 2.0) | (0.1, 5.0) | 板块生长速度范围 |
+| `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
 | `continental_fraction` | 0.35 | 0.1 – 0.8 | 大陆板块比例 |
-| `fill_jitter` | 0.1 | 0.0 – 0.5 | 填充随机扰动 |
 
 ---
 
@@ -604,7 +602,7 @@ speed_multiplier    →      (新增字段)
 在惯性参考系中板块绕该轴做刚体旋转。
 
 > 运动学公式已上浮至
-> [knowledge/geology/plate_tectonics.md](../knowledge/geology/plate_tectonics.md)
+> [knowledge/geology/plate_tectonics.md](../../knowledge/geology/plate_tectonics.md)
 > §欧拉极运动学：角速度换算 ω = v/R 与地球板块速度参考表、速度场
 > v(P) = ω·(ê×P) 及其大小 |v| = ωR·sin α、边界相对速度与法向/切向分解、
 > 无净旋转（no-net-rotation）参考系。
@@ -612,11 +610,9 @@ speed_multiplier    →      (新增字段)
 **实现要点**（`tectonic_simulator.py` / `plate_generator.py`）：
 
 - **欧拉极分配**：每板块随机单位旋转轴（高斯采样后归一化），角速度由
-  `speed_min_cm_yr`–`speed_max_cm_yr` 均匀采样后经 ω = v/R 换算。
+  `plate_speed_range_cm_yr` 均匀采样后经 ω = v/R 换算。
 - **速度场**：向量化叉积一次算出全部节点速度（单位球坐标 → 乘
   `radius_km × 1000` 得 m/yr）。
-- **参考系**：可选移除岩石圈净旋转（按 cell 面积加权平均速度后扣除），
-  由配置键 `remove_net_rotation` 控制。
 - **时间演化的 δt 自动缩放**（实现行为，见 §17 与
   `tectonic_simulator.py::_auto_compute_dt`）：
   `δt = 3 · √(4πR²/N) / v_max`——令最快板块每步移动 ~3 个 cell
@@ -626,9 +622,7 @@ speed_multiplier    →      (新增字段)
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
-| `speed_min_cm_yr` | 1.0 | 0.1 – 5.0 | 最慢板块速度 |
-| `speed_max_cm_yr` | 10.0 | 5.0 – 20.0 | 最快板块速度 |
-| `remove_net_rotation` | True | bool | 是否移除净旋转 |
+| `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
 
 ---
 
@@ -637,7 +631,7 @@ speed_multiplier    →      (新增字段)
 在 CVT 网格的邻接图上扫描所有边，两端属于不同板块的边即为**板块边界**段。
 
 > 边界运动学与地质学依据已上浮至
-> [knowledge/geology/plate_tectonics.md](../knowledge/geology/plate_tectonics.md)
+> [knowledge/geology/plate_tectonics.md](../../knowledge/geology/plate_tectonics.md)
 > §边界检测与分类：相对速度
 > v_rel = (Ω_A − Ω_B) × P · R 及其法向/切向分解（v_n 汇聚为正、v_t 走滑），
 > 各边界类型的地质效应（山脉/海沟/火山弧、洋中脊/裂谷、走滑断层）与
@@ -646,18 +640,16 @@ speed_multiplier    →      (新增字段)
 **实现要点**（`boundary_detector.py`）：
 
 1. **邻接扫描**：遍历邻接表，以 `(min(a,b), max(a,b))` 去重，收集
-   `BoundarySegment`（两端节点、两侧板块、中点坐标、`v_normal_m_yr`、
-   `v_tangential_m_yr`、`influence_radius_km` 等字段）。
+   `BoundarySegment`（两端节点、两侧板块、中点坐标、`boundary_influence_km` 等字段）。
 2. **相对速度分解**：先把 v_rel 投影到中点切平面（扣除径向分量），再沿
    边界法向分解；边界法向近似取 plate_A 质心 → plate_B 质心方向（投影到切平面）。
-3. **分类**：按 `velocity_threshold_cm_yr`（默认 0.5 cm/yr）划分
-   convergent / divergent / transform / inactive，并按两侧地壳组合细化
-   汇聚子类型（`subduction_type`）。
+3. **分类**：按边界相对速度划分 convergent / divergent / transform / inactive，
+   并按两侧地壳组合细化汇聚子类型。
 4. **边界链追踪**：将共享节点的同类边界段贪心连成链（`BoundaryChain`），
    供山脉走向、海沟线等线性特征生成使用。
 
 > **Cortial 2019 俯冲上隆公式**（详见
-> [knowledge/geology/cortial_2019_notes.md](../knowledge/geology/cortial_2019_notes.md) §D.4）：
+> [knowledge/geology/cortial_2019_notes.md](../../knowledge/geology/cortial_2019_notes.md) §D.4）：
 > $u_j(p) = u_0 \cdot f(d) \cdot g(v) \cdot h(\tilde{z})$
 > 其中 $u_0 = 0.6$ mm/y, $r_s = 1800$ km, $h(\tilde{z}) = \tilde{z}^2$。
 > 我们的 §6 地形合成使用类似的高斯衰减函数，但简化为距离的指数衰减。
@@ -668,7 +660,6 @@ speed_multiplier    →      (新增字段)
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
 | `boundary_influence_km` | 500.0 | 100 – 2000 | 边界效应影响半径 |
-| `velocity_threshold_cm_yr` | 0.5 | 0.1 – 2.0 | 活动/非活动阈值 |
 
 ---
 
@@ -678,7 +669,7 @@ speed_multiplier    →      (新增字段)
 （+ 潮汐形变，仅潮汐锁定天体）。
 
 > 地球物理依据与公式已上浮至
-> [knowledge/geology/terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md)：
+> [knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md)：
 > 双峰高程分布依据（§1）、三类边界剖面公式与速率因子汇总表（§2）、
 > 距边界粗糙度调制（§2）、fBm octave 物理尺度表（§3）、热点/地幔柱高斯隆起
 > 与高程合成叠加式（§6），以及内陆古造山带/山间盆地的地貌学依据（§4.3）。
@@ -700,7 +691,7 @@ speed_multiplier    →      (新增字段)
    弧间断陷海——汇聚带不再均匀缎带；`boundary_uplift_noise` 调制岛弧/洋脊。
 3. **热点链**：`_generate_hotspots` 宽尺度高斯隆起 + 可选中央破火山口凹陷。
 4. **区域噪声**：低频 fBm（`regional_noise_scale`，陆/海不同振幅
-   `regional_noise_amplitude_land_m` / `_ocean_m`）。
+   `regional_noise_amplitude_land_m` / `regional_noise_amplitude_ocean_m`）。
 5. **细节噪声**：`_anisotropic_fbm`（3D Simplex 在节点 (x,y,z) 采样，无投影畸变；
    各向异性 `noise_anisotropy` 沿边界走向拉伸）；近边界 `interior_factor` 增强
    （1.2→1.5×，山体更崎岖）。
@@ -715,7 +706,7 @@ speed_multiplier    →      (新增字段)
 
 板块内部（距边界 >600 km 的大陆区域）放置线性构造带（`_apply_interior_landforms`），
 模拟古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。地貌学依据已上浮至
-[knowledge/geology/terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md) §4.3。
+[knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §4.3。
 
 - **沿走向调制**：每条 belt 用 1D simplex 噪声沿大圆弧采样，调制各段振幅
   （振幅 ∈ [base × 0.3, base × 1.7]），造山带呈高峰 + 鞍部而非均匀脊线；
@@ -759,11 +750,11 @@ age = max_age · d_div / (d_div + d_conv)
 
 | 参数 | gaia-m 值 | 地球参考 |
 |------|----------|---------|
-| `spreading_rate_cm_yr` | 6.0 | 1–5 |
-| `ridge_depth_m` | 2500 | ~2500 |
-| `subsidence_coeff` | 350 | ~350 |
-| `max_age_myr` | 100 | ~100 |
-| `max_age_depth_m` | 5500 | ~5500 |
+| `ocean_spreading_rate_cm_yr` | 6.0 | 1–5 |
+| `ocean_ridge_depth_m` | 2500 | ~2500 |
+| `ocean_subsidence_coeff` | 350 | ~350 |
+| `ocean_max_age_myr` | 100 | ~100 |
+| `ocean_max_age_depth_m` | 5500 | ~5500 |
 
 效果：均海深 3015→3687 m（对齐地球 3682 m）；浅水 0-500m 占比 14.8%→10.6%（地球 8%）。
 
@@ -947,7 +938,7 @@ def check_polar_configuration(
 > 流量累积 → 河网提取，填入 `VoronoiCell.flow_direction / flow_accumulation /
 > river_id / river_order`。侵蚀循环（§10）每次迭代内部复用同一套"洼地填平 +
 > D8 + 累积"纯函数，与本节的最终提取共用实现，避免两套水文逻辑漂移。
-> 物理公式与引用见 [knowledge/geology/hydrology.md](../knowledge/geology/hydrology.md)。
+> 物理公式与引用见 [knowledge/geology/hydrology.md](../../knowledge/geology/hydrology.md)。
 
 ### 8.0 洼地填平（前置）
 
@@ -1244,9 +1235,7 @@ def detect_lakes_and_endorheic(
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
 | `min_river_accum_km2` | 1000 | 100 – 10000 | 河流最小汇水面积（河网提取阈值） |
-| `river_order_thresholds` | {1:100, 2:1K, 3:10K, 4:100K} | — | 河流分级阈值（累积面积） |
-| `lake_min_area_km2` | 10 | 1 – 100 | 最小湖泊面积 |
-| `evaporation_rate_mm` | 800 | 300 – 2000 | 简化蒸发率 |
+| `evaporation_base_mm` | 800 | 300 – 2000 | 简化蒸发率 |
 
 > 湖泊 / 内流盆地的水收支（§8.5 的 `detect_lakes_and_endorheic`）需要降水强迫，
 > 首版以 §10 的地貌降水代理为输入；完整水收支（湖泊面积收敛、盐湖判别）留第二批。
@@ -1259,7 +1248,7 @@ def detect_lakes_and_endorheic(
 > **全球尺度的流水侵蚀**，Gaea 仍保留用于米级局部细节——两者互补而非替代。
 > 架构依据（roadmap §五 3B 决策，2026-08-09）：地质层用**地貌降水代理**，不读气候
 > 引擎输出，避免地质→气候→地质的 DAG 环依赖。物理公式与引用见
-> [knowledge/geology/erosion.md](../knowledge/geology/erosion.md)。
+> [knowledge/geology/erosion.md](../../knowledge/geology/erosion.md)。
 >
 > 算法由 `erosion_algorithm` 选择（当前仅 `stream_power`，保留为将来可能的不同
 > 算法留扩展位）；侵蚀精度由 `stream_power_dt_fraction` 旋钮控制——大值=粗/快、
@@ -1291,7 +1280,7 @@ RNG——纯函数，确定性由 seed 与上游地形保证。
   - **纬向基础场** `P_base(lat)`：镜像气候引擎的纬向项（ITCZ 对流峰 + 副热带抑制 +
     风暴路径），复用 `hadley_extent_deg` / `storm_track_amplitude_mm` /
     `precip_proxy_base_mm` 同一批旋钮；
-  - **地形响应** `f_orog`：线性 upslope `w = U·∇h`（`hadley_cell_wind` 纬向风 ×
+  - **地形响应** `orographic_efficiency`：线性 upslope `w = U·∇h`（`hadley_cell_wind` 纬向风 ×
     地形梯度），迎风坡湿、背风坡干——Smith & Barstad (2004) 线性地形降水模型的
     **零平流极限**，完整傅里叶传递函数（凝结水顺风平流）留后续。
 - `climate_coupling: full` —— 读气候引擎输出（DAG 环，当前留接口位不实现）。
@@ -1554,16 +1543,13 @@ class PlateData(BaseModel):
     cell_ids: list[int]
     euler_pole: tuple[float, float, float]  # unit vector (rotation axis)
     omega_rad_yr: float                  # angular velocity
-    speed_multiplier: float = 1.0        # flood-fill speed
+    growth_speed_multiplier: float = 1.0        # flood-fill speed
 
 class BoundaryData(BaseModel):
     """Plate boundary segment."""
     plate_a: str
     plate_b: str
     boundary_type: str                   # convergent | divergent | transform
-    subduction_type: str | None = None
-    v_normal_m_yr: float
-    v_tangential_m_yr: float
     node_pairs: list[tuple[int, int]]    # CVT node pairs forming boundary
 
 class ClimateData(BaseModel):
@@ -1860,12 +1846,12 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 | 条目 | 内容 | 上浮位置 |
 |------|------|----------|
-| A.1 Haversine 角距离 | 大圆距离公式 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §角距离 |
-| A.2 Fibonacci 球面格点 | 极角/方位角 + 笛卡尔坐标 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §Fibonacci 球面螺旋 |
-| A.3 欧拉极运动学 | v = ω × P、速度大小、相对速度与 v_n/v_t 分解 | [plate_tectonics.md](../knowledge/geology/plate_tectonics.md) §欧拉极运动学 / §边界检测与分类 |
-| A.4 fBm | octave 叠加公式与归一化 | [terrain_synthesis.md](../knowledge/geology/terrain_synthesis.md) §3 fBm 噪声 |
-| A.5 Köppen 气候阈值 | 五主群 + 亚型判据 | [koppen_classification.md](../knowledge/climatology/koppen_classification.md) |
-| A.7 球面多边形面积 | 球面角盈公式 | [cvt_mesh.md](../knowledge/geology/cvt_mesh.md) §Cell 面积 |
+| A.1 Haversine 角距离 | 大圆距离公式 | [cvt_mesh.md](../../knowledge/geology/cvt_mesh.md) §角距离 |
+| A.2 Fibonacci 球面格点 | 极角/方位角 + 笛卡尔坐标 | [cvt_mesh.md](../../knowledge/geology/cvt_mesh.md) §Fibonacci 球面螺旋 |
+| A.3 欧拉极运动学 | v = ω × P、速度大小、相对速度与 v_n/v_t 分解 | [plate_tectonics.md](../../knowledge/geology/plate_tectonics.md) §欧拉极运动学 / §边界检测与分类 |
+| A.4 fBm | octave 叠加公式与归一化 | [terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §3 fBm 噪声 |
+| A.5 Köppen 气候阈值 | 五主群 + 亚型判据 | [koppen_classification.md](../../knowledge/climatology/koppen_classification.md) |
+| A.7 球面多边形面积 | 球面角盈公式 | [cvt_mesh.md](../../knowledge/geology/cvt_mesh.md) §Cell 面积 |
 
 **A.6 汇水累积**（水文学知识文档尚待建立，见 `knowledge/geology/CLAUDE.md`
 规划清单；实现见 §8.2）：
@@ -1908,7 +1894,7 @@ accum(i) = area(i) + Σ accum(j) for j in upstream(i)
 | `generate_cubemap_faces()` | ❌ 废弃 | CVT 管线不需要立方体投影 |
 | `ContinentFeature` | ⚠️ 可选保留 | 用于手动指定大陆特征 |
 | `HotspotFeature` | ✅ 直接复用 | 热点配置 |
-| `PlateSeed` | ⚠️ 改造 | 增加 `speed_multiplier` 字段 |
+| `PlateSeed` | ⚠️ 改造 | 增加 `growth_speed_multiplier` 字段 |
 | `PlanetConfig` | ⚠️ 重大改造 | 增加 CVT 参数，移除栅格相关参数 |
 | `make_equirect_grid()` | ✅ 保留 | 仅用于导出阶段 |
 
@@ -2195,5 +2181,5 @@ For t = 0 to T_end step Δt (= 2 My):
 > 论文解读全文（原 D.1–D.15：论文定位、网格与地壳参数化、四大构造现象公式、
 > 侵蚀/衰减 ε 常数、完整常数表、性能数据、已知局限，以及与 dreamulator 的
 > 实现对照、板块裂解实现细节、自适应裂解率与研究谱系）已整体移入
-> [knowledge/geology/cortial_2019_notes.md](../knowledge/geology/cortial_2019_notes.md)。
+> [knowledge/geology/cortial_2019_notes.md](../../knowledge/geology/cortial_2019_notes.md)。
 

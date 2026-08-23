@@ -341,11 +341,7 @@ def _load_monthly_reference() -> dict[str, Any]:
     if _MONTHLY_REF_CACHE is not None:
         return _MONTHLY_REF_CACHE
     path = (
-        _find_project_root()
-        / "tests"
-        / "validation"
-        / "reference"
-        / "monthly_zonal_reference.json"
+        _find_project_root() / "tests" / "validation" / "reference" / "monthly_zonal_reference.json"
     )
     if not path.exists():
         _MONTHLY_REF_CACHE = {}
@@ -368,13 +364,7 @@ def _load_lgm_reference() -> dict[str, Any]:
     global _LGM_REF_CACHE
     if _LGM_REF_CACHE is not None:
         return _LGM_REF_CACHE
-    path = (
-        _find_project_root()
-        / "tests"
-        / "validation"
-        / "reference"
-        / "lgm_zonal_reference.json"
-    )
+    path = _find_project_root() / "tests" / "validation" / "reference" / "lgm_zonal_reference.json"
     if not path.exists():
         _LGM_REF_CACHE = {}
         return _LGM_REF_CACHE
@@ -587,9 +577,7 @@ def validate_zonal_precipitation(mesh: CVTMesh) -> dict[str, Any]:
     }
 
 
-def _score_monthly_zonal(
-    monthly: np.ndarray, lats: np.ndarray, ref: np.ndarray
-) -> dict[str, Any]:
+def _score_monthly_zonal(monthly: np.ndarray, lats: np.ndarray, ref: np.ndarray) -> dict[str, Any]:
     """Score a simulated monthly field against the monthly zonal reference.
 
     ``monthly`` is (N, 12), ``ref`` is (12, 90) in month-major order (0=Jan).
