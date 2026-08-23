@@ -369,6 +369,19 @@ cd frontend && npm run build:static:local && npm run preview:static
 
 **原则**：代码是"实现"，文档是"解释"。代码变更无文档同步 = 技术债务。
 
+### 文档↔代码一致性审计
+
+`docs/design/` 按实现状态分三类：`pipelines/`（已实现管线技术参考）、`proposals/`
+（设计提案/方法论）、根目录（总览/路线图/竞品/审计）。**只有 `pipelines/` 的引用必须对齐
+当前代码**；`proposals/` 的未来字段/设计词汇是合法的前向引用，`archive/`+`audit/` 是历史快照。
+
+- **工具**：`scripts/check_doc_refs.py` 扫 `pipelines/` 的 file:line 引用 + 反引号
+  snake_case 符号，报出改名/删除/失效。**pre-push 钩子已挂为硬门槛（只 gate main）**。
+- **审计发现**记入 `docs/design/audit/waveN-<slug>.md`（映射表 + `文件:行号` 证据），
+  修复后重跑 `check_doc_refs.py` 确认归零。
+- **改引擎字段/函数时**：同步更新 `pipelines/` 里引用它的文档 + 重跑 `check_doc_refs.py`；
+  否则 push main 会被钩子拦下。斜杠技能 `/audit-doc` 封装了这条审计流程。
+
 ### 竞品参照：实现前先调研
 
 `docs/design/competitor-analysis.md` 记录了各 DAG 层级的对标专业软件和开源项目。

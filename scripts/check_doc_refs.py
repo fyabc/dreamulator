@@ -35,6 +35,14 @@ _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _CODE_ROOTS = ["src", "scripts", "tests", "frontend/src"]
 _CODE_SUFFIXES = {".py", ".ts", ".tsx", ".yaml", ".json"}
 
+# Documented-planned forward references inside implemented docs (pipelines/).
+# These are symbols the design doc names but the engine hasn't implemented yet
+# (marked "留第二批" / "计划中"); they are NOT stale renames.  Keep this list
+# short and remove an entry once the symbol lands in code.
+_PLANNED_SYMBOLS = {
+    "detect_lakes_and_endorheic",  # geological-pipeline §8.5 湖泊/内流盆地（留第二批）
+}
+
 
 def _find_project_root() -> Path:
     d = Path(__file__).resolve().parent
@@ -122,6 +130,8 @@ def main() -> None:
 
             for m in _REF_BACKTICK.finditer(text):
                 name = m.group(1)
+                if name in _PLANNED_SYMBOLS:
+                    continue  # documented-planned forward reference
                 if not _is_snake_case(name) or name in idents:
                     continue
                 sym_total += 1
