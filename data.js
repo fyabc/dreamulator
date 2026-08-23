@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787423219190,
+  "lastUpdate": 1787492311528,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4246,6 +4246,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007186048914015399",
             "extra": "mean: 5.137581400001068 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "167cd6c9f094176d96e2c0c397e80bb73942eeb5",
+          "message": "feat(docs): /diagnose-climate 气候引擎诊断技能\n\n- 七步诊断流程（问题定义 → cell 定位 → 第一性假设 → 交叉验证 → 竞品参照 → 修复+回归 → 记录）\n- 沉淀 5 个常见坑（ITCZ argmax 极昼、两季分解漏赤道、图扩散太短、对流被季节化、季节 vs 年总量）\n- 首例参照 Af 460→6293 诊断链路\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-23T21:34:16+08:00",
+          "tree_id": "cf350beebc0d7dd1e25d1375aaf6f55981155bed",
+          "url": "https://github.com/fyabc/dreamulator/commit/167cd6c9f094176d96e2c0c397e80bb73942eeb5"
+        },
+        "date": 1787492310432,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 7.7423904047528,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011514159051960519",
+            "extra": "mean: 129.15907719999922 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.580221941753201,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06051321969815914",
+            "extra": "mean: 279.3122930000003 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.441777714921393,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1107769486973278",
+            "extra": "mean: 693.5881930000013 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 430.5760677210021,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0011051729530924947",
+            "extra": "mean: 2.32247000000001 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.006972696794,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000689314118659671",
+            "extra": "mean: 5.0503271999986055 msec\nrounds: 5"
           }
         ]
       }
