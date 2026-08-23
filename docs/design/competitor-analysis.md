@@ -181,7 +181,7 @@ Nacrea 单圈环流（`hadley_extent=90`）或三圈纬度不同的行星会错�
 | 工具 | 用途 | 与 Dreamulator 的关系 |
 |------|------|---------------------|
 | [**Madingley Model**](https://github.com/Madingley/Madingley) | 通用生态系统模型（UNEP WCMC）：个体级异养 + 功能群自养。C#/R/Python | Dreamulator P2 "简单食物网"的参照；Madingley 是网格化全球生态模型，输出 NPP/生物量/功能群分布 |
-| [**Biblaridion's Alien Biosphere**](https://www.youtube.com/playlist?list=PLB1C15C2225B4C9E8) | YouTube 方法论系列：物理约束→身体结构→进化枝→生态位→食物网→智慧生物 | Dreamulator P3 异星物种推演的直接参照（已在 [ecology-layer.md](ecology-layer.md) §三详细分析） |
+| [**Biblaridion's Alien Biosphere**](https://www.youtube.com/playlist?list=PLB1C15C2225B4C9E8) | YouTube 方法论系列：物理约束→身体结构→进化枝→生态位→食物网→智慧生物 | Dreamulator P3 异星物种推演的直接参照（已在 [ecology-layer.md](proposals/ecology-layer.md) §三详细分析） |
 | [**NetLogo**](https://ccl.northwestern.edu/netlogo/) | 基于 agent 的生态模拟平台 | 原型验证：食物网/种群动态/岛屿生物地理学 |
 | [**EcoSim**](https://github.com/EcoSim) | C++ 个体级生态系统模拟 | P2 食物网的算法参考 |
 
@@ -276,7 +276,7 @@ Nacrea 单圈环流（`hadley_extent=90`）或三圈纬度不同的行星会错�
 
 ## 七、World Anvil 方法论参照（自洽性 vs 创造性）
 
-> 2026-08-16 补：守护轴（[harness.md](harness.md)）设计时调研 World Anvil 的**方法论**（非工具功能，
+> 2026-08-16 补：守护轴（[harness.md](proposals/harness.md)）设计时调研 World Anvil 的**方法论**（非工具功能，
 > 工具功能对比见 §三.3）。本节聚焦 World Anvil 对「自洽性 vs 创造性」矛盾的处理方式，作为守护轴
 > 「硬度旋钮 / 意图感知 / 后果映射」的业界参照。详表见
 > `docs/knowledge/agent-engineering/self-maintenance-patterns.md` §三。
@@ -285,7 +285,7 @@ Nacrea 单圈环流（`hadley_extent=90`）或三圈纬度不同的行星会错�
 
 World Anvil 创始人 Janet Forbes & Dimitris Havlidis 合创的 **Agile Worldbuilding Method**
 核心口号是「**防止 over-worldbuilding（规则过多扼杀创造）和 under-worldbuilding（规则过少导致
-lore drift）**」——这正是 Dreamulator 在 [vision.md](vision.md) §7「混沌边缘」和四层控制模型
+lore drift）**」——这正是 Dreamulator 在 [vision.md](proposals/vision.md) §7「混沌边缘」和四层控制模型
 「约束分级」所表达张力的业界版本：
 
 | World Anvil 概念 | Dreamulator 对应 |

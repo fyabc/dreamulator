@@ -3,7 +3,7 @@
 > 状态：Draft 0.1 · 2026-08-16
 > 定位：Dreamulator 的**第三条轨道（守护轴）**——在 [vision.md](vision.md) §2「双轨驱动」（ODE/SDE 引力骨架 + LLM 血肉）之外补齐的第三条：校验与维护。
 > 关联：[vision.md](vision.md) 的 Fantasy Harness；[layer-control-model.md](layer-control-model.md) 的校验层；
-> [audit-plan.md](audit-plan.md)（守护引擎那一半）；本文件补齐「守护世界」那一半并把两者统一。
+> [audit-plan.md](../audit-plan.md)（守护引擎那一半）；本文件补齐「守护世界」那一半并把两者统一。
 
 ---
 
@@ -108,7 +108,7 @@ Layer 1: Validation（校验层） —— 自洽性守卫
 
 | 守护对象 | 名称 | 现有落点 | 状态 |
 |---|---|---|---|
-| **引擎代码** | 三波审计（工程卫生/物理/架构） | [audit-plan.md](audit-plan.md) | 已规划，第一波部分完成 |
+| **引擎代码** | 三波审计（工程卫生/物理/架构） | [audit-plan.md](../audit-plan.md) | 已规划，第一波部分完成 |
 | **世界设定** | 设定维护工作流（§3） | 散落：`validate`、`doc_render`、决策记录提案 | 未成形，本文件补全 |
 
 两者共用同一套机制：证据锚定（`文件:行号` / 文献）、子代理互审（audit-plan §五）、校验和/指纹、单点裁决升级用户。
@@ -394,7 +394,7 @@ divergence: intentional    # 可选：intentional = 故意覆写（创造性分�
 
 ### 9.1 griller/answerer 子代理互审
 
-直接沿用 [audit-plan.md §五](audit-plan.md) 已写好的模式：
+直接沿用 [audit-plan.md §五](../audit-plan.md) 已写好的模式：
 
 - **griller agent**：按维度清单（§9.2）生成问题；
 - **answerer agent**：**只许从事实上下文 + 设定文档取证作答，每条必须附 `文件:行号` 或 `derived 字段` 或文献出处**；
@@ -499,7 +499,7 @@ per-branch 可调——硬科幻世界默认 strict，软魔法分支可 lenient
 
 1. 拷问反复发现的「这类矛盾」→ 沉淀成引擎的**不变式测试**（`tests/test_invariants.py`，见 audit-plan §四）；
 2. 反复出现的拷问类型 → 沉淀成 `critique.py` 的**新维度**；
-3. 拷问暴露的「手写自由参数」→ 归入 [audit-plan §三](audit-plan.md) 的**参数处置**（A 可推导 / B 创意旋钮 / C 经验常数），A 类替换为物理公式。
+3. 拷问暴露的「手写自由参数」→ 归入 [audit-plan §三](../audit-plan.md) 的**参数处置**（A 可推导 / B 创意旋钮 / C 经验常数），A 类替换为物理公式。
 
 守护轴本身也要进化，而不是只守护别人。
 
@@ -585,7 +585,7 @@ P0–P2 是**确定性内核**（纯函数、可单测、不依赖 LLM），先�
 ## 16. 与其他文档的关系
 
 - **总纲**：本文件（守护轴）；[vision.md](vision.md)（愿景，需补「守护轴」为第三条轨道，见 §1.1）。
-- **守护引擎**：[audit-plan.md](audit-plan.md)（三波审计），是本文件「两个守护对象」之一。
+- **守护引擎**：[audit-plan.md](../audit-plan.md)（三波审计），是本文件「两个守护对象」之一。
 - **守护世界**：本文件 §3–§12 补全。
 - **机制复用**：[layer-control-model.md](layer-control-model.md)（校验层）、[ai-cli-commands.md](ai-cli-commands.md)（`ai critique`/`ai civ`/`ai trace`/`ai reconcile` 入口）。
 - **单一数据源**：`doc_render.py`（渲染）、`physical_inputs.py::build_system_catalog`（system_catalog 派生数据）、`ComputationManifest`（校验和）。

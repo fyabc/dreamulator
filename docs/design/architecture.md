@@ -57,9 +57,9 @@ dreamulator/
 |------|------|
 | `models/` | Pydantic 数据模型：世界（`WorldConfig`）、分支元数据、层级定义、恒星系、地图数据模型等 |
 | `engine/` | 模拟引擎。每个引擎继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`；`pipeline.py` 拓扑排序后按序执行。已实现：`astronomy`（含纯函数模块 `stellar_physics.py`，输出含 `world_parameters.yaml` 世界参数派生汇总与 `system_catalog.yaml` 天体统一目录）、`geological`（封装地形管线）、`climate`（含纯函数模块 `climate_physics.py`）；`physical_inputs.py` 统一解析卫星感知物理参数 + `derive_world_parameters()` 世界参数聚合 + `build_system_catalog()` 天体目录合并（stellar.yaml + planets.yaml，后者为共享字段权威） |
-| `map/` | 地图子系统：CVT 网格生成、板块构造（Cortial 2019 时间演化）、地形合成、边界检测、地理锚定、气候模拟、栅格编解码、外部高度图导入、地图 CRUD + 分支继承。算法原理见 [geological-pipeline.md](geological-pipeline.md)，系统架构见 [map-system.md](map-system.md) |
+| `map/` | 地图子系统：CVT 网格生成、板块构造（Cortial 2019 时间演化）、地形合成、边界检测、地理锚定、气候模拟、栅格编解码、外部高度图导入、地图 CRUD + 分支继承。算法原理见 [geological-pipeline.md](pipelines/geological-pipeline.md)，系统架构见 [map-system.md](pipelines/map-system.md) |
 | `civmap/` | 文明地图：真实地球国家/省份底图上的架空领土涂色与时间快照 |
-| `guard/` | 守护轴：校验、审计与设定维护（与生成轴 `engine/` 正交）。含事实上下文（扩展 `doc_render`）、几何/空间查询、过期检测、拷问编排。设计见 [harness.md](harness.md) |
+| `guard/` | 守护轴：校验、审计与设定维护（与生成轴 `engine/` 正交）。含事实上下文（扩展 `doc_render`）、几何/空间查询、过期检测、拷问编排。设计见 [harness.md](proposals/harness.md) |
 | `io/` | YAML 文件加载（支持分支继承链查找）和 JSON Schema 生成 |
 | `api.py` / `api_routes/` | FastAPI 应用与路由（worlds、narrate、maps、civmap），同时 serve `frontend/dist/` |
 | `resolver.py` | 层级数据解析器，沿分支继承链向上查找每层的实际数据来源（支持 `_inherit` 深度合并） |
@@ -73,7 +73,7 @@ dreamulator/
 | 脚本 | 用途 |
 |------|------|
 | `export_static.py` | 将世界数据导出为静态 JSON（GitHub Pages 静态模式前置步骤） |
-| `validate_climate.py` | 气候验证 CLI 薄壳（实现在 `dreamulator.validate_climate`；zonal 加权 RMSE、Cohen's Kappa），见 [climate-validation.md](climate-validation.md) |
+| `validate_climate.py` | 气候验证 CLI 薄壳（实现在 `dreamulator.validate_climate`；zonal 加权 RMSE、Cohen's Kappa），见 [climate-validation.md](pipelines/climate-validation.md) |
 | `import_earth_elevation.py` | ETOPO1 导入 CLI 薄壳（实现在 `dreamulator.import_earth_elevation`） |
 | `convert_koppen_map.py` | 转换 Beck et al. (2018) Köppen 参考数据 |
 | `prepare_civmap_data.py` | 文明地图底图数据下载与预处理 |
@@ -118,7 +118,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 - **derived/**（JSON）— 引擎计算的物理结果
 
 LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理结果。
-这一分离在架构层面强制了因果箭头（详见 [vision.md](vision.md) 的设计哲学）。
+这一分离在架构层面强制了因果箭头（详见 [vision.md](proposals/vision.md) 的设计哲学）。
 
 input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人类创作，但其中
 引用物理参数处应写 **Jinja2 占位符**（如 `{{ entities.satellite_gaiam.solar_day_days | round2 }}`），
@@ -138,7 +138,7 @@ input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人�
 文档随演化静默漂移（silent drift / stale memory）。核心理念：**生成轴决定「能造出什么」，
 守护轴决定「造出的东西能不能信任」**。两个守护对象：**引擎代码**（[audit-plan.md](audit-plan.md)
 三波审计）与**世界设定**（设定维护工作流：拷问 → 补全 → 归档 → 过期检测）。设计总纲见
-[harness.md](harness.md)。
+[harness.md](proposals/harness.md)。
 
 - **事实上下文**：扩展 `doc_render.py` 渲染上下文至各层 `derived/*_summary.yaml`，作为
   文档模板、决策记录模板与 agent 事实库的单一来源；
@@ -173,11 +173,10 @@ input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人�
 行星地图采用**栅格高度图 + Voronoi 语义网络**混合表示：CVT 球面网格承载语义数据
 （板块、气候、生态），最终可视化时投影为 2D 栅格。设计文档：
 
-- [geological-pipeline.md](geological-pipeline.md) — 12 阶段地形生成管线技术参考（算法原理、数学公式、论文解读）
-- [map-system.md](map-system.md) — 地图系统架构（数据模型、多投影 GPU 渲染、API 端点）
-- [climate-pipeline.md](climate-pipeline.md) — 气候引擎实现架构与改进路线图
-- [climate-validation.md](climate-validation.md) — 真实地球数据验证方法
-- [archive/map_system_design.md](archive/map_system_design.md) — 早期架构决策记录（ADR，已归档）
+- [geological-pipeline.md](pipelines/geological-pipeline.md) — 12 阶段地形生成管线技术参考（算法原理、数学公式、论文解读）
+- [map-system.md](pipelines/map-system.md) — 地图系统架构（数据模型、多投影 GPU 渲染、API 端点）
+- [climate-pipeline.md](pipelines/climate-pipeline.md) — 气候引擎实现架构与改进路线图
+- [climate-validation.md](pipelines/climate-validation.md) — 真实地球数据验证方法
 
 操作指南见 [../usage/map-workflow.md](../usage/map-workflow.md) 和 [../usage/civmap-guide.md](../usage/civmap-guide.md)。
 

@@ -3,7 +3,7 @@
 > 本文档描述 dreamulator 气候引擎的代码架构、模块职责、数据流和物理模型。
 > 对应源码：`src/dreamulator/engine/climate_physics.py`、`climate_seasonality.py`、
 > `src/dreamulator/engine/climate.py`、`src/dreamulator/map/climate_simulator.py`。
-> 物理公式见 [`docs/knowledge/climatology/energy_balance.md`](../knowledge/climatology/energy_balance.md)。
+> 物理公式见 [`docs/knowledge/climatology/energy_balance.md`](../../knowledge/climatology/energy_balance.md)。
 
 ---
 
@@ -176,7 +176,7 @@ P = η_recycle · q_diff                      # 基线：水汽回收（层积�
 ### 2.5 洋流：`ocean_circulation.py`
 
 > 详细物理（Ekman / Sverdrup / Stommel / 热盐双稳态 / 海峡闸门）见
-> [knowledge/climatology/ocean_currents.md](../knowledge/climatology/ocean_currents.md)。
+> [knowledge/climatology/ocean_currents.md](../../knowledge/climatology/ocean_currents.md)。
 
 洋流在 `simulate_climate` 的 **Stage 2.5**（风场之后、降水之前）挂载，单向单遍
 （不做 SST↔风迭代回耦合）。三步：

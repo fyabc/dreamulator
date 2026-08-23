@@ -1,7 +1,7 @@
 # 文明层半格式化管理设计
 
 > 从 `roadmap.md` 拆分而来（2026-08-04）。这是 Phase 3C 的详细设计提案。
-> 路线图与优先级见 [roadmap.md](roadmap.md)。
+> 路线图与优先级见 [roadmap.md](../roadmap.md)。
 
 **目标**：将文明层从 "Wiki 文档堆" 升级为 "事件溯源 + 状态机"。
 

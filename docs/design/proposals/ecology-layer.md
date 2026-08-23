@@ -1,8 +1,8 @@
 # 生态层设计方案
 
 > 状态：设计阶段（P0 已实施 v0.20.0；本版重写 P1–P3 架构，2026-08-12）
-> 配套：路线图见 [roadmap.md](roadmap.md)；数学模型见 [ecological_mathematical_models.md](../knowledge/ecology/ecological_mathematical_models.md)
-> 竞品调研：异星生命推演引擎见 [competitor-analysis.md](competitor-analysis.md)；《外星生物圈》方法论见 `private/plans/video/alien-biosphere-analysis.md`
+> 配套：路线图见 [roadmap.md](../roadmap.md)；数学模型见 [ecological_mathematical_models.md](../../knowledge/ecology/ecological_mathematical_models.md)
+> 竞品调研：异星生命推演引擎见 [competitor-analysis.md](../competitor-analysis.md)；《外星生物圈》方法论见 `private/plans/video/alien-biosphere-analysis.md`
 
 ---
 
@@ -45,7 +45,7 @@ P0 已全链路闭环（v0.20.0）：`EcologyEngine` 读气候数据，逐 cell 
 | **功能性状生态学** | 先定义性状轴与基础生态位，再把物种投影到性状空间 | McGill et al. (2006), *TREE* 21:178–185 |
 | **网络生态学** | 食物网拓扑（连接度、模体、嵌套性）是独立于物种身份的结构属性 | Dunne et al. (2002)；Bascompte et al. (2003)；Milo et al. (2002) |
 
-范畴论（olog 的 schema/instance 分离、把谱系树建成 operad 的 Phyl、范畴化反应网络）提供了更形式化的语言，但属于"锦上添花"而非"必要前提"。详见 [competitor-analysis.md](competitor-analysis.md)。
+范畴论（olog 的 schema/instance 分离、把谱系树建成 operad 的 Phyl、范畴化反应网络）提供了更形式化的语言，但属于"锦上添花"而非"必要前提"。详见 [competitor-analysis.md](../competitor-analysis.md)。
 
 ### 1.3 与 input/derived 的映射
 
@@ -304,7 +304,7 @@ Instantiator(
 
 ## 四、与文明层的接口
 
-生态层输出直接作为文明层 ODE 的参数（详见 [ecological_mathematical_models.md](../knowledge/ecology/ecological_mathematical_models.md) §10）：
+生态层输出直接作为文明层 ODE 的参数（详见 [ecological_mathematical_models.md](../../knowledge/ecology/ecological_mathematical_models.md) §10）：
 
 ```
 生态输出                    →  文明模型参数
@@ -332,7 +332,7 @@ niche_construction_potential →  文明技术路径（河狸筑坝 → 灌溉 �
 
 ## 五、可视化设计（前端）
 
-复用成熟标准，不造轮子。可视化调研见 [competitor-analysis.md](competitor-analysis.md)（P0 三图层已实施）。
+复用成熟标准，不造轮子。可视化调研见 [competitor-analysis.md](../competitor-analysis.md)（P0 三图层已实施）。
 
 | 优先级 | 可视化 | 成熟方案 | 状态 |
 |--------|--------|---------|------|
