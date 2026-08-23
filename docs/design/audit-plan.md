@@ -51,7 +51,7 @@
 ### 第三波：架构审计（判据：Phase 3B 启动前）
 
 3B 侵蚀将引入 `surface_evolution_steps` + `climate_coupling` + 地貌降水代理，
-是对 DAG 与四层控制模型（[layer-control-model.md](layer-control-model.md)）的
+是对 DAG 与四层控制模型（[layer-control-model.md](proposals/layer-control-model.md)）的
 结构性改动；3C 文明层要新增整层。**在加新结构之前审，成本最低。**
 
 | 条目 | 内容 |
@@ -133,5 +133,5 @@
 
 - [roadmap.md](roadmap.md) §七 优先级、§八 技术债务（#4、#22 为第一波前置；#23 天体双文件重复已由 system_catalog 化解）
 - [competitor-analysis.md](competitor-analysis.md) — 简化 GCM 探索（ExoPlaSim PoC）
-- [climate-validation.md](climate-validation.md) — 多线证据策略
-- [layer-control-model.md](layer-control-model.md) — 第三波架构审计对象
+- [climate-validation.md](pipelines/climate-validation.md) — 多线证据策略
+- [layer-control-model.md](proposals/layer-control-model.md) — 第三波架构审计对象

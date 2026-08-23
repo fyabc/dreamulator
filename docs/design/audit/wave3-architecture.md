@@ -162,7 +162,7 @@ gaia-m 建地质分叉分支调侵蚀时须记得携带。
 
 不改代码。在地图/分支工作流文档写清「地质分叉分支必须携带 `geography.yaml`
 （及 `planets.yaml` / `geography_raster.png`）」——见
-[geological-pipeline.md](../geological-pipeline.md) §3.5 末尾的 caveat。
+[geological-pipeline.md](../pipelines/geological-pipeline.md) §3.5 末尾的 caveat。
 
 ---
 

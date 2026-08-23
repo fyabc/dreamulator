@@ -1,9 +1,9 @@
 # 开发路线图
 
 > 最后更新：2026-08-19（v0.32.0 地图图层 headless 导出 CLI + 配色单源化 + Seed 探索器 CLI。前次：v0.31.0 守护轴实现落地：事实上下文 / 过期检测 + guard check / ADR 台账 / 原语注册表 / 拷问编排 + /grill-world skill）
-> 长期愿景与设计哲学见 [vision.md](vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
-> 文明层详细设计见 [civilization-layer.md](civilization-layer.md)；
-> 生态层设计见 [ecology-layer.md](ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
+> 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
+> 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
+> 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
 > 文明种子见 `data/worlds/gaia-m/layers/civilization/input/civilizations.yaml`。
 
 ---
@@ -30,8 +30,8 @@
 | 2.5 | 地形真实感增强 | ✅ v0.7.0–0.8.0 | 板块剖分（Cortial 2019）、地形合成、海岸线、噪声标定；见 CHANGELOG.md |
 | 3A | 气候与流体引擎 | 🚧 | 核心已合并（v0.9.0），调优进行中；见 三 |
 | 3B | 侵蚀与河流生成 | 📋 | D8 流向 / 流量累积 / 水力侵蚀 / 沉积物搬运（`river_generator.py`、`erosion.py` 为占位） |
-| 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker 映射 + 代谢标度 NPP + 可驯化标签（P0 ✅ 已于 v0.20.0 实施，含前端 Whittaker 群系 / NPP / 文明摇篮三个专题图层）；区域连通物种分布（P1）；简单食物网（P2）；异星物种推演（P3 = body plan 推导 P3a → 演化树 P3b → 图像输出 P3c，推演核心留主仓、图像独立成模块，见 [ecology-layer.md](ecology-layer.md) §3.5 / 决策 #5）。数学模型见 `docs/knowledge/ecology/ecological_mathematical_models.md` |
-| 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](civilization-layer.md) |
+| 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker 映射 + 代谢标度 NPP + 可驯化标签（P0 ✅ 已于 v0.20.0 实施，含前端 Whittaker 群系 / NPP / 文明摇篮三个专题图层）；区域连通物种分布（P1）；简单食物网（P2）；异星物种推演（P3 = body plan 推导 P3a → 演化树 P3b → 图像输出 P3c，推演核心留主仓、图像独立成模块，见 [ecology-layer.md](proposals/ecology-layer.md) §3.5 / 决策 #5）。数学模型见 `docs/knowledge/ecology/ecological_mathematical_models.md` |
+| 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](proposals/civilization-layer.md) |
 | 3D | 世界线合并可视化 Diff | 📋 | DAG 影响半径分析 / Lyapunov 混沌预警 / 蒙特卡洛不确定性 |
 | 3E | LLM 叙事引擎 | 🚧 | 基础 `narrate` 已实现；史诗叙事桥（`narrative_bridge.py`）未做 |
 
@@ -39,7 +39,7 @@
 
 ## 三、Phase 3A 气候引擎子状态
 
-详见 [climate-pipeline.md](climate-pipeline.md)。输出：temperature.png / precipitation.png / koppen.json / climate_metadata.json。
+详见 [climate-pipeline.md](pipelines/climate-pipeline.md)。输出：temperature.png / precipitation.png / koppen.json / climate_metadata.json。
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
@@ -78,7 +78,7 @@
   - 气候引擎仍从最终（侵蚀后）地形算权威气候（供生态/文明），两者是"强迫 vs 精细化"关系
   
   **管线位置**：`terrain_config.yaml` 新增 `surface_evolution_steps`（层内时间循环，接在 tectonic_steps 之后）+ `climate_coupling: none | proxy | full`（默认 proxy）。
-- **3C 文明层**：三层半格式化架构（实体修饰器 / 事件流 / LLM 渲染层）+ 策略模式建模（HANDY / SDT / Tainter / 标签驱动），见 [civilization-layer.md](civilization-layer.md)。
+- **3C 文明层**：三层半格式化架构（实体修饰器 / 事件流 / LLM 渲染层）+ 策略模式建模（HANDY / SDT / Tainter / 标签驱动），见 [civilization-layer.md](proposals/civilization-layer.md)。
 - **3D 世界线 Diff**：地理热力图 + 文明状态对比；DAG 影响半径、混沌预警、蒙特卡洛置信区间。
 - **3E 叙事引擎**：`narrative_bridge.py` — LLM 读取 YAML/JSON 数据变动，生成符合逻辑的世界线编年史。
 
@@ -125,7 +125,7 @@
 | P2 | 地质时间轴可视化（板块漂移回放） | 3–4 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周（低风险渐进迁移） | ★★★ |
-| P2 | `ai` CLI 命令组（narrate/imagine/assist/trace/mythologize/tavern 等；`ai assist` 为世界设计助手——自然语言→结构化编辑；`ai civ` 为地理→文明推演——气候画像→文明种子，衔接 civilizations.yaml。设计见 [ai-cli-commands.md](ai-cli-commands.md)。**注**：`ai critique`/`ai trace`/`ai reconcile` 已并入守护轴 [harness.md](harness.md) P0，不在本条目内） | 2–3 周 | ★★★ |
+| P2 | `ai` CLI 命令组（narrate/imagine/assist/trace/mythologize/tavern 等；`ai assist` 为世界设计助手——自然语言→结构化编辑；`ai civ` 为地理→文明推演——气候画像→文明种子，衔接 civilizations.yaml。设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)。**注**：`ai critique`/`ai trace`/`ai reconcile` 已并入守护轴 [harness.md](proposals/harness.md) P0，不在本条目内） | 2–3 周 | ★★★ |
 | P1 | **增量重建细化**（`--only terrain` 粒度：改 geography.yaml 后跳过板块构造） | 0.5 周 | ★★★★ |
 | **P0** | **前端加载性能优化**（① JSON 截断 ✅ ② gzip ✅ ③ MessagePack ✅ 已落地；④ 纹理分辨率匹配 cell 密度待做） | 1–2 周 | ★★★★★ |
 | P1 | **几何/气候数据分离存储**（静态网格（x,y,z,neighbors,plate_id）只加载一次；气候/生态字段增量更新。200k 下几何 ~80 MB、气候 ~90 MB，总计 ~170 MB 可接受） | 0.5 周 | ★★★★ |
@@ -134,9 +134,9 @@
 | P2 | **分辨率独立性验证**（确保 geography.yaml 锚定特征在 100k/200k/500k 下一致；已发现 sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
 | P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具编辑 ↔ 回贴 cell，用于 Gaea/World Machine 集成）。**注**：P1 "局部地形精细化管线" 为此项的 MVP 先行版——先打通实用工作流，远期再做全自动往返协议 | 远期 | ★★ |
 | P3 | AI 顾问模式 / 实时协作 / 世界导出包 | 见 vision.md §9 | ★★ |
-| P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算） | 远期，设计概要见 [moltke-engine.md](moltke-engine.md) | ★★ |
+| P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算） | 远期，设计概要见 [moltke-engine.md](proposals/moltke-engine.md) | ★★ |
 | P3 | SDE 文明建模（Euler-Maruyama / Milstein / Jump-Euler + 泊松跳跃冲击） | 远期，依赖 Entity ID + Modifier 系统 | ★★ |
-| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上；`query_registry` 补 `context=None` 物理/化学 verifier 原语——配平、密度-温度、能量预算等，作 `ai critique` 确定性取证底座。见 [harness.md](harness.md) §9.4） | 内核 0.5 周，随 `ai` 命令组（P2）推进 | ★★ |
+| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上；`query_registry` 补 `context=None` 物理/化学 verifier 原语——配平、密度-温度、能量预算等，作 `ai critique` 确定性取证底座。见 [harness.md](proposals/harness.md) §9.4） | 内核 0.5 周，随 `ai` 命令组（P2）推进 | ★★ |
 
 ---
 
@@ -194,7 +194,7 @@
 **ocean (GMRES) 缩放非线性但非爆炸性**：100k→200k 2.75×、200k→500k 4.05×、500k→1M 2.15×。其中 200k→500k 最差（2.5× nodes 但 4.05× 耗时），可能因海盆切分阈值在该区间触发了不同数量的独立 GMRES 求解。1M 有 126 个海盆（500k 约 71 个），最大单盆 680k cells。整体 1M/100k=23.8× 偏离理想 10×，是唯一需要算法优化的阶段。
 
 **地质层缩放健康**：tectonics 和 terrain 均为 O(N^1.5) 预期，mesh 为 O(N log N)，均无意外。
-12. **四层控制模型**（2026-08-11 设计决策）— 将地质层的两层编辑架构（#20）泛化为适用于所有 DAG 层级的统一框架。详见 [layer-control-model.md](layer-control-model.md)。核心设计：
+12. **四层控制模型**（2026-08-11 设计决策）— 将地质层的两层编辑架构（#20）泛化为适用于所有 DAG 层级的统一框架。详见 [layer-control-model.md](proposals/layer-control-model.md)。核心设计：
 
 | 层级 | 载体 | 职责 |
 |------|------|------|
