@@ -317,6 +317,33 @@
     （Z、平衡潮、共振因子；输入 k₂/h₂/Q/e/a/R/H 均已存在于 stellar/planets/physical_params），
     接入 `world_parameters.yaml`，潮汐相关文档转 Jinja2 模板。
 
+20. **气候引擎水汽收支标定遗留**（2026-08-24，质量守恒水汽收支 Level 2 后续）—
+    质量守恒水汽收支（∇·(Wu)+W/τ−κ∇²W=E, P=W/τ）已落地（Köppen 空间 29.2%→32.0%），
+    但 κ 扩散（~1e6 m²/s，穿透 ~900km）+ 风场辐合，与剩余启发式（storm track / convection /
+    tropical boost / Step 6.5 内陆干旱梯度）形成**互相纠缠的补偿网络**。已试并否决两条
+    「删启发式」路线（均退化）：
+    - ❌ 纬度依赖涡旋扩散 κ(φ) 替换 storm/convection/tropical boost → 22.8%（扩散是抹平
+      算子，无法同时表达尖 ITCZ + 干沙漠 + 湿中纬的锐利结构）。
+    - ❌ 删 Step 6.5 内陆干旱梯度 → 24.3%（Step 6.5 同时正确干燥沙漠 + 误伤 Siberia 内陆）。
+    剩余方向（聚焦修传输本身，而非增删外围启发式）：
+    - **ITCZ 偏强**（赤道 3334mm vs GPCP 1466）——根因是风场赤道辐合过强/过窄
+      （有限体积散度 ~100× 放大），修风场（加宽 Hadley 辐合带 / 更强平滑）。
+    - **中纬干燥**（gaia-m 40°N Cfb→BSk）——单圈下沉支 + 无风暴路径，慢自转中纬补水机制另寻。
+    - **双重计数**——storm/convection/tropical boost 叠加在守恒 budget 上（海洋输送变负），
+      改「缩减叠加项幅度」恢复质量平衡，而非删除。
+    - **C/D 群退化**（Dfc→EF/ET 2069+1968）——温度分类问题，非降水改动引起，单独排查。
+    - **coastal moderation**——年平温度向 SST 混合（`distance_to_coast_km` 已算未用于年平温，
+      亚南极群岛 EF 冰盖主因）。
+    - **海洋输送占比按风生环流推导**——`ebm_diffusion_land_wm2k`=0.6×D_total 是地球洋流
+      占比标定，慢自转下海洋占比应更小。
+
+21. **低优先级（异星生态 / 天文 / 验证数据）**（2026-08-24）：
+    - Whittaker 群系「平移边界线」——`classify_whittaker_biome` 硬编码地球阈值，异星应平移降水轴。
+    - Aegis 偏心率调高（0.005→~0.03，GJ 876 类比，需 REBOUND 精确值）。
+    - 年度冰反照率光谱统一（B 方案，等 M 矮星 GCM 参考数据再标定）。
+    - 温度源升级 ERA5（需 CDS API）/ CRU TS v4（免注册），当前用 NCEP。
+    - LGM 扩展：22ka 时间片 + 月度版（tasmin/tasmax/pr）+ PMIP4 多模型交叉。
+
 ### 工程卫生
 
 1. **Pillow `mode="I;16"` 弃用（Pillow 13，2026-10-15 移除）** — ✅ 已修复

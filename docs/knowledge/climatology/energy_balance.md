@@ -288,53 +288,58 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 
 ## 8. 降水与水循环
 
-### 总体结构（辐合驱动，2026-08 重推）
+### 总体结构（质量守恒水汽收支，2026-08 重推）
 
-降水是三层物理之和：
+降水是一个**质量守恒的柱水汽收支方程**（Held & Soden 2006 的 $P-E=-\nabla\cdot(W\vec u)$
+在雨出参数化下的形式）：
 
-$$P = \underbrace{\eta_{recycle}\cdot q_{diff}}_{基线回收} + \underbrace{\eta_{conv}\cdot \min(W(T), W_{cap})\cdot \text{conv}}_{辐合增强} + \underbrace{P_{storm}}_{斜压风暴}$$
+$$\nabla\cdot(W\vec u) + \frac{W}{\tau} - \kappa\nabla^2 W = E,\qquad P = \frac{W}{\tau}$$
 
-- **基线回收**：扩散水汽 $q_{diff}$ 的一小部分（`recycling_fraction`）局部落雨——层积云、
-  副高弱下沉雨、陆地蒸散。**让副热带下沉带不干到零**（观测 ~1000 mm/yr）。
-- **辐合增强**：`conv = max(0, −∇·u)` 是表面风辐合（`_meridional_convergence`，12 月
-  ITCZ 平均的平滑纬向函数）。ITCZ（赤道辐合）、副热带干带（下沉辐散）、极锋（辐合）
-  全部从风场自然涌现，**无纬度硬编码**。柱水汽 $W(T)$（C–C）被能量上限 `convergence_moisture_cap_mm`
-  封顶（热带降水是能量受限，非水汽受限，避免湿热带按水汽库正比降水而淹掉海洋）。
-- **斜压风暴**：中纬斜压涡旋是独立机制（表面辐合无法捕捉其上升支 + 水汽输送），幅度
-  $\propto \nabla T \times \Omega^{0.3} \times$ 蒸发（Eady 增长率），中心在极锋。
+- $W$：柱水汽（可降水量，mm），全球均 ~25 mm（Trenberth & Smith 2005）。
+- $\tau$：水汽驻留时间 ≈ 9 天（Trenberth 1998；van der Ent & Tuinenburg 2016 复核）。
+- $\kappa$：湍流扩散 ≈ 1e6 m²/s（大气涡旋扩散率，展宽 ITCZ 到观测 ~10° 雨带，
+  扩散长度 $\sqrt{\kappa\tau}\approx 900$ km）。
+- **质量守恒由构造保证**：$\int P = \int E$（通量项全局对消），不再有「只落 30% 水汽」的
+  启发式因子。
+- 离散：CVT 图上迎风有限体积（边平均风速保证通量守恒）+ 图扩散，直接稀疏 LU 求解。
+- **ITCZ / 副热带干带从 $\nabla\cdot(W\vec u)$ 自然涌现**——辐合处 $W$ 高 → $P$ 高，无纬度硬编码。
 
-### 海洋蒸发（水汽源）
+### 海洋蒸发（水汽源，能量限制）
 
-暖洋面蒸发更强，Clausius–Clapeyron 7%/°C：
+海洋蒸发是**能量限制**的（潜热通量不能超过可用净表面辐射），不是 C–C 饱和斜率：
 
 ```
-evaporation = evaporation_base_mm × (1 + 0.07 × (SST − 15))   # mm/yr
+evaporation = evaporation_base_mm × (1 + 0.03 × (SST − 15))   # mm/yr
 ```
 
-`evaporation_base_mm` 默认 2000（热带洋面年蒸发）。
+- `evaporation_base_mm` 默认 1000（15 °C 洋面年蒸发），标定使全球洋均蒸发 ≈ 1143 mm/yr
+  （Trenberth 2009 实测）。~3%/°C 是能量限制响应（Trenberth 2009；Held & Soden 2006），
+  非饱和水汽压的 ~7%/°C。
+- 陆地蒸散 = `_LAND_EVAPOTRANSPIRATION_FRACTION`（≈0.55）× 洋面速率，标定使全球陆均
+  蒸散 ≈ 490 mm/yr（Trenberth 2009 水量收支）。
 
-### 水汽输送（图扩散）
+### 水汽输送（迎风平流 + 湍流扩散）
 
-水汽在 CVT 邻域图上做风偏图扩散（`_compute_precipitation_bfs` Step 2），每个 advection
-pass 求解稳态扩散 $(I + \bar\alpha L)\,q = q_{source}$（GMRES）。唯一自由参数
-`moisture_diffusivity`（$D_0$，默认 5.0），风速标度自动继承自转（$\Omega^{-1/3}$）。
+柱水汽 $W$ 在 CVT 图上沿风场迎风平流（`_solve_moisture_budget`），边平均风速保证守恒，
+湍流扩散项展宽 ITCZ。传播距离由 $L = u\tau$ 随风速自适配（慢自转风强 → 水汽穿透更远），
+分辨率无关（用 km 定义的物理量）。
 
 ### 地形降水与雨影
 
-- 迎风坡抬升：`rain = q_upwind × min(0.20 × elev_gain/1000, 0.9)`（每 1000m 抬升转换 20% 水汽）；
-- 雨影（背风坡）：降水 = 水汽 × 3%。
+- 迎风坡抬升：`rain = W_upwind × min(0.20 × elev_gain/1000, 0.9)`（每 1000m 抬升转换 20% 柱水汽）；
+- 雨影（背风坡）：降水 = 柱水汽 × 3%。
 
 ### 其他保留项（第一性）
 
-- 局地对流（暖陆地午后雷暴）、内陆干旱梯度、海岸不对称、Föhn 雨影、热带底线、
-  次行星半球强迫——详见 `climate-pipeline.md`。
+- 斜压风暴路径、局地对流（暖陆地午后雷暴）、内陆干旱梯度、海岸不对称、Föhn 雨影、
+  热带底线、次行星半球强迫——详见 `climate-pipeline.md`。
 
 ### 对应源码
 
 ```
-dreamulator.map.climate_simulator._compute_precipitation_bfs   # 三层降水 + 输送 + 地形
-dreamulator.map.climate_simulator._meridional_convergence      # 平滑纬向辐合
-dreamulator.engine.climate_physics.evaporation_rate            # C-C 蒸发
+dreamulator.map.climate_simulator._compute_precipitation_bfs   # 水汽收支 + 地形 + 保留项
+dreamulator.map.climate_simulator._solve_moisture_budget       # 质量守恒水汽收支求解
+dreamulator.engine.climate_physics.evaporation_rate            # 能量限制蒸发
 ```
 
 ---

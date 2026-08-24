@@ -1,6 +1,6 @@
 # 降水：水汽输送、相态与地形效应
 
-> 为 dreamulator 气候引擎的降水模块提供参考。降水由 BFS 水汽输送（`climate_simulator.py:_compute_precipitation_bfs`）
+> 为 dreamulator 气候引擎的降水模块提供参考。降水由质量守恒水汽收支（`climate_simulator.py:_solve_moisture_budget`）
 > + 地形效应（翻山雨影/Föhn）+ 相态（雨/雪）转换构成。本文档补记降水相态与
 > 低温降水（雪）的科学底座，以及 2026-08-13 发现的一处低温降水骤降 bug。
 
