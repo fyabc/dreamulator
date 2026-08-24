@@ -183,7 +183,7 @@ npm run lint
 ### 引擎设计纪律（最高优先级）
 
 1. **第一性计算 > 先验启发式**：每个引擎决策优先从物理推导，尽量少引入启发式自变量。新增参数必须是可推导量（从自转/光度/倾角/海陆分布等物理量推出），不接受「为让结果像一点」的裸调。
-2. **同物理（所有世界同一套物理引擎）**：只差输入参数，不做单世界特调。改完必须在其他世界（如 gaia-m）回归验证，指标不能退化。
+2. **同物理（所有世界同一套物理引擎）**：只差输入参数，不做单世界特调。改完必须在其他世界（如 nacrea）回归验证，指标不能退化。
 3. **不因一时变差而放弃第一性**：当第一性改动让验证指标暂时变差时，先判断「指标变差是物理错了，还是标定/口径没跟上」——物理错了才回退，标定没跟上就修标定或整体重推，而不是退回启发式。
 4. **避免过早优化**：为了第一性可适当放弃运行速度，先建立准确的模型，之后再回头优化。交互性（秒级~分钟级）是硬约束，但不能以牺牲正确性为代价去满足它。
 
@@ -294,7 +294,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 3. **每次 commit/push 前需用户确认**：先展示改动摘要（`git diff --stat` 或关键 diff），等用户明确说「提交/推送」再执行。
 4. **提交前先在 `private/worlds` 上构建验证**：改动涉及引擎/管线时，先跑
    ```bash
-   uv run dreamulator build gaia-m --data-dir private/worlds --force
+   uv run dreamulator build nacrea --data-dir private/worlds --force
    ```
    让用户检查结果后再合并。
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
@@ -311,15 +311,15 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ```bash
 # 改前保存基线
-cp -r private/worlds/gaia-m/maps/satellite_gaiam private/worlds/gaia-m/maps/_baseline
+cp -r private/worlds/nacrea/maps/satellite_nacrea private/worlds/nacrea/maps/_baseline
 
 # 改代码 → 构建
-uv run dreamulator build gaia-m --data-dir private/worlds --only climate --force
+uv run dreamulator build nacrea --data-dir private/worlds --only climate --force
 
 # 对比
 uv run python scripts/climate_diff.py \
-    private/worlds/gaia-m/maps/_baseline \
-    private/worlds/gaia-m/maps/satellite_gaiam
+    private/worlds/nacrea/maps/_baseline \
+    private/worlds/nacrea/maps/satellite_nacrea
 ```
 
 输出：全局摘要（T/P/Köppen/biome）、纬度带平均差异、Top-N 变化最大的细胞。

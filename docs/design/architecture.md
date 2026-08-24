@@ -121,7 +121,7 @@ LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理�
 这一分离在架构层面强制了因果箭头（详见 [vision.md](proposals/vision.md) 的设计哲学）。
 
 input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人类创作，但其中
-引用物理参数处应写 **Jinja2 占位符**（如 `{{ entities.satellite_gaiam.solar_day_days | round2 }}`），
+引用物理参数处应写 **Jinja2 占位符**（如 `{{ entities.satellite_nacrea.solar_day_days | round2 }}`），
 在读取时（API）与静态导出时由 `doc_render.py` 从事实上下文（`system_catalog.yaml` +
 各层 summary，见 `guard/facts.py`）渲染填充；渲染产物不落盘、不进 git，模板是唯一
 被跟踪的来源。详见 [worldbuilding/design_patterns.md](../worldbuilding/design_patterns.md) 模式 10。

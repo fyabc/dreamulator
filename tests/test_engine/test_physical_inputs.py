@@ -56,7 +56,7 @@ def _make_planet(pid: str, orbits: str) -> Planet:
     )
 
 
-# Mirrors the gaia-m system: habitable moon around a gas giant at 0.2795 AU
+# Mirrors the nacrea system: habitable moon around a gas giant at 0.2795 AU
 # around a 0.0357 L_sun / 0.4499 M_sun M-dwarf.
 _GAIA_STELLAR: dict[str, Any] = {
     "stars": [{"id": "star_ignis", "luminosity": 0.0357, "mass": 0.449864}],
@@ -73,7 +73,7 @@ _GAIA_STELLAR: dict[str, Any] = {
         # and its eccentricity (0.002, the tidal-heating source) must NOT be
         # mistaken for the heliocentric eccentricity.
         {
-            "body_id": "satellite_gaiam",
+            "body_id": "satellite_nacrea",
             "parent_id": "planet_aegis",
             "semi_major_axis_au": 0.00494,
             "eccentricity": 0.002,
@@ -85,7 +85,7 @@ _GAIA_STELLAR: dict[str, Any] = {
 def test_satellite_resolves_host_star_distance_and_period(tmp_path: Path) -> None:
     stellar = _write(tmp_path, "stellar.yaml", _GAIA_STELLAR)
     engine = _StubEngine({"stellar.yaml": stellar})
-    planet = _make_planet("satellite_gaiam", "planet_aegis")
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
 
     lum, dist, period, warnings = resolve_stellar_forcing(engine, planet)
 
@@ -194,7 +194,7 @@ def test_heliocentric_eccentricity_ignores_satellite_orbit(tmp_path: Path) -> No
     """
     stellar = _write(tmp_path, "stellar.yaml", _GAIA_STELLAR)
     engine = _StubEngine({"stellar.yaml": stellar})
-    planet = _make_planet("satellite_gaiam", "planet_aegis")
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
 
     ecc, is_satellite, warnings = resolve_orbital_elements(engine, planet)
 
@@ -234,8 +234,8 @@ def test_resolve_and_apply_full_chain(tmp_path: Path) -> None:
         {
             "planets": [
                 {
-                    "id": "satellite_gaiam",
-                    "name": "Gaia-M",
+                    "id": "satellite_nacrea",
+                    "name": "Nacrea",
                     "orbits": "planet_aegis",
                     "mass": 1.2,
                     "radius": 1.07,
@@ -266,7 +266,7 @@ def test_resolve_and_apply_full_chain(tmp_path: Path) -> None:
 
 
 # ===================================================================
-# gaia-m system fixtures (shared by build_system_catalog tests)
+# nacrea system fixtures (shared by build_system_catalog tests)
 # ===================================================================
 
 _GAIA_STELLAR_WITH_BODIES: dict[str, Any] = {
@@ -279,7 +279,7 @@ _GAIA_STELLAR_WITH_BODIES: dict[str, Any] = {
             "eccentricity": 0.005,
         },
         {
-            "body_id": "satellite_gaiam",
+            "body_id": "satellite_nacrea",
             "parent_id": "planet_aegis",
             "semi_major_axis_au": 0.00494,
             "eccentricity": 0.002,
@@ -291,8 +291,8 @@ _GAIA_STELLAR_WITH_BODIES: dict[str, Any] = {
 _GAIA_PLANET_YAML: dict[str, Any] = {
     "planets": [
         {
-            "id": "satellite_gaiam",
-            "name": "Gaia-M",
+            "id": "satellite_nacrea",
+            "name": "Nacrea",
             "orbits": "planet_aegis",
             "mass": 1.2,
             "radius": 1.07,
@@ -342,7 +342,7 @@ def _planet_model(pid: str, **overrides: Any) -> Planet:
 def test_consistency_check_passes_when_aligned() -> None:
     bodies = [
         {
-            "id": "satellite_gaiam",
+            "id": "satellite_nacrea",
             "mass_earth": 1.2,
             "radius_km": 1.07 * 6371.0,
             "rotation_period_days": 3.25,
@@ -350,11 +350,11 @@ def test_consistency_check_passes_when_aligned() -> None:
             "albedo": 0.30,
         }
     ]
-    assert check_body_field_consistency(bodies, [_planet_model("satellite_gaiam")]) == []
+    assert check_body_field_consistency(bodies, [_planet_model("satellite_nacrea")]) == []
 
 
 def test_consistency_check_detects_drift() -> None:
-    """The three real gaia-m drifts fixed in 2026-08 must all be caught."""
+    """The three real nacrea drifts fixed in 2026-08 must all be caught."""
     bodies = [
         {"id": "planet_aegis", "albedo": 0.34},  # vs 0.343 (0.87%)
         {"id": "sat_c", "radius_km": 2840.0},  # vs 0.45 R⊕ = 2867 km (0.93%)
@@ -383,7 +383,7 @@ def test_consistency_check_skips_bodies_absent_from_planets() -> None:
 # ===================================================================
 
 
-def test_build_system_catalog_gaia_m(tmp_path: Path) -> None:
+def test_build_system_catalog_nacrea(tmp_path: Path) -> None:
     catalog, warnings = build_system_catalog(_gaia_stub(tmp_path))
     assert warnings == []
 
@@ -395,30 +395,30 @@ def test_build_system_catalog_gaia_m(tmp_path: Path) -> None:
     assert "habitable_zone" in star
     assert star["habitable_zone_center_au"] == pytest.approx(0.2994, rel=1e-2)
 
-    # Union of bodies: planet_aegis (bodies only) + satellite_gaiam (planets only)
-    assert sorted(b["id"] for b in catalog["bodies"]) == ["planet_aegis", "satellite_gaiam"]
+    # Union of bodies: planet_aegis (bodies only) + satellite_nacrea (planets only)
+    assert sorted(b["id"] for b in catalog["bodies"]) == ["planet_aegis", "satellite_nacrea"]
     by_id = {b["id"]: b for b in catalog["bodies"]}
-    gaiam = by_id["satellite_gaiam"]
-    assert gaiam["in_planets_yaml"] is True
-    assert gaiam["orbit"]["period_days"] == pytest.approx(3.245, rel=1e-2)
-    assert gaiam["physical"]["gravity_m_s2"] == pytest.approx(10.28, rel=1e-3)
-    assert gaiam["atmosphere"]["greenhouse_factor"] == pytest.approx(62.0)
-    assert gaiam["derived"]["tidally_locked"] is True
-    assert gaiam["derived"]["solar_day_days"] == pytest.approx(3.42, rel=1e-2)
-    assert gaiam["derived"]["in_conservative_habitable_zone"] is True
-    # Calendar + instellation facts (the values gaia-m docs derive by hand)
-    assert gaiam["derived"]["days_per_year"] == pytest.approx(19.6, rel=1e-2)
-    assert gaiam["derived"]["instellation_w_m2"] == pytest.approx(1361.0 * 0.6603, rel=1e-2)
-    assert gaiam["derived"]["season_length_days"] == pytest.approx(67.0 / 4.0, rel=1e-2)
-    assert gaiam["derived"]["polar_circle_latitude_deg"] == pytest.approx(81.0)
-    assert gaiam["derived"]["polar_day_at_pole_days"] == pytest.approx(33.5, rel=1e-2)
+    nacrea = by_id["satellite_nacrea"]
+    assert nacrea["in_planets_yaml"] is True
+    assert nacrea["orbit"]["period_days"] == pytest.approx(3.245, rel=1e-2)
+    assert nacrea["physical"]["gravity_m_s2"] == pytest.approx(10.28, rel=1e-3)
+    assert nacrea["atmosphere"]["greenhouse_factor"] == pytest.approx(62.0)
+    assert nacrea["derived"]["tidally_locked"] is True
+    assert nacrea["derived"]["solar_day_days"] == pytest.approx(3.42, rel=1e-2)
+    assert nacrea["derived"]["in_conservative_habitable_zone"] is True
+    # Calendar + instellation facts (the values nacrea docs derive by hand)
+    assert nacrea["derived"]["days_per_year"] == pytest.approx(19.6, rel=1e-2)
+    assert nacrea["derived"]["instellation_w_m2"] == pytest.approx(1361.0 * 0.6603, rel=1e-2)
+    assert nacrea["derived"]["season_length_days"] == pytest.approx(67.0 / 4.0, rel=1e-2)
+    assert nacrea["derived"]["polar_circle_latitude_deg"] == pytest.approx(81.0)
+    assert nacrea["derived"]["polar_day_at_pole_days"] == pytest.approx(33.5, rel=1e-2)
 
     # Parent planet's heliocentric orbit is the satellite's "year" (67 Earth days)
     aegis = by_id["planet_aegis"]
     assert aegis["orbit"]["period_days"] == pytest.approx(67.0, rel=1e-2)
 
     # Target body is flagged for the frontend; no role-flattened duplicate
-    assert catalog["target_body_id"] == "satellite_gaiam"
+    assert catalog["target_body_id"] == "satellite_nacrea"
     assert "target_parameters" not in catalog
 
 
@@ -477,7 +477,7 @@ def test_build_system_catalog_warns_on_drift(tmp_path: Path) -> None:
     """Duplicated fields that diverge surface as catalog warnings."""
     stellar = dict(_GAIA_STELLAR_WITH_BODIES)
     drifted_bodies = [
-        {"id": "satellite_gaiam", "mass_earth": 1.2, "albedo": 0.25}  # vs 0.30
+        {"id": "satellite_nacrea", "mass_earth": 1.2, "albedo": 0.25}  # vs 0.30
     ]
     stellar = {**stellar, "bodies": drifted_bodies}
     stellar_file = _write(tmp_path, "stellar.yaml", stellar)
@@ -493,7 +493,7 @@ def test_build_system_catalog_warns_on_drift(tmp_path: Path) -> None:
 
     catalog, warnings = build_system_catalog(engine)
 
-    assert any("albedo" in w and "satellite_gaiam" in w for w in warnings)
+    assert any("albedo" in w and "satellite_nacrea" in w for w in warnings)
     assert any("albedo" in w for w in catalog.get("warnings", []))
 
 

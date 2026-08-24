@@ -1,7 +1,7 @@
 """Numba-JIT noise kernels (Stage 1.1).
 
 Replaces the per-cell scalar ``opensimplex.noise3`` calls (~44 µs each,
-~1.4M of them on a gaia-m build) with compiled 3D Perlin gradient noise
+~1.4M of them on a nacrea build) with compiled 3D Perlin gradient noise
 (~0.1 µs each). The noise field is statistically similar to OpenSimplex
 (smooth, zero-mean, fractal via fBm composition) but **not bit-identical**
 — swapping the backend changes terrain detail on rebuild (documented,

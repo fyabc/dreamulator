@@ -12,7 +12,7 @@ does not even guarantee plate tectonics (the Venus paradox).  See
 O'Neill & Lenardic debate and the full reference list.
 
 Defaults anchor on Earth (v=5 cm/yr at q=0.09 W/m² total surface heat flux)
-and reproduce ~15 cm/yr for gaia-m's ~3× tidal flux with β=1.
+and reproduce ~15 cm/yr for nacrea's ~3× tidal flux with β=1.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 ---
 title: ""赤渊"倒流河奇观"
 type: hydro
-tags: [river, geological-wonder, tidal-bore, gaia-m]
+tags: [river, geological-wonder, tidal-bore, nacrea]
 status: draft
 updated: 2026-08-10
 ---
@@ -10,7 +10,7 @@ updated: 2026-08-10
 
 ## 原设（2026-07，已搁置）
 
-原选址 gaia-m 世界岛北纬 40° 大裂谷海裂谷段，副热带超级荒漠核心区。
+原选址 nacrea 世界岛北纬 40° 大裂谷海裂谷段，副热带超级荒漠核心区。
 因当时地形不支持封闭裂谷盆地而移出，计划待后续异星世界复用。
 
 ### 自变量
@@ -46,7 +46,7 @@ updated: 2026-08-10
 
 ### 背景
 
-gaia-m v0.24+ 气候引擎经 subtropical suppression 参数化（Hadley 边界 55° +
+nacrea v0.24+ 气候引擎经 subtropical suppression 参数化（Hadley 边界 55° +
 罗斯贝变形半径标度）后，北方（48°N 附近）形成了大片温带荒漠，为倒流河奇观
 提供了新的候选场景。
 
@@ -136,7 +136,7 @@ gaia-m v0.24+ 气候引擎经 subtropical suppression 参数化（Hadley 边界 
   完全自洽
 - ✅ **陆壳裂谷**：cell #12554 已确认为 continental crust，裂谷在陆壳内
   延伸（而非洋壳），形成"大陆裂谷→海水灌入→内陆盐湖"的经典演化序列
-- ✅ **潮汐驱动**：gaia-m 的 ~44 m 潮汐（巨行星 Aegis + 卫星共振）为倒流河
+- ✅ **潮汐驱动**：nacrea 的 ~44 m 潮汐（巨行星 Aegis + 卫星共振）为倒流河
   提供强大的涌潮驱动力，与裂谷形态无关
 - ✅ **极端干旱**：39.6 mm/yr 降水 → 蒸发 >> 降水，盐湖可持续堆积
 

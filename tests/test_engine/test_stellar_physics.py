@@ -292,8 +292,8 @@ class TestHabitableZoneCenter:
         d = habitable_zone_center(1.0, 5772.0)
         assert d == pytest.approx(1.29, rel=0.02)
 
-    def test_gaia_m_hz_center(self):
-        """Gaia-M HZ center ≈ 0.28 AU."""
+    def test_nacrea_hz_center(self):
+        """Nacrea HZ center ≈ 0.28 AU."""
         d = habitable_zone_center(0.0357, 3858.0)
         assert d == pytest.approx(0.2795, rel=0.01)
 
@@ -331,11 +331,11 @@ class TestSolarDay:
         assert pytest.approx(1.0 / (1.0 - 1.0 / 365.25), rel=1e-9) == P
         assert pytest.approx(1.0027, rel=1e-3) == P
 
-    def test_gaia_m_locked_moon(self):
-        """Gaia-M: locked to Aegis at 3.25 d, heliocentric year 67 d → 3.42 d.
+    def test_nacrea_locked_moon(self):
+        """Nacrea: locked to Aegis at 3.25 d, heliocentric year 67 d → 3.42 d.
 
         Regression anchor: docs/knowledge/astrophysics/sidereal_solar_day.md
-        and gaia-m physical_params.md both give 3.42 d (82.0 h).
+        and nacrea physical_params.md both give 3.42 d (82.0 h).
         """
         P = solar_day_days(3.25, 67.0)
         assert pytest.approx(3.42, rel=1e-2) == P
@@ -365,8 +365,8 @@ class TestPolarGeometry:
         """Earth ε=23.44° → polar circles at ±66.56°."""
         assert polar_circle_latitude_deg(23.44) == pytest.approx(66.56)
 
-    def test_polar_circle_gaia_m(self):
-        """Gaia-M ε=9° → ±81° (physical_params.md)."""
+    def test_polar_circle_nacrea(self):
+        """Nacrea ε=9° → ±81° (physical_params.md)."""
         assert polar_circle_latitude_deg(9.0) == pytest.approx(81.0)
 
     def test_zero_tilt_no_polar_day(self):

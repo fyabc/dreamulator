@@ -1,6 +1,6 @@
 """Tests for dreamulator.engine.sky_geometry — sky phenomenon primitives.
 
-Anchor values from gaia-m's sky_phenomena.md (Aegis 11°, 永耀岛 89°, 外卫星掩).
+Anchor values from nacrea's sky_phenomena.md (Aegis 11°, 永耀岛 89°, 外卫星掩).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from dreamulator.engine.sky_geometry import (
     transit_classification,
 )
 
-# Minimal entity table (flattened system_catalog bodies) with gaia-m anchor values.
+# Minimal entity table (flattened system_catalog bodies) with nacrea anchor values.
 ENTITIES: dict[str, dict[str, object]] = {
     "planet_aegis": {
         "id": "planet_aegis",
@@ -24,8 +24,8 @@ ENTITIES: dict[str, dict[str, object]] = {
         "semi_major_axis_au": 0.2504,
         "albedo": 0.343,
     },
-    "satellite_gaiam": {
-        "id": "satellite_gaiam",
+    "satellite_nacrea": {
+        "id": "satellite_nacrea",
         "parent_id": "planet_aegis",
         "semi_major_axis_au": 0.00494,
         "radius_km": 6817.0,
@@ -54,7 +54,7 @@ def test_angular_size_ignis() -> None:
 
 def test_sky_position_yongyao_island() -> None:
     """金丝雀：永耀岛（lon 0.5°, lat −0.8°）看 Aegis 仰角 ≈ 89°（sky_phenomena.md）。"""
-    pos = sky_position(ENTITIES, "satellite_gaiam", "planet_aegis", 0.5, -0.8)
+    pos = sky_position(ENTITIES, "satellite_nacrea", "planet_aegis", 0.5, -0.8)
     assert pos.altitude_deg == pytest.approx(89.0, abs=1.0)
     assert pos.angular_size_deg == pytest.approx(11.0, abs=0.1)
     assert pos.visible is True
@@ -62,21 +62,24 @@ def test_sky_position_yongyao_island() -> None:
 
 def test_sky_position_sub_planet_overhead() -> None:
     """正下点（lon 0, lat 0）看母行星应近天顶。"""
-    pos = sky_position(ENTITIES, "satellite_gaiam", "planet_aegis", 0.0, 0.0)
+    pos = sky_position(ENTITIES, "satellite_nacrea", "planet_aegis", 0.0, 0.0)
     assert pos.altitude_deg == pytest.approx(90.0, abs=0.01)
 
 
 def test_sky_position_antipodal_not_visible() -> None:
     """反下点（lon 180, lat 0）看母行星应不可见（仰角 −90°）。"""
-    pos = sky_position(ENTITIES, "satellite_gaiam", "planet_aegis", 180.0, 0.0)
+    pos = sky_position(ENTITIES, "satellite_nacrea", "planet_aegis", 180.0, 0.0)
     assert pos.visible is False
     assert pos.altitude_deg < 0.0
 
 
 def test_transit_classification_outer_satellite_occulted() -> None:
     """外卫星（Cadence/Vigil）轨道半径更大 → 被掩（sky_phenomena.md §6 修正）。"""
-    assert transit_classification(ENTITIES, "satellite_gaiam", "satellite_cadence") == "occultation"
-    assert transit_classification(ENTITIES, "satellite_gaiam", "satellite_vigil") == "occultation"
+    assert (
+        transit_classification(ENTITIES, "satellite_nacrea", "satellite_cadence")
+        == "occultation"
+    )
+    assert transit_classification(ENTITIES, "satellite_nacrea", "satellite_vigil") == "occultation"
 
 
 def test_transit_classification_different_parent_neither() -> None:
@@ -89,7 +92,7 @@ def test_transit_classification_different_parent_neither() -> None:
             "semi_major_axis_au": 0.003,
         },
     }
-    assert transit_classification(entities, "satellite_gaiam", "satellite_other") == "neither"
+    assert transit_classification(entities, "satellite_nacrea", "satellite_other") == "neither"
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +107,7 @@ def test_hill_radius_moon() -> None:
 
 def test_apparent_illuminance_aegis_full_phase() -> None:
     # sky_phenomena.md / giant_brightness.md：Aegis 满相照度 1.91 W/m²。
-    assert apparent_illuminance(ENTITIES, "satellite_gaiam", "planet_aegis") == pytest.approx(
+    assert apparent_illuminance(ENTITIES, "satellite_nacrea", "planet_aegis") == pytest.approx(
         1.91, abs=0.05
     )
 

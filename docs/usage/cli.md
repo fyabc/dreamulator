@@ -100,7 +100,7 @@ dreamulator terrain validate earth --planet earth --branch terrain-dev
 ### 完整构建
 
 ```bash
-dreamulator build gaia-m --data-dir data/worlds
+dreamulator build nacrea --data-dir data/worlds
 ```
 
 按 DAG 拓扑序执行所有引擎：`astronomy → geological → climate`。每层输出保存到对应的 `layers/<layer>/derived/` 目录。
@@ -108,9 +108,9 @@ dreamulator build gaia-m --data-dir data/worlds
 ### 按层构建
 
 ```bash
-dreamulator build gaia-m --only geological   # 只跑地质层（地形生成）
-dreamulator build gaia-m --only climate      # 只跑气候层
-dreamulator build gaia-m --layer climate     # 从气候层开始（跳过已完成的层）
+dreamulator build nacrea --only geological   # 只跑地质层（地形生成）
+dreamulator build nacrea --only climate      # 只跑气候层
+dreamulator build nacrea --layer climate     # 从气候层开始（跳过已完成的层）
 ```
 
 ### 分支构建
@@ -150,7 +150,7 @@ dreamulator build earth --branch climate-dev --only climate
 ### 查看气候状态
 
 ```bash
-dreamulator climate info gaia-m --data-dir data/worlds
+dreamulator climate info nacrea --data-dir data/worlds
 dreamulator climate info earth --branch climate-dev
 ```
 
@@ -217,7 +217,7 @@ dreamulator narrate earth --branch pangea  # 分支描述
 ### 过期检测
 
 ```bash
-dreamulator guard check gaia-m [--branch <b>] [--data-dir <dir>]
+dreamulator guard check nacrea [--branch <b>] [--data-dir <dir>]
 ```
 
 三级检测，从粗到精（harness.md §7）：
@@ -233,10 +233,10 @@ dreamulator guard check gaia-m [--branch <b>] [--data-dir <dir>]
 ### 决策记录台账（ADR）
 
 ```bash
-dreamulator guard accept gaia-m 0001              # proposed → accepted（写 checked_against + 基线）
-dreamulator guard supersede gaia-m 0001 --by 0002 # 标记被 0002 取代（正文不动）
-dreamulator guard deprecate gaia-m 0001           # 弃用（前提失效但历史保留）
-dreamulator guard archive gaia-m --limit 20       # 归档最旧的 accepted，直至 ≤ 上限
+dreamulator guard accept nacrea 0001              # proposed → accepted（写 checked_against + 基线）
+dreamulator guard supersede nacrea 0001 --by 0002 # 标记被 0002 取代（正文不动）
+dreamulator guard deprecate nacrea 0001           # 弃用（前提失效但历史保留）
+dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，直至 ≤ 上限
 ```
 
 - ADR 落在 `data/worlds/<world>/design-notes/00NN-<slug>.md`，frontmatter 带 `status` 字段。
@@ -257,10 +257,10 @@ headless 烘焙地图图层为彩色 PNG，颜色与前端渲染逐字节一致�
 前后端共读）。支撑 `/read-map` skill、`ai civ`、CI 审计——守护轴的取证腿。
 
 ```bash
-dreamulator export layers gaia-m                                # 全部 5 层，分辨率取 map.yaml
-dreamulator export layers gaia-m --layers terrain,koppen        # 指定图层（逗号分隔）
-dreamulator export layers gaia-m --grid 4096x2048               # 指定输出分辨率 WxH
-dreamulator export layers gaia-m --output out/ --data-dir private/worlds
+dreamulator export layers nacrea                                # 全部 5 层，分辨率取 map.yaml
+dreamulator export layers nacrea --layers terrain,koppen        # 指定图层（逗号分隔）
+dreamulator export layers nacrea --grid 4096x2048               # 指定输出分辨率 WxH
+dreamulator export layers nacrea --output out/ --data-dir private/worlds
 ```
 
 | 图层 | 类型 | 字段 | 说明 |
@@ -281,9 +281,9 @@ dreamulator export layers gaia-m --output out/ --data-dir private/worlds
 （Cortial-2019 对 seed 高度敏感：不同 seed 产出完全不同的星球，需工具链辅助选种子）。
 
 ```bash
-dreamulator explore-seeds gaia-m --seeds 42,123,456         # 指定 seed
-dreamulator explore-seeds gaia-m --count 10 --nodes 50000   # 随机 10 个 seed，5 万节点
-dreamulator explore-seeds gaia-m --raw                      # 纯 seed（跳过 geography 锚定）
+dreamulator explore-seeds nacrea --seeds 42,123,456         # 指定 seed
+dreamulator explore-seeds nacrea --count 10 --nodes 50000   # 随机 10 个 seed，5 万节点
+dreamulator explore-seeds nacrea --raw                      # 纯 seed（跳过 geography 锚定）
 ```
 
 | 选项 | 说明 | 默认 |

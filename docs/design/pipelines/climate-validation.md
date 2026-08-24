@@ -165,9 +165,9 @@
 | Tier | 内容 | 状态 | 成本 |
 |---|---|---|---|
 | **T3 单调性 / 物理合理性**（先做） | 纯理论断言，零数据依赖（见 §7.4） | **已建** (7 tests: 5 pass + 3 xfail) | 最低 |
-| **T2 太阳系端元复现**（性价比最高） | Venus / Mars / airless / gaia-m HZ 断言（见 §7.5） | **已建** (4 tests) | 低 |
+| **T2 太阳系端元复现**（性价比最高） | Venus / Mars / airless / nacrea HZ 断言（见 §7.5） | **已建** (4 tests) | 低 |
 | **T1 现代地球**（现有） | §1–5 的 ETOPO1 / Beck / ERA5 / GPCP 流程 | **已建**（降级为"一条证据线"） | — |
-| **T1 回归门**（新增） | gaia-m 200k 基线快照 → CI 回归对比（见 §7.8） | **已建** (`tests/validation/test_regression.py`) | 中（~90s） |
+| **T1 回归门**（新增） | nacrea 200k 基线快照 → CI 回归对比（见 §7.8） | **已建** (`tests/validation/test_regression.py`) | 中（~90s） |
 | **T4 古气候体制检验** | LGM 型（低 CO₂）/ 始新世型（高 CO₂ 无冰）边界条件 → 核查**体制**而非数值；定量对比用 DeepMIP 代理库 | 规划中 | 中 |
 | **T5 模型间比对 / JWST 仿真** | THAI 式比对需多个独立引擎 | 暂缓（单项目不现实） | 高 |
 
@@ -196,7 +196,7 @@
 | Venus | L=1.0, d=0.723 AU, albedo=0.75, p=92 bar, GHG≈500 K | T_min > 300 K；全 cell > 50°C | ✅ `tests/validation/test_end_members.py` |
 | Mars | L=1.0, d=1.524 AU, albedo=0.25, p=0.006 bar, GHG≈3 K | T_mean < −40°C；无 Af/Aw/Cfa/Cfb 类 | ✅ 同上 |
 | 无大气裸岩 | GHG=0, albedo=0.1 | T_land_mean ≈ T_eq（误差 < 25°C） | ✅ 同上 |
-| gaia-m HZ 中心 | L=0.0357, d=0.2795, GHG=78 K | T_mean > 0°C；T_max > 15°C；液态水体制存在；EF < 50% 陆地 | ✅ 同上 |
+| nacrea HZ 中心 | L=0.0357, d=0.2795, GHG=78 K | T_mean > 0°C；T_max > 15°C；液态水体制存在；EF < 50% 陆地 | ✅ 同上 |
 
 ### 7.6 替代数据（T4 及后续）
 
@@ -215,17 +215,17 @@
 `tests/validation/`：T3 单调性断言 + T2 Venus/Mars 复现（§7.4/§7.5）。
 纯 Python 属性测试，与性能基准套件（perf plan §三）同期搭建，进 CI 门。
 
-### 7.8 T1 回归门（gaia-m 200k 基线）
+### 7.8 T1 回归门（nacrea 200k 基线）
 
-**目标**：每次气候引擎代码变更后，在 gaia-m 200k 数据集上重新运行气候模拟，
+**目标**：每次气候引擎代码变更后，在 nacrea 200k 数据集上重新运行气候模拟，
 与提交的基线快照对比全局指标——防止无意中的精度退化。
 
-**基线快照**：`tests/validation/baselines/gaia-m-200k.json`（schema v1）。
+**基线快照**：`tests/validation/baselines/nacrea-200k.json`（schema v1）。
 包含温度均值、降水均值、Köppen 分类分布、陆地占比。使用以下命令生成/更新：
 
 ```bash
-uv run python tests/validation/baselines/generate_baseline.py gaia-m \
-    --planet satellite_gaiam
+uv run python tests/validation/baselines/generate_baseline.py nacrea \
+    --planet satellite_nacrea
 ```
 
 **回归测试**：`tests/validation/test_regression.py`（`@pytest.mark.slow`）。
@@ -285,7 +285,7 @@ uv run python tests/validation/baselines/generate_baseline.py gaia-m \
 （`climate validate --generalize`）。
 
 **与「同物理 / 第一性」原则的呼应**：泛化得分正是「同物理」的可测量形态——引擎对
-Earth（三圈环流）、LGM（冷体制）、金星/火星（极端端元）、gaia-m（单圈环流）用**同一套
+Earth（三圈环流）、LGM（冷体制）、金星/火星（极端端元）、nacrea（单圈环流）用**同一套
 代码路径**，泛化得分衡量的是这套路径在离开地球标定域后还剩多少正确性。
 
 ---

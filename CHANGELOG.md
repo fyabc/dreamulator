@@ -98,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **气候 M4 空间准确率**：降水管线三 bug 修复（地形降水误套海洋洋底、ITCZ 夏至位置、
   缺风暴路径）+ ITCZ/风暴路径物理重构 + 纬向参考数组 NCEP+GPCP 重生成。温度 corr 0.981、
   群组 Kappa 0.466（>0.45 达标）。
-- **gaia-m 单圈环流**（GCM PoC 证实无 Ferrel/极地胞）：`hadley_extent_deg=90` +
+- **nacrea 单圈环流**（GCM PoC 证实无 Ferrel/极地胞）：`hadley_extent_deg=90` +
   关闭风暴路径 + 概念文档修订 + 生态文档合并。
 - 潮差 78 m → ~44 m（tidal_effects.md 重算），潮汐平原 45 km → ~25 km。
 - 文档「只写当前设定，不写历史」原则（CLAUDE.md）+ 全仓翻案残留清理。
@@ -130,11 +130,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   卫星另附绕母星轨道周期与潮汐锁定一致性校验（偏差 >2% 告警）。新增纯函数
   `stellar_physics.solar_day_days()` / `polar_circle_latitude_deg()` /
   `polar_day_fraction_of_year()`（公式见 `docs/knowledge/astrophysics/
-  sidereal_solar_day.md`）。gaia-m 输出与 `physical_params.md` 手算值逐项
+  sidereal_solar_day.md`）。nacrea 输出与 `physical_params.md` 手算值逐项
   一致；回归测试锚定（太阳日 3.42 d、年 67 d、一年 19.6 太阳日、极圈 ±81°、
   极点极昼/夜 33.5 d、卫星公转 78 h）。
 - **世界文档 Jinja2 模板渲染**（技术债 #22 阶段②，`doc_render.py`）：读取/导出时
-  从 `world_parameters.yaml` 按需渲染文档模板，产物不落盘；gaia-m 5 篇文档模板化。
+  从 `world_parameters.yaml` 按需渲染文档模板，产物不落盘；nacrea 5 篇文档模板化。
   设计笔记渲染修复标题缺失 + 支持 KaTeX LaTeX 公式。
 - **前端 i18n 扫尾 + 语言切换器**（审计 T5）：35 个文件 / ~600 处硬编码中文消除，
   词典表（Köppen 群系/土纲等 code→名称映射）迁入 i18n key；Sidebar 页脚新增
@@ -151,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   比较法/音系类型学/声调发生学/音变库/conlang 工具调研（packages/conlang）；
   新增待开发设计稿 `language-phylogeny.md`、`myth-strata.md`、conlang
   feature-rules 特征音变规则。
-- **gaia-m「天象全景」推演文档**（`layers/astronomy/input/sky_phenomena.md`）：
+- **nacrea「天象全景」推演文档**（`layers/astronomy/input/sky_phenomena.md`）：
   从珠母星表面观测各天体视直径/视星等的完整推演（Bond→几何反照率 Lambert
   换算约定 + 食季与十大可展示天文现象 + 地球时/珠母星年显式时间单位约定）。
 
@@ -160,9 +160,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **3D 恒星系视图数据源迁移**：`StellarSystemViewerPage` 改读 system-catalog
   单一端点，删除 `StellarSystemViewer` 内的 stellar bodies/planets 客户端
   merge + 按 id 去重补丁（合并逻辑下沉至后端 catalog）。
-- **gaia-m 天文命名体系完善**：五行星补古雅单字中文名（焦星·Ember /
+- **nacrea 天文命名体系完善**：五行星补古雅单字中文名（焦星·Ember /
   鼎星·Crucible / 沧星·Boreal / 霰星·Glacis / 藩星·Sentinel）；珠母星英文名
-  Gaia-M → Nacrea（24 个文档/yaml 全量替换；天体 id 与世界线名 gaia-m 不变）。
+  Nacrea → Nacrea（24 个文档/yaml 全量替换；天体 id 与世界线名 nacrea 不变）。
 - **legacy 死代码清理**（审计 T2/T4，−527 行）：删除 `generate_map` →
   `voronoi_generator.assign_cells_to_plates` → `PlateVelocity` 死代码链、
   `terrain_generator.py`、孤立端点 `/worlds/{w}/civilizations`、
@@ -172,12 +172,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   默认跑在 earth/climate-dev（与地球海陆分布一致）；旧 32k `koppen_obs.json`
   移出仓库，新 200k 参考由脚本本地生成并加入 `.gitignore`（可再生、不入库）；
   `validation-workflow.md` 补诊断脚本一节。
-- **天文 tab 天体百科去重**：按从属关系嵌套显示（Gaia-M 挂在 Aegis 下），
+- **天文 tab 天体百科去重**：按从属关系嵌套显示（Nacrea 挂在 Aegis 下），
   消除与恒星卡的信息重复。
 
 ### Fixed
 
-- **gaia-m 三处天体字段漂移**（stellar.yaml bodies vs planets.yaml，按
+- **nacrea 三处天体字段漂移**（stellar.yaml bodies vs planets.yaml，按
   planets.yaml 权威对齐）：Aegis 反照率 0.34→0.343；Cadence 半径
   2840→2867 km；Vigil 半径 2470→2485 km。
 - **`stellar_physics.equilibrium_temperature` docstring 自相矛盾**：f=16/8 的
@@ -194,7 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   200k→100k、PlateVelocity 三处"废弃"标记改"已删除"、六处 flood-fill 措辞改
   Cortial 2019 球面 Voronoi 剖分、§2.5 500K 栅格分辨率 4096×2048→6144×3072、
   `lat_gradient_earth_c` 字段名漂移等；test_doc_render 过时锚点修复。
-- **gaia-m `giant_brightness.md` 亮度修正**：满月参考照度 0.0012 → 0.0034 W/m²
+- **nacrea `giant_brightness.md` 亮度修正**：满月参考照度 0.0012 → 0.0034 W/m²
   （按 −12.74 等反推），满相倍数 1592× → 560×、半相 507× → 178×、
   极细相 0.86× → 0.3×；移除过程性"前稿修正记录"。
 - **earth 时间线文档归类**：补 `type: timeline` 归入「编年史」分组。
@@ -210,11 +210,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **可调气候参数**：`seasonal_damping_b`、`seasonal_land/ocean_heat_capacity`、
   `lat_gradient_earth_c`、`evaporation_base_mm`、`moisture_advection_steps`。
 - **日心偏心率解析**（`physical_inputs.resolve_orbital_elements`）：季节周期取恒星轨道
-  成员的偏心率（gaia-m e=0.005），而非卫星绕行星的偏心率。
+  成员的偏心率（nacrea e=0.005），而非卫星绕行星的偏心率。
 - **空间诊断脚本** `scripts/diagnose_koppen_spatial.py`：经纬网格 + 两极合并的空间
   Köppen 准确率热图（区分引擎 bug vs 参数微调）。
 - **`ai civ` 命令设计**（`ai-cli-commands.md` 附录 D）：地理→文明推演——气候画像→文明种子。
-- **文明气候画像** `climate_portrait.md`：gaia-m vs 地球气候对比 + 文明启示。
+- **文明气候画像** `climate_portrait.md`：nacrea vs 地球气候对比 + 文明启示。
 - **前端**：cell inspector 显示最热月/最冷月（`temperature_hottest_month_C` /
   `temperature_coldest_month_C`）。
 
@@ -223,7 +223,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Köppen 第三字母改季节感知**（Kottek et al. 2006）：按最暖/最冷 6 月分半判别 s/w，
   修复「冬干被误标 Csb」。
 - **B 组干旱阈值修复**：`20·T+offset` 钳到 1mm 正底，冷干 cell（P≈0）正确归 BWk 而非 Dfb。
-- gaia-m 气候调参：温室 59.5→62.0 K、`lat_gradient_earth_c` 40→28、蒸发 2000→1900、
+- nacrea 气候调参：温室 59.5→62.0 K、`lat_gradient_earth_c` 40→28、蒸发 2000→1900、
   BFS 步数 auto17→28（暖高纬 + 水汽深入内陆，BWk 冷荒漠 −426）。
 
 ### Fixed
@@ -247,7 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **gaia-m 天文参数（方案2）**：光照 0.48→0.66×地球（光度 0.0357→0.0414 L☉、
+- **nacrea 天文参数（方案2）**：光照 0.48→0.66×地球（光度 0.0357→0.0414 L☉、
   Aegis 轨道 0.2722→0.2504 AU，共振链按开普勒第三定律同步），温室 75→59.5 K，
   均温 ~17.1°C，气候类型丰富。
 - **前端 NPP 动态归一化**：按每世界自身 NPP 峰值（而非固定 3000 gC），修复低光度
@@ -283,9 +283,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Gaia-M 全量重建**：3 轮地理微调（北极大陆缩小+偏移、南方大陆重命名、南大洋纬度微调、
+- **Nacrea 全量重建**：3 轮地理微调（北极大陆缩小+偏移、南方大陆重命名、南大洋纬度微调、
   前导点褶皱山系调整）。Köppen E 组（极地）从 44.5% 降至 29.7%，陆地均温从 3.96°C 升至 8.20°C。
-- **回归基线更新**：`tests/validation/baselines/gaia-m-200k.json` 匹配新地理 + 双分量山脉。
+- **回归基线更新**：`tests/validation/baselines/nacrea-200k.json` 匹配新地理 + 双分量山脉。
 - **首页标题上边距加大**：`pt-20 md:pt-28` 防止顶部挤压。
 
 ## [0.24.0] — 2026-08-11
@@ -299,10 +299,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **gaia-m 迁移至 200k 节点**（51 km/cell，原 71 km/cell）。前端加载 ~14s。
+- **nacrea 迁移至 200k 节点**（51 km/cell，原 71 km/cell）。前端加载 ~14s。
   - 地形调整：世界岛中心南移 10° + 拉长短缩（压缩北方沙漠），前导点山系东移 10°，
     北极裂谷加宽。噪声参数还原。
-  - JSON 优化：compact 格式 + 浮点 4 位截断 → gaia-m 85 MB（原 108 MB，−21%）。
+  - JSON 优化：compact 格式 + 浮点 4 位截断 → nacrea 85 MB（原 108 MB，−21%）。
 - **气候文档重写**：`climate_zones.md`、`atmospheric_dynamics.md` 按引擎实际
   Köppen 输出修正（此前为引擎实现前的手写推定）。
 
@@ -318,18 +318,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Performance
 
 - **ocean GMRES 优化**：rtol 1e-6→1e-4，maxiter 减半，跳过 <20 cell 小海盆。
-  gaia-m 200k ocean 90s→56s（−38%）。
+  nacrea 200k ocean 90s→56s（−38%）。
 - **JSON 导出优化**：compact 格式 + 浮点精度截断，100k 108→85 MB（−21%）。
-- gaia-m 200k 全量构建 456→334s（−27%）。
+- nacrea 200k 全量构建 456→334s（−27%）。
 
 ## [0.23.0] — 2026-08-09
 
 ### Added
 
 - **洋底年龄-深度沉降模型**（`terrain_synthesizer.py`）：divergent↔convergent 距离比插值
-  + sqrt(age) 冷却律。gaia-m 均海深 3015→3687 m（地球 3682）。
+  + sqrt(age) 冷却律。nacrea 均海深 3015→3687 m（地球 3682）。
 - **均衡尾部压缩**（`terrain_synthesizer.py`）：`h_max ∝ 1/g` 重力标度指数衰减压缩。
-  gaia-m 陆极高 10770→8721 m、海极深 16593→12400 m。
+  nacrea 陆极高 10770→8721 m、海极深 16593→12400 m。
 - **图拉普拉斯平滑**（`terrain_synthesizer.py:_smooth_land_discontinuities`）：消除
   均衡压缩后的邻域悬崖跳跃，>3000m 跳跃 cell 从 1446→137 (−91%)。
 - **永耀岛**：向星点潮汐固定热点火山岛（~1200 m 峰），位于 Aegis 深渊洋中央。
@@ -363,7 +363,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 地图图层系统重构为 slot-based（底图/专题/填充/特征）
 - 生态专题图层（Whittaker / NPP / 文明摇篮）归入统一 radio 组
 - cell 选择行为重新设计（Ctrl+点击多选、Esc 清除）
-- `regional_noise_scale` gaia-m 0.5→3.0（板块级起伏）
+- `regional_noise_scale` nacrea 0.5→3.0（板块级起伏）
 - 文档架构整理（设计文档/知识库/世界构建指南分离）
 - 海岸线/洋流预烘焙由 half→full res
 
@@ -426,7 +426,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 27 单元测试（矩形盆地 gyre 方向/WBC 强化/确定性/Ekman 上升流/SST 平流）
 - **Hadley 环流经向风 + Ω^(-1/3) 风速标度**：修复纯纬向风模板，添加地表信风
   equatorward 分量（Hadley/Ferrel/Polar）；引用 Hill et al. (2019) / Held & Hou (1980)
-- **gaia-m 次行星半球经度暖化**：`sub_planet_warming_c` 参数化 Aegis 红外+反射光
+- **nacrea 次行星半球经度暖化**：`sub_planet_warming_c` 参数化 Aegis 红外+反射光
   加热（~1°C 半球均值）
 - **洋流前端可视化**：
   - 2D: SVG 矢量箭头（4.5° 网格，品红暖流/青绿寒流，sqrt 拉伸，zoom 自适应）
@@ -458,7 +458,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   （洒点岛屿仅岛弧/热点/钉扎涌现）；边界多数投票平滑 + 飞地合并
   （犬牙转角 76.5°→38.4°/步）；古造山带/裂谷双频 meander + 沿走向宽度变化
   （0.55–1.45×）；**per-plate 地壳下限** `crust_plate_floor`（默认 0.10，
-  authored 洋豁免）避免整板同型地壳。gaia-m：南大洋四环洋带、南极浅海/地峡
+  authored 洋豁免）避免整板同型地壳。nacrea：南大洋四环洋带、南极浅海/地峡
   钉扎、南方大陆×2（澳洲/南美类似，南半球陆地 15.1%→16.9%，地球 ~19%）、
   boundary_warp 0.3、boundary_uplift_noise 0.8；>2000 m 陆地 29.7%→12.3%
 - **密集偏置场导入 / Gleba 模式**（问题 1 阶段 3）：`geography_raster.png`
@@ -485,7 +485,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **锚定裂谷被推上海面**（roadmap #9；gaia-m 大裂谷海曾 +927 m）：地形合成
+- **锚定裂谷被推上海面**（roadmap #9；nacrea 大裂谷海曾 +927 m）：地形合成
   对强负偏置场（authored 裂谷/海盆）的汇聚正抬升乘连续阻尼
   （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)），岛弧同处理；且 |bias|>0.5 处
   双峰基准服从作者（top-N 地壳泄漏的 continental cell 不再拿 +850 m 基准隆起
@@ -505,7 +505,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   从当前运动学状态（欧拉极相对速度 → 汇聚速率 → 俯冲角 → 弧矢比 0.10–0.30）
   把俯冲/碰撞边界松弛向小圆弧，弧矢随演化逐步生长（涌现而非初始规定）。
   洋壳俯冲凸向俯冲板（日本/阿留申式），陆陆碰撞凸向 indenter（喜马拉雅/
-  阿尔卑斯式）。配置 `trench_arc`（0=关，默认 1）。gaia-m 碰撞带
+  阿尔卑斯式）。配置 `trench_arc`（0=关，默认 1）。nacrea 碰撞带
   sagitta/chord 0.14–0.27（日本弧 ≈0.2）
 - **汇聚带沿弧分段**（日本列岛式）：~800 km 波长 fBm 调制隆起幅度
   [−0.25, 1.35]× 与带宽 0.7–1.3× → 主岛 + 小岛 + 弧间断陷海，替代均匀缎带
@@ -519,7 +519,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **裂谷海碎成湖泊串**：geography.yaml 裂谷 radius ×1.7、strength 加强、中段加
   西支分叉（仿东非 Western Rift）；裂谷走廊水体成单一连通陆间海
 
-### gaia-m 重建实测
+### nacrea 重建实测
 
 22 板 CV=0.83；最长边界弧 sagitta/chord 0.145–0.272；用户可视化验证通过。
 
@@ -543,7 +543,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   构造重采样改**乘法加权 Voronoi**（power diagram 图版本）——每板持出生面积
   为持久权重、波前代价 ∝ 1/w。修复无权"质心→最近种子"重采样（= Lloyd 迭代，
   吸引子为等面积 CVT）洗掉偏态的问题；最终 boundary warp 同传权重。
-  gaia-m 实测：26 板、CV 0.22→0.97、max/min ≈2000（地球主板块 ≈100×）
+  nacrea 实测：26 板、CV 0.22→0.97、max/min ≈2000（地球主板块 ≈100×）
 - **板块边界曲率**（roadmap #7 清偿）：boundary_warp 噪声改低频 fBm
   （base_freq=0.6，波长≈板块尺度），边界弯曲成岛弧状而非细碎锯齿
 - **前端图层系统重构**：kind 分组多选面板 + 烘焙/显示分离
@@ -556,11 +556,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   geography.yaml，命名海陆全部丢失；修复加载链并记录 build 跳过判定
   （`_outputs_exist` 只看输出存在）陷阱
 - **俯冲海沟缺失**（roadmap #8 清偿）：海沟凹陷仅限洋壳（陆陆碰撞无海沟），
-  relief 1.4→7 km；gaia-m 海洋最深 −4758→−10484 m（地球海沟 −8~−11 km）
+  relief 1.4→7 km；nacrea 海洋最深 −4758→−10484 m（地球海沟 −8~−11 km）
 - F 类 lint 存量 19 项清零（未用变量/导入、无占位 f-string），
   tests.yml 以 F,E9 门槛防回潮
 
-### gaia-m 重建实测
+### nacrea 重建实测
 
 26 板（CV=0.97）；海洋最深 −10484 m、最高峰 11737 m；均温 12.7 °C、
 13 个 Köppen 类；16 个锚定特征空间抽查 10 个完全命中、裂谷 7 段中 6 段
@@ -582,7 +582,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **climate 引擎与地质管线共读 `terrain_config.yaml` 气候调优项**——独立
   `build --only climate` 与管线内气候阶段不再可能分叉；canonical 物理强迫
   （光度/距离/倾角/温室）仍以 planets.yaml + stellar 为准
-- **gaia-m 样板世界全面改造**（物理自洽化）：
+- **nacrea 样板世界全面改造**（物理自洽化）：
   - 天文：新增 4:2:1 拉普拉斯卫星链 **Cadence**（0.05 M⊕, 6.5 d）/
     **Vigil**（0.03 M⊕, 13.0 d），补上 e_m=0.0025 的 60 亿年共振泵浦机制
     （此前设定无泵浦源）；Aegis 轨道内移 0.2795→0.2722 AU（混合变暖路径），
@@ -606,14 +606,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   从零重建的世界缺 `planet_id` 等必填字段，maps API 抛 pydantic
   ValidationError；现每次导出完整写入标识字段（planet_id / projection /
   尺寸 / voronoi 参数）
-- gaia-m 设定数据不一致：轨道年 80.5→77.3 d、季节 20.1→19.3 d、极点极夜
+- nacrea 设定数据不一致：轨道年 80.5→77.3 d、季节 20.1→19.3 d、极点极夜
   31→38.7 d、次行星半球加温 1.5–2.0→~1 °C（按辐射收支核算）
 
 ## [0.14.0] — 2026-08-04
 
 ### Added
 
-- **性能：gaia-m 全量构建 532s → 98s（−81.5%）**
+- **性能：nacrea 全量构建 532s → 98s（−81.5%）**
   - Numba JIT 噪声内核（`map/noise_kernels.py` 新模块）：标准 Perlin 梯度噪声
     + fBm，44µs→9.6ns/call（~4600×），`parallel=True` 且逐点独立 → 严格确定
   - 构造演化：cKDTree 批量最近邻（消除 ~1 亿次 Python 点积）、高程数组规范化
@@ -633,15 +633,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Actions 基准回归工作流（github-action-benchmark，`perf-dashboard` 分支）
 - **验证套件** `tests/validation/`：T3 物理合理性（L/GHG/反照率单调性、无大气
   极限、倾角季节响应、3 个 xfail 占位）+ T2 太阳系端元复现（Venus / Mars /
-  裸岩 / gaia-m HZ 中心）；慢速确定性回归测试（跨进程 hash 种子比对）
+  裸岩 / nacrea HZ 中心）；慢速确定性回归测试（跨进程 hash 种子比对）
 - **验证策略**（climate-validation.md §7）：针对"仅以现代地球验证"的过拟合
   风险，建立多线证据框架（PMIP 古气候 / THAI 系外比对 / 太阳系端元 / 过程
   诊断）与 T2–T5 分层计划
 - **共享物理参数解析**（`engine/physical_inputs.py`）：卫星感知恒星查找
-  （卫星→主行星→恒星父链），轨道周期由开普勒第三定律导出（gaia-m 80.47 天，
+  （卫星→主行星→恒星父链），轨道周期由开普勒第三定律导出（nacrea 80.47 天，
   与设定吻合）；config 新增 albedo / orbital_period_days / surface_pressure_hpa
 - **文档**：climate-engine.md Phase 3A.6（方案常数行星化 8 项：Hadley 自转
-  依赖、次行星半球强迫等）；gaia-m 新增 long_term_cycles.md（米兰科维奇式
+  依赖、次行星半球强迫等）；nacrea 新增 long_term_cycles.md（米兰科维奇式
   变率谱）；terrain-pipeline.md §15 实测修正（基线、噪声路线）
 - 新依赖：`numba>=0.61`
 
@@ -649,11 +649,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **噪声后端 OpenSimplex → Numba Perlin**：统计相似但非比特一致——重建任何
   世界地形细节会变化（预期内；同一代码版本内严格可复现）
-- **gaia-m 气候物理修正**：greenhouse 33→72K（HZ 中心定位，比地球等价值低
+- **nacrea 气候物理修正**：greenhouse 33→72K（HZ 中心定位，比地球等价值低
   6K，预留次行星半球加温 2–4K）；恒星辐射按 0.0357 L☉@0.2795 AU ≈ 0.458 S⊕
   计算（此前误用地球默认 1 L☉@1 AU，日照高估 2.2×）。修正后年均温 9.2°C、
   9 个柯本类（EF 冰原 37% / Cfb 温带 23% / Af 热带雨林 11%）
-- gaia-m 派生数据已用新引擎重建（本版本随附提交）
+- nacrea 派生数据已用新引擎重建（本版本随附提交）
 
 ### Fixed
 
@@ -680,7 +680,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   else 23.44` 的真值判断把显式的 `0.0`（潮汐锁定天体）当作未设置，静默替换为
   地球倾角并凭空造出季节；`rotation_period_days` 同模式。改为 `is not None`
   守卫，config 构建抽出纯函数 `_build_terrain_config` 并新增回归测试。
-  对 gaia-m 的影响：柯本分类 14 → 11（无季节即无 D 类），极地冰原扩大，
+  对 nacrea 的影响：柯本分类 14 → 11（无季节即无 D 类），极地冰原扩大，
   年均温不变。
 - **earth 世界三分支 fork_layer 修正**：`fork_layer` 是 build 起始层，不只是
   展示标签。climate-dev `geological → climate`（实际只持有气候层，旧标注使
@@ -692,10 +692,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **gaia-m 首份气候数据**：`dreamulator build gaia-m --only climate` 全量产出
+- **nacrea 首份气候数据**：`dreamulator build nacrea --only climate` 全量产出
   （climate_summary + 温度/降水栅格 + 柯本分类 + 10 万 cell mesh 回写）。
   T = −70~27 °C，11 个柯本类（Af 热带雨林为最大类，与设定一致）。近似点已
-  记录于 `data/worlds/gaia-m/design-notes/climate_data_status.md`：轨道参数
+  记录于 `data/worlds/nacrea/design-notes/climate_data_status.md`：轨道参数
   查找未实现（按 L=1.0 L☉、d=1.0 AU 计算），潮汐锁定仅纬向对称近似——
   数据可展示、数值自洽，非设定级正式气候。
 
@@ -907,7 +907,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **3D 球体对齐**：鼠标 picking 改用纹理 UV 坐标（替代 sphereToLonLat），高亮多边形 z 坐标取反匹配 SphereGeometry UV 映射
-- **GeologicalEngine planet_id**：自动从 planets.yaml 检测，不再硬编码 "earth"（修复 gaia-m 等非地球世界的 build 输出路径）
+- **GeologicalEngine planet_id**：自动从 planets.yaml 检测，不再硬编码 "earth"（修复 nacrea 等非地球世界的 build 输出路径）
 - **ClimateEngine 数据回写**：气候模拟后将 koppen_class/temperature_C/precipitation_mm 写回 cvt_mesh.json，前端可渲染
 
 ---
@@ -962,7 +962,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 全球均温 15.0 °C（匹配地球）
 - 陆地比例 29.1%（匹配地球 29%）
 - 降水 RMSE 493 mm/yr（通过 <800 阈值）
-- gaia-m 完整构建 6m44s 全部通过
+- nacrea 完整构建 6m44s 全部通过
 
 ---
 
@@ -999,7 +999,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - `classify_sea_land()`: 被淹没的大陆地壳不再错误重分类为 transitional, 大陆地壳比例现在地质正确 (> 露出陆地)
-- gaia-m 星球 ID 修正 + 3D 球面实时缩放显示
+- nacrea 星球 ID 修正 + 3D 球面实时缩放显示
 - `onDistanceChange` 低于过渡阈值时不再被忽略
 - PNG 量化不再导致海岸线颜色渗色
 - 海洋深度色标方向修正
@@ -1022,7 +1022,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - `continental_fraction_min/max` 默认值: `[0.25, 0.65]` → `[0.28, 0.36]`
-- gaia-m: `lat_bias=0.33`, earth/terrain-dev: `lat_bias=0.7`
+- nacrea: `lat_bias=0.33`, earth/terrain-dev: `lat_bias=0.7`
 - `opensimplex>=0.4` 从 heightmap 可选依赖移入核心依赖
 
 ## [0.7.2] — 2026-07-26
@@ -1046,11 +1046,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 **地图色彩异常 (关键修复)**
 - 地形管线生成后自动同步 `map.yaml` 到正确的 PNG 编码范围
-- gaia-m 高程范围 `[-11000, 9000]` → `[-11000, 11632]`,修复 +1000m 以上陆地渲染为海洋的问题
+- nacrea 高程范围 `[-11000, 9000]` → `[-11000, 11632]`,修复 +1000m 以上陆地渲染为海洋的问题
 - earth/terrain-dev 高程范围 `[-11000, 9000]` → `[-11000, 9802]`
 
 **YAML 配置修复**
-- gaia-m `terrain_config.yaml` 合并三个重复的 `terrain:` 键 (YAML 键覆盖导致参数丢失)
+- nacrea `terrain_config.yaml` 合并三个重复的 `terrain:` 键 (YAML 键覆盖导致参数丢失)
 
 ### Removed
 

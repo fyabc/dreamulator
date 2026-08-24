@@ -201,7 +201,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Detect ocean bottlenecks")
-    parser.add_argument("mesh", nargs="?", default="data/worlds/gaia-m/maps/satellite_gaiam/cvt_mesh.json")
+    parser.add_argument("mesh", nargs="?", default="data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.json")
     parser.add_argument("--top", type=int, default=15)
     args = parser.parse_args()
 

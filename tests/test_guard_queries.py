@@ -41,7 +41,7 @@ def test_run_query_entities_context(tmp_path: Path) -> None:
         "bodies": [
             {"id": "planet_aegis", "physical": {"radius_km": 71355.2, "albedo": 0.343}},
             {
-                "id": "satellite_gaiam",
+                "id": "satellite_nacrea",
                 "parent_id": "planet_aegis",
                 "orbit": {"semi_major_axis_au": 0.00494},
                 "physical": {"radius_km": 6817.0},
@@ -55,7 +55,7 @@ def test_run_query_entities_context(tmp_path: Path) -> None:
         None,
         "sky_position",
         {
-            "observer_id": "satellite_gaiam",
+            "observer_id": "satellite_nacrea",
             "target_id": "planet_aegis",
             "lon_deg": 0.5,
             "lat_deg": -0.8,

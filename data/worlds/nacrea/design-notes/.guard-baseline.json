@@ -1,0 +1,12 @@
+{
+  "0001-stellar-parameters.md": {
+    "{{ entities.star_ignis.luminosity_sol }}": "0.0414",
+    "{{ entities.star_ignis.mass_sol | round(4) }}": "0.4665",
+    "{{ entities.star_ignis.temperature_k | round0 }}": "3931",
+    "{{ entities.star_ignis.ms_lifetime_gyr | round1 }}": "67.3",
+    "{{ entities.star_ignis.evolution_progress }}": "0.0877",
+    "{{ entities.star_ignis.age_gyr }}": "5.9",
+    "{{ entities.planet_aegis.semi_major_axis_au }}": "0.2504",
+    "{{ entities.satellite_nacrea.instellation_earth_ratio | round2 }}": "0.66"
+  }
+}

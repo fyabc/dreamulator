@@ -5,8 +5,8 @@ genuinely different planets, so a seed explorer + catalog is the toolchain to
 pick a seed before committing it to a world.
 
 Usage:
-    dreamulator explore-seeds gaia-m --seeds 42,123,456
-    dreamulator explore-seeds gaia-m --count 10 --nodes 50000 --raw
+    dreamulator explore-seeds nacrea --seeds 42,123,456
+    dreamulator explore-seeds nacrea --count 10 --nodes 50000 --raw
 
 The heavy imports are deferred to keep `dreamulator --help` fast; the command
 is registered on the root app in `cli.py` via `app.command(...)`.

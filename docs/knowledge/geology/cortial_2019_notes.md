@@ -218,7 +218,7 @@ $$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathb
     凸向 indenter（喜马拉雅/阿尔卑斯式，弧矢 ×0.7）。弧矢在 arc_state 中逐步
     生长（每次 resample ×0.3 松弛）→ 弧度随演化涌现而非初始规定。弯折边界
     先经 `_split_bent_segment` 在拐点拆成更直子段、各带独立弧。配置
-    `trench_arc`（0=关，默认 1）。gaia-m 实测：plate_002/016 碰撞带
+    `trench_arc`（0=关，默认 1）。nacrea 实测：plate_002/016 碰撞带
     sagitta/chord 0.14 → 0.18+（日本弧类比 ≈0.2）。
 
 ## D.12 自适应裂解率与真实地球数据

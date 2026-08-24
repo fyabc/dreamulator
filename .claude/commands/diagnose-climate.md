@@ -23,7 +23,7 @@ description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某�
 ① 问题定义（Earth vs 架空 + 明确症状）→ ② 复现 + 精确 cell 定位（cell id / 值 / 坐标 /
 `distance_to_coast_km`，不只靠肉眼）→ ③ 第一性根因假设（水汽输送 / 辐合 / 海陆热力对比…）
 → ④ 交叉验证（诊断脚本 + `/read-map` + `validate_climate` 数据）→ ⑤ 竞品/论文参照
-→ ⑥ 修复（第一性优先，改完 gaia-m 回归）→ ⑦ 记录（memory + docs 同步）。
+→ ⑥ 修复（第一性优先，改完 nacrea 回归）→ ⑦ 记录（memory + docs 同步）。
 
 ## 工具
 
@@ -46,7 +46,7 @@ description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某�
 ## 修复原则
 
 - **第一性 > 先验启发式**：新增参数必须是可推导量，不接受裸调。
-- **同物理**：改完必须 gaia-m 回归（`uv run dreamulator build gaia-m --data-dir private/worlds --only climate`），群系结构不能退化。
+- **同物理**：改完必须 nacrea 回归（`uv run dreamulator build nacrea --data-dir private/worlds --only climate`），群系结构不能退化。
 - **指标变差不等于物理错**：先判「物理错了」还是「标定/口径没跟上」——物理错了才回退，标定没跟上就修标定。
 
 ## 入库
