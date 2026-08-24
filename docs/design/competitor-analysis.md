@@ -3,6 +3,7 @@
 > 从 `roadmap.md` 拆分而来（2026-08-04）。2026-08-08 扩展：各 DAG 层级专业工具对比 +
 > 2024–2025 世界构建工具格局。2026-08-10 扩展 §六：分辨率对标 + 多分辨率基准测试 + 业界数据处理方案。
 > 2026-08-16 扩展 §七：World Anvil 方法论参照（自洽性 vs 创造性）。2026-08-17 扩展 §八：宜居卫星设定参照。
+> 2026-08-25 扩展 §4.2.1：侵蚀业界做法对照；更新 Gleba 公开特性。
 
 ---
 
@@ -80,7 +81,7 @@
 | 工具 | 类型 | 核心能力 | 与 Dreamulator 对比 |
 |------|------|---------|-------------------|
 | [**Azgaar's FMG**](https://azgaar.github.io/Fantasy-Map-Generator/) | 开源 Web | 启发式随机地图 + 城市/国家/文化生成；Voronoi 单元 + 风力/温度/降水简化模型 | 启发式无因果链；Dreamulator 的 DAG 推演给出可溯源的因果 |
-| [**Gleba**](https://calandiel.itch.io/gleba) | 闭源（itch.io 免费） | 科学模拟：球面地形 + 气候 + 简单生态 | 同赛道，但无分支系统 / 无 AI 叙事；Gleba 本体闭源，但同作者的 SotE FOSS 版 [SongsOfGPL](https://github.com/Calandiel/SongsOfGPL)（Lua）**含完整气候代码**（`sote/game/climate/`，诊断式 2 月模型），算法详见 §4.3 |
+| [**Gleba**](https://calandiel.itch.io/gleba) | 闭源（itch.io 免费） | 科学模拟：板块构造（沿笔触布置小板块 → 真实造山带/海洋特征）+ 地表水运动/土壤搬运/侵蚀 + 全球气候（降雨+温度，随地形调整）+ 植物群系；显式特性含**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**；Rust 核心，真实尺度行星 3D 可视化（卫星视图/真彩色） | 同赛道，但无分支系统 / 无 AI 叙事；Gleba 本体闭源，但同作者的 SotE FOSS 版 [SongsOfGPL](https://github.com/Calandiel/SongsOfGPL)（Lua）**含完整气候代码**（`sote/game/climate/`，诊断式 2 月模型），算法详见 §4.3；侵蚀公开信息见 §4.2.1 |
 | [**World Creator**](https://www.world-creator.com/) | 商用 | 2025.1：多层 Biome 系统 + 实时侵蚀/沉积/水/熔岩模拟 + Blender Bridge + 百万级 3D 模型散布 | 纯地形雕刻/渲染，非科学模拟；不生成气候或文明 |
 | [**Gaea**](https://quadspinner.com/) | 商用 | 节点图程序化地形：分形噪声 + 水力/热力侵蚀 + 沉积。2025 支持 tile-aware 导出 | 局部地形（~几 km²），非全球尺度；针对游戏/影视资产 |
 | [**World Machine**](https://www.world-machine.com/) | 商用 | 节点图地形：确定性侵蚀设备、多掩码导出。地质时间线模拟（GeoGlyph 附加） | 同上；适合可复现的资产管线，无气候/生态/文明 |
@@ -137,9 +138,26 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 | 工具 | 用途 | 与 Dreamulator 的关系 |
 |------|------|---------------------|
 | [**GPlates**](https://www.gplates.org/) | 板块构造重建与可视化。支持 Euler 极旋转、洋壳年龄、古地理重建 | Dreamulator 的 tectonic_simulator（Euler 极 + 边界演化）是 GPlates 的"正向生成"镜像——GPlates 做反演（数据→模型），Dreamulator 做生成（参数→板块） |
-| [**Badlands**](https://badlands.readthedocs.io/) | 盆地地层模拟：侵蚀/沉积/构造沉降/海平面变化 | 3B 侵蚀层的参考模型 |
-| [**Landlab**](https://landlab.github.io/) | 地表过程建模框架：河流/坡面/冰川/海岸线 | Dreamulator 拟实现的 D8 流向/流量累积/水力侵蚀可复用 Landlab 算法 |
+| [**Badlands**](https://badlands.readthedocs.io/) | 盆地地层模拟：侵蚀/沉积/构造沉降/海平面变化（TIN 网格 + 沉积物溯源搬运 + 海进程） | 3B 侵蚀层的参考模型；其沉积物搬运与海进程是 dreamulator 沉积待办（§4.2.1）的直接参照 |
+| [**Landlab**](https://landlab.github.io/) | 地表过程建模框架：河流/坡面/冰川/海岸线 | D8 流向/流量累积/隐式 stream power 侵蚀已实现（同算法族）；仍可复用的组件：MFD 多向流、transport-limited 泥沙搬运 |
 | [**Fastscape**](https://fastscape.org/) | 河流切割 + 坡面扩散地表演化 | 轻量级，算法可参考 |
+
+### 4.2.1 侵蚀业界做法对照（2026-08-25 调研）
+
+dreamulator 侵蚀（`map/erosion.py`：Fastscape 式隐式 stream power + 坡面扩散 +
+地貌降水代理）算法族与科学 LEM 一致。按「世界尺度上侵蚀该产出什么」对照业界：
+
+| 阵营 | 代表 | 做法 | 对 dreamulator 的启示 |
+|------|------|------|---------------------|
+| 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | dreamulator 缺侵蚀的「另一半」——目前只下切不沉积，物质在海岸线丢失，质量不守恒 |
+| 同赛道世界生成器 | [Gleba](https://calandiel.itch.io/gleba)（闭源） | 侵蚀定位为「土壤搬运」（realistic soil transport and erosion）；**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**为显式特性 | 沉积物搬运是业界共识；湖泊/内流盆地、冰川侵蚀也属特性清单（算法细节闭源不可得） |
+| 局部精修工具 | Gaea / World Creator / World Machine | 米级水力侵蚀，只做几 km² 的局部资产（World Creator 2025.1 实时侵蚀/沉积/水/熔岩） | 「可见的侵蚀纹理」属于这一层——与 roadmap P1 局部地形精细化管线 + `pipelines/gaea-refinement.md` 同向，不在全球 DEM 上做 |
+| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 最便宜的「看得见河」方案：矢量河流图层；dreamulator 后端已有 `river_id`/`river_order`，前端无渲染层 |
+
+**结论**：全球层侵蚀的 KPI 是大尺度地貌 + 物质再分配 + 水系一致性，不是可见河谷
+——51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见河谷，
+ETOPO1 导入 200k 实测确认）；可见性由矢量河流图层 + Gaea 局部精修承担。
+执行清单见 `private/todos/today.md` #5。
 
 ### 4.3 气候层
 
