@@ -296,38 +296,14 @@ class TerrainPipelineConfig:
     # Wind
     wind_blocking_height_m: float = 3000.0  # mountains above this block wind
     # Precipitation
-    evaporation_base_mm: float = 2000.0  # annual evaporation at tropical ocean surface
-    moisture_advection_steps: int = 0  # diffusion passes; 0 = auto from Ω (12 × P^(1/3))
-    moisture_diffusivity: float = 5.0  # graph-diffusion D₀ (TODO: calibrate via Earth Beck 2018)
-    orographic_efficiency: float = 0.5  # fraction of moisture converted to rain per km uplift
+    evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
     # Mid-latitude storm-track amplitude (baroclinic cyclones), mm/yr at Earth
-    # calibration (∇T=45°C, Ω=1, evap=2000).  The actual amplitude scales with
-    # ∇T × Ω^0.3 × evap (see _compute_precipitation_bfs Step 3.5).  Set to 0 to
-    # disable storm tracks (e.g. slow rotators in the single-Hadley-cell regime,
-    # where baroclinic eddies do not form).
+    # calibration (∇T=45°C, Ω=1, evap=1000).  The actual amplitude scales with
+    # ∇T × Ω^0.3 × evap (see _compute_precipitation_bfs).  Set to 0 to disable
+    # storm tracks (e.g. slow rotators in the single-Hadley-cell regime, where
+    # baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
-    # Convergence-driven large-scale precipitation.  Rising air (surface-wind
-    # convergence −∇·u > 0) condenses the C–C column water vapour:
-    # P = η · min(W(T), W_cap) · max(0, −∇·u).  This single physical term
-    # replaces the latitude-Gaussian ITCZ / storm-track / subtropical-suppression
-    # priors: the ITCZ, the subtropical dry belt, and the mid-latitude storm
-    # tracks all emerge from the wind field itself.  η absorbs the s_per_year/R
-    # conversion (∇·u in 1/radian) and the precipitation efficiency.
-    convergence_efficiency: float = 1.8
-    # Baseline precipitation from local moisture recycling: a fraction of the
-    # diffused (evaporation + transport) moisture rains out even without
-    # large-scale convergence — marine stratocumulus, weak-subsidence rain under
-    # the subtropical high, land evapotranspiration.  Keeps the subtropical
-    # divergence zone from drying to zero (~1000 mm/yr zonal mean on Earth).
-    recycling_fraction: float = 0.3
-    # Energy-limited rainable column water (mm).  Tropical precipitation is
-    # energy-limited (≈3–5 mm/day), not moisture-limited, so the C–C column
-    # water (up to ~200 mm in the tropics) is capped to remove its ~6× dynamic
-    # range — otherwise the moist tropics would rain proportionally to their
-    # vapour reservoir and drown the ocean.  Calibrated on Earth (~40 mm ≈
-    # 4 mm/day over a ~10-day residence time).
-    convergence_moisture_cap_mm: float = 40.0
     # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)
     sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for gaia-m)
     sub_planet_longitude_deg: float = 0.0  # longitude of the sub-planet point

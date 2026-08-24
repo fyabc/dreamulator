@@ -676,16 +676,22 @@ def terrain_wind_blocking(
 def evaporation_rate(
     temperature_c: np.ndarray,
     is_ocean: np.ndarray,
-    base_mm: float = 2000.0,
+    base_mm: float = 1000.0,
 ) -> np.ndarray:
     """Surface evaporation rate based on temperature and water availability.
 
-    Clausius-Clapeyron: evaporation increases ~7% per °C warming.
+    Ocean evaporation is *energy-limited*, not set by the Clausius–Clapeyron
+    saturation curve: the latent heat flux cannot exceed the available net
+    surface radiation, so evaporation rises only ~2–3% per °C of warming
+    (Trenberth et al. 2009; Held & Soden 2006) — not the ~7%/°C C–C rate,
+    which applies to the *saturation vapour pressure*, a different quantity.
 
     Args:
         temperature_c: Temperature in °C, shape (N,).
         is_ocean: Boolean mask, True for ocean cells.
-        base_mm: Base annual evaporation at 15 °C tropical ocean (mm/yr).
+        base_mm: Base annual evaporation at 15 °C reference ocean (mm/yr).
+            Calibrated so the global ocean-mean evaporation matches Earth's
+            observed ~1143 mm/yr (Trenberth 2009; 1000 mm at ~18.7 °C mean SST).
 
     Returns:
         Annual evaporation in mm, shape (N,).
@@ -693,8 +699,8 @@ def evaporation_rate(
     evap = np.zeros(len(temperature_c), dtype=np.float64)
     # Only ocean cells evaporate
     ocean_mask = np.asarray(is_ocean, dtype=bool)
-    # 7% per °C above 15 °C reference
-    evap[ocean_mask] = base_mm * (1.0 + 0.07 * (temperature_c[ocean_mask] - 15.0))
+    # ~3% per °C above 15 °C reference (energy-limited, not C–C)
+    evap[ocean_mask] = base_mm * (1.0 + 0.03 * (temperature_c[ocean_mask] - 15.0))
     return np.maximum(evap, 0.0)
 
 

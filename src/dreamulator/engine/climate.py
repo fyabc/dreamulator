@@ -145,7 +145,6 @@ class ClimateEngine(BaseEngine):
             "polar_cell_start_deg",
             "greenhouse_warming_K",
             "evaporation_base_mm",
-            "orographic_efficiency",
             "wind_blocking_height_m",
             "itcz_lag_days",
         ):

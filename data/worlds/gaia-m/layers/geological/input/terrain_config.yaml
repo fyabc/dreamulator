@@ -156,10 +156,8 @@ climate:
   # rotator where Coriolis-driven circulation is inherently weak.
   sub_planet_warming_c: 1.0
   sub_planet_longitude_deg: 0.0  # Aegis深渊洋 = 向星点 (geography.yaml)
-  # 水汽输送：蒸发基准取近地球值，BFS 平流步数取 27，
-  # 让水汽深入内陆（缓解 BWk 冷荒漠）。
-  evaporation_base_mm: 1900.0
-  moisture_advection_steps: 28
+  # 水汽输送：蒸发基准用共享物理默认（能量限制 ~1000 mm @15°C），
+  # 不再单世界覆盖（蒸发是水的物理属性，不随恒星/卫星变化）。
 
 # ── 导出设置 ──────────────────────────────────────────────────────────────────
 export:

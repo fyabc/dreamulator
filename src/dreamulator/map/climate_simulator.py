@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import gmres
 
 from dreamulator.engine.climate_physics import (
     SOLAR_CONSTANT,
@@ -65,17 +64,6 @@ _CONV_TOL: float = 0.01
 # Minimum wind speed magnitude to be considered "blowing" (m/s)
 _MIN_WIND_SPEED: float = 0.1
 
-# Number of advection steps for moisture transport.  Higher values mean
-# moisture can travel farther from its source (ocean → deep interior).
-#  8: coast only (~200 km inland)
-# 16: moderate interior (~400 km at 32K nodes)
-#
-# The optimal value scales with wind speed ∝ Ω^(−1/3) (Hill et al. 2019):
-# slower rotators have stronger winds → moisture travels farther → more
-# steps are needed to cover the same angular distance.  Earth reference:
-# 12 steps at Ω=Ω⊕.  For gaia-m (Ω=0.31 Ω⊕): 12 × 1.48 ≈ 18 steps.
-_MOISTURE_ADVECTION_STEPS: int = 12
-
 
 # ---------------------------------------------------------------------------
 # Main entry point
@@ -85,6 +73,7 @@ _MOISTURE_ADVECTION_STEPS: int = 12
 def simulate_climate(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
+    debug: dict[str, np.ndarray] | None = None,
 ) -> dict[str, float]:
     """Run climate simulation on the CVT mesh, filling cell climate fields.
 
@@ -485,6 +474,7 @@ def simulate_climate(
         distance_to_coast_km=distance_to_coast_km,
         config=config,
         itcz_lat_monthly=itcz_lat_monthly,
+        debug=debug,
     )
 
     # ------------------------------------------------------------------
@@ -855,6 +845,167 @@ def _upwind_distance_to_coast(
     return dist, source
 
 
+# Water-vapour residence time in the atmosphere (days).  Global mean column
+# water ~25 mm ÷ global precip ~2.7 mm/day ≈ 9 days (Trenberth 1998; the value
+# is re-confirmed by van der Ent & Tuinenburg 2016).  This is the rainout
+# timescale τ in the moisture budget P = W/τ, a physical constant — not a free
+# calibration knob — so it is shared by every world (only wind speed and
+# evaporation differ, and the advective e-folding length L = u·τ adapts
+# automatically with Ω).
+_MOISTURE_RESIDENCE_DAYS: float = 9.0
+
+# Turbulent moisture diffusivity (m²/s).  Atmospheric eddy diffusivity is
+# ~1e6 m²/s; this sets the sub-grid spreading of the advected moisture (the
+# physical ITCZ rain belt is ~10° wide, not a single cell).  Physical constant,
+# shared across worlds — only the wind/evaporation differ between planets.
+_MOISTURE_DIFFUSIVITY_M2S: float = 1.0e6
+
+# Land evapotranspiration as a fraction of the ocean evaporation *rate* at the
+# same temperature.  Earth's land surface returns ~490 mm/yr against the ocean's
+# ~1143 mm/yr (Trenberth et al. 2009 global water budget), i.e. ~43% — but land
+# is colder than the ocean on average, so the reference is the shared 15 °C
+# evaporation rate and this factor absorbs the soil/vegetation reduction of
+# evapotranspiration relative to open water.  Calibrated so the global
+# land-mean evapotranspiration lands near the observed ~490 mm/yr.  A single
+# physical constant, shared by every world (only temperature differs).
+_LAND_EVAPOTRANSPIRATION_FRACTION: float = 0.55
+
+
+def _solve_moisture_budget(
+    mesh: CVTMesh,
+    wind: np.ndarray,
+    is_ocean: np.ndarray,
+    temperature_c: np.ndarray,
+    nodes_xyz: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Solve the steady upwind advection–decay moisture budget for column water.
+
+    The mass-conserving hydrological cycle (Held & Soden 2006: P − E = −∇·(W u))
+    in its rainout form,
+
+        ∇·(W u) + W/τ = E ,   P = W/τ
+
+    is discretised with a first-order upwind finite-volume scheme on the CVT
+    graph and solved for the column-water field W (mm).  The upwind flux across
+    each edge carries the *upwind* cell's W, so the resulting linear system is a
+    diagonally-dominant M-matrix (the rainout W/τ provides strict dominance).
+
+    Because the advection flux terms cancel globally (Σ ∇·(Wu) = 0), the total
+    precipitation equals the total evaporation *by construction* — global water
+    mass is conserved with no calibration constant.
+
+    Args:
+        mesh: CVT mesh (adjacency + cell areas).
+        wind: Surface wind vectors (m/s), shape (N, 3).
+        is_ocean: Boolean ocean mask, shape (N,).
+        temperature_c: Temperature (°C), shape (N,), for the evaporation source.
+        nodes_xyz: Unit sphere node positions, shape (N, 3).
+        config: Pipeline configuration.
+
+    Returns:
+        (W, P): column water (mm) and rainout precipitation (mm/yr), shape (N,).
+    """
+    n = mesh.num_cells
+    s_per_year = 365.25 * 86400.0
+    tau_yr = _MOISTURE_RESIDENCE_DAYS / 365.25
+    k_rain = 1.0 / tau_yr  # rainout rate [1/yr]
+
+    # Evaporation source E (mm/yr): energy-limited ocean evaporation + land
+    # evapotranspiration (see _LAND_EVAPOTRANSPIRATION_FRACTION).
+    is_land = ~is_ocean
+    e = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
+    e = np.where(
+        is_land,
+        evaporation_rate(
+            temperature_c, is_land, config.evaporation_base_mm * _LAND_EVAPOTRANSPIRATION_FRACTION
+        ),
+        e,
+    )
+
+    # Directed edge table (reuse the flat (src, dst) convention).
+    from dreamulator.map.ocean_circulation import _build_directed_edge_table
+
+    src, dst = _build_directed_edge_table(mesh.cells)
+
+    # Smooth the wind over the graph: large-scale moisture transport responds to
+    # the large-scale wind, not the noisy local field.  Near the equator the
+    # geostrophic component is degenerate (1/f) and the terrain blocking adds
+    # per-cell jumps; without smoothing these concentrate the ITCZ into a single
+    # spurious cell-wide spike.  A few Jacobi passes damp the small-scale noise
+    # while preserving the Hadley/ferrel structure (and the solver below stays
+    # conservative for any wind field).
+    _wdeg = np.bincount(src, minlength=n).astype(np.float64)
+    _wdeg = np.maximum(_wdeg, 1.0)
+    for _ in range(40):
+        _wsum = np.zeros_like(wind)
+        np.add.at(_wsum, src, wind[dst])
+        wind = 0.5 * wind + 0.5 * (_wsum / _wdeg[:, None])
+
+    # Outward tangent unit vector from src → dst, and great-circle edge length.
+    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
+    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
+    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
+    en = np.linalg.norm(edge_vec, axis=1)
+    valid = en > 1e-9
+    edge_dir = np.zeros_like(edge_vec)
+    edge_dir[valid] = edge_vec[valid] / en[valid, None]
+    dot = np.clip(np.einsum("ij,ij->i", nodes_xyz[src], nodes_xyz[dst]), -1.0, 1.0)
+    l_m = config.radius_km * 1000.0 * np.arccos(dot)
+
+    # Outward wind component across the edge (m/s): positive = outflow from src.
+    # Use the edge-averaged wind so the two directed edges of each neighbour pair
+    # carry equal-and-opposite fluxes — with a per-cell wind the upwind scheme
+    # would not be conservative (mass balance breaks where the wind varies).
+    u_out = np.einsum("ij,ij->i", 0.5 * (wind[src] + wind[dst]), edge_dir)
+
+    area_m2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64) * 1e6
+
+    # Upwind advection coefficient c = u_out · l / A · s_per_year  [1/yr].
+    c = u_out * l_m / area_m2[src] * s_per_year
+
+    # Assemble the M-matrix A:  A W = e.
+    #   diagonal  A[i,i] = k + Σ_{outflow} c  (> 0)
+    #   off-diag  A[i,j] = c  for inflow edges (c < 0)
+    #
+    # A is not always strictly diagonally dominant — in the ITCZ the surface
+    # convergence (∇·u < 0) can add more inflow than the rainout k offsets,
+    # which makes Jacobi/GMRES stall.  But A = kI + L_upwind is non-singular:
+    # the first-order upwind scheme's numerical dissipation keeps the real part
+    # of every eigenvalue ≥ k > 0.  A direct sparse LU solve is therefore both
+    # robust and exact; the CVT graph is ~6-connected so fill-in stays bounded.
+    pos = c > 0.0
+    neg = c < 0.0
+    # Add a turbulent-diffusion term κ∇²W alongside the upwind advection.  The
+    # pure upwind scheme concentrates the ITCZ into a single spurious cell-wide
+    # spike at the equator, because the ~1° CVT mesh cannot resolve the
+    # Hadley-cell wind reversal and the finite-volume divergence is ~100× too
+    # strong.  Real moisture transport is advection + turbulent mixing; κ ≈
+    # 1e6 m²/s (atmospheric eddy diffusivity) spreads the spike to the observed
+    # ~10° rain belt (diffusion length √(κτ) ≈ 900 km) and makes A more
+    # diagonally dominant.  Finite-volume flux form (coefficient κ/A_i, flux
+    # κ(W_i−W_j) per edge) so the term stays exactly conservative on the
+    # non-uniform CVT mesh, matching the area-weighted advection.
+    _diff_i = _MOISTURE_DIFFUSIVITY_M2S * s_per_year / area_m2  # 1/yr, per cell
+    diag = np.full(n, k_rain, dtype=np.float64)
+    np.add.at(diag, src[pos], c[pos])
+    np.add.at(diag, src, _diff_i[src])  # diffusion: +κ/A_i per neighbour
+    row = np.concatenate([np.arange(n), src[neg], src])
+    col = np.concatenate([np.arange(n), dst[neg], dst])
+    val = np.concatenate([diag, c[neg], -_diff_i[src]])
+    a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsr()
+
+    from scipy.sparse.linalg import splu
+
+    lu = splu(a.tocsc())
+    w = lu.solve(e)
+
+    # Clamp against numerical under/overshoot (W ≥ 0), then P = W/τ.
+    w = np.maximum(w, 0.0)
+    p = w * k_rain
+    return w, p
+
+
 def _detect_coastal_cells(
     cells: list[VoronoiCell],
     n: int,
@@ -1016,21 +1167,20 @@ def _compute_precipitation_bfs(
     distance_to_coast_km: np.ndarray,
     config: TerrainPipelineConfig,
     itcz_lat_monthly: np.ndarray | None = None,
+    debug: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
-    """Multi-pass graph-diffusion moisture transport with orographic precipitation.
+    """Precipitation from the mass-conserving moisture budget + enhancements.
 
-    Algorithm (2026-08: replaces single-path BFS):
-    1. Build wind-biased symmetric graph Laplacian on CVT adjacency.
-       Edge weight = max(0, wind_dir · edge_dir).
-    2. Initialize moisture source: ocean evaporation (SST-dependent) + land recycling.
-    3. For *k* advection passes:
-       a. Solve steady-state diffusion (I + α̅L) q_new = q_source (GMRES).
-       b. Compute upwind elevation gain per cell (edge-level sweep).
-       c. Apply orographic rain where elev_gain > 0; rain shadow elsewhere.
-    4. Add convective (ITCZ) precipitation in tropical regions.
+    Core: solve the steady upwind advection–decay budget for column water W
+    (``_solve_moisture_budget``): ∇·(W u) + W/τ − κ∇²W = E, P = W/τ.  This is
+    mass-conserving by construction (ΣP = ΣE); the ITCZ / subtropical dry belt
+    emerge from the wind field, and the former graph-diffusion / recycling /
+    convergence heuristics are gone.
 
-    Single free parameter: D₀ (moisture_diffusivity), scaling with local wind speed.
-    Rotation-rate dependence (Ω^(-1/3)) inherited automatically from wind field.
+    On top of P = W/τ, orographic rain is applied from the column water W
+    (upwind elevation gain → rainout fraction), then the remaining distinct
+    mechanisms (baroclinic storm track, monsoon, local convection, inland
+    aridity, Föhn, tropical floor, sub-planet warming).
 
     Args:
         mesh: CVT mesh.
@@ -1051,20 +1201,8 @@ def _compute_precipitation_bfs(
     lat_rad = np.radians(np.array([c.lat for c in mesh.cells], dtype=np.float64))
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
 
-    # Step 1: Base moisture from ocean evaporation
-    ocean_moisture = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
-    # Land evapotranspiration: ~40% of ocean rate (soil + vegetation recycling)
-    land_moisture = np.where(
-        is_land, evaporation_rate(temperature_c, is_land, config.evaporation_base_mm * 0.40), 0.0
-    )
-
-    # Stage 1.3 precompute: the wind field is invariant across passes, so
-    # build the directed-edge table and per-cell downwind candidate lists
-    # ONCE. Each cell's candidates are its valid neighbours sorted by wind
-    # alignment (descending, dot > −0.3 kept) — this exactly reproduces the
-    # original "best unvisited downwind neighbour" selection: the original
-    # picks the highest-alignment unvisited neighbour, i.e. the first
-    # unvisited entry in this sorted list.
+    # Edge table for the orographic rain (Step 2) and monsoon (Step 4): wind
+    # alignment per directed edge (the moisture budget below builds its own).
     wind_speed_all = np.linalg.norm(wind, axis=1)
     with np.errstate(invalid="ignore", divide="ignore"):
         wind_unit = wind / np.maximum(wind_speed_all, 1e-9)[:, None]
@@ -1087,160 +1225,41 @@ def _compute_precipitation_bfs(
     edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
     align = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, wind_unit[src]), -1.0)
 
-    # CSR layout: per-cell candidates sorted by alignment (descending).
-    keep = align > -0.3
-    src_k = src[keep]
-    align_k = align[keep]
-    order = np.lexsort((-align_k, src_k))  # src asc, align desc (stable ties)
-    cand_dst = dst[keep][order]
-    counts = np.bincount(src_k[order], minlength=n)
-    offsets = np.zeros(n + 1, dtype=np.int64)
-    np.cumsum(counts, out=offsets[1:])
-
-    # ---- Edge table reuse: the BFS precompute (src_k, cand_dst, offsets, counts,
-    #   align) is already built above.  For diffusion we convert those directed
-    #   wind-aligned edges into a symmetric graph Laplacian.
-    #   Weight = max(0, wind_alignment) — edges aligned with wind get higher
-    #   diffusivity, counter-wind edges get zero.
-    _align_pos = np.maximum(align[keep][order], 0.0)  # keep only positive alignment
-    _src_lap = src_k[order]
-    _dst_lap = cand_dst
-    # Symmetrise: L = (L_dir + L_dir^T) / 2 for SPD property (CG-compatible).
-    _row = np.concatenate([_src_lap, _dst_lap])
-    _col = np.concatenate([_dst_lap, _src_lap])
-    _val = np.concatenate([_align_pos, _align_pos]) * 0.5
-    # Remove zero-weight entries
-    _nz = _val > 1e-12
-    _row, _col, _val = _row[_nz], _col[_nz], _val[_nz]
-    _W = sparse.coo_matrix((_val, (_row, _col)), shape=(n, n)).tocsr()
-    _degree = np.asarray(_W.sum(axis=1)).ravel()
-    _L = sparse.diags(_degree) - _W  # symmetric graph Laplacian
-
-    # Diffusion coefficient: single global D₀ scaled by local wind speed.
-    # Fast winds → larger effective diffusivity.  Rotation-rate scaling
-    # (Ω^(-1/3)) is inherited from wind speed automatically.
-    _wind_mag = np.maximum(wind_speed_all, 1e-9)
-    _cell_radius_km = config.radius_km * np.sqrt(4.0 * np.pi / n)
-    # D₀ calibrated on Earth; ~0.3 gives good Köppen accuracy trade-off.
-    _D0 = config.moisture_diffusivity
-    _alpha = _D0 * _wind_mag / _cell_radius_km  # per-cell diffusion strength
-    _alpha_avg = float(np.mean(_alpha))
-
-    # Step 2: Multi-pass advection-diffusion
-    # Each pass: solve steady-state diffusion (I + α̅*L) q_new = q_source,
-    # then apply orographic precipitation from the flux.
-    if config.moisture_advection_steps > 0:
-        n_steps = config.moisture_advection_steps
-    else:
-        n_steps = max(8, int(12 * config.rotation_period_days ** (1.0 / 3.0)))
-    for _pass in range(n_steps):
-        # Reset moisture to ocean evaporation + land recycling
-        q_source = ocean_moisture.copy()
-        q_source[is_land] += land_moisture[is_land]
-
-        # Solve (I + α̅*L) q = q_source — steady-state diffusion
-        _A = sparse.eye(n, format="csr") + _alpha_avg * _L
-        q_new, _info = gmres(_A, q_source, rtol=1e-3, atol=1e-6, maxiter=200)
-        if _info != 0 and _pass == 0:
-            import logging as _log
-
-            _log.getLogger(__name__).warning(
-                "Moisture diffusion did not converge (info=%d); result may be approximate.", _info
-            )
-
-        # Orographic precipitation from diffused moisture.
-        # For each cell with upwind elevation gain, apply orographic rain.
-        _upwind_gain = np.zeros(n, dtype=np.float64)
-        _upwind_q = np.zeros(n, dtype=np.float64)
-        for _ei in range(len(_src_lap)):
-            _i, _j = _src_lap[_ei], _dst_lap[_ei]
-            _gain = elevation_m[_j] - elevation_m[_i]
-            if _gain > 0 and _align_pos[_ei] > 0.1 and _gain > _upwind_gain[_j]:
-                _upwind_gain[_j] = _gain
-                _upwind_q[_j] = q_new[_i]  # moisture from upwind source
-
-        # Orographic rain applies only to LAND (mountains lift air); the sea
-        # surface is flat regardless of ocean-floor relief, so an upwind
-        # "elevation gain" over the ocean must not produce rain.
-        _q_mask = (_upwind_q > 0.5) & is_land
-        _rain = np.zeros(n, dtype=np.float64)
-        # Vectorised orographic precipitation:
-        # rain_fraction = min(efficiency * elev_gain / 1000, 0.9)
-        _frac = np.minimum(0.20 * _upwind_gain[_q_mask] / 1000.0, 0.9)
-        _rain[_q_mask] = _upwind_q[_q_mask] * _frac
-        # Rain shadow where moisture present but no upwind elevation gain
-        _shadow = is_land & (_upwind_gain <= 0) & (_upwind_q > 0.5)
-        _rain[_shadow] = _upwind_q[_shadow] * 0.03
-
-        pass_precip = _rain
-
-        # After pass: accumulate
-        precip += pass_precip
-        precip = np.minimum(precip, 12000.0)
-
-    # Step 3: Baseline precipitation from directional (upwind) moisture transport.
-    # Replaces the isotropic short-range diffusion (q_new) for the baseline: the
-    # moisture available at a cell is the upwind-ocean evaporation decayed over
-    # the physical upwind distance (rainout e-folding L_rain, resolution-independent
-    # in km).  This lets moisture penetrate far inland along the trade winds —
-    # the Amazon/Congo get ocean moisture thousands of km upwind, which the
-    # ~50 km isotropic diffusion could never reach.  Ocean cells keep their full
-    # evaporation (upwind distance 0).
-    _upwind_dist, _upwind_src = _upwind_distance_to_coast(
-        mesh.cells, n, is_land, wind, nodes_xyz, radius_km=config.radius_km
+    # Step 2+3+3.5: mass-conserving moisture budget.
+    # The precipitation core is a single steady upwind advection–decay solve for
+    # column water W:
+    #     ∇·(W u) + W/τ − κ∇²W = E ,   P = W/τ
+    # (see ``_solve_moisture_budget``).  Mass is conserved by construction
+    # (ΣP = ΣE), and the ITCZ / subtropical dry belt emerge from the wind field.
+    # The storm track below stays as a distinct baroclinic mechanism.
+    _col_water, precip = _solve_moisture_budget(
+        mesh, wind, is_ocean, temperature_c, nodes_xyz, config
     )
-    _l_rain_km = 1000.0  # physical rainout e-folding distance (tropical moisture)
-    _directional = np.zeros(n, dtype=np.float64)
-    _reachable = _upwind_src >= 0
-    _directional[_reachable] = ocean_moisture[_upwind_src[_reachable]] * np.exp(
-        -_upwind_dist[_reachable] / _l_rain_km
-    )
-    precip += config.recycling_fraction * _directional
-
-    # Step 3.5: Convergence-driven enhancement.  Rising air (convergence,
-    # −∇·u > 0) condenses additional column water vapour on top of the baseline;
-    # sinking air (divergence) contributes none.  The ITCZ and the polar front
-    # emerge from the wind field itself — no latitude hardcoding, correct for
-    # Earth's three cells and gaia-m's single cell alike.
-    #
-    # The moisture is the Clausius–Clapeyron column water vapour (a function of
-    # temperature), capped at ``convergence_moisture_cap_mm``: tropical
-    # precipitation is *energy*-limited, not moisture-limited, so it does not
-    # scale with the (huge) tropical vapour reservoir.  The cap removes the ~6×
-    # moisture dynamic range that a bare q × ∇·u would otherwise inherit.
     lat_deg = np.degrees(lat_rad)
-    # Large-scale convergence from the meridional cell circulation (a smooth
-    # latitude function — no per-cell Voronoi-geometry noise).  When the monthly
-    # ITCZ positions are available, the annual convergence is the 12-month
-    # average of the migrating convergence belt: the ITCZ follows the seasonal
-    # thermal equator, so the annual rain belt is much broader than the
-    # stationary Hadley-cell convergence (which is a narrow equatorial peak).
-    if itcz_lat_monthly is not None:
-        _conv = np.zeros(n, dtype=np.float64)
-        for _m in range(12):
-            _conv += _meridional_convergence(
-                lat_rad,
-                hadley_extent_deg=config.hadley_extent_deg,
-                polar_cell_start_deg=config.polar_cell_start_deg,
-                rotation_period_days=config.rotation_period_days,
-                itcz_lat_deg=float(itcz_lat_monthly[_m]),
-            )
-        _conv /= 12.0
-    else:
-        _conv = _meridional_convergence(
-            lat_rad,
-            hadley_extent_deg=config.hadley_extent_deg,
-            polar_cell_start_deg=config.polar_cell_start_deg,
-            rotation_period_days=config.rotation_period_days,
-        )
-    _t_k = np.maximum(temperature_c + 273.15, 230.0)
-    _e_sat = 611.2 * np.exp(17.67 * (_t_k - 273.15) / (_t_k - 29.65))  # Pa (Magnus)
-    _q_sat = 0.622 * _e_sat / 101325.0  # saturation specific humidity (kg/kg)
-    # Column (precipitable) water: q_sat × ρ_air × H_w, with the water-vapour
-    # scale height H_w ≈ 2500 m (≈60 mm at 27 °C, ≈16 mm at 5 °C).
-    _col_water_mm = _q_sat * 1.2 * 2500.0
-    _rainable = np.minimum(_col_water_mm, config.convergence_moisture_cap_mm)
-    precip += config.convergence_efficiency * _rainable * _conv
+
+    # Orographic rain from the column water W (upwind elevation gain).  A rising
+    # moist air parcel cools and rains out a fraction of its column water per km
+    # of uplift (same physics as the old Step 2); the sea surface is flat so an
+    # upwind elevation gain over the ocean produces no rain.
+    _upwind_gain = np.zeros(n, dtype=np.float64)
+    _upwind_w = np.zeros(n, dtype=np.float64)
+    for _ei in range(len(src)):
+        _i, _j = src[_ei], dst[_ei]
+        _gain = elevation_m[_j] - elevation_m[_i]
+        if _gain > 0 and align[_ei] > 0.1 and _gain > _upwind_gain[_j]:
+            _upwind_gain[_j] = _gain
+            _upwind_w[_j] = _col_water[_i]
+    _q_mask = (_upwind_w > 0.5) & is_land
+    _frac = np.minimum(0.20 * _upwind_gain[_q_mask] / 1000.0, 0.9)
+    precip[_q_mask] += _upwind_w[_q_mask] * _frac
+    _shadow = is_land & (_upwind_gain <= 0) & (_upwind_w > 0.5)
+    precip[_shadow] += _upwind_w[_shadow] * 0.03
+
+    if debug is not None:
+        debug["moisture_budget"] = precip.copy()
+        debug["bfs_diffusion"] = np.zeros(n)
+        debug["baseline"] = np.zeros(n)
+        debug["convergence"] = np.zeros(n)
 
     # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — a distinct
     # mechanism.  The convergence above captures the Hadley rising branch (ITCZ)
@@ -1264,8 +1283,12 @@ def _compute_precipitation_bfs(
         config.storm_track_amplitude_mm
         * (_lat_grad / 45.0)
         * (1.0 / config.rotation_period_days) ** 0.3
-        * (config.evaporation_base_mm / 2000.0)
+        * (config.evaporation_base_mm / 1000.0)
     )
+    if debug is not None:
+        debug["storm"] = (
+            _storm_amp * np.exp(-0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2)
+        ).copy()
     precip += _storm_amp * np.exp(-0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2)
 
     # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
@@ -1284,6 +1307,8 @@ def _compute_precipitation_bfs(
     # This fills in continental interiors that BFS moisture can't reach.
     conv_trigger = np.maximum(temperature_c - 10.0, 0.0)  # °C above 10 °C
     conv_precip = 30.0 * conv_trigger  # ~30 mm/yr per °C above 10 °C
+    if debug is not None:
+        debug["convection"] = np.where(is_land, conv_precip, 0.0).copy()
     precip[is_land] += conv_precip[is_land]
 
     # Step 6.5: Inland aridity gradient (3A.4).
@@ -1440,6 +1465,10 @@ def _compute_precipitation_bfs(
         # Soft boost: move 70% of the way toward target (preserves BFS variation)
         current = precip[tropical_land]
         deficit = np.maximum(tropical_target - current, 0.0)
+        if debug is not None:
+            _boost = np.zeros(n, dtype=np.float64)
+            _boost[tropical_land] = deficit * 0.7
+            debug["tropical_boost"] = _boost
         precip[tropical_land] = current + deficit * 0.7
 
     # Step 8: Sub-planet / sub-stellar convective enhancement (3A.7).
@@ -1464,6 +1493,8 @@ def _compute_precipitation_bfs(
         ang_dist_deg = np.degrees(np.arccos(np.clip(cos_ang, -1.0, 1.0)))
         amplitude = config.sub_planet_warming_c * 200.0  # mm/yr per °C
         sub_boost = amplitude * np.exp(-0.5 * (ang_dist_deg / 15.0) ** 2)
+        if debug is not None:
+            debug["sub_planet"] = sub_boost.copy()
         precip += sub_boost
 
     # Final cap after ALL precipitation steps.  Real-Earth maximum annual
@@ -1472,6 +1503,10 @@ def _compute_precipitation_bfs(
     # runs *before* the ITCZ / storm-track / monsoon / convection additions, so
     # it never limited the final field (P_max reached ~30500 mm/yr — see
     # roadmap §6).  Cap once here to keep the wettest cells physical.
+    if debug is not None:
+        debug["pre_cap"] = precip.copy()
     precip = np.minimum(precip, 11000.0)
+    if debug is not None:
+        debug["final"] = precip.copy()
 
     return precip

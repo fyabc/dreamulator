@@ -258,16 +258,16 @@ class TestMonthlyTemperature:
 
 
 class TestItczMonthly:
-    """ITCZ follows the latitude of maximum insolation."""
+    """ITCZ follows the subsolar latitude (solar declination), damped by ocean inertia."""
 
     def test_itcz_migrates(self) -> None:
-        lat_rad = np.linspace(-np.pi / 2, np.pi / 2, 181)
-        q = monthly_insolation(lat_rad, 23.44, 1361.0)
-        itcz = itcz_latitude_monthly(q, lat_rad)
+        itcz = itcz_latitude_monthly(23.44)
         assert itcz.shape == (12,)
         # ITCZ crosses into both hemispheres over the year
         assert itcz.max() > 0.0
         assert itcz.min() < 0.0
+        # Damped by ocean thermal inertia: |ITCZ| ≤ obliquity × damping (0.6)
+        assert itcz.max() <= 23.44 * 0.6 + 1e-6
 
 
 class TestMonthlyPrecipitationFactor:
