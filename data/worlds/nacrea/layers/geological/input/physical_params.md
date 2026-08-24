@@ -10,10 +10,10 @@ tags: [mass, radius, gravity, love-numbers]
 
 | 参数 | 值 | 备注 |
 |------|-----|------|
-| 质量 | {{ "%.2f" | format(entities.satellite_gaiam.mass_earth) }} M⊕ | |
-| 半径 | {{ entities.satellite_gaiam.radius_earth | round2 }} R⊕（{{ entities.satellite_gaiam.radius_km | round0 }} km） | |
+| 质量 | {{ "%.2f" | format(entities.satellite_nacrea.mass_earth) }} M⊕ | |
+| 半径 | {{ entities.satellite_nacrea.radius_earth | round2 }} R⊕（{{ entities.satellite_nacrea.radius_km | round0 }} km） | |
 | 潮汐状态 | 被巨行星 Aegis 潮汐锁定 | 公转周期 = 自转周期 |
-| 绕巨行星公转周期 | {{ entities.satellite_gaiam.period_days | hours | round0 }} 小时 | |
+| 绕巨行星公转周期 | {{ entities.satellite_nacrea.period_days | hours | round0 }} 小时 | |
 | 海洋平均深度 | 4000 m | |
 | 海洋覆盖率 | 72%（陆地 28%） | |
 | 洛夫数 h₂ | 0.6 | 固体形变 |
@@ -39,12 +39,12 @@ tags: [mass, radius, gravity, love-numbers]
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 表面重力 g | {{ entities.satellite_gaiam.gravity_m_s2 | round2 }} m/s²（≈{{ (entities.satellite_gaiam.gravity_m_s2 / 9.80665) | round2 }}g） | G·{{ "%.2f" | format(entities.satellite_gaiam.mass_earth) }}M⊕ / ({{ entities.satellite_gaiam.radius_earth | round2 }}R⊕)² |
+| 表面重力 g | {{ entities.satellite_nacrea.gravity_m_s2 | round2 }} m/s²（≈{{ (entities.satellite_nacrea.gravity_m_s2 / 9.80665) | round2 }}g） | G·{{ "%.2f" | format(entities.satellite_nacrea.mass_earth) }}M⊕ / ({{ entities.satellite_nacrea.radius_earth | round2 }}R⊕)² |
 | 轨道半长轴 | 740,332 km（≈10.35 R_J） | 开普勒第三定律 |
 | 系统稳定性 | 0.2 R_H 处 | 长期绝对稳定区 |
-| 昼夜交替周期（太阳日） | **{{ entities.satellite_gaiam.solar_day_days | round2 }} 地球日（{{ entities.satellite_gaiam.solar_day_days | hours | round1 }} 小时）** | 恒星自转 {{ entities.satellite_gaiam.period_days | hours | round0 }}h（=绕 Aegis 公转）+ Aegis 公转 {{ entities.planet_aegis.period_days | round0 }} 天 → 1/(1/{{ entities.satellite_gaiam.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
-| 年（季节周期） | **{{ entities.planet_aegis.period_days | round0 }} 地球日** | = Aegis 绕恒星公转周期（{{ entities.planet_aegis.semi_major_axis_au }} AU）；一年 = {{ entities.satellite_gaiam.days_per_year | round1 }} 个太阳日 |
-| 有效倾角 / 极圈 | {{ entities.satellite_gaiam.axial_tilt_deg | round0 }}° / ±{{ entities.satellite_gaiam.polar_circle_latitude_deg | round0 }}° | 轨道倾角即黄赤交角；极点极昼极夜各 ~{{ entities.satellite_gaiam.polar_day_at_pole_days | round1 }} 天 |
+| 昼夜交替周期（太阳日） | **{{ entities.satellite_nacrea.solar_day_days | round2 }} 地球日（{{ entities.satellite_nacrea.solar_day_days | hours | round1 }} 小时）** | 恒星自转 {{ entities.satellite_nacrea.period_days | hours | round0 }}h（=绕 Aegis 公转）+ Aegis 公转 {{ entities.planet_aegis.period_days | round0 }} 天 → 1/(1/{{ entities.satellite_nacrea.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
+| 年（季节周期） | **{{ entities.planet_aegis.period_days | round0 }} 地球日** | = Aegis 绕恒星公转周期（{{ entities.planet_aegis.semi_major_axis_au }} AU）；一年 = {{ entities.satellite_nacrea.days_per_year | round1 }} 个太阳日 |
+| 有效倾角 / 极圈 | {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}° / ±{{ entities.satellite_nacrea.polar_circle_latitude_deg | round0 }}° | 轨道倾角即黄赤交角；极点极昼极夜各 ~{{ entities.satellite_nacrea.polar_day_at_pole_days | round1 }} 天 |
 | 浅水重力波速 | 202.8 m/s | √(gH) |
 
 ---

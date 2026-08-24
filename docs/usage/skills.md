@@ -8,8 +8,8 @@ Claude Code 里以 `/技能名 参数` 触发；技能文件本身是完整指�
 
 | 技能 | 用途 | 触发示例 |
 |---|---|---|
-| `/grill-world` | 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录 | `/grill-world gaia-m civilizations` |
-| `/read-map` | 视觉 + 数据双路交叉校验读取地图图层，抽取海陆/气候/生态/文明结构 | `/read-map gaia-m` |
+| `/grill-world` | 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录 | `/grill-world nacrea civilizations` |
+| `/read-map` | 视觉 + 数据双路交叉校验读取地图图层，抽取海陆/气候/生态/文明结构 | `/read-map nacrea` |
 | `/narrate` | 生成世界口语化描述 | `/narrate earth --branch pangea` |
 
 ---

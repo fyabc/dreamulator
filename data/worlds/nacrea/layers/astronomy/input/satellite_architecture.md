@@ -79,7 +79,7 @@ Nacrea 的偏心率**不是自由衰减的**，而是**受迫偏心率（forced 
 ### 其他行星的卫星系统
 
 参考太阳系但刻意制造区分度、各具特点。设计依据（Hill 球、潮汐剥离）与命名词族见
-`data/worlds/gaia-m/design-notes/0004-satellite-systems.md`。
+`data/worlds/nacrea/design-notes/0004-satellite-systems.md`。
 
 | 行星 | 架构 | 卫星（科学别名） | 太阳系类比 |
 |------|------|------------------|-----------|

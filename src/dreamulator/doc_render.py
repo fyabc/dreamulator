@@ -5,7 +5,7 @@ World documents (``layers/*/input/*.md`` and ``design-notes/*.md``) may embed
 facts: the entity-addressed fact context built by
 ``guard/facts.py::build_fact_context`` (``system_catalog.yaml`` + per-layer
 ``*_summary.yaml``, see ``docs/design/harness.md`` §5). Entities are keyed by
-stable ID (``{{ entities.satellite_gaiam.axial_tilt_deg }}``); per-layer
+stable ID (``{{ entities.satellite_nacrea.axial_tilt_deg }}``); per-layer
 aggregates live under ``aggregates.climate`` / ``.ecology`` / ``.civilization``.
 
 Design decisions:

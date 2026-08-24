@@ -1,6 +1,6 @@
 # 地形微调诊断指南
 
-> 基于 gaia-m 实际迭代经验（2026-08）总结。面向设计了 geography.yaml 后需要
+> 基于 nacrea 实际迭代经验（2026-08）总结。面向设计了 geography.yaml 后需要
 > 对照生成结果反复微调的场景。
 
 ---
@@ -49,7 +49,7 @@ elevation = base(850m+板块偏移+大陆起伏)
 波长(km) ≈ 行星半径(km) / noise_scale
 ```
 
-| scale | gaia-m 波长 | 地形含义 |
+| scale | nacrea 波长 | 地形含义 |
 |-------|------------|---------|
 | 0.5 | ~13,600 km | 全球级——全行星仅 2-3 波，同板块内几乎常数 |
 | 2.0 | ~3,400 km | 大陆级——单个大陆 2-3 个起伏区 |
@@ -138,7 +138,7 @@ elevation = base(850m+板块偏移+大陆起伏)
 ### 正确流程
 
 1. 编辑 `private/worlds/<world>/layers/geological/input/geography.yaml`
-2. `uv run dreamulator build gaia-m --force --data-dir private/worlds`
+2. `uv run dreamulator build nacrea --force --data-dir private/worlds`
 3. 刷新前端验证
 4. 满意后同步回 `data/worlds/`
 

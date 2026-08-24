@@ -14,7 +14,7 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 | 参数 | 值 | 来源 |
 |------|-----|------|
 | 中心天体质量 M_Aegis | 508.5 M⊕ = 3.037×10²⁷ kg | stellar.yaml |
-| 卫星质量 M_GaiaM | 1.20 M⊕ = 7.166×10²⁴ kg | physical_params.md |
+| 卫星质量 M_Nacrea | 1.20 M⊕ = 7.166×10²⁴ kg | physical_params.md |
 | 卫星半径 R | 6817 km | physical_params.md |
 | 轨道半长轴 a | 739,013 km | stellar.yaml |
 | 轨道周期 P | 3.25 d（78 h），n = 2.2375×10⁻⁵ rad/s | stellar.yaml |

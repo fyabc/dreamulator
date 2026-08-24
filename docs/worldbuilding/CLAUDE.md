@@ -16,7 +16,7 @@
 
 - `drafts/conlang-world-drafts.md` — 架空语言文字草案（6 个草案：OSV 认知文明、多轨和声语法、能量梯度语序、宿命论语序、硅基纯表意文字、种族语音对立）
 - `drafts/alternative-solvent-world-drafts.md` — 替代溶剂世界草案（8 个草案：氨海超级地球、乙烷湖行星、温水双洋、冷海双洋、硫火世界、富碳辛烷油海、四氢化萘密度翻转油海、冰-油-卤水三层世界）
-- `drafts/reversing-river-wonder.md` — "赤渊"倒流河奇观（2026-08 重新评估：gaia-m 北方内海缺口 #12554 (−72.3°, 48.2°) 具备地质条件；待裂谷原语 + 侵蚀引擎落地后以 geography.yaml 裂谷特征实施。精细化地形（~5–10 cell）后期可能需 Gaea 等外部工具局部渲染）
+- `drafts/reversing-river-wonder.md` — "赤渊"倒流河奇观（2026-08 重新评估：nacrea 北方内海缺口 #12554 (−72.3°, 48.2°) 具备地质条件；待裂谷原语 + 侵蚀引擎落地后以 geography.yaml 裂谷特征实施。精细化地形（~5–10 cell）后期可能需 Gaea 等外部工具局部渲染）
 
 ## 规划中的文档
 

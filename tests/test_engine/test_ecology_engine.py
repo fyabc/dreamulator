@@ -56,7 +56,7 @@ def _build_mesh_with_climate() -> CVTMesh:
 
 def _write_world(tmp_path):
     """Write a minimal world dir: maps/<planet>/cvt_mesh.json + planets.yaml."""
-    planet_dir = tmp_path / "maps" / "satellite_gaiam"
+    planet_dir = tmp_path / "maps" / "satellite_nacrea"
     planet_dir.mkdir(parents=True)
     mesh = _build_mesh_with_climate()
     (planet_dir / "cvt_mesh.json").write_bytes(TypeAdapter(CVTMesh).dump_json(mesh))
@@ -65,8 +65,8 @@ def _write_world(tmp_path):
     geo_input.mkdir(parents=True)
     (geo_input / "planets.yaml").write_text(
         "planets:\n"
-        "  - id: satellite_gaiam\n"
-        "    name: Gaiam\n"
+        "  - id: satellite_nacrea\n"
+        "    name: Nacrea\n"
         "    orbits: star_a\n"
         "    mass: 1.0\n"
         "    radius: 1.0\n",
@@ -92,7 +92,7 @@ def test_ecology_engine_populates_p1_fields(tmp_path) -> None:
     from dreamulator.map.export import decompress_mesh_bytes
 
     mesh = TypeAdapter(CVTMesh).validate_json(
-        decompress_mesh_bytes((world / "maps" / "satellite_gaiam" / "cvt_mesh.json").read_bytes())
+        decompress_mesh_bytes((world / "maps" / "satellite_nacrea" / "cvt_mesh.json").read_bytes())
     )
     land = [c for c in mesh.cells if c.crust_type == "continental"]
     ocean = [c for c in mesh.cells if c.crust_type != "continental"]

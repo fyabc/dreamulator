@@ -70,13 +70,13 @@ dreamulator 的地图系统采用**球面质心 Voronoi 镶嵌（Spherical CVT�
 最快速的生成方式——一行命令完成全部管线：
 
 ```bash
-uv run dreamulator map generate myworld satellite_gaiam
+uv run dreamulator map generate myworld satellite_nacrea
 ```
 
 **预期输出**：
 
 ```
-🌍 Generating map for planet 'satellite_gaiam' in world 'myworld'...
+🌍 Generating map for planet 'satellite_nacrea' in world 'myworld'...
   [1/6] CVT mesh generation (200,000 cells) ......... 25s
   [2/6] Tectonic plates (20 plates) ................. 18s
   [3/6] Boundary analysis & terrain .................. 32s
@@ -84,7 +84,7 @@ uv run dreamulator map generate myworld satellite_gaiam
   [5/6] Climate simulation ........................... ~150s
   [6/6] Export (equirectangular 4096×2048) ........... 5s
 ✅ Map generated in ~390s
-   → data/worlds/myworld/maps/satellite_gaiam/
+   → data/worlds/myworld/maps/satellite_nacrea/
 ```
 
 整个流程约 6–7 分钟（200k 节点，含气候；视机器性能和 `tectonic_steps` 而异）。生成完成后，所有数据文件会自动写入行星的地图目录。
@@ -93,13 +93,13 @@ uv run dreamulator map generate myworld satellite_gaiam
 
 ```bash
 # 使用不同种子
-uv run dreamulator map generate myworld satellite_gaiam --seed 123
+uv run dreamulator map generate myworld satellite_nacrea --seed 123
 
 # 更多板块、更高海平面
-uv run dreamulator map generate myworld satellite_gaiam --num-plates 30 --sea-level 50
+uv run dreamulator map generate myworld satellite_nacrea --num-plates 30 --sea-level 50
 
 # 使用配置文件
-uv run dreamulator map generate myworld satellite_gaiam -c config.yaml
+uv run dreamulator map generate myworld satellite_nacrea -c config.yaml
 ```
 
 ### 2.2 API 生成
@@ -107,7 +107,7 @@ uv run dreamulator map generate myworld satellite_gaiam -c config.yaml
 通过 REST API 触发生成（适合自动化脚本和前端调用）：
 
 ```bash
-curl -X POST "http://localhost:8000/api/worlds/myworld/maps/satellite_gaiam/generate" \
+curl -X POST "http://localhost:8000/api/worlds/myworld/maps/satellite_nacrea/generate" \
   -H "Content-Type: application/json" \
   -d '{
     "seed": 42,
@@ -122,7 +122,7 @@ curl -X POST "http://localhost:8000/api/worlds/myworld/maps/satellite_gaiam/gene
 ```json
 {
   "ok": true,
-  "planet_id": "satellite_gaiam",
+  "planet_id": "satellite_nacrea",
   "projection": "equirectangular",
   "width": 2048,
   "height": 1024,
@@ -360,7 +360,7 @@ terrain:
 使用配置文件生成：
 
 ```bash
-uv run dreamulator map generate myworld satellite_gaiam -c earthlike_terrain.yaml
+uv run dreamulator map generate myworld satellite_nacrea -c earthlike_terrain.yaml
 ```
 
 ### 4.4 预设模板
@@ -375,7 +375,7 @@ uv run dreamulator map generate myworld satellite_gaiam -c earthlike_terrain.yam
 | `archipelago` | 群岛行星 | 海平面 +200m，40 个小板块 |
 
 ```bash
-uv run dreamulator map generate myworld satellite_gaiam --preset ocean_world
+uv run dreamulator map generate myworld satellite_nacrea --preset ocean_world
 ```
 
 预设提供合理的默认值，你仍可以通过 CLI 参数或配置文件覆盖任意选项。
@@ -532,7 +532,7 @@ Gaea 精细化仅作用于选定区域，不会影响全球管线结果（气候
 使用 `export-region` 命令将指定经纬度范围的区域导出为独立高度图，采用立体投影（stereographic projection）以减少形变：
 
 ```bash
-uv run dreamulator map export-region myworld satellite_gaiam \
+uv run dreamulator map export-region myworld satellite_nacrea \
     --lat 20:40 --lon -10:30 --resolution 4096 \
     -o region_heightmap.png
 ```
@@ -563,7 +563,7 @@ uv run dreamulator map export-region myworld satellite_gaiam \
 将 Gaea 处理后的区域高度图回导到全局地图中：
 
 ```bash
-uv run dreamulator map import-region myworld satellite_gaiam \
+uv run dreamulator map import-region myworld satellite_nacrea \
     --lat 20:40 --lon -10:30 \
     -i refined_region.png --feather 0.1
 ```
@@ -594,9 +594,9 @@ uv run dreamulator map import-region myworld satellite_gaiam \
 
 ```bash
 # 生成多个候选
-uv run dreamulator map generate myworld satellite_gaiam --seed 123
-uv run dreamulator map generate myworld satellite_gaiam --seed 456
-uv run dreamulator map generate myworld satellite_gaiam --seed 789
+uv run dreamulator map generate myworld satellite_nacrea --seed 123
+uv run dreamulator map generate myworld satellite_nacrea --seed 456
+uv run dreamulator map generate myworld satellite_nacrea --seed 789
 ```
 
 每次生成会完全覆盖之前的数据。如果需要在不同种子之间比较，建议将满意的结果复制到其他分支（见 [7.4 分支工作流](#74-分支工作流)）。
@@ -607,10 +607,10 @@ uv run dreamulator map generate myworld satellite_gaiam --seed 789
 
 ```bash
 # 种子满意，但想增加山脉 → 增大 num_plates
-uv run dreamulator map generate myworld satellite_gaiam --seed 123 --num-plates 30
+uv run dreamulator map generate myworld satellite_nacrea --seed 123 --num-plates 30
 
 # 海平面太低，想增加海洋面积
-uv run dreamulator map generate myworld satellite_gaiam --seed 123 --num-plates 30 --sea-level 200
+uv run dreamulator map generate myworld satellite_nacrea --seed 123 --num-plates 30 --sea-level 200
 ```
 
 > **注意**：即使种子不变，修改参数也会导致不同的地形——因为管线各阶段的输入已经改变。种子只保证"相同参数 = 相同结果"。
@@ -653,7 +653,7 @@ terrain:
 uv run dreamulator branch create myworld pangea --at geological
 
 # 在分支上生成地图（使用不同配置）
-uv run dreamulator map generate myworld satellite_gaiam \
+uv run dreamulator map generate myworld satellite_nacrea \
     --branch pangea -c pangea_config.yaml
 
 # 对比查看

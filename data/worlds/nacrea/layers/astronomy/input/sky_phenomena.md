@@ -12,8 +12,8 @@ tags: [sky, apparent-magnitude, angular-diameter, eclipse, transit, phenomena]
 
 > **时间单位约定**：除非注明，本文所有时间均为**地球时**（地球日 / 地球年 / 地球时），
 > 与轨道根数所用单位一致。本地时间换算：**1 珠母星年 = {{ entities.planet_aegis.period_days | round0 }} 地球日**
-> （≈ {{ entities.satellite_gaiam.days_per_year | round1 }} 个太阳日）；**1 太阳日 = {{ entities.satellite_gaiam.solar_day_days | round2 }} 地球日 =
-> {{ entities.satellite_gaiam.solar_day_days | hours | round1 }} 地球时**；卫星公转周期 = {{ entities.satellite_gaiam.period_days | hours | round0 }} 地球时。
+> （≈ {{ entities.satellite_nacrea.days_per_year | round1 }} 个太阳日）；**1 太阳日 = {{ entities.satellite_nacrea.solar_day_days | round2 }} 地球日 =
+> {{ entities.satellite_nacrea.solar_day_days | hours | round1 }} 地球时**；卫星公转周期 = {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时。
 > 涉及"年"的天象频率，下文均明确标注是**珠母星年**还是**地球年**。
 
 > **反照率约定**：各天体物理参数采用 `planets.yaml` 设定的 **Bond 反照率**；
@@ -87,7 +87,7 @@ $R=0.4387\,R_\odot=305{,}222$ km（`stellar_derived.yaml`）；
 **永悬天顶**：珠母星被巨神星潮汐锁定。从向星点附近的**永耀岛**
 （`geography.yaml`：lon 0.5°、lat −0.8°，距正星下点仅 0.94°）望去，
 巨神星中心高度角约 **89°**，**永不升起、永不落下**，只在原地以
-{{ entities.satellite_gaiam.period_days | hours | round0 }} 地球时为周期盈亏。
+{{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时为周期盈亏。
 
 ## 3. 外卫星：韵珠星（Cadence）与守珠星（Vigil）
 
@@ -121,14 +121,14 @@ $= 11{,}429{,}199$ km，远超珠母星轨道半径 739,013 km → **全食完�
 | 参数 | 结果 |
 |------|------|
 | 本影在珠母星轨道处的半径 | **66,741 km**（≫ 珠母星半径 6,817 km） |
-| 轨道速度（公转周期 $P=$ {{ entities.satellite_gaiam.period_days | hours | round0 }} 地球时） | 59,530 km/h |
+| 轨道速度（公转周期 $P=$ {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时） | 59,530 km/h |
 | **全食最长** | **约 2.2 地球时**（穿越本影中心） |
 | 偏食到偏食最长 | 约 2.4 地球时 |
 
-**食季窗口**（轨道倾角 {{ entities.satellite_gaiam.axial_tilt_deg | round0 }}°）：珠母星最大黄纬
+**食季窗口**（轨道倾角 {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}°）：珠母星最大黄纬
 $739{,}013\sin 9°=115{,}607$ km；食发生阈值 = 本影半径 + 珠母星半径 = 73,558 km。
 每个升/降交点食季占全轨道周期（珠母星年） $\frac{2\arcsin(73558/115607)}{2\pi}=22\%$，
-即**每次食季约 14.7 地球日**，每 {{ entities.satellite_gaiam.period_days | hours | round0 }} 地球时
+即**每次食季约 14.7 地球日**，每 {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时
 一次食 → **每食季约 4 次全食，每珠母星年（{{ entities.planet_aegis.period_days | round0 }} 地球日）约 8 次**
 （与 `orbital_dynamics.md` "每年 2 个食季" 一致）。
 

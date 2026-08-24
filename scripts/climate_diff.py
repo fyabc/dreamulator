@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Climate build diff tool — compare two gaia-m climate outputs.
+"""Climate build diff tool — compare two nacrea climate outputs.
 
 Usage:
     uv run python private/scripts/climate_diff.py \\
-        data/worlds/gaia-m/maps/satellite_gaiam \\
-        private/worlds/gaia-m/maps/satellite_gaiam
+        data/worlds/nacrea/maps/satellite_nacrea \\
+        private/worlds/nacrea/maps/satellite_nacrea
 
 Compares the two most recent mesh files and reports:
 - Global summaries (T, P, Köppen counts)
@@ -40,9 +40,9 @@ def load(path: str) -> tuple[list[dict], dict]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Diff two gaia-m climate builds")
-    p.add_argument("old", help="Path to old build (e.g. data/worlds/gaia-m/maps/satellite_gaiam)")
-    p.add_argument("new", help="Path to new build (e.g. private/worlds/gaia-m/maps/satellite_gaiam)")
+    p = argparse.ArgumentParser(description="Diff two nacrea climate builds")
+    p.add_argument("old", help="Path to old build (e.g. data/worlds/nacrea/maps/satellite_nacrea)")
+    p.add_argument("new", help="Path to new build (e.g. private/worlds/nacrea/maps/satellite_nacrea)")
     p.add_argument("--top", type=int, default=10, help="Top-N cells to show (default 10)")
     p.add_argument("--band-width", type=float, default=10.0, help="Latitude band width (deg)")
     args = p.parse_args()

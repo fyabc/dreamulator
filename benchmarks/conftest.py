@@ -19,8 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tests.validation.conftest import build_validation_mesh  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-GAIA_MESH_JSON = (
-    REPO_ROOT / "data" / "worlds" / "gaia-m" / "maps" / "satellite_gaiam" / "cvt_mesh.json"
+NACREAESH_JSON = (
+    REPO_ROOT / "data" / "worlds" / "nacrea" / "maps" / "satellite_nacrea" / "cvt_mesh.json"
 )
 
-__all__ = ["build_validation_mesh", "REPO_ROOT", "GAIA_MESH_JSON"]
+__all__ = ["build_validation_mesh", "REPO_ROOT", "NACREAESH_JSON"]

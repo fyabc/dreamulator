@@ -6,7 +6,7 @@ to frontend/public/data/ for static site hosting.
 Usage:
     python scripts/export_static.py
     python scripts/export_static.py --output frontend/public/data
-    python scripts/export_static.py --worlds earth gaia-m
+    python scripts/export_static.py --worlds earth nacrea
 """
 
 from __future__ import annotations

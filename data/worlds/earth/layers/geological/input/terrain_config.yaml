@@ -1,5 +1,5 @@
 # Earth shared-physics climate config.
-# Only the shared-physics feature flags are set (same code path as gaia-m);
+# Only the shared-physics feature flags are set (same code path as nacrea);
 # all calibration values use the dataclass defaults, which match
 # build_earth_validation_config(). Earth's terrain is imported (ETOPO1), not
 # generated, so this file carries only the climate tuning knobs.

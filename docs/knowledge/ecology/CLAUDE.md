@@ -14,7 +14,7 @@ ecology 层 P0（Whittaker 群系 + NPP + 可驯化标签）与 P1a（土壤层 
 
 - `whittaker_biomes.md` — Whittaker 温度-降水生物群系图（与 Köppen 的映射是
   天然接口：`koppen_classification.md` 的 (T, P) 输入即 Whittaker 坐标轴）
-- `intertidal_ecology.md` — 潮间带生态位（gaia-m ~25 km 进退带：固着滤食者、
+- `intertidal_ecology.md` — 潮间带生态位（nacrea ~25 km 进退带：固着滤食者、
   快速穴居者、两栖迁徙类；呼吸潮节律写入基因的世界构建案例）
 - `refugia_broad_spectrum.md` — 避难所（refugia）与广谱革命：气候振荡期的
   物种/文化蓄水池机制（视频赏析中乐意 Ajax 世界的"蓄水池"文明形态同源）

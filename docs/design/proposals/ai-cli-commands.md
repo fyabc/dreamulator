@@ -14,7 +14,7 @@
 |--------|------|------|
 | `ai narrate` | 现有叙述功能迁移 | `dreamulator ai narrate --id aegis` |
 | `ai imagine` | 基于现有设定推演未来 | `dreamulator ai imagine --world earth/ERE-if --id ERE` |
-| `ai civ` | **地理→文明推演**：给定气候带（Köppen）+ 地理锚点 + 地形 + 邻近关系，用真实文明史类比建议可能孕育的文明种子（类型/经济基础/与邻区互动），锚定到 civilizations.yaml | `dreamulator ai civ --world gaia-m --anchor "北方大陆南岸"` |
+| `ai civ` | **地理→文明推演**：给定气候带（Köppen）+ 地理锚点 + 地形 + 邻近关系，用真实文明史类比建议可能孕育的文明种子（类型/经济基础/与邻区互动），锚定到 civilizations.yaml | `dreamulator ai civ --world nacrea --anchor "北方大陆南岸"` |
 
 > `ai civ` 是命令组的**第四向**（前三个是「数据→叙事」「意图→数据」「Tags→名字/角色」）：
 > **气候画像 → 文明种子**。它补上文明种子设计缺失的那块——从气候

@@ -15,4 +15,4 @@ type: overview
 | [tidal_effects.md](tidal_effects.md) | 潮汐效应 — 静态拉伸、动态震荡、地质结果（板块运动、超大陆旋回、地震、海岸线进退） |
 | [geography.md](geography.md) | 海陆分布（文明时代） — 潮汐海陆骨架 + 不对称混合案 |
 | [geological_history.md](geological_history.md) | 地质历史简史 — 60 亿年地质分期（冥古宙→显生宙）及地球对比 |
-| ~~reversing_river.md~~ | 已移出 gaia-m — 当前地形无法支持封闭裂谷盆地。移至 `docs/worldbuilding/drafts/reversing-river-wonder.md`，待后续异星世界复用 |
+| ~~reversing_river.md~~ | 已移出 nacrea — 当前地形无法支持封闭裂谷盆地。移至 `docs/worldbuilding/drafts/reversing-river-wonder.md`，待后续异星世界复用 |

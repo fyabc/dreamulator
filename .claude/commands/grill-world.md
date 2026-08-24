@@ -1,5 +1,5 @@
 ---
-description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录。当需要审一个世界/层/文明的自洽性时使用（如 /grill-world gaia-m civilizations）。
+description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录。当需要审一个世界/层/文明的自洽性时使用（如 /grill-world nacrea civilizations）。
 ---
 
 # grill-world — 世界设定拷问
@@ -51,5 +51,5 @@ description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），�
 
 ## 首例参照
 
-`data/worlds/gaia-m/layers/civilization/input/civilizations.yaml` 的 #9 拷问：
+`data/worlds/nacrea/layers/civilization/input/civilizations.yaml` 的 #9 拷问：
 驯化潜力 vs 锚点、Aegis 地平线 vs「巨眼崇拜」、光污染 vs 声呐/天文——对应决策记录 0001–0006。

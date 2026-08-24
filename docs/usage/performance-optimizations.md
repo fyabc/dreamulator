@@ -10,7 +10,7 @@
 
 ## 2026-08-12：地质层子阶段缓存 + Ocean 预条件子 + 前端 code-split
 
-**基线**：gaia-m 200k seed=42, `build_profile.json`（347.4s）
+**基线**：nacrea 200k seed=42, `build_profile.json`（347.4s）
 
 ### 1. 地质层子阶段缓存
 
@@ -122,7 +122,7 @@
 
 ## 累计效果
 
-gaia-m 200k seed=42 `--force` 构建：
+nacrea 200k seed=42 `--force` 构建：
 
 | 优化 | terrain | geological | total |
 |------|---------|-----------|-------|

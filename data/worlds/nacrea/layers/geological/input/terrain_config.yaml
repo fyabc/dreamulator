@@ -3,8 +3,8 @@
 # 用于 dreamulator terrain generate 命令的配置文件。
 #
 # 用法:
-#   uv run dreamulator terrain generate gaia-m --planet satellite_gaiam \
-#     --config data/worlds/gaia-m/layers/geological/input/terrain_config.yaml
+#   uv run dreamulator terrain generate nacrea --planet satellite_nacrea \
+#     --config data/worlds/nacrea/layers/geological/input/terrain_config.yaml
 #
 # 数据来源:
 #   planets.yaml       — 行星物理参数
@@ -93,7 +93,7 @@ noise:
   noise_amplitude_land_m: 600.0
   noise_amplitude_ocean_m: 300.0
   # noise_scale 与物理波长的换算：波长(km) ≈ 行星半径(km) / scale
-  # gaia-m R=6817 km: scale 0.5→13600 km(全球级), 2.0→3400 km(大陆级),
+  # nacrea R=6817 km: scale 0.5→13600 km(全球级), 2.0→3400 km(大陆级),
   #                   3.0→2300 km(板块级), 5.0→1400 km(区域级)
   regional_noise_scale: 3.0      # 板块级起伏（波长 ~2300 km）
   regional_noise_amplitude_land_m: 1200.0
@@ -107,7 +107,7 @@ noise:
 # 后不再超 12km。
 ocean:
   age_depth_enabled: true
-  spreading_rate_cm_yr: 6.0     # 半扩张速率（地球 1–5），gaia-m 潮汐加热+活跃地质体 → 更高
+  spreading_rate_cm_yr: 6.0     # 半扩张速率（地球 1–5），nacrea 潮汐加热+活跃地质体 → 更高
   ridge_depth_m: 2500.0         # 洋中脊深度
   subsidence_coeff: 350.0       # sqrt(age) 系数
   max_age_myr: 100.0            # 稳态年龄（岩石圈热平衡）
@@ -116,7 +116,7 @@ ocean:
 # ── 潮汐加热 → 板块速度耦合 ──────────────────────────────────────────────────
 # 启用后，最快板块速度与洋底半扩张速率由潮汐加热（Peale & Cassen 1978）通过
 # 经验幂律 v ∝ q^β 推导，替代上面的 plate_speed_max_cm_yr / ocean.spreading_rate_cm_yr。
-# gaia-m: q_tidal ≈ 0.27 W/m² = 3× 地球总热流(0.09) → β=1.0 → v ≈ 15 cm/yr，
+# nacrea: q_tidal ≈ 0.27 W/m² = 3× 地球总热流(0.09) → β=1.0 → v ≈ 15 cm/yr，
 # 半扩张 = 0.4 × 15 = 6 cm/yr —— 与手写值一致（终值不变）。
 # 参考 docs/knowledge/geology/tidal_plate_speed.md（含引用与 Valencia vs
 # O'Neill&Lenardic 争论）。v 以 0.5 cm/yr 粒度取整（经验律 ±50% 不确定）。
