@@ -136,40 +136,39 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 8. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值）
 ```
 
-### 2.4 降水：`_compute_precipitation_bfs` — 辐合驱动三层模型
+### 2.4 降水：`_compute_precipitation_bfs` — 质量守恒水汽收支
 
-降水是三层物理之和（详细公式见 energy_balance.md §8）：
+核心是一个**质量守恒的柱水汽收支方程**（`_solve_moisture_budget`，详细公式见
+energy_balance.md §8）：
 
 ```
-P = η_recycle · q_diff                      # 基线：水汽回收（层积云/副高弱下沉/蒸散）
-  + η_conv · min(W(T), W_cap) · conv        # 辐合增强：ITCZ / 极锋（从风场涌现）
-  + P_storm                                 # 斜压风暴路径（独立机制）
+∇·(W u) + W/τ − κ∇²W = E ,   P = W/τ
 ```
+
+迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ≈1e6 m²/s，展宽 ITCZ 到
+观测的 ~10° 雨带）+ 直接稀疏 LU 求解。**质量守恒由构造保证**（ΣP = ΣE），ITCZ /
+副热带干带从风场自然涌现。
 
 执行步骤：
 
-1. **Step 1 蒸发源**：海洋蒸发（C–C，SST 依赖）+ 陆地蒸散（海洋的 40%）。
-2. **Step 2 水汽输送**：风偏图扩散（`(I + α̅L) q = q_source`，GMRES），多 pass；
-   每 pass 后做地形抬升降水 + 雨影。
-3. **Step 3 基线回收**：`recycling_fraction × q_diff`（让副热带下沉带不干到零）。
-4. **Step 3.5 辐合增强**：`_meridional_convergence`（平滑纬向辐合，12 月 ITCZ 平均）→
-   `η_conv × min(W, W_cap) × conv`；随后加**斜压风暴路径**（幅度 ∝ ∇T × Ω^0.3 × 蒸发，
-   中心在极锋）。
-5. **Step 4 季风增强**：沿海热带陆地 ×1.5/×1.3（过渡先验，待季节季风机制替代）。
-6. **Step 5 局地对流**：暖陆地午后雷暴（`30 × max(T−10, 0)`）。
-7. **Step 6.5 内陆干旱梯度**、**6.6 海岸不对称**、**6.7 Föhn 雨影**、**7 热带底线**、
-   **8 次行星半球强迫**。
-8. 最终封顶 11000 mm/yr。
+1. **蒸发源 E**：海洋蒸发（能量限制 ~3%/°C）+ 陆地蒸散
+   （`_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55，配 Earth ~490 mm/yr 陆地蒸散）。
+2. **水汽收支求解**：`_solve_moisture_budget` 解出柱水汽 W，P = W/τ（质量守恒）。
+3. **地形抬升雨**：从 W 算迎风抬升雨 + 雨影。
+4. **斜压风暴路径**（幅度 ∝ ∇T × Ω^0.3 × 蒸发，中心在极锋）。
+5. **季风增强**、**局地对流**、**内陆干旱梯度**、**海岸不对称**、**Föhn 雨影**、
+   **热带底线**、**次行星半球强迫**。
+6. 最终封顶 11000 mm/yr。
 
-**关键设计**：ITCZ、副热带干带、极锋全部从 `_meridional_convergence` 的 ∇·u 自然涌现，
+**关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，
 **无纬度硬编码**——对 Earth 三圈环流与 gaia-m 单圈环流（`hadley_extent=90`）同一套代码
 自动适配（见 `scripts/diagnose_wind_divergence.py`）。
 
-**辐合函数**：
+**诊断辅助函数**：
 
 - `_meridional_convergence(lat_rad, hadley_extent, polar_cell_start, rotation, itcz_lat_deg)`：
   在细纬度网格上算经向风散度 `(1/cos φ) d(v cos φ)/dφ`（`np.gradient`），12 月 ITCZ 平均
-  后插值回 cell。平滑无噪声（避免逐 cell Voronoi 几何噪声）。
+  后插值回 cell。平滑无噪声，供诊断脚本对比水汽收支的逐 cell 散度。
 - `_surface_divergence(nodes_xyz, wind, neighbors, areas_ster)`：有限体积逐 cell 散度，
   供诊断脚本 `diagnose_wind_divergence.py` 使用。
 
@@ -320,18 +319,18 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | 三圈环流边界 | Hadley 30° / Ferrel 60° 可配置 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½ 行星化 | `hadley_cell_wind` |
 | gaia-m 回归 | gaia-m 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `gaia-m/terrain_config.yaml` |
 
-### 地球调优的方案常数（影响异星保真度）
+### 地球标定的方案常数（影响异星保真度）
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `ebm_diffusion_wm2k` | 0.35 | 总经向热输送 D，Earth ΔT≈41°C 标定 |
 | `ebm_diffusion_land_wm2k` | 0.2 | 陆地（大气）输送，≈0.6×总输送 |
-| `convergence_efficiency` | 1.8 | 辐合降水效率（含单位换算） |
-| `convergence_moisture_cap_mm` | 40.0 | 能量受限可降水柱（热带降水能量受限） |
-| `recycling_fraction` | 0.3 | 基线水汽回收比例 |
 | `storm_track_amplitude_mm` | 900.0 | 斜压风暴路径幅度 |
-| `evaporation_base_mm` | 2000.0 | 热带洋面年蒸发基准 |
-| `moisture_diffusivity` | 5.0 | 图扩散 D₀ |
+| `evaporation_base_mm` | 1000.0 | 15 °C 洋面年蒸发基准（能量限制 ~3%/°C） |
+
+> 水汽收支的物理常数在代码内（非 config）：驻留时间 τ≈9 天（`_MOISTURE_RESIDENCE_DAYS`）、
+> 湍流扩散 κ≈1e6 m²/s（`_MOISTURE_DIFFUSIVITY_M2S`）、陆地蒸散因子 ≈0.55
+> （`_LAND_EVAPOTRANSPIRATION_FRACTION`）。它们是水的物理属性，所有世界共享。
 
 ---
 

@@ -111,8 +111,8 @@
 |------|---------|---------|
 | 全球温度偏高 | 温室效应过强 | 降低 `greenhouse_warming_K` |
 | 赤道-极地温差过大 | 环流弱 | 降低 `lat_gradient_c` |
-| 降水在海岸线剧烈变化 | 水汽输送步数不足 | 增大 `_MOISTURE_ADVECTION_STEPS` |
-| 沙漠面积过大 | 干旱阈值偏低 + 降水不足 | 调整 `orographic_efficiency` |
+| 降水在海岸线剧烈变化 | 水汽输送过短（湍流扩散 κ 不足） | 增大 `_MOISTURE_DIFFUSIVITY_M2S` |
+| 沙漠面积过大 | 陆地蒸散偏低 + 降水不足 | 调整 `_LAND_EVAPOTRANSPIRATION_FRACTION` |
 | 极地温度不够冷 | 反照率未考虑冰盖 | 调整纬度梯度 |
 
 ---

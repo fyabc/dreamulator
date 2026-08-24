@@ -1280,7 +1280,7 @@ RNG——纯函数，确定性由 seed 与上游地形保证。
   - **纬向基础场** `P_base(lat)`：镜像气候引擎的纬向项（ITCZ 对流峰 + 副热带抑制 +
     风暴路径），复用 `hadley_extent_deg` / `storm_track_amplitude_mm` /
     `precip_proxy_base_mm` 同一批旋钮；
-  - **地形响应** `orographic_efficiency`：线性 upslope `w = U·∇h`（`hadley_cell_wind` 纬向风 ×
+  - **地形响应** `_orographic_factor`：线性 upslope `w = U·∇h`（`hadley_cell_wind` 纬向风 ×
     地形梯度），迎风坡湿、背风坡干——Smith & Barstad (2004) 线性地形降水模型的
     **零平流极限**，完整傅里叶传递函数（凝结水顺风平流）留后续。
 - `climate_coupling: full` —— 读气候引擎输出（DAG 环，当前留接口位不实现）。
