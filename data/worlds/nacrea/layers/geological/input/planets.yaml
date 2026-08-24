@@ -4,7 +4,7 @@ planets:
   # ================================================================
   # 宜居卫星：Nacrea（珠母星） — 环绕巨神星 Aegis
   # ================================================================
-  - id: satellite_gaiam
+  - id: satellite_nacrea
     name: "珠母星 · Nacrea"
     orbits: planet_aegis
     planet_type: ocean_world
@@ -208,7 +208,7 @@ planets:
       greenhouse_factor: 0.0
     magnetic_field_strength: 400.0  # ~8× Jupiter (质量更大 + 快速自转)
     satellite_ids:
-      - satellite_gaiam
+      - satellite_nacrea
       - satellite_cadence
       - satellite_vigil
 

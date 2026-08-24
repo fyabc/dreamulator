@@ -2,7 +2,7 @@
 # 行星层：Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
 # 卫星层：Nacrea : Cadence : Vigil = 1:2:4 拉普拉斯共振链（维持 Nacrea 偏心率）
 # 以光度为自变量（混合输入模式），引擎通过数值反演推算质量
-name: "Gaia System"
+name: "Nacrea System"
 
 description: |
   系统形成史（基于 Izidoro et al. 2017 共振链迁移理论，四阶段演化）：
@@ -110,7 +110,7 @@ orbits:
     epoch_year: 0.0
 
   # ---- 宜居卫星（环绕 Aegis，1:2:4 卫星拉普拉斯共振链） ----
-  - body_id: satellite_gaiam
+  - body_id: satellite_nacrea
     parent_id: planet_aegis
     semi_major_axis_au: 0.00494   # 739,013 km（P=78h，开普勒第三定律）
     eccentricity: 0.002           # Cadence/Vigil 共振链泵浦维持（受迫偏心率，终值 0.002，潮汐加热之源）
@@ -298,7 +298,7 @@ bodies:
       surface: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分"
 
   # ---- 宜居卫星：Nacrea（珠母星） ----
-  - id: satellite_gaiam
+  - id: satellite_nacrea
     name: "珠母星 · Nacrea"
     body_type: "natural_satellite"
     mass_earth: 1.20

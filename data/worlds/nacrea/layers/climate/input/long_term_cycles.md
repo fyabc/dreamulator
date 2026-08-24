@@ -11,7 +11,7 @@ Nacrea 是一颗**处于 1:2:4 拉普拉斯共振链中的巨行星卫星**—�
 行星-卫星几何效应）。本文档列举各强迫源的机制、时标、量级与当前引擎建模状态，
 作为未来气候变率建模的世界设定依据。
 
-基准日照：Ignis（{{ entities.star_ignis.luminosity_sol }} L☉）@ {{ entities.planet_aegis.semi_major_axis_au }} AU → **{{ entities.satellite_gaiam.instellation_earth_ratio | round2 }} S⊕**（方案2 校准后位于本系统
+基准日照：Ignis（{{ entities.star_ignis.luminosity_sol }} L☉）@ {{ entities.planet_aegis.semi_major_axis_au }} AU → **{{ entities.satellite_nacrea.instellation_earth_ratio | round2 }} S⊕**（方案2 校准后位于本系统
 保守宜居带几何中心附近；参见 `habitable_zones.yaml`）。
 
 ## 强迫谱总览
@@ -34,7 +34,7 @@ Nacrea 是一颗**处于 1:2:4 拉普拉斯共振链中的巨行星卫星**—�
   周期性事件（对生态节律、文化叙事有意义）。
 - **行星反照与热辐射（经度不对称源）**：Aegis（Bond 反照率 0.343，R=71,355 km，
   距 739,013 km）对次 Aegis 半球的附加通量：热红外 ~1.4 W/m²（全相位恒定）+
-  反射光 ~2.0 W/m²（局地午夜满相位峰值），均远小于日照 {{ entities.satellite_gaiam.instellation_w_m2 | round0 }} W/m²
+  反射光 ~2.0 W/m²（局地午夜满相位峰值），均远小于日照 {{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m²
   （全球年均 <0.3%）。**但这是经度项而非全球项**：次 Aegis 半球均增温
   ~1°C（半球均值 ~1–1.5 W/m²），打破纬向对称 →
   Aegis 面大陆夜温较高、蒸发与大气持水能力较高 → 整体较同纬度反 Aegis
@@ -44,9 +44,9 @@ Nacrea 是一颗**处于 1:2:4 拉普拉斯共振链中的巨行星卫星**—�
 
 ## 2. 交点进动与季节相位漂移（~1–10 yr）
 
-Nacrea 的有效黄赤交角恒为 **{{ entities.satellite_gaiam.axial_tilt_deg | round0 }}°**（= 轨道倾角；自转轴 ⊥ 绕 Aegis 轨道面，
-随轨道面一起进动），因此存在稳定的 {{ entities.planet_aegis.period_days | round0 }} 天季节循环（直射点 ±{{ entities.satellite_gaiam.axial_tilt_deg | round0 }}° 摆动，
-极圈 ±{{ entities.satellite_gaiam.polar_circle_latitude_deg | round0 }}°）。卫星轨道面在太阳力矩与 Aegis J₂ 作用下交点进动：
+Nacrea 的有效黄赤交角恒为 **{{ entities.satellite_nacrea.axial_tilt_deg | round0 }}°**（= 轨道倾角；自转轴 ⊥ 绕 Aegis 轨道面，
+随轨道面一起进动），因此存在稳定的 {{ entities.planet_aegis.period_days | round0 }} 天季节循环（直射点 ±{{ entities.satellite_nacrea.axial_tilt_deg | round0 }}° 摆动，
+极圈 ±{{ entities.satellite_nacrea.polar_circle_latitude_deg | round0 }}°）。卫星轨道面在太阳力矩与 Aegis J₂ 作用下交点进动：
 
 - 太阳力矩贡献：~2 yr 周期（(n_P/n_m)² 标度）
 - Aegis J₂ 贡献：~9 yr 周期（J₂≈0.02 估计，(R_P/a_m)² 标度）
@@ -63,18 +63,18 @@ Aegis–Boreal–Glacis 1:2:4 拉普拉斯共振链的共振角存在周期摆�
 交换偏心率与近日点经度。类比：木星-土星"great inequality" ~900 yr；紧密共振链
 摆动周期通常 10²–10³ yr。后果：
 
-- Aegis 的 e≈{{ entities.planet_aegis.eccentricity }} 在摆动中被调制 → gaia-m 日照 ±2e ≈ ±1% 量级周期变化
+- Aegis 的 e≈{{ entities.planet_aegis.eccentricity }} 在摆动中被调制 → nacrea 日照 ±2e ≈ ±1% 量级周期变化
 - 这一时标与**文明时标重合**（地球全新世间冰期 ~11.7 kyr 的稳定性是人类文明的
-  运气）——gaia-m 文明层设定应考虑其气候在百年-千年尺带的周期性"好坏期"
+  运气）——nacrea 文明层设定应考虑其气候在百年-千年尺带的周期性"好坏期"
 
 ## 4. 潮汐加热振荡（卫星特有，同 #3 时标）⭐
 
-stellar.yaml 注明 gaia-m 的 e_m=0.002 为"共振泵浦维持"——这正是 Io 机制
+stellar.yaml 注明 nacrea 的 e_m=0.002 为"共振泵浦维持"——这正是 Io 机制
 （Io e=0.0041 → 太阳系火山最活跃天体）。潮汐耗散 ∝ e²，e_m 受共振摆动调制时：
 
 - 地质热通量与火山活动（当前设定 3×⊕）随之振荡，量级可达 ×2
 - 气候通路：火山 CO₂ 释放率振荡 → 大气温室浓度振荡 → 冰期/暖期旋回
-- 直接热通量（<1 W/m² 量级）相对日照 {{ entities.satellite_gaiam.instellation_w_m2 | round0 }} W/m² 可忽略——重要的是**碳循环通路**
+- 直接热通量（<1 W/m² 量级）相对日照 {{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m² 可忽略——重要的是**碳循环通路**
 
 physical_params.md 的洛夫数（k₂=0.3, h₂=0.6）与 Q=100 即为此计算预埋的参数。
 
@@ -97,7 +97,7 @@ Q=100 的持续耗散 → 卫星缓慢外迁（形成以来 +10%）、Aegis 自�
 
 Ignis 为 M1V（0.45 M☉ 反演值），前主序阶段（~1 Gyr）光度可达当前数倍：
 
-- 早期 gaia-m 承受远超 runaway greenhouse 极限（0.834 S⊕）的日照
+- 早期 nacrea 承受远超 runaway greenhouse 极限（0.834 S⊕）的日照
   → **早期湿温室风险**：原始水库存是否部分散失？当前 72% 海洋覆盖是幸存结果
   还是需要设定更大的初始水量？
 - 天文引擎已计算 evolution_progress={{ entities.star_ignis.evolution_progress }}（主序寿命 {{ entities.star_ignis.ms_lifetime_gyr | round1 }} Gyr 的 {{ entities.star_ignis.evolution_progress | pct }}）——

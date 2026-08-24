@@ -27,7 +27,7 @@ from dreamulator.map.terrain_synthesizer import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-GAIA_M_GEOGRAPHY = REPO_ROOT / "data/worlds/gaia-m/layers/geological/input/geography.yaml"
+NACREA_GEOGRAPHY = REPO_ROOT / "data/worlds/nacrea/layers/geological/input/geography.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -48,10 +48,10 @@ def _config_with(spec: GeographySpec) -> TerrainPipelineConfig:
 # ---------------------------------------------------------------------------
 
 
-def test_load_gaia_m_spec() -> None:
-    spec = load_geography_spec(GAIA_M_GEOGRAPHY)
+def test_load_nacrea_spec() -> None:
+    spec = load_geography_spec(NACREA_GEOGRAPHY)
     assert spec is not None
-    assert spec.features, "gaia-m geography.yaml must define features"
+    assert spec.features, "nacrea geography.yaml must define features"
     assert spec.land_fraction_target == pytest.approx(0.28)
     kinds = {f.kind for f in spec.features}
     assert "continent" in kinds

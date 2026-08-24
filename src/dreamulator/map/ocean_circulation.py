@@ -674,7 +674,7 @@ def solve_ocean_gyre(
 
     # u = k̂ × ∇ψ is already in m/s: the RHS was divided by ρ_w·H_ml, so ψ has
     # units m²/s and its gradient ∇ψ has units m/s directly — no further
-    # scaling by H_ml (that shrank speeds ~50×, leaving gaia-m currents at
+    # scaling by H_ml (that shrank speeds ~50×, leaving nacrea currents at
     # ~0.9 cm/s instead of the physically expected ~50 cm/s surface flow).
     return psi, velocity
 

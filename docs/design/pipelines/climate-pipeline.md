@@ -83,7 +83,7 @@
 
 > **Legacy 兼容**：`latitude_temperature()`（sin² 剖面）、`diffuse_heat_graph()`（图扩散）、
 > `lat_gradient_from_omega()`（ΔT∝Ω^0.3）仍保留，供 `ebm_1d=false` 的旧路径使用
-> （gaia-m 尚未切到 ebm_1d，见 §6）。
+> （nacrea 尚未切到 ebm_1d，见 §6）。
 
 ### 2.2 `climate_seasonality.py` — 年平 EBM + 季节模型
 
@@ -161,7 +161,7 @@ energy_balance.md §8）：
 6. 最终封顶 11000 mm/yr。
 
 **关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，
-**无纬度硬编码**——对 Earth 三圈环流与 gaia-m 单圈环流（`hadley_extent=90`）同一套代码
+**无纬度硬编码**——对 Earth 三圈环流与 nacrea 单圈环流（`hadley_extent=90`）同一套代码
 自动适配（见 `scripts/diagnose_wind_divergence.py`）。
 
 **诊断辅助函数**：
@@ -182,7 +182,7 @@ energy_balance.md §8）：
 
 1. **Stommel 流函数解**（`solve_ocean_gyre`）：对每个海盆解 β 平面摩擦涡度方程，
    西边界强化（WBC）作为摩擦边界层**自然涌现**（不手贴 ×3 系数）。流函数形式在
-   赤道无 `1/f` 奇点（β=2Ωcosφ/a 在赤道最大）——gaia-m 慢自转（Ω=0.31Ω⊕）下地转
+   赤道无 `1/f` 奇点（β=2Ωcosφ/a 在赤道最大）——nacrea 慢自转（Ω=0.31Ω⊕）下地转
    求逆会除零，流函数是唯一全程良态的极小模型。
 2. **SST 沿流平流修正**（`advect_sst_semilagrangian`）：semi-Lagrangian 沿流溯源
    松弛（复用 BFS 水汽的「沿输送方向迭代松弛」思路），暖流增温/寒流降温，修正后的
@@ -317,7 +317,7 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | 内陆干旱梯度 / 海岸不对称 / 热带底线 | 逐 cell 启发式 | BFS 季节输送 / 涌升 + 季风 / 双 ITCZ | `_compute_precipitation_bfs` Step 6.5/6.6/7 |
 | 南半球 SST 过暖 | `_ocean_surface_temperature` 南半球偏暖 +4~+10°C | 独立标定 | `_ocean_surface_temperature` |
 | 三圈环流边界 | Hadley 30° / Ferrel 60° 可配置 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½ 行星化 | `hadley_cell_wind` |
-| gaia-m 回归 | gaia-m 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `gaia-m/terrain_config.yaml` |
+| nacrea 回归 | nacrea 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `nacrea/terrain_config.yaml` |
 
 ### 地球标定的方案常数（影响异星保真度）
 
@@ -340,7 +340,7 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 
 GCM（求解原始方程）技术上能取代参数化管线，但**不适合做主干**——计算量差 3–4 个数量级
 （ExoPlaSim 一个案例数小时 vs 管线 ~2 分钟），且 GCM 的次网格参数化同样有几十个地球标定
-的「补丁」，用到 gaia-m 需重新标定。
+的「补丁」，用到 nacrea 需重新标定。
 
 ### 定位
 

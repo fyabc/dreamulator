@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "world": "gaia-m",
-  "planet": "satellite_gaiam",
+  "world": "nacrea",
+  "planet": "satellite_nacrea",
   "seed": 42,
   "mesh_cells": 200000,
   "temperature": {

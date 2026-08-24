@@ -68,7 +68,7 @@ $$
 
 ## Aegis 轨道：{{ entities.planet_aegis.semi_major_axis_au }} AU
 
-Aegis 保持在 **{{ entities.planet_aegis.semi_major_axis_au }} AU**（方案2 校准后内移 8%，配合光度 +16% 使光照 0.48→{{ entities.satellite_gaiam.instellation_earth_ratio | round2 }}×地球）。这一位置有双重意义：
+Aegis 保持在 **{{ entities.planet_aegis.semi_major_axis_au }} AU**（方案2 校准后内移 8%，配合光度 +16% 使光照 0.48→{{ entities.satellite_nacrea.instellation_earth_ratio | round2 }}×地球）。这一位置有双重意义：
 
 1. **宜居带中心锚定**：确保 Nacrea（Aegis 的卫星）接收最佳恒星辐射
 2. **雪线内缘参考**：水雪线在 0.513 AU，Aegis 位于雪线内侧，符合气态巨行星形成后内迁的迁移理论

@@ -33,8 +33,8 @@ uv run dreamulator climate validate earth --spatial
 | Tier | 文件 | 内容 | 数据依赖 | 耗时 | CI |
 |---|---|---|---|---|---|
 | **T3 物理合理性** | `test_physical_plausibility.py` | 7 纯理论断言（单调性、无大气极限、倾角振幅）+ 3 xfail（未实现物理） | 无 | < 1s | ✅ 每次 push |
-| **T2 太阳系端元** | `test_end_members.py` | Venus 温室 / Mars 冰封 / 裸岩黑体 / gaia-m HZ 宜居性 | 无（合成网格） | < 1s | ✅ 每次 push |
-| **T1 回归门** | `test_regression.py` | gaia-m 200k 基线对比：温度、降水、Köppen 组分布、陆地占比 | 已提交的 gaia-m CVT mesh | ~90s | ❌ `@pytest.mark.slow`（手动触发） |
+| **T2 太阳系端元** | `test_end_members.py` | Venus 温室 / Mars 冰封 / 裸岩黑体 / nacrea HZ 宜居性 | 无（合成网格） | < 1s | ✅ 每次 push |
+| **T1 回归门** | `test_regression.py` | nacrea 200k 基线对比：温度、降水、Köppen 组分布、陆地占比 | 已提交的 nacrea CVT mesh | ~90s | ❌ `@pytest.mark.slow`（手动触发） |
 | **T1 现代地球** | `dreamulator climate validate`（CLI） | Earth DEM → Köppen/ERA5/GPCP 对比（zonal mean + cell-by-cell） | ETOPO1 (~400 MB) + Beck/ERA5/GPCP | ~60-120s | ❌ 需网络 + 参考数据下载 |
 
 **运行速查**：
@@ -54,10 +54,10 @@ dreamulator climate validate earth --dataset all
 - `@pytest.mark.slow` — 默认被 `pyproject.toml` 的 `addopts` 排除，需显式 `-m slow` 运行
 - `@pytest.mark.xfail` — 预期的失败（引擎尚未实现的物理），实现后从 xfail → XPASS 报警
 
-**基线快照**：`tests/validation/baselines/gaia-m-200k.json`（schema v1）。
+**基线快照**：`tests/validation/baselines/nacrea-200k.json`（schema v1）。
 当引擎改动导致指标有预期内变化时，重新生成基线：
 ```bash
-uv run python tests/validation/baselines/generate_baseline.py gaia-m --planet satellite_gaiam
+uv run python tests/validation/baselines/generate_baseline.py nacrea --planet satellite_nacrea
 ```
 
 ---
@@ -207,18 +207,18 @@ dreamulator climate validate earth --output-dir reports/climate/
 
 生成 `reports/climate/climate_validation.json`。
 
-### 5.3 回归测试（gaia-m 200k 基线）
+### 5.3 回归测试（nacrea 200k 基线）
 
 ```bash
 # 生成/更新基线快照
-uv run python tests/validation/baselines/generate_baseline.py gaia-m \
-    --planet satellite_gaiam
+uv run python tests/validation/baselines/generate_baseline.py nacrea \
+    --planet satellite_nacrea
 
 # 运行回归对比（标记为 slow，默认 CI 跳过）
 uv run pytest tests/validation/test_regression.py -m slow -v
 ```
 
-基线快照位于 `tests/validation/baselines/gaia-m-200k.json`，
+基线快照位于 `tests/validation/baselines/nacrea-200k.json`，
 包含温度、降水、Köppen 分类、陆地占比的全局指标。
 回归测试加载提交的 200k CVT mesh，运行气候模拟，逐项对比基线。
 
@@ -228,8 +228,8 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 
 除了上面的验证 CLI（综合评分），还有三个**交互式诊断脚本**，用于在"引擎 bug"与
 "参数待微调"之间做二分。核心原则：**现代地球是唯一有「标准答案」的基准**
-（Beck 2018 / ERA5 / GPCP）；系统性偏差若在地球与 gaia-m 上都出现 → 引擎 bug，
-只在 gaia-m 出现 → 参数微调。
+（Beck 2018 / ERA5 / GPCP）；系统性偏差若在地球与 nacrea 上都出现 → 引擎 bug，
+只在 nacrea 出现 → 参数微调。
 
 | 脚本 | 内容 | 何时用 |
 |---|---|---|
@@ -247,4 +247,4 @@ uv run python scripts/diagnose_koppen_confusion.py
 > 海陆分布一致），`koppen_obs.json` 参考以相同 200k mesh 生成、存于
 > `maps/planet_earth/`（与 mesh 并排）。cell-by-cell 准确率（~27%）低于分布匹配
 > （~54%）——这是两个不同指标，空间准确率天然更低。诊断结论以**相对对比**
-> （调参前后、地球 vs gaia-m）为准。
+> （调参前后、地球 vs nacrea）为准。

@@ -116,7 +116,7 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
     regions = sv.regions
 
     # Stage 1.4: vectorized region centroids (was a per-region Python loop
-    # with small numpy gathers — 8 × 100k iterations on gaia-m).
+    # with small numpy gathers — 8 × 100k iterations on nacrea).
     region_lens = np.fromiter((len(r) for r in regions), dtype=np.int64, count=n)
     bad = region_lens == 0
     if not bad.all():

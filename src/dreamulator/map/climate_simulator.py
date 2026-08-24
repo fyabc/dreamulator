@@ -241,7 +241,7 @@ def simulate_climate(
         t_surf_C,
     )
 
-    # Sub-planet hemisphere warming (e.g. gaia-m: Aegis IR + reflected light)
+    # Sub-planet hemisphere warming (e.g. nacrea: Aegis IR + reflected light)
     if config.sub_planet_warming_c > 0:
         lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
         # Cosine falloff from sub-planet point, zero on anti-planet side
@@ -1472,7 +1472,7 @@ def _compute_precipitation_bfs(
         precip[tropical_land] = current + deficit * 0.7
 
     # Step 8: Sub-planet / sub-stellar convective enhancement (3A.7).
-    # A tidally-locked planet (or a satellite like gaia-m) has a permanently
+    # A tidally-locked planet (or a satellite like nacrea) has a permanently
     # warmer hemisphere facing the host body.  The extra heating drives
     # low-level convergence → rising air → convective precipitation,
     # analogous to the ITCZ but fixed at a (lat, lon) point rather than a

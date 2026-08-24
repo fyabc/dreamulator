@@ -425,7 +425,7 @@ def build_earth_validation_config(
     ``ebm_1d=True`` is the shared-physics default — the 1D Energy Balance Model
     (North 1975 / climlab) formally solving
     ``0 = D∇²T + Q(φ)(1−α) − (A + B·T)`` for the zonal-mean temperature, the
-    same code path gaia-m enables via its ``terrain_config.yaml``.  Pass it off
+    same code path nacrea enables via its ``terrain_config.yaml``.  Pass it off
     (with ``auto_lat_gradient=True`` + ``diffusive_heat_transport=True``) to
     reproduce the legacy sin² + graph-diffusion baseline for comparison.
     """

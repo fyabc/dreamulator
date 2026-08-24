@@ -154,9 +154,9 @@ build 跳过/脏判定走 `_is_dirty`（`pipeline.py:295-309`）——**mtime �
 
 **实证**：`data/worlds/earth/branches/terrain-dev/layers/geological/input/` 现含
 `{planets.yaml, terrain_config.yaml}` 两个文件、无 `geography.yaml`——earth 本身
-不用 geography.yaml 故无影响；但 gaia-m 用 geography.yaml
-（`private/worlds/gaia-m/layers/geological/input/geography.yaml` 存在），未来为
-gaia-m 建地质分叉分支调侵蚀时须记得携带。
+不用 geography.yaml 故无影响；但 nacrea 用 geography.yaml
+（`private/worlds/nacrea/layers/geological/input/geography.yaml` 存在），未来为
+nacrea 建地质分叉分支调侵蚀时须记得携带。
 
 ### 4.3 处置：文档化（已定，2026-08-20）
 
@@ -221,4 +221,4 @@ layer-control-model.md 定义四层（覆写/约束/引擎/校验）。落地现
 - `src/dreamulator/resolver.py:161-183,259-320` — resolve_layer / _inherit 合并
 - `docs/design/layer-control-model.md` — 四层控制模型（纸面）
 - `data/worlds/earth/branches/terrain-dev/layers/geological/input/` — 分支遮蔽实证
-- `private/worlds/gaia-m/layers/geological/input/geography.yaml` — gaia-m 用 geography.yaml 实证
+- `private/worlds/nacrea/layers/geological/input/geography.yaml` — nacrea 用 geography.yaml 实证

@@ -4,7 +4,7 @@
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
-> 文明种子见 `data/worlds/gaia-m/layers/civilization/input/civilizations.yaml`。
+> 文明种子见 `data/worlds/nacrea/layers/civilization/input/civilizations.yaml`。
 
 ---
 
@@ -13,10 +13,10 @@
 | 维度 | 状态 |
 |------|------|
 | 层级管线 | physics → chemistry → astronomy → geological → climate → ecology 全链路打通；civilization 新增宜居/农业 derived 引擎（`engine/civilization.py`），3C 半格式化 Schema 与 LLM narrate 待推进 |
-| 性能 | gaia-m（200k 节点）全量构建 ~391 s（地质 238s + 气候 147s + 生态 5s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
+| 性能 | nacrea（200k 节点）全量构建 ~391 s（地质 238s + 气候 147s + 生态 5s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
 | 气候精度 | Köppen 分布匹配 53.6%（v0.27+，季节 EBM + s/w 修复后，vs Beck 2018，200k ETOPO1）；T2 端元复现 4 测试 + T3 物理合理性 7 测试已建 |
-| 样板世界 | gaia-m：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（v0.15.0+ 校准）；25 板 CV=0.87（偏态化）、海洋最深 −10484 m |
+| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（v0.15.0+ 校准）；25 板 CV=0.87（偏态化）、海洋最深 −10484 m |
 | 网格规模 | 主力分辨率 **200k**（51 km/cell，已达中分辨率 GCM 水平）；ESM 气候验证支持多数据集（Beck 2018 + ERA5 + GPCP）；JSON 浮点截断 4 位 + gzip 传输（~220→~50 MB） |
 
 ---
@@ -63,7 +63,7 @@
 > **诊断结论（2026-08）**：Köppen 两条线要分开——**BWk（冷荒漠）→ C/D 靠「增湿」**
 > （`moisture_advection_steps` 提高把水汽送进内陆），**ET（苔原）→ C/D 靠「增温」**
 > （t_hot 过 10°C 林线）。ET 主体是「温和但干」（年均 ~5°C、降水中位 ~33mm），增湿
-> 不改其温度、暖化不改其干旱，二者不可互替。gaia-m 调参：`evaporation_base_mm` 2000→1850
+> 不改其温度、暖化不改其干旱，二者不可互替。nacrea 调参：`evaporation_base_mm` 2000→1850
 > （近地球值）、`moisture_advection_steps` auto17→27（Ω^(−1/3) 经验标度 ±50% 内）。
 
 ## 四、Phase 3B–3E 要点
@@ -84,9 +84,9 @@
 
 ---
 
-## 五、近期工作：gaia-m 样板世界改造（2026 Q3）
+## 五、近期工作：nacrea 样板世界改造（2026 Q3）
 
-目标：把 gaia-m 打造成物理自洽、内容丰富、可支撑 B 站系列视频的样板世界。
+目标：把 nacrea 打造成物理自洽、内容丰富、可支撑 B 站系列视频的样板世界。
 
 | 项目 | 内容 | 状态 |
 |------|------|------|
@@ -95,7 +95,7 @@
 | 地质：海陆分布翻案 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆；旧设定（大潮点大陆）被推翻，改为不对称混合案 | ✅ 地形引擎已按新设定生成：`geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §3.5；海岸线平直为已知限制 |
 | 气候：温度校准 | 温室 72 → 75 K（保留 3 K 给次行星半球加温）；lat_gradient_c 与 Hadley 边界参数化，均温 9.2 → 14.4 °C | ✅ v0.24+（ΔT(Ω) + 扩散热输送 + 冰反照率 + 可变直减率 + 子星体对流增强全链路完成） |
 | 气候：文档校验 | 按引擎实际输出重写 `layers/climate/input/*.md`（200k seed=42） | ✅ v0.24.0 |
-| 数据：200k 迁移 | gaia-m 网格 100k→200k（71→51 km/cell），数据已提交 | ✅ v0.24.0 |
+| 数据：200k 迁移 | nacrea 网格 100k→200k（71→51 km/cell），数据已提交 | ✅ v0.24.0 |
 | 文明：种子设计 | civilizations.yaml 填充（3 文明 + 地理锚点 + 双语言叙事，2026-08 由 seed_discovery 候选区锚定）；大事年表 / conlang 待推进 | ✅（已填 3 种子） |
 | 视频素材 | 板块漂移/气候/文明 timelapse、3D 自动旋转、纯净视图模式 | 📋 |
 
@@ -108,14 +108,14 @@
 - **守护轴**（校验/审计/设定维护，v0.31.0）；**回归测试基建**；**前端加载性能优化**（JSON 截断 + gzip + MessagePack）。
 - **地图图层 headless 导出 CLI**；**气候诊断脚本四件套**；**Seed 探索器 CLI**；**文明宜居/农业图层**；**全球温度/降水图层**；**单元格信息面板重构**；**3D 球体拖动修复**；**前端气候可视化**（风场箭头）；**文档 200k 更新**。
 - **气候 3A**：3A.3a 慢自转输送 / 3A.3 温度精细化 / 3A.7 潮汐锁定 / 3A.4 空间格局；**洋流系统**（Stommel 流函数 + SST 平流 + 涌升）。
-- **生态层 P0**（Whittaker + NPP + 可驯化标签）；**潮汐加热显式化**；**CLI 精简**（移除 `terrain generate`）；**gaia-m 迁移 200k + 气候文档校验**。
+- **生态层 P0**（Whittaker + NPP + 可驯化标签）；**潮汐加热显式化**；**CLI 精简**（移除 `terrain generate`）；**nacrea 迁移 200k + 气候文档校验**。
 
 ### 待办
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
 | **P1** | **局部地形精细化管线**（桥接 dreamulator 全球输出 → 专业工具局部高精度地图。含：① `export-region`/`import-region` CLI 命令（立体投影区域导出 + 羽化回贴）——`map-workflow.md` §6 已纸面设计但未实现；② GeoTIFF 导出支持（带地理参考，QGIS 直接打开）；③ Gaea/World Machine 侵蚀节点图模板；④ QGIS 矢量化脚本（栅格→等高线+河流+政区边界）；⑤ Photoshop 配色/标注模板。目标自动化程度：dreamulator→PNG/GeoTIFF 自动；Gaea/QGIS 半自动（模板+脚本）；Photoshop 手动） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
-| **P0** | gaia-m 样板世界改造（五） | 进行中。天文/地质/气候三大层已就绪；文明种子设计 + 视频素材待推进 | ★★★★★ |
+| **P0** | nacrea 样板世界改造（五） | 进行中。天文/地质/气候三大层已就绪；文明种子设计 + 视频素材待推进 | ★★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
@@ -147,7 +147,7 @@
 ### 功能性
 
 1. **潮汐锁定经度效应缺失**（Phase 3A.7）— 无昼夜半球 / 次恒星点热源 / 经度
-   不对称，潮汐锁定世界只能产出纬向对称近似气候。gaia-m 温室预算已预留 +3 K
+   不对称，潮汐锁定世界只能产出纬向对称近似气候。nacrea 温室预算已预留 +3 K
    等待该效应落地。
 2. **海岸线过于平直** — 海陆判定在 cell 粒度（~51 km @ 200k cells），海岸线
    沿 cell 边延伸、缺乏分形细节（用户反馈，2026-08）。方向（任选/组合）：
@@ -156,16 +156,16 @@
    格局，此改进只增海岸微观粗糙度。
 3. **大裂谷海过于对齐经线、边界平直** — 当前用单个拉长偏置场（elongation=11、
    bearing=0），产生笔直经向裂谷。应似东非大裂谷/红海：蜿蜒走向、不规则边界、
-   局部断块隆起/异常塌陷。已用"多段错列偏置场"初步缓解（见 gaia-m
+   局部断块隆起/异常塌陷。已用"多段错列偏置场"初步缓解（见 nacrea
    geography.yaml）；彻底方案需 geography 逻辑支持"弯曲裂谷带"原语。
    **~~另一脆弱机制~~** → ✅ 已修复（2026-08-07，feat/geography-elevation-anchor）：
    地形合成对强负偏置场（authored 裂谷/海盆）的汇聚抬升乘连续阻尼
-   （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)，岛弧同处理）；gaia-m 重建核对
+   （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)，岛弧同处理）；nacrea 重建核对
    大裂谷海支持区 max elevation <0 m。同批新增 `elevation_target_m`/`pin_strength`
    高程钉扎（浅海/地峡水深控制）与 `sea_level_offset_m` 海平面旋钮
    （冰期/临界海峡实验），见 geological-pipeline.md §3.5。
    **蜿蜒裂谷原语**仍 open（上段）。
-4. **气候分类体系扩展**（2026-08-09）— 当前仅 Köppen–Geiger 一种分类。建议新增：① **Trewartha**（更好的中纬度区分 + 亚热带独立主群——对 gaia-m 慢自转 Hadley 扩展后的中纬度过渡带尤其有用）；② **Holdridge Life Zones**（基于植物生理而非地球植被经验——系外行星通用、直接桥接生态层 Whittaker 映射）。两种均复用现有 T/P 数据，零新增数据需求。见 `docs/knowledge/climatology/climate_classification_comparison.md`。优先级 P2。
+4. **气候分类体系扩展**（2026-08-09）— 当前仅 Köppen–Geiger 一种分类。建议新增：① **Trewartha**（更好的中纬度区分 + 亚热带独立主群——对 nacrea 慢自转 Hadley 扩展后的中纬度过渡带尤其有用）；② **Holdridge Life Zones**（基于植物生理而非地球植被经验——系外行星通用、直接桥接生态层 Whittaker 映射）。两种均复用现有 T/P 数据，零新增数据需求。见 `docs/knowledge/climatology/climate_classification_comparison.md`。优先级 P2。
 5. **年均温 / 年降水诊断图层缺失**（2026-08-09）— `temperature_C` 和 `precipitation_mm` 是逐 cell 字段，但无对应的地图专题图层。世界构建者调试气候参数时需要直接看原始场而非经过分类"滤镜"的 Köppen。实现成本极低（连续色标 pseudo-color 烘焙，管线已有），优先级 P2。建议随洋流图层 P4 面板重构一并加入。
 6. **自动国界 / 行政区划生成**（2026-08-09）— Azgaar's FMG 具有基于地形自动剖分的 burgs/states/provinces 系统，dreamulator 目前无对应模块。roadmap 3C 文明层的当前设计以人工锚定种子 + 事件流程序化填充为主，自动领土剖分是远期扩展项。登记为 P3 技术债，不阻塞 3C 推进。前期调研：Azgaar 的自动国界算法（基于流域 + 距离衰减 + 军事/文化权重）值得参考但不应移植。
 7. **侵蚀应能冲开浅海海峡封堵**（2026-08-25 转为能力需求）— 北方内海海峡当前为
@@ -218,7 +218,7 @@
 
 13. **生态 NPP 光谱匹配缺失**（2026-08-13）— 当前 `par_ratio = L/d²`
    （`ecology.py`）是**总辐射通量比**（标量），未按恒星光谱类型修正光合
-   有效辐射（PAR，400–700 nm）。M 矮星（gaia-m `star_ignis` 0.036 L☉）辐射峰
+   有效辐射（PAR，400–700 nm）。M 矮星（nacrea `star_ignis` 0.036 L☉）辐射峰
    在近红外（NIR），可见光/PAR 比例低 → 用总通量会**高估**叶绿素型植物的
    NPP；反之若植物演化出 NIR 吸收色素，可利用红外辐射，NPP 可能不降反升。
    缺失的修正链：`恒星光谱类型 → 光合色素吸收谱 → 有效 PAR → par_ratio`。
@@ -238,7 +238,7 @@
    聚合原始 + 衍生参数（辐照度/日照比/平衡温度/年长/太阳日/一年日数/季节长度/
    极圈与极点极昼时长/恒星寿命与演化进度/宜居带位置/卫星轨道周期与锁定状态），
    天文引擎 build 时输出 `layers/astronomy/derived/world_parameters.yaml`（优先用
-   本次构建的内存恒星计算值，首次构建无需回读 stellar_derived.yaml）；gaia-m 输出
+   本次构建的内存恒星计算值，首次构建无需回读 stellar_derived.yaml）；nacrea 输出
    与 `physical_params.md` 手算值逐项一致（g=10.28、太阳日 3.42 d、年 67 d、
    一年 19.6 太阳日、极圈 ±81°、极点极昼/夜 33.5 d、卫星公转 78 h），回归测试
    锚定这些值（`test_physical_inputs.py`）。② **文档模板渲染** ✅（2026-08-15）：
@@ -247,7 +247,7 @@
    （API `layer-documents`/`design-documents` 端点）与**静态导出时**从
    `world_parameters.yaml` 渲染——渲染产物不落盘、不进 git（纯函数缓存，非引擎产物）；
    分支沿继承链取自己的参数，覆写天文 input 未构建的分支不回退根世界参数而是降级。
-   响应/导出 JSON 带 `rendered` 标志，缺参时前端显示横幅提示。gaia-m 5 个文档已模板化，
+   响应/导出 JSON 带 `rendered` 标志，缺参时前端显示横幅提示。nacrea 5 个文档已模板化，
    锚定值渲染后与手写一致（`test_doc_render.py`），并顺带修正 `long_term_cycles.md`
    两处方案2 遗漏漂移（日照 656→899 W/m²）与 `giant_brightness.md` 898 截断（→899）。
    叙事类文档保留手写 + 局部引用。两阶段均完成，P1 关闭。
@@ -256,7 +256,7 @@
     `astronomy/input/stellar.yaml`（stars/orbits/bodies 叙事）与
     `geological/input/planets.yaml`（权威物理参数 + 大气/水圈/岩石圈）两处：
     5 个物理字段 × 每个天体重复维护（单位还不同：radius_km vs R⊕），已发现
-    3 处漂移（gaia-m：Aegis 反照率 0.34/0.343、Cadence 半径 2840/2867 km、
+    3 处漂移（nacrea：Aegis 反照率 0.34/0.343、Cadence 半径 2840/2867 km、
     Vigil 半径 2470/2485 km，均已按 planets.yaml 权威对齐修复）；前端被迫在
     `StellarSystemViewer` 里 merge + 按 id 去重、API 里有 `_normalize_body`
     单位换算补丁。**分裂本身保留**（分支系统依赖：l4-companion 在天文层覆写
@@ -272,11 +272,11 @@
     天体百科卡片面板；③ 📋 创作规范：共享物理字段以 planets.yaml 为权威，
     stellar.yaml 的 bodies 仅增补叙事/分类（本条目即规范出处）；④ 📋 远期：
     `dreamulator validate` 深度模式接入一致性校验、WorldDetail i18n。
-16. **气候参数 per-world 特调违反「同物理」原则**（2026-08-15）— 目标：地球与 gaia-m
+16. **气候参数 per-world 特调违反「同物理」原则**（2026-08-15）— 目标：地球与 nacrea
     用同一套物理（同一代码路径），只差输入参数（自转/光度/倾角/温室…），不做单世界
-    特调。当前 gaia-m `terrain_config.yaml` 把若干「该从物理推导」的量手调成世界专属值：
+    特调。当前 nacrea `terrain_config.yaml` 把若干「该从物理推导」的量手调成世界专属值：
     - `lat_gradient_earth_c=28`（全局参考应为 ~45）：本应是 Ω^0.3 标度律里的「地球参考
-      ΔT」全局常数，gaia-m 却拿它当自己梯度旋钮压到 28（→ ΔT≈19.7°C，比公式该给的
+      ΔT」全局常数，nacrea 却拿它当自己梯度旋钮压到 28（→ ΔT≈19.7°C，比公式该给的
       31.6°C 平得多），注释自述「恢复 52°N 北方南岸 / 60°S 亚南极沿海宜居」——命名地貌
       宜居性绑定了这个特调。**已决定暂留，登记为第二波物理审计「自由参数处置」对象**
       （audit-plan §三 A 可推导类）。
@@ -289,7 +289,7 @@
       第二波物理审计的「自由参数处置」逐项裁决，不在 M4 零散单点修。
     - 配套：`lat_gradient_earth_c` 全局默认已从 40 → 45（地球实测 ΔT）；Earth 验证诊断
       三脚本 + `climate validate` 已统一走 `build_earth_validation_config()`（单一来源），
-      `auto_lat_gradient`/`diffusive_heat_transport` 默认开启（与 gaia-m 同物理），
+      `auto_lat_gradient`/`diffusive_heat_transport` 默认开启（与 nacrea 同物理），
       `--no-*` 选项显式关闭以复现 legacy 手动 45 基线。
 17. **降水管线三处 bug 已修 + 剩余调参**（2026-08-16）— 修参考数组后温度 corr 0.981
     达标，降水曾 corr 0.762。三处 bug 已修：
@@ -302,7 +302,7 @@
     结果：降水 corr 0.762→0.805、Köppen 30类 26.7%→28.3%、群组 Kappa 0.439→0.457
     （>0.45 达标）。
     剩余调参（慢慢补）：① 中纬/亚热带海洋仍偏干（bias −347mm，30–60° 缺口 500–830mm）；
-    ② ITCZ 年均 0°N 缺地球 ~6°N 的 NH 陆偏（thermal-equator bias）；③ gaia-m 基线
+    ② ITCZ 年均 0°N 缺地球 ~6°N 的 NH 陆偏（thermal-equator bias）；③ nacrea 基线
     需随本次降水改动重生成。
 18. **热带 Af 偏少（单 ITCZ 缺双 ITCZ / 季风）**（2026-08-16）— 单 ITCZ 年均模型无法
     表达亚马逊的「双 ITCZ / 南美季风」：真实亚马逊干季（6–9 月 ITCZ 北移）仍被南半球
@@ -332,7 +332,7 @@
     剩余方向（聚焦修传输本身，而非增删外围启发式）：
     - **ITCZ 偏强**（赤道 3334mm vs GPCP 1466）——根因是风场赤道辐合过强/过窄
       （有限体积散度 ~100× 放大），修风场（加宽 Hadley 辐合带 / 更强平滑）。
-    - **中纬干燥**（gaia-m 40°N Cfb→BSk）——单圈下沉支 + 无风暴路径，慢自转中纬补水机制另寻。
+    - **中纬干燥**（nacrea 40°N Cfb→BSk）——单圈下沉支 + 无风暴路径，慢自转中纬补水机制另寻。
     - **双重计数**——storm/convection/tropical boost 叠加在守恒 budget 上（海洋输送变负），
       改「缩减叠加项幅度」恢复质量平衡，而非删除。
     - **C/D 群退化**（Dfc→EF/ET 2069+1968）——温度分类问题，非降水改动引起，单独排查。

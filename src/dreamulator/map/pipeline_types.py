@@ -56,7 +56,7 @@ class TerrainPipelineConfig:
     # parent mass resolve from stellar.yaml (see physical_inputs.resolve_tidal_heating).
     tidal_plate_speed_enabled: bool = False
     # Power-law exponent v ∝ q^β.  Literature range [0.5, 1.5]; 1.0 = linear
-    # (matches most thermal-evolution models; reproduces ~15 cm/yr for gaia-m).
+    # (matches most thermal-evolution models; reproduces ~15 cm/yr for nacrea).
     tidal_plate_speed_beta: float = 1.0
     # Earth reference anchors: mean plate speed (cm/yr) and total surface heat
     # flux (W/m²).  0.09 = 47 TW over Earth's area (44–47 TW total heat flow).
@@ -65,7 +65,7 @@ class TerrainPipelineConfig:
     # Tidal dissipation factor k₂/Q (physical_params.md: k₂=0.3, Q=100).
     tidal_k2_over_q: float = 0.003
     # Ocean half-spreading rate as a fraction of the fastest plate speed
-    # (Earth ~0.4; gaia-m authored 6/15 = 0.4).
+    # (Earth ~0.4; nacrea authored 6/15 = 0.4).
     tidal_spreading_ratio: float = 0.4
     # Algorithm for initial plate partition:
     #   "cortial2019" — Poisson-disc + spherical Voronoi BFS (Cortial et al. 2019 §3)
@@ -143,7 +143,7 @@ class TerrainPipelineConfig:
     # Multi-scale long-wavelength relief amplitude for continental interiors
     # (metres).  Analog of dynamic topography (mantle-driven ±500 m on Earth)
     # plus craton-scale swells; without it plate-interior continents are
-    # unrealistically flat tablelands (gaia-m 2026-08 feedback).
+    # unrealistically flat tablelands (nacrea 2026-08 feedback).
     continental_undulation_m: float = 600.0
     # Per-plate continental-crust floor (fraction of the plate's cells).
     # The global top-N crust threshold can leave whole plates (and their
@@ -305,7 +305,7 @@ class TerrainPipelineConfig:
     # baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
     # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)
-    sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for gaia-m)
+    sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for nacrea)
     sub_planet_longitude_deg: float = 0.0  # longitude of the sub-planet point
     sub_planet_latitude_deg: float = 0.0  # latitude of the sub-planet point (0=equator)
     # Seasonality (3A.2): seasonal energy-balance model (North & Coakley 1979).

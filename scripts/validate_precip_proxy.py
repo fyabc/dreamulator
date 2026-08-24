@@ -18,7 +18,7 @@ correlation are reported (linear RMSE is dominated by wet regions).
 Usage::
 
     uv run python scripts/validate_precip_proxy.py
-    uv run python scripts/validate_precip_proxy.py --world gaia-m --data-dir private/worlds
+    uv run python scripts/validate_precip_proxy.py --world nacrea --data-dir private/worlds
     uv run python scripts/validate_precip_proxy.py --coupling none   # compare uniform proxy
 """
 
@@ -128,8 +128,8 @@ def _report(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="private/worlds")
-    parser.add_argument("--world", default="gaia-m")
-    parser.add_argument("--planet", default="satellite_gaiam")
+    parser.add_argument("--world", default="nacrea")
+    parser.add_argument("--planet", default="satellite_nacrea")
     parser.add_argument("--branch", default=None)
     parser.add_argument("--coupling", default="proxy", choices=["proxy", "none", "both"])
     parser.add_argument("--precip-proxy-base-mm", type=float, default=None)

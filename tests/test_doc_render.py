@@ -21,10 +21,10 @@ from dreamulator.doc_render import (
 # Synthetic context for render_body semantics tests. render_body is agnostic to
 # the key structure, so arbitrary role-like keys are fine here — the real
 # entity-addressed fact context is exercised via test_guard_facts.py and the
-# gaia-m anchor tests below.
+# nacrea anchor tests below.
 CONTEXT: dict[str, object] = {
     "body": {
-        "name": "Gaia-M",
+        "name": "Nacrea",
         "mass_earth": 1.2,
         "gravity_m_s2": 10.282,
         "axial_tilt_deg": 9.0,
@@ -210,7 +210,7 @@ def test_frontmatter_placeholders_not_rendered() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Real-world anchor tests (gaia-m)
+# Real-world anchor tests (nacrea)
 #
 # These render the actual templated world documents against the committed
 # ``system_catalog.yaml`` (+ summaries) via the fact context, and pin the
@@ -220,7 +220,7 @@ def test_frontmatter_placeholders_not_rendered() -> None:
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_GAIA_WORLD = _REPO_ROOT / "data" / "worlds" / "gaia-m"
+_GAIA_WORLD = _REPO_ROOT / "data" / "worlds" / "nacrea"
 
 _DOC_ANCHORS: dict[str, list[str]] = {
     "layers/astronomy/input/orbital_dynamics.md": [
@@ -262,11 +262,11 @@ _DOC_ANCHORS: dict[str, list[str]] = {
 }
 
 
-@pytest.mark.skipif(not _GAIA_WORLD.exists(), reason="gaia-m world not present")
+@pytest.mark.skipif(not _GAIA_WORLD.exists(), reason="nacrea world not present")
 @pytest.mark.parametrize("rel_path", sorted(_DOC_ANCHORS))
-def test_gaia_m_document_renders_anchored_values(rel_path: str) -> None:
+def test_nacrea_document_renders_anchored_values(rel_path: str) -> None:
     context = load_render_context(_GAIA_WORLD)
-    assert context is not None, "gaia-m must have a built system_catalog.yaml"
+    assert context is not None, "nacrea must have a built system_catalog.yaml"
 
     raw = (_GAIA_WORLD / rel_path).read_text(encoding="utf-8")
     _fm, body = parse_frontmatter(raw)

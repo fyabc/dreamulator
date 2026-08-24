@@ -3,16 +3,16 @@
 
 Usage::
 
-    # Generate baseline for gaia-m 200k (from committed data/worlds/)
-    uv run python tests/validation/baselines/generate_baseline.py gaia-m
+    # Generate baseline for nacrea 200k (from committed data/worlds/)
+    uv run python tests/validation/baselines/generate_baseline.py nacrea
 
     # With custom planet ID and data dir
-    uv run python tests/validation/baselines/generate_baseline.py gaia-m \\
-        --planet satellite_gaiam --data-dir private/worlds
+    uv run python tests/validation/baselines/generate_baseline.py nacrea \\
+        --planet satellite_nacrea --data-dir private/worlds
 
     # Specify output path
-    uv run python tests/validation/baselines/generate_baseline.py gaia-m \\
-        --output tests/validation/baselines/gaia-m-200k.json
+    uv run python tests/validation/baselines/generate_baseline.py nacrea \\
+        --output tests/validation/baselines/nacrea-200k.json
 
 The generated JSON snapshot is committed to the repo and used by
 ``tests/validation/test_regression.py`` as the regression gate.
@@ -59,10 +59,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a climate validation baseline snapshot",
     )
-    parser.add_argument("world", help="World name (e.g. 'gaia-m')")
+    parser.add_argument("world", help="World name (e.g. 'nacrea')")
     parser.add_argument(
         "--planet",
-        default="satellite_gaiam",
+        default="satellite_nacrea",
         help="Planet ID within the world",
     )
     parser.add_argument(

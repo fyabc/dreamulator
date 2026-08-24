@@ -17,8 +17,8 @@ tags: [illumination, eclipse, albedo]
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 恒星在 Aegis 处的辐照度 | **{{ entities.satellite_gaiam.instellation_w_m2 | round0 }} W/m²** | L_star / (4πa_p²)；L={{ entities.star_ignis.luminosity_sol }} L☉, a={{ entities.planet_aegis.semi_major_axis_au }} AU（方案2 校准后） |
-| Aegis 满相照度（Nacrea 表面） | **1.91 W/m²** | F_star × A_g × (R_p/a_m)² = {{ entities.satellite_gaiam.instellation_w_m2 | round0 }} × 0.228 × 9.32×10⁻³ |
+| 恒星在 Aegis 处的辐照度 | **{{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m²** | L_star / (4πa_p²)；L={{ entities.star_ignis.luminosity_sol }} L☉, a={{ entities.planet_aegis.semi_major_axis_au }} AU（方案2 校准后） |
+| Aegis 满相照度（Nacrea 表面） | **1.91 W/m²** | F_star × A_g × (R_p/a_m)² = {{ entities.satellite_nacrea.instellation_w_m2 | round0 }} × 0.228 × 9.32×10⁻³ |
 | 满相 = 地球满月倍数 | **约 560 倍** | 1.91 / 0.0034 |
 | 半相（90°）= 地球满月倍数 | **约 178 倍** | 560 × 朗伯相位函数 Φ(90°)=0.318 |
 | 极细相（170°）= 地球满月倍数 | **约 0.3 倍** | 560 × Φ(170°)≈5.7×10⁻⁴ |

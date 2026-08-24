@@ -15,16 +15,16 @@
 
 ```bash
 # 直接查看 JSON
-cat private/worlds/gaia-m/build_profile.json
+cat private/worlds/nacrea/build_profile.json
 
 # 或用脚本格式化打印
-uv run python scripts/profile_build.py gaia-m --data-dir private/worlds
+uv run python scripts/profile_build.py nacrea --data-dir private/worlds
 ```
 
-输出示例（gaia-m 200k，seed=42，本机）：
+输出示例（nacrea 200k，seed=42，本机）：
 
 ```
-Build profile: gaia-m (seed=42, total 347.4s)
+Build profile: nacrea (seed=42, total 347.4s)
 
   astronomy      0.6s   0%  ok
   geological   213.8s  62%  ok
@@ -55,7 +55,7 @@ Build profile: gaia-m (seed=42, total 347.4s)
 ## 2. 内存诊断：profile_build.py --memory
 
 ```bash
-uv run python scripts/profile_build.py gaia-m --data-dir private/worlds --memory
+uv run python scripts/profile_build.py nacrea --data-dir private/worlds --memory
 ```
 
 进程内运行管线 + `tracemalloc`，输出 Top 15 内存分配点。用于排查：
@@ -77,11 +77,11 @@ uv add --dev py-spy
 
 # 生成 SVG 火焰图
 uv run py-spy record -o private/prof/gaia-flame.svg -- \
-    uv run dreamulator build gaia-m --data-dir private/worlds --force
+    uv run dreamulator build nacrea --data-dir private/worlds --force
 
 # 生成 speedscope 格式（可在 https://speedscope.app 缩放分析）
 uv run py-spy record --format speedscope -o private/prof/gaia.json -- \
-    uv run dreamulator build gaia-m --data-dir private/worlds --force
+    uv run dreamulator build nacrea --data-dir private/worlds --force
 ```
 
 SVG 用浏览器打开即可交互式浏览；speedscope 适合长构建（>5 min）的时间线分析。
@@ -193,16 +193,16 @@ source-map-explorer dist/assets/*.js
 
 ```bash
 # 1. 改前：保存基线
-cp private/worlds/gaia-m/build_profile.json /tmp/baseline_profile.json
+cp private/worlds/nacrea/build_profile.json /tmp/baseline_profile.json
 
 # 2. 改代码 → 构建
-uv run dreamulator build gaia-m --data-dir private/worlds --force
+uv run dreamulator build nacrea --data-dir private/worlds --force
 
 # 3. 对比
 uv run python -c "
 import json
 old = json.load(open('/tmp/baseline_profile.json'))
-new = json.load(open('private/worlds/gaia-m/build_profile.json'))
+new = json.load(open('private/worlds/nacrea/build_profile.json'))
 old_t = old['total_wall_seconds']
 new_t = new['total_wall_seconds']
 print(f'Before: {old_t:.1f}s  After: {new_t:.1f}s  Δ: {new_t-old_t:+.1f}s ({100*(new_t-old_t)/old_t:+.1f}%)')

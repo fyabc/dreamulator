@@ -472,8 +472,8 @@ class TestComputeSeasonalClimate:
         assert out["T_cold"].shape == (37,)
         assert out["P_factor"].shape == (37, 12)
 
-    def test_gaia_m_small_seasons_no_nan(self) -> None:
-        """Gaia-M: 9° obliquity, 67 d year → small but finite seasons, no NaN."""
+    def test_nacrea_small_seasons_no_nan(self) -> None:
+        """Nacrea: 9° obliquity, 67 d year → small but finite seasons, no NaN."""
         lat_rad = np.linspace(-np.pi / 2, np.pi / 2, 37)
         t_mean = np.full(37, 14.0)
         is_land = np.ones(37, dtype=bool)

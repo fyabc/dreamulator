@@ -27,7 +27,7 @@ f = 2Ω sin(φ),   Ω = 2π / T_rot
 边界已参数化（`hadley_extent_deg` / `polar_cell_start_deg`，3A.3a）。
 
 **慢自转标度**：Held–Hou 理论给出 Hadley 胞宽度
-φ_H ∝ (gHΔθ/Ω²a²)^{1/2}——Ω 减半 → φ_H 显著加宽。gaia-m（Ω=0.31 Ω⊕）
+φ_H ∝ (gHΔθ/Ω²a²)^{1/2}——Ω 减半 → φ_H 显著加宽。nacrea（Ω=0.31 Ω⊕）
 用 H=55°、P=75°。当前实现把边界当方案常数；严格做法是按 Ω 动态计算
 （roadmap 3A.3a 中期项，与 `climate-pipeline.md` §6 3A.6 审计表一致）。
 
@@ -108,9 +108,9 @@ P ← P − 20 hPa × norm(T)                          # 暖空气→低压
 
 ### 7.3 dreamulator 中的应用
 
-**gaia-m**：Ω = 0.31 Ω⊕（周期 ≈ 3.2 天），Hadley = 55°，Polar = 75°，Ferrel 宽 20°。
+**nacrea**：Ω = 0.31 Ω⊕（周期 ≈ 3.2 天），Hadley = 55°，Polar = 75°，Ferrel 宽 20°。
 
-| 指标 | 地球 | gaia-m | 比例 |
+| 指标 | 地球 | nacrea | 比例 |
 |------|------|--------|------|
 | Ω | 1 Ω⊕ | 0.31 Ω⊕ | 0.31× |
 | Hadley 边界 | 30° | 55° | 1.83× |
@@ -120,7 +120,7 @@ P ← P − 20 hPa × norm(T)                          # 暖空气→低压
 | 涡动动能 | 1（参考） | ~0.5× | 弱 |
 | Ferrel 水汽输运 | 1（参考） | ~0.3–0.5× | 弱 |
 
-**结论**：gaia-m 处于弱三胞体制（Ω=0.31 > 临界 0.25）。Ferrel 理论上存在但极窄弱——
+**结论**：nacrea 处于弱三胞体制（Ω=0.31 > 临界 0.25）。Ferrel 理论上存在但极窄弱——
 水汽输运仅为地球的 1/3–1/2。中纬度降水主要依靠 BFS 平流 + 局地对流，
 Ferrel 西风贡献有限。sub-tropical suppression 覆盖 Ferrel 大部在物理上是自洽的。
 
@@ -146,7 +146,7 @@ L_d 决定了大气的"记忆长度"——小于 L_d 的结构受重力波调控
 | 洋流西边界层宽度 | ∝ L_d^(1/2) | Stommel 边界层理论 |
 
 **dreamulator 应用**：`climate_simulator.py` Step 6 的 Gaussian subtropical
-suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；gaia-m（H=55°）
+suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea（H=55°）
 → σ=3.05°。
 
 **参考资料**：

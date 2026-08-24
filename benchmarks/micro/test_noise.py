@@ -1,7 +1,7 @@
 """Noise sampling benchmarks — historical hotspot #1.
 
 Stage 1.1 landed the Numba JIT kernel (map/noise_kernels.py):
-scalar opensimplex.noise3 cost ~44 µs/call (~1.4M calls on gaia-m);
+scalar opensimplex.noise3 cost ~44 µs/call (~1.4M calls on nacrea);
 the kernel costs ~10 ns/call (~4000x). Both variants kept here as
 permanent before/after records.
 """

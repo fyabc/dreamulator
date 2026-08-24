@@ -1,7 +1,7 @@
 # 地壳均衡与高程极限
 
 > 为 dreamulator 地形合成（`terrain_synthesizer.py`）提供物理上界约束的依据。
-> 当前 gaia-m 无高程限制：陆 Max=10770 m、海 Max=16593 m——均远超均衡极限。
+> 当前 nacrea 无高程限制：陆 Max=10770 m、海 Max=16593 m——均远超均衡极限。
 
 ---
 
@@ -55,12 +55,12 @@ h_max ∝ Y / (ρ g)
 - 冰川侵蚀（"冰川锯"假说：冰川平衡线高度(ELA)压制山脉最大高程）在高纬区限制更显著
 - 山根达到地幔熔融深度 → 相变浮力消失
 
-### 2.3 对 gaia-m 的计算
+### 2.3 对 nacrea 的计算
 
-gaia-m 参数：g = 10.28 m/s²（1.05 g⊕），R = 6817 km。
+nacrea 参数：g = 10.28 m/s²（1.05 g⊕），R = 6817 km。
 
 ```
-h_max(gaia-m) ≈ h_max(Earth) × (g⊕ / g_gaia) × 修正因子
+h_max(nacrea) ≈ h_max(Earth) × (g⊕ / g_gaia) × 修正因子
 
 基准：8848 × (9.81 / 10.28) ≈ 8440 m  （仅考虑重力差，−5%）
 
@@ -69,7 +69,7 @@ h_max(gaia-m) ≈ h_max(Earth) × (g⊕ / g_gaia) × 修正因子
   - 综上：h_max 预计在 ~6300–8000 m 范围
 ```
 
-**当前 gaia-m 最高 10770 m → 超出预期上限约 35–70%。**
+**当前 nacrea 最高 10770 m → 超出预期上限约 35–70%。**
 
 ---
 
@@ -97,16 +97,16 @@ h_max(gaia-m) ≈ h_max(Earth) × (g⊕ / g_gaia) × 修正因子
 
 两种效应竞争。地球海沟最深 ~11 km（马里亚纳），已接近理论极限（研究发现挑战者深度的板片弯曲异常紧——"bending is unusually tight"——说明不能再深太多）。
 
-### 3.3 对 gaia-m 的计算
+### 3.3 对 nacrea 的计算
 
 ```
-h_trench(gaia-m) ≈ 6 km（均衡基准）+ Δh_flexure × (g_gaia/g⊕ 竞争)
+h_trench(nacrea) ≈ 6 km（均衡基准）+ Δh_flexure × (g_gaia/g⊕ 竞争)
 ```
 
 - 高 g → 板片负浮力 +5%（更深）↔ 高热梯度 → Te 变薄 + 弯曲更弱（更浅）
 - 净效应不确定，但 **16.6 km 的海沟深度在物理上不成立**——这需要 ~10 km 的挠曲量，对应地幔密度差远超岩石物理
 
-**当前 gaia-m 海最深 16593 m → 超出地球海沟约 50%，物理上不可信。**
+**当前 nacrea 海最深 16593 m → 超出地球海沟约 50%，物理上不可信。**
 
 ---
 
@@ -118,11 +118,11 @@ h_trench(gaia-m) ≈ 6 km（均衡基准）+ Δh_flexure × (g_gaia/g⊕ 竞争)
 
 ```python
 # 大陆均衡上限
-max_elevation_m = config.isostasy.max_continental_elevation_m  # 默认 9000, gaia-m ~7500
+max_elevation_m = config.isostasy.max_continental_elevation_m  # 默认 9000, nacrea ~7500
 elevation = np.clip(elevation, None, max_elevation_m)
 
 # 海沟挠曲上限
-max_trench_depth_m = config.isostasy.max_ocean_depth_m  # 默认 11500, gaia-m ~12000
+max_trench_depth_m = config.isostasy.max_ocean_depth_m  # 默认 11500, nacrea ~12000
 elevation = np.clip(elevation, -max_trench_depth_m, None)
 ```
 
@@ -154,7 +154,7 @@ isostasy:
   relaxation_rate: 0.1                 # 超出均衡部分的消减率
 ```
 
-### 4.4 gaia-m 推荐值
+### 4.4 nacrea 推荐值
 
 基于 g=10.28 m/s² 和较高地质活动：
 - `max_continental_elevation_m: 7500`（~1.05×重力削减 + 高热修正）

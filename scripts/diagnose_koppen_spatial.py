@@ -9,7 +9,7 @@ poles), while the rest of the globe is split into regular lon bins.
 
 This is a diagnostic for distinguishing *engine bugs* (systematic biases that
 appear on the Earth baseline too) from *world-specific parameter tuning* (issues
-that only appear on non-Earth worlds like gaia-m).
+that only appear on non-Earth worlds like nacrea).
 
 Usage::
 

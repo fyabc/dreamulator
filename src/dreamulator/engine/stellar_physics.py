@@ -487,7 +487,7 @@ def solar_day_days(rotation_period_days: float, orbital_period_days: float) -> f
 
     A satellite tidally locked to its *planet* still has a finite solar day,
     because the relevant "year" is the host planet's heliocentric period
-    (Gaia-M: 1/(1/3.25 − 1/67) ≈ 3.42 d; see sidereal_solar_day.md).
+    (Nacrea: 1/(1/3.25 − 1/67) ≈ 3.42 d; see sidereal_solar_day.md).
 
     Args:
         rotation_period_days: Sidereal rotation period in days (> 0).

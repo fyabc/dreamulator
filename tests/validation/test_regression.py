@@ -1,7 +1,7 @@
-"""Tier 1 (regression gate) — baseline comparison for gaia-m 200k.
+"""Tier 1 (regression gate) — baseline comparison for nacrea 200k.
 
 Compares the current climate engine output against a committed baseline
-snapshot (``tests/validation/baselines/gaia-m-200k.json``).  Fails when
+snapshot (``tests/validation/baselines/nacrea-200k.json``).  Fails when
 key metrics drift beyond tolerance — this is the CI safety net.
 
 These tests are marked ``slow`` because they load the full 200k-cell CVT
@@ -66,8 +66,8 @@ def _data_dir() -> Path:
 
 
 def _load_baseline() -> dict[str, Any]:
-    """Load the gaia-m 200k baseline snapshot."""
-    baseline_path = _find_project_root() / "tests" / "validation" / "baselines" / "gaia-m-200k.json"
+    """Load the nacrea 200k baseline snapshot."""
+    baseline_path = _find_project_root() / "tests" / "validation" / "baselines" / "nacrea-200k.json"
     if not baseline_path.exists():
         pytest.skip(f"Baseline not found at {baseline_path}")
     with baseline_path.open("r", encoding="utf-8") as f:
@@ -75,8 +75,8 @@ def _load_baseline() -> dict[str, Any]:
 
 
 def _run_climate_on_world(
-    world: str = "gaia-m",
-    planet: str = "satellite_gaiam",
+    world: str = "nacrea",
+    planet: str = "satellite_nacrea",
     seed: int = 42,
 ) -> tuple[dict[str, Any], Any]:
     """Load a world's CVT mesh (from committed data) and run climate."""
@@ -196,8 +196,8 @@ def _compute_metrics(mesh: Any) -> dict[str, Any]:
 
 
 @pytest.mark.slow
-class TestGaiaM200kRegression:
-    """Compare current climate output against the gaia-m-200k baseline.
+class TestNacrea200kRegression:
+    """Compare current climate output against the nacrea-200k baseline.
 
     These tests load the full 200k-cell mesh and run the climate simulation
     (~90 s).  Run selectively with ``pytest -m slow``.

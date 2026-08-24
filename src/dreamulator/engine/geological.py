@@ -282,7 +282,7 @@ class GeologicalEngine(BaseEngine):
         """Auto-detect planet ID from planets.yaml or existing map directories.
 
         Returns:
-            Planet ID string (e.g. 'satellite_gaiam', 'earth').
+            Planet ID string (e.g. 'satellite_nacrea', 'earth').
         """
         import yaml
 

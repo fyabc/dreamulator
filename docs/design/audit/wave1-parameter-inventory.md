@@ -26,7 +26,7 @@
 
 | 字段 | 默认 | 分类 | 备注 |
 |---|---|---|---|
-| num_nodes | 100_000 | B | 分辨率旋钮（gaia-m 用 200k） |
+| num_nodes | 100_000 | B | 分辨率旋钮（nacrea 用 200k） |
 | jitter_sigma | 0.3 | C | 扰动强度 |
 | lloyd_iterations | 8 | C | Lloyd 松弛次数 |
 

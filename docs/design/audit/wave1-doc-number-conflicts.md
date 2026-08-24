@@ -20,7 +20,7 @@
 
 | # | 位置 | 文档值 | 代码值 | 处置 |
 |---|---|---|---|---|
-| 1 | geological-pipeline.md:327 | `num_nodes` 默认 200,000 | `pipeline_types.py:45` 默认 100_000 | 已改为 100,000，注明 gaia-m 主力用 200,000 |
+| 1 | geological-pipeline.md:327 | `num_nodes` 默认 200,000 | `pipeline_types.py:45` 默认 100_000 | 已改为 100,000，注明 nacrea 主力用 200,000 |
 | 2 | geological-pipeline.md:651 | "PlateVelocity 将被废弃"（将来时） | `models.py:340` + `voronoi_generator.py:283` 仍在定义/使用 | 已改为"仍在使用（Euler pole 迁移进行中）" |
 | 3 | geological-pipeline.md:2010 | "PlateVelocity 废弃·不再使用" | 同上 | 已改为"⚠️ 仍在使用" |
 | 4 | geological-pipeline.md:2329 | "PlateVelocity ❌ 废弃" | 同上 | 已改为"⚠️ 仍在使用" |
