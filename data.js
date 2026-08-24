@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787492311528,
+  "lastUpdate": 1787598202278,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4305,6 +4305,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000689314118659671",
             "extra": "mean: 5.0503271999986055 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "ecce584d93005f707961d68dabd0f282ddcfbf04",
+          "message": "docs: 气候文档 + roadmap 同步质量守恒水汽收支\n\n- climate-pipeline.md §2.4/§6、energy_balance.md §8：三层模型 → 水汽收支方程 +\n  能量限制蒸发 + 陆地蒸散。\n- climate-validation/geological-pipeline/precipitation/CLAUDE：删死参数引用。\n- roadmap 第七节 #20/#21：气候水汽收支标定遗留 + 低优先级项。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-08-25T03:02:34+08:00",
+          "tree_id": "92fde19bbaca751951eb390e118d07f8200d8c62",
+          "url": "https://github.com/fyabc/dreamulator/commit/ecce584d93005f707961d68dabd0f282ddcfbf04"
+        },
+        "date": 1787598201287,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 16.795781380748668,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03869065278279967",
+            "extra": "mean: 59.53876019999882 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4713443879302175,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06801499968547021",
+            "extra": "mean: 288.072829499999 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4783581465596873,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0772636199875647",
+            "extra": "mean: 676.4260759999985 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 673.5381931185697,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00020927146165489302",
+            "extra": "mean: 1.4846967999986305 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 145.7598545759411,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0010813663716939756",
+            "extra": "mean: 6.860599600001649 msec\nrounds: 5"
           }
         ]
       }
