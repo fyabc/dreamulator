@@ -11,7 +11,7 @@ used by both engines.
 Satellite handling
 ------------------
 A body whose ``orbits`` field points at a planet rather than a star (e.g.
-the habitable moon gaia-m, which orbits the gas giant Aegis) is walked up
+the habitable moon nacrea, which orbits the gas giant Aegis) is walked up
 the ``orbits`` table in ``stellar.yaml`` until the host star is found.
 
 For the received stellar flux we use the **host planet's heliocentric
@@ -19,7 +19,7 @@ distance**, ignoring the satellite's own orbit around the planet.  With
 ``eps = a_moon / a_planet``, the time-averaged insolation correction is
 ``1/(1 - eps**2) - 1 ~ eps**2`` and the instantaneous extremes are
 ``~ +/-2*eps`` (both from averaging ``1/d^2`` over the moon's orbit).
-For gaia-m (eps = 0.00494/0.2795 = 0.0177) the mean error is +0.03% and the
+For nacrea (eps = 0.00494/0.2795 = 0.0177) the mean error is +0.03% and the
 78-hour oscillation is +/-3.5% — far below climate-model and
 geomorphic-erosion resolution, and smaller than the host planet's own
 eccentricity modulation.  Moon orbits are Hill-sphere bounded (stable orbits
@@ -582,7 +582,7 @@ def check_body_field_consistency(
     engines consume it via ``apply_physical_parameters``); the ``bodies``
     section only supplements narrative and classification.  Divergences beyond
     *rel_tol* are reported so authors reconcile them — three such drifts were
-    found and fixed in gaia-m when this check was introduced (2026-08).
+    found and fixed in nacrea when this check was introduced (2026-08).
 
     Args:
         bodies: Raw ``bodies`` entries from stellar.yaml.
@@ -962,7 +962,7 @@ def resolve_tidal_heating(
     ``docs/knowledge/geology/tidal_plate_speed.md``).
 
     The fastest-plate speed is rounded to 0.5 cm/yr — the meaningful granularity
-    given the ±50% empirical uncertainty of the scaling — which keeps gaia-m's
+    given the ±50% empirical uncertainty of the scaling — which keeps nacrea's
     authored 15 cm/yr unchanged (the raw computed value is ~14.9 cm/yr).
 
     Args:

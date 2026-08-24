@@ -35,7 +35,7 @@ $$\frac{1}{T_{\text{solar}}} = \frac{1}{T_{\text{sidereal}}} + \frac{1}{T_{\text
 
 - **月球**（锁定于地球，绕日周年 365.25 d）：
   太阳日 = 1/(1/27.32 − 1/365.25) = **29.53 d**（朔望月）——月球上一昼夜约 29.5 个地球日。
-- **Gaia-M**（锁定于 Aegis，Aegis 绕 Ignis 周期 67 d）：
+- **Nacrea**（锁定于 Aegis，Aegis 绕 Ignis 周期 67 d）：
   恒星日 = 3.25 d（= 绕 Aegis 公转周期）；太阳日 = 1/(1/3.25 − 1/67) = **3.42 d**。
 
 > 注意术语陷阱：天文学里"synodic day"若以**被锁定的中心天体**为参照（月球相对地球），
@@ -61,7 +61,7 @@ $$\frac{1}{T_{\text{solar}}} = \frac{1}{T_{\text{sidereal}}} + \frac{1}{T_{\text
    时才有意义。纯平衡 EBM 不区分二者。
 3. **潮汐锁定的相位漂移**：潮汐周期（= 绕中心天体公转周期）与太阳日通常不同，二者以
    **拍频** `1/(1/T_tide − 1/T_solar)` 缓慢漂移——这是潮间带热环境随"年"周期性平均的根源
-   （见 `data/worlds/gaia-m/layers/geological/input/tidal_effects.md` §大潮相位漂移）。
+   （见 `data/worlds/nacrea/layers/geological/input/tidal_effects.md` §大潮相位漂移）。
 
 ## 极昼/极夜时长公式（零偏心率近似）
 
@@ -76,7 +76,7 @@ $$f_{\text{极昼}} = \frac{\pi - 2\arcsin c}{2\pi} \quad (0 \le c \le 1)$$
 - 地球北角（71.2°N，ε=23.44°）：f ≈ 0.204，约 74 天（几何值；计入大气折射后
   与观测的 ~76 天午夜太阳季一致）
 
-极圈纬度即 ``90° − ε``（地球 ±66.56°、Gaia-M ±81°）。
+极圈纬度即 ``90° − ε``（地球 ±66.56°、Nacrea ±81°）。
 
 **引擎实现**：`engine/stellar_physics.py::polar_day_fraction_of_year` /
 `polar_circle_latitude_deg` / `solar_day_days`；世界参数汇总

@@ -403,7 +403,7 @@ features:
 **参考**：
 - `docs/design/geological-pipeline.md` §3.5 — 地理锚定算法与注入点
 - `src/dreamulator/map/geography.py` — `GeographySpec` / `build_land_bias_field()` / `apply_geography_crust()`
-- `data/worlds/gaia-m/layers/geological/input/geography.yaml` — gaia-m 实例
+- `data/worlds/nacrea/layers/geological/input/geography.yaml` — nacrea 实例
 
 ---
 
@@ -427,7 +427,7 @@ features:
 | 太阳日 | **3.42 天（82.0 小时）** | 1/(1/3.25 − 1/67) |
 
 <!-- 模板化后（渲染时从事实上下文填充） -->
-| 太阳日 | **{{ entities.satellite_gaiam.solar_day_days | round2 }} 天（{{ entities.satellite_gaiam.solar_day_days | hours | round1 }} 小时）** | 1/(1/{{ entities.satellite_gaiam.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
+| 太阳日 | **{{ entities.satellite_nacrea.solar_day_days | round2 }} 天（{{ entities.satellite_nacrea.solar_day_days | hours | round1 }} 小时）** | 1/(1/{{ entities.satellite_nacrea.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
 ```
 
 **Filter 清单**（`doc_render.build_environment()`）：
@@ -435,7 +435,7 @@ features:
 | filter | 作用 | 示例 |
 |--------|------|------|
 | `round0`/`round1`/`round2` | 四舍五入到整数/1/2 位 | `{{ entities.planet_aegis.period_days \| round0 }}` → 67 |
-| `hours` | 天 → 小时（×24），常与 round 组合 | `{{ entities.satellite_gaiam.period_days \| hours \| round0 }}` → 78 |
+| `hours` | 天 → 小时（×24），常与 round 组合 | `{{ entities.satellite_nacrea.period_days \| hours \| round0 }}` → 78 |
 | `pct` | 小数 → 百分比字符串 | `{{ entities.star_ignis.evolution_progress \| pct }}` → 8.8% |
 | `"%.2f"\|format(...)` | 定长小数（保尾随零） | → 1.20 |
 
@@ -466,7 +466,7 @@ features:
 - `src/dreamulator/guard/facts.py::build_fact_context` — 事实上下文（实体 + 聚合）
 - `src/dreamulator/engine/physical_inputs.py::build_system_catalog` — `system_catalog.yaml` 的生产者
 - `docs/design/roadmap.md` #22 — 世界参数单一来源（两阶段）背景
-- `data/worlds/gaia-m/layers/astronomy/input/orbital_dynamics.md` — gaia-m 模板化实例
+- `data/worlds/nacrea/layers/astronomy/input/orbital_dynamics.md` — nacrea 模板化实例
 
 ---
 

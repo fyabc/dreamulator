@@ -243,7 +243,7 @@ def build_fact_context(world_dir, branch=None) -> dict | None:
     return {
         "entities": {
             "star_ignis": ...,        # system_catalog.yaml（实体属性，稳定 ID）
-            "satellite_gaiam": ...,   # 目标体 Nacrea
+            "satellite_nacrea": ...,   # 目标体 Nacrea
             "planet_aegis": ...,      # 母行星（父链）
             # ... 其余天体按 ID
         },
@@ -256,7 +256,7 @@ def build_fact_context(world_dir, branch=None) -> dict | None:
     }
 ```
 
-模板里天体属性按实体寻址：`{{ entities.satellite_gaiam.axial_tilt_deg }}`（旧的 `{{ body.axial_tilt_deg }}`
+模板里天体属性按实体寻址：`{{ entities.satellite_nacrea.axial_tilt_deg }}`（旧的 `{{ body.axial_tilt_deg }}`
 角色键已废弃，见 §5.3）。
 
 这套上下文**三用**：
@@ -276,7 +276,7 @@ def build_fact_context(world_dir, branch=None) -> dict | None:
 
 | 类型 | 例子 | 处理 |
 |---|---|---|
-| **实体属性**（有身份） | `satellite_gaiam.axial_tilt_deg`、`star_ignis.luminosity_sol` | 按实体稳定 ID 寻址，直接来自 `system_catalog.yaml` |
+| **实体属性**（有身份） | `satellite_nacrea.axial_tilt_deg`、`star_ignis.luminosity_sol` | 按实体稳定 ID 寻址，直接来自 `system_catalog.yaml` |
 | **聚合统计**（无身份） | `climate.land_mean_t`、`ecology.biome_counts` | 命名归约查询（非实体，但需稳定名 + 溯源） |
 
 **证据**：曾经的 `world_parameters.yaml` 就是 `system_catalog.yaml` 的 `target_parameters` 段
@@ -526,7 +526,7 @@ per-branch 可调——硬科幻世界默认 strict，软魔法分支可 lenient
 ### 14.1 QQ 群实时拷问
 
 群友：「你这卫星季节温差这么小，是不是引擎出 bug 了？红矮星耀斑不会烤没大气吗？」你在 Claude Code 里
-`/grill-world gaia-m "群友质疑：季节温差太小 + 红矮星耀斑问题"`。skill 结构化出两条拷问（`seasonal-range`
+`/grill-world nacrea "群友质疑：季节温差太小 + 红矮星耀斑问题"`。skill 结构化出两条拷问（`seasonal-range`
 物理一致性 + `flare-retention` 天文一致性）→ 内核 `build_fact_context` + `queries` 取证 → griller/answerer
 互审 → 产出两条决策记录：季节温差 `accepted`（9° 倾角 + 67 天年的物理必然），耀斑 `proposed → accepted`
 （补写了磁层耦合依据，改 `stellar.yaml`）。`guard check` 自动发现 input 指纹变了，把受影响的记录标「需复核」。
@@ -543,7 +543,7 @@ PR 页 bot 自动评论：3 条决策记录 superseded、2 条下游派生过期
 ### 14.3 B 站评论区 → 批量拷问 + FAQ
 
 视频《我用物理引擎造了颗宜居卫星》评论区涌现几十条质疑。一个轻量环节把高频问题聚类成 8 个维度条目 →
-`/grill-world --batch` 批量拷问 → 产出（a）决策记录台账（b）FAQ 页面 `docs/worldbuilding/gaia-m-faq.md`，
+`/grill-world --batch` 批量拷问 → 产出（a）决策记录台账（b）FAQ 页面 `docs/worldbuilding/nacrea-faq.md`，
 所有数字用 `{{ ... }}` 模板渲染。**FAQ 里的数字自动同步**——以后改倾角/潮汐，科普稿不用手动更新。
 回应视频直接贴 FAQ + 台账链接，质疑从「你骗我」变成「你的推导公式我能查」。
 

@@ -164,7 +164,7 @@ ETOPO1 导入 200k 实测确认）；可见性由矢量河流图层 + Gaea 局�
 | 工具 | 用途 | 与 Dreamulator 的关系 |
 |------|------|---------------------|
 | [**PlaSim**](https://www.mi.uni-hamburg.de/en/arbeitsgruppen/theoretische-meteorologie/modelle/plasim.html) | 中等复杂度 3D GCM。灵活、快速、支持任意轨道/物理参数 | Dreamulator 目前的 EBM + BFS 水汽比 PlaSim 简单 2–3 个数量级；长期"简化 GCM"方向可对标 PlaSim |
-| [**ExoPlaSim**](https://github.com/alphaparrot/ExoPlaSim) | PlaSim 扩展：潮汐锁定行星、非太阳光谱、超地球。pip 安装 + Python API。MNRAS (2022) 发表。**2026-08 已启动 PoC**——用 gaia-m 参数配置 ExoPlaSim（T21/T42），对比 dreamulator 当前启发式气候输出，评估替代 `climate_simulator.py` 的可行性 | Dreamulator 的"简化 GCM"方向直接对标。ExoPlaSim 已解决：潮汐锁定、冰川模块、碳-硅酸盐风化。主要风险：Fortran 编译依赖（Windows 兼容性）、T21 分辨率 vs CVT 100K 网格的地形细节损失 |
+| [**ExoPlaSim**](https://github.com/alphaparrot/ExoPlaSim) | PlaSim 扩展：潮汐锁定行星、非太阳光谱、超地球。pip 安装 + Python API。MNRAS (2022) 发表。**2026-08 已启动 PoC**——用 nacrea 参数配置 ExoPlaSim（T21/T42），对比 dreamulator 当前启发式气候输出，评估替代 `climate_simulator.py` 的可行性 | Dreamulator 的"简化 GCM"方向直接对标。ExoPlaSim 已解决：潮汐锁定、冰川模块、碳-硅酸盐风化。主要风险：Fortran 编译依赖（Windows 兼容性）、T21 分辨率 vs CVT 100K 网格的地形细节损失 |
 | [**CESM / ROCKE-3D**](https://www.cesm.ucar.edu/) | 全复杂度地球系统模型（大气/海洋/陆地/海冰/碳循环耦合） | 精度标杆——Dreamulator 气候验证的参照系 |
 | [**climlab**](https://climlab.readthedocs.io/) | Python 气候建模工具箱：EBM/RCE/辐射对流。Brian Rose (SUNY Albany) | Dreamulator 同架构（Python 纯函数模块）；其 `climlab.EBM` 类（1D 纬度能量平衡模型，解 `0 = D∇²T + Q(φ)(1−α) − (A+BT)`）是温度模型「sin² → 正式 EBM 求解」的直接对标 |
 | [**ExoCAM**](https://github.com/storyofthewolf/ExoCAM) | CESM 的系外行星分支 | 与 ExoPlaSim 同赛道；全复杂度 |
@@ -343,7 +343,7 @@ lore drift）**」——这正是 Dreamulator 在 [vision.md](proposals/vision.m
 
 ## 八、宜居卫星设定参照
 
-> 2026-08-17 补：gaia-m 的 Nacrea 是「宜居卫星」设定，本节梳理采用了这一母题的作品/游戏，
+> 2026-08-17 补：nacrea 的 Nacrea 是「宜居卫星」设定，本节梳理采用了这一母题的作品/游戏，
 > 作为设定参照与卖点依据（间奏曲 #8）。
 
 ### 8.1 电影 / 影视
@@ -381,7 +381,7 @@ lore drift）**」——这正是 Dreamulator 在 [vision.md](proposals/vision.m
 
 - **Kepler-1625b 候选 exomoon**：Teachey & Kipping (2018) 发现的海王星级候选卫星，位于宜居带——
   学界以「寻找潘多拉/恩多」作为 exomoon 探索的叙事锚点（[Space.com](https://www.space.com/42023-possible-exomoon-discovery-pandora-endor.html)）。
-- **磁层屏蔽**：Heller & Zuluaga (2013) 提出巨行星磁层可保护卫星大气（即 gaia-m 决策记录
+- **磁层屏蔽**：Heller & Zuluaga (2013) 提出巨行星磁层可保护卫星大气（即 nacrea 决策记录
   `0006-habitability-protection.md` 引用的机制）。
 - **关键论点**：绕红矮星气态巨行星的卫星**可能比被潮汐锁定的类地行星更宜居**（免受潮汐锁定之苦），
   与 Nacrea「绕 M 矮星巨行星」设定同构（[IAA-CSIC](http://sir.caha.es/news/releases-mainmenu-163/habitable-moons-around-cool-nearby-stars-from-science-fiction-to-reality)）。
@@ -389,6 +389,6 @@ lore drift）**」——这正是 Dreamulator 在 [vision.md](proposals/vision.m
 ### 8.5 与 Dreamulator 的对比
 
 fiction 里的宜居卫星多为**地球级或更小**（潘多拉≈地球、恩多≈1/3 地球）。而 **Nacrea 是 1.2 M⊕
-的「超级卫星」**，比绝大多数虚构宜居卫星都大——这是 gaia-m 相对稀缺的差异化定位，可作为卖点。
+的「超级卫星」**，比绝大多数虚构宜居卫星都大——这是 nacrea 相对稀缺的差异化定位，可作为卖点。
 
 - [Pandora (Avatar) — Wikipedia](https://en.wikipedia.org/wiki/Pandora_(Avatar))

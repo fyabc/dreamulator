@@ -18,8 +18,8 @@ Architecture:
 
 Usage:
     uv run python scripts/generate_planet_heightmap.py \\
-        -c data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \\
-        -o output/gaiam/ --preview
+        -c data/worlds/nacrea/layers/geological/input/heightmap_config.yaml \\
+        -o output/nacrea/ --preview
 
     # Override resolution and seed
     uv run python scripts/generate_planet_heightmap.py -c cfg.yaml -o out/ \\
@@ -1266,7 +1266,7 @@ def load_planet_config(path: Path) -> PlanetConfig:
     """Load planet configuration from a YAML file.
 
     The YAML format supports comments and is human-editable.
-    See data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml
+    See data/worlds/nacrea/layers/geological/input/heightmap_config.yaml
     for a fully documented example.
 
     Args:
@@ -1434,8 +1434,8 @@ def generate(
     Example:
 
         uv run python scripts/generate_planet_heightmap.py \\
-            -c data/worlds/gaia-m/layers/geological/input/heightmap_config.yaml \\
-            -o output/gaiam/ --preview
+            -c data/worlds/nacrea/layers/geological/input/heightmap_config.yaml \\
+            -o output/nacrea/ --preview
     """
     # Load config from YAML
     planet_config = load_planet_config(config)

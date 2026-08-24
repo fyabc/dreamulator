@@ -7,7 +7,7 @@ axis: ``/read-map`` skill, ``ai civ``, and CI auditing all need headless layer
 rasters without a browser or manual screenshots.
 
 Usage:
-    dreamulator export layers gaia-m --layers terrain,koppen,biome,agriculture,habitability
+    dreamulator export layers nacrea --layers terrain,koppen,biome,agriculture,habitability
 """
 
 from __future__ import annotations

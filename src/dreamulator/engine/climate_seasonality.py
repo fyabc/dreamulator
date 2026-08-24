@@ -48,7 +48,7 @@ def compute_effective_obliquity(
 
     NOTE: this helper is **not wired into the pipeline**.  The convention in
     this project is that ``config.axial_tilt_deg`` is already the *effective*
-    obliquity (gaia-m authors 9.0° = its orbital inclination), so auto-applying
+    obliquity (nacrea authors 9.0° = its orbital inclination), so auto-applying
     the RMS here would double-count the parent's tilt.  Keep this function for
     documentation and for future worlds that author the intrinsic spin tilt.
 

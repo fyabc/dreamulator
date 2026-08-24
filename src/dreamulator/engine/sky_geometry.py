@@ -115,7 +115,7 @@ def sky_position(
 
     observer 必须潮汐锁定到 target（母行星固定在天空）。母行星固定在「正下点」
     （lon=0, lat=0），地表点看它的仰角 = 90° − 角距；视直径用轨道距离。锚定值：
-    ``sky_position(entities, "satellite_gaiam", "planet_aegis", 0.5, -0.8).altitude_deg ≈ 89``。
+    ``sky_position(entities, "satellite_nacrea", "planet_aegis", 0.5, -0.8).altitude_deg ≈ 89``。
     """
     observer = entities[observer_id]
     target = entities[target_id]

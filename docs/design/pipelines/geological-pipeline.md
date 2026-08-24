@@ -255,7 +255,7 @@ A = Σᵢ αᵢ - (n - 2)π
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
-| `num_nodes` | 100,000 | 10K – 1M | CVT 节点数（分辨率；gaia-m 主力用 200,000） |
+| `num_nodes` | 100,000 | 10K – 1M | CVT 节点数（分辨率；nacrea 主力用 200,000） |
 | `jitter_sigma` | 0.3 | 0.0 – 0.5 | 随机扰动强度（× d_mean） |
 | `lloyd_iterations` | 8 | 0 – 20 | Lloyd 松弛迭代次数 |
 | `seed` | (world seed) | 任意 int | RNG 种子 |
@@ -332,11 +332,11 @@ def _voronoi_partition(
 板面积由 **可变密度 Poisson-disc 种子**与球面 Voronoi 几何共同决定：
 `select_plate_seeds` 中每个种子抽取对数均匀 size-factor（e^{U(-0.8, 0.8)}≈0.45–2.2）
 缩放其最小间距——大间距种子周围形成大板块、小间距种子挤成小板块，初始剖分
-即呈偏态（gaia-m 实测 CV≈0.44）。无需额外的目标尺寸（Pareto）或速度参数。
+即呈偏态（nacrea 实测 CV≈0.44）。无需额外的目标尺寸（Pareto）或速度参数。
 
 > **偏态的保持（构造重采样）**：构造演化的周期性重分区若是无权重的
 > "最近种子" Voronoi，则等价于 Lloyd 迭代——其吸引子是等面积的质心
-> Voronoi 剖分（CVT），会把初始偏态洗掉（gaia-m 实测 50 步后 CV 0.44→0.22）。
+> Voronoi 剖分（CVT），会把初始偏态洗掉（nacrea 实测 50 步后 CV 0.44→0.22）。
 > 因此重采样改用**乘法加权 Voronoi**（power diagram 的图版本）：每个板块
 > 持有出生时确定的持久权重 wᵢ（初始板块取初始面积、裂解碎片取碎片面积），
 > 波前 i 进入 cell 的代价为 cost/wᵢ，面积比 ∝ 权重比。规定权重后迭代吸引子
@@ -400,7 +400,7 @@ plates:
 ### 3.5 地理锚定（geography.yaml）
 
 默认的地壳分配（§3.3）是**纯程序化**的——大陆落在哪里完全由纬度偏好 + fBm
-噪声决定，作者无法控制。对于"样板世界"（如 gaia-m），世界构建者往往已经在
+噪声决定，作者无法控制。对于"样板世界"（如 nacrea），世界构建者往往已经在
 设定文档里写死了海陆格局（哪个大陆在哪、多大的洋），需要让引擎**按设定生成**。
 
 **业界先例**：Gleba 支持"自定义陆块概率图导入"来引导大陆生成；Azgaar 用
@@ -480,7 +480,7 @@ fBm 的 seed = `config.seed + 500`（确定性）。按 score 降序取前
 #### 汇聚抬升抑制（roadmap #9 修复，2026-08）
 
 锚定只钉地壳的脆弱机制：横穿 authored 裂谷/海盆的汇聚边界会把 +4000 m 级
-抬升加在洋壳 cell 上，把裂谷推上海面（gaia-m 大裂谷海曾测得 +927 m）。
+抬升加在洋壳 cell 上，把裂谷推上海面（nacrea 大裂谷海曾测得 +927 m）。
 修复：合成阶段在入口重算偏置场（纯函数，与地壳锚定逐位一致），对**正抬升项**
 乘阻尼
 
@@ -493,7 +493,7 @@ damp = clip(2·bias + 2, 0.1, 1.0)   （bias < −0.5 时；否则 1.0，阈值�
 叠最坏基底仍 <0。正常造山带（bias ≥ −0.5）完全无感。
 
 仅有阻尼还不够：top-N 地壳阈值总会向 authored 海洋泄漏少量 continental cell
-（gaia-m 裂谷核心 ~13%），它们拿 +850 m 双峰基准 + 板块偏移（±1500 m）直接
+（nacrea 裂谷核心 ~13%），它们拿 +850 m 双峰基准 + 板块偏移（±1500 m）直接
 隆起成高原。因此 |bias| > 0.5 处**双峰基准服从作者**（负侧用 oceanic 基准、
 正侧用 continental 基准，`_apply_base_override`），锚定贯通到高程而不仅是
 地壳类型——这正是 roadmap #9 的验收要求。
@@ -557,7 +557,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 - **offset 下游假设**：前端色标/河流生成（TODO）按水面 0 m 假设；
   `sea_level_offset_m ≠ 0` 仅用于实验性重建。
 - **钉扎与海陆比**：钉扎只动核支撑区，对 `land_fraction_target` 的扰动 ≤
-  核面积占比（gaia-m 地峡 ≈0.3pp）；大陆级钉扎（>5% 表面）需自行调 target。
+  核面积占比（nacrea 地峡 ≈0.3pp）；大陆级钉扎（>5% 表面）需自行调 target。
   钉扎后不重跑校准（全局平移会放大局部操作且 target 相对水面→迭代不适定）。
 - **参数需调优**：feature 的 radius/strength/elongation 是作者旋钮，需按渲染
   结果迭代（如"切开大陆"要求裂谷 `|strength|` 超过下伏大陆 strength）。
@@ -746,9 +746,9 @@ age = max_age · d_div / (d_div + d_conv)
 
 不能同时到达两类边界的海洋 cell（孤立盆地）保持均匀 `oceanic_elevation_m`。
 
-**gaia-m 参数**（活跃地质体 + 较高重力）：
+**nacrea 参数**（活跃地质体 + 较高重力）：
 
-| 参数 | gaia-m 值 | 地球参考 |
+| 参数 | nacrea 值 | 地球参考 |
 |------|----------|---------|
 | `ocean_spreading_rate_cm_yr` | 6.0 | 1–5 |
 | `ocean_ridge_depth_m` | 2500 | ~2500 |
@@ -770,7 +770,7 @@ age = max_age · d_div / (d_div + d_conv)
 6. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
 7. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
    `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
-   上限 `h_max ∝ 1/g`——gaia-m g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
+   上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
 8. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
    悬崖式跳跃，3 轮 30% 邻域均值混合（仅陆地）松弛为连续坡降：
    `elev_i = 0.7·elev_i + 0.3·mean(land_neighbors)`；>3000m 邻域跳跃 1446→137 cell。
@@ -799,7 +799,7 @@ age = max_age · d_div / (d_div + d_conv)
 | `continental_undulation_m` | 600 | 200 – 1500 | 大陆动态地形起伏 |
 
 > **noise_scale 与物理波长的换算**：OpenSimplex 在单位球面 (x,y,z) 上采样，
-> 特征波长 ≈ **R / scale**（R = 行星半径，gaia-m = 6817 km）：
+> 特征波长 ≈ **R / scale**（R = 行星半径，nacrea = 6817 km）：
 > scale 0.5 → ~13,600 km（全球级）；2.0 → ~3,400 km（大陆级）；
 > 3.0 → ~2,300 km（板块级）；5.0 → ~1,400 km（区域级）。
 
@@ -1286,7 +1286,7 @@ RNG——纯函数，确定性由 seed 与上游地形保证。
 - `climate_coupling: full` —— 读气候引擎输出（DAG 环，当前留接口位不实现）。
 
 **验证**（`scripts/validate_precip_proxy.py`，代理 vs 气候引擎权威降水，陆地逐 cell）：
-gaia-m 实测 `corr_log = 0.761`（形状对、幅度标定问题）；残余偏差是陆地降水 ~2×
+nacrea 实测 `corr_log = 0.761`（形状对、幅度标定问题）；残余偏差是陆地降水 ~2×
 高于纬向均值（BFS 把海洋水汽集中搬运到陆地，纬向基础场无法捕获），归 M3 标定。
 
 代理场是"强迫"，气候引擎的 BFS 水汽是"精细化"——二者是 roadmap 写明的
@@ -1464,7 +1464,7 @@ CVT 管线输出直接对接现有 `MapManager` 和 `MapLayerRegistry`：
 # 创建/更新地图
 manager = MapManager(world_dir)
 manager.create_map(
-    planet_id="gaia_m",
+    planet_id="nacrea",
     source="cvt_pipeline",
     cvt_mesh=cvt_result,
     layers={
@@ -1476,7 +1476,7 @@ manager.create_map(
 )
 
 # 注册图层
-registry = MapLayerRegistry(planet_id="gaia_m")
+registry = MapLayerRegistry(planet_id="nacrea")
 registry.raster_layers["elevation"] = RasterLayerMeta(
     layer_type=MapLayerType.ELEVATION,
     source="engine-derived",
@@ -1616,7 +1616,7 @@ class BiomeData(BaseModel):
 ## 12. 性能考量
 
 > **实测修正（2026-08-03，perf/profiling-and-optimization 分支）**：
-> 本节原估算（总计 ~70s）偏差较大——实测 gaia-m（100K 胞、构造 ×50）全量构建
+> 本节原估算（总计 ~70s）偏差较大——实测 nacrea（100K 胞、构造 ×50）全量构建
 > **532s**（geological 388s + climate 143s + astronomy <1s）。
 > pyfastnoise 路线已失效：**该包不在 PyPI**（uv 解析失败、无 py3.12 wheel）；
 > `opensimplex.noise3array` 是纯 Python 循环（21µs/点，仅比标量 44µs/次快 2 倍）。

@@ -1,6 +1,6 @@
 """Authored geography — continent anchoring via a land-bias field.
 
-Worldbuilding settings (e.g. gaia-m's ``geography.yaml``) name landmasses and
+Worldbuilding settings (e.g. nacrea's ``geography.yaml``) name landmasses and
 oceans anchored to lon/lat.  This module turns that spec into a per-cell
 **land-bias field** on the CVT mesh ([-1, 1]: positive = land, negative =
 ocean) which ``plate_generator.assign_crust_types`` consumes through a global

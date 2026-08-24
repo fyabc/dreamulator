@@ -211,7 +211,7 @@ def lat_gradient_from_omega(
 
     Examples:
         Earth  (P=1.0):  45.0 × 1.0^0.3     = 45.0 °C
-        gaia-m (P=3.23): 45.0 × 3.23^(-0.3) ≈ 31.6 °C
+        nacrea (P=3.23): 45.0 × 3.23^(-0.3) ≈ 31.6 °C
         Venus  (P=243):  45.0 × 243^(-0.3)  ≈  8.7 °C
     """
     omega_ratio = 1.0 / rotation_period_days  # Ω / Ω⊕

@@ -229,7 +229,7 @@ $$α_{eff} = α_{vis}\,f_{vis} + α_{nir}\,(1-f_{vis})$$
 | 恒星 | T_eff | α_ice_eff |
 |------|:---:|:---:|
 | 太阳 | 5772 K | 0.700 |
-| gaia-m M1 | 3930.8 K | 0.563 |
+| nacrea M1 | 3930.8 K | 0.563 |
 | 3300 K 黑体 | 3300 K | 0.486 |
 
 `stellar_temperature_k`（默认 5772）从天文层 `stellar_derived.yaml` 的 `computed_temperature`

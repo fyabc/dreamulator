@@ -1,8 +1,8 @@
 """Zonal sanity checks for ecology engine — verify latitude-band biome patterns.
 
-These tests load the gaia-m mesh and check that biome distributions follow
+These tests load the nacrea mesh and check that biome distributions follow
 expected latitude-zonal patterns. Not pure unit tests — they require a
-gaia-m mesh with climate data to exist.
+nacrea mesh with climate data to exist.
 """
 
 import json
@@ -14,9 +14,9 @@ from dreamulator.engine.ecology_physics import WhittakerBiome
 
 
 @pytest.fixture(scope="module")
-def gaia_m_cells():
-    """Load the gaia-m satellite mesh (requires climate+ecology build)."""
-    mesh_path = "data/worlds/gaia-m/maps/satellite_gaiam/cvt_mesh.json"
+def nacrea_cells():
+    """Load the nacrea satellite mesh (requires climate+ecology build)."""
+    mesh_path = "data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.json"
     try:
         from dreamulator.map.export import decompress_mesh_bytes
 
@@ -24,7 +24,7 @@ def gaia_m_cells():
             decompress_mesh_bytes(__import__("pathlib").Path(mesh_path).read_bytes()),
         )
     except (FileNotFoundError, json.JSONDecodeError):
-        pytest.skip("gaia-m mesh not available (LFS not pulled or not built)")
+        pytest.skip("nacrea mesh not available (LFS not pulled or not built)")
     return mesh["cells"]
 
 
@@ -83,10 +83,10 @@ def _dominant_biome_group(biome_counter: Counter) -> str:
     return "boreal"
 
 
-def test_tropical_band_dominated_by_tropical_biomes(gaia_m_cells):
+def test_tropical_band_dominated_by_tropical_biomes(nacrea_cells):
     """0-15° latitude: tropical biomes should have noticeable presence.
 
-    Note: gaia-m is a cold-biased world (land mean T 3.7 °C) orbiting an
+    Note: nacrea is a cold-biased world (land mean T 3.7 °C) orbiting an
     M dwarf.  Its equatorial band may not reach the 18 °C threshold needed
     for tropical biomes in many cells, especially at elevation.
     This test checks that tropical biomes at least *appear* in the tropics —
@@ -95,7 +95,7 @@ def test_tropical_band_dominated_by_tropical_biomes(gaia_m_cells):
     """
     land_cells = [
         c
-        for c in gaia_m_cells
+        for c in nacrea_cells
         if c.get("crust_type") == "continental"
         and abs(c["lat"]) <= 15
         and c.get("biome") is not WhittakerBiome.OCEAN.value
@@ -109,31 +109,31 @@ def test_tropical_band_dominated_by_tropical_biomes(gaia_m_cells):
         f"Counts: {biome_counts.most_common(8)}"
     )
     # For a well-tuned Earth-like planet, tropical > temperate.
-    # On cold gaia-m, this may not hold — emit a diagnostic, not a failure.
+    # On cold nacrea, this may not hold — emit a diagnostic, not a failure.
     if tropical_count < temperate_count:
         import warnings
 
         warnings.warn(
             f"Tropical band (0-15°) has more temperate ({temperate_count}) "
             f"than tropical ({tropical_count}) cells — expected for a cold-biased "
-            f"planet like gaia-m (land mean T {5.7}°C). Climate tuning (3A.4) "
+            f"planet like nacrea (land mean T {5.7}°C). Climate tuning (3A.4) "
             f"should shift this toward tropical dominance.",
             stacklevel=2,
         )
 
 
-def test_mid_latitude_dominated_by_temperate_biomes(gaia_m_cells):
+def test_mid_latitude_dominated_by_temperate_biomes(nacrea_cells):
     """30-50° latitude: temperate biomes should dominate."""
     land_cells = [
         c
-        for c in gaia_m_cells
+        for c in nacrea_cells
         if c.get("crust_type") == "continental"
         and 30 <= abs(c["lat"]) <= 50
         and c.get("biome") is not WhittakerBiome.OCEAN.value
     ]
     biome_counts = Counter(c.get("biome") for c in land_cells)
     dom = _dominant_biome_group(biome_counts)
-    # gaia-m's slow rotation (Ω=0.31 Ω⊕) pushes cold biomes equatorward;
+    # nacrea's slow rotation (Ω=0.31 Ω⊕) pushes cold biomes equatorward;
     # tundra can dominate 30-50° in the current build (world island
     # centred at −10°S with reduced elongation).
     assert dom in ("temperate", "boreal", "ocean"), (
@@ -142,11 +142,11 @@ def test_mid_latitude_dominated_by_temperate_biomes(gaia_m_cells):
     )
 
 
-def test_high_latitude_dominated_by_boreal_cold_biomes(gaia_m_cells):
+def test_high_latitude_dominated_by_boreal_cold_biomes(nacrea_cells):
     """60-75° latitude: boreal/cold biomes should dominate."""
     land_cells = [
         c
-        for c in gaia_m_cells
+        for c in nacrea_cells
         if c.get("crust_type") == "continental"
         and 60 <= abs(c["lat"]) <= 75
         and c.get("biome") is not WhittakerBiome.OCEAN.value
@@ -159,11 +159,11 @@ def test_high_latitude_dominated_by_boreal_cold_biomes(gaia_m_cells):
     )
 
 
-def test_npp_latitude_gradient(gaia_m_cells):
+def test_npp_latitude_gradient(nacrea_cells):
     """NPP should decrease from equator to poles (on average per band)."""
     land_cells = [
         c
-        for c in gaia_m_cells
+        for c in nacrea_cells
         if c.get("crust_type") == "continental" and c.get("npp_gc_m2_yr") is not None
     ]
     # Group NPP by latitude band
@@ -183,11 +183,11 @@ def test_npp_latitude_gradient(gaia_m_cells):
     )
 
 
-def test_npp_range_plausible(gaia_m_cells):
+def test_npp_range_plausible(nacrea_cells):
     """Global NPP should be within 0-3000 gC/m^2/yr (Miami model bounds)."""
     land_cells = [
         c
-        for c in gaia_m_cells
+        for c in nacrea_cells
         if c.get("crust_type") == "continental" and c.get("npp_gc_m2_yr") is not None
     ]
     for c in land_cells:

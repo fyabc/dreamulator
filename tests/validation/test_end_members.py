@@ -35,10 +35,10 @@ _MARS = {
     "eccentricity": 0.093,
 }
 
-# gaia-m: habitable-zone center of the Ignis system (see planets.yaml).
+# nacrea: habitable-zone center of the Ignis system (see planets.yaml).
 # Seasonality inputs synced to the current system: 67 d year (Aegis's orbit),
 # 9° effective obliquity, heliocentric eccentricity 0.005.
-_GAIAM = {
+_NACREA = {
     "stellar_luminosity_sol": 0.0357,
     "orbital_distance_au": 0.2795,
     "greenhouse_warming_K": 72.0,
@@ -84,11 +84,11 @@ def test_airless_body_follows_equilibrium():
     assert stats["t_land_mean"] > teq_c - 25.0
 
 
-def test_gaiam_hz_center_is_not_snowball():
-    """gaia-m at HZ center with Earth-equivalent GHG (78 K) must support a
+def test_nacrea_hz_center_is_not_snowball():
+    """nacrea at HZ center with Earth-equivalent GHG (78 K) must support a
     temperate regime — the world sits at the HZ center, not the inner edge.
     (Uses 78 K, the measured Earth-equivalent value, as the regime anchor.)"""
-    params = dict(_GAIAM)
+    params = dict(_NACREA)
     params["greenhouse_warming_K"] = 78.0
     stats = run_climate(build_validation_mesh(ocean_bands=(0, 1, 10, 11)), **params)
     # Not a full snowball: global mean above freezing, warm cells survive.

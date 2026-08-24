@@ -8,7 +8,7 @@
 
 - **实体寻址**：天体按稳定 ID 从 ``system_catalog.yaml`` 建表（``entities``）。
   body 的 ``physical`` / ``orbit`` / ``derived`` 拍平到顶层（
-  ``entities.satellite_gaiam.axial_tilt_deg``），``atmosphere`` /
+  ``entities.satellite_nacrea.axial_tilt_deg``），``atmosphere`` /
   ``hydrosphere`` / ``lithosphere`` 作为子系统保留嵌套（含 ``composition`` /
   ``crust_composition`` 等嵌套映射）。恒星原样键控。
 - **聚合统计**：各层 ``*_summary.yaml`` 作为命名归约（``aggregates``），带溯源

@@ -289,7 +289,7 @@ function buildCellPalettes(
   const flow = new Map<number, [number, number, number]>()
 
   // NPP range for normalisation.  Dynamic rather than the fixed Miami 3000 gC
-  // ceiling — a red dwarf's PAR suppresses NPP far below 3000 (gaia-m land NPP
+  // ceiling — a red dwarf's PAR suppresses NPP far below 3000 (nacrea land NPP
   // peaks ~1200 gC), and a fixed ceiling washes the whole heatmap out.
   let nppMax = 0
   for (const cell of cvtMesh.cells) {

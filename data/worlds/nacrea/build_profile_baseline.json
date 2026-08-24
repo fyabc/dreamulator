@@ -1,0 +1,48 @@
+{
+  "world": "nacrea",
+  "branch": null,
+  "seed": 42,
+  "total_wall_seconds": 379.292,
+  "engines": [
+    {
+      "engine": "astronomy",
+      "layer": "astronomy",
+      "wall_seconds": 0.526,
+      "success": true
+    },
+    {
+      "engine": "geological",
+      "layer": "geological",
+      "wall_seconds": 247.353,
+      "success": true,
+      "stages": {
+        "mesh": 30.77,
+        "plates": 4.51,
+        "tectonics": 76.508,
+        "boundaries": 4.716,
+        "terrain": 117.759,
+        "export": 12.751
+      }
+    },
+    {
+      "engine": "climate",
+      "layer": "climate",
+      "wall_seconds": 120.195,
+      "success": true,
+      "stages": {
+        "temperature": 6.113,
+        "wind": 8.177,
+        "ocean": 57.438,
+        "precipitation": 26.159,
+        "koppen": 0.061,
+        "writeback": 0.356
+      }
+    },
+    {
+      "engine": "ecology",
+      "layer": "ecology",
+      "wall_seconds": 11.209,
+      "success": true
+    }
+  ]
+}
