@@ -4,13 +4,12 @@ Runs the complete CVT terrain generation pipeline:
     1. CVT mesh generation (Fibonacci + Lloyd + SphericalVoronoi)
     2. Plate tectonics (Poisson-disc + Voronoi partition)
     3. Tectonic time evolution (Cortial et al. 2019: centroid rotation +
-       subduction + collision + erosion)
+       subduction + collision)
     4. Boundary detection (velocity decomposition + classification)
     5. Terrain synthesis (bimodal base + boundary effects + fBm noise)
     6. Climate simulation (TODO)
-    7. River generation (TODO)
-    8. Erosion (TODO)
-    9. Export (equirectangular raster + PNG + JSON)
+    7. River generation (flow routing + river vector layer)
+    8. Export (equirectangular raster + PNG + JSON)
 
 See ``docs/design/terrain-pipeline.md`` for complete algorithm reference.
 """
@@ -56,22 +55,20 @@ VALID_STAGES = frozenset(
         "terrain",
         "climate",
         "rivers",
-        "erosion",
         "export",
     }
 )
 
 # Stage display names for stdout
 _STAGE_NAMES: dict[str, str] = {
-    "mesh": "1/9  CVT Mesh",
-    "plates": "2/9  Plate Tectonics",
-    "tectonics": "3/9  Tectonic Evolution",
-    "boundaries": "4/9  Boundary Detection",
-    "terrain": "5/9  Terrain Synthesis",
-    "climate": "6/9  Climate Simulation",
-    "erosion": "7/9  Erosion",
-    "rivers": "8/9  River Generation",
-    "export": "9/9  Export",
+    "mesh": "1/8  CVT Mesh",
+    "plates": "2/8  Plate Tectonics",
+    "tectonics": "3/8  Tectonic Evolution",
+    "boundaries": "4/8  Boundary Detection",
+    "terrain": "5/8  Terrain Synthesis",
+    "climate": "6/8  Climate Simulation",
+    "rivers": "7/8  River Generation",
+    "export": "8/8  Export",
 }
 
 
@@ -121,7 +118,6 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
         "boundaries",
         "terrain",
         "climate",
-        "erosion",
         "rivers",
         "export",
     ]
@@ -153,8 +149,8 @@ def run_terrain_pipeline(
         config: Pipeline configuration.
         output_dir: Directory for output files. If None, no files are saved.
         stages: Optional list of stages to run. If None, runs all stages.
-            Valid stages: mesh, plates, boundaries, terrain, climate, rivers,
-            erosion, export.
+            Valid stages: mesh, plates, tectonics, boundaries, terrain,
+            climate, rivers, export.
         cache: Optional caching configuration. When enabled, intermediate
             results are saved to ``_cache/`` and re-used on subsequent runs
             when inputs haven't changed.
@@ -418,50 +414,7 @@ def run_terrain_pipeline(
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
-    # ---- Stage 7: Erosion ----
-    if "erosion" in ordered:
-        _stage_begin("erosion")
-        try:
-            from .erosion import apply_erosion
-
-            erosion_progress_cb = None
-            _progress = None
-            if config.surface_evolution_time_myr > 0:
-                try:
-                    from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
-
-                    _progress = Progress(
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TextColumn("[dim]{task.percentage:>3.0f}%[/]"),
-                        TimeRemainingColumn(),
-                        transient=True,
-                    )
-                    task_id = _progress.add_task(
-                        "  Erosion (Myr)",
-                        total=config.surface_evolution_time_myr,
-                    )
-                    _progress.start()
-
-                    def _erosion_cb(completed: float, _total: float) -> None:
-                        _progress.update(task_id, completed=completed)
-
-                    erosion_progress_cb = _erosion_cb
-                except ImportError:
-                    pass
-
-            t = time.time()
-            apply_erosion(result.mesh, config, progress_callback=erosion_progress_cb)
-            if _progress is not None:
-                _progress.stop()
-            result.stages_completed.append("erosion")
-            result.stage_timings["erosion"] = time.time() - t
-            _stage_end(result.stage_timings["erosion"])
-        except NotImplementedError as e:
-            _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
-            logger.info("  skipped: %s", str(e).split("\n")[0])
-
-    # ---- Stage 8: Rivers ----
+    # ---- Stage 7: Rivers ----
     if "rivers" in ordered:
         _stage_begin("rivers")
         try:
