@@ -465,10 +465,23 @@ def run_terrain_pipeline(
     if "rivers" in ordered:
         _stage_begin("rivers")
         try:
-            from .river_generator import generate_rivers
+            from .river_generator import extract_river_features, generate_rivers
 
             t = time.time()
             generate_rivers(result.mesh, config)
+            # River vector layer: polylines for the frontend (width ∝ order).
+            # Rendering algorithm documented in geological-pipeline.md §10.
+            if output_dir is not None:
+                features = extract_river_features(result.mesh)
+                import json as _json
+
+                with (output_dir / "features.json").open("w", encoding="utf-8") as f:
+                    _json.dump(
+                        {"features": [ft.model_dump(mode="json") for ft in features]},
+                        f,
+                        ensure_ascii=False,
+                    )
+                logger.info("  features.json: %d river polylines", len(features))
             result.stages_completed.append("rivers")
             result.stage_timings["rivers"] = time.time() - t
             _stage_end(result.stage_timings["rivers"])

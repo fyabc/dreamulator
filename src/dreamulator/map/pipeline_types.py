@@ -385,7 +385,13 @@ class TerrainPipelineConfig:
     # it is scaled by the fractal law K_eff = K₀·(Δx/ref)^(n(1-H)) to compensate
     # for coarse-grid slope smoothing (S ∝ Δx^(H-1)), making the erosion rate
     # resolution-independent (see erosion.md §4.3).
-    fluvial_erodibility: float = 1.4e-3  # K₀ (m/yr at reference_cell_km)
+    # Calibration (2026-08-26): anchored to POST-OROGRAPHIC survival evidence,
+    # not Earth's instantaneous steady-state denudation (~0.05 mm/yr is
+    # tectonically maintained and planates an uplift-free sequential pipeline;
+    # measured K₀=52 e-fold ≈ 27 Myr vs observed Urals/Appalachians ~300 Myr).
+    # K₀=2 keeps orogens' p95 ≈ 1 km after 100 Myr of decay (scan {52..2},
+    # nacrea 200k); see competitor-analysis.md §4.2.2.
+    fluvial_erodibility: float = 2.0  # K₀ (m/yr at reference_cell_km)
     reference_cell_km: float = 1.0  # reference resolution for K scaling (km)
     terrain_hurst_exponent: float = 0.5  # H — fractal slope scaling (S ∝ Δx^(H-1))
     stream_power_m: float = 0.5  # discharge exponent
@@ -400,6 +406,14 @@ class TerrainPipelineConfig:
     # peak amplitude; ~ evaporation_base_mm (2000) for a good match to the
     # climate engine's zonal mean.
     precip_proxy_base_mm: float = 2000.0
+    # Sediment routing: "bagnold" = transport-limited downstream routing with
+    # Bagnold (1966) stream-power capacity (mass-conserving source-to-sink:
+    # basin fill + coastal deltas); "none" = legacy incision-only (mass lost).
+    sediment_routing: str = "bagnold"
+    # Bagnold sediment-transport efficiency ε (dimensionless): fraction of the
+    # stream power used to move sediment.  Literature range ~0.01–0.1
+    # (Bagnold 1966); default the midpoint 0.05.
+    sediment_transport_efficiency: float = 0.05
 
     @classmethod
     def from_yaml(cls, path: Path) -> TerrainPipelineConfig:

@@ -91,8 +91,8 @@ def main():
                 print(f"    {k:>6s}: {old_k.get(k,0):>5d} -> {new_k.get(k,0):<5d}  ({dk:+d})")
 
     # ── Biomes ──
-    b_old = Counter(c.get("biome") for c in old_cells[:n])
-    b_new = Counter(c.get("biome") for c in new_cells[:n])
+    b_old = Counter(c.get("biome") or "(none)" for c in old_cells[:n])
+    b_new = Counter(c.get("biome") or "(none)" for c in new_cells[:n])
     all_b = sorted(set(b_old) | set(b_new))
     print(f"\n  Biome changes (>10 cells):")
     for k in all_b:
