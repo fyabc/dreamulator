@@ -504,6 +504,11 @@ class MapFeature(BaseModel):
         default_factory=list,
         description="(lon, lat) pairs forming a polyline or a single point",
     )
+    order: int = Field(
+        default=0,
+        description="Stream order / width class (rivers, see hydrology "
+        "RIVER_ORDER_THRESHOLDS); 0 = not applicable",
+    )
 
 
 # ---------------------------------------------------------------------------

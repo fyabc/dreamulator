@@ -1230,6 +1230,31 @@ def detect_lakes_and_endorheic(
 | `river_id` | `str \| None` | 所属河流 id（`river_XXXX`），无河为 `None` |
 | `river_order` | `int` | Strahler 级数（0 = 无河） |
 
+### 8.7 河流矢量图层（features.json）与渲染
+
+**提取**（`river_generator.extract_river_features`，管线 rivers 阶段末尾调用，
+写入地图目录 `features.json`，`manager.get_features` / API / 静态导出直接消费）：
+
+- **河道 cell**：`river_order >= 1`。order 阈值按 cell 面积缩放（§8.3
+  `classify_rivers`），200k 网格下只画主干河网（陆域按汇水面积前 ~2–3%）——
+  世界地图的河流密度。
+- **折线追踪**：每个河道「源头」（无上游河道邻居的河道 cell）沿
+  `flow_direction` 向下游走；遇到 order 升高（汇合点）当前折线结束、从该
+  cell 起新折线——每条折线只含一个宽度级别。已被走过的 cell（主干先从别的
+  源头到达）使支流游走终止——支流止于主干线上。
+- **反子午线**：相邻点经度跳变 >180° 时折断折线。
+- 输出 `MapFeature(type=RIVER, coordinates=[(lon,lat)...], order=级别)`，
+  格式 `{"features": [...]}`。
+
+**渲染**（前端 `MapSvgOverlay`，SVG 矢量叠加层）：每条折线逐点经当前投影的
+`project()` 投到屏幕（等距圆柱 / Mollweide / Robinson 通用，与经纬网格同一
+机制）；线宽 `(0.55 + 0.5×order)/√zoom`、圆头/圆角连接，不透明度由图层开关
+控制（默认开，0.9）。制图学路线：51 km 网格上「看得见河」靠矢量线而非 DEM
+切谷（竞品分析 §4.2.1 结论；3D 球面渲染留后续）。
+
+nacrea 实测（200k，seed 42）：103 条折线（order 1 × 97、order 2 × 6），
+1365 个顶点。
+
 ### 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |

@@ -233,6 +233,15 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     kind: 'feature',
     group: 'overlay',
   },
+  {
+    id: 'rivers',
+    label: 'help:layer.rivers.label',
+    desc: 'help:layer.rivers.desc',
+    detail: 'help:layer.rivers.detail',
+    defaultOpacity: 0.9,
+    kind: 'feature',
+    group: 'overlay',
+  },
 ]
 
 // ---------------------------------------------------------------------------

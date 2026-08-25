@@ -201,3 +201,12 @@ export interface CVTMesh {
   vertices: CVTVertex[]
   regions: CVTRegion[]
 }
+
+/** A named linear/point map feature (rivers, ridges, …) from features.json. */
+export interface MapFeatureData {
+  id: string
+  name: string
+  type: string
+  coordinates: [number, number][]
+  order?: number
+}
