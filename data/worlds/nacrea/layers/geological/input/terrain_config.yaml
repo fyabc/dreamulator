@@ -174,13 +174,14 @@ isostasy:
   max_continental_elevation_m: 8443.0   # 地球 ~8848
   max_ocean_depth_m: 11550.0            # 地球 ~11034
 
-# ── 地表演化侵蚀（Phase 3B，terrain-pipeline §10）──────────────────────────
+# ── 地表演化侵蚀（Phase 3B，terrain-pipeline §9）──────────────────────────
 # stream power 侵蚀（唯一算法，隐式格式 Fastscape 式三角解，无条件稳定、大 dt 正确）。
+# K₀ 与 m=0.5/n=1.0 用全局默认（地球锚定标定，2026-08-26：复现地球大陆平均
+# 剥蚀率 ~0.05 mm/yr，见 scripts/calibrate_erodibility.py）——同物理，不做
+# 单世界特调。沉积路由（Bagnold）同默认开启。
 erosion_algorithm: stream_power
 stream_power_steps: 20
-surface_evolution_time_myr: 100
-stream_power_m: 0.7              # 流量指数（θ=m/n=0.5，折中：源头少切 vs 台阶感）
-stream_power_n: 1.4              # 坡度指数
+surface_evolution_time_myr: 10   # 最近一次构造幕以来的侵蚀时长；nacrea 构造活跃、
+                                 # 地表更新快，只需轻微侵蚀（重点是河网计算，非深切）
 climate_coupling: proxy          # none | proxy | full（full 未实现）
-fluvial_erodibility: 1.0e-3      # K₀（m/yr，@ reference_cell_km=1 km）
 hillslope_diffusivity: 5.5e-5    # D₀（m²/yr，@ reference_cell_km=1 km，分形缩放）

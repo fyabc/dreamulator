@@ -157,20 +157,20 @@ def test_erosion_breaches_dammed_basin():
     """Roadmap §7 #7 capability: erosion cuts open a blocked shallow strait.
 
     Layout (chain on the equator): ocean | low coast | sill A | sill B |
-    inland sea (below sea level, dammed by the sills) | upstream land draining
-    into the inland sea.  The sills are worn down to the sea-level clamp and
-    then breached so the inland sea connects to the ocean.
+    inland sea (below sea level, dammed by the sills) | low upstream land
+    draining into the inland sea (kept low so its sediment supply cannot fill
+    the basin before the sills are cut).  The sills are worn down to the
+    sea-level clamp and breached while the basin still holds water.
     """
     mesh = _make_chain_mesh(
-        [-200.0, 2.0, 20.0, 40.0, -50.0, 100.0, 80.0, 60.0], area_km2=1e6
+        [-200.0, 2.0, 20.0, 40.0, -50.0, 12.0, 11.0, 10.0], area_km2=1e6
     )
-    # Default erodibility K₀ — barrier cells incise without width dilution
-    # (concentrated notch).  At this synthetic geometry (1112 km cell spacing,
-    # default n=1 fractal scaling) cutting the 40 m sill to the clamp takes
-    # ~75 Myr of simulated time; nacrea's 51 km cells incise ~22× faster.
+    # Default (Earth-anchored) erodibility K₀ — barrier cells incise without
+    # width dilution (concentrated notch), so the 40 m sill reaches the clamp
+    # within the first step and the per-step breach pass opens it.
     config = TerrainPipelineConfig(
         erosion_algorithm="stream_power",
-        surface_evolution_time_myr=80.0,
+        surface_evolution_time_myr=5.0,
         stream_power_steps=5,
         sea_level_offset_m=0.0,
     )
