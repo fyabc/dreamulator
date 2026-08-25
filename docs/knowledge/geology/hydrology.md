@@ -2,10 +2,11 @@
 
 > 实现：`src/dreamulator/map/hydrology.py` · 设计：`docs/design/geological-pipeline.md` §9
 
-球面 CVT 网格上的河流网络生成，是**侵蚀后地形**的一次性水文学产品：洼地填平 →
+球面 CVT 网格上的河流网络生成，是**地形合成后地形**的一次性水文学产品：洼地填平 →
 D8 流向 → 流量累积 → 河网分级/提取，填入 `VoronoiCell` 的
-`flow_direction` / `flow_accumulation` / `river_id` / `river_order`。侵蚀循环
-（erosion.py）每次迭代复用同一套纯函数，避免两套水文逻辑漂移。
+`flow_direction` / `flow_accumulation` / `river_id` / `river_order`，并提取为
+河流矢量图层（features.json）。2026-08-26 起流水侵蚀已移除（见
+`docs/design/pipelines/geological-pipeline.md` §9），水文仅做河网提取。
 
 ---
 
@@ -17,7 +18,7 @@ CVT 地形合成会产出大量局部洼地（pit）：直接跑 D8 会在每个
 1. 从海洋 cell（`elevation < sea_level`）出发，用最小堆按高程向外扩张；
 2. 每个陆 cell 的临时标高推到 `max(elevation, spill)`（spill = 已填邻居的标高）；
 3. 填平只在**临时数组**上进行，**不写回** `cell.elevation`——最终河网提取仍在真实
-   （已侵蚀）地形上做；
+   地形上做；
 4. 内流盆地（无通海出口）在连通球面上不存在（priority-flood 从海洋可达全部 cell），
    完整的湖泊/内流水收支留后续。
 

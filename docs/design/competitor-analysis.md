@@ -142,22 +142,23 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 | [**Landlab**](https://landlab.github.io/) | 地表过程建模框架：河流/坡面/冰川/海岸线 | D8 流向/流量累积/隐式 stream power 侵蚀已实现（同算法族）；仍可复用的组件：MFD 多向流、transport-limited 泥沙搬运 |
 | [**Fastscape**](https://fastscape.org/) | 河流切割 + 坡面扩散地表演化 | 轻量级，算法可参考 |
 
-### 4.2.1 侵蚀业界做法对照（2026-08-25 调研）
+### 4.2.1 侵蚀业界做法对照（2026-08-25 调研，2026-08-26 侵蚀移除后修订）
 
-dreamulator 侵蚀（`map/erosion.py`：Fastscape 式隐式 stream power + 坡面扩散 +
-地貌降水代理）算法族与科学 LEM 一致。按「世界尺度上侵蚀该产出什么」对照业界：
+dreamulator 曾实现流水侵蚀（Fastscape 式隐式 stream power + 坡面扩散 + 地貌降水
+代理 + Bagnold 沉积路由），算法族与科学 LEM 一致，**但 2026-08-26 已从 200k 地质
+引擎移除**（尺度不匹配，见结论）。按「世界尺度上侵蚀该产出什么」对照业界：
 
 | 阵营 | 代表 | 做法 | 对 dreamulator 的启示 |
 |------|------|------|---------------------|
-| 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | 沉积路由已落地（2026-08-26，Bagnold 输沙能力 + 有界沉积，`erosion.md` §5.5）；海进程、挠曲均衡回弹仍缺 |
+| 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | 它们在 100 m–10 km 分辨率做侵蚀（河谷可分辨）；dreamulator 200k（51 km）河谷亚网格，故侵蚀移除 |
 | 同赛道世界生成器 | [Gleba](https://calandiel.itch.io/gleba)（闭源） | 侵蚀定位为「土壤搬运」（realistic soil transport and erosion）；**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**为显式特性 | 沉积物搬运是业界共识；湖泊/内流盆地、冰川侵蚀也属特性清单（算法细节闭源不可得） |
-| 局部精修工具 | Gaea / World Creator / World Machine | 米级水力侵蚀，只做几 km² 的局部资产（World Creator 2025.1 实时侵蚀/沉积/水/熔岩） | 「可见的侵蚀纹理」属于这一层——与 roadmap P1 局部地形精细化管线 + `pipelines/gaea-refinement.md` 同向，不在全球 DEM 上做 |
-| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 「看得见河」方案：矢量河流图层（已落地，2026-08-25，`geological-pipeline.md` §8.7） |
+| 局部精修工具 | Gaea / World Creator / World Machine | 米级水力侵蚀，只做几 km² 的局部资产（World Creator 2025.1 实时侵蚀/沉积/水/熔岩） | 「可见的侵蚀纹理」属于这一层——河谷雕刻归 Gaea 局地精修（`pipelines/gaea-refinement.md`），不在全球 DEM 上做 |
+| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 「看得见河」方案：矢量河流图层（已落地，`geological-pipeline.md` §8.7） |
 
-**结论**：全球层侵蚀的 KPI 是大尺度地貌 + 物质再分配 + 水系一致性，不是可见河谷
-——51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见河谷，
-ETOPO1 导入 200k 实测确认）；可见性由矢量河流图层 + Gaea 局部精修承担。
-执行清单见 `private/todos/today.md` #5。
+**结论**：51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见
+河谷，ETOPO1 导入 200k 实测确认）。流水侵蚀从 200k 地质引擎移除；河网可见性由
+**矢量河流图层**承担，河谷雕刻归 **Gaea 局地精修**。大陆内部低地由地形合成的
+「内部低地」解决（非侵蚀）。执行清单见 `private/todos/today.md` #5。
 
 ### 4.2.2 构造-地表过程耦合：业界做法调研（2026-08-26）
 
