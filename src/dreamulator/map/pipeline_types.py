@@ -357,63 +357,12 @@ class TerrainPipelineConfig:
     ocean_max_age_myr: float = 100.0  # steady-state age (lithosphere equilibrates)
     ocean_max_age_depth_m: float = 5500.0  # max depth from cooling alone (no trench)
 
-    # ---- Surface evolution / fluvial erosion (Phase 3B, terrain-pipeline §10) ----
-    # Erosion algorithm:
-    #   "none"         — no erosion (terrain unchanged; the default).
-    #   "stream_power" — iterative surface evolution (stream power + hillslope
-    #                    diffusion, time-driven).  Precision is set by
-    #                    ``stream_power_dt_fraction``: small = precise/slow,
-    #                    large = coarse/fast (same physics, blurrier result).
-    erosion_algorithm: str = "none"
-    # Total erosion duration (Myr).  0 = disabled: terrain is emitted unchanged.
-    # Resolution-independent: the internal dt is CFL-adaptive, so the number of
-    # steps adapts to the mesh resolution while the total simulated time is fixed.
-    surface_evolution_time_myr: float = 0.0
-    # Number of uniform time steps (dt = surface_evolution_time_myr / steps).
-    # The implicit scheme is unconditionally stable, so the step count is small
-    # (~20) and independent of mesh resolution; more steps = sharper channels,
-    # fewer = smoother (same total erosion).
-    stream_power_steps: int = 20
-    # Precipitation forcing for the erosion loop.  "none" = uniform precip;
-    # "proxy" = geomorphic precipitation proxy (latitude base + simple orographic
-    # enhancement — a pure function of terrain/latitude, never reads the climate
-    # engine which is downstream, avoiding a DAG cycle); "full" = read climate
-    # output (interface only, not implemented — geological runs before climate).
-    climate_coupling: str = "proxy"
-    # Stream-power incision law E = K · Q^m · S^n (Howard 1994).  This is K₀, the
-    # erodibility at the reference resolution ``reference_cell_km``; at run time
-    # it is scaled by the fractal law K_eff = K₀·(Δx/ref)^(n(1-H)) to compensate
-    # for coarse-grid slope smoothing (S ∝ Δx^(H-1)), making the erosion rate
-    # resolution-independent (see erosion.md §4.3).
-    # Calibration (2026-08-26): anchored to POST-OROGRAPHIC survival evidence,
-    # not Earth's instantaneous steady-state denudation (~0.05 mm/yr is
-    # tectonically maintained and planates an uplift-free sequential pipeline;
-    # measured K₀=52 e-fold ≈ 27 Myr vs observed Urals/Appalachians ~300 Myr).
-    # K₀=2 keeps orogens' p95 ≈ 1 km after 100 Myr of decay (scan {52..2},
-    # nacrea 200k); see competitor-analysis.md §4.2.2.
-    fluvial_erodibility: float = 2.0  # K₀ (m/yr at reference_cell_km)
-    reference_cell_km: float = 1.0  # reference resolution for K scaling (km)
-    terrain_hurst_exponent: float = 0.5  # H — fractal slope scaling (S ∝ Δx^(H-1))
-    stream_power_m: float = 0.5  # discharge exponent
-    stream_power_n: float = 1.0  # slope exponent
-    # Hillslope diffusion ∂h/∂t = D ∇²h (linear creep / talus smoothing).  This
-    # is D₀, the diffusivity at the reference resolution ``reference_cell_km``;
-    # at run time it is scaled by D_eff = D₀·(Δx/ref)^(2-H) to compensate the
-    # fractal curvature scaling ∇²h ∝ Δx^(H-2), making the diffusion rate
-    # resolution-independent (see erosion.md §3).
-    hillslope_diffusivity: float = 1e-5  # D₀ (m²/yr at reference_cell_km)
-    # Base precipitation for the geomorphic proxy (mm/yr) — the ITCZ convective
-    # peak amplitude; ~ evaporation_base_mm (2000) for a good match to the
-    # climate engine's zonal mean.
-    precip_proxy_base_mm: float = 2000.0
-    # Sediment routing: "bagnold" = transport-limited downstream routing with
-    # Bagnold (1966) stream-power capacity (mass-conserving source-to-sink:
-    # basin fill + coastal deltas); "none" = legacy incision-only (mass lost).
-    sediment_routing: str = "bagnold"
-    # Bagnold sediment-transport efficiency ε (dimensionless): fraction of the
-    # stream power used to move sediment.  Literature range ~0.01–0.1
-    # (Bagnold 1966); default the midpoint 0.05.
-    sediment_transport_efficiency: float = 0.05
+    # Fluvial erosion / sediment routing was removed (2026-08-26): at the 200k
+    # (51 km) geological-engine scale real river valleys (5–50 km wide) are all
+    # sub-grid, so fluvial erosion there produced one-cell-wide artificial
+    # gullies; river carving belongs to the final Gaea local-refinement step
+    # (metre scale).  The river NETWORK (flow routing + river vector layer) is
+    # kept — see hydrology.py / river_generator.py.
 
     @classmethod
     def from_yaml(cls, path: Path) -> TerrainPipelineConfig:

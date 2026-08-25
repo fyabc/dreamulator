@@ -9,7 +9,6 @@
 - `cortial_2019_notes.md` — Cortial et al. 2019 论文解读（自 geological-pipeline.md 附录 D 上浮）
 - `tidal_plate_speed.md` — 潮汐加热→板块速度标度律（v ∝ q^β、Valencia vs O'Neill&Lenardic 争论、金星悖论；2026-08）
 - `hydrology.md` — D8 流向 / priority-flood 洼地填平 / 流量累积 / 河网分级（2026-08）
-- `erosion.md` — 流水侵蚀：stream power + 坡面扩散 + 地貌降水代理（2026-08）
 
 ## 关键参考
 
