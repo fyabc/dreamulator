@@ -1395,7 +1395,7 @@ E = K · Q^m · S^n
 | `surface_evolution_time_myr` | 0 | 0 – 1000 | 侵蚀总时长（Myr；0 = 禁用，分辨率无关） |
 | `stream_power_steps` | 20 | 1 – 200 | 隐式格式的均匀大步数（dt = time/steps） |
 | `climate_coupling` | `"proxy"` | none / proxy / full | 降水强迫源 |
-| `fluvial_erodibility` | 1.4e-3 | 1e-4 – 1e-2 | 参考分辨率下的侵蚀系数 K₀（m/yr） |
+| `fluvial_erodibility` | 52 | 10 – 100 | 参考分辨率下的侵蚀系数 K₀（m/yr）；地球锚定标定（复现地球大陆平均剥蚀率 ~0.05 mm/yr），见 `knowledge/geology/erosion.md` §6.1 |
 | `reference_cell_km` | 1.0 | — | K 缩放的参考分辨率（km） |
 | `terrain_hurst_exponent` | 0.5 | 0.3 – 0.7 | 地形 Hurst 指数 H（坡度分形标度 S ∝ Δx^(H−1)） |
 | `stream_power_m` | 0.5 | 0.3 – 0.7 | 流量指数 m |

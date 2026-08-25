@@ -180,6 +180,11 @@ def _apply_stream_power_erosion(
             ocean_comp,
             barrier_mask,
         )
+        # Breach per step, right after incision (before sediment routing): a
+        # sill worn to the clamp while its basin still holds water opens
+        # immediately — otherwise a basin that fills with sediment within the
+        # same step would lose its opening window.
+        h = _breach_sills(h, is_land, neighbors, sea_level)
         if config.sediment_routing == "bagnold":
             h = _route_sediment(
                 h,
@@ -193,11 +198,11 @@ def _apply_stream_power_erosion(
                 sea_level,
                 config,
                 barrier_mask,
+                water_comp,
+                ocean_comp,
             )
         if progress_callback is not None:
             progress_callback((step + 1) * dt / 1e6, config.surface_evolution_time_myr)
-
-    h = _breach_sills(h, is_land, neighbors, sea_level)
 
     for i, c in enumerate(mesh.cells):
         if is_land[i]:
@@ -260,15 +265,22 @@ def _implicit_step(
     """One unconditionally-stable implicit step (stream power + hillslope diffusion)."""
     n = len(h)
 
+    # Dynamic land mask: anything at/above sea level is fluvially active land
+    # — regardless of origin, so shoaled water cells (deltas) behave as land
+    # and submerged cells (breached sills) are excluded from incision and
+    # from the sea-level clamp (which would otherwise lift them back above
+    # sea level every step).
+    active = h >= sea_level
+
     # 1. Drainage.
-    filled, connected = priority_flood_fill(h, is_land, neighbors)
-    flow_dir = compute_flow_directions(filled, is_land, neighbors, dists_km)
-    flow_dir = route_flat_cells(filled, is_land, connected, neighbors, flow_dir)
-    accum = compute_flow_accumulation(flow_dir, is_land, area_km2)
+    filled, connected = priority_flood_fill(h, active, neighbors)
+    flow_dir = compute_flow_directions(filled, active, neighbors, dists_km)
+    flow_dir = route_flat_cells(filled, active, connected, neighbors, flow_dir)
+    accum = compute_flow_accumulation(flow_dir, active, area_km2)
 
     # 2. Discharge.
     q_ref = config.precip_proxy_base_mm * 1e6
-    q = np.where(is_land, precip_mm * np.maximum(accum, area_km2), 0.0) / q_ref
+    q = np.where(active, precip_mm * np.maximum(accum, area_km2), 0.0) / q_ref
 
     # 3. Stream-power implicit solve (n=1 → linear triangular system).
     #    c_i = dt · K_eff · q_i^m / d_ij · width_frac;
@@ -283,12 +295,12 @@ def _implicit_step(
     downstream = np.full(n, -1, dtype=np.int32)
     c = np.zeros(n)
     for i in range(n):
-        if not is_land[i]:
+        if not active[i]:
             continue
         j = flow_dir[i]
         if j < 0:
             continue
-        if not is_land[j] and water_comp[j] == ocean_comp and not barrier_mask[i]:
+        if not active[j] and water_comp[j] == ocean_comp and not barrier_mask[i]:
             continue  # open-ocean coastline: static in v1 (marine processes P2);
             # barrier cells damming an inland sea are the exception — they must
             # incise toward sea level so the strait can open
@@ -317,12 +329,12 @@ def _implicit_step(
     def _down_level(i: int) -> float:
         """Effective downstream elevation for the solve (water → sea level)."""
         j = downstream[i]
-        if is_land[j]:
+        if active[j]:
             return float(h_new[j])
         return max(float(h[j]), sea_level)
 
     h_new = h.copy()
-    for i in _reverse_topological_order(flow_dir, is_land):
+    for i in _reverse_topological_order(flow_dir, active):
         j = downstream[i]
         if j >= 0:
             h_new[i] = (h[i] + c[i] * _down_level(i)) / (1.0 + c[i])
@@ -334,12 +346,12 @@ def _implicit_step(
     for _ in range(_DIFF_JACOBI_ITERS):
         h_next = h_new.copy()
         for i in range(n):
-            if not is_land[i]:
+            if not active[i]:
                 continue
             num = h_new[i]
             den = 1.0
             for k, j in enumerate(neighbors[i]):
-                if not is_land[j]:
+                if not active[j]:
                     continue
                 d = dists_m[i][k]
                 if d <= 0:
@@ -355,12 +367,12 @@ def _implicit_step(
     # own starting elevation (flat-routed cells can have an *uphill* downstream
     # parent — raising them would fabricate deposition).
     for i in range(n):
-        if not is_land[i]:
+        if not active[i]:
             continue
         j = downstream[i]
         if j >= 0 and h_new[i] < _down_level(i):
             h_new[i] = min(_down_level(i), h[i])
-    h_new[is_land] = np.maximum(h_new[is_land], sea_level + 1.0)
+    h_new[active] = np.maximum(h_new[active], sea_level + 1.0)
     return h_new
 
 
@@ -376,6 +388,8 @@ def _route_sediment(
     sea_level: float,
     config: TerrainPipelineConfig,
     barrier_mask: np.ndarray,
+    water_comp: np.ndarray,
+    ocean_comp: int,
 ) -> np.ndarray:
     """Route this step's erosion product downstream and deposit it.
 
@@ -405,13 +419,16 @@ def _route_sediment(
         Elevation array with deposition applied (land and water cells).
     """
     n = len(h)
-    filled, connected = priority_flood_fill(h, is_land, neighbors)
-    flow_dir = compute_flow_directions(filled, is_land, neighbors, dists_km)
-    flow_dir = route_flat_cells(filled, is_land, connected, neighbors, flow_dir)
-    accum = compute_flow_accumulation(flow_dir, is_land, area_km2)
+    # Dynamic mask: anything below sea level acts as water (original ocean,
+    # breached sills); shoaled cells act as land.
+    active = h >= sea_level
+    filled, connected = priority_flood_fill(h, active, neighbors)
+    flow_dir = compute_flow_directions(filled, active, neighbors, dists_km)
+    flow_dir = route_flat_cells(filled, active, connected, neighbors, flow_dir)
+    accum = compute_flow_accumulation(flow_dir, active, area_km2)
 
     q_ref = config.precip_proxy_base_mm * 1e6
-    q = np.where(is_land, precip_mm * np.maximum(accum, area_km2), 0.0) / q_ref
+    q = np.where(active, precip_mm * np.maximum(accum, area_km2), 0.0) / q_ref
 
     n_steps = max(config.stream_power_steps, 1)
     dt_s = config.surface_evolution_time_myr * 1e6 / n_steps * _SECONDS_PER_YEAR
@@ -420,19 +437,64 @@ def _route_sediment(
     supply_m3 = np.maximum(0.0, h_prev - h) * area_km2
     load = supply_m3.copy()
     dep = np.zeros(n)
+    # Spill level of each water body: ocean-connected water shoals toward sea
+    # level; an ENDORHEIC basin fills only up to the rim (lowest surrounding
+    # land) — beyond that the lake overtops and flow reroutes.  Bounded
+    # accommodation (fill-to-spill) is what prevents runaway sediment piles.
+    spill_h = np.full(n, sea_level)
+    for j in range(n):
+        if active[j] or water_comp[j] == ocean_comp:
+            continue
+        rim = [float(h[nb]) for nb in neighbors[j] if active[nb]]
+        if rim:
+            spill_h[j] = min(rim)
+    acc_left = np.where(active, 0.0, np.maximum(0.0, spill_h - h) * area_km2)
+    discarded_m3 = 0.0
 
     # Source → sink (reverse of the downstream-first solve order).
-    order = _reverse_topological_order(flow_dir, is_land)[::-1]
+    order = _reverse_topological_order(flow_dir, active)[::-1]
     for i in order:
         if load[i] <= 0.0:
             continue
         j = int(flow_dir[i])
-        if j < 0:
-            dep[i] += load[i]  # unrouted sink: deposit in place
+        if j >= 0 and not active[j]:
+            # Water body: fill toward its spill level.
+            put = min(load[i], acc_left[j])
+            dep[j] += put
+            acc_left[j] -= put
+            rem = load[i] - put
+            if rem > 0.0:
+                if water_comp[j] == ocean_comp:
+                    # Ocean: push the excess into deeper connected water.
+                    unplaced = _spread_into_water(
+                        j, rem, dep, acc_left, active, neighbors
+                    )
+                    if unplaced > 0.0:
+                        # Connected water is at its spill level everywhere:
+                        # hold the rest in the donor channel (capped at the
+                        # spill level); anything beyond is unresolved at this
+                        # coarse time step (avulsion — the real system reroutes
+                        # rivers faster than one dt).
+                        spill_i = max(float(h[j]), sea_level)
+                        cap_i = max(0.0, (spill_i - h[i])) * area_km2[i]
+                        put_i = min(unplaced, cap_i)
+                        dep[i] += put_i
+                        discarded_m3 += unplaced - put_i
+                else:
+                    # Endorheic basin at its spill level: same bounded hold.
+                    cap_i = max(0.0, (spill_h[j] - h[i])) * area_km2[i]
+                    keep = min(rem, cap_i)
+                    dep[i] += keep
+                    discarded_m3 += rem - keep
             load[i] = 0.0
             continue
-        if not is_land[j]:
-            dep[j] += load[i]  # water body: delta / lake-fill deposition
+        if j < 0:
+            # Unrouted land sink: fill to the lowest neighbour, then spill.
+            rim = [float(h[nb]) for nb in neighbors[i] if active[nb]]
+            spill = min(rim) if rim else float(h[i])
+            put = min(load[i], max(0.0, (spill - h[i])) * area_km2[i])
+            dep[i] += put
+            discarded_m3 += load[i] - put
             load[i] = 0.0
             continue
         if barrier_mask[i]:
@@ -450,14 +512,58 @@ def _route_sediment(
         q_m3s = q[i] * q_ref * _MM_KM2_PER_YR_TO_M3S
         cap = coeff * q_m3s * slope * dt_s
         if load[i] > cap:
-            dep[i] += load[i] - cap
-            load[i] = cap
+            # Fill-and-spill: deposition cannot raise the cell above its
+            # spill level (the downstream elevation) within one step; the
+            # excess bypasses downstream.  This bounds per-step pile-up.
+            dep_max = max(0.0, (h[j] - h[i])) * area_km2[i]
+            put = min(load[i] - cap, dep_max)
+            dep[i] += put
+            load[i] -= put
         load[j] += load[i]
 
+    if discarded_m3 > 0.0:
+        logger.info(
+            "Sediment routing: %.0f km³ left unresolved (avulsion sub-dt)",
+            discarded_m3 / 1e9,
+        )
     if not dep.any():
         return h
     out = h + dep / np.maximum(area_km2, 1e-9)
     return np.asarray(out)
+
+
+def _spread_into_water(
+    entry: int,
+    rem_m3: float,
+    dep: np.ndarray,
+    acc_left: np.ndarray,
+    active: np.ndarray,
+    neighbors: list[list[int]],
+) -> float:
+    """Spread excess sediment into connected water cells (BFS).
+
+    Fills each visited water cell up to its remaining accommodation
+    (shoaling toward sea level) and moves on until the load is placed.  The
+    deep ocean has enormous accommodation, so the walk usually terminates
+    quickly.  Returns whatever could not be placed (caller applies a bounded
+    fallback — this function itself never creates unbounded deposition).
+    """
+    rem = rem_m3
+    visited = {entry}
+    frontier = deque(nb for nb in neighbors[entry] if not active[nb])
+    while rem > 0.0 and frontier:
+        nxt = frontier.popleft()
+        if nxt in visited:
+            continue
+        visited.add(nxt)
+        put = min(rem, acc_left[nxt])
+        dep[nxt] += put
+        acc_left[nxt] -= put
+        rem -= put
+        for nb in neighbors[nxt]:
+            if not active[nb] and nb not in visited:
+                frontier.append(nb)
+    return rem
 
 
 def _minimax_from_ocean(
