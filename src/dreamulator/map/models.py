@@ -277,7 +277,8 @@ class VoronoiCell(BaseModel):
     # Erosion properties (filled by erosion loop — map/erosion.py)
     net_erosion_m: float = Field(
         default=0.0,
-        description="Net elevation change from fluvial erosion (m; negative = eroded)",
+        description="Net elevation change from fluvial erosion + deposition "
+        "(m; negative = eroded, positive = deposition)",
     )
     hotspot_id: str | None = Field(
         default=None,
@@ -503,6 +504,11 @@ class MapFeature(BaseModel):
     coordinates: list[tuple[float, float]] = Field(
         default_factory=list,
         description="(lon, lat) pairs forming a polyline or a single point",
+    )
+    order: int = Field(
+        default=0,
+        description="Stream order / width class (rivers, see hydrology "
+        "RIVER_ORDER_THRESHOLDS); 0 = not applicable",
     )
 
 

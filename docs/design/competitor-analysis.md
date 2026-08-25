@@ -149,15 +149,44 @@ dreamulator 侵蚀（`map/erosion.py`：Fastscape 式隐式 stream power + 坡�
 
 | 阵营 | 代表 | 做法 | 对 dreamulator 的启示 |
 |------|------|------|---------------------|
-| 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | dreamulator 缺侵蚀的「另一半」——目前只下切不沉积，物质在海岸线丢失，质量不守恒 |
+| 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | 沉积路由已落地（2026-08-26，Bagnold 输沙能力 + 有界沉积，`erosion.md` §5.5）；海进程、挠曲均衡回弹仍缺 |
 | 同赛道世界生成器 | [Gleba](https://calandiel.itch.io/gleba)（闭源） | 侵蚀定位为「土壤搬运」（realistic soil transport and erosion）；**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**为显式特性 | 沉积物搬运是业界共识；湖泊/内流盆地、冰川侵蚀也属特性清单（算法细节闭源不可得） |
 | 局部精修工具 | Gaea / World Creator / World Machine | 米级水力侵蚀，只做几 km² 的局部资产（World Creator 2025.1 实时侵蚀/沉积/水/熔岩） | 「可见的侵蚀纹理」属于这一层——与 roadmap P1 局部地形精细化管线 + `pipelines/gaea-refinement.md` 同向，不在全球 DEM 上做 |
-| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 最便宜的「看得见河」方案：矢量河流图层；dreamulator 后端已有 `river_id`/`river_order`，前端无渲染层 |
+| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 「看得见河」方案：矢量河流图层（已落地，2026-08-25，`geological-pipeline.md` §8.7） |
 
 **结论**：全球层侵蚀的 KPI 是大尺度地貌 + 物质再分配 + 水系一致性，不是可见河谷
 ——51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见河谷，
 ETOPO1 导入 200k 实测确认）；可见性由矢量河流图层 + Gaea 局部精修承担。
 执行清单见 `private/todos/today.md` #5。
+
+### 4.2.2 构造-地表过程耦合：业界做法调研（2026-08-26）
+
+顺序管线「构造段 → 侵蚀段」在无抬升补偿时会把地形削成准平原（实测：地球锚定
+K₀ 下 nacrea 100 Myr 起伏度 1365→37 m）。各引擎如何处理构造与地表过程的时间耦合：
+
+| 引擎 | 耦合方式 | 要点 |
+|------|---------|------|
+| **Landlab**（标准 LEM 工具箱） | **抬升率场 + 逐时间步循环** | 构造 = 预设抬升率场（均匀/空间变化/时变）：`elevation += uplift_rate·dt`，随后 `diffusion.run_one_step(dt)` + `stream_power.run_one_step(dt)`；**循环内无板块动力学**。组件：StreamPowerRiverIncision / ErosionDeposition / SPACE（基岩+沉积物同时侵蚀） |
+| **Badlands**（盆地+地貌动力学，TIN） | **构造从外部输入** | 不模拟板块动力学；GPlates 运动学重建 → Badlands（单向驱动）；Underworld2 地幔动力学 ↔ Badlands 双向耦合为 2026 GMD ALE 方案论文——研究前沿，非常重 |
+| **Cortial 2019**（本项目构造基础） | **构造循环内一阶衰减** | `z −= (z/z_c)·ε_c·δt`（ε_c = 0.03 mm/yr，z_c = 10 km → e-fold ≈ 333 Myr）+ 海沟沉积 0.3 mm/yr；无水力侵蚀、明确留接口。本项目 `tectonic_simulator._erosion` 已实现同款 |
+| **Gleba**（同赛道，闭源） | 公开信息只见顺序管线 | 板块 → 地表水/侵蚀 → 气候；无耦合循环证据 |
+| **World Machine / Gaea** | 静态侵蚀滤镜 | 无时间演化 |
+
+**结论**：
+
+1. **业界主流 = 「预设构造速率场 + 地表过程按 Δt 耦合」**（Landlab 循环结构）；
+   全双向耦合（侵蚀反作用于板块边界）只在研究前沿（Underworld2+Badlands，
+   需地幔尺度地球动力学代码），程序化世界生成工具无现成实现。
+2. dreamulator 演进路线：① 顺序 + K₀ 按**造山后存活证据**标定（乌拉尔/
+   阿巴拉契亚 ~300 Myr 保 ~1 km 起伏；被动陆块剥蚀 0.005–0.02 mm/yr）→
+   ② 抬升率场 + Δt 耦合（≈ 把 Cortial 预留的水力侵蚀接口补上，物理一致版）→
+   ③ 全双向耦合（远期，对齐学术前沿）。
+3. 自洽性检查：Cortial ε_c 给 e-fold 333 Myr（与造山后存活证据一致）；地球瞬时
+   稳态锚定的 K₀=52 实测 e-fold ≈ 27 Myr，快 ~12×——稳态锚点不适用于无抬升
+   补偿的顺序管线（0.05 mm/yr 是构造供给维持的值）。
+4. K₀ 扫描（nacrea 200k，100 Myr，2026-08-26）：K₀=52→20→10→5 均把陆地中位
+   削到 ≤3 m（准平原化对 K₀ 不敏感）；**K₀=2** 保 p95 ≈ 1 km、max 7.5 km
+   （山系残留 + 低地准平原——造山后世界的物理正确形态）。
 
 ### 4.3 气候层
 

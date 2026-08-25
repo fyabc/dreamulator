@@ -1230,6 +1230,31 @@ def detect_lakes_and_endorheic(
 | `river_id` | `str \| None` | 所属河流 id（`river_XXXX`），无河为 `None` |
 | `river_order` | `int` | Strahler 级数（0 = 无河） |
 
+### 8.7 河流矢量图层（features.json）与渲染
+
+**提取**（`river_generator.extract_river_features`，管线 rivers 阶段末尾调用，
+写入地图目录 `features.json`，`manager.get_features` / API / 静态导出直接消费）：
+
+- **河道 cell**：`river_order >= 1`。order 阈值按 cell 面积缩放（§8.3
+  `classify_rivers`），200k 网格下只画主干河网（陆域按汇水面积前 ~2–3%）——
+  世界地图的河流密度。
+- **折线追踪**：每个河道「源头」（无上游河道邻居的河道 cell）沿
+  `flow_direction` 向下游走；遇到 order 升高（汇合点）当前折线结束、从该
+  cell 起新折线——每条折线只含一个宽度级别。已被走过的 cell（主干先从别的
+  源头到达）使支流游走终止——支流止于主干线上。
+- **反子午线**：相邻点经度跳变 >180° 时折断折线。
+- 输出 `MapFeature(type=RIVER, coordinates=[(lon,lat)...], order=级别)`，
+  格式 `{"features": [...]}`。
+
+**渲染**（前端 `MapSvgOverlay`，SVG 矢量叠加层）：每条折线逐点经当前投影的
+`project()` 投到屏幕（等距圆柱 / Mollweide / Robinson 通用，与经纬网格同一
+机制）；线宽 `(0.55 + 0.5×order)/√zoom`、圆头/圆角连接，不透明度由图层开关
+控制（默认开，0.9）。制图学路线：51 km 网格上「看得见河」靠矢量线而非 DEM
+切谷（竞品分析 §4.2.1 结论；3D 球面渲染留后续）。
+
+nacrea 实测（200k，seed 42）：103 条折线（order 1 × 97、order 2 × 6），
+1365 个顶点。
+
 ### 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |
@@ -1251,8 +1276,8 @@ def detect_lakes_and_endorheic(
 > [knowledge/geology/erosion.md](../../knowledge/geology/erosion.md)。
 >
 > 算法由 `erosion_algorithm` 选择（当前仅 `stream_power`，保留为将来可能的不同
-> 算法留扩展位）；侵蚀精度由 `stream_power_dt_fraction` 旋钮控制——大值=粗/快、
-> 小值=精确/慢，同一套物理、只差时间离散精度。
+> 算法留扩展位）；时间离散由 `stream_power_steps` 控制（隐式格式无条件稳定，
+> 步数少而均匀，~20）。
 
 ### 9.1 总体：层内时间循环
 
@@ -1323,13 +1348,46 @@ E = K · Q^m · S^n
 - **分形 K 缩放**：粗网格平滑了坡度（`S ∝ Δx^(H−1)`），运行时按
   `K_eff = K₀·(Δx/reference_cell_km)^(n(1−H))` 自动换算，使输入的 `K₀` 分辨率无关。
 
-### 9.6 沉积物搬运（第二批，暂不做）
+### 9.6 亚网格河道宽度稀释与内流海缺口（2026-08-25）
 
-首版**只做侵蚀下切 + 坡面扩散**，沉积物 / 三角洲搬运留第二批：它是独立物理
-（沉积通量平衡、海岸三角洲形态），还牵扯海岸与海平面交互。当前 `net_erosion_m`
-字段只记录诊断量（侵蚀 − / 沉积 +），不做真实搬运。
+两块网格尺度修正，详见 [knowledge/geology/erosion.md](../../knowledge/geology/erosion.md)
+§3.1/§3.2：
 
-### 9.7 参数表
+- **河道宽度稀释**：stream power 下切的是河床（宽度 `w = 5·Q^0.5`，Leopold &
+  Maddock 1953），不是整个 cell——cell 平均下切乘 `min(1, w/d)`。没有它，D8
+  单流向把全部流量集中进单 cell 宽细流，在 51 km 网格上切出深达 1–2 km 的
+  网格级峡谷（真实地球同分辨率无此特征）。**封堵坝 cell 豁免**：海峡下切是
+  集中缺口推进，按全河道速率下切。
+- **基准面规则**：陆 cell 下限 clamp 到 `sea_level + 1 m`；排入开阔海洋的陆
+  cell 静止（无输沙极限的 detachment-limited 律会夷平全部低地，nacrea 回归
+  验证过）；排入**未连通外洋的内流海**的陆 cell 向海平面基准面下切。
+- **缺口冲开**：侵蚀结束后跑一次海侵通道——minimax Dijkstra 找每个内流海
+  通向大洋的最低鞍部（= priority flood 溢流水位）；鞍部已被切到海平面时，把
+  路径上残余陆 cell 降到 `sea_level − 5 m`，内流海连通外洋。实现 roadmap
+  §7 #7 能力需求（侵蚀冲开被堵海峡），验收测试
+  `tests/test_map/test_erosion.py::test_erosion_breaches_dammed_basin`。
+
+### 9.7 沉积物搬运与沉积（Bagnold 输沙能力，2026-08-26 落地）
+
+`sediment_routing: "bagnold"`（默认；`"none"` = 旧行为，下切物质在海岸丢失）。
+每个侵蚀子步后跑一次**质量守恒的 source-to-sink 路由**：
+
+1. **供给**：子步内降低的体积（`max(0, h_prev − h)·area`）成为泥沙载荷；
+2. **输沙能力**（Bagnold 1966）：`cap = ε·(ρw/ρs)·Q·S·dt`——ε 为 Bagnold
+   效率（文献 ~0.01–0.1，默认 0.05），ρw/ρs = 1000/2650。载荷超能力就地
+   沉积，其余传向下游（不做额外床沙卷入——下切已由 stream power 步完成）；
+3. **汇**：载荷到达水体 cell 全部沉积——三角洲前积 / 陆架建造（外洋）、
+   湖泊充填（内流海）；
+4. **封堵坝豁免**：坝路径 cell 不沉积（亚网格缺口，溢流把泥沙带往外洋），
+   否则坝被自己流域的供给淤埋，缺口冲开机制
+   （[knowledge/geology/erosion.md](../../knowledge/geology/erosion.md) §3.2）失效。
+
+能力 ∝ Q·S·dt：干流上能力远超供给，泥沙几乎只在 S→0 处沉积（盆地底、湖盆、
+海岸基准面）——与真实供给受限河流「泥沙送到基准面」一致。`net_erosion_m`
+现为**净变化**（负=侵蚀、正=沉积）。验收：`scripts/diagnose_erosion.py` 质量
+平衡段 + `tests/test_map/test_sediment.py`（盆地充填 / 三角洲 / 守恒）。
+
+### 9.8 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
@@ -1337,13 +1395,15 @@ E = K · Q^m · S^n
 | `surface_evolution_time_myr` | 0 | 0 – 1000 | 侵蚀总时长（Myr；0 = 禁用，分辨率无关） |
 | `stream_power_steps` | 20 | 1 – 200 | 隐式格式的均匀大步数（dt = time/steps） |
 | `climate_coupling` | `"proxy"` | none / proxy / full | 降水强迫源 |
-| `fluvial_erodibility` | 1.4e-3 | 1e-4 – 1e-2 | 参考分辨率下的侵蚀系数 K₀（m/yr） |
+| `fluvial_erodibility` | 52 | 10 – 100 | 参考分辨率下的侵蚀系数 K₀（m/yr）；地球锚定标定（复现地球大陆平均剥蚀率 ~0.05 mm/yr），见 `knowledge/geology/erosion.md` §6.1 |
 | `reference_cell_km` | 1.0 | — | K 缩放的参考分辨率（km） |
 | `terrain_hurst_exponent` | 0.5 | 0.3 – 0.7 | 地形 Hurst 指数 H（坡度分形标度 S ∝ Δx^(H−1)） |
 | `stream_power_m` | 0.5 | 0.3 – 0.7 | 流量指数 m |
 | `stream_power_n` | 1.0 | 0.7 – 2.0 | 坡降指数 n |
 | `hillslope_diffusivity` | 1e-5 | 1e-6 – 1e-3 | 坡面扩散 D₀（m²/yr @ 1km，分形缩放） |
 | `precip_proxy_base_mm` | 2000 | 100 – 4000 | 代理场 ITCZ 峰振幅 |
+| `sediment_routing` | `"bagnold"` | none / bagnold | 沉积路由（§9.7；none = 旧行为，物质在海岸丢失） |
+| `sediment_transport_efficiency` | 0.05 | 0.01 – 0.1 | Bagnold 输沙效率 ε（无量纲；文献范围） |
 
 ---
 
@@ -1799,8 +1859,9 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 ### 当前限制
 
-1. **侵蚀精度**：全球 stream power + 坡面扩散产生河谷网络，但沉积扇 / 三角洲
-   （§9.6 第二批）与米级细节仍需 Gaea 精细化。
+1. **侵蚀精度**：全球 stream power + 坡面扩散做大尺度地貌改造（河道宽度稀释
+   抑制了网格级峡谷，§9.6）；Bagnold 沉积路由已落地（§9.7：盆地充填 + 三角洲，
+   无海洋再改造 / 碳酸盐 / 冰川沉积）；米级细节仍需 Gaea 精细化。
 
 2. **静态气候**：当前气候模型是稳态快照，不模拟气候的季节内变化或年际变率（ENSO 等）。
 
