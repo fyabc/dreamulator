@@ -202,10 +202,12 @@ def test_erosion_no_breach_without_dammed_basin():
 
 
 def test_erosion_never_raises_land():
-    """Erosion must never raise a cell (no fabricated deposition).
+    """Incision-only mode must never raise a cell (no fabricated deposition).
 
     Flat-routed cells behind a dammed basin can have an uphill downstream
     parent; the overshoot guard must not lift them to the parent's elevation.
+    Sediment routing is disabled: with routing on, cells legitimately rise
+    where sediment deposits (covered by test_sediment.py).
     """
     elevations = [-200.0, 2.0, 20.0, 40.0, -50.0, 100.0, 80.0, 60.0]
     mesh = _make_chain_mesh(elevations, area_km2=1e6)
@@ -214,6 +216,7 @@ def test_erosion_never_raises_land():
         surface_evolution_time_myr=5.0,
         stream_power_steps=5,
         sea_level_offset_m=0.0,
+        sediment_routing="none",
     )
     apply_erosion(mesh, config)
     for c, h0 in zip(mesh.cells, elevations, strict=True):
@@ -221,13 +224,18 @@ def test_erosion_never_raises_land():
 
 
 def test_stream_power_steps_stable_and_deterministic():
-    """Implicit scheme with a small step count stays stable and deterministic."""
+    """Implicit scheme with a small step count stays stable and deterministic.
+
+    Sediment routing is disabled to isolate the implicit scheme (routing
+    legitimately raises ocean cells via delta deposition).
+    """
     mesh1 = _make_chain_mesh([-100.0, 100.0, 200.0, 500.0, 300.0])
     mesh2 = _make_chain_mesh([-100.0, 100.0, 200.0, 500.0, 300.0])
     config = TerrainPipelineConfig(
         erosion_algorithm="stream_power",
         surface_evolution_time_myr=5.0,
         stream_power_steps=5,
+        sediment_routing="none",
     )
     apply_erosion(mesh1, config)
     apply_erosion(mesh2, config)

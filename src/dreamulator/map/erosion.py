@@ -24,6 +24,13 @@ concentrates all discharge into one-cell-wide threads and cuts grid-scale
 canyons ~d/w times too deep (up to ~1–2 km at 51 km cells).  Barrier cells
 on a dammed-basin sill are exempt (concentrated notch incision — see below).
 
+Sediment routing (mass conservation, ``sediment_routing="bagnold"``): each
+substep's erosion product is routed downstream along the flow graph and
+deposited where the load exceeds the Bagnold (1966) stream-power transport
+capacity ``ε·(ρw/ρs)·Q·S``; sediment reaching water bodies deposits there
+(deltas, shelf building, lake fill).  Without routing, incised mass would be
+lost at the coastline and basins would never fill.
+
 Land cells are clamped at ``sea_level + 1 m`` during incision (no general
 marine transgression), and cells draining to the **open ocean** stay static
 (marine base-level incision there over-planates lowlands — nacrea regression
@@ -92,6 +99,11 @@ _CHANNEL_WIDTH_COEFF_M = 5.0
 # 3.156e7 s ≈ 3.17e-5 m³/s.
 _MM_KM2_PER_YR_TO_M3S = 1.0e3 / 3.156e7  # ≈ 3.17e-5
 
+# Bagnold (1966) sediment-transport capacity: capacity ∝ ε·(ρw/ρs)·Q·S.
+_RHO_WATER_KG_M3 = 1000.0
+_RHO_SEDIMENT_KG_M3 = 2650.0
+_SECONDS_PER_YEAR = 3.156e7
+
 
 def apply_erosion(
     mesh: CVTMesh,
@@ -150,6 +162,7 @@ def _apply_stream_power_erosion(
         h, sea_level, is_land, neighbors, water_comp, ocean_comp
     )
     for step in range(n_steps):
+        h_prev = h
         h = _implicit_step(
             h,
             is_land,
@@ -167,6 +180,20 @@ def _apply_stream_power_erosion(
             ocean_comp,
             barrier_mask,
         )
+        if config.sediment_routing == "bagnold":
+            h = _route_sediment(
+                h,
+                h_prev,
+                is_land,
+                neighbors,
+                dists_km,
+                dists_m,
+                area_km2,
+                precip_mm,
+                sea_level,
+                config,
+                barrier_mask,
+            )
         if progress_callback is not None:
             progress_callback((step + 1) * dt / 1e6, config.surface_evolution_time_myr)
 
@@ -176,6 +203,9 @@ def _apply_stream_power_erosion(
         if is_land[i]:
             c.elevation = float(h[i])
             c.net_erosion_m = float(h[i] - h0[i])
+        elif h[i] != h0[i]:
+            # Sediment deposited into water bodies (deltas, lake fill).
+            c.elevation = float(h[i])
 
 
 def _water_components(
@@ -332,6 +362,102 @@ def _implicit_step(
             h_new[i] = min(_down_level(i), h[i])
     h_new[is_land] = np.maximum(h_new[is_land], sea_level + 1.0)
     return h_new
+
+
+def _route_sediment(
+    h: np.ndarray,
+    h_prev: np.ndarray,
+    is_land: np.ndarray,
+    neighbors: list[list[int]],
+    dists_km: list[list[float]],
+    dists_m: list[list[float]],
+    area_km2: np.ndarray,
+    precip_mm: np.ndarray,
+    sea_level: float,
+    config: TerrainPipelineConfig,
+    barrier_mask: np.ndarray,
+) -> np.ndarray:
+    """Route this step's erosion product downstream and deposit it.
+
+    Mass-conserving source-to-sink pass (Bagnold 1966 transport capacity):
+
+    - **Supply**: cells that dropped during the incision/diffusion substep
+      (``h_prev − h``, clipped at 0) become sediment volume.
+    - **Capacity**: ``cap = ε·(ρw/ρs)·Q·S·dt`` — the stream power available
+      to move sediment (Bagnold 1966; ε ≈ 0.01–0.1).  Load exceeding capacity
+      deposits in place; the remainder is passed downstream.  No extra bed
+      entrainment (detachment is already handled by the stream-power step).
+    - **Water bodies are sinks**: sediment reaching an ocean cell deposits
+      there (delta progradation / shelf building); endorheic sinks deposit in
+      the terminal cell (lake fill).
+    - **Barrier cells are exempt** (same reason they are exempt from width
+      dilution): the sill notch is sub-grid; the spill flow through it exports
+      sediment to the ocean rather than depositing it, otherwise the sill
+      would be buried by its own catchment's supply and never breach.
+
+    Args:
+        h: (n,) elevation after the incision/diffusion substep.
+        h_prev: (n,) elevation before that substep.
+        barrier_mask: (n,) bool dammed-basin barrier cells (no deposition).
+        (remaining args as in :func:`_implicit_step`).
+
+    Returns:
+        Elevation array with deposition applied (land and water cells).
+    """
+    n = len(h)
+    filled, connected = priority_flood_fill(h, is_land, neighbors)
+    flow_dir = compute_flow_directions(filled, is_land, neighbors, dists_km)
+    flow_dir = route_flat_cells(filled, is_land, connected, neighbors, flow_dir)
+    accum = compute_flow_accumulation(flow_dir, is_land, area_km2)
+
+    q_ref = config.precip_proxy_base_mm * 1e6
+    q = np.where(is_land, precip_mm * np.maximum(accum, area_km2), 0.0) / q_ref
+
+    n_steps = max(config.stream_power_steps, 1)
+    dt_s = config.surface_evolution_time_myr * 1e6 / n_steps * _SECONDS_PER_YEAR
+    coeff = config.sediment_transport_efficiency * (_RHO_WATER_KG_M3 / _RHO_SEDIMENT_KG_M3)
+
+    supply_m3 = np.maximum(0.0, h_prev - h) * area_km2
+    load = supply_m3.copy()
+    dep = np.zeros(n)
+
+    # Source → sink (reverse of the downstream-first solve order).
+    order = _reverse_topological_order(flow_dir, is_land)[::-1]
+    for i in order:
+        if load[i] <= 0.0:
+            continue
+        j = int(flow_dir[i])
+        if j < 0:
+            dep[i] += load[i]  # unrouted sink: deposit in place
+            load[i] = 0.0
+            continue
+        if not is_land[j]:
+            dep[j] += load[i]  # water body: delta / lake-fill deposition
+            load[i] = 0.0
+            continue
+        if barrier_mask[i]:
+            load[j] += load[i]  # sill notch: spill flow exports the load
+            continue
+        d = 1.0
+        for k, nbr in enumerate(neighbors[i]):
+            if nbr == j:
+                d = max(dists_m[i][k], 1.0)
+                break
+        # Local slope toward the downstream cell.  Zero on uphill flat routes
+        # (filled-basin spill paths) → zero capacity → deposition, which is
+        # exactly the basin-fill behaviour.
+        slope = max(0.0, (h[i] - h[j]) / d)
+        q_m3s = q[i] * q_ref * _MM_KM2_PER_YR_TO_M3S
+        cap = coeff * q_m3s * slope * dt_s
+        if load[i] > cap:
+            dep[i] += load[i] - cap
+            load[i] = cap
+        load[j] += load[i]
+
+    if not dep.any():
+        return h
+    out = h + dep / np.maximum(area_km2, 1e-9)
+    return np.asarray(out)
 
 
 def _minimax_from_ocean(
