@@ -2,6 +2,7 @@
 
 > 实现：`src/dreamulator/map/erosion.py`（循环）、`map/precip_proxy.py`（代理）
 > 设计：`docs/design/geological-pipeline.md` §10 · 验证：`scripts/validate_precip_proxy.py`
+> 大尺度验收诊断：`scripts/diagnose_erosion.py`（§6）
 
 地质层内部的地表演化循环（Phase 3B）：洼地填平 → D8 → 流量累积 → stream power
 下切 + 坡面扩散，以**地貌降水代理**为强迫。不读气候引擎输出（气候是地质下游，
@@ -39,8 +40,13 @@ E = K · Q^m · S^n
 | m=1.0, n=2 | 0.5 | 剪应力（τ ∝ Q^0.5·S，E ∝ τ²） | 通用 |
 
 - **m 控流量依赖**：m 越大，源头（低 Q）侵蚀越弱、主干（高 Q）越强；
-- **n 控坡度依赖**：n 越大，陡坡（山峰）侵蚀越强；
-- 折中 `m=0.75, n=1.5`（θ=0.5）是「源头少被切、主干主导」的常见取法（nacrea 采用）。
+- **n 控坡度依赖**：n 越大，陡坡（山峰）侵蚀越强。
+
+**实现约束**：隐式三角精确解要求 **n=1**（n=1 时方程线性、每 cell 单一下游，
+逆拓扑序一次遍历即精确解；Braun & Willett 2013）。动力学固定为
+`E = K_eff · Q^m · S`（m 取 `stream_power_m`，nacrea 现用 0.7）；
+`config.stream_power_n` **不进入动力学**，只用于分形 K/D 缩放的指数（§3）。
+支持 n≠1 需迭代求解器（Fastscape 做法），属远期升级。
 
 ## 2. 坡面扩散（hillslope diffusion）
 
@@ -75,7 +81,48 @@ D_eff = D₀ · (Δx/reference_cell_km)^(2−H)       # 曲率补偿（坡面扩
 自动换算，使输入的 `K₀`、`D₀` 都分辨率无关。**注意**：D 的标度（`Δx^(2−H)`，51 km 下
 ~364×）远强于 K（`Δx^(n(1−H))`，~19×），因为曲率比坡度对分辨率更敏感——所以坡面扩散
 在粗网格上被大幅削弱，51 km 下即使调大 D 也很难磨平百公里级的河谷壁（那是区域尺度的
-地貌，扩散只作用坡面尺度）。更新后陆 cell 下限 clamp 到 `sea_level + 1 m`（v1 不做海侵）。
+地貌，扩散只作用坡面尺度）。
+
+## 3.1 亚网格河道宽度稀释（2026-08-25）
+
+stream power 下切的是**河床**，不是整个 cell。自然河宽满足下游水力几何关系
+`w = c_w · Q^0.5`（Q 单位 m³/s；Leopold & Maddock 1953，综合研究 c_w ≈ 3–10，
+实现取 5）。cell 平均下切 = 河道下切 × 面积占比：
+
+```
+E_cell = E_channel · min(1, w / d)     # d = 沿流向的 cell 尺度
+```
+
+没有 `w/d` 因子时，D8 单流向把全部流量集中进单 cell 宽的细流，下切被高估 ~d/w
+倍——51 km 网格上切出深达 1–2 km 的**网格级峡谷**（nacrea 实测：改前 5.5% 的
+陆-陆相邻边高差 >500 m、最深单 cell 下切 −1927 m；改后深尾与陡边大幅下降）。
+真实地球同分辨率无此特征（河谷宽度 1–20 km ≪ 51 km cell，见
+`docs/design/competitor-analysis.md` §4.2.1 结论）。
+
+**封堵坝 cell 豁免**：内流海封堵坝上的 cell 不做宽度稀释——海峡下切是沿鞍部
+路径的集中缺口（notch）推进，缺口以全河道速率下切、切穿即海峡打开；若也按
+w/d 稀释，cell 平均降到海平面所需时间被拉长 ~d/w 倍，远超物理缺口切穿时间。
+
+## 3.2 海平面基准与内流海海侵缺口（2026-08-25）
+
+下切过程中陆 cell 下限 clamp 到 `sea_level + 1 m`（不做一般性海侵）。两条
+边界规则：
+
+- **开洋海岸静止**：排入开阔海洋的陆 cell 不做基准面下切——无输沙极限的
+   detachment-limited 律会让基准面沿河网上行、把全部低地夷平（nacrea 回归：
+  放开后陆域平均剥蚀 97→155 m、Cfb −1069 cell，过度夷平）。海岸侵蚀属海洋
+  过程（P2）。
+- **内流海基准面下切**：排入**未连通外洋的海平面以下水体**（内流海）的陆
+  cell 向海平面基准面下切（基准面 = 水面，不是水底——否则海岸 cell 会朝洋底
+  深度失控下切）。封堵坝因此能被切到 clamp。
+
+**缺口冲开（breach）**：侵蚀循环结束后跑一次海侵缺口通道——用 minimax
+Dijkstra 从外洋算每个 cell 的「最低鞍部成本」（= priority flood 溢流水位，
+Barnes et al. 2014 同源）；若某内流海的最低鞍部已被切到 `sea_level + 1 m`
+（clamp）以内，则把该鞍部路径上所有残余陆 cell 降到 `sea_level − 5 m`
+（新切开的海峡是浅的；5 m 只需保证「明确低于海平面」以建立水体连通，
+后续加深属海洋过程）。这实现 roadmap §7 #7 的能力需求：**侵蚀能冲开被堵上
+的浅海海峡**。验收测试：`tests/test_map/test_erosion.py::test_erosion_breaches_dammed_basin`。
 
 ## 4. 地貌降水代理（climate_coupling）
 
@@ -125,6 +172,32 @@ Smith & Barstad (2004) 线性地形降水模型的**零平流极限**；完整�
 | `hillslope_diffusivity` | 1e-5 | 1e-6–1e-3 | 坡面扩散 D₀（m²/yr @ 1km，分形缩放） |
 | `precip_proxy_base_mm` | 2000 | 100–4000 | 代理 ITCZ 峰振幅（≈ evaporation_base） |
 
+## 6. 大尺度验收诊断与 nacrea 基线（2026-08-25，Phase 3B P0）
+
+`scripts/diagnose_erosion.py <map_dir> [--time-myr N]`：从已构建网格读侵蚀产物，
+输出大尺度验收指标（侵蚀量分布/总侵蚀体积/剥蚀速率、侵蚀前后高程分位与起伏度、
+坡度统计、汇水面积分位与河网密度）。**验收哲学**（竞品分析 §4.2.1 结论）：
+51 km 网格上侵蚀的合法产物是大尺度地貌改造与物质再分配，不是可见河谷；
+河网可见性由河流矢量图层 + Gaea 局部精细化承担。
+
+**nacrea 基线**（200k，seed 42，当前配置 K₀=1e-3、m=0.7、100 Myr、20 步，
+含 §3.1 宽度稀释 + §3.2 基准面/缺口机制）：
+
+| 指标 | 数值 | 判读 |
+|------|------|------|
+| 陆域平均剥蚀 | 2.0 m / 100 Myr = 2e-5 mm/yr | 比地球大陆均值（0.03–0.07 mm/yr，含构造供给）低 ~3 个数量级 |
+| 最深单 cell 下切 | −1010 m | 主干峡谷深尾；无宽度稀释时约 −1900 m |
+| 被侵蚀陆域占比 | 59.5%（中位仅 −0.5 m） | 下切集中在汇水 ≥20×cell 的 ~8% 陆域 |
+| 起伏度 p95−p50 | 1223 → 1223 m | 大尺度地貌基本未动 |
+| 气候回归（vs 侵蚀前地形构建） | T −0.17 °C、P −14 mm、Af −2137 cell | 高程微调的气候响应，量级可接受 |
+
+**标定判断**：当前配置下侵蚀近乎休眠（2 m/100 Myr），不是过度下切。注意：
+2026-08-22 同步进 `data/worlds` 的网格（平均剥蚀 97.6 m、最深 −1927 m）是
+旧参数集的产物（历史已 squash，具体参数不可考）——下次发版重建会明显变弱。
+**激进标定（向地球剥蚀速率靠拢）应先落地沉积物搬运（今日待办 #5-P1）**：
+当前只下切不沉积、质量不守恒，单独调大 K₀ 只会放大物质丢失；先有
+transport-limited 段与盆地充填，再按地球剥蚀率锚定 K₀。
+
 ## 参考
 
 - Howard, A. D. (1994). A detachment-limited model of drainage basin evolution.
@@ -133,6 +206,13 @@ Smith & Barstad (2004) 线性地形降水模型的**零平流极限**；完整�
   method to solve the stream power equation. *Geomorphology*, 180–181, 170–179.
 - Smith, R. B., & Barstad, I. (2004). A linear theory of orographic precipitation.
   *Journal of the Atmospheric Sciences*, 61(12), 1377–1391.
+- Leopold, L. B., & Maddock, T. Jr. (1953). The hydraulic geometry of stream
+  channels and some physiographic implications. *USGS Professional Paper* 252.
+  （下游水力几何 `w ∝ Q^0.5`，§3.1 宽度稀释的来源；系数综合研究范围 3–10）
+- Barnes, R., Lehman, C., Mulla, D., & Dowling, R. (2014). Priority-flood: An
+  optimal depression-filling and watershed-labeling algorithm for digital
+  elevation models. *Computers & Geosciences*, 62, 117–127.（§3.2 minimax
+  鞍部成本即 priority-flood 溢流水位视角）
 - Fastscape/Landlab：侵蚀模型把降水作为外部场 `water__unit_flux_in` →
   `surface_water__discharge` → stream power（本代理采用同一「代理场 → 流量 → 下切」
   架构）。

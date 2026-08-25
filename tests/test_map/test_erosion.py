@@ -11,7 +11,7 @@ from dreamulator.map.pipeline_types import TerrainPipelineConfig, lonlat_to_xyz
 from dreamulator.map.precip_proxy import geomorphic_precipitation
 
 
-def _make_chain_mesh(elevations: list[float]) -> CVTMesh:
+def _make_chain_mesh(elevations: list[float], area_km2: float = 1.0) -> CVTMesh:
     """Build a small chain CVT mesh on the equator (cell 0 = ocean)."""
     n = len(elevations)
     cells: list[VoronoiCell] = []
@@ -30,7 +30,7 @@ def _make_chain_mesh(elevations: list[float]) -> CVTMesh:
                 x=float(x),
                 y=float(y),
                 z=float(z),
-                area_km2=1.0,
+                area_km2=area_km2,
                 elevation=elevations[i],
                 neighbors=neighbors,
             )
@@ -119,7 +119,7 @@ def test_apply_erosion_lowers_peak():
 
 
 def test_apply_erosion_bounded_above_sea_level():
-    """Erosion must not push land below sea level (no marine transgression in v1)."""
+    """No general marine transgression: without a dammed basin, land stays ≥ sea level + 1."""
     mesh = _make_chain_mesh([-100.0, 100.0, 200.0, 500.0, 300.0])
     config = TerrainPipelineConfig(
         erosion_algorithm="stream_power", surface_evolution_time_myr=5.0, sea_level_offset_m=0.0
@@ -151,6 +151,73 @@ def test_apply_erosion_writes_net_erosion():
     # net erosion is filled (negative for eroded peaks, ~0 for ocean)
     assert mesh.cells[3].net_erosion_m < 0.0  # peak eroded
     assert mesh.cells[0].net_erosion_m == 0.0  # ocean untouched
+
+
+def test_erosion_breaches_dammed_basin():
+    """Roadmap §7 #7 capability: erosion cuts open a blocked shallow strait.
+
+    Layout (chain on the equator): ocean | low coast | sill A | sill B |
+    inland sea (below sea level, dammed by the sills) | upstream land draining
+    into the inland sea.  The sills are worn down to the sea-level clamp and
+    then breached so the inland sea connects to the ocean.
+    """
+    mesh = _make_chain_mesh(
+        [-200.0, 2.0, 20.0, 40.0, -50.0, 100.0, 80.0, 60.0], area_km2=1e6
+    )
+    # Default erodibility K₀ — barrier cells incise without width dilution
+    # (concentrated notch).  At this synthetic geometry (1112 km cell spacing,
+    # default n=1 fractal scaling) cutting the 40 m sill to the clamp takes
+    # ~75 Myr of simulated time; nacrea's 51 km cells incise ~22× faster.
+    config = TerrainPipelineConfig(
+        erosion_algorithm="stream_power",
+        surface_evolution_time_myr=80.0,
+        stream_power_steps=5,
+        sea_level_offset_m=0.0,
+    )
+    apply_erosion(mesh, config)
+
+    # Both sill cells are breached below sea level…
+    assert mesh.cells[2].elevation < 0.0
+    assert mesh.cells[3].elevation < 0.0
+    # …so the inland sea (cell 4) reaches the ocean through cells < sea level.
+    path = [c.elevation for c in mesh.cells[0:5]]
+    assert all(e < 0.0 for e in path), f"dammed basin not connected: {path}"
+    # Breach counts as erosion in the bookkeeping.
+    assert mesh.cells[2].net_erosion_m < 0.0
+    assert mesh.cells[3].net_erosion_m < 0.0
+
+
+def test_erosion_no_breach_without_dammed_basin():
+    """A simple coast (single water body) never triggers the breach pass."""
+    mesh = _make_chain_mesh([-100.0, 3.0, 30.0, 10.0], area_km2=1e6)
+    config = TerrainPipelineConfig(
+        erosion_algorithm="stream_power",
+        surface_evolution_time_myr=5.0,
+        stream_power_steps=5,
+        sea_level_offset_m=0.0,
+    )
+    apply_erosion(mesh, config)
+    for c in mesh.cells[1:]:
+        assert c.elevation >= 1.0  # land stays at or above the clamp
+
+
+def test_erosion_never_raises_land():
+    """Erosion must never raise a cell (no fabricated deposition).
+
+    Flat-routed cells behind a dammed basin can have an uphill downstream
+    parent; the overshoot guard must not lift them to the parent's elevation.
+    """
+    elevations = [-200.0, 2.0, 20.0, 40.0, -50.0, 100.0, 80.0, 60.0]
+    mesh = _make_chain_mesh(elevations, area_km2=1e6)
+    config = TerrainPipelineConfig(
+        erosion_algorithm="stream_power",
+        surface_evolution_time_myr=5.0,
+        stream_power_steps=5,
+        sea_level_offset_m=0.0,
+    )
+    apply_erosion(mesh, config)
+    for c, h0 in zip(mesh.cells, elevations, strict=True):
+        assert c.elevation <= h0 + 1e-9, f"cell {c.id} raised {h0} -> {c.elevation}"
 
 
 def test_stream_power_steps_stable_and_deterministic():
