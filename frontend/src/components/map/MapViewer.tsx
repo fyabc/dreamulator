@@ -38,6 +38,7 @@ import type {
   MapMetadata,
   VoronoiCell,
   CVTMesh,
+  MapFeatureData,
 } from '../../viewers/map/types'
 import { buildCellKDTree, type KDTree3D } from './utils/kdtree'
 
@@ -64,6 +65,8 @@ interface MapViewerProps {
   onCellClick?: (cellId: number, ctrlKey: boolean) => void
   hoveredCell: number | null
   selectedCells: Set<number>
+  /** River network polylines (backend features layer). */
+  riverFeatures?: MapFeatureData[] | null
   /** Subsolar longitude in degrees (day/night overlay). */
   sunLongitudeDeg?: number
   /** Solar declination in degrees (day/night overlay). */
@@ -110,6 +113,7 @@ export default function MapViewer({
   onCellClick,
   hoveredCell,
   selectedCells,
+  riverFeatures = null,
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
@@ -675,6 +679,8 @@ export default function MapViewer({
         selectedCells={selectedCells}
         currentOpacity={layers?.currents ?? 0}
         windOpacity={layers?.winds ?? 0}
+        riverFeatures={riverFeatures}
+        riverOpacity={layers?.rivers ?? 0}
       />
     </div>
   )

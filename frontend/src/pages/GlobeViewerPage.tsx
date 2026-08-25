@@ -58,7 +58,9 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 } })
+  // rivers: 0 — the 3D globe does not render the river vector layer yet
+  // (2D map viewer only); keep the state key so the layer panel type-checks.
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 } })
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
