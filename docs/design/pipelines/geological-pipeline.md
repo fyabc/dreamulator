@@ -1367,11 +1367,25 @@ E = K · Q^m · S^n
   §7 #7 能力需求（侵蚀冲开被堵海峡），验收测试
   `tests/test_map/test_erosion.py::test_erosion_breaches_dammed_basin`。
 
-### 9.7 沉积物搬运（第二批，暂不做）
+### 9.7 沉积物搬运与沉积（Bagnold 输沙能力，2026-08-26 落地）
 
-首版**只做侵蚀下切 + 坡面扩散**，沉积物 / 三角洲搬运留第二批：它是独立物理
-（沉积通量平衡、海岸三角洲形态），还牵扯海岸与海平面交互。当前 `net_erosion_m`
-字段只记录诊断量（侵蚀 − / 沉积 +），不做真实搬运。
+`sediment_routing: "bagnold"`（默认；`"none"` = 旧行为，下切物质在海岸丢失）。
+每个侵蚀子步后跑一次**质量守恒的 source-to-sink 路由**：
+
+1. **供给**：子步内降低的体积（`max(0, h_prev − h)·area`）成为泥沙载荷；
+2. **输沙能力**（Bagnold 1966）：`cap = ε·(ρw/ρs)·Q·S·dt`——ε 为 Bagnold
+   效率（文献 ~0.01–0.1，默认 0.05），ρw/ρs = 1000/2650。载荷超能力就地
+   沉积，其余传向下游（不做额外床沙卷入——下切已由 stream power 步完成）；
+3. **汇**：载荷到达水体 cell 全部沉积——三角洲前积 / 陆架建造（外洋）、
+   湖泊充填（内流海）；
+4. **封堵坝豁免**：坝路径 cell 不沉积（亚网格缺口，溢流把泥沙带往外洋），
+   否则坝被自己流域的供给淤埋，缺口冲开机制
+   （[knowledge/geology/erosion.md](../../knowledge/geology/erosion.md) §3.2）失效。
+
+能力 ∝ Q·S·dt：干流上能力远超供给，泥沙几乎只在 S→0 处沉积（盆地底、湖盆、
+海岸基准面）——与真实供给受限河流「泥沙送到基准面」一致。`net_erosion_m`
+现为**净变化**（负=侵蚀、正=沉积）。验收：`scripts/diagnose_erosion.py` 质量
+平衡段 + `tests/test_map/test_sediment.py`（盆地充填 / 三角洲 / 守恒）。
 
 ### 9.8 参数表
 
@@ -1388,6 +1402,8 @@ E = K · Q^m · S^n
 | `stream_power_n` | 1.0 | 0.7 – 2.0 | 坡降指数 n |
 | `hillslope_diffusivity` | 1e-5 | 1e-6 – 1e-3 | 坡面扩散 D₀（m²/yr @ 1km，分形缩放） |
 | `precip_proxy_base_mm` | 2000 | 100 – 4000 | 代理场 ITCZ 峰振幅 |
+| `sediment_routing` | `"bagnold"` | none / bagnold | 沉积路由（§9.7；none = 旧行为，物质在海岸丢失） |
+| `sediment_transport_efficiency` | 0.05 | 0.01 – 0.1 | Bagnold 输沙效率 ε（无量纲；文献范围） |
 
 ---
 
@@ -1844,8 +1860,8 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 ### 当前限制
 
 1. **侵蚀精度**：全球 stream power + 坡面扩散做大尺度地貌改造（河道宽度稀释
-   抑制了网格级峡谷，§9.6）；沉积扇 / 三角洲（§9.7 第二批）与米级细节仍需
-   Gaea 精细化。
+   抑制了网格级峡谷，§9.6）；Bagnold 沉积路由已落地（§9.7：盆地充填 + 三角洲，
+   无海洋再改造 / 碳酸盐 / 冰川沉积）；米级细节仍需 Gaea 精细化。
 
 2. **静态气候**：当前气候模型是稳态快照，不模拟气候的季节内变化或年际变率（ENSO 等）。
 

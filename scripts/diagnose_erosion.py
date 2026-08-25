@@ -119,22 +119,33 @@ def main() -> int:
     eroded_pct = eroded.sum() / max(is_land.sum(), 1) * 100
     print(f"被侵蚀陆域 cell: {eroded.sum()}（陆域 {eroded_pct:.1f}%）")
 
-    # ── 2. 侵蚀量 ───────────────────────────────────────────────────────────
-    print("\n== 侵蚀量（net_erosion_m，陆域）==")
+    # ── 2. 侵蚀量与质量平衡 ────────────────────────────────────────────────
+    print("\n== 侵蚀量（net_erosion_m，陆域；负=侵蚀、正=沉积）==")
     if eroded.any():
         e = net[eroded]
         pct = np.percentile(e, [1, 10, 50, 90])
         print(
-            f"min {e.min():.1f} / p1 {pct[0]:.1f} / p10 {pct[1]:.1f} / "
-            f"中位 {pct[2]:.1f} / p90 {pct[3]:.1f} / max {e.max():.1f} m"
+            f"侵蚀分位: min {e.min():.1f} / p1 {pct[0]:.1f} / p10 {pct[1]:.1f} / "
+            f"中位 {pct[2]:.1f} / p90 {pct[3]:.1f} m"
         )
-        vol_km3 = float(np.sum(-net[is_land] * area[is_land]) / 1e3)  # m·km² = 1e6 m³ → km³
-        mean_m = float(np.mean(-net[is_land]))
-        print(f"陆域平均剥蚀: {mean_m:.1f} m   总侵蚀体积: {vol_km3:,.0f} km³")
+        gross_ero_m3 = float(np.sum(-net[is_land & (net < 0)] * area[is_land & (net < 0)])) * 1e6
+        dep_mask = is_land & (net > 1e-6)
+        dep_land_m3 = float(np.sum(net[dep_mask] * area[dep_mask])) * 1e6
+        net_land_m3 = float(np.sum(-net[is_land] * area[is_land])) * 1e6
+        mean_net_m = float(np.mean(-net[is_land]))
+        print(
+            f"陆域平均净变: {mean_net_m:.1f} m   净体积变化: {net_land_m3 / 1e9:,.0f} km³"
+        )
+        print(f"侵蚀总量: {gross_ero_m3 / 1e9:,.0f} km³（{eroded.sum()} cells）")
+        print(
+            f"沉积: 陆域 {dep_land_m3 / 1e9:,.0f} km³（{dep_mask.sum()} cells）；"
+            f"水体（三角洲/湖泊充填，侵蚀量−陆域沉积） "
+            f"{(gross_ero_m3 - dep_land_m3) / 1e9:,.0f} km³"
+        )
         if args.time_myr:
-            rate = mean_m / args.time_myr  # m/Myr
+            rate = mean_net_m / args.time_myr  # m/Myr
             print(
-                f"平均剥蚀速率: {rate:.2f} m/Myr = {rate * 1e-3:.5f} mm/yr"
+                f"平均净变速率: {rate:.2f} m/Myr = {rate * 1e-3:.5f} mm/yr"
                 f"（@ {args.time_myr} Myr；地球大陆均值 ~0.03–0.07 mm/yr 含构造供给）"
             )
     else:

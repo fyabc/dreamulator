@@ -400,6 +400,14 @@ class TerrainPipelineConfig:
     # peak amplitude; ~ evaporation_base_mm (2000) for a good match to the
     # climate engine's zonal mean.
     precip_proxy_base_mm: float = 2000.0
+    # Sediment routing: "bagnold" = transport-limited downstream routing with
+    # Bagnold (1966) stream-power capacity (mass-conserving source-to-sink:
+    # basin fill + coastal deltas); "none" = legacy incision-only (mass lost).
+    sediment_routing: str = "bagnold"
+    # Bagnold sediment-transport efficiency ε (dimensionless): fraction of the
+    # stream power used to move sediment.  Literature range ~0.01–0.1
+    # (Bagnold 1966); default the midpoint 0.05.
+    sediment_transport_efficiency: float = 0.05
 
     @classmethod
     def from_yaml(cls, path: Path) -> TerrainPipelineConfig:
