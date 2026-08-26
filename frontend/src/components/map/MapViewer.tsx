@@ -529,7 +529,7 @@ export default function MapViewer({
           lon: Math.round(ll.lon * 100) / 100,
           lat: Math.round(ll.lat * 100) / 100,
           elevation: elev,
-          elevationM: Math.round(normalisedToMeters(elev, elevMin, elevMax)),
+          elevationM: normalisedToMeters(elev, elevMin, elevMax),
           pixelX: ep?.px ?? 0,
           pixelY: ep?.py ?? 0,
         })
@@ -591,7 +591,7 @@ export default function MapViewer({
           lon: Math.round(ll.lon * 100) / 100,
           lat: Math.round(ll.lat * 100) / 100,
           elevation: elev,
-          elevationM: Math.round(normalisedToMeters(elev, elevMin, elevMax)),
+          elevationM: normalisedToMeters(elev, elevMin, elevMax),
           pixelX: ep?.px ?? 0,
           pixelY: ep?.py ?? 0,
         })

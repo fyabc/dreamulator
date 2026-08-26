@@ -300,7 +300,7 @@ function CellDetails({
   cell: VoronoiCell
 }) {
   const { t } = useTranslation('map')
-  const elevM = Math.round(cell.elevation)
+  const elevM = cell.elevation
   const isLand = cell.elevation > 0
   const boundaryClass = cell.boundary_type
     ? BOUNDARY_COLORS[cell.boundary_type] ?? 'bg-gray-800 text-gray-300'
@@ -350,7 +350,7 @@ function CellDetails({
             <dt className="text-gray-500">{t('inspector.elevation')}</dt>
             <dd className={`font-mono ${elevM >= 0 ? 'text-green-400' : 'text-blue-400'}`}>
               {elevM >= 0 ? '+' : ''}
-              {elevM.toLocaleString()} m
+              {elevM.toFixed(1)} m
             </dd>
           </div>
           <div className="flex justify-between">
@@ -897,7 +897,7 @@ export function MobileCellCard({
   onClose: () => void
 }) {
   const { t } = useTranslation('map')
-  const elevM = cell ? Math.round(cell.elevation) : 0
+  const elevM = cell ? cell.elevation : 0
   const isLand = cell ? cell.elevation > 0 : false
 
   return (
@@ -932,7 +932,7 @@ export function MobileCellCard({
       {cell && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-gray-300">
           <span className={elevM >= 0 ? 'text-green-400' : 'text-blue-400'}>
-            {t('inspector.elevation')} {elevM >= 0 ? '+' : ''}{elevM.toLocaleString()}m
+            {t('inspector.elevation')} {elevM >= 0 ? '+' : ''}{elevM.toFixed(1)}m
           </span>
           {cell.koppen_class && (
             <span className="text-cyan-300">{t(KOPPEN_NAMES[cell.koppen_class] ?? cell.koppen_class)}</span>
