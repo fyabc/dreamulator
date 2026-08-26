@@ -72,7 +72,7 @@
 | `surface_temperature()` | + 温室效应 |
 | `altitude_lapse_rate()` | 海拔递减率 |
 | `moist_lapse_rate()` | 温度相关湿绝热递减率 |
-| `hadley_cell_wind()` | 三圈环流风场（含 `itcz_lat_deg` 季节迁移） |
+| `hadley_cell_wind()` | 三圈环流风场（含 `itcz_lat_deg` 季节迁移 + 经向风软肩部） |
 | `terrain_wind_blocking()` | 山脉挡风 |
 | `evaporation_rate()` | 海面蒸发（Clausius–Clapeyron） |
 | `orographic_precipitation()` | 地形抬升降水（纯函数版，管线用内联版） |
