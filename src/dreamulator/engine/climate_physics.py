@@ -585,16 +585,24 @@ def hadley_cell_wind(
     # ── Meridional (N-S) wind ──
     # positive = northward, negative = southward
     # Base magnitude (Earth); scaled by omega_scale.
-    M = 3.0 * omega_scale  # m/s, peak meridional surface wind
+    M = 1.5 * omega_scale  # m/s, peak meridional surface wind
 
     merid_speed = np.zeros(n, dtype=np.float64)
 
     # Hadley: surface branch flows equatorward
     #   NH (lat>0): equatorward = south → negative (−M)
     #   SH (lat<0): equatorward = north → positive (+M)
-    #   Profile: sin(π·|lat|/h), peaks at h/2
+    #   Profile: soft-shouldered sine, peaks at h/2.
+    # The plain sin(π·|lat|/h) reverses over ~2 cells at the equator; the coarse
+    # CVT mesh amplifies that reversal's finite-volume divergence ~100× into a
+    # spurious ITCZ spike.  A soft shoulder u = M·sin(πt)·(s + (1−s)·sin(πt))
+    # (t = |lat|/h) has slope s·π at the equator instead of π, so s < 1 widens the
+    # convergence band without a hard dead zone (which would split the ITCZ).
+    _shoulder = 0.2  # meridional wind factor at the equator (1.0 = plain sine)
+    _t = np.abs(lat_deg[hadley_mask]) / h
+    _sin_t = np.sin(np.pi * _t)
     merid_speed[hadley_mask] = (
-        -np.sign(lat_deg[hadley_mask]) * M * np.sin(np.pi * np.abs(lat_deg[hadley_mask]) / h)
+        -np.sign(lat_deg[hadley_mask]) * M * _sin_t * (_shoulder + (1.0 - _shoulder) * _sin_t)
     )
 
     # Ferrel: surface branch flows poleward (opposite of Hadley)

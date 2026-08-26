@@ -26,6 +26,12 @@ f = 2Ω sin(φ),   Ω = 2π / T_rot
 地球默认 H=30°、P=60°。源码：`climate_physics.py:hadley_cell_wind()`，
 边界已参数化（`hadley_extent_deg` / `polar_cell_start_deg`，3A.3a）。
 
+**经向风**（`hadley_cell_wind` 的另一输出，驱动 ITCZ 辐合与洋流风应力旋度）：
+Hadley 胞地表支流向赤道，峰值经向风 M = 1.5 m/s（地球参考，随 Ω^(-1/3) 标度）。
+近赤道用**软肩部**剖面 `u = M·sin(πt)·(s + (1−s)·sin(πt))`（t=|lat|/h，s=0.2），
+赤道斜率降到 s·π（纯正弦为 π）——把 ITCZ 辐合带加宽，避免有限体积散度在
+51 km 网格上把赤道风反转放大 ~100× 成单 cell 尖峰（ITCZ 偏强）。
+
 **慢自转标度**：Held–Hou 理论给出 Hadley 胞宽度
 φ_H ∝ (gHΔθ/Ω²a²)^{1/2}——Ω 减半 → φ_H 显著加宽。nacrea（Ω=0.31 Ω⊕）
 用 H=55°、P=75°。当前实现把边界当方案常数；严格做法是按 Ω 动态计算
