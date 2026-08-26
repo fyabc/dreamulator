@@ -20,8 +20,8 @@
 6. [阶段 5: 地形合成](#6-阶段-5-地形合成)
 7. [阶段 6: 海平面与基础分类](#7-阶段-6-海平面与基础分类)
 8. [阶段 7: 河流与水文](#8-阶段-7-河流与水文)
-9. [阶段 8: 地表演化侵蚀](#9-阶段-8-地表演化侵蚀)
-10. [阶段 9: 数据导出与可视化](#10-阶段-9-数据导出与可视化)
+9. [流水侵蚀 / 沉积（已移除）](#9-流水侵蚀--沉积2026-08-26-已移除)
+10. [阶段 8: 数据导出与可视化](#10-阶段-8-数据导出与可视化)
 11. [数据模型变更](#11-数据模型变更)
 12. [性能考量](#12-性能考量)
 13. [已知限制与未来工作](#13-已知限制与未来工作)
@@ -683,7 +683,7 @@ growth_speed_multiplier →  (新增字段)
    oceanic `normal(-3800, 500)`；每板块叠加均匀偏移 ±`plate_elevation_spread_m`
    （陆地取 0.4×）；叠加多尺度「动态地形」起伏 `_continental_undulation`
    （`continental_undulation_m`，默认 600 m，地幔对流类比 Flament et al. 2013）。
-   若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §6.3）。
+   若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §6.4）。
 2. **非对称边界效应**：`_asymmetric_boundary_effects` 按边界类型叠加高斯剖面
    （σ 由 `boundary_influence_km`，振幅 × 速率因子 `min(|v_n|/10, 1)`，
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
@@ -722,7 +722,49 @@ growth_speed_multiplier →  (新增字段)
 | `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
 | `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
 
-### 6.3 洋底年龄-深度沉降（板块冷却模型）
+### 6.3 内部低地：大陆内部系统性下压
+
+> 实施：`terrain_synthesizer.py:_apply_interior_lowlands`
+> 科学依据：`knowledge/geology/terrain_synthesis.md` §4.4（Cogley 1984；ETOPO1）
+
+双峰基准（大陆 850 m）+ 汇聚边界隆起后，板块内部残留为均匀高原——纯过程合成会把
+近半陆地堆到 >1000 m，而地球陆均高 ~350–500 m。`_apply_interior_lowlands` 以汇聚
+边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）为源
+做多源 BFS，得每个陆壳 cell 到最近汇聚边界的距离 `d`，再按 Hermite smoothstep 下压：
+
+```
+lowering = depth × smoothstep(d / scale)
+elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降陆壳 cell
+```
+
+`floor` 把下压**软钳制**在海平面之上（logsumexp 光滑最大值，非硬钳 `max`）——
+**校准后的海岸线（目标陆面比）不变**，低地也不会全部堆在同一个高度。在 §6.5
+后处理中排在海平面校准之后、岛弧/内部地貌之前——古造山带仍能从低地中崛起，裂谷/
+盆地则下切（部分低于海平面，成内流湖/内海）。
+
+| 参数 | 默认值 | 范围 | 含义 |
+|------|--------|------|------|
+| `interior_lowland_enabled` | true | — | 是否启用（false = 关闭） |
+| `interior_lowland_depth_m` | 600 | 200–1200 | 深部最大下压量（m） |
+| `interior_lowland_distance_scale_km` | 1500 | 500–3000 | 下压 0→满深的距离（km） |
+| `interior_lowland_floor_m` | 0 | 0–200 | 下压后离海平面最低高度（m，0=海平面） |
+
+**沉积填充**（`_apply_deposition_fill`，紧接内部低地之后）：内部低地把深部压到海平面
+以下后，`floor` 软钳制把它们钳到 ~0m（先保住海岸线），并返回**被钳制的 cell 掩码**。
+沉积填充**只填这些被钳制的 cell**（内部低地的过冲），把它们填到**溢流点**（通往全球海洋
+的最低出口），使其重新排水——参照 [Landlab SinkFiller](https://landlab.csdms.io/generated/api/landlab.components.sink_fill.fill_sinks.html)
+（Tucker et al. 2001）；以海洋为源做 priority-flood 得每 cell 的溢流点高度，把被钳制、
+且低于溢流点的 cell 填到溢流点。**天然的海/海峡没被钳制，不会被填**。留一小部分盆地
+（`lake_fraction`，仅 ≥20 格的大盆地）填到 `spill − lake_depth_m`，标记 `is_lake` 为
+外流湖。这样**只调整内陆海拔、不动海岸线**（陆地面积比保持 28%）。
+
+| 参数 | 默认值 | 范围 | 含义 |
+|------|--------|------|------|
+| `deposition_enabled` | true | — | 是否启用 |
+| `lake_fraction` | 0.2 | 0–1 | 留作外流湖的盆地比例 |
+| `lake_depth_m` | 50 | 10–400 | 湖面低于溢流点深度（m） |
+
+### 6.4 洋底年龄-深度沉降（板块冷却模型）
 
 > 实施：`terrain_synthesizer.py:_compute_ocean_age_depth`
 > 配置：`terrain_config.yaml` → `ocean:` 段落；理论：`isostasy_elevation_limits.md`
@@ -758,24 +800,28 @@ age = max_age · d_div / (d_div + d_conv)
 
 效果：均海深 3015→3687 m（对齐地球 3682 m）；浅水 0-500m 占比 14.8%→10.6%（地球 8%）。
 
-### 6.4 后处理（顺序）
+### 6.5 后处理（顺序）
 
 合成后按序执行（弧/造山带增加高程，架/平原必须最后，否则被覆盖）：
 
 1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§7）。
-2. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
-3. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
-4. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
-5. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）。
-6. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
-7. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
+2. **内部低地** `_apply_interior_lowlands`（见 §6.3）：以汇聚边界为源做多源 BFS，
+   大陆内部按 `depth × smoothstep(d/scale)` 下压。
+3. **沉积填充** `_apply_deposition_fill`（见 §6.3）：把低于海平面的闭合盆地填到溢流
+   点，留一小部分为内流湖。
+4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
+5. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
+6. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
+7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）。
+8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
+9. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
    `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
    上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
-8. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
+10. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
    悬崖式跳跃，3 轮 30% 邻域均值混合（仅陆地）松弛为连续坡降：
    `elev_i = 0.7·elev_i + 0.3·mean(land_neighbors)`；>3000m 邻域跳跃 1446→137 cell。
 
-### 6.5 参数表
+### 6.6 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
@@ -797,6 +843,13 @@ age = max_age · d_div / (d_div + d_conv)
 | `noise_anisotropy` | 0.3 | 0 – 1 | 各向异性噪声强度 |
 | `plate_elevation_spread_m` | 1500 | 500 – 3000 | per-plate 均匀偏移 |
 | `continental_undulation_m` | 600 | 200 – 1500 | 大陆动态地形起伏 |
+| `interior_lowland_enabled` | true | — | 内部低地开关 |
+| `interior_lowland_depth_m` | 600 | 200 – 1200 | 内部低地下压量 |
+| `interior_lowland_distance_scale_km` | 1500 | 500 – 3000 | 下压 0→满深距离 |
+| `interior_lowland_floor_m` | 0 | 0 – 200 | 下压后离海平面最低高度 |
+| `deposition_enabled` | true | — | 沉积填充开关 |
+| `lake_fraction` | 0.2 | 0 – 1 | 留作内流湖的盆地比例 |
+| `lake_depth_m` | 50 | 10 – 400 | 湖面低于海平面深度 |
 
 > **noise_scale 与物理波长的换算**：OpenSimplex 在单位球面 (x,y,z) 上采样，
 > 特征波长 ≈ **R / scale**（R = 行星半径，nacrea = 6817 km）：

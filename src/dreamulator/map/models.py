@@ -274,12 +274,6 @@ class VoronoiCell(BaseModel):
         ),
     )
 
-    # Erosion properties (filled by erosion loop — map/erosion.py)
-    net_erosion_m: float = Field(
-        default=0.0,
-        description="Net elevation change from fluvial erosion + deposition "
-        "(m; negative = eroded, positive = deposition)",
-    )
     hotspot_id: str | None = Field(
         default=None,
         description=(

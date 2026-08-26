@@ -227,6 +227,40 @@ class TerrainPipelineConfig:
     # range).  Controls how much the orogenic belt amplitude varies along
     # its length via 1D noise modulation.
     interior_height_variation: float = 0.7
+    # Interior lowlands: lower the deep continental interior (far from active
+    # convergent boundaries) toward cratonic lowland elevation, so continents
+    # read as "low plains + orogenic belts" instead of a uniform high plateau.
+    # The bimodal continental base (850 m) has no interior-lowering stage, so
+    # without this ~half of emergent land sits above 1000 m (Earth median land
+    # ≈ 350–500 m).  Lowering is a smoothstep ramp from 0 at the convergent
+    # (mountain-building) margin to full depth at *distance_scale_km* beyond
+    # it, soft-clamped above *floor_m* (smooth maximum) so the calibrated
+    # coastline is never crossed and the lowlands don't pile up at one value.
+    interior_lowland_enabled: bool = True
+    # Maximum lowering of the deep interior (m).  Applied only to continental
+    # cells far from convergent boundaries (orogenic belts keep their relief).
+    interior_lowland_depth_m: float = 600.0
+    # Distance (km) from the nearest convergent boundary over which the
+    # lowering ramps from 0 to full depth (smoothstep).
+    interior_lowland_distance_scale_km: float = 1500.0
+    # Minimum post-lowering elevation above the calibrated sea surface (m).
+    # 0 = sea level (the natural limit); cells below it are soft-clamped back so
+    # the 0–100 m lowland band emerges naturally instead of piling at one value.
+    # Orogenic/paleo-orogeny belts added downstream can still rise or carve below.
+    interior_lowland_floor_m: float = 0.0
+    # Depositional fill of below-sea-level interior basins.  The interior
+    # lowlands can push the deep interior below the calibrated sea level; instead
+    # of clamping those cells back to sea level (a flat, isolated 0 m floor),
+    # deposit sediment to raise each closed basin to its spill level — the lowest
+    # outlet to the global ocean — so it drains again (Landlab SinkFiller /
+    # Tucker et al. 2001).  A fraction of basins are left below sea level as
+    # endorheic lakes, auto-detected later by hydrology.detect_closed_basins.
+    deposition_enabled: bool = True
+    # Fraction of below-sea-level basins left unfilled as endorheic lakes.
+    lake_fraction: float = 0.2
+    # Lake surface depth below the calibrated sea level (m).  Reference:
+    # Caspian Sea −28 m, Dead Sea −430 m, Great Salt Lake −1280 m.
+    lake_depth_m: float = 50.0
 
     # Noise
     noise_scale: float = 2.0
