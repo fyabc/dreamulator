@@ -430,4 +430,4 @@ def generate_rivers(mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         c.flow_accumulation = float(accum_km2[i])
         c.river_id = river_ids[i]
         c.river_order = int(order[i])
-        c.is_lake = bool(is_lake[i])
+        c.is_lake = bool(is_lake[i]) or bool(c.is_lake)

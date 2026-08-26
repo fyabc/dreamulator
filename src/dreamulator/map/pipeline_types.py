@@ -243,10 +243,24 @@ class TerrainPipelineConfig:
     # Distance (km) from the nearest convergent boundary over which the
     # lowering ramps from 0 to full depth (smoothstep).
     interior_lowland_distance_scale_km: float = 1500.0
-    # Minimum post-lowering elevation above the calibrated sea surface (m) —
-    # the floor that keeps coastlines unchanged.  Orogenic/paleo-orogeny belts
-    # added downstream can still rise above or carve below it.
-    interior_lowland_floor_m: float = 50.0
+    # Minimum post-lowering elevation above the calibrated sea surface (m).
+    # 0 = sea level (the natural limit); cells below it are soft-clamped back so
+    # the 0–100 m lowland band emerges naturally instead of piling at one value.
+    # Orogenic/paleo-orogeny belts added downstream can still rise or carve below.
+    interior_lowland_floor_m: float = 0.0
+    # Depositional fill of below-sea-level interior basins.  The interior
+    # lowlands can push the deep interior below the calibrated sea level; instead
+    # of clamping those cells back to sea level (a flat, isolated 0 m floor),
+    # deposit sediment to raise each closed basin to its spill level — the lowest
+    # outlet to the global ocean — so it drains again (Landlab SinkFiller /
+    # Tucker et al. 2001).  A fraction of basins are left below sea level as
+    # endorheic lakes, auto-detected later by hydrology.detect_closed_basins.
+    deposition_enabled: bool = True
+    # Fraction of below-sea-level basins left unfilled as endorheic lakes.
+    lake_fraction: float = 0.2
+    # Lake surface depth below the calibrated sea level (m).  Reference:
+    # Caspian Sea −28 m, Dead Sea −430 m, Great Salt Lake −1280 m.
+    lake_depth_m: float = 50.0
 
     # Noise
     noise_scale: float = 2.0
