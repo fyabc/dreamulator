@@ -746,6 +746,7 @@ def _synthesize_gaussian(
 
     # Post-processing (shared with asymmetric: shelf/plain must run last)
     sea_level = config.sea_level_offset_m
+    elevation = _apply_interior_lowlands(mesh, elevation, config)
     elevation = _apply_island_arcs(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
@@ -937,6 +938,7 @@ def _synthesize_asymmetric(
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
     sea_level = config.sea_level_offset_m
+    elevation = _apply_interior_lowlands(mesh, elevation, config)
     elevation = _apply_island_arcs(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
@@ -1657,6 +1659,118 @@ def _apply_sea_level_calibration(
     )
 
     return elevation - sea_level
+
+
+def _apply_interior_lowlands(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Lower deep continental interiors toward cratonic lowland elevation.
+
+    The bimodal continental base (``continental_elevation_m``) plus convergent
+    boundary uplift leaves plate interiors as a uniform high plateau — without
+    this stage roughly half of emergent land sits above 1000 m, whereas Earth's
+    median land elevation is ≈ 350–500 m (Cogley 1984; ETOPO1).  Real continents
+    are low cratons ringed by orogenic belts: mountain-building is concentrated
+    at active convergent margins, and the deep interior subsides back toward sea
+    level.
+
+    Lowering is a smoothstep ramp from 0 at the nearest convergent (orogenic)
+    boundary to full ``interior_lowland_depth_m`` at
+    ``interior_lowland_distance_scale_km`` beyond it, soft-clamped above
+    ``interior_lowland_floor_m`` (smooth maximum) so the calibrated coastline
+    (and target land fraction) is never crossed.  Runs before the island-arc /
+    interior-landform stages so paleo-orogeny belts and rift valleys are carved
+    on top of the lowlands.
+
+    References:
+      * Cogley, J.G. (1984). "Continental margins and the extent and number of
+        the continents." *Reviews of Geophysics*, 22(2), 101–122. — cratonic
+        interiors are systematically lower than active margins.
+      * ETOPO1 Global Relief Model — Earth median land elevation ≈ 350–500 m.
+
+    Modifies *elevation* in-place.
+    """
+    if not config.interior_lowland_enabled:
+        return elevation
+    depth = config.interior_lowland_depth_m
+    if depth <= 0:
+        return elevation
+    scale = config.interior_lowland_distance_scale_km
+    floor = config.interior_lowland_floor_m
+    sea_level = config.sea_level_offset_m  # 0 after calibration
+    n = mesh.num_cells
+
+    # Convergent boundary cells are the orogenic source.  Seed the BFS from the
+    # exact plate-edge cells (distance 0) so the ramp origin is the trench /
+    # collision zone, not the propagated type halo (~1.2× boundary_influence_km).
+    from collections import deque
+
+    sources: list[int] = []
+    for i, cell in enumerate(mesh.cells):
+        d = cell.distance_to_boundary_km
+        if cell.boundary_type == "convergent" and d is not None and d <= 1.0:
+            sources.append(i)
+    if not sources:
+        logger.info("  Interior lowlands: no convergent boundaries, skipping")
+        return elevation
+
+    # Multi-source BFS → hop distance to the nearest convergent boundary.
+    hops = np.full(n, -1, dtype=np.int32)
+    q: deque[int] = deque()
+    for s in sources:
+        hops[s] = 0
+        q.append(s)
+    while q:
+        cur = q.popleft()
+        for nid in mesh.cells[cur].neighbors:
+            if not (0 <= nid < n):
+                continue
+            if hops[nid] == -1:
+                hops[nid] = hops[cur] + 1
+                q.append(nid)
+
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+    dist_km = hops.astype(np.float64) * cell_km
+
+    # Smoothstep ramp 0 → 1 over [0, scale].
+    t = np.clip(dist_km / scale, 0.0, 1.0)
+    ramp = t * t * (3.0 - 2.0 * t)
+
+    # Lower continental land cells only.  The floor is a SOFT clamp (smooth
+    # maximum via logsumexp): cells approaching it taper off instead of
+    # hard-clamping, so lowlands keep intra-cell relief and the elevation
+    # histogram doesn't spike at exactly ``floor_m`` — while never crossing the
+    # calibrated sea level (coastline unchanged).
+    n_lowered = 0
+    min_h = sea_level + floor
+    soft_k = 1.0 / max(floor, 1.0)  # soft-floor transition width ≈ floor
+    for i, cell in enumerate(mesh.cells):
+        if elevation[i] <= sea_level:
+            continue
+        if getattr(cell, "crust_type", "") != "continental":
+            continue
+        r = ramp[i]
+        if r <= 0.0:
+            continue
+        new_h = elevation[i] - depth * r
+        if new_h < min_h:
+            # Smooth maximum: approaches min_h without a hard cliff.
+            new_h = float(np.logaddexp(soft_k * new_h, soft_k * min_h) / soft_k)
+        if new_h < elevation[i]:
+            elevation[i] = new_h
+            n_lowered += 1
+
+    if n_lowered:
+        logger.info(
+            "  Interior lowlands: lowered %d cells (depth=%.0f m, scale=%.0f km, floor=%.0f m)",
+            n_lowered,
+            depth,
+            scale,
+            floor,
+        )
+    return elevation
 
 
 # =========================================================================

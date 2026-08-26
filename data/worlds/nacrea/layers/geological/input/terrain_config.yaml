@@ -46,6 +46,15 @@ terrain:
   # terrain_algorithm: cortial2019_asymmetric  # terrain synthesis strategy
   # mountain_asymmetry: 0.4                    # 0=symmetric, 1=strongly asymmetric
   # hotspot_count: 3                           # volcanic hotspot chains (0=off)
+  # ── 内部低地（2026-08）──────────────────────────────────────────────
+  # 大陆深部（远离汇聚边界的克拉通内部）系统性下压到低地海拔，解决
+  # "大陆主体都是 ≥1000m 高原、缺少平原"的问题（地球陆均高 ~350-500m）。
+  # 下压量 = depth × smoothstep(距最近汇聚边界距离 / scale)，被 floor 钳制在
+  # 海平面之上 → 校准后的海岸线不变。造山带/古造山带（后续阶段叠加）仍可高出。
+  interior_lowland_enabled: true
+  interior_lowland_depth_m: 800.0        # 深部最大下压量（m）
+  interior_lowland_distance_scale_km: 600.0   # 下压从 0 → 满深的距离（km，≈1.5× boundary_influence）
+  interior_lowland_floor_m: 50.0         # 下压后离海平面的最低高度（m）
 
 # ── 构造板块 ──────────────────────────────────────────────────────────────────
 # 来源: geography.md (12主板块 + 8小板 = 20)

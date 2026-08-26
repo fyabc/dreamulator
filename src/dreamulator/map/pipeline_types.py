@@ -227,6 +227,26 @@ class TerrainPipelineConfig:
     # range).  Controls how much the orogenic belt amplitude varies along
     # its length via 1D noise modulation.
     interior_height_variation: float = 0.7
+    # Interior lowlands: lower the deep continental interior (far from active
+    # convergent boundaries) toward cratonic lowland elevation, so continents
+    # read as "low plains + orogenic belts" instead of a uniform high plateau.
+    # The bimodal continental base (850 m) has no interior-lowering stage, so
+    # without this ~half of emergent land sits above 1000 m (Earth median land
+    # ≈ 350–500 m).  Lowering is a smoothstep ramp from 0 at the convergent
+    # (mountain-building) margin to full depth at *distance_scale_km* beyond
+    # it, soft-clamped above *floor_m* (smooth maximum) so the calibrated
+    # coastline is never crossed and the lowlands don't pile up at one value.
+    interior_lowland_enabled: bool = True
+    # Maximum lowering of the deep interior (m).  Applied only to continental
+    # cells far from convergent boundaries (orogenic belts keep their relief).
+    interior_lowland_depth_m: float = 600.0
+    # Distance (km) from the nearest convergent boundary over which the
+    # lowering ramps from 0 to full depth (smoothstep).
+    interior_lowland_distance_scale_km: float = 1500.0
+    # Minimum post-lowering elevation above the calibrated sea surface (m) —
+    # the floor that keeps coastlines unchanged.  Orogenic/paleo-orogeny belts
+    # added downstream can still rise above or carve below it.
+    interior_lowland_floor_m: float = 50.0
 
     # Noise
     noise_scale: float = 2.0

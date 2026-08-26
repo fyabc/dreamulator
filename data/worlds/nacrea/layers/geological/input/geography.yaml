@@ -52,7 +52,9 @@ features:
     strength: 0.85              # <裂谷强度，保证裂谷能切开（见大裂谷海）
     elongation: 1.3             # 南北拉伸缩短（1.6→1.3: 北界 56→35°, 南界 −56→−55°）
     bearing_deg: 0.0            # 南北向拉长
-    elevation_target_m: 750.0   # 压低整体海拔（nacrea 均陆高 ~1238 m，地球 ~840 m）
+    # 与 terrain_config.interior_lowland_* 协同：内部低地已系统性下压大陆深部，
+    # 此钉扎把低区锚定在 ~400m（地球陆均高），pin_exponent<1 保护造山带高山。
+    elevation_target_m: 400.0
     pin_strength: 0.3
     pin_exponent: 0.6           # 偏差指数化：保护高山，低区拉平到 target
 
