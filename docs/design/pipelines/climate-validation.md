@@ -70,13 +70,13 @@
 
 ## 3. 下载与预处理
 
-> 操作步骤已移至 [../usage/validation-workflow.md](../../usage/validation-workflow.md) §1–4。
+> 操作步骤已移至 [../usage/climate-validation-workflow.md](../../usage/climate-validation-workflow.md) §1–4。
 
 ---
 
 ## 4. 运行验证
 
-> 操作步骤已移至 [../usage/validation-workflow.md](../../usage/validation-workflow.md) §5。
+> 操作步骤已移至 [../usage/climate-validation-workflow.md](../../usage/climate-validation-workflow.md) §5。
 
 ---
 

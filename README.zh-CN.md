@@ -180,7 +180,7 @@ uv run dreamulator serve
 |------|------|
 | [CLI 命令参考](docs/usage/cli.md) | 全部 CLI 命令 (init/build/branch/climate/narrate/serve…) |
 | [地图工作流](docs/usage/map-workflow.md) | CVT 网格地形生成 → 查看器检查 → Gaea 精细化 |
-| [气候验证工作流](docs/usage/validation-workflow.md) | 真实地球观测数据导入、多数据集验证、回归测试体系 |
+| [气候验证工作流](docs/usage/climate-validation-workflow.md) | 真实地球观测数据导入、多数据集验证、回归测试体系 |
 | [性能分析工作流](docs/usage/profiling.md) | 构建耗时档案、py-spy 火焰图、Scalene、CI 基准；[优化记录](docs/usage/performance-optimizations.md) |
 | [文明地图指南](docs/usage/civmap-guide.md) | 真实地球底图、架空国家涂色、时间快照 |
 | [3D 可视化器](docs/usage/frontend-3d-viewer.md) | 恒星系视图 + 球面地球操作指南 |

@@ -9,7 +9,7 @@
 - `cli.md` — CLI 命令参考（init、list、info、validate、schema、delete、branch、conlang、terrain、build、climate、narrate、guard、export、explore-seeds、serve）
 - `skills.md` — Claude Code 技能速查（/grill-world 拷问、/read-map 读图、/narrate 叙述）
 - `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 查看器检查 → 可选 Gaea 精细化的完整流程）
-- `validation-workflow.md` — 气候验证工作流（真实高程导入、参考数据下载、运行验证、保存报告）
+- `climate-validation-workflow.md` — 气候验证工作流（真实高程导入、参考数据下载、运行验证、保存报告）
 - `profiling.md` — 性能分析工作流（build_profile.json、py-spy 火焰图、Scalene、基准测试）
 - `performance-optimizations.md` — 性能优化记录（基线数据、改动内容、效果对比、待优化清单）
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）

@@ -114,10 +114,10 @@ def _report(
     print(f"  {'lat':>6} {'comb':>8} {'ref':>8} {'bias':>8} {'land':>8} {'ocean':>8}")
     for i in range(len(centers)):
         if not np.isnan(sim[i]):
-            lv = f"{land[i]:>8.1f}" if not np.isnan(land[i]) else f"{'—':>8}"
-            ov = f"{ocean[i]:>8.1f}" if not np.isnan(ocean[i]) else f"{'—':>8}"
+            lv = f"{land[i]:>8.1f}" if not np.isnan(land[i]) else f"{'-':>8}"
+            ov = f"{ocean[i]:>8.1f}" if not np.isnan(ocean[i]) else f"{'-':>8}"
             print(
-                f"  {centers[i]:>5.0f}° {sim[i]:>8.1f} {ref[i]:>8.1f} "
+                f"  {centers[i]:>5.0f} {sim[i]:>8.1f} {ref[i]:>8.1f} "
                 f"{sim[i] - ref[i]:>+8.1f} {lv} {ov}"
             )
 
@@ -126,7 +126,7 @@ def _report(
         if abs(r) > 0.9
         else "shape WRONG (physics/engine issue)"
     )
-    print(f"  → {verdict}")
+    print(f"  -> {verdict}")
     return {"rmse": round(rmse, 1), "bias": round(bias, 1), "corr": round(r, 3), "verdict": verdict}
 
 
@@ -134,6 +134,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--branch", default="climate-dev")
     parser.add_argument("--band", type=float, default=5.0)
     parser.add_argument(
@@ -161,7 +162,7 @@ def main() -> None:
     from dreamulator.validate_climate import _ZONAL_PRECIP_REF, _ZONAL_TEMP_REF
 
     root = _find_project_root()
-    world_dir = root / "data" / "worlds" / args.world
+    world_dir = root / args.world_dir / args.world
 
     print(f"Loading Earth mesh ({args.world}, branch={args.branch}) ...")
     mesh = _load_mesh(world_dir, args.planet, args.branch)

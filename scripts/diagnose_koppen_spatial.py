@@ -53,6 +53,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument(
         "--branch", default="climate-dev", help="branch whose mesh matches koppen_obs.json"
     )
@@ -63,7 +64,7 @@ def main() -> None:
     args = parser.parse_args()
 
     root = _find_project_root()
-    world_dir = root / "data" / "worlds" / args.world
+    world_dir = root / args.world_dir / args.world
 
     print(f"Loading Earth mesh from {world_dir} (branch={args.branch}) ...")
     mesh = _load_mesh(world_dir, args.planet, args.branch)
@@ -129,14 +130,14 @@ def main() -> None:
 
     def _fmt(lat_key, lon_key):
         if lon_key is None:
-            return f"{lat_key:>10} {'—':>8}"
-        return f"{lat_key:>8.0f}° {lon_key:>7.0f}°"
+            return f"{lat_key:>10} {'-':>8}"
+        return f"{lat_key:>8.0f} {lon_key:>7.0f}"
 
-    print("  — best bins —")
+    print("  - best bins -")
     for acc, _match, total, lat_key, lon_key in rows[: args.top]:
         print(f"  {_fmt(lat_key, lon_key)} {acc:>5.1%} {total:>6}")
 
-    print("  — worst bins —")
+    print("  - worst bins -")
     for acc, _match, total, lat_key, lon_key in rows[-args.top :]:
         print(f"  {_fmt(lat_key, lon_key)} {acc:>5.1%} {total:>6}")
 

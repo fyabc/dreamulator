@@ -8,7 +8,7 @@ climatology.  They are derived from:
     - temperature : NCEP/NCAR Reanalysis 1 ``air.mon.ltm.nc`` (long-term monthly mean)
     - precipitation: GPCP v2.3 ``precip.mon.mean.nc`` (mm/day)
 
-Download both first (see docs/usage/validation-workflow.md §3–4), then run::
+Download both first (see docs/usage/climate-validation-workflow.md §3–4), then run::
 
     uv run python scripts/generate_validation_reference.py \
         --temp data/earth/NCEP_air_mon_ltm.nc \

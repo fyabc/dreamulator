@@ -180,7 +180,7 @@ See `docs/usage/cli.md` for deployment options and the `dreamulator serve` comma
 |----------|-------------|
 | [CLI Reference](docs/usage/cli.md) | All CLI commands (init/build/branch/climate/narrate/serve…) |
 | [Map Workflow](docs/usage/map-workflow.md) | CVT mesh terrain generation → viewer inspection → Gaea refinement |
-| [Climate Validation](docs/usage/validation-workflow.md) | Real-Earth observation data import, multi-dataset validation, regression test suite |
+| [Climate Validation](docs/usage/climate-validation-workflow.md) | Real-Earth observation data import, multi-dataset validation, regression test suite |
 | [Profiling](docs/usage/profiling.md) | Build timing profiles, py-spy flamegraphs, Scalene, CI benchmarks; [optimization log](docs/usage/performance-optimizations.md) |
 | [CivMap Guide](docs/usage/civmap-guide.md) | Real-Earth basemap, fictional territory coloring, temporal snapshots |
 | [3D Viewer](docs/usage/frontend-3d-viewer.md) | Star system view + globe interaction guide |

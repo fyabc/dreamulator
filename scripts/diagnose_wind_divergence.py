@@ -52,6 +52,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--branch", default="climate-dev")
     parser.add_argument("--itcz", type=float, default=0.0, help="ITCZ latitude (°) for the wind")
     parser.add_argument("--n-band", type=int, default=9, help="latitude bands for the report")
@@ -64,7 +65,7 @@ def main() -> None:
     args = parser.parse_args()
 
     root = _find_project_root()
-    world_dir = root / "data" / "worlds" / args.world
+    world_dir = root / args.world_dir / args.world
     mesh = _load_mesh(world_dir, args.planet, args.branch)
     if mesh is None:
         print("ERROR: no mesh found")

@@ -68,6 +68,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--branch", default="climate-dev")
     parser.add_argument("--top", type=int, default=12, help="number of top confusions to show")
     parser.add_argument(
@@ -93,7 +94,7 @@ def main() -> None:
     args = parser.parse_args()
 
     root = _find_project_root()
-    world_dir = root / "data" / "worlds" / args.world
+    world_dir = root / args.world_dir / args.world
 
     print(f"Loading Earth mesh ({args.world}, branch={args.branch}) ...")
     mesh = _load_mesh(world_dir, args.planet, args.branch)
@@ -191,9 +192,9 @@ def main() -> None:
     # Top confusion pairs (off-diagonal)
     off_diag = [(cnt, obs, sim) for (obs, sim), cnt in confusion.items() if obs != sim]
     off_diag.sort(reverse=True)
-    print(f"\n=== Top {args.top} confusion pairs (obs → sim) ===\n")
+    print(f"\n=== Top {args.top} confusion pairs (obs -> sim) ===\n")
     for cnt, obs, sim in off_diag[: args.top]:
-        print(f"  {obs:>5} → {sim:<5} {cnt:>7} cells")
+        print(f"  {obs:>5} -> {sim:<5} {cnt:>7} cells")
 
     # v0.27 tuning targets: BWk (cold desert) and ET (tundra) confusion with C/D
     print("\n=== v0.27 tuning targets (BWk / ET confusions) ===")
@@ -206,7 +207,7 @@ def main() -> None:
         total_conf = sum(cnt for cnt, _, _ in cw)
         print(f"  {target}: {total_conf} confused cells")
         for cnt, o, s in sorted(cw, reverse=True)[:5]:
-            print(f"    {o} → {s}: {cnt}")
+            print(f"    {o} -> {s}: {cnt}")
 
 
 if __name__ == "__main__":
