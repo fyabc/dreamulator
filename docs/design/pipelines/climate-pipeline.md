@@ -45,7 +45,6 @@
 │  climate_simulator.py         export.py                       │
 │  ├─ simulate_climate()        └─ export_climate_layers()      │
 │  ├─ _compute_precipitation_bfs                                │
-│  ├─ _meridional_convergence                                    │
 │  ├─ _surface_divergence                                        │
 │  ├─ _geostrophic_wind                                          │
 │  └─ _ocean_surface_temperature                                 │
@@ -111,18 +110,21 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 
 ### 2.3 `climate_simulator.py` — CVT mesh 气候模拟
 
-**入口**：`simulate_climate(mesh: CVTMesh, config: TerrainPipelineConfig) -> dict[str, float]`
+**入口**：`simulate_climate(mesh: CVTMesh, config: TerrainPipelineConfig, debug: dict[str, np.ndarray] | None = None) -> dict[str, float]`
 
-**执行流程**：
+**执行流程**（六步：温度 → 风场 → 洋流 → 降水 → Köppen → 写回）：
 
 ```
 1. 提取 CVT mesh → numpy 数组（elevation / lat / land-ocean mask / 3D 节点）
 2. Stage 1: 温度
    ├─ equilibrium_temperature + surface_temperature → 全球均温 t_surf
-   ├─ ebm_1d=true: solve_1d_ebm_temperature(D_land) → 陆地温度（大陆度）
+   ├─ ebm_1d=true:
+   │   ├─ hadley_extent_deg ≥ 90: solve_held_hou_temperature（单圈 Held-Hou 慢自转）
+   │   └─ 否则: solve_1d_ebm_temperature(D_land) → 陆地温度（大陆度）
    │   ebm_1d=false: legacy sin² + 图扩散（见 §6）
    ├─ ice_albedo_feedback（年均，若开启）
    ├─ 海拔直减率（仅陆地）
+   ├─ sub_planet_warming_c（潮汐锁定卫星向星面增温，若 >0）
    └─ _ocean_surface_temperature（海洋 SST，地球剖面锚定）
 3. Stage 1b: 季节
    └─ compute_seasonal_climate → t_monthly / t_cold / t_hot / p_factor / itcz_lat
@@ -130,10 +132,10 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
    ├─ 气压场（barometric + thermal low）→ 图梯度 → 地转风（Coriolis）
    ├─ hadley_cell_wind（三圈 + 地形阻挡）
    └─ 40% 地转 + 60% 环流
-5. Stage 2.5: 洋流（Stommel 环流 + SST 平流 + 涌升）
-6. Stage 3: 降水（_compute_precipitation_bfs，见 §2.4）
-7. Stage 4: Köppen 分类（koppen_classify）
-8. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值）
+5. Stage 3: 洋流（Stommel 环流 + SST 平流 + 涌升）
+6. Stage 4: 降水（_compute_precipitation_bfs，见 §2.4）
+7. Stage 5: Köppen 分类（koppen_classify）
+8. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值 / distance_to_coast_km）
 ```
 
 ### 2.4 降水：`_compute_precipitation_bfs` — 质量守恒水汽收支
@@ -166,9 +168,6 @@ energy_balance.md §8）：
 
 **诊断辅助函数**：
 
-- `_meridional_convergence(lat_rad, hadley_extent, polar_cell_start, rotation, itcz_lat_deg)`：
-  在细纬度网格上算经向风散度 `(1/cos φ) d(v cos φ)/dφ`（`np.gradient`），12 月 ITCZ 平均
-  后插值回 cell。平滑无噪声，供诊断脚本对比水汽收支的逐 cell 散度。
 - `_surface_divergence(nodes_xyz, wind, neighbors, areas_ster)`：有限体积逐 cell 散度，
   供诊断脚本 `diagnose_wind_divergence.py` 使用。
 
@@ -195,8 +194,8 @@ energy_balance.md §8）：
 
 **配置**（`TerrainPipelineConfig` 的 `Ocean` 小节）：`ocean_currents_enabled`（开关）、
 `ocean_drag_coefficient`、`ocean_mixed_layer_depth_m`（H_ml）、`ocean_bottom_friction_s`
-（Stommel R，调 WBC 比）、`ocean_sst_advection_days`（τ）、`ocean_coastal_influence_km`、
-`ocean_upwelling_enabled`。
+（Stommel R，调 WBC 比）、`ocean_sst_advection_days`（τ）、`ocean_temperature_diffusivity`
+（D₀，温度平流扩散）、`ocean_coastal_influence_km`、`ocean_upwelling_enabled`。
 
 ### 2.6 `climate.py` — DAG 引擎封装
 
@@ -272,7 +271,7 @@ const temperature = tMin + (pixelValue / 65535) * (tMax - tMin);  // from climat
   "temperature_range_c": [-40, 50],
   "precipitation_range_mm": [0, 6000],
   "koppen_classes": ["Af", "Am", "Aw", "BSh", "BWh", ...],
-  "export_resolution": [2048, 1024]
+  "export_resolution": [4096, 2048]
 }
 ```
 

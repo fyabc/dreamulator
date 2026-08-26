@@ -22,8 +22,8 @@ dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地�
 
 地图系统采用**栅格 + Voronoi 双层混合架构**（参考 [QGIS](https://qgis.org/) 的栅格 DEM + 矢量特征模式）：
 
-- **栅格高度图**（Raster）：2048×1024 像素的 16-bit PNG，作为核心可编辑数据和视觉渲染底图
-- **Voronoi 网络**（Vector）：~5000 个 cell 的语义分组，用于板块划分、省份管理、引擎模拟计算
+- **栅格高度图**（Raster）：4096×2048 像素的 16-bit PNG，作为核心可编辑数据和视觉渲染底图
+- **Voronoi 网络**（Vector）：~10 万（100k）个 cell 的语义分组，用于板块划分、省份管理、引擎模拟计算
 
 ```
 栅格高度图 (编辑 + 渲染)          ← 参考 Paradox 的 heightmap 方法
@@ -40,7 +40,7 @@ Voronoi 网络 (语义分组)           ← 参考 Azgaar 的 Voronoi cell 方�
 **为什么选 Voronoi 而非纯栅格？**
 - 栅格缺少拓扑信息（不知道"山脊"和"河谷"的区别）
 - Voronoi cells 可分组为板块、省份，天然支持文明层和引擎模拟
-- 逐 cell 计算比逐像素计算快约 400 倍（5000 cells vs 200 万像素）
+- 逐 cell 计算比逐像素计算快约 80 倍（100k cells vs ~800 万像素）
 
 ## 核心设计决策
 
@@ -127,8 +127,8 @@ SVG 叠加层使用 **动态偏移副本** 方案：
 
 > **参考**：dreamulator 自身的层级架构设计
 
-- 地图数据遵循现有的层目录结构（`layers/geological/input/maps/`）
-- 编辑数据放 `input/`，引擎计算结果放 `derived/`
+- 地图数据存于统一顶层 `maps/<planet_id>/` 目录（旧 `layers/geological/input/maps/` 已弃用，仅作向后兼容 fallback）
+- 分支地图存于 `branches/<name>/maps/<planet_id>/`，覆盖主地图
 - 分支继承通过 `LayerResolver` 处理
 
 ### 地图系统作为主包模块
@@ -153,19 +153,17 @@ SVG 叠加层使用 **动态偏移副本** 方案：
 地图数据遵循 `input/` + `derived/` 分离原则：
 
 ```
-layers/
-├── geological/
-│   ├── input/maps/<planet_id>/
-│   │   ├── map.yaml          # 元数据
-│   │   ├── elevation.png     # 高度图（git-lfs 管理）
-│   │   ├── voronoi.json      # Voronoi 网络
-│   │   ├── plates.json       # 板块分组
-│   │   └── features.json     # 线性特征
-│   └── derived/maps/<planet_id>/
-│       └── terrain.png       # 地形分类
-├── climate/derived/maps/...  # 气候衍生图层
-├── ecology/derived/maps/...  # 生态衍生图层
-└── civilization/input/maps/  # 文明层地图数据
+maps/
+├── <planet_id>/
+│   ├── map.yaml              # 元数据
+│   ├── cvt_mesh.json         # CVT 网格（gzip 压缩）
+│   ├── elevation.png         # 高度图（git-lfs 管理）
+│   ├── plates.json           # 板块分组
+│   ├── features.json         # 河流矢量图层
+│   ├── temperature.png       # 气候温度图层
+│   ├── precipitation.png     # 气候降水图层
+│   └── koppen.json           # Köppen 分类
+└── branches/<name>/maps/<planet_id>/   # 分支地图（覆盖主地图）
 ```
 
 > **注意**：PNG 高度图使用 git-lfs 管理（`.gitattributes` 中配置 `*.png filter=lfs`）。
@@ -176,8 +174,8 @@ layers/
 |------|------|----------|
 | `map/models.py` | Pydantic 数据模型 | — |
 | `map/elevation_codec.py` | 高度图 PNG ↔ numpy 编解码 | Pillow 16-bit PNG I/O |
-| `map/voronoi_generator.py` | Voronoi 网络生成 + Lloyd relaxation | [Red Blob Games](https://www.redblobgames.com/x/2022-voronoi-maps-tutorial/)、scipy.spatial.Voronoi |
-| `map/terrain_generator.py` | 程序化地形生成（快速原型，推荐用 Gaea 替代） | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
+| `map/voronoi_generator.py` | 高度图采样（`sample_heightmap`；Voronoi 生成 + Lloyd 已迁至 `cvt_mesh.py` / `plate_generator.py`） | [Red Blob Games](https://www.redblobgames.com/x/2022-voronoi-maps-tutorial/)、scipy.spatial.Voronoi |
+| `map/terrain_synthesizer.py` | 程序化地形合成（双峰基底 + 边界效应 + 热点 + fBm） | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
 | `map/importer.py` | 外部高度图导入（Gaea/World Machine 输出格式解码） | — |
 | `map/manager.py` | 地图 CRUD + 分支继承 + 同步 | dreamulator LayerResolver |
 
@@ -188,7 +186,7 @@ layers/
 | GET | `/api/worlds/{w}/maps` | 列出有地图的行星 |
 | GET | `/api/worlds/{w}/maps/{p}/meta` | 地图元数据 |
 | GET | `/api/worlds/{w}/maps/{p}/elevation` | 高度图 PNG |
-| GET | `/api/worlds/{w}/maps/{p}/layer/{type}` | 指定图层数据 |
+| GET | `/api/worlds/{w}/maps/{p}/cvt-mesh` | CVT 网格（`fmt=json|msgpack`） |
 | GET | `/api/worlds/{w}/maps/{p}/voronoi` | Voronoi 网络 JSON |
 | GET | `/api/worlds/{w}/maps/{p}/plates` | 板块分组 JSON |
 | GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON（预留） |

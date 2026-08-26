@@ -30,7 +30,7 @@
   对比观测数据 → RMSE, R², 匹配率
 ```
 
-**快速验证**（无需下载额外数据）：仅使用 zonal mean 参考值（已内嵌在 `validate_climate.py` 中）。
+**快速验证**（无需下载额外数据）：仅使用 zonal mean 参考值（已内嵌在 `src/dreamulator/validate_climate.py` 中）。
 
 **完整验证**（需下载数据）：逐 cell 对比 Beck et al. (2018) Köppen 观测图。
 
@@ -54,7 +54,7 @@
 | **GPCP v2.3** | [NOAA PSL](https://psl.noaa.gov/data/gridded/data.gpcp.html) | NetCDF | ~3 MB | 2.5° | 降水验证 |
 | **Beck et al. 2018 Köppen** | [figshare](https://doi.org/10.1038/sdata.2018.214) | GeoTIFF | ~10 MB | 5 arc-min | 气候分类验证 |
 
-> **快速模式**：温度/降水的 zonal mean 参考值已硬编码在 `validate_climate.py` 中，
+> **快速模式**：温度/降水的 zonal mean 参考值已硬编码在 `src/dreamulator/validate_climate.py` 中，
 > 无需下载上述数据即可运行快速验证。仅 Köppen 完整验证需要下载 Beck 2018 数据。
 
 ### 2.3 数据许可证
@@ -164,7 +164,7 @@
 
 | Tier | 内容 | 状态 | 成本 |
 |---|---|---|---|
-| **T3 单调性 / 物理合理性**（先做） | 纯理论断言，零数据依赖（见 §7.4） | **已建** (7 tests: 5 pass + 3 xfail) | 最低 |
+| **T3 单调性 / 物理合理性**（先做） | 纯理论断言，零数据依赖（见 §7.4） | **已建** (8 tests: 5 pass + 3 xfail) | 最低 |
 | **T2 太阳系端元复现**（性价比最高） | Venus / Mars / airless / nacrea HZ 断言（见 §7.5） | **已建** (4 tests) | 低 |
 | **T1 现代地球**（现有） | §1–5 的 ETOPO1 / Beck / ERA5 / GPCP 流程 | **已建**（降级为"一条证据线"） | — |
 | **T1 回归门**（新增） | nacrea 200k 基线快照 → CI 回归对比（见 §7.8） | **已建** (`tests/validation/test_regression.py`) | 中（~90s） |
@@ -183,7 +183,7 @@
 - 日照相同的快/慢自转世界：慢自转经向温度梯度更弱
 
 实现形态：`tests/validation/test_physical_plausibility.py`（小网格 n=144 快速跑），
-可进 CI（已集成）。共 7 个测试：5 pass（光照/温室/反照率单调性、无大气极限、
+可进 CI（已集成）。共 8 个测试：5 pass（光照/温室/反照率单调性、无大气极限、
 倾角季节性振幅）+ 3 xfail（冰-反照率双稳态、高倾角极地增温、Hadley 宽度自转依赖待后续实现）。
 
 ### 7.5 T2 端元复现（设计）

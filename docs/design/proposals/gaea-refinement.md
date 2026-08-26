@@ -1,11 +1,14 @@
 # Gaea 局部精细化
 
+> **状态**：设计提案（未实现）——本文档的函数与配置 schema 均为伪代码，尚无实现代码。
+> 2026-08-27 从 `pipelines/` 迁至 `proposals/`。
+
 > 本文档描述「Gaea 局部精细化」——在跑完全球管线（地质 → 气候 → 生态）拿到
 > **地形 / 气候 / 土壤 / 植被** 四个场之后，选取一个固定区域，用 Gaea 做高分辨率
 > 细化，再把结果回导到 CVT 网格。
 >
 > 本阶段是**全局管线之后的区域后处理**，不是独立层级。在
-> [world-generation-pipeline.md](world-generation-pipeline.md) 的阶段目录中位于生态层之后。
+> [world-generation-pipeline.md](../pipelines/world-generation-pipeline.md) 的阶段目录中位于生态层之后。
 
 ## 1 何时使用
 

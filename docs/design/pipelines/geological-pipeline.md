@@ -46,7 +46,7 @@
 
 ### 数据流总览
 
-地质层管线（9 阶段，均作用在 CVT 网格上）：
+地质层管线（8 阶段，均作用在 CVT 网格上）：
 
 | 阶段 | 名称 | 输入 → 输出 |
 |------|------|------------|
@@ -57,8 +57,7 @@
 | 5 | 地形合成 | 双峰基底 + 边界效应 + 热点 + fBm → `elevation` |
 | 6 | 海平面与基础分类 | 海平面校准 → 海陆掩膜 → 大陆架 |
 | 7 | 河流与水文 | 最陡下降 → 流量累积 → 河网/湖泊/内流湖 |
-| 8 | 地表演化侵蚀 | stream power + 坡面扩散（地貌降水代理强迫）→ `elevation` |
-| 9 | 数据导出与可视化 | 等距圆柱投影 → PNG / Three.js / SVG |
+| 8 | 数据导出与可视化 | 等距圆柱投影 → PNG / Three.js / SVG |
 
 下游（气候 → 生态 → 文明）与 Gaea 精细化不在此管线内，见
 [world-generation-pipeline.md](world-generation-pipeline.md)。
@@ -72,9 +71,8 @@
 - **板块 Cortial 2019 Voronoi 剖分**: 加权 Voronoi 重分区（替代早期洪水填充），
   产生自然的不规则板块边界（参考真实地球板块的非凸性）。
 - **欧拉极运动学**: 板块运动使用刚体旋转（`v = ω × P`），确保球面上的运动自洽性。
-- **全球尺度流水侵蚀**: 用 stream power + 坡面扩散做层内 surface evolution 循环，
-  以地貌降水代理为强迫（不读气候引擎，避免地质→气候→地质的 DAG 环）；Gaea 仍用于
-  米级局部细节。
+- **河谷雕刻归 Gaea**: 51 km 网格上流水侵蚀只会产生单 cell 宽人工沟壑，故地质层不做
+  流水侵蚀；河谷雕刻归管线最后一步的 Gaea 局地高清精修（米级）。
 
 ---
 
@@ -493,7 +491,7 @@ damp = clip(2·bias + 2, 0.1, 1.0)   （bias < −0.5 时；否则 1.0，阈值�
 叠最坏基底仍 <0。正常造山带（bias ≥ −0.5）完全无感。
 
 仅有阻尼还不够：top-N 地壳阈值总会向 authored 海洋泄漏少量 continental cell
-（nacrea 裂谷核心 ~13%），它们拿 +850 m 双峰基准 + 板块偏移（±1500 m）直接
+（nacrea 裂谷核心 ~13%），它们拿 continental 双峰基准 + 板块偏移直接
 隆起成高原。因此 |bias| > 0.5 处**双峰基准服从作者**（负侧用 oceanic 基准、
 正侧用 continental 基准，`_apply_base_override`），锚定贯通到高程而不仅是
 地壳类型——这正是 roadmap #9 的验收要求。
@@ -679,11 +677,11 @@ growth_speed_multiplier →  (新增字段)
 **实现**：`terrain_synthesizer.py:_synthesize_asymmetric`（默认算法，
 策略由 `terrain_algorithm` 选择；`cortial2019_gaussian` 为对称版）：
 
-1. **基准高程**：按地壳类型双峰分配——continental `normal(850, 200)`、
-   oceanic `normal(-3800, 500)`；每板块叠加均匀偏移 ±`plate_elevation_spread_m`
-   （陆地取 0.4×）；叠加多尺度「动态地形」起伏 `_continental_undulation`
-   （`continental_undulation_m`，默认 600 m，地幔对流类比 Flament et al. 2013）。
-   若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §6.4）。
+1. **基准高程**：按地壳类型双峰分配——continental `continental_elevation_m`
+   （默认 850 m）、oceanic `oceanic_elevation_m`（默认 −3800 m）两个常量；每板块叠加
+   均匀偏移 ±`plate_elevation_spread_m`（陆地取 0.4×）；叠加多尺度「动态地形」起伏
+   `_continental_undulation`（`continental_undulation_m`，默认 600 m，地幔对流类比
+   Flament et al. 2013）。若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §6.4）。
 2. **非对称边界效应**：`_asymmetric_boundary_effects` 按边界类型叠加高斯剖面
    （σ 由 `boundary_influence_km`，振幅 × 速率因子 `min(|v_n|/10, 1)`，
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
@@ -848,8 +846,8 @@ age = max_age · d_div / (d_div + d_conv)
 | `interior_lowland_distance_scale_km` | 1500 | 500 – 3000 | 下压 0→满深距离 |
 | `interior_lowland_floor_m` | 0 | 0 – 200 | 下压后离海平面最低高度 |
 | `deposition_enabled` | true | — | 沉积填充开关 |
-| `lake_fraction` | 0.2 | 0 – 1 | 留作内流湖的盆地比例 |
-| `lake_depth_m` | 50 | 10 – 400 | 湖面低于海平面深度 |
+| `lake_fraction` | 0.2 | 0 – 1 | 留作外流湖的盆地比例 |
+| `lake_depth_m` | 50 | 10 – 400 | 湖面低于溢流点深度 |
 
 > **noise_scale 与物理波长的换算**：OpenSimplex 在单位球面 (x,y,z) 上采样，
 > 特征波长 ≈ **R / scale**（R = 行星半径，nacrea = 6817 km）：
@@ -987,10 +985,9 @@ def check_polar_configuration(
 
 ## 8. 阶段 7: 河流与水文
 
-> 侵蚀落地后，本节是**侵蚀后地形**上的一次性水文学产品：洼地填平 → D8 流向 →
+> 本节是**地形合成后地形**上的一次性水文学产品：洼地填平 → D8 流向 →
 > 流量累积 → 河网提取，填入 `VoronoiCell.flow_direction / flow_accumulation /
-> river_id / river_order`。侵蚀循环（§10）每次迭代内部复用同一套"洼地填平 +
-> D8 + 累积"纯函数，与本节的最终提取共用实现，避免两套水文逻辑漂移。
+> river_id / river_order`。
 > 物理公式与引用见 [knowledge/geology/hydrology.md](../../knowledge/geology/hydrology.md)。
 
 ### 8.0 洼地填平（前置）
@@ -1001,8 +998,8 @@ O(N log N)）：
 
 1. 从海洋 / 边界 cell 出发，用最小堆按高程向内扩张；
 2. 每个陆 cell 的临时标高推到 `max(elevation, spill)`，保证至少有更低出口；
-3. 填平只在**临时数组**上进行（供流向 / 累积 / 侵蚀循环使用），
-   **不写回** `cell.elevation`——最终河网提取仍在真实（已侵蚀）地形上做；
+3. 填平只在**临时数组**上进行（供流向 / 累积使用），
+   **不写回** `cell.elevation`——最终河网提取仍在真实地形上做；
 4. 内流盆地（无通海出口）填平后仍保留其最低出口作为 sink（§8.5）。
 
 ### 8.1 流向确定
@@ -1624,7 +1621,6 @@ class BiomeData(BaseModel):
 | BFS 降水 | O(N) | ~3s | 单次 BFS |
 | 流向确定 | O(N·k) | ~2s | 逐节点扫描 |
 | 汇水累积 | O(N) | ~1s | 拓扑排序 |
-| 热侵蚀 (×10) | O(k·N·I) | ~10s | 迭代松弛 |
 | 等距投影插值 | O(N·log N) | ~5s | scipy griddata |
 | **总计** | | **实测 532s**（2026-08-03，含气候引擎与构造 ×50） | |
 
@@ -1643,7 +1639,7 @@ class BiomeData(BaseModel):
 |------|------|----------|
 | 自适应分辨率 | 板块边界附近加密，板块内部稀疏 | 总节点减少 50% |
 | C 扩展 | 关键路径用 Cython/Rust 重写 | 10-50× 加速 |
-| GPU 计算 | fBm 和侵蚀使用 CUDA/Vulkan | 100× 加速 |
+| GPU 计算 | fBm 使用 CUDA/Vulkan | 100× 加速 |
 | 分块处理 | 将球面分成 8 个八分面，独立计算后拼接 | 内存减半 |
 | 增量 LOD | 先生成 10K 低分辨率预览，按需细化 | 交互响应 <1s |
 
@@ -1784,9 +1780,8 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 ### 当前限制
 
-1. **侵蚀精度**：全球 stream power + 坡面扩散做大尺度地貌改造（河道宽度稀释
-   抑制了网格级峡谷，§9.6）；Bagnold 沉积路由已落地（§9.7：盆地充填 + 三角洲，
-   无海洋再改造 / 碳酸盐 / 冰川沉积）；米级细节仍需 Gaea 精细化。
+1. **河谷雕刻非地质层职责**：51 km 网格上流水侵蚀只会产生单 cell 宽人工沟壑，
+   故地质层不做流水侵蚀（§9）；河谷雕刻归 Gaea 局地高清精修（米级）。
 
 2. **静态气候**：当前气候模型是稳态快照，不模拟气候的季节内变化或年际变率（ENSO 等）。
 
@@ -1819,7 +1814,7 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 6. **多分辨率 LOD**：前端支持从全球视图（10K 节点）无缝缩放到区域视图（100K 节点）。
 
-7. **GPU 加速**：使用 CuPy 或 PyTorch 将 fBm、BFS、侵蚀等计算迁移到 GPU。
+7. **GPU 加速**：使用 CuPy 或 PyTorch 将 fBm、BFS 等计算迁移到 GPU。
 
 8. **天体物理集成**：从 `astronomy` 层的恒星参数（光度、轨道距离）自动驱动气候模型，
    实现真正的"自底向上"推演。
