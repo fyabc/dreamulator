@@ -58,7 +58,7 @@ export default function MapStatusBar({
         }
       >
         {t('field.elevation')} {cursor.elevationM >= 0 ? '+' : ''}
-        {cursor.elevationM.toLocaleString()}m
+        {cursor.elevationM.toFixed(1)}m
       </span>
 
       {hoveredCell && (

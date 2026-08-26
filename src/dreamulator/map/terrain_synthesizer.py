@@ -746,6 +746,8 @@ def _synthesize_gaussian(
 
     # Post-processing (shared with asymmetric: shelf/plain must run last)
     sea_level = config.sea_level_offset_m
+    elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
+    elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
     elevation = _apply_island_arcs(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
@@ -937,6 +939,8 @@ def _synthesize_asymmetric(
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
     sea_level = config.sea_level_offset_m
+    elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
+    elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
     elevation = _apply_island_arcs(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
@@ -1659,6 +1663,219 @@ def _apply_sea_level_calibration(
     return elevation - sea_level
 
 
+def _apply_interior_lowlands(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Lower deep continental interiors toward cratonic lowland elevation.
+
+    The bimodal continental base (``continental_elevation_m``) plus convergent
+    boundary uplift leaves plate interiors as a uniform high plateau — without
+    this stage roughly half of emergent land sits above 1000 m, whereas Earth's
+    median land elevation is ≈ 350–500 m (Cogley 1984; ETOPO1).  Real continents
+    are low cratons ringed by orogenic belts: mountain-building is concentrated
+    at active convergent margins, and the deep interior subsides back toward sea
+    level.
+
+    Lowering is a smoothstep ramp from 0 at the nearest convergent (orogenic)
+    boundary to full ``interior_lowland_depth_m`` at
+    ``interior_lowland_distance_scale_km`` beyond it, soft-clamped above
+    ``interior_lowland_floor_m`` (smooth maximum) so the calibrated coastline
+    (and target land fraction) is never crossed.  Runs before the island-arc /
+    interior-landform stages so paleo-orogeny belts and rift valleys are carved
+    on top of the lowlands.
+
+    References:
+      * Cogley, J.G. (1984). "Continental margins and the extent and number of
+        the continents." *Reviews of Geophysics*, 22(2), 101–122. — cratonic
+        interiors are systematically lower than active margins.
+      * ETOPO1 Global Relief Model — Earth median land elevation ≈ 350–500 m.
+
+    Modifies *elevation* in-place.
+
+    Returns ``(elevation, clamped)`` — the latter marks cells soft-clamped to the
+    floor (the interior overshoot), which the downstream deposition fill targets.
+    """
+    n = mesh.num_cells
+    empty = np.zeros(n, dtype=bool)
+    if not config.interior_lowland_enabled:
+        return elevation, empty
+    depth = config.interior_lowland_depth_m
+    if depth <= 0:
+        return elevation, empty
+    scale = config.interior_lowland_distance_scale_km
+    floor = config.interior_lowland_floor_m
+    sea_level = config.sea_level_offset_m  # 0 after calibration
+
+    # Convergent boundary cells are the orogenic source.  Seed the BFS from the
+    # exact plate-edge cells (distance 0) so the ramp origin is the trench /
+    # collision zone, not the propagated type halo (~1.2× boundary_influence_km).
+    from collections import deque
+
+    sources: list[int] = []
+    for i, cell in enumerate(mesh.cells):
+        d = cell.distance_to_boundary_km
+        if cell.boundary_type == "convergent" and d is not None and d <= 1.0:
+            sources.append(i)
+    if not sources:
+        logger.info("  Interior lowlands: no convergent boundaries, skipping")
+        return elevation, empty
+
+    # Multi-source BFS → hop distance to the nearest convergent boundary.
+    hops = np.full(n, -1, dtype=np.int32)
+    q: deque[int] = deque()
+    for s in sources:
+        hops[s] = 0
+        q.append(s)
+    while q:
+        cur = q.popleft()
+        for nid in mesh.cells[cur].neighbors:
+            if not (0 <= nid < n):
+                continue
+            if hops[nid] == -1:
+                hops[nid] = hops[cur] + 1
+                q.append(nid)
+
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+    dist_km = hops.astype(np.float64) * cell_km
+
+    # Smoothstep ramp 0 → 1 over [0, scale].
+    t = np.clip(dist_km / scale, 0.0, 1.0)
+    ramp = t * t * (3.0 - 2.0 * t)
+
+    # Lower continental land cells only.  The floor is a SOFT clamp (smooth
+    # maximum via logsumexp) at the calibrated sea level + floor_m: cells
+    # approaching it taper off instead of hard-clamping, so lowlands keep
+    # intra-cell relief and the histogram doesn't spike — while never crossing
+    # the sea level (coastline unchanged).
+    n_lowered = 0
+    clamped = np.zeros(n, dtype=bool)
+    min_h = sea_level + floor
+    # Fixed transition width (metres), independent of floor_m: cells that would
+    # fall below the floor spread smoothly over ~this band instead of piling at
+    # a single value.
+    soft_k = 1.0 / 50.0
+    for i, cell in enumerate(mesh.cells):
+        if elevation[i] <= sea_level:
+            continue
+        if getattr(cell, "crust_type", "") != "continental":
+            continue
+        r = ramp[i]
+        if r <= 0.0:
+            continue
+        new_h = elevation[i] - depth * r
+        if new_h < min_h:
+            # Smooth maximum: approaches min_h without a hard cliff.
+            new_h = float(np.logaddexp(soft_k * new_h, soft_k * min_h) / soft_k)
+            clamped[i] = True
+        if new_h < elevation[i]:
+            elevation[i] = new_h
+            n_lowered += 1
+
+    if n_lowered:
+        logger.info(
+            "  Interior lowlands: lowered %d cells (depth=%.0f m, scale=%.0f km, floor=%.0f m)",
+            n_lowered,
+            depth,
+            scale,
+            floor,
+        )
+    return elevation, clamped
+
+
+def _apply_deposition_fill(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+    clamped: np.ndarray,
+) -> np.ndarray:
+    """Fill interior basins with sediment to their spill level (deposition).
+
+    Runs *after* the interior lowlands (whose soft floor has already clamped
+    below-sea-level cells back to ~0 m, fixing the coastline).  Deposit sediment
+    to raise the **clamped** cells (the interior overshoot) to their **spill
+    level**, the lowest outlet to the global ocean, so they drain again (Landlab
+    SinkFiller; Tucker et al. 2001).  This adjusts *inland* elevation without
+    touching the calibrated coastline, and — crucially — does **not** fill
+    natural seas/straits (which were never clamped).  A fraction of basins are
+    left partially unfilled as **lakes** at ``spill − lake_depth_m``, marked
+    ``is_lake``.
+
+    References:
+      * Tucker, G.E., Lancaster, S.T., Gasparini, N.M., Bras, R.L., & Rybarczyk,
+        S.M. (2001). "An object-oriented framework for distributed hydrologic
+        and geomorphic modeling using triangulated irregular networks."
+        *Computers & Geosciences*, 27(8), 959–973.
+      * Barnes, R., Lehman, C., & Mulla, D. (2014). "Priority-flood."
+        *Computers & Geosciences*, 62, 117–127.
+
+    Modifies *elevation* in-place.
+    """
+    from collections import deque
+
+    from .hydrology import priority_flood_fill
+
+    if not config.deposition_enabled:
+        return elevation
+    sea_level = config.sea_level_offset_m
+    n = mesh.num_cells
+    neighbors = [c.neighbors for c in mesh.cells]
+
+    # Spill level per cell (priority-flood from the ocean).
+    filled, _ = priority_flood_fill(elevation, elevation >= sea_level, neighbors)
+
+    # Only the interior-lowlands overshoot (clamped cells) below their spill
+    # level is filled — natural seas/straits are never clamped, so are untouched.
+    depressed = clamped & (filled > elevation)
+    if not bool(np.any(depressed)):
+        return elevation
+
+    rng = np.random.default_rng(config.seed + 900)
+    lake_depth = config.lake_depth_m
+    visited = np.zeros(n, dtype=bool)
+    n_filled = 0
+    n_lake = 0
+    for s in range(n):
+        if not depressed[s] or visited[s]:
+            continue
+        basin: list[int] = []
+        bq: deque[int] = deque([s])
+        visited[s] = True
+        while bq:
+            i = bq.popleft()
+            basin.append(i)
+            for j in neighbors[i]:
+                if depressed[j] and not visited[j]:
+                    visited[j] = True
+                    bq.append(j)
+
+        if len(basin) >= 20 and rng.random() < config.lake_fraction:
+            # Leave a lake: fill to spill − lake_depth (never below the floor).
+            # Only large basins become lakes; tiny noise pits are always filled.
+            for i in basin:
+                target = filled[i] - lake_depth
+                if target > elevation[i]:
+                    elevation[i] = target
+                mesh.cells[i].is_lake = True
+            n_lake += len(basin)
+        else:
+            for i in basin:
+                elevation[i] = filled[i]
+            n_filled += len(basin)
+
+    if n_filled or n_lake:
+        logger.info(
+            "  Deposition fill: %d cells to spill level, %d cells left as lakes "
+            "(frac=%.0f%% of %d basins)",
+            n_filled,
+            n_lake,
+            config.lake_fraction * 100,
+            int(np.sum(visited)),
+        )
+    return elevation
+
+
 # =========================================================================
 # Shared post-processing: continental shelf + island arcs
 # =========================================================================
@@ -1733,8 +1950,11 @@ def _apply_continental_shelf(
             continue
         orig_z = elevation[cid]
         if d_km <= shelf_width:
-            # Shelf platform: linear ramp from coast to shelf break
-            t_ramp = d_km / shelf_width
+            # Shelf platform: quadratic ramp (gentler near the coast).  A linear
+            # ramp reaches ~-75 m at the first 54 km cell — a hard coastal cliff.
+            # Squaring the normalised distance keeps the nearshore shallow (~-30 m
+            # at 54 km) and only steepens toward the shelf break.
+            t_ramp = (d_km / shelf_width) ** 2
             z_shelf = shelf_edge_depth + t_ramp * (shelf_break_depth - shelf_edge_depth)
         else:
             # Below shelf break: exponential drop to original ocean depth

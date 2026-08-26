@@ -216,6 +216,68 @@ uplift −= D_caldera · exp(−(d / σ_caldera)²)          # 可选中央破�
 >   *Journal of the Geological Society*, 152, 327–338.
 > - Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
 
+### 4.4 内陆低地（克拉通内部系统性下压）
+
+双峰基准（大陆 850 m）+ 汇聚边界隆起后，板块内部若不处理会残留为均匀高原——
+地球陆均高 ~350–500 m，而纯过程合成会把近半陆地堆到 >1000 m。真实大陆是
+**被造山带环绕的低克拉通**：造山集中在活跃汇聚边缘，深部内部向海平面回沉
+（Cogley 1984 统计了大陆边缘与内部的系统性高差）。
+
+`_apply_interior_lowlands` 在**海平面校准之后、岛弧/内部地貌之前**执行：以汇聚
+边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）为
+源做多源 BFS，得每个 cell 到最近汇聚边界的距离 `d`；下压量用 Hermite smoothstep
+从 0（边缘）渐变到满深（`d ≥ distance_scale_km`）：
+
+```
+lowering = depth × smoothstep(d / scale)
+elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降陆壳 cell
+```
+
+`floor` 把下压**软钳制**在海平面之上（logsumexp 光滑最大值，非硬钳 `max`）——
+**校准后的海岸线不变**（目标陆面比不变），低地也不会全部堆在同一个高度。
+下游的岛弧（洋壳）与古造山带/裂谷（§4.3）在此之上叠加——古造山带仍能从低地中
+崛起，裂谷/盆地则下切（部分低于海平面，成内流湖/内海）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `interior_lowland_enabled` | true | 是否启用（false = 关闭） |
+| `interior_lowland_depth_m` | 600 | 深部最大下压量（m） |
+| `interior_lowland_distance_scale_km` | 1500 | 下压 0→满深的距离（km） |
+| `interior_lowland_floor_m` | 0 | 下压后离海平面最低高度（m，0=海平面） |
+
+> 参考文献：
+> - Cogley, J.G. (1984). "Continental margins and the extent and number of the
+>   continents." *Reviews of Geophysics*, 22(2), 101–122.
+> - ETOPO1 Global Relief Model（NOAA NGDC）——地球陆均高 ~350–500 m。
+
+### 4.5 沉积填充：闭合盆地填平 + 外流湖
+
+内部低地把深部压到海平面以下后，`floor` 软钳制先把它们钳到 ~0m（保住海岸线）。真实
+世界接着用上游搬运来的沉积物把这些**闭合盆地**填到**溢流点**（通往海洋的最低出口），
+盆地重新排水。没被填满的残余（溢流点以下留下的洼）就形成**外流湖**——水面在溢流点、
+向外排水（如五大湖、贝加尔湖）。
+
+`_apply_deposition_fill` 参照 [Landlab SinkFiller](https://landlab.csdms.io/generated/api/landlab.components.sink_fill.fill_sinks.html)
+（Tucker et al. 2001）：以海洋为源做 priority-flood → 得每 cell 的溢流点高度 → 把
+**被内部低地钳制的 cell**（低于溢流点的）填到溢流点。**天然的海/海峡没被钳制，不会被填**。
+留一小部分盆地（`lake_fraction`，仅 ≥20 格的大盆地）填到 `spill − lake_depth_m`，标记
+`is_lake` 为外流湖。**只调整内陆海拔、不动海岸线**（陆地面积比保持 28%）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `deposition_enabled` | true | 是否启用 |
+| `lake_fraction` | 0.2 | 留作外流湖的盆地比例 |
+| `lake_depth_m` | 50 | 湖面低于溢流点深度（m） |
+
+> 参考文献：
+> - Tucker, G.E., Lancaster, S.T., Gasparini, N.M., Bras, R.L., & Rybarczyk, S.M.
+>   (2001). "An object-oriented framework for distributed hydrologic and
+>   geomorphic modeling using triangulated irregular networks." *Computers &
+>   Geosciences*, 27(8), 959–973.（Landlab SinkFiller 的算法来源）
+> - Barnes, R., Lehman, C., & Mulla, D. (2014). "Priority-flood: An optimal
+>   depression-filling and watershed-labeling algorithm." *Computers &
+>   Geosciences*, 62, 117–127.
+
 ---
 
 ## 5. 海陆重分类
@@ -262,6 +324,13 @@ elevation = base_elev + boundary_effect + hotspot_uplift
 | `noise_amplitude_land_m` | 600 | 噪声 |
 | `noise_amplitude_ocean_m` | 300 | 噪声 |
 | `sea_level_m` | 0.0 | 海平面 |
+| `interior_lowland_enabled` | true | 内部低地 |
+| `interior_lowland_depth_m` | 600 | 内部低地 |
+| `interior_lowland_distance_scale_km` | 1500 | 内部低地 |
+| `interior_lowland_floor_m` | 0 | 内部低地 |
+| `deposition_enabled` | true | 沉积填充 |
+| `lake_fraction` | 0.2 | 沉积填充 |
+| `lake_depth_m` | 50 | 沉积填充 |
 
 ---
 

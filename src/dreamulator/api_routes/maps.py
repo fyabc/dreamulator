@@ -325,7 +325,7 @@ def generate_map(
     """Procedurally generate terrain using the CVT pipeline.
 
     Runs: CVT mesh -> plates -> boundaries -> terrain synthesis -> export.
-    Climate, rivers, and erosion stages are skipped (not yet implemented).
+    Climate and river stages are skipped (handled by other endpoints).
     """
     import logging
 

@@ -1,6 +1,6 @@
 """River network generation via graph-based flow routing (D8) on the spherical CVT mesh.
 
-Pipeline (see ``docs/design/terrain-pipeline.md`` §9):
+Pipeline (see ``docs/design/terrain-pipeline.md`` §8):
 
 1. **Priority-flood depression fill** (Barnes et al. 2014, O(N log N)) — raises
    every pit to its spill level so flow never terminates in a spurious local
@@ -12,9 +12,6 @@ Pipeline (see ``docs/design/terrain-pipeline.md`` §9):
 4. **Flow accumulation** — topological-sort (Kahn) upstream catchment area.
 5. **River classification / ids** — accumulation-threshold stream order plus
    ``river_id`` assignment traced upstream from river mouths.
-
-The erosion loop (§10) reuses the pure functions 1–4 unchanged; only the final
-``generate_rivers`` extraction is a one-shot hydrology product.
 
 Fills the following ``VoronoiCell`` fields (ocean cells get ``flow_direction=None``
 and ``flow_accumulation=0``):
@@ -38,7 +35,7 @@ if TYPE_CHECKING:
     from .pipeline_types import TerrainPipelineConfig
 
 # ---------------------------------------------------------------------------
-# Constants (roadmap terrain-pipeline.md §9.3 — accumulation → stream order)
+# Constants (roadmap terrain-pipeline.md §8.3 — accumulation → stream order)
 # ---------------------------------------------------------------------------
 
 #: Accumulation thresholds (km²) → stream order.
@@ -54,7 +51,7 @@ DEFAULT_MIN_RIVER_ACCUM_KM2: float = 1_000.0
 
 
 # ---------------------------------------------------------------------------
-# Pure routing functions (shared with the erosion loop — §10)
+# Pure routing functions
 # ---------------------------------------------------------------------------
 
 
@@ -296,7 +293,7 @@ def assign_river_ids(
 
     A mouth is a land cell draining into an ocean cell with accumulation above
     the threshold. Each river follows the largest upstream tributary (greedy),
-    matching ``terrain-pipeline.md`` §9.4.
+    matching ``terrain-pipeline.md`` §8.4.
 
     Args:
         flow_dir: (n,) int32 flow directions.
@@ -433,4 +430,4 @@ def generate_rivers(mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         c.flow_accumulation = float(accum_km2[i])
         c.river_id = river_ids[i]
         c.river_order = int(order[i])
-        c.is_lake = bool(is_lake[i])
+        c.is_lake = bool(is_lake[i]) or bool(c.is_lake)

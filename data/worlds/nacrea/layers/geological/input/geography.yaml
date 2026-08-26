@@ -52,7 +52,9 @@ features:
     strength: 0.85              # <裂谷强度，保证裂谷能切开（见大裂谷海）
     elongation: 1.3             # 南北拉伸缩短（1.6→1.3: 北界 56→35°, 南界 −56→−55°）
     bearing_deg: 0.0            # 南北向拉长
-    elevation_target_m: 750.0   # 压低整体海拔（nacrea 均陆高 ~1238 m，地球 ~840 m）
+    # 与 terrain_config.interior_lowland_* 协同：内部低地已系统性下压大陆深部，
+    # 此钉扎把低区锚定在 ~400m（地球陆均高），pin_exponent<1 保护造山带高山。
+    elevation_target_m: 400.0
     pin_strength: 0.3
     pin_exponent: 0.6           # 偏差指数化：保护高山，低区拉平到 target
 
@@ -351,6 +353,17 @@ features:
     lat: -36.0
     radius_deg: 28.0
     strength: -0.8
+
+  # ---- 第二大陆小裂谷（2026-08）----
+  # 以 #89452 为中心、南北走向（偏西 25°），切穿大陆、连通周围内海并打开出口。
+  - name: 第二大陆小裂谷
+    kind: rift_sea
+    lon: 135.0
+    lat: 6.0
+    radius_deg: 2.2
+    strength: -2.0              # 切穿大陆、连通内海
+    elongation: 2.0
+    bearing_deg: -25.0          # 偏西 25°
 
   # ── 高程微调 ────────────────────────────────────────────────────────────
   # (待后续南方文明锚定)

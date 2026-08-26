@@ -1,8 +1,7 @@
 """River network generation — pipeline entry point.
 
 The routing implementation (depression fill, D8, accumulation, river ids) lives
-in :mod:`dreamulator.map.hydrology` so the erosion loop (§10) can reuse the pure
-routing functions without importing the pipeline glue here.
+in :mod:`dreamulator.map.hydrology`, separate from the pipeline glue here.
 """
 
 from __future__ import annotations
