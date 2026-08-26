@@ -91,15 +91,13 @@ class GeologicalEngine(BaseEngine):
             # Stage 0.0a: the climate engine is authoritative for climate
             # fields; skip the terrain pipeline's in-line climate pass
             # (~123 s at 100k cells + duplicated climate raster export).
-            # Erosion runs BEFORE rivers so the hydrology product reflects the
-            # evolved (eroded) terrain (terrain-pipeline §9/§10).
+            # Rivers run on the synthesised terrain (terrain-pipeline §9).
             stage_list = [
                 "mesh",
                 "plates",
                 "tectonics",
                 "boundaries",
                 "terrain",
-                "erosion",
                 "rivers",
                 "export",
             ]
