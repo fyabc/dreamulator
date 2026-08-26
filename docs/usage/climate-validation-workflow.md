@@ -3,8 +3,12 @@
 气候引擎对真实地球观测数据验证的**操作步骤**：导入真实高程、下载参考数据、
 运行验证、保存报告。
 
-设计与原理见 [../design/climate-validation.md](../design/climate-validation.md)：
+设计与原理见 [../design/pipelines/climate-validation.md](../design/pipelines/climate-validation.md)：
 数据源清单（§2）、验证指标说明（§5）、已知限制（§6）、多线证据策略（§7）。
+
+> 脚本默认指向 `data/worlds`（发布态，供其他用户）。本地开发时 `earth` 验证世界在
+> `private/worlds/`（`.gitignore` 排除），加 `--world-dir private/worlds`（诊断脚本）
+> 或 `--data-dir private/worlds`（`climate validate`）即可。
 
 ---
 
@@ -136,14 +140,11 @@ curl "https://downloads.psl.noaa.gov/Datasets/gpcp/precip.mon.mean.nc" \
 
 ## 5. 运行验证
 
-### 5.1 快速验证（推荐首次运行）
+### 5.1 运行验证
 
 ```bash
-# 对 climate-dev 分支运行快速验证
+# 对 climate-dev 分支运行完整验证（温度 + 降水 + Köppen 分布 + 陆地占比）
 dreamulator climate validate earth --branch climate-dev
-
-# 对主世界运行
-dreamulator climate validate earth
 
 # 仅验证温度（ERA5）
 dreamulator climate validate earth --dataset era5
@@ -151,53 +152,74 @@ dreamulator climate validate earth --dataset era5
 # 仅验证降水（GPCP）
 dreamulator climate validate earth --dataset gpcp
 
-# 仅验证 Köppen 分类（Beck 2018）
+# 仅验证 Köppen 分布匹配（Beck 2018）
+dreamulator climate validate earth --dataset beck2018
+
+# 额外加逐 cell 空间准确率（需 koppen_obs.json，见 §2）
 dreamulator climate validate earth --dataset beck2018 --spatial
 
 # 保存验证报告
 dreamulator climate validate earth --output-dir reports/climate/
 ```
 
-**输出示例**：
+**`--spatial` 说明**：默认**不含**逐 cell 空间对比（3b）；加 `--spatial` 才跑
+`validate_koppen_spatial`（需要 `koppen_obs.json`）。分布匹配（3）与空间准确率（3b）
+是两个独立指标——见 §6 结尾的指标辨析。
+
+> 本地开发时 `earth` 在 `private/worlds/`，加 `--data-dir private/worlds`。
+
+**输出示例**（当前 climate-dev 200k 网格实际输出）：
+
 ```
 Validating climate engine against real Earth observations...
-  World: earth  Planet: earth
-  Mesh: 32768 cells
+  World: earth  Planet: planet_earth
+  Mesh: 200000 cells
 
 ============================================================
 1. Temperature Validation (zonal mean vs ERA5)
 ------------------------------------------------------------
-  RMSE:  2.3 °C  (threshold: 5.0 °C)
-  Bias:  +0.8 °C
-  R²:    0.94
-  Result: ✅ PASS
+  RMSE:  3.03 C  (threshold: 5.0 C)
+  Bias:  +0.6 C
+  R2:    0.95
+  Result: PASS
 
 ============================================================
 2. Precipitation Validation (zonal mean vs GPCP)
 ------------------------------------------------------------
-  RMSE:  420 mm/yr  (threshold: 800 mm/yr)
-  Bias:  -120 mm/yr
-  R²:    0.78
-  Result: ✅ PASS
+  RMSE:  325.8 mm/yr  (threshold: 800.0 mm/yr)
+  Bias:  +74 mm/yr
+  R2:    0.635
+  Result: PASS
 
 ============================================================
-3. Köppen Classification Validation (vs Beck et al. 2018)
+3. Koppen Classification Validation (vs Beck et al. 2018)
 ------------------------------------------------------------
-  Match rate: 71%  (threshold: 55%)
-  Group R²:   0.92
-  Group errors: {'A': +3.2, 'B': -5.1, 'C': +1.8, 'D': -0.5, 'E': +0.6}
-  Result: ✅ PASS
+  Distribution match: 59.2% (threshold: 50%)
+  Group R2:   0.011
+  Result: PASS
+
+============================================================
+3b. Koppen Spatial Accuracy (cell-by-cell vs Beck 2018)
+------------------------------------------------------------
+  Overall accuracy: 31.8%
+  Group accuracy:   59.6%
+  Cohen's Kappa:    0.265
+  Result: FAIL
 
 ============================================================
 4. Land Fraction Check
 ------------------------------------------------------------
   Simulated: 29.1%  (Earth: 29.0%)
-  Result: ✅ PASS
+  Result: PASS
 
 ============================================================
-✅ OVERALL: Climate engine VALIDATED against Earth observations
+OVERALL: Climate engine FAILED validation - see above for details
 ============================================================
 ```
+
+> 当前 `Group R2`（0.011）偏低、3b 空间准确率（31.8%）< 50% 阈值 → 整体 FAIL。
+> 前者是「C/D 群退化」的量化体现；后者是已知差距（M4 口径逐 cell ≥30% 已达标，
+> 但 `_KOPPEN_MATCH_THRESHOLD=50%` 仍拦下 overall）。
 
 ### 5.2 保存验证报告
 
@@ -226,7 +248,7 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 
 ## 6. 诊断脚本（区分引擎 bug vs 参数调参）
 
-除了上面的验证 CLI（综合评分），还有三个**交互式诊断脚本**，用于在"引擎 bug"与
+除了上面的验证 CLI（综合评分），还有五个**交互式诊断脚本**，用于在"引擎 bug"与
 "参数待微调"之间做二分。核心原则：**现代地球是唯一有「标准答案」的基准**
 （Beck 2018 / ERA5 / GPCP）；系统性偏差若在地球与 nacrea 上都出现 → 引擎 bug，
 只在 nacrea 出现 → 参数微调。
@@ -236,15 +258,29 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 | `scripts/diagnose_koppen_spatial.py` | 经纬网格 + 两极合并的 Köppen 空间准确率热图（逐 bin 排序） | 找出空间上最差/最好的区域 |
 | `scripts/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
 | `scripts/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
+| `scripts/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（ITCZ 位置、Hadley 边界等超参可调） | 定位风场/辐合带异常 |
+| `scripts/diagnose_precip_budget.py` | 降水预算逐项分解（BFS 扩散/基线/辐合/风暴/对流/热带增强）+ 11000mm 截断检查 | 判断降水幅度由哪一项主导 |
 
 ```bash
 uv run python scripts/diagnose_koppen_spatial.py
 uv run python scripts/diagnose_latitudinal_profile.py
 uv run python scripts/diagnose_koppen_confusion.py
+uv run python scripts/diagnose_wind_divergence.py
+uv run python scripts/diagnose_precip_budget.py
 ```
 
-> **说明**：三个脚本默认跑在 `climate-dev` 分支的 **200k** Earth 网格上（与地球
-> 海陆分布一致），`koppen_obs.json` 参考以相同 200k mesh 生成、存于
-> `maps/planet_earth/`（与 mesh 并排）。cell-by-cell 准确率（~27%）低于分布匹配
-> （~54%）——这是两个不同指标，空间准确率天然更低。诊断结论以**相对对比**
-> （调参前后、地球 vs nacrea）为准。
+**公共参数**（五个脚本一致）：
+
+```bash
+--world earth              # 世界名（默认 earth）
+--planet planet_earth      # 星球 ID（默认 planet_earth）
+--branch climate-dev       # 分支（默认 climate-dev）
+--world-dir data/worlds    # 世界数据目录（默认 data/worlds）
+```
+
+> **说明**：五个脚本默认跑在 `data/worlds/earth` 的 `climate-dev` 分支 **200k**
+> Earth 网格上，`koppen_obs.json` 参考以相同 200k mesh 生成、存于
+> `maps/planet_earth/`（与 mesh 并排）。cell-by-cell 准确率（31.8%）低于分布匹配
+> （59.2%）——这是两个不同指标，空间准确率天然更低。诊断结论以**相对对比**
+> （调参前后、地球 vs nacrea）为准。本地开发时地球数据在 `private/worlds/`，
+> 加 `--world-dir private/worlds`。

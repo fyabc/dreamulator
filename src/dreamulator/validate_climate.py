@@ -9,13 +9,13 @@ the output against observed climatological data:
     - Köppen: cell-by-cell match rate against Beck et al. (2018) observed map
 
 Usage:
-    # Full validation (requires downloaded data — see docs/design/climate-validation.md)
+    # Full validation (requires downloaded data — see docs/design/pipelines/climate-validation.md)
     uv run python scripts/validate_climate.py earth --branch terrain-dev
 
-    # Quick validation (zonal statistics only, no downloads needed)
-    uv run python scripts/validate_climate.py earth --quick
+    # Include cell-by-cell Koppen spatial comparison (requires koppen_obs.json)
+    uv run python scripts/validate_climate.py earth --dataset beck2018 --spatial
 
-    # Generate visual comparison images
+    # Save the validation report
     uv run python scripts/validate_climate.py earth --output-dir reports/climate/
 
 Output:
@@ -1047,7 +1047,7 @@ def run_validation(
     *,
     branch: str | None = None,
     output_dir: Path | None = None,
-    quick: bool = False,
+    spatial: bool = False,
     data_dir: str | None = None,
     datasets: DatasetId | list[DatasetId] = "all",
 ) -> dict[str, Any]:
@@ -1058,7 +1058,8 @@ def run_validation(
         planet_id: Planet ID within the world.
         branch: Optional branch name.
         output_dir: Where to write validation report.
-        quick: If True, only run zonal validation (no mesh needed).
+        spatial: If True, include cell-by-cell Köppen spatial comparison
+            (requires ``koppen_obs.json``).
         data_dir: Custom worlds data directory.
         datasets: Which datasets to validate against.
             ``"all"`` (default), ``"era5"``, ``"gpcp"``, ``"beck2018"``,
@@ -1126,10 +1127,10 @@ def run_validation(
         if "error" in tval:
             print(f"  ERROR: {tval['error']}")
         else:
-            print(f"  RMSE:  {tval['rmse_celsius']} °C  (threshold: {_TEMP_RMSE_THRESHOLD} °C)")
-            print(f"  Bias:  {tval['bias_celsius']:+.1f} °C")
-            print(f"  R²:    {tval['r_squared']}")
-            print(f"  Result: {'✅ PASS' if tval['passed'] else '❌ FAIL'}")
+            print(f"  RMSE:  {tval['rmse_celsius']} C  (threshold: {_TEMP_RMSE_THRESHOLD} C)")
+            print(f"  Bias:  {tval['bias_celsius']:+.1f} C")
+            print(f"  R2:    {tval['r_squared']}")
+            print(f"  Result: {'PASS' if tval['passed'] else 'FAIL'}")
         print()
     else:
         tval = {"skipped": True, "reason": "dataset not selected"}
@@ -1149,8 +1150,8 @@ def run_validation(
                 f"  RMSE:  {pval['rmse_mm_yr']} mm/yr  (threshold: {_PRECIP_RMSE_THRESHOLD} mm/yr)"
             )
             print(f"  Bias:  {pval['bias_mm_yr']:+.0f} mm/yr")
-            print(f"  R²:    {pval['r_squared']}")
-            print(f"  Result: {'✅ PASS' if pval['passed'] else '❌ FAIL'}")
+            print(f"  R2:    {pval['r_squared']}")
+            print(f"  Result: {'PASS' if pval['passed'] else 'FAIL'}")
         print()
     else:
         pval = {"skipped": True, "reason": "dataset not selected"}
@@ -1178,7 +1179,7 @@ def run_validation(
         results["koppen_distribution"] = kval
 
     # 3b. Koppen spatial (cell-by-cell)
-    if _run_koppen:
+    if _run_koppen and spatial:
         print("=" * 60)
         print("3b. Koppen Spatial Accuracy (cell-by-cell vs Beck 2018)")
         print("-" * 60)
@@ -1224,7 +1225,7 @@ def run_validation(
         results["koppen_spatial"] = kval_spatial
         print()
     else:
-        kval_spatial = {"skipped": True, "reason": "dataset not selected"}
+        kval_spatial = {"skipped": True, "reason": "spatial comparison not requested"}
         results["koppen_spatial"] = kval_spatial
 
     # 4. Land fraction
@@ -1239,7 +1240,7 @@ def run_validation(
 
     # --- Overall verdict ---
     check_results = [tval, pval, kval, lval]
-    if _run_koppen and "error" not in kval_spatial:
+    if _run_koppen and spatial and "error" not in kval_spatial:
         check_results.append(kval_spatial)
     # Only consider actually-run validations for the pass threshold
     active_results = [r for r in check_results if "error" not in r and not r.get("skipped")]
@@ -1287,9 +1288,9 @@ def main() -> None:
         help="Directory to save validation report JSON",
     )
     parser.add_argument(
-        "--quick",
+        "--spatial",
         action="store_true",
-        help="Quick mode: zonal statistics only (bypasses mesh loading)",
+        help="Include cell-by-cell Koppen spatial comparison",
     )
     parser.add_argument(
         "--data-dir",
@@ -1309,7 +1310,7 @@ def main() -> None:
         planet_id=args.planet,
         branch=args.branch,
         output_dir=Path(args.output_dir) if args.output_dir else None,
-        quick=args.quick,
+        spatial=args.spatial,
         data_dir=args.data_dir,
         datasets=args.dataset,
     )

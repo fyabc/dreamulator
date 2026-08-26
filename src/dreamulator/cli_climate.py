@@ -171,7 +171,7 @@ def climate_validate(
     Examples:
         dreamulator climate validate earth                    # all datasets
         dreamulator climate validate earth --dataset era5     # temperature only
-        dreamulator climate validate earth --dataset beck2018 --spatial  # Köppen cell-by-cell
+        dreamulator climate validate earth --dataset beck2018 --spatial  # Koppen cell-by-cell
     """
     _set_data_dir(data_dir)
 
@@ -190,7 +190,8 @@ def climate_validate(
         planet_id=planet,
         branch=branch,
         output_dir=output_dir,
-        quick=not spatial,
+        spatial=spatial,
+        data_dir=str(data_dir) if data_dir else None,
         datasets=dataset,  # type: ignore[arg-type]
     )
 

@@ -67,7 +67,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     args = parser.parse_args()
 
     root = _find_project_root()
