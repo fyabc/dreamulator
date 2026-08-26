@@ -103,18 +103,14 @@ def main() -> None:
         return
 
     print(f"Running climate engine on {mesh.num_cells} cells ...")
+    from dreamulator.map.climate_config import load_climate_config
     from dreamulator.map.climate_simulator import simulate_climate
-    from dreamulator.validate_climate import build_earth_validation_config
 
-    simulate_climate(
-        mesh,
-        build_earth_validation_config(
-            mesh.num_cells,
-            lat_gradient_c=args.lat_gradient_c,
-            auto_lat_gradient=args.auto_lat_gradient,
-            diffusive_heat_transport=args.diffusive_heat_transport,
-        ),
-    )
+    config = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
+    config.lat_gradient_c = args.lat_gradient_c
+    config.auto_lat_gradient = args.auto_lat_gradient
+    config.diffusive_heat_transport = args.diffusive_heat_transport
+    simulate_climate(mesh, config)
 
     # Load Beck 2018 reference
     obs_path = world_dir / "branches" / args.branch / "maps" / args.planet / "koppen_obs.json"

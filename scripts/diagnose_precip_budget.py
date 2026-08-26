@@ -80,11 +80,11 @@ def main() -> None:
         return
 
     print(f"Running climate engine on {mesh.num_cells} cells ...")
+    from dreamulator.map.climate_config import load_climate_config
     from dreamulator.map.climate_simulator import simulate_climate
-    from dreamulator.validate_climate import build_earth_validation_config
 
     debug: dict[str, np.ndarray] = {}
-    cfg = build_earth_validation_config(mesh.num_cells)
+    cfg = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
     simulate_climate(mesh, cfg, debug=debug)
 
     elevation_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
