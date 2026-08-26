@@ -747,7 +747,22 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 | `interior_lowland_enabled` | true | — | 是否启用（false = 关闭） |
 | `interior_lowland_depth_m` | 600 | 200–1200 | 深部最大下压量（m） |
 | `interior_lowland_distance_scale_km` | 1500 | 500–3000 | 下压 0→满深的距离（km） |
-| `interior_lowland_floor_m` | 50 | 0–200 | 下压后离海平面最低高度（m） |
+| `interior_lowland_floor_m` | 0 | 0–200 | 下压后离海平面最低高度（m，0=海平面） |
+
+**沉积填充**（`_apply_deposition_fill`，紧接内部低地之后）：内部低地把深部压到海平面
+以下后，`floor` 软钳制把它们钳到 ~0m（先保住海岸线），并返回**被钳制的 cell 掩码**。
+沉积填充**只填这些被钳制的 cell**（内部低地的过冲），把它们填到**溢流点**（通往全球海洋
+的最低出口），使其重新排水——参照 [Landlab SinkFiller](https://landlab.csdms.io/generated/api/landlab.components.sink_fill.fill_sinks.html)
+（Tucker et al. 2001）；以海洋为源做 priority-flood 得每 cell 的溢流点高度，把被钳制、
+且低于溢流点的 cell 填到溢流点。**天然的海/海峡没被钳制，不会被填**。留一小部分盆地
+（`lake_fraction`，仅 ≥20 格的大盆地）填到 `spill − lake_depth_m`，标记 `is_lake` 为
+外流湖。这样**只调整内陆海拔、不动海岸线**（陆地面积比保持 28%）。
+
+| 参数 | 默认值 | 范围 | 含义 |
+|------|--------|------|------|
+| `deposition_enabled` | true | — | 是否启用 |
+| `lake_fraction` | 0.2 | 0–1 | 留作外流湖的盆地比例 |
+| `lake_depth_m` | 50 | 10–400 | 湖面低于溢流点深度（m） |
 
 ### 6.4 洋底年龄-深度沉降（板块冷却模型）
 
@@ -791,17 +806,18 @@ age = max_age · d_div / (d_div + d_conv)
 
 1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§7）。
 2. **内部低地** `_apply_interior_lowlands`（见 §6.3）：以汇聚边界为源做多源 BFS，
-   大陆内部按 `depth × smoothstep(d/scale)` 下压、被 `floor` 软钳制在海平面之上，
-   海岸线不变。
-3. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
-4. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
-5. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
-6. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）。
-7. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
-8. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
+   大陆内部按 `depth × smoothstep(d/scale)` 下压。
+3. **沉积填充** `_apply_deposition_fill`（见 §6.3）：把低于海平面的闭合盆地填到溢流
+   点，留一小部分为内流湖。
+4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
+5. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
+6. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
+7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）。
+8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
+9. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
    `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
    上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
-9. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
+10. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
    悬崖式跳跃，3 轮 30% 邻域均值混合（仅陆地）松弛为连续坡降：
    `elev_i = 0.7·elev_i + 0.3·mean(land_neighbors)`；>3000m 邻域跳跃 1446→137 cell。
 
@@ -830,7 +846,10 @@ age = max_age · d_div / (d_div + d_conv)
 | `interior_lowland_enabled` | true | — | 内部低地开关 |
 | `interior_lowland_depth_m` | 600 | 200 – 1200 | 内部低地下压量 |
 | `interior_lowland_distance_scale_km` | 1500 | 500 – 3000 | 下压 0→满深距离 |
-| `interior_lowland_floor_m` | 50 | 0 – 200 | 下压后离海平面最低高度 |
+| `interior_lowland_floor_m` | 0 | 0 – 200 | 下压后离海平面最低高度 |
+| `deposition_enabled` | true | — | 沉积填充开关 |
+| `lake_fraction` | 0.2 | 0 – 1 | 留作内流湖的盆地比例 |
+| `lake_depth_m` | 50 | 10 – 400 | 湖面低于海平面深度 |
 
 > **noise_scale 与物理波长的换算**：OpenSimplex 在单位球面 (x,y,z) 上采样，
 > 特征波长 ≈ **R / scale**（R = 行星半径，nacrea = 6817 km）：

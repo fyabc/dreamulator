@@ -95,6 +95,9 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
             "interior_lowland_depth_m",
             "interior_lowland_distance_scale_km",
             "interior_lowland_floor_m",
+            "deposition_enabled",
+            "lake_fraction",
+            "lake_depth_m",
             "seed",
         ],
     }
