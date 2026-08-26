@@ -125,7 +125,7 @@ def simulate_climate(
     # Stage 1: Temperature
     # ------------------------------------------------------------------
     _t0 = _time.time()
-    _console.print("  [dim]1/5  Temperature (EBM + latitude + altitude)[/dim]")
+    _console.print("  [dim]1/6  Temperature (EBM + latitude + altitude)[/dim]")
     teq_K = equilibrium_temperature(
         stellar_luminosity_sol=config.stellar_luminosity_sol,
         orbital_distance_au=config.orbital_distance_au,
@@ -295,7 +295,7 @@ def simulate_climate(
     phase_timings["temperature"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['temperature']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]2/5  Wind field (geostrophic + Hadley cells)[/dim]")
+    _console.print("  [dim]2/6  Wind field (geostrophic + Hadley cells)[/dim]")
     # ------------------------------------------------------------------
     # Geostrophic wind from pressure gradient + Coriolis
     pressure_hpa = pressure_from_temperature(
@@ -1100,60 +1100,6 @@ def _surface_divergence(
         div[i] /= areas_ster[i]
     return div
 
-
-def _meridional_convergence(
-    lat_rad: np.ndarray,
-    hadley_extent_deg: float = 30.0,
-    polar_cell_start_deg: float = 60.0,
-    rotation_period_days: float = 1.0,
-    itcz_lat_deg: float = 0.0,
-) -> np.ndarray:
-    """Smooth zonal-mean surface convergence (1/radian) of the meridional cell wind.
-
-    The large-scale rain belt is driven by the convergence of the three-cell
-    meridional circulation, which is a smooth function of latitude only.
-    Computing ∇·u per cell (``_surface_divergence``) picks up Voronoi-geometry
-    noise that spuriously rains in the subtropical divergence zone, so this
-    evaluates the analytical divergence ``(1/cos φ)·d(v·cos φ)/dφ`` of the
-    meridional wind on a fine latitude grid and interpolates back to the cells.
-
-    Args:
-        lat_rad: Cell latitudes in radians, shape (N,).
-        hadley_extent_deg: Hadley cell boundary H (°).
-        polar_cell_start_deg: Polar cell boundary P (°).
-        rotation_period_days: Rotation period (scales the wind speed).
-
-    Returns:
-        Surface convergence in 1/radian, shape (N,); positive = rising.
-    """
-    grid_deg = np.linspace(-89.0, 89.0, 179)
-    grid_rad = np.radians(grid_deg)
-    nodes = np.zeros((len(grid_deg), 3))
-    nodes[:, 0] = np.cos(grid_rad)
-    nodes[:, 1] = np.sin(grid_rad)
-
-    wind = hadley_cell_wind(
-        grid_rad,
-        nodes,
-        hadley_extent_deg,
-        polar_cell_start_deg,
-        rotation_period_days,
-        itcz_lat_deg=itcz_lat_deg,
-    )
-    # Local north = +y projected to the tangent plane; meridional wind = wind·north.
-    north = np.zeros_like(nodes)
-    north[:, 1] = 1.0
-    north -= nodes * (nodes * north).sum(axis=1, keepdims=True)
-    north /= np.linalg.norm(north, axis=1, keepdims=True)
-    v = (wind * north).sum(axis=1)  # northward meridional wind (m/s)
-
-    # divergence = (1/cos φ)·d(v·cos φ)/dφ  →  1/radian
-    vcos = v * np.cos(grid_rad)
-    dvcos = np.gradient(vcos, grid_rad)
-    div = dvcos / np.cos(grid_rad)
-    conv = np.maximum(0.0, -div)
-
-    return np.asarray(np.interp(np.degrees(lat_rad), grid_deg, conv))
 
 
 def _compute_precipitation_bfs(
