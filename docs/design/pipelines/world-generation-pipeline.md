@@ -17,23 +17,22 @@
 | 6 | 海平面与基础分类 | 地质 | 同 §7 |
 | 7 | 气候模拟 | **气候** | [climate-pipeline.md](climate-pipeline.md) |
 | 8 | 河流与水文 | 地质 | [geological-pipeline.md](geological-pipeline.md) §8 |
-| 9 | 地表演化侵蚀 | 地质 | 同 §9 |
-| 10 | 植被与生态 | **生态** | [ecology-layer.md](../proposals/ecology-layer.md) |
-| 11 | 数据导出与可视化 | —（输出） | [geological-pipeline.md](geological-pipeline.md) §10 |
-| 12 | Gaea 局部精细化 | —（区域后处理） | [gaea-refinement.md](gaea-refinement.md) |
+| 9 | 植被与生态 | **生态** | [ecology-layer.md](../proposals/ecology-layer.md) |
+| 10 | 数据导出与可视化 | —（输出） | [geological-pipeline.md](geological-pipeline.md) §10 |
+| 11 | Gaea 局部精细化 | —（区域后处理） | [gaea-refinement.md](../proposals/gaea-refinement.md) |
 
-> **编号说明**：本表的「阶段 1–12」是**全局管线**编号（含气候/生态/Gaea）。
-> `geological-pipeline.md` 内部只含地质层 9 个阶段（§2–§10），编号已按地质层重排
-> （其「阶段 7」= 水文，不同于本表的全局「阶段 7」= 气候）。
+> **编号说明**：本表的「阶段 1–11」是**全局管线**编号（含气候/生态/Gaea）。
+> `geological-pipeline.md` 内部只含地质层 8 个阶段（§2–§8、§10；§9 侵蚀已移除），
+> 编号已按地质层重排（其「阶段 7」= 水文，不同于本表的全局「阶段 7」= 气候）。
 
 ## 层级映射
 
-- **地质层**（全局阶段 1–6、8–9、11）：CVT 网格 + 板块构造 + 地形合成 + 水文 + 侵蚀 + 导出
+- **地质层**（全局阶段 1–6、8、10）：CVT 网格 + 板块构造 + 地形合成 + 水文 + 导出
   → [geological-pipeline.md](geological-pipeline.md)
 - **气候层**（全局阶段 7）：温度 / 降水 / Köppen → [climate-pipeline.md](climate-pipeline.md)
 - **生态层**（全局阶段 10）：Whittaker 群系 / NPP / 可驯化标签 → [ecology-layer.md](../proposals/ecology-layer.md)
 - **区域后处理**（全局阶段 12）：Gaea 局部精细化（跑完生态层拿到地形/气候/土壤/植被后选固定区域细化）
-  → [gaea-refinement.md](gaea-refinement.md)
+  → [gaea-refinement.md](../proposals/gaea-refinement.md)
 
 ## 与 DAG 层级的关系
 
@@ -59,7 +58,7 @@ stellar/planets 参数 (astronomy 上游)
 [阶段 7]    气候层：温度 / 降水 / Köppen
       │  temperature / precipitation / koppen
       ▼
-[阶段 8-9]  地质层：水文（河流/湖泊）+ 侵蚀
+[阶段 8]    地质层：水文（河流/湖泊）
       │
       ▼
 [阶段 10]   生态层：Whittaker 群系 / NPP
@@ -75,4 +74,4 @@ stellar/planets 参数 (astronomy 上游)
 
 每个分支只重跑受影响的阶段（如改海平面只重跑阶段 6+），而非重新生成整个地图——
 分支系统见 [layer-control-model.md](../proposals/layer-control-model.md) 与
-[geological-pipeline.md](geological-pipeline.md) §12.4。
+[geological-pipeline.md](geological-pipeline.md) §10.4。

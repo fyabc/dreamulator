@@ -26,7 +26,6 @@
 - `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
 - `climate-pipeline.md` — 气候层 pipeline（温度/降水/Köppen 实现架构与参数）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
-- `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理）
 
 ### proposals/ — 设计提案 + 方法论
 
@@ -39,6 +38,7 @@
 - `myth-strata.md` — 神话层积与母题变异设计
 - `ai-cli-commands.md` — AI CLI 命令组设计（ai narrate/imagine/assist 等）
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
+- `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 
 ## 写作原则
 
