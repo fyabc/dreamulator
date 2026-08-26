@@ -338,6 +338,7 @@ class TerrainPipelineConfig:
     # storm tracks (e.g. slow rotators in the single-Hadley-cell regime, where
     # baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
+    storm_track_kappa_enhancement: float = 3.0  # eddy diffusivity × at the storm peak
     # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)
     sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for nacrea)
     sub_planet_longitude_deg: float = 0.0  # longitude of the sub-planet point

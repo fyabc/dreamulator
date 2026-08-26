@@ -878,6 +878,8 @@ def _solve_moisture_budget(
     temperature_c: np.ndarray,
     nodes_xyz: np.ndarray,
     config: TerrainPipelineConfig,
+    rainout_enhancement: np.ndarray | None = None,
+    diffusivity_enhancement: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Solve the steady upwind advection–decay moisture budget for column water.
 
@@ -902,6 +904,16 @@ def _solve_moisture_budget(
         temperature_c: Temperature (°C), shape (N,), for the evaporation source.
         nodes_xyz: Unit sphere node positions, shape (N, 3).
         config: Pipeline configuration.
+        rainout_enhancement: Optional dimensionless field (shape N, > −1) that
+            scales the rainout rate spatially: k_rain = (1/τ)·(1 + enhancement).
+            ``None`` → uniform τ.  ΣP = ΣE holds for any enhancement field, so
+            the storm track / convection become mass-conserving modulations
+            rather than additive precipitation sources.
+        diffusivity_enhancement: Optional dimensionless field (shape N, > −1)
+            that scales the eddy diffusivity spatially: κ = κ₀·(1 + enhancement).
+            ``None`` → uniform κ₀.  Models the baroclinic eddies' poleward
+            moisture mixing (larger in the storm track); the finite-volume flux
+            uses the edge-averaged κ so the term stays symmetric.
 
     Returns:
         (W, P): column water (mm) and rainout precipitation (mm/yr), shape (N,).
@@ -909,7 +921,11 @@ def _solve_moisture_budget(
     n = mesh.num_cells
     s_per_year = 365.25 * 86400.0
     tau_yr = _MOISTURE_RESIDENCE_DAYS / 365.25
-    k_rain = 1.0 / tau_yr  # rainout rate [1/yr]
+    k_rain = 1.0 / tau_yr  # base rainout rate [1/yr]
+    if rainout_enhancement is not None:
+        k_rain_field = k_rain * (1.0 + rainout_enhancement)
+    else:
+        k_rain_field = np.full(n, k_rain)
 
     # Evaporation source E (mm/yr): energy-limited ocean evaporation + land
     # evapotranspiration (see _LAND_EVAPOTRANSPIRATION_FRACTION).
@@ -986,13 +1002,18 @@ def _solve_moisture_budget(
     # diagonally dominant.  Finite-volume flux form (coefficient κ/A_i, flux
     # κ(W_i−W_j) per edge) so the term stays exactly conservative on the
     # non-uniform CVT mesh, matching the area-weighted advection.
-    _diff_i = _MOISTURE_DIFFUSIVITY_M2S * s_per_year / area_m2  # 1/yr, per cell
-    diag = np.full(n, k_rain, dtype=np.float64)
+    if diffusivity_enhancement is not None:
+        kappa = _MOISTURE_DIFFUSIVITY_M2S * (1.0 + diffusivity_enhancement)
+    else:
+        kappa = np.full(n, _MOISTURE_DIFFUSIVITY_M2S)
+    kappa_edge = 0.5 * (kappa[src] + kappa[dst])  # edge-averaged (symmetric)
+    _diff_edge = kappa_edge * s_per_year / area_m2[src]  # 1/yr, per directed edge
+    diag = k_rain_field.copy()
     np.add.at(diag, src[pos], c[pos])
-    np.add.at(diag, src, _diff_i[src])  # diffusion: +κ/A_i per neighbour
+    np.add.at(diag, src, _diff_edge)  # diffusion: +κ_edge/A_src per neighbour
     row = np.concatenate([np.arange(n), src[neg], src])
     col = np.concatenate([np.arange(n), dst[neg], dst])
-    val = np.concatenate([diag, c[neg], -_diff_i[src]])
+    val = np.concatenate([diag, c[neg], -_diff_edge])
     a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsr()
 
     from scipy.sparse.linalg import splu
@@ -1002,7 +1023,7 @@ def _solve_moisture_budget(
 
     # Clamp against numerical under/overshoot (W ≥ 0), then P = W/τ.
     w = np.maximum(w, 0.0)
-    p = w * k_rain
+    p = w * k_rain_field
     return w, p
 
 
@@ -1146,6 +1167,7 @@ def _compute_precipitation_bfs(
     precip = np.zeros(n, dtype=np.float64)
     lat_rad = np.radians(np.array([c.lat for c in mesh.cells], dtype=np.float64))
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
+    lat_deg = np.degrees(lat_rad)
 
     # Edge table for the orographic rain (Step 2) and monsoon (Step 4): wind
     # alignment per directed edge (the moisture budget below builds its own).
@@ -1171,17 +1193,53 @@ def _compute_precipitation_bfs(
     edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
     align = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, wind_unit[src]), -1.0)
 
-    # Step 2+3+3.5: mass-conserving moisture budget.
-    # The precipitation core is a single steady upwind advection–decay solve for
-    # column water W:
-    #     ∇·(W u) + W/τ − κ∇²W = E ,   P = W/τ
-    # (see ``_solve_moisture_budget``).  Mass is conserved by construction
-    # (ΣP = ΣE), and the ITCZ / subtropical dry belt emerge from the wind field.
-    # The storm track below stays as a distinct baroclinic mechanism.
-    _col_water, precip = _solve_moisture_budget(
-        mesh, wind, is_ocean, temperature_c, nodes_xyz, config
+    # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — modelled as a
+    # spatial modulation of the rainout rate k_rain = 1/τ, NOT an additive
+    # precipitation source (Held & Soden 2006: global ΣP = ΣE is energy-limited,
+    # so extra precipitation must be sourced from the advected column water).
+    # Baroclinic eddies rain out advected moisture more efficiently at the polar
+    # front, so τ is shorter there.  The enhancement scales with the Eady growth
+    # rate (∇T × Ω^0.3) and the available moisture (evaporation), expressed as a
+    # dimensionless factor relative to evaporation_base_mm (peak ≈ 1 → τ halves).
+    _lat_grad = (
+        lat_gradient_from_omega(
+            config.rotation_period_days,
+            earth_gradient_c=config.lat_gradient_earth_c,
+        )
+        if config.auto_lat_gradient
+        else config.lat_gradient_c
     )
-    lat_deg = np.degrees(lat_rad)
+    # Storm track centred in the baroclinic zone (midpoint of the Hadley and
+    # polar-cell boundaries).  Earth → 45°; single-cell nacrea (both 90°) →
+    # width 0, and storm_track_amplitude_mm=0 disables it entirely.
+    _storm_center = 0.5 * (config.hadley_extent_deg + config.polar_cell_start_deg)
+    _storm_width = max(0.5 * (config.polar_cell_start_deg - config.hadley_extent_deg), 1.0)
+    _storm_amp = (
+        config.storm_track_amplitude_mm
+        * (_lat_grad / 45.0)
+        * (1.0 / config.rotation_period_days) ** 0.3
+        * (config.evaporation_base_mm / 1000.0)
+    )
+    _storm_enhance = (_storm_amp / config.evaporation_base_mm) * np.exp(
+        -0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2
+    )
+    # Step 3.5b: the same baroclinic eddies also *transport* moisture poleward
+    # (transient-eddy mixing), which the mean surface wind's advection does not
+    # capture.  The eddy-diffusivity enhancement is proportional to the rainout
+    # enhancement (same eddies), so a single-cell planet (storm_amp=0) gets none.
+    _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
+
+    # Step 2+3+3.5: mass-conserving moisture budget with the storm-track rainout
+    # enhancement folded into k_rain and the eddy transport into κ.  The core is
+    # a single steady upwind advection–decay solve for column water W:
+    #     ∇·(W u) + k_rain(x) W − ∇·(κ(x)∇W) = E ,   P = k_rain(x) W
+    # (see ``_solve_moisture_budget``).  ΣP = ΣE by construction; the ITCZ /
+    # subtropical dry belt / storm track emerge from the wind + rainout fields.
+    _col_water, precip = _solve_moisture_budget(
+        mesh, wind, is_ocean, temperature_c, nodes_xyz, config,
+        rainout_enhancement=_storm_enhance,
+        diffusivity_enhancement=_eddy_enhance,
+    )
 
     # Orographic rain from the column water W (upwind elevation gain).  A rising
     # moist air parcel cools and rains out a fraction of its column water per km
@@ -1207,35 +1265,11 @@ def _compute_precipitation_bfs(
         debug["baseline"] = np.zeros(n)
         debug["convergence"] = np.zeros(n)
 
-    # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — a distinct
-    # mechanism.  The convergence above captures the Hadley rising branch (ITCZ)
-    # and descending branch (subtropical dry belt), but the extratropical
-    # cyclones that deliver the ~800–1000 mm/yr mid-latitude rain are driven by
-    # baroclinic instability, whose ascent + moisture transport the mean surface
-    # convergence does not resolve.  Amplitude scales with the Eady growth rate
-    # (∇T × Ω^0.3) and the available moisture (evaporation); centre at the
-    # polar front.
-    _lat_grad = (
-        lat_gradient_from_omega(
-            config.rotation_period_days,
-            earth_gradient_c=config.lat_gradient_earth_c,
-        )
-        if config.auto_lat_gradient
-        else config.lat_gradient_c
-    )
-    _storm_center = config.polar_cell_start_deg - 2.0  # polar front
-    _storm_width = 14.0 * (config.hadley_extent_deg / 30.0)
-    _storm_amp = (
-        config.storm_track_amplitude_mm
-        * (_lat_grad / 45.0)
-        * (1.0 / config.rotation_period_days) ** 0.3
-        * (config.evaporation_base_mm / 1000.0)
-    )
     if debug is not None:
-        debug["storm"] = (
-            _storm_amp * np.exp(-0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2)
-        ).copy()
-    precip += _storm_amp * np.exp(-0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2)
+        # Storm track's share of the conserved rainout: its rainout-rate
+        # enhancement times the column water at the base rainout rate k_0.
+        _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS
+        debug["storm"] = (_col_water * _k_base * _storm_enhance).copy()
 
     # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
     # (vectorized over the edge table, Stage 1.3)

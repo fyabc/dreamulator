@@ -74,10 +74,10 @@ def main() -> None:
 
     # Run the climate engine on the Earth baseline
     print(f"Running climate engine on {mesh.num_cells} cells ...")
+    from dreamulator.map.climate_config import load_climate_config
     from dreamulator.map.climate_simulator import simulate_climate
-    from dreamulator.validate_climate import build_earth_validation_config
 
-    config = build_earth_validation_config(mesh.num_cells)
+    config = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
     simulate_climate(mesh, config)
 
     # Load Beck 2018 reference
