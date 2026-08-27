@@ -33,13 +33,9 @@ tags: [climate, habitability, civilization]
 
 ## 三、宜居性评估
 
-> 以下数字由引擎逐 cell 计算（`layers/civilization/derived/habitability_summary.yaml`）。
-
-- **农业核心区（t_hot > 10°C，即 A+B+C）占 63.5% 陆地**（36449 cell，`agricultural_core`）——支撑文明绰绰有余。
-- **宜居海岸（年均温>0°C 且 降水>500mm 且 沿海 ≤200km）占 12.6% 陆地**（7246 cell，`habitable_coast`）——决定可定居性。
-- **凉湿海洋性 ET（法罗/因纽特型）1106 cell（1.9%）**——宜居但不产粮
-  （`habitable_coast=True` 且 `agricultural_core=False`），北方沿岸 + 亚南极 ~43°S 群岛。
-- **重叠（摇篮）6140 cell（10.7%）**——既沿海宜居又可农耕，是文明起源的最优带。
+- **宜居陆地（t_hot > 10°C，即 A+B+C）占 63.5%**（地球 78%）——支撑文明绰绰有余。
+- **凉湿海洋性 ET**（年均温>0 且降水>1000mm）另有 ~1500 cell（北方沿岸 + 亚南极 ~43°S 群岛），
+  对人类定居宜居、只是无乔木/农业弱（法罗/因纽特型）。
 
 ## 四、优势
 
@@ -57,7 +53,7 @@ tags: [climate, habitability, civilization]
 
 ## 六、独特特征（地球没有）
 
-1. **慢自转（3.25d）**：科氏力弱 → 单 Hadley 胞直抵极地（GCM 证实无 Ferrel/极地胞），下沉支在极地；
+1. **慢自转（3.25d）**：科氏力弱 → Hadley 胞宽达 55° → 副热带干燥带在高纬（33–73°）；
 2. **潮汐锁定卫星**：次 Aegis 半球永久 +1°C 暖化，固定经向温度梯度驱动风/洋流；
 3. **M 矮星 0.66× 光照**：NIR 为主，靠 62K 温室补温——高纬苔原、低纬雨林，中间过渡带窄。
 

@@ -114,7 +114,12 @@ orbits:
     parent_id: planet_aegis
     semi_major_axis_au: 0.00494   # 739,013 km（P=78h，开普勒第三定律）
     eccentricity: 0.002           # Cadence/Vigil 共振链泵浦维持（受迫偏心率，终值 0.002，潮汐加热之源）
-    inclination_deg: 9.0          # 相对黄道面（Aegis 绕恒星轨道面，系统参考平面）
+    inclination_deg: 9.0          # 赤道面轨道：规则卫星在行星子盘里形成，天然贴着行星赤道面；
+    # 相对黄道的 9° 来自 Aegis 的自转轴倾角。轨道面动力学：这个距离上恒星扭矩已强于行星
+    # 四极矩扭矩约 14 倍，平衡面（Laplace 面）几乎贴黄道，所以赤道面构型带有 8.35° 自由倾角，
+    # 以约 4.7 年周期绕平衡面摆动（相对黄道 7.7°↔9°）。该自由倾角约 1–2 Gyr 会被潮汐磨平，
+    # 5.9 Gyr 的系统需要 1:2:4 共振链的倾角型共振来维持（土卫一–土卫三类比），
+    # 见 satellite_architecture.md 与 roadmap #22。
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
     mean_anomaly_epoch_deg: 0.0
@@ -258,7 +263,10 @@ bodies:
     mass_earth: 508.5             # 1.6 M_J × 317.83 M⊕/M_J
     radius_km: 71355              # 11.2 R⊕
     rotation_period_days: 0.4167  # ~10 小时（远快于卫星公转，确保角动量正向传递）
-    axial_tilt_deg: 3.0
+    axial_tilt_deg: 9.0           # 自转轴倾角（形成史的自由参数，土星 27° 类比）。Nacrea 走赤道面轨道，
+    # 所以 Nacrea 相对黄道的有效倾角就是这 9°，它驱动季节。自转轴的自由进动周期约 550 年，
+    # 与轨道面交点进动（约 1.2 千年）同量级，因此合理推断 Aegis 处于 Cassini 态：
+    # 自转轴跟着轨道面一起进动、倾角保持恒定（土星即此状态）。详见 orbital_dynamics.md。
     albedo: 0.343                 # 类木星 Bond albedo（与 planets.yaml 对齐）
 
   # ---- 行星 IV：沧星（共振链 2:1） ----
@@ -304,7 +312,7 @@ bodies:
     mass_earth: 1.20
     radius_km: 6817               # 1.07 R⊕
     rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 9.0           # 相对黄道面的有效倾角 = 轨道倾角 9°（自转轴 ⊥ 绕 Aegis 轨道面）；驱动气候引擎季节项
+    axial_tilt_deg: 9.0           # 赤道面轨道 + Aegis obliquity 9° → 相对黄道有效倾角 9°（自转轴 ⊥ 轨道面）；驱动气候引擎季节项
     albedo: 0.30
     description:
       surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"

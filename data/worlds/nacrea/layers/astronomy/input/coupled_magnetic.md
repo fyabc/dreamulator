@@ -12,7 +12,7 @@ tags: [magnetic-field, dynamo, current-sheet]
 |------|-----|------|
 | Aegis 表面赤道磁场 B_p | **400 μT** | planets.yaml；~8× 木星（Christensen 2009 发电机标度律） |
 | Nacrea 表面赤道磁场 B_s | **30 μT** | planets.yaml；潮汐加热维持熔融地核 → 发电机效应 |
-| Aegis 磁偶极轴倾角 | 3.0° | 等于自转轴倾角 |
+| Aegis 磁偶极轴倾角 | 9.0° | 等于自转轴倾角 |
 
 ### 因变量 — 磁场参数
 
