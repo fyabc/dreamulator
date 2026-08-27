@@ -80,11 +80,7 @@ def extract_river_features(mesh: CVTMesh, min_order: int = 1) -> list[MapFeature
             reverse[idx_of[j]].append(i)
 
     # Sources: channel cells with no upstream channel neighbour.
-    starts = deque(
-        i
-        for i in range(n)
-        if channel[i] and not any(channel[u] for u in reverse[i])
-    )
+    starts = deque(i for i in range(n) if channel[i] and not any(channel[u] for u in reverse[i]))
 
     features: list[MapFeature] = []
     walked: set[int] = set()

@@ -76,8 +76,7 @@ def test_sky_position_antipodal_not_visible() -> None:
 def test_transit_classification_outer_satellite_occulted() -> None:
     """外卫星（Cadence/Vigil）轨道半径更大 → 被掩（sky_phenomena.md §6 修正）。"""
     assert (
-        transit_classification(ENTITIES, "satellite_nacrea", "satellite_cadence")
-        == "occultation"
+        transit_classification(ENTITIES, "satellite_nacrea", "satellite_cadence") == "occultation"
     )
     assert transit_classification(ENTITIES, "satellite_nacrea", "satellite_vigil") == "occultation"
 
