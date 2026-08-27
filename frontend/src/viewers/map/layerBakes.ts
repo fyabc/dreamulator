@@ -587,7 +587,9 @@ export function bakeMonthlyLayer(
     const color =
       field === 'temperature'
         ? sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
-        : sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(30001), PRECIP_SCALE)
+        : // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
+          // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
+          sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
     colors.set(cell.id, color)
   }
 

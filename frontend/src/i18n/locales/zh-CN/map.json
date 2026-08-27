@@ -214,6 +214,11 @@
     "autumnEquinox": "秋分",
     "winterSolstice": "冬至"
   },
+  "monthly": {
+    "title": "月度气候",
+    "annual": "年度",
+    "monthly": "月度"
+  },
   "info": {
     "star": "恒星",
     "planet": "行星",

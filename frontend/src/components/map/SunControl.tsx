@@ -148,39 +148,49 @@ export default function SunControl({
             <span>360°</span>
           </div>
         </div>
+      </div>
 
-        {/* Season (orbital position → solar declination) */}
-        <div className="space-y-1 mt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-500">{t('sun.season')}</span>
-            <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
-              {t('sun.declination', { declination: formatDeclination(declination) })}
-              {showMonth && (
-                <span className="ml-2">{t('sun.monthValue', { m: monthOfYear + 1 })}</span>
-              )}
-            </span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="360"
-            value={seasonDeg}
-            onChange={handleSeason}
-            className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
-            disabled={!active || axialTiltDeg === 0}
-            title={
-              axialTiltDeg === 0
-                ? t('sun.noTiltHint')
-                : t('sun.seasonTitle')
-            }
-          />
-          <div className="flex justify-between text-[9px] text-gray-600">
-            <span>{t('sun.springEquinox')}</span>
-            <span>{t('sun.summerSolstice')}</span>
-            <span>{t('sun.autumnEquinox')}</span>
-            <span>{t('sun.winterSolstice')}</span>
-            <span>{t('sun.springEquinox')}</span>
-          </div>
+      {/* Season (orbital position → solar declination) — always active (drives
+          both the lighting declination AND the monthly climate month). */}
+      <div className="space-y-1 mt-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-gray-500">{t('sun.season')}</span>
+          <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
+            {t('sun.declination', { declination: formatDeclination(declination) })}
+            {showMonth && (
+              <span className="ml-2">{t('sun.monthValue', { m: monthOfYear + 1 })}</span>
+            )}
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="360"
+          value={seasonDeg}
+          onChange={handleSeason}
+          className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
+          disabled={axialTiltDeg === 0}
+          title={
+            axialTiltDeg === 0
+              ? t('sun.noTiltHint')
+              : t('sun.seasonTitle')
+          }
+        />
+        {/* 12-division tick marks (30° each) — no labels. */}
+        <div className="flex justify-between items-end h-2 px-px">
+          {Array.from({ length: 13 }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-px ${i % 3 === 0 ? 'h-2 bg-gray-500' : 'h-1 bg-gray-700'}`}
+            />
+          ))}
+        </div>
+        <div className="flex justify-between text-[9px] text-gray-600">
+          <span>{t('sun.springEquinox')}</span>
+          <span>{t('sun.summerSolstice')}</span>
+          <span>{t('sun.autumnEquinox')}</span>
+          <span>{t('sun.winterSolstice')}</span>
+          <span>{t('sun.springEquinox')}</span>
         </div>
       </div>
     </div>

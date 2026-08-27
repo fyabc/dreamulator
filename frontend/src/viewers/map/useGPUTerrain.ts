@@ -129,6 +129,10 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
+  /** Monthly temperature/precipitation textures (Phase 4), baked by the caller
+   *  from `bakeMonthlyLayer`.  When provided they replace the annual thematic. */
+  monthlyTemperature?: THREE.DataTexture | null
+  monthlyPrecipitation?: THREE.DataTexture | null
   /** Flip texture horizontally. Set true for SphereGeometry (Three.js sphere
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
@@ -174,6 +178,8 @@ export default function useGPUTerrain({
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
+  monthlyTemperature = null,
+  monthlyPrecipitation = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -304,8 +310,8 @@ export default function useGPUTerrain({
       [layers.agriculture, baked.agriculture],
       [layers.soil, baked.soil],
       [layers.provinces, baked.provinces],
-      [layers.temperature, baked.temperature],
-      [layers.precipitation, baked.precipitation],
+      [layers.temperature, monthlyTemperature ?? baked.temperature],
+      [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
     ]
     let activeThematic = baked.terrainThematic
     let thematicOp = 1.0  // default: terrain on
@@ -330,7 +336,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive])
+  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {
