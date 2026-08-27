@@ -224,6 +224,31 @@ def simulate_climate(
             ice_threshold_c=config.ice_albedo_threshold_c,
         )
 
+    # Ocean surface temperature: damped latitude gradient (maritime moderation)
+    # anchored to the planet's global-mean surface temperature (Earth profile
+    # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
+    t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
+        lat_rad[~land_mask_arr],
+        t_surf_C,
+    )
+
+    # Coastal moderation (maritime influence on the annual mean): mix the
+    # *sea-level* land temperature toward the nearest ocean's SST, decaying
+    # inland over the maritime scale.  Applied *before* the altitude lapse rate
+    # so the elevation cooling still acts on the moderated coastal lowlands and
+    # the high ice sheet stays cold.  The ice-covered ocean's SST (~−2 °C) is
+    # already cold, so this is automatically ice-aware.
+    distance_to_coast_km, nearest_sst = _graph_distance_to_coast(
+        mesh.cells, n, is_land, radius_km=config.radius_km, ocean_value=t_mean_C
+    )
+    assert nearest_sst is not None  # ocean_value always passed
+    _maritime = np.where(
+        is_land,
+        np.exp(-distance_to_coast_km / config.coastal_moderation_scale_km),
+        0.0,
+    )
+    t_mean_C = t_mean_C + (nearest_sst - t_mean_C) * _maritime
+
     # Altitude correction (land only — ocean surface is at 0 m regardless of depth)
     lapse: float | np.ndarray = config.lapse_rate_c_km
     if config.variable_lapse_rate:
@@ -232,13 +257,6 @@ def simulate_climate(
         t_mean_C[land_mask_arr],
         elevation_m[land_mask_arr],
         lapse,
-    )
-    # Ocean surface temperature: damped latitude gradient (maritime moderation)
-    # anchored to the planet's global-mean surface temperature (Earth profile
-    # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
-    t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
-        lat_rad[~land_mask_arr],
-        t_surf_C,
     )
 
     # Sub-planet hemisphere warming (e.g. nacrea: Aegis IR + reflected light)
@@ -251,11 +269,7 @@ def simulate_climate(
 
     # Seasonality (3A.2): seasonal energy-balance model — insolation-driven
     # monthly temperature with physical surface heat capacity (land/ocean/coastal).
-    # Distance-to-coast is computed once here and reused by the precipitation
-    # stage's inland-aridity gradient (Step 6.5).
-    distance_to_coast_km = _graph_distance_to_coast(
-        mesh.cells, n, is_land, radius_km=config.radius_km
-    )
+    # Distance-to-coast is computed above and reused by the heat capacity.
     heat_capacity = seasonal_heat_capacity(
         is_land,
         is_ocean,
@@ -727,7 +741,8 @@ def _graph_distance_to_coast(
     is_land: np.ndarray,
     *,
     radius_km: float = 6371.0,
-) -> np.ndarray:
+    ocean_value: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Shortest graph-path distance from each cell to the nearest ocean (km).
 
     Multi-source Dijkstra: all ocean cells start at distance 0.  The
@@ -736,18 +751,25 @@ def _graph_distance_to_coast(
     cannot reach any ocean (should never happen on a connected mesh)
     get infinity.
 
+    When ``ocean_value`` is supplied, the Dijkstra also propagates that
+    per-cell value from the nearest ocean to every cell (a land cell inherits
+    its *nearest* ocean's value — e.g. the SST for coastal moderation).
+
     Args:
         cells: All VoronoiCell objects.
         n: Number of cells.
         is_land: Boolean land mask, shape (n,).
         radius_km: Planet radius in km.
+        ocean_value: Optional per-cell value to propagate from the nearest ocean.
 
     Returns:
         Distance to nearest ocean in km, shape (n,).  Ocean cells = 0.
+        If ``ocean_value`` is given, also returns the nearest ocean's value.
     """
     import heapq
 
     dist = np.full(n, np.inf, dtype=np.float64)
+    val = np.full(n, np.nan, dtype=np.float64)
     visited = np.zeros(n, dtype=bool)
 
     # Seed: all ocean cells at distance 0
@@ -755,6 +777,8 @@ def _graph_distance_to_coast(
     for i in range(n):
         if not is_land[i]:
             dist[i] = 0.0
+            if ocean_value is not None:
+                val[i] = ocean_value[i]
             heapq.heappush(heap, (0.0, i))
 
     while heap:
@@ -773,9 +797,11 @@ def _graph_distance_to_coast(
             nd = d + edge_km
             if nd < dist[j]:
                 dist[j] = nd
+                if ocean_value is not None:
+                    val[j] = val[i]
                 heapq.heappush(heap, (nd, j))
 
-    return dist
+    return dist, val if ocean_value is not None else None
 
 
 def _upwind_distance_to_coast(
