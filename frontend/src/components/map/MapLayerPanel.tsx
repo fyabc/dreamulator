@@ -30,6 +30,11 @@ interface LayerState {
 interface MapLayerPanelProps {
   state: LayerState
   onChange: (state: LayerState) => void
+  /** Phase 4: monthly-climate mode (annual/monthly) for the temperature and
+   *  precipitation thematic layers.  When `monthly` is on, the season slider
+   *  drives the monthly data. */
+  monthlyMode?: boolean
+  onMonthlyModeChange?: (mode: boolean) => void
 }
 
 /** A group with its member layers, split by interaction style. */
@@ -112,7 +117,7 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, monthlyMode = false, onMonthlyModeChange }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
@@ -305,6 +310,22 @@ export default function MapLayerPanel({ state, onChange }: MapLayerPanelProps) {
                     </label>
                   )
                 })}
+
+                {/* Monthly-climate mode switch (Phase 4): drives the temperature/
+                    precipitation thematic with the season slider when on. */}
+                {g.id === 'climate' && onMonthlyModeChange && (
+                  <label className="flex items-center gap-1.5 cursor-pointer" title={t('monthly.title')}>
+                    <input
+                      type="checkbox"
+                      checked={monthlyMode}
+                      onChange={(e) => onMonthlyModeChange(e.target.checked)}
+                      className="h-3 w-3 accent-neon-cyan cursor-pointer"
+                    />
+                    <span className={`text-[11px] ${monthlyMode ? 'text-gray-300' : 'text-gray-500'}`}>
+                      {t(monthlyMode ? 'monthly.monthly' : 'monthly.annual')}
+                    </span>
+                  </label>
+                )}
 
                 {/* Eye + slider rows (fill / feature overlays). */}
                 {g.toggleMembers.map((l) => {

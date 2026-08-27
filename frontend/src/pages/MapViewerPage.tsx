@@ -23,6 +23,8 @@ import { PROJECTION_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
+import useCellIdMap from '../viewers/map/useCellIdMap'
+import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -79,6 +81,16 @@ export default function MapViewerPage() {
   const [layerState, setLayerState] = useState<LayerState>({
     layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0.9, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 },
   })
+  // Monthly climate mode (Phase 4): on = the active temperature/precipitation
+  // layer shows the monthly data driven by the season slider.
+  const [monthlyMode, setMonthlyMode] = useState(false)
+  const monthlyField: MonthlyField | null = monthlyMode
+    ? layerState.layers.temperature > 0
+      ? 'temperature'
+      : layerState.layers.precipitation > 0
+        ? 'precipitation'
+        : null
+    : null
 
   // Decoded elevation data (for rendering)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
@@ -191,6 +203,18 @@ export default function MapViewerPage() {
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
     enabled: !!worldName && !!selectedPlanet,
     retry: false,
+  })
+
+  // --- Monthly climate texture (Phase 4) ---
+  const cellIdMap = useCellIdMap({
+    cvtMesh: cvtMesh ?? null,
+    width: meta?.width ?? 2048,
+    height: meta?.height ?? 1024,
+  })
+  const monthlyThematic = useMonthlyClimate({
+    worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
+    field: monthlyField, cvtMesh: cvtMesh ?? null, cellIdMap,
+    width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
 
   // River network vector layer (features.json; empty when absent)
@@ -497,6 +521,8 @@ export default function MapViewerPage() {
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
                     forceCpuReproject={forceCpuReproject}
+                    monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
+                    monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
@@ -556,6 +582,8 @@ export default function MapViewerPage() {
                 <MapLayerPanel
                   state={layerState}
                   onChange={setLayerState}
+                  monthlyMode={monthlyMode}
+                  onMonthlyModeChange={setMonthlyMode}
                 />
                 {platesError && selectedPlanet && (
                   <div className="text-xs text-gray-500 pt-2">
@@ -571,6 +599,7 @@ export default function MapViewerPage() {
                     axialTiltDeg={axialTiltDeg}
                     enabled={dayNightEnabled}
                     onEnabledChange={setDayNightEnabled}
+                    showMonth={monthlyField !== null}
                   />
                 </div>
               </div>
@@ -585,6 +614,8 @@ export default function MapViewerPage() {
             <MapLayerPanel
               state={layerState}
               onChange={setLayerState}
+              monthlyMode={monthlyMode}
+              onMonthlyModeChange={setMonthlyMode}
             />
             {platesError && selectedPlanet && (
               <div className="text-xs text-gray-500 pt-2">
@@ -600,6 +631,7 @@ export default function MapViewerPage() {
                 axialTiltDeg={axialTiltDeg}
                 enabled={dayNightEnabled}
                 onEnabledChange={setDayNightEnabled}
+                showMonth={monthlyField !== null}
               />
             </div>
           </div>
@@ -627,6 +659,8 @@ export default function MapViewerPage() {
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
                     forceCpuReproject={forceCpuReproject}
+                    monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
+                    monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />

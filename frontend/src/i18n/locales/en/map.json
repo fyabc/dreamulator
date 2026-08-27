@@ -214,6 +214,11 @@
     "autumnEquinox": "Equinox",
     "winterSolstice": "Solstice"
   },
+  "monthly": {
+    "title": "Monthly climate",
+    "annual": "Annual",
+    "monthly": "Monthly"
+  },
   "info": {
     "star": "Star",
     "planet": "Planet",

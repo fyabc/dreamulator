@@ -76,6 +76,9 @@ interface MapViewerProps {
   /** Force the legacy CPU reprojection for Mollweide/Robinson (?reproject=cpu).
    *  Debug / A-B comparison only — NOT a no-GPU fallback (display needs WebGL). */
   forceCpuReproject?: boolean
+  /** Monthly temperature/precipitation textures (Phase 4), baked by the caller. */
+  monthlyTemperature?: THREE.DataTexture | null
+  monthlyPrecipitation?: THREE.DataTexture | null
 }
 
 export interface CursorInfo {
@@ -118,6 +121,8 @@ export default function MapViewer({
   solarDeclinationDeg = 0,
   dayNight = false,
   forceCpuReproject = false,
+  monthlyTemperature = null,
+  monthlyPrecipitation = null,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -218,6 +223,7 @@ export default function MapViewer({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
+    monthlyTemperature, monthlyPrecipitation,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
