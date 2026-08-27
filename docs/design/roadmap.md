@@ -15,7 +15,7 @@
 | 层级管线 | physics → chemistry → astronomy → geological → climate → ecology 全链路打通；civilization 新增宜居/农业 derived 引擎（`engine/civilization.py`），3C 半格式化 Schema 与 LLM narrate 待推进 |
 | 性能 | nacrea（200k 节点）全量构建 ~391 s（地质 238s + 气候 147s + 生态 5s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
-| 气候精度 | Köppen 分布匹配 53.6%（v0.27+，季节 EBM + s/w 修复后，vs Beck 2018，200k ETOPO1）；T2 端元复现 4 测试 + T3 物理合理性 7 测试已建 |
+| 气候精度 | Köppen 空间准确率 28.2% / 30 类 Kappa 0.225 / 群组 Kappa 0.466（主指标，逐 cell vs Beck 2018，200k ETOPO1）；分布匹配 53.6%（辅助）；T2 端元复现 4 测试 + T3 物理合理性 7 测试已建 |
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（v0.15.0+ 校准）；25 板 CV=0.87（偏态化）、海洋最深 −10484 m |
 | 网格规模 | 主力分辨率 **200k**（51 km/cell，已达中分辨率 GCM 水平）；ESM 气候验证支持多数据集（Beck 2018 + ERA5 + GPCP）；JSON 浮点截断 4 位 + gzip 传输（~220→~50 MB） |
 
@@ -49,7 +49,7 @@
 | 地形降水 + 雨影 | ✅ | 风偏图扩散水汽传输 + 辐合驱动三层降水 |
 | 陆地蒸散循环 | ✅ | 土壤+植被蒸发回收 |
 | ITCZ 对流降水 | ✅ | 热带辐合带 + 局地热对流 |
-| Köppen 气候分类 | ✅ | 分布匹配 53.6%（v0.27+，季节 EBM + s/w 修复后，200k，vs Beck 2018；v0.26.0 为 55.0%） |
+| Köppen 气候分类 | ✅ | 空间准确率 28.2% / 30 类 Kappa 0.225 / 群组 Kappa 0.466（主指标）；分布匹配 53.6%（辅助，200k vs Beck 2018） |
 | ETOPO1 真实地球验证 | ✅ | `earth/climate-dev` 分支 + `scripts/validate_climate.py` |
 | 热带降水修正（3A.1） | ✅ | v0.11.0：ITCZ 增强、热带对流 ×2、降水底线 |
 | 季节变化（3A.2） | ✅ | **季节能量平衡模型** `T_amp=ΔQ_ω(1−α)/√(B_eff²+(ωC)²)`（North & Coakley 1979，`B_eff=B+6D` 显式热输送）+ 季节冰反照率 + ITCZ 迁移月度降水 + s/w 判别季节感知 |
