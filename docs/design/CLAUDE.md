@@ -39,6 +39,7 @@
 - `ai-cli-commands.md` — AI CLI 命令组设计（ai narrate/imagine/assist 等）
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
+- `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 
 ## 写作原则
 
