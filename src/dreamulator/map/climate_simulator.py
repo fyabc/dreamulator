@@ -242,8 +242,13 @@ def simulate_climate(
         mesh.cells, n, is_land, radius_km=config.radius_km, ocean_value=t_mean_C
     )
     assert nearest_sst is not None  # ocean_value always passed
+    # Ocean-less worlds: _graph_distance_to_coast has no seed cells, so
+    # nearest_sst is NaN.  Mask the maritime term to exactly zero there —
+    # (NaN − T)·0 would still be NaN, so sanitise the SST too.
+    _has_sst = np.isfinite(nearest_sst)
+    nearest_sst = np.where(_has_sst, nearest_sst, t_mean_C)
     _maritime = np.where(
-        is_land,
+        is_land & _has_sst,
         np.exp(-distance_to_coast_km / config.coastal_moderation_scale_km),
         0.0,
     )
