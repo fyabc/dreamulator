@@ -123,9 +123,10 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
    │   └─ 否则: solve_1d_ebm_temperature(D_land) → 陆地温度（大陆度）
    │   ebm_1d=false: legacy sin² + 图扩散（见 §6）
    ├─ ice_albedo_feedback（年均，若开启）
-   ├─ 海拔直减率（仅陆地）
-   ├─ sub_planet_warming_c（潮汐锁定卫星向星面增温，若 >0）
-   └─ _ocean_surface_temperature（海洋 SST，地球剖面锚定）
+   ├─ _ocean_surface_temperature（海洋 SST，地球剖面锚定）
+   ├─ 沿海调节（coastal moderation：海平面陆地温度向最近海洋 SST 混合，自动冰感知）
+   ├─ 海拔直减率（仅陆地，在沿海调节之后 → 高冰盖仍冷）
+   └─ sub_planet_warming_c（潮汐锁定卫星向星面增温，若 >0）
 3. Stage 1b: 季节
    └─ compute_seasonal_climate → t_monthly / t_cold / t_hot / p_factor / itcz_lat
 4. Stage 2: 风场
