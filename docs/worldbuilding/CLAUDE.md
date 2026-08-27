@@ -7,6 +7,7 @@
 - `design_patterns.md` — 架空世界数据编码模式（特洛伊天体与拉格朗日点等）
 - `map_design_guide.md` — 地图设计指导（CVT 时代版：地理锚定工作流、气候/生态/文明预期、命名与呈现）
 - `narrative-craft.md` — 世界史讲述方法论（叙事公式、双线史纲、多声部呈现、比喻与诚信制度）
+- `speculative_evolution_genre.md` — 推测进化流派简史与方法论（After Man/Expedition/All Tomorrows/Serina；生态位填充、alternate timeline、seed world、真正 alien 设计）
 - `terrain-tuning-guide.md` — 地形微调诊断指南（海拔诊断链、噪声参数换算、高程钉扎模式、海岸线微调、迭代工作流）
 
 ### drafts/ — 不成熟世界草案
