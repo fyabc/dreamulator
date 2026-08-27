@@ -280,6 +280,13 @@ def _export_map_data(
             elevation_png.read_bytes()
         )
 
+        # Copy monthly climate MessagePack (Phase 4 monthly display), if present.
+        monthly_msgpack = planet_dir / "climate_monthly.msgpack"
+        if monthly_msgpack.exists():
+            planet_out.joinpath("climate_monthly.msgpack").write_bytes(
+                monthly_msgpack.read_bytes()
+            )
+
         # Export map metadata (map.yaml → meta.json)
         map_yaml = planet_dir / "map.yaml"
         if map_yaml.exists():

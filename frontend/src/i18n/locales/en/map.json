@@ -204,6 +204,8 @@
     "longitudeTitle": "Subsolar longitude (0° = noon on the prime meridian)",
     "season": "Season (annual)",
     "declination": "Subsolar {{declination}}",
+    "monthLabel": "Month",
+    "monthValue": "M{{m}}",
     "noTiltHint": "This planet has no axial tilt, so no seasonal variation",
     "seasonTitle": "Orbital position (0° = vernal equinox, 90° = N. summer solstice)",
     "equator": "equator",

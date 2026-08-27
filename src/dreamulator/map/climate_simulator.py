@@ -519,6 +519,16 @@ def simulate_climate(
         t_monthly_C, p_monthly
     )
 
+    # Store the monthly climate arrays for the export stage (Phase 4 monthly
+    # display).  These are *not* serialized to cvt_mesh.json — the full N×12
+    # fields would double the mesh — so export_climate_layers reads them off the
+    # mesh object and writes a separate compact MessagePack file.
+    object.__setattr__(mesh, "_t_monthly_c", t_monthly_C.astype(np.float32))
+    # Clamp: `_seasonal_annual = p_annual − conv` can be slightly negative when
+    # the convective floor exceeds the annual total (warm, dry cells); negative
+    # monthly precipitation is unphysical and would render wrong.
+    object.__setattr__(mesh, "_p_monthly_mm", np.maximum(p_monthly, 0.0).astype(np.float32))
+
     koppen_codes = koppen_classify(
         t_mean_c=t_mean_C,
         t_cold_c=t_cold_C,

@@ -25,6 +25,7 @@ import * as THREE from 'three'
 import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
+import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
@@ -555,6 +556,43 @@ function bakeCellLayer(
     }
   }
   return flipBuffer(buf, width, height, flipHorizontal)
+}
+
+/**
+ * Bake a monthly temperature/precipitation layer (Phase 4 monthly display).
+ *
+ * Reads the per-cell monthly value (cell index `i`, month `m` → `i·months + m`)
+ * from the backend's compact MessagePack, maps it through the *same* colour
+ * scale as the annual layer, and bakes it to a texture via the existing
+ * cell-ID map.  Land only (ocean stays transparent).
+ */
+export function bakeMonthlyLayer(
+  monthly: MonthlyClimateData,
+  month: number,
+  field: 'temperature' | 'precipitation',
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  width: number,
+  height: number,
+  flipHorizontal: boolean,
+): THREE.DataTexture {
+  const { months, tMonthly, pMonthly } = monthly
+  const arr = field === 'temperature' ? tMonthly : pMonthly
+  const colors = new Map<number, [number, number, number]>()
+
+  for (let i = 0; i < cvtMesh.cells.length; i++) {
+    const cell = cvtMesh.cells[i]
+    if (cell.elevation < 0) continue
+    const v = arr[i * months + month]
+    const color =
+      field === 'temperature'
+        ? sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
+        : sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(30001), PRECIP_SCALE)
+    colors.set(cell.id, color)
+  }
+
+  const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
+  return makeTexture(buf, width, height)
 }
 
 function bakeAll(inp: BakeInputs): LayerTextures {
