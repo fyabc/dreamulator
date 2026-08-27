@@ -743,3 +743,6 @@ bodies:
     polar_day_at_pole_days: 1887.6
     in_conservative_habitable_zone: false
 target_body_id: satellite_nacrea
+warnings:
+- 'body ''planet_aegis'': axial_tilt_deg differs between stellar.yaml bodies (9.0)
+  and planets.yaml (3.0); planets.yaml is authoritative for engine runs'

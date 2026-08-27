@@ -1,13 +1,19 @@
 planet_id: planet_earth
 projection: equirectangular
-width: 2048
-height: 1024
-elevation_min_m: -10456.806268328251
-elevation_max_m: 7003.259347507337
+width: 4096
+height: 2048
+elevation_min_m: -13649.436946799755
+elevation_max_m: 9000
 sea_level_m: 0.0
 elevation_range_m:
-- -10456.8
-- 7003.3
-pipeline_version: etopo1-import
+- -13649.4
+- 6896.7
+pipeline_version: 2.0-cvt
 source: ETOPO1 Ice Surface (grid-registered)
 source_resolution: 1 arc-minute (~1.8 km at equator)
+voronoi_seed: 42
+voronoi_num_cells: 100000
+cvt_jitter_sigma: 0.3
+cvt_lloyd_iterations: 8
+num_plates: 20
+radius_km: 6371.0

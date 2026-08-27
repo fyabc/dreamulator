@@ -1,31 +1,49 @@
 planet:
-  id: unknown
-  name: unknown
+  id: planet_earth
+  name: Earth
 n_cells: 100000
-n_land: 32335
-n_ocean: 67665
+n_land: 27699
+n_ocean: 72301
 biome_counts:
-  ocean: 70571
-  boreal_forest: 1634
-  temperate_forest: 1461
-  temperate_rainforest: 1132
-  boreal_shrubland: 737
-  ice: 1865
-  tundra: 3211
-  temperate_grassland: 2103
-  temperate_desert: 5428
-  tropical_seasonal_forest: 2051
-  tropical_rainforest: 1528
-  tropical_savanna: 6735
-  tropical_desert: 1544
+  ocean: 70618
+  temperate_forest: 1947
+  temperate_grassland: 3479
+  boreal_forest: 3087
+  temperate_rainforest: 383
+  boreal_shrubland: 1530
+  temperate_desert: 2301
+  tundra: 166
+  tropical_savanna: 5126
+  tropical_desert: 2945
+  tropical_seasonal_forest: 4148
+  tropical_rainforest: 3263
+  ice: 1007
 npp_gc_m2_yr:
   land:
-    mean: 822.0984329304996
-    min: 0.0
-    max: 2600.591605442679
+    mean: 1006.2681005373177
+    min: 11.799255241072837
+    max: 2659.652741491786
   ocean:
-    mean: 1141.075238516436
+    mean: 1451.8015308577774
+soil:
+  orders:
+    alfisol: 1712
+    mollisol: 3189
+    spodosol: 1267
+    ultisol: 3341
+    gelisol: 3594
+    inceptisol: 527
+    aridisol: 3825
+    vertisol: 4961
+    oxisol: 2300
+  fertility:
+    high: 9862
+    low: 14327
+    medium: 527
+biogeography:
+  n_realms: 9
+  n_provinces: 9
 domesticable_highlights:
-  high_large_herbivores: 8803
-  high_staple_crops: 5388
-  high_draft_animals: 2087
+  high_large_herbivores: 7197
+  high_staple_crops: 7880
+  high_draft_animals: 3189

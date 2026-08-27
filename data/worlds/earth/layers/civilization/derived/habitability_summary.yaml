@@ -1,26 +1,26 @@
 planet:
-  id: satellite_nacrea
-  name: 珠母星 · Nacrea
-n_cells: 200000
-n_land: 57735
+  id: planet_earth
+  name: Earth
+n_cells: 100000
+n_land: 29382
 habitable_coast:
-  n_cells: 5052
-  land_fraction: 0.0875
+  n_cells: 3525
+  land_fraction: 0.12
 agricultural_core:
-  n_cells: 42281
-  land_fraction: 0.7323
+  n_cells: 24211
+  land_fraction: 0.824
 overlap:
-  n_cells: 4992
-  land_fraction: 0.0865
+  n_cells: 3188
+  land_fraction: 0.1085
   note: habitable AND agricultural — coastal civilisation 'cradle'
 habitable_not_agricultural:
-  n_cells: 60
-  land_fraction: 0.001
+  n_cells: 337
+  land_fraction: 0.0115
   note: cool-wet oceanic ET (Faroese/Inuit-type) — settleable, not farmable
 agricultural_not_habitable:
-  n_cells: 37289
-  land_fraction: 0.6459
+  n_cells: 21023
+  land_fraction: 0.7155
   note: inland warm land — farmable but outside the coastal threshold
 neither:
-  n_cells: 15394
-  land_fraction: 0.2666
+  n_cells: 4834
+  land_fraction: 0.1645

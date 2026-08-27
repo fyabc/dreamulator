@@ -17,9 +17,3 @@ type: overview
 | [space_age.md](space_age.md) | 主题推演 | 太空时代发展推演——核心轨道约束、科技树分歧、航空/低轨时代、磁帆技术与星际探测 |
 | [civilization_divergence.md](civilization_divergence.md) | 地缘政治 | 文明地理大分流——向星区/背星区/边缘区在石器、古典、海洋、太空时代的深刻分化与角色逆转 |
 | [civilizations.yaml](civilizations.yaml) | 数据文件 | 文明层结构化输入数据（YAML） |
-
-## 引擎 derived 输出
-
-| 文件 | 说明 |
-|------|------|
-| `../derived/habitability_summary.yaml` | 宜居海岸 / 农业核心区两个 derived 图层（`engine/civilization.py` 逐 cell 计算，供 civilizations.yaml 锚定） |

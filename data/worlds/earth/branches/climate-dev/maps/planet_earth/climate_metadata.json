@@ -5,7 +5,7 @@
   ],
   "precipitation_range_mm": [
     0.0,
-    30470.0
+    11000.0
   ],
   "koppen_classes": [
     "Af",
@@ -15,11 +15,17 @@
     "BSk",
     "BWh",
     "BWk",
+    "Cfa",
+    "Cfb",
     "Csa",
     "Csb",
     "Csc",
     "Cwa",
     "Cwb",
+    "Dfa",
+    "Dfb",
+    "Dsb",
+    "Dwa",
     "Dwb",
     "EF",
     "ET",

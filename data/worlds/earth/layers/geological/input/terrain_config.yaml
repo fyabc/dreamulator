@@ -4,5 +4,5 @@
 # build_earth_validation_config(). Earth's terrain is imported (ETOPO1), not
 # generated, so this file carries only the climate tuning knobs.
 climate:
-  ebm_1d: true            # 1D EBM formal solve (replaces sin² + graph diffusion)
-  auto_lat_gradient: true # still drives the storm-track ΔT scaling (Step 3.5)
+  auto_lat_gradient: true
+  diffusive_heat_transport: true
