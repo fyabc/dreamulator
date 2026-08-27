@@ -9,6 +9,7 @@ ecology 层 P0（Whittaker 群系 + NPP + 可驯化标签）与 P1a（土壤层 
 - `ecological_mathematical_models.md` — 生态学数学模型参考（种群动力学、物种相互作用、代谢标度理论、食物网、群落生态学、生态系统级、演化动力学；含 dreamulator 生态引擎方程体系设计）
 - `soil_orders.md` — USDA 12 土纲 + 肥力分级 + `classify_soil` 简化查表（P1a 土壤层）
 - `biogeographic_provinces.md` — Wallace/Udvardy/WWF 分区标准 + `partition_biogeographic_provinces` 算法（P1a 生物地理分区）
+- `pre_ediacaran_macrofossils.md` — 前埃迪卡拉宏体/多细胞记录（弗朗西维利安 2.1 Ga、高于庄/Qingshania 1.6 Ga、Bangiomorpha 1.05 Ga、瓮安）；false dawn、氧阈值、多次独立多细胞化；生态层演化设计启发 8 条
 
 ## 规划中的文档
 
