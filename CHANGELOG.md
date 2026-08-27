@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] — 2026-08-28
+
+### Added
+
+- **Phase 4 月度气候展示**：`climate_monthly.msgpack`（N×12×2 float32）导出 +
+  `/climate-monthly` API + 前端月度温度/降水图层（气候组「年度/月度」切换 + 周年滑块、
+  12 等分刻度 M1–M12；月度降水独立对数范围 0–2500 mm/月）
+- **河流矢量图层**：features.json 提取 + SVG 渲染（D8 河网分级）
+- 知识库：`speculative_evolution_genre.md`（推测进化流派史）、
+  `coastal_geomorphology.md`（海岸地貌分类 + 44 m 潮差外推）、
+  `pre_ediacaran_macrofossils.md`（弗朗西维利安等前埃迪卡拉记录）
+- 生态层设计 §2.7 深时演化门控；gaea-refinement §6 高清地形图完整链路
+
+### Changed
+
+- **nacrea 天文设定**：Aegis obliquity 3°→9°、Nacrea 赤道面轨道叙事（Cassini 态、
+  Laplace 面 4.7 yr 摆动、共振维持约束）；轨道面动力学与长周期气候循环数字卡入设定文档
+- 气候准确率系列：水汽收支守恒化（Budyko 陆地再循环 + κ 3.75e5）、辐合驱动降水、
+  大陆度（陆地-only EBM）、季节 EBM（B_eff=B+6D + 季节冰反照率）、
+  coastal moderation（年平温度向最近海洋 SST 混合）
+- 地质层：流水侵蚀/沉积自 200k 引擎移除（尺度不匹配，转 Gaea 局地精修）；
+  内部低地 + 靶向沉积填充 + 大陆架缓坡 + 小裂谷
+- nacrea / earth 双世界全量重建并同步 data/worlds
+
+### Fixed
+
+- 无海洋世界的 coastal moderation NaN 守卫（验证网格全陆地时温度场被 NaN 污染、
+  水汽预算矩阵奇异）
+- ITCZ 偏强 / Af 海岸锁定等气候修复若干
+
 ## [0.32.0] — 2026-08-19
 
 ### Added

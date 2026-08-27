@@ -1,6 +1,8 @@
 # 开发路线图
 
-> 最后更新：2026-08-19（v0.32.0 地图图层 headless 导出 CLI + 配色单源化 + Seed 探索器 CLI。前次：v0.31.0 守护轴实现落地：事实上下文 / 过期检测 + guard check / ADR 台账 / 原语注册表 / 拷问编排 + /grill-world skill）
+> 最后更新：2026-08-28（v0.33.0 Phase 4 月度气候展示 + 气候准确率系列 + nacrea 天文设定修订
+> （Aegis obliquity 9°/赤道面轨道）+ 双世界重建同步 + 间奏曲知识/设计落地。前次：v0.32.0 地图图层
+> headless 导出 CLI + 配色单源化 + Seed 探索器 CLI）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
@@ -8,7 +10,7 @@
 
 ---
 
-## 一、当前状态快照（v0.32.0）
+## 一、当前状态快照（v0.33.0）
 
 | 维度 | 状态 |
 |------|------|
