@@ -856,9 +856,11 @@ _MOISTURE_RESIDENCE_DAYS: float = 9.0
 
 # Turbulent moisture diffusivity (m²/s).  Atmospheric eddy diffusivity is
 # ~1e6 m²/s; this sets the sub-grid spreading of the advected moisture (the
-# physical ITCZ rain belt is ~10° wide, not a single cell).  Physical constant,
-# shared across worlds — only the wind/evaporation differ between planets.
-_MOISTURE_DIFFUSIVITY_M2S: float = 1.0e6
+# physical ITCZ rain belt is ~10° wide, not a single cell).  At κ=1e6 the
+# diffusion over-transported ocean moisture onto land (ocean→land transport
+# ~2× the observed ~268 mm/yr land-mean), so κ is calibrated down toward the
+# observed transport.  Shared across worlds.
+_MOISTURE_DIFFUSIVITY_M2S: float = 3.75e5
 
 # Land evapotranspiration as a fraction of the ocean evaporation *rate* at the
 # same temperature.  Earth's land surface returns ~490 mm/yr against the ocean's
@@ -869,6 +871,19 @@ _MOISTURE_DIFFUSIVITY_M2S: float = 1.0e6
 # land-mean evapotranspiration lands near the observed ~490 mm/yr.  A single
 # physical constant, shared by every world (only temperature differs).
 _LAND_EVAPOTRANSPIRATION_FRACTION: float = 0.55
+
+# Land recycling (Budyko 1974; Savenije 1995; van der Ent & Savenije 2011): land
+# evapotranspiration is water-limited, not just energy-limited — wet land
+# (Amazon) evaporates near its potential, dry land (Sahara) evaporates only the
+# rain that falls.  This is the physical mechanism behind the "inland aridity"
+# that the old distance-to-coast decay (removed) approximated: the recycled
+# fraction of precipitation decays inland with a *region-dependent* length scale
+# λ ∈ 500–7000 km (van der Ent & Savenije 2011), set by the local E/P, not by
+# distance from the coast.  A fixed-point iteration couples E_land to the local
+# precipitation via the Budyko reciprocal form E = E_pot·P/(E_pot+P).
+_LAND_RECYCLING_MAX_ITER: int = 12
+_LAND_RECYCLING_RELAX: float = 0.5
+_LAND_RECYCLING_TOL_MM: float = 1.0  # max |ΔE| over land cells (mm/yr)
 
 
 def _solve_moisture_budget(
@@ -915,6 +930,12 @@ def _solve_moisture_budget(
             moisture mixing (larger in the storm track); the finite-volume flux
             uses the edge-averaged κ so the term stays symmetric.
 
+    The land evapotranspiration source is water-limited by the Budyko recycling
+    feedback (see ``_LAND_RECYCLING_*`` constants): E_land = E_pot·P/(E_pot+P),
+    solved as a fixed point by re-solving the RHS against the (constant) matrix
+    A — wet land evaporates near its potential, dry land evaporates only the
+    rain that falls.
+
     Returns:
         (W, P): column water (mm) and rainout precipitation (mm/yr), shape (N,).
     """
@@ -930,14 +951,13 @@ def _solve_moisture_budget(
     # Evaporation source E (mm/yr): energy-limited ocean evaporation + land
     # evapotranspiration (see _LAND_EVAPOTRANSPIRATION_FRACTION).
     is_land = ~is_ocean
-    e = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
-    e = np.where(
+    e_ocean = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
+    e_land_init = evaporation_rate(
+        temperature_c,
         is_land,
-        evaporation_rate(
-            temperature_c, is_land, config.evaporation_base_mm * _LAND_EVAPOTRANSPIRATION_FRACTION
-        ),
-        e,
+        config.evaporation_base_mm * _LAND_EVAPOTRANSPIRATION_FRACTION,
     )
+    e = np.where(is_land, e_land_init, e_ocean)
 
     # Directed edge table (reuse the flat (src, dst) convention).
     from dreamulator.map.ocean_circulation import _build_directed_edge_table
@@ -1019,6 +1039,26 @@ def _solve_moisture_budget(
     from scipy.sparse.linalg import splu
 
     lu = splu(a.tocsc())
+
+    # Budyko land-recycling fixed point (see the module-level constants).  The
+    # matrix A is independent of the evaporation source E, so factor once and
+    # iterate only the RHS solve: E_land = E_pot·P/(E_pot+P) couples the land
+    # evapotranspiration to the local precipitation — wet land evaporates near
+    # its potential, dry land evaporates nearly nothing (water-limited).
+    if _LAND_RECYCLING_MAX_ITER > 0:
+        _e_pot_land = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
+        _e_land = e_land_init
+        for _ in range(_LAND_RECYCLING_MAX_ITER):
+            w = lu.solve(e)
+            w = np.maximum(w, 0.0)
+            p = w * k_rain_field
+            _e_new = _e_pot_land * p / (_e_pot_land + p + 1e-9)
+            _delta = float(np.max(np.abs(_e_new - _e_land)))
+            _e_land = _LAND_RECYCLING_RELAX * _e_new + (1.0 - _LAND_RECYCLING_RELAX) * _e_land
+            e = np.where(is_land, _e_land, e_ocean)
+            if _delta < _LAND_RECYCLING_TOL_MM:
+                break
+
     w = lu.solve(e)
 
     # Clamp against numerical under/overshoot (W ≥ 0), then P = W/τ.
@@ -1120,7 +1160,6 @@ def _surface_divergence(
             div[i] += flux
         div[i] /= areas_ster[i]
     return div
-
 
 
 def _compute_precipitation_bfs(
@@ -1229,15 +1268,40 @@ def _compute_precipitation_bfs(
     # enhancement (same eddies), so a single-cell planet (storm_amp=0) gets none.
     _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
 
-    # Step 2+3+3.5: mass-conserving moisture budget with the storm-track rainout
-    # enhancement folded into k_rain and the eddy transport into κ.  The core is
-    # a single steady upwind advection–decay solve for column water W:
+    # Step 5+7: local convection + tropical boost as k_rain modulations (not
+    # additive precipitation, so ΣP = ΣE is preserved).  Convection (afternoon
+    # thunderstorms over warm land) is a temperature-driven rainout efficiency;
+    # the tropical boost raises the deep-tropics rainout toward the observed
+    # Amazon/Congo interior (1200 mm equator → 700 mm at 15°), sourced from the
+    # advected column water rather than injected ex nihilo.
+    _conv_enhance = np.where(
+        is_land,
+        30.0 * np.maximum(temperature_c - 10.0, 0.0) / config.evaporation_base_mm,
+        0.0,
+    )
+    _tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
+    _boost_enhance = np.zeros(n, dtype=np.float64)
+    _boost_enhance[_tropical_land] = (
+        1200.0 - 500.0 * (np.abs(lat_deg[_tropical_land]) / 15.0)
+    ) / config.evaporation_base_mm
+
+    _rainout_enhance = _storm_enhance + _conv_enhance + _boost_enhance
+
+    # Step 2+3+3.5+5+7: mass-conserving moisture budget with the storm-track,
+    # convection and tropical-boost rainout enhancements folded into k_rain, and
+    # the eddy transport into κ.  The core is a single steady upwind
+    # advection–decay solve for column water W:
     #     ∇·(W u) + k_rain(x) W − ∇·(κ(x)∇W) = E ,   P = k_rain(x) W
     # (see ``_solve_moisture_budget``).  ΣP = ΣE by construction; the ITCZ /
     # subtropical dry belt / storm track emerge from the wind + rainout fields.
     _col_water, precip = _solve_moisture_budget(
-        mesh, wind, is_ocean, temperature_c, nodes_xyz, config,
-        rainout_enhancement=_storm_enhance,
+        mesh,
+        wind,
+        is_ocean,
+        temperature_c,
+        nodes_xyz,
+        config,
+        rainout_enhancement=_rainout_enhance,
         diffusivity_enhancement=_eddy_enhance,
     )
 
@@ -1282,51 +1346,12 @@ def _compute_precipitation_bfs(
     precip[monsoon_cells & (abs_lat < 20.0)] *= 1.5
     precip[monsoon_cells & (abs_lat >= 20.0)] *= 1.3
 
-    # Step 5: Local convection (afternoon thunderstorms over warm land)
-    # Temperature > 10 °C → thermal convection produces background precipitation.
-    # This fills in continental interiors that BFS moisture can't reach.
-    conv_trigger = np.maximum(temperature_c - 10.0, 0.0)  # °C above 10 °C
-    conv_precip = 30.0 * conv_trigger  # ~30 mm/yr per °C above 10 °C
     if debug is not None:
-        debug["convection"] = np.where(is_land, conv_precip, 0.0).copy()
-    precip[is_land] += conv_precip[is_land]
-
-    # Step 6.5: Inland aridity gradient (3A.4).
-    # BFS moisture transport has finite range (~12 graph hops).  Cells deep
-    # in continental interiors receive no direct ocean moisture and must
-    # rely on recycled precipitation (not yet modelled).  Apply an exponential
-    # decay beyond the BFS effective range so that hyper-arid interiors
-    # (e.g. Taklamakan, central Sahara) are realistically dry.
-    #
-    # The distance-to-coast is computed once on the CVT graph via Dijkstra
-    # from all ocean cells — this is the shortest graph-path to any ocean.
-    if is_land.any():
-        _dist_km = distance_to_coast_km
-        # E-folding distance scales with wind speed only: moisture travels
-        # farther where winds are stronger.  Humidity affects the *amount* of
-        # moisture carried (via evaporation), not the transport distance —
-        # coupling q_sat into e_fold collapsed the distance in cold polar air
-        # and hyper-dried continental interiors (see 2026-08-13 fix).
-        # Reference: 800 km at Earth trade-wind speed (5 m/s).
-        _zwind_inland = hadley_cell_wind(
-            lat_rad,
-            nodes_xyz,
-            hadley_extent_deg=config.hadley_extent_deg,
-            polar_cell_start_deg=config.polar_cell_start_deg,
-            rotation_period_days=config.rotation_period_days,
-        )
-        from dreamulator.map.ocean_circulation import east_north_basis as _enb3
-
-        _e_inland, _ = _enb3(nodes_xyz)
-        _uz_abs = np.abs(np.einsum("ij,ij->i", _zwind_inland, _e_inland))
-        for i in range(n):
-            if not is_land[i]:
-                continue
-            u_local = max(_uz_abs[i], 1.0)
-            e_fold = 800.0 * (u_local / 5.0)
-            threshold = 500.0 * (u_local / 5.0)
-            excess = max(_dist_km[i] - threshold, 0.0)
-            precip[i] *= np.exp(-excess / e_fold)
+        # Convection's share of the conserved rainout: temperature-driven rainout
+        # efficiency over warm land, times the column water at the base rate.
+        debug["convection"] = (
+            _col_water * (365.25 / _MOISTURE_RESIDENCE_DAYS) * _conv_enhance
+        ).copy()
 
     # Step 6.6: West-coast / east-coast asymmetry (3A.4).
     # Onshore winds carry ocean moisture → coastal precipitation is
@@ -1432,24 +1457,12 @@ def _compute_precipitation_bfs(
                 fohn_factor = np.exp(-elev_drop / h_scale_m)
                 precip[i] *= fohn_factor
 
-    # Step 7: Tropical precipitation boost (soft, with natural variation)
-    # Deep tropics (|lat| < 15°, T > 20°C) get boosted toward a target that
-    # varies by latitude (equator wetter, edges drier). This prevents inland
-    # tropical areas from being classified as arid (B) when BFS can't reach them,
-    # while avoiding an artificial spike at a single value.
-    # Real Earth: Congo/Amazon interior 1500-2000mm, Sahel 400-800mm.
-    tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
-    if tropical_land.any():
-        # Target decreases from equator (1200mm) to 15° latitude (700mm)
-        tropical_target = 1200.0 - 500.0 * (np.abs(lat_deg[tropical_land]) / 15.0)
-        # Soft boost: move 70% of the way toward target (preserves BFS variation)
-        current = precip[tropical_land]
-        deficit = np.maximum(tropical_target - current, 0.0)
-        if debug is not None:
-            _boost = np.zeros(n, dtype=np.float64)
-            _boost[tropical_land] = deficit * 0.7
-            debug["tropical_boost"] = _boost
-        precip[tropical_land] = current + deficit * 0.7
+    if debug is not None:
+        # Tropical boost's share of the conserved rainout (deep-tropics rainout
+        # floor, sourced from the advected column water).
+        debug["tropical_boost"] = (
+            _col_water * (365.25 / _MOISTURE_RESIDENCE_DAYS) * _boost_enhance
+        ).copy()
 
     # Step 8: Sub-planet / sub-stellar convective enhancement (3A.7).
     # A tidally-locked planet (or a satellite like nacrea) has a permanently

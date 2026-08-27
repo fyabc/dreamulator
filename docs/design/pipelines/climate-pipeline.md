@@ -145,12 +145,13 @@ energy_balance.md §8）：
 
 ```
 ∇·(W u) + k_rain(x)·W − κ∇²W = E ,   P = k_rain(x)·W
-k_rain(x) = (1/τ)·(1 + s_storm(x))
+k_rain(x) = (1/τ)·(1 + _storm_enhance(x) + _conv_enhance(x) + _boost_enhance(x))
 ```
 
-迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ≈1e6 m²/s，展宽 ITCZ 到
-观测的 ~10° 雨带）+ 直接稀疏 LU 求解。**质量守恒由构造保证**（ΣP = ΣE，任意
-`k_rain(x)` 场都成立），ITCZ / 副热带干带从风场自然涌现。
+迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ≈3.75e5 m²/s，从 1e6 下调以
+抑制海洋→陆地的过度扩散湿润，见 §6 标定；代价是 ITCZ 更集中，属已知待办）+ 直接稀疏 LU
+求解。**质量守恒由构造保证**（ΣP = ΣE，任意 `k_rain(x)` 场都成立），ITCZ / 副热带干带
+从风场自然涌现。
 
 **雨出率空间调制**：`k_rain(x)` 非常数——风暴路径等增强机制当作**雨出效率的空间
 调制**（τ 更短 → 雨出更高效），而非加法降水项。这保证全球 ΣP = ΣE（Held & Soden
@@ -158,13 +159,16 @@ k_rain(x) = (1/τ)·(1 + s_storm(x))
 
 执行步骤：
 
-1. **蒸发源 E**：海洋蒸发（能量限制 ~3%/°C）+ 陆地蒸散
-   （`_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55，配 Earth ~490 mm/yr 陆地蒸散）。
-2. **水汽收支求解**：`_solve_moisture_budget` 解出柱水汽 W，P = W/τ（质量守恒）。
+1. **蒸发源 E**：海洋蒸发（能量限制 ~3%/°C）+ 陆地蒸散——后者走 **Budyko 再循环**
+   （`E_land = E_pot·P/(E_pot+P)`，湿陆蒸散近潜势、干陆近零），取代旧的距离海岸内陆
+   干旱衰减；基准因子 `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55 作首轮初值（配 Earth
+   ~490 mm/yr 陆地蒸散）。
+2. **水汽收支求解**：`_solve_moisture_budget` 解出柱水汽 W，P = W/τ（质量守恒）；Budyko
+   再循环在解内作固定点迭代（矩阵与 E 无关，只 LU 分解一次、迭代重解 RHS）。
 3. **地形抬升雨**：从 W 算迎风抬升雨 + 雨影。
 4. **斜压风暴路径**：雨出率增强 `_storm_enhance`（幅度 ∝ ∇T × Ω^0.3 × 蒸发，作为 `k_rain` 调制而非加法项；中心取斜压带中点 φ=(φ_H+φ_P)/2、宽 ½(φ_P−φ_H)——地球 45°±15°，单圈行星宽度为零自动消失）。
-5. **季风增强**、**局地对流**、**内陆干旱梯度**、**海岸不对称**、**Föhn 雨影**、
-   **热带底线**、**次行星半球强迫**。
+5. **局地对流 + 热带底线**（同为 `k_rain` 调制 `_conv_enhance`/`_boost_enhance`，非加法）、**季风增强**、
+   **海岸不对称**、**Föhn 雨影**、**次行星半球强迫**。
 6. 最终封顶 11000 mm/yr。
 
 **关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，
@@ -182,6 +186,9 @@ k_rain(x) = (1/τ)·(1 + s_storm(x))
 - **PlaSim/ExoPlaSim**（Kuo 对流）：对流降水 ∝ 水汽辐合，天然守恒。
 - **WAM-2layers**（van der Ent 2014）：水汽标记追踪；~40% 陆地降水来自陆地再蒸发，
   作再循环率标定目标。
+- **Savenije (1995) / van der Ent & Savenije (2011)**：内陆降水沿水汽轨迹指数衰减
+  `P = P₀·exp(−x/λ)`，但再循环长度 λ 区域依赖（热带 500–2000 km、沙漠 >7000 km），
+  由当地 E/P 决定而非距海距离——这是 Budyko 再循环取代距离衰减的依据。
 
 **诊断辅助函数**：
 
@@ -321,7 +328,7 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 |------|------|
 | 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`） |
 | 温度（季节） | ✅ 显式热输送（B+6D）+ 季节冰反照率 |
-| 降水 | ✅ 质量守恒水汽收支 + 雨出率 `k_rain` 空间调制（风暴路径已守恒化；对流/热带底线仍是加法项，待迁） |
+| 降水 | ✅ 质量守恒水汽收支 + 雨出率 `k_rain` 空间调制（风暴路径 / 对流 / 热带底线均已守恒化）+ Budyko 陆地再循环 |
 | 风场 | ✅ 地转 + 三圈环流（`itcz_lat_deg` 季节迁移已实现、未接线） |
 | 洋流 | ✅ Stommel 环流 + SST 平流 + 涌升 |
 
@@ -330,7 +337,7 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | 项 | 现状 | 方向 | 位置 |
 |---|---|---|---|
 | 季风 | Step 4 系数 ×1.5/×1.3 固定 | 季节风反转 + 海陆热力对比驱动的向岸水汽平流（`itcz_lat_deg` 已就绪） | `climate_simulator.py` Step 4 |
-| 内陆干旱梯度 / 海岸不对称 / 热带底线 | 逐 cell 启发式 | BFS 季节输送 / 涌升 + 季风 / 双 ITCZ | `_compute_precipitation_bfs` Step 6.5/6.6/7 |
+| 海岸不对称 | Step 6.6 逐 cell 启发式（向岸/离岸风系数） | 涌升 + 向岸水汽平流 | `_compute_precipitation_bfs` Step 6.6 |
 | 南半球 SST 过暖 | `_ocean_surface_temperature` 南半球偏暖 +4~+10°C | 独立标定 | `_ocean_surface_temperature` |
 | 三圈环流边界 | Hadley 30° / Ferrel 60° 可配置 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½ 行星化 | `hadley_cell_wind` |
 | nacrea 回归 | nacrea 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `nacrea/terrain_config.yaml` |
@@ -345,8 +352,9 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | `evaporation_base_mm` | 1000.0 | 15 °C 洋面年蒸发基准（能量限制 ~3%/°C） |
 
 > 水汽收支的物理常数在代码内（非 config）：驻留时间 τ≈9 天（`_MOISTURE_RESIDENCE_DAYS`）、
-> 湍流扩散 κ≈1e6 m²/s（`_MOISTURE_DIFFUSIVITY_M2S`）、陆地蒸散因子 ≈0.55
-> （`_LAND_EVAPOTRANSPIRATION_FRACTION`）。它们是水的物理属性，所有世界共享。
+> 湍流扩散 κ≈3.75e5 m²/s（`_MOISTURE_DIFFUSIVITY_M2S`，从 1e6 下调以抑制海洋→陆地过度
+> 扩散湿润）、陆地蒸散基准因子 ≈0.55（`_LAND_EVAPOTRANSPIRATION_FRACTION`，Budyko 再循环
+> 首轮初值）+ Budyko 再循环参数（`_LAND_RECYCLING_*`）。它们所有世界共享。
 
 ---
 
