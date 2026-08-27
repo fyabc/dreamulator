@@ -29,6 +29,8 @@ interface SunControlProps {
   /** When provided (2D map), renders an on/off toggle for the overlay. */
   enabled?: boolean
   onEnabledChange?: (enabled: boolean) => void
+  /** Show the month readout (M1–M12, Phase 4 monthly climate) beside the season. */
+  showMonth?: boolean
 }
 
 /** Simple sun icon as inline SVG. */
@@ -57,6 +59,7 @@ export default function SunControl({
   axialTiltDeg = 0,
   enabled = true,
   onEnabledChange,
+  showMonth = false,
 }: SunControlProps) {
   const { t } = useTranslation('map')
 
@@ -66,6 +69,10 @@ export default function SunControl({
     if (abs < 0.05) return `0°（${t('sun.equator')}）`
     return `${abs.toFixed(1)}°${dec > 0 ? 'N' : 'S'}`
   }
+
+  // Month of year (0–11), derived from the season angle.  0° = vernal equinox
+  // = month 0 (M1); 90° = summer solstice = month 3 (M4).
+  const monthOfYear = Math.round(seasonDeg / 30) % 12
 
   const handleLongitude = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => onLongitudeChange(parseInt(e.target.value)),
@@ -148,6 +155,9 @@ export default function SunControl({
             <span className="text-[10px] text-gray-500">{t('sun.season')}</span>
             <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
               {t('sun.declination', { declination: formatDeclination(declination) })}
+              {showMonth && (
+                <span className="ml-2">{t('sun.monthValue', { m: monthOfYear + 1 })}</span>
+              )}
             </span>
           </div>
           <input

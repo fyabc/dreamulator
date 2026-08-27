@@ -5,6 +5,8 @@
  * Only supports read operations; write operations throw.
  */
 
+import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
+
 interface DocumentMeta {
   filename: string
   title: string
@@ -313,6 +315,21 @@ export const staticApi = {
     } finally {
       mark('mesh-fetch-end')
     }
+  },
+
+  getMonthlyClimate: async (
+    name: string,
+    planetId: string,
+    branch?: string | null,
+  ): Promise<MonthlyClimateData | null> => {
+    const blob = await fetchBranchAwareBlob(
+      name,
+      branch,
+      `/maps/${planetId}/climate_monthly.msgpack`,
+      `/maps/${planetId}/climate_monthly.msgpack`,
+    )
+    if (blob === null) return null
+    return decodeMonthlyClimate(await blob.arrayBuffer())
   },
 
   getPlates: async (name: string, planetId: string, branch?: string | null) => {

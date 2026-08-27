@@ -179,6 +179,35 @@ def get_cvt_mesh(
     return data
 
 
+@router.get("/{world_name}/maps/{planet_id}/climate-monthly")
+def get_climate_monthly(
+    world_name: str,
+    planet_id: str,
+    branch: str | None = None,
+) -> Response:
+    """Get the monthly climate data (Phase 4) as MessagePack.
+
+    The file is written by ``export_climate_layers`` (already MessagePack), so
+    this endpoint streams the raw bytes.
+    """
+    mgr = _get_map_manager(world_name, branch)
+    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
+    if map_dir is None:
+        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
+
+    monthly_file = map_dir / "climate_monthly.msgpack"
+    if not monthly_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No monthly climate data for '{planet_id}'. Run the climate engine first.",
+        )
+
+    return Response(
+        content=monthly_file.read_bytes(),
+        media_type="application/x-msgpack",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Write endpoints
 # ---------------------------------------------------------------------------

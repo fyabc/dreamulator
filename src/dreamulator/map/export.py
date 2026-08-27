@@ -548,6 +548,30 @@ def export_climate_layers(
         json.dump(climate_meta, _f, indent=2)
     logger.info("  Exported climate_metadata.json")
 
+    # 5. Monthly climate (Phase 4 monthly display) — compact MessagePack of the
+    # per-cell monthly temperature + precipitation (N×12 float32) in mesh cell
+    # order, so the frontend can bake it with the existing cell-ID map.  Raw
+    # bytes keep the file compact (gzip ~10 MB vs JSON text ~40 MB).
+    t_monthly = getattr(mesh, "_t_monthly_c", None)
+    p_monthly = getattr(mesh, "_p_monthly_mm", None)
+    if t_monthly is not None and p_monthly is not None:
+        import msgpack
+
+        monthly = {
+            "num_cells": mesh.num_cells,
+            "months": 12,
+            "dtype": "float32",
+            "t_monthly": t_monthly.tobytes(),
+            "p_monthly": p_monthly.tobytes(),
+            "temperature_range_c": [float(np.min(t_monthly)), float(np.max(t_monthly))],
+            "precipitation_range_mm": [float(np.min(p_monthly)), float(np.max(p_monthly))],
+            "month_0": "vernal_equinox",
+        }
+        monthly_path = output_dir / "climate_monthly.msgpack"
+        with monthly_path.open("wb") as _f:
+            _f.write(msgpack.packb(monthly))
+        logger.info("  Exported climate_monthly.msgpack (%d×%d)", mesh.num_cells, 12)
+
 
 def _nice_range(
     data_min: float,

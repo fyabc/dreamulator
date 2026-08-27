@@ -204,6 +204,8 @@
     "longitudeTitle": "太阳直射经度（0° = 本初子午线正午）",
     "season": "季节（周年）",
     "declination": "直射 {{declination}}",
+    "monthLabel": "月序",
+    "monthValue": "M{{m}}",
     "noTiltHint": "该行星无地轴倾角，无季节变化",
     "seasonTitle": "轨道位置（0° = 春分，90° = 北半球夏至）",
     "equator": "赤道",
