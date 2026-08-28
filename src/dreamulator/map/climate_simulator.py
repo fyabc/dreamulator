@@ -327,14 +327,11 @@ def simulate_climate(
 
     # Overlay three-cell circulation (Hadley / Ferrel / Polar); cell
     # boundaries are planet parameters (3A.3a — slow rotators get an
-    # expanded Hadley cell).
-    wind_cell = hadley_cell_wind(
-        lat_rad,
-        nodes_xyz,
-        hadley_extent_deg=config.hadley_extent_deg,
-        polar_cell_start_deg=config.polar_cell_start_deg,
-        rotation_period_days=config.rotation_period_days,
-    )
+    # expanded Hadley cell).  The circulation follows the migrating ITCZ:
+    # averaging the cells over the 12 monthly ITCZ positions makes the
+    # annual-mean convergence band span the ITCZ's full seasonal excursion
+    # rather than sitting pinned at the geographic equator (roadmap 20 ①).
+    wind_cell = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
 
     # Combine: 40% geostrophic + 60% cell circulation
     wind = 0.4 * wind_geostrophic + 0.6 * wind_cell
@@ -655,6 +652,49 @@ def _compute_graph_gradient(
     grad[mask] /= weight_sum[mask, None]
 
     return grad
+
+
+def _seasonal_mean_cell_wind(
+    lat_rad: np.ndarray,
+    nodes_xyz: np.ndarray,
+    config: TerrainPipelineConfig,
+    itcz_lat_monthly: np.ndarray | None,
+) -> np.ndarray:
+    """Time-average of the three-cell circulation over the seasonal ITCZ.
+
+    The circulation is symmetric about the thermal equator, which follows the
+    subsolar point through the year (``itcz_lat_monthly``).  The annual-mean
+    wind that drives the steady moisture budget is therefore the time average
+    of the circulation evaluated at each month's ITCZ position: the surface
+    convergence band ends up spread over the ITCZ's full seasonal excursion
+    instead of being pinned at the geographic equator.  With ``None`` (or an
+    all-zero array) this reduces to the single classic call.
+
+    Args:
+        lat_rad: Latitude in radians, shape (N,).
+        nodes_xyz: Unit sphere node positions, shape (N, 3).
+        config: Pipeline configuration (cell extents, rotation period).
+        itcz_lat_monthly: ITCZ latitude per month (degrees), shape (12,), or
+            None for no migration.
+
+    Returns:
+        Annual-mean cell-circulation wind vectors (m/s), shape (N, 3).
+    """
+    if itcz_lat_monthly is None:
+        itcz_lat_monthly = np.zeros(12)
+    winds = [
+        hadley_cell_wind(
+            lat_rad,
+            nodes_xyz,
+            hadley_extent_deg=config.hadley_extent_deg,
+            polar_cell_start_deg=config.polar_cell_start_deg,
+            rotation_period_days=config.rotation_period_days,
+            itcz_lat_deg=float(itcz),
+        )
+        for itcz in itcz_lat_monthly
+    ]
+    mean_wind: np.ndarray = np.mean(np.stack(winds), axis=0)
+    return mean_wind
 
 
 def _geostrophic_wind(
@@ -1239,6 +1279,10 @@ def _compute_precipitation_bfs(
         nodes_xyz: Unit sphere node positions, shape (N, 3).
         distance_to_coast_km: Distance to nearest ocean in km, shape (N,).
         config: Pipeline configuration.
+        itcz_lat_monthly: ITCZ latitude per month (degrees), shape (12,).
+            The west/east-coast asymmetry (Step 6.6) evaluates the cell
+            circulation averaged over these positions, the same annual-mean
+            wind the moisture budget sees.
 
     Returns:
         Annual precipitation in mm, shape (N,).
@@ -1416,13 +1460,7 @@ def _compute_precipitation_bfs(
             is_land,
             is_ocean,
         )
-        _zwind = hadley_cell_wind(
-            lat_rad,
-            nodes_xyz,
-            hadley_extent_deg=config.hadley_extent_deg,
-            polar_cell_start_deg=config.polar_cell_start_deg,
-            rotation_period_days=config.rotation_period_days,
-        )
+        _zwind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
         from dreamulator.map.ocean_circulation import east_north_basis as _enb2
 
         _east, _ = _enb2(nodes_xyz)
