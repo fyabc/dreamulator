@@ -167,6 +167,24 @@ suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea�
 这对 Ferrel 是过高估计（慢自转时涡动应减弱而非增强）。
 **已知局限**：roadmap 3A.3a 中期计划细化 Ferrel/polar 强度标度。
 
+### 7.6 单圈环流下的涡旋活动
+
+「单圈环流 = 没有涡旋」是不成立的过度简化。慢自转 GCM 的一致结论是：
+瞬变涡旋随 Ω 降低而减弱，但不消失；定常涡旋（驻波）的比重上升。
+Gnanaraj et al. (2025) 的水行星旋转速率扫描显示，慢自转端 Hadley 胞扩张、
+对流层变干，但斜压涡旋热通量依然可测；Hermosilla Canobra (2026) 用 Isca
+模型扫到 0.083 Ω⊕，发现涡旋驱动的经向输送效率低于直接平流但仍非零；
+Showman & Kaspi (2010) 的潮汐锁定水行星里，定常涡旋主导角动量输送并塑造
+降水分布。
+
+对引擎的含义（2026-08-29 落地，技术债 20 ⑥）：斜压雨出带的位置不取环流胞
+边界（单圈时退化为零宽），而是从纬向平均温度的经向梯度推导——Eady 不稳定
+跟随 ∇T，带中心取 |dT/dφ| 峰值、σ 取半峰全宽/2.355（`_baroclinic_band`）。
+地球与 nacrea 的年均梯度峰值都在 ~67°（极锋区），σ≈20°。幅度沿用共享默认
+（900 mm）加 Ω^0.3 标度，慢自转行星自动得到弱增强：nacrea 有效幅度约
+560 mm，中高纬增湿 +31~+89 mm/年，BW 沙漠 −910 cell，沿海沙漠
+（<200 km）853→636——方向与「涡旋减弱而不为零」一致。
+
 ## 参考资料
 
 - Held, I.M., & Hou, A.Y. (1980). "Nonlinear axially symmetric circulations." *JAS 37*.
@@ -180,3 +198,9 @@ suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea�
   downdraft width with rotation rate." *J. Atmos. Sci.* 76.
 - Sukhanovskii, A., Popova, E., & Vasiliev, A. (2023). "A shallow layer laboratory
   model of large-scale atmospheric circulation." *GApFD* 117.
+- Gnanaraj, C., et al. (2025). "The impact of the rotation rate on an aquaplanet's
+  radiant energy budget." *Weather Clim. Dynam.* 6, 489–509.
+- Showman, A.P., & Kaspi, Y. (2010). "Atmospheric dynamics of Earth-like tidally
+  locked aquaplanets." *JAMES* 2.
+- Hermosilla Canobra, S. (2026). "Circulation and cloud-cover fingerprints in
+  aquaplanet atmospheres." Utrecht University MSc thesis.
