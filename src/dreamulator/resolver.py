@@ -214,6 +214,29 @@ class LayerResolver:
         source = self.resolve_layer(layer)
         return source.derived_dir
 
+    def find_input_file(self, layer: Layer | str, relative_path: str) -> Path | None:
+        """Find an input file, walking the inheritance chain (branch → root).
+
+        ``resolve_layer`` returns a single directory per layer, so a branch
+        with a non-empty input directory shadows the root directory for the
+        whole layer.  Individual files the branch does not override are still
+        inherited from the root world — this method resolves them per file.
+
+        Args:
+            layer: Layer to query.
+            relative_path: Path relative to the layer's input directory.
+
+        Returns:
+            First existing file along the chain, or None.
+        """
+        if isinstance(layer, str):
+            layer = Layer(layer)
+        for _metadata, dir_path in self._get_branch_chain():
+            path = dir_path / "layers" / layer.value / "input" / relative_path
+            if path.exists():
+                return path
+        return None
+
     def list_input_files(self, layer: Layer | str, pattern: str = "*") -> list[Path]:
         """List files matching a glob pattern in the effective input directory.
 

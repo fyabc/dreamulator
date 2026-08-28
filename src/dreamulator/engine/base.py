@@ -111,6 +111,13 @@ class BaseEngine(ABC):
                 path = self.layer_input_dirs[layer_name] / relative_path
                 if path.exists():
                     return path
+            # Per-file root fallback: layer_input_dirs holds one (branch-resolved)
+            # directory per layer, so a branch with a non-empty input directory
+            # shadows the root directory for the whole layer.  Files the branch
+            # does not override are still inherited from the root world.
+            root_input = self.world_dir / "layers" / layer_name / "input" / relative_path
+            if root_input.exists():
+                return root_input
 
         return None
 

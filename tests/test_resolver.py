@@ -122,6 +122,46 @@ class TestLayerResolverBranch:
             resolver.resolve_all_layers()
 
 
+class TestFindInputFile:
+    """Per-file inheritance: branch files override, missing files fall to root."""
+
+    def test_branch_file_wins(self, tmp_path):
+        root_geo = tmp_path / "layers" / "geological" / "input"
+        root_geo.mkdir(parents=True)
+        (root_geo / "terrain_config.yaml").write_text("root: true", encoding="utf-8")
+
+        BranchManager(tmp_path).create_branch("pangea", Layer.GEOLOGICAL)
+        branch_geo = tmp_path / "branches" / "pangea" / "layers" / "geological" / "input"
+        (branch_geo / "terrain_config.yaml").write_text("branch: true", encoding="utf-8")
+
+        resolver = LayerResolver(tmp_path, "pangea")
+        path = resolver.find_input_file("geological", "terrain_config.yaml")
+        assert path is not None
+        assert "branches" in path.parts
+
+    def test_missing_branch_file_falls_back_to_root(self, tmp_path):
+        # The branch shadows the whole geological directory (it has planets.yaml),
+        # but terrain_config.yaml — which it does not override — is inherited.
+        root_geo = tmp_path / "layers" / "geological" / "input"
+        root_geo.mkdir(parents=True)
+        (root_geo / "terrain_config.yaml").write_text("root: true", encoding="utf-8")
+
+        BranchManager(tmp_path).create_branch("pangea", Layer.GEOLOGICAL)
+        branch_geo = tmp_path / "branches" / "pangea" / "layers" / "geological" / "input"
+        (branch_geo / "planets.yaml").write_text("bodies: []", encoding="utf-8")
+
+        resolver = LayerResolver(tmp_path, "pangea")
+        # Directory-level resolution sees only the branch dir...
+        assert resolver.get_input_dir("geological") == branch_geo
+        # ...but per-file lookup still finds the root's terrain_config.yaml.
+        path = resolver.find_input_file("geological", "terrain_config.yaml")
+        assert path == root_geo / "terrain_config.yaml"
+
+    def test_no_file_anywhere(self, tmp_path):
+        resolver = LayerResolver(tmp_path)
+        assert resolver.find_input_file("geological", "terrain_config.yaml") is None
+
+
 class TestLayerResolverInherit:
     """Tests for _inherit: true branch data merge."""
 

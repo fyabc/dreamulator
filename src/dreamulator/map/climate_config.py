@@ -93,11 +93,11 @@ def load_world_climate_config(
             derived_dirs[layer.value] = ddir
 
     config = TerrainPipelineConfig()
-    geo_input = resolver.get_input_dir("geological")
-    if geo_input is not None:
-        terrain_cfg_path = geo_input / "terrain_config.yaml"
-        if terrain_cfg_path.exists():
-            config = TerrainPipelineConfig.from_yaml(terrain_cfg_path)
+    # Per-file lookup: a branch that overrides some geological inputs (e.g.
+    # planets.yaml) still inherits the root world's terrain_config.yaml.
+    terrain_cfg_path = resolver.find_input_file("geological", "terrain_config.yaml")
+    if terrain_cfg_path is not None:
+        config = TerrainPipelineConfig.from_yaml(terrain_cfg_path)
 
     from dreamulator.engine.physical_inputs import resolve_and_apply_physical_parameters
 

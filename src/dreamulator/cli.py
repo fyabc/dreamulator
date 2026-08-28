@@ -978,16 +978,17 @@ def _load_terrain_config(
     if config_path and config_path.exists():
         cfg = TerrainPipelineConfig.from_yaml(config_path)
     else:
-        # Try to find terrain config in geological layer
-        geological_input = resolver.get_input_dir("geological")
+        # Try to find terrain config in the geological layer.  Per-file lookup:
+        # a branch that overrides some geological inputs (e.g. planets.yaml)
+        # still inherits the root world's terrain_config.yaml.
         cfg = TerrainPipelineConfig()
-        if geological_input:
-            # Check for terrain config YAML
-            terrain_cfg_path = geological_input / "terrain_config.yaml"
-            if terrain_cfg_path.exists():
-                cfg = TerrainPipelineConfig.from_yaml(terrain_cfg_path)
-            else:
-                # Try to load from planets.yaml
+        terrain_cfg_path = resolver.find_input_file("geological", "terrain_config.yaml")
+        if terrain_cfg_path is not None:
+            cfg = TerrainPipelineConfig.from_yaml(terrain_cfg_path)
+        else:
+            # Try to load from planets.yaml
+            geological_input = resolver.get_input_dir("geological")
+            if geological_input:
                 planets_file = geological_input / "planets.yaml"
                 if planets_file.exists():
                     with open(planets_file, encoding="utf-8") as f:
