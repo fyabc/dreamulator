@@ -334,9 +334,9 @@ class TerrainPipelineConfig:
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
     # Mid-latitude storm-track amplitude (baroclinic cyclones), mm/yr at Earth
     # calibration (∇T=45°C, Ω=1, evap=1000).  The actual amplitude scales with
-    # ∇T × Ω^0.3 × evap (see _compute_precipitation_bfs).  Set to 0 to disable
-    # storm tracks (e.g. slow rotators in the single-Hadley-cell regime, where
-    # baroclinic eddies do not form).
+    # ∇T × Ω^0.3 × evap (see _compute_precipitation_monthly_budget).  Set to 0
+    # to disable storm tracks (e.g. slow rotators in the single-Hadley-cell
+    # regime, where baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
     storm_track_kappa_enhancement: float = 3.0  # eddy diffusivity × at the storm peak
     # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)

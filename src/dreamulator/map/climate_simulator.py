@@ -43,6 +43,10 @@ from dreamulator.engine.climate_seasonality import (
     solve_held_hou_temperature,
     warm_cold_half_precip,
 )
+from dreamulator.engine.monsoon_circulation import (
+    monsoon_boundary_layer_wind,
+    pressure_anomaly_monthly,
+)
 
 if TYPE_CHECKING:
     from .models import CVTMesh, VoronoiCell
@@ -306,7 +310,6 @@ def simulate_climate(
     t_cold_C = seasonal["T_cold"]
     t_hot_C = seasonal["T_hot"]
     t_monthly_C = seasonal["T_monthly"]
-    p_factor = seasonal["P_factor"]
     itcz_lat_monthly = seasonal["itcz_lat"]
 
     # ------------------------------------------------------------------
@@ -336,8 +339,75 @@ def simulate_climate(
     # Combine: 40% geostrophic + 60% cell circulation
     wind = 0.4 * wind_geostrophic + 0.6 * wind_cell
 
-    # Terrain blocking
+    # ── Monsoon wind anomaly (tech debt 23) ──
+    # Summer continents warm above the zonal mean → thermal lows; the boundary-
+    # layer wind answers the anomaly pressure gradient against Coriolis and drag
+    # (engine/monsoon_circulation.py).  Near the equator f → 0 and the flow goes
+    # straight down-gradient — the cross-equatorial monsoon current.  The anomaly
+    # is added onto the annual background, giving 12 monthly winds that drive the
+    # monthly moisture budget in Stage 3.
+    from dreamulator.map.ocean_circulation import _build_directed_edge_table
+
+    _msrc, _mdst = _build_directed_edge_table(mesh.cells)
+
+    _dp_hpa = pressure_anomaly_monthly(
+        t_monthly_C,
+        lat_deg,
+        surface_pressure_hpa=config.surface_pressure_hpa,
+    )
+    # Scale separation before differentiation: the anomaly field inherits the
+    # cell-level land-ocean mosaic (~51 km at 200k cells), whose coastline
+    # jumps dominate the raw gradient and drive sea-breeze-scale winds far
+    # stronger than any monsoon.  Pressure anomalies adjust hydrostatically over
+    # the synoptic scale (the Rossby deformation radius, O(500 km)), so smooth
+    # each month's field over that scale first — the continental thermal lows
+    # (1000–4000 km wide) survive, the mosaic noise does not.  Each Jacobi pass
+    # is a lazy random-walk step (σ = √(passes/2)·cell_spacing).
+    _cell_km = 2.0 * config.radius_km * np.sqrt(np.pi / n)
+    _smooth_passes = 2 * int((_MONSOON_PRESSURE_SMOOTHING_KM / _cell_km) ** 2)
+    _mdeg = np.maximum(np.bincount(_msrc, minlength=n).astype(np.float64), 1.0)
+    # Neighbour-averaging operator M (row i = mean over i's neighbours),
+    # applied as a sparse matmul so all 12 months smooth in one pass.
+    _avg = sparse.csr_matrix(
+        (1.0 / _mdeg[_msrc], (_msrc, _mdst)),
+        shape=(n, n),
+    )
+    _dp_fields = _dp_hpa  # (N, 12)
+    for _ in range(_smooth_passes):
+        _dp_fields = 0.5 * _dp_fields + 0.5 * _avg.dot(_dp_fields)
+    _dp_hpa = np.asarray(_dp_fields)
+
+    _radius_m = config.radius_km * 1000.0
+    # Least-squares gradient per radian on the unit sphere → Pa/m (hPa × 100).
+    _grad_dp_pa_m = np.stack(
+        [
+            _graph_least_squares_gradient(mesh, _dp_hpa[:, m], nodes_xyz) * 100.0 / _radius_m
+            for m in range(12)
+        ]
+    )
+    _wind_monsoon = monsoon_boundary_layer_wind(_grad_dp_pa_m, f_coriolis, nodes_xyz)
+
+    # Monthly wind = annual background + monsoon anomaly.  The 12-month
+    # average of the monthly winds is the background field itself (the
+    # anomaly averages to zero), so the annual-mean state is unchanged.  The
+    # monthly migration of the circulation cells is part of the monthly-vector
+    # winds work (tech debt 24): tested here, giving each month its own
+    # ITCZ-shifted circulation sharpened the convergence band into a sweeping
+    # rain belt that over-seasoned the subtropics (Csa/Dsb inflation) and
+    # overshot land-mean precipitation, so v1 keeps the calibrated
+    # annual-mean circulation as the advecting field and lets the anomaly
+    # carry the seasonal land-sea reversal.
+    wind_monthly = np.stack([wind + _wind_monsoon[m] for m in range(12)])
+
+    # Terrain blocking (the annual field and each monthly field exactly once —
+    # blocking is a per-cell linear scaling of the wind vector).
     wind = terrain_wind_blocking(wind, elevation_m, config.wind_blocking_height_m)
+    wind_monthly = np.stack(
+        [
+            terrain_wind_blocking(wind_monthly[m], elevation_m, config.wind_blocking_height_m)
+            for m in range(12)
+        ]
+    )
 
     # Write wind to cells for frontend visualisation
     from dreamulator.map.ocean_circulation import (
@@ -473,24 +543,26 @@ def simulate_climate(
         t_mean_C = np.where(is_land, t_mean_C + _temp_anom, t_mean_C)
 
     # ------------------------------------------------------------------
-    # Stage 3: Precipitation (multi-pass BFS moisture transport)
+    # Stage 3: Precipitation (monthly mass-conserving moisture budget)
     phase_timings["ocean"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['ocean']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]4/6  Precipitation (BFS moisture transport)[/dim]")
+    _console.print("  [dim]4/6  Precipitation (monthly moisture budget)[/dim]")
     # ------------------------------------------------------------------
-    precipitation_mm = _compute_precipitation_bfs(
+    precipitation_mm, p_monthly = _compute_precipitation_monthly_budget(
         mesh=mesh,
         wind=wind,
+        wind_monthly=wind_monthly,
         is_land=is_land,
         is_ocean=is_ocean,
         elevation_m=elevation_m,
         temperature_c=t_mean_C,
+        t_monthly_c=t_monthly_C,
         nodes_xyz=nodes_xyz,
-        distance_to_coast_km=distance_to_coast_km,
         config=config,
         itcz_lat_monthly=itcz_lat_monthly,
         debug=debug,
+        edge_table=(_msrc, _mdst),
     )
 
     # ------------------------------------------------------------------
@@ -500,20 +572,13 @@ def simulate_climate(
     _t0 = _time.time()
     _console.print("  [dim]5/6  Koppen classification[/dim]")
     # ------------------------------------------------------------------
-    # Monthly precipitation from the ITCZ-migration factor (3A.2), conserving
-    # the BFS annual total.  Real driest/wettest months and the warm/cold-half
-    # split un-dead-code the Köppen third letter (s/w/f/m) and B-group offset.
+    # Monthly precipitation now comes directly from the monthly moisture budget
+    # (Stage 3): each month's wind (background + monsoon anomaly) and
+    # evaporation (from that month's temperature) drive that month's column
+    # water and rainout.  The ITCZ-Gaussian redistribution factor is gone —
+    # driest/wettest months and the warm/cold-half split are real monthly
+    # values, which is what the Köppen third letter (s/w/f/m) needs.
     p_annual = precipitation_mm
-    # Convective (afternoon-thunderstorm) precipitation is temperature-driven and
-    # year-round, NOT ITCZ-driven — subjecting it to the ITCZ-migration seasonal
-    # factor over-seasons the tropics and turns inland Af into Aw (driest month
-    # < 60 mm).  Split it out: the seasonal factor applies only to the ITCZ-driven
-    # (advective + orographic + frontal) remainder, while the convective floor is
-    # uniform year-round.  Matches Step 5 in `_compute_precipitation_bfs`; exact
-    # for cells within the 500 km inland-decay threshold (the Af region).
-    _conv_precip = np.where(is_land, 30.0 * np.maximum(t_mean_C - 10.0, 0.0), 0.0)
-    _seasonal_annual = p_annual - _conv_precip
-    p_monthly = _seasonal_annual[:, None] * p_factor + _conv_precip[:, None] / 12.0
     p_dry_mm = p_monthly.min(axis=1)
     p_wet_mm = p_monthly.max(axis=1)
     p_warm_mm, p_cold_mm = warm_cold_half_precip(t_monthly_C, p_monthly)
@@ -526,9 +591,6 @@ def simulate_climate(
     # fields would double the mesh — so export_climate_layers reads them off the
     # mesh object and writes a separate compact MessagePack file.
     object.__setattr__(mesh, "_t_monthly_c", t_monthly_C.astype(np.float32))
-    # Clamp: `_seasonal_annual = p_annual − conv` can be slightly negative when
-    # the convective floor exceeds the annual total (warm, dry cells); negative
-    # monthly precipitation is unphysical and would render wrong.
     object.__setattr__(mesh, "_p_monthly_mm", np.maximum(p_monthly, 0.0).astype(np.float32))
 
     koppen_codes = koppen_classify(
@@ -652,6 +714,99 @@ def _compute_graph_gradient(
     grad[mask] /= weight_sum[mask, None]
 
     return grad
+
+
+def _graph_least_squares_gradient(
+    mesh: CVTMesh,
+    scalar: np.ndarray,
+    nodes_xyz: np.ndarray,
+) -> np.ndarray:
+    """Per-cell least-squares gradient of a scalar field, in radians on the unit sphere.
+
+    Unlike ``_compute_graph_gradient`` (a weighted difference average whose
+    magnitude depends on the mesh spacing and which the geostrophic wind absorbs
+    into its calibration), this solves the local normal equations
+
+        (Σ_j d_j d_jᵀ) g = Σ_j Δf_j d_j
+
+    over each cell's neighbours, with d_j the tangent vector from the cell to
+    neighbour j (length = angular distance, radians).  The result is the true
+    gradient per radian of arc, independent of the local mesh spacing — needed
+    wherever a physical gradient magnitude matters (the monsoon pressure-gradient
+    force).  Convert to per-metre by dividing by the planet radius.
+
+    Args:
+        mesh: CVT mesh with adjacency information.
+        scalar: Scalar field values, shape (N,).
+        nodes_xyz: Unit sphere coordinates, shape (N, 3).
+
+    Returns:
+        Gradient vectors tangent to the sphere, per radian, shape (N, 3).
+    """
+    n = mesh.num_cells
+    _src: list[int] = []
+    _dst: list[int] = []
+    for _i, _cell in enumerate(mesh.cells):
+        for _j in _cell.neighbors:
+            if 0 <= _j < n:
+                _src.append(_i)
+                _dst.append(_j)
+    src = np.asarray(_src, dtype=np.int64)
+    dst = np.asarray(_dst, dtype=np.int64)
+
+    # Tangent vector from src cell toward its neighbour (unit sphere).
+    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
+    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
+    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
+
+    # Local (east, north) basis at each src cell — the same convention as
+    # hadley_cell_wind (north = (0,1,0) projected tangent, east = north × r̂,
+    # a right-handed ENU frame; see engine/monsoon_circulation.py).
+    node_s = nodes_xyz[src]
+    north = np.array([0.0, 1.0, 0.0]) - node_s[:, 1:2] * node_s
+    north_norm = np.linalg.norm(north, axis=1)
+    ok_n = north_norm >= 1e-9
+    north[ok_n] /= north_norm[ok_n, None]
+    east = np.cross(north, node_s)
+    east_norm = np.linalg.norm(east, axis=1)
+    ok_e = east_norm >= 1e-9
+    east[ok_e] /= east_norm[ok_e, None]
+
+    dx = np.einsum("ij,ij->i", edge_vec, east)
+    dy = np.einsum("ij,ij->i", edge_vec, north)
+    df = scalar[dst] - scalar[src]
+
+    # Accumulate the 2×2 normal equations per cell.
+    m11 = np.zeros(n, dtype=np.float64)
+    m12 = np.zeros(n, dtype=np.float64)
+    m22 = np.zeros(n, dtype=np.float64)
+    b1 = np.zeros(n, dtype=np.float64)
+    b2 = np.zeros(n, dtype=np.float64)
+    np.add.at(m11, src, dx * dx)
+    np.add.at(m12, src, dx * dy)
+    np.add.at(m22, src, dy * dy)
+    np.add.at(b1, src, dx * df)
+    np.add.at(b2, src, dy * df)
+
+    det = m11 * m22 - m12 * m12
+    valid = det > 1e-18
+    gx = np.zeros(n, dtype=np.float64)
+    gy = np.zeros(n, dtype=np.float64)
+    gx[valid] = (m22[valid] * b1[valid] - m12[valid] * b2[valid]) / det[valid]
+    gy[valid] = (m11[valid] * b2[valid] - m12[valid] * b1[valid]) / det[valid]
+
+    # Recompose in the per-cell basis (recomputed at every cell, not just edge
+    # sources, so isolated cells still get a zero vector).
+    north_c = np.array([0.0, 1.0, 0.0]) - nodes_xyz[:, 1:2] * nodes_xyz
+    north_c_norm = np.linalg.norm(north_c, axis=1)
+    ok_nc = north_c_norm >= 1e-9
+    north_c[ok_nc] /= north_c_norm[ok_nc, None]
+    east_c = np.cross(north_c, nodes_xyz)
+    east_c_norm = np.linalg.norm(east_c, axis=1)
+    ok_ec = east_c_norm >= 1e-9
+    east_c[ok_ec] /= east_c_norm[ok_ec, None]
+    grad = gx[:, None] * east_c + gy[:, None] * north_c
+    return np.asarray(grad)
 
 
 def _seasonal_mean_cell_wind(
@@ -953,6 +1108,15 @@ _MOISTURE_DIFFUSIVITY_M2S: float = 3.75e5
 # physical constant, shared by every world (only temperature differs).
 _LAND_EVAPOTRANSPIRATION_FRACTION: float = 0.55
 
+# Monsoon pressure-anomaly smoothing scale (km).  The monsoon wind responds to
+# the gradient of the seasonal pressure anomaly, which must be evaluated on the
+# synoptic scale — hydrostatic/geostrophic adjustment spreads local heating over
+# the Rossby deformation radius, O(500 km) in the tropics and mid-latitudes —
+# not on the 51 km cell scale of the land-ocean mosaic (see Stage 2 wiring).
+# This is a physical scale separation, shared by all worlds: the mesh resolves
+# the anomaly, the atmosphere does not feel it at that resolution.
+_MONSOON_PRESSURE_SMOOTHING_KM: float = 500.0
+
 # Land recycling (Budyko 1974; Savenije 1995; van der Ent & Savenije 2011): land
 # evapotranspiration is water-limited, not just energy-limited — wet land
 # (Amazon) evaporates near its potential, dry land (Sahara) evaporates only the
@@ -976,6 +1140,8 @@ def _solve_moisture_budget(
     config: TerrainPipelineConfig,
     rainout_enhancement: np.ndarray | None = None,
     diffusivity_enhancement: np.ndarray | None = None,
+    edge_table: tuple[np.ndarray, np.ndarray] | None = None,
+    land_evapotranspiration: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Solve the steady upwind advection–decay moisture budget for column water.
 
@@ -1010,6 +1176,16 @@ def _solve_moisture_budget(
             ``None`` → uniform κ₀.  Models the baroclinic eddies' poleward
             moisture mixing (larger in the storm track); the finite-volume flux
             uses the edge-averaged κ so the term stays symmetric.
+        land_evapotranspiration: Optional fixed land evapotranspiration field
+            (mm/yr), shape (N,).  The Budyko water-limitation curve
+            E = E_pot·P/(E_pot+P) is an *annual* water-balance relation; the
+            monthly solves must not re-apply it per month (that underestimates
+            land ET by Jensen's inequality).  The annual solve runs the fixed
+            point and hands the converged field to the monthly solves here.
+            ``None`` → run the internal Budyko fixed point (annual path).
+        edge_table: Optional pre-built directed edge table (src, dst).  The
+            monthly budget solves call this 12 times; building the table once
+            upstream saves a Python loop per month.
 
     The land evapotranspiration source is water-limited by the Budyko recycling
     feedback (see ``_LAND_RECYCLING_*`` constants): E_land = E_pot·P/(E_pot+P),
@@ -1030,20 +1206,31 @@ def _solve_moisture_budget(
         k_rain_field = np.full(n, k_rain)
 
     # Evaporation source E (mm/yr): energy-limited ocean evaporation + land
-    # evapotranspiration (see _LAND_EVAPOTRANSPIRATION_FRACTION).
+    # evapotranspiration (see _LAND_EVAPOTRANSPIRATION_FRACTION).  The monthly
+    # solves receive a pre-converged land ET field (Budyko is an annual
+    # relation — see ``land_evapotranspiration``); the annual solve iterates
+    # the fixed point itself.
     is_land = ~is_ocean
     e_ocean = evaporation_rate(temperature_c, is_ocean, config.evaporation_base_mm)
-    e_land_init = evaporation_rate(
-        temperature_c,
-        is_land,
-        config.evaporation_base_mm * _LAND_EVAPOTRANSPIRATION_FRACTION,
-    )
-    e = np.where(is_land, e_land_init, e_ocean)
+    if land_evapotranspiration is not None:
+        e = np.where(is_land, land_evapotranspiration, e_ocean)
+    else:
+        e_land_init = evaporation_rate(
+            temperature_c,
+            is_land,
+            config.evaporation_base_mm * _LAND_EVAPOTRANSPIRATION_FRACTION,
+        )
+        e = np.where(is_land, e_land_init, e_ocean)
 
-    # Directed edge table (reuse the flat (src, dst) convention).
-    from dreamulator.map.ocean_circulation import _build_directed_edge_table
+    # Directed edge table (reuse the flat (src, dst) convention).  Monthly
+    # budget loops solve this 12 times — build the table once upstream and pass
+    # it in via ``edge_table``.
+    if edge_table is not None:
+        src, dst = edge_table
+    else:
+        from dreamulator.map.ocean_circulation import _build_directed_edge_table
 
-    src, dst = _build_directed_edge_table(mesh.cells)
+        src, dst = _build_directed_edge_table(mesh.cells)
 
     # Smooth the wind over the graph: large-scale moisture transport responds to
     # the large-scale wind, not the noisy local field.  Near the equator the
@@ -1126,7 +1313,8 @@ def _solve_moisture_budget(
     # iterate only the RHS solve: E_land = E_pot·P/(E_pot+P) couples the land
     # evapotranspiration to the local precipitation — wet land evaporates near
     # its potential, dry land evaporates nearly nothing (water-limited).
-    if _LAND_RECYCLING_MAX_ITER > 0:
+    # Skipped when a converged annual land-ET field is supplied (monthly path).
+    if land_evapotranspiration is None and _LAND_RECYCLING_MAX_ITER > 0:
         _e_pot_land = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
         _e_land = e_land_init
         for _ in range(_LAND_RECYCLING_MAX_ITER):
@@ -1307,71 +1495,77 @@ def _baroclinic_band(
     return centre, width
 
 
-def _compute_precipitation_bfs(
+def _compute_precipitation_monthly_budget(
     mesh: CVTMesh,
     wind: np.ndarray,
+    wind_monthly: np.ndarray,
     is_land: np.ndarray,
     is_ocean: np.ndarray,
     elevation_m: np.ndarray,
     temperature_c: np.ndarray,
+    t_monthly_c: np.ndarray,
     nodes_xyz: np.ndarray,
-    distance_to_coast_km: np.ndarray,
     config: TerrainPipelineConfig,
     itcz_lat_monthly: np.ndarray | None = None,
     debug: dict[str, np.ndarray] | None = None,
-) -> np.ndarray:
-    """Precipitation from the mass-conserving moisture budget + enhancements.
+    edge_table: tuple[np.ndarray, np.ndarray] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Precipitation from the monthly mass-conserving moisture budget.
 
-    Core: solve the steady upwind advection–decay budget for column water W
-    (``_solve_moisture_budget``): ∇·(W u) + W/τ − κ∇²W = E, P = W/τ.  This is
-    mass-conserving by construction (ΣP = ΣE); the ITCZ / subtropical dry belt
-    emerge from the wind field, and the former graph-diffusion / recycling /
-    convergence heuristics are gone.
+    Each month's wind (annual background + monsoon anomaly) and that month's
+    temperature-dependent evaporation drive a steady moisture budget
+    (``_solve_moisture_budget``): ∇·(W u) + k_rain(x)·W − ∇·(κ∇W) = E,
+    P = k_rain(x)·W.  Monthly precipitation is P_m/12, annual the sum over
+    months; mass is conserved per month (ΣP = ΣE), hence also annually.
+    Monsoon seasonality, ITCZ migration, and evaporation seasonality all enter
+    through the monthly wind and temperature fields — the former ITCZ-Gaussian
+    redistribution factor and the ×1.5/×1.3 tropical-coastal monsoon gain are
+    gone (tech debt 23).
 
-    On top of P = W/τ, orographic rain is applied from the column water W
-    (upwind elevation gain → rainout fraction), then the remaining distinct
-    mechanisms (baroclinic storm track, monsoon, local convection, inland
-    aridity, Föhn, tropical floor, sub-planet warming).
+    On top of each month's budget precipitation: orographic rain from that
+    month's column water and wind, then the mechanisms that do not vary by
+    month in this model — west/east-coast asymmetry (annual cell circulation),
+    Föhn rain shadow (latitude-regime based), sub-planet convective
+    enhancement (steady on a locked body) — and finally the annual cap applied
+    to the monthly values proportionally.
 
     Args:
         mesh: CVT mesh.
-        wind: Wind vector field, shape (N, 3).
+        wind: Annual background wind field, shape (N, 3).
+        wind_monthly: Monthly winds (background + monsoon anomaly), shape
+            (12, N, 3).
         is_land: Boolean land mask, shape (N,).
         is_ocean: Boolean ocean mask, shape (N,).
         elevation_m: Elevation in metres, shape (N,).
-        temperature_c: Temperature in °C, shape (N,).
+        temperature_c: Annual-mean temperature in °C, shape (N,).
+        t_monthly_c: Monthly temperature in °C, shape (N, 12).
         nodes_xyz: Unit sphere node positions, shape (N, 3).
-        distance_to_coast_km: Distance to nearest ocean in km, shape (N,).
         config: Pipeline configuration.
         itcz_lat_monthly: ITCZ latitude per month (degrees), shape (12,).
-            The west/east-coast asymmetry (Step 6.6) evaluates the cell
-            circulation averaged over these positions, the same annual-mean
-            wind the moisture budget sees.
+            The west/east-coast asymmetry evaluates the cell circulation
+            averaged over these positions, the same annual-mean wind the
+            background field contains.
+        debug: Optional dict collecting diagnostic fields (mm/yr).
+        edge_table: Optional pre-built directed edge table (src, dst), shared
+            with the Stage 2 wiring.
 
     Returns:
-        Annual precipitation in mm, shape (N,).
+        (p_annual_mm shape (N,), p_monthly_mm shape (N, 12)).
     """
     n = mesh.num_cells
-    precip = np.zeros(n, dtype=np.float64)
     lat_rad = np.radians(np.array([c.lat for c in mesh.cells], dtype=np.float64))
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
     lat_deg = np.degrees(lat_rad)
 
-    # Edge table for the orographic rain (Step 2) and monsoon (Step 4): wind
-    # alignment per directed edge (the moisture budget below builds its own).
-    wind_speed_all = np.linalg.norm(wind, axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        wind_unit = wind / np.maximum(wind_speed_all, 1e-9)[:, None]
+    # Directed edge table built once, shared by the 12 budget solves and the
+    # orographic step.
+    if edge_table is not None:
+        src, dst = edge_table
+    else:
+        from dreamulator.map.ocean_circulation import _build_directed_edge_table
 
-    _src: list[int] = []
-    _dst: list[int] = []
-    for _i, _cell in enumerate(mesh.cells):
-        for _j in _cell.neighbors:
-            if 0 <= _j < n:
-                _src.append(_i)
-                _dst.append(_j)
-    src = np.asarray(_src, dtype=np.int64)
-    dst = np.asarray(_dst, dtype=np.int64)
+        src, dst = _build_directed_edge_table(mesh.cells)
+
     edge_vec = nodes_xyz[dst] - nodes_xyz[src]
     radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
     edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
@@ -1379,16 +1573,13 @@ def _compute_precipitation_bfs(
     valid_edge = edge_norm >= 1e-9
     edge_dir = np.zeros_like(edge_vec)
     edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
-    align = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, wind_unit[src]), -1.0)
 
-    # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — modelled as a
-    # spatial modulation of the rainout rate k_rain = 1/τ, NOT an additive
-    # precipitation source (Held & Soden 2006: global ΣP = ΣE is energy-limited,
-    # so extra precipitation must be sourced from the advected column water).
-    # Baroclinic eddies rain out advected moisture more efficiently at the polar
-    # front, so τ is shorter there.  The enhancement scales with the Eady growth
-    # rate (∇T × Ω^0.3) and the available moisture (evaporation), expressed as a
-    # dimensionless factor relative to evaporation_base_mm (peak ≈ 1 → τ halves).
+    # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — a spatial
+    # modulation of the rainout rate k_rain, NOT an additive precipitation
+    # source (Held & Soden 2006).  The band is derived from the zonal-mean
+    # temperature gradient (``_baroclinic_band``); the amplitude scales with
+    # the Eady growth rate (∇T × Ω^0.3) and the available moisture.  Annual
+    # fields — the band's seasonal excursion is a second-order effect here.
     _lat_grad = (
         lat_gradient_from_omega(
             config.rotation_period_days,
@@ -1397,11 +1588,6 @@ def _compute_precipitation_bfs(
         if config.auto_lat_gradient
         else config.lat_gradient_c
     )
-    # Storm track centred in the baroclinic zone — derived from the zonal-mean
-    # temperature gradient (Eady instability follows ∇T), which locates the
-    # band for any circulation regime: three-cell Earth peaks near 45–55°;
-    # single-cell slow rotators keep a weakened-but-nonzero band at their
-    # mid-to-high-latitude gradient maximum (GCMs show eddies there too).
     _storm_center, _storm_width = _baroclinic_band(temperature_c, lat_deg)
     _storm_amp = (
         config.storm_track_amplitude_mm
@@ -1412,170 +1598,158 @@ def _compute_precipitation_bfs(
     _storm_enhance = (_storm_amp / config.evaporation_base_mm) * np.exp(
         -0.5 * ((np.abs(lat_deg) - _storm_center) / _storm_width) ** 2
     )
-    # Step 3.5b: the same baroclinic eddies also *transport* moisture poleward
-    # (transient-eddy mixing), which the mean surface wind's advection does not
-    # capture.  The eddy-diffusivity enhancement is proportional to the rainout
-    # enhancement (same eddies); setting storm_track_amplitude_mm=0 disables both.
+    # The same baroclinic eddies also transport moisture poleward (transient-
+    # eddy mixing): eddy-diffusivity enhancement ∝ rainout enhancement.
     _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
 
-    # Step 5+7: local convection + tropical boost as k_rain modulations (not
-    # additive precipitation, so ΣP = ΣE is preserved).  Convection (afternoon
-    # thunderstorms over warm land) is a temperature-driven rainout efficiency;
-    # the tropical boost raises the deep-tropics rainout toward the observed
-    # Amazon/Congo interior (1200 mm equator → 700 mm at 15°), sourced from the
-    # advected column water rather than injected ex nihilo.
-    _conv_enhance = np.where(
-        is_land,
-        30.0 * np.maximum(temperature_c - 10.0, 0.0) / config.evaporation_base_mm,
-        0.0,
-    )
+    # Deep-tropics rainout floor (Amazon/Congo interior analogue), annual —
+    # the permanent heating of the deep tropics does not vary by month here.
     _tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
     _boost_enhance = np.zeros(n, dtype=np.float64)
     _boost_enhance[_tropical_land] = (
         1200.0 - 500.0 * (np.abs(lat_deg[_tropical_land]) / 15.0)
     ) / config.evaporation_base_mm
 
-    _rainout_enhance = _storm_enhance + _conv_enhance + _boost_enhance
+    _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
-    # Step 2+3+3.5+5+7: mass-conserving moisture budget with the storm-track,
-    # convection and tropical-boost rainout enhancements folded into k_rain, and
-    # the eddy transport into κ.  The core is a single steady upwind
-    # advection–decay solve for column water W:
-    #     ∇·(W u) + k_rain(x) W − ∇·(κ(x)∇W) = E ,   P = k_rain(x) W
-    # (see ``_solve_moisture_budget``).  ΣP = ΣE by construction; the ITCZ /
-    # subtropical dry belt / storm track emerge from the wind + rainout fields.
-    _col_water, precip = _solve_moisture_budget(
+    # Annual solve first: the Budyko recycling curve E = E_pot·P/(E_pot+P) is
+    # an annual water-balance relation, and its fixed point converges against
+    # the annual P.  Re-applying it inside each monthly solve would depress
+    # land evapotranspiration by Jensen's inequality (concave in P), starving
+    # the land recycling loop.  Converge it once here and hand the annual
+    # water limitation to the monthly solves.
+    _conv_annual = np.where(
+        is_land,
+        30.0 * np.maximum(temperature_c - 10.0, 0.0) / config.evaporation_base_mm,
+        0.0,
+    )
+    _, p_ann = _solve_moisture_budget(
         mesh,
         wind,
         is_ocean,
         temperature_c,
         nodes_xyz,
         config,
-        rainout_enhancement=_rainout_enhance,
+        rainout_enhancement=_storm_enhance + _conv_annual + _boost_enhance,
         diffusivity_enhancement=_eddy_enhance,
+        edge_table=(src, dst),
     )
+    # Converged land ET re-extracted from the annual P (the fixed point ended
+    # within 1 mm/yr of this relation).
+    _e_pot_ann = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
+    _e_land_ann = _e_pot_ann * p_ann / (_e_pot_ann + p_ann + 1e-9)
 
-    # Orographic rain from the column water W (upwind elevation gain).  A rising
-    # moist air parcel cools and rains out a fraction of its column water per km
-    # of uplift (same physics as the old Step 2); the sea surface is flat so an
-    # upwind elevation gain over the ocean produces no rain.
-    _upwind_gain = np.zeros(n, dtype=np.float64)
-    _upwind_w = np.zeros(n, dtype=np.float64)
-    for _ei in range(len(src)):
-        _i, _j = src[_ei], dst[_ei]
-        _gain = elevation_m[_j] - elevation_m[_i]
-        if _gain > 0 and align[_ei] > 0.1 and _gain > _upwind_gain[_j]:
-            _upwind_gain[_j] = _gain
-            _upwind_w[_j] = _col_water[_i]
-    _q_mask = (_upwind_w > 0.5) & is_land
-    _frac = np.minimum(0.20 * _upwind_gain[_q_mask] / 1000.0, 0.9)
-    precip[_q_mask] += _upwind_w[_q_mask] * _frac
-    _shadow = is_land & (_upwind_gain <= 0) & (_upwind_w > 0.5)
-    precip[_shadow] += _upwind_w[_shadow] * 0.03
+    p_monthly = np.zeros((n, 12), dtype=np.float64)
+    _dbg_storm = np.zeros(n)
+    _dbg_conv = np.zeros(n)
+    _dbg_boost = np.zeros(n)
 
-    if debug is not None:
-        debug["moisture_budget"] = precip.copy()
-        debug["bfs_diffusion"] = np.zeros(n)
-        debug["baseline"] = np.zeros(n)
-        debug["convergence"] = np.zeros(n)
-
-    if debug is not None:
-        # Storm track's share of the conserved rainout: its rainout-rate
-        # enhancement times the column water at the base rainout rate k_0.
-        _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS
-        debug["storm"] = (_col_water * _k_base * _storm_enhance).copy()
-
-    # Step 4: Monsoon enhancement — coastal tropical regions get extra rain
-    # (vectorized over the edge table, Stage 1.3)
-    abs_lat = np.abs(lat_deg)
-    tropical_land = is_land & (abs_lat <= 35.0)
-    coastal_edges = tropical_land[src] & is_ocean[dst]
-    has_ocean_neighbor = np.zeros(n, dtype=bool)
-    has_ocean_neighbor[src[coastal_edges]] = True
-    monsoon_cells = tropical_land & has_ocean_neighbor
-    precip[monsoon_cells & (abs_lat < 20.0)] *= 1.5
-    precip[monsoon_cells & (abs_lat >= 20.0)] *= 1.3
-
-    if debug is not None:
-        # Convection's share of the conserved rainout: temperature-driven rainout
-        # efficiency over warm land, times the column water at the base rate.
-        debug["convection"] = (
-            _col_water * (365.25 / _MOISTURE_RESIDENCE_DAYS) * _conv_enhance
-        ).copy()
-
-    # Step 6.6: West-coast / east-coast asymmetry (3A.4).
-    # Onshore winds carry ocean moisture → coastal precipitation is
-    # enhanced; offshore winds carry dry continental air → suppressed.
-    #
-    # The onshore moisture flux is  ρ_air × |U_zonal| × q_sat(T).  A
-    # small fraction ε ≈ 1.3×10⁻⁴ of this flux precipitates at the
-    # coast (the "coastal precipitation efficiency").  The enhancement
-    # factor is therefore
-    #
-    #     f = 1 ± ε × ρ_air × |U| × q_sat(T) × s_per_year / P_bg
-    #
-    # where P_bg ≈ 1000 mm/yr is a reference background precipitation.
-    # For Earth (U=5 m/s, T=15°C): f ≈ 1.25 (windward), 0.85 (leeward),
-    # matching the old hard-coded values — but now the formula adapts
-    # automatically to different wind speeds, temperatures, and gravities.
-    if is_land.any():
-        _coastal, _west_coast = _detect_coastal_cells(
-            mesh.cells,
-            n,
+    for m in range(12):
+        t_m = t_monthly_c[:, m]
+        # Local convection (afternoon thunderstorms over warm land) is a
+        # temperature-driven rainout efficiency — monthly with t_m.
+        _conv_enhance_m = np.where(
             is_land,
-            is_ocean,
+            30.0 * np.maximum(t_m - 10.0, 0.0) / config.evaporation_base_mm,
+            0.0,
         )
+        # Monthly land ET: energy limitation from that month's temperature,
+        # water limitation from the annual precipitation (soil moisture
+        # integrates the annual water input, not a single month's).
+        _e_pot_m = evaporation_rate(t_m, is_land, config.evaporation_base_mm)
+        _e_land_m = _e_pot_m * p_ann / (_e_pot_m + p_ann + 1e-9)
+        w_m, p_m = _solve_moisture_budget(
+            mesh,
+            wind_monthly[m],
+            is_ocean,
+            t_m,
+            nodes_xyz,
+            config,
+            rainout_enhancement=_storm_enhance + _conv_enhance_m + _boost_enhance,
+            diffusivity_enhancement=_eddy_enhance,
+            edge_table=(src, dst),
+            land_evapotranspiration=_e_land_m,
+        )
+
+        # Orographic rain from this month's column water: upwind elevation gain
+        # along this month's wind rains out a fraction of W per km of uplift.
+        _speed_m = np.linalg.norm(wind_monthly[m], axis=1)
+        _wind_unit_m = wind_monthly[m] / np.maximum(_speed_m, 1e-9)[:, None]
+        align_m = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, _wind_unit_m[src]), -1.0)
+        gain_e = elevation_m[dst] - elevation_m[src]
+        ok = (gain_e > 0.0) & (align_m > 0.1)
+        up_gain = np.zeros(n, dtype=np.float64)
+        np.maximum.at(up_gain, dst[ok], gain_e[ok])
+        # Column water of the edge carrying the maximum gain into each cell.
+        is_max = ok & (gain_e == up_gain[dst])
+        up_w = np.zeros(n, dtype=np.float64)
+        np.maximum.at(up_w, dst[is_max], w_m[src[is_max]])
+
+        oro_m = np.zeros(n, dtype=np.float64)
+        q_mask = is_land & (up_w > 0.5) & (up_gain > 0.0)
+        frac = np.minimum(0.20 * up_gain[q_mask] / 1000.0, 0.9)
+        oro_m[q_mask] = up_w[q_mask] * frac
+
+        p_monthly[:, m] = (p_m + oro_m) / 12.0
+
+        _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
+        _dbg_conv += (w_m * _k_base * _conv_enhance_m) / 12.0
+        _dbg_boost += (w_m * _k_base * _boost_enhance) / 12.0
+
+    if debug is not None:
+        debug["moisture_budget"] = p_monthly.sum(axis=1).copy()
+        debug["storm"] = _dbg_storm
+        debug["convection"] = _dbg_conv
+        debug["tropical_boost"] = _dbg_boost
+
+    # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
+    # the seasonality of the westerlies is not modelled yet, so the same
+    # factor applies to every month).  Onshore winds carry ocean moisture →
+    # coastal precipitation enhanced; offshore winds → suppressed.  The onshore
+    # moisture flux is ρ_air × |U_zonal| × q_sat(T); a fraction ε of it
+    # precipitates at the coast:
+    #     f = 1 ± ε × ρ_air × |U| × q_sat(T) × s_per_year / P_bg
+    if is_land.any():
+        _coastal, _west_coast = _detect_coastal_cells(mesh.cells, n, is_land, is_ocean)
         _zwind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
         from dreamulator.map.ocean_circulation import east_north_basis as _enb2
 
         _east, _ = _enb2(nodes_xyz)
         _uzonal = np.einsum("ij,ij->i", _zwind, _east)
 
-        # Physical constants
         _rho_air = 1.2  # kg/m³
         _s_per_year = 365.25 * 86400.0
         _p_bg = 1000.0  # mm/yr reference background precipitation
         _eps_windward = 1.3e-4  # coastal precipitation efficiency (windward)
         _eps_leeward = 0.8e-4  # coastal precipitation efficiency (leeward)
 
+        _coastal_factor = np.ones(n, dtype=np.float64)
         for i in range(n):
             if not _coastal[i]:
                 continue
             u_abs = abs(_uzonal[i])
             t_k = max(temperature_c[i] + 273.15, 230.0)
-            # Specific humidity (kg/kg) from Clausius–Clapeyron
             e_sat = 611.2 * np.exp(17.67 * (t_k - 273.15) / (t_k - 29.65))  # Pa
             q_sat = 0.622 * e_sat / 101325.0  # kg/kg
-            # Onshore moisture flux → precipitation enhancement
             moisture_flux = _rho_air * u_abs * q_sat  # kg/m²/s
             delta_p = moisture_flux * _s_per_year  # mm/yr equivalent
 
-            is_west_coast = _west_coast[i]
             is_westerly = _uzonal[i] > 0
-            windward = (is_westerly and is_west_coast) or (not is_westerly and not is_west_coast)
+            windward = (is_westerly and _west_coast[i]) or (not is_westerly and not _west_coast[i])
             eps = _eps_windward if windward else _eps_leeward
             factor = 1.0 + eps * delta_p / _p_bg if windward else (1.0 - eps * delta_p / _p_bg)
-            precip[i] *= np.clip(factor, 0.5, 1.5)
+            _coastal_factor[i] = np.clip(factor, 0.5, 1.5)
+        p_monthly *= _coastal_factor[:, None]
 
-    # Step 6.7: Physics-based Föhn rain shadow (3A.4).
-    #
-    # As moist air rises on the windward slope it cools at the moist
-    # adiabatic lapse rate Γ_m(T).  The saturation vapour pressure drops
-    # exponentially with temperature (Clausius–Clapeyron).  The surviving
-    # moisture fraction after crossing a barrier of height Δz is
-    #
-    #     f = exp(−Δz / H_scale)
-    #
-    # where  H_scale = R_v · T² / (L_v · Γ_m)  (moisture scale height).
-    # At T ≈ 280 K, Γ_m ≈ 5.5 K/km → H_scale ≈ 2.6 km.
-    #
-    # BFS already handles windward-side orographic precipitation, so this
-    # step only applies the leeward-side Föhn drying.  No redistribution
-    # to windward cells — BFS covers that physics.
+    # Step 6.7: Föhn rain shadow — leeward drying from the moisture scale
+    # height of the barrier the air crossed.  The wind regime (westerlies vs
+    # trades) is latitude-based and steady through the year, so one factor
+    # applies to every month.  BFS already handles windward orographic rain.
     if is_land.any():
         _westerly_rs = (np.abs(lat_deg) >= config.hadley_extent_deg) & (
             np.abs(lat_deg) < config.polar_cell_start_deg
         )
+        _fohn_factor = np.ones(n, dtype=np.float64)
         for i in range(n):
             if not is_land[i] or elevation_m[i] < 0:
                 continue
@@ -1598,29 +1772,11 @@ def _compute_precipitation_bfs(
                 t_k = max(temperature_c[i] + 273.15, 230.0)
                 gamma = moist_lapse_rate(np.array([temperature_c[i]]))[0]
                 h_scale_m = 461.0 * t_k**2 / (2.5e6 * gamma / 1000.0)
-                fohn_factor = np.exp(-elev_drop / h_scale_m)
-                precip[i] *= fohn_factor
+                _fohn_factor[i] = np.exp(-elev_drop / h_scale_m)
+        p_monthly *= _fohn_factor[:, None]
 
-    if debug is not None:
-        # Tropical boost's share of the conserved rainout (deep-tropics rainout
-        # floor, sourced from the advected column water).
-        debug["tropical_boost"] = (
-            _col_water * (365.25 / _MOISTURE_RESIDENCE_DAYS) * _boost_enhance
-        ).copy()
-
-    # Step 8: Sub-planet / sub-stellar convective enhancement (3A.7).
-    # A tidally-locked planet (or a satellite like nacrea) has a permanently
-    # warmer hemisphere facing the host body.  The extra heating drives
-    # low-level convergence → rising air → convective precipitation,
-    # analogous to the ITCZ but fixed at a (lat, lon) point rather than a
-    # latitude band.  The same mechanism applies to:
-    #   - satellites (host-planet IR + reflected light)
-    #   - tidally-locked planets (sub-stellar insolation)
-    #   - circumbinary planets (dual heat sources — future)
-    #
-    # The enhancement is a Gaussian in angular distance from the sub-body
-    # point, with amplitude ∝ sub_planet_warming_c.  A 1 °C warming gives
-    # ~200 mm/yr peak enhancement (≈ weak ITCZ).
+    # Step 8: Sub-planet / sub-stellar convective enhancement — steady on a
+    # tidally locked body, so it splits evenly across the 12 months.
     if config.sub_planet_warming_c > 0:
         sub_lat = np.radians(config.sub_planet_latitude_deg)
         sub_lon = np.radians(config.sub_planet_longitude_deg)
@@ -1632,18 +1788,18 @@ def _compute_precipitation_bfs(
         sub_boost = amplitude * np.exp(-0.5 * (ang_dist_deg / 15.0) ** 2)
         if debug is not None:
             debug["sub_planet"] = sub_boost.copy()
-        precip += sub_boost
+        p_monthly += sub_boost[:, None] / 12.0
 
-    # Final cap after ALL precipitation steps.  Real-Earth maximum annual
-    # precipitation is ~11000 mm/yr (Mawsynram/Cherrapunji).  The per-pass cap
-    # inside the BFS loop (12000 mm) only guards the diffusion accumulation and
-    # runs *before* the ITCZ / storm-track / monsoon / convection additions, so
-    # it never limited the final field (P_max reached ~30500 mm/yr — see
-    # roadmap §6).  Cap once here to keep the wettest cells physical.
+    # Annual cap (real-Earth maximum ~11000 mm/yr, Mawsynram/Cherrapunji),
+    # applied to the monthly values proportionally so the seasonal shape is
+    # preserved where the cap engages.
+    p_annual = p_monthly.sum(axis=1)
     if debug is not None:
-        debug["pre_cap"] = precip.copy()
-    precip = np.minimum(precip, 11000.0)
+        debug["pre_cap"] = p_annual.copy()
+    scale = np.where(p_annual > 11000.0, 11000.0 / np.maximum(p_annual, 1e-9), 1.0)
+    p_monthly *= scale[:, None]
+    p_annual = p_monthly.sum(axis=1)
     if debug is not None:
-        debug["final"] = precip.copy()
+        debug["final"] = p_annual.copy()
 
-    return precip
+    return p_annual, p_monthly
