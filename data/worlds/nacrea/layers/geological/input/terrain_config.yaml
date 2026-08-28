@@ -166,7 +166,9 @@ climate:
   ice_albedo_threshold_c: -5.0    # default -10; lower = earlier activation
   hadley_extent_deg: 90.0     # 单圈环流：Hadley 胞直抵极地（GCM Ω=0.31 结果）
   polar_cell_start_deg: 90.0  # 单圈：无 Ferrel/极地胞
-  storm_track_amplitude_mm: 0.0  # 单圈：无斜压风暴路径（baroclinic eddies 不形成）
+  # storm_track_amplitude_mm 用共享默认 900：幅度公式自带 Ω^0.3 标度，
+  # 慢自转自动得到减弱的斜压雨出增强；斜压带位置由引擎从经向温度梯度推导
+  # （GCM 结论：慢自转行星瞬变涡旋减弱而不为零）。见技术债 20 ⑥ 实验。
   # Sub-Aegis hemisphere warming: tidally-locked to gas giant →
   # Aegis IR + reflected starlight ≈ 1–1.5 W/m² → ~1°C warmer
   # on the permanently planet-facing side.  This fixed longitudinal

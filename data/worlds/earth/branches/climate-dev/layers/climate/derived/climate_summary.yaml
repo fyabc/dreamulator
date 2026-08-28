@@ -16,39 +16,38 @@ temperature_C:
     max: 27.999999995522106
 precipitation_mm:
   global:
-    mean: 863.2790581494269
-    min: 0.12001669566252741
+    mean: 857.89944336927
+    min: 0.10753669699410488
     max: 11000.0
   land:
-    mean: 765.1254694166073
-    min: 0.12001669566252741
+    mean: 774.5540797930599
+    min: 0.10753669699410488
     max: 11000.0
   ocean:
-    mean: 903.4976137650125
-    min: 37.86603979850227
-    max: 7063.584335281899
+    mean: 892.0503102256563
+    min: 45.404295053022445
+    max: 7732.199133526737
 koppen_classes:
   EF: 7908
   ET: 7511
-  Dfb: 6965
-  Cfb: 2688
-  Dfa: 773
-  BSk: 4303
-  BWk: 2893
-  Csb: 1472
-  Csc: 59
-  Cfa: 4132
-  Cwb: 198
-  Dwb: 215
-  Dwa: 49
-  BSh: 4702
-  BWh: 5576
-  Cwa: 3
-  Csa: 189
-  Aw: 1639
-  Am: 478
-  Af: 6351
-  Dsb: 27
+  Dfb: 6470
+  Cfb: 2362
+  Dfa: 561
+  BSk: 5146
+  BWk: 3874
+  Csb: 1229
+  Csc: 37
+  Cfa: 3426
+  Cwb: 116
+  Dwb: 151
+  Dwa: 25
+  BSh: 4540
+  BWh: 6143
+  Csa: 146
+  Aw: 1592
+  Am: 450
+  Af: 6423
+  Dsb: 21
 seasonal_range_C:
   land:
     median: 13.222067313153193
