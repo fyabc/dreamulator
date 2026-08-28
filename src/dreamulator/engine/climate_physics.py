@@ -627,25 +627,26 @@ def hadley_cell_wind(
         )
 
     # ── Combine zonal + meridional into 3D tangent vectors ──
+    # Vectorized basis (was a per-cell Python loop — the seasonal-mean
+    # circulation evaluates this 12 times, so it must be cheap):
+    # local north = (0,1,0) projected to the tangent plane, local east =
+    # north × radial (right-hand rule).
     wind = np.zeros((n, 3), dtype=np.float64)
-    for i in range(n):
-        if abs(zonal_speed[i]) < 1e-9 and abs(merid_speed[i]) < 1e-9:
-            continue
-        node = mesh_nodes_xyz[i]
-        # Local north: (0, 1, 0) projected to tangent plane
-        north_vec = np.array([0.0, 1.0, 0.0], dtype=np.float64)
-        north_tangent = north_vec - np.dot(north_vec, node) * node
-        north_norm = np.linalg.norm(north_tangent)
-        if north_norm < 1e-9:
-            continue
-        north_tangent /= north_norm
-        # Local east = north × radial (right-hand rule)
+    nonzero = (np.abs(zonal_speed) >= 1e-9) | (np.abs(merid_speed) >= 1e-9)
+    if nonzero.any():
+        node = mesh_nodes_xyz[nonzero]
+        north_tangent = np.array([0.0, 1.0, 0.0]) - node[:, 1:2] * node
+        north_norm = np.linalg.norm(north_tangent, axis=1)
+        pole = north_norm < 1e-9
+        north_tangent[~pole] /= north_norm[~pole, None]
         east = np.cross(north_tangent, node)
-        east_norm = np.linalg.norm(east)
-        if east_norm < 1e-9:
-            continue
-        east /= east_norm
-        wind[i] = east * zonal_speed[i] + north_tangent * merid_speed[i]
+        east_norm = np.linalg.norm(east, axis=1)
+        valid = ~pole & (east_norm >= 1e-9)
+        east[valid] /= east_norm[valid, None]
+        idx = np.flatnonzero(nonzero)[valid]
+        wind[idx] = (
+            east[valid] * zonal_speed[idx, None] + north_tangent[valid] * merid_speed[idx, None]
+        )
 
     return wind
 
