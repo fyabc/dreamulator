@@ -89,7 +89,14 @@ def main() -> None:
         "--lat-gradient-c",
         type=float,
         default=45.0,
-        help="manual equator-pole ΔT when auto_lat_gradient is off",
+        help="manual equator-to-pole temperature difference when auto_lat_gradient is off",
+    )
+    parser.add_argument(
+        "--no-ebm-1d",
+        action="store_false",
+        dest="ebm_1d",
+        default=True,
+        help="disable the 1D EBM temperature path (fall back to legacy sin^2 + diffusion)",
     )
     args = parser.parse_args()
 
@@ -110,6 +117,7 @@ def main() -> None:
     config.lat_gradient_c = args.lat_gradient_c
     config.auto_lat_gradient = args.auto_lat_gradient
     config.diffusive_heat_transport = args.diffusive_heat_transport
+    config.ebm_1d = args.ebm_1d
     simulate_climate(mesh, config)
 
     # Load Beck 2018 reference
