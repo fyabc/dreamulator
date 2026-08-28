@@ -44,7 +44,7 @@
 │                                                              │
 │  climate_simulator.py         export.py                       │
 │  ├─ simulate_climate()        └─ export_climate_layers()      │
-│  ├─ _compute_precipitation_bfs                                │
+│  ├─ _compute_precipitation_monthly_budget                     │
 │  ├─ _surface_divergence                                        │
 │  ├─ _geostrophic_wind                                          │
 │  └─ _ocean_surface_temperature                                 │
@@ -132,49 +132,79 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 4. Stage 2: 风场
    ├─ 气压场（barometric + thermal low）→ 图梯度 → 地转风（Coriolis）
    ├─ hadley_cell_wind（三圈 + 地形阻挡）
-   └─ 40% 地转 + 60% 环流
+   ├─ 40% 地转 + 60% 环流（12 个 ITCZ 位置平均，背景场）
+   └─ 季风异常：月度气压异常（§2.4）→ 边界层动量平衡 → 12 个月度风场
 5. Stage 3: 洋流（Stommel 环流 + SST 平流 + 涌升）
-6. Stage 4: 降水（_compute_precipitation_bfs，见 §2.4）
+6. Stage 4: 降水（_compute_precipitation_monthly_budget，见 §2.4）
 7. Stage 5: Köppen 分类（koppen_classify）
 8. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值 / distance_to_coast_km）
 ```
 
-### 2.4 降水：`_compute_precipitation_bfs` — 质量守恒水汽收支
+### 2.4 降水：`_compute_precipitation_monthly_budget` — 逐月质量守恒水汽收支
 
 核心是一个**质量守恒的柱水汽收支方程**（`_solve_moisture_budget`，详细公式见
-energy_balance.md §8）：
+energy_balance.md §8），**逐月求解 12 次**（月度风场 + 月度温度驱动的蒸发与对流雨出），
+年降水为 12 个月之和：
 
 ```
 ∇·(W u) + k_rain(x)·W − κ∇²W = E ,   P = k_rain(x)·W
-k_rain(x) = (1/τ)·(1 + _storm_enhance(x) + _conv_enhance(x) + _boost_enhance(x))
+k_rain(x) = (1/τ)·(1 + _storm_enhance(x) + _conv_enhance_m(x) + _boost_enhance(x))
 ```
 
 迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ≈3.75e5 m²/s，从 1e6 下调以
 抑制海洋→陆地的过度扩散湿润，见 §6 标定；代价是 ITCZ 更集中，属已知待办）+ 直接稀疏 LU
-求解。**质量守恒由构造保证**（ΣP = ΣE，任意 `k_rain(x)` 场都成立），ITCZ / 副热带干带
-从风场自然涌现。
+求解。**质量守恒逐月由构造保证**（ΣP = ΣE，任意 `k_rain(x)` 场都成立），年总量因而也守恒；
+ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预算——旧的「年均降水 × ITCZ
+高斯因子」再分配已删除，Köppen 第三字母（s/w/f）用的是真实月度值。
 
 **雨出率空间调制**：`k_rain(x)` 非常数——风暴路径等增强机制当作**雨出效率的空间
 调制**（τ 更短 → 雨出更高效），而非加法降水项。这保证全球 ΣP = ΣE（Held & Soden
 2006：降水受地表/辐射能量预算约束，只能从平流来的柱水汽中析出，不能凭空加）。
 
+**月度风场**：`wind_monthly[m] = 背景风 + 季风异常`。背景风是 §2.3 Stage 2 的年均场
+（40% 地转 + 60% 三圈环流，含 12 个 ITCZ 位置平均），逐月胞圈迁移属月度矢量场工作
+（技术债 24），v1 不含。季风异常由海陆热力对比驱动（技术债 23），物理链条：
+
+1. **纬向平均基准**（`zonal_mean_monthly`）：逐月、按符号纬度带（5°）求纬向平均温度。
+2. **气压异常**（`pressure_anomaly_monthly`，`engine/monsoon_circulation.py` 纯函数）：
+   ΔT = 细胞温度 − 同纬度纬向平均，**再扣 12 个月均值**（年均气压型已由年均地转风
+   承担，这里只留季节异常，避免双重计数）。静力响应可推导：
+   ΔP = −P_sfc·(d/H)·ΔT/T̄，d/H = 0.25（季风热异常占尺度高度最低 ~2 km）。
+   地球检验：ΔT = +5 K → −4.3 hPa，与亚洲夏季热低压量级一致。
+3. **尺度分离平滑**：51 km 网格的海陆镶嵌使原始异常场的梯度被海岸线噪声主导；
+   气压异常经静力/地转调整在天气尺度（罗斯贝变形半径，O(500 km)）上响应，
+   故取梯度前先在图上做 ~500 km Jacobi 平滑（`_MONSOON_PRESSURE_SMOOTHING_KM`，
+   大陆热低压 1000–4000 km 宽，平滑后存活）。
+4. **边界层动量平衡**（`monsoon_boundary_layer_wind`）：0 = −∇ΔP/ρ − f k̂×v − k_d·v，
+   局地东/北分量闭式解。f→0（赤道）退化为沿梯度直流——跨赤道季风气流的涌现机制；
+   k_d→0 退化为地转风。k_d = C_D·|U|/h_BL ≈ 1e-5 s⁻¹（动量耗散 ~1 天，可推导量，
+   合理区间 0.9–3e-5）。梯度用最小二乘逐 cell 拟合（`_graph_least_squares_gradient`，
+   单位「每弧度」除以行星半径换算 Pa/m），不用加权差分（后者幅度依赖网格间距）。
+
 执行步骤：
 
-1. **蒸发源 E**：海洋蒸发（能量限制 ~3%/°C）+ 陆地蒸散——后者走 **Budyko 再循环**
-   （`E_land = E_pot·P/(E_pot+P)`，湿陆蒸散近潜势、干陆近零），取代旧的距离海岸内陆
-   干旱衰减；基准因子 `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55 作首轮初值（配 Earth
-   ~490 mm/yr 陆地蒸散）。
-2. **水汽收支求解**：`_solve_moisture_budget` 解出柱水汽 W，P = W/τ（质量守恒）；Budyko
-   再循环在解内作固定点迭代（矩阵与 E 无关，只 LU 分解一次、迭代重解 RHS）。
-3. **地形抬升雨**：从 W 算迎风抬升雨 + 雨影。
+1. **年预算先行**：Budyko 再循环曲线 `E_land = E_pot·P/(E_pot+P)` 是**年水量平衡**
+   关系（Budyko 1974），先在年场上解固定点得到收敛的陆地蒸散；逐月求解以「年降水
+   定水分限制、月温度定能量限制」沿用该场——若逐月套用曲线，Jensen 不等式会系统性
+   低估陆地蒸散（实测：490 → 319 mm/yr），削弱再循环回路。
+2. **逐月水汽收支**（×12）：海洋蒸发送月度温度（能量限制 ~3%/°C）；对流雨出增强
+   `_conv_enhance_m` 逐月（温度驱动）；风暴路径与热带底线增强用年场（急流/深热带加热
+   的季节摆动为二阶效应）。边表建一次复用。
+3. **地形抬升雨**（逐月）：从当月 W 与当月风算迎风抬升雨（向量化 `maximum.at`）。
 4. **斜压风暴路径**：雨出率增强 `_storm_enhance`（幅度 ∝ ∇T × Ω^0.3 × 蒸发，作为 `k_rain` 调制而非加法项；`_eddy_enhance` 同比例增强涡旋水汽扩散 κ）。带的位置由 `_baroclinic_band` 从纬向平均温度的经向梯度推导（Eady 不稳定性跟随 ∇T）：中心取 |dT/dφ| 峰值纬度（限制在 20° 以上），σ 取半峰全宽/2.355（钳制 5–20°）；地球与 nacrea 的年均梯度峰值都在 ~67°（极锋区），σ≈20°。旧的胞圈边界方案（φ=(φ_H+φ_P)/2）在单圈行星退化为零宽，但慢自转 GCM 表明瞬变涡旋「减弱而不为零」（Gnanaraj et al. 2025; Showman & Kaspi 2010），梯度推导让单圈行星也得到弱而真实的斜压带（技术债 20 ⑥）。
-5. **局地对流 + 热带底线**（同为 `k_rain` 调制 `_conv_enhance`/`_boost_enhance`，非加法）、**季风增强**、
-   **海岸不对称**、**Föhn 雨影**、**次行星半球强迫**。
-6. 最终封顶 11000 mm/yr。
+5. **海岸不对称**（年场系数，逐月同乘）、**Föhn 雨影**（纬度风带稳态，逐月同乘）、
+   **次行星半球强迫**（潮汐锁定稳态，均分 12 月）。旧的热带沿海启发式增益
+   （×1.5/×1.3）已删除，由上述季风机制取代。
+6. 最终封顶 11000 mm/yr（按月度值等比例封顶，保持季节形状）。
 
 **关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，
 **无纬度硬编码**——对 Earth 三圈环流与 nacrea 单圈环流（`hadley_extent=90`）同一套代码
 自动适配（见 `scripts/diagnose_wind_divergence.py`）。
+
+**区域诊断**：`scripts/diagnose_monsoon_regional.py` 读已构建地图的月度数据，
+对比关键季风区/对照区（华南、华北、地中海、刚果、印度、萨赫勒、撒哈拉、亚马逊）
+的月度降水与观测气候态，并给出各区 Köppen 构成——季风机制（技术债 23/24）的
+主要调试工具。
 
 **守恒约束与文献参照**：
 
@@ -330,15 +360,15 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`） |
 | 温度（季节） | ✅ 显式热输送（B+6D）+ 季节冰反照率 |
 | 降水 | ✅ 质量守恒水汽收支 + 雨出率 `k_rain` 空间调制（风暴路径 / 对流 / 热带底线均已守恒化）+ Budyko 陆地再循环 |
-| 风场 | ✅ 地转 + 三圈环流（`itcz_lat_deg` 季节迁移已实现、未接线） |
+| 风场 | ✅ 地转 + 三圈环流（`itcz_lat_deg` 季节迁移已接线为年均背景）+ 季风异常月度风场 |
 | 洋流 | ✅ Stommel 环流 + SST 平流 + 涌升 |
 
 ### 待办（过渡先验 → 第一性）
 
 | 项 | 现状 | 方向 | 位置 |
 |---|---|---|---|
-| 季风 | Step 4 系数 ×1.5/×1.3 固定 | 季节风反转 + 海陆热力对比驱动的向岸水汽平流（`itcz_lat_deg` 已就绪） | `climate_simulator.py` Step 4 |
-| 海岸不对称 | Step 6.6 逐 cell 启发式（向岸/离岸风系数） | 涌升 + 向岸水汽平流 | `_compute_precipitation_bfs` Step 6.6 |
+| 季风 | ✅ v1：海陆热力对比气压异常 → 边界层风场 → 逐月水汽预算（技术债 23） | 环流胞圈本身的逐月迁移并入月度风场（技术债 24）；v1 用年均背景环流 + 季风异常 | `engine/monsoon_circulation.py` |
+| 海岸不对称 | Step 6.6 逐 cell 启发式（向岸/离岸风系数） | 涌升 + 向岸水汽平流 | `_compute_precipitation_monthly_budget` |
 | 南半球 SST 过暖 | `_ocean_surface_temperature` 南半球偏暖 +4~+10°C | 独立标定 | `_ocean_surface_temperature` |
 | 三圈环流边界 | Hadley 30° / Ferrel 60° 可配置 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½ 行星化 | `hadley_cell_wind` |
 | nacrea 回归 | nacrea 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `nacrea/terrain_config.yaml` |
