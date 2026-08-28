@@ -1243,6 +1243,70 @@ def _surface_divergence(
     return div
 
 
+def _baroclinic_band(
+    temperature_c: np.ndarray,
+    lat_deg: np.ndarray,
+    band_deg: float = 5.0,
+    min_lat_deg: float = 20.0,
+) -> tuple[float, float]:
+    """Centre and half-width (degrees) of the baroclinic storm-track band.
+
+    Transient eddies grow where the meridional temperature gradient is
+    steepest (Eady instability follows ∇T), so the band is derived from the
+    zonal-mean temperature profile rather than from circulation-cell
+    boundaries.  Cell boundaries degenerate for single-cell slow rotators —
+    yet GCMs of slow rotators show weakened-but-nonzero eddy activity, with
+    the baroclinic zone at the mid-to-high-latitude gradient maximum of the
+    broad temperature profile (Held–Hou quartic: gradient ∝ sin³φ·cosφ,
+    peak near 50–60°).
+
+    Args:
+        temperature_c: Annual-mean temperature field (°C), shape (N,).
+        lat_deg: Latitude in degrees, shape (N,).
+        band_deg: Latitude bin width for the zonal mean.
+        min_lat_deg: Ignore gradients equatorward of this (ITCZ region).
+
+    Returns:
+        (centre_latitude, gaussian_half_width); falls back to the classic
+        (45°, 15°) when the profile is too flat to locate a peak.
+    """
+    abs_lat = np.abs(lat_deg)
+    edges = np.arange(0.0, 90.0 + band_deg, band_deg)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    idx = np.clip(((abs_lat - edges[0]) / band_deg).astype(np.int64), 0, len(centers) - 1)
+    sums = np.zeros(len(centers))
+    counts = np.zeros(len(centers))
+    np.add.at(sums, idx, temperature_c)
+    np.add.at(counts, idx, 1.0)
+    if (counts < 1).any():
+        return 45.0, 15.0  # incomplete latitudinal coverage — classic fallback
+    t_zonal = sums / counts
+
+    grad = np.abs(np.gradient(t_zonal, band_deg))
+    # Smooth bin noise (twice-over 3-point kernel ≈ Gaussian σ≈1 bin).
+    kernel = np.array([0.25, 0.5, 0.25])
+    for _ in range(2):
+        grad = np.convolve(grad, kernel, mode="same")
+
+    search = centers >= min_lat_deg
+    if not search.any() or grad[search].max() < 0.05:
+        return 45.0, 15.0  # flat profile (no baroclinicity) — fallback
+    peak = int(np.argmax(np.where(search, grad, 0.0)))
+    centre = float(centers[peak])
+    half_max = 0.5 * grad[peak]
+    # Walk outward from the peak to the half-max crossings (equatorward and
+    # poleward) and convert the full width at half maximum to a Gaussian σ.
+    left = peak
+    while left > 0 and grad[left - 1] >= half_max:
+        left -= 1
+    right = peak
+    while right < len(grad) - 1 and grad[right + 1] >= half_max:
+        right += 1
+    fwhm = float(centers[right] - centers[left])
+    width = float(np.clip(fwhm / 2.355, 5.0, 20.0))
+    return centre, width
+
+
 def _compute_precipitation_bfs(
     mesh: CVTMesh,
     wind: np.ndarray,
@@ -1333,11 +1397,12 @@ def _compute_precipitation_bfs(
         if config.auto_lat_gradient
         else config.lat_gradient_c
     )
-    # Storm track centred in the baroclinic zone (midpoint of the Hadley and
-    # polar-cell boundaries).  Earth → 45°; single-cell nacrea (both 90°) →
-    # width 0, and storm_track_amplitude_mm=0 disables it entirely.
-    _storm_center = 0.5 * (config.hadley_extent_deg + config.polar_cell_start_deg)
-    _storm_width = max(0.5 * (config.polar_cell_start_deg - config.hadley_extent_deg), 1.0)
+    # Storm track centred in the baroclinic zone — derived from the zonal-mean
+    # temperature gradient (Eady instability follows ∇T), which locates the
+    # band for any circulation regime: three-cell Earth peaks near 45–55°;
+    # single-cell slow rotators keep a weakened-but-nonzero band at their
+    # mid-to-high-latitude gradient maximum (GCMs show eddies there too).
+    _storm_center, _storm_width = _baroclinic_band(temperature_c, lat_deg)
     _storm_amp = (
         config.storm_track_amplitude_mm
         * (_lat_grad / 45.0)
@@ -1350,7 +1415,7 @@ def _compute_precipitation_bfs(
     # Step 3.5b: the same baroclinic eddies also *transport* moisture poleward
     # (transient-eddy mixing), which the mean surface wind's advection does not
     # capture.  The eddy-diffusivity enhancement is proportional to the rainout
-    # enhancement (same eddies), so a single-cell planet (storm_amp=0) gets none.
+    # enhancement (same eddies); setting storm_track_amplitude_mm=0 disables both.
     _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
 
     # Step 5+7: local convection + tropical boost as k_rain modulations (not
