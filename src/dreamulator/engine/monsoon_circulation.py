@@ -71,8 +71,8 @@ _MONSOON_DEPTH_FRACTION: float = 0.25
 # open-water rate it over-amplifies the equatorial LAND wind (Amazon) to ~20 m/s
 # vs the observed ~1–2 m/s.  Hence the per-cell land/ocean split (see
 # docs/knowledge/climatology/atmospheric_circulation.md §4.5).
-_DRAG_RATE_S: float = 1.0e-5        # open water (C_D ≈ 1.3e-3)
-_DRAG_RATE_LAND_S: float = 2.0e-4   # rough vegetation (C_D ≈ 0.03), ~20× water
+_DRAG_RATE_S: float = 1.0e-5  # open water (C_D ≈ 1.3e-3)
+_DRAG_RATE_LAND_S: float = 2.0e-4  # rough vegetation (C_D ≈ 0.03), ~20× water
 
 # Sea-level air density (kg/m³), same reference as _geostrophic_wind.
 _AIR_DENSITY_KG_M3: float = 1.225
