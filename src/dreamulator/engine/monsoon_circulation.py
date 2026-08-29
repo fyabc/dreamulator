@@ -247,7 +247,7 @@ def monsoon_boundary_layer_wind(
     g_n = np.einsum("mij,ij->mi", g, north)
 
     # Per-cell drag rate: scalar → uniform, array → surface-type dependent.
-    if np.isscalar(drag_rate_s):
+    if isinstance(drag_rate_s, (int, float)):
         k_d = np.full(f_coriolis.shape, float(drag_rate_s))
     else:
         k_d = np.asarray(drag_rate_s, dtype=np.float64)
