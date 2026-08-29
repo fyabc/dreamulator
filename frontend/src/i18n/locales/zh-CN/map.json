@@ -197,28 +197,29 @@
   },
   "sun": {
     "title": "光照",
-    "tilt": "倾角 {{deg}}°",
-    "toggleOff": "关闭昼夜光照",
-    "toggleOn": "开启昼夜光照",
+    "titleHint": "昼夜光照：太阳直射经度（周日）+ 明暗开关",
+    "toggleOff": "关闭昼夜光照（GPU 明暗着色）",
+    "toggleOn": "开启昼夜光照（GPU 明暗着色）",
     "timeOfDay": "时刻（周日）",
     "longitudeTitle": "太阳直射经度（0° = 本初子午线正午）",
-    "season": "季节（周年）",
     "declination": "直射 {{declination}}",
-    "monthLabel": "月序",
-    "monthValue": "M{{m}}",
-    "noTiltHint": "该行星无地轴倾角，无季节变化",
-    "seasonTitle": "轨道位置（0° = 春分，90° = 北半球夏至）",
     "equator": "赤道",
     "springEquinox": "春分",
     "summerSolstice": "夏至",
     "autumnEquinox": "秋分",
     "winterSolstice": "冬至"
   },
-  "monthly": {
-    "title": "月度气候",
-    "annual": "年度",
-    "monthly": "月度"
+  "time": {
+    "title": "时间",
+    "titleHint": "时间维度：年均 / 月度模式 + 季节/月份滑块",
+    "annual": "年均",
+    "monthly": "月度",
+    "seasonLabel": "季节（仅光照）",
+    "monthLabel": "月份",
+    "annualHint": "年均模式：图层显示年度平均，季节滑条仅影响光照",
+    "monthlyHint": "月度模式：拖动选择月份，温度/降水/气压/风场随之变化"
   },
+  "months": ["三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月", "一月", "二月"],
   "info": {
     "star": "恒星",
     "planet": "行星",

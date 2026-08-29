@@ -1,36 +1,40 @@
 /**
- * SunControl — directional lighting controls for the globe / map.
+ * SunControl — diurnal lighting controls for the globe / map.
  *
- * Two independent controls drive the sun direction:
- *   - Sun longitude (0–360°): the diurnal (daily) rotation — where the sun is
- *     overhead in longitude. 0° = noon on the prime meridian.
- *   - Season (0–360°): the annual (orbital) position. Together with the planet's
- *     axial tilt this sets the solar declination — the latitude where the sun is
- *     directly overhead — so the terminator tilts across the year (midnight sun /
- *     polar night at the poles). 0° = vernal equinox, 90° = N. summer solstice.
+ * Controls only the daily (diurnal) sun longitude — where the sun is overhead
+ * in longitude (0° = noon on the prime meridian). The seasonal / monthly
+ * dimension (which drives both solar declination and monthly climate data) has
+ * moved to TimeControl, so the two time axes are cleanly separated:
  *
- * On the 3D globe lighting is always on (a lit sphere always has a terminator).
- * On the 2D map the day/night overlay is optional — pass `enabled` /
- * `onEnabledChange` to render an on/off toggle; omit them for always-on.
+ *   - SunControl  → daily rotation (sun longitude) + day/night toggle
+ *   - TimeControl → annual season / monthly data month
+ *
+ * On the 3D globe lighting is always on. On the 2D map the day/night overlay is
+ * optional — pass `enabled` / `onEnabledChange` to render an on/off toggle;
+ * omit them for always-on.
  */
 
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { solarDeclinationDeg } from '../../viewers/utils/solar'
-
 interface SunControlProps {
   sunLongitudeDeg: number
   onLongitudeChange: (deg: number) => void
-  seasonDeg: number
-  onSeasonChange: (deg: number) => void
-  /** Axial tilt in degrees — sets the amplitude of the seasonal declination. */
-  axialTiltDeg?: number
   /** When provided (2D map), renders an on/off toggle for the overlay. */
   enabled?: boolean
   onEnabledChange?: (enabled: boolean) => void
-  /** Show the month readout (M1–M12, Phase 4 monthly climate) beside the season. */
-  showMonth?: boolean
+}
+
+/** Help-circle icon — links to the time/lighting help section. */
+function HelpIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
 }
 
 /** Simple sun icon as inline SVG. */
@@ -54,38 +58,17 @@ function SunIcon() {
 export default function SunControl({
   sunLongitudeDeg,
   onLongitudeChange,
-  seasonDeg,
-  onSeasonChange,
-  axialTiltDeg = 0,
   enabled = true,
   onEnabledChange,
-  showMonth = false,
 }: SunControlProps) {
   const { t } = useTranslation('map')
-
-  /** Format a solar declination as a subsolar latitude, e.g. "23.4°N". */
-  const formatDeclination = (dec: number): string => {
-    const abs = Math.abs(dec)
-    if (abs < 0.05) return `0°（${t('sun.equator')}）`
-    return `${abs.toFixed(1)}°${dec > 0 ? 'N' : 'S'}`
-  }
-
-  // Month of year (0–11), derived from the season angle.  0° = vernal equinox
-  // = month 0 (M1); 90° = summer solstice = month 3 (M4).
-  const monthOfYear = Math.round(seasonDeg / 30) % 12
 
   const handleLongitude = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => onLongitudeChange(parseInt(e.target.value)),
     [onLongitudeChange],
   )
-  const handleSeason = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => onSeasonChange(parseInt(e.target.value)),
-    [onSeasonChange],
-  )
 
-  const declination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
   const hasToggle = onEnabledChange != null
-  // Sliders are active when the overlay is on (or always, if there's no toggle).
   const active = hasToggle ? enabled : true
 
   return (
@@ -95,14 +78,16 @@ export default function SunControl({
         <span className="text-amber-400/80">
           <SunIcon />
         </span>
-        <span className="text-xs text-gray-400">{t('sun.title')}</span>
-        {axialTiltDeg !== 0 && (
-          <span
-            className={`text-[10px] font-mono tabular-nums text-gray-500 ${hasToggle ? '' : 'ml-auto'}`}
-          >
-            {t('sun.tilt', { deg: axialTiltDeg })}
-          </span>
-        )}
+        <span className="text-xs text-gray-400" title={t('sun.titleHint')}>{t('sun.title')}</span>
+        <a
+          href="/help#map-time"
+          target="_blank"
+          rel="noreferrer"
+          className="p-0.5 text-gray-500 hover:text-neon-cyan"
+          title={t('control.helpButton')}
+        >
+          <HelpIcon />
+        </a>
         {hasToggle && (
           <button
             type="button"
@@ -147,50 +132,6 @@ export default function SunControl({
             <span>270°</span>
             <span>360°</span>
           </div>
-        </div>
-      </div>
-
-      {/* Season (orbital position → solar declination) — always active (drives
-          both the lighting declination AND the monthly climate month). */}
-      <div className="space-y-1 mt-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-gray-500">{t('sun.season')}</span>
-          <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
-            {t('sun.declination', { declination: formatDeclination(declination) })}
-            {showMonth && (
-              <span className="ml-2">{t('sun.monthValue', { m: monthOfYear + 1 })}</span>
-            )}
-          </span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="360"
-          value={seasonDeg}
-          onChange={handleSeason}
-          className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
-          disabled={axialTiltDeg === 0}
-          title={
-            axialTiltDeg === 0
-              ? t('sun.noTiltHint')
-              : t('sun.seasonTitle')
-          }
-        />
-        {/* 12-division tick marks (30° each) — no labels. */}
-        <div className="flex justify-between items-end h-2 px-px">
-          {Array.from({ length: 13 }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-px ${i % 3 === 0 ? 'h-2 bg-gray-500' : 'h-1 bg-gray-700'}`}
-            />
-          ))}
-        </div>
-        <div className="flex justify-between text-[9px] text-gray-600">
-          <span>{t('sun.springEquinox')}</span>
-          <span>{t('sun.summerSolstice')}</span>
-          <span>{t('sun.autumnEquinox')}</span>
-          <span>{t('sun.winterSolstice')}</span>
-          <span>{t('sun.springEquinox')}</span>
         </div>
       </div>
     </div>

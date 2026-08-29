@@ -15,6 +15,12 @@ interface Props {
   projectRef: React.MutableRefObject<ProjectFn | null>
   voronoiCells: VoronoiCell[]
   windOpacity: number
+  /** Monthly wind (tech debt 24): N×12 east/north components in mesh-cell
+   *  order.  When both are provided the arrows show month `month` instead of
+   *  the annual-mean wind. */
+  monthlyWindEast?: Float32Array | null
+  monthlyWindNorth?: Float32Array | null
+  month?: number
 }
 
 const GRID_STEP = 4.5
@@ -25,7 +31,10 @@ function tempColor(tC: number): string {
   return `hsl(${240 - (clamped + 10) / 35 * 240}, 70%, 50%)`
 }
 
-export default function GlobeWindArrows({ projectRef, voronoiCells, windOpacity }: Props) {
+export default function GlobeWindArrows({
+  projectRef, voronoiCells, windOpacity,
+  monthlyWindEast = null, monthlyWindNorth = null, month = 0,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
   const arrowsRef = useRef<{ lon: number; lat: number; u: number; v: number; color: string }[]>([])
@@ -36,9 +45,18 @@ export default function GlobeWindArrows({ projectRef, voronoiCells, windOpacity 
     type E = { lon: number; lat: number; u: number; v: number; tC: number }
     const all: E[] = []
     let mx = 0
-    for (const c of voronoiCells) {
-      const u = c.wind_east_m_s; const v = c.wind_north_m_s
-      if (u == null || v == null) continue
+    const useMonthly = !!(monthlyWindEast && monthlyWindNorth)
+    for (let i = 0; i < voronoiCells.length; i++) {
+      const c = voronoiCells[i]
+      let u: number, v: number
+      if (useMonthly) {
+        u = (monthlyWindEast as Float32Array)[i * 12 + month]
+        v = (monthlyWindNorth as Float32Array)[i * 12 + month]
+      } else {
+        u = c.wind_east_m_s as number
+        v = c.wind_north_m_s as number
+      }
+      if (u == null || v == null || !Number.isFinite(u) || !Number.isFinite(v)) continue
       const s = Math.sqrt(u * u + v * v); if (s > mx) mx = s
       all.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, tC: c.temperature_C ?? 0 })
     }
@@ -59,7 +77,7 @@ export default function GlobeWindArrows({ projectRef, voronoiCells, windOpacity 
         out.push({ lon: e.lon, lat: e.lat, u: e.u, v: e.v, color: tempColor(e.tC) })
       }
     arrowsRef.current = out
-  }, [voronoiCells, windOpacity])
+  }, [voronoiCells, windOpacity, monthlyWindEast, monthlyWindNorth, month])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current

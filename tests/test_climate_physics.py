@@ -165,6 +165,22 @@ class TestPressureFromTemperature:
         # Both at sea level, but hot one has thermal low
         assert p_cold[1] < p_cold[0]
 
+    def test_elevated_cold_surface_is_heat_source(self) -> None:
+        """Same cold surface, higher elevation → thermal low via θ (elevated heat source).
+
+        The dry-adiabatic potential temperature θ = T + Γ_d·z makes an elevated
+        cold surface the *warmer* column, so it must get the thermal low — not be
+        read as a cold anomaly (the pre-θ bug)."""
+        t = np.array([-10.0, -10.0])
+        elev = np.array([5000.0, 0.0])
+        p = pressure_from_temperature(t, elev)
+        # Elevated cell: θ = −10 + (g/c_p)·5000 ≈ +39 °C → θ_max → full −20 hPa
+        # thermal low on top of its ~563 hPa barometric pressure.
+        p_baro_high = 1013.25 * np.exp(-5000.0 / 8500.0)
+        assert p[0] < p_baro_high - 15.0
+        # Sea-level cold cell: θ = −10 °C → θ_min → no thermal low, ~1013 hPa.
+        assert p[1] > 1013.25 - 1.0
+
 
 class TestHadleyCellWind:
     """Three-cell atmospheric circulation."""

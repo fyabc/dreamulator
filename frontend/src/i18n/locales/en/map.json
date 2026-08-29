@@ -197,28 +197,29 @@
   },
   "sun": {
     "title": "Lighting",
-    "tilt": "Tilt {{deg}}°",
-    "toggleOff": "Turn off day/night lighting",
-    "toggleOn": "Turn on day/night lighting",
+    "titleHint": "Day/night lighting: subsolar longitude (diurnal) + shading toggle",
+    "toggleOff": "Turn off day/night lighting (GPU shading)",
+    "toggleOn": "Turn on day/night lighting (GPU shading)",
     "timeOfDay": "Time of day (diurnal)",
     "longitudeTitle": "Subsolar longitude (0° = noon on the prime meridian)",
-    "season": "Season (annual)",
     "declination": "Subsolar {{declination}}",
-    "monthLabel": "Month",
-    "monthValue": "M{{m}}",
-    "noTiltHint": "This planet has no axial tilt, so no seasonal variation",
-    "seasonTitle": "Orbital position (0° = vernal equinox, 90° = N. summer solstice)",
     "equator": "equator",
     "springEquinox": "Equinox",
     "summerSolstice": "Solstice",
     "autumnEquinox": "Equinox",
     "winterSolstice": "Solstice"
   },
-  "monthly": {
-    "title": "Monthly climate",
+  "time": {
+    "title": "Time",
+    "titleHint": "Time dimension: annual/monthly mode + season/month slider",
     "annual": "Annual",
-    "monthly": "Monthly"
+    "monthly": "Monthly",
+    "seasonLabel": "Season (lighting only)",
+    "monthLabel": "Month",
+    "annualHint": "Annual mode: layers show annual averages; the season slider affects lighting only.",
+    "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it."
   },
+  "months": ["March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"],
   "info": {
     "star": "Star",
     "planet": "Planet",

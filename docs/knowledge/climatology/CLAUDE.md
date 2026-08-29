@@ -4,7 +4,7 @@
 
 - `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、季节 EBM、质量守恒水汽收支
 - `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
-- `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（2026-08 自实现反写）
+- `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（位温 θ）、季风边界层风 + 标定锚点（2026-08 自实现反写 + 季风 f→0 教训）
 - `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
 - `climate_classification_comparison.md` — 四大分类体系比较（Köppen / Trewartha / Thornthwaite / Holdridge）与 dreamulator 适配建议（2026-08）
 - `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学、ENSO 类振荡（3A.3 科学底座）

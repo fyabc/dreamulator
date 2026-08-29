@@ -25,13 +25,13 @@ Physical chain (tech debt 23, roadmap):
 3. **Boundary-layer momentum balance** — the surface wind answers the
    pressure-gradient force against Coriolis and turbulent drag:
 
-       0 = G − f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
+       0 = G + f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
 
    In local east/north components this is a 2×2 linear system with the
    closed-form solution
 
-       v_e = (k_d·G_e + f·G_n) / (k_d² + f²)
-       v_n = (k_d·G_n − f·G_e) / (k_d² + f²)
+       v_e = (k_d·G_e − f·G_n) / (k_d² + f²)
+       v_n = (k_d·G_n + f·G_e) / (k_d² + f²)
 
    Two limits with the right physics: f → 0 (equator) gives v = G/k_d,
    a direct down-gradient flow — this is what allows the cross-equatorial
@@ -63,14 +63,16 @@ import numpy as np
 _MONSOON_DEPTH_FRACTION: float = 0.25
 
 # Boundary-layer drag rate k_d = C_D·|U|/h_BL (s⁻¹): bulk drag coefficient
-# C_D ≈ 1.3e-3 (open water and smooth terrain; the rough-vegetated value
-# ~2.5e-3 would halve the anomaly again), surface wind |U| ≈ 8 m/s,
-# boundary-layer depth h_BL ≈ 1 km → k_d ≈ 1e-5 s⁻¹, a momentum dissipation
-# timescale of ~1 day.  Near the equator the balance degenerates to v = G/k_d,
-# so this rate directly sets the strength of the cross-equatorial monsoon
-# current; the plausible range (C_D 1.3–2.5e-3, |U| 6–10 m/s, h_BL 0.8–1.5 km)
-# spans k_d ≈ 0.9–3e-5 s⁻¹.
-_DRAG_RATE_S: float = 1.0e-5
+# C_D ≈ 1.3e-3 over open water (smooth surface), |U| ≈ 8 m/s, h_BL ≈ 1 km →
+# k_d ≈ 1e-5 s⁻¹, a momentum dissipation timescale of ~1 day.  Over rough
+# vegetation C_D is ~20× larger (forest canopy ~0.03), so k_d ≈ 2e-4 s⁻¹.
+# Near the equator the balance degenerates to v = G/k_d, so this rate directly
+# sets the strength of the cross-equatorial monsoon current — and with a uniform
+# open-water rate it over-amplifies the equatorial LAND wind (Amazon) to ~20 m/s
+# vs the observed ~1–2 m/s.  Hence the per-cell land/ocean split (see
+# docs/knowledge/climatology/atmospheric_circulation.md §4.5).
+_DRAG_RATE_S: float = 1.0e-5        # open water (C_D ≈ 1.3e-3)
+_DRAG_RATE_LAND_S: float = 2.0e-4   # rough vegetation (C_D ≈ 0.03), ~20× water
 
 # Sea-level air density (kg/m³), same reference as _geostrophic_wind.
 _AIR_DENSITY_KG_M3: float = 1.225
@@ -207,13 +209,13 @@ def monsoon_boundary_layer_wind(
     grad_dp_pa_m: np.ndarray,
     f_coriolis: np.ndarray,
     nodes_xyz: np.ndarray,
-    drag_rate_s: float = _DRAG_RATE_S,
+    drag_rate_s: float | np.ndarray = _DRAG_RATE_S,
     air_density_kg_m3: float = _AIR_DENSITY_KG_M3,
     max_speed_m_s: float = 30.0,
 ) -> np.ndarray:
     """Monthly monsoon wind anomaly from the boundary-layer momentum balance.
 
-    Solves  0 = G − f k̂×v − k_d·v  with G = −∇(ΔP)/ρ in closed form per
+    Solves  0 = G + f k̂×v − k_d·v  with G = −∇(ΔP)/ρ in closed form per
     month and cell (see module docstring for the two physical limits).
     The input pressure gradient is already the gradient of the *seasonal
     anomaly* field (``pressure_anomaly_monthly``), so the output is a wind
@@ -224,7 +226,12 @@ def monsoon_boundary_layer_wind(
             vectors in Pa/m, shape (12, N, 3).
         f_coriolis: Coriolis parameter (rad/s), shape (N,).
         nodes_xyz: Unit sphere node positions, shape (N, 3).
-        drag_rate_s: Boundary-layer drag rate k_d (s⁻¹).
+        drag_rate_s: Boundary-layer drag rate k_d (s⁻¹) — a scalar for a
+            uniform rate, or a per-cell array shape (N,) to split land
+            (rough, high drag) from ocean (smooth, low drag).  The f→0
+            degeneracy v = G/k_d makes the equatorial wind ∝ 1/k_d, so a
+            land/ocean split is what keeps the Amazon (~1 m/s) below the
+            cross-equatorial jet (~10 m/s).
         air_density_kg_m3: Surface air density ρ (kg/m³).
         max_speed_m_s: Speed clamp for the anomaly (m/s).
 
@@ -239,12 +246,17 @@ def monsoon_boundary_layer_wind(
     g_e = np.einsum("mij,ij->mi", g, east)  # (12, N)
     g_n = np.einsum("mij,ij->mi", g, north)
 
-    k_d = drag_rate_s
+    # Per-cell drag rate: scalar → uniform, array → surface-type dependent.
+    if np.isscalar(drag_rate_s):
+        k_d = np.full(f_coriolis.shape, float(drag_rate_s))
+    else:
+        k_d = np.asarray(drag_rate_s, dtype=np.float64)
+    k_d = k_d[None, :]  # (1, N)
     f = f_coriolis[None, :]  # (1, N)
     denom = k_d * k_d + f * f  # (1, N), strictly > 0
 
-    v_e = (k_d * g_e + f * g_n) / denom
-    v_n = (k_d * g_n - f * g_e) / denom
+    v_e = (k_d * g_e - f * g_n) / denom
+    v_n = (k_d * g_n + f * g_e) / denom
 
     wind = v_e[:, :, None] * east[None, :, :] + v_n[:, :, None] * north[None, :, :]
 

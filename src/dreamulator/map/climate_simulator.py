@@ -44,6 +44,8 @@ from dreamulator.engine.climate_seasonality import (
     warm_cold_half_precip,
 )
 from dreamulator.engine.monsoon_circulation import (
+    _DRAG_RATE_LAND_S,
+    _DRAG_RATE_S,
     monsoon_boundary_layer_wind,
     pressure_anomaly_monthly,
 )
@@ -385,7 +387,13 @@ def simulate_climate(
             for m in range(12)
         ]
     )
-    _wind_monsoon = monsoon_boundary_layer_wind(_grad_dp_pa_m, f_coriolis, nodes_xyz)
+    # Per-cell drag: land (rough vegetation) drags harder than ocean, so the
+    # f→0 degeneracy v = G/k_d doesn't over-amplify the equatorial land wind
+    # (Amazon → ~1 m/s instead of ~20 m/s; see atmospheric_circulation.md §4.5).
+    _drag = np.where(is_land, _DRAG_RATE_LAND_S, _DRAG_RATE_S)
+    _wind_monsoon = monsoon_boundary_layer_wind(
+        _grad_dp_pa_m, f_coriolis, nodes_xyz, drag_rate_s=_drag
+    )
 
     # Monthly wind = annual background + monsoon anomaly.  The 12-month
     # average of the monthly winds is the background field itself (the
@@ -592,6 +600,19 @@ def simulate_climate(
     # mesh object and writes a separate compact MessagePack file.
     object.__setattr__(mesh, "_t_monthly_c", t_monthly_C.astype(np.float32))
     object.__setattr__(mesh, "_p_monthly_mm", np.maximum(p_monthly, 0.0).astype(np.float32))
+
+    # Monthly vector field + pressure (tech debt 24): decompose the monthly winds
+    # into local east/north components (same sign convention as the Stage 2 annual
+    # wind write-back) and carry the smoothed monsoon pressure anomaly ΔP (hPa).
+    _we_monthly = np.empty((n, 12), dtype=np.float32)
+    _wn_monthly = np.empty((n, 12), dtype=np.float32)
+    for _m in range(12):
+        _we_m, _wn_m = _dec_wind(wind_monthly[_m], _east_w, _north_w)
+        _we_monthly[:, _m] = -_we_m
+        _wn_monthly[:, _m] = _wn_m
+    object.__setattr__(mesh, "_wind_east_monthly", _we_monthly)
+    object.__setattr__(mesh, "_wind_north_monthly", _wn_monthly)
+    object.__setattr__(mesh, "_pressure_monthly", _dp_hpa.astype(np.float32))
 
     koppen_codes = koppen_classify(
         t_mean_c=t_mean_C,
@@ -1096,7 +1117,7 @@ _MOISTURE_RESIDENCE_DAYS: float = 9.0
 # diffusion over-transported ocean moisture onto land (ocean→land transport
 # ~2× the observed ~268 mm/yr land-mean), so κ is calibrated down toward the
 # observed transport.  Shared across worlds.
-_MOISTURE_DIFFUSIVITY_M2S: float = 3.75e5
+_MOISTURE_DIFFUSIVITY_M2S: float = 7.5e5
 
 # Land evapotranspiration as a fraction of the ocean evaporation *rate* at the
 # same temperature.  Earth's land surface returns ~490 mm/yr against the ocean's
