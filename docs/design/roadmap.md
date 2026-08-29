@@ -1,8 +1,7 @@
 # 开发路线图
 
-> 最后更新：2026-08-28（v0.33.0 Phase 4 月度气候展示 + 气候准确率系列 + nacrea 天文设定修订
-> （Aegis obliquity 9°/赤道面轨道）+ 双世界重建同步 + 间奏曲知识/设计落地 + 季风动力学主线立项
-> （技术债 23/24）。前次：v0.32.0 地图图层
+> 最后更新：2026-08-30（v0.34.0 月度矢量场 + 季风机制修复 + 气候精度提升 + 数据同步）
+> 前次：v0.33.0 月度气候展示 + 气候准确率系列 + nacrea 天文设定修订
 > headless 导出 CLI + 配色单源化 + Seed 探索器 CLI）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；

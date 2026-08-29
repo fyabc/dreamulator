@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] — 2026-08-30
+
+### Added
+
+- **月度矢量场**（技术债 24）：月度风场（年均背景 + 逐月季风异常）与气压异常 ΔP 图层，
+  以 int16 量化（48→24 MB）写入 `climate_monthly.msgpack`；前端「时间」控制区
+  （年均/月度切换 + 周年/月度滑块）统一驱动温度、降水、气压、风场
+- **观测点诊断**：`scripts/station_diagnostics.py`——26 个参考站按 Köppen 类型分层
+  （Af–ET），采样模型逐月温度/降水/风向并与硬编码标准气候态对比，补充 Cohen's Kappa
+  看不到的「单点季节行为」（季风风向、季节振幅、干湿季）
+
+### Changed
+
+- **季风机制重标定**：边界层风 f 项符号更正；年均气压热低压项改用位温 θ=T+Γ_d·z
+  （捕获高地抬升热源）；k_d 按地表分陆海（陆 2e-4、海 1e-5，f→0 退化不再放大赤道陆风）；
+  水汽扩散 κ 3.75e5→7.5e5；沿海调制 e-folding 500→250 km
+- **气候精度提升**：Cohen's Kappa（主指标）0.24→0.265、空间准确率 29%→30.8%、
+  分布匹配 →67.5%
+- 数据同步：nacrea / earth-climate-dev 全量重建（含文明层）；`climate_monthly.msgpack`
+  迁入 Git LFS（`.gitattributes` 加 `*.msgpack` 规则）
+
+### Fixed
+
+- **亚马逊 Af 回归**（Af 0→1324 cell）：f→0 退化项把亚马逊（密林应高拖曳）温和 ΔP
+  放大成 ~20 m/s 假强风 → 干季水汽被抽干；k_d 分陆海 + κ 上调修复
+- 季风边界层风 f 项符号（东亚夏季风经向偏南 → 翻正，暴露「6 月低压在陆、风却吹向太平洋」）
+- 季节振幅减半（沿海陆地被过度海洋调制，季节振幅 14 vs 真实 30°C）
+
 ## [0.33.0] — 2026-08-28
 
 ### Added
