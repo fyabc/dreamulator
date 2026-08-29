@@ -20,6 +20,7 @@ import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
+import TimeControl from '../components/map/TimeControl'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
@@ -61,17 +62,38 @@ export default function GlobeViewerPage() {
   // --- UI State ---
   // rivers: 0 — the 3D globe does not render the river vector layer yet
   // (2D map viewer only); keep the state key so the layer panel type-checks.
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 } })
-  // Monthly climate mode (Phase 4): on = the active temperature/precipitation
-  // layer shows the monthly data driven by the season slider.
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 } })
+  // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
+  // pressure layer shows monthly data driven by the season slider, and the wind
+  // arrows switch to the monthly wind field (tech debt 24).
   const [monthlyMode, setMonthlyMode] = useState(false)
   const monthlyField: MonthlyField | null = monthlyMode
     ? layerState.layers.temperature > 0
       ? 'temperature'
       : layerState.layers.precipitation > 0
         ? 'precipitation'
-        : null
+        : layerState.layers.pressure > 0
+          ? 'pressure'
+          : null
     : null
+  // Fetch monthly data when monthly mode is on and any monthly-driven layer
+  // (temperature / precipitation / pressure / wind arrows) is visible.
+  const monthlyActive = monthlyMode && (
+    layerState.layers.temperature > 0 ||
+    layerState.layers.precipitation > 0 ||
+    layerState.layers.pressure > 0 ||
+    layerState.layers.winds > 0
+  )
+  // Turning OFF monthly mode while the pressure-anomaly layer (monthly-only) is
+  // active would leave a blank thematic — reset to terrain instead.
+  const handleMonthlyModeChange = (mode: boolean) => {
+    setMonthlyMode(mode)
+    if (!mode) {
+      setLayerState((s) =>
+        s.layers.pressure > 0 ? { layers: { ...s.layers, pressure: 0, terrain: 1 } } : s,
+      )
+    }
+  }
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
@@ -189,9 +211,9 @@ export default function GlobeViewerPage() {
   })
 
   // --- Monthly climate texture (Phase 4) — loaded + baked on demand ---
-  const monthlyThematic = useMonthlyClimate({
+  const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId, branch: selectedBranch, seasonDeg,
-    field: monthlyField, cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
+    field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
 
@@ -209,6 +231,7 @@ export default function GlobeViewerPage() {
     cellIdMap: cellIdMap ?? null,
     monthlyTemperature: monthlyField === 'temperature' ? monthlyThematic : null,
     monthlyPrecipitation: monthlyField === 'precipitation' ? monthlyThematic : null,
+    monthlyPressure: monthlyField === 'pressure' ? monthlyThematic : null,
     flipHorizontal: false,
   })
 
@@ -524,6 +547,9 @@ export default function GlobeViewerPage() {
               projectRef={globeProjectRef}
               voronoiCells={voronoiCells}
               windOpacity={layerState.layers.winds ?? 0}
+              monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+              monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+              month={monthlyMonth}
             />
           </div>
           <MobileCellCard
@@ -553,17 +579,26 @@ export default function GlobeViewerPage() {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('label.layerSettings')}</span>
                 <button onClick={() => setLeftPanelOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
               </div>
-              <MapLayerPanel state={layerState} onChange={setLayerState} monthlyMode={monthlyMode} onMonthlyModeChange={setMonthlyMode} />
+              <TimeControl
+                monthlyMode={monthlyMode}
+                onMonthlyModeChange={handleMonthlyModeChange}
+                seasonDeg={seasonDeg}
+                onSeasonChange={setSeasonDeg}
+                axialTiltDeg={axialTiltDeg}
+              />
+              <MapLayerPanel
+                state={layerState}
+                onChange={setLayerState}
+                monthlyMode={monthlyMode}
+                monthIndex={monthlyMonth}
+                onMonthlyModeChange={handleMonthlyModeChange}
+              />
               <div className="mt-3 pt-3 border-t border-space-border">
                 <SunControl
                   sunLongitudeDeg={sunLongitudeDeg}
                   onLongitudeChange={setSunLongitudeDeg}
-                  seasonDeg={seasonDeg}
-                  onSeasonChange={setSeasonDeg}
-                  axialTiltDeg={axialTiltDeg}
                   enabled={dayNightEnabled}
                   onEnabledChange={setDayNightEnabled}
-                  showMonth={monthlyField !== null}
                 />
               </div>
             </div>
@@ -574,18 +609,27 @@ export default function GlobeViewerPage() {
         {/* === Desktop layout (≥ md) === */}
         <div className="hidden md:flex absolute inset-0">
           {/* Left panel: layers */}
-          <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
-            <MapLayerPanel state={layerState} onChange={setLayerState} monthlyMode={monthlyMode} onMonthlyModeChange={setMonthlyMode} />
+          <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
+            <TimeControl
+              monthlyMode={monthlyMode}
+              onMonthlyModeChange={handleMonthlyModeChange}
+              seasonDeg={seasonDeg}
+              onSeasonChange={setSeasonDeg}
+              axialTiltDeg={axialTiltDeg}
+            />
+            <MapLayerPanel
+              state={layerState}
+              onChange={setLayerState}
+              monthlyMode={monthlyMode}
+              monthIndex={monthlyMonth}
+              onMonthlyModeChange={handleMonthlyModeChange}
+            />
             <div className="mt-3 pt-3 border-t border-space-border">
               <SunControl
                   sunLongitudeDeg={sunLongitudeDeg}
                   onLongitudeChange={setSunLongitudeDeg}
-                  seasonDeg={seasonDeg}
-                  onSeasonChange={setSeasonDeg}
-                  axialTiltDeg={axialTiltDeg}
                   enabled={dayNightEnabled}
                   onEnabledChange={setDayNightEnabled}
-                  showMonth={monthlyField !== null}
                 />
             </div>
           </div>
@@ -643,6 +687,9 @@ export default function GlobeViewerPage() {
             projectRef={globeProjectRef}
             voronoiCells={voronoiCells}
             windOpacity={layerState.layers.winds ?? 0}
+            monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+            monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+            month={monthlyMonth}
           />
         </div>
         <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />

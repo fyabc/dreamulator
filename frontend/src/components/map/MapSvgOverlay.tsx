@@ -37,6 +37,12 @@ interface MapSvgOverlayProps {
   currentOpacity?: number
   /** Wind arrow opacity (0 = hidden). */
   windOpacity?: number
+  /** Monthly wind (tech debt 24): N×12 east/north components in mesh-cell
+   *  order.  When both are provided the arrows show month `month` instead of
+   *  the annual-mean wind. */
+  monthlyWindEast?: Float32Array | null
+  monthlyWindNorth?: Float32Array | null
+  month?: number
 
   /** River network polylines (backend features layer). */
   riverFeatures?: MapFeatureData[] | null
@@ -56,6 +62,9 @@ export default function MapSvgOverlay({
   selectedCells,
   currentOpacity = 0,
   windOpacity = 0,
+  monthlyWindEast = null,
+  monthlyWindNorth = null,
+  month = 0,
   riverFeatures = null,
   riverOpacity = 0,
 }: MapSvgOverlayProps) {
@@ -308,10 +317,18 @@ export default function MapSvgOverlay({
     type WCell = { lon: number; lat: number; u: number; v: number; speed: number; tC: number }
     const wcells: WCell[] = []
     let maxSpd = 0
-    for (const c of voronoiCells) {
-      const u = c.wind_east_m_s
-      const v = c.wind_north_m_s
-      if (u == null || v == null) continue
+    const useMonthly = !!(monthlyWindEast && monthlyWindNorth)
+    for (let i = 0; i < voronoiCells.length; i++) {
+      const c = voronoiCells[i]
+      let u: number, v: number
+      if (useMonthly) {
+        u = (monthlyWindEast as Float32Array)[i * 12 + month]
+        v = (monthlyWindNorth as Float32Array)[i * 12 + month]
+      } else {
+        u = c.wind_east_m_s as number
+        v = c.wind_north_m_s as number
+      }
+      if (u == null || v == null || !Number.isFinite(u) || !Number.isFinite(v)) continue
       const s = Math.sqrt(u * u + v * v)
       if (s > maxSpd) maxSpd = s
       wcells.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, speed: s, tC: c.temperature_C ?? 0 })
@@ -384,7 +401,7 @@ export default function MapSvgOverlay({
         {elements}
       </g>
     )
-  }, [windOpacity, voronoiCells, project, viewWidth, viewHeight, zoom])
+  }, [windOpacity, voronoiCells, project, viewWidth, viewHeight, zoom, monthlyWindEast, monthlyWindNorth, month])
 
   // River network polylines (vector layer — width ∝ stream order).
   // Rendering algorithm (docs/design/pipelines/geological-pipeline.md §10):

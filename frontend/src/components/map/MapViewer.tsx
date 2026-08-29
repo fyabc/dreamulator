@@ -76,9 +76,15 @@ interface MapViewerProps {
   /** Force the legacy CPU reprojection for Mollweide/Robinson (?reproject=cpu).
    *  Debug / A-B comparison only — NOT a no-GPU fallback (display needs WebGL). */
   forceCpuReproject?: boolean
-  /** Monthly temperature/precipitation textures (Phase 4), baked by the caller. */
+  /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
+   *  baked by the caller.  Pressure is monthly-only (no annual counterpart). */
   monthlyTemperature?: THREE.DataTexture | null
   monthlyPrecipitation?: THREE.DataTexture | null
+  monthlyPressure?: THREE.DataTexture | null
+  /** Monthly wind arrows (tech debt 24): N×12 components in mesh-cell order. */
+  monthlyWindEast?: Float32Array | null
+  monthlyWindNorth?: Float32Array | null
+  month?: number
 }
 
 export interface CursorInfo {
@@ -123,6 +129,10 @@ export default function MapViewer({
   forceCpuReproject = false,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
+  monthlyPressure = null,
+  monthlyWindEast = null,
+  monthlyWindNorth = null,
+  month = 0,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -223,7 +233,7 @@ export default function MapViewer({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
-    monthlyTemperature, monthlyPrecipitation,
+    monthlyTemperature, monthlyPrecipitation, monthlyPressure,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })
@@ -685,6 +695,9 @@ export default function MapViewer({
         selectedCells={selectedCells}
         currentOpacity={layers?.currents ?? 0}
         windOpacity={layers?.winds ?? 0}
+        monthlyWindEast={monthlyWindEast}
+        monthlyWindNorth={monthlyWindNorth}
+        month={month}
         riverFeatures={riverFeatures}
         riverOpacity={layers?.rivers ?? 0}
       />

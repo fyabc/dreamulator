@@ -559,37 +559,56 @@ function bakeCellLayer(
 }
 
 /**
- * Bake a monthly temperature/precipitation layer (Phase 4 monthly display).
+ * Bake a monthly temperature/precipitation/pressure layer (Phase 4 monthly
+ * display, pressure added by tech debt 24).
  *
  * Reads the per-cell monthly value (cell index `i`, month `m` → `i·months + m`)
- * from the backend's compact MessagePack, maps it through the *same* colour
- * scale as the annual layer, and bakes it to a texture via the existing
- * cell-ID map.  Land only (ocean stays transparent).
+ * from the backend's compact MessagePack, maps it through a colour scale, and
+ * bakes it to a texture via the existing cell-ID map.  Temperature and
+ * precipitation are land-only (ocean stays transparent); pressure is an
+ * atmospheric field and is drawn over land and ocean alike.
  */
 export function bakeMonthlyLayer(
   monthly: MonthlyClimateData,
   month: number,
-  field: 'temperature' | 'precipitation',
+  field: 'temperature' | 'precipitation' | 'pressure',
   cvtMesh: CVTMesh,
   cellIdMap: CellIdMap,
   width: number,
   height: number,
   flipHorizontal: boolean,
 ): THREE.DataTexture {
-  const { months, tMonthly, pMonthly } = monthly
-  const arr = field === 'temperature' ? tMonthly : pMonthly
+  const { months, tMonthly, pMonthly, pressureMonthly, pressureRangeHpa } = monthly
+  const arr = field === 'temperature' ? tMonthly : field === 'precipitation' ? pMonthly : pressureMonthly
   const colors = new Map<number, [number, number, number]>()
+
+  if (!arr) {
+    // Field absent in this file (older export) — transparent texture.
+    const empty = new Uint8Array(width * height * 4)
+    return makeTexture(empty, width, height)
+  }
+
+  // Pressure anomaly ΔP uses a symmetric diverging range centred on 0.
+  let pMaxAbs = 1
+  if (field === 'pressure' && pressureRangeHpa) {
+    pMaxAbs = Math.max(Math.abs(pressureRangeHpa[0]), Math.abs(pressureRangeHpa[1]), 0.01)
+  }
 
   for (let i = 0; i < cvtMesh.cells.length; i++) {
     const cell = cvtMesh.cells[i]
-    if (cell.elevation < 0) continue
+    // Land-only for temperature/precipitation; pressure also covers the ocean.
+    if (field !== 'pressure' && cell.elevation < 0) continue
     const v = arr[i * months + month]
     const color =
       field === 'temperature'
         ? sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
-        : // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
-          // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
-          sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
+        : field === 'precipitation'
+          ? // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
+            // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
+            sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
+          : // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
+            // temperature scale until a dedicated pressure palette exists).
+            sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
     colors.set(cell.id, color)
   }
 

@@ -455,16 +455,24 @@ def pressure_from_temperature(
     Uses the barometric formula (hydrostatic equilibrium, isothermal
     approximation) plus a thermal-low contribution.
 
-    P(h) = P₀ exp(-h / H) - δP_T(T)
+    P(h) = P₀ exp(-h / H) - δP_T(θ)
 
     where H ≈ 8500 m × (9.81/g) is the scale height (isothermal,
     Earth-composition air; H ∝ 1/g) and δP_T is the thermal pressure
     reduction (warmer air → lower pressure).
 
+    The thermal-low term is keyed to the surface **potential temperature**
+    θ = T + Γ_d·z (dry adiabatic lapse rate Γ_d = g/c_p), not the raw surface
+    temperature.  An elevated surface (Tibetan plateau, Andes, Ethiopia) has a
+    cold surface but a warm column — the elevated heat source — which raw T
+    misreads as a cold anomaly.  θ reduces every surface to a common reference
+    level, so the plateau's warm θ correctly lowers the pressure.
+
     Args:
-        temperature_c: Temperature in °C, shape (N,).
+        temperature_c: Surface temperature in °C, shape (N,).
         elevation_m: Elevation in metres, shape (N,).
-        gravity_m_s2: Surface gravity (m/s²).  Sets the scale height.
+        gravity_m_s2: Surface gravity (m/s²).  Sets the scale height and the
+            dry adiabatic lapse rate Γ_d = g/c_p.
         surface_pressure_hpa: Sea-level pressure P₀ (hPa).
 
     Returns:
@@ -474,14 +482,15 @@ def pressure_from_temperature(
     scale_height_m = 8500.0 * (9.81 / gravity_m_s2)
     p_barometric = surface_pressure_hpa * np.exp(-elevation_m / scale_height_m)
 
-    # Normalise temperature for thermal pressure correction
-    t_min, t_max = temperature_c.min(), temperature_c.max()
-    if t_max - t_min < 1e-6:
+    # Thermal low: warm air (potential temperature θ = T + Γ_d·z) expands →
+    # lower pressure.  Γ_d = g/c_p is derived (not tuned), ~9.76 K/km on Earth.
+    theta_c = temperature_c + (gravity_m_s2 / CP_AIR) * elevation_m
+    theta_min, theta_max = theta_c.min(), theta_c.max()
+    if theta_max - theta_min < 1e-6:
         return p_barometric
 
-    t_normalized = (temperature_c - t_min) / (t_max - t_min)
-    # Thermal low: warm air expands → lower pressure
-    p_thermal = p_barometric - 20.0 * t_normalized
+    theta_normalized = (theta_c - theta_min) / (theta_max - theta_min)
+    p_thermal = p_barometric - 20.0 * theta_normalized
 
     return np.asarray(np.clip(p_thermal, 0.5 * surface_pressure_hpa, 1.07 * surface_pressure_hpa))
 

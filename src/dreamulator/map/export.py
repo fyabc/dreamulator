@@ -549,24 +549,57 @@ def export_climate_layers(
     logger.info("  Exported climate_metadata.json")
 
     # 5. Monthly climate (Phase 4 monthly display) — compact MessagePack of the
-    # per-cell monthly temperature + precipitation (N×12 float32) in mesh cell
-    # order, so the frontend can bake it with the existing cell-ID map.  Raw
-    # bytes keep the file compact (gzip ~10 MB vs JSON text ~40 MB).
+    # per-cell monthly temperature + precipitation in mesh cell order, so the
+    # frontend can bake it with the existing cell-ID map.  Raw bytes keep the
+    # file compact (gzip ~10 MB vs JSON text ~40 MB).  Tech debt 24 adds the
+    # monthly wind vector (east/north components) and the monthly monsoon
+    # pressure anomaly ΔP.  All five N×12 fields are quantized to int16 + a
+    # per-field (scale, offset) — halving the file (~48 MB → ~24 MB) with a
+    # resolution far below each field's own precision (see `_quantize_int16`).
     t_monthly = getattr(mesh, "_t_monthly_c", None)
     p_monthly = getattr(mesh, "_p_monthly_mm", None)
     if t_monthly is not None and p_monthly is not None:
         import msgpack
 
+        _t_q, _t_scale, _t_offset = _quantize_int16(t_monthly)
+        _p_q, _p_scale, _p_offset = _quantize_int16(p_monthly)
         monthly = {
             "num_cells": mesh.num_cells,
             "months": 12,
-            "dtype": "float32",
-            "t_monthly": t_monthly.tobytes(),
-            "p_monthly": p_monthly.tobytes(),
+            "dtype": "int16",
+            "t_monthly": _t_q,
+            "t_scale": _t_scale,
+            "t_offset": _t_offset,
+            "p_monthly": _p_q,
+            "p_scale": _p_scale,
+            "p_offset": _p_offset,
             "temperature_range_c": [float(np.min(t_monthly)), float(np.max(t_monthly))],
             "precipitation_range_mm": [float(np.min(p_monthly)), float(np.max(p_monthly))],
             "month_0": "vernal_equinox",
         }
+
+        we_monthly = getattr(mesh, "_wind_east_monthly", None)
+        wn_monthly = getattr(mesh, "_wind_north_monthly", None)
+        if we_monthly is not None and wn_monthly is not None:
+            _we_q, _we_scale, _we_offset = _quantize_int16(we_monthly)
+            _wn_q, _wn_scale, _wn_offset = _quantize_int16(wn_monthly)
+            monthly["wind_east_monthly"] = _we_q
+            monthly["wind_east_scale"] = _we_scale
+            monthly["wind_east_offset"] = _we_offset
+            monthly["wind_north_monthly"] = _wn_q
+            monthly["wind_north_scale"] = _wn_scale
+            monthly["wind_north_offset"] = _wn_offset
+            _we64 = we_monthly.astype(np.float64)
+            _wn64 = wn_monthly.astype(np.float64)
+            monthly["wind_max_speed_m_s"] = float(np.sqrt(_we64**2 + _wn64**2).max())
+        pr_monthly = getattr(mesh, "_pressure_monthly", None)
+        if pr_monthly is not None:
+            _pr_q, _pr_scale, _pr_offset = _quantize_int16(pr_monthly)
+            monthly["pressure_monthly"] = _pr_q
+            monthly["pressure_scale"] = _pr_scale
+            monthly["pressure_offset"] = _pr_offset
+            monthly["pressure_range_hpa"] = [float(np.min(pr_monthly)), float(np.max(pr_monthly))]
+
         monthly_path = output_dir / "climate_monthly.msgpack"
         with monthly_path.open("wb") as _f:
             _f.write(msgpack.packb(monthly))
@@ -595,3 +628,26 @@ def _nice_range(
     rmin = math.floor(min(data_min, fallback_min) / 10.0) * 10.0
     rmax = math.ceil(max(data_max, fallback_max) / 10.0) * 10.0
     return rmin, rmax
+
+
+def _quantize_int16(arr: np.ndarray) -> tuple[bytes, float, float]:
+    """Quantize a float32 array to int16 bytes + (scale, offset) for compact storage.
+
+    Linear map ``float_value = int16_value * scale + offset`` spans the full int16
+    range [−32768, 32767] over [min, max].  Resolution is (max−min)/65535 — far
+    below the data's own precision for every monthly field (temperature ~0.001 °C,
+    precipitation ~0.04 mm, wind ~0.001 m/s, pressure ~0.0005 hPa) — so the loss is
+    negligible while halving the file size.  Little-endian, matching the frontend's
+    Int16Array decode.
+    """
+    a = arr.astype(np.float64)
+    lo = float(a.min())
+    hi = float(a.max())
+    span = hi - lo
+    if span <= 0.0:
+        # Constant field — zeros quantize to 0 and decode back to `lo`.
+        return np.zeros(arr.shape, dtype=np.int16).tobytes(), 1.0, lo
+    scale = span / 65535.0
+    offset = lo + 32768.0 * scale  # lo → −32768, hi → 32767
+    q = np.clip(np.round((a - offset) / scale), -32768, 32767).astype(np.int16)
+    return q.tobytes(), float(scale), float(offset)

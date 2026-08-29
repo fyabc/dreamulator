@@ -129,10 +129,12 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
-  /** Monthly temperature/precipitation textures (Phase 4), baked by the caller
-   *  from `bakeMonthlyLayer`.  When provided they replace the annual thematic. */
+  /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
+   *  baked by the caller from `bakeMonthlyLayer`.  When provided they replace
+   *  the annual thematic.  Pressure has no annual counterpart (monthly only). */
   monthlyTemperature?: THREE.DataTexture | null
   monthlyPrecipitation?: THREE.DataTexture | null
+  monthlyPressure?: THREE.DataTexture | null
   /** Flip texture horizontally. Set true for SphereGeometry (Three.js sphere
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
@@ -174,12 +176,13 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
+  monthlyPressure = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -266,6 +269,7 @@ export default function useGPUTerrain({
     (layers.habitable ?? 0) > 0 || (layers.agriculture ?? 0) > 0 ||
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
+    (layers.pressure ?? 0) > 0 ||
     (layers.flow ?? 0) > 0
 
   // needsFboForGlobe: substantive overlays that require the FBO composite.
@@ -280,6 +284,7 @@ export default function useGPUTerrain({
     (layers.habitable ?? 0) > 0 || (layers.agriculture ?? 0) > 0 ||
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
+    (layers.pressure ?? 0) > 0 ||
     (layers.flow ?? 0) > 0
 
   // Dispose composite resources when they are replaced / on unmount.
@@ -313,6 +318,10 @@ export default function useGPUTerrain({
       [layers.temperature, monthlyTemperature ?? baked.temperature],
       [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
     ]
+    // Pressure is monthly-only (no annual texture); consider it just when present.
+    if (monthlyPressure) {
+      thematicLayers.push([layers.pressure, monthlyPressure])
+    }
     let activeThematic = baked.terrainThematic
     let thematicOp = 1.0  // default: terrain on
     for (const [op, tex] of thematicLayers) {
@@ -336,7 +345,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation])
+  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {

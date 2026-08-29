@@ -34,7 +34,7 @@ Hadley 胞地表支流向赤道，峰值经向风 M = 1.5 m/s（地球参考，�
 
 **慢自转标度**：Held–Hou 理论给出 Hadley 胞宽度
 φ_H ∝ (gHΔθ/Ω²a²)^{1/2}——Ω 减半 → φ_H 显著加宽。nacrea（Ω=0.31 Ω⊕）
-用 H=55°、P=75°。当前实现把边界当方案常数；严格做法是按 Ω 动态计算
+用 H=90°、P=90°（单圈，抵极）。当前实现把边界当方案常数；严格做法是按 Ω 动态计算
 （roadmap 3A.3a 中期项，与 `climate-pipeline.md` §6 3A.6 审计表一致）。
 
 ## 3. 地转风
@@ -54,22 +54,53 @@ u_g = −(1/ρf) ∂p/∂y,   v_g = (1/ρf) ∂p/∂x
 
 ## 4. 气压场（温度→气压）
 
-静压公式 + 热低压修正：
+静压公式 + 热低压修正（热低压项用**位温 θ**，捕获抬升热源）：
 
 ```
 P(h) = P₀ exp(−h/H),  H ≈ 8500 m × (9.81/g)      # 标高随重力缩放
-P ← P − 20 hPa × norm(T)                          # 暖空气→低压
+θ = T + Γ_d·z,  Γ_d = g/c_p                       # 位温（干绝热递减率，推导量）
+P ← P − 20 hPa × norm(θ)                          # 暖位温→低压
 ```
 
+高原地表冷但气柱暖（抬升热源，青藏高原/安第斯/埃塞俄比亚），用位温 θ 才能把高原
+正确判为热低压——地表 T 会误读成冷异常（符号反）。
 源码：`climate_physics.py:pressure_from_temperature()`。这是"温度场驱动风场"的
 耦合点——也是 EBM（见 `energy_balance.md`）与环流的接口。
+
+## 4.5 季风边界层风
+
+海陆**季节**热力对比产生的气压异常 ΔP 驱动边界层风（`engine/monsoon_circulation.py`）：
+
+```
+0 = G + f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
+```
+
+- f→0（赤道）：`v = G/k_d`，直接下坡流——跨赤道季风气流（索马里急流型）；
+- k_d→0：地转平衡，沿等压线。
+
+**拖曳系数** `k_d = C_D·|U|/h_BL`：
+- 开阔水面 / 光滑地表：C_D ≈ 1.3e-3 → k_d ≈ 1e-5 s⁻¹；
+- 粗糙植被（密林）：C_D ≈ 0.05–0.1 → k_d ≈ 1e-4~1e-3 s⁻¹。
+
+**标定锚点（区域风速，独立于端到端气候验收）**：
+
+| 区域 | 观测地表风 | 季风异常风目标 |
+|------|-----------|---------------|
+| 亚马逊（密林） | 1–2 m/s（全年） | ~1 m/s |
+| 索马里急流（洋面） | ~18 m/s（850 hPa） | ~10 m/s |
+
+参考：巴西地表风 1980–2014（地面站+再分析，亚马逊年均 1–2 m/s）；
+Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
+
+> 教训（2026-08-30）：f→0 退化项本身没错（正确生成 ~10 m/s 索马里急流），但若 k_d
+> 全网格统一用开阔水面的 1e-5，会把亚马逊（密林、应高拖曳）的温和 ΔP 放大成 ~20 m/s
+> 假强风 → 干季水汽被抽干、亚马逊 Af→Aw。修法 = k_d 按地表类型区分。
 
 ## 5. 已知简化（与真实大气的差距）
 
 - 纬向平均：无瞬变涡动（天气系统）、无急流核心结构；
 - 无 ITCZ 的动力位置求解（ITCZ 降水见 `precipitation` 规划文档）；
-- 季风以海陆热力对比的经验修正表达（`climate_simulator.py` 季风系数），
-  非真实的海陆风环流求解；
+- 季风边界层风是单层（无垂直结构），k_d 尚未按地表粗糙度区分（§4.5 待修）；
 - 垂直结构单层——递减率与稳定度处理见 `energy_balance.md` §海拔。
 
 ## 6. 与引擎的对应关系
@@ -79,7 +110,8 @@ P ← P − 20 hPa × norm(T)                          # 暖空气→低压
 | f = 2Ωsinφ | `climate_physics.py:coriolis_parameter()` | ✅ |
 | 三胞纬向风 | `climate_physics.py:hadley_cell_wind()` | ✅（边界参数化） |
 | 地转风 | `climate_simulator.py:_geostrophic_wind()` | ✅ |
-| 温度→气压 | `climate_physics.py:pressure_from_temperature()` | ✅ |
+| 温度→气压 | `climate_physics.py:pressure_from_temperature()` | ✅（位温 θ） |
+| 季风边界层风 | `engine/monsoon_circulation.py:monsoon_boundary_layer_wind()` | ✅（f→0 退化 + 边界层平衡，k_d 待按地表区分） |
 | Hadley 宽度 Ω 标度 | 3A.3a 中期 | 📋 |
 | 瞬变涡动 / 急流 | 长期愿景（简化 GCM） | ❌ |
 
@@ -114,21 +146,20 @@ P ← P − 20 hPa × norm(T)                          # 暖空气→低压
 
 ### 7.3 dreamulator 中的应用
 
-**nacrea**：Ω = 0.31 Ω⊕（周期 ≈ 3.2 天），Hadley = 55°，Polar = 75°，Ferrel 宽 20°。
+**nacrea**：Ω = 0.31 Ω⊕（周期 3.25 天，潮汐锁定于 Aegis 巨行星）。专用 GCM 模拟证实
+科氏力弱到不产生 Ferrel/极地胞——环流为**单圈 Hadley 胞直抵极地**
+（`hadley_extent_deg=90`、`polar_cell_start_deg=90`，见 `terrain_config.yaml`）。
 
-| 指标 | 地球 | nacrea | 比例 |
+| 指标 | 地球 | nacrea | 说明 |
 |------|------|--------|------|
-| Ω | 1 Ω⊕ | 0.31 Ω⊕ | 0.31× |
-| Hadley 边界 | 30° | 55° | 1.83× |
-| Ferrel 宽度 | 30°（30°–60°） | 20°（55°–75°） | 0.67× |
-| 总流函数 | 1.9 | ~3.6 (插值) | 1.9× |
-| Ferrel 质量输运 | 1（参考） | ~0.3–0.5× | 弱 |
-| 涡动动能 | 1（参考） | ~0.5× | 弱 |
-| Ferrel 水汽输运 | 1（参考） | ~0.3–0.5× | 弱 |
+| Ω | 1 Ω⊕ | 0.31 Ω⊕ | 潮汐锁定 |
+| Hadley 边界 | 30° | 90°（抵极） | 单圈 |
+| Ferrel / 极地胞 | 有（30°–90°） | 无 | 单圈 |
+| 温度剖面 | 扩散 EBM | Held–Hou 四次方 | `ebm_1d=true` |
 
-**结论**：nacrea 处于弱三胞体制（Ω=0.31 > 临界 0.25）。Ferrel 理论上存在但极窄弱——
-水汽输运仅为地球的 1/3–1/2。中纬度降水主要依靠 BFS 平流 + 局地对流，
-Ferrel 西风贡献有限。sub-tropical suppression 覆盖 Ferrel 大部在物理上是自洽的。
+**结论**：nacrea 是单圈环流，经向热输送由翻转环流（MOC）主导，而非地球的三胞涡旋输送。
+温度剖面用 Held & Hou (1980) 四次方 T(φ)=T_mean+ΔT·(1/5−sin⁴φ)，ΔT=Ω²a²θ₀/(2gH)——
+副热带平（无冷荒漠）、极地有冰盖。
 
 ### 7.4 罗斯贝变形半径
 
@@ -152,8 +183,8 @@ L_d 决定了大气的"记忆长度"——小于 L_d 的结构受重力波调控
 | 洋流西边界层宽度 | ∝ L_d^(1/2) | Stommel 边界层理论 |
 
 **dreamulator 应用**：`climate_simulator.py` Step 6 的 Gaussian subtropical
-suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea（H=55°）
-→ σ=3.05°。
+suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea（H=90°，单圈）
+→ σ=2.5°。
 
 **参考资料**：
 - Vallis, G.K. (2017). *Atmospheric and Oceanic Fluid Dynamics*, ch. 5.
@@ -204,3 +235,7 @@ Showman & Kaspi (2010) 的潮汐锁定水行星里，定常涡旋主导角动量
   locked aquaplanets." *JAMES* 2.
 - Hermosilla Canobra, S. (2026). "Circulation and cloud-cover fingerprints in
   aquaplanet atmospheres." Utrecht University MSc thesis.
+- Masiwal, R., & Dixit, V. (2023). "Explaining dynamics and rapid onset of the Somali
+  jet through its kinetic energy budget." *J. Atmos. Sci.* 80(3).
+- 巴西地表风特征（1980–2014，地面站 + 再分析）：亚马逊盆地年均地表风 1–2 m/s，
+  为全球最弱地表风区之一（季风异常风标定锚点，§4.5）。

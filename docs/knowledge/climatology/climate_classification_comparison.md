@@ -54,7 +54,7 @@
 **dreamulator 适配性**：★★★★☆
 - 输入与 Köppen 完全相同（T, P 月度极值）——零新增数据需求
 - 可作为前端专题图层的第二个"气候透镜"，用户切换 Köppen ↔ Trewartha
-- 对 nacrea 的慢自转（Hadley 扩展到 55°）来说，Trewartha 的亚热带独立主群可能更准确地捕捉中纬度过渡带
+- 对 nacrea 的慢自转（Hadley 扩展到 90°、单圈抵极）来说，Trewartha 的亚热带独立主群可能更准确地捕捉中纬度过渡带
 
 ---
 

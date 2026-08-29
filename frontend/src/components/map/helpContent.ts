@@ -68,6 +68,11 @@ export interface LayerHelpEntry {
   kind: LayerKind
   /** Group id from LAYER_GROUPS. */
   group: string
+  /** Layer varies month-to-month (temperature/precipitation/pressure/wind). */
+  monthlyCapable?: boolean
+  /** Layer exists only in monthly mode — no annual counterpart (e.g. pressure
+   *  anomaly, whose annual-mean ΔP ≈ 0). Selecting it auto-enables monthly. */
+  monthlyOnly?: boolean
 }
 
 export const LAYER_HELP: LayerHelpEntry[] = [
@@ -133,6 +138,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     defaultOpacity: 0.85,
     kind: 'thematic',
     group: 'climate',
+    monthlyCapable: true,
   },
   {
     id: 'precipitation',
@@ -142,6 +148,18 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     defaultOpacity: 0.85,
     kind: 'thematic',
     group: 'climate',
+    monthlyCapable: true,
+  },
+  {
+    id: 'pressure',
+    label: 'help:layer.pressure.label',
+    desc: 'help:layer.pressure.desc',
+    detail: 'help:layer.pressure.detail',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'climate',
+    monthlyCapable: true,
+    monthlyOnly: true,
   },
   {
     id: 'biomes',
@@ -223,6 +241,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     defaultOpacity: 0.6,
     kind: 'feature',
     group: 'overlay',
+    monthlyCapable: true,
   },
   {
     id: 'coastlines',
@@ -258,8 +277,9 @@ export const CONTROL_HELP: ControlHelpEntry[] = [
   { action: 'help:control.rightDrag.action', description: 'help:control.rightDrag.description' },
   { action: 'help:control.scroll.action', description: 'help:control.scroll.description' },
   { action: 'help:control.nKey.action', description: 'help:control.nKey.description' },
+  { action: 'help:control.timeMode.action', description: 'help:control.timeMode.description' },
+  { action: 'help:control.timeSeason.action', description: 'help:control.timeSeason.description' },
   { action: 'help:control.sunTime.action', description: 'help:control.sunTime.description' },
-  { action: 'help:control.sunSeason.action', description: 'help:control.sunSeason.description' },
   { action: 'help:control.sunToggle.action', description: 'help:control.sunToggle.description' },
   { action: 'help:control.debugReproject.action', description: 'help:control.debugReproject.description' },
   { action: 'help:control.hoverCell.action', description: 'help:control.hoverCell.description' },
@@ -363,6 +383,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     render: (t) => CONTROL_HELP.map((c) => ({ title: t(c.action), content: t(c.description) })),
   },
   {
+    id: 'map-time',
+    title: 'help:section.mapTime.title',
+    icon: '🕒',
+    render: (t) => entryKeys('mapTime', 2).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+  },
+  {
     id: 'map-projections',
     title: 'help:section.mapProjections.title',
     icon: '📐',
@@ -378,7 +404,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'globe-viewer',
     title: 'help:section.globeViewer.title',
     icon: '🌐',
-    render: (t) => entryKeys('globeViewer', 4).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+    render: (t) => entryKeys('globeViewer', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
     id: 'civmap',

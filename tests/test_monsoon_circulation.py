@@ -111,6 +111,27 @@ class TestMonsoonBoundaryLayerWind:
         # Direction: northward (positive y component away from poles).
         assert (wind[:, :, 1] > 0).all()
 
+    def test_land_drag_weaker_equatorial_wind(self):
+        # At the equator (f=0) v = G/k_d, so a land cell (rough, high drag) gets
+        # a much weaker down-gradient wind than an ocean cell (smooth, low drag)
+        # for the same pressure gradient — the Amazon-vs-Somali-jet calibration.
+        nodes = _sphere_points(np.zeros(2), np.array([0.0, 90.0]))
+        f = np.zeros(2)
+        rho = 1.225
+        g_north = 1.0e-4
+        north = np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
+        north /= np.linalg.norm(north, axis=1)[:, None]
+        grad_dp = np.zeros((12, 2, 3))
+        grad_dp[:] = -rho * g_north * north[None, :, :]
+
+        drag = np.array([2.0e-4, 1.0e-5])  # land, ocean
+        wind = monsoon_boundary_layer_wind(grad_dp, f, nodes, drag_rate_s=drag)
+        speed = np.linalg.norm(wind, axis=2)
+
+        assert speed[0, 0] < speed[0, 1]  # land slower than ocean
+        assert np.allclose(speed[0, 0], g_north / 2.0e-4, rtol=1e-3)  # 0.5 m/s
+        assert np.allclose(speed[0, 1], g_north / 1.0e-5, rtol=1e-3)  # 10 m/s
+
     def test_geostrophic_limit(self):
         # k_d → 0: flow turns 90° from G (along the isobars), |v| = |G|/|f|.
         lat = np.full(3, 45.0)
@@ -132,8 +153,10 @@ class TestMonsoonBoundaryLayerWind:
         # Perpendicular to G: no east component left.
         east_comp = np.einsum("mij,ij->mi", wind, east)
         assert np.allclose(east_comp, 0.0, atol=1e-3)
-        # NH (f > 0), low pressure to the east → flow toward the south.
-        assert (wind[:, :, 1] < 0).all()
+        # NH (f > 0): the Coriolis force turns the flow 90° to the right of G.
+        # In the right-handed ENU basis (east × north = up), right of +east is
+        # +north, so G = +east → flow toward the north.
+        assert (wind[:, :, 1] > 0).all()
 
     def test_speed_clamp(self):
         nodes = _sphere_points(np.zeros(2), np.array([0.0, 90.0]))

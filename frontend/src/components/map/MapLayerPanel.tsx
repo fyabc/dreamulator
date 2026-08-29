@@ -30,10 +30,13 @@ interface LayerState {
 interface MapLayerPanelProps {
   state: LayerState
   onChange: (state: LayerState) => void
-  /** Phase 4: monthly-climate mode (annual/monthly) for the temperature and
-   *  precipitation thematic layers.  When `monthly` is on, the season slider
-   *  drives the monthly data. */
+  /** Monthly-climate mode (driven by TimeControl). When on, monthly-capable
+   *  layers show a month badge, and monthly-only layers (pressure) are live. */
   monthlyMode?: boolean
+  /** Current season-month index (0 = March) for the monthly badge label. */
+  monthIndex?: number | null
+  /** Called when a monthly-only layer is selected in annual mode, to
+   *  auto-enable monthly mode. */
   onMonthlyModeChange?: (mode: boolean) => void
 }
 
@@ -117,10 +120,23 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, monthlyMode = false, onMonthlyModeChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
+
+  /** Natural-language month name for the badge (empty in annual mode). */
+  const monthName = useMemo(() => {
+    if (monthIndex == null) return ''
+    const months = t('months', { returnObjects: true }) as unknown as string[]
+    return months[monthIndex] ?? String(monthIndex + 1)
+  }, [monthIndex, t])
+
+  /** Small month badge for monthly-capable layers (dimmed with the row). */
+  const monthBadge = (l: LayerHelpEntry, dimmed: boolean) => {
+    if (!monthlyMode || !l.monthlyCapable || !monthName) return null
+    return <span className={`shrink-0 text-[9px] ${dimmed ? 'text-amber-300/40' : 'text-amber-300/70'}`}>·{monthName}</span>
+  }
 
   const groups = useMemo<LayerGroup[]>(
     () =>
@@ -177,10 +193,13 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, on
   /** Select a base/thematic layer into its slot. */
   const selectSlotLayer = useCallback(
     (l: LayerHelpEntry) => {
+      // Monthly-only layers (pressure anomaly) have no annual counterpart —
+      // selecting one while in annual mode auto-enables monthly mode.
+      if (l.monthlyOnly && !monthlyMode) onMonthlyModeChange?.(true)
       const op = l.defaultOpacity > 0 ? l.defaultOpacity : l.kind === 'base' ? 1 : 0.85
       applyPatch({ [l.id]: op })
     },
-    [applyPatch],
+    [applyPatch, monthlyMode, onMonthlyModeChange],
   )
 
   const setLayerOpacity = useCallback(
@@ -295,6 +314,9 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, on
                 {/* Radio rows (thematic slots). */}
                 {g.radioMembers.map((l) => {
                   const active = opacityOf(l) > 0
+                  // Monthly-only layers (pressure) are dimmed in annual mode —
+                  // still selectable, and selecting one auto-enables monthly.
+                  const dimmed = l.monthlyOnly && !monthlyMode
                   return (
                     <label key={l.id} className="flex items-center gap-1.5 cursor-pointer" title={t(l.desc)}>
                       <input
@@ -304,28 +326,13 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, on
                         onChange={() => selectSlotLayer(l)}
                         className="h-3 w-3 accent-neon-cyan cursor-pointer"
                       />
-                      <span className={`text-[11px] ${active ? 'text-gray-200' : 'text-gray-500'}`}>
+                      <span className={`text-[11px] ${active ? 'text-gray-200' : 'text-gray-500'} ${dimmed ? 'opacity-50' : ''}`}>
                         {t(l.label)}
                       </span>
+                      {monthBadge(l, dimmed || !active)}
                     </label>
                   )
                 })}
-
-                {/* Monthly-climate mode switch (Phase 4): drives the temperature/
-                    precipitation thematic with the season slider when on. */}
-                {g.id === 'climate' && onMonthlyModeChange && (
-                  <label className="flex items-center gap-1.5 cursor-pointer" title={t('monthly.title')}>
-                    <input
-                      type="checkbox"
-                      checked={monthlyMode}
-                      onChange={(e) => onMonthlyModeChange(e.target.checked)}
-                      className="h-3 w-3 accent-neon-cyan cursor-pointer"
-                    />
-                    <span className={`text-[11px] ${monthlyMode ? 'text-gray-300' : 'text-gray-500'}`}>
-                      {t(monthlyMode ? 'monthly.monthly' : 'monthly.annual')}
-                    </span>
-                  </label>
-                )}
 
                 {/* Eye + slider rows (fill / feature overlays). */}
                 {g.toggleMembers.map((l) => {
@@ -351,6 +358,7 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, on
                       <span className={`shrink-0 text-[11px] ${visible ? 'text-gray-300' : 'text-gray-500'}`}>
                         {t(l.label)}
                       </span>
+                      {monthBadge(l, !visible)}
                       <input
                         type="range"
                         min="0"

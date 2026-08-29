@@ -18,6 +18,7 @@ import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspe
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
+import TimeControl from '../components/map/TimeControl'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
 import { PROJECTION_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
@@ -79,18 +80,39 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0.9, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, habitable: 0, agriculture: 0, flow: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0.9, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   })
-  // Monthly climate mode (Phase 4): on = the active temperature/precipitation
-  // layer shows the monthly data driven by the season slider.
+  // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
+  // pressure layer shows monthly data driven by the season slider, and the wind
+  // arrows switch to the monthly wind field (tech debt 24).
   const [monthlyMode, setMonthlyMode] = useState(false)
   const monthlyField: MonthlyField | null = monthlyMode
     ? layerState.layers.temperature > 0
       ? 'temperature'
       : layerState.layers.precipitation > 0
         ? 'precipitation'
-        : null
+        : layerState.layers.pressure > 0
+          ? 'pressure'
+          : null
     : null
+  // Fetch monthly data when monthly mode is on and any monthly-driven layer
+  // (temperature / precipitation / pressure / wind arrows) is visible.
+  const monthlyActive = monthlyMode && (
+    layerState.layers.temperature > 0 ||
+    layerState.layers.precipitation > 0 ||
+    layerState.layers.pressure > 0 ||
+    layerState.layers.winds > 0
+  )
+  // Turning OFF monthly mode while the pressure-anomaly layer (monthly-only) is
+  // active would leave a blank thematic — reset to terrain instead.
+  const handleMonthlyModeChange = (mode: boolean) => {
+    setMonthlyMode(mode)
+    if (!mode) {
+      setLayerState((s) =>
+        s.layers.pressure > 0 ? { layers: { ...s.layers, pressure: 0, terrain: 1 } } : s,
+      )
+    }
+  }
 
   // Decoded elevation data (for rendering)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
@@ -211,9 +233,9 @@ export default function MapViewerPage() {
     width: meta?.width ?? 2048,
     height: meta?.height ?? 1024,
   })
-  const monthlyThematic = useMonthlyClimate({
+  const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, cvtMesh: cvtMesh ?? null, cellIdMap,
+    field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
 
@@ -523,6 +545,10 @@ export default function MapViewerPage() {
                     forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
+                    monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
+                    monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                    monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                    month={monthlyMonth}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
@@ -579,11 +605,19 @@ export default function MapViewerPage() {
                     ✕
                   </button>
                 </div>
+                <TimeControl
+                  monthlyMode={monthlyMode}
+                  onMonthlyModeChange={handleMonthlyModeChange}
+                  seasonDeg={seasonDeg}
+                  onSeasonChange={setSeasonDeg}
+                  axialTiltDeg={axialTiltDeg}
+                />
                 <MapLayerPanel
                   state={layerState}
                   onChange={setLayerState}
                   monthlyMode={monthlyMode}
-                  onMonthlyModeChange={setMonthlyMode}
+                  monthIndex={monthlyMonth}
+                  onMonthlyModeChange={handleMonthlyModeChange}
                 />
                 {platesError && selectedPlanet && (
                   <div className="text-xs text-gray-500 pt-2">
@@ -594,12 +628,8 @@ export default function MapViewerPage() {
                   <SunControl
                     sunLongitudeDeg={sunLongitudeDeg}
                     onLongitudeChange={setSunLongitudeDeg}
-                    seasonDeg={seasonDeg}
-                    onSeasonChange={setSeasonDeg}
-                    axialTiltDeg={axialTiltDeg}
                     enabled={dayNightEnabled}
                     onEnabledChange={setDayNightEnabled}
-                    showMonth={monthlyField !== null}
                   />
                 </div>
               </div>
@@ -611,11 +641,19 @@ export default function MapViewerPage() {
         <div className="hidden md:flex flex-1 min-h-0">
           {/* Left panel: layers */}
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
+            <TimeControl
+              monthlyMode={monthlyMode}
+              onMonthlyModeChange={handleMonthlyModeChange}
+              seasonDeg={seasonDeg}
+              onSeasonChange={setSeasonDeg}
+              axialTiltDeg={axialTiltDeg}
+            />
             <MapLayerPanel
               state={layerState}
               onChange={setLayerState}
               monthlyMode={monthlyMode}
-              onMonthlyModeChange={setMonthlyMode}
+              monthIndex={monthlyMonth}
+              onMonthlyModeChange={handleMonthlyModeChange}
             />
             {platesError && selectedPlanet && (
               <div className="text-xs text-gray-500 pt-2">
@@ -626,12 +664,8 @@ export default function MapViewerPage() {
               <SunControl
                 sunLongitudeDeg={sunLongitudeDeg}
                 onLongitudeChange={setSunLongitudeDeg}
-                seasonDeg={seasonDeg}
-                onSeasonChange={setSeasonDeg}
-                axialTiltDeg={axialTiltDeg}
                 enabled={dayNightEnabled}
                 onEnabledChange={setDayNightEnabled}
-                showMonth={monthlyField !== null}
               />
             </div>
           </div>
@@ -661,6 +695,10 @@ export default function MapViewerPage() {
                     forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
+                    monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
+                    monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                    monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                    month={monthlyMonth}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />

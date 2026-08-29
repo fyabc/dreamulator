@@ -350,7 +350,7 @@ class TerrainPipelineConfig:
     # separate damping knob.  See engine/climate_seasonality.py + energy_balance.md §5.
     seasonal_land_heat_capacity: float = 2.0e7  # land+atmosphere (J/m²/K)
     seasonal_ocean_heat_capacity: float = 2.0e8  # ocean mixed layer 50 m (J/m²/K)
-    seasonal_coastal_scale_km: float = 500.0  # maritime-moderation e-folding length
+    seasonal_coastal_scale_km: float = 250.0  # maritime-moderation e-folding length
     coastal_moderation_scale_km: float = 500.0  # annual-mean coastal moderation e-folding
     # Seasonal ice-albedo feedback: a cell whose summer never melts keeps the
     # snow/ice albedo and reflects the summer insolation, shrinking its seasonal
