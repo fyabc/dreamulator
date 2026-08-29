@@ -1,30 +1,36 @@
 planet:
-  id: unknown
-  name: unknown
+  id: planet_earth
+  name: Earth
 n_cells: 200000
 n_land: 0
 n_ocean: 200000
 biome_counts:
   ocean: 141869
-  ice: 8541
-  tundra: 10797
-  boreal_shrubland: 2325
-  boreal_forest: 3959
-  temperate_forest: 3425
-  temperate_rainforest: 1256
-  temperate_grassland: 2556
-  temperate_desert: 7607
-  tropical_savanna: 10027
-  tropical_rainforest: 1299
-  tropical_desert: 3624
-  tropical_seasonal_forest: 2715
+  ice: 9890
+  boreal_shrubland: 7591
+  boreal_forest: 5853
+  tundra: 976
+  temperate_grassland: 5464
+  temperate_forest: 2401
+  temperate_desert: 3375
+  temperate_rainforest: 523
+  tropical_savanna: 7495
+  tropical_desert: 6418
+  tropical_seasonal_forest: 5376
+  tropical_rainforest: 2769
 npp_gc_m2_yr:
   land:
     mean: null
     min: null
     max: null
   ocean:
-    mean: 615.7232296988149
+    mean: 767.6418659427151
+soil:
+  orders: {}
+  fertility: {}
+biogeography:
+  n_realms: 25
+  n_provinces: 25
 domesticable_highlights:
   high_large_herbivores: 0
   high_staple_crops: 0
