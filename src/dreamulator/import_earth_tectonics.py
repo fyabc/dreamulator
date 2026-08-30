@@ -8,15 +8,12 @@ real data:
 - **Plates** — PB2002 (Bird 2003, doi:10.1029/2001GC000252), the standard global
   plate-boundary model (52 plates).  Assigns each cell a ``plate_id`` by a
   point-in-polygon test against the plate outlines.
-- **Crust type** — derived from ETOPO1 bathymetry via the ocean–continent
-  boundary (OCB).  PB2002 itself classifies a boundary step as "oceanic" when
-  the sea floor is younger than 180 Ma *or* deeper than 2000 m; we use the same
-  2000 m depth as the continental/oceanic crust divide, plus a continental-slope
-  band (−3000 m to −2000 m) as the ``transitional`` crust.
-- **Boundaries** — not parsed from the (complex) PB2002 boundary files; instead
-  reuses ``boundary_detector.detect_boundaries``, which derives
-  convergent/divergent/transform from the real Euler poles and the cell→plate
-  adjacency (the same first-principles path the synthetic pipeline uses).
+- **Crust type** — CRUST1.0 (Laske et al. 2013), the real seismic-derived crustal
+  type: 36 crustal types mapped to continental / oceanic / transitional, sampled
+  from the 1° grid at cell centres.
+- **Boundaries** — PB2002 ``steps.dat``, the manually-classified boundary steps
+  (Bird 2003's 7 classes SUB/OSR/OTF/CRB/CTF/OCB/CCB), mapped to
+  convergent/divergent/transform and assigned to cells within ~200 km of a step.
 
 The Euler poles come from ``PB2002_poles.dat`` (pole latitude / longitude /
 degrees-per-Ma CCW), converted to the model's ``EulerPole`` (unit rotation axis +
@@ -70,6 +67,14 @@ _PB2002_PLATES_URL = (
 
 # PB2002 Euler poles (mirror of peterbird.name, original ASCII data).
 _PB2002_POLES_URL = "https://mirror.pyrocko.org/peterbird.name/oldFTP/PB2002/PB2002_poles.dat.txt"
+
+# PB2002 boundary steps — the manually-classified boundary classes (SUB/OSR/OTF/…),
+# the real "boundary type" observation (vs the euler-pole derivation in
+# detect_boundaries).
+_PB2002_STEPS_URL = "https://mirror.pyrocko.org/peterbird.name/oldFTP/PB2002/PB2002_steps.dat.txt"
+
+# CRUST1.0 crustal-type add-on (Laske et al. 2013) — the real crust classification.
+_CRUST1_URL = "https://igppweb.ucsd.edu/~gabi/crust1/crust1.0-addon.tar.gz"
 
 _CACHE_DIR_NAME = "dreamulator_pb2002"
 
@@ -128,6 +133,36 @@ def ensure_pb2002(cache: Path | None = None) -> tuple[Path, Path]:
         print(f"Downloading PB2002 poles: {_PB2002_POLES_URL}")
         _download(_PB2002_POLES_URL, poles)
     return plates, poles
+
+
+def ensure_pb2002_steps(cache: Path | None = None) -> Path:
+    """Download (if needed) and return the PB2002 boundary-steps path."""
+    cache = cache or _cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
+    steps = cache / "PB2002_steps.dat.txt"
+    if not steps.exists():
+        print(f"Downloading PB2002 steps: {_PB2002_STEPS_URL}")
+        _download(_PB2002_STEPS_URL, steps)
+    return steps
+
+
+def ensure_crust1(cache: Path | None = None) -> Path:
+    """Download (if needed) and return the CRUST1.0 type-grid path."""
+    import tarfile
+
+    cache = cache or _cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
+    grid = cache / "CNtype1-1.txt"
+    if not grid.exists():
+        tarball = cache / "crust1.0-addon.tar.gz"
+        if not tarball.exists():
+            print(f"Downloading CRUST1.0: {_CRUST1_URL}")
+            _download(_CRUST1_URL, tarball)
+        with tarfile.open(tarball, "r:gz") as tf:
+            member = tf.extractfile("CNtype1-1.txt")
+            assert member is not None
+            grid.write_bytes(member.read())
+    return grid
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +332,95 @@ def crust_type_from_elevation(elevation_m: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# PB2002 boundary steps — real boundary-type observation
+# ---------------------------------------------------------------------------
+
+# PB2002 step class → model boundary_type (Bird 2003's 7 boundary classes).
+_PB2002_STEP_TO_BOUNDARY: dict[str, str] = {
+    "SUB": "convergent",  # subduction
+    "OSR": "divergent",  # oceanic spreading ridge
+    "CRB": "divergent",  # continental rift boundary
+    "OTF": "transform",  # oceanic transform fault
+    "CTF": "transform",  # continental transform fault
+    "OCB": "convergent",  # oceanic convergent boundary
+    "CCB": "convergent",  # continental convergent boundary
+}
+
+# Boundary-zone width (km): cells within this distance of a step get its class.
+_BOUNDARY_ZONE_KM = 200.0
+
+
+def parse_pb2002_steps(text: str) -> list[tuple[float, float, float, float, str]]:
+    """Parse ``PB2002_steps.dat.txt`` → ``[(lon1, lat1, lon2, lat2, class), ...]``."""
+    steps: list[tuple[float, float, float, float, str]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        try:
+            lon1, lat1, lon2, lat2 = (
+                float(parts[2]),
+                float(parts[3]),
+                float(parts[4]),
+                float(parts[5]),
+            )
+        except ValueError:
+            continue
+        # Strip the ":" orientation prefix and the "*" orogen marker (PB2002
+        # suffixes e.g. "CCB*" — still a continental convergent boundary).
+        cls = parts[-1].lstrip(":").rstrip("*")
+        steps.append((lon1, lat1, lon2, lat2, cls))
+    return steps
+
+
+def assign_pb2002_boundaries(mesh: CVTMesh, steps_text: str) -> None:
+    """Assign ``boundary_type`` per cell from the nearest PB2002 step's class.
+
+    The steps are the manually-classified plate-boundary segments (Bird 2003);
+    each cell within ``_BOUNDARY_ZONE_KM`` of a step gets that step's class
+    (convergent/divergent/transform).  Cells far from any step keep None.
+    """
+    from scipy.spatial import cKDTree
+
+    # Clear any previous boundary assignment so far-from-boundary cells don't
+    # keep stale values from an earlier run.
+    for c in mesh.cells:
+        c.boundary_type = None
+        c.convergence_rate_cm_yr = 0.0
+
+    steps = parse_pb2002_steps(steps_text)
+    step_xyz = np.empty((len(steps), 3), dtype=np.float64)
+    step_cls = np.empty(len(steps), dtype=object)
+    for k, (lon1, lat1, lon2, lat2, cls) in enumerate(steps):
+        # Midpoint of the short step (~44.7 km) — a good proxy for its location.
+        mlon = 0.5 * (lon1 + lon2)
+        mlat = 0.5 * (lat1 + lat2)
+        mlat_r = np.radians(mlat)
+        mlon_r = np.radians(mlon)
+        step_xyz[k] = (
+            np.cos(mlat_r) * np.cos(mlon_r),
+            np.sin(mlat_r),
+            np.cos(mlat_r) * np.sin(mlon_r),
+        )
+        step_cls[k] = cls
+
+    cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    tree = cKDTree(step_xyz)
+    chord, idx = tree.query(cell_xyz, k=1)
+    dist_km = _EARTH_RADIUS_KM * 2.0 * np.arcsin(np.clip(chord / 2.0, 0.0, 1.0))
+
+    n_boundary = 0
+    for i, c in enumerate(mesh.cells):
+        if dist_km[i] <= _BOUNDARY_ZONE_KM:
+            c.boundary_type = _PB2002_STEP_TO_BOUNDARY.get(str(step_cls[idx[i]]))
+            n_boundary += 1
+    print(f"  Assigned PB2002 boundary types: {n_boundary}/{len(mesh.cells)} cells")
+
+
+# ---------------------------------------------------------------------------
 # Euler pole conversion
 # ---------------------------------------------------------------------------
 
@@ -403,9 +527,6 @@ def import_earth_tectonics(output_dir: Path, *, cache: Path | None = None) -> No
     Reads ``cvt_mesh.json`` / ``map.yaml`` from *output_dir*, writes
     ``plates.json`` and updates ``cvt_mesh.json`` / ``map.yaml`` in place.
     """
-    from dreamulator.map.boundary_detector import detect_boundaries
-    from dreamulator.map.pipeline_types import TerrainPipelineConfig
-
     mesh_path = output_dir / "cvt_mesh.json"
     if not mesh_path.exists():
         raise FileNotFoundError(f"{mesh_path} not found — run the ETOPO1 elevation importer first.")
@@ -419,28 +540,29 @@ def import_earth_tectonics(output_dir: Path, *, cache: Path | None = None) -> No
     n = len(mesh.cells)
     lons = np.array([c.lon for c in mesh.cells], dtype=np.float64)
     lats = np.array([c.lat for c in mesh.cells], dtype=np.float64)
-    elevation = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
 
     # 1. plate_id per cell
     plate_id = assign_plate_ids(lons, lats, plates)
     n_assigned = int(np.count_nonzero(plate_id != ""))
     print(f"Assigned plates: {n_assigned}/{n} cells ({len(set(plate_id))} plates)")
 
-    # 2. crust_type per cell (OCB)
-    crust = crust_type_from_elevation(elevation)
+    # 2. crust_type per cell — real CRUST1.0 crustal type (not the OCB heuristic).
+    from dreamulator.map.crust1 import parse_crust1_type, sample_crust1
+
+    crust1_path = ensure_crust1(cache)
+    crust1_grid = parse_crust1_type(crust1_path.read_text(encoding="utf-8"))
+    crust = sample_crust1(crust1_grid, lats, lons)
     for i, c in enumerate(mesh.cells):
         c.crust_type = str(crust[i])
         c.plate_id = str(plate_id[i])
 
-    # 3. Build TectonicPlate list + cell→plate map, then detect boundaries
+    # 3. Build the TectonicPlate list (plates.json) — plate names/types/poles.
     plate_dicts = build_tectonic_plates(mesh.cells, plate_id, plates, poles)
-    cell_plate_map = {c.id: c.plate_id for c in mesh.cells if c.plate_id}
 
-    from dreamulator.map.models import TectonicPlate
-
-    plate_models = [TectonicPlate.model_validate(p) for p in plate_dicts]
-    config = TerrainPipelineConfig(radius_km=_EARTH_RADIUS_KM)
-    detect_boundaries(mesh, plate_models, cell_plate_map, config)
+    # 4. boundary_type per cell — real PB2002 boundary-step classes (not the
+    #    euler-pole derivation in detect_boundaries).
+    steps_path = ensure_pb2002_steps(cache)
+    assign_pb2002_boundaries(mesh, steps_path.read_text(encoding="utf-8"))
 
     # 4. Write outputs
     from dreamulator.map.models import sanitize_nonfinite

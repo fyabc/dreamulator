@@ -38,22 +38,18 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
   `maps/planet_earth`）。导入到 earth 主世界必须显式传
   `--output-dir <world>/maps/planet_earth`。
 
-### 2.2 PB2002 板块（`import_earth_tectonics.py`）
+### 2.2 PB2002 板块 + CRUST1.0 地壳 + PB2002 边界（`import_earth_tectonics.py`）
 
-- **URL**（几何）：`https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_plates.json`
+- **URL**（板块几何）：`https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_plates.json`
 - **URL**（欧拉极）：`https://mirror.pyrocko.org/peterbird.name/oldFTP/PB2002/PB2002_poles.dat.txt`
-- **流程**：52 板块多边形 → 球面点-in-多边形分配 `plate_id` → 地壳类型用 ETOPO1 水深判
-  洋-陆边界（OCB，见 [plate_tectonics.md](../../knowledge/geology/plate_tectonics.md)）→
-  `boundary_type` 复用 `detect_boundaries`（从真实欧拉极的相对运动推导）→ 写 `plates.json`。
-- **地壳口径**：`continental` ≥ −2000 m（陆+大陆架，~41%）、`transitional` −3000~−2000 m、
-  `oceanic` < −3000 m。
-
-> **⚠️ 地壳/边界是「推导值」，非直接观测**：`crust_type` 是 ETOPO1 水深的 OCB 启发式；
-> `boundary_type` 是 `detect_boundaries` 从真实欧拉极的相对运动**推导**的。它们都源自真实输入
-> （ETOPO1 + PB2002），不是合成构建，但也不是观测。**可替换的真实数据集**：
-> - 地壳类型 → **CRUST1.0**（Laske 2013，1° 全球地壳类型/厚度，igppweb.ucsd.edu/~gabi/crust1.html）
-> - 边界类型 → **PB2002 `steps.dat`**（5819 段边界，含 7 类手工分类 OTF/OSR/SUB/CRB/CTF/CCB）
-> 二者均可下载，属可选升级（当前 OCB + 欧拉极推导已够参考用）。
+- **URL**（边界步骤）：`https://mirror.pyrocko.org/peterbird.name/oldFTP/PB2002/PB2002_steps.dat.txt`
+- **URL**（地壳类型）：`https://igppweb.ucsd.edu/~gabi/crust1/crust1.0-addon.tar.gz`
+- **流程**：52 板块多边形 → 点-in-多边形分配 `plate_id` → **地壳类型**采样 CRUST1.0
+  （Laske et al. 2013，36 种地壳类型 → continental/oceanic/transitional）→ **边界类型**采样
+  PB2002 `steps.dat`（7 类手工分类 SUB/OSR/OTF/CRB/CTF/OCB/CCB → convergent/divergent/
+  transform，最近步段距离 ≤ 200 km 赋值）→ 写 `plates.json`。
+- **地壳口径**：CRUST1.0 真实地壳类型 → continental ~33% / transitional ~5% / oceanic ~62%
+  （含大陆架为 continental，大陆坡/岛弧/裂谷/减薄地壳为 transitional）。
 
 ### 2.3 GSHHG 水掩膜（`import_earth_watermask.py`）
 
