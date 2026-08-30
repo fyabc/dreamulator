@@ -463,6 +463,7 @@ export default function useTerrainTexture({
     tex.wrapT = THREE.ClampToEdgeWrapping
     tex.minFilter = THREE.LinearFilter
     tex.magFilter = THREE.LinearFilter
+    tex.colorSpace = THREE.SRGBColorSpace
     tex.needsUpdate = true
     return tex
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, colorMode, hillshadeStrength, waterDepthFactor, cvtMesh, cellIdMap, projection, sunLonRad, sunDecRad, dayNight, enabled])
