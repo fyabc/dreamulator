@@ -14,6 +14,7 @@
 import { useState, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
+import type { ColorMode } from '../../viewers/map/TerrainPlane'
 
 interface MapCellInspectorProps {
   cell: VoronoiCell | null
@@ -22,6 +23,8 @@ interface MapCellInspectorProps {
   planetName: string | null
   /** Multiple selected cells — triggers aggregate stats when cell===null. */
   selectedCells?: VoronoiCell[]
+  /** Currently-active map layer — drives which inspector group auto-expands. */
+  activeColorMode?: ColorMode | null
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +47,27 @@ const BOUNDARY_LABELS: Record<string, string> = {
   convergent: 'boundary.convergent',
   divergent: 'boundary.divergent',
   transform: 'boundary.transform',
+}
+
+/** Map layer → inspector field-group id (for the auto-expand linkage). */
+const COLOR_MODE_TO_GROUP: Partial<Record<ColorMode, string>> = {
+  terrain: 'position',
+  landsea: 'position',
+  plates: 'geology',
+  boundaries: 'geology',
+  koppen: 'climate',
+  temperature: 'climate',
+  precipitation: 'climate',
+  pressure: 'climate',
+  winds: 'climate',
+  currents: 'climate',
+  biomes: 'ecology',
+  npp: 'ecology',
+  domesticable: 'ecology',
+  soil: 'ecology',
+  provinces: 'ecology',
+  habitable: 'civilization',
+  agriculture: 'civilization',
 }
 
 const KOPPEN_NAMES: Record<string, string> = {
@@ -297,10 +321,14 @@ function FieldGroup({
 
 function CellDetails({
   cell,
+  activeColorMode,
 }: {
   cell: VoronoiCell
+  activeColorMode?: ColorMode | null
 }) {
   const { t } = useTranslation('map')
+  const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
+  const highlightGroup = activeColorMode ? COLOR_MODE_TO_GROUP[activeColorMode] ?? null : null
   const elevM = cell.elevation
   const isLand = cell.water_class != null ? cell.water_class === 'land' : cell.elevation > 0
   const boundaryClass = cell.boundary_type
@@ -335,6 +363,14 @@ function CellDetails({
         >
           {isLand ? t('inspector.land') : t('inspector.ocean')}
         </span>
+        <button
+          type="button"
+          onClick={() => setDisplayMode((m) => (m === 'default' ? 'full' : 'default'))}
+          className="ml-auto text-[10px] text-gray-500 hover:text-gray-300"
+          title={t('inspector.displayMode')}
+        >
+          {displayMode === 'default' ? t('inspector.displayModeDefault') : t('inspector.displayModeFull')}
+        </button>
       </div>
 
       <div className="space-y-1">
@@ -365,7 +401,12 @@ function CellDetails({
         </FieldGroup>
 
         {hasGeology && (
-          <FieldGroup icon="🪨" label={t('inspector.geology')}>
+          <FieldGroup
+            icon="🪨"
+            label={t('inspector.geology')}
+            key={`geology-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'geology'}
+          >
             <div className="flex justify-between">
               <dt className="text-gray-500" title={t('tooltip.crustType')}>{t('inspector.crustType')}</dt>
               <dd className="font-mono">{t(CRUST_LABELS[cell.crust_type ?? ''] ?? cell.crust_type ?? '—')}</dd>
@@ -424,7 +465,12 @@ function CellDetails({
         )}
 
         {hasClimate && (
-          <FieldGroup icon="🌦️" label={t('inspector.climate')}>
+          <FieldGroup
+            icon="🌦️"
+            label={t('inspector.climate')}
+            key={`climate-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
+          >
             {cell.koppen_class && (
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.koppen')}>{t('inspector.koppenClimate')}</dt>
@@ -470,7 +516,12 @@ function CellDetails({
         )}
 
         {hasEcology && (
-          <FieldGroup icon="🌿" label={t('inspector.ecology')}>
+          <FieldGroup
+            icon="🌿"
+            label={t('inspector.ecology')}
+            key={`ecology-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'ecology'}
+          >
             {cell.biome && (
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('inspector.whittakerBiome')}</dt>
@@ -518,7 +569,12 @@ function CellDetails({
         )}
 
         {hasCivilization && (
-          <FieldGroup icon="🏛️" label={t('inspector.civilization')}>
+          <FieldGroup
+            icon="🏛️"
+            label={t('inspector.civilization')}
+            key={`civilization-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'civilization'}
+          >
             {cell.habitability_score != null && (
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('inspector.habitableCoast')}</dt>
@@ -842,6 +898,7 @@ export default function MapCellInspector({
   cvtMesh,
   planetName,
   selectedCells,
+  activeColorMode,
 }: MapCellInspectorProps) {
   const { t } = useTranslation('map')
   const [view, setView] = useState<'cell' | 'stats'>('cell')
@@ -875,7 +932,7 @@ export default function MapCellInspector({
       ) : !cell && selectedCells && selectedCells.length > 1 ? (
         <MultiCellStats cells={selectedCells} />
       ) : cell ? (
-        <CellDetails cell={cell} />
+        <CellDetails cell={cell} activeColorMode={activeColorMode} />
       ) : (
         <p className="text-xs text-gray-600 italic p-2">{t('inspector.hoverHint')}</p>
       )}

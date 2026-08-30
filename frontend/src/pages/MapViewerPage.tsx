@@ -13,6 +13,7 @@ import ImportElevationButton, { type ImportElevationResult } from '../components
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
+import type { ColorMode } from '../viewers/map/TerrainPlane'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import MapStatusBar from '../components/map/MapStatusBar'
@@ -20,7 +21,7 @@ import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
-import { PROJECTION_HELP } from '../components/map/helpContent'
+import { PROJECTION_HELP, LAYER_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
@@ -103,6 +104,14 @@ export default function MapViewerPage() {
     layerState.layers.pressure > 0 ||
     layerState.layers.winds > 0
   )
+  // Active map layer (opacity > 0) for the inspector's auto-expand linkage:
+  // prefer the mutually-exclusive thematic layer, else a toggle overlay.
+  const activeColorMode = useMemo<ColorMode | null>(() => {
+    const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
+    const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
+    const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
+    return (thematic ?? overlay)?.id ?? null
+  }, [layerState])
   // Turning OFF monthly mode while the pressure-anomaly layer (monthly-only) is
   // active would leave a blank thematic — reset to terrain instead.
   const handleMonthlyModeChange = (mode: boolean) => {
@@ -730,6 +739,7 @@ export default function MapViewerPage() {
                 cvtMesh={cvtMesh ?? null}
                 planetName={currentPlanetName}
                 selectedCells={selectedCellObjects}
+                activeColorMode={activeColorMode}
               />
               {selectedCells.size > 1 && (
                 <p className="text-[10px] text-gray-600 mt-2 text-center">
