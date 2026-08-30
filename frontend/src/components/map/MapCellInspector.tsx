@@ -15,6 +15,7 @@ import { useState, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import type { MonthlyClimateData } from '../../api/monthlyClimate'
 
 interface MapCellInspectorProps {
   cell: VoronoiCell | null
@@ -25,6 +26,12 @@ interface MapCellInspectorProps {
   selectedCells?: VoronoiCell[]
   /** Currently-active map layer — drives which inspector group auto-expands. */
   activeColorMode?: ColorMode | null
+  /** Monthly mode on — climate group shows the selected month's values. */
+  monthlyMode?: boolean
+  /** Selected month index 0–11 (0 = March vernal equinox). */
+  monthIndex?: number
+  /** Decoded monthly climate arrays (temperature/precip/pressure/wind). */
+  monthlyData?: MonthlyClimateData | null
 }
 
 // ---------------------------------------------------------------------------
@@ -322,9 +329,18 @@ function FieldGroup({
 function CellDetails({
   cell,
   activeColorMode,
+  monthlyMode = false,
+  monthIndex = 0,
+  monthlyData = null,
+  cellIndexById,
 }: {
   cell: VoronoiCell
   activeColorMode?: ColorMode | null
+  monthlyMode?: boolean
+  monthIndex?: number
+  monthlyData?: MonthlyClimateData | null
+  /** Map from cell id → mesh-cell index (the monthly arrays' row order). */
+  cellIndexById: Map<number, number>
 }) {
   const { t } = useTranslation('map')
   const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
@@ -334,13 +350,34 @@ function CellDetails({
   const boundaryClass = cell.boundary_type
     ? BOUNDARY_COLORS[cell.boundary_type] ?? 'bg-gray-800 text-gray-300'
     : null
+
+  // Monthly lookup (Phase 4): the arrays are numCells×months, row i = mesh-cell
+  // index — so resolve the cell's row via cellIndexById, then pick the month.
+  const monthNames = t('months', { returnObjects: true }) as unknown as string[]
+  const monthName = monthNames[monthIndex] ?? ''
+  const idx = cellIndexById.get(cell.id)
+  const nMonths = monthlyData?.months ?? 12
+  const hasMonthly = monthlyMode && monthlyData != null && idx !== undefined
+  const mTemp = hasMonthly ? monthlyData!.tMonthly[idx! * nMonths + monthIndex] : undefined
+  const mPrecip = hasMonthly ? monthlyData!.pMonthly[idx! * nMonths + monthIndex] : undefined
+  const mPressure = hasMonthly && monthlyData!.pressureMonthly
+    ? monthlyData!.pressureMonthly[idx! * nMonths + monthIndex]
+    : undefined
+  const mWindU = hasMonthly && monthlyData!.windEastMonthly
+    ? monthlyData!.windEastMonthly[idx! * nMonths + monthIndex]
+    : undefined
+  const mWindV = hasMonthly && monthlyData!.windNorthMonthly
+    ? monthlyData!.windNorthMonthly[idx! * nMonths + monthIndex]
+    : undefined
+
   const hasGeology = Boolean(
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
   )
   const hasClimate = Boolean(
     cell.koppen_class || cell.temperature_C != null || cell.precipitation_mm != null ||
     (cell.wind_east_m_s != null && cell.wind_north_m_s != null) ||
-    (cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null),
+    (cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null) ||
+    (monthlyMode && monthlyData != null && idx !== undefined),
   )
   const hasEcology = Boolean(
     cell.biome || cell.npp_gc_m2_yr != null ||
@@ -467,7 +504,7 @@ function CellDetails({
         {hasClimate && (
           <FieldGroup
             icon="🌦️"
-            label={t('inspector.climate')}
+            label={hasMonthly ? `${t('inspector.climate')} · ${monthName}` : t('inspector.climate')}
             key={`climate-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
           >
@@ -480,24 +517,46 @@ function CellDetails({
                 </dd>
               </div>
             )}
-            {cell.temperature_C != null && (
+            {hasMonthly && mTemp !== undefined ? (
               <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.annualTemp')}</dt>
-                <dd className="font-mono">{cell.temperature_C.toFixed(1)} °C</dd>
+                <dt className="text-gray-500">{t('inspector.monthlyTemp')}</dt>
+                <dd className="font-mono">{mTemp.toFixed(1)} °C</dd>
               </div>
+            ) : (
+              <>
+                {cell.temperature_C != null && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">{t('inspector.annualTemp')}</dt>
+                    <dd className="font-mono">{cell.temperature_C.toFixed(1)} °C</dd>
+                  </div>
+                )}
+                {(cell.temperature_hottest_month_C != null && cell.temperature_coldest_month_C != null) && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">{t('inspector.hottestColdest')}</dt>
+                    <dd className="font-mono">
+                      {cell.temperature_hottest_month_C.toFixed(1)} / {cell.temperature_coldest_month_C.toFixed(1)} °C
+                    </dd>
+                  </div>
+                )}
+              </>
             )}
-            {(cell.temperature_hottest_month_C != null && cell.temperature_coldest_month_C != null) && (
+            {hasMonthly && mPrecip !== undefined ? (
               <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.hottestColdest')}</dt>
-                <dd className="font-mono">
-                  {cell.temperature_hottest_month_C.toFixed(1)} / {cell.temperature_coldest_month_C.toFixed(1)} °C
-                </dd>
+                <dt className="text-gray-500">{t('inspector.monthlyPrecip')}</dt>
+                <dd className="font-mono">{Math.round(mPrecip)} mm</dd>
               </div>
+            ) : (
+              cell.precipitation_mm != null && (
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">{t('inspector.annualPrecip')}</dt>
+                  <dd className="font-mono">{Math.round(cell.precipitation_mm)} mm</dd>
+                </div>
+              )
             )}
-            {cell.precipitation_mm != null && (
+            {hasMonthly && mPressure !== undefined && (
               <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.annualPrecip')}</dt>
-                <dd className="font-mono">{Math.round(cell.precipitation_mm)} mm</dd>
+                <dt className="text-gray-500">{t('inspector.pressureAnomaly')}</dt>
+                <dd className="font-mono">{mPressure >= 0 ? '+' : ''}{mPressure.toFixed(1)} hPa</dd>
               </div>
             )}
             {cell.distance_to_coast_km != null && (
@@ -506,9 +565,11 @@ function CellDetails({
                 <dd className="font-mono">{Math.round(cell.distance_to_coast_km)} km</dd>
               </div>
             )}
-            {(cell.wind_east_m_s != null && cell.wind_north_m_s != null) && (
+            {hasMonthly && mWindU !== undefined && mWindV !== undefined ? (
+              <WindDetail u={mWindU} v={mWindV} />
+            ) : (cell.wind_east_m_s != null && cell.wind_north_m_s != null) ? (
               <WindDetail u={cell.wind_east_m_s} v={cell.wind_north_m_s} />
-            )}
+            ) : null}
             {(cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null) && (
               <OceanCurrentDetail u={cell.ocean_current_east_m_s} v={cell.ocean_current_north_m_s} sstAnom={cell.sst_anomaly_c ?? 0} />
             )}
@@ -899,9 +960,20 @@ export default function MapCellInspector({
   planetName,
   selectedCells,
   activeColorMode,
+  monthlyMode = false,
+  monthIndex = 0,
+  monthlyData = null,
 }: MapCellInspectorProps) {
   const { t } = useTranslation('map')
   const [view, setView] = useState<'cell' | 'stats'>('cell')
+
+  // cell id → mesh-cell index: the monthly arrays are row-major in mesh-cell
+  // order (cvtMesh.cells[i]), so the inspector resolves a cell's row via id.
+  const cellIndexById = useMemo(() => {
+    const m = new Map<number, number>()
+    if (cvtMesh) cvtMesh.cells.forEach((c, i) => m.set(c.id, i))
+    return m
+  }, [cvtMesh])
 
   return (
     <div className="space-y-2">
@@ -932,7 +1004,14 @@ export default function MapCellInspector({
       ) : !cell && selectedCells && selectedCells.length > 1 ? (
         <MultiCellStats cells={selectedCells} />
       ) : cell ? (
-        <CellDetails cell={cell} activeColorMode={activeColorMode} />
+        <CellDetails
+          cell={cell}
+          activeColorMode={activeColorMode}
+          monthlyMode={monthlyMode}
+          monthIndex={monthIndex}
+          monthlyData={monthlyData}
+          cellIndexById={cellIndexById}
+        />
       ) : (
         <p className="text-xs text-gray-600 italic p-2">{t('inspector.hoverHint')}</p>
       )}

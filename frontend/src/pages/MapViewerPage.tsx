@@ -740,6 +740,9 @@ export default function MapViewerPage() {
                 planetName={currentPlanetName}
                 selectedCells={selectedCellObjects}
                 activeColorMode={activeColorMode}
+                monthlyMode={monthlyMode}
+                monthIndex={monthlyMonth}
+                monthlyData={monthlyData}
               />
               {selectedCells.size > 1 && (
                 <p className="text-[10px] text-gray-600 mt-2 text-center">
