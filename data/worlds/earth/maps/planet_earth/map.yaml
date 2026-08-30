@@ -2,18 +2,14 @@ planet_id: planet_earth
 projection: equirectangular
 width: 4096
 height: 2048
-elevation_min_m: -13649.436946799755
-elevation_max_m: 9000
+elevation_min_m: -10765.70718582069
+elevation_max_m: 7487.436824468134
 sea_level_m: 0.0
 elevation_range_m:
-- -13649.4
-- 6896.7
-pipeline_version: 2.0-cvt
+- -10765.7
+- 7487.4
+pipeline_version: etopo1-import
 source: ETOPO1 Ice Surface (grid-registered)
 source_resolution: 1 arc-minute (~1.8 km at equator)
-voronoi_seed: 42
-voronoi_num_cells: 100000
-cvt_jitter_sigma: 0.3
-cvt_lloyd_iterations: 8
-num_plates: 20
-radius_km: 6371.0
+num_plates: 52
+plate_source: PB2002 (Bird 2003, doi:10.1029/2001GC000252)

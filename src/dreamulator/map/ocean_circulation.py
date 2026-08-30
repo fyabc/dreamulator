@@ -334,6 +334,60 @@ def detect_ocean_basins(
     return basin_id, basins
 
 
+def compute_land_mask(
+    cells: list[VoronoiCell],
+    sea_level_m: float = 0.0,
+) -> np.ndarray:
+    """Land mask via ocean connectivity (flood-fill from the global ocean).
+
+    The climate engine's land/ocean split cannot be a bare ``elevation >= 0``
+    test: endorheic basins below sea level (Turpan −154 m, Qattara, Afar, Death
+    Valley) are dry LAND, not ocean.  This helper marks a cell as "ocean" only
+    when it is part of a water body connected to the *global ocean* (the largest
+    connected water basin); closed below-sea-level basins fall out as land.
+
+    The continental shelf stays ocean (it is connected to the world ocean),
+    which a crust-type test alone would get wrong — hence the pure elevation +
+    connectivity criterion, independent of ``crust_type``.
+
+    Args:
+        cells: All VoronoiCell objects (needs ``neighbors``).
+        sea_level_m: Sea-level offset (from TerrainPipelineConfig).
+
+    Returns:
+        Boolean land mask, shape (N,).  True = land, False = ocean.
+    """
+    n = len(cells)
+    is_water = np.array([c.elevation <= sea_level_m for c in cells], dtype=bool)
+
+    basin_id = np.full(n, -1, dtype=np.int64)
+    basins: list[np.ndarray] = []
+    for seed in range(n):
+        if not is_water[seed] or basin_id[seed] >= 0:
+            continue
+        queue: deque[int] = deque([seed])
+        basin_id[seed] = len(basins)
+        members: list[int] = [seed]
+        while queue:
+            i = queue.popleft()
+            for j in cells[i].neighbors:
+                if 0 <= j < n and is_water[j] and basin_id[j] < 0:
+                    basin_id[j] = len(basins)
+                    queue.append(j)
+                    members.append(j)
+        basins.append(np.array(members, dtype=np.int64))
+
+    if not basins:
+        # No water anywhere → the whole surface is land.
+        return np.ones(n, dtype=bool)
+
+    # Global ocean = largest connected water basin.  Everything else is land
+    # (emergent land AND closed below-sea-level basins / inland lakes).
+    ocean = np.zeros(n, dtype=bool)
+    ocean[max(basins, key=len)] = True
+    return ~ocean
+
+
 # ===================================================================
 # Sparse operator assembly (per basin)
 # ===================================================================

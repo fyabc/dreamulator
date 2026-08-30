@@ -119,8 +119,37 @@ $$v_n = \mathbf{v}_{rel} \cdot \hat{\mathbf{n}} \quad (\text{法向，汇聚为�
 
 ---
 
+## 真实地球板块数据导入（earth 主世界）
+
+earth 验证世界不走合成管线，而是导入真实数据（`src/dreamulator/import_earth_tectonics.py`）：
+
+- **板块边界**：PB2002（Bird 2003）——全球板块边界标准数字模型，52 个板块，
+  含板块轮廓、边界线段与欧拉极。数据来源：
+  [doi:10.1029/2001GC000252](https://doi.org/10.1029/2001GC000252)
+  （Geochemistry, Geophysics, Geosystems, 4(3), 1027）。
+- **地壳类型**：由 ETOPO1 水深经**洋-陆边界（OCB）** 判定。PB2002 本身对
+  「洋壳」的定义是：海底年龄 < 180 Ma（[Mueller et al. 1997]）**或** 水深 >
+  2000 m（ETOPO5）。因此 2000 m 是被动大陆边缘大陆/大洋地壳的物理分界。
+
+地壳类型三段划分（阈值即 PB2002 的洋壳判据）：
+
+| 类型 | 高程判据 | 地质含义 |
+|------|----------|----------|
+| `continental` | ≥ −2000 m | 陆地 + 大陆架 + 上陆坡（≈ 41%） |
+| `transitional` | −3000 m ~ −2000 m | 大陆坡（洋-陆过渡带） |
+| `oceanic` | < −3000 m | 深海洋壳（≈ 59%） |
+
+板块欧拉极来自 `PB2002_poles.dat`（极纬度 / 极经度 / 度每百万年 CCW），换算为
+单位旋转轴 + `omega_rad_yr`。板块类型（oceanic/continental/mixed）由面积加权的
+大陆地壳比例推出（> 0.6 大陆、< 0.4 大洋、其余混合）。边界类型（convergent/
+divergent/transform）复用 `boundary_detector.detect_boundaries`，从真实欧拉极的
+相对运动推导（与合成管线同一套第一性路径）。
+
 ## 参考资料
 
 - Cox, A., & Hart, R. B. (1986). *Plate Tectonics: How It Works*. Blackwell.
+- Bird, P. (2003). *An updated digital model of plate boundaries*. Geochemistry,
+  Geophysics, Geosystems, 4(3), 1027. [doi:10.1029/2001GC000252](https://doi.org/10.1029/2001GC000252)
 - `src/dreamulator/map/plate_generator.py` — `assign_euler_poles()`
 - `src/dreamulator/map/boundary_detector.py` — `classify_boundary()`
+- `src/dreamulator/import_earth_tectonics.py` — earth 真实板块/地壳导入

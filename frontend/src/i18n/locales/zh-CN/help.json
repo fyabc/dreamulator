@@ -3,9 +3,7 @@
     "terrain": "地形",
     "climate": "气候",
     "ecology": "生态",
-    "civilization": "文明",
-    "geology": "地质构造",
-    "overlay": "叠加标注"
+    "civilization": "文明"
   },
   "layer": {
     "terrain": { "label": "地形", "desc": "自适应海拔着色（默认专题图层）", "detail": "基于 hypsometric tint 的自适应海拔着色。深海蓝 → 浅海青 → 低地绿 → 高地棕 → 雪山白。与其他专题层互斥。默认开启。" },

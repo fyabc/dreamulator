@@ -313,14 +313,17 @@ function buildCellPalettes(
   const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
   const lutSize = terrainLut.length / 4
   const elevRange = elevMaxM - elevMinM || 1
-  function terrainColor(elevM: number): [number, number, number] {
-    const idx = Math.round(((elevM - elevMinM) / elevRange) * (lutSize - 1))
+  function terrainColor(elevM: number, isOcean: boolean): [number, number, number] {
+    // Dry below-sea-level basins (Turpan −154 m) are land, not ocean: clamp land
+    // cells to the sea surface so they tint green/brown instead of blue.
+    const effElev = isOcean ? elevM : Math.max(elevM, seaLevel)
+    const idx = Math.round(((effElev - elevMinM) / elevRange) * (lutSize - 1))
     const clampedIdx = Math.max(0, Math.min(lutSize - 1, idx))
     const i = clampedIdx * 4
     let r = terrainLut[i], g = terrainLut[i + 1], b = terrainLut[i + 2]
     // Water depth darkening — matches pre-refactor bakeTerrainBase behaviour.
-    if (elevM < seaLevel) {
-      const depthFrac = Math.min(1, (seaLevel - elevM) / Math.max(1, seaLevel - elevMinM))
+    if (isOcean && effElev < seaLevel) {
+      const depthFrac = Math.min(1, (seaLevel - effElev) / Math.max(1, seaLevel - elevMinM))
       const f = 1 - waterDepthFactor * depthFrac
       r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f)
     }
@@ -340,16 +343,21 @@ function buildCellPalettes(
   })
 
   for (const cell of cvtMesh.cells) {
+    // Authoritative ocean split: prefer imported water_class (GSHHG), fall back
+    // to the elevation sign for generated worlds that predate the field.
+    const isOcean = cell.water_class != null
+      ? cell.water_class === 'ocean'
+      : cell.elevation < seaLevel
     // Terrain thematic — hypsometric tint per cell
-    terrainThematic.set(cell.id, terrainColor(cell.elevation))
+    terrainThematic.set(cell.id, terrainColor(cell.elevation, isOcean))
     // Landsea thematic — binary
-    landseaThematic.set(cell.id, cell.elevation >= seaLevel ? [76, 175, 80] : [21, 101, 192])
+    landseaThematic.set(cell.id, isOcean ? [21, 101, 192] : [76, 175, 80])
 
     // Köppen thematic
     const kc = cell.koppen_class
     if (kc && KOPPEN_COLORS[kc]) {
       koppen.set(cell.id, hexRgb(KOPPEN_COLORS[kc]))
-    } else if (cell.elevation < 0) {
+    } else if (isOcean) {
       koppen.set(cell.id, hexRgb(KOPPEN_COLORS['Ocean']))
     }
     // Plate fill
@@ -384,7 +392,7 @@ function buildCellPalettes(
 
     // Civilization cradle — all land gets a neutral dark fill so the
     // base terrain doesn't bleed through where highlight is absent.
-    if (cell.elevation >= 0) {
+    if (!isOcean) {
       const tags: string[] | undefined = cell.domesticable_tags
       if (tags && tags.length > 0) {
         const hasHerb = tags.includes('large_herbivores_high')
@@ -405,14 +413,14 @@ function buildCellPalettes(
 
     // Habitability grade (宜居等级) — progressive 0–100 ramp, land only.
     const habScore: number | null | undefined = cell.habitability_score
-    if (habScore != null && cell.elevation >= 0) {
+    if (habScore != null && !isOcean) {
       habitable.set(cell.id, sequentialColor(habScore / 100, HABITABILITY_SCALE))
     }
 
     // Agriculture grade (农业等级) — progressive 0–100 ramp, land only
     // (the hard zero below the tree-line renders as the ramp's dark stop).
     const agriScore: number | null | undefined = cell.agriculture_score
-    if (agriScore != null && cell.elevation >= 0) {
+    if (agriScore != null && !isOcean) {
       agriculture.set(cell.id, sequentialColor(agriScore / 100, AGRICULTURE_SCALE))
     }
 
@@ -432,7 +440,7 @@ function buildCellPalettes(
     // Annual mean temperature — continuous diverging, land only (ocean stays
     // transparent so the base terrain shows through, matching npp/biomes).
     const tC: number | null | undefined = cell.temperature_C
-    if (tC != null && cell.elevation >= 0) {
+    if (tC != null && !isOcean) {
       // Fixed −40…+40 °C physical range → 0 °C (freezing) at the centre stop.
       temperature.set(cell.id, sequentialColor((tC + 40) / 80, TEMPERATURE_SCALE))
     }
@@ -441,7 +449,7 @@ function buildCellPalettes(
     // Log scale because precipitation spans five orders of magnitude; a linear
     // ramp would collapse ~95% of cells into the low end.
     const pMm: number | null | undefined = cell.precipitation_mm
-    if (pMm != null && cell.elevation >= 0) {
+    if (pMm != null && !isOcean) {
       precipitation.set(
         cell.id,
         sequentialColor(Math.log10(pMm + 1) / Math.log10(30001), PRECIP_SCALE),
@@ -452,7 +460,7 @@ function buildCellPalettes(
     // Log scale because catchment area spans ~3 orders of magnitude (single-cell
     // ~2600 km² @200k up to multi-million-km² continental basins).
     const fAcc: number | null | undefined = cell.flow_accumulation
-    if (fAcc != null && fAcc > 0 && cell.elevation >= 0) {
+    if (fAcc != null && fAcc > 0 && !isOcean) {
       flow.set(
         cell.id,
         sequentialColor(Math.log10(fAcc + 1) / Math.log10(FLOW_MAX + 1), FLOW_SCALE),
@@ -488,7 +496,7 @@ function bakeCoastlineMask(
 
   const cellLand = new Map<number, boolean>()
   for (const cell of cvtMesh.cells) {
-    cellLand.set(cell.id, cell.elevation >= seaLevel)
+    cellLand.set(cell.id, cell.water_class != null ? cell.water_class === 'land' : cell.elevation >= seaLevel)
   }
 
   for (let y = 0; y < height; y++) {
@@ -597,7 +605,8 @@ export function bakeMonthlyLayer(
   for (let i = 0; i < cvtMesh.cells.length; i++) {
     const cell = cvtMesh.cells[i]
     // Land-only for temperature/precipitation; pressure also covers the ocean.
-    if (field !== 'pressure' && cell.elevation < 0) continue
+    const isOceanCell = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
+    if (field !== 'pressure' && isOceanCell) continue
     const v = arr[i * months + month]
     const color =
       field === 'temperature'

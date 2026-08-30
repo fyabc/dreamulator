@@ -3,7 +3,10 @@
 # dreamulator.validate_climate.build_earth_validation_config() 保持一致：
 # 常规构建（dreamulator build earth）和验证诊断（diagnose_*.py /
 # climate validate）跑同一套物理，看到的图和测出的指标才可比。
-# Earth 的地形是导入的（ETOPO1），不由管线生成，所以这里只有气候旋钮。
+# Earth 的地形是导入的（ETOPO1 + PB2002），不由管线生成，所以这里只有气候旋钮。
+# elevation_source: imported 让地质引擎跳过合成管线（否则 build --only geological
+# 会用合成地形覆盖已导入的 ETOPO1/PB2002 数据——见 d7384dc「双世界重建」的教训）。
+elevation_source: imported
 climate:
   auto_lat_gradient: true        # 赤道-极地温差从自转速率推导（Kaspi 2015）
   diffusive_heat_transport: true # 图拉普拉斯经向热扩散

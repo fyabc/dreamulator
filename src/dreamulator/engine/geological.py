@@ -77,6 +77,28 @@ class GeologicalEngine(BaseEngine):
         output_dir = self.maps_output_dir / planet_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # ---- Imported data guard ----
+        # Worlds whose terrain is imported (earth: ETOPO1 + PB2002, committed
+        # under maps/) must not have it clobbered by the synthetic pipeline.
+        # Skip generation; the climate engine still runs on the imported mesh.
+        if config.elevation_source == "imported":
+            logger.info(
+                "Skipping terrain pipeline: elevation_source=imported "
+                "(map data is committed, not generated)"
+            )
+            return EngineResult(
+                engine_name=self.name,
+                success=True,
+                output_files=[
+                    f"maps/{planet_id}/elevation.png",
+                    f"maps/{planet_id}/cvt_mesh.json",
+                    f"maps/{planet_id}/plates.json",
+                    f"maps/{planet_id}/map.yaml",
+                ],
+                warnings=warnings,
+                metadata={"planet_id": planet_id, "elevation_source": "imported"},
+            )
+
         # ---- Parse optional stage list ----
         stage_list: list[str] | None = None
         stages_val: object = None  # track whether user supplied custom stages
