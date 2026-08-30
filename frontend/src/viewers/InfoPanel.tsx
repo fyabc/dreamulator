@@ -130,7 +130,7 @@ export default function InfoPanel({ selected, onClose, worldName, branchQS, mapP
 
                 for (const c of cells) {
                   const area = c.area_km2 ?? 0
-                  if (c.elevation > 0) landArea += area
+                  if (c.water_class != null ? c.water_class === 'land' : c.elevation > 0) landArea += area
                   else oceanArea += area
                   if (c.crust_type === 'continental') continentalArea += area
                   if (c.elevation < elevMin) elevMin = c.elevation

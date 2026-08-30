@@ -273,6 +273,15 @@ class VoronoiCell(BaseModel):
             "distinct from the global ocean"
         ),
     )
+    # Authoritative land/ocean split for climate + frontend rendering.  For the
+    # real Earth this is imported from GSHHG (see import_earth_watermask.py) and
+    # folds large inland seas (Caspian) into "ocean", small lakes (Dead Sea) and
+    # dry below-sea-level basins (Turpan) into "land".  Generated worlds derive
+    # it from elevation connectivity + the same size split (water_bodies.py).
+    water_class: str = Field(
+        default="ocean",
+        description="'ocean' or 'land' — the authoritative climate land/ocean split",
+    )
 
     hotspot_id: str | None = Field(
         default=None,

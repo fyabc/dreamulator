@@ -284,6 +284,8 @@ export const staticApi = {
           distance_to_boundary_km: c.distance_to_boundary_km,
           boundary_type: c.boundary_type ?? null,
           convergence_rate_cm_yr: c.convergence_rate_cm_yr,
+          is_lake: c.is_lake,
+          water_class: c.water_class,
         })),
       }
     }

@@ -33,6 +33,13 @@ class TerrainPipelineConfig:
     # Identity
     seed: int = 42
 
+    # Terrain data source.  "generated" (default) runs the full synthetic
+    # pipeline (mesh → plates → tectonics → terrain).  "imported" declares that
+    # the map data (elevation / plates / crust) was imported from real-world or
+    # authored sources and is committed under maps/, so the geological engine
+    # must NOT regenerate (or clobber) it — see engine/geological.py.
+    elevation_source: str = "generated"
+
     # Planetary physical parameters
     radius_km: float = 6371.0
     gravity_m_s2: float = 9.81

@@ -796,6 +796,17 @@ A: 目前没有直接混合功能。但你可以通过分支系统分别生成�
 - **导入的高度图不含板块构造数据**：plates 图层为空（左栏有提示），
   boundaries 图层回落到地壳底色。需要构造叙事时，用 geography 锚定 +
   管线生成（§2–§4），或把导入图当作"最终高程"接受无板块设定。
+- **earth 验证世界是特例**：它的真实板块 + 地壳由专用脚本导入（PB2002 板块 +
+  ETOPO1 水深判大陆架），不依赖上面的通用导入按钮：
+  ```bash
+  uv run python scripts/import_earth_elevation.py \
+      --output-dir <world>/maps/planet_earth --skip-download
+  uv run python scripts/import_earth_tectonics.py \
+      --output-dir <world>/maps/planet_earth
+  ```
+  之后在 `terrain_config.yaml` 设 `elevation_source: imported`，地质引擎就会
+  跳过合成管线、不覆盖已导入数据（见 `docs/knowledge/geology/plate_tectonics.md`
+  「真实地球板块数据导入」）。
 - 想"形状手绘、地貌物理补全"的中间路线：顶栏"⬆ 锚定灰度图"上传灰度概率图
   （存 `geography_raster.png`，白=陆/黑=海/中灰=中立），下次生成时与
   geography.yaml 叠加（`raster_weight` 调和）——形状是你的，地貌细节是物理的

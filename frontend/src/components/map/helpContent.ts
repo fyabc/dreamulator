@@ -55,8 +55,6 @@ export const LAYER_GROUPS: { id: string; label: string; icon: string }[] = [
   { id: 'climate', label: 'help:layerGroup.climate', icon: '🌦️' },
   { id: 'ecology', label: 'help:layerGroup.ecology', icon: '🌿' },
   { id: 'civilization', label: 'help:layerGroup.civilization', icon: '🏛️' },
-  { id: 'geology', label: 'help:layerGroup.geology', icon: '🪨' },
-  { id: 'overlay', label: 'help:layerGroup.overlay', icon: '📍' },
 ]
 
 export interface LayerHelpEntry {
@@ -101,7 +99,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.plates.detail',
     defaultOpacity: 0.8,
     kind: 'fill',
-    group: 'geology',
+    group: 'terrain',
   },
   {
     id: 'boundaries',
@@ -110,7 +108,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.boundaries.detail',
     defaultOpacity: 0.8,
     kind: 'feature',
-    group: 'geology',
+    group: 'terrain',
   },
   {
     id: 'flow',
@@ -119,7 +117,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.flow.detail',
     defaultOpacity: 0.7,
     kind: 'feature',
-    group: 'overlay',
+    group: 'terrain',
   },
   {
     id: 'koppen',
@@ -231,7 +229,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.currents.detail',
     defaultOpacity: 0.75,
     kind: 'feature',
-    group: 'overlay',
+    group: 'climate',
   },
   {
     id: 'winds',
@@ -240,7 +238,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.winds.detail',
     defaultOpacity: 0.6,
     kind: 'feature',
-    group: 'overlay',
+    group: 'climate',
     monthlyCapable: true,
   },
   {
@@ -250,7 +248,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.coastlines.detail',
     defaultOpacity: 0.6,
     kind: 'feature',
-    group: 'overlay',
+    group: 'terrain',
   },
   {
     id: 'rivers',
@@ -259,7 +257,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.rivers.detail',
     defaultOpacity: 0.9,
     kind: 'feature',
-    group: 'overlay',
+    group: 'terrain',
   },
 ]
 

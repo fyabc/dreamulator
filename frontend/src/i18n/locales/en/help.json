@@ -3,9 +3,7 @@
     "terrain": "Terrain",
     "climate": "Climate",
     "ecology": "Ecology",
-    "civilization": "Civilization",
-    "geology": "Geology",
-    "overlay": "Overlays"
+    "civilization": "Civilization"
   },
   "layer": {
     "terrain": { "label": "Terrain", "desc": "Adaptive hypsometric shading (default thematic layer)", "detail": "Adaptive hypsometric tint. Deep-sea blue → shallow cyan → lowland green → highland brown → snow white. Mutually exclusive with other thematic layers. On by default." },

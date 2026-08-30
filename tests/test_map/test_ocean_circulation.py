@@ -926,3 +926,42 @@ class TestEkmanSurfaceCurrent:
         wind = np.array([[0.0, 0.0, 0.0]])
         current = ekman_surface_current(wind, nodes, np.array([0.0]))
         assert np.allclose(current, 0.0)
+
+
+# ===================================================================
+# compute_land_mask — ocean connectivity
+# ===================================================================
+
+
+def _land_mask_mesh() -> list["VoronoiCell"]:
+    """6 cells: connected ocean (0-1-2), closed basin (3), land (4-5)."""
+    return [
+        _cell(0, -10, 0, 1, 0, 0, 1.0, -1000.0, "oceanic", [1]),
+        _cell(1, 0, 0, 0, 0, 1, 1.0, -1000.0, "oceanic", [0, 2]),
+        _cell(2, 10, 0, -1, 0, 0, 1.0, -1000.0, "oceanic", [1]),
+        # A below-sea-level basin with no water path to the ocean (endorheic).
+        _cell(3, 30, 30, 0, 1, 0, 1.0, -150.0, "continental", [4]),
+        _cell(4, 30, 31, 0, 1, 0, 1.0, 100.0, "continental", [3, 5]),
+        _cell(5, 30, 32, 0, 1, 0, 1.0, 100.0, "continental", [4]),
+    ]
+
+
+def test_compute_land_mask_closed_basin_is_land() -> None:
+    from dreamulator.map.ocean_circulation import compute_land_mask
+
+    cells = _land_mask_mesh()
+    land = compute_land_mask(cells, 0.0)
+    # Ocean cells (0,1,2) are connected water → ocean (False).
+    # Closed basin (3, elevation −150) and emergent land (4,5) → land (True).
+    assert list(land) == [False, False, False, True, True, True]
+
+
+def test_compute_land_mask_no_water_all_land() -> None:
+    from dreamulator.map.ocean_circulation import compute_land_mask
+
+    cells = [
+        _cell(0, 0, 0, 1, 0, 0, 1.0, 500.0, "continental", []),
+        _cell(1, 1, 0, 0, 0, 1, 1.0, 500.0, "continental", []),
+    ]
+    land = compute_land_mask(cells, 0.0)
+    assert list(land) == [True, True]

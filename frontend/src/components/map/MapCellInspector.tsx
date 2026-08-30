@@ -156,7 +156,8 @@ function PlanetSummary({
 
   for (const c of cells) {
     const area = c.area_km2 ?? 0
-    if (c.elevation > 0) {
+    const isLandCell = c.water_class != null ? c.water_class === 'land' : c.elevation > 0
+    if (isLandCell) {
       landCount++
       landArea += area
     } else {
@@ -301,7 +302,7 @@ function CellDetails({
 }) {
   const { t } = useTranslation('map')
   const elevM = cell.elevation
-  const isLand = cell.elevation > 0
+  const isLand = cell.water_class != null ? cell.water_class === 'land' : cell.elevation > 0
   const boundaryClass = cell.boundary_type
     ? BOUNDARY_COLORS[cell.boundary_type] ?? 'bg-gray-800 text-gray-300'
     : null
@@ -616,7 +617,7 @@ function MultiCellStats({ cells }: { cells: VoronoiCell[] }) {
   for (const c of cells) {
     const area = c.area_km2 ?? 0
     totalArea += area
-    if (c.elevation > 0) landCount++
+    if (c.water_class != null ? c.water_class === 'land' : c.elevation > 0) landCount++
     if (c.elevation < elevMin) elevMin = c.elevation
     if (c.elevation > elevMax) elevMax = c.elevation
     elevSum += c.elevation
@@ -898,7 +899,11 @@ export function MobileCellCard({
 }) {
   const { t } = useTranslation('map')
   const elevM = cell ? cell.elevation : 0
-  const isLand = cell ? cell.elevation > 0 : false
+  const isLand = cell
+    ? cell.water_class != null
+      ? cell.water_class === 'land'
+      : cell.elevation > 0
+    : false
 
   return (
     <div className="bg-space-panel/95 border-t border-space-border px-3 py-2 text-xs">
