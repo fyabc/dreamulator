@@ -586,7 +586,7 @@ export function bakeMonthlyLayer(
   height: number,
   flipHorizontal: boolean,
 ): THREE.DataTexture {
-  const { months, tMonthly, pMonthly, pressureMonthly, pressureRangeHpa } = monthly
+  const { months, tMonthly, pMonthly, pressureMonthly } = monthly
   const arr = field === 'temperature' ? tMonthly : field === 'precipitation' ? pMonthly : pressureMonthly
   const colors = new Map<number, [number, number, number]>()
 
@@ -596,11 +596,11 @@ export function bakeMonthlyLayer(
     return makeTexture(empty, width, height)
   }
 
-  // Pressure anomaly ΔP uses a symmetric diverging range centred on 0.
-  let pMaxAbs = 1
-  if (field === 'pressure' && pressureRangeHpa) {
-    pMaxAbs = Math.max(Math.abs(pressureRangeHpa[0]), Math.abs(pressureRangeHpa[1]), 0.01)
-  }
+  // Pressure anomaly ΔP uses a symmetric diverging range centred on 0, fixed at
+  // ±20 hPa.  A data-derived max (max |ΔP|) is dominated by the Antarctic polar
+  // vortex (±41 hPa) and washes the Asian monsoon (±12 hPa) into a pale band —
+  // hence the fixed range instead of an auto-scaled one.
+  const pMaxAbs = 20
 
   for (let i = 0; i < cvtMesh.cells.length; i++) {
     const cell = cvtMesh.cells[i]
