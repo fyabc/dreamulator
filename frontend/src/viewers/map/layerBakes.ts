@@ -78,6 +78,9 @@ const LANDFORM_COLORS: Record<string, [number, number, number]> = {
 /** Closed inland-lake colour — light cyan, distinct from the deep ocean blue. */
 const LAKE_COLOR: [number, number, number] = hexRgb('#67e6dc')
 
+/** River channel colour — matches the former 2D SVG stroke (rgb 70,140,215). */
+const RIVER_COLOR: [number, number, number] = hexRgb('#468cd7')
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -118,6 +121,8 @@ export interface LayerTextures {
   precipitation: THREE.DataTexture
   /** Drainage / flow accumulation thematic (per-cell continuous, log-scaled). Half res. */
   flow: THREE.DataTexture
+  /** River channel cells (per-cell boolean, river_order ≥ 1). Half res. */
+  rivers: THREE.DataTexture
 }
 
 export interface BakeInputs {
@@ -176,6 +181,7 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
     t.soil.dispose(); t.provinces.dispose()
     t.temperature.dispose(); t.precipitation.dispose()
     t.flow.dispose()
+    t.rivers.dispose()
     t.terrainWithCoastlines.dispose()
   }
 
@@ -271,6 +277,7 @@ function buildCellPalettes(
   temperature: Map<number, [number, number, number]>
   precipitation: Map<number, [number, number, number]>
   flow: Map<number, [number, number, number]>
+  rivers: Map<number, [number, number, number]>
 } {
   const terrainThematic = new Map<number, [number, number, number]>()
   const landseaThematic = new Map<number, [number, number, number]>()
@@ -288,6 +295,7 @@ function buildCellPalettes(
   const temperature = new Map<number, [number, number, number]>()
   const precipitation = new Map<number, [number, number, number]>()
   const flow = new Map<number, [number, number, number]>()
+  const rivers = new Map<number, [number, number, number]>()
 
   // NPP range for normalisation.  Dynamic rather than the fixed Miami 3000 gC
   // ceiling — a red dwarf's PAR suppresses NPP far below 3000 (nacrea land NPP
@@ -471,11 +479,16 @@ function buildCellPalettes(
     if (cell.is_lake) {
       flow.set(cell.id, LAKE_COLOR)
     }
+
+    // River channels (accumulation-threshold stream order ≥ 1) — land only.
+    if ((cell.river_order ?? 0) >= 1 && !isOcean) {
+      rivers.set(cell.id, RIVER_COLOR)
+    }
   }
 
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
            coastlines, biomes, npp, domesticable, habitable, agriculture,
-           soil, provinces, temperature, precipitation, flow }
+           soil, provinces, temperature, precipitation, flow, rivers }
 }
 
 /**
@@ -646,6 +659,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let temperatureBuf: Uint8Array = empty
   let precipitationBuf: Uint8Array = empty
   let flowBuf: Uint8Array = empty
+  let riversBuf: Uint8Array = empty
   let kw = 1, kh = 1
   if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
     const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
@@ -665,6 +679,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     temperatureBuf = bakeCellLayer(palettes.temperature, width, height, cellIdMap, flipHorizontal)
     precipitationBuf = bakeCellLayer(palettes.precipitation, width, height, cellIdMap, flipHorizontal)
     flowBuf = bakeCellLayer(palettes.flow, width, height, cellIdMap, flipHorizontal)
+    riversBuf = bakeCellLayer(palettes.rivers, width, height, cellIdMap, flipHorizontal)
     kw = width; kh = height
   }
 
@@ -721,5 +736,6 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     temperature: makeTexture(temperatureBuf, kw, kh),
     precipitation: makeTexture(precipitationBuf, kw, kh),
     flow: makeTexture(flowBuf, kw, kh),
+    rivers: makeTexture(riversBuf, kw, kh, { nearestMag: true }),
   }
 }

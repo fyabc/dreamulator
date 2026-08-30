@@ -51,11 +51,13 @@ uniform sampler2D u_fill;       // plates
 uniform sampler2D u_feature;    // boundaries (crust/plate)
 uniform sampler2D u_coastlines; // coastline outline
 uniform sampler2D u_flow;       // drainage / flow accumulation (stackable)
+uniform sampler2D u_rivers;     // river channel cells (stackable)
 uniform float u_thematicOp;
 uniform float u_fillOp;
 uniform float u_featureOp;
 uniform float u_coastlinesOp;
 uniform float u_flowOp;
+uniform float u_riversOp;
 varying vec2 vUv;
 
 vec3 blendLayer(vec3 dst, vec4 src, float op) {
@@ -70,6 +72,7 @@ void main() {
   color = blendLayer(color, texture2D(u_fill, vUv), u_fillOp);
   color = blendLayer(color, texture2D(u_feature, vUv), u_featureOp);
   color = blendLayer(color, texture2D(u_flow, vUv), u_flowOp);
+  color = blendLayer(color, texture2D(u_rivers, vUv), u_riversOp);
   color = blendLayer(color, texture2D(u_coastlines, vUv), u_coastlinesOp);
   gl_FragColor = vec4(color, 1.0);
 }
@@ -219,11 +222,13 @@ export default function useGPUTerrain({
         u_feature: { value: baked.boundaries },
         u_coastlines: { value: baked.coastlines },
         u_flow: { value: baked.flow },
+        u_rivers: { value: baked.rivers },
         u_thematicOp: { value: layers.terrain ?? 1 },
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
         u_coastlinesOp: { value: layers.coastlines ?? 1 },
         u_flowOp: { value: layers.flow ?? 0 },
+        u_riversOp: { value: layers.rivers ?? 0 },
         _terrainThematic: { value: baked.terrainThematic },
         _landseaThematic: { value: baked.landseaThematic },
         _koppen: { value: baked.koppen },
@@ -270,7 +275,8 @@ export default function useGPUTerrain({
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 ||
-    (layers.flow ?? 0) > 0
+    (layers.flow ?? 0) > 0 ||
+    (layers.rivers ?? 0) > 0
 
   // needsFboForGlobe: substantive overlays that require the FBO composite.
   // The coastline feature layer is pre-baked into a dedicated globe texture at
@@ -285,7 +291,8 @@ export default function useGPUTerrain({
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 ||
-    (layers.flow ?? 0) > 0
+    (layers.flow ?? 0) > 0 ||
+    (layers.rivers ?? 0) > 0
 
   // Dispose composite resources when they are replaced / on unmount.
   useEffect(() => {
@@ -336,6 +343,7 @@ export default function useGPUTerrain({
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
     u.u_flowOp.value = layers.flow ?? 0
+    u.u_riversOp.value = layers.rivers ?? 0
     u.u_coastlinesOp.value = layers.coastlines ?? 1
     const d = composite.displayMat.uniforms
     d.u_useComposite.value = overlayActive ? 1 : 0

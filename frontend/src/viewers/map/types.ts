@@ -64,6 +64,7 @@ export interface VoronoiCell {
   wind_north_m_s?: number | null
   flow_accumulation?: number
   river_id?: string | null
+  river_order?: number
   is_lake?: boolean
   water_class?: string
   hotspot_id?: string | null
