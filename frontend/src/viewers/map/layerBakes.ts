@@ -231,6 +231,10 @@ function makeTexture(
   tex.wrapT = THREE.ClampToEdgeWrapping
   tex.minFilter = opts?.nearestMin === false ? THREE.LinearFilter : THREE.NearestFilter
   tex.magFilter = opts?.nearestMag ? THREE.NearestFilter : THREE.LinearFilter
+  // The baked RGB bytes are sRGB-encoded colour (not linear).  Marking them
+  // sRGB lets the 3D globe's PBR (MeshStandardMaterial + ACES) decode them to
+  // linear before lighting, and the 2D map round-trips decode→encode losslessly.
+  tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
   return tex
 }

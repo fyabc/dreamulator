@@ -212,6 +212,9 @@ export default function useGPUTerrain({
     target.texture.wrapS = THREE.RepeatWrapping
     target.texture.wrapT = THREE.ClampToEdgeWrapping
     target.texture.flipY = false
+    // Composite target stores sRGB (matches the sRGB source DataTextures) so the
+    // PBR downstream decodes it symmetrically with the pre-baked texture path.
+    target.texture.colorSpace = THREE.SRGBColorSpace
 
     const compMat = new THREE.ShaderMaterial({
       vertexShader,
@@ -372,24 +375,18 @@ export default function useGPUTerrain({
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
       if (!composite || !overlayActive) return
-      // The composite pass is just layer blending, not a final render.
-      // Disable all colour transforms (tone mapping + sRGB encoding) so the
-      // FBO stores the same values as the source DataTextures.  Without this,
-      // an SRGBColorSpace renderer (3D globe) double-encodes the sRGB data,
-      // and the downstream sampler decodes it only once — shifting colours.
+      // The composite pass is just layer blending, not a final render.  Disable
+      // tone mapping so the composite blends the raw layer colours unchanged;
+      // colour space is handled symmetrically by the sRGB target + sRGB sources.
       const prevTM = renderer.toneMapping
       const prevExp = renderer.toneMappingExposure
-      const prevOCS = renderer.outputColorSpace
       renderer.toneMapping = THREE.NoToneMapping
       renderer.toneMappingExposure = 1.0
-      renderer.outputColorSpace = THREE.NoColorSpace
       renderer.setRenderTarget(composite.target)
       renderer.render(composite.scene, composite.camera)
       renderer.setRenderTarget(null)
       renderer.toneMapping = prevTM
       renderer.toneMappingExposure = prevExp
-      renderer.outputColorSpace = prevOCS
-      composite.target.texture.colorSpace = THREE.NoColorSpace
     },
     [composite, overlayActive],
   )
