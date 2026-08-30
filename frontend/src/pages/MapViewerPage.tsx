@@ -81,7 +81,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0.9, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
