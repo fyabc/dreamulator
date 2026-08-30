@@ -46,7 +46,7 @@ terrain:
   boundary_noise: 0.10
   # terrain_algorithm: cortial2019_asymmetric  # terrain synthesis strategy
   # mountain_asymmetry: 0.4                    # 0=symmetric, 1=strongly asymmetric
-  # hotspot_count: 3                           # volcanic hotspot chains (0=off)
+  hotspot_count: 9                            # volcanic hotspot chains (large hotspots, 8~10)
   # ── 内部低地（2026-08）──────────────────────────────────────────────
   # 大陆深部（远离汇聚边界的克拉通内部）系统性下压到低地海拔，解决
   # "大陆主体都是 ≥1000m 高原、缺少平原"的问题（地球陆均高 ~350-500m）。

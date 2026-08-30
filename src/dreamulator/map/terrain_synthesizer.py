@@ -1262,6 +1262,8 @@ def _generate_hotspots(
         if len(hotspot_seeds) >= num_hotspots:
             break
         c = mesh.cells[cid]
+        if c.crust_type != "oceanic":
+            continue  # hotspots only on oceanic crust (Earth's ~80% are oceanic)
         xyz = np.array([c.x, c.y, c.z])
         too_close = False
         for sid in hotspot_seeds:
@@ -1276,7 +1278,7 @@ def _generate_hotspots(
     # For each hotspot, trace a chain along plate motion direction
     plate_dict = {p.id: p for p in plates}
     max_chain_cells = 30  # ≈ 30 × 45 km ≈ 1350 km chain length at 100K cells
-    hotspot_height = 3000.0  # m — active hotspot volcano height
+    hotspot_height = 8500.0  # m — active hotspot volcano height (breaks surface from ~-5000 m)
     decay_per_cell = 0.85  # exponential decay per cell along chain
 
     for hs_idx, seed in enumerate(hotspot_seeds):
@@ -1330,6 +1332,8 @@ def _generate_hotspots(
 
             if best_nid < 0:
                 break  # dead end
+            if mesh.cells[best_nid].crust_type != "oceanic":
+                break  # chain stays on oceanic crust
 
             current_cid = best_nid
             visited.add(current_cid)

@@ -399,6 +399,16 @@ def run_terrain_pipeline(
                 _btype = np.array([c.boundary_type or "" for c in result.mesh.cells], dtype=object)
                 tc.save("terrain", (_elev, _crust, _btype), terrain_fp)
 
+        # water_class (land/ocean split) is geological — elevation + sea level +
+        # ocean connectivity — not a climate field.  Write it here so the climate
+        # engine and frontend read it directly, and a `--only geological` rebuild
+        # no longer leaves it at the "ocean" default (coastline disappearance).
+        from .water_bodies import compute_land_mask
+
+        _is_land = compute_land_mask(result.mesh.cells, config.sea_level_offset_m)
+        for _i, _c in enumerate(result.mesh.cells):
+            _c.water_class = "land" if bool(_is_land[_i]) else "ocean"
+
     # ---- Stage 6: Climate (TODO) ----
     if "climate" in ordered:
         _stage_begin("climate")

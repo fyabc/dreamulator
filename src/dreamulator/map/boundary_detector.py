@@ -169,6 +169,112 @@ def classify_boundary(
 
 
 # ---------------------------------------------------------------------------
+# Segment-based classification
+# ---------------------------------------------------------------------------
+
+
+def _cluster_cells(mesh: CVTMesh, cell_set: set[int]) -> list[list[int]]:
+    """Cluster a set of cells into connected components via mesh adjacency."""
+    segments: list[list[int]] = []
+    unvisited = set(cell_set)
+    while unvisited:
+        start = unvisited.pop()
+        segment = [start]
+        stack = [start]
+        while stack:
+            cid = stack.pop()
+            for nid in mesh.cells[cid].neighbors:
+                if nid in unvisited:
+                    unvisited.remove(nid)
+                    segment.append(nid)
+                    stack.append(nid)
+        segments.append(segment)
+    return segments
+
+
+def _classify_boundary_segments(
+    mesh: CVTMesh,
+    boundary_edges: list[tuple[int, int, str, str]],
+    plate_map: dict[str, TectonicPlate],
+    cell_plate_map: dict[int, str],
+    radius_cm: float,
+) -> tuple[set[int], dict[int, tuple[str, float]]]:
+    """Classify boundary cells by plate-pair segments (continuous bands).
+
+    Boundary cells are clustered into connected segments per plate-pair, then
+    each segment is classified ONCE using its average normal (toward the other
+    plate) and the relative plate velocity at its centroid.  This replaces the
+    per-cell classification whose local normal ``n̂`` is noisy on a jagged
+    Voronoi boundary, producing continuous convergent/divergent/transform bands
+    (like Earth) instead of red/green/yellow speckle.
+
+    Returns:
+        ``(boundary_cell_ids, cell_result)`` where ``cell_result`` maps a cell
+        id to ``(boundary_type, convergence_rate_cm_yr)``.
+    """
+    from collections import defaultdict
+
+    # Group edges by unordered plate-pair; keep each edge oriented A→B.
+    pair_edges: dict[tuple[str, str], list[tuple[int, int]]] = defaultdict(list)
+    for cell_id, neighbor_id, pa, pb in boundary_edges:
+        if pa < pb:
+            pair_edges[(pa, pb)].append((cell_id, neighbor_id))
+        else:
+            pair_edges[(pb, pa)].append((neighbor_id, cell_id))
+
+    cell_result: dict[int, tuple[str, float]] = {}
+    boundary_cell_ids: set[int] = set()
+
+    for (pa, pb), edges in pair_edges.items():
+        plate_a = plate_map[pa]
+        plate_b = plate_map[pb]
+        a_side = {cell_id for cell_id, _ in edges}
+
+        for segment in _cluster_cells(mesh, a_side):
+            normals: list[np.ndarray] = []
+            centroids: list[np.ndarray] = []
+            for cid in segment:
+                cell = mesh.cells[cid]
+                cx = np.array([cell.x, cell.y, cell.z])
+                centroids.append(cx)
+                for nid in cell.neighbors:
+                    if cell_plate_map.get(nid) == pb:
+                        nb = mesh.cells[nid]
+                        nx = np.array([nb.x, nb.y, nb.z])
+                        d = nx - cx * float(np.dot(cx, nx))
+                        dn = float(np.linalg.norm(d))
+                        if dn > 1e-12:
+                            normals.append(d / dn)
+
+            if not normals:
+                continue
+            n_hat = np.mean(normals, axis=0)
+            n_hat = n_hat / np.linalg.norm(n_hat)
+            centroid = np.mean(centroids, axis=0)
+            centroid = centroid / np.linalg.norm(centroid)
+
+            v_rel = compute_relative_velocity(centroid, plate_a, plate_b)
+            v_n = float(np.dot(v_rel, n_hat))
+            v_t_vec = v_rel - v_n * n_hat
+            v_t = float(np.linalg.norm(v_t_vec))
+            v_total = float(np.linalg.norm(v_rel))
+            v_n_cm = v_n * radius_cm
+            v_t_cm = v_t * radius_cm
+            v_total_cm = v_total * radius_cm
+            btype = classify_boundary(v_n_cm, v_t_cm, v_total_cm)
+
+            for cid in segment:
+                boundary_cell_ids.add(cid)
+                cell_result[cid] = (btype, v_n_cm)
+                for nid in mesh.cells[cid].neighbors:
+                    if cell_plate_map.get(nid) == pb:
+                        boundary_cell_ids.add(nid)
+                        cell_result.setdefault(nid, (btype, v_n_cm))
+
+    return boundary_cell_ids, cell_result
+
+
+# ---------------------------------------------------------------------------
 # BFS distance from boundary
 # ---------------------------------------------------------------------------
 
@@ -326,63 +432,24 @@ def detect_boundaries(
     boundary_edges = find_boundary_cells(mesh, cell_plate_map)
     logger.info("  Found %d boundary edges", len(boundary_edges))
 
-    # 2. Compute velocities and classify
-    logger.info("  Step 2/5: Computing velocities and classifying boundaries")
-    boundary_cell_ids: set[int] = set()
+    # 2. Segment-based classification (continuous boundary-type bands)
+    logger.info("  Step 2/5: Classifying boundary segments")
     # Convert radius to cm for velocity calculations
     radius_cm = config.radius_km * 1e5
-
-    # Track per-cell accumulated boundary properties
-    cell_v_n: dict[int, list[float]] = {}
-    cell_btype: dict[int, list[str]] = {}
-
-    for cell_id, neighbor_id, plate_a_id, plate_b_id in boundary_edges:
-        plate_a = plate_map.get(plate_a_id)
-        plate_b = plate_map.get(plate_b_id)
-        if plate_a is None or plate_b is None:
-            continue
-
-        cell = mesh.cells[cell_id]
-        neighbor = mesh.cells[neighbor_id]
-
-        cell_xyz = np.array([cell.x, cell.y, cell.z])
-        neighbor_xyz = np.array([neighbor.x, neighbor.y, neighbor.z])
-
-        # Relative velocity
-        v_rel = compute_relative_velocity(cell_xyz, plate_a, plate_b)
-
-        # Boundary normal (from cell toward neighbor)
-        n_hat = compute_boundary_normal(cell_xyz, neighbor_xyz)
-
-        # Normal and tangential components
-        v_n = float(np.dot(v_rel, n_hat))
-        v_t_vec = v_rel - v_n * n_hat
-        v_t = float(np.linalg.norm(v_t_vec))
-        v_total = float(np.linalg.norm(v_rel))
-
-        # Convert from rad/yr to cm/yr
-        v_n_cm_yr = v_n * radius_cm
-        v_t_cm_yr = v_t * radius_cm
-        v_total_cm_yr = v_total * radius_cm
-
-        btype = classify_boundary(v_n_cm_yr, v_t_cm_yr, v_total_cm_yr)
-
-        boundary_cell_ids.add(cell_id)
-        cell_v_n.setdefault(cell_id, []).append(v_n_cm_yr)
-        cell_btype.setdefault(cell_id, []).append(btype)
+    boundary_cell_ids, cell_result = _classify_boundary_segments(
+        mesh,
+        boundary_edges,
+        plate_map,
+        cell_plate_map,
+        radius_cm,
+    )
 
     # 3. Write boundary properties to cells
     logger.info("  Step 3/5: Writing boundary properties to cells")
     for cid in boundary_cell_ids:
-        # Average convergence rate
-        rates = cell_v_n.get(cid, [0.0])
-        mesh.cells[cid].convergence_rate_cm_yr = sum(rates) / len(rates)
-
-        # Most common boundary type
-        types = cell_btype.get(cid, ["transform"])
-        from collections import Counter
-
-        mesh.cells[cid].boundary_type = Counter(types).most_common(1)[0][0]
+        btype, rate = cell_result[cid]
+        mesh.cells[cid].convergence_rate_cm_yr = rate
+        mesh.cells[cid].boundary_type = btype
 
     # 4. BFS distance from boundary
     logger.info("  Step 4/5: Computing boundary distances (BFS)")

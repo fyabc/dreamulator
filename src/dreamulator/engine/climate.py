@@ -302,7 +302,12 @@ def _load_cvt_mesh_from_geological(
 
     # 1. Search unified maps/ directory first
     if maps_dir is not None and maps_dir.exists():
-        mesh_paths = list(maps_dir.glob("*/cvt_mesh.json"))
+        # Exclude _baseline_*/_cache_* scratch maps — the climate engine must load
+        # the real planet mesh, not a stale baseline (which lacks plate_id etc.
+        # and would clobber the geological output when written back).
+        mesh_paths = [
+            p for p in maps_dir.glob("*/cvt_mesh.json") if not p.parent.name.startswith("_")
+        ]
         if mesh_paths:
             mesh_path = mesh_paths[0]
             try:
@@ -333,7 +338,9 @@ def _load_cvt_mesh_from_geological(
     # Search for cvt_mesh.json in maps/<planet_id>/
     mesh_paths = []
     for d in search_dirs:
-        mesh_paths.extend(d.glob("maps/*/cvt_mesh.json"))
+        mesh_paths.extend(
+            p for p in d.glob("maps/*/cvt_mesh.json") if not p.parent.name.startswith("_")
+        )
 
     if not mesh_paths:
         return None, [f"No cvt_mesh.json found in: {[str(d) for d in search_dirs]}"]
