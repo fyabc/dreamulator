@@ -702,6 +702,9 @@ export default function GlobeViewerPage() {
           cvtMesh={cvtMesh ?? null}
           planetName={currentPlanet?.name ?? planetId}
           selectedCells={selectedCellObjects}
+          monthlyMode={monthlyMode}
+          monthIndex={monthlyMonth}
+          monthlyData={monthlyData}
         />
       </div>
     </div>
