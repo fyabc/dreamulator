@@ -18,17 +18,21 @@ its influence to extend beyond itself, hence the area threshold
 
 For the real Earth this is driven by the GSHHG hierarchy (ocean = level 1,
 lakes = level 2); for generated worlds by flood-fill connectivity on the
-synthesised elevation (see ``ocean_circulation.compute_land_mask``).  This
-module provides the pure geometry/classification helpers, independent of the
-data source.
+synthesised elevation (see :func:`compute_land_mask`).  This module provides
+the pure geometry/classification helpers, independent of the data source.
 """
 
 from __future__ import annotations
 
 import math
 import struct
+from collections import deque
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from .models import VoronoiCell
 
 # Minimum area (km²) for an enclosed water body to be treated as "ocean-like"
 # for climate.  = (maritime-moderation scale)²; the scale is 250 km (see
@@ -210,3 +214,54 @@ def classify_ocean_land(
     land = in_land & ~in_lake  # emergent land (not a lake)
     land |= in_lake & ~in_large_lake  # small inland lakes are treated as land
     return land
+
+
+def compute_land_mask(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> np.ndarray:
+    """Land mask via ocean connectivity (flood-fill from the global ocean).
+
+    The land/ocean split cannot be a bare ``elevation >= 0`` test: endorheic
+    basins below sea level (Turpan −154 m, Qattara, Afar, Death Valley) are dry
+    LAND, not ocean.  This marks a cell as "ocean" only when it is part of a
+    water body connected to the *global ocean* (the largest connected water
+    basin); closed below-sea-level basins fall out as land.
+
+    This is a **geological** property — elevation + sea level + connectivity on
+    the synthesised terrain — not a climate field.  The terrain pipeline writes
+    the resulting ``water_class``; the climate engine and frontend read it.
+
+    Args:
+        cells: All VoronoiCell objects (needs ``neighbors``).
+        sea_level_m: Sea-level offset (from TerrainPipelineConfig).
+
+    Returns:
+        Boolean land mask, shape (N,).  True = land, False = ocean.
+    """
+    n = len(cells)
+    is_water = np.array([c.elevation <= sea_level_m for c in cells], dtype=bool)
+
+    basin_id = np.full(n, -1, dtype=np.int64)
+    basins: list[np.ndarray] = []
+    for seed in range(n):
+        if not is_water[seed] or basin_id[seed] >= 0:
+            continue
+        queue: deque[int] = deque([seed])
+        basin_id[seed] = len(basins)
+        members: list[int] = [seed]
+        while queue:
+            i = queue.popleft()
+            for j in cells[i].neighbors:
+                if 0 <= j < n and is_water[j] and basin_id[j] < 0:
+                    basin_id[j] = len(basins)
+                    queue.append(j)
+                    members.append(j)
+        basins.append(np.array(members, dtype=np.int64))
+
+    if not basins:
+        # No water anywhere → the whole surface is land.
+        return np.ones(n, dtype=bool)
+
+    # Global ocean = largest connected water basin.  Everything else is land
+    # (emergent land AND closed below-sea-level basins / inland lakes).
+    ocean = np.zeros(n, dtype=bool)
+    ocean[max(basins, key=len)] = True
+    return ~ocean

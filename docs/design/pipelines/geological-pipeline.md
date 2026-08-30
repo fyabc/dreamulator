@@ -639,10 +639,13 @@ growth_speed_multiplier →  (新增字段)
 
 1. **邻接扫描**：遍历邻接表，以 `(min(a,b), max(a,b))` 去重，收集
    `BoundarySegment`（两端节点、两侧板块、中点坐标、`boundary_influence_km` 等字段）。
-2. **相对速度分解**：先把 v_rel 投影到中点切平面（扣除径向分量），再沿
-   边界法向分解；边界法向近似取 plate_A 质心 → plate_B 质心方向（投影到切平面）。
-3. **分类**：按边界相对速度划分 convergent / divergent / transform / inactive，
-   并按两侧地壳组合细化汇聚子类型。
+2. **相对速度分解**：先把 v_rel 投影到切平面（扣除径向分量），再沿边界法向分解
+   （v_n 汇聚为正、v_t 走滑）。
+3. **分段聚类分类**（`_classify_boundary_segments`）：按相邻板块对 `(plate_a, plate_b)`
+   把边界 cell 聚类成连通段（`_cluster_cells`），每段用**段内平均法向**（指向另一侧板块的
+   方向均值）+ 段质心的相对速度统一分类 → 边界类型连续成带，消除逐 cell `n̂` 噪声的斑驳。
+   判据：`v_t/v_total > 0.7` → transform，`v_n > +0.5 cm/yr` → convergent，
+   `v_n < −0.5` → divergent，否则 transform。
 4. **边界链追踪**：将共享节点的同类边界段贪心连成链（`BoundaryChain`），
    供山脉走向、海沟线等线性特征生成使用。
 
@@ -687,7 +690,9 @@ growth_speed_multiplier →  (新增字段)
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
    （~800 km 波长，隆起幅度 ∈ [−0.25, 1.35]）：高值段成主岛/山结，负值段沉降为
    弧间断陷海——汇聚带不再均匀缎带；`boundary_uplift_noise` 调制岛弧/洋脊。
-3. **热点链**：`_generate_hotspots` 宽尺度高斯隆起 + 可选中央破火山口凹陷。
+3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
+   沿板块运动方向（欧拉极速度）追踪链，`hotspot_height`（默认 8500 m）从洋底抬升露海面成岛，
+   沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 9（模拟大型热点）。
 4. **区域噪声**：低频 fBm（`regional_noise_scale`，陆/海不同振幅
    `regional_noise_amplitude_land_m` / `regional_noise_amplitude_ocean_m`）。
 5. **细节噪声**：`_anisotropic_fbm`（3D Simplex 在节点 (x,y,z) 采样，无投影畸变；
@@ -899,22 +904,18 @@ def compute_sea_level(
     return (lo + hi) / 2
 ```
 
-### 陆地/海洋分类
+### 陆地/海洋分类（water_class）
 
-```python
-def classify_land_ocean(
-    elevation: np.ndarray,
-    sea_level_m: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Classify nodes as land or ocean.
+陆地/海洋判定不是裸 `elevation >= sea_level` 符号测试（会把吐鲁番等低于海平面的干盆地
+误判为海），而是**海洋连通性 flood-fill**（`water_bodies.compute_land_mask`）：
 
-    Returns:
-        (is_land, water_depth): boolean mask and depth in meters.
-    """
-    is_land = elevation >= sea_level_m
-    water_depth = np.where(is_land, 0.0, sea_level_m - elevation)
-    return is_land, water_depth
-```
+- 把 `elevation <= sea_level` 的水体 cell 用邻接 BFS 聚类成连通盆地；
+- **全球海洋 = 最大的连通盆地** → ocean，其余（出露陆地 + 闭合内流盆地/内陆湖）→ land。
+
+这是**地质属性**（高程 + 海平面 + 连通性），在**地形管线合成后**写入每个 cell 的
+`water_class`（`"ocean"`/`"land"`，`terrain_pipeline.py`），气候引擎和前端直接读该字段，
+不再各自重复判据。真实地球由 GSHHG 水掩膜导入（`import_earth_watermask.py`），生成世界
+走连通性 flood-fill——两条路径在地质层统一出 `water_class`。
 
 ### 大陆架检测
 

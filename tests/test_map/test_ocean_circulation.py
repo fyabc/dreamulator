@@ -947,7 +947,7 @@ def _land_mask_mesh() -> list["VoronoiCell"]:
 
 
 def test_compute_land_mask_closed_basin_is_land() -> None:
-    from dreamulator.map.ocean_circulation import compute_land_mask
+    from dreamulator.map.water_bodies import compute_land_mask
 
     cells = _land_mask_mesh()
     land = compute_land_mask(cells, 0.0)
@@ -957,7 +957,7 @@ def test_compute_land_mask_closed_basin_is_land() -> None:
 
 
 def test_compute_land_mask_no_water_all_land() -> None:
-    from dreamulator.map.ocean_circulation import compute_land_mask
+    from dreamulator.map.water_bodies import compute_land_mask
 
     cells = [
         _cell(0, 0, 0, 1, 0, 0, 1.0, 500.0, "continental", []),
