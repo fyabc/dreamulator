@@ -26,6 +26,8 @@ import { solarDeclinationDeg } from '../viewers/utils/solar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import useCellIdMap from '../viewers/map/useCellIdMap'
+import type { ColorMode } from '../viewers/map/TerrainPlane'
+import { LAYER_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 import { normalisedToMeters } from '../viewers/map/utils/projection'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
@@ -60,9 +62,7 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  // rivers: 0 — the 3D globe does not render the river vector layer yet
-  // (2D map viewer only); keep the state key so the layer panel type-checks.
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 } })
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0.9, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 } })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
   // arrows switch to the monthly wind field (tech debt 24).
@@ -84,6 +84,14 @@ export default function GlobeViewerPage() {
     layerState.layers.pressure > 0 ||
     layerState.layers.winds > 0
   )
+  // Active map layer (opacity > 0) for the inspector's auto-expand linkage:
+  // prefer the mutually-exclusive thematic layer, else a toggle overlay.
+  const activeColorMode = useMemo<ColorMode | null>(() => {
+    const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
+    const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
+    const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
+    return (thematic ?? overlay)?.id ?? null
+  }, [layerState])
   // Turning OFF monthly mode while the pressure-anomaly layer (monthly-only) is
   // active would leave a blank thematic — reset to terrain instead.
   const handleMonthlyModeChange = (mode: boolean) => {
@@ -702,6 +710,7 @@ export default function GlobeViewerPage() {
           cvtMesh={cvtMesh ?? null}
           planetName={currentPlanet?.name ?? planetId}
           selectedCells={selectedCellObjects}
+          activeColorMode={activeColorMode}
           monthlyMode={monthlyMode}
           monthIndex={monthlyMonth}
           monthlyData={monthlyData}

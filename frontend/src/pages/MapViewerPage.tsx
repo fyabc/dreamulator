@@ -248,17 +248,6 @@ export default function MapViewerPage() {
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
 
-  // River network vector layer (features.json; empty when absent)
-  const { data: riverFeatures } = useQuery({
-    queryKey: ['riverFeatures', worldName, selectedPlanet, selectedBranch],
-    queryFn: async () => {
-      const feats = await api.getFeatures(worldName!, selectedPlanet, selectedBranch)
-      return feats.filter((f) => f.type === 'river')
-    },
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
   // --- Heightmap import (write op; live mode only) ---
   const queryClient = useQueryClient()
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -540,7 +529,6 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    riverFeatures={riverFeatures}
                     projection={projection}
 
                     onCursorMove={setCursor}
@@ -690,7 +678,6 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    riverFeatures={riverFeatures}
                     projection={projection}
 
                     onCursorMove={setCursor}

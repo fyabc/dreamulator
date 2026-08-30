@@ -9,7 +9,6 @@ import { useMemo } from 'react'
 import type {
   VoronoiCell,
   CVTMesh,
-  MapFeatureData,
 } from '../../viewers/map/types'
 
 interface MapSvgOverlayProps {
@@ -44,10 +43,6 @@ interface MapSvgOverlayProps {
   monthlyWindNorth?: Float32Array | null
   month?: number
 
-  /** River network polylines (backend features layer). */
-  riverFeatures?: MapFeatureData[] | null
-  /** River layer opacity (0 = hidden). */
-  riverOpacity?: number
 }
 
 export default function MapSvgOverlay({
@@ -65,8 +60,6 @@ export default function MapSvgOverlay({
   monthlyWindEast = null,
   monthlyWindNorth = null,
   month = 0,
-  riverFeatures = null,
-  riverOpacity = 0,
 }: MapSvgOverlayProps) {
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
@@ -403,48 +396,6 @@ export default function MapSvgOverlay({
     )
   }, [windOpacity, voronoiCells, project, viewWidth, viewHeight, zoom, monthlyWindEast, monthlyWindNorth, month])
 
-  // River network polylines (vector layer — width ∝ stream order).
-  // Rendering algorithm (docs/design/pipelines/geological-pipeline.md §10):
-  // polylines are pre-extracted by the backend (split at confluences by order
-  // and at the antimeridian); here each polyline is projected point-by-point,
-  // so it works for all projections (equirectangular / Mollweide / Robinson).
-  const riverElements = useMemo(() => {
-    if (riverOpacity <= 0 || !riverFeatures || riverFeatures.length === 0) return null
-    const offset = wrapOffset
-    const elems: JSX.Element[] = []
-    for (const feat of riverFeatures) {
-      if (!feat.coordinates || feat.coordinates.length < 2) continue
-      const pts: string[] = []
-      let minX = Infinity
-      let maxX = -Infinity
-      let minY = Infinity
-      let maxY = -Infinity
-      for (const [lon, lat] of feat.coordinates) {
-        const p = project(lon + offset, lat)
-        pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-        if (p.x < minX) minX = p.x
-        if (p.x > maxX) maxX = p.x
-        if (p.y < minY) minY = p.y
-        if (p.y > maxY) maxY = p.y
-      }
-      // Viewport culling
-      if (maxX < -20 || minX > viewWidth + 20 || maxY < -20 || minY > viewHeight + 20) continue
-      const order = feat.order ?? 1
-      elems.push(
-        <polyline
-          key={feat.id}
-          points={pts.join(' ')}
-          fill="none"
-          stroke={`rgba(70,140,215,${riverOpacity.toFixed(2)})`}
-          strokeWidth={Math.max(0.6, (0.55 + 0.5 * order) / Math.sqrt(zoom))}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />,
-      )
-    }
-    return elems
-  }, [riverFeatures, riverOpacity, project, zoom, wrapOffset, viewWidth, viewHeight])
-
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
@@ -455,7 +406,6 @@ export default function MapSvgOverlay({
       <g className="pointer-events-none">{graticuleElements}</g>
       <g className="pointer-events-none">{currentArrowElements}</g>
       <g className="pointer-events-none">{windArrowElements}</g>
-      <g className="pointer-events-none">{riverElements}</g>
       <g className="pointer-events-none">{highlightElements}</g>
     </svg>
   )
