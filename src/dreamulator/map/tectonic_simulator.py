@@ -84,19 +84,23 @@ def _bfs_distance(
     mesh: CVTMesh,
     sources: set[int],
     max_dist_km: float,
-    cell_radius_km: float,
+    cell_spacing_km: float,
     *,
     adj_offsets: np.ndarray | None = None,
     adj_nbrs: np.ndarray | None = None,
 ) -> dict[int, float]:
     """BFS graph-distance (km) from *sources*, clamped to *max_dist_km*.
 
+    ``cell_spacing_km`` is the mean cell spacing ``√(4πR²/n)`` (the centre-to-
+    centre hop length).  It was previously named ``cell_radius_km`` and doubled
+    (``* 2.0``) as if it were a radius, which over-estimated distances by 2×.
+
     When *adj_offsets*/*adj_nbrs* are provided, neighbour iteration uses
     pre-flattened numpy arrays instead of Pydantic per-cell attribute access.
     """
     from collections import deque
 
-    step_km = cell_radius_km * 2.0
+    step_km = cell_spacing_km
     dist: dict[int, float] = {}
     q: deque[int] = deque()
     for cid in sources:
@@ -396,6 +400,64 @@ def _classify_step_boundaries(
     return convergent, divergent
 
 
+def _accumulate_convergence(
+    mesh: CVTMesh,
+    cell_plate_map: dict[int, str],
+    plates: list[TectonicPlate],
+    radius_km: float,
+    interval_my: float,
+    s_arr: np.ndarray,
+    e_arr: np.ndarray,
+) -> None:
+    """Accumulate cumulative convergence/divergence (km) at boundary cells.
+
+    For each cell adjacent to a different plate, compute the relative-velocity
+    normal component ``v_n`` (cm/yr); where ``v_n > 0`` (converging) add the
+    shortening over *interval_my* into ``s_arr``, and where ``v_n < 0``
+    (rifting) add the extension into ``e_arr``.  These are the time-integrated
+    ``S = ∫ v_n dt`` (convergence) and ``E = ∫ |v_n| dt`` (divergence) that drive
+    the orogen and rift widths in terrain synthesis (critical taper / distributed
+    extension, proposal §3.6).
+    """
+    plate_dict = {p.id: p for p in plates}
+    interval_yr = interval_my * 1e6  # years since the last resample
+
+    for cid, pid in cell_plate_map.items():
+        cell = mesh.cells[cid]
+        pos = np.array([cell.x, cell.y, cell.z])
+        nb_plates: set[str] = set()
+        for nid in cell.neighbors:
+            npid = cell_plate_map.get(nid, "")
+            if npid and npid != pid:
+                nb_plates.add(npid)
+        if not nb_plates:
+            continue
+        plate = plate_dict.get(pid)
+        if plate is None:
+            continue
+        v_own = _plate_velocity_cm_yr(plate, pos, radius_km)
+        for npid in nb_plates:
+            nplate = plate_dict.get(npid)
+            if nplate is None:
+                continue
+            v_rel = v_own - _plate_velocity_cm_yr(nplate, pos, radius_km)
+            # Normal toward the neighbour plate (great-circle direction).
+            normal = np.zeros(3)
+            for nid in cell.neighbors:
+                if cell_plate_map.get(nid, "") == npid:
+                    nc = mesh.cells[nid]
+                    normal += np.array([nc.x, nc.y, nc.z]) - pos
+            norm = np.linalg.norm(normal)
+            if norm < 1e-12:
+                continue
+            normal /= norm
+            v_n = float(np.dot(v_rel, normal))  # cm/yr, positive = convergent
+            if v_n > 0.0:
+                s_arr[cid] += v_n * interval_yr / 1e5  # cm/yr × yr ÷ (cm/km) → km
+            elif v_n < 0.0:
+                e_arr[cid] += -v_n * interval_yr / 1e5  # divergence (extension)
+
+
 # =============================================================================
 # Main loop
 # =============================================================================
@@ -420,6 +482,7 @@ def run_tectonic_evolution(
     config: TerrainPipelineConfig,
     *,
     progress_callback: Callable[[int, int], object] | None = None,
+    raster_bias: np.ndarray | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Run tectonic time evolution (dispatches to configured algorithm).
 
@@ -437,6 +500,15 @@ def run_tectonic_evolution(
     # Backward compatibility: auto-select if YAML overrides default to ""
     if not algo and config.tectonic_steps > 0:
         algo = "cortial2019"
+
+    # Coast-attraction cost (§5 方案 2): with authored geography, plate
+    # boundaries are pinned to continental margins through the whole evolution
+    # (re-samples + final warp), matching the fixed coastline that
+    # ``reapply_after_tectonics`` re-stamps at the end.
+    from .geography import build_geography_coast_cost
+
+    coast = build_geography_coast_cost(mesh, config, raster_bias=raster_bias)
+    coast_cost = coast[0] if coast is not None else None
     if not algo or config.tectonic_steps <= 0:
         # No evolution — reconstruct cell map from plate data
         cell_map: dict[int, str] = {}
@@ -447,7 +519,9 @@ def run_tectonic_evolution(
             # Weight by current area so the warp preserves the (possibly
             # skewed) size distribution of the initial partition.
             weights = {p.id: float(max(len(p.cell_ids), 1)) for p in plates}
-            cell_map = warp_boundaries(mesh, cell_map, config, plate_weights=weights)
+            cell_map = warp_boundaries(
+                mesh, cell_map, config, plate_weights=weights, coast_cost=coast_cost
+            )
             _rebuild_plate_cells(mesh, cell_map, plates)
         return plates, cell_map
 
@@ -461,26 +535,35 @@ def run_tectonic_evolution(
             plates,
             config,
             progress_callback=progress_callback,
+            coast_cost=coast_cost,
         )
-        # Noise-warp the FINAL partition (Cortial 2019 §3) — irregular
-        # boundaries instead of straight geodesic arcs.  Pass the persistent
-        # size weights so the warp doesn't re-uniformise plate areas.
-        if config.boundary_warp > 0:
-            cell_map = warp_boundaries(mesh, cell_map, config, plate_weights=plate_weight)
-        # The warp re-partitions from centroids (geodesic bisectors) and thus
-        # re-straightens the trench arcs developed during evolution — re-apply
-        # them on the final map before terrain synthesis.
-        cell_map = _trench_arc_relaxation(
+        cell_map = _smooth_partition(mesh, cell_map)
+        # Split each boundary into sub-segments and shape each by type
+        # (convergent → arc, divergent → en-echelon chain, transform → straight)
+        # — Earth's boundaries are segmented, not single uniform curves.
+        cell_map = _shape_boundary_segments(
             mesh,
             cell_map,
             plates_out,
             config.radius_km,
-            config.trench_arc,
-            arc_state,
-            smooth_rng=np.random.default_rng(config.seed + 909),
+            rng=np.random.default_rng(config.seed + 9100),
+            ridge_segment_length_km=config.ridge_segment_length_km,
+            ridge_en_echelon_offset_km=config.ridge_en_echelon_offset_km,
         )
-        cell_map = _smooth_partition(mesh, cell_map)
+        # Noise-warp the FINAL partition AFTER shaping (Cortial 2019 §3) — the
+        # warp re-partitions from centroids with a noise-warped distance, so
+        # placing it last keeps its irregular arcs instead of having the
+        # straighten/bow pass flatten them back into great circles.  A final
+        # majority-vote pass clears the warp's cell-lattice dog-teeth.
+        if config.boundary_warp > 0:
+            cell_map = warp_boundaries(
+                mesh, cell_map, config, plate_weights=plate_weight, coast_cost=coast_cost
+            )
+            cell_map = _smooth_partition(mesh, cell_map)
         cell_map = _merge_plate_enclaves(mesh, cell_map)
+        cell_map, removed_ids = _merge_enclosed_plates(mesh, cell_map)
+        if removed_ids:
+            plates_out = [p for p in plates_out if p.id not in removed_ids]
         _rebuild_plate_cells(mesh, cell_map, plates_out)
         return plates_out, cell_map
     raise ValueError(f"Tectonic algorithm '{algo}' not implemented")  # unreachable
@@ -546,13 +629,20 @@ def _spawn_oceanic_crust(
     if parent is None:
         return plates, cell_plate_map
 
-    # Fresh Euler pole: small perturbation from parent
-    ax = rng.standard_normal(3)
-    ax /= np.linalg.norm(ax)
+    # Fresh Euler pole: small perturbation from parent (keeps motion coherent —
+    # a fully random axis here would re-introduce the random-direction noise).
+    parent_axis = np.array([parent.euler_pole.x, parent.euler_pole.y, parent.euler_pole.z])
+    perturb_axis = rng.standard_normal(3)
+    perturb_axis /= np.linalg.norm(perturb_axis)
+    angle_rad = rng.uniform(0.15, 0.35)  # ~10-20°, same as rift fragments
+    new_axis = parent_axis * np.cos(angle_rad) + np.cross(perturb_axis, parent_axis) * np.sin(
+        angle_rad
+    )
+    new_axis /= np.linalg.norm(new_axis)
     new_pole = EulerPole(
-        x=float(ax[0]),
-        y=float(ax[1]),
-        z=float(ax[2]),
+        x=float(new_axis[0]),
+        y=float(new_axis[1]),
+        z=float(new_axis[2]),
         omega_rad_yr=parent.euler_pole.omega_rad_yr * rng.uniform(0.7, 1.3),
     )
 
@@ -640,6 +730,7 @@ def _evolve_cortial2019(
     config: TerrainPipelineConfig,
     *,
     progress_callback: Callable[[int, int], object] | None = None,
+    coast_cost: np.ndarray | None = None,
 ) -> tuple[list[TectonicPlate], dict[int, str], dict[str, float], dict[tuple[str, str], float]]:
     """Cortial et al. (2019) original — centroid rotation + re-Voronoi.
 
@@ -693,6 +784,8 @@ def _evolve_cortial2019(
     _tree = cKDTree(_cell_xyz)
     elev_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
     crust_arr = np.array([c.crust_type for c in mesh.cells])
+    s_arr = np.zeros(_n, dtype=np.float64)  # cumulative convergence (km)
+    e_arr = np.zeros(_n, dtype=np.float64)  # cumulative divergence (km)
 
     # Pre-build CSR adjacency for fast BFS (used by _bfs_distance).
     # Flattened neighbour lists: offsets[i]..offsets[i+1]-1 index into nbrs_flat.
@@ -723,7 +816,12 @@ def _evolve_cortial2019(
     prev_cell_map = cell_plate_map
     plate_birth_step: dict[str, int] = {p.id: 0 for p in plates}
     cooldown = max(1, num_steps // 20)  # ~5% of total run
-    unit_cost = np.ones(mesh.num_cells, dtype=np.float64)
+    # Per-cell partition cost: unit by default; with authored geography this is
+    # the coast-attraction cost (§5 方案 2) so re-sampling keeps plate boundaries
+    # pinned to continental margins as the centroids move.
+    partition_cost = (
+        coast_cost if coast_cost is not None else np.ones(mesh.num_cells, dtype=np.float64)
+    )
     # Re-partition the Voronoi every resample_every steps (so boundaries track
     # the moving centroids), and once immediately after a rifting event so
     # newborn fragments get a clean partition.  Between resamples cell
@@ -762,6 +860,7 @@ def _evolve_cortial2019(
         # 2. Re-run Voronoi (every N steps, or right after a rift)
         # Protect newborn plates: lock their cells so they survive long enough to grow
         needs_resample = step - last_resample_step >= resample_every or rifted_since_last_resample
+        steps_since_resample = step - last_resample_step  # actual interval (steps)
         if needs_resample:
             locked: dict[int, str] = {}
             newborn_cooldown = cooldown * 5  # ~25 steps — give oceanic plates time to grow
@@ -801,7 +900,7 @@ def _evolve_cortial2019(
                 mesh,
                 new_seeds,
                 [p.id for p in plates],
-                unit_cost,
+                partition_cost,
                 plate_speed=_plate_speeds(
                     [p.id for p in plates],
                     plate_weight,
@@ -854,6 +953,16 @@ def _evolve_cortial2019(
             convergent = set()
 
         # 4. Apply elevation effects (array-backed, Stage 1.2)
+        if needs_resample:
+            _accumulate_convergence(
+                mesh,
+                new_cell_map,
+                plates,
+                radius_km,
+                steps_since_resample * dt_my,
+                s_arr,
+                e_arr,
+            )
         _subduction_uplift(
             mesh,
             new_cell_map,
@@ -930,6 +1039,8 @@ def _evolve_cortial2019(
     # Finalise — write the canonical elevation array back to cells once
     for i, c in enumerate(mesh.cells):
         c.elevation = float(elev_m[i])
+        c.cumulative_convergence_km = float(s_arr[i])
+        c.cumulative_divergence_km = float(e_arr[i])
     logger.info(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
         num_steps,
@@ -1096,52 +1207,56 @@ def _partition_cells(
     seeds: list[int],
     rng: np.random.Generator,
 ) -> list[list[int]]:
-    """Partition *plate_cells* into *len(seeds)* groups via weighted multi-source
-    Dijkstra.
+    """Partition *plate_cells* into *len(seeds)* groups via recursive plane cuts.
 
-    Each seed expands with a random per-seed growth weight, so fragments come out
-    **unequal-sized** (one or two large fragments plus smaller ones) instead of the
-    near-equal regions a uniform synchronous BFS produces.  Repeated rifting of the
-    large fragments then yields a skewed, power-law-like plate-size distribution
-    closer to Earth's (a few great plates + many small plates), rather than the
-    uniform sizes a plain Voronoi partition gives.
+    A rift splits a plate along a roughly straight (small-circle) crack, so rift
+    fragments are **convex blocks** — never a C-shape that wraps around a sibling
+    fragment.  The previous weighted multi-source Dijkstra produced arbitrary
+    non-convex fragments (a large fragment could half-enclose a small one — the
+    "半包围" plate-shape artefact, §5.6); partitioning by signed distance to a
+    random plane is convexity-preserving.
+
+    Size skew is kept for the power-law plate-size distribution: the plane
+    threshold is drawn logistically (so a cut can lop off a small sliver or a
+    large block), and the *larger* piece is the one re-cut when more pieces are
+    requested — the big plate keeps fragmenting, the small one is left alone.
     """
-    import heapq
-
-    cell_set = set(plate_cells)
     n_seeds = len(seeds)
-    # Per-seed growth weight: a seed with a larger weight claims cells faster and
-    # thus a larger fragment.  Log-uniform spread gives a wide size range.
-    weights = [float(np.exp(rng.uniform(-0.9, 0.9))) for _ in range(n_seeds)]
+    if n_seeds <= 1:
+        return [list(plate_cells)]
 
-    dist: dict[int, float] = {}
-    owner: dict[int, int] = {}
-    heap: list[tuple[float, int, int]] = []
-    for i, s in enumerate(seeds):
-        dist[s] = 0.0
-        owner[s] = i
-        heapq.heappush(heap, (0.0, s, i))
+    pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in plate_cells])
 
-    while heap:
-        d, cid, i = heapq.heappop(heap)
-        if d > dist.get(cid, float("inf")):
-            continue  # stale heap entry
-        step_cost = 1.0 / weights[i]
-        for nid in mesh.cells[cid].neighbors:
-            if nid in cell_set and nid not in dist:
-                dist[nid] = d + step_cost
-                owner[nid] = i
-                heapq.heappush(heap, (dist[nid], nid, i))
+    def cut(idx: np.ndarray, k: int) -> list[np.ndarray]:
+        """Split *idx* (indices into ``plate_cells``) into *k* convex fragments."""
+        if k <= 1:
+            return [idx]
+        sub = pts[idx]
+        nrm = rng.standard_normal(3)
+        nrm /= np.linalg.norm(nrm)
+        dots = sub @ nrm
+        lo, hi = float(dots.min()), float(dots.max())
+        if hi - lo < 1e-12:
+            # Degenerate: cells coplanar with the normal — split arbitrarily.
+            rng.shuffle(idx)
+            half = len(idx) // 2
+            return [idx[:half], idx[half:]] if half > 0 else [idx]
+        # Logistic threshold ∈ ~(0.12, 0.88) — a sliver or a block, not a bisect.
+        frac = float(1.0 / (1.0 + np.exp(-rng.uniform(-2.0, 2.0))))
+        t = lo + (hi - lo) * frac
+        left = idx[dots <= t]
+        right = idx[dots > t]
+        if left.size == 0 or right.size == 0:
+            t = float(np.median(dots))
+            left = idx[dots <= t]
+            right = idx[dots > t]
+        # Re-cut the larger piece (power-law: big fragments keep breaking up).
+        if left.size >= right.size:
+            return cut(left, k - 1) + [right]
+        return [left] + cut(right, k - 1)
 
-    # Stranded cells (disconnected) — assign to the first seed as a fallback.
-    for cid in plate_cells:
-        if cid not in owner:
-            owner[cid] = 0
-
-    result: list[list[int]] = [[] for _ in seeds]
-    for cid, idx in owner.items():
-        result[idx].append(cid)
-    return result
+    groups = cut(np.arange(len(plate_cells)), n_seeds)
+    return [[plate_cells[i] for i in g] for g in groups]
 
 
 def _cleanup_empty(
@@ -1671,10 +1786,14 @@ def _relax_segment(
     approach = float((v_ret - v_oth) @ n_so)
     if approach < 0.5:
         return  # not convergent (transform/divergent) — no arc forcing
-    # Tovish (1978): faster convergence → steeper dip → tighter arc.
+    # Tovish (1978): faster convergence → steeper dip → tighter arc.  The
+    # sagitta/chord ratio is Frank-1968 observed ~0.07–0.08 (Aleutians 250 km /
+    # 3000 km chord, Japan 150/2000, Kuril 120/1500); the old 0.10–0.30 ratio
+    # over-deepened arcs ~3× (up to ~700 km on a 3400 km chord) and flipped far
+    # too many cells, interweaving neighbouring divergent boundaries.
     dip_deg = float(np.clip(70.0 - 1.5 * approach, 30.0, 70.0))
     cc = max(fa, fb) < 0.6
-    s_target = strength * (0.10 + 0.20 * (dip_deg - 30.0) / 40.0)
+    s_target = strength * (0.03 + 0.07 * (dip_deg - 30.0) / 40.0)
     if cc:
         s_target *= 0.7  # collision orogens arc gentler than trenches
 
@@ -1684,7 +1803,7 @@ def _relax_segment(
     cur = arc_state.get(key, 0.0)
     cur += (s_target - cur) * 0.3
     arc_state[key] = cur
-    if cur < 0.03:
+    if cur < 0.01:
         return
     sag = cur * chord  # radians
 
@@ -1774,14 +1893,219 @@ def _smooth_partition(mesh: CVTMesh, cell_map: dict[int, str], rounds: int = 4) 
     return cell_map
 
 
+def _shape_boundary_segments(
+    mesh: CVTMesh,
+    cell_map: dict[int, str],
+    plates: list[TectonicPlate],
+    radius_km: float,
+    *,
+    sagitta: float = 0.15,
+    rng: np.random.Generator,
+    ridge_segment_length_km: float = 120.0,
+    ridge_en_echelon_offset_km: float = 60.0,
+) -> dict[int, str]:
+    """Split each boundary into sub-segments and shape each by type.
+
+    Earth's plate boundaries are SEGMENTED, not single uniform curves: a
+    convergent boundary is a chain of small-circle arcs, a divergent ridge is a
+    chain of straight en-echelon segments stepped by transform faults, a
+    transform is a straight fault.  This pass splits each boundary at its bends
+    (``_split_bent_segment``), then for each sub-segment bows it (convergent,
+    parabola of ``sagitta`` toward the oceanic / faster side), steps it into an
+    en-echelon chain (divergent, §3.2) or straightens it (transform, ``sag=0``),
+    by flipping the cells of a band around it.
+    """
+    cell_km = float(np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells))
+    plate_dict = {p.id: p for p in plates}
+    new_map = dict(cell_map)
+
+    pair_cells: dict[tuple[str, str], list[int]] = {}
+    for cid, pid in cell_map.items():
+        for nb in mesh.cells[cid].neighbors:
+            npid = cell_map.get(nb, "")
+            if npid and npid != pid:
+                key = (pid, npid) if pid < npid else (npid, pid)
+                pair_cells.setdefault(key, []).append(cid)
+                break
+
+    bowed = 0
+    straightened = 0
+    segmented = 0
+    pair_n_segments: list[int] = []
+    seg_totals: dict[str, int] = {"bow": 0, "en_echelon": 0, "straight": 0}
+    for (pa, pb), cells in pair_cells.items():
+        pla, plb = plate_dict.get(pa), plate_dict.get(pb)
+        if pla is None or plb is None:
+            continue
+        n_seg_pair = 0
+        bset = set(cells)
+        while bset:
+            start = next(iter(bset))
+            bset.remove(start)
+            seg = [start]
+            stack = [start]
+            while stack:
+                u = stack.pop()
+                for v in mesh.cells[u].neighbors:
+                    if v in bset:
+                        bset.remove(v)
+                        seg.append(v)
+                        stack.append(v)
+            for sub_seg in _split_bent_segment(mesh, seg, depth=0):
+                if len(sub_seg) < 8:
+                    continue
+                pts = np.array(
+                    [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in sub_seg]
+                )
+                d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+                i, j = np.unravel_index(int(np.argmax(d2)), d2.shape)
+                e0, e1 = pts[i], pts[j]
+                chord = float(np.sqrt(d2[i, j]))
+                if chord < 0.1:
+                    continue
+                t3 = (e1 - e0) / chord
+                mid = (e0 + e1) / 2.0
+                mid /= float(np.linalg.norm(mid))
+                n = np.cross(mid, t3)
+                nn = float(np.linalg.norm(n))
+                if nn < 1e-9:
+                    continue
+                n /= nn
+                pb_cells = [c for c in sub_seg if cell_map.get(c) == pb]
+                pa_cells = [c for c in sub_seg if cell_map.get(c) == pa]
+                if not pb_cells or not pa_cells:
+                    continue
+                side_pb = np.mean(
+                    [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in pb_cells],
+                    axis=0,
+                )
+                side_pa = np.mean(
+                    [[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in pa_cells],
+                    axis=0,
+                )
+                if (side_pb - side_pa) @ n < 0:
+                    n = -n  # now n points toward pb
+                # n toward pb → v_n > 0 = pa converging on pb
+                va = _plate_velocity_cm_yr(pla, mid, radius_km)
+                vb = _plate_velocity_cm_yr(plb, mid, radius_km)
+                v_n = float((va - vb) @ n)
+
+                if v_n > 0.5:
+                    # convergent → bow toward oceanic / faster side
+                    fa = sum(1 for c in pa_cells if mesh.cells[c].crust_type == "oceanic") / len(
+                        pa_cells
+                    )
+                    fb = sum(1 for c in pb_cells if mesh.cells[c].crust_type == "oceanic") / len(
+                        pb_cells
+                    )
+                    if abs(fa - fb) > 0.2:
+                        bow_toward_pb = fb > fa
+                    else:
+                        bow_toward_pb = plb.euler_pole.omega_rad_yr > pla.euler_pole.omega_rad_yr
+                    sag = sagitta
+                    sign = 1.0 if bow_toward_pb else -1.0
+                    mode = "bow"
+                elif v_n < -0.5 and chord * radius_km >= 2.0 * ridge_segment_length_km:
+                    # divergent → en-echelon segmented ridge (§3.2).  The ridge
+                    # is a chain of straight segments stepped by transform
+                    # faults: split the chord into ~segment-length chunks and
+                    # offset each along the ridge-normal (⊥ spreading) by a
+                    # RANDOM WALK (each transform adds a random step), so
+                    # consecutive segments step coherently into a staircase
+                    # rather than jittering iid.  Re-centred on the kinematic
+                    # axis so the ridge does not drift off over a long ridge.
+                    mode = "en_echelon"
+                    n_chunks = max(2, int(round(chord * radius_km / ridge_segment_length_km)))
+                    steps = rng.uniform(
+                        -ridge_en_echelon_offset_km,
+                        ridge_en_echelon_offset_km,
+                        size=n_chunks - 1,
+                    )
+                    offsets = np.concatenate(([0.0], np.cumsum(steps)))
+                    offsets -= offsets.mean()
+                    offsets /= radius_km  # radians, to compare with h
+                else:
+                    # transform / short ridge → straighten (sag = 0)
+                    mode = "straight"
+                    sag = 0.0
+                    sign = 1.0
+
+                n_sub = n_chunks if mode == "en_echelon" else 1
+                n_seg_pair += n_sub
+                seg_totals[mode] += n_sub
+
+                if mode == "en_echelon":
+                    band = _bfs_distance(
+                        mesh, set(sub_seg), 1.5 * cell_km + ridge_en_echelon_offset_km, cell_km
+                    )
+                else:
+                    band = _bfs_distance(
+                        mesh,
+                        set(sub_seg),
+                        max(1.5 * sag * chord * radius_km, 1.5 * cell_km),
+                        cell_km,
+                    )
+                for cid in band:
+                    if cell_map.get(cid) not in (pa, pb):
+                        continue
+                    p = np.array([mesh.cells[cid].x, mesh.cells[cid].y, mesh.cells[cid].z])
+                    rel = p - e0
+                    t = float(np.clip((rel @ t3) / chord, 0.0, 1.0))
+                    h = float(rel @ n)  # perpendicular offset, + toward pb
+                    if mode == "bow":
+                        h_shape = sign * 4.0 * sag * chord * t * (1.0 - t)
+                    elif mode == "en_echelon":
+                        k = min(int(t * n_chunks), n_chunks - 1)
+                        h_shape = offsets[k]
+                    else:
+                        h_shape = 0.0
+                    want_pb = h > h_shape
+                    if want_pb != (cell_map.get(cid) == pb):
+                        new_map[cid] = pb if want_pb else pa
+                        if mode == "bow":
+                            bowed += 1
+                        elif mode == "en_echelon":
+                            segmented += 1
+                        else:
+                            straightened += 1
+            pair_n_segments.append(n_seg_pair)
+    if bowed or straightened or segmented:
+        logger.info(
+            "  Boundary shaping: %d bowed, %d en-echelon, %d straightened",
+            bowed,
+            segmented,
+            straightened,
+        )
+    if pair_n_segments:
+        arr = np.array(pair_n_segments, dtype=float)
+        logger.info(
+            "  Boundary segments: %d pairs, per-pair mean %.1f median %.0f max %d "
+            "(bow %d, en-echelon %d, straight %d)",
+            len(arr),
+            float(arr.mean()),
+            float(np.median(arr)),
+            int(arr.max()),
+            seg_totals["bow"],
+            seg_totals["en_echelon"],
+            seg_totals["straight"],
+        )
+    return new_map
+
+
 def _merge_plate_enclaves(mesh: CVTMesh, cell_map: dict[int, str]) -> dict[int, str]:
-    """Reassign tiny disconnected plate enclaves to the surrounding plate.
+    """Reassign disconnected plate enclaves to the surrounding plate.
 
     The final boundary warp re-partitions from centroids and can carve
     single-cell exclaves ("dog-teeth"); rifting children (``plate_xxx_b``)
-    may also leave enclaves.  Connected components smaller than
-    max(20, 0.5% of the plate) are merged into the neighbour-majority
-    plate, restoring connectivity without moving the large-scale partition.
+    may also leave enclaves; the boundary-shaping steps (trench arc /
+    transform straighten / smooth) can sever a thin protrusion into a small
+    enclave (2026-09: plate_014 +113 cells, plate_012_a +29 cells).  Connected
+    components below the *surface* threshold ``max(50, 0.3% of the mesh)``
+    (~600 cells at 200k, the smallest recognised plate — Scotia ≈ 0.31%) are
+    merged into the neighbour-majority plate, restoring single-connectivity
+    without moving the large-scale partition.  A plate must be one connected
+    region; any non-largest component below this size is a fragment too small
+    to be a tectonic plate, so it is absorbed by its surroundings.
     """
     from collections import Counter, deque
 
@@ -1789,6 +2113,7 @@ def _merge_plate_enclaves(mesh: CVTMesh, cell_map: dict[int, str]) -> dict[int, 
     for cid, pid in cell_map.items():
         by_plate.setdefault(pid, []).append(cid)
 
+    merged = 0
     new_map = dict(cell_map)
     for pid, cids in by_plate.items():
         cellset = set(cids)
@@ -1811,7 +2136,7 @@ def _merge_plate_enclaves(mesh: CVTMesh, cell_map: dict[int, str]) -> dict[int, 
         if len(comps) < 2:
             continue
         comps.sort(key=len, reverse=True)
-        min_keep = max(20, int(0.005 * len(cids)))
+        min_keep = max(50, int(0.003 * mesh.num_cells))
         for comp in comps[1:]:
             if len(comp) >= min_keep:
                 continue
@@ -1824,7 +2149,96 @@ def _merge_plate_enclaves(mesh: CVTMesh, cell_map: dict[int, str]) -> dict[int, 
             target = votes.most_common(1)[0][0] if votes else pid
             for u in comp:
                 new_map[u] = target
+            merged += 1
+    if merged:
+        logger.info("  Enclave merge: %d disconnected fragments absorbed", merged)
     return new_map
+
+
+def _merge_enclosed_plates(
+    mesh: CVTMesh,
+    cell_map: dict[int, str],
+    *,
+    enclosure_deg: float = 240.0,
+    max_size_frac: float = 0.02,
+) -> tuple[dict[int, str], set[str]]:
+    """Absorb plates that a single neighbour nearly fully encloses ("holes").
+
+    Real plates are roughly convex Voronoi cells (``plate_tectonics.md``: the
+    graph Voronoi is convex, so plates never enclose each other).  Tectonic
+    evolution — rifting small fragments then re-partitioning from centroids —
+    can pinch one plate into a concave pocket so a single neighbour wraps around
+    it on almost every side (the "半包围" plate-shape artefact, §5.6).  Such a
+    plate is topologically a *hole* in its neighbour, not a tectonic plate, and
+    is absorbed into the enclosing plate.
+
+    A plate *A* is absorbed when the boundary cells shared with a single
+    neighbour *B* span more than ``enclosure_deg`` of azimuth around A's
+    centroid (B wraps around >75% of A's horizon) **and** A is small (<
+    ``max_size_frac`` of the surface) — a large plate legitimately ringed by
+    several neighbours is never a hole.
+
+    Returns ``(new_map, removed_ids)``.
+    """
+    n = mesh.num_cells
+    by_plate: dict[str, list[int]] = {}
+    for cid, pid in cell_map.items():
+        by_plate.setdefault(pid, []).append(cid)
+
+    xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+    max_cells = max_size_frac * n
+
+    new_map = dict(cell_map)
+    removed: set[str] = set()
+
+    for a_pid, a_cells in by_plate.items():
+        if len(a_cells) > max_cells:
+            continue
+        ca = xyz[a_cells].mean(axis=0)
+        norm = float(np.linalg.norm(ca))
+        if norm < 1e-12:
+            continue
+        ca /= norm
+        e1 = np.array([-ca[1], ca[0], 0.0])
+        if np.linalg.norm(e1) < 1e-9:
+            e1 = np.array([0.0, 0.0, 1.0])
+        e1 /= np.linalg.norm(e1)
+        e2 = np.cross(ca, e1)
+
+        # Boundary cells of A grouped by neighbouring plate.  Read the LATEST
+        # map (not the snapshot) so a neighbour already absorbed into a third
+        # plate this pass is resolved to that plate (avoids orphaning A's cells).
+        nb_angs: dict[str, list[float]] = {}
+        for cid in a_cells:
+            for nid in mesh.cells[cid].neighbors:
+                npid = new_map.get(nid, "")
+                if npid and npid != a_pid:
+                    v = xyz[cid] - ca
+                    nb_angs.setdefault(npid, []).append(float(np.arctan2(v @ e2, v @ e1)))
+
+        best_pid, best_span = None, 0.0
+        for b_pid, angs in nb_angs.items():
+            if len(angs) < 2:
+                continue
+            s = np.sort(np.asarray(angs))
+            gaps = np.diff(np.concatenate([s, s[:1] + 2.0 * np.pi]))
+            span = float(2.0 * np.pi - gaps.max())
+            if span > best_span:
+                best_pid, best_span = b_pid, span
+
+        if best_pid is not None and best_span > np.radians(enclosure_deg):
+            for cid in a_cells:
+                new_map[cid] = best_pid
+            removed.add(a_pid)
+            logger.info(
+                "  Enclosed plate %s (%d cells, %.0f° span) absorbed into %s",
+                a_pid,
+                len(a_cells),
+                np.degrees(best_span),
+                best_pid,
+            )
+
+    return new_map, removed
 
 
 def warp_boundaries(
@@ -1832,6 +2246,7 @@ def warp_boundaries(
     cell_plate_map: dict[int, str],
     config: TerrainPipelineConfig,
     plate_weights: dict[str, float] | None = None,
+    coast_cost: np.ndarray | None = None,
 ) -> dict[int, str]:
     """Re-partition as a noise-warped Voronoi of the current plate positions.
 
@@ -1871,6 +2286,11 @@ def warp_boundaries(
     tree = cKDTree(cell_xyz)
     seeds = _assign_distinct_seeds(tree, centroids)
     cost = build_cell_cost(mesh, config.seed + 7777, config.boundary_warp)
+    if coast_cost is not None:
+        # Coast attraction + noise warp: both are ≥1 multipliers, so the coast
+        # band stays high-cost (attracting boundaries) while the noise still
+        # bends them into arcs (§5 方案 2).
+        cost = cost * coast_cost
     speed = _plate_speeds(plate_ids, plate_weights, areas) if plate_weights is not None else None
     warped = voronoi_partition_warped(mesh, seeds, plate_ids, cost, plate_speed=speed)
     logger.info("  Boundary warp: %d plates, amplitude=%.2f", len(plate_ids), config.boundary_warp)

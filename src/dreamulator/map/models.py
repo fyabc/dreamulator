@@ -170,6 +170,30 @@ class VoronoiCell(BaseModel):
         default=0.0,
         description="Convergence rate at boundary (cm/year, positive=convergent)",
     )
+    tangential_fraction: float = Field(
+        default=0.0,
+        description=(
+            "Tangential fraction of relative velocity at the boundary "
+            "(v_t/v_total, [0,1]).  1.0 = pure strike-slip; lower = more oblique.  "
+            "Drives leaky-transform pull-apart basins (§3.7)."
+        ),
+    )
+    cumulative_convergence_km: float = Field(
+        default=0.0,
+        description=(
+            "Cumulative convergence (shortening) accumulated at this cell during "
+            "tectonic evolution, in km.  Drives the orogen width (critical taper, "
+            "§3.6): a boundary that converged longer/faster gets a wider belt."
+        ),
+    )
+    cumulative_divergence_km: float = Field(
+        default=0.0,
+        description=(
+            "Cumulative divergence (extension) accumulated at this cell during "
+            "tectonic evolution, in km.  Drives the continental rift-valley width "
+            "(§3.6): a boundary that rifted longer/faster gets a wider rift sea."
+        ),
+    )
 
     # Climate properties (filled by climate simulator — TODO)
     temperature_C: float | None = Field(

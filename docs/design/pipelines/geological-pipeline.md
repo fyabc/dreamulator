@@ -426,6 +426,7 @@ features:
     strength: 0.85              # + 陆地 … − 海洋；|strength|>1 用于"切开"大陆
     elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
     bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
+    noise_amplitude: 0.8        # 可选：边界粗糙化强度（0=光滑椭圆；见「陆地偏置场」）
     elevation_target_m: -120.0  # 可选：高程钉扎（相对校准海面 0 m；负=水深）
     pin_strength: 1.0           # 可选：钉扎信任度 0–1（核提供空间软边）
 ```
@@ -445,6 +446,13 @@ features:
 4. 核函数为余弦钟形（边缘 C¹ 连续）：`kernel(q) = 0.5(1 + cos(πq))`（q<1），
    否则 0。贡献 = `strength · kernel`。
 5. 叠加全部 feature，再加 `hemisphere_land_bias · sin(lat)`，clamp 到 [-1, 1]。
+
+**边界粗糙化**（`noise_amplitude > 0`）：`_feature_kernel` 把归一化距离缩放为
+`q / (1 + noise_amplitude·noise)`，其中 `noise` 是逐 cell 的确定性 fBm
+（seed 派生自 `config.seed`，octaves=5、lacunarity=2.5、persistence=0.5、
+base_freq=15）——有效半径随噪声在 ±`noise_amplitude` 内扰动，椭圆/裂谷边缘变成
+分形海岸线而非规整形状（proposal §4）。`noise_amplitude` 上限 3.0，但取值需 < 1
+（避免 `1 + noise_amplitude·noise` 触及零除）。
 
 #### 地壳赋值（全局阈值）
 
@@ -691,7 +699,7 @@ growth_speed_multiplier →  (新增字段)
    （~800 km 波长，隆起幅度 ∈ [−0.25, 1.35]）：高值段成主岛/山结，负值段沉降为
    弧间断陷海——汇聚带不再均匀缎带；`boundary_uplift_noise` 调制岛弧/洋脊。
 3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
-   沿板块运动方向（欧拉极速度）追踪链，`hotspot_height`（默认 8500 m）从洋底抬升露海面成岛，
+   沿板块运动方向（欧拉极速度）追踪链，`hotspot_active_height_m`（默认 8500 m）从洋底抬升露海面成岛，
    沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 9（模拟大型热点）。
 4. **区域噪声**：低频 fBm（`regional_noise_scale`，陆/海不同振幅
    `regional_noise_amplitude_land_m` / `regional_noise_amplitude_ocean_m`）。
@@ -714,13 +722,20 @@ growth_speed_multiplier →  (新增字段)
 - **沿走向调制**：每条 belt 用 1D simplex 噪声沿大圆弧采样，调制各段振幅
   （振幅 ∈ [base × 0.3, base × 1.7]），造山带呈高峰 + 鞍部而非均匀脊线；
   路径双频 meander（0.35+0.12 rad），宽度沿走向 0.55–1.45× 变化。
+- **长度封顶**：造山带/裂谷的大圆弧长度按右偏分布随机截断
+  `min_deg + (max_deg − min_deg)·rand²`（默认 2–10°，多数 ~600 km、最长 ~1200 km），
+  配合 `_angle_ap > angle_ab` 的长度过滤，把「贯穿板块的单条长条」变成「散碎短段」。
 - **山间盆地**：沿走向噪声低于阈值时（`interior_basin_chance`）该段成为断陷盆地，
   深度上限 `interior_basin_depth_max_m`（部分盆底低于海平面）。
-- **裂谷**：30% 概率/板块，独立线性凹陷（深 300–800 m，σ=40–100 km）。
+- **裂谷**：每板块 `interior_rift_chance` 概率（默认 0.5）生成一条独立线性凹陷
+  （深 300–800 m，σ=40–100 km），复用同一长度封顶，数量远少于造山带。
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
-| `interior_orogeny_count` | 2 | 0–5 | 基准 belt 数，随 inland cell 数缩放，硬上限 4 |
+| `interior_orogeny_count` | 5 | 0–10 | 基准 belt 数/板块，随 inland cell 数缩放（+1/800 cell），无硬上限 |
+| `interior_belt_length_min_deg` | 2.0 | 0–5 | belt/裂谷大圆弧最短长度（度） |
+| `interior_belt_length_max_deg` | 10.0 | 5–20 | belt/裂谷大圆弧最长长度（度） |
+| `interior_rift_chance` | 0.5 | 0–1 | 每板块生成裂谷的概率 |
 | `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
 | `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
 | `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
@@ -815,8 +830,12 @@ age = max_age · d_div / (d_div + d_conv)
 4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
 5. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
 6. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
-7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）。
-8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。
+7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
+   （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
+   （物理上是海沟）和大陆海岸山一起平滑（§3.9 海岸过渡）。
+8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
+   （削峰）只放大「高于目标」的下压方向，低于目标（海沟）保持线性上拉——避免把
+   feature 软边上的深沟 cell 对称指数化抬成山（§3.9 钉扎过抬修复）。
 9. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
    `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
    上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。

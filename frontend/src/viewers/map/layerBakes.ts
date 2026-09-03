@@ -69,10 +69,13 @@ const CRUST_INTERIOR_COLORS: Record<string, [number, number, number]> = {
 /** Hotspot chain colour — magenta-pink, distinct from convergent red. */
 const HOTSPOT_COLOR: [number, number, number] = hexRgb('#e040fb')
 
-/** Interior landform colours — paleo-orogeny (brown) and rift (teal). */
+/** Interior landform colours — paleo-orogeny (brown), rift (teal),
+ *  strike-slip transform (gold) and intermontane basin (saddle brown). */
 const LANDFORM_COLORS: Record<string, [number, number, number]> = {
   orogeny: hexRgb('#b8860b'),  // dark goldenrod
   rift:    hexRgb('#008080'),  // teal
+  transform: hexRgb('#d4a017'),  // gold (strike-slip fault)
+  basin:   hexRgb('#8b5a2b'),  // saddle brown (intermontane basin)
 }
 
 /** Closed inland-lake colour — light cyan, distinct from the deep ocean blue. */

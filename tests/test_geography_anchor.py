@@ -491,8 +491,9 @@ def test_offset_shoals_strait_closes() -> None:
     cell = mesh.cells[_nearest(mesh, 180.0, 0.0)]
     assert cell.elevation == pytest.approx(-80.0, abs=1e-6)
     assert cell.elevation > -120.0  # above the glacial sea surface
-    # 40 m above the surface <= 50 m buffer -> transitional crust.
-    assert cell.crust_type == "transitional"
+    # 40 m above the surface (still below sea level) -> oceanic crust.
+    # Transitional crust was removed in §8; shallow water is now oceanic.
+    assert cell.crust_type == "oceanic"
 
 
 def test_authored_ocean_base_override() -> None:

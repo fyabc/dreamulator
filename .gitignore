@@ -57,6 +57,9 @@ data/**/build_profile.json
 # Validation reports (regeneratable via scripts/validate_climate.py)
 reports/
 
+# Headless map-layer export artifacts (diagnostic, regeneratable via `dreamulator export`)
+export/
+
 # Raw reference data downloads (use scripts to re-download)
 *.grd
 *.grd.gz

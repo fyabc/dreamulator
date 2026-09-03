@@ -41,6 +41,7 @@ from .models import (
     PlateType,
     TectonicPlate,
 )
+from .pipeline_types import lonlat_to_xyz
 
 if TYPE_CHECKING:
     from .pipeline_types import TerrainPipelineConfig
@@ -127,6 +128,106 @@ def select_plate_seeds(
                 seeds.append(cid)
             if len(seeds) >= num_plates:
                 break
+
+    return seeds
+
+
+def _connected_components(mesh: CVTMesh, labels: np.ndarray) -> list[list[int]]:
+    """Connected components of the cells where ``labels[i]`` is True.
+
+    Deterministic: cells are swept in index order and components are returned
+    in first-touch order (ties broken by cell index).
+    """
+    n = mesh.num_cells
+    comps: list[list[int]] = []
+    seen = np.zeros(n, dtype=np.bool_)
+    for start in range(n):
+        if not labels[start] or seen[start]:
+            continue
+        comp: list[int] = []
+        stack = [start]
+        seen[start] = True
+        while stack:
+            cid = stack.pop()
+            comp.append(cid)
+            for nb in mesh.cells[cid].neighbors:
+                if labels[nb] and not seen[nb]:
+                    seen[nb] = True
+                    stack.append(nb)
+        comps.append(comp)
+    return comps
+
+
+def select_geography_seeds(
+    mesh: CVTMesh,
+    mask: np.ndarray,
+    field: np.ndarray,
+    num_plates: int,
+) -> list[int]:
+    """Select plate seeds aligned to authored geography (§5 方案 2).
+
+    Continents are plates and oceans are plates: each connected continental or
+    oceanic region of at least ``0.5%`` of the surface gets one seed at its
+    interior (the cell with the largest ``|field|`` — deepest land or deepest
+    ocean).  Remaining seeds are placed by farthest-point sampling over non-coast
+    cells, spreading plates evenly while keeping every seed off a coastline.  The
+    resulting Voronoi partition has boundaries near continental margins instead of
+    through continent interiors / ocean basins.
+
+    Fully deterministic (no RNG): component order follows cell index, and the
+    interior/farthest picks use ``max``/``argmax`` with stable tie-breaking.
+    """
+    n = mesh.num_cells
+    xyz = mesh.cell_xyz
+
+    # Non-coast cells: every neighbour has the same crust type.
+    interior = np.ones(n, dtype=np.bool_)
+    for i in range(n):
+        for nb in mesh.cells[i].neighbors:
+            if mask[nb] != mask[i]:
+                interior[i] = False
+                break
+
+    min_size = max(1, int(n * 0.005))
+    comps = _connected_components(mesh, mask) + _connected_components(mesh, ~mask)
+    comps = [c for c in comps if len(c) >= min_size]
+    comps.sort(key=len, reverse=True)
+
+    seeds: list[int] = []
+    used: set[int] = set()
+    for comp in comps:
+        if len(seeds) >= num_plates:
+            break
+        cands = [i for i in comp if interior[i]] or comp
+        best = max(cands, key=lambda i: abs(field[i]))
+        if best in used:
+            continue
+        seeds.append(best)
+        used.add(best)
+
+    # Farthest-point sampling over the remaining non-coast cells to reach
+    # ``num_plates``.  This splits the largest regions further while keeping a
+    # near-uniform spread (and the power-law size skew is inherited from the
+    # component sizes, not the seed spacing).
+    cand_idx = np.array([i for i in range(n) if interior[i] and i not in used], dtype=np.int64)
+    if not seeds and len(cand_idx) > 0:
+        # No component reached min_size (tiny authored geography): start from
+        # the deepest-interior cell.
+        best = int(cand_idx[int(np.argmax(np.abs(field[cand_idx])))])
+        seeds.append(best)
+        used.add(best)
+        cand_idx = cand_idx[cand_idx != best]
+
+    if seeds:
+        seed_xyz = xyz[np.asarray(seeds, dtype=np.int64)]
+        while len(seeds) < num_plates and len(cand_idx) > 0:
+            dots = np.clip(xyz[cand_idx] @ seed_xyz.T, -1.0, 1.0)
+            nearest = np.arccos(dots).min(axis=1)
+            j = int(np.argmax(nearest))
+            new_cell = int(cand_idx[j])
+            seeds.append(new_cell)
+            seed_xyz = np.vstack([seed_xyz, xyz[new_cell]])
+            cand_idx = np.delete(cand_idx, j)
 
     return seeds
 
@@ -235,15 +336,15 @@ def build_cell_cost(
     mesh: CVTMesh,
     rng_seed: int,
     amplitude: float,
-    base_freq: float = 0.6,
+    base_freq: float = 2.0,
 ) -> np.ndarray:
     """Per-cell traversal cost for the noise-warped partition.
 
     Returns ``1 + amplitude * noise`` (clamped to stay positive), where noise
-    ∈ [-1, 1] is deterministic LOW-frequency fBm sampled at each cell's 3D
-    position.  Low-cost cells attract boundaries, high-cost cells repel them,
-    warping the edges.  ``base_freq`` < 1 gives wavelengths larger than a
-    typical plate, so boundaries bend into smooth arcs instead of jaggies.
+    ∈ [-1, 1] is deterministic fBm sampled at each cell's 3D position.  Low-cost
+    cells attract boundaries, high-cost cells repel them, warping the edges.
+    ``base_freq`` ~2 gives wavelengths of a few thousand km (about a plate), so
+    boundaries bend into visible arcs/segments instead of running straight.
     """
     from .noise_kernels import fbm_on_points
 
@@ -549,21 +650,201 @@ def assign_crust_types(
 # ---------------------------------------------------------------------------
 
 
+def _cross_matrix(v: np.ndarray) -> np.ndarray:
+    """Skew-symmetric cross-product matrix ``[v]_×`` (3×3)."""
+    x, y, z = v
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+
+
+def _coherent_poloidal_axis(config: TerrainPipelineConfig) -> np.ndarray:
+    """Symmetry axis of the coherent poloidal flow.
+
+    Tidally-locked bodies (tidal plate-speed coupling on) anchor the flow to
+    the sub-planet (tidal) axis; otherwise the rotation axis (y = north).
+    """
+    if config.tidal_plate_speed_enabled:
+        ax = lonlat_to_xyz(config.sub_planet_longitude_deg, config.sub_planet_latitude_deg)
+        return np.asarray(ax, dtype=np.float64)
+    return np.array([0.0, 1.0, 0.0], dtype=np.float64)
+
+
+def coherent_velocity_field(
+    points: np.ndarray,
+    poloidal_axis: np.ndarray,
+    poloidal_amp_cm_yr: float,
+    extra_fields: list[tuple[np.ndarray, float]] | None = None,
+) -> np.ndarray:
+    """Coherent poloidal + toroidal surface velocity field (cm/yr).
+
+    The dominant degree-2 tidal POLOIDAL cell (upwelling at ``P = ±â``,
+    downwelling on the ring ``P·â = 0``, peak speed ``A/2`` at ``c = ±1/√2``)
+    plus optional ``extra_fields`` — degree-2 TOROIDAL cells (``c·(âₖ × P)``,
+    divergence-free differential rotation about random axes).  A purely
+    poloidal field is a gradient, so its rigid-rotation fit is forced ⊥ the
+    tidal axis for every plate (transform-dominated boundaries); the toroidal
+    cells add the divergent-rotation component that diversifies the fitted
+    Euler poles, representing internal-heating convection's vorticity.
+
+    .. math::
+
+        v(P) = A \\, c\\,(c\\,P - \\hat a), \\qquad c = P\\cdot\\hat a
+    """
+    c = points @ poloidal_axis
+    v = poloidal_amp_cm_yr * c[:, None] * (c[:, None] * points - poloidal_axis[None, :])
+    if extra_fields:
+        for axis, amp in extra_fields:
+            cc = points @ axis
+            v = v + amp * cc[:, None] * np.cross(axis, points)
+    return v  # type: ignore[no-any-return]
+
+
+def _convection_harmonics(
+    rng: np.random.Generator,
+    base_amp: float,
+    num: int,
+    rel_amp: float,
+) -> list[tuple[np.ndarray, float]]:
+    """Random degree-2 toroidal convection cells (internal-heating diversity).
+
+    Each cell is a degree-2 TOROIDAL field ``c·(âₖ × P)`` about a random axis
+    ``âₖ`` with amplitude ``rel_amp · base_amp · U(0.5, 1)``.  Physically these
+    are the ~15% internal heating (radiogenic + secular cooling) whose
+    multi-cell convection carries vorticity (differential rotation) not tied to
+    the tidal axis; a poloidal gradient alone would force every plate's Euler
+    pole ⊥ the tidal axis, and the toroidal cells break that symmetry.
+    """
+    fields: list[tuple[np.ndarray, float]] = []
+    for _ in range(num):
+        axis = rng.standard_normal(3)
+        axis = axis / np.linalg.norm(axis)
+        amp = base_amp * rel_amp * float(rng.uniform(0.5, 1.0))
+        fields.append((np.asarray(axis), amp))
+    return fields
+
+
+def _fit_rotation_vector(points: np.ndarray, velocities: np.ndarray) -> np.ndarray:
+    """Least-squares rigid rotation ``ω`` (cm/yr) fitting ``ω × P_i ≈ v_i``.
+
+    Solved via normal equations ``H ω = b`` (3×3).  ``ω × P = −[P]_× ω``, so
+    ``H = Σ AᵀA`` and ``b = Σ Aᵀv`` with ``A = −[P]_×``.  The solve uses
+    ``np.linalg.solve`` (LU) rather than ``lstsq`` (SVD) because SVD is
+    non-deterministic under multithreaded BLAS, which would break pipeline
+    reproducibility.  A tiny ridge regularises the (never-hit in practice)
+    degenerate case of a plate whose cells all lie on one great circle.
+    """
+    h = np.zeros((3, 3))
+    b = np.zeros(3)
+    for i in range(len(points)):
+        a = -_cross_matrix(points[i])
+        h += a.T @ a
+        b += a.T @ velocities[i]
+    omega = np.linalg.solve(h + np.eye(3) * 1e-12, b)
+    return np.asarray(omega, dtype=np.float64)
+
+
+def _plate_type_from_cells(mesh: CVTMesh, cell_ids: list[int]) -> PlateType:
+    """Plate type from majority crust (continental / oceanic / mixed)."""
+    n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
+    n_ocean = len(cell_ids) - n_cont
+    if n_cont > 2 * n_ocean:
+        return PlateType.CONTINENTAL
+    if n_ocean > 2 * n_cont:
+        return PlateType.OCEANIC
+    return PlateType.MIXED
+
+
+def _assign_coherent_euler_poles(
+    mesh: CVTMesh,
+    plate_cells: dict[str, list[int]],
+    config: TerrainPipelineConfig,
+    radius_cm: float,
+    rng: np.random.Generator,
+) -> list[TectonicPlate]:
+    """Euler poles fit (least squares) to a coherent poloidal velocity field.
+
+    The field is the dominant degree-2 tidal cell anchored to the tidal axis
+    plus random higher-harmonic convection cells (see
+    :func:`coherent_velocity_field`); each plate's rigid rotation is the best
+    fit to that field over its cells, so plate-motion directions are coherent
+    but diverse (not all ⊥ the tidal axis).
+    """
+    _, speed_max = config.plate_speed_range_cm_yr
+    poloidal_axis = _coherent_poloidal_axis(config)
+    # Peak poloidal surface speed = speed_max → A = 2·speed_max.
+    poloidal_amp = 2.0 * speed_max
+
+    # Internal-heating convection diversity (§ 方向 3): random extra cells
+    # generated ONCE so every plate sees the same global field.
+    extra_fields = _convection_harmonics(
+        rng,
+        poloidal_amp,
+        config.convection_harmonics,
+        config.convection_harmonic_amp,
+    )
+
+    omega_fit: dict[str, np.ndarray] = {}
+    for plate_id, cell_ids in sorted(plate_cells.items()):
+        pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in cell_ids])
+        pts /= np.linalg.norm(pts, axis=1, keepdims=True)
+        vel = coherent_velocity_field(pts, poloidal_axis, poloidal_amp, extra_fields)
+        omega_fit[plate_id] = _fit_rotation_vector(pts, vel)
+
+    # Renormalise so the fastest plate matches speed_max (tidal-derived anchor).
+    max_omega = max((float(np.linalg.norm(w)) for w in omega_fit.values()), default=1.0)
+    scale = speed_max / max_omega if max_omega > 1e-12 else 1.0
+
+    plates: list[TectonicPlate] = []
+    for plate_id, cell_ids in sorted(plate_cells.items()):
+        plate_idx = int(plate_id.split("_")[1])
+        omega_cm_yr = omega_fit[plate_id] * scale
+        # Continental slowdown (§5.5): scale the rotation by the plate's
+        # continental-cell fraction so continental rifts don't open as fast as
+        # mid-ocean ridges (Africa ~2 vs Pacific ~10 cm/yr ≈ 0.2–0.3).
+        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
+        cont_frac = n_cont / len(cell_ids) if cell_ids else 0.0
+        slowdown = 1.0 - (1.0 - config.continental_plate_speed_factor) * cont_frac
+        omega_cm_yr = omega_cm_yr * slowdown
+        mag = float(np.linalg.norm(omega_cm_yr))
+        if mag < 1e-15:
+            axis = np.array([0.0, 0.0, 1.0])
+            omega_rad_yr = 0.0
+        else:
+            axis = omega_cm_yr / mag
+            omega_rad_yr = mag / radius_cm
+        plates.append(
+            TectonicPlate(
+                id=plate_id,
+                name=f"Plate {plate_idx + 1}",
+                type=_plate_type_from_cells(mesh, cell_ids),
+                cell_ids=sorted(cell_ids),
+                euler_pole=EulerPole(
+                    x=float(axis[0]),
+                    y=float(axis[1]),
+                    z=float(axis[2]),
+                    omega_rad_yr=omega_rad_yr,
+                ),
+                growth_speed_multiplier=1.0,
+            )
+        )
+        for cid in cell_ids:
+            mesh.cells[cid].plate_id = plate_id
+
+    return plates
+
+
 def assign_euler_poles(
     mesh: CVTMesh,
     cell_plate_map: dict[int, str],
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
 ) -> list[TectonicPlate]:
-    """Create TectonicPlate objects with random Euler poles.
+    """Create TectonicPlate objects with Euler poles.
 
-    Each plate receives:
-    - A random rotation axis (unit vector on the sphere).
-    - An angular velocity derived from ``plate_speed_range_cm_yr``.
-    - Plate type determined by majority crust.
-
-    Plate speed defaults from Cortial 2019: 1–10 cm/yr, with
-    v₀ = 100 mm/yr as the maximum reference speed.
+    With ``config.coherent_motion`` (default) the poles are fit (least squares)
+    to a coherent poloidal velocity field derived from tidal-heating geometry,
+    so plate-motion directions are coherent rather than random — see
+    ``docs/design/proposals/plate-motion-coherence.md``.  With it off, the
+    original Cortial 2019 random-direction poles are used.
     """
     plate_cells: dict[str, list[int]] = {}
     for cid, pid in cell_plate_map.items():
@@ -571,6 +852,9 @@ def assign_euler_poles(
 
     speed_min, speed_max = config.plate_speed_range_cm_yr
     radius_cm = config.radius_km * 1e5  # for cm/yr → rad/yr conversion
+
+    if config.coherent_motion:
+        return _assign_coherent_euler_poles(mesh, plate_cells, config, radius_cm, rng)
 
     plates: list[TectonicPlate] = []
 
@@ -604,15 +888,7 @@ def assign_euler_poles(
         euler_axis = np.cross(centroid, motion_dir)
         euler_axis /= np.linalg.norm(euler_axis)
 
-        # Plate type from majority crust
-        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
-        n_ocean = len(cell_ids) - n_cont
-        if n_cont > 2 * n_ocean:
-            plate_type = PlateType.CONTINENTAL
-        elif n_ocean > 2 * n_cont:
-            plate_type = PlateType.OCEANIC
-        else:
-            plate_type = PlateType.MIXED
+        plate_type = _plate_type_from_cells(mesh, cell_ids)
 
         plates.append(
             TectonicPlate(
@@ -709,13 +985,33 @@ def _generate_plates_impl(
 
     logger.info("Generating %d tectonic plates", config.num_plates)
 
-    # 1. Seed selection
-    logger.info("  Step 1/4: Selecting plate seeds")
-    seeds = select_plate_seeds(mesh, config.num_plates, rng)
+    from .geography import apply_geography_crust, build_geography_coast_cost
 
-    # 2. Spherical Voronoi partition (Cortial 2019 §3)
-    logger.info("  Step 2/5: Spherical Voronoi partition")
-    cell_plate_map = _voronoi_partition(mesh, seeds)
+    # Geography-aligned partition (§5 方案 2): with authored geography, a
+    # coastline is a plate boundary (continent ↔ ocean).  Seed each major
+    # continent/ocean basin and weight the partition so plate boundaries settle
+    # on continental margins instead of running through interiors.
+    coast = build_geography_coast_cost(mesh, config, raster_bias=raster_bias)
+
+    if coast is not None:
+        coast_cost, field, mask = coast
+        logger.info("  Step 1/5: Geography-aligned seed selection")
+        seeds = select_geography_seeds(mesh, mask, field, config.num_plates)
+        logger.info("  Step 2/5: Weighted Voronoi partition (coast-attracted)")
+        cell_plate_map = voronoi_partition_warped(
+            mesh,
+            seeds,
+            [f"plate_{i:03d}" for i in range(len(seeds))],
+            coast_cost,
+        )
+    else:
+        # 1. Seed selection
+        logger.info("  Step 1/5: Selecting plate seeds")
+        seeds = select_plate_seeds(mesh, config.num_plates, rng)
+
+        # 2. Spherical Voronoi partition (Cortial 2019 §3)
+        logger.info("  Step 2/5: Spherical Voronoi partition")
+        cell_plate_map = _voronoi_partition(mesh, seeds)
 
     # 3. Boundary smoothing (Cortial 2019 "noise-warped geodetic distance")
     logger.info("  Step 3/5: Boundary smoothing (strength=%.2f)", config.boundary_noise)
@@ -725,7 +1021,7 @@ def _generate_plates_impl(
     plate_sizes = sorted(
         [
             sum(1 for v in cell_plate_map.values() if v == f"plate_{i:03d}")
-            for i in range(config.num_plates)
+            for i in range(len(seeds))
         ],
         reverse=True,
     )
@@ -735,13 +1031,11 @@ def _generate_plates_impl(
     )
 
     # 4. Crust types
-    if config.geography is not None:
+    if coast is not None:
         # Authored geography: assign crust from the land-bias field via a
-        # global threshold (realizes named continents/oceans). Plates are still
-        # generated above for tectonics/boundaries; only crust is anchored.
+        # global threshold (realizes named continents/oceans).  The plate
+        # partition above is already aligned to the coast; only crust is set.
         logger.info("  Step 4/5: Assigning crust types (authored geography)")
-        from .geography import apply_geography_crust
-
         apply_geography_crust(mesh, config, raster_bias=raster_bias)
     else:
         logger.info("  Step 4/5: Assigning crust types")

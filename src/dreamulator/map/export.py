@@ -257,6 +257,117 @@ def save_rgba_png(rgba: np.ndarray, path: Path) -> None:
     Image.fromarray(rgba, "RGBA").save(str(path))
 
 
+def plate_velocity_east_north(
+    mesh: CVTMesh,
+    omega_by_plate: dict[str, tuple[np.ndarray, float]],
+    radius_km: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-cell surface velocity (east, north) in cm/yr from Euler poles.
+
+    Rigid plate motion ``v(P) = ω × P`` with ``ω = axis · omega_rad_yr`` (unit
+    axis, rad/yr), scaled to cm/yr at the surface by the planet radius.  This
+    is the same field the tectonic simulator uses to classify boundary types,
+    so it is exactly the quantity one wants to see when debugging coherent vs
+    diverse plate motion.  Returns ``(v_east, v_north)`` in mesh cell order.
+    """
+    radius_cm = radius_km * 1e5
+    xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+    lon = np.radians(np.array([c.lon for c in mesh.cells]))
+    lat = np.radians(np.array([c.lat for c in mesh.cells]))
+    plate_ids = [c.plate_id for c in mesh.cells]
+
+    v = np.zeros_like(xyz)
+    for pid, (axis, omega_rad_yr) in omega_by_plate.items():
+        mask = np.array([p == pid for p in plate_ids])
+        if mask.any():
+            v[mask] = np.cross(axis, xyz[mask]) * (omega_rad_yr * radius_cm)
+
+    e_east = np.stack([-np.sin(lon), np.zeros_like(lon), np.cos(lon)], axis=1)
+    e_north = np.stack(
+        [-np.sin(lat) * np.cos(lon), np.cos(lat), -np.sin(lat) * np.sin(lon)], axis=1
+    )
+    v_east = np.einsum("ij,ij->i", v, e_east)
+    v_north = np.einsum("ij,ij->i", v, e_north)
+    return v_east, v_north
+
+
+def render_plate_motion_layer(
+    mesh: CVTMesh,
+    indices: np.ndarray,
+    omega_by_plate: dict[str, tuple[np.ndarray, float]],
+    radius_km: float,
+    *,
+    step: int = 96,
+    max_arrow_px: float = 24.0,
+    speed_max_cm_yr: float | None = None,
+    background: tuple[int, int, int, int] = (0, 0, 0, 255),
+) -> np.ndarray:
+    """Render plate velocity arrows (``v = ω × r``) to an RGBA array.
+
+    Arrows are drawn on a subsampled equirectangular grid (every ``step`` px),
+    length ∝ speed (capped at ``max_arrow_px`` at ``speed_max_cm_yr``), hue by
+    direction.  East components are divided by ``cos(lat)`` so arrows keep their
+    true bearing despite the equirectangular east-west compression.
+    """
+    import colorsys
+    import math
+
+    from PIL import Image, ImageDraw
+
+    v_east, v_north = plate_velocity_east_north(mesh, omega_by_plate, radius_km)
+    height, width = indices.shape
+
+    ve_grid = v_east[indices]
+    vn_grid = v_north[indices]
+    speed = np.hypot(ve_grid, vn_grid)
+    if speed_max_cm_yr is None:
+        speed_max_cm_yr = float(np.percentile(speed[speed > 0], 95)) if (speed > 0).any() else 1.0
+    speed_max_cm_yr = max(speed_max_cm_yr, 1e-6)
+
+    # latitude per row (row 0 = +90°), for east compression + pole guard
+    lat_grid = np.radians(np.linspace(90.0, -90.0, height))
+    cos_lat = np.cos(lat_grid)
+
+    img = Image.new("RGBA", (width, height), background)
+    draw = ImageDraw.Draw(img)
+    scale = max_arrow_px / speed_max_cm_yr
+    for y in range(step // 2, height, step):
+        cy = cos_lat[y]
+        if abs(cy) < 0.2:  # near poles, east direction is ill-defined
+            continue
+        for x in range(step // 2, width, step):
+            ve = ve_grid[y, x] / cy  # correct equirect east compression
+            vn = -vn_grid[y, x]  # north → up (−y)
+            s = math.hypot(ve, vn)
+            if s < 0.02 * speed_max_cm_yr:
+                continue
+            length = min(s * scale, max_arrow_px)
+            ux, uy = ve / s, vn / s
+            dx, dy = ux * length, uy * length
+            ex, ey = x + dx * 0.5, y + dy * 0.5
+            sx, sy = x - dx * 0.5, y - dy * 0.5
+            hue = (math.atan2(vn, ve) % (2 * math.pi)) / (2 * math.pi)
+            r, g, b = colorsys.hsv_to_rgb(hue, 0.9, 1.0)
+            color = (int(r * 255), int(g * 255), int(b * 255), 255)
+            width_px = max(1, int(length * 0.10))
+            draw.line([(sx, sy), (ex, ey)], fill=color, width=width_px)
+            # arrowhead — two short segments back from the head
+            hx, hy = -ux, -uy
+            px, py = -uy, ux
+            hl = max(3.0, length * 0.35)
+            draw.line(
+                [(ex, ey), (ex + hx * hl + px * hl, ey + hy * hl + py * hl)],
+                fill=color,
+                width=width_px,
+            )
+            draw.line(
+                [(ex, ey), (ex + hx * hl - px * hl, ey + hy * hl - py * hl)],
+                fill=color,
+                width=width_px,
+            )
+    return np.asarray(img)
+
+
 # ---------------------------------------------------------------------------
 # PNG export
 # ---------------------------------------------------------------------------

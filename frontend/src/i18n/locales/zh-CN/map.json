@@ -138,6 +138,8 @@
     "hotspotChain": "热点链 {{id}}",
     "orogeny": "古造山带",
     "rift": "裂谷",
+    "transform": "转换断层",
+    "basin": "断陷盆地",
     "climate": "气候",
     "koppenClimate": "Köppen 气候",
     "annualTemp": "年均温",

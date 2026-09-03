@@ -256,6 +256,7 @@ class MapManager:
                 plate_id=c.get("plate_id"),
                 boundary_type=c.get("boundary_type"),
                 convergence_rate_cm_yr=c.get("convergence_rate_cm_yr", 0.0),
+                tangential_fraction=c.get("tangential_fraction", 0.0),
                 distance_to_boundary_km=c.get("distance_to_boundary_km", float("inf")),
                 biome=c.get("biome"),
                 neighbors=c.get("neighbors", []),

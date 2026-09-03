@@ -405,7 +405,8 @@ cd frontend && npm run build:static:local && npm run preview:static
 | 生态 | Madingley Model（通用生态系统）、Biblaridion Alien Biosphere（方法论） | ✅ |
 | 文明 | Seshat Databank（历史验证数据）、HANDY（人口-资源 ODE） | ✅ |
 
-**原则**：不在真空中设计算法。每个引擎决策都应有"论文/源码/数据"三者至少其一的支撑。
+**原则**：不在真空中设计算法。每个引擎决策都要有**物理第一性**（从物理推导）、**地球真实参考**
+（观测数据）或**业界成熟方案**（论文/源码）三者至少其一的支撑。
 竞品文档更新时，本节的速查表也需同步。
 
 ### i18n：多语言字符串

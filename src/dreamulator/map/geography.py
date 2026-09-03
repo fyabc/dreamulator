@@ -35,6 +35,15 @@ logger = logging.getLogger(__name__)
 # Deterministic noise seed offset (convention: mesh=seed, plates=seed+1,
 # tectonics=seed, synthesis=seed+100/+200).
 _GEOGRAPHY_NOISE_SEED_OFFSET = 500
+# Feature-kernel roughening noise (separate from the score-blending fBm at +500,
+# so the two noises are uncorrelated).
+_FEATURE_NOISE_SEED_OFFSET = 501
+
+
+def feature_noise_seed(config_seed: int) -> int:
+    """Deterministic seed for the feature-kernel roughening noise."""
+    return int(config_seed) + _FEATURE_NOISE_SEED_OFFSET
+
 
 FeatureKind = Literal[
     "continent",
@@ -169,8 +178,15 @@ def _feature_kernel(
     py: np.ndarray,
     pz: np.ndarray,
     feature: GeographyFeature,
+    noise: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Per-cell kernel of one feature: 1 at the centre → 0 at the edge (N,)."""
+    """Per-cell kernel of one feature: 1 at the centre → 0 at the edge (N,).
+
+    ``noise`` (optional, per-cell fBm in [-1, 1]) roughens the otherwise smooth
+    cosine-tapered boundary: the effective radius is scaled by
+    ``1 + noise_amplitude·noise``, so the ellipse / rift edge becomes a fractal
+    coastline instead of a regular shape.
+    """
     c = _lonlat_to_xyz(feature.lon, feature.lat)
     p = np.stack([px, py, pz], axis=1)
     dot = np.clip(p @ c, -1.0, 1.0)
@@ -181,6 +197,8 @@ def _feature_kernel(
     polar = abs(abs(feature.lat) - 90.0) < 1e-6
     if feature.elongation <= 1.0 + 1e-9 or polar:
         q = d / radius_rad
+        if feature.noise_amplitude > 0 and noise is not None:
+            q = q / (1.0 + feature.noise_amplitude * noise)
         return _cosine_kernel(q)
 
     # Elongated feature: elliptic metric in the tangent plane at the centre.
@@ -188,10 +206,11 @@ def _feature_kernel(
     semi_minor = radius_rad
     # The tangent-plane projection degenerates at the antipode (offset → 0 →
     # q → 0, a spurious full-strength hit on the far side of the planet).
-    # Any point farther than the semi-major axis is outside the ellipse
-    # regardless, so zero those first — this also removes the antipode.
+    # Pre-filter by the noise-expanded semi-major axis so the roughening can
+    # still push the edge outward (the antipode stays far outside).
     result = np.zeros(p.shape[0])
-    within = d <= semi_major
+    margin = 1.0 + max(feature.noise_amplitude, 0.0)
+    within = d <= semi_major * margin
     if not np.any(within):
         return result
     north, east = _tangent_frame(c)
@@ -204,6 +223,8 @@ def _feature_kernel(
     along = v @ axis
     across = v @ perp
     q = np.sqrt((along / semi_major) ** 2 + (across / semi_minor) ** 2)
+    if feature.noise_amplitude > 0 and noise is not None:
+        q = q / (1.0 + feature.noise_amplitude * noise)
     result[within] = _cosine_kernel(q[within])
     return result
 
@@ -213,9 +234,10 @@ def _feature_contribution(
     py: np.ndarray,
     pz: np.ndarray,
     feature: GeographyFeature,
+    noise: np.ndarray | None = None,
 ) -> np.ndarray:
     """Per-cell bias contribution of one feature (array of shape (N,))."""
-    return feature.strength * _feature_kernel(px, py, pz, feature)
+    return feature.strength * _feature_kernel(px, py, pz, feature, noise)
 
 
 def build_land_bias_field(
@@ -223,22 +245,42 @@ def build_land_bias_field(
     spec: GeographySpec,
     *,
     raster_bias: np.ndarray | None = None,
+    noise_seed: int | None = None,
 ) -> np.ndarray:
     """Build the per-cell land-bias field in [-1, 1].
 
     Positive values favour continental crust, negative oceanic.  Pure function
-    of (mesh, spec[, raster_bias]) — no randomness.  When a dense raster bias
-    (Gleba-style probability map, [-1, 1] per cell) is given, it is superposed
-    with weight ``spec.raster_weight`` — same treatment as the feature field.
+    of (mesh, spec[, raster_bias, noise_seed]) — no randomness.  When a dense
+    raster bias (Gleba-style probability map, [-1, 1] per cell) is given, it is
+    superposed with weight ``spec.raster_weight`` — same treatment as the
+    feature field.  ``noise_seed`` enables the per-feature ``noise_amplitude``
+    roughening (deterministic fBm); omit it to keep features smooth.
     """
     n = len(mesh.cells)
     px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
     py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
     pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
 
+    # Feature-roughening noise (computed once, shared across features) — only
+    # when a seed is given and at least one feature declares noise_amplitude.
+    noise: np.ndarray | None = None
+    if noise_seed is not None and any(f.noise_amplitude > 0 for f in spec.features):
+        from .noise_kernels import fbm_on_points
+
+        noise = fbm_on_points(
+            px,
+            py,
+            pz,
+            noise_seed,
+            octaves=5,
+            lacunarity=2.5,
+            persistence=0.5,
+            base_freq=15.0,
+        )
+
     field = np.zeros(n, dtype=np.float64)
     for feature in spec.features:
-        field += _feature_contribution(px, py, pz, feature)
+        field += _feature_contribution(px, py, pz, feature, noise)
 
     if spec.hemisphere_land_bias != 0.0:
         lat_rad = np.fromiter((np.radians(c.lat) for c in mesh.cells), dtype=np.float64, count=n)
@@ -326,38 +368,40 @@ def build_elevation_pins(
 # ---------------------------------------------------------------------------
 
 
-def apply_geography_crust(
+def compute_geography_land_mask(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
     *,
     anchor_weight: float | None = None,
     raster_bias: np.ndarray | None = None,
-) -> None:
-    """Set per-cell crust_type from the authored geography.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute ``(field, score, continental_mask)`` from the authored geography.
 
-    ``score = anchor_weight * bias_field + (1 - anchor_weight) * fBm``; the top
-    ``target_land_fraction`` cells by score become continental.  Used both for
-    the initial assignment (plate stage) and the post-tectonics re-anchor, so
-    the two use identical seeds and produce identical land patterns.
+    Pure function of ``(mesh, config[, raster_bias])`` — no side effects.  The
+    continental mask is the top ``target_land_fraction`` cells by
+    ``score = anchor_weight·field + (1−anchor_weight)·fBm``.  ``apply_geography_crust``
+    writes this mask to ``crust_type``; ``build_geography_coast_cost`` reuses the
+    mask to locate the coastline.  Returns all three (n,) arrays so callers that
+    need the field (seed interiority) or score (crust floor) don't recompute the
+    fBm.
 
-    Modifies ``mesh.cells[*].crust_type`` in place.
+    The caller must guarantee a geography spec is present (``config.geography``
+    is not None and has features or a raster).
     """
     from .noise_kernels import fbm_on_points
 
-    spec: GeographySpec | None = config.geography
-    if spec is None or (not spec.features and raster_bias is None):
-        return
+    spec = config.geography
+    assert spec is not None, "compute_geography_land_mask requires config.geography"
 
     n = len(mesh.cells)
-    if n == 0:
-        return
 
     weight = config.anchor_weight if anchor_weight is None else anchor_weight
     weight = float(min(max(weight, 0.0), 1.0))
-
     target_fraction = spec.land_fraction_target or config.target_land_fraction
 
-    field = build_land_bias_field(mesh, spec, raster_bias=raster_bias)
+    field = build_land_bias_field(
+        mesh, spec, raster_bias=raster_bias, noise_seed=feature_noise_seed(int(config.seed))
+    )
 
     px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
     py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
@@ -380,10 +424,93 @@ def apply_geography_crust(
     n_land = min(max(n_land, 0), n)
     # score[i] corresponds to mesh.cells[i]; argsort positions index the list.
     order = np.argsort(score)[::-1]
-    for pos in order[:n_land]:
-        mesh.cells[int(pos)].crust_type = "continental"
-    for pos in order[n_land:]:
-        mesh.cells[int(pos)].crust_type = "oceanic"
+    mask = np.zeros(n, dtype=np.bool_)
+    mask[order[:n_land]] = True
+
+    return field, score, mask
+
+
+def build_geography_coast_cost(
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
+    *,
+    raster_bias: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Coast-attraction cost field for the weighted plate partition (§5).
+
+    Returns ``(coast_cost, field, mask)`` or None when no authored geography is
+    present.  ``coast_cost[i] = 1 + w·max(0, 1 − d_i/band)`` where ``d_i`` is the
+    geodesic distance (km) from cell ``i`` to the nearest coastline cell (a cell
+    whose continental mask differs from a neighbour's), ``band`` ≈ 2 mean cell
+    spacings, and ``w = geography_boundary_weight``.
+
+    A coastline is a plate boundary on Earth (continent ↔ ocean).  Weighting the
+    Dijkstra partition's cell-entry cost to be HIGHER near the coast pins the
+    meeting front of a continental-plate wavefront and an oceanic-plate wavefront
+    onto the coast, aligning plate boundaries with continental margins (§5 方案 2).
+    """
+    spec = config.geography
+    if spec is None or (not spec.features and raster_bias is None):
+        return None
+
+    from .distance import geodesic_bfs
+
+    n = len(mesh.cells)
+    field, _score, mask = compute_geography_land_mask(mesh, config, raster_bias=raster_bias)
+
+    # Coast cells = boundary of the continental mask (a neighbour has the
+    # opposite crust).
+    coast = np.zeros(n, dtype=np.bool_)
+    for i in range(n):
+        for nb in mesh.cells[i].neighbors:
+            if mask[nb] != mask[i]:
+                coast[i] = True
+                break
+    coast_ids = [int(i) for i in np.where(coast)[0]]
+    if not coast_ids:
+        return np.ones(n, dtype=np.float64), field, mask
+
+    dist = geodesic_bfs(mesh, coast_ids, config.radius_km)
+    band_km = 2.0 * float(np.sqrt(4.0 * np.pi * config.radius_km**2 / n))
+    w = float(config.geography_boundary_weight)
+    cost = np.ones(n, dtype=np.float64)
+    for i, d in dist.items():
+        cost[i] += w * max(0.0, 1.0 - d / band_km)
+    return cost, field, mask
+
+
+def apply_geography_crust(
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
+    *,
+    anchor_weight: float | None = None,
+    raster_bias: np.ndarray | None = None,
+) -> None:
+    """Set per-cell crust_type from the authored geography.
+
+    ``score = anchor_weight * bias_field + (1 - anchor_weight) * fBm``; the top
+    ``target_land_fraction`` cells by score become continental.  Used both for
+    the initial assignment (plate stage) and the post-tectonics re-anchor, so
+    the two use identical seeds and produce identical land patterns.
+
+    Modifies ``mesh.cells[*].crust_type`` in place.
+    """
+    spec: GeographySpec | None = config.geography
+    if spec is None or (not spec.features and raster_bias is None):
+        return
+
+    n = len(mesh.cells)
+    if n == 0:
+        return
+
+    target_fraction = spec.land_fraction_target or config.target_land_fraction
+
+    field, score, mask = compute_geography_land_mask(
+        mesh, config, anchor_weight=anchor_weight, raster_bias=raster_bias
+    )
+    n_land = int(mask.sum())
+    for i in range(n):
+        mesh.cells[i].crust_type = "continental" if mask[i] else "oceanic"
 
     # Per-plate continental floor: the global top-N threshold can leave whole
     # plates near-zero continental crust (Earth has ~40% mostly-oceanic

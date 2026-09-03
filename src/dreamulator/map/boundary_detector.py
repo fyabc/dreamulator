@@ -24,15 +24,19 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .distance import geodesic_bfs_with_source
+
 if TYPE_CHECKING:
     from .models import CVTMesh, TectonicPlate
     from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
-# Threshold for boundary classification (cm/year)
-_CONVERGENT_THRESHOLD = 0.5  # cm/yr
-_TRANSFORM_THRESHOLD = 0.3  # ratio of tangential to total
+# Threshold for boundary classification (cm/year).  Below this the normal
+# component is "negligible" → transform (crust-conservative).  Earth's slowest
+# subduction / spreading is ~1 cm/yr (Alpine Fault oblique transform ~0.5,
+# Cascadia slow subduction ~3), so |v_n| < 1 cm/yr marks a transform.
+_CONVERGENT_THRESHOLD = 1.0  # cm/yr
 
 
 # ---------------------------------------------------------------------------
@@ -143,21 +147,24 @@ def classify_boundary(
     v_t: float,
     v_total: float,
 ) -> str:
-    """Classify a boundary segment based on velocity decomposition.
+    """Classify a boundary segment from the normal velocity component.
+
+    The type is set by the NORMAL component ``v_n`` (positive = plates
+    approaching → convergent; negative = separating → divergent; small = sliding
+    → transform).  The tangential component ``v_t`` does NOT override the type —
+    it is carried separately as ``tangential_fraction`` for the leaky-transform
+    refinement (§3.7), so an oblique-convergent boundary (``v_n`` large,
+    ``v_t`` larger) is still convergent (it builds mountains), not transform.
 
     Args:
         v_n: Normal velocity component (positive = convergent).
-        v_t: Tangential velocity component.
+        v_t: Tangential velocity component (unused — see above).
         v_total: Total velocity magnitude.
 
     Returns:
         "convergent", "divergent", or "transform".
     """
     if v_total < 1e-12:
-        return "transform"
-
-    # Transform if tangential dominates
-    if v_t / v_total > (1 - _TRANSFORM_THRESHOLD):
         return "transform"
 
     if v_n > _CONVERGENT_THRESHOLD:
@@ -192,25 +199,101 @@ def _cluster_cells(mesh: CVTMesh, cell_set: set[int]) -> list[list[int]]:
     return segments
 
 
+def _segment_normal_and_centroid(
+    mesh: CVTMesh,
+    segment: list[int],
+    pb: str,
+    cell_plate_map: dict[int, str],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Mean boundary normal (toward ``pb``) + centroid for a (sub-)segment."""
+    normals: list[np.ndarray] = []
+    centroids: list[np.ndarray] = []
+    for cid in segment:
+        cell = mesh.cells[cid]
+        cx = np.array([cell.x, cell.y, cell.z])
+        centroids.append(cx)
+        for nid in cell.neighbors:
+            if cell_plate_map.get(nid) == pb:
+                nb = mesh.cells[nid]
+                nx = np.array([nb.x, nb.y, nb.z])
+                d = nx - cx * float(np.dot(cx, nx))
+                dn = float(np.linalg.norm(d))
+                if dn > 1e-12:
+                    normals.append(d / dn)
+    if not normals:
+        return None
+    n_hat = np.mean(normals, axis=0)
+    n_hat = n_hat / np.linalg.norm(n_hat)
+    centroid = np.mean(centroids, axis=0)
+    centroid = centroid / np.linalg.norm(centroid)
+    return n_hat, centroid
+
+
+def _assign_segment_type(
+    mesh: CVTMesh,
+    segment: list[int],
+    plate_a: TectonicPlate,
+    plate_b: TectonicPlate,
+    pb: str,
+    cell_plate_map: dict[int, str],
+    radius_cm: float,
+    cell_result: dict[int, tuple[str, float, float]],
+    boundary_cell_ids: set[int],
+) -> None:
+    """Classify one (sub-)segment and write its type/rate to its cells."""
+    res = _segment_normal_and_centroid(mesh, segment, pb, cell_plate_map)
+    if res is None:
+        return
+    n_hat, centroid = res
+
+    v_rel = compute_relative_velocity(centroid, plate_a, plate_b)
+    v_n = float(np.dot(v_rel, n_hat))
+    v_t_vec = v_rel - v_n * n_hat
+    v_t = float(np.linalg.norm(v_t_vec))
+    v_total = float(np.linalg.norm(v_rel))
+    v_n_cm = v_n * radius_cm
+    v_t_cm = v_t * radius_cm
+    v_total_cm = v_total * radius_cm
+    btype = classify_boundary(v_n_cm, v_t_cm, v_total_cm)
+    tangential_fraction = v_t_cm / v_total_cm if v_total_cm > 1e-12 else 0.0
+
+    for cid in segment:
+        boundary_cell_ids.add(cid)
+        cell_result[cid] = (btype, v_n_cm, tangential_fraction)
+        for nid in mesh.cells[cid].neighbors:
+            if cell_plate_map.get(nid) == pb:
+                boundary_cell_ids.add(nid)
+                cell_result.setdefault(nid, (btype, v_n_cm, tangential_fraction))
+
+
+# Below this length a boundary is treated as one coherent stretch (too short to
+# have meaningful along-strike type variation); longer boundaries are sub-
+# segmented by their local normal velocity.
+_MIN_SUBSEGMENT_CELLS = 8
+
+
 def _classify_boundary_segments(
     mesh: CVTMesh,
     boundary_edges: list[tuple[int, int, str, str]],
     plate_map: dict[str, TectonicPlate],
     cell_plate_map: dict[int, str],
     radius_cm: float,
-) -> tuple[set[int], dict[int, tuple[str, float]]]:
+) -> tuple[set[int], dict[int, tuple[str, float, float]]]:
     """Classify boundary cells by plate-pair segments (continuous bands).
 
-    Boundary cells are clustered into connected segments per plate-pair, then
-    each segment is classified ONCE using its average normal (toward the other
-    plate) and the relative plate velocity at its centroid.  This replaces the
-    per-cell classification whose local normal ``n̂`` is noisy on a jagged
-    Voronoi boundary, producing continuous convergent/divergent/transform bands
-    (like Earth) instead of red/green/yellow speckle.
+    Boundary cells are clustered into connected segments per plate-pair.  Each
+    connected segment is then sub-segmented by its LOCAL normal velocity
+    (projected onto the segment's mean normal, so the signal is smooth): a long
+    boundary whose relative motion is convergent in one stretch, transform in
+    another and divergent in a third (e.g. Pacific–North America) is split into
+    those coherent stretches, each classified once with its own normal and
+    centroid velocity.  This replaces both the noisy per-cell classification
+    (red/green/yellow speckle) and the over-coarse whole-boundary classification
+    (a 170-cell boundary collapsed to one type).
 
     Returns:
         ``(boundary_cell_ids, cell_result)`` where ``cell_result`` maps a cell
-        id to ``(boundary_type, convergence_rate_cm_yr)``.
+        id to ``(boundary_type, convergence_rate_cm_yr, tangential_fraction)``.
     """
     from collections import defaultdict
 
@@ -222,7 +305,7 @@ def _classify_boundary_segments(
         else:
             pair_edges[(pb, pa)].append((neighbor_id, cell_id))
 
-    cell_result: dict[int, tuple[str, float]] = {}
+    cell_result: dict[int, tuple[str, float, float]] = {}
     boundary_cell_ids: set[int] = set()
 
     for (pa, pb), edges in pair_edges.items():
@@ -231,45 +314,61 @@ def _classify_boundary_segments(
         a_side = {cell_id for cell_id, _ in edges}
 
         for segment in _cluster_cells(mesh, a_side):
-            normals: list[np.ndarray] = []
-            centroids: list[np.ndarray] = []
-            for cid in segment:
+            norm = _segment_normal_and_centroid(mesh, segment, pb, cell_plate_map)
+            if norm is None:
+                continue
+            n_hat, _ = norm
+
+            # Short boundary → classify whole (too short for along-strike split).
+            if len(segment) < 2 * _MIN_SUBSEGMENT_CELLS:
+                _assign_segment_type(
+                    mesh,
+                    segment,
+                    plate_a,
+                    plate_b,
+                    pb,
+                    cell_plate_map,
+                    radius_cm,
+                    cell_result,
+                    boundary_cell_ids,
+                )
+                continue
+
+            # Long boundary → sub-segment by local normal velocity.  The signal
+            # uses the segment's mean normal so it is smooth (v_rel varies with
+            # position, the per-cell normal would be noisy); cells whose local
+            # v_n falls in the same category cluster into one coherent stretch.
+            def _category(
+                cid: int,
+                _pa: TectonicPlate = plate_a,
+                _pb: TectonicPlate = plate_b,
+                _n: np.ndarray = n_hat,
+            ) -> str:
                 cell = mesh.cells[cid]
                 cx = np.array([cell.x, cell.y, cell.z])
-                centroids.append(cx)
-                for nid in cell.neighbors:
-                    if cell_plate_map.get(nid) == pb:
-                        nb = mesh.cells[nid]
-                        nx = np.array([nb.x, nb.y, nb.z])
-                        d = nx - cx * float(np.dot(cx, nx))
-                        dn = float(np.linalg.norm(d))
-                        if dn > 1e-12:
-                            normals.append(d / dn)
+                v_rel = compute_relative_velocity(cx, _pa, _pb)
+                v_n_cm = float(np.dot(v_rel, _n)) * radius_cm
+                if v_n_cm > _CONVERGENT_THRESHOLD:
+                    return "convergent"
+                if v_n_cm < -_CONVERGENT_THRESHOLD:
+                    return "divergent"
+                return "transform"
 
-            if not normals:
-                continue
-            n_hat = np.mean(normals, axis=0)
-            n_hat = n_hat / np.linalg.norm(n_hat)
-            centroid = np.mean(centroids, axis=0)
-            centroid = centroid / np.linalg.norm(centroid)
-
-            v_rel = compute_relative_velocity(centroid, plate_a, plate_b)
-            v_n = float(np.dot(v_rel, n_hat))
-            v_t_vec = v_rel - v_n * n_hat
-            v_t = float(np.linalg.norm(v_t_vec))
-            v_total = float(np.linalg.norm(v_rel))
-            v_n_cm = v_n * radius_cm
-            v_t_cm = v_t * radius_cm
-            v_total_cm = v_total * radius_cm
-            btype = classify_boundary(v_n_cm, v_t_cm, v_total_cm)
-
-            for cid in segment:
-                boundary_cell_ids.add(cid)
-                cell_result[cid] = (btype, v_n_cm)
-                for nid in mesh.cells[cid].neighbors:
-                    if cell_plate_map.get(nid) == pb:
-                        boundary_cell_ids.add(nid)
-                        cell_result.setdefault(nid, (btype, v_n_cm))
+            for cat in ("convergent", "divergent", "transform"):
+                cat_cells = {cid for cid in segment if _category(cid) == cat}
+                for sub in _cluster_cells(mesh, cat_cells):
+                    if sub:
+                        _assign_segment_type(
+                            mesh,
+                            sub,
+                            plate_a,
+                            plate_b,
+                            pb,
+                            cell_plate_map,
+                            radius_cm,
+                            cell_result,
+                            boundary_cell_ids,
+                        )
 
     return boundary_cell_ids, cell_result
 
@@ -346,42 +445,28 @@ def _propagate_boundary_type(
     within the influence radius, so the Gaussian mountain/trench/rift profiles
     extend smoothly across the landscape.
     """
-    from collections import deque
-
     sigma = config.boundary_influence_km
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / mesh.num_cells)
     max_dist = 1.2 * sigma  # same cutoff as terrain synthesizer
 
-    # Multi-source BFS: each boundary cell "claims" nearby cells
-    q: deque[int] = deque()
-    # source_boundary[cid] = (boundary_cell_id, distance)
-    source_boundary: dict[int, tuple[int, float]] = {}
-    for cid in boundary_cell_ids:
-        source_boundary[cid] = (cid, 0.0)
-        q.append(cid)
+    # Multi-source geodesic BFS: each boundary cell "claims" nearby cells.
+    source_boundary = geodesic_bfs_with_source(
+        mesh, boundary_cell_ids, config.radius_km, max_dist_km=max_dist
+    )
 
     propagated = 0
-    while q:
-        cid = q.popleft()
-        src_id, d = source_boundary[cid]
-        if d >= max_dist:
+    for cid, (src_id, _d) in source_boundary.items():
+        if cid == src_id:
             continue
-
         # Copy boundary properties from source if not already set
         src = mesh.cells[src_id]
         cell = mesh.cells[cid]
-        if cid != src_id:
-            if cell.boundary_type is None:
-                cell.boundary_type = src.boundary_type
-                propagated += 1
-            if cell.convergence_rate_cm_yr == 0.0:
-                cell.convergence_rate_cm_yr = src.convergence_rate_cm_yr
-
-        for nid in cell.neighbors:
-            if nid not in source_boundary:
-                new_d = d + cell_km
-                source_boundary[nid] = (src_id, new_d)
-                q.append(nid)
+        if cell.boundary_type is None:
+            cell.boundary_type = src.boundary_type
+            propagated += 1
+        if cell.convergence_rate_cm_yr == 0.0:
+            cell.convergence_rate_cm_yr = src.convergence_rate_cm_yr
+        if cell.tangential_fraction == 0.0:
+            cell.tangential_fraction = src.tangential_fraction
 
     if propagated > 0:
         logger.info(
@@ -447,9 +532,10 @@ def detect_boundaries(
     # 3. Write boundary properties to cells
     logger.info("  Step 3/5: Writing boundary properties to cells")
     for cid in boundary_cell_ids:
-        btype, rate = cell_result[cid]
+        btype, rate, tangential_fraction = cell_result[cid]
         mesh.cells[cid].convergence_rate_cm_yr = rate
         mesh.cells[cid].boundary_type = btype
+        mesh.cells[cid].tangential_fraction = tangential_fraction
 
     # 4. BFS distance from boundary
     logger.info("  Step 4/5: Computing boundary distances (BFS)")

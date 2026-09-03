@@ -138,6 +138,8 @@
     "hotspotChain": "Hotspot chain {{id}}",
     "orogeny": "Ancient orogeny",
     "rift": "Rift",
+    "transform": "Transform fault",
+    "basin": "Intermontane basin",
     "climate": "Climate",
     "koppenClimate": "Köppen climate",
     "annualTemp": "Annual temp.",
