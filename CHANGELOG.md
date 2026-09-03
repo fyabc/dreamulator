@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   （`interior_rift_chance`），长条造山带/裂谷变为散碎短段。
 - **前端地物着色**：转换断层（transform）/ 断陷盆地（basin）图层配色 + i18n 标签。
 - **板块运动箭头图层**：`plate_motion` 静态导出图层。
+- **earth 基础世界**：真实地球数据导入（高程/板块/地壳/水掩膜/气候），地壳/边界换真实
+  数据（CRUST1.0 地壳类型 + PB2002 板块边界）。
+- **前端增强**：河流图层 3D 栅格烘培；单元格信息栏「默认/全量」显示模式 + 月度协调；
+  气压异常图层固定 ±20 hPa 色标；叠加图层配色统一 sRGB（消除亮度跳变）。
 
 ### Changed
 
