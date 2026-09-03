@@ -74,6 +74,35 @@ class TerrainPipelineConfig:
     # Ocean half-spreading rate as a fraction of the fastest plate speed
     # (Earth ~0.4; nacrea authored 6/15 = 0.4).
     tidal_spreading_ratio: float = 0.4
+    # ---- Coherent plate motion (2026-08) ----
+    # Replace the per-plate *random* Euler-pole direction (Cortial 2019) with a
+    # coherent poloidal velocity field derived from tidal-heating geometry
+    # (docs/design/proposals/plate-motion-coherence.md): a degree-2 zonal flow
+    # anchored to the tidal axis (upwelling at the sub-/anti-planet points,
+    # convergence at the 90° ring).  Each plate's Euler pole is the rigid
+    # rotation that best fits the field over its cells (least squares), so the
+    # resulting plate-motion directions are coherent rather than random — the
+    # root cause of the ~70% transform-boundary excess.
+    coherent_motion: bool = True
+    # Convection diversity (§ 方向 3): superpose ``convection_harmonics`` extra
+    # degree-2 TOROIDAL cells (``c·(âₖ × P)``, random axes, random amplitude) on
+    # the dominant tidal POLOIDAL field.  Physically these are the ~15% internal
+    # heating (radiogenic + secular cooling) whose multi-cell convection carries
+    # vorticity (differential rotation) not tied to the tidal axis.  A purely
+    # poloidal field is a gradient, so its rigid-rotation fit is forced ⊥ the
+    # tidal axis for every plate → relative motion is pure shear → transform-
+    # dominated, single-type boundaries.  The toroidal cells add the divergent-
+    # rotation component that diversifies the fitted poles like Earth's.
+    # ``convection_harmonic_amp`` is each cell's amplitude relative to the tidal
+    # amplitude.
+    convection_harmonics: int = 3
+    convection_harmonic_amp: float = 0.3
+    # Continental plates move slower than oceanic ones: thicker, buoyant
+    # lithosphere (crust ~35 km + ~150 km cratonic root vs ~7 km oceanic
+    # crust) resists motion and continental collision dissipates the driving
+    # force.  Earth: Africa ~2 cm/yr vs Pacific ~10 cm/yr ≈ 0.2–0.3.  Applied
+    # as a linear slowdown by each plate's continental-cell fraction (§5.5).
+    continental_plate_speed_factor: float = 0.3
     # Algorithm for initial plate partition:
     #   "cortial2019" — Poisson-disc + spherical Voronoi BFS (Cortial et al. 2019 §3)
     plate_algorithm: str = "cortial2019"
@@ -96,6 +125,19 @@ class TerrainPipelineConfig:
     # state (not authored).  0 = off; 1 = full dip-dependent sagitta
     # (0.10–0.30 × chord, bulging oceanward).
     trench_arc: float = 1.0
+    # Mid-ocean ridge en-echelon segmentation (§3.2).  A divergent boundary is a
+    # chain of straight ridge segments stepped by transform faults, not a single
+    # straight line: segments are ~50–200 km long (ridge segmentation scale,
+    # Frisch 2011), each offset ⊥ to the spreading direction (i.e. along the
+    # ridge-normal) by a transform of random length.  In the final boundary-
+    # shaping pass a divergent boundary is broken into ``ridge_segment_length_km``
+    # segments; the offsets follow a RANDOM WALK (each transform adds a random
+    # step of magnitude up to ``ridge_en_echelon_offset_km``), so consecutive
+    # segments step coherently into a staircase rather than jittering iid.  The
+    # walk is re-centred on the kinematic axis so the ridge does not wander off.
+    # 0 = straight divergent boundary (no segmentation).
+    ridge_segment_length_km: float = 150.0
+    ridge_en_echelon_offset_km: float = 100.0
     # Per-plate continental fraction range.  Each plate is assigned a random
     # continental cell ratio uniformly in [min, max].  Earth ≈ 0.29 land
     # (emergent), but the crust-type continental fraction should be higher
@@ -159,6 +201,17 @@ class TerrainPipelineConfig:
     # (decisively authored ocean, e.g. the southern-ocean ring) are exempt;
     # the global land fraction is re-absorbed by sea-level calibration.
     crust_plate_floor: float = 0.10
+    # Coastline attraction strength for the plate partition (§5 方案 2).  With
+    # authored geography, a coastline is a plate boundary (continent ↔ ocean),
+    # so the weighted Voronoi/Dijkstra partition's cell-entry cost is raised to
+    # ``1 + geography_boundary_weight`` in a band around the coastline.  This
+    # pins plate boundaries to continental margins instead of letting them run
+    # through continent interiors / ocean basins.  0 disables the attraction.
+    # Calibrated on nacrea: 1.5 gave ~29% initial coast alignment; 4.0 raises it
+    # to ~38% without over-fragmenting the final plate roster (higher weights
+    # barely change the post-evolution map — the tectonic centroid drift is the
+    # real bottleneck — see proposal §5.7).
+    geography_boundary_weight: float = 4.0
 
     # ---- Tectonic time evolution (Cortial et al. 2019 §4–5) ----
     # Algorithm for time evolution.  "" = no evolution (static).
@@ -190,6 +243,46 @@ class TerrainPipelineConfig:
     continental_elevation_m: float = 850.0
     oceanic_elevation_m: float = -3800.0
     boundary_influence_km: float = 500.0
+    # Per-type boundary widths (km), decoupled from boundary_influence_km (which
+    # remains the propagation/influence radius).  Earth reference: divergent rift
+    # ~30–80 km, transform fault ~1–5 km.  Convergent orogen width is now DERIVED
+    # from the cumulative convergence (orogen_width_* below, §3.6), not a fixed
+    # value.  The 51 km mesh floor clamps transform/divergent to ≥1 cell.
+    divergent_width_km: float = 80.0
+    transform_width_km: float = 51.0
+    # Leaky transform (§3.7): a transform whose tangential fraction
+    # (v_t/v_total) falls below this is oblique — it carries a normal
+    # component that opens a pull-apart basin (Dead Sea −430 m, Salton
+    # Trough −75 m).  Above the threshold it is treated as pure strike-slip
+    # (roughness only).
+    transform_leaky_threshold: float = 0.9
+    # Maximum pull-apart basin depth (m) at the strongest obliquity
+    # (v_t/v_total ≈ 0.7).  Scales linearly with obliquity.
+    transform_leaky_basin_depth_m: float = 400.0
+    # Orogen width from cumulative convergence (critical taper, Davis et al. 1983):
+    # the belt width grows with the total shortening S = v_n × T (convergence rate
+    # × evolution time), not a fixed value.  width = min(w_max, w_base + k × S),
+    # with k depending on boundary type (continental collision ≫ subduction).
+    # Earth reference: Tibet k ≈ 0.4 (1000 km width / 2500 km convergence), Andes
+    # k ≈ 0.1–0.2 (200–700 km / ~3500 km).  See proposal §3.6.
+    orogen_width_base_km: float = 150.0
+    orogen_width_collision_rate: float = 0.35  # k for C-C collision
+    orogen_width_subduction_rate: float = 0.15  # k for O-O / C-O subduction
+    orogen_width_max_km: float = 1200.0
+    # Continental rift-valley width from cumulative divergence (distributed
+    # extension, East African Rift 50–200 km): the graben — and hence the rift
+    # sea — widens with the cumulative divergence E = ∫ |v_n| dt.  See §3.6.
+    rift_valley_base_km: float = 40.0
+    rift_valley_rate: float = 0.06  # km of width per km of cumulative divergence
+    rift_valley_max_km: float = 150.0
+    # Horst-graben fault-block relief inside a continental rift (m).  Must exceed
+    # the regional noise (~1200 m) to be visible; the old 600 m was buried. §3.8.
+    rift_fault_block_amp_m: float = 1200.0
+    # Intermontane basin (断陷) behind a wide, super-critical orogen: a depression
+    # that forms by orogenic collapse (Davis 1983) on the overriding side of the
+    # range, gated by belt width and along-strike chance. §3.8.
+    intermontane_basin_depth_m: float = 800.0
+    intermontane_basin_wide_km: float = 500.0  # belt width above which basins form
     # Dual-component boundary profile: narrow ridge (sharp crest) + wide shoulder
     # (plateau flanks).  Ridge sigma ~80 km gives recognisable linear ranges;
     # shoulder sigma defaults to boundary_influence_km for backward compatibility.
@@ -198,18 +291,48 @@ class TerrainPipelineConfig:
     boundary_shoulder_strength: float = 0.3  # shoulder amplitude relative to ridge
     convergent_uplift_m: float = 4000.0
     divergent_depth_m: float = 2000.0
+    # Continental rift sea gate: full divergence rate (|v_n| at the boundary,
+    # cm/yr) above which a continental rift drops below sea level into a rift
+    # sea (Red Sea stage); below it the rift stays a shallow graben above sea
+    # level (East African Rift / Baikal).  Nacrea's coherent motion gives a
+    # bimodal divergence distribution (~2 and ~10 cm/yr); 6.0 splits the two.
+    continental_rift_sea_rate_cm_yr: float = 6.0
     # Per-plate random base elevation offset (creates inter-plate variation)
     plate_elevation_spread_m: float = 1500.0
     # Asymmetric mountain profile: 0=symmetric, 0.4=moderate, 1.0=extreme
     mountain_asymmetry: float = 0.4
     # Number of hotspot volcanic chains (0 = disabled)
     hotspot_count: int = 3
+    # Hotspot chain: spacing between successive volcanoes along the plate
+    # motion direction.  Earth: Hawaii islands are 50–150 km apart.  Must
+    # exceed ~2× the cell spacing (≈54 km @ nacrea 200K) so islands are
+    # separated by sea rather than merged into a continuous bar.
+    hotspot_eruption_interval_km: float = 180.0
+    # Hotspot volcano cone base radius (km).  Earth large shield islands are
+    # ~50–60 km radius (100–120 km across), but their submarine base spans
+    # ~200 km.  ~100 km lets the active island surface across ~2 cells
+    # (center + nearest neighbours) at nacrea's 54 km spacing.
+    hotspot_volcano_radius_km: float = 100.0
+    # Height (m) of the active (youngest) volcano above the ocean floor
+    # baseline (~-5000 m → ~+3500 m surface).
+    hotspot_active_height_m: float = 8500.0
+    # Age-progressive subsidence along the chain (m per km away from the
+    # active hotspot).  Hawaii subsides from ~+4000 m to ~0 m over ~2500 km
+    # (to Kure atoll) ≈ 1.6 m/km relative to sea level; here ~4 m/km makes
+    # the chain tail subside into seamounts sooner, so fewer volcanoes stay
+    # above sea level at once (a compact archipelago, not a long island bar).
+    hotspot_subsidence_m_per_km: float = 4.0
+    # Total chain length (km).  Emperor-Hawaii chain is ~6000 km; truncated
+    # to the young, still-surfacing portion so chains stay a compact
+    # archipelago (~7 volcanoes) rather than a long bar.
+    hotspot_chain_length_km: float = 1200.0
     # Continental shelf: width in km from coastline into ocean.
     # Earth average: 80 km; passive margins: 100–200 km.
     shelf_width_km: float = 150.0
     # Coastal plain: width in km from coastline inland for gentle
-    # elevation ramp-down.  Earth average: 50–100 km.
-    coastal_plain_width_km: float = 80.0
+    # elevation ramp-down.  Earth average: 50–100 km; wider passive
+    # margins 100–200 km.
+    coastal_plain_width_km: float = 100.0
     # Maximum elevation (m) for coastal plain smoothing.  Cells above this
     # are treated as coastal mountains (e.g. Andes, Big Sur) and left
     # largely untouched.  The smoothing effect fades linearly from full
@@ -220,12 +343,23 @@ class TerrainPipelineConfig:
     # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
     # 0 = disabled.  Base number of orogenic belts per continental plate.
     # Scales with plate interior area: larger plates get more belts
-    # (1 additional belt per ~300 interior cells beyond the first).
-    interior_orogeny_count: int = 2
+    # (1 additional belt per ~800 interior cells beyond the first).
+    interior_orogeny_count: int = 5
+    # Great-circle arc length of interior orogeny belts and rift valleys (deg).
+    # Lengths are right-skewed (rng.random() ** 2): most belts ~min_deg + a few
+    # degrees (~600 km at R_earth), with a rare tail up to max_deg (~1200 km).
+    # Rift valleys reuse the same cap so they don't read as one long stripe
+    # across a whole plate.
+    interior_belt_length_min_deg: float = 2.0
+    interior_belt_length_max_deg: float = 10.0
     # Probability (0–1) that a segment along an orogenic belt becomes a
     # sunken intermontane basin (pull-apart / fault-block depression)
     # instead of an elevated ridge.
     interior_basin_chance: float = 0.25
+    # Probability (0–1) that a continental plate gets an interior rift valley
+    # (failed rift arm, e.g. East African Rift).  Rifts are far rarer than
+    # orogenic belts — at most one per eligible plate, gated by this chance.
+    interior_rift_chance: float = 0.5
     # Maximum subsidence depth (m) for intermontane basins.  Reference:
     # Turpan Depression −154 m, Fergana Valley ~400 m above sea level,
     # Basin and Range grabens 500–2000 m below surrounding ranges.

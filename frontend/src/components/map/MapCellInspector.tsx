@@ -517,11 +517,15 @@ function CellDetails({
                 <dd className={`font-mono text-xs ${
                   cell.hotspot_id ? 'text-fuchsia-400' :
                   cell.landform === 'orogeny' ? 'text-amber-400' :
-                  'text-teal-400'
+                  cell.landform === 'rift' ? 'text-teal-400' :
+                  cell.landform === 'transform' ? 'text-yellow-400' :
+                  'text-orange-400'
                 }`}>
                   {cell.hotspot_id ? t('inspector.hotspotChain', { id: cell.hotspot_id }) :
                    cell.landform === 'orogeny' ? t('inspector.orogeny') :
-                   cell.landform === 'rift' ? t('inspector.rift') : ''}
+                   cell.landform === 'rift' ? t('inspector.rift') :
+                   cell.landform === 'transform' ? t('inspector.transform') :
+                   cell.landform === 'basin' ? t('inspector.basin') : ''}
                 </dd>
               </div>
             )}

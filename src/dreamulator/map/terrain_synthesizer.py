@@ -36,7 +36,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .geography import build_elevation_pins, build_land_bias_field
+from .distance import geodesic_bfs, geodesic_bfs_with_source
+from .geography import build_elevation_pins, build_land_bias_field, feature_noise_seed
 from .pipeline_types import TerrainPipelineConfig
 
 if TYPE_CHECKING:
@@ -89,62 +90,36 @@ def _compute_ocean_age_depth(
 
     capped at ``ocean_max_age_depth_m``.
     """
-    from collections import deque
-
     n = len(mesh.cells)
 
-    # ---- Multi-source BFS to divergent and convergent boundaries ----
-    hops_div = np.full(n, -1, dtype=np.int32)
-    hops_conv = np.full(n, -1, dtype=np.int32)
-    q_div: deque[int] = deque()
-    q_conv: deque[int] = deque()
-
+    # ---- Multi-source geodesic BFS to divergent and convergent boundaries ----
+    # Restricted to oceanic crust (ocean-floor age only).
+    seeds_div: list[int] = []
+    seeds_conv: list[int] = []
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type != "oceanic":
             continue
-        bt = cell.boundary_type
-        if bt == "divergent":
-            hops_div[i] = 0
-            q_div.append(i)
-        elif bt == "convergent":
-            hops_conv[i] = 0
-            q_conv.append(i)
+        if cell.boundary_type == "divergent":
+            seeds_div.append(i)
+        elif cell.boundary_type == "convergent":
+            seeds_conv.append(i)
 
-    # BFS from divergent boundaries
-    while q_div:
-        cur = q_div.popleft()
-        for nid in mesh.cells[cur].neighbors:
-            if not (0 <= nid < n):
-                continue
-            if mesh.cells[nid].crust_type != "oceanic":
-                continue
-            if hops_div[nid] == -1:
-                hops_div[nid] = hops_div[cur] + 1
-                q_div.append(nid)
+    def oceanic(cid: int) -> bool:
+        return mesh.cells[cid].crust_type == "oceanic"
 
-    # BFS from convergent boundaries
-    while q_conv:
-        cur = q_conv.popleft()
-        for nid in mesh.cells[cur].neighbors:
-            if not (0 <= nid < n):
-                continue
-            if mesh.cells[nid].crust_type != "oceanic":
-                continue
-            if hops_conv[nid] == -1:
-                hops_conv[nid] = hops_conv[cur] + 1
-                q_conv.append(nid)
-
-    # ---- Hops → distance (km) ----
-    avg_spacing_km = (4.0 * config.radius_km) / np.sqrt(n) if n > 0 else 100.0
-    d_div = hops_div.astype(np.float64) * avg_spacing_km
-    d_conv = hops_conv.astype(np.float64) * avg_spacing_km
+    d_div = np.full(n, -1.0)
+    d_conv = np.full(n, -1.0)
+    for cid, d in geodesic_bfs(mesh, seeds_div, config.radius_km, can_expand=oceanic).items():
+        d_div[cid] = d
+    for cid, d in geodesic_bfs(mesh, seeds_conv, config.radius_km, can_expand=oceanic).items():
+        d_conv[cid] = d
 
     # ---- Interplate ocean cells only ----
     # Cells that can reach both a divergent AND a convergent boundary
     # are "conveyor-belt" ocean floor with a meaningful age.
     # Cells that can only reach one type (e.g. a plate with no convergent
     # boundary) fall through to NaN and keep the uniform base.
-    valid = (hops_div >= 0) & (hops_conv >= 0)
+    valid = (d_div >= 0) & (d_conv >= 0)
     both_zero = (d_div == 0.0) & (d_conv == 0.0)  # cell IS both types — skip
     valid = valid & ~both_zero
 
@@ -459,35 +434,6 @@ def apply_boundary_effects(
     return delta_h
 
 
-# ---------------------------------------------------------------------------
-# Sea/land classification
-# ---------------------------------------------------------------------------
-
-
-def classify_sea_land(
-    mesh: CVTMesh,
-    sea_level_m: float,
-    *,
-    buffer_m: float = 50.0,
-) -> None:
-    """Update crust_type based on final elevation vs sea level.
-
-    Cells within ±*buffer_m* of sea level are marked ``transitional``
-    regardless of original crust type — this prevents near-sea-level
-    shelf cells from appearing as deep ocean.
-
-    Cells far above sea level with oceanic crust become ``transitional``
-    (islands, seamounts).  Submerged continental crust is left as
-    ``continental`` (the geological definition of continental shelves).
-
-    Modifies cells in-place.
-    """
-    for cell in mesh.cells:
-        near_sea = abs(cell.elevation - sea_level_m) <= buffer_m
-        if near_sea or cell.elevation > sea_level_m and cell.crust_type == "oceanic":
-            cell.crust_type = "transitional"
-
-
 def _apply_geography_pins(
     mesh: CVTMesh,
     elevation: np.ndarray,
@@ -525,7 +471,14 @@ def _apply_geography_pins(
     deviation = target - elevation
     ref = 1000.0  # metres — at this deviation the pull equals linear
     normalised = deviation / ref
-    exaggerated = np.sign(normalised) * np.power(np.abs(normalised), exponent)
+    mag = np.power(np.abs(normalised), exponent)
+    # 削峰 (exponent > 1) is meant to *depress* cells above the target.  Applied
+    # symmetrically it also over-raises cells far below the target — a deep ocean
+    # trench on the feature's soft edge gets pulled up into a mountain (§3.9).
+    # Keep the downward (above-target) amplification, but make the upward
+    # (below-target) pull linear so the ocean floor stays in the ocean.
+    mag = np.where((exponent > 1.0) & (normalised >= 0.0), np.abs(normalised), mag)
+    exaggerated = np.sign(normalised) * mag
     pull = exaggerated * ref
     pulled = elevation + factor * pull
     n_pinned = int(np.count_nonzero(weight > 0.0))
@@ -575,7 +528,9 @@ def synthesize_terrain(
     # be damped inside authored ocean basins / rift seas.
     spec = config.geography
     geography_bias = (
-        build_land_bias_field(mesh, spec, raster_bias=raster_bias)
+        build_land_bias_field(
+            mesh, spec, raster_bias=raster_bias, noise_seed=feature_noise_seed(int(config.seed))
+        )
         if spec is not None and (spec.features or raster_bias is not None)
         else None
     )
@@ -763,7 +718,10 @@ def _synthesize_gaussian(
     # Unlike global scaling (which compresses the entire distribution),
     # this leaves the bulk of cells untouched and only pulls back extremes.
     # Excess above/below the limit is folded back with exponential decay,
-    # so peaks stay higher than foothills but no cell exceeds the limit.
+    # so peaks stay higher than foothills while the tail approaches the
+    # limit asymptotically — it is NOT a hard clip, so the very highest
+    # peaks can still sit a little above ``land_limit`` (and the deepest
+    # trenches a little below ``-ocean_limit``) after compression.
     # Limits: h_max ∝ 1/g  (see isostasy_elevation_limits.md).
     if config.isostasy_enabled:
         land_limit = config.isostasy_max_continental_elevation_m
@@ -773,22 +731,19 @@ def _synthesize_gaussian(
         over = elevation > land_limit
         if np.any(over):
             excess = elevation[over] - land_limit
-            elevation[over] = land_limit + excess * np.exp(-5.0 * excess / land_limit)
+            elevation[over] = land_limit + excess * np.exp(-7.5 * excess / land_limit)
 
         # Ocean: compress cells below (deeper than) limit
         over_deep = elevation < -ocean_limit
         if np.any(over_deep):
             excess = -ocean_limit - elevation[over_deep]  # positive excess depth
-            elevation[over_deep] = -ocean_limit - excess * np.exp(-5.0 * excess / ocean_limit)
+            elevation[over_deep] = -ocean_limit - excess * np.exp(-7.5 * excess / ocean_limit)
 
     _smooth_land_discontinuities(mesh, elevation, iterations=3, blend=0.3)
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
-
-    # Classify sea/land
-    classify_sea_land(mesh, sea_level)
 
     _log_synthesis_stats(elevation, sea_level, n)
     _compute_quality_metrics(mesh, sea_level)
@@ -892,7 +847,7 @@ def _synthesize_asymmetric(
         config.noise_octaves,
         config.noise_anisotropy,
     )
-    strike = _compute_boundary_strike(mesh) if config.noise_anisotropy > 0 else None
+    strike = _compute_boundary_strike(mesh, config) if config.noise_anisotropy > 0 else None
     fbm = _anisotropic_fbm(mesh, config, strike) if strike else generate_fbm_on_cells(mesh, config)
     noise_amp = np.where(
         base >= 0.0,
@@ -952,17 +907,19 @@ def _synthesize_asymmetric(
     elevation = _apply_geography_pins(mesh, elevation, config)
 
     # Isostasy: compress only the tail that exceeds physical limits.
+    # Asymptotic (not hard-clip): the tail approaches the limit without
+    # reaching it — see the detailed note in the gaussian synthesizer.
     if config.isostasy_enabled:
         land_limit = config.isostasy_max_continental_elevation_m
         ocean_limit = config.isostasy_max_ocean_depth_m
         over = elevation > land_limit
         if np.any(over):
             excess = elevation[over] - land_limit
-            elevation[over] = land_limit + excess * np.exp(-5.0 * excess / land_limit)
+            elevation[over] = land_limit + excess * np.exp(-7.5 * excess / land_limit)
         over_deep = elevation < -ocean_limit
         if np.any(over_deep):
             excess = -ocean_limit - elevation[over_deep]
-            elevation[over_deep] = -ocean_limit - excess * np.exp(-5.0 * excess / ocean_limit)
+            elevation[over_deep] = -ocean_limit - excess * np.exp(-7.5 * excess / ocean_limit)
 
     # Graph Laplacian smoothing: reduce cliff-like discontinuities
     # between neighbouring land cells caused by isostasy selectively
@@ -974,7 +931,6 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    classify_sea_land(mesh, sea_level)
     _log_synthesis_stats(elevation, sea_level, n)
     _compute_quality_metrics(mesh, sea_level)
 
@@ -991,12 +947,31 @@ def _smooth_land_discontinuities(
     Each iteration blends every land cell toward the mean of its land
     neighbours, relaxing cliff-like steps without flattening legitimate
     mountain shapes.
+
+    Coastline cells (land with an ocean neighbour) are *not* smoothed: they
+    carry the coastal-plain transition laid down by *_apply_coastal_plain*
+    (§3.9).  Blending them toward their (mountainous) inland neighbours would
+    lift the low coastal strip straight back to the inland relief — the
+    "Andes drop straight into the sea" artefact.  They still serve as
+    neighbours for inland cells, so the interior relaxes toward the coast
+    without the coast being lifted.
     """
     n = len(mesh.cells)
     # Precompute per-cell neighbour land-mean for vectorised smoothing
     nbr_sum = np.empty(n, dtype=np.float64)
     nbr_count = np.empty(n, dtype=np.int32)
     land_mask = elevation > 0
+
+    # Coastline cells: land with at least one ocean (non-land) neighbour.
+    coastline_mask = np.zeros(n, dtype=bool)
+    for i, cell in enumerate(mesh.cells):
+        if not land_mask[i]:
+            continue
+        for nid in cell.neighbors:
+            if 0 <= nid < n and not land_mask[nid]:
+                coastline_mask[i] = True
+                break
+    update_mask = land_mask & ~coastline_mask
 
     for _ in range(iterations):
         nbr_sum.fill(0.0)
@@ -1009,10 +984,57 @@ def _smooth_land_discontinuities(
                     nbr_sum[i] += elevation[nid]
                     nbr_count[i] += 1
 
-        valid = nbr_count > 0
+        valid = (nbr_count > 0) & update_mask
         nbr_mean = np.divide(nbr_sum, nbr_count, out=np.full_like(nbr_sum, elevation), where=valid)
         # Blend:  (1 - blend) * self  +  blend * neighbours
         elevation[valid] = (1.0 - blend) * elevation[valid] + blend * nbr_mean[valid]
+
+
+def _divergent_side_sign(mesh: CVTMesh) -> np.ndarray:
+    """Signed side (±1) of each cell relative to its nearest divergent boundary.
+
+    A boundary separates two plates; a cell is +1 on the canonically-smaller
+    plate's side and -1 on the larger plate's side (matching boundary_detector's
+    ``pa < pb`` ordering).  This is the geometric ingredient for half-graben
+    asymmetry: footwall (uplifted) vs hanging-wall (down-dropped) side.  0 =
+    cell not near a divergent boundary.
+    """
+    from collections import deque
+
+    n = mesh.num_cells
+    side = np.zeros(n, dtype=np.float64)
+    boundary_side: dict[int, float] = {}
+    source: dict[int, int] = {}
+    q: deque[int] = deque()
+
+    for i, cell in enumerate(mesh.cells):
+        if cell.boundary_type != "divergent" or cell.plate_id is None:
+            continue
+        other: str | None = None
+        for nid in cell.neighbors:
+            npid = mesh.cells[nid].plate_id
+            if npid is not None and npid != cell.plate_id:
+                other = npid
+                break
+        if other is None:
+            continue
+        boundary_side[i] = 1.0 if cell.plate_id < other else -1.0
+        source[i] = i
+        q.append(i)
+
+    # BFS: each cell inherits the side of its nearest divergent boundary cell.
+    while q:
+        cid = q.popleft()
+        src = source[cid]
+        for nid in mesh.cells[cid].neighbors:
+            if nid in source:
+                continue
+            source[nid] = src
+            q.append(nid)
+
+    for cid, src in source.items():
+        side[cid] = boundary_side[src]
+    return side
 
 
 def _asymmetric_boundary_effects(
@@ -1031,17 +1053,22 @@ def _asymmetric_boundary_effects(
         (σ ≈ 200 km) facing the trench, gentle back-slope (σ ≈ 700 km).
         Oceanic trench at 100–150 km from the peak on the subducting side.
 
-    Divergent (continental rift / mid-ocean ridge)
-        Continental: deep central rift valley with flanking highlands
-        (e.g. East African Rift).  Oceanic: broad submarine ridge rising
-        ~1300 m above the abyssal plain (peak ≈ −2500 m), occasionally
-        breaking the surface (Iceland-type).
+    Divergent (continental rift / rifted margin / mid-ocean ridge)
+        Continental: deep central rift valley with flanking rift shoulders
+        (East African Rift, Baikal), segmented along strike.
+        Transitional: rifted margin — thinned crust, shallow half-graben,
+        no high shoulders.
+        Oceanic: mid-ocean ridge whose morphology follows the FULL spreading
+        rate — fast (>9 cm/yr) = smooth axial high (no graben), slow (<5 cm/yr)
+        = median valley + rift mountains (Frisch et al. 2011).
 
     Transform
-        No systematic elevation change.  Instead, a narrow band of
-        enhanced roughness (±50 % noise boost within ~200 km) creates
-        linear valleys and shutter ridges characteristic of strike-slip
-        fault zones (e.g. San Andreas, North Anatolian).
+        Pure strike-slip (v_t/v_total > ~0.9): no systematic elevation
+        change — a narrow band of enhanced roughness (±50 % noise boost
+        within ~200 km) creates linear valleys and shutter ridges (San
+        Andreas, North Anatolian).  Oblique transtension (v_t/v_total
+        ~0.7–0.9, v_n < 0) opens a shallow pull-apart basin (Dead Sea,
+        Salton Trough) whose depth scales with obliquity (§3.7).
 
     References
     ----------
@@ -1091,6 +1118,74 @@ def _asymmetric_boundary_effects(
     )
     arc_u = 0.5 * (arc_noise + 1.0)  # [0, 1]
 
+    # Along-strike segmentation (width, decoupled from height): a higher-frequency
+    # fBm (~base_freq 24 → ~270 km) quantized to discrete steps, so the convergent
+    # belt width varies piecewise-constantly along strike (salient/recess) instead
+    # of a smooth global field.  Separate from `arc_u` (which still drives height),
+    # so width and height are decoupled.  (The divergent rift is NOT modulated here:
+    # the "rift sea" is a transitional-crust band assigned in geography, not terrain
+    # synthesis — see §4.)
+    width_noise = fbm_on_points(
+        px,
+        py,
+        pz,
+        int(config.seed) + 7170,
+        octaves=2,
+        lacunarity=2.0,
+        persistence=0.5,
+        base_freq=24.0,
+    )
+    width_u = np.round(0.5 * (width_noise + 1.0) * 2.0) / 2.0  # quantized [0,1], 3 steps: {0,.5,1}
+
+    # Intermontane-basin trigger: a lower-frequency fBm (~base_freq 12 → ~550 km)
+    # marks which along-strike segments of a wide (super-critical) orogen collapse
+    # into a basin (§3.8), so basins are discrete segments, not a uniform ribbon.
+    basin_noise = fbm_on_points(
+        px,
+        py,
+        pz,
+        int(config.seed) + 8190,
+        octaves=2,
+        lacunarity=2.0,
+        persistence=0.5,
+        base_freq=12.0,
+    )
+    basin_u = 0.5 * (basin_noise + 1.0)  # [0, 1]
+
+    # Half-graben polarity: ±1 field (~base_freq 16 → ~400 km wavelength) that
+    # flips the footwall/hanging-wall side along strike, segmenting the rift into
+    # dip domains (Scholz 1998) instead of a uniform one-sided scarp.
+    polarity_noise = fbm_on_points(
+        px,
+        py,
+        pz,
+        int(config.seed) + 6160,
+        octaves=2,
+        lacunarity=2.0,
+        persistence=0.5,
+        base_freq=16.0,
+    )
+    polarity = np.where(polarity_noise > 0.0, 1.0, -1.0)
+    side = _divergent_side_sign(mesh)
+
+    # Horst-graben fault-block noise: high-frequency anisotropic fBm aligned to
+    # boundary strike, so blocks are elongated along the rift axis (not isotropic
+    # blobs).  Only used in the continental rift branch, confined to the graben.
+    fault_strike = _compute_boundary_strike(mesh, config) if config.noise_anisotropy > 0 else None
+    fault_cfg = TerrainPipelineConfig(
+        seed=config.seed + 700,
+        noise_scale=config.noise_scale * 4.0,
+        noise_octaves=config.noise_octaves,
+        noise_persistence=config.noise_persistence,
+        noise_lacunarity=config.noise_lacunarity,
+        noise_anisotropy=config.noise_anisotropy,
+    )
+    fault_noise = (
+        _anisotropic_fbm(mesh, fault_cfg, fault_strike)
+        if fault_strike is not None
+        else generate_fbm_on_cells(mesh, fault_cfg)
+    )
+
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
@@ -1104,16 +1199,32 @@ def _asymmetric_boundary_effects(
 
         if cell.boundary_type == "convergent":
             # ---- Convergent: asymmetric mountain + trench ----------------
-            # Narrower sigma for convergent belts (more focused deformation)
-            sigma_conv = shoulder_sigma * 0.8  # 400 km
+            # Belt width grows with the cumulative convergence S accumulated
+            # during tectonic evolution (critical taper, Davis et al. 1983 —
+            # proposal §3.6): a boundary that converged longer/faster gets a
+            # wider orogen.  Continental collision widens ~2× faster than
+            # subduction because buoyant continental lithosphere underthrusts
+            # broadly instead of being floored by a dense slab.
+            s_km = cell.cumulative_convergence_km
+            k_type = (
+                config.orogen_width_collision_rate
+                if crust == "continental"
+                else config.orogen_width_subduction_rate
+            )
+            sigma_conv = min(
+                config.orogen_width_max_km,
+                config.orogen_width_base_km + k_type * s_km,
+            )
             # Along-arc segmentation: belt width varies 0.7–1.3× and the
             # amplitude factor spans [-0.25, 1.35] — high segments become
             # main islands/mountain knots, low ones islets or shelf, negative
             # ones subside into graben seas between arc segments.
             u = arc_u[i]
             seg_mod = 1.6 * u - 0.25
+            # Width decoupled from height: quantized segment-based `width_u`
+            # (not the smooth `u` that drives `seg_mod` height).
             sigma_front = (
-                sigma_conv * (1.0 - asym * 0.5) * (0.7 + 0.6 * u)  # steep side
+                sigma_conv * (1.0 - asym * 0.5) * (0.7 + 0.6 * width_u[i])  # steep side
             )
 
             # Mountain peak offset toward overriding plate (50–150 km)
@@ -1125,13 +1236,38 @@ def _asymmetric_boundary_effects(
                 )[0]
             )
 
-            # Crust-type-dependent amplitude
+            # Crust-type-dependent amplitude.  A continental cell is C-C
+            # collision (or the overriding side of an O-C subduction).  An
+            # oceanic cell is only an O-O island arc when its neighbourhood is
+            # all-oceanic; an oceanic cell with continental neighbours sits on
+            # the subducting side of an O-C subduction and must NOT get the
+            # island-arc uplift — the trench (below) is its only relief.
             if crust == "continental":
                 amp = config.convergent_uplift_m * 1.3  # C-C collision
+            elif cont_frac is not None and cont_frac[i] >= 0.15:
+                amp = 0.0  # O-C subducting side → trench only
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
             delta_h[i] = amp * mountain * rate_factor * seg_mod * damp[i]
+
+            # Intermontane basin (断陷): on wide (super-critical) continental
+            # orogens, orogenic collapse forms a depression behind the range
+            # (§3.8, Davis 1983 — Andes Altiplano, Tibet Qaidam).  Gated by belt
+            # width + along-strike chance; depth scales with belt width.
+            if crust == "continental" and sigma_conv > config.intermontane_basin_wide_km:
+                basin_strength = float(np.clip((basin_u[i] - 0.5) * 2.0, 0.0, 1.0))
+                if basin_strength > 0.0:
+                    basin_center = sigma_conv * 0.4  # behind the peak, overriding side
+                    basin_sigma = sigma_conv * 0.25
+                    basin_depth = (
+                        config.intermontane_basin_depth_m
+                        * (sigma_conv / config.orogen_width_max_km)
+                        * basin_strength
+                    )
+                    delta_h[i] -= basin_depth * np.exp(
+                        -((d - basin_center) ** 2) / (2 * basin_sigma * basin_sigma)
+                    )
 
             # Oceanic trench on the subducting side (100–200 km from peak).
             # Only oceanic crust subducts and forms a trench; continental
@@ -1147,8 +1283,8 @@ def _asymmetric_boundary_effects(
                 delta_h[i] += trench * rate_factor
 
         elif cell.boundary_type == "divergent":
-            # ---- Divergent: rift + ridge, crust-aware ---------------------
-            sigma_div = shoulder_sigma * 0.6  # 300 km — narrower rift zone
+            # ---- Divergent: crust-aware + spreading-rate-dependent ---------
+            sigma_div = config.divergent_width_km  # per-type width (km)
             # Top-N crust leakage on an oceanic boundary (neighbourhood mostly
             # oceanic) follows the oceanic ridge profile, not the +1400 m
             # continental-rift one; −0.6×off decouples ridge depth from the
@@ -1157,76 +1293,136 @@ def _asymmetric_boundary_effects(
             off_i = plate_offsets.get(cell.plate_id or "", 0.0) if plate_offsets else 0.0
 
             if crust == "oceanic" or leaked:
-                # Mid-ocean ridge: broad submarine rise, shallow central graben.
+                # Mid-ocean ridge, morphology by FULL spreading rate.
                 # Earth: ridge crest ~1300 m above the abyss, ~-2500 m below sea
                 # level.  0.35× keeps crests submerged even on high-offset
                 # oceanic plates after sea-level calibration (2026-08 feedback).
+                full_rate = 2.0 * config.ocean_spreading_rate_cm_yr  # half → full
                 ridge_amp = config.divergent_depth_m * 0.35
-                ridge = ridge_amp * np.exp(
-                    -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
-                )
-                # Shallow central rift (only ~300 m deeper than the ridge flanks)
-                rift = (
-                    -config.divergent_depth_m
-                    * 0.15
-                    * np.exp(-(d * d) / (2 * (sigma_div * 0.2) ** 2))
-                )
+                if full_rate >= 9.0:
+                    # Fast: single smooth axial high (peak at axis, no graben).
+                    ridge = ridge_amp * np.exp(-(d * d) / (2 * (sigma_div * 0.3) ** 2))
+                    rift = 0.0
+                elif full_rate <= 5.0:
+                    # Slow: central median valley + flanking rift mountains.
+                    ridge = ridge_amp * np.exp(
+                        -(abs(d - sigma_div * 0.2) ** 2) / (2 * (sigma_div * 0.45) ** 2)
+                    )
+                    rift = (
+                        -config.divergent_depth_m
+                        * 0.25
+                        * np.exp(-(d * d) / (2 * (sigma_div * 0.2) ** 2))
+                    )
+                else:
+                    # Intermediate: shallow graben + low axial high.
+                    ridge = ridge_amp * 0.7 * np.exp(-(d * d) / (2 * (sigma_div * 0.3) ** 2))
+                    rift = (
+                        -config.divergent_depth_m
+                        * 0.1
+                        * np.exp(-(d * d) / (2 * (sigma_div * 0.2) ** 2))
+                    )
                 delta_h[i] = (rift + ridge) * rate_factor * mod[i] - 0.6 * off_i
-            else:
-                # Continental rift: deep central valley + flanking highlands
-                # (East African Rift, Baikal).  The rift floor can drop below
-                # sea level (Dead Sea, Danakil Depression).
+            elif crust == "transitional":
+                # Rifted margin / continent-ocean transition: thinned crust, no
+                # high rift shoulders — shallow half-graben relief only.
                 rift = (
                     -config.divergent_depth_m
-                    * 0.5
-                    * np.exp(-(d * d) / (2 * (sigma_div * 0.25) ** 2))
+                    * 0.2
+                    * np.exp(-(d * d) / (2 * (sigma_div * 0.3) ** 2))
+                )
+                delta_h[i] = rift * rate_factor * mod[i]
+            else:
+                # Continental rift: deep central graben + flanking rift
+                # shoulders (East African Rift, Baikal, Red Sea).  The graben
+                # must drop below sea level to form a rift sea, so the shoulder
+                # Gaussian is pushed OUT (centre 0.6σ) and narrowed (0.3σ) — a
+                # wide shoulder at 0.35σ overlaps the valley floor (74% of its
+                # peak at d=0) and fills it back up, killing the rift sea.
+                seg_mod = 0.7 + 0.6 * arc_u[i]  # [0.7, 1.3] shoulder-height modulation
+                # Rate gate: only fast continental rifts (Red Sea stage) drop
+                # below sea level; slow rifts (East African Rift / Baikal) stay
+                # as a shallow graben above sea level.  `rate` = |v_n| (full
+                # divergence rate, cm/yr) at the boundary.
+                rift_depth_factor = 0.8 if rate >= config.continental_rift_sea_rate_cm_yr else 0.3
+                # Half-graben: signed distance (ds > 0 = footwall side) puts the
+                # shoulder on ONE side only, so the rift is asymmetric instead of
+                # two symmetric shoulders.
+                ds = d * side[i] * polarity[i]
+                # Rift-valley width grows with cumulative divergence E
+                # (distributed extension, East African Rift 50–200 km — §3.6):
+                # a boundary that rifted longer/faster gets a wider graben, so the
+                # rift sea is wider and varies along strike instead of a uniform
+                # 1-cell slit.
+                valley_sigma = min(
+                    config.rift_valley_max_km,
+                    config.rift_valley_base_km
+                    + config.rift_valley_rate * cell.cumulative_divergence_km,
+                )
+                rift = (
+                    -config.divergent_depth_m
+                    * rift_depth_factor
+                    * np.exp(-(ds * ds) / (2 * valley_sigma * valley_sigma))
                 )
                 ridge = (
                     config.divergent_depth_m
                     * 0.7
-                    * np.exp(-(abs(d - sigma_div * 0.35) ** 2) / (2 * (sigma_div * 0.45) ** 2))
+                    * seg_mod
+                    * np.exp(-((ds - sigma_div * 0.6) ** 2) / (2 * (sigma_div * 0.3) ** 2))
                 )
-                delta_h[i] = (rift + ridge) * rate_factor * mod[i]
+                # Horst-graben: high-freq fault blocks confined to the graben
+                # (d < σ_div), ±fault_amp relief so the rift floor is broken into
+                # along-strike horsts/grabens instead of a smooth valley.
+                fault_amp = config.rift_fault_block_amp_m  # m (§3.8)
+                fault = fault_amp * fault_noise[i] * np.exp(-(d * d) / (2 * (sigma_div * 0.4) ** 2))
+                # uplift_mod (mod) only modulates the shoulder (ridge), not the
+                # valley (rift) — otherwise the arc noise halves the graben depth
+                # and kills the rift sea (was ~-26 m).
+                delta_h[i] = (rift + ridge * mod[i]) * rate_factor + fault
 
-    # ---- Transform: roughness-only (no systematic elevation change) ----
-    # Collect transform boundary cells for a narrow roughness boost.
-    # Strike-slip fault zones (San Andreas, North Anatolian) feature
-    # linear valleys, shutter ridges, and sag ponds — local roughness
-    # ~1.5× within ~200 km of the fault trace.
+    # ---- Transform: leaky-transform basins + roughness boost ----
+    # Pure strike-slip (v_t/v_total > threshold) is roughness-only — San
+    # Andreas / North Anatolian linear valleys, shutter ridges, sag ponds.
+    # Oblique transforms with an extensional component (v_t/v_total below the
+    # threshold AND v_n < 0) open a shallow pull-apart basin (Dead Sea −430 m,
+    # Salton Trough) whose depth scales with the obliquity (§3.7).
     transform_cells: list[int] = []
+    leaky_cells: dict[int, float] = {}  # cid → obliquity strength [0, 1]
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type == "transform":
             transform_cells.append(i)
             mesh.cells[i].landform = (
                 "transform" if not mesh.cells[i].landform else mesh.cells[i].landform
             )
+            tf = cell.tangential_fraction
+            if 0.0 < tf < config.transform_leaky_threshold and cell.convergence_rate_cm_yr < 0.0:
+                # Obliquity strength: 1.0 at v_t/v_total=0.7 (strongest oblique),
+                # 0.0 at the threshold (pure strike-slip).  Only transtension
+                # (v_n < 0) opens a basin; transpression would uplift instead.
+                strength = (config.transform_leaky_threshold - tf) / (
+                    config.transform_leaky_threshold - 0.7
+                )
+                leaky_cells[i] = float(np.clip(strength, 0.0, 1.0))
 
-    # BFS from transform boundary cells (narrow band: σ × 0.4 ≈ 200 km)
+    # Pull-apart basin subsidence: the leaky trace is a continuous along-strike
+    # floor, its non-leaky flanks are the basin shoulders (half depth).
+    if leaky_cells:
+        for cid, strength in leaky_cells.items():
+            depth = config.transform_leaky_basin_depth_m * strength
+            delta_h[cid] -= depth
+            for nid in mesh.cells[cid].neighbors:
+                if nid not in leaky_cells:
+                    delta_h[nid] -= depth * 0.5
+
+    # Roughness boost in a narrow band around transform boundary cells
+    # (σ × 0.4 ≈ 200 km): 1.5 at the fault trace, decaying to 1.0 outward.
     transform_boost = np.ones(n, dtype=np.float64)
     if transform_cells:
-        sigma_trans = shoulder_sigma * 0.4  # 200 km — transform faults are linear, narrow
-        from collections import deque
-
-        tq: deque[int] = deque()
-        tdist: dict[int, float] = {}
-        for cid in transform_cells:
-            tdist[cid] = 0.0
-            tq.append(cid)
-
-        cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-        while tq:
-            cid = tq.popleft()
-            d_t = tdist[cid]
-            if d_t >= 1.2 * sigma_trans:
-                continue
-            # Boost factor: 1.5 at the fault trace, decaying to 1.0 at 200 km
+        sigma_trans = config.transform_width_km  # per-type width (km)
+        tdist = geodesic_bfs(mesh, transform_cells, config.radius_km, max_dist_km=1.2 * sigma_trans)
+        for cid, d_t in tdist.items():
             transform_boost[cid] = 1.0 + 0.5 * np.exp(
                 -(d_t * d_t) / (2 * sigma_trans * sigma_trans)
             )
-            for nid in mesh.cells[cid].neighbors:
-                if nid not in tdist:
-                    tdist[nid] = d_t + cell_km
-                    tq.append(nid)
 
     return delta_h, transform_boost
 
@@ -1237,22 +1433,29 @@ def _generate_hotspots(
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Hotspot volcanic chains — age-progressive elevation decay.
+    """Hotspot volcanic chains — discrete age-progressive archipelagos.
 
-    Seeds hotspots randomly on the sphere (Poisson-disc).  For each
-    hotspot, trace a chain of cells following the local plate motion
-    direction.  Elevation decays exponentially along the chain from
-    the active hotspot (youngest, highest) to the oldest seamount.
+    Seeds hotspots randomly on oceanic crust (Poisson-disc).  For each
+    hotspot, traces a chain of *discrete* shield volcanoes following the
+    local plate-motion direction (a small circle about the plate's Euler
+    pole).  Volcanoes are spaced by an eruption interval along the chain;
+    each is a cosine-bell uplift whose height decays with age (distance from
+    the active hotspot), so the young end is an island and the old end
+    subsides into a seamount.  All lengths are real geodesic km
+    (grid-resolution independent — see proposal §7).
 
     Reference:
       Wilson, J.T. (1963). "A possible origin of the Hawaiian Islands."
-      — plate moving over a fixed mantle plume produces a linear chain
-        of volcanoes with age-progressive subsidence.
+      — plate moving over a fixed mantle plume produces a linear chain of
+        age-progressive volcanoes.
     """
     n = mesh.num_cells
+    radius_km = config.radius_km
     hotspot_field = np.zeros(n, dtype=np.float64)
+    xyz = mesh.cell_xyz  # (n, 3) unit-sphere positions
 
-    # Poisson-disc hotspot seed placement
+    # Poisson-disc hotspot seed placement (angular separation is resolution-
+    # independent; 0.5 rad ≈ 3200 km keeps hotspots well separated).
     num_hotspots = config.hotspot_count
     candidates = list(range(n))
     rng.shuffle(candidates)
@@ -1264,22 +1467,23 @@ def _generate_hotspots(
         c = mesh.cells[cid]
         if c.crust_type != "oceanic":
             continue  # hotspots only on oceanic crust (Earth's ~80% are oceanic)
-        xyz = np.array([c.x, c.y, c.z])
+        c_xyz = xyz[cid]
         too_close = False
         for sid in hotspot_seeds:
-            sc = mesh.cells[sid]
-            dot = np.clip(xyz[0] * sc.x + xyz[1] * sc.y + xyz[2] * sc.z, -1, 1)
+            dot = float(np.clip(c_xyz @ xyz[sid], -1.0, 1.0))
             if np.arccos(dot) < min_sep:
                 too_close = True
                 break
         if not too_close:
             hotspot_seeds.append(cid)
 
-    # For each hotspot, trace a chain along plate motion direction
     plate_dict = {p.id: p for p in plates}
-    max_chain_cells = 30  # ≈ 30 × 45 km ≈ 1350 km chain length at 100K cells
-    hotspot_height = 8500.0  # m — active hotspot volcano height (breaks surface from ~-5000 m)
-    decay_per_cell = 0.85  # exponential decay per cell along chain
+    interval_km = config.hotspot_eruption_interval_km
+    volcano_radius_km = config.hotspot_volcano_radius_km
+    active_height = config.hotspot_active_height_m
+    subsidence = config.hotspot_subsidence_m_per_km
+    chain_length_km = config.hotspot_chain_length_km
+    total_volcanoes = 0
 
     for hs_idx, seed in enumerate(hotspot_seeds):
         hs_id = f"hs_{hs_idx}"
@@ -1289,59 +1493,80 @@ def _generate_hotspots(
         if plate is None:
             continue
 
-        # Get plate motion direction at hotspot
-        ep = plate.euler_pole
-        axis = np.array([ep.x, ep.y, ep.z])
-        pos = np.array([cell.x, cell.y, cell.z])
-        velocity = np.cross(axis, pos)  # direction of plate motion
+        axis = np.array([plate.euler_pole.x, plate.euler_pole.y, plate.euler_pole.z])
 
-        # Trace chain: follow velocity direction, picking nearest cells
+        # Trace the chain along the small circle about the Euler pole,
+        # accumulating real geodesic distance.  A volcano sits at the seed
+        # (active hotspot) and at each eruption interval along the chain.
+        volcanoes: list[tuple[int, float]] = [(seed, 0.0)]
         current_cid = seed
-        height = hotspot_height
+        arc_km = 0.0
+        next_eruption_arc = interval_km
         visited: set[int] = {seed}
-
-        # Tag the seed cell
         mesh.cells[seed].hotspot_id = hs_id
 
-        for _ in range(max_chain_cells):
+        while arc_km < chain_length_km:
             current = mesh.cells[current_cid]
-            hotspot_field[current_cid] += height
-            mesh.cells[current_cid].hotspot_id = hs_id
+            pos = xyz[current_cid]
+            # Local plate-motion direction (tangent to the Euler small circle).
+            velocity = np.cross(axis, pos)
+            vnorm = np.linalg.norm(velocity)
+            if vnorm < 1e-12:
+                break  # at/near the Euler pole: motion direction undefined
+            velocity /= vnorm
 
-            # Find neighbor cell most aligned with velocity direction
+            # Pick the unvisited neighbor most aligned with motion.
             best_dot = -2.0
             best_nid = -1
             for nid in current.neighbors:
                 if nid in visited:
                     continue
-                nc = mesh.cells[nid]
-                dir_to_neighbor = np.array(
-                    [
-                        nc.x - current.x,
-                        nc.y - current.y,
-                        nc.z - current.z,
-                    ]
-                )
-                norm = np.linalg.norm(dir_to_neighbor)
-                if norm < 1e-12:
+                npos = xyz[nid]
+                step = npos - pos
+                snorm = np.linalg.norm(step)
+                if snorm < 1e-12:
                     continue
-                dot = np.dot(dir_to_neighbor / norm, velocity)
+                dot = float(np.dot(step / snorm, velocity))
                 if dot > best_dot:
                     best_dot = dot
                     best_nid = nid
 
             if best_nid < 0:
-                break  # dead end
+                break  # dead end (enclosed by land / already visited)
             if mesh.cells[best_nid].crust_type != "oceanic":
                 break  # chain stays on oceanic crust
+            if mesh.cells[best_nid].plate_id != pid:
+                break  # chain records one plate's motion; never crosses a boundary
 
+            step_km = float(np.arccos(np.clip(xyz[best_nid] @ pos, -1.0, 1.0))) * radius_km
+            arc_km += step_km
             current_cid = best_nid
             visited.add(current_cid)
-            height *= decay_per_cell  # age-progressive subsidence
+            mesh.cells[current_cid].hotspot_id = hs_id
+
+            if arc_km >= next_eruption_arc:
+                volcanoes.append((current_cid, arc_km))
+                next_eruption_arc += interval_km
+
+        # Apply each volcano as a cosine-bell uplift with a real-km radius.
+        for center_cid, arc in volcanoes:
+            total_volcanoes += 1
+            h = active_height - subsidence * arc
+            if h <= 0.0:
+                continue  # fully subsided (below the abyssal baseline)
+            cpos = xyz[center_cid]
+            dots = np.clip(xyz @ cpos, -1.0, 1.0)
+            dist_km = np.arccos(dots) * radius_km
+            mask = dist_km < volcano_radius_km
+            if not np.any(mask):
+                continue
+            profile = h * np.cos(0.5 * np.pi * (dist_km[mask] / volcano_radius_km))
+            hotspot_field[mask] += profile
 
     logger.info(
-        "  Hotspots: %d chains, total %d cells affected",
-        num_hotspots,
+        "  Hotspots: %d chains, %d volcanoes, %d cells affected",
+        len(hotspot_seeds),
+        total_volcanoes,
         int(np.sum(hotspot_field > 0)),
     )
     return hotspot_field
@@ -1441,6 +1666,7 @@ def _anisotropic_fbm(
 
 def _compute_boundary_strike(
     mesh: CVTMesh,
+    config: TerrainPipelineConfig,
 ) -> dict[int, tuple[float, float, float]]:
     """Estimate local boundary strike direction for cells near boundaries.
 
@@ -1484,29 +1710,15 @@ def _compute_boundary_strike(
                 strike_vec /= nrm
                 strike[cid] = (float(strike_vec[0]), float(strike_vec[1]), float(strike_vec[2]))
 
-    # Propagate strike to cells within boundary influence radius
-    from collections import deque
-
+    # Propagate strike to cells within the boundary influence radius, each
+    # cell inheriting the strike of its nearest boundary cell.
     sigma = 500.0  # km — same as boundary_influence default
-    cell_km = np.sqrt(4.0 * np.pi * 6371.0**2 / mesh.num_cells) * 2
-    q: deque[int] = deque()
-    dist: dict[int, float] = {}
-    for cid in strike:
-        dist[cid] = 0.0
-        q.append(cid)
-
-    while q:
-        cid = q.popleft()
-        d = dist[cid]
-        if d >= sigma:
-            continue
-        s = strike.get(cid)
-        for nid in mesh.cells[cid].neighbors:
-            if nid not in dist:
-                dist[nid] = d + cell_km
-                if s:
-                    strike[nid] = s  # inherit parent strike
-                q.append(nid)
+    propagated = geodesic_bfs_with_source(
+        mesh, list(strike.keys()), config.radius_km, max_dist_km=sigma
+    )
+    for nid, (src, _d) in propagated.items():
+        if nid not in strike:
+            strike[nid] = strike[src]
 
     return strike
 
@@ -1715,8 +1927,6 @@ def _apply_interior_lowlands(
     # Convergent boundary cells are the orogenic source.  Seed the BFS from the
     # exact plate-edge cells (distance 0) so the ramp origin is the trench /
     # collision zone, not the propagated type halo (~1.2× boundary_influence_km).
-    from collections import deque
-
     sources: list[int] = []
     for i, cell in enumerate(mesh.cells):
         d = cell.distance_to_boundary_km
@@ -1726,23 +1936,11 @@ def _apply_interior_lowlands(
         logger.info("  Interior lowlands: no convergent boundaries, skipping")
         return elevation, empty
 
-    # Multi-source BFS → hop distance to the nearest convergent boundary.
-    hops = np.full(n, -1, dtype=np.int32)
-    q: deque[int] = deque()
-    for s in sources:
-        hops[s] = 0
-        q.append(s)
-    while q:
-        cur = q.popleft()
-        for nid in mesh.cells[cur].neighbors:
-            if not (0 <= nid < n):
-                continue
-            if hops[nid] == -1:
-                hops[nid] = hops[cur] + 1
-                q.append(nid)
-
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-    dist_km = hops.astype(np.float64) * cell_km
+    # Multi-source geodesic BFS → distance to the nearest convergent boundary.
+    dist = geodesic_bfs(mesh, sources, config.radius_km)
+    dist_km = np.full(n, -1.0)  # unreachable → negative → ramp 0
+    for cid, d in dist.items():
+        dist_km[cid] = d
 
     # Smoothstep ramp 0 → 1 over [0, scale].
     t = np.clip(dist_km / scale, 0.0, 1.0)
@@ -1903,7 +2101,6 @@ def _apply_continental_shelf(
       Shepard, F.P. (1963). *Submarine Geology*. Harper & Row.
       — global average continental shelf width ~80 km, depth ~200 m.
     """
-    n = mesh.num_cells
     shelf_width = config.shelf_width_km
     if shelf_width <= 0:
         return elevation
@@ -1923,31 +2120,21 @@ def _apply_continental_shelf(
         logger.info("  Continental shelf: no coastline cells detected")
         return elevation
 
-    # 2. BFS distance from coastline into ocean
-    from collections import deque
-
-    shelf_dist: dict[int, float] = {}
-    q: deque[int] = deque()
-    for cid in coastline:
-        shelf_dist[cid] = 0.0
-        q.append(cid)
-
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-    while q:
-        cid = q.popleft()
-        d = shelf_dist[cid]
-        if d >= shelf_width:
-            continue
-        for nid in mesh.cells[cid].neighbors:
-            if nid not in shelf_dist and elevation[nid] <= sea_level:
-                shelf_dist[nid] = d + cell_km
-                q.append(nid)
+    # 2. Geodesic BFS from coastline into ocean (only seaward cells).
+    shelf_dist = geodesic_bfs(
+        mesh,
+        coastline,
+        config.radius_km,
+        max_dist_km=shelf_width,
+        can_expand=lambda nid: elevation[nid] <= sea_level,
+    )
 
     # 3. Two-stage shelf profile: shallow platform → shelf break → deep ocean
     shelf_edge_depth = sea_level + rng.uniform(-5.0, -1.0)  # near-surface
     shelf_break_depth = sea_level - 200.0  # typical shelf-break depth (m)
     drop_fold = 30.0  # e-folding for the drop beyond the shelf break (km)
     shelf_cells = 0
+    shelf_cont = 0
 
     for cid, d_km in shelf_dist.items():
         if d_km <= 0:
@@ -1968,11 +2155,18 @@ def _apply_continental_shelf(
         # Random ±5% variation
         noise = 1.0 + rng.uniform(-0.05, 0.05)
         elevation[cid] = z_shelf * noise
+        # The continental shelf is submerged CONTINENTAL crust, not oceanic
+        # (§8 地壳类型正交化): the crust boundary should be the shelf edge,
+        # not the coastline itself.
+        if mesh.cells[cid].crust_type == "oceanic":
+            mesh.cells[cid].crust_type = "continental"
+            shelf_cont += 1
         shelf_cells += 1
 
     logger.info(
-        "  Continental shelf: %d cells, width=%.0f km",
+        "  Continental shelf: %d cells (%d → continental), width=%.0f km",
         shelf_cells,
+        shelf_cont,
         shelf_width,
     )
     return elevation
@@ -1999,7 +2193,10 @@ def _apply_coastal_plain(
     have at least a minimal lowland transition.
 
     Combines with *_apply_continental_shelf* (ocean side) to produce
-    a smooth land→coast→shelf→deep ocean transition.
+    a smooth land→coast→shelf→deep ocean transition.  Oceanic cells
+    raised above sea level at the continental margin (the subducting
+    side of an O-C subduction, physically a trench) are smoothed too,
+    so the subducting plate does not turn into a coastal mountain range.
 
     References
     ----------
@@ -2017,7 +2214,18 @@ def _apply_coastal_plain(
 
     sea_level = config.sea_level_offset_m
 
-    # 1. Identify coastline cells (land with at least one ocean neighbour)
+    # Minimum coastal strip: at least ~3 cells wide for steep tectonic coasts,
+    # so the main-arc relief (4000–6000 m) sits 2–3 cells inland rather than
+    # dropping straight into the sea (Andes: main arc 100–200 km from the
+    # trench, coastal range/plain in the first ~50 km).
+    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
+    min_strip_km = min(150.0, max(cell_km * 3.0, plain_width * 0.2))
+    max_bfs_width = max(plain_width, min_strip_km)
+
+    # 1. Identify coastline cells: any land cell (elevation above sea level)
+    #    with an ocean neighbour.  Applied uniformly to every crust type — an
+    #    oceanic cell raised above sea level at a subduction margin is an O-C
+    #    artifact and is smoothed exactly like a continental coastal mountain.
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
         if elevation[i] <= sea_level:
@@ -2030,31 +2238,14 @@ def _apply_coastal_plain(
     if not coastline:
         return elevation
 
-    # 2. BFS inland from coastline.
-    #    Extend BFS range to cover the minimum coastal strip even for
-    #    high-elevation mountains (at least 1 cell inland).
-    from collections import deque
-
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-    # Minimum coastal strip: at least 1 cell wide, up to 150 km absolute cap
-    min_strip_km = min(150.0, max(cell_km * 1.2, plain_width * 0.2))
-    max_bfs_width = max(plain_width, min_strip_km)
-
-    inland_dist: dict[int, float] = {}
-    q: deque[int] = deque()
-    for cid in coastline:
-        inland_dist[cid] = 0.0
-        q.append(cid)
-
-    while q:
-        cid = q.popleft()
-        d = inland_dist[cid]
-        if d >= max_bfs_width:
-            continue
-        for nid in mesh.cells[cid].neighbors:
-            if nid not in inland_dist and elevation[nid] > sea_level:
-                inland_dist[nid] = d + cell_km
-                q.append(nid)
+    # 2. Geodesic BFS inland from coastline.
+    inland_dist = geodesic_bfs(
+        mesh,
+        coastline,
+        config.radius_km,
+        max_dist_km=max_bfs_width,
+        can_expand=lambda nid: elevation[nid] > sea_level,
+    )
 
     # 3. Variable-width coastal plain with elevation-dependent blend target.
     #    Low-lying cells blend toward ~30 m (classic coastal plain).
@@ -2062,7 +2253,10 @@ def _apply_coastal_plain(
     #    original elevation — creating a narrow but not-flat transition
     #    (cf. Chilean Cordillera de la Costa, ~2000–3000 m at the coast).
     max_plain_elev = config.coastal_plain_max_elevation_m  # 500 m default
-    mountain_coast_ratio = 0.40  # mountain cells retain ~40% of elev at the coast
+    # Coastal strip target for steep tectonic coasts: ~15% of the inland
+    # relief ≈ 500–900 m — the coastal range/plain (Chilean Cordillera de la
+    # Costa ~500–1500 m), not the 4000–6000 m main arc.
+    mountain_coast_ratio = 0.15
 
     for cid, d_km in inland_dist.items():
         if elevation[cid] <= sea_level:
@@ -2124,7 +2318,6 @@ def _apply_island_arcs(
       Stern, R.J. (2002). "Subduction zones." *Reviews of Geophysics*, 40(4).
       — island arc formation at O-O convergent margins, arc-trench gap.
     """
-    n = mesh.num_cells
     arc_height = config.island_arc_height_m
     if arc_height <= 0:
         return elevation
@@ -2149,27 +2342,10 @@ def _apply_island_arcs(
     if not arc_cells:
         return elevation
 
-    # BFS from arc boundary cells: arc is ~1-2 cells wide on the overriding side
-    from collections import deque
-
-    arc_affected: dict[int, float] = {}
-    q: deque[int] = deque()
-    for cid in arc_cells:
-        arc_affected[cid] = 0.0
-        q.append(cid)
-
-    cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / n)
-    arc_width_km = 200.0  # arc-trench gap + arc width
-
-    while q:
-        cid = q.popleft()
-        d = arc_affected[cid]
-        if d >= arc_width_km:
-            continue
-        for nid in mesh.cells[cid].neighbors:
-            if nid not in arc_affected:
-                arc_affected[nid] = d + cell_km
-                q.append(nid)
+    # Geodesic BFS from arc boundary cells: arc is ~1-2 cells wide on the
+    # overriding side (arc-trench gap + arc width).
+    arc_width_km = 200.0
+    arc_affected = geodesic_bfs(mesh, arc_cells, config.radius_km, max_dist_km=arc_width_km)
 
     # Gaussian arc uplift: peak at ~150 km from trench
     sigma = arc_width_km * 0.4
@@ -2178,7 +2354,6 @@ def _apply_island_arcs(
 
     damp = _anchor_uplift_damping(geography_bias, len(elevation))
     mod = uplift_mod if uplift_mod is not None else np.ones(len(elevation), dtype=np.float64)
-    sea_level = config.sea_level_offset_m
     for cid, d_km in arc_affected.items():
         weight = np.exp(-((d_km - peak_dist) ** 2) / (2 * sigma * sigma))
         dz = arc_height * weight * damp[cid] * mod[cid]
@@ -2186,10 +2361,6 @@ def _apply_island_arcs(
         if getattr(mesh.cells[cid], "crust_type", "") != "continental":
             elevation[cid] += dz
             arc_count += 1
-        # If this lifts above sea level, mark as transitional (island)
-        if elevation[cid] > sea_level:
-            mesh.cells[cid].crust_type = "transitional"
-
     logger.info(
         "  Island arcs: %d boundary cells → %d arc cells (height=%.0f m)",
         len(arc_cells),
@@ -2293,8 +2464,10 @@ def _apply_interior_landforms(
         interior_arr = np.array(interior, dtype=np.int64)
 
         # ---- Orogenic belts: count scales with interior area ----
+        # ``interior_orogeny_count`` is the per-plate base; one extra belt per
+        # 800 interior cells beyond the first 800 (so large plates get more,
+        # small plates fewer).  No hard cap — the base count is authoritative.
         n_belts = config.interior_orogeny_count + max(0, ni // 800 - 1)
-        n_belts = min(n_belts, 4)
         belt_seed_base = zlib.crc32(pid.encode("utf-8")) % 10000
 
         # Pre-extract interior positions (ni, 3)
@@ -2318,9 +2491,15 @@ def _apply_interior_landforms(
                 continue
             gc_normal /= gc_norm
 
-            # Angular length of the belt — cap at 30°
+            # Angular length of the belt — random, right-skewed so most are
+            # short (~600 km) with a rare long tail up to ~1200 km (10°).
             angle_ab_raw = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
-            angle_ab = min(angle_ab_raw, np.radians(30))
+            belt_length_deg = (
+                config.interior_belt_length_min_deg
+                + (config.interior_belt_length_max_deg - config.interior_belt_length_min_deg)
+                * rng.random() ** 2
+            )
+            angle_ab = min(angle_ab_raw, np.radians(belt_length_deg))
 
             # Belt parameters
             base_amplitude = rng.uniform(500.0, 1500.0)
@@ -2358,6 +2537,8 @@ def _apply_interior_landforms(
             for _j, ci in enumerate(candidates):
                 if not _ok[_j]:
                     continue
+                if _angle_ap[_j] > angle_ab:
+                    continue  # projection beyond the belt's end — not in the belt
                 t = float(t_vals[_j])
                 p_proj = _proj[_j]
                 i = interior_arr[ci]
@@ -2415,8 +2596,8 @@ def _apply_interior_landforms(
             total_orogeny += belt_count
             total_basin += basin_count
 
-        # ---- Rift valleys (1 per plate, 30% chance) ----
-        if rng.random() < 0.3 and ni > 20:
+        # ---- Rift valleys (1 per plate, gated by interior_rift_chance) ----
+        if rng.random() < config.interior_rift_chance and ni > 20:
             a_idx = interior[rng.integers(0, ni)]
             b_idx = interior[rng.integers(0, ni)]
             if a_idx != b_idx:
@@ -2426,7 +2607,18 @@ def _apply_interior_landforms(
                 gc_norm = np.linalg.norm(gc_normal)
                 if gc_norm > 1e-12:
                     gc_normal /= gc_norm
-                    angle_ab = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+                    # Cap the rift length like orogeny belts — a full great-circle
+                    # rift reads as one long artificial stripe.  Most rifts ~600 km.
+                    angle_ab_raw = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
+                    rift_length_deg = (
+                        config.interior_belt_length_min_deg
+                        + (
+                            config.interior_belt_length_max_deg
+                            - config.interior_belt_length_min_deg
+                        )
+                        * rng.random() ** 2
+                    )
+                    angle_ab = min(angle_ab_raw, np.radians(rift_length_deg))
                     rift_sigma = rng.uniform(40.0, 100.0)
                     rift_depth_base = rng.uniform(300.0, 800.0)
                     rift_noise_seed = (belt_seed_base * 100 + 99) * 1000
@@ -2451,6 +2643,8 @@ def _apply_interior_landforms(
                     for _j, ci in enumerate(candidates):
                         if not _ok[_j]:
                             continue
+                        if _angle_ap[_j] > angle_ab:
+                            continue  # projection beyond the rift's end
                         t = float(t_vals[_j])
                         p_proj = _proj[_j]
                         i = interior_arr[ci]

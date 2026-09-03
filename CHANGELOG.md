@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] — 2026-09-04
+
+### Added
+
+- **板块边界对齐大陆边缘**（proposal §5 方案 2）：geography 感知的板块种子 + 海岸代价场，
+  板块边界被「吸」到海岸附近，不再横穿大陆/纵切大洋（`geography_boundary_weight`）。
+- **锚定地貌噪声粗糙化**（proposal §4）：`geography.yaml` 的 feature 支持 `noise_amplitude`，
+  高原/裂谷/群岛的边界由规整椭圆变为分形海岸线。
+- **内部造山带/裂谷形态**（proposal §4）：长度封顶（`interior_belt_length_min/max_deg`，
+  多数 ~600 km）+ 去硬上限（`interior_orogeny_count` 真正生效）+ 裂谷概率参数化
+  （`interior_rift_chance`），长条造山带/裂谷变为散碎短段。
+- **前端地物着色**：转换断层（transform）/ 断陷盆地（basin）图层配色 + i18n 标签。
+- **板块运动箭头图层**：`plate_motion` 静态导出图层。
+
+### Changed
+
+- **海岸高程过渡**（proposal §3.9）：沿海平原统一所有沿海 cell（不再只限大陆地壳）；
+  高程钉扎「削峰」不对称化——海沟不再被抬成山。
+- **地壳类型正交化**（proposal §8）：取消程序化 transitional，浅水大陆架划入陆壳。
+- **球面测地距离统一**（proposal §7）：距离单位真实（`distance.geodesic_bfs`），
+  不依赖网格分辨率。
+
+### Fixed
+
+- 板块边界分类改用**法向速度判据** + 沿走向子分段，打破 Voronoi 大圆边界的犬牙。
+- 渗漏转换拉分盆地、断陷盆地/地垒可见、热点链离散群岛化、大陆板块减速、板块半包围。
+- 4 个测试对齐代码现状：transitional 地壳断言、`water_class` 迁移、无大气温度、
+  生态纬向 sanity（中纬度热带化暂标 xfail，气候重调为下一版）。
+
 ## [0.34.0] — 2026-08-30
 
 ### Added

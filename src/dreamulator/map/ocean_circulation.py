@@ -292,9 +292,9 @@ def detect_ocean_basins(
 ) -> tuple[np.ndarray, list[np.ndarray]]:
     """Partition ocean cells into connected basins via BFS.
 
-    A cell is "ocean" when  elevation <= sea_level  AND  crust_type is
-    'oceanic' or 'transitional' (continental shelf cells that are submerged
-    still participate in the basin circulation).
+    A cell is "ocean" when its ``water_class`` is "ocean" (below sea level and
+    connected to the global ocean — includes submerged continental shelf and
+    rift-sea cells; the geological water_bodies classification).
 
     Args:
         cells: All VoronoiCell objects.
@@ -309,7 +309,7 @@ def detect_ocean_basins(
     is_ocean = np.zeros(n, dtype=bool)
     for i in range(n):
         c = cells[i]
-        if c.elevation <= sea_level_m and c.crust_type in ("oceanic", "transitional"):
+        if c.water_class == "ocean":
             is_ocean[i] = True
 
     basin_id = np.full(n, -1, dtype=np.int64)
@@ -734,7 +734,7 @@ def compute_upwelling_index(
 
     for i in range(n):
         c = cells[i]
-        if c.crust_type not in ("oceanic", "transitional"):
+        if c.water_class != "ocean":
             continue
         if c.elevation > 0.0:
             continue
@@ -919,7 +919,7 @@ def advect_sst_relaxation(
                     for j in c.neighbors:
                         if 0 <= j < n_global:
                             nc = cells[j]
-                            if nc.crust_type in ("oceanic", "transitional") and nc.elevation <= 0.0:
+                            if nc.water_class == "ocean":
                                 ocean_anomalies.append(anomaly[j])
                     if ocean_anomalies:
                         mean_anom = float(np.mean(ocean_anomalies))
@@ -972,7 +972,7 @@ def _trace_upstream(
                 # Land blocks the current, and a land cell's temperature is a
                 # surface air temp, not an SST.
                 c_j = cells[j]
-                if not (c_j.crust_type in ("oceanic", "transitional") and c_j.elevation <= 0.0):
+                if c_j.water_class != "ocean":
                     continue
             d = nodes_xyz[j] - nodes_xyz[gi]
             radial = float(np.dot(d, nodes_xyz[gi]))
@@ -1059,7 +1059,7 @@ def advect_sst_semilagrangian(
                     for j in c.neighbors:
                         if 0 <= j < n_global:
                             nc = cells[j]
-                            if nc.crust_type in ("oceanic", "transitional") and nc.elevation <= 0.0:
+                            if nc.water_class == "ocean":
                                 ocean_anomalies.append(anomaly[j])
                     if ocean_anomalies:
                         mean_anom = float(np.mean(ocean_anomalies))

@@ -71,6 +71,7 @@ def _cell(
         area_km2=area_km2,
         elevation=elevation,
         crust_type=crust_type,
+        water_class="land" if elevation > 0 else "ocean",
         neighbors=neighbors,
     )
 

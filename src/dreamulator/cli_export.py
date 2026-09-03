@@ -28,11 +28,12 @@ from dreamulator.map.export import (
     export_cell_index_grid,
     render_categorical_layer,
     render_continuous_layer,
+    render_plate_motion_layer,
     render_terrain_layer,
     save_rgba_png,
 )
 from dreamulator.map.manager import MapManager
-from dreamulator.map.models import CVTMesh
+from dreamulator.map.models import CVTMesh, TectonicPlate
 from dreamulator.map.palettes import (
     build_adaptive_terrain_lut,
     continuous_scale,
@@ -47,7 +48,9 @@ export_app = typer.Typer(
 )
 console = Console()
 
-_VALID_LAYERS = frozenset({"terrain", "koppen", "biome", "agriculture", "habitability"})
+_VALID_LAYERS = frozenset(
+    {"terrain", "koppen", "biome", "agriculture", "habitability", "plate_motion"}
+)
 
 
 def _set_data_dir(data_dir: Path | None) -> None:
@@ -64,6 +67,8 @@ def _render_layer(
     elev_min: float,
     elev_max: float,
     sea_level: float,
+    omega_by_plate: dict[str, tuple[np.ndarray, float]] | None = None,
+    radius_km: float = 6371.0,
 ) -> np.ndarray:
     if name == "terrain":
         lut = build_adaptive_terrain_lut(elev_min, elev_max, sea_level)
@@ -94,6 +99,10 @@ def _render_layer(
             land_only=True,
             sea_level=sea_level,
         )
+    if name == "plate_motion":
+        if omega_by_plate is None:
+            raise ValueError("plate_motion layer requires loaded plate Euler poles")
+        return render_plate_motion_layer(mesh, indices, omega_by_plate, radius_km)
     raise ValueError(f"Unknown layer: {name}")
 
 
@@ -180,6 +189,24 @@ def export_layers(
     indices = export_cell_index_grid(mesh, width, height)
     output.mkdir(parents=True, exist_ok=True)
 
+    radius_km = float(getattr(meta, "radius_km", 6371.0) or 6371.0)
+    omega_by_plate: dict[str, tuple[np.ndarray, float]] | None = None
+    if "plate_motion" in requested:
+        plates_path = map_dir / "plates.json"
+        if not plates_path.exists():
+            console.print("[red]plate_motion layer needs plates.json — build first.[/red]")
+            raise typer.Exit(code=1) from None
+        import numpy as np
+
+        plates = TypeAdapter(list[TectonicPlate]).validate_json(plates_path.read_bytes())
+        omega_by_plate = {
+            p.id: (
+                np.asarray([p.euler_pole.x, p.euler_pole.y, p.euler_pole.z], dtype=float),
+                float(p.euler_pole.omega_rad_yr),
+            )
+            for p in plates
+        }
+
     table = Table(title=f"Exported layers — {world}/{planet_id}")
     table.add_column("Layer", style="cyan")
     table.add_column("File", style="green")
@@ -187,7 +214,9 @@ def export_layers(
 
     for name in requested:
         start = time.perf_counter()
-        rgba = _render_layer(name, mesh, indices, elev_min, elev_max, sea_level)
+        rgba = _render_layer(
+            name, mesh, indices, elev_min, elev_max, sea_level, omega_by_plate, radius_km
+        )
         path = output / f"{name}.png"
         save_rgba_png(rgba, path)
         elapsed = time.perf_counter() - start

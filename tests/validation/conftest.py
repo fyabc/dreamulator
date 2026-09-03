@@ -62,6 +62,7 @@ def build_validation_mesh(
                     area_km2=4.0 * math.pi * 6371.0**2 / n,
                     elevation=elevation,
                     crust_type=crust,
+                    water_class="land" if elevation > 0 else "ocean",
                     plate_id="plate_000",
                 )
             )

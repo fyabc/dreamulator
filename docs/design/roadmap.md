@@ -1,7 +1,7 @@
 # 开发路线图
 
-> 最后更新：2026-08-30（v0.34.0 月度矢量场 + 季风机制修复 + 气候精度提升 + 数据同步）
-> 前次：v0.33.0 月度气候展示 + 气候准确率系列 + nacrea 天文设定修订
+> 最后更新：2026-09-04（v0.35.0 地质层改进：板块对齐海岸 + 锚定地貌噪声 + 造山带/裂谷形态 + 海岸过渡修复）
+> 前次：v0.34.0 月度矢量场 + 季风机制修复 + 气候精度提升 + 数据同步
 > headless 导出 CLI + 配色单源化 + Seed 探索器 CLI）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
@@ -10,7 +10,7 @@
 
 ---
 
-## 一、当前状态快照（v0.33.0）
+## 一、当前状态快照（v0.35.0）
 
 | 维度 | 状态 |
 |------|------|
@@ -151,6 +151,8 @@
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算） | 远期，设计概要见 [moltke-engine.md](proposals/moltke-engine.md) | ★★ |
 | P3 | SDE 文明建模（Euler-Maruyama / Milstein / Jump-Euler + 泊松跳跃冲击） | 远期，依赖 Entity ID + Modifier 系统 | ★★ |
 | P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上；`query_registry` 补 `context=None` 物理/化学 verifier 原语——配平、密度-温度、能量预算等，作 `ai critique` 确定性取证底座。见 [harness.md](proposals/harness.md) §9.4） | 内核 0.5 周，随 `ai` 命令组（P2）推进 | ★★ |
+| P2 | **基于地质时间的板块运动演化**（古造山带/断陷自然涌现）：当前内部古造山带/裂谷/断陷是 `_apply_interior_landforms` **手动随机放置**（`geological-pipeline.md` §6.2），非从数亿年板块运动自然涌现。目标：把 tectonic 演化（Cortial 2019，当前 50 步预览）延展到数亿年尺度，让汇聚造山/离散裂谷/断陷随板块漂移-碰撞-裂解**自然生成**，去掉手动造山带。**与手动指定主体地形的冲突**：geography.yaml 锚定静态海陆格局，而「自然涌现」要求地形随演化漂移——两者矛盾。需调研：① 区分「指定模式」（geography 锚定 + 静态地形）vs「演化模式」（无锚定 + 动态地形）两种模式；② 或混合（锚定大陆骨架，板块边界/造山带由演化涌现）。参考 GPlates（板块重建）、Underworld2（岩石圈动力学）。与「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2）关联 | 设计 1–2 周 + 实现远期 | ★★★ |
+| P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，其中 **tectonics（50 步演化 + 加权 Voronoi 重采样）~105 s 占主导**，terrain ~44 s、mesh ~33 s、export ~27 s、plates ~13 s。先 profile 各段瓶颈（tectonics 逐步重采样、terrain 逐 cell Python 循环 + fBm、mesh SphericalVoronoi 构建），再定优化策略（Numba/向量化/并行/降演化步数）。交互性（秒~分钟）是硬约束，但不能以牺牲正确性为代价（引擎纪律 4） | 评估 0.5 周 | ★★ |
 
 ---
 
@@ -502,6 +504,11 @@
     - **月度 SST（居中）**：洋流季节化落地前，月度海表温度/混合层温度、上升流强度、
       海冰范围是比伪造月度洋流更有物理意义的替代展示，也为后续生态层（海洋 NPP、
       渔场）与文明层（季风航线）提供输入。
+25. **水系图层内湖终点处理**（2026-09）— 当前水系图层（`river_id`/`flow_accumulation`）中，
+    河流流到内流湖（内湖）就终止、不再向外流。物理上内流湖是封闭盆地、河流流入即终点，
+    这本身合理；需重新思考的是**绘制/展示方案**：①「内湖」是否应在地形图层显示（湖泊 vs
+    海洋的渲染区分）；② 水系图层的可视化逻辑（外流河→外洋 vs 内流河→内湖终点）。可能需
+    区分两类河流终点，并在图层/图例上明确内湖为「封闭水体」。
 
 ### 工程卫生
 

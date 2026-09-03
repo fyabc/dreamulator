@@ -308,6 +308,7 @@ def run_terrain_pipeline(
                 result.plates,
                 config,
                 progress_callback=progress_cb,
+                raster_bias=raster_bias,
             )
             if _progress is not None:
                 _progress.stop()

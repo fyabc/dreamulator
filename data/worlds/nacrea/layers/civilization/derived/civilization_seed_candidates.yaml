@@ -1,688 +1,853 @@
 planet:
   id: satellite_nacrea
   name: 珠母星 · Nacrea
-n_candidates: 25
+n_candidates: 35
 candidates:
-- cell_count: 19663
-  area_km2: 57459135.1
-  score: 14641827081.67
-  centroid_lon_deg: -76.23
-  centroid_lat_deg: 6.99
+- cell_count: 8866
+  area_km2: 25905644.8
+  score: 25967305968.63
+  centroid_lon_deg: 116.1
+  centroid_lat_deg: 21.76
   is_coastal: true
-  coastal_fraction: 0.0791
-  mean_distance_to_coast_km: 989.7
-  mean_temperature_c: 20.76
-  mean_precipitation_mm: 1625.2
+  coastal_fraction: 0.0951
+  mean_distance_to_coast_km: 1028.7
+  mean_temperature_c: 22.4
+  mean_precipitation_mm: 1546.0
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 11814
-    Cfb: 2517
-    BSk: 1305
-    BSh: 1290
-    BWk: 1103
-  mean_npp_gc_m2_yr: 1019.3
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
+    Af: 4774
+    Aw: 1616
+    BSh: 1537
+    Cfb: 533
+    BSk: 193
+  mean_npp_gc_m2_yr: 1002.4
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.3696
-    large_herbivores_high: 0.2461
-    draft_animals_high: 0.0471
+    staple_crops_high: 0.2693
+    large_herbivores_high: 0.4718
+    draft_animals_high: 0.0399
   landforms:
-    transform: 4766
-    basin: 16
-    orogeny: 644
-    rift: 4
+    orogeny: 404
+    basin: 18
+    rift: 1
   longitude_zone: twilight
   rank: 1
   id: cradle_01
-- cell_count: 2687
-  area_km2: 7840962.8
-  score: 7977231914.66
-  centroid_lon_deg: 132.53
-  centroid_lat_deg: -26.44
+- cell_count: 19740
+  area_km2: 57687526.8
+  score: 13799578828.24
+  centroid_lon_deg: -75.5
+  centroid_lat_deg: 6.14
   is_coastal: true
-  coastal_fraction: 0.1005
-  mean_distance_to_coast_km: 688.6
-  mean_temperature_c: 21.66
-  mean_precipitation_mm: 1343.1
+  coastal_fraction: 0.0648
+  mean_distance_to_coast_km: 1036.5
+  mean_temperature_c: 21.36
+  mean_precipitation_mm: 1517.7
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 1539
-    Cfb: 502
-    Aw: 435
-    BSh: 204
-    BSk: 6
-  mean_npp_gc_m2_yr: 1017.4
+    Af: 11077
+    BSh: 2530
+    Aw: 1650
+    Cfb: 1573
+    BSk: 1346
+  mean_npp_gc_m2_yr: 956.9
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.3319
+    large_herbivores_high: 0.3173
+    draft_animals_high: 0.0355
+  landforms:
+    orogeny: 698
+    transform: 1440
+    rift: 10
+    basin: 27
+  longitude_zone: twilight
+  rank: 2
+  id: cradle_02
+- cell_count: 2849
+  area_km2: 8314061.6
+  score: 8086717258.15
+  centroid_lon_deg: 132.98
+  centroid_lat_deg: -26.55
+  is_coastal: true
+  coastal_fraction: 0.0913
+  mean_distance_to_coast_km: 782.9
+  mean_temperature_c: 21.64
+  mean_precipitation_mm: 1509.2
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 1296
+    Aw: 522
+    BSh: 501
+    Cfb: 501
+    BSk: 21
+  mean_npp_gc_m2_yr: 972.7
   dominant_soil_fertility: high
   fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.3893
-    large_herbivores_high: 0.4645
-    draft_animals_high: 0.0119
+    staple_crops_high: 0.3229
+    large_herbivores_high: 0.5079
+    draft_animals_high: 0.0323
   landforms:
-    transform: 834
-    orogeny: 149
-    rift: 20
-    basin: 2
+    orogeny: 110
   longitude_zone: anti_planet
-  rank: 2
-  id: cradle_02
-- cell_count: 9550
-  area_km2: 27911151.6
-  score: 7389249815.29
-  centroid_lon_deg: 113.44
-  centroid_lat_deg: 19.45
-  is_coastal: true
-  coastal_fraction: 0.1153
-  mean_distance_to_coast_km: 858.0
-  mean_temperature_c: 22.62
-  mean_precipitation_mm: 1528.8
-  dominant_koppen: Af
-  koppen_breakdown:
-    Af: 6010
-    Aw: 1501
-    Cfb: 799
-    BSh: 661
-    BSk: 343
-  mean_npp_gc_m2_yr: 1059.0
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
-  domesticable_fraction:
-    staple_crops_high: 0.3664
-    large_herbivores_high: 0.4025
-    draft_animals_high: 0.0682
-  landforms:
-    transform: 2185
-    orogeny: 322
-    basin: 7
-  longitude_zone: twilight
   rank: 3
   id: cradle_03
-- cell_count: 5464
-  area_km2: 15959025.8
-  score: 4388085998.91
-  centroid_lon_deg: 41.94
-  centroid_lat_deg: 20.18
+- cell_count: 5349
+  area_km2: 15609541.8
+  score: 4235674968.68
+  centroid_lon_deg: 44.33
+  centroid_lat_deg: 16.68
   is_coastal: true
-  coastal_fraction: 0.1642
-  mean_distance_to_coast_km: 451.9
-  mean_temperature_c: 22.28
-  mean_precipitation_mm: 1711.4
+  coastal_fraction: 0.1492
+  mean_distance_to_coast_km: 541.1
+  mean_temperature_c: 22.66
+  mean_precipitation_mm: 1856.2
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 3535
-    BSk: 735
-    BSh: 372
-    Cfb: 307
-    Aw: 263
-  mean_npp_gc_m2_yr: 1099.8
+    Af: 3206
+    Cfb: 506
+    BSh: 477
+    BSk: 466
+    Aw: 456
+  mean_npp_gc_m2_yr: 1085.4
   dominant_soil_fertility: low
   fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.3384
-    large_herbivores_high: 0.2145
-    draft_animals_high: 0.0739
+    staple_crops_high: 0.2821
+    large_herbivores_high: 0.2799
+    draft_animals_high: 0.0593
   landforms:
-    transform: 1886
-    orogeny: 90
-    basin: 6
+    orogeny: 80
+    transform: 449
+    basin: 8
   longitude_zone: sub_planet
   rank: 4
   id: cradle_04
-- cell_count: 1688
-  area_km2: 4927566.1
-  score: 2278336514.04
-  centroid_lon_deg: -111.61
-  centroid_lat_deg: 44.14
+- cell_count: 823
+  area_km2: 2398815.1
+  score: 760334022.38
+  centroid_lon_deg: -137.66
+  centroid_lat_deg: -17.59
   is_coastal: true
-  coastal_fraction: 0.0723
-  mean_distance_to_coast_km: 671.4
-  mean_temperature_c: 14.21
-  mean_precipitation_mm: 409.3
-  dominant_koppen: Cfb
+  coastal_fraction: 0.243
+  mean_distance_to_coast_km: 414.8
+  mean_temperature_c: 24.65
+  mean_precipitation_mm: 1890.0
+  dominant_koppen: Af
   koppen_breakdown:
-    Cfb: 768
-    BSk: 482
-    BWk: 211
-    BSh: 131
-    Aw: 47
-  mean_npp_gc_m2_yr: 462.4
+    Af: 770
+    Aw: 27
+    BSh: 26
+  mean_npp_gc_m2_yr: 1267.8
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.6391
+    large_herbivores_high: 0.0936
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 5
+  id: cradle_05
+- cell_count: 1976
+  area_km2: 5763711.6
+  score: 553698723.05
+  centroid_lon_deg: -112.36
+  centroid_lat_deg: 44.75
+  is_coastal: true
+  coastal_fraction: 0.0612
+  mean_distance_to_coast_km: 468.4
+  mean_temperature_c: 15.99
+  mean_precipitation_mm: 336.0
+  dominant_koppen: BSk
+  koppen_breakdown:
+    BSk: 729
+    BWk: 536
+    BSh: 367
+    Aw: 131
+    Cfb: 111
+  mean_npp_gc_m2_yr: 384.3
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.2161
+    large_herbivores_high: 0.4155
+    draft_animals_high: 0.205
+  landforms:
+    orogeny: 73
+  longitude_zone: twilight
+  rank: 6
+  id: cradle_06
+- cell_count: 160
+  area_km2: 472608.6
+  score: 398715288.23
+  centroid_lon_deg: -38.16
+  centroid_lat_deg: -35.45
+  is_coastal: true
+  coastal_fraction: 0.35
+  mean_distance_to_coast_km: 274.8
+  mean_temperature_c: 20.79
+  mean_precipitation_mm: 855.9
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 86
+    Aw: 45
+    Cfb: 15
+    BSh: 14
+  mean_npp_gc_m2_yr: 843.6
   dominant_soil_fertility: high
   fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.6303
-    large_herbivores_high: 0.6866
-    draft_animals_high: 0.6066
-  landforms:
-    transform: 815
-    orogeny: 31
-  longitude_zone: twilight
-  rank: 5
-  id: cradle_05
-- cell_count: 388
-  area_km2: 1135100.8
-  score: 1114526372.76
-  centroid_lon_deg: -128.28
-  centroid_lat_deg: -38.58
+    staple_crops_high: 0.2687
+    large_herbivores_high: 0.75
+    draft_animals_high: 0.0187
+  landforms: {}
+  longitude_zone: sub_planet
+  rank: 7
+  id: cradle_07
+- cell_count: 126
+  area_km2: 365536.6
+  score: 338547098.52
+  centroid_lon_deg: -155.89
+  centroid_lat_deg: 33.72
   is_coastal: true
-  coastal_fraction: 0.3041
-  mean_distance_to_coast_km: 317.4
-  mean_temperature_c: 16.68
-  mean_precipitation_mm: 1146.0
+  coastal_fraction: 0.4524
+  mean_distance_to_coast_km: 218.6
+  mean_temperature_c: 22.41
+  mean_precipitation_mm: 981.9
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 98
+    Aw: 19
+    BSh: 9
+  mean_npp_gc_m2_yr: 926.2
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.3571
+    large_herbivores_high: 0.6429
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 8
+  id: cradle_08
+- cell_count: 133
+  area_km2: 388250.9
+  score: 301031582.93
+  centroid_lon_deg: -128.83
+  centroid_lat_deg: -39.56
+  is_coastal: true
+  coastal_fraction: 0.594
+  mean_distance_to_coast_km: 185.9
+  mean_temperature_c: 15.56
+  mean_precipitation_mm: 770.3
   dominant_koppen: Cfb
   koppen_breakdown:
-    Cfb: 259
-    Af: 91
-    Aw: 21
-    BSh: 10
-    BSk: 7
-  mean_npp_gc_m2_yr: 981.9
+    Cfb: 96
+    Af: 22
+    BSh: 7
+    BSk: 5
+    Aw: 3
+  mean_npp_gc_m2_yr: 775.4
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.8496
+    large_herbivores_high: 0.4737
+    draft_animals_high: 0.3459
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 9
+  id: cradle_09
+- cell_count: 177
+  area_km2: 514251.1
+  score: 296681790.64
+  centroid_lon_deg: 143.15
+  centroid_lat_deg: -36.34
+  is_coastal: true
+  coastal_fraction: 0.1525
+  mean_distance_to_coast_km: 294.9
+  mean_temperature_c: 20.54
+  mean_precipitation_mm: 523.8
+  dominant_koppen: BSh
+  koppen_breakdown:
+    BSh: 118
+    Aw: 39
+    Af: 16
+    Cfb: 4
+  mean_npp_gc_m2_yr: 576.9
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.0
+    large_herbivores_high: 0.904
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 10
+  id: cradle_10
+- cell_count: 95
+  area_km2: 275885.6
+  score: 260534065.76
+  centroid_lon_deg: 78.94
+  centroid_lat_deg: 25.38
+  is_coastal: true
+  coastal_fraction: 0.4737
+  mean_distance_to_coast_km: 190.9
+  mean_temperature_c: 25.83
+  mean_precipitation_mm: 1020.9
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 64
+    BSh: 17
+    Aw: 14
+  mean_npp_gc_m2_yr: 944.4
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.3789
+    large_herbivores_high: 0.5895
+    draft_animals_high: 0.0
+  landforms:
+    orogeny: 1
+  longitude_zone: twilight
+  rank: 11
+  id: cradle_11
+- cell_count: 97
+  area_km2: 280289.3
+  score: 240538893.23
+  centroid_lon_deg: 83.09
+  centroid_lat_deg: 37.57
+  is_coastal: true
+  coastal_fraction: 0.4845
+  mean_distance_to_coast_km: 222.1
+  mean_temperature_c: 17.19
+  mean_precipitation_mm: 869.4
+  dominant_koppen: Cfb
+  koppen_breakdown:
+    Cfb: 57
+    Af: 21
+    Aw: 14
+    BSh: 5
+  mean_npp_gc_m2_yr: 858.2
   dominant_soil_fertility: high
   fertility_weight: 1.0
   domesticable_fraction:
     staple_crops_high: 0.7216
-    large_herbivores_high: 0.2216
-    draft_animals_high: 0.0902
-  landforms:
-    transform: 50
-  longitude_zone: anti_planet
-  rank: 6
-  id: cradle_06
-- cell_count: 665
-  area_km2: 1940325.2
-  score: 642491157.53
-  centroid_lon_deg: -138.7
-  centroid_lat_deg: -16.89
-  is_coastal: true
-  coastal_fraction: 0.3158
-  mean_distance_to_coast_km: 378.3
-  mean_temperature_c: 22.36
-  mean_precipitation_mm: 3090.3
-  dominant_koppen: Af
-  koppen_breakdown:
-    Af: 513
-    Cfb: 106
-    BSh: 24
-    Aw: 22
-  mean_npp_gc_m2_yr: 1324.5
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
-  domesticable_fraction:
-    staple_crops_high: 0.3699
-    large_herbivores_high: 0.1023
-    draft_animals_high: 0.0015
-  landforms:
-    transform: 203
-  longitude_zone: anti_planet
-  rank: 7
-  id: cradle_07
-- cell_count: 160
-  area_km2: 472608.6
-  score: 367088650.71
-  centroid_lon_deg: -38.16
-  centroid_lat_deg: -35.45
-  is_coastal: true
-  coastal_fraction: 0.325
-  mean_distance_to_coast_km: 274.8
-  mean_temperature_c: 19.93
-  mean_precipitation_mm: 768.0
-  dominant_koppen: Aw
-  koppen_breakdown:
-    Aw: 67
-    Af: 50
-    BSh: 23
-    Cfb: 20
-  mean_npp_gc_m2_yr: 776.7
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
-  domesticable_fraction:
-    staple_crops_high: 0.1812
-    large_herbivores_high: 0.8375
-    draft_animals_high: 0.0187
-  landforms:
-    transform: 22
-  longitude_zone: sub_planet
-  rank: 8
-  id: cradle_08
-- cell_count: 191
-  area_km2: 558507.3
-  score: 321842198.84
-  centroid_lon_deg: -149.09
-  centroid_lat_deg: 39.49
-  is_coastal: true
-  coastal_fraction: 0.2042
-  mean_distance_to_coast_km: 237.0
-  mean_temperature_c: 18.22
-  mean_precipitation_mm: 522.3
-  dominant_koppen: Cfb
-  koppen_breakdown:
-    Cfb: 68
-    BSh: 60
-    Aw: 33
-    BSk: 25
-    Af: 5
-  mean_npp_gc_m2_yr: 576.3
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
-  domesticable_fraction:
-    staple_crops_high: 0.4136
-    large_herbivores_high: 0.8639
-    draft_animals_high: 0.3874
-  landforms:
-    basin: 21
-    orogeny: 21
-  longitude_zone: anti_planet
-  rank: 9
-  id: cradle_09
-- cell_count: 94
-  area_km2: 273199.3
-  score: 264993194.58
-  centroid_lon_deg: 78.99
-  centroid_lat_deg: 25.39
-  is_coastal: true
-  coastal_fraction: 0.5745
-  mean_distance_to_coast_km: 169.6
-  mean_temperature_c: 24.97
-  mean_precipitation_mm: 1074.7
-  dominant_koppen: Af
-  koppen_breakdown:
-    Af: 66
-    Aw: 15
-    BSh: 13
-  mean_npp_gc_m2_yr: 970.0
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
-  domesticable_fraction:
-    staple_crops_high: 0.3723
-    large_herbivores_high: 0.5745
-    draft_animals_high: 0.0
-  landforms:
-    transform: 11
-  longitude_zone: twilight
-  rank: 10
-  id: cradle_10
-- cell_count: 100
-  area_km2: 286550.6
-  score: 243367518.85
-  centroid_lon_deg: -156.42
-  centroid_lat_deg: 33.99
-  is_coastal: true
-  coastal_fraction: 0.63
-  mean_distance_to_coast_km: 178.9
-  mean_temperature_c: 20.92
-  mean_precipitation_mm: 873.5
-  dominant_koppen: Af
-  koppen_breakdown:
-    Af: 63
-    Aw: 21
-    BSh: 16
-  mean_npp_gc_m2_yr: 849.3
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
-  domesticable_fraction:
-    staple_crops_high: 0.26
-    large_herbivores_high: 0.74
-    draft_animals_high: 0.0
+    large_herbivores_high: 0.3093
+    draft_animals_high: 0.0309
   landforms: {}
-  longitude_zone: anti_planet
-  rank: 11
-  id: cradle_11
-- cell_count: 96
-  area_km2: 277764.3
-  score: 183189588.1
-  centroid_lon_deg: 83.18
-  centroid_lat_deg: 37.5
-  is_coastal: true
-  coastal_fraction: 0.375
-  mean_distance_to_coast_km: 224.6
-  mean_temperature_c: 16.74
-  mean_precipitation_mm: 614.5
-  dominant_koppen: Cfb
-  koppen_breakdown:
-    Cfb: 62
-    BSh: 11
-    Aw: 11
-    BSk: 7
-    Af: 5
-  mean_npp_gc_m2_yr: 659.5
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
-  domesticable_fraction:
-    staple_crops_high: 0.6771
-    large_herbivores_high: 0.8542
-    draft_animals_high: 0.5417
-  landforms:
-    transform: 8
   longitude_zone: twilight
   rank: 12
   id: cradle_12
-- cell_count: 112
-  area_km2: 324386.8
-  score: 114029591.17
-  centroid_lon_deg: -155.11
-  centroid_lat_deg: 20.95
+- cell_count: 187
+  area_km2: 544084.2
+  score: 234145466.91
+  centroid_lon_deg: 1.36
+  centroid_lat_deg: 43.81
   is_coastal: true
-  coastal_fraction: 0.3839
-  mean_distance_to_coast_km: 261.7
-  mean_temperature_c: 24.26
-  mean_precipitation_mm: 2094.0
-  dominant_koppen: Af
-  koppen_breakdown:
-    Af: 102
-    Aw: 8
-    Cfb: 2
-  mean_npp_gc_m2_yr: 1406.1
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
-  domesticable_fraction:
-    staple_crops_high: 0.3125
-    large_herbivores_high: 0.0982
-    draft_animals_high: 0.0
-  landforms:
-    transform: 63
-  longitude_zone: anti_planet
-  rank: 13
-  id: cradle_13
-- cell_count: 455
-  area_km2: 1338461.4
-  score: 90086884.57
-  centroid_lon_deg: -153.27
-  centroid_lat_deg: 52.64
-  is_coastal: true
-  coastal_fraction: 0.0088
-  mean_distance_to_coast_km: 347.0
-  mean_temperature_c: 11.99
-  mean_precipitation_mm: 222.1
+  coastal_fraction: 0.0749
+  mean_distance_to_coast_km: 263.2
+  mean_temperature_c: 16.88
+  mean_precipitation_mm: 374.6
   dominant_koppen: BSk
   koppen_breakdown:
-    BSk: 267
-    BWk: 170
-    Cfb: 18
-  mean_npp_gc_m2_yr: 269.2
+    BSk: 101
+    BSh: 28
+    Cfb: 24
+    BWk: 17
+    Aw: 6
+  mean_npp_gc_m2_yr: 430.3
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.4813
+    large_herbivores_high: 0.6257
+    draft_animals_high: 0.4759
+  landforms:
+    orogeny: 30
+  longitude_zone: sub_planet
+  rank: 13
+  id: cradle_13
+- cell_count: 257
+  area_km2: 751384.0
+  score: 232879018.24
+  centroid_lon_deg: 94.71
+  centroid_lat_deg: -2.29
+  is_coastal: true
+  coastal_fraction: 0.3463
+  mean_distance_to_coast_km: 340.3
+  mean_temperature_c: 22.07
+  mean_precipitation_mm: 2100.4
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 190
+    Cfb: 46
+    BSh: 12
+    BSk: 3
+    Aw: 3
+  mean_npp_gc_m2_yr: 1239.7
   dominant_soil_fertility: low
   fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.1626
-    large_herbivores_high: 0.1626
-    draft_animals_high: 0.1626
-  landforms:
-    transform: 6
-    orogeny: 45
-    basin: 34
-  longitude_zone: anti_planet
+    staple_crops_high: 0.4397
+    large_herbivores_high: 0.1556
+    draft_animals_high: 0.0389
+  landforms: {}
+  longitude_zone: twilight
   rank: 14
   id: cradle_14
-- cell_count: 37
-  area_km2: 104345.8
-  score: 87889355.62
-  centroid_lon_deg: -146.9
-  centroid_lat_deg: -4.71
+- cell_count: 215
+  area_km2: 628055.4
+  score: 191215432.64
+  centroid_lon_deg: -156.47
+  centroid_lat_deg: 22.28
   is_coastal: true
-  coastal_fraction: 0.7838
-  mean_distance_to_coast_km: 147.6
-  mean_temperature_c: 28.53
-  mean_precipitation_mm: 4706.7
+  coastal_fraction: 0.4326
+  mean_distance_to_coast_km: 243.8
+  mean_temperature_c: 25.9
+  mean_precipitation_mm: 1519.6
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 37
-  mean_npp_gc_m2_yr: 1684.6
-  dominant_soil_fertility: null
-  fertility_weight: 0.5
+    Af: 186
+    Aw: 28
+    BSh: 1
+  mean_npp_gc_m2_yr: 1217.8
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.0
-    large_herbivores_high: 0.0
+    staple_crops_high: 0.6186
+    large_herbivores_high: 0.2
     draft_animals_high: 0.0
   landforms: {}
   longitude_zone: anti_planet
   rank: 15
   id: cradle_15
-- cell_count: 300
-  area_km2: 869380.5
-  score: 75992055.65
-  centroid_lon_deg: 125.31
-  centroid_lat_deg: 52.94
+- cell_count: 82
+  area_km2: 236202.9
+  score: 152100811.24
+  centroid_lon_deg: -47.54
+  centroid_lat_deg: 39.65
   is_coastal: true
-  coastal_fraction: 0.0933
-  mean_distance_to_coast_km: 511.1
-  mean_temperature_c: 11.46
-  mean_precipitation_mm: 305.4
-  dominant_koppen: BWk
+  coastal_fraction: 0.3415
+  mean_distance_to_coast_km: 189.4
+  mean_temperature_c: 20.35
+  mean_precipitation_mm: 601.4
+  dominant_koppen: Aw
   koppen_breakdown:
-    BWk: 121
-    Cfb: 101
-    BSk: 78
-  mean_npp_gc_m2_yr: 349.6
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
+    Aw: 40
+    BSh: 30
+    Af: 12
+  mean_npp_gc_m2_yr: 643.9
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.4267
-    large_herbivores_high: 0.39
-    draft_animals_high: 0.39
+    staple_crops_high: 0.0122
+    large_herbivores_high: 0.8659
+    draft_animals_high: 0.0
   landforms: {}
-  longitude_zone: anti_planet
+  longitude_zone: sub_planet
   rank: 16
   id: cradle_16
-- cell_count: 67
-  area_km2: 192325.9
-  score: 75384644.44
-  centroid_lon_deg: 111.24
-  centroid_lat_deg: -5.98
+- cell_count: 165
+  area_km2: 476694.4
+  score: 151704445.49
+  centroid_lon_deg: 67.52
+  centroid_lat_deg: -25.5
   is_coastal: true
-  coastal_fraction: 0.8507
-  mean_distance_to_coast_km: 140.0
-  mean_temperature_c: 27.82
-  mean_precipitation_mm: 3296.8
+  coastal_fraction: 0.5576
+  mean_distance_to_coast_km: 198.2
+  mean_temperature_c: 25.72
+  mean_precipitation_mm: 1689.1
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 67
-  mean_npp_gc_m2_yr: 1567.9
+    Af: 155
+    Aw: 10
+  mean_npp_gc_m2_yr: 1273.0
   dominant_soil_fertility: low
   fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.3433
-    large_herbivores_high: 0.0
+    staple_crops_high: 0.5212
+    large_herbivores_high: 0.2303
     draft_animals_high: 0.0
   landforms:
-    transform: 25
+    transform: 13
   longitude_zone: twilight
   rank: 17
   id: cradle_17
-- cell_count: 45
-  area_km2: 128681.2
-  score: 66882871.2
-  centroid_lon_deg: 13.98
-  centroid_lat_deg: -54.2
+- cell_count: 579
+  area_km2: 1694432.5
+  score: 108820894.16
+  centroid_lon_deg: -154.89
+  centroid_lat_deg: 52.95
   is_coastal: true
-  coastal_fraction: 0.3556
-  mean_distance_to_coast_km: 151.8
-  mean_temperature_c: 12.78
-  mean_precipitation_mm: 459.8
-  dominant_koppen: Cfb
+  coastal_fraction: 0.0035
+  mean_distance_to_coast_km: 402.2
+  mean_temperature_c: 11.82
+  mean_precipitation_mm: 210.7
+  dominant_koppen: BSk
   koppen_breakdown:
-    Cfb: 33
-    BSk: 12
-  mean_npp_gc_m2_yr: 519.8
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
+    BSk: 306
+    BWk: 251
+    Cfb: 22
+  mean_npp_gc_m2_yr: 256.9
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 1.0
-    large_herbivores_high: 1.0
-    draft_animals_high: 1.0
+    staple_crops_high: 0.1054
+    large_herbivores_high: 0.1054
+    draft_animals_high: 0.1054
   landforms:
-    transform: 8
-  longitude_zone: sub_planet
+    orogeny: 12
+  longitude_zone: anti_planet
   rank: 18
   id: cradle_18
-- cell_count: 24
-  area_km2: 68996.6
-  score: 55412005.14
-  centroid_lon_deg: -30.83
-  centroid_lat_deg: -19.63
+- cell_count: 94
+  area_km2: 272929.4
+  score: 88060501.53
+  centroid_lon_deg: 37.96
+  centroid_lat_deg: -19.46
   is_coastal: true
-  coastal_fraction: 0.7917
-  mean_distance_to_coast_km: 141.1
-  mean_temperature_c: 26.11
-  mean_precipitation_mm: 824.7
-  dominant_koppen: BSh
+  coastal_fraction: 0.5
+  mean_distance_to_coast_km: 227.4
+  mean_temperature_c: 27.7
+  mean_precipitation_mm: 1705.2
+  dominant_koppen: Af
   koppen_breakdown:
-    BSh: 14
-    Af: 10
-  mean_npp_gc_m2_yr: 803.1
-  dominant_soil_fertility: high
-  fertility_weight: 1.0
+    Af: 86
+    Aw: 8
+  mean_npp_gc_m2_yr: 1290.6
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.25
-    large_herbivores_high: 0.75
+    staple_crops_high: 0.5851
+    large_herbivores_high: 0.2021
     draft_animals_high: 0.0
   landforms: {}
   longitude_zone: sub_planet
   rank: 19
   id: cradle_19
-- cell_count: 51
-  area_km2: 144055.4
-  score: 55043722.24
-  centroid_lon_deg: 0.53
-  centroid_lat_deg: -0.83
+- cell_count: 31
+  area_km2: 93505.5
+  score: 72297636.19
+  centroid_lon_deg: 56.37
+  centroid_lat_deg: -40.82
   is_coastal: true
-  coastal_fraction: 0.6275
-  mean_distance_to_coast_km: 180.2
-  mean_temperature_c: 23.02
-  mean_precipitation_mm: 2547.8
+  coastal_fraction: 0.6452
+  mean_distance_to_coast_km: 168.4
+  mean_temperature_c: 18.97
+  mean_precipitation_mm: 760.5
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 51
-  mean_npp_gc_m2_yr: 1528.4
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
+    Af: 12
+    BSh: 8
+    Cfb: 6
+    Aw: 5
+  mean_npp_gc_m2_yr: 773.2
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.2157
-    large_herbivores_high: 0.0
-    draft_animals_high: 0.0
+    staple_crops_high: 0.3226
+    large_herbivores_high: 0.7097
+    draft_animals_high: 0.0323
   landforms: {}
   longitude_zone: sub_planet
   rank: 20
   id: cradle_20
-- cell_count: 28
-  area_km2: 81188.5
-  score: 51955893.68
-  centroid_lon_deg: 123.79
-  centroid_lat_deg: -12.72
+- cell_count: 42
+  area_km2: 117017.1
+  score: 68612611.6
+  centroid_lon_deg: 42.26
+  centroid_lat_deg: -47.08
   is_coastal: true
-  coastal_fraction: 0.8571
-  mean_distance_to_coast_km: 149.2
-  mean_temperature_c: 18.41
-  mean_precipitation_mm: 2081.2
+  coastal_fraction: 0.3333
+  mean_distance_to_coast_km: 169.2
+  mean_temperature_c: 15.19
+  mean_precipitation_mm: 531.6
   dominant_koppen: Cfb
   koppen_breakdown:
-    Cfb: 15
-    Af: 12
-    Aw: 1
-  mean_npp_gc_m2_yr: 1279.9
-  dominant_soil_fertility: null
-  fertility_weight: 0.5
+    Cfb: 31
+    BSk: 11
+  mean_npp_gc_m2_yr: 586.3
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
   domesticable_fraction:
-    staple_crops_high: 0.3571
-    large_herbivores_high: 0.0357
-    draft_animals_high: 0.0
+    staple_crops_high: 1.0
+    large_herbivores_high: 0.9286
+    draft_animals_high: 0.9286
   landforms:
-    transform: 7
-  longitude_zone: anti_planet
+    transform: 42
+  longitude_zone: sub_planet
   rank: 21
   id: cradle_21
-- cell_count: 59
-  area_km2: 174174.4
-  score: 49400503.74
-  centroid_lon_deg: -159.71
-  centroid_lat_deg: 24.65
+- cell_count: 23
+  area_km2: 66370.4
+  score: 62950466.47
+  centroid_lon_deg: -30.86
+  centroid_lat_deg: -19.72
   is_coastal: true
-  coastal_fraction: 0.7797
-  mean_distance_to_coast_km: 157.0
-  mean_temperature_c: 25.16
-  mean_precipitation_mm: 1376.5
+  coastal_fraction: 0.8261
+  mean_distance_to_coast_km: 141.5
+  mean_temperature_c: 28.39
+  mean_precipitation_mm: 1065.8
+  dominant_koppen: BSh
+  koppen_breakdown:
+    BSh: 13
+    Af: 10
+  mean_npp_gc_m2_yr: 948.5
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.3913
+    large_herbivores_high: 0.5652
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: sub_planet
+  rank: 22
+  id: cradle_22
+- cell_count: 51
+  area_km2: 150441.5
+  score: 60591409.84
+  centroid_lon_deg: 123.48
+  centroid_lat_deg: -12.1
+  is_coastal: true
+  coastal_fraction: 0.6275
+  mean_distance_to_coast_km: 182.1
+  mean_temperature_c: 27.21
+  mean_precipitation_mm: 3503.2
   dominant_koppen: Af
   koppen_breakdown:
-    Af: 45
-    Aw: 13
-    BSh: 1
-  mean_npp_gc_m2_yr: 1134.5
+    Af: 51
+  mean_npp_gc_m2_yr: 1611.0
   dominant_soil_fertility: low
   fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.4407
-    large_herbivores_high: 0.339
+    staple_crops_high: 0.2549
+    large_herbivores_high: 0.0
     draft_animals_high: 0.0
-  landforms:
-    transform: 29
+  landforms: {}
   longitude_zone: anti_planet
-  rank: 22
-  id: cradle_22
-- cell_count: 42
-  area_km2: 121219.0
-  score: 48614227.0
-  centroid_lon_deg: 118.23
-  centroid_lat_deg: -8.09
+  rank: 23
+  id: cradle_23
+- cell_count: 58
+  area_km2: 165623.7
+  score: 58777148.78
+  centroid_lon_deg: 0.4
+  centroid_lat_deg: -0.79
   is_coastal: true
-  coastal_fraction: 0.6429
-  mean_distance_to_coast_km: 170.1
-  mean_temperature_c: 26.19
-  mean_precipitation_mm: 3568.0
+  coastal_fraction: 0.6207
+  mean_distance_to_coast_km: 185.3
+  mean_temperature_c: 22.66
+  mean_precipitation_mm: 2082.0
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 58
+  mean_npp_gc_m2_yr: 1419.5
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.4483
+    large_herbivores_high: 0.0
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: sub_planet
+  rank: 24
+  id: cradle_24
+- cell_count: 33
+  area_km2: 92218.8
+  score: 51924108.96
+  centroid_lon_deg: -152.98
+  centroid_lat_deg: 42.28
+  is_coastal: true
+  coastal_fraction: 0.2424
+  mean_distance_to_coast_km: 158.8
+  mean_temperature_c: 18.35
+  mean_precipitation_mm: 507.4
+  dominant_koppen: BSh
+  koppen_breakdown:
+    BSh: 13
+    Cfb: 7
+    Aw: 7
+    BSk: 6
+  mean_npp_gc_m2_yr: 563.1
+  dominant_soil_fertility: high
+  fertility_weight: 1.0
+  domesticable_fraction:
+    staple_crops_high: 0.303
+    large_herbivores_high: 0.9394
+    draft_animals_high: 0.303
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 25
+  id: cradle_25
+- cell_count: 42
+  area_km2: 123414.5
+  score: 43394359.36
+  centroid_lon_deg: -138.1
+  centroid_lat_deg: -0.9
+  is_coastal: true
+  coastal_fraction: 0.9286
+  mean_distance_to_coast_km: 132.7
+  mean_temperature_c: 27.12
+  mean_precipitation_mm: 2170.3
   dominant_koppen: Af
   koppen_breakdown:
     Af: 42
-  mean_npp_gc_m2_yr: 1604.2
+  mean_npp_gc_m2_yr: 1406.5
   dominant_soil_fertility: low
   fertility_weight: 0.25
   domesticable_fraction:
-    staple_crops_high: 0.1905
+    staple_crops_high: 0.5952
+    large_herbivores_high: 0.0
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 26
+  id: cradle_26
+- cell_count: 37
+  area_km2: 104345.8
+  score: 43026774.27
+  centroid_lon_deg: -146.9
+  centroid_lat_deg: -4.71
+  is_coastal: true
+  coastal_fraction: 0.7838
+  mean_distance_to_coast_km: 147.6
+  mean_temperature_c: 27.97
+  mean_precipitation_mm: 4122.5
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 37
+  mean_npp_gc_m2_yr: 1649.4
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.0541
+    large_herbivores_high: 0.0
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 27
+  id: cradle_27
+- cell_count: 180
+  area_km2: 523743.0
+  score: 37534939.94
+  centroid_lon_deg: 129.93
+  centroid_lat_deg: 52.88
+  is_coastal: false
+  coastal_fraction: 0.0
+  mean_distance_to_coast_km: 569.2
+  mean_temperature_c: 10.67
+  mean_precipitation_mm: 236.1
+  dominant_koppen: BSk
+  koppen_breakdown:
+    BSk: 171
+    BWk: 6
+    Cfb: 3
+  mean_npp_gc_m2_yr: 286.7
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.0722
+    large_herbivores_high: 0.0722
+    draft_animals_high: 0.0722
+  landforms:
+    orogeny: 1
+  longitude_zone: anti_planet
+  rank: 28
+  id: cradle_28
+- cell_count: 29
+  area_km2: 82618.4
+  score: 34071351.18
+  centroid_lon_deg: 118.46
+  centroid_lat_deg: -7.95
+  is_coastal: true
+  coastal_fraction: 0.7241
+  mean_distance_to_coast_km: 152.9
+  mean_temperature_c: 28.28
+  mean_precipitation_mm: 4073.2
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 29
+  mean_npp_gc_m2_yr: 1649.6
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.2069
+    large_herbivores_high: 0.0
+    draft_animals_high: 0.0
+  landforms: {}
+  longitude_zone: twilight
+  rank: 29
+  id: cradle_29
+- cell_count: 149
+  area_km2: 440155.6
+  score: 32578068.9
+  centroid_lon_deg: 168.63
+  centroid_lat_deg: 52.3
+  is_coastal: false
+  coastal_fraction: 0.0
+  mean_distance_to_coast_km: 288.8
+  mean_temperature_c: 11.49
+  mean_precipitation_mm: 245.7
+  dominant_koppen: BSk
+  koppen_breakdown:
+    BSk: 91
+    BWk: 39
+    Cfb: 19
+  mean_npp_gc_m2_yr: 296.1
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.2081
+    large_herbivores_high: 0.2081
+    draft_animals_high: 0.2081
+  landforms: {}
+  longitude_zone: anti_planet
+  rank: 30
+  id: cradle_30
+- cell_count: 26
+  area_km2: 76455.4
+  score: 30684301.79
+  centroid_lon_deg: -122.82
+  centroid_lat_deg: 6.28
+  is_coastal: true
+  coastal_fraction: 0.7308
+  mean_distance_to_coast_km: 151.1
+  mean_temperature_c: 28.46
+  mean_precipitation_mm: 3669.0
+  dominant_koppen: Af
+  koppen_breakdown:
+    Af: 26
+  mean_npp_gc_m2_yr: 1605.3
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.3077
     large_herbivores_high: 0.0
     draft_animals_high: 0.0
   landforms:
-    transform: 18
-  longitude_zone: twilight
-  rank: 23
-  id: cradle_23
-- cell_count: 122
-  area_km2: 360543.2
-  score: 32343575.3
-  centroid_lon_deg: 167.51
-  centroid_lat_deg: 51.97
-  is_coastal: true
-  coastal_fraction: 0.0984
-  mean_distance_to_coast_km: 305.5
-  mean_temperature_c: 11.21
-  mean_precipitation_mm: 304.8
-  dominant_koppen: BSk
-  koppen_breakdown:
-    BSk: 80
-    Cfb: 31
-    BWk: 11
-  mean_npp_gc_m2_yr: 358.8
-  dominant_soil_fertility: low
-  fertility_weight: 0.25
-  domesticable_fraction:
-    staple_crops_high: 0.459
-    large_herbivores_high: 0.459
-    draft_animals_high: 0.459
-  landforms:
-    transform: 75
+    transform: 17
   longitude_zone: anti_planet
-  rank: 24
-  id: cradle_24
-- cell_count: 30
-  area_km2: 83806.4
-  score: 23024068.0
-  centroid_lon_deg: 159.91
-  centroid_lat_deg: 46.17
+  rank: 31
+  id: cradle_31
+- cell_count: 21
+  area_km2: 61552.3
+  score: 16545911.09
+  centroid_lon_deg: -43.64
+  centroid_lat_deg: -51.47
   is_coastal: true
-  coastal_fraction: 0.3333
-  mean_distance_to_coast_km: 120.8
-  mean_temperature_c: 15.34
-  mean_precipitation_mm: 492.8
-  dominant_koppen: BSk
+  coastal_fraction: 0.2381
+  mean_distance_to_coast_km: 134.2
+  mean_temperature_c: 13.11
+  mean_precipitation_mm: 478.8
+  dominant_koppen: Cfb
   koppen_breakdown:
-    BSk: 18
-    Cfb: 12
-  mean_npp_gc_m2_yr: 549.5
+    Cfb: 19
+    BSk: 2
+  mean_npp_gc_m2_yr: 537.6
   dominant_soil_fertility: null
   fertility_weight: 0.5
   domesticable_fraction:
@@ -690,6 +855,83 @@ candidates:
     large_herbivores_high: 1.0
     draft_animals_high: 1.0
   landforms: {}
-  longitude_zone: anti_planet
-  rank: 25
-  id: cradle_25
+  longitude_zone: sub_planet
+  rank: 32
+  id: cradle_32
+- cell_count: 31
+  area_km2: 90199.7
+  score: 6624340.35
+  centroid_lon_deg: 111.17
+  centroid_lat_deg: 54.18
+  is_coastal: false
+  coastal_fraction: 0.0
+  mean_distance_to_coast_km: 177.5
+  mean_temperature_c: 11.17
+  mean_precipitation_mm: 242.5
+  dominant_koppen: BSk
+  koppen_breakdown:
+    BSk: 29
+    BWk: 2
+  mean_npp_gc_m2_yr: 293.8
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.1613
+    large_herbivores_high: 0.1613
+    draft_animals_high: 0.1613
+  landforms:
+    transform: 20
+  longitude_zone: twilight
+  rank: 33
+  id: cradle_33
+- cell_count: 28
+  area_km2: 81784.6
+  score: 5679840.86
+  centroid_lon_deg: 81.97
+  centroid_lat_deg: 57.52
+  is_coastal: false
+  coastal_fraction: 0.0
+  mean_distance_to_coast_km: 152.6
+  mean_temperature_c: 10.3
+  mean_precipitation_mm: 228.1
+  dominant_koppen: BSk
+  koppen_breakdown:
+    BSk: 28
+  mean_npp_gc_m2_yr: 277.8
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.0357
+    large_herbivores_high: 0.0357
+    draft_animals_high: 0.0357
+  landforms:
+    transform: 1
+  longitude_zone: twilight
+  rank: 34
+  id: cradle_34
+- cell_count: 34
+  area_km2: 97179.1
+  score: 4945075.25
+  centroid_lon_deg: 23.69
+  centroid_lat_deg: 57.26
+  is_coastal: false
+  coastal_fraction: 0.0
+  mean_distance_to_coast_km: 153.0
+  mean_temperature_c: 10.67
+  mean_precipitation_mm: 164.1
+  dominant_koppen: BWk
+  koppen_breakdown:
+    BWk: 19
+    BSk: 15
+  mean_npp_gc_m2_yr: 203.5
+  dominant_soil_fertility: low
+  fertility_weight: 0.25
+  domesticable_fraction:
+    staple_crops_high: 0.0
+    large_herbivores_high: 0.0
+    draft_animals_high: 0.0
+  landforms:
+    orogeny: 3
+  longitude_zone: sub_planet
+  rank: 35
+  id: cradle_35

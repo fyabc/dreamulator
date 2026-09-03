@@ -40,9 +40,14 @@
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
+- `geology-layer-improvement.md` — 地质层改进方案（§1 板块运动相干化已实现；§2 裂谷半地堑、§3 边界几何、§4 geography 真实化、§5 geography↔板块运动协调为提案）
 
 ## 写作原则
 
+- **设计决策原则（硬门槛）**：每个方案/引擎决策都要有「物理第一性」（从物理推导）、「地球真实参考」
+  （观测数据）或「业界成熟方案」（论文/源码）三者至少其一的支撑；同物理（所有世界同一套引擎，
+  只差输入参数）；第一性 > 启发式（不接受「为让结果像一点」的裸调）。与根 `../../CLAUDE.md` 的
+  「引擎设计纪律」「竞品参照」同源。
 - 本目录文档回答"为什么这样设计 / 如何实现"；`../usage/` 回答"如何使用"
 - **已实现子系统**的文档放 `pipelines/`，**未实现 / 方法论**放 `proposals/`——这也是
   `scripts/check_doc_refs.py` 只审计 `pipelines/` 的分类依据

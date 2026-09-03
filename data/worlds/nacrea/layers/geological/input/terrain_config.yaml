@@ -33,7 +33,10 @@ terrain:
   lloyd_iterations: 8
   continental_elevation_m: 650.0  # 剥蚀后克拉通基准（地球陆表众数 ~200–500m，非均值 840m）
   oceanic_elevation_m: -3800.0 # Nacrea 海洋平均深度 ~4000m
-  boundary_influence_km: 400.0       # shoulder sigma — wide flank base width (km)
+  boundary_influence_km: 250.0       # shoulder sigma — wide flank base width (km)
+  # 汇聚带宽度已改为按累积汇聚量推导（orogen_width_*，§3.6），不再用 convergent_width_km。
+  divergent_width_km: 100.0          # 裂谷带宽（地球 30–80 km；51km 网格下限 ~1 cell）
+  transform_width_km: 60.0           # 转换断层带宽（地球 1–5 km 亚网格，取 ~1 cell）
   # Dual-component mountain profile (v0.25): narrow ridge Gaussian + wide shoulder
   # Gaussian.  Ridge sigma controls how sharp the range crest is; shoulder
   # strength controls the flank plateau height relative to the crest.
@@ -86,7 +89,7 @@ plates:
   rift_base_rate: 0.005
   # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界；低频 fBm 扭曲使边界弯曲成
   # 弧形（岛弧/造山带分段弯曲），而非绵延平直（见 terrain-pipeline.md §3.2）。
-  boundary_warp: 0.3              # 0.9→0.6 仍犬牙交错，再降（2026-08 用户反馈）
+  boundary_warp: 0.6              # 噪声扭曲幅度（实验：0.3→0.6，对齐 irregular 区间 0.5-0.8）
   boundary_uplift_noise: 0.8      # 岛弧/洋脊隆起低频随机调制 → 大岛+附属岛层级
   continental_fraction_min: 0.28   # target ~28% emergent land
   continental_fraction_max: 0.36
