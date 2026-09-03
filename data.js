@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787896766794,
+  "lastUpdate": 1788477420430,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4423,6 +4423,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00024414218078762194",
             "extra": "mean: 5.136315800000091 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "12a7103c33e343735c2f4694ecf621acc64eb3c7",
+          "message": "feat(geology): 地质层改进 — 板块对齐海岸 + 锚定地貌真实化 + 边界几何\n\n汇总 feature/plate-motion-coherence（§3/§4/§5/§7/§8）：\n- §5 板块边界对齐大陆边缘（geography 感知种子 + 海岸代价场）\n- §3 板块边界几何（分段脊/宽度累积/渗漏转换/断陷盆地/热点链群岛化/海岸过渡/边界整形）\n- §4 锚定地貌噪声粗糙化 + 造山带/裂谷形态（长度封顶 + 参数化）\n- §7 网格精度无关性（统一球面测地 BFS）\n- §8 地壳类型正交化（取消 transitional）\n- 前端 transform/basin 着色 + plate_motion 图层\n- 4 个测试对齐代码现状 + 生态纬向 xfail\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-04T07:10:08+08:00",
+          "tree_id": "c771c9262bb4ddbf29526610c1516d2949977308",
+          "url": "https://github.com/fyabc/dreamulator/commit/12a7103c33e343735c2f4694ecf621acc64eb3c7"
+        },
+        "date": 1788477419622,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 10.280165916861469,
+            "unit": "iter/sec",
+            "range": "stddev: 0.041892440182485606",
+            "extra": "mean: 97.27469459999725 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.533866379971109,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06040080881183011",
+            "extra": "mean: 282.9761775000037 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5126959191944833,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0562936257777658",
+            "extra": "mean: 661.0713939999945 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 922.8526556836954,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007741199171566225",
+            "extra": "mean: 1.0835966000001918 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 191.7032519538063,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009772129028989237",
+            "extra": "mean: 5.216395600012902 msec\nrounds: 5"
           }
         ]
       }
