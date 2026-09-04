@@ -1279,7 +1279,7 @@ def main() -> None:
         description="Validate dreamulator climate engine against real Earth data",
     )
     parser.add_argument("world", help="World name (e.g. 'earth')")
-    parser.add_argument("--planet", default="earth", help="Planet ID within the world")
+    parser.add_argument("--planet", default="planet_earth", help="Planet ID within the world")
     parser.add_argument("--branch", default=None, help="Branch name")
     parser.add_argument(
         "--output-dir",

@@ -4,7 +4,7 @@ The implementation lives in ``dreamulator.validate_climate`` (moved from
 scripts/ on 2026-08 so the CLI (``dreamulator climate validate``) can reuse
 it without sys.path hacks). Usage is unchanged:
 
-    uv run python scripts/validate_climate.py earth --branch terrain-dev
+    uv run python scripts/validate_climate.py earth --branch climate-dev --data-dir private/worlds
 """
 
 from dreamulator.validate_climate import main

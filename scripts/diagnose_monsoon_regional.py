@@ -90,11 +90,23 @@ def main() -> None:
         return
     raw = msgpack.unpackb(monthly_path.read_bytes(), raw=False)
     n = raw["num_cells"]
-    p_monthly = np.frombuffer(raw["p_monthly"], dtype=np.float32).reshape(n, 12)
+    if raw.get("dtype") == "int16":
+        # Quantized storage: float = int16 * scale + offset (map/export.py).
+        p_monthly = (
+            np.frombuffer(raw["p_monthly"], dtype=np.int16).reshape(n, 12).astype(np.float64)
+            * raw["p_scale"]
+            + raw["p_offset"]
+        )
+    else:
+        p_monthly = np.frombuffer(raw["p_monthly"], dtype=np.float32).reshape(n, 12)
 
     lat = np.array([c.lat for c in mesh.cells])
     lon = np.array([c.lon for c in mesh.cells])
-    is_land = np.array([c.elevation >= 0.0 for c in mesh.cells])
+    # water_class is the authoritative land/ocean split (falls back to
+    # elevation for legacy meshes without it).
+    is_land = np.array([c.water_class == "land" for c in mesh.cells])
+    if not is_land.any():
+        is_land = np.array([c.elevation >= 0.0 for c in mesh.cells])
     koppen = [c.koppen_class or "Ocean" for c in mesh.cells]
 
     header = f"{'region':<34} {'n':>5} {'sim ann':>8} {'sim wet':>12} {'sim dry':>12}"
