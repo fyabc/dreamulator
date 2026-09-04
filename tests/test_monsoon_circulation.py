@@ -153,10 +153,55 @@ class TestMonsoonBoundaryLayerWind:
         # Perpendicular to G: no east component left.
         east_comp = np.einsum("mij,ij->mi", wind, east)
         assert np.allclose(east_comp, 0.0, atol=1e-3)
-        # NH (f > 0): the Coriolis force turns the flow 90° to the right of G.
-        # In the right-handed ENU basis (east × north = up), right of +east is
-        # +north, so G = +east → flow toward the north.
-        assert (wind[:, :, 1] > 0).all()
+        # NH (f > 0) Buys-Ballot: low pressure (the direction of G) stays to
+        # the LEFT of the geostrophic flow — equivalently the flow is G turned
+        # 90° to the right (seen from above).  In the right-handed ENU basis
+        # (east × north = up), right of +east is −north, so G = +east →
+        # southward flow, matching _geostrophic_wind's r̂×∇p/(fρ).
+        assert (wind[:, :, 1] < 0).all()
+
+    def test_nh_thermal_low_gets_cyclonic_inflow(self):
+        # NH boundary-layer cyclone: a cell south of a thermal low feels G
+        # northward (toward the low) and answers with an eastward (cyclonic)
+        # component plus frictional inflow toward the low — the pattern that
+        # spins up the southwesterly monsoon current around the Indian low.
+        nodes = _sphere_points(np.array([20.0]), np.array([0.0]))
+        f = np.array([5.0e-5])
+        rho = 1.225
+        north = np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
+        north /= np.linalg.norm(north, axis=1)[:, None]
+        east = np.cross(north, nodes)
+        # ΔP falling northward → G = −∇(ΔP)/ρ points north, 1e-4 m/s².
+        grad_dp = np.zeros((12, 1, 3))
+        grad_dp[:] = -rho * 1.0e-4 * north[None, :, :]
+
+        wind = monsoon_boundary_layer_wind(grad_dp, f, nodes, drag_rate_s=1.0e-5)
+
+        v_e = float(np.einsum("ij,ij->i", wind[0], east)[0])
+        v_n = float(np.einsum("ij,ij->i", wind[0], north)[0])
+        assert v_e > 0.0  # cyclonic (eastward) on the low's south flank
+        assert v_n > 0.0  # frictional inflow toward the low
+
+    def test_sh_thermal_low_gets_cyclonic_inflow(self):
+        # Mirror check in the southern hemisphere: f < 0 deflects left, so SH
+        # cyclones circulate clockwise seen from above — eastward on the low's
+        # north flank — with frictional inflow toward the low.
+        nodes = _sphere_points(np.array([-20.0]), np.array([0.0]))
+        f = np.array([-5.0e-5])
+        rho = 1.225
+        north = np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
+        north /= np.linalg.norm(north, axis=1)[:, None]
+        east = np.cross(north, nodes)
+        # ΔP falling southward → G points south.
+        grad_dp = np.zeros((12, 1, 3))
+        grad_dp[:] = rho * 1.0e-4 * north[None, :, :]
+
+        wind = monsoon_boundary_layer_wind(grad_dp, f, nodes, drag_rate_s=1.0e-5)
+
+        v_e = float(np.einsum("ij,ij->i", wind[0], east)[0])
+        v_n = float(np.einsum("ij,ij->i", wind[0], north)[0])
+        assert v_e > 0.0  # eastward on the SH low's north flank (clockwise)
+        assert v_n < 0.0  # frictional inflow toward the low (southward)
 
     def test_speed_clamp(self):
         nodes = _sphere_points(np.zeros(2), np.array([0.0, 90.0]))

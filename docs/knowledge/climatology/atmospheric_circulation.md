@@ -69,18 +69,25 @@ P ← P − 20 hPa × norm(θ)                          # 暖位温→低压
 
 ## 4.5 季风边界层风
 
-海陆**季节**热力对比产生的气压异常 ΔP 驱动边界层风（`engine/monsoon_circulation.py`）：
+海陆**季节**热力对比产生的气压异常 ΔP 驱动边界层风（`engine/monsoon_circulation.py`）。
+右手 ENU 基底下科氏加速度为 −f k̂×v（北半球 f>0 时偏向运动方向右侧），稳态平衡：
 
 ```
-0 = G + f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
+0 = G − f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
+
+v_e = (k_d·G_e + f·G_n) / (k_d² + f²)
+v_n = (k_d·G_n − f·G_e) / (k_d² + f²)
 ```
 
 - f→0（赤道）：`v = G/k_d`，直接下坡流——跨赤道季风气流（索马里急流型）；
-- k_d→0：地转平衡，沿等压线。
+- k_d→0：地转平衡，沿等压线，北半球低压在风向左侧（Buys-Ballot，与
+  `_geostrophic_wind` 的 r̂×∇p/(fρ) 同约定）；
+- 有摩擦时风向斜穿等压线指向低压：北半球热低压得到气旋式（逆时针）流入——
+  南亚夏季风西南气流的动力学来源。
 
-**拖曳系数** `k_d = C_D·|U|/h_BL`：
+**拖曳系数** `k_d = C_D·|U|/h_BL`（代码按地表类型区分，`_DRAG_RATE_S` / `_DRAG_RATE_LAND_S`）：
 - 开阔水面 / 光滑地表：C_D ≈ 1.3e-3 → k_d ≈ 1e-5 s⁻¹；
-- 粗糙植被（密林）：C_D ≈ 0.05–0.1 → k_d ≈ 1e-4~1e-3 s⁻¹。
+- 粗糙植被（密林）：C_D ≈ 0.03 → k_d ≈ 2e-4 s⁻¹。
 
 **标定锚点（区域风速，独立于端到端气候验收）**：
 
@@ -100,7 +107,7 @@ Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
 
 - 纬向平均：无瞬变涡动（天气系统）、无急流核心结构；
 - 无 ITCZ 的动力位置求解（ITCZ 降水见 `precipitation` 规划文档）；
-- 季风边界层风是单层（无垂直结构），k_d 尚未按地表粗糙度区分（§4.5 待修）；
+- 季风边界层风是单层（无垂直结构），k_d 按地表类型二分（水面/植被，§4.5）；
 - 垂直结构单层——递减率与稳定度处理见 `energy_balance.md` §海拔。
 
 ## 6. 与引擎的对应关系
@@ -111,7 +118,7 @@ Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
 | 三胞纬向风 | `climate_physics.py:hadley_cell_wind()` | ✅（边界参数化） |
 | 地转风 | `climate_simulator.py:_geostrophic_wind()` | ✅ |
 | 温度→气压 | `climate_physics.py:pressure_from_temperature()` | ✅（位温 θ） |
-| 季风边界层风 | `engine/monsoon_circulation.py:monsoon_boundary_layer_wind()` | ✅（f→0 退化 + 边界层平衡，k_d 待按地表区分） |
+| 季风边界层风 | `engine/monsoon_circulation.py:monsoon_boundary_layer_wind()` | ✅（f→0 退化 + 边界层平衡，k_d 按地表区分） |
 | Hadley 宽度 Ω 标度 | 3A.3a 中期 | 📋 |
 | 瞬变涡动 / 急流 | 长期愿景（简化 GCM） | ❌ |
 

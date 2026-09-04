@@ -23,22 +23,27 @@ Physical chain (tech debt 23, roadmap):
    order for the Asian summer thermal low (~5 hPa below the surrounding
    ocean).
 3. **Boundary-layer momentum balance** — the surface wind answers the
-   pressure-gradient force against Coriolis and turbulent drag:
+   pressure-gradient force against Coriolis and turbulent drag.  The
+   Coriolis acceleration in the right-handed ENU frame is −f k̂×v
+   (rightward of the motion for f > 0), so the steady balance is
 
-       0 = G + f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
+       0 = G − f k̂×v − k_d·v ,   G = −∇(ΔP)/ρ
 
    In local east/north components this is a 2×2 linear system with the
    closed-form solution
 
-       v_e = (k_d·G_e − f·G_n) / (k_d² + f²)
-       v_n = (k_d·G_n + f·G_e) / (k_d² + f²)
+       v_e = (k_d·G_e + f·G_n) / (k_d² + f²)
+       v_n = (k_d·G_n − f·G_e) / (k_d² + f²)
 
    Two limits with the right physics: f → 0 (equator) gives v = G/k_d,
    a direct down-gradient flow — this is what allows the cross-equatorial
    monsoon current (the Somali-jet analogue); k_d → 0 gives geostrophic
-   flow along the isobars.  The drag rate k_d ≈ C_D·|U|/h_BL ≈
-   1.3e-3·8/1000 ≈ 1e-5 s⁻¹ is the inverse boundary-layer drag timescale
-   (~1 day), derived from bulk aerodynamic surface drag, not calibrated.
+   flow along the isobars, low pressure to the left of the wind in the
+   northern hemisphere (Buys-Ballot) — the same convention as
+   ``_geostrophic_wind`` in ``map/climate_simulator.py``.  The drag rate
+   k_d ≈ C_D·|U|/h_BL ≈ 1.3e-3·8/1000 ≈ 1e-5 s⁻¹ is the inverse
+   boundary-layer drag timescale (~1 day), derived from bulk aerodynamic
+   surface drag, not calibrated.
 
 **Sign convention.**  The east/north basis used here is the same as
 ``hadley_cell_wind`` in ``climate_physics.py``: north_t = (0,1,0)
@@ -215,7 +220,7 @@ def monsoon_boundary_layer_wind(
 ) -> np.ndarray:
     """Monthly monsoon wind anomaly from the boundary-layer momentum balance.
 
-    Solves  0 = G + f k̂×v − k_d·v  with G = −∇(ΔP)/ρ in closed form per
+    Solves  0 = G − f k̂×v − k_d·v  with G = −∇(ΔP)/ρ in closed form per
     month and cell (see module docstring for the two physical limits).
     The input pressure gradient is already the gradient of the *seasonal
     anomaly* field (``pressure_anomaly_monthly``), so the output is a wind
@@ -255,8 +260,8 @@ def monsoon_boundary_layer_wind(
     f = f_coriolis[None, :]  # (1, N)
     denom = k_d * k_d + f * f  # (1, N), strictly > 0
 
-    v_e = (k_d * g_e - f * g_n) / denom
-    v_n = (k_d * g_n + f * g_e) / denom
+    v_e = (k_d * g_e + f * g_n) / denom
+    v_n = (k_d * g_n - f * g_e) / denom
 
     wind = v_e[:, :, None] * east[None, :, :] + v_n[:, :, None] * north[None, :, :]
 
