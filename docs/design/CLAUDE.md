@@ -41,6 +41,7 @@
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `geology-layer-improvement.md` — 地质层改进方案（§1 板块运动相干化已实现；§2 裂谷半地堑、§3 边界几何、§4 geography 真实化、§5 geography↔板块运动协调为提案）
+- `climate-layer-improvement.md` — 气候层改进方案（§1 科氏力符号已合入；§2 季风 ΔP 高地热源为方案底稿待技术债 24 捆绑；§3–§7 为第一轮全面诊断排序出的 P1–P6 攻关项）
 
 ## 写作原则
 
