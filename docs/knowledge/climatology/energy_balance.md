@@ -241,6 +241,19 @@ $$α_{eff} = α_{vis}\,f_{vis} + α_{nir}\,(1-f_{vis})$$
 $\approx 2\times10^7$。热容量随距海岸距离指数插值（`seasonal_heat_capacity`，~500 km
 e-folding）。这决定 C（海洋性）vs D（大陆性）分野——伦敦 Cfb vs 温尼伯 Dfb 相差 ~27°C。
 
+### 内湖热容量（淡水湖，介于海陆之间）
+
+大型内湖（里海/五大湖/程序化世界的内流海，`is_lake=True` 且 `water_class="ocean"`）
+不是海洋混合层：它们是**大陆性水体**，表面温度与上空大陆空气平衡，且淡水在 0°C 封冻。
+处理分两档（`climate_simulator.py` Stage 1）：
+
+- **季节性冰湖**（年均陆地温度 T≥0）：表面温度取陆地 EBM 温度（而非开洋 SST 剖面），
+  热容量 `seasonal_lake_heat_capacity = 4×10⁷` J/m²/K（≈ ρ_w·c_p·10 m 季节性温跃层，
+  介于陆地 2×10⁷ 与海洋 2×10⁸ 之间），月度温度再钳制 ≥0°C（淡水冰点，物理常数非地球标定）。
+  五大湖实测：冬季 0°C（观测 ~1°C）、夏季 ~19°C（观测 ~20°C）。
+- **永久冰湖**（年均 T<0，如 nacrea 78–80°N 内流海）：保留海冰面剖面（`_ocean_surface_temperature`
+  的冰分支已正确），因为封冻湖表面即冰面。
+
 ### 对应源码
 
 ```python
@@ -260,6 +273,7 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 | `ebm_diffusion_wm2k` | 0.35 | 经向扩散 $D$（与年平 EBM 共用） |
 | `seasonal_land_heat_capacity` | 2.0e7 | 陆地+大气热容量 $C_{land}$（J/m²/K） |
 | `seasonal_ocean_heat_capacity` | 2.0e8 | 海洋混合层热容量 $C_{ocean}$（J/m²/K） |
+| `seasonal_lake_heat_capacity` | 4.0e7 | 内湖季节性温跃层热容量 $C_{lake}$（J/m²/K，~10 m） |
 | `seasonal_coastal_scale_km` | 500.0 | 海洋调节 e-folding 长度（km） |
 | `seasonal_ice_albedo` | true | 季节冰反照率反馈开关 |
 | `ice_albedo_surface` | 0.7 | 雪/冰反照率（太阳谱下；其他恒星按 `spectral_ice_albedo` 光谱加权） |

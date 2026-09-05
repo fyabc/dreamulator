@@ -40,7 +40,13 @@ from urllib.request import Request, urlopen
 
 import numpy as np
 
-from dreamulator.map.water_bodies import classify_ocean_land, read_shp_polygons
+from dreamulator.map.water_bodies import (
+    _MIN_OCEAN_LIKE_LAKE_KM2,
+    classify_ocean_land,
+    points_in_rings,
+    read_shp_polygons,
+    rings_area_km2,
+)
 
 # GSHHG shapefile bundle (LGPL-3).  We use the "intermediate" resolution L1
 # (shoreline) and L2 (lakes) — a good accuracy/size balance for a ~1° mesh.
@@ -121,8 +127,19 @@ def import_earth_watermask(output_dir: Path, *, cache: Path | None = None) -> No
     lats = np.array([c.lat for c in mesh.cells], dtype=np.float64)
 
     land = classify_ocean_land(lons, lats, land_polys, lake_polys)
+    # Identify the inland lakes that became "ocean": GSHHG level-2 lakes above
+    # the maritime-moderation area threshold.  These are the Caspian, Great
+    # Lakes, Aral and Lake Victoria — *not* the Red/Black Seas, which are
+    # GSHHG level-0 ocean enclosed by straits the mesh cannot resolve.  The
+    # climate engine gives these ``is_lake`` cells a continental (freshwater)
+    # surface-temperature regime rather than the open-ocean profile.
+    large_lake = np.zeros(len(mesh.cells), dtype=bool)
+    for rings in lake_polys:
+        if rings_area_km2(rings) >= _MIN_OCEAN_LIKE_LAKE_KM2:
+            large_lake |= points_in_rings(lons, lats, rings)
     for i, c in enumerate(mesh.cells):
         c.water_class = "land" if bool(land[i]) else "ocean"
+        c.is_lake = bool(large_lake[i] and not land[i])
 
     n_land = int(land.sum())
     land_pct = 100 * n_land / len(mesh.cells)

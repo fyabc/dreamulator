@@ -491,6 +491,11 @@ class TerrainPipelineConfig:
     # separate damping knob.  See engine/climate_seasonality.py + energy_balance.md §5.
     seasonal_land_heat_capacity: float = 2.0e7  # land+atmosphere (J/m²/K)
     seasonal_ocean_heat_capacity: float = 2.0e8  # ocean mixed layer 50 m (J/m²/K)
+    # Inland-lake heat capacity (J/m²/K): a freshwater lake's seasonal epilimnion
+    # (~10 m mixed layer) sits between the land's thin soil+atmosphere layer and
+    # the ocean's 50 m mixed layer — continental amplitude, but moderated by the
+    # water's thermal inertia.  ~4×10⁷ J/m²/K ≈ ρ_w·c_p·10 m.
+    seasonal_lake_heat_capacity: float = 4.0e7
     seasonal_coastal_scale_km: float = 250.0  # maritime-moderation e-folding length
     coastal_moderation_scale_km: float = 500.0  # annual-mean coastal moderation e-folding
     # Seasonal ice-albedo feedback: a cell whose summer never melts keeps the

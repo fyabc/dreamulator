@@ -126,6 +126,14 @@ def simulate_climate(
 
         is_land = compute_land_mask(mesh.cells, config.sea_level_offset_m)
     is_ocean = ~is_land
+    # Inland lakes that are ocean-like in size (Caspian, Great Lakes, nacrea's
+    # endorheic seas) are ``water_class == "ocean"`` but *not* the open ocean:
+    # they are continental water bodies that equilibrate with the overlying air,
+    # not a deep maritime heat reservoir.  Stage 1 gives them the land (EBM)
+    # temperature + the land heat capacity + a 0 °C freeze clamp, instead of the
+    # open-ocean SST profile.
+    is_lake = np.array([c.is_lake for c in mesh.cells], dtype=bool)
+    is_lake_ocean = is_lake & is_ocean
 
     # 3D unit-sphere node positions for vector operations
     nodes_xyz = np.zeros((n, 3), dtype=np.float64)
@@ -240,10 +248,26 @@ def simulate_climate(
     # Ocean surface temperature: damped latitude gradient (maritime moderation)
     # anchored to the planet's global-mean surface temperature (Earth profile
     # at Earth forcing; shifts 1:1 with stellar forcing / greenhouse changes)
+    _land_t = t_mean_C.copy()  # land EBM temperature (before the SST override)
     t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
         lat_rad[~land_mask_arr],
         t_surf_C,
     )
+    # Inland lakes split by their annual-mean land temperature:
+    #  - seasonal-ice lakes (annual land T ≥ 0) keep the land temperature —
+    #    a freshwater lake equilibrates with the continental air, so the Great
+    #    Lakes sit ~0 °C in winter, not the +12 °C the latitude profile gives;
+    #  - permanent-ice lakes (annual land T < 0) keep the open-ocean SST
+    #    override — the sea-ice surface is already the correct frozen surface.
+    #
+    # NOTE: the annual mean is a first-order proxy for "does the lake melt in
+    # summer" (the exact criterion is summer T > 0).  They differ only for a
+    # lake whose annual mean hugs 0 °C — but every lake large enough to be
+    # ocean-like (≥ 6e4 km²) sits far from freezing on the current Earth/nacrea
+    # meshes, so the proxy is safe.  Lower the lake-area threshold and it must
+    # be re-derived from the summer temperature.
+    _seasonal_lake = is_lake_ocean & (_land_t >= 0.0)
+    t_mean_C[_seasonal_lake] = _land_t[_seasonal_lake]
 
     # Coastal moderation (maritime influence on the annual mean): mix the
     # *sea-level* land temperature toward the nearest ocean's SST, decaying
@@ -296,6 +320,11 @@ def simulate_climate(
         ocean_capacity=config.seasonal_ocean_heat_capacity,
         coastal_scale_km=config.seasonal_coastal_scale_km,
     )
+    # Seasonal-ice lakes are continental water bodies, not a 50 m maritime mixed
+    # layer: they take the lake heat capacity (a ~10 m epilimnion — continental
+    # amplitude, moderated by the water's inertia), then the 0 °C freeze clamp
+    # below caps the winter surface.
+    heat_capacity[_seasonal_lake] = config.seasonal_lake_heat_capacity
     seasonal = compute_seasonal_climate(
         lat_rad,
         t_mean_C,
@@ -320,6 +349,13 @@ def simulate_climate(
     t_hot_C = seasonal["T_hot"]
     t_monthly_C = seasonal["T_monthly"]
     itcz_lat_monthly = seasonal["itcz_lat"]
+
+    # Freshwater lakes freeze at 0 °C: the winter surface sits at the freezing
+    # point (the ice caps the radiative heat loss) rather than following the
+    # land's sub-zero cycle.  A physical constant, not an Earth calibration.
+    if _seasonal_lake.any():
+        t_monthly_C[_seasonal_lake] = np.maximum(t_monthly_C[_seasonal_lake], 0.0)
+        t_cold_C[_seasonal_lake] = np.maximum(t_cold_C[_seasonal_lake], 0.0)
 
     # ------------------------------------------------------------------
     # Stage 2: Wind

@@ -293,8 +293,12 @@ class VoronoiCell(BaseModel):
     is_lake: bool = Field(
         default=False,
         description=(
-            "True for a closed below-sea-level depression (endorheic lake), "
-            "distinct from the global ocean"
+            "True for an inland lake / ocean-like inland water body that is "
+            "distinct from the global ocean (endorheic basins like the Caspian, "
+            "or large exorheic lakes like the Great Lakes).  Set by the GSHHG "
+            "importer (level-2 lakes) or by ``upgrade_large_endorheic_lakes``; "
+            "the climate engine gives these cells a continental (freshwater) "
+            "surface-temperature regime rather than the open-ocean profile."
         ),
     )
     # Authoritative land/ocean split for climate + frontend rendering.  For the
