@@ -30,7 +30,6 @@ from dreamulator.engine.climate_physics import (
     lat_gradient_from_omega,
     latitude_temperature,
     moist_lapse_rate,
-    pressure_from_temperature,
     spectral_ice_albedo,
     surface_temperature,
     terrain_wind_blocking,
@@ -327,27 +326,37 @@ def simulate_climate(
     phase_timings["temperature"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['temperature']:.1f}s)[/dim]")
     _t0 = _time.time()
-    _console.print("  [dim]2/6  Wind field (geostrophic + Hadley cells)[/dim]")
+    _console.print("  [dim]2/6  Wind field (Hadley cells + monsoon)[/dim]")
     # ------------------------------------------------------------------
-    # Geostrophic wind from pressure gradient + Coriolis
-    pressure_hpa = pressure_from_temperature(
-        t_mean_C, elevation_m, config.gravity_m_s2, config.surface_pressure_hpa
+    # Directed edge table + neighbour-averaging operator, built once here and
+    # shared by the monsoon-DP synoptic smoothing below.
+    from dreamulator.map.ocean_circulation import _build_directed_edge_table
+
+    _msrc, _mdst = _build_directed_edge_table(mesh.cells)
+    _cell_km = 2.0 * config.radius_km * np.sqrt(np.pi / n)
+    _mdeg = np.maximum(np.bincount(_msrc, minlength=n).astype(np.float64), 1.0)
+    _avg = sparse.csr_matrix(
+        (1.0 / _mdeg[_msrc], (_msrc, _mdst)),
+        shape=(n, n),
     )
-    grad_p = _compute_graph_gradient(mesh, pressure_hpa, nodes_xyz)
+    # Scale-separation smoothing passes for the synoptic (Rossby-radius, ~500 km)
+    # scale: each Jacobi pass is a lazy random-walk step (σ = √(passes/2)·cell_km).
+    _n_smooth = 2 * int((_MONSOON_PRESSURE_SMOOTHING_KM / _cell_km) ** 2)
+    _radius_m = config.radius_km * 1000.0
     f_coriolis = coriolis_parameter(lat_rad, config.rotation_period_days)
 
-    wind_geostrophic = _geostrophic_wind(grad_p, f_coriolis, nodes_xyz)
-
-    # Overlay three-cell circulation (Hadley / Ferrel / Polar); cell
-    # boundaries are planet parameters (3A.3a — slow rotators get an
-    # expanded Hadley cell).  The circulation follows the migrating ITCZ:
-    # averaging the cells over the 12 monthly ITCZ positions makes the
-    # annual-mean convergence band span the ITCZ's full seasonal excursion
-    # rather than sitting pinned at the geographic equator (roadmap 20 ①).
-    wind_cell = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
-
-    # Combine: 40% geostrophic + 60% cell circulation
-    wind = 0.4 * wind_geostrophic + 0.6 * wind_cell
+    # Large-scale surface wind = the three-cell circulation (Hadley / Ferrel /
+    # Polar) — the model's complete zonal wind field (trades, mid-latitude
+    # westerlies, polar easterlies).  Cell boundaries are planet parameters
+    # (3A.3a: slow rotators get an expanded Hadley cell); the circulation
+    # follows the migrating ITCZ (roadmap 20 ①).  A separate geostrophic
+    # (thermal) wind component was removed: the model has no dynamical
+    # subtropical high, so its θ-based thermal wind is easterly at every
+    # latitude and only weakens the Ferrel westerlies, while the raw surface
+    # pressure gradient (barometric exp(−h/H)) adds ~30 m/s of topographic
+    # noise over land that swamps the coherent flow.  The three-cell wind
+    # alone gives coherent ~3–4 m/s westerlies at 30–60°.
+    wind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
 
     # ── Monsoon wind anomaly (tech debt 23) ──
     # Summer continents warm above the zonal mean → thermal lows; the boundary-
@@ -356,10 +365,6 @@ def simulate_climate(
     # straight down-gradient — the cross-equatorial monsoon current.  The anomaly
     # is added onto the annual background, giving 12 monthly winds that drive the
     # monthly moisture budget in Stage 3.
-    from dreamulator.map.ocean_circulation import _build_directed_edge_table
-
-    _msrc, _mdst = _build_directed_edge_table(mesh.cells)
-
     _dp_hpa = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
@@ -371,23 +376,9 @@ def simulate_climate(
     # stronger than any monsoon.  Pressure anomalies adjust hydrostatically over
     # the synoptic scale (the Rossby deformation radius, O(500 km)), so smooth
     # each month's field over that scale first — the continental thermal lows
-    # (1000–4000 km wide) survive, the mosaic noise does not.  Each Jacobi pass
-    # is a lazy random-walk step (σ = √(passes/2)·cell_spacing).
-    _cell_km = 2.0 * config.radius_km * np.sqrt(np.pi / n)
-    _smooth_passes = 2 * int((_MONSOON_PRESSURE_SMOOTHING_KM / _cell_km) ** 2)
-    _mdeg = np.maximum(np.bincount(_msrc, minlength=n).astype(np.float64), 1.0)
-    # Neighbour-averaging operator M (row i = mean over i's neighbours),
-    # applied as a sparse matmul so all 12 months smooth in one pass.
-    _avg = sparse.csr_matrix(
-        (1.0 / _mdeg[_msrc], (_msrc, _mdst)),
-        shape=(n, n),
-    )
-    _dp_fields = _dp_hpa  # (N, 12)
-    for _ in range(_smooth_passes):
-        _dp_fields = 0.5 * _dp_fields + 0.5 * _avg.dot(_dp_fields)
-    _dp_hpa = np.asarray(_dp_fields)
+    # (1000–4000 km wide) survive, the mosaic noise does not.
+    _dp_hpa = _smooth_graph(_dp_hpa, _avg, _n_smooth)
 
-    _radius_m = config.radius_km * 1000.0
     # Least-squares gradient per radian on the unit sphere → Pa/m (hPa × 100).
     _grad_dp_pa_m = np.stack(
         [
@@ -681,68 +672,32 @@ def simulate_climate(
 # ---------------------------------------------------------------------------
 
 
-def _compute_graph_gradient(
-    mesh: CVTMesh,
-    scalar: np.ndarray,
-    nodes_xyz: np.ndarray,
+def _smooth_graph(
+    field: np.ndarray,
+    avg: sparse.csr_matrix,
+    n_passes: int,
 ) -> np.ndarray:
-    """Finite-difference gradient of a scalar field on the CVT adjacency graph.
+    """Jacobi (neighbour-averaging) smoothing on the CVT graph.
 
-    For each cell i, the gradient is estimated as the weighted average of
-    (scalar[j] - scalar[i]) / distance_ij × direction_ij over all neighbours j.
+    Each pass is a lazy random-walk step (σ = √(passes/2)·cell_spacing); the
+    field is smoothed over the synoptic (Rossby-radius, ~500 km) scale before
+    differentiation, removing the cell-level land-ocean mosaic / topographic
+    noise that would otherwise dominate the gradient.  Used by the geostrophic
+    wind (θ) and the monsoon ΔP — both fields must be scale-separated before
+    ``_graph_least_squares_gradient``.
 
     Args:
-        mesh: CVT mesh with adjacency information.
-        scalar: Scalar field values, shape (N,).
-        nodes_xyz: Unit sphere coordinates, shape (N, 3).
+        field: Scalar field(s), shape (N,) or (N, M).
+        avg: Neighbour-averaging sparse matrix (row i = mean over i's neighbours).
+        n_passes: Number of Jacobi smoothing passes.
 
     Returns:
-        Gradient vectors tangent to sphere, shape (N, 3).
+        Smoothed field, same shape as input.
     """
-    n = mesh.num_cells
-
-    # Stage 1.3: vectorized over a flat directed-edge table (was per-cell,
-    # per-neighbour scalar numpy ops).
-    _src: list[int] = []
-    _dst: list[int] = []
-    for _i, _cell in enumerate(mesh.cells):
-        for _j in _cell.neighbors:
-            if 0 <= _j < n:
-                _src.append(_i)
-                _dst.append(_j)
-    src = np.asarray(_src, dtype=np.int64)
-    dst = np.asarray(_dst, dtype=np.int64)
-
-    node_i = nodes_xyz[src]
-    node_j = nodes_xyz[dst]
-
-    # Angular distance (radians)
-    dot = np.clip(np.einsum("ij,ij->i", node_i, node_j), -1.0, 1.0)
-    dist = np.arccos(dot)
-
-    # Direction from i to j (tangent to sphere)
-    direction = node_j - node_i
-    radial = np.einsum("ij,ij->i", direction, node_i)
-    direction = direction - radial[:, None] * node_i
-    dir_norm = np.linalg.norm(direction, axis=1)
-    valid = (dist >= 1e-9) & (dir_norm >= 1e-9)
-
-    # Weight = 1/distance (closer neighbours more influential); invalid
-    # edges contribute zero weight, so their direction need not be unit.
-    weight = np.zeros_like(dist)
-    weight[valid] = 1.0 / dist[valid]
-
-    diff = scalar[dst] - scalar[src]
-    contrib = (weight * diff)[:, None] * direction
-
-    grad = np.zeros((n, 3), dtype=np.float64)
-    np.add.at(grad, src, contrib)
-    weight_sum = np.zeros(n, dtype=np.float64)
-    np.add.at(weight_sum, src, weight)
-    mask = weight_sum > 1e-9
-    grad[mask] /= weight_sum[mask, None]
-
-    return grad
+    out = field
+    for _ in range(n_passes):
+        out = 0.5 * out + 0.5 * avg.dot(out)
+    return out
 
 
 def _graph_least_squares_gradient(
@@ -752,17 +707,17 @@ def _graph_least_squares_gradient(
 ) -> np.ndarray:
     """Per-cell least-squares gradient of a scalar field, in radians on the unit sphere.
 
-    Unlike ``_compute_graph_gradient`` (a weighted difference average whose
-    magnitude depends on the mesh spacing and which the geostrophic wind absorbs
-    into its calibration), this solves the local normal equations
+    Solves the local normal equations
 
         (Σ_j d_j d_jᵀ) g = Σ_j Δf_j d_j
 
     over each cell's neighbours, with d_j the tangent vector from the cell to
     neighbour j (length = angular distance, radians).  The result is the true
     gradient per radian of arc, independent of the local mesh spacing — needed
-    wherever a physical gradient magnitude matters (the monsoon pressure-gradient
-    force).  Convert to per-metre by dividing by the planet radius.
+    wherever a physical gradient magnitude matters (the geostrophic wind, the
+    monsoon pressure-gradient force).  Convert to per-metre by dividing by the
+    planet radius.  Callers that feed this a raw cell-scale field (temperature
+    mosaic, topography) must smooth it first with ``_smooth_graph``.
 
     Args:
         mesh: CVT mesh with adjacency information.

@@ -46,7 +46,7 @@
 │  ├─ simulate_climate()        └─ export_climate_layers()      │
 │  ├─ _compute_precipitation_monthly_budget                     │
 │  ├─ _surface_divergence                                        │
-│  ├─ _geostrophic_wind                                          │
+│  ├─ _smooth_graph                                             │
 │  └─ _ocean_surface_temperature                                 │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -130,9 +130,8 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 3. Stage 1b: 季节
    └─ compute_seasonal_climate → t_monthly / t_cold / t_hot / p_factor / itcz_lat
 4. Stage 2: 风场
-   ├─ 气压场（barometric + thermal low）→ 图梯度 → 地转风（Coriolis）
-   ├─ hadley_cell_wind（三圈 + 地形阻挡）
-   ├─ 40% 地转 + 60% 环流（12 个 ITCZ 位置平均，背景场）
+   ├─ hadley_cell_wind（三圈环流 + 地形阻挡，12 个 ITCZ 位置平均 = 年均背景风）
+   ├─ （地转风分量已移除，见 §2.4 末；大尺度风场 = 纯三圈环流）
    └─ 季风异常：月度气压异常（§2.4）→ 边界层动量平衡 → 12 个月度风场
 5. Stage 3: 洋流（Stommel 环流 + SST 平流 + 涌升）
 6. Stage 4: 降水（_compute_precipitation_monthly_budget，见 §2.4）
@@ -162,13 +161,13 @@ ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预�
 2006：降水受地表/辐射能量预算约束，只能从平流来的柱水汽中析出，不能凭空加）。
 
 **月度风场**：`wind_monthly[m] = 背景风 + 季风异常`。背景风是 §2.3 Stage 2 的年均场
-（40% 地转 + 60% 三圈环流，含 12 个 ITCZ 位置平均），逐月胞圈迁移属月度矢量场工作
+（**纯三圈环流**，含 12 个 ITCZ 位置平均），逐月胞圈迁移属月度矢量场工作
 （技术债 24），v1 不含。季风异常由海陆热力对比驱动（技术债 23），物理链条：
 
 1. **纬向平均基准**（`zonal_mean_monthly`）：逐月、按符号纬度带（5°）求纬向平均温度。
 2. **气压异常**（`pressure_anomaly_monthly`，`engine/monsoon_circulation.py` 纯函数）：
-   ΔT = 细胞温度 − 同纬度纬向平均，**再扣 12 个月均值**（年均气压型已由年均地转风
-   承担，这里只留季节异常，避免双重计数）。静力响应可推导：
+   ΔT = 细胞温度 − 同纬度纬向平均，**再扣 12 个月均值**（只保留季节海陆反转——
+   年均海陆对比属背景态，此处只留季节异常，避免双重计数）。静力响应可推导：
    ΔP = −P_sfc·(d/H)·ΔT/T̄，d/H = 0.25（季风热异常占尺度高度最低 ~2 km）。
    地球检验：ΔT = +5 K → −4.3 hPa，与亚洲夏季热低压量级一致。
 3. **尺度分离平滑**：51 km 网格的海陆镶嵌使原始异常场的梯度被海岸线噪声主导；
@@ -177,7 +176,7 @@ ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预�
    大陆热低压 1000–4000 km 宽，平滑后存活）。
 4. **边界层动量平衡**（`monsoon_boundary_layer_wind`）：0 = −∇ΔP/ρ − f k̂×v − k_d·v，
    局地东/北分量闭式解。f→0（赤道）退化为沿梯度直流——跨赤道季风气流的涌现机制；
-   k_d→0 退化为地转风（北半球低压在风向左侧，与 `_geostrophic_wind` 同约定）。
+   k_d→0 退化为地转风（北半球低压在风向左侧，Buys-Ballot）。
    k_d = C_D·|U|/h_BL 按地表类型区分：水面 1e-5 s⁻¹、粗糙植被 2e-4 s⁻¹
    （动量耗散 ~1 天，可推导量，水面合理区间 0.9–3e-5）。梯度用最小二乘逐 cell
    拟合（`_graph_least_squares_gradient`，单位「每弧度」除以行星半径换算 Pa/m），
@@ -362,7 +361,7 @@ uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬�
 | 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`） |
 | 温度（季节） | ✅ 显式热输送（B+6D）+ 季节冰反照率 |
 | 降水 | ✅ 质量守恒水汽收支 + 雨出率 `k_rain` 空间调制（风暴路径 / 对流 / 热带底线均已守恒化）+ Budyko 陆地再循环 |
-| 风场 | ✅ 地转 + 三圈环流（`itcz_lat_deg` 季节迁移已接线为年均背景）+ 季风异常月度风场 |
+| 风场 | ✅ 纯三圈环流（`itcz_lat_deg` 季节迁移已接线为年均背景）+ 季风异常月度风场 |
 | 洋流 | ✅ Stommel 环流 + SST 平流 + 涌升 |
 
 ### 待办（过渡先验 → 第一性）

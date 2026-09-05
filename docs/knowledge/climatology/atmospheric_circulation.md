@@ -37,7 +37,7 @@ Hadley 胞地表支流向赤道，峰值经向风 M = 1.5 m/s（地球参考，�
 用 H=90°、P=90°（单圈，抵极）。当前实现把边界当方案常数；严格做法是按 Ω 动态计算
 （roadmap 3A.3a 中期项，与 `climate-pipeline.md` §6 3A.6 审计表一致）。
 
-## 3. 地转风
+## 3. 地转风（概念保留，引擎已移除独立地转风分量）
 
 大尺度水平风近似满足科氏力与气压梯度力平衡：
 
@@ -45,12 +45,19 @@ Hadley 胞地表支流向赤道，峰值经向风 M = 1.5 m/s（地球参考，�
 u_g = −(1/ρf) ∂p/∂y,   v_g = (1/ρf) ∂p/∂x
 ```
 
-源码：`climate_simulator.py:_geostrophic_wind()`——在 CVT 图上用相邻 cell 气压差
-（`pressure_from_temperature()` 的静压 + 热低压项）估计梯度。
-最终风场 = **0.4 × 地转风 + 0.6 × 三胞风**，再经 `terrain_wind_blocking()`
-地形阻挡（>3000 m 衰减）。
+地转平衡仍是理解风场的概念框架（`climate_simulator.py:_geostrophic_wind()`
+实现 `v_g = r̂×∇p/(fρ)`，作为参考实现保留），但**年均背景风场已不再叠加独立的
+地转风分量**（2026-09 移除），原因有两个，都源于「模型没有动力学的副热带高压」：
 
-赤道附近 f→0，地转风发散——实现以三胞风为主体、地转风为修正的加权即为此。
+1. **地形噪声**：`pressure_from_temperature()` 的地表气压含 `P₀·exp(−h/H)` 气压项，
+   在山地边缘产生巨梯度（5 km 高原 ≈ 500 hPa 落差），`r̂×∇p/(fρ)` 把它放大成
+   大陆上 ~30 m/s 的散乱风，淹没相干的三胞西风。
+2. **热成风方向反号**：改用位温 θ 的海平面气压（去除地形）后，θ 场是赤道单调热低压，
+   梯度处处指向极地 → 地转风在**所有纬度都是东风**，在中纬抵消 Ferrel 西风。
+
+因此大尺度风场 = **纯三圈环流**（`hadley_cell_wind`，信风/西风/极地东风完整自洽），
+季风的季节海陆反转由月度季风异常单独承担。若未来引入动力学副热带高压，可恢复
+地转风分量。
 
 ## 4. 气压场（温度→气压）
 
@@ -80,8 +87,7 @@ v_n = (k_d·G_n − f·G_e) / (k_d² + f²)
 ```
 
 - f→0（赤道）：`v = G/k_d`，直接下坡流——跨赤道季风气流（索马里急流型）；
-- k_d→0：地转平衡，沿等压线，北半球低压在风向左侧（Buys-Ballot，与
-  `_geostrophic_wind` 的 r̂×∇p/(fρ) 同约定）；
+- k_d→0：地转平衡，沿等压线，北半球低压在风向左侧（Buys-Ballot）；
 - 有摩擦时风向斜穿等压线指向低压：北半球热低压得到气旋式（逆时针）流入——
   南亚夏季风西南气流的动力学来源。
 
@@ -116,7 +122,7 @@ Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
 |------|---------|------|
 | f = 2Ωsinφ | `climate_physics.py:coriolis_parameter()` | ✅ |
 | 三胞纬向风 | `climate_physics.py:hadley_cell_wind()` | ✅（边界参数化） |
-| 地转风 | `climate_simulator.py:_geostrophic_wind()` | ✅ |
+| 地转风 | `climate_simulator.py:_geostrophic_wind()` | 参考实现（未接管线，见 §3） |
 | 温度→气压 | `climate_physics.py:pressure_from_temperature()` | ✅（位温 θ） |
 | 季风边界层风 | `engine/monsoon_circulation.py:monsoon_boundary_layer_wind()` | ✅（f→0 退化 + 边界层平衡，k_d 按地表区分） |
 | Hadley 宽度 Ω 标度 | 3A.3a 中期 | 📋 |
