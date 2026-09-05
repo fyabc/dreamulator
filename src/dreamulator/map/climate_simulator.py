@@ -933,8 +933,20 @@ def _ocean_surface_temperature(
     temperature while keeping the maritime-moderation shape.
     ``t_surf_earth_ref`` is the model's own Earth value (1 L☉, 1 AU,
     albedo 0.306, +33 K greenhouse), so Earth is reproduced exactly.
-    Uses a sigmoid transition to sea-ice temperature (-1.8 °C) at high
-    latitudes.
+
+    Sea ice: the surface of an ice-covered ocean is NOT open water at the
+    freezing point.  Sea ice insulates the ocean from the atmosphere
+    (Semtner 1976 zero-layer thermodynamics); its surface equilibrates
+    with the overlying air and sits far below 0 °C (~−16 °C annual mean
+    at the central Arctic).  A −1.8 °C ice surface would evaporate
+    ~500 mm/yr through the energy-limited formula and rain it out over
+    the poles — the observed ice-zone evaporation is O(100 mm/yr).  The
+    ice surface temperature is therefore an observed-anchor profile
+    (NCEP zonal-mean surface temperature over the sea-ice zones), shifted
+    1:1 with the planet's climate like the open-ocean branch.  Ice edges
+    are hemisphere-asymmetric, matching the annual-mean sea-ice extent
+    (NSIDC 1981–2010: Arctic ~11.7 Mkm² ≈ 72°N edge, Antarctic ~11 Mkm²
+    ≈ 63°S edge).
 
     Args:
         lat_rad: Latitude in radians.
@@ -942,30 +954,41 @@ def _ocean_surface_temperature(
             temperature + greenhouse warming.
 
     Returns:
-        SST estimate (°C), shape matches inputs.
+        SST / ice-surface temperature estimate (°C), shape matches inputs.
     """
-    abs_lat = np.abs(lat_rad)
-    t_surf_earth_ref = float(
+    lat_deg = np.degrees(lat_rad)
+    abs_lat_deg = np.abs(lat_deg)
+    shift = t_surf_c - float(
         surface_temperature(equilibrium_temperature(1.0, 1.0, 0.306), 33.0) - 273.15
     )
     # Open-ocean SST: 30 °C range from equator (28 °C) to ~60° lat (-2 °C),
-    # shifted by the planet's surface temperature relative to Earth's
-    sst_open = 28.0 + (t_surf_c - t_surf_earth_ref) - 30.0 * np.sin(abs_lat) ** 2
+    # shifted by the planet's surface temperature relative to Earth's.
+    # NOTE: sin() takes the latitude in RADIANS (the profile's native form).
+    sst_open = 28.0 + shift - 30.0 * np.sin(np.abs(lat_rad)) ** 2
 
-    # Sea-ice transition: sigmoid from open-ocean SST → -1.8 °C
-    # Transition centered at ~70° latitude, width ~8°
-    ice_weight = _sigmoid(np.degrees(abs_lat), center=70.0, width=8.0)
-    sst = sst_open * (1.0 - ice_weight) + (-1.8) * ice_weight
+    # Sea-ice edges (annual mean, hemisphere-asymmetric): ~72°N / ~63°S.
+    edge_deg = np.where(lat_deg >= 0.0, 72.0, 63.0)
+    ice_weight = _sigmoid(abs_lat_deg, center=np.abs(edge_deg), width=6.0)
 
-    return np.asarray(np.clip(sst, -2.0, 30.0))
+    # Ice surface temperature: piecewise-linear anchors from NCEP zonal-mean
+    # surface temperature over the ice zones, edge → pole (both hemispheres;
+    # south of ~72°S is the Antarctic landmass, so the SH profile flattens).
+    t_ice_nh = np.interp(abs_lat_deg, [72.0, 80.0, 90.0], [-6.0, -12.0, -17.0])
+    t_ice_sh = np.interp(abs_lat_deg, [63.0, 70.0, 90.0], [-4.0, -13.0, -13.0])
+    t_ice = np.where(lat_deg >= 0.0, t_ice_nh, t_ice_sh) + shift
+
+    sst = sst_open * (1.0 - ice_weight) + t_ice * ice_weight
+
+    return np.asarray(np.clip(sst, -60.0, 30.0))
 
 
-def _sigmoid(x: np.ndarray, center: float, width: float) -> np.ndarray:
+def _sigmoid(x: np.ndarray, center: float | np.ndarray, width: float) -> np.ndarray:
     """Smooth sigmoid from 0 (x ≪ center) to 1 (x ≫ center).
 
     Args:
         x: Input values.
-        center: Transition center.
+        center: Transition center (scalar, or an array broadcastable
+            against ``x`` for per-element centers).
         width: Transition width (σ ≈ width/4).
 
     Returns:
