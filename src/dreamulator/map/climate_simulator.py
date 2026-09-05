@@ -197,6 +197,27 @@ def simulate_climate(
                 olr_b_wm2k=config.ebm_olr_b_wm2k,
                 diffusion_wm2k=d_scaled,
             )
+            # ── 4.2: Held-Hou subsidence warming (subtropical desert) ──
+            # The diffusive EBM's meridional transport is purely down-gradient,
+            # so it cools the subtropics by diffusing heat poleward; the real
+            # Hadley cell instead warms them by subsidence — its overturning
+            # homogenises the tropics-subtropics (Held & Hou 1980).  Relax land
+            # toward the cell's area-weighted mean (the equal-area constraint),
+            # tapering across the cell edge (~8°-wide descent band).  Land-only
+            # — the ocean is overwritten by the SST profile below.  (The
+            # single-Hadley-cell branch above already has flat subtropics, and
+            # the legacy sin² path below is a separate, unmaintained model.)
+            if config.subsidence_warming_c > 0.0:
+                phi_h = np.radians(config.hadley_extent_deg)
+                _cell = np.abs(lat_rad) < phi_h
+                t_cell = float(np.average(t_mean_C[_cell], weights=np.cos(lat_rad[_cell])))
+                _edge = np.radians(8.0)  # Ferrel/Hadley boundary transition width
+                _w = np.clip((phi_h + _edge - np.abs(lat_rad)) / _edge, 0.0, 1.0)
+                t_mean_C[land_mask_arr] += (
+                    config.subsidence_warming_c
+                    * _w[land_mask_arr]
+                    * (t_cell - t_mean_C[land_mask_arr])
+                )
     else:
         # ── 3A.3a: auto-compute latitudinal gradient from rotation rate? ──
         if config.auto_lat_gradient:

@@ -464,6 +464,16 @@ class TerrainPipelineConfig:
     # subtropics (BWh stays hot, fixing BWh→BWk) and colder poles — the
     # annual-mean continentality contrast that the 1D EBM's zonal mean washes out.
     ebm_diffusion_land_wm2k: float = 0.2
+    # Held-Hou subsidence warming (4.2): the Hadley cell's descending branch
+    # adiabatically warms the subtropical surface, so the diffusive EBM — whose
+    # meridional transport is purely down-gradient (diffuses heat poleward OUT
+    # of the warm subtropics) — under-heats the subtropics by ~6–7 °C (Sahara
+    # 21 vs 27–28 observed).  Within the Hadley cell the overturning homogenises
+    # the temperature toward the cell's area-weighted mean (Held & Hou 1980
+    # "equal-area" constraint), so the land temperature is relaxed toward that
+    # mean, tapering off at the cell edge.  Land-only (the ocean already carries
+    # the SST profile).  1.0 = full homogenisation, 0 = off.
+    subsidence_warming_c: float = 1.0
     # 3A.3: ice-albedo feedback
     ice_albedo_feedback: bool = False  # True = ice/snow → higher albedo → cooler
     ice_albedo_max_cooling_c: float = 8.0  # max additional cooling from full ice cover (°C)

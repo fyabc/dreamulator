@@ -129,6 +129,37 @@ t_mean_C = solve_1d_ebm_temperature(lat_rad, t_surf_C, ..., diffusion_wm2k=d_sca
 
 ---
 
+## 4.5 副热带下沉增温（Held-Hou 等面积均质化）
+
+扩散 EBM 的经向输送是**纯下坡扩散**——把副热带（暖）的热量往极地扩散，所以副热带被
+过度冷却（撒哈拉 21°C vs 观测 27–28°C），赤道则相对过暖（EBM 赤道 ~31°C vs 观测 ~26°C）。
+但真实的 Hadley 环流在副热带是**下沉增温**（绝热压缩），翻转环流把热带-副热带均质化到
+接近等温（Held & Hou 1980 的「等面积」约束：环流内的动力学温度 ≈ 该环流辐射平衡温度的
+面积加权平均）。
+
+`climate_simulator` Stage 1 在 EBM 陆地温度后、海洋 SST 覆盖前，把 Hadley 环流内
+（|lat| < `hadley_extent_deg`）的陆地年均温松弛向该环流的**面积加权平均温度**
+`t_cell = ⟨T·cosφ⟩/⟨cosφ⟩`，在环流边缘 ~8° 平滑过渡到 EBM。赤道降温、副热带增温一并
+发生，均质化值对地球约 27.5°C（EBM 赤道 30.8°C 与 25°N 22.3°C 的等面积折中）。仅陆地
+（海洋已由 SST 剖面覆盖）；`subsidence_warming_c=1.0`（0 关）。
+
+参数与源码：
+
+| 参数 | 默认 | 含义 |
+|------|------|------|
+| `subsidence_warming_c` | 1.0 | 均质化强度（1.0 = 完全等面积均质化，0 = 关） |
+
+```python
+# climate_simulator.py Stage 1（EBM 后、海洋 SST 前）
+t_cell = np.average(t_mean_C[|lat| < φ_h], weights=cos(lat))  # 等面积均质化目标
+t_mean_C[land] += subsidence_warming_c · w(|lat|) · (t_cell − t_mean_C[land])
+```
+
+参考：Held, I. M., & Hou, A. Y. (1980). *Nonlinear axially symmetric circulations in a
+nearly inviscid atmosphere*. JAS 37, 515–533。
+
+---
+
 ## 5. 海拔递减率
 
 ### 湿绝热递减率
