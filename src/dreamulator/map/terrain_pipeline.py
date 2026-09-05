@@ -457,6 +457,18 @@ def run_terrain_pipeline(
     if "export" in ordered:
         _stage_begin("export")
         t = time.time()
+
+        # Large endorheic lakes (Caspian analogues) are ocean-like for climate —
+        # the same size split the GSHHG import applies on the real Earth.  Runs
+        # here (after rivers): hydrology marks river-terminating endorheic
+        # lakes (is_lake), and those are the climate-relevant inland seas —
+        # terrain-stage deposition lakes alone undercount them.
+        from .water_bodies import upgrade_large_endorheic_lakes
+
+        _n_upgraded = upgrade_large_endorheic_lakes(result.mesh.cells, config.sea_level_offset_m)
+        if _n_upgraded:
+            _console.print(f"  [dim]large endorheic lakes → ocean-like: {_n_upgraded} cells[/dim]")
+
         result.elevation_grid = export_equirectangular(
             result.mesh,
             config.export_width,

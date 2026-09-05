@@ -18,8 +18,10 @@ its influence to extend beyond itself, hence the area threshold
 
 For the real Earth this is driven by the GSHHG hierarchy (ocean = level 1,
 lakes = level 2); for generated worlds by flood-fill connectivity on the
-synthesised elevation (see :func:`compute_land_mask`).  This module provides
-the pure geometry/classification helpers, independent of the data source.
+synthesised elevation (see :func:`compute_land_mask`) plus the same size
+split applied to endorheic lakes (see :func:`upgrade_large_endorheic_lakes`).
+This module provides the pure geometry/classification helpers, independent
+of the data source.
 """
 
 from __future__ import annotations
@@ -265,3 +267,54 @@ def compute_land_mask(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> np.
     ocean = np.zeros(n, dtype=bool)
     ocean[max(basins, key=len)] = True
     return ~ocean
+
+
+def upgrade_large_endorheic_lakes(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> int:
+    """Reclassify large endorheic lakes as ocean-like (Caspian analogues).
+
+    Procedural-world counterpart of the GSHHG size split (see
+    ``classify_ocean_land``): a closed below-sea-level basin left as a lake
+    (``is_lake``, still ``water_class == "land"`` after
+    :func:`compute_land_mask`) moderates its regional climate like an ocean
+    once its area reaches ``_MIN_OCEAN_LIKE_LAKE_KM2`` — ocean heat capacity,
+    an interior evaporation source, and (if big enough) its own gyre.  Small
+    endorheic lakes stay land (negligible climate effect), and dry endorheic
+    basins are never upgraded (they are not lakes).
+
+    Call after ``water_class`` has been written from :func:`compute_land_mask`.
+
+    Args:
+        cells: All VoronoiCell objects (needs ``neighbors``, ``area_km2``,
+            ``is_lake``, ``water_class``, ``elevation``).
+        sea_level_m: Sea-level offset (from TerrainPipelineConfig).
+
+    Returns:
+        Number of cells reclassified to "ocean".
+    """
+    n = len(cells)
+    is_water = np.array([c.elevation <= sea_level_m for c in cells], dtype=bool)
+    is_land = np.array([c.water_class == "land" for c in cells], dtype=bool)
+    endorheic = is_water & is_land  # below-sea-level cells outside the global ocean
+
+    visited = np.zeros(n, dtype=bool)
+    upgraded = 0
+    for seed in np.flatnonzero(endorheic):
+        if visited[seed]:
+            continue
+        queue: deque[int] = deque([int(seed)])
+        visited[seed] = True
+        members: list[int] = [int(seed)]
+        while queue:
+            i = queue.popleft()
+            for j in cells[i].neighbors:
+                if 0 <= j < n and endorheic[j] and not visited[j]:
+                    visited[j] = True
+                    queue.append(j)
+                    members.append(j)
+        area_km2 = float(sum(cells[i].area_km2 for i in members))
+        lake_frac = float(sum(1 for i in members if cells[i].is_lake)) / len(members)
+        if area_km2 >= _MIN_OCEAN_LIKE_LAKE_KM2 and lake_frac > 0.5:
+            for i in members:
+                cells[i].water_class = "ocean"
+            upgraded += len(members)
+    return upgraded
