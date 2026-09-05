@@ -467,6 +467,36 @@ def simulate_climate(
         c.wind_east_m_s = float(_we[i])
         c.wind_north_m_s = float(_wn[i])
 
+    # ── 4.1-B: directional maritime moderation ──
+    # Relax each land cell's monthly temperature toward its *upwind* ocean's
+    # monthly temperature, decaying over the maritime air-mass e-folding length.
+    # The upwind ocean is traced against the *physical* annual wind — the
+    # prevailing westerlies carry the ocean's small-amplitude seasonal cycle
+    # inland, so this warms the deep continental winter (Moscow ~-25 → ~-12 °C)
+    # while the ocean's own small amplitude keeps the summer cooling mild.  This
+    # is the "smart explicit preset" for the missing zonal maritime advection
+    # (SotE-style directional continentality), not a wind coupling: the annual
+    # circulation is a fixed advecting field, and the relaxation is one-pass (the
+    # monsoon above already used the unrelaxed temperature).  The remaining East
+    # Asian over-warm (Harbin) is the missing winter monsoon (tech debt 24).
+    if config.maritime_advection_scale_km > 0.0:
+        # `wind` is in the hadley basis (east = north × r̂, opposite the physical
+        # east); flip the east component onto the east_north_basis convention so
+        # the upwind trace follows the true surface wind (matching the frontend).
+        _we_phys = np.einsum("ij,ij->i", wind, _east_w)
+        _wn_phys = np.einsum("ij,ij->i", wind, _north_w)
+        _wind_phys = -_we_phys[:, None] * _east_w + _wn_phys[:, None] * _north_w
+        _dist_up, _src_up = _upwind_distance_to_coast(
+            mesh.cells, n, is_land, _wind_phys, nodes_xyz, radius_km=config.radius_km
+        )
+        _valid_up = is_land & (_src_up >= 0)
+        _w_up = np.where(_valid_up, np.exp(-_dist_up / config.maritime_advection_scale_km), 0.0)
+        for _m in range(12):
+            _t_src = np.where(_valid_up, t_monthly_C[np.maximum(_src_up, 0), _m], 0.0)
+            t_monthly_C[:, _m] += _w_up * (_t_src - t_monthly_C[:, _m])
+        t_cold_C = t_monthly_C.min(axis=1)
+        t_hot_C = t_monthly_C.max(axis=1)
+
     # ------------------------------------------------------------------
     # Stage 2.5: Ocean currents (Stommel gyres + SST correction)
     phase_timings["wind"] = _time.time() - _t0
@@ -1074,6 +1104,12 @@ def _upwind_distance_to_coast(
     travels from the ocean inland, so the distance is directional (moisture
     travels along the wind, not isotropically) and resolution-independent
     (great-circle arc length in km, not a hop count).
+
+    **Convention**: ``wind`` must be the *physical* surface wind (east = the
+    ``east_north_basis`` convention, matching the frontend's ``wind_east_m_s``).
+    The raw ``hadley_cell_wind`` output uses the opposite east (``north × r̂``),
+    so callers must flip its east component first — see the 4.1-B wiring in
+    ``simulate_climate`` (the ``-we·east + wn·north`` flip).
 
     Returns:
         dist:   upwind distance in km (ocean cells = 0; unreachable land = inf).

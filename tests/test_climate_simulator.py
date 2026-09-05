@@ -109,6 +109,35 @@ def _build_test_mesh(
     )
 
 
+def test_upwind_distance_traces_west_ocean_for_westerly_wind() -> None:
+    """A physical westerly wind traces a land cell's upwind ocean to its WEST.
+
+    Regression test for the 4.1-B wind sign convention: ``hadley_cell_wind``
+    uses ``east = north × r̂`` (opposite the physical east), so the frontend
+    flips it; ``_upwind_distance_to_coast`` must receive the *physical* wind
+    (``east_north_basis``) or it traces to the downwind ocean instead.
+    """
+    from dreamulator.map.climate_simulator import _upwind_distance_to_coast
+    from dreamulator.map.ocean_circulation import east_north_basis
+
+    # A single latitude band at the equator, 8 cells spanning 360° lon.
+    mesh = _build_test_mesh(num_bands=1, cells_per_band=8)
+    n = mesh.num_cells
+    nodes_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    east, _ = east_north_basis(nodes_xyz)
+
+    # Land only at lon ≈ 0°; ocean everywhere else on the band.
+    is_land = np.array([abs(c.lon) < 1.0 for c in mesh.cells], dtype=bool)
+    # Physical westerly wind: blow toward increasing longitude (east).
+    wind = east * 5.0
+
+    dist, src = _upwind_distance_to_coast(mesh.cells, n, is_land, wind, nodes_xyz, radius_km=6371.0)
+    land_i = int(np.flatnonzero(is_land)[0])
+    assert src[land_i] >= 0 and np.isfinite(dist[land_i])
+    # The source is the ocean to the west (lon < 0), not the east.
+    assert mesh.cells[src[land_i]].lon < 0.0
+
+
 class TestClimateSimulatorEndToEnd:
     """End-to-end climate simulation on a synthetic 100-cell mesh."""
 

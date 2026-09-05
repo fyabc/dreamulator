@@ -254,6 +254,24 @@ e-folding）。这决定 C（海洋性）vs D（大陆性）分野——伦敦 C
 - **永久冰湖**（年均 T<0，如 nacrea 78–80°N 内流海）：保留海冰面剖面（`_ocean_surface_temperature`
   的冰分支已正确），因为封冻湖表面即冰面。
 
+### 方向性海洋调节（东西向海陆不对称，4.1-B）
+
+季节 EBM 的辐射余弦在深内陆给出 ~2× 观测振幅（莫斯科冬 −25 vs 观测 −9），因为缺**东西向**
+海洋调节——盛行西风把海洋的小振幅季节循环送进内陆。修法是**方向性海洋调节**（`simulate_climate`
+Stage 2 后，`maritime_advection_scale_km`）：
+
+```
+t_land[m] += exp(−dist_upwind / L) · (t_ocean_upwind[m] − t_land[m])
+```
+
+- `dist_upwind`：沿**物理风**（`east_north_basis` 约定，与前端 `wind_east_m_s` 一致；原始
+  `hadley_cell_wind` 的 `east = north × r̂` 指向物理西，需翻转 east 分量）逆推的上风向离岸距离；
+- L = 1500 km 海洋气团 e 折长度；
+- **非对称性自然涌现**：海洋季节振幅小，海陆温差冬季 ~30°C / 夏季 ~10°C，故松弛冬季暖 ~13°C、
+  夏季只冷 ~5°C——莫斯科冬 −25→−12 而夏仅 +2.8→−2.3。
+- 遗留（§7 冬季季风）：annual 西风带把哈尔滨逆推到暖渤海 → 误暖 +12.5，真实冬季应由西伯利亚
+  冷高压外流主导，待技术债 24 修方向。
+
 ### 对应源码
 
 ```python
@@ -275,6 +293,7 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 | `seasonal_ocean_heat_capacity` | 2.0e8 | 海洋混合层热容量 $C_{ocean}$（J/m²/K） |
 | `seasonal_lake_heat_capacity` | 4.0e7 | 内湖季节性温跃层热容量 $C_{lake}$（J/m²/K，~10 m） |
 | `seasonal_coastal_scale_km` | 500.0 | 海洋调节 e-folding 长度（km） |
+| `maritime_advection_scale_km` | 1500.0 | 方向性海洋调节 e-folding 长度（km，0 关闭） |
 | `seasonal_ice_albedo` | true | 季节冰反照率反馈开关 |
 | `ice_albedo_surface` | 0.7 | 雪/冰反照率（太阳谱下；其他恒星按 `spectral_ice_albedo` 光谱加权） |
 | `seasonal_ice_threshold_c` | 0.0 | 夏季温度低于此值视为冻结（°C） |

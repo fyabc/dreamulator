@@ -496,6 +496,12 @@ class TerrainPipelineConfig:
     # the ocean's 50 m mixed layer — continental amplitude, but moderated by the
     # water's thermal inertia.  ~4×10⁷ J/m²/K ≈ ρ_w·c_p·10 m.
     seasonal_lake_heat_capacity: float = 4.0e7
+    # Directional maritime-moderation e-folding length (km).  Each land cell's
+    # monthly temperature is relaxed toward its *upwind* ocean's monthly
+    # temperature, decaying over this distance (4.1-B).  ~1500 km captures the
+    # westerlies carrying the Atlantic's small-amplitude seasonal cycle into the
+    # Eurasian interior (Moscow ~-25 → ~-12 °C winter).  0 disables the preset.
+    maritime_advection_scale_km: float = 1500.0
     seasonal_coastal_scale_km: float = 250.0  # maritime-moderation e-folding length
     coastal_moderation_scale_km: float = 500.0  # annual-mean coastal moderation e-folding
     # Seasonal ice-albedo feedback: a cell whose summer never melts keeps the

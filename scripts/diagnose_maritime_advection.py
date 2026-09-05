@@ -61,19 +61,30 @@ def _recompute_annual_wind(mesh, config) -> tuple[np.ndarray, np.ndarray]:
         perihelion_day=config.perihelion_day,
     )
     wind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz)
+    # _seasonal_mean_cell_wind uses the hadley basis (east = north × r̂), which
+    # points the OPPOSITE of the physical east.  Flip the east component onto
+    # the physical (frontend / east_north_basis) convention so the upwind trace
+    # follows the true surface wind.
+    east, north = east_north_basis(nodes_xyz)
+    we = np.einsum("ij,ij->i", wind, east)
+    wn = np.einsum("ij,ij->i", wind, north)
+    wind = -we[:, None] * east + wn[:, None] * north
     return nodes_xyz, wind
 
 
 def _reconstruct_monthly_wind(mesh, nodes_xyz) -> np.ndarray:
-    """Reconstruct the (N,12,3) monthly wind from the stored east/north fields."""
+    """Reconstruct the (N,12,3) monthly wind from the stored east/north fields.
+
+    The stored ``_wind_east_monthly`` / ``_wind_north_monthly`` are already in
+    the physical (frontend) convention (the ``-`` flip was applied at
+    write-back), so they are recomposed with no further negation.
+    """
     we = np.asarray(mesh._wind_east_monthly, dtype=np.float64)  # (N, 12)
     wn = np.asarray(mesh._wind_north_monthly, dtype=np.float64)  # (N, 12)
     east, north = east_north_basis(nodes_xyz)
     wind_monthly = np.empty((we.shape[0], 12, 3), dtype=np.float64)
     for m in range(12):
-        # write-back stored wind_east = -vec.east (line 610 sign flip) and
-        # wind_north = vec.north.
-        wind_monthly[:, m] = recompose_tangent(-we[:, m], wn[:, m], east, north)
+        wind_monthly[:, m] = recompose_tangent(we[:, m], wn[:, m], east, north)
     return wind_monthly
 
 
