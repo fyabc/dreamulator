@@ -221,6 +221,10 @@ def test_frontmatter_placeholders_not_rendered() -> None:
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GAIA_WORLD = _REPO_ROOT / "data" / "worlds" / "nacrea"
+# Derived data (system_catalog.yaml) is no longer committed — it is built locally
+# or downloaded from the worlds-data release during deploy. Skip these anchor
+# tests when it is absent (CI) rather than failing.
+_GAIA_CATALOG = _GAIA_WORLD / "layers" / "astronomy" / "derived" / "system_catalog.yaml"
 
 _DOC_ANCHORS: dict[str, list[str]] = {
     "layers/astronomy/input/orbital_dynamics.md": [
@@ -262,7 +266,10 @@ _DOC_ANCHORS: dict[str, list[str]] = {
 }
 
 
-@pytest.mark.skipif(not _GAIA_WORLD.exists(), reason="nacrea world not present")
+@pytest.mark.skipif(
+    not _GAIA_CATALOG.exists(),
+    reason="nacrea derived data not present (built locally or downloaded in deploy)",
+)
 @pytest.mark.parametrize("rel_path", sorted(_DOC_ANCHORS))
 def test_nacrea_document_renders_anchored_values(rel_path: str) -> None:
     context = load_render_context(_GAIA_WORLD)
