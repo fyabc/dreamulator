@@ -942,6 +942,40 @@ def _catalog_body_entry(
         derived["in_conservative_habitable_zone"] = bool(
             hz["runaway_greenhouse_au"] <= helio_distance <= hz["max_greenhouse_au"]
         )
+    # ---- Tidal range (satellites only): the resonant equilibrium tide ----
+    # The ~44 m fact for Nacrea (tidal_effects.md), engine-computed here so the
+    # ecology / geography / climate_zones / civilization docs render it from
+    # `entities.<id>.tidal_range_m` instead of hardcoding it (tech debt 19).
+    _ocean_depth_m = (
+        float(planet.hydrosphere.ocean_depth_km) * 1000.0
+        if planet is not None and planet.hydrosphere is not None
+        else None
+    )
+    if (
+        str(body_type) == "natural_satellite"
+        and parent_id is not None
+        and parent_id in index.body_masses
+        and mass_earth is not None
+        and radius_km is not None
+        and a_au is not None
+        and ecc is not None
+        and orbital_period is not None
+        and "gravity_m_s2" in physical
+        and _ocean_depth_m is not None
+    ):
+        from dreamulator.engine.tidal_physics import AU_M, EARTH_MASS_KG, resonant_tidal_range_m
+
+        _range_m = resonant_tidal_range_m(
+            mass_primary_kg=float(index.body_masses[parent_id]) * EARTH_MASS_KG,
+            mass_satellite_kg=float(mass_earth) * EARTH_MASS_KG,
+            radius_m=float(radius_km) * 1000.0,
+            semi_major_axis_m=float(a_au) * AU_M,
+            eccentricity=float(ecc),
+            gravity_m_s2=float(physical["gravity_m_s2"]),
+            ocean_depth_m=_ocean_depth_m,
+            tidal_period_h=float(orbital_period) * 24.0,
+        )
+        derived["tidal_range_m"] = round(_range_m, 1)
     if derived:
         entry["derived"] = derived
     return entry

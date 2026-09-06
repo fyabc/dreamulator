@@ -52,7 +52,7 @@ tags: [migration, adaptation, ecosystem, red-dwarf]
 
 #### 高纬度恒温雾林与浅海（60°–75°）
 
-环境：全年 12–15°C（年温差 <3°C），浓雾常年笼罩，78 m 潮差 → 数十公里宽巨型潮间带泥滩
+环境：全年 12–15°C（年温差 <3°C），浓雾常年笼罩，{{ entities.satellite_nacrea.tidal_range_m | round0 }} m 潮差 → 数十公里宽巨型潮间带泥滩
 
 | 物种 | 生态位 | 核心适应 |
 |------|--------|---------|
