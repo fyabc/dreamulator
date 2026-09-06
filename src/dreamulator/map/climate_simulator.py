@@ -1866,13 +1866,13 @@ def _compute_precipitation_monthly_budget(
         p_monthly *= _coastal_factor[:, None]
 
     # Step 6.7: Föhn rain shadow — leeward drying from the moisture scale
-    # height of the barrier the air crossed.  The wind regime (westerlies vs
-    # trades) is latitude-based and steady through the year, so one factor
-    # applies to every month.  BFS already handles windward orographic rain.
+    # height of the barrier the air crossed.  The upwind direction is now the
+    # *physical* surface wind (the three-cell circulation), not the former
+    # latitude-based westerlies/trades split — the "directional continentality"
+    # first-principles re-derivation (SotE uses a 6·lat/90 sigmoid hardcode).
+    # One factor applies to every month (the annual wind is steady).
     if is_land.any():
-        _westerly_rs = (np.abs(lat_deg) >= config.hadley_extent_deg) & (
-            np.abs(lat_deg) < config.polar_cell_start_deg
-        )
+        _wind_unit = wind / np.maximum(np.linalg.norm(wind, axis=1), 1e-9)[:, None]
         _fohn_factor = np.ones(n, dtype=np.float64)
         for i in range(n):
             if not is_land[i] or elevation_m[i] < 0:
@@ -1882,13 +1882,12 @@ def _compute_precipitation_monthly_budget(
             for j in ci.neighbors:
                 if j < 0 or j >= n:
                     continue
-                cj = mesh.cells[j]
-                dlon = cj.lon - ci.lon
-                if dlon > 180.0:
-                    dlon -= 360.0
-                elif dlon < -180.0:
-                    dlon += 360.0
-                is_upwind = (_westerly_rs[i] and dlon < 0) or (not _westerly_rs[i] and dlon > 0)
+                edge = nodes_xyz[j] - nodes_xyz[i]
+                edge = edge - float(np.dot(edge, nodes_xyz[i])) * nodes_xyz[i]
+                if float(np.linalg.norm(edge)) < 1e-9:
+                    continue
+                # Upwind neighbour = the one the surface wind blows FROM.
+                is_upwind = float(np.dot(_wind_unit[i], edge)) < 0.0
                 if is_upwind and elevation_m[j] > max_upwind_elev:
                     max_upwind_elev = elevation_m[j]
             elev_drop = max_upwind_elev - elevation_m[i]
