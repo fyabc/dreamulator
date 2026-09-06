@@ -33,19 +33,20 @@ EARTH_MASS_SOL: float = 1.0 / 332946.0  # Earth mass in solar masses (M☉/M⊕)
 # Solar age for normalisation (Gyr)
 _TAU_SUN: float = 0.46  # Sun's evolution progress at 4.6 Gyr
 
-# Age correction denominators (ensure M=1, t=4.6 → L=1, R=1)
-_L_AGE_DENOM: float = 1.0 + 0.4 * _TAU_SUN  # = 1.184
+# Radius age-correction denominator (ensures M=1, t=4.6 → R=1)
 _R_AGE_DENOM: float = 1.0 + 0.3 * _TAU_SUN  # = 1.138
 
 
 # ===================================================================
 # Mass–Luminosity Relation (ZAMS)
 # Ref: Kippenhahn & Weigert (2012), Stellar Structure and Evolution
+# Modified: 0.43–1.0 M☉ segment steepened M^4 → M^4.5 (empirical low-mass MLR,
+# Delfosse et al. 2000); plain M^4 over-predicts L by 20–42% for 0.5–0.7 M☉.
 # ===================================================================
 
 
 def mass_luminosity_zams(mass: float) -> float:
-    """Zero-age main-sequence luminosity from mass (Kippenhahn four-segment MLR).
+    """Zero-age main-sequence luminosity from mass (modified Kippenhahn MLR).
 
     Args:
         mass: Stellar mass in solar masses (M☉).
@@ -53,8 +54,10 @@ def mass_luminosity_zams(mass: float) -> float:
     Returns:
         Luminosity in solar luminosities (L☉).
     """
-    if mass < 0.43:
+    if mass < 0.5127:   # = 0.23^(1/2.2); where 0.23 M^2.3 meets M^4.5 (continuity)
         return 0.23 * math.pow(mass, 2.3)
+    elif mass < 1.0:
+        return math.pow(mass, 4.5)   # steeper than M^4; empirical low-mass MLR (Delfosse 2000)
     elif mass < 2.0:
         return math.pow(mass, 4.0)
     elif mass < 55.0:
@@ -149,8 +152,8 @@ def apply_age_metallicity(
     Returns:
         (luminosity, radius) in solar units after corrections.
     """
-    # Age correction (solar-normalised)
-    l_age = l_zams * (1.0 + 0.4 * tau) / _L_AGE_DENOM
+    # Age correction (Gough 1981 inverse, normalised to L0 at tau=_TAU_SUN)
+    l_age = l_zams / (1.0 + 0.4 * (1.0 - tau / _TAU_SUN))
     r_age = r_zams * (1.0 + 0.3 * tau) / _R_AGE_DENOM
 
     # Metallicity correction
