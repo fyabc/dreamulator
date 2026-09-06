@@ -1848,6 +1848,9 @@ def _compute_precipitation_monthly_budget(
     # within 1 mm/yr of this relation).
     _e_pot_ann = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
     _e_land_ann = _e_pot_ann * p_ann / (_e_pot_ann + p_ann + 1e-9)
+    if debug is not None:
+        debug["land_epot"] = _e_pot_ann.copy()
+        debug["land_et"] = _e_land_ann.copy()
 
     p_monthly = np.zeros((n, 12), dtype=np.float64)
     _dbg_storm = np.zeros(n)
