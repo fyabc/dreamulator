@@ -54,10 +54,10 @@ def mass_luminosity_zams(mass: float) -> float:
     Returns:
         Luminosity in solar luminosities (L☉).
     """
-    if mass < 0.5127:   # = 0.23^(1/2.2); where 0.23 M^2.3 meets M^4.5 (continuity)
+    if mass < 0.5127:  # = 0.23^(1/2.2); where 0.23 M^2.3 meets M^4.5 (continuity)
         return 0.23 * math.pow(mass, 2.3)
     elif mass < 1.0:
-        return math.pow(mass, 4.5)   # steeper than M^4; empirical low-mass MLR (Delfosse 2000)
+        return math.pow(mass, 4.5)  # steeper than M^4; empirical low-mass MLR (Delfosse 2000)
     elif mass < 2.0:
         return math.pow(mass, 4.0)
     elif mass < 55.0:
