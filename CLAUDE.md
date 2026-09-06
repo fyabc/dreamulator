@@ -299,11 +299,12 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    让用户检查结果后再合并。
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
 6. **合并到 main 后再推送**：用户验证通过 → merge 到 main → `git push`。
-7. **LFS 大文件纪律**：`cvt_mesh.json`（已 gzip 存储，~31.6MB）、PNG 等大文件走 Git LFS，
-   LFS 存完整对象不做增量。调参期间**只在 `private/worlds` 构建**，发版前最后一次才同步
-   `data/worlds` 并 commit，否则反复重建+commit 会撑爆 LFS 配额（v0.27.0、v0.33.0 两次踩坑）。
-   读取 mesh 用 `decompress_mesh_bytes`（透明解压，兼容纯 JSON）；push 被 `GH008 unknown LFS
-   objects` 拒绝时，先 `git lfs push --all origin` 再 `git push`。
+7. **构建产物不入 git（GitHub Releases 发布）**：`maps/` 与 `layers/*/derived/` 是「input + 代码 +
+   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。调参期间在 `private/worlds`
+   构建；发版前跑 `uv run python scripts/publish_world_data.py` 把 maps + derived 打包上传到固定
+   release tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push
+   会影响数据的输入改动**，否则 Pages 拿到旧数据。读取 mesh 仍用 `decompress_mesh_bytes`（透明解压，
+   兼容纯 JSON）。LFS 历史清理（`.gitattributes` 移除 + history rewrite）待单独做。
 
 ### 气候修改差异对比
 
@@ -338,6 +339,10 @@ uv run python scripts/climate_diff.py \
 cd frontend && npm run build:static:local && npm run preview:static
 # 打开 http://localhost:4173，确认页面功能正常、控制台无 404
 ```
+
+> `data/worlds` 不再包含 maps（走 GitHub Releases），本地导出/预览需让
+> `export_static.py` 读到构建产物：加 `DREAMULATOR_DATA_DIR=private/worlds`
+> 环境变量，或先 `uv run python scripts/publish_world_data.py` 后本地模拟下载。
 
 ### 3D 球面矢量可视化（风场/洋流箭头）
 

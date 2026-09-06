@@ -30,21 +30,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        # lfs: false — LFS objects are pulled below, after the cache restore,
-        # so unchanged objects hit the actions/cache and only the delta is
-        # downloaded (avoids burning the monthly LFS bandwidth on every deploy).
+        # Build output (maps + derived) is NOT in git — it is published as a
+        # GitHub Release tarball by scripts/publish_world_data.py and downloaded
+        # below. This keeps the repo free of large generated files (no LFS).
 
-      - name: Cache Git LFS objects
-        id: cache-lfs
-        uses: actions/cache@v4
-        with:
-          path: .git/lfs
-          key: lfs-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            lfs-${{ runner.os }}-
-
-      - name: Fetch LFS objects
-        run: git lfs pull
+      - name: Download world build data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/worlds
+          gh release download worlds-data --pattern 'worlds-data.tar.gz' \
+            --dir /tmp/worlds-data --clobber
+          tar xzf /tmp/worlds-data/worlds-data.tar.gz -C data/worlds
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,11 +54,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      # Engine builds are intentionally NOT run here: derived data is committed
-      # to the repo (git-tracked since v0.10.0), and the static export consumes
-      # it as-is. This saves minutes per world on every deploy. To rebuild
-      # derived data, run `uv run dreamulator build <world>` locally
-      # (add `--branch <b>` for branches) and commit the results.
+      # The engine build is deliberately NOT run here: maps are slow to generate
+      # (minutes per world). They are rebuilt locally and published via
+      # `uv run python scripts/publish_world_data.py`; this deploy just consumes
+      # the published tarball. Publish BEFORE pushing input changes that affect
+      # the data, so the deploy picks up the matching build output.
 
       - name: Export static data
         run: uv run python scripts/export_static.py

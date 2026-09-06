@@ -63,7 +63,12 @@ export/
 # Raw reference data downloads (use scripts to re-download)
 *.grd
 *.grd.gz
-data/worlds/*/layers/ecology/derived/
+
+# Generated world build output — published to a GitHub Release by
+# scripts/publish_world_data.py and downloaded by deploy-pages.yml, so it is
+# NOT committed (no git LFS). Rebuild locally in private/worlds + publish.
+data/worlds/**/maps/
+data/worlds/**/derived/
 
 # Import artifacts (duplicates of maps/, staging area for import-elevation)
 layers/geological/input/maps/
