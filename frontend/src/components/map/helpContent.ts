@@ -157,7 +157,6 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     kind: 'thematic',
     group: 'climate',
     monthlyCapable: true,
-    monthlyOnly: true,
   },
   {
     id: 'biomes',

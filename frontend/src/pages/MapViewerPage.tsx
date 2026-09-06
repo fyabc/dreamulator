@@ -112,15 +112,8 @@ export default function MapViewerPage() {
     const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
     return (thematic ?? overlay)?.id ?? null
   }, [layerState])
-  // Turning OFF monthly mode while the pressure-anomaly layer (monthly-only) is
-  // active would leave a blank thematic — reset to terrain instead.
   const handleMonthlyModeChange = (mode: boolean) => {
     setMonthlyMode(mode)
-    if (!mode) {
-      setLayerState((s) =>
-        s.layers.pressure > 0 ? { layers: { ...s.layers, pressure: 0, terrain: 1 } } : s,
-      )
-    }
   }
 
   // Decoded elevation data (for rendering)

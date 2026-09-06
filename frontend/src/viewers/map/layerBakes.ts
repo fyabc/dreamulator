@@ -122,6 +122,8 @@ export interface LayerTextures {
   temperature: THREE.DataTexture
   /** Annual precipitation thematic (per-cell continuous, log-scaled). Half res. */
   precipitation: THREE.DataTexture
+  /** Annual mean sea-level pressure thematic (per-cell continuous). Half res. */
+  pressure: THREE.DataTexture
   /** Drainage / flow accumulation thematic (per-cell continuous, log-scaled). Half res. */
   flow: THREE.DataTexture
   /** River channel cells (per-cell boolean, river_order ≥ 1). Half res. */
@@ -283,6 +285,7 @@ function buildCellPalettes(
   provinces: Map<number, [number, number, number]>
   temperature: Map<number, [number, number, number]>
   precipitation: Map<number, [number, number, number]>
+  pressure: Map<number, [number, number, number]>
   flow: Map<number, [number, number, number]>
   rivers: Map<number, [number, number, number]>
 } {
@@ -301,6 +304,7 @@ function buildCellPalettes(
   const provinces = new Map<number, [number, number, number]>()
   const temperature = new Map<number, [number, number, number]>()
   const precipitation = new Map<number, [number, number, number]>()
+  const pressure = new Map<number, [number, number, number]>()
   const flow = new Map<number, [number, number, number]>()
   const rivers = new Map<number, [number, number, number]>()
 
@@ -471,6 +475,14 @@ function buildCellPalettes(
       )
     }
 
+    // Annual-mean sea-level pressure — continuous, ocean + land (the subtropical
+    // highs sit over the ocean).  ~980–1035 hPa mapped linearly, reusing the
+    // temperature scale until a dedicated pressure palette exists.
+    const slp: number | null | undefined = cell.slp_annual_hpa
+    if (slp != null) {
+      pressure.set(cell.id, sequentialColor((slp - 980) / 55, TEMPERATURE_SCALE))
+    }
+
     // Drainage / flow accumulation — continuous, log-normalised, land only.
     // Log scale because catchment area spans ~3 orders of magnitude (single-cell
     // ~2600 km² @200k up to multi-million-km² continental basins).
@@ -495,7 +507,7 @@ function buildCellPalettes(
 
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
            coastlines, biomes, npp, domesticable, habitable, agriculture,
-           soil, provinces, temperature, precipitation, flow, rivers }
+           soil, provinces, temperature, precipitation, pressure, flow, rivers }
 }
 
 /**
@@ -665,6 +677,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let provincesBuf: Uint8Array = empty
   let temperatureBuf: Uint8Array = empty
   let precipitationBuf: Uint8Array = empty
+  let pressureBuf: Uint8Array = empty
   let flowBuf: Uint8Array = empty
   let riversBuf: Uint8Array = empty
   let kw = 1, kh = 1
@@ -685,6 +698,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     provincesBuf = bakeCellLayer(palettes.provinces, width, height, cellIdMap, flipHorizontal)
     temperatureBuf = bakeCellLayer(palettes.temperature, width, height, cellIdMap, flipHorizontal)
     precipitationBuf = bakeCellLayer(palettes.precipitation, width, height, cellIdMap, flipHorizontal)
+    pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
     flowBuf = bakeCellLayer(palettes.flow, width, height, cellIdMap, flipHorizontal)
     riversBuf = bakeCellLayer(palettes.rivers, width, height, cellIdMap, flipHorizontal)
     kw = width; kh = height
@@ -742,6 +756,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     provinces: makeTexture(provincesBuf, kw, kh, { nearestMag: true }),
     temperature: makeTexture(temperatureBuf, kw, kh),
     precipitation: makeTexture(precipitationBuf, kw, kh),
+    pressure: makeTexture(pressureBuf, kw, kh),
     flow: makeTexture(flowBuf, kw, kh),
     rivers: makeTexture(riversBuf, kw, kh, { nearestMag: true }),
   }

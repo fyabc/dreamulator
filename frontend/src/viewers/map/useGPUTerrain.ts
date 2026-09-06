@@ -134,7 +134,7 @@ interface UseGPUTerrainOptions {
   cellIdMap?: CellIdMap | null
   /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
    *  baked by the caller from `bakeMonthlyLayer`.  When provided they replace
-   *  the annual thematic.  Pressure has no annual counterpart (monthly only). */
+   *  the annual thematic (the annual SLP is the fallback for pressure). */
   monthlyTemperature?: THREE.DataTexture | null
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
@@ -327,11 +327,8 @@ export default function useGPUTerrain({
       [layers.provinces, baked.provinces],
       [layers.temperature, monthlyTemperature ?? baked.temperature],
       [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
+      [layers.pressure, monthlyPressure ?? baked.pressure],
     ]
-    // Pressure is monthly-only (no annual texture); consider it just when present.
-    if (monthlyPressure) {
-      thematicLayers.push([layers.pressure, monthlyPressure])
-    }
     let activeThematic = baked.terrainThematic
     let thematicOp = 1.0  // default: terrain on
     for (const [op, tex] of thematicLayers) {
