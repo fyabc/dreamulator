@@ -13,7 +13,7 @@ description: |
   - 雪线内侧仅形成 0.1–1.0 M⊕ 岩石胚胎，未达气态吸积临界质量
 
   阶段 2 — II 型迁移与共振链捕获 (5–10 Myr)
-  - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (0.40 AU)
+  - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (0.3536 AU)
   - 外缘两颗胚胎被"牧羊犬效应"推动，发生会聚迁移
   - 穿过 2:1 / 4:1 共振后被永久锁定 → Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
   - 迁移扫清 0.05–0.2 AU 区间所有原始胚胎
@@ -24,7 +24,7 @@ description: |
 
   阶段 4 — 长期潮汐演化 (200 Myr–6 Gyr)
   - 内行星被恒星潮汐锁定
-  - Nacrea 在 Aegis 子盘中形成并缓慢外迁 10%（672,727 → 739,013 km），后 0007 微内移至 724,000 km
+  - Nacrea 在 Aegis 子盘中形成并缓慢外迁至 724,000 km（潮汐演化，形成以来 +10%）
   - 外迁过程中会聚迁移捕获两颗外卫星胚胎 → Nacrea : Cadence : Vigil = 1:2:4
     卫星拉普拉斯共振链（机制与阶段 2 的行星共振链捕获完全对称）
   - 共振链持续泵浦 Nacrea 的偏心率 e=0.002（否则潮汐阻尼将在 ~Myr 尺度抹平），
@@ -70,8 +70,8 @@ orbits:
   # ---- 气态巨行星（宜居带，混合变暖校准后位置） ----
   - body_id: planet_aegis
     parent_id: star_ignis
-    semi_major_axis_au: 0.3536    # 0007 方案 B：年长 100 天（M=0.59 + 光照 0.66 反推）
-    eccentricity: 0.03            # 0007：距离季（受迫偏心率，GJ 876 共振链类比，0.03–0.05 待标定）
+    semi_major_axis_au: 0.3536    # 年长 100 天（M=0.59 + 光照 0.66 反推）
+    eccentricity: 0.03            # 距离季（受迫偏心率，GJ 876 共振链类比，0.03–0.05 待标定）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
@@ -113,8 +113,8 @@ orbits:
   # ---- 宜居卫星（环绕 Aegis，1:2:4 卫星拉普拉斯共振链） ----
   - body_id: satellite_nacrea
     parent_id: planet_aegis
-    semi_major_axis_au: 0.00484   # 724,000 km（0007：微内移，Vigil → 0.37 r_H）
-    eccentricity: 0.0019          # Cadence/Vigil 共振链泵浦维持（0007：微降补偿内移的潮汐加热增量）
+    semi_major_axis_au: 0.00484   # 724,000 km（Vigil 在 0.37 r_H）
+    eccentricity: 0.0019          # Cadence/Vigil 共振链泵浦维持（微降以平衡潮汐加热）
     inclination_deg: 9.0          # 赤道面轨道：规则卫星在行星子盘里形成，天然贴着行星赤道面；
     # 相对黄道的 9° 来自 Aegis 的自转轴倾角。轨道面动力学：这个距离上恒星扭矩已强于行星
     # 四极矩扭矩约 14 倍，平衡面（Laplace 面）几乎贴黄道，所以赤道面构型带有 8.35° 自由倾角，
