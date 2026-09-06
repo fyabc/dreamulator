@@ -40,7 +40,7 @@ tags: [mass, radius, gravity, love-numbers]
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
 | 表面重力 g | {{ entities.satellite_nacrea.gravity_m_s2 | round2 }} m/s²（≈{{ (entities.satellite_nacrea.gravity_m_s2 / 9.80665) | round2 }}g） | G·{{ "%.2f" | format(entities.satellite_nacrea.mass_earth) }}M⊕ / ({{ entities.satellite_nacrea.radius_earth | round2 }}R⊕)² |
-| 轨道半长轴 | 740,332 km（≈10.35 R_J） | 开普勒第三定律 |
+| 轨道半长轴 | {{ sky.planet_aegis.distance_km | round0 }} km | 开普勒第三定律 |
 | 系统稳定性 | 0.2 R_H 处 | 长期绝对稳定区 |
 | 昼夜交替周期（太阳日） | **{{ entities.satellite_nacrea.solar_day_days | round2 }} 地球日（{{ entities.satellite_nacrea.solar_day_days | hours | round1 }} 小时）** | 恒星自转 {{ entities.satellite_nacrea.period_days | hours | round0 }}h（=绕 Aegis 公转）+ Aegis 公转 {{ entities.planet_aegis.period_days | round0 }} 天 → 1/(1/{{ entities.satellite_nacrea.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
 | 年（季节周期） | **{{ entities.planet_aegis.period_days | round0 }} 地球日** | = Aegis 绕恒星公转周期（{{ entities.planet_aegis.semi_major_axis_au }} AU）；一年 = {{ entities.satellite_nacrea.days_per_year | round1 }} 个太阳日 |

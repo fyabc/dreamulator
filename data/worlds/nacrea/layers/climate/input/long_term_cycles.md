@@ -28,12 +28,12 @@ Nacrea 是一颗**处于 1:2:4 拉普拉斯共振链中的巨行星卫星**—�
 
 ## 1. 短周期几何效应（78–81 h）
 
-- **食**：Aegis 角直径 ~11°（71,355 km @ 739,013 km）远大于 Ignis 的 ~0.8°，
+- **食**：Aegis 角直径 ~{{ sky.planet_aegis.angular_diameter_deg | round0 }}°（{{ entities.planet_aegis.radius_km | round0 }} km @ {{ sky.planet_aegis.distance_km | round0 }} km）远大于 Ignis 的 ~{{ sky.star_ignis.angular_diameter_deg | round1 }}°，
   对齐时全食。轨道倾角 9° → 每年两个食季，每次全食 ≤ ~2.4 h（轨道速度 ~16.5 km/s，
   影锥宽 ~2 R_Aegis）。年均能量损失 <0.1%——气候上可忽略，是大气/天气尺度的
   周期性事件（对生态节律、文化叙事有意义）。
 - **行星反照与热辐射（经度不对称源）**：Aegis（Bond 反照率 0.343，R=71,355 km，
-  距 739,013 km）对次 Aegis 半球的附加通量：热红外 ~1.4 W/m²（全相位恒定）+
+  距 {{ sky.planet_aegis.distance_km | round0 }} km）对次 Aegis 半球的附加通量：热红外 ~1.4 W/m²（全相位恒定）+
   反射光 ~2.0 W/m²（局地午夜满相位峰值），均远小于日照 {{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m²
   （全球年均 <0.3%）。**但这是经度项而非全球项**：次 Aegis 半球均增温
   ~1°C（半球均值 ~1–1.5 W/m²），打破纬向对称 →

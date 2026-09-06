@@ -161,4 +161,8 @@ def build_fact_context(world_dir: Path, branch: str | None = None) -> dict[str, 
         "entities": _load_entities(catalog),
         "aggregates": _load_aggregates(resolver),
         "spatial": {},
+        # The target body's sky view (angular diameters / magnitudes / eclipse),
+        # keyed by stable id (``sky.planet_aegis.angular_diameter_deg``).  Empty
+        # dict when the catalog has no sky section (older worlds / no satellite).
+        "sky": catalog.get("sky") or {},
     }

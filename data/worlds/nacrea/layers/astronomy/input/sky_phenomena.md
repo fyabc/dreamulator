@@ -48,40 +48,40 @@ $$m_\star = -26.74 - 2.5\log_{10} L + 5\log_{10} d_{[\mathrm{AU}]}$$
 ## 1. 烬星（Ignis，主恒星）
 
 输入：$L={{ entities.star_ignis.luminosity_sol }}\,L_\odot$；半径取**引擎反演值**
-$R=0.4387\,R_\odot=305{,}222$ km（`stellar_derived.yaml`）；
-距离 $d={{ entities.planet_aegis.semi_major_axis_au }}$ AU $=37{,}459{,}307$ km。
+$R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.radius_km | round0 }}$ km（`stellar_derived.yaml`）；
+距离 $d={{ entities.planet_aegis.semi_major_axis_au }}$ AU $={{ sky.star_ignis.distance_km | round0 }}$ km。
 
 | 物理量 | 结果 | 对比 |
 |------|------|------|
-| **视直径** | **0.93°（56 角分）** | 地球看太阳 0.53°；烬星**宽约 1.8 倍** |
-| **视星等** | **−26.29** | 地球看太阳 −26.74；仅暗 0.45 等 |
+| **视直径** | **{{ sky.star_ignis.angular_diameter_deg | round2 }}°（{{ (sky.star_ignis.angular_diameter_deg * 60) | round0 }} 角分）** | 地球看太阳 0.53°；烬星**宽约 {{ (sky.star_ignis.angular_diameter_deg / 0.53) | round1 }} 倍** |
+| **视星等** | **{{ sky.star_ignis.apparent_magnitude | round2 }}** | 地球看太阳 −26.74；仅暗 {{ (sky.star_ignis.apparent_magnitude + 26.74) | round2 }} 等 |
 
-直观感受：烬星是一枚暗红色的大圆盘，面积约太阳 3 倍，但因 K8 表面亮度低，
+直观感受：烬星是一枚橙红色的大圆盘，面积约太阳 {{ ((sky.star_ignis.angular_diameter_deg / 0.53) ** 2) | round1 }} 倍，但因 K8 表面亮度低，
 总视觉亮度与地球的太阳几乎相当。
 
 ## 2. 巨神星（Aegis，气态巨行星）
 
-输入：$R=71{,}355$ km；Bond 反照率 $0.343\to p=\tfrac23\times0.343=0.229$；
-观测距离 $\Delta=739{,}013$ km（珠母星轨道半径）；
+输入：$R={{ entities.planet_aegis.radius_km | round0 }}$ km；Bond 反照率 $0.343\to p=\tfrac23\times0.343=0.229$；
+观测距离 $\Delta={{ sky.planet_aegis.distance_km | round0 }}$ km（珠母星轨道半径）；
 天体–烬星距离 $a\approx D_\star={{ entities.planet_aegis.semi_major_axis_au }}$ AU（比值≈1）。
 
 | 物理量 | 结果 | 对比 |
 |------|------|------|
-| **视直径** | **11.0°** | 满月 0.52°；**宽 21 倍、面积 450 倍** |
-| **满相视星等** | **−19.6** | 满月 −12.74；**总亮度约 560 倍** |
+| **视直径** | **{{ sky.planet_aegis.angular_diameter_deg | round2 }}°** | 满月 0.52°；**宽 {{ (sky.planet_aegis.angular_diameter_deg / 0.52) | round0 }} 倍、面积 {{ ((sky.planet_aegis.angular_diameter_deg / 0.52) ** 2) | round0 }} 倍** |
+| **满相视星等** | **{{ sky.planet_aegis.apparent_magnitude_full | round1 }}** | 满月 −12.74；**总亮度约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034) | round0 }} 倍** |
 | **面亮度** | **满月的 1.25 倍** | 每平方度比满月更刺眼 |
 
-**不同相位下的视星等**（Lambert 相位函数，$m_\star=-26.29$）：
+**不同相位下的视星等**（Lambert 相位函数，$m_\star={{ sky.star_ignis.apparent_magnitude | round2 }}$）：
 
 | 相位 | 相位角 $\alpha$ | $\Phi(\alpha)$ | 视星等 | 满月亮度比 |
 |------|:---:|:---:|:---:|:---:|
-| 盈满 Full | 0° | 1.000 | **−19.6** | 560× |
-| 凸月 Gibbous | 45° | 0.755 | −19.3 | 423× |
-| 半月 Half | 90° | 0.318 | −18.4 | 178× |
-| 眉月 Crescent | 135° | 0.048 | −16.3 | 27× |
+| 盈满 Full | 0° | 1.000 | **{{ sky.planet_aegis.apparent_magnitude_full | round1 }}** | {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034) | round0 }}× |
+| 凸月 Gibbous | 45° | 0.755 | {{ (sky.planet_aegis.apparent_magnitude_full + 0.31) | round1 }} | {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 0.755) | round0 }}× |
+| 半月 Half | 90° | 0.318 | {{ (sky.planet_aegis.apparent_magnitude_full + 1.24) | round1 }} | {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 0.318) | round0 }}× |
+| 眉月 Crescent | 135° | 0.048 | {{ (sky.planet_aegis.apparent_magnitude_full + 3.29) | round1 }} | {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 0.048) | round0 }}× |
 | 新相 New | 180° | 0.000 | 全暗 + **日食季** | — |
 
-直观感受：满相巨神星是横跨 21 个满月宽度的金琥珀色巨盘，面亮度超过地球满月
+直观感受：满相巨神星是横跨 {{ (sky.planet_aegis.angular_diameter_deg / 0.52) | round0 }} 个满月宽度的金琥珀色巨盘，面亮度超过地球满月
 ——它不是"照亮黑夜"，而是**把黑夜本身变成白昼**。
 
 **永悬天顶**：珠母星被巨神星潮汐锁定。从向星点附近的**永耀岛**
@@ -95,8 +95,8 @@ $R=0.4387\,R_\odot=305{,}222$ km（`stellar_derived.yaml`）；
 
 | 天体 | 半径 | 距珠母星 | 视直径 | 满相视星等（最近） |
 |------|------|---------|--------|------|
-| **韵珠星 Cadence**（2:1，岩质） | 2,867 km | 434,100 ~ 1,912,126 km | **0.76°（近）~ 0.17°（远）** | **约 −13.4**（比满月略亮） |
-| **守珠星 Vigil**（4:1，冰岩） | 2,485 km | 1,123,228 ~ 2,601,254 km | **0.25°（近）~ 0.11°（远）** | **约 −11.4**（接近满月） |
+| **韵珠星 Cadence**（2:1，岩质） | {{ entities.satellite_cadence.radius_km | round0 }} km | {{ sky.satellite_cadence.distance_km_near | round0 }} ~ {{ sky.satellite_cadence.distance_km_far | round0 }} km | **{{ sky.satellite_cadence.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_cadence.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_cadence.apparent_magnitude_full | round1 }}**（比满月略亮） |
+| **守珠星 Vigil**（4:1，冰岩） | {{ entities.satellite_vigil.radius_km | round0 }} km | {{ sky.satellite_vigil.distance_km_near | round0 }} ~ {{ sky.satellite_vigil.distance_km_far | round0 }} km | **{{ sky.satellite_vigil.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_vigil.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_vigil.apparent_magnitude_full | round1 }}**（接近满月） |
 
 直观感受：韵珠星最接近时约 1.5 个满月宽，是夜空中仅次于巨神星的天体；
 守珠星约半个满月宽。二者与巨神星同框时，即"一串珍珠"的核心画面。
@@ -107,30 +107,31 @@ $R=0.4387\,R_\odot=305{,}222$ km（`stellar_derived.yaml`）；
 
 | 行星 | 位置 | 视直径 | 最大距角 / 冲日 | 视星等 | 特殊现象 |
 |------|:---:|--------|----------------|:---:|------|
-| **焦星 Ember** | 内 | 0.7 角分 | 距角 10.6° | **−6.0** | 类金星大距，仅晨昏可见 |
-| **鼎星 Crucible** | 内 | 1.2 角分 | 距角 23.0° | **−5.9** | 最亮的"晨星/昏星" |
-| **沧星 Boreal** | 外 | 18.9 角分 | 冲日 0.15 AU | **−10.7** | 冰蓝巨盘，肉眼可见圆面 |
-| **霰星 Glacis** | 外 | 3.0 角分 | 冲日 0.38 AU | **−5.5** | 深青色亮点 |
-| **藩星 Sentinel** | 外 | 0.20 角分 | 冲日 3.43 AU | **+4.4** | 肉眼勉强可见的暗弱"流浪星" |
+| **焦星 Ember** | 内 | {{ sky.planet_ember.angular_diameter_arcmin | round1 }} 角分 | 距角 {{ sky.planet_ember.elongation_deg | round1 }}° | **{{ sky.planet_ember.apparent_magnitude_elongation | round1 }}** | 类金星大距，仅晨昏可见 |
+| **鼎星 Crucible** | 内 | {{ sky.planet_crucible.angular_diameter_arcmin | round1 }} 角分 | 距角 {{ sky.planet_crucible.elongation_deg | round1 }}° | **{{ sky.planet_crucible.apparent_magnitude_elongation | round1 }}** | 最亮的"晨星/昏星" |
+| **沧星 Boreal** | 外 | {{ sky.planet_boreal.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_boreal.distance_au_opposition | round2 }} AU | **{{ sky.planet_boreal.apparent_magnitude_opposition | round1 }}** | 冰蓝巨盘，肉眼可见圆面 |
+| **霰星 Glacis** | 外 | {{ sky.planet_glacis.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_glacis.distance_au_opposition | round2 }} AU | **{{ sky.planet_glacis.apparent_magnitude_opposition | round1 }}** | 深青色亮点 |
+| **藩星 Sentinel** | 外 | {{ sky.planet_sentinel.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_sentinel.distance_au_opposition | round2 }} AU | **{{ sky.planet_sentinel.apparent_magnitude_opposition | round1 }}** | 肉眼勉强可见的暗弱"流浪星" |
 
 ## 5. 食季（巨神星遮蔽烬星）
 
 **本影锥**：$L_{\mathrm{umbra}} = R_{\mathrm{Aegis}}\,d_\star/(R_\star-R_{\mathrm{Aegis}})$
-$= 11{,}429{,}199$ km，远超珠母星轨道半径 739,013 km → **全食完全可行**。
+$= {{ sky.eclipse.umbra_length_km | round0 }}$ km，远超珠母星轨道半径 {{ sky.planet_aegis.distance_km | round0 }} km → **全食完全可行**。
 
 | 参数 | 结果 |
 |------|------|
-| 本影在珠母星轨道处的半径 | **66,741 km**（≫ 珠母星半径 6,817 km） |
-| 轨道速度（公转周期 $P=$ {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时） | 59,530 km/h |
-| **全食最长** | **约 2.2 地球时**（穿越本影中心） |
+| 本影在珠母星轨道处的半径 | **{{ sky.eclipse.umbra_radius_at_orbit_km | round0 }} km**（≫ 珠母星半径 {{ entities.satellite_nacrea.radius_km | round0 }} km） |
+| 轨道速度（公转周期 $P=$ {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时） | {{ sky.eclipse.orbit_speed_kmh | round0 }} km/h |
+| **全食最长** | **约 {{ sky.eclipse.max_total_eclipse_hours | round1 }} 地球时**（穿越本影中心） |
 | 偏食到偏食最长 | 约 2.4 地球时 |
 
 **食季窗口**（轨道倾角 {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}°）：珠母星最大黄纬
-$739{,}013\sin 9°=115{,}607$ km；食发生阈值 = 本影半径 + 珠母星半径 = 73,558 km。
-每个升/降交点食季占全轨道周期（珠母星年） $\frac{2\arcsin(73558/115607)}{2\pi}=22\%$，
-即**每次食季约 14.7 地球日**，每 {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时
-一次食 → **每食季约 4 次全食，每珠母星年（{{ entities.planet_aegis.period_days | round0 }} 地球日）约 8 次**
-（与 `orbital_dynamics.md` "每年 2 个食季" 一致）。
+${{ sky.planet_aegis.distance_km | round0 }}\sin {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}°={{ sky.eclipse.max_vertical_offset_km | round0 }}$ km；
+食发生阈值 = 本影半径 + 珠母星半径 = {{ sky.eclipse.eclipse_threshold_km | round0 }} km。
+当反烬星点（全相相位）落入本影竖直窗口（|黄纬| < 阈值）时发生全食——该窗口占交点进动周期的
+$2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_vertical_offset_km | round0 }})/2\pi={{ sky.eclipse.season_fraction | pct }}$。
+交点进动周期 ~4.7 年，故食季约持续其 {{ sky.eclipse.season_fraction | pct }}（≈1 地球年）；
+食季内每 {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时一次食（全向星半球同时入夜）。
 
 **食季漂移**：交点线以 ~4.7 yr 周期退行一周 → 食季在 67 天年中的位置 4.7 yr 遍历全年
 （月球食季 18.6 yr 漂移的类比）；食季与季节的相位组合构成短周期辐照调制
@@ -141,21 +142,21 @@ $739{,}013\sin 9°=115{,}607$ km；食发生阈值 = 本影半径 + 珠母星半
 | # | 现象 | 频率（地球时制） | 视频潜力 |
 |:---:|------|------|:---:|
 | 1 | **巨神星相位周期**（完整盈亏） | 每 78 地球时（= 1 卫星公转周期） | ★★★★★ 系列一核心视觉 |
-| 2 | **日全食**（烬星被巨神星遮蔽） | 每珠母星年约 8 次，每次最长 2.2 地球时 | ★★★★★ 全片高潮 |
+| 2 | **日全食**（烬星被巨神星遮蔽） | 食季内每个公转周期（{{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时）一次，每次最长 {{ sky.eclipse.max_total_eclipse_hours | round1 }} 地球时 | ★★★★★ 全片高潮 |
 | 3 | **外卫星被巨神星掩**（韵珠/守珠隐入巨神星盘面后方） | 每个公转周期 | ★★★★ 尺度远超水星凌日 |
 | 4 | **外卫星互掩**（韵珠掩守珠） | 约每 13 地球日 | ★★★★ 三星系统独有 |
 | 5 | **鼎星大距**（超金星星） | 约每 0.1 地球年（≈36.5 地球日） | ★★★ 晨昏"超金星" |
 | 6 | **沧星冲日**（冰蓝巨盘子夜升起） | 约每 0.4 地球年 | ★★★★ |
 | 7 | **三珠连珠**（韵珠+守珠+巨神星对齐） | 罕见 | ★★★★★ 命名体系核心画面 |
-| 8 | **食季连食**（约 14.7 地球日内 4 次全食） | 每食季 | ★★★★ 叙事节奏锚点 |
+| 8 | **食季连食**（交点进动周期 ~4.7 年的 {{ sky.eclipse.season_fraction | pct }} 时段内每轨道连食） | 每食季 | ★★★★ 叙事节奏锚点 |
 | 9 | **藩星冲日**（暗弱"回归"） | 约每 3.7 地球年 | ★★★ 可做文明历法 |
 | 10 | **星环掩星**（若巨神星有环，环面遮挡烬星光） | 视几何 | ★★★ 远期扩展 |
 
 > **两处几何修正**：
-> 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（739,013 km），韵珠/守珠轨道
->    更大（1,173,113 / 1,862,241 km），从珠母星看它们永远在巨神星盘面**后方**，只会被巨神星遮蔽
+> 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（{{ sky.planet_aegis.distance_km | round0 }} km），韵珠/守珠轨道
+>    更大（{{ entities.satellite_cadence.semi_major_axis_au }} / {{ entities.satellite_vigil.semi_major_axis_au }} AU），从珠母星看它们永远在巨神星盘面**后方**，只会被巨神星遮蔽
 >    （掩），不会掠过盘面前方（凌）。只有轨道在珠母星**内侧**的牧羊犬卫星（<125,000 km）才会凌巨神星。
-> 2. **「环食」非「日环食」**：巨神星视直径 11.0° ≫ 烬星 0.93°，巨神星总是完全遮住烬星（日全食），
+> 2. **「环食」非「日环食」**：巨神星视直径 {{ sky.planet_aegis.angular_diameter_deg | round2 }}° ≫ 烬星 {{ sky.star_ignis.angular_diameter_deg | round2 }}°，巨神星总是完全遮住烬星（日全食），
 >    「日环食」不可能。若巨神星有环，环面可额外遮挡烬星光（星环掩星）——但现有环极暗、限于
->    <125,000 km 内圈，对珠母星可忽略；「过大环」延伸到珠母星轨道（739,013 km）会被珠母星引力
+>    <125,000 km 内圈，对珠母星可忽略；「过大环」延伸到珠母星轨道（{{ sky.planet_aegis.distance_km | round0 }} km）会被珠母星引力
 >    清空（牧羊效应），动力学不稳定，故不构成陨石威胁。

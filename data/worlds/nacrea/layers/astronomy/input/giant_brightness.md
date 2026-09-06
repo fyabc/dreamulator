@@ -17,12 +17,12 @@ tags: [illumination, eclipse, albedo]
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 恒星在 Aegis 处的辐照度 | **{{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m²** | L_star / (4πa_p²)；L={{ entities.star_ignis.luminosity_sol }} L☉, a={{ entities.planet_aegis.semi_major_axis_au }} AU（方案2 校准后） |
-| Aegis 满相照度（Nacrea 表面） | **1.91 W/m²** | F_star × A_g × (R_p/a_m)² = {{ entities.satellite_nacrea.instellation_w_m2 | round0 }} × 0.228 × 9.32×10⁻³ |
-| 满相 = 地球满月倍数 | **约 560 倍** | 1.91 / 0.0034 |
-| 半相（90°）= 地球满月倍数 | **约 178 倍** | 560 × 朗伯相位函数 Φ(90°)=0.318 |
-| 极细相（170°）= 地球满月倍数 | **约 0.3 倍** | 560 × Φ(170°)≈5.7×10⁻⁴ |
-| Aegis 视直径 | **11.03°** | 2 arctan(R_p/a_m)；地球月球仅 0.52°，面积比 ~450 倍 |
+| 恒星在 Aegis 处的辐照度 | **{{ entities.satellite_nacrea.instellation_w_m2 | round0 }} W/m²** | L_star / (4πa_p²)；L={{ entities.star_ignis.luminosity_sol }} L☉, a={{ entities.planet_aegis.semi_major_axis_au }} AU |
+| Aegis 满相照度（Nacrea 表面） | **{{ sky.planet_aegis.illuminance_full_w_m2 | round2 }} W/m²** | F_star × A_g × (R_p/a_m)²，A_g = 0.228 |
+| 满相 = 地球满月倍数 | **约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034) | round0 }} 倍** | {{ sky.planet_aegis.illuminance_full_w_m2 | round2 }} / 0.0034 |
+| 半相（90°）= 地球满月倍数 | **约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 0.318) | round0 }} 倍** | × 朗伯相位函数 Φ(90°)=0.318 |
+| 极细相（170°）= 地球满月倍数 | **约 0.3 倍** | × Φ(170°)≈5.7×10⁻⁴ |
+| Aegis 视直径 | **{{ sky.planet_aegis.angular_diameter_deg | round2 }}°** | 2 arctan(R_p/a_m)；地球月球仅 0.52°，面积比 ~{{ ((sky.planet_aegis.angular_diameter_deg / 0.52) ** 2) | round0 }} 倍 |
 | 满相可见光照度（估算） | **~111 lux** | 民用暮光 ~10 lux；足以投射清晰阴影，支持微弱光合作用 |
 
 ### 日食可见性的地理隔离
@@ -31,7 +31,7 @@ tags: [illumination, eclipse, albedo]
 
 | 区域 | 经度范围 | Aegis 天空位置 | 日食可见性 |
 |------|---------|---------------|-----------|
-| **向星区 (Sub-Jovian)** | −45° ~ 45° | 天顶附近 | ✅ 每年 ~11 次日全食（每次 ~2.5h） |
+| **向星区 (Sub-Jovian)** | −45° ~ 45° | 天顶附近 | ✅ 食季内每个公转周期一次全食（每次最长 ~{{ sky.eclipse.max_total_eclipse_hours | round1 }}h） |
 | **边缘区 (Limb)** | 45° ~ 90° / −45° ~ −90° | 贴近地平线 | ✅ 带食日出/日落 |
 | **背星区 (Anti-Jovian)** | 90° ~ 180° / −90° ~ −180° | 永远在天底 | ❌ **物理上绝对无日食**（Aegis 永远在观测者背面） |
 

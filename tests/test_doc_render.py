@@ -226,38 +226,38 @@ _DOC_ANCHORS: dict[str, list[str]] = {
     "layers/astronomy/input/orbital_dynamics.md": [
         "| 卫星轨道倾角 i | 9.0° |",
         "南北纬 81°",
-        "**33.5 天**",
-        "**67 天**",
-        "**3.42 天（82.0 小时）**",
-        "**19.6 个**",
-        "每 78h 穿过本影一次",
+        "**50.0 天**",
+        "**100 天**",
+        "**3.36 天（80.6 小时）**",
+        "**29.8 个**",
+        "每 76h 穿过本影一次",
     ],
     "layers/geological/input/physical_params.md": [
         "1.20 M⊕",
         "1.07 R⊕（6817 km）",
         "10.28 m/s²（≈1.05g）",
-        "**3.42 地球日（82.0 小时）**",
-        "**67 地球日**",
+        "**3.36 地球日（80.6 小时）**",
+        "**100 地球日**",
         "9° / ±81°",
-        "78 小时",
+        "76 小时",
     ],
     "layers/astronomy/input/giant_brightness.md": [
-        "**899 W/m²**",  # round0 of 898.73 (previously truncated to 898)
-        "**1.91 W/m²**",
-        "**约 560 倍**",  # 1.91/0.0034 ≈ 562（旧锚 1592 已过时）
+        "**828 W/m²**",
+        "**1.84 W/m²**",
+        "**约 541 倍**",
     ],
     "design-notes/0001-stellar-parameters.md": [
-        "0.0414 L☉",
-        "0.4665 M☉",
-        "3931 K",
-        "67.3 Gyr",
-        "0.0877",
+        "0.0761 L☉",
+        "0.59 M☉",
+        "4055 K",
+        "37.4 Gyr",
+        "0.1578",
     ],
     "layers/climate/input/long_term_cycles.md": [
-        "**0.66 S⊕**",
-        "日照 899 W/m²",  # drift fix: stale pre-方案2 value was 656
-        "evolution_progress=0.09",  # round0/round2 of 0.0877 (was truncated 0.08)
-        "67.3 Gyr 的 8.8%",
+        "**0.61 S⊕**",
+        "日照 828 W/m²",
+        "evolution_progress=0.16",
+        "37.4 Gyr 的 15.8%",
     ],
 }
 

@@ -30,6 +30,7 @@ error for every physically plausible moon.
 from __future__ import annotations
 
 import logging
+import math
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -686,6 +687,9 @@ def build_system_catalog(
         # highlights it). Its per-body entry in ``bodies`` already carries all
         # derived physics; no role-flattened ``target_parameters`` duplicate.
         catalog["target_body_id"] = planets[0].id
+        sky = _catalog_sky(index, planets, computed_stars)
+        if sky is not None:
+            catalog["sky"] = sky
     if warnings:
         catalog["warnings"] = warnings
     return catalog, warnings
@@ -979,6 +983,260 @@ def _catalog_body_entry(
     if derived:
         entry["derived"] = derived
     return entry
+
+
+def _sky_observation(
+    sky: Any,
+    radius_km: float,
+    albedo: float,
+    observer_distance_au: float,
+    m_star: float,
+    star_flux_w_m2: float,
+    star_body_distance_au: float,
+    star_observer_distance_au: float,
+    phase_angle_rad: float = 0.0,
+) -> tuple[float, float, float]:
+    """One-body sky observation: ``(angular_diameter_deg, apparent_magnitude, illuminance_w_m2)``.
+
+    Assumes a Lambert reflected-body at full phase (``phase_angle_rad=0``) unless
+    overridden.  The ``(D★/a)²`` distance-ratio term in the magnitude uses the
+    body's own heliocentric distance (``star_body_distance_au``) against the
+    observer's (``star_observer_distance_au``).
+    """
+    distance_km = observer_distance_au * sky.AU_KM
+    angular = sky.angular_size(radius_km, distance_km)
+    p = sky.geometric_albedo_from_bond(albedo)
+    magnitude = sky.reflected_apparent_magnitude(
+        star_magnitude=m_star,
+        geometric_albedo=p,
+        radius_km=radius_km,
+        observer_distance_km=distance_km,
+        star_body_distance_au=star_body_distance_au,
+        star_observer_distance_au=star_observer_distance_au,
+        phase_angle_rad=phase_angle_rad,
+    )
+    illuminance = sky.reflected_illuminance_w_m2(
+        star_flux_w_m2=star_flux_w_m2,
+        geometric_albedo=p,
+        radius_km=radius_km,
+        observer_distance_km=distance_km,
+        phase_angle_rad=phase_angle_rad,
+    )
+    return angular, magnitude, illuminance
+
+
+def _catalog_sky(
+    index: _StellarIndex,
+    planets: Sequence[Planet],
+    computed_stars: Mapping[str, Mapping[str, float]] | None,
+) -> dict[str, Any] | None:
+    """Compute the sky view from the target body (``planets[0]``) for the doc templates.
+
+    A ``sky`` catalog section holds each body's angular diameter, apparent
+    magnitude, and full-phase illuminance *as seen from the target body*, plus
+    the eclipse season and stellar parallax.  Document templates render these
+    via ``{{ sky.<body_id>... }}`` so their headline numbers never drift from
+    the derived data (方案 A — sky_phenomena.md / giant_brightness.md /
+    orbital_dynamics.md).  Returns ``None`` when the observer's orbital chain
+    cannot be resolved (no sky view to describe).
+    """
+    from dreamulator.engine import sky_geometry as sky
+
+    if not planets:
+        return None
+    observer_id = planets[0].id
+
+    obs_orbit = index.orbits.get(observer_id)
+    if obs_orbit is None:
+        return None
+    a_obs_au = _as_float(obs_orbit.get("semi_major_axis_au"))
+    obs_inclination_deg = _as_float(obs_orbit.get("inclination_deg"))
+    parent_id = str(obs_orbit.get("parent_id")) if obs_orbit.get("parent_id") is not None else None
+    if a_obs_au is None or parent_id is None:
+        return None
+
+    parent_orbit = index.orbits.get(parent_id)
+    a_parent_au = _as_float(parent_orbit.get("semi_major_axis_au")) if parent_orbit else None
+    if a_parent_au is None:
+        return None
+
+    star_id = _walk_to_star(observer_id, index)
+    if star_id is None:
+        return None
+
+    star_lum = index.luminosities.get(star_id)
+    star_radius_sol = index.radii.get(star_id)
+    if computed_stars and star_id in computed_stars:
+        cs = computed_stars[star_id]
+        if cs.get("luminosity") is not None:
+            star_lum = cs["luminosity"]
+        if cs.get("radius") is not None:
+            star_radius_sol = cs["radius"]
+    if star_lum is None or star_radius_sol is None:
+        return None
+
+    # The observer's heliocentric distance is (to within the moon/planet ratio
+    # error analysed in the module docstring) its host planet's distance.
+    star_distance_au = a_parent_au
+    star_distance_km = star_distance_au * sky.AU_KM
+    star_radius_km = star_radius_sol * sky.SOLAR_RADIUS_KM
+    m_star = sky.stellar_apparent_magnitude(star_lum, star_distance_au)
+    star_flux_w_m2 = instellation(star_lum, star_distance_au)
+
+    planets_by_id = {p.id: p for p in planets}
+    bodies: dict[str, Any] = {}
+
+    # The star itself: angular size + apparent magnitude from the observer.
+    bodies[star_id] = {
+        "radius_km": round(star_radius_km, 0),
+        "distance_km": round(star_distance_km, 0),
+        "angular_diameter_deg": round(sky.angular_size(star_radius_km, star_distance_km), 2),
+        "apparent_magnitude": round(m_star, 2),
+    }
+
+    # The host planet (observer's parent): constant distance a_obs, full phase.
+    parent = planets_by_id.get(parent_id)
+    if parent is not None:
+        angular, magnitude, illuminance = _sky_observation(
+            sky,
+            float(parent.radius) * 6371.0,
+            float(parent.albedo),
+            a_obs_au,
+            m_star,
+            star_flux_w_m2,
+            star_body_distance_au=star_distance_au,
+            star_observer_distance_au=star_distance_au,
+        )
+        bodies[parent_id] = {
+            "distance_km": round(a_obs_au * sky.AU_KM, 0),
+            "angular_diameter_deg": round(angular, 2),
+            "apparent_magnitude_full": round(magnitude, 2),
+            "illuminance_full_w_m2": round(illuminance, 2),
+        }
+
+    # Sibling satellites (same parent) and heliocentric planets.
+    for planet in planets:
+        bid = planet.id
+        if bid in (observer_id, parent_id) or bid == star_id:
+            continue
+        orbit = index.orbits.get(bid)
+        if orbit is None:
+            continue
+        a_b_au = _as_float(orbit.get("semi_major_axis_au"))
+        if a_b_au is None:
+            continue
+        b_parent = str(orbit.get("parent_id")) if orbit.get("parent_id") is not None else None
+        radius_km = float(planet.radius) * 6371.0
+        albedo = float(planet.albedo)
+
+        if b_parent == parent_id:
+            # Sibling satellite: distance ranges [|a_b − a_obs|, a_b + a_obs].
+            d_near_au = abs(a_b_au - a_obs_au)
+            d_far_au = a_b_au + a_obs_au
+            ang_near, magnitude, _ = _sky_observation(
+                sky,
+                radius_km,
+                albedo,
+                d_near_au,
+                m_star,
+                star_flux_w_m2,
+                star_body_distance_au=star_distance_au,
+                star_observer_distance_au=star_distance_au,
+            )
+            ang_far = sky.angular_size(radius_km, d_far_au * sky.AU_KM)
+            bodies[bid] = {
+                "distance_km_near": round(d_near_au * sky.AU_KM, 0),
+                "distance_km_far": round(d_far_au * sky.AU_KM, 0),
+                "angular_diameter_deg_near": round(ang_near, 2),
+                "angular_diameter_deg_far": round(ang_far, 2),
+                "apparent_magnitude_full": round(magnitude, 2),
+            }
+        elif b_parent == star_id:
+            # Heliocentric planet: closest approach = |a_b − a_parent| (opposition
+            # for outer planets, inferior conjunction for inner).  Inner planets
+            # are brightest at greatest elongation (phase ≈ elongation); outer at
+            # opposition (phase ≈ 0).
+            if a_b_au > a_parent_au:
+                d_near_au = a_b_au - a_parent_au
+                angular, magnitude, _ = _sky_observation(
+                    sky,
+                    radius_km,
+                    albedo,
+                    d_near_au,
+                    m_star,
+                    star_flux_w_m2,
+                    star_body_distance_au=a_b_au,
+                    star_observer_distance_au=star_distance_au,
+                )
+                bodies[bid] = {
+                    "distance_au_opposition": round(d_near_au, 3),
+                    "angular_diameter_arcmin": round(angular * 60.0, 1),
+                    "apparent_magnitude_opposition": round(magnitude, 1),
+                }
+            else:
+                elongation_rad = math.asin(a_b_au / a_parent_au)
+                d_elong_au = math.sqrt(a_parent_au**2 - a_b_au**2)
+                angular, magnitude, _ = _sky_observation(
+                    sky,
+                    radius_km,
+                    albedo,
+                    d_elong_au,
+                    m_star,
+                    star_flux_w_m2,
+                    star_body_distance_au=a_b_au,
+                    star_observer_distance_au=star_distance_au,
+                    phase_angle_rad=elongation_rad,
+                )
+                bodies[bid] = {
+                    "elongation_deg": round(math.degrees(elongation_rad), 1),
+                    "angular_diameter_arcmin": round(angular * 60.0, 1),
+                    "apparent_magnitude_elongation": round(magnitude, 1),
+                }
+        # else: satellite of another planet — not part of this sky view.
+
+    # Body views are flattened into the sky namespace keyed by stable id
+    # (``sky.planet_aegis.angular_diameter_deg``); the reserved ``eclipse`` and
+    # ``parallax_deg`` keys hold the non-body phenomena.  ``observer_id`` is
+    # kept for self-description (it also appears as ``target_body_id``).
+    result: dict[str, Any] = {"observer_id": observer_id, **bodies}
+
+    # Eclipse season (host planet occulting the star) + stellar parallax.
+    parent_radius_km = float(parent.radius) * 6371.0 if parent is not None else None
+    observer_radius_km = (
+        float(planets_by_id[observer_id].radius) * 6371.0 if observer_id in planets_by_id else None
+    )
+    if (
+        parent_radius_km is not None
+        and observer_radius_km is not None
+        and obs_inclination_deg is not None
+        and star_radius_km > parent_radius_km
+    ):
+        umbra_length = sky.umbra_length_km(parent_radius_km, star_radius_km, star_distance_km)
+        a_obs_km = a_obs_au * sky.AU_KM
+        umbra_at_orbit = sky.umbra_radius_at_distance_km(parent_radius_km, umbra_length, a_obs_km)
+        season_fraction = sky.eclipse_season_fraction(
+            math.radians(obs_inclination_deg), umbra_at_orbit, observer_radius_km, a_obs_km
+        )
+        max_offset_km = a_obs_km * math.sin(math.radians(obs_inclination_deg))
+        eclipse: dict[str, Any] = {
+            "umbra_length_km": round(umbra_length, 0),
+            "umbra_radius_at_orbit_km": round(umbra_at_orbit, 0),
+            "max_vertical_offset_km": round(max_offset_km, 0),
+            "eclipse_threshold_km": round(umbra_at_orbit + observer_radius_km, 0),
+            "season_fraction": round(season_fraction, 3),
+        }
+        parent_mass_earth = index.body_masses.get(parent_id)
+        if parent_mass_earth is not None and parent_mass_earth > 0:
+            period_days = kepler_orbital_period(a_obs_au, parent_mass_earth * EARTH_MASS_SOL)
+            orbit_speed_kmh = 2.0 * math.pi * a_obs_km / (period_days * 24.0)
+            eclipse["orbit_speed_kmh"] = round(orbit_speed_kmh, 0)
+            eclipse["max_total_eclipse_hours"] = round(2.0 * umbra_at_orbit / orbit_speed_kmh, 1)
+        result["eclipse"] = eclipse
+
+    result["parallax_deg"] = round(
+        sky.stellar_parallax_deg(a_obs_au * sky.AU_KM, star_distance_km), 2
+    )
+    return result
 
 
 def resolve_tidal_heating(

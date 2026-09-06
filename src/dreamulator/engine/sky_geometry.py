@@ -20,17 +20,30 @@ from dreamulator.query_registry import query
 
 __all__ = [
     "AU_KM",
+    "SOLAR_RADIUS_KM",
     "SkyPosition",
     "angular_size",
     "apparent_illuminance",
+    "eclipse_season_fraction",
+    "geometric_albedo_from_bond",
     "hill_radius",
+    "lambert_phase",
+    "reflected_apparent_magnitude",
+    "reflected_illuminance_w_m2",
     "sky_position",
+    "stellar_apparent_magnitude",
+    "stellar_parallax_deg",
     "tidal_amplitude",
     "transit_classification",
+    "umbra_length_km",
+    "umbra_radius_at_distance_km",
 ]
 
 # 天文单位（km）。
 AU_KM = 149_597_870.7
+
+# 太阳半径（km）。
+SOLAR_RADIUS_KM = 695_700.0
 
 # 潮汐锁定卫星上，母行星固定在天空的「正下点」——约定本初子午线（lon=0, lat=0）
 # 正对母行星。轴向倾角会把正下点的纬度按季节在 ±tilt 摆动，这里取「平均位置」
@@ -218,10 +231,12 @@ def apparent_illuminance(
     observer = entities[observer_id]
     target = entities[target_id]
     flux = float(observer["instellation_w_m2"])
-    p = (2.0 / 3.0) * float(target["albedo"])  # 几何反照率（Lambert 假设）
+    p = geometric_albedo_from_bond(float(target["albedo"]))
     r = float(target["radius_km"])
     d = float(observer["semi_major_axis_au"]) * AU_KM
-    return flux * p * (r / d) ** 2
+    return reflected_illuminance_w_m2(
+        star_flux_w_m2=flux, geometric_albedo=p, radius_km=r, observer_distance_km=d
+    )
 
 
 class TidalAmplitudeParams(BaseModel):
@@ -240,3 +255,135 @@ class TidalAmplitudeParams(BaseModel):
 def tidal_amplitude(m_parent_kg: float, m_sat_kg: float, a_m: float, r_sat_m: float) -> float:
     """卫星平衡潮差（m）——潮汐锁定卫星的静态潮汐隆起高度（Murray & Dermott 1999）。"""
     return 1.5 * (m_parent_kg / m_sat_kg) * (r_sat_m / a_m) ** 3 * r_sat_m
+
+
+# ---------------------------------------------------------------------------
+# 光度 / 本影 / 食季 / 视差原语（方案 A：天象派生量进 derived catalog）
+# ---------------------------------------------------------------------------
+#
+# 这些是「天空可视量」的纯计算：视星等、反照率、本影几何、食季、恒星视差。
+# 与上面的「拷问原语」不同，它们直接服务 build_system_catalog 的 derived sky 段
+# （模板渲染 sky_phenomena.md / giant_brightness.md 等），故不做 @query 注册
+# （不是守护轴「有哪些查询」的索引项）。公式与锚定值均出自 nacrea 的
+# sky_phenomena.md / giant_brightness.md / orbital_dynamics.md。
+
+
+def geometric_albedo_from_bond(bond_albedo: float) -> float:
+    """Lambert 球几何反照率 ``p = (2/3)·A_Bond``。
+
+    视星等/照度计算需要几何反照率；Bond 反照率（``planets.yaml`` 设定值）按 Lambert
+    散射假设换算（sky_phenomena.md 反照率约定）。真实后向散射天体（气态巨行星）的 p
+    更高，满相亮度相应再亮 0.3–0.5 等，Lambert 值为保守基准。
+    """
+    return (2.0 / 3.0) * bond_albedo
+
+
+def lambert_phase(phase_angle_rad: float) -> float:
+    """Lambert 相位函数 ``Φ(α) = [sin α + (π−α)cos α] / π``（Φ(0)=1）。
+
+    α=0 满相、α=π/2 半相（Φ=1/π≈0.318）、α=π 新相（Φ=0）。
+    """
+    return (
+        math.sin(phase_angle_rad) + (math.pi - phase_angle_rad) * math.cos(phase_angle_rad)
+    ) / math.pi
+
+
+def stellar_apparent_magnitude(luminosity_sol: float, distance_au: float) -> float:
+    """恒星视星等（以太阳在 1 AU 处 −26.74 等为基准）。
+
+    ``m = −26.74 − 2.5·log10(L) + 5·log10(d_AU)``（sky_phenomena.md）。锚定值：
+    Ignis（L=0.0761, d=0.3536 AU）→ ≈ −26.20。
+    """
+    return -26.74 - 2.5 * math.log10(luminosity_sol) + 5.0 * math.log10(distance_au)
+
+
+def reflected_apparent_magnitude(
+    *,
+    star_magnitude: float,
+    geometric_albedo: float,
+    radius_km: float,
+    observer_distance_km: float,
+    star_body_distance_au: float,
+    star_observer_distance_au: float,
+    phase_angle_rad: float = 0.0,
+) -> float:
+    """反射光视星等（满相 α=0 默认）。
+
+    ``m = m★ − 2.5·log10[ p·Φ(α)·(R/Δ)²·(D★/a)² ]``（sky_phenomena.md），其中 Δ 为
+    天体–观测者距离、a 为天体–恒星距离、D★ 为恒星–观测者距离。锚定值：Aegis 满相
+    ≈ −19.6（sky_phenomena.md §2）。
+    """
+    term = (
+        geometric_albedo
+        * lambert_phase(phase_angle_rad)
+        * (radius_km / observer_distance_km) ** 2
+        * (star_observer_distance_au / star_body_distance_au) ** 2
+    )
+    return star_magnitude - 2.5 * math.log10(term)
+
+
+def reflected_illuminance_w_m2(
+    *,
+    star_flux_w_m2: float,
+    geometric_albedo: float,
+    radius_km: float,
+    observer_distance_km: float,
+    phase_angle_rad: float = 0.0,
+) -> float:
+    """满相反射光照度（W/m²，满相 α=0 默认）。
+
+    ``F = F★·p·Φ(α)·(R/Δ)²``（giant_brightness.md）。锚定值：Aegis 满相 ≈ 1.9 W/m²。
+    """
+    return (
+        star_flux_w_m2
+        * geometric_albedo
+        * lambert_phase(phase_angle_rad)
+        * (radius_km / observer_distance_km) ** 2
+    )
+
+
+def umbra_length_km(
+    radius_occulting_km: float, radius_star_km: float, star_distance_km: float
+) -> float:
+    """本影锥长度（km）：``L = R_occ·d★ / (R★ − R_occ)``（sky_phenomena.md §5）。
+
+    掩蔽体半径须小于恒星半径（否则无本影锥）。
+    """
+    return radius_occulting_km * star_distance_km / (radius_star_km - radius_occulting_km)
+
+
+def umbra_radius_at_distance_km(
+    radius_occulting_km: float, umbra_length_km: float, distance_from_occulting_km: float
+) -> float:
+    """距掩蔽体 ``d`` 处的本影半径（km）：``r = R_occ·(L − d)/L``。
+
+    ``d < L`` 时为正（本影内），``d > L`` 时本影已收束（仅半影）。
+    """
+    return radius_occulting_km * (umbra_length_km - distance_from_occulting_km) / umbra_length_km
+
+
+def eclipse_season_fraction(
+    inclination_rad: float,
+    umbra_radius_at_orbit_km: float,
+    satellite_radius_km: float,
+    semi_major_axis_km: float,
+) -> float:
+    """每个升/降交点食季占全轨道周期的比例（0–1）。
+
+    卫星最大黄纬 ``a·sin(i)``；食发生阈值 = 本影半径 + 卫星半径；
+    ``fraction = arcsin(threshold / max_offset) / π``（sky_phenomena.md §5）。低倾角
+    （max_offset ≤ threshold）→ 恒食，返回 1.0。
+    """
+    max_offset_km = semi_major_axis_km * math.sin(inclination_rad)
+    threshold_km = umbra_radius_at_orbit_km + satellite_radius_km
+    if max_offset_km <= threshold_km:
+        return 1.0
+    return math.asin(threshold_km / max_offset_km) / math.pi
+
+
+def stellar_parallax_deg(orbit_radius_km: float, star_distance_km: float) -> float:
+    """卫星绕行星公转引起的恒星视差角（度，半幅）：``atan(a_moon / d★)``。
+
+    orbital_dynamics.md「视差摆动」：绕行星公转半径对恒星方向的调制。
+    """
+    return math.degrees(math.atan(orbit_radius_km / star_distance_km))
