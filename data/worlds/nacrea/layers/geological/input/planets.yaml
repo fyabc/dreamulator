@@ -196,7 +196,7 @@ planets:
     mass: 508.5                   # 1.6 M_J × 317.83 M⊕/M_J
     radius: 11.2                  # ~1.0 R_J (Fortney et al. 2007, 1.6 M_J 冷气态巨行星)
     rotation_period_days: 0.4167  # ~10 hours
-    axial_tilt_deg: 3.0
+    axial_tilt_deg: 9.0           # 与 stellar.yaml 对齐：Aegis 自转轴倾 9°，Nacrea 沿赤道面轨道继承此倾角驱动季节
     albedo: 0.343                 # Jupiter-like Bond albedo
     atmosphere:
       surface_pressure_atm: 1000.0

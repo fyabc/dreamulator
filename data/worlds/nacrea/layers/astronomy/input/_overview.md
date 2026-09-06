@@ -5,7 +5,7 @@ type: overview
 
 # Nacrea 恒星系天文学
 
-恒星 Ignis (M1V 红矮星) 和巨行星 Aegis 的结构化参数已在 `stellar.yaml` 中定义。
+恒星 Ignis (K8 橙矮星) 和巨行星 Aegis 的结构化参数已在 `stellar.yaml` 中定义。
 本目录收录 YAML 无法表达的长篇描述性内容。
 
 ## 文档索引

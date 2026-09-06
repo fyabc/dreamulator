@@ -2,13 +2,15 @@
 title: "偏心率设定依据"
 type: design
 tags: [eccentricity, resonance, tidal-circularization]
-status: accepted
+status: superseded by 0007
 checked_against:
   astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
   geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
 ---
 
 # 0002 · 偏心率设定依据
+
+> Aegis 偏心率（0.005→0.03）与 Nacrea 偏心率（0.002→0.0019）已被 [0007](0007-aegis-seasonal-eccentricity.md) 取代。
 
 本文档记录 Nacrea 系统各行星偏心率的设定理由与物理机制。
 

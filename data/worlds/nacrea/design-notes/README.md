@@ -22,10 +22,11 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 
 | 编号 | 决策 | 状态 |
 |------|------|------|
-| [0001](0001-stellar-parameters.md) | 恒星与行星系参数设计决策 | accepted |
-| [0002](0002-eccentricity.md) | 偏心率设定依据 | accepted |
+| [0001](0001-stellar-parameters.md) | 恒星与行星系参数设计决策 | superseded by 0007 |
+| [0002](0002-eccentricity.md) | 偏心率设定依据 | superseded by 0007 |
 | [0003](0003-system-formation.md) | 系统形成史与共振验证 | accepted |
 | [0004](0004-satellite-systems.md) | 其他行星的卫星系统设计 | proposed |
 | [0005](0005-orbital-inclination.md) | 轨道倾角 9° 的设定原因 | accepted |
 | [0006](0006-habitability-protection.md) | 红矮星环境下的宜居保护（耀斑生存 + 撞击概率） | accepted |
-| [0007](0007-aegis-seasonal-eccentricity.md) | Aegis 偏心率调高（距离季主导的半球不对称季节） | proposed |
+| [0007](0007-aegis-seasonal-eccentricity.md) | Nacrea 天文系统调参（季节增强 + 轨道稳定） | accepted |
+| [0008](0008-circulation-critical-instabilities.md) | 单圈环流的临界不稳定性（弱斜压 + 赤道超旋转，未来丰富设定源） | proposed |

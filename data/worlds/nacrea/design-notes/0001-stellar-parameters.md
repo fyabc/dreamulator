@@ -2,13 +2,15 @@
 title: "恒星与行星系参数设计决策"
 type: design
 tags: [stellar, parameters, design-rationale]
-status: accepted
+status: superseded by 0007
 checked_against:
   astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
   geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
 ---
 
 # 0001 · 恒星与行星系参数设计决策
+
+> Ignis 参数（光度/质量/光谱型）与 Aegis 半长轴已被 [0007](0007-aegis-seasonal-eccentricity.md) 取代。
 
 本文档记录恒星和行星系核心参数的设计选择与调整理由。
 

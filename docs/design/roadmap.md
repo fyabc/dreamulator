@@ -153,6 +153,7 @@
 | P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上；`query_registry` 补 `context=None` 物理/化学 verifier 原语——配平、密度-温度、能量预算等，作 `ai critique` 确定性取证底座。见 [harness.md](proposals/harness.md) §9.4） | 内核 0.5 周，随 `ai` 命令组（P2）推进 | ★★ |
 | P2 | **基于地质时间的板块运动演化**（古造山带/断陷自然涌现）：当前内部古造山带/裂谷/断陷是 `_apply_interior_landforms` **手动随机放置**（`geological-pipeline.md` §6.2），非从数亿年板块运动自然涌现。目标：把 tectonic 演化（Cortial 2019，当前 50 步预览）延展到数亿年尺度，让汇聚造山/离散裂谷/断陷随板块漂移-碰撞-裂解**自然生成**，去掉手动造山带。**与手动指定主体地形的冲突**：geography.yaml 锚定静态海陆格局，而「自然涌现」要求地形随演化漂移——两者矛盾。需调研：① 区分「指定模式」（geography 锚定 + 静态地形）vs「演化模式」（无锚定 + 动态地形）两种模式；② 或混合（锚定大陆骨架，板块边界/造山带由演化涌现）。参考 GPlates（板块重建）、Underworld2（岩石圈动力学）。与「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2）关联 | 设计 1–2 周 + 实现远期 | ★★★ |
 | P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，其中 **tectonics（50 步演化 + 加权 Voronoi 重采样）~105 s 占主导**，terrain ~44 s、mesh ~33 s、export ~27 s、plates ~13 s。先 profile 各段瓶颈（tectonics 逐步重采样、terrain 逐 cell Python 循环 + fBm、mesh SphericalVoronoi 构建），再定优化策略（Numba/向量化/并行/降演化步数）。交互性（秒~分钟）是硬约束，但不能以牺牲正确性为代价（引擎纪律 4） | 评估 0.5 周 | ★★ |
+| P3 | **GCM PoC 能正常跑起来**（`climate-gcm-plan.md` 离线 oracle 前提）：ExoPlaSim PoC 目前风场退化（~1e-5 m/s，温度场有、环流全零，根因未明），只能定性、不能定量可回填。目标：让 PoC 跑到非退化环流，使 GCM 能当 offline oracle 扫 Ω/倾角/光度参数空间。障碍与已修 3 个脚本 bug 见 `private/external-projects/exoplasim_poc/README.md`。定性结论（单圈 @Ω=0.31）已用 Kaspi & Showman (2015) 文献兜底 | 远期（调试类） | ★★ |
 
 ---
 
