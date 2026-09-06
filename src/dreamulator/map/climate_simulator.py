@@ -340,9 +340,16 @@ def simulate_climate(
         )[land_mask_arr]
         lapse_arr[_sub] = config.subtropical_lapse_rate_c_km
         lapse = lapse_arr
+    # The lapse rate is an atmospheric cooling-with-altitude effect and only
+    # applies *above* sea level.  Below-sea-level "land" cells (Antarctic ice
+    # whose stored elevation is the bedrock, below-sea-level endorheic basins,
+    # and island cells whose centre samples the surrounding shelf) must not be
+    # *warmed* by extrapolating Γ below h = 0 — that turns a −2.9 km ocean-floor
+    # sample into a spurious +19 °C hot spot.  Clamp to sea level.
+    _elev_above_sea = np.maximum(elevation_m[land_mask_arr], 0.0)
     t_mean_C[land_mask_arr] = altitude_lapse_rate(
         t_mean_C[land_mask_arr],
-        elevation_m[land_mask_arr],
+        _elev_above_sea,
         lapse,
     )
 
