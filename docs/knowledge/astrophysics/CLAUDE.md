@@ -5,6 +5,7 @@
 - `lagrange_points.md` — 特洛伊天体与拉格朗日点
 - `stellar_physics.md` — 质光关系、主序星演化、宜居带
 - `sidereal_solar_day.md` — 恒星日 vs 太阳日（synodic day）换算、潮汐锁定特例、极昼/极夜时长公式、对引擎的启示
+- `orbital-stability.md` — 轨道稳定性 N-body 验证（REBOUND 脚本用法、共振链、希尔球稳定上限）
 
 ## 规划中的文档
 

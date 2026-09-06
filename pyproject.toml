@@ -41,6 +41,9 @@ dev = [
     "pre-commit>=4.0",
     "httpx>=0.28",
     "types-PyYAML>=6.0",
+    # N-body orbit integration (REBOUND) for the Nacrea spin-orbit / Cassini
+    # calibration — a dev/calibration tool, not a runtime engine dependency.
+    "rebound>=4.0",
 ]
 narrate = [
     "anthropic>=0.40",
