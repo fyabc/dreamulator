@@ -300,11 +300,11 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
 6. **合并到 main 后再推送**：用户验证通过 → merge 到 main → `git push`。
 7. **构建产物不入 git（GitHub Releases 发布）**：`maps/` 与 `layers/*/derived/` 是「input + 代码 +
-   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。调参期间在 `private/worlds`
-   构建；发版前跑 `uv run python scripts/publish_world_data.py` 把 maps + derived 打包上传到固定
-   release tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push
-   会影响数据的输入改动**，否则 Pages 拿到旧数据。读取 mesh 仍用 `decompress_mesh_bytes`（透明解压，
-   兼容纯 JSON）。LFS 历史清理（`.gitattributes` 移除 + history rewrite）待单独做。
+   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略，`private/worlds` 已不再需要）。
+   直接在 `data/worlds` 构建（输出被 ignore、不污染工作区）；发版前跑
+   `uv run python scripts/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
+   tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
+   input 改动**，否则 Pages 拿到旧数据。读取 mesh 仍用 `decompress_mesh_bytes`（透明解压，兼容纯 JSON）。
 
 ### 气候修改差异对比
 
