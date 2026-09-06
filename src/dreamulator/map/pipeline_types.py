@@ -432,6 +432,21 @@ class TerrainPipelineConfig:
     greenhouse_warming_K: float = 33.0  # additional greenhouse warming (K)
     lapse_rate_c_km: float = 6.5  # moist adiabatic lapse rate (°C/km)
     variable_lapse_rate: bool = False  # True = T-dependent Γ (tropical highlands warmer)
+    # Subtropical dry-desert surface lapse rate (°C/km), 4.2-①: the subsiding
+    # desert's *surface* temperature is set by radiative balance, not the free-
+    # atmosphere lapse rate, so its effective surface lapse rate is smaller than
+    # the moist 6.5 (subsidence offsets the altitude cooling; observed desert
+    # lapse ~3-4 °C/km, Sudan stations Frontiers 2022).  Applied to land cells in
+    # the Hadley descent band (|lat| 15-35°).  Default 3.5.
+    subtropical_lapse_rate_c_km: float = 3.5
+    subtropical_lapse_lat_lo_deg: float = 15.0  # dry-desert belt lower bound (°)
+    subtropical_lapse_lat_hi_deg: float = 35.0  # dry-desert belt upper bound (°)
+    # Dry-air surface warming (°C) for the same subtropical desert belt (4.2-①):
+    # the dry surface has no evaporative cooling, so its radiative balance sits
+    # hotter than the moist area-weighted mean that the Held-Hou homogenisation
+    # (§4.2) flattens to — the remaining ~2 °C desert cold after the lapse-rate
+    # fix.  Applied to land in |lat| 15-35°.
+    subtropical_dry_warming_c: float = 0.0  # 0 = off (deferred: needs aridity, a 2-way coupling)
     lat_gradient_c: float = 40.0  # equator-to-pole temperature difference (°C)
     # Circulation cell boundaries (3A.3a).  Earth: Hadley 0–30°, Ferrel 30–60°,
     # Polar 60–90°.  Slow rotators (weak Coriolis) get an expanded Hadley cell

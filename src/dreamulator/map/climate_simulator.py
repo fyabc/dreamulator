@@ -218,6 +218,17 @@ def simulate_climate(
                     * _w[land_mask_arr]
                     * (t_cell - t_mean_C[land_mask_arr])
                 )
+            # ── 4.2-①: dry-air surface warming (subtropical desert) ──
+            # The dry desert has no evaporative cooling, so its radiative balance
+            # sits hotter than the moist area-weighted mean the Held-Hou
+            # homogenisation flattens to — the remaining ~2 °C desert cold.
+            if config.subtropical_dry_warming_c > 0.0:
+                _dry = (
+                    land_mask_arr
+                    & (np.abs(lat_deg) >= config.subtropical_lapse_lat_lo_deg)
+                    & (np.abs(lat_deg) <= config.subtropical_lapse_lat_hi_deg)
+                )
+                t_mean_C[_dry] += config.subtropical_dry_warming_c
     else:
         # ── 3A.3a: auto-compute latitudinal gradient from rotation rate? ──
         if config.auto_lat_gradient:
@@ -316,6 +327,19 @@ def simulate_climate(
     lapse: float | np.ndarray = config.lapse_rate_c_km
     if config.variable_lapse_rate:
         lapse = moist_lapse_rate(t_mean_C[land_mask_arr])
+    # Subtropical dry-desert surface lapse rate (4.2-①): subsidence offsets the
+    # free-atmosphere lapse rate, so the dry desert cools less with elevation.
+    if config.subtropical_lapse_rate_c_km < config.lapse_rate_c_km:
+        lapse_arr = np.full(
+            int(land_mask_arr.sum()), float(config.lapse_rate_c_km), dtype=np.float64
+        )
+        lapse_arr[:] = lapse  # scalar → broadcast; array → copy (land cells)
+        _sub = (
+            (np.abs(lat_deg) >= config.subtropical_lapse_lat_lo_deg)
+            & (np.abs(lat_deg) <= config.subtropical_lapse_lat_hi_deg)
+        )[land_mask_arr]
+        lapse_arr[_sub] = config.subtropical_lapse_rate_c_km
+        lapse = lapse_arr
     t_mean_C[land_mask_arr] = altitude_lapse_rate(
         t_mean_C[land_mask_arr],
         elevation_m[land_mask_arr],
