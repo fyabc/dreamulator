@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from './LanguageSwitcher'
+import { useDevModeStore } from '../stores/devModeStore'
+import { isStaticMode } from '../api/mode'
 
 interface SidebarProps {
   open: boolean
@@ -17,6 +19,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation()
   const { t } = useTranslation()
+  const devMode = useDevModeStore((s) => s.devMode)
+  const setDevMode = useDevModeStore((s) => s.setDevMode)
 
   // Extract world name from path if we're in a world context
   const worldMatch = location.pathname.match(/^\/worlds\/([^/]+)/)
@@ -172,6 +176,22 @@ export default function Sidebar({
         <div className={collapsed ? 'md:hidden' : ''}>
           <LanguageSwitcher />
         </div>
+        {/* Developer-mode toggle — reveals diagnostic layers (ΔT/ΔP error heatmaps).
+            Hidden in static mode: the public read-only release has no diagnostic
+            layers to expose. */}
+        {!isStaticMode() && (
+          <div className={['mt-2', collapsed ? 'md:hidden' : ''].join(' ')}>
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={devMode}
+                onChange={(e) => setDevMode(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span>{t('devMode.toggle')}</span>
+            </label>
+          </div>
+        )}
       </div>
     </aside>
   )

@@ -63,5 +63,8 @@
     "step3Desc": "在世界详情页打开地图查看器、3D 球面或恒星系视图",
     "myWorlds": "我的世界",
     "footerBuilt": "构建于"
+  },
+  "devMode": {
+    "toggle": "开发者模式"
   }
 }

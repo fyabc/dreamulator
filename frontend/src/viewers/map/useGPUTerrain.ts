@@ -179,7 +179,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -277,6 +277,7 @@ export default function useGPUTerrain({
     (layers.habitable ?? 0) > 0 || (layers.agriculture ?? 0) > 0 ||
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
+    (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
@@ -293,6 +294,7 @@ export default function useGPUTerrain({
     (layers.habitable ?? 0) > 0 || (layers.agriculture ?? 0) > 0 ||
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
+    (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
@@ -327,6 +329,8 @@ export default function useGPUTerrain({
       [layers.provinces, baked.provinces],
       [layers.temperature, monthlyTemperature ?? baked.temperature],
       [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
+      [layers.temperatureError, baked.temperatureError],
+      [layers.precipitationError, baked.precipitationError],
       [layers.pressure, monthlyPressure ?? baked.pressure],
     ]
     let activeThematic = baked.terrainThematic

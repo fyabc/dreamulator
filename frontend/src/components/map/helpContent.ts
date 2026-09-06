@@ -71,6 +71,9 @@ export interface LayerHelpEntry {
   /** Layer exists only in monthly mode — no annual counterpart (e.g. pressure
    *  anomaly, whose annual-mean ΔP ≈ 0). Selecting it auto-enables monthly. */
   monthlyOnly?: boolean
+  /** Diagnostic layer for engine authors, hidden unless developer mode is on
+   *  (e.g. the ΔT/ΔP error heatmaps vs ERA5/GPCP). */
+  devOnly?: boolean
 }
 
 export const LAYER_HELP: LayerHelpEntry[] = [
@@ -147,6 +150,26 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     kind: 'thematic',
     group: 'climate',
     monthlyCapable: true,
+  },
+  {
+    id: 'temperatureError',
+    label: 'help:layer.temperatureError.label',
+    desc: 'help:layer.temperatureError.desc',
+    detail: 'help:layer.temperatureError.detail',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'climate',
+    devOnly: true,
+  },
+  {
+    id: 'precipitationError',
+    label: 'help:layer.precipitationError.label',
+    desc: 'help:layer.precipitationError.desc',
+    detail: 'help:layer.precipitationError.detail',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'climate',
+    devOnly: true,
   },
   {
     id: 'pressure',

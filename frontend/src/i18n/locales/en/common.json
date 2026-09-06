@@ -63,5 +63,8 @@
     "step3Desc": "Open the map viewer, 3D globe or stellar system view from the world detail page",
     "myWorlds": "My Worlds",
     "footerBuilt": "Built on"
+  },
+  "devMode": {
+    "toggle": "Developer mode"
   }
 }

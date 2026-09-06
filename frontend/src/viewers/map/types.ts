@@ -141,6 +141,8 @@ export type MapLayerType =
   | 'terrain'
   | 'temperature'
   | 'precipitation'
+  | 'temperatureError'
+  | 'precipitationError'
   | 'biomes'
   | 'plates'
   | 'provinces'

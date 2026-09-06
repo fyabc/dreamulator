@@ -26,6 +26,7 @@ import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
+import { zonalTempAt, zonalPrecipAt } from './zonalReference'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
@@ -122,6 +123,10 @@ export interface LayerTextures {
   temperature: THREE.DataTexture
   /** Annual precipitation thematic (per-cell continuous, log-scaled). Half res. */
   precipitation: THREE.DataTexture
+  /** ΔT error (model − zonal observed, diverging). Earth-only diagnostic. */
+  temperatureError: THREE.DataTexture
+  /** ΔP error (model − zonal observed, diverging). Earth-only diagnostic. */
+  precipitationError: THREE.DataTexture
   /** Annual mean sea-level pressure thematic (per-cell continuous). Half res. */
   pressure: THREE.DataTexture
   /** Drainage / flow accumulation thematic (per-cell continuous, log-scaled). Half res. */
@@ -185,6 +190,7 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
     t.habitable.dispose(); t.agriculture.dispose()
     t.soil.dispose(); t.provinces.dispose()
     t.temperature.dispose(); t.precipitation.dispose()
+    t.temperatureError.dispose(); t.precipitationError.dispose()
     t.flow.dispose()
     t.rivers.dispose()
     t.terrainWithCoastlines.dispose()
@@ -285,6 +291,8 @@ function buildCellPalettes(
   provinces: Map<number, [number, number, number]>
   temperature: Map<number, [number, number, number]>
   precipitation: Map<number, [number, number, number]>
+  temperatureError: Map<number, [number, number, number]>
+  precipitationError: Map<number, [number, number, number]>
   pressure: Map<number, [number, number, number]>
   flow: Map<number, [number, number, number]>
   rivers: Map<number, [number, number, number]>
@@ -304,6 +312,8 @@ function buildCellPalettes(
   const provinces = new Map<number, [number, number, number]>()
   const temperature = new Map<number, [number, number, number]>()
   const precipitation = new Map<number, [number, number, number]>()
+  const temperatureError = new Map<number, [number, number, number]>()
+  const precipitationError = new Map<number, [number, number, number]>()
   const pressure = new Map<number, [number, number, number]>()
   const flow = new Map<number, [number, number, number]>()
   const rivers = new Map<number, [number, number, number]>()
@@ -475,6 +485,22 @@ function buildCellPalettes(
       )
     }
 
+    // ΔT / ΔP error vs zonal observed (Earth-only diagnostic) — diverging,
+    // blue = model too cold/dry, red = model too warm/wet.  Fixed ranges so
+    // the colour stays comparable across regions (like the pressure anomaly).
+    if (tC != null && !isOcean) {
+      temperatureError.set(
+        cell.id,
+        sequentialColor((tC - zonalTempAt(cell.lat) + 20) / 40, TEMPERATURE_SCALE),
+      )
+    }
+    if (pMm != null && !isOcean) {
+      precipitationError.set(
+        cell.id,
+        sequentialColor((pMm - zonalPrecipAt(cell.lat) + 2000) / 4000, TEMPERATURE_SCALE),
+      )
+    }
+
     // Annual-mean sea-level pressure — continuous, ocean + land (the subtropical
     // highs sit over the ocean).  ~980–1035 hPa mapped linearly, reusing the
     // temperature scale until a dedicated pressure palette exists.
@@ -507,7 +533,8 @@ function buildCellPalettes(
 
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
            coastlines, biomes, npp, domesticable, habitable, agriculture,
-           soil, provinces, temperature, precipitation, pressure, flow, rivers }
+           soil, provinces, temperature, precipitation, temperatureError,
+           precipitationError, pressure, flow, rivers }
 }
 
 /**
@@ -677,6 +704,8 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let provincesBuf: Uint8Array = empty
   let temperatureBuf: Uint8Array = empty
   let precipitationBuf: Uint8Array = empty
+  let temperatureErrorBuf: Uint8Array = empty
+  let precipitationErrorBuf: Uint8Array = empty
   let pressureBuf: Uint8Array = empty
   let flowBuf: Uint8Array = empty
   let riversBuf: Uint8Array = empty
@@ -698,6 +727,8 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     provincesBuf = bakeCellLayer(palettes.provinces, width, height, cellIdMap, flipHorizontal)
     temperatureBuf = bakeCellLayer(palettes.temperature, width, height, cellIdMap, flipHorizontal)
     precipitationBuf = bakeCellLayer(palettes.precipitation, width, height, cellIdMap, flipHorizontal)
+    temperatureErrorBuf = bakeCellLayer(palettes.temperatureError, width, height, cellIdMap, flipHorizontal)
+    precipitationErrorBuf = bakeCellLayer(palettes.precipitationError, width, height, cellIdMap, flipHorizontal)
     pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
     flowBuf = bakeCellLayer(palettes.flow, width, height, cellIdMap, flipHorizontal)
     riversBuf = bakeCellLayer(palettes.rivers, width, height, cellIdMap, flipHorizontal)
@@ -756,6 +787,8 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     provinces: makeTexture(provincesBuf, kw, kh, { nearestMag: true }),
     temperature: makeTexture(temperatureBuf, kw, kh),
     precipitation: makeTexture(precipitationBuf, kw, kh),
+    temperatureError: makeTexture(temperatureErrorBuf, kw, kh),
+    precipitationError: makeTexture(precipitationErrorBuf, kw, kh),
     pressure: makeTexture(pressureBuf, kw, kh),
     flow: makeTexture(flowBuf, kw, kh),
     rivers: makeTexture(riversBuf, kw, kh, { nearestMag: true }),

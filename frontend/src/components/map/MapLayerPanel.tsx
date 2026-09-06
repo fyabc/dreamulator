@@ -20,6 +20,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import { LAYER_HELP, LAYER_GROUPS, type LayerHelpEntry } from './helpContent'
+import { useDevModeStore } from '../../stores/devModeStore'
 
 type LayerOpacities = Record<ColorMode, number>
 
@@ -138,17 +139,18 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, mo
     return <span className={`shrink-0 text-[9px] ${dimmed ? 'text-amber-300/40' : 'text-amber-300/70'}`}>·{monthName}</span>
   }
 
+  const devMode = useDevModeStore((s) => s.devMode)
   const groups = useMemo<LayerGroup[]>(
     () =>
       LAYER_GROUPS.map((g) => {
-        const members = LAYER_HELP.filter((l) => l.group === g.id)
+        const members = LAYER_HELP.filter((l) => l.group === g.id && (!l.devOnly || devMode))
         return {
           ...g,
           radioMembers: members.filter(isRadioKind),
           toggleMembers: members.filter((l) => !isRadioKind(l)),
         }
       }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
-    [],
+    [devMode],
   )
 
   const opacityOf = useCallback(
