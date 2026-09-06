@@ -247,10 +247,12 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     p_monthly = _sample_monthly(p_arr, p_lat, p_lon, lats, lons).T  # (N, 12), mm/month
     p_annual = p_monthly.sum(axis=1)
 
-    # 4. Pressure anomaly (NCEP SLP) → _pressure_monthly (N×12), SLP − annual mean.
+    # 4. Pressure (NCEP SLP) → _pressure_monthly (N×12, seasonal anomaly) +
+    #    per-cell slp_annual_hpa (annual-mean SLP, the subtropical-high field).
     slp_arr, slp_lat, slp_lon = _load_nc_monthly(data_dir / "ncep_slp.mon.ltm.nc", "slp")
     slp_monthly = _sample_monthly(slp_arr, slp_lat, slp_lon, lats, lons).T  # (N, 12), hPa
     pressure_monthly = slp_monthly - slp_monthly.mean(axis=1, keepdims=True)
+    slp_annual = slp_monthly.mean(axis=1)
 
     # Hottest / coldest month from the monthly temperature (order-independent).
     t_hottest = t_monthly.max(axis=1)
@@ -288,6 +290,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
         c.temperature_coldest_month_C = float(t_coldest[i])
         c.wind_east_m_s = float(wind_east[i])
         c.wind_north_m_s = float(wind_north[i])
+        c.slp_annual_hpa = float(slp_annual[i])
         _d = dist_to_coast[i]
         c.distance_to_coast_km = float(_d) if np.isfinite(_d) else None
 

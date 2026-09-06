@@ -245,6 +245,16 @@ class VoronoiCell(BaseModel):
         description="Surface wind north component (m/s, positive=northward)",
     )
 
+    # Annual-mean sea-level pressure (hPa) — the persistent surface-pressure
+    # field (subtropical highs, ITCZ low).  Filled by the real-Earth importer
+    # (NCEP SLP annual mean) or the climate simulator (§7-② dynamical
+    # subtropical high); the *monthly* seasonal anomaly lives in the separate
+    # ``climate_monthly.msgpack`` (``pressure_monthly``).
+    slp_annual_hpa: float | None = Field(
+        default=None,
+        description="Annual-mean sea-level pressure (hPa)",
+    )
+
     # Ecology properties (filled by ecology engine — P0)
     biome: str | None = Field(
         default=None,
