@@ -1212,6 +1212,85 @@ def _upwind_distance_to_coast(
     return dist, source
 
 
+def _upwind_barrier(
+    cells: list[VoronoiCell],
+    n: int,
+    is_land: np.ndarray,
+    wind: np.ndarray,
+    nodes_xyz: np.ndarray,
+    elevation_m: np.ndarray,
+    *,
+    radius_km: float = 6371.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Upwind barrier height and distance-since-barrier (km), following the wind.
+
+    Multi-source Dijkstra (downwind edges only — the same convention as
+    ``_upwind_distance_to_coast``) that also propagates, along the shortest
+    upwind path from the ocean, two quantities for the Föhn rain shadow:
+
+      barrier[i] — the maximum elevation the air crossed before reaching cell i
+        (the highest cell on the upwind path, *excluding* i itself; ocean = 0).
+      since[i]   — great-circle distance from that barrier peak to i (km);
+        resets each time the path climbs a new, higher peak.
+
+    The air rains out moisture crossing ``barrier[i]`` (orographic rain on the
+    windward side), then the leeward dryness decays over ``since[i]`` as the
+    air re-moistens.  ``wind`` must be the *physical* surface wind (east =
+    ``east_north_basis``), the same convention as ``_upwind_distance_to_coast``.
+
+    Returns:
+        (barrier, since), both shape (n,).
+    """
+    import heapq
+
+    dist = np.full(n, np.inf, dtype=np.float64)
+    barrier = np.zeros(n, dtype=np.float64)
+    since = np.zeros(n, dtype=np.float64)
+    visited = np.zeros(n, dtype=bool)
+    heap: list[tuple[float, int]] = []
+    for i in range(n):
+        if not is_land[i]:
+            dist[i] = 0.0
+            heapq.heappush(heap, (0.0, i))
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        wind_unit = wind / np.maximum(np.linalg.norm(wind, axis=1), 1e-9)[:, None]
+
+    while heap:
+        d, i = heapq.heappop(heap)
+        if visited[i]:
+            continue
+        visited[i] = True
+        ci = nodes_xyz[i]
+        for j in cells[i].neighbors:
+            if j < 0 or j >= n or visited[j]:
+                continue
+            cj = nodes_xyz[j]
+            edge_vec = cj - ci
+            edge_vec = edge_vec - float(np.dot(edge_vec, ci)) * ci
+            en = float(np.linalg.norm(edge_vec))
+            if en < 1e-9:
+                continue
+            edge_dir = edge_vec / en
+            if float(np.dot(wind_unit[i], edge_dir)) <= 0.0:
+                continue  # j is not downwind of i — the air does not reach it
+            dot = max(-1.0, min(1.0, float(np.dot(ci, cj))))
+            edge_km = radius_km * float(np.arccos(dot))
+            nd = d + edge_km
+            if nd < dist[j]:
+                dist[j] = nd
+                # The barrier the air crossed to reach j includes i's own
+                # elevation; the distance-since-barrier resets at a new peak.
+                if float(elevation_m[i]) > barrier[i]:
+                    since[j] = edge_km
+                else:
+                    since[j] = since[i] + edge_km
+                barrier[j] = max(barrier[i], float(elevation_m[i]))
+                heapq.heappush(heap, (nd, j))
+
+    return barrier, since
+
+
 # Water-vapour residence time in the atmosphere (days).  Global mean column
 # water ~25 mm ÷ global precip ~2.7 mm/day ≈ 9 days (Trenberth 1998; the value
 # is re-confirmed by van der Ent & Tuinenburg 2016).  This is the rainout
@@ -1873,37 +1952,48 @@ def _compute_precipitation_monthly_budget(
         p_monthly *= _coastal_factor[:, None]
 
     # Step 6.7: Föhn rain shadow — leeward drying from the moisture scale
-    # height of the barrier the air crossed.  The upwind direction is now the
-    # *physical* surface wind (the three-cell circulation), not the former
-    # latitude-based westerlies/trades split — the "directional continentality"
-    # first-principles re-derivation (SotE uses a 6·lat/90 sigmoid hardcode).
-    # One factor applies to every month (the annual wind is steady).
+    # height of the barrier the air crossed on its *whole upwind path*, not just
+    # the immediately upwind neighbour (that old "point effect" put the shadow
+    # one cell deep, so classic lee deserts stayed far too wet).  The barrier is
+    # the maximum elevation on the upwind path traced against the physical
+    # surface wind; the drying at the barrier (exp(−ΔH/h_scale)) re-moistens
+    # downwind as exp(−d/L) over the rain-shadow decay length.  One factor
+    # applies to every month (the annual wind is steady).
     if is_land.any():
-        _wind_unit = wind / np.maximum(np.linalg.norm(wind, axis=1), 1e-9)[:, None]
-        _fohn_factor = np.ones(n, dtype=np.float64)
-        for i in range(n):
-            if not is_land[i] or elevation_m[i] < 0:
-                continue
-            ci = mesh.cells[i]
-            max_upwind_elev = elevation_m[i]
-            for j in ci.neighbors:
-                if j < 0 or j >= n:
-                    continue
-                edge = nodes_xyz[j] - nodes_xyz[i]
-                edge = edge - float(np.dot(edge, nodes_xyz[i])) * nodes_xyz[i]
-                if float(np.linalg.norm(edge)) < 1e-9:
-                    continue
-                # Upwind neighbour = the one the surface wind blows FROM.
-                is_upwind = float(np.dot(_wind_unit[i], edge)) < 0.0
-                if is_upwind and elevation_m[j] > max_upwind_elev:
-                    max_upwind_elev = elevation_m[j]
-            elev_drop = max_upwind_elev - elevation_m[i]
-            if elev_drop > 500.0:
-                t_k = max(temperature_c[i] + 273.15, 230.0)
-                gamma = moist_lapse_rate(np.array([temperature_c[i]]))[0]
-                h_scale_m = 461.0 * t_k**2 / (2.5e6 * gamma / 1000.0)
-                _fohn_factor[i] = np.exp(-elev_drop / h_scale_m)
-        p_monthly *= _fohn_factor[:, None]
+        # The raw `wind` is in the hadley basis (east = north × r̂, physical
+        # *west*); flip its east component onto the east_north_basis convention
+        # before the upwind trace — the same flip as 4.1-B in simulate_climate.
+        from dreamulator.map.ocean_circulation import east_north_basis as _enb_f
+
+        _east_f, _north_f = _enb_f(nodes_xyz)
+        _we_f = np.einsum("ij,ij->i", wind, _east_f)
+        _wn_f = np.einsum("ij,ij->i", wind, _north_f)
+        _wind_phys = -_we_f[:, None] * _east_f + _wn_f[:, None] * _north_f
+        _barrier, _since_barrier = _upwind_barrier(
+            mesh.cells, n, is_land, _wind_phys, nodes_xyz, elevation_m, radius_km=config.radius_km
+        )
+        _drop = np.where(
+            is_land & (elevation_m >= 0.0),
+            np.maximum(_barrier - elevation_m, 0.0),
+            0.0,
+        )
+        _shadow = np.ones(n, dtype=np.float64)
+        _dry = _drop > 500.0
+        if _dry.any():
+            _t_k = np.maximum(temperature_c + 273.15, 230.0)
+            # moist_lapse_rate blows up negative for T < ~-12 °C (its exp(-T/10)
+            # is unbounded cold-ward); clamp to the physical [Γ_min, Γ_max] band.
+            _gamma = np.clip(moist_lapse_rate(temperature_c), 4.5, 6.5)
+            _h_scale = 461.0 * _t_k**2 / (2.5e6 * _gamma / 1000.0)
+            _dry_frac = 1.0 - np.exp(-_drop[_dry] / _h_scale[_dry])
+            _recharge = np.exp(-_since_barrier[_dry] / config.rain_shadow_decay_km)
+            _shadow[_dry] = 1.0 - _dry_frac * _recharge
+        p_monthly *= _shadow[:, None]
+        if debug is not None:
+            debug["fohn_factor"] = _shadow.copy()
+            debug["fohn_drop"] = _drop.copy()
+            debug["fohn_barrier"] = _barrier.copy()
+            debug["fohn_since"] = _since_barrier.copy()
 
     # Step 8: Sub-planet / sub-stellar convective enhancement — steady on a
     # tidally locked body, so it splits evenly across the 12 months.

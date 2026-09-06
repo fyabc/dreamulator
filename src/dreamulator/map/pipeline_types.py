@@ -527,6 +527,12 @@ class TerrainPipelineConfig:
     # westerlies carrying the Atlantic's small-amplitude seasonal cycle into the
     # Eurasian interior (Moscow ~-25 → ~-12 °C winter).  0 disables the preset.
     maritime_advection_scale_km: float = 1500.0
+    # Föhn rain-shadow re-moistening length (km): a barrier's leeward dryness
+    # decays over this e-folding length downwind (the moisture recharge length,
+    # same order as the maritime air-mass e-folding above).  The drying at the
+    # barrier itself is exp(−ΔH/h_scale); it re-moistens as exp(−d/L) downwind.
+    #  0 disables the decay (the old point-effect behaviour, shadow one cell deep).
+    rain_shadow_decay_km: float = 1500.0
     seasonal_coastal_scale_km: float = 250.0  # maritime-moderation e-folding length
     coastal_moderation_scale_km: float = 500.0  # annual-mean coastal moderation e-folding
     # Seasonal ice-albedo feedback: a cell whose summer never melts keeps the
