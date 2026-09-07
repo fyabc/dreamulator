@@ -10,7 +10,7 @@ planets:
     planet_type: ocean_world
     mass: 1.20                    # M⊕
     radius: 1.07                  # R⊕ (6817 km)
-    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
+    rotation_period_days: 3.147   # = 公转周期（被 Aegis 潮汐锁定）
     axial_tilt_deg: 9.0           # 相对黄道面的有效倾角 = 轨道倾角 9°（自转轴 ⊥ 绕 Aegis 轨道面）
     albedo: 0.30
     atmosphere:
@@ -39,7 +39,7 @@ planets:
     planet_type: terrestrial
     mass: 0.05                    # M⊕
     radius: 0.45                  # R⊕ (2840 km)，ρ≈3.1 g/cm³ 岩质
-    rotation_period_days: 6.50    # 同步自转 = 公转周期
+    rotation_period_days: 6.29    # 同步自转 = 公转周期
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.25
 
@@ -52,7 +52,7 @@ planets:
     planet_type: terrestrial
     mass: 0.03                    # M⊕
     radius: 0.39                  # R⊕ (2470 km)，ρ≈2.8 g/cm³ 冰岩混合
-    rotation_period_days: 13.0    # 同步自转 = 公转周期
+    rotation_period_days: 12.59   # 同步自转 = 公转周期
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.35                  # 富冰表面
 

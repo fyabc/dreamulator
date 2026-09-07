@@ -11,7 +11,7 @@ tags: [orbit, eclipse, seasons, resonance]
 | 参数 | 值 | 备注 |
 |------|-----|------|
 | 卫星轨道倾角 i | {{ entities.satellite_nacrea.axial_tilt_deg }}° | 赤道面轨道：轨道面 = Aegis 赤道面；相对黄道夹角 = Aegis obliquity 9°（黄道面 = Aegis 绕恒星轨道面，系统参考平面） |
-| 轨道偏心率 e | **0.002** | 由 Cadence/Vigil 卫星拉普拉斯共振链泵浦维持（受迫偏心率，见 satellite_architecture.md） |
+| 轨道偏心率 e | **0.0018** | 由 Cadence/Vigil 卫星拉普拉斯共振链泵浦维持（受迫偏心率，见 satellite_architecture.md） |
 | 1:2:4 行星共振 | 三颗巨行星构成拉普拉斯共振 | 防止巨行星坠入主星，维持巨行星偏心率不衰减 |
 
 ### 因变量

@@ -24,7 +24,7 @@ planet:
   seed: 42
   radius_km: 6817.0            # 1.07 R_earth
   gravity_m_s2: 10.28          # 1.05g (G*1.2M_earth/(1.07R_earth)^2)
-  rotation_period_days: 3.25   # 潮汐锁定于 Aegis 巨行星
+  rotation_period_days: 3.147   # 潮汐锁定于 Aegis 巨行星
 
 # ── CVT 网格 + 地形合成 ───────────────────────────────────────────────────────
 terrain:
@@ -150,11 +150,11 @@ tidal:
   spreading_ratio: 0.4            # 半扩张 ≈ 0.4 × 最快板块速度
 
 # ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────
-# Nacrea 自转 Ω=0.31 Ω⊕（78h）：科氏力弱 → 经向热输送更强 →
+# Nacrea 自转 Ω=0.318 Ω⊕（75.5h）：科氏力弱 → 经向热输送更强 →
 # 赤道-极地温差小于地球的 40°C；Hadley 胞扩展到极地（单圈环流，GCM 证实无 Ferrel/极地胞）。
 climate:
   # ── 温度：单圈环流 Held-Hou 剖面 ──
-  # hadley_extent_deg=90（单圈，GCM Ω=0.31 结果）：Hadley 胞抵极，热输送由
+  # hadley_extent_deg=90（单圈，GCM Ω=0.318 结果）：Hadley 胞抵极，热输送由
   # 翻转环流（MOC）主导——与扩散 EBM 的涡旋输送机制不同，Ω^0.3 标度会低估输送。
   # 用 Held & Hou (1980) 四次方剖面 T(φ)=T_mean+ΔT·(1/5−sin⁴φ)，ΔT=Ω²a²θ₀/(2gH)，
   # 副热带平（无冷荒漠）、极地有冰盖。ebm_1d=true 启用；ebm_diffusion_* 仅三圈环流用。
@@ -165,9 +165,9 @@ climate:
   # 3A.3: ice-albedo feedback — T<-10C → albedo 0.7 → less solar abs → cooler
   variable_lapse_rate: true  # T-dependent Γ: tropical highlands stay warmer
   ice_albedo_feedback: true
-  ice_albedo_max_cooling_c: 3.0   # M dwarf: ice albedo in NIR is much lower (~0.2 vs ~0.7 visible)
+  ice_albedo_max_cooling_c: 3.0   # K dwarf (K8): ice albedo in NIR is much lower (~0.2 vs ~0.7 visible)
   ice_albedo_threshold_c: -5.0    # default -10; lower = earlier activation
-  hadley_extent_deg: 90.0     # 单圈环流：Hadley 胞直抵极地（GCM Ω=0.31 结果）
+  hadley_extent_deg: 90.0     # 单圈环流：Hadley 胞直抵极地（GCM Ω=0.318 结果）
   polar_cell_start_deg: 90.0  # 单圈：无 Ferrel/极地胞
   # storm_track_amplitude_mm 用共享默认 900：幅度公式自带 Ω^0.3 标度，
   # 慢自转自动得到减弱的斜压雨出增强；斜压带位置由引擎从经向温度梯度推导

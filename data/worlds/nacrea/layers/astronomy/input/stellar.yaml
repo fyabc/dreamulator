@@ -27,7 +27,7 @@ description: |
   - Nacrea 在 Aegis 子盘中形成并缓慢外迁至 724,000 km（潮汐演化，形成以来 +10%）
   - 外迁过程中会聚迁移捕获两颗外卫星胚胎 → Nacrea : Cadence : Vigil = 1:2:4
     卫星拉普拉斯共振链（机制与阶段 2 的行星共振链捕获完全对称）
-  - 共振链持续泵浦 Nacrea 的偏心率 e=0.002（否则潮汐阻尼将在 ~Myr 尺度抹平），
+  - 共振链持续泵浦 Nacrea 的偏心率 e=0.0018（否则潮汐阻尼将在 ~Myr 尺度抹平），
     维持潮汐加热 → 板块构造与碳-硅酸盐循环
   - 系统进入当前稳定态
 
@@ -114,7 +114,7 @@ orbits:
   - body_id: satellite_nacrea
     parent_id: planet_aegis
     semi_major_axis_au: 0.00484   # 724,000 km（Vigil 在 0.37 r_H）
-    eccentricity: 0.0019          # Cadence/Vigil 共振链泵浦维持（微降以平衡潮汐加热）
+    eccentricity: 0.0018          # Cadence/Vigil 共振链泵浦维持（微降以平衡潮汐加热）
     inclination_deg: 9.0          # 赤道面轨道：规则卫星在行星子盘里形成，天然贴着行星赤道面；
     # 相对黄道的 9° 来自 Aegis 的自转轴倾角。轨道面动力学：这个距离上恒星扭矩已强于行星
     # 四极矩扭矩约 14 倍，平衡面（Laplace 面）几乎贴黄道，所以赤道面构型带有 8.35° 自由倾角，
@@ -312,31 +312,31 @@ bodies:
     body_type: "natural_satellite"
     mass_earth: 1.20
     radius_km: 6817               # 1.07 R⊕
-    rotation_period_days: 3.25    # = 公转周期（被 Aegis 潮汐锁定）
+    rotation_period_days: 3.147   # = 公转周期（被 Aegis 潮汐锁定）
     axial_tilt_deg: 9.0           # 赤道面轨道 + Aegis obliquity 9° → 相对黄道有效倾角 9°（自转轴 ⊥ 轨道面）；驱动气候引擎季节项
     albedo: 0.30
     description:
       surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
 
-  # ---- 共振卫星：Cadence（2:1 with Nacrea，P=6.50 d） ----
+  # ---- 共振卫星：Cadence（2:1 with Nacrea，P=6.29 d） ----
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
     body_type: "natural_satellite"
     mass_earth: 0.05              # 共振链内环泵浦者
     radius_km: 2867               # 0.45 R⊕（与 planets.yaml 对齐），ρ≈3.0 g/cm³（岩质）
-    rotation_period_days: 6.50    # 同步自转
+    rotation_period_days: 6.29    # 同步自转
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.25
     description:
       surface: "岩质共振卫星，与 Nacrea 锁定 2:1 共振，持续泵浦其偏心率；天空中间歇性出现的'节拍之月'"
 
-  # ---- 共振卫星：Vigil（4:1 with Nacrea，P=13.0 d） ----
+  # ---- 共振卫星：Vigil（4:1 with Nacrea，P=12.59 d） ----
   - id: satellite_vigil
     name: "守珠星 · Vigil"
     body_type: "natural_satellite"
     mass_earth: 0.03              # 共振链外环节拍器
     radius_km: 2485               # 0.39 R⊕（与 planets.yaml 对齐），ρ≈2.8 g/cm³（冰岩混合）
-    rotation_period_days: 13.0    # 同步自转
+    rotation_period_days: 12.59   # 同步自转
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.35                  # 富冰表面
     description:
