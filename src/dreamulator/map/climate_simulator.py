@@ -1705,6 +1705,26 @@ def _baroclinic_band(
     return centre, width
 
 
+def _latitude_gate(
+    lat_deg: np.ndarray,
+    protect_deg: float,
+    full_deg: float,
+) -> np.ndarray:
+    """Smooth 0→1 gate in |latitude|: 0 below ``protect_deg``, 1 above ``full_deg``.
+
+    Smoothstep between the two thresholds so the aridity damping ramps in
+    continuously across the tropical-to-subtropical transition rather than
+    cutting a step into the ITCZ edge.  ``protect_deg >= full_deg`` degenerates
+    to a hard step at ``protect_deg`` (no ramp).
+    """
+    if protect_deg >= full_deg:
+        gate: np.ndarray = (np.abs(lat_deg) >= protect_deg).astype(np.float64)
+        return gate
+    x = np.clip((np.abs(lat_deg) - protect_deg) / (full_deg - protect_deg), 0.0, 1.0)
+    gate = x * x * (3.0 - 2.0 * x)
+    return gate
+
+
 def _compute_precipitation_monthly_budget(
     mesh: CVTMesh,
     wind: np.ndarray,
@@ -1914,6 +1934,31 @@ def _compute_precipitation_monthly_budget(
         debug["storm"] = _dbg_storm
         debug["convection"] = _dbg_conv
         debug["tropical_boost"] = _dbg_boost
+
+    # ① directional dryness: post-hoc continental-aridity damping (see the
+    # aridity_* config fields).  The upwind distance is traced against the
+    # *physical* surface wind (the same east flip as the Föhn step below) and a
+    # single time-independent factor damps every month.  NOT mass-conserving —
+    # a transition preset until §7-② shortens the real transport length.
+    if config.aridity_max_damping > 0.0:
+        from dreamulator.map.ocean_circulation import east_north_basis as _enb_a
+
+        _east_a, _north_a = _enb_a(nodes_xyz)
+        _we_a = np.einsum("ij,ij->i", wind, _east_a)
+        _wn_a = np.einsum("ij,ij->i", wind, _north_a)
+        _wind_phys_a = -_we_a[:, None] * _east_a + _wn_a[:, None] * _north_a
+        _updist_a, _ = _upwind_distance_to_coast(
+            mesh.cells, n, is_land, _wind_phys_a, nodes_xyz, radius_km=config.radius_km
+        )
+        _arid_gate = _latitude_gate(
+            lat_deg, config.aridity_protect_lat_deg, config.aridity_full_lat_deg
+        )
+        _continent = np.sqrt(1.0 - np.exp(-_updist_a / config.aridity_length_km))
+        _aridity_damp = 1.0 - config.aridity_max_damping * _continent * _arid_gate
+        _aridity_damp = np.clip(_aridity_damp, 0.0, 1.0)
+        p_monthly *= _aridity_damp[:, None]
+        if debug is not None:
+            debug["aridity_damp"] = _aridity_damp.copy()
 
     # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
     # the seasonality of the westerlies is not modelled yet, so the same

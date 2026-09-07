@@ -505,6 +505,21 @@ class TerrainPipelineConfig:
     # regime, where baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
     storm_track_kappa_enhancement: float = 3.0  # eddy diffusivity × at the storm peak
+    # Continental-aridity damping (① directional dryness, option A): the
+    # Held-Soden transport length u·τ is too long (~3900 km), so moisture
+    # overshoots into the subtropical/mid-lat continental interiors (deserts
+    # 2-10× too wet).  Post-hoc multiplicative damping of land precipitation by
+    # upwind distance to coast,
+    #     p *= 1 − aridity_max_damping · sqrt(1 − exp(−upwind_km/aridity_length_km)) · g(lat)
+    # gated to |lat| > aridity_protect_lat_deg so the deep tropics (ITCZ /
+    # recycled Amazon-Congo rainfall) is untouched.  NOT mass-conserving (ΣP <
+    # ΣE inland) — a transition preset until the wind-field regularity (§7-②)
+    # shortens the real transport length; option B (E/P continentality) is the
+    # first-principles replacement.  0 disables.
+    aridity_max_damping: float = 0.9  # max fractional P reduction at full continentality
+    aridity_length_km: float = 1500.0  # continentality e-folding length (upwind distance)
+    aridity_protect_lat_deg: float = 10.0  # |lat| below this → no damping (ITCZ guard)
+    aridity_full_lat_deg: float = 25.0  # |lat| above this → full damping (smooth ramp)
     # Sub-planet hemisphere warming (for satellites tidally locked to a gas giant)
     sub_planet_warming_c: float = 0.0  # °C warming on the sub-planet side (e.g. 1.0 for nacrea)
     sub_planet_longitude_deg: float = 0.0  # longitude of the sub-planet point
