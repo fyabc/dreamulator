@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788795508583,
+  "lastUpdate": 1788801725564,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4600,6 +4600,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00372991439170857",
             "extra": "mean: 7.514958599999488 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7fe3dc312a46591444016c4db37ebb6c39461d57",
+          "message": "feat(world): nacrea 地形微调——世界岛完整化 + 海岸曲折化\n\n大裂谷海拆成多段错列（南/中南/中/中北/连接/北 + 西支），北极周缘裂谷分段；\n世界岛参数调整（中心南移压缩北方沙漠、elongation 1.6→1.3、低区 elevation 钉扎）。\n海岸线曲折化、世界岛恢复完整。同步去掉已删除的 kind 字段。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-08T01:21:12+08:00",
+          "tree_id": "f3e65d361bba012d0c37bdd1fef7fee16a9464e5",
+          "url": "https://github.com/fyabc/dreamulator/commit/7fe3dc312a46591444016c4db37ebb6c39461d57"
+        },
+        "date": 1788801724742,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 10.038186183756238,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03911892753461266",
+            "extra": "mean: 99.619590799999 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6321210614135455,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05369409756796853",
+            "extra": "mean: 275.3212194999968 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4140115556050352,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1112682893843109",
+            "extra": "mean: 707.2077989999977 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 982.2827622740806,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007229811127077499",
+            "extra": "mean: 1.0180367999993223 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 199.7302203967048,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006704049892197563",
+            "extra": "mean: 5.006753600000025 msec\nrounds: 5"
           }
         ]
       }
