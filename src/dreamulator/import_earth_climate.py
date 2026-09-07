@@ -6,8 +6,11 @@ climate fields should therefore be real observation, not engine output.  This
 module samples four observation datasets onto the CVT mesh and writes:
 
 - ``cvt_mesh.json`` per-cell fields — ``koppen_class`` (Beck), ``temperature_C``
-  (NCEP annual mean), ``precipitation_mm`` (GPCP annual total).  These are the
-  only climate fields the frontend reads for the annual layers.
+  (NCEP annual mean), ``precipitation_mm`` (GPCP annual total), wind / SLP
+  (NCEP), and ``ocean_current_east/north_m_s`` (SODA v3.15.2 observed
+  climatology, annual mean; engine Stommel-solver fallback when SODA is
+  absent).  These are the only climate fields the frontend reads for the
+  annual layers.
 - ``climate_monthly.msgpack`` — monthly ``t_monthly`` / ``p_monthly`` /
   ``pressure_monthly`` (the seasonal SLP anomaly), in the same quantized-int16
   format the engine exports (``export._quantize_int16``), so the frontend's
@@ -23,6 +26,13 @@ Data provenance:
   climatology).
 - Precipitation — GPCP v2.3 ``precip.mon.mean.nc`` (2.5°, monthly mean).
 - Sea-level pressure — NCEP/NCAR Reanalysis 1 ``slp.mon.ltm.nc`` (2.5°).
+- Ocean currents — SODA v3.15.2 (Carton et al. 2018, doi:10.1175/JCLI-D-18-0149.1)
+  surface (~5 m) monthly climatology 1993–2022, annual mean per cell
+  (``soda_currents_mon_clim.nc``, built by ``scripts/download_validation_data.py``
+  from the APDRC OPeNDAP server).  Fallback when that file is absent: the
+  engine's Stommel barotropic solver driven by the NCEP wind below (modelled,
+  not observed — the earth world then gets the same current physics as built
+  worlds instead).
 
 Usage mirrors the other importers::
 
@@ -40,7 +50,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from dreamulator.map.models import CVTMesh
+    from dreamulator.map.models import CVTMesh, VoronoiCell
 
 # Beck class code → Köppen string (from scripts/convert_koppen_map.py).
 _BECK_LEGEND: dict[int, str] = {
@@ -87,6 +97,7 @@ _MARCH_FIRST = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1]
 _NCEP_AIR = "private/tmp/climatology/ncep_air.mon.ltm.nc"
 _NCEP_SLP = "private/tmp/climatology/ncep_slp.mon.ltm.nc"
 _GPCP = "private/tmp/climatology/gpcp_precip.mon.mean.nc"
+_SODA_CURRENTS_NC = "soda_currents_mon_clim.nc"
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +217,182 @@ def _sample_beck(beck: np.ndarray, lats: np.ndarray, lons: np.ndarray) -> np.nda
 
 
 # ---------------------------------------------------------------------------
+# Ocean currents (engine solver driven by observed wind)
+# ---------------------------------------------------------------------------
+
+#: Basins smaller than this contribute no visible surface currents; same
+#: cutoff as the engine (``climate_simulator`` stage 2.5).
+_MIN_BASIN_CELLS = 20
+
+
+def _compute_ocean_currents(
+    cells: list[VoronoiCell], wind_east: np.ndarray, wind_north: np.ndarray
+) -> None:
+    """Write per-cell surface currents from the engine's Stommel gyre solver.
+
+    The earth world never runs the climate engine, so its ``ocean_current_*``
+    fields would stay empty.  Here we drive the same solver the engine uses
+    (``map/ocean_circulation.py``) with the *observed* NCEP annual-mean wind:
+    wind stress curl → per-basin Stommel streamfunction (GMRES) → tangent
+    velocity.  Physical parameters are the engine's Earth defaults
+    (``TerrainPipelineConfig``: rotation 1 day, radius 6371 km; solver
+    defaults: C_D 1.2e-3, H_ml 50 m, R 1e-6 s⁻¹).
+
+    Deliberately **not** done here: SST advection / upwelling corrections.
+    Earth's temperature field is pure observation — advecting a model SST
+    anomaly onto it would mix model output into ground truth, and
+    ``sst_anomaly_c`` is left unset (frontend arrows render neutral-coloured).
+    """
+    from dreamulator.map.ocean_circulation import (
+        _build_directed_edge_table,
+        _extract_areas_km2,
+        _extract_lat_rad,
+        _extract_nodes_xyz,
+        compute_curl_z,
+        compute_wind_stress,
+        detect_ocean_basins,
+        east_north_basis,
+        solve_ocean_gyre,
+    )
+
+    nodes_xyz = _extract_nodes_xyz(cells)
+    east, north = east_north_basis(nodes_xyz)
+
+    # Tangent wind vectors (m/s) from the imported east/north components —
+    # composed on the engine's *internal* wind convention: hadley_cell_wind
+    # builds vectors on a mirrored east basis (``east = north × r̂`` = physical
+    # west; the stored ``wind_east_m_s`` is flipped back by the FIXME at
+    # climate_simulator.py:517), and the whole Stommel chain is calibrated
+    # against that convention — engine-built worlds store physically correct
+    # currents (Gulf Stream NE-ward, SEC W-ward, verified on earth/climate-dev)
+    # while feeding true-east vectors mirrors the entire current field.  So
+    # negate the imported (true-east) component to reproduce the internal
+    # convention.  If that FIXME is ever resolved, this negation must go too.
+    wind = -wind_east[:, None] * east + wind_north[:, None] * north
+    tau = compute_wind_stress(wind)
+    src, dst = _build_directed_edge_table(cells)
+    curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
+
+    # Planetary β = 2Ω cos(φ) / a, Earth defaults (ω for a 1-day rotation).
+    omega = 2.0 * np.pi / 86400.0
+    radius_m = 6371.0e3
+    beta = 2.0 * omega * np.cos(_extract_lat_rad(cells)) / radius_m
+
+    _, basins = detect_ocean_basins(cells, sea_level_m=0.0)
+    if not basins:
+        print("  Ocean currents: no ocean basins detected — skipped")
+        return
+
+    areas_km2 = _extract_areas_km2(cells)
+    filled = 0
+    solved = 0
+    for b_idx, b_cells in enumerate(basins):
+        n_b = len(b_cells)
+        if n_b < _MIN_BASIN_CELLS:
+            continue
+        print(f"    Basin {b_idx + 1}/{len(basins)} ({n_b} cells)...")
+        _, vel = solve_ocean_gyre(
+            b_cells,
+            cells,
+            nodes_xyz,
+            areas_km2,
+            curl_z,
+            beta,
+            east=east,
+            sea_level_m=0.0,
+        )
+        for li, gi in enumerate(b_cells):
+            c = cells[gi]
+            c.ocean_current_east_m_s = float(np.dot(vel[li], east[gi]))
+            c.ocean_current_north_m_s = float(np.dot(vel[li], north[gi]))
+        filled += n_b
+        solved += 1
+    print(f"  Ocean currents (Stommel gyres): {solved}/{len(basins)} basins, {filled} cells")
+
+
+# ---------------------------------------------------------------------------
+# Observed ocean currents (SODA monthly climatology)
+# ---------------------------------------------------------------------------
+
+
+def _load_soda_climatology(
+    path: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, str]]:
+    """Load the SODA surface-current monthly climatology netCDF.
+
+    Returns ``(u, v, lat, lon, attrs)`` with u/v as ``(12, lat, lon)`` arrays
+    in m/s, January-first, NaN over land/ice and SODA's uncovered
+    far-southern ocean (grid starts at 74.5°S).
+    """
+    import xarray as xr
+
+    ds = xr.open_dataset(path)
+    u = np.asarray(ds["u"].values, dtype=np.float64)
+    v = np.asarray(ds["v"].values, dtype=np.float64)
+    lat = np.asarray(ds["lat"].values, dtype=np.float64)
+    lon = np.asarray(ds["lon"].values, dtype=np.float64)
+    attrs = {str(k): str(val) for k, val in ds.attrs.items()}
+    ds.close()
+    return u, v, lat, lon, attrs
+
+
+def _sample_monthly_nan_tolerant(
+    monthly: np.ndarray, lat: np.ndarray, lon: np.ndarray, lats: np.ndarray, lons: np.ndarray
+) -> np.ndarray:
+    """``_sample_monthly`` with a nearest-grid-point fallback at NaN.
+
+    Bilinear interpolation bleeds SODA's land/ice NaN one source-grid step
+    into the ocean, blanking coastal mesh cells; where the bilinear result is
+    NaN, sample the nearest source grid point instead (itself possibly NaN —
+    those cells stay empty).  Assumes a regular lat/lon grid (SODA is 0.5°
+    linear), so the nearest index is arithmetic rather than a search.
+    """
+    out = np.asarray(_sample_monthly(monthly, lat, lon, lats, lons))
+    if np.isfinite(out).all():
+        return out
+    lons_w = lons.copy()
+    if float(lon.max()) > 180.0 and float(lons.min()) < 0.0:
+        lons_w = np.where(lons_w < 0, lons_w + 360.0, lons_w)
+    dlat = float(lat[1] - lat[0])
+    dlon = float(lon[1] - lon[0])
+    i = np.clip(np.round((lats - float(lat[0])) / dlat).astype(np.int64), 0, len(lat) - 1)
+    j = np.clip(np.round((lons_w - float(lon[0])) / dlon).astype(np.int64), 0, len(lon) - 1)
+    nearest = monthly[:, i, j]
+    return np.asarray(np.where(np.isfinite(out), out, nearest))
+
+
+def _apply_observed_currents(
+    cells: list[VoronoiCell],
+    lats: np.ndarray,
+    lons: np.ndarray,
+    u_clim: np.ndarray,
+    v_clim: np.ndarray,
+    cur_lat: np.ndarray,
+    cur_lon: np.ndarray,
+) -> int:
+    """Write the observed annual-mean surface currents onto ocean cells.
+
+    Samples the ``(12, lat, lon)`` SODA climatology at cell centres and stores
+    the 12-month mean per ocean cell; cells whose sample stays NaN (SODA land
+    mask or the uncovered far-southern ocean) keep ``None``.  Returns the
+    number of cells written.
+    """
+    u_mon = _sample_monthly_nan_tolerant(u_clim, cur_lat, cur_lon, lats, lons)
+    v_mon = _sample_monthly_nan_tolerant(v_clim, cur_lat, cur_lon, lats, lons)
+    written = 0
+    for i, c in enumerate(cells):
+        if c.water_class != "ocean":
+            continue
+        u_col, v_col = u_mon[:, i], v_mon[:, i]
+        if not np.isfinite(u_col).any() or not np.isfinite(v_col).any():
+            continue
+        c.ocean_current_east_m_s = float(np.nanmean(u_col))
+        c.ocean_current_north_m_s = float(np.nanmean(v_col))
+        written += 1
+    return written
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -294,6 +481,29 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
         _d = dist_to_coast[i]
         c.distance_to_coast_km = float(_d) if np.isfinite(_d) else None
 
+    # 6. Ocean currents — observed where possible: SODA v3.15.2 monthly
+    #    climatology (annual mean into ocean cells).  Fallback when the SODA
+    #    file is absent: the engine's Stommel gyre solver driven by the
+    #    observed NCEP wind above (modelled).  Either way the observed T/P
+    #    fields stay untouched (no SST advection onto ground truth).
+    soda_path = data_dir / _SODA_CURRENTS_NC
+    if soda_path.exists():
+        u_clim, v_clim, cur_lat, cur_lon, cur_attrs = _load_soda_climatology(soda_path)
+        n_cur = _apply_observed_currents(mesh.cells, lats, lons, u_clim, v_clim, cur_lat, cur_lon)
+        print(f"  Ocean currents (observed SODA v3.15.2, annual mean): {n_cur} cells")
+        currents_source = (
+            "observed — SODA v3.15.2 surface (~5 m) monthly climatology "
+            f"{cur_attrs.get('climatology_years', '')}, annual mean; APDRC OPeNDAP "
+            "(Carton et al. 2018, doi:10.1175/JCLI-D-18-0149.1)"
+        )
+    else:
+        print(f"  SODA climatology not found ({soda_path.name}) — Stommel fallback")
+        _compute_ocean_currents(mesh.cells, wind_east, wind_north)
+        currents_source = (
+            "modelled — Stommel barotropic gyres (engine solver, "
+            "map/ocean_circulation.py) driven by NCEP annual-mean wind"
+        )
+
     # Attach monthly fields for the msgpack export (runtime attrs, not pydantic).
     object.__setattr__(mesh, "_t_monthly_c", t_monthly.astype(np.float32))
     object.__setattr__(mesh, "_p_monthly_mm", p_monthly.astype(np.float32))
@@ -309,7 +519,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     _write_monthly_msgpack(mesh, output_dir)
 
     # Secondary exports the frontend ignores but keep for consistency.
-    _write_secondary_exports(mesh, output_dir, project_root)
+    _write_secondary_exports(mesh, output_dir, project_root, currents_source)
 
 
 def _write_monthly_msgpack(mesh: CVTMesh, output_dir: Path) -> None:
@@ -347,7 +557,9 @@ def _write_monthly_msgpack(mesh: CVTMesh, output_dir: Path) -> None:
     print(f"  Wrote climate_monthly.msgpack: {output_dir / 'climate_monthly.msgpack'}")
 
 
-def _write_secondary_exports(mesh: CVTMesh, output_dir: Path, project_root: Path) -> None:
+def _write_secondary_exports(
+    mesh: CVTMesh, output_dir: Path, project_root: Path, currents_source: str
+) -> None:
     from collections import Counter
 
     from dreamulator.map.export import export_equirectangular, export_layer_png
@@ -380,6 +592,7 @@ def _write_secondary_exports(mesh: CVTMesh, output_dir: Path, project_root: Path
     # climate_metadata.json — minimal real-data provenance + ranges.
     meta = {
         "source": "NCEP/NCAR Reanalysis 1 + GPCP v2.3 + Beck et al. (2018)",
+        "ocean_currents": currents_source,
         "temperature_range_c": [float(temp_grid.min()), float(temp_grid.max())],
         "precipitation_range_mm": [float(precip_grid.min()), float(precip_grid.max())],
         "koppen_classes": sorted(koppen_counter.keys()),

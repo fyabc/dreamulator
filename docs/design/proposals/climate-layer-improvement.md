@@ -434,7 +434,14 @@ Aw→BWh/BSh 混淆 ~2300；0N60E 格 5.7%。
   （从西南吹来），Coriolis 偏转落在错误一侧，与 G 的 down-gradient 方向相反。
 - **坐标泥潭的一部分**：实测 `east_hadley(north×r̂) · east_north_basis(r̂×k̂) = −1.000`
   （两套「东」基相反）；`monsoon_boundary_layer_wind` 与 `hadley_cell_wind` 共用
-  `north×r̂` 基，其「东」在网格上实为地理西，Coriolis 偏转随之镜像。
+  `north×r̂` 基，其「东」在网格上实为地理西，Coriolis 偏转随之镜像。存储侧
+  `wind_east_m_s` 靠 `climate_simulator.py` 的 `_we = -_we`（FIXME "remove after
+  verification"）翻转补正；整条 Stommel 洋流链按内部镜像约定校准——2026-09-08
+  earth 导入器实测：喂真东基风（NCEP）给求解器，洋流全场镜像（湾流西南向、
+  南赤道东向），取反东分量后与 climate-dev 引擎产物一致（湾流东北、SEC 西向）。
+  引擎外消费方已按此约定同步：`import_earth_climate._compute_ocean_currents` +
+  `tests/test_import_earth_climate.py`（符号锚定）；技术债 23/24 清理 FIXME 时
+  须全库联动翻转（已登记 roadmap 技术债 24）。
 
 **结论**：修冬季风方向会牵动已验证的夏季风 + 背景西风带 + 水分预算里同一套
 `wind_monthly`（技术债 23 已标注「东亚季风偏弱」同源），风险高，本轮**不单独落地**。
