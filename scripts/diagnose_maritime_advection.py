@@ -19,7 +19,7 @@ path maritime air travels from the ocean to each land cell, and L is the
 maritime air-mass decay length (the single free parameter).
 
 Usage:
-    uv run python scripts/diagnose_maritime_advection.py --world-dir private/worlds
+    uv run python scripts/diagnose_maritime_advection.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--sweep", default="500,1000,1500,2000,2500")
     parser.add_argument("--mode", choices=["annual", "monthly", "both"], default="monthly")
     args = parser.parse_args()

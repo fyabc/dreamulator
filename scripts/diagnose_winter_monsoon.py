@@ -11,7 +11,7 @@ cell's January temperature), so we can see whether the winter monsoon direction
 is already present or must be fixed before switching 4.1-B to monthly wind.
 
 Usage:
-    uv run python scripts/diagnose_winter_monsoon.py --world-dir private/worlds
+    uv run python scripts/diagnose_winter_monsoon.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent

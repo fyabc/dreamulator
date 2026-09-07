@@ -18,7 +18,7 @@ This script runs the climate engine once (with the debug Föhn fields) and repor
 
 Usage::
 
-    uv run python scripts/diagnose_rain_shadow.py --world-dir private/worlds
+    uv run python scripts/diagnose_rain_shadow.py --world-dir data/worlds
 """
 
 from __future__ import annotations

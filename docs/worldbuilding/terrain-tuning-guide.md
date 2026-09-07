@@ -137,14 +137,12 @@ elevation = base(850m+板块偏移+大陆起伏)
 
 ### 正确流程
 
-1. 编辑 `private/worlds/<world>/layers/geological/input/geography.yaml`
-2. `uv run dreamulator build nacrea --force --data-dir private/worlds`
+1. 编辑 `data/worlds/<world>/layers/geological/input/geography.yaml`
+2. `uv run dreamulator build nacrea --force`
 3. 刷新前端验证
-4. 满意后同步回 `data/worlds/`
 
 ### 常见陷阱
 
-- ❌ 在 data/worlds 编辑 → 构建用 private/worlds → 改动没生效
 - ❌ 改了 geography.yaml 但没用 `--force` → 地质层被跳过
 - ❌ strength 设太弱（|s| < 0.3）→ 被世界岛或其他大 feature 盖过
 - ❌ pin_strength 设太小（< 0.2）→ 肉眼看不出来 → 以为 bug

@@ -9,7 +9,7 @@ column depth-fraction d/H and reports the subtropical-high magnitude (ocean vs
 land ΔP) and the geostrophic wind direction/speed at key points.
 
 Usage:
-    uv run python scripts/diagnose_subtropical_high.py --world-dir private/worlds
+    uv run python scripts/diagnose_subtropical_high.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--dh", default="0.5,1.0,1.5")
     args = parser.parse_args()
 

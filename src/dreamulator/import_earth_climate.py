@@ -27,7 +27,7 @@ Data provenance:
 Usage mirrors the other importers::
 
     uv run python scripts/import_earth_climate.py \
-        --output-dir private/worlds/earth/maps/planet_earth
+        --output-dir data/worlds/earth/maps/planet_earth
 """
 
 from __future__ import annotations

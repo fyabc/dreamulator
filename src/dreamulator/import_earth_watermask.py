@@ -21,7 +21,7 @@ narrow straits (Red Sea via Bab-el-Mandeb, Black Sea via the Bosphorus) as
 Usage mirrors the other importers::
 
     uv run python scripts/import_earth_watermask.py \
-        --output-dir private/worlds/earth/maps/planet_earth
+        --output-dir data/worlds/earth/maps/planet_earth
 
 Data provenance: Wessel, P. & Smith, W. H. F. (1996), A global, self-consistent,
 hierarchical, high-resolution shoreline database, J. Geophys. Res. 101(B4).

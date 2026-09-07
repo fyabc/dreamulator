@@ -6,9 +6,8 @@
 设计与原理见 [../design/pipelines/climate-validation.md](../design/pipelines/climate-validation.md)：
 数据源清单（§2）、验证指标说明（§5）、已知限制（§6）、多线证据策略（§7）。
 
-> 脚本默认指向 `data/worlds`（发布态，供其他用户）。本地开发时 `earth` 验证世界在
-> `private/worlds/`（`.gitignore` 排除），加 `--world-dir private/worlds`（诊断脚本）
-> 或 `--data-dir private/worlds`（`climate validate`）即可。
+> 脚本默认指向 `data/worlds`。earth 验证世界的构建产物（`maps/`）已被 `.gitignore`
+> 忽略，直接在 `data/worlds` 上重建即可，通常无需额外 `--world-dir`/`--data-dir`。
 
 ---
 
@@ -166,8 +165,6 @@ dreamulator climate validate earth --output-dir reports/climate/
 `validate_koppen_spatial`（需要 `koppen_obs.json`）。分布匹配（3）与空间准确率（3b）
 是两个独立指标——见 §6 结尾的指标辨析。
 
-> 本地开发时 `earth` 在 `private/worlds/`，加 `--data-dir private/worlds`。
-
 **输出示例**（当前 climate-dev 200k 网格实际输出）：
 
 ```
@@ -282,5 +279,4 @@ uv run python scripts/diagnose_precip_budget.py
 > Earth 网格上，`koppen_obs.json` 参考以相同 200k mesh 生成、存于
 > `maps/planet_earth/`（与 mesh 并排）。cell-by-cell 准确率（31.8%）低于分布匹配
 > （59.2%）——这是两个不同指标，空间准确率天然更低。诊断结论以**相对对比**
-> （调参前后、地球 vs nacrea）为准。本地开发时地球数据在 `private/worlds/`，
-> 加 `--world-dir private/worlds`。
+> （调参前后、地球 vs nacrea）为准。

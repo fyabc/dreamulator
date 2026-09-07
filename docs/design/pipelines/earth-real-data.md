@@ -94,20 +94,21 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 
 ```bash
 uv run python scripts/import_earth_elevation.py \
-    --output-dir private/worlds/earth/maps/planet_earth \
+    --output-dir data/worlds/earth/maps/planet_earth \
     --resolution 4096x2048 --mesh-nodes 200000 --seed 42 --skip-download
 
 uv run python scripts/import_earth_tectonics.py \
-    --output-dir private/worlds/earth/maps/planet_earth
+    --output-dir data/worlds/earth/maps/planet_earth
 
 uv run python scripts/import_earth_watermask.py \
-    --output-dir private/worlds/earth/maps/planet_earth
+    --output-dir data/worlds/earth/maps/planet_earth
 
 uv run python scripts/import_earth_climate.py \
-    --output-dir private/worlds/earth/maps/planet_earth
+    --output-dir data/worlds/earth/maps/planet_earth
 ```
 
-> 日常在 `private/worlds` 迭代；发版前同步到 `data/worlds` 并 commit（LFS 纪律见根 CLAUDE.md）。
+> 直接在 `data/worlds` 上重建（输出被 `.gitignore` 忽略、不污染工作区）；发版时
+> `scripts/publish_world_data.py` 会按依赖顺序跑这 4 个 import 脚本并打包上传。
 
 ---
 

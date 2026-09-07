@@ -18,7 +18,7 @@ The model's ΔP is computed from the annual-mean land-sea temperature contrast
 depth-fraction d/H; the geostrophic wind follows `_geostrophic_wind`.
 
 Usage:
-    uv run python scripts/diagnose_pressure_anomaly.py --world-dir private/worlds
+    uv run python scripts/diagnose_pressure_anomaly.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--dh", default="1.0")
     args = parser.parse_args()
 

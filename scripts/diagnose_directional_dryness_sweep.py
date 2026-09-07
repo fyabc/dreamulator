@@ -13,7 +13,7 @@ precipitation for each (L_cont, k_dry) combo — the same zonal scoring as
 
 Usage::
 
-    uv run python scripts/diagnose_directional_dryness_sweep.py --world-dir private/worlds
+    uv run python scripts/diagnose_directional_dryness_sweep.py --world-dir data/worlds
 """
 
 from __future__ import annotations

@@ -101,12 +101,11 @@ uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 # 启动服务器（API + 前端，一条命令）
 uv run dreamulator serve --open              # 启动并打开浏览器
 uv run dreamulator serve --reload             # 开发模式（热重载）
-uv run dreamulator serve --data-dir private/worlds  # 使用自定义数据目录
 
-# 数据目录配置
+# 数据目录
 # 所有 CLI 命令和 API 服务支持 --data-dir 参数或 DREAMULATOR_DATA_DIR 环境变量
-# 来覆盖默认的 data/worlds/ 数据目录。开发时建议使用 private/worlds/
-# （已在 .gitignore 中排除），避免编辑地图等操作污染 git 工作区。
+# 来覆盖默认的 data/worlds/ 数据目录。构建输出（maps/ + layers/*/derived/）已被
+# .gitignore 忽略，直接在 data/worlds 构建不污染 git 工作区，无需单独的开发目录。
 
 # 运行测试
 uv run pytest
@@ -292,15 +291,15 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 1. **新任务默认开 feature 分支**：`git checkout -b feature/<描述>`，不在 main 上直接开发；合入 main 前清理 commits（squash 为语义清晰的少量提交）。
 2. **开发分支不推远程**：`git push` 仅用于 `main` 分支。
 3. **每次 commit/push 前需用户确认**：先展示改动摘要（`git diff --stat` 或关键 diff），等用户明确说「提交/推送」再执行。
-4. **提交前先在 `private/worlds` 上构建验证**：改动涉及引擎/管线时，先跑
+4. **提交前先在 `data/worlds` 上构建验证**：改动涉及引擎/管线时，先跑
    ```bash
-   uv run dreamulator build nacrea --data-dir private/worlds --force
+   uv run dreamulator build nacrea --force
    ```
-   让用户检查结果后再合并。
+   （默认数据目录即 `data/worlds`，输出已被 ignore）让用户检查结果后再合并。
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
 6. **合并到 main 后再推送**：用户验证通过 → merge 到 main → `git push`。
 7. **构建产物不入 git（GitHub Releases 发布）**：`maps/` 与 `layers/*/derived/` 是「input + 代码 +
-   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略，`private/worlds` 已不再需要）。
+   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。
    直接在 `data/worlds` 构建（输出被 ignore、不污染工作区）；发版前跑
    `uv run python scripts/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
    tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
@@ -312,15 +311,15 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ```bash
 # 改前保存基线
-cp -r private/worlds/nacrea/maps/satellite_nacrea private/worlds/nacrea/maps/_baseline
+cp -r data/worlds/nacrea/maps/satellite_nacrea data/worlds/nacrea/maps/_baseline
 
 # 改代码 → 构建
-uv run dreamulator build nacrea --data-dir private/worlds --only climate --force
+uv run dreamulator build nacrea --only climate --force
 
 # 对比
 uv run python scripts/climate_diff.py \
-    private/worlds/nacrea/maps/_baseline \
-    private/worlds/nacrea/maps/satellite_nacrea
+    data/worlds/nacrea/maps/_baseline \
+    data/worlds/nacrea/maps/satellite_nacrea
 ```
 
 输出：全局摘要（T/P/Köppen/biome）、纬度带平均差异、Top-N 变化最大的细胞。
@@ -340,9 +339,8 @@ cd frontend && npm run build:static:local && npm run preview:static
 # 打开 http://localhost:4173，确认页面功能正常、控制台无 404
 ```
 
-> `data/worlds` 不再包含 maps（走 GitHub Releases），本地导出/预览需让
-> `export_static.py` 读到构建产物：加 `DREAMULATOR_DATA_DIR=private/worlds`
-> 环境变量，或先 `uv run python scripts/publish_world_data.py` 后本地模拟下载。
+> 本地静态导出/预览前，先在 `data/worlds` 上构建（`uv run dreamulator build ...` 或
+> `uv run python scripts/publish_world_data.py`）；`export_static.py` 默认读 `data/worlds`。
 
 ### 3D 球面矢量可视化（风场/洋流箭头）
 

@@ -260,7 +260,7 @@ headless 烘焙地图图层为彩色 PNG，颜色与前端渲染逐字节一致�
 dreamulator export layers nacrea                                # 全部 5 层，分辨率取 map.yaml
 dreamulator export layers nacrea --layers terrain,koppen        # 指定图层（逗号分隔）
 dreamulator export layers nacrea --grid 4096x2048               # 指定输出分辨率 WxH
-dreamulator export layers nacrea --output out/ --data-dir private/worlds
+dreamulator export layers nacrea --output out/ --data-dir data/worlds
 ```
 
 | 图层 | 类型 | 字段 | 说明 |

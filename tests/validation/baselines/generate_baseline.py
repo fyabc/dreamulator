@@ -8,7 +8,7 @@ Usage::
 
     # With custom planet ID and data dir
     uv run python tests/validation/baselines/generate_baseline.py nacrea \\
-        --planet satellite_nacrea --data-dir private/worlds
+        --planet satellite_nacrea --data-dir data/worlds
 
     # Specify output path
     uv run python tests/validation/baselines/generate_baseline.py nacrea \\

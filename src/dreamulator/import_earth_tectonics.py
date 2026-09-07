@@ -22,7 +22,7 @@ degrees-per-Ma CCW), converted to the model's ``EulerPole`` (unit rotation axis 
 Usage mirrors the elevation importer::
 
     uv run python scripts/import_earth_tectonics.py \
-        --output-dir private/worlds/earth/maps/planet_earth
+        --output-dir data/worlds/earth/maps/planet_earth
 
 Inputs (downloaded on first run, cached under ``tempfile.gettempdir()/
 dreamulator_pb2002``):

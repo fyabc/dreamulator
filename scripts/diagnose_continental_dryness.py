@@ -13,7 +13,7 @@ directional — upwind — or effectively isotropic).
 
 Usage::
 
-    uv run python scripts/diagnose_continental_dryness.py --world-dir private/worlds
+    uv run python scripts/diagnose_continental_dryness.py --world-dir data/worlds
 """
 
 from __future__ import annotations

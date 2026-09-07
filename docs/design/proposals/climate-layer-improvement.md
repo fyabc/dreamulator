@@ -184,7 +184,7 @@ RMSE 3.1→8.2 FAIL）。教训入 today.md：改三角函数输入单位前全�
 
 **执行步骤**：
 1. **earth 分支数据修复**（零代码改动）：
-   `scripts/import_earth_watermask.py --output-dir private/worlds/earth/branches/climate-dev/maps/planet_earth`
+   `scripts/import_earth_watermask.py --output-dir data/worlds/earth/branches/climate-dev/maps/planet_earth`
    → 黑海/里海转 ocean；顺带解决 interlude ①（内湖渲染）。
 2. **五大湖阈值实证**：导入后清点五大湖哪些过 60k 阈值（GSHHG 若把
    密歇根-休伦合为一个 117k 多边形则自然过关；若分开各 57–59k 卡在阈值下，
@@ -493,7 +493,7 @@ Hadley 下沉（动力），热力部分很浅（反推 d/H≈0.2），纯热力
 | `diagnose_monsoon_regional.py` | 8 季风区逐月降水相位/量级（秒级） | 秒级 |
 
 **注意**：前六个脚本**重跑模拟**且默认 `--world-dir data/worlds`——诊断开发态必须加
-`--world-dir private/worlds`；后两个读构建产物，需先 `dreamulator build --only climate`。
+`--world-dir data/worlds`；后两个读构建产物，需先 `dreamulator build --only climate`。
 验证基线数据（Köppen 观测、ERA5/GPCP 纬向值）的出处与下载见
 [pipelines/climate-validation.md](../pipelines/climate-validation.md)。
 

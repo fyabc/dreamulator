@@ -21,7 +21,7 @@ Two checks it answers (the "transport magnitude" lever):
 Usage::
 
     uv run python scripts/diagnose_precip_budget.py
-    uv run python scripts/diagnose_precip_budget.py --world-dir private/worlds
+    uv run python scripts/diagnose_precip_budget.py --world-dir data/worlds
 """
 
 from __future__ import annotations

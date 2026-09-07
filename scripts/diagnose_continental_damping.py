@@ -17,7 +17,7 @@ where d is the isotropic distance to coast (km), k_cont the maximum relative
 damping deep inland, L the maritime-penetration e-folding length.
 
 Usage:
-    uv run python scripts/diagnose_continental_damping.py --world-dir private/worlds
+    uv run python scripts/diagnose_continental_damping.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--k", default="0.5,1.0,1.5,2.0")
     parser.add_argument("--L", default="1000,1500,2000")
     args = parser.parse_args()

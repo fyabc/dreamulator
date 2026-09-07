@@ -12,7 +12,7 @@ the current (annual-mean-removed) form and a raw (land-sea contrast) form.
 Loads the built monthly temperature (no full simulation), so it runs in seconds.
 
 Usage:
-    uv run python scripts/diagnose_winter_pressure.py --world-dir private/worlds
+    uv run python scripts/diagnose_winter_pressure.py --world-dir data/worlds
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def main() -> None:
     parser.add_argument("--world", default="earth")
     parser.add_argument("--planet", default="planet_earth")
     parser.add_argument("--branch", default="climate-dev")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent

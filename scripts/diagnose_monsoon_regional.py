@@ -67,7 +67,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world", default="earth")
     parser.add_argument("--map", default="planet_earth", help="map/planet id under maps/")
-    parser.add_argument("--world-dir", default="private/worlds")
+    parser.add_argument("--world-dir", default="data/worlds")
     parser.add_argument("--branch", default="climate-dev", help="empty string for root world")
     args = parser.parse_args()
 

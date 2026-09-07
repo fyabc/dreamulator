@@ -32,7 +32,7 @@ the script aligns them explicitly.  Sampling is nearest-cell on the CVT mesh
 
 Usage:
     uv run python scripts/station_diagnostics.py \
-        private/worlds/earth/branches/climate-dev/maps/planet_earth
+        data/worlds/earth/branches/climate-dev/maps/planet_earth
 """
 
 from __future__ import annotations

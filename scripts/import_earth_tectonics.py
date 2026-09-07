@@ -4,7 +4,7 @@ The implementation lives in ``dreamulator.import_earth_tectonics`` (mirroring
 the ETOPO1 elevation importer).  Usage::
 
     uv run python scripts/import_earth_tectonics.py \
-        --output-dir private/worlds/earth/maps/planet_earth
+        --output-dir data/worlds/earth/maps/planet_earth
 """
 
 from dreamulator.import_earth_tectonics import main

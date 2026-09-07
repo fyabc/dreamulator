@@ -66,7 +66,7 @@ export/
 
 # Generated world build output — published to a GitHub Release by
 # scripts/publish_world_data.py and downloaded by deploy-pages.yml, so it is
-# NOT committed (no git LFS). Rebuild locally in private/worlds + publish.
+# NOT committed (no git LFS). Rebuild locally in data/worlds + publish.
 data/worlds/**/maps/
 data/worlds/**/derived/
 
