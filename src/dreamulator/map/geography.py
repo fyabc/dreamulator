@@ -18,7 +18,7 @@ the post-tectonics re-anchor produce identical land patterns.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
@@ -45,22 +45,10 @@ def feature_noise_seed(config_seed: int) -> int:
     return int(config_seed) + _FEATURE_NOISE_SEED_OFFSET
 
 
-FeatureKind = Literal[
-    "continent",
-    "archipelago",
-    "plateau",
-    "ocean_basin",
-    "rift_sea",
-    "shallow_sea",
-    "isthmus",
-]
-
-
 class GeographyFeature(BaseModel):
     """One authored landmass / ocean feature anchored on the sphere."""
 
     name: str
-    kind: FeatureKind = "continent"
     lon: float = Field(default=0.0, ge=-180.0, le=180.0)
     lat: float = Field(ge=-90.0, le=90.0)
     #: Circular radius in degrees; for elongated features this is the
@@ -91,7 +79,7 @@ class GeographyFeature(BaseModel):
     #: fBm noise amplitude injected into the bias field kernel (0 = off).
     #: For rift features this roughens the otherwise smooth cosine-tapered
     #: boundary, creating fractal coastlines.  Typical: 0.1–0.5.
-    noise_amplitude: float = Field(default=0.0, ge=0.0, le=3.0)
+    noise_amplitude: float = Field(default=0.0, ge=0.0, le=5.0)
 
 
 class GeographySpec(BaseModel):

@@ -418,8 +418,6 @@ hemisphere_land_bias: 0.10      # >0 北半球偏陆（按 sin(lat) 平滑加权
 reapply_after_tectonics: true   # 构造演化后重新锚定（见下）
 features:
   - name: 世界岛
-    kind: continent             # 语义标签：continent / archipelago / plateau /
-                                #   ocean_basin / rift_sea / shallow_sea / isthmus
     lon: -90.0
     lat: 0.0
     radius_deg: 35.0            # 圆半径；拉长特征 = 半短轴（半宽）

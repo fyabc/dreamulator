@@ -53,9 +53,9 @@ def test_load_nacrea_spec() -> None:
     assert spec is not None
     assert spec.features, "nacrea geography.yaml must define features"
     assert spec.land_fraction_target == pytest.approx(0.28)
-    kinds = {f.kind for f in spec.features}
-    assert "continent" in kinds
-    assert "ocean_basin" in kinds
+    strengths = [f.strength for f in spec.features]
+    assert any(s > 0 for s in strengths), "must have at least one land (positive-strength) feature"
+    assert any(s < 0 for s in strengths), "must have at least one ocean (negative-strength) feature"
 
 
 def test_load_missing_returns_none() -> None:
