@@ -438,7 +438,7 @@ class TerrainPipelineConfig:
     # the moist 6.5 (subsidence offsets the altitude cooling; observed desert
     # lapse ~3-4 °C/km, Sudan stations Frontiers 2022).  Applied to land cells in
     # the Hadley descent band (|lat| 15-35°).  Default 3.5.
-    subtropical_lapse_rate_c_km: float = 3.5
+    subtropical_lapse_rate_c_km: float = 1.5
     subtropical_lapse_lat_lo_deg: float = 15.0  # dry-desert belt lower bound (°)
     subtropical_lapse_lat_hi_deg: float = 35.0  # dry-desert belt upper bound (°)
     # Dry-air surface warming (°C) for the same subtropical desert belt (4.2-①):
