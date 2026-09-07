@@ -9,8 +9,10 @@ downloads that tarball before running the static export.
 
 This script performs the whole "rebuild + publish" loop in one command:
 
-  1. Build each world in-place on ``data/worlds`` (the default data dir; the output
-     is gitignored, so it does not dirty the working tree).
+  1. Rebuild each world in-place on ``data/worlds`` (the default data dir; the output
+     is gitignored, so it does not dirty the working tree). Procedural worlds run
+     ``dreamulator build``; imported (real-data) worlds such as ``earth`` run their
+     importer scripts instead.
   2. Package the generated maps + derived into a tarball.
   3. Upload the tarball to the ``worlds-data`` release.
 
@@ -60,6 +62,40 @@ def _build_world(world: str, worlds_dir: Path) -> None:
         cmd = ["uv", "run", "dreamulator", "build", world, "--force", "--data-dir", str(worlds_dir)]
     print(f"Building '{world}' ...")
     subprocess.run(cmd, check=True)
+
+
+# Real-data (imported) worlds are not procedurally generated — their ``maps/``
+# comes from dedicated import scripts, not ``dreamulator build``.  Each entry
+# lists the importer modules to run, in dependency order (see
+# docs/design/pipelines/earth-real-data.md §3).  The raw data is cached in the
+# system temp dir and re-downloaded automatically when missing.
+_IMPORTED_WORLDS: dict[str, list[tuple[str, list[str]]]] = {
+    "earth": [
+        ("import_earth_elevation", ["--resolution", "4096x2048", "--mesh-nodes", "200000",
+                                    "--seed", "42", "--skip-download"]),
+        ("import_earth_tectonics", []),
+        ("import_earth_watermask", []),
+        ("import_earth_climate", []),
+    ],
+}
+
+
+def _import_world(world: str, worlds_dir: Path) -> None:
+    """Rebuild an imported world by running its importer scripts in order.
+
+    The elevation importer's default ``--output-dir`` is a legacy layer path, so
+    the real ``maps/<planet>/`` dir is always passed explicitly; the remaining
+    importers read the mesh already written there.
+    """
+    out_dir = worlds_dir / world / "maps" / "planet_earth"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    py = str(Path(sys.executable))
+    scripts_dir = _project_root() / "scripts"
+    for module, extra_args in _IMPORTED_WORLDS[world]:
+        script = scripts_dir / f"{module}.py"
+        cmd = [py, str(script), "--output-dir", str(out_dir), *extra_args]
+        print(f"Importing '{world}' via {module} ...")
+        subprocess.run(cmd, check=True, cwd=str(_project_root()))
 
 
 def _is_generated_maps_dir(path: Path) -> bool:
@@ -158,7 +194,10 @@ def main() -> None:
 
     if not args.skip_build:
         for world in args.worlds:
-            _build_world(world, worlds_dir)
+            if world in _IMPORTED_WORLDS:
+                _import_world(world, worlds_dir)
+            else:
+                _build_world(world, worlds_dir)
 
     if not worlds_dir.is_dir():
         print(f"Worlds directory not found: {worlds_dir}", file=sys.stderr)
