@@ -7,8 +7,6 @@
 # 重新锚定，防止大陆随板块漂移离开锚点。
 #
 # 字段语义（见 src/dreamulator/map/geography.py）：
-#   kind          语义标签（continent/archipelago/plateau/ocean_basin/
-#                 rift_sea/shallow_sea/isthmus）
 #   lon/lat       锚点中心（度）。极点特征 lon 任意
 #   radius_deg    圆半径；拉长特征 = 半短轴（半宽）
 #   strength      +1 强陆地 … −1 强海洋
@@ -45,7 +43,6 @@ reapply_after_tectonics: true   # 构造演化后重锚定，保住正典大陆
 features:
   # ---- 陆块（侧点 + 极点）----
   - name: 世界岛
-    kind: continent
     lon: -90.0                  # 后随点 ~90°W
     lat: -10.0                  # 中心南移以压缩北方沙漠
     radius_deg: 35.0            # 半短轴；拉长后面积约 15% 表面积
@@ -64,7 +61,6 @@ features:
   # 2026-08-06 v2：用户验证后整体 ×1.7 放大并加强（首版裂谷太弱，碎成湖泊串
   # 而非陆间海）；各段仍拉开幅度，并有东非式分叉（西支）。
   - name: 大裂谷海·南段
-    kind: rift_sea
     lon: -92.0
     lat: -25.0
     radius_deg: 5.1             # 宽深海段（红海型）
@@ -73,7 +69,6 @@ features:
     elongation: 3.0
     bearing_deg: 25.0           # 段轴向左右摆动 → 蜿蜒走向
   - name: 大裂谷海·中南段
-    kind: rift_sea
     lon: -88.0
     lat: -11.0
     radius_deg: 3.1             # 窄弱段（半裂谷/夭折裂谷）
@@ -82,7 +77,6 @@ features:
     elongation: 5.0
     bearing_deg: -30.0
   - name: 大裂谷海·中段
-    kind: rift_sea
     lon: -91.5
     lat: -3.0
     radius_deg: 4.4
@@ -91,7 +85,6 @@ features:
     elongation: 3.5
     bearing_deg: 40.0
   - name: 大裂谷海·中北段
-    kind: rift_sea
     lon: -87.0
     lat: 8.0
     radius_deg: 2.6             # 最窄段
@@ -101,7 +94,6 @@ features:
     bearing_deg: -15.0
   # 北段与中北段之间的连接裂谷（保持裂谷海连通，增加海岸线曲折度）
   - name: 大裂谷海·中北连接段
-    kind: rift_sea
     lon: -87.0
     lat: 13.0
     radius_deg: 1.7             # 小型裂谷，不切太宽
@@ -110,7 +102,6 @@ features:
     elongation: 2.5
     bearing_deg: -10.0
   - name: 大裂谷海·北段
-    kind: rift_sea
     lon: -90.5
     lat: 19.0
     radius_deg: 4.9
@@ -120,26 +111,23 @@ features:
     bearing_deg: 30.0
   # 西支分叉（仿东非大裂谷 Western Rift：从中段向 WNW 分出）
   - name: 大裂谷海·西支南段
-    kind: rift_sea
     lon: -95.5
     lat: -1.0
-    radius_deg: 3.2
+    radius_deg: 4.0
     strength: -2.2
-    noise_amplitude: 0.8
+    noise_amplitude: 1.0
     elongation: 3.0
     bearing_deg: -70.0
   - name: 大裂谷海·西支北段
-    kind: rift_sea
     lon: -103.0
-    lat: 3.0
-    radius_deg: 2.4
+    lat: 4.0
+    radius_deg: 3.0
     strength: -1.8
-    noise_amplitude: 0.8
-    elongation: 2.8
+    noise_amplitude: 1.0
+    elongation: 3.5
     bearing_deg: -75.0
   # 断块隆起（正场小丘，裂谷肩抬升 / 未裂透的断块）
   - name: 裂谷肩断块隆起·南
-    kind: plateau
     lon: -85.5
     lat: -9.0
     radius_deg: 2.7
@@ -148,7 +136,6 @@ features:
     elongation: 2.4
     bearing_deg: -25.0
   - name: 裂谷肩断块隆起·北
-    kind: plateau
     lon: -93.5
     lat: 12.0
     radius_deg: 1.7
@@ -160,7 +147,6 @@ features:
   # 潮汐锁定过程中自转离心力减弱 → 极点旋转扁率松弛 → 地壳张性裂缝。
   # 这些裂谷切割北极大陆边缘，连通北方内海与外洋。
   - name: 北极周缘裂谷·本初段
-    kind: rift_sea
     lon: 11.5
     lat: 59.0
     radius_deg: 2.25
@@ -169,7 +155,6 @@ features:
     elongation: 3.5
     bearing_deg: 130.0
   - name: 北极周缘裂谷·西段
-    kind: rift_sea
     lon: -82.5
     lat: 48.0
     radius_deg: 1.4
@@ -178,7 +163,6 @@ features:
     elongation: 3.0
     bearing_deg: 25.0
   - name: 北极周缘裂谷·中段
-    kind: rift_sea
     lon: -52.0
     lat: 52.0
     radius_deg: 1.4
@@ -187,7 +171,6 @@ features:
     elongation: 3.5
     bearing_deg: 140.0
   - name: 北极周缘裂谷·远西段
-    kind: rift_sea
     lon: -136.3
     lat: 58.5
     radius_deg: 1.2
@@ -197,7 +180,6 @@ features:
     bearing_deg: 133.0
 
   - name: 北方海峡小型断陷1
-    kind: rift_sea
     lon: -3.3
     lat: 68.9 
     radius_deg: 1.1
@@ -208,7 +190,6 @@ features:
 
   # 异常塌陷（更强负场，裂谷内局部深陷 / 拉分盆地）
   - name: 裂谷塌陷盆地·中
-    kind: rift_sea
     lon: -84.5
     lat: 2.0
     radius_deg: 2.5
@@ -217,7 +198,6 @@ features:
     elongation: 2.5
     bearing_deg: 15.0
   - name: 裂谷塌陷盆地·北
-    kind: rift_sea
     lon: -89.0
     lat: 14.0
     radius_deg: 1.7
@@ -227,7 +207,6 @@ features:
     bearing_deg: -18.0
 
   - name: 前导点褶皱山系
-    kind: archipelago
     lon: 94.0
     lat: -2.5
     radius_deg: 6.0
@@ -237,7 +216,6 @@ features:
     bearing_deg: 30.0
 
   - name: 海峡小型断陷1
-    kind: rift_sea
     lon: 73.0
     lat: 24.0 
     radius_deg: 1.2
@@ -247,7 +225,6 @@ features:
     bearing_deg: 5.0
 
   - name: 海峡小型断陷2
-    kind: rift_sea
     lon: 73.3
     lat: 17.0 
     radius_deg: 0.5
@@ -257,7 +234,6 @@ features:
     bearing_deg: 0.0
 
   - name: 北极大陆
-    kind: plateau
     lon: 150.0
     lat: 86.0
     radius_deg: 15.0
@@ -272,7 +248,6 @@ features:
 
   # ---- 大洋（向星 / 背星点 + 南极浅海）----
   - name: Aegis深渊洋
-    kind: ocean_basin
     lon: 0.0                    # 向星点
     lat: 0.0
     radius_deg: 45.0
@@ -283,12 +258,11 @@ features:
   # 单一巨型火山在固定位置持续堆积（不同于地球板块飘过热点形成的火山链）。
   # 位于 Aegis 深渊洋中央，Aegis 永悬天顶，为 nacrea 文明传说中的"世界之眼"。
   - name: 永耀岛
-    kind: plateau
     lon: 0.5                    # 略偏向星点，不完全重合
     lat: -0.8
     radius_deg: 2.5             # 小型岛屿
     strength: 1.5               # 需克服 Aegis 深渊洋 −1.0 偏置
-    noise_amplitude: 0.75
+    noise_amplitude: 0.8
     elongation: 1.1
     bearing_deg: 0.0
     elevation_target_m: 2100.0
@@ -296,7 +270,6 @@ features:
     pin_exponent: 2.0           # 削峰——孤立的尖耸火山锥
 
   - name: 虚空洋
-    kind: ocean_basin
     lon: 180.0                  # 背星点
     lat: 0.0
     radius_deg: 40.0
@@ -305,16 +278,15 @@ features:
 
   # 世界岛东岸浅海——弱负偏置让海向陆渗透，形成曲折海岸和内海
   - name: 世界岛东岸浅海1
-    kind: shallow_sea
     lon: -46.0
     lat: -12.0
     radius_deg: 6.0
-    strength: -0.35            # 弱负偏置：不强制成海，只增加海洋倾向
+    strength: -0.35             # 弱负偏置：不强制成海，只增加海洋倾向
+    noise_amplitude: 4.0        # 高噪声增加边界随机性
     elongation: 2.0
     bearing_deg: 75.0
 
   - name: 南极浅海
-    kind: shallow_sea
     lon: 0.0                    # 极点，lon 任意
     lat: -90.0
     radius_deg: 24.0
@@ -324,7 +296,6 @@ features:
   # ---- 南方大陆（地球南半球 19% 陆地来自南美/澳洲；打破南大洋单调、
   #   让板块地壳构成接近地球：~5 陆 / ~6 洋 / 其余混合）----
   - name: 南方大陆1
-    kind: continent
     lon: 120.0
     lat: -35.0
     radius_deg: 12.0
@@ -335,7 +306,6 @@ features:
     pin_strength: 0.4
     pin_exponent: 1.5          # 偏差指数化：山脉强力下压
   - name: 南方大陆2
-    kind: continent
     lon: -35.0
     lat: -40.0
     radius_deg: 11.0
@@ -346,25 +316,21 @@ features:
   # ---- 南大洋（geography.md：南半球中纬度为洋；四环近似纬向洋带，
   #   否则 fBm 在此自发出陆，形成设计外大陆，边界横穿成"露出洋中脊"假象）----
   - name: 南大洋·0
-    kind: ocean_basin
     lon: 0.0
     lat: -32.0
     radius_deg: 28.0
     strength: -0.8
   - name: 南大洋·90
-    kind: ocean_basin
     lon: 90.0
     lat: -39.0
     radius_deg: 26.0
     strength: -0.8
   - name: 南大洋·180
-    kind: ocean_basin
     lon: 180.0
     lat: -40.0
     radius_deg: 30.0
     strength: -0.9
   - name: 南大洋·-90
-    kind: ocean_basin
     lon: -90.0
     lat: -36.0
     radius_deg: 27.0
@@ -373,7 +339,6 @@ features:
   # ---- 前导大陆小裂谷（2026-08）----
   # 以 #89452 为中心、南北走向（偏西 25°），切穿大陆、连通周围内海并打开出口。
   - name: 前导大陆小裂谷
-    kind: rift_sea
     lon: 135.0
     lat: 6.0
     radius_deg: 2.2
