@@ -93,22 +93,22 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 ## 3. 导入命令（一次性重建 earth）
 
 ```bash
-uv run python scripts/import_earth_elevation.py \
+uv run python scripts/earth/import_earth_elevation.py \
     --output-dir data/worlds/earth/maps/planet_earth \
     --resolution 4096x2048 --mesh-nodes 200000 --seed 42 --skip-download
 
-uv run python scripts/import_earth_tectonics.py \
+uv run python scripts/earth/import_earth_tectonics.py \
     --output-dir data/worlds/earth/maps/planet_earth
 
-uv run python scripts/import_earth_watermask.py \
+uv run python scripts/earth/import_earth_watermask.py \
     --output-dir data/worlds/earth/maps/planet_earth
 
-uv run python scripts/import_earth_climate.py \
+uv run python scripts/earth/import_earth_climate.py \
     --output-dir data/worlds/earth/maps/planet_earth
 ```
 
 > 直接在 `data/worlds` 上重建（输出被 `.gitignore` 忽略、不污染工作区）；发版时
-> `scripts/publish_world_data.py` 会按依赖顺序跑这 4 个 import 脚本并打包上传。
+> `scripts/release/publish_world_data.py` 会按依赖顺序跑这 4 个 import 脚本并打包上传。
 
 ---
 

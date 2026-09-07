@@ -100,7 +100,7 @@ SunControl 的 season 约定是「0° = 北半球春分」（`solarDeclinationDe
 
 1. **后端**：`export_climate_layers` 增加 `climate_monthly.msgpack` 导出
    （`t_monthly` + `p_monthly` + 范围元数据 + 月历约定）。
-2. **静态导出三件套**（CLAUDE.md 约定）：`scripts/export_static.py` 导出该文件 +
+2. **静态导出三件套**（CLAUDE.md 约定）：`scripts/release/export_static.py` 导出该文件 +
    `frontend/src/api/staticClient.ts` 加读取方法 + `client.ts` unified API 委托。
 3. **前端烘焙**：`layerBakes.ts` 增加 `bakeMonthlyLayer(month)`；`useGPUTerrain` 增加
    月度纹理缓存。

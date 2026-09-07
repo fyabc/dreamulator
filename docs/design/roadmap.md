@@ -52,7 +52,7 @@
 | 陆地蒸散循环 | ✅ | 土壤+植被蒸发回收 |
 | ITCZ 对流降水 | ✅ | 热带辐合带 + 局地热对流 |
 | Köppen 气候分类 | ✅ | 空间准确率 30.8% / 30 类 Kappa 0.265 / 群组准确率 65.8%（主指标）；分布匹配 67.5%（辅助，200k vs Beck 2018） |
-| ETOPO1 真实地球验证 | ✅ | `earth/climate-dev` 分支 + `scripts/validate_climate.py` |
+| ETOPO1 真实地球验证 | ✅ | `earth/climate-dev` 分支 + `scripts/climate/validate_climate.py` |
 | 热带降水修正（3A.1） | ✅ | v0.11.0：ITCZ 增强、热带对流 ×2、降水底线 |
 | 季节变化（3A.2） | ✅ | **季节能量平衡模型** `T_amp=ΔQ_ω(1−α)/√(B_eff²+(ωC)²)`（North & Coakley 1979，`B_eff=B+6D` 显式热输送）+ 季节冰反照率 + ITCZ 迁移月度降水 + s/w 判别季节感知 |
 | 洋流 + 温度精细化（3A.3） | ✅ | Stommel + GMRES；冰盖反照率（M dwarf 修正）；可变直减率（Γ(T), 热带高地 +3.5°C）；上升流 SST 冷却；~~云反馈~~（SW/LW 抵消→跳过） |
@@ -468,7 +468,7 @@
       在没有配套重新标定前，尖锐化的月度辐合带会让副热带过度季节化并高估陆地降水，
       属「物理方向对、标定未跟上」，待月度矢量场工作里系统处理。验收指标（Cwa/Cfa/Am
       recall >40%）随之顺延到该轮。
-    - **v1 验收后的遗留 mismatch**（2026-08-29，`scripts/diagnose_monsoon_regional.py`
+    - **v1 验收后的遗留 mismatch**（2026-08-29，`scripts/climate/diagnose_monsoon_regional.py`
       区域诊断定量确认）：① 热带水分输送路由错位——刚果年降水 195（观测 ~1800）、
       撒哈拉腹地 1132（观测 ~30）、亚马逊单月 1562 mm 爆表：大西洋水汽被年均信风
       送去亚马逊，进入非洲的部分被抽到撒哈拉深处才雨出，真实世界靠季节反转的西南

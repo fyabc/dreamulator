@@ -248,7 +248,7 @@ angularSize = orbit.semi_major_axis_au / cameraDistanceToParent
 | `GET /api/worlds/{name}/planets` | 行星定义列表 | ✅ `?branch=` |
 | `GET /api/worlds/{name}/habitable-zones` | 宜居带 + 凝结线数据 | ✅ `?branch=` |
 
-在静态模式下，这些端点由 `frontend/public/data/` 中预导出的 JSON 文件提供（通过 `scripts/export_static.py` 生成）。
+在静态模式下，这些端点由 `frontend/public/data/` 中预导出的 JSON 文件提供（通过 `scripts/release/export_static.py` 生成）。
 
 ## 扩展方向
 

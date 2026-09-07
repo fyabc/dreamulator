@@ -132,7 +132,7 @@ The static mode pre-exports all world data as JSON at build time. The resulting 
 cd frontend
 
 # 1. Export world data to static JSON
-python ../scripts/export_static.py
+python ../scripts/release/export_static.py
 
 # 2. Build with static mode (uses .env.static for base path)
 npx vite build --mode static
@@ -154,7 +154,7 @@ npm run build:static:local    # export all worlds + typecheck + build with base 
 npm run preview:static        # serves dist/ at http://localhost:4173
 ```
 
-Open e.g. `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` to verify maps and other features (check the console for 404s). For quick iteration, export a single world only: `uv run python scripts/export_static.py --worlds earth` (from the repo root).
+Open e.g. `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` to verify maps and other features (check the console for 404s). For quick iteration, export a single world only: `uv run python scripts/release/export_static.py --worlds earth` (from the repo root).
 
 **GitHub Pages deployment** is automated via GitHub Actions (`.github/workflows/deploy-pages.yml`). Push to `main` and enable Pages in repository settings (Source: GitHub Actions).
 

@@ -297,7 +297,7 @@ ocean:
 | climate_summary.yaml 追加段 | 层 derived | 盆地数、最大输运（Sv）、WBC/内部流速比、SST anomaly 统计 |
 
 `ocean_currents.json` 需按 CLAUDE.md 三文件同步：`api_routes/maps.py`（新端点或
-并入 `features`）+ `scripts/export_static.py` + `frontend/src/api/staticClient.ts`。
+并入 `features`）+ `scripts/release/export_static.py` + `frontend/src/api/staticClient.ts`。
 
 ---
 

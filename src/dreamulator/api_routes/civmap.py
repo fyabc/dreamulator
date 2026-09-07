@@ -54,7 +54,7 @@ def get_boundaries(
         raise HTTPException(
             status_code=404,
             detail=f"Boundary data for '{level}' not found. "
-            "Run scripts/prepare_civmap_data.py to download reference data.",
+            "Run scripts/dev/prepare_civmap_data.py to download reference data.",
         )
     return geojson
 

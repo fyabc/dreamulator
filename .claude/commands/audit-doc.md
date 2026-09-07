@@ -21,7 +21,7 @@ description: 审计文档↔代码一致性（file:line 引用、反引号符号
 
 ## 工具（防幻觉，先跑工具再人工核对）
 
-- `scripts/check_doc_refs.py` —— 自动扫 file:line 引用 + 反引号 snake_case 符号，报出
+- `scripts/dev/check_doc_refs.py` —— 自动扫 file:line 引用 + 反引号 snake_case 符号，报出
   `FILE_NOT_FOUND` / `LINE_OUT_OF_RANGE` / `NOT_IN_CODE`。先跑它拿候选清单。
 - `grep -rn "<符号>" src/` —— 逐个核对符号是否真的存在、当前叫什么
 - 参数表字段 → 对照 `map/pipeline_types.py`（`TerrainPipelineConfig`）等配置类的 `model_fields`

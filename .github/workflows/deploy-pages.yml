@@ -7,7 +7,7 @@ on:
     # the deploy entirely. Manual runs remain available via workflow_dispatch.
     paths:
       - 'frontend/**'
-      - 'scripts/export_static.py'
+      - 'scripts/release/export_static.py'
       - 'data/**'
       - 'src/**'
       - 'pyproject.toml'
@@ -31,7 +31,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         # Build output (maps + derived) is NOT in git — it is published as a
-        # GitHub Release tarball by scripts/publish_world_data.py and downloaded
+        # GitHub Release tarball by scripts/release/publish_world_data.py and downloaded
         # below. This keeps the repo free of large generated files (no LFS).
 
       - name: Download world build data
@@ -56,12 +56,12 @@ jobs:
 
       # The engine build is deliberately NOT run here: maps are slow to generate
       # (minutes per world). They are rebuilt locally and published via
-      # `uv run python scripts/publish_world_data.py`; this deploy just consumes
+      # `uv run python scripts/release/publish_world_data.py`; this deploy just consumes
       # the published tarball. Publish BEFORE pushing input changes that affect
       # the data, so the deploy picks up the matching build output.
 
       - name: Export static data
-        run: uv run python scripts/export_static.py
+        run: uv run python scripts/release/export_static.py
 
       - name: Set up Node
         uses: actions/setup-node@v4

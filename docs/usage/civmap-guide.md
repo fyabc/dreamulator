@@ -19,17 +19,17 @@
 
 ```bash
 # 默认下载 Natural Earth 的 ADM0（国界）和 ADM1（省/州级）
-uv run python scripts/prepare_civmap_data.py
+uv run python scripts/dev/prepare_civmap_data.py
 
 # 可选：只下载特定层级
-uv run python scripts/prepare_civmap_data.py --level adm0
-uv run python scripts/prepare_civmap_data.py --level adm0 adm1
+uv run python scripts/dev/prepare_civmap_data.py --level adm0
+uv run python scripts/dev/prepare_civmap_data.py --level adm0 adm1
 
 # 可选：使用 geoBoundaries 数据（CC BY 4.0，更精细）
-uv run python scripts/prepare_civmap_data.py --source geoboundaries --level adm1
+uv run python scripts/dev/prepare_civmap_data.py --source geoboundaries --level adm1
 
 # 可选：简化几何以减小文件体积（需要 geopandas）
-uv run python scripts/prepare_civmap_data.py --simplify 0.01
+uv run python scripts/dev/prepare_civmap_data.py --simplify 0.01
 ```
 
 数据存储在 `data/worlds/earth/layers/geological/input/maps/earth_reference/`，已在 `.gitignore` 中排除（约 45MB）。

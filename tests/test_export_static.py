@@ -1,4 +1,4 @@
-"""Tests for scripts/export_static.py markdown document rendering.
+"""Tests for scripts/release/export_static.py markdown document rendering.
 
 The script is not a package, so it is loaded via ``importlib``. Verifies that
 ``_export_dir_documents`` and ``_export_layer_data`` render template bodies

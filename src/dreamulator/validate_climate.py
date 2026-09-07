@@ -10,13 +10,13 @@ the output against observed climatological data:
 
 Usage:
     # Full validation (requires downloaded data — see docs/design/pipelines/climate-validation.md)
-    uv run python scripts/validate_climate.py earth --branch terrain-dev
+    uv run python scripts/climate/validate_climate.py earth --branch terrain-dev
 
     # Include cell-by-cell Koppen spatial comparison (requires koppen_obs.json)
-    uv run python scripts/validate_climate.py earth --dataset beck2018 --spatial
+    uv run python scripts/climate/validate_climate.py earth --dataset beck2018 --spatial
 
     # Save the validation report
-    uv run python scripts/validate_climate.py earth --output-dir reports/climate/
+    uv run python scripts/climate/validate_climate.py earth --output-dir reports/climate/
 
 Output:
     - Validation report printed to stdout
@@ -335,7 +335,7 @@ def _load_monthly_reference() -> dict[str, Any]:
     ``precipitation_mm_per_month`` (12×90); month-major (0=Jan), band-major
     (90N → 88S).  Empty dict when the file is missing.  Cached after first load.
 
-    Regenerate with ``scripts/generate_monthly_reference.py``.
+    Regenerate with ``scripts/earth/generate_monthly_reference.py``.
     """
     global _MONTHLY_REF_CACHE
     if _MONTHLY_REF_CACHE is not None:
@@ -359,7 +359,7 @@ def _load_lgm_reference() -> dict[str, Any]:
     top edge sits at 84N.  Empty dict when the file is missing.  Cached after
     first load.
 
-    Regenerate with ``scripts/generate_lgm_reference.py``.
+    Regenerate with ``scripts/earth/generate_lgm_reference.py``.
     """
     global _LGM_REF_CACHE
     if _LGM_REF_CACHE is not None:
@@ -1097,7 +1097,7 @@ def run_validation(
     if mesh is None:
         return {
             "error": f"No CVT mesh found for {planet_id} in {world_dir}. "
-            f"Run 'uv run python scripts/import_earth_elevation.py' first."
+            f"Run 'uv run python scripts/earth/import_earth_elevation.py' first."
         }
 
     print("Validating climate engine against real Earth observations...")
@@ -1198,7 +1198,10 @@ def run_validation(
         ]
         obs_path = next((p for p in obs_candidates if p.exists()), None)
         if obs_path is None:
-            print("  SKIP: koppen_obs.json not found. Run scripts/convert_koppen_map.py first.")
+            print(
+                "  SKIP: koppen_obs.json not found. "
+                "Run scripts/climate/convert_koppen_map.py first."
+            )
             kval_spatial: dict[str, Any] = {"error": "koppen_obs.json not found"}
         else:
             kval_spatial = validate_koppen_spatial(mesh, obs_path)

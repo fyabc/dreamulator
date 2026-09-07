@@ -6,15 +6,15 @@
 无法描述多体系统的真实演化。当世界含**共振链**、**紧密轨道卫星**、**长期摄动**时，
 仅凭开普勒根数判断「系统稳不稳定」是危险的——需要 N-body 数值积分来验证。
 
-dreamulator 用 REBOUND（Rein & Liu 2012）做这件事。脚本 `scripts/rebound_nbody.py` 是
+dreamulator 用 REBOUND（Rein & Liu 2012）做这件事。脚本 `scripts/astro/rebound_nbody.py` 是
 最小骨架，后续会扩展出自旋-轨道耦合（Cassini 态）与百年~千年进动周期标定。
 
-## 工具：`scripts/rebound_nbody.py`
+## 工具：`scripts/astro/rebound_nbody.py`
 
 ### 怎么跑
 
 ```bash
-uv run python scripts/rebound_nbody.py
+uv run python scripts/astro/rebound_nbody.py
 ```
 
 依赖在 `pyproject.toml` 的 `dev` extra（`rebound>=4.0`），`uv sync --all-extras` 安装，

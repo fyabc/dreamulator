@@ -1,7 +1,7 @@
 # 审计第一波 T4：静态导出同步差异清单
 
 > 日期：2026-08-15 · 方法：枚举 `src/dreamulator/api_routes/` 全部读端点（GET），
-> 逐一核对三件套 `scripts/export_static.py` / `frontend/src/api/staticClient.ts` /
+> 逐一核对三件套 `scripts/release/export_static.py` / `frontend/src/api/staticClient.ts` /
 > `frontend/src/api/client.ts` 的覆盖情况。
 > 判据：读端点在静态模式（GitHub Pages）是否可用 = 导出脚本有对应产物 **且**
 > staticClient 有读取方法 **且** client.ts 静态分支正确委托。
@@ -58,7 +58,7 @@
 
 **F1. `GET /worlds/{name}/civilizations`** —— `api_routes/worlds.py:301`
 - 读 `layers/civilization/input/civilizations.yaml`，返回文明列表；
-- `scripts/export_static.py:137` 的 `_export_layer_data` docstring 声称输出
+- `scripts/release/export_static.py:137` 的 `_export_layer_data` docstring 声称输出
   `civilizations` 键，但函数体（146–225 行）**从未 emit 该键**——docstring 过时；
 - `staticClient.ts` 无 `getCivilizations`；`client.ts` 无 `getCivilizations`；
 - 前端无调用（grep `getCivilizations`/`civilizations` 仅命中
@@ -111,7 +111,7 @@
 ## 出处
 
 - 端点清单：`api_routes/worlds.py`、`maps.py`、`civmap.py`（grep `@router.get`）
-- 导出流程：`scripts/export_static.py`（`_export_layer_data` 146–225、
+- 导出流程：`scripts/release/export_static.py`（`_export_layer_data` 146–225、
   `_export_map_data` 228–330、`_export_civmap_reference` 363–413）
 - 静态客户端：`frontend/src/api/staticClient.ts`（方法清单见 §2.1）
 - 统一 API：`frontend/src/api/client.ts`（readApi 334–496）

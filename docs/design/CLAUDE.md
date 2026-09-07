@@ -5,7 +5,7 @@
 ## 目录结构
 
 - **根目录** — 总览、路线图、竞品分析、审计计划
-- [`pipelines/`](pipelines/) — **已实现管线技术参考**（`scripts/check_doc_refs.py` 的审计对象）
+- [`pipelines/`](pipelines/) — **已实现管线技术参考**（`scripts/dev/check_doc_refs.py` 的审计对象）
 - [`proposals/`](proposals/) — **设计提案 + 方法论**（未来子系统、未实现）
 - [`audit/`](audit/) — 审计结果（三波审计的发现记录）
 - [`archive/`](archive/) — 已归档的早期决策记录
@@ -53,6 +53,6 @@
   「引擎设计纪律」「竞品参照」同源。
 - 本目录文档回答"为什么这样设计 / 如何实现"；`../usage/` 回答"如何使用"
 - **已实现子系统**的文档放 `pipelines/`，**未实现 / 方法论**放 `proposals/`——这也是
-  `scripts/check_doc_refs.py` 只审计 `pipelines/` 的分类依据
+  `scripts/dev/check_doc_refs.py` 只审计 `pipelines/` 的分类依据
 - 引入新设计模式时同步更新 `../worldbuilding/design_patterns.md`；引入新学科知识时同步 `../knowledge/<discipline>/`
 - 路线图或架构变更时更新 `roadmap.md` 与 `architecture.md`

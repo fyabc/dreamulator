@@ -52,9 +52,12 @@ dreamulator/
 │       ├── pages/           # 页面（含 MapViewerPage 全页地图查看器）
 │       ├── stores/          # Zustand 状态管理
 │       └── viewers/         # 3D 恒星系 + 2D 地图可视化器（Three.js / WebGPU）
-├── scripts/
-│   ├── export_static.py     # 静态站点数据导出脚本
-│   └── prepare_civmap_data.py # 文明地图底图数据下载与预处理
+├── scripts/                 # 按域分组（各组说明见 scripts/README.md）
+│   ├── climate/             # 气候验证与诊断（validate_climate、diagnose_*、climate_diff）
+│   ├── earth/               # 真实地球数据导入与验证参考（import_earth_*、download_validation_data）
+│   ├── astro/               # 天文 N 体与恒星诊断（rebound_*、diagnose_stellar_physics）
+│   ├── release/             # 发布与静态导出（publish_world_data、export_static）
+│   └── dev/                 # 开发工具（check_doc_refs、profile_build、prepare_civmap_data）
 ├── .github/
 │   └── workflows/
 │       └── deploy-pages.yml # GitHub Pages 自动部署
@@ -151,13 +154,13 @@ npm run lint
 > **单命令启动**：`npm run build` 后，`uv run dreamulator serve` 同时提供 API 和前端。
 > 开发时仍可单独 `npm run dev` 使用 Vite HMR（代理到 :8000）。
 >
-> **静态模式**：`VITE_STATIC_MODE=true` 时前端读取预导出的 JSON（`scripts/export_static.py`），
+> **静态模式**：`VITE_STATIC_MODE=true` 时前端读取预导出的 JSON（`scripts/release/export_static.py`），
 > 不依赖后端，但创建/删除/构建/验证/叙述等写操作不可用。
 > GitHub Pages 部署通过 `.github/workflows/deploy-pages.yml` 自动化。
 >
 > **⚠️ 静态导出同步**：新增 API 端点或数据字段时，**必须同步更新**以下三个文件，
 > 否则 GitHub Pages 部署后对应功能将不可用：
-> 1. `scripts/export_static.py` — 添加新数据到导出流程
+> 1. `scripts/release/export_static.py` — 添加新数据到导出流程
 > 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
 > 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
 
@@ -301,13 +304,13 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 7. **构建产物不入 git（GitHub Releases 发布）**：`maps/` 与 `layers/*/derived/` 是「input + 代码 +
    seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。
    直接在 `data/worlds` 构建（输出被 ignore、不污染工作区）；发版前跑
-   `uv run python scripts/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
+   `uv run python scripts/release/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
    tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
    input 改动**，否则 Pages 拿到旧数据。读取 mesh 仍用 `decompress_mesh_bytes`（透明解压，兼容纯 JSON）。
 
 ### 气候修改差异对比
 
-改气候引擎后，用小差异难以在前端看出效果。使用 `scripts/climate_diff.py` 对比两次构建：
+改气候引擎后，用小差异难以在前端看出效果。使用 `scripts/climate/climate_diff.py` 对比两次构建：
 
 ```bash
 # 改前保存基线
@@ -317,7 +320,7 @@ cp -r data/worlds/nacrea/maps/satellite_nacrea data/worlds/nacrea/maps/_baseline
 uv run dreamulator build nacrea --only climate --force
 
 # 对比
-uv run python scripts/climate_diff.py \
+uv run python scripts/climate/climate_diff.py \
     data/worlds/nacrea/maps/_baseline \
     data/worlds/nacrea/maps/satellite_nacrea
 ```
@@ -327,7 +330,7 @@ uv run python scripts/climate_diff.py \
 ### 静态导出同步
 
 新增 API 端点或数据字段时，**必须同步更新**以下三个文件，否则 GitHub Pages 部署后对应功能不可用：
-1. `scripts/export_static.py` — 添加新数据到导出流程
+1. `scripts/release/export_static.py` — 添加新数据到导出流程
 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
 
@@ -340,7 +343,7 @@ cd frontend && npm run build:static:local && npm run preview:static
 ```
 
 > 本地静态导出/预览前，先在 `data/worlds` 上构建（`uv run dreamulator build ...` 或
-> `uv run python scripts/publish_world_data.py`）；`export_static.py` 默认读 `data/worlds`。
+> `uv run python scripts/release/publish_world_data.py`）；`export_static.py` 默认读 `data/worlds`。
 
 ### 3D 球面矢量可视化（风场/洋流箭头）
 
@@ -378,7 +381,7 @@ cd frontend && npm run build:static:local && npm run preview:static
 （设计提案/方法论）、根目录（总览/路线图/竞品/审计）。**只有 `pipelines/` 的引用必须对齐
 当前代码**；`proposals/` 的未来字段/设计词汇是合法的前向引用，`archive/`+`audit/` 是历史快照。
 
-- **工具**：`scripts/check_doc_refs.py` 扫 `pipelines/` 的 file:line 引用 + 反引号
+- **工具**：`scripts/dev/check_doc_refs.py` 扫 `pipelines/` 的 file:line 引用 + 反引号
   snake_case 符号，报出改名/删除/失效。**pre-push 钩子已挂为硬门槛（只 gate main）**。
 - **审计发现**记入 `docs/design/audit/waveN-<slug>.md`（映射表 + `文件:行号` 证据），
   修复后重跑 `check_doc_refs.py` 确认归零。

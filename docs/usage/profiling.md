@@ -18,7 +18,7 @@
 cat data/worlds/nacrea/build_profile.json
 
 # 或用脚本格式化打印
-uv run python scripts/profile_build.py nacrea --data-dir data/worlds
+uv run python scripts/dev/profile_build.py nacrea --data-dir data/worlds
 ```
 
 输出示例（nacrea 200k，seed=42，本机）：
@@ -55,7 +55,7 @@ Build profile: nacrea (seed=42, total 347.4s)
 ## 2. 内存诊断：profile_build.py --memory
 
 ```bash
-uv run python scripts/profile_build.py nacrea --data-dir data/worlds --memory
+uv run python scripts/dev/profile_build.py nacrea --data-dir data/worlds --memory
 ```
 
 进程内运行管线 + `tracemalloc`，输出 Top 15 内存分配点。用于排查：

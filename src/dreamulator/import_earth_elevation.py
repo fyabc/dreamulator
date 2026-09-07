@@ -10,9 +10,9 @@ the configured equirectangular resolution, and produces:
     - map.yaml            — map metadata for the frontend
 
 Usage:
-    uv run python scripts/import_earth_elevation.py [--resolution 2048x1024]
+    uv run python scripts/earth/import_earth_elevation.py [--resolution 2048x1024]
     [--mesh 32768]
-    uv run python scripts/import_earth_elevation.py
+    uv run python scripts/earth/import_earth_elevation.py
         --output-dir data/worlds/earth/layers/geological/input/maps/earth
 
 Requirements:
@@ -424,7 +424,7 @@ def main() -> None:
 
     print("\nDone! Real Earth elevation imported successfully.")
     print(f"  Output: {output_dir}")
-    print("  Next: uv run python scripts/validate_climate.py earth")
+    print("  Next: uv run python scripts/climate/validate_climate.py earth")
 
 
 def _find_project_root() -> Path:

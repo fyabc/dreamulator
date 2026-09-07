@@ -1867,7 +1867,7 @@ accum(i) = area(i) + Σ accum(j) for j in upstream(i)
 
 ## 附录 B: 现有代码复用清单
 
-### 来自 `scripts/generate_planet_heightmap.py`
+### 来自 `scripts/dev/generate_planet_heightmap.py`
 
 | 函数 | 复用状态 | 说明 |
 |------|----------|------|
@@ -1992,7 +1992,7 @@ accum(i) = area(i) + Σ accum(j) for j in upstream(i)
 - [ ] 端到端测试：从 world.yaml → 完整地形
 - [ ] 性能基准报告
 - [ ] 更新 CLAUDE.md 和 API 文档
-- [ ] 更新 `scripts/export_static.py` + `staticClient.ts` + `client.ts`（静态导出同步）
+- [ ] 更新 `scripts/release/export_static.py` + `staticClient.ts` + `client.ts`（静态导出同步）
 
 ### 依赖关系图
 

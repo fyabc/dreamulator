@@ -28,7 +28,7 @@ Data provenance:
 - Sea-level pressure — NCEP/NCAR Reanalysis 1 ``slp.mon.ltm.nc`` (2.5°).
 - Ocean currents — SODA v3.15.2 (Carton et al. 2018, doi:10.1175/JCLI-D-18-0149.1)
   surface (~5 m) monthly climatology 1993–2022, annual mean per cell
-  (``soda_currents_mon_clim.nc``, built by ``scripts/download_validation_data.py``
+  (``soda_currents_mon_clim.nc``, built by ``scripts/earth/download_validation_data.py``
   from the APDRC OPeNDAP server).  Fallback when that file is absent: the
   engine's Stommel barotropic solver driven by the NCEP wind below (modelled,
   not observed — the earth world then gets the same current physics as built
@@ -36,7 +36,7 @@ Data provenance:
 
 Usage mirrors the other importers::
 
-    uv run python scripts/import_earth_climate.py \
+    uv run python scripts/earth/import_earth_climate.py \
         --output-dir data/worlds/earth/maps/planet_earth
 """
 
@@ -52,7 +52,7 @@ import numpy as np
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh, VoronoiCell
 
-# Beck class code → Köppen string (from scripts/convert_koppen_map.py).
+# Beck class code → Köppen string (from scripts/climate/convert_koppen_map.py).
 _BECK_LEGEND: dict[int, str] = {
     0: "N/A",
     1: "Af",

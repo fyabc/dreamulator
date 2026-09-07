@@ -1,7 +1,7 @@
 # Wave 1 审计：geological-pipeline.md 与当前构造/侵蚀代码字段脱节
 
 > 日期：2026-08-23
-> 方法：`scripts/check_doc_refs.py`（引用活性检查）+ 逐字段对照 `pipeline_types.py` / `plate_generator.py` / `tectonic_simulator.py`
+> 方法：`scripts/dev/check_doc_refs.py`（引用活性检查）+ 逐字段对照 `pipeline_types.py` / `plate_generator.py` / `tectonic_simulator.py`
 > 结论：`docs/design/geological-pipeline.md`（2199 行）引用的 ~20 个字段名与当前代码不符——构造/侵蚀代码经历了一轮字段改名（加 `ocean_`/`plate_`/`boundary_` 前缀、speed 两标量合成 tuple），但文档 §3/§5/§6/§8 未同步。
 
 ## 一、已改名（有当前等价）
@@ -36,4 +36,4 @@
 
 1. 按 §二 把 `geological-pipeline.md` 中旧名替换为当前名；
 2. 已移除字段对应的段落（§5 净旋转、§5 边界分类的 `subduction_type`/`velocity_threshold_cm_yr`、§8 湖泊/河流阈值表）标注「已由实现变更移除」或删除，并补当前实现的实际参数名；
-3. 修复后重跑 `scripts/check_doc_refs.py` 确认 `geological-pipeline.md` 无 `NOT_IN_CODE`。
+3. 修复后重跑 `scripts/dev/check_doc_refs.py` 确认 `geological-pipeline.md` 无 `NOT_IN_CODE`。

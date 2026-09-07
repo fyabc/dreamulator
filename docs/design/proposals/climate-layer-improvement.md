@@ -192,7 +192,7 @@ RMSE 3.1→8.2 FAIL）。教训入 today.md：改三角函数输入单位前全�
 
 **执行步骤**：
 1. **earth 分支数据修复**（零代码改动）：
-   `scripts/import_earth_watermask.py --output-dir data/worlds/earth/branches/climate-dev/maps/planet_earth`
+   `scripts/earth/import_earth_watermask.py --output-dir data/worlds/earth/branches/climate-dev/maps/planet_earth`
    → 黑海/里海转 ocean；顺带解决 interlude ①（内湖渲染）。
 2. **五大湖阈值实证**：导入后清点五大湖哪些过 60k 阈值（GSHHG 若把
    密歇根-休伦合为一个 117k 多边形则自然过关；若分开各 57–59k 卡在阈值下，
@@ -240,7 +240,7 @@ t_land[m] += exp(−dist_upwind / L) · (t_ocean_upwind[m] − t_land[m])
 
 单一自由参数 L（海洋气团衰减长度）。
 
-**敏感性实验**（`scripts/diagnose_maritime_advection.py`，扫 L∈{500…2500} km，annual vs 月度风）：
+**敏感性实验**（`scripts/climate/diagnose_maritime_advection.py`，扫 L∈{500…2500} km，annual vs 月度风）：
 
 - **符号修正（前置）**：`hadley_cell_wind` 用 `east = north × r̂`（指向物理西，与
   `east_north_basis` 的 `r̂ × k̂` 相反），前端靠 `_we = −_we` 翻转。`_upwind_distance_to_coast`

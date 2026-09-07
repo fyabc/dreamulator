@@ -132,7 +132,7 @@ npm run build
 cd frontend
 
 # 1. 将世界数据导出为静态 JSON
-python ../scripts/export_static.py
+python ../scripts/release/export_static.py
 
 # 2. 以静态模式构建（使用 .env.static 中的 base path）
 npx vite build --mode static
@@ -154,7 +154,7 @@ npm run build:static:local    # 导出全部世界 + 类型检查 + 以 base pat
 npm run preview:static        # 在 http://localhost:4173 提供服务
 ```
 
-打开形如 `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` 的地址验证地图等功能（检查控制台无 404）。快速迭代时只需导出单个世界：在仓库根目录运行 `uv run python scripts/export_static.py --worlds earth`。
+打开形如 `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` 的地址验证地图等功能（检查控制台无 404）。快速迭代时只需导出单个世界：在仓库根目录运行 `uv run python scripts/release/export_static.py --worlds earth`。
 
 **GitHub Pages 部署**已通过 GitHub Actions 自动化（`.github/workflows/deploy-pages.yml`）。推送到 `main` 分支后，在仓库设置中启用 Pages（Source: GitHub Actions）即可。
 

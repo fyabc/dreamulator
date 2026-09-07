@@ -165,7 +165,7 @@ input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人�
 | **API 模式**（默认） | FastAPI 后端 | 全部可用 | 本地开发、云服务器 |
 | **静态模式** | 预导出的静态 JSON | 不可用（只读） | GitHub Pages 等静态托管 |
 
-> **静态导出同步原则**：新增 API 端点或数据字段时，必须同步更新 `scripts/export_static.py`、
+> **静态导出同步原则**：新增 API 端点或数据字段时，必须同步更新 `scripts/release/export_static.py`、
 > `frontend/src/api/staticClient.ts`、`frontend/src/api/client.ts` 三处，否则静态部署后功能缺失。
 
 ### 地图子系统

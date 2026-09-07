@@ -799,9 +799,9 @@ A: 目前没有直接混合功能。但你可以通过分支系统分别生成�
 - **earth 验证世界是特例**：它的真实板块 + 地壳由专用脚本导入（PB2002 板块 +
   ETOPO1 水深判大陆架），不依赖上面的通用导入按钮：
   ```bash
-  uv run python scripts/import_earth_elevation.py \
+  uv run python scripts/earth/import_earth_elevation.py \
       --output-dir <world>/maps/planet_earth --skip-download
-  uv run python scripts/import_earth_tectonics.py \
+  uv run python scripts/earth/import_earth_tectonics.py \
       --output-dir <world>/maps/planet_earth
   ```
   之后在 `terrain_config.yaml` 设 `elevation_source: imported`，地质引擎就会

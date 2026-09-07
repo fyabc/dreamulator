@@ -27,9 +27,9 @@ description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某�
 
 ## 工具
 
-- **诊断脚本** `scripts/diagnose_*.py`：koppen_confusion / koppen_spatial / latitudinal_profile /
+- **诊断脚本** `scripts/climate/diagnose_*.py`：koppen_confusion / koppen_spatial / latitudinal_profile /
   wind_divergence / detect_ocean_bottlenecks
-- **数据交叉** `/read-map`（视觉 + 数据）+ `scripts/validate_climate.py`（zonal / 逐 cell vs 观测）
+- **数据交叉** `/read-map`（视觉 + 数据）+ `scripts/climate/validate_climate.py`（zonal / 逐 cell vs 观测）
 - **cell 取证** `map/query.py::cell_facts(mesh, tree, lon, lat)`（koppen / 离岸距离 / 温 / 降水）
 - **竞品参照** `docs/design/competitor-analysis.md`（climlab / ExoPlaSim / Landlab 等）
 

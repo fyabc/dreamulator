@@ -200,9 +200,9 @@ ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预�
 
 **关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，
 **无纬度硬编码**——对 Earth 三圈环流与 nacrea 单圈环流（`hadley_extent=90`）同一套代码
-自动适配（见 `scripts/diagnose_wind_divergence.py`）。
+自动适配（见 `scripts/climate/diagnose_wind_divergence.py`）。
 
-**区域诊断**：`scripts/diagnose_monsoon_regional.py` 读已构建地图的月度数据，
+**区域诊断**：`scripts/climate/diagnose_monsoon_regional.py` 读已构建地图的月度数据，
 对比关键季风区/对照区（华南、华北、地中海、刚果、印度、萨赫勒、撒哈拉、亚马逊）
 的月度降水与观测气候态，并给出各区 Köppen 构成——季风机制（技术债 23/24）的
 主要调试工具。
@@ -344,10 +344,10 @@ Köppen / ERA5 温度 / GPCP 降水。诊断脚本区分「引擎 bug」vs「参
 30 类匹配 ≥30%；④ 温度纬向 corr >0.9。
 
 ```bash
-uv run python scripts/diagnose_koppen_confusion.py     # 逐类 precision/recall/F1 + 混淆矩阵
-uv run python scripts/diagnose_latitudinal_profile.py  # 海陆分离 T/P 纬向剖面
-uv run python scripts/diagnose_koppen_spatial.py       # 空间准确率热图
-uv run python scripts/diagnose_wind_divergence.py      # 风场辐合/辐散纬向剖面
+uv run python scripts/climate/diagnose_koppen_confusion.py     # 逐类 precision/recall/F1 + 混淆矩阵
+uv run python scripts/climate/diagnose_latitudinal_profile.py  # 海陆分离 T/P 纬向剖面
+uv run python scripts/climate/diagnose_koppen_spatial.py       # 空间准确率热图
+uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/辐散纬向剖面
 ```
 
 ---

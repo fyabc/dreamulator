@@ -17,13 +17,13 @@
 如需**离线运行**或**预下载**，执行：
 
 ```bash
-uv run python scripts/download_validation_data.py
+uv run python scripts/earth/download_validation_data.py
 ```
 
 下载完成后可离线运行：
 ```bash
-uv run python scripts/import_earth_elevation.py --skip-download
-uv run python scripts/convert_koppen_map.py
+uv run python scripts/earth/import_earth_elevation.py --skip-download
+uv run python scripts/climate/convert_koppen_map.py
 uv run dreamulator climate validate earth --spatial
 ```
 
@@ -72,16 +72,16 @@ uv run python tests/validation/baselines/generate_baseline.py nacrea --planet sa
 uv sync --extra validation
 
 # 自动下载 ETOPO1 (~400 MB)，生成 elevation.png + CVT mesh
-uv run python scripts/import_earth_elevation.py
+uv run python scripts/earth/import_earth_elevation.py
 
 # 指定输出目录和分辨率
-uv run python scripts/import_earth_elevation.py \
+uv run python scripts/earth/import_earth_elevation.py \
     --output-dir data/worlds/earth/layers/geological/input/maps/earth \
     --resolution 2048x1024 \
     --mesh-nodes 32768
 
 # 跳过下载（使用已缓存的文件）
-uv run python scripts/import_earth_elevation.py --skip-download --skip-mesh
+uv run python scripts/earth/import_earth_elevation.py --skip-download --skip-mesh
 ```
 
 **输出文件**：
@@ -98,17 +98,17 @@ Beck 图（或读缓存），对 `climate-dev` 分支的 200k Earth mesh 逐 cel
 
 ```bash
 # 自动下载 + 转换（对 climate-dev 200k mesh 采样）
-uv run python scripts/convert_koppen_map.py
+uv run python scripts/climate/convert_koppen_map.py
 
 # 或显式指定 GeoTIFF / mesh / 输出
-uv run python scripts/convert_koppen_map.py \
+uv run python scripts/climate/convert_koppen_map.py \
     --tif path/to/Beck_KG_V1.zip \
     --mesh data/worlds/earth/branches/climate-dev/maps/planet_earth/cvt_mesh.json \
     --output data/worlds/earth/branches/climate-dev/maps/planet_earth/koppen_obs.json
 ```
 
 > `koppen_obs.json` 已加入 `.gitignore`（可再生，不入库）；新 clone 需先运行
-> `scripts/convert_koppen_map.py` 生成本地参考文件，否则 Köppen 诊断会提示
+> `scripts/climate/convert_koppen_map.py` 生成本地参考文件，否则 Köppen 诊断会提示
 > "koppen_obs.json not found"。
 
 ## 3. 下载 NCEP/NCAR 温度数据（可选）
@@ -133,7 +133,7 @@ curl "https://downloads.psl.noaa.gov/Datasets/gpcp/precip.mon.mean.nc" \
 
 > **纬向参考数组的生成**：`validate_climate.py` 里的 `_ZONAL_TEMP_REF` /
 > `_ZONAL_PRECIP_REF` 是**硬编码**的 2° 纬向均值（90N→88S），由上述原始数据
-> 一次性算出。重生成脚本见 `scripts/generate_validation_reference.py`。
+> 一次性算出。重生成脚本见 `scripts/earth/generate_validation_reference.py`。
 
 ---
 
@@ -252,18 +252,18 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 
 | 脚本 | 内容 | 何时用 |
 |---|---|---|
-| `scripts/diagnose_koppen_spatial.py` | 经纬网格 + 两极合并的 Köppen 空间准确率热图（逐 bin 排序） | 找出空间上最差/最好的区域 |
-| `scripts/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
-| `scripts/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
-| `scripts/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（ITCZ 位置、Hadley 边界等超参可调） | 定位风场/辐合带异常 |
-| `scripts/diagnose_precip_budget.py` | 降水预算逐项分解（BFS 扩散/基线/辐合/风暴/对流/热带增强）+ 11000mm 截断检查 | 判断降水幅度由哪一项主导 |
+| `scripts/climate/diagnose_koppen_spatial.py` | 经纬网格 + 两极合并的 Köppen 空间准确率热图（逐 bin 排序） | 找出空间上最差/最好的区域 |
+| `scripts/climate/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
+| `scripts/climate/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
+| `scripts/climate/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（ITCZ 位置、Hadley 边界等超参可调） | 定位风场/辐合带异常 |
+| `scripts/climate/diagnose_precip_budget.py` | 降水预算逐项分解（BFS 扩散/基线/辐合/风暴/对流/热带增强）+ 11000mm 截断检查 | 判断降水幅度由哪一项主导 |
 
 ```bash
-uv run python scripts/diagnose_koppen_spatial.py
-uv run python scripts/diagnose_latitudinal_profile.py
-uv run python scripts/diagnose_koppen_confusion.py
-uv run python scripts/diagnose_wind_divergence.py
-uv run python scripts/diagnose_precip_budget.py
+uv run python scripts/climate/diagnose_koppen_spatial.py
+uv run python scripts/climate/diagnose_latitudinal_profile.py
+uv run python scripts/climate/diagnose_koppen_confusion.py
+uv run python scripts/climate/diagnose_wind_divergence.py
+uv run python scripts/climate/diagnose_precip_budget.py
 ```
 
 **公共参数**（五个脚本一致）：
