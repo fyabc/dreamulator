@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788732406522,
+  "lastUpdate": 1788795508583,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4541,6 +4541,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008989672541680985",
             "extra": "mean: 3.2002959999999803 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "83cf16749cea0aff62b55af764a139e6a13088ae",
+          "message": "fix(world): 裁决项落地——周期级联 3.147 + 恒星叙事 K8 + 偏心率 0.0018\n\n① 0007 微内移级联：rotation_period_days 3.25→3.147（Nacrea）、6.50→6.29（Cadence）、\n13.0→12.59（Vigil）；tidal_effects.md 按 a=724,000 km 全套重算（Z 2267→2411 m、\n太阳日 3.42→3.25 d、相位漂移 17.5→11.3°）。\n② 恒星叙事：生态/文明/地质/气候 ~10 处「红矮星」→「橙矮星」（K8 37 Gyr、少耀斑、\n偏橙光非纯 NIR）。\n③ 偏心率 e 0.002→0.0018：补偿 ① 的潮汐增强，共振潮差 51→46 m、加热 183→148 TW、\n热流 0.31→0.25 W/m²。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-07T23:35:05+08:00",
+          "tree_id": "34c34583d316cdd9b0124ca4b586065d592150dc",
+          "url": "https://github.com/fyabc/dreamulator/commit/83cf16749cea0aff62b55af764a139e6a13088ae"
+        },
+        "date": 1788795508051,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 10.07596820562905,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0400424261897628",
+            "extra": "mean: 99.24604559999892 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4903580986642915,
+            "unit": "iter/sec",
+            "range": "stddev: 0.055614687974018265",
+            "extra": "mean: 286.5035539999994 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4147364927040689,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1321896389060424",
+            "extra": "mean: 706.8454126666666 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 983.3953691912595,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006580878012045676",
+            "extra": "mean: 1.0168849999999452 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 133.06793200431844,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00372991439170857",
+            "extra": "mean: 7.514958599999488 msec\nrounds: 5"
           }
         ]
       }
