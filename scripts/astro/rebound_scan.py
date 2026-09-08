@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """2-D stability scan for the Nacrea system (REBOUND).
 
+HISTORICAL EXPLORATION (2026-09-07) — superseded by ``rebound_nbody.py``,
+which reads the landed ``stellar.yaml`` directly.  Constants below are the
+PRE-cascade setting (M★=0.4665, old satellite semi-major axes); its conclusion
+(Vigil ≲ 0.37 r_H) is landed in the yaml.  Also note the 20-yr survival
+criterion proved too lenient: the landed configuration survives 20 yr but
+ejects Cadence by ~90 yr in pure N-body (2026-09-08 finding — see
+``rebound_nbody.py --sat-scan`` and today.md §六).
+
 Sweeps Aegis semi-major axis × satellite-chain scale (with the Galilean resonant
 phase fixed: θ1≈0°, θ2≈180° → M1=0, M2=0, M3=270°) and reports, for each grid
 point, whether Vigil stays bound — i.e. whether the satellite chain is stable.

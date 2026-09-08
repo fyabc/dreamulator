@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Phase scan for the Nacrea 1:2:4 satellite resonance (REBOUND).
 
+HISTORICAL EXPLORATION (2026-09-07) — superseded by ``rebound_nbody.py
+--sat-scan`` (same θ1×θ2 parameterisation, but reads the landed stellar.yaml
+and runs 300 yr instead of 20).  Constants below are the PRE-cascade setting
+(M★=0.4665, old satellite semi-major axes); the Vigil M=270° conclusion they
+produced is landed in the yaml but proved short-lived at the landed masses
+(Cadence ejected by ~90 yr in pure N-body — 2026-09-08 finding, today.md §六).
+
 Sweeps the two resonant angles θ1 = λ1 − 2λ2 and θ2 = λ2 − 2λ3 (the 2:1 inner /
 outer angles of the Laplace chain, periapsis set to 0) to find which mean-anomaly
 configuration keeps Vigil bound — i.e. the stable libration centre.
