@@ -255,15 +255,27 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 | `scripts/climate/diagnose_koppen_spatial.py` | 经纬网格 + 两极合并的 Köppen 空间准确率热图（逐 bin 排序） | 找出空间上最差/最好的区域 |
 | `scripts/climate/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
 | `scripts/climate/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
-| `scripts/climate/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（ITCZ 位置、Hadley 边界等超参可调） | 定位风场/辐合带异常 |
+| `scripts/climate/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（产物=上次构建风场；`--rebuild`=解析重建，ITCZ/Hadley 边界可扫） | 定位风场/辐合带异常 |
 | `scripts/climate/diagnose_precip_budget.py` | 降水预算逐项分解（BFS 扩散/基线/辐合/风暴/对流/热带增强）+ 11000mm 截断检查 | 判断降水幅度由哪一项主导 |
 
+**两种模式（2026-09-08 E-lite）**：前四个脚本**默认读构建产物**（`cvt_mesh.json`
+里已存的气候字段，秒级）——验证的是「上次构建」；加 `--rebuild` 先重跑气候引擎
+（~5 min/个）——验证的是「当前代码」。日常攻关工作流：`build --only climate --force`
+一次 + 产物模式批量跑诊断（秒级）；改了引擎代码尚未构建、或需要 config 覆盖
+（`--no-ebm-1d`、`--itcz` 等扫掠参数）时才用 `--rebuild`。
+`diagnose_precip_budget.py` 与 `validate_climate.py` **始终重跑**（前者需要 W 场等
+产物中不存在的求解器中间量；后者是官方验证入口，语义就是「验证当前代码」）。
+注意 `diagnose_wind_divergence.py` 两模式的风场来源不同（产物 = 上次构建的真实
+风场含季风异常；rebuild = 0.4×地转 + 0.6×三圈的解析重建），对比看**带状结构**
+（赤道/±60° 辐合、±30° 辐散）而非数值全等。
+
 ```bash
-uv run python scripts/climate/diagnose_koppen_spatial.py
+uv run python scripts/climate/diagnose_koppen_spatial.py             # 产物模式（秒级）
 uv run python scripts/climate/diagnose_latitudinal_profile.py
 uv run python scripts/climate/diagnose_koppen_confusion.py
 uv run python scripts/climate/diagnose_wind_divergence.py
-uv run python scripts/climate/diagnose_precip_budget.py
+uv run python scripts/climate/diagnose_koppen_confusion.py --rebuild # 重跑模拟（~5 min）
+uv run python scripts/climate/diagnose_precip_budget.py              # 始终重跑
 ```
 
 **公共参数**（五个脚本一致）：

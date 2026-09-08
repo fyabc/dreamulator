@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Köppen confusion-matrix diagnostic — per-class precision/recall/F1.
 
-Runs the climate engine on the Earth (baseline) mesh, compares the simulated
-Köppen class against the Beck et al. (2018) per-cell reference, and reports:
+Compares the mesh's Köppen classes against the Beck et al. (2018) per-cell
+reference.  By default reads the fields stored by the **last build** (artifact
+mode, seconds); ``--rebuild`` re-runs the climate engine first (~5 min) to
+validate the *current code* instead of the last build.  Reports:
 
   - a full confusion matrix (observed rows → simulated columns),
   - per-class precision / recall / F1,
@@ -11,7 +13,8 @@ Köppen class against the Beck et al. (2018) per-cell reference, and reports:
 
 Usage::
 
-    uv run python scripts/climate/diagnose_koppen_confusion.py
+    uv run python scripts/climate/diagnose_koppen_confusion.py            # last build
+    uv run python scripts/climate/diagnose_koppen_confusion.py --rebuild  # re-simulate
     uv run python scripts/climate/diagnose_koppen_confusion.py --top 15
 """
 
@@ -19,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -72,33 +76,40 @@ def main() -> None:
     parser.add_argument("--branch", default="climate-dev")
     parser.add_argument("--top", type=int, default=12, help="number of top confusions to show")
     parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="re-run the climate engine instead of reading the last build's stored fields",
+    )
+    parser.add_argument(
         "--no-auto-lat-gradient",
         action="store_false",
         dest="auto_lat_gradient",
         default=True,
-        help="disable auto_lat_gradient (fall back to manual --lat-gradient-c)",
+        help="disable auto_lat_gradient (--rebuild only)",
     )
     parser.add_argument(
         "--no-diffusive-heat-transport",
         action="store_false",
         dest="diffusive_heat_transport",
         default=True,
-        help="disable graph-Laplacian diffusive heat transport",
+        help="disable graph-Laplacian diffusive heat transport (--rebuild only)",
     )
     parser.add_argument(
         "--lat-gradient-c",
         type=float,
         default=45.0,
-        help="manual equator-to-pole temperature difference when auto_lat_gradient is off",
+        help="manual equator-to-pole temperature difference when auto_lat_gradient is off "
+        "(--rebuild only)",
     )
     parser.add_argument(
         "--no-ebm-1d",
         action="store_false",
         dest="ebm_1d",
         default=True,
-        help="disable the 1D EBM temperature path (fall back to legacy sin^2 + diffusion)",
+        help="disable the 1D EBM temperature path, legacy sin^2 + diffusion (--rebuild only)",
     )
     args = parser.parse_args()
+    t_start = time.time()
 
     root = _find_project_root()
     world_dir = root / args.world_dir / args.world
@@ -109,16 +120,28 @@ def main() -> None:
         print("  ERROR: no mesh found")
         return
 
-    print(f"Running climate engine on {mesh.num_cells} cells ...")
-    from dreamulator.map.climate_config import load_climate_config
-    from dreamulator.map.climate_simulator import simulate_climate
+    if args.rebuild:
+        print(f"Running climate engine on {mesh.num_cells} cells ...")
+        from dreamulator.map.climate_config import load_climate_config
+        from dreamulator.map.climate_simulator import simulate_climate
 
-    config = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
-    config.lat_gradient_c = args.lat_gradient_c
-    config.auto_lat_gradient = args.auto_lat_gradient
-    config.diffusive_heat_transport = args.diffusive_heat_transport
-    config.ebm_1d = args.ebm_1d
-    simulate_climate(mesh, config)
+        config = load_climate_config(
+            world_dir, args.world, args.planet, args.branch, mesh.num_cells
+        )
+        config.lat_gradient_c = args.lat_gradient_c
+        config.auto_lat_gradient = args.auto_lat_gradient
+        config.diffusive_heat_transport = args.diffusive_heat_transport
+        config.ebm_1d = args.ebm_1d
+        simulate_climate(mesh, config)
+    else:
+        print("Artifact mode: using the last build's stored fields (--rebuild to re-simulate)")
+        if not any(c.koppen_class is not None for c in mesh.cells[:5000]):
+            print(
+                "  ERROR: mesh carries no built koppen_class — run "
+                f"`dreamulator build {args.world} --branch {args.branch} --only climate` "
+                "first, or pass --rebuild"
+            )
+            return
 
     # Load Beck 2018 reference
     obs_path = world_dir / "branches" / args.branch / "maps" / args.planet / "koppen_obs.json"
@@ -212,6 +235,9 @@ def main() -> None:
         print(f"  {target}: {total_conf} confused cells")
         for cnt, o, s in sorted(cw, reverse=True)[:5]:
             print(f"    {o} -> {s}: {cnt}")
+
+    mode = "rebuild" if args.rebuild else "artifact"
+    print(f"\n(total {time.time() - t_start:.1f}s, {mode} mode)")
 
 
 if __name__ == "__main__":

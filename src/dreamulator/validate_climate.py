@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Validate the dreamulator climate engine against real Earth observations.
 
+Always re-runs the climate simulation (no artifact mode): this is the official
+validation entry (shared with the ``dreamulator climate validate`` CLI) — its
+semantics are "validate the *current code*", which stored build artifacts
+cannot express.  For fast artifact-based checks use the default mode of the
+``scripts/climate/diagnose_*`` scripts.
+
 Runs the climate simulation on a real-Earth elevation CVT mesh, then compares
 the output against observed climatological data:
 

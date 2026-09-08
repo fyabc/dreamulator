@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Spatial Köppen accuracy diagnostic — by lat/lon grid with polar merging.
 
-Runs the climate engine on the Earth (baseline) mesh, compares the simulated
-Köppen class against the Beck et al. (2018) per-cell reference, and reports the
-accuracy broken down by a latitude/longitude grid.  The two polar caps
+Compares the mesh's Köppen classes against the Beck et al. (2018) per-cell
+reference and reports the accuracy broken down by a latitude/longitude grid.
+By default reads the fields stored by the **last build** (artifact mode,
+seconds); ``--rebuild`` re-runs the climate engine first (~5 min) to validate
+the *current code*.  The two polar caps
 (|lat| > 60°) are merged across longitude (longitude is ill-defined near the
 poles), while the rest of the globe is split into regular lon bins.
 
@@ -13,7 +15,8 @@ that only appear on non-Earth worlds like nacrea).
 
 Usage::
 
-    uv run python scripts/climate/diagnose_koppen_spatial.py
+    uv run python scripts/climate/diagnose_koppen_spatial.py            # last build
+    uv run python scripts/climate/diagnose_koppen_spatial.py --rebuild  # re-simulate
     uv run python scripts/climate/diagnose_koppen_spatial.py --lat-band 15 --lon-bin 30
     uv run python scripts/climate/diagnose_koppen_spatial.py --polar-bound 66.5
 """
@@ -22,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -61,7 +65,13 @@ def main() -> None:
     parser.add_argument("--lon-bin", type=float, default=30.0)
     parser.add_argument("--polar-bound", type=float, default=60.0)
     parser.add_argument("--top", type=int, default=10, help="number of best/worst bins to show")
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="re-run the climate engine instead of reading the last build's stored fields",
+    )
     args = parser.parse_args()
+    t_start = time.time()
 
     root = _find_project_root()
     world_dir = root / args.world_dir / args.world
@@ -72,13 +82,25 @@ def main() -> None:
         print(f"  ERROR: no mesh at {world_dir}/maps/{args.planet}/cvt_mesh.json")
         return
 
-    # Run the climate engine on the Earth baseline
-    print(f"Running climate engine on {mesh.num_cells} cells ...")
-    from dreamulator.map.climate_config import load_climate_config
-    from dreamulator.map.climate_simulator import simulate_climate
+    if args.rebuild:
+        # Run the climate engine on the Earth baseline
+        print(f"Running climate engine on {mesh.num_cells} cells ...")
+        from dreamulator.map.climate_config import load_climate_config
+        from dreamulator.map.climate_simulator import simulate_climate
 
-    config = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
-    simulate_climate(mesh, config)
+        config = load_climate_config(
+            world_dir, args.world, args.planet, args.branch, mesh.num_cells
+        )
+        simulate_climate(mesh, config)
+    else:
+        print("Artifact mode: using the last build's stored fields (--rebuild to re-simulate)")
+        if not any(c.koppen_class is not None for c in mesh.cells[:5000]):
+            print(
+                "  ERROR: mesh carries no built koppen_class — run "
+                f"`dreamulator build {args.world} --branch {args.branch} --only climate` "
+                "first, or pass --rebuild"
+            )
+            return
 
     # Load Beck 2018 reference
     obs_path = world_dir / "branches" / args.branch / "maps" / args.planet / "koppen_obs.json"
@@ -147,6 +169,9 @@ def main() -> None:
     print(
         f"\n  Overall spatial accuracy: {total_match / total_n:.1%} ({total_match}/{total_n} cells)"
     )
+
+    mode = "rebuild" if args.rebuild else "artifact"
+    print(f"\n(total {time.time() - t_start:.1f}s, {mode} mode)")
 
 
 if __name__ == "__main__":
