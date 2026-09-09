@@ -75,3 +75,4 @@ layers/geological/input/maps/
 
 # Backup files
 *.bak
+/rebound.html
