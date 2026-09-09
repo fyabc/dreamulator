@@ -91,15 +91,21 @@ $R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.ra
 
 ## 3. 外卫星：韵珠星（Cadence）与守珠星（Vigil）
 
-两者与珠母星构成 1:2:4 拉普拉斯共振链，从珠母星看是两颗会"游走"的月亮。
+两者为**互相独立的单体逆行捕获卫**（非共振、非绑定——动力学依据见
+satellite_architecture.md 与 design-notes/0009），从珠母星看是两颗一暗红一灰蓝、
+会"游走"的月亮。二者恒近满相：同轨共转天体互看的相位角 ≤3.4°（Λ 满相亮度即实际亮度）。
 
 | 天体 | 半径 | 距珠母星 | 视直径 | 满相视星等（最近） |
 |------|------|---------|--------|------|
-| **韵珠星 Cadence**（2:1，岩质） | {{ entities.satellite_cadence.radius_km | round0 }} km | {{ sky.satellite_cadence.distance_km_near | round0 }} ~ {{ sky.satellite_cadence.distance_km_far | round0 }} km | **{{ sky.satellite_cadence.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_cadence.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_cadence.apparent_magnitude_full | round1 }}**（比满月略亮） |
-| **守珠星 Vigil**（4:1，冰岩） | {{ entities.satellite_vigil.radius_km | round0 }} km | {{ sky.satellite_vigil.distance_km_near | round0 }} ~ {{ sky.satellite_vigil.distance_km_far | round0 }} km | **{{ sky.satellite_vigil.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_vigil.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_vigil.apparent_magnitude_full | round1 }}**（接近满月） |
+| **韵珠星 Cadence**（逆行 @1.2e6 km，岩质，红褐托林 A=0.13） | {{ entities.satellite_cadence.radius_km | round0 }} km | {{ sky.satellite_cadence.distance_km_near | round0 }} ~ {{ sky.satellite_cadence.distance_km_far | round0 }} km | **{{ sky.satellite_cadence.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_cadence.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_cadence.apparent_magnitude_full | round1 }}**（≈ 本地满月球等的一半亮；近合宽 0.85× 满月） |
+| **守珠星 Vigil**（逆行 @2.15e6 km，Charon 级冰岩，中灰微蓝 A=0.313） | {{ entities.satellite_vigil.radius_km | round0 }} km | {{ sky.satellite_vigil.distance_km_near | round0 }} ~ {{ sky.satellite_vigil.distance_km_far | round0 }} km | **{{ sky.satellite_vigil.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_vigil.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_vigil.apparent_magnitude_full | round1 }}**（近合亮于金星 7 倍，3′ 小圆盘） |
 
-直观感受：韵珠星最接近时约 1.5 个满月宽，是夜空中仅次于巨神星的天体；
-守珠星约半个满月宽。二者与巨神星同框时，即"一串珍珠"的核心画面。
+直观感受：韵珠星最接近时约 0.85 个满月宽、半满月亮度的**暗红巨珠**，是夜空中
+仅次于巨神星的天体；守珠星是 3 角分、全轨道不暗于金星的**中灰微蓝小珠**。
+二者会合周期 11.5 天，与巨神星同框时即"三珠连珠"的核心画面。
+
+> **本地满月球等**：烬星比太阳暗 1.2 等，故珠母星的"满月球等"参照为 −11.5
+> （而非地球的 −12.74）；表内星等为绝对视星等，可与金星 −4.9 直接比较。
 
 ## 4. 其他行星
 
@@ -143,11 +149,11 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 |:---:|------|------|:---:|
 | 1 | **巨神星相位周期**（完整盈亏） | 每 78 地球时（= 1 卫星公转周期） | ★★★★★ 系列一核心视觉 |
 | 2 | **日全食**（烬星被巨神星遮蔽） | 食季内每个公转周期（{{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时）一次，每次最长 {{ sky.eclipse.max_total_eclipse_hours | round1 }} 地球时 | ★★★★★ 全片高潮 |
-| 3 | **外卫星被巨神星掩**（韵珠/守珠隐入巨神星盘面后方） | 每个公转周期 | ★★★★ 尺度远超水星凌日 |
-| 4 | **外卫星互掩**（韵珠掩守珠） | 约每 13 地球日 | ★★★★ 三星系统独有 |
+| 3 | **外卫星被巨神星掩**（韵珠/守珠隐入巨神星盘面后方） | 韵珠每 2.14 地球日、守珠每 2.63 地球日（会合周期） | ★★★★ 尺度远超水星凌日 |
+| 4 | **韵珠掩守珠 / 韵珠影食守珠**（两珠轨道近共面，掩食成对上演） | 每 11.5 地球日（会合周期，掩食季内） | ★★★★ 三星系统独有 |
 | 5 | **鼎星大距**（超金星星） | 约每 0.1 地球年（≈36.5 地球日） | ★★★ 晨昏"超金星" |
 | 6 | **沧星冲日**（冰蓝巨盘子夜升起） | 约每 0.4 地球年 | ★★★★ |
-| 7 | **三珠连珠**（韵珠+守珠+巨神星对齐） | 罕见 | ★★★★★ 命名体系核心画面 |
+| 7 | **三珠连珠**（韵珠+守珠+巨神星对齐） | 以 ~11.5 地球日拍频重现；严格三线对齐需会合相位与交点叠加，仍属罕见 | ★★★★★ 命名体系核心画面 |
 | 8 | **食季连食**（交点进动周期 ~4.7 年的 {{ sky.eclipse.season_fraction | pct }} 时段内每轨道连食） | 每食季 | ★★★★ 叙事节奏锚点 |
 | 9 | **藩星冲日**（暗弱"回归"） | 约每 3.7 地球年 | ★★★ 可做文明历法 |
 | 10 | **星环掩星**（若巨神星有环，环面遮挡烬星光） | 视几何 | ★★★ 远期扩展 |

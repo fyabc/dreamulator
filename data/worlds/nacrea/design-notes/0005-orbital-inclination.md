@@ -10,6 +10,12 @@ checked_against:
 
 # 0005 · 轨道倾角 9° 的设定原因
 
+> **⚠ 部分被取代（2026-09-09）**：本文论据 3「拉普拉斯共振共面要求」随卫星共振链
+> 判死失效。9° 倾角结论不变，现行支撑 = P-B 潮汐包：早期巨撞击（Sentinel 散射期）
+> 撞出 9° 并减速 Aegis 自转至 10h；弱潮汐耗散（k₂/Q≈7×10⁻⁸）把倾角阻尼时标拉到
+> ~150–300 Gyr ≫ 系统年龄，构型为冻结化石。见 `0009-satellite-architecture.md`
+> 与 stellar.yaml Aegis 注释。
+
 ## 决策背景
 
 Nacrea 的轨道倾角（相对 Aegis 绕恒星轨道面，即系统参考平面）设为 9°，且 Nacrea / Cadence / Vigil

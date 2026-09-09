@@ -1,5 +1,5 @@
 # Nacrea 恒星系 — 行星物理参数
-# 含 6 颗行星 + 3 颗卫星（Nacrea 珠母星 + 共振卫星 Cadence/Vigil）
+# 含 6 颗行星 + 3 颗卫星（Nacrea 珠母星 + 逆行捕获卫 Cadence/Vigil）
 planets:
   # ================================================================
   # 宜居卫星：Nacrea（珠母星） — 环绕巨神星 Aegis
@@ -31,30 +31,31 @@ planets:
     magnetic_field_strength: 30.0 # 潮汐加热维持熔融地核 → 发电机效应
 
   # ================================================================
-  # 共振卫星：Cadence — 2:1 with Nacrea（拉普拉斯链内环）
+  # 逆行捕获卫：Cadence — 早期捕获（~0.5 Gyr），非共振，Gyr 级准可积
+  # 认证实现（design-notes/0009）：轨道要素见 stellar.yaml，勿单独改动
   # ================================================================
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
     orbits: planet_aegis
     planet_type: terrestrial
-    mass: 0.05                    # M⊕
-    radius: 0.45                  # R⊕ (2840 km)，ρ≈3.1 g/cm³ 岩质
-    rotation_period_days: 6.29    # 同步自转 = 公转周期
+    mass: 0.012                   # M⊕
+    radius: 0.2841                # R⊕ (1810 km，木卫一大小)，ρ≈2.88 g/cm³（欧罗巴成分带：岩质+深部水层）
+    rotation_period_days: 6.715   # 同步自转 = 公转周期
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.25
+    albedo: 0.13                  # 红褐暗珠：原生托林 + Gyr 辐照 + 等离子体溅射（土卫八/D 型类比）
 
   # ================================================================
-  # 共振卫星：Vigil — 4:1 with Nacrea（拉普拉斯链外环）
+  # 逆行捕获卫：Vigil — Charon 级小卫（0.44 r_H），早期捕获，Gyr 级准可积
   # ================================================================
   - id: satellite_vigil
     name: "守珠星 · Vigil"
     orbits: planet_aegis
     planet_type: terrestrial
-    mass: 0.03                    # M⊕
-    radius: 0.39                  # R⊕ (2470 km)，ρ≈2.8 g/cm³ 冰岩混合
-    rotation_period_days: 12.59   # 同步自转 = 公转周期
+    mass: 3.05e-4                 # M⊕（Charon 级）
+    radius: 0.0965                # R⊕ (615 km)，ρ≈1.87 g/cm³（冰岩混合，土卫六/木卫四带）
+    rotation_period_days: 13.9    # Hut 伪同步（随恒星潮汐 e 摆动 10–16 d 漂移）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.35                  # 富冰表面
+    albedo: 0.313                 # Charon 型处理结晶水冰（HZ 辐照压暗版）
 
   # ================================================================
   # Crucible（鼎星）捕获卫星 — 小卫星（火卫一类比）

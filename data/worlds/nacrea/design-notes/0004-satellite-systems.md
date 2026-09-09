@@ -10,6 +10,10 @@ checked_against:
 
 # 0004 · 其他行星的卫星系统设计
 
+> **⚠ 部分被取代（2026-09-09）**：本文提及的 Aegis 卫星系统架构（Nacrea + Cadence +
+> Vigil 拉普拉斯共振链）已被 0009 取代（双单体逆行捕获卫架构）。其他行星（Ember/Crucible/
+> Boreal/Glacis/Sentinel）的卫星系统设计与命名词族仍有效。
+
 ## 决策背景
 
 此前仅 Aegis（巨神星）有完善卫星系统（Nacrea + Cadence + Vigil 拉普拉斯共振链）。

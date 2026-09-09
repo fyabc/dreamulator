@@ -110,42 +110,55 @@ orbits:
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
 
-  # ---- 宜居卫星（环绕 Aegis，1:2:4 卫星拉普拉斯共振链） ----
+  # ---- 宜居卫星（环绕 Aegis；外卫星为逆行捕获双珠，见 design-notes/0009） ----
   - body_id: satellite_nacrea
     parent_id: planet_aegis
-    semi_major_axis_au: 0.00484   # 724,000 km（Vigil 在 0.37 r_H）
-    eccentricity: 0.0018          # Cadence/Vigil 共振链泵浦维持（微降以平衡潮汐加热）
+    semi_major_axis_au: 0.00484   # 724,000 km（Vigil 在 0.40 r_H）
+    eccentricity: 0.0018          # 历元值；受韵珠/守珠长期摄动在受迫带 0.002–0.007 内振荡
+    # （设计意图带，线性标定 e_rms≈0.0026 → 潮汐加热均值 ~0.5 W/m²、峰值 ≤3.3 =
+    # 超级板块构造；轨迹级实测与硬度豁免见 design-notes/0009 §2–3）。
+    # 原「1:2:4 共振链泵浦」机制随链废弃
     inclination_deg: 9.0          # 赤道面轨道：规则卫星在行星子盘里形成，天然贴着行星赤道面；
     # 相对黄道的 9° 来自 Aegis 的自转轴倾角。轨道面动力学：这个距离上恒星扭矩已强于行星
     # 四极矩扭矩约 14 倍，平衡面（Laplace 面）几乎贴黄道，所以赤道面构型带有 8.35° 自由倾角，
-    # 以约 4.7 年周期绕平衡面摆动（相对黄道 7.7°↔9°）。该自由倾角约 1–2 Gyr 会被潮汐磨平，
-    # 5.9 Gyr 的系统需要 1:2:4 共振链的倾角型共振来维持（土卫一–土卫三类比），
-    # 见 satellite_architecture.md 与 roadmap #22。
+    # 以约 4.7 年周期绕平衡面摆动（相对黄道 7.7°↔9°）。维持机制（P-B 潮汐包）：早期巨撞击
+    # （Sentinel 散射期）撞出 9° 倾角并减速 Aegis 自转至 10h；Aegis 弱潮汐耗散（k₂/Q≈7×10⁻⁸）
+    # 把倾角阻尼时标拉到 ~150–300 Gyr ≫ 系统年龄 5.9 Gyr，构型为冻结化石，
+    # 见 design-notes/0009 与本文件 Aegis 弱耗散声明注释。
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
 
-  # ---- 共振卫星（2:1 with Nacrea，拉普拉斯链内环） ----
+  # ---- 逆行捕获卫：Cadence（韵珠，早期捕获 ~0.5 Gyr，Sentinel 散射期） ----
+  # Gyr 级准可积：单体远距逆行（无交叉伙伴、恒星潮汐仅有界 e 摆动、无耗散通道），
+  # F12/F14/F23 血统。与 Nacrea 周期比 2.13（脱离 2:1 约 2.4 个共振宽度）；
+  # 与守珠 2.40（仅七阶 12:5，耦合 ∝ e⁷ 免疫）。
+  # ⚠ 认证实现要素（X8，IAS15+J2+潮汐）：改动任何字段前必须重跑认证，
+  # 见 design-notes/0009 §5 工程红线。
   - body_id: satellite_cadence
     parent_id: planet_aegis
-    semi_major_axis_au: 0.00769   # 1,150,000 km = 724,000 × 2^(2/3)，精确 2:1
-    eccentricity: 0.005           # 共振平衡值（泵浦 vs 潮汐阻尼）
-    inclination_deg: 9.0          # 与 Nacrea 共面（相互倾角 ~0，链稳定性要求）
-    longitude_ascending_node_deg: 0.0
+    semi_major_axis_au: 0.0080213904  # 1,200,000 km = 0.245 r_H；P=6.715 d
+    eccentricity: 0.005           # 历元值；恒星潮汐驱动摆动 ~0.05–0.12 有界（X8 认证）
+    inclination_deg: 171.0        # 赤道逆行（Kozai 窗口 39.2°–140.8° 之外）
+    longitude_ascending_node_deg: 0.0   # 认证实现要素，勿改
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0         # 认证实现要素，勿改
     epoch_year: 0.0
 
-  # ---- 共振卫星（4:1 with Nacrea / 2:1 with Cadence，拉普拉斯链外环） ----
+  # ---- 逆行捕获卫：Vigil（守珠，Charon 级小卫，早期捕获） ----
+  # 0.44 r_H 逆行（安全线 0.5 内，F14 @0.458 r_H 血统）；与韵珠径向净空
+  # 设计值 ~160k km ≈ 4.8 r_H,m（最坏 e 组合下 ~1.6）——X8 实测 60 kyr 下界。
+  # 自转：已潮汐锁定（t_lock 28–86 Myr ≪ 5.4 Gyr，概率 ≈100%）；因恒星潮汐
+  # e 摆动（0.05–0.35）处于 Hut 伪同步：自转周期在 10–16 d 间漂移（「呼吸锁定」）。
   - body_id: satellite_vigil
     parent_id: planet_aegis
-    semi_major_axis_au: 0.01220   # 1,825,000 km = 724,000 × 4^(2/3)，精确 4:1
-    eccentricity: 0.008           # 链外端共振强制值略高（仍 <0.01 稳定性约束）
-    inclination_deg: 9.0          # 与 Nacrea 共面
-    longitude_ascending_node_deg: 0.0
+    semi_major_axis_au: 0.0143716578  # 2,150,000 km = 0.44 r_H；P=16.10 d
+    eccentricity: 0.02            # 历元值；恒星潮汐驱动摆动 ~0.05–0.35 有界（F23 @0.42 r_H 实测 0.254）
+    inclination_deg: 171.0        # 赤道逆行（Kozai 窗口之外）
+    longitude_ascending_node_deg: 0.0   # 认证实现要素，勿改
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 270.0  # 伽利略式相位（θ₂≈180°，共振链天平动）
+    mean_anomaly_epoch_deg: 90.0        # 认证实现要素，勿改
     epoch_year: 0.0
 
   # ---- Crucible 捕获小卫星（火卫一类比） ----
@@ -263,8 +276,15 @@ bodies:
     body_type: "planet"
     mass_earth: 508.5             # 1.6 M_J × 317.83 M⊕/M_J
     radius_km: 71355              # 11.2 R⊕
-    rotation_period_days: 0.4167  # ~10 小时（远快于卫星公转，确保角动量正向传递）
-    axial_tilt_deg: 9.0           # 自转轴倾角（形成史的自由参数，土星 27° 类比）。Nacrea 走赤道面轨道，
+    rotation_period_days: 0.4167  # ~10 小时（远快于卫星公转，确保角动量正向传递；
+    #   偏慢于类木行星 ~8h 的原生值——早期巨撞击再倾事件同时减速，见下）
+    # 潮汐耗散（弱耗散体制，2026-09-08 REBOUND+潮汐自洽核算裁决 P-B）：k₂≈0.35，
+    #   Q≈5×10⁶（k₂/Q≈7×10⁻⁸，比木星实测 1.1×10⁻⁵ 弱 ~150×，在气巨星潮汐理论
+    #   不确定带内）。推论：卫星外迁 ~0.8 cm/yr（形成以来累计 +10%，与
+    #   satellite_architecture.md 一致）；自由倾角/4.7yr 摆动阻尼时标 ~80 Gyr ≫
+    #   系统年龄 → 9° 构型为早期巨撞击化石（与 Sentinel 散射同期、Nacrea 冷却期），
+    #   无需持续维持机制；Aegis 自转 5.9 Gyr 减慢 <1%。
+    axial_tilt_deg: 9.0           # 自转轴倾角（早期巨撞击设定；金星式撞击减速类比）。Nacrea 走赤道面轨道，
     # 所以 Nacrea 相对黄道的有效倾角就是这 9°，它驱动季节。自转轴的自由进动周期约 550 年，
     # 与轨道面交点进动（约 1.2 千年）同量级，因此合理推断 Aegis 处于 Cassini 态：
     # 自转轴跟着轨道面一起进动、倾角保持恒定（土星即此状态）。详见 orbital_dynamics.md。
@@ -318,29 +338,29 @@ bodies:
     description:
       surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
 
-  # ---- 共振卫星：Cadence（2:1 with Nacrea，P=6.29 d） ----
+  # ---- 逆行捕获卫：Cadence（韵珠，P=6.715 d，Io 大小） ----
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
     body_type: "natural_satellite"
-    mass_earth: 0.05              # 共振链内环泵浦者
-    radius_km: 2867               # 0.45 R⊕（与 planets.yaml 对齐），ρ≈3.0 g/cm³（岩质）
-    rotation_period_days: 6.29    # 同步自转
+    mass_earth: 0.012             # 早期捕获（~0.5 Gyr，Sentinel 散射期）；长期摄动维持 Nacrea 受迫偏心率
+    radius_km: 1810               # 0.284 R⊕（与 planets.yaml 对齐），木卫一大小；ρ≈2884 kg/m³（「Io 个头、Europa 成分」：岩质+深部水层）
+    rotation_period_days: 6.715   # 同步自转（t_lock ~Myr ≪ 年龄，锁定概率 ≈100%）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.25
+    albedo: 0.13                  # 红褐暗珠：形成期原生托林 + Gyr 级辐照聚合 + 磁层等离子体溅射（土卫八前导半球/D 型小行星类比）
     description:
-      surface: "岩质共振卫星，与 Nacrea 锁定 2:1 共振，持续泵浦其偏心率；天空中间歇性出现的'节拍之月'"
+      surface: "逆行岩质捕获卫；表面红褐暗化（托林），深部冰层在自身隔热下保留；Nacrea 潮汐加热（板块构造）的长期维持者；近合 26′ ≈ 0.85× 满月宽、~半满月亮度的暗红巨珠"
 
-  # ---- 共振卫星：Vigil（4:1 with Nacrea，P=12.59 d） ----
+  # ---- 逆行捕获卫：Vigil（守珠，Charon 级，P=16.10 d） ----
   - id: satellite_vigil
     name: "守珠星 · Vigil"
     body_type: "natural_satellite"
-    mass_earth: 0.03              # 共振链外环节拍器
-    radius_km: 2485               # 0.39 R⊕（与 planets.yaml 对齐），ρ≈2.8 g/cm³（冰岩混合）
-    rotation_period_days: 12.59   # 同步自转
+    mass_earth: 3.05e-4           # Charon 级（Charon 2.66e-4 M⊕）；ρ=1870 kg/m³ 由质量/半径自动导出（土卫六/木卫四冰岩带）
+    radius_km: 615                # 0.0965 R⊕（与 planets.yaml 对齐），卡戎大小
+    rotation_period_days: 13.9    # Hut 伪同步中值（随恒星潮汐 e 摆动在 10–16 d 漂移——「呼吸锁定」；锁定概率 ≈100%）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.35                  # 富冰表面
+    albedo: 0.313                 # Charon 型处理水冰的 HZ 辐照压暗版（p=0.209）
     description:
-      surface: "冰岩混合共振卫星，拉普拉斯链最外端；与 Cadence 共同维持 Nacrea 的潮汐加热"
+      surface: "冰岩 Charon 级捕获卫；5 Gyr 老表面，处理结晶冰+托林斑驳；近合 3.0′ 圆盘、~1/60 满月亮度的中灰微蓝亮珠；自转周期随 e 摆动漂移（光变曲线可测）"
 
   # ---- Crucible 捕获小卫星 ----
   - id: satellite_cinder
