@@ -1,7 +1,8 @@
 # 开发路线图
 
-> 最后更新：2026-09-10（瘦身：已完成项移交 CHANGELOG、待办表改「一行摘要 + 指针」；
-> nacrea 卫星系统终版同步）
+> 最后更新：2026-09-10（v0.36.0：气候方向性大陆度系列 + earth 洋流 SODA 补全 +
+> 天文 REBOUND 卫星架构终版 + 构建产物改走 GitHub Releases + scripts 重组提速；
+> roadmap 瘦身：已完成项移交 CHANGELOG、待办表改「一行摘要 + 指针」）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
@@ -9,7 +10,7 @@
 
 ---
 
-## 一、当前状态快照（v0.35.0）
+## 一、当前状态快照（v0.36.0）
 
 | 维度 | 状态 |
 |------|------|

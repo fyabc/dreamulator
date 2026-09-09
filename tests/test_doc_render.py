@@ -234,7 +234,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "**100 天**",
         "**3.25 天（78.0 小时）**",
         "**30.8 个**",
-        "每 76h 穿过本影一次",
+        "每 75h 穿过本影一次",
     ],
     "layers/geological/input/physical_params.md": [
         "1.20 M⊕",
@@ -243,7 +243,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "**3.25 地球日（78.0 小时）**",
         "**100 地球日**",
         "9° / ±81°",
-        "76 小时",
+        "75 小时",
     ],
     "layers/astronomy/input/giant_brightness.md": [
         "**828 W/m²**",

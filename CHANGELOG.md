@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] — 2026-09-10
+
+### Added
+
+- **方向性大陆度系列**（气候 4.x，提案 `climate-layer-improvement.md`）：方向性海洋调节
+  （4.1-B，陆格月温向上风向海洋松弛）、Held-Hou 副热带下沉增温（4.2，Hadley 等面积均质化）、
+  Föhn 雨影沿真实风向累积、副热带地表递减率（4.2-①，沙漠递减率 1.5）、方向性干燥①落地
+  （内陆后乘衰减 + 纬度门控）。
+- **earth 洋流补全**：SODA v3.15.2 观测月度气候态为表面流主源（APDRC 匿名 OPeNDAP），
+  Stommel 流函数回退兼求解器检验；141,856/141,940 海洋 cell 有流，湾流/Agulhas/ACC 抽查
+  全对，10 个符号锚定测试。
+- **潮差进引擎**（技术债 19）：共振平衡潮计算 + doc_render 变量渲染。
+- **天象派生量进 derived catalog**：视直径/视星等/亮度/食季 engine 化（替代手写数字）。
+- **卫星动力学子系统**：`engine/satellite_dynamics.py` 纯函数 + REBOUND 长期算子
+  （J2 长期摄动 + 常数 Q 潮汐 e 阻尼，Lie 分裂）+ 引擎层级泛化（parent_id 卫卫层级）。
+- **REBOUND 工具链**：`rebound_nbody.py`（stellar.yaml 直读 + 落地构型判定 + 共振相位扫描）、
+  `viz_nbody.py`（live/dump/replay 三模式 N 体可视化，内置 WASM 查看器随库 vendor）。
+- **前端误差热力图层**（ΔT/ΔP 诊断）+ 开发者模式门控；年平 SLP 增存 + 年平气压视图 +
+  副热带高压验证指标。
+- **验证/诊断脚本**：月度温度/风场验证（NCEP zonal-mean RMSE/R² + 站点月度 T 双口径）、
+  季节温度分解诊断。
+- **发布链路迁移 GitHub Releases**：构建产物（`maps/` + `layers/*/derived/`）移出 git；
+  `publish_world_data.py`「构建 + 打包 + 上传」一条命令到固定 release tag `worlds-data`，
+  deploy-pages 下载后做静态导出。
+
+### Changed
+
+- **nacrea 卫星架构终版**：双单体逆行捕获卫（韵珠 Cadence 0.012 M⊕ @1.2e6 km +
+  守珠 Vigil 615 km @2.15e6 km）+ 卫星动力学层硬度豁免；Nacrea 受迫偏心率带
+  0.002–0.007 为「万年活动周期」叙事特色；~50 次 REBOUND 积分终判与豁免记录存档
+  `design-notes/0009`，知识库新增 `satellite_system_stability.md`（混沌散射区四约束 +
+  e 带重叠定理 + REBOUND 工程教训）。
+- **nacrea 天文/地形**：Aegis a=0.3536 AU、e=0.03（~45 kyr 距离季旋回）、周期级联 3.147、
+  恒星叙事 K8；世界岛完整化 + 海岸曲折化微调。
+- **大尺度风场回归纯三圈环流**：移除地转风分量（路线否证——打崩降水 R²）；方向性
+  改由大陆度体现在温度/降水上。
+- **scripts/ 按域重组**：40 脚本分 5 组（climate/earth/astro/release/dev）+ 全库引用同步；
+  诊断脚本默认读构建产物（一轮诊断 20-30 min → 37 s，`--rebuild` 显式重跑）。
+- geography `kind` 字段删除（no-op 标签）；`noise_amplitude` 上限 3→5。
+
+### Fixed
+
+- 季风边界层科氏力符号翻正（北半球热低压应为气旋式流入）。
+- 极地海冰表面温度：冰面观测锚定剖面替代 −1.8 °C 开阔水近似。
+- 递减率海平面以下不外推升温（负高程陆地钳到 0）；内湖自有 SST 剖面
+  （五大湖/里海不再误用开洋剖面，4.3-①）。
+- 内流大湖海陆分档 + earth 分支水掩膜修正（4.1-A）。
+- 风场镜像：外部真东基观测数据进引擎前翻转东分量（Stommel 链按引擎内部镜像约定校准），
+  新增符号锚定测试防回归。
+- 恒星引擎质光/年龄修正。
+- `publish_world_data` 对导入世界（earth）跑 import 脚本而非 build；doc-render 锚点测试
+  在 derived 缺失时跳过而非失败。
+
 ## [0.35.0] — 2026-09-04
 
 ### Added
