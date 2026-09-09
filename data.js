@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788801725564,
+  "lastUpdate": 1788978336180,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4659,6 +4659,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006704049892197563",
             "extra": "mean: 5.006753600000025 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "bb8514673e666be2aaa3853bd01fc3d978e1c8ce",
+          "message": "chore: bump version 0.35.0 → 0.36.0\n\n- CHANGELOG 新增 [0.36.0] 节（气候方向性大陆度系列 / earth 洋流 SODA /\n  天文 REBOUND 卫星架构终版 / 发布链路迁移 GitHub Releases / scripts 重组提速）\n- roadmap 版本引用同步；doc-render 锚点 76h→75h（冻结设定全量重建后\n  derived 周期 3.1433 d = 75.4 h，模板取整 75，纯测试同步）\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-10T02:08:35+08:00",
+          "tree_id": "0cfb62c4bdea8c2cf1b2531e5faff8a1ec7048de",
+          "url": "https://github.com/fyabc/dreamulator/commit/bb8514673e666be2aaa3853bd01fc3d978e1c8ce"
+        },
+        "date": 1788978335182,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 13.43442223767889,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03218410974272664",
+            "extra": "mean: 74.4356535999998 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.584688696256261,
+            "unit": "iter/sec",
+            "range": "stddev: 0.048071475771963766",
+            "extra": "mean: 218.11731750000263 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9776415336870488,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8067846094658435",
+            "extra": "mean: 505.6528106666699 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1204.4347286723726,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000811219402977428",
+            "extra": "mean: 830.2649999990308 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 247.61920326547784,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004533905475281281",
+            "extra": "mean: 4.038458999998795 msec\nrounds: 5"
           }
         ]
       }
