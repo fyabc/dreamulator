@@ -289,6 +289,23 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 这类历史表述——历史由 git 管理，git commit message 才是记录历史的地方。涉及推导参数表，
 只放「当前值 + 参数范围」，不放「旧值 → 新值」叙事。
 
+### 任务文档分工（收集 → 执行 → 战略 → 归档）
+
+任务/计划类文档按时间尺度与生命周期分四层，信息单向流动。**单一事实源**：每个条目的
+完整定义只住一处，其余层只持有指针，不复述内容（防双写漂移）。
+
+| 层 | 文件 | 入库 | 记什么 | 不记什么 |
+|------|------|:--:|--------|---------|
+| 收集箱 | `private/todos/interlude.txt` | ✗ | 开发中闪现的原始想法，append-only | 不排序不细化；**条目全部落入执行层后即清空（总量优先）** |
+| 执行台 | `private/todos/today.md` | ✗ | 本周执行顺序、分支/构建状态快照、教训一行、进行中项指针 | 不复述 roadmap/proposal 条目；已完成项删掉换一行 ✅ 指针 |
+| 战略图 | `docs/design/roadmap.md` | ✓ | Phase 状态机、P0–P3 待办表（每格 ≤2 行 = 一句话摘要 + 指针）、技术债登记表 | 不记每日进度、不堆积已完成项、条目不写成段落 |
+| 归档层 | `CHANGELOG.md`、proposals/、各世界 `design-notes/`、git | ✓ | 已完成工作与决策的全部细节 | — |
+
+**分诊规则**（收集箱 → 其他层，开/收工时扫一眼）：当场可做 → today.md 待办；
+方向性/功能提案 → roadmap 一行（需展开则写 `proposals/`）；纯知识 → `docs/knowledge/`；
+无价值 → 删。roadmap.md 回答「接下来几个月做什么、为什么是这个顺序」，月更频率；
+每日待办只写 today.md，不进 roadmap。
+
 ### 开发流程纪律
 
 1. **新任务默认开 feature 分支**：`git checkout -b feature/<描述>`，不在 main 上直接开发；合入 main 前清理 commits（squash 为语义清晰的少量提交）。

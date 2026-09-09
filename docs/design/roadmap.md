@@ -1,8 +1,7 @@
 # 开发路线图
 
-> 最后更新：2026-09-04（v0.35.0 地质层改进：板块对齐海岸 + 锚定地貌噪声 + 造山带/裂谷形态 + 海岸过渡修复）
-> 前次：v0.34.0 月度矢量场 + 季风机制修复 + 气候精度提升 + 数据同步
-> headless 导出 CLI + 配色单源化 + Seed 探索器 CLI）
+> 最后更新：2026-09-10（瘦身：已完成项移交 CHANGELOG、待办表改「一行摘要 + 指针」；
+> nacrea 卫星系统终版同步）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统设计见 [ocean-currents-model.md](archive/ocean-currents-model.md)；
@@ -100,12 +99,12 @@
 
 | 项目 | 内容 | 状态 |
 |------|------|------|
-| 天文：卫星系统 | 新增 4:2:1 拉普拉斯共振卫星链（Cadence/Vigil），为 e_m=0.0025 提供 60 亿年尺度的共振泵浦机制（此前设定无泵浦源） | ✅ v0.15.0 |
-| 天文：轨道校准 | Aegis 内移 0.2795 → 0.2722 AU（混合变暖路径），Boreal/Glacis 随共振链同步缩放 | ✅ v0.15.0 |
-| 地质：海陆分布翻案 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆；旧设定（大潮点大陆）被推翻，改为不对称混合案 | ✅ 地形引擎已按新设定生成：`geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §3.5；海岸线平直为已知限制 |
-| 气候：温度校准 | 温室 72 → 75 K（保留 3 K 给次行星半球加温）；lat_gradient_c 与 Hadley 边界参数化，均温 9.2 → 14.4 °C | ✅ v0.24+（ΔT(Ω) + 扩散热输送 + 冰反照率 + 可变直减率 + 子星体对流增强全链路完成） |
-| 气候：文档校验 | 按引擎实际输出重写 `layers/climate/input/*.md`（200k seed=42） | ✅ v0.24.0 |
-| 数据：200k 迁移 | nacrea 网格 100k→200k（71→51 km/cell），数据已提交 | ✅ v0.24.0 |
+| 天文：卫星系统 | 双单体逆行捕获卫（韵珠 Cadence 0.012 M⊕ @1.2e6 km + 守珠 Vigil 615 km @2.15e6 km），长期摄动维持 Nacrea 受迫偏心率带 0.002–0.007（泵浦源）；REBOUND 终判 + 硬度豁免见 nacrea `design-notes/0009` | ✅ 2026-09 终版 |
+| 天文：轨道校准 | Aegis a=0.3536 AU（保守宜居带几何中心附近，方案2 校准）、e=0.03（~45 kyr 距离季旋回）；Aegis–Boreal–Glacis 1:2:4 共振链（周期级联 3.147），1 Myr N 体稳定；详见 nacrea `orbital_dynamics.md` | ✅ 2026-09 终版 |
+| 地质：海陆分布 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆（不对称混合案） | ✅ `geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §3.5；海岸线平直为已知限制 |
+| 气候：温度校准 | 温室 75 K（含 3 K 预留次行星半球加温）；ΔT(Ω) + 扩散热输送 + 冰反照率 + 可变直减率 + 子星体对流增强全链路，均温 14.4 °C | ✅ v0.24+ |
+| 气候：文档校验 | `layers/climate/input/*.md` 按引擎实际输出维护（200k seed=42） | ✅ v0.24.0 |
+| 数据：网格规模 | nacrea 主力网格 200k（51 km/cell），数据已提交 | ✅ v0.24.0 |
 | 文明：种子设计 | civilizations.yaml 填充（3 文明 + 地理锚点 + 双语言叙事，2026-08 由 seed_discovery 候选区锚定）；大事年表 / conlang 待推进 | ✅（已填 3 种子） |
 | 视频素材 | 板块漂移/气候/文明 timelapse、3D 自动旋转、纯净视图模式 | 📋 |
 
@@ -113,47 +112,43 @@
 
 ## 六、实施优先级
 
-### 已完成（摘要）
-
-- **守护轴**（校验/审计/设定维护，v0.31.0）；**回归测试基建**；**前端加载性能优化**（JSON 截断 + gzip + MessagePack）。
-- **地图图层 headless 导出 CLI**；**气候诊断脚本四件套**；**Seed 探索器 CLI**；**文明宜居/农业图层**；**全球温度/降水图层**；**单元格信息面板重构**；**3D 球体拖动修复**；**前端气候可视化**（风场箭头）；**文档 200k 更新**。
-- **气候 3A**：3A.3a 慢自转输送 / 3A.3 温度精细化 / 3A.7 潮汐锁定 / 3A.4 空间格局；**洋流系统**（Stommel 流函数 + SST 平流 + 涌升）。
-- **生态层 P0**（Whittaker + NPP + 可驯化标签）；**潮汐加热显式化**；**CLI 精简**（移除 `terrain generate`）；**nacrea 迁移 200k + 气候文档校验**。
+> 已完成项不在此累积：发版内容见 `CHANGELOG.md`，Phase/功能状态见 §二/§三，
+> 世界设定类决策存档见各世界 `design-notes/`。
 
 ### 待办
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P1** | **局部地形精细化管线**（桥接 dreamulator 全球输出 → 专业工具局部高精度地图。含：① `export-region`/`import-region` CLI 命令（立体投影区域导出 + 羽化回贴）——`map-workflow.md` §6 已纸面设计但未实现；② GeoTIFF 导出支持（带地理参考，QGIS 直接打开，**16-bit+**）；③ Gaea/World Machine 侵蚀节点图模板；④ QGIS 矢量化脚本（栅格→等高线+河流+政区边界）；⑤ Photoshop 配色/标注模板。目标自动化程度：dreamulator→PNG/GeoTIFF 自动；Gaea/QGIS 半自动（模板+脚本）；Photoshop 手动。**2026-08 完整链路调研已入 `proposals/gaea-refinement.md` §6**：含开源替代（Landlab Fastscape 侵蚀 + Whitebox 河网，可用引擎降水加权 K）与各阶段 pitfalls） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
-| P3 | ~~构造-侵蚀 Δt 耦合（抬升率场）~~（2026-08-26 立项，**随侵蚀关闭降级/搁置**）：原设计把「构造段→侵蚀段」改为 Δt 交替耦合循环（抬升率场 + 侵蚀/沉积一步）。**流水侵蚀对 200k 关闭后，本条主要动机（对抗侵蚀准平原化）消失**，随侵蚀重启再评估（调研存 `competitor-analysis.md` §4.2.2） | — | ★★ |
+| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化脚本。完整链路与开源替代调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6，区域导出纸面设计见 `map-workflow.md` §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
+| P3 | ~~构造-侵蚀 Δt 耦合（抬升率场）~~——随流水侵蚀关闭（§四 3B）搁置，侵蚀重启再评估；调研存 `competitor-analysis.md` §4.2.2 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五） | 进行中。天文/地质/气候三大层已就绪；文明种子设计 + 视频素材待推进 | ★★★★★ |
-| **P0** | **季风动力学与季节风场**（技术债 23）：v1 已落地（气压异常 → 边界层风场 → 逐月水汽预算，启发式增益已删）；环流胞圈逐月迁移与月度矢量场合并推进（技术债 24），验收指标（Cwa/Cfa/Am recall >40%）随该轮 | 剩余 1–2 周（随 24） | ★★★★★ |
-| P1 | **月度矢量场展示**（技术债 24）：月度风场先行（季风诊断底座），洋流季节化之后再月度化；前端懒加载抽样箭头 | 1–2 周（风场部分随 23） | ★★★★ |
+| **P0** | **季风动力学与季节风场**（技术债 23，§七）：v1 已落地；环流胞圈逐月迁移与月度矢量场（技术债 24）合并推进，方案底稿 [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §2，验收 Cwa/Cfa/Am recall >40% | 剩余 1–2 周（随 24） | ★★★★★ |
+| P1 | **月度矢量场展示**（技术债 24，§七）：月度风场先行 → 洋流季节化后月度化；前端懒加载抽样箭头 | 1–2 周（风场部分随 23） | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
-| P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置）：潮汐锁定卫星的海岸侵蚀以潮汐冲刷（tidal scour）而非波浪为主导，需潮差输入（来自 astronomy 上游，无 DAG 循环）；随流水侵蚀重启再评估。**2026-08 间奏曲评估**（`knowledge/geology/coastal_geomorphology.md`）：44 m 潮差下亚网格地貌（潮沟/沙脊/沙波）推高清化；但**大尺度指纹可在 200k 表达**——喇叭形河口、潮间带缓坡高程带（5–50 km）、障壁岛/潟湖**禁止生成**、海岸平直化；海岸线数据给高/低潮双基准。潮汐冲刷机制随侵蚀重启 | 1–2 周 | ★★ |
+| P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置，重启再评估）：大尺度指纹可在 200k 表达（喇叭河口、潮间带高程带、海岸平直化、高/低潮双基准；障壁岛/潟湖禁止生成），亚网格地貌归高清化——评估存 `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
 | P2 | **生态层海洋模块**（3B.5）：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——当前生态层全陆相 Whittaker 映射，零海洋 | 1–2 周 | ★★★ |
 | P2 | 地质时间轴可视化（板块漂移回放） | 3–4 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周（低风险渐进迁移） | ★★★ |
-| P2 | `ai` CLI 命令组（narrate/imagine/assist/trace/mythologize/tavern 等；`ai assist` 为世界设计助手——自然语言→结构化编辑；`ai civ` 为地理→文明推演——气候画像→文明种子，衔接 civilizations.yaml。设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)。**注**：`ai critique`/`ai trace`/`ai reconcile` 已并入守护轴 [harness.md](proposals/harness.md) P0，不在本条目内） | 2–3 周 | ★★★ |
+| P2 | `ai` CLI 命令组（narrate/imagine/assist/civ 等），设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归守护轴 [harness.md](proposals/harness.md) P0 | 2–3 周 | ★★★ |
 | P1 | **增量重建细化**（`--only terrain` 粒度：改 geography.yaml 后跳过板块构造） | 0.5 周 | ★★★★ |
-| **P0** | **前端加载性能优化**（① JSON 截断 ✅ ② gzip ✅ ③ MessagePack ✅ 已落地；④ 纹理分辨率匹配 cell 密度待做） | 1–2 周 | ★★★★★ |
+| **P0** | **前端加载性能优化**：JSON 截断/gzip/MessagePack 已落地，剩「纹理分辨率匹配 cell 密度」 | 1–2 周 | ★★★★★ |
 | P1 | **几何/气候数据分离存储**（静态网格（x,y,z,neighbors,plate_id）只加载一次；气候/生态字段增量更新。200k 下几何 ~80 MB、气候 ~90 MB，总计 ~170 MB 可接受） | 0.5 周 | ★★★★ |
 | P2 | **geography.yaml 编辑原语补全**（`elevation_bias` 区域性海拔乘数、`lock_region` 锁定区域、`lake`/`inland_sea` 内陆水体定义；**注意**：geography.yaml 约束随机生成过程，seed 无关；逐 cell 后处理覆写属 edits.json 层） | 1–2 周 | ★★★ |
-| P2 | **edits.json 逐 cell 编辑系统**（方案 B：管线后处理叠加层，seed 绑定。支持逐 cell elevation/land_sea 覆写。Phase 1: 点击编辑；Phase 2: 画笔工具；Phase 3: 地形笔刷。换 seed 时标记 stale 并支持最近邻迁移） | 1–2 周（Phase 1: ~2 天） | ★★★ |
+| P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；换 seed 标记 stale + 最近邻迁移） | 1–2 周（Phase 1 ~2 天） | ★★★ |
 | P2 | **分辨率独立性验证**（确保 geography.yaml 锚定特征在 100k/200k/500k 下一致；已发现 sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
 | P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具编辑 ↔ 回贴 cell，用于 Gaea/World Machine 集成）。**注**：P1 "局部地形精细化管线" 为此项的 MVP 先行版——先打通实用工作流，远期再做全自动往返协议 | 远期 | ★★ |
 | P3 | **构造-地表全双向耦合**（侵蚀/沉积反作用于板块动力学：侵蚀卸载改变板缘应力、沉积载荷影响俯冲）。对齐学术前沿（Underworld2+Badlands ALE 方案，2026 GMD），需先解决地理锚定与动态板块的协调；程序化世界工具无现成实现 | 远期 | ★★ |
 | P3 | AI 顾问模式 / 实时协作 / 世界导出包 | 见 vision.md §9 | ★★ |
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算） | 远期，设计概要见 [moltke-engine.md](proposals/moltke-engine.md) | ★★ |
 | P3 | SDE 文明建模（Euler-Maruyama / Milstein / Jump-Euler + 泊松跳跃冲击） | 远期，依赖 Entity ID + Modifier 系统 | ★★ |
-| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上；`query_registry` 补 `context=None` 物理/化学 verifier 原语——配平、密度-温度、能量预算等，作 `ai critique` 确定性取证底座。见 [harness.md](proposals/harness.md) §9.4） | 内核 0.5 周，随 `ai` 命令组（P2）推进 | ★★ |
-| P2 | **基于地质时间的板块运动演化**（古造山带/断陷自然涌现）：当前内部古造山带/裂谷/断陷是 `_apply_interior_landforms` **手动随机放置**（`geological-pipeline.md` §6.2），非从数亿年板块运动自然涌现。目标：把 tectonic 演化（Cortial 2019，当前 50 步预览）延展到数亿年尺度，让汇聚造山/离散裂谷/断陷随板块漂移-碰撞-裂解**自然生成**，去掉手动造山带。**与手动指定主体地形的冲突**：geography.yaml 锚定静态海陆格局，而「自然涌现」要求地形随演化漂移——两者矛盾。需调研：① 区分「指定模式」（geography 锚定 + 静态地形）vs「演化模式」（无锚定 + 动态地形）两种模式；② 或混合（锚定大陆骨架，板块边界/造山带由演化涌现）。参考 GPlates（板块重建）、Underworld2（岩石圈动力学）。与「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2）关联 | 设计 1–2 周 + 实现远期 | ★★★ |
-| P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，其中 **tectonics（50 步演化 + 加权 Voronoi 重采样）~105 s 占主导**，terrain ~44 s、mesh ~33 s、export ~27 s、plates ~13 s。先 profile 各段瓶颈（tectonics 逐步重采样、terrain 逐 cell Python 循环 + fBm、mesh SphericalVoronoi 构建），再定优化策略（Numba/向量化/并行/降演化步数）。交互性（秒~分钟）是硬约束，但不能以牺牲正确性为代价（引擎纪律 4） | 评估 0.5 周 | ★★ |
-| P3 | **GCM PoC 能正常跑起来**（`climate-gcm-plan.md` 离线 oracle 前提）：ExoPlaSim PoC 目前风场退化（~1e-5 m/s，温度场有、环流全零，根因未明），只能定性、不能定量可回填。目标：让 PoC 跑到非退化环流，使 GCM 能当 offline oracle 扫 Ω/倾角/光度参数空间。障碍与已修 3 个脚本 bug 见 `private/external-projects/exoplasim_poc/README.md`。定性结论（单圈 @Ω=0.31）已用 Kaspi & Showman (2015) 文献兜底 | 远期（调试类） | ★★ |
+| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上），见 [harness.md](proposals/harness.md) §9.4 | 内核 0.5 周，随 `ai` 命令组推进 | ★★ |
+| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷/断陷随数亿年漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置，见 `pipelines/geological-pipeline.md` §6.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式或混合骨架方案；参考 GPlates、Underworld2；关联「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2） | 设计 1–2 周 + 实现远期 | ★★★ |
+| P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，tectonics（50 步演化 + 加权重采样）~105 s 占主导（terrain 44 / mesh 33 / export 27 / plates 13）；先 profile 再定策略（Numba/向量化/并行），交互性硬约束但正确性优先（引擎纪律 4） | 评估 0.5 周 | ★★ |
+| P3 | **GCM PoC 跑通**（[climate-gcm-plan.md](proposals/climate-gcm-plan.md) 的 offline oracle 前提）：ExoPlaSim PoC 风场退化（环流全零，根因未明）；障碍与已修 bug 见 `private/external-projects/exoplasim_poc/README.md`，定性结论已由 Kaspi & Showman (2015) 兜底 | 远期（调试类） | ★★ |
 
 ---
 
