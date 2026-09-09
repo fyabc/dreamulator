@@ -501,3 +501,124 @@ def test_build_system_catalog_without_inputs(tmp_path: Path) -> None:
     catalog, warnings = build_system_catalog(_StubEngine({}))
     assert catalog == {}
     assert any("stellar.yaml" in w for w in warnings)
+
+
+def test_build_system_catalog_binary_companion(tmp_path: Path) -> None:
+    """Moon-of-moon (hierarchical binary): summed-mass period + shared sky envelope.
+
+    A binary companion's ``parent_id`` is a sibling satellite, not the host
+    planet.  Two generalisations are exercised:
+
+    1. the mutual-orbit period uses the SUM of the binary's masses (using the
+       parent alone would give 1.497 d instead of 1.312 d — 14% off);
+    2. the sky view walks the parent chain so the companion shares the binary
+       barycentre's distance envelope from the observer instead of vanishing.
+    """
+    stellar = _write(
+        tmp_path,
+        "stellar.yaml",
+        {
+            "stars": [
+                {
+                    "id": "star_ignis",
+                    "luminosity": 0.0414,
+                    "mass": 0.4665,
+                    "radius": 0.70,  # needed for the sky view (angular size)
+                    "age_gyr": 5.9,
+                }
+            ],
+            "orbits": [
+                {
+                    "body_id": "planet_aegis",
+                    "parent_id": "star_ignis",
+                    "semi_major_axis_au": 0.2504,
+                    "eccentricity": 0.005,
+                },
+                {
+                    "body_id": "satellite_nacrea",
+                    "parent_id": "planet_aegis",
+                    "semi_major_axis_au": 0.00494,
+                    "eccentricity": 0.002,
+                },
+                {
+                    "body_id": "satellite_cadence",
+                    "parent_id": "planet_aegis",
+                    "semi_major_axis_au": 0.0113636,  # 1,700,000 km barycentre orbit
+                    "eccentricity": 0.02,
+                },
+                {
+                    "body_id": "satellite_vigil",
+                    "parent_id": "satellite_cadence",  # moon of a moon
+                    "semi_major_axis_au": 1.0026738e-4,  # 15,000 km mutual orbit
+                    "eccentricity": 0.0,
+                },
+            ],
+            "bodies": [
+                {"id": "planet_aegis", "mass_earth": 508.5},
+                {"id": "satellite_cadence", "mass_earth": 0.02},
+                {"id": "satellite_vigil", "mass_earth": 0.006},
+            ],
+        },
+    )
+    derived = _write(
+        tmp_path,
+        "stellar_derived.yaml",
+        {"stars": [{"id": "star_ignis", "computed_temperature": 3931.0}]},
+    )
+    planets = _write(
+        tmp_path,
+        "planets.yaml",
+        {
+            "planets": [
+                {
+                    "id": "satellite_nacrea",
+                    "name": "Nacrea",
+                    "orbits": "planet_aegis",
+                    "mass": 1.2,
+                    "radius": 1.07,
+                    "rotation_period_days": 3.25,
+                    "axial_tilt_deg": 9.0,
+                    "albedo": 0.30,
+                },
+                {
+                    "id": "satellite_cadence",
+                    "name": "Cadence",
+                    "orbits": "planet_aegis",
+                    "mass": 0.02,
+                    "radius": 0.3325,
+                    "rotation_period_days": 1.3124,
+                    "axial_tilt_deg": 0.0,
+                    "albedo": 0.13,
+                },
+                {
+                    "id": "satellite_vigil",
+                    "name": "Vigil",
+                    "orbits": "satellite_cadence",
+                    "mass": 0.006,
+                    "radius": 0.2605,
+                    "rotation_period_days": 1.3124,
+                    "axial_tilt_deg": 0.0,
+                    "albedo": 0.25,
+                },
+            ]
+        },
+    )
+    engine = _StubEngine(
+        {"stellar.yaml": stellar, "stellar_derived.yaml": derived, "planets.yaml": planets}
+    )
+
+    catalog, warnings = build_system_catalog(engine)
+    assert warnings == []
+    by_id = {b["id"]: b for b in catalog["bodies"]}
+
+    # (1) summed-mass mutual-orbit period
+    vigil = by_id["satellite_vigil"]
+    assert vigil["parent_id"] == "satellite_cadence"
+    assert vigil["orbit"]["period_days"] == pytest.approx(1.3124, rel=3e-3)
+
+    # (2) sky view: companion shares the barycentre's distance envelope
+    sky = catalog["sky"]
+    assert "satellite_vigil" in sky
+    d_near_km = (0.0113636 - 0.00494) * 1.496e8
+    assert sky["satellite_vigil"]["distance_km_near"] == pytest.approx(d_near_km, rel=1e-3)
+    assert sky["satellite_cadence"]["distance_km_near"] == pytest.approx(d_near_km, rel=1e-3)

@@ -24,7 +24,7 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 @pytest.fixture(scope="module")
 def export_static() -> Any:
     spec = importlib.util.spec_from_file_location(
-        "export_static_under_test", _ROOT / "scripts" / "export_static.py"
+        "export_static_under_test", _ROOT / "scripts" / "release" / "export_static.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

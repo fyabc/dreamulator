@@ -33,12 +33,19 @@ satellites orbit Aegis; WHFast diverges within ~250 yr here (verified
 2026-09-08, vigil e → 10³ while IAS15 stays clean).  Long horizons are
 therefore IAS15-throughput-bound (~tens of kyr per hour, benchmark below).
 
+J2 & tides (``--j2`` / ``--tides``): both effects are secular (74–1879 yr vs
+orbital 3–13 d), so they enter as exact analytic kicks between ≤1-yr IAS15
+point-mass chunks (Lie splitting) — see the operator functions for the rates,
+constants and provenance, and for why ``additional_forces`` is not used.
+
 Modes::
 
     uv run python scripts/astro/rebound_nbody.py                 # landed: IAS15 20 kyr + MEGNO
     uv run python scripts/astro/rebound_nbody.py --t-end 1e5     # longer horizon (hours)
     uv run python scripts/astro/rebound_nbody.py --with-extras   # + Ember/Crucible/Sentinel
+    uv run python scripts/astro/rebound_nbody.py --j2 0.008 --tides  # + secular J2 & tides
     uv run python scripts/astro/rebound_nbody.py --baseline      # 10 yr IAS15 sanity run
+    uv run python scripts/astro/rebound_nbody.py --sat-scan      # θ1×θ2 satellite phase sweep
     uv run python scripts/astro/rebound_nbody.py --scan          # legacy Laplace-phase scan
 
 Units: REBOUND with ``sim.units = ("yr", "AU", "Msun")`` sets G=4π², so
@@ -69,6 +76,26 @@ _VIGIL_E_MAX = 0.6
 _VIGIL_RH_MAX = 0.55
 _ANY_E_MAX = 0.9
 
+# ── J2 & tides (secular operator splitting) ──────────────────────────
+#: Aegis J2 — Darwin–Radau estimate from the landed spin (P=0.4167 d → q=0.055):
+#: J2 ≈ (0.10–0.17)·q for a centrally-condensed 1.6 M_J body (Jupiter reference:
+#: J2/q = 0.165, less condensed).  Nominal 0.008; experiments sweep 0.006–0.010.
+_J2_NOMINAL = 0.008
+
+# Constant-Q tidal dissipation (Murray & Dermott 1999 ch. 4).  Provenance:
+#   Aegis  — gas-giant analogue: k2p = 0.35 (Jupiter 0.379), Qp = 1e5 (measured
+#            lower bound; plausible range 1e4–1e6 → τ_e uncertain by ×10).
+#   Nacrea — landed setting: k2 = 0.30, Q = 100 (physical_params.md, Earth values).
+#   Cadence/Vigil — icy moons: k2 = 0.25, Q = 100 (Europa/Enceladus-like;
+#            NOT in the yaml — assumption to revisit at adjudication).
+_K2Q_AEGIS = 0.35 / 1.0e5
+_SAT_K2Q = {
+    "satellite_nacrea": 0.30 / 100.0,
+    "satellite_cadence": 0.25 / 100.0,
+    "satellite_vigil": 0.25 / 100.0,
+}
+_AU_KM = 1.496e8
+
 
 def _find_project_root() -> Path:
     d = Path(__file__).resolve().parent
@@ -96,12 +123,16 @@ def load_system(yaml_path: Path | None = None) -> dict:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     star_m = float(data["stars"][0]["mass"])
     masses = {b["id"]: float(b.get("mass_earth", 0.0)) for b in data["bodies"]}
+    radii = {b["id"]: float(b.get("radius_km", 0.0)) for b in data["bodies"]}
+    tilts = {b["id"]: float(b.get("axial_tilt_deg", 0.0)) for b in data["bodies"]}
     bodies: dict[str, dict] = {}
     for o in data["orbits"]:
         bid = o["body_id"]
         bodies[bid] = {
             "parent": o["parent_id"],
             "m_earth": masses.get(bid, 0.0),
+            "radius_km": radii.get(bid, 0.0),
+            "axial_tilt_deg": tilts.get(bid, 0.0),
             "a": float(o["semi_major_axis_au"]),
             "e": float(o["eccentricity"]),
             "inc": np.radians(float(o.get("inclination_deg", 0.0))),
@@ -354,6 +385,125 @@ def report(sim: rebound.Simulation, idx: dict[str, int], label: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Secular operators (J2 apsidal precession + constant-Q tidal e-damping)
+# ---------------------------------------------------------------------------
+#
+# Why operator splitting instead of ``additional_forces``: REBOUND 5.x calls
+# the Python force callback ~8.7× per nominal dt under IAS15 and the v += dt·a
+# convention mis-applies it (calibrated 2026-09-08: Δvx off by −4.5× with a
+# sign flip).  Both effects are *secular* (timescales 74–1879 yr vs orbital
+# 3–13 d), so Lie splitting — IAS15 point-mass chunks of ≤1 yr between exact
+# analytic kicks — is cleaner AND verifiable against closed-form rates.
+
+
+def _apply_j2_secular(
+    sim: rebound.Simulation,
+    idx: dict[str, int],
+    j2: float,
+    r_prim_au: float,
+    dt: float,
+    eq_normal: tuple[float, float, float] | None = None,
+) -> None:
+    """Advance each satellite's argument of periapsis by the secular J2 rate.
+
+    dϖ/dt = (3/4)·J2·(R_p/a)²·n·(4 − 5 sin²i_eq − 2 cos i_eq)·(1−e²)⁻²
+    (Vallado, combined dΩ/dt + dω/dt), with i_eq the inclination relative to
+    the primary's EQUATOR.  Equatorial prograde (i_eq=0) recovers the classic
+    (3/2)J2(R/a)²n; equatorial retrograde (i_eq≈180°) precesses ~3× faster in
+    the same inertial sense.  *eq_normal* None ⇒ assume equatorial prograde.
+    (a, e, i, M) are preserved; the point-mass orbital energy depends on a
+    alone, so dE/E stays a valid integrator-health check (up to the barycentric
+    cross-term bookkeeping noted in run_landed).
+    """
+    aegis = sim.particles[idx["planet_aegis"]]
+    for bid in _SATS:
+        if bid not in idx:
+            continue  # subsystem tests may carry fewer satellites
+        i = idx[bid]
+        p = sim.particles[i]
+        o = p.orbit(primary=aegis)
+        if not np.isfinite(o.a) or o.a <= 0.0 or o.e >= 1.0:
+            continue
+        n = 2.0 * np.pi / o.P
+        if eq_normal is None:
+            fac = 2.0  # 4 − 5·0 − 2·1 (equatorial prograde)
+        else:
+            h = np.array(
+                [
+                    np.sin(o.inc) * np.sin(o.Omega),
+                    -np.sin(o.inc) * np.cos(o.Omega),
+                    np.cos(o.inc),
+                ]
+            )
+            cos_ieq = float(np.clip(np.dot(h, np.asarray(eq_normal)), -1.0, 1.0))
+            fac = 4.0 - 5.0 * (1.0 - cos_ieq**2) - 2.0 * cos_ieq
+        dvarpi = 0.75 * j2 * (r_prim_au / o.a) ** 2 * n * dt * fac / (1.0 - o.e**2) ** 2
+        sim.particles[i] = rebound.Particle(
+            simulation=sim,
+            primary=aegis,
+            m=p.m,
+            a=o.a,
+            e=o.e,
+            inc=o.inc,
+            Omega=o.Omega,
+            omega=o.omega + dvarpi,
+            M=o.M,
+        )
+
+
+def _apply_tidal_edamp(
+    sim: rebound.Simulation,
+    idx: dict[str, int],
+    dt: float,
+    boost: float,
+    r_prim_au: float,
+    sat_radii_au: dict[str, float],
+) -> None:
+    """Damp satellite eccentricities by the constant-Q tidal rates over one chunk.
+
+    ė/e = −(21/2)·n·[ (k2p/Qp)·(m_s/M_p)·(R_p/a)⁵ + (k2s/Qs)·(M_p/m_s)·(R_s/a)⁵ ]
+
+    (planet-raised + satellite-raised tides, circular-orbit leading order —
+    adequate at e ≲ 0.1; the O(e²) eccentricity functions are omitted, which
+    *underestimates* damping at high e, i.e. stays conservative for survival
+    verdicts).  Semi-major axes are NOT migrated: ȧ timescales (~Gyr at
+    Qp = 1e5) far exceed the experiment horizon; e-damping alone captures the
+    pumping-vs-damping balance that sets the forced eccentricity.
+    """
+    aegis = sim.particles[idx["planet_aegis"]]
+    m_a = aegis.m
+    for bid in _SATS:
+        if bid not in idx or bid not in sat_radii_au:
+            continue  # subsystem tests may carry fewer satellites
+        i = idx[bid]
+        p = sim.particles[i]
+        o = p.orbit(primary=aegis)
+        if not np.isfinite(o.a) or o.a <= 0.0 or not (0.0 < o.e < 1.0):
+            continue
+        n = 2.0 * np.pi / o.P
+        rate = (
+            10.5
+            * n
+            * (
+                _K2Q_AEGIS * (p.m / m_a) * (r_prim_au / o.a) ** 5
+                + _SAT_K2Q[bid] * (m_a / p.m) * (sat_radii_au[bid] / o.a) ** 5
+            )
+        )
+        e_new = o.e * float(np.exp(-boost * rate * dt))
+        sim.particles[i] = rebound.Particle(
+            simulation=sim,
+            primary=aegis,
+            m=p.m,
+            a=o.a,
+            e=e_new,
+            inc=o.inc,
+            Omega=o.Omega,
+            omega=o.omega,
+            M=o.M,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Run modes
 # ---------------------------------------------------------------------------
 
@@ -385,6 +535,9 @@ def run_landed(
     sample_every: float,
     integrator: str,
     out_npz: Path,
+    j2: float = 0.0,
+    tides: bool = False,
+    tide_boost: float = 1.0,
 ) -> None:
     sim, idx = build_landed_system(sysdata, with_extras)
     sim.integrator = integrator
@@ -399,12 +552,23 @@ def run_landed(
     if use_megno:
         sim.init_megno()  # REBOUND 5.x API (was add_megno in 3.x/4.x)
 
+    r_prim_au = sysdata["bodies"]["planet_aegis"]["radius_km"] / _AU_KM
+    sat_radii_au = {bid: sysdata["bodies"][bid]["radius_km"] / _AU_KM for bid in _SATS}
+    # Aegis equator normal in the sim frame: axial tilt from yaml, node at Ω=0
+    # (the landed satellites all sit at inc=tilt, Ω=0 — i.e. in the equator).
+    _tilt = np.radians(sysdata["bodies"]["planet_aegis"]["axial_tilt_deg"])
+    eq_normal = (0.0, -float(np.sin(_tilt)), float(np.cos(_tilt)))
+
     print(
         f"Landed configuration: {len(idx) - 1} bodies"
         f"{' (+Ember/Crucible/Sentinel)' if with_extras else ''}, "
         f"integrator={integrator} (P_min={p_min * 365.25:.2f} d), "
         f"t_end={t_end:g} yr, MEGNO={'on' if use_megno else 'off'}"
     )
+    if j2 > 0.0:
+        print(f"  J2 secular splitting: J2={j2:g} (R_A={r_prim_au * _AU_KM:.0f} km)")
+    if tides:
+        print(f"  tidal e-damping: constant-Q, boost={tide_boost:g}")
 
     e0 = sim.energy()
     t_wall0 = time.time()
@@ -423,15 +587,25 @@ def run_landed(
     de_s: list[float] = []
 
     verdict = "STABLE"
+    use_ops = j2 > 0.0 or tides
+    dt_op = min(sample_every, 1.0) if use_ops else sample_every
+    n_ops = max(1, int(round(sample_every / dt_op)))
+    t_cur = 0.0
     for k in range(1, n_samples + 1):
-        sim.integrate(k * sample_every)
+        for _j in range(n_ops):
+            sim.integrate(t_cur + dt_op)
+            t_cur += dt_op
+            if j2 > 0.0:
+                _apply_j2_secular(sim, idx, j2, r_prim_au, dt_op, eq_normal)
+            if tides:
+                _apply_tidal_edamp(sim, idx, dt_op, tide_boost, r_prim_au, sat_radii_au)
         s = sample_state(sim, idx)
         v_e, v_rh = s["vigil_e"], s["vigil_rh_ratio"]
         any_e_max = max(st[1] for st in s["state"].values())
 
         # Record first, then guard — a breaking sample still lands in the series
         # so the post-mortem table/npz shows the runaway itself.
-        t_s.append(k * sample_every)
+        t_s.append(t_cur)
         for bid, st in s["state"].items():
             series[bid]["a"].append(st[0])
             series[bid]["e"].append(st[1])
@@ -455,7 +629,7 @@ def run_landed(
         )
         if broken:
             verdict = (
-                f"UNSTABLE at t={k * sample_every:g} yr "
+                f"UNSTABLE at t={t_cur:g} yr "
                 f"(vigil e={v_e:.3f}, a/r_H={v_rh:.3f}, max e={any_e_max:.3f})"
             )
             print(f"\n  !! {verdict}")
@@ -463,8 +637,8 @@ def run_landed(
 
         if k % max(1, n_samples // 10) == 0:
             wall = time.time() - t_wall0
-            speed = (k * sample_every) / wall if wall > 0 else float("nan")
-            eta_min = (t_end - k * sample_every) / speed / 60.0 if speed > 0 else float("nan")
+            speed = t_cur / wall if wall > 0 else float("nan")
+            eta_min = (t_end - t_cur) / speed / 60.0 if speed > 0 else float("nan")
             meg = megno_s[-1] if use_megno else float("nan")
             print(
                 f"  t={k * sample_every:>10.0f} yr  wall={wall:6.0f}s  dE/E={de_s[-1]:+.2e}  "
@@ -568,6 +742,21 @@ def main() -> None:
         help="ias15 is the only valid choice while satellites are included "
         "(whfast/mercurius assume star-centred Kepler steps)",
     )
+    parser.add_argument(
+        "--j2",
+        type=float,
+        default=0.0,
+        help="Aegis J2 for secular apsidal splitting (0=off; Darwin-Radau est. 0.006-0.010)",
+    )
+    parser.add_argument(
+        "--tides", action="store_true", help="constant-Q tidal e-damping operator (see _K2Q_*)"
+    )
+    parser.add_argument(
+        "--tide-boost",
+        type=float,
+        default=1.0,
+        help="nonphysical tidal-strength multiplier (equilibrium-capture probe)",
+    )
     parser.add_argument("--baseline", action="store_true", help="10 yr IAS15 sanity run only")
     parser.add_argument("--scan", action="store_true", help="legacy Laplace-phase scan only")
     parser.add_argument(
@@ -598,6 +787,9 @@ def main() -> None:
         sample_every=args.sample_every,
         integrator=args.integrator,
         out_npz=_find_project_root() / args.out,
+        j2=args.j2,
+        tides=args.tides,
+        tide_boost=args.tide_boost,
     )
 
 

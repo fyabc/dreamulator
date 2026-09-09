@@ -850,7 +850,15 @@ def _catalog_body_entry(
             parent_mass_sol = index.body_masses[parent_id] * EARTH_MASS_SOL
     orbital_period: float | None = None
     if a_au is not None and parent_mass_sol is not None and parent_mass_sol > 0:
-        orbital_period = kepler_orbital_period(a_au, parent_mass_sol)
+        # Two-body period uses the SUM of masses: negligible for ordinary moons
+        # (m_sat/m_parent ~ 1e-3) but material for binary companions (~0.3).
+        self_mass_earth = (
+            float(planet.mass) if planet is not None else _as_float(raw.get("mass_earth"))
+        )
+        total_mass_sol = parent_mass_sol
+        if self_mass_earth is not None:
+            total_mass_sol += self_mass_earth * EARTH_MASS_SOL
+        orbital_period = kepler_orbital_period(a_au, total_mass_sol)
         orbit["period_days"] = round(orbital_period, 4)
     if orbit:
         entry["orbit"] = orbit
@@ -1114,7 +1122,8 @@ def _catalog_sky(
             "illuminance_full_w_m2": round(illuminance, 2),
         }
 
-    # Sibling satellites (same parent) and heliocentric planets.
+    # Sibling satellites (same parent), their descendants (moons of moons, e.g.
+    # binary companions), and heliocentric planets.
     for planet in planets:
         bid = planet.id
         if bid in (observer_id, parent_id) or bid == star_id:
@@ -1129,10 +1138,35 @@ def _catalog_sky(
         radius_km = float(planet.radius) * 6371.0
         albedo = float(planet.albedo)
 
-        if b_parent == parent_id:
+        # Hierarchical descent: a moon of a sibling satellite shares that
+        # satellite's geocentric distance to within its mutual-orbit radius
+        # (its own ``a`` is the mutual separation, orders of magnitude
+        # smaller).  Walk the parent chain up to the ancestor that is a
+        # direct child of the observer's host and adopt the ancestor's ``a``
+        # as the effective geocentric distance.
+        sibling = b_parent == parent_id
+        a_eff_au = a_b_au
+        if not sibling and b_parent is not None and b_parent != star_id:
+            cur: str | None = b_parent
+            seen: set[str] = {bid}
+            while cur is not None and cur not in seen:
+                seen.add(cur)
+                anc = index.orbits.get(cur)
+                if anc is None:
+                    break
+                anc_parent = str(anc["parent_id"]) if anc.get("parent_id") is not None else None
+                if anc_parent == parent_id:
+                    anc_a = _as_float(anc.get("semi_major_axis_au"))
+                    if anc_a is not None:
+                        sibling = True
+                        a_eff_au = anc_a
+                    break
+                cur = anc_parent
+
+        if sibling:
             # Sibling satellite: distance ranges [|a_b − a_obs|, a_b + a_obs].
-            d_near_au = abs(a_b_au - a_obs_au)
-            d_far_au = a_b_au + a_obs_au
+            d_near_au = abs(a_eff_au - a_obs_au)
+            d_far_au = a_eff_au + a_obs_au
             ang_near, magnitude, _ = _sky_observation(
                 sky,
                 radius_km,
