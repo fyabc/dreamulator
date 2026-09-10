@@ -131,6 +131,8 @@
 | P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
 | P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置，重启再评估）：大尺度指纹可在 200k 表达（喇叭河口、潮间带高程带、海岸平直化、高/低潮双基准；障壁岛/潟湖禁止生成），亚网格地貌归高清化——评估存 `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
 | P2 | **生态层海洋模块**（3B.5）：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——当前生态层全陆相 Whittaker 映射，零海洋 | 1–2 周 | ★★★ |
+| P2 | **生物地理分区算法改进**（生态线）：`biogeography.py` 唯一屏障=海洋（沙漠/山脉不构成屏障，target_provinces_per_realm=1 把 biome 分界几乎全归并、过渡带零建模）→ ① 参数侧先调 target_provinces_per_realm；② 机制侧扩散阻力加权分区（文献锚 Holt 2013 / Udvardy 1975 / WWF）；③ 命名侧 ecology-layer 提案 §2.4 字段；④ 联动 Gleba biome 机制 | 1–2 周 | ★★★ |
+| P2 | **Gleba 实测调研**（竞品线；本地 `E:\Gleba-0.3.5\gleba.exe`，仓库零实测记录）：Godot 背景简注 / 中文帮助 / 非交互运行试验（CLI/headless，能跑则作快速对比源）/ 实测问题对比（板块边界蜿蜒、山脉沿大陆边界、湖泊/内流海/冰川/LGM 遗迹、默认精度与性能对照技术债 10）/ 层设计借鉴；产出落 competitor-analysis.md 新增「Gleba 实测」节，biome 结论喂「生物地理分区改进」 | 2–3 天 | ★★★ |
 | P2 | 地质时间轴可视化（板块漂移回放） | 3–4 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周（低风险渐进迁移） | ★★★ |
@@ -150,6 +152,8 @@
 | P2 | **基于地质时间的板块运动演化**（古造山带/裂谷/断陷随数亿年漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置，见 `pipelines/geological-pipeline.md` §6.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式或混合骨架方案；参考 GPlates、Underworld2；关联「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2） | 设计 1–2 周 + 实现远期 | ★★★ |
 | P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，tectonics（50 步演化 + 加权重采样）~105 s 占主导（terrain 44 / mesh 33 / export 27 / plates 13）；先 profile 再定策略（Numba/向量化/并行），交互性硬约束但正确性优先（引擎纪律 4） | 评估 0.5 周 | ★★ |
 | P3 | **GCM PoC 跑通**（[climate-gcm-plan.md](proposals/climate-gcm-plan.md) 的 offline oracle 前提）：ExoPlaSim PoC 风场退化（环流全零，根因未明）；障碍与已修 bug 见 `private/external-projects/exoplasim_poc/README.md`，定性结论已由 Kaspi & Showman (2015) 兜底 | 远期（调试类） | ★★ |
+| P3 | **气候「偏差清单」逐场调研**：气压/风为中间量，按 DAG 逐场列偏差清单、以实测决定攻关序（诊断优先，前端暂不新增偏差图层） | 2–3 天 | ★★ |
+| P3 | **诊断缓存设计**：诊断脚本中间量落盘带版本号（precip_budget 提速前置）；已知属性：mesh JSON 4 位小数截断致产物 vs rebuild 差 0.2pp | 1 周 | ★★ |
 
 ---
 
