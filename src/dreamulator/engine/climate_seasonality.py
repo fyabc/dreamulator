@@ -89,10 +89,14 @@ def solar_declination(
     (N. winter solstice) — matching the frontend SunControl convention (0° =
     vernal equinox, 90° = N. summer solstice).
 
-    For eccentric orbits an equation-of-center correction is applied, with the
-    argument of perihelion assumed 0 (perihelion at the vernal-equinox
-    reference).  ``perihelion_day`` is the day of perihelion passage relative to
-    that reference.
+    For eccentric orbits an equation-of-center correction is applied.  The
+    solar longitude is measured from the vernal equinox: its mean part advances
+    ``2π·day/P`` from day 0 (the equinox), and the equation-of-center offset
+    (evaluated at the true anomaly measured from perihelion) is added on top.
+    ``perihelion_day`` therefore positions the *distance* cycle
+    (``orbital_distance_factor``) independently of the *declination* cycle —
+    the two only coincide when perihelion falls on the equinox (``perihelion_day
+    = 0``).
 
     Args:
         day_of_year: Day number (0 = northern vernal equinox).
@@ -106,7 +110,7 @@ def solar_declination(
     """
     eps = math.radians(obliquity_deg)
 
-    # Mean anomaly measured from perihelion
+    # Mean anomaly measured from perihelion (feeds the equation of center).
     mean_anomaly = 2.0 * math.pi * (day_of_year - perihelion_day) / orbital_period_days
 
     # Equation of center (first-order eccentricity correction)
@@ -117,8 +121,13 @@ def solar_declination(
         + 1.25 * e * e * math.sin(2.0 * mean_anomaly)
     )
 
-    # sin(δ) = sin(ε)·sin(λ_sun); λ_sun = ϖ + ν with ϖ = 0 (perihelion at equinox)
-    return math.asin(max(-1.0, min(1.0, math.sin(eps) * math.sin(true_anomaly))))
+    # sin(δ) = sin(ε)·sin(λ_sun).  λ_sun is the solar longitude from the vernal
+    # equinox: mean longitude (2π·day/P) + equation-of-center offset, so the
+    # declination phase stays anchored to the equinox regardless of perihelion.
+    solar_longitude = 2.0 * math.pi * day_of_year / orbital_period_days + (
+        true_anomaly - mean_anomaly
+    )
+    return math.asin(max(-1.0, min(1.0, math.sin(eps) * math.sin(solar_longitude))))
 
 
 def daily_mean_insolation(

@@ -386,8 +386,11 @@ i ∈ 39.2°–140.8° 危险区；Kozai 1962, AJ 67:591；Lidov 1962）只是�
   间距/稳定极限/常数 Q 潮汐时标/J2 进动/拉普拉斯半径/同步轨道半径），
   由 `physical_inputs.build_system_catalog` 接入天体目录：零新参数量
   （`hill_radius_km`/`a_rh_ratio`/互希尔间距/`synchronous_orbit_radius_km`/
-  自转轴方位约定）随每次天文构建派生并供文档模板渲染；
-  k₂/Q、J2、C/MR² 依赖量待参数 authored 后接入。
+  自转轴方位约定，方位 = 赤道参考卫星 Ω−90°）随每次天文构建派生并供文档
+  模板渲染；k₂/Q、J2、C/MR² 参数化派生量（外迁/e 阻尼/J2 进动/拉普拉斯/
+  自转进动）经 `OrbitingBody` 可选字段 authored 后接入。`perihelion_day`
+  由近日点经度 ϖ=Ω+ω 与自转轴方位 λ_pole 推出（近日点相对春分相位），
+  供气候季节模型使用。
 - `scripts/astro/rebound_nbody.py` — 全部判据的可执行实现（landed/baseline/
   sat-scan 模式 + `--j2/--tides/--tide-boost` 长期算子）。
 - 气候层 — 轨道倾角决定季节幅度；偏心率振荡（Aegis e 0.016–0.062 @ ~45 kyr，

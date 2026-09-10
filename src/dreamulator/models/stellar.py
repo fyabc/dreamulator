@@ -133,6 +133,24 @@ class OrbitingBody(BaseModel):
     )
     albedo: float | None = Field(default=None, ge=0, le=1, description="Geometric albedo")
 
+    # Rotational / tidal dynamics — optional, single-sourced in stellar.yaml
+    # bodies (planets.yaml stays the authority for the five shared physical
+    # fields).  These unlock the satellite-dynamics derived quantities in
+    # system_catalog (tidal migration, e-damping, J2 precession, Laplace
+    # radius, spin precession); absent values simply omit those fields.
+    j2: float | None = Field(
+        default=None, ge=0, lt=1, description="Gravitational quadrupole J2 (host planets)"
+    )
+    k2_over_q: float | None = Field(
+        default=None, gt=0, description="Tidal Love number over quality factor k₂/Q"
+    )
+    c_over_mr2: float | None = Field(
+        default=None,
+        gt=0,
+        le=0.4,
+        description="Principal moment of inertia coefficient C/MR² (uniform sphere 0.4)",
+    )
+
     # Extensible surface properties (composition, atmosphere presence, etc.)
     surface: dict[str, Any] | None = Field(
         default=None, description="Surface properties (composition, atmosphere, etc.)"

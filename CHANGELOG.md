@@ -10,21 +10,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **卫星动力学派生量进 catalog**（#13 引擎派生量集成）：`satellite_dynamics.py`
-  零新参数量接入 `build_system_catalog`——逐天体 `hill_radius_km`、卫星
+  纯函数接入 `build_system_catalog`——逐天体 `hill_radius_km`、卫星
   `a_rh_ratio`/`prograde`/相邻互希尔间距、`synchronous_orbit_radius_km`/
   `synchronous_over_hill`；自转轴方位约定（赤道参考卫星 → 行星
-  `spin_axis_ecliptic_longitude_deg` = Ω+90°，Cassini 态化石，零新字段）。
+  `spin_axis_ecliptic_longitude_deg` = Ω−90°，Cassini 态化石，零新字段）。
 - **一致性 warnings**：卫星超稳定极限/工程安全线（Domingos 2006 + REBOUND 标定）、
   互希尔间距 < 10、无赤道参考卫星。
 - **doc_render `group` filter**：千分位分组定长（printf format 不支持分组）。
+- **k₂/Q / J2 / C/MR² 参数化派生量**：`OrbitingBody` 新增可选字段 `j2`/
+  `k2_over_q`/`c_over_mr2`（单源 stellar.yaml bodies），解锁 catalog 派生量——
+  卫星 `tidal_migration_rate_m_yr`/`tidal_e_damping_timescale_yr`/
+  `j2_apsidal_precession_period_yr`，行星 `laplace_radius_km`/
+  `spin_precession_period_yr`（nacrea authored：Aegis j2=0.008、k₂/Q=7e-8、
+  C/MR²=0.26，Nacrea k₂/Q=3e-3）。
+- **`perihelion_day` 精确解析**：从近日点经度 ϖ=Ω+ω 与自转轴方位 λ_pole 推出
+  近日点相对春分的相位（`resolve_perihelion_day`），接线气候 config；配合修正
+  `solar_declination` 的相位耦合（declination 现锚定春分，与 distance 周期解耦）。
+
+### Fixed
+
+- **自转轴方位符号**：顺行轨道法线 n=(sin i sinΩ, −sin i cosΩ, cos i) 投影到
+  Ω−90°（非 Ω+90°），nacrea 的 `spin_axis_ecliptic_longitude_deg` 90°→270°。
 
 ### Changed
 
-- **5 个世界文档手写数字 → 模板**（satellite_architecture/space_age/
-  habitability_solutions/orbital_dynamics/long_term_cycles），测试锚定渲染值；
-  顺带修正旧值漂移：Nacrea 希尔球 68,220→66,715 km（space_age/habitability，
-  satellite_architecture 66,800 同步）、r_sync 98,488→96,396 km、占顺行稳定区
-  34.0%→30.8%（旧分母为过时手算）。
+- **世界文档手写数字 → 模板**（satellite_architecture/space_age/
+  habitability_solutions/orbital_dynamics/long_term_cycles/tidal_effects），
+  测试锚定渲染值；顺带修正旧值漂移：Nacrea 希尔球 68,220→66,715 km
+  （space_age/habitability，satellite_architecture 66,800 同步）、r_sync
+  98,488→96,396 km、占顺行稳定区 34.0%→30.8%、外迁 0.8→0.7 cm/yr（P-B 锚
+  0.0073 m/yr）。
 
 ## [0.36.0] — 2026-09-10
 

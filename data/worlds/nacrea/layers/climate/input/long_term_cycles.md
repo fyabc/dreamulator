@@ -101,7 +101,7 @@ physical_params.md 的洛夫数（k₂=0.3, h₂=0.6）与 Q=100 即为此计算
 ## 6. 潮汐演化长期漂移（Gyr）
 
 Aegis 弱潮汐耗散（k₂/Q ≈ 7×10⁻⁸，Q ≈ 5×10⁶）的持续角动量正传递 → 卫星缓慢外迁
-（Nacrea 形成以来 +10%，当前 ~0.8 cm/年；韵珠/守珠均 ≤7 μm/年，
+（Nacrea 形成以来 +10%，当前 ~{{ (entities.satellite_nacrea.tidal_migration_rate_m_yr * 100) | round1 }} cm/年；韵珠/守珠均 ≤7 μm/年，
 泵浦源频率 Gyr 级冻结）、Aegis 自转减慢极微（<1%，10h 自转主要由早期巨撞击设定）：
 
 - 潮汐加热率随 a_m⁻⁶ 衰减 → 火山活动 3×⊕ 将逐渐下降

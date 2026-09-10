@@ -44,8 +44,13 @@ from dreamulator.engine.satellite_dynamics import (
     RETROGRADE_STABILITY_LIMIT_RH,
     SAFE_SEPARATION_MUTUAL_HILL,
     hill_radius_km,
+    j2_apsidal_precession_period_yr,
+    laplace_radius_km,
     mutual_hill_separation,
+    spin_precession_period_yr,
     synchronous_orbit_radius_km,
+    tidal_e_damping_timescale_yr,
+    tidal_migration_rate_m_yr,
 )
 from dreamulator.engine.sky_geometry import AU_KM
 from dreamulator.engine.stellar_physics import (
@@ -177,6 +182,11 @@ class _StellarIndex:
     ms_lifetimes: dict[str, float] = field(default_factory=dict)  # star id -> Gyr
     evolution_progresses: dict[str, float] = field(default_factory=dict)  # star id -> [0,1]
     body_masses: dict[str, float] = field(default_factory=dict)  # body id -> M/M_earth
+    body_radii: dict[str, float] = field(default_factory=dict)  # body id -> R_km
+    body_tilt: dict[str, float] = field(default_factory=dict)  # body id -> axial tilt (deg)
+    # Rotational / tidal dynamics authored on stellar.yaml bodies:
+    # body id -> {"j2": …, "k2_over_q": …, "c_over_mr2": …}
+    body_dynamics: dict[str, dict[str, float]] = field(default_factory=dict)
     orbits: dict[str, dict[str, Any]] = field(default_factory=dict)  # body id -> entry
     star_ids: set[str] = field(default_factory=set)
 
@@ -249,9 +259,23 @@ def _index_stellar_data(engine: BaseEngine) -> _StellarIndex:
         for body in source.get("bodies") or []:
             if not isinstance(body, dict) or body.get("id") is None:
                 continue
+            body_id = str(body["id"])
             mass_earth = _first_float(body, "mass_earth")
             if mass_earth is not None:
-                index.body_masses[str(body["id"])] = mass_earth
+                index.body_masses[body_id] = mass_earth
+            radius_km = _first_float(body, "radius_km")
+            if radius_km is not None:
+                index.body_radii[body_id] = radius_km
+            tilt = _first_float(body, "axial_tilt_deg")
+            if tilt is not None:
+                index.body_tilt[body_id] = tilt
+            dynamics = {
+                key: value
+                for key in ("j2", "k2_over_q", "c_over_mr2")
+                if (value := _first_float(body, key)) is not None
+            }
+            if dynamics:
+                index.body_dynamics[body_id] = dynamics
 
     if input_data is not None:
         for entry in input_data.get("orbits") or []:
@@ -343,6 +367,115 @@ def _heliocentric_eccentricity(body_id: str, index: _StellarIndex) -> float | No
         seen.add(parent)
         current = parent
     return None
+
+
+def _heliocentric_chain_member(body_id: str, index: _StellarIndex) -> str | None:
+    """Id of the chain member that directly orbits the star, else None.
+
+    Mirrors ``_heliocentric_distance_au`` / ``_heliocentric_eccentricity`` but
+    returns the member *id* so callers can read its orbital elements (Ω, ω).
+    """
+    current = body_id
+    seen = {current}
+    for _ in range(_MAX_PARENT_DEPTH):
+        if current in index.star_ids:
+            return None
+        entry = index.orbits.get(current)
+        if entry is None:
+            return None
+        parent_raw = entry.get("parent_id")
+        if parent_raw is None:
+            return None
+        parent = str(parent_raw)
+        if parent in index.star_ids:
+            return current
+        if parent in seen:
+            return None
+        seen.add(parent)
+        current = parent
+    return None
+
+
+def _equatorial_reference(parent_id: str, index: _StellarIndex) -> tuple[str, float] | None:
+    """``(satellite_id, ascending_node_deg)`` of the equatorial reference, or None.
+
+    Cassini-state equatorial-fossil convention: the prograde satellite within
+    ``_EQUATORIAL_TOLERANCE_DEG`` of the parent's ``axial_tilt_deg`` — both
+    measured against the heliocentric ecliptic — defines the equatorial plane.
+    Returns None when the parent's tilt is unknown or no satellite matches
+    (e.g. Earth: its moon is ecliptic at 5.1°, not equatorial at 23.4°).
+    """
+    tilt = index.body_tilt.get(parent_id)
+    if tilt is None:
+        return None
+    best: tuple[float, str] | None = None
+    for body_id, orbit in index.orbits.items():
+        if str(orbit.get("parent_id")) != parent_id:
+            continue
+        i_deg = _as_float(orbit.get("inclination_deg"))
+        if i_deg is None or i_deg >= 90.0:
+            continue  # retrograde / polar captures are not equatorial fossils
+        deviation = abs(i_deg - tilt)
+        if best is None or deviation < best[0]:
+            best = (deviation, body_id)
+    if best is None or best[0] > _EQUATORIAL_TOLERANCE_DEG:
+        return None
+    node = _as_float(index.orbits[best[1]].get("longitude_ascending_node_deg")) or 0.0
+    return best[1], node
+
+
+def _spin_axis_longitude_deg(parent_id: str, index: _StellarIndex) -> float | None:
+    """Ecliptic longitude the parent's north pole tilts toward, or None.
+
+    The prograde equatorial-reference satellite's orbital normal projects to
+    ``Ω − 90°`` (its −y component for Ω=0).  See ``_equatorial_reference``.
+    """
+    ref = _equatorial_reference(parent_id, index)
+    if ref is None:
+        return None
+    _sat_id, node = ref
+    return (node - 90.0) % 360.0
+
+
+def resolve_perihelion_day(
+    engine: BaseEngine,
+    planet: Planet | None,
+    period_days: float | None,
+) -> tuple[float | None, list[str]]:
+    """Resolve the day of perihelion passage relative to the vernal equinox.
+
+    The seasonal model's ``solar_declination`` anchors day 0 at the northern
+    vernal equinox.  Perihelion happens when the star-orbiting chain member
+    reaches longitude-of-perihelion ``ϖ = Ω + ω``; the equinox happens when the
+    sun's longitude matches ``λ_pole − 90°`` (``λ_pole`` the spin-axis azimuth).
+    The offset is ``φ = ϖ − λ_pole + 270°``, so ``perihelion_day = P·φ/360°``.
+
+    For nacrea ``ϖ = 0°`` and ``λ_pole = 270°`` coincide → ``φ = 0``, so the
+    resolution returns 0 and the climate is unchanged.  Returns ``None`` when
+    the spin-axis azimuth is underivable (e.g. Earth — its moon is ecliptic,
+    not equatorial, so there is no equatorial reference satellite).
+    """
+    warnings: list[str] = []
+    if planet is None or period_days is None:
+        return None, warnings
+    index = _index_stellar_data(engine)
+    if not index.orbits:
+        return None, warnings
+    member = _heliocentric_chain_member(planet.id, index)
+    if member is None:
+        return None, warnings
+    orbit = index.orbits.get(member) or {}
+    omega = _as_float(orbit.get("argument_of_periapsis_deg"))
+    node = _as_float(orbit.get("longitude_ascending_node_deg"))
+    if omega is None:
+        return None, warnings
+    peri_longitude = (omega + (node or 0.0)) % 360.0
+    pole = _spin_axis_longitude_deg(member, index)
+    if pole is None:
+        return None, warnings
+    offset = (peri_longitude - pole + 270.0) % 360.0
+    perihelion_day = period_days * offset / 360.0
+    return perihelion_day, warnings
 
 
 def resolve_orbital_elements(
@@ -499,6 +632,7 @@ def apply_physical_parameters(
     orbital_period_days: float | None = None,
     eccentricity: float | None = None,
     stellar_temperature_k: float | None = None,
+    perihelion_day: float | None = None,
 ) -> None:
     """Write resolved physical parameters onto *config* in place.
 
@@ -514,6 +648,8 @@ def apply_physical_parameters(
         config.orbital_period_days = orbital_period_days
     if eccentricity is not None:
         config.eccentricity = eccentricity
+    if perihelion_day is not None:
+        config.perihelion_day = perihelion_day
     if planet is None:
         return
     # The `is not None` guards only cover Optional model variants; an explicit
@@ -567,6 +703,9 @@ def resolve_and_apply_physical_parameters(
     eccentricity, _is_satellite, orbital_warnings = resolve_orbital_elements(engine, planet)
     warnings.extend(orbital_warnings)
 
+    perihelion_day, perihelion_warnings = resolve_perihelion_day(engine, planet, period)
+    warnings.extend(perihelion_warnings)
+
     apply_physical_parameters(
         config,
         planet,
@@ -575,6 +714,7 @@ def resolve_and_apply_physical_parameters(
         period,
         eccentricity,
         stellar_temperature_k=stellar_temperature_k,
+        perihelion_day=perihelion_day,
     )
     return warnings
 
@@ -806,12 +946,16 @@ def _catalog_bodies(
         if cs.get("mass") is not None:
             star_masses[star_id] = cs["mass"]
 
-    # planets.yaml is authoritative for masses; bodies entries are cross-checked
-    # against it (check_body_field_consistency), so backfill bodies that only
-    # exist in planets.yaml (e.g. earth's planet_earth) — otherwise satellites
-    # of such parents miss their Hill/stability derived quantities.
+    # planets.yaml is authoritative for masses/radii; bodies entries are
+    # cross-checked against it (check_body_field_consistency), so backfill
+    # bodies that only exist in planets.yaml (e.g. earth's planet_earth) —
+    # otherwise satellites of such parents miss their Hill/stability and
+    # tidal derived quantities.  Radius is R⊕ in planets.yaml → km here.
     for p in planets:
         index.body_masses[p.id] = float(p.mass)
+        index.body_radii[p.id] = float(p.radius) * 6371.0
+        if p.axial_tilt_deg is not None:
+            index.body_tilt[p.id] = float(p.axial_tilt_deg)
 
     entries: list[dict[str, Any]] = []
     for body_id in all_ids:
@@ -846,8 +990,10 @@ def _annotate_satellite_dynamics(
     whose inclination is closest to the parent's ``axial_tilt_deg`` — both
     measured against the heliocentric ecliptic, the ``stellar.yaml`` reference
     plane — defines the equatorial plane, so its ascending node Ω fixes the
-    pole azimuth: the pole tilts away from the ecliptic normal toward 90°
-    past the node, giving ``spin_axis_ecliptic_longitude_deg = (Ω + 90) % 360``.
+    pole azimuth.  The prograde orbital-normal vector
+    ``n = (sin i sin Ω, −sin i cos Ω, cos i)`` projects onto the ecliptic at
+    longitude ``Ω − 90°`` (its component along −y for Ω=0), so
+    ``spin_axis_ecliptic_longitude_deg = (Ω − 90) % 360``.
 
     Returns catalog warnings (stability lines, sibling spacing, missing
     equatorial reference); these join ``EngineResult.warnings`` verbatim.
@@ -889,31 +1035,57 @@ def _annotate_satellite_dynamics(
                 )
 
         # Spin-axis azimuth from the equatorial reference satellite.
-        tilt = _as_float((parent.get("physical") or {}).get("axial_tilt_deg"))
+        tilt = index.body_tilt.get(parent_id)
         if tilt is None:
             continue
-        best: tuple[float, str] | None = None
-        for sid in sat_ids:
-            i_deg = _as_float((index.orbits.get(sid) or {}).get("inclination_deg"))
-            if i_deg is None or i_deg >= 90.0:
-                continue  # retrograde / polar captures are not equatorial fossils
-            deviation = abs(i_deg - tilt)
-            if best is None or deviation < best[0]:
-                best = (deviation, sid)
-        if best is not None and best[0] <= _EQUATORIAL_TOLERANCE_DEG:
-            node = (
-                _as_float((index.orbits.get(best[1]) or {}).get("longitude_ascending_node_deg"))
-                or 0.0
-            )
+        ref = _equatorial_reference(parent_id, index)
+        if ref is not None:
+            ref_sid, node = ref
             derived = parent.setdefault("derived", {})
-            derived["equatorial_reference_satellite"] = best[1]
-            derived["spin_axis_ecliptic_longitude_deg"] = round((node + 90.0) % 360.0, 2)
+            derived["equatorial_reference_satellite"] = ref_sid
+            derived["spin_axis_ecliptic_longitude_deg"] = round((node - 90.0) % 360.0, 2)
         else:
             warnings.append(
                 f"planet '{parent_id}': no prograde satellite within "
                 f"{_EQUATORIAL_TOLERANCE_DEG:.0f}° of axial tilt {tilt:.1f}°; spin-axis "
                 "azimuth not derivable (equatorial-orbit convention)"
             )
+
+        # Planetary spin-axis precession (needs the parent's authored j2 + C/MR²
+        # and the full satellite list, so it lives here rather than in the
+        # per-body entry).  Murray & Dermott §5.9, stellar torque omitted.
+        p_dyn = index.body_dynamics.get(parent_id, {})
+        if "j2" in p_dyn and "c_over_mr2" in p_dyn:
+            spin_period = _as_float((parent.get("physical") or {}).get("rotation_period_days"))
+            if spin_period is not None:
+                sat_list: list[tuple[float, float]] = []
+                for sid in sat_ids:
+                    m_s = index.body_masses.get(sid)
+                    # The spin-precession term needs each satellite's orbital
+                    # period; resolve it via Kepler against the parent mass.
+                    if m_s is None:
+                        continue
+                    a_s_au = _as_float((index.orbits.get(sid) or {}).get("semi_major_axis_au"))
+                    if a_s_au is None:
+                        continue
+                    m_primary_sol = index.body_masses[parent_id] * EARTH_MASS_SOL
+                    p_days = kepler_orbital_period(a_s_au, m_primary_sol)
+                    sat_list.append((m_s, p_days))
+                if sat_list:
+                    _tilt = _as_float((parent.get("physical") or {}).get("axial_tilt_deg"))
+                    if _tilt is not None:
+                        _prec = spin_precession_period_yr(
+                            p_dyn["j2"],
+                            p_dyn["c_over_mr2"],
+                            spin_period,
+                            _tilt,
+                            index.body_masses[parent_id],
+                            sat_list,
+                        )
+                        if math.isfinite(_prec):
+                            parent.setdefault("derived", {})["spin_precession_period_yr"] = round(
+                                _prec, 1
+                            )
 
     # Stability-line warnings for every satellite carrying an a/R_H ratio.
     for entry in entries:
@@ -1130,10 +1302,11 @@ def _catalog_body_entry(
         derived["tidal_range_m"] = round(_range_m, 1)
 
     # ---- Satellite-system dynamics (Hill geometry, synchronous orbit) ----
-    # Zero-new-parameter quantities from engine/satellite_dynamics.py (the
-    # REBOUND-adjudication module).  k2/Q-, J2- and C/MR²-dependent rates
-    # (tidal migration, e-damping, precession) stay out until those inputs
-    # are authored (roadmap backlog).
+    # Quantities from engine/satellite_dynamics.py (the REBOUND-adjudication
+    # module).  Zero-parameter geometry is unconditional; the k2/Q-, J2- and
+    # C/MR²-dependent rates appear only when those inputs are authored on the
+    # stellar.yaml bodies (single-sourced; see OrbitingBody.j2/k2_over_q/
+    # c_over_mr2).
     a_km = a_au * AU_KM if a_au is not None else None
     own_hill_km: float | None = None
     if a_km is not None and mass_earth is not None and parent_mass_sol is not None:
@@ -1162,6 +1335,70 @@ def _catalog_body_entry(
                 _parent_ecc or 0.0,
             )
             derived["a_rh_ratio"] = round(a_km / _parent_hill_km, 3)
+
+    # ---- Constant-Q tidal evolution + J2 secular rates (authored params) ----
+    _parent_dyn = index.body_dynamics.get(parent_id, {}) if parent_id else {}
+    _self_dyn = index.body_dynamics.get(body_id, {})
+    _parent_r_km = index.body_radii.get(parent_id) if parent_id else None
+    if (
+        str(body_type) == "natural_satellite"
+        and parent_id is not None
+        and a_km is not None
+        and mass_earth is not None
+        and orbital_period is not None
+        and _parent_r_km is not None
+    ):
+        _m_primary = index.body_masses.get(parent_id)
+        if _m_primary is not None:
+            if "k2_over_q" in _parent_dyn:
+                _mig = tidal_migration_rate_m_yr(
+                    _parent_dyn["k2_over_q"],
+                    mass_earth,
+                    _m_primary,
+                    _parent_r_km,
+                    a_km,
+                    orbital_period,
+                )
+                derived["tidal_migration_rate_m_yr"] = round(_mig, 8)
+            if "k2_over_q" in _parent_dyn and "k2_over_q" in _self_dyn and radius_km is not None:
+                _tau_e = tidal_e_damping_timescale_yr(
+                    _parent_dyn["k2_over_q"],
+                    _self_dyn["k2_over_q"],
+                    mass_earth,
+                    _m_primary,
+                    _parent_r_km,
+                    radius_km,
+                    a_km,
+                    orbital_period,
+                )
+                if math.isfinite(_tau_e):
+                    derived["tidal_e_damping_timescale_yr"] = round(_tau_e, 1)
+            if "j2" in _parent_dyn:
+                _j2_period = j2_apsidal_precession_period_yr(
+                    _parent_dyn["j2"],
+                    _parent_r_km,
+                    a_km,
+                    orbital_period,
+                    e=ecc or 0.0,
+                    i_eq_deg=0.0 if inc is None or inc < 90.0 else 180.0,
+                )
+                derived["j2_apsidal_precession_period_yr"] = round(_j2_period, 1)
+    if (
+        str(body_type) != "natural_satellite"
+        and "j2" in _self_dyn
+        and radius_km is not None
+        and helio_distance is not None
+        and mass_earth is not None
+        and star_mass is not None
+    ):
+        _r_l = laplace_radius_km(
+            _self_dyn["j2"],
+            radius_km,
+            helio_distance * AU_KM,
+            mass_earth,
+            star_mass,
+        )
+        derived["laplace_radius_km"] = round(_r_l, 1)
     if derived:
         entry["derived"] = derived
     return entry

@@ -18,6 +18,7 @@ from dreamulator.engine.physical_inputs import (
     check_body_field_consistency,
     resolve_and_apply_physical_parameters,
     resolve_orbital_elements,
+    resolve_perihelion_day,
     resolve_stellar_forcing,
 )
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
@@ -608,9 +609,9 @@ def test_catalog_satellite_dynamics_fields(tmp_path: Path) -> None:
     assert "mutual_hill_separation_to_outer" not in c_derived
 
     # Spin-axis azimuth: Nacrea (i=9 = tilt, Ω=40) is the equatorial
-    # reference; the pole tilts toward 90° past the node.
+    # reference; the prograde orbital normal projects to Ω − 90°.
     assert aegis["derived"]["equatorial_reference_satellite"] == "satellite_nacrea"
-    assert aegis["derived"]["spin_axis_ecliptic_longitude_deg"] == 130.0
+    assert aegis["derived"]["spin_axis_ecliptic_longitude_deg"] == 310.0
 
     # 5.11 < 10 mutual Hill radii → sibling-spacing warning (both channels).
     assert any("mutual Hill separation" in w and "satellite_nacrea" in w for w in warnings)
@@ -766,3 +767,84 @@ def test_build_system_catalog_binary_companion(tmp_path: Path) -> None:
     d_near_km = (0.0113636 - 0.00494) * 1.496e8
     assert sky["satellite_vigil"]["distance_km_near"] == pytest.approx(d_near_km, rel=1e-3)
     assert sky["satellite_cadence"]["distance_km_near"] == pytest.approx(d_near_km, rel=1e-3)
+
+
+# ===================================================================
+# resolve_perihelion_day — season-phase resolution from orbital elements
+# ===================================================================
+
+
+def _perihelion_stub(
+    tmp_path: Path, *, aegis_omega: float = 0.0, aegis_node: float = 0.0
+) -> _StubEngine:
+    """Aegis (tilt 9, equatorial satellite Ω=0) around a star."""
+    stellar = _write(
+        tmp_path,
+        "stellar.yaml",
+        {
+            "stars": [{"id": "star_ignis", "luminosity": 0.0414, "mass": 0.4665}],
+            "orbits": [
+                {
+                    "body_id": "planet_aegis",
+                    "parent_id": "star_ignis",
+                    "semi_major_axis_au": 0.2504,
+                    "eccentricity": 0.03,
+                    "longitude_ascending_node_deg": aegis_node,
+                    "argument_of_periapsis_deg": aegis_omega,
+                },
+                {
+                    "body_id": "satellite_nacrea",
+                    "parent_id": "planet_aegis",
+                    "semi_major_axis_au": 0.00484,
+                    "inclination_deg": 9.0,
+                    "longitude_ascending_node_deg": 0.0,
+                },
+            ],
+            "bodies": [
+                {"id": "planet_aegis", "mass_earth": 508.5, "axial_tilt_deg": 9.0},
+                {"id": "satellite_nacrea", "mass_earth": 1.2, "body_type": "natural_satellite"},
+            ],
+        },
+    )
+    return _StubEngine({"stellar.yaml": stellar})
+
+
+def test_perihelion_day_zero_when_perihelion_on_equinox(tmp_path: Path) -> None:
+    """nacrea geometry: ϖ=0 and λ_pole=270 → perihelion coincides with equinox."""
+    engine = _perihelion_stub(tmp_path)
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
+    perihelion_day, warnings = resolve_perihelion_day(engine, planet, 99.98)
+    assert warnings == []
+    assert perihelion_day == pytest.approx(0.0, abs=1e-6)
+
+
+def test_perihelion_day_quarter_year_shift(tmp_path: Path) -> None:
+    """ϖ = 90° → perihelion a quarter-year after the equinox."""
+    engine = _perihelion_stub(tmp_path, aegis_omega=90.0)
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
+    perihelion_day, _ = resolve_perihelion_day(engine, planet, 100.0)
+    assert perihelion_day == pytest.approx(25.0, abs=1e-6)
+
+
+def test_perihelion_day_none_without_equatorial_reference(tmp_path: Path) -> None:
+    """No equatorial satellite → spin-axis azimuth underivable → None (earth-like)."""
+    stellar = _write(
+        tmp_path,
+        "stellar.yaml",
+        {
+            "stars": [{"id": "star_sol", "luminosity": 1.0, "mass": 1.0}],
+            "orbits": [
+                {
+                    "body_id": "planet_earth",
+                    "parent_id": "star_sol",
+                    "semi_major_axis_au": 1.0,
+                    "eccentricity": 0.0167,
+                    "argument_of_periapsis_deg": 114.21,
+                }
+            ],
+        },
+    )
+    engine = _StubEngine({"stellar.yaml": stellar})
+    planet = _make_planet("planet_earth", "star_sol")
+    perihelion_day, _ = resolve_perihelion_day(engine, planet, 365.25)
+    assert perihelion_day is None

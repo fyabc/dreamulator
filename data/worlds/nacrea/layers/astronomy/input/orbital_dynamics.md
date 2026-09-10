@@ -35,6 +35,6 @@ tags: [orbit, eclipse, seasons, resonance]
 | 日食季节律 | 食季 = 交点进动周期（~4.7 年）的 {{ sky.eclipse.season_fraction | pct }} | 食季内每 {{ entities.satellite_nacrea.period_days | hours | round0 }}h 穿过本影一次全食，每次最长 {{ sky.eclipse.max_total_eclipse_hours | round1 }}h（全向星半球同时入夜）；食季外反烬星点黄纬超出本影竖直窗口（{{ sky.eclipse.eclipse_threshold_km | round0 }} km），无日食 |
 | 外侧行星 2 轨道 | **0.5614 AU** | 共振 2:1 → 0.3536 × 2^(2/3) |
 | 外侧行星 3 轨道 | **0.8911 AU** | 共振 4:1 → 0.3536 × 4^(2/3) |
-| 卫星轨道外迁速率 | ~0.008 m/年（~0.8 cm/年） | 角动量正向传递（Aegis 自转 10h 快于卫星公转 75.5h）；对应 Aegis k₂/Q ≈ 7×10⁻⁸（Q ≈ 5×10⁶，弱耗散），自形成累计外迁 ~10% |
+| 卫星轨道外迁速率 | ~{{ entities.satellite_nacrea.tidal_migration_rate_m_yr | round(4) }} m/年（~{{ (entities.satellite_nacrea.tidal_migration_rate_m_yr * 100) | round1 }} cm/年） | 角动量正向传递（Aegis 自转 10h 快于卫星公转 75.5h）；对应 Aegis k₂/Q ≈ 7×10⁻⁸（Q ≈ 5×10⁶，弱耗散），自形成累计外迁 ~10% |
 
 ---

@@ -45,7 +45,7 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 偏心率阻尼时标 τ_e | **~1.4 Myr**（k₂/Q=3×10⁻³） | (1/e)(de/dt) = (21/2)(k₂/Q)(M_p/M_m)(R_m/a_m)⁵n_m |
+| 偏心率阻尼时标 τ_e | **~{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**（k₂/Q=3×10⁻³） | (1/e)(de/dt) = (21/2)(k₂/Q)(M_p/M_m)(R_m/a_m)⁵n_m |
 | 无泵浦时的结局 | e → 0，潮汐加热熄灭 | 板块构造与碳循环停摆 → 宜居性丧失 |
 | 泵浦机制 | **韵珠（贡献 99.6%）+ 守珠的长期（secular）摄动** | 非共振（周期比 2.13/2.40/5.12 全部脱调或高阶免疫）；受迫偏心率带 **0.0008–0.009（rms 0.0035）**（A4v 认证 33 kyr 健康切片实测；线性标定 coef=Σmᵢ(a_N/aᵢ)³=2.64×10⁻³；硬度豁免见 design-notes/0009 §2 与重开章） |
 | 泵浦源稳定性 | 两珠均为单体远距逆行轨道（有界 e 摆动、迁移 ~μm/yr 冻结） | {{ entities.satellite_cadence.a_rh_ratio }}/{{ entities.satellite_vigil.a_rh_ratio }} r_H 逆行；径向净空 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} r_H,m；长期动力学判决与硬度豁免见 design-notes/0009 §2 |
@@ -68,7 +68,7 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 Nacrea 的偏心率**不是自由衰减的**，而是**受迫偏心率（forced eccentricity）**——
 由韵珠/守珠的长期摄动持续维持。区分两个时间尺度至关重要：
 
-- **潮汐阻尼时标 τ_e ≈ 1.4 Myr**：泵浦一旦消失，自由 e 在此尺度内归零。
+- **潮汐阻尼时标 τ_e ≈ {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**：泵浦一旦消失，自由 e 在此尺度内归零。
 - **泵浦源寿命 ~Gyr**：两珠轨道准可积、迁移 ~μm–cm/yr——受迫带 5.4 Gyr 恒定。
 
 | 时代 | 时间 (Gyr) | e | 潮汐热流 (W/m²) | 机制 |

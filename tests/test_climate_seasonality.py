@@ -44,6 +44,29 @@ class TestSolarDeclination:
     def test_zero_obliquity_no_declination(self) -> None:
         assert solar_declination(50.0, 0.0) == pytest.approx(0.0)
 
+    def test_perihelion_day_shifts_distance_not_declination(self) -> None:
+        """The declination phase is anchored to the equinox regardless of perihelion.
+
+        With perihelion a quarter-year after the equinox (perihelion_day=P/4),
+        the *distance* cycle peaks at day P/4 while the *declination* cycle keeps
+        its solstice at day P/4 (summer) — decoupled from perihelion.  The old
+        (buggy) coupling would have put the summer solstice at day P/2.
+        """
+        eps = np.radians(23.44)
+        period = 365.25
+        e = 0.05
+        # Day 0 stays near the equinox (small equation-of-center residual).
+        assert abs(solar_declination(0.0, 23.44, period, e, period / 4)) < 0.1
+        # Day P/4 is the summer solstice (+ε) — anchored to the equinox, not
+        # dragged along with perihelion.
+        assert solar_declination(period / 4, 23.44, period, e, period / 4) == pytest.approx(
+            eps, abs=0.05
+        )
+        # The distance factor, by contrast, DOES peak at perihelion (day P/4).
+        f_near = orbital_distance_factor(period / 4, e, period, period / 4)
+        f_far = orbital_distance_factor(3 * period / 4, e, period, period / 4)
+        assert f_near > f_far
+
 
 class TestDailyMeanInsolation:
     """Daily-mean insolation with polar day/night."""

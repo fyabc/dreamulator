@@ -269,11 +269,16 @@
    两处方案2 遗漏漂移（日照 656→899 W/m²）与 `giant_brightness.md` 898 截断（→899）。
    叙事类文档保留手写 + 局部引用。两阶段均完成，P1 关闭。
    **2026-09-10 扩展**：卫星动力学派生量进 catalog（`hill_radius_km`/`a_rh_ratio`/
-   互希尔间距/`synchronous_orbit_radius_km`/自转轴方位约定——赤道参考卫星 Ω+90°），
+   互希尔间距/`synchronous_orbit_radius_km`/自转轴方位约定——赤道参考卫星 Ω−90°），
    `satellite_architecture`/`space_age`/`habitability_solutions`/`orbital_dynamics`/
    `long_term_cycles` 再模板化 5 文档并测试锚定，顺带修正 3 处旧值漂移
-   （R_H_s 68,220→66,715、r_sync 98,488→96,396、占顺行稳定区 34.0%→30.8%）；
-   k₂/Q、J2、C/MR² 参数化派生量（外迁/阻尼/进动）待 authored 后接入（待授权）。
+   （R_H_s 68,220→66,715、r_sync 98,488→96,396、占顺行稳定区 34.0%→30.8%）。
+   **2026-09-11 扩展**：k₂/Q、J2、C/MR² 参数化派生量（外迁/阻尼/J2 进动/拉普拉斯/
+   自转进动）接入 ✅（OrbitingBody 可选字段 + nacrea authored）；`perihelion_day`
+   精确解析（ϖ 与自转轴方位 λ_pole → 近日点相位）+ 修正 `solar_declination`
+   相位耦合（declination 锚定春分，与 distance 周期解耦）✅——两者对 nacrea
+   （近日点=春分）与 earth（无赤道参考卫星）均为 no-op；自转轴方位符号 bug
+   （Ω+90°→Ω−90°）已修。
 
 15. **天体数据双文件分裂与字段重复**（2026-08-15）— 天体信息分散在
     `astronomy/input/stellar.yaml`（stars/orbits/bodies 叙事）与

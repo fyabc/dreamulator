@@ -235,6 +235,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "**3.25 天（78.0 小时）**",
         "**30.8 个**",
         "每 75h 穿过本影一次",
+        "~0.0073 m/年",
     ],
     "layers/geological/input/physical_params.md": [
         "1.20 M⊕",
@@ -263,6 +264,10 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "evolution_progress=0.16",
         "37.4 Gyr 的 15.8%",
         "径向净空 28 r_H,m",
+        "当前 ~0.7 cm/年",
+    ],
+    "layers/geological/input/tidal_effects.md": [
+        "**1.4 Myr**",
     ],
     # Satellite-dynamics derived fields (#13): Hill geometry, stability
     # metrics, sibling separations, synchronous-orbit economics.
@@ -273,6 +278,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "= 0.44 r_H",
         "28 互希尔半径径向净空",
         "希尔球（66,715 km）",
+        "~1.4 Myr",
     ],
     "layers/civilization/input/space_age.md": [
         "**96,396 km**（高度 89,579 km）",
@@ -282,6 +288,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
     ],
     "layers/civilization/input/habitability_solutions.md": [
         "r_sync (96,396 km) > R_H_s (66,715 km)",
+        "~0.7 cm/年外迁",
     ],
 }
 

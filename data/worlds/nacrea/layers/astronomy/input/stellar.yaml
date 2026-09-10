@@ -310,6 +310,10 @@ bodies:
     # 与轨道面交点进动（约 1.2 千年）同量级，因此合理推断 Aegis 处于 Cassini 态：
     # 自转轴跟着轨道面一起进动、倾角保持恒定（土星即此状态）。详见 orbital_dynamics.md。
     albedo: 0.343                 # 类木星 Bond albedo（与 planets.yaml 对齐）
+    j2: 0.008                     # 归一化四极矩（1.6 M_J 快自转类木值；0009 认证的长期算子标度）
+    k2_over_q: 7.0e-8             # 弱耗散 P-B 包（k₂≈0.35, Q≈5×10⁶；2026-09-08 REBOUND+潮汐自洽核算裁决）。
+    #   引擎派生量（Nacrea 外迁 ~0.7 cm/yr、拉普拉斯半径 ~5.0e5 km、自转进动 ~605 yr）由 system_catalog 计算
+    c_over_mr2: 0.26              # 主惯量系数（类木行星 Darwin–Radau，木星 0.254 同级；自转进动 ~604 yr 输入）
 
   # ---- 行星 IV：沧星（共振链 2:1） ----
   - id: planet_boreal
@@ -356,6 +360,7 @@ bodies:
     rotation_period_days: 3.147   # = 公转周期（被 Aegis 潮汐锁定）
     axial_tilt_deg: 9.0           # 赤道面轨道 + Aegis obliquity 9° → 相对黄道有效倾角 9°（自转轴 ⊥ 轨道面）；驱动气候引擎季节项
     albedo: 0.30
+    k2_over_q: 3.0e-3             # k₂=0.3, Q=100（physical_params.md 洛夫数；τ_e≈1.4 Myr 与潮汐加热输入）
     description:
       surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
 
