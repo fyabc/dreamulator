@@ -289,9 +289,9 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 这类历史表述——历史由 git 管理，git commit message 才是记录历史的地方。涉及推导参数表，
 只放「当前值 + 参数范围」，不放「旧值 → 新值」叙事。
 
-### 任务文档分工（收集 → 执行 → 战略 → 归档）
+### 任务文档分工（收集 → 执行 → 战略 → 设计 → 归档）
 
-任务/计划类文档按时间尺度与生命周期分四层，信息单向流动。**单一事实源**：每个条目的
+任务/计划/设计类文档按时间尺度与生命周期分五层，信息单向流动。**单一事实源**：每个条目的
 完整定义只住一处，其余层只持有指针，不复述内容（防双写漂移）。
 
 | 层 | 文件 | 入库 | 记什么 | 不记什么 |
@@ -299,12 +299,20 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 | 收集箱 | `private/todos/interlude.txt` | ✗ | 开发中闪现的原始想法，append-only | 不排序不细化；**条目全部落入执行层后即清空（总量优先）** |
 | 执行台 | `private/todos/today.md` | ✗ | 本周执行顺序、分支/构建状态快照、教训一行、进行中项指针 | 不复述 roadmap/proposal 条目；已完成项删掉换一行 ✅ 指针 |
 | 战略图 | `docs/design/roadmap.md` | ✓ | Phase 状态机、P0–P3 待办表（每格 ≤2 行 = 一句话摘要 + 指针）、技术债登记表 | 不记每日进度、不堆积已完成项、条目不写成段落 |
-| 归档层 | `CHANGELOG.md`、proposals/、各世界 `design-notes/`、git | ✓ | 已完成工作与决策的全部细节 | — |
+| 设计文档 | `docs/design/proposals/`（未实现设计+方法论）、`docs/design/pipelines/`（已实现技术参考） | ✓ | 物理第一性推理 + 文献 + **当前**方案 + 已否证方向各一行 | **不堆积实验记录**（敏感性扫描/正负结果数值）；不记优先级/技术债（roadmap 的事）、不记每日进度（today 的事）；不写「已修正/旧值」叙事 |
+| 归档层 | `CHANGELOG.md`、各世界 `design-notes/`、git | ✓ | 已完成工作与最终决策的全部细节 | — |
 
 **分诊规则**（收集箱 → 其他层，开/收工时扫一眼）：当场可做 → today.md 待办；
 方向性/功能提案 → roadmap 一行（需展开则写 `proposals/`）；纯知识 → `docs/knowledge/`；
 无价值 → 删。roadmap.md 回答「接下来几个月做什么、为什么是这个顺序」，月更频率；
 每日待办只写 today.md，不进 roadmap。
+
+**proposal 生命周期**（「活的但稳定」的设计文档，非工作日志、非一次性总结）：
+立项（物理+方案）→ 迭代执行（**方案变更才动**，实验记录进 git/CHANGELOG）→ 完成后
+「已实现」技术参考移到 `pipelines/`，proposal 只留「为什么」+「已否证方向」。
+**完成态流向**：普适物理机制 → `docs/knowledge/`；已实现管线细节 → `pipelines/`；
+完成结果一行 → `CHANGELOG` + git commit；proposal 里的方案段 → 删，留「✅ 已实现 → 指针」；
+负结果 → proposal 留「已否证」一行（防重试），细节进 git。
 
 ### 开发流程纪律
 

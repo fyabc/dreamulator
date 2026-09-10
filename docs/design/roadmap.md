@@ -303,11 +303,13 @@
 16. **气候参数 per-world 特调违反「同物理」原则**（2026-08-15）— 目标：地球与 nacrea
     用同一套物理（同一代码路径），只差输入参数（自转/光度/倾角/温室…），不做单世界
     特调。当前 nacrea `terrain_config.yaml` 把若干「该从物理推导」的量手调成世界专属值：
-    - `lat_gradient_earth_c=28`（全局参考应为 ~45）：本应是 Ω^0.3 标度律里的「地球参考
-      ΔT」全局常数，nacrea 却拿它当自己梯度旋钮压到 28（→ ΔT≈19.7°C，比公式该给的
-      31.6°C 平得多），注释自述「恢复 52°N 北方南岸 / 60°S 亚南极沿海宜居」——命名地貌
-      宜居性绑定了这个特调。**已决定暂留，登记为第二波物理审计「自由参数处置」对象**
-      （audit-plan §三 A 可推导类）。
+    - ✅ `lat_gradient_earth_c=28`（全局参考应为 ~45）：**已解决（2026-08-22）**——Held-Hou
+      单圈剖面落地后，nacrea 温度改走 `ebm_1d=true` + `hadley_extent_deg=90` 的 Held-Hou
+      四次方剖面，不再消费 `lat_gradient_earth_c`；terrain_config.yaml 的 28 覆盖已删。
+    - ⚠️ 新发现（2026-09-11）：storm track 幅度公式的 `_lat_grad` 里，nacrea 走
+      `lat_gradient_c=40`（`auto_lat_gradient` 未设，默认 false），earth 走
+      `auto_lat_gradient=true → 45`——基准不一致（同物理裂缝），应统一 nacrea 也开
+      `auto_lat_gradient=true`。
     - `hadley_extent_deg=90`、`polar_cell_start_deg=90`（单圈环流，GCM 证实无 Ferrel/极地胞）：
       ExoPlaSim Ω=0.31 的 mass streamfunction 全半球同号（单 Hadley 胞直抵极地、只在赤道变号），
       `storm_track_amplitude_mm=0`（无斜压风暴路径）。残留问题：90 应走 Held-Hou 标度
@@ -323,8 +325,8 @@
       幅度仍标定旋钮。推导方式 2026-08-29 再进一步：从胞圈边界中点（单圈行星退化为零宽）
       改为纬向平均温度经向梯度峰值（`_baroclinic_band`，Eady 不稳定性跟随 ∇T），单圈行星
       得到弱而真实的斜压带（见 20 ⑥）。
-      剩 `lat_gradient_earth_c`（nacrea 28 vs 全球 45）与 `hadley_extent_deg`（90 应走
-      Held-Hou 标度）两项仍待第二波审计裁决。
+      剩 `hadley_extent_deg`（90 应走 Held-Hou 标度）一项 + 上面新发现的
+      `auto_lat_gradient` 同物理裂缝，待第二波审计裁决。
 17. **降水管线三处 bug 已修 + 剩余调参**（2026-08-16）— 修参考数组后温度 corr 0.981
     达标，降水曾 corr 0.762。三处 bug 已修：
     - ✅ **地形降水误套海洋洋底**：`_rain[_q_mask]` 无 `is_land` 限制，海洋按洋底地形
@@ -540,17 +542,16 @@
       已有引擎外消费方：`import_earth_climate._compute_ocean_currents`（NCEP 真值风
       东分量取反后合成）+ `tests/test_import_earth_climate.py`（信风带符号锚定测试）。
       本项做月度矢量场（数据约定「局地东/北切向分量」）时必须一并裁决该约定，
-      清理时全库联动翻转（详见提案 climate-layer-improvement.md §7-①「坐标泥潭」）。
+      清理时全库联动翻转（「坐标泥潭」约定细节见本条上文）。
 25. **水系图层内湖终点处理**（2026-09）— 当前水系图层（`river_id`/`flow_accumulation`）中，
     河流流到内流湖（内湖）就终止、不再向外流。物理上内流湖是封闭盆地、河流流入即终点，
     这本身合理；需重新思考的是**绘制/展示方案**：①「内湖」是否应在地形图层显示（湖泊 vs
     海洋的渲染区分）；② 水系图层的可视化逻辑（外流河→外洋 vs 内流河→内湖终点）。可能需
     区分两类河流终点，并在图层/图例上明确内湖为「封闭水体」。
 26. **气候层残余偏差归档**（2026-09-08）— 气候主线已合入一批（① 方向性干燥：塔克拉玛干
-    385→39、P R² 0.699；4.2-① 沙漠递减率 1.5）。以下暂无法单独落地、已归档到提案
-    `climate-layer-improvement.md`，待 §7 风场规则性 / 质量守恒冷陷阱一并处理：§3.2 寒带降水
-    低温钳制（硬钳制破坏质量守恒，需冷陷阱定点）、§4.3-② 沿海过度海洋化（需半封闭海盆识别
-    或 §7 冬季季风）、§5 水汽输送（κ 非主杠杆，与 §7-② 同源）、§6/§7 季风/ITCZ（依赖 §5）。
+    385→39、P R² 0.699；4.2-① 沙漠递减率 1.5）。残余偏差归档到提案
+    `climate-layer-improvement.md` §0（各要素偏差 TOP）+ §7（已知局限清单）；当前 P0 主动项 =
+    §5 大标定轮 + 冷陷阱（见 today §〇-3）。
 
 ### 工程卫生
 
