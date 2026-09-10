@@ -81,7 +81,7 @@ orbits:
   - body_id: planet_aegis
     parent_id: star_ignis
     semi_major_axis_au: 0.3536    # 年长 100 天（M=0.59 + 光照 0.66 反推）
-    eccentricity: 0.03            # 距离季（受迫偏心率，GJ 876 共振链类比，0.03–0.05 待标定）
+    eccentricity: 0.03            # 距离季（受迫偏心率，GJ 876 共振链类比；用户终裁「0.03 够用」——e=0/0.03 A/B 验证信号确认）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
     argument_of_periapsis_deg: 0.0
