@@ -1,6 +1,7 @@
 # Nacrea 恒星系统 — 6 行星 + 3 卫星（Aegis 系统）
-# 行星层：Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
-# 卫星层：Nacrea : Cadence : Vigil = 1:2:4 拉普拉斯共振链（维持 Nacrea 偏心率）
+# 行星层：Aegis : Boreal : Glacis = 1:2:4 周期通约链（共振邻接；φ_L 循环，1 Myr 实测）
+# 卫星层：Nacrea（宜居内卫）+ 双单体逆行捕获卫韵珠/守珠（长期摄动维持 Nacrea
+# 受迫偏心率，见 design-notes/0009）
 # 以光度为自变量（混合输入模式），引擎通过数值反演推算质量
 name: "Nacrea System"
 
@@ -12,10 +13,12 @@ description: |
   - 触发失控气体吸积，3–5 Myr 内增长至 1.6 M_J (Aegis)
   - 雪线内侧仅形成 0.1–1.0 M⊕ 岩石胚胎，未达气态吸积临界质量
 
-  阶段 2 — II 型迁移与共振链捕获 (5–10 Myr)
+  阶段 2 — II 型迁移与共振捕获 (5–10 Myr)
   - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (0.3536 AU)
   - 外缘两颗胚胎被"牧羊犬效应"推动，发生会聚迁移
-  - 穿过 2:1 / 4:1 共振后被永久锁定 → Aegis : Boreal : Glacis = 1:2:4 拉普拉斯共振链
+  - 穿过 2:1 / 4:1 共振后周期比锁定 → Aegis : Boreal : Glacis = 1:2:4 周期通约链
+    （共振邻接：盘消散后拉普拉斯角 φ_L 转入循环、无相位锁定，1 Myr N 体实测；
+    近共振长期耦合仍维持 Aegis 的 45 kyr 偏心率振荡，见 long_term_cycles.md §3）
   - 迁移扫清 0.05–0.2 AU 区间所有原始胚胎
 
   阶段 3 — 盘消散后碎片重组 (10–200 Myr)
@@ -47,25 +50,31 @@ stars:
       z: 0.0
 
 orbits:
+  # 轨道根数自然化散布（2026-09-10，seed 20260910，规则：距 90° 整数倍 <10° 重抽）：
+  # 非认证天体的 Ω/ω/M₀ 为散布值（此前全 0 = 交点共线/近点对齐/历元合排的默认值伪影）；
+  # 规则卫星系共享父行星赤道交点（Boreal 三卫 Ω=11.5°、Glacis Shard Ω=20.3°，
+  # 自转极方位未编码，约定极向随卫星交点）；ω 仅对 e≥0.02 天体散布（近圆轨道近点无定义）。
+  # 不动名单：共振链三行星 M₀（φ_L 相位，1 Myr 验证）、Aegis argp/M₀（近日点相位=纪元态，
+  # 0007 审查）、Aegis 系三卫星全要素（A4v 认证实现）、链内行星 i≈0（迁移共面化，物理理由）。
   # ---- 内行星（Aegis 迁移后残余碎片重组） ----
   - body_id: planet_ember
     parent_id: star_ignis
     semi_major_axis_au: 0.046
     eccentricity: 0.005           # 5.9 Gyr 恒星潮汐圆化残余（TRAPPIST-1b 类比）
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    inclination_deg: 0.8          # 内残余吸积的小互倾角（水星 7° 同类，缩放版）
+    longitude_ascending_node_deg: 324.9
+    argument_of_periapsis_deg: 0.0   # e=0.005 近圆，近点无定义
+    mean_anomaly_epoch_deg: 138.6
     epoch_year: 0.0
 
   - body_id: planet_crucible
     parent_id: star_ignis
     semi_major_axis_au: 0.098
     eccentricity: 0.010           # 距恒星较远，潮汐圆化效率低于 Ember
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    inclination_deg: 0.4
+    longitude_ascending_node_deg: 157.3
+    argument_of_periapsis_deg: 0.0   # e=0.010 近圆，近点无定义
+    mean_anomaly_epoch_deg: 198.0
     epoch_year: 0.0
 
   # ---- 气态巨行星（宜居带，混合变暖校准后位置） ----
@@ -106,9 +115,9 @@ orbits:
     semi_major_axis_au: 3.68
     eccentricity: 0.18            # 高偏心率 — 散射弹射的直接证据
     inclination_deg: 7.0          # 高倾角 — 散射弹射的直接证据
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    longitude_ascending_node_deg: 326.0   # 散射事件随机化 Ω/ω/M（散布 pass）
+    argument_of_periapsis_deg: 280.3
+    mean_anomaly_epoch_deg: 116.0
     epoch_year: 0.0
 
   # ---- 宜居卫星（环绕 Aegis；外卫星为逆行捕获双珠，见 design-notes/0009） ----
@@ -178,10 +187,10 @@ orbits:
     parent_id: planet_crucible
     semi_major_axis_au: 0.000114  # 17,000 km（2.8 R_C），P≈0.27 d
     eccentricity: 0.02
-    inclination_deg: 1.5          # 近赤道捕获
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    inclination_deg: 1.5          # 近赤道捕获（Crucible 倾角 0 → 赤道面≈黄道面）
+    longitude_ascending_node_deg: 242.8
+    argument_of_periapsis_deg: 322.8
+    mean_anomaly_epoch_deg: 74.7
     epoch_year: 0.0
 
   # ---- Boreal 卫星链（3 颗冰质规则卫星） ----
@@ -189,10 +198,10 @@ orbits:
     parent_id: planet_boreal
     semi_major_axis_au: 0.00239   # 357,000 km（5.9 R_B），P≈1.95 d
     eccentricity: 0.001
-    inclination_deg: 2.0          # 规则卫星，低倾角
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    inclination_deg: 2.0          # 规则卫星，贴 Boreal 赤道面（倾角 2°）
+    longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享，散布 pass）
+    argument_of_periapsis_deg: 0.0   # 近圆，近点无定义
+    mean_anomaly_epoch_deg: 158.1
     epoch_year: 0.0
 
   - body_id: satellite_umbra
@@ -200,9 +209,9 @@ orbits:
     semi_major_axis_au: 0.00380   # 569,000 km（9.4 R_B），P≈3.9 d
     eccentricity: 0.002
     inclination_deg: 2.0
-    longitude_ascending_node_deg: 0.0
+    longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    mean_anomaly_epoch_deg: 295.8
     epoch_year: 0.0
 
   - body_id: satellite_sleet
@@ -210,9 +219,9 @@ orbits:
     semi_major_axis_au: 0.00607   # 908,000 km（15 R_B），P≈7.9 d
     eccentricity: 0.003
     inclination_deg: 2.5
-    longitude_ascending_node_deg: 0.0
+    longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    mean_anomaly_epoch_deg: 127.2
     epoch_year: 0.0
 
   # ---- Glacis 卫星 — 规则内卫星 + 逆行捕获外卫星 ----
@@ -220,10 +229,10 @@ orbits:
     parent_id: planet_glacis
     semi_major_axis_au: 0.00165   # 247,000 km（10 R_G），P≈3.4 d
     eccentricity: 0.01
-    inclination_deg: 2.0          # 规则
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    inclination_deg: 5.0          # 规则卫星 = 贴 Glacis 赤道面（倾角 5°；散布 pass 修正原 2° 失配）
+    longitude_ascending_node_deg: 20.3   # Glacis 赤道交点
+    argument_of_periapsis_deg: 0.0   # 近圆，近点无定义
+    mean_anomaly_epoch_deg: 297.2
     epoch_year: 0.0
 
   - body_id: satellite_rogue
@@ -231,9 +240,9 @@ orbits:
     semi_major_axis_au: 0.00496   # 742,000 km（30 R_G），P≈17.8 d
     eccentricity: 0.30            # 轨道扁（捕获）
     inclination_deg: 157.0        # 逆行
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    longitude_ascending_node_deg: 32.2   # 捕获随机化 Ω/ω/M（散布 pass）
+    argument_of_periapsis_deg: 10.4
+    mean_anomaly_epoch_deg: 210.9
     epoch_year: 0.0
 
   # ---- Sentinel 不规则捕获群（散射遗孤） ----
@@ -242,9 +251,9 @@ orbits:
     semi_major_axis_au: 0.00307   # 459,000 km（30 R_S）
     eccentricity: 0.15
     inclination_deg: 28.0         # 不规则（顺行）
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    longitude_ascending_node_deg: 164.1   # 不规则群随机面（散布 pass）
+    argument_of_periapsis_deg: 75.0
+    mean_anomaly_epoch_deg: 198.9
     epoch_year: 0.0
 
   - body_id: satellite_guest
@@ -252,9 +261,9 @@ orbits:
     semi_major_axis_au: 0.00511   # 764,000 km（50 R_S）
     eccentricity: 0.30
     inclination_deg: 151.0        # 逆行不规则（~29° 逆行）
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    longitude_ascending_node_deg: 65.7   # 不规则群随机面（散布 pass）
+    argument_of_periapsis_deg: 51.8
+    mean_anomaly_epoch_deg: 289.4
     epoch_year: 0.0
 
 bodies:
