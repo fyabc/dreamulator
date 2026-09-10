@@ -12,8 +12,8 @@ checked_against:
 
 > **⚠ 部分被取代（2026-09-09）**：本文「Nacrea e 由 1:2:4 卫星共振链泵浦维持」条目失效
 > ——卫星共振链经 REBOUND 积分判定动力学不稳定（任意初相 ~90 yr 瓦解）。现行机制：
-> 双单体逆行捕获卫（韵珠、守珠）的长期摄动使 Nacrea e 受迫振荡（0.002–0.007，
-> 潮汐加热 0.25–3.3 W/m² 带内）。权威设定见 `0009-satellite-architecture.md`。
+> 双单体逆行捕获卫（韵珠、守珠）的长期摄动使 Nacrea e 受迫振荡（0.0008–0.009，
+> 潮汐加热 0.05–6 W/m² 带内）。权威设定见 `0009-satellite-architecture.md`。
 > 行星链（Aegis–Boreal–Glacis 1:2:4）相关内容仍有效（1 Myr 积分验证）。
 
 > Aegis 偏心率（0.005→0.03）与 Nacrea 偏心率（0.002→0.0019）已被 [0007](0007-aegis-seasonal-eccentricity.md) 取代。
