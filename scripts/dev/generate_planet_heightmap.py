@@ -36,12 +36,10 @@ Optional dependencies (for noise + preview):
 from __future__ import annotations
 
 import json
-import math
 import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import typer
@@ -65,8 +63,8 @@ try:
     import matplotlib
 
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
 
     _HAS_MATPLOTLIB = True
 except ImportError:
@@ -961,7 +959,7 @@ class SphericalHeightmapGenerator:
         # Compute statistics
         land_mask = elevation > self.config.sea_level_m
         land_frac = np.mean(land_mask)
-        print(f"\n  Statistics:")
+        print("\n  Statistics:")
         print(f"    Elevation range: {elevation.min():.0f}m to {elevation.max():.0f}m")
         print(f"    Mean elevation: {elevation.mean():.0f}m")
         print(f"    Land fraction: {land_frac:.1%}")
@@ -1282,7 +1280,7 @@ def load_planet_config(path: Path) -> PlanetConfig:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):

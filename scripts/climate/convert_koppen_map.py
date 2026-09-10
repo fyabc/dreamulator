@@ -174,9 +174,8 @@ def main() -> None:
 
     # Load CVT mesh
     print(f"Loading CVT mesh from: {mesh_path}")
-    from dreamulator.map.models import CVTMesh
-
     from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.models import CVTMesh
 
     mesh = CVTMesh(**json.loads(decompress_mesh_bytes(mesh_path.read_bytes())))
     print(f"  Mesh: {mesh.num_cells} cells")

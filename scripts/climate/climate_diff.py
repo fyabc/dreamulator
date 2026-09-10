@@ -17,7 +17,6 @@ visualisation is too coarse to see the difference.
 
 import argparse
 import json
-import sys
 from collections import Counter
 
 import numpy as np
@@ -84,7 +83,7 @@ def main():
     # ── Köppen ──
     if old_k and new_k:
         all_keys = sorted(set(old_k) | set(new_k))
-        print(f"\n  Koppen changes (>10 cells):")
+        print("\n  Koppen changes (>10 cells):")
         for k in all_keys:
             dk = new_k.get(k, 0) - old_k.get(k, 0)
             if abs(dk) >= 10:
@@ -94,7 +93,7 @@ def main():
     b_old = Counter(c.get("biome") or "(none)" for c in old_cells[:n])
     b_new = Counter(c.get("biome") or "(none)" for c in new_cells[:n])
     all_b = sorted(set(b_old) | set(b_new))
-    print(f"\n  Biome changes (>10 cells):")
+    print("\n  Biome changes (>10 cells):")
     for k in all_b:
         db = b_new.get(k, 0) - b_old.get(k, 0)
         if abs(db) >= 10:
