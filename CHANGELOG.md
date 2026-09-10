@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   全球 T −0.27°C、北极高地正确降温（旧公式冷端失稳曾使其过暖）。
 - **重生成 nacrea 回归基线**：`tests/validation/baselines/nacrea-200k.json` 快照
   过期（3d295f6 改名时代，其后世界数据多轮迭代），重生成自当前引擎+数据。
+- **ΔT/ΔP 偏差图层 reference 升级**（前端）：从纬向平均 → **逐格观测**（NCEP/GPCP
+  原生网格，`generate_spatial_reference.py` → `spatialReference.ts` 双线性采样）。
+  高原不再因海拔「永远偏冷」（青藏 ΔT −17→+6 反映真实暖偏）；修孟加拉 +555 假偏差
+  （NCEP/GPCP 网格 1.25° 错位重采样的 bug）。
 
 ### Added
 
@@ -46,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **自转轴方位符号**：顺行轨道法线 n=(sin i sinΩ, −sin i cosΩ, cos i) 投影到
   Ω−90°（非 Ω+90°），nacrea 的 `spin_axis_ecliptic_longitude_deg` 90°→270°。
+- **前端偏差图层面板**：点击温度/降水偏差图层时单元格信息的气候组不再收起
+  （`COLOR_MODE_TO_GROUP` 补 `temperatureError`/`precipitationError` 映射）；
+  开发者模式下单元格信息显示 ΔT/ΔP 绝对值；偏差图层 + ΔT/ΔP 行加 **earth-only**
+  门控（虚构世界不显示——其 baseline 是地球观测）。
 
 ### Changed
 

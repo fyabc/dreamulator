@@ -19,7 +19,7 @@
 - `convert_koppen_map.py` — Beck Köppen GeoTIFF → 网格观测参考。
 - `detect_ocean_bottlenecks.py` — 海盆连通瓶颈探测（洋流求解上下文）。
 
-## earth/ — 真实地球数据导入与验证参考（8 个）
+## earth/ — 真实地球数据导入与验证参考（9 个）
 
 earth 基础世界是**导入世界**（不走 build 管线）；这组把真实观测采样到 CVT 网格。
 发布时 `release/publish_world_data.py` 按依赖序自动调用四个 importer。
@@ -28,8 +28,9 @@ earth 基础世界是**导入世界**（不走 build 管线）；这组把真实
   `import_earth_climate.py` — 高程（ETOPO1）/ 板块与地壳（PB2002+CRUST1.0）/
   水掩膜（GSHHG）/ 气候（NCEP+GPCP+Beck+SODA 洋流）。
 - `download_validation_data.py` — 预下载 ETOPO1、Beck Köppen、SODA 洋流月度气候态（`--skip-soda` 可跳）。
-- `generate_validation_reference.py`、`generate_monthly_reference.py`、`generate_lgm_reference.py` —
-  纬向气候态 / 月度 / LGM 验证参考数据生成。
+- `generate_validation_reference.py`、`generate_spatial_reference.py`、`generate_monthly_reference.py`、
+  `generate_lgm_reference.py` — 纬向 / 逐格 / 月度 / LGM 验证参考数据生成
+  （`generate_spatial_reference.py` 输出前端 `spatialReference.ts`，供 ΔT/ΔP 逐格偏差图层）。
 
 ## astro/ — 天文 N 体与恒星诊断（4 个）
 

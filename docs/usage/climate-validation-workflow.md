@@ -134,6 +134,11 @@ curl "https://downloads.psl.noaa.gov/Datasets/gpcp/precip.mon.mean.nc" \
 > **纬向参考数组的生成**：`validate_climate.py` 里的 `_ZONAL_TEMP_REF` /
 > `_ZONAL_PRECIP_REF` 是**硬编码**的 2° 纬向均值（90N→88S），由上述原始数据
 > 一次性算出。重生成脚本见 `scripts/earth/generate_validation_reference.py`。
+>
+> **逐格参考（前端 ΔT/ΔP 偏差图层）**：`scripts/earth/generate_spatial_reference.py`
+> 把 NCEP/GPCP **原生网格**（各自 2.5°，错位 ~1.25°，勿互相重采样）打包成前端
+> `frontend/src/viewers/map/spatialReference.ts`，双线性采样逐格观测——高原不再因海拔
+> 「永远偏冷」。
 
 ---
 
