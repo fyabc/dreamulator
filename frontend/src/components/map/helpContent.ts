@@ -74,6 +74,10 @@ export interface LayerHelpEntry {
   /** Diagnostic layer for engine authors, hidden unless developer mode is on
    *  (e.g. the ΔT/ΔP error heatmaps vs ERA5/GPCP). */
   devOnly?: boolean
+  /** Earth-only diagnostic — the ΔT/ΔP heatmaps diff against Earth's observed
+   *  zonal climatology, so they are meaningless on fictional worlds.  Hidden
+   *  on every non-Earth world regardless of developer mode. */
+  earthOnly?: boolean
 }
 
 export const LAYER_HELP: LayerHelpEntry[] = [
@@ -160,6 +164,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     kind: 'thematic',
     group: 'climate',
     devOnly: true,
+    earthOnly: true,
   },
   {
     id: 'precipitationError',
@@ -170,6 +175,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     kind: 'thematic',
     group: 'climate',
     devOnly: true,
+    earthOnly: true,
   },
   {
     id: 'pressure',

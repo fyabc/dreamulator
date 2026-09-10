@@ -605,6 +605,7 @@ export default function MapViewerPage() {
                 <MapLayerPanel
                   state={layerState}
                   onChange={setLayerState}
+                  isEarth={worldName === 'earth'}
                   monthlyMode={monthlyMode}
                   monthIndex={monthlyMonth}
                   onMonthlyModeChange={handleMonthlyModeChange}
@@ -641,6 +642,7 @@ export default function MapViewerPage() {
             <MapLayerPanel
               state={layerState}
               onChange={setLayerState}
+              isEarth={worldName === 'earth'}
               monthlyMode={monthlyMode}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
@@ -723,6 +725,7 @@ export default function MapViewerPage() {
                 monthlyMode={monthlyMode}
                 monthIndex={monthlyMonth}
                 monthlyData={monthlyData}
+                isEarth={worldName === 'earth'}
               />
               {selectedCells.size > 1 && (
                 <p className="text-[10px] text-gray-600 mt-2 text-center">

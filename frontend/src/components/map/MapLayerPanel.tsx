@@ -39,6 +39,10 @@ interface MapLayerPanelProps {
   /** Called when a monthly-only layer is selected in annual mode, to
    *  auto-enable monthly mode. */
   onMonthlyModeChange?: (mode: boolean) => void
+  /** True for the Earth reference world — gates the earth-only diagnostic
+   *  layers (ΔT/ΔP vs observed zonal climatology) which are meaningless on
+   *  fictional worlds. */
+  isEarth: boolean
 }
 
 /** A group with its member layers, split by interaction style. */
@@ -121,7 +125,7 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange, isEarth }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
@@ -143,14 +147,16 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, mo
   const groups = useMemo<LayerGroup[]>(
     () =>
       LAYER_GROUPS.map((g) => {
-        const members = LAYER_HELP.filter((l) => l.group === g.id && (!l.devOnly || devMode))
+        const members = LAYER_HELP.filter(
+          (l) => l.group === g.id && (!l.devOnly || devMode) && (!l.earthOnly || isEarth),
+        )
         return {
           ...g,
           radioMembers: members.filter(isRadioKind),
           toggleMembers: members.filter((l) => !isRadioKind(l)),
         }
       }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
-    [devMode],
+    [devMode, isEarth],
   )
 
   const opacityOf = useCallback(

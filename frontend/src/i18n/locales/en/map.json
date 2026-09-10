@@ -145,6 +145,8 @@
     "annualTemp": "Annual temp.",
     "hottestColdest": "Hottest / coldest",
     "annualPrecip": "Annual precip.",
+    "tempDeviation": "Temp. deviation ΔT",
+    "precipDeviation": "Precip. deviation ΔP",
     "monthlyTemp": "Monthly temp.",
     "monthlyPrecip": "Monthly precip.",
     "pressureAnomaly": "Pressure anomaly",

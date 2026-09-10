@@ -590,6 +590,7 @@ export default function GlobeViewerPage() {
               <MapLayerPanel
                 state={layerState}
                 onChange={setLayerState}
+                isEarth={worldName === 'earth'}
                 monthlyMode={monthlyMode}
                 monthIndex={monthlyMonth}
                 onMonthlyModeChange={handleMonthlyModeChange}
@@ -621,6 +622,7 @@ export default function GlobeViewerPage() {
             <MapLayerPanel
               state={layerState}
               onChange={setLayerState}
+              isEarth={worldName === 'earth'}
               monthlyMode={monthlyMode}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
@@ -707,6 +709,7 @@ export default function GlobeViewerPage() {
           monthlyMode={monthlyMode}
           monthIndex={monthlyMonth}
           monthlyData={monthlyData}
+          isEarth={worldName === 'earth'}
         />
       </div>
     </div>

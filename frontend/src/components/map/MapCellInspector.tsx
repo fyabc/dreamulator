@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
+import { zonalTempAt, zonalPrecipAt } from '../../viewers/map/zonalReference'
+import { useDevModeStore } from '../../stores/devModeStore'
 
 interface MapCellInspectorProps {
   cell: VoronoiCell | null
@@ -32,6 +34,9 @@ interface MapCellInspectorProps {
   monthIndex?: number
   /** Decoded monthly climate arrays (temperature/precip/pressure/wind). */
   monthlyData?: MonthlyClimateData | null
+  /** True for the Earth reference world — gates the ΔT/ΔP deviation rows
+   *  (vs observed zonal climatology), meaningless on fictional worlds. */
+  isEarth?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +70,8 @@ const COLOR_MODE_TO_GROUP: Partial<Record<ColorMode, string>> = {
   koppen: 'climate',
   temperature: 'climate',
   precipitation: 'climate',
+  temperatureError: 'climate',
+  precipitationError: 'climate',
   pressure: 'climate',
   winds: 'climate',
   currents: 'climate',
@@ -359,6 +366,7 @@ function CellDetails({
   monthIndex = 0,
   monthlyData = null,
   cellIndexById,
+  isEarth = true,
 }: {
   cell: VoronoiCell
   activeColorMode?: ColorMode | null
@@ -367,9 +375,12 @@ function CellDetails({
   monthlyData?: MonthlyClimateData | null
   /** Map from cell id → mesh-cell index (the monthly arrays' row order). */
   cellIndexById: Map<number, number>
+  /** Earth reference world — gates the ΔT/ΔP deviation rows. */
+  isEarth?: boolean
 }) {
   const { t } = useTranslation('map')
   const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
+  const devMode = useDevModeStore((s) => s.devMode)
   const highlightGroup = activeColorMode ? COLOR_MODE_TO_GROUP[activeColorMode] ?? null : null
   const elevM = cell.elevation
   const isLand = cell.water_class != null ? cell.water_class === 'land' : cell.elevation > 0
@@ -414,6 +425,14 @@ function CellDetails({
     cell.habitable_coast != null || cell.agricultural_core != null ||
     cell.habitability_score != null || cell.agriculture_score != null,
   )
+
+  // ΔT / ΔP vs the zonal-mean observed reference (the same values the
+  // temperatureError / precipitationError heatmaps encode as colour).  Shown
+  // in developer mode only — like those diagnostic layers themselves — so the
+  // author can read the absolute deviation, not just the relative colour.
+  // Red = model too warm/wet, blue = model too cold/dry (diverging palette).
+  const devT = cell.temperature_C != null ? cell.temperature_C - zonalTempAt(cell.lat) : null
+  const devP = cell.precipitation_mm != null ? cell.precipitation_mm - zonalPrecipAt(cell.lat) : null
 
   return (
     <div className="space-y-2 text-sm">
@@ -583,6 +602,26 @@ function CellDetails({
                   <dd className="font-mono">{Math.round(cell.precipitation_mm)} mm</dd>
                 </div>
               )
+            )}
+            {devMode && isEarth && !hasMonthly && (
+              <div className="border-t border-space-border pt-1 mt-1">
+                {devT != null && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">{t('inspector.tempDeviation')}</dt>
+                    <dd className={`font-mono ${devT > 0 ? 'text-red-400' : devT < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {devT > 0 ? '+' : ''}{devT.toFixed(1)} °C
+                    </dd>
+                  </div>
+                )}
+                {devP != null && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">{t('inspector.precipDeviation')}</dt>
+                    <dd className={`font-mono ${devP > 0 ? 'text-red-400' : devP < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                      {devP > 0 ? '+' : ''}{Math.round(devP)} mm
+                    </dd>
+                  </div>
+                )}
+              </div>
             )}
             {hasMonthly && mPressure !== undefined && (
               <div className="flex justify-between">
@@ -994,6 +1033,7 @@ export default function MapCellInspector({
   monthlyMode = false,
   monthIndex = 0,
   monthlyData = null,
+  isEarth = true,
 }: MapCellInspectorProps) {
   const { t } = useTranslation('map')
   const [view, setView] = useState<'cell' | 'stats'>('cell')
@@ -1042,6 +1082,7 @@ export default function MapCellInspector({
           monthIndex={monthIndex}
           monthlyData={monthlyData}
           cellIndexById={cellIndexById}
+          isEarth={isEarth}
         />
       ) : (
         <p className="text-xs text-gray-600 italic p-2">{t('inspector.hoverHint')}</p>
