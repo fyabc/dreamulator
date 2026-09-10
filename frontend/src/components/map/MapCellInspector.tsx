@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
-import { zonalTempAt, zonalPrecipAt } from '../../viewers/map/zonalReference'
+import { observedTempAt, observedPrecipAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 
 interface MapCellInspectorProps {
@@ -426,13 +426,13 @@ function CellDetails({
     cell.habitability_score != null || cell.agriculture_score != null,
   )
 
-  // ΔT / ΔP vs the zonal-mean observed reference (the same values the
+  // ΔT / ΔP vs the per-grid observed climatology (the same values the
   // temperatureError / precipitationError heatmaps encode as colour).  Shown
   // in developer mode only — like those diagnostic layers themselves — so the
   // author can read the absolute deviation, not just the relative colour.
   // Red = model too warm/wet, blue = model too cold/dry (diverging palette).
-  const devT = cell.temperature_C != null ? cell.temperature_C - zonalTempAt(cell.lat) : null
-  const devP = cell.precipitation_mm != null ? cell.precipitation_mm - zonalPrecipAt(cell.lat) : null
+  const devT = cell.temperature_C != null ? cell.temperature_C - observedTempAt(cell.lat, cell.lon) : null
+  const devP = cell.precipitation_mm != null ? cell.precipitation_mm - observedPrecipAt(cell.lat, cell.lon) : null
 
   return (
     <div className="space-y-2 text-sm">

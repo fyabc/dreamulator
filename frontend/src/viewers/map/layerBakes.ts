@@ -26,7 +26,7 @@ import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
-import { zonalTempAt, zonalPrecipAt } from './zonalReference'
+import { observedTempAt, observedPrecipAt } from './spatialReference'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
@@ -485,19 +485,22 @@ function buildCellPalettes(
       )
     }
 
-    // ΔT / ΔP error vs zonal observed (Earth-only diagnostic) — diverging,
-    // blue = model too cold/dry, red = model too warm/wet.  Fixed ranges so
-    // the colour stays comparable across regions (like the pressure anomaly).
+    // ΔT / ΔP error vs per-grid observed climatology (Earth-only diagnostic) —
+    // diverging, blue = model too cold/dry, red = model too warm/wet.  Fixed
+    // ranges so the colour stays comparable across regions (like the pressure
+    // anomaly).  The reference is the observed surface climatology at each
+    // cell's (lat, lon) — carrying real orography — not the elevation-blind
+    // zonal mean, so a high plateau no longer reads as a huge cold artifact.
     if (tC != null && !isOcean) {
       temperatureError.set(
         cell.id,
-        sequentialColor((tC - zonalTempAt(cell.lat) + 20) / 40, TEMPERATURE_SCALE),
+        sequentialColor((tC - observedTempAt(cell.lat, cell.lon) + 20) / 40, TEMPERATURE_SCALE),
       )
     }
     if (pMm != null && !isOcean) {
       precipitationError.set(
         cell.id,
-        sequentialColor((pMm - zonalPrecipAt(cell.lat) + 2000) / 4000, TEMPERATURE_SCALE),
+        sequentialColor((pMm - observedPrecipAt(cell.lat, cell.lon) + 2000) / 4000, TEMPERATURE_SCALE),
       )
     }
 
