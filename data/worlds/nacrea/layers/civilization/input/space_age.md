@@ -12,10 +12,10 @@ tags: [space-age, technology, magsail]
 |------|-----|---------|
 | 逃逸速度 v_e | **11.85 km/s** | √(2GM_s/R_s)；地球 11.2 km/s |
 | 第一宇宙速度 v₁ | **8.38 km/s** | √(GM_s/R_s)；地球 7.9 km/s |
-| 同步轨道半径 r_sync | **98,488 km**（高度 91,671 km） | (GM_sT_rot²/4π²)^(1/3) |
-| Nacrea 希尔半径 R_H_s | **68,220 km**（10.0 R_s） | a_m × (M_s/3M_p)^(1/3) |
-| **GEO 存在性** | **❌ 不存在** | r_sync (98,488 km) > R_H_s (68,220 km)；任何超出希尔边界的卫星被 Aegis 潮汐力剥夺 |
-| r_sync / R_H_s | **1.44** | 同步轨道在希尔球外 44% |
+| 同步轨道半径 r_sync | **{{ entities.satellite_nacrea.synchronous_orbit_radius_km | group }} km**（高度 {{ (entities.satellite_nacrea.synchronous_orbit_radius_km - entities.satellite_nacrea.radius_km) | group }} km） | (GM_sT_rot²/4π²)^(1/3) |
+| Nacrea 希尔半径 R_H_s | **{{ entities.satellite_nacrea.hill_radius_km | group }} km**（{{ (entities.satellite_nacrea.hill_radius_km / entities.satellite_nacrea.radius_km) | round1 }} R_s） | a_m × (M_s/3M_p)^(1/3) |
+| **GEO 存在性** | **❌ 不存在** | r_sync ({{ entities.satellite_nacrea.synchronous_orbit_radius_km | group }} km) > R_H_s ({{ entities.satellite_nacrea.hill_radius_km | group }} km)；任何超出希尔边界的卫星被 Aegis 潮汐力剥夺 |
+| r_sync / R_H_s | **{{ entities.satellite_nacrea.synchronous_over_hill }}** | 同步轨道在希尔球外 44% |
 
 ## 科技树分歧总表
 

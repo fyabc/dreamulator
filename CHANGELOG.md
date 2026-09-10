@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **卫星动力学派生量进 catalog**（#13 引擎派生量集成）：`satellite_dynamics.py`
+  零新参数量接入 `build_system_catalog`——逐天体 `hill_radius_km`、卫星
+  `a_rh_ratio`/`prograde`/相邻互希尔间距、`synchronous_orbit_radius_km`/
+  `synchronous_over_hill`；自转轴方位约定（赤道参考卫星 → 行星
+  `spin_axis_ecliptic_longitude_deg` = Ω+90°，Cassini 态化石，零新字段）。
+- **一致性 warnings**：卫星超稳定极限/工程安全线（Domingos 2006 + REBOUND 标定）、
+  互希尔间距 < 10、无赤道参考卫星。
+- **doc_render `group` filter**：千分位分组定长（printf format 不支持分组）。
+
+### Changed
+
+- **5 个世界文档手写数字 → 模板**（satellite_architecture/space_age/
+  habitability_solutions/orbital_dynamics/long_term_cycles），测试锚定渲染值；
+  顺带修正旧值漂移：Nacrea 希尔球 68,220→66,715 km（space_age/habitability，
+  satellite_architecture 66,800 同步）、r_sync 98,488→96,396 km、占顺行稳定区
+  34.0%→30.8%（旧分母为过时手算）。
+
 ## [0.36.0] — 2026-09-10
 
 ### Added

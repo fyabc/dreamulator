@@ -56,7 +56,7 @@ dreamulator/
 | 模块 | 职责 |
 |------|------|
 | `models/` | Pydantic 数据模型：世界（`WorldConfig`）、分支元数据、层级定义、恒星系、地图数据模型等 |
-| `engine/` | 模拟引擎。每个引擎继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`；`pipeline.py` 拓扑排序后按序执行。已实现：`astronomy`（含纯函数模块 `stellar_physics.py`，输出含 `world_parameters.yaml` 世界参数派生汇总与 `system_catalog.yaml` 天体统一目录）、`geological`（封装地形管线）、`climate`（含纯函数模块 `climate_physics.py`）；`physical_inputs.py` 统一解析卫星感知物理参数 + `derive_world_parameters()` 世界参数聚合 + `build_system_catalog()` 天体目录合并（stellar.yaml + planets.yaml，后者为共享字段权威） |
+| `engine/` | 模拟引擎。每个引擎继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`；`pipeline.py` 拓扑排序后按序执行。已实现：`astronomy`（含纯函数模块 `stellar_physics.py`，输出含 `system_catalog.yaml` 天体统一目录）、`geological`（封装地形管线）、`climate`（含纯函数模块 `climate_physics.py`）；`physical_inputs.py` 统一解析卫星感知物理参数 + `build_system_catalog()` 天体目录合并（stellar.yaml + planets.yaml，后者为共享字段权威），`satellite_dynamics.py` 纯函数提供卫星系统派生量（希尔几何/互希尔间距/稳定极限/同步轨道半径；k₂/Q、J2 类时标待参数 authored 后接入） |
 | `map/` | 地图子系统：CVT 网格生成、板块构造（Cortial 2019 时间演化）、地形合成、边界检测、地理锚定、气候模拟、栅格编解码、外部高度图导入、地图 CRUD + 分支继承。算法原理见 [geological-pipeline.md](pipelines/geological-pipeline.md)，系统架构见 [map-system.md](pipelines/map-system.md) |
 | `civmap/` | 文明地图：真实地球国家/省份底图上的架空领土涂色与时间快照 |
 | `guard/` | 守护轴：校验、审计与设定维护（与生成轴 `engine/` 正交）。含事实上下文（扩展 `doc_render`）、几何/空间查询、过期检测、拷问编排。设计见 [harness.md](proposals/harness.md) |

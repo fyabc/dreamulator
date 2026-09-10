@@ -37,6 +37,17 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from dreamulator.engine.satellite_dynamics import (
+    PROGRADE_SAFETY_LINE_RH,
+    PROGRADE_STABILITY_LIMIT_RH,
+    RETROGRADE_SAFETY_LINE_RH,
+    RETROGRADE_STABILITY_LIMIT_RH,
+    SAFE_SEPARATION_MUTUAL_HILL,
+    hill_radius_km,
+    mutual_hill_separation,
+    synchronous_orbit_radius_km,
+)
+from dreamulator.engine.sky_geometry import AU_KM
 from dreamulator.engine.stellar_physics import (
     EARTH_MASS_SOL,
     equilibrium_temperature,
@@ -91,6 +102,12 @@ _ONE_ATM_HPA = 1013.25
 # Earth's orbital period (days); fallback when the host star's mass is
 # unknown and Kepler's third law cannot be applied.
 _EARTH_ORBITAL_PERIOD_DAYS = 365.25
+
+# Equatorial-orbit convention (Cassini-state fossil): a prograde satellite
+# within this many degrees of the parent's axial tilt counts as lying in the
+# equatorial plane and fixes the spin-axis azimuth (see
+# ``_annotate_satellite_dynamics``).
+_EQUATORIAL_TOLERANCE_DEG = 2.0
 
 
 def load_planets(path: Path) -> tuple[list[Planet], list[str]]:
@@ -680,8 +697,10 @@ def build_system_catalog(
         # position solving) need no other input; per-body derived periods are
         # in each body's ``orbit`` block.
         "orbits": [o for o in (input_data.get("orbits") or []) if isinstance(o, dict)],
-        "bodies": _catalog_bodies(input_data, raw_bodies, planets, index, computed_stars),
     }
+    entries = _catalog_bodies(input_data, raw_bodies, planets, index, computed_stars)
+    warnings.extend(_annotate_satellite_dynamics(entries, index))
+    catalog["bodies"] = entries
     if planets:
         # The target body is the focus planet of this world (frontend 3D viewer
         # highlights it). Its per-body entry in ``bodies`` already carries all
@@ -787,6 +806,13 @@ def _catalog_bodies(
         if cs.get("mass") is not None:
             star_masses[star_id] = cs["mass"]
 
+    # planets.yaml is authoritative for masses; bodies entries are cross-checked
+    # against it (check_body_field_consistency), so backfill bodies that only
+    # exist in planets.yaml (e.g. earth's planet_earth) — otherwise satellites
+    # of such parents miss their Hill/stability derived quantities.
+    for p in planets:
+        index.body_masses[p.id] = float(p.mass)
+
     entries: list[dict[str, Any]] = []
     for body_id in all_ids:
         entries.append(
@@ -799,6 +825,120 @@ def _catalog_bodies(
             )
         )
     return entries
+
+
+def _orbit_a_km(elements: dict[str, Any] | None) -> float:
+    """Semi-major axis in km from a raw orbit mapping (``inf`` when absent)."""
+    a_au = _as_float((elements or {}).get("semi_major_axis_au"))
+    return a_au * AU_KM if a_au is not None else float("inf")
+
+
+def _annotate_satellite_dynamics(
+    entries: list[dict[str, Any]],
+    index: _StellarIndex,
+) -> list[str]:
+    """Sibling separations, spin-axis azimuth convention, stability warnings.
+
+    Mutates ``entries`` in place: adjacent-satellite mutual-Hill separations
+    land on each satellite's ``derived`` block, and every parent with an
+    equatorial reference satellite gains the spin-axis azimuth.  Convention
+    (Cassini-state fossil, zero new authored fields): the prograde satellite
+    whose inclination is closest to the parent's ``axial_tilt_deg`` — both
+    measured against the heliocentric ecliptic, the ``stellar.yaml`` reference
+    plane — defines the equatorial plane, so its ascending node Ω fixes the
+    pole azimuth: the pole tilts away from the ecliptic normal toward 90°
+    past the node, giving ``spin_axis_ecliptic_longitude_deg = (Ω + 90) % 360``.
+
+    Returns catalog warnings (stability lines, sibling spacing, missing
+    equatorial reference); these join ``EngineResult.warnings`` verbatim.
+    """
+    warnings: list[str] = []
+    entries_by_id = {e["id"]: e for e in entries}
+
+    satellites_by_parent: dict[str, list[str]] = {}
+    for entry in entries:
+        if entry.get("body_type") != "natural_satellite":
+            continue
+        parent_id = entry.get("parent_id")
+        if parent_id is not None and parent_id in index.body_masses:
+            satellites_by_parent.setdefault(str(parent_id), []).append(str(entry["id"]))
+
+    for parent_id, sat_ids in satellites_by_parent.items():
+        parent = entries_by_id.get(parent_id, {})
+        m_primary = index.body_masses[parent_id]
+
+        # Adjacent pairs in semi-major axis → mutual-Hill separation.
+        ordered = sorted(sat_ids, key=lambda sid: _orbit_a_km(index.orbits.get(sid)))
+        for inner, outer in zip(ordered, ordered[1:], strict=False):
+            m_inner = index.body_masses.get(inner)
+            m_outer = index.body_masses.get(outer)
+            a_inner = _orbit_a_km(index.orbits.get(inner))
+            a_outer = _orbit_a_km(index.orbits.get(outer))
+            if m_inner is None or m_outer is None or a_inner == a_outer:
+                continue
+            sep = mutual_hill_separation(a_inner, a_outer, m_inner, m_outer, m_primary)
+            inner_derived = entries_by_id[inner].setdefault("derived", {})
+            inner_derived["mutual_hill_separation_to_outer"] = round(sep, 2)
+            outer_derived = entries_by_id[outer].setdefault("derived", {})
+            outer_derived["mutual_hill_separation_to_inner"] = round(sep, 2)
+            if sep < SAFE_SEPARATION_MUTUAL_HILL:
+                warnings.append(
+                    f"satellites '{inner}'/'{outer}': mutual Hill separation {sep:.1f} < "
+                    f"{SAFE_SEPARATION_MUTUAL_HILL:.0f} — safe for resonantly locked pairs only "
+                    "(Gladman 1993; certified configurations may be exempt)"
+                )
+
+        # Spin-axis azimuth from the equatorial reference satellite.
+        tilt = _as_float((parent.get("physical") or {}).get("axial_tilt_deg"))
+        if tilt is None:
+            continue
+        best: tuple[float, str] | None = None
+        for sid in sat_ids:
+            i_deg = _as_float((index.orbits.get(sid) or {}).get("inclination_deg"))
+            if i_deg is None or i_deg >= 90.0:
+                continue  # retrograde / polar captures are not equatorial fossils
+            deviation = abs(i_deg - tilt)
+            if best is None or deviation < best[0]:
+                best = (deviation, sid)
+        if best is not None and best[0] <= _EQUATORIAL_TOLERANCE_DEG:
+            node = (
+                _as_float((index.orbits.get(best[1]) or {}).get("longitude_ascending_node_deg"))
+                or 0.0
+            )
+            derived = parent.setdefault("derived", {})
+            derived["equatorial_reference_satellite"] = best[1]
+            derived["spin_axis_ecliptic_longitude_deg"] = round((node + 90.0) % 360.0, 2)
+        else:
+            warnings.append(
+                f"planet '{parent_id}': no prograde satellite within "
+                f"{_EQUATORIAL_TOLERANCE_DEG:.0f}° of axial tilt {tilt:.1f}°; spin-axis "
+                "azimuth not derivable (equatorial-orbit convention)"
+            )
+
+    # Stability-line warnings for every satellite carrying an a/R_H ratio.
+    for entry in entries:
+        if entry.get("body_type") != "natural_satellite":
+            continue
+        derived = entry.get("derived") or {}
+        ratio = derived.get("a_rh_ratio")
+        if not isinstance(ratio, float):
+            continue
+        sid = str(entry["id"])
+        if derived.get("prograde", True):
+            limit, safety = PROGRADE_STABILITY_LIMIT_RH, PROGRADE_SAFETY_LINE_RH
+        else:
+            limit, safety = RETROGRADE_STABILITY_LIMIT_RH, RETROGRADE_SAFETY_LINE_RH
+        if ratio > limit:
+            warnings.append(
+                f"satellite '{sid}': a/R_H = {ratio:.3f} exceeds the formal stability limit "
+                f"{limit} r_H (Domingos et al. 2006)"
+            )
+        elif ratio > safety:
+            warnings.append(
+                f"satellite '{sid}': a/R_H = {ratio:.3f} beyond the engineering safety line "
+                f"{safety} r_H (resonantly locked or certified configurations may be exempt)"
+            )
+    return warnings
 
 
 def _catalog_body_entry(
@@ -988,6 +1128,40 @@ def _catalog_body_entry(
             tidal_period_h=float(orbital_period) * 24.0,
         )
         derived["tidal_range_m"] = round(_range_m, 1)
+
+    # ---- Satellite-system dynamics (Hill geometry, synchronous orbit) ----
+    # Zero-new-parameter quantities from engine/satellite_dynamics.py (the
+    # REBOUND-adjudication module).  k2/Q-, J2- and C/MR²-dependent rates
+    # (tidal migration, e-damping, precession) stay out until those inputs
+    # are authored (roadmap backlog).
+    a_km = a_au * AU_KM if a_au is not None else None
+    own_hill_km: float | None = None
+    if a_km is not None and mass_earth is not None and parent_mass_sol is not None:
+        # The perturber is whatever the body orbits: the star for planets,
+        # the planet for satellites — both are ``parent`` here.  Near-
+        # periapsis Hill sphere (conservative) when the orbit carries an e.
+        own_hill_km = hill_radius_km(a_km, mass_earth, parent_mass_sol, ecc or 0.0)
+        derived["hill_radius_km"] = round(own_hill_km, 1)
+    if rotation is not None and mass_earth is not None:
+        _r_sync_km = synchronous_orbit_radius_km(mass_earth, rotation)
+        derived["synchronous_orbit_radius_km"] = round(_r_sync_km, 1)
+        if own_hill_km is not None and own_hill_km > 0:
+            derived["synchronous_over_hill"] = round(_r_sync_km / own_hill_km, 2)
+    if str(body_type) == "natural_satellite" and parent_id is not None and a_km is not None:
+        # Stability metric a/R_H(parent) against the Domingos et al. (2006)
+        # limits and the REBOUND-validated engineering safety lines.
+        derived["prograde"] = bool(inc is None or inc < 90.0)
+        _parent_mass_earth = index.body_masses.get(parent_id)
+        _parent_a_au = _as_float((index.orbits.get(parent_id) or {}).get("semi_major_axis_au"))
+        if _parent_mass_earth is not None and _parent_a_au is not None and star_mass is not None:
+            _parent_ecc = _as_float((index.orbits.get(parent_id) or {}).get("eccentricity"))
+            _parent_hill_km = hill_radius_km(
+                _parent_a_au * AU_KM,
+                _parent_mass_earth,
+                star_mass,
+                _parent_ecc or 0.0,
+            )
+            derived["a_rh_ratio"] = round(a_km / _parent_hill_km, 3)
     if derived:
         entry["derived"] = derived
     return entry

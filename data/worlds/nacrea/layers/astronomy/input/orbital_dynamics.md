@@ -11,7 +11,7 @@ tags: [orbit, eclipse, seasons, resonance]
 | 参数 | 值 | 备注 |
 |------|-----|------|
 | 卫星轨道倾角 i | {{ entities.satellite_nacrea.axial_tilt_deg }}° | 赤道面轨道：轨道面 = Aegis 赤道面；相对黄道夹角 = Aegis obliquity 9°（黄道面 = Aegis 绕恒星轨道面，系统参考平面） |
-| 轨道偏心率 e | **0.0018**（历元值） | 受韵珠（99.6%）/守珠的长期摄动，在受迫带 0.0008–0.009 内振荡（A4v 认证带，rms 0.0035；轨迹级认证与硬度豁免见 design-notes/0009 §2–3）；潮汐加热 0.05–6 W/m² 带内、均值 ~0.9、主调制 11 kyr。见 satellite_architecture.md |
+| 轨道偏心率 e | **{{ entities.satellite_nacrea.eccentricity }}**（历元值） | 受韵珠（99.6%）/守珠的长期摄动，在受迫带 0.0008–0.009 内振荡（A4v 认证带，rms 0.0035；轨迹级认证与硬度豁免见 design-notes/0009 §2–3）；潮汐加热 0.05–6 W/m² 带内、均值 ~0.9、主调制 11 kyr。见 satellite_architecture.md |
 | 1:2:4 行星共振 | 三颗巨行星构成拉普拉斯共振 | 防止巨行星坠入主星，维持巨行星偏心率不衰减；1 Myr N 体积分验证稳定，Aegis e 摆动 0.016–0.062 @ ~45 kyr（天然的类米兰科维奇旋回，见 long_term_cycles §3） |
 
 ### 因变量

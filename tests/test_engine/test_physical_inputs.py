@@ -497,6 +497,150 @@ def test_build_system_catalog_warns_on_drift(tmp_path: Path) -> None:
     assert any("albedo" in w for w in catalog.get("warnings", []))
 
 
+# ===================================================================
+# Satellite-system dynamics in the catalog (hill_radius_km / a_rh_ratio /
+# mutual-Hill separations / spin-axis azimuth convention)
+# ===================================================================
+
+
+def _dynamics_stub(
+    tmp_path: Path,
+    *,
+    aegis_tilt: float | None = 9.0,
+    nacrea_inclination: float | None = 9.0,
+    nacrea_a_au: float = 0.00494,
+    cadence: bool = False,
+) -> _StubEngine:
+    """_gaia_stub variant with equatorial geometry + optional retrograde sibling.
+
+    Orbital elements use the stellar.yaml reference plane (heliocentric
+    ecliptic): inclination is measured against it, matching the spin-axis
+    azimuth convention in ``_annotate_satellite_dynamics``.
+    """
+    orbits: list[dict[str, Any]] = [
+        {
+            "body_id": "planet_aegis",
+            "parent_id": "star_ignis",
+            "semi_major_axis_au": 0.2504,
+            "eccentricity": 0.005,
+        },
+        {
+            "body_id": "satellite_nacrea",
+            "parent_id": "planet_aegis",
+            "semi_major_axis_au": nacrea_a_au,
+            "eccentricity": 0.002,
+            "longitude_ascending_node_deg": 40.0,
+        },
+    ]
+    if nacrea_inclination is not None:
+        orbits[1]["inclination_deg"] = nacrea_inclination
+    if cadence:
+        orbits.append(
+            {
+                "body_id": "satellite_cadence",
+                "parent_id": "planet_aegis",
+                "semi_major_axis_au": 0.008,
+                "eccentricity": 0.0,
+                "inclination_deg": 171.0,  # retrograde capture fossil
+                "longitude_ascending_node_deg": 180.0,
+            }
+        )
+    # ``body_type`` semantics live in the stellar.yaml bodies section
+    # (planets.yaml's planet_type is a composition class like ocean_world).
+    bodies: list[dict[str, Any]] = [
+        {"id": "planet_aegis", "mass_earth": 508.5},
+        {"id": "satellite_nacrea", "mass_earth": 1.2, "body_type": "natural_satellite"},
+    ]
+    if aegis_tilt is not None:
+        bodies[0]["axial_tilt_deg"] = aegis_tilt
+    if cadence:
+        bodies.append(
+            {"id": "satellite_cadence", "mass_earth": 0.012, "body_type": "natural_satellite"}
+        )
+    stellar = _write(
+        tmp_path,
+        "stellar.yaml",
+        {
+            "stars": [{"id": "star_ignis", "luminosity": 0.0414, "mass": 0.4665, "age_gyr": 5.9}],
+            "orbits": orbits,
+            "bodies": bodies,
+        },
+    )
+    derived = _write(
+        tmp_path,
+        "stellar_derived.yaml",
+        {"stars": [{"id": "star_ignis", "computed_temperature": 3931.0}]},
+    )
+    planets = _write(tmp_path, "planets.yaml", _GAIA_PLANET_YAML)
+    return _StubEngine(
+        {"stellar.yaml": stellar, "stellar_derived.yaml": derived, "planets.yaml": planets}
+    )
+
+
+def test_catalog_satellite_dynamics_fields(tmp_path: Path) -> None:
+    """Hill geometry, stability metrics, sibling separations, azimuth."""
+    catalog, warnings = build_system_catalog(_dynamics_stub(tmp_path, cadence=True))
+
+    by_id = {b["id"]: b for b in catalog["bodies"]}
+    aegis = by_id["planet_aegis"]
+    nacrea = by_id["satellite_nacrea"]
+    cadence = by_id["satellite_cadence"]
+
+    # Aegis (508.5 M⊕ @ 0.2504 AU around 0.4665 M☉, e=0.005):
+    # R_H ≈ 3.844e6 km (hand calc).
+    assert aegis["derived"]["hill_radius_km"] == pytest.approx(3.844e6, rel=1e-2)
+
+    # Nacrea: own Hill sphere ≈ 6.80e4 km, r_sync ≈ 9.85e4 km (1.2 M⊕, 3.25 d)
+    # → ratio 1.45: synchronous orbit beyond the Hill sphere.
+    n_derived = nacrea["derived"]
+    assert n_derived["hill_radius_km"] == pytest.approx(6.805e4, rel=1e-2)
+    assert n_derived["synchronous_orbit_radius_km"] == pytest.approx(9.848e4, rel=1e-2)
+    assert n_derived["synchronous_over_hill"] == pytest.approx(1.45, rel=1e-2)
+    assert n_derived["prograde"] is True
+    assert n_derived["a_rh_ratio"] == pytest.approx(0.193, abs=1e-3)
+
+    # Sibling pair: mutual-Hill separation ≈ 5.11 on both sides.
+    assert n_derived["mutual_hill_separation_to_outer"] == pytest.approx(5.11, abs=0.05)
+    c_derived = cadence["derived"]
+    assert c_derived["prograde"] is False
+    assert c_derived["a_rh_ratio"] == pytest.approx(0.312, abs=1e-3)
+    assert c_derived["mutual_hill_separation_to_inner"] == pytest.approx(5.11, abs=0.05)
+    assert "mutual_hill_separation_to_outer" not in c_derived
+
+    # Spin-axis azimuth: Nacrea (i=9 = tilt, Ω=40) is the equatorial
+    # reference; the pole tilts toward 90° past the node.
+    assert aegis["derived"]["equatorial_reference_satellite"] == "satellite_nacrea"
+    assert aegis["derived"]["spin_axis_ecliptic_longitude_deg"] == 130.0
+
+    # 5.11 < 10 mutual Hill radii → sibling-spacing warning (both channels).
+    assert any("mutual Hill separation" in w and "satellite_nacrea" in w for w in warnings)
+    assert any("mutual Hill separation" in w for w in catalog.get("warnings", []))
+
+
+def test_catalog_warns_stability_lines(tmp_path: Path) -> None:
+    """a/R_H beyond the engineering safety line and the formal limit."""
+    # 0.012 AU → a_rh ≈ 0.467: beyond the 0.38 prograde safety line, still
+    # inside the 0.48 formal limit.
+    _, warnings = build_system_catalog(_dynamics_stub(tmp_path, nacrea_a_au=0.012))
+    assert any("engineering safety line" in w and "satellite_nacrea" in w for w in warnings)
+    assert not any("formal stability limit" in w for w in warnings)
+
+    # 0.019 AU → a_rh ≈ 0.740: beyond the 0.48 formal stability limit.
+    _, warnings = build_system_catalog(_dynamics_stub(tmp_path, nacrea_a_au=0.019))
+    assert any("formal stability limit" in w and "satellite_nacrea" in w for w in warnings)
+
+
+def test_catalog_warns_missing_equatorial_reference(tmp_path: Path) -> None:
+    """A prograde satellite far off the parent's equator blocks the azimuth."""
+    catalog, warnings = build_system_catalog(_dynamics_stub(tmp_path, nacrea_inclination=30.0))
+    by_id = {b["id"]: b for b in catalog["bodies"]}
+    assert "equatorial_reference_satellite" not in by_id["planet_aegis"]["derived"]
+    assert "spin_axis_ecliptic_longitude_deg" not in by_id["planet_aegis"]["derived"]
+    assert any("no prograde satellite within" in w and "planet_aegis" in w for w in warnings)
+    # The satellite itself still carries its inclination semantics.
+    assert by_id["satellite_nacrea"]["derived"]["prograde"] is True
+
+
 def test_build_system_catalog_without_inputs(tmp_path: Path) -> None:
     catalog, warnings = build_system_catalog(_StubEngine({}))
     assert catalog == {}

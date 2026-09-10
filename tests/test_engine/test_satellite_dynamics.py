@@ -26,6 +26,7 @@ from dreamulator.engine.satellite_dynamics import (
     mutual_hill_separation,
     spin_precession_period_yr,
     stability_limit_km,
+    synchronous_orbit_radius_km,
     tidal_e_damping_timescale_yr,
     tidal_migration_rate_m_yr,
 )
@@ -69,6 +70,19 @@ class TestHillGeometry:
         assert abs(pro / 2.418e6 - 1.0) < 0.01
         assert abs(ret / 4.684e6 - 1.0) < 0.01
         assert ret > pro
+
+
+class TestSynchronousOrbit:
+    def test_earth_geo_radius(self) -> None:
+        # Textbook geostationary radius 42,164 km (sidereal day 0.99727 d);
+        # residual <0.2% from the rounded constants.
+        assert abs(synchronous_orbit_radius_km(1.0, 0.99727) / 42164.0 - 1.0) < 0.002
+
+    def test_nacrea_sync_beyond_own_hill(self) -> None:
+        # Nacrea r_sync ≈ 9.64e4 km vs own Hill sphere ≈ 6.67e4 km → ratio 1.44:
+        # a tidally locked moon's "GEO" is dynamically forbidden (space_age.md).
+        r_sync = synchronous_orbit_radius_km(M_NACREA, P_NACREA)
+        assert abs(r_sync / 9.638e4 - 1.0) < 0.01
 
 
 class TestJ2Secular:

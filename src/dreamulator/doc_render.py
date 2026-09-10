@@ -156,6 +156,17 @@ def _pct(value: Any) -> Any:
     return f"{round(float(value) * 100.0, 1)}%"
 
 
+def _group(value: Any, digits: int = 0) -> Any:
+    """Thousands-grouped fixed-point string (66715.2 → "66,715").
+
+    For km-scale astronomy numbers whose authored form carries separators;
+    printf-style ``| format`` cannot express grouping.
+    """
+    if isinstance(value, Undefined):
+        return value
+    return f"{float(value):,.{digits}f}"
+
+
 def _format_filter(value: Any, *args: Any, **kwargs: Any) -> Any:
     """Builtin ``format`` with Undefined passthrough (``"%.2f"|format(...)``).
 
@@ -202,6 +213,7 @@ def build_environment() -> SandboxedEnvironment:
             "round2": _round2,
             "hours": _hours,
             "pct": _pct,
+            "group": _group,
             # Builtin overrides: Undefined passthrough instead of crashing.
             "format": _format_filter,
             "round": _round_filter,

@@ -437,6 +437,7 @@ features:
 | `round0`/`round1`/`round2` | 四舍五入到整数/1/2 位 | `{{ entities.planet_aegis.period_days \| round0 }}` → 67 |
 | `hours` | 天 → 小时（×24），常与 round 组合 | `{{ entities.satellite_nacrea.period_days \| hours \| round0 }}` → 78 |
 | `pct` | 小数 → 百分比字符串 | `{{ entities.star_ignis.evolution_progress \| pct }}` → 8.8% |
+| `group` | 千分位分组定长（`group`/`group(1)`） | `{{ entities.satellite_nacrea.hill_radius_km \| group }}` → 66,715 |
 | `"%.2f"\|format(...)` | 定长小数（保尾随零） | → 1.20 |
 
 **降级行为**（`render_body()` 返回 `(text, rendered)`）：
@@ -464,7 +465,7 @@ features:
 **参考**：
 - `src/dreamulator/doc_render.py` — `parse_frontmatter()` / `load_render_context()` / `render_body()` / filters
 - `src/dreamulator/guard/facts.py::build_fact_context` — 事实上下文（实体 + 聚合）
-- `src/dreamulator/engine/physical_inputs.py::build_system_catalog` — `system_catalog.yaml` 的生产者
+- `src/dreamulator/engine/physical_inputs.py::build_system_catalog` — `system_catalog.yaml` 的生产者（含卫星动力学派生量：`hill_radius_km`/`a_rh_ratio`/互希尔间距/`synchronous_orbit_radius_km`/自转轴方位；物理源 `engine/satellite_dynamics.py`）
 - `docs/design/roadmap.md` #22 — 世界参数单一来源（两阶段）背景
 - `data/worlds/nacrea/layers/astronomy/input/orbital_dynamics.md` — nacrea 模板化实例
 

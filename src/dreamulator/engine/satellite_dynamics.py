@@ -8,7 +8,7 @@ the Nacrea satellite chain; physics, provenance and case-study numbers live in
 
 All functions take plain floats in the units named by their suffixes
 (``_km``, ``_au``, ``_days``, ``_yr``, ``_m_yr``) and return floats — the
-engine layer (``physical_inputs.derive_world_parameters``) is responsible for
+engine layer (``physical_inputs.build_system_catalog``) is responsible for
 unit conversion at the boundary.
 
 References: Gladman (1993) Icarus 106:247; Chambers et al. (1996) Icarus
@@ -44,6 +44,29 @@ RETROGRADE_SAFETY_LINE_RH: float = 0.50
 #: cold system without a migration/tidal history.
 MIN_SEPARATION_MUTUAL_HILL: float = 2.0 * math.sqrt(3.0)
 SAFE_SEPARATION_MUTUAL_HILL: float = 10.0
+
+
+# ---------------------------------------------------------------------------
+# Synchronous orbit
+# ---------------------------------------------------------------------------
+
+#: Earth's gravitational parameter (km³/s²).
+_EARTH_GM_KM3_S2: float = 398600.4
+_SECONDS_PER_DAY: float = 86400.0
+
+
+def synchronous_orbit_radius_km(m_body_earth: float, spin_period_days: float) -> float:
+    """Synchronous-orbit radius r_sync = (GM T_spin²/4π²)^(1/3) in km.
+
+    Kepler's third law inverted for the body's own spin: the orbital radius
+    whose period equals the sidereal rotation period.  Compare against the
+    body's own Hill radius — r_sync > r_H means no stable synchronous orbit
+    exists (the parent's tide strips anything beyond the Hill sphere), i.e.
+    the "GEO" of a tidally locked moon like Nacrea is dynamically forbidden.
+    """
+    gm_km3_s2 = m_body_earth * _EARTH_GM_KM3_S2
+    t_s = spin_period_days * _SECONDS_PER_DAY
+    return float((gm_km3_s2 * t_s * t_s / (4.0 * math.pi**2)) ** (1.0 / 3.0))
 
 
 def hill_radius_km(a_p_km: float, m_p_earth: float, m_star_solar: float, e_p: float = 0.0) -> float:

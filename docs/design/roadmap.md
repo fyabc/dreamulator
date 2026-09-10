@@ -268,6 +268,12 @@
    锚定值渲染后与手写一致（`test_doc_render.py`），并顺带修正 `long_term_cycles.md`
    两处方案2 遗漏漂移（日照 656→899 W/m²）与 `giant_brightness.md` 898 截断（→899）。
    叙事类文档保留手写 + 局部引用。两阶段均完成，P1 关闭。
+   **2026-09-10 扩展**：卫星动力学派生量进 catalog（`hill_radius_km`/`a_rh_ratio`/
+   互希尔间距/`synchronous_orbit_radius_km`/自转轴方位约定——赤道参考卫星 Ω+90°），
+   `satellite_architecture`/`space_age`/`habitability_solutions`/`orbital_dynamics`/
+   `long_term_cycles` 再模板化 5 文档并测试锚定，顺带修正 3 处旧值漂移
+   （R_H_s 68,220→66,715、r_sync 98,488→96,396、占顺行稳定区 34.0%→30.8%）；
+   k₂/Q、J2、C/MR² 参数化派生量（外迁/阻尼/进动）待 authored 后接入（待授权）。
 
 15. **天体数据双文件分裂与字段重复**（2026-08-15）— 天体信息分散在
     `astronomy/input/stellar.yaml`（stars/orbits/bodies 叙事）与

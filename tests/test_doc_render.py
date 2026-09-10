@@ -262,6 +262,26 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "日照 828 W/m²",
         "evolution_progress=0.16",
         "37.4 Gyr 的 15.8%",
+        "径向净空 28 r_H,m",
+    ],
+    # Satellite-dynamics derived fields (#13): Hill geometry, stability
+    # metrics, sibling separations, synchronous-orbit economics.
+    "layers/astronomy/input/satellite_architecture.md": [
+        "724,054 km（10.15 R_p）",
+        "**30.8%**",
+        "= 0.246 r_H",
+        "= 0.44 r_H",
+        "28 互希尔半径径向净空",
+        "希尔球（66,715 km）",
+    ],
+    "layers/civilization/input/space_age.md": [
+        "**96,396 km**（高度 89,579 km）",
+        "**66,715 km**（9.8 R_s）",
+        "r_sync (96,396 km) > R_H_s (66,715 km)",
+        "**1.44**",
+    ],
+    "layers/civilization/input/habitability_solutions.md": [
+        "r_sync (96,396 km) > R_H_s (66,715 km)",
     ],
 }
 

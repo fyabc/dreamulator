@@ -382,6 +382,12 @@ i ∈ 39.2°–140.8° 危险区；Kozai 1962, AJ 67:591；Lidov 1962）只是�
 - `engine/tidal_physics.py` — 潮差/潮汐加热（卫星侧 k₂/Q=0.003，Nacrea Q=100）；
   本文档的行星侧 k₂p/Qp 控制迁移与倾角演化，两者是**不同的耗散通道**，
   设定数字勿混用。
+- `engine/satellite_dynamics.py` — 本文档判据的纯函数实现（希尔几何/互希尔
+  间距/稳定极限/常数 Q 潮汐时标/J2 进动/拉普拉斯半径/同步轨道半径），
+  由 `physical_inputs.build_system_catalog` 接入天体目录：零新参数量
+  （`hill_radius_km`/`a_rh_ratio`/互希尔间距/`synchronous_orbit_radius_km`/
+  自转轴方位约定）随每次天文构建派生并供文档模板渲染；
+  k₂/Q、J2、C/MR² 依赖量待参数 authored 后接入。
 - `scripts/astro/rebound_nbody.py` — 全部判据的可执行实现（landed/baseline/
   sat-scan 模式 + `--j2/--tides/--tide-boost` 长期算子）。
 - 气候层 — 轨道倾角决定季节幅度；偏心率振荡（Aegis e 0.016–0.062 @ ~45 kyr，
