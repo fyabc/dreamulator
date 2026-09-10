@@ -122,22 +122,30 @@ def moist_lapse_rate(
     *,
     gamma_max: float = 6.5,
     gamma_min: float = 4.5,
-    t_scale_c: float = 10.0,
+    t_mid_c: float = 10.0,
+    t_width_c: float = 8.0,
 ) -> np.ndarray:
     """Temperature-dependent moist-adiabatic lapse rate (°C / km).
 
     Warm air holds more moisture → more latent heat release during ascent →
-    lower effective lapse rate.  The parametrisation is a simple exponential
-    interpolation between the warm (moist) and cold (dry) limits:
+    lower effective lapse rate.  A logistic between the warm (moist) and
+    cold (dry) limits, bounded to [Γ_min, Γ_max] by construction:
 
-        Γ(T) = Γ_max − (Γ_max − Γ_min) × exp(−T / T_scale)
+        Γ(T) = Γ_min + (Γ_max − Γ_min) · σ((T_mid − T) / T_width)
 
-    At T =  0 °C    →  Γ ≈ Γ_max (cold, dry — little latent heating)
-    At T ≫ T_scale  →  Γ → Γ_min (warm, moist — strong latent heating)
+        T =  27 °C → 4.7 °C/km  (tropical sea-level reference)
+        T =  10 °C → 5.5 °C/km
+        T =   0 °C → 6.1 °C/km
+        T = −20 °C → 6.5 °C/km  (polar / ice sheet — standard value)
 
-    Typical values at Earth's surface gravity:
-        Γ_min = 4.5 °C/km  (tropical ocean, T ≈ 27 °C)
-        Γ_max = 6.5 °C/km  (polar / high-altitude, T ≪ 0 °C)
+    The station-implied effective surface lapse splits along temperature,
+    not latitude (2026-09-11 highland diagnostic, earth climate-dev):
+    tropical highlands ~4.2–5.2 °C/km (Quito/Cusco/Addis/Altiplano), mid
+    and high latitude ~6+ — matching this curve.  This replaces both the
+    constant 6.5 and the former hard [15°, 35°] subtropical band (whose
+    edges printed artificial step lines across Tibet/Andes/Rockies).  The
+    former exponential interpolation was inverted (warm → steep) and went
+    unphysical (Γ < 0 below ~−12 °C), forcing callers to clip.
 
     For planets with different gravity the limits scale with g/g⊕ because
     the dry adiabatic lapse rate Γ_d = g / cp.  Pass ``gamma_max`` and
@@ -145,15 +153,18 @@ def moist_lapse_rate(
 
     Args:
         temperature_c: Surface air temperature (°C), shape (N,).
-        gamma_max: Lapse rate in the cold (dry) limit (°C / km).
-        gamma_min: Lapse rate in the warm (moist) limit (°C / km).
-        t_scale_c: e-folding temperature scale (°C).
+        gamma_max: Lapse rate in the cold (dry) limit (°C/km).
+        gamma_min: Lapse rate in the warm (moist) limit (°C/km).
+        t_mid_c: Mid-transition temperature (°C): Γ = (Γ_min+Γ_max)/2 here.
+        t_width_c: Logistic transition width (°C).
 
     Returns:
-        Moist adiabatic lapse rate for each cell (°C / km), shape (N,).
+        Moist adiabatic lapse rate for each cell (°C/km), shape (N,).
     """
     delta = gamma_max - gamma_min
-    return gamma_max - delta * np.exp(-np.maximum(temperature_c, -50.0) / t_scale_c)  # type: ignore[no-any-return]
+    _z = np.clip((t_mid_c - temperature_c) / t_width_c, -50.0, 50.0)
+    _sig = 1.0 / (1.0 + np.exp(-_z))
+    return np.asarray(gamma_min + delta * _sig)
 
 
 def altitude_lapse_rate(

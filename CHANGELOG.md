@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **地表递减率重构（气候 P0-①）**：`moist_lapse_rate` 从指数插值改为**有界 logistic**
+  （暖 ~4.7 / 冷 6.5 °C/km，T_mid 10°C、宽 8°C）——旧公式与 docstring 物理相反
+  （暖→陡）且冷端 < −12 °C 发散。`variable_lapse_rate` 默认开启（所有世界同物理）。
+  删除副热带硬纬度带（`subtropical_lapse_rate_c_km`/`_lat_lo_deg`/`_lat_hi_deg` +
+  死开关 `subtropical_dry_warming_c`）：台站隐含有效地表递减率按温度分裂、不按纬度
+  （热带高地 4.2–5.2、中高纬 ~6+），硬带 [15°, 35°] 边缘在青藏/安第斯/落基打出人工
+  台阶线，且两锚值（1.5 带内过浅、6.5 热带过陡）都错。earth（climate-dev）：
+  纬向 T RMSE 2.08→1.94、高地偏差收敛（El Alto +12.7→+0.2、Uyuni +11.8→−0.5、
+  Quito −7.5→−1.8、Cusco −9.5→−3.0）、假线消失（用户前端确认）；nacrea 回归：
+  全球 T −0.27°C、北极高地正确降温（旧公式冷端失稳曾使其过暖）。
+- **重生成 nacrea 回归基线**：`tests/validation/baselines/nacrea-200k.json` 快照
+  过期（3d295f6 改名时代，其后世界数据多轮迭代），重生成自当前引擎+数据。
+
 ### Added
 
 - **卫星动力学派生量进 catalog**（#13 引擎派生量集成）：`satellite_dynamics.py`

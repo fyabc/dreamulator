@@ -1,43 +1,40 @@
 {
-  "schema_version": 1,
   "world": "nacrea",
   "planet": "satellite_nacrea",
-  "seed": 42,
   "mesh_cells": 200000,
   "temperature": {
-    "global_mean_c": 19.12,
-    "land_mean_c": 11.81,
-    "ocean_mean_c": 22.06,
-    "min_c": -25.51,
-    "max_c": 31.0
+    "global_mean_c": 15.56,
+    "land_mean_c": 11.41,
+    "ocean_mean_c": 17.26,
+    "min_c": -50.35,
+    "max_c": 28.83
   },
   "precipitation": {
-    "global_mean_mm": 1250.9,
-    "land_mean_mm": 1632.9
+    "global_mean_mm": 827.7,
+    "land_mean_mm": 1058.6
   },
   "koppen": {
     "class_counts": {
-      "Af": 12139,
-      "Am": 1936,
-      "Aw": 5532,
-      "BSh": 1281,
-      "BSk": 2511,
-      "BWh": 517,
-      "BWk": 795,
-      "Cfb": 12463,
-      "Csb": 1562,
-      "EF": 9524,
-      "ET": 9134
+      "Af": 18250,
+      "Am": 5,
+      "Aw": 2595,
+      "BSh": 4378,
+      "BSk": 2587,
+      "BWh": 2121,
+      "BWk": 10884,
+      "Cfb": 1843,
+      "EF": 8500,
+      "ET": 7107
     },
     "group_distribution": {
-      "A": 0.342,
-      "B": 0.089,
-      "C": 0.244,
+      "A": 0.358,
+      "B": 0.343,
+      "C": 0.032,
       "D": 0.0,
-      "E": 0.325
+      "E": 0.268
     },
-    "n_classes": 11,
-    "n_land_cells": 57394
+    "n_classes": 10,
+    "n_land_cells": 58270
   },
-  "land_fraction": 0.287
+  "land_fraction": 0.2913
 }

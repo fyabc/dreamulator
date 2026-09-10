@@ -218,17 +218,10 @@ def simulate_climate(
                     * _w[land_mask_arr]
                     * (t_cell - t_mean_C[land_mask_arr])
                 )
-            # ── 4.2-①: dry-air surface warming (subtropical desert) ──
-            # The dry desert has no evaporative cooling, so its radiative balance
-            # sits hotter than the moist area-weighted mean the Held-Hou
-            # homogenisation flattens to — the remaining ~2 °C desert cold.
-            if config.subtropical_dry_warming_c > 0.0:
-                _dry = (
-                    land_mask_arr
-                    & (np.abs(lat_deg) >= config.subtropical_lapse_lat_lo_deg)
-                    & (np.abs(lat_deg) <= config.subtropical_lapse_lat_hi_deg)
-                )
-                t_mean_C[_dry] += config.subtropical_dry_warming_c
+            # (4.2-① dry-air surface warming removed 2026-09-11: its hard
+            #  [15°, 35°] latitude gate is the source of the artificial step
+            #  lines across Tibet/Andes/Rockies; the deferred aridity-gated
+            #  version is documented in climate-layer-improvement.md §1.)
     else:
         # ── 3A.3a: auto-compute latitudinal gradient from rotation rate? ──
         if config.auto_lat_gradient:
@@ -323,23 +316,17 @@ def simulate_climate(
     )
     t_mean_C = t_mean_C + (nearest_sst - t_mean_C) * _maritime
 
-    # Altitude correction (land only — ocean surface is at 0 m regardless of depth)
+    # Altitude correction (land only — ocean surface is at 0 m regardless of
+    # depth).  The surface lapse rate is temperature-dependent (moist
+    # adiabatic: warm air → latent heat release → shallower Γ) — tropical
+    # highlands cool ~4.7 °C/km, polar ice sheets ~6.5 °C/km.  This replaces
+    # both the constant 6.5 and the former hard [15°, 35°] subtropical band
+    # (removed 2026-09-11): the station-implied effective lapse splits along
+    # temperature, not latitude, and the band edges printed artificial step
+    # lines across Tibet/Andes/Rockies.
     lapse: float | np.ndarray = config.lapse_rate_c_km
     if config.variable_lapse_rate:
         lapse = moist_lapse_rate(t_mean_C[land_mask_arr])
-    # Subtropical dry-desert surface lapse rate (4.2-①): subsidence offsets the
-    # free-atmosphere lapse rate, so the dry desert cools less with elevation.
-    if config.subtropical_lapse_rate_c_km < config.lapse_rate_c_km:
-        lapse_arr = np.full(
-            int(land_mask_arr.sum()), float(config.lapse_rate_c_km), dtype=np.float64
-        )
-        lapse_arr[:] = lapse  # scalar → broadcast; array → copy (land cells)
-        _sub = (
-            (np.abs(lat_deg) >= config.subtropical_lapse_lat_lo_deg)
-            & (np.abs(lat_deg) <= config.subtropical_lapse_lat_hi_deg)
-        )[land_mask_arr]
-        lapse_arr[_sub] = config.subtropical_lapse_rate_c_km
-        lapse = lapse_arr
     # The lapse rate is an atmospheric cooling-with-altitude effect and only
     # applies *above* sea level.  Below-sea-level "land" cells (Antarctic ice
     # whose stored elevation is the bedrock, below-sea-level endorheic basins,
@@ -2029,8 +2016,8 @@ def _compute_precipitation_monthly_budget(
         _dry = _drop > 500.0
         if _dry.any():
             _t_k = np.maximum(temperature_c + 273.15, 230.0)
-            # moist_lapse_rate blows up negative for T < ~-12 °C (its exp(-T/10)
-            # is unbounded cold-ward); clamp to the physical [Γ_min, Γ_max] band.
+            # moist_lapse_rate is logistic-bounded to [Γ_min, Γ_max] since
+            # 2026-09-11; the clip stays as a cheap defensive no-op.
             _gamma = np.clip(moist_lapse_rate(temperature_c), 4.5, 6.5)
             _h_scale = 461.0 * _t_k**2 / (2.5e6 * _gamma / 1000.0)
             _dry_frac = 1.0 - np.exp(-_drop[_dry] / _h_scale[_dry])
