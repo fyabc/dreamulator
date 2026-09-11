@@ -9,6 +9,7 @@ import pytest
 
 from dreamulator.engine.climate_physics import (
     altitude_lapse_rate,
+    column_water_saturation,
     coriolis_parameter,
     equilibrium_temperature,
     evaporation_rate,
@@ -18,6 +19,7 @@ from dreamulator.engine.climate_physics import (
     latitude_temperature,
     orographic_precipitation,
     pressure_from_temperature,
+    saturation_specific_humidity,
     surface_temperature,
     terrain_wind_blocking,
 )
@@ -270,6 +272,35 @@ class TestEvaporationRate:
         evap = evaporation_rate(temp, is_ocean)
         assert evap[0] > 0
         assert evap[1] == 0.0
+
+
+class TestSaturationHumidity:
+    """Clausius–Clapeyron saturation (Bolton) + cold-trap column water."""
+
+    def test_q_sat_freezing_point(self) -> None:
+        """q_sat(0 °C) ≈ 0.00375 kg/kg (e_sat = 611.2 Pa)."""
+        q = saturation_specific_humidity(np.array([0.0]))
+        assert q[0] == pytest.approx(0.00375, abs=2e-5)
+
+    def test_q_sat_monotonic_warm(self) -> None:
+        """Warmer air holds more water vapour."""
+        q = saturation_specific_humidity(np.array([-10.0, 10.0, 25.0]))
+        assert q[0] < q[1] < q[2]
+
+    def test_column_water_freezing_point(self) -> None:
+        """W_sat(0 °C) ≈ 9.5 mm (q_sat × H_v 2.1 km × ρ_air/ρ_w)."""
+        w = column_water_saturation(np.array([0.0]))
+        assert w[0] == pytest.approx(9.45, abs=0.1)
+
+    def test_column_water_warm_large(self) -> None:
+        """Warm columns are effectively unconstrained (W_sat ≫ typical W ~25 mm)."""
+        w = column_water_saturation(np.array([25.0]))
+        assert w[0] > 40.0
+
+    def test_column_water_cold_tiny(self) -> None:
+        """A cold column (~−40 °C) can hold almost nothing."""
+        w = column_water_saturation(np.array([-40.0]))
+        assert w[0] < 1.0
 
 
 class TestOrographicPrecipitation:

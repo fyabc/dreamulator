@@ -20,6 +20,7 @@ from scipy import sparse
 from dreamulator.engine.climate_physics import (
     SOLAR_CONSTANT,
     altitude_lapse_rate,
+    column_water_saturation,
     coriolis_parameter,
     diffuse_heat_graph,
     equilibrium_temperature,
@@ -1287,14 +1288,6 @@ def _upwind_barrier(
 # automatically with Ω).
 _MOISTURE_RESIDENCE_DAYS: float = 9.0
 
-# Turbulent moisture diffusivity (m²/s).  Atmospheric eddy diffusivity is
-# ~1e6 m²/s; this sets the sub-grid spreading of the advected moisture (the
-# physical ITCZ rain belt is ~10° wide, not a single cell).  At κ=1e6 the
-# diffusion over-transported ocean moisture onto land (ocean→land transport
-# ~2× the observed ~268 mm/yr land-mean), so κ is calibrated down toward the
-# observed transport.  Shared across worlds.
-_MOISTURE_DIFFUSIVITY_M2S: float = 7.5e5
-
 # Land evapotranspiration as a fraction of the ocean evaporation *rate* at the
 # same temperature.  Earth's land surface returns ~490 mm/yr against the ocean's
 # ~1143 mm/yr (Trenberth et al. 2009 global water budget), i.e. ~43% — but land
@@ -1326,6 +1319,25 @@ _MONSOON_PRESSURE_SMOOTHING_KM: float = 500.0
 _LAND_RECYCLING_MAX_ITER: int = 12
 _LAND_RECYCLING_RELAX: float = 0.5
 _LAND_RECYCLING_TOL_MM: float = 1.0  # max |ΔE| over land cells (mm/yr)
+
+
+def _apply_cold_trap(
+    w: np.ndarray,
+    w_sat: np.ndarray,
+    k_rain_field: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Cold-trap cap: clamp column water at its Clausius–Clapeyron saturation.
+
+    A cold air column cannot hold more water than ``W_sat(T)``, so the column
+    water above that limit is removed before the rainout ``P = W/τ`` is computed.
+    Physically the excess would rain out *upwind* of the saturated column (at the
+    coast, not the frozen interior); this first-order cut destroys it instead of
+    routing it there, a small global mass deficit (~1-2% — the cold columns are
+    a small fraction of the surface).  Warm columns have ``W_sat ≫ W`` and are
+    untouched.  TODO(§5): route the excess upwind for exact ΣP = ΣE.
+    """
+    w = np.minimum(np.maximum(w, 0.0), w_sat)
+    return w, w * k_rain_field
 
 
 def _solve_moisture_budget(
@@ -1488,9 +1500,9 @@ def _solve_moisture_budget(
     # κ(W_i−W_j) per edge) so the term stays exactly conservative on the
     # non-uniform CVT mesh, matching the area-weighted advection.
     if diffusivity_enhancement is not None:
-        kappa = _MOISTURE_DIFFUSIVITY_M2S * (1.0 + diffusivity_enhancement)
+        kappa = config.moisture_diffusivity_m2s * (1.0 + diffusivity_enhancement)
     else:
-        kappa = np.full(n, _MOISTURE_DIFFUSIVITY_M2S)
+        kappa = np.full(n, config.moisture_diffusivity_m2s)
     kappa_edge = 0.5 * (kappa[src] + kappa[dst])  # edge-averaged (symmetric)
     _diff_edge = kappa_edge * s_per_year / area_m2[src]  # 1/yr, per directed edge
     diag = k_rain_field.copy()
@@ -1527,9 +1539,11 @@ def _solve_moisture_budget(
 
     w = lu.solve(e)
 
-    # Clamp against numerical under/overshoot (W ≥ 0), then P = W/τ.
+    # Cold trap: cap column water at its Clausius–Clapeyron saturation W_sat(T)
+    # so a cold air column cannot rain out more water than it can hold.
     w = np.maximum(w, 0.0)
-    p = w * k_rain_field
+    w_sat = column_water_saturation(temperature_c)
+    w, p = _apply_cold_trap(w, w_sat, k_rain_field)
     return w, p
 
 
@@ -1692,26 +1706,6 @@ def _baroclinic_band(
     return centre, width
 
 
-def _latitude_gate(
-    lat_deg: np.ndarray,
-    protect_deg: float,
-    full_deg: float,
-) -> np.ndarray:
-    """Smooth 0→1 gate in |latitude|: 0 below ``protect_deg``, 1 above ``full_deg``.
-
-    Smoothstep between the two thresholds so the aridity damping ramps in
-    continuously across the tropical-to-subtropical transition rather than
-    cutting a step into the ITCZ edge.  ``protect_deg >= full_deg`` degenerates
-    to a hard step at ``protect_deg`` (no ramp).
-    """
-    if protect_deg >= full_deg:
-        gate: np.ndarray = (np.abs(lat_deg) >= protect_deg).astype(np.float64)
-        return gate
-    x = np.clip((np.abs(lat_deg) - protect_deg) / (full_deg - protect_deg), 0.0, 1.0)
-    gate = x * x * (3.0 - 2.0 * x)
-    return gate
-
-
 def _compute_precipitation_monthly_budget(
     mesh: CVTMesh,
     wind: np.ndarray,
@@ -1819,14 +1813,6 @@ def _compute_precipitation_monthly_budget(
     # eddy mixing): eddy-diffusivity enhancement ∝ rainout enhancement.
     _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
 
-    # Deep-tropics rainout floor (Amazon/Congo interior analogue), annual —
-    # the permanent heating of the deep tropics does not vary by month here.
-    _tropical_land = is_land & (np.abs(lat_deg) < 15.0) & (temperature_c > 20.0)
-    _boost_enhance = np.zeros(n, dtype=np.float64)
-    _boost_enhance[_tropical_land] = (
-        1200.0 - 500.0 * (np.abs(lat_deg[_tropical_land]) / 15.0)
-    ) / config.evaporation_base_mm
-
     _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
     # Annual solve first: the Budyko recycling curve E = E_pot·P/(E_pot+P) is
@@ -1835,11 +1821,6 @@ def _compute_precipitation_monthly_budget(
     # land evapotranspiration by Jensen's inequality (concave in P), starving
     # the land recycling loop.  Converge it once here and hand the annual
     # water limitation to the monthly solves.
-    _conv_annual = np.where(
-        is_land,
-        30.0 * np.maximum(temperature_c - 10.0, 0.0) / config.evaporation_base_mm,
-        0.0,
-    )
     _, p_ann = _solve_moisture_budget(
         mesh,
         wind,
@@ -1847,7 +1828,7 @@ def _compute_precipitation_monthly_budget(
         temperature_c,
         nodes_xyz,
         config,
-        rainout_enhancement=_storm_enhance + _conv_annual + _boost_enhance,
+        rainout_enhancement=_storm_enhance,
         diffusivity_enhancement=_eddy_enhance,
         edge_table=(src, dst),
     )
@@ -1861,18 +1842,9 @@ def _compute_precipitation_monthly_budget(
 
     p_monthly = np.zeros((n, 12), dtype=np.float64)
     _dbg_storm = np.zeros(n)
-    _dbg_conv = np.zeros(n)
-    _dbg_boost = np.zeros(n)
 
     for m in range(12):
         t_m = t_monthly_c[:, m]
-        # Local convection (afternoon thunderstorms over warm land) is a
-        # temperature-driven rainout efficiency — monthly with t_m.
-        _conv_enhance_m = np.where(
-            is_land,
-            30.0 * np.maximum(t_m - 10.0, 0.0) / config.evaporation_base_mm,
-            0.0,
-        )
         # Monthly land ET: energy limitation from that month's temperature,
         # water limitation from the annual precipitation (soil moisture
         # integrates the annual water input, not a single month's).
@@ -1885,7 +1857,7 @@ def _compute_precipitation_monthly_budget(
             t_m,
             nodes_xyz,
             config,
-            rainout_enhancement=_storm_enhance + _conv_enhance_m + _boost_enhance,
+            rainout_enhancement=_storm_enhance,
             diffusivity_enhancement=_eddy_enhance,
             edge_table=(src, dst),
             land_evapotranspiration=_e_land_m,
@@ -1913,39 +1885,10 @@ def _compute_precipitation_monthly_budget(
         p_monthly[:, m] = (p_m + oro_m) / 12.0
 
         _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
-        _dbg_conv += (w_m * _k_base * _conv_enhance_m) / 12.0
-        _dbg_boost += (w_m * _k_base * _boost_enhance) / 12.0
 
     if debug is not None:
         debug["moisture_budget"] = p_monthly.sum(axis=1).copy()
         debug["storm"] = _dbg_storm
-        debug["convection"] = _dbg_conv
-        debug["tropical_boost"] = _dbg_boost
-
-    # ① directional dryness: post-hoc continental-aridity damping (see the
-    # aridity_* config fields).  The upwind distance is traced against the
-    # *physical* surface wind (the same east flip as the Föhn step below) and a
-    # single time-independent factor damps every month.  NOT mass-conserving —
-    # a transition preset until §7-② shortens the real transport length.
-    if config.aridity_max_damping > 0.0:
-        from dreamulator.map.ocean_circulation import east_north_basis as _enb_a
-
-        _east_a, _north_a = _enb_a(nodes_xyz)
-        _we_a = np.einsum("ij,ij->i", wind, _east_a)
-        _wn_a = np.einsum("ij,ij->i", wind, _north_a)
-        _wind_phys_a = -_we_a[:, None] * _east_a + _wn_a[:, None] * _north_a
-        _updist_a, _ = _upwind_distance_to_coast(
-            mesh.cells, n, is_land, _wind_phys_a, nodes_xyz, radius_km=config.radius_km
-        )
-        _arid_gate = _latitude_gate(
-            lat_deg, config.aridity_protect_lat_deg, config.aridity_full_lat_deg
-        )
-        _continent = np.sqrt(1.0 - np.exp(-_updist_a / config.aridity_length_km))
-        _aridity_damp = 1.0 - config.aridity_max_damping * _continent * _arid_gate
-        _aridity_damp = np.clip(_aridity_damp, 0.0, 1.0)
-        p_monthly *= _aridity_damp[:, None]
-        if debug is not None:
-            debug["aridity_damp"] = _aridity_damp.copy()
 
     # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
     # the seasonality of the westerlies is not modelled yet, so the same

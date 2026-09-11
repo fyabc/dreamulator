@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   原生网格，`generate_spatial_reference.py` → `spatialReference.ts` 双线性采样）。
   高原不再因海拔「永远偏冷」（青藏 ΔT −17→+6 反映真实暖偏）；修孟加拉 +555 假偏差
   （NCEP/GPCP 网格 1.25° 错位重采样的 bug）。
+- **§5 大标定轮（气候 P0 降水）**：收回方向性干燥补丁（`aridity_*`，非质量守恒）+
+  删 `tropical_boost`/`convection` 两个启发式增强 + **冷陷阱**（`W ≤ W_sat(T)` 柱水汽
+  饱和钳制，`saturation_specific_humidity`/`column_water_saturation`）。κ 提为 config
+  `moisture_diffusivity_m2s`（标定到 1e6）。earth：降水逐格 R² −0.107→+0.272、纬向
+  R² 0.698→0.806、**验证 FAIL→PASS**；南极 663→略干、热带过湿 +4000→微干 −285、
+  中纬干 −460→−150；温度不变。nacrea 回归：陆地降水 1058→769（更接近地球 759）、
+  温度零漂移。新增 `diagnose_climate_bias.py`（逐格偏差审计）/`diagnose_lapse_moisture.py`
+  （递减率干湿维度可行性，已否证留档）。
 
 ### Added
 

@@ -1,11 +1,11 @@
 # scripts/ 目录说明
 
-按域分组，共 40 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 42 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（22 个）
+## climate/ — 气候验证与诊断（24 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -18,6 +18,8 @@
 - `climate_diff.py` — 两次构建的差异对比（全局摘要 + 纬度带平均 + Top-N 变化细胞）。
 - `convert_koppen_map.py` — Beck Köppen GeoTIFF → 网格观测参考。
 - `detect_ocean_bottlenecks.py` — 海盆连通瓶颈探测（洋流求解上下文）。
+- `diagnose_climate_bias.py` — 逐格 T/P 偏差审计（对 `climate_obs.json`，全局/纬向带/区域/极端格，秒级）。
+- `diagnose_lapse_moisture.py` — 递减率干湿维度可行性实验（读产物手算定点，不动引擎）。
 
 ## earth/ — 真实地球数据导入与验证参考（9 个）
 

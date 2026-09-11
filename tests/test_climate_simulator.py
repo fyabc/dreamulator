@@ -365,3 +365,34 @@ class TestClimateSimulatorEndToEnd:
 
         # No NaN in output
         assert not np.any(np.isnan(temp_grid))
+
+
+class TestColdTrap:
+    """The cold-trap saturation clamp W ≤ W_sat."""
+
+    def test_caps_column_water(self) -> None:
+        """Column water above W_sat is removed; warm columns are untouched."""
+        from dreamulator.map.climate_simulator import _apply_cold_trap
+
+        w = np.array([25.0, 3.0, 0.2])
+        w_sat = np.array([1e9, 1.0, 0.5])
+        k_rain_field = np.array([40.6, 40.6, 40.6])
+        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field)
+
+        assert np.all(w_capped <= w_sat + 1e-9)
+        assert w_capped[0] == pytest.approx(25.0)  # warm → untouched
+        assert w_capped[1] == pytest.approx(1.0)  # cold → capped
+        assert w_capped[2] == pytest.approx(0.2)  # already below → untouched
+        assert np.allclose(p, w_capped * k_rain_field)
+
+    def test_no_op_when_unsaturated(self) -> None:
+        """No cells near saturation → identical to the input."""
+        from dreamulator.map.climate_simulator import _apply_cold_trap
+
+        w = np.array([20.0, 15.0, 10.0, 5.0])
+        w_sat = np.full(4, 1e9)
+        k_rain_field = np.full(4, 40.6)
+        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field)
+
+        assert np.allclose(w_capped, w)
+        assert np.allclose(p, w * k_rain_field)

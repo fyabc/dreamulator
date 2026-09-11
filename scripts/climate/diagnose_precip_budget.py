@@ -7,21 +7,14 @@ contributions) that build artifacts do not store — see the diagnostic-cache
 plan in private/todos/today.md §二-E before adding one.
 
 Runs the climate engine on the Earth (climate-dev) mesh with the shared-physics
-validation config and records each additive precipitation term (BFS diffusion,
-directional baseline, convergence, storm track, convection, tropical boost,
-sub-planet) before the multiplicative coastal/föhn/aridity factors and the
+validation config and records the additive precipitation terms (the mass-
+conserving moisture budget P=W/τ, the storm-track rainout modulation, and the
+sub-planet enhancement) before the multiplicative coastal/föhn factors and the
 final 11000 mm cap are applied.
 
-Two checks it answers (the "transport magnitude" lever):
-
-1. **Is the global land-mean precipitation inflated by the 11000 mm cap?**
-   Reports the number/area of land cells pinned at the cap and the land-mean
-   with those cells excluded.
-
-2. **Does the convergence cap (40 mm) underestimate ITCZ precipitation?**
-   Reports the convergence term's magnitude in the ITCZ band (equator ±5°) vs
-   the observed ~2000 mm/yr ITCZ rainfall, and the tropical zonal-mean precip
-   vs GPCP.
+The check it answers (the "transport magnitude" lever): **is the global
+land-mean precipitation inflated by the 11000 mm cap?**  Reports the number/area
+of land cells pinned at the cap and the land-mean with those cells excluded.
 
 Usage::
 
@@ -102,14 +95,12 @@ def main() -> None:
     for key, label in [
         ("moisture_budget", "moisture budget P=W/tau"),
         ("storm", "storm track"),
-        ("convection", "convection"),
-        ("tropical_boost", "tropical boost"),
         ("sub_planet", "sub-planet"),
     ]:
         if key in debug:
             _report_field(label, debug[key], is_land)
 
-    print("\n=== Check 1: does the 11000 mm cap inflate land-mean precip? ===\n")
+    print("\n=== Check: does the 11000 mm cap inflate land-mean precip? ===\n")
     land_final = final[is_land]
     at_cap = land_final >= 11000.0 - 1e-6
     n_cap = int(at_cap.sum())
@@ -120,25 +111,6 @@ def main() -> None:
     print(
         f"  capped land cells             : {n_cap}/{n_land} ({100 * n_cap / max(n_land, 1):.1f}%)"
     )
-
-    print("\n=== Check 2: convergence term vs observed ITCZ precip (~2000 mm/yr) ===\n")
-    conv = debug.get("convergence")
-    if conv is not None:
-        itcz_band = np.abs(lat_deg) < 5.0
-        itcz_land = itcz_band & is_land
-        print(f"  convergence ITCZ band (+-5 deg) mean : {np.mean(conv[itcz_band]):.1f} mm/yr")
-        print(f"  convergence ITCZ band max            : {np.max(conv[itcz_band]):.1f} mm/yr")
-        print(f"  convergence ITCZ land mean           : {np.mean(conv[itcz_land]):.1f} mm/yr")
-
-        t_itcz = np.array([c.temperature_C for c in mesh.cells])[itcz_land]
-        t_k = np.maximum(t_itcz + 273.15, 230.0)
-        e_sat = 611.2 * np.exp(17.67 * (t_k - 273.15) / (t_k - 29.65))
-        q_sat = 0.622 * e_sat / 101325.0
-        col_water = q_sat * 1.2 * 2500.0
-        print(f"  ITCZ land mean T                    : {np.mean(t_itcz):.1f} degC")
-        print(
-            f"  ITCZ column water W(T) mean         : {np.mean(col_water):.1f} mm (cap=40 binding?)"
-        )
 
     # Zonal precip in the tropics vs GPCP (informational)
     print("\n=== Tropical zonal precip vs GPCP (mm/yr, 5 deg bands) ===\n")

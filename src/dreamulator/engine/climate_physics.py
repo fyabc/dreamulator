@@ -702,6 +702,38 @@ def terrain_wind_blocking(
 # ---------------------------------------------------------------------------
 
 
+def saturation_specific_humidity(temperature_c: np.ndarray) -> np.ndarray:
+    """Saturation specific humidity q_sat (kg/kg) — Bolton (1980).
+
+    Clausius–Clapeyron saturation vapour pressure over liquid water, converted
+    to a specific-humidity mixing ratio at ~1000 hPa.  Shared by the cold-trap
+    saturation clamp (``column_water_saturation``) and the coastal
+    moisture-flux estimate.
+    """
+    t_k = np.maximum(np.asarray(temperature_c, dtype=np.float64) + 273.15, 180.0)
+    e_sat = 611.2 * np.exp(17.67 * (t_k - 273.15) / (t_k - 29.65))  # Pa
+    return 0.622 * e_sat / 101325.0
+
+
+def column_water_saturation(
+    temperature_c: np.ndarray,
+    *,
+    vapor_scale_height_m: float = 2100.0,
+    rho_air_kg_m3: float = 1.2,
+    rho_water_kg_m3: float = 1000.0,
+) -> np.ndarray:
+    """Saturated column water vapour W_sat (mm) at the given temperature.
+
+    ``W_sat = q_sat(T) · H_v · ρ_air / ρ_w`` with the water-vapour scale height
+    ``H_v ≈ 2.1 km``.  The cold-trap clamp caps the moisture budget's column
+    water at this value, so a cold air column cannot rain out more water than
+    it can hold (Clausius–Clapeyron saturation × column height).  Warm columns
+    have a large W_sat and are effectively unconstrained.
+    """
+    q_sat = saturation_specific_humidity(temperature_c)
+    return q_sat * vapor_scale_height_m * rho_air_kg_m3 / rho_water_kg_m3 * 1000.0
+
+
 def evaporation_rate(
     temperature_c: np.ndarray,
     is_ocean: np.ndarray,
