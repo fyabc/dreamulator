@@ -317,6 +317,37 @@ def simulate_climate(
     )
     t_mean_C = t_mean_C + (nearest_sst - t_mean_C) * _maritime
 
+    # Directional annual maritime advection (4.1-B annual): relax the annual-mean
+    # land temperature toward its *upwind* ocean's SST, decaying over the maritime
+    # air-mass e-folding length (the classical advection-mixing ω — Berg 1944).
+    # The prevailing westerlies carry the ocean's warmth inland, warming the
+    # mid-lat continents.  Gated to non-ice land so the polar ice sheets are not
+    # warmed toward the cold polar ocean.  Applied before the lapse rate.
+    if config.maritime_advection_scale_km > 0.0:
+        from dreamulator.map.ocean_circulation import east_north_basis as _enb_ann
+
+        _east_ann, _north_ann = _enb_ann(nodes_xyz)
+        _wind_ann = terrain_wind_blocking(
+            _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, None),
+            elevation_m,
+            config.wind_blocking_height_m,
+        )
+        _we_ann = np.einsum("ij,ij->i", _wind_ann, _east_ann)
+        _wn_ann = np.einsum("ij,ij->i", _wind_ann, _north_ann)
+        _wind_phys_ann = -_we_ann[:, None] * _east_ann + _wn_ann[:, None] * _north_ann
+        _dist_up_ann, _src_up_ann = _upwind_distance_to_coast(
+            mesh.cells, n, is_land, _wind_phys_ann, nodes_xyz, radius_km=config.radius_km
+        )
+        _valid_ann = is_land & (_src_up_ann >= 0)
+        _w_up_ann = np.where(
+            _valid_ann, np.exp(-_dist_up_ann / config.maritime_advection_scale_km), 0.0
+        )
+        # Ice gate: exclude the polar ice sheets (annual mean < −10 °C) — relaxing
+        # them toward the cold polar ocean would warm the ice surface.
+        _non_ice_ann = is_land & (t_mean_C > -10.0)
+        _t_src_ann = np.where(_valid_ann, t_mean_C[np.maximum(_src_up_ann, 0)], 0.0)
+        t_mean_C += _w_up_ann * (_t_src_ann - t_mean_C) * _non_ice_ann
+
     # Altitude correction (land only — ocean surface is at 0 m regardless of
     # depth).  The surface lapse rate is temperature-dependent (moist
     # adiabatic: warm air → latent heat release → shallower Γ) — tropical
