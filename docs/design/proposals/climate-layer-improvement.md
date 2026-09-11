@@ -69,6 +69,11 @@ SST）→ 季节（季节 EBM `monthly_temperature`）。
   有界 logistic。
 - **季节振幅**（North & Coakley 1979）：`T_amp = ΔQ_ω(1−α)/√(B_eff² + (ωC)²)`，
   `B_eff = B_rad + 6D`（显式经向热输送，季节与年平共用 D），季节冰反照率固定点迭代。
+- **距离季（轨道偏心率）**：`monthly_insolation` 每月乘 `orbital_distance_factor=(a/d)²`
+  （e=0.03 → 全球 ±3%），由 `resolve_orbital_elements` 沿父链取「绕恒星者」的 e（卫星自身
+  轨道 e 只驱动潮汐加热）。相位由 `resolve_perihelion_day`（ϖ=Ω+ω vs λ_pole）定：nacrea
+  ϖ=0/λ_pole=270° → 近日点在春分，与倾角季正交——**无半球增强/减弱**（那是近日点在至日才发生）。
+  季节振幅 ~1°C 是冻结天文（e=0.03 + 9° 倾角 + 100 天短年）的后果，非引擎 bug、非温室可修。
 
 ### 残余偏差（2026-09-11 逐格量化，`diagnose_climate_bias.py` 对 `climate_obs.json`）
 
@@ -222,6 +227,8 @@ Stommel 正压 gyre（`solve_ocean_gyre`）+ 半拉格朗日 SST 平流 + 上升
 - 沿海振幅（上海/雅典）→ 技术债 24 冬季季风。
 - 半封闭海季节振幅 → GCM 级细节（§4）。
 - 风场规则性 → 技术债 24 月度矢量场。
+- 卫星特有光照（Aegis 食 / Aegis 反射光·红外 / 复合倾角未自动推导）→ nacrea 专属二阶项，
+  登记不主动（现用常数 `sub_planet_warming_c` 近似向星面）。
 
 **实现顺序**（指向 today §〇-3 / roadmap）：§5 大标定轮 + 冷陷阱 → 技术债 16 →（后续）技术债
 24（季风/风场）、技术债 20④（植被掩雪）。
