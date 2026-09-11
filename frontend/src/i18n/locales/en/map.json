@@ -183,6 +183,7 @@
     "biomeShare": "Biome share",
     "soilShare": "Soil share",
     "koppenShare": "Köppen share",
+    "koppenCount": "Köppen classes",
     "cellTab": "Cell",
     "statsTab": "Stats",
     "displayMode": "Toggle display mode",

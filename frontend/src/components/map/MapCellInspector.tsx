@@ -955,7 +955,9 @@ function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetNa
     return <p className="text-xs text-gray-600 italic p-2">{t('inspector.loading')}</p>
   }
 
-  const landCells = [...stats.biome.values()].reduce((a, b) => a + b, 0)
+  const koppenCells = [...stats.koppen.values()].reduce((a, b) => a + b, 0)
+  const biomeCells = [...stats.biome.values()].reduce((a, b) => a + b, 0)
+  const soilCells = [...stats.soil.values()].reduce((a, b) => a + b, 0)
 
   return (
     <div className="space-y-3">
@@ -976,12 +978,16 @@ function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetNa
             <dt className="text-gray-500">{t('inspector.globalPrecip')}</dt>
             <dd className="font-mono">{Math.round(stats.precipMean)} mm/yr</dd>
           </div>
+          <div className="flex justify-between">
+            <dt className="text-gray-500">{t('inspector.koppenCount')}</dt>
+            <dd className="font-mono text-cyan-300">{stats.koppen.size}</dd>
+          </div>
           <div className="border-t border-space-border pt-1 mt-1" />
           <p className="text-[10px] text-gray-600">{t('inspector.koppenShare')}</p>
           {topN(stats.koppen, 5).map(([k, count]) => (
             <div key={k} className="flex justify-between">
               <dt className="text-gray-500">{t(KOPPEN_NAMES[k] ?? k)}</dt>
-              <dd className="font-mono text-cyan-300">{(count / landCells * 100).toFixed(1)}%</dd>
+              <dd className="font-mono text-cyan-300">{koppenCells ? `${(count / koppenCells * 100).toFixed(1)}%` : '—'}</dd>
             </div>
           ))}
         </dl>
@@ -1003,7 +1009,7 @@ function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetNa
           {topN(stats.biome, 5).map(([b, count]) => (
             <div key={b} className="flex justify-between">
               <dt className="text-gray-500">{t(BIOME_LABELS[b] ?? b)}</dt>
-              <dd className="font-mono text-green-300">{(count / landCells * 100).toFixed(1)}%</dd>
+              <dd className="font-mono text-green-300">{biomeCells ? `${(count / biomeCells * 100).toFixed(1)}%` : '—'}</dd>
             </div>
           ))}
           <div className="border-t border-space-border pt-1 mt-1" />
@@ -1011,7 +1017,7 @@ function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetNa
           {topN(stats.soil, 5).map(([s, count]) => (
             <div key={s} className="flex justify-between">
               <dt className="text-gray-500">{t(SOIL_LABELS[s] ?? s)}</dt>
-              <dd className="font-mono text-amber-300">{(count / landCells * 100).toFixed(1)}%</dd>
+              <dd className="font-mono text-amber-300">{soilCells ? `${(count / soilCells * 100).toFixed(1)}%` : '—'}</dd>
             </div>
           ))}
         </dl>

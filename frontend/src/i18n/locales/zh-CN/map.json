@@ -183,6 +183,7 @@
     "biomeShare": "群系占比",
     "soilShare": "土壤占比",
     "koppenShare": "Köppen 分类占比",
+    "koppenCount": "Köppen 分类数",
     "cellTab": "单元格",
     "statsTab": "统计",
     "displayMode": "切换显示模式",
