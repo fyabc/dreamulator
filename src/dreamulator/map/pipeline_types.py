@@ -464,13 +464,14 @@ class TerrainPipelineConfig:
     ebm_1d: bool = False  # True = solve the 1D EBM (else legacy sin² + diffusion)
     ebm_olr_b_wm2k: float = 2.0  # linear OLR coefficient B (W/m²/K)
     ebm_diffusion_wm2k: float = 0.35  # meridional diffusion D (W/m²/K), Earth ΔT ≈ 41 °C
-    # Land-only meridional transport (the atmospheric fraction).  The ocean
-    # carries ~30–40% of Earth's poleward heat transport, so land — with no
-    # ocean currents — sees only the atmospheric ~60%: D_land ≈ 0.6·D_total.
-    # A smaller D makes land follow the local insolation more closely: warmer
-    # subtropics (BWh stays hot, fixing BWh→BWk) and colder poles — the
-    # annual-mean continentality contrast that the 1D EBM's zonal mean washes out.
-    ebm_diffusion_land_wm2k: float = 0.2
+    # Land-only meridional transport (the atmospheric fraction).  The atmosphere
+    # carries ~75–80% of Earth's poleward heat transport (the ocean ~20–25%,
+    # Trenberth & Caron 2001), so land — with no ocean currents — sees only the
+    # atmospheric ~75%: D_land ≈ 0.75·D_total.  A smaller D makes land follow the
+    # local insolation more closely: warmer subtropics (BWh stays hot) and colder
+    # poles — the annual-mean continentality contrast that the 1D EBM's zonal mean
+    # washes out.
+    ebm_diffusion_land_wm2k: float = 0.28
     # Held-Hou subsidence warming (4.2): the Hadley cell's descending branch
     # adiabatically warms the subtropical surface, so the diffusive EBM — whose
     # meridional transport is purely down-gradient (diffuses heat poleward OUT

@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   中纬干 −460→−150；温度不变。nacrea 回归：陆地降水 1058→769（更接近地球 759）、
   温度零漂移。新增 `diagnose_climate_bias.py`（逐格偏差审计）/`diagnose_lapse_moisture.py`
   （递减率干湿维度可行性，已否证留档）。
+- **D_land 大陆度标定**：`ebm_diffusion_land_wm2k` 0.2→0.28（0.6×→0.8×D_total）。大气经向
+  输送占总量 ~75-80%（海洋 ~20-25%，Trenberth & Caron 2001），原 0.6× 低估大气占比、致中纬
+  陆地年平偏冷 −6~−11。修正后：东欧/西伯利亚 −7.5→−5.3、西欧 −6.0→−5.1、蒙古 −5.8→−4.6、
+  华南 +5.9→+4.7、Köppen Group R² 0.099→0.192（翻倍）；逐格 T RMSE 4.53→4.25。代价：南极
+  +0.9→+4.4（暖高纬陆地，§3.1 冰面温度）。nacrea 走 Held-Hou，不受影响。
 
 ### Added
 
