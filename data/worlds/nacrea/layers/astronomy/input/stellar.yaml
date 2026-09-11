@@ -54,8 +54,8 @@ orbits:
   # 非认证天体的 Ω/ω/M₀ 为散布值（此前全 0 = 交点共线/近点对齐/历元合排的默认值伪影）；
   # 规则卫星系共享父行星赤道交点（Boreal 三卫 Ω=11.5°、Glacis Shard Ω=20.3°，
   # 自转极方位未编码，约定极向随卫星交点）；ω 仅对 e≥0.02 天体散布（近圆轨道近点无定义）。
-  # 不动名单：共振链三行星 M₀（φ_L 相位，1 Myr 验证）、Aegis argp/M₀（近日点相位=纪元态，
-  # 0007 审查）、Aegis 系三卫星全要素（A4v 认证实现）、链内行星 i≈0（迁移共面化，物理理由）。
+  # 不动名单：共振链三行星 M₀（φ_L 相位，1 Myr 验证）、Aegis argp=90°（近日点对齐北夏至）、
+  # Aegis 系三卫星全要素（A4v 认证实现）、链内行星 i≈0（迁移共面化，物理理由）。
   # ---- 内行星（Aegis 迁移后残余碎片重组） ----
   - body_id: planet_ember
     parent_id: star_ignis
@@ -84,7 +84,7 @@ orbits:
     eccentricity: 0.03            # 距离季（受迫偏心率，GJ 876 共振链类比；用户终裁「0.03 够用」——e=0/0.03 A/B 验证信号确认）
     inclination_deg: 0.0
     longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
+    argument_of_periapsis_deg: 90.0  # 近日点对齐北夏至（ϖ=90°）：距离季与倾角季同相 → 北半球季节增强、南半球削弱
     mean_anomaly_epoch_deg: 0.0
     epoch_year: 0.0
 
