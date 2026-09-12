@@ -1737,6 +1737,26 @@ def _baroclinic_band(
     return centre, width
 
 
+def _to_physical_wind(wind: np.ndarray, east: np.ndarray) -> np.ndarray:
+    """Flip a wind field from the engine-internal mirror convention to physical.
+
+    ``hadley_cell_wind`` composes vectors on ``east = north × r̂``, which points
+    physical WEST; the physical convention (stored ``wind_east_m_s``, NCEP,
+    frontend arrows, ``_upwind_distance_to_coast``) is ``east = r̂ × north``.
+    Reflection across the north axis: ``w_phys = w − 2(w·ê)ê`` — the same
+    recipe as the 4.1-B ``_wind_phys`` flip.
+
+    Args:
+        wind: Wind vectors, shape (N, 3) or (M, N, 3).
+        east: Physical local east unit vectors (``east_north_basis``), (N, 3).
+
+    Returns:
+        Physical-convention wind, same shape as *wind*.
+    """
+    we = np.einsum("...ij,ij->...i", wind, east)
+    return np.asarray(wind - 2.0 * we[..., None] * east)
+
+
 def _compute_precipitation_monthly_budget(
     mesh: CVTMesh,
     wind: np.ndarray,
@@ -1798,6 +1818,22 @@ def _compute_precipitation_monthly_budget(
     lat_rad = np.radians(np.array([c.lat for c in mesh.cells], dtype=np.float64))
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
     lat_deg = np.degrees(lat_rad)
+
+    # ── Wind convention (tech debt 24, 2026-09-12 mirror-bug fix) ──────────
+    # `wind` / `wind_monthly` arrive in the engine-internal mirror convention
+    # (`hadley_cell_wind` composes on `east = north × r̂` = physical WEST).
+    # The moisture budget, orographic rain and the coast-asymmetry step below
+    # must advect along the *physical* surface wind (the convention of the
+    # stored `wind_east_m_s`, NCEP and the frontend arrows), so flip the east
+    # component once, here, at the entry of the only precipitation consumer.
+    # Other consumers handle the convention themselves and must NOT be touched
+    # here: Stommel (calibrated on the mirror input), storage/msgpack (flip at
+    # write), 4.1-B temperature advection (flip at use).
+    from dreamulator.map.ocean_circulation import east_north_basis as _enb_conv
+
+    _east_conv, _ = _enb_conv(nodes_xyz)
+    wind = _to_physical_wind(wind, _east_conv)
+    wind_monthly = _to_physical_wind(wind_monthly, _east_conv)
 
     # Directed edge table built once, shared by the 12 budget solves and the
     # orographic step.
@@ -1934,7 +1970,10 @@ def _compute_precipitation_monthly_budget(
         from dreamulator.map.ocean_circulation import east_north_basis as _enb2
 
         _east, _ = _enb2(nodes_xyz)
-        _uzonal = np.einsum("ij,ij->i", _zwind, _east)
+        # `_zwind` is fresh from the cell-circulation builder = mirror
+        # convention; flip so `is_westerly` below reads the physical zonal wind
+        # (pre-fix the windward/leeward coast assignment was inverted).
+        _uzonal = np.einsum("ij,ij->i", _to_physical_wind(_zwind, _east), _east)
 
         _rho_air = 1.2  # kg/m³
         _s_per_year = 365.25 * 86400.0
@@ -1969,17 +2008,10 @@ def _compute_precipitation_monthly_budget(
     # downwind as exp(−d/L) over the rain-shadow decay length.  One factor
     # applies to every month (the annual wind is steady).
     if is_land.any():
-        # The raw `wind` is in the hadley basis (east = north × r̂, physical
-        # *west*); flip its east component onto the east_north_basis convention
-        # before the upwind trace — the same flip as 4.1-B in simulate_climate.
-        from dreamulator.map.ocean_circulation import east_north_basis as _enb_f
-
-        _east_f, _north_f = _enb_f(nodes_xyz)
-        _we_f = np.einsum("ij,ij->i", wind, _east_f)
-        _wn_f = np.einsum("ij,ij->i", wind, _north_f)
-        _wind_phys = -_we_f[:, None] * _east_f + _wn_f[:, None] * _north_f
+        # `wind` is already physical (converted at the function entry — the
+        # former local east-flip here would now double-flip).
         _barrier, _since_barrier = _upwind_barrier(
-            mesh.cells, n, is_land, _wind_phys, nodes_xyz, elevation_m, radius_km=config.radius_km
+            mesh.cells, n, is_land, wind, nodes_xyz, elevation_m, radius_km=config.radius_km
         )
         _drop = np.where(
             is_land & (elevation_m >= 0.0),

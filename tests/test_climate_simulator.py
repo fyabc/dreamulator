@@ -396,3 +396,139 @@ class TestColdTrap:
 
         assert np.allclose(w_capped, w)
         assert np.allclose(p, w * k_rain_field)
+
+
+# ---------------------------------------------------------------------------
+# Wind convention: mirror → physical flip in the precipitation stage
+# (2026-09-12 mirror-bug fix; tech debt 24)
+# ---------------------------------------------------------------------------
+
+
+def _build_lat_band_mesh(lat_deg: float, n_cells: int = 24) -> CVTMesh:
+    """Single latitude band of cells around the globe (1-D ring adjacency)."""
+    import math
+
+    cells: list[VoronoiCell] = []
+    adjacency: dict[str, list[int]] = {}
+    lat_rad = math.radians(lat_deg)
+    for j in range(n_cells):
+        lon = j * 360.0 / n_cells - 180.0
+        lon_rad = math.radians(lon)
+        neighbors = [(j + 1) % n_cells, (j - 1) % n_cells]
+        cells.append(
+            VoronoiCell(
+                id=j,
+                lon=lon,
+                lat=lat_deg,
+                x=math.cos(lat_rad) * math.cos(lon_rad),
+                y=math.sin(lat_rad),
+                z=math.cos(lat_rad) * math.sin(lon_rad),
+                area_km2=510_000_000 / n_cells,
+                elevation=-3000.0,
+                crust_type="oceanic",
+                neighbors=neighbors,
+                plate_id="plate_0",
+            )
+        )
+        adjacency[str(j)] = neighbors
+    return CVTMesh(seed=42, num_cells=n_cells, cells=cells, adjacency=adjacency)
+
+
+class TestWindConventionPrecipitation:
+    """Sign anchors for the mirror→physical wind flip in the precipitation stage.
+
+    ``hadley_cell_wind`` composes on ``east = north × r̂`` (physical WEST); the
+    precipitation stage must advect along the *physical* wind (the convention of
+    the stored ``wind_east_m_s`` / NCEP / frontend arrows).  These tests fail if
+    the flip regresses — the 2026-09-12 mirror bug advected moisture E-W
+    reversed (Earth's top-3 per-cell P biases + nacrea east-coast deserts).
+    """
+
+    def test_to_physical_wind_flips_east_keeps_north(self) -> None:
+        from dreamulator.map.climate_simulator import _to_physical_wind
+        from dreamulator.map.ocean_circulation import east_north_basis
+
+        mesh = _build_lat_band_mesh(45.0, 8)
+        nodes = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+        east, north = east_north_basis(nodes)
+        # Internal mirror encoding of a physical (5 m/s east, 2 m/s north) wind.
+        internal = 5.0 * (-east) + 2.0 * north
+        phys = _to_physical_wind(internal, east)
+        np.testing.assert_allclose(np.einsum("ij,ij->i", phys, east), 5.0, atol=1e-12)
+        np.testing.assert_allclose(np.einsum("ij,ij->i", phys, north), 2.0, atol=1e-12)
+        # (M, N, 3) monthly stacking must broadcast.
+        phys_m = _to_physical_wind(np.stack([internal] * 3), east)
+        np.testing.assert_allclose(phys_m, np.stack([phys] * 3), atol=1e-12)
+
+    def test_solver_advects_moisture_downwind(self) -> None:
+        """Solver contract: a physical eastward wind carries W eastward."""
+        from dreamulator.map.climate_simulator import _solve_moisture_budget
+        from dreamulator.map.ocean_circulation import east_north_basis
+
+        mesh = _build_lat_band_mesh(0.0, 24)
+        n = mesh.num_cells
+        nodes = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+        east, _ = east_north_basis(nodes)
+        # Ocean (the only moisture source) at lon ∈ [-75, -15]; land elsewhere
+        # with zero ET → any W there is advected or diffused.
+        is_ocean = np.array([-75.0 <= c.lon <= -15.0 for c in mesh.cells])
+        wind = east * 5.0  # physical eastward (westerly)
+        w, _p = _solve_moisture_budget(
+            mesh,
+            wind,
+            is_ocean,
+            np.full(n, 20.0),
+            nodes,
+            TerrainPipelineConfig(),
+            land_evapotranspiration=np.zeros(n),
+        )
+        lons = np.array([c.lon for c in mesh.cells])
+        east_plume = w[(lons >= 0.0) & (lons <= 45.0)].mean()  # downwind of source
+        west_side = w[(lons >= -165.0) & (lons <= -90.0)].mean()  # upwind, no source
+        assert east_plume > 2.0 * max(west_side, 1e-9), (east_plume, west_side)
+
+    def test_west_coast_wetter_than_east_coast_under_westerlies(self) -> None:
+        """Stage-level Patagonia anchor, fed exactly what the pipeline feeds.
+
+        A mid-latitude continent (lon 0–75°) under the Ferrel-cell westerlies:
+        the west coast is windward (long ocean fetch) and must be wetter than
+        the east coast (downwind of the whole continent).  Pre-fix, the mirrored
+        advection + inverted coast-asymmetry step made the EAST coast wetter.
+        """
+        from dreamulator.map.climate_simulator import (
+            _compute_precipitation_monthly_budget,
+            _seasonal_mean_cell_wind,
+        )
+
+        mesh = _build_lat_band_mesh(45.0, 24)
+        n = mesh.num_cells
+        nodes = np.array([[c.x, c.y, c.z] for c in mesh.cells])
+        lat_rad = np.radians(np.array([c.lat for c in mesh.cells]))
+        is_land = np.array([0.0 <= c.lon <= 75.0 for c in mesh.cells])
+        is_ocean = ~is_land
+        elevation_m = np.where(is_land, 300.0, -3000.0)
+        config = TerrainPipelineConfig()
+        # Exactly what simulate_climate passes: the internal mirror-convention
+        # annual background (Ferrel westerlies at 45°N), no monsoon anomaly.
+        wind = _seasonal_mean_cell_wind(lat_rad, nodes, config, None)
+        wind_monthly = np.stack([wind] * 12)
+        t = np.full(n, 15.0)
+        p_ann, _p_m = _compute_precipitation_monthly_budget(
+            mesh,
+            wind,
+            wind_monthly,
+            is_land,
+            is_ocean,
+            elevation_m,
+            t,
+            np.stack([t] * 12, axis=1),
+            nodes,
+            config,
+        )
+        lons = np.array([c.lon for c in mesh.cells])
+        west_coast = p_ann[(lons >= -1.0) & (lons <= 16.0)].mean()
+        east_coast = p_ann[(lons >= 59.0) & (lons <= 76.0)].mean()
+        assert west_coast > 1.2 * east_coast, (
+            f"west coast {west_coast:.0f} mm vs east coast {east_coast:.0f} mm — "
+            "moisture advection likely mirrored"
+        )

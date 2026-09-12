@@ -66,6 +66,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **风场镜像约定：水分收支/地形雨/海岸不对称吃镜像风**（技术债 24 实锤，重大）：
+  `hadley_cell_wind` 在镜像东基（`east = north × r̂` = 物理西）上合成风矢量，
+  存储/4.1-B/前端已翻转补正，但 `_compute_precipitation_monthly_budget` 的水分
+  平流（年平+逐月）、地形雨 `_wind_unit_m`、西岸/东岸不对称 `_uzonal` 三处直接
+  消费未翻转的镜像风 → **水分平流与迎风岸判定东西向整体反转**。证据：地球逐格 P
+  三大偏差同根因（索马里 +852/孟加拉 −1975/阿拉斯加 −587；巴塔哥尼亚迎风:背风
+  应 ~12:1 实测 1.05:1）、nacrea 东岸信风迎风反而沙漠（用户 #48744「暖沿海 BWh」
+  发现）。修复 = `_to_physical_wind` 在唯一降水消费函数入口翻转（最小手术，
+  不动源头/Stommel/存储链）+ Föhn 步去除重复翻转 + 3 个符号锚定测试（合成场
+  平流方向 / 求解器几何契约 / 阶段级巴塔哥尼亚锚，红→绿）。earth：Köppen
+  Group R² 0.272→0.347、逐格 P R² 0.272→0.292、西西伯利亚 654→474（观测 ~450）、
+  温度/存储风场逐位不变、验证 4 项 PASS；nacrea：东岸 B 47%→35%/C 16%→26%、
+  BWk −1557→BSk +1603、#48744 BWh→Aw，基线重生成（回归 11 过）。镜像对纬向
+  指标不可见（08-29「季风镜像误报」根因）；季风模块 f→−f 次级泥潭与根部约定
+  统一归技术债 24。
+- **缓存命中构建丢失逐格板块归属**：plates/tectonics 阶段缓存命中只恢复
+  `(plates, cell_plate_map)`，`cell.plate_id` 的就地赋值副作用不重放（mesh.pkl
+  存于板块阶段之前）→ 导出的 cvt_mesh.json 20 万格 plate_id 全空、前端板块图层
+  空白（plates.json 完好）。修复 = tectonics 后统一重放 map（幂等）+ 双跑缓存
+  回归测试；nacrea plate_id 0→200000/200000、气候零漂移。
 - **自转轴方位符号**：顺行轨道法线 n=(sin i sinΩ, −sin i cosΩ, cos i) 投影到
   Ω−90°（非 Ω+90°），nacrea 的 `spin_axis_ecliptic_longitude_deg` 90°→270°。
 - **前端偏差图层面板**：点击温度/降水偏差图层时单元格信息的气候组不再收起
