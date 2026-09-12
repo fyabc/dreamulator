@@ -18,7 +18,12 @@
 - `climate_diff.py` — 两次构建的差异对比（全局摘要 + 纬度带平均 + Top-N 变化细胞）。
 - `convert_koppen_map.py` — Beck Köppen GeoTIFF → 网格观测参考。
 - `detect_ocean_bottlenecks.py` — 海盆连通瓶颈探测（洋流求解上下文）。
-- `diagnose_climate_bias.py` — 逐格 T/P 偏差审计（对 `climate_obs.json`，全局/纬向带/区域/极端格，秒级）。
+- `generate_climate_obs.py` — committed 逐格 obs 生成器：NCEP T/SLP/风 + GPCP P → `climate_obs.json`
+  （年平、mesh-bound；重建后用本脚本重生成，替代旧无生成器的 ad-hoc 版）。
+- `diagnose_climate_bias.py` — 逐格 T/P/风/Köppen 偏差审计（对 `climate_obs.json` + `koppen_obs.json`，
+  全局/纬向带/区域/极端格 + Köppen agreement，秒级）。
+- `diagnose_monsoon_dp_shape.py` — 季风 ΔP vs NCEP SLP 框对标（A 陆地-only/D 陆−海对比双口径 + g(W)/
+  aridity-keep/`_dt_subsidence` 证伪，Stage C；读产物，秒级）。
 - `diagnose_lapse_moisture.py` — 递减率干湿维度可行性实验（读产物手算定点，不动引擎）。
 
 ## earth/ — 真实地球数据导入与验证参考（9 个）

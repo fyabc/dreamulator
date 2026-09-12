@@ -21,9 +21,15 @@
 | 温度纬向 | RMSE 2.05 °C、R² 0.992、bias +1.1 °C |
 | 降水纬向 | RMSE 335 mm/yr、R² 0.712、bias −219 mm/yr |
 | Köppen 分布匹配 / Group R² | 66.4% / 0.102（Group R² 欠账 = Dfc→ET 揭蔽，§6） |
-| 温度逐格 | RMSE 4.34 °C、bias −0.53 °C、R² 0.941 |
-| 降水逐格 | RMSE 559 mm、bias −123 mm、R² 0.359 |
+| 温度逐格 | RMSE 4.36 °C、bias −0.55 °C、R² 0.941 |
+| 降水逐格 | RMSE 559 mm、bias −117 mm、R² 0.354 |
 | 混淆矩阵 | accuracy 31.9%、5 群 kappa 0.538、30 类 kappa 0.273 |
+| 风场逐格（新） | \|U\| RMSE 2.61、bias +0.33 m/s、**R² −0.81**（量级对、逐格零 skill = 缺定常涡旋 → ④） |
+
+> **逐格 obs 口径（2026-09-13）**：`climate_obs.json` 经 `generate_climate_obs.py` 重生成
+> 为全覆盖 200000/200000 格（旧 ad-hoc 197871、缺极地 763 陆格 + 仅 T/P）；**模型场未变
+> （无重建）**，逐格指标微移（P R² 0.359→0.354、T RMSE 4.34→4.36）= 纳入南极的口径改进，
+> 非回归。风场/Köppen 逐格 delta 为本次新增（`diagnose_climate_bias` 扩场）。
 
 **各要素残余偏差 TOP**（逐格 `diagnose_climate_bias`，2026-09-13 门控落地后）：
 
@@ -266,6 +272,15 @@ wn·north` 同款配方），**不动源头合成/Stommel/存储/前端链**—�
 转正（Aug/Jul）；印度次大陆供水回落（Delhi 7 月 W，热低压 −3.9 hPa 太弱 → §2 Stage B
 ΔP 热源收回）。表示层逐位不变实测：存储风/洋流/SST/ΔP/nacrea 温度全 bitwise ✓。
 
+**逐格风场诊断（delta 后端，2026-09-13）**：`diagnose_climate_bias` 扩到风速逐格对标
+（模型 `wind_east/north_m_s` vs NCEP `uwnd/vwnd`，物理东/北同约定、直接可比）。结果：
+全球陆地 |U| bias 仅 +0.33 m/s（模型 2.45 vs obs 2.11，量级对）但 **R² = −0.81**——
+逐格空间结构零 skill，= 纯三圈纬向风 + 季风异常、无定常涡旋的预期症状（与 §2 撒哈拉
+ΔP 过深同根：缺副热带反气旋/静止波，roadmap ④）。纬向 Δ|U|：南半球高纬过弱（−4~−7，
+**南极 katabatic 风缺失**——逐格 |Δ|U|| 最大 = 南极高原 model 1.0 vs obs 13.4 m/s）、
+热带/副热带过强（+1~+2.6）。风场逐格 skill 的恢复绑定 roadmap ④（静止波/SLP 逐格），
+非本轮振幅/路由可收。
+
 ### 方向性大陆度（东西不对称的落点）
 
 - **已否证**：❌ 地转风 → 风场不对称（打崩降水 R² 0.688→0.254；副热带高压是 GCM 涌现特征，
@@ -416,7 +431,16 @@ Stommel 正压 gyre（`solve_ocean_gyre`）+ 半拉格朗日 SST 平流 + 上升
 **诊断工具**（`scripts/climate/`）：`validate_climate`（纬向 T/P + Köppen）、
 `station_diagnostics`（26 基准站逐月 T/P/风向）、`diagnose_koppen_confusion` / `_spatial`、
 `diagnose_latitudinal_profile`（纬向 T/P 海陆拆分）、`diagnose_precip_budget`（输送/预算分解）、
-`diagnose_pressure_anomaly`、`diagnose_monsoon_regional`、`climate_diff`（A/B 对比）。
+`diagnose_monsoon_regional`、`diagnose_monsoon_dp_shape`（季风 ΔP vs NCEP SLP 框对标 +
+g(W)/keep/_dt_subsidence 证伪，Stage C）、`climate_diff`（A/B 对比）。
+**逐格 obs 对齐（delta 图层后端，roadmap line156 提级）**：`generate_climate_obs`
+（committed 生成器——NCEP T/SLP/风 + GPCP P 逐格采样进 `climate_obs.json`，mesh-bound
+记 seed+mesh_path，替代旧无生成器的 ad-hoc 版）+ `diagnose_climate_bias`（逐格 model−obs
+delta 排序：T/P/风/Köppen 的 global+zonal+region+top 离群）。`diagnose_pressure_anomaly`
+（旧 7-②）= 镜像时代 `we=-we` 残留 + 已废年平地转风方法，被 `diagnose_monsoon_dp_shape`
+取代，待清理。**月份口径陷阱**：模型 month 0 = 三月（春分），NCEP/obs month 0 = 一月——
+逐月对标须 `(model_m + 2) % 12` 映射，否则读肩季（pre-flight 踩坑，见 §2 已否证）；
+**年平口径天然免疫**（mean/sum 与月序无关），故 delta 后端选年平先行。
 
 ---
 

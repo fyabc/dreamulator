@@ -121,6 +121,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   NCEP SLP 框对标（A 陆地-only / D 陆−海对比双口径 + 气候态 sanity）+ g(W)/aridity-keep/
   `_dt_subsidence` 三候选区域重加权的离线证伪；纯读归档产物（`climate_monthly.msgpack`
   + `cvt_mesh.json`），不重建。docstring 记录 pre-flight 月份索引 bug 的复现与修正。
+- **`scripts/climate/generate_climate_obs.py`**（delta 图层后端，用户裁决提级、后端先行）：
+  committed 逐格 obs 生成器——NCEP T/SLP/风(u,v) + GPCP P 采样到 mesh → `climate_obs.json`
+  （年平口径=月序免疫，mesh-bound 记 seed+mesh_path，复用 `import_earth_climate` 双线性
+  机制）。替代旧无生成器、重建即腐、仅 T/P 的 ad-hoc 版（扩为 5 场 + provenance 元数据，
+  200000/200000 格）。验证：id==position、T 与旧版逐格一致（≤0.05°C=rounding）、P 用
+  canonical `_DAYS_PER_MONTH`（Σ=365）、南极格 P=66 匹配 GPCP 直采、land/ocean 均值合
+  气候态（陆 P 790/洋 P 1059/陆 T 9.2）。
+- **`diagnose_climate_bias.py` 扩到 T/P/风/Köppen 逐场排序**（delta 图层后端）：原仅 T/P；
+  加风（模型 `wind_east/north_m_s` vs NCEP `uwnd/vwnd`，物理东/北同约定直接可比，免符号
+  映射）+ Köppen（agreement + top model→obs 错配对 + zonal agreement）+ 各场 top-|Δ| 离群。
+  读 `climate_obs.json`（5 场）+ `koppen_obs.json`，向后兼容旧 2 场 obs（缺场 NaN 填、风
+  自动跳过）。**新诊断**：风 |U| bias 仅 +0.33 m/s 但 **R²=−0.81**（量级对、逐格空间
+  结构零 skill = 缺定常涡旋/副热带反气旋，→ roadmap ④）；南极 katabatic 风缺失（逐格
+  |Δ|U|| 最大 = 南极高原 model 1.0 vs obs 13.4 m/s）。T/P/Köppen 复现已知残差（T R²
+  0.941、P R² 0.354、Köppen agree 30.6%、恒河 −868/华南 −1236/索马里 +952）。
 - **卫星动力学派生量进 catalog**（#13 引擎派生量集成）：`satellite_dynamics.py`
   纯函数接入 `build_system_catalog`——逐天体 `hill_radius_km`、卫星
   `a_rh_ratio`/`prograde`/相邻互希尔间距、`synchronous_orbit_radius_km`/
