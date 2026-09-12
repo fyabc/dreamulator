@@ -1086,6 +1086,7 @@ def koppen_classify(
     p_wet_winter_mm: np.ndarray | None = None,
     p_dry_winter_mm: np.ndarray | None = None,
     p_wet_summer_mm: np.ndarray | None = None,
+    t_months_ge10: np.ndarray | None = None,
 ) -> list[str]:
     """Köppen climate classification for each cell.
 
@@ -1126,6 +1127,14 @@ def koppen_classify(
         p_wet_winter_mm: Wettest cold-half month (mm), shape (N,).
         p_dry_winter_mm: Driest cold-half month (mm), shape (N,).
         p_wet_summer_mm: Wettest warm-half month (mm), shape (N,).
+        t_months_ge10: Count of months with mean temperature ≥ 10 °C, shape
+            (N,) — the Kottek et al. (2006) criterion for the b/c third
+            letter (b = ≥ 4 such months, c = 1–3).  Optional; without it the
+            third letter falls back to warmest-month thresholds, under which
+            'c' is structurally unreachable (the E-group gate has already
+            caught t_hot < 10).  D-group 'd' (coldest month < −38 °C) also
+            requires the monthly count to be meaningful and is skipped
+            without it.
 
     Returns:
         List of Köppen codes (e.g. 'Cfa', 'BWh', 'ET', 'Am').  Ocean → 'Ocean'.
@@ -1150,6 +1159,13 @@ def koppen_classify(
         dry_summer_c = np.asarray((p_wet_mm > 3.0 * p_dry_mm) & (p_dry_mm < 40.0))
         dry_summer_d = dry_summer_c
         dry_winter = np.asarray((p_dry_mm < 30.0) & (p_wet_mm < 10.0 * p_dry_mm))
+
+    # Warm-month count for the b/c third letter (Kottek et al. 2006: b = ≥ 4
+    # months at ≥ 10 °C, c = 1–3).  The former `elif t_hot > 10: b else: c`
+    # made 'c' structurally unreachable (the E-group gate above has already
+    # caught t_hot < 10), so observed Dfc/Dwc/Cfc cells (≈ 7300 on Earth)
+    # could never be produced.
+    warm4_b = np.asarray(t_months_ge10) >= 4 if t_months_ge10 is not None else None
 
     for i in range(n):
         if not is_land[i]:
@@ -1204,59 +1220,51 @@ def koppen_classify(
                 classes.append("Aw")  # Tropical savanna
             continue
 
+        # Third-letter seasonality (s/w/f), shared by C and D.
         # Group C: Temperate
         if tc > -3.0:
             if dry_summer_c[i]:
-                # Dry summer (Mediterranean)
-                if th > 22.0:
-                    classes.append("Csa")
-                elif th > 10.0 and tc > 0.0:
-                    classes.append("Csb")
-                else:
-                    classes.append("Csc")
+                s = "s"  # dry summer (Mediterranean)
             elif dry_winter[i]:
-                # Dry winter
-                if th > 22.0:
-                    classes.append("Cwa")
-                elif th > 10.0:
-                    classes.append("Cwb")
-                else:
-                    classes.append("Cwc")
+                s = "w"  # dry winter
             else:
-                # Fully humid
-                if th > 22.0:
-                    classes.append("Cfa")
-                elif th > 10.0:
-                    classes.append("Cfb")
-                else:
-                    classes.append("Cfc")
+                s = "f"  # fully humid
+            # Temperature letter (Kottek et al. 2006): a = warmest > 22 °C;
+            # b = ≥ 4 months at ≥ 10 °C; c = 1–3 such months.  (The former
+            # Csb extra `tc > 0` condition is dropped — non-standard, and 'c'
+            # is now reachable by the proper month-count criterion.)
+            if th > 22.0:
+                t3 = "a"
+            elif warm4_b is None:
+                t3 = "b" if th > 10.0 else "c"  # legacy fallback
+            elif warm4_b[i]:
+                t3 = "b"
+            else:
+                t3 = "c"
+            classes.append(f"C{s}{t3}")
             continue
 
-        # Group D: Continental
+        # Group D: Continental (tc ≤ −3, th ≥ 10 — the E gate caught th < 10)
         if dry_summer_d[i]:
-            # Dry summer
-            if th > 22.0:
-                classes.append("Dsa")
-            elif th > 10.0:
-                classes.append("Dsb")
-            else:
-                classes.append("Dsc")
+            s = "s"
         elif dry_winter[i]:
-            # Dry winter
-            if th > 22.0:
-                classes.append("Dwa")
-            elif th > 10.0:
-                classes.append("Dwb")
-            else:
-                classes.append("Dwc")
+            s = "w"
         else:
-            # Fully humid
-            if th > 22.0:
-                classes.append("Dfa")
-            elif th > 10.0:
-                classes.append("Dfb")
-            else:
-                classes.append("Dfc")
+            s = "f"
+        # 'd' (coldest month < −38 °C, e.g. Verkhoyansk) takes precedence —
+        # it replaces the warm-summer letter entirely (Kottek et al. 2006;
+        # requires monthly data, skipped in the legacy fallback).
+        if warm4_b is not None and tc < -38.0:
+            t3 = "d"
+        elif th > 22.0:
+            t3 = "a"
+        elif warm4_b is None:
+            t3 = "b" if th > 10.0 else "c"  # legacy fallback
+        elif warm4_b[i]:
+            t3 = "b"
+        else:
+            t3 = "c"
+        classes.append(f"D{s}{t3}")
 
     return classes
 

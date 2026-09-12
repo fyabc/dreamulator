@@ -13,29 +13,30 @@
   },
   "precipitation": {
     "global_mean_mm": 824.8,
-    "land_mean_mm": 794.6
+    "land_mean_mm": 794.8
   },
   "koppen": {
     "class_counts": {
-      "Af": 22395,
+      "Af": 20515,
       "Am": 5,
-      "Aw": 3688,
-      "BSh": 2313,
-      "BSk": 5641,
-      "BWh": 219,
-      "BWk": 4896,
-      "Cfb": 3689,
-      "EF": 7990,
-      "ET": 7434
+      "Aw": 2796,
+      "BSh": 2301,
+      "BSk": 5201,
+      "BWh": 217,
+      "BWk": 4406,
+      "Cfb": 5603,
+      "Cfc": 24,
+      "EF": 9350,
+      "ET": 7852
     },
     "group_distribution": {
-      "A": 0.448,
-      "B": 0.224,
-      "C": 0.063,
+      "A": 0.4,
+      "B": 0.208,
+      "C": 0.097,
       "D": 0.0,
-      "E": 0.265
+      "E": 0.295
     },
-    "n_classes": 10,
+    "n_classes": 11,
     "n_land_cells": 58270
   },
   "land_fraction": 0.2913

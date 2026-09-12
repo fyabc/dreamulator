@@ -467,6 +467,39 @@ def test_annual_wind_is_vector_mean_of_monthly() -> None:
     np.testing.assert_allclose(wn_ann, wn_m.mean(axis=1), atol=2e-4)
 
 
+def test_annual_temperature_is_mean_of_monthly() -> None:
+    """B0c data contract: ⟨t_monthly⟩ ≡ temperature_C, and t_hot/t_cold are
+    the monthly extremes.
+
+    The seasonal EBM alone has no elevation dimension — before the
+    re-centring, highland cells' monthly series sat ~19 °C above the
+    lapse-corrected annual field (Andes 4 km), poisoning Köppen via t_hot.
+    """
+    from dreamulator.map.climate_simulator import simulate_climate
+
+    mesh = _build_lat_band_mesh(45.0, 24)
+    highland = np.zeros(len(mesh.cells), dtype=bool)
+    for j, c in enumerate(mesh.cells):
+        if j % 3 == 0:
+            c.elevation = 2500.0  # highland: exercises the lapse vs EBM gap
+            c.crust_type = "continental"
+            c.water_class = "land"
+            highland[j] = True
+        else:
+            c.water_class = "ocean"
+    simulate_climate(mesh, TerrainPipelineConfig())
+
+    t_m = np.asarray(mesh._t_monthly_c, dtype=np.float64)  # (N, 12) float32
+    t_ann = np.array([c.temperature_C for c in mesh.cells])
+    t_hot = np.array([c.temperature_hottest_month_C for c in mesh.cells])
+    t_cold = np.array([c.temperature_coldest_month_C for c in mesh.cells])
+    np.testing.assert_allclose(t_ann, t_m.mean(axis=1), atol=1e-3)
+    np.testing.assert_allclose(t_hot, t_m.max(axis=1), atol=1e-3)
+    np.testing.assert_allclose(t_cold, t_m.min(axis=1), atol=1e-3)
+    # Highland cells actually carry the lapse-corrected (much colder) level.
+    assert t_ann[highland].mean() < t_ann[~highland].mean() - 8.0
+
+
 class TestWindConventionPrecipitation:
     """Sign anchors for the physical wind convention in the precipitation stage.
 

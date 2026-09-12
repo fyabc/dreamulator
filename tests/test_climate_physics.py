@@ -573,6 +573,50 @@ class TestTemperaturePipeline:
 # ---------------------------------------------------------------------------
 
 
+class TestKoppenThirdLetterMonths:
+    """B0d: Kottek-2006 b/c/d third letter by ≥10 °C month count.
+
+    The former `elif t_hot > 10: b else: c` made 'c' structurally
+    unreachable (the E gate catches t_hot < 10 first) — observed Dfc/Dwc
+    (≈ 7300 Earth cells) could never be produced.
+    """
+
+    def _call(self, tc: float, th: float, ta: float, pa: float, n10=None) -> str:
+        one = lambda x: np.array([x], dtype=float)  # noqa: E731
+        kw: dict = {}
+        if n10 is not None:
+            kw["t_months_ge10"] = np.array([n10])
+        return koppen_classify(
+            t_mean_c=one(ta),
+            t_cold_c=one(tc),
+            t_hot_c=one(th),
+            p_annual_mm=one(pa),
+            p_dry_mm=one(pa / 12.0),
+            p_wet_mm=one(pa / 12.0),
+            is_land=np.array([True]),
+            **kw,
+        )[0]
+
+    def test_dfc_reachable_by_month_count(self) -> None:
+        # East-Siberian type: coldest −20, warmest +14 (> 10 → not E), 2 warm months
+        assert self._call(-20.0, 14.0, -5.0, 400.0, n10=2) == "Dfc"
+
+    def test_dfd_extreme_winter_takes_precedence(self) -> None:
+        # Verkhoyansk type: coldest < −38 °C → 'd' regardless of warm months
+        assert self._call(-45.0, 20.0, -15.0, 400.0, n10=3) == "Dfd"
+
+    def test_dfb_four_warm_months(self) -> None:
+        assert self._call(-15.0, 18.0, 0.0, 600.0, n10=5) == "Dfb"
+
+    def test_cfc_subpolar_oceanic(self) -> None:
+        # Iceland type: coldest +1, warmest +11, 2 warm months
+        assert self._call(1.0, 11.0, 5.0, 800.0, n10=2) == "Cfc"
+
+    def test_legacy_fallback_without_month_count(self) -> None:
+        # No monthly data → legacy warmest-month thresholds, 'c' unreachable
+        assert self._call(-20.0, 14.0, -5.0, 400.0) == "Dfb"
+
+
 class TestSubsidenceAridityGate:
     """Aridity-gated release of the Held-Hou subsidence warming.
 

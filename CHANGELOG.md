@@ -58,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   obs ~1700，门控按引擎气候正确保留增温；修 P 后自动释放）；发现热沙漠海岸系统性过湿
   （波斯湾 475 vs 175、撒哈拉西洋岸 391 vs 76、红海 454 vs 22）= 下沉干燥缺参数化，登记 §5。
   知识库同步 energy_balance.md §4.6（Hamon 1961 / UNEP 1992 / Kottek 2006）。
+- **风场符号约定根部统一（技术债 24，季风轮 Stage A）**：`hadley_cell_wind`/季风
+  `_tangent_basis` 改物理东基（`east = r̂ × north`）合成，6 处补正翻转退役，Stommel 链
+  入口喂 `wind_mirror`（校准不动）；季风异常动力学随之物理修正（旧镜像基 ≡ f→−f）——
+  东亚 7 月风向全转正（上海 SE/广州 SW/北京 S）、华南华北最湿月转夏；表示层逐位不变。
+- **风场数据契约（季风轮 B0a，用户裁决）**：月度风为主场，年平风 = 12 月**矢量平均**
+  导出量（观测产品同定义）——恒等式由架构保证；海岸不对称 Step 6.6 并入单一数据源；
+  `pressure_anomaly_monthly`「减年平」的过时依据（地转风已删）改写为 B0b 开放决策。
 
 ### Added
 
@@ -81,6 +88,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **月度温度场缺海拔递减（季风轮 B0c，双份数据审计发现）**：季节 EBM 解无海拔维度，
+  高地月温停在「海平面等效纬度温度」（安第斯 4km ⟨t_m⟩−t_mean 达 +19.2°C、|Δ|>2 有
+  17480 格）→ t_hot/t_cold 污染 Köppen（>4.5km 686 格 E 群仅 9%、判 BSk/Dfb）、月度
+  蒸发虚高、前端年平/月度图层矛盾。修为**重定心契约**：T_m ← t_mean + (T_m − ⟨T_m⟩)
+  （形状/振幅取季节 EBM、水平取 Stage 1 校准年平场），Stage 1 末 + 存储/Köppen 前
+  双执行点，恒等式由构造保证（湖冰 0°C 钳物理豁免 224 格）。**南极陆地 P 663→145mm
+  = 观测精确归位**（冰盖虚蒸发根因，冷陷阱钳退居护栏）；accuracy 26.4→30.0%、
+  EF/ET recall ↑、BWh precision 0.38→0.45。揭蔽登记：Dfc→ET 2187 = 中纬冷偏族经契约
+  诚实传导（雪冰反馈/E1 路径收回）；高地季节振幅过大（33K vs ~20K）新登记。
+- **Köppen 三字母 c/d 亚型结构性死代码（季风轮 B0d）**：旧 `elif t_hot>10: b else: c`
+  的 c 分支被 E 群门截死、d（最冷月 <−38°C）缺失——观测 Dfc 6074/Dwc 1175/Csc 37
+  格引擎永远产不出（Group R² 结构性拖累）。修为 Kottek 2006 月数判据（b = ≥4 月
+  ≥10°C、c = 1-3 月、d 优先；`t_months_ge10` 参数，无月度回退旧行为）。Dfc 0→2061
+  （precision 0.50）、Dwc recall 0.52、accuracy →32.2%、30 类 kappa 0.215→0.275；
+  知识库 koppen_classification.md 对应表同步（知识本就写对，是实现违背后知识）。
 - **风场镜像约定：水分收支/地形雨/海岸不对称吃镜像风**（技术债 24 实锤，重大）：
   `hadley_cell_wind` 在镜像东基（`east = north × r̂` = 物理西）上合成风矢量，
   存储/4.1-B/前端已翻转补正，但 `_compute_precipitation_monthly_budget` 的水分

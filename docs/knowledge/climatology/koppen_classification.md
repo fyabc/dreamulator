@@ -95,7 +95,10 @@ BW/BS 分界：P < 10·T → 沙漠（W），否则草原（S）；h/k 由 T_ann
 | 知识 | 引擎 | 状态 |
 |------|------|------|
 | 五主群 + 亚型阈值 | `climate_physics.py:koppen_classify()` | ✅ |
-| 月度极值来源 | `climate_seasonality.py:compute_seasonal_climate()` | ✅（3A.2） |
+| 三字母 b/c 月数判据（≥4 / 1-3 月 ≥10°C） | `koppen_classify(t_months_ge10=…)`，由契约一致的 `t_monthly`（B0c 重定心）计数 | ✅ |
+| 三字母 d（最冷月 < −38°C，优先于 a/b/c） | 同上（需月度数据；无月度时回退最热月阈值、c/d 不可达） | ✅ |
+| B 群干旱阈值（20·T+offset） | `dryness_offset_mm` / `dryness_threshold_mm`（与 4.2-① 下沉增温门控共享单一来源） | ✅ |
+| 月度极值来源 | `climate_seasonality.py:compute_seasonal_climate()` + B0c 重定心（⟨t_monthly⟩ ≡ t_mean） | ✅ |
 | 半年降水极值 | `climate_seasonality.py:seasonal_precip_extremes()` | ✅ |
 | 海洋分区替代 | `ocean_provinces.md` | 📋 3A.5 |
 

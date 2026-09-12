@@ -423,10 +423,22 @@ def simulate_climate(
         ice_threshold_c=config.seasonal_ice_threshold_c,
         ice_albedo_feedback=config.seasonal_ice_albedo,
     )
-    t_cold_C = seasonal["T_cold"]
-    t_hot_C = seasonal["T_hot"]
     t_monthly_C = seasonal["T_monthly"]
     itcz_lat_monthly = seasonal["itcz_lat"]
+
+    # ── B0c temperature data contract (2026-09-13): re-centre the monthly
+    # series onto the calibrated annual field.  The seasonal EBM solves its
+    # own radiative/heat-capacity cycle and has no elevation dimension, so
+    # highland cells sat at their sea-level-equivalent latitude temperature
+    # (Andes 4 km: ⟨t_m⟩ +16 °C vs t_mean −3.3; Greenland 3 km: −11 vs −30)
+    # — poisoning t_hot/t_cold → Köppen (only 9% of >4.5 km cells classified
+    # E), monthly evaporation and the monthly display layer.  Keep the EBM's
+    # seasonal *shape/amplitude*, take the *level* from the Stage-1 annual
+    # field (lapse, subsidence gate, coastal moderation, advection, SST):
+    t_monthly_C = t_monthly_C + (t_mean_C - t_monthly_C.mean(axis=1))[:, None]
+    # Uniform per-cell shift ⇒ min/max re-derivation is the exact transform.
+    t_cold_C = t_monthly_C.min(axis=1)
+    t_hot_C = t_monthly_C.max(axis=1)
 
     # Freshwater lakes freeze at 0 °C: the winter surface sits at the freezing
     # point (the ice caps the radiative heat loss) rather than following the
@@ -794,6 +806,22 @@ def simulate_climate(
                 f"cells (max -{_dt_undo.max():.1f} C)[/dim]"
             )
 
+    # ── B0c contract enforcement (final, 2026-09-13): the 4.1-B monthly
+    # maritime relaxation, the Stage 2.5 gyre SST correction and the ocean→
+    # land anomaly advection each act on only one of the two temperature
+    # fields, so re-centre the monthly series onto the final annual field
+    # before storage: ⟨t_monthly⟩ ≡ t_mean_C for the exported pair (the same
+    # data contract as the wind — identity by construction, monthly primary).
+    # t_cold/t_hot are re-derived here, so Köppen and the cell write-back
+    # below consume the consistent pair.  The seasonal-lake 0 °C freeze clamp
+    # takes precedence over the identity (physical invariant, lake cells only).
+    t_monthly_C = t_monthly_C + (t_mean_C - t_monthly_C.mean(axis=1))[:, None]
+    t_cold_C = t_monthly_C.min(axis=1)
+    t_hot_C = t_monthly_C.max(axis=1)
+    if _seasonal_lake.any():
+        t_monthly_C[_seasonal_lake] = np.maximum(t_monthly_C[_seasonal_lake], 0.0)
+        t_cold_C[_seasonal_lake] = np.maximum(t_cold_C[_seasonal_lake], 0.0)
+
     # Store the monthly climate arrays for the export stage (Phase 4 monthly
     # display).  These are *not* serialized to cvt_mesh.json — the full N×12
     # fields would double the mesh — so export_climate_layers reads them off the
@@ -830,6 +858,9 @@ def simulate_climate(
         p_dry_winter_mm=p_dry_winter_mm,
         p_wet_summer_mm=p_wet_summer_mm,
         is_land=is_land,
+        # B0d (Kottek 2006): the b/c third letter counts months ≥ 10 °C —
+        # meaningful now that the B0c contract makes t_monthly lapse-consistent.
+        t_months_ge10=(t_monthly_C >= 10.0).sum(axis=1),
     )
 
     # ------------------------------------------------------------------
