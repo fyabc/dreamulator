@@ -2,7 +2,7 @@
 
 ## 已有文档
 
-- `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、季节 EBM、质量守恒水汽收支
+- `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、副热带下沉增温及其干燥度门控（Hamon PET + UNEP AI）、季节 EBM、质量守恒水汽收支
 - `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
 - `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（位温 θ）、季风边界层风 + 标定锚点（2026-08 自实现反写 + 季风 f→0 教训）
 - `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
@@ -26,6 +26,8 @@
 | `energy_balance.md` | `climate_physics.py:equilibrium_temperature()` | 全球平均温度 |
 | `energy_balance.md` §3 | `climate_seasonality.py:solve_1d_ebm_temperature()` | 纬向年均温（1D EBM 谱解） |
 | `energy_balance.md` §4 | `climate_simulator.py`（`ebm_diffusion_land_wm2k`） | 大陆度（海陆年均对比） |
+| `energy_balance.md` §4.5 | `climate_simulator.py`（`subsidence_warming_c`，Stage 1） | 副热带下沉增温（等面积均质化） |
+| `energy_balance.md` §4.6 | `climate_physics.py:subsidence_aridity_gate()`（Stage 3.5） | 下沉增温的干燥度门控释放 |
 | `energy_balance.md` §6 | `climate_seasonality.py:compute_seasonal_climate()` | 月度温度/降水（显式热输送 + 冰反照率） |
 | `energy_balance.md` §8 | `climate_simulator.py:_solve_moisture_budget()` | 质量守恒水汽收支 |
 | `atmospheric_circulation.md` | `climate_physics.py:hadley_cell_wind()` | 风场矢量 |

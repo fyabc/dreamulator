@@ -31,7 +31,9 @@ from dreamulator.engine.climate_physics import (
     lat_gradient_from_omega,
     latitude_temperature,
     moist_lapse_rate,
+    potential_evapotranspiration_hamon,
     spectral_ice_albedo,
+    subsidence_aridity_gate,
     surface_temperature,
     terrain_wind_blocking,
 )
@@ -162,6 +164,11 @@ def simulate_climate(
 
     land_mask_arr = np.array(is_land, dtype=bool)
 
+    # Archived 4.2 subsidence-warming increment (°C), released over humid land
+    # by the Stage 3.5 aridity gate (subsidence_aridity_gate).  Stays zero for
+    # single-cell worlds (nacrea) and when subsidence_warming_c = 0.
+    _dt_subsidence = np.zeros(n)
+
     if config.ebm_1d:
         # ── 1D EBM (North 1975 / climlab.EBM) — formal steady-state solve ──
         # 0 = D d/dx[(1−x²)dT/dx] + Q(x)(1−α) − (A + B·T),  x = sin(φ), replaces
@@ -214,15 +221,20 @@ def simulate_climate(
                 t_cell = float(np.average(t_mean_C[_cell], weights=np.cos(lat_rad[_cell])))
                 _edge = np.radians(8.0)  # Ferrel/Hadley boundary transition width
                 _w = np.clip((phi_h + _edge - np.abs(lat_rad)) / _edge, 0.0, 1.0)
-                t_mean_C[land_mask_arr] += (
+                # Archive the increment — the Stage 3.5 aridity gate releases
+                # it over humid land (4.2-①): subsidence warming physically
+                # belongs to the dry descending branch only.
+                _dt_subsidence[land_mask_arr] = (
                     config.subsidence_warming_c
                     * _w[land_mask_arr]
                     * (t_cell - t_mean_C[land_mask_arr])
                 )
-            # (4.2-① dry-air surface warming removed 2026-09-11: its hard
-            #  [15°, 35°] latitude gate is the source of the artificial step
-            #  lines across Tibet/Andes/Rockies; the deferred aridity-gated
-            #  version is documented in climate-layer-improvement.md §1.)
+                t_mean_C[land_mask_arr] += _dt_subsidence[land_mask_arr]
+            # (4.2-①: the homogenisation above is aridity-gated at Stage 3.5 —
+            #  ``subsidence_aridity_gate``, knots on the Köppen BW/BS and
+            #  arid/humid boundaries, no new tunable.  The dry-side radiative-
+            #  balance term (+~2 °C over deserts) needs the T↔P fixed point:
+            #  proposals/climate-steady-coupling.md.)
     else:
         # ── 3A.3a: auto-compute latitudinal gradient from rotation rate? ──
         if config.auto_lat_gradient:
@@ -729,6 +741,42 @@ def simulate_climate(
     p_dry_summer_mm, p_wet_winter_mm, p_dry_winter_mm, p_wet_summer_mm = seasonal_precip_extremes(
         t_monthly_C, p_monthly
     )
+
+    # ── Stage 3.5: 4.2-① aridity-gated subsidence-warming release ──
+    # Stage 1 archived the Held-Hou homogenisation increment on
+    # _dt_subsidence; physically the warming belongs to the dry descending
+    # branch — over humid subtropical margins it is offset by moist convection
+    # and evaporative cooling.  Now that precipitation exists, release the
+    # *warming* increment over humid lowland (both the Köppen ratio and the
+    # UNEP P/PET_Hamon index must say humid; highlands ≥ 1.5 km always keep —
+    # see subsidence_aridity_gate).  The negative (equatorial ascent-branch)
+    # part of the homogenisation is moist-convective, not subsidence, and
+    # stays.  A uniform shift preserves the seasonal amplitude and the
+    # warm/cold-half month ordering, so the Köppen prep arrays above stay
+    # valid.  Single-pass approximation: Stages 2-3 consumed the pre-release
+    # temperature — the residual inconsistency the T↔P fixed point
+    # (proposals/climate-steady-coupling.md) would remove.
+    if _dt_subsidence.any():
+        _pet_annual = potential_evapotranspiration_hamon(
+            t_monthly_C, config.orbital_period_days / 12.0
+        )
+        _dt_undo = subsidence_aridity_gate(
+            _dt_subsidence, p_annual, t_mean_C, p_warm_mm, p_cold_mm, _pet_annual, elevation_m
+        )
+        t_mean_C -= _dt_undo
+        t_monthly_C -= _dt_undo[:, None]
+        t_cold_C -= _dt_undo
+        t_hot_C -= _dt_undo
+        # Re-apply the seasonal-lake 0 °C freeze clamp after the shift.
+        if _seasonal_lake.any():
+            t_monthly_C[_seasonal_lake] = np.maximum(t_monthly_C[_seasonal_lake], 0.0)
+            t_cold_C[_seasonal_lake] = np.maximum(t_cold_C[_seasonal_lake], 0.0)
+        _n_released = int((_dt_undo > 0.01).sum())
+        if _n_released:
+            _console.print(
+                f"  [dim]subsidence aridity gate: released {_n_released} humid "
+                f"cells (max -{_dt_undo.max():.1f} C)[/dim]"
+            )
 
     # Store the monthly climate arrays for the export stage (Phase 4 monthly
     # display).  These are *not* serialized to cvt_mesh.json — the full N×12

@@ -43,6 +43,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   冰门 `t_mean_C>−10°C` 排除极地冰盖。修中纬纵向冷：西欧 −5.1→−2.6、东欧/西伯利亚 −5.3→−3.9、
   高加索 −6.7→−4.2、落基 −7.6→−6.1、华南 +4.7→+3.9；逐格 T bias −0.81→−0.30（近零）、
   Köppen Group R² 0.192→0.272。蒙古 −4.6 未动（深内陆真大陆度）；南极冰门生效（+4.4 不变）。
+- **4.2-① 下沉增温干燥度门控**：Held-Hou 均质化增量 Stage 1 存档（`_dt_subsidence`）、
+  Stage 3.5 降水落地后释放湿润格份额——下沉增温只属于干燥下沉支。三维门控：只门控正增量
+  （负增量=赤道上升支湿对流均质化）；双干燥度指标保守并集 keep=max（Köppen r 结点 0.5/1.0 +
+  UNEP AI=P/PET_Hamon 结点 0.5/0.65——AI 的指数型 PET 对热沙漠海岸模型过湿鲁棒，单用 r 会把
+  波斯湾真沙漠误释放打出 −14 °C 冷弹+Csb 误分类）；≥1500 m 高地豁免（增量定义于海平面折算
+  温度、参照下沉支边界层 ~850 hPa）。全结点取既有 Köppen/UNEP 分类边界，零新调参。新纯函数
+  `dryness_offset_mm`/`dryness_threshold_mm`/`potential_evapotranspiration_hamon`/
+  `aridity_index_keep`/`subsidence_aridity_gate`（`koppen_classify` B 群阈值改调同一来源）。
+  earth：释放 2489 格（真湿润低地，主要 SH 副热带——Pampas/Natal EBM 冷偏诚实揭蔽）、
+  Köppen Group R² 0.347→0.379、分布 64.3%、逐格 T RMSE 4.21→4.24（揭蔽口径重排）、
+  validate 4 项 PASS；nacrea 单圈分支不含 4.2 → 逐位不变（no-op 回归确认）。**诊断收获**：
+  华南 +3.9 暖偏改判归因 §2 季风降水干偏（引擎中华南低地 247/344 格 BWh、modP 253 vs
+  obs ~1700，门控按引擎气候正确保留增温；修 P 后自动释放）；发现热沙漠海岸系统性过湿
+  （波斯湾 475 vs 175、撒哈拉西洋岸 391 vs 76、红海 454 vs 22）= 下沉干燥缺参数化，登记 §5。
+  知识库同步 energy_balance.md §4.6（Hamon 1961 / UNEP 1992 / Kottek 2006）。
 
 ### Added
 

@@ -888,6 +888,186 @@ def ekman_current_direction(
 # ---------------------------------------------------------------------------
 
 
+def dryness_offset_mm(
+    p_warm_mm: float | np.ndarray,
+    p_cold_mm: float | np.ndarray,
+    p_annual_mm: float | np.ndarray,
+) -> np.ndarray:
+    """Köppen B-group dryness-threshold seasonal offset (Kottek et al. 2006).
+
+    280 mm when >70% of the annual precipitation falls in the warm half of the
+    year, 0 mm when >70% falls in the cold half, 140 mm otherwise (even
+    distribution).  Vectorised single source for ``koppen_classify`` and the
+    subsidence aridity gate (``subsidence_aridity_gate``).
+
+    Args:
+        p_warm_mm: Warm-half (6 warmest months) precipitation total, mm.
+        p_cold_mm: Cold-half (6 coldest months) precipitation total, mm.
+        p_annual_mm: Annual precipitation total, mm.
+
+    Returns:
+        Offset in mm, same broadcast shape as the inputs (0-d array for
+        scalar inputs).
+    """
+    return np.asarray(
+        np.where(
+            np.asarray(p_warm_mm) > 0.7 * np.asarray(p_annual_mm),
+            280.0,
+            np.where(np.asarray(p_cold_mm) > 0.7 * np.asarray(p_annual_mm), 0.0, 140.0),
+        )
+    )
+
+
+def dryness_threshold_mm(
+    t_mean_c: float | np.ndarray,
+    offset_mm: float | np.ndarray,
+) -> np.ndarray:
+    """Köppen B-group aridity threshold: ``max(20·T + offset, 1)`` mm/yr.
+
+    The 1 mm floor keeps polar deserts (T ≤ −7 °C drives the empirical
+    formula ≤ 0, while P ≈ 0 from numerical noise) classified as arid.
+
+    Args:
+        t_mean_c: Mean annual temperature, °C.
+        offset_mm: Seasonal offset from ``dryness_offset_mm``, mm.
+
+    Returns:
+        Threshold in mm/yr, same broadcast shape as the inputs.
+    """
+    return np.asarray(np.maximum(20.0 * np.asarray(t_mean_c) + np.asarray(offset_mm), 1.0))
+
+
+def potential_evapotranspiration_hamon(
+    t_monthly_c: np.ndarray,
+    days_per_month: float,
+) -> np.ndarray:
+    """Annual Hamon (1961) potential evapotranspiration, mm/yr.
+
+    Daily form ``PET = 29.8 · N_h · e_s(T) / T_K`` mm/day (Hamon 1961;
+    identical to the HEC-HMS ``ETo = c·(N/12)·ρ_sat`` with c = 0.165 mm per
+    g/m³ and ρ_sat = 216.7·e_s[hPa]/T_K), Magnus saturation vapour pressure
+    ``e_s = 0.6108·exp(17.27·T/(T+237.3))`` kPa.
+
+    Daylength is taken as N = 12 h: the annual-mean daylength is 12 h at
+    every latitude, and the consumer (``subsidence_aridity_gate``) acts only
+    inside the Hadley band (|lat| ≲ 38°), where the seasonal N×T covariance
+    contributes < 5% to the annual sum.  Below 0 °C the formula stays
+    positive and small (T_K > 0 always), so no cold-side pathology.
+
+    Args:
+        t_monthly_c: Monthly-mean temperature, °C, shape (N, 12).
+        days_per_month: Mean days per calendar month (orbital_period / 12).
+
+    Returns:
+        Annual potential evapotranspiration, mm/yr, shape (N,).
+    """
+    t = np.asarray(t_monthly_c, dtype=np.float64)
+    es_kpa = 0.6108 * np.exp(17.27 * t / (t + 237.3))
+    pet_day = 29.8 * 12.0 * es_kpa / (t + 273.15)  # mm/day at N = 12 h
+    return np.asarray(pet_day.sum(axis=-1) * days_per_month)
+
+
+def aridity_index_keep(
+    p_annual_mm: np.ndarray,
+    pet_annual_mm: np.ndarray,
+) -> np.ndarray:
+    """UNEP (1992) aridity-index keep-fraction for the subsidence gate.
+
+    ``AI = P / PET``; UNEP classes: hyper-arid < 0.05, arid 0.05-0.2,
+    semi-arid 0.2-0.5, dry sub-humid 0.5-0.65, humid > 0.65.  Subsidence
+    warming is kept through the semi-arid class (AI ≤ 0.5), released through
+    the humid class (AI ≥ 0.65), linear across the dry sub-humid transition.
+    Both knots are UNEP class boundaries — no tunable parameters.
+
+    The exponential (Clausius-Clapeyron) PET makes AI robust where the
+    linear Köppen threshold is not: over hot subsidence coasts the engine's
+    precipitation is biased wet (no subsidence drying parameterisation yet),
+    but a 3× wet bias at 27 °C still lands in the semi-arid class because
+    PET there is ~1500 mm/yr.
+
+    Args:
+        p_annual_mm: Annual precipitation, mm, shape (N,).
+        pet_annual_mm: Annual potential evapotranspiration, mm, shape (N,).
+
+    Returns:
+        Keep-fraction in [0, 1], shape (N,): 1 = arid, keep the warming;
+        0 = humid, release it.
+    """
+    ai = np.asarray(p_annual_mm) / np.maximum(np.asarray(pet_annual_mm), 1e-9)
+    return np.asarray(np.clip((0.65 - ai) / 0.15, 0.0, 1.0))
+
+
+# Highland exemption for the subsidence gate (m).  The Stage-1 increment is
+# defined on the sea-level-reduced temperature and physically belongs to the
+# descent-branch boundary layer, which tops out near 850 hPa over the
+# subtropics — ≈ 1.5 km in the standard atmosphere.  Surfaces above it
+# (Tibet, Altiplano, Rockies) are decoupled from that layer and their
+# temperature treatment is a separate registered open item (highland cold
+# bias family), so the gate must not silently re-tune them.
+_SUBSIDENCE_GATE_ELEV_MAX_M = 1500.0
+
+
+def subsidence_aridity_gate(
+    dt_subsidence_c: np.ndarray,
+    p_annual_mm: np.ndarray,
+    t_mean_c: np.ndarray,
+    p_warm_mm: np.ndarray,
+    p_cold_mm: np.ndarray,
+    pet_annual_mm: np.ndarray,
+    elevation_m: np.ndarray,
+) -> np.ndarray:
+    """Aridity-gated release of the Held-Hou subsidence warming (4.2-①).
+
+    The subsidence homogenisation warms every land cell inside the Hadley
+    cell, but physically the warming belongs to the *dry* descending branch:
+    over humid subtropical margins (monsoon coasts) it is offset by moist
+    convection and evaporative cooling, and the annual-mean surface sits at
+    its local radiative-advection balance instead.  Since precipitation is
+    only known after the temperature pass, the increment is archived at
+    Stage 1 and *released* here: dry cells keep it, humid cells give it
+    back.
+
+    Only the **warming** (positive) component is gated.  Near the equator the
+    archived increment is negative — there the homogenisation represents the
+    ascent branch's moist-convective pull toward the cell mean, not subsidence
+    warming — so it is kept everywhere regardless of aridity.
+
+    Release requires **both** aridity indicators to say humid (keep = max of
+    the two keep-fractions): the Köppen ratio ``r = P / threshold(T)`` (knots
+    r = 0.5 BW/BS and r = 1 arid/humid) and the UNEP aridity index
+    ``AI = P / PET_Hamon`` (knots 0.5 / 0.65, ``aridity_index_keep``).  The
+    conjunction absorbs the engine's wet bias over hot subsidence coasts
+    (Persian Gulf / Sahara Atlantic coast), where model P alone would
+    misclassify true desert as humid and release the warming.  Cells above
+    ``_SUBSIDENCE_GATE_ELEV_MAX_M`` always keep (highland exemption).
+    All knots are existing Köppen / UNEP class boundaries — no new tunable
+    parameters.
+
+    Args:
+        dt_subsidence_c: Archived Stage-1 subsidence increment, °C, shape
+            (N,) — zero over ocean and outside the Hadley band.
+        p_annual_mm: Annual precipitation, mm, shape (N,).
+        t_mean_c: Mean annual temperature (pre-release), °C, shape (N,).
+        p_warm_mm: Warm-half precipitation, mm, shape (N,).
+        p_cold_mm: Cold-half precipitation, mm, shape (N,).
+        pet_annual_mm: Annual Hamon potential evapotranspiration, mm, (N,).
+        elevation_m: Cell elevation, m, shape (N,).
+
+    Returns:
+        Increment to *subtract* from the temperature fields, °C, shape (N,) —
+        non-negative (never adds warming back).
+    """
+    offset = dryness_offset_mm(p_warm_mm, p_cold_mm, p_annual_mm)
+    threshold = dryness_threshold_mm(t_mean_c, offset)
+    r = np.asarray(p_annual_mm) / threshold
+    keep_k = np.asarray(np.clip((1.0 - r) / 0.5, 0.0, 1.0))  # 1 dry … 0 humid
+    keep_ai = aridity_index_keep(p_annual_mm, pet_annual_mm)
+    keep = np.maximum(keep_k, keep_ai)
+    keep = np.where(np.asarray(elevation_m) >= _SUBSIDENCE_GATE_ELEV_MAX_M, 1.0, keep)
+    dt_warm = np.maximum(np.asarray(dt_subsidence_c), 0.0)
+    return np.asarray((1.0 - keep) * dt_warm)
+
+
 def koppen_classify(
     t_mean_c: np.ndarray,
     t_cold_c: np.ndarray,
@@ -985,28 +1165,17 @@ def koppen_classify(
                 classes.append("EF")
             continue
 
-        # Group B: Arid — dryness threshold (Köppen 1936 / Kottek et al. 2006).
-        #   P_threshold = 20·T + offset, offset ∈ {280 (warm-season wet),
-        #   140 (even), 0 (cold-season wet)}.
-        # When monthly precipitation is available, pick the offset by the
-        # warm/cold-season concentration; otherwise fall back to "even" (140).
-        # The threshold is clamped to a positive floor (1 mm): for T ≤ −7 °C the
-        # empirical 20·T + offset goes ≤ 0, which would otherwise classify a
-        # polar desert (P≈0, from BFS numerical noise ~1e-5 mm) as "humid" (D)
-        # instead of arid — a latent bug exposed when warming pushes polar t_hot
-        # above the E-group threshold.  ``<=`` + the 1 mm floor make P≈0 arid.
+        # Group B: Arid — dryness threshold (Köppen 1936 / Kottek et al. 2006),
+        # shared with the subsidence aridity gate: ``dryness_offset_mm`` picks
+        # the seasonal offset from the warm/cold-half concentration (fallback
+        # "even" 140 without monthly data), ``dryness_threshold_mm`` applies
+        # 20·T + offset with the 1 mm polar-desert floor (see their docstrings).
+        # ``<=`` + the floor make P≈0 polar desert arid, not "humid" (D).
         if p_warm_mm is not None and p_cold_mm is not None:
-            p_warm = p_warm_mm[i]
-            p_cold = p_cold_mm[i]
-            if p_warm > 0.7 * pa:
-                offset = 280.0
-            elif p_cold > 0.7 * pa:
-                offset = 0.0
-            else:
-                offset = 140.0
+            offset = float(dryness_offset_mm(p_warm_mm[i], p_cold_mm[i], pa))
         else:
             offset = 140.0
-        dryness_threshold = max(20.0 * ta + offset, 1.0)
+        dryness_threshold = float(dryness_threshold_mm(ta, offset))
 
         if pa <= dryness_threshold:
             if ta > 18.0:

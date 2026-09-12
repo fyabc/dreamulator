@@ -9,8 +9,11 @@ import pytest
 
 from dreamulator.engine.climate_physics import (
     altitude_lapse_rate,
+    aridity_index_keep,
     column_water_saturation,
     coriolis_parameter,
+    dryness_offset_mm,
+    dryness_threshold_mm,
     equilibrium_temperature,
     evaporation_rate,
     hadley_cell_wind,
@@ -18,8 +21,10 @@ from dreamulator.engine.climate_physics import (
     koppen_classify,
     latitude_temperature,
     orographic_precipitation,
+    potential_evapotranspiration_hamon,
     pressure_from_temperature,
     saturation_specific_humidity,
+    subsidence_aridity_gate,
     surface_temperature,
     terrain_wind_blocking,
 )
@@ -538,3 +543,178 @@ class TestTemperaturePipeline:
         assert temps[0] > 20.0, f"Equator too cold: {temps[0]:.1f} °C"
         # Pole
         assert temps[1] < -10.0, f"Pole too warm: {temps[1]:.1f} °C"
+
+
+# ---------------------------------------------------------------------------
+# Subsidence aridity gate (4.2-①) — dryness helpers + gated release
+# ---------------------------------------------------------------------------
+
+
+class TestSubsidenceAridityGate:
+    """Aridity-gated release of the Held-Hou subsidence warming.
+
+    Release requires BOTH indicators humid (keep = max of keep-fractions):
+    Köppen ratio knots r = 0.5 / 1.0, UNEP AI = P/PET_Hamon knots 0.5 / 0.65;
+    highlands ≥ 1.5 km always keep.  In the Köppen-path tests PET is pinned
+    to AI = 1 (pet = p_annual) so keep_AI = 0 and keep reduces to keep_K.
+    """
+
+    def test_dryness_offset_selection(self) -> None:
+        # warm-season wet (>70% in warm half) → 280
+        assert float(dryness_offset_mm(800.0, 200.0, 1000.0)) == 280.0
+        # cold-season wet → 0
+        assert float(dryness_offset_mm(100.0, 900.0, 1000.0)) == 0.0
+        # even → 140
+        assert float(dryness_offset_mm(500.0, 500.0, 1000.0)) == 140.0
+
+    def test_dryness_offset_vectorized(self) -> None:
+        pw = np.array([800.0, 100.0, 500.0])
+        pc = np.array([200.0, 900.0, 500.0])
+        pa = np.array([1000.0, 1000.0, 1000.0])
+        np.testing.assert_array_equal(dryness_offset_mm(pw, pc, pa), [280.0, 0.0, 140.0])
+
+    def test_dryness_threshold_formula_and_floor(self) -> None:
+        # 20·T + offset
+        assert float(dryness_threshold_mm(20.0, 140.0)) == pytest.approx(540.0)
+        # 1 mm polar-desert floor (20·(−20) + 140 = −260 → 1)
+        assert float(dryness_threshold_mm(-20.0, 140.0)) == pytest.approx(1.0)
+
+    def test_hamon_pet_reference_values(self) -> None:
+        # Constant 20 °C, 365.25-day year → ~1045 mm/yr (2.86 mm/day)
+        t20 = np.full((1, 12), 20.0)
+        pet20 = float(potential_evapotranspiration_hamon(t20, 365.25 / 12.0)[0])
+        assert 1000.0 < pet20 < 1100.0, f"20 °C PET {pet20:.0f} mm/yr out of range"
+        # Constant 27 °C (hot desert coast) → ~1550 mm/yr
+        t27 = np.full((1, 12), 27.0)
+        pet27 = float(potential_evapotranspiration_hamon(t27, 365.25 / 12.0)[0])
+        assert 1450.0 < pet27 < 1650.0, f"27 °C PET {pet27:.0f} mm/yr out of range"
+        # Monotone in T, positive at sub-zero T (no cold-side pathology)
+        t0 = np.full((1, 12), -5.0)
+        pet0 = float(potential_evapotranspiration_hamon(t0, 365.25 / 12.0)[0])
+        assert 0.0 < pet0 < pet20 < pet27
+
+    def test_aridity_index_keep_knots(self) -> None:
+        pet = np.full(5, 1000.0)
+        pa = np.array([200.0, 500.0, 575.0, 650.0, 1500.0])  # AI .2/.5/.575/.65/1.5
+        keep = aridity_index_keep(pa, pet)
+        assert keep[0] == pytest.approx(1.0)  # arid → keep
+        assert keep[1] == pytest.approx(1.0)  # semi-arid knot → keep
+        assert keep[2] == pytest.approx(0.5)  # dry sub-humid midpoint
+        assert keep[3] == pytest.approx(0.0)  # humid knot → release
+        assert keep[4] == pytest.approx(0.0)  # humid → release
+
+    def test_gate_keeps_dry_releases_humid(self) -> None:
+        dt = np.full(3, 2.5)
+        ta = np.full(3, 25.0)  # threshold = 20·25 + 140 = 640 (even split)
+        pa = np.array([128.0, 480.0, 1600.0])  # r = 0.2 / 0.75 / 2.5
+        pw = pa / 2.0
+        pc = pa / 2.0
+        undo = subsidence_aridity_gate(dt, pa, ta, pw, pc, pa, np.zeros(3))
+        assert undo[0] == pytest.approx(0.0)  # desert: keep all
+        assert undo[1] == pytest.approx(0.5 * 2.5)  # steppe: half
+        assert undo[2] == pytest.approx(2.5)  # humid: release all
+
+    def test_gate_knots_on_koppen_boundaries(self) -> None:
+        ta = np.full(2, 20.0)  # threshold = 540
+        dt = np.full(2, 3.0)
+        pa = np.array([0.5 * 540.0, 1.0 * 540.0])  # exactly at the knots
+        pw = pa / 2.0
+        pc = pa / 2.0
+        undo = subsidence_aridity_gate(dt, pa, ta, pw, pc, pa, np.zeros(2))
+        assert undo[0] == pytest.approx(0.0)  # BW/BS boundary → keep
+        assert undo[1] == pytest.approx(3.0)  # arid/humid boundary → release
+
+    def test_gate_monotone_in_aridity_ratio(self) -> None:
+        ta = np.full(50, 22.0)
+        dt = np.full(50, 2.0)
+        pa = np.linspace(10.0, 3000.0, 50)
+        undo = subsidence_aridity_gate(dt, pa, ta, pa / 2.0, pa / 2.0, pa, np.zeros(50))
+        assert np.all(np.diff(undo) >= -1e-12)
+
+    def test_gate_zero_increment_is_noop(self) -> None:
+        # ocean / out-of-band cells carry dt = 0 → no release regardless of P
+        dt = np.zeros(2)
+        undo = subsidence_aridity_gate(
+            dt,
+            np.array([2000.0, 50.0]),
+            np.full(2, 25.0),
+            np.array([1000.0, 25.0]),
+            np.array([1000.0, 25.0]),
+            np.array([2000.0, 50.0]),
+            np.zeros(2),
+        )
+        np.testing.assert_array_equal(undo, [0.0, 0.0])
+
+    def test_gate_preserves_negative_increment(self) -> None:
+        # Equatorial ascent-branch homogenisation (negative increment) is not
+        # subsidence warming — the gate must never release (re-warm) it.
+        dt = np.array([-3.0, -3.0])
+        undo = subsidence_aridity_gate(
+            dt,
+            np.array([2500.0, 100.0]),  # humid AND arid — both keep negatives
+            np.full(2, 26.0),
+            np.array([1250.0, 50.0]),
+            np.array([1250.0, 50.0]),
+            np.array([2500.0, 100.0]),
+            np.zeros(2),
+        )
+        np.testing.assert_array_equal(undo, [0.0, 0.0])
+
+    def test_gate_persian_gulf_kept_by_pet_index(self) -> None:
+        # Anchor (2026-09-13 earth build): Persian Gulf coast ~29°N — true
+        # BWh (obs P ~170 mm) but engine P biased wet ~475 mm, which alone
+        # (Köppen r ≈ 0.88, winter-wet offset 0) would release 76% of the
+        # warming and drop the cell ~−14 °C.  UNEP AI = 475/1554 ≈ 0.31
+        # (semi-arid) must keep the increment.
+        dt = np.array([7.0])
+        ta = np.array([27.0])
+        pa = np.array([475.0])
+        pw = np.array([0.25 * 475.0])  # winter-wet → offset 0 → threshold 540
+        pc = np.array([0.75 * 475.0])
+        pet = potential_evapotranspiration_hamon(np.full((1, 12), 27.0), 365.25 / 12.0)
+        undo = subsidence_aridity_gate(dt, pa, ta, pw, pc, pet, np.array([100.0]))
+        assert undo[0] == pytest.approx(0.0)  # AI keeps it despite Köppen r
+
+    def test_gate_humid_margin_released_by_both(self) -> None:
+        # Humid subtropical margin (South-China-coast-like): T 21.3, P 1700 →
+        # Köppen r ≈ 3.0 AND AI ≈ 1.5 → both humid → full release.
+        dt = np.array([4.0])
+        ta = np.array([21.3])
+        pa = np.array([1700.0])
+        pet = potential_evapotranspiration_hamon(np.full((1, 12), 21.3), 365.25 / 12.0)
+        undo = subsidence_aridity_gate(dt, pa, ta, pa / 2.0, pa / 2.0, pet, np.array([50.0]))
+        assert undo[0] == pytest.approx(4.0)
+
+    def test_gate_highland_exemption(self) -> None:
+        # Same humid state at 3 km elevation → highlands always keep: the
+        # increment refers to the descent-branch boundary layer (≈850 hPa,
+        # ~1.5 km), and highland temperature is a separate open item.
+        dt = np.array([4.0])
+        ta = np.array([21.3])
+        pa = np.array([1700.0])
+        pet = potential_evapotranspiration_hamon(np.full((1, 12), 21.3), 365.25 / 12.0)
+        undo = subsidence_aridity_gate(dt, pa, ta, pa / 2.0, pa / 2.0, pet, np.array([3000.0]))
+        assert undo[0] == pytest.approx(0.0)
+
+    def test_koppen_b_group_unchanged_by_helper_refactor(self) -> None:
+        # Regression anchor: the vectorised helpers must reproduce the former
+        # inline threshold — BWh/BSk boundaries land where they always did.
+        t_mean = np.array([25.0, 25.0, 10.0])
+        t_cold = np.array([20.0, 20.0, -5.0])
+        t_hot = np.array([30.0, 30.0, 25.0])
+        # even split → offset 140: thresholds 640 / 640 / 340
+        p_annual = np.array([300.0, 400.0, 200.0])  # r ≈ 0.47 / 0.63 / 0.59
+        p_warm = p_annual / 2.0
+        p_cold = p_annual / 2.0
+        codes = koppen_classify(
+            t_mean_c=t_mean,
+            t_cold_c=t_cold,
+            t_hot_c=t_hot,
+            p_annual_mm=p_annual,
+            p_dry_mm=p_annual / 12.0,
+            p_wet_mm=p_annual / 12.0,
+            is_land=np.array([True, True, True]),
+            p_warm_mm=p_warm,
+            p_cold_mm=p_cold,
+        )
+        assert codes == ["BWh", "BSh", "BSk"]

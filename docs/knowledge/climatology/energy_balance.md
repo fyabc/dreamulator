@@ -158,6 +158,51 @@ t_mean_C[land] += subsidence_warming_c · w(|lat|) · (t_cell − t_mean_C[land]
 参考：Held, I. M., & Hou, A. Y. (1980). *Nonlinear axially symmetric circulations in a
 nearly inviscid atmosphere*. JAS 37, 515–533。
 
+## 4.6 下沉增温的干燥度门控（4.2-①）
+
+下沉增温物理上只属于哈得来胞的**干燥下沉支**：绝热压缩增温发生在副热带高压的下沉空气柱，
+干地表无蒸发冷却，净增温全部体现在地表。湿润副热带边缘（季风海岸、Cfa 湿缘）年平下沉被
+湿对流与蒸发冷却抵消，地表温度由局地辐射-平流平衡设定，不接受这份增温。§4.5 的均质化
+增量因此在 Stage 1 存档（`_dt_subsidence`），Stage 3 降水落地后按干燥度**释放**（撤销）
+湿润格的份额——温度步在降水之前，干燥度只能事后判定，这是 T↔P 双向耦合的单趟特例
+（完整定点迭代见 `design/proposals/climate-steady-coupling.md`）。
+
+门控三个维度（全部结点取自既有分类边界，无新调参）：
+
+1. **只门控正增量**。增量为负处（赤道附近，均质化把过暖的赤道拉向胞均值）是**上升支**
+   湿对流均质化、不是下沉增温，无论干湿一律保留。
+2. **双干燥度指标取保守并集**（keep = max(keep_K, keep_AI)，两指标都说湿润才释放）：
+   - **Köppen 干旱比** `r = P / max(20·T + offset, 1)`（offset 280/140/0 按暖冷半季
+     集中度，Köppen 1936 / Kottek et al. 2006）：r ≤ 0.5（BW）全保留、r ≥ 1（湿润）
+     全释放、BS 线性过渡。
+   - **UNEP 干旱度指数** `AI = P / PET`，PET 用 Hamon (1961) 温度法：
+     `PET_day = 29.8 · N_h · e_s(T) / T_K`（mm/day；e_s = 0.6108·exp(17.27T/(T+237.3)) kPa，
+     Magnus；N 取 12 h——年均昼长处处 12 h，门控只作用于 |lat| ≲ 38°，季节 N×T 协变
+     贡献 <5%）。参考值：20°C → ~2.86 mm/day ≈ 1045 mm/yr；27°C → ~1550 mm/yr。
+     UNEP (1992) 分类：极旱 <0.05、干旱 0.05–0.2、半干旱 0.2–0.5、干半湿润 0.5–0.65、
+     湿润 >0.65；keep 结点取 0.5 / 0.65（半干旱上界与湿润下界）。
+   - **为什么需要 AI 第二判据**：引擎降水在**热下沉海岸系统性过湿**（下沉干燥缺参数化；
+     波斯湾 modP ~475 vs obs ~175、撒哈拉西洋岸 391 vs 76、红海 454 vs 22）。单用
+     Köppen r 会把这些真沙漠误判湿润、错误释放增温（格点级 −14°C）。AI 的分母 PET 随
+     温度指数增长（Clausius-Clapeyron），27°C 下 PET ~1550 mm，P 过湿 3× 仍落在半干旱
+     类——对模型降水误差鲁棒。
+3. **高地豁免**（≥1500 m 不释放）。增量定义在海平面折算温度上、物理参照物是下沉支
+   边界层，副热带边界层顶 ~850 hPa ≈ 1.5 km（标准大气）；更高地表与该层解耦（高原
+   自身辐射平衡），且高地温度处理是独立登记项，门控不得暗中重调。
+
+释放为**逐月均匀平移**（t_mean/t_monthly/t_cold/t_hot 同减），季节振幅与暖冷半季月份
+排序不变。单趟近似：Stage 2-3 消费的是释放前温度。
+
+源码：`climate_physics.py` 纯函数 `dryness_offset_mm` / `dryness_threshold_mm` /
+`potential_evapotranspiration_hamon` / `aridity_index_keep` / `subsidence_aridity_gate`
+（`koppen_classify` 的 B 群阈值改调同一来源，单一事实源）；`climate_simulator.py`
+Stage 1 存档 + Stage 3.5 释放。
+
+参考：Hamon (1961) *Estimating potential evapotranspiration*, Proc. ASCE 87(HY3)
+（公式形式另见 USGS HEC-HMS Hamon Method 文档：`ETo = c·(N/12)·ρ_sat`，c = 0.165 mm
+per g/m³，与 29.8·N_h·e_s/T_K 恒等）；UNEP (1992) *World Atlas of Desertification*
+（AI 分类）；Kottek et al. (2006) *Meteorologische Zeitschrift*（Köppen 阈值 offset）。
+
 ---
 
 ## 5. 海拔递减率
