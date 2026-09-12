@@ -435,6 +435,38 @@ def _build_lat_band_mesh(lat_deg: float, n_cells: int = 24) -> CVTMesh:
     return CVTMesh(seed=42, num_cells=n_cells, cells=cells, adjacency=adjacency)
 
 
+def test_annual_wind_is_vector_mean_of_monthly() -> None:
+    """B0a data contract: the stored annual wind is the vector mean of the
+    monthly fields (observational definition — NCEP annual climatology).
+
+    The identity must hold *by construction*, also with a non-zero monsoon
+    anomaly: the annual field is derived from the monthly one, not stored
+    from an independent composition path.
+    """
+    from dreamulator.map.climate_simulator import simulate_climate
+
+    mesh = _build_lat_band_mesh(30.0, 24)
+    # Every 3rd cell becomes low land → land-sea heating contrast drives a
+    # non-zero monsoon anomaly in the monthly fields.
+    for j, c in enumerate(mesh.cells):
+        if j % 3 == 0:
+            c.elevation = 50.0
+            c.crust_type = "continental"
+            c.water_class = "land"
+        else:
+            c.water_class = "ocean"
+    simulate_climate(mesh, TerrainPipelineConfig())
+
+    we_ann = np.array([c.wind_east_m_s for c in mesh.cells])
+    wn_ann = np.array([c.wind_north_m_s for c in mesh.cells])
+    we_m = np.asarray(mesh._wind_east_monthly, dtype=np.float64)  # (N, 12) float32
+    wn_m = np.asarray(mesh._wind_north_monthly, dtype=np.float64)
+    # A non-trivial anomaly actually exercised the identity:
+    assert np.abs(we_m - we_m.mean(axis=1, keepdims=True)).max() > 1e-6
+    np.testing.assert_allclose(we_ann, we_m.mean(axis=1), atol=2e-4)
+    np.testing.assert_allclose(wn_ann, wn_m.mean(axis=1), atol=2e-4)
+
+
 class TestWindConventionPrecipitation:
     """Sign anchors for the physical wind convention in the precipitation stage.
 

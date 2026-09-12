@@ -169,9 +169,18 @@ def pressure_anomaly_monthly(
 
     ΔT is the cell's departure from the zonal mean at its latitude and
     month — the land-sea / surface-type heating contrast.  Its annual
-    mean is then subtracted: the annual-mean pressure pattern already
-    drives the annual geostrophic wind upstream, so only the *seasonal*
-    anomaly belongs here (no double counting).
+    mean is then subtracted, so only the *seasonal* anomaly drives the
+    monsoon wind and each cell's 12 monthly values sum to zero.
+
+    Open decision (monsoon-amplitude round, B0b): the original rationale —
+    "the annual-mean pressure pattern already drives the annual geostrophic
+    wind" — is obsolete (the geostrophic wind was removed).  The annual-mean
+    ΔP pattern (winter Siberian high ≫ summer thermal low) therefore drives
+    no wind at all today, and the annual-mean circulation stays purely
+    zonal; keeping the annual component would give the derived annual wind
+    its stationary structure.  Deferred until the ΔP heat-source rework is
+    calibrated — it changes the character of the annual wind feeding the
+    Stommel chain and the annual moisture budget.
 
     The hydrostatic surface response to warming the lowest
     ``depth_fraction`` of the column by ΔT is

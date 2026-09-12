@@ -508,27 +508,35 @@ def simulate_climate(
         _grad_dp_pa_m, f_coriolis, nodes_xyz, drag_rate_s=_drag
     )
 
-    # Monthly wind = annual background + monsoon anomaly.  The 12-month
-    # average of the monthly winds is the background field itself (the
-    # anomaly averages to zero), so the annual-mean state is unchanged.  The
-    # monthly migration of the circulation cells is part of the monthly-vector
-    # winds work (tech debt 24): tested here, giving each month its own
-    # ITCZ-shifted circulation sharpened the convergence band into a sweeping
-    # rain belt that over-seasoned the subtropics (Csa/Dsb inflation) and
-    # overshot land-mean precipitation, so v1 keeps the calibrated
-    # annual-mean circulation as the advecting field and lets the anomaly
-    # carry the seasonal land-sea reversal.
+    # Monthly wind = annual background + monsoon anomaly (the annual field is
+    # then *derived* from these — see below).  The monthly migration of the
+    # circulation cells is part of the monthly-vector winds work (tech debt
+    # 24): tested here, giving each month its own ITCZ-shifted circulation
+    # sharpened the convergence band into a sweeping rain belt that
+    # over-seasoned the subtropics (Csa/Dsb inflation) and overshot land-mean
+    # precipitation, so v1 keeps the calibrated annual-mean circulation as the
+    # advecting field and lets the anomaly carry the seasonal land-sea
+    # reversal.
     wind_monthly = np.stack([wind + _wind_monsoon[m] for m in range(12)])
 
-    # Terrain blocking (the annual field and each monthly field exactly once —
-    # blocking is a per-cell linear scaling of the wind vector).
-    wind = terrain_wind_blocking(wind, elevation_m, config.wind_blocking_height_m)
+    # Terrain blocking on each monthly field (a per-cell scalar scaling of the
+    # wind vector — linear, so the mean identity below is exact).
     wind_monthly = np.stack(
         [
             terrain_wind_blocking(wind_monthly[m], elevation_m, config.wind_blocking_height_m)
             for m in range(12)
         ]
     )
+
+    # Annual-mean wind = vector mean of the (blocked) monthly fields — the
+    # observational definition itself (NCEP annual climatology is the vector
+    # mean of the monthly winds).  Tech-debt-24 data contract (2026-09-13):
+    # the monthly field is primary, the annual one derived, so the identity is
+    # guaranteed by construction instead of resting on the anomaly's zero
+    # 12-month sum.  Every annual consumer (cell storage, the Stommel chain
+    # via wind_mirror, 4.1-B advection, the annual moisture budget, the coast
+    # asymmetry step) reads this single source.
+    wind = wind_monthly.mean(axis=0)
 
     # Write wind to cells for frontend visualisation
     from dreamulator.map.ocean_circulation import (
@@ -2020,13 +2028,16 @@ def _compute_precipitation_monthly_budget(
     #     f = 1 ± ε × ρ_air × |U| × q_sat(T) × s_per_year / P_bg
     if is_land.any():
         _coastal, _west_coast = _detect_coastal_cells(mesh.cells, n, is_land, is_ocean)
-        _zwind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
+        # Single source (2026-09-13): the coast asymmetry reads the same
+        # annual-mean wind as every other consumer — the terrain-blocked
+        # vector mean of the monthly fields — instead of re-deriving an
+        # unblocked background circulation of its own.
         from dreamulator.map.ocean_circulation import east_north_basis as _enb2
 
         _east, _ = _enb2(nodes_xyz)
-        # `_zwind` is physical (root unification, 2026-09-13) — the former
-        # flip is retired; `is_westerly` below reads the physical zonal wind.
-        _uzonal = np.einsum("ij,ij->i", _zwind, _east)
+        # `wind` is physical (root unification, 2026-09-13); `is_westerly`
+        # below reads the physical zonal component.
+        _uzonal = np.einsum("ij,ij->i", wind, _east)
 
         _rho_air = 1.2  # kg/m³
         _s_per_year = 365.25 * 86400.0
