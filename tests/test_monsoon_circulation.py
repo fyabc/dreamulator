@@ -1,6 +1,7 @@
 """Tests for the monsoon circulation pure functions (engine/monsoon_circulation.py)."""
 
 import numpy as np
+import pytest
 
 from dreamulator.engine.monsoon_circulation import (
     monsoon_boundary_layer_wind,
@@ -85,6 +86,25 @@ class TestPressureAnomalyMonthly:
         lat = rng.uniform(-90.0, 90.0, 50)
         t = 25.0 - 40.0 * np.abs(lat)[:, None] / 90.0 + rng.normal(0, 8, (50, 12))
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0)
+        assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
+
+    def test_elevation_derating(self):
+        # B1: a 4844 m plateau cell responds at exp(−z/8500)·exp(−z/3000)
+        # ≈ 0.113 of an identical lowland cell — the Tibetan-dominance
+        # artifact suppression (Boos & Kuang: the heat source is the lowland
+        # non-orographic heating; Wu 2012: 85% of vapour below 3 km).
+        lat = np.full(3, 30.0)
+        t = np.zeros((3, 12))
+        t[0, 5] = t[1, 5] = 12.0  # two identical warm cells (z = 0 / 4844)
+        t[2, 5] = -24.0  # cold ballast so the zonal mean stays 0 → dt = +12
+        elev = np.array([0.0, 4844.0, 0.0])
+
+        dp = pressure_anomaly_monthly(t, lat, band_deg=5.0, elevation_m=elev)
+        ratio = dp[1, 5] / dp[0, 5]
+        expected = np.exp(-4844.0 / 8500.0) * np.exp(-4844.0 / 3000.0)
+        assert ratio == pytest.approx(expected, rel=1e-6)
+        # Both are thermal lows (warm anomaly), and the zero-sum invariant holds.
+        assert dp[0, 5] < 0.0 and dp[1, 5] < 0.0
         assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
 
 

@@ -65,8 +65,21 @@ import numpy as np
 # Fraction of the atmospheric column whose temperature anomaly projects
 # onto surface pressure (hydrostatic).  Monsoon thermal anomalies are
 # tropospheric but bottom-heavy: the boundary layer plus the lower free
-# troposphere, ~2 km of an ~8.5 km scale height.
+# troposphere, ~2 km of an ~8.5 km scale height.  Since B1 this is the
+# LOWLAND limit (f_deep) of the elevation-derated f(z) — the Stage-C
+# calibration target against NCEP SLP anomaly amplitude.
 _MONSOON_DEPTH_FRACTION: float = 0.25
+
+# B1 elevation derating scales (m):
+# Barometric pressure scale height (standard atmosphere) — an elevated
+# cell's surface pressure represents a smaller mass column.
+_PRESSURE_SCALE_HEIGHT_M: float = 8500.0
+# Moisture scale height: 85% of the atmospheric water vapour resides below
+# 3 km (Wu et al. 2012, Sci Rep 2:404, p.3) — heating above the moisture
+# ceiling acts on dry air and projects only weakly onto surface pressure
+# (Boos & Kuang 2010/2013: the monsoon heat source is the lowland
+# non-orographic heating, not the elevated plateau surface).
+_MOISTURE_SCALE_HEIGHT_M: float = 3000.0
 
 # Boundary-layer drag rate k_d = C_D·|U|/h_BL (s⁻¹): bulk drag coefficient
 # C_D ≈ 1.3e-3 over open water (smooth surface), |U| ≈ 8 m/s, h_BL ≈ 1 km →
@@ -164,6 +177,7 @@ def pressure_anomaly_monthly(
     band_deg: float = 5.0,
     surface_pressure_hpa: float = 1013.25,
     depth_fraction: float = _MONSOON_DEPTH_FRACTION,
+    elevation_m: np.ndarray | None = None,
 ) -> np.ndarray:
     """Monthly surface-pressure anomaly from seasonal heating contrasts (hPa).
 
@@ -183,15 +197,32 @@ def pressure_anomaly_monthly(
     Stommel chain and the annual moisture budget.
 
     The hydrostatic surface response to warming the lowest
-    ``depth_fraction`` of the column by ΔT is
+    ``depth_fraction`` of the column by ΔT, structured by elevation
+    (monsoon-amplitude round B1, 2026-09-13):
 
-        ΔP = −P_sfc · depth_fraction · ΔT / T̄_zonal
+        ΔP = −P(z) · f(z) · ΔT / T̄_zonal
+        P(z) = P_sfc · exp(−z/H)                 # H  = 8.5 km (scale height)
+        f(z) = depth_fraction · exp(−z/z_moist)  # z_moist = 3 km
 
-    (fractional column expansion ΔT/T̄ applied to the fraction of the
-    column that couples to surface pressure; T̄_zonal is the *annual-mean*
-    zonal temperature, so the 12 monthly anomalies sum to exactly zero
-    per cell).  Warmer → lower pressure (thermal low); colder → higher
-    pressure.
+    with z = max(elevation, 0) and T̄_zonal the *annual-mean* zonal
+    temperature (so the 12 monthly anomalies sum to exactly zero per cell).
+    Warmer → lower pressure (thermal low); colder → higher pressure.
+
+    The two elevation deratings, both physical (no tuned constants beyond
+    the two scale heights):
+    * P(z): the surface pressure of an elevated cell already represents a
+      smaller mass column — the same fractional expansion moves less mass
+      (barometric).
+    * f(z): the monsoon's heat source is the *lowland non-orographic*
+      heating — deep convection anchors on the lowland θeb maximum and
+      removing the plateau's elevated heating barely weakens the South
+      Asian monsoon (Boos & Kuang 2010 Nature / 2013 Sci Rep), while 85%
+      of the atmospheric water vapour sits below 3 km (Wu et al. 2012):
+      heating above the moisture ceiling acts on dry air and projects
+      only weakly onto the surface pressure field.  Without f(z) the
+      4844 m Tibetan surface anomaly (the largest raw |ΔT| on the planet)
+      dominates ΔP — the opposite of the observed lowland thermal low.
+      Combined, a 4.8 km plateau cell responds at ~11% of a lowland cell.
 
     Args:
         t_monthly_c: Monthly temperature field (°C), shape (N, 12).
@@ -200,8 +231,12 @@ def pressure_anomaly_monthly(
         surface_pressure_hpa: Sea-level pressure P_sfc.  Scales the
             response linearly, so denser/thinner atmospheres respond
             proportionally.
-        depth_fraction: Fraction of the column coupling to surface
-            pressure (see module docstring).
+        depth_fraction: Lowland fraction of the column coupling to surface
+            pressure (f_deep — the Stage-C calibration target; see module
+            docstring).
+        elevation_m: Cell elevation (m), shape (N,), clamped at 0 for the
+            derating factors.  None → all cells at sea level (uniform
+            depth_fraction, the pre-B1 behaviour).
 
     Returns:
         Monthly pressure anomaly ΔP (hPa), shape (N, 12).  The 12 months
@@ -217,7 +252,13 @@ def pressure_anomaly_monthly(
     # anomaly-only (12 months sum to zero).  Using the monthly T̄ would leak a
     # ~0.5 hPa annual residual through the 1/T̄ modulation.
     t_zonal_k = np.maximum(t_zonal.mean(axis=1, keepdims=True) + 273.15, 200.0)
-    dp = -surface_pressure_hpa * depth_fraction * dt / t_zonal_k
+    if elevation_m is None:
+        dp = -surface_pressure_hpa * depth_fraction * dt / t_zonal_k
+    else:
+        z = np.maximum(np.asarray(elevation_m, dtype=np.float64), 0.0)[:, None]
+        p_z = surface_pressure_hpa * np.exp(-z / _PRESSURE_SCALE_HEIGHT_M)
+        f_z = depth_fraction * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M)
+        dp = -p_z * f_z * dt / t_zonal_k
     return np.asarray(dp)
 
 
