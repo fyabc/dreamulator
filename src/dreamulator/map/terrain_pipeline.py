@@ -325,6 +325,18 @@ def run_terrain_pipeline(
             if tc is not None:
                 tc.save("tectonics", (result.plates, cell_plate_map), tectonics_fp)
 
+    # Re-apply the plate assignment onto the mesh cells.  On cache hits the
+    # (plates, cell_plate_map) pair is restored from the pickle, but the
+    # in-place ``cell.plate_id = ...`` side effects of generate_plates /
+    # run_tectonic_evolution are NOT replayed — and the mesh cache was saved
+    # before the plates stage, so its cells carry plate_id=None.  Without this
+    # the exported cvt_mesh.json loses all per-cell plate assignments while
+    # plates.json (written from result.plates) stays intact.  Idempotent on
+    # fresh runs (the map matches the in-place values).
+    if cell_plate_map:
+        for _cid, _pid in cell_plate_map.items():
+            result.mesh.cells[_cid].plate_id = _pid
+
     # ---- Stage 4: Boundary Detection ----
     if "boundaries" in ordered:
         if not result.plates:
