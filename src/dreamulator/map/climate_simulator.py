@@ -336,19 +336,14 @@ def simulate_climate(
     # mid-lat continents.  Gated to non-ice land so the polar ice sheets are not
     # warmed toward the cold polar ocean.  Applied before the lapse rate.
     if config.maritime_advection_scale_km > 0.0:
-        from dreamulator.map.ocean_circulation import east_north_basis as _enb_ann
-
-        _east_ann, _north_ann = _enb_ann(nodes_xyz)
         _wind_ann = terrain_wind_blocking(
             _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, None),
             elevation_m,
             config.wind_blocking_height_m,
         )
-        _we_ann = np.einsum("ij,ij->i", _wind_ann, _east_ann)
-        _wn_ann = np.einsum("ij,ij->i", _wind_ann, _north_ann)
-        _wind_phys_ann = -_we_ann[:, None] * _east_ann + _wn_ann[:, None] * _north_ann
+        # `_wind_ann` is already physical (root unification, 2026-09-13).
         _dist_up_ann, _src_up_ann = _upwind_distance_to_coast(
-            mesh.cells, n, is_land, _wind_phys_ann, nodes_xyz, radius_km=config.radius_km
+            mesh.cells, n, is_land, _wind_ann, nodes_xyz, radius_km=config.radius_km
         )
         _valid_ann = is_land & (_src_up_ann >= 0)
         _w_up_ann = np.where(
@@ -543,9 +538,12 @@ def simulate_climate(
         east_north_basis as _enb_wind,
     )
 
+    # `wind` is in the physical convention (tech debt 24 root unification,
+    # 2026-09-13: `hadley_cell_wind` now composes on the true east basis), so
+    # the decomposition maps 1:1 onto the stored/frontend/NCEP convention —
+    # the former `_we = -_we` compensating flip is gone.
     _east_w, _north_w = _enb_wind(nodes_xyz)
     _we, _wn = _dec_wind(wind, _east_w, _north_w)
-    _we = -_we  # FIXME: wind_east sign convention; remove after verification
     for i, c in enumerate(mesh.cells):
         c.wind_east_m_s = float(_we[i])
         c.wind_north_m_s = float(_wn[i])
@@ -563,14 +561,11 @@ def simulate_climate(
     # monsoon above already used the unrelaxed temperature).  The remaining East
     # Asian over-warm (Harbin) is the missing winter monsoon (tech debt 24).
     if config.maritime_advection_scale_km > 0.0:
-        # `wind` is in the hadley basis (east = north × r̂, opposite the physical
-        # east); flip the east component onto the east_north_basis convention so
-        # the upwind trace follows the true surface wind (matching the frontend).
-        _we_phys = np.einsum("ij,ij->i", wind, _east_w)
-        _wn_phys = np.einsum("ij,ij->i", wind, _north_w)
-        _wind_phys = -_we_phys[:, None] * _east_w + _wn_phys[:, None] * _north_w
+        # `wind` is already in the physical convention (tech debt 24 root
+        # unification, 2026-09-13) — the former `-we·east + wn·north` flip
+        # recipe here is gone.
         _dist_up, _src_up = _upwind_distance_to_coast(
-            mesh.cells, n, is_land, _wind_phys, nodes_xyz, radius_km=config.radius_km
+            mesh.cells, n, is_land, wind, nodes_xyz, radius_km=config.radius_km
         )
         _valid_up = is_land & (_src_up >= 0)
         _w_up = np.where(_valid_up, np.exp(-_dist_up / config.maritime_advection_scale_km), 0.0)
@@ -602,7 +597,16 @@ def simulate_climate(
         )
 
         east, north = east_north_basis(nodes_xyz)
-        tau = compute_wind_stress(wind, c_d=config.ocean_drag_coefficient)
+        # The Stommel chain (stress → curl → gyre), the upwelling index and
+        # the ocean→land anomaly advection below were all *calibrated* on the
+        # legacy mirrored wind (verified outputs: Gulf Stream / Kuroshio /
+        # Canary signs).  The root unification (2026-09-13) made `wind`
+        # physical, so these consumers get its mirror image — a reflection
+        # about the east axis — instead of a re-derivation of the chain.
+        # Historical lesson: flipping a calibrated chain at its root cascades
+        # into every downstream sign.
+        wind_mirror = _to_physical_wind(wind, east)  # involution: phys → mirror
+        tau = compute_wind_stress(wind_mirror, c_d=config.ocean_drag_coefficient)
         src, dst = _build_directed_edge_table(mesh.cells)
         curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
 
@@ -670,7 +674,9 @@ def simulate_climate(
 
             # ── 3A.3: upwelling → SST cooling ──
             if config.ocean_upwelling_enabled:
-                _upw = compute_upwelling_index(wind, mesh.cells, nodes_xyz, east, north, lat_rad)
+                _upw = compute_upwelling_index(
+                    wind_mirror, mesh.cells, nodes_xyz, east, north, lat_rad
+                )
                 t_mean_C = apply_upwelling_sst_correction(_upw, t_mean_C)
         else:
             _console.print("    [dim]No ocean basins detected[/dim]")
@@ -687,9 +693,11 @@ def simulate_climate(
             [c.sst_anomaly_c if c.sst_anomaly_c is not None else 0.0 for c in mesh.cells],
             dtype=np.float64,
         )
+        # wind_mirror: the anomaly advection is calibrated on the legacy
+        # mirrored convention (same block as the Stommel chain above).
         _temp_anom = advect_temperature_anomaly(
             _sst_anom,
-            wind,
+            wind_mirror,
             is_ocean,
             mesh.cells,
             nodes_xyz,
@@ -791,8 +799,10 @@ def simulate_climate(
     _we_monthly = np.empty((n, 12), dtype=np.float32)
     _wn_monthly = np.empty((n, 12), dtype=np.float32)
     for _m in range(12):
+        # wind_monthly is physical (root unification) — store as decomposed;
+        # the former east flip is gone.
         _we_m, _wn_m = _dec_wind(wind_monthly[_m], _east_w, _north_w)
-        _we_monthly[:, _m] = -_we_m
+        _we_monthly[:, _m] = _we_m
         _wn_monthly[:, _m] = _wn_m
     object.__setattr__(mesh, "_wind_east_monthly", _we_monthly)
     object.__setattr__(mesh, "_wind_north_monthly", _wn_monthly)
@@ -1226,9 +1236,8 @@ def _upwind_distance_to_coast(
 
     **Convention**: ``wind`` must be the *physical* surface wind (east = the
     ``east_north_basis`` convention, matching the frontend's ``wind_east_m_s``).
-    The raw ``hadley_cell_wind`` output uses the opposite east (``north × r̂``),
-    so callers must flip its east component first — see the 4.1-B wiring in
-    ``simulate_climate`` (the ``-we·east + wn·north`` flip).
+    Since the tech-debt-24 root unification (2026-09-13) ``hadley_cell_wind``
+    composes on that basis directly, so callers pass its output as-is.
 
     Returns:
         dist:   upwind distance in km (ocean cells = 0; unreachable land = inf).
@@ -1786,20 +1795,23 @@ def _baroclinic_band(
 
 
 def _to_physical_wind(wind: np.ndarray, east: np.ndarray) -> np.ndarray:
-    """Flip a wind field from the engine-internal mirror convention to physical.
+    """Reflect a wind field across the local east axis (flip its east component).
 
-    ``hadley_cell_wind`` composes vectors on ``east = north × r̂``, which points
-    physical WEST; the physical convention (stored ``wind_east_m_s``, NCEP,
-    frontend arrows, ``_upwind_distance_to_coast``) is ``east = r̂ × north``.
-    Reflection across the north axis: ``w_phys = w − 2(w·ê)ê`` — the same
-    recipe as the 4.1-B ``_wind_phys`` flip.
+    The map is an involution between the physical convention and the legacy
+    mirrored one (``east = north × r̂`` = physical west).  Since the tech-debt-24
+    root unification (2026-09-13) the engine's wind fields compose physical at
+    the source; the sole remaining use is to feed the *mirror-calibrated*
+    ocean chain (Stommel stress/curl, upwelling index, ocean→land anomaly
+    advection) in Stage 2.5 — those internals are verified on mirror input
+    and must not be re-derived (historical lesson: root-flipping a calibrated
+    chain cascades into every downstream sign).  ``w' = w − 2(w·ê)ê``.
 
     Args:
         wind: Wind vectors, shape (N, 3) or (M, N, 3).
         east: Physical local east unit vectors (``east_north_basis``), (N, 3).
 
     Returns:
-        Physical-convention wind, same shape as *wind*.
+        East-reflected wind, same shape as *wind*.
     """
     we = np.einsum("...ij,ij->...i", wind, east)
     return np.asarray(wind - 2.0 * we[..., None] * east)
@@ -1867,21 +1879,15 @@ def _compute_precipitation_monthly_budget(
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
     lat_deg = np.degrees(lat_rad)
 
-    # ── Wind convention (tech debt 24, 2026-09-12 mirror-bug fix) ──────────
-    # `wind` / `wind_monthly` arrive in the engine-internal mirror convention
-    # (`hadley_cell_wind` composes on `east = north × r̂` = physical WEST).
-    # The moisture budget, orographic rain and the coast-asymmetry step below
-    # must advect along the *physical* surface wind (the convention of the
-    # stored `wind_east_m_s`, NCEP and the frontend arrows), so flip the east
-    # component once, here, at the entry of the only precipitation consumer.
-    # Other consumers handle the convention themselves and must NOT be touched
-    # here: Stommel (calibrated on the mirror input), storage/msgpack (flip at
-    # write), 4.1-B temperature advection (flip at use).
-    from dreamulator.map.ocean_circulation import east_north_basis as _enb_conv
-
-    _east_conv, _ = _enb_conv(nodes_xyz)
-    wind = _to_physical_wind(wind, _east_conv)
-    wind_monthly = _to_physical_wind(wind_monthly, _east_conv)
+    # ── Wind convention (tech debt 24 root unification, 2026-09-13) ────────
+    # `wind` / `wind_monthly` arrive in the *physical* convention
+    # (`hadley_cell_wind` and the monsoon module compose on the true east
+    # basis = direction of increasing longitude, verified against NCEP).
+    # The moisture budget, orographic rain and the coast-asymmetry step
+    # consume them directly — the former entry flip (2026-09-12 mirror-bug
+    # fix) is retired.  The only remaining mirror-convention consumers are
+    # the calibrated ocean chain (Stommel / upwelling / anomaly advection),
+    # fed `wind_mirror` at their own entry in Stage 2.5.
 
     # Directed edge table built once, shared by the 12 budget solves and the
     # orographic step.
@@ -2018,10 +2024,9 @@ def _compute_precipitation_monthly_budget(
         from dreamulator.map.ocean_circulation import east_north_basis as _enb2
 
         _east, _ = _enb2(nodes_xyz)
-        # `_zwind` is fresh from the cell-circulation builder = mirror
-        # convention; flip so `is_westerly` below reads the physical zonal wind
-        # (pre-fix the windward/leeward coast assignment was inverted).
-        _uzonal = np.einsum("ij,ij->i", _to_physical_wind(_zwind, _east), _east)
+        # `_zwind` is physical (root unification, 2026-09-13) — the former
+        # flip is retired; `is_westerly` below reads the physical zonal wind.
+        _uzonal = np.einsum("ij,ij->i", _zwind, _east)
 
         _rho_air = 1.2  # kg/m³
         _s_per_year = 365.25 * 86400.0

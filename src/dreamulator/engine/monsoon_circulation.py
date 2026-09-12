@@ -45,16 +45,17 @@ Physical chain (tech debt 23, roadmap):
    boundary-layer drag timescale (~1 day), derived from bulk aerodynamic
    surface drag, not calibrated.
 
-**Sign convention.**  The east/north basis used here is the same as
-``hadley_cell_wind`` in ``climate_physics.py``: north_t = (0,1,0)
-projected onto the tangent plane, east_t = north_t × r̂.  This basis is a
-right-handed ENU frame (east × north = up), which with f = +2Ω·sin(φ)
-(rotation vector +y, northern hemisphere at y > 0) gives rightward
-Coriolis deflection — the physical convention.  Note that
-``map/ocean_circulation.east_north_basis`` currently points the *other*
-way (it returns the direction of increasing longitude, which on this
-mesh's lon = atan2(z, x) labeling is physical west); see the convention
-audit note in today.md before mixing components from the two bases.
+**Sign convention.**  The east/north basis used here is the *physical*
+one, identical to ``map/ocean_circulation.east_north_basis`` (verified
+against NCEP, 2026-09-12) and to ``hadley_cell_wind``: north_t = (0,1,0)
+projected onto the tangent plane, east_t = r̂ × north_t = direction of
+increasing longitude.  With f = +2Ω·sin(φ) (rotation vector +y, northern
+hemisphere at y > 0) the boundary-layer solution below deflects rightward
+in the NH — the physical convention.  (Tech debt 24 root unification,
+2026-09-13: the basis used to be ``north_t × r̂`` = physical west, which
+made the closed-form solution equivalent to f → −f in true geography;
+the former claim that ``east_north_basis`` points west was wrong — the
+NCEP storage anchor is the authority.)
 """
 
 from __future__ import annotations
@@ -86,10 +87,11 @@ _AIR_DENSITY_KG_M3: float = 1.225
 def _tangent_basis(nodes_xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Local (east, north) unit basis, same convention as ``hadley_cell_wind``.
 
-    north = (0,1,0) projected to the tangent plane; east = north × r̂.
-    Right-handed ENU (east × north = r̂).  At the poles north is degenerate;
-    those cells get world +x as east, zero north — the monsoon pressure
-    gradient is weak at the poles, so the choice there is immaterial.
+    north = (0,1,0) projected to the tangent plane; east = r̂ × north — the
+    *physical* east (direction of increasing longitude), matching
+    ``map/ocean_circulation.east_north_basis``.  At the poles north is
+    degenerate; those cells get world +x as east, zero north — the monsoon
+    pressure gradient is weak at the poles, so the choice there is immaterial.
 
     Args:
         nodes_xyz: Unit sphere positions, shape (N, 3).
@@ -103,7 +105,7 @@ def _tangent_basis(nodes_xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     north[~pole] /= north_norm[~pole, None]
     north[pole] = 0.0
 
-    east = np.cross(north, nodes_xyz)
+    east = np.cross(nodes_xyz, north)
     east_norm = np.linalg.norm(east, axis=1)
     ok = east_norm >= 1e-9
     east[ok] /= east_norm[ok, None]

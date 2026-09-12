@@ -112,10 +112,11 @@ def _build_test_mesh(
 def test_upwind_distance_traces_west_ocean_for_westerly_wind() -> None:
     """A physical westerly wind traces a land cell's upwind ocean to its WEST.
 
-    Regression test for the 4.1-B wind sign convention: ``hadley_cell_wind``
-    uses ``east = north × r̂`` (opposite the physical east), so the frontend
-    flips it; ``_upwind_distance_to_coast`` must receive the *physical* wind
-    (``east_north_basis``) or it traces to the downwind ocean instead.
+    Regression test for the 4.1-B wind sign convention: since the tech-debt-24
+    root unification (2026-09-13) ``hadley_cell_wind`` composes on the
+    physical east basis (``east_north_basis``, = direction of increasing
+    longitude); ``_upwind_distance_to_coast`` consumes it directly — a
+    mirrored feed would trace to the downwind ocean instead.
     """
     from dreamulator.map.climate_simulator import _upwind_distance_to_coast
     from dreamulator.map.ocean_circulation import east_north_basis
@@ -435,13 +436,16 @@ def _build_lat_band_mesh(lat_deg: float, n_cells: int = 24) -> CVTMesh:
 
 
 class TestWindConventionPrecipitation:
-    """Sign anchors for the mirror→physical wind flip in the precipitation stage.
+    """Sign anchors for the physical wind convention in the precipitation stage.
 
-    ``hadley_cell_wind`` composes on ``east = north × r̂`` (physical WEST); the
-    precipitation stage must advect along the *physical* wind (the convention of
-    the stored ``wind_east_m_s`` / NCEP / frontend arrows).  These tests fail if
-    the flip regresses — the 2026-09-12 mirror bug advected moisture E-W
-    reversed (Earth's top-3 per-cell P biases + nacrea east-coast deserts).
+    Since the tech-debt-24 root unification (2026-09-13) ``hadley_cell_wind``
+    and the monsoon module compose on the *physical* east basis
+    (``east_north_basis`` = direction of increasing longitude, NCEP-verified)
+    and the precipitation stage consumes it directly — the 2026-09-12 entry
+    flip is retired (``_to_physical_wind`` survives only to feed the
+    mirror-calibrated ocean chain).  These tests fail if the convention
+    regresses — the mirror bug advected moisture E-W reversed (Earth's top-3
+    per-cell P biases + nacrea east-coast deserts).
     """
 
     def test_to_physical_wind_flips_east_keeps_north(self) -> None:
@@ -508,7 +512,7 @@ class TestWindConventionPrecipitation:
         is_ocean = ~is_land
         elevation_m = np.where(is_land, 300.0, -3000.0)
         config = TerrainPipelineConfig()
-        # Exactly what simulate_climate passes: the internal mirror-convention
+        # Exactly what simulate_climate passes: the physical-convention
         # annual background (Ferrel westerlies at 45°N), no monsoon anomaly.
         wind = _seasonal_mean_cell_wind(lat_rad, nodes, config, None)
         wind_monthly = np.stack([wind] * 12)

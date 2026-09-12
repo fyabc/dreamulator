@@ -650,7 +650,11 @@ def hadley_cell_wind(
     # Vectorized basis (was a per-cell Python loop — the seasonal-mean
     # circulation evaluates this 12 times, so it must be cheap):
     # local north = (0,1,0) projected to the tangent plane, local east =
-    # north × radial (right-hand rule).
+    # r̂ × north — the *physical* east (direction of increasing longitude),
+    # identical to ``map/ocean_circulation.east_north_basis``.  (Tech debt 24
+    # root unification, 2026-09-13: this used to compose on ``north × r̂`` =
+    # physical WEST — the mirrored convention whose storage/consumer flips are
+    # now removed.  ``zonal_speed`` > 0 = eastward (westerly) is literal.)
     wind = np.zeros((n, 3), dtype=np.float64)
     nonzero = (np.abs(zonal_speed) >= 1e-9) | (np.abs(merid_speed) >= 1e-9)
     if nonzero.any():
@@ -659,7 +663,7 @@ def hadley_cell_wind(
         north_norm = np.linalg.norm(north_tangent, axis=1)
         pole = north_norm < 1e-9
         north_tangent[~pole] /= north_norm[~pole, None]
-        east = np.cross(north_tangent, node)
+        east = np.cross(node, north_tangent)
         east_norm = np.linalg.norm(east, axis=1)
         valid = ~pole & (east_norm >= 1e-9)
         east[valid] /= east_norm[valid, None]

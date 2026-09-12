@@ -56,6 +56,10 @@ PRECIP_REGIONS: list[dict] = [
     dict(name="爪哇", lat=(-10, -5), lon=(105, 115)),
     dict(name="孟加拉", lat=(20, 25), lon=(88, 92)),
     dict(name="阿拉斯加海岸", lat=(55, 62), lon=(-150, -130)),
+    # C→B 最大错配流三区（2026-09-13 审计，季风幅度攻关验收框）
+    dict(name="恒河流域", lat=(20, 30), lon=(77, 92)),
+    dict(name="华南", lat=(20, 30), lon=(105, 122)),
+    dict(name="美国东南", lat=(25, 35), lon=(-90, -75)),
 ]
 
 

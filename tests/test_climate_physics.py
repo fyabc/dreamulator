@@ -233,6 +233,29 @@ class TestHadleyCellWind:
         assert float(np.dot(w_summer[0], north)) > 0.0  # toward ITCZ at +14°
         assert float(np.dot(w_winter[0], north)) < 0.0  # toward ITCZ at −14°
 
+    def test_zonal_winds_point_physical_direction(self) -> None:
+        """Root convention anchor (tech debt 24 unification, 2026-09-13).
+
+        The Ferrel westerlies (45°N, zonal_speed > 0) must project positively
+        onto the *physical* east basis — the direction of increasing longitude
+        (``east_north_basis``, NCEP-verified) — and the tropical trades (15°N)
+        negatively.  The mirrored composition (``east = north × r̂`` = physical
+        west) was the root of the 2026-09-12 precipitation mirror bug; this
+        test fails if it ever returns.
+        """
+        from dreamulator.map.ocean_circulation import east_north_basis
+
+        lat_deg = np.concatenate([np.full(3, 45.0), np.full(3, 15.0)])
+        lon_deg = np.tile(np.array([0.0, 120.0, 240.0]), 2)
+        la = np.radians(lat_deg)
+        lo = np.radians(lon_deg)
+        nodes = np.stack([np.cos(la) * np.cos(lo), np.sin(la), np.cos(la) * np.sin(lo)], axis=1)
+        wind = hadley_cell_wind(np.radians(lat_deg), nodes)
+        east, _ = east_north_basis(nodes)
+        we = np.einsum("ij,ij->i", wind, east)
+        assert (we[:3] > 1.0).all(), f"45°N westerlies must blow east: {we[:3]}"
+        assert (we[3:] < -1.0).all(), f"15°N trades must blow west: {we[3:]}"
+
 
 class TestTerrainWindBlocking:
     """Wind blocking by mountains."""

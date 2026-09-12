@@ -140,8 +140,8 @@ class TestMonsoonBoundaryLayerWind:
         rho = 1.225
         # G eastward (pressure falling eastward).
         east = np.cross(
-            np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes, nodes
-        )  # hadley-convention east
+            nodes, np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
+        )  # physical east (r̂ × north, root unification 2026-09-13)
         east /= np.linalg.norm(east, axis=1)[:, None]
         g_east = 2.0e-4
         grad_dp = -rho * g_east * east[None, :, :]
@@ -155,9 +155,9 @@ class TestMonsoonBoundaryLayerWind:
         assert np.allclose(east_comp, 0.0, atol=1e-3)
         # NH (f > 0) Buys-Ballot: low pressure (the direction of G) stays to
         # the LEFT of the geostrophic flow — equivalently the flow is G turned
-        # 90° to the right (seen from above).  In the right-handed ENU basis
-        # (east × north = up), right of +east is −north, so G = +east →
-        # southward flow, matching _geostrophic_wind's r̂×∇p/(fρ).
+        # 90° to the right (seen from above): right of physical +east is
+        # −north, so G = +east → southward flow, matching _geostrophic_wind's
+        # r̂×∇p/(fρ).
         assert (wind[:, :, 1] < 0).all()
 
     def test_nh_thermal_low_gets_cyclonic_inflow(self):
@@ -170,7 +170,7 @@ class TestMonsoonBoundaryLayerWind:
         rho = 1.225
         north = np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
         north /= np.linalg.norm(north, axis=1)[:, None]
-        east = np.cross(north, nodes)
+        east = np.cross(nodes, north)  # physical east (root unification)
         # ΔP falling northward → G = −∇(ΔP)/ρ points north, 1e-4 m/s².
         grad_dp = np.zeros((12, 1, 3))
         grad_dp[:] = -rho * 1.0e-4 * north[None, :, :]
@@ -191,7 +191,7 @@ class TestMonsoonBoundaryLayerWind:
         rho = 1.225
         north = np.array([0.0, 1.0, 0.0]) - nodes[:, 1:2] * nodes
         north /= np.linalg.norm(north, axis=1)[:, None]
-        east = np.cross(north, nodes)
+        east = np.cross(nodes, north)  # physical east (root unification)
         # ΔP falling southward → G points south.
         grad_dp = np.zeros((12, 1, 3))
         grad_dp[:] = rho * 1.0e-4 * north[None, :, :]
