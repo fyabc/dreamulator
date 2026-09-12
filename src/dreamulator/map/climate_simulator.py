@@ -497,6 +497,7 @@ def simulate_climate(
         surface_pressure_hpa=config.surface_pressure_hpa,
         depth_fraction=config.monsoon_depth_fraction,
         elevation_m=elevation_m,
+        ocean_mask=is_ocean,  # B2: land-vs-same-latitude-ocean contrast
     )
     # Scale separation before differentiation: the anomaly field inherits the
     # cell-level land-ocean mosaic (~51 km at 200k cells), whose coastline

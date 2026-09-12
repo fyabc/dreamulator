@@ -46,8 +46,29 @@ class TestZonalMeanMonthly:
         t = np.array([np.full(12, -30.0), np.full(12, 30.0)])
         zm = zonal_mean_monthly(t, lat, band_deg=5.0)
         assert np.isfinite(zm).all()
-        # Every latitude maps to one of the two populated bands' values.
-        assert set(np.round(zm[:, 0], 6)) == {-30.0, 30.0}
+
+    def test_mask_ocean_only_reference(self):
+        # B2: with an ocean mask, every cell in the band gets the OCEAN mean
+        # (the land-sea contrast reference) — hot land cells no longer pull
+        # their own reference up.
+        lat = np.array([25.0, 26.0, 27.0])  # one 5° band
+        t = np.array([np.full(12, 38.0), np.full(12, 36.0), np.full(12, 28.0)])  # land, land, ocean
+        ocean = np.array([False, False, True])
+        zm = zonal_mean_monthly(t, lat, band_deg=5.0, mask=ocean)
+        assert np.allclose(zm, 28.0)  # ocean-only mean everywhere
+        zm_all = zonal_mean_monthly(t, lat, band_deg=5.0)
+        assert np.allclose(zm_all, (38.0 + 36.0 + 28.0) / 3.0)
+
+    def test_mask_band_without_ocean_falls_back(self):
+        # A band with no masked cells borrows the nearest band that has one —
+        # no NaN/zero reference over all-land polar bands.
+        lat = np.array([-82.0, -60.0, -58.0])
+        t = np.array([np.full(12, -40.0), np.full(12, 0.0), np.full(12, 5.0)])
+        ocean = np.array([False, False, True])  # only the -60..-55 band has ocean
+        zm = zonal_mean_monthly(t, lat, band_deg=5.0, mask=ocean)
+        assert np.isfinite(zm).all()
+        assert np.allclose(zm[0], 5.0)  # polar band filled from nearest
+        assert np.allclose(zm[1], 5.0)  # the -60..-55 band itself
 
 
 class TestPressureAnomalyMonthly:

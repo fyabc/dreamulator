@@ -12,26 +12,26 @@
     "max_c": 28.83
   },
   "precipitation": {
-    "global_mean_mm": 824.8,
-    "land_mean_mm": 794.8
+    "global_mean_mm": 829.9,
+    "land_mean_mm": 799.5
   },
   "koppen": {
     "class_counts": {
-      "Af": 20515,
-      "Am": 5,
-      "Aw": 2796,
-      "BSh": 2301,
-      "BSk": 5201,
-      "BWh": 217,
-      "BWk": 4406,
-      "Cfb": 5603,
+      "Af": 20020,
+      "Am": 36,
+      "Aw": 3297,
+      "BSh": 2263,
+      "BSk": 5195,
+      "BWh": 215,
+      "BWk": 4405,
+      "Cfb": 5613,
       "Cfc": 24,
       "EF": 9350,
       "ET": 7852
     },
     "group_distribution": {
-      "A": 0.4,
-      "B": 0.208,
+      "A": 0.401,
+      "B": 0.207,
       "C": 0.097,
       "D": 0.0,
       "E": 0.295

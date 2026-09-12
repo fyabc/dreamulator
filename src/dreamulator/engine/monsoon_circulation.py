@@ -131,6 +131,7 @@ def zonal_mean_monthly(
     t_monthly_c: np.ndarray,
     lat_deg: np.ndarray,
     band_deg: float = 5.0,
+    mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Monthly zonal-mean temperature per cell (latitude-band average).
 
@@ -143,6 +144,11 @@ def zonal_mean_monthly(
         t_monthly_c: Monthly temperature field (°C), shape (N, 12).
         lat_deg: Latitude in degrees, shape (N,).
         band_deg: Latitude bin width (degrees).
+        mask: Optional boolean (N,) — only these cells contribute to the
+            band average (e.g. ocean-only, giving each cell its same-
+            latitude *ocean* temperature as the land-sea contrast
+            reference).  A band with no masked cells falls back to the
+            nearest band that has one.
 
     Returns:
         Zonal-mean temperature per cell and month (°C), shape (N, 12).
@@ -151,10 +157,19 @@ def zonal_mean_monthly(
     n_bins = len(edges) - 1
     idx = np.clip(((lat_deg - edges[0]) / band_deg).astype(np.int64), 0, n_bins - 1)
 
+    m = None if mask is None else np.asarray(mask, dtype=bool)
+    if m is None or not m.any():
+        # No mask (or an all-land world with no reference ocean at all):
+        # fall back to the all-cell zonal mean.
+        idx_sel = idx
+        t_sel = t_monthly_c
+    else:
+        idx_sel = idx[m]
+        t_sel = t_monthly_c[m]
     sums = np.zeros((n_bins, 12), dtype=np.float64)
     counts = np.zeros(n_bins, dtype=np.float64)
-    np.add.at(sums, idx, t_monthly_c)
-    np.add.at(counts, idx, 1.0)
+    np.add.at(sums, idx_sel, t_sel)
+    np.add.at(counts, idx_sel, 1.0)
 
     filled = counts >= 1
     means = np.zeros((n_bins, 12), dtype=np.float64)
@@ -178,6 +193,7 @@ def pressure_anomaly_monthly(
     surface_pressure_hpa: float = 1013.25,
     depth_fraction: float = _MONSOON_DEPTH_FRACTION,
     elevation_m: np.ndarray | None = None,
+    ocean_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Monthly surface-pressure anomaly from seasonal heating contrasts (hPa).
 
@@ -237,12 +253,20 @@ def pressure_anomaly_monthly(
         elevation_m: Cell elevation (m), shape (N,), clamped at 0 for the
             derating factors.  None → all cells at sea level (uniform
             depth_fraction, the pre-B1 behaviour).
+        ocean_mask: Boolean (N,).  When given, the zonal reference is the
+            *ocean-only* latitude-band mean (B2): ΔT becomes the land-vs-
+            same-latitude-ocean contrast — the module's documented intent.
+            The all-cell zonal mean self-dilutes in the subtropical desert
+            belt (every 25-35°N cell is hot → small departure), which pushed
+            the July thermal-low centre to the 40-50°N interior (Karakum)
+            instead of the observed Iran/Thar ~30°N lowlands anchored on the
+            land-ocean θeb contrast (Boos & Kuang 2010; Geen et al. 2020).
 
     Returns:
         Monthly pressure anomaly ΔP (hPa), shape (N, 12).  The 12 months
         sum to ≈ 0 at every cell.
     """
-    t_zonal = zonal_mean_monthly(t_monthly_c, lat_deg, band_deg)
+    t_zonal = zonal_mean_monthly(t_monthly_c, lat_deg, band_deg, mask=ocean_mask)
     dt = t_monthly_c - t_zonal
     # Seasonal anomaly only: remove the annual mean of the land-sea contrast.
     dt = dt - dt.mean(axis=1, keepdims=True)
