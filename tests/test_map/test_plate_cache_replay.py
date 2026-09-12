@@ -47,9 +47,9 @@ class TestPlateIdCacheReplay:
         # Run 2: every stage cache-hits (mesh.pkl predates the plates stage).
         r2 = run_terrain_pipeline(cfg, tmp_path, cache=cache)
         assert len(r2.plates) == len(r1.plates)
-        assert all(
-            c.plate_id is not None for c in r2.mesh.cells
-        ), "cache-hit run lost cell plate_id (re-apply of cell_plate_map missing)"
+        assert all(c.plate_id is not None for c in r2.mesh.cells), (
+            "cache-hit run lost cell plate_id (re-apply of cell_plate_map missing)"
+        )
         # The in-memory assignment must match run 1 cell-for-cell.
         assert [c.plate_id for c in r2.mesh.cells] == [c.plate_id for c in r1.mesh.cells]
 
