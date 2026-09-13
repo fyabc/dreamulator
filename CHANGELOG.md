@@ -160,6 +160,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`docs/design/proposals/unified-climate-taxonomy.md`**（2026-09-14 设计轮，
+  未实现）：跨世界统一气候分类方案 **UCC**（Unified Climate Classification，
+  统一气候分类；命名已裁决：平实描述性、搜索友好、不用双关缩略名）。锚点法八类（A1 溶剂
+  液窗 θ 归一化温度轴——**Köppen 魔数 {−3,0,10,18}°C = 地球水窗（0–100 K）θ 节点
+  {−0.03,0,0.10,0.18}**，地球档案零覆写按构造重现 Köppen；θ 可移植性 sanity 锚 =
+  泰坦甲烷窗 0.13 ≈ 地球 0.15。A2 UNEP AI=P/PET 水分轴，复用 subsidence_aridity_gate
+  既有 Hamon PET 链路。A4 广义季节 = 振幅/生长季（Trewartha 吸收）/集中度/T-P 相位
+  正交拆段，修 Köppen s/w 双重含义歧义。A5 环流带按世界自己的 φ_H/φ_P。A6-A8 锁定
+  区词汇/高地/生物接口留槽）+ 分段编码语法（ASCIIPA 式可扩展：未知段透传 + profile
+  rebind）+ 世界档案 YAML（溶剂表/归并/别名 → Köppen）+ 覆盖矩阵（interlude 世界
+  清单逐项判定）+ 实施分期 Phase 1-3（Phase 1 纯函数零新 input，验收 = UCC→Köppen
+  别名逐 cell 一致率 ≥95%）。调研缺口：「逐 cell × 跨溶剂 × 跨自转」统一分类无学术
+  先验（整行星 Kopparapu/PHL、锁定 Turbet/terminator、泰坦 Olcott 2024、社区
+  Pasta Bioclimate 各占一角）→ 首创成立。roadmap 条目 4（Trewartha/Holdridge 并列
+  方案）被吸收改指本提案；Köppen 管线保持不动（验证基线不变）。
 - **`src/dreamulator/map/stationary_wave.py` + `tests/test_stationary_wave.py`**
   （④ v1 遗产，默认关但保留）：线性定常正压涡度求解器纯计算模块——自带 2°×2°
   纬向网格（经度周期 + 80° Dirichlet 墙）+ 向量化稀疏组装 + splu；D 闭合全派生

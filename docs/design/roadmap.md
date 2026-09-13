@@ -183,7 +183,7 @@
    高程钉扎（浅海/地峡水深控制）与 `sea_level_offset_m` 海平面旋钮
    （冰期/临界海峡实验），见 geological-pipeline.md §3.5。
    **蜿蜒裂谷原语**仍 open（上段）。
-4. **气候分类体系扩展**（2026-08-09）— 当前仅 Köppen–Geiger 一种分类。建议新增：① **Trewartha**（更好的中纬度区分 + 亚热带独立主群——对 nacrea 慢自转 Hadley 扩展后的中纬度过渡带尤其有用）；② **Holdridge Life Zones**（基于植物生理而非地球植被经验——系外行星通用、直接桥接生态层 Whittaker 映射）。两种均复用现有 T/P 数据，零新增数据需求。见 `docs/knowledge/climatology/climate_classification_comparison.md`。优先级 P2。
+4. **气候分类体系扩展**（设计轮 ✅ 2026-09-14）— 原 Trewartha/Holdridge 并列方案已被统一方案 **UCC（Unified Climate Classification，统一气候分类）**吸收（锚点法：溶剂液窗 θ 归一化温度轴——Köppen 魔数 {−3,0,10,18} °C 恰为地球水窗节点 {−0.03,0,0.10,0.18}，地球档案按构造重现 Köppen；UNEP AI 水分轴复用现有 PET 链路；广义季节段 + 世界档案 profile）。方案与实施分期（Phase 1–3）见 `docs/design/proposals/unified-climate-taxonomy.md`；地球四体系比较仍见 `climate_classification_comparison.md`。优先级 P2，实现交接其他模型。
 5. **年均温 / 年降水诊断图层**（2026-08-09）— ✅ 已实现：「全球温度/降水图层」直接渲染 `temperature_C` / `precipitation_mm` 原始场（连续色标，非 Köppen 分类滤镜）。
 6. **自动国界 / 行政区划生成**（2026-08-09）— Azgaar's FMG 具有基于地形自动剖分的 burgs/states/provinces 系统，dreamulator 目前无对应模块。roadmap 3C 文明层的当前设计以人工锚定种子 + 事件流程序化填充为主，自动领土剖分是远期扩展项。登记为 P3 技术债，不阻塞 3C 推进。前期调研：Azgaar 的自动国界算法（基于流域 + 距离衰减 + 军事/文化权重）值得参考但不应移植。
 7. **内流盆地 / 海峡连通**（2026-08-26 重新定性）— 曾有「坝路径硬编码」机制
@@ -562,6 +562,19 @@
 26. **气候层残余偏差归档**（2026-09-08）— 残余偏差单一事实源 = 提案
     `climate-layer-improvement.md` §0（各要素偏差 TOP，逐格 `diagnose_climate_bias` 口径）
     + §7（已知局限清单）；当前主动项 = 单圈体制包（§7 实现顺序）。
+27. **时间表示通用化：12 bin → 世界频谱派生**（2026-09-14 调研裁决）— 「月」=
+    年 12 等分是地球历法遗产与存储约定，不是物理常量。对地球它恰好是充分采样
+    （温度年循环谐波 1–2 阶主导、约 4 阶充分；Nyquist 下 12 bin 可精确表示 ≤6
+    阶谐波）；nacrea 年长 100 d → 「月」= 8.33 d ≈ 2.4 个太阳日，bin 无历法含义
+    （弱季节 = 谐波振幅小 → 采样误差小，未咬人）；高 e 世界日照非正弦谐波丰富、
+    自旋-轨道共振/系外卫星下「日」「年」需由系统几何重定义。季节 EBM 已是频域
+    单谐波解，`(n,12)` 数组只是输出投影。通用化方向 = 三层分离：强迫谱（周日/
+    周年及谐波族、天文长拍——世界物理派生，Dobrovolskis 2013 解析展开）→ 逐频
+    响应（热惯性衰减 + 相移，线性叠加）→ 表示层（bin 数 N ≥ 2·k_max 世界派生，
+    或直接存谐波系数；潮汐锁定 = k_max=0 稳态特例；可变时间采样先例 Mayorga et
+    al. 2021）。现行存储不动（避免过早优化）；与技术债 1（潮汐锁定经度效应）及
+    UCC Phase 3 `-L` 段同一前提捆绑。原则措辞单一事实源 =
+    `climate-layer-improvement.md` §3「B0b 原则泛化」。
 
 ### 工程卫生
 
