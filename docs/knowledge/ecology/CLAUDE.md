@@ -10,6 +10,7 @@ ecology 层 P0（Whittaker 群系 + NPP + 可驯化标签）与 P1a（土壤层 
 - `soil_orders.md` — USDA 12 土纲 + 肥力分级 + `classify_soil` 简化查表（P1a 土壤层）
 - `biogeographic_provinces.md` — Wallace/Udvardy/WWF 分区标准 + `partition_biogeographic_provinces` 算法（P1a 生物地理分区）
 - `pre_ediacaran_macrofossils.md` — 前埃迪卡拉宏体/多细胞记录（弗朗西维利安 2.1 Ga、高于庄/Qingshania 1.6 Ga、Bangiomorpha 1.05 Ga、瓮安）；false dawn、氧阈值、多次独立多细胞化；生态层演化设计启发 8 条
+- `photosynthesis_spectra.md` — 光合色素吸收谱（叶绿素/细菌叶绿素/视黄醛族）+ 叶绿素霸权的必然性（水裂解 Z 机制门槛）与偶然性（GOE 清洗/紫地球假说）+ 恒星光谱匹配（Kiang 2007 / Lehmer 2021，PAR 份额 = roadmap 技术债 13 的修正链）+ 异星斑斓星球四设计启示（2026-09 外部讨论核查吸收）
 
 ## 规划中的文档
 
@@ -25,6 +26,8 @@ ecology 层 P0（Whittaker 群系 + NPP + 可驯化标签）与 P1a（土壤层 
 
 ## 与其他学科的关联
 
+- 天文 → 生态：恒星 SED 与 PAR 份额（`photosynthesis_spectra.md`、
+  `../astrophysics/stellar_physics.md` 维恩位移节）
 - 气候 → 生态：`../climatology/koppen_classification.md`、`ocean_provinces.md`
   （海洋版 Köppen = 海洋生态分区）
 - 地质 → 生态：土壤层（母岩 × 气候 → 土纲，见 `soil_orders.md`）、岛屿生物地理学（前导点褶皱山系的种-面积关系）

@@ -117,6 +117,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`docs/knowledge/ecology/photosynthesis_spectra.md`**（技术债 13 配套，2026-09-13
+  间奏曲轮：外部 AI 讨论核查吸收）：光合色素吸收谱表（叶绿素/藻胆蛋白/细菌叶绿素/
+  视黄醛族）+ 叶绿素霸权必然性（水裂解 Z 机制门槛）与偶然性（GOE 清洗/紫地球假说）
+  + 恒星光谱匹配（Wien 位移、PAR 份额、Kiang 2007「K 星植被仅轻微色偏、M 星紫→黑」、
+  Lehmer & Catling 2021 吸收峰 675/711/746 nm）+ C3/C4 效率上限 + 异星斑斓星球四
+  设计启示。**核查记录**：「K 星植物蓝绿 = Kiang 结论」系误归因（蓝绿/黄绿/黑为
+  可能性谱系，晚 K 型偏移更大；与 nacrea「赤道红外雨林深黑/紫黑」正典自洽）。配套：
+  `astrophysics/stellar_physics.md` 增「SED 与维恩位移」节（谱型-λ_max 表 + 口径三
+  注意点），ecology/astrophysics/astrobiology 三索引同步。
 - **`scripts/climate/diagnose_monsoon_dp_shape.py`**（季风轮 Stage C）：季风 ΔP vs
   NCEP SLP 框对标（A 陆地-only / D 陆−海对比双口径 + 气候态 sanity）+ g(W)/aridity-keep/
   `_dt_subsidence` 三候选区域重加权的离线证伪；纯读归档产物（`climate_monthly.msgpack`

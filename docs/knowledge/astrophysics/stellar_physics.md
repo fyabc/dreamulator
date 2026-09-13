@@ -62,6 +62,29 @@ $$T_{\text{eff}} = T_\odot \cdot \left(\frac{L}{R^2}\right)^{1/4}$$
 
 ---
 
+## 光谱能量分布（SED）与维恩位移
+
+主序星辐射近似黑体，**波长空间**峰值由维恩位移定律给出：
+
+$$\lambda_{max} = \frac{b}{T_{\text{eff}}}, \qquad b \approx 2.898\times10^{6}\ \text{nm·K}$$
+
+| 光谱型 | T_eff (K) | λ_max (nm) | 峰值波段 |
+|--------|-----------|------------|----------|
+| F5V | ~6500 | ~446 | 蓝 |
+| G2V（太阳） | 5772 | ~502 | 绿 |
+| K2V | ~4950 | ~585 | 黄橙 |
+| K8V | ~4050 | ~715 | 深红/近红外边界 |
+| M3V | ~3300 | ~880 | 近红外 |
+
+温度取 Pecaut & Mamajek (2013) 主序表典型值；晚 K 型各测量源散布约 ±100–200 K
+（如 K8V HD 88230 文献值 3970–4215 K）。注意：① 真实光谱带吸收线，晚型 K/M
+分子带强、偏离黑体；② 波长空间峰值 ≠ 频率/光子数峰值（后者更长波），引用须标口径；
+③ 精确波段能量份额用实测/模型 SED 模板，不用黑体积分代替。
+
+生态后果（PAR 份额、色素颜色随光谱型的预测）→ `knowledge/ecology/photosynthesis_spectra.md`。
+
+---
+
 ## 宜居带
 
 > 实现：`stellar_physics.py::habitable_zone_bounds()`  
@@ -96,6 +119,7 @@ $$T_{\text{eff}} = T_\odot \cdot \left(\frac{L}{R^2}\right)^{1/4}$$
 
 - `knowledge/astrophysics/orbital_mechanics.md`（待创建）
 - `knowledge/planetary_science/planet_models.md`
+- `knowledge/ecology/photosynthesis_spectra.md`（恒星光谱 → 光合色素匹配）
 - 代码：`src/dreamulator/engine/stellar_physics.py`
 
 ## 参考资料
@@ -104,3 +128,4 @@ $$T_{\text{eff}} = T_\odot \cdot \left(\frac{L}{R^2}\right)^{1/4}$$
 - Demircan, O., & Kahraman, G. (1991). *Ap&SS*, 181(2), 313-322.
 - Kopparapu, R. K., et al. (2013). *ApJ*, 765(2), 131.
 - Prša, A., et al. (2016). IAU 2015 Resolution B3. *AJ*, 151(5), 123.
+- Pecaut, M. J., & Mamajek, E. E. (2013). arXiv:1303.1645（主序星 T_eff/BC 表）.

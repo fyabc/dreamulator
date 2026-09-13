@@ -3,7 +3,7 @@
 ## 已有文档
 
 - `lagrange_points.md` — 特洛伊天体与拉格朗日点
-- `stellar_physics.md` — 质光关系、主序星演化、宜居带
+- `stellar_physics.md` — 质光关系、主序星演化、宜居带、SED 与维恩位移（谱型-峰值波长表）
 - `sidereal_solar_day.md` — 恒星日 vs 太阳日（synodic day）换算、潮汐锁定特例、极昼/极夜时长公式、对引擎的启示
 - `orbital-stability.md` — 轨道稳定性 N-body 验证（REBOUND 脚本用法、共振链、希尔球稳定上限）
 - `satellite_system_stability.md` — 卫星系统稳定性（互希尔间距判据、顺/逆行恒星潮汐极限、共振链冷启动陷阱、J2/Laplace 面、常数 Q 潮汐自洽核算、混沌散射区与瞬态架构四条约束、宜居带表面成分约束、REBOUND 工程教训、近恒星巨行星外卫的工程 κ 边界与静楔/振荡族分类）
