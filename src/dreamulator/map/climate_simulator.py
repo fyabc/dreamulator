@@ -487,20 +487,21 @@ def simulate_climate(
     # reassigned to the monthly mean = background + monsoon anomaly).
     _wind_bg = wind
 
-    # ── Monsoon wind anomaly (tech debt 23) ──
-    # Summer continents warm above the zonal mean → thermal lows; the boundary-
-    # layer wind answers the anomaly pressure gradient against Coriolis and drag
+    # ── Monsoon wind (tech debt 23; M4/B0b 2026-09-14) ──
+    # Continents thermally contrasted against the same-latitude ocean (full
+    # monthly value, annual mean included) → thermal lows/highs; the boundary-
+    # layer wind answers the pressure gradient against Coriolis and drag
     # (engine/monsoon_circulation.py).  Near the equator f → 0 and the flow goes
-    # straight down-gradient — the cross-equatorial monsoon current.  The anomaly
-    # is added onto the annual background, giving 12 monthly winds that drive the
-    # monthly moisture budget in Stage 3.
-    # Raw (unsmoothed) anomaly kept for ④: the stationary-wave ΔSLP is added
+    # straight down-gradient — the cross-equatorial monsoon current.  The
+    # monthly thermal component is added onto the three-cell background, giving
+    # 12 monthly winds that drive the monthly moisture budget in Stage 3 and
+    # whose vector mean is the annual wind (with its stationary structure).
+    # Raw (unsmoothed) field kept for ④: the stationary-wave ΔSLP is added
     # *before* smoothing so both components get the same scale separation.
     _dp_hpa_raw = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
         surface_pressure_hpa=config.surface_pressure_hpa,
-        depth_fraction=config.monsoon_depth_fraction,
         elevation_m=elevation_m,
         ocean_mask=is_ocean,  # B2: land-vs-same-latitude-ocean contrast
     )
@@ -552,11 +553,13 @@ def simulate_climate(
     # Annual-mean wind = vector mean of the (blocked) monthly fields — the
     # observational definition itself (NCEP annual climatology is the vector
     # mean of the monthly winds).  Tech-debt-24 data contract (2026-09-13):
-    # the monthly field is primary, the annual one derived, so the identity is
-    # guaranteed by construction instead of resting on the anomaly's zero
-    # 12-month sum.  Every annual consumer (cell storage, the Stommel chain
-    # via wind_mirror, 4.1-B advection, the annual moisture budget, the coast
-    # asymmetry step) reads this single source.
+    # the monthly field is primary, the annual one derived, so the identity
+    # holds by construction — and since B0b (2026-09-14) the full-value
+    # monthly ΔP makes that average carry the stationary land-sea structure
+    # (winter Siberian high ≫ summer thermal lows).  Every annual consumer
+    # (cell storage, the Stommel chain via wind_mirror, 4.1-B advection, the
+    # annual moisture budget, the coast asymmetry step) reads this single
+    # source.
     wind = wind_monthly.mean(axis=0)
 
     # Write wind to cells for frontend visualisation

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from dreamulator.engine.monsoon_circulation import (
+    _MONSOON_PROJECTION_FRACTION,
     monsoon_boundary_layer_wind,
     pressure_anomaly_monthly,
     zonal_mean_monthly,
@@ -88,26 +89,37 @@ class TestPressureAnomalyMonthly:
         # Zonal mean is 20 °C for both cells → dt = ±10 K exactly.
         assert (dp[0, 0:6] < 0).all()  # warm → low pressure
         assert (dp[0, 6:12] > 0).all()  # cold → high pressure
-        # Magnitude: ΔP = −P_sfc · 0.25 · ΔT / T̄_K
-        expected = -1013.25 * 0.25 * 10.0 / (20.0 + 273.15)
+        # Magnitude: ΔP = −P_sfc · E · ΔT / T̄_K  (E = M4 projection factor)
+        expected = -1013.25 * _MONSOON_PROJECTION_FRACTION * 10.0 / (20.0 + 273.15)
         assert np.isclose(dp[0, 0], expected, rtol=1e-6)
 
-    def test_annual_mean_anomaly_is_removed(self):
-        # A constant land-sea contrast all year belongs to the annual
-        # geostrophic wind, not the monsoon — it must not appear here.
+    def test_full_contrast_retained(self):
+        # B0b: a constant year-round land-sea contrast produces a constant
+        # ΔP (a steady thermal low) — the annual mean is NOT removed, so the
+        # derived annual wind keeps its stationary land-sea structure.
         lat = np.array([30.0, 31.0])
         t = np.full((2, 12), 20.0)
         t[0, :] += 5.0
         t[1, :] -= 5.0
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0)
-        assert np.allclose(dp, 0.0, atol=1e-12)
+        expected = -1013.25 * _MONSOON_PROJECTION_FRACTION * 5.0 / (20.0 + 273.15)
+        assert (dp[0] < 0).all()  # warmer land → steady thermal low
+        assert (dp[1] > 0).all()  # cooler land → steady high
+        assert np.allclose(dp[0], expected, rtol=1e-6)
 
-    def test_months_sum_to_zero(self):
-        rng = np.random.default_rng(7)
-        lat = rng.uniform(-90.0, 90.0, 50)
-        t = 25.0 - 40.0 * np.abs(lat)[:, None] / 90.0 + rng.normal(0, 8, (50, 12))
+    def test_monthly_sensitivity_uses_monthly_reference(self):
+        # The 1/T̄ hydrostatic sensitivity follows the monthly zonal
+        # reference: the same ±10 K contrast in a colder column produces a
+        # stronger hPa response (the winter high responds harder per kelvin).
+        lat = np.array([30.0, 31.0])
+        t = np.full((2, 12), 20.0)
+        t[0, 1] += 10.0
+        t[1, 1] -= 10.0
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0)
-        assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
+        t2 = t - 30.0  # colder world, same contrast
+        dp2 = pressure_anomaly_monthly(t2, lat, band_deg=5.0)
+        assert np.abs(dp2[0, 1]) > np.abs(dp[0, 1])
+        assert np.allclose(dp[0, 1], -dp[1, 1])  # symmetric contrast
 
     def test_elevation_derating(self):
         # B1: a 4844 m plateau cell responds at exp(−z/8500)·exp(−z/3000)
@@ -124,9 +136,8 @@ class TestPressureAnomalyMonthly:
         ratio = dp[1, 5] / dp[0, 5]
         expected = np.exp(-4844.0 / 8500.0) * np.exp(-4844.0 / 3000.0)
         assert ratio == pytest.approx(expected, rel=1e-6)
-        # Both are thermal lows (warm anomaly), and the zero-sum invariant holds.
+        # Both are thermal lows (warm anomaly).
         assert dp[0, 5] < 0.0 and dp[1, 5] < 0.0
-        assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
 
 
 class TestMonsoonBoundaryLayerWind:

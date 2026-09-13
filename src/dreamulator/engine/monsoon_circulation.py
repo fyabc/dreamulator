@@ -8,20 +8,28 @@ Physical chain (tech debt 23, roadmap):
 
 1. **Zonal-mean reference** — the monthly zonal-mean temperature per
    latitude band is the "no land-sea contrast" reference state.
-2. **Pressure anomaly** — a column warmer than the zonal mean expands
-   (hydrostatic), lowering surface pressure: a thermal low over summer
-   continents, a relative high over winter continents and cool oceans.
-   The response is derived, not tuned:
+2. **Pressure anomaly** — a column warmer than its same-latitude ocean
+   reference expands (hydrostatic), lowering surface pressure: a thermal
+   low over summer continents, a relative high over winter continents.
+   The monthly field carries the *full* land-sea contrast (annual mean
+   included — B0b), so the derived annual wind (vector mean of the
+   monthly winds) keeps its stationary structure.  The response is
+   derived, not tuned:
 
-       ΔP = −P_sfc · (d/H) · ΔT / T̄
+       ΔP = −P_sfc · E · ΔT / T̄
 
-   with d/H = ``depth_fraction`` the fraction of the atmospheric column
-   whose temperature anomaly projects onto surface pressure (monsoon
-   thermal anomalies occupy the lowest ~2 km of an ~8.5 km scale height,
-   hence the default 0.25), and T̄ the zonal-mean absolute temperature.
-   Earth check: ΔT = +5 K over 293 K mean gives −4.3 hPa, the right
-   order for the Asian summer thermal low (~5 hPa below the surrounding
-   ocean).
+   with E ≈ 0.104 the boundary-layer projection factor (BL-mean
+   amplitude × linear-decay profile over the heat-low depth; see the
+   module constants) and T̄ the monthly zonal reference temperature.
+   Earth anchor (2026-09-14 Stage-C probe, full-contrast target): Sahara
+   July 0.93×, Siberia January 1.08×, Mongolia January 0.80× of the
+   observed NCEP land-sea SLP contrast.  Known limitation: wet
+   deep-convective systems (India/South-China summer lows, whose latent
+   heating projects through the whole column) need E ≈ 0.37-0.40 and are
+   undershot ~4× by this dry-BL factor — no Stage-2-available,
+   non-circular discriminator separates them (δMCD/δTH decomposition
+   2026-09-14), so the monsoon-land amplitude moves to the moisture-
+   routing line (D) rather than a per-region ΔP retune.
 3. **Boundary-layer momentum balance** — the surface wind answers the
    pressure-gradient force against Coriolis and turbulent drag.  The
    Coriolis acceleration in the right-handed ENU frame is −f k̂×v
@@ -62,13 +70,31 @@ from __future__ import annotations
 
 import numpy as np
 
-# Fraction of the atmospheric column whose temperature anomaly projects
-# onto surface pressure (hydrostatic).  Monsoon thermal anomalies are
-# tropospheric but bottom-heavy: the boundary layer plus the lower free
-# troposphere, ~2 km of an ~8.5 km scale height.  Since B1 this is the
-# LOWLAND limit (f_deep) of the elevation-derated f(z) — the Stage-C
-# calibration target against NCEP SLP anomaly amplitude.
-_MONSOON_DEPTH_FRACTION: float = 0.25
+# Fraction of the atmospheric column whose temperature anomaly projects onto
+# surface pressure (hydrostatic), derived from the observed structure of the
+# thermal systems (M4, 2026-09-14):
+#
+#   E = r · [1 − (H/h)·(1 − e^(−h/H))]
+#
+# * r = ΔT̄_BL / ΔT_sfc — the boundary-layer-mean (virtual) temperature
+#   anomaly over the surface land-sea contrast: the surface superadiabatic
+#   layer over hot dry ground and the in-layer decay (Lindzen & Nigam 1987,
+#   JAS 44:2418: BL anomaly decays to ~70 % of the surface value by 3 km,
+#   γ = 0.30, H₀ = 3000 m; ERA5 BL profiles put the layer-mean ratio at
+#   0.4-0.6).
+# * h = the depth over which the anomaly converges to zero — the heat-low
+#   vertical cap at ≤ ~700 hPa (Lavaysse et al. 2009, Climate Dyn. 33:313;
+#   observed 1.5-4 km, the circulation closes within the boundary layer,
+#   Rácz & Smith 1999, QJRMS 125:225).
+#
+# With r = 0.6 and h = 3200 m this gives E ≈ 0.104 — the uniform-full-amplitude
+# 0.25 (pre-M4) overstated the Sahara July thermal low by ~4-5× (two factors
+# of ~2: the uniform in-layer profile, and the surface ΔT standing in for the
+# BL mean; lit review 2026-09-14 report 2 §B).  Stage-C anchor check
+# (2026-09-14, full land-sea contrast target): Sahara 0.93×, Siberia 1.08×,
+# Mongolia 0.80× of the observed NCEP contrast at this value.
+_BL_AMPLITUDE_RATIO: float = 0.6
+_HEAT_LOW_DEPTH_M: float = 3200.0
 
 # B1 elevation derating scales (m):
 # Barometric pressure scale height (standard atmosphere) — an elevated
@@ -80,6 +106,17 @@ _PRESSURE_SCALE_HEIGHT_M: float = 8500.0
 # (Boos & Kuang 2010/2013: the monsoon heat source is the lowland
 # non-orographic heating, not the elevated plateau surface).
 _MOISTURE_SCALE_HEIGHT_M: float = 3000.0
+
+
+def _monsoon_projection_fraction() -> float:
+    """Lowland column projection factor E (see the M4 constants block)."""
+    ratio = 1.0 - (_PRESSURE_SCALE_HEIGHT_M / _HEAT_LOW_DEPTH_M) * (
+        1.0 - float(np.exp(-_HEAT_LOW_DEPTH_M / _PRESSURE_SCALE_HEIGHT_M))
+    )
+    return _BL_AMPLITUDE_RATIO * ratio
+
+
+_MONSOON_PROJECTION_FRACTION: float = _monsoon_projection_fraction()
 
 # Boundary-layer drag rate k_d = C_D·|U|/h_BL (s⁻¹): bulk drag coefficient
 # C_D ≈ 1.3e-3 over open water (smooth surface), |U| ≈ 8 m/s, h_BL ≈ 1 km →
@@ -191,54 +228,46 @@ def pressure_anomaly_monthly(
     lat_deg: np.ndarray,
     band_deg: float = 5.0,
     surface_pressure_hpa: float = 1013.25,
-    depth_fraction: float = _MONSOON_DEPTH_FRACTION,
     elevation_m: np.ndarray | None = None,
     ocean_mask: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Monthly surface-pressure anomaly from seasonal heating contrasts (hPa).
+    """Monthly surface pressure from the land-sea heating contrast (hPa).
 
-    ΔT is the cell's departure from the zonal mean at its latitude and
-    month — the land-sea / surface-type heating contrast.  Its annual
-    mean is then subtracted, so only the *seasonal* anomaly drives the
-    monsoon wind and each cell's 12 monthly values sum to zero.
+    ΔT is the cell's departure from the same-latitude ocean zonal mean at
+    its month — the *full* land-sea contrast, annual mean included (B0b,
+    2026-09-14: the correct algorithm is monthly pressure (full contrast)
+    → monthly wind → vector average = annual wind; the former "seasonal
+    anomaly only" subtraction zero-meaned the monthly ΔP and made the
+    annual vector average collapse onto the pure three-cell background —
+    the "annual wind is a textbook three-cell pattern" artifact and the
+    wind R² −0.81 metric).  A winter Siberian high now drives its
+    north-easterly outflow, and its asymmetric collocation with the summer
+    thermal lows gives the annual mean its stationary structure.
 
-    Open decision (monsoon-amplitude round, B0b): the original rationale —
-    "the annual-mean pressure pattern already drives the annual geostrophic
-    wind" — is obsolete (the geostrophic wind was removed).  The annual-mean
-    ΔP pattern (winter Siberian high ≫ summer thermal low) therefore drives
-    no wind at all today, and the annual-mean circulation stays purely
-    zonal; keeping the annual component would give the derived annual wind
-    its stationary structure.  Deferred until the ΔP heat-source rework is
-    calibrated — it changes the character of the annual wind feeding the
-    Stommel chain and the annual moisture budget.
+    The hydrostatic response to warming the boundary layer by ΔT (M4,
+    2026-09-14 — BL-mean amplitude × linear-decay profile, see module
+    constants), structured by elevation (B1, 2026-09-13):
 
-    The hydrostatic surface response to warming the lowest
-    ``depth_fraction`` of the column by ΔT, structured by elevation
-    (monsoon-amplitude round B1, 2026-09-13):
+        ΔP = −P(z) · f(z) · ΔT / T̄_zonal(m)
+        P(z) = P_sfc · exp(−z/H)                    # H = 8.5 km
+        f(z) = E · exp(−z/z_moist)                  # E ≈ 0.104, z_moist = 3 km
 
-        ΔP = −P(z) · f(z) · ΔT / T̄_zonal
-        P(z) = P_sfc · exp(−z/H)                 # H  = 8.5 km (scale height)
-        f(z) = depth_fraction · exp(−z/z_moist)  # z_moist = 3 km
+    with z = max(elevation, 0) and T̄_zonal(m) the zonal reference
+    temperature of the same month (the actual column temperature that
+    sets the hydrostatic sensitivity).
 
-    with z = max(elevation, 0) and T̄_zonal the *annual-mean* zonal
-    temperature (so the 12 monthly anomalies sum to exactly zero per cell).
-    Warmer → lower pressure (thermal low); colder → higher pressure.
-
-    The two elevation deratings, both physical (no tuned constants beyond
-    the two scale heights):
+    The two elevation deratings, both physical:
     * P(z): the surface pressure of an elevated cell already represents a
       smaller mass column — the same fractional expansion moves less mass
       (barometric).
-    * f(z): the monsoon's heat source is the *lowland non-orographic*
-      heating — deep convection anchors on the lowland θeb maximum and
-      removing the plateau's elevated heating barely weakens the South
-      Asian monsoon (Boos & Kuang 2010 Nature / 2013 Sci Rep), while 85%
-      of the atmospheric water vapour sits below 3 km (Wu et al. 2012):
-      heating above the moisture ceiling acts on dry air and projects
-      only weakly onto the surface pressure field.  Without f(z) the
-      4844 m Tibetan surface anomaly (the largest raw |ΔT| on the planet)
-      dominates ΔP — the opposite of the observed lowland thermal low.
-      Combined, a 4.8 km plateau cell responds at ~11% of a lowland cell.
+    * f(z)'s exp(−z/z_moist): the monsoon's heat source is the *lowland
+      non-orographic* heating — deep convection anchors on the lowland θeb
+      maximum and removing the plateau's elevated heating barely weakens
+      the South Asian monsoon (Boos & Kuang 2010 Nature / 2013 Sci Rep),
+      while 85% of the atmospheric water vapour sits below 3 km (Wu et al.
+      2012).  Without it the 4844 m Tibetan surface anomaly dominates ΔP.
+      Combined with P(z), a 4.8 km plateau cell responds at ~11% of a
+      lowland cell.
 
     Args:
         t_monthly_c: Monthly temperature field (°C), shape (N, 12).
@@ -247,41 +276,33 @@ def pressure_anomaly_monthly(
         surface_pressure_hpa: Sea-level pressure P_sfc.  Scales the
             response linearly, so denser/thinner atmospheres respond
             proportionally.
-        depth_fraction: Lowland fraction of the column coupling to surface
-            pressure (f_deep — the Stage-C calibration target; see module
-            docstring).
         elevation_m: Cell elevation (m), shape (N,), clamped at 0 for the
-            derating factors.  None → all cells at sea level (uniform
-            depth_fraction, the pre-B1 behaviour).
+            derating factors.  None → all cells at sea level.
         ocean_mask: Boolean (N,).  When given, the zonal reference is the
             *ocean-only* latitude-band mean (B2): ΔT becomes the land-vs-
-            same-latitude-ocean contrast — the module's documented intent.
-            The all-cell zonal mean self-dilutes in the subtropical desert
-            belt (every 25-35°N cell is hot → small departure), which pushed
-            the July thermal-low centre to the 40-50°N interior (Karakum)
-            instead of the observed Iran/Thar ~30°N lowlands anchored on the
+            same-latitude-ocean contrast.  The all-cell zonal mean
+            self-dilutes in the subtropical desert belt (every 25-35°N
+            cell is hot → small departure), which pushed the July
+            thermal-low centre to the 40-50°N interior (Karakum) instead
+            of the observed Iran/Thar ~30°N lowlands anchored on the
             land-ocean θeb contrast (Boos & Kuang 2010; Geen et al. 2020).
 
     Returns:
-        Monthly pressure anomaly ΔP (hPa), shape (N, 12).  The 12 months
-        sum to ≈ 0 at every cell.
+        Monthly pressure ΔP (hPa), shape (N, 12).  Ocean cells are 0 by
+        construction (they are their own reference); the 12 months do not
+        sum to zero — the annual mean is the stationary land-sea pattern.
     """
     t_zonal = zonal_mean_monthly(t_monthly_c, lat_deg, band_deg, mask=ocean_mask)
     dt = t_monthly_c - t_zonal
-    # Seasonal anomaly only: remove the annual mean of the land-sea contrast.
-    dt = dt - dt.mean(axis=1, keepdims=True)
 
-    # Sensitivity factor from the annual-mean zonal temperature: the monthly
-    # ΔT already averages to zero per cell, and a fixed T̄ keeps ΔP exactly
-    # anomaly-only (12 months sum to zero).  Using the monthly T̄ would leak a
-    # ~0.5 hPa annual residual through the 1/T̄ modulation.
-    t_zonal_k = np.maximum(t_zonal.mean(axis=1, keepdims=True) + 273.15, 200.0)
+    # Hydrostatic sensitivity from the monthly zonal reference temperature.
+    t_zonal_k = np.maximum(t_zonal + 273.15, 200.0)
     if elevation_m is None:
-        dp = -surface_pressure_hpa * depth_fraction * dt / t_zonal_k
+        dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt / t_zonal_k
     else:
         z = np.maximum(np.asarray(elevation_m, dtype=np.float64), 0.0)[:, None]
         p_z = surface_pressure_hpa * np.exp(-z / _PRESSURE_SCALE_HEIGHT_M)
-        f_z = depth_fraction * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M)
+        f_z = _MONSOON_PROJECTION_FRACTION * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M)
         dp = -p_z * f_z * dt / t_zonal_k
     return np.asarray(dp)
 
@@ -294,13 +315,15 @@ def monsoon_boundary_layer_wind(
     air_density_kg_m3: float = _AIR_DENSITY_KG_M3,
     max_speed_m_s: float = 30.0,
 ) -> np.ndarray:
-    """Monthly monsoon wind anomaly from the boundary-layer momentum balance.
+    """Monthly monsoon wind from the boundary-layer momentum balance.
 
     Solves  0 = G − f k̂×v − k_d·v  with G = −∇(ΔP)/ρ in closed form per
     month and cell (see module docstring for the two physical limits).
-    The input pressure gradient is already the gradient of the *seasonal
-    anomaly* field (``pressure_anomaly_monthly``), so the output is a wind
-    anomaly to be added onto the annual background wind.
+    The input pressure gradient is that of the *full* monthly land-sea
+    contrast field (``pressure_anomaly_monthly``, B0b), so the output is
+    the monthly thermal-wind component to be added onto the three-cell
+    background — their vector average over the 12 months is the annual
+    wind (which therefore carries the stationary land-sea structure).
 
     Args:
         grad_dp_pa_m: Gradient of the monthly pressure anomaly, tangent
@@ -317,8 +340,9 @@ def monsoon_boundary_layer_wind(
         max_speed_m_s: Speed clamp for the anomaly (m/s).
 
     Returns:
-        Monthly wind anomaly vectors (m/s), tangent to the sphere,
-        shape (12, N, 3).  Sum over months ≈ 0 (anomaly field).
+        Monthly wind vectors (m/s), tangent to the sphere, shape (12, N, 3).
+        Sum over months ≠ 0 — the residual is the stationary annual
+        component the full-value ΔP is meant to carry.
     """
     east, north = _tangent_basis(nodes_xyz)
 

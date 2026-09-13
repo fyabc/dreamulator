@@ -488,13 +488,10 @@ class TerrainPipelineConfig:
     ice_albedo_threshold_c: float = -5.0  # T below which ice albedo activates
     # Wind
     wind_blocking_height_m: float = 3000.0  # mountains above this block wind
-    # Monsoon ΔP column-coupling coefficient, lowland limit (f_deep).  The
-    # elevation-derated f(z) = f_deep·exp(−z/3 km) in pressure_anomaly_monthly
-    # suppresses the elevated-plateau surface anomaly (Boos & Kuang 2010/2013:
-    # the monsoon heat source is the lowland non-orographic heating).  Stage-C
-    # calibration target against NCEP SLP anomaly amplitude — Earth-calibrated
-    # once, same physics for all worlds.
-    monsoon_depth_fraction: float = 0.25
+    # (Monsoon ΔP column coupling is no longer a config knob: since M4
+    # 2026-09-14 the lowland projection factor is derived from cited
+    # physical constants — BL-mean amplitude ratio and heat-low depth — in
+    # engine/monsoon_circulation.py.)
     # ④ Stationary-wave response (subtropical-high longitudinal structure).
     # Linear steady barotropic vorticity solve on the model's own latent-
     # heating divergence (Sardeshmukh & Hoskins 1988 RWS; Rodwell & Hoskins

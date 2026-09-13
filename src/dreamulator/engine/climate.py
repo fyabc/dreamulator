@@ -146,7 +146,6 @@ class ClimateEngine(BaseEngine):
             "greenhouse_warming_K",
             "evaporation_base_mm",
             "wind_blocking_height_m",
-            "monsoon_depth_fraction",
             "itcz_lag_days",
         ):
             if key in pars:

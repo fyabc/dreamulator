@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **M4 热低压 ΔP 结构修复 + B0b 删「减年平」（2026-09-14）**：`pressure_anomaly_monthly`
+  投影因子从旧 `depth_fraction`=0.25（均匀全幅、地表 ΔT 直投柱压）改为**第一性推导的
+  E ≈ 0.10** = r·[1−(H/h)(1−e^(−h/H))]，其中 r = 0.6（BL 平均 vs 地表异常，Lindzen &
+  Nigam 1987 的 γ=0.30 剖面量级）、h = 3.2 km（热低压 ≤700 hPa 封顶，Lavaysse 2009；
+  Rácz & Smith 1999 BL 内闭合）——两主犯各 ~2×、相乘 ≈ 4-5× = 实锤的撒哈拉 5×。同轮
+  B0b 删「减年平」：月 ΔP 全值陆海对比 → 月风 → 矢量平均 = 年平，月 T̄ 敏感度同改。
+  **Stage C 全值标定**（`diagnose_monsoon_dp_shape.py` 重写）：撒哈拉 7 月 1.08、西伯利亚
+  1 月 1.00；蒙古 0.41 = 高原海拔衰减。**earth 逐格回归**：P R² 0.354→0.373、风 R²
+  −0.81→−0.737、T R² 0.941→0.944、Köppen agree 31.9%→32.1%；Stommel 链签名逐位保持
+  （湾流/黑潮/加那利/赤道流符号不变）；**nacrea** Af 陆地占比 38.9%→30.0%（§7 E3「Af
+  占 39% 过多」收敛）、Am 消失（弱季节边缘）。**加热深度判别实测无解**（供给地理/模型 P/
+  背景风上风三候选全否，δMCD/δTH 分解）——湿深季风框（印度/华南/哈萨克 E≈0.37-0.40 需）
+  被 E=0.10 欠投影 ~4×，裁定**移交 D 线**（水分路由/槽位/LLJ），Cwa/Cfa/Am recall 不再
+  以 E 端点承担。新增 `scripts/climate/diagnose_moisture_decomp.py`（Seager 2014 δMCD/δTH
+  分解）。详见 proposal §2/§5。
+
 - **④ 定常波响应 v1 实现路径否证（2026-09-13，七版迭代，`stationary_wave_enabled`
   默认 False）**：机制 = Rodwell & Hoskins 2001（季风加热 → 源西侧副高脊 = 沙漠
   维持）+ Sardeshmukh & Hoskins 1988 RWS。离线原型（解析基本态）R&H 签名完整再现

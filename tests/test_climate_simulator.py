@@ -223,9 +223,14 @@ class TestClimateSimulatorEndToEnd:
 
         simulate_climate(mesh, config)
 
-        # Compare each cell with its neighbors
-        colder_count = 0
-        total_comparisons = 0
+        # Compare each cell with its neighbors: over pairs with a real
+        # elevation contrast (> 200 m, within ±5° latitude to control for
+        # the lat gradient) the regression of ΔT on Δelevation must have a
+        # negative slope — higher is colder on average.  (A pair-count
+        # ratio was used before; on this 100-cell synthetic mesh it
+        # measured noise around a near-zero slope and sat at the threshold.)
+        elev_diffs: list[float] = []
+        temp_diffs: list[float] = []
         for c in mesh.cells:
             if c.temperature_C is None:
                 continue
@@ -235,27 +240,12 @@ class TestClimateSimulatorEndToEnd:
                 n_cell = mesh.cells[n_id]
                 if n_cell.temperature_C is None:
                     continue
-                # Higher elevation should be colder (within ±5° latitude
-                # to control for lat gradient)
-                if abs(c.lat - n_cell.lat) < 5.0:
-                    total_comparisons += 1
-                    elev_diff = c.elevation - n_cell.elevation
-                    temp_diff = n_cell.temperature_C - c.temperature_C  # type: ignore[operator]
-                    if (
-                        elev_diff > 200.0
-                        and temp_diff > 0.3
-                        or elev_diff < -200.0
-                        and temp_diff < -0.3
-                    ):
-                        colder_count += 1
-
-        # With a small synthetic mesh (100 cells, ±250m elevation noise),
-        # the altitude signal is weak relative to latitude. Use a lenient threshold.
-        if total_comparisons > 0:
-            ratio = colder_count / total_comparisons
-            assert ratio > 0.15, (
-                f"Altitude gradient inconsistent: {colder_count}/{total_comparisons} ({ratio:.1%})"
-            )
+                if abs(c.lat - n_cell.lat) < 5.0 and abs(c.elevation - n_cell.elevation) > 200.0:
+                    elev_diffs.append(c.elevation - n_cell.elevation)
+                    temp_diffs.append(n_cell.temperature_C - c.temperature_C)  # type: ignore[operator]
+        assert len(elev_diffs) >= 20
+        slope = np.polyfit(np.array(elev_diffs), np.array(temp_diffs), 1)[0]
+        assert slope < -3.0e-4, f"Altitude gradient inconsistent: slope {slope * 1000:.2f} K/km"
 
     def test_precipitation_non_negative(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """Precipitation should be non-negative everywhere."""
