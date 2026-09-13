@@ -126,6 +126,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   可能性谱系，晚 K 型偏移更大；与 nacrea「赤道红外雨林深黑/紫黑」正典自洽）。配套：
   `astrophysics/stellar_physics.md` 增「SED 与维恩位移」节（谱型-λ_max 表 + 口径三
   注意点），ecology/astrophysics/astrobiology 三索引同步。
+- **气候提案 §7 两项候选登记**（2026-09-13 间奏曲轮）：E1 **风暴输送参数化**候选
+  （慢自转斜压涡旋「少而大」，巨型气旋间歇性深输送水汽 → nacrea 中纬干旱候选正解，
+  ExoPlaSim PoC 对标先行）；**食季辐照脉冲**候选（nacrea：食季内每轨道周期全食
+  ≤~2.2 h → 平均直射辐照 ~−3%、4.7 yr 交点周期 = 「食季纪元」短周期调制；脉冲分量
+  热惯性强阻尼、持续分量 −ΔQ(1−α)/B_eff 量级几 K，离线 EBM 量化后再定入引擎）。
 - **`scripts/climate/diagnose_monsoon_dp_shape.py`**（季风轮 Stage C）：季风 ΔP vs
   NCEP SLP 框对标（A 陆地-only / D 陆−海对比双口径 + 气候态 sanity）+ g(W)/aridity-keep/
   `_dt_subsidence` 三候选区域重加权的离线证伪；纯读归档产物（`climate_monthly.msgpack`

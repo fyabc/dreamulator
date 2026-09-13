@@ -123,7 +123,7 @@
 | **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化脚本。完整链路与开源替代调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6，区域导出纸面设计见 `map-workflow.md` §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合（抬升率场）~~——随流水侵蚀关闭（§四 3B）搁置，侵蚀重启再评估；调研存 `competitor-analysis.md` §4.2.2 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五） | 进行中。天文/地质/气候三大层已就绪；文明种子设计 + 视频素材待推进 | ★★★★★ |
-| **P0** | **单圈体制包（E1-E4）**：nacrea 气候多样性——E1 涡旋热/水汽输送参数化（高纬过冷/中纬过干）、E2 斜压带脱离冰缘吸附、E3 ITCZ 宽度随 Ω 收窄（Faulk 2017；Af 39%+60mm 边界噪声）、E4 极向 OHT + WBC 急流；ExoPlaSim PoC 对标先行，见 [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §7 | 1–2 周 | ★★★★★ |
+| **P0** | **单圈体制包（E1-E4）**：nacrea 气候多样性——E1 涡旋热/水汽输送参数化（高纬过冷/中纬过干；候选机制=风暴输送参数化，慢自转涡旋少而大、巨型气旋间歇性深输送，proposal §7）、E2 斜压带脱离冰缘吸附、E3 ITCZ 宽度随 Ω 收窄（Faulk 2017；Af 39%+60mm 边界噪声）、E4 极向 OHT + WBC 急流；ExoPlaSim PoC 对标先行，见 [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §7 | 1–2 周 | ★★★★★ |
 | **P0** | **季风动力学与季节风场**（技术债 23，§七）：v1 + 幅度轮 A/B0/B1/B2 ✅；**Stage C 振幅标定 ✅（2026-09-13 诊断反转）**——季风 ΔP **已标定**（对 NCEP SLP 陆−海对比距平：印度 1.00/哈萨克 1.29/华南 0.73/蒙古 0.78，6 框 4 落 0.73–1.29）；C1 两趟 g(W)/θeb + aridity-keep + `_dt_subsidence` ΔP 帽**全证伪**（pre-flight「干内陆过强」是月份索引 bug 伪影；详见 proposal §2 已否证）；**季风降水残差（恒河 492/1347）归因降水侧**（水分路由/辐合增强 → Stage F），非风场强迫；撒哈拉/西伯利亚 ΔP 残差 = **缺副热带反气旋**（结构项 → ④ 静止波/SLP 逐格）；**副高西缘流（美洲 Cfa）= 条件项**（需 ΔP 框架自然覆盖、不做逐区特调）；总验收（Cwa/Cfa/Am recall >40%）随降水侧 F 推进，见 [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §2/§7 | 降水侧随 F | ★★★★★ |
 | P1 | **月度矢量场展示**（技术债 24，§七）：月度风场先行 → 洋流季节化后月度化；前端懒加载抽样箭头 | 1–2 周（风场部分随 23） | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
@@ -242,8 +242,9 @@
    缺失的修正链：`恒星光谱类型 → 光合色素吸收谱 → 有效 PAR → par_ratio`。
    当前 `physical_inputs` 只解析 `stellar_luminosity_sol`（总光度），未读恒星
    有效温度/光谱型。优先级 **P2**（类地球世界不受影响，仅影响 M/K 矮星异星
-   生态的真实性）。配套：新增 `docs/knowledge/ecology/photosynthesis_spectra.md`
-   （光合吸收谱 + 恒星光谱匹配，含 C3/C4 效率上限与 NIR 色素的参考）。
+   生态的真实性）。配套：`docs/knowledge/ecology/photosynthesis_spectra.md`
+   ✅ 已建（2026-09-13，光合吸收谱 + 恒星光谱匹配（Kiang 2007 / Lehmer 2021）+
+   C3/C4 效率上限 + 异星斑斓星球设计启示）；`par_ratio` 光谱修正本身仍未实现。
 
 14. **世界参数单一来源缺失**（2026-08-13）— 参数（光度、轨道、温室等）散落在
    `stellar.yaml`/`planets.yaml` 之外，还被**手工抄写**进多个 Markdown 文档
