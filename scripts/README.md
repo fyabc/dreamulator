@@ -1,11 +1,11 @@
 # scripts/ 目录说明
 
-按域分组，共 42 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 43 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（24 个）
+## climate/ — 气候验证与诊断（25 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -24,6 +24,8 @@
   全局/纬向带/区域/极端格 + Köppen agreement，秒级）。
 - `diagnose_monsoon_dp_shape.py` — 季风 ΔP vs NCEP SLP 框对标（A 陆地-only/D 陆−海对比双口径 + g(W)/
   aridity-keep/`_dt_subsidence` 证伪，Stage C；读产物，秒级）。
+- `diagnose_desert_wetness.py` — §5 沙漠过湿归因：默认存档模式（秒级，GPCP 海洋格 f(ΔSST) 对流门
+  标定 + SST 距平结构核查）；`--ablation` 三引擎重跑（季风/κ 消融逐盒归因，~15 min）。
 - `diagnose_lapse_moisture.py` — 递减率干湿维度可行性实验（读产物手算定点，不动引擎）。
 
 ## earth/ — 真实地球数据导入与验证参考（9 个）
