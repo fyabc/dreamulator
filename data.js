@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788978336180,
+  "lastUpdate": 1789327711643,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4718,6 +4718,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004533905475281281",
             "extra": "mean: 4.038458999998795 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "05116fa2fcaa93740838e43245f1873b2c69ddc7",
+          "message": "docs(climate): 捆绑轮收口措辞——§5 实施顺序指针改「气候主线」\n\n季风幅度捆绑轮随本次合并收口，proposal 内「捆绑轮下一可实施子项」\n的轮次归属表述改为轮次中性的「气候主线」（D/F 水分路由的下一可实施\n地位不变，归 M4/ΔP 结构修复轮）。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-14T03:02:26+08:00",
+          "tree_id": "e7b80c1d2d1c658eb4ac07cb22fe726b0d02c586",
+          "url": "https://github.com/fyabc/dreamulator/commit/05116fa2fcaa93740838e43245f1873b2c69ddc7"
+        },
+        "date": 1789327711071,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 10.10812041837803,
+            "unit": "iter/sec",
+            "range": "stddev: 0.041741599112615664",
+            "extra": "mean: 98.93036080000144 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.497190553826011,
+            "unit": "iter/sec",
+            "range": "stddev: 0.065139602285686",
+            "extra": "mean: 285.9438125000011 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.503964116282469,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0611284823218234",
+            "extra": "mean: 664.9094809999999 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 818.3911477569259,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0003317675996771117",
+            "extra": "mean: 1.22190960000097 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 159.17461467957307,
+            "unit": "iter/sec",
+            "range": "stddev: 0.002534786324504214",
+            "extra": "mean: 6.28240880000277 msec\nrounds: 5"
           }
         ]
       }
