@@ -495,6 +495,22 @@ class TerrainPipelineConfig:
     # calibration target against NCEP SLP anomaly amplitude — Earth-calibrated
     # once, same physics for all worlds.
     monsoon_depth_fraction: float = 0.25
+    # ④ Stationary-wave response (subtropical-high longitudinal structure).
+    # Linear steady barotropic vorticity solve on the model's own latent-
+    # heating divergence (Sardeshmukh & Hoskins 1988 RWS; Rodwell & Hoskins
+    # 2001).  ΔSLP = ρ·f·ψ' enters the pressure-anomaly field before the
+    # existing smoothing → gradient → boundary-layer-wind chain; two-pass
+    # fixed point, under-relaxed.  **v1 FALSIFIED 2026-09-13 → default
+    # OFF**: the surface-T thermal-wind basic-state proxy falls below the
+    # fidelity the mechanism needs — the R&H signature appeared only with
+    # an unphysical polar basic state, and every guarded configuration
+    # regressed global P (R² 0.354→0.20) with the Sahara *wetter*.  Code +
+    # tests kept for v2 (needs a real upper-level basic state: two-layer
+    # Gill / baroclinic).  Chain: proposal §2 「定常波响应」 + module docstrings.
+    stationary_wave_enabled: bool = False
+    # r⁻¹: literature convention (S&H 1988), same order as the moisture τ=9d — NOT a tuning knob
+    stationary_wave_damping_days: float = 10.0
+    stationary_wave_relaxation: float = 0.5  # fixed-point under-relaxation between the two passes
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)

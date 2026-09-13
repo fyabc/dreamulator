@@ -483,6 +483,9 @@ def simulate_climate(
     # noise over land that swamps the coherent flow.  The three-cell wind
     # alone gives coherent ~3–4 m/s westerlies at 30–60°.
     wind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
+    # ④ pass-2 needs the pure three-cell background (below, `wind` gets
+    # reassigned to the monthly mean = background + monsoon anomaly).
+    _wind_bg = wind
 
     # ── Monsoon wind anomaly (tech debt 23) ──
     # Summer continents warm above the zonal mean → thermal lows; the boundary-
@@ -491,7 +494,9 @@ def simulate_climate(
     # straight down-gradient — the cross-equatorial monsoon current.  The anomaly
     # is added onto the annual background, giving 12 monthly winds that drive the
     # monthly moisture budget in Stage 3.
-    _dp_hpa = pressure_anomaly_monthly(
+    # Raw (unsmoothed) anomaly kept for ④: the stationary-wave ΔSLP is added
+    # *before* smoothing so both components get the same scale separation.
+    _dp_hpa_raw = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
         surface_pressure_hpa=config.surface_pressure_hpa,
@@ -499,6 +504,7 @@ def simulate_climate(
         elevation_m=elevation_m,
         ocean_mask=is_ocean,  # B2: land-vs-same-latitude-ocean contrast
     )
+    _dp_hpa = _dp_hpa_raw
     # Scale separation before differentiation: the anomaly field inherits the
     # cell-level land-ocean mosaic (~51 km at 200k cells), whose coastline
     # jumps dominate the raw gradient and drive sea-breeze-scale winds far
@@ -751,6 +757,101 @@ def simulate_climate(
         debug=debug,
         edge_table=(_msrc, _mdst),
     )
+
+    # ── ④ Stationary-wave response (roadmap ④): two-pass fixed point ──
+    # Pass-1 precipitation is the latent-heating source: P → column latent
+    # heat → mid-level ω → upper-level divergence D → RWS → steady linear
+    # barotropic ψ' (map/stationary_wave.py).  ΔSLP_wave = ρ·f·ψ' rides on
+    # the *raw* monsoon ΔP field; the existing smoothing → gradient →
+    # boundary-layer-wind chain consumes it, giving the wind field its
+    # longitudinal structure (subtropical ridge west of monsoon heating —
+    # the desert-maintenance mechanism, Rodwell & Hoskins 2001).  Then the
+    # moisture budget re-runs on the updated winds.  Under-relaxed between
+    # passes (config); the mechanism is a negative feedback (ridge → drying
+    # → less heating), residual logged for monitoring.  v1 scope: the ocean
+    # chain keeps pass-1 winds (Stommel/SST not re-run) and 4.1-B maritime
+    # advection keeps the pre-wave wind field.
+    if config.stationary_wave_enabled:
+        from dreamulator.map.stationary_wave import compute_slp_wave_anomaly
+
+        _lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
+        _areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+        # pass-1 逐月风的切向分量 (n, 12)：2D 基本态的地表项（含季风异常
+        # 的经度结构——TEJ 型局域东风由此进入热成风修正）。`wind_monthly`
+        # 此刻仍是 pass-1 场（下方 wave 消费后才重赋值为 pass-2）。
+        _u_e = np.einsum("mck,ck->cm", wind_monthly, _east_w)
+        _v_e = np.einsum("mck,ck->cm", wind_monthly, _north_w)
+        _wave = compute_slp_wave_anomaly(
+            p_monthly_mm=p_monthly,
+            t_monthly_c=t_monthly_C,
+            elevation_m=elevation_m,
+            cell_lat_deg=lat_deg,
+            cell_lon_deg=_lon_deg,
+            cell_area_km2=_areas_km2,
+            wind_east_monthly=_u_e,
+            wind_north_monthly=_v_e,
+            surface_pressure_hpa=config.surface_pressure_hpa,
+            rotation_period_days=config.rotation_period_days,
+            radius_km=config.radius_km,
+            orbital_period_days=config.orbital_period_days,
+            damping_days=config.stationary_wave_damping_days,
+        )
+        _clip_frac = float((np.abs(_wave.dp_hpa) >= 7.999).mean())
+        _dp_wave = _wave.dp_hpa * config.stationary_wave_relaxation
+        _console.print(
+            f"    [dim]stationary wave (④): ΔSLP {_dp_wave.min():.1f}.."
+            f"{_dp_wave.max():.1f} hPa (capped {_clip_frac * 100:.1f}%)[/dim]"
+        )
+        _dp2 = _smooth_graph(_dp_hpa_raw + _dp_wave, _avg, _n_smooth)
+        _grad2 = np.stack(
+            [
+                _graph_least_squares_gradient(mesh, _dp2[:, m], nodes_xyz) * 100.0 / _radius_m
+                for m in range(12)
+            ]
+        )
+        _wind_monsoon2 = monsoon_boundary_layer_wind(
+            _grad2, f_coriolis, nodes_xyz, drag_rate_s=_drag
+        )
+        wind_monthly = np.stack([_wind_bg + _wind_monsoon2[m] for m in range(12)])
+        wind_monthly = np.stack(
+            [
+                terrain_wind_blocking(wind_monthly[m], elevation_m, config.wind_blocking_height_m)
+                for m in range(12)
+            ]
+        )
+        wind = wind_monthly.mean(axis=0)
+        # Stored (frontend/validation) winds must reflect the wave-updated
+        # annual mean — the wind-R² acceptance metric reads these fields.
+        _we2, _wn2 = _dec_wind(wind, _east_w, _north_w)
+        for _i, _c in enumerate(mesh.cells):
+            _c.wind_east_m_s = float(_we2[_i])
+            _c.wind_north_m_s = float(_wn2[_i])
+
+        _p_pass1 = p_monthly
+        precipitation_mm, p_monthly = _compute_precipitation_monthly_budget(
+            mesh=mesh,
+            wind=wind,
+            wind_monthly=wind_monthly,
+            is_land=is_land,
+            is_ocean=is_ocean,
+            elevation_m=elevation_m,
+            temperature_c=t_mean_C,
+            t_monthly_c=t_monthly_C,
+            nodes_xyz=nodes_xyz,
+            config=config,
+            itcz_lat_monthly=itcz_lat_monthly,
+            debug=debug,
+            edge_table=(_msrc, _mdst),
+        )
+        _resid = float(np.abs(p_monthly - _p_pass1).mean())
+        _console.print(f"    [dim]wave two-pass |P₂−P₁| mean {_resid:.1f} mm[/dim]")
+        if debug is not None:
+            debug["dp_wave_hpa"] = _wave.dp_hpa
+            debug["wave_psi"] = _wave.psi
+            debug["wave_ubar"] = _wave.ubar
+            debug["wave_vbar"] = _wave.vbar
+            debug["wave_div_grid"] = _wave.div_grid
+            debug["wave_p_resid_mm"] = np.array(_resid)
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification

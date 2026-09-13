@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **④ 定常波响应 v1 实现路径否证（2026-09-13，七版迭代，`stationary_wave_enabled`
+  默认 False）**：机制 = Rodwell & Hoskins 2001（季风加热 → 源西侧副高脊 = 沙漠
+  维持）+ Sardeshmukh & Hoskins 1988 RWS。离线原型（解析基本态）R&H 签名完整再现
+  （撒哈拉 +4.7×10⁶ m²/s ψ'、ΔSLP +3.1 hPa，r 5-20d/急流 ×0.5-2/ū=0 全鲁棒）；
+  引擎集成后七版迭代依次修复极区热成风垃圾外推（taper 45→60°）、等价正压投影高纬
+  高估（ΔSLP 帽 ±8 hPa = NCEP 定常涡气候学上界）、中纬临界线共振（r_eff=r(1+(5/|ū|)²)
+  临界层阻尼）、非地转 v̄ 热成风垃圾（只用 bin 地表 v）、bin 噪声毒化（行星尺度平滑
+  σ=10° + corr 帽 ±30）、k=0 模态耦合泵爆（ψ 解出行均投影）、ITCZ 泄漏（赤道消费
+  掩膜 10→20°）——最终仍不达标：**P R² 0.354→0.202、撒哈拉 +253 mm 更湿、风 R²
+  −0.825 未转正**，真增益（索马里 −481、澳洲 −118、卡拉哈里 −49）被淹没。单一根因 =
+  **地表-T 热成风基本态代理保真度低于机制需求下限**（R&H 签名只依赖非物理极地波导
+  偶然出现；S&H/R&H 用观测 200hPa 流场，无垂直维度引擎派生不出 = 结构性缺口非标定
+  问题）。机制本身未否证；v2 前提 = 真高层基本态（双层 Gill / steady-coupling /
+  GCM），消费点候选改下沉干燥调制。详 proposal §2「定常波响应」+ §5 已否证。
+  earth 归档已重建回基线（P R² 0.354 逐位恢复）；nacrea 免回归（flag-off = no-op，
+  且本轮从未以 flag-on 构建 nacrea）。教训：**原型通过 ≠ 集成通过**——原型理想化
+  掉的输入正是集成主难点。
+
 - **地表递减率重构（气候 P0-①）**：`moist_lapse_rate` 从指数插值改为**有界 logistic**
   （暖 ~4.7 / 冷 6.5 °C/km，T_mid 10°C、宽 8°C）——旧公式与 docstring 物理相反
   （暖→陡）且冷端 < −12 °C 发散。`variable_lapse_rate` 默认开启（所有世界同物理）。
@@ -142,6 +160,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`src/dreamulator/map/stationary_wave.py` + `tests/test_stationary_wave.py`**
+  （④ v1 遗产，默认关但保留）：线性定常正压涡度求解器纯计算模块——自带 2°×2°
+  纬向网格（经度周期 + 80° Dirichlet 墙）+ 向量化稀疏组装 + splu；D 闭合全派生
+  （P→Q→ω→D，零自由参数）；2D 基本态（bin 地表风 + 局域热成风，含 taper/corr 帽/
+  行星平滑护栏）；临界层阻尼 r_eff；ψ 行均投影；ΔSLP=ρfψ' 有效域帽 + 赤道消费掩膜。
+  10 项单测（R&H 签名/鲁棒性/护栏/binning 往返/合成世界全链）全过——**求解器与护栏
+  机器本身是好的，否证的是基本态代理输入保真度**（详 Changed ④ 条）。config 三字段：
+  `stationary_wave_enabled=False`/`_damping_days=10`/`_relaxation=0.5`。
 - **`scripts/climate/diagnose_desert_wetness.py`**（§5 诊断裁决轮）：双模式——默认
   存档模式（秒级）：GPCP 海洋格 f(ΔSST) 经验抑制曲线（§5-α SST 对流门标定）+ 模型
   SST 距平结构核查（洋流盒 + `sst_anomaly_c` 统计）；`--ablation`（~15 min，引擎重跑
