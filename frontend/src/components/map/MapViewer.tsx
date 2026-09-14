@@ -78,6 +78,7 @@ interface MapViewerProps {
   monthlyTemperature?: THREE.DataTexture | null
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
+  monthlyPressureError?: THREE.DataTexture | null
   /** Monthly wind arrows (tech debt 24): N×12 components in mesh-cell order. */
   monthlyWindEast?: Float32Array | null
   monthlyWindNorth?: Float32Array | null
@@ -126,6 +127,7 @@ export default function MapViewer({
   monthlyTemperature = null,
   monthlyPrecipitation = null,
   monthlyPressure = null,
+  monthlyPressureError = null,
   monthlyWindEast = null,
   monthlyWindNorth = null,
   month = 0,
@@ -229,7 +231,7 @@ export default function MapViewer({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
-    monthlyTemperature, monthlyPrecipitation, monthlyPressure,
+    monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,
   })

@@ -176,6 +176,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **前端 delta 图层全套 + 开发分组（2026-09-15，气候主线收官可视化）**：5 个偏差图层
+  就地计算（模型场 − 逐格观测场，**非存储**）：ΔT/ΔP（年平）、ΔSLP（月度量，
+  `(月+2)%12` 映射 NCEP 日历）、Δ风/Δ洋流（**矢量偏差** Δu/Δv 分量，非标量速度差）。
+  新增「开发」🧪 图层分组（`devOnly` + `earthOnly` 门控），右侧 inspector 同步「开发」
+  组显示 5 个偏差值（ΔT/ΔP/ΔSLP/Δu,Δv 风/Δu,Δv 洋流），点偏差图层自动展开。**矢量
+  偏差展示**：风/洋流偏差层改为**叠加 feature 层**（与风场/洋流并列，非互斥），用
+  `GlobeWindArrows`/`GlobeCurrentArrows` 的 `deviation` 模式画偏差箭头（方向=偏差矢量、
+  颜色=偏差强度）；删热力图烘焙路径。观测侧 `generate_spatial_reference.py` 扩到 SLP
+  距平/风/洋流逐格（NCEP/SODA）→ `spatialReference.ts`。修眼睛按钮（feature 层）不
+  触发 inspector 分组展开（跟踪最近点亮图层，`GlobeViewerPage`/`MapViewerPage` 同改）。
+  图层名简化「风速偏差」「洋流偏差」（去 ΔU/ΔV 后缀）。
 - **`docs/design/proposals/unified-climate-taxonomy.md`**（2026-09-14 设计轮，
   未实现）：跨世界统一气候分类方案 **UCC**（Unified Climate Classification，
   统一气候分类；命名已裁决：平实描述性、搜索友好、不用双关缩略名）。锚点法八类（A1 溶剂

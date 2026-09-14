@@ -26,7 +26,7 @@ import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
-import { observedTempAt, observedPrecipAt } from './spatialReference'
+import { observedTempAt, observedPrecipAt, observedSlpAnomAt } from './spatialReference'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
@@ -641,7 +641,7 @@ function bakeCellLayer(
 export function bakeMonthlyLayer(
   monthly: MonthlyClimateData,
   month: number,
-  field: 'temperature' | 'precipitation' | 'pressure',
+  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError',
   cvtMesh: CVTMesh,
   cellIdMap: CellIdMap,
   width: number,
@@ -668,7 +668,7 @@ export function bakeMonthlyLayer(
     const cell = cvtMesh.cells[i]
     // Land-only for temperature/precipitation; pressure also covers the ocean.
     const isOceanCell = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
-    if (field !== 'pressure' && isOceanCell) continue
+    if (field !== 'pressure' && field !== 'pressureError' && isOceanCell) continue
     const v = arr[i * months + month]
     const color =
       field === 'temperature'
@@ -677,9 +677,17 @@ export function bakeMonthlyLayer(
           ? // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
             // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
             sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
-          : // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
-            // temperature scale until a dedicated pressure palette exists).
-            sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
+          : field === 'pressureError'
+            ? // ΔP error (model monthly ΔP − observed monthly ΔSLP), diverging,
+              // ±20 hPa, same fixed range as the pressure anomaly itself.
+              // Month-calendar mapping: model month 0 = March, NCEP month 0 = Jan.
+              sequentialColor(
+                (v - observedSlpAnomAt(cell.lat, cell.lon, (month + 2) % 12) + pMaxAbs) / (2 * pMaxAbs),
+                TEMPERATURE_SCALE,
+              )
+            : // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
+              // temperature scale until a dedicated pressure palette exists).
+              sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
     colors.set(cell.id, color)
   }
 

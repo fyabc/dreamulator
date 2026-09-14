@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import type { VoronoiCell } from '../../viewers/map/types'
+import { observedWindAt } from '../../viewers/map/spatialReference'
 
 type ProjectFn = (lon: number, lat: number) => ({
   x: number; y: number; edgeFade: number; zoomScale: number
@@ -21,6 +22,10 @@ interface Props {
   monthlyWindEast?: Float32Array | null
   monthlyWindNorth?: Float32Array | null
   month?: number
+  /** Deviation mode (developer diagnostic): arrows show the *vector error*
+   *  (model wind − NCEP observed wind) instead of the model wind, coloured by
+   *  the deviation magnitude (red = model stronger, blue = weaker). */
+  deviation?: boolean
 }
 
 const GRID_STEP = 4.5
@@ -31,9 +36,15 @@ function tempColor(tC: number): string {
   return `hsl(${240 - (clamped + 10) / 35 * 240}, 70%, 50%)`
 }
 
+function devColor(dMag: number): string {
+  const clamped = Math.min(Math.max(dMag, 0), 10)
+  return `hsl(${240 - (clamped / 10) * 240}, 70%, 50%)`
+}
+
 export default function GlobeWindArrows({
   projectRef, voronoiCells, windOpacity,
   monthlyWindEast = null, monthlyWindNorth = null, month = 0,
+  deviation = false,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
@@ -55,10 +66,15 @@ export default function GlobeWindArrows({
       } else {
         u = c.wind_east_m_s as number
         v = c.wind_north_m_s as number
+        if (deviation) {
+          const [owE, owN] = observedWindAt(c.lat ?? 0, c.lon ?? 0)
+          u -= owE
+          v -= owN
+        }
       }
       if (u == null || v == null || !Number.isFinite(u) || !Number.isFinite(v)) continue
       const s = Math.sqrt(u * u + v * v); if (s > mx) mx = s
-      all.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, tC: c.temperature_C ?? 0 })
+      all.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, tC: deviation ? s : (c.temperature_C ?? 0) })
     }
     if (all.length === 0 || mx < 1e-9) { arrowsRef.current = []; maxSpdRef.current = 0; return }
     maxSpdRef.current = mx
@@ -74,10 +90,10 @@ export default function GlobeWindArrows({
         const e = bins.get(`${Math.round(lon / 2) * 2},${Math.round(lat / 2) * 2}`)
         if (!e) continue
         if (Math.sqrt(e.u * e.u + e.v * e.v) < 1e-9) continue
-        out.push({ lon: e.lon, lat: e.lat, u: e.u, v: e.v, color: tempColor(e.tC) })
+        out.push({ lon: e.lon, lat: e.lat, u: e.u, v: e.v, color: deviation ? devColor(e.tC) : tempColor(e.tC) })
       }
     arrowsRef.current = out
-  }, [voronoiCells, windOpacity, monthlyWindEast, monthlyWindNorth, month])
+  }, [voronoiCells, windOpacity, monthlyWindEast, monthlyWindNorth, month, deviation])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
