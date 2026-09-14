@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
-"""Generate the per-grid observed-climatology reference for the ΔT/ΔP layers.
+"""Generate the per-grid observed-climatology reference for the Δ* layers.
 
-The frontend's temperature-error / precipitation-error heatmaps previously diffed
-each cell against a **zonal-mean** reference, which averages out longitude *and
-elevation* (a 4844 m Tibetan cell always looked "~17 °C too cold").  This script
-replaces that with a **per-grid** observed climatology — NCEP/NCAR Reanalysis-1
-surface air temperature and GPCP v2.3 precipitation — bundled on their **native
-grids**, which the frontend bilinearly samples at each cell's (lat, lon).
+The frontend's error heatmaps diff each cell against a **per-grid** observed
+climatology — NCEP/NCAR Reanalysis-1 (surface air temperature, SLP, near-surface
+u/v wind) + GPCP v2.3 (precipitation) + SODA v3.15.2 (surface ocean currents) —
+bundled on their **native grids**, which the frontend bilinearly samples at each
+cell's (lat, lon).
 
-Each dataset keeps its own grid (they are offset by ~1.25° from each other):
-resampling one onto the other's grid introduces a ~20% error in steep-gradient
-regions like the Bangladesh monsoon coast (observed ≈ 2510 mm/yr read as 1966).
-So the TS module carries two independent grids + a sampler parameterised by each.
+Each dataset keeps its own grid (they are offset from each other): resampling one
+onto another's grid introduces large error in steep-gradient regions (the
+Bangladesh monsoon coast reads ~20 % low).  So the TS module carries independent
+grids + a sampler parameterised by each.
 
 Outputs ``frontend/src/viewers/map/spatialReference.ts``.  Regenerate whenever the
 source climatology changes (rare — fixed Earth reference):
 
-    uv run python scripts/earth/generate_spatial_reference.py \
-        --temp private/tmp/climatology/ncep_air.mon.ltm.nc \
-        --precip private/tmp/climatology/gpcp_precip.mon.mean.nc
+    uv run python scripts/earth/generate_spatial_reference.py \\
+        --temp private/tmp/climatology/ncep_air.mon.ltm.nc \\
+        --precip private/tmp/climatology/gpcp_precip.mon.mean.nc \\
+        --slp private/tmp/climatology/ncep_slp.mon.ltm.nc \\
+        --wind-u private/tmp/climatology/ncep_uwnd.mon.ltm.nc \\
+        --wind-v private/tmp/climatology/ncep_vwnd.mon.ltm.nc \\
+        --current private/tmp/climatology/soda_currents_mon_clim.nc
+
+The extra fields (SLP / wind / currents) are optional: omit them to regenerate
+only the temperature/precipitation reference.
 
 Earth-only: a fictional world has no observed climatology to diff against.
 """
@@ -39,10 +45,25 @@ def _fmt_ints(values: np.ndarray, per_line: int = 12) -> str:
     return "\n".join(lines)
 
 
+def _load_annual(nc_path: Path, var: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(12, lat, lon) monthly climatology → annual mean + native grid."""
+    ds = xr.open_dataset(nc_path, decode_times=False)
+    data = ds[var].mean(dim="time")
+    lat = np.asarray(data.lat.values)
+    lon = np.asarray(data.lon.values)
+    arr = np.asarray(data.values)
+    ds.close()
+    return arr, lat, lon
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--temp", required=True, help="NCEP air.mon.ltm.nc")
     parser.add_argument("--precip", required=True, help="GPCP precip.mon.mean.nc")
+    parser.add_argument("--slp", help="NCEP slp.mon.ltm.nc (monthly ΔSLP)")
+    parser.add_argument("--wind-u", help="NCEP uwnd.mon.ltm.nc (annual mean u)")
+    parser.add_argument("--wind-v", help="NCEP vwnd.mon.ltm.nc (annual mean v)")
+    parser.add_argument("--current", help="SODA soda_currents_mon_clim.nc (annual mean u/v)")
     parser.add_argument(
         "--output",
         default="frontend/src/viewers/map/spatialReference.ts",
@@ -60,6 +81,7 @@ def main() -> None:
     t_lat = np.asarray(t.lat.values)  # 90 → −90
     t_lon = np.asarray(t.lon.values)  # 0 → 357.5
     temp = np.asarray(t.values)  # (nlat, nlon) lat-major, north→south
+    ncep.close()
 
     # Precipitation: GPCP (mm/day), monthly → annual → mm/yr, native grid
     # (lat −88.75 → 88.75 ascending, lon 1.25 → 358.75).
@@ -68,8 +90,45 @@ def main() -> None:
     p_lat = np.asarray(p.lat.values)  # −88.75 → 88.75
     p_lon = np.asarray(p.lon.values)  # 1.25 → 358.75
     precip = np.asarray(p.values)  # (nlat, nlon) lat-major, south→north
+    gpcp.close()
 
-    # Encode: temperature ×10 (int, 0.1 °C), precipitation int (mm/yr).
+    # ── Optional extra fields (climate-development diagnostics) ───────────────
+    # SLP monthly ΔSLP = SLP − zonal mean (land + season anomaly), 12 months, to
+    # align with the engine's `pressureMonthly` (monthly land-sea-contrast ΔP).
+    slp_anom = slp_lat = slp_lon = None
+    if args.slp:
+        ds = xr.open_dataset(args.slp, decode_times=False)
+        slp = ds["slp"]
+        slp_lat = np.asarray(slp.lat.values)
+        slp_lon = np.asarray(slp.lon.values)
+        slp_arr = np.asarray(slp.values)  # (12, nlat, nlon)
+        slp_anom = slp_arr - slp_arr.mean(axis=2, keepdims=True)  # monthly ΔSLP
+        ds.close()
+
+    # NCEP annual-mean u/v wind (m/s).
+    uwnd = uw_lat = uw_lon = None
+    vwnd = vw_lat = vw_lon = None
+    if args.wind_u and args.wind_v:
+        uwnd, uw_lat, uw_lon = _load_annual(Path(args.wind_u), "uwnd")
+        vwnd, vw_lat, vw_lon = _load_annual(Path(args.wind_v), "vwnd")
+
+    # SODA annual-mean surface (lev 0 ≈ 5 m) u/v currents (m/s).
+    cur_u = cur_lat = cur_lon = None
+    cur_v = None
+    if args.current:
+        ds = xr.open_dataset(args.current, decode_times=False)
+        cu = ds["u"].mean(dim="month")
+        cv = ds["v"].mean(dim="month")
+        cur_lat = np.asarray(cu.lat.values)
+        cur_lon = np.asarray(cu.lon.values)
+        # SODA has NaN over land/missing cells — cast them to 0 m/s (land has no
+        # surface current to diff against; the frontend draws only ocean cells).
+        cur_u = np.nan_to_num(np.asarray(cu.values), nan=0.0)
+        cur_v = np.nan_to_num(np.asarray(cv.values), nan=0.0)
+        ds.close()
+
+    # Encode (compact ints): temp ×10 (0.1 °C), precip ×1 (mm/yr), ΔSLP ×10
+    # (0.1 hPa), wind ×100 (0.01 m/s), current ×1000 (0.001 m/s).
     temp_flat = np.rint(temp * 10).astype(np.int32).ravel()
     precip_flat = np.rint(precip).astype(np.int32).ravel()
 
@@ -81,19 +140,91 @@ def main() -> None:
             f"lon0: {float(lon[0])}, dlon: {dlon} }}"
         )
 
+    # Assemble the optional-field TS blocks (arrays + samplers + grids).
+    extra_arrays = ""
+    extra_samplers = ""
+
+    if slp_anom is not None:
+        # 12 × (nlat × nlon), month-major.
+        slp_flat = np.rint(slp_anom * 10).astype(np.int32).ravel()
+        extra_arrays += f"""
+// monthly ΔSLP ×10 (0.1 hPa), month-major (month 0..11 → nlat × nlon), {slp_lat[0]}→{slp_lat[-1]}
+export const OBS_SLP_ANOM_X10: number[] = [
+{_fmt_ints(slp_flat)}
+]
+
+export const OBS_SLP_GRID = {grid_meta(slp_lat, slp_lon)}
+export const OBS_SLP_MONTHS = 12
+"""
+        extra_samplers += """
+/** Bilinear-sample the observed monthly ΔSLP (hPa) at (lat, lon, month 0..11). */
+export function observedSlpAnomAt(latDeg: number, lonDeg: number, month: number): number {
+  return _sample(latDeg, lonDeg, OBS_SLP_ANOM_X10, OBS_SLP_GRID, month) / 10
+}
+"""
+
+    if uwnd is not None and vwnd is not None:
+        uw_flat = np.rint(uwnd * 100).astype(np.int32).ravel()
+        vw_flat = np.rint(vwnd * 100).astype(np.int32).ravel()
+        extra_arrays += f"""
+// annual-mean near-surface wind ×100 (0.01 m/s), lat-major
+export const OBS_UWND_X100: number[] = [
+{_fmt_ints(uw_flat)}
+]
+export const OBS_VWND_X100: number[] = [
+{_fmt_ints(vw_flat)}
+]
+
+export const OBS_WIND_GRID = {grid_meta(uw_lat, uw_lon)}
+"""
+        extra_samplers += """
+/** Bilinear-sample the observed annual-mean wind (m/s) at (lat, lon) → [u, v]. */
+export function observedWindAt(latDeg: number, lonDeg: number): [number, number] {
+  return [
+    _sample(latDeg, lonDeg, OBS_UWND_X100, OBS_WIND_GRID, 0) / 100,
+    _sample(latDeg, lonDeg, OBS_VWND_X100, OBS_WIND_GRID, 0) / 100,
+  ]
+}
+"""
+
+    if cur_u is not None and cur_v is not None:
+        cu_flat = np.rint(cur_u * 1000).astype(np.int32).ravel()
+        cv_flat = np.rint(cur_v * 1000).astype(np.int32).ravel()
+        extra_arrays += f"""
+// annual-mean surface ocean current ×1000 (0.001 m/s), lat-major
+export const OBS_CUR_U_X1000: number[] = [
+{_fmt_ints(cu_flat)}
+]
+export const OBS_CUR_V_X1000: number[] = [
+{_fmt_ints(cv_flat)}
+]
+
+export const OBS_CUR_GRID = {grid_meta(cur_lat, cur_lon)}
+"""
+        extra_samplers += """
+/** Bilinear-sample the observed annual-mean surface current (m/s) at (lat, lon) → [u, v]. */
+export function observedCurrentAt(latDeg: number, lonDeg: number): [number, number] {
+  return [
+    _sample(latDeg, lonDeg, OBS_CUR_U_X1000, OBS_CUR_GRID, 0) / 1000,
+    _sample(latDeg, lonDeg, OBS_CUR_V_X1000, OBS_CUR_GRID, 0) / 1000,
+  ]
+}
+"""
+
     body = f"""/**
  * Earth per-grid observed climatology (native grids).
  *
  * Generated by ``scripts/earth/generate_spatial_reference.py`` from NCEP/NCAR
- * Reanalysis-1 surface air temperature (``air.mon.ltm.nc``) and GPCP v2.3
- * precipitation (``precip.mon.mean.nc``).  This is the per-grid reference for
- * the ΔT/ΔP error heatmaps — unlike the old zonal mean it carries the real
- * orography (Tibet ≈ −5.5 °C, not the +18 °C zonal mean) and land/ocean
- * contrast, so the deviation reflects the *model's* error, not elevation.
+ * Reanalysis-1 (surface air temperature, SLP, near-surface u/v wind), GPCP v2.3
+ * (precipitation) and SODA v3.15.2 (surface ocean currents).  This is the
+ * per-grid reference for the Δ* error heatmaps — unlike the old zonal mean it
+ * carries the real orography (Tibet ≈ −5.5 °C, not the +18 °C zonal mean) and
+ * land/ocean contrast, so the deviation reflects the *model's* error, not
+ * elevation.
  *
- * The two datasets keep their native grids (offset ~1.25° from each other);
- * resampling one onto the other corrupts steep-gradient regions.  Each sampler
- * below is parameterised by its own grid metadata.
+ * The datasets keep their native grids (offset from each other); resampling one
+ * onto another corrupts steep-gradient regions.  Each sampler is parameterised
+ * by its own grid metadata.
  *
  * Earth-only: a fictional world has no observed climatology to diff against.
  * Do not hand-edit; regenerate with the script.
@@ -111,7 +242,7 @@ export const OBS_PRECIP_MM: number[] = [
 
 export const OBS_TEMP_GRID = {grid_meta(t_lat, t_lon)}
 export const OBS_PRECIP_GRID = {grid_meta(p_lat, p_lon)}
-
+{extra_arrays}
 interface Grid {{
   nlat: number
   nlon: number
@@ -123,15 +254,17 @@ interface Grid {{
 
 /** Bilinear-sample the observed annual temperature (°C) at (lat, lon). */
 export function observedTempAt(latDeg: number, lonDeg: number): number {{
-  return _sample(latDeg, lonDeg, OBS_TEMP_X10, OBS_TEMP_GRID) / 10
+  return _sample(latDeg, lonDeg, OBS_TEMP_X10, OBS_TEMP_GRID, 0) / 10
 }}
 
 /** Bilinear-sample the observed annual precipitation (mm/yr) at (lat, lon). */
 export function observedPrecipAt(latDeg: number, lonDeg: number): number {{
-  return _sample(latDeg, lonDeg, OBS_PRECIP_MM, OBS_PRECIP_GRID)
+  return _sample(latDeg, lonDeg, OBS_PRECIP_MM, OBS_PRECIP_GRID, 0)
 }}
-
-function _sample(latDeg: number, lonDeg: number, grid: number[], g: Grid): number {{
+{extra_samplers}
+function _sample(
+  latDeg: number, lonDeg: number, grid: number[], g: Grid, month: number,
+): number {{
   // Grid row index in the array's native lat order (ascending or descending).
   const fi = (latDeg - g.lat0) / g.dlat
   let fj = ((lonDeg - g.lon0) / g.dlon) % g.nlon
@@ -141,10 +274,11 @@ function _sample(latDeg: number, lonDeg: number, grid: number[], g: Grid): numbe
   const j1 = (j0 + 1) % g.nlon
   const di = fi - i0
   const dj = fj - j0
-  const v00 = grid[i0 * g.nlon + j0]
-  const v01 = grid[i0 * g.nlon + j1]
-  const v10 = grid[(i0 + 1) * g.nlon + j0]
-  const v11 = grid[(i0 + 1) * g.nlon + j1]
+  const base = month * g.nlat * g.nlon
+  const v00 = grid[base + i0 * g.nlon + j0]
+  const v01 = grid[base + i0 * g.nlon + j1]
+  const v10 = grid[base + (i0 + 1) * g.nlon + j0]
+  const v11 = grid[base + (i0 + 1) * g.nlon + j1]
   const top = v00 + (v01 - v00) * dj
   const bot = v10 + (v11 - v10) * dj
   return top + (bot - top) * di
@@ -152,10 +286,20 @@ function _sample(latDeg: number, lonDeg: number, grid: number[], g: Grid): numbe
 """
     out = Path(args.output)
     out.write_text(body, encoding="utf-8")
+    extras = []
+    if slp_anom is not None:
+        extras.append(f"ΔSLP {float(slp_anom.min()):.1f}..{float(slp_anom.max()):.1f} hPa")
+    if uwnd is not None:
+        extras.append(f"wind u {float(uwnd.min()):.1f}..{float(uwnd.max()):.1f} m/s")
+    if cur_u is not None:
+        extras.append(f"current u {float(cur_u.min()):.2f}..{float(cur_u.max()):.2f} m/s")
+    extra_str = "; ".join(extras)
     print(
         f"[OK] {out} ({out.stat().st_size / 1e3:.0f} KB) — "
         f"temp {float(temp.min()):.1f}..{float(temp.max()):.1f} °C on {len(t_lat)}×{len(t_lon)}, "
-        f"precip {float(precip.min()):.0f}..{float(precip.max()):.0f} mm/yr on {len(p_lat)}×{len(p_lon)}"
+        f"precip {float(precip.min()):.0f}..{float(precip.max()):.0f} mm/yr "
+        f"on {len(p_lat)}×{len(p_lon)}"
+        + (f"; {extra_str}" if extra_str else "")
     )
 
 

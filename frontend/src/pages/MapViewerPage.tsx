@@ -4,7 +4,7 @@
  * Route: /worlds/:worldName/map and /worlds/:worldName/map/:planetId
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -81,7 +81,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
@@ -94,7 +94,9 @@ export default function MapViewerPage() {
         ? 'precipitation'
         : layerState.layers.pressure > 0
           ? 'pressure'
-          : null
+          : layerState.layers.pressureError > 0
+            ? 'pressureError'
+            : null
     : null
   // Fetch monthly data when monthly mode is on and any monthly-driven layer
   // (temperature / precipitation / pressure / wind arrows) is visible.
@@ -102,16 +104,37 @@ export default function MapViewerPage() {
     layerState.layers.temperature > 0 ||
     layerState.layers.precipitation > 0 ||
     layerState.layers.pressure > 0 ||
+    layerState.layers.pressureError > 0 ||
     layerState.layers.winds > 0
   )
-  // Active map layer (opacity > 0) for the inspector's auto-expand linkage:
-  // prefer the mutually-exclusive thematic layer, else a toggle overlay.
+  // --- Inspector auto-expand linkage ---
+  // Track the most recently activated layer (opacity 0 → >0) so eye-toggled
+  // overlays (winds/currents/windError/currentError) auto-expand their group
+  // just like radio-selected thematic layers do.  The default base (terrain)
+  // is always active, so a naive "prefer thematic" would always pick terrain
+  // and never surface an overlay's group.
+  const prevLayersRef = useRef(layerState.layers)
+  const [lastActivated, setLastActivated] = useState<ColorMode | null>(null)
+  useEffect(() => {
+    const prev = prevLayersRef.current
+    for (const [id, v] of Object.entries(layerState.layers)) {
+      if (v > 0 && (prev[id as ColorMode] ?? 0) <= 0) {
+        setLastActivated(id as ColorMode)
+      }
+    }
+    prevLayersRef.current = layerState.layers
+  }, [layerState])
+
+  // Active map layer for the inspector's auto-expand: the most recently
+  // activated layer wins while still visible; otherwise fall back to the
+  // mutually-exclusive thematic layer, then a toggle overlay.
   const activeColorMode = useMemo<ColorMode | null>(() => {
+    if (lastActivated && (layerState.layers[lastActivated] ?? 0) > 0) return lastActivated
     const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
     const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
     const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
     return (thematic ?? overlay)?.id ?? null
-  }, [layerState])
+  }, [layerState, lastActivated])
   const handleMonthlyModeChange = (mode: boolean) => {
     setMonthlyMode(mode)
   }
@@ -536,6 +559,7 @@ export default function MapViewerPage() {
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
+                    monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
@@ -687,6 +711,7 @@ export default function MapViewerPage() {
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
+                    monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}

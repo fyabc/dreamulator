@@ -4,7 +4,10 @@ import numpy as np
 import pytest
 
 from dreamulator.engine.monsoon_circulation import (
+    _MONSOON_PROJECTION_FRACTION,
+    cross_equatorial_monsoon_wind,
     monsoon_boundary_layer_wind,
+    monsoon_trough_latitude,
     pressure_anomaly_monthly,
     zonal_mean_monthly,
 )
@@ -88,26 +91,37 @@ class TestPressureAnomalyMonthly:
         # Zonal mean is 20 °C for both cells → dt = ±10 K exactly.
         assert (dp[0, 0:6] < 0).all()  # warm → low pressure
         assert (dp[0, 6:12] > 0).all()  # cold → high pressure
-        # Magnitude: ΔP = −P_sfc · 0.25 · ΔT / T̄_K
-        expected = -1013.25 * 0.25 * 10.0 / (20.0 + 273.15)
+        # Magnitude: ΔP = −P_sfc · E · ΔT / T̄_K  (E = M4 projection factor)
+        expected = -1013.25 * _MONSOON_PROJECTION_FRACTION * 10.0 / (20.0 + 273.15)
         assert np.isclose(dp[0, 0], expected, rtol=1e-6)
 
-    def test_annual_mean_anomaly_is_removed(self):
-        # A constant land-sea contrast all year belongs to the annual
-        # geostrophic wind, not the monsoon — it must not appear here.
+    def test_full_contrast_retained(self):
+        # B0b: a constant year-round land-sea contrast produces a constant
+        # ΔP (a steady thermal low) — the annual mean is NOT removed, so the
+        # derived annual wind keeps its stationary land-sea structure.
         lat = np.array([30.0, 31.0])
         t = np.full((2, 12), 20.0)
         t[0, :] += 5.0
         t[1, :] -= 5.0
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0)
-        assert np.allclose(dp, 0.0, atol=1e-12)
+        expected = -1013.25 * _MONSOON_PROJECTION_FRACTION * 5.0 / (20.0 + 273.15)
+        assert (dp[0] < 0).all()  # warmer land → steady thermal low
+        assert (dp[1] > 0).all()  # cooler land → steady high
+        assert np.allclose(dp[0], expected, rtol=1e-6)
 
-    def test_months_sum_to_zero(self):
-        rng = np.random.default_rng(7)
-        lat = rng.uniform(-90.0, 90.0, 50)
-        t = 25.0 - 40.0 * np.abs(lat)[:, None] / 90.0 + rng.normal(0, 8, (50, 12))
+    def test_monthly_sensitivity_uses_monthly_reference(self):
+        # The 1/T̄ hydrostatic sensitivity follows the monthly zonal
+        # reference: the same ±10 K contrast in a colder column produces a
+        # stronger hPa response (the winter high responds harder per kelvin).
+        lat = np.array([30.0, 31.0])
+        t = np.full((2, 12), 20.0)
+        t[0, 1] += 10.0
+        t[1, 1] -= 10.0
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0)
-        assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
+        t2 = t - 30.0  # colder world, same contrast
+        dp2 = pressure_anomaly_monthly(t2, lat, band_deg=5.0)
+        assert np.abs(dp2[0, 1]) > np.abs(dp[0, 1])
+        assert np.allclose(dp[0, 1], -dp[1, 1])  # symmetric contrast
 
     def test_elevation_derating(self):
         # B1: a 4844 m plateau cell responds at exp(−z/8500)·exp(−z/3000)
@@ -124,9 +138,8 @@ class TestPressureAnomalyMonthly:
         ratio = dp[1, 5] / dp[0, 5]
         expected = np.exp(-4844.0 / 8500.0) * np.exp(-4844.0 / 3000.0)
         assert ratio == pytest.approx(expected, rel=1e-6)
-        # Both are thermal lows (warm anomaly), and the zero-sum invariant holds.
+        # Both are thermal lows (warm anomaly).
         assert dp[0, 5] < 0.0 and dp[1, 5] < 0.0
-        assert np.allclose(dp.sum(axis=1), 0.0, atol=1e-9)
 
 
 class TestMonsoonBoundaryLayerWind:
@@ -277,3 +290,119 @@ class TestMonsoonBoundaryLayerWind:
         f = np.array([1.0e-4, -1.0e-4])
         wind = monsoon_boundary_layer_wind(np.zeros((12, 2, 3)), f, nodes)
         assert np.allclose(wind, 0.0)
+
+
+class TestCrossEquatorialMonsoonWind:
+    """Cross-equatorial monsoon westerlies (D/F 子项 2)."""
+
+    @staticmethod
+    def _east_comp(w: np.ndarray, lat_deg: float) -> float:
+        node = _sphere_points(np.array([lat_deg]), np.array([0.0]))
+        north = np.array([0.0, 1.0, 0.0]) - node[:, 1:2] * node
+        north /= np.linalg.norm(north, axis=1)[:, None]
+        east = np.cross(node, north)
+        east /= np.linalg.norm(east, axis=1)[:, None]
+        return float(np.einsum("j,j->", w, east[0]))
+
+    @staticmethod
+    def _net(lat: np.ndarray, itcz: float, itcz_max: float = 14.0) -> np.ndarray:
+        from dreamulator.engine.climate_physics import hadley_cell_wind
+
+        n = len(lat)
+        nodes = _sphere_points(lat, np.zeros(n))
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=itcz)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, itcz, 6371.0, 1.0, itcz_max, bg
+        )
+        return bg + sw  # net wind = background + westerly (replacement)
+
+    def test_nh_summer_westerly(self):
+        # NH summer: within the belt the net zonal wind is westerly (u > 0) —
+        # the Guinea/Somali westerlies.
+        lat = np.array([4.0, 8.0])
+        net = self._net(lat, 14.0)
+        for i, la in enumerate(lat):
+            assert self._east_comp(net[i], la) > 0.0
+
+    def test_sh_summer_westerly(self):
+        # SH summer mirror: the westerly belt appears in the SH cross-equatorial
+        # belt too (the same westward sign in both hemispheres).
+        lat = np.array([-4.0, -8.0])
+        net = self._net(lat, -14.0)
+        for i, la in enumerate(lat):
+            assert self._east_comp(net[i], la) > 0.0
+
+    def test_zero_outside_belt(self):
+        # Poleward of the ITCZ (trades) and the opposite hemisphere are
+        # untouched — the replacement wind is strictly equatorward of the ITCZ.
+        lat = np.array([15.0, 20.0, -8.0])
+        nodes = _sphere_points(lat, np.zeros(3))
+        from dreamulator.engine.climate_physics import hadley_cell_wind
+
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=14.0)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, 14.0, 6371.0, 1.0, 14.0, bg
+        )
+        assert np.allclose(sw, 0.0)
+
+    def test_zero_when_itcz_at_equator(self):
+        # No ITCZ excursion → no cross-equatorial belt (backward compatible with
+        # the symmetric Hadley easterly at 15°N).
+        lat = np.array([8.0, 15.0, -8.0])
+        nodes = _sphere_points(lat, np.zeros(3))
+        from dreamulator.engine.climate_physics import hadley_cell_wind
+
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=0.0)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, 0.0, 6371.0, 1.0, 14.0, bg
+        )
+        assert np.allclose(sw, 0.0)
+
+    def test_replaces_background_easterly(self):
+        # The net wind is the westerly, NOT background + a weak westerly: the
+        # Hadley background easterly is subtracted within the belt.
+        lat = np.array([8.0])
+        net = self._net(lat, 14.0)
+        # ~8°N mid-belt: westerly of order ~1.5 m/s, magnitude bounded.
+        speed = np.linalg.norm(net[0])
+        assert 0.5 < speed < 4.0
+
+    def test_tangent(self):
+        lat = np.array([2.0, 8.0])
+        nodes = _sphere_points(lat, np.zeros(2))
+        net = self._net(lat, 14.0)
+        radial = np.einsum("ij,ij->i", net, nodes)
+        assert np.allclose(radial, 0.0, atol=1e-9)
+
+
+class TestMonsoonTroughLatitude:
+    """Monsoon-trough latitude (the ITCZ's land northward shift)."""
+
+    def test_cross_equatorial_sector_shifts_poleward(self):
+        # SH ocean + EQ ocean + hot NH land → the trough shifts poleward of the
+        # ocean ITCZ (toward the warm land).
+        lat = np.array([-10.0, 0.0, 20.0, 25.0])
+        lon = np.array([5.0, 5.0, 5.0, 5.0])
+        ocean = np.array([True, True, False, False])
+        t = np.array([20.0, 25.0, 30.0, 32.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert (trough > 14.0).all()
+
+    def test_non_cross_equatorial_no_shift(self):
+        # NH ocean + NH land with no SH ocean and no EQ ocean corridor (South
+        # China / East Asia, behind the Indonesian archipelago) → no shift.
+        lat = np.array([10.0, 20.0, 25.0])
+        lon = np.array([15.0, 15.0, 15.0])
+        ocean = np.array([True, False, False])
+        t = np.array([25.0, 30.0, 32.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert np.allclose(trough, 14.0)
+
+    def test_pure_ocean_no_shift(self):
+        # No land at all → the trough stays at the ocean ITCZ.
+        lat = np.array([-10.0, 0.0, 10.0, 20.0])
+        lon = np.array([5.0, 5.0, 5.0, 5.0])
+        ocean = np.array([True, True, True, True])
+        t = np.array([20.0, 25.0, 27.0, 25.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert np.allclose(trough, 14.0)

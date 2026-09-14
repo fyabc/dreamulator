@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
-import { observedTempAt, observedPrecipAt } from '../../viewers/map/spatialReference'
+import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 
 interface MapCellInspectorProps {
@@ -70,8 +70,11 @@ const COLOR_MODE_TO_GROUP: Partial<Record<ColorMode, string>> = {
   koppen: 'climate',
   temperature: 'climate',
   precipitation: 'climate',
-  temperatureError: 'climate',
-  precipitationError: 'climate',
+  temperatureError: 'dev',
+  precipitationError: 'dev',
+  pressureError: 'dev',
+  windError: 'dev',
+  currentError: 'dev',
   pressure: 'climate',
   winds: 'climate',
   currents: 'climate',
@@ -426,13 +429,30 @@ function CellDetails({
     cell.habitability_score != null || cell.agriculture_score != null,
   )
 
-  // ΔT / ΔP vs the per-grid observed climatology (the same values the
-  // temperatureError / precipitationError heatmaps encode as colour).  Shown
-  // in developer mode only — like those diagnostic layers themselves — so the
-  // author can read the absolute deviation, not just the relative colour.
-  // Red = model too warm/wet, blue = model too cold/dry (diverging palette).
+  // Δ* vs the per-grid observed climatology (the same values the ΔT/ΔP/ΔSLP/
+  // Δ|wind|/Δ|current| error heatmaps encode as colour).  Shown in developer
+  // mode only — like those diagnostic layers themselves — so the author can read
+  // the absolute deviation, not just the relative colour.  Red = model too warm/
+  // wet/strong, blue = model too cold/dry/weak (diverging palette).
   const devT = cell.temperature_C != null ? cell.temperature_C - observedTempAt(cell.lat, cell.lon) : null
   const devP = cell.precipitation_mm != null ? cell.precipitation_mm - observedPrecipAt(cell.lat, cell.lon) : null
+  const devWind = (cell.wind_east_m_s != null && cell.wind_north_m_s != null)
+    ? (() => {
+        const [owE, owN] = observedWindAt(cell.lat, cell.lon)
+        return { u: cell.wind_east_m_s - owE, v: cell.wind_north_m_s - owN }
+      })()
+    : null
+  const devCurrent = (cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null)
+    ? (() => {
+        const [ocE, ocN] = observedCurrentAt(cell.lat, cell.lon)
+        return { u: cell.ocean_current_east_m_s - ocE, v: cell.ocean_current_north_m_s - ocN }
+      })()
+    : null
+  // ΔSLP is monthly (annual ΔP ≈ 0): model month 0 = March, NCEP month 0 = Jan,
+  // so map (modelMonth + 2) % 12 onto the observed monthly ΔSLP grid.
+  const devSlp = hasMonthly && mPressure !== undefined
+    ? mPressure - observedSlpAnomAt(cell.lat, cell.lon, (monthIndex + 2) % 12)
+    : null
 
   return (
     <div className="space-y-2 text-sm">
@@ -603,26 +623,6 @@ function CellDetails({
                 </div>
               )
             )}
-            {devMode && isEarth && !hasMonthly && (
-              <div className="border-t border-space-border pt-1 mt-1">
-                {devT != null && (
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">{t('inspector.tempDeviation')}</dt>
-                    <dd className={`font-mono ${devT > 0 ? 'text-red-400' : devT < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {devT > 0 ? '+' : ''}{devT.toFixed(1)} °C
-                    </dd>
-                  </div>
-                )}
-                {devP != null && (
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">{t('inspector.precipDeviation')}</dt>
-                    <dd className={`font-mono ${devP > 0 ? 'text-red-400' : devP < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {devP > 0 ? '+' : ''}{Math.round(devP)} mm
-                    </dd>
-                  </div>
-                )}
-              </div>
-            )}
             {hasMonthly && mPressure !== undefined && (
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('inspector.pressureAnomaly')}</dt>
@@ -642,6 +642,70 @@ function CellDetails({
             ) : null}
             {(cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null) && (
               <OceanCurrentDetail u={cell.ocean_current_east_m_s} v={cell.ocean_current_north_m_s} sstAnom={cell.sst_anomaly_c ?? 0} />
+            )}
+          </FieldGroup>
+        )}
+
+        {devMode && isEarth && (
+          <FieldGroup
+            icon="🧪"
+            label={t('inspector.dev')}
+            key={`dev-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'dev'}
+          >
+            {devT != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.tempDeviation')}</dt>
+                <dd className={`font-mono ${devT > 0 ? 'text-red-400' : devT < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                  {devT > 0 ? '+' : ''}{devT.toFixed(1)} °C
+                </dd>
+              </div>
+            )}
+            {devP != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.precipDeviation')}</dt>
+                <dd className={`font-mono ${devP > 0 ? 'text-red-400' : devP < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                  {devP > 0 ? '+' : ''}{Math.round(devP)} mm
+                </dd>
+              </div>
+            )}
+            {devSlp != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.pressureDeviation')}</dt>
+                <dd className={`font-mono ${devSlp > 0 ? 'text-red-400' : devSlp < 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+                  {devSlp > 0 ? '+' : ''}{devSlp.toFixed(1)} hPa
+                </dd>
+              </div>
+            )}
+            {devWind != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.windDeviation')}</dt>
+                <dd className="font-mono text-xs">
+                  <span className={devWind.u > 0 ? 'text-red-400' : devWind.u < 0 ? 'text-blue-400' : 'text-gray-400'}>
+                    {devWind.u > 0 ? '+' : ''}{devWind.u.toFixed(1)}E
+                  </span>
+                  <span className="text-gray-600 mx-1">/</span>
+                  <span className={devWind.v > 0 ? 'text-red-400' : devWind.v < 0 ? 'text-blue-400' : 'text-gray-400'}>
+                    {devWind.v > 0 ? '+' : ''}{devWind.v.toFixed(1)}N
+                  </span>
+                  <span className="text-gray-500 ml-1">m/s</span>
+                </dd>
+              </div>
+            )}
+            {devCurrent != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.currentDeviation')}</dt>
+                <dd className="font-mono text-xs">
+                  <span className={devCurrent.u > 0 ? 'text-red-400' : devCurrent.u < 0 ? 'text-blue-400' : 'text-gray-400'}>
+                    {devCurrent.u > 0 ? '+' : ''}{devCurrent.u.toFixed(2)}E
+                  </span>
+                  <span className="text-gray-600 mx-1">/</span>
+                  <span className={devCurrent.v > 0 ? 'text-red-400' : devCurrent.v < 0 ? 'text-blue-400' : 'text-gray-400'}>
+                    {devCurrent.v > 0 ? '+' : ''}{devCurrent.v.toFixed(2)}N
+                  </span>
+                  <span className="text-gray-500 ml-1">m/s</span>
+                </dd>
+              </div>
             )}
           </FieldGroup>
         )}

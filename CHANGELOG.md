@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **M4 热低压 ΔP 结构修复 + B0b 删「减年平」（2026-09-14）**：`pressure_anomaly_monthly`
+  投影因子从旧 `depth_fraction`=0.25（均匀全幅、地表 ΔT 直投柱压）改为**第一性推导的
+  E ≈ 0.10** = r·[1−(H/h)(1−e^(−h/H))]，其中 r = 0.6（BL 平均 vs 地表异常，Lindzen &
+  Nigam 1987 的 γ=0.30 剖面量级）、h = 3.2 km（热低压 ≤700 hPa 封顶，Lavaysse 2009；
+  Rácz & Smith 1999 BL 内闭合）——两主犯各 ~2×、相乘 ≈ 4-5× = 实锤的撒哈拉 5×。同轮
+  B0b 删「减年平」：月 ΔP 全值陆海对比 → 月风 → 矢量平均 = 年平，月 T̄ 敏感度同改。
+  **Stage C 全值标定**（`diagnose_monsoon_dp_shape.py` 重写）：撒哈拉 7 月 1.08、西伯利亚
+  1 月 1.00；蒙古 0.41 = 高原海拔衰减。**earth 逐格回归**：P R² 0.354→0.373、风 R²
+  −0.81→−0.737、T R² 0.941→0.944、Köppen agree 31.9%→32.1%；Stommel 链签名逐位保持
+  （湾流/黑潮/加那利/赤道流符号不变）；**nacrea** Af 陆地占比 38.9%→30.0%（§7 E3「Af
+  占 39% 过多」收敛）、Am 消失（弱季节边缘）。**加热深度判别实测无解**（供给地理/模型 P/
+  背景风上风三候选全否，δMCD/δTH 分解）——湿深季风框（印度/华南/哈萨克 E≈0.37-0.40 需）
+  被 E=0.10 欠投影 ~4×，裁定**移交 D 线**（水分路由/槽位/LLJ），Cwa/Cfa/Am recall 不再
+  以 E 端点承担。新增 `scripts/climate/diagnose_moisture_decomp.py`（Seager 2014 δMCD/δTH
+  分解）。详见 proposal §2/§5。
+
 - **④ 定常波响应 v1 实现路径否证（2026-09-13，七版迭代，`stationary_wave_enabled`
   默认 False）**：机制 = Rodwell & Hoskins 2001（季风加热 → 源西侧副高脊 = 沙漠
   维持）+ Sardeshmukh & Hoskins 1988 RWS。离线原型（解析基本态）R&H 签名完整再现
@@ -160,6 +176,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **前端 delta 图层全套 + 开发分组（2026-09-15，气候主线收官可视化）**：5 个偏差图层
+  就地计算（模型场 − 逐格观测场，**非存储**）：ΔT/ΔP（年平）、ΔSLP（月度量，
+  `(月+2)%12` 映射 NCEP 日历）、Δ风/Δ洋流（**矢量偏差** Δu/Δv 分量，非标量速度差）。
+  新增「开发」🧪 图层分组（`devOnly` + `earthOnly` 门控），右侧 inspector 同步「开发」
+  组显示 5 个偏差值（ΔT/ΔP/ΔSLP/Δu,Δv 风/Δu,Δv 洋流），点偏差图层自动展开。**矢量
+  偏差展示**：风/洋流偏差层改为**叠加 feature 层**（与风场/洋流并列，非互斥），用
+  `GlobeWindArrows`/`GlobeCurrentArrows` 的 `deviation` 模式画偏差箭头（方向=偏差矢量、
+  颜色=偏差强度）；删热力图烘焙路径。观测侧 `generate_spatial_reference.py` 扩到 SLP
+  距平/风/洋流逐格（NCEP/SODA）→ `spatialReference.ts`。修眼睛按钮（feature 层）不
+  触发 inspector 分组展开（跟踪最近点亮图层，`GlobeViewerPage`/`MapViewerPage` 同改）。
+  图层名简化「风速偏差」「洋流偏差」（去 ΔU/ΔV 后缀）。
 - **`docs/design/proposals/unified-climate-taxonomy.md`**（2026-09-14 设计轮 +
   第一波审稿意见吸收，未实现）：跨世界统一气候分类方案 **UCC**（Unified Climate
   Classification，统一气候分类；命名已裁决：平实描述性、搜索友好、不用双关缩略名）。

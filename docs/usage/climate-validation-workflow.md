@@ -135,10 +135,11 @@ curl "https://downloads.psl.noaa.gov/Datasets/gpcp/precip.mon.mean.nc" \
 > `_ZONAL_PRECIP_REF` 是**硬编码**的 2° 纬向均值（90N→88S），由上述原始数据
 > 一次性算出。重生成脚本见 `scripts/earth/generate_validation_reference.py`。
 >
-> **逐格参考（前端 ΔT/ΔP 偏差图层）**：`scripts/earth/generate_spatial_reference.py`
-> 把 NCEP/GPCP **原生网格**（各自 2.5°，错位 ~1.25°，勿互相重采样）打包成前端
-> `frontend/src/viewers/map/spatialReference.ts`，双线性采样逐格观测——高原不再因海拔
-> 「永远偏冷」。
+> **逐格参考（前端 Δ* 偏差图层）**：`scripts/earth/generate_spatial_reference.py`
+> 把 NCEP（温度/气压/风）、GPCP（降水）、SODA（洋流）**原生网格**（各自分辨率，
+> 错位 ~1.25°，勿互相重采样）打包成前端 `frontend/src/viewers/map/spatialReference.ts`，
+> 双线性采样逐格观测——高原不再因海拔「永远偏冷」。ΔT/ΔP 之外新增 ΔSLP（月 ΔP）、
+> Δ风、Δ洋流（矢量偏差 Δu/Δv 箭头）三个开发图层（「开发」分组，devMode + Earth 才显示）。
 
 ---
 

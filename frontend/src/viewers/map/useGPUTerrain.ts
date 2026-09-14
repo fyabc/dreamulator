@@ -138,6 +138,7 @@ interface UseGPUTerrainOptions {
   monthlyTemperature?: THREE.DataTexture | null
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
+  monthlyPressureError?: THREE.DataTexture | null
   /** Flip texture horizontally. Set true for SphereGeometry (Three.js sphere
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
@@ -179,13 +180,14 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
   monthlyPressure = null,
+  monthlyPressureError = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -331,6 +333,7 @@ export default function useGPUTerrain({
       [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
       [layers.temperatureError, baked.temperatureError],
       [layers.precipitationError, baked.precipitationError],
+      [layers.pressureError, monthlyPressureError ?? baked.pressure],
       [layers.pressure, monthlyPressure ?? baked.pressure],
     ]
     let activeThematic = baked.terrainThematic
@@ -357,7 +360,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure])
+  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {

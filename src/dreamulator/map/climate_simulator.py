@@ -48,6 +48,7 @@ from dreamulator.engine.climate_seasonality import (
 from dreamulator.engine.monsoon_circulation import (
     _DRAG_RATE_LAND_S,
     _DRAG_RATE_S,
+    cross_equatorial_monsoon_wind,
     monsoon_boundary_layer_wind,
     pressure_anomaly_monthly,
 )
@@ -487,20 +488,21 @@ def simulate_climate(
     # reassigned to the monthly mean = background + monsoon anomaly).
     _wind_bg = wind
 
-    # ── Monsoon wind anomaly (tech debt 23) ──
-    # Summer continents warm above the zonal mean → thermal lows; the boundary-
-    # layer wind answers the anomaly pressure gradient against Coriolis and drag
+    # ── Monsoon wind (tech debt 23; M4/B0b 2026-09-14) ──
+    # Continents thermally contrasted against the same-latitude ocean (full
+    # monthly value, annual mean included) → thermal lows/highs; the boundary-
+    # layer wind answers the pressure gradient against Coriolis and drag
     # (engine/monsoon_circulation.py).  Near the equator f → 0 and the flow goes
-    # straight down-gradient — the cross-equatorial monsoon current.  The anomaly
-    # is added onto the annual background, giving 12 monthly winds that drive the
-    # monthly moisture budget in Stage 3.
-    # Raw (unsmoothed) anomaly kept for ④: the stationary-wave ΔSLP is added
+    # straight down-gradient — the cross-equatorial monsoon current.  The
+    # monthly thermal component is added onto the three-cell background, giving
+    # 12 monthly winds that drive the monthly moisture budget in Stage 3 and
+    # whose vector mean is the annual wind (with its stationary structure).
+    # Raw (unsmoothed) field kept for ④: the stationary-wave ΔSLP is added
     # *before* smoothing so both components get the same scale separation.
     _dp_hpa_raw = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
         surface_pressure_hpa=config.surface_pressure_hpa,
-        depth_fraction=config.monsoon_depth_fraction,
         elevation_m=elevation_m,
         ocean_mask=is_ocean,  # B2: land-vs-same-latitude-ocean contrast
     )
@@ -529,16 +531,37 @@ def simulate_climate(
         _grad_dp_pa_m, f_coriolis, nodes_xyz, drag_rate_s=_drag
     )
 
-    # Monthly wind = annual background + monsoon anomaly (the annual field is
-    # then *derived* from these — see below).  The monthly migration of the
-    # circulation cells is part of the monthly-vector winds work (tech debt
-    # 24): tested here, giving each month its own ITCZ-shifted circulation
-    # sharpened the convergence band into a sweeping rain belt that
-    # over-seasoned the subtropics (Csa/Dsb inflation) and overshot land-mean
-    # precipitation, so v1 keeps the calibrated annual-mean circulation as the
-    # advecting field and lets the anomaly carry the seasonal land-sea
-    # reversal.
-    wind_monthly = np.stack([wind + _wind_monsoon[m] for m in range(12)])
+    # Monthly wind = annual background + cross-equatorial westerly + monsoon
+    # anomaly (the annual field is then *derived* from these — see below).  The
+    # monthly migration of the circulation cells is part of the monthly-vector
+    # winds work (tech debt 24): tested here, giving each month its own
+    # ITCZ-shifted circulation sharpened the convergence band into a sweeping
+    # rain belt that over-seasoned the subtropics (Csa/Dsb inflation) and
+    # overshot land-mean precipitation, so v1 keeps the calibrated annual-mean
+    # circulation as the advecting field and lets the anomaly carry the seasonal
+    # land-sea reversal.  The cross-equatorial westerly (D/F 子项 2, 2026-09-14)
+    # is the one seasonal cell term kept *monthly*: within the cross-equatorial
+    # belt it *replaces* the background zonal wind with the westerly — restoring
+    # the Somali-jet / Guinea-westerly moisture route without moving the
+    # meridional convergence structure (the tech-debt-24 sweeping rain belt
+    # stays retired; the meridional branch and the monsoon-trough poleward shift
+    # were falsified this round, see proposal §5).
+    _itcz_max = float(np.max(np.abs(itcz_lat_monthly)))
+    _sw_wind = np.stack(
+        [
+            cross_equatorial_monsoon_wind(
+                lat_rad,
+                nodes_xyz,
+                float(itcz_lat_monthly[m]),
+                config.radius_km,
+                config.rotation_period_days,
+                _itcz_max,
+                wind,
+            )
+            for m in range(12)
+        ]
+    )
+    wind_monthly = np.stack([wind + _sw_wind[m] + _wind_monsoon[m] for m in range(12)])
 
     # Terrain blocking on each monthly field (a per-cell scalar scaling of the
     # wind vector — linear, so the mean identity below is exact).
@@ -552,11 +575,13 @@ def simulate_climate(
     # Annual-mean wind = vector mean of the (blocked) monthly fields — the
     # observational definition itself (NCEP annual climatology is the vector
     # mean of the monthly winds).  Tech-debt-24 data contract (2026-09-13):
-    # the monthly field is primary, the annual one derived, so the identity is
-    # guaranteed by construction instead of resting on the anomaly's zero
-    # 12-month sum.  Every annual consumer (cell storage, the Stommel chain
-    # via wind_mirror, 4.1-B advection, the annual moisture budget, the coast
-    # asymmetry step) reads this single source.
+    # the monthly field is primary, the annual one derived, so the identity
+    # holds by construction — and since B0b (2026-09-14) the full-value
+    # monthly ΔP makes that average carry the stationary land-sea structure
+    # (winter Siberian high ≫ summer thermal lows).  Every annual consumer
+    # (cell storage, the Stommel chain via wind_mirror, 4.1-B advection, the
+    # annual moisture budget, the coast asymmetry step) reads this single
+    # source.
     wind = wind_monthly.mean(axis=0)
 
     # Write wind to cells for frontend visualisation
@@ -812,7 +837,7 @@ def simulate_climate(
         _wind_monsoon2 = monsoon_boundary_layer_wind(
             _grad2, f_coriolis, nodes_xyz, drag_rate_s=_drag
         )
-        wind_monthly = np.stack([_wind_bg + _wind_monsoon2[m] for m in range(12)])
+        wind_monthly = np.stack([_wind_bg + _sw_wind[m] + _wind_monsoon2[m] for m in range(12)])
         wind_monthly = np.stack(
             [
                 terrain_wind_blocking(wind_monthly[m], elevation_m, config.wind_blocking_height_m)

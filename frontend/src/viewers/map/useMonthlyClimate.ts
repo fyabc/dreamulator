@@ -16,7 +16,7 @@ import type { CellIdMap } from './useCellIdMap'
 import { bakeMonthlyLayer } from './layerBakes'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 
-export type MonthlyField = 'temperature' | 'precipitation' | 'pressure'
+export type MonthlyField = 'temperature' | 'precipitation' | 'pressure' | 'pressureError'
 
 interface UseMonthlyClimateArgs {
   worldName?: string

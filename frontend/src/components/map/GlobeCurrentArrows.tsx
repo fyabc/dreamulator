@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import type { VoronoiCell } from '../../viewers/map/types'
+import { observedCurrentAt } from '../../viewers/map/spatialReference'
 
 type ProjectFn = (lon: number, lat: number) => ({
   x: number; y: number; edgeFade: number; zoomScale: number
@@ -15,6 +16,10 @@ interface Props {
   projectRef: React.MutableRefObject<ProjectFn | null>
   voronoiCells: VoronoiCell[]
   currentOpacity: number
+  /** Deviation mode (developer diagnostic): arrows show the *vector error*
+   *  (model current − SODA observed current) instead of the model current,
+   *  coloured by the deviation magnitude (red = strong, blue = weak). */
+  deviation?: boolean
 }
 
 const WARM = '#e040fb'
@@ -22,10 +27,15 @@ const COLD = '#00bcd4'
 const GRID_STEP = 4.5
 const ARROW_SCALE = 1.0
 
-export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOpacity }: Props) {
+function devColor(dMag: number): string {
+  const clamped = Math.min(Math.max(dMag, 0), 0.2)
+  return `hsl(${240 - (clamped / 0.2) * 240}, 70%, 50%)`
+}
+
+export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOpacity, deviation = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
-  const arrowsRef = useRef<{ lon: number; lat: number; u: number; v: number; warm: boolean }[]>([])
+  const arrowsRef = useRef<{ lon: number; lat: number; u: number; v: number; mag: number }[]>([])
   const maxSpdRef = useRef(0)
 
   useEffect(() => {
@@ -34,10 +44,15 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
     const ocean: OC[] = []
     let mx = 0
     for (const c of voronoiCells) {
-      const u = c.ocean_current_east_m_s; const v = c.ocean_current_north_m_s
+      let u = c.ocean_current_east_m_s; let v = c.ocean_current_north_m_s
       if (u == null || v == null) continue
+      if (deviation) {
+        const [ocE, ocN] = observedCurrentAt(c.lat ?? 0, c.lon ?? 0)
+        u -= ocE
+        v -= ocN
+      }
       const s = Math.sqrt(u * u + v * v); if (s > mx) mx = s
-      ocean.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, sstAnom: c.sst_anomaly_c ?? 0 })
+      ocean.push({ lon: c.lon ?? 0, lat: c.lat ?? 0, u, v, sstAnom: deviation ? s : (c.sst_anomaly_c ?? 0) })
     }
     if (ocean.length === 0 || mx < 1e-9) { arrowsRef.current = []; maxSpdRef.current = 0; return }
     maxSpdRef.current = mx
@@ -53,10 +68,10 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
         const oc = bins.get(`${Math.round(lon / 2) * 2},${Math.round(lat / 2) * 2}`)
         if (!oc) continue
         if (Math.sqrt(oc.u * oc.u + oc.v * oc.v) < 1e-9) continue
-        out.push({ lon: oc.lon, lat: oc.lat, u: oc.u, v: oc.v, warm: oc.sstAnom > 0 })
+        out.push({ lon: oc.lon, lat: oc.lat, u: oc.u, v: oc.v, mag: oc.sstAnom })
       }
     arrowsRef.current = out
-  }, [voronoiCells, currentOpacity])
+  }, [voronoiCells, currentOpacity, deviation])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -94,7 +109,7 @@ export default function GlobeCurrentArrows({ projectRef, voronoiCells, currentOp
       const len = (1.5 + 13.5 * Math.sqrt(Math.min(spd / (maxSpdRef.current || 1), 1))) * ARROW_SCALE * (p.zoomScale ?? 1)
       const tx = p.x + sx * len; const ty = p.y + sy * len
       const hl = len * 0.38
-      const color = a.warm ? WARM : COLD
+      const color = deviation ? devColor(a.mag) : (a.mag > 0 ? WARM : COLD)
 
       ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, len * 0.13); ctx.lineCap = 'round'
       ctx.beginPath()
