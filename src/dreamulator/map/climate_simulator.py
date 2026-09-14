@@ -48,6 +48,7 @@ from dreamulator.engine.climate_seasonality import (
 from dreamulator.engine.monsoon_circulation import (
     _DRAG_RATE_LAND_S,
     _DRAG_RATE_S,
+    cross_equatorial_monsoon_westerly,
     monsoon_boundary_layer_wind,
     pressure_anomaly_monthly,
 )
@@ -530,16 +531,33 @@ def simulate_climate(
         _grad_dp_pa_m, f_coriolis, nodes_xyz, drag_rate_s=_drag
     )
 
-    # Monthly wind = annual background + monsoon anomaly (the annual field is
-    # then *derived* from these — see below).  The monthly migration of the
-    # circulation cells is part of the monthly-vector winds work (tech debt
-    # 24): tested here, giving each month its own ITCZ-shifted circulation
-    # sharpened the convergence band into a sweeping rain belt that
-    # over-seasoned the subtropics (Csa/Dsb inflation) and overshot land-mean
-    # precipitation, so v1 keeps the calibrated annual-mean circulation as the
-    # advecting field and lets the anomaly carry the seasonal land-sea
-    # reversal.
-    wind_monthly = np.stack([wind + _wind_monsoon[m] for m in range(12)])
+    # Monthly wind = annual background + cross-equatorial westerly belt +
+    # monsoon anomaly (the annual field is then *derived* from these — see
+    # below).  The monthly migration of the circulation cells is part of the
+    # monthly-vector winds work (tech debt 24): tested here, giving each month
+    # its own ITCZ-shifted circulation sharpened the convergence band into a
+    # sweeping rain belt that over-seasoned the subtropics (Csa/Dsb inflation)
+    # and overshot land-mean precipitation, so v1 keeps the calibrated
+    # annual-mean circulation as the advecting field and lets the anomaly carry
+    # the seasonal land-sea reversal.  The cross-equatorial westerly belt
+    # (D/F 子项 1, 2026-09-14) is the one seasonal cell term kept *monthly*: it
+    # reverses only the cross-equatorial belt's zonal wind (easterly → westerly
+    # as the ITCZ crosses the equator), without moving the meridional
+    # convergence structure — so it restores the Somali-jet / Guinea-westerly
+    # moisture route without re-introducing the sweeping rain belt.
+    _westerly = np.stack(
+        [
+            cross_equatorial_monsoon_westerly(
+                lat_rad,
+                nodes_xyz,
+                float(itcz),
+                hadley_extent_deg=config.hadley_extent_deg,
+                rotation_period_days=config.rotation_period_days,
+            )
+            for itcz in itcz_lat_monthly
+        ]
+    )
+    wind_monthly = np.stack([wind + _westerly[m] + _wind_monsoon[m] for m in range(12)])
 
     # Terrain blocking on each monthly field (a per-cell scalar scaling of the
     # wind vector — linear, so the mean identity below is exact).
@@ -815,7 +833,7 @@ def simulate_climate(
         _wind_monsoon2 = monsoon_boundary_layer_wind(
             _grad2, f_coriolis, nodes_xyz, drag_rate_s=_drag
         )
-        wind_monthly = np.stack([_wind_bg + _wind_monsoon2[m] for m in range(12)])
+        wind_monthly = np.stack([_wind_bg + _westerly[m] + _wind_monsoon2[m] for m in range(12)])
         wind_monthly = np.stack(
             [
                 terrain_wind_blocking(wind_monthly[m], elevation_m, config.wind_blocking_height_m)

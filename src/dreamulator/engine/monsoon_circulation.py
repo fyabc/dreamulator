@@ -70,6 +70,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from dreamulator.engine.climate_physics import coriolis_parameter
+
 # Fraction of the atmospheric column whose temperature anomaly projects onto
 # surface pressure (hydrostatic), derived from the observed structure of the
 # thermal systems (M4, 2026-09-14):
@@ -129,6 +131,18 @@ _MONSOON_PROJECTION_FRACTION: float = _monsoon_projection_fraction()
 # docs/knowledge/climatology/atmospheric_circulation.md §4.5).
 _DRAG_RATE_S: float = 1.0e-5  # open water (C_D ≈ 1.3e-3)
 _DRAG_RATE_LAND_S: float = 2.0e-4  # rough vegetation (C_D ≈ 0.03), ~20× water
+
+# Cross-equatorial westerly drag rate (s⁻¹).  The cross-equatorial monsoon
+# current (winter hemisphere → summer ITCZ) is a *deep* tropospheric flow that
+# approaches angular-momentum conservation — its effective damping is much
+# weaker than the surface boundary layer, with a timescale set by the
+# equator→ITCZ crossing (~7 days) rather than the surface drag (~1 day).  The
+# value below calibrates the westerly belt so the cross-equatorial belt's
+# surface wind reverses from the symmetric Hadley easterly to the observed
+# westerly (~+2 m/s over Guinea/India in July, NCEP sig995).  Shared by all
+# worlds: on a slow rotator the Coriolis parameter f and the ITCZ excursion
+# both shrink, so the belt weakens correspondingly (see the module tests).
+_CROSS_EQUATORIAL_DRAG_RATE_S: float = 1.6e-6
 
 # Sea-level air density (kg/m³), same reference as _geostrophic_wind.
 _AIR_DENSITY_KG_M3: float = 1.225
@@ -369,3 +383,80 @@ def monsoon_boundary_layer_wind(
     scale = np.where(speed > max_speed_m_s, max_speed_m_s / np.maximum(speed, 1e-12), 1.0)
     wind *= scale[:, :, None]
     return np.asarray(wind)
+
+
+def cross_equatorial_monsoon_westerly(
+    lat_rad: np.ndarray,
+    nodes_xyz: np.ndarray,
+    itcz_lat_deg: float,
+    hadley_extent_deg: float = 30.0,
+    rotation_period_days: float = 1.0,
+    drag_rate_s: float = _CROSS_EQUATORIAL_DRAG_RATE_S,
+) -> np.ndarray:
+    """Cross-equatorial monsoon westerlies (seasonal Hadley branch).
+
+    The three-cell circulation's zonal wind (``hadley_cell_wind``) is a
+    symmetric easterly in the Hadley belt, so it misses the monsoon's
+    signature feature: the low-level cross-equatorial flow from the winter
+    hemisphere toward the summer ITCZ is deflected *westward* once it crosses
+    the equator — the Somali-jet / Guinea-westerly belt.  This function
+    reconstructs that belt from the boundary-layer momentum balance in the
+    pure-meridional-gradient limit (G_e = 0):
+
+        u_cross = f · v_n / k_d
+
+    f = 2Ω sin(φ) is the Coriolis parameter at the *absolute* latitude, v_n
+    the cross-equatorial meridional wind (the Hadley surface branch toward the
+    ITCZ, the same soft-shouldered sine as ``hadley_cell_wind``), and k_d the
+    cross-equatorial drag rate (see ``_CROSS_EQUATORIAL_DRAG_RATE_S``).  The
+    sign is westerly in both hemispheres — NH: f > 0 and v_n > 0; SH: f < 0
+    and v_n < 0 — and it vanishes at the equator (f = 0) and outside the
+    cross-equatorial belt (|φ| < |ITCZ| with φ on the ITCZ's side of the
+    equator), leaving the trades and the mid-latitude Ferrel cell untouched.
+    (The tech-debt-24 "sweeping rain belt" falsification came from moving the
+    *whole* circulation with the ITCZ; this is the local reversal only.)
+
+    Args:
+        lat_rad: Latitude in radians, shape (N,).
+        nodes_xyz: Unit sphere positions, shape (N, 3).
+        itcz_lat_deg: ITCZ latitude in degrees (seasonal thermal equator).
+        hadley_extent_deg: Hadley cell poleward boundary (°).
+        rotation_period_days: Rotation period in Earth days (for f and Ω^⅓).
+        drag_rate_s: Cross-equatorial drag rate k_d (s⁻¹).
+
+    Returns:
+        Westerly wind vectors (m/s) tangent to the sphere, shape (N, 3);
+        non-zero only within the cross-equatorial belt.
+    """
+    n = len(lat_rad)
+    itcz = float(itcz_lat_deg)
+    if abs(itcz) < 1e-9:
+        return np.zeros((n, 3), dtype=np.float64)
+
+    lat_deg = np.degrees(lat_rad)
+    # Cross-equatorial belt: same side of the equator as the ITCZ, equatorward
+    # of it (0 < |φ| < |ITCZ|).
+    cross = (np.sign(lat_deg) == np.sign(itcz)) & (np.abs(lat_deg) < np.abs(itcz))
+
+    # Cross-equatorial meridional wind v_n — the Hadley surface branch toward
+    # the ITCZ, the same soft-shouldered sine as ``hadley_cell_wind``, evaluated
+    # on the ITCZ-relative latitude rel = φ − ITCZ.  Within the belt rel has the
+    # opposite sign to the ITCZ, so −sign(rel) points toward the ITCZ
+    # (northward in NH summer).
+    h = float(hadley_extent_deg)
+    omega_scale = rotation_period_days ** (1.0 / 3.0)
+    m = 1.5 * omega_scale
+    shoulder = 0.2
+
+    rel_deg = lat_deg - itcz
+    v_n = np.zeros(n, dtype=np.float64)
+    sel = cross & (np.abs(rel_deg) < h)
+    t = np.abs(rel_deg[sel]) / h
+    sin_t = np.sin(np.pi * t)
+    v_n[sel] = -np.sign(rel_deg[sel]) * m * sin_t * (shoulder + (1.0 - shoulder) * sin_t)
+
+    f = coriolis_parameter(lat_rad, rotation_period_days)
+    u_cross = f * v_n / drag_rate_s  # westerly (eastward) > 0 in both hemispheres
+
+    east, _ = _tangent_basis(nodes_xyz)
+    return np.asarray(u_cross[:, None] * east)

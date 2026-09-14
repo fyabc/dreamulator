@@ -109,11 +109,38 @@ Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
 > 全网格统一用开阔水面的 1e-5，会把亚马逊（密林、应高拖曳）的温和 ΔP 放大成 ~20 m/s
 > 假强风 → 干季水汽被抽干、亚马逊 Af→Aw。修法 = k_d 按地表类型区分。
 
+## 4.6 跨赤道季风西风带
+
+三胞环流的纬向风在 Hadley 带内是**对称东风**（`hadley_cell_wind` 只依赖 |φ−ITCZ|），
+缺了季风的标志性特征：跨赤道低层流（冬季半球 → 夏季半球 ITCZ）一旦越过赤道，
+受科氏力偏转成**西风**——索马里急流 / 几内亚西南季风。`cross_equatorial_monsoon_westerly()`
+在纯经向梯度（G_e=0）边界层平衡下重建该西风带：
+
+```
+u_cross = f · v_n / k_d
+```
+
+- `f = 2Ω sin(φ)`：绝对纬度科氏参数（`coriolis_parameter`）；
+- `v_n`：跨赤道经向风（Hadley 地表支指向 ITCZ，同 `hadley_cell_wind` 的软肩部正弦）；
+- `k_d`：跨赤道拖曳速率（`_CROSS_EQUATORIAL_DRAG_RATE_S ≈ 1.6e-6 s⁻¹`，~7 天穿越
+  时间，比地面边界层 ~1 天弱——跨赤道流是深层对流层流，接近角动量守恒）。
+
+符号在两半球恒为西风（北半球 f>0、v_n>0；南半球 f<0、v_n<0），赤道（f=0）与跨赤道带
+之外（|φ| ≥ |ITCZ| 或 ITCZ 反侧）为零——不动信风与中纬 Ferrel（技术债 24「扫掠雨带」
+否证来自移动整个环流，这里是局部反转）。
+
+**标定锚点**：几内亚湾 / 印度 7 月地表西风 ~+2 m/s（NCEP sig995；δMCD/δTH 分解
+`diagnose_moisture_decomp.py` 结论 ②「风向错误是活跃错路由」的直接修复）。跨赤道西风带
+随 ITCZ 逐月迁移，作为 `wind_monthly` 的季节支——年平 `wind` 是逐月风矢量平均导出的
+「平均西风带」（「逐月为主、年平为导出量」契约，B0b）。
+
 ## 5. 已知简化（与真实大气的差距）
 
 - 纬向平均：无瞬变涡动（天气系统）、无急流核心结构；
 - 无 ITCZ 的动力位置求解（ITCZ 降水见 `precipitation` 规划文档）；
 - 季风边界层风是单层（无垂直结构），k_d 按地表类型二分（水面/植被，§4.5）；
+- 跨赤道西风带已补方向（§4.6），但低空急流（LLJ）垂直结构仍未解析——水汽通量的
+  850 hPa/地面 ~1.8× 量级缺口是单层风的已知残留（δMCD/δTH 结论 ③，D/F 子项 2）；
 - 垂直结构单层——递减率与稳定度处理见 `energy_balance.md` §海拔。
 
 ## 6. 与引擎的对应关系
@@ -125,6 +152,7 @@ Masiwal & Dixit (JAS 80(3)) 索马里急流 850 hPa 月均最大 ~18 m/s。
 | 地转风 | `climate_simulator.py:_geostrophic_wind()` | 参考实现（未接管线，见 §3） |
 | 温度→气压 | `climate_physics.py:pressure_from_temperature()` | ✅（位温 θ） |
 | 季风边界层风 | `engine/monsoon_circulation.py:monsoon_boundary_layer_wind()` | ✅（f→0 退化 + 边界层平衡，k_d 按地表区分） |
+| 跨赤道季风西风带 | `engine/monsoon_circulation.py:cross_equatorial_monsoon_westerly()` | ✅（u = f·v_n/k_d，随 ITCZ 逐月） |
 | Hadley 宽度 Ω 标度 | 3A.3a 中期 | 📋 |
 | 瞬变涡动 / 急流 | 长期愿景（简化 GCM） | ❌ |
 
