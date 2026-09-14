@@ -132,7 +132,7 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 4. Stage 2: 风场
    ├─ hadley_cell_wind（三圈环流 + 地形阻挡，12 个 ITCZ 位置平均 = 年均背景风）
    ├─ （地转风分量已移除，见 §2.4 末；大尺度风场 = 纯三圈环流）
-   ├─ 跨赤道季风西风带（cross_equatorial_monsoon_westerly，随 ITCZ 逐月，§2.4）
+   ├─ 跨赤道季风西风带（cross_equatorial_monsoon_wind，随 ITCZ 逐月，§2.4）
    └─ 季风异常：月度气压异常（§2.4）→ 边界层动量平衡 → 12 个月度风场
 5. Stage 3: 洋流（Stommel 环流 + SST 平流 + 涌升）
 6. Stage 4: 降水（_compute_precipitation_monthly_budget，见 §2.4）
@@ -163,10 +163,11 @@ ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预�
 
 **月度风场**：`wind_monthly[m] = 背景风 + 跨赤道西风带 + 季风异常`。背景风是 §2.3
 Stage 2 的年均场（**纯三圈环流**，含 12 个 ITCZ 位置平均），逐月胞圈迁移属月度矢量场
-工作（技术债 24），v1 不含——但跨赤道西风带（`cross_equatorial_monsoon_westerly`，
-u = f·v_n/k_d，随 ITCZ 逐月）是**保留逐月的唯一胞圈项**：只反转跨赤道带（|φ|<|ITCZ|）
-的纬向风方向（东风→西风），不动经向辐合结构，故不重演技术债 24 的「扫掠雨带」。
-季风异常由海陆热力对比驱动（技术债 23），物理链条：
+工作（技术债 24），v1 不含——但跨赤道西风带（`cross_equatorial_monsoon_wind`，量级
+ε·Ωa·sin(φ_itcz_max)，随 ITCZ 逐月）是**保留逐月的唯一胞圈项**：在跨赤道带内**只替换
+背景纬向风**为西风（保留背景经向辐合结构），不动经向辐合结构，故不重演技术债 24 的
+「扫掠雨带」（经向支 + 季风槽北移已否证，见 §2.4 末）。季风异常由海陆热力对比驱动
+（技术债 23），物理链条：
 
 1. **纬向平均基准**（`zonal_mean_monthly`）：逐月、按符号纬度带（5°）求纬向平均温度。
 2. **气压异常**（`pressure_anomaly_monthly`，`engine/monsoon_circulation.py` 纯函数）：

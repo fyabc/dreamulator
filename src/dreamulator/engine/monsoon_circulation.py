@@ -70,8 +70,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from dreamulator.engine.climate_physics import coriolis_parameter
-
 # Fraction of the atmospheric column whose temperature anomaly projects onto
 # surface pressure (hydrostatic), derived from the observed structure of the
 # thermal systems (M4, 2026-09-14):
@@ -132,17 +130,26 @@ _MONSOON_PROJECTION_FRACTION: float = _monsoon_projection_fraction()
 _DRAG_RATE_S: float = 1.0e-5  # open water (C_D ≈ 1.3e-3)
 _DRAG_RATE_LAND_S: float = 2.0e-4  # rough vegetation (C_D ≈ 0.03), ~20× water
 
-# Cross-equatorial westerly drag rate (s⁻¹).  The cross-equatorial monsoon
-# current (winter hemisphere → summer ITCZ) is a *deep* tropospheric flow that
-# approaches angular-momentum conservation — its effective damping is much
-# weaker than the surface boundary layer, with a timescale set by the
-# equator→ITCZ crossing (~7 days) rather than the surface drag (~1 day).  The
-# value below calibrates the westerly belt so the cross-equatorial belt's
-# surface wind reverses from the symmetric Hadley easterly to the observed
-# westerly (~+2 m/s over Guinea/India in July, NCEP sig995).  Shared by all
-# worlds: on a slow rotator the Coriolis parameter f and the ITCZ excursion
-# both shrink, so the belt weakens correspondingly (see the module tests).
-_CROSS_EQUATORIAL_DRAG_RATE_S: float = 1.6e-6
+# Cross-equatorial monsoon southwesterly amplitude (D/F 子项 2, 2026-09-14).
+# The cross-equatorial current (winter hemisphere → summer ITCZ) is a deep
+# tropospheric flow whose surface wind is a small fraction ε of the angular-
+# momentum scale Ω·a at the ITCZ's maximum excursion:
+#
+#   u_scale = ε_u · Ω a · sin(φ_itcz_max)   # westerly (Coriolis-deflected)
+#
+# ε ≈ 0.015 is the boundary-layer frictional attenuation (the current is ~2 % of
+# the rotational-speed scale), a physical constant shared by every world — Ω and
+# the ITCZ excursion carry the world-dependence, so a slow rotator (small Ω,
+# small obliquity) gets a proportionally weak current (nacrea ≈ 0.21 m/s, Earth
+# ≈ 1.7 m/s).  The amplitude is *not* a function of the local latitude φ, only
+# of the ITCZ latitude — this fixes sub-item 1's `f·v_n/k_d`, which grew with
+# local f and over-amplified ~6× once the monsoon trough moved poleward.  The
+# cross-equatorial belt's zonal wind therefore reverses from the symmetric
+# Hadley easterly to the observed westerly (~+2 m/s Guinea/India July, NCEP
+# sig995).  (The meridional branch ε_v was falsified this round — the northward
+# v lacked the "southward north-of-ITCZ" convergence limb and over-dried Guinea;
+# see proposal §5.)
+_EPS_U: float = 0.015
 
 # Sea-level air density (kg/m³), same reference as _geostrophic_wind.
 _AIR_DENSITY_KG_M3: float = 1.225
@@ -385,78 +392,179 @@ def monsoon_boundary_layer_wind(
     return np.asarray(wind)
 
 
-def cross_equatorial_monsoon_westerly(
+def monsoon_trough_latitude(
+    t_c: np.ndarray,
+    lat_deg: np.ndarray,
+    lon_deg: np.ndarray,
+    ocean_mask: np.ndarray,
+    itcz_ocean_deg: float,
+    band_deg: float = 10.0,
+    damping: float = 0.9,
+    sh_ocean_thresh: float = 0.5,
+    nh_land_thresh: float = 0.3,
+    eq_ocean_thresh: float = 0.7,
+) -> np.ndarray:
+    """Monsoon-trough latitude (the ITCZ's land northward shift), per cell.
+
+    The monsoon trough is the ITCZ shifted poleward over land by the stronger
+    summer surface heating of low-heat-capacity ground — India's July land
+    temperature peaks at 24–28°N vs the ocean ITCZ at ~14°N.  This function
+    derives the trough latitude per longitude band from the engine's own
+    temperature field (first-principles, no tuning per world): within each
+    longitude band, if (and only if) it is a **cross-equatorial monsoon**
+    sector — southern-hemisphere ocean (the trade-wind moisture source) *and*
+    northern-hemisphere land (the heated sink) — the trough latitude is the
+    temperature-weighted latitude of the warm northern land, else it falls back
+    to the ocean ITCZ.  This is the discriminator that keeps India/West Africa/
+    Southeast Asia (cross-equatorial) shifting poleward while South China /
+    East Asia (subtropical-high south-easterlies, no SH ocean source) do not.
+
+    Args:
+        t_c: Monthly temperature field (°C), shape (N,) — one month.
+        lat_deg: Latitude in degrees, shape (N,).
+        lon_deg: Longitude in degrees, shape (N,) (any sign convention).
+        ocean_mask: Boolean ocean mask, shape (N,).
+        itcz_ocean_deg: Ocean ITCZ latitude for this month (°).
+        band_deg: Longitude band width (°).
+        damping: Fraction of the land-temperature-peak latitude the trough
+            reaches (convective heating lags the surface maximum).
+        sh_ocean_thresh: Minimum southern-hemisphere ocean fraction for a band
+            to count as having a cross-equatorial trade-wind source.
+        nh_land_thresh: Minimum northern-hemisphere land fraction for a band to
+            count as having a heated land sink.
+        eq_ocean_thresh: Minimum equatorial (−5°…5°) ocean fraction — an
+            unblocked cross-equatorial corridor.  South China / East Asia sit
+            behind the Indonesian archipelago (equatorial land ~50 %), so their
+            equatorial-ocean fraction is low and the belt does not shift there.
+
+    Returns:
+        Monsoon-trough latitude per cell (°), shape (N,) — ≥ ``itcz_ocean_deg``.
+    """
+    lon = np.where(lon_deg < 0.0, lon_deg + 360.0, lon_deg)
+    n_bands = int(round(360.0 / band_deg))
+    band_idx = np.clip((lon / band_deg).astype(np.int64), 0, n_bands - 1)
+    is_land = ~np.asarray(ocean_mask, dtype=bool)
+    t = np.asarray(t_c, dtype=np.float64)
+
+    # Cross-equatorial monsoon sector: SH ocean (source) + NH land (sink) +
+    # an unblocked equatorial ocean corridor (no land damming the flow).
+    sh = lat_deg < -5.0
+    eq = (lat_deg > -5.0) & (lat_deg < 5.0)
+    nh = lat_deg > 5.0
+    sh_ocean = sh & ~is_land
+    nh_land = nh & is_land
+    eq_ocean = eq & ~is_land
+    sh_count = np.bincount(band_idx, weights=sh.astype(np.float64), minlength=n_bands)
+    sh_oc = np.bincount(band_idx, weights=sh_ocean.astype(np.float64), minlength=n_bands)
+    eq_count = np.bincount(band_idx, weights=eq.astype(np.float64), minlength=n_bands)
+    eq_oc = np.bincount(band_idx, weights=eq_ocean.astype(np.float64), minlength=n_bands)
+    nh_count = np.bincount(band_idx, weights=nh.astype(np.float64), minlength=n_bands)
+    nh_ld = np.bincount(band_idx, weights=nh_land.astype(np.float64), minlength=n_bands)
+    sh_ocean_frac = sh_oc / np.maximum(sh_count, 1e-9)
+    eq_ocean_frac = eq_oc / np.maximum(eq_count, 1e-9)
+    nh_land_frac = nh_ld / np.maximum(nh_count, 1e-9)
+    cross_eq = (
+        (sh_ocean_frac > sh_ocean_thresh)
+        & (eq_ocean_frac > eq_ocean_thresh)
+        & (nh_land_frac > nh_land_thresh)
+    )
+
+    # Land temperature-peak latitude: warm (T > 20 °C) northern land, weighted
+    # by T² so the hottest cells dominate the mean (India July → ~24°N).
+    w = np.where(nh_land, np.maximum(t - 20.0, 0.0) ** 2, 0.0)
+    sum_w = np.bincount(band_idx, weights=w, minlength=n_bands)
+    sum_wlat = np.bincount(band_idx, weights=w * lat_deg, minlength=n_bands)
+    land_peak = sum_wlat / np.maximum(sum_w, 1e-9)
+
+    trough_band = np.where(
+        cross_eq,
+        np.maximum(itcz_ocean_deg, land_peak * damping),
+        itcz_ocean_deg,
+    )
+    # One pass of neighbour smoothing, but only *within* cross-equatorial bands:
+    # a non-cross-equatorial band (e.g. South China, behind the Indonesian
+    # archipelago) stays at the ocean ITCZ and is not pulled poleward by an
+    # adjacent cross-equatorial band (the Philippines / SE Asia).
+    nbr = 0.5 * (np.roll(trough_band, 1) + np.roll(trough_band, -1))
+    trough_band = np.where(cross_eq, 0.5 * trough_band + 0.5 * nbr, itcz_ocean_deg)
+    return np.asarray(trough_band[band_idx])
+
+
+def cross_equatorial_monsoon_wind(
     lat_rad: np.ndarray,
     nodes_xyz: np.ndarray,
     itcz_lat_deg: float,
-    hadley_extent_deg: float = 30.0,
-    rotation_period_days: float = 1.0,
-    drag_rate_s: float = _CROSS_EQUATORIAL_DRAG_RATE_S,
+    radius_km: float,
+    rotation_period_days: float,
+    itcz_max_deg: float,
+    background_wind: np.ndarray,
 ) -> np.ndarray:
     """Cross-equatorial monsoon westerlies (seasonal Hadley branch).
 
     The three-cell circulation's zonal wind (``hadley_cell_wind``) is a
     symmetric easterly in the Hadley belt, so it misses the monsoon's
     signature feature: the low-level cross-equatorial flow from the winter
-    hemisphere toward the summer ITCZ is deflected *westward* once it crosses
-    the equator — the Somali-jet / Guinea-westerly belt.  This function
-    reconstructs that belt from the boundary-layer momentum balance in the
-    pure-meridional-gradient limit (G_e = 0):
+    hemisphere toward the summer ITCZ, deflected *westward* once it crosses the
+    equator — the Somali-jet / Guinea-westerly belt.  This function returns the
+    belt's net westerly **with the background zonal wind replaced** within the
+    belt (``background_wind`` is subtracted there, so adding the result to the
+    background yields exactly the westerly).
 
-        u_cross = f · v_n / k_d
+    The amplitude is a scale shared by every world (see ``_EPS_U``):
 
-    f = 2Ω sin(φ) is the Coriolis parameter at the *absolute* latitude, v_n
-    the cross-equatorial meridional wind (the Hadley surface branch toward the
-    ITCZ, the same soft-shouldered sine as ``hadley_cell_wind``), and k_d the
-    cross-equatorial drag rate (see ``_CROSS_EQUATORIAL_DRAG_RATE_S``).  The
-    sign is westerly in both hemispheres — NH: f > 0 and v_n > 0; SH: f < 0
-    and v_n < 0 — and it vanishes at the equator (f = 0) and outside the
-    cross-equatorial belt (|φ| < |ITCZ| with φ on the ITCZ's side of the
-    equator), leaving the trades and the mid-latitude Ferrel cell untouched.
-    (The tech-debt-24 "sweeping rain belt" falsification came from moving the
-    *whole* circulation with the ITCZ; this is the local reversal only.)
+        u_scale = ε_u · Ω a · sin(φ_itcz_max)
+
+    with the bell `g = sin(π·|φ|/|φ_trough|)` (0 at the equator and the trough,
+    peak mid-belt).  The amplitude depends only on the *maximum ITCZ excursion*
+    (Ω and obliquity), not on the local latitude — sub-item 1's `f·v_n/k_d`
+    grew with local f and over-amplified once the trough moved poleward.
+
+    (2026-09-14 否证记录：跨赤道流的**经向支**（v toward the ITCZ）与**季风槽
+    北移**（陆地温度峰值）已否证——v 向北缺「ITCZ 北侧向南」的辐合结构导致几内亚
+    辐散，季风槽用温度峰值无法区分湿润对流 vs 干热沙漠；两者属「稳态耦合」大工程，
+    见 proposal §5。本函数只保留纬向 u 反转，经向辐合仍由背景三圈环流承担。）
 
     Args:
         lat_rad: Latitude in radians, shape (N,).
         nodes_xyz: Unit sphere positions, shape (N, 3).
-        itcz_lat_deg: ITCZ latitude in degrees (seasonal thermal equator).
-        hadley_extent_deg: Hadley cell poleward boundary (°).
-        rotation_period_days: Rotation period in Earth days (for f and Ω^⅓).
-        drag_rate_s: Cross-equatorial drag rate k_d (s⁻¹).
+        itcz_lat_deg: Ocean ITCZ latitude in degrees (scalar, one month).
+        radius_km: Planet radius (km) for the rotational-speed scale Ω a.
+        rotation_period_days: Rotation period in Earth days.
+        itcz_max_deg: Maximum ITCZ excursion (°, the ocean ITCZ's seasonal
+            amplitude) for the amplitude scale.
+        background_wind: Background (annual three-cell) wind, shape (N, 3) —
+            subtracted within the belt so the result *replaces* it there.
 
     Returns:
-        Westerly wind vectors (m/s) tangent to the sphere, shape (N, 3);
-        non-zero only within the cross-equatorial belt.
+        Wind vectors (m/s) tangent to the sphere, shape (N, 3); non-zero only
+        within the cross-equatorial belt, where adding them to
+        ``background_wind`` yields the net westerly.
     """
     n = len(lat_rad)
     itcz = float(itcz_lat_deg)
-    if abs(itcz) < 1e-9:
-        return np.zeros((n, 3), dtype=np.float64)
-
     lat_deg = np.degrees(lat_rad)
+
     # Cross-equatorial belt: same side of the equator as the ITCZ, equatorward
     # of it (0 < |φ| < |ITCZ|).
-    cross = (np.sign(lat_deg) == np.sign(itcz)) & (np.abs(lat_deg) < np.abs(itcz))
+    belt = (
+        (np.sign(lat_deg) == np.sign(itcz))
+        & (np.abs(lat_deg) < np.abs(itcz))
+        & (abs(itcz) > 1e-9)
+    )
 
-    # Cross-equatorial meridional wind v_n — the Hadley surface branch toward
-    # the ITCZ, the same soft-shouldered sine as ``hadley_cell_wind``, evaluated
-    # on the ITCZ-relative latitude rel = φ − ITCZ.  Within the belt rel has the
-    # opposite sign to the ITCZ, so −sign(rel) points toward the ITCZ
-    # (northward in NH summer).
-    h = float(hadley_extent_deg)
-    omega_scale = rotation_period_days ** (1.0 / 3.0)
-    m = 1.5 * omega_scale
-    shoulder = 0.2
+    # Bell g = sin(π·|φ|/|ITCZ|), 0 at equator and ITCZ, peak mid-belt.
+    g = np.zeros(n, dtype=np.float64)
+    ratio = np.abs(lat_deg[belt]) / abs(itcz)
+    g[belt] = np.sin(np.pi * ratio)
 
-    rel_deg = lat_deg - itcz
-    v_n = np.zeros(n, dtype=np.float64)
-    sel = cross & (np.abs(rel_deg) < h)
-    t = np.abs(rel_deg[sel]) / h
-    sin_t = np.sin(np.pi * t)
-    v_n[sel] = -np.sign(rel_deg[sel]) * m * sin_t * (shoulder + (1.0 - shoulder) * sin_t)
-
-    f = coriolis_parameter(lat_rad, rotation_period_days)
-    u_cross = f * v_n / drag_rate_s  # westerly (eastward) > 0 in both hemispheres
+    omega_a = 2.0 * np.pi * radius_km * 1000.0 / (rotation_period_days * 86400.0)
+    sin_max = float(np.sin(np.radians(abs(itcz_max_deg))))
+    u_scale = _EPS_U * omega_a * sin_max  # westerly (eastward)
 
     east, _ = _tangent_basis(nodes_xyz)
-    return np.asarray(u_cross[:, None] * east)
+    u_cross = u_scale * g
+    # Replace only the *zonal* component (keep the background meridional branch,
+    # which carries the Hadley convergence structure): west = (u_cross − bg_e)·east.
+    bg_east = np.einsum("ij,ij->i", background_wind, east)
+    west = (u_cross - bg_east)[:, None] * east
+    return np.asarray(np.where(belt[:, None], west, 0.0))

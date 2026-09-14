@@ -5,8 +5,9 @@ import pytest
 
 from dreamulator.engine.monsoon_circulation import (
     _MONSOON_PROJECTION_FRACTION,
-    cross_equatorial_monsoon_westerly,
+    cross_equatorial_monsoon_wind,
     monsoon_boundary_layer_wind,
+    monsoon_trough_latitude,
     pressure_anomaly_monthly,
     zonal_mean_monthly,
 )
@@ -291,12 +292,11 @@ class TestMonsoonBoundaryLayerWind:
         assert np.allclose(wind, 0.0)
 
 
-class TestCrossEquatorialMonsoonWesterly:
-    """Cross-equatorial monsoon westerlies (D/F 子项 1)."""
+class TestCrossEquatorialMonsoonWind:
+    """Cross-equatorial monsoon westerlies (D/F 子项 2)."""
 
     @staticmethod
     def _east_comp(w: np.ndarray, lat_deg: float) -> float:
-        """Physical-east component of a single tangent vector at lon=0."""
         node = _sphere_points(np.array([lat_deg]), np.array([0.0]))
         north = np.array([0.0, 1.0, 0.0]) - node[:, 1:2] * node
         north /= np.linalg.norm(north, axis=1)[:, None]
@@ -304,57 +304,105 @@ class TestCrossEquatorialMonsoonWesterly:
         east /= np.linalg.norm(east, axis=1)[:, None]
         return float(np.einsum("j,j->", w, east[0]))
 
-    def test_zero_at_equator(self):
-        # f = 0 at the equator → no Coriolis deflection → no westerly belt.
-        for itcz in (13.6, -13.6):
-            w = cross_equatorial_monsoon_westerly(
-                np.array([0.0]), _sphere_points(np.array([0.0]), np.array([0.0])), itcz
-            )
-            assert np.allclose(w, 0.0)
+    @staticmethod
+    def _net(lat: np.ndarray, itcz: float, itcz_max: float = 14.0) -> np.ndarray:
+        from dreamulator.engine.climate_physics import hadley_cell_wind
 
-    def test_nh_summer_westerly_in_belt(self):
-        # NH summer (ITCZ north): cells between the equator and the ITCZ blow
-        # westward (east component > 0) — the Guinea/Somali westerlies.
+        n = len(lat)
+        nodes = _sphere_points(lat, np.zeros(n))
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=itcz)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, itcz, 6371.0, 1.0, itcz_max, bg
+        )
+        return bg + sw  # net wind = background + westerly (replacement)
+
+    def test_nh_summer_westerly(self):
+        # NH summer: within the belt the net zonal wind is westerly (u > 0) —
+        # the Guinea/Somali westerlies.
         lat = np.array([4.0, 8.0])
-        nodes = _sphere_points(lat, np.zeros(2))
-        w = cross_equatorial_monsoon_westerly(np.radians(lat), nodes, 13.6)
+        net = self._net(lat, 14.0)
         for i, la in enumerate(lat):
-            assert self._east_comp(w[i], la) > 0.0
+            assert self._east_comp(net[i], la) > 0.0
 
-    def test_sh_summer_westerly_in_belt(self):
+    def test_sh_summer_westerly(self):
         # SH summer mirror: the westerly belt appears in the SH cross-equatorial
-        # belt too (f < 0 and v_n < 0 → the same westward sign).
+        # belt too (the same westward sign in both hemispheres).
         lat = np.array([-4.0, -8.0])
-        nodes = _sphere_points(lat, np.zeros(2))
-        w = cross_equatorial_monsoon_westerly(np.radians(lat), nodes, -13.6)
+        net = self._net(lat, -14.0)
         for i, la in enumerate(lat):
-            assert self._east_comp(w[i], la) > 0.0
+            assert self._east_comp(net[i], la) > 0.0
 
     def test_zero_outside_belt(self):
         # Poleward of the ITCZ (trades) and the opposite hemisphere are
-        # untouched — the belt is strictly equatorward of the ITCZ.
+        # untouched — the replacement wind is strictly equatorward of the ITCZ.
         lat = np.array([15.0, 20.0, -8.0])
         nodes = _sphere_points(lat, np.zeros(3))
-        w = cross_equatorial_monsoon_westerly(np.radians(lat), nodes, 13.6)
-        assert np.allclose(w, 0.0)
+        from dreamulator.engine.climate_physics import hadley_cell_wind
+
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=14.0)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, 14.0, 6371.0, 1.0, 14.0, bg
+        )
+        assert np.allclose(sw, 0.0)
 
     def test_zero_when_itcz_at_equator(self):
         # No ITCZ excursion → no cross-equatorial belt (backward compatible with
         # the symmetric Hadley easterly at 15°N).
         lat = np.array([8.0, 15.0, -8.0])
         nodes = _sphere_points(lat, np.zeros(3))
-        w = cross_equatorial_monsoon_westerly(np.radians(lat), nodes, 0.0)
-        assert np.allclose(w, 0.0)
+        from dreamulator.engine.climate_physics import hadley_cell_wind
 
-    def test_tangent_and_belt_shape(self):
-        # The belt is tangent to the sphere, and its speed peaks within the
-        # belt (grows away from the equator as f rises, then decays toward the
-        # ITCZ where v_n → 0).
-        lat = np.array([2.0, 8.0, 12.0])
-        nodes = _sphere_points(lat, np.zeros(3))
-        w = cross_equatorial_monsoon_westerly(np.radians(lat), nodes, 13.6)
-        radial = np.einsum("ij,ij->i", w, nodes)
+        bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=0.0)
+        sw = cross_equatorial_monsoon_wind(
+            np.radians(lat), nodes, 0.0, 6371.0, 1.0, 14.0, bg
+        )
+        assert np.allclose(sw, 0.0)
+
+    def test_replaces_background_easterly(self):
+        # The net wind is the westerly, NOT background + a weak westerly: the
+        # Hadley background easterly is subtracted within the belt.
+        lat = np.array([8.0])
+        net = self._net(lat, 14.0)
+        # ~8°N mid-belt: westerly of order ~1.5 m/s, magnitude bounded.
+        speed = np.linalg.norm(net[0])
+        assert 0.5 < speed < 4.0
+
+    def test_tangent(self):
+        lat = np.array([2.0, 8.0])
+        nodes = _sphere_points(lat, np.zeros(2))
+        net = self._net(lat, 14.0)
+        radial = np.einsum("ij,ij->i", net, nodes)
         assert np.allclose(radial, 0.0, atol=1e-9)
-        speeds = np.linalg.norm(w, axis=1)
-        assert speeds[0] > 0.0  # 2°N in-belt
-        assert speeds[2] < speeds[1]  # decays approaching the ITCZ
+
+
+class TestMonsoonTroughLatitude:
+    """Monsoon-trough latitude (the ITCZ's land northward shift)."""
+
+    def test_cross_equatorial_sector_shifts_poleward(self):
+        # SH ocean + EQ ocean + hot NH land → the trough shifts poleward of the
+        # ocean ITCZ (toward the warm land).
+        lat = np.array([-10.0, 0.0, 20.0, 25.0])
+        lon = np.array([5.0, 5.0, 5.0, 5.0])
+        ocean = np.array([True, True, False, False])
+        t = np.array([20.0, 25.0, 30.0, 32.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert (trough > 14.0).all()
+
+    def test_non_cross_equatorial_no_shift(self):
+        # NH ocean + NH land with no SH ocean and no EQ ocean corridor (South
+        # China / East Asia, behind the Indonesian archipelago) → no shift.
+        lat = np.array([10.0, 20.0, 25.0])
+        lon = np.array([15.0, 15.0, 15.0])
+        ocean = np.array([True, False, False])
+        t = np.array([25.0, 30.0, 32.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert np.allclose(trough, 14.0)
+
+    def test_pure_ocean_no_shift(self):
+        # No land at all → the trough stays at the ocean ITCZ.
+        lat = np.array([-10.0, 0.0, 10.0, 20.0])
+        lon = np.array([5.0, 5.0, 5.0, 5.0])
+        ocean = np.array([True, True, True, True])
+        t = np.array([20.0, 25.0, 27.0, 25.0])
+        trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
+        assert np.allclose(trough, 14.0)
