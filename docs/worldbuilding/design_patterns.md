@@ -2,8 +2,6 @@
 
 可复用的世界配置模板。每个模式说明概念、YAML 编码方式和源码引用。
 
-> 科学知识文档已迁移至 `docs/knowledge/` 目录。
-
 ---
 
 ## 模式 1：分支与层级继承
@@ -28,12 +26,12 @@ description: "盘古大陆分支 — 在 geological 层分叉"
 
 ```
 基础世界 (main)
-├── layers/geological/input/maps/earth/
+├── maps/planet_earth/
 │   ├── elevation.png           ← 基础地形
 │   └── plates.json
 │
 └── branches/pangea/
-    └── layers/geological/input/maps/earth/
+    └── maps/planet_earth/      ← 存在时优先于父世界（map/manager.py 解析顺序）
         ├── elevation.png       ← 覆盖：盘古大陆
         └── plates.json         ← 重新生成
 ```
@@ -155,23 +153,25 @@ bodies:
 ```yaml
 # layers/geological/input/terrain_config.yaml
 seed: 42
-num_nodes: 4096       # 节点数（快速迭代：~4000；生产质量：~100000）
+num_nodes: 100000     # 节点数（引擎默认；现行标准世界用 200000）
 jitter_sigma: 0.3     # Fibonacci 初始扰动（0 = 无扰动，0.3 = 推荐）
 lloyd_iterations: 8   # Lloyd 松弛迭代次数（越高 cell 越均匀）
 ```
 
-**参数指南**：
+**参数指南**（200k cell ≈ 51 km/cell，地球级世界现行标准；量级参考：mesh 阶段
+200k 约 2.5 s——Numba 内核优化后，全管线（含构造演化 + 气候）基线 ~391 s，
+见 roadmap v0.36.0 口径）：
 
-| 场景 | num_nodes | lloyd_iterations | 预计耗时 |
-|------|-----------|-----------------|---------|
-| 快速原型 | 4096 | 4-5 | ~7s |
-| 标准质量 | 50000 | 8 | ~40s |
-| 生产质量 | 100000 | 8-10 | ~70s |
+| 场景 | num_nodes | lloyd_iterations |
+|------|-----------|-----------------|
+| 快速原型 | 32768 | 4-5 |
+| 引擎默认 | 100000 | 8 |
+| 现行标准（earth / nacrea） | 200000 | 8 |
 
 **参考**：
 - `src/dreamulator/map/pipeline_types.py` — TerrainPipelineConfig
 - `src/dreamulator/map/cvt_mesh.py` — `generate_cvt_mesh()`, `fibonacci_sphere()`
-- `docs/design/pipelines/geological-pipeline.md` §2 — CVT 网格生成算法
+- `docs/design/pipelines/geological-pipeline.md` §3 — CVT 网格生成算法
 
 ---
 
@@ -220,116 +220,64 @@ noise_amplitude_ocean_m: 300
 DAG 引擎在 upstream 修改时自动标记 downstream 为 `stale`。
 
 ```yaml
-# layers/geological/input/maps/earth/registry.yaml
+# <world>/maps/<planet>/registry.yaml（注册表随地图产物存放）
 raster_layers:
   elevation:
+    layer_type: elevation
     source: imported
     file_path: elevation.png
     depends_on: []
     stale: false
   temperature:
+    layer_type: temperature
     source: engine-derived
     depends_on: [elevation]
     stale: true        # elevation 更新 → BFS 级联标记 stale
 
 vector_layers:
   plates:
+    layer_id: plates
+    format: plates-json
     depends_on: [elevation]
     stale: false
   provinces:
-    depends_on: [voronoi, plates]
+    layer_id: provinces
+    format: geojson
+    depends_on: [plates]
     stale: true
 ```
 
-**依赖链**：
-```
-elevation → plates → provinces → civ_territory
-elevation → features (河流/山脊)
-elevation → temperature → biomes
-```
+**图层标识**（`MapLayerType`）：栅格层 `elevation`（可编辑）、`terrain` /
+`temperature` / `precipitation` / `biomes` / `plates_raster` / `boundaries`
+（引擎派生）；矢量层 `plates` / `provinces`（文明行省，可编辑）。
 
 **级联失效**：`mark_downstream_stale()` BFS 遍历依赖图。
 
 **参考**：
-- `src/dreamulator/map/manager.py` — `mark_downstream_stale()`
-- `src/dreamulator/map/models.py` — MapMetadata, MapLayerRegistry
+- `src/dreamulator/map/manager.py` — `mark_downstream_stale()` / `update_registry_on_elevation_change()`
+- `src/dreamulator/map/models.py` — MapMetadata, MapLayerRegistry, MapLayerType
 - `docs/design/pipelines/map-system.md` — 图层依赖关系 DAG
 
 ---
 
 ## 模式 7：地图自适应配色
 
-**概念**：地形着色自动适配行星实际高程范围。色标断点基于
-`elevMinM`/`elevMaxM`/`seaLevelM` 动态计算，无需手动调色。
-
-```
-配色方案：海洋 NOAA ETOPO1 + 陆地 ESRI Natural Earth
-断点位置：minElev → +15% → +30% → sea-2% → sea-0.5% → sea →
-          +0.5% → +2% → +8% → +18% → +30% → +35% → +40% → maxElev
-```
-
-**不同世界的自动适配**：
-
-| 场景 | 最低点 | 最高点 | 海平面位置 |
-|------|--------|--------|-----------|
-| 地球类 | -11000m | 9000m | 0m (归一化 0.55) |
-| 浅海世界 | -3000m | 5000m | -500m (归一化 0.31) |
-| 深谷世界 | -20000m | 6000m | 0m (归一化 0.77) |
-
-**参考**：
-- `src/viewers/map/utils/colorScales.ts` — `generateAdaptiveTerrainScale()`
-- `docs/design/roadmap.md` — 配色方案调研
+**概念**：地形着色自动适配行星实际高程范围——色标断点基于 `elevMinM`/`elevMaxM`/
+`seaLevelM` 动态计算，无需手动调色；地球类/浅海/深谷世界同一套代码自动适配。
+配色方案（海洋 NOAA ETOPO1 + 陆地 ESRI Natural Earth）与断点公式见
+[map-system.md](../design/pipelines/map-system.md) 的渲染章节与
+`src/viewers/map/utils/colorScales.ts` 的 `generateAdaptiveTerrainScale()`。
 
 ---
 
 ## 模式 8：PID 自适应参数调节
 
-**概念**：比例-积分-微分控制器（PID controller）是工业控制中的经典算法，
-在 dreamulator 中用于自动调节模拟参数，使系统在变化条件下保持目标状态。
-核心思想：**测量当前值 → 与目标比较 → 微调参数 → 重复**。
-
-与一步到位的参数设定不同，PID 提供**缓慢适应**——模拟真实地质/物理过程的惯性。
-
-**算法伪代码**：
-
-```python
-def adaptive_pid(current_value, target, base_rate, history):
-    # 滑动平均平滑噪声
-    avg = mean(history[-window:])
-
-    # 比例响应（P 项）：偏差越大，调整越强
-    if avg < target * 0.6:      # 严重偏低
-        rate = min(base_rate * 5, rate * 1.25)   # 加速但设上限
-    elif avg > target * 1.5:    # 严重偏高
-        rate = max(base_rate * 0.2, rate * 0.80) # 减速但设下限
-    else:                        # 正常范围
-        rate += (base_rate - rate) * 0.1          # 向基准衰减
-
-    return rate
-```
-
-**关键参数**：
-
-| 参数 | 含义 | 推荐值 |
-|------|------|--------|
-| 窗口大小 | 滑动平均的步数 | 5（平衡响应速度与噪声过滤） |
-| 触发阈值 | 离目标多远才调整 | 0.6× / 1.5×（避免频繁微调） |
-| 调整速率 | 每次调整的幅度 | ×1.25 / ×0.80（缓慢修正） |
-| 上限/下限 | 防止失控 | ×5 / ×0.2（绝对不许裂解归零或暴增） |
-| 衰减速率 | 正常时向基准回归 | 0.1（每步回归 10%） |
-
-**代码库中的使用**：
-
-| 模块 | 文件 | 调节目标 | PID 参数 |
-|------|------|---------|----------|
-| 构造演化 | `tectonic_simulator.py:489-502` | 板块数量稳定在 12-15 | λ₀ (裂解率) |
-| （建议） | 地形合成 | 目标海陆比 70:30 | sea_level_m |
-| （建议） | 气候模拟 | 目标全球均温 | atmosphere_factor |
-
-**参考**：
-- `docs/knowledge/geology/cortial_2019_notes.md` §D.12 — 板块裂解 PID 实现细节
-- `src/dreamulator/map/tectonic_simulator.py` — `_evolve_cortial2019()` 中的 PID 控制器
-- Matthews et al. (2016) — 地球 410 My 板块数量参考数据
+**概念**：比例-积分-微分控制器（PID controller）用于自动调节模拟参数，使系统在
+变化条件下缓慢收敛到目标状态（板块数量稳定、海陆比等），模拟真实地质过程的惯性。
+当前唯一接线用途：构造演化的板块裂解率 λ₀ 调节（板块数量稳定在 12–15）。
+算法细节（滑动平均 / 触发阈值 / 调整上限）与实现见
+[../knowledge/geology/cortial_2019_notes.md](../knowledge/geology/cortial_2019_notes.md)
+§D.12；代码在 `src/dreamulator/map/tectonic_simulator.py` 的 `_evolve_cortial2019()`。
 
 ---
 
@@ -396,12 +344,12 @@ features:
 | 手绘大陆大形 | 上传 `geography_raster.png` 灰度概率图，与 feature 叠加（Gleba 模式） |
 
 **已知限制**：
-- 海岸线偏直（海陆判定在 cell 粒度 ~51 km，见 geological-pipeline.md §3.5）
+- 海岸线偏直（海陆判定在 cell 粒度 ~51 km，见 geological-pipeline.md §4.4）
 - 钉扎后不重跑校准：大陆级钉扎（>5% 表面）会偏离 `land_fraction_target`，需自调
 - `sea_level_offset_m ≠ 0` 时前端色标仍按 0 m（实验旋钮定位）
 
 **参考**：
-- `docs/design/pipelines/geological-pipeline.md` §3.5 — 地理锚定算法与注入点
+- `docs/design/pipelines/geological-pipeline.md` §4.4 — 地理锚定算法与注入点
 - `src/dreamulator/map/geography.py` — `GeographySpec` / `build_land_bias_field()` / `apply_geography_crust()`
 - `data/worlds/nacrea/layers/geological/input/geography.yaml` — nacrea 实例
 

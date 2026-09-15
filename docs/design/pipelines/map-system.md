@@ -184,26 +184,22 @@ maps/
 | `map/importer.py` | 外部高度图导入（Gaea/World Machine 输出格式解码） | — |
 | `map/manager.py` | 地图 CRUD + 分支继承 + 同步 | dreamulator LayerResolver |
 
-## API 端点
+## API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/worlds/{w}/maps` | 列出有地图的行星 |
-| GET | `/api/worlds/{w}/maps/{p}/meta` | 地图元数据 |
-| GET | `/api/worlds/{w}/maps/{p}/elevation` | 高度图 PNG |
-| GET | `/api/worlds/{w}/maps/{p}/cvt-mesh` | CVT 网格（`fmt=json|msgpack`） |
-| GET | `/api/worlds/{w}/maps/{p}/climate-monthly` | 月度气候数据（MessagePack：温度/降水/气压/风场） |
-| GET | `/api/worlds/{w}/maps/{p}/voronoi` | Voronoi 网络 JSON |
-| GET | `/api/worlds/{w}/maps/{p}/plates` | 板块分组 JSON |
-| GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON（河流矢量图层） |
-| POST | `/api/worlds/{w}/maps/{p}/elevation` | 上传原始高度数组 |
-| POST | `/api/worlds/{w}/maps/{p}/import-elevation` | 从文件导入高度图 |
-| POST | `/api/worlds/{w}/maps/{p}/voronoi` | 更新 Voronoi 网络 |
-| POST | `/api/worlds/{w}/maps/{p}/plates` | 更新板块分组 |
-| POST | `/api/worlds/{w}/maps/{p}/generate` | 程序化生成 |
-| DELETE | `/api/worlds/{w}/maps/{p}` | 删除地图 |
+地图后端路由全部在 `api_routes/maps.py`，前缀 `/api/worlds/{w}/maps/{p}`，按功能分组：
+元数据与栅格图层（elevation PNG / climate-monthly）、CVT 网格（`cvt-mesh`）、矢量数据
+（voronoi / plates / features）、写操作（elevation / import-elevation / generate / DELETE）。
 
-所有端点支持 `?branch=xxx` 查询参数。
+**端点的权威参考**：`dreamulator serve` 后访问 `http://localhost:8000/docs`——FastAPI
+从路由代码自动生成的 OpenAPI 交互文档，与实现 by-construction 同步（手写端点表会漂移，
+不再维护）。静态模式（GitHub Pages）下无后端，API 不可用。
+
+**OpenAPI 描述不承载、需要在此记录的约定**：
+
+- 所有端点支持 `?branch=xxx` 查询参数指定分支（沿 `LayerResolver` 继承链解析）。
+- `cvt-mesh` 的 `fmt=msgpack` 返回压缩二进制（前端透明解压，兼容纯 JSON）。
+- `climate-monthly` 返回 `climate_monthly.msgpack` 原始字节（N×12 场，int16 量化）；
+  **月序约定：索引 0 = 三月**（引擎年从春分起算，前端月份标签按此排列）。
 
 ## 前端组件
 
@@ -273,7 +269,26 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 
 > 光照参数（`sun`/`season`/`night`）在 2D↔3D 视图间通过 URL 同步、可分享。
 
-### 图层系统（Slot-based Map Modes）
+#### 3D 球面渲染（GlobeViewer）
+
+3D 视图（`/worlds/:worldName/globe/:planetId`）与 2D 共享同一套烘焙纹理，渲染管线
+独立（`frontend/src/viewers/GlobeViewer.tsx` + `pages/GlobeViewerPage.tsx`，Three.js/R3F）：
+
+- **球体**：equirectangular 纹理直接贴 `SphereGeometry`（与 2D 等距圆柱同一纹理，
+  零额外烘焙）+ `OrbitControls` 交互。
+- **昼夜光照**：`SunLight` 组件按太阳直射经度 + 赤纬（随季节参数变化）放置
+  `directionalLight`（GlobeViewer.tsx:95-101）；昼夜模式下 `ambientLight` 降至 0.25
+  （:437），晨昏线由几何自然产生。光照参数（sun/season/night）与 2D 视图经 URL 同步。
+- **矢量箭头**：风/洋流箭头为独立实例（`GlobeWindArrows` / `GlobeCurrentArrows`，
+  GlobeViewerPage.tsx:36-37），切空间投影用 THREE 相机矩阵解析计算（不用数值差分，
+  避免与缩放耦合）；速度与方向分离归一（洋流 ~0.002 m/s 与风速 ~5 m/s 差 3 个量级）。
+  偏差（deviation）箭头是独立图层实例，与常规箭头各自控制透明度。
+- **月度模式**：月度风场箭头 + 月度专题层（`climate-monthly` 端点数据，
+  monthlyMode 状态组，GlobeViewerPage.tsx:69-83）。
+- **缩小过渡**：缩放超出阈值触发「转入星系视图」动画（`onTransition` 回调，
+  GlobeViewer.tsx:15、:556-558）——类《戴森球计划》的球面→恒星系过渡。
+
+## 图层系统（Slot-based Map Modes）
 
 > **参考**：[Paradox](https://www.paradoxinteractive.com/) 的 map modes（EU4 20+ 模式）、
 > [Azgaar FMG](https://azgaar.github.io/Fantasy-Map-Generator/) 的 Style 下拉、
@@ -296,29 +311,8 @@ UI 按学科组织为五个面板组：**地形** / **气候** / **生态** / **
 
 ## 使用流程
 
-> 完整的 Gaea → Dreamulator 工作流详见 [map-workflow.md](../../usage/map-workflow.md)。
-
-### 创建地图
-
-有两种方式：
-
-**方式 A：从外部工具导入（推荐）**
-
-在 Gaea 等外部工具中设计地形，导出 16-bit TIFF，然后在地图查看器中点击「📥 导入高度图」
-（`ImportElevationButton`，上传至 `/import-elevation` 端点，重采样回 CVT 网格）。
-
-**方式 B：程序化生成（快速原型）**
-
-通过 CLI（`dreamulator terrain` / `dreamulator build`）或 `POST /generate` 端点运行
-CVT 管线：CVT 网格 → 板块剖分 → 边界检测 → 地形合成 → 导出（算法细节见
-[geological-pipeline.md](geological-pipeline.md)）。
-
-### 查看地图
-
-- 左侧面板中切换专题图层（地形/海陆/Köppen/温度/降水/气压/群系/NPP/宜居/农业等）
-  与叠加层（洋流、风场、板块、地壳边界、海岸线、河流）
-- 月度模式下温度/降水/气压/风场图层切换为当月值
-- 悬停单元格查看属性（经纬度、海拔、气候、板块等），右侧单元格面板按学科分组展示
+创建（程序化生成 / 外部高度图导入）与查看的操作步骤属于用户指南，单一事实源 =
+[map-workflow.md](../../usage/map-workflow.md)。
 
 ## 分支继承
 
@@ -328,14 +322,11 @@ CVT 管线：CVT 网格 → 板块剖分 → 边界检测 → 地形合成 → �
 - 分支的地图数据存储在 `branches/<name>/maps/<planet_id>/` 下，覆盖主地图
 - 使用 `LayerResolver` 沿继承链查找有效数据
 
-## 已实现能力与后续方向
-
-> 完整路线图详见 [`docs/design/roadmap.md`](../roadmap.md)。
+## 已实现能力
 
 **已实现能力**：
 
-- **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls
-- **缩小过渡特效** — 类似《戴森球计划》的球面→恒星系过渡
+- **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls + 昼夜光照 + 风/洋流/偏差箭头 + 月度模式 + 星系过渡（见上文"3D 球面渲染"）
 - **行星纹理** — 恒星系中有地图的行星显示真实地形纹理
 - **多投影 2D 地图** — 等距圆柱（GPU 纹理直贴）/ Mollweide / Robinson（GPU 逆 warp shader，`gpuReproject.ts`）+ 经纬线网格
 - **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
@@ -345,8 +336,5 @@ CVT 管线：CVT 网格 → 板块剖分 → 边界检测 → 地形合成 → �
 - **河流矢量图层** — features.json 渲染外流河与内流河
 - **偏差诊断图层** — ΔT/ΔP/ΔSLP 热力层 + 风/洋流偏差箭头（开发组，devMode + Earth）
 
-**后续方向**：
-
-- **文明半格式化管理**（Phase 3C）— Entities+Modifiers → Event Stream → LLM 编译 Wiki（[civilization-layer.md](../proposals/civilization-layer.md)）
-- **分支差异可视化**（Phase 3D）— DAG 影响半径、混沌预警
-- **LLM 叙事引擎**（Phase 3E）— 结构化数据 → 史诗叙事
+后续方向（文明层 Phase 3C-3E、分支差异可视化等）属路线图事项，单一事实源 =
+[roadmap.md](../roadmap.md)。

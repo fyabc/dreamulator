@@ -1,7 +1,7 @@
 # 地形合成
 
 > 从 `src/dreamulator/map/terrain_synthesizer.py` 抽取。  
-> 详细算法参考：`docs/design/pipelines/geological-pipeline.md` §6
+> 详细算法参考：`docs/design/pipelines/geological-pipeline.md` §7
 
 ---
 
@@ -26,7 +26,7 @@
 
 每板块叠加随机偏移：均匀分布 $[-1500, +1500]$ m。
 
-**地球物理依据**（自 design/pipelines/geological-pipeline.md §6.1 上浮，2026-08）：
+**地球物理依据**（自 design/pipelines/geological-pipeline.md §7.1 上浮，2026-08）：
 地球高程呈**双峰分布**（hypsometric curve）——陆面平均 ~840 m、海底平均
 ~−3800 m。双峰源于陆壳（长英质，~2.7 g/cm³）与洋壳（镁铁质，~3.0 g/cm³）
 的密度差导致的地壳均衡：两种地壳"漂浮"在不同均衡补偿深度上，中间过渡带狭窄。
@@ -52,7 +52,7 @@ $$\Delta H = A \cdot \exp\left(-\frac{d^2}{2\sigma^2}\right) \cdot \min\left(\fr
 
 ### 2.1 三类边界剖面公式（设计参考）
 
-（自 design/pipelines/geological-pipeline.md §6.2 上浮，2026-08。以下为管线设计阶段的示意
+（自 design/pipelines/geological-pipeline.md §7.2 上浮，2026-08。以下为管线设计阶段的示意
 公式；现行实现以上文 cortial2019 策略及 `terrain_synthesizer.py` 源码为准）
 
 **汇聚边界**——上覆板侧山脉 + 俯冲板侧海沟（d 为到边界的有符号距离，上盘为正）：
@@ -83,7 +83,7 @@ ridge = +1000 m · rate_factor · exp(−((|d| − 200 km) / 200 km)²)
 | Divergent | +1500m 山脊 | −1500m 裂谷 | 200/100 | \|v_n\|/3.0 |
 | Transform | — | — | 200 | 粗糙度 ×2.0 |
 
-**距边界粗糙度调制**（自 design/pipelines/geological-pipeline.md §6.3 上浮，2026-08）：
+**距边界粗糙度调制**（自 design/pipelines/geological-pipeline.md §7 上浮，2026-08）：
 
 ```
 roughness = base × (1 + A · exp(−d / λ))    A = 1.0, λ = 300 km
@@ -102,7 +102,7 @@ $$H(x) = \sum_{i=0}^{N-1} \text{amplitude}_i \cdot \text{noise}(x \cdot \text{fr
 每倍频程：amplitude ×= persistence, frequency ×= lacunarity。
 归一化：fBm /= max(|fBm|) → 值域 ≈ [−1, 1]，再乘振幅配置。
 
-**Octave 物理尺度对照**（自 design/pipelines/geological-pipeline.md §6.4 上浮，2026-08；
+**Octave 物理尺度对照**（自 design/pipelines/geological-pipeline.md §7.6 上浮，2026-08；
 设计阶段参数：振幅基准 1000 m、persistence 0.5、lacunarity 2.0）：
 
 | Octave | 频率 f | 振幅 A (m) | 累积振幅 | 物理含义 |
@@ -167,7 +167,7 @@ $$H(x) = \sum_{i=0}^{N-1} \text{amplitude}_i \cdot \text{noise}(x \cdot \text{fr
 
 热点链方向由板块欧拉极运动方向自动确定。
 
-**地幔柱/超级隆起设计参考**（自 design/pipelines/geological-pipeline.md §6.5 上浮，2026-08）：
+**地幔柱/超级隆起设计参考**（自 design/pipelines/geological-pipeline.md §7.1 上浮，2026-08）：
 地幔柱（mantle plume）从深部地幔上升，在地表产生火山热点；大型地幔上涌可产生
 直径数千公里的隆起区域（mantle superswell，参考 Gleba 的 mantle superswells
 设计），叠加可选的中央破火山口凹陷：
@@ -196,7 +196,7 @@ uplift −= D_caldera · exp(−(d / σ_caldera)²)          # 可选中央破�
 
 每板块随机方向放置线状隆起，沿走向增加噪声扰动以模拟自然形态。
 
-**沿走向高度调制与山间盆地**（自 design/pipelines/geological-pipeline.md §6.7 上浮，2026-08）：
+**沿走向高度调制与山间盆地**（自 design/pipelines/geological-pipeline.md §7.2 上浮，2026-08）：
 
 均匀 Gaussian 脊线不符合真实造山带——后者沿走向有显著的高度变化
 （Allen et al. 1995; Kröner 1981）。设计上每条 belt 用 1D simplex 噪声沿大圆弧
@@ -291,7 +291,7 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 
 ## 6. 高程合成叠加
 
-（自 design/pipelines/geological-pipeline.md §6.6 上浮，2026-08）
+（自 design/pipelines/geological-pipeline.md §7.1 上浮，2026-08）
 
 最终节点高程为各贡献项之和：
 

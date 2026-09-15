@@ -8,16 +8,18 @@
 - [`pipelines/`](pipelines/) — **已实现管线技术参考**（`scripts/dev/check_doc_refs.py` 的审计对象）
 - [`proposals/`](proposals/) — **设计提案 + 方法论**（未来子系统、未实现）
 - [`audit/`](audit/) — 审计结果（三波审计的发现记录）
-- [`archive/`](archive/) — 已归档的早期决策记录
 
 ## 文档列表
 
 ### 根目录
 
 - `architecture.md` — 项目架构：目录结构、模块职责、核心设计概念（层级架构、分支系统、input/derived 分离、可复现性）
+- `frontend-3d-viewer.md` — 3D 恒星系可视化器架构（真实比例设计、层级轨道解算、标签去重叠）
 - `roadmap.md` — 开发路线图（Phase 状态、优先级、技术债务）
 - `competitor-analysis.md` — 竞品分析（护城河定位与参考链接）
 - `audit-plan.md` — 三波审计计划（按变化速率分波，各有启动判据与交付物）
+- `profiling.md` — 性能剖析工作流（build_profile.json、py-spy 火焰图、CI 基准测试、前端 React Profiler、跨版本对比）
+- `performance-optimizations.md` — 性能优化记录（基线数据、改动内容、效果对比、待优化清单）
 
 ### pipelines/ — 已实现管线技术参考
 

@@ -1,41 +1,60 @@
 # 行星地形生成管线技术参考
 
-> 本文档描述 dreamulator 地质层生成管线的当前实现。
-> 对应源码：`src/dreamulator/map/`（cvt_mesh.py、plate_generator.py、boundary_detector.py、
-> terrain_synthesizer.py、hydrology.py、export.py、tectonic_simulator.py）与
-> `src/dreamulator/engine/`。
-
-> **本文档是 [地图工作流指南](../../usage/map-workflow.md) 的技术参考**。工作流指南描述"怎么做"，本文档解释"为什么这么做"以及各阶段的算法细节。
-
-本文档描述 dreamulator **地质层**生成管线的完整技术方案。
-**球面质心 Voronoi 镶嵌（CVT Mesh）是一等公民数据，等距圆柱投影高度图是派生导出产物**。
-全部模拟（构造、侵蚀、水文）在 CVT 不规则网格上完成，仅在最终可视化/导出阶段投影为栅格。
-
----
+> 本文档描述 dreamulator 地质层生成管线的当前实现：模块与调用方（§1）、执行顺序
+> （§2）、各相位细节（§3-§10）、数据模型与性能（§11-§12）、已知限制与未实现设计
+> 余量（§13）。对应源码：`src/dreamulator/map/` 与 `src/dreamulator/engine/geological.py`。
+> **球面质心 Voronoi 镶嵌（CVT Mesh）是一等公民数据，等距圆柱投影高度图是派生导出产物**：
+> 全部模拟（构造、水文、气候）在 CVT 不规则网格上完成，仅在最终导出阶段投影为栅格。
+> 使用向操作指南见 [map-workflow.md](../../usage/map-workflow.md)；气候相位细节见
+> [climate-pipeline.md](climate-pipeline.md)；引擎总目录见
+> [world-generation-pipeline.md](world-generation-pipeline.md)。
 
 ## 目录
 
-1. [总体架构](#1-总体架构)
-2. [阶段 1: 球面 CVT 网格生成](#2-阶段-1-球面-cvt-网格生成)
-3. [阶段 2: 构造板块](#3-阶段-2-构造板块)
-4. [阶段 3: 欧拉极与板块运动学](#4-阶段-3-欧拉极与板块运动学)
-5. [阶段 4: 边界检测与分类](#5-阶段-4-边界检测与分类)
-6. [阶段 5: 地形合成](#6-阶段-5-地形合成)
-7. [阶段 6: 海平面与基础分类](#7-阶段-6-海平面与基础分类)
-8. [阶段 7: 河流与水文](#8-阶段-7-河流与水文)
-9. [流水侵蚀](#9-流水侵蚀)
-10. [阶段 8: 数据导出与可视化](#10-阶段-8-数据导出与可视化)
+1. [架构总览](#1-架构总览)
+2. [执行顺序](#2-执行顺序)
+3. [CVT 网格生成](#3-cvt-网格生成)
+4. [构造板块剖分](#4-构造板块剖分)
+5. [构造时间演化](#5-构造时间演化)
+6. [边界检测与分类](#6-边界检测与分类)
+7. [地形合成](#7-地形合成)
+8. [海平面与水系统](#8-海平面与水系统)
+9. [河流与水文](#9-河流与水文)
+10. [导出与可视化](#10-导出与可视化)
 11. [数据模型](#11-数据模型)
-12. [性能考量](#12-性能考量)
-13. [已知限制与未来工作](#13-已知限制与未来工作)
-14. [时间演化与威尔逊循环](#14-时间演化与威尔逊循环)
+12. [性能](#12-性能)
+13. [已知限制与未实现设计余量](#13-已知限制与未实现设计余量)
 - [附录 A: 数学公式参考](#附录-a-数学公式参考)
-- [附录 B: 现有代码复用清单](#附录-b-现有代码复用清单)
-- [附录 D: 论文解读 — Cortial et al. 2019 *Procedural Tectonic Planets*](#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)
+- [附录 D: 论文解读 - Cortial et al. 2019](#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)
+
 
 ---
 
-## 1. 总体架构
+## 1. 架构总览
+
+**模块清单**（`src/dreamulator/map/`，本管线直接涉及；气候/生态见各自文档）：
+
+- `cvt_mesh.py` - Fibonacci 球面螺旋 + Lloyd 松弛 + SphericalVoronoi 构建（§3）
+- `plate_generator.py` - Poisson-disc 种子选取 + Cortial 2019 加权 Voronoi 剖分 + 地壳类型分配 + 欧拉极（§4）
+- `geography.py` - geography.yaml 地理锚定：陆地偏置场 / 全局阈值 / 高程钉扎 / 密集偏置导入（§4.4）
+- `tectonic_simulator.py` - 构造时间演化：质心旋转 / 俯冲 / 碰撞 / 裂解 / 海沟弧（§5）
+- `boundary_detector.py` - 边界检测、分类与链追踪（§6）
+- `terrain_synthesizer.py` - 地形合成：双峰基底 + 边界效应 + fBm + 后处理（§7）
+- `water_bodies.py` - 海陆分类（连通性洪泛）与大内流湖升级（§8）
+- `hydrology.py` / `river_generator.py` - 流向 / 汇水累积 / 河网 / 湖泊 + 河流矢量特征（§9）
+- `terrain_cache.py` - 子阶段内容指纹缓存，增量重建（§2）
+- `export.py` - 等距圆柱栅格导出 + 图层导出（§10）
+- `importer.py` / `elevation_codec.py` - 外部高度图导入与 16-bit PNG 编解码（§10）
+- `models.py` / `pipeline_types.py` / `manager.py` - 数据模型、管线配置、地图 CRUD + 分支继承 + 图层注册表（§11）
+
+**调用方**：
+
+| 调用方 | 入口 | 场景 |
+|--------|------|------|
+| 地质引擎 | `GeologicalEngine` 调 `run_terrain_pipeline`（`terrain_pipeline.py:137`） | `dreamulator build` DAG 主路径 |
+| 气候引擎 | 相位 6/8 内嵌 `simulate_climate`；`ClimateEngine` 独立重建 | [climate-pipeline.md](climate-pipeline.md) §10 |
+| 生态 / 文明引擎 | 读 mesh 上的气候/生态字段 | [world-generation-pipeline.md](world-generation-pipeline.md) |
+| 地图 API / 前端 | `api_routes/maps.py` 与前端查看器消费导出产物 | [map-system.md](map-system.md) |
 
 ### 核心理念
 
@@ -45,24 +64,6 @@
 - 前端 2D 地图可视化（Three.js / Canvas 渲染）
 - 导出给 Gaea 进行局部精细化
 - 与外部 GIS 工具互操作
-
-### 数据流总览
-
-地质层管线（8 阶段，均作用在 CVT 网格上）：
-
-| 阶段 | 名称 | 输入 → 输出 |
-|------|------|------------|
-| 1 | 球面 CVT 网格生成 | Fibonacci 螺旋 → Lloyd 松弛 → SphericalVoronoi → `CVTMesh` |
-| 2 | 构造板块 | Poisson-disc 种子 → Voronoi BFS（Cortial 2019）→ `plate_id` / `crust_type` |
-| 3 | 欧拉极与板块运动学 | 旋转轴 + 角速度 → 速度场 `v = ω × P` |
-| 4 | 边界检测与分类 | 邻接扫描 → 收敛/离散/转换边界 |
-| 5 | 地形合成 | 双峰基底 + 边界效应 + 热点 + fBm → `elevation` |
-| 6 | 海平面与基础分类 | 海平面校准 → 海陆掩膜 → 大陆架 |
-| 7 | 河流与水文 | 最陡下降 → 流量累积 → 河网/湖泊/内流湖 |
-| 8 | 数据导出与可视化 | 等距圆柱投影 → PNG / Three.js / SVG |
-
-下游（气候 → 生态 → 文明）与 Gaea 精细化不在此管线内，见
-[world-generation-pipeline.md](world-generation-pipeline.md)。
 
 ### 关键架构决策
 
@@ -76,11 +77,40 @@
 - **河谷雕刻归 Gaea**: 51 km 网格上流水侵蚀只会产生单 cell 宽人工沟壑，故地质层不做
   流水侵蚀；河谷雕刻归管线最后一步的 Gaea 局地高清精修（米级）。
 
+
 ---
 
-## 2. 阶段 1: 球面 CVT 网格生成
+## 2. 执行顺序
 
-### 2.1 Fibonacci 球面螺旋
+`run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:137`）按固定
+顺序执行 8 个相位（`_STAGE_NAMES` :64-73，控制台 `1/8`-`8/8`）；`stages` 参数可选子集，
+`_resolve_stages`（:110）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
+细节章节在 §3-§10 展开。
+
+| 相位 | 名称 | 行号 | 调用 | 产出 → 下游 |
+|------|------|------|------|------------|
+| 1/8 | mesh | `:184` | `generate_cvt_mesh`；geography 栅格偏置采样 | `CVTMesh` → 全部后续相位 |
+| 2/8 | plates | `:217` | `generate_plates`（种子 / 剖分 / 地壳 / 欧拉极 / 地理锚定，§4） | `plate_id` / `crust_type` → 3、4 |
+| 3/8 | tectonics | `:253` | `run_tectonic_evolution`（§5）+ `apply_geography_crust` 重锚定 | 演化后 plates 与累积构造量 → 4、5 |
+| 4/8 | boundaries | `:341` | `detect_boundaries`（§6） | `boundary_type` → 5 |
+| 5/8 | terrain | `:374` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6、7、8 |
+| 6/8 | climate | `:426` | `simulate_climate`（细节全部委托 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 → 7 |
+| 7/8 | rivers | `:441` | `generate_rivers` + `extract_river_features` → features.json（§9） | 河网 / 河流矢量 → 8 |
+| 8/8 | export | `:469` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.json |
+
+海陆分类在 5/8 末尾写入、大内流湖升级在 8/8 开头执行——「海平面与水系统」（§8）横跨
+两个相位，该章开头有说明。
+
+**增量缓存**（`terrain_cache.py`）：每个相位的输入做内容指纹（config 字段 + 上游相位
+指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则整相位跳过——改
+geography.yaml 只失效受影响的相位，不需要 `--force`（`--force` 仅用于强制全量重建）。
+
+
+---
+
+## 3. CVT 网格生成
+
+### 3.1 Fibonacci 球面螺旋
 
 初始点集使用 Fibonacci 螺旋（又称 "sunflower pattern"），在球面上产生近乎均匀分布的点集。
 
@@ -124,7 +154,7 @@ def fibonacci_lattice(N: int, radius: float = 1.0) -> np.ndarray:
 - 面积近似均匀：每个点占据约 `4π/N` 球面度
 - 无极点聚集（与随机均匀采样不同）
 
-### 2.2 可选随机扰动
+### 3.2 可选随机扰动
 
 纯 Fibonacci 格点过于规则，会在噪声频谱中产生伪峰。添加高斯扰动破坏规则性：
 
@@ -147,7 +177,7 @@ def jitter_points(points: np.ndarray, sigma: float, rng) -> np.ndarray:
 | 0.3 | 自然随机（默认推荐） |
 | 0.5+ | 过度聚集，部分区域出现空洞 |
 
-### 2.3 Lloyd 松弛
+### 3.3 Lloyd 松弛
 
 Lloyd 松弛（Lloyd's algorithm）迭代地将每个点移动到其 Voronoi cell 的质心，从而获得
 **质心 Voronoi 镶嵌（CVT）**。在球面上，质心需要投影回球面。
@@ -177,7 +207,7 @@ def lloyd_relax_spherical(points: np.ndarray, iterations: int, radius: float = 1
 **默认迭代次数**: 5-10 次。超过 10 次收益递减（CVT 已充分收敛）。
 实际收敛判据：所有点的位移量 < 阈值（`1e-4 × d_mean`）。
 
-### 2.4 SphericalVoronoi 构建
+### 3.4 SphericalVoronoi 构建
 
 使用 `scipy.spatial.SphericalVoronoi` 计算球面 Voronoi 图，然后构建邻接图。
 
@@ -238,7 +268,7 @@ A = Σᵢ αᵢ - (n - 2)π
 
 其中 `αᵢ` 是多边形第 i 个顶点的内角，n 是顶点数。
 
-### 2.5 分辨率与性能
+### 3.5 分辨率与性能
 
 | 节点数 N | 平均间距 d_mean | 等效栅格分辨率 | 内存 (CVTMesh) | Lloyd 松弛时间 |
 |----------|----------------|---------------|----------------|---------------|
@@ -261,42 +291,28 @@ A = Σᵢ αᵢ - (n - 2)π
 | `seed` | (world seed) | 任意 int | RNG 种子 |
 | `radius_km` | 6371.0 | 100 – 100,000 | 行星半径 |
 
+
 ---
 
-## 3. 阶段 2: 构造板块
+## 4. 构造板块剖分
 
-### 3.1 种子选取
+### 4.1 种子选取
 
-在 CVT 网格上随机选取 ~20 个种子节点作为板块核心。
+在 CVT 网格上选取 ~20 个种子节点作为板块核心（`select_plate_seeds`，
+`plate_generator.py:57`）：**变密度 Poisson-disc 采样**——每个候选种子抽取一个
+log-uniform 尺度因子（~0.45–2.2）缩放自己的最小间距（基础间距 = 平均间距的
+~0.3×），间距不足的候选被拒绝。大因子种子把邻居推远 → 大板块；小因子允许密集
+堆叠 → 小板块。这样得到的板块大小分布**右偏**（少数大板块 + 一批小板块），接近
+地球的幂律板块大小分布，优于均匀 Poisson-disc 的近等尺寸。
 
 > **参考 Cortial 2019 §3**: 论文使用球面 Voronoi cell 作为板块，通过向测地距离
 > 添加噪声来产生不规则的板块形状（`geodetic distance + noise warp`）。我们的
-> Cortial 2019 Voronoi 剖分（§3.2）实现了类似的不规则性，且更容易控制板块大小分布。
+> Cortial 2019 Voronoi 剖分（§4.2）实现了类似的不规则性，且更容易控制板块大小分布。
 
-```python
-def select_plate_seeds(mesh: CVTMesh, num_plates: int, rng) -> list[int]:
-    """Select plate seed nodes with minimum spacing constraint."""
-    candidates = rng.choice(mesh.num_nodes, size=num_plates * 3, replace=False)
-    seeds = [candidates[0]]
+板块种子目前只由该采样自动生成（无手动种子配置）；控制「哪里是陆」的正道是
+地理锚定（§4.4 的 geography.yaml / 锚定灰度图）。
 
-    min_dist = 2.0 * sqrt(4 * pi / mesh.num_nodes) * sqrt(num_plates / (4 * pi))
-    # Greedy farthest-point sampling for better spacing
-    for c in candidates[1:]:
-        if len(seeds) >= num_plates:
-            break
-        # Check minimum distance to all existing seeds
-        dists = angular_distance_xyz(mesh.nodes[c], mesh.nodes[seeds])
-        if dists.min() > min_dist:
-            seeds.append(c)
-
-    # Fill remaining with random if greedy didn't find enough
-    while len(seeds) < num_plates:
-        seeds.append(int(rng.choice(mesh.num_nodes)))
-
-    return seeds
-```
-
-### 3.2 球面 Voronoi 剖分（Cortial 2019）
+### 4.2 球面 Voronoi 剖分（Cortial 2019）
 
 遵循 [Cortial et al. (2019)](https://doi.org/10.1111/cgf.13614) *Procedural Tectonic Planets*
 的球面 Voronoi 板块剖分方法。
@@ -345,7 +361,7 @@ def _voronoi_partition(
 > （`plate_speed` 参数）与 `tectonic_simulator.py::_evolve_cortial2019`
 > （`plate_weight` 字典，随裂解/清理同步）。
 
-### 3.3 地壳类型分配
+### 4.3 地壳类型分配
 
 每个 cell 的地壳类型（大陆/大洋）通过 **5-octave 分形布朗运动（fBm）** 在板块内分配。
 这替代了早期设计中按板块整体分配的方法，实现了更真实的大陆形状。
@@ -373,33 +389,9 @@ fBm 具有 1/f 功率谱（Mandelbrot 1967），因此 noise 等值面——即�
 > * Musgrave, F.K. et al. (1989). "The synthesis and rendering of eroded
 >   fractal terrains." *SIGGRAPH '89*.
 
-### 3.4 手动板块指定
+### 4.4 地理锚定（geography.yaml）
 
-支持通过 YAML 配置文件覆盖自动生成的板块：
-
-```yaml
-# data/worlds/myworld/layers/geological/input/plates.yaml
-plates:
-  - id: plate_north continent
-    name: "北大洲板块"
-    seed_lat_deg: 45.0
-    seed_lon_deg: -30.0
-    speed: 1.2
-    crust_type: continental
-
-  - id: plate_pacific
-    name: "大洋板块"
-    seed_lat_deg: 0.0
-    seed_lon_deg: 170.0
-    speed: 1.8
-    crust_type: oceanic
-
-  # ... 更多板块
-```
-
-### 3.5 地理锚定（geography.yaml）
-
-默认的地壳分配（§3.3）是**纯程序化**的——大陆落在哪里完全由纬度偏好 + fBm
+默认的地壳分配（§4.3）是**纯程序化**的——大陆落在哪里完全由纬度偏好 + fBm
 噪声决定，作者无法控制。对于"样板世界"（如 nacrea），世界构建者往往已经在
 设定文档里写死了海陆格局（哪个大陆在哪、多大的洋），需要让引擎**按设定生成**。
 
@@ -410,7 +402,7 @@ heightmap 模板/手绘高度图控制陆地。Dreamulator 的等价物是**机�
 #### 规格文件
 
 `data/worlds/<world>/layers/geological/input/geography.yaml`（可选；缺省时管线
-行为与 §3.3 完全一致）。由 `GeologicalEngine._load_config` 经
+行为与 §4.3 完全一致）。由 `GeologicalEngine._load_config` 经
 `load_geography_spec()` 载入并挂到 `config.geography`。
 
 ```yaml
@@ -456,7 +448,7 @@ base_freq=15）——有效半径随噪声在 ±`noise_amplitude` 内扰动，�
 
 #### 地壳赋值（全局阈值）
 
-有 spec 时，`apply_geography_crust()` 用**全局阈值**替代 §3.3 的"每板块随机
+有 spec 时，`apply_geography_crust()` 用**全局阈值**替代 §4.3 的"每板块随机
 比例"：
 
 ```
@@ -572,7 +564,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
   随机分布。这是分支系统的预期语义（见
   [audit/wave3-architecture.md](../audit/wave3-architecture.md) §4）。
 
-### 3.6 板块数据模型
+### 4.5 板块数据模型
 
 板块模型为 `TectonicPlate`（`src/dreamulator/map/models.py`，§11）：`id`、`name`、
 `type`（PlateType 枚举）、`cell_ids`（CVT cell ID 列表）、`euler_pole`（欧拉极，
@@ -587,11 +579,12 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 | `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
 | `continental_fraction` | 0.35 | 0.1 – 0.8 | 大陆板块比例 |
 
+
 ---
 
-## 4. 阶段 3: 欧拉极与板块运动学
+### 4.6 欧拉极与板块运动学（plates 相位的组成步骤）
 
-### 4.1 欧拉极分配
+#### 欧拉极分配
 
 每个板块的运动由一个**欧拉极**（Euler pole）描述——球面上的一个旋转轴；
 在惯性参考系中板块绕该轴做刚体旋转。
@@ -608,20 +601,96 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
   `plate_speed_range_cm_yr` 均匀采样后经 ω = v/R 换算。
 - **速度场**：向量化叉积一次算出全部节点速度（单位球坐标 → 乘
   `radius_km × 1000` 得 m/yr）。
-- **时间演化的 δt 自动缩放**（实现行为，见 §14 与
+- **时间演化的 δt 自动缩放**（实现行为，见 §5 与
   `tectonic_simulator.py::_auto_compute_dt`）：
   `δt = 3 · √(4πR²/N) / v_max`——令最快板块每步移动 ~3 个 cell
   （100K cells 时 δt ≈ 2 My；`tectonic_dt_my > 0` 时显式覆盖）。
 
-### 参数表
+#### 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
 | `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
 
+
 ---
 
-## 5. 阶段 4: 边界检测与分类
+## 5. 构造时间演化
+
+> 时间演化由 `tectonic_simulator.py` 实现（`run_tectonic_evolution`，算法
+> `cortial2019`，`tectonic_steps` 控制步数，nacrea 为 50 步）。§5.1–§5.3 描述
+> **当前实现**；威尔逊循环未实现部分与随时间变化的行星物理参数在 §13
+> 「未实现设计余量」。核心参考：Cortial et al. 2019（见[附录 D](#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)）。
+
+### 5.1 当前实现：质心旋转 + 加权重剖分（固定网格）
+
+**CVT 顶点在整个演化中永不移动**（移动顶点意味着每步都要重构 Delaunay）。
+实现采用 Cortial 2019 原案的「质心运动 + 周期重剖分」策略（`_evolve_cortial2019`）：
+
+1. **网格固定**：200K cell 是不动的观测站；演化状态保存在数组（高程、地壳类型、
+   累积汇聚 s_arr / 累积伸展 e_arr）中，演化结束时一次性写回 cell。
+2. **质心旋转**：每步把每个板块的质心按各自欧拉极做 Rodrigues 旋转
+   （`_rodrigues_rotate`，角度 = ω·δt）。
+3. **周期重剖分**：每 `resample_every` 步（以及裂解事件后立即一次）以旋转后的
+   质心为种子重跑 Voronoi 剖分——使用**出生面积乘性加权**的 Voronoi
+   （`voronoi_partition_warped`），让板块尺寸偏态在迭代中不被拉平；有 geography.yaml
+   锚定时剖分代价叠加海岸吸附成本，板块边界被钉在大陆边缘。重复种子去重
+   （`_assign_distinct_seeds`），新生板块有 ~25 步保护期不被重剖分吞掉。
+4. **海沟弧弛豫**：重剖分的直线二分边界按 Frank (1968) 海沟弧模型弯成弧
+   （`_trench_arc_relaxation`，逐（俯冲侧, 上覆侧）对累积弧矢高，最终边界 warping
+   时重放）。
+5. **边界检测与高程效应**：重剖分后向量化了「易主 cell」检测（暂按汇聚处理），
+   累积汇聚/伸展量（`_accumulate_convergence` → 驱动 §4.5 造山带/裂谷宽度），
+   然后依次施加**俯冲上隆**（Cortial 完整公式 u₀·f(d)·g(v)·(1+h(z̃))·δt，
+   `_subduction_uplift`）、**碰撞造山**（`_collision_orogeny`）、**侵蚀**
+   （`_erosion`，每步持续作用）。
+6. **板块裂解**：`_rift_plates`（Poisson 概率，大板块更易裂解，见 §13 威尔逊循环-D）。
+7. **清理**：零 cell 板块移除（`_cleanup_empty`），尺寸权重与板块名册同步。
+8. **终态整形**：演化结束后按边界类型分段整形（汇聚→弧、离散→雁列链、
+   转换→直线，`_shape_boundary_segments`）→ 噪声 warping（`warp_boundaries`）→
+   多数票平滑（`_smooth_partition`）→ 飞地合并（`_merge_plate_enclaves` /
+   `_merge_enclosed_plates`）。
+
+**δt 自动缩放**（`_auto_compute_dt`）：`δt = 3 · √(4πR²/N) / v_max`——令最快
+板块每步移动 ~3 个 cell（100K cells 时 δt ≈ 2 My）；`tectonic_dt_my > 0` 时显式覆盖。
+
+### 5.2 演化状态（当前实现）
+
+cell 在演化中跟踪的状态：所属板块（cell→plate 映射）、地壳类型（continental /
+oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical taper，§4.5）、
+**累积伸展量 e**（km，驱动裂谷宽度）、高程。下方元组是全威尔逊循环的未实现设计：
+
+| 属性 | 符号 | 类型 | 状态 |
+|------|------|------|------|
+| 地壳厚度 | `Thickness` | float (km) | 未实现 |
+| 地壳年龄 | `Age` | float (My) | 未实现 |
+| 造山年龄 | `Orogeny_Age` | float (My) | 未实现（§7.2 古造山带是静态地貌叠加） |
+| 褶皱方向 | `Fold_Dir` | 3D vector | 未实现 |
+| 克拉通 | `craton` 地壳类型 | enum | 未实现 |
+
+
+### 5.3 时间步进循环（当前实现）
+
+```
+For step = 0 to tectonic_steps:
+  1. 质心旋转: 每板块质心按欧拉极 Rodrigues 旋转（角度 = ω·δt，δt 自动缩放）
+  2. 周期重剖分（每 resample_every 步 + 裂解后）: 出生面积加权 Voronoi
+     （有 geography 锚定时叠加海岸吸附代价）→ 海沟弧弛豫（Frank 1968）
+  3. 易主 cell 检测 → 累积汇聚/伸展量（s_arr / e_arr）
+  4. 高程效应: 俯冲上隆（Cortial 完整公式）→ 碰撞造山 → 侵蚀
+  5. 板块裂解: Poisson 概率（rift_base_rate，大板块更易裂）
+  6. 清理: 零 cell 板块移除，权重同步
+演化结束后: 边界分段整形 → 噪声 warping → 平滑 → 飞地合并 → 写回 cell
+```
+
+未实现的循环成分（对应 §13 未实现设计余量）：全局环境演化（T_mantle /
+omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickness/Age/Type）、
+洋壳创生、物质削减与 slab pull 反馈、气候快照、任意地质年代回溯。
+
+
+---
+
+## 6. 边界检测与分类
 
 在 CVT 网格的邻接图上扫描所有边，两端属于不同板块的边即为**板块边界**段。
 
@@ -650,8 +719,8 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 > [knowledge/geology/cortial_2019_notes.md](../../knowledge/geology/cortial_2019_notes.md) §D.4）：
 > $u_j(p) = u_0 \cdot f(d) \cdot g(v) \cdot h(\tilde{z})$
 > 其中 $u_0 = 0.6$ mm/y, $r_s = 1800$ km, $h(\tilde{z}) = \tilde{z}^2$。
-> 时间演化阶段的俯冲上隆用该完整公式（`tectonic_simulator._subduction_uplift`，§14）；
-> §6 静态地形合成的边界效应使用简化的高斯衰减剖面。
+> 时间演化阶段的俯冲上隆用该完整公式（`tectonic_simulator._subduction_uplift`，§5）；
+> §7 静态地形合成的边界效应使用简化的高斯衰减剖面。
 
 ### 参数表
 
@@ -659,9 +728,10 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 |------|--------|------|----------|
 | `boundary_influence_km` | 500.0 | 100 – 2000 | 边界效应影响半径 |
 
+
 ---
 
-## 6. 阶段 5: 地形合成
+## 7. 地形合成
 
 节点高程 = 双峰基准 + 边界构造效应 + 热点隆起 + 区域 fBm + 细节 fBm × 内部调制
 （+ 潮汐形变，仅潮汐锁定天体）。
@@ -672,7 +742,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 > 距边界粗糙度调制（§2）、fBm octave 物理尺度表（§3）、热点/地幔柱高斯隆起
 > 与高程合成叠加式（§6），以及内陆古造山带/山间盆地的地貌学依据（§4.3）。
 
-### 6.1 合成流程（6 步）
+### 7.1 合成流程（6 步）
 
 **实现**：`terrain_synthesizer.py:_synthesize_asymmetric`（默认算法，
 策略由 `terrain_algorithm` 选择；`cortial2019_gaussian` 为对称版）：
@@ -681,7 +751,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
    （默认 850 m）、oceanic `oceanic_elevation_m`（默认 −3800 m）两个常量；每板块叠加
    均匀偏移 ±`plate_elevation_spread_m`（陆地取 0.4×）；叠加多尺度「动态地形」起伏
    `_continental_undulation`（`continental_undulation_m`，默认 600 m，地幔对流类比
-   Flament et al. 2013）。若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §6.4）。
+   Flament et al. 2013）。若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §7.4）。
 2. **非对称边界效应**：`_asymmetric_boundary_effects` 按边界类型叠加高斯剖面
    （σ 由 `boundary_influence_km`，振幅 × 速率因子 `min(|v_n|/10, 1)`，
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
@@ -703,7 +773,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 > `crust_plate_floor`（默认 0.10）避免整板近零陆壳；泄漏陆壳 `_relabel_leaked_crust`
 > 在 base 前重标为洋壳（洒点岛屿只由岛弧/热点/钉扎涌现）。
 
-### 6.2 内部地貌：古造山带、山间盆地与裂谷
+### 7.2 内部地貌：古造山带、山间盆地与裂谷
 
 板块内部（距边界 >600 km 的大陆区域）放置线性构造带（`_apply_interior_landforms`），
 模拟古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。地貌学依据已上浮至
@@ -730,7 +800,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 | `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
 | `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
 
-### 6.3 内部低地：大陆内部系统性下压
+### 7.3 内部低地：大陆内部系统性下压
 
 > 实施：`terrain_synthesizer.py:_apply_interior_lowlands`
 > 科学依据：`knowledge/geology/terrain_synthesis.md` §4.4（Cogley 1984；ETOPO1）
@@ -746,7 +816,7 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 ```
 
 `floor` 把下压**软钳制**在海平面之上（logsumexp 光滑最大值，非硬钳 `max`）——
-**校准后的海岸线（目标陆面比）不变**，低地也不会全部堆在同一个高度。在 §6.5
+**校准后的海岸线（目标陆面比）不变**，低地也不会全部堆在同一个高度。在 §7.5
 后处理中排在海平面校准之后、岛弧/内部地貌之前——古造山带仍能从低地中崛起，裂谷/
 盆地则下切（部分低于海平面，成内流湖/内海）。
 
@@ -772,7 +842,7 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 | `lake_fraction` | 0.2 | 0–1 | 留作外流湖的盆地比例 |
 | `lake_depth_m` | 50 | 10–400 | 湖面低于溢流点深度（m） |
 
-### 6.4 洋底年龄-深度沉降（板块冷却模型）
+### 7.4 洋底年龄-深度沉降（板块冷却模型）
 
 > 实施：`terrain_synthesizer.py:_compute_ocean_age_depth`
 > 配置：`terrain_config.yaml` → `ocean:` 段落；理论：`isostasy_elevation_limits.md`
@@ -808,24 +878,24 @@ age = max_age · d_div / (d_div + d_conv)
 
 效果：均海深 3015→3687 m（对齐地球 3682 m）；浅水 0-500m 占比 14.8%→10.6%（地球 8%）。
 
-### 6.5 后处理（顺序）
+### 7.5 后处理（顺序）
 
 合成后按序执行（弧/造山带增加高程，架/平原必须最后，否则被覆盖）：
 
-1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§7）。
-2. **内部低地** `_apply_interior_lowlands`（见 §6.3）：以汇聚边界为源做多源 BFS，
+1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§8）。
+2. **内部低地** `_apply_interior_lowlands`（见 §7.3）：以汇聚边界为源做多源 BFS，
    大陆内部按 `depth × smoothstep(d/scale)` 下压。
-3. **沉积填充** `_apply_deposition_fill`（见 §6.3）：把低于海平面的闭合盆地填到溢流
+3. **沉积填充** `_apply_deposition_fill`（见 §7.3）：把低于海平面的闭合盆地填到溢流
    点，留一小部分为内流湖。
 4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
-5. **内部地貌** `_apply_interior_landforms`（见 §6.2）。
+5. **内部地貌** `_apply_interior_landforms`（见 §7.2）。
 6. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
 7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
-   （物理上是海沟）和大陆海岸山一起平滑（§3.9 海岸过渡）。
+   （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。
 8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
    （削峰）只放大「高于目标」的下压方向，低于目标（海沟）保持线性上拉——避免把
-   feature 软边上的深沟 cell 对称指数化抬成山（§3.9 钉扎过抬修复）。
+   feature 软边上的深沟 cell 对称指数化抬成山（§4.4 钉扎过抬修复）。
 9. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
    `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
    上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
@@ -833,7 +903,7 @@ age = max_age · d_div / (d_div + d_conv)
    悬崖式跳跃，3 轮 30% 邻域均值混合（仅陆地）松弛为连续坡降：
    `elev_i = 0.7·elev_i + 0.3·mean(land_neighbors)`；>3000m 邻域跳跃 1446→137 cell。
 
-### 6.6 参数表
+### 7.6 参数表
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
@@ -868,9 +938,13 @@ age = max_age · d_div / (d_div + d_conv)
 > scale 0.5 → ~13,600 km（全球级）；2.0 → ~3,400 km（大陆级）；
 > 3.0 → ~2,300 km（板块级）；5.0 → ~1,400 km（区域级）。
 
+
 ---
 
-## 7. 阶段 6: 海平面与基础分类
+## 8. 海平面与水系统
+
+> 本章机制横跨两个相位：海陆分类（`water_class`）在 5/8 地形合成末尾写入，大内流湖
+> 升级在 8/8 导出开头执行（见 §2）。
 
 ### 海平面设定
 
@@ -991,16 +1065,17 @@ def check_polar_configuration(
     }
 ```
 
+
 ---
 
-## 8. 阶段 7: 河流与水文
+## 9. 河流与水文
 
 > 本节是**地形合成后地形**上的一次性水文学产品：洼地填平 → D8 流向 →
 > 流量累积 → 河网提取，填入 `VoronoiCell.flow_direction / flow_accumulation /
 > river_id / river_order`。
 > 物理公式与引用见 [knowledge/geology/hydrology.md](../../knowledge/geology/hydrology.md)。
 
-### 8.0 洼地填平（前置）
+### 9.0 洼地填平（前置）
 
 CVT 地形合成会产出大量局部洼地（pit）：直接跑 D8 会在每个洼地得到一个 sink、
 河网破碎、流量累积截断。先做 **priority-flood 填平**（Barnes et al. 2014，
@@ -1010,9 +1085,9 @@ O(N log N)）：
 2. 每个陆 cell 的临时标高推到 `max(elevation, spill)`，保证至少有更低出口；
 3. 填平只在**临时数组**上进行（供流向 / 累积使用），
    **不写回** `cell.elevation`——最终河网提取仍在真实地形上做；
-4. 内流盆地（无通海出口）填平后仍保留其最低出口作为 sink（§8.5）。
+4. 内流盆地（无通海出口）填平后仍保留其最低出口作为 sink（§9.5）。
 
-### 8.1 流向确定
+### 9.1 流向确定
 
 每个节点的流向是其**最陡下降方向**的邻居：
 
@@ -1055,7 +1130,7 @@ def compute_flow_directions(
     return flow_dir
 ```
 
-### 8.2 汇水累积
+### 9.2 汇水累积
 
 通过拓扑排序（从源头到河口）计算每个节点的汇水面积：
 
@@ -1104,7 +1179,7 @@ def compute_flow_accumulation(
     return accum
 ```
 
-### 8.3 河流分类
+### 9.3 河流分类
 
 根据汇水面积对河流进行分级：
 
@@ -1138,7 +1213,7 @@ def classify_rivers(
     return river_order
 ```
 
-### 8.4 河流网络提取
+### 9.4 河流网络提取
 
 从河口（海岸节点）逆流追踪到源头，生成 `MapFeature` 对象：
 
@@ -1220,7 +1295,7 @@ def trace_upstream(
     return path
 ```
 
-### 8.5 湖泊与内流盆地
+### 9.5 湖泊与内流盆地
 
 局部最小值（没有下坡邻居的陆地节点）形成湖泊或内流盆地。参考 Gleba 的
 endorheic basins 设计——内流盆地（如里海、死海）是重要的地理特征。
@@ -1281,7 +1356,7 @@ def detect_lakes_and_endorheic(
     return lakes, endorheic
 ```
 
-### 8.6 输出字段
+### 9.6 输出字段
 
 | `VoronoiCell` 字段 | 类型 | 说明 |
 |---|---|---|
@@ -1290,12 +1365,12 @@ def detect_lakes_and_endorheic(
 | `river_id` | `str \| None` | 所属河流 id（`river_XXXX`），无河为 `None` |
 | `river_order` | `int` | Strahler 级数（0 = 无河） |
 
-### 8.7 河流矢量图层（features.json）与渲染
+### 9.7 河流矢量图层（features.json）与渲染
 
 **提取**（`river_generator.extract_river_features`，管线 rivers 阶段末尾调用，
 写入地图目录 `features.json`，`manager.get_features` / API / 静态导出直接消费）：
 
-- **河道 cell**：`river_order >= 1`。order 阈值按 cell 面积缩放（§8.3
+- **河道 cell**：`river_order >= 1`。order 阈值按 cell 面积缩放（§9.3
   `classify_rivers`），200k 网格下只画主干河网（陆域按汇水面积前 ~2–3%）——
   世界地图的河流密度。
 - **折线追踪**：每个河道「源头」（无上游河道邻居的河道 cell）沿
@@ -1322,12 +1397,13 @@ nacrea 实测（200k，seed 42）：103 条折线（order 1 × 97、order 2 × 6
 | `min_river_accum_km2` | 1000 | 100 – 10000 | 河流最小汇水面积（河网提取阈值） |
 | `evaporation_base_mm` | 800 | 300 – 2000 | 简化蒸发率 |
 
-> 湖泊 / 内流盆地的水收支（§8.5 的 `detect_lakes_and_endorheic`）需要降水强迫，
+> 湖泊 / 内流盆地的水收支（§9.5 的 `detect_lakes_and_endorheic`）需要降水强迫，
 > 完整水收支（湖泊面积收敛、盐湖判别）留第二批。
+
 
 ---
 
-## 9. 流水侵蚀
+### 9.8 流水侵蚀（为什么没有）
 
 200k 地质层不做流水侵蚀（stream power 下切 + 坡面扩散）与沉积物搬运。尺度理由：
 51 km 网格上真实河谷（5–50 km 宽）全部亚网格，这个分辨率的流水侵蚀只会产生单 cell
@@ -1337,9 +1413,10 @@ nacrea 实测（200k，seed 42）：103 条折线（order 1 × 97、order 2 × 6
 河网（流量累积 / 河流矢量图层）保留，见 §8。详见 `docs/knowledge/geology/hydrology.md`
 与 `competitor-analysis.md` §4.2。
 
+
 ---
 
-## 10. 阶段 8: 数据导出与可视化
+## 10. 导出与可视化
 
 ### 10.1 等距圆柱投影导出
 
@@ -1443,6 +1520,7 @@ registry.raster_layers["elevation"] = RasterLayerMeta(
 每个分支只需重跑受影响的阶段（如改海平面只需重跑 Phase 5+），
 而非重新生成整个地形。
 
+
 ---
 
 ## 11. 数据模型
@@ -1459,7 +1537,7 @@ registry.raster_layers["elevation"] = RasterLayerMeta(
 | `MapMetadata` | `maps/<planet_id>/map.yaml` 元数据 | `planet_id`、`projection`（仅 `EQUIRECTANGULAR`）、`width/height`、`elevation_min_m/max_m`、`sea_level_m`、`voronoi_seed`、`voronoi_num_cells` |
 | `VoronoiNetwork` | 旧栅格时代网格模型 | 保留以兼容既有数据文件，新管线一律用 `CVTMesh` |
 
-**图层标识**（`MapLayerType`）：栅格层 `ELEVATION` / `MOISTURE`（可编辑）、
+**图层标识**（`MapLayerType`）：栅格层 `ELEVATION`（可编辑）、
 `TERRAIN` / `TEMPERATURE` / `PRECIPITATION` / `BIOMES` / `PLATES_RASTER` / `BOUNDARIES`
 （引擎派生）；矢量层 `PLATES` / `PROVINCES` / `FEATURES` / `CVT_MESH`。
 图层依赖追踪见 `MapLayerRegistry`（`manager.py`）。
@@ -1467,60 +1545,24 @@ registry.raster_layers["elevation"] = RasterLayerMeta(
 **模块布局**（`src/dreamulator/map/`）：`cvt_mesh.py`（Fibonacci + Lloyd + 网格构建）、
 `plate_generator.py`（种子选取 + Cortial 2019 剖分 + 地壳分配 + 欧拉极）、
 `boundary_detector.py`（边界检测/分类/链追踪）、`terrain_synthesizer.py`（地形合成）、
-`tectonic_simulator.py`（构造时间演化，§14）、`hydrology.py`（水文）、
+`tectonic_simulator.py`（构造时间演化，§5）、`hydrology.py`（水文）、
 `export.py`（栅格导出）、`elevation_codec.py`（高度图 PNG 编解码）、
 `climate_simulator.py`（气候，见 climate-pipeline.md）、`manager.py`（地图 CRUD +
 分支继承 + 图层注册）。
 
+
 ---
 
-## 12. 性能考量
+## 12. 性能
 
 当前基线：nacrea（200k 胞、构造 ×50）全量构建 **~391s**（geological 238s + climate 147s +
 ecology 5s；`build_profile.json` 逐阶段计时）。地质段内 tectonics（50 步演化 + 加权重采样）
-~105s 占主导，其余为 terrain ~44s / mesh ~33s / export ~27s / plates ~13s。1M 节点约 41 min。
+~105s 占主导，其余为 terrain ~44s / mesh ~33s / export ~27s / plates ~13s。
 噪声内核为 **Numba JIT**（`noise_kernels.py`，`@njit(parallel=True)`；`opensimplex` 的
-`noise3array` 是纯 Python 循环，不用）。详见 `docs/usage/profiling.md` 与
-`docs/usage/performance-optimizations.md`。
-
-### 瓶颈分析
-
-| 操作 | 复杂度 | 100K 耗时 | 200K 耗时 | 瓶颈原因 |
-|------|--------|-----------|-----------|----------|
-| Fibonacci lattice | O(N) | <0.01s | <0.01s | 无 |
-| Lloyd relaxation (×8) | O(k·N·log N) | ~8s | ~20s | SphericalVoronoi 构建 |
-| 板块剖分（Cortial 2019） | O(N·log N) | ~1s | ~2s | 优先队列 |
-| 欧拉极速度场 | O(N) | <0.1s | <0.1s | 向量化叉积 |
-| 边界检测 | O(N) | <0.1s | <0.1s | 邻接扫描 |
-| 边界效应计算 | O(N·B) | ~15s | ~30s | B = 边界节点数 |
-| fBm 噪声 (6+3 oct) | O(N·O) | ~2s（Numba JIT） | ~4s | 逐点 Simplex |
-| 海平面二分 | O(N·log(precision)) | <0.01s | <0.01s | 无 |
-| 温度计算 | O(N) | <0.1s | <0.1s | 向量化 |
-| 风场计算 | O(N·k) | ~2s | ~4s | k = 平均邻居数 |
-| BFS 降水 | O(N) | ~3s | 单次 BFS |
-| 流向确定 | O(N·k) | ~2s | 逐节点扫描 |
-| 汇水累积 | O(N) | ~1s | 拓扑排序 |
-| 等距投影栅格化 | O(N·log N) | ~5s | cKDTree 最近邻（§10.1） |
-| **总计** | | | **~391s**（含气候与生态） | |
-
-### 已采用的优化
-
-1. **Numba JIT 噪声内核**（`noise_kernels.py`）：fBm ~60s → ~2s（`@njit(parallel=True)`）
-2. **NumPy 向量化**：O(N) 操作全部向量化（边界效应批量 falloff + numpy 索引）
-3. **分块计算**：边界效应使用 KD-tree 范围查询，避免 O(N·B) 全扫描
-4. **增量计算**：分支系统仅重跑受影响的阶段；`pipeline._is_dirty()` 按输入 mtime 指纹跳过未变阶段
-5. **缓存**：同 seed 的 fBm 结果缓存（terrain_cache），仅在地形参数变更时重算
-6. **tectonic BFS 用 scipy 稀疏图**：预构建 CSR 邻接，替代逐 cell Python BFS
-
-### 扩展到 1M 节点
-
-| 策略 | 描述 | 预期效果 |
-|------|------|----------|
-| 自适应分辨率 | 板块边界附近加密，板块内部稀疏 | 总节点减少 50% |
-| C 扩展 | 关键路径用 Cython/Rust 重写 | 10-50× 加速 |
-| GPU 计算 | fBm 使用 CUDA/Vulkan | 100× 加速 |
-| 分块处理 | 将球面分成 8 个八分面，独立计算后拼接 | 内存减半 |
-| 增量 LOD | 先生成 10K 低分辨率预览，按需细化 | 交互响应 <1s |
+`noise3array` 是纯 Python 循环，不用）。逐操作复杂度表、优化记录与基准工作流见
+[profiling.md](../profiling.md) 与
+[performance-optimizations.md](../performance-optimizations.md)；1M 节点扩展（自适应分辨率 /
+C 扩展 / GPU / 分块 / 增量 LOD）为远期方案，见 [roadmap.md](../roadmap.md)。
 
 ### 前端渲染性能
 
@@ -1653,14 +1695,15 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 - `frontend/src/viewers/map/useGPUTerrain.ts` — GPU terrain hook（ShaderMaterial + DataTexture）
 - GLSL 顶点/片元着色器内嵌于 `useGPUTerrain.ts`
 
+
 ---
 
-## 13. 已知限制与未来工作
+## 13. 已知限制与未实现设计余量
 
 ### 当前限制
 
 1. **河谷雕刻非地质层职责**：51 km 网格上流水侵蚀只会产生单 cell 宽人工沟壑，
-   故地质层不做流水侵蚀（§9）；河谷雕刻归 Gaea 局地高清精修（米级）。
+   故地质层不做流水侵蚀（§9.8）；河谷雕刻归 Gaea 局地高清精修（米级）。
 
 2. **静态气候**：当前气候模型是稳态快照，不模拟气候的季节内变化或年际变率（ENSO 等）。
 
@@ -1672,9 +1715,9 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 5. **单球面假设**：不支持非球形天体（如小行星、扁球体）。
 
-### 未来工作
+### 未实现设计余量
 
-1. **全威尔逊循环补全**：当前时间演化（§14）只实现板块旋转平流 + 俯冲/碰撞/裂解/
+1. **全威尔逊循环补全**：当前时间演化（§5）只实现板块旋转平流 + 俯冲/碰撞/裂解/
    海沟弧；未实现部分——地壳属性元组（厚度/年龄/造山年龄）、克拉通稳定化、
    地幔长期冷却、潮汐应力衰减、洋中脊体积-海平面耦合。
 
@@ -1690,62 +1733,8 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 
 7. **GPU 加速**：使用 CuPy 或 PyTorch 将 fBm、BFS 等计算迁移到 GPU。
 
----
 
-## 14. 时间演化与威尔逊循环
-
-> 时间演化由 `tectonic_simulator.py` 实现（`run_tectonic_evolution`，算法
-> `cortial2019`，`tectonic_steps` 控制步数，nacrea 为 50 步）。本节 §14.1–§14.2
-> 描述**当前实现**；§14.3–§14.5 是全威尔逊循环的**未实现设计余量**（逐条标注）。
-> 核心参考：Cortial et al. 2019（见[附录 D](#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)）。
-
-### 14.1 当前实现：质心旋转 + 加权重剖分（固定网格）
-
-**CVT 顶点在整个演化中永不移动**（移动顶点意味着每步都要重构 Delaunay）。
-实现采用 Cortial 2019 原案的「质心运动 + 周期重剖分」策略（`_evolve_cortial2019`）：
-
-1. **网格固定**：200K cell 是不动的观测站；演化状态保存在数组（高程、地壳类型、
-   累积汇聚 s_arr / 累积伸展 e_arr）中，演化结束时一次性写回 cell。
-2. **质心旋转**：每步把每个板块的质心按各自欧拉极做 Rodrigues 旋转
-   （`_rodrigues_rotate`，角度 = ω·δt）。
-3. **周期重剖分**：每 `resample_every` 步（以及裂解事件后立即一次）以旋转后的
-   质心为种子重跑 Voronoi 剖分——使用**出生面积乘性加权**的 Voronoi
-   （`voronoi_partition_warped`），让板块尺寸偏态在迭代中不被拉平；有 geography.yaml
-   锚定时剖分代价叠加海岸吸附成本，板块边界被钉在大陆边缘。重复种子去重
-   （`_assign_distinct_seeds`），新生板块有 ~25 步保护期不被重剖分吞掉。
-4. **海沟弧弛豫**：重剖分的直线二分边界按 Frank (1968) 海沟弧模型弯成弧
-   （`_trench_arc_relaxation`，逐（俯冲侧, 上覆侧）对累积弧矢高，最终边界 warping
-   时重放）。
-5. **边界检测与高程效应**：重剖分后向量化了「易主 cell」检测（暂按汇聚处理），
-   累积汇聚/伸展量（`_accumulate_convergence` → 驱动 §3.6 造山带/裂谷宽度），
-   然后依次施加**俯冲上隆**（Cortial 完整公式 u₀·f(d)·g(v)·(1+h(z̃))·δt，
-   `_subduction_uplift`）、**碰撞造山**（`_collision_orogeny`）、**侵蚀**
-   （`_erosion`，每步持续作用）。
-6. **板块裂解**：`_rift_plates`（Poisson 概率，大板块更易裂解，见 §14.3-D）。
-7. **清理**：零 cell 板块移除（`_cleanup_empty`），尺寸权重与板块名册同步。
-8. **终态整形**：演化结束后按边界类型分段整形（汇聚→弧、离散→雁列链、
-   转换→直线，`_shape_boundary_segments`）→ 噪声 warping（`warp_boundaries`）→
-   多数票平滑（`_smooth_partition`）→ 飞地合并（`_merge_plate_enclaves` /
-   `_merge_enclosed_plates`）。
-
-**δt 自动缩放**（`_auto_compute_dt`）：`δt = 3 · √(4πR²/N) / v_max`——令最快
-板块每步移动 ~3 个 cell（100K cells 时 δt ≈ 2 My）；`tectonic_dt_my > 0` 时显式覆盖。
-
-### 14.2 演化状态（当前实现）
-
-cell 在演化中跟踪的状态：所属板块（cell→plate 映射）、地壳类型（continental /
-oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical taper，§3.6）、
-**累积伸展量 e**（km，驱动裂谷宽度）、高程。下方元组是全威尔逊循环的未实现设计：
-
-| 属性 | 符号 | 类型 | 状态 |
-|------|------|------|------|
-| 地壳厚度 | `Thickness` | float (km) | 未实现 |
-| 地壳年龄 | `Age` | float (My) | 未实现 |
-| 造山年龄 | `Orogeny_Age` | float (My) | 未实现（§6.2 古造山带是静态地貌叠加） |
-| 褶皱方向 | `Fold_Dir` | 3D vector | 未实现 |
-| 克拉通 | `craton` 地壳类型 | enum | 未实现 |
-
-### 14.3 威尔逊循环四大过程
+### 威尔逊循环四大过程（现状与未实现）
 
 在固定 CVT 场中，威尔逊循环由相邻 cell 之间的**相对速度场**直接触发：
 
@@ -1769,7 +1758,7 @@ oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical ta
 
 - **条件**：$v_\perp < 0$，两侧均为陆壳
 - **已实现**：碰撞造山高程事件（`_collision_orogeny`）；累积汇聚量驱动造山带宽度
-  （critical taper，§3.6）。
+  （critical taper，§4.5）。
 - **未实现**：陆壳 `Thickness` 叠加（40km + 40km = 80km，无厚度状态）。
 
 #### D. 板块裂解（Plate Rifting）— 已实现
@@ -1779,7 +1768,7 @@ oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical ta
   （Voronoi 细分）、分配独立欧拉极、冷却期防止碎片立即再裂解。
 - **未实现**：裂解中心陆壳减薄并翻转为洋壳（红海模式——无厚度/年龄状态支撑）。
 
-### 14.4 随时间变化的行星物理参数 — 全部未实现设计
+### 随时间变化的行星物理参数（全部未实现设计）
 
 行星并非静态系统，而是随内热耗散不断"衰老"的热力学系统。以下四项是设计余量
 （当前实现中 `T_mantle`、欧拉极、潮汐应力、海平面在演化全程固定）：
@@ -1818,23 +1807,6 @@ mean_ocean_age = average(all_ocean_cells.age)
 sea_level = base_sea_level + ridge_volume_factor / mean_ocean_age
 ```
 
-### 14.5 时间步进循环（当前实现）
-
-```
-For step = 0 to tectonic_steps:
-  1. 质心旋转: 每板块质心按欧拉极 Rodrigues 旋转（角度 = ω·δt，δt 自动缩放）
-  2. 周期重剖分（每 resample_every 步 + 裂解后）: 出生面积加权 Voronoi
-     （有 geography 锚定时叠加海岸吸附代价）→ 海沟弧弛豫（Frank 1968）
-  3. 易主 cell 检测 → 累积汇聚/伸展量（s_arr / e_arr）
-  4. 高程效应: 俯冲上隆（Cortial 完整公式）→ 碰撞造山 → 侵蚀
-  5. 板块裂解: Poisson 概率（rift_base_rate，大板块更易裂）
-  6. 清理: 零 cell 板块移除，权重同步
-演化结束后: 边界分段整形 → 噪声 warping → 平滑 → 飞地合并 → 写回 cell
-```
-
-未实现的循环成分（对应 §14.3–§14.4 的设计余量）：全局环境演化（T_mantle /
-omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickness/Age/Type）、
-洋壳创生、物质削减与 slab pull 反馈、气候快照、任意地质年代回溯。
 
 ---
 
@@ -1852,7 +1824,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 | A.7 球面多边形面积 | 球面角盈公式 | [cvt_mesh.md](../../knowledge/geology/cvt_mesh.md) §Cell 面积 |
 
 **A.6 汇水累积**（水文学知识文档尚待建立，见 `knowledge/geology/CLAUDE.md`
-规划清单；实现见 §8.2）：
+规划清单；实现见 §9.2）：
 
 ```
 accum(i) = area(i) + Σ accum(j) for j in upstream(i)
@@ -1862,55 +1834,6 @@ accum(i) = area(i) + Σ accum(j) for j in upstream(i)
 计算顺序：拓扑排序（从源头到河口）
 ```
 
----
-
-## 附录 B: 现有代码复用清单
-
-### 来自 `scripts/dev/generate_planet_heightmap.py`
-
-| 函数 | 复用状态 | 说明 |
-|------|----------|------|
-| `lat_lon_to_xyz()` | ✅ 直接复用 | 球面坐标转换，逻辑完全相同 |
-| `xyz_to_lat_lon()` | ✅ 直接复用 | 逆向坐标转换 |
-| `angular_distance()` | ✅ 直接复用 | Haversine 角距离 |
-| `angular_distance_xyz()` | ✅ 直接复用 | 3D 向量角距离 |
-| `smooth_step()` | ✅ 直接复用 | Hermite 平滑插值 |
-| `generate_fbm_3d()` | ⚠️ 改造 | 改为在 CVT 节点 3D 坐标上采样，而非等距网格 |
-| `_compute_noise_elementwise()` | ⚠️ 改造 | 向量化改造或用 Numba JIT 噪声内核替代 |
-| `_fallback_fbm()` | ❌ 废弃 | CVT 管线不需要 2D fallback |
-| `_compute_continent_field()` | ❌ 废弃 | 被 CVT 基准高程 + Cortial 2019 Voronoi 剖分替代 |
-| `_elliptical_gaussian()` | ⚠️ 可选保留 | 可用于 CVT 上的局部特征叠加 |
-| `_compute_base_elevation()` | ⚠️ 改造 | 改为基于地壳类型的双峰分配 |
-| `_compute_tidal_deformation()` | ✅ 直接复用 | P₂ Legendre 潮汐形变 |
-| `_generate_plates()` | ⚠️ 重大改造 | Voronoi 最近邻/洪水填充 → Cortial 2019 Voronoi 剖分；Euler 极逻辑保留 |
-| `_compute_boundary_effects()` | ⚠️ 改造 | 边界检测改为图邻接扫描；效应公式保留 |
-| `_compute_convergence_rate()` | ⚠️ 改造 | 保留 v = ω × P 核心逻辑，修正边界法向计算 |
-| `_plate_velocity_at()` | ✅ 直接复用 | 刚体旋转 v = ω × r |
-| `_compute_hotspot_effects()` | ⚠️ 改造 | 从网格采样改为 CVT 节点采样 |
-| `_compute_noise_detail()` | ⚠️ 改造 | 振幅调制逻辑保留，采样改为 CVT |
-| `SphericalHeightmapGenerator.generate()` | ❌ 废弃 | 被 CVT 管线的分阶段函数替代 |
-| `generate_cubemap_faces()` | ❌ 废弃 | CVT 管线不需要立方体投影 |
-| `ContinentFeature` | ⚠️ 可选保留 | 用于手动指定大陆特征 |
-| `HotspotFeature` | ✅ 直接复用 | 热点配置 |
-| `PlateSeed` | ⚠️ 改造 | 增加 `growth_speed_multiplier` 字段 |
-| `PlanetConfig` | ⚠️ 重大改造 | 增加 CVT 参数，移除栅格相关参数 |
-| `make_equirect_grid()` | ✅ 保留 | 仅用于导出阶段 |
-
-### 来自 `src/dreamulator/map/` 模块
-
-| 函数/模型 | 现状 | 说明 |
-|-----------|----------|------|
-| `VoronoiCell` | ✅ 现行核心模型 | 管线一等公民（§11） |
-| `VoronoiNetwork` | ✅ 保留 | 旧栅格时代网格模型，兼容既有数据文件 |
-| `TectonicPlate` | ✅ 现行 | 含 `EulerPole` 运动学字段 |
-| `PlateType` | ✅ 现行 | 枚举值不变 |
-| `MapFeature` | ✅ 现行 | 河流/山脉等线性特征 |
-| `FeatureType` | ✅ 现行 | 可扩展新类型 |
-| `MapLayerType` | ✅ 现行 | 图层标识（§11） |
-| `MapLayerRegistry` | ✅ 现行 | 图层依赖追踪（`manager.py`） |
-| `RasterLayerMeta` | ✅ 现行 | 导出栅格元数据 |
-| `MapManager` | ✅ 现行 | 地图 CRUD + CVT 管线入口 |
-| `elevation_codec` | ✅ 现行 | 高度图 16-bit PNG 编解码 |
 
 ---
 

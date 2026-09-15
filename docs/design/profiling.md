@@ -76,11 +76,11 @@ uv run python scripts/dev/profile_build.py nacrea --data-dir data/worlds --memor
 uv add --dev py-spy
 
 # 生成 SVG 火焰图
-uv run py-spy record -o private/prof/gaia-flame.svg -- \
+uv run py-spy record -o private/prof/nacrea-flame.svg -- \
     uv run dreamulator build nacrea --data-dir data/worlds --force
 
 # 生成 speedscope 格式（可在 https://speedscope.app 缩放分析）
-uv run py-spy record --format speedscope -o private/prof/gaia.json -- \
+uv run py-spy record --format speedscope -o private/prof/nacrea.json -- \
     uv run dreamulator build nacrea --data-dir data/worlds --force
 ```
 

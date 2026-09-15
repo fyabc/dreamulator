@@ -11,7 +11,7 @@ Flame graphs (sampling profiler, recommended for hotspot analysis):
     uv run py-spy record -o private/prof/flame.svg -- \
         uv run dreamulator build WORLD --force
 
-See docs/usage/profiling.md for the full workflow.
+See docs/design/profiling.md for the full workflow.
 """
 
 from __future__ import annotations

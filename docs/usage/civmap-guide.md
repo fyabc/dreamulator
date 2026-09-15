@@ -51,12 +51,14 @@ uv run dreamulator branch create earth my-history --at civilization
 ### 方式二：直接输入 URL
 
 ```
-http://localhost:5173/worlds/<世界名>/civmap/<分支名>
+http://localhost:8000/worlds/<世界名>/civmap/<分支名>
 ```
 
-例如：`http://localhost:5173/worlds/earth/civmap/ERE-if`
+例如：`http://localhost:8000/worlds/earth/civmap/ERE-if`
 
-> **注意**：开发模式使用 BrowserRouter，URL 中**不需要** `#`。
+> 端口：`dreamulator serve`（API + 前端一体）是 **8000**；前端独立开发模式
+> （`cd frontend && npm run dev`）是 Vite 的 **5173**，二者同一套路由。
+> 开发模式使用 BrowserRouter，URL 中**不需要** `#`。
 
 ## 基本操作
 

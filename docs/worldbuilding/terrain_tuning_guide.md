@@ -138,12 +138,14 @@ elevation = base(850m+板块偏移+大陆起伏)
 ### 正确流程
 
 1. 编辑 `data/worlds/<world>/layers/geological/input/geography.yaml`
-2. `uv run dreamulator build nacrea --force`
+2. `uv run dreamulator build nacrea`（geography.yaml 的改动由子阶段缓存按内容指纹
+   自动失效对应阶段，无需 `--force`——`--force` 只用于强制全量重建）
 3. 刷新前端验证
 
 ### 常见陷阱
 
-- ❌ 改了 geography.yaml 但没用 `--force` → 地质层被跳过
+- ❌ 以为改 geography.yaml 需要手动 `--force` → 不需要：`terrain_cache` 的阶段指纹
+  含 `geography_hash`，改动会自动触发受影响阶段重算
 - ❌ strength 设太弱（|s| < 0.3）→ 被世界岛或其他大 feature 盖过
 - ❌ pin_strength 设太小（< 0.2）→ 肉眼看不出来 → 以为 bug
 - ❌ 调了 `noise_amplitude` 忘记这是**全局参数** → 影响所有大陆

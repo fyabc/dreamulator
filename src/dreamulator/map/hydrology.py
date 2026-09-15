@@ -1,6 +1,6 @@
 """River network generation via graph-based flow routing (D8) on the spherical CVT mesh.
 
-Pipeline (see ``docs/design/terrain-pipeline.md`` §8):
+Pipeline (see ``docs/design/pipelines/geological-pipeline.md`` §9):
 
 1. **Priority-flood depression fill** (Barnes et al. 2014, O(N log N)) — raises
    every pit to its spill level so flow never terminates in a spurious local

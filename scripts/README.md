@@ -58,7 +58,7 @@ earth 基础世界是**导入世界**（不走 build 管线）；这组把真实
 
 - `check_doc_refs.py` — 文档↔代码引用审计（`docs/design/pipelines/` 的 file:line 与反引号符号）；
   **pre-push 钩子对 main 强制**（`.git/hooks/pre-push`，钩子内路径指向本组）。
-- `profile_build.py` — 构建性能剖析（产出 `build_profile.json`，见 `docs/usage/profiling.md`）。
+- `profile_build.py` — 构建性能剖析（产出 `build_profile.json`，见 `docs/design/profiling.md`）。
 - `prepare_civmap_data.py` — 文明地图底图数据下载与预处理。
 - `generate_planet_heightmap.py` — 外部高度图生成（世界创作辅助，配合地图导入工作流）。
 

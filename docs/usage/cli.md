@@ -326,23 +326,25 @@ dreamulator serve --data-dir data/worlds  # 自定义数据目录
 
 地形管线配置通过 YAML 文件管理，路径：`layers/geological/input/terrain_config.yaml`
 
-**关键配置项**：
+**关键配置项**（小节 `planet:` / `terrain:` / `plates:` / `noise:` / `climate:` / `export:`
+与扁平顶层键都支持，加载时自动展平；真实完整示例见
+`data/worlds/nacrea/layers/geological/input/terrain_config.yaml`）：
 
 ```yaml
 terrain:
-  num_nodes: 4096           # CVT 分辨率
+  num_nodes: 100000         # CVT 分辨率（默认 10 万 cell；现行标准 20 万，如 nacrea）
+  lloyd_iterations: 8       # Lloyd 松弛迭代
+  hotspot_count: 3          # 热点链数量（默认 3；nacrea 覆写 9）
+  mountain_asymmetry: 0.4   # 山脉不对称度（0=对称， 1=强不对称）
+  shelf_width_km: 150.0     # 大陆架宽度
+  terrain_algorithm: cortial2019_asymmetric  # 地形合成策略
 
 plates:
-  num_plates: 15            # 板块数量
+  num_plates: 20            # 板块数量
   plate_algorithm: cortial2019
-  tectonic_algorithm: ""    # ""=静态, "cortial2019"=演化
-  tectonic_steps: 0         # 演化步数
-  tectonic_dt_my: 0.0       # 步长 My（0=自动缩放）
-
-terrain_algorithm: cortial2019_asymmetric  # 地形算法
-hotspot_count: 3            # 热点链数量
-mountain_asymmetry: 0.4     # 山脉不对称度
-shelf_width_km: 120.0       # 大陆架宽度
+  tectonic_algorithm: cortial2019   # 默认启用时间演化；"" = 静态板块
+  tectonic_steps: 0         # 演化步数（0 = 跳过演化；nacrea 覆写 50）
+  tectonic_dt_my: 0.0       # 步长 Myr（0 = 自动缩放）
 
 noise:
   noise_anisotropy: 0.3     # 各向异性噪声
@@ -354,7 +356,7 @@ noise:
 |--------|--------|
 | `plate_algorithm` | `cortial2019` |
 | `terrain_algorithm` | `cortial2019_gaussian`, `cortial2019_asymmetric` |
-| `tectonic_algorithm` | `""` (无), `cortial2019` |
+| `tectonic_algorithm` | `cortial2019`（默认，时间演化）, `""`（静态板块） |
 
 ---
 
@@ -363,16 +365,21 @@ noise:
 ```
 data/worlds/<name>/
 ├── world.yaml                    # 世界元数据
+├── maps/<planet>/                # 地图产物（构建输出，已 gitignore）
+│   ├── elevation.png             # 高度图
+│   ├── cvt_mesh.json             # CVT 网格
+│   ├── plates.json               # 板块数据
+│   ├── temperature.png           # 气候图层（+ precipitation.png / koppen.json …）
+│   └── climate_monthly.msgpack   # 月度气候场
 ├── layers/
 │   ├── astronomy/input/          # 恒星系参数
-│   ├── geological/input/         # 行星参数 + 地形配置
-│   │   └── maps/<planet>/
-│   │       ├── elevation.png     # 高度图
-│   │       ├── cvt_mesh.json     # CVT 网格
-│   │       ├── plates.json       # 板块数据
-│   │       └── benchmark.json    # 基准测试
+│   ├── geological/input/         # 行星参数 + terrain_config.yaml + geography.yaml
 │   └── civilization/input/       # 文明设定
 └── branches/<name>/
     ├── branch.yaml               # 分支元数据
-    └── layers/                   # 仅分叉层及之后
+    ├── layers/                   # 仅分叉层及之后
+    └── maps/<planet>/            # 分支自己的地图产物（存在时优先于父世界）
 ```
+
+分支地图解析顺序（`map/manager.py`）：分支 `maps/<planet>/` → 父世界 `maps/<planet>/`
+→ 旧版层级路径回退（`layers/*/derived|input/maps/`，仅为兼容保留）。

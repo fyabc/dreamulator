@@ -78,7 +78,7 @@ dreamulator/
 | `convert_koppen_map.py` | 转换 Beck et al. (2018) Köppen 参考数据 |
 | `prepare_civmap_data.py` | 文明地图底图数据下载与预处理 |
 | `generate_planet_heightmap.py` | 行星高度图生成工具（CVT 管线前的原型，见地形工作流文档） |
-| `profile_build.py` | 构建性能剖析 + 基准 harness（见 [../usage/profiling.md](../usage/profiling.md)） |
+| `profile_build.py` | 构建性能剖析 + 基准 harness（见 [profiling.md](profiling.md)） |
 
 ### frontend/src/
 
@@ -87,7 +87,7 @@ dreamulator/
 | `api/` | REST API 客户端。`client.ts`（统一入口）、`staticClient.ts`（静态模式只读）、`civmapClient.ts`、`mode.ts`（模式检测） |
 | `components/` | 全局 UI 组件 + `map/` 地图编辑器组件（图层面板、配色、帮助内容） |
 | `pages/` | 页面：首页、世界信息/列表/详情、2D 地图查看器、3D 球面查看器、恒星系查看器、文明地图编辑器、帮助页 |
-| `viewers/` | 可视化器：3D 恒星系（Three.js，详见 [../usage/frontend-3d-viewer.md](../usage/frontend-3d-viewer.md)）、3D 球面地球、2D 多投影地图（`viewers/map/`，GPU 地形渲染） |
+| `viewers/` | 可视化器：3D 恒星系（Three.js，详见 [frontend-3d-viewer.md](frontend-3d-viewer.md)）、3D 球面地球（见 [pipelines/map-system.md](pipelines/map-system.md)）、2D 多投影地图（`viewers/map/`，GPU 地形渲染） |
 | `stores/` | Zustand 全局状态管理 |
 
 ## 核心概念
@@ -175,7 +175,7 @@ input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人�
 
 - [geological-pipeline.md](pipelines/geological-pipeline.md) — 12 阶段地形生成管线技术参考（算法原理、数学公式、论文解读）
 - [map-system.md](pipelines/map-system.md) — 地图系统架构（数据模型、多投影 GPU 渲染、API 端点）
-- [climate-pipeline.md](pipelines/climate-pipeline.md) — 气候引擎实现架构与改进路线图
+- [climate-pipeline.md](pipelines/climate-pipeline.md) — 气候引擎实现架构（模块、执行顺序、各阶段物理）
 - [climate-validation.md](pipelines/climate-validation.md) — 真实地球数据验证方法
 
 操作指南见 [../usage/map-workflow.md](../usage/map-workflow.md) 和 [../usage/civmap-guide.md](../usage/civmap-guide.md)。

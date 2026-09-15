@@ -498,4 +498,4 @@ $$ \text{H}_2 + 2\text{Fe}^{3+} \rightarrow 2\text{H}^+ + 2\text{Fe}^{2+} \quad 
 ## 相关文档
 
 - `docs/knowledge/astrobiology/alternative-solvents.md` — 替代溶剂科学知识基础（相图、安托万公式、无氧产能路径）
-- `docs/worldbuilding/drafts/conlang-world-drafts.md` — 架空语言文字草案
+- `docs/worldbuilding/drafts/conlang_world_drafts.md` — 架空语言文字草案

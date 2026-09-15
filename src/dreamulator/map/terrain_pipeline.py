@@ -7,11 +7,12 @@ Runs the complete CVT terrain generation pipeline:
        subduction + collision)
     4. Boundary detection (velocity decomposition + classification)
     5. Terrain synthesis (bimodal base + boundary effects + fBm noise)
-    6. Climate simulation (TODO)
+    6. Climate simulation (see climate_simulator + pipelines/climate-pipeline.md)
     7. River generation (flow routing + river vector layer)
     8. Export (equirectangular raster + PNG + JSON)
 
-See ``docs/design/terrain-pipeline.md`` for complete algorithm reference.
+See ``docs/design/pipelines/geological-pipeline.md`` for the algorithm
+reference of stages 1-5/7-8 and ``climate-pipeline.md`` for stage 6.
 """
 
 from __future__ import annotations
@@ -422,7 +423,7 @@ def run_terrain_pipeline(
         for _i, _c in enumerate(result.mesh.cells):
             _c.water_class = "land" if bool(_is_land[_i]) else "ocean"
 
-    # ---- Stage 6: Climate (TODO) ----
+    # ---- Stage 6: Climate ----
     if "climate" in ordered:
         _stage_begin("climate")
         try:
@@ -446,7 +447,7 @@ def run_terrain_pipeline(
             t = time.time()
             generate_rivers(result.mesh, config)
             # River vector layer: polylines for the frontend (width ∝ order).
-            # Rendering algorithm documented in geological-pipeline.md §10.
+            # Rendering algorithm documented in geological-pipeline.md §9.7.
             if output_dir is not None:
                 features = extract_river_features(result.mesh)
                 import json as _json
@@ -465,7 +466,7 @@ def run_terrain_pipeline(
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
-    # ---- Stage 9: Export ----
+    # ---- Stage 8: Export ----
     if "export" in ordered:
         _stage_begin("export")
         t = time.time()

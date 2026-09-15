@@ -121,10 +121,10 @@
     "docs": {
       "title": "设计文档索引",
       "entries": [
-        { "title": "架构与设计", "content": "- `docs/design/architecture.md` — 项目架构（层级架构与分支管理）\n- `docs/design/vision.md` — 长期愿景与设计哲学\n- `docs/design/roadmap.md` — 开发路线图\n- `docs/design/terrain-pipeline.md` — 地形生成管线技术参考\n- `docs/design/map-system.md` — 地图系统架构\n- `docs/design/climate-engine.md` — 气候引擎实现架构\n- `docs/design/climate-validation.md` — 气候引擎验证指南\n- `docs/design/ecology-layer.md` — 生态层设计方案\n- `docs/design/ocean-currents-model.md` — 洋流系统设计方案\n- `docs/design/civilization-layer.md` — 文明层详细架构" },
-        { "title": "用户指南", "content": "- `docs/usage/cli.md` — CLI 命令参考\n- `docs/usage/map-workflow.md` — 地图工作流指南\n- `docs/usage/civmap-guide.md` — 文明地图使用指南\n- `docs/usage/profiling.md` — 性能剖析与基准测试\n- `docs/usage/frontend-3d-viewer.md` — 3D 查看器指南" },
+        { "title": "架构与设计", "content": "- `docs/design/architecture.md` — 项目架构（层级架构与分支管理）\n- `docs/design/vision.md` — 长期愿景与设计哲学\n- `docs/design/roadmap.md` — 开发路线图\n- `docs/design/profiling.md` — 性能剖析与基准\n- `docs/design/pipelines/geological-pipeline.md` — 地形生成管线技术参考\n- `docs/design/pipelines/map-system.md` — 地图系统架构\n- `docs/design/pipelines/climate-pipeline.md` — 气候引擎实现架构\n- `docs/design/pipelines/climate-validation.md` — 气候引擎验证指南\n- `docs/design/proposals/ecology-layer.md` — 生态层设计方案\n- `docs/design/proposals/civilization-layer.md` — 文明层详细架构" },
+        { "title": "用户指南", "content": "- `docs/usage/cli.md` — CLI 命令参考\n- `docs/usage/map-workflow.md` — 地图工作流指南\n- `docs/usage/civmap-guide.md` — 文明地图使用指南\n- `docs/usage/frontend-3d-viewer.md` — 3D 查看器指南" },
         { "title": "知识库", "content": "- `docs/knowledge/astrophysics/` — 恒星物理、拉格朗日点\n- `docs/knowledge/climatology/` — 大气环流、能量平衡、Köppen 分类、洋流\n- `docs/knowledge/geology/` — 板块构造、CVT 网格、地形合成\n- `docs/knowledge/ecology/` — 生态数学模型\n- `docs/knowledge/astrobiology/` — 替代溶剂与异星生命\n- `docs/knowledge/linguistics/` — 语言设计指南" },
-        { "title": "世界构建", "content": "- `docs/worldbuilding/map_design_guide.md` — 地图设计指导\n- `docs/worldbuilding/narrative-craft.md` — 世界史讲述方法论\n- `docs/worldbuilding/design_patterns.md` — YAML/JSON 配置设计模式" }
+        { "title": "世界构建", "content": "- `docs/worldbuilding/map_design_guide.md` — 地图设计指导\n- `docs/worldbuilding/narrative_craft.md` — 世界史讲述方法论\n- `docs/worldbuilding/design_patterns.md` — YAML/JSON 配置设计模式" }
       ]
     }
   },

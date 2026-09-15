@@ -11,7 +11,7 @@
 > **来源说明**：本文自 `docs/design/pipelines/geological-pipeline.md` 附录 D 整体上浮（2026-08）。
 > 小节编号沿用原附录 D；原文档中重复的编号（两个 D.11 / 两个 D.12）已重排为
 > D.13–D.15，原 D.10 表格被正文截断的尾行已并回 D.10。文中 §x 引用均指
-> `docs/design/pipelines/geological-pipeline.md` 章节；设计文档 §14（时间演化与威尔逊循环）
+> `docs/design/pipelines/geological-pipeline.md` 章节；设计文档 §5（构造时间演化）
 > 以本文为核心参考。
 
 ---

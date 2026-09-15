@@ -1,7 +1,7 @@
 # 板块构造模型
 
 > 从 `src/dreamulator/map/plate_generator.py` 和 `boundary_detector.py` 抽取。  
-> 详细算法参考：`docs/design/pipelines/geological-pipeline.md` §3–4
+> 详细算法参考：`docs/design/pipelines/geological-pipeline.md` §4
 
 ---
 
@@ -15,14 +15,14 @@ $$\mathbf{v}(P) = \boldsymbol{\omega} \times \mathbf{P}$$
 为角速度矢量（$\hat{\mathbf{e}}$ 为欧拉极方向）。在半径 $R$ 的球面上速度单位为
 m/yr 时写作 $\mathbf{v}(P) = \boldsymbol{\omega} \times \mathbf{P} \cdot R$。
 
-**速度大小**随 P 到欧拉极的角距离变化（自 design/pipelines/geological-pipeline.md §4.3 与
+**速度大小**随 P 到欧拉极的角距离变化（自 design/pipelines/geological-pipeline.md §4.7 与
 附录 A.3 上浮，2026-08）：
 
 $$|\mathbf{v}(P)| = \omega R \sin\alpha, \qquad \alpha = \arccos(\hat{\mathbf{e}} \cdot \mathbf{P})$$
 
 欧拉极处速度为零，90° 处最大。
 
-**角速度-线速度换算**（自 design/pipelines/geological-pipeline.md §4.2 上浮，2026-08）：
+**角速度-线速度换算**（自 design/pipelines/geological-pipeline.md §4.7 上浮，2026-08）：
 
 $$\omega = v / R$$
 
@@ -90,7 +90,7 @@ $$v_n = \mathbf{v}_{rel} \cdot \hat{\mathbf{n}} \quad (\text{法向，汇聚为�
 | **transform**（转换） | $v_t / v_{total} > 0.7$（切向主导） |
 | **inactive**（非活动） | $|v_n|$、$v_t$ 均 ≤ 阈值（默认 0.5 cm/yr） |
 
-**各类型的地质效应**（自 design/pipelines/geological-pipeline.md §5.4 上浮，2026-08）：
+**各类型的地质效应**（自 design/pipelines/geological-pipeline.md §6 上浮，2026-08）：
 
 | 边界类型 | 地质效应 |
 |----------|----------|

@@ -1,9 +1,10 @@
 """Climate simulation on the spherical CVT mesh.
 
-Phase 3A implementation — Energy Balance Model + geostrophic wind + graph-diffusion
-moisture transport + orographic rainfall + Köppen classification.
+Stage sequence — annual temperature (1D EBM or Held-Hou single-cell regime) +
+seasonal EBM, monsoon pressure-anomaly wind field, Stommel ocean gyres + SST
+advection, monthly mass-conserving moisture budget, Köppen classification.
 
-Algorithm reference: ``docs/design/climate-engine.md`` §2.2a (moisture transport).
+Architecture reference: ``docs/design/pipelines/climate-pipeline.md``.
 
 Physical constants and composable functions are in
 ``src/dreamulator/engine/climate_physics.py``.  This module orchestrates them

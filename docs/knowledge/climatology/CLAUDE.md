@@ -31,6 +31,6 @@
 | `energy_balance.md` §6 | `climate_seasonality.py:compute_seasonal_climate()` | 月度温度/降水（显式热输送 + 冰反照率） |
 | `energy_balance.md` §8 | `climate_simulator.py:_solve_moisture_budget()` | 质量守恒水汽收支 |
 | `atmospheric_circulation.md` | `climate_physics.py:hadley_cell_wind()` | 风场矢量 |
-| `precipitation.md` | `climate_simulator.py:_compute_precipitation_bfs()` | 年降水量 |
-| `ocean_currents.md` | `climate_physics.py:ekman_current_direction()` | 洋流矢量 |
+| `precipitation.md` | `climate_simulator.py:_compute_precipitation_monthly_budget()` | 年/月降水量 |
+| `ocean_currents.md` | `map/ocean_circulation.py`（`solve_ocean_gyre` 等） | 洋流矢量 |
 | `koppen_classification.md` | `climate_physics.py:koppen_classify()` | 气候类型 |

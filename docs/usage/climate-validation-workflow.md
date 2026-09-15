@@ -74,9 +74,10 @@ uv sync --extra validation
 # 自动下载 ETOPO1 (~400 MB)，生成 elevation.png + CVT mesh
 uv run python scripts/earth/import_earth_elevation.py
 
-# 指定输出目录和分辨率
+# 指定输出目录和分辨率（规范位置：<world>/maps/<planet>/；省略 --output-dir 时
+# 脚本默认写到旧版层级路径 layers/geological/input/maps/earth，manager 仍能回退识别）
 uv run python scripts/earth/import_earth_elevation.py \
-    --output-dir data/worlds/earth/layers/geological/input/maps/earth \
+    --output-dir data/worlds/earth/maps/planet_earth \
     --resolution 2048x1024 \
     --mesh-nodes 32768
 
@@ -181,32 +182,32 @@ Validating climate engine against real Earth observations...
 ============================================================
 1. Temperature Validation (zonal mean vs ERA5)
 ------------------------------------------------------------
-  RMSE:  3.03 C  (threshold: 5.0 C)
-  Bias:  +0.6 C
-  R2:    0.95
+  RMSE:  2.06 C  (threshold: 5.0 C)
+  Bias:  +1.1 C
+  R2:    0.992
   Result: PASS
 
 ============================================================
 2. Precipitation Validation (zonal mean vs GPCP)
 ------------------------------------------------------------
-  RMSE:  325.8 mm/yr  (threshold: 800.0 mm/yr)
-  Bias:  +74 mm/yr
-  R2:    0.635
+  RMSE:  336 mm/yr  (threshold: 800.0 mm/yr)
+  Bias:  -178 mm/yr
+  R2:    0.724
   Result: PASS
 
 ============================================================
 3. Koppen Classification Validation (vs Beck et al. 2018)
 ------------------------------------------------------------
-  Distribution match: 59.2% (threshold: 50%)
-  Group R2:   0.011
+  Distribution match: 61.2% (threshold: 50%)
+  Group R2:   0.103
   Result: PASS
 
 ============================================================
 3b. Koppen Spatial Accuracy (cell-by-cell vs Beck 2018)
 ------------------------------------------------------------
-  Overall accuracy: 31.8%
-  Group accuracy:   59.6%
-  Cohen's Kappa:    0.265
+  Overall accuracy: 32.1%
+  Group kappa:      0.538
+  Cohen's Kappa:    0.273
   Result: FAIL
 
 ============================================================
@@ -220,9 +221,11 @@ OVERALL: Climate engine FAILED validation - see above for details
 ============================================================
 ```
 
-> 当前 `Group R2`（0.011）偏低、3b 空间准确率（31.8%）< 50% 阈值 → 整体 FAIL。
-> 前者是「C/D 群退化」的量化体现；后者是已知差距（M4 口径逐 cell ≥30% 已达标，
-> 但 `_KOPPEN_MATCH_THRESHOLD=50%` 仍拦下 overall）。
+> 示例数字为 2026-09-14 M4/B0b 轮基线（earth/climate-dev，200k cells；完整指标表见
+> `docs/design/proposals/climate-layer-improvement.md` §0）。`Group R2`（0.103）偏低是
+> 「D 群崩溃」（Dfc→ET 揭蔽）的量化体现；3b 空间准确率 32.1% < `_KOPPEN_MATCH_THRESHOLD`
+> 的 50% 阈值 → 整体仍 FAIL（M4 验收口径「逐 cell 30 类 ≥30%」已达标，门槛与验收口径
+> 是两套判据）。
 
 ### 5.2 保存验证报告
 
@@ -262,7 +265,7 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 | `scripts/climate/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
 | `scripts/climate/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
 | `scripts/climate/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（产物=上次构建风场；`--rebuild`=解析重建，ITCZ/Hadley 边界可扫） | 定位风场/辐合带异常 |
-| `scripts/climate/diagnose_precip_budget.py` | 降水预算逐项分解（BFS 扩散/基线/辐合/风暴/对流/热带增强）+ 11000mm 截断检查 | 判断降水幅度由哪一项主导 |
+| `scripts/climate/diagnose_precip_budget.py` | 降水预算加法项分解（质量守恒水汽收支 P=W/τ + 风暴路径雨出率调制 + 次行星增强，均在海岸/Föhn 乘法因子与 11000 mm 封顶之前）+ 封顶截断检查 | 判断降水幅度由哪一项主导、封顶是否虚增陆均降水 |
 
 **两种模式（2026-09-08 E-lite）**：前四个脚本**默认读构建产物**（`cvt_mesh.json`
 里已存的气候字段，秒级）——验证的是「上次构建」；加 `--rebuild` 先重跑气候引擎
@@ -272,8 +275,9 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 `diagnose_precip_budget.py` 与 `validate_climate.py` **始终重跑**（前者需要 W 场等
 产物中不存在的求解器中间量；后者是官方验证入口，语义就是「验证当前代码」）。
 注意 `diagnose_wind_divergence.py` 两模式的风场来源不同（产物 = 上次构建的真实
-风场含季风异常；rebuild = 0.4×地转 + 0.6×三圈的解析重建），对比看**带状结构**
-（赤道/±60° 辐合、±30° 辐散）而非数值全等。
+风场含季风异常；rebuild = 0.4×地转 + 0.6×三圈的解析重建——这是该脚本自己的近似，
+引擎本身已无地转风分量，构建的真实年风 = 三圈背景 + 跨赤道西风带 + 季风异常的矢量
+平均），对比看**带状结构**（赤道/±60° 辐合、±30° 辐散）而非数值全等。
 
 ```bash
 uv run python scripts/climate/diagnose_koppen_spatial.py             # 产物模式（秒级）

@@ -54,7 +54,7 @@
 - 锚定只钉地壳类型；构造演化后可按 `reapply_after_tectonics` 重锚。
   **已知限制**：锚定不钉高程（汇聚抬升可盖过锚定裂谷）、浅海深度控制待补——
   见 `../design/roadmap.md` 功能性 #9 与
-  `../design/pipelines/geological-pipeline.md` §3.5
+  `../design/pipelines/geological-pipeline.md` §4.4
 
 需要"手绘形状"时，走高度图导入模式（外部灰度图 → 偏置场或最终高程），
 同一份计划文档给出了双模式谱系。
@@ -78,11 +78,11 @@
 
 ## 气候层预期
 
-地图定稿后气候引擎自动推演（EBM + 三胞环流 + BFS 水汽 + Köppen，见
-`../knowledge/climatology/` 各篇）。设计地图时可预判：
+地图定稿后气候引擎自动推演（1D EBM 温度 + 三圈环流与季风风场 + 逐月质量守恒水汽
+收支 + Köppen，见 `../knowledge/climatology/` 各篇）。设计地图时可预判：
 
-- **纬度**：赤道热、极地冷；**海拔**：~6.5°C/km（热带有效直减率更低，
-  当前模型把热带苔原线压低 ~1200 m——已知限制）
+- **纬度**：赤道热、极地冷；**海拔**：温度相关湿绝热直减率（热带 ~4.7 °C/km、
+  极地 ~6.5 °C/km——暖空气潜热释放使递减更缓）
 - **雨影**：>3000 m 山脉背风侧干旱（安第斯型东西坡分异）
 - **洋流**（3A.3 落地后）：西边界暖流增温增湿、东边界寒流降温减湿、
   上升流沿岸干冷
@@ -92,8 +92,8 @@
 
 ## 生态层预期
 
-基于温度和降水的 Whittaker 群系映射（ecology 引擎未实现，当前为 input 设定；
-规划见 `../knowledge/ecology/CLAUDE.md`）：
+基于温度和降水的 Whittaker 群系映射（ecology 引擎已实现：Whittaker 群系、NPP、
+可驯化标签、土纲、生物地理省；设计参考 `../knowledge/ecology/CLAUDE.md`）：
 
 | 温度 | 高降水 | 中降水 | 低降水 |
 |------|--------|--------|--------|
@@ -131,7 +131,7 @@ refugia（气候振荡期的物种蓄水池）。
   天体用神话典故——命名本身在做世界观
 - **机构化包装**：地图导出为"世界内机构出版物"（附件编号、钢印、落款、
   界内纪年），真实感远高于裸地图
-- 详见 `narrative-craft.md`
+- 详见 `narrative_craft.md`
 
 ## 工作流（CVT 时代）
 
@@ -141,5 +141,5 @@ refugia（气候振荡期的物种蓄水池）。
 3. **气候联调**：`build --only climate` 后看 Köppen 分布是否符合直觉
 4. **可选精细化**：Gaea 局部往返（[gaea-refinement.md](../design/proposals/gaea-refinement.md)，纸面阶段）
    或高度图导入模式
-5. **定稿入库**：地图产物 LFS 入库；定稿才进 `data/worlds/`（提交纪律，
-   ）
+5. **定稿**：地图产物是构建输出，已被 `.gitignore` 忽略、不入 git——设定
+   （`terrain_config.yaml` + `geography.yaml` + 种子）即单一事实源，任何机器可重建

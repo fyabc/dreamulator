@@ -1,12 +1,12 @@
 # 水文学：D8 流向与汇水面积
 
-> 实现：`src/dreamulator/map/hydrology.py` · 设计：`docs/design/pipelines/geological-pipeline.md` §8
+> 实现：`src/dreamulator/map/hydrology.py` · 设计：`docs/design/pipelines/geological-pipeline.md` §9
 
 球面 CVT 网格上的河流网络生成，是**地形合成后地形**的一次性水文学产品：洼地填平 →
 D8 流向 → 流量累积 → 河网分级/提取，填入 `VoronoiCell` 的
 `flow_direction` / `flow_accumulation` / `river_id` / `river_order`，并提取为
 河流矢量图层（features.json）。2026-08-26 起流水侵蚀已移除（见
-`docs/design/pipelines/geological-pipeline.md` §9），水文仅做河网提取。
+`docs/design/pipelines/geological-pipeline.md` §9.8），水文仅做河网提取。
 
 ---
 
