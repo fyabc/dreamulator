@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789327711643,
+  "lastUpdate": 1789504922660,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4777,6 +4777,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.002534786324504214",
             "extra": "mean: 6.28240880000277 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e77f4b44f77ec4efbb688631cbcd81169438dc46",
+          "message": "style: ruff format 三文件既有漂移（pre-push 钩子拦下）\n\nmonsoon_circulation / test_monsoon_circulation / test_schema_freshness\n的换行收缩，纯格式无行为变化。\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-16T04:41:37+08:00",
+          "tree_id": "72d5b4265da53a6a440944bc3add4a6e830af2f4",
+          "url": "https://github.com/fyabc/dreamulator/commit/e77f4b44f77ec4efbb688631cbcd81169438dc46"
+        },
+        "date": 1789504922103,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 9.827687982094355,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03851437110152368",
+            "extra": "mean: 101.75333220000056 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.1693151521491685,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011512435910089297",
+            "extra": "mean: 315.52557950000096 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4544555342865035,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0982905256582747",
+            "extra": "mean: 687.5425039999996 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 861.9561681482037,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0002883528477591537",
+            "extra": "mean: 1.1601518000020405 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 177.3307844042852,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0012950519052148356",
+            "extra": "mean: 5.639178799999911 msec\nrounds: 5"
           }
         ]
       }
