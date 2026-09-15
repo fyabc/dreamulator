@@ -1,6 +1,6 @@
 # 世界生成管线总览
 
-> 本文档是「行星地图生成」的顶层管线目录（阶段 1–12），把每个阶段映射到对应的层级
+> 本文档是「行星地图生成」的顶层管线目录（阶段 1–11），把每个阶段映射到对应的层级
 > pipeline 文档。各阶段的技术细节在对应文档中，此处只给顺序、依赖与指针。
 
 ---
@@ -30,8 +30,8 @@
 - **地质层**（全局阶段 1–6、8、10）：CVT 网格 + 板块构造 + 地形合成 + 水文 + 导出
   → [geological-pipeline.md](geological-pipeline.md)
 - **气候层**（全局阶段 7）：温度 / 降水 / Köppen → [climate-pipeline.md](climate-pipeline.md)
-- **生态层**（全局阶段 10）：Whittaker 群系 / NPP / 可驯化标签 → [ecology-layer.md](../proposals/ecology-layer.md)
-- **区域后处理**（全局阶段 12）：Gaea 局部精细化（跑完生态层拿到地形/气候/土壤/植被后选固定区域细化）
+- **生态层**（全局阶段 9）：Whittaker 群系 / NPP / 可驯化标签 → [ecology-layer.md](../proposals/ecology-layer.md)
+- **区域后处理**（全局阶段 11）：Gaea 局部精细化（跑完生态层拿到地形/气候/土壤/植被后选固定区域细化）
   → [gaea-refinement.md](../proposals/gaea-refinement.md)
 
 ## 与 DAG 层级的关系
@@ -42,7 +42,7 @@
 physics → chemistry → astronomy → geological → climate → ecology → civilization
 ```
 
-本管线（阶段 1–12）覆盖的是中间的**地图生成段**（geological → climate → ecology +
+本管线（阶段 1–11）覆盖的是中间的**地图生成段**（geological → climate → ecology +
 导出 + Gaea）。上游 physics/chemistry/astronomy 提供恒星/轨道/行星物理参数（作为
 各阶段输入），下游 civilization 消费地图输出（地形/气候/生态作为文明推演的底图）。
 
@@ -61,13 +61,13 @@ stellar/planets 参数 (astronomy 上游)
 [阶段 8]    地质层：水文（河流/湖泊）
       │
       ▼
-[阶段 10]   生态层：Whittaker 群系 / NPP
+[阶段 9]    生态层：Whittaker 群系 / NPP
       │
       ▼
-[阶段 11]   导出：栅格图层 + JSON
+[阶段 10]   导出：栅格图层 + JSON
       │
       ▼
-[阶段 12]   Gaea 局部精细化（可选）：选定区域高分辨率细化
+[阶段 11]   Gaea 局部精细化（可选）：选定区域高分辨率细化
 ```
 
 ## 分支与增量重建

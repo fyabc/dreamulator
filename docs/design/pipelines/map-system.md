@@ -1,7 +1,12 @@
 # 地图系统
 
-dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地图，支持地形导入、多图层查看和 Voronoi 语义管理。
+dreamulator 的地图系统为每颗有固体表面的行星提供 2D/3D 交互地图，基于球面 CVT 网格，
+支持外部高度图导入、多图层查看与分支继承。
 
+> 对应源码：`src/dreamulator/map/`、`src/dreamulator/api_routes/maps.py`、
+> `frontend/src/pages/MapViewerPage.tsx`、`frontend/src/pages/GlobeViewerPage.tsx`、
+> `frontend/src/components/map/`、`frontend/src/viewers/map/`。
+>
 > **使用指南**：完整的 Gaea 设计 → 导入 → 查看工作流见 [map-workflow.md](../../usage/map-workflow.md)。
 
 ## 参考项目
@@ -20,27 +25,30 @@ dreamulator 的地图系统为每颗有固体表面的行星提供 2D 交互地�
 
 ## 架构概览
 
-地图系统采用**栅格 + Voronoi 双层混合架构**（参考 [QGIS](https://qgis.org/) 的栅格 DEM + 矢量特征模式）：
+地图系统采用 **CVT 网格 + 派生栅格** 架构（参考 [QGIS](https://qgis.org/) 的矢量 + 栅格分工）：
 
-- **栅格高度图**（Raster）：4096×2048 像素的 16-bit PNG，作为核心可编辑数据和视觉渲染底图
-- **Voronoi 网络**（Vector）：~10 万（100k）个 cell 的语义分组，用于板块划分、省份管理、引擎模拟计算
+- **球面 CVT 网格**（Vector，一等公民）：标准 20 万（200k）个 cell 的不规则网格，
+  是地图的存储格式与模拟载体——板块划分、地形合成、气候/水文模拟全部在 cell 上完成
+- **栅格图层**（Raster，派生导出）：4096×2048 像素，由 CVT 网格导出，
+  作为前端渲染纹理与外部工具（Gaea 等）的交换格式
 
 ```
-栅格高度图 (编辑 + 渲染)          ← 参考 Paradox 的 heightmap 方法
-        │ 采样
-Voronoi 网络 (语义分组)           ← 参考 Azgaar 的 Voronoi cell 方法
+球面 CVT 网格 (存储 + 模拟)         ← 参考 Azgaar 的 Voronoi cell 方法
+        │ 导出
+栅格图层 (渲染 + 外部交换)           ← 参考 Paradox 的 heightmap 方法
         │ 聚合
-区域特征 (板块、省份、大陆)        ← 参考 Paradox 的 province/state 系统
+区域特征 (板块、省份、大陆)          ← 参考 Paradox 的 province/state 系统
 ```
 
-**为什么选栅格而非纯 Voronoi？**
-- 栅格编辑直观（画笔工具），WebGPU 渲染高效且兼容性好
-- Voronoi 语义丰富但编辑复杂，两者互补
+**为什么 CVT 网格是一等公民？**
+- 栅格缺少拓扑信息（不知道"山脊"和"河谷"的区别）；CVT cells 有邻接关系，
+  可分组为板块、省份，天然支持文明层和引擎模拟
+- 逐 cell 计算比逐像素计算快约 40 倍（200k cells vs ~800 万像素）
+- 全部模拟（构造、水文、气候）在球面网格上进行，无投影畸变
 
-**为什么选 Voronoi 而非纯栅格？**
-- 栅格缺少拓扑信息（不知道"山脊"和"河谷"的区别）
-- Voronoi cells 可分组为板块、省份，天然支持文明层和引擎模拟
-- 逐 cell 计算比逐像素计算快约 80 倍（100k cells vs ~800 万像素）
+**为什么仍要栅格导出？**
+- 栅格纹理渲染高效（GPU 直贴），且是与外部地形工具交换数据的通用格式
+- 外部高度图（Gaea 输出）可反向导入，重采样回 CVT 网格
 
 ## 核心设计决策
 
@@ -59,20 +67,15 @@ Voronoi 网络 (语义分组)           ← 参考 Azgaar 的 Voronoi cell 方�
 
 - **WebGPU**（Three.js `WebGPURenderer`）渲染：CPU 预烘焙纹理 + GPU slot-based 合成
   - 底图/专题/填充/特征四个槽位依次合成，opacity 控制为 GPU uniform（零重烘）
-  - 半分辨率 cell 贴图（~4 px/cell），NearestFilter 保持锐利边缘
+  - 全分辨率 cell 贴图（~8 px/cell），NearestFilter 保持锐利边缘
   - WebGPU 在 Windows 上使用 D3D12 后端，不受 ANGLE/D3D11 bug 影响
 - **SVG 叠加**渲染矢量特征（洋流箭头）：DOM 层，任意缩放清晰
 - **槽位分离**：slot-based 架构确保互斥层不会同时激活
 
-> **架构变更说明**（2026-06）：
-> 1. 原方案使用 Three.js (R3F) + 自定义 GLSL shader。在 AMD 集显 + Windows ANGLE/D3D11
->    环境下，所有顶点属性（`uv`、`position`）在 mesh 覆盖大面积视口时无法正确插值，
->    导致纹理采样失效。
-> 2. 临时回退到 Canvas 2D + CSS 定位方案，功能正常但无 GPU 加速。
-> 3. 最终采用 WebGPU 方案：Three.js `WebGPURenderer` 使用 D3D12 后端，完全绕过
->    ANGLE/D3D11 bug。CPU 预渲染地形纹理，GPU 负责显示。
->    山体阴影烘焙在纹理中（固定强度 0.7），实时 hillshade 需要 GPU shader 支持。
->    实验过程记录在 `experiment/gpu-terrain-shader` 分支。
+> **WebGPU 方案的技术动机**：Three.js `WebGPURenderer` 在 Windows 上使用 D3D12 后端，
+> 绕过 AMD 集显 + ANGLE/D3D11 的顶点属性插值 bug（大视口 mesh 上 `uv`/`position`
+> 无法正确插值，导致 WebGL 自定义 shader 纹理采样失效）。CPU 预渲染地形纹理，
+> GPU 负责显示；山体阴影烘焙在纹理中（固定强度 0.7）。
 
 ### 交互：圆柱投影平移 + 缩放
 
@@ -89,7 +92,7 @@ Voronoi 网络 (语义分组)           ← 参考 Azgaar 的 Voronoi cell 方�
 - 水平方向：无限制，圆柱投影无缝环绕
 - 垂直方向：限制在地图边界内（`maxPanY = (planeH × zoom - viewH) / 2`）
 
-**圆柱投影无缝环绕实现**（2026-06）：
+**圆柱投影无缝环绕实现**：
 
 地形层使用 **Ghost Mesh** 方案：在主 mesh 左右各放置一个相同的 mesh（偏移 ±worldW），当用户平移超出地图一侧时，ghost mesh 从另一侧进入视口，实现视觉无缝。只需 3 个 mesh（main + 2 ghosts），GPU 开销极低。
 
@@ -157,7 +160,7 @@ maps/
 ├── <planet_id>/
 │   ├── map.yaml              # 元数据
 │   ├── cvt_mesh.json         # CVT 网格（gzip 压缩）
-│   ├── elevation.png         # 高度图（git-lfs 管理）
+│   ├── elevation.png         # 高度图
 │   ├── plates.json           # 板块分组
 │   ├── features.json         # 河流矢量图层
 │   ├── temperature.png       # 气候温度图层
@@ -166,7 +169,9 @@ maps/
 └── branches/<name>/maps/<planet_id>/   # 分支地图（覆盖主地图）
 ```
 
-> **注意**：PNG 高度图使用 git-lfs 管理（`.gitattributes` 中配置 `*.png filter=lfs`）。
+> **产物管理**：`maps/` 与 `layers/*/derived/` 是「input + 代码 + seed」的确定性构建产物，
+> 不入 git、不走 LFS（`.gitignore` 已忽略）；发版由 `scripts/release/publish_world_data.py`
+> 打包上传到 GitHub Releases 的 `worlds-data` tag。
 
 ## 后端模块
 
@@ -187,9 +192,10 @@ maps/
 | GET | `/api/worlds/{w}/maps/{p}/meta` | 地图元数据 |
 | GET | `/api/worlds/{w}/maps/{p}/elevation` | 高度图 PNG |
 | GET | `/api/worlds/{w}/maps/{p}/cvt-mesh` | CVT 网格（`fmt=json|msgpack`） |
+| GET | `/api/worlds/{w}/maps/{p}/climate-monthly` | 月度气候数据（MessagePack：温度/降水/气压/风场） |
 | GET | `/api/worlds/{w}/maps/{p}/voronoi` | Voronoi 网络 JSON |
 | GET | `/api/worlds/{w}/maps/{p}/plates` | 板块分组 JSON |
-| GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON（预留） |
+| GET | `/api/worlds/{w}/maps/{p}/features` | 特征 JSON（河流矢量图层） |
 | POST | `/api/worlds/{w}/maps/{p}/elevation` | 上传原始高度数组 |
 | POST | `/api/worlds/{w}/maps/{p}/import-elevation` | 从文件导入高度图 |
 | POST | `/api/worlds/{w}/maps/{p}/voronoi` | 更新 Voronoi 网络 |
@@ -206,26 +212,30 @@ maps/
 > **参考**：[Azgaar](https://azgaar.github.io/Fantasy-Map-Generator/) 的全屏编辑器 UI
 
 - `/worlds/:worldName` — 世界详情页，概览 tab 中有地图预览卡片
-- `/worlds/:worldName/map` — 独立全页地图编辑器
-- `/worlds/:worldName/map/:planetId` — 指定行星的地图编辑器
+- `/worlds/:worldName/map` — 独立全页地图查看器
+- `/worlds/:worldName/map/:planetId` — 指定行星的地图查看器
+- `/worlds/:worldName/globe/:planetId` — 3D 球面查看器
 
 ### 渲染技术
 
 > **参考**：[Paradox](https://www.paradoxinteractive.com/) 的 terrain rendering；[Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 SVG overlay 系统
 
-- **地形渲染**：`useTerrainTexture` hook 预渲染到 OffscreenCanvas → `CanvasTexture`
+- **地形渲染**：`layerBakes.ts` CPU 预烘焙各图层纹理（全分辨率 cell 贴图）→
+  `useGPUTerrain` GPU 槽位合成（底图/专题/填充/特征，opacity 为 uniform）
   - 海拔→颜色映射（hypsometric tint，参考 GIS 标准色表）
   - 山体阴影（hillshading，CPU 计算梯度 + 模拟西北 45° 光源，固定强度 0.7）
   - 水面深度暗化
   - 由 `WebGPURenderer` + `MeshBasicMaterial` 在 GPU 上显示
   - 缩放/平移通过调整 Three.js 相机和 mesh 位置实现
+  - Mollweide/Robinson 的 CPU 重投影调试路径走 `useTerrainTexture`
+    （OffscreenCanvas → CanvasTexture，见下节）
 - **矢量叠加**：SVG 层覆盖在地形 Canvas 上
-  - Voronoi cells（圆圈 + hover 高亮，参考 Azgaar 的 cell 交互）
-  - 板块边界（红色线段，跳过跨反子午线的边避免横跨全图的线）
-  - 河流/山脊（polyline）
+  - 经纬网（按当前投影实时绘制）
+  - 单元格高亮（蓝=悬停 / 黄=选中，三投影行为一致）
+  - 板块边界、地壳类型、河流等特征层烘焙进纹理（特征槽位，见「图层系统」）
 - **鸟瞰图**：`MapMinimap` 组件，Canvas 2D 缩略图 + SVG 视口矩形
 
-### 多投影渲染与调试路径（v0.12.0）
+### 多投影渲染与调试路径
 
 2D 地图支持三种投影：**等距圆柱**（Plate Carrée）、**Mollweide**、**Robinson**。
 
@@ -275,12 +285,13 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 | 槽位 | 选择 | 语义 | 示例 |
 |------|------|------|------|
 | **底图** (base) | 恰好 1 个（radio） | 不透明画布 | 地形、海陆 |
-| **专题着色** (thematic) | 0 或 1 个（radio） | 全表面着色，alpha 叠在底图上 | Köppen、Whittaker 群系、NPP、文明摇篮 |
+| **专题着色** (thematic) | 0 或 1 个（radio） | 全表面着色，alpha 叠在底图上 | Köppen、温度、降水、气压、Whittaker 群系、NPP、宜居/农业、诊断偏差层 |
 | **分类填充** (fill) | 0–N（多选叠加） | 半透明 cell 着色 | 板块 |
-| **特征标注** (feature) | 0–N（多选叠加，永远置顶） | 线/箭头/高亮 | 地壳边界、洋流 |
+| **特征标注** (feature) | 0–N（多选叠加，永远置顶） | 线/箭头/高亮 | 地壳边界、洋流、风场、海岸线、河流、风/洋流偏差箭头 |
 
-UI 组织为四个面板组：**底图** / **专题着色** / **地质构造** / **叠加标注**。
-专题着色组内四个选项互斥（radio）——这与 Azgaar 的 Style 下拉和 P 社的 map mode 切换逻辑一致，
+UI 按学科组织为五个面板组：**地形** / **气候** / **生态** / **文明** / **开发**
+（开发组为诊断偏差层，仅开发者模式 + Earth 世界显示）。专题着色槽内选项互斥（radio）——
+这与 Azgaar 的 Style 下拉和 P 社的 map mode 切换逻辑一致，
 用户一次只能看到一个"地图模式"，不会出现两个全表面涂色叠加导致的视觉混乱。
 
 ## 使用流程
@@ -293,48 +304,49 @@ UI 组织为四个面板组：**底图** / **专题着色** / **地质构造** /
 
 **方式 A：从外部工具导入（推荐）**
 
-在 Gaea 等外部工具中设计地形，导出 16-bit TIFF，然后在地图编辑器中点击「📥 导入高度图」。
+在 Gaea 等外部工具中设计地形，导出 16-bit TIFF，然后在地图查看器中点击「📥 导入高度图」
+（`ImportElevationButton`，上传至 `/import-elevation` 端点，重采样回 CVT 网格）。
 
 **方式 B：程序化生成（快速原型）**
 
-进入地图编辑器 → 点击「🌍 生成地形」，后端使用多频率高斯噪声生成基础海陆分布 + Voronoi + 板块。
+通过 CLI（`dreamulator terrain` / `dreamulator build`）或 `POST /generate` 端点运行
+CVT 管线：CVT 网格 → 板块剖分 → 边界检测 → 地形合成 → 导出（算法细节见
+[geological-pipeline.md](geological-pipeline.md)）。
 
 ### 查看地图
 
-- 左侧面板中切换着色模式（地形/海拔/海陆/坡度）
-- 开关矢量叠加层（Voronoi 网格、板块边界、河流/山脊）
-- 悬停 Voronoi 单元格查看属性（经纬度、海拔、板块等）
+- 左侧面板中切换专题图层（地形/海陆/Köppen/温度/降水/气压/群系/NPP/宜居/农业等）
+  与叠加层（洋流、风场、板块、地壳边界、海岸线、河流）
+- 月度模式下温度/降水/气压/风场图层切换为当月值
+- 悬停单元格查看属性（经纬度、海拔、气候、板块等），右侧单元格面板按学科分组展示
 
 ## 分支继承
 
 地图数据支持分支系统：
 
 - 在 `geological` 层分叉的分支可以继承或覆盖父世界的地图
-- 分支的地图修改存储在 `branches/<name>/layers/geological/input/maps/` 下
+- 分支的地图数据存储在 `branches/<name>/maps/<planet_id>/` 下，覆盖主地图
 - 使用 `LayerResolver` 沿继承链查找有效数据
 
-## 后续阶段
+## 已实现能力与后续方向
 
 > 完整路线图详见 [`docs/design/roadmap.md`](../roadmap.md)。
 
-### 已完成（v0.5.0）
+**已实现能力**：
 
-- ✅ **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls
-- ✅ **缩小过渡特效** — 类似《戴森球计划》的球面→恒星系过渡
-- ✅ **行星纹理（路线 C）** — 恒星系中有地图的行星显示真实地形纹理
-- ✅ **多投影 2D 地图** — 等距圆柱（GPU 纹理）/ Mollweide / Robinson（CPU 重投影）+ 经纬线网格
+- **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls
+- **缩小过渡特效** — 类似《戴森球计划》的球面→恒星系过渡
+- **行星纹理** — 恒星系中有地图的行星显示真实地形纹理
+- **多投影 2D 地图** — 等距圆柱（GPU 纹理直贴）/ Mollweide / Robinson（GPU 逆 warp shader，`gpuReproject.ts`）+ 经纬线网格
+- **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
+- **CPU 重投影调试路径** — `?reproject=cpu` 保留为 A/B 对照（见上文"多投影渲染与调试路径"）
+- **SVG 单元格高亮 + 经纬网** — 三投影统一叠加层
+- **气候图层与月度模式** — 温度/降水/气压/Köppen 专题层 + 月度切换（`climate-monthly` 端点）
+- **河流矢量图层** — features.json 渲染外流河与内流河
+- **偏差诊断图层** — ΔT/ΔP/ΔSLP 热力层 + 风/洋流偏差箭头（开发组，devMode + Earth）
 
-### 已完成（v0.12.0）
+**后续方向**：
 
-- ✅ **Mollweide / Robinson GPU 重投影** — 从 CPU 逐像素重投影改为 GPU 逆 warp shader（`gpuReproject.ts`）
-- ✅ **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
-- ✅ **SVG 单元格高亮 + 经纬网** — 三投影统一叠加层，经纬网为干净投影曲线
-- ✅ **CPU 重投影调试路径** — `?reproject=cpu` 保留为 A/B 对照（见上文"多投影渲染与调试路径"）
-
-### 计划中
-
-- [ ] **气候与流体引擎**（Phase 3A）— 能量平衡模型、大气环流、地形雨影、洋流
-- [ ] **侵蚀与河流生成**（Phase 3B）— D8 流向、水力侵蚀、沉积物搬运
-- [ ] **文明半格式化管理**（Phase 3C）— Entities+Modifiers → Event Stream → LLM 编译 Wiki
-- [ ] **分支差异可视化**（Phase 3D）— DAG 影响半径、混沌预警
-- [ ] **LLM 叙事引擎**（Phase 3E）— 结构化数据 → 史诗叙事
+- **文明半格式化管理**（Phase 3C）— Entities+Modifiers → Event Stream → LLM 编译 Wiki（[civilization-layer.md](../proposals/civilization-layer.md)）
+- **分支差异可视化**（Phase 3D）— DAG 影响半径、混沌预警
+- **LLM 叙事引擎**（Phase 3E）— 结构化数据 → 史诗叙事

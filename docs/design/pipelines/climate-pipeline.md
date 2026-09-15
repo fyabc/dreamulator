@@ -100,7 +100,7 @@
 
 解 `0 = D∇²T + Q(φ)(1−α) − (A+BT)`，Legendre 谱法。$A$ 内部标定使全球均温锚定
 equilibrium+greenhouse 链。参数 `ebm_olr_b_wm2k`（B=2）、`ebm_diffusion_wm2k`（D=0.35）。
-陆地用 `ebm_diffusion_land_wm2k`（D=0.2，仅大气输送）产生**大陆度**（海陆年均对比）。
+陆地用 `ebm_diffusion_land_wm2k`（D=0.28，仅大气输送）产生**大陆度**（海陆年均对比）。
 
 #### 季节温度：`monthly_temperature`
 
@@ -112,7 +112,7 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
 
 **入口**：`simulate_climate(mesh: CVTMesh, config: TerrainPipelineConfig, debug: dict[str, np.ndarray] | None = None) -> dict[str, float]`
 
-**执行流程**（六步：温度 → 风场 → 洋流 → 降水 → Köppen → 写回）：
+**执行流程**（温度 → 风场 → 洋流 → 降水 → 下沉增温释放 → Köppen → 写回）：
 
 ```
 1. 提取 CVT mesh → numpy 数组（elevation / lat / land-ocean mask / 3D 节点）
@@ -121,7 +121,7 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
    ├─ ebm_1d=true:
    │   ├─ hadley_extent_deg ≥ 90: solve_held_hou_temperature（单圈 Held-Hou 慢自转）
    │   └─ 否则: solve_1d_ebm_temperature(D_land) → 陆地温度（大陆度）
-   │   ebm_1d=false: legacy sin² + 图扩散（见 §6）
+   │   ebm_1d=false: legacy sin² + 图扩散（见 §6；earth/nacrea 均已切 ebm_1d=true）
    ├─ ice_albedo_feedback（年均，若开启）
    ├─ _ocean_surface_temperature（海洋 SST，地球剖面锚定）
    ├─ 沿海调节（coastal moderation：海平面陆地温度向最近海洋 SST 混合，自动冰感知）
@@ -131,13 +131,15 @@ $B_{eff} = B + 6D$（显式热输送的四极模阻尼，取代旧标定常数�
    └─ compute_seasonal_climate → t_monthly / t_cold / t_hot / p_factor / itcz_lat
 4. Stage 2: 风场
    ├─ hadley_cell_wind（三圈环流 + 地形阻挡，12 个 ITCZ 位置平均 = 年均背景风）
-   ├─ （地转风分量已移除，见 §2.4 末；大尺度风场 = 纯三圈环流）
+   ├─ 大尺度风场 = 纯三圈环流（无地转风分量）
    ├─ 跨赤道季风西风带（cross_equatorial_monsoon_wind，随 ITCZ 逐月，§2.4）
    └─ 季风异常：月度气压异常（§2.4）→ 边界层动量平衡 → 12 个月度风场
 5. Stage 3: 洋流（Stommel 环流 + SST 平流 + 涌升）
 6. Stage 4: 降水（_compute_precipitation_monthly_budget，见 §2.4）
-7. Stage 5: Köppen 分类（koppen_classify）
-8. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值 / distance_to_coast_km）
+7. Stage 3.5: 下沉增温的干旱度门控释放（subsidence_aridity_gate：Stage 1 存档的
+   Held-Hou 均质化增量，只在水汽/PET 双判据判定湿润的低地释放；高地 ≥1.5 km 恒保留）
+8. Stage 5: Köppen 分类（koppen_classify）
+9. 写回 mesh.cells（temperature_C / precipitation_mm / koppen_class / 月度极值 / distance_to_coast_km）
 ```
 
 ### 2.4 降水：`_compute_precipitation_monthly_budget` — 逐月质量守恒水汽收支
@@ -151,9 +153,8 @@ energy_balance.md §8），**逐月求解 12 次**（月度风场 + 月度温度
 k_rain(x) = (1/τ)·(1 + _storm_enhance(x))
 ```
 
-迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ≈3.75e5 m²/s，从 1e6 下调以
-抑制海洋→陆地的过度扩散湿润，见 §6 标定；代价是 ITCZ 更集中，属已知待办）+ 直接稀疏 LU
-求解。**质量守恒逐月由构造保证**（ΣP = ΣE，任意 `k_rain(x)` 场都成立），年总量因而也守恒；
+迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ 为 config 字段
+`moisture_diffusivity_m2s`，默认 1e6 m²/s）+ 直接稀疏 LU 求解。**质量守恒逐月由构造保证**（ΣP = ΣE，任意 `k_rain(x)` 场都成立），年总量因而也守恒；
 ITCZ / 副热带干带从风场自然涌现。月度降水直接来自逐月预算——旧的「年均降水 × ITCZ
 高斯因子」再分配已删除，Köppen 第三字母（s/w/f）用的是真实月度值。
 
@@ -166,7 +167,7 @@ Stage 2 的年均场（**纯三圈环流**，含 12 个 ITCZ 位置平均），�
 工作（技术债 24），v1 不含——但跨赤道西风带（`cross_equatorial_monsoon_wind`，量级
 ε·Ωa·sin(φ_itcz_max)，随 ITCZ 逐月）是**保留逐月的唯一胞圈项**：在跨赤道带内**只替换
 背景纬向风**为西风（保留背景经向辐合结构），不动经向辐合结构，故不重演技术债 24 的
-「扫掠雨带」（经向支 + 季风槽北移已否证，见 §2.4 末）。季风异常由海陆热力对比驱动
+「扫掠雨带」（经向支 + 季风槽北移已否证，见 [climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §5 已否证清单）。季风异常由海陆热力对比驱动
 （技术债 23），物理链条：
 
 1. **纬向平均基准**（`zonal_mean_monthly`）：逐月、按符号纬度带（5°）求纬向平均温度。
@@ -358,7 +359,7 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 
 ## 6. 已知限制与调优方向
 
-### 当前状态（2026-08）
+### 当前状态
 
 | 机制 | 状态 |
 |------|------|
@@ -376,20 +377,19 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 | 海岸不对称 | Step 6.6 逐 cell 启发式（向岸/离岸风系数） | 涌升 + 向岸水汽平流 | `_compute_precipitation_monthly_budget` |
 | 南半球 SST 过暖 | `_ocean_surface_temperature` 南半球偏暖 +4~+10°C | 独立标定 | `_ocean_surface_temperature` |
 | 三圈环流边界 | Hadley 30° / Ferrel 60° 可配置 | Held-Hou 标度 φ_H ∝ (gHΔθ)^½/(Ωa)^½ 行星化 | `hadley_cell_wind` |
-| nacrea 回归 | nacrea 仍走 `ebm_1d=false` legacy 路径 | flip `ebm_1d: true` 后回归验证（计划 §六 #1） | `nacrea/terrain_config.yaml` |
 
 ### 地球标定的方案常数（影响异星保真度）
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `ebm_diffusion_wm2k` | 0.35 | 总经向热输送 D，Earth ΔT≈41°C 标定 |
-| `ebm_diffusion_land_wm2k` | 0.2 | 陆地（大气）输送，≈0.6×总输送 |
+| `ebm_diffusion_land_wm2k` | 0.28 | 陆地（大气）输送，≈0.8×总输送 |
+| `moisture_diffusivity_m2s` | 1e6 | 柱水汽湍流扩散 κ，§5 大标定轮标定 |
 | `storm_track_amplitude_mm` | 900.0 | 斜压风暴路径幅度 |
 | `evaporation_base_mm` | 1000.0 | 15 °C 洋面年蒸发基准（能量限制 ~3%/°C） |
 
-> 水汽收支的物理常数在代码内（非 config）：驻留时间 τ≈9 天（`_MOISTURE_RESIDENCE_DAYS`）、
-> 湍流扩散 κ≈3.75e5 m²/s（`_MOISTURE_DIFFUSIVITY_M2S`，从 1e6 下调以抑制海洋→陆地过度
-> 扩散湿润）、陆地蒸散基准因子 ≈0.55（`_LAND_EVAPOTRANSPIRATION_FRACTION`，Budyko 再循环
+> 其余水汽收支物理常数在代码内（非 config）：驻留时间 τ≈9 天（`_MOISTURE_RESIDENCE_DAYS`）、
+> 陆地蒸散基准因子 ≈0.55（`_LAND_EVAPOTRANSPIRATION_FRACTION`，Budyko 再循环
 > 首轮初值）+ Budyko 再循环参数（`_LAND_RECYCLING_*`）。它们所有世界共享。
 
 ---

@@ -19,7 +19,7 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 | 1 | **ETOPO1** 高程 | NOAA NGDC | Public domain | `import_earth_elevation.py` | `elevation` |
 | 2 | **PB2002** 板块 | Bird 2003 (doi:10.1029/2001GC000252) | ODC-BY | `import_earth_tectonics.py` | `plate_id`、`crust_type`、`boundary_type` |
 | 3 | **GSHHG** 水掩膜 | Wessel & Smith 1996 | LGPL-3 | `import_earth_watermask.py` | `water_class` |
-| 4 | **NCEP/GPCP/Beck** 气候 | NOAA PSL / figshare | 见下 | `import_earth_climate.py` | `koppen_class`、`temperature_C`、`precipitation_mm`、月均 msgpack |
+| 4 | **NCEP/GPCP/Beck/SODA** 气候 | NOAA PSL / figshare / APDRC | 见下 | `import_earth_climate.py` | `koppen_class`、`temperature_C`、`precipitation_mm`、`ocean_current_east/north_m_s`、月均 msgpack |
 
 前三个缓存到系统临时目录（`tempfile.gettempdir()` 下的 `dreamulator_*`），气候观测数据
 放在 `private/tmp/climatology/`（gitignored），均可重下载。
@@ -64,26 +64,34 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 - **纯函数**：`water_bodies.py`（`read_shp_polygons`、`points_in_rings`、`rings_area_km2`、
   `classify_ocean_land`）。
 
-### 2.4 NCEP/GPCP/Beck 气候观测（`import_earth_climate.py`）
+### 2.4 NCEP/GPCP/Beck 气候观测 + SODA 洋流（`import_earth_climate.py`）
 
 - **Köppen**：Beck et al. (2018) Present Köppen-Geiger，5 arc-min
   （`https://doi.org/10.1038/sdata.2018.214`，figshare 下载，CC-BY）。
 - **温度**：NCEP/NCAR Reanalysis 1 `air.mon.ltm.nc`（2.5° 月均气候态，NOAA PSL）。
 - **降水**：GPCP v2.3 `precip.mon.mean.nc`（2.5° 月均，NOAA PSL，需算 12 月气候态）。
 - **海平面气压**：NCEP/NCAR Reanalysis 1 `slp.mon.ltm.nc`（2.5° 月均，NOAA PSL）。
+- **洋流**：SODA v3.15.2（Carton et al. 2018, doi:10.1175/JCLI-D-18-0149.1）表层（~5 m）
+  月均气候态 1993–2022，逐 cell 年均（`soda_currents_mon_clim.nc`，由
+  `scripts/earth/download_validation_data.py` 从 APDRC OPeNDAP 构建）。SODA 文件缺失时
+  回退到引擎 Stommel 正压求解器（以导入的 NCEP 风驱动——此时 earth 与生成世界同源，
+  是模拟值而非观测值）。
 
-**流程**：四个观测数据采样到 cell 中心（Beck 最近邻、NCEP/GPCP/SLP 双线性）→ 写
+**流程**：观测数据采样到 cell 中心（Beck 最近邻、NCEP/GPCP/SLP/SODA 双线性）→ 写
 `cvt_mesh.json` 的 per-cell 字段（`koppen_class`/`temperature_C`/`precipitation_mm`/
-`temperature_hottest/coldest_month_C`/`wind_east/north_m_s`/`distance_to_coast_km`）+
-`climate_monthly.msgpack`（`t_monthly`/`p_monthly`/`pressure_monthly`，量化 int16，与
-`export._quantize_int16` 同格式，月份按 3 月春分起排序）→ 次要导出
+`temperature_hottest/coldest_month_C`/`wind_east/north_m_s`/`ocean_current_east/north_m_s`/
+`distance_to_coast_km`）+ `climate_monthly.msgpack`（`t_monthly`/`p_monthly`/`pressure_monthly`，
+量化 int16，与 `export._quantize_int16` 同格式，月份按 3 月春分起排序）→ 次要导出
 （`koppen.json`/`temperature.png`/`precipitation.png`/`climate_metadata.json`）。
 
 > 派生字段来源：最热/最冷月 = NCEP 月均 max/min；距岸距离 = `_graph_distance_to_coast`
 > （`water_class` 图 Dijkstra）；风 = NCEP `uwnd/vwnd.mon.ltm.nc` 年均。
 > **风是 sigma 0.995（~40m）近地面风**，比 10m 风系统偏弱 ~2–3 倍（NCEP derived surface
-> 无 10m 风）；量级仅供参考，方向正确。SST 异常 / 洋流是引擎模拟专属，真实观测无此概念，
-> 保持 None。
+> 无 10m 风）；量级仅供参考，方向正确。`sst_anomaly_c` 无对应观测场，保持 None
+> （前端洋流箭头渲染为中性色）。
+
+> 实现在 `src/dreamulator/import_earth_climate.py`（供 `publish_world_data.py` 复用）；
+> `scripts/earth/import_earth_climate.py` 是薄壳 CLI 入口。
 
 > **earth 基础世界从不 build 气候**：它的气候字段是**真实观测**，不是引擎模拟。验证时用它
 > 作 ground truth 去对比 nacrea 等生成世界的模拟精度（见 climate-validation.md）。
@@ -122,6 +130,7 @@ uv run python scripts/earth/import_earth_climate.py \
 | `plate_id` / `crust_type` / `boundary_type` | PB2002 | 真实板块 / 地壳 / 边界类型 |
 | `water_class` | GSHHG | `"ocean"` / `"land"`（权威海陆判据，供气候+前端渲染） |
 | `koppen_class` / `temperature_C` / `precipitation_mm` | NCEP/GPCP/Beck | 真实气候（年均温度 / 年降水 / Köppen） |
+| `ocean_current_east_m_s` / `ocean_current_north_m_s` | SODA | 真实洋流（年均东/北分量，m/s） |
 
 `water_class` 是**权威海陆判据**，替换了 `elevation >= 0` 符号判定。前端
 （`layerBakes.ts`、`MapCellInspector.tsx` 等）用 `water_class` 决定蓝/绿着色；

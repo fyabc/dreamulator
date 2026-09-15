@@ -26,6 +26,7 @@
 - `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
 - `climate-pipeline.md` — 气候层 pipeline（温度/降水/Köppen 实现架构与参数）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
+- `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
 
 ### proposals/ — 设计提案 + 方法论
 
