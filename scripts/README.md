@@ -1,11 +1,11 @@
 # scripts/ 目录说明
 
-按域分组，共 48 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 44 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（28 个）
+## climate/ — 气候验证与诊断（24 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -13,8 +13,8 @@
 - `station_diagnostics.py`、`diagnose_monsoon_regional.py` — 26 基准站 / 8 季风区逐月对照
   （**读构建产物，秒级**；先 `dreamulator build --only climate` 再跑）。
 - `diagnose_*.py` — 各攻关项专用诊断（Köppen 混淆/空间、纬向剖面、降水预算、风场散度、
-  气压异常、雨影、冬季风/冬季气压、大陆度与干燥度扫掠、海洋平流、季节分解、副热带高压等；
-  多数**重跑模拟**，~5 min/个，注意 `--world-dir data/worlds`）。
+  雨影、大陆度与干燥度扫掠、海洋平流、季节分解等；多数**重跑模拟**，~5 min/个，
+  注意 `--world-dir data/worlds`）。
 - `climate_diff.py` — 两次构建的差异对比（全局摘要 + 纬度带平均 + Top-N 变化细胞）。
 - `convert_koppen_map.py` — Beck Köppen GeoTIFF → 网格观测参考。
 - `detect_ocean_bottlenecks.py` — 海盆连通瓶颈探测（洋流求解上下文）。

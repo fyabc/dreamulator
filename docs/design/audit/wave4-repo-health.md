@@ -105,6 +105,7 @@ layer-control-model 全部被 roadmap 吸收或自带状态标注，**无一需�
 | D3 | `frontend/src/pages/WorldInfo.tsx` | `App.tsx:36` 已把路由重定向到 /worlds；共享件已抽到 LayerDag/StarfieldBackground |
 | D4 | `pyproject.toml:22` 运行时依赖 `jsonschema>=4.23` | 全库零 `import jsonschema` |
 | D5 | `VoronoiCell.moisture` 字段（`models.py:335`，注释自标 legacy） | 全库零消费方 |
+| D6 | `tectonic_simulator.py` 的 `_classify_step_boundaries`（68 行）/ `_spawn_oceanic_crust`（99 行）/ `_consume_small_plates`（106 行） | 全库零调用点（pipelines 重写 fork 顺带发现，2026-09-16 删除）——是全威尔逊循环的**写好未接线**实现；§14 未实现设计余量仍有完整设计描述，重启时对照当时代码重推导 |
 
 ### stale 标记/注释待清【已修复 2026-09-15】
 
@@ -113,7 +114,7 @@ layer-control-model 全部被 roadmap 吸收或自带状态标注，**无一需�
 - S3 `models.py:640`「flow_accumulation — TODO」过期（river_generator 已实现）。
 - S4 `scripts/README.md:3`「43 个脚本」实际 48；climate 组「25 个」实际 28。
 
-### stale 脚本（方法论已被 B0b「逐月契约」取代）【待裁决：删 / 重写 / 标 archived】
+### stale 脚本（方法论已被 B0b「逐月契约」取代）【已删除 2026-09-16：改写价值评估后全部删除】
 
 - O1 `scripts/climate/diagnose_pressure_anomaly.py`——确认 stale（年平地转风方法），替代 = `diagnose_monsoon_dp_shape.py`。
 - O2 `scripts/climate/diagnose_subtropical_high.py`、O3 `scripts/climate/diagnose_winter_pressure.py`——同族前提（annual-mean contrast dropped），方法与结论需重估；`diagnose_winter_monsoon.py` 与 O3 配套复核。
@@ -122,5 +123,5 @@ layer-control-model 全部被 roadmap 吸收或自带状态标注，**无一需�
 ### schemas/ 与杂项
 
 - `schemas/` 9 个 .schema.json 当前未漂移（SCHEMA_MODELS 覆盖的 models 最后提交同为 08-23）但**无同步机制**（CI 无新鲜度检查）；`map/models.py` 不在覆盖范围；库内无消费方（定位 = LLM/外部作者参考）。待裁决：CI 新鲜度检查 or 移除。
-- `perf-dashboard` 分支（benchmarks.yml 的 dashboard 数据分支，08-04 起 3 提交）从未合并 main——待裁决。
+- `perf-dashboard` 分支（benchmarks.yml 的 dashboard 数据分支）——**裁决保留**（2026-09-16）。
 - 健康面：后端 100 个 py 模块零孤儿；前端零 FIXME/TODO；66 个后端端点全部有消费（无 API 错位）；可选依赖组全部在用；`scripts/climate/validate_climate.py` 是**有意薄壳委托**（实现在 `src/dreamulator/validate_climate.py`，非双份）；`stationary_wave.py` 按既定「默认关但保留」遗产处理。

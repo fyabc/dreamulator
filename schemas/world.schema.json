@@ -281,6 +281,50 @@
           "description": "Geometric albedo",
           "title": "Albedo"
         },
+        "j2": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Gravitational quadrupole J2 (host planets)",
+          "title": "J2"
+        },
+        "k2_over_q": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tidal Love number over quality factor k₂/Q",
+          "title": "K2 Over Q"
+        },
+        "c_over_mr2": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 0.4,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Principal moment of inertia coefficient C/MR² (uniform sphere 0.4)",
+          "title": "C Over Mr2"
+        },
         "surface": {
           "anyOf": [
             {

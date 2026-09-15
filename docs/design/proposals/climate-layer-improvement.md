@@ -713,9 +713,12 @@ g(W)/keep/_dt_subsidence 证伪，Stage C）、`climate_diff`（A/B 对比）。
 **逐格 obs 对齐（delta 图层后端，roadmap line156 提级）**：`generate_climate_obs`
 （committed 生成器——NCEP T/SLP/风 + GPCP P 逐格采样进 `climate_obs.json`，mesh-bound
 记 seed+mesh_path，替代旧无生成器的 ad-hoc 版）+ `diagnose_climate_bias`（逐格 model−obs
-delta 排序：T/P/风/Köppen 的 global+zonal+region+top 离群）。`diagnose_pressure_anomaly`
-（旧 7-②）= 镜像时代 `we=-we` 残留 + 已废年平地转风方法，被 `diagnose_monsoon_dp_shape`
-取代，待清理。**月份口径陷阱**：模型 month 0 = 三月（春分），NCEP/obs month 0 = 一月——
+delta 排序：T/P/风/Köppen 的 global+zonal+region+top 离群）。年平地转风方法的旧诊断
+（`diagnose_pressure_anomaly` / `diagnose_subtropical_high` / `diagnose_winter_pressure` /
+`diagnose_winter_monsoon`）随 B0b 月度契约确立已删除——区域对标统一走
+`diagnose_monsoon_dp_shape`（含西伯利亚 1 月框），站点逐月风向走 `station_diagnostics`；
+副高带（20–40°）SLP 纬向 std 与空间相关若需复查，作为 `diagnose_monsoon_dp_shape` 的
+小扩展添加，不另立脚本。**月份口径陷阱**：模型 month 0 = 三月（春分），NCEP/obs month 0 = 一月——
 逐月对标须 `(model_m + 2) % 12` 映射，否则读肩季（pre-flight 踩坑，见 §2 已否证）；
 **年平口径天然免疫**（mean/sum 与月序无关），故 delta 后端选年平先行。
 
