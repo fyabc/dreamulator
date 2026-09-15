@@ -311,9 +311,7 @@ class TestCrossEquatorialMonsoonWind:
         n = len(lat)
         nodes = _sphere_points(lat, np.zeros(n))
         bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=itcz)
-        sw = cross_equatorial_monsoon_wind(
-            np.radians(lat), nodes, itcz, 6371.0, 1.0, itcz_max, bg
-        )
+        sw = cross_equatorial_monsoon_wind(np.radians(lat), nodes, itcz, 6371.0, 1.0, itcz_max, bg)
         return bg + sw  # net wind = background + westerly (replacement)
 
     def test_nh_summer_westerly(self):
@@ -340,9 +338,7 @@ class TestCrossEquatorialMonsoonWind:
         from dreamulator.engine.climate_physics import hadley_cell_wind
 
         bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=14.0)
-        sw = cross_equatorial_monsoon_wind(
-            np.radians(lat), nodes, 14.0, 6371.0, 1.0, 14.0, bg
-        )
+        sw = cross_equatorial_monsoon_wind(np.radians(lat), nodes, 14.0, 6371.0, 1.0, 14.0, bg)
         assert np.allclose(sw, 0.0)
 
     def test_zero_when_itcz_at_equator(self):
@@ -353,9 +349,7 @@ class TestCrossEquatorialMonsoonWind:
         from dreamulator.engine.climate_physics import hadley_cell_wind
 
         bg = hadley_cell_wind(np.radians(lat), nodes, itcz_lat_deg=0.0)
-        sw = cross_equatorial_monsoon_wind(
-            np.radians(lat), nodes, 0.0, 6371.0, 1.0, 14.0, bg
-        )
+        sw = cross_equatorial_monsoon_wind(np.radians(lat), nodes, 0.0, 6371.0, 1.0, 14.0, bg)
         assert np.allclose(sw, 0.0)
 
     def test_replaces_background_easterly(self):

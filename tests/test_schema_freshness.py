@@ -31,11 +31,5 @@ def test_schemas_are_fresh(tmp_path: Path) -> None:
     )
     assert len(generated_names) == len(SCHEMA_MODELS)
 
-    stale = [
-        p.name
-        for p in generated
-        if p.read_bytes() != (SCHEMAS_DIR / p.name).read_bytes()
-    ]
-    assert not stale, (
-        f"stale schema(s): {stale} — regenerate with `uv run dreamulator schema`"
-    )
+    stale = [p.name for p in generated if p.read_bytes() != (SCHEMAS_DIR / p.name).read_bytes()]
+    assert not stale, f"stale schema(s): {stale} — regenerate with `uv run dreamulator schema`"

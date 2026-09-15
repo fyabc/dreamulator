@@ -547,9 +547,7 @@ def cross_equatorial_monsoon_wind(
     # Cross-equatorial belt: same side of the equator as the ITCZ, equatorward
     # of it (0 < |φ| < |ITCZ|).
     belt = (
-        (np.sign(lat_deg) == np.sign(itcz))
-        & (np.abs(lat_deg) < np.abs(itcz))
-        & (abs(itcz) > 1e-9)
+        (np.sign(lat_deg) == np.sign(itcz)) & (np.abs(lat_deg) < np.abs(itcz)) & (abs(itcz) > 1e-9)
     )
 
     # Bell g = sin(π·|φ|/|ITCZ|), 0 at equator and ITCZ, peak mid-belt.
