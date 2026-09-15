@@ -258,16 +258,17 @@ def _compute_ocean_currents(
     nodes_xyz = _extract_nodes_xyz(cells)
     east, north = east_north_basis(nodes_xyz)
 
-    # Tangent wind vectors (m/s) from the imported east/north components —
-    # composed on the engine's *internal* wind convention: hadley_cell_wind
-    # builds vectors on a mirrored east basis (``east = north × r̂`` = physical
-    # west; the stored ``wind_east_m_s`` is flipped back by the FIXME at
-    # climate_simulator.py:517), and the whole Stommel chain is calibrated
-    # against that convention — engine-built worlds store physically correct
-    # currents (Gulf Stream NE-ward, SEC W-ward, verified on earth/climate-dev)
-    # while feeding true-east vectors mirrors the entire current field.  So
-    # negate the imported (true-east) component to reproduce the internal
-    # convention.  If that FIXME is ever resolved, this negation must go too.
+    # Tangent wind vectors (m/s) from the imported east/north components.
+    # The imported NCEP wind is physical (true-east basis), but the Stommel
+    # chain (stress → curl → gyre) is calibrated on the engine's legacy
+    # mirrored wind convention — the same mirror the engine feeds it via
+    # ``_to_physical_wind`` in climate_simulator Stage 2.5 (reflect across the
+    # local east axis: flip the east-component sign).  Engine-built worlds
+    # store physically correct currents (Gulf Stream NE-ward, SEC W-ward,
+    # verified on earth/climate-dev) while feeding true-east vectors mirrors
+    # the entire current field.  So negate the imported (true-east) east
+    # component to reproduce the mirror convention — the exact reflection
+    # ``_to_physical_wind`` applies in the engine.
     wind = -wind_east[:, None] * east + wind_north[:, None] * north
     tau = compute_wind_stress(wind)
     src, dst = _build_directed_edge_table(cells)

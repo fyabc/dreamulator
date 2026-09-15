@@ -10,7 +10,7 @@
 > **相关文档**：更深的专题知识维护在 conlang 独立包的知识库中——
 > `../../../packages/conlang/docs/knowledge/`（比较法与喉音理论案例、音系类型学
 > 统计、声调发生学、音变类型库、conlang 工具调研）。语言谱系模拟的系统设计
-> 见 `../../design/language-phylogeny.md`。
+> 见 `../../design/proposals/language-phylogeny.md`。
 
 ---
 

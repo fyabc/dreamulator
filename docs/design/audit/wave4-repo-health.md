@@ -96,7 +96,7 @@ layer-control-model 全部被 roadmap 吸收或自带状态标注，**无一需�
 
 ## 三、过时代码与死代码
 
-### 确认死代码（零引用，已验证）【待处置】
+### 确认死代码（零引用，已验证）【已删除 2026-09-15】
 
 | # | 对象 | 证据 |
 |---|------|------|
@@ -106,7 +106,7 @@ layer-control-model 全部被 roadmap 吸收或自带状态标注，**无一需�
 | D4 | `pyproject.toml:22` 运行时依赖 `jsonschema>=4.23` | 全库零 `import jsonschema` |
 | D5 | `VoronoiCell.moisture` 字段（`models.py:335`，注释自标 legacy） | 全库零消费方 |
 
-### stale 标记/注释待清【待处置】
+### stale 标记/注释待清【已修复 2026-09-15】
 
 - S1 `src/dreamulator/import_earth_climate.py:264-270` 注释引用已消失的「FIXME at climate_simulator.py:517」+ 描述 Stage A 前的镜像基机制（改注释时需顺带复核符号锚定——Stommel 链仍吃 wind_mirror，`climate_simulator.py:656-661`）。
 - S2 `models.py:198`「temperature_C — TODO」过期（climate_simulator 早已填充）。

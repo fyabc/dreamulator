@@ -4,7 +4,7 @@
 每次优化记录：日期、基线数据、改动内容、效果数据。
 
 > 性能分析工作流见 [../usage/profiling.md](../usage/profiling.md)。
-> 构建耗时基准见 [roadmap.md §八-19](roadmap.md#八已知技术债务)。
+> 构建耗时基准见 [roadmap §八-19](../design/roadmap.md#八已知技术债务)。
 
 ---
 
@@ -130,6 +130,24 @@ nacrea 200k seed=42 `--force` 构建：
 | +缓存（二次构建） | 373ms | 16.4s | 147.7s |
 | **+向量化（本次）** | **59.8s** | **185.5s** | **317.0s** |
 
+> 当前版本全量构建基线以 roadmap §一 快照为准（v0.36.0：~391s = 地质 238s +
+> 气候 147s + 生态 5s）——上表是 2026-08 优化轮的版本口径，其后气候/地质引擎
+> 功能增加使总量回升。
+
+---
+
+## Numba JIT 噪声内核（Stage 1.1）
+
+**文件**：`src/dreamulator/map/noise_kernels.py`（`numba>=0.61`，`@njit(parallel=True)`）
+
+**设计**：把逐 cell 的标量 `opensimplex.noise3` 调用（~44 µs/次，nacrea 单次构建
+~1.4M 次）替换为编译后的 3D Perlin 梯度噪声（~0.1 µs/次）。噪声场统计特性与
+OpenSimplex 相当（平滑、零均值、fBm 复合）但**非逐位一致**——换后端会改变重建后的
+地形细节（已记录的口径，与 crc32 确定性修复同等待遇）。
+
+**确定性**：每个点独立求值，`parallel=True` 不会重排结果；排列表由显式种子经
+`numpy.random.default_rng` 派生（按种子缓存）。
+
 ---
 
 ## 2026-08-12：地球 Köppen 空间验证基线（D₀=5.0，图扩散）
@@ -180,7 +198,7 @@ nacrea 200k seed=42 `--force` 构建：
 | P0 | ~~边界效应向量化~~ ✅ | terrain_synthesizer.py | ~7% | 批量 falloff + numpy 索引 |
 | P0 | ~~xyz 坐标缓存~~ ✅ | models.py + terrain_synthesizer.py | — | `mesh.cell_xyz` 属性，一次提取 |
 | P0 | ~~interior_landforms 预过滤~~ ✅ | terrain_synthesizer.py | **-47.7%** | 大圆面 dot 预过滤 + 向量化投影 |
-| P1 | Tectonic BFS → scipy 稀疏图 | tectonic_simulator.py | 3-8× | `_bfs_distance` 每步 4+ 次调用 |
+| P1 | ~~Tectonic BFS → scipy 稀疏图~~ ✅ | tectonic_simulator.py | — | `_bfs_distance` 已预建 CSR 邻接（`tectonic_simulator.py:790`） |
 | P1 | 布尔 mask listcomp → 向量化 | terrain_synthesizer.py | 1.5-2× | `[c.crust_type == "oceanic" for c in mesh.cells]` 等 |
 | P2 | ~~MessagePack + Web Worker~~ ✅ | client.ts | 传输 -50% | cvt_mesh 已落地（`msgpack.worker.ts` + JSON 回退） |
 | P2 | Ocean 并行 basin 求解 | climate_simulator.py | 有限 | 主海盆 139k cells 占 99% 时间 |

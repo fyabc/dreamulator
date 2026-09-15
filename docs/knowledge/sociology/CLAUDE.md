@@ -2,7 +2,7 @@
 
 目录于 2026-08 docs 重组时建立。civilization 层当前为半结构化 input +
 `narrate`；Phase 3C（事件溯源 + 状态机）设计见
-`../../design/civilization-layer.md`。本目录收录文明动力学的科学底座。
+`../../design/proposals/civilization-layer.md`。本目录收录文明动力学的科学底座。
 
 ## 已有文档
 

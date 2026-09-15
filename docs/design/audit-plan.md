@@ -27,13 +27,14 @@
 
 | 条目 | 内容 | 交付物 |
 |------|------|--------|
-| 文档↔代码数值一致性扫描 | 抽取 `docs/` 中所有数值声明（参数值、物理常数、性能数字），逐一对照代码/配置值。根因是技术债 #22（参数手抄进 7+ 文档）；先落地 `derive_world_parameters()` 消除参数型矛盾，再扫描残余的物理声明型矛盾（earth_gradient_c 即此类） | 矛盾清单 + 修复 commit |
-| 自由参数清点造册 | 枚举全部引擎配置字段（`TerrainPipelineConfig`、气候配置、生态配置……），只清点不处置。分类见 §三 | 参数清单表 |
-| 技术债 #4：build dirty 判定 | 输入 mtime 指纹替代"输出存在即跳过"（8/6、8/13 两次踩中） | `pipeline._is_dirty()` + 测试 |
+| 文档↔代码数值一致性扫描 ✅（见 `audit/wave1-doc-number-conflicts.md`） | 抽取 `docs/` 中所有数值声明（参数值、物理常数、性能数字），逐一对照代码/配置值。根因是技术债 #22（参数手抄进 7+ 文档）；先落地 `derive_world_parameters()` 消除参数型矛盾，再扫描残余的物理声明型矛盾（earth_gradient_c 即此类） | 矛盾清单 + 修复 commit |
+| 自由参数清点造册 ✅（见 `audit/wave1-parameter-inventory.md`） | 枚举全部引擎配置字段（`TerrainPipelineConfig`、气候配置、生态配置……），只清点不处置。分类见 §三 | 参数清单表 |
+| 技术债 #4：build dirty 判定 ✅（`pipeline.py::_is_dirty` 已实现） | 输入 mtime 指纹替代"输出存在即跳过"（8/6、8/13 两次踩中） | `pipeline._is_dirty()` + 测试 |
 | 技术债 #22：`derive_world_parameters()` ✅（2026-08-15 交付） | build 时输出 `world_parameters.yaml`（原始 + 衍生参数），杜绝手算手抄 | 纯函数 + YAML 导出 + 测试（已完成） |
-| 静态导出同步检查 | `export_static.py` / `staticClient.ts` / `client.ts` 三件套与当前 API 端点逐一比对（v0.10.0 地图 404 教训） | 差异清单 |
-| i18n 硬编码扫描 | 组件中的硬编码中文 → `t()`（CLAUDE.md 约定） | 修复 commit |
+| 静态导出同步检查 ✅（见 `audit/wave1-static-export-sync.md`） | `export_static.py` / `staticClient.ts` / `client.ts` 三件套与当前 API 端点逐一比对（v0.10.0 地图 404 教训） | 差异清单 |
+| i18n 硬编码扫描 ✅（见 `audit/wave1-i18n-residual.md`） | 组件中的硬编码中文 → `t()`（CLAUDE.md 约定） | 修复 commit |
 | 前端二进制化前架构审视 ✅（评审见 `audit/wave1-binary-format-review.md`） | JSON→MessagePack/FlatBuffers（§七 P0）动工前的数据结构与 Worker 边界评审 | 评审纪要（已完成，MessagePack 落地） |
+| 地质管线漂移审计 ✅（见 `audit/wave1-geological-pipeline-drift.md`） | geological-pipeline.md 与实现的漂移定位 | 漂移清单 |
 
 ### 第二波：物理审计（判据：Phase 3A 验收 M4 达成 **且** 简化 GCM PoC 出结论）
 

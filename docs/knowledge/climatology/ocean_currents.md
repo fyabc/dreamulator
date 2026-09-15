@@ -90,7 +90,7 @@ L = |u|·τ —— 这是洋流对气候影响的距离标度，也是引擎 SST
 3. 微扰放大器——周期性强迫（潮汐、季节）或单事件（地震、岛弧火山）触发跃迁。
 
 源码/设计接口：geography.yaml 的 `isthmus`/`shallow_sea` feature + 高程锚定
-详见 `docs/design/geological-pipeline.md` §3.5（高程锚定 + sea_level_offset_m）
+详见 `docs/design/pipelines/geological-pipeline.md` §3.5（高程锚定 + sea_level_offset_m）
 
 ## 4. 年际变率：ENSO 类振荡
 

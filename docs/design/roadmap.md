@@ -584,17 +584,17 @@
    往返不变。## 八、内部文档链接
 
 - `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
-- `docs/design/harness.md` — 守护轴总纲（校验/审计/设定维护：与生成轴正交；两个守护对象=引擎代码+世界设定；三级过期检测；决策记录台账）
+- `docs/design/proposals/harness.md` — 守护轴总纲（校验/审计/设定维护：与生成轴正交；两个守护对象=引擎代码+世界设定；三级过期检测；决策记录台账）
 - `docs/design/audit-plan.md` — 三波审计计划（守护轴之「守护引擎」实例；工程卫生/物理/架构；启动判据与交付物）
-- `docs/design/geological-pipeline.md` — 地形生成管线技术参考
-- `docs/design/map-system.md` — 地图系统架构
-- `docs/design/climate-pipeline.md` — 气候引擎实现架构
-- `docs/design/climate-validation.md` — 气候引擎验证指南
-- `docs/design/ecology-layer.md` — 生态层设计方案（Whittaker 群系 + NPP + 可驯化标签）
+- `docs/design/pipelines/geological-pipeline.md` — 地形生成管线技术参考
+- `docs/design/pipelines/map-system.md` — 地图系统架构
+- `docs/design/pipelines/climate-pipeline.md` — 气候引擎实现架构
+- `docs/design/pipelines/climate-validation.md` — 气候引擎验证指南
+- `docs/design/proposals/ecology-layer.md` — 生态层设计方案（Whittaker 群系 + NPP + 可驯化标签）
 - `docs/design/archive/ocean-currents-model.md` — 洋流系统设计方案（Stommel 流函数 + SST 修正 + 前端双语言图层）
-- `docs/design/civilization-layer.md` — 文明层详细架构设计（三层半格式化架构）
-- `docs/design/language-phylogeny.md` — 语言谱系子系统设计稿（待开发；语族树 ↔ 分支系统同构、借用边、地名词源分层、Abrams-Strogatz 语言竞争、比较法往返校验）
-- `docs/design/myth-strata.md` — 神话层累数据模型设计稿（待开发；母题 UUID 实体、树+网络、层累机制库、物理锚定、上帝/研究双认知视角）
+- `docs/design/proposals/civilization-layer.md` — 文明层详细架构设计（三层半格式化架构）
+- `docs/design/proposals/language-phylogeny.md` — 语言谱系子系统设计稿（待开发；语族树 ↔ 分支系统同构、借用边、地名词源分层、Abrams-Strogatz 语言竞争、比较法往返校验）
+- `docs/design/proposals/myth-strata.md` — 神话层累数据模型设计稿（待开发；母题 UUID 实体、树+网络、层累机制库、物理锚定、上帝/研究双认知视角）
 - `docs/usage/map-workflow.md` — 地图工作流指南
 - `docs/usage/civmap-guide.md` — 文明地图使用指南
 - `docs/usage/profiling.md` — 性能剖析与基准测试指南

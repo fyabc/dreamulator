@@ -43,7 +43,7 @@ province = realm 内连续同 biome 区域（同 biome 的相邻 cell 连通分�
 
 **与 civmap 的承接**：`VoronoiCell.biogeographic_province`（生态区划）与
 `province_id`（真实地球行政区划，geoBoundaries）语义不同、命名已解耦；未来
-civmap 架空世界模式可用生态分区作为领土锚定（详见 `docs/design/ecology-layer.md` §2.4）。
+civmap 架空世界模式可用生态分区作为领土锚定（详见 `docs/design/proposals/ecology-layer.md` §2.4）。
 
 ---
 
@@ -58,4 +58,4 @@ civmap 架空世界模式可用生态分区作为领土锚定（详见 `docs/des
 
 - `soil_orders.md` — 土壤（province 的植被/肥力基础）
 - `../climatology/` — Whittaker/Köppen（province 的 biome 来源）
-- `docs/design/ecology-layer.md` §2.4 — civmap 承接性
+- `docs/design/proposals/ecology-layer.md` §2.4 — civmap 承接性

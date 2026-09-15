@@ -195,7 +195,7 @@ class VoronoiCell(BaseModel):
         ),
     )
 
-    # Climate properties (filled by climate simulator — TODO)
+    # Climate properties (filled by climate simulator)
     temperature_C: float | None = Field(
         default=None,
         description="Mean annual temperature in °C",
@@ -330,14 +330,6 @@ class VoronoiCell(BaseModel):
     landform: str | None = Field(
         default=None,
         description="Interior landform type: 'orogeny', 'rift', or None",
-    )
-
-    # Moisture (legacy, may be replaced by precipitation_mm)
-    moisture: float = Field(
-        default=0.0,
-        ge=0,
-        le=1,
-        description="Normalised moisture value [0, 1]",
     )
 
     # Neighbours
@@ -563,7 +555,6 @@ class MapLayerType(StrEnum):
 
     # Raster layers
     ELEVATION = "elevation"  # editable
-    MOISTURE = "moisture"  # editable
     TERRAIN = "terrain"  # engine-derived
     TEMPERATURE = "temperature"  # engine-derived
     PRECIPITATION = "precipitation"  # engine-derived
@@ -637,7 +628,7 @@ class MapLayerRegistry(BaseModel):
             │   │   └── elevation (engine: terrain synthesiser)
             │   │       ├── temperature (engine: climate simulator)
             │   │       │   └── biomes (engine: ecology engine)
-            │   │       └── flow_accumulation (engine: river generator — TODO)
+            │   │       └── flow_accumulation (engine: river generator)
             │   └── provinces (engine: voronoi → GeoJSON)
             │       └── civ_territory (manual: civmap painting)
             └── features (engine: feature_extractor)

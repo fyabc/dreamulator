@@ -4,7 +4,7 @@
 2026-08 重写；旧版"内置编辑器"工作流已随 ADR-001 废弃）。
 
 操作层面的完整流程见 [`../usage/map-workflow.md`](../usage/map-workflow.md)；
-算法原理见 [`../design/geological-pipeline.md`](../design/geological-pipeline.md)。
+算法原理见 [`../design/pipelines/geological-pipeline.md`](../design/pipelines/geological-pipeline.md)。
 
 ## 参考资源
 
@@ -54,7 +54,7 @@
 - 锚定只钉地壳类型；构造演化后可按 `reapply_after_tectonics` 重锚。
   **已知限制**：锚定不钉高程（汇聚抬升可盖过锚定裂谷）、浅海深度控制待补——
   见 `../design/roadmap.md` 功能性 #9 与
-  `../design/geological-pipeline.md` §3.5
+  `../design/pipelines/geological-pipeline.md` §3.5
 
 需要"手绘形状"时，走高度图导入模式（外部灰度图 → 偏置场或最终高程），
 同一份计划文档给出了双模式谱系。
@@ -139,7 +139,7 @@ refugia（气候振荡期的物种蓄水池）。
    编辑 `terrain_config.yaml` + `geography.yaml` 迭代海陆格局
 2. **检查**：MapViewer 看板块/边界/高程图层；对照本文检查单
 3. **气候联调**：`build --only climate` 后看 Köppen 分布是否符合直觉
-4. **可选精细化**：Gaea 局部往返（design/geological-pipeline.md §13，纸面阶段）
+4. **可选精细化**：Gaea 局部往返（[gaea-refinement.md](../design/proposals/gaea-refinement.md)，纸面阶段）
    或高度图导入模式
 5. **定稿入库**：地图产物 LFS 入库；定稿才进 `data/worlds/`（提交纪律，
    ）

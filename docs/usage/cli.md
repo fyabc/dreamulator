@@ -210,7 +210,7 @@ dreamulator narrate earth --branch pangea  # 分支描述
 
 ## 守护轴（guard）
 
-守护轴（Harness）是校验 / 审计 / 设定维护的**第三条轨道**（总纲见 `docs/design/harness.md`）。
+守护轴（Harness）是校验 / 审计 / 设定维护的**第三条轨道**（总纲见 `docs/design/proposals/harness.md`）。
 `guard` 命令组做两件事：**过期检测**（`check`）与**决策记录（ADR）台账管理**
 （`accept` / `supersede` / `deprecate`）。
 

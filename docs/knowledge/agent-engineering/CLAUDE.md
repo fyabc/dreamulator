@@ -1,7 +1,7 @@
 # Agent 工程知识库
 
 本目录存放「自维护系统」的工程参照——agent 框架与世界托管平台如何防止系统随演化腐烂。
-供 Dreamulator「守护轴」（`docs/design/harness.md`）设计时查阅。
+供 Dreamulator「守护轴」（`docs/design/proposals/harness.md`）设计时查阅。
 
 ## 目录结构
 
@@ -25,6 +25,6 @@ agent-engineering/
 
 ## 交叉引用
 
-- `docs/design/harness.md` — 守护轴总纲（本知识库的「应用方」）
+- `docs/design/proposals/harness.md` — 守护轴总纲（本知识库的「应用方」）
 - `docs/design/audit-plan.md` — 守护轴之「守护引擎」实例
-- `docs/design/vision.md` — 愿景（Fantasy Harness 隐喻的来源）
+- `docs/design/proposals/vision.md` — 愿景（Fantasy Harness 隐喻的来源）

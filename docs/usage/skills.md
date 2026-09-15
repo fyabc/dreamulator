@@ -11,12 +11,14 @@ Claude Code 里以 `/技能名 参数` 触发；技能文件本身是完整指�
 | `/grill-world` | 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录 | `/grill-world nacrea civilizations` |
 | `/read-map` | 视觉 + 数据双路交叉校验读取地图图层，抽取海陆/气候/生态/文明结构 | `/read-map nacrea` |
 | `/narrate` | 生成世界口语化描述 | `/narrate earth --branch pangea` |
+| `/audit-doc` | 审计文档↔代码一致性（file:line 引用、反引号符号、参数字段是否仍存在），产出失效清单并记入 `docs/design/audit/` | `/audit-doc geological-pipeline` |
+| `/diagnose-climate` | 诊断气候引擎结果异常（Köppen 群系偏多/偏少、区域降水/温度异常），区分 Earth vs 架空世界，第一性定位根因 | `/diagnose-climate earth/climate-dev` |
 
 ---
 
 ## /grill-world — 世界设定拷问
 
-**守护轴（harness）的交互式入口**（设计见 [harness.md](../design/harness.md) §9、§14）。
+**守护轴（harness）的交互式入口**（设计见 [harness.md](../design/proposals/harness.md) §9、§14）。
 
 - **触发**：`/grill-world <world> [layer] [质疑]`
 - **依赖**（守护轴内核，均已落地）：
@@ -51,3 +53,22 @@ Claude Code 里以 `/技能名 参数` 触发；技能文件本身是完整指�
 - **触发**：`/narrate <world> [--branch <b>] [--model <m>]`
 - **依赖**：`uv sync --extra narrate`（首次）+ Anthropic API key
 - **产出**：口语化世界描述（直接展示，不加额外解释）
+
+## /audit-doc — 文档↔代码一致性审计
+
+pipelines/ 技术参考的守护者：检查文档中的 file:line 引用、反引号符号（函数/字段/参数）
+是否仍存在于当前代码，产出失效清单并记入 `docs/design/audit/waveN-<slug>.md`。
+
+- **触发**：`/audit-doc <文档名或层级>`
+- **依赖**：`scripts/dev/check_doc_refs.py`（已挂为 pre-push 钩子，只 gate main）
+- **产出**：失效清单（映射表 + `文件:行号` 证据）；修复后重跑 `check_doc_refs.py` 确认归零
+
+## /diagnose-climate — 气候引擎诊断
+
+气候引擎输出异常的七步诊断流（问题定义 → 复现定位 → 第一性根因 → 交叉验证 →
+竞品/论文参照 → 修复 → 记录），区分 Earth（纯引擎问题）与架空世界（引擎 + 超参分解）。
+
+- **触发**：`/diagnose-climate <world>[/<branch>]`
+- **依赖**：`scripts/climate/diagnose_*.py` 诊断脚本群 + `validate_climate.py` +
+  `map/query.py::cell_facts`
+- **产出**：根因诊断 + 修复方案；修复须过 nacrea 回归（同物理原则）

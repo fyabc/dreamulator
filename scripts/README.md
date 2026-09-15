@@ -1,11 +1,11 @@
 # scripts/ 目录说明
 
-按域分组，共 43 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 48 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（25 个）
+## climate/ — 气候验证与诊断（28 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -41,7 +41,7 @@ earth 基础世界是**导入世界**（不走 build 管线）；这组把真实
   `generate_lgm_reference.py` — 纬向 / 逐格 / 月度 / LGM 验证参考数据生成
   （`generate_spatial_reference.py` 输出前端 `spatialReference.ts`，供 ΔT/ΔP 逐格偏差图层）。
 
-## astro/ — 天文 N 体与恒星诊断（4 个）
+## astro/ — 天文 N 体与恒星诊断（5 个）
 
 - `rebound_nbody.py` — REBOUND 自旋-轨道积分（轨道稳定性、Laplace 共振角）。
 - `rebound_scan.py`、`rebound_phase_scan.py` — 参数扫描 / 共振相位扫描。

@@ -1,6 +1,6 @@
 # 自维护系统模式：Agent 框架与架空世界托管平台
 
-> 学科定位：软件工程 / agent 工程。这是 Dreamulator「守护轴」（`docs/design/harness.md`）的
+> 学科定位：软件工程 / agent 工程。这是 Dreamulator「守护轴」（`docs/design/proposals/harness.md`）的
 > **工程参照来源**——不是世界构建科学，而是「如何让一个持续演化的系统不腐烂」的方法。
 > Dreamulator 把这些经验从「agent 记忆 / 世界托管平台」的层面，提升到「有引擎 derived 数据
 > 可校验」的层面（见「超越点」一节）。

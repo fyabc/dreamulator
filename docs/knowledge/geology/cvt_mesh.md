@@ -1,7 +1,7 @@
 # CVT 球面网格生成
 
 > 从 `src/dreamulator/map/cvt_mesh.py` 抽取。  
-> 详细算法参考：`docs/design/geological-pipeline.md` §2
+> 详细算法参考：`docs/design/pipelines/geological-pipeline.md` §2
 
 ---
 
@@ -73,7 +73,7 @@ $$\Omega = \sum_i 2\arctan\left(\frac{\mathbf{n} \cdot (\mathbf{v}_i \times \mat
 
 面积 = $|\Omega| \cdot R^2$（R = 行星半径 km）
 
-**等价形式（球面角盈 / spherical excess）**（自 design/geological-pipeline.md 附录 A.7
+**等价形式（球面角盈 / spherical excess）**（自 design/pipelines/geological-pipeline.md 附录 A.7
 上浮，2026-08）：
 
 $$A = \left|\sum_{i=1}^{n}\theta_i - (n-2)\pi\right| \cdot R^2$$
@@ -95,7 +95,7 @@ $$\begin{aligned} (x,y,z) &= (r\cos\phi\cos\theta,\; r\sin\phi,\; r\cos\phi\sin\
 
 ## 角距离（Haversine）
 
-（自 design/geological-pipeline.md 附录 A.1 上浮，2026-08）
+（自 design/pipelines/geological-pipeline.md 附录 A.1 上浮，2026-08）
 
 $$d(\varphi_1,\lambda_1,\varphi_2,\lambda_2) = 2\arcsin\sqrt{\sin^2\frac{\Delta\varphi}{2} + \cos\varphi_1\cos\varphi_2\,\sin^2\frac{\Delta\lambda}{2}}$$
 

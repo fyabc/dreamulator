@@ -8,10 +8,10 @@
 > **视频**: [Eurographics 2019 Presentation (YouTube)](https://www.youtube.com/watch?v=GJQVl6Xld0w)
 > **后续**: Cortial 获 2020 CNRS 最佳博士论文奖，现为 Arkane Studios 图形程序员。
 
-> **来源说明**：本文自 `docs/design/geological-pipeline.md` 附录 D 整体上浮（2026-08）。
+> **来源说明**：本文自 `docs/design/pipelines/geological-pipeline.md` 附录 D 整体上浮（2026-08）。
 > 小节编号沿用原附录 D；原文档中重复的编号（两个 D.11 / 两个 D.12）已重排为
 > D.13–D.15，原 D.10 表格被正文截断的尾行已并回 D.10。文中 §x 引用均指
-> `docs/design/geological-pipeline.md` 章节；设计文档 §17（时间演化与威尔逊循环）
+> `docs/design/pipelines/geological-pipeline.md` 章节；设计文档 §14（时间演化与威尔逊循环）
 > 以本文为核心参考。
 
 ---
@@ -282,7 +282,7 @@ $$\mathbf{w}_i(t+\delta t) = \mathbf{w}_i(t) + \varepsilon \sum_{k} \frac{\mathb
 
 ## 参考资料
 
-- 本文为 `docs/design/geological-pipeline.md` 附录 D 的整体上浮（2026-08）
+- 本文为 `docs/design/pipelines/geological-pipeline.md` 附录 D 的整体上浮（2026-08）
 - Cortial, Y., Peytavie, A., Galin, E., & Guérin, É. (2019). *Procedural Tectonic Planets*.
   Computer Graphics Forum, 38(2). DOI: [10.1111/cgf.13614](https://doi.org/10.1111/cgf.13614)
 - Frank, F. (1968). *Curvature of Island Arcs*. Nature.（D.11-11 海沟小圆弧机制）

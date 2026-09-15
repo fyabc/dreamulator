@@ -1,8 +1,8 @@
 # 异星语音学（Xenophonetics）与生物声学（Bioacoustics）
 
 > 领域：为架空/异星世界设计"从发声器官推导语言"的科学依据。
-> 关联：`docs/design/language-phylogeny.md` §6（异星发声模式）、
-> `docs/design/ecology-layer.md` §四（生态→文明接口）。
+> 关联：`docs/design/proposals/language-phylogeny.md` §6（异星发声模式）、
+> `docs/design/proposals/ecology-layer.md` §四（生态→文明接口）。
 > 调研来源：`private/plans/video/alien-biosphere-analysis.md`（Biblaridion 方法论）的补充。
 
 ---

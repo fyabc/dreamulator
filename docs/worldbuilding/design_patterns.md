@@ -171,7 +171,7 @@ lloyd_iterations: 8   # Lloyd 松弛迭代次数（越高 cell 越均匀）
 **参考**：
 - `src/dreamulator/map/pipeline_types.py` — TerrainPipelineConfig
 - `src/dreamulator/map/cvt_mesh.py` — `generate_cvt_mesh()`, `fibonacci_sphere()`
-- `docs/design/geological-pipeline.md` §2 — CVT 网格生成算法
+- `docs/design/pipelines/geological-pipeline.md` §2 — CVT 网格生成算法
 
 ---
 
@@ -253,7 +253,7 @@ elevation → temperature → biomes
 **参考**：
 - `src/dreamulator/map/manager.py` — `mark_downstream_stale()`
 - `src/dreamulator/map/models.py` — MapMetadata, MapLayerRegistry
-- `docs/design/map-system.md` — 图层依赖关系 DAG
+- `docs/design/pipelines/map-system.md` — 图层依赖关系 DAG
 
 ---
 
@@ -401,7 +401,7 @@ features:
 - `sea_level_offset_m ≠ 0` 时前端色标仍按 0 m（实验旋钮定位）
 
 **参考**：
-- `docs/design/geological-pipeline.md` §3.5 — 地理锚定算法与注入点
+- `docs/design/pipelines/geological-pipeline.md` §3.5 — 地理锚定算法与注入点
 - `src/dreamulator/map/geography.py` — `GeographySpec` / `build_land_bias_field()` / `apply_geography_crust()`
 - `data/worlds/nacrea/layers/geological/input/geography.yaml` — nacrea 实例
 

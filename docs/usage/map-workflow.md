@@ -2,9 +2,9 @@
 
 本文档介绍 dreamulator 的地图生成工作流——从球面 CVT 网格出发，自动完成板块构造、地形生成、河流网络、气候模拟的完整管线，并提供可选的 Gaea 局部精细化能力。
 
-> **相关文档**：[地图系统架构](../design/map-system.md) · [文明地图使用指南](civmap-guide.md)
+> **相关文档**：[地图系统架构](../design/pipelines/map-system.md) · [文明地图使用指南](civmap-guide.md)
 
-> **技术参考**：[行星地形生成管线](../design/geological-pipeline.md) — 各阶段的算法原理与数学公式
+> **技术参考**：[行星地形生成管线](../design/pipelines/geological-pipeline.md) — 各阶段的算法原理与数学公式
 
 ---
 
@@ -511,7 +511,7 @@ uv run dreamulator serve --open
 - **DOM 节点**：仅 1-2 个高亮 polygon（无隐藏 hit-test 节点）
 - **rAF 节流**：`requestAnimationFrame` 确保每帧最多一次更新
 
-> 详见 `docs/design/geological-pipeline.md` §15 "前端渲染性能" 章节。
+> 详见 `docs/design/pipelines/geological-pipeline.md` §12 "性能考量" 章节。
 
 ---
 
@@ -735,7 +735,7 @@ maps/**/climate.json filter=lfs diff=lfs merge=lfs -text
 
 ### 参考资料
 
-- **技术论文**: Cortial et al. 2019 *Procedural Tectonic Planets*（详见 [geological-pipeline.md 附录 D](../design/geological-pipeline.md#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)）
+- **技术论文**: Cortial et al. 2019 *Procedural Tectonic Planets*（详见 [geological-pipeline.md 附录 D](../design/pipelines/geological-pipeline.md#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)）
 - **科普视频**: [Fractal Philosophy — *Maps: Fractals, Tectonics and the Fourth Dimension*](https://www.bilibili.com/video/BV1n2i7BrEmq)（B站中字 BV1n2i7BrEmq）— 分形几何、板块动力学与高维空间映射的可视化讲解
 
 ### 常见问题 FAQ
@@ -810,7 +810,7 @@ A: 目前没有直接混合功能。但你可以通过分支系统分别生成�
 - 想"形状手绘、地貌物理补全"的中间路线：顶栏"⬆ 锚定灰度图"上传灰度概率图
   （存 `geography_raster.png`，白=陆/黑=海/中灰=中立），下次生成时与
   geography.yaml 叠加（`raster_weight` 调和）——形状是你的，地貌细节是物理的
-  （见 `design/geological-pipeline.md` §3.5 密集偏置场小节）。
+  （见 `design/pipelines/geological-pipeline.md` §3.5 密集偏置场小节）。
 - 静态模式（GitHub Pages）为只读，按钮禁用。
 
 ### 锚定灰度图格式规范

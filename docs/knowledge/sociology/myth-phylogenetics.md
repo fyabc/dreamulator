@@ -138,11 +138,11 @@ dreamulator 相对现实民俗学的独特优势：引擎拥有可定年的物�
 
 ## 七、与 dreamulator 的对接方向
 
-- 数据模型设计稿：`../../design/myth-strata.md`（母题 UUID 实体 +
+- 数据模型设计稿：`../../design/proposals/myth-strata.md`（母题 UUID 实体 +
   树/网络 + 层累规则 + 认知姿态）。
 - 与语言谱系的联动：母题随语言树传播是 Mace & Pagel 范式的直接
   应用——母题分布可与 `Culture.language_id` 的语言谱系对齐，
-  见 `../../design/language-phylogeny.md`。
+  见 `../../design/proposals/language-phylogeny.md`。
 - 叙述的认知姿态参数（omniscient vs in-world scholar）：
   narrate 子系统的扩展方向。
 
