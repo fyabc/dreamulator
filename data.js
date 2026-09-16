@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789567972510,
+  "lastUpdate": 1789591589650,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4895,6 +4895,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005224758422152201",
             "extra": "mean: 4.202808999997387 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "450981a5b6fc1df11a5babf0679b0db7935b20a7",
+          "message": "chore: bump version 0.36.0 → 0.37.0\n\n气候慢自转 E 包 + §5-α SST 对流门（行为变化，默认开）+ ④ v2 两层 Gill 与\n§5-β 对流临界雨出门（休眠机器，默认关）；生态层 P3c 呈现层设计输入；\nworlds-data 资产已重发布（earth terrain_config 输入变更后首次重传）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-17T04:43:02+08:00",
+          "tree_id": "1fd227f5911a720e66fda60e0be4f0e74d18f37d",
+          "url": "https://github.com/fyabc/dreamulator/commit/450981a5b6fc1df11a5babf0679b0db7935b20a7"
+        },
+        "date": 1789591588515,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 8.992853032570878,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04173293261109815",
+            "extra": "mean: 111.19941540000013 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.9593023235253666,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0016092399765831112",
+            "extra": "mean: 337.9174855000002 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4134309094545061,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1343090083626077",
+            "extra": "mean: 707.4983243333317 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 931.5986717622391,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009765757514353629",
+            "extra": "mean: 1.0734236000018882 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.51181513087158,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007951986167855531",
+            "extra": "mean: 5.1147804000009955 msec\nrounds: 5"
           }
         ]
       }
