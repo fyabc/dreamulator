@@ -22,6 +22,7 @@ from dreamulator.engine.climate_physics import (
     SOLAR_CONSTANT,
     altitude_lapse_rate,
     column_water_saturation,
+    convective_pickup_gate,
     coriolis_parameter,
     diffuse_heat_graph,
     equilibrium_temperature,
@@ -2400,7 +2401,7 @@ def _compute_precipitation_monthly_budget(
     # land evapotranspiration by Jensen's inequality (concave in P), starving
     # the land recycling loop.  Converge it once here and hand the annual
     # water limitation to the monthly solves.
-    _, p_ann = _solve_moisture_budget(
+    w0_ann, p_ann = _solve_moisture_budget(
         mesh,
         wind,
         is_ocean,
@@ -2411,6 +2412,56 @@ def _compute_precipitation_monthly_budget(
         diffusivity_enhancement=_eddy_enhance,
         edge_table=(src, dst),
     )
+    if debug is not None:
+        # Ungated pass-1 column water — the §5-β calibration input (the wave-
+        # gate mode reads this to bin observed precipitation by x = W/W_sat).
+        debug["w_column_annual"] = w0_ann.copy()
+    # ── §5-β convective pickup gate (iterate-once, keeps every solve linear).
+    # The observed rainout efficiency τ = W/P varies by 15-20× between deep
+    # deserts (~150 d) and convective regions (7-10 d); the engine's base
+    # k_rain is a uniform 1/9 d, which rains the desert column out every nine
+    # days and leaks transit-ocean moisture en route.  The gate restores the
+    # criticality: precipitation is a critical phenomenon of column water
+    # (Neelin, Peters & Hales 2009), so k_rain is suppressed below the
+    # convective criticality x = W/W_sat.  The re-solve re-converges the Budyko
+    # fixed point against the gated P (correct annual water balance), and the
+    # withheld moisture is mass-conservingly exported toward regions above
+    # criticality — including the monsoon lands the transit oceans feed.
+    if config.convective_pickup_gate_enabled:
+        _pickup_ann = convective_pickup_gate(w0_ann, temperature_c)
+        w1_ann, p_ann = _solve_moisture_budget(
+            mesh,
+            wind,
+            is_ocean,
+            temperature_c,
+            nodes_xyz,
+            config,
+            rainout_enhancement=(1.0 + _rain_ann) * _pickup_ann - 1.0,
+            diffusivity_enhancement=_eddy_enhance,
+            edge_table=(src, dst),
+        )
+        # Iterate-twice: the gate relaxes at the re-balanced column.  A single
+        # pass pins the gate to the ungated W₀ and structurally blocks the
+        # self-release (the first acceptance run: the Ganges fell to 0.35×
+        # because its starved W₀ held the gate shut while the withheld
+        # transit moisture could never re-open it).  Recomputing at W₁ lets
+        # forced columns climb to their criticality — the Picard step toward
+        # the k(W) fixed point, matching the daily-timescale convective
+        # adjustment behind a monthly-mean closure.
+        _pickup_ann = convective_pickup_gate(w1_ann, temperature_c)
+        _, p_ann = _solve_moisture_budget(
+            mesh,
+            wind,
+            is_ocean,
+            temperature_c,
+            nodes_xyz,
+            config,
+            rainout_enhancement=(1.0 + _rain_ann) * _pickup_ann - 1.0,
+            diffusivity_enhancement=_eddy_enhance,
+            edge_table=(src, dst),
+        )
+        if debug is not None:
+            debug["pickup_gate_annual"] = _pickup_ann.copy()
     # Converged land ET re-extracted from the annual P (the fixed point ended
     # within 1 mm/yr of this relation).
     _e_pot_ann = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
@@ -2421,6 +2472,8 @@ def _compute_precipitation_monthly_budget(
 
     p_monthly = np.zeros((n, 12), dtype=np.float64)
     _dbg_storm = np.zeros(n)
+    _dbg_pickup = np.ones(n)
+    _dbg_w_final = np.zeros(n)
 
     for m in range(12):
         t_m = t_monthly_c[:, m]
@@ -2447,6 +2500,40 @@ def _compute_precipitation_monthly_budget(
             edge_table=(src, dst),
             land_evapotranspiration=_e_land_m,
         )
+        # §5-β monthly iterate-twice: this month's pass-1 column water sets
+        # the gate (monthly responsiveness — the July Sahel column is
+        # convectively viable while the annual mean is not), the month is
+        # re-solved, and the gate is recomputed at the re-balanced column
+        # (self-release — see the annual block).  The orographic step below
+        # consumes the re-solved w_m automatically.
+        if config.convective_pickup_gate_enabled:
+            _pickup_m = convective_pickup_gate(w_m, t_m)
+            w_m, p_m = _solve_moisture_budget(
+                mesh,
+                wind_monthly[m],
+                is_ocean,
+                t_m,
+                nodes_xyz,
+                config,
+                rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
+                diffusivity_enhancement=_eddy_enhance,
+                edge_table=(src, dst),
+                land_evapotranspiration=_e_land_m,
+            )
+            _pickup_m = convective_pickup_gate(w_m, t_m)
+            w_m, p_m = _solve_moisture_budget(
+                mesh,
+                wind_monthly[m],
+                is_ocean,
+                t_m,
+                nodes_xyz,
+                config,
+                rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
+                diffusivity_enhancement=_eddy_enhance,
+                edge_table=(src, dst),
+                land_evapotranspiration=_e_land_m,
+            )
+            _dbg_pickup *= _pickup_m
 
         # Orographic rain from this month's column water: upwind elevation gain
         # along this month's wind rains out a fraction of W per km of uplift.
@@ -2470,10 +2557,14 @@ def _compute_precipitation_monthly_budget(
         p_monthly[:, m] = (p_m + oro_m) / 12.0
 
         _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
+        _dbg_w_final += w_m / 12.0
 
     if debug is not None:
         debug["moisture_budget"] = p_monthly.sum(axis=1).copy()
         debug["storm"] = _dbg_storm
+        debug["w_column_final_mean"] = _dbg_w_final.copy()
+        if config.convective_pickup_gate_enabled:
+            debug["pickup_gate_monthly_mean"] = _dbg_pickup.copy()
 
     # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
     # the seasonality of the westerlies is not modelled yet, so the same

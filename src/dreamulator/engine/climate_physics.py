@@ -1282,6 +1282,74 @@ def subsidence_rainout_gate(
     return np.asarray(out[:, 0])
 
 
+# §5-β 对流临界雨出门结点（骨架 = Neelin-Peters-Hales 2009 物理形态；陆地临界
+# 偏低于海洋取中点 0.5 偏陆侧，Schiro 2016 / Ahmed 2017；f_min = 9d/150d 深沙漠
+# 观测 τ 比）。**验收轮裁决（2026-09-17，earth 分支口径两轮全构建）：门物理按
+# 设计工作**——沙漠盒全降（撒哈拉 343→198、澳洲→399、卡拉哈里→523；iterate-
+# once 更深：撒哈拉→102）、不动盒完美（刚果 1.07/暖池 1.00/中西欧 1.04/西伯利亚
+# 1.12）、自释放方向正确（iterate-twice 让恒河 132→230、全球均值 699→753）；
+# **但全球逐格 P R² 0.296→0.238（−0.058 > 0.03 中止判据）**——iterate-twice 的
+# 收敛不动点把每柱 P 变成「≈其水汽输入」：同 x 档（0.19-0.26）内沙漠需 f~0.1、
+# 恒河/华南需 f~1.0+ 的共位方差（标定轮预注册的放弃项）在 R² 上不可调和，结点
+# 重标定无改进假设。**裁决 = 「W 场供给对比是硬前置」，flag 保持默认关**；结点
+# 保持物理骨架。解锁路径 = 供给路线修复（恒河 |Q| 9× / 过境洋面漏湿 / κ 结构），
+# 届时 W 场自己分开沙漠与季风陆地，本门与 ④/§5-α 三门同时解锁。
+_PICKUP_GATE_KNOTS_X: tuple[float, ...] = (0.00, 0.20, 0.35, 0.50, 0.65, 0.80)
+_PICKUP_GATE_KNOTS_F: tuple[float, ...] = (0.06, 0.18, 0.40, 0.62, 0.84, 1.00)
+_PICKUP_GATE_F_MIN: float = 0.06  # = 9 d / 150 d（深沙漠观测 τ）
+_PICKUP_GATE_WSAT_FLOOR_MM: float = 0.5  # 冰冻柱 W_sat→0 护栏（分母下限）
+
+
+def convective_pickup_gate(
+    w_column_mm: np.ndarray,
+    temperature_c: np.ndarray,
+) -> np.ndarray:
+    """对流临界雨出门（§5-β）：k_rain × f(W/W_sat)。
+
+    观测的对流雨出效率 τ = W/P 变化 15-20×（深撒哈拉 ~150 d、萨赫勒 ~28 d、对流
+    区 7-10 d），而引擎的基底 k_rain 全局均匀 1/9 d——沙漠柱水汽 W≈7 mm 量级正确
+    却被每 9 天雨出一遍（撒哈拉 P 343 vs obs 30 的机制内核），过境洋面的水汽也在
+    传输中按 e^(−t/τ) 漏掉（孟加拉湾 W 29.5 vs 赤道印度洋 53.8 → 季风陆地被饿死）。
+    本门把 τ 的临界结构装回去：**降水是柱水汽的临界现象**（Neelin, Peters & Hales
+    2009, JAS 66:2367——热带海洋 〈P〉 = a(w−w_c)^β·H(w−w_c)，β≈0.23、95% 降水在
+    0.8w_c 以上、临界以下→0；SST 只改出现频率不改抬升，故门变量取 x 不取 T）；
+    陆地临界柱湿度偏低于海洋（Schiro et al. 2016 / Ahmed et al. 2017），单曲线
+    中点 0.5 取偏陆侧；Holloway & Neelin 2009（探空印证柱水汽为低对流层湿度
+    proxy）。Betts-Miller 阈值族为参数化对应物。
+
+    门变量 x = W/W_sat(T)（逐 cell T，``column_water_saturation``——冷阱同一函数，
+    clamp 使 x ≤ 1 按构造成立）：冷区 x≈1（西伯利亚/中西欧）自动豁免、暖池 x=1.00
+    结构性不动、副热带干柱 x~0.2 被压——无需纬度混合。纯压制器 f ∈ [f_min, 1]
+    （f ≤ 1：增强由质量守恒再分配自然产生——沙漠不雨的水汽输出到基过临界的辐合
+    区再雨出，ΣP = ΣE 对任意门场成立）。**作用于陆+洋全域**：过境洋面的适度压制
+    → W 爬升 → 更多水汽抵达季风陆地 → 陆地基过临界 → 门开雨出（自释放回路 =
+    NPH09 的自组织临界性；land-only 会切断该供给回路，禁止）。
+
+    Args:
+        w_column_mm: 柱水汽 W（mm），(N,) 或 (N, 12)（水分收支 pass-1 解出的 W₀）。
+        temperature_c: 柱温代理（地表温度 °C），(N,)（对全部月共用）或 (N, 12)。
+
+    Returns:
+        门因子 [0.06, 1.0]，与 w_column_mm 同形。
+    """
+    w_arr = np.asarray(w_column_mm, dtype=np.float64)
+    t_arr = np.asarray(temperature_c, dtype=np.float64)
+    monthly = w_arr.ndim == 2
+    n_months = w_arr.shape[1] if monthly else 1
+    w_flat = w_arr if monthly else w_arr[:, None]
+    if t_arr.ndim == 1:
+        t_flat = np.broadcast_to(t_arr[:, None], (t_arr.shape[0], n_months))
+    else:
+        t_flat = t_arr
+    w_sat = column_water_saturation(t_flat)
+    x = np.clip(w_flat / np.maximum(w_sat, _PICKUP_GATE_WSAT_FLOOR_MM), 0.0, 1.0)
+    f = np.asarray(np.interp(x, _PICKUP_GATE_KNOTS_X, _PICKUP_GATE_KNOTS_F))
+    out = np.clip(f, _PICKUP_GATE_F_MIN, 1.0)
+    if monthly:
+        return np.asarray(out)
+    return np.asarray(out[:, 0])
+
+
 def koppen_classify(
     t_mean_c: np.ndarray,
     t_cold_c: np.ndarray,

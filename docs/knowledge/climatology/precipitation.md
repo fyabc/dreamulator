@@ -83,8 +83,55 @@ ramp（热带/外热带结点 = GPCP 海洋格 e_rel/e_rel(0) 标定，热带敏
 正距平零抑制（暖池/西边界流走廊的结构安全）；下限 f_min = 0.2（层积云 drizzle 残余）。
 标定细节与触发覆盖现状 → `docs/design/proposals/climate-layer-improvement.md` §5-α。
 
+## 对流临界雨出门（降水是柱水汽的临界现象，2026-09-17）
+
+观测告诉我们，大气把柱水汽变成降水的效率不是一个常数，而是随着柱水汽接近某个
+临界值而急剧抬升。把热带洋面上的格点按柱水汽分箱统计条件平均降水率，会看到一条
+明确的幂律抬升曲线：〈P〉 = a·(w − w_c)^β（β ≈ 0.23），低于临界值 w_c 时降水几乎
+为零，95% 的降水发生在 0.8·w_c 以上（Peters & Neelin 2006；Neelin, Peters & Hales
+2009，热带三大洋的一致结果）。临界值随对流层平均温度线性上升（约 2.2 mm/K），
+但比柱饱和值的增速（约 6%/K）慢得多——所以用「柱水汽/柱饱和值」这个无量纲比值
+来表达临界性是合理的近似。陆地上的临界柱湿度比洋面低（Schiro et al. 2016，
+Amazon vs 西太平洋探空对比；Ahmed & Neelin 用浮力机制解释）。
+
+这套物理有两个常被忽视的推论，正好对应本引擎的两个病灶。其一，**沙漠为什么干**：
+深撒哈拉的柱水汽其实不算小（约 10 mm 量级），干的原因是它远低于当地温度对应的
+临界值，对流根本组织不起来，水汽滞留时间约 150 天；而对流区（刚果、西太平洋暖池）
+的柱水汽在临界值附近，水汽约一周就雨出一次。两边的雨出效率差 15 到 20 倍——
+用一句统一的水汽收支语言说，P = W/τ 里的 τ 不是常数。引擎此前把 τ 设成全局均匀
+的 9 天（全球平均的水汽滞留时间），于是沙漠的柱水汽每九天被平白雨出一遍，这是
+撒哈拉降水偏湿十倍的直接机制。其二，**过境水汽为什么到不了季风陆地**：水汽在
+孟加拉湾这类过境洋面上输送时，按 e^(−t/τ) 边走边漏（输送时间约 8 天 ≈ τ），到岸
+之前就漏掉一多半——观测的湾内柱水汽接近赤道印度洋的值，模型的却掉到六成以下，
+恒河平原因此被饿死（模型 W 约 9 mm，观测约 40 mm）。
+
+还有一层自组织的性质值得单独说明（Neelin–Peters–Hales 论文的核心洞察之一）：
+被对流约束的水汽分布会自己迁移到临界值附近——一个柱子低于临界，降水几乎停止，
+水汽在水汽收支里继续累积（或被平流输送过去），直到越过临界才重新雨出。这给
+引擎里的门提供了一个「自释放」回路：把过境洋面的雨出压低后，湾内柱水汽会回升，
+更多水汽得以输送到恒河平原，陆地柱水汽升过临界值后门打开、雨在那里落下。压制
+不是销毁，是质量守恒的重定向——沙漠不下的雨，会落到被强迫到临界以上的辐合区。
+
+引擎实现：`climate_physics.convective_pickup_gate`——k_rain 乘法调制，门变量是
+x = W/W_sat(T)（W_sat 用冷阱同一个 `column_water_saturation`，冷区 x≈1 自动豁免，
+暖池 x=1 结构性不动）；分段线性压制曲线，下限 f_min = 9d/150d（深沙漠观测滞留时间
+与引擎基底之比）。门在水分收支里按 iterate-once 应用：每月（和年）先用基底
+k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——每次求解仍是线性的。结点
+标定与验收现状 → `docs/design/proposals/climate-layer-improvement.md` §5-β。
+
 ## 参考来源
 
+- Peters, O., & Neelin, J.D. (2006). "Critical phenomena in atmospheric
+  precipitation." *Nature Physics 2*, 393–396.
+- Neelin, J.D., Peters, O., & Hales, K. (2009). "The transition to strong
+  convection." *JAS 66*, 2367–2384, doi:10.1175/2009JAS2962.1.
+- Holloway, C.E., & Neelin, J.D. (2009). "Moisture vertical structure, column
+  water vapor, and tropical deep convection." *JAS 66*, 1665–1683.
+- Schiro, K.A., Neelin, J.D., Adams, D.K., & Lintner, B.R. (2016). "Deep
+  convection and column water vapor over tropical land versus tropical ocean."
+  *JAS 73*, doi:10.1175/JAS-D-16-0119.1.
+- Ahmed, F., & Neelin, J.D. (2018). "Reverse engineering the tropical
+  precipitation–buoyancy relationship." *JAS 75*, doi:10.1175/JAS-D-17-0333.1.
 - Sobel, A.H., Nilsson, J., & Polvani, L. (2001). "The weak temperature gradient
   approximation and balanced tropical moisture waves." *JAS 58*, 3650–3665.
 - Johnson, N.C., & Xie, S.-P. (2010). "Changes in the sea surface temperature

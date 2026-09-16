@@ -348,6 +348,99 @@ def run_ablation(world_dir: Path) -> None:
         )
 
 
+def run_pickup_gate_calibration(world_dir: Path) -> None:
+    """§5-β 对流临界雨出门标定：x = W₀/W_sat 分箱 vs 观测（一次 flag-off 引擎重跑）。
+
+    门的输入是水分收支 pass-1 的柱水汽 W₀（flag-off 构建即可取得——debug 键
+    ``w_column_annual`` 无条件落盘）。对每个 x 分箱（陆/洋分列）输出：格数、
+    W₀ 与模型 P 的中位数、观测 P 的中位数、两者的比值，以及 f_τ = 9d/τ_obs
+    （τ_obs = W₀/(P_obs/365.25)）。f_τ 是「所需门因子」的保守上界：门压制后
+    水汽会再平衡（干区 W 升高），所以实际所需压制比 f_τ 浅。
+
+    已知局限（诚实登记）：单条 monotone 曲线分不开同 x 不同命运的格子——
+    萨赫勒（x≈0.26，观测比模型湿）与撒哈拉（x≈0.19，观测比模型干 10 倍）几乎
+    同档；孟加拉湾（x≈0.54）需要增强而非压制。这些格子的补偿来自自释放回路
+    （过境洋面少漏、下游基过临界），不来自结点本身。结点骨架按物理形态定
+    （Neelin-Peters-Hales 2009 抬升 + 陆地临界偏低），数据只微调中部斜率。
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from diagnose_precip_budget import _load_mesh
+
+    import dreamulator.map.climate_simulator as cs
+    from dreamulator.engine.climate_physics import (
+        column_water_saturation,
+        convective_pickup_gate,
+    )
+    from dreamulator.map.climate_config import load_climate_config
+
+    mesh = _load_mesh(world_dir, "planet_earth", "climate-dev")
+    cfg = load_climate_config(world_dir, "earth", "planet_earth", "climate-dev", mesh.num_cells)
+    debug: dict[str, np.ndarray] = {}
+    cs.simulate_climate(mesh, cfg, debug=debug)
+
+    lat = np.array([c.lat for c in mesh.cells])
+    lon = np.array([c.lon for c in mesh.cells])
+    elev = np.array([c.elevation for c in mesh.cells])
+    t_mean = np.array([c.temperature_C for c in mesh.cells])
+    is_land = elev >= 0.0
+    w0 = debug["w_column_annual"]
+    p_mod = debug["final"]
+    with open(
+        world_dir / "branches" / "climate-dev" / "maps" / "planet_earth" / "climate_obs.json",
+        encoding="utf-8",
+    ) as f:
+        obs = json.load(f)
+    p_obs = np.full(len(lat), np.nan)
+    for cid, v in obs["cells"].items():
+        if "p_obs_mm" in v:
+            p_obs[int(cid)] = v["p_obs_mm"]
+
+    w_sat = column_water_saturation(t_mean)
+    x = np.clip(w0 / np.maximum(w_sat, 0.5), 0.0, 1.0)
+    f_cur = convective_pickup_gate(w0, t_mean)
+    tau_obs = w0 / np.maximum(p_obs, 1e-9) * 365.25  # days
+    f_tau = 9.0 / np.maximum(tau_obs, 1e-9)
+
+    print(f"cells: {len(lat)} (land {int(is_land.sum())}); x range {x.min():.2f}..{x.max():.2f}")
+    for label, mask in (("LAND", is_land), ("OCEAN", ~is_land)):
+        print(f"\n== {label}: x-bin table (n≥30) ==")
+        print(
+            f"{'x bin':>12}{'n':>7}{'medW0':>7}{'medPmod':>8}{'medPobs':>8}"
+            f"{'obs:mod':>8}{'f_tau':>7}"
+        )
+        for lo in np.arange(0.0, 1.0, 0.05):
+            m = mask & (x >= lo) & (x < lo + 0.05) & np.isfinite(p_obs)
+            if m.sum() < 30:
+                continue
+            print(
+                f"{lo:>5.2f}-{lo + 0.05:<5.2f}{m.sum():>7}{np.median(w0[m]):>7.1f}"
+                f"{np.median(p_mod[m]):>8.0f}{np.median(p_obs[m]):>8.0f}"
+                f"{np.median(p_obs[m]) / max(np.median(p_mod[m]), 1e-9):>8.2f}"
+                f"{np.median(f_tau[m]):>7.2f}"
+            )
+
+    print("\n== knot draft: median f_tau in ±0.05 windows at the knot x positions ==")
+    for kx in (0.20, 0.35, 0.50, 0.65, 0.80):
+        m = (np.abs(x - kx) <= 0.05) & np.isfinite(p_obs)
+        tag = "all"
+        if m.sum() >= 30:
+            print(f"  x={kx:.2f} [{tag}]: f_tau med {np.median(f_tau[m]):.2f} (n={int(m.sum())})")
+        else:
+            print(f"  x={kx:.2f} [{tag}]: n={int(m.sum())} too few")
+
+    print("\n== boxes: x / current-knot f / f_tau ==")
+    print(f"{'box':<14}{'n':>6}{'x':>6}{'f_cur':>7}{'f_tau':>7}")
+    for name, la0, la1, lo0, lo1 in _BOXES:
+        m = (lat >= la0) & (lat <= la1) & (lon >= lo0) & (lon <= lo1) & np.isfinite(p_obs)
+        if m.sum() == 0:
+            print(f"{name:<14} EMPTY")
+            continue
+        print(
+            f"{name:<14}{m.sum():>6}{np.nanmean(x[m]):>6.2f}"
+            f"{np.nanmean(f_cur[m]):>7.2f}{np.nanmedian(f_tau[m]):>7.2f}"
+        )
+
+
 def main() -> None:
     root = _find_project_root()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -361,6 +454,11 @@ def main() -> None:
         action="store_true",
         help="calibrate the ④ v2 subsidence-drying gate (archive-based, ~1 min)",
     )
+    ap.add_argument(
+        "--pickup-gate",
+        action="store_true",
+        help="calibrate the §5-β convective pickup gate (one engine re-run, ~4 min)",
+    )
     ap.add_argument("--world", default="earth")
     ap.add_argument("--branch", default="climate-dev")
     ap.add_argument("--world-dir", default=str(root / "data" / "worlds"))
@@ -368,6 +466,8 @@ def main() -> None:
     world_dir = Path(args.world_dir) / args.world
     if args.ablation:
         run_ablation(world_dir)
+    elif args.pickup_gate:
+        run_pickup_gate_calibration(world_dir)
     elif args.wave_gate:
         map_dir = (
             world_dir / "branches" / args.branch / "maps" / f"planet_{args.world}"

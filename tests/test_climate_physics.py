@@ -8,9 +8,11 @@ import numpy as np
 import pytest
 
 from dreamulator.engine.climate_physics import (
+    _PICKUP_GATE_F_MIN,
     altitude_lapse_rate,
     aridity_index_keep,
     column_water_saturation,
+    convective_pickup_gate,
     coriolis_parameter,
     dryness_offset_mm,
     dryness_threshold_mm,
@@ -268,6 +270,77 @@ class TestSstConvectionGate:
         oc = np.ones(8, dtype=bool)
         f = sst_convection_gate(t, lat, oc)
         assert np.allclose(f, 1.0)
+
+
+class TestConvectivePickupGate:
+    """§5-β gate: k_rain × f(W/W_sat), the convective criticality pickup.
+
+    Anchored on Neelin, Peters & Hales 2009 (precipitation as a critical
+    phenomenon of column water: near-zero below the criticality, full
+    efficiency above) with the land-ocean criticality offset of Schiro 2016 /
+    Ahmed 2017 folded into the single-knot skeleton.
+    """
+
+    def test_saturated_column_identity(self) -> None:
+        """A saturated column (x = 1 — warm pool, W = cold-trap clamp) keeps f = 1."""
+        t = np.array([29.0, 25.0, 5.0])
+        ws = column_water_saturation(t)
+        f = convective_pickup_gate(ws, t)
+        assert np.allclose(f, 1.0)
+
+    def test_monotone_with_desert_floor(self) -> None:
+        """Drier column → smaller factor, monotonically, down to the floor."""
+        t = np.full(40, 27.0)
+        ws = float(column_water_saturation(t[:1])[0])
+        w = np.linspace(0.0, ws, 40)
+        f = convective_pickup_gate(w, t)
+        assert np.all(np.diff(f) >= -1e-12)
+        assert f[0] == pytest.approx(_PICKUP_GATE_F_MIN)
+        assert f[-1] == pytest.approx(1.0)
+
+    def test_never_enhances(self) -> None:
+        """f ≤ 1 for any input (enhancement comes from redistribution, not the gate)."""
+        f = convective_pickup_gate(np.array([80.0, 500.0]), np.array([27.0, 27.0]))
+        assert np.all(f <= 1.0 + 1e-12)
+
+    def test_hotter_column_needs_more_water(self) -> None:
+        """Same W under a hotter column is drier in x terms → suppressed more."""
+        f = convective_pickup_gate(np.array([20.0, 20.0]), np.array([30.0, 20.0]))
+        assert f[0] < f[1]
+
+    def test_temperature_portability(self) -> None:
+        """f depends only on x: f(0.5·W_sat(T), T) is the same number at every T."""
+        t = np.array([30.0, 20.0, 10.0, 0.0])
+        f = convective_pickup_gate(0.5 * column_water_saturation(t), t)
+        assert np.allclose(f, f[0], rtol=1e-9)
+
+    def test_cold_region_exempt_and_finite(self) -> None:
+        """Frozen columns (W_sat → 0) stay finite; a relatively moist cold
+        column (Siberia-type, x clipped to 1) is not suppressed."""
+        f = convective_pickup_gate(np.array([0.3, 6.3, 5.0]), np.array([-30.0, -20.0, -5.0]))
+        assert np.isfinite(f).all()
+        assert f[1] == 1.0
+        assert np.all(f >= _PICKUP_GATE_F_MIN - 1e-12)
+
+    def test_monthly_consistent_with_annual(self) -> None:
+        """An (N, 12) field gives the same gate as stacking 12 annual calls."""
+        rng = np.random.default_rng(11)
+        w12 = rng.uniform(0.0, 60.0, size=(30, 12))
+        t = rng.uniform(-20.0, 30.0, size=30)
+        f12 = convective_pickup_gate(w12, t)
+        for m in range(12):
+            assert np.allclose(f12[:, m], convective_pickup_gate(w12[:, m], t))
+
+    def test_monthly_temperature_field(self) -> None:
+        """(N, 12) W with (N, 12) T: at fixed W the cold month's column is
+        closer to saturation (x → 1), so it is suppressed LESS than the hot
+        month's — the W_sat normalisation gives seasonal criticality."""
+        w12 = np.full((5, 12), 20.0)
+        t12 = np.tile(np.linspace(10.0, 30.0, 12)[None, :], (5, 1))
+        f12 = convective_pickup_gate(w12, t12)
+        assert f12.shape == (5, 12)
+        assert np.all(f12[:, 0] > f12[:, -1])
+        assert np.allclose(f12[:, 0], 1.0)
 
 
 class TestPressureFromTemperature:

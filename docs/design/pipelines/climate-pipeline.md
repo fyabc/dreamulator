@@ -405,7 +405,7 @@ Stage 2.5 挂载（风场之后、降水之前），单向单遍——不做 SST
 
 ```
 ∇·(W u) + k_rain(x)·W − κ∇²W = E ,   P = k_rain(x)·W
-k_rain(x) = (1/τ)·(1 + _storm_enhance)·gate(ΔSST) ,  τ = _MOISTURE_RESIDENCE_DAYS = 9 d
+k_rain(x) = (1/τ)·(1 + _storm_enhance)·gate(ΔSST)·pickup(W/W_sat) ,  τ = 9 d
 ```
 
 其中 gate = **§5-α SST 对流门**（`sst_convection_gate`，2026-09-16）：WTG 下冷距平
@@ -414,6 +414,24 @@ k_rain(x) = (1/τ)·(1 + _storm_enhance)·gate(ΔSST) ,  τ = _MOISTURE_RESIDENC
 （逐月随 t_m 场），正距平 f≡1（暖池/WBC 走廊结构安全）、f_min = 0.2（层积云 drizzle
 尾）、仅海洋格；config `sst_convection_gate_enabled`。触发覆盖现状与残余 → proposal
 §5-α/§4（ΔSST 结构窄：冷舌缺失）。
+
+pickup = **§5-β 对流临界雨出门**（`convective_pickup_gate`，2026-09-17，
+config `convective_pickup_gate_enabled`）：降水是柱水汽的临界现象（Neelin-Peters-
+Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上），观测的雨出效率
+τ = W/P 在深沙漠（约 150 天）与对流区（7-10 天）之间差 15-20 倍，而引擎基底是全局
+均匀的 9 天。门把 k_rain 乘上 f(W/W_sat)（W_sat 用冷阱同一个
+`column_water_saturation`，所以冷区 x≈1 自动豁免、暖池 x=1 不动）。门作用于
+**陆+洋全域**：过境洋面（孟加拉湾这类）被适度压制后柱水汽回升，更多水汽得以输送到
+季风陆地，陆地柱水汽越过临界值后门打开、雨在那里落下——这个「自释放」回路要求
+陆洋统一处理，只做陆地会切断供给。
+
+**iterate-twice 求解结构**（每次求解保持线性）：年和每个月都先用基底 k_rain 解一遍
+得到 W₀，由 W₀ 算出门，带着门重解得到 W₁，再在 W₁ 上重算门、再解一次。第二步不可
+省——单次迭代把门钉在未门控的 W₀ 上，恒河这类被饿死的柱子永远等不到门重开（首轮
+验收实测：恒河降水掉到 0.35×，正是这个结构性缺陷）。两次迭代是对 k(W) 真非线性
+不动点的 Picard 逼近，物理上对应对流在日尺度上随柱水汽调整、月平均闭合取其平衡。
+结点与 f_min = 9d/150d 是 `climate_physics` 的模块常数（标定模式
+`diagnose_desert_wetness --pickup-gate`），不是 config 旋钮。
 
 迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ 为 config 字段
 `moisture_diffusivity_m2s`，默认 1e6 m²/s）+ 直接稀疏 LU 求解。**质量守恒逐月由构造

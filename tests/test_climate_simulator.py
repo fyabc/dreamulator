@@ -7,6 +7,7 @@ Uses a small synthetic mesh (100 cells) for fast execution.
 import numpy as np
 import pytest
 
+from dreamulator.engine.climate_physics import _PICKUP_GATE_F_MIN
 from dreamulator.map.models import CVTMesh, VoronoiCell
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
@@ -598,3 +599,76 @@ class TestWindConventionPrecipitation:
             f"west coast {west_coast:.0f} mm vs east coast {east_coast:.0f} mm — "
             "moisture advection likely mirrored"
         )
+
+
+class TestConvectivePickupGateWiring:
+    """§5-β wiring: iterate-once pickup gate in the monthly moisture budget.
+
+    The gate multiplies k_rain by f(W/W_sat) — a mass-conserving
+    redistribution (sums are untouched up to the Budyko feedback), so the
+    flag-on run must move precipitation from dry columns to moist ones
+    instead of removing it.
+    """
+
+    @pytest.fixture
+    def mesh(self) -> CVTMesh:
+        """Synthetic 100-cell CVT mesh (same geometry as the end-to-end class)."""
+        return _build_test_mesh(num_bands=10, cells_per_band=10)
+
+    def _run(self, mesh: CVTMesh, gate: bool) -> dict[str, np.ndarray]:
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        cfg = TerrainPipelineConfig(
+            seed=42,
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+            lat_gradient_c=45.0,
+            evaporation_base_mm=1000.0,
+            num_nodes=100,
+            convective_pickup_gate_enabled=gate,
+        )
+        debug: dict[str, np.ndarray] = {}
+        simulate_climate(mesh, cfg, debug=debug)
+        return debug
+
+    def test_flag_off_deterministic_and_ungated(self, mesh: CVTMesh) -> None:
+        """Two flag-off runs are bit-identical and store the calibration field."""
+        d1 = self._run(mesh, False)
+        d2 = self._run(mesh, False)
+        assert np.array_equal(d1["moisture_budget"], d2["moisture_budget"])
+        assert "w_column_annual" in d1
+        assert "pickup_gate_annual" not in d1
+
+    def test_gate_redistributes_rather_than_removes(self, mesh: CVTMesh) -> None:
+        """Flag-on: bounded gate field, dry cells lose, global mean survives."""
+        d_off = self._run(mesh, False)
+        d_on = self._run(mesh, True)
+        p_off = d_off["moisture_budget"]
+        p_on = d_on["moisture_budget"]
+        gate = d_on["pickup_gate_annual"]
+        assert gate.min() >= _PICKUP_GATE_F_MIN - 1e-12
+        assert gate.max() <= 1.0 + 1e-12
+        assert "pickup_gate_monthly_mean" in d_on
+        # Mass-conserving redistribution: the global mean survives (the Budyko
+        # feedback shifts it only second-order).
+        assert abs(p_on.mean() - p_off.mean()) < 0.15 * p_off.mean()
+        # Wherever the gate bites, the local precipitation falls.
+        bitten = gate < 0.95
+        if bitten.any():
+            assert p_on[bitten].mean() < p_off[bitten].mean()
+
+    def test_gate_uses_monthly_columns(self, mesh: CVTMesh) -> None:
+        """The monthly gate is not the annual gate pasted twelve times.
+
+        The annual factor multiplies the twelve monthly factors element-wise;
+        equality everywhere would mean the monthly solve ignored its own
+        column water (the lagged/degenerate failure mode)."""
+        d_on = self._run(mesh, True)
+        g_ann = d_on["pickup_gate_annual"]
+        g_mon = d_on["pickup_gate_monthly_mean"]
+        if (g_ann < 0.99).any():
+            assert not np.allclose(g_ann, g_mon)

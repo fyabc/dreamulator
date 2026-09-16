@@ -546,6 +546,26 @@ class TerrainPipelineConfig:
     # pool (mass-conserving).  Knots are GPCP-calibrated constants in
     # climate_physics.sst_convection_gate; warm anomalies are never suppressed.
     sst_convection_gate_enabled: bool = True
+    # §5-β convective pickup gate: k_rain × f(W/W_sat) everywhere (land AND
+    # ocean).  The observed rainout efficiency τ = W/P varies by 15-20×
+    # (deep-desert ~150 d vs convective regions 7-10 d) while the engine's
+    # base is a uniform 1/9 d — the desert column rains out every nine days
+    # and transit-ocean moisture leaks away en route.  Precipitation is a
+    # critical phenomenon of column water (Neelin, Peters & Hales 2009, JAS
+    # 66:2367: 〈P〉 = a(w−w_c)^β·H(w−w_c), β≈0.23, 95% of rain above 0.8w_c;
+    # land criticality is lower than ocean — Schiro 2016 / Ahmed 2017), so
+    # k_rain is suppressed below the criticality x = W/W_sat.  Land+ocean is
+    # load-bearing: gated transit oceans keep their moisture, raising W
+    # downstream until monsoon-land columns cross criticality and rain
+    # (self-release = the SOC behaviour NPH09 document; land-only severs the
+    # supply loop).  The gate applies iterate-once per solve (pass-1 W₀ sets
+    # the factor, the month/annual solve is re-run — every solve stays
+    # linear).  Knots and f_min = 9d/150d are module constants in
+    # climate_physics.convective_pickup_gate (calibrated via
+    # diagnose_desert_wetness --pickup-gate), not knobs.  Cold regions are
+    # exempt by construction (x = W/W_sat ≈ 1); the §5-α SST gate covers the
+    # cold-tongue family where x saturates (no overlap).
+    convective_pickup_gate_enabled: bool = False  # flip after earth+nacrea acceptance
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ
     # rain belt to the observed ~10° width (diffusion length √(κτ) ≈ 900 km).
