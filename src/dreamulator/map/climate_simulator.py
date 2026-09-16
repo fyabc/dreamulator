@@ -37,6 +37,7 @@ from dreamulator.engine.climate_physics import (
     spectral_ice_albedo,
     sst_convection_gate,
     subsidence_aridity_gate,
+    subsidence_rainout_gate,
     surface_temperature,
     terrain_wind_blocking,
 )
@@ -886,6 +887,11 @@ def simulate_climate(
     # → less heating), residual logged for monitoring.  v1 scope: the ocean
     # chain keeps pass-1 winds (Stommel/SST not re-run) and 4.1-B maritime
     # advection keeps the pre-wave wind field.
+    if config.stationary_wave_enabled and config.stationary_wave_v2_enabled:
+        raise ValueError(
+            "stationary_wave_enabled and stationary_wave_v2_enabled are mutually "
+            "exclusive (④ v1 barotropic vs v2 two-level Gill paths)"
+        )
     if config.stationary_wave_enabled:
         from dreamulator.map.stationary_wave import compute_slp_wave_anomaly
 
@@ -968,6 +974,73 @@ def simulate_climate(
             debug["wave_vbar"] = _wave.vbar
             debug["wave_div_grid"] = _wave.div_grid
             debug["wave_p_resid_mm"] = np.array(_resid)
+
+    # ── ④ v2 two-level Gill response: ω̂ → land subsidence-drying gate ──
+    # Pass-1 precipitation is the latent-heating source: P → Q̇ → (zonal-mean
+    # basic state) two-mode steady linear solve (map/stationary_wave_two_level.
+    # py, Lee-Wang-Mapes 2009) → mid-level w.  Consumption is the R&H
+    # subsidence-drying gate — a multiplicative k_rain modulation on LAND
+    # (mass-conserving, composed with the storm/SST gates) — NOT the v1
+    # ΔSLP→BL-wind path: the wind fields stay pass-1 (no _dp2/gradient/BL
+    # rebuild, no 1/f amplification; wind-R² acceptance untouched).  The
+    # moisture budget re-runs with the gate only; residual logged.
+    elif config.stationary_wave_v2_enabled:
+        from dreamulator.map.stationary_wave_two_level import compute_omega_wave_anomaly
+
+        _lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
+        _areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+        # pass-1 逐月风的切向分量 (n, 12)：纬向平均基本态的低层项。
+        _u_e = np.einsum("mck,ck->cm", wind_monthly, _east_w)
+        _v_e = np.einsum("mck,ck->cm", wind_monthly, _north_w)
+        _wave2 = compute_omega_wave_anomaly(
+            p_monthly_mm=p_monthly,
+            t_monthly_c=t_monthly_C,
+            elevation_m=elevation_m,
+            cell_lat_deg=lat_deg,
+            cell_lon_deg=_lon_deg,
+            cell_area_km2=_areas_km2,
+            wind_east_monthly=_u_e,
+            wind_north_monthly=_v_e,
+            surface_pressure_hpa=config.surface_pressure_hpa,
+            rotation_period_days=config.rotation_period_days,
+            radius_km=config.radius_km,
+            orbital_period_days=config.orbital_period_days,
+        )
+        _gate_omega = subsidence_rainout_gate(_wave2.w_mid_m_s, is_land)
+        _supp = float((_gate_omega < 0.9)[is_land].mean()) if is_land.any() else 0.0
+        _console.print(
+            f"    [dim]stationary wave v2 (④): w_mid {_wave2.w_mid_m_s.min():.2e}.."
+            f"{_wave2.w_mid_m_s.max():.2e} m/s, gate f<0.9 on {_supp * 100:.1f}% land[/dim]"
+        )
+        _p_pass1 = p_monthly
+        precipitation_mm, p_monthly = _compute_precipitation_monthly_budget(
+            mesh=mesh,
+            wind=wind,
+            wind_monthly=wind_monthly,
+            is_land=is_land,
+            is_ocean=is_ocean,
+            elevation_m=elevation_m,
+            temperature_c=t_mean_C,
+            t_monthly_c=t_monthly_C,
+            nodes_xyz=nodes_xyz,
+            config=config,
+            itcz_lat_monthly=itcz_lat_monthly,
+            debug=debug,
+            edge_table=(_msrc, _mdst),
+            ice_increment_c=_t_ice_increment,
+            omega_gate_monthly=_gate_omega,
+        )
+        _resid = float(np.abs(p_monthly - _p_pass1).mean())
+        _console.print(f"    [dim]wave v2 two-pass |P₂−P₁| mean {_resid:.1f} mm[/dim]")
+        if debug is not None:
+            debug["wave2_w_mid"] = _wave2.w_mid_m_s
+            debug["omega_gate"] = _gate_omega
+            debug["wave2_psi"] = _wave2.psi
+            debug["wave2_psi_hat"] = _wave2.psi_hat
+            debug["wave2_phi_hat"] = _wave2.phi_hat
+            debug["wave2_u_baro"] = _wave2.u_baro
+            debug["wave2_u_shear"] = _wave2.u_shear
+            debug["wave2_p_resid_mm"] = np.array(_resid)
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification
@@ -2175,6 +2248,7 @@ def _compute_precipitation_monthly_budget(
     debug: dict[str, np.ndarray] | None = None,
     edge_table: tuple[np.ndarray, np.ndarray] | None = None,
     ice_increment_c: np.ndarray | None = None,
+    omega_gate_monthly: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Precipitation from the monthly mass-conserving moisture budget.
 
@@ -2186,10 +2260,13 @@ def _compute_precipitation_monthly_budget(
     Monsoon seasonality, ITCZ migration, and evaporation seasonality all enter
     through the monthly wind and temperature fields — the former ITCZ-Gaussian
     redistribution factor and the ×1.5/×1.3 tropical-coastal monsoon gain are
-    gone (tech debt 23).  k_rain carries two composed modulations, both
-    mass-conserving: the storm-track enhancement (Step 3.5) and the §5-α SST
+    gone (tech debt 23).  k_rain carries three composed modulations, all
+    mass-conserving: the storm-track enhancement (Step 3.5), the §5-α SST
     convection gate ``f(ΔSST)`` (cold-anomaly ocean water exports its moisture
-    to the warm pool instead of raining locally — ``sst_convection_gate``).
+    to the warm pool instead of raining locally — ``sst_convection_gate``) and
+    the ④ v2 subsidence-drying gate ``f(w_mid)`` on land (``omega_gate_monthly``,
+    stationary-wave subsidence lobes export their moisture to the ascent
+    regions — ``subsidence_rainout_gate``).
 
     On top of each month's budget precipitation: orographic rain from that
     month's column water and wind, then the mechanisms that do not vary by
@@ -2222,6 +2299,11 @@ def _compute_precipitation_monthly_budget(
             ice-free field ``temperature_c − increment`` on land (E2: the
             feedback is a response, not a forcing — the storm band must not
             chase the ice edge).  ``None`` or all-zero → use the field as-is.
+        omega_gate_monthly: Optional land subsidence-drying gate factor,
+            shape (N, 12), in [0.2, 1] — the ④ v2 consumption
+            (``subsidence_rainout_gate`` on the stationary-wave mid-level w).
+            Composed multiplicatively with the storm/SST k_rain modulations;
+            ``None`` (default) disables the composition.
 
     Returns:
         (p_annual_mm shape (N,), p_monthly_mm shape (N, 12)).
@@ -2303,6 +2385,12 @@ def _compute_precipitation_monthly_budget(
     else:
         _gate_monthly = None
         _rain_ann = _storm_enhance
+    # ④ v2 subsidence-drying gate: multiplicative composition with the storm /
+    # SST gates (the annual budget uses the monthly gate factors' arithmetic
+    # mean — the annual solve only sets the land-ET fixed point, which must not
+    # be distorted by the monthly weighting).
+    if omega_gate_monthly is not None:
+        _rain_ann = (1.0 + _rain_ann) * omega_gate_monthly.mean(axis=1) - 1.0
 
     _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
@@ -2345,6 +2433,8 @@ def _compute_precipitation_monthly_budget(
             _rain_m = (1.0 + _storm_enhance) * _gate_monthly[:, m] - 1.0
         else:
             _rain_m = _storm_enhance
+        if omega_gate_monthly is not None:
+            _rain_m = (1.0 + _rain_m) * omega_gate_monthly[:, m] - 1.0
         w_m, p_m = _solve_moisture_budget(
             mesh,
             wind_monthly[m],

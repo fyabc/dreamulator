@@ -277,11 +277,65 @@ a/L_R（nacrea 2.4 vs 地球 7.8，onset 在 1–2）独立给出「刚好激活
 文献上限，与 ExoPlaSim PoC 在 nacrea（0.318）观测到的全球单胞（质量流函数全
 半球同号）之间存在倾角依赖（9° 弱季节 forcing 更接近年均对称解）。
 
+### 7.7 两层 Gill 型定常波响应（④ v2 的动力学母本）
+
+**Matsuno-Gill 结构**（Gill 1980）：定常线性浅水系统对局地加热的响应 = 赤道俘获
+波族的叠加——加热以东沿赤道的阻尼 Kelvin 尾（e 折尺度 ~c_g/γ 量级）、以西两半球
+成对的 Rossby 涡旋（高层反气旋、低层气旋，旋转方向两半球相反）、纬圈平均的
+Walker 型翻转（上升限于加热区、补偿下沉在其周围）。赤道俘获尺度 L_R = √(c_g/β)
+（c_g = 60 m/s 时 ≈ 14.6°），随 Ω^(-1/2) 加宽——慢自转世界波导更宽。
+
+**Lee-Wang-Mapes 2009 两模态模型**（J. Climate 22:272，④ v2 实现母本）：两层
+（250/750 mb）定常线性原始方程，变量分解为正压（层平均）与斜压（层差/2）模态。
+关键结构性质：
+
+1. **静止基本态下正压方程严格解耦**（剪切相互作用源 ψF ≡ 0）——模型退化为纯
+   Matsuno-Gill（其 Case-1）。这是「不需基本态风场」的架构性优点：斜压响应直接
+   由加热解出，基本态保真度不构成瓶颈（论文并指出斜压响应基本不受背景流影响）。
+2. **斜压→正压激发只能经垂直背景风剪切**（纯正压背景同样解耦——其 Case-2）；
+   剪切激发的正压信号只在正压西风背景下传向高纬（teleconnection）。
+3. **WTG 热力学闭合**（其 eq 17）：γφ̂ + c²_g∇²χ̂ = −ΛQ̇（略去水平温度平流 →
+   正压位势不出现，方程组以四个标量场封闭：ψ, ψ̂, χ̂, φ̂）。
+4. 参数（论文 §3）：c_g=60 m/s（Kleeman 1989/Zebiak 1986 惯例）、γ=(2d)⁻¹（Gill
+   1980）、r₁=(10d)⁻¹、r₀=(20d)⁻¹、A₀=A₁=1e6 m²/s。
+
+**Rodwell-Hoskins 机制链**（R&H 1996 QJRMS 122:1385 / 2001 J. Climate 14:3192）：
+季风潜热加热 → Gill 型响应 → 加热**西侧** Rossby 波列与中纬西风交互 → 沿等熵面
+下沉 → 绝热增温减湿 → 副热带反气旋/沙漠维持（东地中海-撒哈拉-中东被印度季风
+部分维持——「沙漠与季风是同一枚硬币的两面」）。线性模型中该下沉舌表现为加热
+西侧离赤道的 ω 正距平（离赤道源 + 现实急流基本态下：撒哈拉 +3.5e-3、中东
++5.2e-3 Pa/s，源区 −3e-2）。S&H 1988 的对应表述：20°N/110°E 季风加热可激发横跨
+北半球的定常 Rossby 波。**适用边界**：Kelvin 波东传支同样重要（北美副高自亚洲
+季风、南大西洋副高自南美季风的东传维持，R&H 2001）；纯线性斜压模型在中纬的
+斜压分量欠准（论文自述），方向性诊断（下沉/上升）比幅度可靠。
+
+**球面适用性**（Shamir & Gerber 2023, JFM 964:A32）：β 平面近似只在快自转准确
+（重力波在一个自转周期内只走球面直径的一小部分）；慢自转（金星/泰坦/慢转系外
+行星）必须球面处理。地球管线在球面纬向网格上直接离散（非 β 平面截断），对
+nacrea（Ω=0.318）自然成立——实测赤道俘获宽度按 Ω^(-1/2) 加宽（52°→80° 1/e 宽）。
+
+引擎实现（2026-09-17，`map/stationary_wave_two_level.py`）：zonal 平均基本态 →
+算子与经度无关 → 经度 rFFT 后按 wavenumber k 块对角（交织排列 + 带状求解器，
+0.16 s/月）；消费取中层 w = −p_m∇²χ̂/(ρ_m·g) 作陆地降水效率门。标定轮发现
+**强迫自引用**阻塞（模型沙漠湿偏差加热淹没 R&H 下沉），详 proposal §2。
+
 ## 参考资料
 
 - Held, I.M., & Hou, A.Y. (1980). "Nonlinear axially symmetric circulations." *JAS 37*.
 - Hartmann, D.L. (2016). *Global Physical Climatology* (2nd ed.), ch. 4–7.
 - Vallis, G.K. (2017). *Atmospheric and Oceanic Fluid Dynamics*, ch. 12.
+- Gill, A.E. (1980). "Some simple solutions for heat-induced tropical circulation."
+  *QJRMS 106*:447–462.
+- Lee, S.-K., Wang, C., & Mapes, B.E. (2009). "A simple atmospheric model of the local
+  and teleconnection responses to tropical heating anomalies." *J. Climate 22*:272–284,
+  doi:10.1175/2008JCLI2303.1.
+- Rodwell, M.J., & Hoskins, B.J. (1996). "Monsoons and the dynamics of deserts."
+  *QJRMS 122*:1385–1404; (2001). "Subtropical anticyclones and summer monsoons."
+  *J. Climate 14*:3192–3211.
+- Sardeshmukh, P.D., & Hoskins, B.J. (1988). "The generation of global rotational flow
+  by steady idealized tropical divergence." *JAS 45*:1228–1252.
+- Shamir, O., Garfinkel, C.I., Gerber, E.P., & Paldor, N. (2023). "The Matsuno–Gill
+  model on the sphere." *JFM 964*:A32.
 - Kaspi, Y., & Showman, A.P. (2015). "Atmospheric dynamics of terrestrial exoplanets
   over a wide range of orbital and atmospheric parameters." *ApJ* 804:60.
   [arXiv:1407.6349](https://arxiv.org/abs/1407.6349).

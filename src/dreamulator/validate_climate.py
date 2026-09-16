@@ -458,6 +458,13 @@ def build_earth_validation_config(
         evaporation_base_mm=1000.0,
         wind_blocking_height_m=3000.0,
         itcz_lag_days=30,
+        # ④ v2 two-level Gill response: default OFF until the desert-P supply-side
+        # bias is fixed and the subsidence gate recalibrated (2026-09-17
+        # calibration found no monotone signal — see _SUBSIDENCE_GATE_KNOTS_W).
+        # Measurement runs 2026-09-17 proved the gated flag is a no-op (≤0.2 mm
+        # mean P change, 0.1 pp metric delta at both root and branch contexts);
+        # flip this pin together with the default when recalibration lands.
+        stationary_wave_v2_enabled=False,
         num_nodes=num_nodes,
     )
 

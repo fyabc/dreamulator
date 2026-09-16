@@ -44,8 +44,10 @@
   Stage 顺序执行全链并把结果写回 `VoronoiCell` 字段。
 - `map/ocean_circulation.py` — 洋流三步（Stommel 流函数、SST 平流、涌升），在 Stage 2.5
   挂载；也提供风场分解（东/北分量基）等切空间工具。
-- `map/stationary_wave.py` — ④ 定常波响应求解器（roadmap ④）：默认关闭的已接线组件，
-  见 §5.6。
+- `map/stationary_wave.py` — ④ 定常波响应 v1 求解器（roadmap ④，已否证保留）：默认
+  关闭的已接线组件，见 §5.6。
+- `map/stationary_wave_two_level.py` — ④ v2 两层 Gill 响应（Lee-Wang-Mapes 2009 两模态
+  模型，k-块对角带状求解 + 下沉干燥门消费），见 §5.6。
 - `map/climate_config.py` — 世界气候配置加载（`terrain_config.yaml` + 行星物理参数解析），
   是诊断脚本的统一配置入口（`load_climate_config`）。
 - `engine/climate.py` — DAG 引擎封装 `ClimateEngine`：`dreamulator build` 气候层的
@@ -326,16 +328,30 @@ B0b 契约（技术债 24）：**月度场是主、年场是导出**，恒等式
 ——根部翻转会连锁打反整链符号，故在 Stage 2.5 入口做一次 `_to_physical_wind`
 involution 换回镜像（:653-662、:1965、:2050-2058）。
 
-### 5.6 ④ 定常波两趟回路（已接线，默认关）
+### 5.6 ④ 定常波两趟回路（v1 默认关；v2 两层 Gill 已实施，默认关）
 
-`stationary_wave_enabled = false`（`pipeline_types.py:507`）。开启时在 Stage 3 内跑两
-趟定点（:799-872）：pass-1 降水 → 柱潜热 → 定常线性正压涡度方程
+**v1**：`stationary_wave_enabled = false`。开启时在 Stage 3 内跑两趟定点
+（`climate_simulator.py` ④ 块）：pass-1 降水 → 柱潜热 → 定常线性正压涡度方程
 （`map/stationary_wave.py::compute_slp_wave_anomaly`，Sardeshmukh & Hoskins 1988 /
 Rodwell & Hoskins 2001）→ ΔSLP_wave 叠加到 raw ΔP 上重过「平滑 → 梯度 → 边界层风」链
 → 重解水汽收支。趟间欠松弛（`stationary_wave_relaxation` = 0.5）。v1 保真度不足（地表
 温度热成风基本态代理），机器保留待 v2（真高层基本态），细节见
 [proposals/climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §2
 「定常波响应」。
+
+**v2（2026-09-17，与 v1 互斥）**：`stationary_wave_v2_enabled = false`
+（`pipeline_types.py`）。开启时走 Lee-Wang-Mapes 2009 两模态模型
+（`map/stationary_wave_two_level.py::compute_omega_wave_anomaly`）：pass-1 P → Q̇
+（`precip_to_heating`）→ 扣纬向环均值 → k-块对角带状求解（zonal 平均基本态 → 经度
+rFFT 后按 wavenumber 块对角，0.16 s/月）→ 中层 w = −p_m∇²χ̂/(ρ_m·g) → **陆地
+k_rain 下沉干燥门**（`climate_physics.subsidence_rainout_gate`，质量守恒乘性调制，
+与 storm/SST 门在 `_compute_precipitation_monthly_budget` 的 `omega_gate_monthly`
+钩子复合）→ 重解水汽收支。**风场保持 pass-1**（v1 的 ΔSLP→BL 风 1/f 放大路径不
+再消费）。求解器全验证（Case-1 退化 Matsuno-Gill/Case-4 反气旋对/R&H ω 签名三基本
+态不变号/慢自转波导加宽，`tests/test_stationary_wave_two_level.py` 14 项）；消费门
+2026-09-17 标定无信号（强迫自引用——模型沙漠湿偏差加热淹没 R&H 下沉），结点保守
+弱斜率，待供给端沙漠 P 偏差修复后重标定（`diagnose_desert_wetness --wave-gate`，
+存档驱动）。
 
 ---
 

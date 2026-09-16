@@ -1223,6 +1223,65 @@ def sst_convection_gate(
     return np.asarray(out[:, 0])
 
 
+# ④ v2 下沉干燥门结点（earth 标定 2026-09-17，diagnose_desert_wetness --wave-gate：
+# GPCP 陆格 e_rel = P_local/P_5°带均值 vs 模型 w_mid 分 bin）。**标定轮结论：信号
+# 弱且非单调**——上升 bin e_rel 0.95 vs 深下沉 bin 0.84-1.04（年尺度 n≈2e4 陆格），
+# 远弱于 §5-α SST 门的单调曲线。根因 = 强迫自引用：模型沙漠湿偏差作为虚假加热
+# 进入 Q（7 月撒哈拉模型 P 58 mm ≈ 恒河 56 mm），淹没 R&H 遥相关下沉（撒哈拉 7 月
+# 模型 w 反为上升 +6e-4）；华南年尺度误下沉（obs e_rel 2.76 = 模型已欠雨）。结点
+# 取实测弱信号的保守单调内插；**待沙漠 P 偏差修复（供给端）后重标定**——届时深
+# 下沉 bin 应显现 e_rel→0.2-0.4 的真信号。自变量 = 下沉速度幅度 |w|（m/s）。
+_SUBSIDENCE_GATE_KNOTS_W: tuple[float, ...] = (0.0, 1.0e-3, 3.0e-3)
+_SUBSIDENCE_GATE_KNOTS_F: tuple[float, ...] = (1.0, 0.93, 0.85)
+_SUBSIDENCE_GATE_F_MIN: float = 0.2
+
+
+def subsidence_rainout_gate(
+    w_mid_ms: np.ndarray,
+    is_land: np.ndarray,
+) -> np.ndarray:
+    """Rodwell–Hoskins 下沉干燥门（④ v2 消费点）：k_rain × f(w_mid)。
+
+    定常波斜压响应的下沉支（季风加热西侧的 Rossby 下沉舌——撒哈拉/中东沙漠的
+    维持机制，Rodwell & Hoskins 1996/2001）自上方稳定层结 → 对流雨出效率坍缩，
+    水汽被水平输出到上升区再雨出（质量守恒重分配：门乘 k_rain，ΣP = ΣE 对任意
+    门场成立）。与 §5-α SST 门同构但驱动场换为动力垂直运动：
+
+    - 上升（w_mid > 0）恒 f = 1（结构安全：上升永不压制）；
+    - 下沉单调压制至 stratocumulus-drizzle 量级的 floor（海洋层积云甲板仍有
+      ~20% 的弱雨出——与 §5-α 同一残余物理）；
+    - 陆地 only（海洋归 §5-α SST 门，掩膜不相交 → 海岸无双压制）；下沉干燥
+      的物理本体在大陆（沙漠），海上的冷舌/层积云已由 SST 门覆盖；
+    - 逐月（w_mid 为 (N, 12)），与风暴/SST 门同钩子乘性复合。
+
+    Args:
+        w_mid_ms: 中层垂直速度 m/s（>0 上升），shape (N,) 或 (N, 12)
+            （``stationary_wave_two_level.compute_omega_wave_anomaly`` 产物）。
+        is_land: 陆地掩码，shape (N,)。
+
+    Returns:
+        门因子 [0.2, 1.0]，与输入同形。
+    """
+    w_arr = np.asarray(w_mid_ms, dtype=np.float64)
+    monthly = w_arr.ndim == 2
+    n_months = w_arr.shape[1] if monthly else 1
+    flat = w_arr.reshape(w_arr.shape[0], n_months) if monthly else w_arr[:, None]
+
+    dw = np.maximum(-flat, 0.0)  # 下沉幅度（上升 → 0 → f = 1）
+    xs, fs = _SUBSIDENCE_GATE_KNOTS_W, _SUBSIDENCE_GATE_KNOTS_F
+    f = np.asarray(np.interp(dw, xs, fs))
+    above = dw > xs[-1]
+    if above.any():
+        slope = (fs[-1] - fs[-2]) / (xs[-1] - xs[-2])
+        f = np.asarray(np.where(above, fs[-1] + (dw - xs[-1]) * slope, f))
+
+    f = np.where(np.asarray(is_land)[:, None], f, 1.0)
+    out = np.clip(f, _SUBSIDENCE_GATE_F_MIN, 1.0)
+    if monthly:
+        return np.asarray(out)
+    return np.asarray(out[:, 0])
+
+
 def koppen_classify(
     t_mean_c: np.ndarray,
     t_cold_c: np.ndarray,

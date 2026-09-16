@@ -514,6 +514,22 @@ class TerrainPipelineConfig:
     # r⁻¹: literature convention (S&H 1988), same order as the moisture τ=9d — NOT a tuning knob
     stationary_wave_damping_days: float = 10.0
     stationary_wave_relaxation: float = 0.5  # fixed-point under-relaxation between the two passes
+    # ④ v2 two-level Gill response (Lee, Wang & Mapes 2009, J. Climate 22:272,
+    # doi:10.1175/2008JCLI2303.1): two-mode (barotropic + baroclinic) steady
+    # linear model on the wave grid — solves the upper/lower structure directly
+    # from the heating, structurally bypassing the surface-T thermal-wind proxy
+    # that falsified v1 (resting basic state ⇒ exact Matsuno-Gill, paper Case-1;
+    # the paper shows the baroclinic response is largely background-flow
+    # insensitive).  Basic state = zonal means (surface wind + thermal-wind
+    # shear) — zonal averaging removes the bin-noise/topography contamination
+    # that killed v1.  Consumption: mid-level w from the baroclinic mode feeds a
+    # LAND k_rain subsidence-drying gate (mass-conserving, §5-α-style; the wind
+    # field stays pass-1 — v1's 1/f BL-wind amplification path is severed).
+    # Solver: longitude-rFFT block-diagonal in zonal wavenumber k (zonal basic
+    # state ⇒ operator longitude-independent).  Parameters c_g=60 m/s,
+    # γ=(2d)⁻¹, r₁=(10d)⁻¹, r₀=(20d)⁻¹, A=1e6 m²/s are paper values (module
+    # constants, not knobs).  Mutually exclusive with stationary_wave_enabled.
+    stationary_wave_v2_enabled: bool = False  # flip to True after earth+nacrea acceptance
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)

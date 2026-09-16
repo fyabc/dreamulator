@@ -200,6 +200,94 @@ def run_archive_mode(map_dir: Path) -> None:
         )
 
 
+def run_wave_gate_calibration(map_dir: Path) -> None:
+    """④ v2 下沉干燥门标定：e_rel（GPCP 陆格 P / 陆地带均值）vs 模型 w_mid 分 bin。
+
+    波动求解是 pass-1 场的纯函数，而 pass-1 产物 = flag-off 构建存档
+    （t/p/wind 月场，climate_monthly.msgpack，int16×scale/offset）——无需重跑
+    引擎。结点自变量 = 年均（+7 月对照）下沉速度 w<0（m/s）；e_rel 在 w≈0 bin
+    归一（同 §5-α 纪律：零距平基线不动）。月份约定 month_0 = 春分 → 7 月 =
+    索引 4。
+    """
+    import msgpack
+
+    from dreamulator.map.stationary_wave_two_level import compute_omega_wave_anomaly
+
+    a = _load_archive(map_dir)
+    with open(map_dir / "climate_monthly.msgpack", "rb") as f:
+        d = msgpack.unpack(f)
+
+    def _monthly(prefix: str) -> np.ndarray:
+        raw = np.frombuffer(d[f"{prefix}_monthly"], dtype=np.int16).reshape(
+            d["num_cells"], d["months"]
+        )
+        return raw.astype(np.float64) * d[f"{prefix}_scale"] + d[f"{prefix}_offset"]
+
+    sol = compute_omega_wave_anomaly(
+        p_monthly_mm=_monthly("p"),
+        t_monthly_c=_monthly("t"),
+        elevation_m=a["elev"],
+        cell_lat_deg=a["lat"],
+        cell_lon_deg=a["lon"],
+        cell_area_km2=a["area"],
+        wind_east_monthly=_monthly("wind_east"),
+        wind_north_monthly=_monthly("wind_north"),
+        surface_pressure_hpa=1013.25,
+        rotation_period_days=1.0,
+        radius_km=6371.0,
+        orbital_period_days=365.25,
+    )
+    w = sol.w_mid_m_s  # (n, 12)，>0 上升
+    lat, area, p_obs = a["lat"], a["area"], a["p_obs"]
+    is_land = a["elev"] >= 0.0
+
+    band = np.floor((lat + 2.5) / 5.0).astype(int)
+    band -= band.min()
+    nb = int(band.max()) + 1
+    m = is_land & np.isfinite(p_obs) & np.isfinite(w.mean(axis=1))
+    p_zm = _zonal_mean(p_obs, area, m, band, nb)
+    e_rel = p_obs / np.maximum(p_zm, 1e-9)
+
+    w_ann = w.mean(axis=1)
+    w_jul = w[:, 4]  # month_0 = vernal equinox → July = index 4
+    print(f"land cells with obs: {m.sum()} / {int(is_land.sum())}")
+    print(
+        f"w_mid annual: min {w_ann[m].min():.2e} max {w_ann[m].max():.2e} m/s; "
+        f"subsidence share {float((w_ann[m] < 0).mean()) * 100:.0f}%"
+    )
+    print(f"w_mid July:   min {w_jul[m].min():.2e} max {w_jul[m].max():.2e} m/s")
+
+    for label, wf in (("annual", w_ann), ("July", w_jul)):
+        print(f"\n== e_rel (obs P / zonal-mean obs P) by w_mid bin [land, GPCP, {label}] ==")
+        print(f"{'w bin (m/s)':>18}{'n':>8}{'med':>7}{'p25':>7}{'p75':>7}")
+        edges = [-4e-3, -2e-3, -1e-3, -5e-4, -2e-4, -1e-4, -5e-5, -1e-5, 0.0, 1e-5, 1e-4]
+        for lo, hi in zip(edges[:-1], edges[1:], strict=False):
+            sel = m & (wf >= lo) & (wf < hi)
+            if sel.sum() < 30:
+                print(f"{lo:>9.1e}..{hi:<7.1e}{sel.sum():>8}   --")
+                continue
+            e = e_rel[sel]
+            print(
+                f"{lo:>9.1e}..{hi:<7.1e}{sel.sum():>8}{np.median(e):>7.2f}"
+                f"{np.percentile(e, 25):>7.2f}{np.percentile(e, 75):>7.2f}"
+            )
+        up = m & (wf >= 1e-4)
+        if up.sum() >= 30:
+            print(f"{'ascent>1e-4':>18}{up.sum():>8}{np.median(e_rel[up]):>7.2f}")
+
+    print("\n== desert/monsoon boxes: model w_mid (annual / July) + obs e_rel ==")
+    print(f"{'box':<14}{'n':>6}{'w_ann':>10}{'w_jul':>10}{'e_rel':>7}")
+    for name, la0, la1, lo0, lo1 in _BOXES:
+        sel = m & (lat >= la0) & (lat <= la1) & (a["lon"] >= lo0) & (a["lon"] <= lo1)
+        if sel.sum() == 0:
+            print(f"{name:<14} EMPTY")
+            continue
+        print(
+            f"{name:<14}{sel.sum():>6}{np.nanmean(w_ann[sel]):>+10.2e}"
+            f"{np.nanmean(w_jul[sel]):>+10.2e}{np.nanmedian(e_rel[sel]):>7.2f}"
+        )
+
+
 def run_ablation(world_dir: Path) -> None:
     """3 engine re-runs: baseline / monsoon-anomaly off / kappa off."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -268,6 +356,11 @@ def main() -> None:
         action="store_true",
         help="run the 3-case engine ablation (~15 min) instead of archive mode",
     )
+    ap.add_argument(
+        "--wave-gate",
+        action="store_true",
+        help="calibrate the ④ v2 subsidence-drying gate (archive-based, ~1 min)",
+    )
     ap.add_argument("--world", default="earth")
     ap.add_argument("--branch", default="climate-dev")
     ap.add_argument("--world-dir", default=str(root / "data" / "worlds"))
@@ -275,6 +368,13 @@ def main() -> None:
     world_dir = Path(args.world_dir) / args.world
     if args.ablation:
         run_ablation(world_dir)
+    elif args.wave_gate:
+        map_dir = (
+            world_dir / "branches" / args.branch / "maps" / f"planet_{args.world}"
+            if args.branch
+            else world_dir / "maps" / f"planet_{args.world}"
+        )
+        run_wave_gate_calibration(map_dir)
     else:
         map_dir = (
             world_dir / "branches" / args.branch / "maps" / f"planet_{args.world}"
