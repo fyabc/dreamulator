@@ -27,6 +27,7 @@ from dreamulator.engine.climate_physics import (
     equilibrium_temperature,
     evaporation_rate,
     hadley_cell_wind,
+    hadley_extent_from_rotation,
     ice_albedo_feedback,
     koppen_classify,
     lat_gradient_from_omega,
@@ -39,7 +40,10 @@ from dreamulator.engine.climate_physics import (
     terrain_wind_blocking,
 )
 from dreamulator.engine.climate_seasonality import (
+    apply_eddy_relaxation,
     compute_seasonal_climate,
+    eddy_diffusion_single_cell,
+    radiative_equilibrium_contrast,
     seasonal_heat_capacity,
     seasonal_precip_extremes,
     solve_1d_ebm_temperature,
@@ -166,6 +170,38 @@ def simulate_climate(
 
     land_mask_arr = np.array(is_land, dtype=bool)
 
+    # P3 (2026-09-16): Hadley-cell extent.  ``hadley_extent_deg = 0`` means
+    # "derive" — the Held-Hou thermal-Rossby scaling φ_H ≈ R_t^(1/2) with Δ_H
+    # from the model's own radiative-equilibrium contrast (same insolation
+    # geometry as the EBM).  An explicit config value pins it (escape hatch
+    # for the GCM-evidenced global-cell regime — nacrea's PoC mass
+    # streamfunction is single-signed to the pole where the axisymmetric
+    # formula only reaches ~60°; see hadley_extent_from_rotation).
+    if config.hadley_extent_deg > 0.0:
+        hadley_extent_deg = config.hadley_extent_deg
+    else:
+        _delta_h = radiative_equilibrium_contrast(
+            t_surf_C,
+            albedo=config.albedo,
+            obliquity_deg=config.axial_tilt_deg,
+            solar_constant=solar_const,
+            orbital_period_days=config.orbital_period_days,
+            eccentricity=config.eccentricity,
+            perihelion_day=config.perihelion_day,
+        )
+        hadley_extent_deg = hadley_extent_from_rotation(
+            _delta_h,
+            radius_km=config.radius_km,
+            gravity_m_s2=config.gravity_m_s2,
+            rotation_period_days=config.rotation_period_days,
+        )
+        _console.print(
+            f"    [dim]hadley extent derived: {hadley_extent_deg:.1f} deg"
+            f" (Δ_H={_delta_h:.3f})[/dim]"
+        )
+    # Anti-overlap clamp: the polar cell cannot start inside the Hadley cell.
+    polar_cell_start_deg = max(config.polar_cell_start_deg, hadley_extent_deg)
+
     # Archived 4.2 subsidence-warming increment (°C), released over humid land
     # by the Stage 3.5 aridity gate (subsidence_aridity_gate).  Stays zero for
     # single-cell worlds (nacrea) and when subsidence_warming_c = 0.
@@ -177,7 +213,7 @@ def simulate_climate(
         # the sin² latitude profile + 3-pass graph diffusion.  The ocean is
         # overwritten by ``_ocean_surface_temperature`` below, so this solve
         # gives the LAND temperature.  Two regimes (energy_balance.md §3):
-        if config.hadley_extent_deg >= 90.0:
+        if hadley_extent_deg >= 90.0:
             # Single-Hadley-cell regime (slow rotators, P ≳ 3 d): heat transport
             # is by direct overturning (MOC), not eddies — a different mechanism
             # than the diffusive EBM.  Held & Hou (1980) quartic profile (flat
@@ -189,6 +225,21 @@ def simulate_climate(
                 radius_km=config.radius_km,
                 gravity_m_s2=config.gravity_m_s2,
                 rotation_period_days=config.rotation_period_days,
+            )
+            # E1 (2026-09-16): eddy heat transport on top of the overturning.
+            # Held-Hou is the axisymmetric (eddy-free) limit; the slow-rotation
+            # eddy residual — weakened but nonzero, ~50% of Earth's eddy peak at
+            # nacrea's Ω = 0.318 (Kaspi & Showman 2015 Fig. 8b) — further
+            # flattens the profile toward the global mean.  Same (B, D, n(n+1))
+            # machinery as the EBM branch, with the eddy-only D.  The ocean is
+            # overwritten by the SST profile below; this acts on the land field.
+            t_mean_C = apply_eddy_relaxation(
+                t_mean_C,
+                lat_rad,
+                olr_b_wm2k=config.ebm_olr_b_wm2k,
+                eddy_diffusion_wm2k=eddy_diffusion_single_cell(
+                    config.rotation_period_days, config.ebm_diffusion_land_wm2k
+                ),
             )
         else:
             # Three-cell regime (Earth-like): eddy-driven transport, D ∝ Ω^0.3
@@ -277,6 +328,15 @@ def simulate_climate(
                 land_mask=land_mask_arr,
             )
 
+    # E2 (2026-09-16): archive the ice-albedo increment for the baroclinic
+    # band.  The feedback is a *response* to the climate, not a radiative
+    # forcing — letting its sharpened gradient (the 58-72° ice edge on nacrea)
+    # steer the storm band is a positive coupling the single-pass annual chain
+    # cannot equilibrate.  The precipitation budget feeds ``_baroclinic_band``
+    # the ice-free field instead (land cells only — the ocean is overwritten by
+    # the SST profile below, so its archived increment is stale by then).
+    _t_pre_ice = t_mean_C.copy()
+
     # ── 3A.3: ice-albedo feedback ──
     if config.ice_albedo_feedback:
         t_mean_C = ice_albedo_feedback(
@@ -284,6 +344,7 @@ def simulate_climate(
             max_cooling_c=config.ice_albedo_max_cooling_c,
             ice_threshold_c=config.ice_albedo_threshold_c,
         )
+    _t_ice_increment = t_mean_C - _t_pre_ice
 
     # Ocean surface temperature: damped latitude gradient (maritime moderation)
     # anchored to the planet's global-mean surface temperature (Earth profile
@@ -292,6 +353,8 @@ def simulate_climate(
     t_mean_C[~land_mask_arr] = _ocean_surface_temperature(
         lat_rad[~land_mask_arr],
         t_surf_C,
+        config,
+        solar_const=solar_const,
     )
     # Inland lakes split by their annual-mean land temperature:
     #  - seasonal-ice lakes (annual land T ≥ 0) keep the land temperature —
@@ -339,7 +402,14 @@ def simulate_climate(
     # warmed toward the cold polar ocean.  Applied before the lapse rate.
     if config.maritime_advection_scale_km > 0.0:
         _wind_ann = terrain_wind_blocking(
-            _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, None),
+            _seasonal_mean_cell_wind(
+                lat_rad,
+                nodes_xyz,
+                config,
+                None,
+                hadley_extent_deg=hadley_extent_deg,
+                polar_cell_start_deg=polar_cell_start_deg,
+            ),
             elevation_m,
             config.wind_blocking_height_m,
         )
@@ -416,7 +486,10 @@ def simulate_climate(
         eccentricity=config.eccentricity,
         perihelion_day=config.perihelion_day,
         olr_b_wm2k=config.ebm_olr_b_wm2k,
-        diffusion_wm2k=config.ebm_diffusion_wm2k,
+        # E1: Ω-scale the seasonal damping exactly like the annual EBM caller
+        # (D ∝ P^0.3 = Ω^−0.3 — bigger cells smear anomalies meridionally
+        # faster).  Earth (P = 1 d) is unchanged.
+        diffusion_wm2k=config.ebm_diffusion_wm2k * config.rotation_period_days**0.3,
         albedo=config.albedo,
         ice_albedo=spectral_ice_albedo(
             config.stellar_temperature_k,
@@ -484,7 +557,14 @@ def simulate_climate(
     # pressure gradient (barometric exp(−h/H)) adds ~30 m/s of topographic
     # noise over land that swamps the coherent flow.  The three-cell wind
     # alone gives coherent ~3–4 m/s westerlies at 30–60°.
-    wind = _seasonal_mean_cell_wind(lat_rad, nodes_xyz, config, itcz_lat_monthly)
+    wind = _seasonal_mean_cell_wind(
+        lat_rad,
+        nodes_xyz,
+        config,
+        itcz_lat_monthly,
+        hadley_extent_deg=hadley_extent_deg,
+        polar_cell_start_deg=polar_cell_start_deg,
+    )
     # ④ pass-2 needs the pure three-cell background (below, `wind` gets
     # reassigned to the monthly mean = background + monsoon anomaly).
     _wind_bg = wind
@@ -642,6 +722,7 @@ def simulate_climate(
             _build_directed_edge_table,
             advect_sst_semilagrangian,
             advect_temperature_anomaly,
+            apply_subgrid_wbc_boost,
             apply_upwelling_sst_correction,
             compute_curl_z,
             compute_upwelling_index,
@@ -705,6 +786,12 @@ def simulate_climate(
                     east=east,
                     sea_level_m=config.sea_level_offset_m,
                 )
+                # E4 (2026-09-16): sub-grid WBC jet — restore the analytic
+                # jet speed ψ_max/(R/β) in the western-intensification core,
+                # which the ~51 km graph Laplacian smears out (observed WBC
+                # 100–250 cm/s vs resolved ~1 cm/s).  Feeds the SST advection
+                # (longitudinal anomaly structure) and the stored currents.
+                vel = apply_subgrid_wbc_boost(psi, vel, beta[b_cells], bottom_friction_s=R)
                 all_psi[b_idx] = psi
                 all_velocity[b_idx] = vel
 
@@ -782,6 +869,7 @@ def simulate_climate(
         itcz_lat_monthly=itcz_lat_monthly,
         debug=debug,
         edge_table=(_msrc, _mdst),
+        ice_increment_c=_t_ice_increment,
     )
 
     # ── ④ Stationary-wave response (roadmap ④): two-pass fixed point ──
@@ -868,6 +956,7 @@ def simulate_climate(
             itcz_lat_monthly=itcz_lat_monthly,
             debug=debug,
             edge_table=(_msrc, _mdst),
+            ice_increment_c=_t_ice_increment,
         )
         _resid = float(np.abs(p_monthly - _p_pass1).mean())
         _console.print(f"    [dim]wave two-pass |P₂−P₁| mean {_resid:.1f} mm[/dim]")
@@ -1162,6 +1251,9 @@ def _seasonal_mean_cell_wind(
     nodes_xyz: np.ndarray,
     config: TerrainPipelineConfig,
     itcz_lat_monthly: np.ndarray | None,
+    *,
+    hadley_extent_deg: float,
+    polar_cell_start_deg: float,
 ) -> np.ndarray:
     """Time-average of the three-cell circulation over the seasonal ITCZ.
 
@@ -1176,9 +1268,12 @@ def _seasonal_mean_cell_wind(
     Args:
         lat_rad: Latitude in radians, shape (N,).
         nodes_xyz: Unit sphere node positions, shape (N, 3).
-        config: Pipeline configuration (cell extents, rotation period).
+        config: Pipeline configuration (rotation period).
         itcz_lat_monthly: ITCZ latitude per month (degrees), shape (12,), or
             None for no migration.
+        hadley_extent_deg: Resolved Hadley half-width (P3: config pin or the
+            derived Held-Hou value).
+        polar_cell_start_deg: Resolved polar-cell start (anti-overlap clamped).
 
     Returns:
         Annual-mean cell-circulation wind vectors (m/s), shape (N, 3).
@@ -1189,8 +1284,8 @@ def _seasonal_mean_cell_wind(
         hadley_cell_wind(
             lat_rad,
             nodes_xyz,
-            hadley_extent_deg=config.hadley_extent_deg,
-            polar_cell_start_deg=config.polar_cell_start_deg,
+            hadley_extent_deg=hadley_extent_deg,
+            polar_cell_start_deg=polar_cell_start_deg,
             rotation_period_days=config.rotation_period_days,
             itcz_lat_deg=float(itcz),
         )
@@ -1238,9 +1333,25 @@ def _geostrophic_wind(
     return wind
 
 
+# E4 (2026-09-16): ocean heat transport as a column diffusion D_OHT.  Calibrated
+# on Earth: the EBM ocean column with D = 0.37 reproduces the observed
+# open-ocean anchor contrast (28 °C equator → −2 °C at 60°, i.e. 30 K); the
+# implied peak column transport is ~2.9 PW.  The column lumps two components
+# with different rotation dependence, weighted by the Trenberth & Caron 2001
+# partition (peak OHT 1.7-2.2 PW of the ~2.9 PW column → ocean share ~0.65):
+# the ocean share is wind-driven (gyres + Ekman, NOT Ω-scaled to first order —
+# slow rotators lose the westerly-driven subpolar gyres while gaining Ekman
+# drift, roughly cancelling), the atmospheric share scales Ω^−0.3 (Kaspi &
+# Showman 2015, the same law as the annual EBM).  Earth (P = 1) is unchanged.
+_OHT_COLUMN_WM2K: float = 0.37
+_OHT_OCEAN_SHARE: float = 0.65
+
+
 def _ocean_surface_temperature(
     lat_rad: np.ndarray,
     t_surf_c: float,
+    config: TerrainPipelineConfig | None = None,
+    solar_const: float = SOLAR_CONSTANT,
 ) -> np.ndarray:
     """Estimate sea surface temperature (SST) from latitude.
 
@@ -1252,6 +1363,24 @@ def _ocean_surface_temperature(
     temperature while keeping the maritime-moderation shape.
     ``t_surf_earth_ref`` is the model's own Earth value (1 L☉, 1 AU,
     albedo 0.306, +33 K greenhouse), so Earth is reproduced exactly.
+
+    E4 world-departure: the anchor shape is Earth's *observed* SST — it
+    already contains Earth's OHT, so applying it verbatim to another world is
+    a hidden Earth calibration.  When ``config`` is given, a process-based
+    departure is added:
+
+        T_world = anchor(lat) + [EBM_OHT(world; D=0.37·P^0.3)
+                                 − EBM_OHT(earth_ref; D=0.37)]
+
+    the diffusive-OHT EBM difference between the world's own forcing
+    (obliquity/flux/orbit) and the Earth reference.  Earth's forcing makes
+    the bracket exactly zero (same parameters, same solve); both solves are
+    anchored to the same ``t_surf_c``, so the departure carries no global-mean
+    shift (the anchor's ``shift`` mechanism stays the sole level control).
+    Slow rotators get stronger column diffusion (bigger cells smear anomalies
+    faster — the same P^0.3 law as the annual EBM) and weak-obliquity worlds
+    get their own radiative shape (e.g. nacrea's 9° tilt flattens the
+    mid-latitude ocean while depleting the polar annual insolation).
 
     Sea ice: the surface of an ice-covered ocean is NOT open water at the
     freezing point.  Sea ice insulates the ocean from the atmosphere
@@ -1271,6 +1400,11 @@ def _ocean_surface_temperature(
         lat_rad: Latitude in radians.
         t_surf_c: Global-mean surface temperature (°C), i.e. equilibrium
             temperature + greenhouse warming.
+        config: Optional pipeline config — enables the E4 process-based
+            world-departure.  ``None`` (or an Earth-forcing config) gives the
+            pure anchor.
+        solar_const: S₀ at the planet's distance (W/m²); only read when
+            ``config`` is given.
 
     Returns:
         SST / ice-surface temperature estimate (°C), shape matches inputs.
@@ -1297,6 +1431,37 @@ def _ocean_surface_temperature(
     t_ice = np.where(lat_deg >= 0.0, t_ice_nh, t_ice_sh) + shift
 
     sst = sst_open * (1.0 - ice_weight) + t_ice * ice_weight
+
+    # ── E4: process-based world-departure (diffusive OHT; see docstring) ──
+    if config is not None:
+        olr_b = config.ebm_olr_b_wm2k
+        # Column D_OHT: ocean share (wind-driven, constant) + atmospheric share
+        # (Ω^−0.3) — see the module constants above.
+        d_oht = _OHT_COLUMN_WM2K * (
+            _OHT_OCEAN_SHARE + (1.0 - _OHT_OCEAN_SHARE) * config.rotation_period_days**0.3
+        )
+        t_proc = solve_1d_ebm_temperature(
+            lat_rad,
+            t_surf_c,
+            albedo=config.albedo,
+            obliquity_deg=config.axial_tilt_deg,
+            solar_constant=solar_const,
+            orbital_period_days=config.orbital_period_days,
+            eccentricity=config.eccentricity,
+            perihelion_day=config.perihelion_day,
+            olr_b_wm2k=olr_b,
+            diffusion_wm2k=d_oht,
+        )
+        t_ref = solve_1d_ebm_temperature(
+            lat_rad,
+            t_surf_c,
+            albedo=0.306,
+            obliquity_deg=23.44,
+            solar_constant=SOLAR_CONSTANT,
+            olr_b_wm2k=olr_b,
+            diffusion_wm2k=_OHT_COLUMN_WM2K,
+        )
+        sst = sst + (t_proc - t_ref)
 
     return np.asarray(np.clip(sst, -60.0, 30.0))
 
@@ -1904,8 +2069,8 @@ def _baroclinic_band(
     lat_deg: np.ndarray,
     band_deg: float = 5.0,
     min_lat_deg: float = 20.0,
-) -> tuple[float, float]:
-    """Centre and half-width (degrees) of the baroclinic storm-track band.
+) -> tuple[float, float, float]:
+    """Centre, half-width (degrees) and equator-pole contrast of the baroclinic band.
 
     Transient eddies grow where the meridional temperature gradient is
     steepest (Eady instability follows ∇T), so the band is derived from the
@@ -1916,15 +2081,22 @@ def _baroclinic_band(
     broad temperature profile (Held–Hou quartic: gradient ∝ sin³φ·cosφ,
     peak near 50–60°).
 
+    The third return value is the profile's own equator-to-pole contrast
+    (first minus last zonal bin) — the self-field baroclinicity measure the
+    storm amplitude normalises against Earth's 45 °C, replacing the former
+    config/auto ``lat_gradient`` duality.
+
     Args:
-        temperature_c: Annual-mean temperature field (°C), shape (N,).
+        temperature_c: Annual-mean temperature field (°C), shape (N,).  Callers
+            on ice-feedback worlds pass the ice-free field (E2).
         lat_deg: Latitude in degrees, shape (N,).
         band_deg: Latitude bin width for the zonal mean.
         min_lat_deg: Ignore gradients equatorward of this (ITCZ region).
 
     Returns:
-        (centre_latitude, gaussian_half_width); falls back to the classic
-        (45°, 15°) when the profile is too flat to locate a peak.
+        (centre_latitude, gaussian_half_width, delta_ep_c); falls back to the
+        classic (45°, 15°, 45 °C) when the profile is too flat to locate a
+        peak.
     """
     abs_lat = np.abs(lat_deg)
     edges = np.arange(0.0, 90.0 + band_deg, band_deg)
@@ -1935,8 +2107,9 @@ def _baroclinic_band(
     np.add.at(sums, idx, temperature_c)
     np.add.at(counts, idx, 1.0)
     if (counts < 1).any():
-        return 45.0, 15.0  # incomplete latitudinal coverage — classic fallback
+        return 45.0, 15.0, 45.0  # incomplete latitudinal coverage — classic fallback
     t_zonal = sums / counts
+    delta_ep_c = float(t_zonal[0] - t_zonal[-1])
 
     grad = np.abs(np.gradient(t_zonal, band_deg))
     # Smooth bin noise (twice-over 3-point kernel ≈ Gaussian σ≈1 bin).
@@ -1946,7 +2119,7 @@ def _baroclinic_band(
 
     search = centers >= min_lat_deg
     if not search.any() or grad[search].max() < 0.05:
-        return 45.0, 15.0  # flat profile (no baroclinicity) — fallback
+        return 45.0, 15.0, 45.0  # flat profile (no baroclinicity) — fallback
     peak = int(np.argmax(np.where(search, grad, 0.0)))
     centre = float(centers[peak])
     half_max = 0.5 * grad[peak]
@@ -1960,7 +2133,7 @@ def _baroclinic_band(
         right += 1
     fwhm = float(centers[right] - centers[left])
     width = float(np.clip(fwhm / 2.355, 5.0, 20.0))
-    return centre, width
+    return centre, width, delta_ep_c
 
 
 def _to_physical_wind(wind: np.ndarray, east: np.ndarray) -> np.ndarray:
@@ -2000,6 +2173,7 @@ def _compute_precipitation_monthly_budget(
     itcz_lat_monthly: np.ndarray | None = None,
     debug: dict[str, np.ndarray] | None = None,
     edge_table: tuple[np.ndarray, np.ndarray] | None = None,
+    ice_increment_c: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Precipitation from the monthly mass-conserving moisture budget.
 
@@ -2039,6 +2213,11 @@ def _compute_precipitation_monthly_budget(
         debug: Optional dict collecting diagnostic fields (mm/yr).
         edge_table: Optional pre-built directed edge table (src, dst), shared
             with the Stage 2 wiring.
+        ice_increment_c: Optional annual ice-albedo feedback increment (°C,
+            shape (N,)) archived by Stage 1.  The baroclinic band reads the
+            ice-free field ``temperature_c − increment`` on land (E2: the
+            feedback is a response, not a forcing — the storm band must not
+            chase the ice edge).  ``None`` or all-zero → use the field as-is.
 
     Returns:
         (p_annual_mm shape (N,), p_monthly_mm shape (N, 12)).
@@ -2078,21 +2257,20 @@ def _compute_precipitation_monthly_budget(
     # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — a spatial
     # modulation of the rainout rate k_rain, NOT an additive precipitation
     # source (Held & Soden 2006).  The band is derived from the zonal-mean
-    # temperature gradient (``_baroclinic_band``); the amplitude scales with
-    # the Eady growth rate (∇T × Ω^0.3) and the available moisture.  Annual
+    # temperature gradient (``_baroclinic_band``, E2: evaluated on the
+    # ice-free field); the amplitude scales with the baroclinicity — the
+    # model's own zonal equator-to-pole contrast (self-field criterion: no
+    # config/auto_lat_gradient duality, Earth emerges as the 45 °C reference)
+    # — times the Ω^0.3 eddy scaling and the available moisture.  Annual
     # fields — the band's seasonal excursion is a second-order effect here.
-    _lat_grad = (
-        lat_gradient_from_omega(
-            config.rotation_period_days,
-            earth_gradient_c=config.lat_gradient_earth_c,
-        )
-        if config.auto_lat_gradient
-        else config.lat_gradient_c
-    )
-    _storm_center, _storm_width = _baroclinic_band(temperature_c, lat_deg)
+    if ice_increment_c is not None:
+        _t_band_input = np.where(is_land, temperature_c - ice_increment_c, temperature_c)
+    else:
+        _t_band_input = temperature_c
+    _storm_center, _storm_width, _storm_delta_ep_c = _baroclinic_band(_t_band_input, lat_deg)
     _storm_amp = (
         config.storm_track_amplitude_mm
-        * (_lat_grad / 45.0)
+        * (_storm_delta_ep_c / 45.0)
         * (1.0 / config.rotation_period_days) ** 0.3
         * (config.evaporation_base_mm / 1000.0)
     )

@@ -11,3 +11,6 @@ climate:
   auto_lat_gradient: true        # 赤道-极地温差从自转速率推导（Kaspi 2015）
   diffusive_heat_transport: true # 图拉普拉斯经向热扩散
   ebm_1d: true                   # 1D 能量平衡模型温度路径（North 1975 / climlab）
+  # P3: 观测锚定（年均 Hadley 边界 ~30°，基线标定值）。Held-Hou 推导给 23.3°
+  # （轴对称理论 ~20% 不确定度内），但基线指标在 30 上标定——Earth 显式钉住。
+  hadley_extent_deg: 30.0

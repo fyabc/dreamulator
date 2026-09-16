@@ -569,7 +569,14 @@ class TestWindConventionPrecipitation:
         config = TerrainPipelineConfig()
         # Exactly what simulate_climate passes: the physical-convention
         # annual background (Ferrel westerlies at 45°N), no monsoon anomaly.
-        wind = _seasonal_mean_cell_wind(lat_rad, nodes, config, None)
+        wind = _seasonal_mean_cell_wind(
+            lat_rad,
+            nodes,
+            config,
+            None,
+            hadley_extent_deg=30.0,
+            polar_cell_start_deg=60.0,
+        )
         wind_monthly = np.stack([wind] * 12)
         t = np.full(n, 15.0)
         p_ann, _p_m = _compute_precipitation_monthly_budget(

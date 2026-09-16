@@ -10,9 +10,11 @@ import pytest
 
 from dreamulator.engine.climate_physics import koppen_classify
 from dreamulator.engine.climate_seasonality import (
+    apply_eddy_relaxation,
     compute_effective_obliquity,
     compute_seasonal_climate,
     daily_mean_insolation,
+    eddy_diffusion_single_cell,
     itcz_latitude_monthly,
     monthly_insolation,
     monthly_precipitation_factor,
@@ -22,6 +24,7 @@ from dreamulator.engine.climate_seasonality import (
     seasonal_precip_extremes,
     solar_declination,
     solve_1d_ebm_temperature,
+    solve_held_hou_temperature,
     warm_cold_half_precip,
 )
 
@@ -181,6 +184,68 @@ class TestSolve1DEBM:
         t = solve_1d_ebm_temperature(lat, 15.0, obliquity_deg=0.0, diffusion_wm2k=0.35)
         assert not np.isnan(t).any()
         assert t[90] > 0.0 > t[0]
+
+
+class TestHeldHouEddyRelaxation:
+    """Single-cell regime: Held-Hou quartic + the E1 eddy relaxation on top."""
+
+    def _uniform_lat(self, n: int = 400) -> np.ndarray:
+        # Near-equal-area sampling: uniform in sin(lat) (the quadrature in
+        # apply_eddy_relaxation assumes equal-solid-angle cells).
+        return np.arcsin(np.linspace(-1.0, 1.0, n))
+
+    @staticmethod
+    def _area_mean(lat_rad: np.ndarray, t: np.ndarray) -> float:
+        # Uniform-in-sin(lat) sampling: each sample carries equal Δx, so the
+        # area-weighted sphere mean is the plain average (no cos factor — the
+        # cos is already in the sampling density).
+        del lat_rad
+        return float(np.mean(t))
+
+    def test_held_hou_profile_shape(self) -> None:
+        """nacrea-like parameters: warm equator, cold pole, flat subtropics."""
+        lat = self._uniform_lat()
+        t = solve_held_hou_temperature(lat, 15.0, rotation_period_days=3.147)
+        assert t.max() > t.min() + 25.0  # Ω²-scaled contrast ~30 K
+        assert self._area_mean(lat, t) == pytest.approx(15.0, abs=0.1)
+
+    def test_eddy_relaxation_identity_at_zero_diffusion(self) -> None:
+        """D_eddy = 0 → the filter is the identity."""
+        lat = self._uniform_lat()
+        t = solve_held_hou_temperature(lat, 15.0, rotation_period_days=3.147)
+        out = apply_eddy_relaxation(t, lat, eddy_diffusion_wm2k=0.0)
+        assert np.allclose(out, t)
+
+    def test_eddy_relaxation_flattens_and_conserves_mean(self) -> None:
+        """The relaxation reduces the equator-pole contrast, keeps the mean."""
+        lat = self._uniform_lat()
+        t = solve_held_hou_temperature(lat, 15.0, rotation_period_days=3.147)
+        out = apply_eddy_relaxation(t, lat, eddy_diffusion_wm2k=0.1)
+        before = t.max() - t.min()
+        after = out.max() - out.min()
+        assert after < before - 1.0  # measurably flatter
+        assert self._area_mean(lat, out) == pytest.approx(self._area_mean(lat, t), abs=0.2)
+
+    def test_eddy_relaxation_preserves_local_structure(self) -> None:
+        """Two cells at the same latitude receive the identical correction."""
+        lat = self._uniform_lat(200)
+        t = solve_held_hou_temperature(lat, 15.0, rotation_period_days=3.147)
+        # Add a longitudinal anomaly: duplicate every cell with +5 °C
+        lat2 = np.concatenate([lat, lat])
+        t2 = np.concatenate([t, t + 5.0])
+        out = apply_eddy_relaxation(t2, lat2, eddy_diffusion_wm2k=0.1)
+        # The +5 °C local offset survives at every latitude (correction is
+        # zonal): out[i+n] − out[i] == 5 exactly.
+        n = len(lat)
+        assert np.allclose(out[n:] - out[:n], 5.0)
+
+    def test_eddy_diffusion_scaling(self) -> None:
+        """D_eddy: Earth (P=1 d) is the 0.69·D_land reference; nacrea ~half."""
+        d_earth = eddy_diffusion_single_cell(1.0, 0.28)
+        assert d_earth == pytest.approx(0.69 * 0.28)
+        d_nacrea = eddy_diffusion_single_cell(3.147, 0.28)
+        assert d_nacrea == pytest.approx(0.69 * 0.28 * 0.318**0.6, rel=0.01)
+        assert d_nacrea == pytest.approx(0.5 * d_earth, rel=0.05)
 
 
 # ---------------------------------------------------------------------------

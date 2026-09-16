@@ -167,7 +167,10 @@ climate:
   ice_albedo_feedback: true
   ice_albedo_max_cooling_c: 3.0   # K dwarf (K8): ice albedo in NIR is much lower (~0.2 vs ~0.7 visible)
   ice_albedo_threshold_c: -5.0    # default -10; lower = earlier activation
-  hadley_extent_deg: 90.0     # 单圈环流：Hadley 胞直抵极地（GCM Ω=0.318 结果）
+  hadley_extent_deg: 90.0     # 单圈环流：Hadley 胞直抵极地（GCM Ω=0.318 结果）。
+    # P3 推导佐证：Held-Hou 热罗斯贝标度 φ_H≈R_t^½（Δ_H=0.30 → R_t=2.49）恰好
+    # 打满 90° 上限——但推导值贴在体制悬崖边（阈值 R_t=2.467），显式钉 90 保
+    # 复现稳健性；推导与 PoC mass-streamfunction 证据三方一致。
   polar_cell_start_deg: 90.0  # 单圈：无 Ferrel/极地胞
   # storm_track_amplitude_mm 用共享默认 900：幅度公式自带 Ω^0.3 标度，
   # 慢自转自动得到减弱的斜压雨出增强；斜压带位置由引擎从经向温度梯度推导

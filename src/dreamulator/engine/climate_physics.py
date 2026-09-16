@@ -229,6 +229,54 @@ def lat_gradient_from_omega(
     return float(earth_gradient_c * omega_ratio**0.3)
 
 
+def hadley_extent_from_rotation(
+    delta_theta_fraction: float,
+    *,
+    radius_km: float = 6371.0,
+    gravity_m_s2: float = 9.81,
+    rotation_period_days: float = 1.0,
+    troposphere_height_m: float = 1.0e4,
+) -> float:
+    """Hadley-cell half-width from the Held-Hou thermal-Rossby-number scaling.
+
+    The axisymmetric (eddy-free) equinox solution (Held & Hou 1980; Lindzen &
+    Hou 1988; see also Guendelman & Kaspi 2019, GRL, "An axisymmetric limit
+    for the width of the Hadley cell on planets") closes as
+
+        R_t = 2 g H Δ_H / (Ω² a²) ,      φ_H ≈ R_t^(1/2)
+
+    where Δ_H is the *fractional* meridional contrast of the radiative-
+    equilibrium temperature (Δθ_eq/θ₀) and the O(1) proportionality constant
+    is 1 (edge-matching closure; the full equal-area solution shifts it by
+    O(20%)).  The cap at 90° is the global-cell regime — for R_t ≳ 2.5 the
+    axisymmetric cell fills the hemisphere.
+
+    Known limitation (why nacrea keeps an explicit override): the solstitial
+    winter cell goes global far more readily than the equinox scaling
+    predicts (Faulk et al. 2017: global cross-equatorial cell at Ω ≤ Ω⊕/8),
+    and nacrea's weak obliquity (9°) shrinks Δ_H — the axisymmetric formula
+    gives ~60° where the GCM evidence (ExoPlaSim PoC mass streamfunction,
+    single-signed to the pole at Ω = 0.318) shows a global cell.  Worlds in
+    that regime set ``hadley_extent_deg: 90`` explicitly (escape hatch).
+
+    Args:
+        delta_theta_fraction: Fractional radiative-equilibrium contrast
+            Δθ_eq/θ₀ (dimensionless, ~0.13–0.25 for terrestrial forcings).
+        radius_km: Planet radius (km).
+        gravity_m_s2: Surface gravity (m/s²).
+        rotation_period_days: Sidereal rotation period (days).
+        troposphere_height_m: Hadley-cell depth (troposphere height, m).
+
+    Returns:
+        Hadley-cell half-width in degrees, capped at 90.
+    """
+    omega = 2.0 * np.pi / (rotation_period_days * 86400.0)  # rad/s
+    a = radius_km * 1000.0  # m
+    r_t = 2.0 * gravity_m_s2 * troposphere_height_m * delta_theta_fraction / (omega**2 * a**2)
+    phi = min(0.5 * np.pi, np.sqrt(r_t))
+    return float(np.degrees(phi))
+
+
 def diffuse_heat_graph(
     temperature_c: np.ndarray,
     neighbors: list[list[int]],

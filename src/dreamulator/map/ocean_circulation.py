@@ -679,6 +679,60 @@ def solve_ocean_gyre(
     return psi, velocity
 
 
+def apply_subgrid_wbc_boost(
+    psi: np.ndarray,
+    velocity: np.ndarray,
+    beta_basin: np.ndarray,
+    *,
+    bottom_friction_s: float,
+    core_fraction: float = 0.9,
+    max_boost: float = 25.0,
+) -> np.ndarray:
+    """Sub-grid western-boundary-current jet speed (E4, 2026-09-16).
+
+    The Stommel solve is transport-faithful in ψ, but the graph Laplacian's
+    numerical viscosity spreads the western boundary layer
+    (δ = R/β ≈ 60 km on Earth, ≈ 165 km on nacrea at 30° — sub-grid or ~1
+    cell at the ~51 km mesh) over several cells, so the resolved core speed
+    ``u_res = |∇ψ|`` underestimates the physical jet ``u_jet = ψ_max/δ`` by
+    the spreading factor (observed Gulf Stream / Kuroshio 100–250 cm/s vs
+    the resolved p90 ~1 cm/s — the "SST anomaly structure death" of
+    proposals/climate-layer-improvement.md §4).
+
+    The boost restores the analytic jet speed inside the intensification
+    core (|ψ| ≥ ``core_fraction``·ψ_max — in the Stommel solution that core
+    hugs the western boundary), preserving direction.  The Sverdrup interior
+    is untouched (boost floor 1).  Used for the semi-Lagrangian SST
+    advection (reviving the WBC warm corridor / cold eastern-boundary
+    structure) and the stored/displayed currents.
+
+    Args:
+        psi: Streamfunction of the basin (m²/s), shape (N_basin,).
+        velocity: Resolved current vectors (m/s), shape (N_basin, 3).
+        beta_basin: Planetary β at the basin cells (m⁻¹ s⁻¹), shape (N_basin,).
+        bottom_friction_s: Stommel R (s⁻¹) — the same value the solve used.
+        core_fraction: |ψ| fraction of the basin max defining the jet core.
+        max_boost: Cap on the velocity multiplier (spreading-factor guard).
+
+    Returns:
+        Boosted current vectors (m/s), same shape as *velocity*.
+    """
+    speed = np.linalg.norm(velocity, axis=1)
+    psi_abs = np.abs(psi)
+    psi_max = float(psi_abs.max()) if psi_abs.size else 0.0
+    if psi_max <= 0.0 or not np.any(speed > 1e-12):
+        return velocity
+    # Stommel boundary-layer width at the ψ-peak cell (β varies with latitude).
+    i_peak = int(np.argmax(psi_abs))
+    delta_wbc_m = bottom_friction_s / max(float(beta_basin[i_peak]), 1e-13)
+    u_jet = psi_max / delta_wbc_m
+    # Boost only the intensification core, only upward, capped.
+    core = psi_abs >= core_fraction * psi_max
+    boost = np.ones_like(speed)
+    boost[core] = np.clip(u_jet / np.maximum(speed[core], 1e-9), 1.0, max_boost)
+    return np.asarray(velocity * boost[:, None])
+
+
 def _is_coastal(
     gi: int,
     cells: list[VoronoiCell],

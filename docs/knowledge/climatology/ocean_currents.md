@@ -27,7 +27,21 @@ u_surface ≈ 0.02 · |wind|,  direction = rotate(wind, ±45°·sign(φ))
 
 Sverdrup 输运在西岸集中返回，形成**西边界强化**暖流（Gulf Stream / 黑潮型，
 Stommel 1948 的 β 项 + 底摩擦机制；宽度 ~100 km、流速 ×3–10）。
-3A.3 参数化方向：环流圈西侧流速 ×3（见 roadmap §4 3A.3 表）。
+
+**Stommel 边界层宽与亚网格急流（E4，2026-09-16 落地）**：摩擦边界层宽
+δ = R/β——地球 β(30°) ≈ 1.6×10⁻¹¹ m⁻¹s⁻¹、R = 10⁻⁶ s⁻¹ → δ ≈ 62 km（~1 格）；
+nacrea（Ω=0.318）δ ≈ 165 km（~3 格）。51 km CVT 网格 + 图拉普拉斯数值粘性把
+ψ 梯度摊过数格，解出的核心流速系统性低估（观测 WBC 100–250 cm/s vs 解析
+p90 ~1 cm/s）。引擎修法（`apply_subgrid_wbc_boost`）：从已解 ψ 解析恢复急流速度
+u_jet = ψ_max/(R/β)，注入强化核（|ψ| ≥ 0.9·ψ_max，方向不变、封顶 25×），
+Sverdrup 内区不动。
+
+**极向海洋热输送（OHT）标定数（Trenberth & Caron 2001）**：地球峰值 OHT ≈
+1.7–2.2 PW（±20–30°，NCEP/ECMWF 两套再分析的能量收支残差法；大西洋 26.5°N
+RAPID 锚定 ~1.25 PW）；大气输送峰 ~3.4–5 PW → 洋柱总输送 ~2.9 PW 量级、
+海洋份额 ~0.65。引擎的扩散型 OHT（`_OHT_COLUMN_WM2K` = 0.37 W/m²/K，
+按地球开洋对比度 30 K 标定）隐含峰值柱输送 ~2.9 PW，与该份额分解一致；
+世界间变化按「海洋份额（风驱，不随 Ω 标度）+ 大气份额（Ω^−0.3）」加权。
 
 ### 1.3 环流圈形态
 
@@ -154,4 +168,6 @@ span{r₀, Ar₀, …, A^{k−1}r₀}）中取残差 ‖b − Ax‖₂ 最小的
 - Bjerknes, J. (1969). "Atmospheric teleconnections from the equatorial Pacific." *MWR 97*.
 - Haney, R. L. (1971). "Surface thermal boundary condition for ocean circulation models." *J. Phys. Oceanogr.* 1(4), 241–248.
 - Frankignoul, C., & Hasselmann, K. (1977). "Stochastic climate models, Part II: Application to sea-surface temperature anomalies and thermocline variability." *Tellus* 29(4), 289–305.
+- Trenberth, K. E., & Caron, J. M. (2001). "Estimates of Meridional Atmosphere and
+  Ocean Heat Transports." *J. Climate* 14, 3433–3443.
 - Saad, Y., & Schultz, M. H. (1986). "GMRES: A generalized minimal residual algorithm for solving nonsymmetric linear systems." *SIAM J. Sci. Stat. Comput.* 7(3), 856–869.

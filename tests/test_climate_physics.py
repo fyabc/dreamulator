@@ -17,6 +17,7 @@ from dreamulator.engine.climate_physics import (
     equilibrium_temperature,
     evaporation_rate,
     hadley_cell_wind,
+    hadley_extent_from_rotation,
     itcz_latitude,
     koppen_classify,
     latitude_temperature,
@@ -145,6 +146,33 @@ class TestCoriolisParameter:
         f_slow = coriolis_parameter(np.array([np.pi / 4]), rotation_period_days=2.0)
         f_fast = coriolis_parameter(np.array([np.pi / 4]), rotation_period_days=0.5)
         assert f_fast[0] > f_slow[0]
+
+
+class TestHadleyExtentFromRotation:
+    """Held-Hou thermal-Rossby width scaling (P3): φ_H ≈ R_t^(1/2), capped 90°."""
+
+    def test_earth_reference(self) -> None:
+        """Earth forcing (Δ_H ≈ 0.18) lands in the observed 20–35° range."""
+        phi = hadley_extent_from_rotation(0.1812, rotation_period_days=1.0)
+        assert 20.0 < phi < 30.0
+
+    def test_nacrea_hits_global_cap(self) -> None:
+        """nacrea forcing (Δ_H = 0.30, P = 3.147 d, a = 6817 km) caps at 90°."""
+        phi = hadley_extent_from_rotation(
+            0.3015, radius_km=6817.0, gravity_m_s2=10.28, rotation_period_days=3.147
+        )
+        assert phi == 90.0
+
+    def test_slower_rotation_wider_cell(self) -> None:
+        """φ_H grows as Ω decreases (R_t ∝ Ω⁻²)."""
+        fast = hadley_extent_from_rotation(0.2, rotation_period_days=1.0)
+        slow = hadley_extent_from_rotation(0.2, rotation_period_days=2.0)
+        assert slow > fast
+
+    def test_cap_at_90(self) -> None:
+        """Absurdly large Δ_H cannot exceed the global cell."""
+        phi = hadley_extent_from_rotation(10.0, rotation_period_days=1.0)
+        assert phi == 90.0
 
 
 class TestPressureFromTemperature:

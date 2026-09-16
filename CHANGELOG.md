@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **单圈体制包 E1-E4（2026-09-16，慢自转世界气候攻关）**：roadmap §六 P0 收口。
+  **E1 涡旋热输送参数化**——`apply_eddy_relaxation`（Held-Hou 剖面上的 Legendre 模态
+  弛豫 θ_n → θ_n/(1+D_eddy·n(n+1)/B)，与 EBM 同算子）+ `D_eddy = 0.69·D_land·
+  min(1,Ω)^0.6`（Kaspi & Showman 2015 Fig 8b 原文读数推导；交叉佐证 design-notes 0008
+  的斜压 onset 超临界性）；季节模型 D 统一 Ω 标度（0.35×P^0.3，地球不变）。**E2 斜压带
+  冰缘脱钩**——冰反照率增量归档（`_t_ice_increment`），`_baroclinic_band` 读冰前场
+  （反馈是响应不是强迫，风暴带不再追冰缘跑）；风暴幅度归一化改模型自身场赤道-极差
+  （第三返回值，杀 auto_lat_gradient 双轨裂缝）。**E3 已否证**——Faulk et al. 2017
+  原文细读：慢自转收敛带**变宽**（方向与 proposal 记忆相反）、nacrea（0.318）在
+  Ω≤1/8 阈值之上属窄上升体制；宽 Af 带 = 低倾角单圈的正当物理，Af 压制另走调参线。
+  **E4 过程化 OHT + WBC**——SST 剖面改「地球观测锚 + 过程化偏差
+  `[EBM_OHT(world; D=0.37×(0.65+0.35·P^0.3)) − EBM_OHT(earth_ref)]`」（TC2001 65/35
+  海气份额分解；地球侧偏差恒零）；`apply_subgrid_wbc_boost` 从已解 ψ 解析恢复急流
+  速度 ψ_max/(R/β) 注入 Stommel 强化核（复活 SST 距平纵向结构，§5-α 前置就绪）。
+  **φ_H 从 Ω 推导**（`hadley_extent_from_rotation`，Guendelman & Kaspi 2019 热罗斯贝
+  R_t^½ 定律 + `radiative_equilibrium_contrast`）：Earth 推导 23.3°、nacrea 恰好打满
+  90°（双锚数值命中但贴体制悬崖，两世界显式钉住，推导作新世界默认；`hadley_extent_deg=0`
+  = 推导）。**nacrea 实测**（200k 全量重建）：极地带 +5.7~+11.1°C、EF −3423→ET/Cfb、
+  赤道 −3.3°C（n=2 四极模物理）、Af 29%→26%、全球 P −4.4%；**earth 零变化**（各项
+  自消/钉住）。文献锚裁决：ExoPlaSim PoC 风场修复（~1e-5 m/s 根因未明）独立立项
+  不阻塞。详见 proposal §7 + `pipelines/climate-pipeline.md` §3/§6/§7。
+
+
+
 - **M4 热低压 ΔP 结构修复 + B0b 删「减年平」（2026-09-14）**：`pressure_anomaly_monthly`
   投影因子从旧 `depth_fraction`=0.25（均匀全幅、地表 ΔT 直投柱压）改为**第一性推导的
   E ≈ 0.10** = r·[1−(H/h)(1−e^(−h/H))]，其中 r = 0.6（BL 平均 vs 地表异常，Lindzen &

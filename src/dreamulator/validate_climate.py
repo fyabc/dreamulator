@@ -449,6 +449,11 @@ def build_earth_validation_config(
         auto_lat_gradient=auto_lat_gradient,
         diffusive_heat_transport=diffusive_heat_transport,
         ebm_1d=ebm_1d,
+        # P3: observational anchor (annual-mean Hadley edge ~30°, the value the
+        # baseline was calibrated with).  The Held-Hou derivation gives 23.3°
+        # for Earth — within the axisymmetric theory's ~20% uncertainty, but
+        # the baseline metrics are tuned at 30, so Earth pins it.
+        hadley_extent_deg=30.0,
         lapse_rate_c_km=6.5,
         evaporation_base_mm=1000.0,
         wind_blocking_height_m=3000.0,

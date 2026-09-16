@@ -256,13 +256,26 @@ Gnanaraj et al. (2025) 的水行星旋转速率扫描显示，慢自转端 Hadle
 Showman & Kaspi (2010) 的潮汐锁定水行星里，定常涡旋主导角动量输送并塑造
 降水分布。
 
-对引擎的含义（2026-08-29 落地，技术债 20 ⑥）：斜压雨出带的位置不取环流胞
-边界（单圈时退化为零宽），而是从纬向平均温度的经向梯度推导——Eady 不稳定
-跟随 ∇T，带中心取 |dT/dφ| 峰值、σ 取半峰全宽/2.355（`_baroclinic_band`）。
-地球与 nacrea 的年均梯度峰值都在 ~67°（极锋区），σ≈20°。幅度沿用共享默认
-（900 mm）加 Ω^0.3 标度，慢自转行星自动得到弱增强：nacrea 有效幅度约
-560 mm，中高纬增湿 +31~+89 mm/年，BW 沙漠 −910 cell，沿海沙漠
-（<200 km）853→636——方向与「涡旋减弱而不为零」一致。
+对引擎的含义（2026-08-29 落地，技术债 20 ⑥；2026-09-16 E 包升级）：斜压雨出带的
+位置不取环流胞边界（单圈时退化为零宽），而是从纬向平均温度的经向梯度推导——Eady
+不稳定性跟随 ∇T，带中心取 |dT/dφ| 峰值、σ 取半峰全宽/2.355（`_baroclinic_band`）。
+幅度基准 2026-09-16 起改为**模型自身场的赤道-极差**（第三返回值；取代 config/auto
+`lat_gradient` 双轨）。**E1 涡旋热输送参数化**（2026-09-16）：Kaspi & Showman 2015
+Fig 8b 原文读数——涡旋极向热输送对 Ω **非单调**（峰在 Ω≈Ω⊕，快转端涡旋尺度变小、
+慢转端斜压性变弱两端都衰落）；Ω=1 处涡旋/大气总输送份额 = 3.4/4.9 ≈ 0.69，慢支
+nacrea 点（Ω=0.318）比值 ≈ 0.5 → α = ln0.5/ln0.318 ≈ 0.6。引擎以
+`D_eddy = 0.69·D_land·min(1,Ω)^0.6` 在 Held-Hou 剖面上做 Legendre 模态弛豫
+（`apply_eddy_relaxation`，与 EBM 同算子）。交叉佐证：斜压 onset 超临界性
+a/L_R（nacrea 2.4 vs 地球 7.8，onset 在 1–2）独立给出「刚好激活但很弱」。
+
+**ITCZ 宽度 vs Ω 的方向（Faulk et al. 2017 原文细读，2026-09-16 裁决）**：自转
+变慢 → 收敛带**变宽**（原文 "As rotation slows and the convergence zone widens"）；
+体制转换在 Ω/Ω⊕ ≤ 1/8（冬半球胞两极贯通、上升带变宽）；nacrea（0.318）在阈值
+之上，属「窄上升」体制、ITCZ 被钉在 ≤60–70°。据此「慢自转 ITCZ 收窄」方向**已否证**
+（曾记于 proposal §7，方向记反）；低倾角慢自转世界的宽 Af 带（无副热带下沉干带 +
+无干季）是正当物理。另：该文 solstice 冬胞在 Ω ≤ 1/8 才全球化——慢自转宽胞的
+文献上限，与 ExoPlaSim PoC 在 nacrea（0.318）观测到的全球单胞（质量流函数全
+半球同号）之间存在倾角依赖（9° 弱季节 forcing 更接近年均对称解）。
 
 ## 参考资料
 
@@ -283,6 +296,9 @@ Showman & Kaspi (2010) 的潮汐锁定水行星里，定常涡旋主导角动量
   locked aquaplanets." *JAMES* 2.
 - Hermosilla Canobra, S. (2026). "Circulation and cloud-cover fingerprints in
   aquaplanet atmospheres." Utrecht University MSc thesis.
+- Faulk, S., Mitchell, J., & Bordoni, S. (2017). "Effects of Rotation Rate and
+  Seasonal Forcing on the ITCZ Extent in Planetary Atmospheres." *JAS 74*,
+  665–678. [AMS](https://journals.ametsoc.org/view/journals/atsc/74/3/jas-d-16-0014.1.xml).
 - Masiwal, R., & Dixit, V. (2023). "Explaining dynamics and rapid onset of the Somali
   jet through its kinetic energy budget." *J. Atmos. Sci.* 80(3).
 - 巴西地表风特征（1980–2014，地面站 + 再分析）：亚马逊盆地年均地表风 1–2 m/s，

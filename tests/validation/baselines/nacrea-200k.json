@@ -5,36 +5,36 @@
   "seed": 42,
   "mesh_cells": 200000,
   "temperature": {
-    "global_mean_c": 15.86,
-    "land_mean_c": 12.45,
-    "ocean_mean_c": 17.26,
-    "min_c": -49.42,
-    "max_c": 28.83
+    "global_mean_c": 16.03,
+    "land_mean_c": 13.08,
+    "ocean_mean_c": 17.24,
+    "min_c": -42.62,
+    "max_c": 24.98
   },
   "precipitation": {
-    "global_mean_mm": 829.9,
-    "land_mean_mm": 799.5
+    "global_mean_mm": 739.8,
+    "land_mean_mm": 660.6
   },
   "koppen": {
     "class_counts": {
-      "Af": 20020,
-      "Am": 36,
-      "Aw": 3297,
-      "BSh": 2263,
-      "BSk": 5195,
-      "BWh": 215,
-      "BWk": 4405,
-      "Cfb": 5613,
-      "Cfc": 24,
-      "EF": 9350,
-      "ET": 7852
+      "Af": 14450,
+      "Am": 7,
+      "Aw": 2949,
+      "BSh": 2427,
+      "BSk": 5397,
+      "BWh": 220,
+      "BWk": 7057,
+      "Cfb": 10602,
+      "Cfc": 35,
+      "EF": 5923,
+      "ET": 9203
     },
     "group_distribution": {
-      "A": 0.401,
-      "B": 0.207,
-      "C": 0.097,
+      "A": 0.299,
+      "B": 0.259,
+      "C": 0.183,
       "D": 0.0,
-      "E": 0.295
+      "E": 0.26
     },
     "n_classes": 11,
     "n_land_cells": 58270

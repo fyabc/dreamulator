@@ -25,6 +25,7 @@ from dreamulator.map.ocean_circulation import (
     advect_sst_relaxation,
     advect_sst_semilagrangian,
     advect_temperature_anomaly,
+    apply_subgrid_wbc_boost,
     assemble_east_gradient,
     assemble_graph_laplacian,
     assemble_stommel_operator,
@@ -40,6 +41,57 @@ from dreamulator.map.ocean_circulation import (
     recompose_tangent,
     solve_ocean_gyre,
 )
+
+
+class TestSubgridWbcBoost:
+    """E4: restore the analytic Stommel jet speed ψ_max/δ in the core."""
+
+    def test_interior_untouched_core_boosted(self) -> None:
+        """|ψ| < core·ψ_max cells keep their velocity; the core is boosted."""
+        n = 6
+        # Realistic transport: ψ_max ~ u_jet·δ ~ 1 m/s × 62.5 km = 6.25e4 m²/s,
+        # strong on cell 0 (the western boundary), decaying eastward.
+        psi = np.array([6.25e4, 6.0e4, 3.0e3, 1.0e3, 200.0, 0.0])
+        vel = np.tile(np.array([[0.05, 0.0, 0.0]]), (n, 1))
+        beta = np.full(n, 1.6e-11)
+        out = apply_subgrid_wbc_boost(psi, vel, beta, bottom_friction_s=1.0e-6, max_boost=25.0)
+        speed_out = np.linalg.norm(out, axis=1)
+        # u_jet = 6.25e4/(1e-6/1.6e-11) = 1.0 m/s → core boosted to ~1 m/s
+        # (u_res 0.05, boost 20 < cap 25).
+        assert speed_out[0] == pytest.approx(1.0, rel=0.01)
+        assert speed_out[1] == pytest.approx(1.0, rel=0.01)
+        # Interior cells untouched (boost floor 1).
+        assert np.allclose(speed_out[2:], 0.05)
+
+    def test_direction_preserved_and_capped(self) -> None:
+        """Boost scales the vector (direction unchanged) and respects the cap."""
+        psi = np.array([6.25e4, 0.0])
+        vel = np.array([[0.01, 0.02, 0.0], [0.03, 0.0, 0.0]])
+        beta = np.full(2, 1.6e-11)
+        out = apply_subgrid_wbc_boost(psi, vel, beta, bottom_friction_s=1.0e-6, max_boost=10.0)
+        # Cell 0: u_jet = 1.0 m/s, u_res = |(0.01, 0.02)| = 0.02236 →
+        # raw boost 44.7 → capped at 10: direction preserved, speed ×10.
+        u0, u0_out = vel[0], out[0]
+        assert np.allclose(u0_out / np.linalg.norm(u0_out), u0 / np.linalg.norm(u0))
+        assert np.isclose(np.linalg.norm(u0_out) / np.linalg.norm(u0), 10.0)
+        # Cell 1: tiny ψ (below core threshold) — untouched.
+        assert np.allclose(out[1], vel[1])
+
+    def test_cap_engages(self) -> None:
+        """A very slow resolved core cannot exceed max_boost×."""
+        psi = np.array([6.25e4])
+        vel = np.array([[1e-6, 0.0, 0.0]])
+        beta = np.full(1, 1.6e-11)
+        out = apply_subgrid_wbc_boost(psi, vel, beta, bottom_friction_s=1.0e-6, max_boost=25.0)
+        assert np.isclose(np.linalg.norm(out[0]), 25.0e-6)
+
+    def test_zero_psi_identity(self) -> None:
+        """No circulation → no boost."""
+        psi = np.zeros(3)
+        vel = np.array([[0.1, 0.0, 0.0]] * 3)
+        out = apply_subgrid_wbc_boost(psi, vel, np.full(3, 1.6e-11), bottom_friction_s=1.0e-6)
+        assert np.allclose(out, vel)
+
 
 # ===================================================================
 # Synthetic mesh helpers

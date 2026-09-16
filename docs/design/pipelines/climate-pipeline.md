@@ -129,8 +129,13 @@
 
 - **`ebm_1d=true` + `hadley_extent_deg ≥ 90`（单圈体制，慢自转）**：`solve_held_hou_temperature`
   解 Held & Hou (1980) 四次方剖面（平坦副热带 + 极冠），温差 ΔT ∝ Ω²。翻转环流把陆海
-  均质化，无单独的陆地扩散率（:179-191）。nacrea 走这条路（其
-  `layers/geological/input/terrain_config.yaml` 设 `ebm_1d: true` +
+  均质化，无单独的陆地扩散率。**E1（2026-09-16）**：其后接 `apply_eddy_relaxation`——
+  HH 是无涡旋轴对称极限，慢自转涡旋残差（nacrea Ω=0.318 处 ≈ 地球峰值的 50%，
+  Kaspi & Showman 2015 Fig 8b）把剖面进一步向全球均温弛豫：Legendre 模态衰减
+  `θ_n → θ_n/(1 + D_eddy·n(n+1)/B)`（n≥1，n=0 不动保均值；与 EBM 同机器），
+  `D_eddy = 0.69·D_land·min(1,Ω)^0.6`（0.69 与 α=0.6 均从 Fig 8b 推导；
+  交叉佐证 = design-notes 0008 的斜压 onset 超临界性 a/L_R 2.4 vs 7.8）。
+  nacrea 走这条路（其 terrain_config.yaml 设 `ebm_1d: true` +
   `hadley_extent_deg: 90`）。
 - **`ebm_1d=true` + 三圈体制（类地）**：`solve_1d_ebm_temperature` 解 North (1975) 谱
   方法一维 EBM——`0 = D d/dx[(1−x²)dT/dx] + Q(x)(1−α) − (A+B·T)`，x = sin φ，Legendre
@@ -142,19 +147,37 @@
   会把副热带扩散冷；真实 Hadley 环流的下沉支反而加热它。把 Hadley 胞内向胞面积加权
   均温弛豫（胞缘 ~8° 过渡带），**增量先存档在 `_dt_subsidence`**，待 Stage 3.5 按干旱
   度门控释放（§3.7）——下沉增温物理上只属于干燥下沉支。earth 走这条路（其
-  terrain_config.yaml 设 `ebm_1d: true`）。
+  terrain_config.yaml 设 `ebm_1d: true` + `hadley_extent_deg: 30` 观测锚定）。
 - **`ebm_1d=false`（legacy，无世界在用）**：`latitude_temperature` sin² 剖面 +
   `diffuse_heat_graph` 图扩散（可选 `lat_gradient_from_omega` 自动梯度），函数保留仅为
   兼容（:239-277）。
 
+**Hadley 边界的确定（P3，2026-09-16）**：`hadley_extent_deg = 0`（默认）= 从
+Held-Hou 热罗斯贝数定律推导 `φ_H ≈ R_t^{1/2}`（`hadley_extent_from_rotation`，
+R_t = 2gHΔ_H/(Ω²a²)，Δ_H 由 `radiative_equilibrium_contrast` 从世界自身日射推出；
+Guendelman & Kaspi 2019）。地球推导 23.3°、nacrea 恰好打满 90° 上限——但推导值贴
+体制悬崖（R_t=2.49 对阈值 2.467），两世界均显式钉住（earth 30 = 观测锚，
+nacrea 90 = GCM PoC mass-streamfunction 证据），推导值作新世界默认。极胞起点被钳到
+≥ Hadley 边界（防重叠）。
+
 年均冰反照率反馈（`ice_albedo_feedback`，:280）在剖面上追加，默认 earth 配置走季节版
-（§3.6）。
+（§3.6）。**E2（2026-09-16）**：冰增量 `_t_ice_increment` 在此归档——斜压带（§7）
+读「最终场 − 冰增量」（陆格），风暴带不再追冰缘跑（反馈是响应不是强迫）。
 
 ### 3.2 海洋与内陆湖下垫面
 
-海洋 cell 被 `_ocean_surface_temperature`（:1240）的「阻尼纬向梯度剖面」覆写——剖面
+海洋 cell 被 `_ocean_surface_temperature` 的「阻尼纬向梯度剖面」覆写——剖面
 锚定在行星全球均温上：地球强迫下重现地球 SST 剖面，恒星强迫/温室变化时整体 1:1 平移
-（:287-294）。
+（:287-294）。**E4（2026-09-16）过程化世界偏差**：锚定形状是地球*观测*（内含地球
+OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过程化偏差
+
+`T_world = anchor(lat) + [EBM_OHT(world; D_OHT) − EBM_OHT(earth_ref; D=0.37)]`
+
+其中柱扩散 `D_OHT = 0.37 × [0.65 + 0.35·P^0.3]`（海洋份额 0.65 风驱不随 Ω 标度 +
+大气份额 Ω^−0.3，Trenberth & Caron 2001 分解）；地球强迫下偏差恒为零（同参数自消，
+零回归风险），两个 EBM 解都锚定同一 `t_surf_c`（偏差不带全球均值漂移）。nacrea
+效果：极地海温 +5~7°C、赤道 −3~4°C（其 9° 倾角的 n=2 辐射四极模比地球弱 23%，
+赤道相对均温抬升更小——真实物理）。
 
 大洋级内陆湖（`water_class == "ocean"` 且 `is_lake`，如里海/五大湖）不是深海洋热库：
 **季节冰湖**（年平陆地温度 ≥ 0 °C）保留陆地 EBM 温度 + 陆地热容量 + 冬季 0 °C 冰点钳
@@ -195,7 +218,8 @@
    `T_amp = ΔQ_ω(1−α) / √(B_eff² + (ωC)²)`，其中 `B_eff = B + 6D`
    （`climate_seasonality.py:511`）——显式热输送在主导季节模态（四极模 n=2，n(n+1)=6）
    上的阻尼，取代旧标定常数；相位滞后 `tan φ = ωC/B_eff`。夏季冻结 cell 保留冰反照率
-   → 振幅缩小，区分冰盖（EF）与副极地（Dfc）。
+   → 振幅缩小，区分冰盖（EF）与副极地（Dfc）。**E1（2026-09-16）**：D 与年 EBM 调用方
+   同源 Ω 标度（`0.35 × P^0.3`，地球 P=1 不变；慢自转大胞更快抹平季节距平）。
 3. **B0c 数据契约**（:430-442）：季节 EBM 自带辐射/热容量循环但**没有海拔维**——高原
    cell 会落在海平面等效的纬向温度上（安第斯 4 km：月均 +16 °C vs 年平 −3.3 °C），毒化
    t_hot/t_cold、月度蒸发与月度展示层。契约：**月度序列的形状/振幅取 EBM，水平值平移
@@ -328,6 +352,11 @@ Stage 2.5 挂载（风场之后、降水之前），单向单遍——不做 SST
    ：686-693）解 β 平面摩擦涡度方程，西边界强化（WBC）作为摩擦边界层**自然涌现**
    （不手贴 ×3 系数）。流函数形式在赤道无 1/f 奇点（β = 2Ωcosφ/a 在赤道最大）——
    nacrea 慢自转（Ω=0.31Ω⊕）下地转求逆会除零，流函数是唯一全程良态的极小模型。
+   **E4 亚网格 WBC 增速**（`apply_subgrid_wbc_boost`，:705-708）：解析急流速度
+   `u_jet = ψ_max/(R/β)`（Stommel 边界层宽 δ=R/β——地球 ~62 km / nacrea ~165 km，
+   均 ≲ 3 格）注入强化核（|ψ| ≥ 0.9·ψ_max，方向不变、封顶 25×）——图拉普拉斯数值
+   粘性把边界层摊过数格，解析值恢复真实急流量级（观测湾流/黑潮 100–250 cm/s）。
+   喂 SST 平流与存储/显示场；Sverdrup 内区不动（增幅下限 1）。
 2. **SST 沿流平流修正**（`advect_sst_semilagrangian`，:711）：semi-Lagrangian 沿流溯源
    弛豫（时间尺度 `ocean_sst_advection_days`），暖流增温/寒流降温；修正后的 SST 写回
    `t_mean_C`，进入 Stage 3 蒸发与 Stage 4 Köppen（:721）。
@@ -385,11 +414,15 @@ k_rain(x) = (1/τ)·(1 + _storm_enhance(x)) ,  τ = _MOISTURE_RESIDENCE_DAYS = 9
    `evaporation_base_mm` = 1000 mm/yr @15 °C）；风暴路径增强用年场（急流季节摆动为二阶
    效应）。有向边表建一次复用。
 3. **地形抬升雨**（逐月）：从当月 W 与当月风算迎风抬升雨（向量化 `maximum.at`）。
-4. **斜压风暴路径**（年场，:2077）：雨出率增强 `_storm_enhance`——幅度 ∝ ∇T × Ω^0.3 ×
-   蒸发，作为 `k_rain` 调制而非加法项；`_eddy_enhance` 同比例增强涡旋水汽扩散 κ。带
-   位置由 `_baroclinic_band`（:1901）从纬向平均温度的经向梯度推导（Eady 不稳定性跟随
-   ∇T）：中心取 |dT/dφ| 峰值纬度（限制在 20° 以上），σ 取半峰全宽/2.355（钳制
-   5–20°）。梯度推导让单圈行星也得到弱而真实的斜压带——旧的胞圈边界方案（φ=(φ_H+φ_P)/2）
+4. **斜压风暴路径**（年场，:2077）：雨出率增强 `_storm_enhance`——幅度 ∝ 自身场赤道-
+   极差 × Ω^0.3 × 蒸发，作为 `k_rain` 调制而非加法项；`_eddy_enhance` 同比例增强涡旋
+   水汽扩散 κ。带位置由 `_baroclinic_band`（:1901）从纬向平均温度的经向梯度推导
+   （Eady 不稳定性跟随 ∇T）：中心取 |dT/dφ| 峰值纬度（限制在 20° 以上），σ 取半峰全宽
+   /2.355（钳制 5–20°）；第三返回值 = 剖面自身的赤道-极差，作风暴幅度的**自身场**归一化
+   基准（E2，2026-09-16：取代 config/auto `lat_gradient` 双轨，杀同物理裂缝）。带输入 =
+   「最终场 − 冰反照率增量」（陆格，`ice_increment_c` 穿参）——冰缘梯度是反馈不是强迫，
+   风暴带不追冰缘跑（nacrea 冰缘 58-72° 曾吸走 ∇T 峰值、把风暴增强错投中纬之外）。
+   梯度推导让单圈行星也得到弱而真实的斜压带——旧的胞圈边界方案（φ=(φ_H+φ_P)/2）
    在单圈行星退化为零宽，但慢自转 GCM 表明瞬变涡旋「减弱而不为零」（Gnanaraj et al.
    2025; Showman & Kaspi 2010）。
 5. **海岸不对称**（年场系数逐月同乘，:2182）：向岸风携带洋面水汽 → 海岸降水增强、
@@ -556,27 +589,28 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 
 | 机制 | 状态 |
 |------|------|
-| 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`）+ 单圈 Held-Hou 分支 |
-| 温度（季节） | ✅ 显式热输送（B+6D）+ 季节冰反照率 + B0c 数据契约 |
+| 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`）+ 单圈 Held-Hou 分支 + E1 eddy relaxation |
+| 温度（季节） | ✅ 显式热输送（B+6D，Ω 标度）+ 季节冰反照率 + B0c 数据契约 |
 | 气压 | ✅ B2 海洋参照月度 ΔP（全值，含年平）+ 500 km 尺度分离 |
 | 风场 | ✅ 三圈背景 + 跨赤道西风带（可推广标度）+ 季风异常月度风场；年风 = 月矢量平均 |
-| 洋流 | ✅ Stommel 环流 + SST 平流 + 涌升 + 洋向陆距平平流 |
-| 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制 + Budyko 陆地再循环 |
+| 洋流 | ✅ Stommel 环流 + E4 亚网格 WBC 增速 + SST 平流 + 涌升 + 洋向陆距平平流 + E4 过程化 OHT 偏差 |
+| 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制（E2 冰缘脱钩 + 自身场幅度）+ Budyko 陆地再循环 |
 | ④ 定常波 | ⚪ 求解器 + 两趟回路已接线，默认关（v1 保真度不足，待 v2 真高层基本态） |
 
 ### 已知局限
 
 残余偏差清单与实现顺序的单一事实源 =
 [proposals/climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §7
-（已登记不主动项：D 群崩溃/沿海振幅/半封闭海/风场规则性/卫星特有光照；单圈世界的
-E1-E4 引擎缺口与物理真实项也在其中）。本文仅保留结论：
+（已登记不主动项：D 群崩溃/沿海振幅/半封闭海/风场规则性/卫星特有光照；单圈世界
+E1-E4 已实施——E3 已否证（Faulk 2017 细读方向反转）、E1/E2/E4 ✅、φ_H 从 Ω 推导 ✅）。
+本文仅保留结论：
 
 - **季风残余**：ΔP 框架只能给「大陆热低压」向岸流，覆盖不了「海洋高压西缘」（百慕大
   高压型 = 动力下沉）；LLJ 垂直结构与季风槽北移超出单层引擎，归架构升级
   （steady-coupling / 双层 Gill / 简化 GCM）。
-- **斜压带边界**：三圈体制的 Hadley 30°/Ferrel 60° 可配置，单圈体制已走
-  `hadley_extent_deg=90` + Held-Hou；慢自转世界的涡旋热/水汽输送参数化未建
-  （roadmap §六 P0 单圈体制包 E1-E4）。
+- **单圈残余**：宽 Af 带 = 单圈无副热带下沉干带 + 低倾角无干季的正当物理（E3 已否证，
+  不修）；nacrea 洋流 ψ 本身偏弱（信风单调 → 风应力旋度小），WBC 增速受其上限约束；
+  §5-α SST 对流门已具备前置（距平结构复活待地球侧验证）。
 
 ### 地球标定的方案常数（影响异星保真度）
 
@@ -595,7 +629,10 @@ E1-E4 引擎缺口与物理真实项也在其中）。本文仅保留结论：
 > `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55（:1555）+ Budyko 再循环参数
 > （`_LAND_RECYCLING_*` :1575-1577）、季风气压平滑 `_MONSOON_PRESSURE_SMOOTHING_KM`
 > = 500 km（:1564）、边界层拖曳 `_DRAG_RATE_S`/`_DRAG_RATE_LAND_S`（水面/植被，
-> `monsoon_circulation.py:130-131`）。
+> `monsoon_circulation.py:130-131`）、E4 海洋柱输送 `_OHT_COLUMN_WM2K` = 0.37 +
+> `_OHT_OCEAN_SHARE` = 0.65（TC2001 分解，`climate_simulator.py`）、E1 涡旋标度
+> `_EDDY_SHARE_EARTH` = 0.69 / `_EDDY_OMEGA_EXPONENT` = 0.6（Kaspi 2015 Fig 8b，
+> `climate_seasonality.py`）。
 
 ---
 

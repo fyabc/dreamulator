@@ -442,9 +442,15 @@ class TerrainPipelineConfig:
     lat_gradient_c: float = 40.0  # equator-to-pole temperature difference (°C)
     # Circulation cell boundaries (3A.3a).  Earth: Hadley 0–30°, Ferrel 30–60°,
     # Polar 60–90°.  Slow rotators (weak Coriolis) get an expanded Hadley cell
-    # (~Ω^-1/2 scaling) and stronger meridional heat transport → smaller
-    # lat_gradient_c.  Keep hadley_extent_deg < polar_cell_start_deg.
-    hadley_extent_deg: float = 30.0  # Hadley cell poleward boundary (°)
+    # and stronger meridional heat transport → smaller lat_gradient_c.
+    # P3 (2026-09-16): hadley_extent_deg = 0 means *derive* — the Held-Hou
+    # thermal-Rossby scaling φ_H ≈ R_t^(1/2) with Δ_H from the model's own
+    # radiative-equilibrium contrast (climate_physics.hadley_extent_from_rotation).
+    # An explicit value pins the extent: pin 30 to reproduce the Earth baseline
+    # exactly; pin 90 for the GCM-evidenced global-cell regime (nacrea, whose
+    # axisymmetric derivation only reaches ~60° — escape hatch, see the
+    # function docstring).  The engine clamps polar_cell_start to ≥ extent.
+    hadley_extent_deg: float = 0.0  # Hadley poleward boundary (°); 0 = derive (Held-Hou)
     polar_cell_start_deg: float = 60.0  # Polar cell equatorward boundary (°)
     # 3A.3a: slow-rotation meridional transport
     auto_lat_gradient: bool = False  # True = compute lat_gradient_c from Ω (Kaspi 2015)

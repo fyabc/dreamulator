@@ -395,6 +395,157 @@ def solve_held_hou_temperature(
     return np.asarray(t_global_mean_c + delta_t * (0.2 - np.sin(lat_rad) ** 4))
 
 
+# Eddy share of the atmospheric poleward heat transport at Earth's rotation:
+# Kaspi & Showman 2015 Fig. 8b (aquaplanet GCM, Ω-scan) — eddy (v′m′) peaks at
+# ~3.4 PW near Ω⊕ while the mean overturning carries ~1.5 PW, i.e. eddy/
+# (eddy+mean) ≈ 3.4/4.9 ≈ 0.69.  Slow-rotation branch exponent: the same eddy
+# curve falls to ~0.5 of its Earth peak at Ω = 0.318 (nacrea) → α = ln0.5/
+# ln0.318 ≈ 0.6.  The eddy curve is nonmonotonic (peak near Ω⊕, weak at both
+# ends — fast rotation shrinks the eddy length scale); ``min(1, Ω)`` caps the
+# fast branch so Earth is the amplitude reference.  Independent cross-check:
+# the baroclinic-onset supercriticality a/L_R ≈ 2.4 for nacrea vs 7.8 for
+# Earth (nacrea design-notes 0008) puts nacrea just above eddy onset — the
+# same "weakened but nonzero eddies" picture.
+_EDDY_SHARE_EARTH: float = 0.69
+_EDDY_OMEGA_EXPONENT: float = 0.6
+
+
+def eddy_diffusion_single_cell(
+    rotation_period_days: float,
+    land_diffusion_wm2k: float,
+) -> float:
+    """Eddy-only meridional diffusion for the single-cell (Held-Hou) regime.
+
+    The three-cell EBM lumps the *total* atmospheric transport (mean + eddy)
+    into D.  In the single-cell regime the overturning part is already inside
+    the Held-Hou quartic — only the eddy residual is missing, so
+
+        D_eddy = 0.69 · D_land · min(1, Ω/Ω⊕)^0.6
+
+    with both constants derived from Kaspi & Showman 2015 Fig. 8b (see the
+    module constants above).  Earth never runs this branch (it takes the EBM);
+    a hypothetical Earth-rotation single-cell world would get 0.69·D_land.
+
+    Args:
+        rotation_period_days: Sidereal rotation period (days).
+        land_diffusion_wm2k: The config's land diffusion D (W/m²/K), i.e. the
+            atmospheric-transport share the three-cell EBM uses.
+
+    Returns:
+        Eddy-only diffusion coefficient (W/m²/K).
+    """
+    omega_ratio = min(1.0, 1.0 / rotation_period_days)
+    return float(_EDDY_SHARE_EARTH * land_diffusion_wm2k * omega_ratio**_EDDY_OMEGA_EXPONENT)
+
+
+def radiative_equilibrium_contrast(
+    t_global_mean_c: float,
+    *,
+    albedo: float = 0.306,
+    obliquity_deg: float = 23.44,
+    solar_constant: float = SOLAR_CONSTANT,
+    orbital_period_days: float = 365.25,
+    eccentricity: float = 0.0,
+    perihelion_day: float = 0.0,
+) -> float:
+    """Fractional radiative-equilibrium meridional contrast Δ_H (for the HH width).
+
+    The local radiative-equilibrium surface temperature (no dynamics):
+    σT⁴ = Q(φ)·(1−α) with Q the annual-mean insolation from
+    ``monthly_insolation`` — the same solar geometry the EBM/seasonal solvers
+    use.  Returns the Lindzen-Hou fractional contrast
+
+        Δ_H = (T_rad(0°) − T_rad(polar cap ≥ 85°)) / θ₀
+
+    that enters the thermal Rossby number in
+    ``climate_physics.hadley_extent_from_rotation``.  Weak-obliquity worlds
+    get a smaller Δ_H (their polar insolation is less depleted) — nacrea's
+    9° tilt gives ~0.13 vs Earth's ~0.24.
+
+    Args:
+        t_global_mean_c: Global-mean surface temperature (°C) — θ₀ reference.
+        albedo: Bond albedo.
+        obliquity_deg: Effective obliquity (degrees).
+        solar_constant: S₀ at the planet's distance (W/m²).
+        orbital_period_days: Year length (days).
+        eccentricity: Orbit eccentricity.
+        perihelion_day: Day of perihelion passage.
+
+    Returns:
+        Dimensionless fractional contrast (typically 0.1–0.3).
+    """
+    from dreamulator.engine.climate_physics import SIGMA_SB
+
+    lat_grid = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 181)
+    q_monthly = monthly_insolation(
+        lat_grid,
+        obliquity_deg,
+        solar_constant,
+        orbital_period_days,
+        eccentricity,
+        perihelion_day,
+    )
+    q_annual = q_monthly.mean(axis=1)
+    t_rad = (q_annual * (1.0 - albedo) / SIGMA_SB) ** 0.25  # K
+    polar = float(np.mean(t_rad[np.abs(np.degrees(lat_grid)) >= 85.0]))
+    theta0 = t_global_mean_c + 273.15
+    return float((t_rad[90] - polar) / theta0)  # idx 90 of 181 = equator
+
+
+def apply_eddy_relaxation(
+    t_c: np.ndarray,
+    lat_rad: np.ndarray,
+    *,
+    olr_b_wm2k: float = 2.0,
+    eddy_diffusion_wm2k: float,
+    n_legendre: int = 8,
+) -> np.ndarray:
+    """Flatten a temperature profile's meridional structure by eddy diffusion.
+
+    Linear response of the EBM operator (North 1975) to the Held-Hou profile:
+    the steady equation ``0 = D∇²θ + (S − Bθ)`` damps each Legendre mode of
+    the departure from the global mean by ``B/(B + D·n(n+1))``, so the eddy
+    correction is a per-mode attenuation
+
+        θ_n → θ_n / (1 + D_eddy·n(n+1)/B),   n ≥ 1
+
+    (n = 0 untouched — the eddy flux has zero global integral, the mean is
+    conserved exactly).  The correction is a function of latitude only, added
+    uniformly to every cell at that latitude: the field's *local* structure
+    (coastal moderation, maritime advection, lapse) is preserved and only the
+    zonal-mean profile is flattened.  Shares the same Legendre machinery and
+    the same (B, D, n(n+1)) denominator as ``solve_1d_ebm_temperature`` —
+    one code path, the single-cell branch passing the eddy-only D.
+
+    Args:
+        t_c: Temperature (°C), shape (N,).
+        lat_rad: Latitude in radians, shape (N,).
+        olr_b_wm2k: Linear OLR coefficient B (W/m²/K).
+        eddy_diffusion_wm2k: Eddy diffusion coefficient (W/m²/K); 0 → no-op.
+        n_legendre: Legendre truncation order.
+
+    Returns:
+        Temperature with the eddy relaxation applied (°C), shape (N,).
+    """
+    x = np.sin(lat_rad)
+    n_cells = len(t_c)
+    # Equal-solid-angle CVT cells → uniform quadrature weight: the cos(φ) area
+    # factor is already inside each cell's solid angle, so
+    # T_n = (2n+1)/2 · (2/N) Σ_i T_i P_n(x_i).
+    t_n = np.zeros(n_legendre + 1)
+    for n in range(n_legendre + 1):
+        p_vals = np.polynomial.legendre.legval(x, [0.0] * n + [1.0])
+        t_n[n] = (2 * n + 1) / n_cells * float(np.sum(t_c * p_vals))
+
+    factors = np.ones(n_legendre + 1)
+    for n in range(1, n_legendre + 1):
+        factors[n] = 1.0 / (1.0 + eddy_diffusion_wm2k * n * (n + 1) / olr_b_wm2k)
+
+    t_before = np.polynomial.legendre.legval(x, t_n)
+    t_after = np.polynomial.legendre.legval(x, t_n * factors)
+    return np.asarray(t_c + (t_after - t_before))
+
+
 # ---------------------------------------------------------------------------
 # 4. Land-ocean heat capacity (seasonal amplitude modulation)
 # ---------------------------------------------------------------------------
