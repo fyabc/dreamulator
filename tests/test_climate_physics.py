@@ -25,6 +25,7 @@ from dreamulator.engine.climate_physics import (
     potential_evapotranspiration_hamon,
     pressure_from_temperature,
     saturation_specific_humidity,
+    sst_convection_gate,
     subsidence_aridity_gate,
     surface_temperature,
     terrain_wind_blocking,
@@ -173,6 +174,100 @@ class TestHadleyExtentFromRotation:
         """Absurdly large Δ_H cannot exceed the global cell."""
         phi = hadley_extent_from_rotation(10.0, rotation_period_days=1.0)
         assert phi == 90.0
+
+
+class TestSstConvectionGate:
+    """§5-α WTG gate: k_rain × f(SST − 5°-band mean), ocean only."""
+
+    def _flat_ocean(self, lat: float, n: int = 12, t: float = 25.0) -> tuple:
+        """Uniform band-mean ocean at one latitude + mask."""
+        return (
+            np.full(n, t),
+            np.full(n, lat),
+            np.ones(n, dtype=bool),
+        )
+
+    def test_zero_anomaly_identity(self) -> None:
+        """A perfectly uniform SST field gives f ≡ 1 everywhere."""
+        t, lat, oc = self._flat_ocean(10.0)
+        f = sst_convection_gate(t, lat, oc)
+        assert np.allclose(f, 1.0)
+
+    def test_positive_anomaly_never_suppressed(self) -> None:
+        """Warm-anomaly water (warm pool) keeps f = 1 exactly."""
+        t = np.array([28.0, 25.0, 25.0, 25.0])
+        lat = np.full(4, 10.0)
+        oc = np.ones(4, dtype=bool)
+        f = sst_convection_gate(t, lat, oc)
+        assert f[0] == 1.0  # +3 °C anomaly → no suppression
+
+    def test_tropical_knots_and_monotonicity(self) -> None:
+        """Cold anomalies suppress; deeper anomaly → smaller f (monotone)."""
+        base = 25.0
+        t = np.array([base, base - 0.5, base - 1.0, base - 2.0, base - 4.0])
+        lat = np.full(5, 10.0)
+        oc = np.ones(5, dtype=bool)
+        # Band mean shifts with the anomalies; recompute the expectation from
+        # the actual mean of this 5-cell band.
+        f = sst_convection_gate(t, lat, oc)
+        assert np.all(np.diff(f) <= 0)  # non-increasing with T
+        assert np.all(np.diff(f[2:]) < 0)  # strictly decreasing on the cold side
+        assert f[-1] < 0.6  # deep anomaly extrapolated well below the last knot
+
+        # Extreme anomaly (fillers hold the mean, one cell −8 °C): floor 0.2.
+        t2 = np.array([base, base, base, base, base - 10.0])
+        f2 = sst_convection_gate(t2, lat, oc)
+        assert f2[-1] == pytest.approx(0.2)
+
+    def test_tropical_more_sensitive_than_extratropical(self) -> None:
+        """Same −1.5 °C anomaly: the tropical branch suppresses more (WTG)."""
+        for lat_t, lat_x in [(5.0, 40.0), (10.0, 30.0)]:
+            # Two warm filler cells keep the band populated (≥3 cells) while
+            # fixing the band mean, giving the cold cell a clean −1.5 anomaly.
+            t_t = np.array([25.0, 25.0, 23.5])
+            f_t = sst_convection_gate(t_t, np.full(3, lat_t), np.ones(3, dtype=bool))
+            t_x = np.array([15.0, 15.0, 13.5])
+            f_x = sst_convection_gate(t_x, np.full(3, lat_x), np.ones(3, dtype=bool))
+            assert f_t[2] < f_x[2] < 1.0
+
+    def test_land_cells_untouched(self) -> None:
+        """Land cells get f = 1 regardless of their temperature anomaly."""
+        t = np.array([25.0, 20.0, 25.0, 20.0])
+        lat = np.full(4, 10.0)
+        oc = np.array([True, True, False, False])
+        f = sst_convection_gate(t, lat, oc)
+        assert f[2] == 1.0 and f[3] == 1.0
+
+    def test_floor_clamp(self) -> None:
+        """f never drops below the stratocumulus-drizzle floor 0.2."""
+        # Two warm fillers + one deep cold cell: band mean 10 → −10 °C anomaly.
+        t = np.array([15.0, 15.0, 0.0])
+        lat = np.full(3, 40.0)
+        oc = np.ones(3, dtype=bool)
+        f = sst_convection_gate(t, lat, oc)
+        assert f[2] == pytest.approx(0.2)
+
+    def test_monthly_field_consistent_with_annual(self) -> None:
+        """An (N, 12) field gives the same gate as stacking 12 annual calls."""
+        rng = np.random.default_rng(42)
+        n = 40
+        t12 = rng.normal(20.0, 2.0, size=(n, 12))
+        lat = rng.uniform(-60.0, 60.0, size=n)
+        oc = rng.random(n) > 0.3
+        f12 = sst_convection_gate(t12, lat, oc)
+        for m in range(12):
+            fm = sst_convection_gate(t12[:, m], lat, oc)
+            assert np.allclose(f12[:, m], fm)
+
+    def test_hemispheres_not_merged(self) -> None:
+        """A uniform interhemispheric offset must not create anomalies."""
+        # 4 cells at +5° all 25 °C, 4 cells at −5° all 24.5 °C: within-band
+        # uniform → no zonal anomaly → f = 1 in both bands.
+        t = np.concatenate([np.full(4, 25.0), np.full(4, 24.5)])
+        lat = np.concatenate([np.full(4, 5.0), np.full(4, -5.0)])
+        oc = np.ones(8, dtype=bool)
+        f = sst_convection_gate(t, lat, oc)
+        assert np.allclose(f, 1.0)
 
 
 class TestPressureFromTemperature:

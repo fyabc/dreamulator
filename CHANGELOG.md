@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
+### Added
+
+- **§5-α SST 对流门（2026-09-16，WTG 冷距平雨出效率调制）**：`sst_convection_gate`
+  （climate_physics）——k_rain 乘法调制（与风暴路径同钩子复合，ΣP=ΣE 不变）：冷距平
+  洋面（上升流/东边界流）雨出效率坍缩、水汽输出到暖池再雨出（质量守恒重分配）。
+  两分支分段线性 ramp（热带 1.0→0.894@−1→0.638@−2 线性外推 / 外热带 →0.82@−3→
+  0.65@−5→0.24@−7，15-25° 混合），结点 = GPCP 海洋格 e_rel/e_rel(0) 标定；ΔSST =
+  SST − 符号化 5° 带海洋格 cos 加权均值（半球不合并防伪距平），逐月随 t_m 场；
+  正距平 f≡1（暖池/WBC 走廊结构安全）；f_min=0.2；v1 仅海洋格；config
+  `sst_convection_gate_enabled`（默认开）。**earth 实测**：机制按设计工作（gate<0.7
+  洋格 P −157 mm / 暖池 +6 重分配；安全盒孟加拉湾/南海/恒河/华南 ±5 mm 不动；P 逐格
+  R² 0.298→0.304、bias −243→−238；T/风逐位不变，validate 全 PASS）。**触发覆盖受限
+  登记**：洋格仅 2.5% 在 f<0.9——A2 锚盒盒均距平仅 −0.05（冷核贴岸细条）、赤道冷舌
+  无结构；A2/B 族完全收敛以 SST 距平结构增广为前置（§4 残余：赤道 Ekman 冷舌 +
+  上升流广度）。详见 proposal §5-α/§4。
+
+
 
 - **单圈体制包 E1-E4（2026-09-16，慢自转世界气候攻关）**：roadmap §六 P0 收口。
   **E1 涡旋热输送参数化**——`apply_eddy_relaxation`（Held-Hou 剖面上的 Legendre 模态

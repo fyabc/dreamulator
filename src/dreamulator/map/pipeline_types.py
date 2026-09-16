@@ -524,6 +524,12 @@ class TerrainPipelineConfig:
     # regime, where baroclinic eddies do not form).
     storm_track_amplitude_mm: float = 900.0
     storm_track_kappa_enhancement: float = 3.0  # eddy diffusivity × at the storm peak
+    # §5-α SST convection gate (WTG): k_rain × f(SST − 5°-band mean) over the
+    # ocean — cold-anomaly water (upwelling / eastern boundary currents) has
+    # its rainout efficiency collapsed and the moisture re-rains over the warm
+    # pool (mass-conserving).  Knots are GPCP-calibrated constants in
+    # climate_physics.sst_convection_gate; warm anomalies are never suppressed.
+    sst_convection_gate_enabled: bool = True
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ
     # rain belt to the observed ~10° width (diffusion length √(κτ) ≈ 900 km).

@@ -389,8 +389,15 @@ Stage 2.5 挂载（风场之后、降水之前），单向单遍——不做 SST
 
 ```
 ∇·(W u) + k_rain(x)·W − κ∇²W = E ,   P = k_rain(x)·W
-k_rain(x) = (1/τ)·(1 + _storm_enhance(x)) ,  τ = _MOISTURE_RESIDENCE_DAYS = 9 d
+k_rain(x) = (1/τ)·(1 + _storm_enhance)·gate(ΔSST) ,  τ = _MOISTURE_RESIDENCE_DAYS = 9 d
 ```
+
+其中 gate = **§5-α SST 对流门**（`sst_convection_gate`，2026-09-16）：WTG 下冷距平
+洋面（上升流/东边界流）雨出效率坍缩、水汽输出到暖池再雨出——两分支分段线性 ramp
+（热带/外热带结点 = GPCP 海洋格标定），ΔSST = SST − 符号化 5° 带海洋格 cos 加权均值
+（逐月随 t_m 场），正距平 f≡1（暖池/WBC 走廊结构安全）、f_min = 0.2（层积云 drizzle
+尾）、仅海洋格；config `sst_convection_gate_enabled`。触发覆盖现状与残余 → proposal
+§5-α/§4（ΔSST 结构窄：冷舌缺失）。
 
 迎风有限体积（边平均风速保证通量守恒）+ 湍流扩散 κ∇²W（κ 为 config 字段
 `moisture_diffusivity_m2s`，默认 1e6 m²/s）+ 直接稀疏 LU 求解。**质量守恒逐月由构造
@@ -412,7 +419,8 @@ k_rain(x) = (1/τ)·(1 + _storm_enhance(x)) ,  τ = _MOISTURE_RESIDENCE_DAYS = 9
    Jensen 不等式会系统性低估陆地蒸散（实测：490 → 319 mm/yr），削弱再循环回路。
 2. **逐月水汽收支**（×12）：海洋蒸发送月度温度（能量限制 ~3%/°C，基准
    `evaporation_base_mm` = 1000 mm/yr @15 °C）；风暴路径增强用年场（急流季节摆动为二阶
-   效应）。有向边表建一次复用。
+   效应），与 §5-α SST 门复合为公共 k_rain 因子（逐月门随 t_m 场）。有向边表建一次
+   复用。
 3. **地形抬升雨**（逐月）：从当月 W 与当月风算迎风抬升雨（向量化 `maximum.at`）。
 4. **斜压风暴路径**（年场，:2077）：雨出率增强 `_storm_enhance`——幅度 ∝ 自身场赤道-
    极差 × Ω^0.3 × 蒸发，作为 `k_rain` 调制而非加法项；`_eddy_enhance` 同比例增强涡旋
@@ -594,7 +602,7 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 | 气压 | ✅ B2 海洋参照月度 ΔP（全值，含年平）+ 500 km 尺度分离 |
 | 风场 | ✅ 三圈背景 + 跨赤道西风带（可推广标度）+ 季风异常月度风场；年风 = 月矢量平均 |
 | 洋流 | ✅ Stommel 环流 + E4 亚网格 WBC 增速 + SST 平流 + 涌升 + 洋向陆距平平流 + E4 过程化 OHT 偏差 |
-| 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制（E2 冰缘脱钩 + 自身场幅度）+ Budyko 陆地再循环 |
+| 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制（E2 冰缘脱钩 + 自身场幅度 + §5-α SST 对流门）+ Budyko 陆地再循环 |
 | ④ 定常波 | ⚪ 求解器 + 两趟回路已接线，默认关（v1 保真度不足，待 v2 真高层基本态） |
 
 ### 已知局限
@@ -632,7 +640,8 @@ E1-E4 已实施——E3 已否证（Faulk 2017 细读方向反转）、E1/E2/E4 
 > `monsoon_circulation.py:130-131`）、E4 海洋柱输送 `_OHT_COLUMN_WM2K` = 0.37 +
 > `_OHT_OCEAN_SHARE` = 0.65（TC2001 分解，`climate_simulator.py`）、E1 涡旋标度
 > `_EDDY_SHARE_EARTH` = 0.69 / `_EDDY_OMEGA_EXPONENT` = 0.6（Kaspi 2015 Fig 8b，
-> `climate_seasonality.py`）。
+> `climate_seasonality.py`）、§5-α 门结点（GPCP 标定 + `_SST_GATE_F_MIN` = 0.2，
+> `climate_physics.sst_convection_gate`）。
 
 ---
 

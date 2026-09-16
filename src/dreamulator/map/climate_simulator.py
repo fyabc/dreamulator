@@ -35,6 +35,7 @@ from dreamulator.engine.climate_physics import (
     moist_lapse_rate,
     potential_evapotranspiration_hamon,
     spectral_ice_albedo,
+    sst_convection_gate,
     subsidence_aridity_gate,
     surface_temperature,
     terrain_wind_blocking,
@@ -2185,7 +2186,10 @@ def _compute_precipitation_monthly_budget(
     Monsoon seasonality, ITCZ migration, and evaporation seasonality all enter
     through the monthly wind and temperature fields — the former ITCZ-Gaussian
     redistribution factor and the ×1.5/×1.3 tropical-coastal monsoon gain are
-    gone (tech debt 23).
+    gone (tech debt 23).  k_rain carries two composed modulations, both
+    mass-conserving: the storm-track enhancement (Step 3.5) and the §5-α SST
+    convection gate ``f(ΔSST)`` (cold-anomaly ocean water exports its moisture
+    to the warm pool instead of raining locally — ``sst_convection_gate``).
 
     On top of each month's budget precipitation: orographic rain from that
     month's column water and wind, then the mechanisms that do not vary by
@@ -2281,6 +2285,25 @@ def _compute_precipitation_monthly_budget(
     # eddy mixing): eddy-diffusivity enhancement ∝ rainout enhancement.
     _eddy_enhance = config.storm_track_kappa_enhancement * _storm_enhance
 
+    # ── §5-α SST convection gate (WTG): k_rain × f(ΔSST) ──────────────────
+    # Cold-anomaly ocean water (upwelling / eastern boundary currents — Somali,
+    # Canary, Peru cores) is stabilised from below → rainout efficiency
+    # collapses and the moisture exports to the warm pool (mass-conserving:
+    # composed with the storm modulation as a common k_rain factor, ΣP = ΣE
+    # holds for any gate field).  Warm anomalies give f = 1 exactly — warm
+    # pools / WBC supply corridors (Bay of Bengal, SCS, Kuroshio, Gulf Stream)
+    # are structurally untouched.  Knots = GPCP ocean-cell calibration
+    # (``sst_convection_gate`` docstring).  v1 ocean-only.
+    if config.sst_convection_gate_enabled:
+        _gate_annual = sst_convection_gate(temperature_c, lat_deg, is_ocean)
+        _gate_monthly = sst_convection_gate(t_monthly_c, lat_deg, is_ocean)
+        _rain_ann = (1.0 + _storm_enhance) * _gate_annual - 1.0
+        if debug is not None:
+            debug["sst_gate"] = _gate_annual.copy()
+    else:
+        _gate_monthly = None
+        _rain_ann = _storm_enhance
+
     _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
     # Annual solve first: the Budyko recycling curve E = E_pot·P/(E_pot+P) is
@@ -2296,7 +2319,7 @@ def _compute_precipitation_monthly_budget(
         temperature_c,
         nodes_xyz,
         config,
-        rainout_enhancement=_storm_enhance,
+        rainout_enhancement=_rain_ann,
         diffusivity_enhancement=_eddy_enhance,
         edge_table=(src, dst),
     )
@@ -2318,6 +2341,10 @@ def _compute_precipitation_monthly_budget(
         # integrates the annual water input, not a single month's).
         _e_pot_m = evaporation_rate(t_m, is_land, config.evaporation_base_mm)
         _e_land_m = _e_pot_m * p_ann / (_e_pot_m + p_ann + 1e-9)
+        if _gate_monthly is not None:
+            _rain_m = (1.0 + _storm_enhance) * _gate_monthly[:, m] - 1.0
+        else:
+            _rain_m = _storm_enhance
         w_m, p_m = _solve_moisture_budget(
             mesh,
             wind_monthly[m],
@@ -2325,7 +2352,7 @@ def _compute_precipitation_monthly_budget(
             t_m,
             nodes_xyz,
             config,
-            rainout_enhancement=_storm_enhance,
+            rainout_enhancement=_rain_m,
             diffusivity_enhancement=_eddy_enhance,
             edge_table=(src, dst),
             land_evapotranspiration=_e_land_m,

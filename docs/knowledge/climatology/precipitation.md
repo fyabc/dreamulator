@@ -67,7 +67,32 @@ $$
 
 ---
 
+## SST 对流门（WTG——冷距平洋面的雨出效率，2026-09-16）
+
+弱温度梯度（WTG）近似下热带自由对流层温度水平均匀（Sobel et al. 2001），海洋深对流的
+不稳定度由**局地 SST 相对纬向带的距平**决定：暖距平水越过对流阈值族（26-28 °C，
+Johnson & Xie 2010）深对流；冷距平水（沿岸/赤道上升流、东边界流、冷舌）自下方被稳定
+（信风逆温、海岸雾沙漠——纳米布/阿塔卡马型，Garreaud et al. 2002；冷舌-ITCZ 耦合，
+Xie & Philander 1994）——雨出效率坍缩，水汽水平输出到暖池/ITCZ 再雨出（质量守恒的
+重分配，非销毁）。GCM 著名的「冷舌过暖 → 赤道东太平洋过湿」（double-ITCZ bias）
+与此同构。
+
+引擎实现：`climate_physics.sst_convection_gate`——k_rain 乘法调制，两分支分段线性
+ramp（热带/外热带结点 = GPCP 海洋格 e_rel/e_rel(0) 标定，热带敏感得多 = WTG 预期）；
+ΔSST 用符号化 5° 纬度带海洋格 cos 加权均值（半球不合并，防半球间对称差伪距平）；
+正距平零抑制（暖池/西边界流走廊的结构安全）；下限 f_min = 0.2（层积云 drizzle 残余）。
+标定细节与触发覆盖现状 → `docs/design/proposals/climate-layer-improvement.md` §5-α。
+
 ## 参考来源
+
+- Sobel, A.H., Nilsson, J., & Polvani, L. (2001). "The weak temperature gradient
+  approximation and balanced tropical moisture waves." *JAS 58*, 3650–3665.
+- Johnson, N.C., & Xie, S.-P. (2010). "Changes in the sea surface temperature
+  threshold for tropical convection." *Nat. Geosci.* 3, 842–845.
+- Garreaud, R.D., Rutllant, J., & Fuenzalida, P. (2002). 副热带西海岸海岸低
+  （冷洋面上的低层结构与沿海干旱）— *J. Climate 15*, 75 ff.
+- Xie, S.-P., & Philander, S.G.H. (1994). "A coupled ocean-atmosphere model of
+  the tropical Pacific: the cold tongue–ITCZ interaction." *J. Climate* 7.
 
 - 陈仁升等. *固液态降水分离方法探讨* — [ResearchGate PDF](https://www.researchgate.net/profile/Chen_Rensheng/publication/283600062_A_discuss_of_the_separating_solid_and_liquid_precipitations/links/568e601208aef987e567b150.pdf)
 - 中国天山山区降水形态分离及降雪影响因素分析 — [知网](https://d.wanfangdata.com.cn/thesis/Y3443596)

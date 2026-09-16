@@ -1120,6 +1120,109 @@ def subsidence_aridity_gate(
     return np.asarray((1.0 - keep) * dt_warm)
 
 
+# §5-α SST convection gate knots.  Calibration: GPCP ocean cells, rainout
+# efficiency e_rel = P_local / P_band-mean, binned by the SST anomaly
+# ΔSST = SST − 5°-band mean (scripts/climate/diagnose_desert_wetness.py,
+# archive mode, 2026-09-13).  The gate factor is e_rel normalised by its
+# zero-anomaly value so the calibrated baseline (ΔSST = 0) is untouched:
+#   tropical (|lat| ≤ 15°):   e_rel 0.94 @ 0 → 0.84 @ −1 → 0.60 @ −2  (WTG —
+#     the free troposphere is horizontally uniform, so convective instability
+#     follows the *local* anomaly; much more sensitive than mid-latitudes)
+#   extratropical (|lat| ≥ 25°): 1.00 @ 0 → 0.82 @ −3 → 0.65 @ −5 → 0.24 @ −7
+_SST_GATE_KNOTS_TROP_DSST: tuple[float, ...] = (0.0, -1.0, -2.0)
+_SST_GATE_KNOTS_TROP_F: tuple[float, ...] = (1.0, 0.894, 0.638)
+_SST_GATE_KNOTS_EXTR_DSST: tuple[float, ...] = (0.0, -3.0, -5.0, -7.0)
+_SST_GATE_KNOTS_EXTR_F: tuple[float, ...] = (1.0, 0.82, 0.65, 0.24)
+# Floor: the stratocumulus-drizzle residual — marine Sc decks over cold water
+# still drizzle ~20% of what a warm pool rains per unit column water (the
+# 0.1-0.3 tail range of the calibration; take 0.2).
+_SST_GATE_F_MIN: float = 0.2
+
+
+def sst_convection_gate(
+    t_c: np.ndarray,
+    lat_deg: np.ndarray,
+    is_ocean: np.ndarray,
+) -> np.ndarray:
+    """Weak-temperature-gradient SST convection gate (§5-α): k_rain × f(ΔSST).
+
+    Under WTG (Sobel et al. 2001) the tropical free troposphere is horizontally
+    uniform, so ocean convective instability follows the *local* SST anomaly
+    relative to its latitude band: warm-anomaly water deep-conveys (threshold
+    family 26-28 °C, Johnson & Xie 2010), cold-anomaly water (upwelling /
+    eastern boundary currents / the equatorial cold tongue) is stabilised from
+    below (trade inversion, coastal fog deserts — Namib/Atacama type, Garreaud
+    et al. 2002; cold tongue-ITCZ coupling, Xie & Philander 1994).  Rainout
+    efficiency collapses over the cold anomaly and the moisture is exported
+    horizontally to the warm pool / ITCZ where it rains out — a mass-conserving
+    redistribution (the gate multiplies k_rain, so ΣP = ΣE holds for any gate
+    field), not a sink.
+
+    The returned factor is a piecewise-linear ramp through the calibrated
+    knots (see the module constants above), clipped to [0.2, 1].  Positive
+    anomalies give f = 1 exactly (structural safety: warm pools and western
+    boundary currents — Bay of Bengal, South China Sea, Kuroshio, Gulf Stream
+    — are never suppressed; only the *cold* side of the double-ITCZ bias
+    family is addressed).  Land cells get f = 1 (v1: ocean-only gate; coastal
+    land converges indirectly through the moisture-supply cutoff).  The
+    tropical/extratropical branches blend linearly over 15-25°.
+
+    Args:
+        t_c: Sea-surface temperature field, °C, shape (N,) or (N, 12).  The
+            anomaly is computed against the 5°-band, cos-weighted mean of the
+            ocean cells in the same column (monthly fields are banded per
+            month).
+        lat_deg: Latitude in degrees, shape (N,).
+        is_ocean: Ocean mask, shape (N,) — the band mean and the gate apply
+            to ocean cells only.
+
+    Returns:
+        Gate factor in [0.2, 1.0], same shape as *t_c*.
+    """
+    t_arr = np.asarray(t_c, dtype=np.float64)
+    monthly = t_arr.ndim == 2
+    n_months = t_arr.shape[1] if monthly else 1
+    flat = t_arr.reshape(t_arr.shape[0], n_months) if monthly else t_arr[:, None]
+
+    abs_lat = np.abs(np.asarray(lat_deg, dtype=np.float64))
+    lat_signed = np.asarray(lat_deg, dtype=np.float64)
+    # Signed 5° latitude bands (36 bands, hemispheres NOT merged — a uniform
+    # interhemispheric offset must not register as a zonal anomaly).
+    band_idx = np.clip(((lat_signed + 90.0) / 5.0).astype(np.int64), 0, 35)
+
+    dsst = np.zeros_like(flat)
+    for b in range(36):
+        m = (band_idx == b) & is_ocean
+        if m.sum() < 3:
+            continue  # band with no ocean (polar cap) — no anomaly defined
+        w = np.cos(np.radians(lat_signed[m]))
+        for j in range(n_months):
+            dsst[m, j] = flat[m, j] - float(np.average(flat[m, j], weights=w))
+
+    # Branch interpolation + latitudinal blend (tropical |lat|≤15, extratrop ≥25).
+    # np.interp with increasing x: positive anomalies clamp to f(0)=1 (the
+    # structural zero-suppression for warm pools); below the last knot the
+    # measured slope is linearly extrapolated (the tropical calibration stops
+    # at −2 °C — upwelling cores reach −4).
+    def _ramp(x: np.ndarray, xs: tuple[float, ...], fs: tuple[float, ...]) -> np.ndarray:
+        f = np.asarray(np.interp(x, xs[::-1], fs[::-1]))
+        below = x < xs[-1]
+        if below.any():
+            slope = (fs[-1] - fs[-2]) / (xs[-1] - xs[-2])
+            f = np.asarray(np.where(below, fs[-1] + (x - xs[-1]) * slope, f))
+        return f
+
+    w_trop = 1.0 - np.clip((abs_lat - 15.0) / 10.0, 0.0, 1.0)
+    f_trop = _ramp(dsst, _SST_GATE_KNOTS_TROP_DSST, _SST_GATE_KNOTS_TROP_F)
+    f_extr = _ramp(dsst, _SST_GATE_KNOTS_EXTR_DSST, _SST_GATE_KNOTS_EXTR_F)
+    f = w_trop[:, None] * f_trop + (1.0 - w_trop[:, None]) * f_extr
+    f = np.where(np.asarray(is_ocean)[:, None], f, 1.0)
+    out = np.clip(f, _SST_GATE_F_MIN, 1.0)
+    if monthly:
+        return np.asarray(out)
+    return np.asarray(out[:, 0])
+
+
 def koppen_classify(
     t_mean_c: np.ndarray,
     t_cold_c: np.ndarray,
