@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789504922660,
+  "lastUpdate": 1789567972510,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4836,6 +4836,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0012950519052148356",
             "extra": "mean: 5.639178799999911 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "dcd63eeb5b338d9c0c6404e08943bc12181eb284",
+          "message": "feat(climate): 单圈体制包 E1-E4——慢自转世界气候引擎攻关\n\n- E1 涡旋热输送参数化: apply_eddy_relaxation（HH 剖面 Legendre 弛豫，\n  D_eddy=0.69·D_land·min(1,Ω)^0.6，Kaspi & Showman 2015 Fig 8b 标定）\n  + 季节 D 统一 Ω 标度（0.35×P^0.3，地球不变）\n- E2 斜压带冰缘脱钩（冰增量归档）+ 风暴幅度自身场化（杀 auto_lat_gradient 裂缝）\n- E3 已否证登记（Faulk 2017 原文细读：慢自转收敛带变宽，方向反转）\n- E4 过程化 OHT 偏差（TC2001 65/35 混合柱 D=0.37×(0.65+0.35·P^0.3)）\n  + WBC 亚网格增速 ψ_max/(R/β)\n- φ_H 从 Ω 推导（R_t^½ 定律，双锚 Earth 23.3°/nacrea 90°，hadley_extent_deg=0=推导）\n- nacrea: 极地 +5.7~11.1°C、EF −3423→ET、Cfb +4816、Af 29→26%；\n  earth 零回归（validate 全 PASS 与基线逐位一致）\n- nacrea-200k 基线重生成（T1 绿）；proposal/roadmap/pipelines/knowledge 同步\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-09-16T22:06:05+08:00",
+          "tree_id": "7a9264020353b747f0177c7261be3dc25a3910e5",
+          "url": "https://github.com/fyabc/dreamulator/commit/dcd63eeb5b338d9c0c6404e08943bc12181eb284"
+        },
+        "date": 1789567971915,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 12.24488393504235,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0325024064976155",
+            "extra": "mean: 81.66676020000523 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.914062920624183,
+            "unit": "iter/sec",
+            "range": "stddev: 0.002223229279984885",
+            "extra": "mean: 255.4889944999985 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9252559709797192,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8305857357625116",
+            "extra": "mean: 519.4114523333345 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1110.9689070914746,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008373492994982858",
+            "extra": "mean: 900.1151999996182 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 237.93610416286384,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005224758422152201",
+            "extra": "mean: 4.202808999997387 msec\nrounds: 5"
           }
         ]
       }
