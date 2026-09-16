@@ -229,9 +229,10 @@ Nacrea 单圈环流（`hadley_extent=90`）或三圈纬度不同的行星会错�
 | 工具 | 用途 | 与 Dreamulator 的关系 |
 |------|------|---------------------|
 | [**Madingley Model**](https://github.com/Madingley/Madingley) | 通用生态系统模型（UNEP WCMC）：个体级异养 + 功能群自养。C#/R/Python | Dreamulator P2 "简单食物网"的参照；Madingley 是网格化全球生态模型，输出 NPP/生物量/功能群分布 |
-| [**Biblaridion's Alien Biosphere**](https://www.youtube.com/playlist?list=PLB1C15C2225B4C9E8) | YouTube 方法论系列：物理约束→身体结构→进化枝→生态位→食物网→智慧生物 | Dreamulator P3 异星物种推演的直接参照（已在 [ecology-layer.md](proposals/ecology-layer.md) §三详细分析） |
+| [**Biblaridion's Alien Biosphere**](https://www.youtube.com/playlist?list=PLB1C15C2225B4C9E8) | YouTube 方法论系列：物理约束→身体结构→进化枝→生态位→食物网→智慧生物；3D 示意图展示生物 | Dreamulator P3 异星物种推演的直接参照（已在 [ecology-layer.md](proposals/ecology-layer.md) §三详细分析）；其 3D 呈现维度（视觉是设定可信度的放大器）登记为 P3c 呈现层参照（2026-09-17） |
 | [**NetLogo**](https://ccl.northwestern.edu/netlogo/) | 基于 agent 的生态模拟平台 | 原型验证：食物网/种群动态/岛屿生物地理学 |
 | [**EcoSim**](https://github.com/EcoSim) | C++ 个体级生态系统模拟 | P2 食物网的算法参考 |
+| [**Blender + 文生 3D 工具族**](https://www.blender.org/)（Tripo / Meshy / Rodin / Hunyuan3D） | P3c 呈现层管线（2026-09-17 登记，详见 [ecology-layer.md](proposals/ecology-layer.md) §3.5 P3c）：creature spec → Blender Python 程序化建模；文生 3D 出基底网格（Tripo/Meshy 快、Rodin/Hunyuan3D 几何质量高、Hunyuan3D 开源可自部署）→ Blender 修拓扑/UV/PBR；视频侧 Blender + DaVinci Resolve（AI 视频生成只作空镜 b-roll） | 呈现层工具选型参照；本机 AMD 集显 → EEVEE 优先 / Cycles CPU / 云渲染农场 |
 
 ### 4.5 文明层
 
