@@ -78,13 +78,38 @@ class GeologicalEngine(BaseEngine):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # ---- Imported data guard ----
-        # Worlds whose terrain is imported (earth: ETOPO1 + PB2002, committed
-        # under maps/) must not have it clobbered by the synthetic pipeline.
-        # Skip generation; the climate engine still runs on the imported mesh.
+        # Worlds whose terrain is imported from real data (earth: ETOPO1 +
+        # PB2002) must not have it clobbered by the synthetic pipeline; the
+        # climate engine runs on the imported mesh.  Imported maps are
+        # gitignored regenerable products, so absence is an honest failure
+        # with recovery instructions — not a silent success that surfaces
+        # later as an unrelated "No CVT mesh" climate error (M1-P0/BUILD-01).
         if config.elevation_source == "imported":
+            mesh_path = self._find_imported_mesh(planet_id)
+            if mesh_path is None:
+                expected = self.maps_output_dir / planet_id
+                return EngineResult(
+                    engine_name=self.name,
+                    success=False,
+                    warnings=warnings
+                    + [
+                        f"Imported terrain for planet '{planet_id}' not found "
+                        f"(no cvt_mesh.json under {expected}).\n"
+                        "Imported maps are gitignored regenerable products; restore them "
+                        "with the real-data importers before building. For Earth (from "
+                        "the repo root):\n"
+                        "  uv sync --extra validation\n"
+                        f"  uv run python scripts/earth/import_earth_elevation.py "
+                        f"--output-dir {expected} --mesh-nodes 200000 --seed 42\n"
+                        f"  uv run dreamulator build {self.world_dir.name}"
+                        + (f" --branch {self._branch_name()}" if self._branch_name() else "")
+                        + "\nSee docs/usage/climate-validation-workflow.md for the full "
+                        "import workflow.",
+                    ],
+                    metadata={"planet_id": planet_id, "elevation_source": "imported"},
+                )
             logger.info(
-                "Skipping terrain pipeline: elevation_source=imported "
-                "(map data is committed, not generated)"
+                "Skipping terrain pipeline: elevation_source=imported (mesh: %s)", mesh_path
             )
             return EngineResult(
                 engine_name=self.name,
@@ -326,3 +351,36 @@ class GeologicalEngine(BaseEngine):
                             return d.name
 
         return "earth"
+
+    def _find_imported_mesh(self, planet_id: str) -> Path | None:
+        """Locate an existing imported mesh for the planet.
+
+        Checks this build's maps directory first (branch or root), then the
+        root world's maps (branch inheritance), then a non-scratch glob
+        fallback for single-planet worlds.  Returns None when nothing exists.
+        """
+        candidates = [
+            self.maps_output_dir / planet_id / "cvt_mesh.json",
+            self.world_dir / "maps" / planet_id / "cvt_mesh.json",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        for base in (self.maps_output_dir, self.world_dir / "maps"):
+            if not base.exists():
+                continue
+            meshes = [p for p in base.glob("*/cvt_mesh.json") if not p.parent.name.startswith("_")]
+            if meshes:
+                return meshes[0]
+        return None
+
+    def _branch_name(self) -> str | None:
+        """Branch this engine writes into (None for root-world builds)."""
+        try:
+            rel = self.maps_output_dir.relative_to(self.world_dir)
+        except ValueError:
+            return None
+        parts = rel.parts
+        if len(parts) >= 2 and parts[0] == "branches":
+            return parts[1]
+        return None

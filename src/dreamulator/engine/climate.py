@@ -14,6 +14,7 @@ Output files (written to ``layers/climate/derived/``):
 from __future__ import annotations
 
 import logging
+import shutil
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -120,18 +121,41 @@ class ClimateEngine(BaseEngine):
         warnings.extend(resolve_and_apply_physical_parameters(self, config, planet=planet))
 
         # ---- 4. Load CVT mesh with elevation ----
-        mesh, mwarnings = _load_cvt_mesh_from_geological(
+        mesh, mesh_source, mwarnings = _load_cvt_mesh_from_geological(
             self.layer_derived_dirs,
             self.layer_input_dirs,
             maps_dir=self.maps_output_dir,
+            planet_id=planet.id,
+            world_dir=self.world_dir,
         )
         warnings.extend(mwarnings)
         if mesh is None:
+            recovery = (
+                "Restore imported terrain first (docs/usage/climate-validation-"
+                "workflow.md), e.g.:\n"
+                "  uv sync --extra validation\n"
+                f"  uv run python scripts/earth/import_earth_elevation.py "
+                f"--output-dir {self.maps_output_dir / planet.id} "
+                "--mesh-nodes 200000 --seed 42"
+                if config.elevation_source == "imported"
+                else "Generate terrain first: uv run dreamulator build <world> "
+                "[--branch <branch>] (geological stage), or import real data "
+                "(Earth) via scripts/earth/."
+            )
             return EngineResult(
                 engine_name=self.name,
                 success=False,
-                warnings=warnings + ["No CVT mesh found in geological derived data"],
+                warnings=warnings + ["No CVT mesh found in geological derived data", recovery],
             )
+
+        # ---- 4b. Materialize a branch-local mesh copy ----
+        # Climate writes its fields back into cvt_mesh.json.  When the mesh was
+        # inherited from outside this build's maps directory (typically the
+        # root world's mesh, via a branch that forked before climate), writing
+        # in place would leak branch climate fields into the shared parent
+        # baseline — copy first, then all writes stay inside the branch
+        # (M1-P0: 分支不回写父世界 / base-mesh isolation).
+        mesh_target = _materialize_writable_mesh(mesh_source, self.maps_output_dir, planet.id)
 
         # ---- 5. Run climate simulation ----
         from dreamulator.map.climate_simulator import simulate_climate
@@ -157,7 +181,7 @@ class ClimateEngine(BaseEngine):
         # ---- 5b. Write climate data back to source cvt_mesh.json ----
         # The frontend reads cvt_mesh.json (geological layer) and expects
         # koppen_class / temperature_C / precipitation_mm to be populated.
-        self._update_source_mesh(mesh, planet.id)
+        self._update_source_mesh(mesh, mesh_target)
 
         # ---- 6. Export outputs ----
         export_dir = self.maps_output_dir / planet.id
@@ -230,11 +254,15 @@ class ClimateEngine(BaseEngine):
         with path.open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-    def _update_source_mesh(self, mesh: CVTMesh, planet_id: str) -> None:
-        """Write climate-populated mesh back to the source cvt_mesh.json.
+    def _update_source_mesh(self, mesh: CVTMesh, target: Path) -> None:
+        """Write climate-populated mesh back to cvt_mesh.json.
 
-        Writes to the specific planet's unified maps/ directory (new structure),
-        with a fallback to old layer-based locations for backward compatibility.
+        ``target`` is the mesh's writable location — for branch builds this is
+        the branch-local copy materialized before the simulation (step 4b), so
+        branch climate fields never leak into the parent world's baseline
+        mesh.  For root builds the target is the canonical
+        ``maps/{planet_id}/cvt_mesh.json``; the legacy layer-based fallback is
+        root-build compat only and is never reached from a branch.
 
         Uses the pydantic-core serializer (Rust, ~5x faster than
         model_dump() + json.dump()); non-finite floats serialize as null.
@@ -245,31 +273,28 @@ class ClimateEngine(BaseEngine):
 
         mesh_bytes = _truncate_float_precision(mesh_bytes)
         mesh_bytes = compress_mesh_bytes(mesh_bytes)
-        # Write to the specific planet directory (new unified maps/ structure)
-        target = self.maps_output_dir / planet_id / "cvt_mesh.json"
-        if target.exists():
-            try:
-                target.write_bytes(mesh_bytes)
-                logger.info("Updated source mesh with climate data: %s", target)
-                return
-            except Exception as e:
-                logger.warning("Failed to update %s: %s", target, e)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(mesh_bytes)
+            logger.info("Updated source mesh with climate data: %s", target)
+            return
+        except Exception as e:
+            logger.warning("Failed to update %s: %s", target, e)
 
-        # Fallback: old layer-based locations
-        search_dirs: list[Path] = []
-        for layer_dirs in (self.layer_derived_dirs, self.layer_input_dirs):
-            geo_dir = layer_dirs.get("geological")
-            if geo_dir:
-                search_dirs.append(geo_dir)
-
-        for d in search_dirs:
-            for mesh_path in d.glob("maps/*/cvt_mesh.json"):
-                try:
-                    mesh_path.write_bytes(mesh_bytes)
-                    logger.info("Updated source mesh with climate data: %s", mesh_path)
-                    return
-                except Exception as e:
-                    logger.warning("Failed to update %s: %s", mesh_path, e)
+        if self.maps_output_dir == self.world_dir / "maps":
+            # Root build with a legacy layout (maps under layers/geological/
+            # derived/maps/): keep the old write location working.
+            for layer_dirs in (self.layer_derived_dirs, self.layer_input_dirs):
+                geo_dir = layer_dirs.get("geological")
+                if not geo_dir:
+                    continue
+                for mesh_path in geo_dir.glob("maps/*/cvt_mesh.json"):
+                    try:
+                        mesh_path.write_bytes(mesh_bytes)
+                        logger.info("Updated source mesh with climate data: %s", mesh_path)
+                        return
+                    except Exception as e:
+                        logger.warning("Failed to update %s: %s", mesh_path, e)
 
         logger.warning("No source cvt_mesh.json found to update with climate data")
 
@@ -279,79 +304,127 @@ class ClimateEngine(BaseEngine):
 # ---------------------------------------------------------------------------
 
 
+def _mesh_candidates(base: Path, planet_id: str | None) -> list[Path]:
+    """Mesh paths under a ``maps/`` root, exact planet match first.
+
+    Excludes ``_``-prefixed scratch directories (_baseline_*/_cache_* …) —
+    the climate engine must load the real planet mesh, not a stale baseline.
+    """
+    if not base.exists():
+        return []
+    out: list[Path] = []
+    if planet_id:
+        exact = base / planet_id / "cvt_mesh.json"
+        if exact.exists():
+            out.append(exact)
+    for p in sorted(base.glob("*/cvt_mesh.json")):
+        if p.parent.name.startswith("_"):
+            continue
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def _materialize_writable_mesh(
+    mesh_source: Path | None, maps_output_dir: Path, planet_id: str
+) -> Path:
+    """Return a writable mesh path inside this build's maps directory.
+
+    When the loaded mesh already lives under ``maps_output_dir`` (same build
+    context), it is returned as-is.  When it was inherited from outside — the
+    root world's mesh consumed by a branch build — a copy is materialized at
+    ``maps_output_dir/<planet_id>/cvt_mesh.json`` so that subsequent field
+    write-backs (climate/ecology/civilization) never modify the parent
+    baseline mesh (M1-P0).
+    """
+    target = maps_output_dir / planet_id / "cvt_mesh.json"
+    if mesh_source is None or mesh_source == target:
+        return target
+    try:
+        mesh_source.relative_to(maps_output_dir)
+        return mesh_source  # already inside this build's maps directory
+    except ValueError:
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        shutil.copyfile(mesh_source, target)
+        logger.info(
+            "Materialized branch mesh copy: %s (source: %s — parent mesh stays untouched)",
+            target,
+            mesh_source,
+        )
+    return target
+
+
 def _load_cvt_mesh_from_geological(
     layer_derived_dirs: dict[str, Path],
     layer_input_dirs: dict[str, Path] | None = None,
     maps_dir: Path | None = None,
-) -> tuple[CVTMesh | None, list[str]]:
-    """Load the CVT mesh from the unified maps/ directory or old layer locations.
+    *,
+    planet_id: str | None = None,
+    world_dir: Path | None = None,
+) -> tuple[CVTMesh | None, Path | None, list[str]]:
+    """Load the CVT mesh, planet-scoped, with parent-world inheritance.
 
-    Searches for ``cvt_mesh.json`` in:
-    1. Unified maps/{planet_id}/ directory (new structure)
-    2. Old layer-based directories (backward compatibility)
+    Candidate locations, most specific first:
+
+    1. this build's unified ``maps/`` — exact ``maps/{planet_id}/`` match
+       before any non-scratch planet directory
+    2. the root world's ``maps/`` (same rule) — branch builds inherit the
+       parent's mesh when the branch has none of its own
+    3. legacy layer-based ``maps/`` locations under the geological layer
 
     Args:
         layer_derived_dirs: Map of layer name → derived directory.
         layer_input_dirs: Map of layer name → input directory.
-        maps_dir: Unified maps output directory (new structure).
+        maps_dir: Unified maps output directory for this build (branch or root).
+        planet_id: Target planet — selects the exact mesh instead of the
+            first glob hit.
+        world_dir: Root world directory, enabling parent-map inheritance.
 
     Returns:
-        (CVTMesh | None, warnings).
+        (mesh, source path, warnings).  Source path is None iff mesh is None.
     """
     from ..map.export import decompress_mesh_bytes
 
-    # 1. Search unified maps/ directory first
-    if maps_dir is not None and maps_dir.exists():
-        # Exclude _baseline_*/_cache_* scratch maps — the climate engine must load
-        # the real planet mesh, not a stale baseline (which lacks plate_id etc.
-        # and would clobber the geological output when written back).
-        mesh_paths = [
-            p for p in maps_dir.glob("*/cvt_mesh.json") if not p.parent.name.startswith("_")
-        ]
-        if mesh_paths:
-            mesh_path = mesh_paths[0]
-            try:
-                # pydantic-core JSON parser (Rust) — faster than
-                # json.load() + CVTMesh(**data) for the 80+ MB mesh.
-                mesh = TypeAdapter(CVTMesh).validate_json(
-                    decompress_mesh_bytes(mesh_path.read_bytes())
-                )
-                return mesh, []
-            except Exception as e:
-                return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
+    candidates: list[Path] = []
+    if maps_dir is not None:
+        candidates.extend(_mesh_candidates(maps_dir, planet_id))
+    if world_dir is not None and (world_dir / "maps") != maps_dir:
+        candidates.extend(_mesh_candidates(world_dir / "maps", planet_id))
 
-    # 2. Fallback: old layer-based locations
-    search_dirs: list[Path] = []
-
+    # Legacy layer-based locations (pre-migration layouts).
+    legacy_dirs: list[Path] = []
     geo_derived = layer_derived_dirs.get("geological")
     if geo_derived is not None:
-        search_dirs.append(geo_derived)
-
+        legacy_dirs.append(geo_derived)
     if layer_input_dirs:
         geo_input = layer_input_dirs.get("geological")
         if geo_input is not None:
-            search_dirs.append(geo_input)
+            legacy_dirs.append(geo_input)
+    for d in legacy_dirs:
+        for p in sorted(d.glob("maps/*/cvt_mesh.json")):
+            if not p.parent.name.startswith("_") and p not in candidates:
+                candidates.append(p)
 
-    if not search_dirs:
-        return None, ["No maps directory or geological layer directories found"]
+    if not candidates:
+        searched = [
+            str(maps_dir) if maps_dir is not None else "(no maps dir)",
+            *([str(world_dir / "maps")] if world_dir is not None else []),
+            *[str(d / "maps") for d in legacy_dirs],
+        ]
+        return None, None, [f"No cvt_mesh.json found in: {searched}"]
 
-    # Search for cvt_mesh.json in maps/<planet_id>/
-    mesh_paths = []
-    for d in search_dirs:
-        mesh_paths.extend(
-            p for p in d.glob("maps/*/cvt_mesh.json") if not p.parent.name.startswith("_")
-        )
+    for mesh_path in candidates:
+        try:
+            # pydantic-core JSON parser (Rust) — faster than
+            # json.load() + CVTMesh(**data) for the 80+ MB mesh.
+            mesh = TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(mesh_path.read_bytes()))
+            return mesh, mesh_path, []
+        except Exception as e:
+            return None, None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
 
-    if not mesh_paths:
-        return None, [f"No cvt_mesh.json found in: {[str(d) for d in search_dirs]}"]
-
-    # Use the first one found
-    mesh_path = mesh_paths[0]
-    try:
-        mesh = TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(mesh_path.read_bytes()))
-        return mesh, []
-    except Exception as e:
-        return None, [f"Failed to load CVT mesh from {mesh_path}: {e}"]
+    return None, None, ["No loadable cvt_mesh.json found"]
 
 
 def _build_climate_summary(

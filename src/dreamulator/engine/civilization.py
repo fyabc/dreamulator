@@ -254,11 +254,13 @@ def _load_cvt_mesh(engine: CivilizationEngine) -> tuple[CVTMesh | None, list[str
     """Load the CVT mesh, reusing the same logic as the climate engine."""
     from dreamulator.engine.climate import _load_cvt_mesh_from_geological
 
-    return _load_cvt_mesh_from_geological(
+    mesh, _source, warnings = _load_cvt_mesh_from_geological(
         engine.layer_derived_dirs,
         engine.layer_input_dirs,
         maps_dir=engine.maps_output_dir,
+        world_dir=engine.world_dir,
     )
+    return mesh, warnings
 
 
 def _build_habitability_summary(

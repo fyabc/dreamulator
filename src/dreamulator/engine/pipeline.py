@@ -82,7 +82,8 @@ def run_pipeline(
     Returns:
         List of EngineResults from each engine run.
     """
-    sorted_engines = topological_sort(engines)
+    all_sorted = topological_sort(engines)
+    sorted_engines = all_sorted
 
     # Determine the effective start layer
     if start_layer is not None:
@@ -120,6 +121,23 @@ def run_pipeline(
             layer_input_dirs[layer.value] = source.input_dir
         if source.derived_dir is not None:
             layer_derived_dirs[layer.value] = source.derived_dir
+
+    # Auto-prepare derived inputs whose producing engines were filtered out
+    # (build bootstrap M1-P0): a climate fork excludes astronomy, but the
+    # climate engine still requires astronomy-derived inputs from the source
+    # (parent) context.  Fresh checkouts have no gitignored derived files, so
+    # build them in the parent context instead of failing opaquely.
+    excluded_engines = [e for e in all_sorted if e.name not in {x.name for x in sorted_engines}]
+    if excluded_engines:
+        _bootstrap_missing_upstream(
+            sorted_engines,
+            excluded_engines,
+            world_dir,
+            seed,
+            layer_input_dirs=layer_input_dirs,
+            layer_derived_dirs=layer_derived_dirs,
+            resolver=resolver,
+        )
 
     results: list[EngineResult] = []
     profile_records: list[dict[str, Any]] = []
@@ -251,6 +269,106 @@ def run_pipeline(
                 _console.print(f"    [dim]{name:<22} {secs:6.1f}s[/dim]")
 
     return results
+
+
+# Engines allowed to run automatically to prepare missing derived inputs.
+# Astronomy is seconds-cheap, pure layer-derived YAML, and required by every
+# downstream engine.  Map-producing engines (geological) must NEVER auto-run:
+# imported terrain needs an explicit documented import (network + data deps),
+# and generated terrain is minutes of compute that belongs to an explicit
+# geological build — both fail with recovery instructions instead.
+_BOOTSTRAP_ENGINES = {"astronomy"}
+
+
+def _bootstrap_missing_upstream(
+    included: list[type[BaseEngine]],
+    excluded: list[type[BaseEngine]],
+    world_dir: Path,
+    seed: int,
+    *,
+    layer_input_dirs: dict[str, Path],
+    layer_derived_dirs: dict[str, Path],
+    resolver: LayerResolver,
+) -> None:
+    """Build missing derived inputs from engines the fork filter excluded.
+
+    A branch that forks at layer L runs only engines for L and after; required
+    inputs produced by pre-fork engines come from the source (parent) context.
+    When such a derived file is missing — typically a fresh checkout, where
+    gitignored derived products do not exist — the producing engine is run
+    once against its resolved source directories, writing to the source
+    context (e.g. the root world's ``layers/astronomy/derived/``), never the
+    branch.  Only engines in ``_BOOTSTRAP_ENGINES`` are auto-run; anything
+    else falls through to the regular input validation error.
+
+    Args:
+        included: Engines the pipeline is about to run (post-filter).
+        excluded: Engines removed by the fork/start/only filters.
+        world_dir: Root world directory.
+        seed: RNG seed (passed through to the bootstrap run).
+        layer_input_dirs: Resolved effective input dirs (branch-aware).
+        layer_derived_dirs: Resolved derived dirs; updated in place on success.
+        resolver: Layer resolver for the current build context.
+    """
+    # Which required inputs of the engines we are about to run are missing?
+    missing: set[str] = set()
+    for engine_cls in included:
+        probe = engine_cls(
+            world_dir,
+            seed,
+            layer_input_dirs=layer_input_dirs,
+            layer_derived_dirs=layer_derived_dirs,
+        )
+        missing.update(f for f in engine_cls.input_files if probe.find_input(f) is None)
+    if not missing:
+        return
+
+    producers: dict[str, type[BaseEngine]] = {}
+    for engine_cls in excluded:
+        for out in engine_cls.output_files:
+            producers.setdefault(out, engine_cls)
+
+    for filename in sorted(missing):
+        producer = producers.get(filename)
+        if producer is None or producer.name not in _BOOTSTRAP_ENGINES:
+            continue  # regular validation will report it with the usual error
+
+        source = resolver.resolve_layer(producer.layer)
+        if source.input_dir is None:
+            continue
+        output_dir = source.input_dir.parent / "derived"
+
+        _console.print(
+            f"  [yellow]{producer.layer.value}[/yellow]: derived '{filename}' missing "
+            f"→ building in source context ({source.source})"
+        )
+        logger.info(
+            "Bootstrapping %s for missing %s (source: %s, output: %s)",
+            producer.name,
+            filename,
+            source.source,
+            output_dir,
+        )
+        engine = producer(
+            world_dir,
+            seed,
+            layer_input_dirs=layer_input_dirs,
+            layer_derived_dirs=layer_derived_dirs,
+            layer_output_dir=output_dir,
+            maps_output_dir=world_dir / "maps",
+        )
+        result = engine.run()
+        if result.success:
+            # Make the freshly built derived files visible to find_input()
+            # for every engine constructed later in the main loop.
+            layer_derived_dirs[producer.layer.value] = output_dir
+        else:
+            logger.error(
+                "Bootstrap of %s failed (input validation will report the "
+                "original missing file): %s",
+                producer.name,
+                result.warnings,
+            )
 
 
 def _collect_dependencies(engine_name: str, sorted_engines: list[type[BaseEngine]]) -> set[str]:
