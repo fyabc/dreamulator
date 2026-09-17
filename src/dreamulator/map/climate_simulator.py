@@ -2083,6 +2083,63 @@ def _solve_moisture_budget(
     return w, p + p_oro
 
 
+def _coastal_rainout_factor(
+    mesh: CVTMesh,
+    n: int,
+    is_land: np.ndarray,
+    is_ocean: np.ndarray,
+    wind: np.ndarray,
+    temperature_c: np.ndarray,
+    nodes_xyz: np.ndarray,
+) -> np.ndarray:
+    """Coastal rainout-efficiency modulation (CLIM-02 slice 3, astra §2.1/§7).
+
+    Onshore winds carry ocean moisture → coastal convergence raises the local
+    rainout efficiency; offshore (land-sourced) winds suppress it.  Applied as
+    a multiplicative ``k_rain`` field inside the budget — mass-conserving by
+    construction (same family as the storm-track / SST / omega gates), unlike
+    the former post-budget multiplication of the final precipitation (which
+    non-conservatively scaled everything, including orographic condensation
+    and cold-trap routed rain that have nothing to do with coastal
+    convergence).  Epistemic class of the constants (discipline #9):
+    observation-fit — eps windward/leeward and the [0.5, 1.5] clip are
+    calibrated magnitudes; the flux form rho·|U|·q_sat is physical.
+
+    Returns:
+        Factor in [0.5, 1.5], shape (n,); 1.0 away from coastal land.
+    """
+    _coastal, _west_coast = _detect_coastal_cells(mesh.cells, n, is_land, is_ocean)
+    if not _coastal.any():
+        return np.ones(n, dtype=np.float64)
+
+    from dreamulator.map.ocean_circulation import east_north_basis as _enb
+
+    _east, _ = _enb(nodes_xyz)
+    _uzonal = np.einsum("ij,ij->i", wind, _east)  # physical zonal component
+
+    _rho_air = 1.2  # kg/m³
+    _s_per_year = 365.25 * 86400.0
+    _p_bg = 1000.0  # mm/yr reference background precipitation
+    _eps_windward = 1.3e-4  # coastal precipitation efficiency (windward)
+    _eps_leeward = 0.8e-4  # coastal precipitation efficiency (leeward)
+
+    factor = np.ones(n, dtype=np.float64)
+    for i in np.flatnonzero(_coastal):
+        u_abs = abs(_uzonal[i])
+        t_k = max(temperature_c[i] + 273.15, 230.0)
+        e_sat = 611.2 * np.exp(17.67 * (t_k - 273.15) / (t_k - 29.65))  # Pa
+        q_sat = 0.622 * e_sat / 101325.0  # kg/kg
+        moisture_flux = _rho_air * u_abs * q_sat  # kg/m²/s
+        delta_p = moisture_flux * _s_per_year  # mm/yr equivalent
+
+        is_westerly = _uzonal[i] > 0
+        windward = (is_westerly and _west_coast[i]) or (not is_westerly and not _west_coast[i])
+        eps = _eps_windward if windward else _eps_leeward
+        f_i = 1.0 + eps * delta_p / _p_bg if windward else (1.0 - eps * delta_p / _p_bg)
+        factor[i] = np.clip(f_i, 0.5, 1.5)
+    return factor
+
+
 def _detect_coastal_cells(
     cells: list[VoronoiCell],
     n: int,
@@ -2307,12 +2364,13 @@ def _compute_precipitation_monthly_budget(
     stationary-wave subsidence lobes export their moisture to the ascent
     regions — ``subsidence_rainout_gate``).
 
-    On top of each month's budget precipitation: orographic rain from that
-    month's column water and wind, then the mechanisms that do not vary by
-    month in this model — west/east-coast asymmetry (annual cell circulation),
-    Föhn rain shadow (latitude-regime based), sub-planet convective
-    enhancement (steady on a locked body) — and finally the annual cap applied
-    to the monthly values proportionally.
+    On top of each month's budget precipitation: the mechanisms that do not
+    vary by month in this model — sub-planet convective enhancement (steady
+    on a locked body) — and finally the annual cap applied to the monthly
+    values proportionally.  The orographic uplift condensation, the cold-trap
+    upwind routing and the west/east-coast rainout asymmetry all live INSIDE
+    the budget solve itself (CLIM-02 slices 1-3), so every solve conserves
+    ΣA·P = ΣA·E exactly before the remaining post-processing.
 
     Args:
         mesh: CVT mesh.
@@ -2421,6 +2479,11 @@ def _compute_precipitation_monthly_budget(
     # be distorted by the monthly weighting).
     if omega_gate_monthly is not None:
         _rain_ann = (1.0 + _rain_ann) * omega_gate_monthly.mean(axis=1) - 1.0
+    # ── CLIM-02 slice 3: coastal asymmetry as a k_rain modulation ── the
+    # same physical factor the former post-budget step applied, but inside
+    # the budget so ΣA·P = ΣA·E survives it (see _coastal_rainout_factor).
+    _coastal_k = _coastal_rainout_factor(mesh, n, is_land, is_ocean, wind, temperature_c, nodes_xyz)
+    _rain_ann = (1.0 + _rain_ann) * _coastal_k - 1.0
 
     _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
@@ -2526,6 +2589,7 @@ def _compute_precipitation_monthly_budget(
             _rain_m = _storm_enhance
         if omega_gate_monthly is not None:
             _rain_m = (1.0 + _rain_m) * omega_gate_monthly[:, m] - 1.0
+        _rain_m = (1.0 + _rain_m) * _coastal_k - 1.0  # CLIM-02 slice 3
         w_m, p_m = _solve_moisture_budget(
             mesh,
             wind_monthly[m],
@@ -2596,52 +2660,13 @@ def _compute_precipitation_monthly_budget(
     def _pa() -> float:
         return float((p_monthly.sum(axis=1) * _area_km2).sum())
 
-    _ledger_stages: list[tuple[str, float]] = [("core (budget+oro)", _ledger_core)]
+    _ledger_stages: list[tuple[str, float]] = [("core (budget+oro+coastal)", _ledger_core)]
 
-    # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
-    # the seasonality of the westerlies is not modelled yet, so the same
-    # factor applies to every month).  Onshore winds carry ocean moisture →
-    # coastal precipitation enhanced; offshore winds → suppressed.  The onshore
-    # moisture flux is ρ_air × |U_zonal| × q_sat(T); a fraction ε of it
-    # precipitates at the coast:
-    #     f = 1 ± ε × ρ_air × |U| × q_sat(T) × s_per_year / P_bg
-    if is_land.any():
-        _coastal, _west_coast = _detect_coastal_cells(mesh.cells, n, is_land, is_ocean)
-        # Single source (2026-09-13): the coast asymmetry reads the same
-        # annual-mean wind as every other consumer — the terrain-blocked
-        # vector mean of the monthly fields — instead of re-deriving an
-        # unblocked background circulation of its own.
-        from dreamulator.map.ocean_circulation import east_north_basis as _enb2
-
-        _east, _ = _enb2(nodes_xyz)
-        # `wind` is physical (root unification, 2026-09-13); `is_westerly`
-        # below reads the physical zonal component.
-        _uzonal = np.einsum("ij,ij->i", wind, _east)
-
-        _rho_air = 1.2  # kg/m³
-        _s_per_year = 365.25 * 86400.0
-        _p_bg = 1000.0  # mm/yr reference background precipitation
-        _eps_windward = 1.3e-4  # coastal precipitation efficiency (windward)
-        _eps_leeward = 0.8e-4  # coastal precipitation efficiency (leeward)
-
-        _coastal_factor = np.ones(n, dtype=np.float64)
-        for i in range(n):
-            if not _coastal[i]:
-                continue
-            u_abs = abs(_uzonal[i])
-            t_k = max(temperature_c[i] + 273.15, 230.0)
-            e_sat = 611.2 * np.exp(17.67 * (t_k - 273.15) / (t_k - 29.65))  # Pa
-            q_sat = 0.622 * e_sat / 101325.0  # kg/kg
-            moisture_flux = _rho_air * u_abs * q_sat  # kg/m²/s
-            delta_p = moisture_flux * _s_per_year  # mm/yr equivalent
-
-            is_westerly = _uzonal[i] > 0
-            windward = (is_westerly and _west_coast[i]) or (not is_westerly and not _west_coast[i])
-            eps = _eps_windward if windward else _eps_leeward
-            factor = 1.0 + eps * delta_p / _p_bg if windward else (1.0 - eps * delta_p / _p_bg)
-            _coastal_factor[i] = np.clip(factor, 0.5, 1.5)
-        p_monthly *= _coastal_factor[:, None]
-        _ledger_stages.append(("coastal", _pa()))
+    # Step 6.6 (coastal asymmetry) migrated into the budget in CLIM-02 slice 3:
+    # the same physical factor now modulates k_rain inside every solve (see
+    # _coastal_rainout_factor) instead of multiplying the final precipitation
+    # — conserving, and it no longer spuriously scales orographic condensation
+    # or cold-trap routed rain.
 
     # Step 6.7 (Föhn rain shadow) was removed in CLIM-02 slice 1: the leeward
     # drying now emerges inside the budget — the orographic condensation

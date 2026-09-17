@@ -192,3 +192,38 @@ class TestCcLiftDryingScale:
         h = float(cc_lift_drying_scale(np.array([14.85]), np.array([6.5]))[0])
         phi_2km = 1.0 - math.exp(-2000.0 / h)
         assert 0.4 < phi_2km < 0.75
+
+
+class TestCoastalRainoutFactor:
+    """CLIM-02 slice 3: coastal asymmetry as a k_rain modulation."""
+
+    def test_factor_bounds_and_signs(self):
+        from dreamulator.map.climate_simulator import _coastal_rainout_factor
+
+        # Land sector lon ∈ [60°, 120°], ocean elsewhere; strong westerly.
+        n = N_LON * N_LAT
+        lons = np.array([c.lon for c in _ridge_mesh()[0].cells])
+        # Build a flat land-island mesh from the ridge builder (elevation → 0,
+        # land mask by longitude sector).
+        mesh, wind = _ridge_mesh(ridge_top_m=0.0)
+        is_land = (lons >= 60.0) & (lons <= 120.0)
+        # Broadcast the land sector across all latitudes.
+        is_land = np.tile(
+            (np.linspace(-180, 180 - 360.0 / N_LON, N_LON) >= 60.0)
+            & (np.linspace(-180, 180 - 360.0 / N_LON, N_LON) <= 120.0),
+            N_LAT,
+        )
+        is_ocean = ~is_land
+        t = np.full(n, 25.0)
+        nodes = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+        f = _coastal_rainout_factor(mesh, n, is_land, is_ocean, wind, t, nodes)
+
+        assert np.all((f >= 0.5 - 1e-12) & (f <= 1.5 + 1e-12))
+        assert np.all(f[~is_land] == 1.0)  # ocean / inland: no modulation
+        # Under a westerly, west-coast cells (lon=60 boundary) are windward
+        # (f > 1) and east-coast cells (lon=120) are leeward (f < 1).
+        west_edge = np.flatnonzero(is_land & (np.abs(lons - 60.0) < 1e-6))
+        east_edge = np.flatnonzero(is_land & (np.abs(lons - 120.0) < 1e-6))
+        assert len(west_edge) and len(east_edge)
+        assert np.all(f[west_edge] > 1.0)
+        assert np.all(f[east_edge] < 1.0)
