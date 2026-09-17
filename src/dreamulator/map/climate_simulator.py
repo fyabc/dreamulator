@@ -809,7 +809,14 @@ def simulate_climate(
                     tau_days=config.ocean_sst_advection_days,
                     coastal_influence_km=config.ocean_coastal_influence_km,
                 )
+                # CLIM-01 (2026-09-18): the SST advection shifts the ocean's
+                # annual-mean SST; shift the monthly series by the same
+                # increment so the monthly evaporation / SST-gate consumers in
+                # Stage 3 see the same level (⟨t_monthly⟩ ≡ t_mean_C at every
+                # stage, not only at the final re-centre).
+                _dt_sst = sst_corrected - t_mean_C
                 t_mean_C = sst_corrected  # feeds into stage 3 (BFS evaporation) + stage 4 (Köppen)
+                t_monthly_C = t_monthly_C + _dt_sst[:, None]
                 # Write per-cell ocean fields
                 for li, gi in enumerate(b_cells):
                     c = mesh.cells[gi]
@@ -822,7 +829,9 @@ def simulate_climate(
                 _upw = compute_upwelling_index(
                     wind_mirror, mesh.cells, nodes_xyz, east, north, lat_rad
                 )
-                t_mean_C = apply_upwelling_sst_correction(_upw, t_mean_C)
+                _dt_upw = apply_upwelling_sst_correction(_upw, t_mean_C) - t_mean_C
+                t_mean_C = t_mean_C + _dt_upw
+                t_monthly_C = t_monthly_C + _dt_upw[:, None]  # CLIM-01: keep ⟨t_monthly⟩ ≡ t_mean_C
         else:
             _console.print("    [dim]No ocean basins detected[/dim]")
     else:
@@ -849,7 +858,11 @@ def simulate_climate(
             radius_m=_radius_m,
             diffusivity=config.ocean_temperature_diffusivity,
         )
-        t_mean_C = np.where(is_land, t_mean_C + _temp_anom, t_mean_C)
+        # CLIM-01: land-only increment, applied to both the annual and monthly
+        # fields so Stage 3's monthly evaporation / SST-gate see it too.
+        _dt_adv = np.where(is_land, _temp_anom, 0.0)
+        t_mean_C = t_mean_C + _dt_adv
+        t_monthly_C = t_monthly_C + _dt_adv[:, None]
 
     # ------------------------------------------------------------------
     # Stage 3: Precipitation (monthly mass-conserving moisture budget)
@@ -2491,6 +2504,15 @@ def _compute_precipitation_monthly_budget(
     _dbg_pickup = np.ones(n)
     _dbg_w_final = np.zeros(n)
 
+    # CLIM-02 (2026-09-18): per-stage area-weighted water ledger — quantify how
+    # much each post-budget mechanism adds/removes, exposing the ΣP = ΣE
+    # residual that the budget core guarantees but the orographic / coastal /
+    # föhn / sub-planet / cap post-processing breaks.  Area-weighted (Σ P·A in
+    # mm·km²/yr) so a huge wet ocean cell counts proportionally.
+    _area_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+    _ledger_core = 0.0  # budget core (incl. cold-trap) annual Σ P·A
+    _ledger_oro = 0.0  # orographic add-on
+
     for m in range(12):
         t_m = t_monthly_c[:, m]
         # Monthly land ET: energy limitation from that month's temperature,
@@ -2572,6 +2594,8 @@ def _compute_precipitation_monthly_budget(
 
         p_monthly[:, m] = (p_m + oro_m) / 12.0
 
+        _ledger_core += float((p_m * _area_km2).sum() / 12.0)
+        _ledger_oro += float((oro_m * _area_km2).sum() / 12.0)
         _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
         _dbg_w_final += w_m / 12.0
 
@@ -2581,6 +2605,16 @@ def _compute_precipitation_monthly_budget(
         debug["w_column_final_mean"] = _dbg_w_final.copy()
         if config.convective_pickup_gate_enabled:
             debug["pickup_gate_monthly_mean"] = _dbg_pickup.copy()
+
+    # CLIM-02 water ledger: area-weighted annual Σ P·A (mm·km²/yr) snapshots at
+    # each post-budget stage, so the build log exposes how much the orographic /
+    # coastal / föhn / sub-planet / cap corrections add or remove relative to
+    # the mass-conserving core (ΣP = ΣE there).  The residual is the net
+    # non-conservation of the final precipitation field.
+    def _pa() -> float:
+        return float((p_monthly.sum(axis=1) * _area_km2).sum())
+
+    _ledger_stages: list[tuple[str, float]] = [("budget+orographic", _ledger_core + _ledger_oro)]
 
     # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
     # the seasonality of the westerlies is not modelled yet, so the same
@@ -2625,6 +2659,7 @@ def _compute_precipitation_monthly_budget(
             factor = 1.0 + eps * delta_p / _p_bg if windward else (1.0 - eps * delta_p / _p_bg)
             _coastal_factor[i] = np.clip(factor, 0.5, 1.5)
         p_monthly *= _coastal_factor[:, None]
+        _ledger_stages.append(("coastal", _pa()))
 
     # Step 6.7: Föhn rain shadow — leeward drying from the moisture scale
     # height of the barrier the air crossed on its *whole upwind path*, not just
@@ -2657,6 +2692,7 @@ def _compute_precipitation_monthly_budget(
             _recharge = np.exp(-_since_barrier[_dry] / config.rain_shadow_decay_km)
             _shadow[_dry] = 1.0 - _dry_frac * _recharge
         p_monthly *= _shadow[:, None]
+        _ledger_stages.append(("foehn", _pa()))
         if debug is not None:
             debug["fohn_factor"] = _shadow.copy()
             debug["fohn_drop"] = _drop.copy()
@@ -2677,6 +2713,7 @@ def _compute_precipitation_monthly_budget(
         if debug is not None:
             debug["sub_planet"] = sub_boost.copy()
         p_monthly += sub_boost[:, None] / 12.0
+        _ledger_stages.append(("sub-planet", _pa()))
 
     # Annual cap (real-Earth maximum ~11000 mm/yr, Mawsynram/Cherrapunji),
     # applied to the monthly values proportionally so the seasonal shape is
@@ -2687,7 +2724,23 @@ def _compute_precipitation_monthly_budget(
     scale = np.where(p_annual > 11000.0, 11000.0 / np.maximum(p_annual, 1e-9), 1.0)
     p_monthly *= scale[:, None]
     p_annual = p_monthly.sum(axis=1)
+    _ledger_stages.append(("cap", _pa()))
     if debug is not None:
         debug["final"] = p_annual.copy()
+
+    # CLIM-02 ledger report: each stage's area-weighted ΣP·A and its delta from
+    # the mass-conserving core, ending at the net non-conservation residual.
+    _core = _ledger_stages[0][1]
+    _parts = [f"{_core / 1e9:.3f}"]
+    _prev = _core
+    for _name, _val in _ledger_stages[1:]:
+        _parts.append(f"{_name} {(_val - _prev) / 1e9:+.3f}")
+        _prev = _val
+    _resid = _prev - _core
+    _console.print(
+        f"  [dim]water ledger ΣP·A (10⁹ mm·km²/yr): "
+        f"{' → '.join(_parts)}; residual {_resid / 1e9:+.3f} "
+        f"({_resid / max(_core, 1e-9) * 100:+.2f}% of core)[/dim]"
+    )
 
     return p_annual, p_monthly

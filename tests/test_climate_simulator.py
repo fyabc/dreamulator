@@ -676,3 +676,43 @@ class TestConvectivePickupGateWiring:
         g_mon = d_on["pickup_gate_monthly_mean"]
         if (g_ann < 0.99).any():
             assert not np.allclose(g_ann, g_mon)
+
+
+class TestMonthlyAnnualConsistency:
+    """CLIM-01 (2026-09-18): the exported monthly series stays aligned with the
+    annual field — ⟨t_monthly⟩ ≡ t_mean_C after every Stage-2.5 ocean
+    correction, not only at the final re-centre."""
+
+    def test_monthly_mean_matches_annual(self) -> None:
+        import numpy as np
+
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        mesh = _build_test_mesh(num_bands=10, cells_per_band=10)
+        config = TerrainPipelineConfig(
+            seed=42,
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+            lat_gradient_c=45.0,
+            lapse_rate_c_km=6.5,
+            evaporation_base_mm=1000.0,
+            wind_blocking_height_m=3000.0,
+            itcz_lag_days=30,
+            num_nodes=100,
+            ocean_currents_enabled=True,
+            ocean_upwelling_enabled=True,
+        )
+        simulate_climate(mesh, config)
+
+        t_monthly = getattr(mesh, "_t_monthly_c", None)
+        assert t_monthly is not None, "monthly temperature array not attached"
+        t_annual = np.array([c.temperature_C for c in mesh.cells], dtype=np.float64)
+        mean_monthly = np.asarray(t_monthly, dtype=np.float64).mean(axis=1)
+        assert np.allclose(mean_monthly, t_annual, atol=0.05), (
+            f"monthly mean drifted from annual by up to "
+            f"{np.abs(mean_monthly - t_annual).max():.3f} °C"
+        )
