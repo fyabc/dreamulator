@@ -1719,19 +1719,60 @@ def _apply_cold_trap(
     w: np.ndarray,
     w_sat: np.ndarray,
     k_rain_field: np.ndarray,
+    neg: np.ndarray,
+    src: np.ndarray,
+    dst: np.ndarray,
+    c_in: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Cold-trap cap: clamp column water at its Clausius–Clapeyron saturation.
+    """Cold-trap saturation cap with upwind routing (CLIM-02 slice 2).
 
-    A cold air column cannot hold more water than ``W_sat(T)``, so the column
-    water above that limit is removed before the rainout ``P = W/τ`` is computed.
-    Physically the excess would rain out *upwind* of the saturated column (at the
-    coast, not the frozen interior); this first-order cut destroys it instead of
-    routing it there, a small global mass deficit (~1-2% — the cold columns are
-    a small fraction of the surface).  Warm columns have ``W_sat ≫ W`` and are
-    untouched.  TODO(§5): route the excess upwind for exact ΣP = ΣE.
+    A cold air column cannot hold more water than its Clausius–Clapeyron
+    ``W_sat(T)``, so the reported column is capped — but the capped rainout
+    ``k·(W − W_sat)`` is no longer destroyed (the former silent mass
+    deletion).  Physically the excess condensed while the air was still warm:
+    it rains out *upwind* of the saturated column (the Antarctic coast, not
+    the plateau — astra rethinking §2.1/§5.2), so the excess rate is routed
+    back along the cell's inflow edges proportionally to the actual arriving
+    flux.  With the routed share included as precipitation,
+    ΣA·(rainout + routed) = ΣA·k·W_unconstrained, so the budget's exact
+    global conservation survives the cap.
+
+    Args:
+        w: Solved (unconstrained) column water, mm.
+        w_sat: Saturation column water, mm.
+        k_rain_field: Rainout rate field, 1/yr.
+        neg: Boolean mask of inflow edges (directed src→dst with c<0: air
+            flows dst→src, so *dst* is the upwind source).
+        src: Directed-edge source-cell indices.
+        dst: Directed-edge destination-cell indices.
+        c_in: Attenuated advection coefficients (the actual arriving flux is
+            |c_in|·W[dst]).
+
+    Returns:
+        (capped W, P) with P = k·W_capped + routed excess, both shape (N,).
     """
-    w = np.minimum(np.maximum(w, 0.0), w_sat)
-    return w, w * k_rain_field
+    w = np.maximum(w, 0.0)
+    excess_rate = k_rain_field * np.maximum(w - w_sat, 0.0)
+    p_routed = np.zeros_like(w)
+    if excess_rate.any():
+        neg_idx = np.flatnonzero(neg)
+        inflow_e = (-c_in[neg_idx]) * w[dst[neg_idx]]  # arriving flux per edge
+        inflow_tot = np.zeros_like(w)
+        np.add.at(inflow_tot, src[neg_idx], inflow_e)
+        has_inflow = inflow_tot > 1e-12
+        tot_at_src = np.where(has_inflow, inflow_tot, 1.0)
+        over_src = excess_rate[src[neg_idx]] > 0.0
+        share = np.where(
+            over_src & has_inflow[src[neg_idx]],
+            excess_rate[src[neg_idx]] * inflow_e / tot_at_src[src[neg_idx]],
+            0.0,
+        )
+        np.add.at(p_routed, dst[neg_idx], share)
+        # Overshoot from local sources with no inflow: the cell keeps its own rain.
+        local_only = (excess_rate > 0.0) & ~has_inflow
+        p_routed[local_only] += excess_rate[local_only]
+    w = np.minimum(w, w_sat)
+    return w, w * k_rain_field + p_routed
 
 
 # timescale τ in the moisture budget P = W/τ, a physical constant — not a free
@@ -2033,11 +2074,10 @@ def _solve_moisture_budget(
     w = lu.solve(e)
     p_oro = _oro_from_w(w)  # from the solved (pre-trap) column water
 
-    # Cold trap: cap column water at its Clausius–Clapeyron saturation W_sat(T)
-    # so a cold air column cannot rain out more water than it can hold.
-    w = np.maximum(w, 0.0)
+    # Cold trap: saturation cap + upwind routing of the excess rainout
+    # (CLIM-02 slice 2 — the excess rains where the air was still warm).
     w_sat = column_water_saturation(temperature_c)
-    w, p = _apply_cold_trap(w, w_sat, k_rain_field)
+    w, p = _apply_cold_trap(w, w_sat, k_rain_field, neg, src, dst, _c_in)
     # Orographic condensation comes from the *transiting* flux, not the local
     # column, so it bypasses the cold-trap cap.
     return w, p + p_oro

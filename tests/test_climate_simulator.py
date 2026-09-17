@@ -364,22 +364,34 @@ class TestClimateSimulatorEndToEnd:
 
 
 class TestColdTrap:
-    """The cold-trap saturation clamp W ≤ W_sat."""
+    """The cold-trap saturation cap W ≤ W_sat with upwind routing (CLIM-02 slice 2)."""
+
+    @staticmethod
+    def _no_edges(n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Degenerate edge set (no inflow) for pure-cap behaviour."""
+        return (
+            np.zeros(0, dtype=bool),
+            np.zeros(0, dtype=np.int64),
+            np.zeros(0, dtype=np.int64),
+            np.zeros(0, dtype=np.float64),
+        )
 
     def test_caps_column_water(self) -> None:
-        """Column water above W_sat is removed; warm columns are untouched."""
+        """Column water above W_sat is capped; warm columns are untouched."""
         from dreamulator.map.climate_simulator import _apply_cold_trap
 
         w = np.array([25.0, 3.0, 0.2])
         w_sat = np.array([1e9, 1.0, 0.5])
         k_rain_field = np.array([40.6, 40.6, 40.6])
-        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field)
+        neg, src, dst, c_in = self._no_edges(3)
+        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field, neg, src, dst, c_in)
 
         assert np.all(w_capped <= w_sat + 1e-9)
         assert w_capped[0] == pytest.approx(25.0)  # warm → untouched
         assert w_capped[1] == pytest.approx(1.0)  # cold → capped
         assert w_capped[2] == pytest.approx(0.2)  # already below → untouched
-        assert np.allclose(p, w_capped * k_rain_field)
+        # No inflow edges: the capped cell keeps its own excess rain.
+        assert p[1] == pytest.approx(3.0 * 40.6)
 
     def test_no_op_when_unsaturated(self) -> None:
         """No cells near saturation → identical to the input."""
@@ -388,10 +400,64 @@ class TestColdTrap:
         w = np.array([20.0, 15.0, 10.0, 5.0])
         w_sat = np.full(4, 1e9)
         k_rain_field = np.full(4, 40.6)
-        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field)
+        neg, src, dst, c_in = self._no_edges(4)
+        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field, neg, src, dst, c_in)
 
         assert np.allclose(w_capped, w)
         assert np.allclose(p, w * k_rain_field)
+
+    def test_excess_rains_upwind(self) -> None:
+        """The capped rainout rains at the (warm) inflow source, not the cold cell.
+
+        Two cells: warm source 0 → cold overshooting cell 1 (one inflow edge,
+        directed 1→0 with c<0).  Cell 1's column is capped at W_sat and its
+        excess rainout k·(W−W_sat) appears as cell 0's precipitation —
+        ΣP is exactly the unconstrained Σ k·W (conservation survives the cap).
+        """
+        from dreamulator.map.climate_simulator import _apply_cold_trap
+
+        k = 40.6
+        w = np.array([10.0, 6.0])
+        w_sat = np.array([1e9, 2.0])
+        k_rain_field = np.full(2, k)
+        # One directed edge (src=1 → dst=0) with c<0: air flows 0 → 1.
+        neg = np.array([True])
+        src = np.array([1])
+        dst = np.array([0])
+        c_in = np.array([-5.0])
+
+        w_capped, p = _apply_cold_trap(w, w_sat, k_rain_field, neg, src, dst, c_in)
+
+        assert w_capped[1] == pytest.approx(2.0)  # capped
+        assert p[1] == pytest.approx(2.0 * k)  # cold cell rains only its capped column
+        excess = (6.0 - 2.0) * k
+        assert p[0] == pytest.approx(10.0 * k + excess)  # excess rained upwind
+        # Global conservation: ΣP == Σ k·W_unconstrained.
+        assert p.sum() == pytest.approx(k * w.sum(), rel=1e-12)
+
+    def test_excess_split_by_inflow_share(self) -> None:
+        """Two inflow edges split the routed excess ∝ their arriving *flux*
+        (|c|·W_source — the edge with 3× |c| from a wetter source carries
+        30 vs 8 of flux, so shares are 30/38 and 8/38)."""
+        from dreamulator.map.climate_simulator import _apply_cold_trap
+
+        k = 40.6
+        w = np.array([10.0, 8.0, 6.0])
+        w_sat = np.array([1e9, 1e9, 2.0])  # only cell 2 overshoots
+        k_rain_field = np.full(3, k)
+        # Two inflow edges into cell 2 (directed 2→0 and 2→1, c<0).
+        neg = np.array([True, True])
+        src = np.array([2, 2])
+        dst = np.array([0, 1])
+        c_in = np.array([-3.0, -1.0])
+
+        _, p = _apply_cold_trap(w, w_sat, k_rain_field, neg, src, dst, c_in)
+
+        excess = (6.0 - 2.0) * k
+        f0, f1 = 3.0 * 10.0, 1.0 * 8.0  # arriving fluxes |c|·W_source
+        assert p[0] == pytest.approx(10.0 * k + excess * f0 / (f0 + f1))
+        assert p[1] == pytest.approx(8.0 * k + excess * f1 / (f0 + f1))
+        assert p.sum() == pytest.approx(k * w.sum(), rel=1e-12)
 
 
 # ---------------------------------------------------------------------------
