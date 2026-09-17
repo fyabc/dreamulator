@@ -323,15 +323,20 @@ cell_facts(lon, lat) -> {koppen, domesticable_tags, distance_to_coast_km, ...}
 
 **③ 数值漂移（渲染 diff）** — 比 ② 更精准。决策记录的定量声明是模板（`{{ aggregates.climate.seasonal_range_C.land.median | round1 }} °C`）；`guard check` 重渲染当前上下文，diff 定量子集：
 
-- 校验和变了 **但** 渲染结果没变 → 这条决策记录引用的事实没被改动 → **结论仍成立，不用重算**；
-- 校验和变了 **且** 渲染结果变了 → 事实漂移 → **结论需复核**。
+- 指纹变了 **但** 渲染结果没变 → 这条决策记录引用的事实没被改动 → **结论仍成立，不用重算**；
+- 渲染结果变了 → 事实漂移 → **结论需复核**。**③ 独立于 ② 运行**（GUARD-01）：指纹没变
+  也会漂移——同一份输入 YAML、新版引擎派生出不同值，正是「校验和门控」漏检的场景。
 
 这区分了「设定改了但这条拷问不受影响」与「这条拷问的前提真的变了」——比单纯看校验和精准。
 
-> ⚠️ **意图感知**：上述三级检测默认「不一致 = 意外漂移」。但用户**故意覆写**（如 `edits.json`
-> 把某 cell 温度设为 30°C、`physics.yaml` 改重力）产生的「不一致」是**声明过的创造力**，不是漂移。
-> `guard check` 遇到「已记录的故意覆写」时报「已知覆写 N 条」（info），而非误报 stale——见 §2.4、
-> §8.1 的 `divergence` 标记。
+> ⚠️ **意图感知（作用域限定）**：用户**故意覆写**（如 `edits.json` 把某 cell 温度设为
+> 30°C、`physics.yaml` 改重力）产生的「输入不一致」是**声明过的创造力**，`divergence:
+> intentional` 把 **② input_changed** 降级为 info（可选 `divergence_layers: [...]`
+> 限定到声明的层，其余层照常报）。但 **③ fact_drifted 永不豁免**——故意改温度不能
+> 豁免卫星轨道等其它依赖的漂移（GUARD-01，astra proposals-review §3.3）。
+>
+> **不可运行 ≠ 干净**：事实上下文缺失（未构建世界/目录损坏）时检测返回显式
+> `not_run` finding，CLI 黄字警示——空清单只在检查真正跑过时才显示绿勾。
 
 ### 决策状态（对齐 ADR）
 
@@ -386,7 +391,12 @@ divergence: intentional    # 可选：intentional = 故意覆写（创造性分�
 
 台账不设上限会变坟场（三年后 `design-notes/` 全是过期条目，`guard check` 在坟场里捞针）。借鉴 Hermes 的
 「**容量上限 + 超限写入失败**」：设一个世界一个上限（如 N 条 active 记录），超限时 `guard archive`
-强制把最旧的 `accepted` 标 `deprecated` 归档，**写不进去而非静默追加**。
+把最旧的 `accepted` 移出活动台账，**写不进去而非静默追加**。
+
+归档是**可见性字段而非状态改判**（GUARD-01，2026-09-18）：`archive` 写 `archived: true`，
+**不改 `status`**——存储/阅读容量不是结论失效的证据，把仍有效的 `accepted` 改判
+`deprecated` 是在篡改台账真值。归档记录继续接受 ②/③ 漂移检测（结论仍有效仍需守护），
+删掉 `archived` 字段即恢复活动。`deprecate` 仍是显式裁决「前提失效」的唯一入口。
 
 ---
 

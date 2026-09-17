@@ -136,14 +136,17 @@ def test_broken_ref_also_scans_design_notes(tmp_path: Path) -> None:
     assert findings[0].layer is None
 
 
-def test_empty_when_context_unavailable(tmp_path: Path) -> None:
-    """Unbuilt world (no system_catalog) → no broken-ref scan, not a false positive."""
+def test_not_run_when_context_unavailable(tmp_path: Path) -> None:
+    """GUARD-01: unbuilt world → an explicit not_run finding, NEVER a silent
+    empty list that reads as 'verified clean'."""
     world = _make_world(tmp_path, catalog=None)
     _write_text(
         world / "layers" / "astronomy" / "input" / "broken.md",
         "x {{ entities.star_sol.nonexistent_field }} y\n",
     )
-    assert check_broken_refs(world) == []
+    findings = check_broken_refs(world)
+    assert [f.kind for f in findings] == ["not_run"]
+    assert "unavailable" in findings[0].detail
 
 
 # ---------------------------------------------------------------------------
@@ -244,18 +247,86 @@ def test_claims_stable_despite_input_change_no_drift(tmp_path: Path) -> None:
     assert {f.kind for f in findings} == {"input_changed"}
 
 
-def test_divergence_intentional_downgrades_to_info(tmp_path: Path) -> None:
+def test_divergence_downgrades_input_only_not_facts(tmp_path: Path) -> None:
+    """GUARD-01: ``divergence: intentional`` excuses the *declared input*
+    drift (②), never the drifted facts (③) — an intentional temperature
+    override does not exempt unrelated dependencies."""
     world = _make_world(tmp_path)
     fp = layer_input_fingerprint(world, None, "astronomy")
     _write_text(
         world / "design-notes" / "0001-div.md",
+        # NOTE: the body line is deliberately NOT an f-string — inside one,
+        # ``{{`` collapses to a single brace and the template stops being a
+        # template (this silently voided the ③ channel of the former test).
         f"---\nstatus: accepted\ndivergence: intentional\nchecked_against:\n"
-        f"  astronomy: {fp}\n---\nx {{ entities.star_sol.luminosity_sol }} y\n",
+        f"  astronomy: {fp}\n---\n"
+        "x {{ entities.star_sol.luminosity_sol }} y\n",
     )
     write_baseline(world, {"0001-div.md": {"{{ entities.star_sol.luminosity_sol }}": "1.0"}})
 
     _rebuild_with_luminosity(world, 2.0)
 
+    kinds = {f.kind for f in check_decision_records(world)}
+    assert kinds == {"divergence", "fact_drifted"}
+
+
+def test_divergence_layers_scope(tmp_path: Path) -> None:
+    """With ``divergence_layers`` declared, only those layers downgrade;
+    drift in any other layer still reports input_changed."""
+    world = _make_world(tmp_path)
+    fp = layer_input_fingerprint(world, None, "astronomy")
+    _write_text(
+        world / "design-notes" / "0001-div.md",
+        f"---\nstatus: accepted\ndivergence: intentional\n"
+        f"divergence_layers: [geological]\nchecked_against:\n"
+        f"  astronomy: {fp}\n---\nbody\n",
+    )
+    # astronomy input changed, but only geological drift was declared intentional
+    _write_yaml(
+        world / "layers" / "astronomy" / "input" / "stellar.yaml",
+        {"stars": [{"id": "star_sol", "luminosity": 1.0, "note": "edited"}]},
+    )
     findings = check_decision_records(world)
-    assert findings
-    assert all(f.kind == "divergence" for f in findings)
+    assert [f.kind for f in findings] == ["input_changed"]
+
+
+def test_fact_drift_detected_with_same_input_fingerprint(tmp_path: Path) -> None:
+    """GUARD-01 probe #1 (astra): same input fingerprint + a new engine value
+    (fact 10 → 20) must report fact_drifted — ③ no longer gated on ②."""
+    from unittest.mock import patch
+
+    from dreamulator.guard import stale
+
+    world = _make_world(tmp_path)
+    fp = layer_input_fingerprint(world, None, "astronomy")
+    _write_text(
+        world / "design-notes" / "0001-probe.md",
+        f"---\nstatus: accepted\nchecked_against:\n  astronomy: {fp}\n---\n"
+        "{{ aggregates.climate.t }}\n",
+    )
+    write_baseline(world, {"0001-probe.md": {"{{ aggregates.climate.t }}": "10"}})
+
+    context = {"aggregates": {"climate": {"t": 20}}}
+    with (
+        patch.object(stale, "build_fact_context", return_value=context),
+        patch.object(stale, "layer_input_fingerprint", return_value=fp),
+    ):
+        findings = stale.check_decision_records(world)
+    assert [f.kind for f in findings] == ["fact_drifted"]
+    assert "'10' → '20'" in findings[0].detail
+
+
+def test_nested_yaml_change_moves_fingerprint(tmp_path: Path) -> None:
+    """GUARD-01 probe #2 (astra): authored YAML in subdirectories (conlang
+    lexicons etc.) participates in the layer fingerprint."""
+    world = _make_world(tmp_path)
+    input_dir = world / "layers" / "civilization" / "input"
+    (input_dir / "languages" / "proto").mkdir(parents=True)
+    _write_text(input_dir / "top.yaml", "x: 1\n")
+    nested = input_dir / "languages" / "proto" / "lexicon.yaml"
+    _write_text(nested, "word: a\n")
+
+    before = layer_input_fingerprint(world, None, "civilization")
+    _write_text(nested, "word: b\n")
+    after = layer_input_fingerprint(world, None, "civilization")
+    assert before != after

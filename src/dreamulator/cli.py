@@ -78,6 +78,16 @@ def guard_check(
         console.print("[green]No stale findings — all facts up-to-date.[/green]")
         return
 
+    # GUARD-01: not_run = the check could NOT be performed (unbuilt world /
+    # missing catalog) — never let it pass as a clean bill of health.
+    not_run = [f for f in findings if f.kind == "not_run"]
+    if not_run:
+        console.print(
+            f"[yellow]⚠ {len(not_run)} check(s) could not run (NOT verified clean):[/yellow]"
+        )
+        for f in not_run:
+            console.print(f"[yellow]  {f.detail}[/yellow]")
+
     table = Table(title=f"guard check: {world}" + (f" (branch {branch})" if branch else ""))
     table.add_column("kind")
     table.add_column("path")
@@ -176,7 +186,10 @@ def guard_archive(
         return
     for p in archived:
         console.print(f"[dim]  archived: {p.name}[/dim]")
-    console.print(f"[green]{len(archived)} record(s) archived (→ deprecated).[/green]")
+    console.print(
+        f"[green]{len(archived)} record(s) archived "
+        "(hidden from the active ledger; still accepted & drift-checked).[/green]"
+    )
 
 
 # Climate subcommand group — imported late to avoid a circular import

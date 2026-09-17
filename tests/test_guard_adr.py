@@ -60,7 +60,11 @@ def test_accept_stamps_status_and_fingerprints(tmp_path: Path) -> None:
     assert path.name == "0001-test.md"
     fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
     assert fm["status"] == "accepted"
-    assert set(fm["checked_against"]) == {"astronomy", "geological"}
+    # GUARD-01: every layer is fingerprinted, not just the catalog feeders —
+    # a climate/ecology argument depends on its own layer's inputs too.
+    from dreamulator.models.layers import LAYER_ORDER
+
+    assert set(fm["checked_against"]) == {layer.value for layer in LAYER_ORDER}
 
 
 def test_accept_records_baseline_claims(tmp_path: Path) -> None:
@@ -122,6 +126,8 @@ def test_count_accepted(tmp_path: Path) -> None:
 
 
 def test_archive_prunes_oldest_accepted(tmp_path: Path) -> None:
+    """GUARD-01: archive is a *visibility* field — capacity pressure is not
+    evidence of invalidity, so status stays ``accepted``."""
     world = _make_world(tmp_path)
     for i in range(5):
         _write_adr(world, f"000{i + 1}-r.md", "accepted")
@@ -129,9 +135,25 @@ def test_archive_prunes_oldest_accepted(tmp_path: Path) -> None:
     archived = archive(world, limit=3)
 
     assert [p.name for p in archived] == ["0001-r.md", "0002-r.md"]
-    assert count_accepted(world) == 3
-    assert _status(world, "0001-r.md") == "deprecated"
+    assert count_accepted(world) == 3  # archived records leave the active count
+    assert _status(world, "0001-r.md") == "accepted"  # NOT deprecated
+    fm, _ = parse_frontmatter((world / "design-notes" / "0001-r.md").read_text(encoding="utf-8"))
+    assert fm.get("archived") is True
     assert _status(world, "0003-r.md") == "accepted"
+
+
+def test_archived_records_do_not_block_accept(tmp_path: Path) -> None:
+    """Archiving frees active capacity; re-archiving skips already-archived."""
+    world = _make_world(tmp_path)
+    for i in range(3):
+        _write_adr(world, f"000{i + 1}-r.md", "accepted")
+    _write_adr(world, "0009-new.md", "proposed")
+
+    archive(world, limit=1)  # hides 0001 + 0002, active = {0003}
+    accept(world, None, "0009-new", limit=2)  # capacity freed → no raise
+    assert _status(world, "0009-new.md") == "accepted"
+    assert count_accepted(world) == 2
+    assert archive(world, limit=2) == []  # already within limit → noop
 
 
 def test_archive_noop_within_limit(tmp_path: Path) -> None:

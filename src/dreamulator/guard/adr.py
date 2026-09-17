@@ -23,6 +23,7 @@ from dreamulator.guard.stale import (
     render_claims,
     write_baseline,
 )
+from dreamulator.models.layers import LAYER_ORDER
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -36,9 +37,12 @@ __all__ = [
     "supersede",
 ]
 
-# The authored layers that feed system_catalog.yaml, hence every ``entities.*``
-# template reference.  ADRs citing ``aggregates.*`` facts would extend this list.
-_CHECKED_LAYERS = ("astronomy", "geological")
+# GUARD-01 (astra proposals-review §3.3): fingerprint *every* layer, not just
+# the system_catalog feeders.  A climate/ecology/civilization argument depends
+# on its own layer's authored inputs too; unconfigured layers record "" (or
+# the no-yaml sentinel) — harmless, and if an input dir appears later the
+# fingerprint change fires ② exactly as it should.
+_CHECKED_LAYERS: tuple[str, ...] = tuple(layer.value for layer in LAYER_ORDER)
 
 # Ledger capacity: max concurrently-``accepted`` records per world (harness.md §8.2,
 # Hermes "capacity limit + fail-on-overflow" — an unbounded ledger becomes a graveyard).
@@ -103,35 +107,59 @@ def _checked_against_block(fingerprints: dict[str, str]) -> list[str]:
     return lines
 
 
-def _status_of(doc: Path) -> str | None:
+def _frontmatter_of(doc: Path) -> dict[str, object]:
     fm, _ = parse_frontmatter(doc.read_text(encoding="utf-8"))
-    status = fm.get("status")
+    return fm
+
+
+def _status_of(doc: Path) -> str | None:
+    status = _frontmatter_of(doc).get("status")
     return str(status) if status is not None else None
 
 
+def _is_archived(doc: Path) -> bool:
+    return bool(_frontmatter_of(doc).get("archived", False))
+
+
 def count_accepted(world_dir: Path) -> int:
-    """Count ADR records currently ``accepted`` (the ledger's active size)."""
+    """Count ADR records currently ``accepted`` **and visible** (active ledger).
+
+    Archived records stay ``accepted`` (their conclusions remain valid — see
+    ``archive``); they just no longer occupy active-ledger capacity.
+    """
     design_dir = world_dir / "design-notes"
     if not design_dir.exists():
         return 0
-    return sum(1 for d in sorted(design_dir.glob("*.md")) if _status_of(d) == "accepted")
+    return sum(
+        1
+        for d in sorted(design_dir.glob("*.md"))
+        if _status_of(d) == "accepted" and not _is_archived(d)
+    )
 
 
 def archive(world_dir: Path, limit: int = DEFAULT_MAX_ACCEPTED) -> list[Path]:
-    """Force-archive the oldest ``accepted`` records until count ≤ ``limit``.
+    """Hide the oldest ``accepted`` records from the active ledger until count ≤ limit.
 
-    Mark the overflow (sorted by filename, so the lowest-numbered = oldest)
-    ``deprecated`` — a bounded ledger that fails on overflow rather than silently
-    growing into a graveyard (harness.md §8.2).  Returns the archived paths.
+    GUARD-01 (astra proposals-review §3.3): sets an ``archived: true``
+    **visibility** field — it does NOT rewrite ``status``.  Storage/reading
+    capacity is not evidence that a conclusion became invalid; the former
+    behaviour silently deprecated still-accepted records, corrupting the
+    ledger's truth.  Archived records keep ``status: accepted``, remain
+    subject to stale detection (②/③ still scan every design-notes file), and
+    can be restored by removing the field.  Returns the archived paths.
     """
     design_dir = world_dir / "design-notes"
-    accepted = [d for d in sorted(design_dir.glob("*.md")) if _status_of(d) == "accepted"]
+    accepted = [
+        d
+        for d in sorted(design_dir.glob("*.md"))
+        if _status_of(d) == "accepted" and not _is_archived(d)
+    ]
     overflow = max(0, len(accepted) - limit)
 
     archived: list[Path] = []
     for doc in accepted[:overflow]:
         content = doc.read_text(encoding="utf-8")
-        content = _set_frontmatter_field(content, "status", ["status: deprecated\n"])
+        content = _set_frontmatter_field(content, "archived", ["archived: true\n"])
         doc.write_text(content, encoding="utf-8")
         archived.append(doc)
     return archived

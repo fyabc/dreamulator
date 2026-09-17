@@ -57,11 +57,15 @@ class Finding:
     """One stale-detection finding (harness.md §7).
 
     ``kind`` discriminates the three levels + the intentional-divergence case.
-    ``path`` is the doc/ADR path relative to the world root; ``layer`` is the
-    owning layer (``None`` for design-notes / world-level).
+    ``not_run`` marks a check that could NOT be performed (missing fact
+    context / unbuilt world) — an empty finding list must never be displayed
+    as "verified clean" when the check did not actually run (GUARD-01, astra
+    proposals-review §3.3).  ``path`` is the doc/ADR path relative to the
+    world root; ``layer`` is the owning layer (``None`` for design-notes /
+    world-level).
     """
 
-    kind: Literal["broken_ref", "input_changed", "fact_drifted", "divergence"]
+    kind: Literal["broken_ref", "input_changed", "fact_drifted", "divergence", "not_run"]
     path: str
     layer: str | None
     detail: str
@@ -70,28 +74,35 @@ class Finding:
 def layer_input_fingerprint(world_dir: Path, branch: str | None, layer: Layer | str) -> str:
     """Stable fingerprint of a layer's authored YAML inputs (harness.md §7 ②).
 
-    Hashes filename + content of every ``input/*.yaml`` (sorted), so any change
-    to the authored YAML changes the fingerprint.  ``.md`` narrative docs are
-    deliberately excluded — narrative edits must not invalidate physical
-    conclusions (decided 2026-08-18).
+    Hashes relative path + content of every ``input/**/*.yaml`` (recursive,
+    sorted) — GUARD-01: the former single-level glob missed authored data in
+    subdirectories (e.g. a conlang ``languages/proto/lexicon.yaml``), so an
+    ADR depending on it kept a stale "unchanged" fingerprint.  ``.md``
+    narrative docs remain deliberately excluded — narrative edits must not
+    invalidate physical conclusions (decided 2026-08-18).
 
     Returns:
         Hex digest; ``NO_YAML_FINGERPRINT`` when the layer has an input dir but
-        no ``.yaml`` files; ``""`` when the layer has no effective input dir
-        (unconfigured layer / missing input).
+        no ``.yaml``/``.yml`` files anywhere under it; ``""`` when the layer has
+        no effective input dir (unconfigured layer / missing input).
     """
     resolver = LayerResolver(world_dir, branch)
     input_dir = resolver.get_input_dir(layer)
     if input_dir is None or not input_dir.exists():
         return ""
 
-    yaml_files = sorted(input_dir.glob("*.yaml"))
+    yaml_files = sorted(
+        [*input_dir.glob("**/*.yaml"), *input_dir.glob("**/*.yml")],
+        key=lambda p: p.relative_to(input_dir).as_posix(),
+    )
     if not yaml_files:
         return NO_YAML_FINGERPRINT
 
     hasher = hashlib.sha256()
     for path in yaml_files:
-        hasher.update(path.name.encode("utf-8"))
+        # Relative path (not bare name): distinguishes same-named files in
+        # different subdirectories and detects moves between them.
+        hasher.update(path.relative_to(input_dir).as_posix().encode("utf-8"))
         hasher.update(b"\x00")
         hasher.update(path.read_bytes())
         hasher.update(b"\x00")
@@ -147,12 +158,24 @@ def check_broken_refs(world_dir: Path, branch: str | None = None) -> list[Findin
 
     Renders each ``layers/*/input/*.md`` and ``design-notes/*.md`` against the
     fact context; a residual ``{{ ... }}`` means a referenced field was deleted
-    or renamed.  Returns an empty list when the fact context is unavailable
-    (unbuilt world — that is a different, higher-level condition).
+    or renamed.  When the fact context is unavailable (unbuilt world), returns
+    a single ``not_run`` finding — the check did NOT pass, it could not run
+    (GUARD-01: an empty list must not read as "verified clean").
     """
     context = build_fact_context(world_dir, branch)
     if context is None:
-        return []
+        return [
+            Finding(
+                kind="not_run",
+                path="-",
+                layer=None,
+                detail=(
+                    "broken-ref scan skipped: fact context unavailable "
+                    "(unbuilt world or missing/corrupt system_catalog.yaml) — "
+                    "run `dreamulator build` first"
+                ),
+            )
+        ]
 
     resolver = LayerResolver(world_dir, branch)
     findings: list[Finding] = []
@@ -177,12 +200,18 @@ def check_decision_records(world_dir: Path, branch: str | None = None) -> list[F
 
     - ② compares frontmatter ``checked_against`` (``{layer: fingerprint}``)
       against the recomputed layer fingerprint → ``input_changed``.
-    - ③ (only when ② flagged a change) re-renders the ADR's ``{{ ... }}``
-      claims and diffs against the baseline → ``fact_drifted``.  A claim that
-      renders identically despite the input change means the conclusion still
-      holds (no finding).
-    - ``divergence: intentional`` ADRs report ``divergence`` (info) instead of
-      the stale kinds — the drift is declared creativity, not rot.
+    - ③ re-renders the ADR's ``{{ ... }}`` claims and diffs against the
+      baseline → ``fact_drifted``.  Runs **independently of ②** (GUARD-01):
+      a fact can drift with the input fingerprint unchanged — e.g. a new
+      engine version derives a different value from the same YAML, the exact
+      case the former ``if not changed: skip`` gate missed.
+    - ``divergence: intentional`` downgrades **② only** (declared creative
+      divergence of the authored input), optionally scoped to the layers
+      listed in ``divergence_layers``.  ③ ``fact_drifted`` is NEVER exempted:
+      an intentional temperature override does not excuse drift in unrelated
+      dependencies (astra proposals-review §3.3).
+    - Missing fact context while checkable ADRs exist → one ``not_run``
+      finding (the ③ channel could not be evaluated).
     """
     design_dir = world_dir / "design-notes"
     if not design_dir.exists():
@@ -191,33 +220,53 @@ def check_decision_records(world_dir: Path, branch: str | None = None) -> list[F
     context = build_fact_context(world_dir, branch)
     baseline = read_baseline(world_dir)
     findings: list[Finding] = []
+    context_missing_reported = False
 
     for doc in sorted(design_dir.glob("*.md")):
         raw = doc.read_text(encoding="utf-8")
         fm, body = parse_frontmatter(raw)
         rel = f"design-notes/{doc.name}"
         divergence = fm.get("divergence") == "intentional"
+        div_layers = fm.get("divergence_layers")
+        div_scope: list[str] | None = (
+            [str(x) for x in div_layers] if isinstance(div_layers, list) else None
+        )
 
         # ② input fingerprint
         checked = fm.get("checked_against")
         if not isinstance(checked, dict):
             continue
-        changed = False
         for layer, recorded in checked.items():
             current = layer_input_fingerprint(world_dir, branch, layer)
             if current != str(recorded):
-                changed = True
+                scoped = divergence and (div_scope is None or str(layer) in div_scope)
                 findings.append(
                     Finding(
-                        kind="divergence" if divergence else "input_changed",
+                        kind="divergence" if scoped else "input_changed",
                         path=rel,
                         layer=str(layer),
                         detail=f"input changed: {str(recorded)[:8]}… → {current[:8]}…",
                     )
                 )
 
-        # ③ render diff — only meaningful when an input changed
-        if not changed or context is None or doc.name not in baseline:
+        # ③ render diff — independent of ②: same input + new engine can still
+        # move the derived facts the conclusion rests on.
+        if context is None:
+            if not context_missing_reported:
+                findings.append(
+                    Finding(
+                        kind="not_run",
+                        path="-",
+                        layer=None,
+                        detail=(
+                            "render-diff check skipped: fact context unavailable "
+                            "(unbuilt world or missing/corrupt system_catalog.yaml)"
+                        ),
+                    )
+                )
+                context_missing_reported = True
+            continue
+        if doc.name not in baseline:
             continue
         recorded_claims = baseline[doc.name]
         for template, value in render_claims(body, context).items():
@@ -225,7 +274,7 @@ def check_decision_records(world_dir: Path, branch: str | None = None) -> list[F
             if recorded is not None and recorded != value:
                 findings.append(
                     Finding(
-                        kind="divergence" if divergence else "fact_drifted",
+                        kind="fact_drifted",
                         path=rel,
                         layer=None,
                         detail=f"{template}: {recorded!r} → {value!r}",
