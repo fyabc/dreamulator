@@ -119,12 +119,24 @@ def load_climate_config(
 ) -> TerrainPipelineConfig:
     """Resolve the climate config for a world (diagnostic-script entry point).
 
-    The ``earth`` validation world uses the shared-physics Earth config; any
-    other world loads its authored ``terrain_config.yaml`` + physical params.
+    M2-A0 (2026-09-17): every world — including ``earth`` — loads its
+    *authored* world inputs (``terrain_config.yaml`` knobs + physical
+    parameters from ``planets.yaml``/``stellar.yaml``), exactly what
+    ``dreamulator build`` consumes.  The former ``world == "earth"``
+    shortcut swapped in a parallel hardcoded validation planet (rotation
+    1.0 d vs the authored 0.9973, e 0 vs 0.0167, pressure 1013.25 vs
+    1026.7 hPa), so diagnostics re-simulated a *different* planet than the
+    one the mesh under diagnosis was built with.  The standard Earth
+    *experiment* remains available explicitly via
+    ``validate_climate.build_earth_validation_config``.
     """
-    if world == "earth":
-        from dreamulator.validate_climate import build_earth_validation_config
+    del world  # no world-name physics switching — same path for every world
+    config, warnings = load_world_climate_config(world_dir, planet_id, branch)
+    if warnings:
+        import logging
 
-        return build_earth_validation_config(num_cells)
-    config, _ = load_world_climate_config(world_dir, planet_id, branch)
+        logging.getLogger(__name__).warning(
+            "load_climate_config(%s): %s", world_dir.name, "; ".join(warnings)
+        )
+    config.num_nodes = num_cells
     return config

@@ -601,8 +601,17 @@ def resolve_stellar_temperature(
 
     Ice/snow albedo is spectrally dependent (high in the visible, low in the
     near-IR), so the effective ice albedo depends on the host star's spectral
-    energy distribution (Shields et al. 2012).  Returns None when the stellar
-    temperature is unavailable — callers keep the Sun-like default.
+    energy distribution (Shields et al. 2012).
+
+    Resolution order (M2-A0: no silent Sun fallback):
+
+    1. explicit/computed ``temperature`` / ``computed_temperature`` from
+       ``stellar.yaml`` / ``stellar_derived.yaml`` (derived wins);
+    2. Stefan–Boltzmann from luminosity + radius when both are known
+       (``effective_temperature``; typical when the astronomy layer has run).
+
+    Returns None only when neither path resolves — callers must then warn,
+    not silently keep the Sun default.
 
     Args:
         engine: Engine whose ``find_input`` resolves the stellar-derived layer.
@@ -621,7 +630,26 @@ def resolve_stellar_temperature(
         star_id = planet.orbits
     if star_id is None:
         return None
-    return index.temperatures.get(star_id)
+    explicit = index.temperatures.get(star_id)
+    if explicit is not None:
+        return explicit
+    # Stefan–Boltzmann fallback: T = T☉ (L / R²)^¼ in solar units.
+    luminosity = index.luminosities.get(star_id)
+    radius = index.radii.get(star_id)
+    if luminosity is not None and radius is not None and luminosity > 0.0 and radius > 0.0:
+        from dreamulator.engine.stellar_physics import effective_temperature
+
+        computed = effective_temperature(luminosity, radius)
+        logger.info(
+            "Stellar temperature for '%s' derived via Stefan–Boltzmann: "
+            "%.1f K (L=%.4g L☉, R=%.4g R☉)",
+            star_id,
+            computed,
+            luminosity,
+            radius,
+        )
+        return computed
+    return None
 
 
 def apply_physical_parameters(
@@ -699,6 +727,17 @@ def resolve_and_apply_physical_parameters(
     warnings.extend(stellar_warnings)
 
     stellar_temperature_k = resolve_stellar_temperature(engine, planet)
+    if stellar_temperature_k is None and planet is not None:
+        # M2-A0: the Sun default is a *fallback*, never a silent substitution —
+        # a K/M-dwarf world would get a ~1700+ K wrong spectral ice albedo with
+        # no trace in the build log.  (Normal builds are unaffected: the
+        # astronomy layer's derived temperature or the L+R fallback resolves
+        # first; this fires on diagnostic paths that skip the astronomy build.)
+        warnings.append(
+            f"Stellar temperature unresolved for '{planet.id}'s host star; "
+            "spectral ice albedo will use the Sun default 5772 K. Author a "
+            "temperature in stellar.yaml or build the astronomy layer."
+        )
 
     eccentricity, _is_satellite, orbital_warnings = resolve_orbital_elements(engine, planet)
     warnings.extend(orbital_warnings)

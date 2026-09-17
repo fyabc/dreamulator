@@ -104,7 +104,12 @@ def main() -> None:
         return
 
     print(f"Running climate simulation on {mesh.num_cells} cells ...")
-    simulate_climate(mesh, build_earth_validation_config(mesh.num_cells))
+    simulate_climate(
+        mesh,
+        build_earth_validation_config(
+            mesh.num_cells, world_dir=world_dir, planet_id=args.planet, branch=args.branch or None
+        ),
+    )
 
     t_model = np.asarray(mesh._t_monthly_c, dtype=np.float64)
     u_model = np.asarray(mesh._wind_east_monthly, dtype=np.float64)

@@ -70,7 +70,12 @@ def main() -> None:
         return
 
     print(f"Running climate simulation on {mesh.num_cells} cells ...")
-    config = build_earth_validation_config(mesh.num_cells)
+    config = build_earth_validation_config(
+        mesh.num_cells,
+        world_dir=root / args.world_dir / args.world,
+        planet_id=args.planet,
+        branch=args.branch or None,
+    )
     simulate_climate(mesh, config)
 
     n = mesh.num_cells

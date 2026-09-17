@@ -416,6 +416,9 @@ def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> CV
 def build_earth_validation_config(
     num_nodes: int,
     *,
+    world_dir: Path | None = None,
+    planet_id: str = "planet_earth",
+    branch: str | None = "climate-dev",
     lat_gradient_c: float = 45.0,
     auto_lat_gradient: bool = True,
     diffusive_heat_transport: bool = True,
@@ -423,10 +426,14 @@ def build_earth_validation_config(
 ) -> TerrainPipelineConfig:
     """Single source of truth for the Earth (climate-dev) validation config.
 
-    Every caller — the three ``scripts/diagnose_*.py`` diagnostics and
-    ``run_validation()`` below — must build its ``TerrainPipelineConfig`` from
-    here rather than hand-writing it, so the Earth baseline cannot silently
-    diverge from the engine's tuned configuration.
+    M2-A0 (2026-09-17): **world-first**.  When *world_dir* is given, the base
+    is the world's authored inputs — ``planets.yaml`` physical parameters +
+    ``terrain_config.yaml`` knobs, exactly what ``dreamulator build earth
+    --branch climate-dev`` consumes — and only the explicit experiment
+    toggles below are overlaid.  The former hardcoded physical values
+    (rotation 1.0 d vs the authored 0.9973 sidereal day, e = 0 vs the
+    authored 0.0167) silently validated a parallel planet; they survive only
+    in the no-world fallback (unit tests / contexts without the data tree).
 
     ``ebm_1d=True`` is the shared-physics default — the 1D Energy Balance Model
     (North 1975 / climlab) formally solving
@@ -437,36 +444,48 @@ def build_earth_validation_config(
     """
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
-    return TerrainPipelineConfig(
-        seed=42,
-        radius_km=6371.0,
-        rotation_period_days=1.0,
-        stellar_luminosity_sol=1.0,
-        orbital_distance_au=1.0,
-        axial_tilt_deg=23.44,
-        greenhouse_warming_K=33.0,
-        lat_gradient_c=lat_gradient_c,
-        auto_lat_gradient=auto_lat_gradient,
-        diffusive_heat_transport=diffusive_heat_transport,
-        ebm_1d=ebm_1d,
-        # P3: observational anchor (annual-mean Hadley edge ~30°, the value the
-        # baseline was calibrated with).  The Held-Hou derivation gives 23.3°
-        # for Earth — within the axisymmetric theory's ~20% uncertainty, but
-        # the baseline metrics are tuned at 30, so Earth pins it.
-        hadley_extent_deg=30.0,
-        lapse_rate_c_km=6.5,
-        evaporation_base_mm=1000.0,
-        wind_blocking_height_m=3000.0,
-        itcz_lag_days=30,
-        # ④ v2 two-level Gill response: default OFF until the desert-P supply-side
-        # bias is fixed and the subsidence gate recalibrated (2026-09-17
-        # calibration found no monotone signal — see _SUBSIDENCE_GATE_KNOTS_W).
-        # Measurement runs 2026-09-17 proved the gated flag is a no-op (≤0.2 mm
-        # mean P change, 0.1 pp metric delta at both root and branch contexts);
-        # flip this pin together with the default when recalibration lands.
-        stationary_wave_v2_enabled=False,
-        num_nodes=num_nodes,
-    )
+    if world_dir is not None:
+        from dreamulator.map.climate_config import load_world_climate_config
+
+        # Authored world inputs (physical + knob base).  Warnings are logged
+        # by the loader path; validation re-simulation mirrors the build.
+        config, _warnings = load_world_climate_config(world_dir, planet_id, branch)
+    else:
+        config = TerrainPipelineConfig(
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+        )
+
+    # Experiment toggles — the only fields this function owns.  Physics
+    # (rotation, orbit, pressure, greenhouse, luminosity, radius) comes from
+    # the world when world_dir is given.
+    config.seed = 42
+    config.lat_gradient_c = lat_gradient_c
+    config.auto_lat_gradient = auto_lat_gradient
+    config.diffusive_heat_transport = diffusive_heat_transport
+    config.ebm_1d = ebm_1d
+    # P3: observational anchor (annual-mean Hadley edge ~30°, the value the
+    # baseline was calibrated with).  The Held-Hou derivation gives 23.3°
+    # for Earth — within the axisymmetric theory's ~20% uncertainty, but
+    # the baseline metrics are tuned at 30, so Earth pins it.
+    config.hadley_extent_deg = 30.0
+    config.lapse_rate_c_km = 6.5
+    config.evaporation_base_mm = 1000.0
+    config.wind_blocking_height_m = 3000.0
+    config.itcz_lag_days = 30
+    # ④ v2 two-level Gill response: default OFF until the desert-P supply-side
+    # bias is fixed and the subsidence gate recalibrated (2026-09-17
+    # calibration found no monotone signal — see _SUBSIDENCE_GATE_KNOTS_W).
+    # Measurement runs 2026-09-17 proved the gated flag is a no-op (≤0.2 mm
+    # mean P change, 0.1 pp metric delta at both root and branch contexts);
+    # flip this pin together with the default when recalibration lands.
+    config.stationary_wave_v2_enabled = False
+    config.num_nodes = num_nodes
+    return config
 
 
 def validate_zonal_temperature(mesh: CVTMesh) -> dict[str, Any]:
@@ -1126,7 +1145,9 @@ def run_validation(
     # Run climate simulation on this mesh
     from dreamulator.map.climate_simulator import simulate_climate
 
-    config = build_earth_validation_config(mesh.num_cells)
+    config = build_earth_validation_config(
+        mesh.num_cells, world_dir=world_dir, planet_id=planet_id, branch=branch
+    )
 
     print("Running climate simulation on real Earth elevation...")
     simulate_climate(mesh, config)

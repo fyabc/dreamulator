@@ -43,11 +43,7 @@ from dreamulator.map.ocean_circulation import east_north_basis, recompose_tangen
 from dreamulator.validate_climate import _load_mesh, build_earth_validation_config  # noqa: E402
 
 _NCEP_AIR = (
-    Path(__file__).resolve().parents[2]
-    / "private"
-    / "tmp"
-    / "climatology"
-    / "ncep_air.mon.ltm.nc"
+    Path(__file__).resolve().parents[2] / "private" / "tmp" / "climatology" / "ncep_air.mon.ltm.nc"
 )
 
 
@@ -157,7 +153,9 @@ def main() -> None:
         return
 
     print(f"Running climate simulation on {mesh.num_cells} cells ...")
-    config = build_earth_validation_config(mesh.num_cells)
+    config = build_earth_validation_config(
+        mesh.num_cells, world_dir=world_dir, planet_id=args.planet, branch=args.branch or None
+    )
     simulate_climate(mesh, config)
 
     n = mesh.num_cells

@@ -20,6 +20,7 @@ from dreamulator.engine.physical_inputs import (
     resolve_orbital_elements,
     resolve_perihelion_day,
     resolve_stellar_forcing,
+    resolve_stellar_temperature,
 )
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.models.planet import Planet
@@ -60,7 +61,7 @@ def _make_planet(pid: str, orbits: str) -> Planet:
 # Mirrors the nacrea system: habitable moon around a gas giant at 0.2795 AU
 # around a 0.0357 L_sun / 0.4499 M_sun M-dwarf.
 _GAIA_STELLAR: dict[str, Any] = {
-    "stars": [{"id": "star_ignis", "luminosity": 0.0357, "mass": 0.449864}],
+    "stars": [{"id": "star_ignis", "luminosity": 0.0357, "mass": 0.449864, "temperature": 3400.0}],
     "orbits": [
         # Heliocentric orbit (drives the seasonal insolation cycle): e = 0.005.
         {
@@ -848,3 +849,165 @@ def test_perihelion_day_none_without_equatorial_reference(tmp_path: Path) -> Non
     planet = _make_planet("planet_earth", "star_sol")
     perihelion_day, _ = resolve_perihelion_day(engine, planet, 365.25)
     assert perihelion_day is None
+
+
+# ===================================================================
+# M2-A0 input contract (2026-09-17): no silent Sun fallback for the
+# stellar temperature; diagnostics load the world's authored inputs.
+# ===================================================================
+
+
+class TestStellarTemperatureContract:
+    """resolve_stellar_temperature: explicit → Stefan–Boltzmann → None+warn."""
+
+    def _engine_with(self, tmp_path: Path, star: dict[str, Any]) -> _StubEngine:
+        stellar = _write(
+            tmp_path,
+            "stellar.yaml",
+            {
+                "stars": [star],
+                "orbits": [
+                    {
+                        "body_id": "planet_x",
+                        "parent_id": "s",
+                        "semi_major_axis_au": 0.5,
+                        "eccentricity": 0.01,
+                    }
+                ],
+            },
+        )
+        return _StubEngine({"stellar.yaml": stellar})
+
+    def test_explicit_temperature_wins(self, tmp_path: Path) -> None:
+        engine = self._engine_with(
+            tmp_path, {"id": "s", "luminosity": 0.5, "mass": 0.8, "temperature": 3500.0}
+        )
+        planet = _make_planet("planet_x", "s")
+        assert resolve_stellar_temperature(engine, planet) == 3500.0
+
+    def test_stefan_boltzmann_fallback(self, tmp_path: Path) -> None:
+        """No explicit T, but L + R known → T = T☉ (L/R²)^¼ (no Sun default)."""
+        engine = self._engine_with(
+            tmp_path, {"id": "s", "luminosity": 0.08, "mass": 0.6, "radius": 0.56}
+        )
+        planet = _make_planet("planet_x", "s")
+        expected = 5772.0 * (0.08 / 0.56**2) ** 0.25
+        assert resolve_stellar_temperature(engine, planet) == pytest.approx(expected, rel=1e-6)
+
+    def test_unresolved_temperature_warns_not_silent(self, tmp_path: Path) -> None:
+        """No T and no R: config keeps the Sun default, but a warning is emitted."""
+        engine = self._engine_with(tmp_path, {"id": "s", "luminosity": 0.08, "mass": 0.6})
+        planet = _make_planet("planet_x", "s")
+        config = TerrainPipelineConfig()
+        warnings = resolve_and_apply_physical_parameters(engine, config, planet=planet)
+        assert config.stellar_temperature_k == 5772.0  # default kept…
+        assert any("Stellar temperature unresolved" in w for w in warnings)  # …but loudly
+
+    def test_resolved_temperature_emits_no_warning(self, tmp_path: Path) -> None:
+        engine = self._engine_with(
+            tmp_path, {"id": "s", "luminosity": 0.5, "mass": 0.8, "temperature": 3500.0}
+        )
+        planet = _make_planet("planet_x", "s")
+        config = TerrainPipelineConfig()
+        warnings = resolve_and_apply_physical_parameters(engine, config, planet=planet)
+        assert not any("Stellar temperature unresolved" in w for w in warnings)
+        assert config.stellar_temperature_k == 3500.0
+
+
+def _make_input_contract_world(
+    tmp_path: Path,
+    *,
+    rotation_days: float = 0.9973,
+    eccentricity: float = 0.0167,
+    pressure_atm: float = 1.0,
+) -> Path:
+    """Tiny on-disk world with authored astronomy + geological inputs."""
+    world = tmp_path / "contract_world"
+    astro_in = world / "layers" / "astronomy" / "input"
+    astro_in.mkdir(parents=True)
+    with (astro_in / "stellar.yaml").open("w", encoding="utf-8") as f:
+        yaml.safe_dump(
+            {
+                "stars": [
+                    {
+                        "id": "star_x",
+                        "luminosity": 1.0,
+                        "mass": 1.0,
+                        "temperature": 5772.0,
+                    }
+                ],
+                "orbits": [
+                    {
+                        "body_id": "planet_x",
+                        "parent_id": "star_x",
+                        "semi_major_axis_au": 1.0,
+                        "eccentricity": eccentricity,
+                    }
+                ],
+            },
+            f,
+            allow_unicode=True,
+        )
+    geo_in = world / "layers" / "geological" / "input"
+    geo_in.mkdir(parents=True)
+    with (geo_in / "planets.yaml").open("w", encoding="utf-8") as f:
+        yaml.safe_dump(
+            {
+                "planets": [
+                    {
+                        "id": "planet_x",
+                        "name": "X",
+                        "orbits": "star_x",
+                        "mass": 1.0,
+                        "radius": 1.0,
+                        "rotation_period_days": rotation_days,
+                        "axial_tilt_deg": 23.44,
+                        "albedo": 0.3,
+                        "atmosphere": {
+                            "surface_pressure_atm": pressure_atm,
+                            "greenhouse_factor": 33.0,
+                        },
+                    }
+                ]
+            },
+            f,
+            allow_unicode=True,
+        )
+    return world
+
+
+class TestWorldFirstDiagnostics:
+    """M2-A0: every world (earth included) loads its authored world inputs."""
+
+    def test_load_climate_config_uses_world_inputs(self, tmp_path: Path) -> None:
+        from dreamulator.map.climate_config import load_climate_config
+
+        world = _make_input_contract_world(tmp_path)
+        cfg = load_climate_config(world, "earth", "planet_x", None, 123)
+        # The authored values — NOT the former hardcoded validation planet
+        # (rotation 1.0 / e 0 / default pressure pinning).
+        assert cfg.rotation_period_days == pytest.approx(0.9973)
+        assert cfg.eccentricity == pytest.approx(0.0167)
+        assert cfg.surface_pressure_hpa == pytest.approx(1013.25)
+        assert cfg.num_nodes == 123
+
+    def test_build_earth_validation_config_world_first(self, tmp_path: Path) -> None:
+        from dreamulator.validate_climate import build_earth_validation_config
+
+        world = _make_input_contract_world(tmp_path, rotation_days=0.9, eccentricity=0.05)
+        cfg = build_earth_validation_config(999, world_dir=world, planet_id="planet_x", branch=None)
+        # Physics from the world…
+        assert cfg.rotation_period_days == pytest.approx(0.9)
+        assert cfg.eccentricity == pytest.approx(0.05)
+        # …experiment knobs still pinned.
+        assert cfg.hadley_extent_deg == 30.0
+        assert cfg.ebm_1d is True
+        assert cfg.num_nodes == 999
+
+    def test_build_earth_validation_config_no_world_fallback(self) -> None:
+        from dreamulator.validate_climate import build_earth_validation_config
+
+        cfg = build_earth_validation_config(50)
+        # Legacy hardcoded block survives for contexts without a data tree.
+        assert cfg.rotation_period_days == 1.0
+        assert cfg.hadley_extent_deg == 30.0
