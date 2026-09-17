@@ -135,6 +135,32 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
     return [s for s in all_stages if s in requested]
 
 
+# Per-cell fields each cached stage writes in place (2026-09-17 nacrea
+# landform-layer loss): stage pickles must capture these alongside their
+# regular outputs, and cache hits must replay them onto the cells — otherwise
+# an all-cache-hit rebuild exports a mesh with these fields empty.  When a
+# stage gains a new in-place cell field, add it to the stage's save/replay
+# payload here AND bump its _STAGE_SCHEMA_VERSIONS entry in terrain_cache.
+_TECTONICS_CELL_FIELDS = ("cumulative_convergence_km", "cumulative_divergence_km")
+_BOUNDARIES_CELL_FIELDS = (
+    "distance_to_boundary_km",
+    "convergence_rate_cm_yr",
+    "tangential_fraction",
+)
+
+
+def _cell_field_arrays(mesh: CVTMesh, fields: tuple[str, ...]) -> dict[str, np.ndarray]:
+    """Snapshot per-cell field values for the stage cache (pickle-safe arrays)."""
+    return {f: np.array([getattr(c, f) for c in mesh.cells]) for f in fields}
+
+
+def _replay_cell_fields(mesh: CVTMesh, arrays: dict[str, np.ndarray]) -> None:
+    """Re-apply cached per-cell field values onto the live mesh cells."""
+    for f, arr in arrays.items():
+        for cell, value in zip(mesh.cells, arr, strict=False):
+            setattr(cell, f, value)
+
+
 def run_terrain_pipeline(
     config: TerrainPipelineConfig,
     output_dir: Path | None = None,
@@ -268,7 +294,8 @@ def run_terrain_pipeline(
             t = time.time()
             cached = tc.load("tectonics")
             if cached is not None:
-                result.plates, cell_plate_map = cached
+                result.plates, cell_plate_map, cumulative_fields = cached
+                _replay_cell_fields(result.mesh, cumulative_fields)
                 result.stages_completed.append("tectonics")
                 result.stage_timings["tectonics"] = time.time() - t
                 _stage_end(result.stage_timings["tectonics"])
@@ -324,7 +351,15 @@ def run_terrain_pipeline(
             result.stage_timings["tectonics"] = time.time() - t
             _stage_end(result.stage_timings["tectonics"])
             if tc is not None:
-                tc.save("tectonics", (result.plates, cell_plate_map), tectonics_fp)
+                tc.save(
+                    "tectonics",
+                    (
+                        result.plates,
+                        cell_plate_map,
+                        _cell_field_arrays(result.mesh, _TECTONICS_CELL_FIELDS),
+                    ),
+                    tectonics_fp,
+                )
 
     # Re-apply the plate assignment onto the mesh cells.  On cache hits the
     # (plates, cell_plate_map) pair is restored from the pickle, but the
@@ -355,7 +390,8 @@ def run_terrain_pipeline(
             t = time.time()
             cached = tc.load("boundaries")
             if cached is not None:
-                result.boundary_cell_ids = cached
+                result.boundary_cell_ids, boundary_fields = cached
+                _replay_cell_fields(result.mesh, boundary_fields)
                 result.stages_completed.append("boundaries")
                 result.stage_timings["boundaries"] = time.time() - t
                 _stage_end(result.stage_timings["boundaries"])
@@ -369,7 +405,14 @@ def run_terrain_pipeline(
             result.stage_timings["boundaries"] = time.time() - t
             _stage_end(result.stage_timings["boundaries"])
             if tc is not None:
-                tc.save("boundaries", result.boundary_cell_ids, boundaries_fp)
+                tc.save(
+                    "boundaries",
+                    (
+                        result.boundary_cell_ids,
+                        _cell_field_arrays(result.mesh, _BOUNDARIES_CELL_FIELDS),
+                    ),
+                    boundaries_fp,
+                )
 
     # ---- Stage 5: Terrain Synthesis ----
     if "terrain" in ordered:
@@ -389,11 +432,13 @@ def run_terrain_pipeline(
             t = time.time()
             cached_arrays = tc.load("terrain")
             if cached_arrays is not None:
-                _el, _cr, _bt = cached_arrays
+                _el, _cr, _bt, _lf, _hs = cached_arrays
                 for _i in range(len(result.mesh.cells)):
                     result.mesh.cells[_i].elevation = float(_el[_i])
                     result.mesh.cells[_i].crust_type = str(_cr[_i])
                     result.mesh.cells[_i].boundary_type = str(_bt[_i]) if _bt[_i] else None
+                    result.mesh.cells[_i].landform = str(_lf[_i]) if _lf[_i] else None
+                    result.mesh.cells[_i].hotspot_id = str(_hs[_i]) if _hs[_i] else None
                 result.stages_completed.append("terrain")
                 result.stage_timings["terrain"] = time.time() - t
                 _stage_end(result.stage_timings["terrain"])
@@ -411,7 +456,9 @@ def run_terrain_pipeline(
                 _elev = np.array([c.elevation for c in result.mesh.cells], dtype=np.float64)
                 _crust = np.array([c.crust_type for c in result.mesh.cells], dtype=object)
                 _btype = np.array([c.boundary_type or "" for c in result.mesh.cells], dtype=object)
-                tc.save("terrain", (_elev, _crust, _btype), terrain_fp)
+                _landform = np.array([c.landform or "" for c in result.mesh.cells], dtype=object)
+                _hotspot = np.array([c.hotspot_id or "" for c in result.mesh.cells], dtype=object)
+                tc.save("terrain", (_elev, _crust, _btype, _landform, _hotspot), terrain_fp)
 
         # water_class (land/ocean split) is geological — elevation + sea level +
         # ocean connectivity — not a climate field.  Write it here so the climate
