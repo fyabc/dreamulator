@@ -2,7 +2,7 @@
 
 本文档描述 dreamulator 项目**实际可执行的** profiling 流程，覆盖后端（Python）和前端（TypeScript/React）两端。
 
-> 多分辨率基准数据（100k/200k/500k/1M 缩放对比）见 [roadmap §八-19](../design/roadmap.md#八已知技术债务)。
+> 多分辨率基准数据（100k/200k/500k/1M 缩放对比）见 [roadmap §七-11](../design/roadmap.md#七已知技术债务)。
 
 ---
 

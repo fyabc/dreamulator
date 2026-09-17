@@ -1,5 +1,14 @@
 # Test & lint gate (roadmap 功能性 #3).
 #
+# Job layering (audit M0 / TEST-01, 2026-09-17):
+# - test:     fast suite — tests/ with default markers (slow/benchmark off).
+# - conlang:  independent package tests — packages/conlang/tests (its own
+#   pytest run; the root pyproject's testpaths only covers tests/).
+# - lint/mypy: static gates on src/ + tests/.
+# Out of the PR path by design: slow/validation tests (real-data imports,
+# `uv sync --extra validation` + `-m slow`), benchmarks (benchmarks.yml),
+# frontend checks (frontend.yml), docs checks (docs.yml).
+#
 # - pytest:        hard gate — full suite with all extras (mirrors local dev env).
 # - ruff check:    hard gate at pyproject's FULL select (Sprint B, 2026-08 —
 #   all 266 legacy items cleared or consciously exempted via per-file-ignores).
@@ -17,6 +26,8 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "packages/**"
+      - "schemas/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/tests.yml"
@@ -25,6 +36,8 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "packages/**"
+      - "schemas/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/tests.yml"
@@ -45,6 +58,21 @@ jobs:
 
       - name: Run test suite
         run: uv run pytest tests/ -q -p no:warnings
+
+  conlang:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run conlang package tests
+        run: uv run pytest packages/conlang/tests -q -p no:warnings
 
   lint:
     runs-on: ubuntu-latest

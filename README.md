@@ -40,20 +40,22 @@ A fantasy world building and simulation tool grounded in real science. Starting 
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- Node.js 18+ and npm
+- Node.js 20+ and npm
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/dreamulator.git
+git clone https://github.com/fyabc/dreamulator.git
 cd dreamulator
 
 # Install Python dependencies
 uv sync --all-extras
 
-# Install frontend dependencies
-cd frontend && npm install && cd ..
+# Install frontend dependencies (locked versions; `npm ci` does not rewrite
+# package-lock.json — use `npm install <package>` when intentionally adding
+# or upgrading dependencies, then review and commit the lockfile changes)
+cd frontend && npm ci && cd ..
 ```
 
 ### Create Your First World
@@ -185,15 +187,15 @@ See `docs/usage/cli.md` for deployment options and the `dreamulator serve` comma
 | [CivMap Guide](docs/usage/civmap-guide.md) | Real-Earth basemap, fictional territory coloring, temporal snapshots |
 | [3D Viewer](docs/usage/frontend-3d-viewer.md) | Star system view + globe interaction guide |
 | [Architecture](docs/design/architecture.md) | Project architecture, layer system, branching, input/derived separation |
-| [Harness / Guard Axis](docs/design/harness.md) | Validation, audit, and setting-maintenance: the guard axis orthogonal to the simulation engine |
-| [Terrain Pipeline](docs/design/terrain-pipeline.md) | 12-stage algorithm, Cortial 2019 plate partitioning, geography.yaml anchoring |
-| [Climate Engine](docs/design/climate-engine.md) | EBM + three-cell circulation + BFS moisture + Köppen classification |
+| [Harness / Guard Axis](docs/design/proposals/harness.md) | Validation, audit, and setting-maintenance: the guard axis orthogonal to the simulation engine |
+| [Terrain Pipeline](docs/design/pipelines/geological-pipeline.md) | 12-stage algorithm, Cortial 2019 plate partitioning, geography.yaml anchoring |
+| [Climate Engine](docs/design/pipelines/climate-pipeline.md) | 1D spectral EBM + Hadley circulation + mass-conserving moisture budget + monsoon dynamics + Köppen classification |
 
 ## Roadmap
 
-**Current status**: Phases 1–2.5 complete (scaffolding, CLI, 3D/2D visualization, terrain realism enhancement); Phase 3A climate engine core merged (EBM, three-cell wind belts, orographic precipitation, Köppen classification, seasonality module, real-Earth validation) with accuracy tuning in progress. Up next: erosion & rivers (3B), civilization semi-structured modeling (3C), world-line diff visualization (3D), LLM narrative bridge (3E), and the Harness guard axis (validation / audit / setting-maintenance).
+**Current status**: Phases 1–2.5 complete (scaffolding, CLI, 3D/2D visualization, terrain realism enhancement); Phase 3A climate engine core merged and under accuracy tuning (1D EBM, seasonal model, mass-conserving moisture budget, monsoon dynamics, monthly fields, real-Earth validation against Beck 2018); the Harness guard axis is implemented (`dreamulator guard` CLI + API). River networks landed with fluvial erosion deferred to local high-res refinement (3B). Up next: civilization semi-structured modeling (3C), world-line diff visualization (3D), LLM narrative bridge (3E).
 
-See [docs/design/roadmap.md](docs/design/roadmap.md) for the full roadmap, competitive analysis and design references, and [docs/design/vision.md](docs/design/vision.md) for the project's long-term vision and design philosophy.
+See [docs/design/roadmap.md](docs/design/roadmap.md) for the full roadmap, competitive analysis and design references, and [docs/design/proposals/vision.md](docs/design/proposals/vision.md) for the project's long-term vision and design philosophy.
 
 ## License
 

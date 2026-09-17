@@ -113,6 +113,9 @@ uv run dreamulator serve --reload             # 开发模式（热重载）
 # 运行测试
 uv run pytest
 
+# 独立包测试（conlang；根 pytest 的 testpaths 不含包内测试）
+uv run pytest packages/conlang/tests -q
+
 # 代码检查
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/

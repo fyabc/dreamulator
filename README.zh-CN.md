@@ -40,20 +40,21 @@
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)（Python 包管理器）
-- Node.js 18+ 和 npm
+- Node.js 20+ 和 npm
 
 ### 安装
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/dreamulator.git
+git clone https://github.com/fyabc/dreamulator.git
 cd dreamulator
 
 # 安装 Python 依赖
 uv sync --all-extras
 
-# 安装前端依赖
-cd frontend && npm install && cd ..
+# 安装前端依赖（锁定版本；`npm ci` 不会重写 package-lock.json——有意新增或
+# 升级依赖时用 `npm install <package>`，审阅后提交清单与锁文件变化）
+cd frontend && npm ci && cd ..
 ```
 
 ### 创建你的第一个世界
@@ -185,15 +186,15 @@ uv run dreamulator serve
 | [文明地图指南](docs/usage/civmap-guide.md) | 真实地球底图、架空国家涂色、时间快照 |
 | [3D 可视化器](docs/usage/frontend-3d-viewer.md) | 恒星系视图 + 球面地球操作指南 |
 | [架构设计](docs/design/architecture.md) | 项目架构、层级系统、分支管理、input/derived 分离 |
-| [守护轴 / Harness](docs/design/harness.md) | 校验、审计与设定维护：与模拟引擎正交的守护轴 |
-| [地形管线](docs/design/terrain-pipeline.md) | 12 阶段算法、Cortial 2019 板块剖分、geography.yaml 锚定 |
-| [气候引擎](docs/design/climate-engine.md) | EBM + 三圈环流 + BFS 水汽 + Köppen 分类 |
+| [守护轴 / Harness](docs/design/proposals/harness.md) | 校验、审计与设定维护：与模拟引擎正交的守护轴 |
+| [地形管线](docs/design/pipelines/geological-pipeline.md) | 12 阶段算法、Cortial 2019 板块剖分、geography.yaml 锚定 |
+| [气候引擎](docs/design/pipelines/climate-pipeline.md) | 1D 谱解 EBM + Hadley 环流 + 质量守恒水汽预算 + 季风动力学 + Köppen 分类 |
 
 ## 路线图
 
-**当前状态**：Phase 1–2.5 已完成（项目骨架、CLI、3D/2D 可视化、地形真实感增强）；Phase 3A 气候引擎核心已合并（能量平衡、三圈环流风带、地形降水、Köppen 分类、季节模块、真实地球验证），精度调优进行中。后续方向：侵蚀与河流（3B）、文明半格式化管理（3C）、世界线 Diff（3D）、LLM 叙事桥（3E），以及守护轴（Harness，校验 / 审计 / 设定维护）。
+**当前状态**：Phase 1–2.5 已完成（项目骨架、CLI、3D/2D 可视化、地形真实感增强）；Phase 3A 气候引擎核心已合并、精度调优进行中（1D EBM、季节模型、质量守恒水汽预算、季风动力学、月度场、对照 Beck 2018 的真实地球验证）；守护轴 Harness 已实现（`dreamulator guard` CLI + API）；河网已落地、流水侵蚀转局地高清精修（3B）。后续方向：文明半格式化管理（3C）、世界线 Diff（3D）、LLM 叙事桥（3E）。
 
-完整路线图、竞品分析与设计参考见 [docs/design/roadmap.md](docs/design/roadmap.md)；项目长期愿景见 [docs/design/vision.md](docs/design/vision.md)。
+完整路线图、竞品分析与设计参考见 [docs/design/roadmap.md](docs/design/roadmap.md)；项目长期愿景见 [docs/design/proposals/vision.md](docs/design/proposals/vision.md)。
 
 ## 许可证
 

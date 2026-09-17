@@ -1,0 +1,42 @@
+# Docs PR gate (audit M0 / CI-03, 2026-09-17): run the reference/link
+# checkers on documentation changes. Previously check_doc_refs.py existed but
+# had no CI entry, and no Markdown link check ran at all (the 2026-09-17 audit
+# found 8+ dead README links shipped).
+#
+# Both scripts are stdlib-only — plain python, no dependency install.
+
+name: docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "README.zh-CN.md"
+      - "scripts/dev/**"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "README.zh-CN.md"
+      - "scripts/dev/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pipelines file:line / symbol references
+        run: python scripts/dev/check_doc_refs.py
+
+      - name: Markdown link check
+        run: python scripts/dev/check_markdown_links.py
