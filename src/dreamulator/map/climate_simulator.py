@@ -13,6 +13,7 @@ on the CVT mesh and writes results into `VoronoiCell` fields in-place.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -71,6 +72,7 @@ import time as _time
 from rich.console import Console as _Console
 
 _console = _Console()
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Thresholds
@@ -81,6 +83,50 @@ _CONV_TOL: float = 0.01
 
 # Minimum wind speed magnitude to be considered "blowing" (m/s)
 _MIN_WIND_SPEED: float = 0.1
+
+# Convergence-sentinel multiplier (CLIM-02 slice 5): per-cell annual
+# precipitation cap = α · k_rain(cell) · W_sat(T_cell) — the local saturated
+# column's maximum annual rainout, times a convergence multiplier.  α = 8
+# anchors the order of the strongest terrestrial orographic funnels
+# (Cherrapunji/Mawsynram receive ~5-10× their local column processing;
+# observation-fitted class, discipline #9).  World-independent and
+# temperature-adaptive — replaces the former fixed 11000 mm/yr clip (a
+# real-Earth *station* record: an arbitrary ceiling for alien worlds, astra
+# rethinking §2.1).  Numerical-stabilisation class closure: it clips the
+# slice-1 per-edge orographic over-concentration artifact (steep tropical
+# terrain reached ~10× Earth records pre-sentinel; known limitation, to be
+# revisited with the stage-D supply-route work) — loudly, via logger.warning,
+# never silently.
+_P_CONVERGENCE_SENTINEL_ALPHA: float = 8.0
+
+
+def _convergence_sentinel(
+    temperature_c: np.ndarray,
+    k_rain_field: np.ndarray,
+    alpha: float = _P_CONVERGENCE_SENTINEL_ALPHA,
+) -> np.ndarray:
+    """Per-cell annual precipitation sentinel: α · k_rain · W_sat_eff, mm/yr.
+
+    The saturated column rained out at the cell's full modulated rainout rate
+    gives the maximum annual precipitation the *local* column processing can
+    support; α allows for advective convergence (orographic funnels
+    concentrate several times the local supply — Cherrapunji/Mawsynram run at
+    ~5-7× theirs, so α = 8 passes real extremes).
+
+    ``W_sat_eff = W_sat(max(T, 0 °C))``: below freezing the sentinel floors at
+    the 0 °C saturated column (~1.6 m/yr at base k).  A pure local-column
+    limit would falsely starve cold cells whose precipitation is *advectively*
+    supplied by warmer upwind air (Antarctic/Greenland coasts receive
+    200-800 mm/yr at local W_sat of only ~0.3-2 mm) — the 0 °C floor proxies
+    that warm-air supply without per-cell flux bookkeeping.
+
+    Net effect: cold highland artifact cells (slice-1 per-edge
+    over-concentration, ~10× Earth records) are clipped hard, warm lowland
+    physical extremes pass, and polar advective regimes are never bitten.
+    """
+    t_eff = np.maximum(np.asarray(temperature_c, dtype=np.float64), 0.0)
+    w_sat_eff = np.asarray(column_water_saturation(t_eff), dtype=np.float64)
+    return alpha * np.asarray(k_rain_field, dtype=np.float64) * w_sat_eff
 
 
 # ---------------------------------------------------------------------------
@@ -2733,16 +2779,33 @@ def _compute_precipitation_monthly_budget(
     # the enhancement scales with the local column water instead of adding a
     # fixed amount over whatever the budget produced.
 
-    # Annual cap (real-Earth maximum ~11000 mm/yr, Mawsynram/Cherrapunji),
-    # applied to the monthly values proportionally so the seasonal shape is
-    # preserved where the cap engages.
+    # Convergence sentinel (CLIM-02 slice 5): per-cell annual cap
+    # α·k_rain·W_sat(T) — world-independent and temperature-adaptive, replacing
+    # the fixed 11000 mm/yr Earth-station clip.  Applied to the monthly values
+    # proportionally so the seasonal shape is preserved where it engages.
+    # Numerical stabilisation (discipline #9), not physics: it clips the
+    # slice-1 per-edge orographic over-concentration on steep terrain — and
+    # warns loudly instead of deleting water silently.
     p_annual = p_monthly.sum(axis=1)
     if debug is not None:
         debug["pre_cap"] = p_annual.copy()
-    scale = np.where(p_annual > 11000.0, 11000.0 / np.maximum(p_annual, 1e-9), 1.0)
+    _sentinel = _convergence_sentinel(temperature_c, _k_base * (1.0 + _rain_ann))
+    _over = p_annual > _sentinel
+    if _over.any():
+        logger.warning(
+            "convergence sentinel clipped %d cells (%.3f%%): max P %.0f mm/yr "
+            "(sentinel range %.0f–%.0f) — slice-1 per-edge orographic "
+            "over-concentration; revisit with the stage-D supply route",
+            int(_over.sum()),
+            float(_over.mean()) * 100.0,
+            float(p_annual[_over].max()),
+            float(_sentinel[_over].min()),
+            float(_sentinel[_over].max()),
+        )
+    scale = np.where(_over, _sentinel / np.maximum(p_annual, 1e-9), 1.0)
     p_monthly *= scale[:, None]
     p_annual = p_monthly.sum(axis=1)
-    _ledger_stages.append(("cap", _pa()))
+    _ledger_stages.append(("sentinel", _pa()))
     if debug is not None:
         debug["final"] = p_annual.copy()
 

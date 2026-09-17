@@ -780,3 +780,55 @@ class TestMonthlyAnnualConsistency:
             f"monthly mean drifted from annual by up to "
             f"{np.abs(mean_monthly - t_annual).max():.3f} °C"
         )
+
+
+class TestConvergenceSentinel:
+    """CLIM-02 slice 5: α·k_rain·W_sat(T) per-cell sentinel replaces the
+    fixed 11000 mm/yr Earth-station clip."""
+
+    def test_sentinel_values_and_monotonicity(self):
+        from dreamulator.map.climate_simulator import _convergence_sentinel
+
+        k = np.full(4, 40.58)  # base rainout rate, 1/yr (τ = 9 d)
+        t = np.array([-20.0, 0.0, 15.0, 28.0])  # polar / freezing / mid / tropical
+        s = _convergence_sentinel(t, k)
+        # Warm tropics: W_sat(28 °C) ~ 66 mm → sentinel ~ 8×40.6×66 ≈ 21,000
+        # mm/yr — real orographic extremes (Cherrapunji 11,871) pass.
+        assert 12_000.0 < s[3] < 30_000.0
+        # Freezing floor: below 0 °C the sentinel is flat (advective-supply
+        # proxy — Antarctic coasts get 200-800 mm/yr at tiny local W_sat).
+        assert s[0] == pytest.approx(s[1])
+        assert 2_000.0 < s[0] < 4_000.0  # W_sat(0 °C) ≈ 9.5 mm → ~3.1 m/yr
+        # Monotone above the floor (a warmer column holds more water).
+        assert s[1] < s[2] < s[3]
+        # Linear in the rainout rate.
+        s2 = _convergence_sentinel(t, 2.0 * k)
+        assert np.allclose(s2, 2.0 * s)
+
+    def test_sentinel_does_not_bite_gentle_terrain(self):
+        """On the gentle 100-cell fixture the budget stays far below the
+        sentinel — pre_cap == final (no clipping in the physical regime)."""
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        mesh = _build_test_mesh(num_bands=10, cells_per_band=10)
+        config = TerrainPipelineConfig(
+            seed=42,
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+            lat_gradient_c=45.0,
+            lapse_rate_c_km=6.5,
+            evaporation_base_mm=1000.0,
+            wind_blocking_height_m=3000.0,
+            itcz_lag_days=30,
+            num_nodes=100,
+        )
+        debug = {}
+        simulate_climate(mesh, config, debug=debug)
+        assert "pre_cap" in debug and "final" in debug
+        assert np.allclose(debug["pre_cap"], debug["final"]), (
+            "convergence sentinel bit on gentle terrain — threshold too tight"
+        )
