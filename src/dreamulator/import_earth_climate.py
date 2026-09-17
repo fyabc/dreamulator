@@ -52,6 +52,49 @@ import numpy as np
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh, VoronoiCell
 
+
+def ocean_band_anomaly_monthly(
+    values: np.ndarray,
+    lats: np.ndarray,
+    ocean_mask: np.ndarray,
+    *,
+    band_deg: float = 5.0,
+) -> np.ndarray:
+    """Monthly pressure anomaly vs the same-month OCEAN band mean (canonical ΔP).
+
+    Single definition of "monthly pressure anomaly" across every producer
+    (M2-A0③, 2026-09-18): a location's monthly pressure minus the mean over
+    OCEAN members of its latitude band for the same month — the land–sea
+    contrast semantics the engine's ``pressure_anomaly_monthly`` uses for its
+    ΔT reference (B0b: full contrast, annual mean included) and that
+    ``diagnose_monsoon_dp_shape.py`` calibrates against.  Ocean members keep
+    their stationary anomalies (subtropical highs, Aleutian/Icelandic lows);
+    land members carry the full land–ocean contrast.  Bands with no ocean
+    member (Antarctic interior) fall back to the all-member mean.
+
+    Args:
+        values: (M, 12) member-major monthly values (mesh cells or flattened
+            grid points; months along the last axis).
+        lats: (M,) member latitudes in degrees.
+        ocean_mask: (M,) True where the member is ocean.
+        band_deg: Latitude band width (default 5°, matching the engine's
+            ``pressure_anomaly_monthly(band_deg=5.0)``).
+
+    Returns:
+        (M, 12) anomaly array.
+    """
+    values = np.asarray(values, dtype=np.float64)
+    n_bands = int(np.ceil(360.0 / band_deg))
+    band_idx = np.clip(((lats + 90.0) / band_deg).astype(int), 0, n_bands - 1)
+    out = np.empty_like(values)
+    for band in np.unique(band_idx):
+        sel = band_idx == band
+        ocean_sel = sel & ocean_mask
+        ref = values[ocean_sel].mean(axis=0) if ocean_sel.any() else values[sel].mean(axis=0)
+        out[sel] = values[sel] - ref
+    return out
+
+
 # Beck class code → Köppen string (from scripts/climate/convert_koppen_map.py).
 _BECK_LEGEND: dict[int, str] = {
     0: "N/A",
@@ -435,11 +478,16 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     p_monthly = _sample_monthly(p_arr, p_lat, p_lon, lats, lons).T  # (N, 12), mm/month
     p_annual = p_monthly.sum(axis=1)
 
-    # 4. Pressure (NCEP SLP) → _pressure_monthly (N×12, seasonal anomaly) +
-    #    per-cell slp_annual_hpa (annual-mean SLP, the subtropical-high field).
+    # 4. Pressure (NCEP SLP) → _pressure_monthly (N×12, canonical ΔP; M2-A0③
+    #    2026-09-18: same-month ocean-band reference, matching the engine's
+    #    pressure_anomaly_monthly ΔT semantics and the frontend
+    #    spatialReference — the former per-cell annual-mean removal was a third,
+    #    mismatched definition) + per-cell slp_annual_hpa (annual-mean SLP,
+    #    the subtropical-high field).
     slp_arr, slp_lat, slp_lon = _load_nc_monthly(data_dir / "ncep_slp.mon.ltm.nc", "slp")
     slp_monthly = _sample_monthly(slp_arr, slp_lat, slp_lon, lats, lons).T  # (N, 12), hPa
-    pressure_monthly = slp_monthly - slp_monthly.mean(axis=1, keepdims=True)
+    ocean_mask = np.array([c.water_class == "ocean" for c in mesh.cells], dtype=bool)
+    pressure_monthly = ocean_band_anomaly_monthly(slp_monthly, lats, ocean_mask)
     slp_annual = slp_monthly.mean(axis=1)
 
     # Hottest / coldest month from the monthly temperature (order-independent).

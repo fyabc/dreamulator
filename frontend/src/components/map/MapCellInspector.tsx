@@ -448,8 +448,9 @@ function CellDetails({
         return { u: cell.ocean_current_east_m_s - ocE, v: cell.ocean_current_north_m_s - ocN }
       })()
     : null
-  // ΔSLP is monthly (annual ΔP ≈ 0): model month 0 = March, NCEP month 0 = Jan,
-  // so map (modelMonth + 2) % 12 onto the observed monthly ΔSLP grid.
+  // ΔSLP is monthly (canonical ΔP = SLP − same-month ocean band mean, full
+  // land-sea contrast incl. the annual mean — M2-A0③): model month 0 = March,
+  // NCEP month 0 = Jan, so map (modelMonth + 2) % 12 onto the observed grid.
   const devSlp = hasMonthly && mPressure !== undefined
     ? mPressure - observedSlpAnomAt(cell.lat, cell.lon, (monthIndex + 2) % 12)
     : null

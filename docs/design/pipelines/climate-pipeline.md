@@ -248,7 +248,17 @@ Stage 1 存档的 `_dt_subsidence`（§3.1）在降水已知后释放（:902-936
 ## 4. 气压（季风强迫）
 
 季风的驱动场是**月度海陆热力对比气压异常 ΔP**（技术债 23 / M4 链，纯函数在
-`engine/monsoon_circulation.py`）。链条四步（执行于 Stage 2 内）：
+`engine/monsoon_circulation.py`）。
+
+> **正典 ΔP 定义（M2-A0③，2026-09-18）**：任何「月度气压异常」字段
+> （引擎 `pressure_monthly`、obs 导入器、前端 `spatialReference` 的 ΔSLP）一律 =
+> **该月 SLP − 同月·同纬 5° 带·海洋格点平均**（海陆对比语义、含年平结构）。单一
+> 实现于 `import_earth_climate.ocean_band_anomaly_monthly`（obs 侧共用）；引擎侧
+> `pressure_anomaly_monthly` 的 ΔT 参考即此语义（B2 海洋参照）。2026-09-18 前的
+> obs 侧另有两套不一致定义：导入器减本地年均、spatialReference 减全经度平均——
+> 已废弃。
+
+链条四步（执行于 Stage 2 内）：
 
 1. **纬向平均基准**（`zonal_mean_monthly`，`monsoon_circulation.py:188`）：逐月、按
    符号纬度带（5°）求纬向平均温度。
