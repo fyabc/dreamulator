@@ -1171,6 +1171,10 @@ def simulate_climate(
         mesh.cells[i].koppen_class = koppen_codes[i]
         mesh.cells[i].temperature_hottest_month_C = float(t_hot_C[i])
         mesh.cells[i].temperature_coldest_month_C = float(t_cold_C[i])
+        # Annual-mean pressure anomaly (canonical ΔP's 12-month mean — M2-A0③):
+        # the stationary land–sea contrast, so the frontend's annual pressure
+        # layer works for engine-built worlds too (slp_annual_hpa is obs-only).
+        mesh.cells[i].pressure_anomaly_annual_hpa = float(_dp_hpa[i].mean())
         # Distance to coast (already computed for seasonal heat capacity + inland
         # aridity) is stored on the cell so the civilization engine's "habitable
         # coast" layer can reuse it without re-running the graph Dijkstra.

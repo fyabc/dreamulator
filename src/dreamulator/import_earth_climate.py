@@ -527,6 +527,9 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
         c.wind_east_m_s = float(wind_east[i])
         c.wind_north_m_s = float(wind_north[i])
         c.slp_annual_hpa = float(slp_annual[i])
+        # Canonical ΔP annual mean (M2-A0③) — same field the engine writes, so
+        # the frontend annual pressure layer is uniform across worlds.
+        c.pressure_anomaly_annual_hpa = float(pressure_monthly[i].mean())
         _d = dist_to_coast[i]
         c.distance_to_coast_km = float(_d) if np.isfinite(_d) else None
 

@@ -181,6 +181,10 @@ class TestClimateSimulatorEndToEnd:
                 assert isinstance(c.precipitation_mm, float)
                 assert isinstance(c.koppen_class, str)
                 assert len(c.koppen_class) >= 2  # at least 2-char code
+                # Annual pressure anomaly (M2-A0③): every built world carries
+                # it — the frontend's annual pressure layer reads this field.
+                assert c.pressure_anomaly_annual_hpa is not None
+                assert -60.0 < c.pressure_anomaly_annual_hpa < 60.0
 
         assert n_populated == mesh.num_cells, (
             f"Expected all {mesh.num_cells} cells populated, got {n_populated}"
