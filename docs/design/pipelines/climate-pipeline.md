@@ -31,6 +31,23 @@
 
 ## 1. 架构总览
 
+### 时间基准约定（M2-A0④ 审计，2026-09-18）
+
+气候引擎同时使用两种时间基准，**每个量的基准如下表固定**；比率类量（AI、Köppen
+比）的分子分母必须同窗：
+
+| 量 | 时间基准 | 说明 |
+|----|---------|------|
+| 水汽预算全部通量（E、P、W/τ、κ 扩散） | **率 / 365.25 天参考年** | 单位约定而非物理年长——`mm/yr` 始终指「365.25 天当量的率」；物理时间尺度（τ=9 天驻留、平流 e 折长度 u·τ）用真实秒 |
+| 月度场（`climate_monthly.msgpack` 的 T/P/ΔP/风） | 参考年月（30.44 天当量） | 年率的 /12 切片；nacrea「月」≠ 当地历法月（当地月 = 轨道年/12 = 8.33 天），跨世界比较见 UCC 提案 |
+| PET（沉降干旱门 `potential_evapotranspiration_hamon`） | **率 / 365.25 天参考年**（`_DAYS_PER_REFERENCE_MONTH`） | M2-A0④ 修复：此前喂轨道月（`orbital_period/12`）使 PET 变成轨道年累计，AI = P(参考年率)/PET(轨道年累计) 混窗——Earth 无感（两基重合），nacrea（100 天年）AI 偏湿 ×3.65 |
+| Budyko 陆地再循环 `E_land = E_pot·P/(E_pot+P)` | 率 / 参考年 | E_pot 走 `evaporation_rate`（同预算基）✓ 内部一致 |
+| 太阳几何/季节（赤纬、年内日序、季节 EBM 相位、ITCZ 迁移） | **当地轨道时间**（`orbital_period_days`） | 物理量，随世界变化 ✓ |
+| Köppen 阈值（mm/yr、mm/月经验线） | Earth 校准应用于参考年率 P | 声明为 Earth 惯例分类（Earth 校准值本就是地球年总量，与参考年率基对 Earth 重合）；异星当地年累计归 UCC |
+| 生态 Miami NPP / Whittaker（消费 P） | 同 Köppen 惯例 | Earth 年校准 + 参考年率基；当地年口径待生态线复核 |
+
+修复后 AI 在所有世界同窗比较；Earth 逐位不变（其轨道年 = 参考年）。
+
 **模块清单**（三个纯函数库 + 一个编排器 + 两个挂载件 + 三个入口/出口件）：
 
 - `engine/climate_physics.py` — 纯物理函数库：温度链（辐射平衡/温室/直减率）、风场输入
@@ -248,7 +265,17 @@ Stage 1 存档的 `_dt_subsidence`（§3.1）在降水已知后释放（:902-936
 ## 4. 气压（季风强迫）
 
 季风的驱动场是**月度海陆热力对比气压异常 ΔP**（技术债 23 / M4 链，纯函数在
-`engine/monsoon_circulation.py`）。链条四步（执行于 Stage 2 内）：
+`engine/monsoon_circulation.py`）。
+
+> **正典 ΔP 定义（M2-A0③，2026-09-18）**：任何「月度气压异常」字段
+> （引擎 `pressure_monthly`、obs 导入器、前端 `spatialReference` 的 ΔSLP）一律 =
+> **该月 SLP − 同月·同纬 5° 带·海洋格点平均**（海陆对比语义、含年平结构）。单一
+> 实现于 `import_earth_climate.ocean_band_anomaly_monthly`（obs 侧共用）；引擎侧
+> `pressure_anomaly_monthly` 的 ΔT 参考即此语义（B2 海洋参照）。2026-09-18 前的
+> obs 侧另有两套不一致定义：导入器减本地年均、spatialReference 减全经度平均——
+> 已废弃。
+
+链条四步（执行于 Stage 2 内）：
 
 1. **纬向平均基准**（`zonal_mean_monthly`，`monsoon_circulation.py:188`）：逐月、按
    符号纬度带（5°）求纬向平均温度。

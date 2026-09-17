@@ -504,12 +504,17 @@ function buildCellPalettes(
       )
     }
 
-    // Annual-mean sea-level pressure — continuous, ocean + land (the subtropical
-    // highs sit over the ocean).  ~980–1035 hPa mapped linearly, reusing the
-    // temperature scale until a dedicated pressure palette exists.
-    const slp: number | null | undefined = cell.slp_annual_hpa
-    if (slp != null) {
-      pressure.set(cell.id, sequentialColor((slp - 980) / 55, TEMPERATURE_SCALE))
+    // Annual-mean pressure anomaly (canonical ΔP's 12-month mean, M2-A0③) —
+    // diverging ±20 hPa like the monthly ΔP bake, ocean + land (subtropical
+    // highs / stationary land–sea contrast).  Written by both the engine
+    // (built worlds) and the obs importer; the absolute slp_annual_hpa is
+    // obs-only and no longer drives this layer.
+    const dpAnnual: number | null | undefined = cell.pressure_anomaly_annual_hpa
+    if (dpAnnual != null) {
+      pressure.set(
+        cell.id,
+        sequentialColor((dpAnnual + 20) / 40, TEMPERATURE_SCALE),
+      )
     }
 
     // Drainage / flow accumulation — continuous, log-normalised, land only.

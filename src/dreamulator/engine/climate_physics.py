@@ -1008,10 +1008,17 @@ def potential_evapotranspiration_hamon(
 
     Args:
         t_monthly_c: Monthly-mean temperature, °C, shape (N, 12).
-        days_per_month: Mean days per calendar month (orbital_period / 12).
+        days_per_month: Days per month of the *target accumulation window*.
+            Pass the reference-year month (365.25/12) so PET is a rate per
+            365.25-day reference year, matching the moisture budget's P basis
+            — AI = P/PET then compares equal windows for every world.  Passing
+            orbital_period/12 instead makes PET an orbital-year accumulation
+            (correct only when P is accumulated the same way; for Earth the
+            two coincide).  See climate-pipeline.md「时间基准约定」(M2-A0④).
 
     Returns:
-        Annual potential evapotranspiration, mm/yr, shape (N,).
+        Annual potential evapotranspiration over the 12-month window, mm,
+        shape (N,).
     """
     t = np.asarray(t_monthly_c, dtype=np.float64)
     es_kpa = 0.6108 * np.exp(17.27 * t / (t + 237.3))

@@ -1079,9 +1079,12 @@ def simulate_climate(
     # temperature — the residual inconsistency the T↔P fixed point
     # (proposals/climate-steady-coupling.md) would remove.
     if _dt_subsidence.any():
-        _pet_annual = potential_evapotranspiration_hamon(
-            t_monthly_C, config.orbital_period_days / 12.0
-        )
+        # PET on the *reference-year* basis (365.25/12 days per month) so that
+        # AI = P/PET compares accumulations over the same window (M2-A0④):
+        # p_annual is a rate per 365.25-day reference year; Hamon with the
+        # orbital month would accumulate PET over the local year instead
+        # (identical for Earth, ×3.65 too wet on nacrea's 100-day year).
+        _pet_annual = potential_evapotranspiration_hamon(t_monthly_C, _DAYS_PER_REFERENCE_MONTH)
         _dt_undo = subsidence_aridity_gate(
             _dt_subsidence, p_annual, t_mean_C, p_warm_mm, p_cold_mm, _pet_annual, elevation_m
         )
@@ -1171,6 +1174,10 @@ def simulate_climate(
         mesh.cells[i].koppen_class = koppen_codes[i]
         mesh.cells[i].temperature_hottest_month_C = float(t_hot_C[i])
         mesh.cells[i].temperature_coldest_month_C = float(t_cold_C[i])
+        # Annual-mean pressure anomaly (canonical ΔP's 12-month mean — M2-A0③):
+        # the stationary land–sea contrast, so the frontend's annual pressure
+        # layer works for engine-built worlds too (slp_annual_hpa is obs-only).
+        mesh.cells[i].pressure_anomaly_annual_hpa = float(_dp_hpa[i].mean())
         # Distance to coast (already computed for seasonal heat capacity + inland
         # aridity) is stored on the cell so the civilization engine's "habitable
         # coast" layer can reuse it without re-running the graph Dijkstra.
@@ -1784,6 +1791,15 @@ def _upwind_barrier(
 # evaporation differ, and the advective e-folding length L = u·τ adapts
 # automatically with Ω).
 _MOISTURE_RESIDENCE_DAYS: float = 9.0
+
+# Reference-year month length (days).  The moisture budget expresses every
+# water flux as a *rate per 365.25-day reference year* (a unit convention, not
+# the world's physical year length — see climate-pipeline.md「时间基准约定」).
+# PET at the subsidence aridity gate must share that basis: feeding Hamon the
+# orbital month (orbital_period/12) made PET an *orbital-year accumulation*,
+# so AI = P/PET mixed a 365.25-day numerator with an orbital-year denominator —
+# on nacrea (100 d yr) AI read ×3.65 too wet (M2-A0④, 2026-09-18).
+_DAYS_PER_REFERENCE_MONTH: float = 365.25 / 12.0
 
 # Land evapotranspiration as a fraction of the ocean evaporation *rate* at the
 # same temperature.  Earth's land surface returns ~490 mm/yr against the ocean's

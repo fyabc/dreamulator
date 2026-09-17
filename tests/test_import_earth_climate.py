@@ -270,3 +270,74 @@ class TestObservedCurrents:
             _sample_monthly_nan_tolerant(finite, lat, lon, pts_lat, pts_lon),
             _sample_monthly(finite, lat, lon, pts_lat, pts_lon),
         )
+
+
+# ===================================================================
+# M2-A0③ (2026-09-18): canonical ΔP definition — same-month ocean band mean.
+# ===================================================================
+
+
+class TestOceanBandAnomalyMonthly:
+    """The single pressure-anomaly definition shared by importer / reference /
+    engine (land–sea contrast, annual mean included)."""
+
+    def test_land_carries_ocean_band_contrast(self):
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        # One 5° band: one ocean member (10 hPa all year), one land member
+        # (+5 hPa all year) → land anomaly = +5 hPa every month (full contrast,
+        # annual mean included), ocean anomaly = 0.
+        values = np.array([[10.0] * 12, [15.0] * 12])
+        lats = np.array([10.2, 11.1])  # same 5° band
+        ocean = np.array([True, False])
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        assert anom[1] == pytest.approx(5.0, abs=1e-12)  # land: full contrast
+        assert anom[0] == pytest.approx(0.0, abs=1e-12)  # ocean: the reference
+
+    def test_ocean_band_mean_of_anomaly_is_zero_per_month(self):
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        rng = np.random.default_rng(42)
+        lats = rng.uniform(-60.0, 60.0, 400)
+        ocean = rng.random(400) < 0.7
+        values = rng.normal(1013.0, 8.0, (400, 12))
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        for band in np.unique(((lats + 90.0) / 5.0).astype(int)):
+            sel = ((lats + 90.0) / 5.0).astype(int) == band
+            if (sel & ocean).any():
+                assert anom[sel & ocean].mean(axis=0) == pytest.approx(0.0, abs=1e-9)
+
+    def test_no_ocean_band_falls_back_to_all_member_mean(self):
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        # Antarctic-interior-style band: no ocean member at all.
+        values = np.array([[8.0, 12.0], [6.0, 14.0]])
+        lats = np.array([-84.0, -82.0])
+        ocean = np.array([False, False])
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        assert anom.mean(axis=0) == pytest.approx(0.0, abs=1e-12)  # all-member reference
+
+    def test_annual_mean_not_removed(self):
+        """Full contrast keeps the annual-mean structure — the old per-cell
+        annual-mean removal (previous importer definition) is a different field."""
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        # Land +4 hPa in every month → old definition would give 0 anomaly;
+        # the canonical definition keeps +4.
+        values = np.array([[12.0] * 12, [16.0] * 12])
+        lats = np.array([0.1, 1.2])
+        ocean = np.array([True, False])
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        assert anom[1].mean() == pytest.approx(4.0, abs=1e-12)
+        assert not np.allclose(anom[1], 0.0)
+
+    def test_band_edges(self):
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        # ±90° must land in valid bands (clip), not crash.
+        values = np.full((3, 12), 5.0)
+        lats = np.array([-90.0, 0.0, 90.0])
+        ocean = np.array([True, True, True])
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        assert anom.shape == (3, 12)
+        assert np.all(np.isfinite(anom))

@@ -63,6 +63,7 @@ export interface VoronoiCell {
   wind_east_m_s?: number | null
   wind_north_m_s?: number | null
   slp_annual_hpa?: number | null
+  pressure_anomaly_annual_hpa?: number | null
   flow_accumulation?: number
   river_id?: string | null
   river_order?: number

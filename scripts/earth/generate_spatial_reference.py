@@ -93,17 +93,44 @@ def main() -> None:
     gpcp.close()
 
     # ── Optional extra fields (climate-development diagnostics) ───────────────
-    # SLP monthly ΔSLP = SLP − zonal mean (land + season anomaly), 12 months, to
-    # align with the engine's `pressureMonthly` (monthly land-sea-contrast ΔP).
+    # Monthly ΔSLP = SLP − same-month OCEAN band mean (M2-A0③, 2026-09-18): the
+    # canonical pressure-anomaly definition, matching the engine's
+    # pressure_anomaly_monthly ΔT reference (land–sea contrast, annual mean
+    # included) and the obs importer.  The ocean mask comes from the SODA
+    # current field's validity (NaN = land), so --slp requires --current.
     slp_anom = slp_lat = slp_lon = None
     if args.slp:
+        if not args.current:
+            parser.error(
+                "--slp requires --current (the SODA field is the ocean-mask "
+                "source for the canonical ΔSLP reference)"
+            )
         ds = xr.open_dataset(args.slp, decode_times=False)
         slp = ds["slp"]
         slp_lat = np.asarray(slp.lat.values)
         slp_lon = np.asarray(slp.lon.values)
         slp_arr = np.asarray(slp.values)  # (12, nlat, nlon)
-        slp_anom = slp_arr - slp_arr.mean(axis=2, keepdims=True)  # monthly ΔSLP
         ds.close()
+
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
+        soda = xr.open_dataset(args.current, decode_times=False)
+        soda_u0 = np.asarray(soda["u"].isel(month=0).values)  # land = NaN
+        soda_lat = np.asarray(soda["u"].lat.values)
+        soda_lon = np.asarray(soda["u"].lon.values)
+        soda.close()
+        soda_valid = np.isfinite(soda_u0)
+        # Nearest SODA gridpoint per SLP grid row/column (circular in lon).
+        ii = np.abs(slp_lat[:, None] - soda_lat[None, :]).argmin(axis=1)
+        _dlon = np.abs(((slp_lon[:, None] - soda_lon[None, :] + 180.0) % 360.0) - 180.0)
+        jj = _dlon.argmin(axis=1)
+        ocean_grid = soda_valid[np.ix_(ii, jj)]  # (nlat, nlon)
+
+        _nlat, _nlon = slp_arr.shape[1], slp_arr.shape[2]
+        _members = slp_arr.transpose(1, 2, 0).reshape(-1, 12)
+        _member_lats = np.repeat(slp_lat, _nlon)
+        _anom = ocean_band_anomaly_monthly(_members, _member_lats, ocean_grid.ravel())
+        slp_anom = _anom.reshape(_nlat, _nlon, 12).transpose(2, 0, 1)  # (12, nlat, nlon)
 
     # NCEP annual-mean u/v wind (m/s).
     uwnd = uw_lat = uw_lon = None
@@ -149,6 +176,8 @@ def main() -> None:
         slp_flat = np.rint(slp_anom * 10).astype(np.int32).ravel()
         extra_arrays += f"""
 // monthly ΔSLP ×10 (0.1 hPa), month-major (month 0..11 → nlat × nlon), {slp_lat[0]}→{slp_lat[-1]}
+// Canonical ΔP (M2-A0③): SLP − same-month 5°-band OCEAN mean (land–sea contrast,
+// annual mean included — matches the engine's pressure_anomaly_monthly).
 export const OBS_SLP_ANOM_X10: number[] = [
 {_fmt_ints(slp_flat)}
 ]
@@ -298,8 +327,7 @@ function _sample(
         f"[OK] {out} ({out.stat().st_size / 1e3:.0f} KB) — "
         f"temp {float(temp.min()):.1f}..{float(temp.max()):.1f} °C on {len(t_lat)}×{len(t_lon)}, "
         f"precip {float(precip.min()):.0f}..{float(precip.max()):.0f} mm/yr "
-        f"on {len(p_lat)}×{len(p_lon)}"
-        + (f"; {extra_str}" if extra_str else "")
+        f"on {len(p_lat)}×{len(p_lon)}" + (f"; {extra_str}" if extra_str else "")
     )
 
 

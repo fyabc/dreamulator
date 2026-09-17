@@ -856,6 +856,19 @@ class TestSubsidenceAridityGate:
         pet0 = float(potential_evapotranspiration_hamon(t0, 365.25 / 12.0)[0])
         assert 0.0 < pet0 < pet20 < pet27
 
+    def test_hamon_pet_time_basis(self) -> None:
+        """M2-A0④: days_per_month sets the accumulation window — the reference
+        (365.25/12) and orbital (P/12) bases differ by exactly the year ratio,
+        so AI = P/PET mixes windows unless P matches PET's basis."""
+        t = np.full((1, 12), 22.0)
+        pet_ref = float(potential_evapotranspiration_hamon(t, 365.25 / 12.0)[0])
+        for orbital in (100.0, 200.0, 365.25):
+            pet_orb = float(potential_evapotranspiration_hamon(t, orbital / 12.0)[0])
+            assert pet_orb == pytest.approx(pet_ref * orbital / 365.25)
+        # nacrea (100 d yr): an orbital-basis PET paired with a reference-basis
+        # P inflates AI by 3.65 — the mixed-window bug the gate fix removes.
+        assert pet_ref * 100.0 / 365.25 == pytest.approx(pet_ref / 3.6525)
+
     def test_aridity_index_keep_knots(self) -> None:
         pet = np.full(5, 1000.0)
         pa = np.array([200.0, 500.0, 575.0, 650.0, 1500.0])  # AI .2/.5/.575/.65/1.5

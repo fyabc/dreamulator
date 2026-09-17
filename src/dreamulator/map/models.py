@@ -247,12 +247,24 @@ class VoronoiCell(BaseModel):
 
     # Annual-mean sea-level pressure (hPa) — the persistent surface-pressure
     # field (subtropical highs, ITCZ low).  Filled by the real-Earth importer
-    # (NCEP SLP annual mean) or the climate simulator (§7-② dynamical
-    # subtropical high); the *monthly* seasonal anomaly lives in the separate
-    # ``climate_monthly.msgpack`` (``pressure_monthly``).
+    # (NCEP SLP annual mean) only; the engine models pressure *anomalies*
+    # (see ``pressure_anomaly_annual_hpa``), never absolute SLP.  The *monthly*
+    # seasonal anomaly lives in the separate ``climate_monthly.msgpack``
+    # (``pressure_monthly``).
     slp_annual_hpa: float | None = Field(
         default=None,
         description="Annual-mean sea-level pressure (hPa)",
+    )
+
+    # Annual-mean pressure anomaly (hPa) = the 12-month mean of the canonical
+    # ΔP (SLP − same-month ocean band mean; M2-A0③) — the stationary land–sea
+    # contrast (winter Siberian high vs summer thermal low asymmetry, dynamical
+    # subtropical highs over oceans).  Written by both the climate engine
+    # (mean of its monthly ΔP) and the real-Earth importer (obs mean), so the
+    # frontend's annual pressure layer works for every world.
+    pressure_anomaly_annual_hpa: float | None = Field(
+        default=None,
+        description="Annual-mean pressure anomaly (hPa, ocean-band reference)",
     )
 
     # Ecology properties (filled by ecology engine — P0)
