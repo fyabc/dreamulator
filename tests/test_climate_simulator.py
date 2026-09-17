@@ -570,7 +570,6 @@ class TestWindConventionPrecipitation:
         lat_rad = np.radians(np.array([c.lat for c in mesh.cells]))
         is_land = np.array([0.0 <= c.lon <= 75.0 for c in mesh.cells])
         is_ocean = ~is_land
-        elevation_m = np.where(is_land, 300.0, -3000.0)
         config = TerrainPipelineConfig()
         # Exactly what simulate_climate passes: the physical-convention
         # annual background (Ferrel westerlies at 45°N), no monsoon anomaly.
@@ -590,7 +589,6 @@ class TestWindConventionPrecipitation:
             wind_monthly,
             is_land,
             is_ocean,
-            elevation_m,
             t,
             np.stack([t] * 12, axis=1),
             nodes,

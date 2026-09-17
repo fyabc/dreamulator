@@ -21,6 +21,7 @@ from scipy import sparse
 from dreamulator.engine.climate_physics import (
     SOLAR_CONSTANT,
     altitude_lapse_rate,
+    cc_lift_drying_scale,
     column_water_saturation,
     convective_pickup_gate,
     coriolis_parameter,
@@ -877,7 +878,6 @@ def simulate_climate(
         wind_monthly=wind_monthly,
         is_land=is_land,
         is_ocean=is_ocean,
-        elevation_m=elevation_m,
         temperature_c=t_mean_C,
         t_monthly_c=t_monthly_C,
         nodes_xyz=nodes_xyz,
@@ -969,7 +969,6 @@ def simulate_climate(
             wind_monthly=wind_monthly,
             is_land=is_land,
             is_ocean=is_ocean,
-            elevation_m=elevation_m,
             temperature_c=t_mean_C,
             t_monthly_c=t_monthly_C,
             nodes_xyz=nodes_xyz,
@@ -1033,7 +1032,6 @@ def simulate_climate(
             wind_monthly=wind_monthly,
             is_land=is_land,
             is_ocean=is_ocean,
-            elevation_m=elevation_m,
             temperature_c=t_mean_C,
             t_monthly_c=t_monthly_C,
             nodes_xyz=nodes_xyz,
@@ -1717,88 +1715,25 @@ def _upwind_distance_to_coast(
     return dist, source
 
 
-def _upwind_barrier(
-    cells: list[VoronoiCell],
-    n: int,
-    is_land: np.ndarray,
-    wind: np.ndarray,
-    nodes_xyz: np.ndarray,
-    elevation_m: np.ndarray,
-    *,
-    radius_km: float = 6371.0,
+def _apply_cold_trap(
+    w: np.ndarray,
+    w_sat: np.ndarray,
+    k_rain_field: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Upwind barrier height and distance-since-barrier (km), following the wind.
+    """Cold-trap cap: clamp column water at its Clausius–Clapeyron saturation.
 
-    Multi-source Dijkstra (downwind edges only — the same convention as
-    ``_upwind_distance_to_coast``) that also propagates, along the shortest
-    upwind path from the ocean, two quantities for the Föhn rain shadow:
-
-      barrier[i] — the maximum elevation the air crossed before reaching cell i
-        (the highest cell on the upwind path, *excluding* i itself; ocean = 0).
-      since[i]   — great-circle distance from that barrier peak to i (km);
-        resets each time the path climbs a new, higher peak.
-
-    The air rains out moisture crossing ``barrier[i]`` (orographic rain on the
-    windward side), then the leeward dryness decays over ``since[i]`` as the
-    air re-moistens.  ``wind`` must be the *physical* surface wind (east =
-    ``east_north_basis``), the same convention as ``_upwind_distance_to_coast``.
-
-    Returns:
-        (barrier, since), both shape (n,).
+    A cold air column cannot hold more water than ``W_sat(T)``, so the column
+    water above that limit is removed before the rainout ``P = W/τ`` is computed.
+    Physically the excess would rain out *upwind* of the saturated column (at the
+    coast, not the frozen interior); this first-order cut destroys it instead of
+    routing it there, a small global mass deficit (~1-2% — the cold columns are
+    a small fraction of the surface).  Warm columns have ``W_sat ≫ W`` and are
+    untouched.  TODO(§5): route the excess upwind for exact ΣP = ΣE.
     """
-    import heapq
-
-    dist = np.full(n, np.inf, dtype=np.float64)
-    barrier = np.zeros(n, dtype=np.float64)
-    since = np.zeros(n, dtype=np.float64)
-    visited = np.zeros(n, dtype=bool)
-    heap: list[tuple[float, int]] = []
-    for i in range(n):
-        if not is_land[i]:
-            dist[i] = 0.0
-            heapq.heappush(heap, (0.0, i))
-
-    with np.errstate(invalid="ignore", divide="ignore"):
-        wind_unit = wind / np.maximum(np.linalg.norm(wind, axis=1), 1e-9)[:, None]
-
-    while heap:
-        d, i = heapq.heappop(heap)
-        if visited[i]:
-            continue
-        visited[i] = True
-        ci = nodes_xyz[i]
-        for j in cells[i].neighbors:
-            if j < 0 or j >= n or visited[j]:
-                continue
-            cj = nodes_xyz[j]
-            edge_vec = cj - ci
-            edge_vec = edge_vec - float(np.dot(edge_vec, ci)) * ci
-            en = float(np.linalg.norm(edge_vec))
-            if en < 1e-9:
-                continue
-            edge_dir = edge_vec / en
-            if float(np.dot(wind_unit[i], edge_dir)) <= 0.0:
-                continue  # j is not downwind of i — the air does not reach it
-            dot = max(-1.0, min(1.0, float(np.dot(ci, cj))))
-            edge_km = radius_km * float(np.arccos(dot))
-            nd = d + edge_km
-            if nd < dist[j]:
-                dist[j] = nd
-                # The barrier the air crossed to reach j includes i's own
-                # elevation; the distance-since-barrier resets at a new peak.
-                if float(elevation_m[i]) > barrier[i]:
-                    since[j] = edge_km
-                else:
-                    since[j] = since[i] + edge_km
-                barrier[j] = max(barrier[i], float(elevation_m[i]))
-                heapq.heappush(heap, (nd, j))
-
-    return barrier, since
+    w = np.minimum(np.maximum(w, 0.0), w_sat)
+    return w, w * k_rain_field
 
 
-# Water-vapour residence time in the atmosphere (days).  Global mean column
-# water ~25 mm ÷ global precip ~2.7 mm/day ≈ 9 days (Trenberth 1998; the value
-# is re-confirmed by van der Ent & Tuinenburg 2016).  This is the rainout
 # timescale τ in the moisture budget P = W/τ, a physical constant — not a free
 # calibration knob — so it is shared by every world (only wind speed and
 # evaporation differ, and the advective e-folding length L = u·τ adapts
@@ -1847,25 +1782,6 @@ _LAND_RECYCLING_RELAX: float = 0.5
 _LAND_RECYCLING_TOL_MM: float = 1.0  # max |ΔE| over land cells (mm/yr)
 
 
-def _apply_cold_trap(
-    w: np.ndarray,
-    w_sat: np.ndarray,
-    k_rain_field: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Cold-trap cap: clamp column water at its Clausius–Clapeyron saturation.
-
-    A cold air column cannot hold more water than ``W_sat(T)``, so the column
-    water above that limit is removed before the rainout ``P = W/τ`` is computed.
-    Physically the excess would rain out *upwind* of the saturated column (at the
-    coast, not the frozen interior); this first-order cut destroys it instead of
-    routing it there, a small global mass deficit (~1-2% — the cold columns are
-    a small fraction of the surface).  Warm columns have ``W_sat ≫ W`` and are
-    untouched.  TODO(§5): route the excess upwind for exact ΣP = ΣE.
-    """
-    w = np.minimum(np.maximum(w, 0.0), w_sat)
-    return w, w * k_rain_field
-
-
 def _solve_moisture_budget(
     mesh: CVTMesh,
     wind: np.ndarray,
@@ -1883,15 +1799,21 @@ def _solve_moisture_budget(
     The mass-conserving hydrological cycle (Held & Soden 2006: P − E = −∇·(W u))
     in its rainout form,
 
-        ∇·(W u) + W/τ = E ,   P = W/τ
+        ∇·(W u) + W/τ = E ,   P = W/τ + P_oro
 
     is discretised with a first-order upwind finite-volume scheme on the CVT
     graph and solved for the column-water field W (mm).  The upwind flux across
     each edge carries the *upwind* cell's W, so the resulting linear system is a
     diagonally-dominant M-matrix (the rainout W/τ provides strict dominance).
+    Air crossing an *uphill* edge condenses the φ = 1 − exp(−Δz/H_cc) share of
+    its moisture flux (``cc_lift_drying_scale``): the inflow coefficient is
+    attenuated to (1−φ)·c and the condensed amount rains out at the windward
+    cell as ``P_oro`` — orographic rain and the lee rain shadow from one
+    conservative mechanism (CLIM-02 slice 1).
 
-    Because the advection flux terms cancel globally (Σ ∇·(Wu) = 0), the total
-    precipitation equals the total evaporation *by construction* — global water
+    Because the advection flux terms cancel globally up to the condensed share
+    (Σ ∇·(Wu) = −Σ P_oro), the total precipitation — rainout plus orographic
+    condensation — equals the total evaporation *by construction*; global water
     mass is conserved with no calibration constant.
 
     Args:
@@ -2015,6 +1937,51 @@ def _solve_moisture_budget(
     # robust and exact; the CVT graph is ~6-connected so fill-in stays bounded.
     pos = c > 0.0
     neg = c < 0.0
+
+    # ── CLIM-02 slice 1: orographic uplift condensation — a flux sink inside
+    # the budget (astra rethinking §5.2/§7: 地形加雨→凝结汇；雨影→输送耗水).
+    # Air crossing an edge uphill cools Γ·Δz; Clausius–Clapeyron drops the
+    # saturation mixing ratio by exp(−Δz/H_cc) (``cc_lift_drying_scale``).
+    # The inflow coefficient is attenuated to (1−φ)·c and the condensed
+    # φ-share rains out at the windward (uphill) cell — one conservative
+    # mechanism replacing the former post-budget orographic add-on
+    # (fabricated water) *and* the multiplicative föhn shadow (deleted
+    # water).  The advection no longer telescopes exactly; the residual is
+    # Σ P_oro by construction, so ΣA·(k·W + P_oro) = ΣA·E still holds.
+    _elev = np.array([cell.elevation for cell in mesh.cells], dtype=np.float64)
+    # The air column rides the *surface*: sea level over the ocean, terrain
+    # over land.  Using the raw elevation would make every ocean→land edge a
+    # 3 km "climb" out of the bathymetry and dump the onshore flux on the
+    # first coastal cell (Earth land-P collapse, found in the slice-1 A/B).
+    _h_eff = np.maximum(_elev, 0.0)
+    _h_cc = cc_lift_drying_scale(temperature_c, moist_lapse_rate(temperature_c))
+    # Lifting-condensation-level offset: unsaturated air condenses nothing
+    # below the LCL.  Monthly-mean RH ~75% puts z_LCL ≈ 125·(T−T_d) ≈ 800 m
+    # (standard approximation, e.g. Bolton 1980 / Smith 1979's linear mountain
+    # model starts condensation at the LCL).  Without it every 100-300 m
+    # coastal or plateau-edge step taps the flux and the interiors starve
+    # (Earth BWh +6500 in the slice-1 A/B) — real orographic rain needs a
+    # real barrier, not mesh-scale steps.
+    _z_lcl_m = 800.0
+    _uphill_inflow = neg & (_h_eff[src] > _h_eff[dst])  # air climbs dst → src
+    _phi = np.zeros_like(c)
+    _lift = (_h_eff[src] - _h_eff[dst])[_uphill_inflow]
+    _phi[_uphill_inflow] = 1.0 - np.exp(
+        -np.maximum(_lift - _z_lcl_m, 0.0) / _h_cc[dst][_uphill_inflow]
+    )
+    _c_in = c * (1.0 - _phi)  # attenuated inflow coefficients (pos edges: φ=0)
+
+    def _oro_from_w(w_field: np.ndarray) -> np.ndarray:
+        """Windward orographic condensation, from the solved column water."""
+        p_oro = np.zeros(n, dtype=np.float64)
+        if _uphill_inflow.any():
+            np.add.at(
+                p_oro,
+                src[_uphill_inflow],
+                _phi[_uphill_inflow] * (-c[_uphill_inflow]) * w_field[dst[_uphill_inflow]],
+            )
+        return p_oro
+
     # Add a turbulent-diffusion term κ∇²W alongside the upwind advection.  The
     # pure upwind scheme concentrates the ITCZ into a single spurious cell-wide
     # spike at the equator, because the ~1° CVT mesh cannot resolve the
@@ -2036,7 +2003,7 @@ def _solve_moisture_budget(
     np.add.at(diag, src, _diff_edge)  # diffusion: +κ_edge/A_src per neighbour
     row = np.concatenate([np.arange(n), src[neg], src])
     col = np.concatenate([np.arange(n), dst[neg], dst])
-    val = np.concatenate([diag, c[neg], -_diff_edge])
+    val = np.concatenate([diag, _c_in[neg], -_diff_edge])
     a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsr()
 
     from scipy.sparse.linalg import splu
@@ -2055,7 +2022,7 @@ def _solve_moisture_budget(
         for _ in range(_LAND_RECYCLING_MAX_ITER):
             w = lu.solve(e)
             w = np.maximum(w, 0.0)
-            p = w * k_rain_field
+            p = w * k_rain_field + _oro_from_w(w)  # orographic rain feeds land ET
             _e_new = _e_pot_land * p / (_e_pot_land + p + 1e-9)
             _delta = float(np.max(np.abs(_e_new - _e_land)))
             _e_land = _LAND_RECYCLING_RELAX * _e_new + (1.0 - _LAND_RECYCLING_RELAX) * _e_land
@@ -2064,13 +2031,16 @@ def _solve_moisture_budget(
                 break
 
     w = lu.solve(e)
+    p_oro = _oro_from_w(w)  # from the solved (pre-trap) column water
 
     # Cold trap: cap column water at its Clausius–Clapeyron saturation W_sat(T)
     # so a cold air column cannot rain out more water than it can hold.
     w = np.maximum(w, 0.0)
     w_sat = column_water_saturation(temperature_c)
     w, p = _apply_cold_trap(w, w_sat, k_rain_field)
-    return w, p
+    # Orographic condensation comes from the *transiting* flux, not the local
+    # column, so it bypasses the cold-trap cap.
+    return w, p + p_oro
 
 
 def _detect_coastal_cells(
@@ -2269,7 +2239,6 @@ def _compute_precipitation_monthly_budget(
     wind_monthly: np.ndarray,
     is_land: np.ndarray,
     is_ocean: np.ndarray,
-    elevation_m: np.ndarray,
     temperature_c: np.ndarray,
     t_monthly_c: np.ndarray,
     nodes_xyz: np.ndarray,
@@ -2312,7 +2281,6 @@ def _compute_precipitation_monthly_budget(
             (12, N, 3).
         is_land: Boolean land mask, shape (N,).
         is_ocean: Boolean ocean mask, shape (N,).
-        elevation_m: Elevation in metres, shape (N,).
         temperature_c: Annual-mean temperature in °C, shape (N,).
         t_monthly_c: Monthly temperature in °C, shape (N, 12).
         nodes_xyz: Unit sphere node positions, shape (N, 3).
@@ -2361,14 +2329,6 @@ def _compute_precipitation_monthly_budget(
         from dreamulator.map.ocean_circulation import _build_directed_edge_table
 
         src, dst = _build_directed_edge_table(mesh.cells)
-
-    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
-    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
-    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
-    edge_norm = np.linalg.norm(edge_vec, axis=1)
-    valid_edge = edge_norm >= 1e-9
-    edge_dir = np.zeros_like(edge_vec)
-    edge_dir[valid_edge] = edge_vec[valid_edge] / edge_norm[valid_edge, None]
 
     # Step 3.5: Mid-latitude storm tracks (baroclinic eddies) — a spatial
     # modulation of the rainout rate k_rain, NOT an additive precipitation
@@ -2506,12 +2466,12 @@ def _compute_precipitation_monthly_budget(
 
     # CLIM-02 (2026-09-18): per-stage area-weighted water ledger — quantify how
     # much each post-budget mechanism adds/removes, exposing the ΣP = ΣE
-    # residual that the budget core guarantees but the orographic / coastal /
-    # föhn / sub-planet / cap post-processing breaks.  Area-weighted (Σ P·A in
-    # mm·km²/yr) so a huge wet ocean cell counts proportionally.
+    # residual that the budget core guarantees (including the orographic
+    # condensation, in-solver since slice 1) but the coastal / sub-planet /
+    # cap post-processing breaks.  Area-weighted (Σ P·A in mm·km²/yr) so a
+    # huge wet ocean cell counts proportionally.
     _area_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
-    _ledger_core = 0.0  # budget core (incl. cold-trap) annual Σ P·A
-    _ledger_oro = 0.0  # orographic add-on
+    _ledger_core = 0.0  # budget core (cold-trap + orographic condensation) Σ P·A
 
     for m in range(12):
         t_m = t_monthly_c[:, m]
@@ -2573,29 +2533,11 @@ def _compute_precipitation_monthly_budget(
             )
             _dbg_pickup *= _pickup_m
 
-        # Orographic rain from this month's column water: upwind elevation gain
-        # along this month's wind rains out a fraction of W per km of uplift.
-        _speed_m = np.linalg.norm(wind_monthly[m], axis=1)
-        _wind_unit_m = wind_monthly[m] / np.maximum(_speed_m, 1e-9)[:, None]
-        align_m = np.where(valid_edge, np.einsum("ij,ij->i", edge_dir, _wind_unit_m[src]), -1.0)
-        gain_e = elevation_m[dst] - elevation_m[src]
-        ok = (gain_e > 0.0) & (align_m > 0.1)
-        up_gain = np.zeros(n, dtype=np.float64)
-        np.maximum.at(up_gain, dst[ok], gain_e[ok])
-        # Column water of the edge carrying the maximum gain into each cell.
-        is_max = ok & (gain_e == up_gain[dst])
-        up_w = np.zeros(n, dtype=np.float64)
-        np.maximum.at(up_w, dst[is_max], w_m[src[is_max]])
-
-        oro_m = np.zeros(n, dtype=np.float64)
-        q_mask = is_land & (up_w > 0.5) & (up_gain > 0.0)
-        frac = np.minimum(0.20 * up_gain[q_mask] / 1000.0, 0.9)
-        oro_m[q_mask] = up_w[q_mask] * frac
-
-        p_monthly[:, m] = (p_m + oro_m) / 12.0
+        # p_m already includes the orographic condensation (in-solver flux
+        # sink, CLIM-02 slice 1) — the former post-budget add-on is gone.
+        p_monthly[:, m] = p_m / 12.0
 
         _ledger_core += float((p_m * _area_km2).sum() / 12.0)
-        _ledger_oro += float((oro_m * _area_km2).sum() / 12.0)
         _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
         _dbg_w_final += w_m / 12.0
 
@@ -2614,7 +2556,7 @@ def _compute_precipitation_monthly_budget(
     def _pa() -> float:
         return float((p_monthly.sum(axis=1) * _area_km2).sum())
 
-    _ledger_stages: list[tuple[str, float]] = [("budget+orographic", _ledger_core + _ledger_oro)]
+    _ledger_stages: list[tuple[str, float]] = [("core (budget+oro)", _ledger_core)]
 
     # Step 6.6: West-coast / east-coast asymmetry (annual cell circulation —
     # the seasonality of the westerlies is not modelled yet, so the same
@@ -2661,43 +2603,11 @@ def _compute_precipitation_monthly_budget(
         p_monthly *= _coastal_factor[:, None]
         _ledger_stages.append(("coastal", _pa()))
 
-    # Step 6.7: Föhn rain shadow — leeward drying from the moisture scale
-    # height of the barrier the air crossed on its *whole upwind path*, not just
-    # the immediately upwind neighbour (that old "point effect" put the shadow
-    # one cell deep, so classic lee deserts stayed far too wet).  The barrier is
-    # the maximum elevation on the upwind path traced against the physical
-    # surface wind; the drying at the barrier (exp(−ΔH/h_scale)) re-moistens
-    # downwind as exp(−d/L) over the rain-shadow decay length.  One factor
-    # applies to every month (the annual wind is steady).
-    if is_land.any():
-        # `wind` is already physical (converted at the function entry — the
-        # former local east-flip here would now double-flip).
-        _barrier, _since_barrier = _upwind_barrier(
-            mesh.cells, n, is_land, wind, nodes_xyz, elevation_m, radius_km=config.radius_km
-        )
-        _drop = np.where(
-            is_land & (elevation_m >= 0.0),
-            np.maximum(_barrier - elevation_m, 0.0),
-            0.0,
-        )
-        _shadow = np.ones(n, dtype=np.float64)
-        _dry = _drop > 500.0
-        if _dry.any():
-            _t_k = np.maximum(temperature_c + 273.15, 230.0)
-            # moist_lapse_rate is logistic-bounded to [Γ_min, Γ_max] since
-            # 2026-09-11; the clip stays as a cheap defensive no-op.
-            _gamma = np.clip(moist_lapse_rate(temperature_c), 4.5, 6.5)
-            _h_scale = 461.0 * _t_k**2 / (2.5e6 * _gamma / 1000.0)
-            _dry_frac = 1.0 - np.exp(-_drop[_dry] / _h_scale[_dry])
-            _recharge = np.exp(-_since_barrier[_dry] / config.rain_shadow_decay_km)
-            _shadow[_dry] = 1.0 - _dry_frac * _recharge
-        p_monthly *= _shadow[:, None]
-        _ledger_stages.append(("foehn", _pa()))
-        if debug is not None:
-            debug["fohn_factor"] = _shadow.copy()
-            debug["fohn_drop"] = _drop.copy()
-            debug["fohn_barrier"] = _barrier.copy()
-            debug["fohn_since"] = _since_barrier.copy()
+    # Step 6.7 (Föhn rain shadow) was removed in CLIM-02 slice 1: the leeward
+    # drying now emerges inside the budget — the orographic condensation
+    # attenuates the moisture flux crossing the barrier, so the air arriving
+    # leeward is already depleted (same Clausius–Clapeyron physics the shadow
+    # factor applied, but conservative: the dried share rains out windward).
 
     # Step 8: Sub-planet / sub-stellar convective enhancement — steady on a
     # tidally locked body, so it splits evenly across the 12 months.

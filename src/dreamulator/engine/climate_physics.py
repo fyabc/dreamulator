@@ -167,6 +167,43 @@ def moist_lapse_rate(
     return np.asarray(gamma_min + delta * _sig)
 
 
+# Clausius–Clapeyron lift-drying constants: R_v (J/(kg·K)) and L_v (J/kg).
+_R_VAPOR = 461.0
+_LATENT_HEAT = 2.5e6
+
+
+def cc_lift_drying_scale(
+    temperature_c: np.ndarray,
+    gamma_c_per_km: np.ndarray,
+) -> np.ndarray:
+    """CC lift-drying scale height H_cc (m) for orographic condensation.
+
+    Air lifted by Δz cools Γ·Δz; Clausius–Clapeyron gives the saturation
+    mixing-ratio ratio ``q_sat(T−ΓΔz)/q_sat(T) = exp(−Δz/H_cc)`` with
+
+        H_cc = R_v·T² / (L_v·Γ)
+
+    (288 K, Γ = 6.5 °C/km → ≈ 2353 m).  The fraction of the *transported
+    moisture flux* that condenses over a Δz lift is ``φ = 1 − exp(−Δz/H_cc)``
+    — one conservative mechanism that yields both windward orographic rain
+    (the condensed share rains out) and the leeward rain shadow (the arriving
+    air is drier).  No free parameters: R_v, L_v are physical constants and
+    Γ comes from ``moist_lapse_rate``.
+
+    Args:
+        temperature_c: Temperature of the *source* (upwind) column, °C.
+        gamma_c_per_km: Lapse rate along the lift, °C/km (moist for saturated
+            ascent; the dry-adiabatic choice for unsaturated air is a caller
+            decision).
+
+    Returns:
+        Scale height in metres, same shape as the inputs.
+    """
+    t_k = np.asarray(temperature_c, dtype=np.float64) + 273.15
+    gamma_c_per_m = np.asarray(gamma_c_per_km, dtype=np.float64) / 1000.0
+    return _R_VAPOR * t_k**2 / (_LATENT_HEAT * gamma_c_per_m)
+
+
 def altitude_lapse_rate(
     temperature_c: np.ndarray,
     elevation_m: np.ndarray,
