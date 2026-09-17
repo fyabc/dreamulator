@@ -2083,6 +2083,53 @@ def _solve_moisture_budget(
     return w, p + p_oro
 
 
+# Reference background precipitation (mm/yr) used to normalise k_rain
+# modulation amplitudes (coastal asymmetry, sub-planet convection) — an
+# observation-fit class constant (discipline #9), shared so the two gates
+# express their strengths on the same scale.
+_K_MOD_P_REF_MM: float = 1000.0
+
+
+def _sub_planet_rainout_factor(
+    lat_rad: np.ndarray,
+    lon_rad: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Sub-planet convective rainout enhancement as a k_rain modulation
+    (CLIM-02 slice 4, astra §2.1/§7).
+
+    On a tidally locked body the host hangs fixed overhead: its thermal +
+    reflected illumination steadily heats the sub-planet point and anchors
+    convection there (the sub-stellar convective anchor, e.g. Pierrehumbert
+    2010 for stellar-locked planets).  A Gaussian rainout-efficiency
+    enhancement centred on the sub-planet point expresses this inside the
+    budget — conserving (any k field keeps ΣA·P = ΣA·E), unlike the former
+    additive post-budget rain boost (fabricated water).  Gated by
+    ``sub_planet_warming_c`` (0 disables; Earth = 0).
+
+    Epistemic class (discipline #9): the σ = 15° Gaussian and the amplitude
+    scale ``warming_c × 200 mm/yr/°C`` (converted to a multiplicative factor
+    over ``_K_MOD_P_REF_MM``) are author-set heuristics awaiting a literature
+    anchor for the sub-planet convective anchor strength — registered to the
+    stage-D W-field work, where why the budget alone does not already peak at
+    the sub-point (transit-ocean SST structure) is the root question.
+
+    Returns:
+        Factor ≥ 1.0, shape (N,).
+    """
+    if config.sub_planet_warming_c <= 0.0:
+        return np.ones_like(lat_rad, dtype=np.float64)
+    sub_lat = np.radians(config.sub_planet_latitude_deg)
+    sub_lon = np.radians(config.sub_planet_longitude_deg)
+    cos_ang = np.sin(lat_rad) * np.sin(sub_lat) + np.cos(lat_rad) * np.cos(sub_lat) * np.cos(
+        lon_rad - sub_lon
+    )
+    ang_dist_deg = np.degrees(np.arccos(np.clip(cos_ang, -1.0, 1.0)))
+    amplitude_mm = config.sub_planet_warming_c * 200.0  # mm/yr per °C of warming
+    gaussian = np.asarray(np.exp(-0.5 * (ang_dist_deg / 15.0) ** 2), dtype=np.float64)
+    return 1.0 + (amplitude_mm / _K_MOD_P_REF_MM) * gaussian
+
+
 def _coastal_rainout_factor(
     mesh: CVTMesh,
     n: int,
@@ -2119,7 +2166,7 @@ def _coastal_rainout_factor(
 
     _rho_air = 1.2  # kg/m³
     _s_per_year = 365.25 * 86400.0
-    _p_bg = 1000.0  # mm/yr reference background precipitation
+    _p_bg = _K_MOD_P_REF_MM  # mm/yr reference background precipitation
     _eps_windward = 1.3e-4  # coastal precipitation efficiency (windward)
     _eps_leeward = 0.8e-4  # coastal precipitation efficiency (leeward)
 
@@ -2484,6 +2531,11 @@ def _compute_precipitation_monthly_budget(
     # the budget so ΣA·P = ΣA·E survives it (see _coastal_rainout_factor).
     _coastal_k = _coastal_rainout_factor(mesh, n, is_land, is_ocean, wind, temperature_c, nodes_xyz)
     _rain_ann = (1.0 + _rain_ann) * _coastal_k - 1.0
+    # ── CLIM-02 slice 4: sub-planet convective anchor as a k_rain modulation ──
+    # nacrea-only (sub_planet_warming_c > 0); conserving, replacing the former
+    # additive post-budget rain boost.
+    _sub_k = _sub_planet_rainout_factor(lat_rad, lon_rad, config)
+    _rain_ann = (1.0 + _rain_ann) * _sub_k - 1.0
 
     _k_base = 365.25 / _MOISTURE_RESIDENCE_DAYS  # base rainout rate, 1/yr
 
@@ -2590,6 +2642,7 @@ def _compute_precipitation_monthly_budget(
         if omega_gate_monthly is not None:
             _rain_m = (1.0 + _rain_m) * omega_gate_monthly[:, m] - 1.0
         _rain_m = (1.0 + _rain_m) * _coastal_k - 1.0  # CLIM-02 slice 3
+        _rain_m = (1.0 + _rain_m) * _sub_k - 1.0  # CLIM-02 slice 4
         w_m, p_m = _solve_moisture_budget(
             mesh,
             wind_monthly[m],
@@ -2674,21 +2727,11 @@ def _compute_precipitation_monthly_budget(
     # leeward is already depleted (same Clausius–Clapeyron physics the shadow
     # factor applied, but conservative: the dried share rains out windward).
 
-    # Step 8: Sub-planet / sub-stellar convective enhancement — steady on a
-    # tidally locked body, so it splits evenly across the 12 months.
-    if config.sub_planet_warming_c > 0:
-        sub_lat = np.radians(config.sub_planet_latitude_deg)
-        sub_lon = np.radians(config.sub_planet_longitude_deg)
-        cos_ang = np.sin(lat_rad) * np.sin(sub_lat) + np.cos(lat_rad) * np.cos(sub_lat) * np.cos(
-            lon_rad - sub_lon
-        )
-        ang_dist_deg = np.degrees(np.arccos(np.clip(cos_ang, -1.0, 1.0)))
-        amplitude = config.sub_planet_warming_c * 200.0  # mm/yr per °C
-        sub_boost = amplitude * np.exp(-0.5 * (ang_dist_deg / 15.0) ** 2)
-        if debug is not None:
-            debug["sub_planet"] = sub_boost.copy()
-        p_monthly += sub_boost[:, None] / 12.0
-        _ledger_stages.append(("sub-planet", _pa()))
+    # Step 8 (sub-planet additive rain boost) migrated into the budget in
+    # CLIM-02 slice 4: the sub-planet convective anchor now modulates k_rain
+    # inside every solve (see _sub_planet_rainout_factor) — conserving, and
+    # the enhancement scales with the local column water instead of adding a
+    # fixed amount over whatever the budget produced.
 
     # Annual cap (real-Earth maximum ~11000 mm/yr, Mawsynram/Cherrapunji),
     # applied to the monthly values proportionally so the seasonal shape is

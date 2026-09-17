@@ -227,3 +227,30 @@ class TestCoastalRainoutFactor:
         assert len(west_edge) and len(east_edge)
         assert np.all(f[west_edge] > 1.0)
         assert np.all(f[east_edge] < 1.0)
+
+
+class TestSubPlanetRainoutFactor:
+    """CLIM-02 slice 4: the sub-planet convective anchor as a k_rain gate."""
+
+    def test_disabled_when_warming_zero(self):
+        from dreamulator.map.climate_simulator import _sub_planet_rainout_factor
+
+        cfg = TerrainPipelineConfig(sub_planet_warming_c=0.0)
+        lat = np.zeros(4)
+        lon = np.zeros(4)
+        f = _sub_planet_rainout_factor(lat, lon, cfg)
+        assert np.all(f == 1.0)
+
+    def test_gaussian_peak_and_decay(self):
+        from dreamulator.map.climate_simulator import _sub_planet_rainout_factor
+
+        cfg = TerrainPipelineConfig(sub_planet_warming_c=1.0)
+        # Radial distances from the default sub-point (0°, 0°): 0, 15, 30, 90°.
+        lat = np.radians([0.0, 0.0, 0.0, 90.0])
+        lon = np.radians([0.0, 15.0, 30.0, 0.0])
+        f = _sub_planet_rainout_factor(lat, lon, cfg)
+        assert f[0] == pytest.approx(1.2)  # peak: 1 + 200/1000
+        assert f[1] == pytest.approx(1.0 + 0.2 * np.exp(-0.5))
+        assert f[2] == pytest.approx(1.0 + 0.2 * np.exp(-2.0))
+        assert f[3] == pytest.approx(1.0, abs=1e-3)  # far side ≈ no gate
+        assert np.all(f >= 1.0)  # enhancement only, never suppression
