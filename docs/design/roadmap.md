@@ -128,7 +128,7 @@
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P0** | **M0 可信入口与检查覆盖**（DOC-01/02、DEV-01、CI-01/02/03、TEST-01）：两 README 8 处失效链接修复、安装 `npm install`→`npm ci`（建议稿 `private/notes/readme-npm-ci-proposal.md`）、CI 触发范围补 `packages/**` 与前端 PR 检查 job、快测/包测试/慢验证分层说明 | 2–3 天 | ★★★★ |
+| **P0** | **M0 可信入口与检查覆盖 ✅ 已完成（2026-09-17，`f8eec43`）**（DOC-01/02、DEV-01、CI-01/02/03、TEST-01）：README 10 处失效链接（含审计漏网 3 处）+ `npm ci` + clone URL + 能力摘要对齐当前实现；CI 新增 conlang/frontend/docs 三检查入口 + tests 触发路径补 `packages/**`/`schemas/**`；新工具 `scripts/dev/check_markdown_links.py`（链接+锚点校验，116 文件）；测试分层说明入 tests.yml 头部 + CLAUDE.md | — | — |
 | **P0** | **M1 世界构建与产物来源闭环**（BUILD-01/02、DATA-01）：P0 = 分叉层过滤后自动补 astronomy 前置 + imported 地形缺文件禁假 success + mesh 按 planet ID 精确解析 + 分支不回写父世界；P1 = 版本化开发数据包（manifest/SHA-256/固定索引 + `data fetch` 拟议接口），交付顺序以数据包评估为准（原始 ETOPO1 导入留作后备）。方案 → `private/reviews/branch-build-bootstrap-plan-2026-09-17.md`（P0 范围 §7）+ `github-data-bootstrap-evaluation-2026-09-17.md`（顺序调整 §对前一份计划的调整） | P0 半周；P1 1–2 周 | ★★★★★ |
 | **P0** | **M2 共同物理输入与可诊断气候**（PHYS-01、CLIM-01/02；= ▶ rethinking 第一阶段）：A0 输入合同（消 Nacrea 恒星温度静默回退 5772 K、Earth 验证配置世界名隐式切换三处不一致、压力 anomaly 四套口径、时间单位审计）→ 月度状态权威化（年温双权威）→ 分阶段水量账本（6 处增删水修正）→ 有限耦合；62 K 温室辐射身份与单圈体制判据随后。证据 → `private/reviews/earth-nacrea-shared-physics-2026-09-17.md`（§3 只读实验/§8 A0–E 计划）+ `climate-pipeline-rethinking-2026-09-17.md`（§2 静态确认清单/§9 阶段顺序） | 2–4 周 | ★★★★★ |
 | P1 | **GUARD-01 守护轴反例修复**：同指纹事实漂移漏检、嵌套 YAML（lexicon）漏检、容量归档误标 deprecated、`intentional` 豁免过宽、缺产物状态显示为已验证。反例脚本/JSON + 裁决 → `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
