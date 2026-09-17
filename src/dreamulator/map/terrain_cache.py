@@ -230,6 +230,7 @@ def build_stage_fingerprint(
     """Build the input fingerprint for a single stage."""
     parts: list[str] = []
     parts.append(_config_fingerprint(config, [stage]))
+    parts.append(f"schema-v{_STAGE_SCHEMA_VERSIONS.get(stage, 1)}")
     if geography_hash:
         parts.append(geography_hash)
     if upstream_fingerprints:
@@ -237,6 +238,23 @@ def build_stage_fingerprint(
             if dep in upstream_fingerprints:
                 parts.append(upstream_fingerprints[dep])
     return _sha256_hex("|".join(parts).encode())
+
+
+# Per-stage cache payload schema versions (v2, 2026-09-17 nacrea landform-layer
+# loss): stage pickles capture only part of a stage's in-place cell side
+# effects.  When a payload format gains fields — or a stage gains a new
+# in-place cell field — bump its version here so old pickles invalidate
+# instead of silently replaying without the new fields (the exported mesh
+# then drops them: inf distance → null, missing landform → None).
+#   tectonics v2: + cumulative_convergence_km / cumulative_divergence_km
+#   boundaries v2: + distance_to_boundary_km / convergence_rate_cm_yr /
+#                  tangential_fraction
+#   terrain v2:    + landform
+_STAGE_SCHEMA_VERSIONS: dict[str, int] = {
+    "tectonics": 2,
+    "boundaries": 2,
+    "terrain": 2,
+}
 
 
 def _stage_dependencies(stage: str) -> list[str]:

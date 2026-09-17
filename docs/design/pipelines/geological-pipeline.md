@@ -101,9 +101,21 @@
 海陆分类在 5/8 末尾写入、大内流湖升级在 8/8 开头执行——「海平面与水系统」（§8）横跨
 两个相位，该章开头有说明。
 
-**增量缓存**（`terrain_cache.py`）：每个相位的输入做内容指纹（config 字段 + 上游相位
-指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则整相位跳过——改
-geography.yaml 只失效受影响的相位，不需要 `--force`（`--force` 仅用于强制全量重建）。
+**增量缓存**（`terrain_cache.py`）：每个相位的输入做内容指纹（config 字段 + 相位
+schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则
+整相位跳过——改 geography.yaml 只失效受影响的相位，不需要 `--force`（`--force` 仅用于
+强制全量重建）。
+
+**缓存负载必须覆盖相位的全部 in-place cell 副作用**（2026-09-17 nacrea 图层丢失教训）：
+凡「计算过程直接改 `mesh.cells[*]` 字段」的相位，缓存负载要一并保存这些字段数组、
+命中时回放到 cells——否则全缓存命中的重建会导出空字段（inf 距离→null、缺失→None），
+前端图层静默消失。当前覆盖：tectonics → `cumulative_convergence_km`/
+`cumulative_divergence_km`；boundaries → `distance_to_boundary_km`/
+`convergence_rate_cm_yr`/`tangential_fraction`；terrain → `elevation`/`crust_type`/
+`boundary_type`/`landform`/`hotspot_id`。**新增 in-place 字段时**：加入
+`terrain_pipeline.py` 的阶段负载 + 回放，并提升 `terrain_cache._STAGE_SCHEMA_VERSIONS`
+中该相位的版本号（旧 pickle 自动失效）。回归守卫 =
+`tests/test_map/test_cell_field_cache_replay.py`（新鲜运行 vs 全缓存回放逐字段全等）。
 
 
 ---
