@@ -1,13 +1,15 @@
 # 开发路线图
 
-> 最后更新：2026-09-17（v0.37.0：气候慢自转 E 包 E1-E4 + §5-α SST 对流门 +
-> ④ v2 两层 Gill 定常波 + §5-β 对流临界雨出门（后两门默认关，验收裁决见
-> proposal）；生态层 P3c 呈现层设计输入（Blender 3D 管线）；气候攻关波收口，
-> rethinking 启动）
+> 最后更新：2026-09-17（外部审计并入：GPT-6-Astra 审计包 M0–M4 里程碑 + 问题台账
+> 入 §六/§七；气候 rethinking 实施顺序定为「输入契约 → 状态权威化 → 守恒账本 →
+> 机制」，前见 v0.37.0 条目）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
 > 文明种子见 `data/worlds/nacrea/layers/civilization/input/civilizations.yaml`。
+> **外部审计（2026-09-17）**：全仓评审证据包 = `private/HANDOFF-2026-09-17.md` +
+> `private/reviews/`（问题台账 20 项 N/P/R 分级、16 份 proposal 裁决、UCC 重设计、
+> 构建复现方案）；§六 M0–M4 各行指针指向对应评审文档。
 
 ---
 
@@ -118,6 +120,22 @@
 > 世界设定类决策存档见各世界 `design-notes/`。
 
 ### 待办
+
+#### 外部审计里程碑（GPT-6-Astra 2026-09-17，应用顺序 M0 → M1 → M2 → GUARD/UCC → M4）
+
+> 台账 20 项分级证据 → `private/reviews/project-structure-and-development-outline-2026-09-17.md` §5。
+> M2 = 气候 rethinking 主线的实施框架（today.md ▶ 项），并非独立的第三条线。
+
+| 优先级 | 模块 | 预计工作量 | 关键性 |
+|--------|------|-----------|--------|
+| **P0** | **M0 可信入口与检查覆盖**（DOC-01/02、DEV-01、CI-01/02/03、TEST-01）：两 README 8 处失效链接修复、安装 `npm install`→`npm ci`（建议稿 `private/notes/readme-npm-ci-proposal.md`）、CI 触发范围补 `packages/**` 与前端 PR 检查 job、快测/包测试/慢验证分层说明 | 2–3 天 | ★★★★ |
+| **P0** | **M1 世界构建与产物来源闭环**（BUILD-01/02、DATA-01）：P0 = 分叉层过滤后自动补 astronomy 前置 + imported 地形缺文件禁假 success + mesh 按 planet ID 精确解析 + 分支不回写父世界；P1 = 版本化开发数据包（manifest/SHA-256/固定索引 + `data fetch` 拟议接口），交付顺序以数据包评估为准（原始 ETOPO1 导入留作后备）。方案 → `private/reviews/branch-build-bootstrap-plan-2026-09-17.md`（P0 范围 §7）+ `github-data-bootstrap-evaluation-2026-09-17.md`（顺序调整 §对前一份计划的调整） | P0 半周；P1 1–2 周 | ★★★★★ |
+| **P0** | **M2 共同物理输入与可诊断气候**（PHYS-01、CLIM-01/02；= ▶ rethinking 第一阶段）：A0 输入合同（消 Nacrea 恒星温度静默回退 5772 K、Earth 验证配置世界名隐式切换三处不一致、压力 anomaly 四套口径、时间单位审计）→ 月度状态权威化（年温双权威）→ 分阶段水量账本（6 处增删水修正）→ 有限耦合；62 K 温室辐射身份与单圈体制判据随后。证据 → `private/reviews/earth-nacrea-shared-physics-2026-09-17.md`（§3 只读实验/§8 A0–E 计划）+ `climate-pipeline-rethinking-2026-09-17.md`（§2 静态确认清单/§9 阶段顺序） | 2–4 周 | ★★★★★ |
+| P1 | **GUARD-01 守护轴反例修复**：同指纹事实漂移漏检、嵌套 YAML（lexicon）漏检、容量归档误标 deprecated、`intentional` 豁免过宽、缺产物状态显示为已验证。反例脚本/JSON + 裁决 → `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
+| P1 | **M3 结果契约与 UCC 小切片**（CONTRACT-01、UCC-01）：API/静态最小一致性夹具 + 时间/geometry/来源元数据；UCC = 连续描述量（26 项语义检查已过）→ 少量版本化分类 profile（不追 Köppen 一致率），可外部序列独立先行。重设计全文 → `private/reviews/ucc-review-2026-09-17.md`（唯一维护正文） | 1–2 周 | ★★★★ |
+| P2 | **M4 有边界的世界创作扩展**：四选一真实用户任务驱动（受控地形精修 / 生态资源描述 / 小型文明事件账本 / 语言谱系小样——各 proposal 的 MVP 定义见 `private/reviews/proposals-review-2026-09-17.md` §3）；16 份 proposal 状态整理（已实现归档 `pipelines/`、统一头部元信息）随后收尾 | 按所选任务 | ★★★ |
+
+#### 既有待办
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
@@ -594,6 +612,38 @@
    （ecology-layer.md 未带 as-built 状态；astronomy 无文档落点）。过渡：引用处
    标注「参考暂住 proposals」；补写 `pipelines/ecology-pipeline.md` /
    `astronomy-pipeline.md` 待排期。
+3. **CI 触发范围与前端/conlang 检查缺口**（CI-01/02，外部审计 2026-09-17 实锤）—
+   tests workflow 触发路径仅 src/tests，`packages/**`（conlang 包）单独改动不触发
+   任何验证、pytest 命令不含包测试；无前端 PR 检查 job（tsc/打包仅在 main 的
+   Pages 部署执行），Vitest 用例无 CI 入口；schema 变动不触发 freshness；文档
+   链接检查脚本未进 CI（本轮 README 8 处失效即证据）。修法：按变更路径触发 +
+   conlang 显式 pytest + 前端 PR job（小夹具、不依赖生产数据下载）。归 M0。
+4. **README 失效链接与安装口径漂移**（DOC-01/02、DEV-01，外部审计 2026-09-17）—
+   两份 README 各 4 处链接指向 docs/ 迁移前旧路径（harness/terrain-pipeline/
+   climate-engine/vision）；安装示例用 `npm install`（换机锁文件漂移，应为
+   `npm ci`）；clone URL 仍为占位符；能力摘要停在旧状态（三圈风/BFS 概述）。
+   归 M0。
+5. **engine ↔ map 双向依赖、编排/领域/mesh 契约混用**（ARCH-01/02，外部审计
+   2026-09-17）— `engine/climate.py ↔ map/climate_simulator.py`、
+   `engine/physical_inputs.py ↔ map/pipeline_types.py` 互引（未证实运行时循环
+   import 报错，但包名不可作依赖层次解释）；共享可写 mesh 分散五文件。修法：
+   公共契约（时间/物理输入/geometry identity/产物来源/运行状态）下沉低层，先做
+   气候一条切片（`simulate_climate` 显式状态 + 阶段输出），按变更频率拆、不做
+   全仓搬移。规模热点：terrain_synthesizer 2719 行 / climate_simulator 2677 行 /
+   tectonic_simulator 2024 行。归 M2 必要切片 + 远期。
+6. **spatialReference.ts ~5.4 万行生成观测数据内嵌**（FE-01，外部审计 2026-09-17）—
+   观测数组与采样代码耦合、多个显示组件直接导入；性能影响未实测（不先宣称瓶颈）。
+   修法：先测 bundle/加载耗时，再决定资产化 + 按需加载（数据保留版本/网格/来源
+   元信息）。归 M3。
+7. **API/静态导出/前端三件套手工同步、无一致性夹具**（CONTRACT-01，外部审计
+   2026-09-17）— 新增端点/字段需三处手抄（CLAUDE.md 已有纪律但无测试兜底）；
+   时间与 geometry 标识跨层使用无格式版本。修法：小型公共结果契约 + 格式版本 +
+   最小静态/API 一致性夹具。归 M3。
+8. **Guard 可靠性缺口**（GUARD-01，外部审计 2026-09-17 反例实锤）—
+   `stale.check_decision_records` 同指纹事实漂移漏检、`layer_input_fingerprint`
+   只扫 `*.yaml` 漏嵌套目录、`adr._CHECKED_LAYERS` 固定两层且基线路径用 world
+   root（分支共用）、`archive()` 按容量改 accepted→deprecated、缺产物时空清单
+   被展示为已验证。已列 §六 P1 行，此处登记债本体。
 ## 八、内部文档链接
 
 - `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
