@@ -193,8 +193,9 @@ nearly inviscid atmosphere*. JAS 37, 515–533。
    边界层，副热带边界层顶 ~850 hPa ≈ 1.5 km（标准大气）；更高地表与该层解耦（高原
    自身辐射平衡），且高地温度处理是独立登记项，门控不得暗中重调。
 
-释放为**逐月均匀平移**（t_mean/t_monthly/t_cold/t_hot 同减），季节振幅与暖冷半季月份
-排序不变。单趟近似：Stage 2-3 消费的是释放前温度。
+释放为**逐月均匀平移**（只作用月度序列；年温与 t_cold/t_hot 由终聚合
+t_mean = ⟨t_monthly⟩ 重新导出——单一温度权威），季节振幅与暖冷半季月份排序不变。
+单趟近似：Stage 2-3 消费的是释放前温度。
 
 源码：`climate_physics.py` 纯函数 `dryness_offset_mm` / `dryness_threshold_mm` /
 `potential_evapotranspiration_hamon` / `aridity_index_keep` / `subsidence_aridity_gate`
@@ -342,18 +343,21 @@ e-folding）。这决定 C（海洋性）vs D（大陆性）分野——伦敦 C
 ### 方向性海洋调节（东西向海陆不对称，4.1-B）
 
 季节 EBM 的辐射余弦在深内陆给出 ~2× 观测振幅（莫斯科冬 −25 vs 观测 −9），因为缺**东西向**
-海洋调节——盛行西风把海洋的小振幅季节循环送进内陆。修法是**方向性海洋调节**（`simulate_climate`
-Stage 2 后，`maritime_advection_scale_km`）：
+海洋调节——盛行西风把海洋的小振幅季节循环送进内陆。修法是**方向性海洋调节**，双孪生分工
+（`maritime_advection_scale_km`）：**年平版**（Stage 1，带冰门）把陆地年温向上风向海洋 SST
+弛豫，定年水平；**月度版**（`simulate_climate` Stage 2 后）为**距平式**——只把陆地季节距平
+向上风向海洋的距平阻尼，年均水平严格不变（水平弛豫会与年平版双重计费）：
 
 ```
-t_land[m] += exp(−dist_upwind / L) · (t_ocean_upwind[m] − t_land[m])
+A_land[m] ← (1−w)·A_land[m] + w·A_ocean[m],   w = exp(−dist_upwind / L)
+A[m] = t[m] − ⟨t⟩（季节距平；⟨⟩ = 年均，两条距平序列年均皆为零 ⇒ 保均值）
 ```
 
 - `dist_upwind`：沿**物理风**（`east_north_basis` 约定，与前端 `wind_east_m_s` 一致；原始
   `hadley_cell_wind` 的 `east = north × r̂` 指向物理西，需翻转 east 分量）逆推的上风向离岸距离；
 - L = 1500 km 海洋气团 e 折长度；
-- **非对称性自然涌现**：海洋季节振幅小，海陆温差冬季 ~30°C / 夏季 ~10°C，故松弛冬季暖 ~13°C、
-  夏季只冷 ~5°C——莫斯科冬 −25→−12 而夏仅 +2.8→−2.3。
+- **振幅阻尼自然涌现**：海洋季节距平远小于陆地（海洋热容量大），阻尼把陆地过负的冬距平与
+  过正的夏距平同时压向海洋形状——冬暖、夏凉、年均不变；深内陆与高地过大的季节振幅同向受益。
 - 遗留（§7 冬季季风）：annual 西风带把哈尔滨逆推到暖渤海 → 误暖 +12.5，真实冬季应由西伯利亚
   冷高压外流主导，待技术债 24 修方向。
 

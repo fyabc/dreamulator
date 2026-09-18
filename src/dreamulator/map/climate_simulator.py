@@ -552,15 +552,18 @@ def simulate_climate(
     t_monthly_C = seasonal["T_monthly"]
     itcz_lat_monthly = seasonal["itcz_lat"]
 
-    # ── B0c temperature data contract (2026-09-13): re-centre the monthly
-    # series onto the calibrated annual field.  The seasonal EBM solves its
-    # own radiative/heat-capacity cycle and has no elevation dimension, so
+    # ── B0c handoff (2026-09-13): anchor the monthly series to the
+    # calibrated annual field.  The seasonal EBM solves its own
+    # radiative/heat-capacity cycle and has no elevation dimension, so
     # highland cells sat at their sea-level-equivalent latitude temperature
     # (Andes 4 km: ⟨t_m⟩ +16 °C vs t_mean −3.3; Greenland 3 km: −11 vs −30)
     # — poisoning t_hot/t_cold → Köppen (only 9% of >4.5 km cells classified
     # E), monthly evaporation and the monthly display layer.  Keep the EBM's
     # seasonal *shape/amplitude*, take the *level* from the Stage-1 annual
-    # field (lapse, subsidence gate, coastal moderation, advection, SST):
+    # field (lapse, subsidence gate, coastal moderation, advection, SST).
+    # This is the one place where the annual chain sets the monthly level:
+    # downstream the monthly series is the authority, and the exported annual
+    # field is re-derived from it at the terminal aggregation (slice 6):
     t_monthly_C = t_monthly_C + (t_mean_C - t_monthly_C.mean(axis=1))[:, None]
     # Uniform per-cell shift ⇒ min/max re-derivation is the exact transform.
     t_cold_C = t_monthly_C.min(axis=1)
@@ -734,18 +737,21 @@ def simulate_climate(
         c.wind_east_m_s = float(_we[i])
         c.wind_north_m_s = float(_wn[i])
 
-    # ── 4.1-B: directional maritime moderation ──
-    # Relax each land cell's monthly temperature toward its *upwind* ocean's
-    # monthly temperature, decaying over the maritime air-mass e-folding length.
-    # The upwind ocean is traced against the *physical* annual wind — the
+    # ── 4.1-B: directional maritime moderation (anomaly form) ──
+    # Relax each land cell's seasonal *anomaly* toward its upwind ocean's
+    # anomaly, decaying over the maritime air-mass e-folding length.  The
+    # upwind ocean is traced against the *physical* annual wind — the
     # prevailing westerlies carry the ocean's small-amplitude seasonal cycle
-    # inland, so this warms the deep continental winter (Moscow ~-25 → ~-12 °C)
-    # while the ocean's own small amplitude keeps the summer cooling mild.  This
-    # is the "smart explicit preset" for the missing zonal maritime advection
-    # (SotE-style directional continentality), not a wind coupling: the annual
-    # circulation is a fixed advecting field, and the relaxation is one-pass (the
-    # monsoon above already used the unrelaxed temperature).  The remaining East
-    # Asian over-warm (Harbin) is the missing winter monsoon (tech debt 24).
+    # inland, so this warms the deep continental winter (Moscow-type) while
+    # the ocean's own small amplitude keeps the summer cooling mild.  The
+    # annual *level* is set by the Stage-1 4.1-B twin (ice-gated, pre-lapse),
+    # and the anomaly form preserves it exactly, so the terminal aggregation
+    # composes without double-counting the moderation.  This is the "smart
+    # explicit preset" for the missing zonal maritime advection (SotE-style
+    # directional continentality), not a wind coupling: the annual circulation
+    # is a fixed advecting field, and the relaxation is one-pass (the monsoon
+    # above already used the unrelaxed temperature).  The remaining East Asian
+    # over-warm (Harbin) is the missing winter monsoon (tech debt 24).
     if config.maritime_advection_scale_km > 0.0:
         # `wind` is already in the physical convention (tech debt 24 root
         # unification, 2026-09-13) — the former `-we·east + wn·north` flip
@@ -755,9 +761,29 @@ def simulate_climate(
         )
         _valid_up = is_land & (_src_up >= 0)
         _w_up = np.where(_valid_up, np.exp(-_dist_up / config.maritime_advection_scale_km), 0.0)
+        # Anomaly-form relaxation (twin reconciliation, 2026-09-19): blend the
+        # land *seasonal anomaly* toward the upwind ocean's anomaly instead of
+        # pulling the monthly level toward the ocean's monthly level.  Setting
+        # the annual level is Stage-1 4.1-B's job (ice-gated, applied before
+        # the lapse rate); a level pull here applies the same moderation a
+        # second time, and the terminal aggregation then pushes the double-
+        # count into the exported annual field (measured: mid-lat Dfb→Cfb /
+        # BSk→Dfa flips on Earth; nacrea polar coast +34 °C).  The anomaly
+        # form is mean-preserving by construction — both anomaly series
+        # average to zero over the year — so it keeps the shape effects
+        # (Moscow-type winter warming, the Arctic maritime-tundra summer
+        # cooling that anchors t_hot < 10 °C / ET, highland amplitude damping)
+        # without moving the annual level.
+        _src_idx = np.maximum(_src_up, 0)
+        _ann = t_monthly_C.mean(axis=1)  # ocean sources are never modified below
         for _m in range(12):
-            _t_src = np.where(_valid_up, t_monthly_C[np.maximum(_src_up, 0), _m], 0.0)
-            t_monthly_C[:, _m] += _w_up * (_t_src - t_monthly_C[:, _m])
+            _src_anom = t_monthly_C[_src_idx, _m] - _ann[_src_idx]
+            _land_anom = t_monthly_C[:, _m] - _ann
+            t_monthly_C[:, _m] = np.where(
+                _valid_up,
+                _ann + (1.0 - _w_up) * _land_anom + _w_up * _src_anom,
+                t_monthly_C[:, _m],
+            )
         t_cold_C = t_monthly_C.min(axis=1)
         t_hot_C = t_monthly_C.max(axis=1)
 
@@ -861,7 +887,8 @@ def simulate_climate(
                 # annual-mean SST; shift the monthly series by the same
                 # increment so the monthly evaporation / SST-gate consumers in
                 # Stage 3 see the same level (⟨t_monthly⟩ ≡ t_mean_C at every
-                # stage, not only at the final re-centre).
+                # synced stage; the terminal aggregation then re-derives the
+                # annual field from the monthly one — slice 6).
                 _dt_sst = sst_corrected - t_mean_C
                 t_mean_C = sst_corrected  # feeds into stage 3 (BFS evaporation) + stage 4 (Köppen)
                 t_monthly_C = t_monthly_C + _dt_sst[:, None]
@@ -1146,14 +1173,11 @@ def simulate_climate(
         _dt_undo = subsidence_aridity_gate(
             _dt_subsidence, p_annual, t_mean_C, p_warm_mm, p_cold_mm, _pet_annual, elevation_m
         )
-        t_mean_C -= _dt_undo
+        # Slice 6: the release acts on the monthly series only — the annual
+        # field, t_cold/t_hot and the seasonal-lake freeze clamp are all
+        # re-derived from it at the terminal aggregation, so no manual
+        # bookkeeping is needed here.
         t_monthly_C -= _dt_undo[:, None]
-        t_cold_C -= _dt_undo
-        t_hot_C -= _dt_undo
-        # Re-apply the seasonal-lake 0 °C freeze clamp after the shift.
-        if _seasonal_lake.any():
-            t_monthly_C[_seasonal_lake] = np.maximum(t_monthly_C[_seasonal_lake], 0.0)
-            t_cold_C[_seasonal_lake] = np.maximum(t_cold_C[_seasonal_lake], 0.0)
         _n_released = int((_dt_undo > 0.01).sum())
         if _n_released:
             _console.print(
@@ -1161,21 +1185,25 @@ def simulate_climate(
                 f"cells (max -{_dt_undo.max():.1f} C)[/dim]"
             )
 
-    # ── B0c contract enforcement (final, 2026-09-13): the 4.1-B monthly
-    # maritime relaxation, the Stage 2.5 gyre SST correction and the ocean→
-    # land anomaly advection each act on only one of the two temperature
-    # fields, so re-centre the monthly series onto the final annual field
-    # before storage: ⟨t_monthly⟩ ≡ t_mean_C for the exported pair (the same
-    # data contract as the wind — identity by construction, monthly primary).
-    # t_cold/t_hot are re-derived here, so Köppen and the cell write-back
-    # below consume the consistent pair.  The seasonal-lake 0 °C freeze clamp
-    # takes precedence over the identity (physical invariant, lake cells only).
-    t_monthly_C = t_monthly_C + (t_mean_C - t_monthly_C.mean(axis=1))[:, None]
-    t_cold_C = t_monthly_C.min(axis=1)
-    t_hot_C = t_monthly_C.max(axis=1)
+    # ── Single temperature authority (slice 6, astra rethinking §2.2 target
+    # architecture): the annual field is *derived* — the aggregation of the
+    # monthly series — instead of prescribing the monthly mean the way the
+    # retired B0c terminal re-centring did.  Downstream of the handoff, the
+    # corrections either keep the two fields level-aligned (Stage 2.5 ocean,
+    # Stage 3.5 subsidence release — CLIM-01) or act on the monthly series
+    # alone (4.1-B directional maritime relaxation, the seasonal-lake freeze
+    # clamp); the monthly-only physics now flows INTO the annual field rather
+    # than being erased from the monthly one by a compensating shift.  The
+    # lake clamp is applied *before* aggregating, so ⟨t_monthly⟩ ≡
+    # temperature_C holds exactly for the exported pair — including lake
+    # cells, where the old re-centre-then-clamp order broke it.  (The wind
+    # export already works this way: identity by construction, monthly
+    # primary.)
     if _seasonal_lake.any():
         t_monthly_C[_seasonal_lake] = np.maximum(t_monthly_C[_seasonal_lake], 0.0)
-        t_cold_C[_seasonal_lake] = np.maximum(t_cold_C[_seasonal_lake], 0.0)
+    t_mean_C = t_monthly_C.mean(axis=1)
+    t_cold_C = t_monthly_C.min(axis=1)
+    t_hot_C = t_monthly_C.max(axis=1)
 
     # Store the monthly climate arrays for the export stage (Phase 4 monthly
     # display).  These are *not* serialized to cvt_mesh.json — the full N×12

@@ -529,11 +529,11 @@ def test_annual_wind_is_vector_mean_of_monthly() -> None:
 
 
 def test_annual_temperature_is_mean_of_monthly() -> None:
-    """B0c data contract: ⟨t_monthly⟩ ≡ temperature_C, and t_hot/t_cold are
-    the monthly extremes.
+    """Single-authority contract (slice 6): temperature_C is *derived* as
+    ⟨t_monthly⟩, and t_hot/t_cold are the monthly extremes.
 
-    The seasonal EBM alone has no elevation dimension — before the
-    re-centring, highland cells' monthly series sat ~19 °C above the
+    The seasonal EBM alone has no elevation dimension — before the B0c
+    handoff, highland cells' monthly series sat ~19 °C above the
     lapse-corrected annual field (Andes 4 km), poisoning Köppen via t_hot.
     """
     from dreamulator.map.climate_simulator import simulate_climate
@@ -743,9 +743,10 @@ class TestConvectivePickupGateWiring:
 
 
 class TestMonthlyAnnualConsistency:
-    """CLIM-01 (2026-09-18): the exported monthly series stays aligned with the
-    annual field — ⟨t_monthly⟩ ≡ t_mean_C after every Stage-2.5 ocean
-    correction, not only at the final re-centre."""
+    """CLIM-01 (2026-09-18) + slice 6: the monthly series is the single
+    temperature authority — every Stage-2.5 ocean correction keeps
+    ⟨t_monthly⟩ ≡ t_mean_C, and the exported annual field is the terminal
+    aggregation of the monthly one (no re-centring)."""
 
     def test_monthly_mean_matches_annual(self) -> None:
         import numpy as np
@@ -780,6 +781,38 @@ class TestMonthlyAnnualConsistency:
             f"monthly mean drifted from annual by up to "
             f"{np.abs(mean_monthly - t_annual).max():.3f} °C"
         )
+
+    def test_seasonal_lake_freeze_clamp_keeps_identity(self) -> None:
+        """Slice 6: the lake 0 °C freeze clamp is applied *before* the
+        terminal aggregation, so lake cells satisfy ⟨t_monthly⟩ ≡
+        temperature_C exactly — the old re-centre-then-clamp order broke the
+        identity on every lake cell whose winter engaged the clamp."""
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        mesh = _build_lat_band_mesh(55.0, 24)
+        lakes = np.zeros(len(mesh.cells), dtype=bool)
+        for j, c in enumerate(mesh.cells):
+            if j % 3 == 0:
+                c.elevation = -50.0
+                c.crust_type = "oceanic"
+                c.water_class = "ocean"
+                c.is_lake = True
+                lakes[j] = True
+            else:
+                c.elevation = 200.0
+                c.crust_type = "continental"
+                c.water_class = "land"
+        simulate_climate(mesh, TerrainPipelineConfig())
+
+        t_m = np.asarray(mesh._t_monthly_c, dtype=np.float64)  # (N, 12) float32
+        t_ann = np.array([c.temperature_C for c in mesh.cells])
+        t_cold = np.array([c.temperature_coldest_month_C for c in mesh.cells])
+        # The clamp actually engaged somewhere — otherwise the clamp-before-
+        # aggregate ordering is not exercised.
+        assert (t_m[lakes].min(axis=1) == 0.0).any(), "freeze clamp never engaged"
+        # Identity holds on *all* cells, lakes included.
+        np.testing.assert_allclose(t_ann, t_m.mean(axis=1), atol=1e-3)
+        assert (t_cold[lakes] >= 0.0).all()
 
 
 class TestConvergenceSentinel:
