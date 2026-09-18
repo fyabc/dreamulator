@@ -7,14 +7,16 @@ contributions) that build artifacts do not store — see the diagnostic-cache
 plan in private/todos/today.md §二-E before adding one.
 
 Runs the climate engine on the Earth (climate-dev) mesh with the shared-physics
-validation config and records the additive precipitation terms (the mass-
-conserving moisture budget P=W/τ, the storm-track rainout modulation, and the
-sub-planet enhancement) before the multiplicative coastal/föhn factors and the
-final 11000 mm cap are applied.
+validation config and records the precipitation budget terms.  Since the
+CLIM-02 mechanism migration the orographic condensation, the coastal /
+sub-planet k_rain modulations and the cold-trap upwind routing all live inside
+the mass-conserving budget; the only post-budget step left is the convergence
+sentinel (per-cell annual cap α·k_rain·W_sat, a declared numerical
+stabilisation that warns when it bites).
 
-The check it answers (the "transport magnitude" lever): **is the global
-land-mean precipitation inflated by the 11000 mm cap?**  Reports the number/area
-of land cells pinned at the cap and the land-mean with those cells excluded.
+The check it answers: **does the convergence sentinel clip a material amount of
+land precipitation?**  Reports the number of clipped cells and the land-mean
+with and without them.
 
 Usage::
 
@@ -91,25 +93,33 @@ def main() -> None:
 
     final = debug["final"]
 
-    print("\n=== Precipitation budget (additive terms, mm/yr, before mult/cap) ===\n")
+    print("\n=== Precipitation budget terms (mm/yr) ===\n")
     for key, label in [
-        ("moisture_budget", "moisture budget P=W/tau"),
-        ("storm", "storm track"),
-        ("sub_planet", "sub-planet"),
+        ("moisture_budget", "budget P = k·W + P_oro + P_route"),
+        ("storm", "storm-track k_rain component"),
     ]:
         if key in debug:
             _report_field(label, debug[key], is_land)
+    if "soil_et_monthly" in debug:
+        _report_field("soil bucket ET", debug["soil_et_monthly"].sum(axis=1), is_land)
+        _report_field("soil bucket runoff", debug["soil_runoff_monthly"].sum(axis=1), is_land)
 
-    print("\n=== Check: does the 11000 mm cap inflate land-mean precip? ===\n")
+    print("\n=== Check: how much does the convergence sentinel clip? ===\n")
+    pre_cap = debug["pre_cap"]
+    clipped = pre_cap > final + 1e-6
     land_final = final[is_land]
-    at_cap = land_final >= 11000.0 - 1e-6
-    n_cap = int(at_cap.sum())
+    land_clip = clipped & is_land
+    n_clip = int(land_clip.sum())
     n_land = int(is_land.sum())
-    print(f"  land-mean precip (with cap)   : {np.mean(land_final):.1f} mm/yr")
-    print(f"  land-mean precip (excl cap)   : {np.mean(land_final[~at_cap]):.1f} mm/yr")
+    print(f"  land-mean precip (final)      : {np.mean(land_final):.1f} mm/yr")
+    if n_clip:
+        print(
+            f"  clipped-cell mean (pre-cap)   : {np.mean(pre_cap[land_clip]):.1f} mm/yr"
+        )
     print(f"  ocean-mean precip             : {np.mean(final[~is_land]):.1f} mm/yr")
     print(
-        f"  capped land cells             : {n_cap}/{n_land} ({100 * n_cap / max(n_land, 1):.1f}%)"
+        f"  sentinel-clipped land cells   : {n_clip}/{n_land} "
+        f"({100 * n_clip / max(n_land, 1):.1f}%)"
     )
 
     # Zonal precip in the tropics vs GPCP (informational)

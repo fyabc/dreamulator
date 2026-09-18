@@ -265,7 +265,7 @@ uv run pytest tests/validation/test_regression.py -m slow -v
 | `scripts/climate/diagnose_latitudinal_profile.py` | 5° 分带、海陆分离的纬向 T/P 剖面 vs ERA5/GPCP，逐带偏差表 + **形状(引擎) vs 幅度(参数)** 判读 | 判断纬向梯度形状对不对 |
 | `scripts/climate/diagnose_koppen_confusion.py` | 完整混淆矩阵 + 逐群 precision/recall/f1 + top 混淆对 + BWk/ET 调参目标验证 | 找出哪类 Köppen 最易错、错成哪类 |
 | `scripts/climate/diagnose_wind_divergence.py` | 风场辐合/辐散纬向剖面（产物=上次构建风场；`--rebuild`=解析重建，ITCZ/Hadley 边界可扫） | 定位风场/辐合带异常 |
-| `scripts/climate/diagnose_precip_budget.py` | 降水预算加法项分解（质量守恒水汽收支 P=W/τ + 风暴路径雨出率调制 + 次行星增强，均在海岸/Föhn 乘法因子与 11000 mm 封顶之前）+ 封顶截断检查 | 判断降水幅度由哪一项主导、封顶是否虚增陆均降水 |
+| `scripts/climate/diagnose_precip_budget.py` | 降水预算项分解（守恒预算 P = k·W + P_oro + P_route，地形凝结/海岸/向星调制/冷阱路由均在预算内核）+ 土壤桶 ET/径流 + 收敛哨兵裁剪检查 | 判断降水幅度由哪一项主导、哨兵裁剪是否实质 |
 
 **两种模式（2026-09-08 E-lite）**：前四个脚本**默认读构建产物**（`cvt_mesh.json`
 里已存的气候字段，秒级）——验证的是「上次构建」；加 `--rebuild` 先重跑气候引擎

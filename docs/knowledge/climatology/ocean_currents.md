@@ -136,10 +136,11 @@ dreamulator 的洋流 / 气候扩散都归结为「稀疏线性系统 A·x = b�
 - **Stommel 流函数**（`ocean_circulation.py:solve_ocean_gyre`）：
   β ∂ψ/∂x + R∇²ψ = curl(τ)/(ρ_w H)，算子**非对称**（β 平流项），CG 不适用，
   GMRES 是标准选择。
-- **图扩散**（BFS 水汽 `climate_simulator.py:_compute_precipitation_bfs` +
-  温度 anomaly 输送 `ocean_circulation.py:advect_temperature_anomaly`）：
+- **图扩散**（温度 anomaly 输送 `ocean_circulation.py:advect_temperature_anomaly`）：
   (I + αL) q = source，算子**对称正定**（对称化的 wind-biased graph Laplacian），
-  理论上可用 CG，但统一用 GMRES + 对角预处理以复用同一套求解管线。
+  理论上可用 CG，但用 GMRES + 对角预处理以复用同一套求解管线。水汽收支
+  （`climate_simulator.py:_solve_moisture_budget`）的迎风 + 扩散算子则是非对称
+  M-矩阵，用直接稀疏 LU（splu）精确求解。
 
 ### 数学
 

@@ -178,7 +178,10 @@ nearly inviscid atmosphere*. JAS 37, 515–533。
    - **UNEP 干旱度指数** `AI = P / PET`，PET 用 Hamon (1961) 温度法：
      `PET_day = 29.8 · N_h · e_s(T) / T_K`（mm/day；e_s = 0.6108·exp(17.27T/(T+237.3)) kPa，
      Magnus；N 取 12 h——年均昼长处处 12 h，门控只作用于 |lat| ≲ 38°，季节 N×T 协变
-     贡献 <5%）。参考值：20°C → ~2.86 mm/day ≈ 1045 mm/yr；27°C → ~1550 mm/yr。
+     贡献 <5%）。年累计取 days_per_month = 365.25/12（**参考年基**）——AI 的分子
+     （P，参考年率）与分母因此同窗，任何年长的世界都成立（时间基准约定见
+     `climate-pipeline.md` §1）。参考值：20°C → ~2.86 mm/day ≈ 1045 mm/yr；
+     27°C → ~1550 mm/yr。
      UNEP (1992) 分类：极旱 <0.05、干旱 0.05–0.2、半干旱 0.2–0.5、干半湿润 0.5–0.65、
      湿润 >0.65；keep 结点取 0.5 / 0.65（半干旱上界与湿润下界）。
    - **为什么需要 AI 第二判据**：引擎降水在**热下沉海岸系统性过湿**（下沉干燥缺参数化；
@@ -403,20 +406,44 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 
 ## 8. 降水与水循环
 
-### 总体结构（质量守恒水汽收支，2026-08 重推）
+### 总体结构（质量守恒水汽收支，2026-09 完整形式）
 
 降水是一个**质量守恒的柱水汽收支方程**（Held & Soden 2006 的 $P-E=-\nabla\cdot(W\vec u)$
-在雨出参数化下的形式）：
+在雨出参数化下的形式）。当前完整形式（CLIM-02 机制迁移后，实现细节见
+`climate-pipeline.md` §7）：
 
-$$\nabla\cdot(W\vec u) + \frac{W}{\tau} - \kappa\nabla^2 W = E,\qquad P = \frac{W}{\tau}$$
+$$\nabla\cdot\big((1-\varphi)\,W\vec u\big) + k_{rain}(\mathbf x)\,W - \nabla\cdot(\kappa\nabla W) = E$$
+
+$$P = k_{rain}(\mathbf x)\,W + P_{oro} + P_{route}$$
+
+各项含义：
 
 - $W$：柱水汽（可降水量，mm），全球均 ~25 mm（Trenberth & Smith 2005）。
-- $\tau$：水汽驻留时间 ≈ 9 天（Trenberth 1998；van der Ent & Tuinenburg 2016 复核）。
+- $\vec u$：地表风（m/s）；$E$：蒸发源（mm/yr，海洋格能量限制、陆地格土壤桶）。
+- $k_{rain}$：雨出率（1/yr），基底 $1/\tau$ 乘空间调制因子（风暴路径、SST 对流门、
+  海岸辐合、向星对流锚等）；$\tau$ = 水汽驻留时间 ≈ 9 天（Trenberth 1998；
+  van der Ent & Tuinenburg 2016 复核）。
 - $\kappa$：湍流扩散 ≈ 1e6 m²/s（大气涡旋扩散率，展宽 ITCZ 到观测 ~10° 雨带，
   扩散长度 $\sqrt{\kappa\tau}\approx 900$ km）。
-- **质量守恒由构造保证**：$\int P = \int E$（通量项全局对消），不再有「只落 30% 水汽」的
-  启发式因子。
-- 离散：CVT 图上迎风有限体积（边平均风速保证通量守恒）+ 图扩散，直接稀疏 LU 求解。
+- $\varphi$：**地形凝结份额**——空气跨上坡边抬升 $\Delta z$ 冷却 $\Gamma\Delta z$，
+  Clausius–Clapeyron 给出饱和比湿下降 $\varphi = 1-\exp(-\max(\Delta z - z_{LCL},0)/H_{cc})$，
+  其中 $H_{cc} = R_v T^2/(L_v\Gamma) \approx 2.0$–$2.6$ km 为抬升干燥尺度
+  （$R_v$ = 水汽气体常数 461 J/(kg·K)，$L_v$ = 凝结潜热 2.5×10⁶ J/kg，
+  $\Gamma$ = 湿绝热直减率），$z_{LCL}\approx 800$ m 为抬升凝结高度偏移
+  （未饱和气块在 LCL 之下不凝结，Smith 1979）。
+- $P_{oro}$：迎风地形凝结雨 = 各上坡入流边上 $\varphi\cdot|c|\cdot W_{上游}$ 之和
+  （$c$ 为边平流系数）；背风雨影由同一机制**涌现**（翻山气流已被削耗），
+  无需独立参数化。
+- $P_{route}$：冷阱路由雨——冷空气柱钳制在饱和值 $W_{sat}(T)$，被钳掉的雨出率
+  $k(W-W_{sat})^+$ 沿入流边按通量份额路由回上风暖格（这部分水汽本就在上游暖区
+  凝结）。
+
+- **质量守恒由构造保证**：通量项的全局对消残差恰为 $\sum P_{oro}$，冷阱截断量
+  经 $P_{route}$ 原额归还，故面积加权 $\sum A\,P = \sum A\,E$ 精确成立。唯一例外
+  是收敛哨兵（$\alpha\,k_{rain}\,W_{sat}$ 逐格年降水帽，数值稳定化类，咬合时
+  warning 并在构建账本中记账）。
+- 离散：CVT 图上迎风有限体积（边平均风速保证成对边通量反对称）+ 图扩散，
+  直接稀疏 LU 求解；地形衰减是边系数的乘法修正，保持线性。
 - **ITCZ / 副热带干带从 $\nabla\cdot(W\vec u)$ 自然涌现**——辐合处 $W$ 高 → $P$ 高，无纬度硬编码。
 
 ### 海洋蒸发（水汽源，能量限制）
@@ -430,8 +457,18 @@ evaporation = evaporation_base_mm × (1 + 0.03 × (SST − 15))   # mm/yr
 - `evaporation_base_mm` 默认 1000（15 °C 洋面年蒸发），标定使全球洋均蒸发 ≈ 1143 mm/yr
   （Trenberth 2009 实测）。~3%/°C 是能量限制响应（Trenberth 2009；Held & Soden 2006），
   非饱和水汽压的 ~7%/°C。
-- 陆地蒸散 = `_LAND_EVAPOTRANSPIRATION_FRACTION`（≈0.55）× 洋面速率，标定使全球陆均
-  蒸散 ≈ 490 mm/yr（Trenberth 2009 水量收支）。
+- **陆地蒸散 = 土壤水桶**（Manabe 1969 单层桶，`soil_bucket_monthly`）：储量 $S$
+  （mm，容量 $C$ = 根区有效持水量，默认 150 mm）逐月闭合
+  $P_m = E_m + R_m + \Delta S$，其中 $E_m = \min(E^{pot}_m,\ S + P_m)$ 为实际蒸散
+  （能量上限、水量约束），$R_m$ 为超过容量的溢流（径流/补给）。年度周期迭代至
+  **周期稳态**（年末储量 = 年初，$\sum \Delta S = 0$，故年尺度 $\sum P = \sum E + \sum R$）。
+  干湿季记忆由此涌现：湿季以潜在速率蒸散并充满储量，干季抽取储量维持蒸散。
+  桶的强迫 $P_m$ 来自第一遍月解（该遍陆地 ET 用 Budyko 曲线
+  $E = E_{pot}\cdot P/(E_{pot}+P)$ 估计），桶 ET 再驱动第二遍月解——截断两遍定点，
+  残差打印在构建日志。Budyko 曲线（Budyko 1974）保留两个角色：年解的水分限制
+  固定点、桶的初始化。陆地潜在蒸散率 = `_LAND_EVAPOTRANSPIRATION_FRACTION`
+  （≈0.55，土壤/植被相对开阔水面的削减）× 能量限制速率。全球陆均蒸散实测
+  ≈ 490 mm/yr（Trenberth 2009 水量收支）——桶方案下模型给出 ~500 mm/yr。
 
 ### 水汽输送（迎风平流 + 湍流扩散）
 
@@ -439,22 +476,33 @@ evaporation = evaporation_base_mm × (1 + 0.03 × (SST − 15))   # mm/yr
 湍流扩散项展宽 ITCZ。传播距离由 $L = u\tau$ 随风速自适配（慢自转风强 → 水汽穿透更远），
 分辨率无关（用 km 定义的物理量）。
 
-### 地形降水与雨影
+### 地形降水与雨影（预算内通量凝结，2026-09 机制迁移）
 
-- 迎风坡抬升：`rain = W_upwind × min(0.20 × elev_gain/1000, 0.9)`（每 1000m 抬升转换 20% 柱水汽）；
-- 雨影（背风坡）：降水 = 柱水汽 × 3%。
+地形雨与雨影是**同一个守恒机制的两面**：空气跨上坡边抬升时按 Clausius–Clapeyron
+凝结（份额 $\varphi$，公式见「总体结构」），凝结部分在迎风格雨出为 $P_{oro}$；
+翻过屏障的气流已被削耗，背风少雨**自然涌现**，无需独立的雨影参数化。早期的
+「迎风加法雨 + 背风乘法雨影」两处后处理已退役——它们各自破坏水量守恒
+（凭空加水 / 静默删水）。
 
-### 其他保留项（第一性）
+### 其他调制与守卫（全部在预算内核或账本内）
 
-- 斜压风暴路径、局地对流（暖陆地午后雷暴）、内陆干旱梯度、海岸不对称、Föhn 雨影、
-  热带底线、次行星半球强迫——详见 `climate-pipeline.md`。
+- $k_{rain}$ 空间调制：斜压风暴路径增强、§5-α SST 对流门、§5-β 对流临界门
+  （默认关）、海岸不对称辐合（切片 3）、向星对流锚（切片 4，潮汐锁定世界）——
+  均为乘法调制，任意调制场下守恒保持。
+- 收敛哨兵：逐格年降水帽 $\alpha\,k_{rain}\,W_{sat}(\max(T,0^\circ C))$（α=8，
+  数值稳定化类），咬合时 warning + 账本记账。
+- 详见 `climate-pipeline.md` §7。
 
 ### 对应源码
 
 ```
-dreamulator.map.climate_simulator._compute_precipitation_bfs   # 水汽收支 + 地形 + 保留项
-dreamulator.map.climate_simulator._solve_moisture_budget       # 质量守恒水汽收支求解
-dreamulator.engine.climate_physics.evaporation_rate            # 能量限制蒸发
+dreamulator.map.climate_simulator._compute_precipitation_monthly_budget  # 月度预算编排 + 账本
+dreamulator.map.climate_simulator._solve_moisture_budget                 # 守恒求解器（含 φ 衰减）
+dreamulator.map.climate_simulator._apply_cold_trap                       # 饱和钳制 + 上风路由
+dreamulator.map.climate_simulator._convergence_sentinel                  # 收敛哨兵
+dreamulator.engine.climate_physics.cc_lift_drying_scale                  # H_cc 抬升干燥尺度
+dreamulator.engine.climate_physics.soil_bucket_monthly                   # 土壤水桶（周期稳态）
+dreamulator.engine.climate_physics.evaporation_rate                      # 能量限制蒸发
 ```
 
 ---
@@ -465,6 +513,9 @@ dreamulator.engine.climate_physics.evaporation_rate            # 能量限制蒸
   energy balance model calculations of climate and climate sensitivity." *J. Atmos. Sci.* 36, 1189.
 - Budyko, M.I. (1969). "The effect of solar radiation variations on the climate of the Earth."
   *Tellus* 21, 611（线性 OLR $I = A + B T$ 的出处）.
+- Manabe, S. (1969). "Climate and the ocean circulation: 1. The atmospheric
+  circulation and the hydrology of the Earth's surface." *Mon. Wea. Rev.* 97,
+  739–774（单层土壤水桶 $E = \min(E_{pot}, S+P)$ 的出处）.
 - Kaspi, Y., & Showman, A.P. (2015). "Atmospheric dynamics of terrestrial exoplanets over a
   wide range of orbital and atmospheric parameters." *ApJ* 804:60（$\Delta T \propto \Omega^{0.3}$ 标度）.
 - Shields, A.L., Bitz, C.M., Meadows, V.S., Joshi, M.M., & Robinson, T.D. (2012). "The effect of

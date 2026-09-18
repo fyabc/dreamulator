@@ -2,13 +2,13 @@
 
 ## 已有文档
 
-- `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、副热带下沉增温及其干燥度门控（Hamon PET + UNEP AI）、季节 EBM、质量守恒水汽收支
+- `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、副热带下沉增温及其干燥度门控（Hamon PET + UNEP AI）、季节 EBM、质量守恒水汽收支（完整方程：地形凝结 φ 衰减 + 冷阱上风路由 + 收敛哨兵）、土壤水桶（Manabe 1969，周期稳态）
 - `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
 - `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（位温 θ）、季风边界层风 + 标定锚点、跨赤道季风西风带（2026-08 自实现反写 + 季风 f→0 教训）
 - `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
 - `climate_classification_comparison.md` — 四大分类体系比较（Köppen / Trewartha / Thornthwaite / Holdridge）与 dreamulator 适配建议（2026-08）
 - `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学、ENSO 类振荡（3A.3 科学底座）
-- `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水、内陆干旱梯度（2026-08 自实现反写 + 低温骤降修复）
+- `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
 
 ## 规划中的文档
 

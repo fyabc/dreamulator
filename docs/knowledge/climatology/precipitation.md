@@ -1,8 +1,9 @@
 # 降水：水汽输送、相态与地形效应
 
-> 为 dreamulator 气候引擎的降水模块提供参考。降水由质量守恒水汽收支（`climate_simulator.py:_solve_moisture_budget`）
-> + 地形效应（翻山雨影/Föhn）+ 相态（雨/雪）转换构成。本文档补记降水相态与
-> 低温降水（雪）的科学底座，以及 2026-08-13 发现的一处低温降水骤降 bug。
+> 为 dreamulator 气候引擎的降水模块提供参考。降水由质量守恒水汽收支
+> （`climate_simulator.py:_solve_moisture_budget`，公式与各项含义见
+> `energy_balance.md` §8）+ 预算内的地形抬升凝结（本文 §三）+ 相态（雨/雪）
+> 转换构成。本文档收录降水相态、低温降水与地形降水的科学底座。
 
 ---
 
@@ -14,7 +15,7 @@ $$
 \frac{1}{e_s}\frac{de_s}{dT} = \frac{L_v}{R_v T^2}
 $$
 
-- 积分近似（**Magnus 公式**，引擎 `climate_simulator.py:985` 采用）：$e_s = 611.2\cdot\exp\!\left(\frac{17.67\,T}{T+243.5}\right)$，$T$ 为 °C。
+- 积分近似（**Magnus 公式**，引擎的海岸辐合与饱和比湿计算采用）：$e_s = 611.2\cdot\exp\!\left(\frac{17.67\,T}{T+243.5}\right)$，$T$ 为 °C。
 - **每升温 1°C，$e_s$ 增加约 6–7%**——这是"暖湿 / 冷干"的根本来源。
 - **三相点（0°C）$e_s = 611.2$ Pa，不为 0**；冰面饱和水汽压略低于过冷液态水（混合云中冰晶增长、液滴蒸发，是温带降水的微物理引擎）。
 - 比湿 $q = 0.622\,e_s/P$（$P$ 为气压）。
@@ -38,32 +39,46 @@ $$
 
 ---
 
-## 三、内陆干旱梯度与沿海增强（引擎实现）
+## 三、地形降水与雨影（抬升凝结）
 
-`climate_simulator.py` Step 6.5–6.6 建模"离海洋越远越干"：
+湿润空气被迫沿迎风坡抬升时按（湿）绝热直减率冷却，饱和比湿随
+Clausius–Clapeyron 关系（§一）指数下降，多余的水汽凝结成云并降落——这是
+**地形降水**；气流越过山脊后下沉增温、相对湿度下降，背风侧因此干燥，即
+**雨影**。两者是同一个抬升凝结机制的两面，不是两条独立规则。
 
-- **内陆干旱梯度**：离海岸图距离 $d$ 超过阈值后，$P\propto\exp(-(d-\text{threshold})/e_{\text{fold}})$，
-  其中 $e_{\text{fold}}\propto u\cdot(q_{sat}/q_{ref})$（风速 × 湿度标度）。
-- **沿海增强**：向岸风携带海洋水汽 → 沿海 cell 降水增强，$f\in[0.5,1.5]$。
+**抬升凝结份额**。气块抬升 $\Delta z$ 冷却 $\Gamma\Delta z$（$\Gamma$ = 直减率，
+°C/km），由 CC 关系可推出饱和比湿的相对下降为指数形式：
 
----
+$$\frac{q_{sat}(T-\Gamma\Delta z)}{q_{sat}(T)} = \exp(-\Delta z / H_{cc}),\qquad
+H_{cc} = \frac{R_v T^2}{L_v\,\Gamma}$$
 
-## 四、修复记录（2026-08-13）
+其中 $H_{cc}$ 称**抬升干燥尺度**（热带约 2.0–2.6 km；$R_v$ = 水汽气体常数
+461 J/(kg·K)，$L_v$ = 凝结潜热 2.5×10⁶ J/kg，$T$ 以 K 计）。凝结份额
+$\varphi = 1-\exp(-\Delta z/H_{cc})$：抬升 1 km 约凝结 35%、2 km 约 57%。
+凝结出的云水并不全部落地为雨——相当部分被输往下游或在云下再蒸发，
+**降水效率**实测约 10–50%（Houze 2012），与风速、云微物理过程和地形宽度
+有关（空气越过山脉的滞留时间短则效率低；线性理论的完整处理见 Smith 1979，
+降水对地形强迫的敏感性标度见 Roe et al. 2002）。
 
-**现象**：#20243（沿海 1 跳，52.93°N，4.6°C）降水 1114 mm，邻接的 #19866
-（内陆 2 跳，53.14°N，−0.3°C）降水仅 5 mm——一格 ~50 km 内骤降 99.5%。
+**抬升凝结高度（LCL）**。未饱和空气要先抬升到 LCL 才开始凝结，LCL 之下
+凝结量为零。工程近似 $z_{LCL} \approx 125\,(T - T_d)$ 米（$T$、$T_d$ 分别为
+干球与露点温度，°C；Lawrence 2005）；月均相对湿度 ~75% 对应约 800 m。
 
-**根因**（日志定位）：骤降主因是 Step 6.5 内陆干旱的
-`e_fold = 800·(u/5)·(q_sat/q_ref)`——把湿度 `q_sat` 错误地耦合进"传输距离"。
-低温（−0.3°C，q_sat/q_ref≈0.35）+ 弱风（u=1）叠加，e_fold 从参考 800 km 骤减
-到 56 km，离海岸 246 km 的冻原内陆被衰减 97.7%。沿海增强（Step 6.6）几乎无贡献
-（弱风下 factor≈1.01）。
+**引擎实现**（CLIM-02 机制迁移后）：地形凝结在水汽预算求解器内完成——每条
+上坡有向边的入流系数按 $(1-\varphi)$ 衰减，$\varphi =
+1-\exp(-\max(\Delta z - z_{LCL},0)/H_{cc})$；$\Delta z$ 取海平面基准的地形差
+（$\max(\text{elev},0)$——气柱在海面上贴海面行走，洋底深度不构成抬升），
+凝结份额在迎风格雨出为 $P_{oro}$，背风雨影由通量亏缺自然涌现。全程质量守恒：
+衰减掉的就是雨出的，雨出的全部来自通量。早期的「迎风加法雨 + 背风乘法雨影」
+两处后处理（分别凭空造水与静默删水）已退役。
 
-**修复**：`e_fold` 和 `threshold` 去掉 `q_sat` 依赖，改为只随风速：
-`e_fold = 800·(u/5)`、`threshold = 500·(u/5)`。物理依据：**传输距离 ∝ 风速**
-（风把水汽吹多远），湿度影响的是水汽**量**（经蒸发体现），而非传输**距离**。
-
-**效果**：#19866 从 5 mm 恢复到 ~89 mm（冻原量级），骤降从 200 倍降到 ~26 倍。
+**海岸辐合**（引擎 `_coastal_rainout_factor`）：向岸风携带海洋水汽，海岸格
+辐合抬升使局地雨出效率升高、离岸（陆地源）风使之降低。调制量纲来自水汽
+通量 $f = 1 \pm \varepsilon\,\rho_{air}|U|\,q_{sat}(T)\,s_{yr}/P_{bg}$
+（$\rho_{air}$ = 空气密度 1.2 kg/m³，$U$ = 纬向风，$q_{sat}$ = 饱和比湿，
+$s_{yr}$ = 参考年秒数，$P_{bg}$ = 1000 mm/yr 参考背景，$\varepsilon$ = 海岸
+降水效率系数——观测拟合类常数，迎风 1.3×10⁻⁴ / 背风 0.8×10⁻⁴），作为
+$k_{rain}$ 的乘法调制进入预算（守恒），不再直接乘在最终降水上。
 
 ---
 
@@ -121,6 +136,15 @@ k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——�
 
 ## 参考来源
 
+- Smith, R.B. (1979). "The influence of mountains on the atmosphere."
+  *Advances in Geophysics* 21, 87–230.（地形降水线性理论）
+- Houze, R.A. (2012). "Orographic effects on precipitating clouds."
+  *Reviews of Geophysics* 50, RG1001.（降水效率 10–50% 及云物理机制综述）
+- Roe, G.H., Montgomery, D.R., & Hallet, B. (2002). "Precipitation sensitivity
+  to topographic forcing: Theory and observations." *JGR* 107(D21), 4585.
+- Lawrence, M.G. (2005). "The relationship between relative humidity and the
+  dewpoint temperature in moist air: A simple conversion and applications."
+  *BAMS* 86, 225–233.（z_LCL ≈ 125(T−T_d) 近似）
 - Peters, O., & Neelin, J.D. (2006). "Critical phenomena in atmospheric
   precipitation." *Nature Physics 2*, 393–396.
 - Neelin, J.D., Peters, O., & Hales, K. (2009). "The transition to strong
@@ -151,6 +175,7 @@ k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——�
 
 ## 相关文档
 
-- `energy_balance.md` — 温度（降水相态与 q_sat 的输入）
-- `atmospheric_circulation.md` — 风场（水汽输送 + 沿海增强的驱动力）
+- `energy_balance.md` §8 — 质量守恒水汽收支的完整方程与各项含义、土壤水桶、
+  冷阱路由、收敛哨兵；温度（降水相态与 q_sat 的输入）
+- `atmospheric_circulation.md` — 风场（水汽输送 + 海岸辐合的驱动力）
 - `koppen_classification.md` — 降水阈值（Köppen 分类输入）
