@@ -533,6 +533,13 @@ class TerrainPipelineConfig:
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
+    # Soil-water bucket (CLIM-02 bucket, astra §2.3): land ET draws on a
+    # finite store with cross-month memory instead of the memoryless monthly
+    # Budyko estimate.  Capacity = root-zone available water (an author-facing
+    # world parameter; default = Manabe 1969's canonical 150 mm).  Snow store
+    # is out of scope in v1 (all P enters as liquid).
+    soil_bucket_enabled: bool = True
+    soil_water_capacity_mm: float = 150.0
     # Mid-latitude storm-track amplitude (baroclinic cyclones), mm/yr at Earth
     # calibration (∇T=45°C, Ω=1, evap=1000).  The actual amplitude scales with
     # ∇T × Ω^0.3 × evap (see _compute_precipitation_monthly_budget).  Set to 0

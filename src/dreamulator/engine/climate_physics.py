@@ -1063,6 +1063,92 @@ def potential_evapotranspiration_hamon(
     return np.asarray(pet_day.sum(axis=-1) * days_per_month)
 
 
+def soil_bucket_monthly(
+    p_monthly: np.ndarray,
+    e_pot_monthly: np.ndarray,
+    capacity_mm: float,
+    *,
+    s_init_mm: float | np.ndarray | None = None,
+    max_cycles: int = 100,
+    tol_mm: float = 0.05,
+) -> tuple[np.ndarray, np.ndarray, int, float]:
+    """Single-layer soil-water bucket at periodic steady state (Manabe 1969).
+
+    Closes the monthly land water balance with a finite store (astra
+    rethinking §2.3/§5.1: ``dS/dt = P − E − R``; the former Budyko-on-annual-P
+    closure had no cross-month memory, so a dry season following a wet season
+    evaporated at its climatological potential instead of drawing down the
+    stored water — and a wet season's surplus never carried over).
+
+    Per month, per cell (all quantities mm per month on the shared
+    reference-month basis)::
+
+        avail = S + P_m                 # store plus this month's input
+        E_m   = min(E_pot_m, avail)     # energy-limited, water-capped
+        S'    = avail − E_m
+        R_m   = max(0, S' − C)          # runoff/drainage overflow
+        S     = min(S', C)
+
+    Exact per-cell monthly balance: ``P_m = E_m + R_m + ΔS``.  The annual
+    cycle is iterated until the store closes on itself (``max|ΔS_cycle| <
+    tol``) — the periodic steady state, so the reported year has ``ΣΔS = 0``
+    and ``ΣP = ΣE + ΣR``.
+
+    No snow store in v1: all precipitation enters the bucket as liquid (a
+    documented limitation where seasonal snowpack matters; the snow regime
+    is a separate closure hypothesis).  Epistemic class (discipline #9):
+    the scheme is a conservation-law discretisation; *capacity* is an
+    author-facing world parameter (root-zone available water), default =
+    Manabe's canonical 150 mm.
+
+    Args:
+        p_monthly: Precipitation, shape (N, 12), mm per month.
+        e_pot_monthly: Potential evapotranspiration, shape (N, 12), mm/month.
+        capacity_mm: Bucket capacity C (mm), > 0.
+        s_init_mm: Initial store (scalar or (N,)); default = capacity/2
+            (a neutral start; the periodic iteration removes the dependence).
+        max_cycles: Cap on 12-month iterations (truncated iteration is
+            reported via the returned residual, never silently converged).
+        tol_mm: Convergence tolerance on max |ΔS| per cycle.
+
+    Returns:
+        (e_monthly, runoff_monthly, cycles, max_delta_s): actual
+        evapotranspiration and runoff (N, 12) mm/month, cycles run, and the
+        final cycle's max store change (convergence residual).
+    """
+    p = np.asarray(p_monthly, dtype=np.float64)
+    e_pot = np.asarray(e_pot_monthly, dtype=np.float64)
+    if p.shape != e_pot.shape:
+        raise ValueError(f"shape mismatch: P {p.shape} vs E_pot {e_pot.shape}")
+    if capacity_mm <= 0.0:
+        raise ValueError(f"capacity_mm must be > 0, got {capacity_mm}")
+
+    n = p.shape[0]
+    if s_init_mm is None:
+        s = np.full(n, capacity_mm / 2.0)
+    else:
+        s = np.broadcast_to(np.asarray(s_init_mm, dtype=np.float64), (n,)).copy()
+
+    e_out = np.zeros_like(p)
+    r_out = np.zeros_like(p)
+    max_ds = float("inf")
+    cycles = 0
+    while cycles < max_cycles:
+        cycles += 1
+        s_start = s.copy()
+        for m in range(p.shape[1]):
+            avail = s + np.maximum(p[:, m], 0.0)
+            e_m = np.minimum(e_pot[:, m], avail)
+            s_new = avail - e_m
+            r_out[:, m] = np.maximum(s_new - capacity_mm, 0.0)
+            s = np.minimum(s_new, capacity_mm)
+            e_out[:, m] = e_m
+        max_ds = float(np.abs(s - s_start).max()) if n else 0.0
+        if max_ds < tol_mm:
+            break
+    return e_out, r_out, cycles, max_ds
+
+
 def aridity_index_keep(
     p_annual_mm: np.ndarray,
     pet_annual_mm: np.ndarray,

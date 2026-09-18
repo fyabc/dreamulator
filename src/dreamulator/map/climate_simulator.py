@@ -37,6 +37,7 @@ from dreamulator.engine.climate_physics import (
     latitude_temperature,
     moist_lapse_rate,
     potential_evapotranspiration_hamon,
+    soil_bucket_monthly,
     spectral_ice_albedo,
     sst_convection_gate,
     subsidence_aridity_gate,
@@ -2660,89 +2661,151 @@ def _compute_precipitation_monthly_budget(
         debug["land_epot"] = _e_pot_ann.copy()
         debug["land_et"] = _e_land_ann.copy()
 
-    p_monthly = np.zeros((n, 12), dtype=np.float64)
-    _dbg_storm = np.zeros(n)
-    _dbg_pickup = np.ones(n)
-    _dbg_w_final = np.zeros(n)
-
     # CLIM-02 (2026-09-18): per-stage area-weighted water ledger — quantify how
     # much each post-budget mechanism adds/removes, exposing the ΣP = ΣE
     # residual that the budget core guarantees (including the orographic
-    # condensation, in-solver since slice 1) but the coastal / sub-planet /
-    # cap post-processing breaks.  Area-weighted (Σ P·A in mm·km²/yr) so a
-    # huge wet ocean cell counts proportionally.
+    # condensation, in-solver since slice 1) but the sub-planet / sentinel
+    # post-processing breaks.  Area-weighted (Σ P·A in mm·km²/yr) so a huge
+    # wet ocean cell counts proportionally.
     _area_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
-    _ledger_core = 0.0  # budget core (cold-trap + orographic condensation) Σ P·A
 
-    for m in range(12):
-        t_m = t_monthly_c[:, m]
-        # Monthly land ET: energy limitation from that month's temperature,
-        # water limitation from the annual precipitation (soil moisture
-        # integrates the annual water input, not a single month's).
-        _e_pot_m = evaporation_rate(t_m, is_land, config.evaporation_base_mm)
-        _e_land_m = _e_pot_m * p_ann / (_e_pot_m + p_ann + 1e-9)
-        if _gate_monthly is not None:
-            _rain_m = (1.0 + _storm_enhance) * _gate_monthly[:, m] - 1.0
-        else:
-            _rain_m = _storm_enhance
-        if omega_gate_monthly is not None:
-            _rain_m = (1.0 + _rain_m) * omega_gate_monthly[:, m] - 1.0
-        _rain_m = (1.0 + _rain_m) * _coastal_k - 1.0  # CLIM-02 slice 3
-        _rain_m = (1.0 + _rain_m) * _sub_k - 1.0  # CLIM-02 slice 4
-        w_m, p_m = _solve_moisture_budget(
-            mesh,
-            wind_monthly[m],
-            is_ocean,
-            t_m,
-            nodes_xyz,
-            config,
-            rainout_enhancement=_rain_m,
-            diffusivity_enhancement=_eddy_enhance,
-            edge_table=(src, dst),
-            land_evapotranspiration=_e_land_m,
+    def _monthly_pass(
+        e_land_rate: np.ndarray | None,
+    ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray]:
+        """Run the 12 monthly budget solves.
+
+        Args:
+            e_land_rate: (n, 12) land evapotranspiration in mm/yr per month
+                (the solver's rate basis); ``None`` → the memoryless Budyko
+                estimate from that month's temperature + the annual P.
+
+        Returns:
+            (p_monthly mm/month, ledger core ΣP·A, storm debug, W debug,
+            pickup-gate debug).
+        """
+        p_out = np.zeros((n, 12), dtype=np.float64)
+        dbg_storm = np.zeros(n)
+        dbg_pickup = np.ones(n)
+        dbg_w = np.zeros(n)
+        ledger = 0.0
+        for m in range(12):
+            t_m = t_monthly_c[:, m]
+            if e_land_rate is None:
+                # Monthly land ET: energy limitation from that month's
+                # temperature, water limitation from the annual precipitation
+                # (soil moisture integrates the annual water input, not a
+                # single month's) — the bucket pass below replaces this.
+                _e_pot_m = evaporation_rate(t_m, is_land, config.evaporation_base_mm)
+                _e_land_m = _e_pot_m * p_ann / (_e_pot_m + p_ann + 1e-9)
+            else:
+                _e_land_m = e_land_rate[:, m]
+            if _gate_monthly is not None:
+                _rain_m = (1.0 + _storm_enhance) * _gate_monthly[:, m] - 1.0
+            else:
+                _rain_m = _storm_enhance
+            if omega_gate_monthly is not None:
+                _rain_m = (1.0 + _rain_m) * omega_gate_monthly[:, m] - 1.0
+            _rain_m = (1.0 + _rain_m) * _coastal_k - 1.0  # CLIM-02 slice 3
+            _rain_m = (1.0 + _rain_m) * _sub_k - 1.0  # CLIM-02 slice 4
+            w_m, p_m = _solve_moisture_budget(
+                mesh,
+                wind_monthly[m],
+                is_ocean,
+                t_m,
+                nodes_xyz,
+                config,
+                rainout_enhancement=_rain_m,
+                diffusivity_enhancement=_eddy_enhance,
+                edge_table=(src, dst),
+                land_evapotranspiration=_e_land_m,
+            )
+            # §5-β monthly iterate-twice: this month's pass-1 column water sets
+            # the gate (monthly responsiveness — the July Sahel column is
+            # convectively viable while the annual mean is not), the month is
+            # re-solved, and the gate is recomputed at the re-balanced column
+            # (self-release — see the annual block).  The orographic step below
+            # consumes the re-solved w_m automatically.
+            if config.convective_pickup_gate_enabled:
+                _pickup_m = convective_pickup_gate(w_m, t_m)
+                w_m, p_m = _solve_moisture_budget(
+                    mesh,
+                    wind_monthly[m],
+                    is_ocean,
+                    t_m,
+                    nodes_xyz,
+                    config,
+                    rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
+                    diffusivity_enhancement=_eddy_enhance,
+                    edge_table=(src, dst),
+                    land_evapotranspiration=_e_land_m,
+                )
+                _pickup_m = convective_pickup_gate(w_m, t_m)
+                w_m, p_m = _solve_moisture_budget(
+                    mesh,
+                    wind_monthly[m],
+                    is_ocean,
+                    t_m,
+                    nodes_xyz,
+                    config,
+                    rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
+                    diffusivity_enhancement=_eddy_enhance,
+                    edge_table=(src, dst),
+                    land_evapotranspiration=_e_land_m,
+                )
+                dbg_pickup *= _pickup_m
+
+            # p_m already includes the orographic condensation (in-solver flux
+            # sink, CLIM-02 slice 1) — the former post-budget add-on is gone.
+            p_out[:, m] = p_m / 12.0
+            ledger += float((p_m * _area_km2).sum() / 12.0)
+            dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
+            dbg_w += w_m / 12.0
+        return p_out, ledger, dbg_storm, dbg_w, dbg_pickup
+
+    # Pass 1: memoryless Budyko land ET (also the bucket's P forcing source).
+    p_monthly, _ledger_core, _dbg_storm, _dbg_w_final, _dbg_pickup = _monthly_pass(None)
+
+    # ── Soil-water bucket (CLIM-02, astra §2.3): cross-month store replaces
+    # the memoryless monthly Budyko estimate.  Pass-1 precipitation forces the
+    # bucket to its periodic steady state; the resulting ET re-drives the 12
+    # monthly solves (pass 2).  A truncated two-pass fixed point — the ΔE
+    # residual between the bucket runs is reported, not iterated away (the
+    # full T↔P coupling belongs to steady-coupling, not here).
+    if config.soil_bucket_enabled and is_land.any():
+        _e_pot_mo = np.stack(
+            [
+                evaporation_rate(t_monthly_c[:, m], is_land, config.evaporation_base_mm) / 12.0
+                for m in range(12)
+            ],
+            axis=1,
         )
-        # §5-β monthly iterate-twice: this month's pass-1 column water sets
-        # the gate (monthly responsiveness — the July Sahel column is
-        # convectively viable while the annual mean is not), the month is
-        # re-solved, and the gate is recomputed at the re-balanced column
-        # (self-release — see the annual block).  The orographic step below
-        # consumes the re-solved w_m automatically.
-        if config.convective_pickup_gate_enabled:
-            _pickup_m = convective_pickup_gate(w_m, t_m)
-            w_m, p_m = _solve_moisture_budget(
-                mesh,
-                wind_monthly[m],
-                is_ocean,
-                t_m,
-                nodes_xyz,
-                config,
-                rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
-                diffusivity_enhancement=_eddy_enhance,
-                edge_table=(src, dst),
-                land_evapotranspiration=_e_land_m,
-            )
-            _pickup_m = convective_pickup_gate(w_m, t_m)
-            w_m, p_m = _solve_moisture_budget(
-                mesh,
-                wind_monthly[m],
-                is_ocean,
-                t_m,
-                nodes_xyz,
-                config,
-                rainout_enhancement=(1.0 + _rain_m) * _pickup_m - 1.0,
-                diffusivity_enhancement=_eddy_enhance,
-                edge_table=(src, dst),
-                land_evapotranspiration=_e_land_m,
-            )
-            _dbg_pickup *= _pickup_m
-
-        # p_m already includes the orographic condensation (in-solver flux
-        # sink, CLIM-02 slice 1) — the former post-budget add-on is gone.
-        p_monthly[:, m] = p_m / 12.0
-
-        _ledger_core += float((p_m * _area_km2).sum() / 12.0)
-        _dbg_storm += (w_m * _k_base * _storm_enhance) / 12.0
-        _dbg_w_final += w_m / 12.0
+        _e_bud, _r_bud, _cycles, _ds = soil_bucket_monthly(
+            p_monthly, _e_pot_mo, config.soil_water_capacity_mm
+        )
+        p_monthly, _ledger_core, _dbg_storm, _dbg_w_final, _dbg_pickup = _monthly_pass(
+            _e_bud * 12.0
+        )
+        # Truncated-iteration diagnostic: re-run the bucket on pass-2 P.
+        _e_bud2, _r_bud2, _c2, _ds2 = soil_bucket_monthly(
+            p_monthly, _e_pot_mo, config.soil_water_capacity_mm
+        )
+        _dE_land = float(np.abs(_e_bud2 - _e_bud)[is_land].max()) * 12.0
+        _e_budyko_mo = (
+            _e_pot_mo * 12.0 * p_ann[:, None] / (_e_pot_mo * 12.0 + p_ann[:, None] + 1e-9)
+        )
+        # Bucket output is mm/month → sum over months = mm/yr; the Budyko
+        # comparison is an annual *rate* per month → mean over months.
+        _et_bucket = float(_e_bud[is_land].sum(axis=1).mean())
+        _et_budyko = float(_e_budyko_mo[is_land].mean(axis=1).mean())
+        _console.print(
+            f"  [dim]soil bucket: C={config.soil_water_capacity_mm:.0f} mm, "
+            f"steady in {_cycles} cycle(s) (residual {_ds:.3f} mm); land-mean ET "
+            f"{_et_bucket:.0f} mm/yr (Budyko {_et_budyko:.0f}); truncated pass-2 "
+            f"ΔE max {_dE_land:.1f} mm/yr[/dim]"
+        )
+        if debug is not None:
+            debug["soil_et_monthly"] = (_e_bud2 * 12.0).copy()
+            debug["soil_runoff_monthly"] = (_r_bud2 * 12.0).copy()
 
     if debug is not None:
         debug["moisture_budget"] = p_monthly.sum(axis=1).copy()
