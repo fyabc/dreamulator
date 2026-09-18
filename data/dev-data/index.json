@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "schema_version": 1,
+      "role": "terrain-base",
+      "world": "earth",
+      "planet_id": "planet_earth",
+      "input_fingerprint": "30d5865ea6e9ffde6f5d1e4112324d79df0b2c453be3a611644890692612c48d",
+      "mesh_format_version": 1,
+      "tag": "dev-data",
+      "asset_name": "earth-terrain-base-30d5865ea6e9.tar.gz",
+      "package_sha256": "7de487e21974498ad29d76d934dff53b3042050fd0db1380df318e89dfe06b23",
+      "manifest_sha256": "04a73cbf679f3f26f7796927ff9f39768d619524b2938c97af8535ac0468ee4c",
+      "size_bytes": 51210789,
+      "recipe": {
+        "provider": "etopo1",
+        "dataset": "etopo1_ice_surface_grid_registered",
+        "resolution_w": 4096,
+        "resolution_h": 2048,
+        "mesh_nodes": 200000,
+        "seed": 42,
+        "importer_version": 1
+      }
+    }
+  ]
+}

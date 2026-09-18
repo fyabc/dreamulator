@@ -206,6 +206,11 @@ from dreamulator.cli_export import export_app  # noqa: E402
 
 app.add_typer(export_app, name="export")
 
+# Data package group — versioned dev data packages (M1-P1), imported late.
+from dreamulator.cli_data import data_app  # noqa: E402
+
+app.add_typer(data_app, name="data")
+
 # Seed explorer — top-level command, imported late to avoid a circular import
 # (cli_explore_seeds imports the terrain-config loader from this module lazily).
 from dreamulator.cli_explore_seeds import explore_seeds  # noqa: E402

@@ -70,6 +70,10 @@ export/
 data/worlds/**/maps/
 data/worlds/**/derived/
 
+# Dev-data package artifacts (tarballs); the committed index lives at
+# data/dev-data/index.json and is NOT ignored.
+data/dev-data/artifacts/
+
 # Import artifacts (duplicates of maps/, staging area for import-elevation)
 layers/geological/input/maps/
 

@@ -197,6 +197,33 @@ dreamulator climate info earth --branch climate-dev
 
 ---
 
+## 数据包（data）
+
+`data fetch` 从**版本化开发数据包**下载并安装某个世界的「基础地形」（被 git 忽略、导入自真实数据的
+高程 + 板块 + 水陆分类），是新机器从干净 checkout 构建 `earth`（或其分支）的首选入口。
+
+```bash
+# 首选路径：一次下载基础地形，之后直接构建
+dreamulator data fetch earth --branch climate-dev --data-dir data/worlds
+dreamulator build earth --branch climate-dev --only climate
+
+# 从本地包安装（网络受限 / 断网时）
+dreamulator data fetch earth --branch climate-dev --from /path/to/earth-terrain-base-*.tar.gz
+```
+
+行为：
+
+- 按世界/分支的 `terrain_import` 配方（分辨率 / mesh 节点数 / seed）计算**兼容性指纹**，在
+  `data/dev-data/index.json`（git 提交的固定索引）里查匹配包；找不到就明确报错并给出原始导入恢复命令。
+- 下载后校验包 SHA-256 与 manifest 内逐文件 SHA-256，拒绝越界路径 / 链接，先在临时目录解包再原子安装，
+  只写 `maps/<planet>/` 下的四个基础地形文件（不覆盖 YAML 源配置）。
+- 本地已有**不同参数**的基础地形时明确拒绝（不静默替换）；重复 fetch 幂等。
+
+`build` 在缺少已导入地形时，若索引确有匹配包，会提示 `data fetch` 命令（否则给原始导入命令）。
+没有 `data fetch` 的机器仍可用 `climate import-elevation` 走真实数据导入（见上一节「导入真实高程」）。
+
+---
+
 ## AI 叙述
 
 ```bash

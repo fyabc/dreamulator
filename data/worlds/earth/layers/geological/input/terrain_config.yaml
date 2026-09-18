@@ -7,6 +7,15 @@
 # elevation_source: imported 让地质引擎跳过合成管线（否则 build --only geological
 # 会用合成地形覆盖已导入的 ETOPO1/PB2002 数据——见 d7384dc「双世界重建」的教训）。
 elevation_source: imported
+# 导入配方（M1-P1 版本化数据包的兼容性指纹来源）：声明基础地形如何从真实数据
+# 产生，供 `data fetch` 按指纹匹配发布包。只依赖配方 + 网格格式版本，不依赖气候代码。
+terrain_import:
+  provider: etopo1
+  dataset: etopo1_ice_surface_grid_registered
+  resolution: [4096, 2048]
+  mesh_nodes: 200000
+  seed: 42
+  importer_version: 1
 climate:
   auto_lat_gradient: true        # 赤道-极地温差从自转速率推导（Kaspi 2015）
   diffusive_heat_transport: true # 图拉普拉斯经向热扩散

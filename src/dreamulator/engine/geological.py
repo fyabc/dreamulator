@@ -19,7 +19,7 @@ from dreamulator.models.layers import Layer
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.map.pipeline_types import TerrainImportRecipe, TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,7 @@ class GeologicalEngine(BaseEngine):
             mesh_path = self._find_imported_mesh(planet_id)
             if mesh_path is None:
                 expected = self.maps_output_dir / planet_id
+                restore = self._dev_data_restore_hint(config.terrain_import, planet_id, expected)
                 return EngineResult(
                     engine_name=self.name,
                     success=False,
@@ -96,15 +97,7 @@ class GeologicalEngine(BaseEngine):
                         f"Imported terrain for planet '{planet_id}' not found "
                         f"(no cvt_mesh.json under {expected}).\n"
                         "Imported maps are gitignored regenerable products; restore them "
-                        "with the real-data importers before building. For Earth (from "
-                        "the repo root):\n"
-                        "  uv sync --extra validation\n"
-                        f"  uv run python scripts/earth/import_earth_elevation.py "
-                        f"--output-dir {expected} --mesh-nodes 200000 --seed 42\n"
-                        f"  uv run dreamulator build {self.world_dir.name}"
-                        + (f" --branch {self._branch_name()}" if self._branch_name() else "")
-                        + "\nSee docs/usage/climate-validation-workflow.md for the full "
-                        "import workflow.",
+                        f"before building:\n{restore}",
                     ],
                     metadata={"planet_id": planet_id, "elevation_source": "imported"},
                 )
@@ -384,3 +377,31 @@ class GeologicalEngine(BaseEngine):
         if len(parts) >= 2 and parts[0] == "branches":
             return parts[1]
         return None
+
+    def _dev_data_restore_hint(
+        self, recipe: TerrainImportRecipe | None, planet_id: str, expected: Path
+    ) -> str:
+        """Restore command for a missing imported mesh.
+
+        Prefer a ``data fetch`` command when a matching package is in the
+        committed index (with its version and size); otherwise fall back to the
+        raw real-data importers.  The "available" claim is only made when the
+        index actually has a matching entry (audit §用户体验建议).
+        """
+        world = self.world_dir.name
+        branch = self._branch_name()
+
+        from dreamulator.datapkg import fetch_hint
+
+        hint = fetch_hint(world, branch, planet_id, recipe)
+        if hint is not None:
+            return hint
+
+        lines = [
+            "  uv sync --extra validation",
+            f"  uv run python scripts/earth/import_earth_elevation.py "
+            f"--output-dir {expected} --mesh-nodes 200000 --seed 42",
+            f"  uv run dreamulator build {world}" + (f" --branch {branch}" if branch else ""),
+            "See docs/usage/climate-validation-workflow.md for the full import workflow.",
+        ]
+        return "\n".join(lines)

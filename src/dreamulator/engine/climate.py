@@ -130,18 +130,7 @@ class ClimateEngine(BaseEngine):
         )
         warnings.extend(mwarnings)
         if mesh is None:
-            recovery = (
-                "Restore imported terrain first (docs/usage/climate-validation-"
-                "workflow.md), e.g.:\n"
-                "  uv sync --extra validation\n"
-                f"  uv run python scripts/earth/import_earth_elevation.py "
-                f"--output-dir {self.maps_output_dir / planet.id} "
-                "--mesh-nodes 200000 --seed 42"
-                if config.elevation_source == "imported"
-                else "Generate terrain first: uv run dreamulator build <world> "
-                "[--branch <branch>] (geological stage), or import real data "
-                "(Earth) via scripts/earth/."
-            )
+            recovery = self._dev_data_recovery_hint(config, planet.id)
             return EngineResult(
                 engine_name=self.name,
                 success=False,
@@ -297,6 +286,41 @@ class ClimateEngine(BaseEngine):
                         logger.warning("Failed to update %s: %s", mesh_path, e)
 
         logger.warning("No source cvt_mesh.json found to update with climate data")
+
+    def _branch_name(self) -> str | None:
+        """Branch this engine writes into (None for root-world builds)."""
+        try:
+            rel = self.maps_output_dir.relative_to(self.world_dir)
+        except ValueError:
+            return None
+        parts = rel.parts
+        if len(parts) >= 2 and parts[0] == "branches":
+            return parts[1]
+        return None
+
+    def _dev_data_recovery_hint(self, config: TerrainPipelineConfig, planet_id: str) -> str:
+        """Recovery message for a missing mesh: prefer ``data fetch`` when indexed."""
+        if config.elevation_source == "imported":
+            from dreamulator.datapkg import fetch_hint
+
+            hint = fetch_hint(
+                self.world_dir.name, self._branch_name(), planet_id, config.terrain_import
+            )
+            if hint is not None:
+                return hint
+            return (
+                "Restore imported terrain first (docs/usage/climate-validation-"
+                "workflow.md), e.g.:\n"
+                "  uv sync --extra validation\n"
+                f"  uv run python scripts/earth/import_earth_elevation.py "
+                f"--output-dir {self.maps_output_dir / planet_id} "
+                "--mesh-nodes 200000 --seed 42"
+            )
+        return (
+            "Generate terrain first: uv run dreamulator build <world> "
+            "[--branch <branch>] (geological stage), or import real data "
+            "(Earth) via scripts/earth/."
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,55 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class TerrainImportRecipe:
+    """Machine-readable declaration of an imported-terrain data source.
+
+    Records *how* the base terrain (elevation + plates + crust + water class)
+    was produced from real data, so the dev-data package system can publish and
+    re-install it deterministically.  The compatibility fingerprint keys on
+    this recipe (+ the mesh format version), NOT on the climate code revision —
+    editing climate code must not invalidate the base terrain (audit
+    github-data-bootstrap-evaluation §最低要求).
+    """
+
+    provider: str = "etopo1"
+    dataset: str = "etopo1_ice_surface_grid_registered"
+    resolution_w: int = 4096
+    resolution_h: int = 2048
+    mesh_nodes: int = 200_000
+    seed: int = 42
+    importer_version: int = 1
+
+    @property
+    def resolution(self) -> str:
+        """``WxH`` string, e.g. ``4096x2048``."""
+        return f"{self.resolution_w}x{self.resolution_h}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Canonical dict for manifest serialisation and fingerprinting."""
+        return {
+            "provider": self.provider,
+            "dataset": self.dataset,
+            "resolution_w": self.resolution_w,
+            "resolution_h": self.resolution_h,
+            "mesh_nodes": self.mesh_nodes,
+            "seed": self.seed,
+            "importer_version": self.importer_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TerrainImportRecipe:
+        """Build from a parsed YAML block (accepts ``resolution: [W, H]``)."""
+        d = dict(data)
+        res = d.pop("resolution", None)
+        if isinstance(res, (list, tuple)) and len(res) == 2:
+            d["resolution_w"] = int(res[0])
+            d["resolution_h"] = int(res[1])
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+@dataclass
 class TerrainPipelineConfig:
     """Complete configuration for the CVT terrain generation pipeline.
 
@@ -39,6 +88,12 @@ class TerrainPipelineConfig:
     # authored sources and is committed under maps/, so the geological engine
     # must NOT regenerate (or clobber) it — see engine/geological.py.
     elevation_source: str = "generated"
+
+    # Imported-terrain recipe (see TerrainImportRecipe).  Present only when
+    # ``elevation_source == "imported"``; declares the exact data source and
+    # import parameters so the dev-data package system can publish/re-install
+    # the base terrain by fingerprint.
+    terrain_import: TerrainImportRecipe | None = None
 
     # Planetary physical parameters
     radius_km: float = 6371.0
@@ -713,6 +768,10 @@ class TerrainPipelineConfig:
         # Filter to known fields
         known = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in flat.items() if k in known}
+
+        # Convert the nested ``terrain_import:`` block into a TerrainImportRecipe.
+        if isinstance(filtered.get("terrain_import"), dict):
+            filtered["terrain_import"] = TerrainImportRecipe.from_dict(filtered["terrain_import"])
 
         return cls(**filtered)
 
