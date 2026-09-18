@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789591589650,
+  "lastUpdate": 1789767654902,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -4954,6 +4954,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007951986167855531",
             "extra": "mean: 5.1147804000009955 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "18ff461af2e9af84c6057bba1656ed069a8fe101",
+          "message": "feat(data): M1-P1 版本化开发数据包——manifest/SHA-256/固定索引 + data fetch\n\n- terrain_import 配方块（TerrainPipelineConfig + earth terrain_config.yaml）\n- datapkg/：recipe 指纹（配方+网格格式版本，不含气候代码）、manifest、固定索引、原子安装\n- data fetch CLI：解析有效配方 → 查索引 → 校验 → 原子安装基础地形（拒绝越界/不同参数产物）\n- 地质/气候引擎缺 mesh 时接 data fetch 提示（仅在索引确有匹配时）\n- publish_dev_data.py：受控基础地形产包（elevation+tectonics+watermask，无气候步骤）\n- 冷 checkout 实测：诚实失败 → fetch → 3/3 构建成功，root mesh 摘要不变\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-19T05:40:21+08:00",
+          "tree_id": "9cbb8ca166ed2c79dd0df2c7046b949181e47748",
+          "url": "https://github.com/fyabc/dreamulator/commit/18ff461af2e9af84c6057bba1656ed069a8fe101"
+        },
+        "date": 1789767654372,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 5.9362185021357385,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04363921188864329",
+            "extra": "mean: 168.45741099998577 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.0414312863706954,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013180584952653845",
+            "extra": "mean: 328.792567000022 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4275275361448816,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1214757665869621",
+            "extra": "mean: 700.5118813333411 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 906.7639878237164,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011929594272364889",
+            "extra": "mean: 1.102822800010017 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.43065156993558,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000912525435411419",
+            "extra": "mean: 5.116904600004091 msec\nrounds: 5"
           }
         ]
       }
