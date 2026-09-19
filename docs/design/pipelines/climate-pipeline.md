@@ -682,6 +682,7 @@ koppen.json / climate_monthly.msgpack`。
 | `koppen.json` | JSON | per-cell 分类 + 统计汇总 |
 | `climate_metadata.json` | JSON | 量化范围、类目表、导出分辨率 |
 | `climate_monthly.msgpack` | MessagePack | N×12 月度场（见下） |
+| `climate_yearly.msgpack` | MessagePack | N 个 per-cell UCC 连续描述量（见下） |
 
 PNG 与 elevation.png 同编码，前端解码：
 
@@ -705,6 +706,18 @@ const temperature = tMin + (pixelValue / 65535) * (tMax - tMin);  // from climat
 :958-974），导出时读出、int16 量化后写入单独的紧凑文件（`export.py` 读
 `getattr(mesh, "_t_monthly_c", None)` 等）。API 侧 `GET /maps/{world}/climate-monthly`
 直接吐这个文件（`api_routes/maps.py:190`）。
+
+`climate_yearly.msgpack`：UCC-01 的年度尺度气候量容器，首批内容 = UCC 连续描述量
+（ucc-review §4.2，计算见 `map/ucc.py` 的 `compute_descriptors`）。导出时从月度序列
+逐 cell 现算，月度参考需求来自 `potential_evapotranspiration_hamon_monthly`
+（`engine/climate_physics.py`，与 aridity gate 的年值 Hamon 共享同一日率核心，
+月度和 ≡ 年值）。数值字段为 raw float32，未定义值存 NaN、原因由 uint8 状态数组
+（`ai_status` / `deficit_status`，取值见文件内 `status_codes` 枚举）表达；元数据内嵌
+`result_metadata()`（format_version + 参考年/月时间约定）+ `demand_model` +
+`freeze_threshold_c`。时间基准 = 12 个等长参考月：`p_total_mm` 为每参考年 mm，
+AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用容器，后续年度量（如年风应力、
+年辐射）也归入此文件。API 侧 `GET /maps/{world}/climate-yearly`
+（`api_routes/maps.py` 的 `get_climate_yearly`）。
 
 ---
 

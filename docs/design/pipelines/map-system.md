@@ -200,6 +200,8 @@ maps/
 - `cvt-mesh` 的 `fmt=msgpack` 返回压缩二进制（前端透明解压，兼容纯 JSON）。
 - `climate-monthly` 返回 `climate_monthly.msgpack` 原始字节（N×12 场，int16 量化）；
   **月序约定：索引 0 = 三月**（引擎年从春分起算，前端月份标签按此排列）。
+- `climate-yearly` 返回 `climate_yearly.msgpack` 原始字节（N 个 per-cell UCC 连续
+  描述量，float32 + uint8 状态码；字段与元数据约定见 climate-pipeline.md §11）。
 
 ## 前端组件
 

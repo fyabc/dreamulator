@@ -590,6 +590,8 @@ def export_climate_layers(
         - precipitation.png (16-bit PNG, range [0, 6000] mm/yr)
         - koppen.json (per-cell Köppen class codes)
         - climate_metadata.json
+        - climate_monthly.msgpack (per-cell monthly series, when present)
+        - climate_yearly.msgpack (per-cell UCC descriptors, when present)
 
     Args:
         mesh: CVT mesh with climate fields populated.
@@ -715,6 +717,88 @@ def export_climate_layers(
         with monthly_path.open("wb") as _f:
             _f.write(msgpack.packb(monthly))
         logger.info("  Exported climate_monthly.msgpack (%d×%d)", mesh.num_cells, 12)
+
+        # 6. Yearly climate descriptors (UCC-01 step 2) — the continuous
+        # UCC descriptions (ucc-review §4.2) computed per cell from the
+        # monthly series above, plus the monthly Hamon reference demand the
+        # supply–demand statistics need.  Value arrays are raw float32 with
+        # NaN wherever the descriptor is undefined — the *status* arrays
+        # carry why (§4.4), so no placeholder value is ever read as data.
+        # Time basis: 12 equal reference months (365.25/12 d), so p_total is
+        # mm per reference year and AI is window-invariant (M2-A0④).
+        from dreamulator.engine.climate_physics import (
+            potential_evapotranspiration_hamon_monthly,
+        )
+        from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
+
+        from .ucc import (
+            MISSING_INPUT,
+            NO_POSITIVE_DEMAND,
+            NOT_APPLICABLE,
+            VALID,
+            compute_descriptors,
+        )
+
+        _et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
+        _status_codes = [VALID, MISSING_INPUT, NOT_APPLICABLE, NO_POSITIVE_DEMAND]
+        _status_index = {name: i for i, name in enumerate(_status_codes)}
+        _n = mesh.num_cells
+        _t_mean = np.empty(_n, dtype=np.float32)
+        _t_min = np.empty(_n, dtype=np.float32)
+        _t_max = np.empty(_n, dtype=np.float32)
+        _t_range = np.empty(_n, dtype=np.float32)
+        _t_below = np.empty(_n, dtype=np.float32)
+        _p_rate = np.empty(_n, dtype=np.float32)
+        _p_total = np.empty(_n, dtype=np.float32)
+        _ai = np.full(_n, np.nan, dtype=np.float32)
+        _ai_status = np.empty(_n, dtype=np.uint8)
+        _deficit = np.full(_n, np.nan, dtype=np.float32)
+        _deficit_status = np.empty(_n, dtype=np.uint8)
+        _concentration = np.full(_n, np.nan, dtype=np.float32)
+        for i in range(_n):
+            d = compute_descriptors(t_monthly[i], p_monthly[i], _et_monthly[i])
+            _t_mean[i] = d.t_mean
+            _t_min[i] = d.t_min
+            _t_max[i] = d.t_max
+            _t_range[i] = d.t_range
+            _t_below[i] = d.t_below_frac
+            _p_rate[i] = d.p_mean_rate
+            _p_total[i] = d.p_total
+            if d.ai is not None:
+                _ai[i] = d.ai
+            _ai_status[i] = _status_index[d.ai_status]
+            if d.deficit is not None:
+                _deficit[i] = d.deficit
+            _deficit_status[i] = _status_index[d.deficit_status]
+            if d.concentration is not None:
+                _concentration[i] = d.concentration
+
+        yearly = {
+            **result_metadata(),
+            "num_cells": _n,
+            "months": 12,
+            "dtype": "float32",
+            "demand_model": "hamon-1961",
+            "demand_daylength_h": 12.0,
+            "freeze_threshold_c": 0.0,
+            "status_codes": _status_codes,
+            "t_mean_c": _t_mean.tobytes(),
+            "t_min_c": _t_min.tobytes(),
+            "t_max_c": _t_max.tobytes(),
+            "t_range_c": _t_range.tobytes(),
+            "t_below_frac": _t_below.tobytes(),
+            "p_mean_mm_per_month": _p_rate.tobytes(),
+            "p_total_mm": _p_total.tobytes(),
+            "ai": _ai.tobytes(),
+            "ai_status": _ai_status.tobytes(),
+            "deficit": _deficit.tobytes(),
+            "deficit_status": _deficit_status.tobytes(),
+            "concentration": _concentration.tobytes(),
+        }
+        yearly_path = output_dir / "climate_yearly.msgpack"
+        with yearly_path.open("wb") as _f:
+            _f.write(msgpack.packb(yearly))
+        logger.info("  Exported climate_yearly.msgpack (%d cells)", _n)
 
 
 def _nice_range(

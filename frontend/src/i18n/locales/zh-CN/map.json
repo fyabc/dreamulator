@@ -196,7 +196,23 @@
     "hoverHint": "悬停单元格查看详情",
     "clickHint": "点击单元格查看详情",
     "close": "关闭",
-    "province": "省 {{name}}"
+    "province": "省 {{name}}",
+    "yearlyClimate": "气候描述",
+    "descMeanTemp": "加权均温",
+    "descMinMaxTemp": "最冷月 / 最热月",
+    "descTempRange": "温度季节范围",
+    "descBelowFreeze": "低于 {{threshold}}°C 时间份额",
+    "descPrecipTotal": "年降水（参考年）",
+    "descAridity": "干燥度指数 AI",
+    "descDeficit": "同期供需亏缺",
+    "descConcentration": "降水集中度",
+    "descNoPrecip": "无降水",
+    "yearlyMissing": "年度气候描述缺失：该地图尚未构建气候（earth 参考根不构建，请查看气候分支）"
+  },
+  "descStatus": {
+    "missing_input": "缺输入",
+    "not_applicable": "不适用",
+    "no_positive_demand": "无正参考需求"
   },
   "tooltip": {
     "crustType": "continental=大陆, oceanic=海洋, transitional=过渡带",
@@ -208,7 +224,14 @@
     "koppen": "Köppen-Geiger 气候分类 (Beck et al. 2018)",
     "soilType": "USDA 土纲（母岩 + 气候推导）",
     "fertility": "土壤肥力等级（农业潜力直接输入）",
-    "province": "生物地理省（realm → province 两级分区）"
+    "province": "生物地理省（realm → province 两级分区）",
+    "descMeanTemp": "时长加权平均温度（分箱均值按时长加权）",
+    "descTempRange": "最热月与最冷月均值之差（全范围，非半振幅；非天气瞬时极值）",
+    "descBelowFreeze": "分箱月均温低于阈值的时长份额，不是实际霜冻天数",
+    "descPrecipTotal": "每 365.25 天参考年的总降水",
+    "descAridity": "AI = 总降水 / 参考蒸散（Hamon 1961，固定 12h 日长）——参考气候供需比，不是土壤湿度",
+    "descDeficit": "Σ max(Eref−P, 0) / Σ Eref——同期亏缺份额，忽略储水与横向输水",
+    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i|——降水时间分布相对均匀率的偏离，无降水时无定义"
   },
   "sun": {
     "title": "光照",

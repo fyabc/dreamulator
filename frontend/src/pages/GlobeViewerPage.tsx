@@ -22,6 +22,7 @@ import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspe
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
+import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
@@ -240,6 +241,8 @@ export default function GlobeViewerPage() {
     field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
+  // UCC yearly descriptors for the cell inspector (independent of monthly mode).
+  const yearlyData = useYearlyClimate(worldName, planetId, selectedBranch)
 
   // --- GPU texture ---
   // Opacity sliders fire many events per frame; coalesce so the composite
@@ -757,6 +760,7 @@ export default function GlobeViewerPage() {
           monthlyMode={monthlyMode}
           monthIndex={monthlyMonth}
           monthlyData={monthlyData}
+          yearlyData={yearlyData}
           isEarth={worldName === 'earth'}
         />
       </div>

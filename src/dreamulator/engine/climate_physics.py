@@ -1026,6 +1026,44 @@ def dryness_threshold_mm(
     return np.asarray(np.maximum(20.0 * np.asarray(t_mean_c) + np.asarray(offset_mm), 1.0))
 
 
+def _hamon_pet_mm_per_day(t_monthly_c: np.ndarray) -> np.ndarray:
+    """Hamon (1961) daily PET rate per month, mm/day, same shape as input.
+
+    Magnus saturation vapour pressure ``e_s = 0.6108·exp(17.27·T/(T+237.3))``
+    kPa; daylength fixed at N = 12 h (see ``potential_evapotranspiration_hamon``
+    for why).  Shared core of the annual and monthly accumulations so the two
+    can never drift apart.
+    """
+    t = np.asarray(t_monthly_c, dtype=np.float64)
+    es_kpa = 0.6108 * np.exp(17.27 * t / (t + 237.3))
+    return 29.8 * 12.0 * es_kpa / (t + 273.15)
+
+
+def potential_evapotranspiration_hamon_monthly(
+    t_monthly_c: np.ndarray,
+    days_per_month: float,
+) -> np.ndarray:
+    """Monthly Hamon (1961) potential evapotranspiration, mm per month.
+
+    Same formula and daylength assumption as
+    ``potential_evapotranspiration_hamon``, but returns the per-month
+    accumulation (shape (N, 12)) instead of the window total — the monthly
+    reference-demand rate consumed by the UCC descriptors' seasonal-deficit
+    statistic (ucc-review §4.2).  ``annual == monthly.sum(axis=-1)`` holds by
+    construction (both derive from ``_hamon_pet_mm_per_day``).
+
+    Args:
+        t_monthly_c: Monthly-mean temperature, °C, shape (N, 12).
+        days_per_month: Days per month of the *target accumulation window* —
+            same contract as the annual variant (pass the reference-year month
+            365.25/12 so the rate matches the moisture budget's P basis).
+
+    Returns:
+        Monthly potential evapotranspiration, mm per month, shape (N, 12).
+    """
+    return np.asarray(_hamon_pet_mm_per_day(t_monthly_c) * days_per_month)
+
+
 def potential_evapotranspiration_hamon(
     t_monthly_c: np.ndarray,
     days_per_month: float,
@@ -1058,8 +1096,7 @@ def potential_evapotranspiration_hamon(
         shape (N,).
     """
     t = np.asarray(t_monthly_c, dtype=np.float64)
-    es_kpa = 0.6108 * np.exp(17.27 * t / (t + 237.3))
-    pet_day = 29.8 * 12.0 * es_kpa / (t + 273.15)  # mm/day at N = 12 h
+    pet_day = _hamon_pet_mm_per_day(t)
     return np.asarray(pet_day.sum(axis=-1) * days_per_month)
 
 

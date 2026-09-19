@@ -25,6 +25,7 @@ from dreamulator.engine.climate_physics import (
     latitude_temperature,
     orographic_precipitation,
     potential_evapotranspiration_hamon,
+    potential_evapotranspiration_hamon_monthly,
     pressure_from_temperature,
     saturation_specific_humidity,
     sst_convection_gate,
@@ -855,6 +856,24 @@ class TestSubsidenceAridityGate:
         t0 = np.full((1, 12), -5.0)
         pet0 = float(potential_evapotranspiration_hamon(t0, 365.25 / 12.0)[0])
         assert 0.0 < pet0 < pet20 < pet27
+
+    def test_hamon_pet_monthly_consistency(self) -> None:
+        """UCC-01: the monthly variant shares the annual one's core, so the
+        window total is exactly the monthly sum — the aridity gate's annual
+        consumption cannot drift from the descriptors' monthly demand."""
+        rng = np.random.default_rng(0)
+        t = rng.uniform(-30.0, 40.0, size=(7, 12))
+        dpm = 365.25 / 12.0
+        monthly = potential_evapotranspiration_hamon_monthly(t, dpm)
+        assert monthly.shape == (7, 12)
+        assert (monthly > 0.0).all()
+        annual = potential_evapotranspiration_hamon(t, dpm)
+        np.testing.assert_allclose(monthly.sum(axis=-1), annual, rtol=1e-12)
+        # Per-month value at constant T: annual / 12.
+        t_const = np.full((1, 12), 20.0)
+        m = potential_evapotranspiration_hamon_monthly(t_const, dpm)
+        a = potential_evapotranspiration_hamon(t_const, dpm)
+        assert float(m[0, 0]) == pytest.approx(float(a[0]) / 12.0)
 
     def test_hamon_pet_time_basis(self) -> None:
         """M2-A0④: days_per_month sets the accumulation window — the reference

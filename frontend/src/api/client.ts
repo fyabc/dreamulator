@@ -1,6 +1,7 @@
 import { isStaticMode } from './mode'
 import { staticApi } from './staticClient'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
+import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 
@@ -501,6 +502,21 @@ const readApi = {
     return fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/climate-monthly${query}`)
       .then((r) => r.arrayBuffer())
       .then(decodeMonthlyClimate)
+      .catch(() => null)
+  },
+
+  getYearlyClimate: (
+    name: string,
+    planetId: string,
+    branch?: string | null,
+  ): Promise<YearlyClimateData | null> => {
+    if (isStaticMode()) {
+      return staticApi.getYearlyClimate(name, planetId, branch)
+    }
+    const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/climate-yearly${query}`)
+      .then((r) => r.arrayBuffer())
+      .then(decodeYearlyClimate)
       .catch(() => null)
   },
 }

@@ -27,6 +27,7 @@ import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
+import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -263,6 +264,8 @@ export default function MapViewerPage() {
     field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
+  // UCC yearly descriptors for the cell inspector (independent of monthly mode).
+  const yearlyData = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
 
   // --- Heightmap import (write op; live mode only) ---
   const queryClient = useQueryClient()
@@ -750,6 +753,7 @@ export default function MapViewerPage() {
                 monthlyMode={monthlyMode}
                 monthIndex={monthlyMonth}
                 monthlyData={monthlyData}
+                yearlyData={yearlyData}
                 isEarth={worldName === 'earth'}
               />
               {selectedCells.size > 1 && (

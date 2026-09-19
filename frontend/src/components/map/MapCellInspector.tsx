@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
+import type { YearlyClimateData } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 
@@ -34,6 +35,8 @@ interface MapCellInspectorProps {
   monthIndex?: number
   /** Decoded monthly climate arrays (temperature/precip/pressure/wind). */
   monthlyData?: MonthlyClimateData | null
+  /** Decoded yearly UCC descriptors (independent of monthly mode). */
+  yearlyData?: YearlyClimateData | null
   /** True for the Earth reference world — gates the ΔT/ΔP deviation rows
    *  (vs observed zonal climatology), meaningless on fictional worlds. */
   isEarth?: boolean
@@ -153,6 +156,13 @@ const FERTILITY_COLORS: Record<string, string> = {
   high: 'text-green-400',
   medium: 'text-yellow-400',
   low: 'text-gray-400',
+}
+
+/** UCC descriptor applicability status → i18n key (ucc-review §4.4). */
+const DESC_STATUS_LABELS: Record<string, string> = {
+  missing_input: 'descStatus.missing_input',
+  not_applicable: 'descStatus.not_applicable',
+  no_positive_demand: 'descStatus.no_positive_demand',
 }
 
 function formatNumber(n: number | undefined, decimals = 0): string {
@@ -368,6 +378,7 @@ function CellDetails({
   monthlyMode = false,
   monthIndex = 0,
   monthlyData = null,
+  yearlyData = null,
   cellIndexById,
   isEarth = true,
 }: {
@@ -376,6 +387,7 @@ function CellDetails({
   monthlyMode?: boolean
   monthIndex?: number
   monthlyData?: MonthlyClimateData | null
+  yearlyData?: YearlyClimateData | null
   /** Map from cell id → mesh-cell index (the monthly arrays' row order). */
   cellIndexById: Map<number, number>
   /** Earth reference world — gates the ΔT/ΔP deviation rows. */
@@ -409,6 +421,14 @@ function CellDetails({
   const mWindV = hasMonthly && monthlyData!.windNorthMonthly
     ? monthlyData!.windNorthMonthly[idx! * nMonths + monthIndex]
     : undefined
+
+  // UCC yearly descriptors (UCC-01): same row order as the monthly arrays.
+  const hasYearly = yearlyData != null && idx !== undefined
+  const yi = hasYearly ? idx! : -1
+  const descStatusName = (code: number): string =>
+    yearlyData?.statusCodes[code] ?? 'not_applicable'
+  const aiStatus = hasYearly ? descStatusName(yearlyData!.aiStatus[yi]) : null
+  const deficitStatus = hasYearly ? descStatusName(yearlyData!.deficitStatus[yi]) : null
 
   const hasGeology = Boolean(
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
@@ -645,6 +665,72 @@ function CellDetails({
               <OceanCurrentDetail u={cell.ocean_current_east_m_s} v={cell.ocean_current_north_m_s} sstAnom={cell.sst_anomaly_c ?? 0} />
             )}
           </FieldGroup>
+        )}
+
+        {/* UCC climate descriptors (UCC-01): continuous, classification-free
+            description derived from the monthly series — independent of
+            monthly mode.  Missing file (Earth reference root is never built,
+            or a branch falling back to root maps) degrades to a hint. */}
+        {hasYearly ? (
+          <FieldGroup
+            icon="📊"
+            label={t('inspector.yearlyClimate')}
+            key={`yearly-${displayMode}-${highlightGroup}`}
+            defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
+          >
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descMeanTemp')}>{t('inspector.descMeanTemp')}</dt>
+              <dd className="font-mono">{yearlyData!.tMeanC[yi].toFixed(1)} °C</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">{t('inspector.descMinMaxTemp')}</dt>
+              <dd className="font-mono">
+                {yearlyData!.tMinC[yi].toFixed(1)} / {yearlyData!.tMaxC[yi].toFixed(1)} °C
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descTempRange')}>{t('inspector.descTempRange')}</dt>
+              <dd className="font-mono">{yearlyData!.tRangeC[yi].toFixed(1)} °C</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descBelowFreeze')}>
+                {t('inspector.descBelowFreeze', { threshold: yearlyData!.freezeThresholdC })}
+              </dt>
+              <dd className="font-mono">{(yearlyData!.tBelowFrac[yi] * 100).toFixed(0)}%</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descPrecipTotal')}>{t('inspector.descPrecipTotal')}</dt>
+              <dd className="font-mono">{Math.round(yearlyData!.pTotalMm[yi])} mm</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descAridity')}>{t('inspector.descAridity')}</dt>
+              <dd className="font-mono">
+                {aiStatus === 'valid'
+                  ? yearlyData!.ai[yi].toFixed(2)
+                  : t(DESC_STATUS_LABELS[aiStatus ?? ''] ?? 'descStatus.not_applicable')}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descDeficit')}>{t('inspector.descDeficit')}</dt>
+              <dd className="font-mono">
+                {deficitStatus === 'valid'
+                  ? `${(yearlyData!.deficit[yi] * 100).toFixed(0)}%`
+                  : t(DESC_STATUS_LABELS[deficitStatus ?? ''] ?? 'descStatus.not_applicable')}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.descConcentration')}>{t('inspector.descConcentration')}</dt>
+              <dd className="font-mono">
+                {Number.isNaN(yearlyData!.concentration[yi])
+                  ? t('inspector.descNoPrecip')
+                  : yearlyData!.concentration[yi].toFixed(2)}
+              </dd>
+            </div>
+          </FieldGroup>
+        ) : (
+          hasClimate && (
+            <p className="text-[10px] text-gray-600 italic ml-4">{t('inspector.yearlyMissing')}</p>
+          )
         )}
 
         {devMode && isEarth && (
@@ -1104,6 +1190,7 @@ export default function MapCellInspector({
   monthlyMode = false,
   monthIndex = 0,
   monthlyData = null,
+  yearlyData = null,
   isEarth = true,
 }: MapCellInspectorProps) {
   const { t } = useTranslation('map')
@@ -1152,6 +1239,7 @@ export default function MapCellInspector({
           monthlyMode={monthlyMode}
           monthIndex={monthIndex}
           monthlyData={monthlyData}
+          yearlyData={yearlyData}
           cellIndexById={cellIndexById}
           isEarth={isEarth}
         />

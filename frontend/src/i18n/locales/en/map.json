@@ -196,7 +196,23 @@
     "hoverHint": "Hover a cell to view details",
     "clickHint": "Click a cell to view details",
     "close": "Close",
-    "province": "Province {{name}}"
+    "province": "Province {{name}}",
+    "yearlyClimate": "Climate descriptors",
+    "descMeanTemp": "Mean temp (weighted)",
+    "descMinMaxTemp": "Coldest / hottest month",
+    "descTempRange": "Seasonal temp range",
+    "descBelowFreeze": "Time below {{threshold}}°C",
+    "descPrecipTotal": "Annual precip (ref. year)",
+    "descAridity": "Aridity index AI",
+    "descDeficit": "Same-period deficit",
+    "descConcentration": "Precip concentration",
+    "descNoPrecip": "No precipitation",
+    "yearlyMissing": "Yearly climate descriptors unavailable: climate not built for this map (the Earth reference root is never built — check a climate branch)"
+  },
+  "descStatus": {
+    "missing_input": "missing input",
+    "not_applicable": "not applicable",
+    "no_positive_demand": "no positive demand"
   },
   "tooltip": {
     "crustType": "continental=continent, oceanic=ocean, transitional=transition",
@@ -208,7 +224,14 @@
     "koppen": "Köppen-Geiger climate classification (Beck et al. 2018)",
     "soilType": "USDA soil order (derived from parent rock + climate)",
     "fertility": "Soil fertility level (direct agricultural potential input)",
-    "province": "Biogeographic province (realm → province two-level division)"
+    "province": "Biogeographic province (realm → province two-level division)",
+    "descMeanTemp": "Duration-weighted mean of bin-mean temperatures",
+    "descTempRange": "Hottest minus coldest bin mean (full range, not half-amplitude; not a weather extreme)",
+    "descBelowFreeze": "Fraction of time with bin-mean temperature below the threshold — not actual frost days",
+    "descPrecipTotal": "Total precipitation per 365.25-day reference year",
+    "descAridity": "AI = total precipitation / reference evapotranspiration (Hamon 1961, fixed 12 h daylength) — a reference supply–demand ratio, not soil moisture",
+    "descDeficit": "Σ max(Eref−P, 0) / Σ Eref — same-period shortfall fraction; ignores storage and lateral water transport",
+    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i| — deviation of the precipitation time distribution from a uniform rate; undefined without precipitation"
   },
   "sun": {
     "title": "Lighting",

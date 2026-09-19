@@ -6,6 +6,7 @@
  */
 
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
+import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 
 interface DocumentMeta {
   filename: string
@@ -332,6 +333,21 @@ export const staticApi = {
     )
     if (blob === null) return null
     return decodeMonthlyClimate(await blob.arrayBuffer())
+  },
+
+  getYearlyClimate: async (
+    name: string,
+    planetId: string,
+    branch?: string | null,
+  ): Promise<YearlyClimateData | null> => {
+    const blob = await fetchBranchAwareBlob(
+      name,
+      branch,
+      `/maps/${planetId}/climate_yearly.msgpack`,
+      `/maps/${planetId}/climate_yearly.msgpack`,
+    )
+    if (blob === null) return null
+    return decodeYearlyClimate(await blob.arrayBuffer())
   },
 
   getPlates: async (name: string, planetId: string, branch?: string | null) => {
