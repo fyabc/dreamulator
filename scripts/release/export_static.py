@@ -23,14 +23,17 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def _ensure_importable() -> None:
-    """Add src/ to sys.path so we can import dreamulator."""
+    """Add src/ and this script's dir to sys.path (for dreamulator / local_branches)."""
     root = _SCRIPT_DIR.parents[1]  # repo root (script lives in scripts/release/)
     src = root / "src"
-    if str(src) not in sys.path:
-        sys.path.insert(0, str(src))
+    for p in (str(src), str(_SCRIPT_DIR)):
+        if p not in sys.path:
+            sys.path.insert(0, p)
 
 
 _ensure_importable()
+
+from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
 from dreamulator.map.models import sanitize_nonfinite  # noqa: E402
@@ -113,6 +116,14 @@ def _export_dir_documents(
             "rendered": rendered,
         })
     return documents
+
+
+def _local_only_branches(root: Path, world_dir: Path) -> set[str]:
+    """Gitignored local-only branches (see ``local_branches``), with a log line."""
+    ignored = local_only_branches(root, world_dir)
+    if ignored:
+        print(f"    (skipping local-only branches: {', '.join(sorted(ignored))})")
+    return ignored
 
 
 def _export_layer_documents(
@@ -288,6 +299,11 @@ def _export_map_data(
                 monthly_msgpack.read_bytes()
             )
 
+        # Copy yearly climate descriptors (UCC-01), if present.
+        yearly_msgpack = planet_dir / "climate_yearly.msgpack"
+        if yearly_msgpack.exists():
+            planet_out.joinpath("climate_yearly.msgpack").write_bytes(yearly_msgpack.read_bytes())
+
         # Export map metadata (map.yaml → meta.json) + result-contract metadata
         # (format_version + time convention, CONTRACT-01).
         map_yaml = planet_dir / "map.yaml"
@@ -430,15 +446,16 @@ def _export_civmap_reference(
             pass
 
 
-def export_world(world_dir: Path) -> dict:
+def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict:
     """Export all data for a single world (root, no branch).
 
     Returns a dict with keys:
       - world: world.yaml contents
-      - branches: list of branch metadata
+      - branches: list of branch metadata (excluding ``skip_branches``)
       - stellar, habitable_zones, planets, climate, ecology, civilizations (from _export_layer_data)
     """
     result: dict = {}
+    skip = skip_branches or set()
 
     # 1. World config (world.yaml)
     world_data = load_yaml(world_dir / "world.yaml")
@@ -452,7 +469,7 @@ def export_world(world_dir: Path) -> dict:
     branches_dir = world_dir / "branches"
     if branches_dir.exists():
         for branch_dir in sorted(branches_dir.iterdir()):
-            if not branch_dir.is_dir():
+            if not branch_dir.is_dir() or branch_dir.name in skip:
                 continue
             branch_yaml = branch_dir / "branch.yaml"
             if branch_yaml.exists():
@@ -519,9 +536,10 @@ def main() -> None:
     # Export each world
     for world_name in all_worlds:
         world_dir = worlds_dir / world_name
-        print(f"  {world_name}...", end=" ")
+        print(f"  {world_name}...", end=" ", flush=True)
 
-        data = export_world(world_dir)
+        local_only = _local_only_branches(root, world_dir)
+        data = export_world(world_dir, skip_branches=local_only)
         if not data:
             print("SKIPPED (no world.yaml)")
             continue
@@ -550,6 +568,8 @@ def main() -> None:
                 if not branch_dir.is_dir():
                     continue
                 branch_name = branch_dir.name
+                if branch_name in local_only:
+                    continue
                 branch_data = _export_layer_data(world_dir, branch=branch_name)
                 branch_out_dir = world_out_dir / "branches" / branch_name
                 # Always create branch dir with empty placeholders
@@ -570,8 +590,8 @@ def main() -> None:
                     branch_count += 1
 
         print(
-            f"OK ({len(data)} files, {len(map_planets)} map(s), "
-            f"{branch_count} branch(es))"
+            f"OK ({len(data)} files, {len(map_planets)} map(s), {branch_count} branch(es))",
+            flush=True,
         )
 
     # Write worlds index

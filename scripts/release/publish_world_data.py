@@ -119,19 +119,32 @@ def _is_scratch(path: Path) -> bool:
 
 def collect_generated(worlds_dir: Path) -> list[Path]:
     """Collect generated files: ``maps/**`` and ``layers/*/derived/**``, including
-    branch subtrees (``branches/<b>/maps/...``, ``branches/<b>/layers/*/derived/...``)."""
+    branch subtrees (``branches/<b>/maps/...``, ``branches/<b>/layers/*/derived/...``).
+
+    Gitignored local-only branches (``bridge-*`` diagnostic experiments — see
+    ``local_branches``) are excluded: they must not reach the release tarball
+    or the public site.
+    """
+    from local_branches import local_only_branches, under_local_only_branch
+
+    root = _project_root()
     files: list[Path] = []
     for world in sorted(worlds_dir.iterdir()):
         if not world.is_dir() or world.name.startswith("."):
             continue
+        local_only = local_only_branches(root, world)
+        if local_only:
+            print(f"  {world.name}: excluding local-only branches: {', '.join(sorted(local_only))}")
+
+        def _keep(p: Path, world: Path = world, local_only: set[str] = local_only) -> bool:
+            return not _is_scratch(p) and not under_local_only_branch(p, world, local_only)
+
         for maps_dir in world.rglob("maps"):
             if maps_dir.is_dir() and _is_generated_maps_dir(maps_dir):
-                files.extend(p for p in maps_dir.rglob("*") if p.is_file() and not _is_scratch(p))
+                files.extend(p for p in maps_dir.rglob("*") if p.is_file() and _keep(p))
         for derived_dir in world.rglob("derived"):
             if derived_dir.is_dir() and _is_derived_dir(derived_dir):
-                files.extend(
-                    p for p in derived_dir.rglob("*") if p.is_file() and not _is_scratch(p)
-                )
+                files.extend(p for p in derived_dir.rglob("*") if p.is_file() and _keep(p))
     return files
 
 
