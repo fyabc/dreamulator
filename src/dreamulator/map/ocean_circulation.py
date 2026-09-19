@@ -1165,7 +1165,8 @@ def advect_sst_semilagrangian(
 
 def advect_temperature_anomaly(
     sst_anomaly: np.ndarray,
-    wind: np.ndarray,
+    wind_unit: np.ndarray,
+    wind_speed: np.ndarray,
     is_ocean: np.ndarray,
     cells: list[VoronoiCell],
     nodes_xyz: np.ndarray,
@@ -1182,7 +1183,9 @@ def advect_temperature_anomaly(
 
     Args:
         sst_anomaly:  Ocean SST anomaly (signed °C), shape (N_global,) — land ignored.
-        wind:         Surface wind vectors, shape (N_global, 3).
+        wind_unit:    Mean wind direction (time-averaged monthly unit vectors,
+            magnitude ≤ 1), shape (N_global, 3).
+        wind_speed:   Mean wind speed (time-averaged monthly |wind|), shape (N_global,).
         is_ocean:     Boolean ocean mask, shape (N_global,).
         cells:        All VoronoiCell objects.
         nodes_xyz:    Unit sphere positions, shape (N_global, 3).
@@ -1195,8 +1198,8 @@ def advect_temperature_anomaly(
     n = len(cells)
 
     # Wind-biased edge alignment (same construction as BFS moisture transport).
-    wind_speed = np.linalg.norm(wind, axis=1)
-    wind_unit = wind / np.maximum(wind_speed, 1e-9)[:, None]
+    # `wind_unit` / `wind_speed` are pre-computed time-averaged (monthly-source)
+    # quantities — do NOT re-derive them here (月度为来源, audit §2.6).
 
     src_list: list[int] = []
     dst_list: list[int] = []

@@ -914,10 +914,12 @@ class TestTemperatureAnomaly:
         n = len(cells)
         is_ocean = ocean_mask
         sst_anomaly = np.where(is_ocean, 3.0, 0.0)
-        wind = np.zeros((n, 3))
+        wind_unit = np.zeros((n, 3))
+        wind_speed = np.zeros(n)
         t_anom = advect_temperature_anomaly(
             sst_anomaly,
-            wind,
+            wind_unit,
+            wind_speed,
             is_ocean,
             cells,
             nodes_xyz,
@@ -934,12 +936,14 @@ class TestTemperatureAnomaly:
         is_land = ~is_ocean
         sst_anomaly = np.where(is_ocean, 5.0, 0.0)
         east, north = east_north_basis(nodes_xyz)
-        wind = 8.0 * east  # blows eastward (toward lon → 0)
+        wind_unit = east  # unit direction — the function takes a mean direction
+        wind_speed = np.full(len(cells), 8.0)  # matches the old |8.0·east| speed
         # Large diffusivity compensates the tiny test mesh (its ~2300 km
         # cell_radius would otherwise suppress diffusion).
         t_anom = advect_temperature_anomaly(
             sst_anomaly,
-            wind,
+            wind_unit,
+            wind_speed,
             is_ocean,
             cells,
             nodes_xyz,
@@ -959,10 +963,12 @@ class TestTemperatureAnomaly:
         is_land = ~is_ocean
         sst_anomaly = np.where(is_ocean, -5.0, 0.0)
         east, north = east_north_basis(nodes_xyz)
-        wind = 8.0 * east
+        wind_unit = east
+        wind_speed = np.full(len(cells), 8.0)  # matches the old |8.0·east| speed
         t_anom = advect_temperature_anomaly(
             sst_anomaly,
-            wind,
+            wind_unit,
+            wind_speed,
             is_ocean,
             cells,
             nodes_xyz,

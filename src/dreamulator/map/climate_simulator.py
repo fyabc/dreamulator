@@ -818,7 +818,6 @@ def simulate_climate(
         # about the east axis — instead of a re-derivation of the chain.
         # Historical lesson: flipping a calibrated chain at its root cascades
         # into every downstream sign.
-        wind_mirror = _to_physical_wind(wind, east)  # involution: phys → mirror
         # Audit §2.6: τ = ρC_D|u|u is nonlinear — the annual stress is the
         # time-mean of monthly stress, not the stress of the annual-mean wind
         # (|mean(u)|² ≤ mean(|u|²), so seasonal wind reversals are under-stressed
@@ -912,8 +911,23 @@ def simulate_climate(
 
             # ── 3A.3: upwelling → SST cooling ──
             if config.ocean_upwelling_enabled:
-                _upw = compute_upwelling_index(
-                    wind_mirror, mesh.cells, nodes_xyz, east, north, lat_rad
+                # 月度为来源 (audit §2.6): compute_upwelling_index applies a ReLU
+                # (max(0, equatorward wind)) — nonlinear — so the annual index is the
+                # time-mean of monthly indices, not the ReLU of the annual wind (which
+                # kills the seasonal equatorward signal in reversing-wind regions).
+                _upw = np.mean(
+                    [
+                        compute_upwelling_index(
+                            _wind_monthly_mirror[m],
+                            mesh.cells,
+                            nodes_xyz,
+                            east,
+                            north,
+                            lat_rad,
+                        )
+                        for m in range(12)
+                    ],
+                    axis=0,
                 )
                 _dt_upw = apply_upwelling_sst_correction(_upw, t_mean_C) - t_mean_C
                 t_mean_C = t_mean_C + _dt_upw
@@ -933,11 +947,18 @@ def simulate_climate(
             [c.sst_anomaly_c if c.sst_anomaly_c is not None else 0.0 for c in mesh.cells],
             dtype=np.float64,
         )
-        # wind_mirror: the anomaly advection is calibrated on the legacy
-        # mirrored convention (same block as the Stommel chain above).
+        # 月度为来源 (audit §2.6): wind_unit = wind/|wind| and |wind| are both
+        # nonlinear — the annual direction is the time-mean of the monthly unit
+        # directions, and the annual speed is the time-mean of the monthly |wind|.
+        _wind_speed_m = np.linalg.norm(_wind_monthly_mirror, axis=2)
+        _wind_dir = (
+            _wind_monthly_mirror / np.maximum(_wind_speed_m, 1e-9)[:, :, None]
+        ).mean(axis=0)
+        _wind_speed = _wind_speed_m.mean(axis=0)
         _temp_anom = advect_temperature_anomaly(
             _sst_anom,
-            wind_mirror,
+            _wind_dir,
+            _wind_speed,
             is_ocean,
             mesh.cells,
             nodes_xyz,
