@@ -47,9 +47,7 @@ def test_client_delegations_are_defined_in_static_client() -> None:
     # client.ts delegates via `staticApi.X(...)`.
     delegated = set(re.findall(r"staticApi\.(\w+)", client_ts))
     # staticClient.ts defines methods as `  name: (...) => ...` (or `async`).
-    defined = set(
-        re.findall(r"^\s{2}(\w+):\s*(?:async\s*)?\(", static_ts, flags=re.MULTILINE)
-    )
+    defined = set(re.findall(r"^\s{2}(\w+):\s*(?:async\s*)?\(", static_ts, flags=re.MULTILINE))
 
     missing = delegated - defined
     assert not missing, (

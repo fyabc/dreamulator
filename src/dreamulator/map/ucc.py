@@ -141,9 +141,7 @@ def _seasonal_deficit(
     return float(deficit), VALID
 
 
-def _concentration(
-    p_rate: np.ndarray, dt: np.ndarray, p_total: float
-) -> float | None:
+def _concentration(p_rate: np.ndarray, dt: np.ndarray, p_total: float) -> float | None:
     if p_total <= 0.0:
         return None  # undefined when there is no precipitation (§4.2)
     q = p_rate * dt / p_total  # precipitation mass fraction per bin

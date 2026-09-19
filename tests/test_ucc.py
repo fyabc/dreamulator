@@ -64,14 +64,10 @@ def test_supply_demand_edge_cases() -> None:
 
 def test_seasonal_deficit() -> None:
     # P >= Eref everywhere → deficit 0 (no same-period shortfall).
-    d = compute_descriptors(
-        np.array([10.0]), np.array([2.0]), et_rate=np.array([1.0])
-    )
+    d = compute_descriptors(np.array([10.0]), np.array([2.0]), et_rate=np.array([1.0]))
     assert d.deficit == 0.0 and d.deficit_status == VALID
     # P=0, Eref=1 → deficit 1 (full shortfall).
-    d = compute_descriptors(
-        np.array([10.0]), np.array([0.0]), et_rate=np.array([1.0])
-    )
+    d = compute_descriptors(np.array([10.0]), np.array([0.0]), et_rate=np.array([1.0]))
     assert d.deficit == 1.0
 
 
@@ -85,7 +81,5 @@ def test_concentration_uniform_and_undefined() -> None:
 
 
 def test_below_freeze_fraction() -> None:
-    d = compute_descriptors(
-        np.array([-5.0, -1.0, 5.0, 15.0]), np.array([1.0] * 4)
-    )
+    d = compute_descriptors(np.array([-5.0, -1.0, 5.0, 15.0]), np.array([1.0] * 4))
     assert d.t_below_frac == pytest.approx(0.5)  # two of four bins below 0°C

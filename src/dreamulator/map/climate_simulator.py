@@ -951,9 +951,9 @@ def simulate_climate(
         # nonlinear — the annual direction is the time-mean of the monthly unit
         # directions, and the annual speed is the time-mean of the monthly |wind|.
         _wind_speed_m = np.linalg.norm(_wind_monthly_mirror, axis=2)
-        _wind_dir = (
-            _wind_monthly_mirror / np.maximum(_wind_speed_m, 1e-9)[:, :, None]
-        ).mean(axis=0)
+        _wind_dir = (_wind_monthly_mirror / np.maximum(_wind_speed_m, 1e-9)[:, :, None]).mean(
+            axis=0
+        )
         _wind_speed = _wind_speed_m.mean(axis=0)
         _temp_anom = advect_temperature_anomaly(
             _sst_anom,
