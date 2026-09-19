@@ -281,6 +281,40 @@ def compute_curl_z(
     return dtn_de - dte_dn  # type: ignore[no-any-return]
 
 
+def compute_divergence(
+    field: np.ndarray,
+    nodes_xyz: np.ndarray,
+    src: np.ndarray,
+    dst: np.ndarray,
+    east: np.ndarray,
+    north: np.ndarray,
+) -> np.ndarray:
+    """Divergence of a tangent vector field (via gradient-of-components).
+
+    Uses  div(v) = ∂v_east/∂x_east + ∂v_north/∂x_north, each partial via the
+    graph gradient — the flat-tangent-plane divergence (the surface curvature
+    term is dropped, adequate for the transport-conservation diagnostic; see
+    ``compute_curl_z`` for the same construction).
+
+    Args:
+        field: Tangent vector field, shape (N, 3).
+        nodes_xyz: Unit sphere positions, shape (N, 3).
+        src, dst: Directed edge tables.
+        east: Local east unit vectors, shape (N, 3).
+        north: Local north unit vectors, shape (N, 3).
+
+    Returns:
+        divergence at each cell, shape (N,).
+    """
+    n = len(field)
+    v_e, v_n = decompose_tangent(field, east, north)
+    grad_ve = _graph_gradient(v_e, nodes_xyz, src, dst, n)
+    grad_vn = _graph_gradient(v_n, nodes_xyz, src, dst, n)
+    dve_de = np.einsum("ij,ij->i", grad_ve, east)  # ∂v_e/∂x_e
+    dvn_dn = np.einsum("ij,ij->i", grad_vn, north)  # ∂v_n/∂x_n
+    return dve_de + dvn_dn  # type: ignore[no-any-return]
+
+
 # ===================================================================
 # Ocean basin detection (connected components on the graph)
 # ===================================================================

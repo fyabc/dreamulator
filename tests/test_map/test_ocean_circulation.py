@@ -30,6 +30,7 @@ from dreamulator.map.ocean_circulation import (
     assemble_graph_laplacian,
     assemble_stommel_operator,
     compute_curl_z,
+    compute_divergence,
     compute_strait_flux,
     compute_upwelling_index,
     compute_wind_stress,
@@ -597,6 +598,67 @@ class TestSolveOceanGyre:
         assert wbc_speed > 1.5 * interior_speed, (
             f"WBC max speed ({wbc_speed:.2e}) not significantly stronger "
             f"than interior mean ({interior_speed:.2e})"
+        )
+
+    def test_wbc_boost_conserves_net_transport(self) -> None:
+        """§2.6: the boost redistributes transport but adds no net source/sink.
+
+        u = k̂×∇ψ is divergence-free; the boost b(x)·u has ∇·(b u) = u·∇b, whose
+        basin integral ∮ b u·n dl = 0 on the closed-gyre boundary (ψ = const).
+        So the area-weighted net divergence stays ~0 even as the peak speed is
+        amplified — ``test_wbc_stronger_than_interior`` checks only the latter.
+        """
+        cells, nodes_xyz, areas_km2, lat_rad, _ = _build_rectangular_basin_mesh(20, 12)
+        east, north = east_north_basis(nodes_xyz)
+        _, basins = detect_ocean_basins(cells)
+
+        lat_norm = (lat_rad - lat_rad.min()) / (lat_rad.max() - lat_rad.min() + 1e-9)
+        wind = ((lat_norm * 2 - 1) * 10.0)[:, None] * east
+        tau = compute_wind_stress(wind)
+        src, dst = _build_directed_edge_table(cells)
+        curl = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
+        radius_m = 6371e3
+        omega = 7.292e-5
+        beta = 2.0 * omega * np.cos(lat_rad) / radius_m
+
+        b_cells = basins[0]
+        psi, velocity = solve_ocean_gyre(
+            b_cells,
+            cells,
+            nodes_xyz,
+            areas_km2,
+            curl,
+            beta,
+            bottom_friction=DEFAULT_BOTTOM_FRICTION,
+            h_ml=DEFAULT_H_ML,
+            east=east,
+        )
+        boosted = apply_subgrid_wbc_boost(
+            psi, velocity, beta[b_cells], bottom_friction_s=DEFAULT_BOTTOM_FRICTION
+        )
+
+        # Basin-local edge table + basis for the (basin-local) boosted velocity.
+        idx_map = {gi: li for li, gi in enumerate(b_cells)}
+        src_b: list[int] = []
+        dst_b: list[int] = []
+        for li, gi in enumerate(b_cells):
+            for nj in cells[gi].neighbors:
+                if nj in idx_map:
+                    src_b.append(li)
+                    dst_b.append(idx_map[nj])
+        src_b = np.asarray(src_b, dtype=np.int64)
+        dst_b = np.asarray(dst_b, dtype=np.int64)
+        nodes_b = nodes_xyz[b_cells]
+        east_b, north_b = east_north_basis(nodes_b)
+
+        div = compute_divergence(boosted, nodes_b, src_b, dst_b, east_b, north_b)
+        areas_b = areas_km2[b_cells]
+        net = float(np.sum(div * areas_b))
+        total_abs = float(np.sum(np.abs(div) * areas_b))
+        # Net source/sink is a tiny fraction of the redistribution: the boost
+        # moves mass within the core, it does not create it.
+        assert abs(net) < 0.1 * total_abs, (
+            f"net divergence {net:.3e} exceeds 10% of redistribution {total_abs:.3e}"
         )
 
     def test_determinism(self) -> None:
