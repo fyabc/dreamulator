@@ -35,6 +35,7 @@ _ensure_importable()
 from dreamulator import doc_render  # noqa: E402
 from dreamulator.map.models import sanitize_nonfinite  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
+from dreamulator.result_contract import result_metadata  # noqa: E402
 
 
 def find_project_root() -> Path:
@@ -287,11 +288,13 @@ def _export_map_data(
                 monthly_msgpack.read_bytes()
             )
 
-        # Export map metadata (map.yaml → meta.json)
+        # Export map metadata (map.yaml → meta.json) + result-contract metadata
+        # (format_version + time convention, CONTRACT-01).
         map_yaml = planet_dir / "map.yaml"
         if map_yaml.exists():
             meta = load_yaml(map_yaml)
             if meta:
+                meta.update(result_metadata())
                 with planet_out.joinpath("meta.json").open(
                     "w", encoding="utf-8"
                 ) as f:
@@ -346,7 +349,12 @@ def _write_branch_defaults(branch_out_dir: Path, branch_data: dict) -> None:
     (civ_territory, civ_documents, maps) on branches that don't have it.
     """
     defaults = {
-        "civ_territory": {"countries": [], "snapshots": [], "active_snapshot": None, "assignments": {}},
+        "civ_territory": {
+            "countries": [],
+            "snapshots": [],
+            "active_snapshot": None,
+            "assignments": {},
+        },
         "astronomy_documents": [],
         "geological_documents": [],
         "climate_documents": [],
