@@ -819,7 +819,18 @@ def simulate_climate(
         # Historical lesson: flipping a calibrated chain at its root cascades
         # into every downstream sign.
         wind_mirror = _to_physical_wind(wind, east)  # involution: phys → mirror
-        tau = compute_wind_stress(wind_mirror, c_d=config.ocean_drag_coefficient)
+        # Audit §2.6: τ = ρC_D|u|u is nonlinear — the annual stress is the
+        # time-mean of monthly stress, not the stress of the annual-mean wind
+        # (|mean(u)|² ≤ mean(|u|²), so seasonal wind reversals are under-stressed
+        # by the annual-mean field).  Compute monthly stress, then aggregate.
+        _wind_monthly_mirror = _to_physical_wind(wind_monthly, east)
+        tau = np.mean(
+            [
+                compute_wind_stress(_wind_monthly_mirror[m], c_d=config.ocean_drag_coefficient)
+                for m in range(12)
+            ],
+            axis=0,
+        )
         src, dst = _build_directed_edge_table(mesh.cells)
         curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
 
