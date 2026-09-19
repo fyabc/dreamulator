@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789851332946,
+  "lastUpdate": 1789856340032,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5190,6 +5190,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005592490480713304",
             "extra": "mean: 4.053126800000939 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "d96139f82264d25ca4e3e235fbba088f84d25d74",
+          "message": "feat(climate): UCC-01 第三步——分类候选比较实验 + profile v0 冻结\n\n实验（scripts/climate/ucc_classify_experiments.py）：在同一 L2 观测气候态\n（earth root 月度网格，20 万 cell）上比较 3 个候选主类（基线 均温3×AI3 /\n热量节点4×AI3 / 节点4×AI4），Köppen 由引擎在观测序列上并列计算作参照；\n修饰语消融（t_range/deficit/concentration）+ 16 次系统性扰动稳定性实验。\n结果与判读：private/reviews/ucc-l2-classify-2026-09-20.{json,md}。\n\n关键结论：节点带相对基线的 t_below_frac 类内压缩 0.67→0.00（最强单项\n增益）；t_range≥25 与 deficit≥0.5 修饰语采纳（轴向压缩 42%/14%）；\nconcentration 修饰语增益 0.2% 按 §4.3 停止规则拒绝；AI4 增益边际，\n留第四步着色时重议；引擎 Köppen vs Beck 主群一致率 84.7%（追 Köppen\n天花板量化，Köppen 降级为并列参照列）。\n\nprofile v0 冻结（src/dreamulator/map/ucc.py classify_v0，PROFILE_V0）：\n主类 = 热量 4 节点（t_max<10 极地 / t_min<−3 寒冷 / t_min<18 温和 /\n否则热带）× AI 3 档（0.5/1.0）= 12 陆地类；海洋只给热量带、供需轴\nnot_applicable；修饰语 continental / water_stress 按需出现不改主类；\n阈值全局共享、声明经验来源。L1 边界/部分有效测试 6 项（tests/test_ucc.py）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-20T06:18:22+08:00",
+          "tree_id": "7ca85ef34a10a612d5d129ef41025fd6ebed7b27",
+          "url": "https://github.com/fyabc/dreamulator/commit/d96139f82264d25ca4e3e235fbba088f84d25d74"
+        },
+        "date": 1789856338808,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 8.310668892662093,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03339683960991625",
+            "extra": "mean: 120.3272580000089 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.00333661292669,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0032310516046014583",
+            "extra": "mean: 249.79163550000294 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.009798578689923,
+            "unit": "iter/sec",
+            "range": "stddev: 0.7930736712208831",
+            "extra": "mean: 497.562298333321 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1197.4352852150705,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008006993733954742",
+            "extra": "mean: 835.118199995577 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 241.68486835686062,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007394054665262955",
+            "extra": "mean: 4.137619400000858 msec\nrounds: 5"
           }
         ]
       }
