@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789814288437,
+  "lastUpdate": 1789834695754,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5072,6 +5072,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00039587440460349133",
             "extra": "mean: 5.372822999999016 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e347fec023ef09b14235923ffc9adc23bfa49be7",
+          "message": "feat(climate): earth root 永不 build guard——reference_anchor 标志 + 气候引擎拒绝\n\n模型态 vs obs 态分离（CLAUDE.md 核心设计原则）：reference_anchor 世界的 root 永不\nbuild 模型层。WorldConfig 加 reference_anchor 标志，earth 置 true，气候引擎 run()\n开头拒绝 root+anchor 构建并指向分支。4 项测试。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-19T23:45:06+08:00",
+          "tree_id": "f6021b3c5a685808c423e81bdb37e9694fa65229",
+          "url": "https://github.com/fyabc/dreamulator/commit/e347fec023ef09b14235923ffc9adc23bfa49be7"
+        },
+        "date": 1789834694690,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 5.920198022951288,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0358110147988197",
+            "extra": "mean: 168.91326880000008 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.92870909379754,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06791402554423187",
+            "extra": "mean: 341.44736400000045 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.468785295583839,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0888896355776099",
+            "extra": "mean: 680.83470266667 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 956.4658815236934,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006254486601222216",
+            "extra": "mean: 1.0455155999991916 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.47037292753564,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007904123736939423",
+            "extra": "mean: 5.064050800000075 msec\nrounds: 5"
           }
         ]
       }
