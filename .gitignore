@@ -74,6 +74,10 @@ data/worlds/**/derived/
 # data/dev-data/index.json and is NOT ignored.
 data/dev-data/artifacts/
 
+# Earth–Nacrea bridging counterfactual branches (diagnostic, regeneratable via
+# scripts/climate/build_bridge_branches.py; not authored worlds).
+data/worlds/earth/branches/bridge-*/
+
 # Import artifacts (duplicates of maps/, staging area for import-elevation)
 layers/geological/input/maps/
 
