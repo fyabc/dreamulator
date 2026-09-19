@@ -190,6 +190,31 @@ class TestClimateSimulatorEndToEnd:
             f"Expected all {mesh.num_cells} cells populated, got {n_populated}"
         )
 
+    def test_hadley_derive_path_does_not_crash(self, mesh: CVTMesh) -> None:
+        """``hadley_extent_deg=0`` (derive) with subsidence warming must not crash.
+
+        Regression for the ZeroDivisionError where the subsidence-warming block
+        read the raw ``config.hadley_extent_deg`` (0.0) instead of the resolved
+        (derived) extent, producing an empty cell mask and an empty ``np.average``.
+        """
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        config = TerrainPipelineConfig(
+            seed=42,
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+            ebm_1d=True,  # the subsidence-warming block lives on the EBM branch
+            hadley_extent_deg=0.0,  # derive via Held-Hou instead of a pin
+            subsidence_warming_c=1.0,
+            num_nodes=100,
+        )
+        simulate_climate(mesh, config)
+        assert all(c.temperature_C is not None for c in mesh.cells)
+
     def test_temperature_physically_plausible(
         self, mesh: CVTMesh, config: TerrainPipelineConfig
     ) -> None:

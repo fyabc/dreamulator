@@ -320,7 +320,7 @@ def simulate_climate(
             # single-Hadley-cell branch above already has flat subtropics, and
             # the legacy sin² path below is a separate, unmaintained model.)
             if config.subsidence_warming_c > 0.0:
-                phi_h = np.radians(config.hadley_extent_deg)
+                phi_h = np.radians(hadley_extent_deg)
                 _cell = np.abs(lat_rad) < phi_h
                 t_cell = float(np.average(t_mean_C[_cell], weights=np.cos(lat_rad[_cell])))
                 _edge = np.radians(8.0)  # Ferrel/Hadley boundary transition width
