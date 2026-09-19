@@ -250,6 +250,17 @@ data/worlds/myworld/
 
 LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理结果。
 
+### 模型态 vs obs 态分离（earth root = 真实数据锚，永不 build）
+
+`earth` 是**真实地球参照世界**（reference baseline），不是「模型的地球」。硬规则：
+
+- **root 的 `maps/planet_earth/cvt_mesh.json` 绝对只含真实地球数据**：ETOPO1 高程、真实板块边界、
+  海陆掩膜，以及 `import_earth_climate` 导入的真实观测 obs 态字段（ERA5 / GPCP / Beck / SODA）。
+- **所有模型算出的字段**（`temperature_C` / `precipitation_mm` / `koppen_class` 等）**只写在分支上**
+  （`earth/branches/climate-dev` 等），绝不写进 root。
+- **earth root 永不 build**：模型字段宁可空缺（缺失），也绝不用生成值填充。前端/验证读不到 root 的
+  模型字段时，报「缺失」并指向分支，而不是触发一次 root build。
+
 ### 可复现性
 
 - 所有引擎使用种子化 RNG（`numpy.random.Generator`）
