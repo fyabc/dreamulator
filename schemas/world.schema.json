@@ -660,6 +660,12 @@
       },
       "title": "Planet Ids",
       "type": "array"
+    },
+    "reference_anchor": {
+      "default": false,
+      "description": "Real-data reference world: root never built for model layers",
+      "title": "Reference Anchor",
+      "type": "boolean"
     }
   },
   "required": [
