@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789767654902,
+  "lastUpdate": 1789814288437,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5013,6 +5013,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000912525435411419",
             "extra": "mean: 5.116904600004091 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "075f69552881a9f3cb0bda90460e165e2aae1f06",
+          "message": "feat(climate): Earth–Nacrea 桥接反事实分支脚本 + gitignore\n\nscripts/climate/build_bridge_branches.py：固定地球地理、逐单参数（自转/年长/倾角/\n光谱/总通量/温室）改向 Nacrea 值，fork astronomy 建 bridge-* 分支供前端查看；含\nyear-tilt 与 rotation-derived 两个组合变体。分支本身 gitignore（诊断反事实，非\n设定世界）。归因结论见 private/todos/today.md。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-19T18:28:06+08:00",
+          "tree_id": "d7b41dd3f21130b627ab3e8e3d66a5bc96c85e6c",
+          "url": "https://github.com/fyabc/dreamulator/commit/075f69552881a9f3cb0bda90460e165e2aae1f06"
+        },
+        "date": 1789814287649,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 6.203259132548925,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04356650884791594",
+            "extra": "mean: 161.20558219999737 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.3038721328534804,
+            "unit": "iter/sec",
+            "range": "stddev: 0.06535183119366343",
+            "extra": "mean: 302.67515200000264 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.366073842984976,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1781507351927492",
+            "extra": "mean: 732.0248499999996 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 740.2599556076344,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0005750970391990788",
+            "extra": "mean: 1.350876800000833 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 186.12189532396343,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00039587440460349133",
+            "extra": "mean: 5.372822999999016 msec\nrounds: 5"
           }
         ]
       }
