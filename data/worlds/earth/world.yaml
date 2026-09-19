@@ -37,3 +37,8 @@ layers:
 
 planet_ids:
   - planet_earth
+
+# Real-data reference anchor: the model (climate + downstream) layers are never
+# built on the root — root fields come from real observation
+# (import_earth_climate), model output lives on branches only.
+reference_anchor: true

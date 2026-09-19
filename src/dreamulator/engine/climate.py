@@ -84,6 +84,22 @@ class ClimateEngine(BaseEngine):
         """
         warnings: list[str] = []
 
+        # Model-state vs obs-state separation (CLAUDE.md「核心设计原则」): the
+        # earth root is a real-data reference anchor — the climate engine never
+        # writes model fields to it.  Model output lives on branches; the root's
+        # climate fields come from import_earth_climate (real observation).
+        if self._branch_name() is None and _is_reference_anchor(self.world_dir):
+            return EngineResult(
+                engine_name=self.name,
+                success=False,
+                warnings=[
+                    f"'{self.world_dir.name}' 是真实数据参照世界（reference_anchor=true）："
+                    f"root 永不 build 模型层。temperature/precipitation/koppen 只写在分支上——"
+                    f"用 `dreamulator build {self.world_dir.name} --branch <名>` 构建模型层；"
+                    f"root 的真实观测由 import_earth_climate 写入。"
+                ],
+            )
+
         # ---- 1. Load planet data ----
         planet_path = self.find_input("planets.yaml")
         if planet_path is None:
@@ -347,6 +363,21 @@ def _mesh_candidates(base: Path, planet_id: str | None) -> list[Path]:
         if p not in out:
             out.append(p)
     return out
+
+
+def _is_reference_anchor(world_dir: Path) -> bool:
+    """True when the world is a real-data reference anchor (earth root).
+
+    Such worlds are never built through the simulation pipeline for the model
+    (climate + downstream) layers — their fields come from real observation
+    (``import_earth_climate``), and model output lives on branches only.
+    (CLAUDE.md「模型态 vs obs 态分离」)
+    """
+    try:
+        data = yaml.safe_load((world_dir / "world.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return False
+    return bool((data or {}).get("reference_anchor", False))
 
 
 def _materialize_writable_mesh(

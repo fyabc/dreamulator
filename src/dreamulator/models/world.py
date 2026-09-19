@@ -50,3 +50,12 @@ class WorldConfig(BaseModel):
         default_factory=list,
         description="IDs of planets defined in separate planets.yaml file",
     )
+
+    # True for real-data reference-anchor worlds (earth): the model (climate +
+    # downstream) layers are never built on the root — model fields live on
+    # branches only, and the root's fields come from real observation
+    # (import_earth_climate).  See CLAUDE.md「模型态 vs obs 态分离」.
+    reference_anchor: bool = Field(
+        default=False,
+        description="Real-data reference world: root never built for model layers",
+    )
