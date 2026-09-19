@@ -14,7 +14,10 @@ from dreamulator.map.ucc import (
     MISSING_INPUT,
     NO_POSITIVE_DEMAND,
     NOT_APPLICABLE,
+    PROFILE_V0,
     VALID,
+    ClimateDescriptors,
+    classify_v0,
     compute_descriptors,
 )
 
@@ -83,3 +86,88 @@ def test_concentration_uniform_and_undefined() -> None:
 def test_below_freeze_fraction() -> None:
     d = compute_descriptors(np.array([-5.0, -1.0, 5.0, 15.0]), np.array([1.0] * 4))
     assert d.t_below_frac == pytest.approx(0.5)  # two of four bins below 0°C
+
+
+# ---------------------------------------------------------------------------
+# L1: classification profile v0 (ucc-review §4.3 / §7 第二步 — frozen
+# thresholds, boundary behaviour, partial validity)
+# ---------------------------------------------------------------------------
+
+
+def _desc(t: list[float], p: list[float], et: list[float] | None = None) -> ClimateDescriptors:
+    et_arr = None if et is None else np.array(et)
+    return compute_descriptors(np.array(t), np.array(p), et_arr)
+
+
+def test_v0_thermal_band_boundaries() -> None:
+    # t_max exactly 10 °C is NOT polar (strict <); t_min exactly −3 is NOT cold;
+    # t_min exactly 18 IS tropical.
+    d = _desc([9.0, 10.0], [1.0, 1.0], [2.0, 2.0])  # t_max=10, t_min=9
+    assert classify_v0(d, is_land=True).thermal == "temperate"
+    d = _desc([-3.0, 15.0], [1.0, 1.0], [2.0, 2.0])  # t_min=-3 boundary
+    assert classify_v0(d, is_land=True).thermal == "temperate"
+    d = _desc([18.0, 25.0], [1.0, 1.0], [2.0, 2.0])  # t_min=18 boundary
+    assert classify_v0(d, is_land=True).thermal == "tropical"
+    d = _desc([-30.0, 9.9], [1.0, 1.0], [0.5, 0.5])  # t_max<10 → polar
+    assert classify_v0(d, is_land=True).thermal == "polar"
+    d = _desc([-10.0, 15.0], [1.0, 1.0], [1.0, 1.0])  # t_min<−3, t_max≥10 → cold
+    assert classify_v0(d, is_land=True).thermal == "cold"
+
+
+def test_v0_supply_band_boundaries() -> None:
+    # AI = P/Eref; boundaries 0.5 and 1.0 (digitize semantics: edge → upper band).
+    d = _desc([20.0, 20.0], [0.5, 0.5], [1.0, 1.0])  # AI = 0.5 → transitional
+    assert classify_v0(d, is_land=True).supply == "transitional"
+    d = _desc([20.0, 20.0], [1.0, 1.0], [1.0, 1.0])  # AI = 1.0 → humid
+    assert classify_v0(d, is_land=True).supply == "humid"
+    d = _desc([20.0, 20.0], [0.4, 0.4], [1.0, 1.0])  # AI = 0.4 → arid
+    assert classify_v0(d, is_land=True).supply == "arid"
+
+
+def test_v0_ocean_supply_not_applicable() -> None:
+    # Ocean keeps its thermal band; the land wet/dry axis is not applicable.
+    d = _desc([20.0, 22.0], [0.1, 0.1], [1.0, 1.0])  # would be arid on land
+    c = classify_v0(d, is_land=False)
+    assert c.thermal == "tropical"
+    assert c.supply is None and c.supply_status == NOT_APPLICABLE
+    assert c.label == "tropical"
+    assert c.water_stress is None
+
+
+def test_v0_partial_validity_propagates() -> None:
+    # Missing PET on land: temperature band survives, supply carries the status.
+    d = _desc([5.0, 15.0], [1.0, 1.0], et=None)
+    c = classify_v0(d, is_land=True)
+    assert c.thermal == "temperate"
+    assert c.supply is None and c.supply_status == MISSING_INPUT
+    assert c.water_stress is None
+    # P=Eref=0 → AI not_applicable propagates (not a fake "arid").
+    d = _desc([-20.0, -15.0], [0.0, 0.0], [0.0, 0.0])
+    c = classify_v0(d, is_land=True)
+    assert c.thermal == "polar"
+    assert c.supply is None and c.supply_status == NOT_APPLICABLE
+
+
+def test_v0_modifiers() -> None:
+    # continental: t_range ≥ 25 °C.
+    d = _desc([-5.0, 20.0], [1.0, 1.0], [1.0, 1.0])  # range 25 → boundary True
+    assert classify_v0(d, is_land=True).continental is True
+    d = _desc([-5.1, 20.0], [1.0, 1.0], [1.0, 1.0])  # range 25.1 → True
+    assert classify_v0(d, is_land=True).continental is True
+    d = _desc([0.0, 24.9], [1.0, 1.0], [1.0, 1.0])  # range 24.9 → False
+    assert classify_v0(d, is_land=True).continental is False
+    # water_stress: deficit ≥ 0.5 (P half of Eref, all in the same bins).
+    d = _desc([20.0, 20.0], [0.5, 0.5], [1.0, 1.0])  # deficit = 0.5 → True
+    assert classify_v0(d, is_land=True).water_stress is True
+    d = _desc([20.0, 20.0], [2.0, 2.0], [1.0, 1.0])  # deficit = 0 → False
+    assert classify_v0(d, is_land=True).water_stress is False
+
+
+def test_v0_constant_temperature_classifies() -> None:
+    # 恒温 (§3.1): thermal band still applies; continental is False (range 0).
+    d = _desc([25.0] * 4, [1.0] * 4, [0.5] * 4)
+    c = classify_v0(d, is_land=True)
+    assert c.thermal == "tropical"
+    assert c.supply == "humid"  # AI = 2
+    assert c.continental is False
+    assert c.profile == PROFILE_V0

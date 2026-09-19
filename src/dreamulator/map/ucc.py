@@ -147,3 +147,100 @@ def _concentration(p_rate: np.ndarray, dt: np.ndarray, p_total: float) -> float 
     q = p_rate * dt / p_total  # precipitation mass fraction per bin
     w = dt / dt.sum()  # uniform-rate reference
     return float(0.5 * np.sum(np.abs(q - w)))
+
+
+# ---------------------------------------------------------------------------
+# Classification profile v0 (ucc-review §4.3 / §7 第二步; frozen 2026-09-20
+# after the L2 candidate comparison — see private/reviews/ucc-l2-classify-*.md)
+# ---------------------------------------------------------------------------
+
+PROFILE_V0 = "ucc-v0"
+"""Frozen classification profile identifier.  Bump on any threshold change.
+
+v0 semantics (all thresholds declared *empirical candidates*, shared across
+worlds — never per-world quantiles; §4.3):
+
+- Thermal bands (from bin-mean min/max): ``t_max < 10 °C`` → polar;
+  ``t_min < −3 °C`` → cold; ``t_min < 18 °C`` → temperate; else tropical
+  (Köppen thermal nodes, evaluated on the descriptors, not on geometry).
+- Supply–demand bands (land only): AI < 0.5 → arid; AI < 1.0 → transitional;
+  else humid.  Ocean cells carry the thermal band only — the land-oriented
+  wet/dry axis is ``not_applicable`` there (§4.4).
+- Modifiers (optional, never change the main class): ``continental`` when
+  ``t_range ≥ 25 °C``; ``water_stress`` when ``deficit ≥ 0.5``.
+- Demand model: hamon-1961 (12 h daylength; declared, not FAO-56-calibrated).
+"""
+
+T_NODE_POLAR_C_V0 = 10.0
+T_NODE_COLD_C_V0 = -3.0
+T_NODE_TROPICAL_C_V0 = 18.0
+AI_EDGES_V0 = (0.5, 1.0)
+MOD_T_RANGE_C_V0 = 25.0
+MOD_DEFICIT_V0 = 0.5
+
+THERMAL_BANDS_V0 = ("polar", "cold", "temperate", "tropical")
+SUPPLY_BANDS_V0 = ("arid", "transitional", "humid")
+
+
+@dataclass(frozen=True)
+class UCCClassV0:
+    """One cell's classification under profile v0.
+
+    ``supply``/``water_stress`` are None with a non-``valid`` status when the
+    supply–demand axis does not apply (ocean, missing PET, undefined AI) —
+    partial validity, mirroring the descriptor contract (§4.4).
+    """
+
+    profile: str
+    thermal: str  # one of THERMAL_BANDS_V0
+    supply: str | None  # one of SUPPLY_BANDS_V0, or None
+    supply_status: str
+    continental: bool  # t_range ≥ MOD_T_RANGE_C_V0
+    water_stress: bool | None  # deficit ≥ MOD_DEFICIT_V0, or None
+
+    @property
+    def label(self) -> str:
+        """Human-readable main class, e.g. ``temperate/arid`` or ``polar``."""
+        return self.thermal if self.supply is None else f"{self.thermal}/{self.supply}"
+
+
+def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
+    """Classify one cell's descriptors under the frozen profile v0.
+
+    The thermal band always applies (constant-temperature cells included —
+    §3.1); the supply–demand band is land-only and follows the descriptor's
+    own AI validity state.
+    """
+    if d.t_max < T_NODE_POLAR_C_V0:
+        thermal = THERMAL_BANDS_V0[0]
+    elif d.t_min < T_NODE_COLD_C_V0:
+        thermal = THERMAL_BANDS_V0[1]
+    elif d.t_min < T_NODE_TROPICAL_C_V0:
+        thermal = THERMAL_BANDS_V0[2]
+    else:
+        thermal = THERMAL_BANDS_V0[3]
+
+    supply: str | None = None
+    supply_status = NOT_APPLICABLE
+    if is_land:
+        supply_status = d.ai_status
+        if d.ai_status == VALID and d.ai is not None:
+            if d.ai < AI_EDGES_V0[0]:
+                supply = SUPPLY_BANDS_V0[0]
+            elif d.ai < AI_EDGES_V0[1]:
+                supply = SUPPLY_BANDS_V0[1]
+            else:
+                supply = SUPPLY_BANDS_V0[2]
+
+    water_stress: bool | None = None
+    if is_land and d.deficit_status == VALID and d.deficit is not None:
+        water_stress = d.deficit >= MOD_DEFICIT_V0
+
+    return UCCClassV0(
+        profile=PROFILE_V0,
+        thermal=thermal,
+        supply=supply,
+        supply_status=supply_status,
+        continental=d.t_range >= MOD_T_RANGE_C_V0,
+        water_stress=water_stress,
+    )
