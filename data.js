@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789918347055,
+  "lastUpdate": 1789937693903,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5426,6 +5426,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006306218566712393",
             "extra": "mean: 4.042331600000182 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "5a351aec6e203b1ce59219961465793b6eeae8ab",
+          "message": "feat(solar): 太阳系参照天体并入 earth 锚世界（UCC-01 4d 四体建成）\n\n架构（用户裁决 2026-09-21）：Mars/Moon/Venus/Titan 作为 earth root（现实世界\n数据锚）的额外 planet_ids，不单开世界；ID 沿用 stellar.yaml 约定\n（planet_mars/satellite_moon/planet_venus/satellite_titan）；mesh cell 数按\n数据源精度：Moon 100k（Diviner GCP 0.5°）＞ Mars 10k（MCD ~5.7°）= Venus 10k\n（VCD ~1.9°）＞ Titan 3k（TAM T21 5.6°）。\n\n- src/dreamulator/import_solar_common.py：共享导入机制（register_solar_planet /\n  DEM→CVT mesh 地标校验 / LMD ASCII 解析 / climate_monthly 含 bin_days 时间契约 /\n  UCC yearly 支持 demand_model=None→MI）；export_earth_yearly.py 重构委托\n- scripts/solar/：fetch_lmd_slices.py（LMD Web 免注册抓取，--max-time 护栏——\n  VCD averaging=loct 挂起实测教训）+ 四导入器 + ucc_examples_solar.py\n- 数据源全免注册：MOLA/MCD v6.1（日均 ASCII×36）、LDEM_4/Diviner GCP 2.8GB\n  （tbol 作 SPT 代理，fill 0.00%）、Magellan/VCD v2.3（固定 LT 切片×24）、\n  TAM 水文 run（Zenodo CC-BY 单一一致源）\n- UCC v1 实测（知识文档 §8 四行补实测对照 + Moon 新行）：Mars 全行星 Pn\n  （日均 t_max −25°C，OOD 门全域实锤）；Moon Cn 94%/Pn 6% 无热带（地方时\n  分箱、日较差 296°C、观测态例外 surface 声明）；Venus 全 Ra-w（热侧外推\n  缺口活体演示，provenance 响亮警告）；Titan Pn+甲烷海 Po 1.4%（bin=896.4\n  地球日时间契约极端案例、mm 液态 CH₄、MI 拒绝非水溶剂）\n- stellar.yaml：大小 ≥ 海卫一的卫星全收（+Io/Europa/Ganymede/Callisto/Triton，\n  NASA Fact Sheet + JPL 实值）；world.yaml planet_ids +5；root astronomy\n  derived 已本地重建（页签入口修复）\n- worked examples ×4 → earth/design-notes/；tests/test_import_solar.py 6 项；\n  知识沉淀 planetary_science/solar_system_data_sources.md（数据源层级+抓取坑）\n- 门槛：mypy/ruff/全量 pytest/check_doc_refs 全绿\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-21T04:48:56+08:00",
+          "tree_id": "dbc2c353b17ef9b90faf2f2f0fd43711500bd704",
+          "url": "https://github.com/fyabc/dreamulator/commit/5a351aec6e203b1ce59219961465793b6eeae8ab"
+        },
+        "date": 1789937692840,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 5.998252150111599,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04281938930580826",
+            "extra": "mean: 166.71523219999926 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.053181145768645,
+            "unit": "iter/sec",
+            "range": "stddev: 0.001607638379724351",
+            "extra": "mean: 327.52724199999864 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4792268111042808,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0799859889201773",
+            "extra": "mean: 676.0288500000039 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 978.6342610851316,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007069367321723909",
+            "extra": "mean: 1.0218322000000057 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.59938891411767,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009410793031108518",
+            "extra": "mean: 5.086485799998286 msec\nrounds: 5"
           }
         ]
       }
