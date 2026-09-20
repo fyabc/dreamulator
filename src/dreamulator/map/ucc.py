@@ -231,6 +231,26 @@ OCEAN_CODE_LETTER = "o"
 LAND_NA_CODE_LETTER = "n"
 MOD_CODE_LETTERS = {"continental": "x", "water_stress": "w"}
 
+# Short display forms for the applicability statuses (§3) — for table cells in
+# worked-example / fixture docs where the full snake_case name is too wide.
+# ``valid`` needs no short form (the numeric value is shown instead), so it is
+# absent here and ``status_short`` falls back to the input for anything unmapped.
+STATUS_SHORT_CODES = {
+    MISSING_INPUT: "MI",
+    NOT_APPLICABLE: "NA",
+    NO_POSITIVE_DEMAND: "NPD",
+    OUT_OF_DOMAIN: "OOD",
+}
+
+
+def status_short(status: str) -> str:
+    """Compact display form of an applicability status (see STATUS_SHORT_CODES).
+
+    Unknown / ``valid`` statuses pass through unchanged, so callers can apply it
+    unconditionally and pair it with a legend in the document header.
+    """
+    return STATUS_SHORT_CODES.get(status, status)
+
 
 @dataclass(frozen=True)
 class UCCClassV0:

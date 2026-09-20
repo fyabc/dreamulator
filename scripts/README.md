@@ -1,11 +1,11 @@
 # scripts/ 目录说明
 
-按域分组，共 44 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 55 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（24 个）
+## climate/ — 气候验证与诊断（31 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -27,8 +27,20 @@
 - `diagnose_desert_wetness.py` — §5 沙漠过湿归因：默认存档模式（秒级，GPCP 海洋格 f(ΔSST) 对流门
   标定 + SST 距平结构核查）；`--ablation` 三引擎重跑（季风/κ 消融逐盒归因，~15 min）。
 - `diagnose_lapse_moisture.py` — 递减率干湿维度可行性实验（读产物手算定点，不动引擎）。
+- `ablate_heat_transport.py` — 热输送消融（§2.6③：三分支逐个关 ocean-currents/upwelling/
+  maritime，隔离各机制对 T/P/D 的贡献；重跑气候，~15 min）。
+- `build_bridge_branches.py`、`build_bridge_branches_nacrea.py` — Earth↔Nacrea 单参数桥接
+  实验分支生成（fork astronomy 覆写自转/倾角/温室/光谱/通量/年长；分支已 gitignore）。
+- `ucc_obs_descriptors.py` — UCC L2 数据集构建（earth root 观测月度序列 → 描述量 +
+  Beck Köppen 参照列 + provenance，msgpack 进 private/reviews/）。
+- `ucc_classify_experiments.py` — UCC 分类候选比较实验（分组候选/消融/扰动，profile
+  v0/v1 冻结依据）。
+- `ucc_examples_earth.py` — Earth worked examples 文档生成（~33 命名地点 + 未覆盖类的
+  类中心点补位 → `data/worlds/earth/design-notes/ucc-worked-examples.md`；读 L2 数据集，秒级）。
+- `ucc_examples_nacrea.py` — Nacrea 迁移语义夹具生成（全局分布 + 预期核对 + 命名地理锚点 +
+  极值点 → `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md`；解析 mesh，~1 min）。
 
-## earth/ — 真实地球数据导入与验证参考（9 个）
+## earth/ — 真实地球数据导入与验证参考（10 个）
 
 earth 基础世界是**导入世界**（不走 build 管线）；这组把真实观测采样到 CVT 网格。
 发布时 `release/publish_world_data.py` 按依赖序自动调用四个 importer。
@@ -40,6 +52,9 @@ earth 基础世界是**导入世界**（不走 build 管线）；这组把真实
 - `generate_validation_reference.py`、`generate_spatial_reference.py`、`generate_monthly_reference.py`、
   `generate_lgm_reference.py` — 纬向 / 逐格 / 月度 / LGM 验证参考数据生成
   （`generate_spatial_reference.py` 输出前端 `spatialReference.ts`，供 ΔT/ΔP 逐格偏差图层）。
+- `export_earth_yearly.py` — earth root 的 UCC 年度文件导出器：从**观测**月度序列直写
+  `climate_yearly.msgpack`（描述量 + 当前 profile 分类，`data_source: "observation"`；
+  root 永不 build 的 obs 侧对应物，已注册进 publish_world_data 导入链）。
 
 ## astro/ — 天文 N 体与恒星诊断（5 个）
 

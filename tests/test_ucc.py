@@ -22,6 +22,7 @@ from dreamulator.map.ucc import (
     classify_v0,
     classify_v1,
     compute_descriptors,
+    status_short,
 )
 
 
@@ -93,6 +94,24 @@ def test_seasonal_deficit() -> None:
     # P=0, Eref=1 → deficit 1 (full shortfall).
     d = compute_descriptors(np.array([10.0]), np.array([0.0]), et_rate=np.array([1.0]))
     assert d.deficit == 1.0
+
+
+def test_same_ai_phase_pair_deficit_diverges() -> None:
+    # 同 AI 同步/错季反例对 (§4.2/§5.2): two series with identical annual AI but
+    # opposite P–Eref phase differ in deficit — only the out-of-phase one earns
+    # the water_stress modifier.  The annual supply–demand ratio structurally
+    # cannot see this difference; the deficit must.
+    et = np.array([1.0, 3.0, 1.0, 3.0])
+    p_in_phase = np.array([1.0, 3.0, 1.0, 3.0])  # P tracks Eref: AI=1, deficit=0
+    p_anti_phase = np.array([3.0, 1.0, 3.0, 1.0])  # same AI=1, deficit=0.5
+    d1 = compute_descriptors(np.full(4, 20.0), p_in_phase, et)
+    d2 = compute_descriptors(np.full(4, 20.0), p_anti_phase, et)
+    assert d1.ai == pytest.approx(1.0) and d2.ai == pytest.approx(1.0)
+    assert d1.deficit == pytest.approx(0.0)
+    assert d2.deficit == pytest.approx(0.5)
+    c1, c2 = classify_v1(d1, is_land=True), classify_v1(d2, is_land=True)
+    assert c1.supply == c2.supply == "humid"  # main class identical
+    assert c1.water_stress is False and c2.water_stress is True  # modifier separates
 
 
 def test_concentration_uniform_and_undefined() -> None:
@@ -211,6 +230,13 @@ def test_short_codes() -> None:
     d = _desc([-5.0, 25.0], [0.4, 0.4], [1.0, 1.0])
     assert classify_v0(d, is_land=True).code == "Ca-xw"
     assert classify_v1(d, is_land=True).code == "Cs-xw"  # v1 splits arid at 0.2
+
+
+def test_status_short_codes() -> None:
+    # Table-cell short forms (doc legend explains them); unmapped passes through.
+    assert status_short(OUT_OF_DOMAIN) == "OOD"
+    assert status_short(MISSING_INPUT) == "MI"
+    assert status_short(VALID) == VALID
 
 
 def test_v1_splits_arid_at_02() -> None:

@@ -1,11 +1,13 @@
 # 统一气候描述（UCC）：连续描述量与分类 profile
 
-> 2026-09-20 整理，对应 UCC-01 第一至三步的已冻结内容。实现入口是
-> `src/dreamulator/map/ucc.py` 的 `compute_descriptors()`（描述量）与 `classify_v0()`
-> （分类 profile v0）；逐 cell 描述量的导出格式见
+> 2026-09-20 整理，对应 UCC-01 第一至四步的已冻结内容。实现入口是
+> `src/dreamulator/map/ucc.py` 的 `compute_descriptors()`（描述量）与 `classify_v1()`
+> （当前分类 profile v1；`classify_v0()` 保留可复现）；逐 cell 描述量的导出格式见
 > `docs/design/pipelines/climate-pipeline.md` 的 climate_yearly.msgpack 一节。
 > 设计与评审依据是 2026-09-17 的 UCC 专项评审和 2026-09-20 的分类候选比较实验
-> （完整记录在本仓库 private/reviews/ 下，未入库）。
+> （完整记录在本仓库 private/reviews/ 下，未入库）。真实数据例证见
+> `data/worlds/earth/design-notes/ucc-worked-examples.md`（观测）与
+> `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md`（架空世界迁移夹具）。
 
 统一气候描述（Unified Climate Classification，UCC）要解决的问题是：让用户在任意
 世界的地图上读到一致、可解释的气候描述。它用「连续描述量 → 版本化分类 profile」
@@ -208,6 +210,60 @@ profile 的表达范围内，引用 UCC 结果时不应外推：
 - 实际水资源可用性——河水、冰川融水、地下水属于水文层，UCC 的 deficit 只
   描述气候供需的同期亏缺，不描述一个地点实际有多少水可用。
 
+## 7. canonical 合成序列读法（反例对）
+
+描述量的语义边界最容易在最小合成序列上看清。下面两对反例是 `tests/test_ucc.py`
+钉住的用例——它们不是真实气候，而是刻意构造来暴露「一个量看得见什么、看不见
+什么」的骨架。读 UCC 输出时，遇到反直觉的标签先回到这两对反例自检。
+
+### 7.1 恒温 ≠ 无季节
+
+序列：`t = [15, 15, 15, 15] °C`（恒温），`p = [0, 0, 10, 10]`（降水集中在后两箱）。
+
+- `t_mean = 15`、`t_range = 0`——温度轴完全平。
+- `concentration > 0`——**降水季节性照常保留**。
+
+要点：「没有温度季节」不等于「没有降水季节性」。描述量是逐轴独立的，温度轴平掉
+不会把水轴一起抹平。分类上，这个 cell 照拿热量带（15 °C → temperate）与供需档，
+只是 `continental` 修饰语为 False（t_range 0 < 25）。恒温世界（如强海洋调节的行星）
+因此仍能被描述出干湿季节，不会退化成一句「常年如春」。
+
+### 7.2 同 AI，同步 vs 错季
+
+两条序列共享同一参考需求 `Eref = [1, 3, 1, 3]`，年供需比完全相同：
+
+| 序列 | P（逐箱） | AI = P总/Eref总 | deficit |
+|------|-----------|------------------|---------|
+| 同步 | `[1, 3, 1, 3]` | 1.0 | 0.0（供水当期满足需求） |
+| 错季 | `[3, 1, 3, 1]` | 1.0 | 0.5（半数需求在错季落空） |
+
+要点：年 AI 是窗口不变量，**结构上看不到相位**——同步与错季的 AI 都是 1.0，年总量
+收支平衡。区分它们的是 deficit（同期亏缺份额）：错季序列有一半需求在供水不足的
+分箱里落空。分类上两者主类相同（temperate/humid），但 `water_stress` 修饰语只对
+错季序列点亮（deficit 0.5 ≥ 阈值 0.5）。这正是 §5.2 把 water_stress 单列为修饰语、
+而不是塞进供需主档的原因：地中海型（冬雨夏干）与季风型（夏雨冬干）可以年 AI 相同，
+但错季程度不同，用修饰语区分、不改主类。
+
+## 8. 迁移语义演练表（外星气候示意值）
+
+把同一 profile 迁移到非地球气候时，部分有效契约（§3 的五状态）负责**拒绝**给出
+没有物理意义的数，而不是硬算一个。下表用 Titan/Venus/Mars 的**文献典型示意值**
+（数量级演示，**非本仓库数据、非模拟结果**）演练各状态是否正确触发。真实数据例证
+见太阳系参照世界建成后的各自 design-notes（ucc-01-plan 4d，尚未实现）。
+
+| 世界 | T 范围（示意） | P（示意） | 溶剂 / 需求模型 | 触发的状态 | 分类结果与读法 |
+|------|----------------|-----------|------------------|------------|----------------|
+| **Titan** | ~ −180 °C（93 K），近恒温 | 甲烷雨 ~50–150 mm/yr | CH₄，非水；Hamon 不适用 | `t_max < 0` → AI/deficit **out_of_domain**（冷侧门）；非水溶剂另受 §6 范围限制约束 | polar 热量带（t_max ≪ 10）；供需轴 n/a → `Pn`。温度轴有效，供需轴被冷侧门正确拒绝。若将来接甲烷需求模型，须**换 demand_model 声明**而非复用 hamon-1961 |
+| **Venus** | ~ +464 °C（737 K），近等温 | 表面无液态降水 P ≈ 0 | 超临界 CO₂ 大气；Hamon 远超标定域 | `t_min ≫ 18` → tropical；P≈0、Eref>0 → AI=0 **valid**（arid）；但 Hamon 在 464 °C 是**热侧外推，无物理意义** | `Ra`（tropical/arid）——**已知缺口**：out_of_domain 门只挡冷侧（冰点以下），热侧外推不被拦截。演练价值 = 明确记录此缺口，Venus 类高温世界的 AI 需人工判为不可信，或未来增设热侧域门 |
+| **Mars** | ~ −125 至 +20 °C，多数 < 0 | P ≈ 0（水汽/CO₂ 霜，无液态降水） | 稀薄 CO₂；Hamon 勉强可算但近零 | 多数区 `t_max < 0` → **out_of_domain**；`P ≈ 0` → concentration **无定义**（None，非 0） | polar/cold 热量带；供需轴多为 n/a → `Pn`/`Cn`。演练两个「拒绝」路径叠加：冷侧域门 + 无降水时集中度不报数（§4.2：无降水 concentration undefined）。少数赤道夏季 t_max>0 的点才可能给出 AI=0 的 arid |
+
+**演练结论**：五状态里 `out_of_domain`（冷侧）、`no_positive_demand`（P>0/Eref=0）、
+`not_applicable`（P=Eref=0）、`missing_input`（无 PET）在极端气候下都有明确的触发
+场景，部分有效契约能拒绝绝大多数无意义的供需数。**唯一已知缺口是热侧外推**——
+需求模型在高温下同样失效，但当前门只覆盖冰点以下；高温世界（Venus 型）的 AI 在
+增设热侧域门前应视为不可信。这条缺口是演练表暴露的、登记在册的 profile 未来工作，
+不是当前的静默错误。
+
 ## 参考资料
 
 - Hamon, W.R. (1961). Estimating potential evapotranspiration. *Journal of the
@@ -237,3 +293,9 @@ profile 的表达范围内，引用 UCC 结果时不应外推：
 - `ocean_provinces.md` — 海洋分区体系（UCC 干湿轴不覆盖海洋）
 - `docs/design/pipelines/climate-pipeline.md` — climate_yearly.msgpack 导出格式
   与 `result_metadata()` 时间约定（实现层技术参考）
+- `data/worlds/earth/design-notes/ucc-worked-examples.md` — Earth 观测 worked
+  examples（33 命名地点 + 类覆盖，4b 创作验收审阅清单；脚本
+  `scripts/climate/ucc_examples_earth.py` 生成）
+- `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md` — Nacrea 迁移
+  语义夹具（同 profile 应用于架空世界的基线记录；脚本
+  `scripts/climate/ucc_examples_nacrea.py` 生成）
