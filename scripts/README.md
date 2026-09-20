@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 55 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 61 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
@@ -55,6 +55,38 @@ earth 基础世界是**导入世界**（不走 build 管线）；这组把真实
 - `export_earth_yearly.py` — earth root 的 UCC 年度文件导出器：从**观测**月度序列直写
   `climate_yearly.msgpack`（描述量 + 当前 profile 分类，`data_source: "observation"`；
   root 永不 build 的 obs 侧对应物，已注册进 publish_world_data 导入链）。
+
+## solar/ — 太阳系参照天体（6 个）
+
+Mars / Moon / Venus / Titan 真实数据参照天体（UCC-01 4d）——**并入 earth root
+（现实世界数据锚）作为额外 planet_ids**，不单开世界（用户裁决 2026-09-21；ID 沿用
+stellar.yaml 约定：`planet_mars` / `satellite_moon` / `planet_venus` /
+`satellite_titan`）。共享导入机制在 `src/dreamulator/import_solar_common.py`
+（register_solar_planet / DEM→CVT mesh 地标校验 / climate_monthly 含 **bin_days
+时间契约** / UCC yearly 支持 demand_model=None→MI）。**mesh cell 数按各天体数据源
+精度定**：Moon 100k（GCP 0.5°）> Mars 10k（MCD ~5.7°）= Venus 10k（VCD ~1.9°）>
+Titan 3k（TAM T21 5.6°）。数据为 GCM 气候态（L4 压力测试层，非观测真值；Moon
+Diviner 为观测级地表温度例外），provenance 随导出文件走。原始数据缓存
+`private/tmp/solar/`（Mars/Venus/Titan 缺失自动重下；Moon GCP 2.8GB 见脚本 docstring）。
+
+- `fetch_lmd_slices.py` — LMD Web 接口免注册抓取器（MCD/VCD 通用：POST 配方 +
+  txt 链接解析 + `--max-time` 护栏；**VCD 的 averaging=loct 挂起**，用
+  `--averaging off` 固定地方时切片）。
+- `import_mars.py` — MOLA 4ppd 地形（PDS IMG，地标校验）+ MCD v6.1 气候态
+  （12 个 Ls 箱中心日均 ASCII 切片；P≡0 声明——现今无液态降水，霜层作注脚；
+  bin = 火星月 57.25 地球日）。
+- `import_moon.py` — LRO LDEM_4 地形（NASA SVS GeoTIFF，km→m）+ Diviner GCP
+  18 带聚合（tbol 作 SPT 代理；**地方时分箱** 12×2h；观测级例外声明
+  `temperature_kind: surface`；P≡0 真空、demand_model=None→MI）。
+- `import_venus.py` — USGS Magellan 全球地形（极区 NODATA 列填充；Maxwell 9.9 km
+  地标校验）+ VCD v2.3 固定 LT 切片；**热侧外推缺口活体演示**（Hamon 保留，
+  provenance 响亮警告；知识文档 §8）。
+- `import_titan.py` — TAM 耦合水文 run（Zenodo CC-BY 单一一致源：tsurf/precip/
+  qsurf/dtd）；bin = 896 地球日（土星年 1/12）；P = mm 液态 CH₄；甲烷海
+  qsurf>0.05m → water_class ocean；demand_model=None→MI（非水溶剂）。
+- `ucc_examples_solar.py` — UCC worked examples 文档生成（`--planet mars|moon|
+  venus|titan`：全局分布 + 世界要点注记 + 命名地貌地点 + 极值点 →
+  `data/worlds/earth/design-notes/ucc-worked-examples-<body>.md`）。
 
 ## astro/ — 天文 N 体与恒星诊断（5 个）
 

@@ -154,7 +154,8 @@
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
-| P2 | **太阳系参照世界**（Mars / Moon / Venus / Titan 真实数据 root，沿用 earth reference_anchor 模式、永不 build）：Mars/Venus/Titan 气候数据均为 GCM 气候态（MCD v6.1 / VCD v2.3 / TAM）= UCC 评审 L4 压力测试层、非观测真值；Moon = LRO Diviner 观测级地表温度（唯一观测态例外，地表温 vs 气温契约案例）；Mars → Moon → Venus → Titan。评估与顺序 → `private/plans/ucc-01-plan.md` 4d | Mars ~1 周级 | ★★★ |
+| P2 | **太阳系参照天体 ✅（2026-09-21 建成）**（Mars / Moon / Venus / Titan **并入 earth root 作为额外 planet_ids**——earth 实为「现实世界数据锚」，一个锚世界多真实天体；ID 沿用 stellar.yaml 约定 `planet_*`/`satellite_*`；mesh 按数据精度 Moon 100k/Mars 10k/Venus 10k/Titan 3k；永不 build）：Mars = MOLA+MCD v6.1（全行星 Pn，OOD 门全域实锤）；Moon = LDEM+Diviner GCP（地方时分箱，Cn/Pn 无热带——唯一观测态例外、地表温契约案例）；Titan = TAM 水文 run（甲烷海 Po + Pn，bin=896 地球日时间契约极端案例，非水溶剂 MI 拒绝）；Venus = Magellan+VCD v2.3（热侧外推缺口活体演示 Ra-w）。共享机制 `import_solar_common.py` + `scripts/solar/`；UCC L4 压力测试层、GCM 非真值 provenance 随文件走。细节 → `private/plans/ucc-01-plan.md` 4d + `data/worlds/earth/design-notes/` | ✅ | ★★★ |
+| P3 | **UCC 天体区分度配套**（2026-09-21 登记）：① 文献调研（deep research 候选）——学界如何划分 Mars/Venus/Titan/Moon 气候（甲烷水文带/挥发分分区/环流区划/热环境分类），作 v2 溶剂/挥发分专属轴的参照目标；② 前端点击式显示天体 profile 声明（provenance/demand_model/bin_days/temperature_kind 字段已在 climate_yearly 文件内）。裁决与候选方向 → `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（陆地 = CHELSA/WorldClim 30″ 按 cell footprint 面积加权聚合，海洋维持 NCEP/GPCP 2.5°；消除「UCC 比 Beck 糊」的分辨率差、与 Beck 同输入使发散纯归因于规则）：须在 LGM 分支之前做（CHELSA 导入管线两处复用）。评估 → `private/plans/ucc-01-plan.md` 4e 附注 | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm` 导入分支：ICE-6G_C 高程 + −120 m 海平面 + CHELSA-TraCE21k 月度 T/P，复用 200k mesh）：「同一行星、不同真实气候态」的 UCC 稳定性检验 + 冰期创作设定双用途；模式重建（CCSM3 降尺度 + 代用指标约束）非观测真值，provenance 声明。评估 → `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |

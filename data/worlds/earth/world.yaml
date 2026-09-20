@@ -1,13 +1,18 @@
 metadata:
   name: earth
-  description: Earth — our home world in the Solar System, used as the reference baseline.
+  # NOTE: the name "earth" is historical — this world is the REAL-WORLD reference
+  # anchor: Earth observations plus real Solar-System bodies (Mars / Moon /
+  # Venus / Titan) as additional planet_ids, all imported, never built.
+  description: Real-world reference anchor — Earth observation baseline + Solar-System
+    bodies (Mars, Moon, Venus, Titan) as imported reference data.
   dreamulator_version: 0.1.0
   created: '2026-05-29T17:26:20.139700+00:00'
-  modified: '2026-05-30T00:00:00+00:00'
+  modified: '2026-09-21T00:00:00+00:00'
   tags:
     - reference
     - earth
     - baseline
+    - solar-system
 
 seed:
   seed: 42
@@ -37,6 +42,13 @@ layers:
 
 planet_ids:
   - planet_earth
+  # Real Solar-System bodies (UCC-01 4d): imported climate/topography anchors,
+  # never built. IDs follow stellar.yaml conventions (satellite_* for moons).
+  # Mesh cell counts scale with each body's source-data resolution.
+  - planet_mars        # MOLA 0.25° topo + MCD v6.1 ~5.7° climate → 10k cells
+  - satellite_moon     # LDEM 0.25° topo + Diviner GCP 0.5° → 100k cells
+  - planet_venus       # Magellan 0.044° topo + VCD v2.3 ~1.9° climate → 10k cells
+  - satellite_titan    # TAM T21 ~5.6° (all fields) → 3k cells
 
 # Real-data reference anchor: the model (climate + downstream) layers are never
 # built on the root — root fields come from real observation

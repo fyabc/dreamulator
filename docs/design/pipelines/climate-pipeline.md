@@ -730,6 +730,14 @@ bit1 = water_stress）。分类在导出层一次性算好，前端只读码不�
 `"model"`（引擎导出）与 `"observation"`（earth root 的观测派生文件，见
 earth-real-data.md §2.4 末）。
 
+写入端有两处：引擎构建路径（`export.py`），以及导入器侧共享模块
+`import_solar_common.write_ucc_yearly`——earth root 的 `export_earth_yearly.py`
+与太阳系参照世界（UCC-01 4d，reference_anchor、永不 build）的导入器都走它。
+导入器侧文件额外携带 `bin_days` / `window_days`：缺省即参考月/参考年，非地球
+窗口（如火星月 ≈ 57.25 地球日）必须显式声明——`p_total_mm` 按该窗口报总量，
+AI/deficit 是窗口不变量、跨世界直接可比（时间契约见
+`docs/knowledge/climatology/ucc_climate_descriptors.md` §2）。
+
 ---
 
 ## 12. 验证方法

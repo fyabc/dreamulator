@@ -109,6 +109,65 @@ orbits:
     argument_of_periapsis_deg: 318.15
     mean_anomaly_epoch_deg: 135.27
     epoch_year: 0.0
+  # 大小 ≥ 海卫一的卫星全收录（用户约定 2026-09-21）：Moon/Titan（已列）+
+  # 伽利略四星 + Triton，共 7 颗。物理/轨道数据 = NASA Planetary Fact Sheet +
+  # JPL SSD phys_par（2026-09-21 检索）。Ω/ω/M 对近圆近共面轨道（e<0.01、
+  # i<0.5°）在该数据精度下简并，取 0（root 永不 build，此目录只服务展示与
+  # 天文上下文；Triton 逆行轨道以 inclination>90° 表达）。
+  - body_id: satellite_io
+    parent_id: planet_jupiter
+    semi_major_axis_au: 0.002820    # 421,800 km
+    eccentricity: 0.004
+    inclination_deg: 0.04            # to ecliptic
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+  - body_id: satellite_europa
+    parent_id: planet_jupiter
+    semi_major_axis_au: 0.004486    # 671,100 km
+    eccentricity: 0.009
+    inclination_deg: 0.47            # to ecliptic
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+  - body_id: satellite_ganymede
+    parent_id: planet_jupiter
+    semi_major_axis_au: 0.007155    # 1,070,400 km
+    eccentricity: 0.001
+    inclination_deg: 0.18            # to ecliptic
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+  - body_id: satellite_callisto
+    parent_id: planet_jupiter
+    semi_major_axis_au: 0.012585    # 1,882,700 km
+    eccentricity: 0.007
+    inclination_deg: 0.19            # to ecliptic
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
+  - body_id: satellite_titan
+    parent_id: planet_saturn
+    semi_major_axis_au: 0.008168    # 1,221,870 km
+    eccentricity: 0.0288
+    inclination_deg: 0.35            # to ecliptic
+    longitude_ascending_node_deg: 28.32
+    argument_of_periapsis_deg: 182.6
+    mean_anomaly_epoch_deg: 176.0
+    epoch_year: 0.0
+  - body_id: satellite_triton
+    parent_id: planet_neptune
+    semi_major_axis_au: 0.002371    # 354,759 km
+    eccentricity: 0.000016
+    inclination_deg: 156.865         # to ecliptic — retrograde orbit
+    longitude_ascending_node_deg: 0.0
+    argument_of_periapsis_deg: 0.0
+    mean_anomaly_epoch_deg: 0.0
+    epoch_year: 0.0
 bodies:
   # --- Planets (NASA Planetary Fact Sheet 2024) ---
   - id: planet_mercury
@@ -200,3 +259,72 @@ bodies:
     surface:
       composition: silicate_regolith
       has_atmosphere: false
+  # Io / Europa / Ganymede / Callisto / Triton：NASA Planetary Fact Sheet +
+  # JPL SSD（2026-09-21 检索，见 docs/knowledge/astronomy/solar_system_data_sources.md）。
+  # 自转均同步（= 轨道周期）；轴倾角 Fact Sheet 未列者取 0（实际 <0.5°）。
+  - id: satellite_io
+    name: Io
+    body_type: natural_satellite
+    mass_earth: 0.01496              # 8.932e22 kg
+    radius_km: 1821.5
+    rotation_period_days: 1.769138   # synchronous
+    axial_tilt_deg: 0.0
+    albedo: 0.62                     # geometric albedo
+    surface:
+      composition: silicate_rock_sulfur_volcanic
+      has_atmosphere: true           # tenuous SO₂ (~1 nbar)
+  - id: satellite_europa
+    name: Europa
+    body_type: natural_satellite
+    mass_earth: 0.00804              # 4.800e22 kg
+    radius_km: 1560.8
+    rotation_period_days: 3.551181   # synchronous
+    axial_tilt_deg: 0.1
+    albedo: 0.68                     # geometric albedo
+    surface:
+      composition: water_ice_crust_over_salty_ocean
+      has_atmosphere: true           # tenuous O₂ (~0.1 μPa)
+  - id: satellite_ganymede
+    name: Ganymede
+    body_type: natural_satellite
+    mass_earth: 0.02481              # 1.4819e23 kg
+    radius_km: 2631.2
+    rotation_period_days: 7.154553   # synchronous
+    axial_tilt_deg: 0.0
+    albedo: 0.44                     # geometric albedo
+    surface:
+      composition: water_ice_silicate
+      has_atmosphere: true           # tenuous O₂
+  - id: satellite_callisto
+    name: Callisto
+    body_type: natural_satellite
+    mass_earth: 0.01802              # 1.0759e23 kg
+    radius_km: 2410.3
+    rotation_period_days: 16.689017  # synchronous
+    axial_tilt_deg: 0.0
+    albedo: 0.19                     # geometric albedo
+    surface:
+      composition: water_ice_silicate
+      has_atmosphere: true           # tenuous CO₂/O₂
+  - id: satellite_titan
+    name: Titan
+    body_type: natural_satellite
+    mass_earth: 0.0225               # 1.3452e23 kg
+    radius_km: 2574.7
+    rotation_period_days: 15.945     # tidally locked to Saturn
+    axial_tilt_deg: 0.32             # to its orbit plane (~ecliptic)
+    albedo: 0.22                     # geometric albedo (Bond 0.265)
+    surface:
+      composition: water_ice_bedrock_with_methane_lakes
+      has_atmosphere: true           # thick N₂ (~1.5 bar) + CH₄; hydrocarbon cycle
+  - id: satellite_triton
+    name: Triton
+    body_type: natural_satellite
+    mass_earth: 0.00358              # 2.140e22 kg
+    radius_km: 1353.4
+    rotation_period_days: 5.876854   # synchronous, retrograde orbit
+    axial_tilt_deg: 0.0              # to its own orbit plane
+    albedo: 0.76                     # geometric albedo
+    surface:
+      composition: nitrogen_ice_with_ch4_and_co_ices
+      has_atmosphere: true           # tenuous N₂ (~1.4 Pa), cryovolcanism

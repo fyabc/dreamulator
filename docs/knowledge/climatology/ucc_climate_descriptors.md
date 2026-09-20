@@ -247,22 +247,27 @@ profile 的表达范围内，引用 UCC 结果时不应外推：
 ## 8. 迁移语义演练表（外星气候示意值）
 
 把同一 profile 迁移到非地球气候时，部分有效契约（§3 的五状态）负责**拒绝**给出
-没有物理意义的数，而不是硬算一个。下表用 Titan/Venus/Mars 的**文献典型示意值**
-（数量级演示，**非本仓库数据、非模拟结果**）演练各状态是否正确触发。真实数据例证
-见太阳系参照世界建成后的各自 design-notes（ucc-01-plan 4d，尚未实现）。
+没有物理意义的数，而不是硬算一个。下表用 Titan/Venus/Mars/Moon 的**文献典型示意
+值**（数量级演示）演练各状态是否正确触发。**四个太阳系参照世界已于 2026-09-21
+建成**（ucc-01-plan 4d），实测结果以各自 `data/worlds/<world>/design-notes/
+ucc-worked-examples.md` 为准；下表保留示意框架并逐行标注实测对照。
 
 | 世界 | T 范围（示意） | P（示意） | 溶剂 / 需求模型 | 触发的状态 | 分类结果与读法 |
 |------|----------------|-----------|------------------|------------|----------------|
-| **Titan** | ~ −180 °C（93 K），近恒温 | 甲烷雨 ~50–150 mm/yr | CH₄，非水；Hamon 不适用 | `t_max < 0` → AI/deficit **out_of_domain**（冷侧门）；非水溶剂另受 §6 范围限制约束 | polar 热量带（t_max ≪ 10）；供需轴 n/a → `Pn`。温度轴有效，供需轴被冷侧门正确拒绝。若将来接甲烷需求模型，须**换 demand_model 声明**而非复用 hamon-1961 |
-| **Venus** | ~ +464 °C（737 K），近等温 | 表面无液态降水 P ≈ 0 | 超临界 CO₂ 大气；Hamon 远超标定域 | `t_min ≫ 18` → tropical；P≈0、Eref>0 → AI=0 **valid**（arid）；但 Hamon 在 464 °C 是**热侧外推，无物理意义** | `Ra`（tropical/arid）——**已知缺口**：out_of_domain 门只挡冷侧（冰点以下），热侧外推不被拦截。演练价值 = 明确记录此缺口，Venus 类高温世界的 AI 需人工判为不可信，或未来增设热侧域门 |
-| **Mars** | ~ −125 至 +20 °C，多数 < 0 | P ≈ 0（水汽/CO₂ 霜，无液态降水） | 稀薄 CO₂；Hamon 勉强可算但近零 | 多数区 `t_max < 0` → **out_of_domain**；`P ≈ 0` → concentration **无定义**（None，非 0） | polar/cold 热量带；供需轴多为 n/a → `Pn`/`Cn`。演练两个「拒绝」路径叠加：冷侧域门 + 无降水时集中度不报数（§4.2：无降水 concentration undefined）。少数赤道夏季 t_max>0 的点才可能给出 AI=0 的 arid |
+| **Titan** | ~ −180 °C（93 K），近恒温 | 甲烷雨 ~50–150 mm/yr | CH₄，非水；Hamon 不适用 | `t_max < 0` → AI/deficit **out_of_domain**（冷侧门）；非水溶剂另受 §6 范围限制约束 | polar 热量带（t_max ≪ 10）；供需轴 n/a → `Pn`。温度轴有效，供需轴被冷侧门正确拒绝。若将来接甲烷需求模型，须**换 demand_model 声明**而非复用 hamon-1961。**实测（TAM 水文 run 已建成）**：导入选择更强的拒绝——`demand_model=None`（对甲烷溶剂不计算无意义的 Eref）→ AI/deficit = **missing_input**；陆地 `Pn`、甲烷海 `Po`（qsurf>0.05 m，1.3% cells）、continental 0%（t_range ~1.6 K）、bin = 896 地球日（土星年 1/12，时间契约极端案例）。详 `data/worlds/earth/design-notes/ucc-worked-examples-titan.md` |
+| **Venus** | ~ +464 °C（737 K），近等温 | 表面无液态降水 P ≈ 0 | 超临界 CO₂ 大气；Hamon 远超标定域 | `t_min ≫ 18` → tropical；P≈0、Eref>0 → AI=0 **valid**（arid）；但 Hamon 在 464 °C 是**热侧外推，无物理意义** | `Ra`（tropical/arid）——**已知缺口**：out_of_domain 门只挡冷侧（冰点以下），热侧外推不被拦截。演练价值 = 明确记录此缺口，Venus 类高温世界的 AI 需人工判为不可信，或未来增设热侧域门。**实测（VCD v2.3 已建成）**：全行星 100% `Ra-w`（AI=0 valid、deficit=1.0、t_range 全网格 0.0 °C；t_mean 408–469 °C 差异纯为高程递减率）——缺口如预测显形，provenance 带响亮 demand_model_warning，热侧门落地后应翻为 `Rn`。详 `data/worlds/earth/design-notes/ucc-worked-examples-venus.md` |
+| **Mars** | ~ −125 至 +20 °C，多数 < 0 | P ≈ 0（水汽/CO₂ 霜，无液态降水） | 稀薄 CO₂；Hamon 勉强可算但近零 | 多数区 `t_max < 0` → **out_of_domain**；`P ≈ 0` → concentration **无定义**（None，非 0） | polar/cold 热量带；供需轴多为 n/a → `Pn`/`Cn`。演练两个「拒绝」路径叠加：冷侧域门 + 无降水时集中度不报数（§4.2：无降水 concentration undefined）。少数赤道夏季 t_max>0 的点才可能给出 AI=0 的 arid。**实测（MCD v6.1 日均气候态已建成）**：日均口径下全网格 t_max 最高仅 −25 °C → **全行星 100% `Pn`**，Pa 路径不出现（需要箱均越过冰点的数据集）；continental 68%（季节幅度中位 41 °C——修饰语点亮的是季节性，日循环已被 diurnal 平均移除）。详 `data/worlds/earth/design-notes/ucc-worked-examples-mars.md` |
 
-**演练结论**：五状态里 `out_of_domain`（冷侧）、`no_positive_demand`（P>0/Eref=0）、
-`not_applicable`（P=Eref=0）、`missing_input`（无 PET）在极端气候下都有明确的触发
-场景，部分有效契约能拒绝绝大多数无意义的供需数。**唯一已知缺口是热侧外推**——
-需求模型在高温下同样失效，但当前门只覆盖冰点以下；高温世界（Venus 型）的 AI 在
-增设热侧域门前应视为不可信。这条缺口是演练表暴露的、登记在册的 profile 未来工作，
-不是当前的静默错误。
+| **Moon** | 赤道 ~ −173 至 +117 °C（昼夜）；永影坑 ~ −230 °C | P = 0（真空） | 无大气 → 无 PET 模型可言 | AI/deficit **missing_input**（demand_model=None，比 OOD 更强的拒绝）；P=0 → concentration **无定义** | **实测（Diviner GCP 已建成）**：分箱 = 12 × 2 h **地方时**（bin_days 2.46 地球日，窗口 = 会合自转一周而非年）→ t_range 是**日较差**（赤道 296 °C）、continental 修饰语点亮日内极端而非季节；赤道因夜箱 t_min < −3 °C 判 **cold（Cn-x）**、极地 **Pn**——「炙热赤道无热带带」是分箱均值口径的诚实结果。温度是**地表皮肤温度**（tbol 作 SPT 代理），data_source 仍为 observation（唯一观测级例外，契约声明随文件走）。详 `data/worlds/earth/design-notes/ucc-worked-examples-moon.md` |
+
+**演练结论**：五状态里 `out_of_domain`（冷侧，Mars/Titan 温度下）、`missing_input`
+（无大气，Moon/Titan 声明式）、`not_applicable`（P=Eref=0）、`no_positive_demand`
+（P>0/Eref=0）在极端气候下都有明确的触发场景，部分有效契约能拒绝绝大多数无意义
+的供需数。**唯一已知缺口是热侧外推**——需求模型在高温下同样失效，但当前门只覆盖
+冰点以下；高温世界（Venus 型）的 AI 在增设热侧域门前应视为不可信。这条缺口是演练
+表暴露的、登记在册的 profile 未来工作，不是当前的静默错误。此外实测新增一条时间
+契约经验：**分箱语义决定 t_range/continental 的物理含义**（季节箱 = 季节幅度，
+地方时箱 = 日较差）——跨世界比较修饰语份额前必须先读文件的 `time_basis` 声明。
 
 ## 参考资料
 
