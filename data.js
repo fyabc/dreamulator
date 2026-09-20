@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789913315550,
+  "lastUpdate": 1789918347055,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5367,6 +5367,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005946921954619891",
             "extra": "mean: 5.1097118000029695 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "b0d80114707ad78a744c773c433ff973a197075e",
+          "message": "feat(climate): UCC profile v1（干旱带 0.2 细分）+ 纯字母简码\n\nprofile v1（AI4 重议落地，v0 冻结时的既定决策点）：arid 带在 AI=0.2 处细分为\narid/semi_arid（沙漠核 vs 草原缘）。证据：L2 实验记录 + root 观测接通后的地图\n证据（arid 带占陆地 23%、带内 AI 中位 0.19、51% < 0.2、Beck BW 占 81%）。\nv0 完整保留可复现（classify_v0 + 测试钉死）；classify_v1 为当前导出版本，\n两 profile 共享分类核（_classify）。色板加半干旱浅暖层（供需定色相族不变），\n类名 i18n 双语同步；earth root 观测 / nacrea / climate-dev 三处数据已按 v1\n重建。\n\n简码（用户审定方案）：纯字母 + 连字符（可拼读、URL/shell/文件名安全），\n热量带大写 P/C/T/R + 供需小写 a/s/t/h + 海洋 o + 陆地 n/a 显式 n（避免裸\n字母被误读为「未分类」）+ 修饰语连字符段 -x/-w（可组合，未来相位等扩展\n新增段）。面板分类行显示简码、悬停气泡给全称。字母表单一事实源在\nucc.py（THERMAL/SUPPLY_CODE_LETTERS），前端 yearlyClimate.ts 镜像 +\nuccCode()，两端测试断言同一组样例（Ts-xw / Ro / Pn）。知识文档 §5 升 v1\n+ §5.2.1 简码表；pipeline 文档同步。\n\n文档附带确认（root 散点分析）：UCC 比 Beck 平滑的主因是输入分辨率\n（Beck 1km 点采样 vs NCEP/GPCP 2.5°——同输入下 Köppen 孤岛率 1.96%→0.18%），\n分类体系差异仅次级（阈值轴更少）；roadmap 新增 earth 观测锚 1km 升级条目\n（CHELSA/WorldClim 面积加权聚合，须在 LGM 分支前做）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-20T23:31:59+08:00",
+          "tree_id": "c06e2bf58665f8055dd43c1213e7c8036f621251",
+          "url": "https://github.com/fyabc/dreamulator/commit/b0d80114707ad78a744c773c433ff973a197075e"
+        },
+        "date": 1789918345813,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 8.191142539141522,
+            "unit": "iter/sec",
+            "range": "stddev: 0.034179491154833444",
+            "extra": "mean: 122.08309100000179 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.876900162057384,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0007385723258392932",
+            "extra": "mean: 257.93803249999667 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9642727002775417,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8131044368171849",
+            "extra": "mean: 509.09428200000184 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1168.754881014376,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007731876159648528",
+            "extra": "mean: 855.6113999986792 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 247.38198123082108,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006306218566712393",
+            "extra": "mean: 4.042331600000182 msec\nrounds: 5"
           }
         ]
       }
