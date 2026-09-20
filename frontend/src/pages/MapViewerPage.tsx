@@ -28,6 +28,7 @@ import type { VoronoiCell } from '../viewers/map/types'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
 import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
+import { useUccLayer } from '../viewers/map/useUccLayer'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -82,7 +83,7 @@ export default function MapViewerPage() {
   }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
 
   const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
@@ -266,6 +267,12 @@ export default function MapViewerPage() {
   })
   // UCC yearly descriptors for the cell inspector (independent of monthly mode).
   const yearlyData = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
+  // UCC classification thematic texture (step 4a); null when the yearly file
+  // predates the classification fields — the layer degrades to transparent.
+  const uccTexture = useUccLayer(
+    yearlyData, cvtMesh ?? null, cellIdMap,
+    meta?.width ?? 2048, meta?.height ?? 1024, false,
+  )
 
   // --- Heightmap import (write op; live mode only) ---
   const queryClient = useQueryClient()
@@ -563,6 +570,7 @@ export default function MapViewerPage() {
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
                     monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
+                    uccTexture={uccTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
@@ -715,6 +723,7 @@ export default function MapViewerPage() {
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
                     monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
+                    uccTexture={uccTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}

@@ -11,6 +11,7 @@
     "plates": "板块",
     "boundaries": "地壳与边界",
     "koppen": "Köppen 气候",
+    "ucc": "UCC 气候分类",
     "biomes": "Whittaker 群系",
     "npp": "净初级生产力",
     "domesticable": "驯化潜力",
@@ -74,6 +75,17 @@
     "Dfa": "湿润大陆性(热夏)", "Dfb": "湿润大陆性(温夏)", "Dfc": "亚寒带", "Dfd": "极端大陆性",
     "ET": "苔原", "EF": "冰原",
     "Ocean": "海洋"
+  },
+  "uccClass": {
+    "polar/arid": "极地·干旱", "polar/transitional": "极地·过渡", "polar/humid": "极地·湿润",
+    "cold/arid": "寒冷·干旱", "cold/transitional": "寒冷·过渡", "cold/humid": "寒冷·湿润",
+    "temperate/arid": "温和·干旱", "temperate/transitional": "温和·过渡", "temperate/humid": "温和·湿润",
+    "tropical/arid": "热带·干旱", "tropical/transitional": "热带·过渡", "tropical/humid": "热带·湿润",
+    "polar": "极地（海洋）", "cold": "寒冷（海洋）", "temperate": "温和（海洋）", "tropical": "热带（海洋）"
+  },
+  "uccMod": {
+    "continental": "强季节",
+    "waterStress": "季节水压力"
   },
   "biome": {
     "tropical_rainforest": "热带雨林",
@@ -207,7 +219,9 @@
     "descDeficit": "同期供需亏缺",
     "descConcentration": "降水集中度",
     "descNoPrecip": "无降水",
-    "yearlyMissing": "年度气候描述缺失：该地图尚未构建气候（earth 参考根不构建，请查看气候分支）"
+    "yearlyMissing": "年度气候描述缺失：该地图尚未构建气候（earth 参考根不构建，请查看气候分支）",
+    "uccClass": "UCC 分类",
+    "uccProfile": "分类版本 {{profile}}"
   },
   "descStatus": {
     "missing_input": "缺输入",
@@ -222,6 +236,7 @@
     "distanceToBoundary": "到最近板块边界的球面距离",
     "specialCrust": "特殊地壳类型：热点链 (Wilson 1963) / 古造山带 (Şengör 1990) / 裂谷 (Burke & Dewey 1973)",
     "koppen": "Köppen-Geiger 气候分类 (Beck et al. 2018)",
+    "ucc": "统一气候描述（UCC）profile v0：热量带 × 参考供需档，阈值全局共享",
     "soilType": "USDA 土纲（母岩 + 气候推导）",
     "fertility": "土壤肥力等级（农业潜力直接输入）",
     "province": "生物地理省（realm → province 两级分区）",
@@ -231,7 +246,9 @@
     "descPrecipTotal": "每 365.25 天参考年的总降水",
     "descAridity": "AI = 总降水 / 参考蒸散（Hamon 1961，固定 12h 日长）——参考气候供需比，不是土壤湿度",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref——同期亏缺份额，忽略储水与横向输水",
-    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i|——降水时间分布相对均匀率的偏离，无降水时无定义"
+    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i|——降水时间分布相对均匀率的偏离，无降水时无定义",
+    "uccClass": "UCC 主类 = 热量背景（极地/寒冷/温和/热带）× 参考供需等级（干旱/过渡/湿润）；海洋不含干湿轴",
+    "uccMod": "修饰语按需附加：强季节 = 年温度范围 ≥ 25 °C；季节水压力 = 同期亏缺 ≥ 50%"
   },
   "sun": {
     "title": "光照",

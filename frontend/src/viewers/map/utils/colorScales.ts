@@ -23,6 +23,14 @@ export interface ColorStop {
 /** Standard Köppen-Geiger color palette (Beck et al. 2018), incl. `Ocean`. */
 export const KOPPEN_COLORS: Record<string, string> = palettesJson.categorical.koppen
 
+/** UCC classification palette (profile v0): 12 land classes keyed
+ *  `"<thermal>/<supply>"` + 4 ocean thermal bands keyed by the bare thermal
+ *  name.  The supply grade picks the hue family (arid warm red-orange →
+ *  transitional olive-gold → humid green; the Köppen reading habit where dry
+ *  is warm-coloured), the thermal band shifts value/temperature within the
+ *  family (colder = greyer). */
+export const UCC_COLORS: Record<string, string> = palettesJson.categorical.ucc
+
 /** Whittaker biome colors (categorical, 12 land + ocean). */
 export const WHITTAKER_COLORS: Record<string, string> = palettesJson.categorical.whittaker
 

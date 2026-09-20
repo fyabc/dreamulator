@@ -137,6 +137,15 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     group: 'climate',
   },
   {
+    id: 'ucc',
+    label: 'help:layer.ucc.label',
+    desc: 'help:layer.ucc.desc',
+    detail: 'help:layer.ucc.detail',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'climate',
+  },
+  {
     id: 'temperature',
     label: 'help:layer.temperature.label',
     desc: 'help:layer.temperature.desc',

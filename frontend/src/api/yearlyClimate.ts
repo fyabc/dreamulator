@@ -42,6 +42,23 @@ export interface YearlyClimateData {
   deficitStatus: Uint8Array
   /** Precipitation concentration C_TV; NaN when there is no precipitation. */
   concentration: Float32Array
+  // --- Classification (UCC-01 step 4a) — optional: older exports predate the
+  // frozen profile, so every field below may be absent (layer then degrades to
+  // fully transparent and the panel hides the class row).
+  /** Frozen profile identifier (e.g. 'ucc-v0'). */
+  profile?: string
+  /** Thermal band index → name (e.g. 'polar', 'cold', 'temperate', 'tropical'). */
+  thermalBands?: string[]
+  /** Supply band index → name (e.g. 'arid', 'transitional', 'humid'). */
+  supplyBands?: string[]
+  /** Per-cell thermal band index into thermalBands. */
+  uccThermal?: Uint8Array
+  /** Per-cell supply band index into supplyBands; 255 = not applicable. */
+  uccSupply?: Uint8Array
+  /** Per-cell supply-axis status code (index into statusCodes). */
+  uccSupplyStatus?: Uint8Array
+  /** Per-cell modifier bitmask: bit 0 = continental, bit 1 = water_stress. */
+  uccModifiers?: Uint8Array
 }
 
 /** Reinterpret a MessagePack `bin` (Uint8Array) as little-endian float32. */
@@ -56,7 +73,7 @@ function toUint8(u8: Uint8Array): Uint8Array {
 
 export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
   const obj = decode(raw) as Record<string, unknown>
-  return {
+  const out: YearlyClimateData = {
     numCells: obj.num_cells as number,
     months: obj.months as number,
     formatVersion: (obj.format_version as string) ?? '',
@@ -76,4 +93,15 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     deficitStatus: toUint8(obj.deficit_status as Uint8Array),
     concentration: toFloat32(obj.concentration as Uint8Array),
   }
+  // Classification fields (UCC-01 step 4a) are absent in older exports.
+  if (obj.ucc_thermal !== undefined) {
+    out.profile = (obj.profile as string) ?? ''
+    out.thermalBands = (obj.thermal_bands as string[]) ?? []
+    out.supplyBands = (obj.supply_bands as string[]) ?? []
+    out.uccThermal = toUint8(obj.ucc_thermal as Uint8Array)
+    out.uccSupply = toUint8(obj.ucc_supply as Uint8Array)
+    out.uccSupplyStatus = toUint8(obj.ucc_supply_status as Uint8Array)
+    out.uccModifiers = toUint8(obj.ucc_modifiers as Uint8Array)
+  }
+  return out
 }

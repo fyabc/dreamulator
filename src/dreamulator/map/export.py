@@ -735,13 +735,19 @@ def export_climate_layers(
             MISSING_INPUT,
             NO_POSITIVE_DEMAND,
             NOT_APPLICABLE,
+            PROFILE_V0,
+            SUPPLY_BANDS_V0,
+            THERMAL_BANDS_V0,
             VALID,
+            classify_v0,
             compute_descriptors,
         )
 
         _et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
         _status_codes = [VALID, MISSING_INPUT, NOT_APPLICABLE, NO_POSITIVE_DEMAND]
         _status_index = {name: i for i, name in enumerate(_status_codes)}
+        _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_V0)}
+        _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_V0)}
         _n = mesh.num_cells
         _t_mean = np.empty(_n, dtype=np.float32)
         _t_min = np.empty(_n, dtype=np.float32)
@@ -755,6 +761,14 @@ def export_climate_layers(
         _deficit = np.full(_n, np.nan, dtype=np.float32)
         _deficit_status = np.empty(_n, dtype=np.uint8)
         _concentration = np.full(_n, np.nan, dtype=np.float32)
+        # Classification under the frozen profile v0 (UCC-01 step 4a).  Codes are
+        # indices into thermal_bands/supply_bands; 255 in ucc_supply = the
+        # supply–demand axis does not apply (ocean or invalid AI) — the why is in
+        # ucc_supply_status.  ucc_modifiers bit 0 = continental, bit 1 = water_stress.
+        _ucc_thermal = np.empty(_n, dtype=np.uint8)
+        _ucc_supply = np.empty(_n, dtype=np.uint8)
+        _ucc_supply_status = np.empty(_n, dtype=np.uint8)
+        _ucc_modifiers = np.empty(_n, dtype=np.uint8)
         for i in range(_n):
             d = compute_descriptors(t_monthly[i], p_monthly[i], _et_monthly[i])
             _t_mean[i] = d.t_mean
@@ -772,6 +786,11 @@ def export_climate_layers(
             _deficit_status[i] = _status_index[d.deficit_status]
             if d.concentration is not None:
                 _concentration[i] = d.concentration
+            _cls = classify_v0(d, is_land=mesh.cells[i].water_class == "land")
+            _ucc_thermal[i] = _thermal_index[_cls.thermal]
+            _ucc_supply[i] = _supply_index[_cls.supply] if _cls.supply is not None else 255
+            _ucc_supply_status[i] = _status_index[_cls.supply_status]
+            _ucc_modifiers[i] = (1 if _cls.continental else 0) | (2 if _cls.water_stress else 0)
 
         yearly = {
             **result_metadata(),
@@ -782,6 +801,9 @@ def export_climate_layers(
             "demand_daylength_h": 12.0,
             "freeze_threshold_c": 0.0,
             "status_codes": _status_codes,
+            "profile": PROFILE_V0,
+            "thermal_bands": list(THERMAL_BANDS_V0),
+            "supply_bands": list(SUPPLY_BANDS_V0),
             "t_mean_c": _t_mean.tobytes(),
             "t_min_c": _t_min.tobytes(),
             "t_max_c": _t_max.tobytes(),
@@ -794,6 +816,10 @@ def export_climate_layers(
             "deficit": _deficit.tobytes(),
             "deficit_status": _deficit_status.tobytes(),
             "concentration": _concentration.tobytes(),
+            "ucc_thermal": _ucc_thermal.tobytes(),
+            "ucc_supply": _ucc_supply.tobytes(),
+            "ucc_supply_status": _ucc_supply_status.tobytes(),
+            "ucc_modifiers": _ucc_modifiers.tobytes(),
         }
         yearly_path = output_dir / "climate_yearly.msgpack"
         with yearly_path.open("wb") as _f:

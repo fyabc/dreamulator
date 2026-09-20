@@ -119,6 +119,17 @@ void main() {
 // Hook
 // ---------------------------------------------------------------------------
 
+/** Shared 1×1 fully-transparent texture — the no-data fallback for layers
+ *  whose data is loaded separately from the main bake (e.g. UCC). */
+let _emptyTex: THREE.DataTexture | null = null
+function emptyTexture(): THREE.DataTexture {
+  if (!_emptyTex) {
+    _emptyTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
+    _emptyTex.needsUpdate = true
+  }
+  return _emptyTex
+}
+
 interface UseGPUTerrainOptions {
   elevation: Float32Array | null
   width: number
@@ -139,6 +150,10 @@ interface UseGPUTerrainOptions {
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
   monthlyPressureError?: THREE.DataTexture | null
+  /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
+   *  from `bakeUccLayer`.  Null while the yearly file is missing or predates
+   *  the classification fields — the layer then degrades to transparent. */
+  uccTexture?: THREE.DataTexture | null
   /** Flip texture horizontally. Set true for SphereGeometry (Three.js sphere
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
@@ -180,7 +195,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -188,6 +203,7 @@ export default function useGPUTerrain({
   monthlyPrecipitation = null,
   monthlyPressure = null,
   monthlyPressureError = null,
+  uccTexture = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -271,7 +287,7 @@ export default function useGPUTerrain({
   // --- Layer-derived state (recomputed on every opacity/base change) ---
   // overlayActive: triggers the composite pass and u_useComposite for 2D display.
   const overlayActive =
-    (layers.koppen ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
+    (layers.koppen ?? 0) > 0 || (layers.ucc ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
     (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
     (layers.coastlines ?? 1) > 0 ||
     (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
@@ -289,7 +305,7 @@ export default function useGPUTerrain({
   // bake time, avoiding the FBO colour-space round-trip issue with
   // MeshStandardMaterial's PBR pipeline on the 3D globe.
   const needsFboForGlobe =
-    (layers.koppen ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
+    (layers.koppen ?? 0) > 0 || (layers.ucc ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
     (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
     (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
     (layers.domesticable ?? 0) > 0 ||
@@ -322,6 +338,7 @@ export default function useGPUTerrain({
       [layers.terrain, baked.terrainThematic],
       [layers.landsea, baked.landseaThematic],
       [layers.koppen, baked.koppen],
+      [layers.ucc, uccTexture ?? emptyTexture()],
       [layers.biomes, baked.biomes],
       [layers.npp, baked.npp],
       [layers.domesticable, baked.domesticable],
@@ -360,7 +377,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError])
+  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {

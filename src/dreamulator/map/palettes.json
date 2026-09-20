@@ -62,6 +62,24 @@
       "inceptisol": "#BDBDBD",
       "entisol": "#D7CCC8"
     },
+    "ucc": {
+      "polar/arid": "#d3d7da",
+      "polar/transitional": "#c2cdd3",
+      "polar/humid": "#84a09c",
+      "cold/arid": "#d9b48c",
+      "cold/transitional": "#93a86b",
+      "cold/humid": "#57a89a",
+      "temperate/arid": "#f2a65a",
+      "temperate/transitional": "#a8bd55",
+      "temperate/humid": "#69b76b",
+      "tropical/arid": "#f25c3c",
+      "tropical/transitional": "#d9bf45",
+      "tropical/humid": "#2e8b57",
+      "polar": "#3d5a73",
+      "cold": "#466a85",
+      "temperate": "#5286a0",
+      "tropical": "#5f94ad"
+    },
     "plate": [
       "#e6194b",
       "#3cb44b",

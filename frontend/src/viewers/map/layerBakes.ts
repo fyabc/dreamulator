@@ -26,10 +26,12 @@ import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
+import type { YearlyClimateData } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedSlpAnomAt } from './spatialReference'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
+  UCC_COLORS,
   WHITTAKER_COLORS,
   SOIL_COLORS,
   NPP_SCALE,
@@ -698,6 +700,45 @@ export function bakeMonthlyLayer(
 
   const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
   return makeTexture(buf, width, height)
+}
+
+/**
+ * Bake the UCC classification thematic layer (UCC-01 step 4a, profile v0).
+ *
+ * Reads the per-cell classification codes from `climate_yearly.msgpack`
+ * (`ucc_thermal` / `ucc_supply`, 255 = supply axis not applicable) and colours
+ * each cell with the shared UCC palette — class *definitions* live in the
+ * backend export (`classify_v0`), so the frontend never re-classifies and the
+ * thresholds stay world-independent by construction.  Modifiers
+ * (continental / water_stress) are not baked into the colour; they show in
+ * the cell panel.  Older exports without the classification fields degrade to
+ * a fully transparent texture.
+ */
+export function bakeUccLayer(
+  yearly: YearlyClimateData,
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  width: number,
+  height: number,
+  flipHorizontal: boolean,
+): THREE.DataTexture {
+  const { uccThermal, uccSupply, thermalBands, supplyBands } = yearly
+  if (!uccThermal || !uccSupply || !thermalBands || !supplyBands) {
+    const empty = new Uint8Array(width * height * 4)
+    return makeTexture(empty, width, height)
+  }
+  const colors = new Map<number, [number, number, number]>()
+  for (let i = 0; i < cvtMesh.cells.length && i < uccThermal.length; i++) {
+    const thermal = thermalBands[uccThermal[i]]
+    const supplyCode = uccSupply[i]
+    const supply = supplyCode === 255 ? null : supplyBands[supplyCode]
+    if (thermal == null || (supplyCode !== 255 && supply == null)) continue
+    const hex = UCC_COLORS[supply ? `${thermal}/${supply}` : thermal]
+    if (hex == null) continue
+    colors.set(cvtMesh.cells[i].id, hexRgb(hex))
+  }
+  const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
+  return makeTexture(buf, width, height, { nearestMag: true })
 }
 
 function bakeAll(inp: BakeInputs): LayerTextures {

@@ -71,6 +71,7 @@ const COLOR_MODE_TO_GROUP: Partial<Record<ColorMode, string>> = {
   plates: 'geology',
   boundaries: 'geology',
   koppen: 'climate',
+  ucc: 'climate',
   temperature: 'climate',
   precipitation: 'climate',
   temperatureError: 'dev',
@@ -429,6 +430,20 @@ function CellDetails({
     yearlyData?.statusCodes[code] ?? 'not_applicable'
   const aiStatus = hasYearly ? descStatusName(yearlyData!.aiStatus[yi]) : null
   const deficitStatus = hasYearly ? descStatusName(yearlyData!.deficitStatus[yi]) : null
+  // UCC classification (step 4a): absent on exports predating the fields.
+  const uccThermal =
+    hasYearly && yearlyData!.uccThermal && yearlyData!.thermalBands
+      ? yearlyData!.thermalBands[yearlyData!.uccThermal[yi]]
+      : null
+  const uccSupplyCode = hasYearly && yearlyData!.uccSupply ? yearlyData!.uccSupply[yi] : 255
+  const uccSupply =
+    uccSupplyCode !== 255 && yearlyData!.supplyBands ? yearlyData!.supplyBands[uccSupplyCode] : null
+  const uccClassKey = uccThermal ? (uccSupply ? `${uccThermal}/${uccSupply}` : uccThermal) : null
+  const uccModBits = hasYearly && yearlyData!.uccModifiers ? yearlyData!.uccModifiers[yi] : 0
+  const uccModifierKeys = [
+    ...(uccModBits & 1 ? ['continental'] : []),
+    ...(uccModBits & 2 ? ['waterStress'] : []),
+  ]
 
   const hasGeology = Boolean(
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
@@ -678,6 +693,19 @@ function CellDetails({
             key={`yearly-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
           >
+            {uccClassKey && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title={t('tooltip.uccClass')}>{t('inspector.uccClass')}</dt>
+                <dd className="font-mono">
+                  {t(`uccClass.${uccClassKey}`)}
+                  {uccModifierKeys.length > 0 && (
+                    <span className="text-gray-500 ml-1" title={t('tooltip.uccMod')}>
+                      ({uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')})
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-gray-500" title={t('tooltip.descMeanTemp')}>{t('inspector.descMeanTemp')}</dt>
               <dd className="font-mono">{yearlyData!.tMeanC[yi].toFixed(1)} °C</dd>

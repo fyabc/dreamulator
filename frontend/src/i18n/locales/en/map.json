@@ -11,6 +11,7 @@
     "plates": "Plates",
     "boundaries": "Crust & Boundaries",
     "koppen": "Köppen Climate",
+    "ucc": "UCC Classification",
     "biomes": "Whittaker Biomes",
     "npp": "Net Primary Productivity",
     "domesticable": "Domestication Potential",
@@ -74,6 +75,17 @@
     "Dfa": "Humid continental (hot)", "Dfb": "Humid continental (warm)", "Dfc": "Subarctic", "Dfd": "Severe continental",
     "ET": "Tundra", "EF": "Ice cap",
     "Ocean": "Ocean"
+  },
+  "uccClass": {
+    "polar/arid": "Polar · arid", "polar/transitional": "Polar · transitional", "polar/humid": "Polar · humid",
+    "cold/arid": "Cold · arid", "cold/transitional": "Cold · transitional", "cold/humid": "Cold · humid",
+    "temperate/arid": "Temperate · arid", "temperate/transitional": "Temperate · transitional", "temperate/humid": "Temperate · humid",
+    "tropical/arid": "Tropical · arid", "tropical/transitional": "Tropical · transitional", "tropical/humid": "Tropical · humid",
+    "polar": "Polar (ocean)", "cold": "Cold (ocean)", "temperate": "Temperate (ocean)", "tropical": "Tropical (ocean)"
+  },
+  "uccMod": {
+    "continental": "Strong seasonality",
+    "waterStress": "Seasonal water stress"
   },
   "biome": {
     "tropical_rainforest": "Tropical rainforest",
@@ -207,7 +219,9 @@
     "descDeficit": "Same-period deficit",
     "descConcentration": "Precip concentration",
     "descNoPrecip": "No precipitation",
-    "yearlyMissing": "Yearly climate descriptors unavailable: climate not built for this map (the Earth reference root is never built — check a climate branch)"
+    "yearlyMissing": "Yearly climate descriptors unavailable: climate not built for this map (the Earth reference root is never built — check a climate branch)",
+    "uccClass": "UCC class",
+    "uccProfile": "Profile {{profile}}"
   },
   "descStatus": {
     "missing_input": "missing input",
@@ -222,6 +236,7 @@
     "distanceToBoundary": "Spherical distance to nearest plate boundary",
     "specialCrust": "Special crust: hotspot chain (Wilson 1963) / ancient orogeny (Şengör 1990) / rift (Burke & Dewey 1973)",
     "koppen": "Köppen-Geiger climate classification (Beck et al. 2018)",
+    "ucc": "Unified Climate Classification (UCC) profile v0: thermal band × reference supply–demand grade, thresholds shared globally",
     "soilType": "USDA soil order (derived from parent rock + climate)",
     "fertility": "Soil fertility level (direct agricultural potential input)",
     "province": "Biogeographic province (realm → province two-level division)",
@@ -231,7 +246,9 @@
     "descPrecipTotal": "Total precipitation per 365.25-day reference year",
     "descAridity": "AI = total precipitation / reference evapotranspiration (Hamon 1961, fixed 12 h daylength) — a reference supply–demand ratio, not soil moisture",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref — same-period shortfall fraction; ignores storage and lateral water transport",
-    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i| — deviation of the precipitation time distribution from a uniform rate; undefined without precipitation"
+    "descConcentration": "C_TV = 0.5 Σ |q_i − w_i| — deviation of the precipitation time distribution from a uniform rate; undefined without precipitation",
+    "uccClass": "UCC main class = thermal background (polar/cold/temperate/tropical) × reference supply grade (arid/transitional/humid); ocean cells carry no supply axis",
+    "uccMod": "Modifiers on demand: strong seasonality = annual temperature range ≥ 25 °C; seasonal water stress = same-period deficit ≥ 50%"
   },
   "sun": {
     "title": "Lighting",

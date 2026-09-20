@@ -719,6 +719,14 @@ AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用�
 年辐射）也归入此文件。API 侧 `GET /maps/{world}/climate-yearly`
 （`api_routes/maps.py` 的 `get_climate_yearly`）。
 
+同一文件还带 **UCC 分类字段**（UCC-01 第四步，profile 见 `map/ucc.py` 的
+`classify_v0` 与 `PROFILE_V0`）：`profile`（版本标识）、`thermal_bands` /
+`supply_bands`（码 → 名枚举）、`ucc_thermal`（uint8 热量带码）、`ucc_supply`
+（uint8 供需档码，255 = 不适用——海洋或 AI 非 valid）、`ucc_supply_status`（uint8，
+复用 `status_codes`）、`ucc_modifiers`（uint8 位掩码：bit0 = continental、
+bit1 = water_stress）。分类在导出层一次性算好，前端只读码不重新分类（阈值共享由
+构造保证）；无这些字段的旧导出在前端降级为透明图层。
+
 ---
 
 ## 12. 验证方法
