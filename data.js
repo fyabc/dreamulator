@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789909266078,
+  "lastUpdate": 1789913315550,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5308,6 +5308,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009303000895657269",
             "extra": "mean: 5.083570399997939 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "f1db608e81fe5b914af83b3eb2f5addb556600ac",
+          "message": "feat(climate): earth root 观测派生 UCC 年度文件 + 需求模型有效域门\n\nearth root 观测 UCC（root 永不 build 原则的合规扩展）：UCC 描述量与\nprofile-v0 分类由观测月度序列（NCEP R1 T + GPCP P，即 root 的\nclimate_monthly.msgpack）经纯确定性变换算出，零引擎参与——与 root 上\nBeck Köppen 列同属「观测经已声明算法的派生」。新脚本\nscripts/earth/export_earth_yearly.py（importer 家族，注册进\npublish_world_data 的 earth 链），文件内 data_source: \"observation\" +\nprovenance 声明；引擎导出对称标 \"model\"。前端面板「气候描述」组显示\nprofile 版本与出处。\n\n需求模型有效域门（root 观测接通后暴露的真问题）：Hamon 是液态水面蒸发\n的经验公式，全年无液态水的冰盖上 Eref 坍缩到 ~78 mm/yr，南极被判\n「极地·湿润」（AI 中位虚高 3.1）。描述量契约新增第五状态\nout_of_domain：t_max < 冻结阈值（0°C）时 AI/deficit 不报告数值\n（温度/降水描述照常；苔原 t_max ≥ 0 保留有效 AI——供大于求在排水受阻\n的湿苔原是真实的）。STATUS_CODES 单一来源入 ucc.py，两个导出器 +\n两个实验脚本共用；L2 数据集与候选实验按新语义重跑，冻结结论不变\n（flip 7.9/8.4/9.4% vs 旧 7.8/8.3/9.3%）。\n\n附带修复：冰盖陆地的供需 n/a 不再落进海洋裸热量带键——调色板新增\n<thermal>/na 陆地中性色（冰盖灰白等 4 键），面板显示纯热量带名\n（状态行已携带原因）；海陆判定与既有代码一致（water_class 缺省按高程）。\n\n验证：pytest 925、mypy/ruff、tsc/eslint/vitest 26 全绿；root 观测导出\n+ nacrea/climate-dev 重建后类分布合理（polar/na 5956 = 南极 5431 +\n格陵兰冰盖；polar/humid 2512 = 苔原保留）；加拉帕戈斯四格观测 =\ntropical/arid + 季节水压力（对照模型侧 humid 湿偏差，观测锚价值兑现）。\n前端目视经用户确认。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-20T22:02:38+08:00",
+          "tree_id": "b5bf34a4faf337880e6509895decad5c0ae76794",
+          "url": "https://github.com/fyabc/dreamulator/commit/f1db608e81fe5b914af83b3eb2f5addb556600ac"
+        },
+        "date": 1789913314879,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 6.346320276450242,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04096143052055031",
+            "extra": "mean: 157.5716252000035 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2484203455667218,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01027560008377545",
+            "extra": "mean: 307.84193350000066 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4835347309121643,
+            "unit": "iter/sec",
+            "range": "stddev: 1.076128229903095",
+            "extra": "mean: 674.0657829999984 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 201.52435439964395,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0018024586571054235",
+            "extra": "mean: 4.962179399998945 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.705753893873,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005946921954619891",
+            "extra": "mean: 5.1097118000029695 msec\nrounds: 5"
           }
         ]
       }
