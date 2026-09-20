@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789856340032,
+  "lastUpdate": 1789909266078,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5249,6 +5249,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007394054665262955",
             "extra": "mean: 4.137619400000858 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8387001e10df9877438b9b984f13af63072a6963",
+          "message": "docs(roadmap): 太阳系参照世界（Mars/Moon/Venus/Titan）与 LGM 古气候分支立项\n\n- 太阳系参照世界（P2）：各自独立 root world + reference_anchor 模式；\n  Mars/Venus/Titan = GCM 气候态（MCD/VCD/TAM，UCC L4 压力测试层，非观测\n  真值），Moon = LRO Diviner 观测级地表温度（唯一观测态例外，地表温 vs\n  气温契约案例）；顺序 Mars → Moon → Venus → Titan。\n- 地球历史气候分支（P2）：earth/branches/lgm 导入分支（ICE-6G_C 高程 +\n  −120 m 海平面 + CHELSA-TraCE21k 月度 T/P，复用 200k mesh）——「同一\n  行星、不同真实气候态」的 UCC 稳定性检验 + 冰期创作设定双用途；\n  模式重建非观测真值，provenance 声明。\n- M3/UCC-01 行状态更新（第一至三步 ✅ + 知识文档，第四步进行中）。\n\n评估全文 → private/plans/ucc-01-plan.md 4d/4e。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-20T21:00:29+08:00",
+          "tree_id": "c7ceb459c643169e34cb95a62fe0254d21d6f9eb",
+          "url": "https://github.com/fyabc/dreamulator/commit/8387001e10df9877438b9b984f13af63072a6963"
+        },
+        "date": 1789909265570,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 6.125087207154164,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04032331514463372",
+            "extra": "mean: 163.26298159999908 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2625810176964167,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013670664399203879",
+            "extra": "mean: 306.50579850000526 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4787423671964797,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0786537164395895",
+            "extra": "mean: 676.2503206666631 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 931.5315029964877,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001289986983053167",
+            "extra": "mean: 1.0735010000018974 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.71213759534155,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009303000895657269",
+            "extra": "mean: 5.083570399997939 msec\nrounds: 5"
           }
         ]
       }
