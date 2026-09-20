@@ -38,7 +38,7 @@ export default function Sidebar({
   const worldNavItems = currentWorld
     ? [
         { path: `/worlds/${currentWorld}${search}`, label: t('nav.overview'), icon: '📋' },
-        { path: `/worlds/${currentWorld}/map${search}`, label: t('nav.map'), icon: '🗺️' },
+        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: '🗺️' },
         { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: '🔭' },
       ]
     : []

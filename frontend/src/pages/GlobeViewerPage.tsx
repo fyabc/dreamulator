@@ -146,8 +146,10 @@ export default function GlobeViewerPage() {
   })
 
   useEffect(() => {
-    if (!mapPlanets || !planetId) return
-    if (mapPlanets.includes(planetId) || mapPlanets.length === 0) return
+    if (!mapPlanets || mapPlanets.length === 0) return
+    // No planetId in the URL (sidebar entry) or a stale one after a branch
+    // switch — land on the first body that has map data.
+    if (planetId && mapPlanets.includes(planetId)) return
     const qs = searchParams.toString()
     navigate(
       `/worlds/${worldName}/globe/${mapPlanets[0]}${qs ? `?${qs}` : ''}`,
@@ -163,10 +165,29 @@ export default function GlobeViewerPage() {
     retry: false,
   })
 
+  // Stellar system catalog — satellites (satellite_moon, satellite_titan, …)
+  // live only here, not in the geological planets catalog. Needed for body
+  // names and axial tilt of every mapped body (solar-system reference bodies
+  // inside the earth anchor world have no planets.yaml entries).
+  const { data: stellarSystem } = useQuery({
+    queryKey: ['astronomy', worldName, selectedBranch],
+    queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
+    enabled: !!worldName,
+    retry: false,
+  })
+
+  // id → body lookup across both catalogs (planets.yaml wins on conflicts).
+  const bodyByName = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const b of stellarSystem?.bodies ?? []) if (b?.id) m.set(b.id, b)
+    for (const p of planets ?? []) if (p?.id) m.set(p.id, { ...m.get(p.id), ...p })
+    return m
+  }, [stellarSystem, planets])
+
   const currentPlanet = useMemo(() => {
-    if (!planets || !planetId) return null
-    return planets.find((p: any) => p.id === planetId) ?? null
-  }, [planets, planetId])
+    if (!planetId) return null
+    return bodyByName.get(planetId) ?? null
+  }, [bodyByName, planetId])
 
   const axialTiltDeg = currentPlanet?.axial_tilt_deg ?? 0
 
@@ -480,8 +501,9 @@ export default function GlobeViewerPage() {
           }
         />
 
-        {/* Planet selector */}
-        {planets && planets.length > 0 && (
+        {/* Body selector — every body with map data; display names resolved
+            from the astronomy catalogs (planets + stellar bodies) */}
+        {mapPlanets && mapPlanets.length > 0 && (
           <select
             value={planetId}
             onChange={(e) => {
@@ -490,10 +512,9 @@ export default function GlobeViewerPage() {
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
-            {planets.map((p: any) => (
-              <option key={p.id} value={p.id}>
-                {p.name ?? p.id}
-                {mapPlanets?.includes(p.id) ? '' : ` (${t('label.noMap')})`}
+            {mapPlanets.map((id: string) => (
+              <option key={id} value={id}>
+                {bodyByName.get(id)?.name ?? id}
               </option>
             ))}
           </select>

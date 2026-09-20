@@ -178,6 +178,24 @@ export default function MapViewerPage() {
     enabled: !!worldName,
   })
 
+  // Stellar system catalog — satellites (satellite_moon, satellite_titan, …)
+  // live only here, not in the geological planets catalog. Needed for body
+  // names and axial tilt of every mapped body (solar-system reference bodies
+  // inside the earth anchor world have no planets.yaml entries).
+  const { data: stellarSystem } = useQuery({
+    queryKey: ['astronomy', worldName, selectedBranch],
+    queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
+    enabled: !!worldName,
+  })
+
+  // id → body lookup across both catalogs (planets.yaml wins on conflicts).
+  const bodyByName = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const b of stellarSystem?.bodies ?? []) if (b?.id) m.set(b.id, b)
+    for (const p of worldPlanets ?? []) if (p?.id) m.set(p.id, { ...m.get(p.id), ...p })
+    return m
+  }, [stellarSystem, worldPlanets])
+
   // Auto-select / reconcile the active planet:
   // - none selected → first available map (or first defined planet if no maps)
   // - selected planet has no map data in the current branch → redirect to the
@@ -385,21 +403,17 @@ export default function MapViewerPage() {
     return [...selectedCells].map((id) => voronoiCells.find((c) => c.id === id)).filter(Boolean) as VoronoiCell[]
   }, [voronoiCells, selectedCells])
 
-  // Display name for the currently selected planet
+  // Display name for the currently selected body (either catalog)
   const currentPlanetName = useMemo(() => {
-    if (!selectedPlanet || !worldPlanets) return null
-    const p = worldPlanets.find((pl: { id: string }) => pl.id === selectedPlanet)
-    return p?.name ?? null
-  }, [selectedPlanet, worldPlanets])
+    if (!selectedPlanet) return null
+    return bodyByName.get(selectedPlanet)?.name ?? null
+  }, [selectedPlanet, bodyByName])
 
   // Planet axial tilt (amplitude of seasonal declination) + current declination.
   const axialTiltDeg = useMemo(() => {
-    if (!worldPlanets) return 0
-    const p = worldPlanets.find(
-      (pl: { id: string; axial_tilt_deg?: number }) => pl.id === selectedPlanet,
-    )
-    return p?.axial_tilt_deg ?? 0
-  }, [worldPlanets, selectedPlanet])
+    if (!selectedPlanet) return 0
+    return bodyByName.get(selectedPlanet)?.axial_tilt_deg ?? 0
+  }, [selectedPlanet, bodyByName])
   const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
 
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
@@ -479,8 +493,9 @@ export default function MapViewerPage() {
           }
         />
 
-        {/* Planet selector */}
-        {worldPlanets && worldPlanets.length > 0 && (
+        {/* Body selector — every body with map data; display names resolved
+            from the astronomy catalogs (planets + stellar bodies) */}
+        {mapPlanets && mapPlanets.length > 0 && (
           <select
             value={selectedPlanet}
             onChange={(e) => {
@@ -490,10 +505,9 @@ export default function MapViewerPage() {
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
-            {worldPlanets.map((p: { id: string; name?: string }) => (
-              <option key={p.id} value={p.id}>
-                {p.name ?? p.id}
-                {mapPlanets?.includes(p.id) ? '' : ` (${t('label.noMap')})`}
+            {mapPlanets.map((id: string) => (
+              <option key={id} value={id}>
+                {bodyByName.get(id)?.name ?? id}
               </option>
             ))}
           </select>

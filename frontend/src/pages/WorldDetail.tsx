@@ -1,18 +1,16 @@
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
 import CivMapPreview from '../components/civmap/CivMapPreview'
-import MapPreviewCanvas from '../components/map/MapPreviewCanvas'
 import LayerDag from '../components/LayerDag'
 import StarfieldBackground from '../components/StarfieldBackground'
-import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
 function bodyIcon(planetType: string | undefined, massEarth: number | undefined) {
@@ -81,7 +79,6 @@ function renderNarrative(text: string) {
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
-  const navigate = useNavigate()
   const { t } = useTranslation('worlds')
   const staticMode = isStaticMode()
 
@@ -181,45 +178,6 @@ export default function WorldDetail() {
     enabled: !!worldName && activeTab === 'ecology',
     retry: false,
   })
-
-  // Map preview data (always loaded for overview tab)
-  const { data: mapPlanets } = useQuery({
-    queryKey: ['mapPlanets', worldName, selectedBranch],
-    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
-    enabled: !!worldName,
-    retry: false,
-  })
-
-  const firstMapPlanet = mapPlanets && mapPlanets.length > 0 ? mapPlanets[0] : null
-
-  const { data: mapMeta } = useQuery({
-    queryKey: ['mapMeta', worldName, firstMapPlanet, selectedBranch],
-    queryFn: () => api.getMapMeta(worldName!, firstMapPlanet!, selectedBranch),
-    enabled: !!worldName && !!firstMapPlanet,
-    retry: false,
-  })
-
-  const { data: mapElevationBlob } = useQuery({
-    queryKey: ['previewElevation', worldName, firstMapPlanet, selectedBranch],
-    queryFn: () => api.getElevationBlob(worldName!, firstMapPlanet!, selectedBranch),
-    enabled: !!worldName && !!firstMapPlanet,
-    retry: false,
-  })
-
-  const [previewElevation, setPreviewElevation] = useState<Float32Array | null>(null)
-  useEffect(() => {
-    if (!mapElevationBlob) {
-      setPreviewElevation(null)
-      return
-    }
-    let cancelled = false
-    decodePngToFloat32(mapElevationBlob).then(({ data }) => {
-      if (!cancelled) setPreviewElevation(data)
-    }).catch(() => {
-      if (!cancelled) setPreviewElevation(null)
-    })
-    return () => { cancelled = true }
-  }, [mapElevationBlob])
 
   const buildMutation = useMutation({
     mutationFn: () => api.buildWorld(worldName!),
@@ -417,56 +375,6 @@ export default function WorldDetail() {
                   </section>
                 )}
 
-                {/* Map preview card */}
-                <section className="glass-panel p-4 sm:p-6">
-                  <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                    {t('detail.map')}
-                  </h2>
-                  {firstMapPlanet ? (
-                    <div>
-                      <div
-                        className="relative cursor-pointer group rounded-lg overflow-hidden"
-                        onClick={() => {
-                          const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-                          navigate(`/worlds/${worldName}/globe/${encodeURIComponent(firstMapPlanet)}${qs}`)
-                        }}
-                      >
-                        <MapPreviewCanvas
-                          elevation={previewElevation}
-                          width={mapMeta?.width ?? 2048}
-                          height={mapMeta?.height ?? 1024}
-                          seaLevel={mapMeta?.sea_level_m ?? 0.0}
-                          className="w-full"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-lg">
-                          <span className="text-neon-cyan font-medium">
-                            {t('label.openMapEditor')}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-2">
-                        {firstMapPlanet} · {mapMeta?.width ?? '?'}×{mapMeta?.height ?? '?'}
-                        {' · '}
-                        {t('label.clickToView')}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6">
-                      <p className="text-gray-500 mb-2">{t('status.noMapData')}</p>
-                      <p className="text-xs text-gray-600 mb-3">
-                        {t('status.mapGenerateHint')}
-                      </p>
-                      {!staticMode && (
-                        <Link
-                          to={`/worlds/${worldName}/map${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
-                          className="inline-block px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 transition-colors"
-                        >
-                          {t('action.generateFirstMap')}
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </section>
 
                 {/* Layer DAG visualisation */}
                 {world.layers && (

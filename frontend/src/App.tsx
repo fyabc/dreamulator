@@ -39,6 +39,7 @@ function App() {
             <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
             <Route path="worlds/:worldName/map/:planetId" element={<MapViewerPage />} />
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
+            <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
             <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
