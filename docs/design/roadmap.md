@@ -132,7 +132,7 @@
 | **P0** | **M1 世界构建与产物来源闭环**（BUILD-01/02、DATA-01）：**P0 ✅ 已完成（2026-09-17）**——分叉层过滤后 astronomy 自动补建（源上下文）、imported 缺文件诚实失败 + 恢复命令、mesh 按 planet ID 精确解析 + 父 maps 继承、分支继承 mesh 先物化副本再写回（父世界零污染）；earth 基线配方裁决 = 4096x2048/200k/seed42；P1 = 版本化开发数据包（manifest/SHA-256/固定索引 + `data fetch` 拟议接口），交付顺序以数据包评估为准（原始 ETOPO1 导入留作后备）。方案 → `private/reviews/branch-build-bootstrap-plan-2026-09-17.md`（P0 范围 §7）+ `github-data-bootstrap-evaluation-2026-09-17.md` | P0 ✅；P1 1–2 周 | ★★★★★ |
 | **P0** | **M2 共同物理输入与可诊断气候**（PHYS-01、CLIM-01/02；= ▶ rethinking 第一阶段）：**A0 ①②③④ ✅ 全部收口（2026-09-17/18）**——恒星温度三级解析（消 5772 K 静默回退）+ 验证配置世界优先（earth 气压单位修复，**主指标改善：32.0%/0.277/66.8% 新基线**）+ 正典 ΔP 统一（SLP − 同月海洋带平均，双修 + 7 锚点验证 + 年均图层贯通）+ 时间单位审计（唯一混窗 = 沉降门 AI，修参考月常量；实测零影响 = Earth 两基重合/nacrea 单圈门休眠，潜伏缺陷已除；「时间基准约定」表入 climate-pipeline §1） → 月度状态权威化（年温双权威）→ 分阶段水量账本（6 处增删水修正）→ 有限耦合；62 K 温室辐射身份与单圈体制判据随后。证据 → `private/reviews/earth-nacrea-shared-physics-2026-09-17.md`（§3 只读实验/§8 A0–E 计划）+ `climate-pipeline-rethinking-2026-09-17.md`（§2 静态确认清单/§9 阶段顺序） | 2–4 周 | ★★★★★ |
 | P1 | **GUARD-01 守护轴反例修复**：同指纹事实漂移漏检、嵌套 YAML（lexicon）漏检、容量归档误标 deprecated、`intentional` 豁免过宽、缺产物状态显示为已验证。反例脚本/JSON + 裁决 → `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
-| P1 | **M3 结果契约与 UCC 小切片**（CONTRACT-01、UCC-01）：API/静态最小一致性夹具 + 时间/geometry/来源元数据；UCC = 连续描述量（26 项语义检查已过）→ 少量版本化分类 profile（不追 Köppen 一致率），可外部序列独立先行。重设计全文 → `private/reviews/ucc-review-2026-09-17.md`（唯一维护正文） | 1–2 周 | ★★★★ |
+| P1 | **M3 结果契约与 UCC 小切片**（CONTRACT-01、UCC-01）：**UCC-01 第一至三步 ✅（2026-09-20）**——连续描述量 + climate_yearly.msgpack 描述量浏览 + L2 候选比较 + profile v0 冻结（`classify_v0`）+ 知识文档（`knowledge/climatology/ucc_climate_descriptors.md`）；第四步 = 分类导出 + 着色 + 用途验证（Nacrea 夹具、AI4 重议）。计划 → `private/plans/ucc-01-plan.md`；重设计全文 → `private/reviews/ucc-review-2026-09-17.md` | 第四步 ~1 周 | ★★★★ |
 | P2 | **M4 有边界的世界创作扩展**：四选一真实用户任务驱动（受控地形精修 / 生态资源描述 / 小型文明事件账本 / 语言谱系小样——各 proposal 的 MVP 定义见 `private/reviews/proposals-review-2026-09-17.md` §3）；16 份 proposal 状态整理（已实现归档 `pipelines/`、统一头部元信息）随后收尾 | 按所选任务 | ★★★ |
 
 #### 既有待办
@@ -154,6 +154,8 @@
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
+| P2 | **太阳系参照世界**（Mars / Moon / Venus / Titan 真实数据 root，沿用 earth reference_anchor 模式、永不 build）：Mars/Venus/Titan 气候数据均为 GCM 气候态（MCD v6.1 / VCD v2.3 / TAM）= UCC 评审 L4 压力测试层、非观测真值；Moon = LRO Diviner 观测级地表温度（唯一观测态例外，地表温 vs 气温契约案例）；Mars → Moon → Venus → Titan。评估与顺序 → `private/plans/ucc-01-plan.md` 4d | Mars ~1 周级 | ★★★ |
+| P2 | **地球历史气候分支**（`earth/branches/lgm` 导入分支：ICE-6G_C 高程 + −120 m 海平面 + CHELSA-TraCE21k 月度 T/P，复用 200k mesh）：「同一行星、不同真实气候态」的 UCC 稳定性检验 + 冰期创作设定双用途；模式重建（CCSM3 降尺度 + 代用指标约束）非观测真值，provenance 声明。评估 → `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
 | P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置，重启再评估）：大尺度指纹可在 200k 表达（喇叭河口、潮间带高程带、海岸平直化、高/低潮双基准；障壁岛/潟湖禁止生成），亚网格地貌归高清化——评估存 `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
 | P2 | **生态层海洋模块**（3B.5）：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——当前生态层全陆相 Whittaker 映射，零海洋 | 1–2 周 | ★★★ |
