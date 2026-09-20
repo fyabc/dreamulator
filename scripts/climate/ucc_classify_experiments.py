@@ -112,6 +112,11 @@ def _descriptors_vectorized(t: np.ndarray, p: np.ndarray, et: np.ndarray) -> dic
     safe_p = np.maximum(p_total, 1e-12)
     q = p / safe_p[:, None]
     concentration = np.where(p_total > 0.0, 0.5 * np.abs(q - 1.0 / t.shape[1]).sum(axis=1), np.nan)
+    # Demand-model validity domain (compute_descriptors): no bin above freezing
+    # → Hamon reference demand undefined → supply–demand stats out of domain.
+    out_of_domain = t_max < 0.0
+    ai = np.where(out_of_domain, np.nan, ai)
+    deficit = np.where(out_of_domain, np.nan, deficit)
     return {
         "t_mean_c": t_mean,
         "t_min_c": t_min,

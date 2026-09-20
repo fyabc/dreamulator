@@ -725,7 +725,9 @@ AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用�
 （uint8 供需档码，255 = 不适用——海洋或 AI 非 valid）、`ucc_supply_status`（uint8，
 复用 `status_codes`）、`ucc_modifiers`（uint8 位掩码：bit0 = continental、
 bit1 = water_stress）。分类在导出层一次性算好，前端只读码不重新分类（阈值共享由
-构造保证）；无这些字段的旧导出在前端降级为透明图层。
+构造保证）；无这些字段的旧导出在前端降级为透明图层。`data_source` 区分
+`"model"`（引擎导出）与 `"observation"`（earth root 的观测派生文件，见
+earth-real-data.md §2.4 末）。
 
 ---
 

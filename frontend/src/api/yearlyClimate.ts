@@ -47,6 +47,9 @@ export interface YearlyClimateData {
   // fully transparent and the panel hides the class row).
   /** Frozen profile identifier (e.g. 'ucc-v0'). */
   profile?: string
+  /** 'model' (engine-built world) or 'observation' (earth root's obs-derived
+   *  file from scripts/earth/export_earth_yearly.py). */
+  dataSource?: string
   /** Thermal band index → name (e.g. 'polar', 'cold', 'temperate', 'tropical'). */
   thermalBands?: string[]
   /** Supply band index → name (e.g. 'arid', 'transitional', 'humid'). */
@@ -93,6 +96,9 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     deficitStatus: toUint8(obj.deficit_status as Uint8Array),
     concentration: toFloat32(obj.concentration as Uint8Array),
   }
+  // Provenance: 'model' (engine-built) vs 'observation' (earth root).  Absent
+  // on exports predating the marker.
+  out.dataSource = (obj.data_source as string) ?? undefined
   // Classification fields (UCC-01 step 4a) are absent in older exports.
   if (obj.ucc_thermal !== undefined) {
     out.profile = (obj.profile as string) ?? ''

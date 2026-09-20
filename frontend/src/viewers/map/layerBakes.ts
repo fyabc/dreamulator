@@ -733,9 +733,15 @@ export function bakeUccLayer(
     const supplyCode = uccSupply[i]
     const supply = supplyCode === 255 ? null : supplyBands[supplyCode]
     if (thermal == null || (supplyCode !== 255 && supply == null)) continue
-    const hex = UCC_COLORS[supply ? `${thermal}/${supply}` : thermal]
+    // No supply grade: ocean cells use the bare-thermal ocean blues; land cells
+    // (ice caps out of the demand model's domain, no-positive-demand, …) use the
+    // neutral `<thermal>/na` land tints — never the ocean colour.
+    const cell = cvtMesh.cells[i]
+    const isOcean = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
+    const key = supply ? `${thermal}/${supply}` : isOcean ? thermal : `${thermal}/na`
+    const hex = UCC_COLORS[key]
     if (hex == null) continue
-    colors.set(cvtMesh.cells[i].id, hexRgb(hex))
+    colors.set(cell.id, hexRgb(hex))
   }
   const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
   return makeTexture(buf, width, height, { nearestMag: true })

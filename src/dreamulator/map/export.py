@@ -732,19 +732,16 @@ def export_climate_layers(
         from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
 
         from .ucc import (
-            MISSING_INPUT,
-            NO_POSITIVE_DEMAND,
-            NOT_APPLICABLE,
             PROFILE_V0,
+            STATUS_CODES,
             SUPPLY_BANDS_V0,
             THERMAL_BANDS_V0,
-            VALID,
             classify_v0,
             compute_descriptors,
         )
 
         _et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
-        _status_codes = [VALID, MISSING_INPUT, NOT_APPLICABLE, NO_POSITIVE_DEMAND]
+        _status_codes = list(STATUS_CODES)
         _status_index = {name: i for i, name in enumerate(_status_codes)}
         _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_V0)}
         _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_V0)}
@@ -804,6 +801,9 @@ def export_climate_layers(
             "profile": PROFILE_V0,
             "thermal_bands": list(THERMAL_BANDS_V0),
             "supply_bands": list(SUPPLY_BANDS_V0),
+            # Engine output — the earth root's obs-derived counterpart (written
+            # by scripts/earth/export_earth_yearly.py) carries "observation".
+            "data_source": "model",
             "t_mean_c": _t_mean.tobytes(),
             "t_min_c": _t_min.tobytes(),
             "t_max_c": _t_max.tobytes(),

@@ -164,6 +164,7 @@ const DESC_STATUS_LABELS: Record<string, string> = {
   missing_input: 'descStatus.missing_input',
   not_applicable: 'descStatus.not_applicable',
   no_positive_demand: 'descStatus.no_positive_demand',
+  out_of_domain: 'descStatus.out_of_domain',
 }
 
 function formatNumber(n: number | undefined, decimals = 0): string {
@@ -438,7 +439,18 @@ function CellDetails({
   const uccSupplyCode = hasYearly && yearlyData!.uccSupply ? yearlyData!.uccSupply[yi] : 255
   const uccSupply =
     uccSupplyCode !== 255 && yearlyData!.supplyBands ? yearlyData!.supplyBands[uccSupplyCode] : null
-  const uccClassKey = uccThermal ? (uccSupply ? `${uccThermal}/${uccSupply}` : uccThermal) : null
+  // No supply grade: ocean shows the bare thermal band (uccClass.<thermal> =
+  // "…（海洋）"); land with a non-applicable supply axis (ice caps out of the
+  // demand model's domain, …) shows the plain thermal name — the status rows
+  // below carry the reason.
+  const uccIsOcean = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
+  const uccClassKey = uccThermal
+    ? uccSupply
+      ? `uccClass.${uccThermal}/${uccSupply}`
+      : uccIsOcean
+        ? `uccClass.${uccThermal}`
+        : `uccThermal.${uccThermal}`
+    : null
   const uccModBits = hasYearly && yearlyData!.uccModifiers ? yearlyData!.uccModifiers[yi] : 0
   const uccModifierKeys = [
     ...(uccModBits & 1 ? ['continental'] : []),
@@ -697,7 +709,7 @@ function CellDetails({
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.uccClass')}>{t('inspector.uccClass')}</dt>
                 <dd className="font-mono">
-                  {t(`uccClass.${uccClassKey}`)}
+                  {t(uccClassKey)}
                   {uccModifierKeys.length > 0 && (
                     <span className="text-gray-500 ml-1" title={t('tooltip.uccMod')}>
                       ({uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')})
@@ -754,6 +766,12 @@ function CellDetails({
                   : yearlyData!.concentration[yi].toFixed(2)}
               </dd>
             </div>
+            {yearlyData!.profile ? (
+              <p className="text-[10px] text-gray-600">
+                {t('inspector.uccProfile', { profile: yearlyData!.profile })}
+                {yearlyData!.dataSource && ` · ${t(`uccSource.${yearlyData!.dataSource}`)}`}
+              </p>
+            ) : null}
           </FieldGroup>
         ) : (
           hasClimate && (

@@ -83,9 +83,16 @@
     "tropical/arid": "热带·干旱", "tropical/transitional": "热带·过渡", "tropical/humid": "热带·湿润",
     "polar": "极地（海洋）", "cold": "寒冷（海洋）", "temperate": "温和（海洋）", "tropical": "热带（海洋）"
   },
+  "uccThermal": {
+    "polar": "极地", "cold": "寒冷", "temperate": "温和", "tropical": "热带"
+  },
   "uccMod": {
     "continental": "强季节",
     "waterStress": "季节水压力"
+  },
+  "uccSource": {
+    "model": "引擎",
+    "observation": "观测"
   },
   "biome": {
     "tropical_rainforest": "热带雨林",
@@ -226,7 +233,8 @@
   "descStatus": {
     "missing_input": "缺输入",
     "not_applicable": "不适用",
-    "no_positive_demand": "无正参考需求"
+    "no_positive_demand": "无正参考需求",
+    "out_of_domain": "需求模型超有效域"
   },
   "tooltip": {
     "crustType": "continental=大陆, oceanic=海洋, transitional=过渡带",

@@ -83,9 +83,16 @@
     "tropical/arid": "Tropical · arid", "tropical/transitional": "Tropical · transitional", "tropical/humid": "Tropical · humid",
     "polar": "Polar (ocean)", "cold": "Cold (ocean)", "temperate": "Temperate (ocean)", "tropical": "Tropical (ocean)"
   },
+  "uccThermal": {
+    "polar": "Polar", "cold": "Cold", "temperate": "Temperate", "tropical": "Tropical"
+  },
   "uccMod": {
     "continental": "Strong seasonality",
     "waterStress": "Seasonal water stress"
+  },
+  "uccSource": {
+    "model": "model",
+    "observation": "observed"
   },
   "biome": {
     "tropical_rainforest": "Tropical rainforest",
@@ -226,7 +233,8 @@
   "descStatus": {
     "missing_input": "missing input",
     "not_applicable": "not applicable",
-    "no_positive_demand": "no positive demand"
+    "no_positive_demand": "no positive demand",
+    "out_of_domain": "demand model out of domain"
   },
   "tooltip": {
     "crustType": "continental=continent, oceanic=ocean, transitional=transition",

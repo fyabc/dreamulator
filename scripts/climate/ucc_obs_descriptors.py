@@ -42,7 +42,7 @@ from dreamulator.engine.climate_physics import (  # noqa: E402
     potential_evapotranspiration_hamon_monthly,
 )
 from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
-from dreamulator.map.ucc import compute_descriptors  # noqa: E402
+from dreamulator.map.ucc import STATUS_CODES, compute_descriptors  # noqa: E402
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS  # noqa: E402
 
 _EARTH_MAP = Path("data/worlds/earth/maps/planet_earth")
@@ -121,7 +121,7 @@ def main() -> None:
         "ai_status": np.empty(n, np.uint8),
         "deficit_status": np.empty(n, np.uint8),
     }
-    status_codes = ["valid", "missing_input", "not_applicable", "no_positive_demand"]
+    status_codes = list(STATUS_CODES)
     status_index = {s: i for i, s in enumerate(status_codes)}
     for i in range(n):
         d = compute_descriptors(t_monthly[i], p_monthly[i], et_monthly[i])

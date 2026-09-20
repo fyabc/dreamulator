@@ -96,6 +96,13 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 > **earth 基础世界从不 build 气候**：它的气候字段是**真实观测**，不是引擎模拟。验证时用它
 > 作 ground truth 去对比 nacrea 等生成世界的模拟精度（见 climate-validation.md）。
 
+> **UCC 年度描述量也在 root 上（观测派生）**：`export_earth_yearly.py` 从观测月度序列
+> （NCEP/GPCP，即 root 的 `climate_monthly.msgpack`）逐 cell 计算 UCC 描述量与
+> profile-v0 分类（`classify_v0`），写 root 的 `climate_yearly.msgpack`。这不违反
+> 「root 永不 build」——整条链路零引擎参与，是观测的确定性变换（与 Beck 2018 Köppen
+> 列同属「观测经已声明算法的派生」）；文件内 `data_source: "observation"` +
+> provenance 块声明来源，引擎导出的对应文件标 `"model"`。
+
 ---
 
 ## 3. 导入命令（一次性重建 earth）
@@ -113,10 +120,13 @@ uv run python scripts/earth/import_earth_watermask.py \
 
 uv run python scripts/earth/import_earth_climate.py \
     --output-dir data/worlds/earth/maps/planet_earth
+
+uv run python scripts/earth/export_earth_yearly.py \
+    --output-dir data/worlds/earth/maps/planet_earth
 ```
 
 > 直接在 `data/worlds` 上重建（输出被 `.gitignore` 忽略、不污染工作区）；发版时
-> `scripts/release/publish_world_data.py` 会按依赖顺序跑这 4 个 import 脚本并打包上传。
+> `scripts/release/publish_world_data.py` 会按依赖顺序跑这 5 个脚本并打包上传。
 
 ---
 

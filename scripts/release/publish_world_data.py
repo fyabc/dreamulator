@@ -76,6 +76,10 @@ _IMPORTED_WORLDS: dict[str, list[tuple[str, list[str]]]] = {
         ("import_earth_tectonics", []),
         ("import_earth_watermask", []),
         ("import_earth_climate", []),
+        # UCC yearly descriptors + profile-v0 classification derived from the
+        # OBSERVED monthly climate (the root is never built — this importer-side
+        # script is the obs counterpart of the engine's yearly export block).
+        ("export_earth_yearly", []),
     ],
 }
 

@@ -27,6 +27,11 @@ VALID = "valid"
 MISSING_INPUT = "missing_input"  # e.g. no PET model → AI not computable
 NOT_APPLICABLE = "not_applicable"  # e.g. P=Eref=0 → AI undefined
 NO_POSITIVE_DEMAND = "no_positive_demand"  # P>0, Eref=0 → not a finite wet/dry ratio
+OUT_OF_DOMAIN = "out_of_domain"  # demand model outside its validity domain (see below)
+
+# Canonical status ordering — the uint8 codes embedded in climate_yearly.msgpack
+# index into this list; both exporters and the experiment scripts share it.
+STATUS_CODES = (VALID, MISSING_INPUT, NOT_APPLICABLE, NO_POSITIVE_DEMAND, OUT_OF_DOMAIN)
 
 
 @dataclass
@@ -97,6 +102,20 @@ def compute_descriptors(
     ai, ai_status = _supply_demand(p_rate, et_rate, dt)
     deficit, deficit_status = _seasonal_deficit(p_rate, et_rate, dt)
     concentration = _concentration(p_rate, dt, p_total)
+
+    # Demand-model validity domain (ucc-review §2.3/§4.4): the Hamon reference
+    # demand is an empirical formula for evaporation from *liquid* water
+    # surfaces.  When no bin-mean temperature reaches the freeze threshold
+    # (no liquid water all year — ice-cap climates), the reference demand is
+    # undefined in physical terms: Eref collapses toward zero while sublimation
+    # physics takes over, and P/Eref inflates into a meaningless "humid" ice
+    # sheet.  Mark the supply–demand statistics out-of-domain there instead of
+    # reporting a number.  MISSING_INPUT (no PET at all) takes precedence.
+    if t_max < freeze_threshold_c:
+        if ai_status != MISSING_INPUT:
+            ai, ai_status = None, OUT_OF_DOMAIN
+        if deficit_status != MISSING_INPUT:
+            deficit, deficit_status = None, OUT_OF_DOMAIN
 
     return ClimateDescriptors(
         t_mean=t_mean,

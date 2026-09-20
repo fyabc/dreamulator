@@ -14,6 +14,7 @@ from dreamulator.map.ucc import (
     MISSING_INPUT,
     NO_POSITIVE_DEMAND,
     NOT_APPLICABLE,
+    OUT_OF_DOMAIN,
     PROFILE_V0,
     VALID,
     ClimateDescriptors,
@@ -63,6 +64,24 @@ def test_supply_demand_edge_cases() -> None:
     # P>0, Eref=0 → "no positive demand", not inf.
     d = compute_descriptors(np.array([10.0]), np.array([1.0]), et_rate=np.array([0.0]))
     assert d.ai is None and d.ai_status == NO_POSITIVE_DEMAND
+
+
+def test_demand_out_of_domain_below_freeze() -> None:
+    # No bin above freezing (ice cap): the Hamon reference demand — an empirical
+    # liquid-water formula — leaves its validity domain; AI/deficit report
+    # out_of_domain instead of a meaningless inflated ratio (南极「湿润」反例).
+    t_cold = np.array([-30.0, -10.0])
+    p_some = np.array([5.0, 5.0])
+    et_tiny = np.array([0.1, 0.2])
+    d = compute_descriptors(t_cold, p_some, et_rate=et_tiny)
+    assert d.ai is None and d.ai_status == OUT_OF_DOMAIN
+    assert d.deficit is None and d.deficit_status == OUT_OF_DOMAIN
+    # t_max exactly at the freeze threshold → still in domain (strict <).
+    d = compute_descriptors(np.array([-10.0, 0.0]), p_some, et_rate=et_tiny)
+    assert d.ai is not None and d.ai_status == VALID
+    # missing PET is the stronger statement — the gate must not overwrite it.
+    d = compute_descriptors(t_cold, p_some, et_rate=None)
+    assert d.ai_status == MISSING_INPUT and d.deficit_status == MISSING_INPUT
 
 
 def test_seasonal_deficit() -> None:
@@ -142,10 +161,16 @@ def test_v0_partial_validity_propagates() -> None:
     assert c.supply is None and c.supply_status == MISSING_INPUT
     assert c.water_stress is None
     # P=Eref=0 → AI not_applicable propagates (not a fake "arid").
-    d = _desc([-20.0, -15.0], [0.0, 0.0], [0.0, 0.0])
+    d = _desc([-5.0, 15.0], [0.0, 0.0], [0.0, 0.0])
+    c = classify_v0(d, is_land=True)
+    assert c.thermal == "cold"
+    assert c.supply is None and c.supply_status == NOT_APPLICABLE
+    # Ice cap (no month above freezing): demand out of domain → supply carries it.
+    d = _desc([-30.0, -10.0], [5.0, 5.0], [0.1, 0.2])
     c = classify_v0(d, is_land=True)
     assert c.thermal == "polar"
-    assert c.supply is None and c.supply_status == NOT_APPLICABLE
+    assert c.supply is None and c.supply_status == OUT_OF_DOMAIN
+    assert c.label == "polar"
 
 
 def test_v0_modifiers() -> None:
