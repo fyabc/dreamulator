@@ -304,3 +304,5 @@ ucc-worked-examples.md` 为准；下表保留示意框架并逐行标注实测�
 - `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md` — Nacrea 迁移
   语义夹具（同 profile 应用于架空世界的基线记录；脚本
   `scripts/climate/ucc_examples_nacrea.py` 生成）
+- `docs/knowledge/planetary_science/planetary_climate_taxonomy.md` — 无生命天体
+  气候划分的学界实践（§8 演练的文献背景；UCC v2 候选轴的参照调研提炼）
