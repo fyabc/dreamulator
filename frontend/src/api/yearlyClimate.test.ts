@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { encode } from '@msgpack/msgpack'
-import { decodeYearlyClimate } from './yearlyClimate'
+import { decodeYearlyClimate, uccCode } from './yearlyClimate'
 
 /** encode() views a pooled 2048-byte buffer — slice to the exact bytes. */
 function toBuffer(payload: Record<string, unknown>): ArrayBuffer {
@@ -72,5 +72,23 @@ describe('decodeYearlyClimate', () => {
     expect(d.uccSupplyStatus).toBeUndefined()
     expect(d.uccModifiers).toBeUndefined()
     expect(d.tMeanC[0]).toBeCloseTo(10)
+    expect(uccCode(d, 0, true)).toBeNull()
+  })
+
+  it('composes short codes (mirror of ucc.py)', () => {
+    const payload = {
+      ...basePayload(),
+      profile: 'ucc-v1',
+      thermal_bands: ['polar', 'cold', 'temperate', 'tropical'],
+      supply_bands: ['arid', 'semi_arid', 'transitional', 'humid'],
+      ucc_thermal: new Uint8Array([2, 3]),
+      ucc_supply: new Uint8Array([1, 255]),
+      ucc_supply_status: new Uint8Array([0, 2]),
+      ucc_modifiers: new Uint8Array([3, 0]),
+    }
+    const d = decodeYearlyClimate(toBuffer(payload))
+    expect(uccCode(d, 0, true)).toBe('Ts-xw') // temperate · semi-arid + both modifiers
+    expect(uccCode(d, 1, false)).toBe('Ro') // ocean
+    expect(uccCode(d, 1, true)).toBe('Rn') // land n/a → explicit n slot
   })
 })

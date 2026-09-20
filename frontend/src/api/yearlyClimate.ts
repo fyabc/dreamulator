@@ -74,6 +74,42 @@ function toUint8(u8: Uint8Array): Uint8Array {
   return new Uint8Array(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength))
 }
 
+// Compact display codes — mirror of THERMAL_CODE_LETTERS / SUPPLY_CODE_LETTERS
+// in src/dreamulator/map/ucc.py (single source of truth is the Python side;
+// codes are versioned with the profile and are NOT Köppen letters).
+const UCC_THERMAL_LETTERS: Record<string, string> = {
+  polar: 'P',
+  cold: 'C',
+  temperate: 'T',
+  tropical: 'R',
+}
+const UCC_SUPPLY_LETTERS: Record<string, string> = {
+  arid: 'a',
+  semi_arid: 's',
+  transitional: 't',
+  humid: 'h',
+}
+
+/** Compose a cell's short UCC code (e.g. `Rh`, `Cs-xw`, `Ro` ocean, `Pn` ice
+ *  cap) from the decoded yearly data.  Null when the file predates the
+ *  classification fields. */
+export function uccCode(d: YearlyClimateData, i: number, isLand: boolean): string | null {
+  const { uccThermal, uccSupply, uccModifiers, thermalBands, supplyBands } = d
+  if (!uccThermal || !thermalBands || !supplyBands) return null
+  const t = UCC_THERMAL_LETTERS[thermalBands[uccThermal[i]]]
+  if (!t) return null
+  const sIdx = uccSupply ? uccSupply[i] : 255
+  let code = t
+  if (sIdx === 255) {
+    code += isLand ? 'n' : 'o'
+  } else {
+    code += UCC_SUPPLY_LETTERS[supplyBands[sIdx]] ?? ''
+  }
+  const mods = uccModifiers ? uccModifiers[i] : 0
+  const modStr = (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
+  return modStr ? `${code}-${modStr}` : code
+}
+
 export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
   const obj = decode(raw) as Record<string, unknown>
   const out: YearlyClimateData = {

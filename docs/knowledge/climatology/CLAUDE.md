@@ -7,7 +7,7 @@
 - `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（位温 θ）、季风边界层风 + 标定锚点、跨赤道季风西风带（2026-08 自实现反写 + 季风 f→0 教训）
 - `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
 - `climate_classification_comparison.md` — 四大分类体系比较（Köppen / Trewartha / Thornthwaite / Holdridge）与 dreamulator 适配建议（2026-08）
-- `ucc_climate_descriptors.md` — 统一气候描述（UCC）：时间基准契约、连续描述量（AI / 同期亏缺 / 集中度 + 部分有效状态）、Hamon-1961 需求模型声明、分类 profile v0（热量 4 节点 × AI 3 档 + 修饰语）与 L2 实验冻结依据（2026-09）
+- `ucc_climate_descriptors.md` — 统一气候描述（UCC）：时间基准契约、连续描述量（AI / 同期亏缺 / 集中度 + 部分有效状态）、Hamon-1961 需求模型声明与有效域、分类 profile v1（热量 4 节点 × AI 4 档 + 修饰语，v0 可复现）与 L2 实验冻结依据（2026-09）
 - `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学、ENSO 类振荡（3A.3 科学底座）
 - `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
 
@@ -35,4 +35,4 @@
 | `precipitation.md` | `climate_simulator.py:_compute_precipitation_monthly_budget()` | 年/月降水量 |
 | `ocean_currents.md` | `map/ocean_circulation.py`（`solve_ocean_gyre` 等） | 洋流矢量 |
 | `koppen_classification.md` | `climate_physics.py:koppen_classify()` | 气候类型 |
-| `ucc_climate_descriptors.md` | `map/ucc.py:compute_descriptors()` / `classify_v0()` | 气候描述量 / UCC 分类 |
+| `ucc_climate_descriptors.md` | `map/ucc.py:compute_descriptors()` / `classify_v1()` | 气候描述量 / UCC 分类 |

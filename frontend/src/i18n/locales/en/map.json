@@ -77,10 +77,10 @@
     "Ocean": "Ocean"
   },
   "uccClass": {
-    "polar/arid": "Polar · arid", "polar/transitional": "Polar · transitional", "polar/humid": "Polar · humid",
-    "cold/arid": "Cold · arid", "cold/transitional": "Cold · transitional", "cold/humid": "Cold · humid",
-    "temperate/arid": "Temperate · arid", "temperate/transitional": "Temperate · transitional", "temperate/humid": "Temperate · humid",
-    "tropical/arid": "Tropical · arid", "tropical/transitional": "Tropical · transitional", "tropical/humid": "Tropical · humid",
+    "polar/arid": "Polar · arid", "polar/semi_arid": "Polar · semi-arid", "polar/transitional": "Polar · transitional", "polar/humid": "Polar · humid",
+    "cold/arid": "Cold · arid", "cold/semi_arid": "Cold · semi-arid", "cold/transitional": "Cold · transitional", "cold/humid": "Cold · humid",
+    "temperate/arid": "Temperate · arid", "temperate/semi_arid": "Temperate · semi-arid", "temperate/transitional": "Temperate · transitional", "temperate/humid": "Temperate · humid",
+    "tropical/arid": "Tropical · arid", "tropical/semi_arid": "Tropical · semi-arid", "tropical/transitional": "Tropical · transitional", "tropical/humid": "Tropical · humid",
     "polar": "Polar (ocean)", "cold": "Cold (ocean)", "temperate": "Temperate (ocean)", "tropical": "Tropical (ocean)"
   },
   "uccThermal": {
@@ -255,7 +255,7 @@
     "descAridity": "AI = total precipitation / reference evapotranspiration (Hamon 1961, fixed 12 h daylength) — a reference supply–demand ratio, not soil moisture",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref — same-period shortfall fraction; ignores storage and lateral water transport",
     "descConcentration": "C_TV = 0.5 Σ |q_i − w_i| — deviation of the precipitation time distribution from a uniform rate; undefined without precipitation",
-    "uccClass": "UCC main class = thermal background (polar/cold/temperate/tropical) × reference supply grade (arid/transitional/humid); ocean cells carry no supply axis",
+    "uccClass": "UCC main class = thermal background (polar/cold/temperate/tropical) × reference supply grade (arid/semi-arid/transitional/humid); ocean cells carry no supply axis",
     "uccMod": "Modifiers on demand: strong seasonality = annual temperature range ≥ 25 °C; seasonal water stress = same-period deficit ≥ 50%"
   },
   "sun": {

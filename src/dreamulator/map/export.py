@@ -732,19 +732,19 @@ def export_climate_layers(
         from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
 
         from .ucc import (
-            PROFILE_V0,
+            PROFILE_CURRENT,
             STATUS_CODES,
-            SUPPLY_BANDS_V0,
-            THERMAL_BANDS_V0,
-            classify_v0,
+            SUPPLY_BANDS_CURRENT,
+            THERMAL_BANDS_CURRENT,
+            classify_v1,
             compute_descriptors,
         )
 
         _et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
         _status_codes = list(STATUS_CODES)
         _status_index = {name: i for i, name in enumerate(_status_codes)}
-        _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_V0)}
-        _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_V0)}
+        _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_CURRENT)}
+        _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_CURRENT)}
         _n = mesh.num_cells
         _t_mean = np.empty(_n, dtype=np.float32)
         _t_min = np.empty(_n, dtype=np.float32)
@@ -783,7 +783,7 @@ def export_climate_layers(
             _deficit_status[i] = _status_index[d.deficit_status]
             if d.concentration is not None:
                 _concentration[i] = d.concentration
-            _cls = classify_v0(d, is_land=mesh.cells[i].water_class == "land")
+            _cls = classify_v1(d, is_land=mesh.cells[i].water_class == "land")
             _ucc_thermal[i] = _thermal_index[_cls.thermal]
             _ucc_supply[i] = _supply_index[_cls.supply] if _cls.supply is not None else 255
             _ucc_supply_status[i] = _status_index[_cls.supply_status]
@@ -798,9 +798,9 @@ def export_climate_layers(
             "demand_daylength_h": 12.0,
             "freeze_threshold_c": 0.0,
             "status_codes": _status_codes,
-            "profile": PROFILE_V0,
-            "thermal_bands": list(THERMAL_BANDS_V0),
-            "supply_bands": list(SUPPLY_BANDS_V0),
+            "profile": PROFILE_CURRENT,
+            "thermal_bands": list(THERMAL_BANDS_CURRENT),
+            "supply_bands": list(SUPPLY_BANDS_CURRENT),
             # Engine output — the earth root's obs-derived counterpart (written
             # by scripts/earth/export_earth_yearly.py) carries "observation".
             "data_source": "model",

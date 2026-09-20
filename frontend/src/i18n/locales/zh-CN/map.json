@@ -77,10 +77,10 @@
     "Ocean": "海洋"
   },
   "uccClass": {
-    "polar/arid": "极地·干旱", "polar/transitional": "极地·过渡", "polar/humid": "极地·湿润",
-    "cold/arid": "寒冷·干旱", "cold/transitional": "寒冷·过渡", "cold/humid": "寒冷·湿润",
-    "temperate/arid": "温和·干旱", "temperate/transitional": "温和·过渡", "temperate/humid": "温和·湿润",
-    "tropical/arid": "热带·干旱", "tropical/transitional": "热带·过渡", "tropical/humid": "热带·湿润",
+    "polar/arid": "极地·干旱", "polar/semi_arid": "极地·半干旱", "polar/transitional": "极地·过渡", "polar/humid": "极地·湿润",
+    "cold/arid": "寒冷·干旱", "cold/semi_arid": "寒冷·半干旱", "cold/transitional": "寒冷·过渡", "cold/humid": "寒冷·湿润",
+    "temperate/arid": "温和·干旱", "temperate/semi_arid": "温和·半干旱", "temperate/transitional": "温和·过渡", "temperate/humid": "温和·湿润",
+    "tropical/arid": "热带·干旱", "tropical/semi_arid": "热带·半干旱", "tropical/transitional": "热带·过渡", "tropical/humid": "热带·湿润",
     "polar": "极地（海洋）", "cold": "寒冷（海洋）", "temperate": "温和（海洋）", "tropical": "热带（海洋）"
   },
   "uccThermal": {
@@ -255,7 +255,7 @@
     "descAridity": "AI = 总降水 / 参考蒸散（Hamon 1961，固定 12h 日长）——参考气候供需比，不是土壤湿度",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref——同期亏缺份额，忽略储水与横向输水",
     "descConcentration": "C_TV = 0.5 Σ |q_i − w_i|——降水时间分布相对均匀率的偏离，无降水时无定义",
-    "uccClass": "UCC 主类 = 热量背景（极地/寒冷/温和/热带）× 参考供需等级（干旱/过渡/湿润）；海洋不含干湿轴",
+    "uccClass": "UCC 主类 = 热量背景（极地/寒冷/温和/热带）× 参考供需等级（干旱/半干旱/过渡/湿润）；海洋不含干湿轴",
     "uccMod": "修饰语按需附加：强季节 = 年温度范围 ≥ 25 °C；季节水压力 = 同期亏缺 ≥ 50%"
   },
   "sun": {

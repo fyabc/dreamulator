@@ -155,6 +155,7 @@
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P2 | **太阳系参照世界**（Mars / Moon / Venus / Titan 真实数据 root，沿用 earth reference_anchor 模式、永不 build）：Mars/Venus/Titan 气候数据均为 GCM 气候态（MCD v6.1 / VCD v2.3 / TAM）= UCC 评审 L4 压力测试层、非观测真值；Moon = LRO Diviner 观测级地表温度（唯一观测态例外，地表温 vs 气温契约案例）；Mars → Moon → Venus → Titan。评估与顺序 → `private/plans/ucc-01-plan.md` 4d | Mars ~1 周级 | ★★★ |
+| P2 | **earth 观测锚 1km 升级**（陆地 = CHELSA/WorldClim 30″ 按 cell footprint 面积加权聚合，海洋维持 NCEP/GPCP 2.5°；消除「UCC 比 Beck 糊」的分辨率差、与 Beck 同输入使发散纯归因于规则）：须在 LGM 分支之前做（CHELSA 导入管线两处复用）。评估 → `private/plans/ucc-01-plan.md` 4e 附注 | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm` 导入分支：ICE-6G_C 高程 + −120 m 海平面 + CHELSA-TraCE21k 月度 T/P，复用 200k mesh）：「同一行星、不同真实气候态」的 UCC 稳定性检验 + 冰期创作设定双用途；模式重建（CCSM3 降尺度 + 代用指标约束）非观测真值，provenance 声明。评估 → `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
 | P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置，重启再评估）：大尺度指纹可在 200k 表达（喇叭河口、潮间带高程带、海岸平直化、高/低潮双基准；障壁岛/潟湖禁止生成），亚网格地貌归高清化——评估存 `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |

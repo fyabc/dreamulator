@@ -190,20 +190,51 @@ worlds — never per-world quantiles; §4.3):
 - Demand model: hamon-1961 (12 h daylength; declared, not FAO-56-calibrated).
 """
 
+PROFILE_V1 = "ucc-v1"
+"""Current classification profile.  v1 = v0 with the arid band split at
+AI = 0.2 (arid / semi_arid), separating desert cores from steppe margins —
+the evidence (L2 experiments + map readability: ~23 % of land sat in one arid
+band, ~51 % of it below AI 0.2) was recorded in the 2026-09-20 L2 comparison
+and the split was deferred from v0 to exactly this evaluation point.
+Everything else (thermal nodes, modifiers, validity states, demand model) is
+unchanged from v0."""
+
 T_NODE_POLAR_C_V0 = 10.0
 T_NODE_COLD_C_V0 = -3.0
 T_NODE_TROPICAL_C_V0 = 18.0
 AI_EDGES_V0 = (0.5, 1.0)
+AI_EDGES_V1 = (0.2, 0.5, 1.0)
 MOD_T_RANGE_C_V0 = 25.0
 MOD_DEFICIT_V0 = 0.5
 
 THERMAL_BANDS_V0 = ("polar", "cold", "temperate", "tropical")
 SUPPLY_BANDS_V0 = ("arid", "transitional", "humid")
+SUPPLY_BANDS_V1 = ("arid", "semi_arid", "transitional", "humid")
+
+#: The profile current exports are written with.
+PROFILE_CURRENT = PROFILE_V1
+THERMAL_BANDS_CURRENT = THERMAL_BANDS_V0
+SUPPLY_BANDS_CURRENT = SUPPLY_BANDS_V1
+
+# Compact display codes (the profile's short alphabet, versioned with it).
+# Letters + hyphen only — speakable and safe in URLs/shells/filenames.
+# Thermal: one uppercase letter; supply: one lowercase letter, ``o`` for the
+# ocean slot and ``n`` for land whose supply axis is not applicable (ice caps
+# out of the demand model's domain, missing PET, …; the status field carries
+# the reason) — a bare thermal letter never occurs.  Modifiers append after a
+# hyphen: ``x`` continental, ``w`` water_stress (combinable: ``-xw``).  The
+# codes are self-namespaced — they are NOT Köppen letters ("Cs" here is
+# cold·semi-arid, not Köppen's temperate dry-summer).
+THERMAL_CODE_LETTERS = {"polar": "P", "cold": "C", "temperate": "T", "tropical": "R"}
+SUPPLY_CODE_LETTERS = {"arid": "a", "semi_arid": "s", "transitional": "t", "humid": "h"}
+OCEAN_CODE_LETTER = "o"
+LAND_NA_CODE_LETTER = "n"
+MOD_CODE_LETTERS = {"continental": "x", "water_stress": "w"}
 
 
 @dataclass(frozen=True)
 class UCCClassV0:
-    """One cell's classification under profile v0.
+    """One cell's classification under a frozen profile (v0/v1 share the record).
 
     ``supply``/``water_stress`` are None with a non-``valid`` status when the
     supply–demand axis does not apply (ocean, missing PET, undefined AI) —
@@ -212,8 +243,9 @@ class UCCClassV0:
 
     profile: str
     thermal: str  # one of THERMAL_BANDS_V0
-    supply: str | None  # one of SUPPLY_BANDS_V0, or None
+    supply: str | None  # one of the profile's supply bands, or None
     supply_status: str
+    is_land: bool  # ocean cells never carry a supply grade
     continental: bool  # t_range ≥ MOD_T_RANGE_C_V0
     water_stress: bool | None  # deficit ≥ MOD_DEFICIT_V0, or None
 
@@ -222,14 +254,36 @@ class UCCClassV0:
         """Human-readable main class, e.g. ``temperate/arid`` or ``polar``."""
         return self.thermal if self.supply is None else f"{self.thermal}/{self.supply}"
 
+    @property
+    def code(self) -> str:
+        """Compact display code, e.g. ``Ta``, ``Rh``, ``Cs-xw``, ``Pn``, ``Ro``.
 
-def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
-    """Classify one cell's descriptors under the frozen profile v0.
+        Supply ``o`` marks ocean; land without a valid supply axis gets ``n``
+        (the status field carries the reason) — a bare thermal letter never
+        occurs, so ``P`` alone cannot be misread as "unclassified".
+        """
+        if self.supply is not None:
+            s = SUPPLY_CODE_LETTERS[self.supply]
+        else:
+            s = LAND_NA_CODE_LETTER if self.is_land else OCEAN_CODE_LETTER
+        code = THERMAL_CODE_LETTERS[self.thermal] + s
+        mods = ""
+        if self.continental:
+            mods += MOD_CODE_LETTERS["continental"]
+        if self.water_stress:
+            mods += MOD_CODE_LETTERS["water_stress"]
+        return code + ("-" + mods if mods else "")
 
-    The thermal band always applies (constant-temperature cells included —
-    §3.1); the supply–demand band is land-only and follows the descriptor's
-    own AI validity state.
-    """
+
+def _classify(
+    d: ClimateDescriptors,
+    *,
+    is_land: bool,
+    ai_edges: tuple[float, ...],
+    supply_bands: tuple[str, ...],
+    profile: str,
+) -> UCCClassV0:
+    """Shared classification core: thermal nodes + AI digitize + modifiers."""
     if d.t_max < T_NODE_POLAR_C_V0:
         thermal = THERMAL_BANDS_V0[0]
     elif d.t_min < T_NODE_COLD_C_V0:
@@ -244,22 +298,37 @@ def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
     if is_land:
         supply_status = d.ai_status
         if d.ai_status == VALID and d.ai is not None:
-            if d.ai < AI_EDGES_V0[0]:
-                supply = SUPPLY_BANDS_V0[0]
-            elif d.ai < AI_EDGES_V0[1]:
-                supply = SUPPLY_BANDS_V0[1]
-            else:
-                supply = SUPPLY_BANDS_V0[2]
+            band = 0
+            for edge in ai_edges:
+                if d.ai >= edge:
+                    band += 1
+            supply = supply_bands[band]
 
     water_stress: bool | None = None
     if is_land and d.deficit_status == VALID and d.deficit is not None:
         water_stress = d.deficit >= MOD_DEFICIT_V0
 
     return UCCClassV0(
-        profile=PROFILE_V0,
+        profile=profile,
         thermal=thermal,
         supply=supply,
         supply_status=supply_status,
+        is_land=is_land,
         continental=d.t_range >= MOD_T_RANGE_C_V0,
         water_stress=water_stress,
+    )
+
+
+def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
+    """Classify under the frozen profile v0 (kept for reproducibility)."""
+    return _classify(
+        d, is_land=is_land, ai_edges=AI_EDGES_V0, supply_bands=SUPPLY_BANDS_V0, profile=PROFILE_V0
+    )
+
+
+def classify_v1(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
+    """Classify under profile v1 (= v0 + arid split at AI 0.2) — the current
+    export profile."""
+    return _classify(
+        d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V1
     )

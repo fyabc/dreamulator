@@ -16,9 +16,11 @@ from dreamulator.map.ucc import (
     NOT_APPLICABLE,
     OUT_OF_DOMAIN,
     PROFILE_V0,
+    PROFILE_V1,
     VALID,
     ClimateDescriptors,
     classify_v0,
+    classify_v1,
     compute_descriptors,
 )
 
@@ -196,3 +198,36 @@ def test_v0_constant_temperature_classifies() -> None:
     assert c.supply == "humid"  # AI = 2
     assert c.continental is False
     assert c.profile == PROFILE_V0
+
+
+def test_short_codes() -> None:
+    # Compact display codes: thermal uppercase + supply lowercase; ocean "o";
+    # land n/a bare letter; modifiers after a hyphen (x = continental,
+    # w = water stress).  NOT Köppen letters.
+    assert classify_v0(_desc([25.0] * 2, [2.0] * 2, [1.0] * 2), is_land=True).code == "Rh"
+    assert classify_v0(_desc([-30.0, -10.0], [5.0, 5.0], [0.1, 0.2]), is_land=True).code == "Pn"
+    assert classify_v0(_desc([20.0, 22.0], [1.0, 1.0], [1.0, 1.0]), is_land=False).code == "Ro"
+    # range 30 → continental; deficit 0.6 → water stress; AI 0.4 → arid (v0)
+    d = _desc([-5.0, 25.0], [0.4, 0.4], [1.0, 1.0])
+    assert classify_v0(d, is_land=True).code == "Ca-xw"
+    assert classify_v1(d, is_land=True).code == "Cs-xw"  # v1 splits arid at 0.2
+
+
+def test_v1_splits_arid_at_02() -> None:
+    # v1 = v0 + arid split at AI = 0.2 (desert core vs steppe margin).
+    def supply_for(ai: float) -> str | None:
+        d = _desc([20.0, 20.0], [ai, ai], [1.0, 1.0])
+        return classify_v1(d, is_land=True).supply
+
+    assert supply_for(0.19) == "arid"
+    assert supply_for(0.2) == "semi_arid"  # edge → upper band (digitize semantics)
+    assert supply_for(0.49) == "semi_arid"
+    assert supply_for(0.5) == "transitional"
+    assert supply_for(1.0) == "humid"
+    # Thermal bands and modifiers unchanged from v0.
+    d = _desc([20.0, 20.0], [0.3, 0.3], [1.0, 1.0])
+    c0, c1 = classify_v0(d, is_land=True), classify_v1(d, is_land=True)
+    assert c0.thermal == c1.thermal and c0.continental == c1.continental
+    assert c0.water_stress == c1.water_stress
+    assert c0.supply == "arid" and c1.supply == "semi_arid"  # the only divergence
+    assert c1.profile == PROFILE_V1

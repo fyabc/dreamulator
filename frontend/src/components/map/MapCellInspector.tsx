@@ -17,6 +17,7 @@ import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { YearlyClimateData } from '../../api/yearlyClimate'
+import { uccCode } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 
@@ -456,6 +457,14 @@ function CellDetails({
     ...(uccModBits & 1 ? ['continental'] : []),
     ...(uccModBits & 2 ? ['waterStress'] : []),
   ]
+  // Compact code (e.g. "Ts-xw"); the hover tooltip carries the full name.
+  const uccShortCode = hasYearly && uccClassKey ? uccCode(yearlyData!, yi, !uccIsOcean) : null
+  const uccFullName = uccClassKey
+    ? t(uccClassKey) +
+      (uccModifierKeys.length > 0
+        ? ' · ' + uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')
+        : '')
+    : null
 
   const hasGeology = Boolean(
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
@@ -708,13 +717,8 @@ function CellDetails({
             {uccClassKey && (
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.uccClass')}>{t('inspector.uccClass')}</dt>
-                <dd className="font-mono">
-                  {t(uccClassKey)}
-                  {uccModifierKeys.length > 0 && (
-                    <span className="text-gray-500 ml-1" title={t('tooltip.uccMod')}>
-                      ({uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')})
-                    </span>
-                  )}
+                <dd className="font-mono" title={uccFullName ?? undefined}>
+                  {uccShortCode}
                 </dd>
               </div>
             )}

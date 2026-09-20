@@ -8,7 +8,7 @@ counterpart of the engine's ``export_climate_layers`` yearly block: it reads
 the root's ``climate_monthly.msgpack`` (NCEP/NCAR R1 temperature + GPCP v2.3
 precipitation, written by ``import_earth_climate``) and the mesh's
 ``water_class``, computes UCC descriptors (``compute_descriptors``) and the
-frozen profile-v0 classification (``classify_v0``), and writes
+the current profile's classification (``classify_v1``), and writes
 ``climate_yearly.msgpack`` into the root maps dir.
 
 Epistemic status: a declared, frozen transformation of observations — the same
@@ -39,11 +39,11 @@ from dreamulator.engine.climate_physics import (  # noqa: E402
 )
 from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
 from dreamulator.map.ucc import (  # noqa: E402
-    PROFILE_V0,
+    PROFILE_CURRENT,
     STATUS_CODES,
-    SUPPLY_BANDS_V0,
-    THERMAL_BANDS_V0,
-    classify_v0,
+    SUPPLY_BANDS_CURRENT,
+    THERMAL_BANDS_CURRENT,
+    classify_v1,
     compute_descriptors,
 )
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata  # noqa: E402
@@ -96,8 +96,8 @@ def main() -> None:
 
     status_codes = list(STATUS_CODES)
     status_index = {s: i for i, s in enumerate(status_codes)}
-    thermal_index = {s: i for i, s in enumerate(THERMAL_BANDS_V0)}
-    supply_index = {s: i for i, s in enumerate(SUPPLY_BANDS_V0)}
+    thermal_index = {s: i for i, s in enumerate(THERMAL_BANDS_CURRENT)}
+    supply_index = {s: i for i, s in enumerate(SUPPLY_BANDS_CURRENT)}
 
     desc_f32: dict[str, np.ndarray] = {
         k: np.empty(n, np.float32)
@@ -121,7 +121,7 @@ def main() -> None:
     ucc_supply_status = np.empty(n, np.uint8)
     ucc_modifiers = np.empty(n, np.uint8)
 
-    print(f"Computing descriptors + {PROFILE_V0} classification for {n} cells …")
+    print(f"Computing descriptors + {PROFILE_CURRENT} classification for {n} cells …")
     for i in range(n):
         d = compute_descriptors(t_monthly[i], p_monthly[i], et_monthly[i])
         desc_f32["t_mean_c"][i] = d.t_mean
@@ -139,7 +139,7 @@ def main() -> None:
         deficit_status[i] = status_index[d.deficit_status]
         if d.concentration is not None:
             concentration[i] = d.concentration
-        c = classify_v0(d, is_land=bool(water_class[i] == "land"))
+        c = classify_v1(d, is_land=bool(water_class[i] == "land"))
         ucc_thermal[i] = thermal_index[c.thermal]
         ucc_supply[i] = supply_index[c.supply] if c.supply is not None else 255
         ucc_supply_status[i] = status_index[c.supply_status]
@@ -154,9 +154,9 @@ def main() -> None:
         "demand_daylength_h": 12.0,
         "freeze_threshold_c": 0.0,
         "status_codes": status_codes,
-        "profile": PROFILE_V0,
-        "thermal_bands": list(THERMAL_BANDS_V0),
-        "supply_bands": list(SUPPLY_BANDS_V0),
+        "profile": PROFILE_CURRENT,
+        "thermal_bands": list(THERMAL_BANDS_CURRENT),
+        "supply_bands": list(SUPPLY_BANDS_CURRENT),
         # This file is derived from OBSERVED climate (root = real-data anchor),
         # not from the engine — the distinction the reference-anchor rule cares
         # about.  Engine-built exports carry "model".
@@ -186,8 +186,8 @@ def main() -> None:
     land = water_class == "land"
     combos = {}
     for i in range(n):
-        t = THERMAL_BANDS_V0[ucc_thermal[i]]
-        s = SUPPLY_BANDS_V0[ucc_supply[i]] if ucc_supply[i] != 255 else "n-a"
+        t = THERMAL_BANDS_CURRENT[ucc_thermal[i]]
+        s = SUPPLY_BANDS_CURRENT[ucc_supply[i]] if ucc_supply[i] != 255 else "n-a"
         combos[f"{t}/{s}"] = combos.get(f"{t}/{s}", 0) + 1
     print("Class distribution (top 8):")
     for k, v in sorted(combos.items(), key=lambda kv: -kv[1])[:8]:
