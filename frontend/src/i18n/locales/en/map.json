@@ -72,7 +72,7 @@
     "Cfa": "Humid subtropical", "Cfb": "Oceanic", "Cfc": "Subpolar oceanic",
     "Dsa": "Continental Mediterranean (hot)", "Dsb": "Continental Mediterranean (warm)", "Dsc": "Continental Mediterranean (cold)", "Dsd": "Continental Mediterranean (severe)",
     "Dwa": "Monsoon continental (hot)", "Dwb": "Monsoon continental (warm)", "Dwc": "Monsoon subarctic", "Dwd": "Monsoon subarctic (severe)",
-    "Dfa": "Humid continental (hot)", "Dfb": "Humid continental (warm)", "Dfc": "Subarctic", "Dfd": "Severe continental",
+    "Dfa": "Humid continental (hot)", "Dfb": "Humid continental (warm)", "Dfc": "Subarctic (cool summer)", "Dfd": "Subarctic (severe winter)",
     "ET": "Tundra", "EF": "Ice cap",
     "Ocean": "Ocean"
   },
