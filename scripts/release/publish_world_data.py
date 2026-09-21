@@ -65,40 +65,109 @@ def _build_world(world: str, worlds_dir: Path) -> None:
 
 
 # Real-data (imported) worlds are not procedurally generated — their ``maps/``
-# comes from dedicated import scripts, not ``dreamulator build``.  Each entry
-# lists the importer modules to run, in dependency order (see
-# docs/design/pipelines/earth-real-data.md §3).  The raw data is cached in the
-# system temp dir and re-downloaded automatically when missing.
-_IMPORTED_WORLDS: dict[str, list[tuple[str, list[str]]]] = {
+# comes from dedicated import scripts, not ``dreamulator build``.  Each step is
+# ``(scripts subdir, module, cli style, extra args)``; two CLI conventions exist:
+#   "output-dir" — scripts/earth importers take ``--output-dir <maps/<planet_id>>``
+#   "data-dir"   — scripts/solar importers take ``--data-dir <worlds root>`` and
+#                  register their own planet_id (import_solar_common.register_solar_planet)
+# The raw data is cached (system temp dir for earth; ``private/tmp/solar/`` for
+# the solar bodies).  DEMs auto-download when missing; the climate sources
+# (MCD/VCD ASCII slices, Diviner GCP bands, TAM nc) do NOT — they must be
+# pre-fetched per docs/knowledge/planetary_science/solar_system_data_sources.md.
+_IMPORTED_WORLDS: dict[str, list[tuple[str, str, str, list[str]]]] = {
     "earth": [
-        ("import_earth_elevation", ["--resolution", "4096x2048", "--mesh-nodes", "200000",
-                                    "--seed", "42", "--skip-download"]),
-        ("import_earth_tectonics", []),
-        ("import_earth_watermask", []),
-        ("import_earth_climate", []),
+        (
+            "earth",
+            "import_earth_elevation",
+            "output-dir",
+            [
+                "--resolution",
+                "4096x2048",
+                "--mesh-nodes",
+                "200000",
+                "--seed",
+                "42",
+                "--skip-download",
+            ],
+        ),
+        ("earth", "import_earth_tectonics", "output-dir", []),
+        ("earth", "import_earth_watermask", "output-dir", []),
+        ("earth", "import_earth_climate", "output-dir", []),
         # UCC yearly descriptors + profile-v0 classification derived from the
         # OBSERVED monthly climate (the root is never built — this importer-side
         # script is the obs counterpart of the engine's yearly export block).
-        ("export_earth_yearly", []),
+        ("earth", "export_earth_yearly", "output-dir", []),
+        # Solar-system reference bodies live inside the earth world as planet
+        # maps (UCC-01 4d).  Mesh sizes follow each body's climate-data
+        # resolution (Mars 10k / Moon 100k / Venus 10k / Titan 3k — defaults
+        # baked into the importers).
+        ("solar", "import_mars", "data-dir", []),
+        ("solar", "import_moon", "data-dir", []),
+        ("solar", "import_venus", "data-dir", []),
+        ("solar", "import_titan", "data-dir", []),
     ],
 }
 
+# Imported worlds whose astronomy derived layer must also be refreshed before
+# packaging: the static site's body selector reads the derived system catalog
+# (merged stellar.yaml), so a newly added satellite is invisible on Pages until
+# this layer is rebuilt.  Astronomy only — the earth-root-never-built anchor
+# rule targets the climate/model layers, not input-derived catalogs.
+_IMPORT_DERIVED_LAYERS: dict[str, list[str]] = {"earth": ["astronomy"]}
+
+
+def _build_layers(world: str, layers: list[str], worlds_dir: Path) -> None:
+    """``dreamulator build <world> --only <layer> --force`` for each layer."""
+    cli = _dreamulator_cli()
+    for layer in layers:
+        if cli.exists():
+            cmd = [
+                str(cli),
+                "build",
+                world,
+                "--only",
+                layer,
+                "--force",
+                "--data-dir",
+                str(worlds_dir),
+            ]
+        else:
+            cmd = [
+                "uv",
+                "run",
+                "dreamulator",
+                "build",
+                world,
+                "--only",
+                layer,
+                "--force",
+                "--data-dir",
+                str(worlds_dir),
+            ]
+        print(f"Building '{world}' layer '{layer}' ...")
+        subprocess.run(cmd, check=True)
+
 
 def _import_world(world: str, worlds_dir: Path) -> None:
-    """Rebuild an imported world by running its importer scripts in order.
+    """Rebuild an imported world: refresh declared derived layers, then run the
+    importer chain in order.
 
-    The elevation importer's default ``--output-dir`` is a legacy layer path, so
-    the real ``maps/<planet>/`` dir is always passed explicitly; the remaining
-    importers read the mesh already written there.
+    The earth elevation importer's default ``--output-dir`` is a legacy layer
+    path, so output-dir steps always get the real ``maps/<planet_id>/`` dir
+    passed explicitly; data-dir steps (solar bodies) register their own
+    planet_id and write under ``maps/`` themselves.
     """
-    out_dir = worlds_dir / world / "maps" / "planet_earth"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    _build_layers(world, _IMPORT_DERIVED_LAYERS.get(world, []), worlds_dir)
     py = str(Path(sys.executable))
-    scripts_dir = _project_root() / "scripts" / "earth"  # importers live in scripts/earth/
-    for module, extra_args in _IMPORTED_WORLDS[world]:
-        script = scripts_dir / f"{module}.py"
-        cmd = [py, str(script), "--output-dir", str(out_dir), *extra_args]
-        print(f"Importing '{world}' via {module} ...")
+    for subdir, module, style, extra_args in _IMPORTED_WORLDS[world]:
+        script = _project_root() / "scripts" / subdir / f"{module}.py"
+        if style == "output-dir":
+            out_dir = worlds_dir / world / "maps" / "planet_earth"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            cmd = [py, str(script), "--output-dir", str(out_dir), *extra_args]
+        else:
+            cmd = [py, str(script), "--data-dir", str(worlds_dir), *extra_args]
+        print(f"Importing '{world}' via {subdir}/{module} ...")
         subprocess.run(cmd, check=True, cwd=str(_project_root()))
 
 
