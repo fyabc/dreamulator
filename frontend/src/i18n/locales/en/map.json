@@ -92,7 +92,8 @@
   },
   "uccSource": {
     "model": "model",
-    "observation": "observed"
+    "observation": "observed",
+    "gcm-climatology": "GCM climatology"
   },
   "biome": {
     "tropical_rainforest": "Tropical rainforest",
@@ -228,7 +229,14 @@
     "descNoPrecip": "No precipitation",
     "yearlyMissing": "Yearly climate descriptors unavailable: climate not built for this map (the Earth reference root is never built — check a climate branch)",
     "uccClass": "UCC class",
-    "uccProfile": "Profile {{profile}}"
+    "uccProfile": "Profile {{profile}}",
+    "uccDeclToggle": "Show/hide data & model declarations",
+    "declDemandModel": "Reference demand model",
+    "declDemandNone": "not applied",
+    "declDaylength": "day length {{hours}} h",
+    "declTimeBasis": "Time basis",
+    "declTimeBasisValue": "{{months}} bins × {{bin}} (window {{window}})",
+    "declProvenance": "Provenance"
   },
   "descStatus": {
     "missing_input": "missing input",

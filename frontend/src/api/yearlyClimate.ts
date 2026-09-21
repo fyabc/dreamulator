@@ -62,6 +62,22 @@ export interface YearlyClimateData {
   uccSupplyStatus?: Uint8Array
   /** Per-cell modifier bitmask: bit 0 = continental, bit 1 = water_stress. */
   uccModifiers?: Uint8Array
+  // --- Declarations (data & model semantics, shown on demand in the cell
+  // inspector).  bin_days/window_days/provenance are written by the solar
+  // importers and the obs-derived earth file; engine exports predate them and
+  // fall back to the result-contract reference month/year below.
+  /** Days per climate bin. */
+  binDays?: number
+  /** Total span of the bins, days. */
+  windowDays?: number
+  /** Hamon day-length assumption (h), written alongside demand_model. */
+  demandDaylengthH?: number
+  /** Free-text provenance entries (dataset, temperature kind, declared-zero
+   *  precipitation, …); the key set varies by body. */
+  provenance?: Record<string, unknown>
+  /** Result-contract reference year / month (days), from shared metadata. */
+  referenceYearDays?: number
+  referenceMonthDays?: number
 }
 
 /** Reinterpret a MessagePack `bin` (Uint8Array) as little-endian float32. */
@@ -132,9 +148,18 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     deficitStatus: toUint8(obj.deficit_status as Uint8Array),
     concentration: toFloat32(obj.concentration as Uint8Array),
   }
-  // Provenance: 'model' (engine-built) vs 'observation' (earth root).  Absent
-  // on exports predating the marker.
+  // Provenance: 'model' (engine-built) vs 'observation' (earth root) vs
+  // 'gcm-climatology' (solar reference bodies).  Absent on exports predating
+  // the marker.
   out.dataSource = (obj.data_source as string) ?? undefined
+  // Declarations: time basis + demand day-length + free-text provenance.
+  out.binDays = (obj.bin_days as number) ?? undefined
+  out.windowDays = (obj.window_days as number) ?? undefined
+  out.demandDaylengthH = (obj.demand_daylength_h as number) ?? undefined
+  out.provenance = (obj.provenance as Record<string, unknown>) ?? undefined
+  const time = obj.time as { reference_year_days?: number; reference_month_days?: number } | undefined
+  out.referenceYearDays = time?.reference_year_days
+  out.referenceMonthDays = time?.reference_month_days
   // Classification fields (UCC-01 step 4a) are absent in older exports.
   if (obj.ucc_thermal !== undefined) {
     out.profile = (obj.profile as string) ?? ''

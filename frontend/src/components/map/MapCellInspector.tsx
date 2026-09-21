@@ -178,6 +178,20 @@ function formatNumber(n: number | undefined, decimals = 0): string {
   })
 }
 
+/** Duration formatting for the declaration block: ≥ 1 day in days, else hours. */
+function formatDurationDays(d: number): string {
+  if (d >= 1) return `${parseFloat(d.toFixed(2))} d`
+  return `${parseFloat((d * 24).toFixed(2))} h`
+}
+
+/** Provenance values are free-form (strings or numbers) — render compactly. */
+function formatProvenanceValue(v: unknown): string {
+  if (typeof v === 'number') {
+    return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(4)))
+  }
+  return String(v)
+}
+
 // ---------------------------------------------------------------------------
 // Mode A — Planet summary
 // ---------------------------------------------------------------------------
@@ -399,6 +413,7 @@ function CellDetails({
 }) {
   const { t } = useTranslation('map')
   const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
+  const [showDecl, setShowDecl] = useState(false)
   const devMode = useDevModeStore((s) => s.devMode)
   const experimental = useExperimentalStore((s) => s.experimental)
   const highlightGroup = activeColorMode ? COLOR_MODE_TO_GROUP[activeColorMode] ?? null : null
@@ -467,6 +482,13 @@ function CellDetails({
         ? ' · ' + uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')
         : '')
     : null
+
+  // Declaration block (click-to-show): the time basis falls back to the
+  // result contract's reference month/year on engine exports that predate
+  // the bin_days/window_days fields.
+  const declBinDays = yearlyData?.binDays ?? yearlyData?.referenceMonthDays
+  const declWindowDays = yearlyData?.windowDays ?? yearlyData?.referenceYearDays
+  const declProvenanceEntries = yearlyData?.provenance ? Object.entries(yearlyData.provenance) : []
 
   const hasGeology = Boolean(
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
@@ -776,10 +798,47 @@ function CellDetails({
               </dd>
             </div>
             {yearlyData!.profile ? (
-              <p className="text-[10px] text-gray-600">
-                {t('inspector.uccProfile', { profile: yearlyData!.profile })}
-                {yearlyData!.dataSource && ` · ${t(`uccSource.${yearlyData!.dataSource}`)}`}
-              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowDecl((v) => !v)}
+                  className="text-[10px] text-gray-600 hover:text-gray-300"
+                  title={t('inspector.uccDeclToggle')}
+                >
+                  {showDecl ? '▾' : '▸'} {t('inspector.uccProfile', { profile: yearlyData!.profile })}
+                  {yearlyData!.dataSource && ` · ${t(`uccSource.${yearlyData!.dataSource}`)}`}
+                </button>
+                {showDecl && (
+                  <div className="mt-1 ml-3 space-y-0.5 text-[10px] text-gray-500">
+                    <div>
+                      {t('inspector.declDemandModel')}:{' '}
+                      {yearlyData!.demandModel
+                        ? `${yearlyData!.demandModel}${yearlyData!.demandDaylengthH != null ? ` · ${t('inspector.declDaylength', { hours: yearlyData!.demandDaylengthH })}` : ''}`
+                        : t('inspector.declDemandNone')}
+                    </div>
+                    {declBinDays != null && declWindowDays != null && (
+                      <div>
+                        {t('inspector.declTimeBasis')}:{' '}
+                        {t('inspector.declTimeBasisValue', {
+                          months: yearlyData!.months,
+                          bin: formatDurationDays(declBinDays),
+                          window: formatDurationDays(declWindowDays),
+                        })}
+                      </div>
+                    )}
+                    {declProvenanceEntries.length > 0 && (
+                      <div>
+                        <div className="text-gray-600">{t('inspector.declProvenance')}</div>
+                        {declProvenanceEntries.map(([k, v]) => (
+                          <div key={k} className="ml-2 break-words">
+                            <span className="font-mono text-gray-600">{k}</span> — {formatProvenanceValue(v)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : null}
           </FieldGroup>
           ) : (

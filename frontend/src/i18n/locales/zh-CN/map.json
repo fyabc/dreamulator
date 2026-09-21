@@ -92,7 +92,8 @@
   },
   "uccSource": {
     "model": "引擎",
-    "observation": "观测"
+    "observation": "观测",
+    "gcm-climatology": "GCM 气候学"
   },
   "biome": {
     "tropical_rainforest": "热带雨林",
@@ -228,7 +229,14 @@
     "descNoPrecip": "无降水",
     "yearlyMissing": "年度气候描述缺失：该地图尚未构建气候（earth 参考根不构建，请查看气候分支）",
     "uccClass": "UCC 分类",
-    "uccProfile": "分类版本 {{profile}}"
+    "uccProfile": "分类版本 {{profile}}",
+    "uccDeclToggle": "显示/隐藏数据与模型声明",
+    "declDemandModel": "参考需求模型",
+    "declDemandNone": "未应用",
+    "declDaylength": "日长 {{hours}} h",
+    "declTimeBasis": "时间基准",
+    "declTimeBasisValue": "{{months}} 箱 × {{bin}}（窗口 {{window}}）",
+    "declProvenance": "来源与声明"
   },
   "descStatus": {
     "missing_input": "缺输入",
