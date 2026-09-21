@@ -66,5 +66,8 @@
   },
   "devMode": {
     "toggle": "Developer mode"
+  },
+  "experimental": {
+    "toggle": "Experimental features"
   }
 }

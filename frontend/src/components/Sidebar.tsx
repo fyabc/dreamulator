@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useDevModeStore } from '../stores/devModeStore'
+import { useExperimentalStore } from '../stores/experimentalStore'
 import { isStaticMode } from '../api/mode'
 
 interface SidebarProps {
@@ -21,6 +22,8 @@ export default function Sidebar({
   const { t } = useTranslation()
   const devMode = useDevModeStore((s) => s.devMode)
   const setDevMode = useDevModeStore((s) => s.setDevMode)
+  const experimental = useExperimentalStore((s) => s.experimental)
+  const setExperimental = useExperimentalStore((s) => s.setExperimental)
 
   // Extract world name from path if we're in a world context
   const worldMatch = location.pathname.match(/^\/worlds\/([^/]+)/)
@@ -189,6 +192,22 @@ export default function Sidebar({
                 className="h-3.5 w-3.5"
               />
               <span>{t('devMode.toggle')}</span>
+            </label>
+          </div>
+        )}
+        {/* Experimental-features toggle — reveals features still under
+            development (UCC climate layer + cell climate descriptors).  Hidden
+            in static mode along with the features it gates. */}
+        {!isStaticMode() && (
+          <div className={['mt-2', collapsed ? 'md:hidden' : ''].join(' ')}>
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={experimental}
+                onChange={(e) => setExperimental(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span>{t('experimental.toggle')}</span>
             </label>
           </div>
         )}

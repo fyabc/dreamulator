@@ -66,5 +66,8 @@
   },
   "devMode": {
     "toggle": "开发者模式"
+  },
+  "experimental": {
+    "toggle": "实验功能"
   }
 }

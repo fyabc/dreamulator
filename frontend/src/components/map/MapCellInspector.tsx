@@ -20,6 +20,7 @@ import type { YearlyClimateData } from '../../api/yearlyClimate'
 import { uccCode } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
+import { useExperimentalStore } from '../../stores/experimentalStore'
 
 interface MapCellInspectorProps {
   cell: VoronoiCell | null
@@ -399,6 +400,7 @@ function CellDetails({
   const { t } = useTranslation('map')
   const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
   const devMode = useDevModeStore((s) => s.devMode)
+  const experimental = useExperimentalStore((s) => s.experimental)
   const highlightGroup = activeColorMode ? COLOR_MODE_TO_GROUP[activeColorMode] ?? null : null
   const elevM = cell.elevation
   const isLand = cell.water_class != null ? cell.water_class === 'land' : cell.elevation > 0
@@ -706,8 +708,11 @@ function CellDetails({
         {/* UCC climate descriptors (UCC-01): continuous, classification-free
             description derived from the monthly series — independent of
             monthly mode.  Missing file (Earth reference root is never built,
-            or a branch falling back to root maps) degrades to a hint. */}
-        {hasYearly ? (
+            or a branch falling back to root maps) degrades to a hint.
+            Experimental feature — hidden unless the experimental toggle is
+            on. */}
+        {experimental ? (
+          hasYearly ? (
           <FieldGroup
             icon="📊"
             label={t('inspector.yearlyClimate')}
@@ -777,11 +782,12 @@ function CellDetails({
               </p>
             ) : null}
           </FieldGroup>
-        ) : (
-          hasClimate && (
-            <p className="text-[10px] text-gray-600 italic ml-4">{t('inspector.yearlyMissing')}</p>
+          ) : (
+            hasClimate && (
+              <p className="text-[10px] text-gray-600 italic ml-4">{t('inspector.yearlyMissing')}</p>
+            )
           )
-        )}
+        ) : null}
 
         {devMode && isEarth && (
           <FieldGroup

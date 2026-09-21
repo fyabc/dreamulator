@@ -75,6 +75,9 @@ export interface LayerHelpEntry {
   /** Diagnostic layer for engine authors, hidden unless developer mode is on
    *  (e.g. the ΔT/ΔP error heatmaps vs ERA5/GPCP). */
   devOnly?: boolean
+  /** Experimental layer — hidden unless the experimental-features toggle is
+   *  on (the UCC climate layer, still under development). */
+  experimentalOnly?: boolean
   /** Earth-only diagnostic — the ΔT/ΔP heatmaps diff against Earth's observed
    *  zonal climatology, so they are meaningless on fictional worlds.  Hidden
    *  on every non-Earth world regardless of developer mode. */
@@ -144,6 +147,7 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     defaultOpacity: 0.85,
     kind: 'thematic',
     group: 'climate',
+    experimentalOnly: true,
   },
   {
     id: 'temperature',

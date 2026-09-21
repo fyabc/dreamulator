@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 import type { ColorMode } from '../../viewers/map/TerrainPlane'
 import { LAYER_HELP, LAYER_GROUPS, type LayerHelpEntry } from './helpContent'
 import { useDevModeStore } from '../../stores/devModeStore'
+import { useExperimentalStore } from '../../stores/experimentalStore'
 
 type LayerOpacities = Record<ColorMode, number>
 
@@ -144,11 +145,16 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, mo
   }
 
   const devMode = useDevModeStore((s) => s.devMode)
+  const experimental = useExperimentalStore((s) => s.experimental)
   const groups = useMemo<LayerGroup[]>(
     () =>
       LAYER_GROUPS.map((g) => {
         const members = LAYER_HELP.filter(
-          (l) => l.group === g.id && (!l.devOnly || devMode) && (!l.earthOnly || isEarth),
+          (l) =>
+            l.group === g.id &&
+            (!l.devOnly || devMode) &&
+            (!l.experimentalOnly || experimental) &&
+            (!l.earthOnly || isEarth),
         )
         return {
           ...g,
@@ -156,7 +162,7 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, mo
           toggleMembers: members.filter((l) => !isRadioKind(l)),
         }
       }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
-    [devMode, isEarth],
+    [devMode, experimental, isEarth],
   )
 
   const opacityOf = useCallback(
