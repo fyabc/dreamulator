@@ -125,7 +125,11 @@ def _ensure_viewer_html() -> None:
     import subprocess
 
     url = "https://github.com/hannorein/rebound/releases/latest/download/rebound.html"
-    for proxy in (None, "http://127.0.0.1:10808"):
+    # curl honors HTTP(S)_PROXY env itself; the second attempt forces the env
+    # proxy explicitly in case the ambient one is set but ignored by the caller.
+    env_proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY")
+    attempts = [None] if not env_proxy else [None, env_proxy]
+    for proxy in attempts:
         env = dict(os.environ)
         if proxy:
             env["https_proxy"] = proxy

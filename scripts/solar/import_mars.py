@@ -87,15 +87,16 @@ _LANDMARKS = [
 ]
 
 
-def _download(url: str, dest: Path) -> None:
-    """curl-with-proxy download (CLAUDE.md network convention)."""
+def _download(url: str, dest: Path, proxy: str | None = None) -> None:
+    """curl download; proxy is explicit (--proxy) or via curl's env handling."""
     import subprocess
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    for cmd in (
-        ["curl", "-sSL", "--proxy", "http://127.0.0.1:10808", "-o", str(dest), url],
-        ["curl", "-sSL", "-o", str(dest), url],
-    ):
+    attempts = []
+    if proxy:
+        attempts.append(["curl", "-sSL", "--proxy", proxy, "-o", str(dest), url])
+    attempts.append(["curl", "-sSL", "-o", str(dest), url])
+    for cmd in attempts:
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode == 0 and dest.exists() and dest.stat().st_size > 0:
             return
@@ -140,6 +141,7 @@ def main() -> None:
     parser.add_argument("--mesh-nodes", type=int, default=10_000)
     parser.add_argument("--skip-climate", action="store_true", help="terrain/mesh only")
     parser.add_argument("--data-dir", type=Path, default=_ROOT / "data/worlds")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for curl downloads")
     args = parser.parse_args()
 
     map_dir = register_solar_planet(args.data_dir, "planet_mars")
@@ -147,7 +149,7 @@ def main() -> None:
     mola_path = _CACHE / _MOLA_IMG
     if not mola_path.exists():
         print("Downloading MOLA 4ppd from PDS …")
-        _download(_MOLA_URL, mola_path)
+        _download(_MOLA_URL, mola_path, proxy=args.proxy)
     print(f"Loading MOLA DEM from {mola_path} …")
     dem = load_mola(mola_path)
 

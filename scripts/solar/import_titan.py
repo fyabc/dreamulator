@@ -104,6 +104,7 @@ def main() -> None:
     # rendering without inventing detail the GCM doesn't have.
     parser.add_argument("--mesh-nodes", type=int, default=3_000)
     parser.add_argument("--data-dir", type=Path, default=_ROOT / "data/worlds")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for curl downloads")
     args = parser.parse_args()
 
     nc_path = _CACHE / _NC
@@ -111,10 +112,11 @@ def main() -> None:
         print("Downloading TAM-hydro NetCDF (232 MB) from Zenodo …")
         import subprocess
 
-        for cmd in (
-            ["curl", "-sSL", "--proxy", "http://127.0.0.1:10808", "-o", str(nc_path), _NC_URL],
-            ["curl", "-sSL", "-o", str(nc_path), _NC_URL],
-        ):
+        attempts = []
+        if args.proxy:
+            attempts.append(["curl", "-sSL", "--proxy", args.proxy, "-o", str(nc_path), _NC_URL])
+        attempts.append(["curl", "-sSL", "-o", str(nc_path), _NC_URL])
+        for cmd in attempts:
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode == 0 and nc_path.exists() and nc_path.stat().st_size > 100_000_000:
                 break

@@ -134,6 +134,7 @@ def main() -> None:
     parser.add_argument("--mesh-nodes", type=int, default=10_000)
     parser.add_argument("--skip-climate", action="store_true", help="terrain/mesh only")
     parser.add_argument("--data-dir", type=Path, default=_ROOT / "data/worlds")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for curl downloads")
     args = parser.parse_args()
 
     map_dir = register_solar_planet(args.data_dir, "planet_venus")
@@ -143,10 +144,13 @@ def main() -> None:
         print("Downloading Magellan topography from USGS (~64 MB) …")
         import subprocess
 
-        for cmd in (
-            ["curl", "-sSL", "--proxy", "http://127.0.0.1:10808", "-o", str(topo_path), _TOPO_URL],
-            ["curl", "-sSL", "-o", str(topo_path), _TOPO_URL],
-        ):
+        attempts = []
+        if args.proxy:
+            attempts.append(
+                ["curl", "-sSL", "--proxy", args.proxy, "-o", str(topo_path), _TOPO_URL]
+            )
+        attempts.append(["curl", "-sSL", "-o", str(topo_path), _TOPO_URL])
+        for cmd in attempts:
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode == 0 and topo_path.exists() and topo_path.stat().st_size > 1_000_000:
                 break

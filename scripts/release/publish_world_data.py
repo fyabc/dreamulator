@@ -148,14 +148,15 @@ def _build_layers(world: str, layers: list[str], worlds_dir: Path) -> None:
         subprocess.run(cmd, check=True)
 
 
-def _import_world(world: str, worlds_dir: Path) -> None:
+def _import_world(world: str, worlds_dir: Path, proxy: str | None = None) -> None:
     """Rebuild an imported world: refresh declared derived layers, then run the
     importer chain in order.
 
     The earth elevation importer's default ``--output-dir`` is a legacy layer
     path, so output-dir steps always get the real ``maps/<planet_id>/`` dir
     passed explicitly; data-dir steps (solar bodies) register their own
-    planet_id and write under ``maps/`` themselves.
+    planet_id and write under ``maps/`` themselves.  ``proxy`` is forwarded to
+    the importers' curl downloads (they also honor HTTP(S)_PROXY env).
     """
     _build_layers(world, _IMPORT_DERIVED_LAYERS.get(world, []), worlds_dir)
     py = str(Path(sys.executable))
@@ -167,6 +168,8 @@ def _import_world(world: str, worlds_dir: Path) -> None:
             cmd = [py, str(script), "--output-dir", str(out_dir), *extra_args]
         else:
             cmd = [py, str(script), "--data-dir", str(worlds_dir), *extra_args]
+            if proxy:
+                cmd += ["--proxy", proxy]
         print(f"Importing '{world}' via {subdir}/{module} ...")
         subprocess.run(cmd, check=True, cwd=str(_project_root()))
 
@@ -273,6 +276,13 @@ def main() -> None:
         "--skip-build", action="store_true", help="Publish only, skip the build step"
     )
     parser.add_argument("--dry-run", action="store_true", help="Build + package, but do not upload")
+    parser.add_argument(
+        "--proxy",
+        default=None,
+        help="HTTP proxy forwarded to the importer scripts' curl downloads "
+        "(e.g. http://127.0.0.1:PORT).  Omit to rely on curl's HTTP(S)_PROXY "
+        "env handling; never hardcode a local proxy address in the repo.",
+    )
     args = parser.parse_args()
 
     root = _project_root()
@@ -281,7 +291,7 @@ def main() -> None:
     if not args.skip_build:
         for world in args.worlds:
             if world in _IMPORTED_WORLDS:
-                _import_world(world, worlds_dir)
+                _import_world(world, worlds_dir, proxy=args.proxy)
             else:
                 _build_world(world, worlds_dir)
 

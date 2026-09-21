@@ -190,6 +190,7 @@ def main() -> None:
     parser.add_argument("--mesh-nodes", type=int, default=100_000)
     parser.add_argument("--skip-climate", action="store_true", help="terrain/mesh only")
     parser.add_argument("--data-dir", type=Path, default=_ROOT / "data/worlds")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for curl downloads")
     args = parser.parse_args()
 
     map_dir = register_solar_planet(args.data_dir, "satellite_moon")
@@ -199,20 +200,18 @@ def main() -> None:
         print("Downloading LDEM_4 from NASA SVS …")
         import subprocess
 
-        subprocess.run(
-            [
-                "curl",
-                "-sSL",
-                "--proxy",
-                "http://127.0.0.1:10808",
-                "-o",
-                str(ldem_path),
-                _LDEM_URL,
-            ],
-            check=False,
-        )
+        attempts = []
+        if args.proxy:
+            attempts.append(
+                ["curl", "-sSL", "--proxy", args.proxy, "-o", str(ldem_path), _LDEM_URL]
+            )
+        attempts.append(["curl", "-sSL", "-o", str(ldem_path), _LDEM_URL])
+        for cmd in attempts:
+            subprocess.run(cmd, check=False)
+            if ldem_path.exists() and ldem_path.stat().st_size > 0:
+                break
         if not ldem_path.exists() or ldem_path.stat().st_size == 0:
-            subprocess.run(["curl", "-sSL", "-o", str(ldem_path), _LDEM_URL], check=True)
+            raise RuntimeError(f"download failed: {_LDEM_URL}")
     print(f"Loading LDEM from {ldem_path} …")
     dem = load_ldem(ldem_path)
 

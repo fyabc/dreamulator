@@ -46,18 +46,19 @@ _LS_CENTERS = [15 + 30 * m for m in range(12)]
 _TXT_HREF = re.compile(r"href=['\"]\.\./txt/([0-9a-f]+)\.txt['\"]")
 
 
-def _curl(args: list[str], max_time: int = 300) -> bytes:
+def _curl(args: list[str], max_time: int = 300, proxy: str | None = None) -> bytes:
     # --max-time is essential: the VCD CGI silently hangs forever on some
     # parameter combinations (averaging=loct observed 2026-09-21).
-    r = subprocess.run(
-        ["curl", "-sSL", "--max-time", str(max_time), "--proxy", "http://127.0.0.1:10808", *args],
-        capture_output=True,
-    )
-    if r.returncode != 0:
+    # Proxy is explicit (--proxy) or via curl's own HTTP(S)_PROXY env handling;
+    # never hardcode a local proxy address here.
+    attempts = []
+    if proxy:
+        attempts.append(["curl", "-sSL", "--max-time", str(max_time), "--proxy", proxy, *args])
+    attempts.append(["curl", "-sSL", "--max-time", str(max_time), *args])
+    r = subprocess.run(attempts[0], capture_output=True)
+    if r.returncode != 0 and len(attempts) > 1:
         # Retry without explicit proxy (env may already provide one).
-        r = subprocess.run(
-            ["curl", "-sSL", "--max-time", str(max_time), *args], capture_output=True
-        )
+        r = subprocess.run(attempts[1], capture_output=True)
     r.check_returncode()
     return r.stdout
 
@@ -71,6 +72,7 @@ def fetch_slice(
     averaging: str = "loct",
     localtime: str = "12.",
     max_time: int = 300,
+    proxy: str | None = None,
 ) -> bytes:
     fields = {
         "var1": var,
@@ -107,11 +109,12 @@ def fetch_slice(
             f"{base}/cgi-bin/{cgi}",
         ],
         max_time=max_time,
+        proxy=proxy,
     ).decode("utf-8", errors="replace")
     m = _TXT_HREF.search(html)
     if m is None:
         raise RuntimeError(f"Ls={ls}: no txt link in response ({len(html)} B HTML)")
-    return _curl([f"{base}/txt/{m.group(1)}.txt"], max_time=max_time)
+    return _curl([f"{base}/txt/{m.group(1)}.txt"], max_time=max_time, proxy=proxy)
 
 
 def main() -> None:
@@ -134,6 +137,12 @@ def main() -> None:
     parser.add_argument("--localtime", default="12.")
     parser.add_argument("--max-time", type=int, default=300, help="curl timeout per request")
     parser.add_argument("--sleep", type=float, default=2.5)
+    parser.add_argument(
+        "--proxy",
+        default=None,
+        help="HTTP proxy for curl (e.g. http://127.0.0.1:PORT); curl also honors "
+        "the HTTP(S)_PROXY env vars",
+    )
     args = parser.parse_args()
 
     base = _BASES[args.db]
@@ -155,6 +164,7 @@ def main() -> None:
             averaging=args.averaging,
             localtime=args.localtime,
             max_time=args.max_time,
+            proxy=args.proxy,
         )
         header = "\n".join(raw.decode("utf-8", errors="replace").splitlines()[:12])
         if "MCD" not in header and "VCD" not in header and "Climate Database" not in header:
