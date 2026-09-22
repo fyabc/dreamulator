@@ -162,6 +162,18 @@ export default function StellarSystemViewerPage() {
   }, [mapPlanetIds, elevQueries])
 
   // 6. Generate DataTextures from decoded elevation data + metadata
+  // Waterless bodies (no hydrosphere / ~zero water coverage — Mars, Moon,
+  // Venus, Titan) use the arid land ramp: below-datum lows are dark basins,
+  // never ocean blue.  Water worlds (Earth, nacrea) keep the ETOPO scheme.
+  const waterlessIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const body of catalog?.bodies ?? []) {
+      const coverage = body.hydrosphere?.water_coverage
+      if (coverage == null || coverage < 0.005) ids.add(body.id)
+    }
+    return ids
+  }, [catalog])
+
   const planetTextures = useMemo(() => {
     const map = new Map<string, THREE.Texture>()
     if (!mapPlanetIds) return map
@@ -178,11 +190,13 @@ export default function StellarSystemViewerPage() {
         meta.elevation_min_m ?? -11000,
         meta.elevation_max_m ?? 9000,
         meta.sea_level_m ?? 0,
+        256,
+        waterlessIds.has(pid),
       )
       map.set(pid, tex)
     }
     return map
-  }, [mapPlanetIds, metaQueries, elevData, elevDataDims])
+  }, [mapPlanetIds, metaQueries, elevData, elevDataDims, waterlessIds])
 
   // --- Render ---
 

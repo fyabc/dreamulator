@@ -156,8 +156,12 @@ export function createThumbnail(
  * @param srcH       Source image height (pixels).
  * @param elevMinM   Minimum elevation in metres.
  * @param elevMaxM   Maximum elevation in metres.
- * @param seaLevelM  Sea level in metres.
+ * @param seaLevelM  Sea level in metres (datum reference for the anchors).
  * @param thumbW     Desired texture width (height = thumbW × srcH / srcW).
+ * @param landOnly   Waterless body (no hydrosphere / ~zero water coverage):
+ *                   use the arid land ramp instead of the ETOPO ocean scheme —
+ *                   below-datum elevations are dark basins, never ocean blue
+ *                   (Mars' Hellas, lunar maria).
  * @returns A THREE.DataTexture suitable for `.map` on a sphere material.
  */
 export function generatePlanetTexture(
@@ -168,9 +172,15 @@ export function generatePlanetTexture(
   elevMaxM: number,
   seaLevelM: number,
   thumbW = 256,
+  landOnly = false,
 ): THREE.DataTexture {
   const thumbH = Math.max(1, Math.round(thumbW * (srcH / srcW)))
-  const lut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevelM)
+  const lut = generateAdaptiveTerrainScale(
+    elevMinM,
+    elevMaxM,
+    seaLevelM,
+    landOnly ? 'adaptive_terrain_land' : 'adaptive_terrain',
+  )
   const buf = new Uint8Array(thumbW * thumbH * 4)
 
   const scaleX = (srcW - 1) / thumbW

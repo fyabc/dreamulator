@@ -210,5 +210,20 @@
       { "anchor": "sea", "fraction": 0.4, "clamp_m": null, "sign": 1, "color": "#D8D0C8" },
       { "anchor": "max", "fraction": 0.0, "clamp_m": null, "sign": 1, "color": "#FFFFFF" }
     ]
+  },
+  "adaptive_terrain_land": {
+    "lut_size": 1024,
+    "breaks": [
+      { "anchor": "min", "fraction": 0.0, "clamp_m": null, "sign": 1, "color": "#4A2E1E" },
+      { "anchor": "min", "fraction": 0.25, "clamp_m": null, "sign": 1, "color": "#7A4E32" },
+      { "anchor": "min", "fraction": 0.5, "clamp_m": null, "sign": 1, "color": "#9C6B44" },
+      { "anchor": "sea", "fraction": 0.03, "clamp_m": 800, "sign": -1, "color": "#B98A5E" },
+      { "anchor": "sea", "fraction": 0.0, "clamp_m": null, "sign": 1, "color": "#C9A276" },
+      { "anchor": "sea", "fraction": 0.08, "clamp_m": null, "sign": 1, "color": "#D9BC8F" },
+      { "anchor": "sea", "fraction": 0.2, "clamp_m": null, "sign": 1, "color": "#CBB49A" },
+      { "anchor": "sea", "fraction": 0.35, "clamp_m": null, "sign": 1, "color": "#B4A898" },
+      { "anchor": "sea", "fraction": 0.5, "clamp_m": null, "sign": 1, "color": "#A9A69E" },
+      { "anchor": "max", "fraction": 0.0, "clamp_m": null, "sign": 1, "color": "#F2EFEA" }
+    ]
   }
 }

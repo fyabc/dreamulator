@@ -95,21 +95,27 @@ function hexToRgb(hex: string): [number, number, number] {
  * Generate an adaptive RGBA lookup table based on the actual elevation range.
  *
  * The LUT is normalized so that index 0 = minElev and index N-1 = maxElev.
- * Colour breaks come from `palettes.json` (single source with the backend),
- * which encodes the NOAA ETOPO1 ocean + ESRI Natural Earth land scheme —
- * researched in docs/usage/map-workflow.md § 配色方案.
+ * Colour breaks come from `palettes.json` (single source with the backend).
+ * `paletteKey` selects the scheme — `"adaptive_terrain"` (default): the NOAA
+ * ETOPO1 ocean + ESRI Natural Earth land scheme researched in
+ * docs/usage/map-workflow.md § 配色方案, for water worlds; or
+ * `"adaptive_terrain_land"`: a waterless hypsometric ramp (no ocean blues —
+ * below-datum elevations are dark basins, not sea floor) for bodies without
+ * surface liquid water (Mars / Moon / Venus / Titan).
  */
 export function generateAdaptiveTerrainScale(
   minElev: number,
   maxElev: number,
   seaLevel: number,
+  paletteKey: 'adaptive_terrain' | 'adaptive_terrain_land' = 'adaptive_terrain',
 ): Uint8Array {
   const range = maxElev - minElev || 1
-  const lutSize: number = palettesJson.adaptive_terrain.lut_size
+  const palette = palettesJson[paletteKey]
+  const lutSize: number = palette.lut_size
   const lut = new Uint8Array(lutSize * 4)
 
   // Resolve declarative breaks (anchor/fraction/clamp_m/sign) → elevation stops.
-  const colorBreaks = palettesJson.adaptive_terrain.breaks.map((b) => {
+  const colorBreaks = palette.breaks.map((b) => {
     const anchorElev = b.anchor === 'min' ? minElev : b.anchor === 'sea' ? seaLevel : maxElev
     const offset = b.clamp_m != null ? Math.max(range * b.fraction, b.clamp_m) : range * b.fraction
     const elev = anchorElev + b.sign * offset
