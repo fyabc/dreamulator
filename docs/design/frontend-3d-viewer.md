@@ -217,6 +217,23 @@ angularSize = orbit.semi_major_axis_au / cameraDistanceToParent
 | Celestia | 视星等过滤 |
 | dreamulator | 角大小阈值 + 聚合 subtitle |
 
+## 天体表面纹理（Route C）
+
+有地图数据的天体在球面上显示真实地形着色（取代 `PlanetMesh` 的程序色）：
+
+`StellarSystemViewerPage` 批量加载各天体的 `elevation.png`（16 位归一化高程）→
+`generatePlanetTexture`（`imageCodec.ts`）按自适应高程 LUT 降采样烘焙为
+equirectangular DataTexture → `PlanetMesh.terrainTexture`。
+
+配色由 `palettes.json` 单一事实源给出，**按天体有无水面分两套**（判别 =
+catalog body 的 `hydrosphere.water_coverage`，缺省或 <0.5% = 无水）：
+
+- `adaptive_terrain` — NOAA ETOPO1 海洋 + ESRI Natural Earth 陆地混合板
+  （水面世界：Earth、nacrea 各行星）；
+- `adaptive_terrain_land` — 无水高程板（干旱色调，基准面以下为深盆地而非
+  海洋蓝；Mars / Moon / Venus / Titan——2026-09-23 修复：此前全部天体共用
+  ETOPO 板，Hellas 盆地/月海等低地被染成海洋蓝）。
+
 ## 后端 API 端点
 
 3D 视图需要以下 API 端点（均已实现）：
@@ -235,4 +252,5 @@ angularSize = orbit.semi_major_axis_au / cameraDistanceToParent
 - **~~卫星~~**：✅ 已实现 — `StellarSystem.bodies[]` + 层级位置解算 + 标签去重叠
 - **时间动画**：轨道运动动画（当前只显示 epoch 位置）
 - **大气光谱**：根据大气成分渲染行星大气层颜色
-- **表面纹理**：程序化生成行星表面（水/陆/冰分布）
+- **~~表面纹理~~**：✅ 已实现（Route C，见「天体表面纹理」节）——真实高程
+  烘焙 + 水/无水双配色板；程序化水/陆/冰分布不再是方向

@@ -76,15 +76,20 @@ def build_adaptive_terrain_lut(
     min_elev: float,
     max_elev: float,
     sea_level: float,
+    palette: str = "adaptive_terrain",
 ) -> np.ndarray:
     """Build the adaptive hypsometric terrain LUT (``(lut_size, 3)`` uint8 RGB).
 
     Port of ``colorScales.ts::generateAdaptiveTerrainScale``: breaks are
     resolved from ``anchor``/``fraction``/``clamp_m``/``sign`` in the JSON,
     sorted by elevation, then interpolated across ``lut_size`` entries.
+    ``palette`` selects the JSON section — ``"adaptive_terrain"`` (ETOPO
+    ocean + Natural Earth land, for water worlds) or
+    ``"adaptive_terrain_land"`` (waterless hypsometric ramp: no ocean blues,
+    datum-anchored arid tones for e.g. Mars/Moon/Venus/Titan).
     """
     range_ = max_elev - min_elev or 1.0
-    break_specs = _PALETTES["adaptive_terrain"]["breaks"]
+    break_specs = _PALETTES[palette]["breaks"]
 
     anchors = {"min": min_elev, "sea": sea_level, "max": max_elev}
     color_breaks: list[tuple[float, tuple[int, int, int]]] = []
@@ -100,7 +105,7 @@ def build_adaptive_terrain_lut(
         color_breaks.append((elev, hex_to_rgb(b["color"])))
     color_breaks.sort(key=lambda item: item[0])
 
-    lut_size = int(_PALETTES["adaptive_terrain"]["lut_size"])
+    lut_size = int(_PALETTES[palette]["lut_size"])
     lut = np.zeros((lut_size, 3), dtype=np.uint8)
 
     for i in range(lut_size):

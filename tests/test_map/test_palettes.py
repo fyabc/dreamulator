@@ -53,3 +53,18 @@ def test_build_adaptive_terrain_lut_shape_and_ends():
     assert tuple(int(v) for v in lut[0]) == (2, 56, 88)
     # last index = peak white (#FFFFFF)
     assert tuple(int(v) for v in lut[1023]) == (255, 255, 255)
+
+
+def test_build_adaptive_terrain_land_lut_has_no_water_blues():
+    """Waterless ramp (Mars/Moon/Venus/Titan): never bluer than it is red —
+    the ETOPO ocean blues are the bug this variant exists to exclude."""
+    # Mars-like range: Hellas floor to Olympus summit, datum at 0.
+    lut = palettes.build_adaptive_terrain_lut(
+        -8_068.0, 21_134.0, 0.0, palette="adaptive_terrain_land"
+    )
+    assert lut.shape == (1024, 3)
+    # Deepest basin = first break #4A2E1E → (74,46,30); peak = #F2EFEA.
+    assert tuple(int(v) for v in lut[0]) == (74, 46, 30)
+    assert tuple(int(v) for v in lut[1023]) == (242, 239, 234)
+    # Warm ramp: red >= blue everywhere (a water blue has B > R by ~30+).
+    assert bool((lut[:, 0] >= lut[:, 2]).all())
