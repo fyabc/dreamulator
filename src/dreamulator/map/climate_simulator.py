@@ -594,8 +594,9 @@ def simulate_climate(
         (1.0 / _mdeg[_msrc], (_msrc, _mdst)),
         shape=(n, n),
     )
-    # Scale-separation smoothing passes for the synoptic (Rossby-radius, ~500 km)
-    # scale: each Jacobi pass is a lazy random-walk step (σ = √(passes/2)·cell_km).
+    # Scale-separation smoothing passes for the mosaic-noise scale (~175 km —
+    # see the constant's note): each Jacobi pass is a lazy random-walk step
+    # (σ = √(passes/2)·cell_km).
     _n_smooth = 2 * int((_MONSOON_PRESSURE_SMOOTHING_KM / _cell_km) ** 2)
     _radius_m = config.radius_km * 1000.0
     f_coriolis = coriolis_parameter(lat_rad, config.rotation_period_days)
@@ -645,10 +646,11 @@ def simulate_climate(
     # Scale separation before differentiation: the anomaly field inherits the
     # cell-level land-ocean mosaic (~51 km at 200k cells), whose coastline
     # jumps dominate the raw gradient and drive sea-breeze-scale winds far
-    # stronger than any monsoon.  Pressure anomalies adjust hydrostatically over
-    # the synoptic scale (the Rossby deformation radius, O(500 km)), so smooth
-    # each month's field over that scale first — the continental thermal lows
-    # (1000–4000 km wide) survive, the mosaic noise does not.
+    # stronger than any monsoon.  The smoothing target is that mosaic scale —
+    # ~175 km (a few cells) kills it while keeping the maintained thermal
+    # lows (1000–2500 km wide) and their inflow channels; see the constant's
+    # note for why the earlier 500 km Rossby-radius rationale was misapplied
+    # to a forced (not freely adjusting) anomaly field.
     _dp_hpa = _smooth_graph(_dp_hpa, _avg, _n_smooth)
 
     # Least-squares gradient per radian on the unit sphere → Pa/m (hPa × 100).
@@ -1907,14 +1909,17 @@ _DAYS_PER_REFERENCE_MONTH: float = 365.25 / 12.0
 # physical constant, shared by every world (only temperature differs).
 _LAND_EVAPOTRANSPIRATION_FRACTION: float = 0.55
 
-# Monsoon pressure-anomaly smoothing scale (km).  The monsoon wind responds to
-# the gradient of the seasonal pressure anomaly, which must be evaluated on the
-# synoptic scale — hydrostatic/geostrophic adjustment spreads local heating over
-# the Rossby deformation radius, O(500 km) in the tropics and mid-latitudes —
-# not on the 51 km cell scale of the land-ocean mosaic (see Stage 2 wiring).
-# This is a physical scale separation, shared by all worlds: the mesh resolves
-# the anomaly, the atmosphere does not feel it at that resolution.
-_MONSOON_PRESSURE_SMOOTHING_KM: float = 500.0
+# Monsoon pressure-anomaly smoothing scale (km).  The smoothing exists to kill
+# the ~51 km cell-scale land–ocean mosaic noise in the ΔP field before
+# differentiation (sea-breeze-scale artifacts) — not to adjust the anomaly to
+# any dynamical scale.  The continental thermal lows the monsoon wind responds
+# to are 1000–2500 km wide with ~500–1000 km inflow channels; the 2026-09-22
+# scale sweep showed σ = 500 km (the earlier Rossby-radius rationale — a
+# *free*-adjustment scale, misapplied to a *maintained* forcing) destroyed
+# 65–85 % of the monsoon-scale gradient, while σ = 150–200 km already
+# suppresses the mosaic noise to ~1/17 of the signal.  175 km is the sweep's
+# sweet spot.
+_MONSOON_PRESSURE_SMOOTHING_KM: float = 175.0
 
 # Land recycling (Budyko 1974; Savenije 1995; van der Ent & Savenije 2011): land
 # evapotranspiration is water-limited, not just energy-limited — wet land
