@@ -49,8 +49,8 @@
     "ctrlClick": { "action": "Ctrl+click cell", "description": "Append/remove from the selection (keeps existing). Standard desktop-app style." },
     "dblClick": { "action": "Double-click cell", "description": "Select that cell (clearing others); deselect if it is already the only selection." },
     "esc": { "action": "Esc", "description": "Clear all selected cells" },
-    "clickPlanet": { "action": "Click a planet", "description": "In the 3D stellar view, opens the info panel. Expand \"🌍 Terrain data\" for a summary if available." },
-    "dblClickPlanet": { "action": "Double-click a planet", "description": "In the 3D stellar view, flies the camera to that planet." }
+    "clickPlanet": { "action": "Click a planet", "description": "In the 3D stellar view: opens the info panel and flies the camera to the body (the URL focus parameter is kept in sync, so refreshing or sharing the link returns to the same view). The panel groups orbit / physical / rotation & seasons / atmosphere / insolation fields; expand \"🌍 Terrain data\" if map data exists." },
+    "dblClickPlanet": { "action": "Double-click a planet", "description": "In the 3D stellar view: the camera flies to and centers on the body immediately (zoom unchanged)." }
   },
   "projection": {
     "equirectangular": { "label": "Equirectangular", "description": "Orthogonal graticule, polar stretching. The simplest projection, good for data processing." },
@@ -97,10 +97,10 @@
     "stellarViewer": {
       "title": "Stellar System 3D View",
       "entries": [
-        { "title": "Basics", "content": "**Drag** — rotate\n**Scroll** — zoom\n**Right-drag** — pan\n\nClick a planet to open the info panel (with terrain summary). Double-click a planet → fly the camera to it." },
+        { "title": "Basics", "content": "**Drag** — rotate\n**Scroll** — zoom\n**Right-drag** — pan\n\nClick a body → open the info panel and fly/center the camera on it (URL focus param synced). Double-click → center immediately (zoom unchanged). The panel's \"🎯 Focus & zoom\" button → center and pull in to ~4× the body's radius. Click empty space → deselect." },
         { "title": "Planet textures", "content": "Planets with map data auto-load terrain textures, showing real land/sea colors (not solid spheres). Textures are decoded from elevation PNGs into low-res equirectangular maps." },
         { "title": "Habitable zone", "content": "A green translucent ring marks the habitable zone (liquid water can exist on the surface). Inner/outer edges are computed from stellar luminosity + planetary albedo + greenhouse parameters." },
-        { "title": "Planet info panel", "content": "Clicking a planet opens the InfoPanel:\n\n- Orbital parameters (semi-major axis, eccentricity, period)\n- Physical parameters (mass, radius, density)\n- If map data exists: elevation range, sea level, cell count" }
+        { "title": "Planet info panel", "content": "Clicking a body opens the InfoPanel (data from the system catalog):\n\n- Orbit (parent, semi-major axis, eccentricity, inclination, period)\n- Physical (mass, radius, surface gravity, magnetic field)\n- Rotation & seasons (rotation, tidal lock, solar day, days per year, season length, polar circles)\n- Atmosphere & hydrosphere (pressure, greenhouse warming, composition, water coverage, salinity, depth)\n- Insolation & thermal (instellation, equilibrium temperature, habitable-zone membership)\n- Lithosphere (plate tectonics, plate count, volcanism)\n- With map data: 🌍 terrain summary + 3D globe / 2D map links" }
       ]
     },
     "globeViewer": {

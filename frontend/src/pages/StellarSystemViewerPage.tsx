@@ -11,9 +11,9 @@
  * planet sphere shows real terrain colours instead of a procedural tint.
  */
 
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useQueries } from '@tanstack/react-query'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
 import { api } from '../api/client'
@@ -31,10 +31,14 @@ export default function StellarSystemViewerPage() {
   const { t } = useTranslation('common')
   const { worldName } = useParams<{ worldName: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
   const selectedBranch = searchParams.get('branch') || null
   const focusPlanetId = searchParams.get('focus') || undefined
   const [selectedBody, setSelectedBody] = useState<SelectedBody>(null)
+  // Imperative focus requests from the body-selector dropdown: fly to the
+  // body AND pull in (dolly), for every entry uniformly — map access stays
+  // in the InfoPanel buttons.  `nonce` makes repeated picks of the same
+  // body re-trigger the flight.
+  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
 
   const setSelectedBranch = (branch: string | null) => {
     setSearchParams((prev) => {
@@ -44,6 +48,19 @@ export default function StellarSystemViewerPage() {
       return next
     }, { replace: true })
   }
+
+  // Selection ↔ URL: the ?focus= parameter always names the selected body
+  // (replace, not push, so browsing bodies doesn't spam history).  This is
+  // what makes a focused view deep-linkable / refresh-stable.
+  const handleSelectionChange = useCallback((body: SelectedBody) => {
+    setSelectedBody(body)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (body) next.set('focus', body.data.id)
+      else next.delete('focus')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
 
   // --- Stellar system data ---
   // The system catalog (derived) is the single merged source for stars,
@@ -73,6 +90,17 @@ export default function StellarSystemViewerPage() {
 
   const planets = useMemo(
     () => (catalog?.bodies ?? []).map(catalogBodyToPlanetData),
+    [catalog],
+  )
+
+  // Catalog lookups for the InfoPanel's rich field groups (orbit elements,
+  // derived thermal/season fields, atmosphere composition, star age/HZ).
+  const bodyCatalog = useMemo(
+    () => new Map((catalog?.bodies ?? []).map((b) => [b.id, b])),
+    [catalog],
+  )
+  const starCatalog = useMemo(
+    () => new Map((catalog?.stars ?? []).map((s) => [s.id, s])),
     [catalog],
   )
 
@@ -226,36 +254,39 @@ export default function StellarSystemViewerPage() {
 
         <div className="flex-1" />
 
-        {/* Planet selector — navigate to globe or focus in stellar view */}
+        {/* Body selector — every entry focuses & pulls in uniformly;
+            🌐 marks bodies with map data (globe/map access via InfoPanel). */}
         {planets && planets.length > 0 && (
           <select
             value={focusPlanetId ?? ''}
             onChange={(e) => {
               const pid = e.target.value
               if (!pid) return
-              const hasMap = mapPlanetIds?.includes(pid)
-              const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-              if (hasMap) {
-                // Navigate to globe view for planets with map data
-                navigate(`/worlds/${worldName}/globe/${pid}${branchQS}`)
-              } else {
-                // Focus on the planet in the stellar view
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev)
-                  next.set('focus', pid)
-                  return next
-                }, { replace: true })
-              }
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev)
+                next.set('focus', pid)
+                return next
+              }, { replace: true })
+              setFocusRequest({ id: pid, nonce: Date.now() })
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
           >
             <option value="">{t('stellar.selectPlanet')}</option>
-            {planets.map((p: any) => (
-              <option key={p.id} value={p.id}>
-                {p.name ?? p.id}
-                {mapPlanetIds?.includes(p.id) ? ' 🌐' : ''}
-              </option>
-            ))}
+            {(catalog?.stars ?? []).length > 0 && (
+              <optgroup label={t('stellar.groupStars')}>
+                {(catalog?.stars ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>☀ {s.name ?? s.id}</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label={t('stellar.groupBodies')}>
+              {planets.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.name ?? p.id}
+                  {mapPlanetIds?.includes(p.id) ? ' 🌐' : ''}
+                </option>
+              ))}
+            </optgroup>
           </select>
         )}
 
@@ -289,8 +320,11 @@ export default function StellarSystemViewerPage() {
             branchQS={selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}
             mapPlanetIds={mapPlanetIds ? new Set(mapPlanetIds) : undefined}
             focusPlanetId={focusPlanetId}
+            focusRequest={focusRequest}
             selectedPlanetCvtMesh={selectedPlanetCvtMesh ?? null}
-            onSelectionChange={setSelectedBody}
+            bodyCatalog={bodyCatalog}
+            starCatalog={starCatalog}
+            onSelectionChange={handleSelectionChange}
           />
         )}
       </div>

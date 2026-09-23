@@ -40,7 +40,9 @@
     "title": "Stellar System 3D",
     "selectPlanet": "Select planet...",
     "loadFailed": "Data load failed",
-    "loadFailedDetail": "Stellar system data could not be loaded. Check your network or world configuration."
+    "loadFailedDetail": "Stellar system data could not be loaded. Check your network or world configuration.",
+    "groupStars": "Stars",
+    "groupBodies": "Bodies"
   },
   "help": {
     "toc": "Contents",
