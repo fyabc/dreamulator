@@ -134,7 +134,7 @@
 
 风向/洋流的下游消费者：年风场写回 `wind_east_m_s` / `wind_north_m_s`（:601-603），
 洋流写回 `ocean_current_east_m_s` / `ocean_current_north_m_s` / `sst_anomaly_c`
-（:723-727），经 `cvt_mesh.json` 进入前端。
+（:723-727），经网格文件（`cvt_mesh.msgpack.gz`）进入前端。
 
 ---
 

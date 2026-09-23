@@ -47,9 +47,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from dreamulator.map.models import CVTMesh
-
 if TYPE_CHECKING:
+    from dreamulator.map.models import CVTMesh
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 # ---------------------------------------------------------------------------
@@ -391,24 +390,22 @@ def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> CV
     else:
         search_dirs = [world_dir]
 
-    # Build search paths: new maps/ structure first, then old locations
-    search_paths = []
+    # Build search dirs: new maps/ structure first, then old locations
+    search_dirs_out = []
     for base in search_dirs:
         # New unified structure
-        search_paths.append(base / "maps" / planet_id / "cvt_mesh.json")
+        search_dirs_out.append(base / "maps" / planet_id)
     for base in search_dirs:
         # Old layer-based structure (backward compat)
         for sub in ("derived", "input"):
-            search_paths.append(
-                base / "layers" / "geological" / sub / "maps" / planet_id / "cvt_mesh.json",
-            )
+            search_dirs_out.append(base / "layers" / "geological" / sub / "maps" / planet_id)
 
-    for p in search_paths:
-        if p.exists():
-            from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
 
-            data = json.loads(decompress_mesh_bytes(p.read_bytes()))
-            return CVTMesh(**data)
+    for d in search_dirs_out:
+        mesh_file = find_mesh_file(d)
+        if mesh_file is not None:
+            return load_cvt_mesh_model(mesh_file)
 
     return None
 

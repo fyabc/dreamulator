@@ -85,13 +85,13 @@ def _run_climate_on_world(
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
     world_dir = _data_dir() / world
-    mesh_path = world_dir / "maps" / planet / "cvt_mesh.json"
-    if not mesh_path.exists():
-        pytest.skip(f"Mesh not found at {mesh_path} — run 'dreamulator build {world}' first")
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-    from dreamulator.map.export import decompress_mesh_bytes
+    mesh_file = find_mesh_file(world_dir / "maps" / planet)
+    if mesh_file is None:
+        pytest.skip(f"Mesh not found under {world_dir / 'maps' / planet} — run 'dreamulator build {world}' first")
 
-    mesh_data = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+    mesh_data = load_cvt_mesh(mesh_file)
 
     num_cells = mesh_data.get("num_cells", len(mesh_data.get("cells", [])))
     mesh = CVTMesh(**mesh_data)
@@ -310,12 +310,12 @@ def test_mesh_cell_count_matches_baseline():
     expected = baseline["mesh_cells"]
 
     world_dir = _data_dir() / baseline["world"]
-    mesh_path = world_dir / "maps" / baseline["planet"] / "cvt_mesh.json"
-    if not mesh_path.exists():
-        pytest.skip(f"Mesh not found at {mesh_path}")
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-    from dreamulator.map.export import decompress_mesh_bytes
+    mesh_file = find_mesh_file(world_dir / "maps" / baseline["planet"])
+    if mesh_file is None:
+        pytest.skip(f"Mesh not found under {world_dir / 'maps' / baseline['planet']}")
 
-    mesh_data = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+    mesh_data = load_cvt_mesh(mesh_file)
     actual = mesh_data.get("num_cells", len(mesh_data.get("cells", [])))
     assert actual == expected, f"Mesh cell count mismatch: baseline={expected}, disk={actual}"

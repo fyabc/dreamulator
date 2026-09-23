@@ -49,10 +49,8 @@ def _build_context(world_dir: Path, branch: str | None, context: str | None) -> 
 def _load_mesh_tree(world_dir: Path, branch: str | None) -> tuple[Any, ...]:
     """加载目标行星的 cvt_mesh + KD-tree（mesh 上下文）。"""
     import yaml
-    from pydantic import TypeAdapter
 
     from dreamulator.map.export import build_export_tree
-    from dreamulator.map.models import CVTMesh
     from dreamulator.resolver import LayerResolver
 
     resolver = LayerResolver(world_dir, branch)
@@ -62,10 +60,12 @@ def _load_mesh_tree(world_dir: Path, branch: str | None) -> tuple[Any, ...]:
         catalog = yaml.safe_load(f)
     planet_id = catalog["target_body_id"]
 
-    mesh_path = world_dir / "maps" / planet_id / "cvt_mesh.json"
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
 
-    mesh = TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(mesh_path.read_bytes()))
+    mesh_path = find_mesh_file(world_dir / "maps" / planet_id)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {world_dir / 'maps' / planet_id}")
+    mesh = load_cvt_mesh_model(mesh_path)
     return mesh, build_export_tree(mesh)
 
 

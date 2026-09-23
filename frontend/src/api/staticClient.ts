@@ -88,6 +88,37 @@ async function fetchBranchAwareBlob(
   }
 }
 
+/**
+ * Fetch the CVT mesh for a planet, canonical format first.
+ *
+ * 1. ``cvt_mesh.msgpack.gz`` (current exports) — fetched as a blob, handed
+ *    to the shared MessagePack worker as an object URL with gunzip: true,
+ *    so neither the gzip decompression nor the decode touches the main
+ *    thread (the legacy path JSON.parsed the whole mesh on the main thread).
+ * 2. ``cvt_mesh.json`` (pre-migration exports) — plain JSON, main thread.
+ *
+ * Returns null when neither generation exists (caller decides the fallback).
+ */
+async function fetchBranchAwareMesh(
+  name: string,
+  branch: string | null | undefined,
+  planetId: string,
+): Promise<any | null> {
+  const meshPath = `/maps/${planetId}/cvt_mesh.msgpack.gz`
+  const blob = await fetchBranchAwareBlob(name, branch, meshPath, meshPath)
+  if (blob !== null) {
+    const { decodeMsgpackUrl } = await import('../workers/msgpackClient')
+    const objectUrl = URL.createObjectURL(blob)
+    try {
+      return await decodeMsgpackUrl(objectUrl, true)
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }
+  const legacyPath = `/maps/${planetId}/cvt_mesh.json`
+  return fetchBranchAwareJson<any>(name, branch, legacyPath, legacyPath)
+}
+
 function notAvailable(operation: string): never {
   throw new Error(`${operation} is not available in static mode`)
 }
@@ -254,13 +285,8 @@ export const staticApi = {
   },
 
   getVoronoi: async (name: string, planetId: string, branch?: string | null) => {
-    // Prefer cvt_mesh.json (current format, same as backend API)
-    const cvtData = await fetchBranchAwareJson<any>(
-      name,
-      branch,
-      `/maps/${planetId}/cvt_mesh.json`,
-      `/maps/${planetId}/cvt_mesh.json`,
-    )
+    // Prefer the CVT mesh (current format, same as backend API)
+    const cvtData = await fetchBranchAwareMesh(name, branch, planetId)
     if (cvtData !== null) {
       // Convert CVT mesh cells to VoronoiNetwork format
       return {
@@ -307,12 +333,7 @@ export const staticApi = {
     const { mark } = await import('../utils/perf')
     mark('mesh-fetch-start')
     try {
-      const result = await fetchBranchAwareJson<any>(
-        name,
-        branch,
-        `/maps/${planetId}/cvt_mesh.json`,
-        `/maps/${planetId}/cvt_mesh.json`,
-      )
+      const result = await fetchBranchAwareMesh(name, branch, planetId)
       if (result === null) throw new Error(`No static CVT mesh data for ${planetId}`)
       return result
     } finally {

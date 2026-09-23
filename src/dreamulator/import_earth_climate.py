@@ -5,7 +5,7 @@ built through the simulation pipeline (`elevation_source: imported`).  Its
 climate fields should therefore be real observation, not engine output.  This
 module samples four observation datasets onto the CVT mesh and writes:
 
-- ``cvt_mesh.json`` per-cell fields — ``koppen_class`` (Beck), ``temperature_C``
+- mesh file per-cell fields — ``koppen_class`` (Beck), ``temperature_C``
   (NCEP annual mean), ``precipitation_mm`` (GPCP annual total), wind / SLP
   (NCEP), and ``ocean_current_east/north_m_s`` (SODA v3.15.2 observed
   climatology, annual mean; engine Stommel-solver fallback when SODA is
@@ -443,8 +443,7 @@ def _apply_observed_currents(
 
 def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> None:
     """Sample real climate onto the mesh and write the climate files."""
-    from dreamulator.map.export import compress_mesh_bytes, decompress_mesh_bytes
-    from dreamulator.map.models import CVTMesh
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model, save_cvt_mesh
 
     project_root = _find_project_root()
     data_dir = data_dir or (project_root / "private/tmp/climatology")
@@ -454,10 +453,12 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
         / "Beck_KG_V1_present_0p083.tif"
     )
 
-    mesh_path = output_dir / "cvt_mesh.json"
-    if not mesh_path.exists():
-        raise FileNotFoundError(f"{mesh_path} not found — run the ETOPO1 elevation importer first.")
-    mesh = CVTMesh.model_validate(json.loads(decompress_mesh_bytes(mesh_path.read_bytes())))
+    mesh_path = find_mesh_file(output_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(
+            f"no mesh file under {output_dir} — run the ETOPO1 elevation importer first."
+        )
+    mesh = load_cvt_mesh_model(mesh_path)
     lats = np.array([c.lat for c in mesh.cells], dtype=np.float64)
     lons = np.array([c.lon for c in mesh.cells], dtype=np.float64)
 
@@ -561,11 +562,9 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     object.__setattr__(mesh, "_p_monthly_mm", p_monthly.astype(np.float32))
     object.__setattr__(mesh, "_pressure_monthly", pressure_monthly.astype(np.float32))
 
-    # Write cvt_mesh.json (per-cell annual climate fields).
-    mesh_path.write_bytes(
-        compress_mesh_bytes(json.dumps(mesh.model_dump(mode="json")).encode("utf-8"))
-    )
-    print(f"  Updated cvt_mesh.json: {mesh_path}")
+    # Write the mesh file (per-cell annual climate fields).
+    save_cvt_mesh(mesh_path, mesh)
+    print(f"  Updated {mesh_path.name}: {mesh_path}")
 
     # Write climate_monthly.msgpack (quantized int16, same as the engine).
     _write_monthly_msgpack(mesh, output_dir)
@@ -670,7 +669,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="data/worlds/earth/maps/planet_earth",
-        help="Map output directory (must contain cvt_mesh.json)",
+        help="Map output directory (must contain a mesh file)",
     )
     args = parser.parse_args()
     output_dir = _find_project_root() / args.output_dir

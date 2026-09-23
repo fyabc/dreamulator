@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from dreamulator.engine.climate_physics import (  # noqa: E402
     potential_evapotranspiration_hamon_monthly,
 )
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 from dreamulator.map.ucc import STATUS_CODES, compute_descriptors  # noqa: E402
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS  # noqa: E402
 
@@ -66,7 +66,7 @@ def _load_monthly(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 def _load_mesh_fields(path: Path) -> dict[str, np.ndarray]:
     """Read the (gzip) mesh JSON, keeping only the fields this dataset needs."""
-    mesh = json.loads(decompress_mesh_bytes(path.read_bytes()))
+    mesh = load_cvt_mesh(path)
     cells = mesh["cells"]
     return {
         "lat": np.array([c["lat"] for c in cells], dtype=np.float32),
@@ -82,7 +82,7 @@ def main() -> None:
         "--map-dir",
         type=Path,
         default=_EARTH_MAP,
-        help="Earth root map dir with climate_monthly.msgpack + cvt_mesh.json",
+        help="Earth root map dir with climate_monthly.msgpack + the mesh file",
     )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
@@ -97,8 +97,10 @@ def main() -> None:
     t_monthly, p_monthly = _load_monthly(args.map_dir / "climate_monthly.msgpack")
     n = t_monthly.shape[0]
 
-    print(f"Reading mesh fields from {args.map_dir}/cvt_mesh.json …")
-    mesh = _load_mesh_fields(args.map_dir / "cvt_mesh.json")
+    print(f"Reading mesh fields from {_mf} …")
+    _mf = find_mesh_file(args.map_dir)
+    assert _mf is not None, f"no mesh file under {args.map_dir}"
+    mesh = _load_mesh_fields(_mf)
     assert len(mesh["lat"]) == n, "mesh/monthly cell-count mismatch"
 
     # Monthly Hamon reference demand from *observed* temperature — same demand

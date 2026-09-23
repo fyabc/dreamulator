@@ -504,30 +504,30 @@ def build_tectonic_plates(
 
 
 def _load_mesh(mesh_path: Path) -> CVTMesh:
-    """Load a compressed CVT mesh file as a ``CVTMesh`` model."""
-    from dreamulator.map.export import decompress_mesh_bytes
-    from dreamulator.map.models import CVTMesh
+    """Load a mesh file (either generation) as a ``CVTMesh`` model."""
+    from dreamulator.map.export import load_cvt_mesh_model
 
-    data = mesh_path.read_bytes()
-    return CVTMesh.model_validate(json.loads(decompress_mesh_bytes(data)))
+    return load_cvt_mesh_model(mesh_path)
 
 
 def _save_mesh(mesh: CVTMesh, mesh_path: Path) -> None:
-    """Write a ``CVTMesh`` model back, gzip-compressed (same as the pipeline)."""
-    from dreamulator.map.export import compress_mesh_bytes
+    """Write a ``CVTMesh`` model back via the canonical serializer."""
+    from dreamulator.map.export import save_cvt_mesh
 
-    mesh_path.write_bytes(
-        compress_mesh_bytes(json.dumps(mesh.model_dump(mode="json")).encode("utf-8"))
-    )
+    save_cvt_mesh(mesh_path, mesh)
 
 
 def import_earth_tectonics(output_dir: Path, *, cache: Path | None = None) -> None:
     """Assign real plates + crust + boundaries onto an imported-elevation mesh.
 
-    Reads ``cvt_mesh.json`` / ``map.yaml`` from *output_dir*, writes
-    ``plates.json`` and updates ``cvt_mesh.json`` / ``map.yaml`` in place.
+    Reads the mesh file / ``map.yaml`` from *output_dir*, writes
+    ``plates.json`` and updates the mesh / ``map.yaml`` in place.
     """
-    mesh_path = output_dir / "cvt_mesh.json"
+    from dreamulator.map.export import find_mesh_file
+
+    mesh_path = find_mesh_file(output_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {output_dir}")
     if not mesh_path.exists():
         raise FileNotFoundError(f"{mesh_path} not found — run the ETOPO1 elevation importer first.")
 
@@ -572,7 +572,7 @@ def import_earth_tectonics(output_dir: Path, *, cache: Path | None = None) -> No
     print(f"  Saved plates.json: {plates_path} ({len(plate_dicts)} plates)")
 
     _save_mesh(mesh, mesh_path)
-    print(f"  Updated cvt_mesh.json: {mesh_path}")
+    print(f"  Updated {mesh_path.name}: {mesh_path}")
 
     _update_map_yaml(output_dir, len(plate_dicts))
     print(f"  Updated map.yaml: {output_dir / 'map.yaml'}")
@@ -599,7 +599,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="data/worlds/earth/maps/planet_earth",
-        help="Map output directory (must already contain cvt_mesh.json from the elevation import)",
+        help="Map output directory (must already contain a mesh file from the elevation import)",
     )
     args = parser.parse_args()
 

@@ -48,9 +48,9 @@ from dreamulator.import_earth_climate import (  # noqa: E402
     _load_nc_monthly,
     _sample_monthly,
 )
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 
-_DEFAULT_MESH = "data/worlds/earth/branches/climate-dev/maps/planet_earth/cvt_mesh.json"
+_DEFAULT_MESH = "data/worlds/earth/branches/climate-dev/maps/planet_earth"
 
 
 def _find_project_root() -> Path:
@@ -69,7 +69,7 @@ def _resolve(p: str, root: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mesh", default=_DEFAULT_MESH, help="path to cvt_mesh.json")
+    parser.add_argument("--mesh", default=_DEFAULT_MESH, help="map dir (or mesh file path)")
     parser.add_argument(
         "--output",
         "-o",
@@ -85,6 +85,11 @@ def main() -> None:
 
     root = _find_project_root()
     mesh_path = _resolve(args.mesh, root)
+    if not mesh_path.is_file():
+        _mf = find_mesh_file(mesh_path if mesh_path.is_dir() else mesh_path.parent)
+        if _mf is None:
+            raise SystemExit(f"no mesh file near {mesh_path}")
+        mesh_path = _mf
     if not mesh_path.exists():
         print(f"ERROR: mesh not found: {mesh_path}", file=sys.stderr)
         sys.exit(1)
@@ -96,7 +101,7 @@ def main() -> None:
     )
 
     print(f"Loading mesh: {mesh_path}")
-    mesh = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+    mesh = load_cvt_mesh(mesh_path)
     cells_raw = mesh["cells"]
     lats = np.array([c["lat"] for c in cells_raw], dtype=np.float64)
     lons = np.array([c["lon"] for c in cells_raw], dtype=np.float64)

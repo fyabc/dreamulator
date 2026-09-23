@@ -1240,7 +1240,7 @@ def simulate_climate(
     t_hot_C = t_monthly_C.max(axis=1)
 
     # Store the monthly climate arrays for the export stage (Phase 4 monthly
-    # display).  These are *not* serialized to cvt_mesh.json — the full N×12
+    # display).  These are *not* serialized to the mesh file — the full N×12
     # fields would double the mesh — so export_climate_layers reads them off the
     # mesh object and writes a separate compact MessagePack file.
     object.__setattr__(mesh, "_t_monthly_c", t_monthly_C.astype(np.float32))

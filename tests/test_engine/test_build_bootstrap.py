@@ -309,7 +309,7 @@ class TestMeshSelection:
             {}, maps_dir=tmp_path / "maps", world_dir=tmp_path
         )
         assert mesh is None and source is None
-        assert any("No cvt_mesh.json" in w for w in warnings)
+        assert any("No mesh file" in w for w in warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -333,9 +333,10 @@ class TestBranchMeshIsolation:
         assert mesh is not None and not warnings
         assert source == root_mesh
 
-        # Materialization copies it into the branch; the root file is untouched.
+        # Materialization copies it into the branch (canonical name); the
+        # root file is untouched.
         target = _materialize_writable_mesh(source, branch_maps, "planet_x")
-        assert target == branch_maps / "planet_x" / "cvt_mesh.json"
+        assert target == branch_maps / "planet_x" / "cvt_mesh.msgpack.gz"
         assert target.exists()
         assert root_mesh.read_bytes() == root_bytes
 
@@ -345,13 +346,24 @@ class TestBranchMeshIsolation:
 
     def test_own_mesh_is_not_copied(self, tmp_path: Path) -> None:
         maps = tmp_path / "maps"
-        own = maps / "planet_x" / "cvt_mesh.json"
+        own = maps / "planet_x" / "cvt_mesh.msgpack.gz"
         _write_mesh(own)
 
         target = _materialize_writable_mesh(own, maps, "planet_x")
         assert target == own
 
+    def test_own_legacy_mesh_redirects_to_canonical(self, tmp_path: Path) -> None:
+        """A legacy-named mesh inside the build dir redirects to the canonical
+        sibling so the write-back converts instead of writing msgpack into a
+        ``.json`` file."""
+        maps = tmp_path / "maps"
+        legacy = maps / "planet_x" / "cvt_mesh.json"
+        _write_mesh(legacy)
+
+        target = _materialize_writable_mesh(legacy, maps, "planet_x")
+        assert target == maps / "planet_x" / "cvt_mesh.msgpack.gz"
+
     def test_missing_source_returns_target_path(self, tmp_path: Path) -> None:
         """Degenerate case (loader already failed) — still returns a sane path."""
         target = _materialize_writable_mesh(None, tmp_path / "maps", "planet_x")
-        assert target == tmp_path / "maps" / "planet_x" / "cvt_mesh.json"
+        assert target == tmp_path / "maps" / "planet_x" / "cvt_mesh.msgpack.gz"

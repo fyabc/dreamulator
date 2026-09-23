@@ -5,7 +5,6 @@ expected latitude-zonal patterns. Not pure unit tests — they require a
 nacrea mesh with climate data to exist.
 """
 
-import json
 from collections import Counter
 
 import pytest
@@ -16,14 +15,15 @@ from dreamulator.engine.ecology_physics import WhittakerBiome
 @pytest.fixture(scope="module")
 def nacrea_cells():
     """Load the nacrea satellite mesh (requires climate+ecology build)."""
-    mesh_path = "data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.json"
+    mesh_dir = __import__("pathlib").Path("data/worlds/nacrea/maps/satellite_nacrea")
     try:
-        from dreamulator.map.export import decompress_mesh_bytes
+        from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-        mesh = json.loads(
-            decompress_mesh_bytes(__import__("pathlib").Path(mesh_path).read_bytes()),
-        )
-    except (FileNotFoundError, json.JSONDecodeError):
+        mesh_file = find_mesh_file(mesh_dir)
+        if mesh_file is None:
+            pytest.skip("nacrea mesh not available (LFS not pulled or not built)")
+        mesh = load_cvt_mesh(mesh_file)
+    except (FileNotFoundError, ValueError):
         pytest.skip("nacrea mesh not available (LFS not pulled or not built)")
     cells = mesh["cells"]
     # Climate-dev phase convention (2026-09-05): nacrea runs climate-only, so

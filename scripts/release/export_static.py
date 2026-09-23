@@ -321,14 +321,37 @@ def _export_map_data(
         # Export JSON map files (voronoi, plates, features).
         # Each is read-validated-rewritten to catch LFS pointers or corrupt
         # files early instead of crashing the whole export.
-        from dreamulator.map.export import decompress_mesh_bytes
+        #
+        # The CVT mesh is different: it ships as the canonical
+        # cvt_mesh.msgpack.gz (the frontend fetches the blob, gunzips and
+        # decodes in a worker — no main-thread JSON.parse of a 300 MB text).
+        # Legacy gzip-JSON meshes convert once here, so static exports and
+        # the dev API converge on one wire format.
+        from dreamulator.map.export import (
+            MESH_FILENAME,
+            find_mesh_file,
+            load_cvt_mesh,
+            save_cvt_mesh,
+        )
 
-        for filename in ("voronoi.json", "cvt_mesh.json", "plates.json", "features.json"):
+        mesh_src = find_mesh_file(planet_dir)
+        if mesh_src is not None:
+            try:
+                save_cvt_mesh(
+                    planet_out / MESH_FILENAME, sanitize_nonfinite(load_cvt_mesh(mesh_src))
+                )
+            except Exception:
+                print(
+                    f"\n  WARNING: {mesh_src} is not a loadable mesh "
+                    f"(possible LFS pointer) — skipping",
+                )
+
+        for filename in ("voronoi.json", "plates.json", "features.json"):
             src_path = planet_dir / filename
             if not src_path.exists():
                 continue
             try:
-                data = sanitize_nonfinite(json.loads(decompress_mesh_bytes(src_path.read_bytes())))
+                data = sanitize_nonfinite(json.loads(src_path.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 print(
                     f"\n  WARNING: {src_path} is not valid JSON "

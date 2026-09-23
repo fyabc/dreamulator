@@ -4,7 +4,7 @@
 
 The bodies live inside the real-world reference-anchor world (``earth``) as
 additional planet_ids.  Reads a body's ``climate_yearly.msgpack`` +
-``climate_monthly.msgpack`` + ``cvt_mesh.json`` and writes
+``climate_monthly.msgpack`` + the mesh file and writes
 ``data/worlds/earth/design-notes/ucc-worked-examples-<body>.md``:
 
 - the declared time basis + provenance (epistemic status travels with the file:
@@ -33,7 +33,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 from dreamulator.map.ucc import status_short  # noqa: E402
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -244,7 +244,9 @@ def main() -> None:
     month_0 = str(monthly_meta.get("month_0", "?"))
 
     print("Reading mesh — full JSON parse …")
-    mesh = json.loads(decompress_mesh_bytes((map_dir / "cvt_mesh.json").read_bytes()))
+    _mf = find_mesh_file(map_dir)
+    assert _mf is not None, "no mesh file under {map_dir}"
+    mesh = load_cvt_mesh(_mf)
     cells = mesh["cells"]
     lat = np.array([c["lat"] for c in cells], dtype=np.float64)
     lon = np.array([c["lon"] for c in cells], dtype=np.float64)

@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from dreamulator.map.models import CVTMesh
+
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.ecology_physics import (
     classify_cell_ecology,
@@ -25,7 +27,6 @@ from dreamulator.engine.physical_inputs import (
     resolve_stellar_forcing,
 )
 from dreamulator.map.biogeography import partition_biogeographic_provinces
-from dreamulator.map.models import CVTMesh
 from dreamulator.models.layers import Layer
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class EcologyEngine(BaseEngine):
             3. Resolve planet + PAR ratio from stellar forcing.
             4. Per cell: biome / NPP / domesticable tags + soil order/fertility.
             5. Partition land cells into biogeographic realms → provinces.
-            6. Write ecology_summary.yaml and update cvt_mesh.json.
+            6. Write ecology_summary.yaml and update the mesh file.
 
         Returns
         -------
@@ -179,31 +180,27 @@ class EcologyEngine(BaseEngine):
 
 
 def _write_mesh_with_ecology(mesh: CVTMesh, maps_output_dir: Path, planet_id: str | None) -> None:
-    """Write the ecology-populated mesh back to cvt_mesh.json.
+    """Write the ecology-populated mesh back to the canonical mesh file.
 
     Overwrites the existing mesh file in place so the frontend and downstream
     engines see the ecology fields. Targets the specific planet directory
     (matching the climate engine's ``_update_source_mesh``), falling back to a
     glob only when the planet id is unknown.
     """
-    from pydantic import TypeAdapter
-
-    mesh_bytes = TypeAdapter(CVTMesh).dump_json(mesh)
-    from ..map.export import _truncate_float_precision, compress_mesh_bytes
-
-    mesh_bytes = _truncate_float_precision(mesh_bytes)
-    mesh_bytes = compress_mesh_bytes(mesh_bytes)
+    from ..map.export import LEGACY_MESH_FILENAME, MESH_FILENAME, iter_mesh_files, save_cvt_mesh
 
     if planet_id is not None:
-        target = maps_output_dir / planet_id / "cvt_mesh.json"
-        if target.exists():
-            target.write_bytes(mesh_bytes)
+        target = maps_output_dir / planet_id / MESH_FILENAME
+        legacy = maps_output_dir / planet_id / LEGACY_MESH_FILENAME
+        if target.exists() or legacy.exists():
+            save_cvt_mesh(target, mesh)  # also removes the legacy twin
             logger.info("Updated mesh with ecology data: %s", target)
             return
 
-    for mesh_path in maps_output_dir.glob("*/cvt_mesh.json"):
-        mesh_path.write_bytes(mesh_bytes)
-        logger.info("Updated mesh with ecology data: %s", mesh_path)
+    for mesh_path in iter_mesh_files(maps_output_dir):
+        canonical = mesh_path.with_name(MESH_FILENAME)
+        save_cvt_mesh(canonical, mesh)
+        logger.info("Updated mesh with ecology data: %s", canonical)
 
 
 def _load_cvt_mesh(engine: EcologyEngine) -> tuple[CVTMesh | None, list[str]]:

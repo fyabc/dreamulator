@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-cell model-vs-observed bias audit (T / P / wind / Köppen).
 
-Reads the built mesh (``cvt_mesh.json``), the sampled per-cell observed
+Reads the built mesh file, the sampled per-cell observed
 climatology (``climate_obs.json``, from ``generate_climate_obs.py`` — NCEP
 T/SLP/wind + GPCP P at each cell), and the observed Köppen
 (``koppen_obs.json``, from ``convert_koppen_map.py``), then ranks the dominant
@@ -77,8 +77,12 @@ PRECIP_REGIONS: list[dict] = [
 
 
 def _load_mesh(map_dir: Path) -> dict[str, np.ndarray]:
-    with gzip.open(map_dir / "cvt_mesh.json", "rb") as f:
-        mesh = json.load(f)
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+
+    mesh_path = find_mesh_file(map_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {map_dir}")
+    mesh = load_cvt_mesh(mesh_path)
     cells = mesh["cells"]
 
     def _f(key: str) -> np.ndarray:

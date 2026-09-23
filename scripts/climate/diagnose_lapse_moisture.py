@@ -125,15 +125,17 @@ def _wetness(precip_mm: np.ndarray, p0: float) -> np.ndarray:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("map_dir", help="path to maps/<planet_id>/ (holds cvt_mesh.json)")
+    parser.add_argument("map_dir", help="path to maps/<planet_id>/ (holds the mesh file)")
     parser.add_argument("--temp", required=True, help="NCEP air.mon.ltm.nc (observed T)")
     parser.add_argument("--p0", type=float, default=P0_DEFAULT, help="wetness threshold (mm/yr)")
     parser.add_argument("--gamma-dry", type=float, default=GAMMA_DRY_DEFAULT,
                         help="dry/environmental lapse rate (°C/km)")
     args = parser.parse_args()
 
-    mesh_path = Path(args.map_dir) / "cvt_mesh.json"
-    if not mesh_path.exists():
+    from dreamulator.map.export import find_mesh_file
+
+    mesh_path = find_mesh_file(Path(args.map_dir))
+    if mesh_path is None:
         print(f"missing {mesh_path} (build earth climate-dev first)")
         sys.exit(1)
 

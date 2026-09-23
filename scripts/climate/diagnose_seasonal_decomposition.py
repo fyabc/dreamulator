@@ -70,15 +70,14 @@ def main() -> None:
         base = base / "branches" / args.branch
     mdir = base / "maps" / args.planet
 
-    mesh_path = mdir / "cvt_mesh.json"
+    mesh_path = find_mesh_file(mdir)
     monthly_path = mdir / "climate_monthly.msgpack"
-    if not mesh_path.exists() or not monthly_path.exists():
+    if mesh_path is None or not monthly_path.exists():
         print(f"missing {mesh_path} or {monthly_path} — build the world first")
         return
 
-    from dreamulator.map.export import decompress_mesh_bytes
-
-    mesh = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+    mesh = load_cvt_mesh(mesh_path)
     cells = mesh["cells"]
     n = len(cells)
     lat = np.array([c["lat"] for c in cells])

@@ -26,10 +26,9 @@ import numpy as np
 
 
 def load_mesh(path: str) -> list[dict[str, Any]]:
-    from dreamulator.map.export import decompress_mesh_bytes
-
+    from dreamulator.map.export import decode_mesh_bytes, find_mesh_file
     with open(path, "rb") as f:
-        data = json.loads(decompress_mesh_bytes(f.read()))
+        data = decode_mesh_bytes(f.read())
     return data["cells"]
 
 
@@ -200,12 +199,16 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Detect ocean bottlenecks")
-    parser.add_argument("mesh", nargs="?", default="data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.json")
+    parser.add_argument("mesh", nargs="?", default="data/worlds/nacrea/maps/satellite_nacrea")
     parser.add_argument("--top", type=int, default=15)
     args = parser.parse_args()
 
     print("Loading mesh...")
-    cells = load_mesh(args.mesh)
+    mesh_arg = Path(args.mesh)
+    mesh_file = mesh_arg if mesh_arg.is_file() else find_mesh_file(mesh_arg)
+    if mesh_file is None:
+        raise SystemExit(f"no mesh file at {args.mesh}")
+    cells = load_mesh(mesh_file)
     print(f"  {len(cells)} cells")
 
     print("Finding largest ocean basin...")

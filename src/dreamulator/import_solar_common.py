@@ -267,8 +267,6 @@ def build_mesh_from_dem(
     """
     from .import_earth_elevation import save_elevation_png
     from .map.cvt_mesh import generate_cvt_mesh
-    from .map.export import compress_mesh_bytes
-    from .map.models import sanitize_nonfinite
     from .map.pipeline_types import TerrainPipelineConfig
 
     config = TerrainPipelineConfig(
@@ -298,17 +296,14 @@ def build_mesh_from_dem(
         # seas) override water_class after this call.
         c.water_class = "land"
 
+    from .map.export import MESH_FILENAME, save_cvt_mesh
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    mesh_path = output_dir / "cvt_mesh.json"
+    mesh_path = output_dir / MESH_FILENAME
     # No plate boundaries on these worlds → distance_to_boundary_km = inf;
-    # sanitize at the serialization boundary (strict JSON, browser-safe).
-    mesh_path.write_bytes(
-        compress_mesh_bytes(
-            json.dumps(sanitize_nonfinite(mesh.model_dump(mode="json")), allow_nan=False).encode(
-                "utf-8"
-            )
-        )
-    )
+    # save_cvt_mesh's JSON intermediate keeps non-finite values sanitized
+    # (strict JSON, browser-safe).
+    save_cvt_mesh(mesh_path, mesh)
     print(f"  Wrote {mesh_path.name} ({mesh_path.stat().st_size / 1e6:.1f} MB)")
 
     # elevation.png (2048×1024 resample) + map.yaml.
@@ -423,24 +418,19 @@ def apply_climate_to_mesh(
     ``water_class`` overrides the all-land default for worlds with a surface
     liquid inventory (Titan's methane seas → "ocean"; declared per world).
     """
-    from .map.export import compress_mesh_bytes, decompress_mesh_bytes
-    from .map.models import CVTMesh, sanitize_nonfinite
+    from .map.export import find_mesh_file, load_cvt_mesh_model, save_cvt_mesh
 
-    mesh_path = output_dir / "cvt_mesh.json"
-    mesh = CVTMesh.model_validate(json.loads(decompress_mesh_bytes(mesh_path.read_bytes())))
+    mesh_path = find_mesh_file(output_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {output_dir}")
+    mesh = load_cvt_mesh_model(mesh_path)
     for c, t, p in zip(mesh.cells, t_annual, p_annual, strict=True):
         c.temperature_C = float(t)
         c.precipitation_mm = float(p)
     if water_class is not None:
         for c, w in zip(mesh.cells, water_class, strict=True):
             c.water_class = str(w)
-    mesh_path.write_bytes(
-        compress_mesh_bytes(
-            json.dumps(sanitize_nonfinite(mesh.model_dump(mode="json")), allow_nan=False).encode(
-                "utf-8"
-            )
-        )
-    )
+    save_cvt_mesh(mesh_path, mesh)
     print("  Applied annual T/P to mesh cell fields")
 
 
@@ -453,15 +443,16 @@ def write_climate_secondary(
 ) -> None:
     """temperature.png / precipitation.png / climate_metadata.json (no Köppen)."""
     from .map.export import (
-        decompress_mesh_bytes,
         export_equirectangular,
         export_layer_png,
+        find_mesh_file,
+        load_cvt_mesh_model,
     )
-    from .map.models import CVTMesh
 
-    mesh = CVTMesh.model_validate(
-        json.loads(decompress_mesh_bytes((output_dir / "cvt_mesh.json").read_bytes()))
-    )
+    mesh_path = find_mesh_file(output_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {output_dir}")
+    mesh = load_cvt_mesh_model(mesh_path)
     t_grid = export_equirectangular(mesh, width, height, field="temperature_C")
     p_grid = export_equirectangular(mesh, width, height, field="precipitation_mm")
     export_layer_png(
@@ -506,7 +497,7 @@ def write_ucc_yearly(
     Returns the land class distribution (code → cell count) for console output.
     """
     from .engine.climate_physics import potential_evapotranspiration_hamon_monthly
-    from .map.export import decompress_mesh_bytes
+    from .map.export import find_mesh_file, load_cvt_mesh
     from .map.ucc import (
         PROFILE_CURRENT,
         STATUS_CODES,
@@ -519,7 +510,10 @@ def write_ucc_yearly(
     t_monthly, p_monthly, bin_days = load_monthly_climate(output_dir / "climate_monthly.msgpack")
     n = t_monthly.shape[0]
 
-    mesh = json.loads(decompress_mesh_bytes((output_dir / "cvt_mesh.json").read_bytes()))
+    _mesh_path = find_mesh_file(output_dir)
+    if _mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {output_dir}")
+    mesh = load_cvt_mesh(_mesh_path)
     water_class = np.array([c.get("water_class") or "" for c in mesh["cells"]], dtype=str)
     if len(water_class) != n:
         raise ValueError("mesh/monthly cell-count mismatch")

@@ -49,7 +49,7 @@ from dreamulator.engine.monsoon_circulation import (  # noqa: E402
     _MONSOON_PROJECTION_FRACTION,
     zonal_mean_monthly,
 )
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 
 _ROOT = Path(__file__).resolve().parents[2]
 _NCEP_SLP = _ROOT / "private" / "tmp" / "climatology" / "ncep_slp.mon.ltm.nc"
@@ -77,7 +77,9 @@ def _load_model(branch: str) -> dict[str, np.ndarray]:
 
     base = _ROOT / "data" / "worlds" / "earth"
     map_dir = base / (Path("branches") / branch if branch else Path()) / "maps" / "planet_earth"
-    mesh = json.loads(decompress_mesh_bytes((map_dir / "cvt_mesh.json").read_bytes()))
+    _mf = find_mesh_file(map_dir)
+    assert _mf is not None, "no mesh file under {map_dir}"
+    mesh = load_cvt_mesh(_mf)
     cells = mesh["cells"]
     lat = np.array([c["lat"] for c in cells], dtype=np.float64)
     lon = np.array([c["lon"] for c in cells], dtype=np.float64)

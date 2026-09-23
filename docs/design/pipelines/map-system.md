@@ -159,7 +159,7 @@ SVG 叠加层使用 **动态偏移副本** 方案：
 maps/
 ├── <planet_id>/
 │   ├── map.yaml              # 元数据
-│   ├── cvt_mesh.json         # CVT 网格（gzip 压缩）
+│   ├── cvt_mesh.msgpack.gz   # CVT 网格（gzip 帧 MessagePack；读端嗅探兼容旧 cvt_mesh.json）
 │   ├── elevation.png         # 高度图
 │   ├── plates.json           # 板块分组
 │   ├── features.json         # 河流矢量图层
@@ -172,6 +172,26 @@ maps/
 > **产物管理**：`maps/` 与 `layers/*/derived/` 是「input + 代码 + seed」的确定性构建产物，
 > 不入 git、不走 LFS（`.gitignore` 已忽略）；发版由 `scripts/release/publish_world_data.py`
 > 打包上传到 GitHub Releases 的 `worlds-data` tag。
+
+## 网格序列化（cvt_mesh.msgpack.gz）
+
+盘上格式 = **gzip 帧 MessagePack**（2026-09-23 起；此前为名实不符的 gzip-JSON
+`cvt_mesh.json`）。读写**一律**走 `map/export.py` 的四个函数，禁止手拼
+`json.loads(gzip...)`：
+
+| 函数 | 用途 |
+|------|------|
+| `save_cvt_mesh(path, mesh)` | 规范写：JSON 文本中间层（保 4 位小数截断 + 非有限→null 语义）→ msgpack → gzip；顺带删除同目录 legacy `cvt_mesh.json`（防双网格漂移） |
+| `load_cvt_mesh(path) -> dict` | 嗅探读：gzip→（JSON 文本 或 msgpack）→ dict |
+| `load_cvt_mesh_model(path) -> CVTMesh` | 同上但校验为模型；legacy JSON 走 pydantic-core `validate_json` 快路径 |
+| `find_mesh_file(dir)` / `iter_mesh_files(base)` | 定位网格文件（canonical 优先，legacy 回退；跳过 `_` 前缀草稿目录） |
+
+**迁移**：零重建——旧世界的 gzip-JSON / 纯 JSON 文件由嗅探读端透明支持，
+下次该层重建或引擎写回时自动转为规范格式。**服务链**：API `cvt-mesh` 端点对
+规范文件字节直发（`Content-Encoding: gzip`，浏览器原生解压，后端零解析——
+此前每请求 gunzip+json.loads 全量 earth ≈ 5 s CPU）；静态导出直接拷贝规范文件，
+前端 `DecompressionStream` + 既有 msgpack worker 解码（不再主线程 parse 300 MB
+纯 JSON）。大小与旧格式相当（gzip 是主要压缩项，容器格式影响 ±20% 内容依赖）。
 
 ## 后端模块
 
@@ -197,7 +217,9 @@ maps/
 **OpenAPI 描述不承载、需要在此记录的约定**：
 
 - 所有端点支持 `?branch=xxx` 查询参数指定分支（沿 `LayerResolver` 继承链解析）。
-- `cvt-mesh` 的 `fmt=msgpack` 返回压缩二进制（前端透明解压，兼容纯 JSON）。
+- `cvt-mesh` 的 `fmt=msgpack`：规范文件字节直发并附 `Content-Encoding: gzip`
+  （浏览器透明解压，后端零解析）；legacy gzip-JSON 文件则解码后重打包为
+  msgpack（纯 JSON 文本从不上 msgpack 线格式）。
 - `climate-monthly` 返回 `climate_monthly.msgpack` 原始字节（N×12 场，int16 量化）；
   **月序约定：索引 0 = 三月**（引擎年从春分起算，前端月份标签按此排列）。
 - `climate-yearly` 返回 `climate_yearly.msgpack` 原始字节（N 个 per-cell UCC 连续
