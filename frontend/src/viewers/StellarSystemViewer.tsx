@@ -25,10 +25,11 @@ import OrbitLine from './OrbitLine'
 import HabitableZoneRing from './HabitableZoneRing'
 import InfoPanel from './InfoPanel'
 import ErrorBoundary from '../components/ErrorBoundary'
-import { computeOrbitalPosition, earthRadiiToAU } from './utils/scale'
+import { computeOrbitalPosition, earthRadiiToAU, solarRadiiToAU } from './utils/scale'
 import type { StarData } from './StarMesh'
 import type { PlanetData, OrbitalElementsData } from './PlanetMesh'
 import type { SelectedBody } from './InfoPanel'
+import type { CatalogBody, CatalogStar } from '../api/catalogAdapter'
 import type { CVTMesh } from './map/types'
 
 type Vec3 = [number, number, number]
@@ -74,8 +75,14 @@ interface StellarSystemViewerProps {
   mapPlanetIds?: Set<string>
   /** Planet ID to auto-focus camera on when the scene loads. */
   focusPlanetId?: string
+  /** Imperative focus request (body-selector dropdown): fly to the body + dolly. */
+  focusRequest?: { id: string; nonce: number } | null
   /** CVT mesh for the currently selected planet — enables terrain summary in InfoPanel. */
   selectedPlanetCvtMesh?: CVTMesh | null
+  /** System-catalog entries by body id — enriches the InfoPanel (orbit/derived fields). */
+  bodyCatalog?: Map<string, CatalogBody>
+  /** System-catalog entries by star id — enriches the InfoPanel (age/HZ fields). */
+  starCatalog?: Map<string, CatalogStar>
   /** Called when the user selects or deselects a body. */
   onSelectionChange?: (body: SelectedBody) => void
 }
@@ -218,6 +225,7 @@ function Scene({
   onControlsChange,
   focusTargetRef,
   focusedRadiusRef,
+  focusDollyRef,
   focusPlanetId,
 }: {
   /** Planet ID to auto-focus on initial load. */
@@ -235,6 +243,8 @@ function Scene({
   onControlsChange: () => void
   focusTargetRef: React.MutableRefObject<THREE.Vector3 | null>
   focusedRadiusRef: React.MutableRefObject<number | null>
+  /** When true, the focus flight also dollies the camera to close range. */
+  focusDollyRef: React.MutableRefObject<boolean>
 }) {
   const orbits = stellar?.orbits ?? []
   const hzData = useMemo(() => resolveHZ(habitableZones), [habitableZones])
@@ -287,10 +297,32 @@ function Scene({
     const target = focusTargetRef.current
     if (target) {
       controls.target.lerp(target, 0.06)
-      // Snap when close enough to avoid endless micro-movement
-      if (controls.target.distanceTo(target) < 0.0001) {
+
+      // Optional dolly (InfoPanel "focus & zoom in"): pull the camera to a
+      // comfortable multiple of the focused body's real radius.
+      let dollyPos: THREE.Vector3 | null = null
+      if (focusDollyRef.current && focusedR != null) {
+        const desiredDist = Math.max(focusedR * 4, controls.minDistance * 1.1)
+        const cam = controls.object as THREE.PerspectiveCamera
+        const dir = cam.position.clone().sub(controls.target)
+        if (dir.lengthSq() > 1e-24) {
+          dollyPos = target.clone().add(dir.normalize().multiplyScalar(desiredDist))
+          cam.position.lerp(dollyPos, 0.08)
+        }
+      }
+
+      // Snap when close enough to avoid endless micro-movement.  The
+      // tolerance is radius-relative so tiny bodies (Earth ≈ 4.3e-5 AU)
+      // snap precisely while stars keep the historical ~1e-4 AU.
+      const snapTol = Math.max(1e-5, (focusedR ?? 0.005) * 0.02)
+      const cam = controls.object as THREE.Camera
+      if (
+        controls.target.distanceTo(target) < snapTol &&
+        (!dollyPos || cam.position.distanceTo(dollyPos) < snapTol)
+      ) {
         controls.target.copy(target)
         focusTargetRef.current = null
+        focusDollyRef.current = false
       }
     }
   })
@@ -300,20 +332,28 @@ function Scene({
     focusedRadiusRef.current = radiusAU
   }, [])
 
-  // Auto-focus on a specific planet when navigating from globe view
+  // Auto-focus on a specific body when navigating from globe view or when
+  // the ?focus= parameter changes (selection keeps it in sync).  Covers
+  // stars too — the Sun is a valid focus target.
   useEffect(() => {
     if (!focusPlanetId) return
     const pos = positionMap.get(focusPlanetId)
     if (!pos) return
     const body = allBodies.find((b) => b.id === focusPlanetId)
-    if (!body) return
+    const star = stellar?.stars?.find((s) => s.id === focusPlanetId)
+    if (!body && !star) return
+    const radiusAU = body
+      ? earthRadiiToAU(body.radius)
+      : star?.radius != null
+        ? solarRadiiToAU(star.radius)
+        : null
     // Small delay to let the scene initialise before flying
     const id = setTimeout(() => {
       focusTargetRef.current = new THREE.Vector3(pos[0], pos[1], pos[2])
-      focusedRadiusRef.current = earthRadiiToAU(body.radius)
+      focusedRadiusRef.current = radiusAU
     }, 200)
     return () => clearTimeout(id)
-  }, [focusPlanetId, positionMap, allBodies, focusTargetRef, focusedRadiusRef])
+  }, [focusPlanetId, positionMap, allBodies, stellar?.stars, focusTargetRef, focusedRadiusRef])
 
   return (
     <>
@@ -404,7 +444,10 @@ export default function StellarSystemViewer({
   branchQS,
   mapPlanetIds,
   focusPlanetId,
+  focusRequest,
   selectedPlanetCvtMesh,
+  bodyCatalog,
+  starCatalog,
   onSelectionChange,
 }: StellarSystemViewerProps) {
   const { t } = useTranslation('map')
@@ -415,6 +458,10 @@ export default function StellarSystemViewer({
   // Drives dynamic OrbitControls.minDistance so small bodies remain reachable
   // and large bodies (stars) can't be zoomed into.
   const focusedRadiusRef = useRef<number | null>(null)
+  // Set alongside a focus flight to also dolly the camera to close range
+  // (the InfoPanel "focus & zoom in" button).  Double-click focus and the
+  // ?focus= auto-flight only recenter, they don't change the zoom level.
+  const focusDollyRef = useRef(false)
   const [cameraDist, setCameraDist] = useState(0)
 
   // The page passes the catalog's merged body list (stellar.yaml +
@@ -444,6 +491,54 @@ export default function StellarSystemViewer({
     }
   }, [])
 
+  // Fly the camera to a body (planet/moon or star); with `dolly`, pull in
+  // to ~4× its real radius.  Shared by the InfoPanel button and the page's
+  // body-selector dropdown.
+  const focusBody = useCallback((id: string, dolly: boolean) => {
+    const pos = positionMap.get(id)
+    if (!pos) return
+    let radiusAU: number | null = null
+    const body = allBodies.find((b) => b.id === id)
+    if (body) {
+      radiusAU = earthRadiiToAU(body.radius)
+    } else {
+      const star = stellar?.stars?.find((s) => s.id === id)
+      if (star?.radius != null) radiusAU = solarRadiiToAU(star.radius)
+    }
+    focusTargetRef.current = new THREE.Vector3(pos[0], pos[1], pos[2])
+    focusedRadiusRef.current = radiusAU
+    focusDollyRef.current = dolly
+  }, [positionMap, allBodies, stellar?.stars])
+
+  // InfoPanel "focus & zoom in": recenter on the selected body and dolly
+  // to ~4× its real radius (vs. wheel zooming from system scale).
+  const handlePanelFocus = useCallback(() => {
+    if (!selected) return
+    focusBody(selected.data.id, true)
+  }, [selected, focusBody])
+
+  // Dropdown focus requests: each new nonce flies (and dollies) once.
+  const lastFocusNonceRef = useRef(0)
+  useEffect(() => {
+    if (!focusRequest || focusRequest.nonce === lastFocusNonceRef.current) return
+    lastFocusNonceRef.current = focusRequest.nonce
+    focusBody(focusRequest.id, true)
+  }, [focusRequest, focusBody])
+
+  // InfoPanel enrichment: catalog entries + orbit-derived context
+  const selectedCatalogBody =
+    selected?.type === 'planet' ? bodyCatalog?.get(selected.data.id) : undefined
+  const selectedCatalogStar =
+    selected?.type === 'star' ? starCatalog?.get(selected.data.id) : undefined
+  const selectedOrbit = selected ? orbitMap.get(selected.data.id) : undefined
+  const selectedParentName = selectedOrbit
+    ? bodyCatalog?.get(selectedOrbit.parent_id)?.name ??
+      starCatalog?.get(selectedOrbit.parent_id)?.name
+    : undefined
+  const selectedSatelliteCount = selected
+    ? satelliteCountMap.get(selected.data.id) ?? 0
+    : 0
+
   if (!stellar?.stars?.length) {
     return (
       <div className="glass-panel p-8 text-center text-gray-400">
@@ -465,7 +560,11 @@ export default function StellarSystemViewer({
   }
 
   return (
-    <div className="relative w-full" style={{ height: '70vh', minHeight: '500px' }}>
+    // Fill the page's flex-1 wrapper — a fixed 70vh here left a large blank
+    // strip at the bottom on tall desktop windows (the wrapper is taller
+    // than 70vh whenever the viewport is).  The minHeight fallback keeps
+    // the canvas near-fullscreen even if a parent chain loses its height.
+    <div className="relative w-full h-full" style={{ minHeight: 'calc(100vh - 140px)' }}>
       <ErrorBoundary message={t('viewer.renderError')}>
         <Suspense
           fallback={
@@ -512,6 +611,7 @@ export default function StellarSystemViewer({
               onControlsChange={handleControlsChange}
               focusTargetRef={focusTargetRef}
               focusedRadiusRef={focusedRadiusRef}
+              focusDollyRef={focusDollyRef}
             />
           </Canvas>
         </Suspense>
@@ -528,6 +628,11 @@ export default function StellarSystemViewer({
         branchQS={branchQS}
         mapPlanetIds={mapPlanetIds}
         cvtMesh={selectedPlanetCvtMesh}
+        catalogBody={selectedCatalogBody}
+        catalogStar={selectedCatalogStar}
+        parentName={selectedParentName}
+        satelliteCount={selectedSatelliteCount}
+        onFocus={handlePanelFocus}
       />
 
       {/* HUD overlays */}

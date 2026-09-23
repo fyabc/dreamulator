@@ -29,7 +29,7 @@ frontend/src/viewers/
 ```
 API / 静态 JSON
     ↓
-WorldDetail.tsx  ──useQuery──→  stellar / planets / habitableZones
+StellarSystemViewerPage.tsx  ──useQuery──→  systemCatalog（恒星/轨道/天体单一合并源）
     ↓
 StellarSystemViewer
     ├── allBodies = planets[] + stellar.bodies[]   ← 合并行星 + 卫星/小行星（按 id 去重，planets 优先）
@@ -38,7 +38,7 @@ StellarSystemViewer
     ├── OrbitLine[]       ← stellar.orbits[] + parentPosition
     ├── PlanetMesh[]      ← allBodies + positionMap + declutter
     ├── HabitableZoneRing ← habitableZones
-    └── InfoPanel         ← selected body state
+    └── InfoPanel         ← selected body state + catalog 查表（富字段分组）
 ```
 
 ### 组件职责
@@ -47,9 +47,13 @@ StellarSystemViewer
 
 主容器组件，负责：
 - `<Canvas>` 设置（`logarithmicDepthBuffer`、相机参数、色调映射）
+- 容器 `h-full` 填满页面 flex 布局的剩余高度（`minHeight: calc(100vh - 140px)`
+  兜底——固定 `70vh` 会在高窗口下留出底部空白条）
 - 场景灯光和背景星场（drei `<Stars>`）
 - `<OrbitControls>` 相机控制（maxDistance: 200 AU；minDistance 动态计算：聚焦天体时 = 1.5 × 天体真实半径，无焦点时 = 0.005 AU）
-- **双击聚焦**：`focusTargetRef` + `useFrame` 中 `controls.target.lerp()` 平滑飞向目标天体
+- **聚焦飞行**：`focusTargetRef` + `useFrame` 中 `controls.target.lerp()` 平滑飞向
+  目标天体；`focusDollyRef` 置位时（InfoPanel「聚焦并拉近」按钮）同时把相机
+  拉到 ~4× 天体真实半径，吸附容差按半径相对化（小天体精确定位）
 - 组装所有子组件
 - HUD 覆盖层（视距显示、图例）
 
@@ -80,6 +84,28 @@ StellarSystemViewer
 - 十字准星为白色细线（Space Engine 风格），选中时略大且更亮
 - 支持 subtitle 行（显示光谱类型/温度/行星类型等）
 - 单击触发 `onClick`（选中天体），双击触发 `onDoubleClick`（聚焦镜头）
+
+#### InfoPanel
+
+选中天体的详情面板（右下角 HTML overlay，`w-80` + `max-h-[70vh]` 滚动）。
+字段分组参照业界惯例（2026-09-23 调研：NASA Eyes "vital statistics" 的
+物理分组与 day/year/moons/atmosphere、Stellarium 天体信息窗的轨道根数 +
+物理星历、Celestia HUD 的半径/质量/恒星日/温度/光度读出）：
+
+| 分组 | 字段（有则显示） | 来源 |
+|------|-----------------|------|
+| 概览 | 类型、质量、半径（R⊕ + km）、反照率、卫星数 | PlanetData + catalog |
+| 轨道 | 绕行天体、半长轴（AU + Mkm/km）、偏心率、倾角、公转周期 | catalog `orbit` |
+| 物理 | 表面重力（m/s² + g）、磁场（µT） | catalog `physical` |
+| 自转与季节 | 自转周期、潮汐锁定、太阳日、轴倾角、年长度、季节长度、极圈纬度 | catalog `derived` |
+| 大气与水文 | 气压、温室增温、成分 top-3、水覆盖率、盐度、平均海深 | catalog `atmosphere`/`hydrosphere` |
+| 辐照与温度 | 恒星辐照（W/m² + ×Earth）、平衡温度、宜居带归属 | catalog `derived` |
+| 岩石圈 | 板块构造、板块数、火山活动 | catalog `lithosphere` |
+| 🌍 地形数据 | 海陆比、面积、高程范围、板块/网格数（折叠） | CVT mesh |
+| 动作 | 🎯 聚焦并拉近 / 🌐 3D 球面 / 🗺️ 2D 地图 | — |
+
+恒星面板：光谱型、温度、半径、光度、质量 + 演化分组（年龄、主序寿命、
+演化进度）+ 宜居带分组（范围、中心）。
 
 #### 工具模块
 
@@ -246,11 +272,44 @@ catalog body 的 `hydrosphere.water_coverage`，缺省或 <0.5% = 无水）：
 
 在静态模式下，这些端点由 `frontend/public/data/` 中预导出的 JSON 文件提供（通过 `scripts/release/export_static.py` 生成）。
 
+## 选中 / 聚焦与 URL 状态同步
+
+- **单击** = 选中天体（弹 InfoPanel）+ 镜头飞向居中；选中态写入 URL 的
+  `?focus=<body_id>`（`replace` 不污染历史），取消选中则删除——刷新/分享
+  链接可回到同一聚焦视野（`?focus=` 同时驱动 Scene 的自动聚焦 effect，
+  恒星 id 也合法）。
+- **双击** = 立即居中（不改变缩放距离）；与单击的飞行同路径
+  （`focusTargetRef`）。
+- **InfoPanel 🎯 按钮** = 居中 + 拉近（`focusDollyRef` → 相机 lerp 到
+  ~4× 天体真实半径），替代滚轮从系统尺度逐级缩放。
+- 页首天体下拉以 optgroup 列出恒星与全部天体；选中项始终与 `?focus=`
+  一致，且**所有条目统一为聚焦并拉近**（`focusRequest` 命令式请求 →
+  `focusBody(id, dolly=true)`，与 InfoPanel 按钮同路径）；🌐 后缀仅标记
+  有地图数据，进入球面/地图走 InfoPanel 按钮。
+
+## 角落控件候选清单（设计盘点，未实现）
+
+参照 Celestia / Stellarium / NASA Eyes / Space Engine 的常用角落控件盘点，
+实现优先级待议（与「时间动画」扩展方向强相关者依赖时间系统）：
+
+| 候选控件 | 参照 | 依赖 | 备注 |
+|---------|------|------|------|
+| 时间控制条（播放/暂停/倍速/日期） | NASA Eyes、Celestia | 时间动画 | 天体轨道运动（现仅 epoch 位置）|
+| 回全景 / 回主星按钮 | Celestia（GoTo）、NASA Eyes | 无 | 一键回到系统概览或恒星 |
+| 轨道线开关 | Celestia、Stellarium | 无 | 密集系统（卫星/小行星）降噪 |
+| 标签开关 / 阈值滑杆 | Space Engine、Stellarium | 无 | 标签全隐藏或调整去重叠阈值 |
+| 宜居带/凝结线开关 | — | 无 | 现仅图例，无开关 |
+| 黄道网格 / 天球坐标网格 | Stellarium、Celestia | 无 | 轨道倾角的直观参照 |
+| 天体目录/搜索面板 | Celestia Solar Browser、Stellarium 搜索 | 无 | 大系统（太阳系 16+ 天体）导航 |
+| 截图导出 | Stellarium、Celestia | 无 | Canvas `toDataURL` 即可 |
+| 全屏切换 | 通用 | 无 | 浏览器 F11 之外的应用内按钮 |
+| 视距标尺（AU 比例尺） | NASA Eyes | 无 | 现有视距 HUD 的图形化 |
+
 ## 扩展方向
 
 - **多恒星系统**：当前已支持多星渲染（`stellar.stars[]`），但轨道力学仅处理行星绕单星
 - **~~卫星~~**：✅ 已实现 — `StellarSystem.bodies[]` + 层级位置解算 + 标签去重叠
-- **时间动画**：轨道运动动画（当前只显示 epoch 位置）
+- **时间动画**：轨道运动动画（当前只显示 epoch 位置）；也是时间控制条控件的前置
 - **大气光谱**：根据大气成分渲染行星大气层颜色
 - **~~表面纹理~~**：✅ 已实现（Route C，见「天体表面纹理」节）——真实高程
   烘焙 + 水/无水双配色板；程序化水/陆/冰分布不再是方向

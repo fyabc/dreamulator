@@ -36,7 +36,13 @@ export interface CatalogBodyDerived {
   equilibrium_temperature_k?: number
   solar_day_days?: number | null
   days_per_year?: number
+  season_length_days?: number
+  polar_circle_latitude_deg?: number
+  polar_day_at_pole_days?: number
   in_conservative_habitable_zone?: boolean
+  hill_radius_km?: number
+  synchronous_orbit_radius_km?: number
+  synchronous_over_hill?: number
 }
 
 export interface CatalogBody {
@@ -65,8 +71,16 @@ export interface CatalogBody {
     composition?: Record<string, number>
     greenhouse_factor?: number
   }
-  hydrosphere?: { water_coverage?: number }
-  lithosphere?: Record<string, unknown>
+  hydrosphere?: {
+    water_coverage?: number
+    salinity_ppt?: number
+    ocean_depth_km?: number
+  }
+  lithosphere?: {
+    has_plate_tectonics?: boolean
+    num_plates?: number
+    volcanic_activity?: number
+  }
   magnetic_field_strength_ut?: number
   description?: Record<string, string>
   derived?: CatalogBodyDerived
