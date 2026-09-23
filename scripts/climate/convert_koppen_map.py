@@ -141,7 +141,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--mesh",
-        default="data/worlds/earth/branches/climate-dev/maps/planet_earth/cvt_mesh.json",
+        default="data/worlds/earth/branches/climate-dev/maps/planet_earth",
         help="Path to CVT mesh JSON (Earth baseline, default 200k in climate-dev)",
     )
     parser.add_argument(
@@ -155,6 +155,11 @@ def main() -> None:
     # Find project root
     project_root = _find_project_root()
     mesh_path = project_root / args.mesh
+    if not mesh_path.exists():
+        _mf = find_mesh_file(mesh_path.parent)
+        if _mf is None:
+            raise SystemExit(f"no mesh file near {mesh_path}")
+        mesh_path = _mf
     output_path = project_root / args.output
 
     if not mesh_path.exists():
@@ -174,10 +179,10 @@ def main() -> None:
 
     # Load CVT mesh
     print(f"Loading CVT mesh from: {mesh_path}")
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
     from dreamulator.map.models import CVTMesh
 
-    mesh = CVTMesh(**json.loads(decompress_mesh_bytes(mesh_path.read_bytes())))
+    mesh = CVTMesh(**load_cvt_mesh(mesh_path))
     print(f"  Mesh: {mesh.num_cells} cells")
 
     # Sample

@@ -3,7 +3,7 @@
 ``nearest_cell`` / ``cell_facts`` 是锚点空间查询的通用工具：给定 (lon, lat)，
 用 KD-tree（``build_export_tree``）找最近 cell，返回其事实。**纯函数、显式依赖**
 （mesh + tree 由调用方传入），缓存由调用方（skill/CLI/API）管理——不在这里隐式
-加载 cvt_mesh.json。
+加载网格文件（cvt_mesh.msgpack.gz，嗅探兼容旧 cvt_mesh.json）。
 """
 
 from __future__ import annotations

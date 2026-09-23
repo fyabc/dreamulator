@@ -227,11 +227,11 @@ class MapManager:
                 return VoronoiNetwork.model_validate(data)
 
         # Fall back to CVT mesh format — convert to VoronoiNetwork
-        cvt_path = map_dir / "cvt_mesh.json"
-        if cvt_path.exists():
-            from .export import decompress_mesh_bytes
+        from .export import find_mesh_file, load_cvt_mesh
 
-            cvt_data = json.loads(decompress_mesh_bytes(cvt_path.read_bytes()))
+        cvt_path = find_mesh_file(map_dir)
+        if cvt_path is not None:
+            cvt_data = load_cvt_mesh(cvt_path)
             if cvt_data is not None:
                 return self._cvt_mesh_to_voronoi_network(cvt_data)
 

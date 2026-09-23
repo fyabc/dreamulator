@@ -11,7 +11,6 @@ This module provides:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
@@ -286,13 +285,10 @@ def climate_import_elevation(
     # CVT mesh
     if not skip_mesh:
         mesh = build_cvt_mesh_from_grid(elevation, mesh_nodes, seed)
-        mesh_json = mesh.model_dump()
-        mesh_path = output_dir / "cvt_mesh.json"
-        from dreamulator.map.export import compress_mesh_bytes
+        from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
 
-        mesh_path.write_bytes(
-            compress_mesh_bytes(json.dumps(mesh_json, indent=2, default=str).encode("utf-8"))
-        )
+        mesh_path = output_dir / MESH_FILENAME
+        save_cvt_mesh(mesh_path, mesh)
         mesh_size_mb = mesh_path.stat().st_size / (1024 * 1024)
         console.print(f"  Saved CVT mesh: {mesh_path.name} ({mesh_size_mb:.1f} MB)")
 

@@ -1,7 +1,7 @@
 """Station diagnostics — model vs observed monthly climate at reference stations.
 
 Reads the model's monthly temperature / precipitation / wind from a world's map
-directory (``cvt_mesh.json`` + ``climate_monthly.msgpack``) and samples them at a
+directory (mesh file + ``climate_monthly.msgpack``) and samples them at a
 set of reference stations, then prints a per-station comparison against observed
 monthly climatology.
 
@@ -194,14 +194,17 @@ def main() -> None:
         print(__doc__)
         sys.exit(1)
     map_dir = Path(sys.argv[1])
-    mesh_path = map_dir / "cvt_mesh.json"
+    mesh_path = find_mesh_file(map_dir)
     monthly_path = map_dir / "climate_monthly.msgpack"
-    if not mesh_path.exists() or not monthly_path.exists():
+    if mesh_path is None or not monthly_path.exists():
         print(f"missing {mesh_path} or {monthly_path}")
         sys.exit(1)
 
-    with gzip.open(mesh_path, "rb") as f:
-        mesh = json.load(f)
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+
+    mesh_path = find_mesh_file(map_dir)
+    assert mesh_path is not None
+    mesh = load_cvt_mesh(mesh_path)
     cells = mesh["cells"]
     n = mesh["num_cells"]
     xyz = np.array([[c["x"], c["y"], c["z"]] for c in cells])

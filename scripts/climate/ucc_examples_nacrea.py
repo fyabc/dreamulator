@@ -38,7 +38,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 from dreamulator.map.ucc import status_short  # noqa: E402
 
 _DEFAULT_MAP = Path("data/worlds/nacrea/maps/satellite_nacrea")
@@ -128,7 +128,9 @@ def main() -> None:
     t_monthly, p_monthly = _load_monthly(map_dir / "climate_monthly.msgpack")
 
     print("Reading mesh (lat/lon/water_class/elevation) — full JSON parse, ~1 min …")
-    mesh = json.loads(decompress_mesh_bytes((map_dir / "cvt_mesh.json").read_bytes()))
+    _mf = find_mesh_file(map_dir)
+    assert _mf is not None, "no mesh file under {map_dir}"
+    mesh = load_cvt_mesh(_mf)
     cells = mesh["cells"]
     lat = np.array([c["lat"] for c in cells], dtype=np.float64)
     lon = np.array([c["lon"] for c in cells], dtype=np.float64)
@@ -334,7 +336,7 @@ status: accepted
 > `uv run python scripts/climate/ucc_examples_nacrea.py`
 > 数据 = 正典构建导出 `maps/satellite_nacrea/climate_yearly.msgpack`
 > （引擎输出，`data_source: model`，profile {profile}）+ `climate_monthly.msgpack`
-> + `cvt_mesh.json`。描述量与分类语义见
+> + 网格文件。描述量与分类语义见
 > `docs/knowledge/climatology/ucc_climate_descriptors.md`；Earth 侧对照例见
 > `data/worlds/earth/design-notes/ucc-worked-examples.md`。
 > 生成日期：{today}。

@@ -40,7 +40,7 @@ class GeologicalEngine(BaseEngine):
     optional_input_files = ["terrain_config.yaml", "geography.yaml"]
     output_files = [
         "maps/{planet_id}/elevation.png",
-        "maps/{planet_id}/cvt_mesh.json",
+        "maps/{planet_id}/cvt_mesh.msgpack.gz",
         "maps/{planet_id}/plates.json",
         "maps/{planet_id}/map.yaml",
     ]
@@ -95,7 +95,7 @@ class GeologicalEngine(BaseEngine):
                     warnings=warnings
                     + [
                         f"Imported terrain for planet '{planet_id}' not found "
-                        f"(no cvt_mesh.json under {expected}).\n"
+                        f"(no mesh file under {expected}).\n"
                         "Imported maps are gitignored regenerable products; restore them "
                         f"before building:\n{restore}",
                     ],
@@ -109,7 +109,7 @@ class GeologicalEngine(BaseEngine):
                 success=True,
                 output_files=[
                     f"maps/{planet_id}/elevation.png",
-                    f"maps/{planet_id}/cvt_mesh.json",
+                    f"maps/{planet_id}/cvt_mesh.msgpack.gz",
                     f"maps/{planet_id}/plates.json",
                     f"maps/{planet_id}/map.yaml",
                 ],
@@ -199,7 +199,7 @@ class GeologicalEngine(BaseEngine):
 
         output_files = [
             f"maps/{planet_id}/elevation.png",
-            f"maps/{planet_id}/cvt_mesh.json",
+            f"maps/{planet_id}/cvt_mesh.msgpack.gz",
             f"maps/{planet_id}/plates.json",
             f"maps/{planet_id}/map.yaml",
         ]
@@ -225,13 +225,15 @@ class GeologicalEngine(BaseEngine):
         return bool(self.output_paths())
 
     def output_paths(self) -> list[Path]:
-        """Resolved geological outputs: any ``cvt_mesh.json`` under maps/.
+        """Resolved geological outputs: any mesh file under maps/.
 
-        The planet id varies per world, so scan rather than enumerate.
+        The planet id varies per world, so scan rather than enumerate
+        (both generations — canonical ``cvt_mesh.msgpack.gz`` and legacy
+        ``cvt_mesh.json`` — count as present).
         """
-        if not self.maps_output_dir.exists():
-            return []
-        return list(self.maps_output_dir.glob("*/cvt_mesh.json"))
+        from dreamulator.map.export import iter_mesh_files
+
+        return iter_mesh_files(self.maps_output_dir)
 
     def _load_config(
         self, pars: dict[str, object]
@@ -334,13 +336,15 @@ class GeologicalEngine(BaseEngine):
                 return str(planets[0]["id"])
 
         # Fallback: check existing maps directories
+        from dreamulator.map.export import find_mesh_file
+
         for layer_dirs in (self.layer_input_dirs, self.layer_derived_dirs):
             geo_dir = layer_dirs.get("geological")
             if geo_dir:
                 maps_dir = geo_dir / "maps"
                 if maps_dir.exists():
                     for d in maps_dir.iterdir():
-                        if d.is_dir() and (d / "cvt_mesh.json").exists():
+                        if d.is_dir() and find_mesh_file(d) is not None:
                             return d.name
 
         return "earth"
@@ -352,17 +356,14 @@ class GeologicalEngine(BaseEngine):
         root world's maps (branch inheritance), then a non-scratch glob
         fallback for single-planet worlds.  Returns None when nothing exists.
         """
-        candidates = [
-            self.maps_output_dir / planet_id / "cvt_mesh.json",
-            self.world_dir / "maps" / planet_id / "cvt_mesh.json",
-        ]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
+        from dreamulator.map.export import find_mesh_file, iter_mesh_files
+
         for base in (self.maps_output_dir, self.world_dir / "maps"):
-            if not base.exists():
-                continue
-            meshes = [p for p in base.glob("*/cvt_mesh.json") if not p.parent.name.startswith("_")]
+            exact = find_mesh_file(base / planet_id)
+            if exact is not None:
+                return exact
+        for base in (self.maps_output_dir, self.world_dir / "maps"):
+            meshes = iter_mesh_files(base)
             if meshes:
                 return meshes[0]
         return None

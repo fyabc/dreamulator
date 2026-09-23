@@ -31,7 +31,6 @@ Downloaded from https://www.soest.hawaii.edu/pwessel/gshhg/ (LGPL-3).
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import tempfile
 import zipfile
@@ -106,12 +105,13 @@ def ensure_gshhg(cache: Path | None = None) -> tuple[Path, Path, Path]:
 
 def import_earth_watermask(output_dir: Path, *, cache: Path | None = None) -> None:
     """Classify each cell's ``water_class`` from GSHHG and write it back."""
-    from dreamulator.map.export import compress_mesh_bytes, decompress_mesh_bytes
-    from dreamulator.map.models import CVTMesh
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model, save_cvt_mesh
 
-    mesh_path = output_dir / "cvt_mesh.json"
-    if not mesh_path.exists():
-        raise FileNotFoundError(f"{mesh_path} not found — run the ETOPO1 elevation importer first.")
+    mesh_path = find_mesh_file(output_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(
+            f"no mesh file under {output_dir} — run the ETOPO1 elevation importer first."
+        )
 
     land_shp, lake_shp, ice_shp = ensure_gshhg(cache)
     land_polys = read_shp_polygons(land_shp.read_bytes())
@@ -122,7 +122,7 @@ def import_earth_watermask(output_dir: Path, *, cache: Path | None = None) -> No
     land_polys = land_polys + ice_polys
     print(f"Parsed GSHHG: {len(land_polys)} land polygons (+ice front), {len(lake_polys)} lakes")
 
-    mesh = CVTMesh.model_validate(json.loads(decompress_mesh_bytes(mesh_path.read_bytes())))
+    mesh = load_cvt_mesh_model(mesh_path)
     lons = np.array([c.lon for c in mesh.cells], dtype=np.float64)
     lats = np.array([c.lat for c in mesh.cells], dtype=np.float64)
 
@@ -145,10 +145,8 @@ def import_earth_watermask(output_dir: Path, *, cache: Path | None = None) -> No
     land_pct = 100 * n_land / len(mesh.cells)
     print(f"Assigned water_class: {n_land}/{len(mesh.cells)} land ({land_pct:.1f}%)")
 
-    mesh_path.write_bytes(
-        compress_mesh_bytes(json.dumps(mesh.model_dump(mode="json")).encode("utf-8"))
-    )
-    print(f"  Updated cvt_mesh.json: {mesh_path}")
+    save_cvt_mesh(mesh_path, mesh)
+    print(f"  Updated {mesh_path.name}: {mesh_path}")
 
 
 def _find_project_root() -> Path:
@@ -167,7 +165,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="data/worlds/earth/maps/planet_earth",
-        help="Map output directory (must contain cvt_mesh.json from the elevation import)",
+        help="Map output directory (must contain a mesh file from the elevation import)",
     )
     args = parser.parse_args()
     output_dir = _find_project_root() / args.output_dir

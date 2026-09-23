@@ -351,7 +351,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    直接在 `data/worlds` 构建（输出被 ignore、不污染工作区）；发版前跑
    `uv run python scripts/release/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
    tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
-   input 改动**，否则 Pages 拿到旧数据。读取 mesh 仍用 `decompress_mesh_bytes`（透明解压，兼容纯 JSON）。
+   input 改动**，否则 Pages 拿到旧数据。mesh 盘上格式 = `cvt_mesh.msgpack.gz`（gzip 帧msgpack）；读写一律走 `map/export.py` 的 `save_cvt_mesh` / `load_cvt_mesh` / `load_cvt_mesh_model` /`find_mesh_file`（嗅探兼容旧 gzip-JSON / 纯 JSON `cvt_mesh.json`，零迁移）。
 
 ### 气候修改差异对比
 

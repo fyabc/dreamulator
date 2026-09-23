@@ -32,12 +32,13 @@ from dreamulator.engine.habitability import (
 )
 from dreamulator.engine.physical_inputs import load_planet_for_engine
 from dreamulator.engine.seed_discovery import discover_seed_candidates
-from dreamulator.map.models import CVTMesh
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.models.layers import Layer
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from dreamulator.map.models import CVTMesh
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class CivilizationEngine(BaseEngine):
                temperature_hottest_month_C, distance_to_coast_km) exist.
             3. Resolve planet id/name for the summary.
             4. Per cell: habitable_coast / agricultural_core booleans.
-            5. Write fields back to cvt_mesh.json + habitability_summary.yaml.
+            5. Write fields back to the mesh file + habitability_summary.yaml.
 
         Returns
         -------
@@ -225,29 +226,25 @@ class CivilizationEngine(BaseEngine):
 def _write_mesh_with_habitability(
     mesh: CVTMesh, maps_output_dir: Path, planet_id: str | None
 ) -> None:
-    """Write the habitability-populated mesh back to cvt_mesh.json.
+    """Write the habitability-populated mesh back to the canonical mesh file.
 
     Overwrites the existing mesh file in place (matching the climate and ecology
     engines) so the frontend and downstream engines see the new fields.
     """
-    from pydantic import TypeAdapter
-
-    mesh_bytes = TypeAdapter(CVTMesh).dump_json(mesh)
-    from ..map.export import _truncate_float_precision, compress_mesh_bytes
-
-    mesh_bytes = _truncate_float_precision(mesh_bytes)
-    mesh_bytes = compress_mesh_bytes(mesh_bytes)
+    from ..map.export import LEGACY_MESH_FILENAME, MESH_FILENAME, iter_mesh_files, save_cvt_mesh
 
     if planet_id is not None:
-        target = maps_output_dir / planet_id / "cvt_mesh.json"
-        if target.exists():
-            target.write_bytes(mesh_bytes)
+        target = maps_output_dir / planet_id / MESH_FILENAME
+        legacy = maps_output_dir / planet_id / LEGACY_MESH_FILENAME
+        if target.exists() or legacy.exists():
+            save_cvt_mesh(target, mesh)  # also removes the legacy twin
             logger.info("Updated mesh with habitability data: %s", target)
             return
 
-    for mesh_path in maps_output_dir.glob("*/cvt_mesh.json"):
-        mesh_path.write_bytes(mesh_bytes)
-        logger.info("Updated mesh with habitability data: %s", mesh_path)
+    for mesh_path in iter_mesh_files(maps_output_dir):
+        canonical = mesh_path.with_name(MESH_FILENAME)
+        save_cvt_mesh(canonical, mesh)
+        logger.info("Updated mesh with habitability data: %s", canonical)
 
 
 def _load_cvt_mesh(engine: CivilizationEngine) -> tuple[CVTMesh | None, list[str]]:

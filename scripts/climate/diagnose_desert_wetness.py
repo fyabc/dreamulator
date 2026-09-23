@@ -105,8 +105,12 @@ _CURRENT_BOXES = [
 
 def _load_archive(map_dir: Path) -> dict[str, np.ndarray]:
     """Fast raw-JSON mesh load (no pydantic) + per-cell GPCP/NCEP obs."""
-    with gzip.open(map_dir / "cvt_mesh.json", "rb") as f:
-        mesh = json.load(f)
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+
+    mesh_path = find_mesh_file(map_dir)
+    if mesh_path is None:
+        raise FileNotFoundError(f"no mesh file under {map_dir}")
+    mesh = load_cvt_mesh(mesh_path)
     cells = mesh["cells"]
 
     def _f(key: str) -> np.ndarray:

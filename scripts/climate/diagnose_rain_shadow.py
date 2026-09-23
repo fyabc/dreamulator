@@ -42,11 +42,11 @@ def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None):
     if branch:
         search_dirs.insert(0, world_dir / "branches" / branch)
     for base in search_dirs:
-        p = base / "maps" / planet_id / "cvt_mesh.json"
-        if p.exists():
-            from dreamulator.map.export import decompress_mesh_bytes
+        p = find_mesh_file(base / "maps" / planet_id)
+        if p is not None:
+            from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
 
-            return TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(p.read_bytes()))
+            return load_cvt_mesh_model(p)
     return None
 
 

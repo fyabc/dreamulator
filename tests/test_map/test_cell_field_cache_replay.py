@@ -16,17 +16,15 @@ cells — every VoronoiCell field**.  Any future stage that gains an in-place
 cell field without extending its cache payload fails here.
 """
 
-import gzip
-import json
-
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 
 def _read_exported_mesh(output_dir):
-    mesh_files = list(output_dir.glob("**/cvt_mesh.json"))
-    assert mesh_files, "export did not write cvt_mesh.json"
-    raw = mesh_files[0].read_bytes()
-    return json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+    mesh_files = list(output_dir.glob("**/cvt_mesh.msgpack.gz"))
+    assert mesh_files, "export did not write cvt_mesh.msgpack.gz"
+    from dreamulator.map.export import load_cvt_mesh
+
+    return load_cvt_mesh(mesh_files[0])
 
 
 class TestCellFieldCacheReplay:

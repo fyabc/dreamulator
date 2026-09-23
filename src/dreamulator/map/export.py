@@ -9,7 +9,7 @@ See ``docs/design/pipelines/geological-pipeline.md`` §10 for algorithm details.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 from PIL import Image
@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from .models import CVTMesh, TectonicPlate
 
 logger = logging.getLogger(__name__)
+
+# Mesh payloads are either a validated model or the plain dict form used by
+# the importers (which assemble cell dicts before any model validation).
+CVTMeshLike = Union["CVTMesh", dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -445,27 +449,127 @@ def _truncate_float_precision(data: bytes) -> bytes:
     return _FLOAT_TRUNC_RE.sub(rb"\1", data)  # type: ignore[no-any-return]
 
 
-def compress_mesh_bytes(mesh_bytes: bytes) -> bytes:
-    """Gzip-compress mesh JSON bytes (level 9) — storage ~7× smaller.
+# ---------------------------------------------------------------------------
+# CVT mesh serialization — gzip-framed MessagePack (canonical), with
+# transparent reads of legacy gzip-JSON / plain-JSON files
+# ---------------------------------------------------------------------------
 
-    ``cvt_mesh.json`` is dominated by repeated field names + string values,
-    which gzip exploits far better than msgpack or float-precision trimming.
-    The file keeps its ``.json`` extension so existing ``.gitattributes`` LFS
-    rules and ``glob("*/cvt_mesh.json")`` paths continue to match; the gzip
-    framing is detected transparently on read by :func:`decompress_mesh_bytes`.
+MESH_FILENAME = "cvt_mesh.msgpack.gz"
+LEGACY_MESH_FILENAME = "cvt_mesh.json"
+_MESH_GZIP_LEVEL = 9
+
+
+def _mesh_json_bytes(mesh: CVTMeshLike) -> bytes:
+    """Canonical JSON text for *mesh* — the serialization intermediate.
+
+    Float truncation and pydantic's non-finite→null semantics live in the
+    JSON layer; the packed representation just re-encodes that text.
+    """
+    import json
+
+    if isinstance(mesh, dict):
+        return _truncate_float_precision(json.dumps(mesh, default=str).encode("utf-8"))
+    from pydantic import TypeAdapter
+
+    from .models import CVTMesh
+
+    return _truncate_float_precision(TypeAdapter(CVTMesh).dump_json(mesh))
+
+
+def save_cvt_mesh(path: Path, mesh: CVTMeshLike) -> None:
+    """Write *mesh* as gzip-framed MessagePack (``cvt_mesh.msgpack.gz``).
+
+    gzip is the size win (the mesh is field-name/string heavy — measured
+    2026-09-23: msgpack alone is ~2/3 of plain JSON, gzip on top lands within
+    ±20% of the old gzip-JSON depending on string density); msgpack is the
+    regularization win — one canonical binary the API can stream unparsed
+    and the frontend decodes in a worker.  A legacy ``cvt_mesh.json``
+    sibling is removed so a planet never carries two divergent meshes.
+    """
+    import gzip
+    import json
+
+    import msgpack
+
+    obj = json.loads(_mesh_json_bytes(mesh))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        gzip.compress(msgpack.packb(obj, use_bin_type=True), compresslevel=_MESH_GZIP_LEVEL)
+    )
+    legacy = path.with_name(LEGACY_MESH_FILENAME)
+    if legacy.exists():
+        legacy.unlink()
+
+
+def decode_mesh_bytes(raw: bytes) -> dict[str, Any]:
+    """Decode mesh bytes of any on-disk generation.
+
+    Sniffs in order: gzip framing (containing legacy JSON or msgpack),
+    plain JSON, raw msgpack.  This is what makes the format migration
+    zero-rebuild — old worlds keep loading until their next build.
+    """
+    import gzip
+    import json
+
+    import msgpack
+
+    if raw[:2] == b"\x1f\x8b":  # gzip magic number
+        raw = gzip.decompress(raw)
+    if raw.lstrip()[:1] in (b"{", b"["):
+        data: dict[str, Any] = json.loads(raw)
+        return data
+    unpacked: dict[str, Any] = msgpack.unpackb(raw, raw=False)
+    return unpacked
+
+
+def load_cvt_mesh(path: Path) -> dict[str, Any]:
+    """Load a mesh file as a dict, regardless of on-disk generation."""
+    return decode_mesh_bytes(path.read_bytes())
+
+
+def load_cvt_mesh_model(path: Path) -> CVTMesh:
+    """Load a mesh file as a validated :class:`~dreamulator.map.models.CVTMesh`.
+
+    Legacy JSON bytes take the pydantic-core ``validate_json`` fast path
+    (Rust parser); msgpack bytes unpack (C extension) then validate.
     """
     import gzip
 
-    return gzip.compress(mesh_bytes, compresslevel=9)
+    raw = path.read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    from .models import CVTMesh
+
+    if raw.lstrip()[:1] == b"{":
+        from pydantic import TypeAdapter
+
+        return TypeAdapter(CVTMesh).validate_json(raw)
+    import msgpack
+
+    return CVTMesh.model_validate(msgpack.unpackb(raw, raw=False))
 
 
-def decompress_mesh_bytes(raw: bytes) -> bytes:
-    """Return mesh JSON bytes, decompressing gzip when the framing is present."""
-    import gzip
+def find_mesh_file(directory: Path) -> Path | None:
+    """Mesh file inside a planet map dir — canonical name first, legacy fallback."""
+    canonical = directory / MESH_FILENAME
+    if canonical.exists():
+        return canonical
+    legacy = directory / LEGACY_MESH_FILENAME
+    return legacy if legacy.exists() else None
 
-    if raw[:2] == b"\x1f\x8b":  # gzip magic number
-        return gzip.decompress(raw)
-    return raw
+
+def iter_mesh_files(base: Path) -> list[Path]:
+    """All planet mesh files under ``base/<planet_id>/`` (both generations,
+    canonical preferred per planet), excluding ``_``-prefixed scratch dirs."""
+    by_planet: dict[str, Path] = {}
+    if not base.exists():
+        return []
+    for name in (MESH_FILENAME, LEGACY_MESH_FILENAME):
+        for p in sorted(base.glob(f"*/{name}")):
+            if p.parent.name.startswith("_"):
+                continue
+            by_planet.setdefault(p.parent.name, p)
+    return list(by_planet.values())
 
 
 def save_outputs(
@@ -479,7 +583,7 @@ def save_outputs(
 
     Output files:
         - elevation.png (16-bit PNG)
-        - cvt_mesh.json (full CVT mesh)
+        - cvt_mesh.msgpack.gz (full CVT mesh, gzip-framed MessagePack)
         - plates.json (tectonic plates)
         - metadata.json (generation parameters)
 
@@ -502,17 +606,11 @@ def save_outputs(
     png_max = max(9_000, elev_max)
     export_elevation_png(elevation_grid, output_dir / "elevation.png", png_min, png_max)
 
-    # 2. CVT Mesh JSON — pydantic-core serializer (Rust, ~5x faster than
-    #    model_dump() + json.dump()); non-finite floats serialize as null,
-    #    same semantics as the previous sanitize_nonfinite pass.
-    from pydantic import TypeAdapter
-
-    from .models import CVTMesh
-
-    mesh_bytes = TypeAdapter(CVTMesh).dump_json(mesh)  # compact (no indent)
-    mesh_bytes = _truncate_float_precision(mesh_bytes)
-    (output_dir / "cvt_mesh.json").write_bytes(compress_mesh_bytes(mesh_bytes))
-    logger.info("  Saved CVT mesh: %s", output_dir / "cvt_mesh.json")
+    # 2. CVT Mesh — gzip-framed MessagePack via the canonical serializer
+    #    (float truncation + non-finite→null semantics preserved through the
+    #    JSON intermediate inside save_cvt_mesh).
+    save_cvt_mesh(output_dir / MESH_FILENAME, mesh)
+    logger.info("  Saved CVT mesh: %s", output_dir / MESH_FILENAME)
 
     # 3. Plates JSON
     from .models import sanitize_nonfinite

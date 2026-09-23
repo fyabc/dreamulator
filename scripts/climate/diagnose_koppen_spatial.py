@@ -45,11 +45,11 @@ def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> di
     if branch:
         search_dirs.insert(0, world_dir / "branches" / branch)
     for base in search_dirs:
-        mesh_path = base / "maps" / planet_id / "cvt_mesh.json"
-        if mesh_path.exists():
-            from dreamulator.map.export import decompress_mesh_bytes
+        mesh_path = find_mesh_file(base / "maps" / planet_id)
+        if mesh_path is not None:
+            from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
 
-            return TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(mesh_path.read_bytes()))
+            return load_cvt_mesh_model(mesh_path)
     return None
 
 
@@ -79,7 +79,7 @@ def main() -> None:
     print(f"Loading Earth mesh from {world_dir} (branch={args.branch}) ...")
     mesh = _load_mesh(world_dir, args.planet, args.branch)
     if mesh is None:
-        print(f"  ERROR: no mesh at {world_dir}/maps/{args.planet}/cvt_mesh.json")
+        print(f"  ERROR: no mesh at {world_dir}/maps/{args.planet}")
         return
 
     if args.rebuild:

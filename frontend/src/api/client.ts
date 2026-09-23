@@ -11,16 +11,7 @@ const API_BASE = '/api'
 // MessagePack CVT mesh loading (worker-based, non-blocking)
 // ---------------------------------------------------------------------------
 
-import MsgPackWorker from '../workers/msgpack.worker.ts?worker'
-
-let _msgpackWorker: Worker | null = null
-
-function _getWorker(): Worker {
-  if (!_msgpackWorker) {
-    _msgpackWorker = new MsgPackWorker()
-  }
-  return _msgpackWorker
-}
+import { decodeMsgpackUrl } from '../workers/msgpackClient'
 
 /** Fetch CVT mesh as MessagePack, decoded in a Web Worker (non-blocking). */
 function fetchCvtMeshMsgPack(
@@ -28,21 +19,8 @@ function fetchCvtMeshMsgPack(
   planetId: string,
   query: string,
 ): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const worker = _getWorker()
-    const url = `${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/cvt-mesh${query}${query ? '&' : '?'}fmt=msgpack`
-    worker.onmessage = (e: MessageEvent<{ data?: any; error?: string }>) => {
-      if (e.data.error) {
-        reject(new Error(e.data.error))
-      } else {
-        resolve(e.data.data)
-      }
-    }
-    worker.onerror = (err: ErrorEvent) => {
-      reject(new Error(err.message))
-    }
-    worker.postMessage({ url })
-  })
+  const url = `${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/cvt-mesh${query}${query ? '&' : '?'}fmt=msgpack`
+  return decodeMsgpackUrl(url) as Promise<any>
 }
 
 // ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from dreamulator.map.export import decompress_mesh_bytes  # noqa: E402
+from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 
 _ROOT = Path(__file__).resolve().parents[2]
 _CLIM = _ROOT / "private" / "tmp" / "climatology"
@@ -185,7 +185,9 @@ def _load_model(branch: str) -> dict[str, np.ndarray]:
     import msgpack
 
     map_dir = _EARTH / (Path("branches") / branch if branch else Path()) / "maps" / "planet_earth"
-    mesh = json.loads(decompress_mesh_bytes((map_dir / "cvt_mesh.json").read_bytes()))
+    _mf = find_mesh_file(map_dir)
+    assert _mf is not None, f"no mesh file under {map_dir}"
+    mesh = load_cvt_mesh(_mf)
     cells = mesh["cells"]
     n = len(cells)
     lat = np.array([c["lat"] for c in cells], dtype=np.float64)

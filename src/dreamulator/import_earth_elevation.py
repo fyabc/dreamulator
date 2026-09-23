@@ -6,7 +6,7 @@ the configured equirectangular resolution, and produces:
 
     - elevation.png       — 16-bit PNG heightmap
     - metadata.json       — encoding parameters + data provenance
-    - cvt_mesh.json       — CVT mesh with elevation assigned to cells
+    - cvt_mesh.msgpack.gz — CVT mesh with elevation assigned to cells
     - map.yaml            — map metadata for the frontend
 
 Usage:
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import json
 import os
 import shutil
 import tempfile
@@ -413,13 +412,10 @@ def main() -> None:
     if not args.skip_mesh:
         mesh = build_cvt_mesh_from_grid(elevation, args.mesh_nodes, args.seed)
 
-        mesh_json = mesh.model_dump()
-        mesh_path = output_dir / "cvt_mesh.json"
-        from dreamulator.map.export import compress_mesh_bytes
+        from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
 
-        mesh_path.write_bytes(
-            compress_mesh_bytes(json.dumps(mesh_json, indent=2, default=str).encode("utf-8"))
-        )
+        mesh_path = output_dir / MESH_FILENAME
+        save_cvt_mesh(mesh_path, mesh)
         print(f"  Saved CVT mesh: {mesh_path} ({mesh_path.stat().st_size / (1024 * 1024):.1f} MB)")
 
     print("\nDone! Real Earth elevation imported successfully.")

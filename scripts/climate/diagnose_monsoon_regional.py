@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Monsoon regional diagnosis — monthly precipitation against observed climatology.
 
-Loads a built climate map (cvt_mesh.json + climate_monthly.msgpack; run
+Loads a built climate map (mesh file + climate_monthly.msgpack; run
 `dreamulator build` first) and compares the model's monthly precipitation in
 key monsoon / control regions against observed climatology.  This is the
 primary debug tool for the monsoon mechanism (tech debt 23/24): it shows
@@ -30,16 +30,16 @@ def _find_project_root() -> Path:
 def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> object | None:
     from pydantic import TypeAdapter
 
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
     from dreamulator.map.models import CVTMesh
 
     search_dirs = [world_dir]
     if branch:
         search_dirs.insert(0, world_dir / "branches" / branch)
     for base in search_dirs:
-        p = base / "maps" / planet_id / "cvt_mesh.json"
-        if p.exists():
-            return TypeAdapter(CVTMesh).validate_json(decompress_mesh_bytes(p.read_bytes()))
+        p = find_mesh_file(base / "maps" / planet_id)
+        if p is not None:
+            return load_cvt_mesh_model(p)
     return None
 
 

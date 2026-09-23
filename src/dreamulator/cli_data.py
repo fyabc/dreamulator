@@ -133,7 +133,9 @@ def fetch(
         )
         raise typer.Exit(code=1)
 
-    already = (target / "cvt_mesh.json").exists()
+    from dreamulator.map.export import LEGACY_MESH_FILENAME, MESH_FILENAME
+
+    already = (target / MESH_FILENAME).exists() or (target / LEGACY_MESH_FILENAME).exists()
     console.print(
         f"[dim]package:[/dim] {entry.asset_name} ({entry.size_bytes / (1024 * 1024):.1f} MB) "
         f"[dim]cached:[/dim] {'yes' if already else 'no'}"

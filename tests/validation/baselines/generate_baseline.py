@@ -40,14 +40,14 @@ def _find_project_root() -> Path:
 
 
 def _load_mesh(world_dir: Path, planet_id: str) -> dict | None:
-    """Load CVT mesh JSON from a world's maps/ directory."""
-    mesh_path = world_dir / "maps" / planet_id / "cvt_mesh.json"
-    if not mesh_path.exists():
-        print(f"ERROR: Mesh not found at {mesh_path}", file=sys.stderr)
-        return None
-    from dreamulator.map.export import decompress_mesh_bytes
+    """Load the mesh from a world's maps/ directory (either generation)."""
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-    return json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))  # type: ignore[no-any-return]
+    mesh_file = find_mesh_file(world_dir / "maps" / planet_id)
+    if mesh_file is None:
+        print(f"ERROR: Mesh not found under {world_dir / 'maps' / planet_id}", file=sys.stderr)
+        return None
+    return load_cvt_mesh(mesh_file)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -1342,7 +1342,7 @@ Terrain generation output for **{world}** · planet `{planet_id}` · branch `{br
 {branch_root.name}/
 └── layers/geological/input/maps/{planet_id}/
     ├── elevation.png      ← heightmap (16-bit PNG)
-    ├── cvt_mesh.json      ← spherical Voronoi mesh
+    ├── cvt_mesh.msgpack.gz ← spherical Voronoi mesh (gzip msgpack)
     ├── plates.json        ← tectonic plate definitions
     ├── metadata.json      ← pipeline parameters
     └── timeline/          ← time-evolution snapshots (when enabled)
@@ -1451,13 +1451,13 @@ def terrain_info(
 
     console.print(table)
 
-    # ---- Land / sea ratio (from cvt_mesh.json) ----
-    mesh_file = map_dir / "cvt_mesh.json"
-    if mesh_file.exists():
-        from dreamulator.map.export import decompress_mesh_bytes
+    # ---- Land / sea ratio (from the mesh file) ----
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if mesh_file is not None:
         console.print("[bold]Land / Sea Ratio[/bold]")
-        mesh = json.loads(decompress_mesh_bytes(mesh_file.read_bytes()))
+        mesh = load_cvt_mesh(mesh_file)
         cells = mesh.get("cells", [])
         if cells:
             total = len(cells)

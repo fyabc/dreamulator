@@ -156,9 +156,12 @@ def export_layers(
             raise typer.Exit(code=1) from None
         planet_id = planets[0]
 
+    from dreamulator.map.export import find_mesh_file
+
     map_dir = mm._maps_dir(planet_id)
-    if map_dir is None or not (map_dir / "cvt_mesh.json").exists():
-        console.print(f"[red]No cvt_mesh.json found for planet '{planet_id}'.[/red]")
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh file found for planet '{planet_id}'.[/red]")
         raise typer.Exit(code=1) from None
 
     meta = mm.get_map_metadata(planet_id)
@@ -176,11 +179,9 @@ def export_layers(
             console.print(f"[red]Invalid --grid '{grid}' (expected WxH, e.g. 4096x2048)[/red]")
             raise typer.Exit(code=2) from None
 
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import load_cvt_mesh_model
 
-    mesh = TypeAdapter(CVTMesh).validate_json(
-        decompress_mesh_bytes((map_dir / "cvt_mesh.json").read_bytes())
-    )
+    mesh = load_cvt_mesh_model(mesh_file)
 
     console.print(
         f"Baking {len(requested)} layer(s) for {world}/{planet_id} "

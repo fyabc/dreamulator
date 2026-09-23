@@ -151,32 +151,57 @@ def get_cvt_mesh(
 
     Query params:
         fmt: ``"json"`` (default) or ``"msgpack"`` — response encoding.
-    """
-    import json
 
+    The canonical on-disk format is gzip-framed MessagePack, streamed back
+    byte-for-byte with ``Content-Encoding: gzip`` (the browser decompresses
+    natively) — zero server-side parse.  Legacy gzip-JSON / plain-JSON files
+    are decoded and re-encoded; raw JSON text is never shipped as msgpack.
+    """
     mgr = _get_map_manager(world_name, branch)
     map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
     if map_dir is None:
         raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
 
-    mesh_file = map_dir / "cvt_mesh.json"
-    if not mesh_file.exists():
+    from dreamulator.map.export import decode_mesh_bytes, find_mesh_file
+
+    mesh_file = find_mesh_file(map_dir)
+    if mesh_file is None:
         raise HTTPException(
             status_code=404,
             detail=f"No CVT mesh data for '{planet_id}'. Run terrain generation first.",
         )
 
-    from dreamulator.map.export import decompress_mesh_bytes
+    raw = mesh_file.read_bytes()
+    import gzip
 
-    data: dict[str, Any] = json.loads(decompress_mesh_bytes(mesh_file.read_bytes()))
+    inner_is_json = False
+    if raw[:2] == b"\x1f\x8b":  # gzip framing — JSON (legacy) or msgpack (canonical)
+        inner = gzip.decompress(raw)
+        inner_is_json = inner.lstrip()[:1] == b"{"
+    else:
+        inner = raw
+        inner_is_json = raw.lstrip()[:1] == b"{"
 
     if fmt == "msgpack":
         import msgpack
 
-        packed = msgpack.packb(data)
-        return Response(content=packed, media_type="application/x-msgpack")
+        if inner_is_json:
+            # Legacy file: decode once and re-encode as msgpack.
+            return Response(
+                content=msgpack.packb(decode_mesh_bytes(raw)),
+                media_type="application/x-msgpack",
+            )
+        # Canonical file: stream the stored bytes untouched.  gzip framing is
+        # declared via Content-Encoding so the browser decompresses it for us.
+        if raw[:2] == b"\x1f\x8b":
+            return Response(
+                content=raw,
+                media_type="application/x-msgpack",
+                headers={"Content-Encoding": "gzip"},
+            )
+        return Response(content=raw, media_type="application/x-msgpack")
 
-    return data
+    return decode_mesh_bytes(raw)
 
 
 @router.get("/{world_name}/maps/{planet_id}/climate-monthly")

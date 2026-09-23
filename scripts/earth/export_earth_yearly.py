@@ -49,7 +49,7 @@ def main() -> None:
         "--output-dir",
         type=Path,
         default=_DEFAULT_MAP,
-        help="Earth root map dir containing climate_monthly.msgpack + cvt_mesh.json",
+        help="Earth root map dir containing climate_monthly.msgpack + the mesh file",
     )
     args = parser.parse_args()
 

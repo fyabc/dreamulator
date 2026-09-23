@@ -84,9 +84,9 @@ def _run_importers(staging_maps: Path, recipe: object) -> None:
 
 def _verify_clean_mesh(mesh_path: Path) -> None:
     """Assert the produced mesh carries no climate-derived fields."""
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import load_cvt_mesh
 
-    data = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+    data = load_cvt_mesh(mesh_path)
     polluted = 0
     for cell in data.get("cells", []):
         if cell.get("temperature_C") is not None or cell.get("koppen_class") is not None:
@@ -134,9 +134,11 @@ def main() -> None:
         staging = Path(tmp)
         staging_maps = staging / "maps" / planet_id
         _run_importers(staging_maps, recipe)
-        _verify_clean_mesh(staging_maps / "cvt_mesh.json")
+        from dreamulator.map.export import MESH_FILENAME
 
-        base_files = ["elevation.png", "cvt_mesh.json", "plates.json", "map.yaml"]
+        _verify_clean_mesh(staging_maps / MESH_FILENAME)
+
+        base_files = ["elevation.png", MESH_FILENAME, "plates.json", "map.yaml"]
         files = []
         for name in base_files:
             p = staging_maps / name

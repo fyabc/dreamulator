@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from dreamulator.datapkg.fingerprint import file_sha256
 from dreamulator.datapkg.manifest import (
+    MESH_FILE_NAMES,
     ROLE_TERRAIN_BASE,
     TERRAIN_BASE_FILES,
     DevDataManifest,
@@ -104,6 +105,8 @@ def _verify_files(extract_dir: Path, manifest: DevDataManifest) -> None:
     for name in TERRAIN_BASE_FILES:
         if not any(p.split("/")[-1] == name for p in present):
             raise InstallError(f"manifest is missing base-terrain file {name!r}")
+    if not any(p.split("/")[-1] in MESH_FILE_NAMES for p in present):
+        raise InstallError(f"manifest is missing a mesh file (any of {MESH_FILE_NAMES})")
     for f in manifest.files:
         p = extract_dir / f.path
         if not p.is_file():
@@ -117,9 +120,12 @@ def _verify_files(extract_dir: Path, manifest: DevDataManifest) -> None:
 def _mesh_params(mesh_path: Path) -> tuple[int, int] | None:
     """(seed, num_cells) of an installed mesh, or ``None`` if unreadable."""
     try:
-        from dreamulator.map.export import decompress_mesh_bytes
+        from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-        data = json.loads(decompress_mesh_bytes(mesh_path.read_bytes()))
+        mesh_file = find_mesh_file(mesh_path.parent)
+        if mesh_file is None:
+            return None
+        data = load_cvt_mesh(mesh_file)
         return int(data.get("seed", -1)), int(data.get("num_cells", -1))
     except Exception:
         return None
@@ -138,11 +144,13 @@ def install_files(
     """
     target_maps_dir.mkdir(parents=True, exist_ok=True)
 
-    mesh_target = target_maps_dir / "cvt_mesh.json"
-    if mesh_target.exists():
+    from dreamulator.map.export import find_mesh_file
+
+    mesh_target = find_mesh_file(target_maps_dir)
+    if mesh_target is not None:
         existing = _mesh_params(mesh_target)
         if existing is None:
-            raise InstallError("existing cvt_mesh.json could not be parsed; refusing to overwrite")
+            raise InstallError("existing mesh file could not be parsed; refusing to overwrite")
         if existing != (recipe.seed, recipe.mesh_nodes):
             raise InstallError(
                 f"existing base terrain has different parameters "

@@ -23,10 +23,12 @@ import numpy as np
 
 
 def load(path: str) -> tuple[list[dict], dict]:
-    from dreamulator.map.export import decompress_mesh_bytes
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
 
-    with open(f"{path}/cvt_mesh.json", "rb") as f:
-        mesh = json.loads(decompress_mesh_bytes(f.read()))
+    mesh_file = find_mesh_file(__import__("pathlib").Path(path))
+    if mesh_file is None:
+        raise FileNotFoundError(f"no mesh file under {path}")
+    mesh = load_cvt_mesh(mesh_file)
     cells = mesh["cells"]
     # Köppen counts
     try:

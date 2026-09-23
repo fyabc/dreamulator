@@ -13,7 +13,9 @@ ROLE_TERRAIN_BASE = "terrain-base"
 # watermask importers — deliberately EXCLUDES import_earth_climate (obs climate)
 # and the climate build's write-back (simulated climate fields).  See audit
 # github-data-bootstrap-evaluation §推荐的包边界.
-TERRAIN_BASE_FILES = ("elevation.png", "cvt_mesh.json", "plates.json", "map.yaml")
+TERRAIN_BASE_FILES = ("elevation.png", "plates.json", "map.yaml")
+# The mesh may be either generation: canonical msgpack.gz or legacy gzip JSON.
+MESH_FILE_NAMES = ("cvt_mesh.msgpack.gz", "cvt_mesh.json")
 
 
 class PackageFile(BaseModel):

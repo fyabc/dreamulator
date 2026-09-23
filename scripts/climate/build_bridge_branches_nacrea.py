@@ -172,7 +172,7 @@ def build_branches(axes: list[str]) -> None:
 def _copy_base_terrain(branch: str) -> None:
     """Copy the parent's base-terrain siblings into the branch's maps dir.
 
-    The climate engine materialises only ``cvt_mesh.json`` into a branch that
+    The climate engine materialises only the mesh file into a branch that
     forked before geological (``_materialize_writable_mesh``); the frontend's
     ``meta``/``elevation``/``plates`` endpoints also need ``elevation.png`` /
     ``map.yaml`` / ``plates.json``, which are read-only here, so copy them once
