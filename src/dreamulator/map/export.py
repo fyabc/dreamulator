@@ -493,6 +493,11 @@ def save_cvt_mesh(path: Path, mesh: CVTMeshLike) -> None:
 
     obj = json.loads(_mesh_json_bytes(mesh))
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.name == LEGACY_MESH_FILENAME:
+        # Never write *into* the legacy name: the sibling cleanup below would
+        # then delete what was just written (root earth re-import lost its
+        # mesh this way, 2026-09-25).  Canonicalize to the msgpack.gz name.
+        path = path.with_name(MESH_FILENAME)
     path.write_bytes(
         gzip.compress(msgpack.packb(obj, use_bin_type=True), compresslevel=_MESH_GZIP_LEVEL)
     )
