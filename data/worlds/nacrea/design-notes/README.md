@@ -31,4 +31,4 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 | [0007](0007-aegis-seasonal-eccentricity.md) | Nacrea 天文系统调参（季节增强 + 轨道稳定） | accepted |
 | [0008](0008-circulation-critical-instabilities.md) | 单圈环流的临界不稳定性（弱斜压 + 赤道超旋转，未来丰富设定源） | proposed |
 | [0009](0009-satellite-architecture.md) | Aegis 卫星架构终版：宜居内卫 + 双单体逆行捕获卫（韵珠·守珠；实验矩阵见[附录](0009-appendix-experiment-log.md)） | final |
-| [0010](0010-ucc-migration-fixture.md) | UCC 迁移语义夹具（profile v1 × Nacrea，脚本生成的对照基线） | accepted |
+| [0010](0010-ucc-migration-fixture.md) | UCC 迁移语义夹具——**已迁至 `docs/ucc/examples/nacrea.md`**（stub 占位） | migrated |

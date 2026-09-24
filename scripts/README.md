@@ -36,9 +36,9 @@
 - `ucc_classify_experiments.py` — UCC 分类候选比较实验（分组候选/消融/扰动，profile
   v0/v1 冻结依据）。
 - `ucc_examples_earth.py` — Earth worked examples 文档生成（~33 命名地点 + 未覆盖类的
-  类中心点补位 → `data/worlds/earth/design-notes/ucc-worked-examples.md`；读 L2 数据集，秒级）。
+  类中心点补位 → `docs/ucc/examples/earth.md`；读 L2 数据集，秒级）。
 - `ucc_examples_nacrea.py` — Nacrea 迁移语义夹具生成（全局分布 + 预期核对 + 命名地理锚点 +
-  极值点 → `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md`；解析 mesh，~1 min）。
+  极值点 → `docs/ucc/examples/nacrea.md`；解析 mesh，~1 min）。
 
 ## earth/ — 真实地球数据导入与验证参考（10 个）
 
@@ -86,7 +86,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   qsurf>0.05m → water_class ocean；demand_model=None→MI（非水溶剂）。
 - `ucc_examples_solar.py` — UCC worked examples 文档生成（`--planet mars|moon|
   venus|titan`：全局分布 + 世界要点注记 + 命名地貌地点 + 极值点 →
-  `data/worlds/earth/design-notes/ucc-worked-examples-<body>.md`）。
+  `docs/ucc/examples/<body>.md`）。
 
 ## astro/ — 天文 N 体与恒星诊断（5 个）
 

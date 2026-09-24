@@ -585,6 +585,54 @@ class TerrainPipelineConfig:
     # γ=(2d)⁻¹, r₁=(10d)⁻¹, r₀=(20d)⁻¹, A=1e6 m²/s are paper values (module
     # constants, not knobs).  Mutually exclusive with stationary_wave_enabled.
     stationary_wave_v2_enabled: bool = False  # flip to True after earth+nacrea acceptance
+    # ── Wet monsoon-trough SLP closure (W-supply route round 1, 2026-09-24) ──
+    # The deep-convective latent heating Q = L_v·P forces the validated
+    # two-mode solver (stationary_wave_two_level); the baroclinic geopotential
+    # φ̂ maps hydrostatically onto an SLP wet component (δp_s = c·φ̂, all-
+    # constant derivation — see wet_trough_slp_anomaly) added to the thermal
+    # ΔP before the smoothing → gradient → boundary-layer-wind chain, and the
+    # moisture budget re-runs on the updated winds (damped Picard).  This is
+    # the supply-route closure the prescribed-ΔP intervention confirmed as
+    # the routing lever (2026-09-23, H1/H4): land AND ocean convective heating
+    # enter Q.  Literature: Boos & Kuang 2013 (deep precipitating convection
+    # maintains the monsoon trough), Chiang et al. 2001 (elevated heating
+    # dominates the tropical surface-wind response), Gill 1980 (Rossby low NW
+    # of off-equatorial heating — the Ganges wind-direction fix).  Mutually
+    # exclusive with both ④ paths (one closure per round; the ④ v2 gate can
+    # later compose off the same solve if both survive acceptance).
+    # GW6 product candidate (round-6 acceptance 9✓/3✗, 2026-09-24): the four
+    # monsoon boxes land within ±25% of obs for the first time (Ganges 0.95×),
+    # W contrast 0.97→3.2-4.2 (gate-unlock criterion met), Sahara 435→327,
+    # Köppen distribution match +9.7pp / Group R² 2.1×; nacrea regression all
+    # guards pass.  **Default OFF = speed gate not met**: 6.4× baseline build
+    # (release bar ≤2×; structural — 3 Picard passes × gate iterate-twice ≈
+    # 300 sparse LU per build vs 25), and the spatial metrics carry a trade
+    # (zonal P R² −0.18; equatorial drain shows as Af→BWh in Sumatra/New
+    # Guinea/Congo).  Preconditions for default-on: build-speed work (the S1-S4
+    # list + pass-count) AND the equatorial supply fix.  Full record:
+    # private/plans/w-supply-route.md + docs/design/profiling.md §2.1.
+    wet_trough_enabled: bool = False
+    wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
+    wet_trough_iterations: int = 3  # moisture-budget re-solves after pass 1 (round-6 config)
+    # Heating weight mode: "total" | "pickup".  "pickup" multiplies Q by the
+    # NPH09 convective-pickup factor f(W/W_sat) — the deep-convective share
+    # (a subsaturated drizzling column does not heat the free troposphere;
+    # pre-registered ablation arm for the desert self-reference problem —
+    # the model's Sahara P bias feeds a spurious −2.5 hPa trough, probe
+    # 2026-09-24).
+    wet_trough_heating_weight: str = "total"
+    # Round 7: ω-gate composition off the SAME two-mode solve (registered as
+    # the ④ v2 upgrade path — "a future ④ v2 gate can compose off the same
+    # solve").  The wet trough's solver pass yields mid-level w for free;
+    # subsidence_rainout_gate turns it into a mass-conserving land k_rain
+    # suppression over the Rodwell–Hoskins descent tongue (Sahara/Sahel/Mid-
+    # East, monsoon-heating west side).  The 2026-09-17 calibration found no
+    # signal because the forcing was self-referential (model's own desert wet
+    # bias as heating); the unlock precondition ("supply-side desert P bias
+    # fixed") is met by the wet trough + pickup gate (round 6: Sahara 435→327,
+    # GW6).  Knots unchanged for round 7 (conservative weak slope); re-calib
+    # via diagnose_desert_wetness --wave-gate after the A/B shows the signal.
+    wet_trough_omega_gate_enabled: bool = False  # round-7 experiment flag
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
@@ -627,7 +675,13 @@ class TerrainPipelineConfig:
     # diagnose_desert_wetness --pickup-gate), not knobs.  Cold regions are
     # exempt by construction (x = W/W_sat ≈ 1); the §5-α SST gate covers the
     # cold-tongue family where x saturates (no overlap).
-    convective_pickup_gate_enabled: bool = False  # flip after earth+nacrea acceptance
+    # Round-6 recalibrated knots; calibration domain = the post-supply-fix W
+    # regime, so the gate requires wet_trough_enabled (simulate_climate raises
+    # otherwise — on the unfixed W field everything collocates at x≈0.16-0.18
+    # and the ramp strangles the monsoon lands, the 2026-09-17 failure).
+    # Default OFF together with the wet trough (same speed gate — see the
+    # wet_trough_enabled comment).
+    convective_pickup_gate_enabled: bool = False
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ
     # rain belt to the observed ~10° width (diffusion length √(κτ) ≈ 900 km).

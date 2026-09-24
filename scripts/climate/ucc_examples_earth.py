@@ -14,7 +14,7 @@ Köppen reference column) and produces a human-review document:
   with the class medoid cell (marked as such), so every class has at least one
   worked example.
 
-Output: ``data/worlds/earth/design-notes/ucc-worked-examples.md`` (regenerate,
+Output: ``docs/ucc/examples/earth.md`` (regenerate,
 don't hand-edit).
 
 Usage:
@@ -46,7 +46,7 @@ from dreamulator.map.ucc import (  # noqa: E402
 )
 
 _DEFAULT_DATASET = Path("private/reviews/ucc-l2-earth-obs-2026-09-20.msgpack")
-_DEFAULT_OUT = Path("data/worlds/earth/design-notes/ucc-worked-examples.md")
+_DEFAULT_OUT = Path("docs/ucc/examples/earth.md")
 
 # Curated review sites (4b): name, lat, lon, land/ocean, short geographic
 # context.  Chosen to span every thermal × supply regime a reviewer can check
@@ -316,7 +316,7 @@ def main() -> None:
         f"> 降水 {prov.get('precipitation', '—')}；Köppen 参照列 {prov.get('koppen_obs', '—')}；",
         f"> 参考需求 {prov.get('demand_model', '—')}。",
         "> 月度序列 month 0 = 三月（春分）——与引擎约定一致（观测导入器已重排）。",
-        "> 读法与描述量语义见 `docs/knowledge/climatology/ucc_climate_descriptors.md`；",
+        "> 读法与描述量语义见 `docs/ucc/specification.md`；",
         "> 分类阈值与简码字母表见该文 §5。",
         "> **状态简写**（表格中替代完整状态名）：`OOD` = out_of_domain（需求模型超出",
         "> 有效域——如冰盖全年无液态水，AI/deficit 不报数）；`MI` = missing_input、",

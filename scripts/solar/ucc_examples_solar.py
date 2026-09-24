@@ -5,7 +5,7 @@
 The bodies live inside the real-world reference-anchor world (``earth``) as
 additional planet_ids.  Reads a body's ``climate_yearly.msgpack`` +
 ``climate_monthly.msgpack`` + the mesh file and writes
-``data/worlds/earth/design-notes/ucc-worked-examples-<body>.md``:
+``docs/ucc/examples/<body>.md``:
 
 - the declared time basis + provenance (epistemic status travels with the file:
   GCM climatology = ucc-review §6.2 L4, NOT error-free truth; Diviner =
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -224,7 +223,7 @@ def main() -> None:
     map_dir = args.map_dir or _ROOT / f"data/worlds/{_ANCHOR_WORLD}/maps" / planet_id
     out = (
         args.out
-        or _ROOT / f"data/worlds/{_ANCHOR_WORLD}/design-notes/ucc-worked-examples-{world}.md"
+        or _ROOT / f"docs/ucc/examples/{world}.md"
     )
 
     print(f"Reading {map_dir}/climate_yearly.msgpack …")
@@ -383,7 +382,7 @@ def main() -> None:
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet {world}`
 > 生成日期：{today}。描述量与分类语义见
-> `docs/knowledge/climatology/ucc_climate_descriptors.md`（§8 有本天体的示意演练行，
+> `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
 > **状态简写**：`OOD` = out_of_domain（需求模型超出有效域）；`MI` = missing_input、
 > `NA` = not_applicable、`NPD` = no_positive_demand（语义见知识文档 §3）。

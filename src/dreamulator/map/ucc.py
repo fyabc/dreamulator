@@ -170,7 +170,7 @@ def _concentration(p_rate: np.ndarray, dt: np.ndarray, p_total: float) -> float 
 
 # ---------------------------------------------------------------------------
 # Classification profile v0 (ucc-review §4.3 / §7 第二步; frozen 2026-09-20
-# after the L2 candidate comparison — see private/reviews/ucc-l2-classify-*.md)
+# after the L2 candidate comparison — see docs/ucc/research/ucc-l2-classify-2026-09-20.md)
 # ---------------------------------------------------------------------------
 
 PROFILE_V0 = "ucc-v0"

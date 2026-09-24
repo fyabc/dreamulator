@@ -7,8 +7,16 @@ docs/
 ├── knowledge/       # 学科知识库（天体物理、地质、气候等真实科学知识）
 ├── worldbuilding/   # 架空世界创建思路与方法论
 ├── usage/           # 项目用法指南（CLI、API、前端操作说明）
-└── design/          # 架构设计文档（面向开发者，含设计决策记录）
+├── design/          # 架构设计文档（面向开发者，含设计决策记录）
+└── ucc/             # 统一气候描述（UCC）专门目录（规格书 + 例证 + 设计锚点 + 评审研究）
 ```
+
+## ucc/ — 统一气候描述（UCC）
+
+跨世界统一气候分类的单一主题目录（2026-09-24 文档收拢）：`specification.md`（主文档/规格书）、
+`design-anchors.md`（设计原则 + 锚点体系 + 已否证方向）、`examples/`（地球观测 + 太阳系四天体 +
+nacrea 架空世界的 worked examples）、`research/`（专项评审、L2 分类实验、天体气候划分文献调研、
+时间基准二元性裁决）。详见 `ucc/CLAUDE.md`。
 
 ## knowledge/ — 学科知识库
 
@@ -46,7 +54,9 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 
 - **根目录**：项目架构（`architecture.md`）、路线图（`roadmap.md`）、竞品分析（`competitor-analysis.md`）、审计计划（`audit-plan.md`）、性能剖析（`profiling.md`）与优化记录（`performance-optimizations.md`）
 - **`pipelines/`（已实现管线技术参考）**：世界生成管线总览（`world-generation-pipeline.md`）、地质层（`geological-pipeline.md`）、地图系统（`map-system.md`）、气候层（`climate-pipeline.md`）及其验证（`climate-validation.md`）、真实地球数据导入（`earth-real-data.md`）
-- **`proposals/`（设计提案 + 方法论）**：愿景（`vision.md`）、守护轴（`harness.md`）、层级控制模型（`layer-control-model.md`）、生态层（`ecology-layer.md`）、文明层（`civilization-layer.md`）、语言谱系（`language-phylogeny.md`）、神话层积（`myth-strata.md`）、AI CLI（`ai-cli-commands.md`）、Moltke 引擎（`moltke-engine.md`）、Gaea 精细化（`gaea-refinement.md`）、气候改进系列（`climate-layer-improvement.md`、`climate-gcm-plan.md`、`climate-steady-coupling.md`、`monthly-climate-display.md`）、地质改进（`geology-layer-improvement.md`）、统一气候分类（`unified-climate-taxonomy.md`）
+- **`proposals/`（设计提案 + 方法论）**：愿景（`vision.md`）、守护轴（`harness.md`）、层级控制模型（`layer-control-model.md`）、生态层（`ecology-layer.md`）、文明层（`civilization-layer.md`）、语言谱系（`language-phylogeny.md`）、神话层积（`myth-strata.md`）、AI CLI（`ai-cli-commands.md`）、Moltke 引擎（`moltke-engine.md`）、Gaea 精细化（`gaea-refinement.md`）、气候改进系列（`climate-layer-improvement.md`、`climate-gcm-plan.md`、`climate-steady-coupling.md`、`monthly-climate-display.md`）、地质改进（`geology-layer-improvement.md`）
+
+> 统一气候分类（UCC）已于 2026-09-24 收拢到独立目录 [`ucc/`](ucc/)，不再属于 `design/proposals/`。
 
 详见 `design/CLAUDE.md`。
 

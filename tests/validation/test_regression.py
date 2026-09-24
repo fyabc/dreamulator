@@ -89,7 +89,10 @@ def _run_climate_on_world(
 
     mesh_file = find_mesh_file(world_dir / "maps" / planet)
     if mesh_file is None:
-        pytest.skip(f"Mesh not found under {world_dir / 'maps' / planet} — run 'dreamulator build {world}' first")
+        pytest.skip(
+            f"Mesh not found under {world_dir / 'maps' / planet} —"
+            f" run 'dreamulator build {world}' first"
+        )
 
     mesh_data = load_cvt_mesh(mesh_file)
 

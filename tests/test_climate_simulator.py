@@ -723,10 +723,37 @@ class TestConvectivePickupGateWiring:
             evaporation_base_mm=1000.0,
             num_nodes=100,
             convective_pickup_gate_enabled=gate,
+            # The gate's knots are calibrated on the post-supply-fix W regime,
+            # so the product configuration enables both (simulate_climate
+            # raises on gate-without-trough — tested separately below).
+            wet_trough_enabled=gate,
         )
         debug: dict[str, np.ndarray] = {}
         simulate_climate(mesh, cfg, debug=debug)
         return debug
+
+    def test_gate_requires_wet_trough(self, mesh: CVTMesh) -> None:
+        """Interlock: gate without the supply-route closure is a config error
+        (knot calibration domain — the 2026-09-17 monsoon-stranglement failure
+        mode on an unfixed W field)."""
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        cfg = TerrainPipelineConfig(
+            seed=42,
+            radius_km=6371.0,
+            rotation_period_days=1.0,
+            stellar_luminosity_sol=1.0,
+            orbital_distance_au=1.0,
+            axial_tilt_deg=23.44,
+            greenhouse_warming_K=33.0,
+            lat_gradient_c=45.0,
+            evaporation_base_mm=1000.0,
+            num_nodes=100,
+            convective_pickup_gate_enabled=True,
+            wet_trough_enabled=False,
+        )
+        with pytest.raises(ValueError, match="requires wet_trough_enabled"):
+            simulate_climate(mesh, cfg)
 
     def test_flag_off_deterministic_and_ungated(self, mesh: CVTMesh) -> None:
         """Two flag-off runs are bit-identical and store the calibration field."""

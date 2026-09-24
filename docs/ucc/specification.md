@@ -1,13 +1,13 @@
 # 统一气候描述（UCC）：连续描述量与分类 profile
 
-> 2026-09-20 整理，对应 UCC-01 第一至四步的已冻结内容。实现入口是
-> `src/dreamulator/map/ucc.py` 的 `compute_descriptors()`（描述量）与 `classify_v1()`
-> （当前分类 profile v1；`classify_v0()` 保留可复现）；逐 cell 描述量的导出格式见
-> `docs/design/pipelines/climate-pipeline.md` 的 climate_yearly.msgpack 一节。
-> 设计与评审依据是 2026-09-17 的 UCC 专项评审和 2026-09-20 的分类候选比较实验
-> （完整记录在本仓库 private/reviews/ 下，未入库）。真实数据例证见
-> `data/worlds/earth/design-notes/ucc-worked-examples.md`（观测）与
-> `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md`（架空世界迁移夹具）。
+> UCC 主文档（规格书）。2026-09-20 整理，2026-09-24 随文档收拢迁入 `docs/ucc/`。
+> 实现入口是 `src/dreamulator/map/ucc.py` 的 `compute_descriptors()`（描述量）与
+> `classify_v1()`（当前分类 profile v1；`classify_v0()` 保留可复现）；逐 cell
+> 描述量的导出格式见 `docs/design/pipelines/climate-pipeline.md` 的
+> climate_yearly.msgpack 一节。设计与评审依据在 `research/`（2026-09-17 专项
+> 评审与重设计正文、2026-09-20 分类候选比较实验、2026-09-21 天体气候划分文献
+> 调研与时间基准二元性裁决）；设计原则与 v2 锚点体系在 `design-anchors.md`；
+> 真实数据例证在 `examples/`（地球观测 + 太阳系四天体 + nacrea 架空世界迁移夹具）。
 
 统一气候描述（Unified Climate Classification，UCC）要解决的问题是：让用户在任意
 世界的地图上读到一致、可解释的气候描述。它用「连续描述量 → 版本化分类 profile」
@@ -18,7 +18,7 @@
 ## 1. 为什么不以 Köppen 为统一标准
 
 Köppen–Geiger 分类的阈值（18°C 热带线、−3°C 温带线、20·T 干旱线等）是二十世纪
-早期对地球植被分布的经验拟合（见 `koppen_classification.md`）。在另一颗行星上，
+早期对地球植被分布的经验拟合（见 `docs/knowledge/climatology/koppen_classification.md`）。在另一颗行星上，
 这些数字没有先验成立的理由；即使在地球上，它们对「供需何时错季」「季节有多强」
 这类问题也不直接回答。2026-09-20 的实验还给出了一个量化背景：把引擎的完整
 Köppen 实现跑在真实观测月度序列上，与 Beck et al. (2018) 的 Köppen–Geiger 数据
@@ -35,10 +35,15 @@ Köppen 实现跑在真实观测月度序列上，与 Beck et al. (2018) 的 Kö
 
 描述量的一切都从时间约定开始，跨世界比较才成立。
 
-- **分箱与时长**：气候序列是一组分箱（bin），每个分箱带时长 Δt。当前的月度产品
-  使用 12 个等长参考月，每月 365.25/12 天（`result_contract.REFERENCE_MONTH_DAYS`）。
-  契约本身不绑定 12 这个数，也不绑定等长——公式里时长权重 w_i = Δt_i / ΣΔt
-  显式出现。
+- **分箱与时长**：气候序列是一组分箱（bin），每个分箱带时长 Δt。**分箱永远
+  是世界本地的采样窗口**（采样物理裁决，`research/ucc-time-basis-duality-2026-09-21.md`）：
+  契约不绑定 12 这个数、不绑定等长、也不绑定「年」——公式里时长权重
+  w_i = Δt_i / ΣΔt 显式出现。地球引擎的月度产品**恰好**使用 12 个等长参考月
+  （每月 365.25/12 天，`result_contract.REFERENCE_MONTH_DAYS`）——这是地球产品
+  的一种选择，不是对世界的承诺；已建成的极端案例：Moon 用 12×2 h **地方时**箱
+  （bin_days = 2.46 地球日，窗口 = 会合自转一周而非年）、Titan 用 896 地球日
+  （土星年 1/12）箱。率与累计量的报告基准（参考年）是随文件的 `time_basis`
+  声明走的导出语义，与采样窗口是两回事（见下条与 `examples/moon.md`）。
 - **温度是均值**：分箱温度是该分箱的平均气温。年均温是时长加权平均
   Σ w_i·t_i，不是简单算术平均（分箱不等长时两者不同）。
 - **降水是通量**：分箱降水是平均率（mm/分箱），窗口总量是 Σ P_i·Δt_i。
@@ -249,16 +254,15 @@ profile 的表达范围内，引用 UCC 结果时不应外推：
 把同一 profile 迁移到非地球气候时，部分有效契约（§3 的五状态）负责**拒绝**给出
 没有物理意义的数，而不是硬算一个。下表用 Titan/Venus/Mars/Moon 的**文献典型示意
 值**（数量级演示）演练各状态是否正确触发。**四个太阳系参照世界已于 2026-09-21
-建成**（ucc-01-plan 4d），实测结果以各自 `data/worlds/<world>/design-notes/
-ucc-worked-examples.md` 为准；下表保留示意框架并逐行标注实测对照。
+建成**（ucc-01-plan 4d），实测结果以各自 `examples/<world>.md` 为准；下表保留示意框架并逐行标注实测对照。
 
 | 世界 | T 范围（示意） | P（示意） | 溶剂 / 需求模型 | 触发的状态 | 分类结果与读法 |
 |------|----------------|-----------|------------------|------------|----------------|
-| **Titan** | ~ −180 °C（93 K），近恒温 | 甲烷雨 ~50–150 mm/yr | CH₄，非水；Hamon 不适用 | `t_max < 0` → AI/deficit **out_of_domain**（冷侧门）；非水溶剂另受 §6 范围限制约束 | polar 热量带（t_max ≪ 10）；供需轴 n/a → `Pn`。温度轴有效，供需轴被冷侧门正确拒绝。若将来接甲烷需求模型，须**换 demand_model 声明**而非复用 hamon-1961。**实测（TAM 水文 run 已建成）**：导入选择更强的拒绝——`demand_model=None`（对甲烷溶剂不计算无意义的 Eref）→ AI/deficit = **missing_input**；陆地 `Pn`、甲烷海 `Po`（qsurf>0.05 m，1.3% cells）、continental 0%（t_range ~1.6 K）、bin = 896 地球日（土星年 1/12，时间契约极端案例）。详 `data/worlds/earth/design-notes/ucc-worked-examples-titan.md` |
-| **Venus** | ~ +464 °C（737 K），近等温 | 表面无液态降水 P ≈ 0 | 超临界 CO₂ 大气；Hamon 远超标定域 | `t_min ≫ 18` → tropical；P≈0、Eref>0 → AI=0 **valid**（arid）；但 Hamon 在 464 °C 是**热侧外推，无物理意义** | `Ra`（tropical/arid）——**已知缺口**：out_of_domain 门只挡冷侧（冰点以下），热侧外推不被拦截。演练价值 = 明确记录此缺口，Venus 类高温世界的 AI 需人工判为不可信，或未来增设热侧域门。**实测（VCD v2.3 已建成）**：全行星 100% `Ra-w`（AI=0 valid、deficit=1.0、t_range 全网格 0.0 °C；t_mean 408–469 °C 差异纯为高程递减率）——缺口如预测显形，provenance 带响亮 demand_model_warning，热侧门落地后应翻为 `Rn`。详 `data/worlds/earth/design-notes/ucc-worked-examples-venus.md` |
-| **Mars** | ~ −125 至 +20 °C，多数 < 0 | P ≈ 0（水汽/CO₂ 霜，无液态降水） | 稀薄 CO₂；Hamon 勉强可算但近零 | 多数区 `t_max < 0` → **out_of_domain**；`P ≈ 0` → concentration **无定义**（None，非 0） | polar/cold 热量带；供需轴多为 n/a → `Pn`/`Cn`。演练两个「拒绝」路径叠加：冷侧域门 + 无降水时集中度不报数（§4.2：无降水 concentration undefined）。少数赤道夏季 t_max>0 的点才可能给出 AI=0 的 arid。**实测（MCD v6.1 日均气候态已建成）**：日均口径下全网格 t_max 最高仅 −25 °C → **全行星 100% `Pn`**，Pa 路径不出现（需要箱均越过冰点的数据集）；continental 68%（季节幅度中位 41 °C——修饰语点亮的是季节性，日循环已被 diurnal 平均移除）。详 `data/worlds/earth/design-notes/ucc-worked-examples-mars.md` |
+| **Titan** | ~ −180 °C（93 K），近恒温 | 甲烷雨 ~50–150 mm/yr | CH₄，非水；Hamon 不适用 | `t_max < 0` → AI/deficit **out_of_domain**（冷侧门）；非水溶剂另受 §6 范围限制约束 | polar 热量带（t_max ≪ 10）；供需轴 n/a → `Pn`。温度轴有效，供需轴被冷侧门正确拒绝。若将来接甲烷需求模型，须**换 demand_model 声明**而非复用 hamon-1961。**实测（TAM 水文 run 已建成）**：导入选择更强的拒绝——`demand_model=None`（对甲烷溶剂不计算无意义的 Eref）→ AI/deficit = **missing_input**；陆地 `Pn`、甲烷海 `Po`（qsurf>0.05 m，1.3% cells）、continental 0%（t_range ~1.6 K）、bin = 896 地球日（土星年 1/12，时间契约极端案例）。详 `examples/titan.md` |
+| **Venus** | ~ +464 °C（737 K），近等温 | 表面无液态降水 P ≈ 0 | 超临界 CO₂ 大气；Hamon 远超标定域 | `t_min ≫ 18` → tropical；P≈0、Eref>0 → AI=0 **valid**（arid）；但 Hamon 在 464 °C 是**热侧外推，无物理意义** | `Ra`（tropical/arid）——**已知缺口**：out_of_domain 门只挡冷侧（冰点以下），热侧外推不被拦截。演练价值 = 明确记录此缺口，Venus 类高温世界的 AI 需人工判为不可信，或未来增设热侧域门。**实测（VCD v2.3 已建成）**：全行星 100% `Ra-w`（AI=0 valid、deficit=1.0、t_range 全网格 0.0 °C；t_mean 408–469 °C 差异纯为高程递减率）——缺口如预测显形，provenance 带响亮 demand_model_warning，热侧门落地后应翻为 `Rn`。详 `examples/venus.md` |
+| **Mars** | ~ −125 至 +20 °C，多数 < 0 | P ≈ 0（水汽/CO₂ 霜，无液态降水） | 稀薄 CO₂；Hamon 勉强可算但近零 | 多数区 `t_max < 0` → **out_of_domain**；`P ≈ 0` → concentration **无定义**（None，非 0） | polar/cold 热量带；供需轴多为 n/a → `Pn`/`Cn`。演练两个「拒绝」路径叠加：冷侧域门 + 无降水时集中度不报数（§4.2：无降水 concentration undefined）。少数赤道夏季 t_max>0 的点才可能给出 AI=0 的 arid。**实测（MCD v6.1 日均气候态已建成）**：日均口径下全网格 t_max 最高仅 −25 °C → **全行星 100% `Pn`**，Pa 路径不出现（需要箱均越过冰点的数据集）；continental 68%（季节幅度中位 41 °C——修饰语点亮的是季节性，日循环已被 diurnal 平均移除）。详 `examples/mars.md` |
 
-| **Moon** | 赤道 ~ −173 至 +117 °C（昼夜）；永影坑 ~ −230 °C | P = 0（真空） | 无大气 → 无 PET 模型可言 | AI/deficit **missing_input**（demand_model=None，比 OOD 更强的拒绝）；P=0 → concentration **无定义** | **实测（Diviner GCP 已建成）**：分箱 = 12 × 2 h **地方时**（bin_days 2.46 地球日，窗口 = 会合自转一周而非年）→ t_range 是**日较差**（赤道 296 °C）、continental 修饰语点亮日内极端而非季节；赤道因夜箱 t_min < −3 °C 判 **cold（Cn-x）**、极地 **Pn**——「炙热赤道无热带带」是分箱均值口径的诚实结果。温度是**地表皮肤温度**（tbol 作 SPT 代理），data_source 仍为 observation（唯一观测级例外，契约声明随文件走）。详 `data/worlds/earth/design-notes/ucc-worked-examples-moon.md` |
+| **Moon** | 赤道 ~ −173 至 +117 °C（昼夜）；永影坑 ~ −230 °C | P = 0（真空） | 无大气 → 无 PET 模型可言 | AI/deficit **missing_input**（demand_model=None，比 OOD 更强的拒绝）；P=0 → concentration **无定义** | **实测（Diviner GCP 已建成）**：分箱 = 12 × 2 h **地方时**（bin_days 2.46 地球日，窗口 = 会合自转一周而非年）→ t_range 是**日较差**（赤道 296 °C）、continental 修饰语点亮日内极端而非季节；赤道因夜箱 t_min < −3 °C 判 **cold（Cn-x）**、极地 **Pn**——「炙热赤道无热带带」是分箱均值口径的诚实结果。温度是**地表皮肤温度**（tbol 作 SPT 代理），data_source 仍为 observation（唯一观测级例外，契约声明随文件走）。详 `examples/moon.md` |
 
 **演练结论**：五状态里 `out_of_domain`（冷侧，Mars/Titan 温度下）、`missing_input`
 （无大气，Moon/Titan 声明式）、`not_applicable`（P=Eref=0）、`no_positive_demand`
@@ -292,16 +296,19 @@ ucc-worked-examples.md` 为准；下表保留示意框架并逐行标注实测�
 
 ## 相关文档
 
-- `koppen_classification.md` — Köppen 阈值表（UCC 的并列参照列）
-- `climate_classification_comparison.md` — 四大分类体系比较（UCC 的调研背景）
-- `energy_balance.md` — Hamon PET 在引擎沉降干旱门中的另一处消费
-- `ocean_provinces.md` — 海洋分区体系（UCC 干湿轴不覆盖海洋）
+- `design-anchors.md` — 设计原则 + 锚点体系（v2 候选轴设计基础）+ 已否证方向
+- `research/ucc-review-2026-09-17.md` — 专项评审与重设计正文（描述量 + 版本化
+  profile 路线的裁决依据）
+- `docs/knowledge/climatology/koppen_classification.md` — Köppen 阈值表（UCC 的并列参照列）
+- `docs/knowledge/climatology/climate_classification_comparison.md` — 四大分类体系比较（UCC 的调研背景）
+- `docs/knowledge/climatology/energy_balance.md` — Hamon PET 在引擎沉降干旱门中的另一处消费
+- `docs/knowledge/climatology/ocean_provinces.md` — 海洋分区体系（UCC 干湿轴不覆盖海洋）
 - `docs/design/pipelines/climate-pipeline.md` — climate_yearly.msgpack 导出格式
   与 `result_metadata()` 时间约定（实现层技术参考）
-- `data/worlds/earth/design-notes/ucc-worked-examples.md` — Earth 观测 worked
+- `examples/earth.md` — Earth 观测 worked
   examples（33 命名地点 + 类覆盖，4b 创作验收审阅清单；脚本
   `scripts/climate/ucc_examples_earth.py` 生成）
-- `data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md` — Nacrea 迁移
+- `examples/nacrea.md` — Nacrea 迁移
   语义夹具（同 profile 应用于架空世界的基线记录；脚本
   `scripts/climate/ucc_examples_nacrea.py` 生成）
 - `docs/knowledge/planetary_science/planetary_climate_taxonomy.md` — 无生命天体
