@@ -600,10 +600,18 @@ class TerrainPipelineConfig:
     # of off-equatorial heating — the Ganges wind-direction fix).  Mutually
     # exclusive with both ④ paths (one closure per round; the ④ v2 gate can
     # later compose off the same solve if both survive acceptance).
-    # 2026-09-24 轮 6 验收后开启（GW6 = 产品候选）：earth 四季风盒首次全进
-    # obs±25%、nacrea 全护栏过、flag-off 零回归。残余 = 西非雨带走廊族
-    # （刚果/萨赫勒），轮 7（ω 门合成）处理中——详见 private/plans/w-supply-route.md。
-    wet_trough_enabled: bool = True
+    # GW6 product candidate (round-6 acceptance 9✓/3✗, 2026-09-24): the four
+    # monsoon boxes land within ±25% of obs for the first time (Ganges 0.95×),
+    # W contrast 0.97→3.2-4.2 (gate-unlock criterion met), Sahara 435→327,
+    # Köppen distribution match +9.7pp / Group R² 2.1×; nacrea regression all
+    # guards pass.  **Default OFF = speed gate not met**: 6.4× baseline build
+    # (release bar ≤2×; structural — 3 Picard passes × gate iterate-twice ≈
+    # 300 sparse LU per build vs 25), and the spatial metrics carry a trade
+    # (zonal P R² −0.18; equatorial drain shows as Af→BWh in Sumatra/New
+    # Guinea/Congo).  Preconditions for default-on: build-speed work (the S1-S4
+    # list + pass-count) AND the equatorial supply fix.  Full record:
+    # private/plans/w-supply-route.md + docs/design/profiling.md §2.1.
+    wet_trough_enabled: bool = False
     wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
     wet_trough_iterations: int = 3  # moisture-budget re-solves after pass 1 (round-6 config)
     # Heating weight mode: "total" | "pickup".  "pickup" multiplies Q by the
@@ -667,10 +675,13 @@ class TerrainPipelineConfig:
     # diagnose_desert_wetness --pickup-gate), not knobs.  Cold regions are
     # exempt by construction (x = W/W_sat ≈ 1); the §5-α SST gate covers the
     # cold-tongue family where x saturates (no overlap).
-    # Knot calibration domain = the post-supply-fix W regime: requires
-    # wet_trough_enabled (simulate_climate raises otherwise — on the unfixed
-    # W field the ramp strangles the monsoon lands, 2026-09-17 failure).
-    convective_pickup_gate_enabled: bool = True  # 轮 6 开启（需 wet_trough_enabled，见联锁）
+    # Round-6 recalibrated knots; calibration domain = the post-supply-fix W
+    # regime, so the gate requires wet_trough_enabled (simulate_climate raises
+    # otherwise — on the unfixed W field everything collocates at x≈0.16-0.18
+    # and the ramp strangles the monsoon lands, the 2026-09-17 failure).
+    # Default OFF together with the wet trough (same speed gate — see the
+    # wet_trough_enabled comment).
+    convective_pickup_gate_enabled: bool = False
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ
     # rain belt to the observed ~10° width (diffusion length √(κτ) ≈ 900 km).
