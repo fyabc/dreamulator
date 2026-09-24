@@ -478,3 +478,25 @@ class TestWetTroughSlp:
         m_in = (lat_c > 2) & (lat_c < 12) & (lon_c > 55) & (lon_c < 85)
         v_mer = jul[m_in, 1].mean()
         assert v_mer > 0.05, f"源以南应有向北季风流入，实际 v = {v_mer:+.3f} m/s"
+
+    def test_w_mid_matches_v2_entry(self) -> None:
+        """轮 7 合成前提：wet_trough 返回的 w_mid 与 compute_omega_wave_anomaly
+        同输入下逐位一致（同一次求解、同一 ρ_mid 换算、同一参考月口径）。"""
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        _, _, sol = self._run(lat_c, lon_c, area, p_month, t_month)
+        sol2 = compute_omega_wave_anomaly(
+            p_monthly_mm=p_month,
+            t_monthly_c=t_month,
+            elevation_m=np.zeros(len(lat_c)),
+            cell_lat_deg=lat_c,
+            cell_lon_deg=lon_c,
+            cell_area_km2=area,
+            wind_east_monthly=np.zeros_like(p_month),
+            wind_north_monthly=np.zeros_like(p_month),
+            surface_pressure_hpa=1013.25,
+            rotation_period_days=1.0,
+            radius_km=6371.0,
+            orbital_period_days=365.25,
+        )
+        assert np.isfinite(sol.w_mid_m_s).all()
+        assert np.allclose(sol.w_mid_m_s, sol2.w_mid_m_s, rtol=1e-9, atol=1e-12)

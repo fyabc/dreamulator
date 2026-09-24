@@ -1228,6 +1228,12 @@ def simulate_climate(
         _lat_frac = np.abs(lat_deg) / _phi_d_deg
         _w_eq = 0.5 * (1.0 + np.cos(np.pi * np.clip(_lat_frac - 1.0, 0.0, 1.0)))
         # 1 at |lat| ≤ φ_d → 0 at ≥ 2φ_d, (n,)
+        # ω-gate state carried out of the loop for the post-pass reporting and
+        # debug dump (None when the gate is off — mypy narrows on the check).
+        from dreamulator.map.stationary_wave_two_level import TwoLevelSolution
+
+        _wt_omega_last: np.ndarray | None = None
+        _wt_sol_last: TwoLevelSolution | None = None
         for _wt_pass in range(max(1, config.wet_trough_iterations)):
             _hweight = None
             if config.wet_trough_heating_weight == "pickup":
@@ -1249,7 +1255,7 @@ def simulate_climate(
                     f"unknown wet_trough_heating_weight {config.wet_trough_heating_weight!r} "
                     "(expected 'total' or 'pickup')"
                 )
-            _dp_wet_new, _v_lower, _ = wet_trough_slp_anomaly(
+            _dp_wet_new, _v_lower, _wt_sol = wet_trough_slp_anomaly(
                 p_monthly_mm=np.maximum(p_monthly, 0.0),
                 t_monthly_c=t_monthly_C,
                 elevation_m=elevation_m,
@@ -1273,6 +1279,21 @@ def simulate_climate(
             # knob.  Clipped share is logged (v1 monitoring precedent).
             _clip_frac = float((np.abs(_dp_wet_new) >= DP_CAP_HPA * 0.999).mean())
             _dp_wet_new = np.clip(_dp_wet_new, -DP_CAP_HPA, DP_CAP_HPA)
+            # ── Round 7: ω-gate composed off the SAME two-mode solve ──
+            # The wet-trough solver already yields mid-level w for free; feed
+            # it to the Rodwell–Hoskins subsidence-drying gate (mass-conserving
+            # land k_rain suppression over the monsoon-heating west-side descent
+            # tongue).  This is the ④ v2 registered upgrade path — one solve,
+            # two consumptions (φ̂→ΔP_wet for routing, w→gate for the desert
+            # flank).  Knots unchanged (conservative weak slope); the 2026-09-17
+            # no-signal verdict was a forcing-self-reference artifact now broken
+            # by the supply fix (see wet_trough_omega_gate_enabled comment).
+            _wt_omega_gate = None
+            if config.wet_trough_omega_gate_enabled:
+                _wt_omega_gate = subsidence_rainout_gate(_wt_sol.w_mid_m_s, is_land)
+                _wt_omega_last = _wt_omega_gate
+                _wt_sol_last = _wt_sol
+
             _wt_inc = _wt_inc + config.wet_trough_relaxation * (_dp_wet_new - _wt_inc)
             # Wet increment split by the blend: the BL chain sees only the
             # extratropical share; the waveguide share rides as the solver's
@@ -1332,6 +1353,7 @@ def simulate_climate(
                 debug=debug,
                 edge_table=(_msrc, _mdst),
                 ice_increment_c=_t_ice_increment,
+                omega_gate_monthly=_wt_omega_gate,
             )
             _resid = float(np.abs(p_monthly - _p_prev).mean())
             _console.print(
@@ -1351,6 +1373,16 @@ def simulate_climate(
         for _i, _c in enumerate(mesh.cells):
             _c.wind_east_m_s = float(_we2[_i])
             _c.wind_north_m_s = float(_wn2[_i])
+        if _wt_omega_last is not None:
+            _supp = float((_wt_omega_last < 0.99)[is_land].mean()) if is_land.any() else 0.0
+            _console.print(
+                f"    [dim]wet-trough ω gate: f<0.99 on {_supp * 100:.1f}% land, "
+                f"min {_wt_omega_last.min():.2f}[/dim]"
+            )
+            if debug is not None:
+                debug["wt_omega_gate"] = _wt_omega_last
+                assert _wt_sol_last is not None  # set together with the gate
+                debug["wt_w_mid"] = _wt_sol_last.w_mid_m_s.copy()
         if debug is not None:
             debug["wet_trough_dp_hpa"] = _wt_inc.copy()
 

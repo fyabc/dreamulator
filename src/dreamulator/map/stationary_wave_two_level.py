@@ -489,6 +489,15 @@ def wet_trough_slp_anomaly(
     c_hpa = surface_pressure_hpa * np.log(3.0) / (255.0 * LAMBDA_GEO_K)
 
     ii, jj = cell_grid_indices(cell_lat_deg, cell_lon_deg, grid)
+    # 中层密度（cell 上，从年均 T 派生——与 compute_omega_wave_anomaly 同式；
+    # ω→w 换算用，轮 7 ω 门合成让本函数与 v2 门共享同一次求解）
+    t_ann_k = t_monthly_c.mean(axis=1) + T0_K
+    gamma_km = np.clip(moist_lapse_rate(t_monthly_c.mean(axis=1)), 4.5, 6.5) / 1000.0
+    z_mid = (R_DRY * t_ann_k / GRAV) * np.log(2.0)
+    rho_mid = (0.5 * surface_pressure_hpa * 100.0) / (
+        R_DRY * np.maximum(t_ann_k - gamma_km * z_mid, 180.0)
+    )
+
     p_rate = p_monthly_mm / month_s  # kg/m²/s
     q_cells = precip_to_heating(p_rate, surface_pressure_hpa * 100.0, elevation_m)
     if heating_weight is not None:
@@ -500,6 +509,7 @@ def wet_trough_slp_anomaly(
     u_shears = np.empty((n_months, grid.nlat))
     dp_wet = np.empty((n, n_months))
     v_lower = np.empty((n, n_months, 2))
+    w_mid = np.empty((n, n_months))
     for m in range(n_months):
         q_grid = bin_to_grid(q_cells[:, m], cell_area_km2, ii, jj, grid)
         q_eddy = q_grid - q_grid.mean(axis=1, keepdims=True)  # k=0 ≡ 0
@@ -526,9 +536,14 @@ def wet_trough_slp_anomaly(
         )
         v_lower[:, m, 0] = sample_grid_to_cells(u_lo, cell_lat_deg, cell_lon_deg, grid)
         v_lower[:, m, 1] = sample_grid_to_cells(v_lo, cell_lat_deg, cell_lon_deg, grid)
+        # ω (Pa/s, <0 上升) → w (m/s, >0 上升)——与 compute_omega_wave_anomaly
+        # 同一换算；轮 7 起 ω 门合成从这次求解免费取用（不再单独跑 v2 入口）。
+        w_mid[:, m] = -sample_grid_to_cells(sol["omega_mid"], cell_lat_deg, cell_lon_deg, grid) / (
+            rho_mid * GRAV
+        )
 
     solution = TwoLevelSolution(
-        w_mid_m_s=np.full((n, n_months), np.nan),  # ω 未消费——见 compute_omega_wave_anomaly
+        w_mid_m_s=w_mid,
         psi=np.stack(fields["psi"]),
         psi_hat=np.stack(fields["psi_hat"]),
         chi_hat=np.stack(fields["chi_hat"]),

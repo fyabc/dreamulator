@@ -600,9 +600,12 @@ class TerrainPipelineConfig:
     # of off-equatorial heating — the Ganges wind-direction fix).  Mutually
     # exclusive with both ④ paths (one closure per round; the ④ v2 gate can
     # later compose off the same solve if both survive acceptance).
-    wet_trough_enabled: bool = False  # flip after earth+nacrea acceptance
+    # 2026-09-24 轮 6 验收后开启（GW6 = 产品候选）：earth 四季风盒首次全进
+    # obs±25%、nacrea 全护栏过、flag-off 零回归。残余 = 西非雨带走廊族
+    # （刚果/萨赫勒），轮 7（ω 门合成）处理中——详见 private/plans/w-supply-route.md。
+    wet_trough_enabled: bool = True
     wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
-    wet_trough_iterations: int = 2  # moisture-budget re-solves after pass 1
+    wet_trough_iterations: int = 3  # moisture-budget re-solves after pass 1 (round-6 config)
     # Heating weight mode: "total" | "pickup".  "pickup" multiplies Q by the
     # NPH09 convective-pickup factor f(W/W_sat) — the deep-convective share
     # (a subsaturated drizzling column does not heat the free troposphere;
@@ -610,6 +613,18 @@ class TerrainPipelineConfig:
     # the model's Sahara P bias feeds a spurious −2.5 hPa trough, probe
     # 2026-09-24).
     wet_trough_heating_weight: str = "total"
+    # Round 7: ω-gate composition off the SAME two-mode solve (registered as
+    # the ④ v2 upgrade path — "a future ④ v2 gate can compose off the same
+    # solve").  The wet trough's solver pass yields mid-level w for free;
+    # subsidence_rainout_gate turns it into a mass-conserving land k_rain
+    # suppression over the Rodwell–Hoskins descent tongue (Sahara/Sahel/Mid-
+    # East, monsoon-heating west side).  The 2026-09-17 calibration found no
+    # signal because the forcing was self-referential (model's own desert wet
+    # bias as heating); the unlock precondition ("supply-side desert P bias
+    # fixed") is met by the wet trough + pickup gate (round 6: Sahara 435→327,
+    # GW6).  Knots unchanged for round 7 (conservative weak slope); re-calib
+    # via diagnose_desert_wetness --wave-gate after the A/B shows the signal.
+    wet_trough_omega_gate_enabled: bool = False  # round-7 experiment flag
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
@@ -655,7 +670,7 @@ class TerrainPipelineConfig:
     # Knot calibration domain = the post-supply-fix W regime: requires
     # wet_trough_enabled (simulate_climate raises otherwise — on the unfixed
     # W field the ramp strangles the monsoon lands, 2026-09-17 failure).
-    convective_pickup_gate_enabled: bool = False  # flip after earth+nacrea acceptance
+    convective_pickup_gate_enabled: bool = True  # 轮 6 开启（需 wet_trough_enabled，见联锁）
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ
     # rain belt to the observed ~10° width (diffusion length √(κτ) ≈ 900 km).
