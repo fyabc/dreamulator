@@ -304,14 +304,20 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 
 链条四步（执行于 Stage 2 内）：
 
-1. **纬向平均基准**（`zonal_mean_monthly`，`monsoon_circulation.py:188`）：逐月、按
+1. **纬向平均基准**（`zonal_mean_monthly`，`monsoon_circulation.py:196`）：逐月、按
    符号纬度带（5°）求纬向平均温度。
-2. **气压异常**（`pressure_anomaly_monthly`，:247，调用在
+2. **气压异常**（`pressure_anomaly_monthly`，:255，调用在
    `climate_simulator.py:502`）：ΔT = 细胞温度 − 同纬度纬向平均（**B2 海洋参照**：
    按符号分带使南北半球不互染；**全值含年平**——B0b 契约不扣年平，月度 ΔP 全海陆
    对比 → 月度风 → 矢量平均 = 年风，年风因此携带定常海陆结构——冬季西伯利亚高压 ≫
    夏季热低压）。静力响应：ΔP = −P_sfc·E·ΔT/T̄，E ≈ 0.10（边界层投影因子 r=0.6 ×
-   线性衰减积分 3.2 km）。地球检验：ΔT = +5 K → −4.3 hPa，与亚洲夏季热低压同量级。
+   线性衰减积分 3.2 km）。高程结构按异常符号分支（**B3**，2026-09-25）：暖异常
+   （ΔT≥0）乘 B1 衰减 exp(−z/8.5km)·exp(−z/3km)（对流加热参数化——Boos-Kuang 低地
+   锚定 + 水汽尺度，4.8 km 高原响应 ~11%）；冷异常（ΔT<0）保持海平面全幅响应
+   （SLP 折算语义下冷的高海拔柱**放大**距平 exp(+z/H_cold)；东南极高原 = 全球最强
+   SLP 正距平 +28 hPa/7 月，旧衰减把东西南极不对称整个反转）。地球检验：ΔT = +5 K
+   → −4.3 hPa，与亚洲夏季热低压同量级；干盒锚（diagnose_monsoon_dp_shape）撒哈拉
+   7 月 1.13×、西伯利亚 1 月 1.21×、蒙古 1 月 0.76×（目标带 0.8-1.25）。
 3. **尺度分离平滑**（`_smooth_graph` :1038，调用 :517）：51 km 网格的海陆镶嵌让原始
    异常场的梯度被海岸线噪声主导——平滑的目标是马赛克噪声尺度，不是任何动力调整尺度
    （热低压是被海陆热力对比**持续强迫**的结构，不存在自由调整问题；早期 500 km 的
@@ -347,7 +353,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 
 ### 5.3 边界层动量平衡（月度异常）
 
-`monsoon_boundary_layer_wind`（`monsoon_circulation.py:331`，调用 :530）：对 §4 的
+`monsoon_boundary_layer_wind`（`monsoon_circulation.py:366`，调用 :530）：对 §4 的
 ΔP 梯度解
 
 ```
@@ -356,7 +362,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 
 局地东/北分量闭式解。两个极限：f→0（赤道）退化为沿梯度直流——跨赤道季风气流的涌现
 机制；k_d→0 退化为地转风（北半球低压在风向左侧，Buys-Ballot）。拖曳率按地表分型
-（`monsoon_circulation.py:130-131`）：水面 `_DRAG_RATE_S` = 1e-5 s⁻¹（C_D ≈ 1.3e-3）、
+（`monsoon_circulation.py:138-139`）：水面 `_DRAG_RATE_S` = 1e-5 s⁻¹（C_D ≈ 1.3e-3）、
 粗糙植被 `_DRAG_RATE_LAND_S` = 2e-4 s⁻¹（~20× 水面；k_d = C_D·|U|/h_BL，可推导量）。
 陆面拖曳防止 f→0 退化 v = G/k_d 在赤道陆地上把风放大到 ~20 m/s（亚马逊 ~1 m/s，见
 [atmospheric_circulation.md](../../knowledge/climatology/atmospheric_circulation.md) §4.5）。
@@ -812,7 +818,7 @@ E1-E4 已实施——E3 已否证（Faulk 2017 细读方向反转）、E1/E2/E4 
 > `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55（:1555）+ Budyko 再循环参数
 > （`_LAND_RECYCLING_*` :1575-1577）、季风气压平滑 `_MONSOON_PRESSURE_SMOOTHING_KM`
 > = 175 km（:1564）、边界层拖曳 `_DRAG_RATE_S`/`_DRAG_RATE_LAND_S`（水面/植被，
-> `monsoon_circulation.py:130-131`）、E4 海洋柱输送 `_OHT_COLUMN_WM2K` = 0.37 +
+> `monsoon_circulation.py:138-139`）、E4 海洋柱输送 `_OHT_COLUMN_WM2K` = 0.37 +
 > `_OHT_OCEAN_SHARE` = 0.65（TC2001 分解，`climate_simulator.py`）、E1 涡旋标度
 > `_EDDY_SHARE_EARTH` = 0.69 / `_EDDY_OMEGA_EXPONENT` = 0.6（Kaspi 2015 Fig 8b，
 > `climate_seasonality.py`）、§5-α 门结点（GPCP 标定 + `_SST_GATE_F_MIN` = 0.2，

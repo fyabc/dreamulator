@@ -124,10 +124,11 @@ class TestPressureAnomalyMonthly:
         assert np.allclose(dp[0, 1], -dp[1, 1])  # symmetric contrast
 
     def test_elevation_derating(self):
-        # B1: a 4844 m plateau cell responds at exp(−z/8500)·exp(−z/3000)
-        # ≈ 0.113 of an identical lowland cell — the Tibetan-dominance
-        # artifact suppression (Boos & Kuang: the heat source is the lowland
-        # non-orographic heating; Wu 2012: 85% of vapour below 3 km).
+        # B1 (warm branch): a 4844 m plateau cell responds at
+        # exp(−z/8500)·exp(−z/3000) ≈ 0.113 of an identical lowland cell —
+        # the Tibetan-dominance artifact suppression (Boos & Kuang: the heat
+        # source is the lowland non-orographic heating; Wu 2012: 85% of
+        # vapour below 3 km).
         lat = np.full(3, 30.0)
         t = np.zeros((3, 12))
         t[0, 5] = t[1, 5] = 12.0  # two identical warm cells (z = 0 / 4844)
@@ -140,6 +141,26 @@ class TestPressureAnomalyMonthly:
         assert ratio == pytest.approx(expected, rel=1e-6)
         # Both are thermal lows (warm anomaly).
         assert dp[0, 5] < 0.0 and dp[1, 5] < 0.0
+
+    def test_cold_anomaly_no_elevation_derating(self):
+        # B3 (2026-09-25): cold anomalies answer at the full sea-level
+        # amplitude — the deratings are convective (warm-branch)
+        # parameterizations, and under SLP semantics a cold elevated column
+        # amplifies its anomaly (East Antarctic Plateau: 3-4 km, coldest
+        # surface, strongest positive SLP anomaly on Earth).
+        lat = np.full(3, -75.0)
+        t = np.zeros((3, 12))
+        t[0, 7] = t[1, 7] = -12.0  # two identical cold cells (z = 0 / 3000)
+        t[2, 7] = 24.0  # warm ballast so the zonal mean stays 0 → dt = −12
+        elev = np.array([0.0, 3000.0, 0.0])
+
+        dp = pressure_anomaly_monthly(t, lat, band_deg=5.0, elevation_m=elev)
+        # Elevated cold cell = lowland cold cell (no derating), both highs.
+        assert dp[1, 7] == pytest.approx(dp[0, 7], rel=1e-6)
+        assert dp[0, 7] > 0.0 and dp[1, 7] > 0.0
+        # ΔT = 0 is continuous across the branch switch (warm ballast cell
+        # at z = 0 has dt = +24 ≠ 0; check an exactly-neutral month instead).
+        assert np.allclose(dp[:, 0], 0.0)
 
 
 class TestMonsoonBoundaryLayerWind:

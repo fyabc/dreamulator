@@ -21,9 +21,12 @@ Physical chain (tech debt 23, roadmap):
    with E ≈ 0.104 the boundary-layer projection factor (BL-mean
    amplitude × linear-decay profile over the heat-low depth; see the
    module constants) and T̄ the monthly zonal reference temperature.
-   Earth anchor (2026-09-14 Stage-C probe, full-contrast target): Sahara
-   July 0.93×, Siberia January 1.08×, Mongolia January 0.80× of the
-   observed NCEP land-sea SLP contrast.  Known limitation: wet
+   Elevated terrain splits by anomaly sign (B1 warm derating / B3 cold
+   sea-level response — see ``pressure_anomaly_monthly``).  Earth anchors
+   (``scripts/climate/diagnose_monsoon_dp_shape.py``, full-contrast
+   target, post-B3 2026-09-25): Sahara July 1.13×, Siberia January
+   1.21×, Mongolia January 0.76× of the observed NCEP land-sea SLP
+   contrast (target band 0.8-1.25).  Known limitation: wet
    deep-convective systems (India/South-China summer lows, whose latent
    heating projects through the whole column) need E ≈ 0.37-0.40 and are
    undershot ~4× by this dry-BL factor — no Stage-2-available,
@@ -90,13 +93,18 @@ import numpy as np
 # With r = 0.6 and h = 3200 m this gives E ≈ 0.104 — the uniform-full-amplitude
 # 0.25 (pre-M4) overstated the Sahara July thermal low by ~4-5× (two factors
 # of ~2: the uniform in-layer profile, and the surface ΔT standing in for the
-# BL mean; lit review 2026-09-14 report 2 §B).  Stage-C anchor check
-# (2026-09-14, full land-sea contrast target): Sahara 0.93×, Siberia 1.08×,
-# Mongolia 0.80× of the observed NCEP contrast at this value.
+# BL mean; lit review 2026-09-14 report 2 §B).  Anchor check
+# (diagnose_monsoon_dp_shape, full land-sea contrast target, post-B3):
+# Sahara 1.13×, Siberia 1.21×, Mongolia 0.76× of the observed NCEP
+# contrast at this value (target band 0.8-1.25).
 _BL_AMPLITUDE_RATIO: float = 0.6
 _HEAT_LOW_DEPTH_M: float = 3200.0
 
-# B1 elevation derating scales (m):
+# B1 elevation derating scales (m) — warm (convective) anomalies only; cold
+# anomalies use the undiminished sea-level response (B3, 2026-09-25, see
+# pressure_anomaly_monthly: both scales derive their rationale from deep
+# convective heating and do not apply to cold stable columns, whose SLP
+# anomaly grows with elevation).
 # Barometric pressure scale height (standard atmosphere) — an elevated
 # cell's surface pressure represents a smaller mass column.
 _PRESSURE_SCALE_HEIGHT_M: float = 8500.0
@@ -267,28 +275,49 @@ def pressure_anomaly_monthly(
 
     The hydrostatic response to warming the boundary layer by ΔT (M4,
     2026-09-14 — BL-mean amplitude × linear-decay profile, see module
-    constants), structured by elevation (B1, 2026-09-13):
+    constants), structured by elevation with a sign-conditional split
+    (B1 2026-09-13 warm branch; B3 2026-09-25 cold branch):
 
-        ΔP = −P(z) · f(z) · ΔT / T̄_zonal(m)
-        P(z) = P_sfc · exp(−z/H)                    # H = 8.5 km
-        f(z) = E · exp(−z/z_moist)                  # E ≈ 0.104, z_moist = 3 km
+        ΔP = −P_sfc · E · ΔT / T̄_zonal(m) · A(z, ΔT)
+        A = exp(−z/H) · exp(−z/z_moist)   for ΔT ≥ 0   # H = 8.5 km,
+                                                      # z_moist = 3 km
+        A = 1                             for ΔT < 0
 
-    with z = max(elevation, 0) and T̄_zonal(m) the zonal reference
-    temperature of the same month (the actual column temperature that
-    sets the hydrostatic sensitivity).
+    with z = max(elevation, 0), E ≈ 0.104, and T̄_zonal(m) the zonal
+    reference temperature of the same month (the actual column
+    temperature that sets the hydrostatic sensitivity).
 
-    The two elevation deratings, both physical:
-    * P(z): the surface pressure of an elevated cell already represents a
-      smaller mass column — the same fractional expansion moves less mass
-      (barometric).
-    * f(z)'s exp(−z/z_moist): the monsoon's heat source is the *lowland
+    The two elevation deratings of the warm branch, both physical:
+    * exp(−z/H): the surface pressure of an elevated cell already
+      represents a smaller mass column — the same fractional expansion
+      moves less mass (barometric).
+    * exp(−z/z_moist): the monsoon's heat source is the *lowland
       non-orographic* heating — deep convection anchors on the lowland θeb
       maximum and removing the plateau's elevated heating barely weakens
       the South Asian monsoon (Boos & Kuang 2010 Nature / 2013 Sci Rep),
       while 85% of the atmospheric water vapour sits below 3 km (Wu et al.
       2012).  Without it the 4844 m Tibetan surface anomaly dominates ΔP.
-      Combined with P(z), a 4.8 km plateau cell responds at ~11% of a
-      lowland cell.
+      Combined, a 4.8 km plateau cell responds at ~11% of a lowland cell.
+
+    The cold branch keeps the sea-level response (A = 1, B3 2026-09-25):
+    both deratings derive their rationale from *convective* heating — the
+    moisture-scale argument presumes deep convection and a vapour supply,
+    and the barometric "less mass displaced" factor is written for
+    expansion — but this field is consumed with SLP semantics, under
+    which a cold elevated column *amplifies* its anomaly (reduction to
+    sea level multiplies by exp(+z/H_cold); the 3-4 km East Antarctic
+    Plateau, Earth's coldest surface, carries the strongest positive SLP
+    anomaly on the planet, +28 hPa in July).  Applying the warm deratings
+    to cold anomalies reversed that asymmetry (model July ΔP: E Antarctic
+    +3.2 vs W Antarctic +4.2 hPa; NCEP: +28.2 vs −2.2 — diagnostic
+    2026-09-25).  Epistemology: approximate derivation — a sign-
+    conditional regime split; the cold branch inherits the lowland E
+    without separate calibration (declared approximation), and cold-side
+    overshoot where subpolar-low climatology is absent (W Antarctic /
+    Greenland) belongs to the missing storm-track stationary waves
+    (④ family), not to this branch.  ΔP is continuous across ΔT = 0
+    (both branches → 0); the slope kink is piecewise physics, cf. the
+    land/ocean drag-rate split.
 
     Args:
         t_monthly_c: Monthly temperature field (°C), shape (N, 12).
@@ -298,7 +327,7 @@ def pressure_anomaly_monthly(
             response linearly, so denser/thinner atmospheres respond
             proportionally.
         elevation_m: Cell elevation (m), shape (N,), clamped at 0 for the
-            derating factors.  None → all cells at sea level.
+            warm-branch derating factors.  None → all cells at sea level.
         ocean_mask: Boolean (N,).  When given, the zonal reference is the
             *ocean-only* latitude-band mean (B2): ΔT becomes the land-vs-
             same-latitude-ocean contrast.  The all-cell zonal mean
@@ -322,9 +351,15 @@ def pressure_anomaly_monthly(
         dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt / t_zonal_k
     else:
         z = np.maximum(np.asarray(elevation_m, dtype=np.float64), 0.0)[:, None]
-        p_z = surface_pressure_hpa * np.exp(-z / _PRESSURE_SCALE_HEIGHT_M)
-        f_z = _MONSOON_PROJECTION_FRACTION * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M)
-        dp = -p_z * f_z * dt / t_zonal_k
+        # Sign-conditional derating (B3): warm anomalies keep the calibrated
+        # convective derating; cold anomalies answer at full sea-level
+        # amplitude (SLP-reduction semantics — see the docstring).
+        atten = np.where(
+            dt >= 0.0,
+            np.exp(-z / _PRESSURE_SCALE_HEIGHT_M) * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M),
+            1.0,
+        )
+        dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt / t_zonal_k * atten
     return np.asarray(dp)
 
 
