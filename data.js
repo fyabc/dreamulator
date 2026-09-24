@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789937693903,
+  "lastUpdate": 1790262009065,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5485,6 +5485,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009410793031108518",
             "extra": "mean: 5.086485799998286 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "df31321e763fd9f63cdaa22166efcd591e748383",
+          "message": "Merge feature/wet-trough-slp: W 供给路线轮收口——湿季风槽闭合（GW6 opt-in）+ pickup 门重标定 + ω 门否证 + UCC 文档收拢\n\n七轮迭代（规定 ΔP 干预归因 → 湿槽闭合 → 赤道 φ_d 混合 → ΔP_wet 帽 →\n门重标定 → ω 门否证 → 双世界验收）收口于 GW6 产品候选，全部 flag 默认关\n（速度 6.4× 超 ≤2× 发版门槛，用户裁决 opt-in 保留；默认开前置 = 速度优化\n+ 赤道供给修复，登记 private/plans/w-supply-route.md）。产品路径零影响\n（flag-off 零回归 bit-level 验证）。\n\n主要变更：\n- 湿季风槽 SLP 闭合（wet_trough_enabled）：LWM09 两模态解 φ̂ 静力映射 +\n  φ_d=arcsin(k_d/2Ω) 赤道混合消费（求解器下层风）+ ±8 hPa 有效域帽 +\n  阻尼 Picard；earth 四季风盒首次全进 obs±25%、W 对比度 0.97→3.2-4.2\n  （三门解锁判据达成）、Köppen 分布匹配 +9.7pp / Group R² 2.1×；nacrea\n  全护栏过（φ_d 慢自转自适应验证）\n- pickup 门结点重标定（标定域 = 供给修复后 W 体制）+ 门↔湿槽联锁\n- ω 门合成（wet_trough_omega_gate_enabled）：FAIL-fast 否证保留代码——\n  R&H 下沉舌在纬向平均基本态下不涌现（④ 系列第三个独立否证）\n- 前端年均气压独立 ±5 hPa 色标（修「图层缺失」实为压平）\n- UCC 文档收拢 docs/ucc/（specification/design-anchors/examples×6/research×4，\n  全库 22 处引用同步，check_doc_refs 绿）\n- 诊断脚本 _load_mesh msgpack 回归修复 ×7、profiling §2.1 OpenBLAS 备忘 +\n  GW6 速度实测、④ v2 month_s 参考月口径修正（nacrea 会过热 3.65× 的潜伏 bug）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-24T22:59:27+08:00",
+          "tree_id": "61501777aa489d135f62faa8966781391c0d022a",
+          "url": "https://github.com/fyabc/dreamulator/commit/df31321e763fd9f63cdaa22166efcd591e748383"
+        },
+        "date": 1790262007872,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 6.14668236009772,
+            "unit": "iter/sec",
+            "range": "stddev: 0.041889223908419655",
+            "extra": "mean: 162.68938939999202 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.11182352299871,
+            "unit": "iter/sec",
+            "range": "stddev: 0.020805702747330596",
+            "extra": "mean: 321.35498450000455 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.481736950493072,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0780754290563284",
+            "extra": "mean: 674.8836220000006 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 942.9196072331428,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009530290842445971",
+            "extra": "mean: 1.0605358000077558 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.30488193690783,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001094333591181515",
+            "extra": "mean: 5.042740200002527 msec\nrounds: 5"
           }
         ]
       }
