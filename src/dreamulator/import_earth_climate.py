@@ -70,7 +70,12 @@ def ocean_band_anomaly_monthly(
     ``diagnose_monsoon_dp_shape.py`` calibrates against.  Ocean members keep
     their stationary anomalies (subtropical highs, Aleutian/Icelandic lows);
     land members carry the full land–ocean contrast.  Bands with no ocean
-    member (Antarctic interior) fall back to the all-member mean.
+    member (Antarctic interior) take the reference of the *nearest band that
+    has ocean* — the same fill semantics as the engine's
+    ``zonal_mean_monthly``.  (The former all-member fallback made interior
+    anomalies band-relative — mean-zero by construction, ±35 hPa cliffs at
+    band edges where one sector's extreme dominates its own band's reference
+    — and inconsistent with the model-side reference in the error layer.)
 
     Args:
         values: (M, 12) member-major monthly values (mesh cells or flattened
@@ -86,13 +91,27 @@ def ocean_band_anomaly_monthly(
     values = np.asarray(values, dtype=np.float64)
     n_bands = int(np.ceil(360.0 / band_deg))
     band_idx = np.clip(((lats + 90.0) / band_deg).astype(int), 0, n_bands - 1)
-    out = np.empty_like(values)
+
+    # Per-band ocean reference (month-resolved).
+    ocean_refs: dict[int, np.ndarray] = {}
     for band in np.unique(band_idx):
-        sel = band_idx == band
-        ocean_sel = sel & ocean_mask
-        ref = values[ocean_sel].mean(axis=0) if ocean_sel.any() else values[sel].mean(axis=0)
-        out[sel] = values[sel] - ref
-    return out
+        ocean_sel = (band_idx == band) & ocean_mask
+        if ocean_sel.any():
+            ocean_refs[int(band)] = values[ocean_sel].mean(axis=0)
+    if not ocean_refs:
+        # Degenerate world with no ocean anywhere: fall back to the global
+        # mean so the output stays finite (anomalies then sum to zero).
+        return np.asarray(values - values.mean(axis=0, keepdims=True))
+
+    # Fill ocean-less bands from the nearest band that has ocean (engine
+    # zonal_mean_monthly parity).
+    filled = np.array(sorted(ocean_refs))
+    ref_by_band = np.empty((n_bands, values.shape[-1]))
+    for band in range(n_bands):
+        nearest = int(filled[np.argmin(np.abs(filled - band))])
+        ref_by_band[band] = ocean_refs[nearest]
+
+    return np.asarray(values - ref_by_band[band_idx])
 
 
 # Beck class code → Köppen string (from scripts/climate/convert_koppen_map.py).

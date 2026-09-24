@@ -307,15 +307,31 @@ class TestOceanBandAnomalyMonthly:
             if (sel & ocean).any():
                 assert anom[sel & ocean].mean(axis=0) == pytest.approx(0.0, abs=1e-9)
 
-    def test_no_ocean_band_falls_back_to_all_member_mean(self):
+    def test_no_ocean_band_uses_nearest_ocean_band_reference(self):
         from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
 
-        # Antarctic-interior-style band: no ocean member at all.
+        # Antarctic-interior-style band (no ocean member) references the
+        # nearest band that has ocean — engine zonal_mean_monthly parity.
+        # The old all-member fallback made the interior anomalies
+        # band-relative (mean zero); the nearest-ocean reference keeps them
+        # on the same scale as the adjacent band's land cells.
+        values = np.array([[1005.0, 1005.0], [985.0, 995.0], [980.0, 990.0]])
+        lats = np.array([-77.5, -82.0, -86.0])  # band with ocean, then two without
+        ocean = np.array([True, False, False])
+        anom = ocean_band_anomaly_monthly(values, lats, ocean)
+        assert anom[0] == pytest.approx(0.0, abs=1e-12)  # ocean: the reference
+        # Land bands reference the same ocean mean (1005), not their own band.
+        assert anom[1] == pytest.approx([-20.0, -10.0], abs=1e-12)
+        assert anom[2] == pytest.approx([-25.0, -15.0], abs=1e-12)
+
+    def test_no_ocean_anywhere_degrades_to_global_mean(self):
+        from dreamulator.import_earth_climate import ocean_band_anomaly_monthly
+
         values = np.array([[8.0, 12.0], [6.0, 14.0]])
         lats = np.array([-84.0, -82.0])
         ocean = np.array([False, False])
         anom = ocean_band_anomaly_monthly(values, lats, ocean)
-        assert anom.mean(axis=0) == pytest.approx(0.0, abs=1e-12)  # all-member reference
+        assert anom.mean(axis=0) == pytest.approx(0.0, abs=1e-12)  # global-mean reference
 
     def test_annual_mean_not_removed(self):
         """Full contrast keeps the annual-mean structure — the old per-cell
