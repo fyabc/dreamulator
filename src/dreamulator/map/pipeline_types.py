@@ -652,6 +652,9 @@ class TerrainPipelineConfig:
     # diagnose_desert_wetness --pickup-gate), not knobs.  Cold regions are
     # exempt by construction (x = W/W_sat ≈ 1); the §5-α SST gate covers the
     # cold-tongue family where x saturates (no overlap).
+    # Knot calibration domain = the post-supply-fix W regime: requires
+    # wet_trough_enabled (simulate_climate raises otherwise — on the unfixed
+    # W field the ramp strangles the monsoon lands, 2026-09-17 failure).
     convective_pickup_gate_enabled: bool = False  # flip after earth+nacrea acceptance
     # Turbulent moisture diffusivity κ (m²/s) in the mass-conserving water-vapour
     # budget.  Atmospheric eddy diffusivity is ~1e6 m²/s; this spreads the ITCZ

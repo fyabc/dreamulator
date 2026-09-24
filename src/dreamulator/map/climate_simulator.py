@@ -1021,6 +1021,15 @@ def simulate_climate(
             "the wet trough and a future ④ v2 gate can compose off the same "
             "two-mode solve if both survive acceptance)"
         )
+    if config.convective_pickup_gate_enabled and not config.wet_trough_enabled:
+        raise ValueError(
+            "convective_pickup_gate_enabled requires wet_trough_enabled: the "
+            "gate knots are calibrated on the post-supply-fix W regime "
+            "(climate_physics._PICKUP_GATE_KNOTS_* comment — calibration "
+            "domain). On the unfixed W field everything collocates at "
+            "x≈0.16-0.18 and the ramp strangles the monsoon lands (the "
+            "2026-09-17 acceptance failure; round-2 G_only arm reproduced it)."
+        )
     if config.stationary_wave_enabled:
         from dreamulator.map.stationary_wave import compute_slp_wave_anomaly
 
