@@ -47,7 +47,7 @@
 - `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）
 - `climate-steady-coupling.md` — 气候层稳态耦合中间态（远期提案：DAG 某一步 T↔P 耦合解定点，介于单向 DAG 与瞬态 GCM 之间，先关 T↔P 干旱度反馈）
-- `unified-climate-taxonomy.md` — 跨世界统一气候分类 UCC（锚点法：溶剂液窗 θ + AI 水分轴 + 广义季节/相位 + 世界档案；提案，未实现）
+- ~~`unified-climate-taxonomy.md`~~ — **已迁出（2026-09-24 UCC 文档收拢）**：跨世界统一气候分类 UCC 现居 `docs/ucc/`（规格书 `specification.md` + 设计锚点 `design-anchors.md` + 例证 `examples/` + 评审研究 `research/`）
 
 ## 写作原则
 

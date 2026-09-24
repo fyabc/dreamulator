@@ -739,7 +739,7 @@ earth-real-data.md §2.4 末）。
 导入器侧文件额外携带 `bin_days` / `window_days`：缺省即参考月/参考年，非地球
 窗口（如火星月 ≈ 57.25 地球日）必须显式声明——`p_total_mm` 按该窗口报总量，
 AI/deficit 是窗口不变量、跨世界直接可比（时间契约见
-`docs/knowledge/climatology/ucc_climate_descriptors.md` §2）。
+`docs/ucc/specification.md` §2）。
 
 ---
 

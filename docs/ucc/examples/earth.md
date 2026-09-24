@@ -10,7 +10,7 @@
 > 降水 GPCP v2.3 precip.mon.mean (2.5°, monthly climatology)；Köppen 参照列 Beck et al. 2018 present-day Köppen-Geiger (5 arc-min)；
 > 参考需求 hamon-1961 (12 h daylength, from observed T)。
 > 月度序列 month 0 = 三月（春分）——与引擎约定一致（观测导入器已重排）。
-> 读法与描述量语义见 `docs/knowledge/climatology/ucc_climate_descriptors.md`；
+> 读法与描述量语义见 `../specification.md`；
 > 分类阈值与简码字母表见该文 §5。
 > **状态简写**（表格中替代完整状态名）：`OOD` = out_of_domain（需求模型超出
 > 有效域——如冰盖全年无液态水，AI/deficit 不报数）；`MI` = missing_input、

@@ -16,7 +16,7 @@ The document is the migration-semantics fixture: thresholds are globally shared
 semantically correct — not earth-like — labels.  Future profile/engine/config
 changes that move these tables are conscious deltas to accept or investigate.
 
-Output: ``data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md``
+Output: ``docs/ucc/examples/nacrea.md``
 (regenerate, don't hand-edit).
 
 Usage:
@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -42,7 +41,7 @@ from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 from dreamulator.map.ucc import status_short  # noqa: E402
 
 _DEFAULT_MAP = Path("data/worlds/nacrea/maps/satellite_nacrea")
-_DEFAULT_OUT = Path("data/worlds/nacrea/design-notes/0010-ucc-migration-fixture.md")
+_DEFAULT_OUT = Path("docs/ucc/examples/nacrea.md")
 
 # Representative sites: (name, lat, lon, want) — anchors from geography.yaml
 # (named continents/oceans/features).  ``want`` forces the nearest cell of that
@@ -337,8 +336,8 @@ status: accepted
 > 数据 = 正典构建导出 `maps/satellite_nacrea/climate_yearly.msgpack`
 > （引擎输出，`data_source: model`，profile {profile}）+ `climate_monthly.msgpack`
 > + 网格文件。描述量与分类语义见
-> `docs/knowledge/climatology/ucc_climate_descriptors.md`；Earth 侧对照例见
-> `data/worlds/earth/design-notes/ucc-worked-examples.md`。
+> `docs/ucc/specification.md`；Earth 侧对照例见
+> `docs/ucc/examples/earth.md`。
 > 生成日期：{today}。
 > **状态简写**（表格中替代完整状态名）：`OOD` = out_of_domain（需求模型超出有效域
 > ——全年无液态水，AI/deficit 不报数）；`MI` = missing_input、`NA` = not_applicable、

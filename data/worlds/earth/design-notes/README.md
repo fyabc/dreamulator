@@ -18,11 +18,7 @@ Venus 10k（VCD ~1.9°）· Titan 3k（TAM T21 5.6°）。
 
 | 文档 | 天体 / 数据源 | 内容 | 重生成 |
 |------|--------------|------|--------|
-| [ucc-worked-examples.md](ucc-worked-examples.md) | Earth（NCEP/GPCP/Beck 观测） | UCC v1 × 33 真实地点 + 类中心点补位（4b 审阅清单，用户已通过） | `scripts/climate/ucc_examples_earth.py` |
-| [ucc-worked-examples-mars.md](ucc-worked-examples-mars.md) | Mars（MOLA + MCD v6.1，L4） | 全行星 Pn（OOD 门全域）、continental 68%、P≡0 声明 | `scripts/solar/ucc_examples_solar.py --planet mars` |
-| [ucc-worked-examples-moon.md](ucc-worked-examples-moon.md) | Moon（LDEM + Diviner GCP，观测态例外） | 地方时分箱、Cn/Pn 无热带、surface 温度契约声明 | `--planet moon` |
-| [ucc-worked-examples-venus.md](ucc-worked-examples-venus.md) | Venus（Magellan + VCD v2.3，L4） | 全行星 Ra-w = 热侧外推缺口活体演示、近等温 | `--planet venus` |
-| [ucc-worked-examples-titan.md](ucc-worked-examples-titan.md) | Titan（TAM 水文 run，L4，CC-BY） | bin=896 地球日时间契约极端案例、甲烷海 Po、MI 拒绝 | `--planet titan` |
+| UCC worked examples（Earth/Mars/Moon/Venus/Titan） | — | **已迁至 `docs/ucc/examples/`**（2026-09-24 文档收拢） | `scripts/climate/ucc_examples_earth.py` / `scripts/solar/ucc_examples_solar.py` |
 
 均为脚本生成，勿手改。导入管线：`scripts/earth/`（地球）+ `scripts/solar/`
 （四天体；数据缓存 `private/tmp/solar/`，LMD 抓取用 `fetch_lmd_slices.py`）。

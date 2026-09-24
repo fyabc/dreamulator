@@ -2,7 +2,7 @@
 
 > 2026-09-21 整理，来自天体气候划分文献调研（UCC v2 候选轴的参照目标调研）。
 > 完整证据（~85 条文献、判据原文引述、检索留痕、核实等级标注）在
-> `private/reviews/ucc-body-climate-taxonomy-2026-09-21.md`（未入库）；本文是
+> `docs/ucc/research/ucc-body-climate-taxonomy-2026-09-21.md`；本文是
 > 世界无关的知识提炼。所有引用均经该调研核到摘要/原文级。
 
 给火星、金星、土卫六、月球这样的无生命天体做「气候分类」时，一个反复被证实的
@@ -87,10 +87,10 @@ GRL 上、年份互换、期刊错配等）——每条的真实替代文献见�
 
 ## 相关文档
 
-- `docs/knowledge/climatology/ucc_climate_descriptors.md` — UCC 描述量与分类
+- `docs/ucc/specification.md` — UCC 描述量与分类
   profile（§8 有四天体的演练与实测对照）
-- `data/worlds/earth/design-notes/ucc-worked-examples-{mars,moon,venus,titan}.md`
+- `docs/ucc/examples/{mars,moon,venus,titan}.md`
   — 四天体实测 worked examples
 - `docs/knowledge/planetary_science/solar_system_data_sources.md` — 四天体数据源
   与抓取经验
-- `private/reviews/ucc-body-climate-taxonomy-2026-09-21.md` — 完整证据文档（未入库）
+- `docs/ucc/research/ucc-body-climate-taxonomy-2026-09-21.md` — 完整证据文档

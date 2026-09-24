@@ -89,7 +89,7 @@ GHRM GeoTIFF（3.15 GB/张且只有午夜时刻）不实用。
 
 ## 相关文档
 
-- `docs/knowledge/climatology/ucc_climate_descriptors.md` — UCC 描述量/分类语义
+- `docs/ucc/specification.md` — UCC 描述量/分类语义
   （§8 有 Mars/Venus/Moon/Titan 演练与实测对照）
 - `scripts/solar/` — 四导入器 + LMD 抓取器（README 有逐脚本说明）
 - `data/worlds/earth/design-notes/` — 各天体 worked examples（脚本生成）

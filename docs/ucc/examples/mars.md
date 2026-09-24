@@ -3,7 +3,7 @@
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet mars`
 > 生成日期：2026-09-21。描述量与分类语义见
-> `docs/knowledge/climatology/ucc_climate_descriptors.md`（§8 有本天体的示意演练行，
+> `../specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
 > **状态简写**：`OOD` = out_of_domain（需求模型超出有效域）；`MI` = missing_input、
 > `NA` = not_applicable、`NPD` = no_positive_demand（语义见知识文档 §3）。
