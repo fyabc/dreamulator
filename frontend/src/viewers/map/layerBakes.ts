@@ -507,15 +507,19 @@ function buildCellPalettes(
     }
 
     // Annual-mean pressure anomaly (canonical ΔP's 12-month mean, M2-A0③) —
-    // diverging ±20 hPa like the monthly ΔP bake, ocean + land (subtropical
-    // highs / stationary land–sea contrast).  Written by both the engine
-    // (built worlds) and the obs importer; the absolute slp_annual_hpa is
-    // obs-only and no longer drives this layer.
+    // diverging ±5 hPa on its OWN scale, ocean + land (subtropical highs /
+    // stationary land–sea contrast).  The annual mean of the full-value
+    // monthly ΔP self-cancels the seasonal land-sea reversal, leaving a
+    // −0.3…+4.1 hPa range on Earth: the monthly ±20 scale squeezed it into
+    // the middle ±3% of the ramp — a visually blank layer (baseline audit
+    // 2026-09-22: display issue, not missing data).  Written by both the
+    // engine (built worlds) and the obs importer; the absolute slp_annual_hpa
+    // is obs-only and no longer drives this layer.
     const dpAnnual: number | null | undefined = cell.pressure_anomaly_annual_hpa
     if (dpAnnual != null) {
       pressure.set(
         cell.id,
-        sequentialColor((dpAnnual + 20) / 40, TEMPERATURE_SCALE),
+        sequentialColor((dpAnnual + 5) / 10, TEMPERATURE_SCALE),
       )
     }
 
