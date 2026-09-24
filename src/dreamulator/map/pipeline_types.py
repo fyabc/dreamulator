@@ -585,6 +585,31 @@ class TerrainPipelineConfig:
     # γ=(2d)⁻¹, r₁=(10d)⁻¹, r₀=(20d)⁻¹, A=1e6 m²/s are paper values (module
     # constants, not knobs).  Mutually exclusive with stationary_wave_enabled.
     stationary_wave_v2_enabled: bool = False  # flip to True after earth+nacrea acceptance
+    # ── Wet monsoon-trough SLP closure (W-supply route round 1, 2026-09-24) ──
+    # The deep-convective latent heating Q = L_v·P forces the validated
+    # two-mode solver (stationary_wave_two_level); the baroclinic geopotential
+    # φ̂ maps hydrostatically onto an SLP wet component (δp_s = c·φ̂, all-
+    # constant derivation — see wet_trough_slp_anomaly) added to the thermal
+    # ΔP before the smoothing → gradient → boundary-layer-wind chain, and the
+    # moisture budget re-runs on the updated winds (damped Picard).  This is
+    # the supply-route closure the prescribed-ΔP intervention confirmed as
+    # the routing lever (2026-09-23, H1/H4): land AND ocean convective heating
+    # enter Q.  Literature: Boos & Kuang 2013 (deep precipitating convection
+    # maintains the monsoon trough), Chiang et al. 2001 (elevated heating
+    # dominates the tropical surface-wind response), Gill 1980 (Rossby low NW
+    # of off-equatorial heating — the Ganges wind-direction fix).  Mutually
+    # exclusive with both ④ paths (one closure per round; the ④ v2 gate can
+    # later compose off the same solve if both survive acceptance).
+    wet_trough_enabled: bool = False  # flip after earth+nacrea acceptance
+    wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
+    wet_trough_iterations: int = 2  # moisture-budget re-solves after pass 1
+    # Heating weight mode: "total" | "pickup".  "pickup" multiplies Q by the
+    # NPH09 convective-pickup factor f(W/W_sat) — the deep-convective share
+    # (a subsaturated drizzling column does not heat the free troposphere;
+    # pre-registered ablation arm for the desert self-reference problem —
+    # the model's Sahara P bias feeds a spurious −2.5 hPa trough, probe
+    # 2026-09-24).
+    wet_trough_heating_weight: str = "total"
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)

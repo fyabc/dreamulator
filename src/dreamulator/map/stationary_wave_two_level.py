@@ -62,6 +62,7 @@ from dreamulator.map.stationary_wave import (
     make_wave_grid,
     sample_grid_to_cells,
 )
+from dreamulator.result_contract import REFERENCE_MONTH_DAYS
 
 # ── 文献锚定常数（Lee, Wang & Mapes 2009 §3；全部论文值，非调参项） ──
 C_GRAVITY_WAVE_MS = 60.0  # 内重力波速 c_g（Kleeman 1989; Zebiak 1986; LWM09）
@@ -363,11 +364,16 @@ def compute_omega_wave_anomaly(
     加热闭合 → bin → 扣环均值 → 纬向平均基本态 → k-块求解 → ω 采样回 cell → w。
     """
     del wind_north_monthly  # 纬向平均基本态不用 v（v1 教训：非地转 v̄ 是毒项）
+    del orbital_period_days  # 月度序列 = 参考年切片（CLIM-01），非轨道月
     grid = make_wave_grid()
     radius_m = radius_km * 1000.0
     omega_planet = 2.0 * np.pi / (rotation_period_days * 86400.0)
     n, n_months = p_monthly_mm.shape
-    month_s = orbital_period_days * 86400.0 / n_months
+    # Rate conversion needs seconds-per-stored-month: the monthly series is
+    # a *reference-year* slice (CLIM-01/M2-A0④: 365.25/12-day months for
+    # every world — nacrea's ~8.3-day orbital month must not divide here,
+    # that would over-state the heating rate 3.65×).
+    month_s = REFERENCE_MONTH_DAYS * 86400.0
 
     ii, jj = cell_grid_indices(cell_lat_deg, cell_lon_deg, grid)
     # 中层密度（cell 上，从年均 T 派生——同 v1 σ_T 路径）
@@ -419,3 +425,149 @@ def compute_omega_wave_anomaly(
         u_baro=u_baros,
         u_shear=u_shears,
     )
+
+
+def wet_trough_slp_anomaly(
+    p_monthly_mm: np.ndarray,
+    t_monthly_c: np.ndarray,
+    elevation_m: np.ndarray,
+    cell_lat_deg: np.ndarray,
+    cell_lon_deg: np.ndarray,
+    cell_area_km2: np.ndarray,
+    wind_east_monthly: np.ndarray,
+    *,
+    surface_pressure_hpa: float,
+    rotation_period_days: float,
+    radius_km: float,
+    heating_weight: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, TwoLevelSolution]:
+    """湿季风槽 SLP 分量（hPa，(n, 12)）——W 场供给路线轮 1 的主闭合。
+
+    深对流降水的潜热加热强迫已验证的两模态求解器，斜压位势 φ̂ 经静力映射读出
+    海平面气压的湿分量（规定 ΔP 干预实验 2026-09-23 裁决 H1/H4：ΔP 结构是水汽
+    路由的主杠杆、海洋侧定常结构必需——陆 + 洋的对流加热都进 Q）。文献：
+    Boos & Kuang 2013（Sci. Rep. 3:1192，深对流降水维持季风槽的自由对流层温度
+    极大值）；Chiang, Zebiak & Cane 2001（JAS 58:1371，elevated heating 主导热带
+    地表风响应）；Gill 1980（非赤道加热 → Rossby 低压在加热西北侧——恒河风向
+    修复的几何，规定 ΔP 实验实测验证）。
+
+    静力映射（近似推导类，全常数、零新参数）：
+
+        δp_s = −(p_s·ln(p_s/p_t)/T̄_col)·δT_v,ln        （顶边界静力）
+        δT_v,ln = T′_mid·ln3/ln(p_s/p_t)               （两模态层只占柱的 ln3）
+        T′_mid = −φ̂/Λ，Λ = R·ln3/2（下层符号，φ̂<0 = 加热）
+        ⇒ δp_s = +c·φ̂，c = p_s·ln3/(T̄_col·Λ)
+
+    ln(p_s/p_t) 因子相消；T̄_col = 255 K（标准大气对数气压加权柱平均）。量级核
+    （2026-09-24 探针，earth 真实构建场）：孟加拉 7 月 300–430 W/m² → 恒河湿项
+    −1.4 hPa（pass-1 P 下），定点迭代随 P 增长推向 −2~−3 hPa——与规定 ΔP 实验
+    D_half 臂（0.5×观测全场 = 机制链增益自洽点）的实证需求量级一致。
+
+    Args:
+        p_monthly_mm: 引擎月度降水（mm/参考月，CLIM-01 基准），(n, 12)。
+        t_monthly_c: 月度温度（°C），(n, 12)。
+        elevation_m / cell_lat_deg / cell_lon_deg / cell_area_km2: 网格几何。
+        wind_east_monthly: 月度纬向风（m/s），(n, 12)——纬向平均基本态的低层项。
+        surface_pressure_hpa / rotation_period_days / radius_km: 行星参数。
+        heating_weight: 可选 (n, 12) 深对流份额权重 ∈ [0, 1]（如 NPH09 pickup
+            因子 f(W/W_sat)——亚饱和毛雨柱不加热自由对流层）。``None`` → 全量 P。
+
+    Returns:
+        (δp_s_wet (n, 12) hPa, v_lower (n, 12, 2) 下层风分量（赤道波导内的
+        湿项风响应——见 _lower_level_wind_components）, 求解器完整解
+        TwoLevelSolution——诊断/测试消费)。
+    """
+    grid = make_wave_grid()
+    radius_m = radius_km * 1000.0
+    omega_planet = 2.0 * np.pi / (rotation_period_days * 86400.0)
+    n, n_months = p_monthly_mm.shape
+    # 月度序列 = 参考年切片（CLIM-01：所有世界 365.25/12 天/月——轨道月做分母
+    # 会把 nacrea 的加热率过计 3.65×）。
+    month_s = REFERENCE_MONTH_DAYS * 86400.0
+
+    # 静力映射常数（hPa per m²/s²）；p_s·ln3 的 p_s 用海平面值（SLP 语义）。
+    c_hpa = surface_pressure_hpa * np.log(3.0) / (255.0 * LAMBDA_GEO_K)
+
+    ii, jj = cell_grid_indices(cell_lat_deg, cell_lon_deg, grid)
+    p_rate = p_monthly_mm / month_s  # kg/m²/s
+    q_cells = precip_to_heating(p_rate, surface_pressure_hpa * 100.0, elevation_m)
+    if heating_weight is not None:
+        q_cells = q_cells * np.clip(np.asarray(heating_weight, dtype=np.float64), 0.0, 1.0)
+
+    field_names = ("psi", "psi_hat", "chi_hat", "phi_hat", "omega_mid")
+    fields: dict[str, list[np.ndarray]] = {name: [] for name in field_names}
+    u_baros = np.empty((n_months, grid.nlat))
+    u_shears = np.empty((n_months, grid.nlat))
+    dp_wet = np.empty((n, n_months))
+    v_lower = np.empty((n, n_months, 2))
+    for m in range(n_months):
+        q_grid = bin_to_grid(q_cells[:, m], cell_area_km2, ii, jj, grid)
+        q_eddy = q_grid - q_grid.mean(axis=1, keepdims=True)  # k=0 ≡ 0
+        u_grid = bin_to_grid(wind_east_monthly[:, m], cell_area_km2, ii, jj, grid, True)
+        t_grid = bin_to_grid(t_monthly_c[:, m], cell_area_km2, ii, jj, grid, True)
+        u_baro, u_shear = zonal_mean_basic_state(u_grid, t_grid, grid, omega_planet, radius_m)
+        u_baros[m] = u_baro
+        u_shears[m] = u_shear
+        sol = solve_two_level_month(
+            q_eddy,
+            u_baro,
+            u_shear,
+            grid,
+            omega_planet,
+            radius_m,
+            surface_pressure_pa=surface_pressure_hpa * 100.0,
+        )
+        for name in fields:
+            fields[name].append(sol[name])
+        phi_cells = sample_grid_to_cells(sol["phi_hat"], cell_lat_deg, cell_lon_deg, grid)
+        dp_wet[:, m] = c_hpa * phi_cells
+        u_lo, v_lo = _lower_level_wind_components(
+            sol["psi"], sol["psi_hat"], sol["chi_hat"], grid, radius_m
+        )
+        v_lower[:, m, 0] = sample_grid_to_cells(u_lo, cell_lat_deg, cell_lon_deg, grid)
+        v_lower[:, m, 1] = sample_grid_to_cells(v_lo, cell_lat_deg, cell_lon_deg, grid)
+
+    solution = TwoLevelSolution(
+        w_mid_m_s=np.full((n, n_months), np.nan),  # ω 未消费——见 compute_omega_wave_anomaly
+        psi=np.stack(fields["psi"]),
+        psi_hat=np.stack(fields["psi_hat"]),
+        chi_hat=np.stack(fields["chi_hat"]),
+        phi_hat=np.stack(fields["phi_hat"]),
+        omega_mid_pa_s=np.stack(fields["omega_mid"]),
+        u_baro=u_baros,
+        u_shear=u_shears,
+    )
+    return dp_wet, v_lower, solution
+
+
+def _lower_level_wind_components(
+    psi: np.ndarray,
+    psi_hat: np.ndarray,
+    chi_hat: np.ndarray,
+    grid: WaveGrid,
+    radius_m: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """两模态解 → 下层风分量 (u, v)（m/s，(nlat, nlon)；Gill 下层符号）。
+
+        v₂ = k̂×∇ψ₂ + ∇χ̂，ψ₂ = ψ + ψ̂（下层流函数），χ₂ = +χ̂（正压缩散 ≡ 0）
+
+    有限差分（2° 网格；场本身 ≥行星尺度，且下游还有 175 km 图平滑——差分
+    精度足够）。物理角色：赤道波导内湿项的风响应（代替 f→0 病态放大的
+    边界层 Ekman 链——轮 1/2 的暖池撕裂病根，求解器动量阻尼 r₁=(10 d)⁻¹
+    使风幅度有界）。
+    """
+    psi2 = psi + psi_hat
+    lat_rad = np.radians(grid.lat_deg)
+    # 经度方向是周期坐标——np.gradient 的单侧端点差分在 lon=0/358° 接缝处
+    # 是错的，用 roll 中心差分（周期 wrap）。纬度方向保持 np.gradient
+    # （端点是 Dirichlet 墙行，场为零，单侧差分无害）。
+    two_dlon = 2.0 * grid.dlon
+    dpsi_dlon = (np.roll(psi2, -1, axis=1) - np.roll(psi2, 1, axis=1)) / two_dlon
+    dchi_dlon = (np.roll(chi_hat, -1, axis=1) - np.roll(chi_hat, 1, axis=1)) / two_dlon
+    dpsi_dlat = np.gradient(psi2, lat_rad, axis=0)
+    dchi_dlat = np.gradient(chi_hat, lat_rad, axis=0)
+    cosf = np.maximum(grid.cosf, 0.05)
+    # k̂×∇ψ₂ = (−(1/a)∂ψ₂/∂φ, (1/(a cosφ))∂ψ₂/∂λ)；∇χ̂ 直取
+    u = dchi_dlon / (radius_m * cosf[:, None]) - dpsi_dlat / radius_m
+    v = dpsi_dlon / (radius_m * cosf[:, None]) + dchi_dlat / radius_m
+    return u, v

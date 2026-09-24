@@ -1009,10 +1009,17 @@ def simulate_climate(
     # → less heating), residual logged for monitoring.  v1 scope: the ocean
     # chain keeps pass-1 winds (Stommel/SST not re-run) and 4.1-B maritime
     # advection keeps the pre-wave wind field.
-    if config.stationary_wave_enabled and config.stationary_wave_v2_enabled:
+    if (
+        int(config.stationary_wave_enabled)
+        + int(config.stationary_wave_v2_enabled)
+        + int(config.wet_trough_enabled)
+        > 1
+    ):
         raise ValueError(
-            "stationary_wave_enabled and stationary_wave_v2_enabled are mutually "
-            "exclusive (④ v1 barotropic vs v2 two-level Gill paths)"
+            "stationary_wave_enabled / stationary_wave_v2_enabled / "
+            "wet_trough_enabled are mutually exclusive (one closure per round; "
+            "the wet trough and a future ④ v2 gate can compose off the same "
+            "two-mode solve if both survive acceptance)"
         )
     if config.stationary_wave_enabled:
         from dreamulator.map.stationary_wave import compute_slp_wave_anomaly
@@ -1161,6 +1168,182 @@ def simulate_climate(
             debug["wave2_u_baro"] = _wave2.u_baro
             debug["wave2_u_shear"] = _wave2.u_shear
             debug["wave2_p_resid_mm"] = np.array(_resid)
+
+    # ── Wet monsoon-trough SLP closure (W-supply route round 1, 2026-09-24) ──
+    # P → Q = L_v·P (land AND ocean — the prescribed-ΔP intervention's H4:
+    # the ocean-side stationary structure is load-bearing for the routing) →
+    # two-mode solve → φ̂ → δp_s_wet = c·φ̂ (hydrostatic mapping, all
+    # constants — wet_trough_slp_anomaly) rides on the *raw* thermal ΔP;
+    # the existing smoothing → gradient → BL-wind chain consumes it, and the
+    # moisture budget re-runs on the updated winds.  The wet trough and the
+    # precipitation it is derived from are one fixed point — damped Picard,
+    # residual logged per pass.  v1 scope (same as ④): the ocean chain and
+    # 4.1-B keep the pass-1 winds.  The Rossby placement (low NW of the
+    # off-equatorial heating, Gill 1980) is what rotates the Ganges pressure
+    # gradient onto the trough axis (the direction fix the wind-chain
+    # decomposition attributed to the ΔP structure).  Amplitude expectations
+    # from the same intervention: the machinery gain is ~2-3× (D_obs vs
+    # D_half arms) — monsoon P may overshoot until the τ(W) governor round
+    # recalibrates the pickup gate; routing metrics (W contrast, trough
+    # winds) are this round's acceptance, not P amplitude.
+    if config.wet_trough_enabled:
+        from dreamulator.map.stationary_wave import DP_CAP_HPA
+        from dreamulator.map.stationary_wave_two_level import wet_trough_slp_anomaly
+
+        _lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
+        _areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+        _u_e = np.einsum("mck,ck->cm", wind_monthly, _east_w)
+        _wt_inc = np.zeros((n, 12), dtype=np.float64)  # accumulated wet increment
+        _vlo_inc = np.zeros((n, 12, 3), dtype=np.float64)  # relaxed solver-wind state
+        # ── Equatorial consumption blend (rounds 1/2 lesson, round-3 refined) ──
+        # The boundary-layer closure misbehaves where the Coriolis term drops
+        # below the surface drag: at f ≲ k_d the Ekman solution degenerates to
+        # v = G/k_d and |v|/|G| = 1/√(k_d²+f²) on the tropical ocean exceeds
+        # the mid-latitude land response by >10×, shredding the moisture field
+        # (warm-pool runaway, rounds 1/2; the ④ v1 disease).  Inside that
+        # degenerate band the wet response is consumed as the solver's own
+        # lower-level wind (wave dynamics with bounded momentum damping r₁)
+        # instead of the Ekman answer.  The boundary is the BL-degeneracy
+        # latitude itself (a validity bound of the momentum balance, not a
+        # heuristic radius — round 3's L_R waveguide was 2-4× too wide and
+        # starved Guinea's cross-equatorial BL supply):
+        #
+        #     φ_d = arcsin(k_d,ocean / (2Ω))     Earth 3.9°, nacrea 12.4°
+        #
+        # world-generic through Ω; cosine taper φ_d → 2φ_d (a numerical
+        # smoothness choice).  Ultra-slow rotators (k_d ≥ 2Ω) get φ_d = 90° —
+        # the BL closure is degenerate everywhere and the solver wind takes
+        # over globally, which is the physically honest limit.
+        _omega_p = 2.0 * np.pi / (config.rotation_period_days * 86400.0)
+        _phi_d_deg = np.degrees(np.arcsin(np.clip(_DRAG_RATE_S / (2.0 * _omega_p), 0.0, 1.0)))
+        _lat_frac = np.abs(lat_deg) / _phi_d_deg
+        _w_eq = 0.5 * (1.0 + np.cos(np.pi * np.clip(_lat_frac - 1.0, 0.0, 1.0)))
+        # 1 at |lat| ≤ φ_d → 0 at ≥ 2φ_d, (n,)
+        for _wt_pass in range(max(1, config.wet_trough_iterations)):
+            _hweight = None
+            if config.wet_trough_heating_weight == "pickup":
+                # Deep-convective share of P (a subsaturated drizzling column
+                # does not heat the free troposphere) — annual-mean W₀ from
+                # the previous budget pass sets the gate (static weight).
+                if debug is None or "w_column_final_mean" not in debug:
+                    raise ValueError(
+                        "wet_trough_heating_weight='pickup' requires the debug "
+                        "dict (it reads the pass-1 column water W₀); pass "
+                        "debug={} or use the default 'total' mode"
+                    )
+                _hweight = np.broadcast_to(
+                    convective_pickup_gate(debug["w_column_final_mean"], t_mean_C)[:, None],
+                    (n, 12),
+                )
+            elif config.wet_trough_heating_weight != "total":
+                raise ValueError(
+                    f"unknown wet_trough_heating_weight {config.wet_trough_heating_weight!r} "
+                    "(expected 'total' or 'pickup')"
+                )
+            _dp_wet_new, _v_lower, _ = wet_trough_slp_anomaly(
+                p_monthly_mm=np.maximum(p_monthly, 0.0),
+                t_monthly_c=t_monthly_C,
+                elevation_m=elevation_m,
+                cell_lat_deg=lat_deg,
+                cell_lon_deg=_lon_deg,
+                cell_area_km2=_areas_km2,
+                wind_east_monthly=_u_e,
+                surface_pressure_hpa=config.surface_pressure_hpa,
+                rotation_period_days=config.rotation_period_days,
+                radius_km=config.radius_km,
+                heating_weight=_hweight,
+            )
+            # Amplitude cap (round-4 verdict: the P→Q→ΔP→convergence→P loop has
+            # a structural gain > 1 — the uncapped Picard sequence diverged to
+            # −54 hPa, ~5× the deepest observed monsoon trough, and the pickup
+            # gate cannot stabilise it because saturated columns get f≈1).
+            # DP_CAP_HPA is the same guard ④ v1/v2 use: the NCEP stationary-eddy
+            # SLP climatology bound, i.e. the validity domain of a *linear*
+            # steady response — beyond it the solver's own premise is violated,
+            # so clipping is a numerical-stabilisation statement, not a tuning
+            # knob.  Clipped share is logged (v1 monitoring precedent).
+            _clip_frac = float((np.abs(_dp_wet_new) >= DP_CAP_HPA * 0.999).mean())
+            _dp_wet_new = np.clip(_dp_wet_new, -DP_CAP_HPA, DP_CAP_HPA)
+            _wt_inc = _wt_inc + config.wet_trough_relaxation * (_dp_wet_new - _wt_inc)
+            # Wet increment split by the blend: the BL chain sees only the
+            # extratropical share; the waveguide share rides as the solver's
+            # lower-level wind (tangent 3D via the local east/north basis),
+            # under the same Picard relaxation as the ΔP increment.  The wind
+            # needs no cap of its own: the solver's momentum damping r₁ bounds
+            # it (round-4 equatorial winds stayed physical while ΔP diverged).
+            _vlo_new = (
+                _v_lower[:, :, 0][:, :, None] * _east_w[:, None, :]
+                + _v_lower[:, :, 1][:, :, None] * _north_w[:, None, :]
+            )
+            _vlo_inc += config.wet_trough_relaxation * (_vlo_new - _vlo_inc)
+            _dp2 = _smooth_graph(_dp_hpa_raw + (1.0 - _w_eq)[:, None] * _wt_inc, _avg, _n_smooth)
+            _grad2 = np.stack(
+                [
+                    _graph_least_squares_gradient(mesh, _dp2[:, m], nodes_xyz) * 100.0 / _radius_m
+                    for m in range(12)
+                ]
+            )
+            _wind_monsoon2 = monsoon_boundary_layer_wind(
+                _grad2, f_coriolis, nodes_xyz, drag_rate_s=_drag
+            )
+            wind_monthly = np.stack(
+                [
+                    _wind_bg
+                    + _sw_wind[m]
+                    + _wind_monsoon2[m]
+                    + (_w_eq[:, None] * _vlo_inc[:, m, :])
+                    for m in range(12)
+                ]
+            )
+            wind_monthly = np.stack(
+                [
+                    terrain_wind_blocking(
+                        wind_monthly[m], elevation_m, config.wind_blocking_height_m
+                    )
+                    for m in range(12)
+                ]
+            )
+            wind = wind_monthly.mean(axis=0)
+            # The next solve's zonal basic state follows the updated winds
+            # (the baroclinic response is basic-state insensitive per LWM09,
+            # but consistency is free).
+            _u_e = np.einsum("mck,ck->cm", wind_monthly, _east_w)
+            _p_prev = p_monthly
+            precipitation_mm, p_monthly = _compute_precipitation_monthly_budget(
+                mesh=mesh,
+                wind=wind,
+                wind_monthly=wind_monthly,
+                is_land=is_land,
+                is_ocean=is_ocean,
+                temperature_c=t_mean_C,
+                t_monthly_c=t_monthly_C,
+                nodes_xyz=nodes_xyz,
+                config=config,
+                itcz_lat_monthly=itcz_lat_monthly,
+                debug=debug,
+                edge_table=(_msrc, _mdst),
+                ice_increment_c=_t_ice_increment,
+            )
+            _resid = float(np.abs(p_monthly - _p_prev).mean())
+            _console.print(
+                f"    [dim]wet trough pass {_wt_pass + 1}: "
+                f"ΔP_wet {_wt_inc.min():.1f}..{_wt_inc.max():.1f} hPa "
+                f"(capped {_clip_frac * 100:.2f}%), "
+                f"|P_next−P_prev| mean {_resid:.1f} mm[/dim]"
+            )
+        # The stored ΔP and winds must reflect the wet-updated fields (the
+        # writebacks below read _dp_hpa; the annual wind write was pass-1).
+        # Same blend as the consumption above: inside the waveguide the wet
+        # share is delivered by the solver wind, not by the ΔP field — the
+        # stored/exported ΔP must not claim a pressure structure the wind
+        # chain never saw (front-end/validation read this field).
+        _dp_hpa = _smooth_graph(_dp_hpa_raw + (1.0 - _w_eq)[:, None] * _wt_inc, _avg, _n_smooth)
+        _we2, _wn2 = _dec_wind(wind, _east_w, _north_w)
+        for _i, _c in enumerate(mesh.cells):
+            _c.wind_east_m_s = float(_we2[_i])
+            _c.wind_north_m_s = float(_wn2[_i])
+        if debug is not None:
+            debug["wet_trough_dp_hpa"] = _wt_inc.copy()
 
     # ------------------------------------------------------------------
     # Stage 4: Köppen classification

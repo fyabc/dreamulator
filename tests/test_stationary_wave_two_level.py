@@ -24,6 +24,7 @@ from dreamulator.map.stationary_wave_two_level import (
     compute_omega_wave_anomaly,
     precip_to_heating,
     solve_two_level_month,
+    wet_trough_slp_anomaly,
     zonal_mean_basic_state,
 )
 
@@ -364,3 +365,116 @@ def test_full_chain_synthetic_world():
     assert gate[(lat_c > 15) & (lat_c < 30) & (lon_c < 25)].min() < 1.0
     assert gate[(np.abs(dn) < 6) & (np.abs(dl) < 10)].min() >= 1.0 - 1e-12
     del rng
+
+
+class TestWetTroughSlp:
+    """湿季风槽 SLP 分量（W 供给路线轮 1 主闭合）。
+
+    物理锚：深对流加热 → φ̂（下层符号，<0 = 加热）→ 静力映射 δp_s = c·φ̂。
+    幅度带参照 2026-09-24 真实场探针（恒河 7 月 −1.4 hPa @ pass-1 P）与规定
+    ΔP 干预实验（机制链自洽点 = −2~−3 hPa）；Rossby 西移在场内（合成实测：
+    最小值 68°E vs 源 75°E）。文献：Boos & Kuang 2013；Chiang et al. 2001；
+    Gill 1980。
+    """
+
+    @staticmethod
+    def _synthetic(p_peak: float = 350.0):
+        grid = make_wave_grid()
+        lat_c = np.repeat(grid.lat_deg[4:-4:2], grid.nlon // 2)
+        lon_c = np.tile(np.arange(0, 360, 4), len(range(4, grid.nlat - 4, 2)))
+        n = len(lat_c)
+        area = np.full(n, 16.0) * np.cos(np.radians(lat_c))
+        p_month = np.full((n, 12), 30.0)
+        dl = (lon_c - 75.0 + 180.0) % 360.0 - 180.0
+        dn = lat_c - 18.0
+        p_month[:, 6] = p_peak * np.exp(-((dl / 18.0) ** 2) - ((dn / 7.0) ** 2))
+        t_month = np.broadcast_to(
+            (25.0 - 30.0 * np.sin(np.radians(lat_c)) ** 2)[:, None], (n, 12)
+        ).copy()
+        return lat_c, lon_c, area, dl, dn, p_month, t_month
+
+    @staticmethod
+    def _run(lat_c, lon_c, area, p_month, t_month, weight=None):
+        return wet_trough_slp_anomaly(
+            p_monthly_mm=p_month,
+            t_monthly_c=t_month,
+            elevation_m=np.zeros(len(lat_c)),
+            cell_lat_deg=lat_c,
+            cell_lon_deg=lon_c,
+            cell_area_km2=area,
+            wind_east_monthly=np.zeros_like(p_month),
+            surface_pressure_hpa=1013.25,
+            rotation_period_days=1.0,
+            radius_km=6371.0,
+            heating_weight=weight,
+        )
+
+    def test_zero_precip_zero_slp(self) -> None:
+        lat_c, lon_c, area, dl, dn, _, t_month = self._synthetic()
+        n = len(lat_c)
+        dp, _, _ = self._run(lat_c, lon_c, area, np.zeros((n, 12)), t_month)
+        assert dp.shape == (n, 12)
+        assert np.abs(dp).max() < 1e-12
+
+    def test_source_low_sign_and_amplitude(self) -> None:
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        dp, _, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        jul = dp[:, 6]
+        assert np.isfinite(dp).all()
+        src = jul[(np.abs(dn) < 6) & (np.abs(dl) < 10)].mean()
+        # 低气压在源区；幅度带 = 物理推导常数的预期域（非 −60 hPa 荒谬局地平衡）
+        assert src < -0.3, f"源区应低压，实际 {src:+.2f} hPa"
+        assert -6.0 < jul.min() < -0.3, f"7 月幅度 {jul.min():+.2f} 超出物理域"
+        # 年均 = 单月强迫的 1/12（月份守恒：其余月只剩均匀背景的 eddy≈0）
+        ann = dp[(np.abs(dn) < 6) & (np.abs(dl) < 10)].mean()
+        assert abs(ann - src / 12.0) < 0.15
+
+    def test_rossby_westward_displacement(self) -> None:
+        """Gill 结构：低压中心西移出加热中心（合成实测 68°E vs 源 75°E）。"""
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        dp, _, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        jul = dp[:, 6]
+        imin = int(np.argmin(jul))
+        assert lon_c[imin] < 75.0, f"低压中心应在源以西，实际 {lon_c[imin]:.0f}°E"
+
+    def test_remote_not_deeper_than_source(self) -> None:
+        """无雨的撒哈拉框不得比源区更深（自引用增防：远场遥相关弱于局地）。"""
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        dp, _, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        jul = dp[:, 6]
+        src = jul[(np.abs(dn) < 6) & (np.abs(dl) < 10)].mean()
+        sah = jul[(lat_c > 15) & (lat_c < 30) & (lon_c < 25)].mean()
+        assert sah > src, f"撒哈拉 {sah:+.2f} 不应比源 {src:+.2f} 深"
+
+    def test_heating_weight_linear(self) -> None:
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        n = len(lat_c)
+        dp0, _, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        dp_half, _, _ = self._run(
+            lat_c, lon_c, area, p_month, t_month, weight=np.full((n, 12), 0.5)
+        )
+        dp_zero, _, _ = self._run(lat_c, lon_c, area, p_month, t_month, weight=np.zeros((n, 12)))
+        assert np.abs(dp_zero).max() < 1e-12
+        assert np.allclose(dp_half, 0.5 * dp0, rtol=1e-9, atol=1e-12)
+
+    def test_linear_in_precipitation(self) -> None:
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        dp1, _, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        dp2, _, _ = self._run(lat_c, lon_c, area, 2.0 * p_month, t_month)
+        assert np.allclose(dp2, 2.0 * dp1, rtol=1e-9, atol=1e-12)
+
+    def test_lower_wind_structure(self) -> None:
+        """下层风：零强迫→零；印度源 → 源以南季风流入（+v），幅度物理域。"""
+        lat_c, lon_c, area, dl, dn, p_month, t_month = self._synthetic()
+        _, v_lo_zero, _ = self._run(lat_c, lon_c, area, np.zeros_like(p_month), t_month)
+        assert np.abs(v_lo_zero).max() < 1e-12
+        _, v_lo, _ = self._run(lat_c, lon_c, area, p_month, t_month)
+        jul = v_lo[:, 6, :]
+        assert np.isfinite(jul).all()
+        mag = np.hypot(jul[:, 0], jul[:, 1])
+        # 求解器动量阻尼下的幅度域（对照：边界层链在赤道洋面无界放大 ~30 m/s）
+        assert 0.05 < np.percentile(mag, 99) < 15.0, f"|v| p99 = {np.percentile(mag, 99):.2f}"
+        # 源以南（2–12N，55–85E）季风流入：向北分量
+        m_in = (lat_c > 2) & (lat_c < 12) & (lon_c > 55) & (lon_c < 85)
+        v_mer = jul[m_in, 1].mean()
+        assert v_mer > 0.05, f"源以南应有向北季风流入，实际 v = {v_mer:+.3f} m/s"
