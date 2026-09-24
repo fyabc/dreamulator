@@ -38,9 +38,7 @@ def _find_project_root() -> Path:
 
 
 def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> object | None:
-    from pydantic import TypeAdapter
-
-    from dreamulator.map.models import CVTMesh
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
 
     search_dirs = [world_dir]
     if branch:
@@ -48,8 +46,6 @@ def _load_mesh(world_dir: Path, planet_id: str, branch: str | None = None) -> ob
     for base in search_dirs:
         p = find_mesh_file(base / "maps" / planet_id)
         if p is not None:
-            from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
-
             return load_cvt_mesh_model(p)
     return None
 
