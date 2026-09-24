@@ -296,7 +296,7 @@ export default function useGPUTerrain({
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
-    (layers.pressure ?? 0) > 0 ||
+    (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
 
@@ -313,7 +313,7 @@ export default function useGPUTerrain({
     (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
-    (layers.pressure ?? 0) > 0 ||
+    (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
 
