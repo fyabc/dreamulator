@@ -65,6 +65,58 @@ uv run python scripts/dev/profile_build.py nacrea --data-dir data/worlds --memor
 
 > **注意**：`--memory` 模式比子进程模式慢（tracemalloc 有 ~10% 开销），仅诊断时使用。
 
+### 2.1 OpenBLAS 线程上限（大网格构建的内存稳定性）
+
+**现象**（2026-09-24，200k 网格湿槽实验首跑实测）：构建进程以
+`OpenBLAS error: Memory allocation still failed after 10 retries, giving up`
+中止——机器尚有 14.7 GB 空闲。根因：numpy/scipy 链接的 scipy-openblas64
+（编译上限 MAX_THREADS=24）在 **DLL 加载时**按线程数预分配工作缓冲；与
+200k×12 的多个大数组叠加后把分配顶爆。两个重任务并跑（构建 + 实验）时最易触发。
+
+**处置**：在启动构建/实验的 shell 里设线程上限——
+
+```powershell
+$env:OPENBLAS_NUM_THREADS="4"; $env:OMP_NUM_THREADS="4"; uv run dreamulator build ...
+```
+
+```bash
+OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
+```
+
+**必须在进程启动前设**：OpenBLAS 线程池在库加载时初始化，Python 运行时再改
+`os.environ` 无效（运行时限流需 threadpoolctl 一类工具，评估后未引入——
+失败模式仅出现在内存紧张/并发场景，不值得加依赖；如未来产品化大网格构建
+再议）。
+
+**对速度影响 ≈ 0，这不是速度旋钮**：构建热点是 scipy 稀疏 LU（SuperLU，
+单线程、不经 BLAS）、洋流 GMRES（稀疏迭代）与逐元素 numpy（内存带宽受限）；
+走 LAPACK/BLAS 的只有定常波求解器的小块稠密运算与带状求解（本质串行）。
+24 线程不会更快，4 线程不会更慢。
+
+**建议**：≤32 GB 内存机器跑 200k 网格、或两个重任务并跑时设 4；空闲机器
+单发构建可不设。
+
+**湿槽+门开启（GW6 产品候选配置）的构建耗时**（200k 网格，OPENBLAS=4，
+与 flag-off 基线 441.6 s 同机对照）：
+
+| 世界 | 气候段 | 其中降水 | 总构建 | 相对基线 |
+|---|---|---|---|---|
+| earth/climate-dev | 2737.9 s | 2590.2 s | 2809.2 s | **6.4×**（基线 441.6 s / 降水 224.9 s = 11.5×） |
+| nacrea（全量含地质） | 2841.8 s | 2673.5 s | 3162.1 s | **~4.1×**（基线 ≈770 s = 地质 255 + 气候 ~450 + 生态/文明 65；降水段 291→2674 s = **9.2×**，回归实验同机实测 11.4×） |
+
+> **⚠ 速度裁决（2026-09-24）**：GW6 产品候选配置（湿槽 3 pass × pickup 门
+> iterate-twice = 每构建 ~300 个稀疏 LU solve，基线 25）**总构建 6.4× 基线、
+> 降水段 11.5×**——earth 47 min，**远超「发版门槛 ≤2× 基线（~10 min）」**。
+> 成本是结构性的（solve 计数比 300/25 ≈ 降水段倍率 11.5，非并发竞争）。
+> flag-on 默认因此**不满足发版速度门槛**，落地前必须走优化路径（下）或保持
+> opt-in。earth 数字含与轮 7 实验并跑的轻度竞争，独占预计 ~40 min（仍 5×+）。
+
+> 实验态参考（研究脚本、同机同 env）：flag-off 基线气候段 312 s；仅 pickup 门
+> 638 s（iterate-twice = 3× solve/预算）；湿槽 3 pass 无门 ~660 s；湿槽+门
+> （GW6 = 4 次预算 × 75 solve ≈ 9× 基线预算量）~2000 s。产品化压缩路径见
+> `private/plans/w-supply-route.md` 速度账（S1 风链线性增量 / 波网格 4° /
+> 预算组装向量化 / cell 重写合并 + pass 数评估）。
+
 ---
 
 ## 3. 热点分析：py-spy 火焰图
