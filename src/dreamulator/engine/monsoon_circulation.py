@@ -21,12 +21,15 @@ Physical chain (tech debt 23, roadmap):
    with E ≈ 0.104 the boundary-layer projection factor (BL-mean
    amplitude × linear-decay profile over the heat-low depth; see the
    module constants) and T̄ the monthly zonal reference temperature.
-   Elevated terrain splits by anomaly sign (B1 warm derating / B3 cold
-   sea-level response — see ``pressure_anomaly_monthly``).  Earth anchors
-   (``scripts/climate/diagnose_monsoon_dp_shape.py``, full-contrast
-   target, post-B3 2026-09-25): Sahara July 1.13×, Siberia January
-   1.21×, Mongolia January 0.76× of the observed NCEP land-sea SLP
-   contrast (target band 0.8-1.25).  Known limitation: wet
+   Elevated terrain splits by anomaly sign (B1 warm derating / B4 cold
+   airmass decomposition — see ``pressure_anomaly_monthly``).  Earth
+   anchors (``scripts/climate/diagnose_monsoon_dp_shape.py``,
+   full-contrast target, post-B4 2026-09-25): Sahara July 1.13×,
+   Siberia January 1.14× of the observed NCEP land-sea SLP contrast
+   (target band 0.8-1.25); Mongolia January 0.58× — below band,
+   declared: its obs target is itself a 1.4 km-plateau SLP reduction and
+   the Γ·z decomposition removes part of what the reduction convention
+   adds back (calibration line, deferred).  Known limitation: wet
    deep-convective systems (India/South-China summer lows, whose latent
    heating projects through the whole column) need E ≈ 0.37-0.40 and are
    undershot ~4× by this dry-BL factor — no Stage-2-available,
@@ -94,17 +97,26 @@ import numpy as np
 # 0.25 (pre-M4) overstated the Sahara July thermal low by ~4-5× (two factors
 # of ~2: the uniform in-layer profile, and the surface ΔT standing in for the
 # BL mean; lit review 2026-09-14 report 2 §B).  Anchor check
-# (diagnose_monsoon_dp_shape, full land-sea contrast target, post-B3):
-# Sahara 1.13×, Siberia 1.21×, Mongolia 0.76× of the observed NCEP
-# contrast at this value (target band 0.8-1.25).
+# (diagnose_monsoon_dp_shape, full land-sea contrast target, post-B4):
+# Sahara 1.13×, Siberia 1.14× of the observed NCEP contrast at this
+# value (target band 0.8-1.25); Mongolia 0.58× below band — declared
+# (obs target is a plateau-reduction value; calibration line, deferred).
 _BL_AMPLITUDE_RATIO: float = 0.6
 _HEAT_LOW_DEPTH_M: float = 3200.0
 
-# B1 elevation derating scales (m) — warm (convective) anomalies only; cold
-# anomalies use the undiminished sea-level response (B3, 2026-09-25, see
-# pressure_anomaly_monthly: both scales derive their rationale from deep
-# convective heating and do not apply to cold stable columns, whose SLP
-# anomaly grows with elevation).
+# Standard-atmosphere lapse rate (°C/km) — fallback only when the caller does
+# not pass the per-cell lapse field (ICAO standard; equals the default of
+# config.lapse_rate_c_km and the cold limit of moist_lapse_rate).  Not a
+# tuning parameter: the B4 airmass decomposition consumes the SAME per-cell
+# Γ(T) (moist_lapse_rate) the engine's temperature stage applied, so adding
+# Γ·z back to ΔT exactly inverts the engine's own altitude cooling.
+_STANDARD_LAPSE_C_PER_KM: float = 6.5
+
+# B1 elevation derating scales (m) — warm (convective) anomalies only; the
+# cold branch answers through its AIRMASS component with no elevation derating
+# (B4, 2026-09-25, see pressure_anomaly_monthly: both scales derive their
+# rationale from deep convective heating and do not apply to cold stable
+# columns).
 # Barometric pressure scale height (standard atmosphere) — an elevated
 # cell's surface pressure represents a smaller mass column.
 _PRESSURE_SCALE_HEIGHT_M: float = 8500.0
@@ -259,6 +271,7 @@ def pressure_anomaly_monthly(
     surface_pressure_hpa: float = 1013.25,
     elevation_m: np.ndarray | None = None,
     ocean_mask: np.ndarray | None = None,
+    lapse_rate_c_per_km: np.ndarray | float | None = None,
 ) -> np.ndarray:
     """Monthly surface pressure from the land-sea heating contrast (hPa).
 
@@ -276,14 +289,15 @@ def pressure_anomaly_monthly(
     The hydrostatic response to warming the boundary layer by ΔT (M4,
     2026-09-14 — BL-mean amplitude × linear-decay profile, see module
     constants), structured by elevation with a sign-conditional split
-    (B1 2026-09-13 warm branch; B3 2026-09-25 cold branch):
+    (B1 2026-09-13 warm branch; B4 2026-09-25 cold branch):
 
-        ΔP = −P_sfc · E · ΔT / T̄_zonal(m) · A(z, ΔT)
-        A = exp(−z/H) · exp(−z/z_moist)   for ΔT ≥ 0   # H = 8.5 km,
-                                                      # z_moist = 3 km
-        A = 1                             for ΔT < 0
+        ΔP = −P_sfc · E · ΔT_eff / T̄_zonal(m) · A(z, ΔT)
+        ΔT ≥ 0:  ΔT_eff = ΔT,                 A = exp(−z/H)·exp(−z/z_moist)
+        ΔT < 0:  ΔT_eff = min(ΔT + Γ·z, 0),   A = 1
+                                            # H = 8.5 km, z_moist = 3 km
 
-    with z = max(elevation, 0), E ≈ 0.104, and T̄_zonal(m) the zonal
+    with z = max(elevation, 0), E ≈ 0.104, Γ the per-cell lapse rate the
+    engine's temperature stage used (°C/km), and T̄_zonal(m) the zonal
     reference temperature of the same month (the actual column
     temperature that sets the hydrostatic sensitivity).
 
@@ -299,25 +313,35 @@ def pressure_anomaly_monthly(
       2012).  Without it the 4844 m Tibetan surface anomaly dominates ΔP.
       Combined, a 4.8 km plateau cell responds at ~11% of a lowland cell.
 
-    The cold branch keeps the sea-level response (A = 1, B3 2026-09-25):
-    both deratings derive their rationale from *convective* heating — the
-    moisture-scale argument presumes deep convection and a vapour supply,
-    and the barometric "less mass displaced" factor is written for
-    expansion — but this field is consumed with SLP semantics, under
-    which a cold elevated column *amplifies* its anomaly (reduction to
-    sea level multiplies by exp(+z/H_cold); the 3-4 km East Antarctic
-    Plateau, Earth's coldest surface, carries the strongest positive SLP
-    anomaly on the planet, +28 hPa in July).  Applying the warm deratings
-    to cold anomalies reversed that asymmetry (model July ΔP: E Antarctic
-    +3.2 vs W Antarctic +4.2 hPa; NCEP: +28.2 vs −2.2 — diagnostic
-    2026-09-25).  Epistemology: approximate derivation — a sign-
-    conditional regime split; the cold branch inherits the lowland E
-    without separate calibration (declared approximation), and cold-side
-    overshoot where subpolar-low climatology is absent (W Antarctic /
-    Greenland) belongs to the missing storm-track stationary waves
-    (④ family), not to this branch.  ΔP is continuous across ΔT = 0
-    (both branches → 0); the slope kink is piecewise physics, cf. the
-    land/ocean drag-rate split.
+    The cold branch answers through its AIRMASS component only (B4
+    2026-09-25): surface cold comes in two kinds — lapse-rate cold
+    (elevated terrain / tropical islands: the surface is cold because it
+    is high, the column above is ambient, the SLP anomaly ≈ 0) and true
+    airmass cold (inversions / polar air: the whole column is colder than
+    the environmental lapse profile — the East Antarctic Plateau carries
+    Earth's strongest positive SLP anomaly, +28 hPa in July, and the
+    winter Siberian high sits at near sea level).  ΔT_airmass = ΔT + Γ·z
+    inverts the engine's own altitude cooling *exactly* (the caller
+    passes the same per-cell moist_lapse_rate field the temperature stage
+    applied — zero new parameters), separating the two: pure lapse cold
+    → ΔP = 0; airmass cold → the undiminished sea-level response (under
+    SLP semantics a cold column amplifies its anomaly — the warm
+    deratings are convective-heating parameterizations, and applying them
+    to cold anomalies reversed the E/W Antarctic asymmetry, B3
+    diagnostic 2026-09-25; applying no correction at all gave tropical
+    elevated terrain spurious permanent highs — nacrea's 7.8 km range
+    read +10.6 hPa and drained its equatorial islands, 永耀岛 P
+    436→148 mm/yr).  Epistemology: approximate derivation — the airmass
+    component is projected through M4's E (whose derivation domain is
+    warm BL heating; inheritance declared), and the standard-lapse
+    assumption over-corrects deep-inversion plateaux (winter Tibet, the
+    Antarctic interior read weak; refinement = the reduction-difference
+    term exp(z/H_cold) − exp(z/H_std), registered stage-2 candidate);
+    cold-side overshoot where subpolar-low climatology is absent (W
+    Antarctic / Greenland) belongs to the missing storm-track stationary
+    waves (④ family).  ΔP is continuous everywhere (both branches → 0
+    at ΔT_eff = 0); slope kinks are piecewise physics, cf. the land/
+    ocean drag-rate split.
 
     Args:
         t_monthly_c: Monthly temperature field (°C), shape (N, 12).
@@ -328,6 +352,10 @@ def pressure_anomaly_monthly(
             proportionally.
         elevation_m: Cell elevation (m), shape (N,), clamped at 0 for the
             warm-branch derating factors.  None → all cells at sea level.
+        lapse_rate_c_per_km: Per-cell lapse rate (°C/km) the engine's
+            temperature stage applied (``moist_lapse_rate``), shape (N,)
+            or scalar — the B4 cold-branch airmass decomposition adds
+            Γ·z back onto ΔT.  None → the 6.5 °C/km standard atmosphere.
         ocean_mask: Boolean (N,).  When given, the zonal reference is the
             *ocean-only* latitude-band mean (B2): ΔT becomes the land-vs-
             same-latitude-ocean contrast.  The all-cell zonal mean
@@ -351,15 +379,24 @@ def pressure_anomaly_monthly(
         dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt / t_zonal_k
     else:
         z = np.maximum(np.asarray(elevation_m, dtype=np.float64), 0.0)[:, None]
-        # Sign-conditional derating (B3): warm anomalies keep the calibrated
-        # convective derating; cold anomalies answer at full sea-level
-        # amplitude (SLP-reduction semantics — see the docstring).
+        # B4 airmass decomposition (cold branch): undo the engine's own
+        # altitude cooling Γ·z — lapse-explained surface cold leaves the
+        # column ambient (no SLP anomaly); only genuine airmass cold drives
+        # the high.  Γ is the caller's per-cell moist_lapse_rate field (the
+        # exact one the temperature stage used), so this inverts it exactly.
+        if lapse_rate_c_per_km is None:
+            lapse_c_km = np.full(dt.shape[0], _STANDARD_LAPSE_C_PER_KM)
+        else:
+            lapse_c_km = np.asarray(lapse_rate_c_per_km, dtype=np.float64) * np.ones(dt.shape[0])
+        dt_airmass = dt + lapse_c_km[:, None] * z / 1000.0
+        dt_eff = np.where(dt >= 0.0, dt, np.minimum(dt_airmass, 0.0))
+        # Warm anomalies keep the calibrated convective derating (B1).
         atten = np.where(
             dt >= 0.0,
             np.exp(-z / _PRESSURE_SCALE_HEIGHT_M) * np.exp(-z / _MOISTURE_SCALE_HEIGHT_M),
             1.0,
         )
-        dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt / t_zonal_k * atten
+        dp = -surface_pressure_hpa * _MONSOON_PROJECTION_FRACTION * dt_eff / t_zonal_k * atten
     return np.asarray(dp)
 
 

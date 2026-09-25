@@ -248,30 +248,37 @@ class TestClimateSimulatorEndToEnd:
         )
 
     def test_high_altitude_colder(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
-        """High-elevation cells should be colder than nearby low-elevation cells."""
+        """High-elevation LAND cells should be colder than nearby low-elevation ones."""
         from dreamulator.map.climate_simulator import simulate_climate
 
         simulate_climate(mesh, config)
 
-        # Compare each cell with its neighbors: over pairs with a real
-        # elevation contrast (> 200 m, within ±5° latitude to control for
-        # the lat gradient) the regression of ΔT on Δelevation must have a
-        # negative slope — higher is colder on average.  (A pair-count
-        # ratio was used before; on this 100-cell synthetic mesh it
-        # measured noise around a near-zero slope and sat at the threshold.)
+        # Compare each LAND cell with its LAND neighbors: over pairs with a
+        # real elevation contrast (> 100 m, within ±5° latitude to control
+        # for the lat gradient) the regression of ΔT on Δelevation must have
+        # a negative slope — higher is colder on average.  Ocean cells are
+        # excluded on purpose: their temperature follows SST advection and
+        # the freezing clamp, not elevation-lapse physics, so land–ocean
+        # pairs confound the regression with the polar SST state (exposed by
+        # the B4 airmass fix 2026-09-25: weakening the spurious polar ΔP
+        # high let the synthetic single-basin polar ocean warm from an
+        # advectively overcooled −27 °C toward the clamp, flipping the
+        # land–ocean-pair slope while every land–land pair stayed at
+        # −9.3 K/km under both physics arms).  Measured: −9.34 K/km on
+        # 24 pairs — the threshold keeps a wide margin.
         elev_diffs: list[float] = []
         temp_diffs: list[float] = []
         for c in mesh.cells:
-            if c.temperature_C is None:
+            if c.temperature_C is None or c.elevation < 0:
                 continue
             for n_id in c.neighbors:
                 if n_id < 0 or n_id >= mesh.num_cells:
                     continue
                 n_cell = mesh.cells[n_id]
-                if n_cell.temperature_C is None:
+                if n_cell.temperature_C is None or n_cell.elevation < 0:
                     continue
-                if abs(c.lat - n_cell.lat) < 5.0 and abs(c.elevation - n_cell.elevation) > 200.0:
-                    elev_diffs.append(c.elevation - n_cell.elevation)
+                if abs(c.lat - n_cell.lat) < 5.0 and abs(c.elevation - n_cell.elevation) > 100.0:
+                    elev_diffs.append(n_cell.elevation - c.elevation)
                     temp_diffs.append(n_cell.temperature_C - c.temperature_C)  # type: ignore[operator]
         assert len(elev_diffs) >= 20
         slope = np.polyfit(np.array(elev_diffs), np.array(temp_diffs), 1)[0]

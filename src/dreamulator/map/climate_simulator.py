@@ -635,12 +635,20 @@ def simulate_climate(
     # whose vector mean is the annual wind (with its stationary structure).
     # Raw (unsmoothed) field kept for ④: the stationary-wave ΔSLP is added
     # *before* smoothing so both components get the same scale separation.
+    # B4: the per-cell lapse field for the ΔP airmass decomposition — the
+    # SAME Γ the temperature stage applied (moist_lapse_rate on land; the
+    # config default elsewhere — ocean cells sit at z=0 and contribute
+    # nothing), so ΔT + Γ·z exactly undoes the engine's altitude cooling.
+    _lapse_by_cell = np.full(len(lat_deg), float(config.lapse_rate_c_km))
+    if config.variable_lapse_rate:
+        _lapse_by_cell[land_mask_arr] = np.asarray(lapse)
     _dp_hpa_raw = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
         surface_pressure_hpa=config.surface_pressure_hpa,
         elevation_m=elevation_m,
         ocean_mask=is_ocean,  # B2: land-vs-same-latitude-ocean contrast
+        lapse_rate_c_per_km=_lapse_by_cell,
     )
     _dp_hpa = _dp_hpa_raw
     # Scale separation before differentiation: the anomaly field inherits the

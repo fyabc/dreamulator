@@ -142,25 +142,53 @@ class TestPressureAnomalyMonthly:
         # Both are thermal lows (warm anomaly).
         assert dp[0, 5] < 0.0 and dp[1, 5] < 0.0
 
-    def test_cold_anomaly_no_elevation_derating(self):
-        # B3 (2026-09-25): cold anomalies answer at the full sea-level
-        # amplitude — the deratings are convective (warm-branch)
-        # parameterizations, and under SLP semantics a cold elevated column
-        # amplifies its anomaly (East Antarctic Plateau: 3-4 km, coldest
-        # surface, strongest positive SLP anomaly on Earth).
-        lat = np.full(3, -75.0)
-        t = np.zeros((3, 12))
-        t[0, 7] = t[1, 7] = -12.0  # two identical cold cells (z = 0 / 3000)
-        t[2, 7] = 24.0  # warm ballast so the zonal mean stays 0 → dt = −12
-        elev = np.array([0.0, 3000.0, 0.0])
+    def test_cold_anomaly_airmass_decomposition(self):
+        # B4 (2026-09-25): the cold branch answers through the airmass
+        # component ΔT_airmass = ΔT + Γ·z — surface cold explained by the
+        # engine's own elevation lapse leaves the column ambient (tropical
+        # highlands/islands: zero SLP anomaly); genuine airmass cold
+        # (inversions/polar air) keeps the undiminished sea-level response
+        # (East Antarctic Plateau, winter Siberia).
+        lat = np.full(4, -75.0)
+        t = np.zeros((4, 12))
+        t[0, 7] = -12.0  # lowland cold cell (z=0): dt = −12, all airmass
+        t[1, 7] = -13.0  # 2 km cell at exactly Γ·z = 6.5×2 = 13 K below the
+        #                  reference → pure lapse cold → zero anomaly
+        t[2, 7] = -23.0  # 2 km cell 10 K colder than the lapse profile →
+        #                  airmass component −10 K
+        t[3, 7] = 48.0  # warm ballast so the zonal mean stays 0
+        elev = np.array([0.0, 2000.0, 2000.0, 0.0])
 
         dp = pressure_anomaly_monthly(t, lat, band_deg=5.0, elevation_m=elev)
-        # Elevated cold cell = lowland cold cell (no derating), both highs.
-        assert dp[1, 7] == pytest.approx(dp[0, 7], rel=1e-6)
-        assert dp[0, 7] > 0.0 and dp[1, 7] > 0.0
-        # ΔT = 0 is continuous across the branch switch (warm ballast cell
-        # at z = 0 has dt = +24 ≠ 0; check an exactly-neutral month instead).
+        # Pure lapse cold: no SLP anomaly at all.
+        assert dp[1, 7] == pytest.approx(0.0, abs=1e-9)
+        # Lowland cold: full sea-level high (dt = ΔT_airmass at z=0).
+        assert dp[0, 7] > 0.0
+        # Partial airmass cold at elevation: responds exactly like a lowland
+        # cell with dt = −10 (no elevation derating on the cold branch).
+        t_ref = np.zeros((2, 12))
+        t_ref[0, 7] = -10.0
+        t_ref[1, 7] = 10.0  # ballast → zonal mean 0 → dt = −10 at z = 0
+        dp_ref = pressure_anomaly_monthly(t_ref, lat[:2], band_deg=5.0, elevation_m=np.zeros(2))
+        assert dp[2, 7] == pytest.approx(dp_ref[0, 7], rel=1e-9)
+        # ΔT = 0 months are continuous across the branch switch.
         assert np.allclose(dp[:, 0], 0.0)
+
+    def test_cold_airmass_uses_caller_lapse_field(self):
+        # The decomposition consumes the caller's per-cell Γ (the engine's
+        # moist_lapse_rate field) — a warmer-column world with Γ = 5.0 keeps
+        # its 2 km lapse-cold cell neutral at dt = −10, not −13.
+        lat = np.full(3, -75.0)
+        t = np.zeros((3, 12))
+        t[0, 7] = -10.0  # 2 km, Γ = 5.0 → exactly ambient column
+        t[1, 7] = -10.0  # 2 km, would be airmass-cold under Γ = 6.5
+        t[2, 7] = 20.0  # ballast → zonal mean 0
+        elev = np.array([2000.0, 2000.0, 0.0])
+
+        dp = pressure_anomaly_monthly(
+            t, lat, band_deg=5.0, elevation_m=elev, lapse_rate_c_per_km=5.0
+        )
+        assert dp[0, 7] == pytest.approx(0.0, abs=1e-9)
 
 
 class TestMonsoonBoundaryLayerWind:
