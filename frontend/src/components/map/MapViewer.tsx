@@ -79,6 +79,7 @@ interface MapViewerProps {
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
   monthlyPressureError?: THREE.DataTexture | null
+  monthlySlp?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`; null when the yearly file lacks the fields. */
   uccTexture?: THREE.DataTexture | null
@@ -131,6 +132,7 @@ export default function MapViewer({
   monthlyPrecipitation = null,
   monthlyPressure = null,
   monthlyPressureError = null,
+  monthlySlp = null,
   uccTexture = null,
   monthlyWindEast = null,
   monthlyWindNorth = null,
@@ -236,6 +238,7 @@ export default function MapViewer({
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
     monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError,
+    monthlySlp,
     uccTexture,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,

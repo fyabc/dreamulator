@@ -131,6 +131,8 @@ export interface LayerTextures {
   precipitationError: THREE.DataTexture
   /** Annual mean sea-level pressure thematic (per-cell continuous). Half res. */
   pressure: THREE.DataTexture
+  /** Absolute annual-mean SLP (obs root only, diverging ±40 hPa). Half res. */
+  slp: THREE.DataTexture
   /** Drainage / flow accumulation thematic (per-cell continuous, log-scaled). Half res. */
   flow: THREE.DataTexture
   /** River channel cells (per-cell boolean, river_order ≥ 1). Half res. */
@@ -296,6 +298,7 @@ function buildCellPalettes(
   temperatureError: Map<number, [number, number, number]>
   precipitationError: Map<number, [number, number, number]>
   pressure: Map<number, [number, number, number]>
+  slp: Map<number, [number, number, number]>
   flow: Map<number, [number, number, number]>
   rivers: Map<number, [number, number, number]>
 } {
@@ -317,6 +320,7 @@ function buildCellPalettes(
   const temperatureError = new Map<number, [number, number, number]>()
   const precipitationError = new Map<number, [number, number, number]>()
   const pressure = new Map<number, [number, number, number]>()
+  const slp = new Map<number, [number, number, number]>()
   const flow = new Map<number, [number, number, number]>()
   const rivers = new Map<number, [number, number, number]>()
 
@@ -515,11 +519,28 @@ function buildCellPalettes(
     // 2026-09-22: display issue, not missing data).  Written by both the
     // engine (built worlds) and the obs importer; the absolute slp_annual_hpa
     // is obs-only and no longer drives this layer.
+    // Ice-cap mask (slp_reduction_unreliable, obs root only): on high ice-cap
+    // cells the reanalysis "sea-level" pressure is a hypothetical reduction
+    // through kilometres of ice (NCEP R1 reads +60..+69 hPa ΔSLP artefacts over
+    // the East Antarctic plateau) — greyed out of every pressure display so an
+    // untrustworthy reference never poses as data.
+    const slpMasked = cell.slp_reduction_unreliable === true
     const dpAnnual: number | null | undefined = cell.pressure_anomaly_annual_hpa
-    if (dpAnnual != null) {
+    if (dpAnnual != null && !slpMasked) {
       pressure.set(
         cell.id,
         sequentialColor((dpAnnual + 5) / 10, TEMPERATURE_SCALE),
+      )
+    }
+
+    // Absolute annual-mean SLP (obs root only — the engine models anomalies,
+    // never absolute pressure).  Raw NCEP field: no band reference, no
+    // artefacts.  Diverging ±40 hPa around 1013.25 (blue = low, red = high).
+    const slpAnnual: number | null | undefined = cell.slp_annual_hpa
+    if (slpAnnual != null && !slpMasked) {
+      slp.set(
+        cell.id,
+        sequentialColor((slpAnnual - 1013.25) / 80 + 0.5, TEMPERATURE_SCALE),
       )
     }
 
@@ -548,7 +569,7 @@ function buildCellPalettes(
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
            coastlines, biomes, npp, domesticable, habitable, agriculture,
            soil, provinces, temperature, precipitation, temperatureError,
-           precipitationError, pressure, flow, rivers }
+           precipitationError, pressure, slp, flow, rivers }
 }
 
 /**
@@ -652,19 +673,27 @@ function bakeCellLayer(
 export function bakeMonthlyLayer(
   monthly: MonthlyClimateData,
   month: number,
-  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError',
+  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp',
   cvtMesh: CVTMesh,
   cellIdMap: CellIdMap,
   width: number,
   height: number,
   flipHorizontal: boolean,
 ): THREE.DataTexture {
-  const { months, tMonthly, pMonthly, pressureMonthly } = monthly
-  const arr = field === 'temperature' ? tMonthly : field === 'precipitation' ? pMonthly : pressureMonthly
+  const { months, tMonthly, pMonthly, pressureMonthly, slpMonthly } = monthly
+  const arr =
+    field === 'temperature'
+      ? tMonthly
+      : field === 'precipitation'
+        ? pMonthly
+        : field === 'slp'
+          ? slpMonthly
+          : pressureMonthly
   const colors = new Map<number, [number, number, number]>()
 
   if (!arr) {
-    // Field absent in this file (older export) — transparent texture.
+    // Field absent in this file (older export / world without absolute SLP) —
+    // transparent texture.
     const empty = new Uint8Array(width * height * 4)
     return makeTexture(empty, width, height)
   }
@@ -677,29 +706,40 @@ export function bakeMonthlyLayer(
 
   for (let i = 0; i < cvtMesh.cells.length; i++) {
     const cell = cvtMesh.cells[i]
-    // Land-only for temperature/precipitation; pressure also covers the ocean.
+    // Land-only for temperature/precipitation; the pressure family (ΔP, ΔSLP
+    // deviation, absolute SLP) covers the ocean too.
     const isOceanCell = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
-    if (field !== 'pressure' && field !== 'pressureError' && isOceanCell) continue
+    const isPressureFamily = field === 'pressure' || field === 'pressureError' || field === 'slp'
+    if (!isPressureFamily && isOceanCell) continue
+    // Ice-cap mask: on high ice-cap cells the reanalysis SLP is a hypothetical
+    // reduction (NCEP R1 artefacts up to +69 hPa over East Antarctica) — every
+    // pressure-family layer greys them out.
+    if (isPressureFamily && cell.slp_reduction_unreliable === true) continue
     const v = arr[i * months + month]
-    const color =
-      field === 'temperature'
-        ? sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
-        : field === 'precipitation'
-          ? // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
-            // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
-            sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
-          : field === 'pressureError'
-            ? // ΔP error (model monthly ΔP − observed monthly ΔSLP), diverging,
-              // ±20 hPa, same fixed range as the pressure anomaly itself.
-              // Month-calendar mapping: model month 0 = March, NCEP month 0 = Jan.
-              sequentialColor(
-                (v - observedSlpAnomAt(cell.lat, cell.lon, (month + 2) % 12) + pMaxAbs) / (2 * pMaxAbs),
-                TEMPERATURE_SCALE,
-              )
-            : // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
-              // temperature scale until a dedicated pressure palette exists).
-              sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
-    colors.set(cell.id, color)
+    let color: [number, number, number] | null
+    if (field === 'temperature') {
+      color = sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
+    } else if (field === 'precipitation') {
+      // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
+      // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
+      color = sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
+    } else if (field === 'slp') {
+      // Absolute SLP: diverging ±40 hPa around 1013.25 (raw NCEP field, no
+      // band reference — the artefact-free baseline display).
+      color = sequentialColor((v - 1013.25) / 80 + 0.5, TEMPERATURE_SCALE)
+    } else if (field === 'pressureError') {
+      // ΔSLP deviation (model monthly ΔP − observed monthly ΔSLP), diverging,
+      // ±20 hPa, same fixed range as the pressure anomaly itself.
+      // Month-calendar mapping: model month 0 = March, NCEP month 0 = Jan.
+      // Obs < −50 hPa = the ice-cap sentinel (no trustworthy reference).
+      const obs = observedSlpAnomAt(cell.lat, cell.lon, (month + 2) % 12)
+      color = obs < -50 ? null : sequentialColor((v - obs + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
+    } else {
+      // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
+      // temperature scale until a dedicated pressure palette exists).
+      color = sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
+    }
+    if (color) colors.set(cell.id, color)
   }
 
   const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
@@ -774,6 +814,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let temperatureErrorBuf: Uint8Array = empty
   let precipitationErrorBuf: Uint8Array = empty
   let pressureBuf: Uint8Array = empty
+  let slpBuf: Uint8Array = empty
   let flowBuf: Uint8Array = empty
   let riversBuf: Uint8Array = empty
   let kw = 1, kh = 1
@@ -797,6 +838,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     temperatureErrorBuf = bakeCellLayer(palettes.temperatureError, width, height, cellIdMap, flipHorizontal)
     precipitationErrorBuf = bakeCellLayer(palettes.precipitationError, width, height, cellIdMap, flipHorizontal)
     pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
+    slpBuf = bakeCellLayer(palettes.slp, width, height, cellIdMap, flipHorizontal)
     flowBuf = bakeCellLayer(palettes.flow, width, height, cellIdMap, flipHorizontal)
     riversBuf = bakeCellLayer(palettes.rivers, width, height, cellIdMap, flipHorizontal)
     kw = width; kh = height
@@ -857,6 +899,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     temperatureError: makeTexture(temperatureErrorBuf, kw, kh),
     precipitationError: makeTexture(precipitationErrorBuf, kw, kh),
     pressure: makeTexture(pressureBuf, kw, kh),
+    slp: makeTexture(slpBuf, kw, kh),
     flow: makeTexture(flowBuf, kw, kh),
     rivers: makeTexture(riversBuf, kw, kh, { nearestMag: true }),
   }

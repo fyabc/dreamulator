@@ -150,6 +150,8 @@ interface UseGPUTerrainOptions {
   monthlyPrecipitation?: THREE.DataTexture | null
   monthlyPressure?: THREE.DataTexture | null
   monthlyPressureError?: THREE.DataTexture | null
+  /** Monthly absolute SLP texture (obs root only); annual slp is the fallback. */
+  monthlySlp?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`.  Null while the yearly file is missing or predates
    *  the classification fields — the layer then degrades to transparent. */
@@ -195,7 +197,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -203,6 +205,7 @@ export default function useGPUTerrain({
   monthlyPrecipitation = null,
   monthlyPressure = null,
   monthlyPressureError = null,
+  monthlySlp = null,
   uccTexture = null,
   flipHorizontal = false,
   sunLonRad = 0,
@@ -297,6 +300,7 @@ export default function useGPUTerrain({
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
+    (layers.slp ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
 
@@ -314,6 +318,7 @@ export default function useGPUTerrain({
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
+    (layers.slp ?? 0) > 0 ||
     (layers.flow ?? 0) > 0 ||
     (layers.rivers ?? 0) > 0
 
@@ -352,6 +357,7 @@ export default function useGPUTerrain({
       [layers.precipitationError, baked.precipitationError],
       [layers.pressureError, monthlyPressureError ?? baked.pressure],
       [layers.pressure, monthlyPressure ?? baked.pressure],
+      [layers.slp, monthlySlp ?? baked.slp],
     ]
     let activeThematic = baked.terrainThematic
     let thematicOp = 1.0  // default: terrain on
@@ -377,7 +383,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, uccTexture])
+  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {

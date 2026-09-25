@@ -64,6 +64,9 @@ export interface VoronoiCell {
   wind_north_m_s?: number | null
   slp_annual_hpa?: number | null
   pressure_anomaly_annual_hpa?: number | null
+  /** High ice-cap cell where the reanalysis SLP is a hypothetical reduction
+   *  (obs-root only) — greyed out of every pressure-family layer. */
+  slp_reduction_unreliable?: boolean | null
   flow_accumulation?: number
   river_id?: string | null
   river_order?: number

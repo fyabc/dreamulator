@@ -435,6 +435,9 @@ function CellDetails({
   const mPressure = hasMonthly && monthlyData!.pressureMonthly
     ? monthlyData!.pressureMonthly[idx! * nMonths + monthIndex]
     : undefined
+  const mSlp = hasMonthly && monthlyData!.slpMonthly
+    ? monthlyData!.slpMonthly[idx! * nMonths + monthIndex]
+    : undefined
   const mWindU = hasMonthly && monthlyData!.windEastMonthly
     ? monthlyData!.windEastMonthly[idx! * nMonths + monthIndex]
     : undefined
@@ -531,8 +534,13 @@ function CellDetails({
   // ΔSLP is monthly (canonical ΔP = SLP − same-month ocean band mean, full
   // land-sea contrast incl. the annual mean — M2-A0③): model month 0 = March,
   // NCEP month 0 = Jan, so map (modelMonth + 2) % 12 onto the observed grid.
-  const devSlp = hasMonthly && mPressure !== undefined
-    ? mPressure - observedSlpAnomAt(cell.lat, cell.lon, (monthIndex + 2) % 12)
+  // Obs < −50 hPa = the ice-cap sentinel (hypothetical SLP reduction over high
+  // ice caps — no trustworthy reference, so no deviation is shown).
+  const slpRef = hasMonthly && mPressure !== undefined
+    ? observedSlpAnomAt(cell.lat, cell.lon, (monthIndex + 2) % 12)
+    : null
+  const devSlp = hasMonthly && mPressure !== undefined && slpRef !== null && slpRef >= -50
+    ? mPressure - slpRef
     : null
 
   return (
@@ -708,6 +716,12 @@ function CellDetails({
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('inspector.pressureAnomaly')}</dt>
                 <dd className="font-mono">{mPressure >= 0 ? '+' : ''}{mPressure.toFixed(1)} hPa</dd>
+              </div>
+            )}
+            {hasMonthly && mSlp !== undefined && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.slpAbsolute')}</dt>
+                <dd className="font-mono">{mSlp.toFixed(1)} hPa</dd>
               </div>
             )}
             {cell.distance_to_coast_km != null && (

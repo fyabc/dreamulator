@@ -236,6 +236,17 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     monthlyCapable: true,
   },
   {
+    id: 'slp',
+    label: 'help:layer.slp.label',
+    desc: 'help:layer.slp.desc',
+    detail: 'help:layer.slp.detail',
+    defaultOpacity: 0.85,
+    kind: 'thematic',
+    group: 'climate',
+    monthlyCapable: true,
+    earthOnly: true,
+  },
+  {
     id: 'biomes',
     label: 'help:layer.biomes.label',
     desc: 'help:layer.biomes.desc',

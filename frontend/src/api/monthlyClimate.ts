@@ -25,6 +25,10 @@ export interface MonthlyClimateData {
   /** Monthly monsoon pressure anomaly ΔP (hPa); absent in old files. */
   pressureMonthly?: Float32Array
   pressureRangeHpa?: [number, number]
+  /** Monthly ABSOLUTE sea-level pressure (hPa); obs-root only (the engine
+   *  models anomalies, never absolute SLP) — absent in engine-built worlds. */
+  slpMonthly?: Float32Array
+  slpRangeHpa?: [number, number]
 }
 
 /**
@@ -72,6 +76,10 @@ export function decodeMonthlyClimate(raw: ArrayBuffer): MonthlyClimateData {
   if (obj.pressure_monthly instanceof Uint8Array) {
     out.pressureMonthly = toF32(obj.pressure_monthly, obj.pressure_scale, obj.pressure_offset)
     out.pressureRangeHpa = obj.pressure_range_hpa as [number, number]
+  }
+  if (obj.slp_monthly instanceof Uint8Array) {
+    out.slpMonthly = toF32(obj.slp_monthly, obj.slp_scale, obj.slp_offset)
+    out.slpRangeHpa = obj.slp_range_hpa as [number, number]
   }
   return out
 }

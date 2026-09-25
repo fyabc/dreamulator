@@ -64,7 +64,7 @@ export default function GlobeViewerPage() {
   }
 
   // --- UI State ---
-  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, habitable: 0, agriculture: 0, flow: 0 } })
+  const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 } })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
   // arrows switch to the monthly wind field (tech debt 24).
@@ -78,7 +78,9 @@ export default function GlobeViewerPage() {
           ? 'pressure'
           : layerState.layers.pressureError > 0
             ? 'pressureError'
-            : null
+            : layerState.layers.slp > 0
+              ? 'slp'
+              : null
     : null
   // Fetch monthly data when monthly mode is on and any monthly-driven layer
   // (temperature / precipitation / pressure / wind arrows) is visible.
@@ -87,6 +89,7 @@ export default function GlobeViewerPage() {
     layerState.layers.precipitation > 0 ||
     layerState.layers.pressure > 0 ||
     layerState.layers.pressureError > 0 ||
+    layerState.layers.slp > 0 ||
     layerState.layers.winds > 0
   )
   // --- Inspector auto-expand linkage ---
@@ -288,6 +291,7 @@ export default function GlobeViewerPage() {
     monthlyPrecipitation: monthlyField === 'precipitation' ? monthlyThematic : null,
     monthlyPressure: monthlyField === 'pressure' ? monthlyThematic : null,
     monthlyPressureError: monthlyField === 'pressureError' ? monthlyThematic : null,
+    monthlySlp: monthlyField === 'slp' ? monthlyThematic : null,
     uccTexture,
     flipHorizontal: false,
   })
