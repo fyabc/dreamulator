@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790357784499,
+  "lastUpdate": 1790366244534,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5603,6 +5603,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008930542793406831",
             "extra": "mean: 5.08877400000074 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "fcc200b0b10e9d0dd67ec88c2852ff268799ec58",
+          "message": "docs(climate): climate-pipeline.md 与实现全面重同步——审计 7 项修复\n\n审计（只读 fork，报告 → private/reviews/2026-09-26-climate-pipeline-doc-audit.md）\n确认物理语义层同步（§4 B3/B4 公式块与代码逐符号一致、口径细则、默认值、stage\n顺序全对）；漂移集中三类，本提交修复：\n\n1. §5.7 GW6 湿槽回路新增（文档整块缺失）：wet_trough_enabled 默认关、三 flag\n   互斥守卫、iterations=3/relaxation=0.5/heating_weight、pickup 联锁\n   （:1032-1035，单开 pickup 会运行时 raise——旧 §7 描述会误导实现）、轮 7\n   ω 门否证状态、默认开双前置。§7 pickup 段同步补联锁说明。\n2. 锚列系统性过期重刷：climate_simulator.py 约 40 处裸行号（偏移 +56~+736，\n   09-23 W 供给轮等四轮插入累积；check_doc_refs 只验范围不验内容故此前全绿\n   漏报）+ 跨文件锚（climate.py/export.py/maps.py/climate_seasonality.py/\n   terrain_pipeline.py）。§2 步骤清单行号旁补符号名，提高机验覆盖率。\n3. 状态/数值刷新：§12 基线刷新为 2026-09-26 B4 实测（κ 62.2%/Group R²\n   0.184/台账 −4.79% + D 线 κ≥67.8% 出口账）；§13 气压行补 B3/B4、④ 行 v2\n   状态矛盾修复 + GW6 行新增；§5.6 v1「待 v2」→已实施、测试计数 14→27；\n   cvt_mesh.json 旧名 → cvt_mesh.msgpack.gz（4 处）。\n4. 代码注释顺手修：monsoon_circulation.py 三处 E≈0.104 → 0.100（旧值残留，\n   文档的 0.10 正确）。\n\n门槛：check_doc_refs（30 refs/0 unknown symbols）/ check_markdown_links\n（130 文件）/ mypy / ruff 全绿。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-26T03:56:55+08:00",
+          "tree_id": "7632b48324788eba3d7e65d0bb7681d831c00cbc",
+          "url": "https://github.com/fyabc/dreamulator/commit/fcc200b0b10e9d0dd67ec88c2852ff268799ec58"
+        },
+        "date": 1790366243397,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 11.171169577819668,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02727826154300006",
+            "extra": "mean: 89.51614180000433 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.532866373757826,
+            "unit": "iter/sec",
+            "range": "stddev: 0.018693108101459233",
+            "extra": "mean: 220.6109595000001 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.371877357935183,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6763815290847724",
+            "extra": "mean: 421.60695899999706 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1553.7654106374673,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000059287135840725824",
+            "extra": "mean: 643.5977999984743 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 290.41010088189586,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010937264393850354",
+            "extra": "mean: 3.443406399995297 msec\nrounds: 5"
           }
         ]
       }
