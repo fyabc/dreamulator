@@ -32,7 +32,7 @@ UCC 的统一性应来自一致的变量含义和计算契约。Earth 与 Nacrea
 
 按原提案节点解释，两者同为 `C3/C12o-Wu-Pf`；当前 `koppen_classify()` 分别得到 `Cfb`、`Cfa`。原 UCC 码未保留最热月是否达到 22°C 的区别，所以别名表无法唯一恢复 Köppen。需要时从原始月度序列独立计算 Köppen，并列保存即可。
 
-PET 在这里是受控输入，不是对两个气候运行完整 PET 模型得到的结果；UCC 码按原提案解释，并非已有正式 UCC 实现。证据见 [反例脚本](proposal-review-probes-2026-09-17.py) 和 [结果](proposal-review-probes-2026-09-17.json)。它支持撤除无损映射承诺，不要求为了分开 Cfa/Cfb 而再加一条 UCC 规则。若报告两种分类的差异，应说明全样本与分歧来源，不通过排除不一致样本改善分数。
+PET 在这里是受控输入，不是对两个气候运行完整 PET 模型得到的结果；UCC 码按原提案解释，并非已有正式 UCC 实现。证据见反例脚本 `private/reviews/proposal-review-probes-2026-09-17.py` 和结果 `private/reviews/proposal-review-probes-2026-09-17.json`（未入库）。它支持撤除无损映射承诺，不要求为了分开 Cfa/Cfb 而再加一条 UCC 规则。若报告两种分类的差异，应说明全样本与分歧来源，不通过排除不一致样本改善分数。
 
 ## 2. 文献给出的关键启发
 
@@ -186,7 +186,7 @@ P=0、Eref>0 时 AI=0；P=Eref=0 时 AI 未定义。P>0、Eref=0 应单列“无
 
 ## 5. Earth 与 Nacrea：同一套语义，分别验证输入能力
 
-Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年；详见 [共有物理评审](earth-nacrea-shared-physics-2026-09-17.md)。
+Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年；详见共有物理评审 `private/reviews/earth-nacrea-shared-physics-2026-09-17.md`（未入库）。
 
 | 同步对象 | 近乎固定的天空对象 | 恒星昼夜含义 |
 |---|---|---|
@@ -205,7 +205,7 @@ Nacrea 的向 Aegis 面/背 Aegis 面不是永久白昼面/黑夜面。母行星
 
 现有实现仍有需先核清的输入问题：Hamon 使用固定 12 小时日长近似；降水预算中有 365.25 年尺度换算和 `/12`，PET 使用 `orbital_period_days/12`；月度温度还受到年值校正。365.25 可以作为合法参考时间单位，问题是必须区分每地球年的率与每当地年的累计量。在时间和通量契约核实前，不能把当前 Earth/Nacrea 输出当作 UCC 的科学真值。
 
-代码入口：[climate_physics.py](../../src/dreamulator/engine/climate_physics.py) 的 `koppen_classify()` / `potential_evapotranspiration_hamon()`、[climate_simulator.py](../../src/dreamulator/map/climate_simulator.py) 的月度预算与 PET 消费链，以及 [月度解码](../../frontend/src/api/monthlyClimate.ts) / [显示 hook](../../frontend/src/viewers/map/useMonthlyClimate.ts) 中现有 12 bin 和相位约定。仅替换汽化潜热与摩尔质量也不足以实现跨压力/组分/重力的通用 PET，还需辐射供能、空气动力输送与饱和物性等闭合条件。
+代码入口：[climate_physics.py](../../../src/dreamulator/engine/climate_physics.py) 的 `koppen_classify()` / `potential_evapotranspiration_hamon()`、[climate_simulator.py](../../../src/dreamulator/map/climate_simulator.py) 的月度预算与 PET 消费链，以及 [月度解码](../../../frontend/src/api/monthlyClimate.ts) / [显示 hook](../../../frontend/src/viewers/map/useMonthlyClimate.ts) 中现有 12 bin 和相位约定。仅替换汽化潜热与摩尔质量也不足以实现跨压力/组分/重力的通用 PET，还需辐射供能、空气动力输送与饱和物性等闭合条件。
 
 ## 6. 是否需要更多测试例？需要，但要改变组织方式
 
@@ -248,7 +248,7 @@ Earth 初期人工审阅可选择约 20–30 个代表地点，但这不是统�
 
 ### 6.3 本轮已经执行的测试
 
-[合成实验脚本](ucc-design-experiments-2026-09-17.py) 与 [结果 JSON](ucc-design-experiments-2026-09-17.json) 中，**26 项描述量语义检查通过**。
+合成实验脚本 `private/reviews/ucc-design-experiments-2026-09-17.py` 与结果 JSON `private/reviews/ucc-design-experiments-2026-09-17.json`（未入库）中，**26 项描述量语义检查通过**。
 
 其中两个直观结果：
 
@@ -314,4 +314,4 @@ Earth 初期人工审阅可选择约 20–30 个代表地点，但这不是统�
 
 另外检索了 Feng、Porporato 与 Rodríguez-Iturbe（2013）的 *Changes in rainfall seasonality in the tropics*（[10.1038/nclimate1907](https://doi.org/10.1038/nclimate1907)）及 Walsh & Lawler（1981）的降水季节性工作；未据此声称已复现其公式。原提案的 Olcott & Lora 2024 Titan 分类来源，本轮未独立核实，不能用作已确认的关键依据，也不能据此断言它不存在。“不存在同类工作”“本方案首次物理锚定”的优先权表述亦不受本次检索支持。
 
-复核材料：[检索脚本](ucc-literature-search-2026-09-17.py)、[检索结果](ucc-literature-search-2026-09-17.json)、[来源获取脚本](ucc-literature-fetch-2026-09-17.py)、[访问记录](ucc-literature-fetch-2026-09-17.json)、`ucc-literature-sources-2026-09-17/` 下的原始页面与抽取文本，以及上述合成实验脚本和 JSON。未运行全球真实数据验证、独立径流评估或新 GCM 模拟。
+复核材料（均在 `private/reviews/`，未入库）：检索脚本 `ucc-literature-search-2026-09-17.py`、检索结果 `ucc-literature-search-2026-09-17.json`、来源获取脚本 `ucc-literature-fetch-2026-09-17.py`、访问记录 `ucc-literature-fetch-2026-09-17.json`、`ucc-literature-sources-2026-09-17/` 下的原始页面与抽取文本，以及上述合成实验脚本和 JSON。未运行全球真实数据验证、独立径流评估或新 GCM 模拟。
