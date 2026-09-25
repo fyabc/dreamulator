@@ -181,7 +181,7 @@ maps/
 
 | 函数 | 用途 |
 |------|------|
-| `save_cvt_mesh(path, mesh)` | 规范写：JSON 文本中间层（保 4 位小数截断 + 非有限→null 语义）→ msgpack → gzip；顺带删除同目录 legacy `cvt_mesh.json`（防双网格漂移） |
+| `save_cvt_mesh(path, mesh, *, backup_existing=False)` | 规范写：JSON 文本中间层（保 4 位小数截断 + 非有限→null 语义）→ msgpack → gzip；顺带删除同目录 legacy `cvt_mesh.json`（防双网格漂移）；传 legacy 路径时写前规范化到 canonical 名（防「写目标==清理目标」自毁）。`backup_existing=True` 覆写前轮转 1 代 `.prev`——仅 root 真实数据写入点使用（重导入昂贵、磁盘单份），引擎/分支构建保持默认关 |
 | `load_cvt_mesh(path) -> dict` | 嗅探读：gzip→（JSON 文本 或 msgpack）→ dict |
 | `load_cvt_mesh_model(path) -> CVTMesh` | 同上但校验为模型；legacy JSON 走 pydantic-core `validate_json` 快路径 |
 | `find_mesh_file(dir)` / `iter_mesh_files(base)` | 定位网格文件（canonical 优先，legacy 回退；跳过 `_` 前缀草稿目录） |

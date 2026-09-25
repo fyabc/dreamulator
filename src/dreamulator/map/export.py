@@ -476,7 +476,7 @@ def _mesh_json_bytes(mesh: CVTMeshLike) -> bytes:
     return _truncate_float_precision(TypeAdapter(CVTMesh).dump_json(mesh))
 
 
-def save_cvt_mesh(path: Path, mesh: CVTMeshLike) -> None:
+def save_cvt_mesh(path: Path, mesh: CVTMeshLike, *, backup_existing: bool = False) -> None:
     """Write *mesh* as gzip-framed MessagePack (``cvt_mesh.msgpack.gz``).
 
     gzip is the size win (the mesh is field-name/string heavy — measured
@@ -485,9 +485,19 @@ def save_cvt_mesh(path: Path, mesh: CVTMeshLike) -> None:
     regularization win — one canonical binary the API can stream unparsed
     and the frontend decodes in a worker.  A legacy ``cvt_mesh.json``
     sibling is removed so a planet never carries two divergent meshes.
+
+    ``backup_existing=True`` rotates the file being replaced to
+    ``cvt_mesh.msgpack.gz.prev`` (1 generation, same directory) before the
+    overwrite — for real-data root meshes that are expensive to re-import
+    (earth root: external source datasets + a single on-disk copy; lost to a
+    self-destruct overwrite 2026-09-25).  Generated/branch meshes stay at the
+    default: reproducible from seed, and a per-build copy buys nothing.  The
+    ``.prev`` keeps whatever bytes were on disk (legacy gzip-JSON included);
+    :func:`decode_mesh_bytes` sniffs content, so it loads regardless of name.
     """
     import gzip
     import json
+    import shutil
 
     import msgpack
 
@@ -498,6 +508,10 @@ def save_cvt_mesh(path: Path, mesh: CVTMeshLike) -> None:
         # then delete what was just written (root earth re-import lost its
         # mesh this way, 2026-09-25).  Canonicalize to the msgpack.gz name.
         path = path.with_name(MESH_FILENAME)
+    if backup_existing:
+        previous = path if path.exists() else path.with_name(LEGACY_MESH_FILENAME)
+        if previous.exists():
+            shutil.copy2(previous, path.with_name(MESH_FILENAME + ".prev"))
     path.write_bytes(
         gzip.compress(msgpack.packb(obj, use_bin_type=True), compresslevel=_MESH_GZIP_LEVEL)
     )
@@ -613,8 +627,10 @@ def save_outputs(
 
     # 2. CVT Mesh — gzip-framed MessagePack via the canonical serializer
     #    (float truncation + non-finite→null semantics preserved through the
-    #    JSON intermediate inside save_cvt_mesh).
-    save_cvt_mesh(output_dir / MESH_FILENAME, mesh)
+    #    JSON intermediate inside save_cvt_mesh).  Terrain export runs once
+    #    per generation/import (not per climate build), so the 1-generation
+    #    backup is cheap insurance for real-data root re-imports.
+    save_cvt_mesh(output_dir / MESH_FILENAME, mesh, backup_existing=True)
     logger.info("  Saved CVT mesh: %s", output_dir / MESH_FILENAME)
 
     # 3. Plates JSON

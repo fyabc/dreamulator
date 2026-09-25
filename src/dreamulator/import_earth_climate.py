@@ -647,8 +647,10 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     object.__setattr__(mesh, "_pressure_monthly", pressure_monthly.astype(np.float32))
     object.__setattr__(mesh, "_slp_monthly", slp_monthly.astype(np.float32))
 
-    # Write the mesh file (per-cell annual climate fields).
-    save_cvt_mesh(mesh_path, mesh)
+    # Write the mesh file (per-cell annual climate fields).  Root mesh =
+    # real-data anchor with a single on-disk copy — keep the previous
+    # generation as .prev so a bad re-import is one copy away from recovery.
+    save_cvt_mesh(mesh_path, mesh, backup_existing=True)
     print(f"  Updated {mesh_path.name}: {mesh_path}")
 
     # Write climate_monthly.msgpack (quantized int16, same as the engine).

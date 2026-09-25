@@ -288,7 +288,7 @@ def climate_import_elevation(
         from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
 
         mesh_path = output_dir / MESH_FILENAME
-        save_cvt_mesh(mesh_path, mesh)
+        save_cvt_mesh(mesh_path, mesh, backup_existing=True)
         mesh_size_mb = mesh_path.stat().st_size / (1024 * 1024)
         console.print(f"  Saved CVT mesh: {mesh_path.name} ({mesh_size_mb:.1f} MB)")
 
