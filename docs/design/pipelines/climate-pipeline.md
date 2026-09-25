@@ -76,8 +76,8 @@
 
 | 调用方 | 入口 | 场景 |
 |--------|------|------|
-| 地形管线 | `terrain_pipeline.py:433`（Stage 6） | `dreamulator build <world>` 主路径：geological 层在管线内顺跑气候 |
-| DAG 引擎 | `ClimateEngine.run()`（`climate.py:155`） | 独立重建气候层（`--only climate` / 分支气候分叉） |
+| 地形管线 | `terrain_pipeline.py:473`（Stage 6） | `dreamulator build <world>` 主路径：geological 层在管线内顺跑气候 |
+| DAG 引擎 | `ClimateEngine.run()`（`climate.py:184`） | 独立重建气候层（`--only climate` / 分支气候分叉） |
 | 验证器 | `src/dreamulator/validate_climate.py` | 内存重建后逐格对观测基准 |
 | 诊断脚本 | `scripts/climate/diagnose_*.py` | 经 `climate_config.load_climate_config` 加载与构建完全相同的配置 |
 
@@ -89,47 +89,55 @@
 
 ## 2. 执行顺序
 
-`simulate_climate(mesh, config)`（`climate_simulator.py:82`）是一个单遍函数，按下列顺序
+`simulate_climate(mesh, config)`（`climate_simulator.py:138`）是一个单遍函数，按下列顺序
 执行。行号是 `climate_simulator.py` 的锚点；每步的物理细节在 §3–§8 展开。控制台输出按
 6 个相位显示进度（`1/6`–`6/6`）。
 
 1. **准备**：从 `mesh.cells` 提取 elevation / 纬度 / 海陆掩码 / 3D 节点。海陆判定用
    地质管线的 `water_class`（连通性洪泛写入；裸 `elevation >= 0` 会把低于海平面的内流
-   盆地误判为海洋，`climate_simulator.py:122-131`）；大洋级内陆湖（`is_lake`）单列
-   （:139）。
-2. **Stage 1 温度**（相位 1/6，:150）——产出年平温度场 `t_mean_C`：
-   辐射平衡 + 温室 → 全球均温锚点（:154-160）→ 年平纬向剖面（1D EBM 或 Held-Hou 单圈，
-   :173-238；副热带下沉增温以「存档增量」形式记在 `_dt_subsidence` 上，:225）→ 年均冰
-   反照率反馈（:280）→ 海洋按 SST 剖面覆写、季节冰湖保留陆地温度（:287-309）→ 沿海
-   调节（:311-331）→ 年平向风海洋平流 4.1-B（:339-357）→ 海拔直减率（:359-381）→
-   向星半球增温（:384-389）。细节 §3.1–§3.5。
-3. **季节块**（无相位号，:391-449）——产出月度温度 `t_monthly_C`：地表热容量（海/陆/
-   沿海/湖分型，:394-406）→ `compute_seasonal_climate` 解季节 EBM（:407）→ **B0c 数据
+   盆地误判为海洋，`climate_simulator.py:178-183`）；大洋级内陆湖（`is_lake`）单列
+   （:190-196）。
+2. **Stage 1 温度**（相位 1/6，:206）——产出年平温度场 `t_mean_C`：
+   辐射平衡 + 温室 → 全球均温锚点 → 年平纬向剖面（1D EBM 或 Held-Hou 单圈，
+   :210-240；副热带下沉增温以「存档增量」形式记在 `_dt_subsidence` 上，:259，
+   写入 :328-336）→ 年均冰反照率反馈（`ice_albedo_feedback` :391-396）→ 海洋按
+   SST 剖面覆写（`_ocean_surface_temperature` :404）、季节冰湖保留陆地温度 → 沿海
+   调节（:429-443）→ 年平向风海洋平流 4.1-B（:448-473）→ 海拔直减率
+   （`moist_lapse_rate` :491）→ 向星半球增温（:505）。细节 §3.1–§3.5。
+3. **季节块**（无相位号，:514-577）——产出月度温度 `t_monthly_C`：地表热容量（海/陆/
+   沿海/湖分型，:514-528）→ `compute_seasonal_climate` 解季节 EBM（:529）→ **B0c 数据
    契约**：月度序列以 Stage-1 年平场重新定水平（EBM 的振幅保留、水平值换成含直减率/
-   平流/SST 的年平场，:439）→ 季节冰湖 0 °C 冰点钳（:447）。细节 §3.6。
-4. **Stage 2 风场**（相位 2/6，:452）——产出月度风 `wind_monthly[12]` 与年风 `wind`：
-   三圈环流背景（ITCZ 位置年均，:486）→ 月度气压异常 ΔP（B2 海陆对比，:502）→
-   175 km 尺度分离平滑（:517）→ 图上最小二乘梯度（:520）→ 边界层动量平衡月度风异常
-   （:530）→ 组装 `wind_monthly = 背景 + 跨赤道西风带 + 季风异常`（:564）→ 逐月地形
-   阻挡（:568）→ **年风 = 12 个月度场的矢量平均**（B0b 契约，:585）→ 写回 cell 的
-   年风东/北分量（:601-603）→ 月度 4.1-B 海洋调节（距平式，修改 `t_monthly_C` 的季节
-   形状、保年均水平，:617-630）。
-   有向边表与邻域平均算子在此建一次、后续共用（:460-471）。细节 §4、§5。
-5. **Stage 2.5 洋流**（相位 3/6，:633，`ocean_currents_enabled` 门控）——SST 修正后的
-   `t_mean_C` 回流给后续蒸发与 Köppen：风应力（镜像约定，:662-663）→ 逐海盆 Stommel
-   流函数（< 20 cell 的小盆跳过，:686）→ semi-Lagrangian SST 平流（:711）→ 洋流/距平
-   写回 cell（:723-727）→ 涌升 SST 修正（:731）→ 洋向陆温度距平平流（:744-761）。
-   细节 §6。
-6. **Stage 3 降水**（相位 4/6，:764）——产出年降水 `precipitation_mm` 与月度
-   `p_monthly`：`_compute_precipitation_monthly_budget` 逐月质量守恒水汽收支（:770）。
-   若 `stationary_wave_enabled`（默认 false），在此追加 ④ 两趟定点回路：pass-1 降水 →
-   定常波 ΔSLP → 重解风场 → 重解水汽收支（:799-872）。细节 §7、§5.6。
-7. **Stage 4 Köppen 分类**（相位 5/6，:882）——产出 `koppen_codes`：先做分类所需的
-   月度极值预计算（最干/最湿月、暖/冷半降水，:894-900）→ **Stage 3.5 下沉增温的干旱
-   度门控释放**（降水已知后从 `t_monthly_C` 扣回，:902-936）→ **单一温度权威终聚合**
-   （湖冰钳 → 年温/极值从月序导出，:947-952）→ 月度场暂存到 mesh 私有属性供导出
-   （:958-974）→ `koppen_classify`（:976-993）。细节 §3.7、§3.8、§8。
-8. **写回**（相位 6/6，:995-1005）：逐 cell 写 `temperature_C` / `precipitation_mm` /
+   平流/SST 的年平场，:555-563）→ 季节冰湖 0 °C 冰点钳（:572）。细节 §3.6。
+4. **Stage 2 风场**（相位 2/6，:580）——产出月度风 `wind_monthly[12]` 与年风 `wind`：
+   有向边表与邻域平均算子在此建一次、后续共用（:588-590）。三圈环流背景（ITCZ 位置
+   :553，`_seasonal_mean_cell_wind` 调用 :615）→ 月度气压异常 ΔP（B2 海陆对比，
+   :645）→ 175 km 尺度分离平滑（:662）→ 图上最小二乘梯度（:667）→ 边界层动量平衡
+   月度风异常（:675）→ 组装 `wind_monthly = 背景 + 跨赤道西风带 + 季风异常`（:709）
+   → 逐月地形阻挡（:713）→ **年风 = 12 个月度场的矢量平均**（B0b 契约，:730）→
+   写回 cell 的年风东/北分量（:747）→ 月度 4.1-B 海洋调节（距平式，修改
+   `t_monthly_C` 的季节形状、保年均水平，:750-777）。细节 §4、§5。
+5. **Stage 2.5 洋流**（相位 3/6，:801，`ocean_currents_enabled` 门控 :807）——SST
+   修正后的 `t_mean_C` 回流给后续蒸发与 Köppen：风应力（镜像约定，`compute_wind_stress`
+   :838）→ 逐海盆 Stommel 流函数（`detect_ocean_basins` :852，< 20 cell 的小盆跳过
+   :863）→ semi-Lagrangian SST 平流（`advect_sst_semilagrangian` :896）→ 洋流/距平
+   写回 cell（:918-920）→ 涌升 SST 修正（`apply_upwelling_sst_correction` :942）→
+   洋向陆温度距平平流（`advect_temperature_anomaly` :968）。细节 §6。
+6. **Stage 3 降水**（相位 4/6，:985）——产出年降水 `precipitation_mm` 与月度
+   `p_monthly`：`_compute_precipitation_monthly_budget` 逐月质量守恒水汽收支（:991）。
+   三条**互斥**的闭合回路可在此追加（守卫 :1021-1035，一次只开一个）：
+   `stationary_wave_enabled`（默认 false）④ v1 两趟定点回路（pass-1 降水 → 定常波
+   ΔSLP → 重解风场 → 重解水汽收支，:1041-1098）；`stationary_wave_v2_enabled`
+   （默认 false）④ v2 两层 Gill ω 回路（§5.6）；`wet_trough_enabled`（默认 false）
+   GW6 湿槽回路（ΔP 湿增量 → 重解风场 → 重解水汽收支，iterations=3，:1206-1395，
+   §5.7）。`convective_pickup_gate_enabled` 与湿槽**联锁**：要求 `wet_trough_enabled`
+   同开，否则 raise（:1032-1035，标定域理由见 §7）。细节 §7、§5.6、§5.7。
+7. **Stage 4 Köppen 分类**（相位 5/6，:1402）——产出 `koppen_codes`：先做分类所需的
+   月度极值预计算（`warm_cold_half_precip` / `seasonal_precip_extremes`，:1413-1414）
+   → **Stage 3.5 下沉增温的干旱度门控释放**（降水已知后从 `t_monthly_C` 扣回，
+   :1418-1451）→ **单一温度权威终聚合**（湖冰钳 → 年温/极值从月序导出，:1459-1477）
+   → 月度场暂存到 mesh 私有属性供导出（:1478-1494）→ `koppen_classify`（:1496）。
+   细节 §3.7、§3.8、§8。
+8. **写回**（相位 6/6，:1521 起）：逐 cell 写 `temperature_C` / `precipitation_mm` /
    `koppen_class` / 月度极值 / `distance_to_coast_km` 等 `VoronoiCell` 字段。
 
 风向/洋流的下游消费者：年风场写回 `wind_east_m_s` / `wind_north_m_s`（:601-603），
@@ -210,7 +218,7 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
 - **沿海调节**（各向同性）：海平面陆地温度向最近海洋 SST 弛豫，内陆按
   `coastal_moderation_scale_km`（默认 500 km）指数衰减；在直减率**之前**施加，高冰盖仍
   冷；冰覆海洋 SST ~−2 °C 使其自动冰感知（:311-331，距离场来自
-  `_graph_distance_to_coast` :1318）。
+  `_graph_distance_to_coast` :1918）。
 - **年平向风海洋平流 4.1-B**（方向性）：陆地年温向**上风向**海洋的 SST 弛豫，按
   `maritime_advection_scale_km`（默认 1500 km，气团 e 折长度，Berg 1944）衰减——盛行
   西风把海洋暖量送进中纬大陆。冰门：年温 < −10 °C 的极地冰盖不参与（避免被冷洋面
@@ -239,7 +247,7 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
 2. **季节 EBM** `compute_seasonal_climate`（:407，实现在 `climate_seasonality.py`）：
    月度辐照驱动 + 冰反照率开关。季节振幅
    `T_amp = ΔQ_ω(1−α) / √(B_eff² + (ωC)²)`，其中 `B_eff = B + 6D`
-   （`climate_seasonality.py:511`）——显式热输送在主导季节模态（四极模 n=2，n(n+1)=6）
+   （`climate_seasonality.py:623-627`）——显式热输送在主导季节模态（四极模 n=2，n(n+1)=6）
    上的阻尼，取代旧标定常数；相位滞后 `tan φ = ωC/B_eff`。夏季冻结 cell 保留冰反照率
    → 振幅缩小，区分冰盖（EF）与副极地（Dfc）。**E1（2026-09-16）**：D 与年 EBM 调用方
    同源 Ω 标度（`0.35 × P^0.3`，地球 P=1 不变；慢自转大胞更快抹平季节距平）。
@@ -254,7 +262,7 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
 
 ### 3.7 下沉增温的干旱度门控释放（Stage 3.5，执行于降水之后）
 
-Stage 1 存档的 `_dt_subsidence`（§3.1）在降水已知后释放（:902-936）：下沉增温物理上
+Stage 1 存档的 `_dt_subsidence`（§3.1）在降水已知后释放（:1418-1451）：下沉增温物理上
 属于干燥下沉支——在湿润的副热带边缘会被湿对流与蒸发冷却抵消。**只有 Köppen 干旱比
 与 UNEP P/PET（Hamon，`potential_evapotranspiration_hamon`）双判据都判湿润的低地才
 释放**（`subsidence_aridity_gate`，结点钉在 Köppen BW/BS 与干湿边界上，无新增调参
@@ -262,7 +270,7 @@ Stage 1 存档的 `_dt_subsidence`（§3.1）在降水已知后释放（:902-936
 季节振幅与暖/冷半月排序，Köppen 预计算数组仍有效。
 
 单遍近似：Stage 2–3 消费的是释放前温度——这正是 T↔P 定点耦合要移除的不自洽
-（`climate_simulator.py:913-915` 自引；见
+（`climate_simulator.py:1432-1440` 自引；见
 [proposals/climate-steady-coupling.md](../proposals/climate-steady-coupling.md) 与 §14）。
 
 ### 3.8 单一温度权威：终聚合（切片 6，astra §2.2 目标架构）
@@ -319,7 +327,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 1. **纬向平均基准**（`zonal_mean_monthly`，`monsoon_circulation.py:208`）：逐月、按
    符号纬度带（5°）求纬向平均温度。
 2. **气压异常**（`pressure_anomaly_monthly`，:267，调用在
-   `climate_simulator.py:502`）：ΔT = 细胞温度 − 同纬度纬向平均（**B2 海洋参照**：
+   `climate_simulator.py:645`）：ΔT = 细胞温度 − 同纬度纬向平均（**B2 海洋参照**：
    按符号分带使南北半球不互染；**全值含年平**——B0b 契约不扣年平，月度 ΔP 全海陆
    对比 → 月度风 → 矢量平均 = 年风，年风因此携带定常海陆结构——冬季西伯利亚高压 ≫
    夏季热低压）。静力响应：ΔP = −P_sfc·E·ΔT_eff/T̄，E ≈ 0.10（边界层投影因子
@@ -336,16 +344,16 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
    观测目标本身是 1.4 km 高原折算值，标定线后解）；格陵兰 7 月 +0.04（观测 +0.75，
    B3 过冲 +3.19 消除）。已申报近似：标准递减率假设对深逆温高原（冬西藏、南极内部）
    过校正 → 冷高偏弱，精化 = 折算差分项 exp(z/H_cold)−exp(z/H_std)（stage-2 已登记）。
-3. **尺度分离平滑**（`_smooth_graph` :1038，调用 :517）：51 km 网格的海陆镶嵌让原始
+3. **尺度分离平滑**（`_smooth_graph` :1562，调用 :662）：51 km 网格的海陆镶嵌让原始
    异常场的梯度被海岸线噪声主导——平滑的目标是马赛克噪声尺度，不是任何动力调整尺度
    （热低压是被海陆热力对比**持续强迫**的结构，不存在自由调整问题；早期 500 km 的
    Rossby 半径依据是对自由距平的误用）。Jacobi 平滑到
-   `_MONSOON_PRESSURE_SMOOTHING_KM` = 175 km（:1564；pass 数 = 2·(175/cell_km)²，
+   `_MONSOON_PRESSURE_SMOOTHING_KM` = 175 km（:2154；pass 数 = 2·(175/cell_km)²，
    每 pass 是一步惰性随机游走）——2026-09-22 平滑尺度扫描（`private/reviews/
    climate-baseline-2026-09-22/smoothing-scale-sweep.log`）：σ=150–200 km 把马赛克
    噪声压到季风信号的 ~1/17 同时保住 ~70% 梯度，σ=500 km 砍掉 65–85%。**未平滑的
    raw 场保留**：④ 定常波分量在平滑前叠加（§5.6）。
-4. **梯度**（`_graph_least_squares_gradient` :1066，调用 :520）：逐 cell 最小二乘拟
+4. **梯度**（`_graph_least_squares_gradient` :1590，调用 :667）：逐 cell 最小二乘拟
    合、单位「每弧度」除以行星半径换算 Pa/m——不用加权差分（幅度依赖网格间距）。
 
 ---
@@ -354,7 +362,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 
 ### 5.1 背景：三圈环流（年均）
 
-`_seasonal_mean_cell_wind`（:1159，调用 :486）给出完整的地表纬向风场（信风/中纬西风/
+`_seasonal_mean_cell_wind`（:1683，调用 :615）给出完整的地表纬向风场（信风/中纬西风/
 极地东风），胞界是行星参数（慢自转得到扩张的 Hadley 胞），环流跟随 ITCZ 的**年均**
 位置。地转（热成）风分量已移除：模型没有动力副热带高压，θ 热成风在所有纬度都是东风、
 只会削弱 Ferrel 西风，而裸地表气压梯度（测高 exp(−h/H)）在陆上加 ~30 m/s 的地形噪声
@@ -371,7 +379,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 
 ### 5.3 边界层动量平衡（月度异常）
 
-`monsoon_boundary_layer_wind`（`monsoon_circulation.py:403`，调用 :530）：对 §4 的
+`monsoon_boundary_layer_wind`（`monsoon_circulation.py:403`，调用 :675）：对 §4 的
 ΔP 梯度解
 
 ```
@@ -388,9 +396,9 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
 ### 5.4 月度组装与年风契约（B0b）
 
 ```
-wind_monthly[m] = 三圈背景 + 跨赤道西风带[m] + 季风异常[m]   (:564)
+wind_monthly[m] = 三圈背景 + 跨赤道西风带[m] + 季风异常[m]   (:709)
 wind_monthly[m] ← 地形阻挡（逐 cell 标量缩放，线性）           (:568)
-wind = wind_monthly.mean(axis=0)                              (:585)
+wind = wind_monthly.mean(axis=0)                              (:730)
 ```
 
 年风 = 12 个月度场的**矢量平均**——观测定义本身（NCEP 年气候态就是月风的矢量平均）。
@@ -416,7 +424,7 @@ involution 换回镜像（:653-662、:1965、:2050-2058）。
 （`map/stationary_wave.py::compute_slp_wave_anomaly`，Sardeshmukh & Hoskins 1988 /
 Rodwell & Hoskins 2001）→ ΔSLP_wave 叠加到 raw ΔP 上重过「平滑 → 梯度 → 边界层风」链
 → 重解水汽收支。趟间欠松弛（`stationary_wave_relaxation` = 0.5）。v1 保真度不足（地表
-温度热成风基本态代理），机器保留待 v2（真高层基本态），细节见
+温度热成风基本态代理），机器保留（v2 两层 Gill 已实施，见下），细节见
 [proposals/climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §2
 「定常波响应」。
 
@@ -429,10 +437,34 @@ k_rain 下沉干燥门**（`climate_physics.subsidence_rainout_gate`，质量守
 与 storm/SST 门在 `_compute_precipitation_monthly_budget` 的 `omega_gate_monthly`
 钩子复合）→ 重解水汽收支。**风场保持 pass-1**（v1 的 ΔSLP→BL 风 1/f 放大路径不
 再消费）。求解器全验证（Case-1 退化 Matsuno-Gill/Case-4 反气旋对/R&H ω 签名三基本
-态不变号/慢自转波导加宽，`tests/test_stationary_wave_two_level.py` 14 项）；消费门
+态不变号/慢自转波导加宽，`tests/test_stationary_wave_two_level.py` 27 项）；消费门
 2026-09-17 标定无信号（强迫自引用——模型沙漠湿偏差加热淹没 R&H 下沉），结点保守
 弱斜率，待供给端沙漠 P 偏差修复后重标定（`diagnose_desert_wetness --wave-gate`，
 存档驱动）。
+
+### 5.7 GW6 湿槽回路（W 供给路线，已实施、默认关）
+
+`wet_trough_enabled = false`（`pipeline_types.py:614`），与 ④ v1/v2 **互斥**
+（守卫 `climate_simulator.py:1021-1028`：一次只开一个闭合回路——每轮一个闭合假设）。
+开启时在 Stage 3 内：pass-1 降水 → 柱潜热（`wet_trough_heating_weight = "total"`；
+备选 `"pickup"` = NPH09 深对流份额加权，预登记消融臂）→ **湿槽 ΔSLP**
+（`stationary_wave_two_level.py::wet_trough_slp_anomaly` :430：湿槽静力映射 +
+赤道混合 + ΔP_wet 幅度帽）叠加到 raw ΔP 重过「平滑 → 梯度 → 边界层风 → 年风」链
+→ 重解水汽收支；Picard 欠松弛 `wet_trough_relaxation = 0.5`、
+`wet_trough_iterations = 3`（回路块 :1206-1395）。**pickup 门与本回路联锁**
+（:1032-1035，标定域理由见 §7）。
+
+轮 7 ω 合成门（`wet_trough_omega_gate_enabled`，`pipeline_types.py:637`，默认关）：
+从同一两模态解的中层 w 合成陆面下沉干燥门——**已否证**（结构复核符号全反；与
+v1 基本态代理、v2 消费门标定构成 ④ 系列三连否证，同指「纬向平均基本态撑不起
+副热带经度结构」）。机制代码保留，重启前提 = 真经度依赖基本态（局域斜压/瞬变
+涡旋）或 GCM 后端。
+
+**收口状态（用户裁决，`bd9bac1`）**：flag 默认关——构建速度代价 6.4× 超 ≤2×
+门槛。默认开的两道前置 = ① 构建速度优化（S1-S4 + pass 数，`profiling.md` §2.1）
++ ② 赤道供给修复（西非雨带走廊族）——`pipeline_types.py:610-613` 注释同文。
+全部轮次记录、验收数值与裁决 → `private/plans/w-supply-route.md`（单一事实源）；
+设计依据 → proposal §5。
 
 ---
 
@@ -465,7 +497,7 @@ Stage 2.5 挂载（风场之后、降水之前），单向单遍——不做 SST
 化），取代旧的各向同性图扩散耦合。
 
 逐 cell 洋流字段（`ocean_current_east_m_s` / `ocean_current_north_m_s` / `sst_anomaly_c`）
-写入 `VoronoiCell`（:723-727），经气候回写进入 `cvt_mesh.json`，前端本地烘焙流线。
+写入 `VoronoiCell`（:918-920），经气候回写进入 `cvt_mesh.msgpack.gz`，前端本地烘焙流线。
 
 **配置**（`TerrainPipelineConfig` 的 `Ocean` 小节）：`ocean_currents_enabled`、
 `ocean_drag_coefficient`、`ocean_mixed_layer_depth_m`（H_ml）、`ocean_bottom_friction_s`
@@ -480,8 +512,8 @@ Stage 2.5 挂载（风场之后、降水之前），单向单遍——不做 SST
 
 ## 7. 降水
 
-`_compute_precipitation_monthly_budget`（:1988，调用 :770）——**逐月质量守恒的柱水汽
-收支方程**（`_solve_moisture_budget` :1599，公式见 energy_balance.md §8），逐月求解
+`_compute_precipitation_monthly_budget`（:2724，调用 :991）——**逐月质量守恒的柱水汽
+收支方程**（`_solve_moisture_budget` :2170，公式见 energy_balance.md §8），逐月求解
 12 次（月度风场 + 月度温度驱动的蒸发与对流雨出），年降水为 12 个月之和：
 
 ```
@@ -519,7 +551,10 @@ CC 饱和柱水汽（`column_water_saturation`）。
 §5-α/§4（ΔSST 结构窄：冷舌缺失）。
 
 pickup = **§5-β 对流临界雨出门**（`convective_pickup_gate`，2026-09-17，
-config `convective_pickup_gate_enabled`）：降水是柱水汽的临界现象（Neelin-Peters-
+config `convective_pickup_gate_enabled`，**与 GW6 湿槽联锁**：要求
+`wet_trough_enabled` 同开，否则 raise——门结点在供给修复后的 W 场态上重标定，
+未修复 W 场上全陆洋共位于 x≈0.16-0.18、ramp 会扼死季风陆地，见
+`climate_simulator.py:1032-1035` 与 §5.7）：降水是柱水汽的临界现象（Neelin-Peters-
 Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上），观测的雨出效率
 τ = W/P 在深沙漠（约 150 天）与对流区（7-10 天）之间差 15-20 倍，而引擎基底是全局
 均匀的 9 天。门把 k_rain 乘上 f(W/W_sat)（W_sat 用冷阱同一个
@@ -574,9 +609,9 @@ Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上）
    2026-09-18 退役）。稳态守恒预算下迎风总降水只是温和抬升（凝结多为「重标记」本地
    本要下的雨），主信号在背风亏损——与旧「凭空加水」机制的迎风大包有本质区别。
    Budyko 固定点与年/月两条求解路径自动消费同一机制。
-4. **斜压风暴路径**（年场，:2077）：雨出率增强 `_storm_enhance`——幅度 ∝ 自身场赤道-
+4. **斜压风暴路径**（年场，:2842）：雨出率增强 `_storm_enhance`——幅度 ∝ 自身场赤道-
    极差 × Ω^0.3 × 蒸发，作为 `k_rain` 调制而非加法项；`_eddy_enhance` 同比例增强涡旋
-   水汽扩散 κ。带位置由 `_baroclinic_band`（:1901）从纬向平均温度的经向梯度推导
+   水汽扩散 κ。带位置由 `_baroclinic_band`（:2629）从纬向平均温度的经向梯度推导
    （Eady 不稳定性跟随 ∇T）：中心取 |dT/dφ| 峰值纬度（限制在 20° 以上），σ 取半峰全宽
    /2.355（钳制 5–20°）；第三返回值 = 剖面自身的赤道-极差，作风暴幅度的**自身场**归一化
    基准（E2，2026-09-16：取代 config/auto `lat_gradient` 双轨，杀同物理裂缝）。带输入 =
@@ -633,14 +668,14 @@ Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上）
   `P = P₀·exp(−x/λ)`，但再循环长度 λ 区域依赖（热带 500–2000 km、沙漠 >7000 km），
   由当地 E/P 决定而非距海距离——这是 Budyko 再循环取代距离衰减的依据。
 
-**诊断辅助**：`_surface_divergence`（:1855）有限体积逐 cell 散度，供
+**诊断辅助**：`_surface_divergence`（:2583）有限体积逐 cell 散度，供
 `diagnose_wind_divergence.py` 使用。
 
 ---
 
 ## 8. Köppen 分类
 
-`koppen_classify`（`climate_physics.py`，调用 :976）吃月度真值：
+`koppen_classify`（`climate_physics.py`，调用 :1496）吃月度真值：
 
 - **极值预计算**（:894-900，`warm_cold_half_precip` / `seasonal_precip_extremes`）：
   最干/最湿月、暖季/冷季降水、夏干/冬湿/冬干/夏湿四个对立量——第三字母 s/w/f 的判据
@@ -669,11 +704,11 @@ class ClimateEngine(BaseEngine):
 2. `terrain_config.yaml`（经 `find_input` 沿层级链继承）加载 `TerrainPipelineConfig`
    ——与地形管线同源，调参不分叉；随后 `resolve_and_apply_physical_parameters` 用
    正典物理量（光度/距离/倾角/自转/温室）覆写 config 中的任何同名值
-   （`climate.py:100-135`）。
+   （`climate.py:121-137`）。
 3. 从 geological 层派生目录加载带海拔的 CVT mesh（`_load_cvt_mesh_from_geological`）；
    缺 mesh 则引擎失败返回。
-4. `simulate_climate(mesh, config)`（:155）→ 写回 `cvt_mesh.json` →
-   `export_climate_layers(mesh, export_dir, config)`（:168）。
+4. `simulate_climate(mesh, config)`（:184）→ 写回 `cvt_mesh.msgpack.gz` →
+   `export_climate_layers(mesh, export_dir, config)`（:197）。
 
 诊断脚本侧的对应物是 `map/climate_config.py::load_climate_config`——同一套
 terrain_config + 物理参数解析，保证诊断与构建读同样的配置。
@@ -684,23 +719,23 @@ terrain_config + 物理参数解析，保证诊断与构建读同样的配置。
 
 地形管线（`map/terrain_pipeline.py`）中气候的位置：
 
-- **Stage 6 Climate**（:426-439）：`simulate_climate(result.mesh, config)` 在地形合成
+- **Stage 6 Climate**（:473-486）：`simulate_climate(result.mesh, config)` 在地形合成
   （Stage 5）之后原地执行；配置与 DAG 引擎同源（同一 terrain_config.yaml）。
-- **Stage 7 Rivers**（:441-468）：河流生成**消费气候输出**（降水 → 径流），并抽取
+- **Stage 7 Rivers**（:488-514）：河流生成**消费气候输出**（降水 → 径流），并抽取
   `features.json` 河流折线。
-- **Stage 8 Export**（:469 起）：全图层导出；导出前把大河型内流湖（里海类比）升级为
+- **Stage 8 Export**（:516 起）：全图层导出；导出前把大河型内流湖（里海类比）升级为
   气候意义上的洋（`upgrade_large_endorheic_lakes`）——放在河流之后，因为河流标记的
   「河流终结型内流湖」才是气候相关的内陆海。
 
 数据流：`terrain_config.yaml → terrain_pipeline → simulate_climate(mesh) → 写回
-cvt_mesh.json + export_climate_layers → maps/{planet}/temperature.png / precipitation.png /
+cvt_mesh.msgpack.gz + export_climate_layers → maps/{planet}/temperature.png / precipitation.png /
 koppen.json / climate_monthly.msgpack`。
 
 ---
 
 ## 11. 图层导出与输出格式
 
-`export_climate_layers(mesh, output_dir, config)`（`export.py:581`）的产物：
+`export_climate_layers(mesh, output_dir, config)`（`export.py:700`）的产物：
 
 | 文件 | 格式 | 内容 |
 |------|------|------|
@@ -727,12 +762,12 @@ const temperature = tMin + (pixelValue / 65535) * (tMax - tMin);  // from climat
 }
 ```
 
-`climate_monthly.msgpack`：月度场**不进 `cvt_mesh.json`**（N×12 数组会使 mesh 体积翻
+`climate_monthly.msgpack`：月度场**不进 `cvt_mesh.msgpack.gz`**（N×12 数组会使 mesh 体积翻
 倍），而是 `simulate_climate` 把它们暂存在 mesh 私有属性上（`_t_monthly_c` /
 `_p_monthly_mm` / `_wind_east_monthly` / `_wind_north_monthly` / `_pressure_monthly`，
-:958-974），导出时读出、int16 量化后写入单独的紧凑文件（`export.py` 读
+:1478-1494），导出时读出、int16 量化后写入单独的紧凑文件（`export.py` 读
 `getattr(mesh, "_t_monthly_c", None)` 等）。API 侧 `GET /maps/{world}/climate-monthly`
-直接吐这个文件（`api_routes/maps.py:190`）。
+直接吐这个文件（`api_routes/maps.py:207`）。
 
 `climate_yearly.msgpack`：UCC-01 的年度尺度气候量容器，首批内容 = UCC 连续描述量
 （ucc-review §4.2，计算见 `map/ucc.py` 的 `compute_descriptors`）。导出时从月度序列
@@ -774,12 +809,14 @@ AI/deficit 是窗口不变量、跨世界直接可比（时间契约见
 （earth/climate-dev 分支，200k cells）对比 Beck 2018 Köppen / ERA5 温度 / GPCP 降水；
 诊断脚本区分「引擎 bug」vs「参数微调」。
 
-**当前基线**（earth/climate-dev，2026-09-14 M4/B0b 轮；完整表与逐格残余见
+**当前基线**（earth/climate-dev，2026-09-26 B4 态实测；完整表与逐格残余见
 [proposals/climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §0）：
-温度纬向 R² 0.992 / 逐格 RMSE 4.23 °C；降水纬向 R² 0.724；Köppen 分布匹配 61.2%、
-逐 30 类 accuracy 32.1%、5 群 kappa 0.538；风场逐格 |U| R² −0.492（年平定常结构已
-给，逐格 skill 仍负 = 定常涡旋仍缺）。M4 四项验收判据（分布 >55% / 群 kappa >0.45 /
-逐类 ≥30% / 纬向 corr >0.9）全部达标。
+温度纬向 R² 0.992 / RMSE 2.06 °C（bias +1.1）；降水纬向 R² 0.57 / RMSE 354 mm/yr
+（bias −106）；Köppen 分布匹配 62.2%、5 群 kappa 0.581、Group R² 0.184、逐 30 类
+accuracy 30.2%；水量台账 −4.79%（全部来自收敛哨兵裁剪 = slice-1 per-edge 地形
+过集中伪影，D 线在册）。κ 分布匹配当前为赤道过供给裸露态；**收复判据 κ ≥ 67.8%
+（不带假高压）= D 线出口账**（proposal §2 B4 条目）。风场逐格 skill 仍负（定常
+涡旋缺，④ 系列重启前提见 §5.6/§5.7）。
 
 ```bash
 uv run python scripts/climate/diagnose_koppen_confusion.py     # 逐类 precision/recall/F1 + 混淆矩阵
@@ -798,11 +835,12 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 |------|------|
 | 温度（年平） | ✅ 1D EBM 正式求解 + 大陆度（`ebm_diffusion_land_wm2k`）+ 单圈 Held-Hou 分支 + E1 eddy relaxation；导出年温 = 月温终聚合（§3.8） |
 | 温度（季节） | ✅ 显式热输送（B+6D，Ω 标度）+ 季节冰反照率 + B0c 交接 + 单一温度权威（§3.8） |
-| 气压 | ✅ B2 海洋参照月度 ΔP（全值，含年平）+ 175 km 尺度分离（2026-09-22 尺度扫描修正，原 500 km Rossby 依据系误用） |
+| 气压 | ✅ B2 海洋参照月度 ΔP（全值，含年平）+ 175 km 尺度分离（2026-09-22 尺度扫描修正，原 500 km Rossby 依据系误用）+ B3/B4 符号条件高程衰减与冷支气团分解（§4） |
 | 风场 | ✅ 三圈背景 + 跨赤道西风带（可推广标度）+ 季风异常月度风场；年风 = 月矢量平均 |
 | 洋流 | ✅ Stommel 环流 + E4 亚网格 WBC 增速 + SST 平流 + 涌升 + 洋向陆距平平流 + E4 过程化 OHT 偏差 |
 | 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制（E2 冰缘脱钩 + 自身场幅度 + §5-α SST 对流门）+ Budyko 陆地再循环 |
-| ④ 定常波 | ⚪ 求解器 + 两趟回路已接线，默认关（v1 保真度不足，待 v2 真高层基本态） |
+| ④ 定常波 | ⚪ v1/v2 两趟回路已接线，默认关（v2 两层 Gill 已实施；轮 7 ω 合成门三连否证——重启前提 = 真经度依赖基本态或 GCM 后端，§5.6） |
+| GW6 湿槽 | ⚪ 已实施，默认关（速度 6.4× > ≤2× 门槛；pickup 门联锁；默认开前置 = 速度优化 + 赤道供给修复，§5.7） |
 
 ### 已知局限
 
@@ -832,10 +870,10 @@ E1-E4 已实施——E3 已否证（Faulk 2017 细读方向反转）、E1/E2/E4 
 | `maritime_advection_scale_km` | 1500 | 4.1-B 向风海洋平流 e 折长度（Berg 1944 气团尺度） |
 
 > 其余水汽收支/季风物理常数在代码内（非 config，所有世界共享）：驻留时间
-> `_MOISTURE_RESIDENCE_DAYS` = 9 天（:1545）、陆地蒸散基准因子
-> `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55（:1555）+ Budyko 再循环参数
-> （`_LAND_RECYCLING_*` :1575-1577）、季风气压平滑 `_MONSOON_PRESSURE_SMOOTHING_KM`
-> = 175 km（:1564）、边界层拖曳 `_DRAG_RATE_S`/`_DRAG_RATE_LAND_S`（水面/植被，
+> `_MOISTURE_RESIDENCE_DAYS` = 9 天（:2123）、陆地蒸散基准因子
+> `_LAND_EVAPOTRANSPIRATION_FRACTION` ≈ 0.55（:2142）+ Budyko 再循环参数
+> （`_LAND_RECYCLING_*` :2165-2167）、季风气压平滑 `_MONSOON_PRESSURE_SMOOTHING_KM`
+> = 175 km（:2154）、边界层拖曳 `_DRAG_RATE_S`/`_DRAG_RATE_LAND_S`（水面/植被，
 > `monsoon_circulation.py:150-151`）、E4 海洋柱输送 `_OHT_COLUMN_WM2K` = 0.37 +
 > `_OHT_OCEAN_SHARE` = 0.65（TC2001 分解，`climate_simulator.py`）、E1 涡旋标度
 > `_EDDY_SHARE_EARTH` = 0.69 / `_EDDY_OMEGA_EXPONENT` = 0.6（Kaspi 2015 Fig 8b，

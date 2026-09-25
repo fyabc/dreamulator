@@ -18,7 +18,7 @@ Physical chain (tech debt 23, roadmap):
 
        ΔP = −P_sfc · E · ΔT / T̄
 
-   with E ≈ 0.104 the boundary-layer projection factor (BL-mean
+   with E ≈ 0.100 the boundary-layer projection factor (BL-mean
    amplitude × linear-decay profile over the heat-low depth; see the
    module constants) and T̄ the monthly zonal reference temperature.
    Elevated terrain splits by anomaly sign (B1 warm derating / B4 cold
@@ -93,7 +93,7 @@ import numpy as np
 #   observed 1.5-4 km, the circulation closes within the boundary layer,
 #   Rácz & Smith 1999, QJRMS 125:225).
 #
-# With r = 0.6 and h = 3200 m this gives E ≈ 0.104 — the uniform-full-amplitude
+# With r = 0.6 and h = 3200 m this gives E ≈ 0.100 — the uniform-full-amplitude
 # 0.25 (pre-M4) overstated the Sahara July thermal low by ~4-5× (two factors
 # of ~2: the uniform in-layer profile, and the surface ΔT standing in for the
 # BL mean; lit review 2026-09-14 report 2 §B).  Anchor check
@@ -296,7 +296,7 @@ def pressure_anomaly_monthly(
         ΔT < 0:  ΔT_eff = min(ΔT + Γ·z, 0),   A = 1
                                             # H = 8.5 km, z_moist = 3 km
 
-    with z = max(elevation, 0), E ≈ 0.104, Γ the per-cell lapse rate the
+    with z = max(elevation, 0), E ≈ 0.100, Γ the per-cell lapse rate the
     engine's temperature stage used (°C/km), and T̄_zonal(m) the zonal
     reference temperature of the same month (the actual column
     temperature that sets the hydrostatic sensitivity).
