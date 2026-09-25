@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790262009065,
+  "lastUpdate": 1790357784499,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5544,6 +5544,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001094333591181515",
             "extra": "mean: 5.042740200002527 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8ed460862429ff2c57774dabdca5dcca047cbc3b",
+          "message": "feat(map): save_cvt_mesh 写前 1 代备份——backup_existing 轮转 .prev\n\nroot 真实数据 mesh（earth 从外部源数据集导入）磁盘单份，2026-09-25 曾被\n自毁覆写丢失一次。save_cvt_mesh 加 opt-in kwarg：覆写前把被替换文件轮转为\n同目录 cvt_mesh.msgpack.gz.prev（1 代深度，maps/ 已 gitignore 零污染；\nlegacy-only 星球备份 legacy 字节，读端按内容嗅探可加载）。\n\n只接 root 的三个写入点：import_earth_climate、export.save_outputs（地形\n导出/太阳系导入链）、ETOPO CLI；引擎层（climate/ecology/civilization）与\n分支构建保持默认关——可复现产物不必为每次 build 付整份拷贝。\n\n测试：test_mesh_export.py +5 回归（轮转/1 代深度/首写 no-op/legacy 源/\n默认无备份）；全量 pytest、mypy、ruff、check_doc_refs 全绿。文档：\nmap-system.md 网格 API 表同步。\n\n备份策略裁决（2026-09-26，用户）：A release 重发布（已完成，asset\n09-25T17:29Z / 279.8MB）+ B 本改动；C（LFS 跟踪）否决——LFS 膨胀伤疤 +\nroot 重导入频率 + 违反 maps/ 不入 git 规则；D（带日期快照 asset）不做。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-26T01:34:26+08:00",
+          "tree_id": "6ab2bd516ca72b301e48da0554ae18294ba063fc",
+          "url": "https://github.com/fyabc/dreamulator/commit/8ed460862429ff2c57774dabdca5dcca047cbc3b"
+        },
+        "date": 1790357783766,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 6.041682230291953,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04100534273432345",
+            "extra": "mean: 165.5168149999966 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2851658861679236,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011308063665552018",
+            "extra": "mean: 304.3986314999998 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.473350944539457,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0840967335488787",
+            "extra": "mean: 678.724918666667 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 908.3104227159166,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000544576501952009",
+            "extra": "mean: 1.1009452000010356 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.51098673272867,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008930542793406831",
+            "extra": "mean: 5.08877400000074 msec\nrounds: 5"
           }
         ]
       }
