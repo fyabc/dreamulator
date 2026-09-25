@@ -172,12 +172,31 @@ def main() -> None:
     extra_samplers = ""
 
     if slp_anom is not None:
-        # 12 × (nlat × nlon), month-major.
-        slp_flat = np.rint(slp_anom * 10).astype(np.int32).ravel()
+        # Ice-cap mask: over land gridpoints whose warmest month stays below
+        # 0 °C the reanalysis "sea-level" pressure is a hypothetical reduction
+        # through kilometres of ice (NCEP R1 reads +60..+69 hPa ΔSLP artefacts
+        # over the East Antarctic plateau).  Those gridpoints get the sentinel
+        # -32768 (= -3276.8 hPa after decode; real ΔSLP never drops below
+        # ~-40), and the frontend skips them in the ΔSLP-deviation layer —
+        # an untrustworthy reference must not pose as an optimisation target.
+        from dreamulator.import_earth_climate import _load_nc_monthly
+
+        _air_arr, _air_lat, _ = _load_nc_monthly(Path(args.temp), "air")
+        _air_c = _air_arr - 273.15 if float(_air_arr.mean()) > 150.0 else _air_arr
+        _warmest = _air_c.max(axis=0)  # (nlat, nlon), °C
+        _ice_mask = (~ocean_grid) & (_warmest < 0.0)
+        # 12 × (nlat × nlon), month-major; masked gridpoints carry the sentinel.
+        slp_x10 = np.rint(slp_anom * 10).astype(np.int32)
+        slp_x10[:, _ice_mask] = -32768
+        slp_flat = slp_x10.ravel()
+        n_masked = int(_ice_mask.sum())
+        print(f"  ΔSLP ice-cap mask: {n_masked}/{_ice_mask.size} native gridpoints sentinel-masked")
         extra_arrays += f"""
 // monthly ΔSLP ×10 (0.1 hPa), month-major (month 0..11 → nlat × nlon), {slp_lat[0]}→{slp_lat[-1]}
 // Canonical ΔP (M2-A0③): SLP − same-month 5°-band OCEAN mean (land–sea contrast,
 // annual mean included — matches the engine's pressure_anomaly_monthly).
+// -32768 = ice-cap sentinel (warmest month < 0 °C land: the SLP reduction is
+// hypothetical there — treat any sample < -50 hPa as "no reference").
 export const OBS_SLP_ANOM_X10: number[] = [
 {_fmt_ints(slp_flat)}
 ]
@@ -186,7 +205,9 @@ export const OBS_SLP_GRID = {grid_meta(slp_lat, slp_lon)}
 export const OBS_SLP_MONTHS = 12
 """
         extra_samplers += """
-/** Bilinear-sample the observed monthly ΔSLP (hPa) at (lat, lon, month 0..11). */
+/** Bilinear-sample the observed monthly ΔSLP (hPa) at (lat, lon, month 0..11).
+ *  Returns < -50 hPa where the ice-cap sentinel dominates — no trustworthy
+ *  reference there (hypothetical SLP reduction); callers must skip such cells. */
 export function observedSlpAnomAt(latDeg: number, lonDeg: number, month: number): number {
   return _sample(latDeg, lonDeg, OBS_SLP_ANOM_X10, OBS_SLP_GRID, month) / 10
 }

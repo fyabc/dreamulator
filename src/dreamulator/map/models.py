@@ -267,6 +267,19 @@ class VoronoiCell(BaseModel):
         description="Annual-mean pressure anomaly (hPa, ocean-band reference)",
     )
 
+    # SLP-reduction reliability mask (obs earth root only): on high ice-cap
+    # cells (land, elevation ≥ 1500 m, warmest month < 0 °C) the reanalysis
+    # "sea-level" pressure is a hypothetical reduction through kilometres of
+    # ice and is not trustworthy — NCEP R1 reads +60..+69 hPa ΔSLP artefacts
+    # over the East Antarctic plateau.  The frontend greys these cells out in
+    # the SLP / ΔP / ΔSLP-deviation layers and validation diagnostics exclude
+    # them.  Written by the real-Earth importer only; model worlds keep the
+    # default (their ΔP is computed physics, not a reduction).
+    slp_reduction_unreliable: bool = Field(
+        default=False,
+        description="High ice-cap cell: reanalysis SLP is a hypothetical reduction (masked)",
+    )
+
     # Ecology properties (filled by ecology engine — P0)
     biome: str | None = Field(
         default=None,

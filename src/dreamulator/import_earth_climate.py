@@ -12,8 +12,9 @@ module samples four observation datasets onto the CVT mesh and writes:
   absent).  These are the only climate fields the frontend reads for the
   annual layers.
 - ``climate_monthly.msgpack`` — monthly ``t_monthly`` / ``p_monthly`` /
-  ``pressure_monthly`` (the seasonal SLP anomaly), in the same quantized-int16
-  format the engine exports (``export._quantize_int16``), so the frontend's
+  ``pressure_monthly`` (the canonical ΔSLP anomaly) / ``slp_monthly``
+  (absolute NCEP SLP, obs-root only), in the same quantized-int16 format the
+  engine exports (``export._quantize_int16``), so the frontend's
   ``monthlyClimate.ts`` decodes it unchanged.
 - Secondary exports the frontend ignores but external tools/validation use:
   ``koppen.json``, ``temperature.png``, ``precipitation.png``,
@@ -112,6 +113,57 @@ def ocean_band_anomaly_monthly(
         ref_by_band[band] = ocean_refs[nearest]
 
     return np.asarray(values - ref_by_band[band_idx])
+
+
+def _native_delta_slp_sampled(
+    slp_arr: np.ndarray,
+    slp_lat: np.ndarray,
+    slp_lon: np.ndarray,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    data_dir: Path,
+) -> np.ndarray:
+    """Canonical ΔSLP (M2-A0③) on the native NCEP grid, bilinear-sampled to cells.
+
+    The ocean members of the latitude-band reference come from the SODA
+    validity mask (NaN = land/ice) — the identical member set used by the
+    frontend reference generator (``scripts/earth/generate_spatial_reference.py``),
+    so the root archive and ``OBS_SLP_ANOM_X10`` agree cell-for-cell and the
+    root's own ΔSLP-deviation layer reads ≈0 (its self-consistency check).
+    Without the SODA file every native gridpoint counts as an ocean member
+    (band = all-member mean) — a degraded but finite reference.
+
+    Args:
+        slp_arr: (12, nlat, nlon) monthly SLP (hPa), Jan-first.
+        slp_lat / slp_lon: Native grid coordinates.
+        lats / lons: (N,) cell centres.
+        data_dir: Directory holding the SODA climatology file.
+
+    Returns:
+        (N, 12) ΔSLP (hPa), Jan-first month order (the caller reorders).
+    """
+    import xarray as xr
+
+    nlat, nlon = slp_arr.shape[1], slp_arr.shape[2]
+    soda_path = data_dir / _SODA_CURRENTS_NC
+    if soda_path.exists():
+        ds = xr.open_dataset(soda_path, decode_times=False)
+        u0 = np.asarray(ds["u"].isel(month=0).values)
+        s_lat = np.asarray(ds["u"].lat.values, dtype=np.float64)
+        s_lon = np.asarray(ds["u"].lon.values, dtype=np.float64)
+        ds.close()
+        ii = np.abs(slp_lat[:, None] - s_lat[None, :]).argmin(axis=1)
+        dlon = np.abs(((slp_lon[:, None] - s_lon[None, :] + 180.0) % 360.0) - 180.0)
+        jj = dlon.argmin(axis=1)
+        ocean_native = np.isfinite(u0)[np.ix_(ii, jj)]  # (nlat, nlon)
+    else:
+        ocean_native = np.ones((nlat, nlon), dtype=bool)
+
+    members = slp_arr.transpose(1, 2, 0).reshape(-1, 12)
+    member_lats = np.repeat(slp_lat, nlon)
+    anom = ocean_band_anomaly_monthly(members, member_lats, ocean_native.ravel())
+    anom_grid = anom.reshape(nlat, nlon, 12).transpose(2, 0, 1)  # (12, nlat, nlon)
+    return np.asarray(_sample_monthly(anom_grid, slp_lat, slp_lon, lats, lons).T)
 
 
 # Beck class code → Köppen string (from scripts/climate/convert_koppen_map.py).
@@ -506,8 +558,13 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     #    the subtropical-high field).
     slp_arr, slp_lat, slp_lon = _load_nc_monthly(data_dir / "ncep_slp.mon.ltm.nc", "slp")
     slp_monthly = _sample_monthly(slp_arr, slp_lat, slp_lon, lats, lons).T  # (N, 12), hPa
-    ocean_mask = np.array([c.water_class == "ocean" for c in mesh.cells], dtype=bool)
-    pressure_monthly = ocean_band_anomaly_monthly(slp_monthly, lats, ocean_mask)
+    # Canonical ΔP computed on the NATIVE grid and bilinearly sampled to cells —
+    # the same member set (NCEP 2.5° points, SODA ocean mask) the frontend's
+    # OBS_SLP_ANOM reference uses.  The former CVT-side band computation used a
+    # different member set (ETOPO water_class, cell-centre samples), so the
+    # root's own ΔSLP-deviation layer read ±2-7 hPa (up to 48 near the
+    # Antarctic ice edge) against its own reference instead of ~0.
+    pressure_monthly = _native_delta_slp_sampled(slp_arr, slp_lat, slp_lon, lats, lons, data_dir)
     slp_annual = slp_monthly.mean(axis=1)
 
     # Hottest / coldest month from the monthly temperature (order-independent).
@@ -532,6 +589,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     t_monthly = t_monthly[:, _MARCH_FIRST]
     p_monthly = p_monthly[:, _MARCH_FIRST]
     pressure_monthly = pressure_monthly[:, _MARCH_FIRST]
+    slp_monthly = slp_monthly[:, _MARCH_FIRST]
 
     # Coast distance from the water mask (graph Dijkstra from ocean cells).
     from dreamulator.map.climate_simulator import _graph_distance_to_coast
@@ -550,6 +608,13 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
         # Canonical ΔP annual mean (M2-A0③) — same field the engine writes, so
         # the frontend annual pressure layer is uniform across worlds.
         c.pressure_anomaly_annual_hpa = float(pressure_monthly[i].mean())
+        # SLP-reduction reliability mask: on high ice-cap cells the reanalysis
+        # "sea-level" pressure is a hypothetical reduction through kilometres
+        # of ice (NCEP R1 reads +60..+69 hPa ΔSLP artefacts over the East
+        # Antarctic plateau) — masked in the pressure displays/comparisons.
+        c.slp_reduction_unreliable = bool(
+            c.water_class == "land" and (c.elevation or 0.0) >= 1500.0 and t_hottest[i] < 0.0
+        )
         _d = dist_to_coast[i]
         c.distance_to_coast_km = float(_d) if np.isfinite(_d) else None
 
@@ -580,6 +645,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     object.__setattr__(mesh, "_t_monthly_c", t_monthly.astype(np.float32))
     object.__setattr__(mesh, "_p_monthly_mm", p_monthly.astype(np.float32))
     object.__setattr__(mesh, "_pressure_monthly", pressure_monthly.astype(np.float32))
+    object.__setattr__(mesh, "_slp_monthly", slp_monthly.astype(np.float32))
 
     # Write the mesh file (per-cell annual climate fields).
     save_cvt_mesh(mesh_path, mesh)
@@ -598,6 +664,7 @@ def _write_monthly_msgpack(mesh: CVTMesh, output_dir: Path) -> None:
     t_monthly = getattr(mesh, "_t_monthly_c", None)
     p_monthly = getattr(mesh, "_p_monthly_mm", None)
     pr_monthly = getattr(mesh, "_pressure_monthly", None)
+    slp_monthly = getattr(mesh, "_slp_monthly", None)
     assert t_monthly is not None and p_monthly is not None and pr_monthly is not None
 
     _t_q, _t_s, _t_o = _quantize_int16(t_monthly)
@@ -623,6 +690,16 @@ def _write_monthly_msgpack(mesh: CVTMesh, output_dir: Path) -> None:
         "pressure_range_hpa": [float(np.min(pr_monthly)), float(np.max(pr_monthly))],
         "month_0": "vernal_equinox",
     }
+    # Absolute SLP (obs-root only — the engine models anomalies, never absolute
+    # pressure).  Raw NCEP field, no band reference: the artefact-free human
+    # baseline display.  Optional key: older archives and engine-built worlds
+    # simply lack it and the frontend hides the layer.
+    if slp_monthly is not None:
+        _slp_q, _slp_s, _slp_o = _quantize_int16(slp_monthly)
+        monthly["slp_monthly"] = _slp_q
+        monthly["slp_scale"] = _slp_s
+        monthly["slp_offset"] = _slp_o
+        monthly["slp_range_hpa"] = [float(np.min(slp_monthly)), float(np.max(slp_monthly))]
     (output_dir / "climate_monthly.msgpack").write_bytes(msgpack.packb(monthly))
     print(f"  Wrote climate_monthly.msgpack: {output_dir / 'climate_monthly.msgpack'}")
 

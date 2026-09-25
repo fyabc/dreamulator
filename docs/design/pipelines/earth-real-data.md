@@ -71,6 +71,18 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 - **温度**：NCEP/NCAR Reanalysis 1 `air.mon.ltm.nc`（2.5° 月均气候态，NOAA PSL）。
 - **降水**：GPCP v2.3 `precip.mon.mean.nc`（2.5° 月均，NOAA PSL，需算 12 月气候态）。
 - **海平面气压**：NCEP/NCAR Reanalysis 1 `slp.mon.ltm.nc`（2.5° 月均，NOAA PSL）。
+  归档两份：**绝对 SLP**（`slp_monthly`，原始场直读，前端「海平面气压」层）与
+  **规范 ΔSLP**（`pressure_monthly`，M2-A0③）。ΔSLP 在 **native 2.5° 网格**上计算
+  （带参照 = 同月同 5° 带 SODA 海洋格均值；空带用最近含海洋带，与引擎
+  `zonal_mean_monthly` 同语义）再双线性采样到 cell——与前端 `OBS_SLP_ANOM_X10`
+  参照（`generate_spatial_reference.py`）成员集合全同，root 自比对残差
+  |max| < 0.001 hPa（旧 CVT 侧带计算与前端参照成员集不一致，root 偏差层曾读
+  ±2-7 hPa、南极冰缘 48 hPa）。
+- **冰盖折算 mask**（`slp_reduction_unreliable`，per-cell bool）：陆地 + 高程
+  ≥ 1500 m + 最热月 < 0 °C 的格上，再分析「海平面」气压是穿数公里冰盖的
+  **折算虚拟量**（NCEP R1 在东南极高原读出 +60~69 hPa ΔSLP 伪影）——前端所有
+  气压族图层（SLP/ΔP/ΔSLP 偏差）将其置灰，native 参照侧同规则打 −32768 哨兵
+  （陆格且最热月 < 0 °C，`observedSlpAnomAt` 返回 < −50 即无可信参照）。
 - **洋流**：SODA v3.15.2（Carton et al. 2018, doi:10.1175/JCLI-D-18-0149.1）表层（~5 m）
   月均气候态 1993–2022，逐 cell 年均（`soda_currents_mon_clim.nc`，由
   `scripts/earth/download_validation_data.py` 从 APDRC OPeNDAP 构建）。SODA 文件缺失时
@@ -78,10 +90,12 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
   是模拟值而非观测值）。
 
 **流程**：观测数据采样到 cell 中心（Beck 最近邻、NCEP/GPCP/SLP/SODA 双线性）→ 写
-`cvt_mesh.json` 的 per-cell 字段（`koppen_class`/`temperature_C`/`precipitation_mm`/
-`temperature_hottest/coldest_month_C`/`wind_east/north_m_s`/`ocean_current_east/north_m_s`/
-`distance_to_coast_km`）+ `climate_monthly.msgpack`（`t_monthly`/`p_monthly`/`pressure_monthly`，
-量化 int16，与 `export._quantize_int16` 同格式，月份按 3 月春分起排序）→ 次要导出
+mesh（`cvt_mesh.msgpack.gz`）的 per-cell 字段（`koppen_class`/`temperature_C`/
+`precipitation_mm`/`temperature_hottest/coldest_month_C`/`wind_east/north_m_s`/
+`ocean_current_east/north_m_s`/`slp_annual_hpa`/`pressure_anomaly_annual_hpa`/
+`slp_reduction_unreliable`/`distance_to_coast_km`）+ `climate_monthly.msgpack`
+（`t_monthly`/`p_monthly`/`pressure_monthly`/`slp_monthly`，量化 int16，与
+`export._quantize_int16` 同格式，月份按 3 月春分起排序）→ 次要导出
 （`koppen.json`/`temperature.png`/`precipitation.png`/`climate_metadata.json`）。
 
 > 派生字段来源：最热/最冷月 = NCEP 月均 max/min；距岸距离 = `_graph_distance_to_coast`

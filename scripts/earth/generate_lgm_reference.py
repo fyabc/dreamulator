@@ -103,15 +103,19 @@ def main() -> None:
 
     print("Computing temperature zonal mean (bio01) ...")
     temp, temp_stats = _zonal_mean_2deg(Path(args.temp))
-    print(f"  global mean = {temp_stats['global_mean']:.2f} °C, "
-          f"zonal range = {temp_stats['zonal_min']:.1f} .. {temp_stats['zonal_max']:.1f}, "
-          f"{temp_stats['n_valid_bands']}/{_N_BANDS} bands")
+    print(
+        f"  global mean = {temp_stats['global_mean']:.2f} °C, "
+        f"zonal range = {temp_stats['zonal_min']:.1f} .. {temp_stats['zonal_max']:.1f}, "
+        f"{temp_stats['n_valid_bands']}/{_N_BANDS} bands"
+    )
 
     print("Computing precipitation zonal mean (bio12) ...")
     precip, precip_stats = _zonal_mean_2deg(Path(args.precip))
-    print(f"  global mean = {precip_stats['global_mean']:.0f} mm/yr, "
-          f"zonal range = {precip_stats['zonal_min']:.0f} .. {precip_stats['zonal_max']:.0f}, "
-          f"{precip_stats['n_valid_bands']}/{_N_BANDS} bands")
+    print(
+        f"  global mean = {precip_stats['global_mean']:.0f} mm/yr, "
+        f"zonal range = {precip_stats['zonal_min']:.0f} .. {precip_stats['zonal_max']:.0f}, "
+        f"{precip_stats['n_valid_bands']}/{_N_BANDS} bands"
+    )
 
     if args.output:
         out = Path(args.output)
