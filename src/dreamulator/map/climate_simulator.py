@@ -174,6 +174,12 @@ def simulate_climate(
     """
     n = mesh.num_cells
 
+    # GW6 'pickup' heating weight reads the pass-1 column water from the debug
+    # stash (wet-trough block); CLI builds call without a debug dict, so
+    # allocate a private one — the ablation arm must be caller-agnostic.
+    if debug is None and config.wet_trough_heating_weight == "pickup":
+        debug = {}
+
     if n == 0:
         return {}
 

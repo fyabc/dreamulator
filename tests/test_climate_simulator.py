@@ -970,3 +970,21 @@ def test_froude_climb_share_bounds_and_monsoon_margin() -> None:
     )
     assert np.all(shares > 0.0) and np.all(shares <= 1.0)
     assert float(shares[3]) > 0.6  # 西高止季风坡：Fr = 9/(N·1000) ≈ 0.7
+
+
+def test_wet_trough_pickup_weight_runs_without_debug() -> None:
+    # 回归（2026-09-27 消融臂跑挂）：wet_trough_heating_weight="pickup" 经
+    # debug 暂存读 pass-1 W₀，而 CLI 构建（dreamulator build）不传 debug——
+    # simulate_climate 须自分配私有 debug dict，消融臂不得依赖调用方约定。
+    from dreamulator.map.climate_simulator import simulate_climate
+
+    mesh = _build_test_mesh(num_bands=6, cells_per_band=8)
+    config = TerrainPipelineConfig()
+    config.wet_trough_enabled = True
+    config.wet_trough_heating_weight = "pickup"
+    config.wet_trough_iterations = 2
+    config.ocean_currents_enabled = False
+    simulate_climate(mesh, config)  # 不传 debug = CLI 等价路径
+    p = [c.precipitation_mm or 0.0 for c in mesh.cells]
+    assert all(np.isfinite(x) for x in p)
+    assert max(p) > 0.0
