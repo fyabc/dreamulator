@@ -43,6 +43,10 @@
   文献带核实等级；v2 候选轴的证据分级来源）。
 - `ucc-time-basis-duality-2026-09-21.md` — 时间基准二元性裁决（二元性在阈值语义与
   用途，不在时间基准；物理家族 profile 而非 per-body）。
+- `ucc-beyond-koppen-geiger-2026-09-27.md` — 「Beyond Köppen-Geiger」三部曲（Pasta
+  Bioclimate System，实践者灰色文献）与 UCC 的逐维对照分析：借鉴 9 项（雨热相位
+  GrS 先例 + 失败替代清单、光照 regime 词汇、热侧 45→60 °C 曲线、短年行星教训 =
+  本地窗口契约外部印证等）/ 存档 4 / 忽略 1；参考文献已合入 taxonomy §5 第 5 类。
 
 调研脚本与数据集留痕仍在 `private/reviews/ucc-*.{py,json,msgpack}` 与
 `private/reviews/_research/ucc-taxonomy-*.md`（未入库）。
