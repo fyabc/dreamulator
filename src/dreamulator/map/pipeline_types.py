@@ -605,13 +605,19 @@ class TerrainPipelineConfig:
     # W contrast 0.97→3.2-4.2 (gate-unlock criterion met), Sahara 435→327,
     # Köppen distribution match +9.7pp / Group R² 2.1×; nacrea regression all
     # guards pass.  **Default OFF = speed gate not met**: 6.4× baseline build
-    # (release bar ≤2×; structural — 3 Picard passes × gate iterate-twice ≈
-    # 300 sparse LU per build vs 25), and the spatial metrics carry a trade
-    # (zonal P R² −0.18; equatorial drain shows as Af→BWh in Sumatra/New
-    # Guinea/Congo).  Preconditions for default-on: build-speed work (the S1-S4
-    # list + pass-count) AND the equatorial supply fix.  Full record:
-    # private/plans/w-supply-route.md + docs/design/profiling.md §2.1.
-    wet_trough_enabled: bool = False
+    # Default ON (2026-09-27 user ruling): the measured cost is 2.9× (1091 s
+    # earth; the old 6.4× figure predates D1), which the user exempted from the
+    # ≤2× release bar — S1-S4 speed work is registered at raised priority.
+    # iterations 3→2 was measured and rejected (κ −4.3 pp, monsoon boxes fall
+    # out of band: the third Picard pass is what converges the trough
+    # amplitude).  nacrea same-physics regression PASS (island/mountains/ledger
+    # all held).  Known accepted residual: the West-Africa corridor family
+    # (Sahara/Sahel overshoot, spurious wet-trough over the Sahara, Guinea
+    # overshoot) is registered as a single-layer-framework limitation — three
+    # independent mechanism routes were falsified inside this framework.
+    # Full record: private/plans/w-supply-route.md + docs/design/profiling.md
+    # §2.1 + private/research/2026-09-2{6,7}-d{1,2}-*-design.md.
+    wet_trough_enabled: bool = True
     wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
     wet_trough_iterations: int = 3  # moisture-budget re-solves after pass 1 (round-6 config)
     # Heating weight mode: "total" | "pickup".  "pickup" multiplies Q by the

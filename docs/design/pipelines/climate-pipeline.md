@@ -125,12 +125,14 @@
 6. **Stage 3 降水**（相位 4/6，:985）——产出年降水 `precipitation_mm` 与月度
    `p_monthly`：`_compute_precipitation_monthly_budget` 逐月质量守恒水汽收支（:991）。
    三条**互斥**的闭合回路可在此追加（守卫 :1021-1035，一次只开一个）：
+   `wet_trough_enabled`（**默认 true**，2026-09-27 用户裁决）GW6 湿槽回路
+   （ΔP 湿增量 → 重解风场 → 重解水汽收支，iterations=3，:1206-1395，§5.7）；
    `stationary_wave_enabled`（默认 false）④ v1 两趟定点回路（pass-1 降水 → 定常波
    ΔSLP → 重解风场 → 重解水汽收支，:1041-1098）；`stationary_wave_v2_enabled`
-   （默认 false）④ v2 两层 Gill ω 回路（§5.6）；`wet_trough_enabled`（默认 false）
-   GW6 湿槽回路（ΔP 湿增量 → 重解风场 → 重解水汽收支，iterations=3，:1206-1395，
-   §5.7）。`convective_pickup_gate_enabled` 与湿槽**联锁**：要求 `wet_trough_enabled`
-   同开，否则 raise（:1032-1035，标定域理由见 §7）。细节 §7、§5.6、§5.7。
+   （默认 false）④ v2 两层 Gill ω 回路（§5.6）——启用 ④ 任一版本须显式
+   `wet_trough_enabled: false`（互斥守卫）。`convective_pickup_gate_enabled`
+   与湿槽**联锁**：要求 `wet_trough_enabled` 同开，否则 raise（:1032-1035，
+   标定域理由见 §7）。细节 §7、§5.6、§5.7。
 7. **Stage 4 Köppen 分类**（相位 5/6，:1402）——产出 `koppen_codes`：先做分类所需的
    月度极值预计算（`warm_cold_half_precip` / `seasonal_precip_extremes`，:1413-1414）
    → **Stage 3.5 下沉增温的干旱度门控释放**（降水已知后从 `t_monthly_C` 扣回，
@@ -442,9 +444,9 @@ k_rain 下沉干燥门**（`climate_physics.subsidence_rainout_gate`，质量守
 弱斜率，待供给端沙漠 P 偏差修复后重标定（`diagnose_desert_wetness --wave-gate`，
 存档驱动）。
 
-### 5.7 GW6 湿槽回路（W 供给路线，已实施、默认关）
+### 5.7 GW6 湿槽回路（W 供给路线，默认开）
 
-`wet_trough_enabled = false`（`pipeline_types.py:614`），与 ④ v1/v2 **互斥**
+`wet_trough_enabled = true`（`pipeline_types.py:620`），与 ④ v1/v2 **互斥**
 （守卫 `climate_simulator.py:1021-1028`：一次只开一个闭合回路——每轮一个闭合假设）。
 开启时在 Stage 3 内：pass-1 降水 → 柱潜热（`wet_trough_heating_weight = "total"`；
 备选 `"pickup"` = NPH09 深对流份额加权，预登记消融臂）→ **湿槽 ΔSLP**
@@ -454,17 +456,23 @@ k_rain 下沉干燥门**（`climate_physics.subsidence_rainout_gate`，质量守
 `wet_trough_iterations = 3`（回路块 :1206-1395）。**pickup 门与本回路联锁**
 （:1032-1035，标定域理由见 §7）。
 
-轮 7 ω 合成门（`wet_trough_omega_gate_enabled`，`pipeline_types.py:637`，默认关）：
+轮 7 ω 合成门（`wet_trough_omega_gate_enabled`，`pipeline_types.py:641`，默认关）：
 从同一两模态解的中层 w 合成陆面下沉干燥门——**已否证**（结构复核符号全反；与
 v1 基本态代理、v2 消费门标定构成 ④ 系列三连否证，同指「纬向平均基本态撑不起
 副热带经度结构」）。机制代码保留，重启前提 = 真经度依赖基本态（局域斜压/瞬变
 涡旋）或 GCM 后端。
 
-**收口状态（用户裁决，`bd9bac1`）**：flag 默认关——构建速度代价 6.4× 超 ≤2×
-门槛。默认开的两道前置 = ① 构建速度优化（S1-S4 + pass 数，`profiling.md` §2.1）
-+ ② 赤道供给修复（西非雨带走廊族）——`pipeline_types.py:610-613` 注释同文。
-全部轮次记录、验收数值与裁决 → `private/plans/w-supply-route.md`（单一事实源）；
-设计依据 → proposal §5。
+**默认开（2026-09-27 用户裁决，原 `bd9bac1` 默认关收口被推翻）**：实测速度
+代价 2.9×（earth 1091s；旧记 6.4× 系 D1 前口径），≤2× 门槛经用户豁免，
+S1-S4 速度优化以更高优先级在册。裁决依据（全部 2026-09-27 实测）：D1 低
+Froude 阻挡并入后 κ 分布匹配 **68.9%**（validate 权威口径；追偿判据 ≥67.8% 达成，余量 +1.1pp）、
+恒河 1.21×/华南 0.77× 季风盒进 obs±25% 带、台账 −0.20%、nacrea 同物理回归
+PASS（永耀岛/山脉/台账全保）。**iterations 3→2 实测否决**（省 22% 时间但
+κ −4.3pp、华南出带——第三趟 Picard 是季风幅度收敛的必要趟）。**已登记局限
+（用户裁决）**：西非雨带走廊族（撒哈拉/萨赫勒过湿、伪湿槽干锚 2.4×、几内亚
+过冲）= 单层框架局限，三条机制路线（本地 k 门/轨迹 k 调制/加热权重）独立
+证伪，归 ④/GCM 阶段 E 或长期登记。全部轮次记录 → `private/plans/w-supply-route.md`
++ `private/research/2026-09-2{6,7}-d{1,2}-*`；设计依据 → proposal §5。
 
 ---
 
@@ -809,14 +817,16 @@ AI/deficit 是窗口不变量、跨世界直接可比（时间契约见
 （earth/climate-dev 分支，200k cells）对比 Beck 2018 Köppen / ERA5 温度 / GPCP 降水；
 诊断脚本区分「引擎 bug」vs「参数微调」。
 
-**当前基线**（earth/climate-dev，2026-09-26 B4 态实测；完整表与逐格残余见
+**当前基线**（earth/climate-dev，2026-09-27 D1+GW6 默认开收口包态 validate 实测；
+完整表与逐格残余见
 [proposals/climate-layer-improvement.md](../proposals/climate-layer-improvement.md) §0）：
-温度纬向 R² 0.992 / RMSE 2.06 °C（bias +1.1）；降水纬向 R² 0.57 / RMSE 354 mm/yr
-（bias −106）；Köppen 分布匹配 62.2%、5 群 kappa 0.581、Group R² 0.184、逐 30 类
-accuracy 30.2%；水量台账 −4.79%（全部来自收敛哨兵裁剪 = slice-1 per-edge 地形
-过集中伪影，D 线在册）。κ 分布匹配当前为赤道过供给裸露态；**收复判据 κ ≥ 67.8%
-（不带假高压）= D 线出口账**（proposal §2 B4 条目）。风场逐格 skill 仍负（定常
-涡旋缺，④ 系列重启前提见 §5.6/§5.7）。
+温度纬向 R² 0.991 / RMSE 2.08 °C（bias +1.0）；降水纬向 R² 0.46 / RMSE 387 mm/yr
+（bias −52）；Köppen 分布匹配 **68.9%**（B4 态 62.2%；D 线追偿判据 ≥67.8% 达成，
+余量 +1.1pp）、5 群 kappa 0.534、逐 30 类 accuracy 28.0%；**申报退化**：Group R²
+0.184→0.0（群比例回归退化：B 类总量仍欠 obs、Cwa 3× 超产）、降水纬向 R²
+0.57→0.46（0° 带 +48% 过浓，海洋侧 ITCZ = 风场族在册）；水量台账 **−0.20%**
+（D1 前 −4.79%；哨兵裁剪 112 格）。季风盒：恒河 1.21×、华南 0.77× obs（进
+±25% 带）。风场逐格 skill 仍负（定常涡旋缺，④ 系列重启前提见 §5.6/§5.7）。
 
 ```bash
 uv run python scripts/climate/diagnose_koppen_confusion.py     # 逐类 precision/recall/F1 + 混淆矩阵
@@ -840,7 +850,7 @@ uv run python scripts/climate/diagnose_wind_divergence.py      # 风场辐合/�
 | 洋流 | ✅ Stommel 环流 + E4 亚网格 WBC 增速 + SST 平流 + 涌升 + 洋向陆距平平流 + E4 过程化 OHT 偏差 |
 | 降水 | ✅ 质量守恒逐月水汽收支 + 雨出率空间调制（E2 冰缘脱钩 + 自身场幅度 + §5-α SST 对流门）+ Budyko 陆地再循环 |
 | ④ 定常波 | ⚪ v1/v2 两趟回路已接线，默认关（v2 两层 Gill 已实施；轮 7 ω 合成门三连否证——重启前提 = 真经度依赖基本态或 GCM 后端，§5.6） |
-| GW6 湿槽 | ⚪ 已实施，默认关（速度 6.4× > ≤2× 门槛；pickup 门联锁；默认开前置 = 速度优化 + 赤道供给修复，§5.7） |
+| GW6 湿槽 | ✅ **默认开**（2026-09-27 用户裁决：速度 2.9× 豁免 ≤2× 门槛、S1-S4 提优先级；nacrea 同物理 PASS；西非族 = 登记单层框架局限，§5.7） |
 
 ### 已知局限
 
