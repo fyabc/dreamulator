@@ -924,3 +924,49 @@ class TestConvergenceSentinel:
         assert np.allclose(debug["pre_cap"], debug["final"]), (
             "convergence sentinel bit on gentle terrain — threshold too tight"
         )
+
+
+# ── D1: low-Froude flow splitting (设计 → private/research/2026-09-26-d1-fr-blocking-design.md) ──
+
+
+def test_froude_climb_share_supercritical_unchanged() -> None:
+    # Fr ≥ 1（强风/低屏障，如中纬风暴过丘陵区）：share = 1 —— 与 D1 之前
+    # 逐边行为完全一致（回归保护）。
+    from dreamulator.map.climate_simulator import _froude_climb_share
+
+    share = _froude_climb_share(
+        temperature_c_dst=np.array([27.0]),
+        u_normal=np.array([-20.0]),  # 入流边 u_out < 0，取绝对值
+        lift_m=np.array([500.0]),
+        gamma_env_k_m=np.array([4.7e-3]),
+    )
+    assert float(share[0]) == 1.0
+
+
+def test_froude_climb_share_subcritical_analytic() -> None:
+    # 信风撞 3 km 墙（安第斯型）：share = Fr = u/(N·Δz)，N 由引擎直减率导出，
+    # 期望值独立复算（N² = (g/T_K)(Γ_d − Γ_env)，g=9.81、Γ_d=9.81/1005）。
+    import math
+
+    from dreamulator.map.climate_simulator import _froude_climb_share
+
+    t_c, u, dz, g_env = 27.0, -6.0, 3000.0, 4.7e-3
+    n_expect = math.sqrt(9.81 / (t_c + 273.15) * (9.81 / 1005.0 - g_env))
+    share = _froude_climb_share(np.array([t_c]), np.array([u]), np.array([dz]), np.array([g_env]))
+    assert float(share[0]) == pytest.approx(abs(u) / (n_expect * dz), rel=1e-9)
+    assert float(share[0]) < 0.25  # 安第斯墙：~5× 削减（设计文档 §2）
+
+
+def test_froude_climb_share_bounds_and_monsoon_margin() -> None:
+    # 混合向量：全部落 (0, 1]；季风坡（u=9, Δz=1000）应几乎不受影响
+    # （设计文档 §2 差分行为表：西高止 Fr≈0.7+）。
+    from dreamulator.map.climate_simulator import _froude_climb_share
+
+    shares = _froude_climb_share(
+        np.array([27.0, -13.0, 5.0, 27.0]),
+        np.array([-6.0, -8.0, -2.0, -9.0]),
+        np.array([3000.0, 1500.0, 800.0, 1000.0]),
+        np.array([4.7e-3, 6.5e-3, 6.0e-3, 4.7e-3]),
+    )
+    assert np.all(shares > 0.0) and np.all(shares <= 1.0)
+    assert float(shares[3]) > 0.6  # 西高止季风坡：Fr = 9/(N·1000) ≈ 0.7

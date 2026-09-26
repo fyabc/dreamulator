@@ -68,9 +68,10 @@ def main() -> None:
 
     root = _find_project_root()
     world_dir = root / args.world_dir / args.world
+    branch = args.branch or None  # --branch "" = root world (no branches)
 
-    print(f"Loading Earth mesh ({args.world}, branch={args.branch}) ...")
-    mesh = _load_mesh(world_dir, args.planet, args.branch)
+    print(f"Loading mesh ({args.world}, branch={branch}) ...")
+    mesh = _load_mesh(world_dir, args.planet, branch)
     if mesh is None:
         print("  ERROR: no mesh found")
         return
@@ -80,7 +81,7 @@ def main() -> None:
     from dreamulator.map.climate_simulator import simulate_climate
 
     debug: dict[str, np.ndarray] = {}
-    cfg = load_climate_config(world_dir, args.world, args.planet, args.branch, mesh.num_cells)
+    cfg = load_climate_config(world_dir, args.world, args.planet, branch, mesh.num_cells)
     simulate_climate(mesh, cfg, debug=debug)
 
     elevation_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)

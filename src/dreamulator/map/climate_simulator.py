@@ -130,6 +130,17 @@ def _convergence_sentinel(
     return alpha * np.asarray(k_rain_field, dtype=np.float64) * w_sat_eff
 
 
+# ── D1 diagnostic capture (default off; prescribed-inputs-for-diagnosis only,
+# never enters the product — astra discipline #8) ────────────────────────────
+# When a diagnostic script replaces this with a list, `_solve_moisture_budget`
+# appends one slim record per solve: the per-edge orographic-condensation
+# decomposition (which edge, what φ, what moisture flux, what upwind column
+# water).  This is the evidence base for the stage-D revisit the convergence
+# sentinel declares (see `_P_CONVERGENCE_SENTINEL_ALPHA`).  Production builds
+# keep it at None and pay nothing.
+ORO_DIAG_LOG: list[dict[str, object]] | None = None
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -2122,6 +2133,43 @@ def _apply_cold_trap(
 # automatically with Ω).
 _MOISTURE_RESIDENCE_DAYS: float = 9.0
 
+# Brunt–Väisälä derivation constants for the D1 low-Froude flow splitting
+# (§2 of the design doc): g and the dry adiabatic lapse rate Γ_d = g/c_p
+# (c_p = 1005 J kg⁻¹ K⁻¹, dry air).  Physical constants shared by all worlds —
+# the environmental-lapse side comes from the engine's own ``moist_lapse_rate``,
+# so the stability N = sqrt((g/T_K)(Γ_d − Γ_env)) needs no calibration.
+_G_M_S2: float = 9.81
+_DRY_LAPSE_K_PER_M: float = _G_M_S2 / 1005.0
+
+
+def _froude_climb_share(
+    temperature_c_dst: np.ndarray,
+    u_normal: np.ndarray,
+    lift_m: np.ndarray,
+    gamma_env_k_m: np.ndarray,
+) -> np.ndarray:
+    """D1 low-Froude climb share ``min(1, Fr)`` per uphill edge.
+
+    Fr = |u_normal| / (N·Δz) with N² = (g/T_K)·(Γ_dry − Γ_env): a subcritical
+    approach flow only lifts its dividing-streamline share of the arriving
+    column over the barrier — the rest goes around with its moisture intact
+    (Roe 2005, AR EPS 33:645; Rotunno & Houze 2007).  ``gamma_env_k_m`` is the
+    engine's own ``moist_lapse_rate`` in K/m, so no stability climatology or
+    fitted constant enters.  Returns the per-edge share (0, 1].
+    """
+    t_k = np.maximum(np.asarray(temperature_c_dst, dtype=np.float64) + 273.15, 1.0)
+    n_bv = np.sqrt(
+        np.maximum(
+            _G_M_S2 / t_k * (_DRY_LAPSE_K_PER_M - np.asarray(gamma_env_k_m, dtype=np.float64)),
+            1e-12,
+        )
+    )
+    fr = np.abs(np.asarray(u_normal, dtype=np.float64)) / (
+        n_bv * np.maximum(np.asarray(lift_m, dtype=np.float64), 1.0)
+    )
+    return np.asarray(np.minimum(1.0, fr), dtype=np.float64)
+
+
 # Reference-year month length (days).  The moisture budget expresses every
 # water flux as a *rate per 365.25-day reference year* (a unit convention, not
 # the world's physical year length — see climate-pipeline.md「时间基准约定」).
@@ -2354,6 +2402,26 @@ def _solve_moisture_budget(
     _phi[_uphill_inflow] = 1.0 - np.exp(
         -np.maximum(_lift - _z_lcl_m, 0.0) / _h_cc[dst][_uphill_inflow]
     )
+
+    # ── D1: low-Froude flow splitting — a subcritical approach flow mostly
+    # goes AROUND a barrier, not over it (linear-theory dividing streamline,
+    # Roe 2005 AR EPS 33:645): only the min(1, Fr) share of the arriving flux
+    # climbs and condenses, Fr = |u_normal| / (N·Δz).  N is derived from the
+    # engine's own moist lapse rate (Γ_env = moist_lapse_rate(T)):
+    # N² = (g/T_K)·(Γ_dry − Γ_env) — zero fitted parameters, Fr_c = 1 is the
+    # dividing-streamline criterion itself.  The blocked share keeps its
+    # moisture and passes through on the graph (lateral detour is sub-grid —
+    # declared approximation); mass stays conserved because φ_eff enters the
+    # inflow attenuation (1−φ_eff)·c and the condensate identically.  Fr ≥ 1
+    # edges (strong mid-latitude wind, low barriers) are untouched.
+    _fr = _froude_climb_share(
+        temperature_c[dst][_uphill_inflow],
+        u_out[_uphill_inflow],
+        _lift,
+        moist_lapse_rate(temperature_c[dst][_uphill_inflow]) / 1000.0,
+    )
+    _phi[_uphill_inflow] *= _fr
+
     _c_in = c * (1.0 - _phi)  # attenuated inflow coefficients (pos edges: φ=0)
 
     def _oro_from_w(w_field: np.ndarray) -> np.ndarray:
@@ -2417,6 +2485,25 @@ def _solve_moisture_budget(
 
     w = lu.solve(e)
     p_oro = _oro_from_w(w)  # from the solved (pre-trap) column water
+
+    if ORO_DIAG_LOG is not None:
+        # D1 diagnostic capture: per-edge orographic condensation terms for the
+        # upstream cells (air climbs dst → src, condensation rains at src).
+        _ce = _uphill_inflow
+        _dst_up = dst[_ce]
+        ORO_DIAG_LOG.append(
+            {
+                "w_pre_trap": w.astype(np.float32),
+                "p_oro": p_oro.astype(np.float32),
+                "src": src[_ce],
+                "dst": _dst_up,
+                "phi": _phi[_ce].astype(np.float32),
+                "fr": _fr.astype(np.float32),
+                "flux": (-c[_ce] * w[_dst_up]).astype(np.float32),
+                "e_len_m": l_m[_ce].astype(np.float32),
+                "a_src_m2": area_m2[src[_ce]].astype(np.float32),
+            }
+        )
 
     # Cold trap: saturation cap + upwind routing of the excess rainout
     # (CLIM-02 slice 2 — the excess rains where the air was still warm).
