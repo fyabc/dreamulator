@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790366244534,
+  "lastUpdate": 1790454769860,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5662,6 +5662,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010937264393850354",
             "extra": "mean: 3.443406399995297 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "c4142b84c68a8c502ac436d635993883fa86986d",
+          "message": "feat(climate): GW6 湿槽默认开——D 线收口包（κ 68.9% 追偿达成 + 季风盒进带）\n\n用户三项裁决（2026-09-27）：① wet_trough_enabled 默认翻 True——速度实测\n2.9×（1091s，旧记 6.4× 系 D1 前口径），≤2× 门槛经用户豁免，S1-S4 提为\n下一批更高优先级；iterations 3→2 实测否决（省 22% 时间但 κ −4.3pp、\n华南 0.44× 出带——第三趟 Picard 是季风幅度收敛的必要趟）。② 西非雨带\n走廊族登记为单层框架局限——七条机制路线穷尽证伪（本地 x 门共位墙、ω 门\n三连、κ 空间化、纬向对称下沉帽、D2/D2′ 干 fetch 轨迹 ×2、pickup 加热\n权重消融），归宿 ④/GCM 阶段 E 或长期登记，判词 → proposal §5。③ 临时\n实验 config 删除（earth 分支文件删、nacrea flag 删，均继承新默认）。\n\n收口包 = D1 低 Froude 阻挡 + GW6 默认开。验收（validate 权威口径）：\nκ 分布匹配 68.9%（B4 态 62.2%；追偿判据 ≥67.8% 达成，余量 +1.1pp）、\n恒河 1.21×/华南 0.77× 季风盒进 obs±25% 带、台账 −0.20%（D1 前 −4.79%）、\n洋→陆输送 295（obs 268）、海洋 P 970（obs 1033）、nacrea 同物理 PASS\n（永耀岛 2608mm/Af39+Cfb19 67% 原样、台账 −2.43%、civilization 字段已\n补跑恢复）。申报退化：Group R² 0.184→0.0、P 纬向 R² 0.57→0.46（0° 带\n+48% 海洋侧 ITCZ = 风场族在册）、西非族（撒哈拉 16×/伪湿槽干锚 2.4×/\n几内亚 1.6×）= 已登记局限。\n\n文档：climate-pipeline §2/§5.7/§12/§13 同步（默认开判词、§12 基线刷新\n为收口包态、锚 :620/:641）；proposal 增 GW6 默认开 + 西非局限判词条目。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-27T04:02:07+08:00",
+          "tree_id": "8898b03e19500b878b84de9ad23c4a954330e3fa",
+          "url": "https://github.com/fyabc/dreamulator/commit/c4142b84c68a8c502ac436d635993883fa86986d"
+        },
+        "date": 1790454769239,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.1560300055424448,
+            "unit": "iter/sec",
+            "range": "stddev: 0.3608504912755299",
+            "extra": "mean: 6.409023678 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.274776176334682,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013431392899485042",
+            "extra": "mean: 305.36438100000396 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4954995170329133,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0693610822386315",
+            "extra": "mean: 668.6729006666686 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 994.0284733525284,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006275322256045513",
+            "extra": "mean: 1.0060073999966335 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.85810685011845,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008433784108629569",
+            "extra": "mean: 5.054126999999653 msec\nrounds: 5"
           }
         ]
       }
