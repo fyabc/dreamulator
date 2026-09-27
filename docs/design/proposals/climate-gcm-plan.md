@@ -77,6 +77,13 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
   也让「自研简化引擎 + GPU 内核」成为现实选项。
 - 传统 Fortran CPU GCM 无法利用 GPU；若走 GCM 路线且要 GPU，候选收窄到
   SpeedyWeather.jl / CliMA（均需系外辐射魔改）或神经代理（需先有真值生成器）。
+- **本机 S6 PoC 判负（2026-09-27，RTX 3060 Laptop 6GB）**：真实预算矩阵
+  （n=200k、nnz=1.4M、MMD 排序后 nnz(L+U)=22.6M）上 CuPy splu 分解+求解
+  7.2 s vs scipy SuperLU 2.0 s（**3.5× 慢**）；精度等价（rel 5e-15）、VRAM
+  2.15 GB 装得下、传输 0.22 s——瓶颈是填充因子的散射访存，GPU 不擅长。
+  结论：本地 GPU 直接稀疏 LU 无收益，不集成求解路径；H200（带宽 ~50× +
+  cuDSS）留作未来服务器实验。已验证的安装配方固化在 pyproject `gpu`
+  可选组（cupy-cuda12x[ctk] + nvidia DLL wheels，Windows 下缺一不可）。
 - 作为备选：只有当 GCM 涌现的收益确立、且 GPU 加速能把成本压到可接受时，才投入。
 
 ## 自研简化引擎（可选路线）
@@ -97,7 +104,10 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
    反射星光是一个空间固定、随相位缓变的辐射源，需硬编码进辐射方案（恒星之外的
    第二热源；Aegis 大气 1000 atm、albedo 0.343 → 反射分量可观）。
 2. **日食掩码**：轨道面 ±0.65° 的 4.7 年摆动 → 食季位置漂移；生成时间-空间掩码
-   进日照强迫（慢自转行星上一次食 = 数十小时连续降温，脉冲效应强）。
+   进日照强迫（慢自转行星上一次食 = 数十小时连续降温，脉冲效应强）。公式参照
+   [WBP #41](https://worldbuildingpasta.blogspot.com/2025/09/day-and-night-on-habitable-moons.html)：
+   全食最大时长 =（行星角径 − 恒星角径）/360° × 日长；行星角径常规带 5-15°；
+   太阳日 = 轨道周期 ×（1 ± 1/行星年周期比）（顺/逆行差一个符号）。
 3. **动态海底热流边界**：11 kyr 周期 0.05→1.85 W/m²（用户已裁决压低 e_max 至
    0.005），空间分布集中洋脊/热点——海洋底边界的时间插值 4D 输入。
 4. **慢自转参数组**：Ω = 1/3 地球、g = 1.05g；罗斯贝变形半径大增 → 网格分辨率
@@ -117,6 +127,14 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
 - ClimaAtmos.jl / ClimaCore.jl（CliMA, Caltech）：GPU-native 下一代 ESM 框架。
 - EOS-ESTM（Biasiotti et al. 2022, arXiv:2206.05103）：宜居系外行星 EBM（同类型参照）。
 - Fauchez et al. 2020 / Sergeev et al. 2022 / Turbet et al. 2022（GMD）：THAI 系外 GCM 互比基准。
+- worldbuildingpasta 实践者参照（2026-09-27 全站调研）：① [ExoPlaSim 参数扫描画廊](https://worldbuildingpasta.blogspot.com/2022/07/climate-explorations-supplement-climate.html)
+  + 断点续跑跑批 harness——离线参照臂的实施范本（安装/基准手册见其
+  Apple Pie VI 教程）；② 公共 GCM 对照数据：Li et al. 2022（显生宙 CESM，
+  [Köppen 序列](https://worldbuildingpasta.blogspot.com/2023/08/hurried-thoughts-phanerozoic-koppen.html)）、
+  Farnsworth et al. 2023（[Pangea Proxima HadCM3](https://worldbuildingpasta.blogspot.com/2026/07/public-climate-data-explorations-pangea.html)，
+  含低分辨率 GCM 半干旱偏差记录——做 GCM 对照时先校准预期）；③
+  [多体潮汐叠加式](https://worldbuildingpasta.blogspot.com/2024/05/hurried-thoughts-multiple-moon-tides.html)
+  （分量正弦和，Earth 校验 36/60 cm）→ 待办 11 卫星轮参照。
 - Miyasaka & Nakamura (2010, J. Climate)：副热带反气旋的海陆热力对比生成机制。
 - 外部聊天核查记录：`private/chats/chat-撒哈拉沙漠干湿周期驱动力.txt`（2026-09-27
   核查：GPU 段 CliMA/SpeedyWeather 属实；EOS-ESTM「GPU 加速」与 HEXTOR「THAI 广泛
