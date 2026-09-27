@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790513519272,
+  "lastUpdate": 1790519104497,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5780,6 +5780,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001880929953541672",
             "extra": "mean: 3.797127999996519 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e1ed4dfe78bd0bc5df78961d6f2725b60c6f0abb",
+          "message": "docs(profiling): S5-lite 收口入账——nacrea 气候段 512.8s（轮前 −54%）\n\n小代码量级可回收池已榨干（S5-lite −6.7% + 地质清尾无收益）；剩余\n大头 = LU 结构性成本 ~210s，后续量级杠杆登记为 S5-full 粗网格\n（plans/s5-coarse-grid-budget.md，待触发）或 GPU 服务器实验。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-27T22:14:16+08:00",
+          "tree_id": "2bd43dcc7636ff189368d64d8387992a6c605a6c",
+          "url": "https://github.com/fyabc/dreamulator/commit/e1ed4dfe78bd0bc5df78961d6f2725b60c6f0abb"
+        },
+        "date": 1790519103393,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.16467407027429842,
+            "unit": "iter/sec",
+            "range": "stddev: 0.16821542058366115",
+            "extra": "mean: 6.072601462600001 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.247370700553001,
+            "unit": "iter/sec",
+            "range": "stddev: 0.022267250744759933",
+            "extra": "mean: 307.94143700000376 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4861347882036744,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0742795448249016",
+            "extra": "mean: 672.8864756666676 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 965.3406040222658,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007558180310421463",
+            "extra": "mean: 1.035903799999005 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.83320729774047,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00017161918933138935",
+            "extra": "mean: 5.185828799994852 msec\nrounds: 5"
           }
         ]
       }
