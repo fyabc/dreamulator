@@ -100,11 +100,11 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 单发构建可不设。
 
 **GW6 默认开（湿槽 3 pass × pickup 门）的当前构建耗时**（2026-09-27 S 速度轮
-后，200k 网格，OPENBLAS=4，同机）：
++ S5-lite 后，200k 网格，OPENBLAS=4，同机）：
 
-| 世界 | 气候段 | 其中降水 | 总构建 | S 轮前对照 |
+| 世界 | 气候段 | 其中降水 | 总构建 | 对照轮前 |
 |---|---|---|---|---|
-| nacrea（全量含地质） | 549.8 s | 395.9 s | 838.1 s | 气候 1120 s（**−51%**） |
+| nacrea（全量含地质） | 512.8 s | 356.9 s | ~803 s | 气候 1120 s（**−54%**） |
 | earth/climate-dev | 537.1 s | 397.7 s | 593.8 s（不含地质） | 气候 2738 s（含并跑竞争；**约 −80%**） |
 
 > **S 速度轮（2026-09-27）**：py-spy 行级归因重排靶点——原计划 S1（风链
@@ -117,6 +117,13 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 > 浮点差），earth 全电池（T R² 0.991 / P R² 0.46 / κ 68.9% / 账本 −0.20%）
 > 与 GW6 收口包逐项同值。GW6 对 flag-off 倍率 ~1.4×（≤2× 门槛重新可达）。
 > flag-off 基线（同机 441.6 s / 气候 ~450 s）同受 add.at 修复惠益。
+>
+> **S5-lite（2026-09-27，`plans/s5-coarse-grid-budget.md` 文末）**：预算调用
+> 不变量外提（平滑算子/边几何/cell 场挂 `mesh._budget_cache`）+ CSC 装配
+> 结构复用（探针取槽序，矩阵逐位不变）→ 气候段再 −6.7%（550→512.8 s）；
+> 地质 add.at 清尾无计时收益。**小代码量级的可回收池已榨干**——剩余大头 =
+> LU 结构性成本 ~210 s（降水段 60%），再往下只有 S5-full 粗网格（登记）或
+> GPU 服务器实验。
 >
 > **内存画像**（进程树 RSS 轮询，`private/research/2026-09-27-rss-poll.py`）：
 > 健康构建峰值 **3.3 GB**（降水 Picard 段，含单次 LU 因子 ~0.5 GB 瞬态）；
