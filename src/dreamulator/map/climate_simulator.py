@@ -1537,21 +1537,31 @@ def simulate_climate(
     _t0 = _time.time()
     _console.print("  [dim]6/6  Write results to mesh[/dim]")
 
-    for i in range(n):
-        mesh.cells[i].temperature_C = float(t_mean_C[i])
-        mesh.cells[i].precipitation_mm = float(precipitation_mm[i])
-        mesh.cells[i].koppen_class = koppen_codes[i]
-        mesh.cells[i].temperature_hottest_month_C = float(t_hot_C[i])
-        mesh.cells[i].temperature_coldest_month_C = float(t_cold_C[i])
-        # Annual-mean pressure anomaly (canonical ΔP's 12-month mean — M2-A0③):
-        # the stationary land–sea contrast, so the frontend's annual pressure
-        # layer works for engine-built worlds too (slp_annual_hpa is obs-only).
-        mesh.cells[i].pressure_anomaly_annual_hpa = float(_dp_hpa[i].mean())
+    # Annual-mean pressure anomaly (canonical ΔP's 12-month mean — M2-A0③):
+    # the stationary land–sea contrast, so the frontend's annual pressure
+    # layer works for engine-built worlds too (slp_annual_hpa is obs-only).
+    _dp_annual_hpa = _dp_hpa.mean(axis=1)
+    for cell, _t, _p, _k, _t_hot, _t_cold, _dp, _d in zip(
+        mesh.cells,
+        t_mean_C,
+        precipitation_mm,
+        koppen_codes,
+        t_hot_C,
+        t_cold_C,
+        _dp_annual_hpa,
+        distance_to_coast_km,
+        strict=True,
+    ):
+        cell.temperature_C = float(_t)
+        cell.precipitation_mm = float(_p)
+        cell.koppen_class = _k
+        cell.temperature_hottest_month_C = float(_t_hot)
+        cell.temperature_coldest_month_C = float(_t_cold)
+        cell.pressure_anomaly_annual_hpa = float(_dp)
         # Distance to coast (already computed for seasonal heat capacity + inland
         # aridity) is stored on the cell so the civilization engine's "habitable
         # coast" layer can reuse it without re-running the graph Dijkstra.
-        _d = distance_to_coast_km[i]
-        mesh.cells[i].distance_to_coast_km = float(_d) if np.isfinite(_d) else None
+        cell.distance_to_coast_km = float(_d) if np.isfinite(_d) else None
 
     # Summary
     n_land = int(is_land.sum())
@@ -1664,17 +1674,13 @@ def _graph_least_squares_gradient(
     dy = np.einsum("ij,ij->i", edge_vec, north)
     df = scalar[dst] - scalar[src]
 
-    # Accumulate the 2×2 normal equations per cell.
-    m11 = np.zeros(n, dtype=np.float64)
-    m12 = np.zeros(n, dtype=np.float64)
-    m22 = np.zeros(n, dtype=np.float64)
-    b1 = np.zeros(n, dtype=np.float64)
-    b2 = np.zeros(n, dtype=np.float64)
-    np.add.at(m11, src, dx * dx)
-    np.add.at(m12, src, dx * dy)
-    np.add.at(m22, src, dy * dy)
-    np.add.at(b1, src, dx * df)
-    np.add.at(b2, src, dy * df)
+    # Accumulate the 2×2 normal equations per cell (bincount = buffered
+    # scatter-add, same sums as np.add.at at a fraction of the cost).
+    m11 = np.bincount(src, weights=dx * dx, minlength=n)
+    m12 = np.bincount(src, weights=dx * dy, minlength=n)
+    m22 = np.bincount(src, weights=dy * dy, minlength=n)
+    b1 = np.bincount(src, weights=dx * df, minlength=n)
+    b2 = np.bincount(src, weights=dy * df, minlength=n)
 
     det = m11 * m22 - m12 * m12
     valid = det > 1e-18
@@ -2115,8 +2121,7 @@ def _apply_cold_trap(
     if excess_rate.any():
         neg_idx = np.flatnonzero(neg)
         inflow_e = (-c_in[neg_idx]) * w[dst[neg_idx]]  # arriving flux per edge
-        inflow_tot = np.zeros_like(w)
-        np.add.at(inflow_tot, src[neg_idx], inflow_e)
+        inflow_tot = np.bincount(src[neg_idx], weights=inflow_e, minlength=w.size)
         has_inflow = inflow_tot > 1e-12
         tot_at_src = np.where(has_inflow, inflow_tot, 1.0)
         over_src = excess_rate[src[neg_idx]] > 0.0
@@ -2125,7 +2130,7 @@ def _apply_cold_trap(
             excess_rate[src[neg_idx]] * inflow_e / tot_at_src[src[neg_idx]],
             0.0,
         )
-        np.add.at(p_routed, dst[neg_idx], share)
+        p_routed += np.bincount(dst[neg_idx], weights=share, minlength=w.size)
         # Overshoot from local sources with no inflow: the cell keeps its own rain.
         local_only = (excess_rate > 0.0) & ~has_inflow
         p_routed[local_only] += excess_rate[local_only]
@@ -2337,10 +2342,14 @@ def _solve_moisture_budget(
     # conservative for any wind field).
     _wdeg = np.bincount(src, minlength=n).astype(np.float64)
     _wdeg = np.maximum(_wdeg, 1.0)
+    # Neighbour-sum as a row-normalised sparse operator: identical accumulation
+    # to np.add.at (CSR conversion sums duplicate entries) but ~100× faster —
+    # the unbuffered ufunc.at scatter was 18% of the whole build (2026-09-27
+    # py-spy, 40 passes × ~50 budget calls on 1.2 M edges).
+    _avg = sparse.csr_matrix((np.ones(len(src)), (src, dst)), shape=(n, n))
+    _avg = sparse.diags(1.0 / _wdeg) @ _avg
     for _ in range(40):
-        _wsum = np.zeros_like(wind)
-        np.add.at(_wsum, src, wind[dst])
-        wind = 0.5 * wind + 0.5 * (_wsum / _wdeg[:, None])
+        wind = 0.5 * wind + 0.5 * (_avg @ wind)
 
     # Outward tangent unit vector from src → dst, and great-circle edge length.
     edge_vec = nodes_xyz[dst] - nodes_xyz[src]
@@ -2432,14 +2441,15 @@ def _solve_moisture_budget(
 
     def _oro_from_w(w_field: np.ndarray) -> np.ndarray:
         """Windward orographic condensation, from the solved column water."""
-        p_oro = np.zeros(n, dtype=np.float64)
         if _uphill_inflow.any():
-            np.add.at(
-                p_oro,
+            return np.bincount(
                 src[_uphill_inflow],
-                _phi[_uphill_inflow] * (-c[_uphill_inflow]) * w_field[dst[_uphill_inflow]],
+                weights=_phi[_uphill_inflow]
+                * (-c[_uphill_inflow])
+                * w_field[dst[_uphill_inflow]],
+                minlength=n,
             )
-        return p_oro
+        return np.zeros(n, dtype=np.float64)
 
     # Add a turbulent-diffusion term κ∇²W alongside the upwind advection.  The
     # pure upwind scheme concentrates the ITCZ into a single spurious cell-wide
@@ -2457,17 +2467,26 @@ def _solve_moisture_budget(
         kappa = np.full(n, config.moisture_diffusivity_m2s)
     kappa_edge = 0.5 * (kappa[src] + kappa[dst])  # edge-averaged (symmetric)
     _diff_edge = kappa_edge * s_per_year / area_m2[src]  # 1/yr, per directed edge
-    diag = k_rain_field.copy()
-    np.add.at(diag, src[pos], c[pos])
-    np.add.at(diag, src, _diff_edge)  # diffusion: +κ_edge/A_src per neighbour
+    diag = (
+        k_rain_field
+        + np.bincount(src[pos], weights=c[pos], minlength=n)
+        + np.bincount(src, weights=_diff_edge, minlength=n)  # +κ_edge/A_src per neighbour
+    )
     row = np.concatenate([np.arange(n), src[neg], src])
     col = np.concatenate([np.arange(n), dst[neg], dst])
     val = np.concatenate([diag, _c_in[neg], -_diff_edge])
-    a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsr()
+    a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsc()
 
     from scipy.sparse.linalg import splu
 
-    lu = splu(a.tocsc())
+    # Column ordering: MMD_AT_PLUS_A + SymmetricMode — the budget matrix's
+    # pattern is structurally symmetric (the diffusion term gives every
+    # neighbour pair entries on both sides), and SuperLU rejects MMD_*
+    # orderings without SymmetricMode.  Measured 2026-09-27 on nacrea 200k
+    # (GW6 default-on): precipitation stage 674 → 403 s (−40%) vs default
+    # COLAMD, with cell aggregates bit-identical after 4-decimal storage
+    # truncation (pivot order shifts rounding below that layer only).
+    lu = splu(a, permc_spec="MMD_AT_PLUS_A", options={"SymmetricMode": True})
 
     # Budyko land-recycling fixed point (see the module-level constants).  The
     # matrix A is independent of the evaporation source E, so factor once and
@@ -2757,10 +2776,8 @@ def _baroclinic_band(
     edges = np.arange(0.0, 90.0 + band_deg, band_deg)
     centers = 0.5 * (edges[:-1] + edges[1:])
     idx = np.clip(((abs_lat - edges[0]) / band_deg).astype(np.int64), 0, len(centers) - 1)
-    sums = np.zeros(len(centers))
-    counts = np.zeros(len(centers))
-    np.add.at(sums, idx, temperature_c)
-    np.add.at(counts, idx, 1.0)
+    sums = np.bincount(idx, weights=temperature_c, minlength=len(centers))
+    counts = np.bincount(idx, minlength=len(centers)).astype(np.float64)
     if (counts < 1).any():
         return 45.0, 15.0, 45.0  # incomplete latitudinal coverage — classic fallback
     t_zonal = sums / counts

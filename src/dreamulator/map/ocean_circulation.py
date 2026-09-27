@@ -207,10 +207,11 @@ def _graph_gradient(
     diff = scalar[dst] - scalar[src]
     contrib = (weight * diff)[:, None] * direction
 
-    grad = np.zeros((n, 3), dtype=np.float64)
-    np.add.at(grad, src, contrib)
-    weight_sum = np.zeros(n, dtype=np.float64)
-    np.add.at(weight_sum, src, weight)
+    grad = np.stack(
+        [np.bincount(src, weights=contrib[:, k], minlength=n) for k in range(3)],
+        axis=1,
+    ).astype(np.float64)
+    weight_sum = np.bincount(src, weights=weight, minlength=n).astype(np.float64)
     mask = weight_sum > 1e-9
     grad[mask] /= weight_sum[mask, None]
     return grad
