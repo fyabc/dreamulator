@@ -1760,7 +1760,7 @@ def _compute_quality_metrics(
     bimodality = land_peak - ocean_peak  # larger = more distinct bimodal
 
     # 2. RMS roughness (local cell-to-cell variance), vectorized over the
-    #    adjacency graph via np.add.at accumulation (previously a per-cell
+    #    adjacency graph via bincount accumulation (previously a per-cell
     #    Python loop calling np.var on tiny lists).
     offsets = np.fromiter((len(cell.neighbors) for cell in mesh.cells), dtype=np.int64, count=n)
     rows = np.repeat(np.arange(n), offsets)
@@ -1769,12 +1769,9 @@ def _compute_quality_metrics(
         dtype=np.int64,
         count=int(offsets.sum()),
     )
-    counts = np.ones(n, dtype=np.float64)
-    sums = elevations.copy()
-    sq_sums = elevations**2
-    np.add.at(counts, rows, 1.0)
-    np.add.at(sums, rows, elevations[cols])
-    np.add.at(sq_sums, rows, elevations[cols] ** 2)
+    counts = 1.0 + np.bincount(rows, minlength=n)
+    sums = elevations + np.bincount(rows, weights=elevations[cols], minlength=n)
+    sq_sums = elevations**2 + np.bincount(rows, weights=elevations[cols] ** 2, minlength=n)
     means = sums / counts
     variances = np.maximum(sq_sums / counts - means**2, 0.0)
     rms_roughness = float(np.sqrt(variances).mean()) if n else 0.0
