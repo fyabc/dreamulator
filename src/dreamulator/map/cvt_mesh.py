@@ -132,8 +132,13 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
             dtype=np.int64,
             count=int(counts.sum()),
         )
-        sums = np.zeros((n, 3), dtype=np.float64)
-        np.add.at(sums, cell_of_flat, sv.vertices[flat_idx])
+        sums = np.stack(
+            [
+                np.bincount(cell_of_flat, weights=sv.vertices[flat_idx, k], minlength=n)
+                for k in range(3)
+            ],
+            axis=1,
+        )
         centroids = sums[good_ids] / counts[:, None]
         norms = np.linalg.norm(centroids, axis=1)
         ok = norms >= 1e-12
@@ -341,7 +346,7 @@ def _build_cells(
         tri_area = np.zeros(len(owner), dtype=np.float64)
         ok = np.abs(denominator) >= 1e-15
         tri_area[ok] = 2.0 * np.arctan2(numerator[ok], denominator[ok])
-        np.add.at(areas, owner, tri_area)
+        areas = areas + np.bincount(owner, weights=tri_area, minlength=len(areas))
         areas = np.abs(areas) * radius_km**2
 
     cells: list[VoronoiCell] = []
