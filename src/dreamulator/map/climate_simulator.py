@@ -2333,42 +2333,74 @@ def _solve_moisture_budget(
 
         src, dst = _build_directed_edge_table(mesh.cells)
 
-    # Smooth the wind over the graph: large-scale moisture transport responds to
-    # the large-scale wind, not the noisy local field.  Near the equator the
-    # geostrophic component is degenerate (1/f) and the terrain blocking adds
-    # per-cell jumps; without smoothing these concentrate the ITCZ into a single
-    # spurious cell-wide spike.  A few Jacobi passes damp the small-scale noise
-    # while preserving the Hadley/ferrel structure (and the solver below stays
-    # conservative for any wind field).
-    _wdeg = np.bincount(src, minlength=n).astype(np.float64)
-    _wdeg = np.maximum(_wdeg, 1.0)
-    # Neighbour-sum as a row-normalised sparse operator: identical accumulation
-    # to np.add.at (CSR conversion sums duplicate entries) but ~100× faster —
-    # the unbuffered ufunc.at scatter was 18% of the whole build (2026-09-27
-    # py-spy, 40 passes × ~50 budget calls on 1.2 M edges).
-    _avg = sparse.csr_matrix((np.ones(len(src)), (src, dst)), shape=(n, n))
-    _avg = sparse.diags(1.0 / _wdeg) @ _avg
+    # Mesh-invariant quantities — the Jacobi smoothing operator, edge geometry,
+    # per-cell fields, and the CSC assembly structure — are computed once per
+    # (mesh, edge table) and stashed on the mesh object (the `_t_monthly_c`
+    # stash precedent).  The budget is solved ~50× per build (12 months ×
+    # Picard passes + gate iterations) and recomputing these was ~20% of the
+    # climate stage (2026-09-27 S5-lite, py-spy line attribution).
+    _ck = (n, len(src))
+    _cache = getattr(mesh, "_budget_cache", None)
+    if _cache is not None and _cache.get("key") == _ck:
+        _avg, edge_dir, l_m, area_m2, _h_eff = _cache["fields"]
+        _indices, _indptr, _order = _cache["struct"]
+    else:
+        _cache = {"key": _ck}
+        # Smooth the wind over the graph: large-scale moisture transport
+        # responds to the large-scale wind, not the noisy local field.  Near
+        # the equator the geostrophic component is degenerate (1/f) and the
+        # terrain blocking adds per-cell jumps; without smoothing these
+        # concentrate the ITCZ into a single spurious cell-wide spike.  A few
+        # Jacobi passes damp the small-scale noise while preserving the
+        # Hadley/ferrel structure (and the solver below stays conservative for
+        # any wind field).  Neighbour-sum as a row-normalised sparse operator:
+        # identical accumulation to np.add.at (CSR conversion sums duplicate
+        # entries) but ~100× faster — the unbuffered ufunc.at scatter was 18%
+        # of the whole build (2026-09-27 py-spy).
+        _wdeg = np.bincount(src, minlength=n).astype(np.float64)
+        _wdeg = np.maximum(_wdeg, 1.0)
+        _avg = sparse.csr_matrix((np.ones(len(src)), (src, dst)), shape=(n, n))
+        _avg = sparse.diags(1.0 / _wdeg) @ _avg
+        # Outward tangent unit vector from src → dst, and great-circle edge
+        # length.
+        edge_vec = nodes_xyz[dst] - nodes_xyz[src]
+        radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
+        edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
+        en = np.linalg.norm(edge_vec, axis=1)
+        valid = en > 1e-9
+        edge_dir = np.zeros_like(edge_vec)
+        edge_dir[valid] = edge_vec[valid] / en[valid, None]
+        dot = np.clip(np.einsum("ij,ij->i", nodes_xyz[src], nodes_xyz[dst]), -1.0, 1.0)
+        l_m = config.radius_km * 1000.0 * np.arccos(dot)
+        area_m2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64) * 1e6
+        # The air column rides the *surface*: sea level over the ocean,
+        # terrain over land.  Using the raw elevation would make every
+        # ocean→land edge a 3 km "climb" out of the bathymetry and dump the
+        # onshore flux on the first coastal cell (Earth land-P collapse,
+        # found in the slice-1 A/B).
+        _h_eff = np.maximum(
+            np.array([cell.elevation for cell in mesh.cells], dtype=np.float64), 0.0
+        )
+        # Assembly structure probe: the canonical triplet set — diagonal plus
+        # exactly one entry per directed edge — has no duplicate positions, so
+        # its CSC conversion yields a fixed slot order `_order` (source index
+        # per CSC data slot).  Subsequent calls rebuild only the value vector
+        # and index it, skipping the COO sort/dedup entirely.
+        _row0 = np.concatenate([np.arange(n), src])
+        _col0 = np.concatenate([np.arange(n), dst])
+        _probe = sparse.coo_matrix((np.arange(n + len(src)), (_row0, _col0)), shape=(n, n)).tocsc()
+        _indices, _indptr, _order = _probe.indices, _probe.indptr, _probe.data.astype(np.int64)
+        _cache["fields"] = (_avg, edge_dir, l_m, area_m2, _h_eff)
+        _cache["struct"] = (_indices, _indptr, _order)
+        object.__setattr__(mesh, "_budget_cache", _cache)
     for _ in range(40):
         wind = 0.5 * wind + 0.5 * (_avg @ wind)
-
-    # Outward tangent unit vector from src → dst, and great-circle edge length.
-    edge_vec = nodes_xyz[dst] - nodes_xyz[src]
-    radial = np.einsum("ij,ij->i", edge_vec, nodes_xyz[src])
-    edge_vec = edge_vec - radial[:, None] * nodes_xyz[src]
-    en = np.linalg.norm(edge_vec, axis=1)
-    valid = en > 1e-9
-    edge_dir = np.zeros_like(edge_vec)
-    edge_dir[valid] = edge_vec[valid] / en[valid, None]
-    dot = np.clip(np.einsum("ij,ij->i", nodes_xyz[src], nodes_xyz[dst]), -1.0, 1.0)
-    l_m = config.radius_km * 1000.0 * np.arccos(dot)
 
     # Outward wind component across the edge (m/s): positive = outflow from src.
     # Use the edge-averaged wind so the two directed edges of each neighbour pair
     # carry equal-and-opposite fluxes — with a per-cell wind the upwind scheme
     # would not be conservative (mass balance breaks where the wind varies).
     u_out = np.einsum("ij,ij->i", 0.5 * (wind[src] + wind[dst]), edge_dir)
-
-    area_m2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64) * 1e6
 
     # Upwind advection coefficient c = u_out · l / A · s_per_year  [1/yr].
     c = u_out * l_m / area_m2[src] * s_per_year
@@ -2396,12 +2428,7 @@ def _solve_moisture_budget(
     # (fabricated water) *and* the multiplicative föhn shadow (deleted
     # water).  The advection no longer telescopes exactly; the residual is
     # Σ P_oro by construction, so ΣA·(k·W + P_oro) = ΣA·E still holds.
-    _elev = np.array([cell.elevation for cell in mesh.cells], dtype=np.float64)
-    # The air column rides the *surface*: sea level over the ocean, terrain
-    # over land.  Using the raw elevation would make every ocean→land edge a
-    # 3 km "climb" out of the bathymetry and dump the onshore flux on the
-    # first coastal cell (Earth land-P collapse, found in the slice-1 A/B).
-    _h_eff = np.maximum(_elev, 0.0)
+    # (_h_eff comes from the mesh-invariant cache above.)
     _h_cc = cc_lift_drying_scale(temperature_c, moist_lapse_rate(temperature_c))
     # Lifting-condensation-level offset: unsaturated air condenses nothing
     # below the LCL.  Monthly-mean RH ~75% puts z_LCL ≈ 125·(T−T_d) ≈ 800 m
@@ -2470,10 +2497,14 @@ def _solve_moisture_budget(
         + np.bincount(src[pos], weights=c[pos], minlength=n)
         + np.bincount(src, weights=_diff_edge, minlength=n)  # +κ_edge/A_src per neighbour
     )
-    row = np.concatenate([np.arange(n), src[neg], src])
-    col = np.concatenate([np.arange(n), dst[neg], dst])
-    val = np.concatenate([diag, _c_in[neg], -_diff_edge])
-    a = sparse.coo_matrix((val, (row, col)), shape=(n, n)).tocsc()
+    # Canonical per-edge off-diagonal value: the advection inflow entry on neg
+    # edges plus the (always-present) diffusion entry.  The old COO path passed
+    # these as two separate duplicate triplets and let the CSC conversion sum
+    # them; the explicit two-term sum is identical in IEEE arithmetic (a+b ==
+    # b+a), so the assembled matrix is bit-for-bit the same.
+    _off_edge = np.where(neg, _c_in, 0.0) - _diff_edge
+    _vals = np.concatenate([diag, _off_edge])
+    a = sparse.csc_matrix((_vals[_order], _indices, _indptr), shape=(n, n))
 
     from scipy.sparse.linalg import splu
 
