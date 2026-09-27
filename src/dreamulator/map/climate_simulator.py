@@ -2444,9 +2444,7 @@ def _solve_moisture_budget(
         if _uphill_inflow.any():
             return np.bincount(
                 src[_uphill_inflow],
-                weights=_phi[_uphill_inflow]
-                * (-c[_uphill_inflow])
-                * w_field[dst[_uphill_inflow]],
+                weights=_phi[_uphill_inflow] * (-c[_uphill_inflow]) * w_field[dst[_uphill_inflow]],
                 minlength=n,
             )
         return np.zeros(n, dtype=np.float64)
