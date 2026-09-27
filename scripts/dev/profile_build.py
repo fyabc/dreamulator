@@ -70,7 +70,10 @@ def main() -> None:
         from dreamulator.engine.pipeline import run_pipeline
 
         wdata = yaml.safe_load((world_dir / "world.yaml").read_text(encoding="utf-8")) or {}
-        seed = int(wdata.get("seed", 42))
+        seed_val = wdata.get("seed", 42)
+        if isinstance(seed_val, dict):  # world.yaml nests seed as {seed: <int>}
+            seed_val = seed_val.get("seed", 42)
+        seed = int(seed_val)
 
         tracemalloc.start()
         results = run_pipeline(

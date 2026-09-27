@@ -63,7 +63,10 @@ uv run python scripts/dev/profile_build.py nacrea --data-dir data/worlds --memor
 - 不必要的中间数组复制
 - numpy/scipy 大对象泄漏
 
-> **注意**：`--memory` 模式比子进程模式慢（tracemalloc 有 ~10% 开销），仅诊断时使用。
+> **注意**：`--memory` 模式仅诊断 Python 对象层分配——**看不见 numpy/SuperLU
+> 等自管分配器的大块**（2026-09-27 实测 top 位点全是 import 碎片），且本管线
+> 上放大严重（GMRES 段 ~10×、地质段 ~4.5×），其计时数据不可用。进程级内存
+> 分解改用 RSS 轮询（见 §2.1 工具教训）。
 
 ### 2.1 OpenBLAS 线程上限（大网格构建的内存稳定性）
 
@@ -96,26 +99,37 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 **建议**：≤32 GB 内存机器跑 200k 网格、或两个重任务并跑时设 4；空闲机器
 单发构建可不设。
 
-**湿槽+门开启（GW6 产品候选配置）的构建耗时**（200k 网格，OPENBLAS=4，
-与 flag-off 基线 441.6 s 同机对照）：
+**GW6 默认开（湿槽 3 pass × pickup 门）的当前构建耗时**（2026-09-27 S 速度轮
+后，200k 网格，OPENBLAS=4，同机）：
 
-| 世界 | 气候段 | 其中降水 | 总构建 | 相对基线 |
+| 世界 | 气候段 | 其中降水 | 总构建 | S 轮前对照 |
 |---|---|---|---|---|
-| earth/climate-dev | 2737.9 s | 2590.2 s | 2809.2 s | **6.4×**（基线 441.6 s / 降水 224.9 s = 11.5×） |
-| nacrea（全量含地质） | 2841.8 s | 2673.5 s | 3162.1 s | **~4.1×**（基线 ≈770 s = 地质 255 + 气候 ~450 + 生态/文明 65；降水段 291→2674 s = **9.2×**，回归实验同机实测 11.4×） |
+| nacrea（全量含地质） | 549.8 s | 395.9 s | 838.1 s | 气候 1120 s（**−51%**） |
+| earth/climate-dev | 537.1 s | 397.7 s | 593.8 s（不含地质） | 气候 2738 s（含并跑竞争；**约 −80%**） |
 
-> **⚠ 速度裁决（2026-09-24）**：GW6 产品候选配置（湿槽 3 pass × pickup 门
-> iterate-twice = 每构建 ~300 个稀疏 LU solve，基线 25）**总构建 6.4× 基线、
-> 降水段 11.5×**——earth 47 min，**远超「发版门槛 ≤2× 基线（~10 min）」**。
-> 成本是结构性的（solve 计数比 300/25 ≈ 降水段倍率 11.5，非并发竞争）。
-> flag-on 默认因此**不满足发版速度门槛**，落地前必须走优化路径（下）或保持
-> opt-in。earth 数字含与轮 7 实验并跑的轻度竞争，独占预计 ~40 min（仍 5×+）。
-
-> 实验态参考（研究脚本、同机同 env）：flag-off 基线气候段 312 s；仅 pickup 门
-> 638 s（iterate-twice = 3× solve/预算）；湿槽 3 pass 无门 ~660 s；湿槽+门
-> （GW6 = 4 次预算 × 75 solve ≈ 9× 基线预算量）~2000 s。产品化压缩路径见
-> `private/plans/w-supply-route.md` 速度账（S1 风链线性增量 / 波网格 4° /
-> 预算组装向量化 / cell 重写合并 + pass 数评估）。
+> **S 速度轮（2026-09-27）**：py-spy 行级归因重排靶点——原计划 S1（风链
+> 线性增量）/S2（波网格 4°）实测合计 <15 s **销项**；真热点 = ① 水汽预算
+> 40 趟 Jacobi 风平滑的 `np.add.at` 无缓冲散射（单行 262.5 s = 全构建
+> 18%），② `splu` 列排序（482 s）。三刀：全库 9 处 add.at → bincount/CSR
+> 算子；`splu(permc_spec="MMD_AT_PLUS_A", options={"SymmetricMode": True})`
+> ——预算矩阵模式结构对称（扩散项保证邻接双向非零），对称排序大幅削填充
+> （降水段 −40%）；mesh gzip 9→6。**指标三度逐位一致**（4 位存储截断吸收
+> 浮点差），earth 全电池（T R² 0.991 / P R² 0.46 / κ 68.9% / 账本 −0.20%）
+> 与 GW6 收口包逐项同值。GW6 对 flag-off 倍率 ~1.4×（≤2× 门槛重新可达）。
+> flag-off 基线（同机 441.6 s / 气候 ~450 s）同受 add.at 修复惠益。
+>
+> **内存画像**（进程树 RSS 轮询，`private/research/2026-09-27-rss-poll.py`）：
+> 健康构建峰值 **3.3 GB**（降水 Picard 段，含单次 LU 因子 ~0.5 GB 瞬态）；
+> 每层 mesh 全量重存有 ~2.4-2.8 GB 尖峰（S4 削减对象）。MMD 排序下单 LU
+> 因子 <1 GB。
+>
+> **工具教训**：① `--memory`（tracemalloc）看不见 numpy/SuperLU 自管分配器，
+> 且事后快照错过峰值——内存分解用进程级 RSS 轮询；② tracemalloc「~10%
+> 开销」在本管线不实（GMRES 段 10×、地质段 4.5× 放大），其计时数据不可用；
+> ③ splu 的 MMD_* 排序必须配 `SymmetricMode=True`，否则 `gstrf invalid
+> arguments`——且崩溃态进程会膨胀到 ~12 GB，勿据其判断内存画像；④ 本机
+> 构建进程链四层（uv → dreamulator.exe → venv python → anaconda python），
+> 单 PID 采样会采到壳，需进程树遍历。
 
 ---
 
