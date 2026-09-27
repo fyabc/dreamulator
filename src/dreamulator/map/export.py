@@ -456,7 +456,10 @@ def _truncate_float_precision(data: bytes) -> bytes:
 
 MESH_FILENAME = "cvt_mesh.msgpack.gz"
 LEGACY_MESH_FILENAME = "cvt_mesh.json"
-_MESH_GZIP_LEVEL = 9
+# 6 = zlib sweet spot: ~3× faster compress than level 9 for ~3-5% larger
+# output (2026-09-27 speed round: gzip at 9 was ~42 s of the build across the
+# per-layer mesh re-saves; level 6 recovers ~2/3 of that).
+_MESH_GZIP_LEVEL = 6
 
 
 def _mesh_json_bytes(mesh: CVTMeshLike) -> bytes:

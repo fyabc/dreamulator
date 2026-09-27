@@ -244,10 +244,15 @@ def zonal_mean_monthly(
     else:
         idx_sel = idx[m]
         t_sel = t_monthly_c[m]
-    sums = np.zeros((n_bins, 12), dtype=np.float64)
-    counts = np.zeros(n_bins, dtype=np.float64)
-    np.add.at(sums, idx_sel, t_sel)
-    np.add.at(counts, idx_sel, 1.0)
+    # Per-column bincount replaces np.add.at (same sums, buffered & faster).
+    sums = np.stack(
+        [
+            np.bincount(idx_sel, weights=t_sel[:, j], minlength=n_bins)
+            for j in range(t_sel.shape[1])
+        ],
+        axis=1,
+    )
+    counts = np.bincount(idx_sel, minlength=n_bins).astype(np.float64)
 
     filled = counts >= 1
     means = np.zeros((n_bins, 12), dtype=np.float64)
