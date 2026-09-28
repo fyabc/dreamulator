@@ -24,12 +24,11 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 |------|------|------|
 | [0001](0001-stellar-parameters.md) | 恒星与行星系参数设计决策 | superseded by 0007 |
 | [0002](0002-eccentricity.md) | 偏心率设定依据 | superseded by 0007 |
-| [0003](0003-system-formation.md) | 系统形成史与共振验证（链长期模态数字以 0009 重构版 §1 β+ 为准） | accepted |
+| [0003](0003-system-formation.md) | 系统形成史与共振验证（链长期模态数字以 0009 §1 β+ 为准） | accepted |
 | [0004](0004-satellite-systems.md) | 其他行星的卫星系统设计 | proposed |
-| [0005](0005-orbital-inclination.md) | 轨道倾角 9° 的设定原因 | superseded by 0009 重构版（ε=18° 锥摆） |
+| [0005](0005-orbital-inclination.md) | 轨道倾角 9° 的设定原因 | superseded by 0009（ε=18° 锥摆） |
 | [0006](0006-habitability-protection.md) | 红矮星环境下的宜居保护（耀斑生存 + 撞击概率） | accepted |
-| [0007](0007-aegis-seasonal-eccentricity.md) | Nacrea 天文系统调参（季节增强 + 轨道稳定） | accepted |
+| [0007](0007-aegis-seasonal-eccentricity.md) | Nacrea 天文系统调参（季节增强 + 轨道稳定） | superseded by 0009 |
 | [0008](0008-circulation-critical-instabilities.md) | 单圈环流的临界不稳定性（弱斜压 + 赤道超旋转，未来丰富设定源） | proposed |
-| [0009](0009-satellite-architecture.md) | Aegis 卫星架构 2026-09-28 重构版：β+ 安静链态 × FJ 近平衡双珠 × ε=18 锥摆 × Q=300（实验矩阵见[附录](0009-appendix-experiment-log.md) §9） | certified-current |
-| [0010](0010-ucc-migration-fixture.md) | UCC 迁移语义夹具——**已迁至 `docs/ucc/examples/nacrea.md`**（stub 占位） | migrated |
+| [0009](0009-satellite-architecture.md) | Aegis 卫星架构：β+ 安静链态 × FJ 近平衡双珠 × ε=18 锥摆 × Q=300 × E3 纪元态（实验矩阵见[附录](0009-appendix-experiment-log.md) §9） | certified-current |
 | [0011](0011-transglacis-system.md) | 墟带系统：Glacis 外碎片带 + 散射盘 + 奥尔特 + 三矮行星（璞/皚/赭）+ 墟带光 | current |

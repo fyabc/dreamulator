@@ -92,7 +92,7 @@ $R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.ra
 ## 3. 外卫星：韵珠星（Cadence）与守珠星（Vigil）
 
 两者为**互相独立的单体逆行捕获卫**（非共振、非绑定——动力学依据见
-satellite_architecture.md 与 design-notes/0009 重构版），从珠母星看是两颗一暗红
+satellite_architecture.md 与 design-notes/0009），从珠母星看是两颗一暗红
 一灰蓝、会"游走"的月亮。**两珠轨道面不共面**：双双绕各自的**逆行拉普拉斯面**
 有界进动（r_L 外侧平衡面 = 拉普拉斯面而非赤道面；i_ecl 为准不变量——韵珠认证带
 166.3–174.9°、守珠 168.4–171.5°，i_eq 大幅锥摆），互倾角 0.3–23.6°（均 12.6°）
@@ -171,10 +171,10 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 | 8 | **食季连食**（交点进动周期 ~10 年的 {{ sky.eclipse.season_fraction | pct }} 时段内每轨道连食） | 每食季 | ★★★★ 叙事节奏锚点 |
 | 9 | **藩星冲日**（暗弱"回归"） | 约每 3.7 地球年 | ★★★ 可做文明历法 |
 | 10 | **星环掩星**（若巨神星有环，环面遮挡烬星光） | 视几何 | ★★★ 远期扩展 |
-| 11 | **墟带光**（Glacis 外碎片带的黄道漫射光带，16° 宽绕天一周；最贴烬星处也有 72° 距角 → 整夜可见不被晨昏淹没） | 常驻（基线 μ_V≈23.8 幽带，背星区极暗夜肉眼边缘可辨）；**墟带觉醒**（带内矮行星级碰撞 → f 升 10×，μ_V≈22.4 肉眼清晰带，持续几十年~百年）一代人一次 | ★★★★ 新增（2026-09-28） |
+| 11 | **墟带光**（Glacis 外碎片带的黄道漫射光带，16° 宽绕天一周；最贴烬星处也有 72° 距角 → 整夜可见不被晨昏淹没） | 常驻（基线 μ_V≈23.8 幽带，背星区极暗夜肉眼边缘可辨）；**墟带觉醒**（带内矮行星级碰撞 → f 升 10×，μ_V≈22.4 肉眼清晰带，持续几十年~百年）一代人一次 | ★★★★ |
 | 12 | **食夜现墟带**（向星区唯一暗夜窗口：全食中烬星与满相 Aegis 双灭，墟带光与完整星空在极光幕布间隙显现） | 食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍） | ★★★★ 仪式级天象 |
 | 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠距巨神星角距 ≤1.3°，始终嵌于光带内；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
-| 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.35 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ 新增 |
+| 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.35 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
 | 15 | **守珠陨落**（远期：E3 落地实现 ~2.4 万年内守珠 e 无界爬升 → Hill 越线解体/弹射；死前 ~8 千年亮度剧增与碎片云阶段可察） | 一次性（末世级） | ★★★★★ 可预报末世天象——先知级天体力学叙事 |
 
 > **两处几何修正**：

@@ -6,7 +6,7 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 
 # 潮汐效应
 
-> **2026-09-28 重构版**：偏心率历元 **{{ entities.satellite_nacrea.eccentricity }}**（认证轨迹
+> 偏心率历元 **{{ entities.satellite_nacrea.eccentricity }}**（认证轨迹
 > 纪元平移态的受迫带冷谷快照；t₁ 见 stellar.yaml 纪元约定）；耗散因子取 `physical_params.md`（k₂=0.3, Q=300）→
 > k₂/Q = **1×10⁻³**（「非共振大洋 + 窄陆架」组合，选值依据见 physical_params.md）。
 > 加热系数 **F = 2.6×10⁴·e² W/m²**；泵浦归因为**双源**：恒星四极矩本底
@@ -80,7 +80,7 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 > （平滑 p95 仅 0.78）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
 > 泵浦为**双源**：恒星四极矩本底（0.35 AU 强场，~0.004–0.006）+ 韵珠/守珠
 > 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段认证带 rms 0.0037 / max 0.0084
-> （详见 `satellite_architecture.md` 与 design-notes/0009 重构版 §3）。
+> （详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
 
 ## 因变量 — Q 敏感性
 

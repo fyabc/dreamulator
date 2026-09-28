@@ -12,7 +12,7 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 |------|-----|------|
 | Aegis 几何反照率 A_g | 0.228 | Sudarsky et al. (2000) Class II/III 温巨行星；碱金属吸收压低可见光反照率 |
 | Aegis 表面赤道磁场 | **400 μT** | ~8× 木星；planets.yaml 设定值 |
-| Aegis 磁偶极轴倾角 | 18.0° | = 自转轴倾角（axial_tilt_deg，2026-09-28 重构） |
+| Aegis 磁偶极轴倾角 | 18.0° | 与自转轴倾角一致（axial_tilt_deg） |
 
 ### 因变量 — Nacrea 轨道定位
 
@@ -20,7 +20,7 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 |------|-----|---------|
 | Nacrea 轨道位置 | {{ (entities.satellite_nacrea.semi_major_axis_au * 149597870.7) | group }} km（10.15 R_p） | YAML stellar.yaml |
 | 占顺行稳定区 | **{{ (entities.satellite_nacrea.a_rh_ratio / 0.48 * 100) | round1 }}%** | a/R_H ÷ 顺行稳定极限 0.48（Domingos 2006） |
-| Nacrea 外侧空间 | **~1,076,000 km**（标称） | 由韵珠（1,196,000 km）与守珠（标称 1,800,000 km，内迁构型）两颗单体逆行捕获卫占据 |
+| Nacrea 外侧空间 | **~1,076,000 km**（标称） | 由韵珠（轨道 {{ (entities.satellite_cadence.semi_major_axis_au * 149597870.7) | round0 }} km）与守珠（轨道 {{ (entities.satellite_vigil.semi_major_axis_au * 149597870.7) | round0 }} km，内迁构型）两颗单体逆行捕获卫占据 |
 
 ### 因变量 — 三层卫星架构
 
@@ -30,19 +30,22 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 |------|---------|------|------|
 | **Zone 1：内圈光环与牧羊犬区** | < 125,000 km（洛希极限内） | 极黯淡硅酸盐+冰质尘埃光环 + 数颗 <20 km 牧羊犬卫星 | 大型胚胎被潮汐力撕碎 |
 | **Zone 2：绝对真空区** | 125,000 – 700,000 km | **死寂真空** | Nacrea 寡头吸积吞噬 99% 固态物质；60 亿年轨道外迁（形成以来 +10%）如"引力扫雪机"弹射/清除沿途所有竞争者 |
-| **Zone 3：双单体逆行捕获卫 + 外圈捕获群** | 700,000 – 2,100,000 km | **韵珠 Cadence**（0.006 M⊕, Europa 大小 R=1437 km, @1.196e6 km = {{ entities.satellite_cadence.a_rh_ratio }} r_H）+ **守珠 Vigil**（Charon 级 3×10⁻⁴ M⊕, @标称 1.8e6 km = {{ entities.satellite_vigil.a_rh_ratio }} r_H，内迁构型）——互相独立、径向净空 ~533,000 km ≈ 25 互希尔半径；**FJ 近平衡族**（黄道系基准）：双珠均初始贴各自的**逆行拉普拉斯面**近旁（韵珠 i=167.2°/Ω=180°、守珠 i=170°/Ω=180° 出发；历元态 = 认证轨迹 t₁ 快照 173.4°/170.5°）——r_L 外侧平衡面 = 拉普拉斯面而非赤道面（旧「赤道化石」叙事作废），i_ecl 为准不变量、绕平衡面有界进动；互倾角 0.2–24.5°（均 13.1°）慢拍频；+ ~30–50 颗 10–100 km 级不规则捕获卫星 | 两颗珠均为晚期散射期（~0.5 Gyr，本系统 LHB）的逆行捕获（Triton/海卫一类比，与 Glacis 的逆石星 Rogue 同世代同机制，与墟带雕塑同事件）；捕获群为 60 亿年间偶然捕获的星际访客/彗星（类似木星加尔尼群） |
+| **Zone 3：双单体逆行捕获卫 + 外圈捕获群** | 700,000 – 2,100,000 km | **韵珠 Cadence**（0.006 M⊕，Europa 大小 R=1437 km，轨道 {{ (entities.satellite_cadence.semi_major_axis_au * 149597870.7) | round0 }} km ≈ {{ entities.satellite_cadence.a_rh_ratio }} r_H）与**守珠 Vigil**（Charon 级 3×10⁻⁴ M⊕，轨道 {{ (entities.satellite_vigil.semi_major_axis_au * 149597870.7) | round0 }} km ≈ {{ entities.satellite_vigil.a_rh_ratio }} r_H，内迁构型）。两者是互相独立的单体捕获卫，径向净空约 {{ ((entities.satellite_vigil.semi_major_axis_au - entities.satellite_cadence.semi_major_axis_au) * 149597870.7) | round0 }} km，合 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 个互希尔半径。双珠属 **FJ 近平衡族**（黄道系基准）：捕获后就停在各自逆行拉普拉斯面的近旁（韵珠初始 i=167.2°/Ω=180°，守珠 i=170°/Ω=180°；当前历元分别为 168.8° 与 170.1°）。由于 r_L 之外的平衡面是拉普拉斯面而不是赤道面，i_ecl 是准不变量，轨道面绕平衡面做有界进动；两个轨道面的互倾角在 0.3–23.6° 之间（均值 12.6°）缓慢拍动。此外还有约 30–50 颗 10–100 km 级的不规则捕获卫星 | 两颗珠都是晚期散射期（约 0.5 Gyr，本系统的晚期重轰炸类比）的逆行捕获天体，与海卫一同类比，与 Glacis 的逆石星 Rogue 同世代、同机制，与墟带雕塑属同一事件；不规则捕获群则是 60 亿年间偶然捕获的星际访客与彗星（类似木星的加尔尼群） |
 
-**为什么是「双单体」而非共振链/双星/共轨对**：Nacrea 质量比 μ = 2.4×10⁻³
-（Io 的 50×）之下，任何共动/绑定外卫组合（1:2:4 链、C+S pair、层级双星）
-都在 6–45 kyr 内死于交叉遭遇扩散、洛希破裂或把 Nacrea 的 e 泵过加热红线。
-2026-09-28 重构轮（累计 130+ 次 REBOUND 积分）进一步穷尽：**单珠**（韵珠
-独存）在平衡位与黄道锚定位均 6–19 kyr 死于自身 Kozai 翻转；**紧凑双珠**
-（双珠内迁 0.2–0.3 r_H）热流反升（标定失效区）；**0.3–0.5 r_H 外珠无 100 kyr
-级长寿解**（93 票天花板 35–60 kyr）。双单体（{{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 互希尔半径径向净空）+
-内迁守珠（0.37 r_H）+ 减质量韵珠（扩散 ∝ m_C²）是天空美学与动力学寿命的
-最优折衷；其长期（>25 kyr）动力学按**硬度豁免**处理（当代段 0–15 kyr 为
-正典窗口；E3 落地实现死期 ~24.3 kyr = 可预报末世天象「守珠陨落」，用户裁决
-2026-09-29 死期豁免；判决与豁免记录见 design-notes/0009 §2、附录重构轮章节）。
+**为什么是「双单体」而非共振链/双星/共轨对**：Nacrea 的质量比 μ = 2.4×10⁻³，
+是木卫一的 50 倍。在这样的摄动源旁边，任何共动或绑定的外卫组合（1:2:4 链、
+双珠成对、层级双星）都在 6–45 kyr 内瓦解——死于交叉遭遇扩散、洛希破裂，
+或把 Nacrea 的偏心率泵过加热红线。参数空间搜索（累计 130 余次 REBOUND 积分，
+记录见附录实验日志）进一步穷尽了其余选项：只留一颗韵珠的**单珠**方案在平衡位
+与黄道锚定位都在 6–19 kyr 内死于自身 Kozai 翻转；双珠内迁到 0.2–0.3 r_H 的
+**紧凑方案**热流反而升高（线性标定在该区失效）；0.3–0.5 r_H 带内不存在
+100 kyr 级的长寿解（93 票的天花板是 35–60 kyr）。最终的双单体方案
+（{{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 个互希尔半径的径向净空）+ 内迁守珠（0.37 r_H）+ 减质量韵珠
+（遭遇扩散速率 ∝ m_C²）是天空美学与动力学寿命之间的最优折衷。它超过 25 kyr
+的长期动力学按**硬度豁免**处理：当代段（0–15 kyr）是生态、气候与文明的正典
+窗口；E3 落地实现的死期约 24.3 kyr，即可以提前预报的末世天象「守珠陨落」
+（用户 2026-09-29 裁决豁免死期）。判决与豁免记录见 design-notes/0009 §2 与
+附录实验日志。
 
 ### 因变量 — 长期摄动：受迫偏心率的 60 亿年维持机制
 
@@ -52,7 +55,7 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 |------|-----|---------|
 | 偏心率阻尼时标 τ_e | **~{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**（k₂/Q=1×10⁻³，Q=300） | (1/e)(de/dt) = (21/2)(k₂/Q)(M_p/M_m)(R_m/a_m)⁵n_m |
 | 无泵浦时的结局 | e → 0，潮汐加热熄灭 | 板块构造与碳循环停摆 → 宜居性丧失 |
-| 泵浦机制（双源） | **恒星四极矩本底（主项）+ 韵珠/守珠长期摄动（次项）** | 0.35 AU 强场下四极矩本底 ~0.004–0.006（测试粒子效应，与双珠质量一阶无关——旧「韵珠 99.6%」归因作废）；双珠受迫 coef=Σmᵢ(a_N/aᵢ)³=1.35×10⁻³（韵珠占 98.3%）；非共振（周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }} 全部脱调或高阶免疫）。**当代段认证带 rms 0.0037 / max 0.0084**（E3 落地实现 25 kyr 重认证，当代段 0–15 kyr；硬度豁免见 design-notes/0009 §2） |
+| 泵浦机制（双源） | **恒星四极矩本底（主项）+ 韵珠/守珠长期摄动（次项）** | 0.35 AU 的强恒星场经四极矩给出 ~0.004–0.006 的偏心率本底——这是测试粒子效应，与双珠质量一阶无关；双珠的受迫项线性系数 coef=Σmᵢ(a_N/aᵢ)³=1.35×10⁻³（韵珠贡献 98.3%）。三星周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }}，全部脱离低阶共振或仅触及可忽略的高阶项。**当代段认证带 rms 0.0037 / max 0.0084**（E3 落地实现经 25 kyr 独立重认证，当代段取 0–15 kyr；硬度豁免见 design-notes/0009 §2） |
 | 泵浦源稳定性 | 两珠均为单体远距逆行轨道（有界 e 摆动、迁移 ~μm/yr 冻结） | {{ entities.satellite_cadence.a_rh_ratio }}/{{ entities.satellite_vigil.a_rh_ratio }} r_H 逆行；径向净空 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} r_H,m；长期动力学判决与硬度豁免见 design-notes/0009 §2 |
 | 巨行星潮汐耗散 | k₂p/Qp ≈ 7×10⁻⁸（Q_p ≈ 5×10⁶，弱耗散 P-B 包） | 两珠外迁均 ≤7 μm/yr（∝ m_s·a⁻⁵）→ 泵浦频率 5.9 Gyr 恒定 |
 | 潮汐加热平衡 | 历元 e={{ entities.satellite_nacrea.eccentricity }} → {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW（{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²，冷谷快照）；当代段均值 **0.36 W/m²**（4.1× 地球内热流）、瞬时极值 1.85（0.79×Io，百年级）、500-yr 平滑持续脉冲占空 0% | 加热功率 ≈**2.6×10⁴**·e² W/m²（k₂/Q=1×10⁻³；见 tidal_effects.md）；带内主调制 **~20 kyr** =「万年火山脉冲」（long_term_cycles §4）；远期增温 = 失稳前兆（诊断律） |

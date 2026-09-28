@@ -111,6 +111,8 @@ def _export_dir_documents(
             "type": fm.get("type", ""),
             "period": fm.get("period", ""),
             "tags": fm.get("tags", []),
+            "status": str(fm.get("status", "") or ""),
+            "date": str(fm.get("date", "") or ""),
             "frontmatter": fm,
             "content": body,
             "rendered": rendered,

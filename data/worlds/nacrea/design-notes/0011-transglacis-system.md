@@ -8,14 +8,14 @@ status: current
 
 # 0011 — 墟带系统（Glacis 外碎片系统）
 
-**一句话架构**：霰星（Glacis, 0.89 AU）之外、藩星（Sentinel, 3.68 AU）内外，
+**架构概要**：霰星（Glacis, 0.89 AU）之外、藩星（Sentinel, 3.68 AU）内外，
 存在一条柯伊伯带类比的碎片带——定名「**墟带**」（用户裁决 2026-09-28）——
 加上外散射盘、脱离族与奥尔特云，构成完整的冰质残骸系统。Glacis 雕刻带内缘，
 Sentinel 雕刻带外缘；带本身经数值验证长期存活。三颗已命名矮行星（璞星、
 皚星、赭星）列入 `stellar.yaml`。
 
 本笔记是墟带系统的**当前权威设定依据**。数值判决来自 536 颗无质量测试粒子
-在 β+ 链态（Aegis e≈0.07 安静模态，见 0009 重构版）+ Sentinel 引力场中的
+在 β+ 链态（Aegis e≈0.07 安静模态，见 0009）+ Sentinel 引力场中的
 0.3 Myr WHFast 积分；解析框架与全部原始数据见 `private/research/2026-09-28-
 transglacis-proposal.md` 与 `private/tmp/transglacis-belt.log`。
 
