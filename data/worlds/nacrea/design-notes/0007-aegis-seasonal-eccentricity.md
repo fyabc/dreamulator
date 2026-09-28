@@ -2,14 +2,15 @@
 title: "Nacrea 天文系统调参（季节增强 + 轨道稳定）"
 type: design
 tags: [orbit, season, resonance, stability, eccentricity, tidal]
-status: proposed
+status: superseded by 0009
 ---
 
 # 0007 · Nacrea 天文系统调参（季节增强 + 轨道稳定）
 
-> **⚠ 部分被取代（2026-09-09）**：本文**卫星** 1:2:4 链相关内容（卫星绝对半长轴表、
-> 「共振耦合分摊潮汐力矩」段）失效——卫星链判死，现行架构见 `0009-satellite-architecture.md`。
-> 行星链（Aegis–Boreal–Glacis）、季节增强方案与 Aegis e=0.0018 裁决仍有效。
+> **⚠ 已被取代**：本文的卫星 1:2:4 链方案（卫星绝对半长轴表、「共振耦合分摊
+> 潮汐力矩」段）与 Aegis e=0.0018 裁决均已失效。现行的行星链状态（β+ 安静模态、
+> Aegis e 带 0.065–0.081）、卫星架构与季节/距离季方案，全部以
+> `0009-satellite-architecture.md` 为准；本文仅作决策过程档案保留。
 
 > 本文档记录 Nacrea 系统天文层的调参方案，把**季节增强**与**轨道稳定**两个目标统一在
 > 一套杠杆里。最终方案见下文；方案探索过程中的权衡与中间结论见文末[附录](#附录权衡记录)。

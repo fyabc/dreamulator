@@ -2,7 +2,7 @@
 title: "轨道倾角 9° 的设定原因"
 type: design
 tags: [orbital-inclination, seasons, dynamics]
-status: accepted
+status: superseded by 0009（ε=18° 锥摆）
 checked_against:
   astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
   geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471

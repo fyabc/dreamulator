@@ -6,10 +6,11 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 
 # 潮汐效应
 
-> **2026-08 重算**：偏心率终值由 0.0025 调整为 **0.0018**；耗散因子统一取
-> `physical_params.md` 的洛夫数（k₂=0.3, Q=100）→ k₂/Q = **3×10⁻³**（此前曾误用 10⁻³）。
-> 潮汐加热、动态潮高、共振潮差、阻尼时标全部按新值重算，并新增
-> 「大潮相位漂移」与「多体叠加潮汐规律」两节。历史值见文末 §变更记录。
+> 偏心率历元 **{{ entities.satellite_nacrea.eccentricity }}**（认证轨迹
+> 纪元平移态的受迫带冷谷快照；t₁ 见 stellar.yaml 纪元约定）；耗散因子取 `physical_params.md`（k₂=0.3, Q=300）→
+> k₂/Q = **1×10⁻³**（「非共振大洋 + 窄陆架」组合，选值依据见 physical_params.md）。
+> 加热系数 **F = 2.6×10⁴·e² W/m²**；泵浦归因为**双源**：恒星四极矩本底
+> （~0.004–0.006）+ 双珠长期摄动（coef=1.35×10⁻³）。
 
 ## 自变量
 
@@ -21,11 +22,11 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 | 中心天体质量 M_Aegis | 508.5 M⊕ = 3.037×10²⁷ kg | stellar.yaml |
 | 卫星质量 M_Nacrea | 1.20 M⊕ = 7.166×10²⁴ kg | physical_params.md |
 | 卫星半径 R | 6817 km | physical_params.md |
-| 轨道半长轴 a | 724,000 km | stellar.yaml |
-| 轨道周期 P | 3.147 d（75.5 h），n = 2.311×10⁻⁵ rad/s | stellar.yaml |
-| 偏心率 e | **0.0018**（受迫终值） | stellar.yaml |
+| 轨道半长轴 a | {{ (entities.satellite_nacrea.semi_major_axis_au * 149597870.7) | round0 }} km | stellar.yaml |
+| 轨道周期 P | {{ entities.satellite_nacrea.period_days | round(3) }} d（{{ entities.satellite_nacrea.period_days | hours | round1 }} h），n = 2.311×10⁻⁵ rad/s | stellar.yaml |
+| 偏心率 e | **{{ entities.satellite_nacrea.eccentricity }}**（历元值，受迫带冷谷快照） | stellar.yaml |
 | 洛夫数 h₂ / k₂ | 0.6 / 0.3 | physical_params.md |
-| 潮汐耗散因子 Q | 100（→ k₂/Q = 3×10⁻³） | physical_params.md |
+| 潮汐耗散因子 Q | 300（→ k₂/Q = 1×10⁻³） | physical_params.md |
 | 表面重力 g | 10.28 m/s² | physical_params.md |
 | 海洋平均深度 H | 4000 m（覆盖 72%） | physical_params.md |
 
@@ -47,50 +48,55 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 > **不产生潮汐加热**。地球固体潮仅 ~0.5 m，Nacrea 因 508.5 M⊕ 巨行星 + 近距轨道
 > （10.36 R_p）而放大数千倍。真正的加热来自下节「动态潮」（∝ e）。
 
-## 因变量 — 动态潮（∝ e，e=0.0018）
+## 因变量 — 动态潮（∝ e，历元 e={{ entities.satellite_nacrea.eccentricity }}）
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 固体潮振幅（峰谷差） | **7.8 m（15.6 m）** | h₂·Z·3e = 1447 × 0.0054 |
-| 海洋平衡潮振幅（峰谷差） | **9.1 m（18.2 m）** | (1+k₂−h₂)·Z·3e = 1688 × 0.0054 |
+| 固体潮振幅（峰谷差） | **{{ (1447*3*entities.satellite_nacrea.eccentricity) | round(1) }} m（{{ (2*1447*3*entities.satellite_nacrea.eccentricity) | round(1) }} m）** | h₂·Z·3e = 1447 × {{ (3*entities.satellite_nacrea.eccentricity) | round(5) }} |
+| 海洋平衡潮振幅（峰谷差） | **{{ (1688*3*entities.satellite_nacrea.eccentricity) | round(1) }} m（{{ (2*1688*3*entities.satellite_nacrea.eccentricity) | round(1) }} m）** | (1+k₂−h₂)·Z·3e = 1688 × {{ (3*entities.satellite_nacrea.eccentricity) | round(5) }} |
 | 海洋固有周期 | 58.7 h | 2πR/√(gH) = 2π·6.817e6 / 202.8 |
 | 共振放大系数 | **2.5×** | 1/(1−(58.7/75.5)²)，弱阻尼 |
-| **共振潮差（峰谷差）** | **~46 m** | 18.2 × 2.5 |
+| **共振潮差（峰谷差）** | **~{{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m** | 峰谷平衡潮 × 2.5 |
 
 > **3e 因子的物理含义**：径向潮（bulge "呼吸"）幅度 ∝ r⁻³，r = a(1±e) → 分数变化 3e，
-> 峰谷差 6e。46 m 是**平衡潮理论上限**（完美流体球 + 全球共振）。实际海岸潮差由地形决定：
-> 开阔大洋 4–12 m，普通海岸 10–25 m，喇叭形海湾共振放大可达 40–80 m，封闭内海 <5 m
-> （见 §潮汐对生态与文明的影响）。
+> 峰谷差 6e。表值是**历元冷谷的平衡潮理论上限**（完美流体球 + 全球共振）；受迫带
+> 内潮差随 e 同步呼吸（e 达 max 0.0084 时 ~3.5×，即 ~210 m 上限——百年级「大潮纪元」）。
+> 实际海岸潮差由地形决定：开阔大洋 4–12 m，普通海岸 10–25 m，喇叭形海湾共振放大
+> 可达 40–80 m，封闭内海 <5 m（见 §潮汐对生态与文明的影响）。
 
 ## 因变量 — 潮汐加热与阻尼
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 潮汐加热功率 Ė | **148 TW** | Peale & Cassen (1978)：Ė = (21/2)(k₂/Q)(GM_p²R⁵/a⁶)·n·e² = 4.57×10¹⁹·e² |
-| 潮汐热流密度 | **0.25 W/m²** | Ė / 4πR² |
-| 对比 | 地球 0.09（放射性）、Io 2.4（潮汐） | — |
+| 潮汐加热功率 Ė | **{{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW**（历元冷谷） | Peale & Cassen (1978)：Ė = (21/2)(k₂/Q)(GM_p²R⁵/a⁶)·n·e² = 1.52×10¹⁹·e² |
+| 潮汐热流密度 | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²**（历元）；**受迫带均值 0.36 W/m²**（210 TW） | Ė / 4πR² |
+| 对比 | 地球内热流 0.087 W/m²、Io 2.2–2.5（潮汐） | 带均值 = 4.1× 地球内热流 |
 | 偏心率阻尼时标 τ_e | **{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr** | (2/21)(Q/k₂)(M_m/M_p)(a/R)⁵(1/n) |
 
-> 148 TW ≈ **3.1× 地球总热流**（47 TW），是 Nacrea 主导热源（~85%），驱动板块构造与
-> 碳-硅酸盐循环。热流密度 0.25 W/m² 介于地球（0.09）与 Io（2.4）之间——活跃但不至岩浆海。
-> τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**外卫长期摄动一旦移除，e 在百万年尺度内归零**——受迫带
-0.0008–0.009（A4v 认证带）由韵珠（99.6%）/守珠维持（详见 `satellite_architecture.md` 与 design-notes/0009）。
+> 历元 {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW ≈ {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 4.7e13) | round(2) }}× 地球总热流（47 TW）——历元值是受迫带的**冷谷快照**；
+> 带均值 0.36 W/m²（210 TW ≈ 4.5× 地球总热流）才是地质时间上的常态热源，
+> 为 Nacrea 主导热源（~85%），驱动板块构造与碳-硅酸盐循环。瞬时极值
+> 1.85 W/m²（0.79×Io）为百年级短暂尖峰，500-yr 平滑持续脉冲占空 0%
+> （平滑 p95 仅 0.78）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
+> 泵浦为**双源**：恒星四极矩本底（0.35 AU 强场，~0.004–0.006）+ 韵珠/守珠
+> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段认证带 rms 0.0037 / max 0.0084
+> （详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
 
 ## 因变量 — Q 敏感性
 
 潮汐加热 Ė ∝ k₂/Q，而 Q 是唯一缺乏实测锚定的自由参数（洛夫数 k₂/h₂ 取地球实测值）。
-下表展示 e=0.0018 固定、Q 取不同值时潮汐加热的变化范围：
+下表展示受迫带固定（当代段 rms 0.0037）、Q 取不同值时潮汐加热的变化范围：
 
-| Q | k₂/Q | 潮汐加热 | 热流密度 | 相对地球总热流 | 地质状态 |
+| Q | k₂/Q | 带均值热流 | 历元热流（e={{ entities.satellite_nacrea.eccentricity }}） | 相对地球内热流（带均值） | 地质状态 |
 |---|------|---------|---------|---------------|---------|
-| 50（近 Io） | 6×10⁻³ | 296 TW | 0.51 W/m² | 6.3× | 剧烈，超活跃但未至岩浆海 |
-| **100（本设定）** | **3×10⁻³** | **148 TW** | **0.25 W/m²** | **3.1×** | 活跃健康 |
-| 200（近刚性） | 1.5×10⁻³ | 74 TW | 0.13 W/m² | 1.6× | 温和，板块构造放缓 |
+| 150 | 2×10⁻³ | 0.72 W/m² | {{ (5.21e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 8.3× | 正典带内活跃端 |
+| **300（本设定）** | **1×10⁻³** | **0.36 W/m²** | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²** | **4.1×** | 活跃健康（正典带，板块构造旺盛） |
+| 500（近月球刚性） | 6×10⁻⁴ | 0.22 W/m² | {{ (1.564e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 2.5× | 增强板块构造 |
 
-> **结论**：Q 在 50–200 之间浮动时，潮汐加热在 **1.6–6.3× 地球**之间变化，但始终处于
-> "活跃但不失控"区间（远低于 Io 的 2.4 W/m² 岩浆海量级）。因此"~3.1× 地球"的定性结论对 Q 的
-> 选择不敏感——**无需为追求精确倍数（如 3.0×）而微调 Q**：3.1× 与 3.0× 的 ~3% 差异远小于
-> Q 本身 ±50% 的不确定。文档中"3.1×"应理解为"约 3×"。
+> **结论**：Q 在 150–500 之间浮动时，带均值加热在 2.5–8× 地球内热流之间变化，
+> 始终处于"活跃但不失控"区间（Io 的 2.2–2.5 W/m² 岩浆海量级之下）。Q=300 为
+> 裁决值（「非共振大洋 + 窄陆架」组合，选值依据见 physical_params.md）；
+> 加热 ∝ 1/Q 线性，文献带内取值属设定判断，可随未来约束折算。
 
 ## 因变量 — 大潮相位漂移
 
@@ -99,11 +105,11 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| 恒星日 | 3.147 d（75.5 h） | = 自转周期 = 公转周期（潮汐锁定） |
-| 太阳日（一昼夜） | **3.25 d（78 h）** | 1/(1/3.147 − 1/100)，自转与 Aegis 周年运动同向 |
-| Aegis 公转周期（年） | 100 d | 开普勒第三定律，a=0.3536 AU |
-| 相位漂移速率 | **11.3°/潮汐周期** | (3.25 − 3.147)/3.25 × 360° |
-| 相位完整循环 | **100 d（一个 Aegis 年）** | 潮汐峰 vs 正午的拍频 |
+| 恒星日 | {{ entities.satellite_nacrea.period_days | round(3) }} d（{{ entities.satellite_nacrea.period_days | hours | round1 }} h） | = 自转周期 = 公转周期（潮汐锁定） |
+| 太阳日（一昼夜） | **{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.planet_aegis.period_days)) | round(2) }} d（{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.planet_aegis.period_days)) | hours | round0 }} h）** | 1/(1/P_sid − 1/P_year)，自转与 Aegis 周年运动同向 |
+| Aegis 公转周期（年） | {{ entities.planet_aegis.period_days | round(2) }} d | 开普勒第三定律，a={{ entities.planet_aegis.semi_major_axis_au }} AU |
+| 相位漂移速率 | **11.5°/潮汐周期** | (P_sol − P_sid)/P_sol × 360° |
+| 相位完整循环 | **{{ entities.planet_aegis.period_days | round0 }} d（一个 Aegis 年）** | 潮汐峰 vs 正午的拍频 |
 
 **物理含义**：大潮时刻与"正午"的相位差**无法静态指定**——它在一个 Aegis 年内连续扫过
 "正午 → 黄昏 → 午夜 → 黎明 → 正午"。`argument_of_periapsis` 只决定某个参考历元的初始相位，
@@ -119,10 +125,10 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 
 | 天体 | 周期 | Δa (m/s²) | 相对主潮 |
 |------|------|-----------|---------|
-| **Aegis**（偏心率潮） | 3.147 d | 8.2×10⁻⁵ | 100% |
-| 韵珠 Cadence（会合） | 2.14 d | 6.0×10⁻⁷ | 0.73% |
-| 守珠 Vigil（会合） | 2.63 d | 5.5×10⁻¹⁰ | ~0% |
-| Ignis（恒星） | 100 d | 1.90×10⁻⁶ | 2.3% |
+| **Aegis**（偏心率潮） | {{ entities.satellite_nacrea.period_days | round(3) }} d | 8.2×10⁻⁵ | 100% |
+| 韵珠 Cadence（会合） | {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }} d | 3.0×10⁻⁷ | 0.37% |
+| 守珠 Vigil（会合） | {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }} d | 1.5×10⁻⁹ | ~0% |
+| Ignis（恒星） | {{ entities.planet_aegis.period_days | round0 }} d | 1.90×10⁻⁶ | 2.3% |
 
 **整体潮汐规律**：
 
@@ -130,15 +136,15 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 2. **极弱 spring/neap（大潮/小潮）**：外天体叠加仅 ±3.0% 调制，潮高 spring/neap 比 ≈ 1.06。
    与地球不同（太阳≈月球 46%，spring/neap 可达 ~2.7×），Nacrea 的大潮/小潮差异**极弱**。
 3. **相位漂移拍**：潮汐峰 vs 正午以 100 d 周期缓慢漂移（见上节）。
-4. **关键周期**：3.147 d（主潮）、2.14 d（韵珠会合）、2.63 d（守珠会合）、
-   100 d（Aegis 年 + 相位漂移拍）四重嵌套，构成"潮汐历"的骨架。
+4. **关键周期**：{{ entities.satellite_nacrea.period_days | round(3) }} d（主潮）、{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }} d（韵珠会合）、{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }} d（守珠会合）、
+   {{ entities.planet_aegis.period_days | round0 }} d（Aegis 年 + 相位漂移拍）四重嵌套，构成"潮汐历"的骨架。
 
 ## 潮汐效应 — 地质结果
 
-- **板块运动速度**：15–25 cm/yr（地球 5 cm/yr 的 3–5 倍，148 TW 潮汐加热驱动）
-- **超大陆旋回周期**：~1.2 亿年（地球 3–5 亿年）
-- **地震规律**：每 75.5 h 触发一次里氏 4–5 级周期性微震；大规模地震（≥8 级）频率比地球低 ~60%
-- **海岸线进退**：46 m 潮差 + 0.1° 大陆架坡度 → 每 38 h 理论最大进退 ~26 km（实际海岸 10–25 m 潮差 → 6–14 km）
+- **板块运动速度**：10–15 cm/yr（地球 5 cm/yr 的 2–3 倍，带均值 0.36 W/m² 潮汐加热驱动）
+- **超大陆旋回周期**：~2 亿年（地球 3–5 亿年）
+- **地震规律**：每 {{ entities.satellite_nacrea.period_days | hours | round1 }} h 触发一次里氏 4–5 级周期性微震；大规模地震（≥8 级）频率比地球低 ~60%
+- **海岸线进退**：{{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差（受迫带内随 e 呼吸至 ~210 m 上限）+ 0.1° 大陆架坡度 → 每 38 h 理论最大进退 ~35 km（实际海岸 10–25 m 潮差 → 6–14 km）
 
 ## 潮汐对生态与文明的影响（伏笔）
 
@@ -149,17 +155,17 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 
 | 影响 | 机制 | 待办关联 |
 |------|------|---------|
-| 潮间带宽度 | 46 m 潮差 + 缓坡（0.02–0.1°）→ 数 km 宽潮间带，地球上不存在的大规模生态位 | 生态层海洋模块 |
+| 潮间带宽度 | {{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差 + 缓坡（0.02–0.1°）→ 数 km 宽潮间带，地球上不存在的大规模生态位 | 生态层海洋模块 |
 | 海洋初级生产力 | 潮汐混合将深海营养盐带上表层，沿海 NPP 提升 2–5× | 同上 |
-| 深海热泉 | 148 TW 加热 → 洋中脊热泉密集，化能合成生态（独立于太阳） | 同上 |
+| 深海热泉 | 潮汐加热（带均值 210 TW）→ 洋中脊热泉密集，化能合成生态（独立于太阳） | 同上 |
 | 相位漂移稀释热应力 | 潮间带在一个 Aegis 年内经历全部热环境并平均（无固定暴晒/冻结） | 简化生态建模 |
 
 ### 文明层
 
 | 影响 | 机制 | 待办关联 |
 |------|------|---------|
-| 潮汐历 | 3.147 / 2.14 / 2.63 / 100 d 四重周期是历法、宗教、农业的核心节律 | 文明种子设计 |
-| 潮汐能 | 46 m 潮差 = 巨大势能（E=mgh），文明可能极早掌握潮汐发电 | 文明能源叙事 |
+| 潮汐历 | {{ entities.satellite_nacrea.period_days | round(2) }} / {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }} / {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }} / {{ entities.planet_aegis.period_days | round0 }} d 四重周期是历法、宗教、农业的核心节律 | 文明种子设计 |
+| 潮汐能 | {{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差 = 巨大势能（E=mgh），文明可能极早掌握潮汐发电 | 文明能源叙事 |
 | 沿海城市形态 | 悬崖城 / 浮动城 / 内海城三分；弱 spring/neap 使港口工程压力低于地球强 spring/neap 场景 | 文明地理锚点 |
 | 海岸侵蚀 | 潮汐冲刷（tidal scour）主导，河口被反复冲刷成潮汐峡谷 | 海岸侵蚀·潮汐冲刷主导 |
 
@@ -168,8 +174,8 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 | 日期 | 变更 | 潮汐加热 | 共振潮差 | 阻尼时标 |
 |------|------|---------|---------|---------|
 | 旧（e=0.0025, k₂/Q=10⁻³） | 初版 | 52–82 TW | 78 m | ~5.6 Myr |
-| **新（e=0.0018, k₂/Q=3×10⁻³）** | 本版 | **148 TW** | **~46 m** | **1.4 Myr** |
+| 旧（e=0.0018, k₂/Q=3×10⁻³） | 2026-08 重算 | 148 TW | ~46 m | 1.4 Myr |
+| **现行（e=0.00242, k₂/Q=1×10⁻³）** | 2026-09-29 E3 历元 | **89 TW 历元 / 210 TW 带均值** | **~61 m** | **4.2 Myr** |
 
-> 旧值的问题：(1) k₂/Q 与 `physical_params.md` 的 k₂=0.3、Q=100 不一致；(2) 平衡潮振幅
-> 16.9 m 与固体潮 10.15 m 的比值 1.66 偏离理论 1.17（应同为 3e 标度）；(3) 潮汐加热绝对值
-> 有一处 ~1.63× 的内部矛盾。本版已全部统一重算。
+> 现行值与 `physical_params.md`（k₂=0.3, Q=300）一致；全部因变量按同一 3e 标度
+> 与 F = 2.6×10⁴·e² 系数统一重算。

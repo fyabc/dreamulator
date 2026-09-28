@@ -92,22 +92,26 @@ $R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.ra
 ## 3. 外卫星：韵珠星（Cadence）与守珠星（Vigil）
 
 两者为**互相独立的单体逆行捕获卫**（非共振、非绑定——动力学依据见
-satellite_architecture.md 与 design-notes/0009），从珠母星看是两颗一暗红一灰蓝、
-会"游走"的月亮。**两珠轨道面不共面**：韵珠贴 Aegis 赤道面（赤道化石）、
-守珠贴黄道面偏 4°（拉普拉斯远端平衡），互倾角以 4.2 地球年为拍频在 5–13° 间
-弱振荡——两珠在天球上沿**不同的行迹带**游走，大部分时间彼此远离。
-二者恒近满相：同轨共转天体互看的相位角 ≤3.4°（Λ 满相亮度即实际亮度）。
+satellite_architecture.md 与 design-notes/0009），从珠母星看是两颗一暗红
+一灰蓝、会"游走"的月亮。**两珠轨道面不共面**：双双绕各自的**逆行拉普拉斯面**
+有界进动（r_L 外侧平衡面 = 拉普拉斯面而非赤道面；i_ecl 为准不变量——韵珠认证带
+166.3–174.9°、守珠 168.4–171.5°，i_eq 大幅锥摆），互倾角 0.3–23.6°（均 12.6°）
+慢拍频——两珠在天球上沿**不同的行迹带**游走，大部分时间彼此远离（会合事件
+口径 p50 相距 7.9°，仅 1% 达盘缘相切）。二者恒近满相：同轨共转天体互看的
+相位角 ≤3.4°（Λ 满相亮度即实际亮度）。
 
 | 天体 | 半径 | 距珠母星 | 视直径 | 满相视星等（最近） |
 |------|------|---------|--------|------|
-| **韵珠星 Cadence**（逆行 @1.2e6 km，岩质，红褐托林 A=0.13） | {{ entities.satellite_cadence.radius_km | round0 }} km | {{ sky.satellite_cadence.distance_km_near | round0 }} ~ {{ sky.satellite_cadence.distance_km_far | round0 }} km | **{{ sky.satellite_cadence.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_cadence.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_cadence.apparent_magnitude_full | round1 }}**（≈ 本地满月球等的一半亮；近合宽 0.85× 满月） |
-| **守珠星 Vigil**（逆行 @2.15e6 km，Charon 级冰岩，中灰微蓝 A=0.313） | {{ entities.satellite_vigil.radius_km | round0 }} km | {{ sky.satellite_vigil.distance_km_near | round0 }} ~ {{ sky.satellite_vigil.distance_km_far | round0 }} km | **{{ sky.satellite_vigil.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_vigil.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_vigil.apparent_magnitude_full | round1 }}**（近合亮于金星 7 倍，3′ 小圆盘） |
+| **韵珠星 Cadence**（逆行 @{{ (entities.satellite_cadence.semi_major_axis_au * 149.5978707) | round(3) }}e6 km，岩质，红褐托林 A=0.13） | {{ entities.satellite_cadence.radius_km | round0 }} km | {{ sky.satellite_cadence.distance_km_near | round0 }} ~ {{ sky.satellite_cadence.distance_km_far | round0 }} km | **{{ sky.satellite_cadence.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_cadence.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_cadence.apparent_magnitude_full | round1 }}**（≈ 本地满月的 {{ (10 ** ((-11.5 - sky.satellite_cadence.apparent_magnitude_full) / 2.5)) | round(1) }} 倍亮；近合宽 {{ (sky.satellite_cadence.angular_diameter_deg_near / 0.52) | round(2) }}× 满月） |
+| **守珠星 Vigil**（逆行 @{{ (entities.satellite_vigil.semi_major_axis_au * 149.5978707) | round(2) }}e6 km，Charon 级冰岩，中灰微蓝 A=0.313） | {{ entities.satellite_vigil.radius_km | round0 }} km | {{ sky.satellite_vigil.distance_km_near | round0 }} ~ {{ sky.satellite_vigil.distance_km_far | round0 }} km | **{{ sky.satellite_vigil.angular_diameter_deg_near | round2 }}°（近）~ {{ sky.satellite_vigil.angular_diameter_deg_far | round2 }}°（远）** | **约 {{ sky.satellite_vigil.apparent_magnitude_full | round1 }}**（近合亮于金星 ~{{ (10 ** ((-4.9 - sky.satellite_vigil.apparent_magnitude_full) / 2.5)) | round0 }} 倍，{{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }}′ 小圆盘） |
 
-直观感受：韵珠星最接近时约 0.85 个满月宽、半满月亮度的**暗红巨珠**，是夜空中
-仅次于巨神星的天体；守珠星是 3 角分、全轨道不暗于金星的**中灰微蓝小珠**。
-二者会合周期 11.52 天，但因轨道面互倾 5–13°，**多数会合只是"同天区不同路"**
-（相距数度至十几度）；只有会合恰逢两轨道面交线时才构成**连珠**——掩食级
-~2.3 地球年一遇，四体共线的**双掩大连珠** ≥50 年一遇（见 §6 #4/#7）。
+直观感受：韵珠星最接近时约 {{ (sky.satellite_cadence.angular_diameter_deg_near / 0.52) | round(2) }} 个满月宽、{{ (10 ** ((-11.5 - sky.satellite_cadence.apparent_magnitude_full) / 2.5)) | round(1) }} 倍本地满月亮度的**暗红巨珠**（{{ sky.satellite_cadence.apparent_magnitude_full | round1 }} 等），
+是夜空中仅次于巨神星的天体；守珠星是 {{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }} 角分、全轨道亮于金星数倍的
+**中灰微蓝小珠**（{{ sky.satellite_vigil.apparent_magnitude_full | round1 }} 等）。二者会合周期 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 天，但因轨道面互倾 0.3–23.6°
+（均 12.6°），**多数会合只是"同天区不同路"**（相距数度至十几度）；只有会合恰逢
+两轨道面交线时才构成**连珠**——掩食级 ~4 年一遇、5′ 级紧合 ~6 年一遇，四体
+共线的**双掩大连珠 ~1500 年一遇**（1500 地球年 N 体 MC 判决，`private/research/
+2026-09-28-sky-recalc.md` §3②；见 §6 #4/#7）。
 
 > **本地满月球等**：烬星比太阳暗 1.2 等，故珠母星的"满月球等"参照为 −11.5
 > （而非地球的 −12.74）；表内星等为绝对视星等，可与金星 −4.9 直接比较。
@@ -141,27 +145,37 @@ ${{ sky.planet_aegis.distance_km | round0 }}\sin {{ entities.satellite_nacrea.ax
 食发生阈值 = 本影半径 + 珠母星半径 = {{ sky.eclipse.eclipse_threshold_km | round0 }} km。
 当反烬星点（全相相位）落入本影竖直窗口（|黄纬| < 阈值）时发生全食——该窗口占交点进动周期的
 $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_vertical_offset_km | round0 }})/2\pi={{ sky.eclipse.season_fraction | pct }}$。
-交点进动周期 ~4.7 年，故食季约持续其 {{ sky.eclipse.season_fraction | pct }}（≈1 地球年）；
-食季内每 {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时一次食（全向星半球同时入夜）。
+交点进动 = Nacrea 轨道面绕拉普拉斯面的锥摆进动，周期 **~10 年**，故食季约
+持续其 {{ sky.eclipse.season_fraction | pct }}（几何窗口口径）。观测口径（MC/解析重算）：**食季间隔
+~48 d（每 Aegis 年 ~2 季）、每季 ~10 d**；季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍，
+非恒星周期）一次食（全向星半球同时入夜）；**全食 ~6 次/Aegis 年**（锥摆带内
+4–10 次、~10 yr 轮转），全食最长 ~{{ sky.eclipse.max_total_eclipse_hours | round(1) }} h、初亏至复圆全程 ~2.45 h。
 
-**食季漂移**：交点线以 ~4.7 yr 周期退行一周 → 食季在 67 天年中的位置 4.7 yr 遍历全年
-（月球食季 18.6 yr 漂移的类比）；食季与季节的相位组合构成短周期辐照调制
-（食季内每次食 ~2.2 h，平均直射辐照 ~−3%）。
+**食季漂移**：交点线以 ~10 yr 周期退行一周 → 食季在 {{ entities.planet_aegis.period_days | round0 }} 天年中的位置
+10 yr 遍历全年（月球食季 18.6 yr 漂移的类比）；食季与季节的相位组合构成短周期
+辐照调制（食季内每次全食最长 ~2.0 h、全程 ~2.45 h，平均直射辐照 ~−3%）。**食夜现墟带**：食季的全食
+窗口是向星区唯一能同时摆脱 Aegis 满相天光（~230 lux）与烬星直射的时段——墟带光
+（μ_V≈23.8 的黄道 16° 宽幽带）与完整星空仅在食夜显现（极光幕布间隙）。
 
 ## 6. 适合视频展示的天文现象
 
 | # | 现象 | 频率（地球时制） | 视频潜力 |
 |:---:|------|------|:---:|
-| 1 | **巨神星相位周期**（完整盈亏） | 每 78 地球时（= 1 卫星公转周期） | ★★★★★ 系列一核心视觉 |
-| 2 | **日全食**（烬星被巨神星遮蔽） | 食季内每个公转周期（{{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时）一次，每次最长 {{ sky.eclipse.max_total_eclipse_hours | round1 }} 地球时 | ★★★★★ 全片高潮 |
-| 3 | **外卫星被巨神星掩**（韵珠/守珠隐入巨神星盘面后方） | 韵珠每 2.14 地球日、守珠每 2.63 地球日（会合周期） | ★★★★ 尺度远超水星凌日 |
-| 4 | **韵珠掩守珠 / 韵珠影食守珠**（会合落在两轨道面交线附近才成对上演） | 掩食级 ~2.3 地球年一遇（互倾角 5–13° 弱拍频调制出"连珠季"）；5′ 级紧合 ~25 年 | ★★★★ 三星系统独有 |
+| 1 | **巨神星相位周期**（完整盈亏） | 每 {{ entities.satellite_nacrea.period_days | hours | round0 }} 地球时（= 1 卫星公转周期） | ★★★★★ 系列一核心视觉 |
+| 2 | **日全食**（烬星被巨神星遮蔽） | 每年 ~6 次（锥摆十年轮转 4–10 次；每岁 ~2 季、食季间隔 ~48 d，季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日会合拍一次），全食最长 {{ sky.eclipse.max_total_eclipse_hours | round1 }} 地球时（全程 ~2.45 h） | ★★★★★ 全片高潮 |
+| 3 | **外卫星被巨神星掩**（韵珠/守珠隐入巨神星盘面后方） | 韵珠每 {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }} 地球日、守珠每 {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }} 地球日（会合周期，掩食还需交线对齐） | ★★★★ 尺度远超水星凌日 |
+| 4 | **韵珠掩守珠 / 韵珠影食守珠**（会合落在两轨道面交线附近才成对上演） | 掩食级（盘缘相切）~4.1 年一遇（15′ 级 ~2.1 年）；5′ 级紧合 ~6.4 年一遇——互倾角 0.3–23.6° 慢拍频调制出"连珠季"（1500 yr MC 判决） | ★★★★ 三星系统独有 |
 | 5 | **鼎星大距**（超金星星） | 约每 0.1 地球年（≈36.5 地球日） | ★★★ 晨昏"超金星" |
 | 6 | **沧星冲日**（冰蓝巨盘子夜升起） | 约每 0.4 地球年 | ★★★★ |
-| 7 | **连珠**（分级）：宽松会合（两珠同天区）→ 严格连珠（Aegis-韵珠-守珠中心共线、从大到小排列）→ **双掩大连珠**（Nacrea–Aegis–韵–守四体共线：双珠相继滑至巨盘边缘排成一线、先后掩入盘后并双双没入巨行星本影） | 宽松会合每 11.52 地球日（相距 >10° 的时间仍占 96%）；严格连珠 = 掩食级 ~2.3 地球年；双掩大连珠 ≥50 地球年（"一代人一次"） | ★★★★★ 命名体系核心画面 |
-| 8 | **食季连食**（交点进动周期 ~4.7 年的 {{ sky.eclipse.season_fraction | pct }} 时段内每轨道连食） | 每食季 | ★★★★ 叙事节奏锚点 |
+| 7 | **连珠**（分级）：宽松会合（两珠同天区）→ 严格连珠（Aegis-韵珠-守珠中心共线、从大到小排列）→ **双掩**（双珠同瞬全掩入巨盘盘后，不入影）→ **双掩大连珠**（四体共线：双珠相继滑至巨盘边缘排成一线、先后掩入盘后并双双没入巨行星本影） | 宽松会合每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日（会合事件 38% 相距 >10°、仅 1% 达盘缘相切）；严格连珠 = 掩食级 ~4.1 地球年；双掩 ~2.7 次/年、成季聚簇（间隔中位 43 d）；**双掩大连珠 ~1500 地球年一遇（"一文明一次"；Poisson 带 ~450–7500 yr）**；严格四体共线且入影 1500 年样本内未见。**相位注**：双掩大连珠发生在**新巨行星相**（暗盘冲日、向星区地方子夜），非食夜——食季时影锥指向 Nacrea 自身、双珠不可能入影（两者相位差 ~1.6 d）。视觉：不可见暗盘横亘中天，双珠近满相滑向盘缘、相继没入影中熄灭（单珠中央穿影 ~2.7 h） | ★★★★★ 命名体系核心画面 |
+| 8 | **食季连食**（交点进动周期 ~10 年的 {{ sky.eclipse.season_fraction | pct }} 时段内每轨道连食） | 每食季 | ★★★★ 叙事节奏锚点 |
 | 9 | **藩星冲日**（暗弱"回归"） | 约每 3.7 地球年 | ★★★ 可做文明历法 |
 | 10 | **星环掩星**（若巨神星有环，环面遮挡烬星光） | 视几何 | ★★★ 远期扩展 |
+| 11 | **墟带光**（Glacis 外碎片带的黄道漫射光带，16° 宽绕天一周；最贴烬星处也有 72° 距角 → 整夜可见不被晨昏淹没） | 常驻（基线 μ_V≈23.8 幽带，背星区极暗夜肉眼边缘可辨）；**墟带觉醒**（带内矮行星级碰撞 → f 升 10×，μ_V≈22.4 肉眼清晰带，持续几十年~百年）一代人一次 | ★★★★ |
+| 12 | **食夜现墟带**（向星区唯一暗夜窗口：全食中烬星与满相 Aegis 双灭，墟带光与完整星空在极光幕布间隙显现） | 食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍） | ★★★★ 仪式级天象 |
+| 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠距巨神星角距 ≤1.3°，始终嵌于光带内；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
+| 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.35 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
+| 15 | **守珠陨落**（远期：E3 落地实现 ~2.4 万年内守珠 e 无界爬升 → Hill 越线解体/弹射；死前 ~8 千年亮度剧增与碎片云阶段可察） | 一次性（末世级） | ★★★★★ 可预报末世天象——先知级天体力学叙事 |
 
 > **两处几何修正**：
 > 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（{{ sky.planet_aegis.distance_km | round0 }} km），韵珠/守珠轨道

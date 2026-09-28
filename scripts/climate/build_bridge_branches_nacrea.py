@@ -11,7 +11,8 @@ override a single field in ``stellar.yaml`` (flux / year) or ``planets.yaml``
 
 Axes (Nacrea value → Earth value, fixed Nacrea geography):
 
-- ``tilt`` — obliquity 9.0 → 23.44 deg (planets.yaml)
+- ``tilt-<deg>`` — obliquity 9.0 → <deg> (planets.yaml; parameterised family,
+  e.g. ``tilt-12`` / ``tilt-15`` / ``tilt-18`` → branches ``bridge-tilt-12`` …)
 - ``rotation`` — rotation 3.147 → 0.9973 d (planets.yaml; the 90° single-cell
   Hadley pin stays, so this isolates rotation's *direct* effect — Coriolis,
   thermal wind — not the circulation-regime flip, which is a separate axis)
@@ -69,15 +70,30 @@ _FLUX_LUM = 0.1250
 _PLANET_ID = "satellite_nacrea"
 _HOST_ID = "planet_aegis"
 
-_AXES: list[str] = ["tilt", "rotation", "greenhouse", "flux", "year"]
+_AXES: list[str] = ["tilt-12", "tilt-15", "tilt-18", "rotation", "greenhouse", "flux", "year"]
 
 _AXIS_DESC: dict[str, str] = {
-    "tilt": "obliquity 9.0 -> 23.44 deg",
     "rotation": "rotation 3.147 -> 0.9973 d (90 deg Hadley pin kept)",
     "greenhouse": "greenhouse 62 -> 33 K",
     "flux": "luminosity 0.0761 -> 0.1250 Lsun (flux 0.61 -> 1.0)",
     "year": "year 99.98 -> 365.25 d (flux kept)",
 }
+
+
+def _axis_desc(axis: str) -> str:
+    value = _tilt_value(axis)
+    if value is not None:
+        return f"obliquity 9.0 -> {value:g} deg"
+    return _AXIS_DESC[axis]
+
+
+def _tilt_value(axis: str) -> float | None:
+    """``tilt-<deg>`` → float deg; bare ``tilt`` → 23.44 (legacy); else None."""
+    if axis == "tilt":
+        return 23.44
+    if axis.startswith("tilt-"):
+        return float(axis.split("-", 1)[1])
+    return None
 
 
 def _project_root() -> Path:
@@ -116,8 +132,9 @@ def _overrides(axis: str) -> dict[str, Any]:
     p0 = planets["planets"][0]  # satellite_nacrea is the first planets.yaml entry
     star = stellar["stars"][0]  # star_ignis
 
-    if axis == "tilt":
-        p0["axial_tilt_deg"] = 23.44
+    tilt = _tilt_value(axis)
+    if tilt is not None:
+        p0["axial_tilt_deg"] = tilt
         return {"planets": planets}
     if axis == "rotation":
         p0["rotation_period_days"] = 0.9973
@@ -142,7 +159,7 @@ def create_branches(axes: list[str], *, force: bool = False) -> None:
     for axis in axes:
         name = f"bridge-{axis}"
         try:
-            mgr.create_branch(name, "astronomy", description=f"bridge (nacrea): {_AXIS_DESC[axis]}")
+            mgr.create_branch(name, "astronomy", description=f"bridge (nacrea): {_axis_desc(axis)}")
         except FileExistsError:
             if not force:
                 print(f"  {name}: exists, skipping create (use --force to recreate)")
@@ -203,9 +220,12 @@ def main() -> None:
     do_all = args.build is None and not args.create
     axes = _AXES if do_all else (args.build or _AXES)
 
-    unknown = [a for a in axes if a not in _AXES]
+    unknown = [a for a in axes if a not in _AXES and _tilt_value(a) is None]
     if unknown:
-        parser.error(f"unknown axis(es): {', '.join(unknown)} (choose from {', '.join(_AXES)})")
+        parser.error(
+            f"unknown axis(es): {', '.join(unknown)} "
+            f"(choose from {', '.join(_AXES)} or tilt-<deg>)"
+        )
 
     if args.create or do_all:
         create_branches(axes, force=args.force)

@@ -1,12 +1,15 @@
-# Nacrea 恒星系统 — 6 行星 + 3 卫星（Aegis 系统）
-# 行星层：Aegis : Boreal : Glacis = 1:2:4 周期通约链（共振邻接；φ_L 循环，1 Myr 实测）
-# 卫星层：Nacrea（宜居内卫）+ 双单体逆行捕获卫韵珠/守珠（长期摄动维持 Nacrea
-# 受迫偏心率，见 design-notes/0009）
+# Nacrea 恒星系统 — 6 行星 + 3 卫星 + 3 矮行星（Aegis 系统 + 墟带）
+# 行星层：Aegis : Boreal : Glacis = 1:2:4 周期通约链（共振邻接，β 安静长期模态，
+#   10 Myr 验证；e 带狂野呼吸 = 链内禀，历元值仅为快照）
+# 卫星层：Nacrea（宜居内卫，ε=18° 锥摆）+ 双单体逆行捕获卫韵珠/守珠（FJ 近平衡族，
+#   长期摄动维持 Nacrea 受迫偏心率，见 design-notes/0009）
+# 墟带：Glacis 之外 1.3–3.0 AU 碎片带（柯伊伯带类比，主带 1.4–2.6 AU）+ 外散射盘 +
+#   奥尔特云；三颗已命名矮行星（璞/皚/赭）；Sentinel 特洛伊「伴行营」
 # 以光度为自变量（混合输入模式），引擎通过数值反演推算质量
 name: "Nacrea System"
 
 description: |
-  系统形成史（基于 Izidoro et al. 2017 共振链迁移理论，四阶段演化）：
+  系统形成史（基于 Izidoro et al. 2017 共振链迁移理论，五阶段演化）：
 
   阶段 1 — 核吸积期 (0–5 Myr)
   - 水雪线 (~0.5 AU) 外侧冰质星子快速吸积，形成 ~10 M⊕ 固态核心
@@ -14,26 +17,41 @@ description: |
   - 雪线内侧仅形成 0.1–1.0 M⊕ 岩石胚胎，未达气态吸积临界质量
 
   阶段 2 — II 型迁移与共振捕获 (5–10 Myr)
-  - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (0.3536 AU)
+  - Aegis 与原行星盘交换角动量，从 ~0.5 AU 内迁至宜居带中心 (~0.35 AU)
   - 外缘两颗胚胎被"牧羊犬效应"推动，发生会聚迁移
   - 穿过 2:1 / 4:1 共振后周期比锁定 → Aegis : Boreal : Glacis = 1:2:4 周期通约链
-    （共振邻接：盘消散后拉普拉斯角 φ_L 转入循环、无相位锁定，1 Myr N 体实测；
-    近共振长期耦合仍维持 Aegis 的 45 kyr 偏心率振荡，见 long_term_cycles.md §3）
+    （共振邻接：盘消散后链落入 β 安静长期模态——φ_L 循环、无相位锁定，
+    链行星 e 带内禀狂野呼吸（Boreal 0.003–0.11、Glacis 0.005–0.14），
+    Aegis e 带 0.065–0.081、振幅呼吸周期 ~2.85 kyr；10 Myr N 体实测有界）
   - 迁移扫清 0.05–0.2 AU 区间所有原始胚胎
 
   阶段 3 — 盘消散后碎片重组 (10–200 Myr)
   - 气体盘消散后，Aegis 轨道内侧残余星子缓慢吸积，重组为两颗小岩石行星 (Ember, Crucible)
-  - 一颗散射体被弹射至远轨道 (Sentinel, e=0.18, i=7°)
+  - Glacis 之外的星子盘保留为「墟带」前身（1.3–3.0 AU）；一颗散射体被弹射至
+    远轨道 (Sentinel, e=0.18, i=7°)
 
-  阶段 4 — 长期潮汐演化与外卫捕获 (200 Myr–6 Gyr)
+  阶段 4 — 晚期散射期与外卫捕获 (~0.5 Gyr，本系统的「晚期重轰炸」)
   - 内行星被恒星潮汐锁定
-  - Nacrea 在 Aegis 子盘中形成并缓慢外迁至 724,000 km（潮汐演化，形成以来 +10%）
-  - Sentinel 散射期（~0.5 Gyr）先后暴力捕获两颗逆行外卫星：Cadence（韵珠）与
-    Vigil（守珠）——互相独立的单体捕获，非共振、非绑定（F12/F14/F23 血统，
-    见 design-notes/0009）
-  - 韵珠/守珠的长期摄动维持 Nacrea 的受迫偏心率（否则潮汐阻尼将在 ~Myr 尺度
-    抹平），驱动潮汐加热 → 板块构造与碳-硅酸盐循环
+  - Nacrea 在 Aegis 子盘中形成并缓慢外迁至 ~724,000 km（潮汐演化；外迁速率由
+    Aegis k₂/Q=7e-8 设定，与 Nacrea 自身 Q 无关）
+  - 一次动力学重组事件把大量冰质星子送过内系：部分被 Aegis/Glacis 逆行捕获
+    （韵珠 Cadence、守珠 Vigil、霰星逆石星 Rogue 同代同机制）；部分入外散射盘
+    与奥尔特云；墟带内缘被侵蚀雕塑，Sentinel 共振雕刻其外缘
+  - 韵珠/守珠的长期摄动 + 恒星四极矩共同维持 Nacrea 的受迫偏心率（否则潮汐阻尼
+    将在 ~Myr 尺度抹平），驱动潮汐加热 → 板块构造与碳-硅酸盐循环
   - 系统进入当前稳定态
+
+  阶段 5 — 当前纪元 (5.9 Gyr)
+  - 墟带持续碰撞研磨供给尘埃（f_dust≈3e-8，黄道面 16° 宽「墟带光」幽带）；
+    偶发矮行星级碰撞 = 「墟带觉醒」增亮事件（百年尺度，当前处于基线期）
+  - 彗星双族：短周期（Aegis 族，散射盘供给）与长周期（奥尔特，银河潮汐调制）
+
+  纪元约定（2026-09-28 重构）：全部轨道根数 = 认证轨迹在 t₁=37.905 yr 的状态
+  （纪元平移，非独立初值；E3 候选，2026-09-29 用户裁决落地、死期豁免）；
+  该历元 φ=ϖ_A−Ω_N=82.7° → perihelion_day≈22.9 d，
+  近日点领先北夏至 ~2.0 d（配大陆 ~25 d 热滞后，增温峰与盛夏重合）。
+  ϖ_A 循环周期 ~44 yr、Nacrea 节点（=其自转轴）进动 ~10 yr → 近日点-季节相位
+  以 ~13 yr 周期走完全循环（「近日点大年」——行星际岁差，一代人可见）。
 
 stars:
   - id: star_ignis
@@ -50,12 +68,14 @@ stars:
       z: 0.0
 
 orbits:
-  # 轨道根数自然化散布（2026-09-10，seed 20260910，规则：距 90° 整数倍 <10° 重抽）：
-  # 非认证天体的 Ω/ω/M₀ 为散布值（此前全 0 = 交点共线/近点对齐/历元合排的默认值伪影）；
-  # 规则卫星系共享父行星赤道交点（Boreal 三卫 Ω=11.5°、Glacis Shard Ω=20.3°，
-  # 自转极方位未编码，约定极向随卫星交点）；ω 仅对 e≥0.02 天体散布（近圆轨道近点无定义）。
-  # 不动名单：共振链三行星 M₀（φ_L 相位，1 Myr 验证）、Aegis argp=90°（近日点对齐北夏至）、
-  # Aegis 系三卫星全要素（A4v 认证实现）、链内行星 i≈0（迁移共面化，物理理由）。
+  # 纪元态 = 认证轨迹 t₁=37.905 yr 平移态（见文件头「纪元约定」；E3 落地）。
+  # 认证对象 = 精确实现（含全部根数与平近点角）：改动任何字段前必须重跑
+  # `uv run python scripts/astro/rebound_nbody.py --j2 0.008 --tides --t-end 1e5`
+  # （harness 已含 J2 节点+近点角向量算子 = 完整拉普拉斯面物理；预期死点
+  # ~24.3 kyr 守珠 Hill 越线（25 kyr 重认证实测，硬度豁免），当代段 0–15 kyr
+  # 热流带见 0009 §3）。
+  # 未积分天体（Ember/Crucible/Sentinel/小卫）= 旧历元根数按开普勒解析推进 t₁。
+  # 矮行星角度按散布规则（距 90° 整数倍 <10° 重抽），轨道经 300 kyr 稳定性验证。
   # ---- 内行星（Aegis 迁移后残余碎片重组） ----
   - body_id: planet_ember
     parent_id: star_ignis
@@ -64,122 +84,146 @@ orbits:
     inclination_deg: 0.8          # 内残余吸积的小互倾角（水星 7° 同类，缩放版）
     longitude_ascending_node_deg: 324.9
     argument_of_periapsis_deg: 0.0   # e=0.005 近圆，近点无定义
-    mean_anomaly_epoch_deg: 138.6
+    mean_anomaly_epoch_deg: 180.030705
     epoch_year: 0.0
 
   - body_id: planet_crucible
     parent_id: star_ignis
     semi_major_axis_au: 0.098
-    eccentricity: 0.010           # 距恒星较远，潮汐圆化效率低于 Ember
+    eccentricity: 0.010           # 距恒星较远，恒星潮汐圆化效率低于 Ember
     inclination_deg: 0.4
     longitude_ascending_node_deg: 157.3
     argument_of_periapsis_deg: 0.0   # e=0.010 近圆，近点无定义
-    mean_anomaly_epoch_deg: 198.0
+    mean_anomaly_epoch_deg: 212.298187
     epoch_year: 0.0
 
-  # ---- 气态巨行星（宜居带，混合变暖校准后位置） ----
+  # ---- 气态巨行星（宜居带，β 安静长期模态） ----
+  # e=0.0679 为历元快照；β+ 安静模态带 0.065–0.081（振幅呼吸 ~2.85 kyr，
+  # 10 Myr 有界验证；E3 重认证当代段 rms 0.069）。距离季 = 通量摆幅 ±14%
+  # （近日点 ~22.9 d，领先北夏至 ~2.0 d）。
+  # 狂野模态（ϖ₀≈90° 初值族）8.4 kyr 即死且热流 ×2.5——禁止「优化」回该扇区。
   - body_id: planet_aegis
     parent_id: star_ignis
-    semi_major_axis_au: 0.3536    # 年长 100 天（M=0.59 + 光照 0.66 反推）
-    eccentricity: 0.03            # 距离季（受迫偏心率，GJ 876 共振链类比；用户终裁「0.03 够用」——e=0/0.03 A/B 验证信号确认）
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 90.0  # 近日点对齐北夏至（ϖ=90°）：距离季与倾角季同相 → 北半球季节增强、南半球削弱
-    mean_anomaly_epoch_deg: 0.0
+    semi_major_axis_au: 0.3532124639
+    eccentricity: 0.06786252      # β+ 安静模态历元值（带 0.065–0.081）
+    inclination_deg: 0.025812
+    longitude_ascending_node_deg: 131.099119
+    argument_of_periapsis_deg: 88.993305  # ϖ_A=220.1°；循环周期 ~44 yr（近日点大年 ~13 yr 见文件头）
+    mean_anomaly_epoch_deg: 47.539366
     epoch_year: 0.0
 
-  # ---- 共振链（会聚迁移捕获，1:2:4 拉普拉斯共振） ----
+  # ---- 共振链（会聚迁移捕获，1:2:4 周期通约；e 为快照，链内禀呼吸见下） ----
   - body_id: planet_boreal
     parent_id: star_ignis
-    semi_major_axis_au: 0.5614    # 2:1 with Aegis → 0.3536 × 2^(2/3)（随链同步外移）
-    eccentricity: 0.010           # 2:1 MMR 强制偏心率（GJ 876 共振链类比）
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    semi_major_axis_au: 0.5593050157
+    eccentricity: 0.04614538      # 快照；β+ 带 0.003–0.11（链内禀呼吸，百年尺度）
+    inclination_deg: 0.00838
+    longitude_ascending_node_deg: 251.335687
+    argument_of_periapsis_deg: 232.272881
+    mean_anomaly_epoch_deg: 298.081383
     epoch_year: 0.0
 
   - body_id: planet_glacis
     parent_id: star_ignis
-    semi_major_axis_au: 0.8911    # 4:1 with Aegis → 0.3536 × 4^(2/3)（随链同步外移）
-    eccentricity: 0.015           # Laplace 共振链最外端强制偏心率最高
-    inclination_deg: 0.0
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    semi_major_axis_au: 0.9000617117
+    eccentricity: 0.0442664       # 快照；β+ 带 0.005–0.14（墟带内缘的雕刻者）
+    inclination_deg: 0.001616
+    longitude_ascending_node_deg: 267.063883
+    argument_of_periapsis_deg: 123.652606
+    mean_anomaly_epoch_deg: 45.95449
     epoch_year: 0.0
 
-  # ---- 远轨道散射体（Aegis 迁移弹射遗孤） ----
+  # ---- 远轨道散射体（Aegis 迁移弹射遗孤；墟带外缘雕刻者） ----
   - body_id: planet_sentinel
     parent_id: star_ignis
-    semi_major_axis_au: 3.68
+    semi_major_axis_au: 3.68      # 判决：3.68 AU 恰位——共振（2:1@2.32、3:2@2.80）
+    # 雕刻墟带外缘而不消毒主带；与 Glacis 相距 34.6 互希尔半径（动力学解耦）
     eccentricity: 0.18            # 高偏心率 — 散射弹射的直接证据
     inclination_deg: 7.0          # 高倾角 — 散射弹射的直接证据
-    longitude_ascending_node_deg: 326.0   # 散射事件随机化 Ω/ω/M（散布 pass）
+    longitude_ascending_node_deg: 326.0
     argument_of_periapsis_deg: 280.3
-    mean_anomaly_epoch_deg: 116.0
+    mean_anomaly_epoch_deg: 160.781931
     epoch_year: 0.0
 
-  # ---- 宜居卫星（环绕 Aegis；外卫星为逆行捕获双珠，见 design-notes/0009） ----
-  # 卫星轨道根数基准面 = 日心黄道面（Aegis 公转轨道面）；Aegis 赤道面在本系中
-  # 由 Nacrea 轨道面定义（obliquity 9°、交点 Ω=0）。赤道系换算见 design-notes/0009。
+  # ---- 墟带矮行星（柯伊伯带类比；0.3 Myr 带扫描 + 300 kyr 单体稳定性双验证） ----
+  - body_id: dwarf_relic
+    parent_id: star_ignis
+    semi_major_axis_au: 1.52      # 主带锚：G 2:1@1.414 与 G 5:2@1.641 之间的干净窗
+    eccentricity: 0.08            # 300 kyr 带 0.034–0.097（热带群成员）
+    inclination_deg: 7.0
+    longitude_ascending_node_deg: 58.2
+    argument_of_periapsis_deg: 201.7
+    mean_anomaly_epoch_deg: 112.4
+    epoch_year: 0.0
+
+  - body_id: dwarf_rime
+    parent_id: star_ignis
+    semi_major_axis_au: 6.50      # 外散射盘/脱离过渡；q=4.55 略出 Sentinel 远日 4.34
+    eccentricity: 0.30            # 300 kyr 带 0.199–0.339（q_min 4.38 = 暂现种群，Gyr 级寿命但缓慢加工中）
+    inclination_deg: 14.0
+    longitude_ascending_node_deg: 291.3
+    argument_of_periapsis_deg: 103.6
+    mean_anomaly_epoch_deg: 305.8
+    epoch_year: 0.0
+
+  - body_id: dwarf_russet
+    parent_id: star_ignis
+    semi_major_axis_au: 12.50     # 深外缘；远日点 20.6 AU（32 K，N₂/CH₄ 霜稳定）
+    eccentricity: 0.60            # 300 kyr 带 0.571–0.647（q_min 4.36，同暂现种群注记）
+    inclination_deg: 15.0
+    longitude_ascending_node_deg: 142.6
+    argument_of_periapsis_deg: 259.4
+    mean_anomaly_epoch_deg: 77.2
+    epoch_year: 0.0
+
+  # ---- 宜居卫星：Nacrea（珠母星；认证实现——勿改任何字段，见文件头红线） ----
+  # 基准面 = 日心黄道系。ε=18°（Aegis 倾角）下的出路 (b) 构型：轨道面初始贴
+  # Aegis 赤道，绕拉普拉斯面 ~10 yr 锥摆（Nacrea 在 1.45 r_L 外侧，赤道面非平衡态）。
+  # 认证带（E3 25 kyr 重认证，当代段 0–15 kyr）：i_ecl 11.7–17.8°、i_eq 0.6–31.1°；
+  # **长期均值 i_ecl ≈ 14.9° = 气候层有效倾角**（planets.yaml axial_tilt_deg，
+  # 10 yr ≪ 气候响应时间，季节学等效于均值倾角 + ±3° 十年呼吸）。历元值 13.6° =
+  # 锥摆快照。
   - body_id: satellite_nacrea
     parent_id: planet_aegis
-    semi_major_axis_au: 0.00484   # 724,000 km（Vigil 在 0.40 r_H）
-    eccentricity: 0.0018          # 历元值；受韵珠/守珠长期摄动在受迫带内振荡
-    # （A4v 认证 33 kyr 健康切片：rms 0.0035、p5–p95 0.0008–0.0059、瞬时极值 0.009；
-    # 主调制周期 11 kyr = 「万年火山脉冲」；加热 ≈7.5e4·e² W/m² → 均值 ~0.9、
-    # 短期尖峰 ~6，红线 rms 0.006=2 W/m² 之内；线性标定 coef=2.64e-3 与
-    # 硬度豁免见 design-notes/0009 §2–3 与重开章）
-    inclination_deg: 9.0          # 赤道面轨道：规则卫星在行星子盘里形成，天然贴着行星赤道面；
-    # 相对黄道的 9° 来自 Aegis 的自转轴倾角。轨道面动力学：这个距离上恒星扭矩已强于行星
-    # 四极矩扭矩约 14 倍，平衡面（Laplace 面）几乎贴黄道，所以赤道面构型带有 8.35° 自由倾角，
-    # 以约 4.7 年周期绕平衡面摆动（相对黄道 7.7°↔9°）。维持机制（P-B 潮汐包）：早期巨撞击
-    # （Sentinel 散射期）撞出 9° 倾角并减速 Aegis 自转至 10h；Aegis 弱潮汐耗散（k₂/Q≈7×10⁻⁸）
-    # 把倾角阻尼时标拉到 ~150–300 Gyr ≫ 系统年龄 5.9 Gyr，构型为冻结化石，
-    # 见 design-notes/0009 与本文件 Aegis 弱耗散声明注释。
-    longitude_ascending_node_deg: 0.0
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0
+    semi_major_axis_au: 0.0048348095   # ~723,300 km
+    eccentricity: 0.0024175            # 历元值；受迫带见 0009 §3（当代段 rms 0.0037）
+    inclination_deg: 13.637092
+    longitude_ascending_node_deg: 137.41468
+    argument_of_periapsis_deg: 247.930961
+    mean_anomaly_epoch_deg: 97.912075
     epoch_year: 0.0
 
   # ---- 逆行捕获卫：Cadence（韵珠，早期捕获 ~0.5 Gyr，Sentinel 散射期） ----
-  # Gyr 级准可积：单体远距逆行（无交叉伙伴、恒星潮汐仅有界 e 摆动、无耗散通道），
-  # F12/F14/F23 血统。与 Nacrea 周期比 2.13（脱离 2:1 约 2.4 个共振宽度）；
-  # 与守珠 2.40（仅七阶 12:5，耦合 ∝ e⁷ 免疫）。
-  # 轨道面 = 精确逆行赤道面（Ω=180° 与 Nacrea 轨道面共面反向）——赤道化石：
-  # Aegis 弱潮汐耗散（k₂/Q≈7e-8）把自由倾角阻尼时标拉到 ≫ 系统年龄。
-  # ⚠ 认证实现要素（A4v，IAS15+J2+潮汐，48.0 kyr）：改动任何字段前必须重跑认证，
-  # 见 design-notes/0009 §5 工程红线与重开章。
+  # FJ 近平衡族：初值 i_ecl=167.2°/Ω=180°（ε=18 逆行拉普拉斯平衡 162.6° 近旁），
+  # 历元态 = 轨迹 t₁ 状态。叙事：不是「赤道化石」，是绕逆行拉普拉斯面的有界进动
+  # （i_ecl 为准不变量，i_eq 锥摆；E3 重认证当代段带 i_ecl 166.3–174.9°、
+  # i_eq 149.9–175.5°）。e 带（当代段 p5–p95）0.006–0.048，火山活动总体温和。
+  # ⚠ 认证实现要素：改动任何字段前必须重跑认证（文件头命令）。
   - body_id: satellite_cadence
     parent_id: planet_aegis
-    semi_major_axis_au: 0.0080213904  # 1,200,000 km = 0.245 r_H；P=6.715 d
-    eccentricity: 0.005           # 历元值；长期摆动 0.04–0.11 有界（p5–p95 包络；极端
-    # excursion 0.006–0.138 各 <5% 时间；11/16.5 kyr 双频呼吸。A4v 认证 33 kyr 健康切片）
-    inclination_deg: 171.0        # 黄道系；工程 Kozai 边界之外（存活要求 i≥171，见 0009 κ 律），摆动 170.3–178.2°
-    longitude_ascending_node_deg: 180.0  # 精确逆行赤道面（赤道化石）——认证实现要素，勿改
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 0.0         # 认证实现要素，勿改
+    semi_major_axis_au: 0.0078845945   # ~1,179,500 km ≈ 0.242 r_H；P≈6.54 d
+    eccentricity: 0.01675059
+    inclination_deg: 168.821896
+    longitude_ascending_node_deg: 290.545652
+    argument_of_periapsis_deg: 117.95592
+    mean_anomaly_epoch_deg: 164.805827
     epoch_year: 0.0
 
-  # ---- 逆行捕获卫：Vigil（守珠，Charon 级小卫，早期捕获） ----
-  # 0.44 r_H 逆行（安全线 0.5 内，F14 @0.458 r_H 血统；A4v 认证摆动 0.434–0.520）；
-  # 与韵珠径向净空设计值 ~160k km ≈ 4.8 r_H,m。
-  # 轨道面贴黄道面偏 4°（i=176°）——拉普拉斯面远端平衡态（4.3 r_L，恒星四极矩
-  # 主导区），天王星不规则卫星实证类比；与韵珠赤道面构成 5–13° 互倾角，
-  # 以 4.2 yr 拍频弱振荡（连珠季节律，见 sky_phenomena.md）。
-  # 自转：已潮汐锁定（t_lock 28–86 Myr ≪ 5.4 Gyr，概率 ≈100%）；因恒星潮汐
-  # e 摆动（0.07–0.34 包络，极端 0.01–0.46，A4v 认证）处于 Hut 伪同步：自转周期在
-  # 10–16 d 间漂移（「呼吸锁定」）。
+  # ---- 逆行捕获卫：Vigil（守珠，Charon 级，早期捕获；内迁 1800k 标称构型） ----
+  # a≈1,747,000 km（历元 osculating；标称 1800k = 0.37 r_H）：内迁削弱恒星潮汐
+  # e 泵浦、延寿并改善热流（Stage A/B/D 93 票矩阵结论）。e 带（当代段 p5–p95）
+  # 0.043–0.121 → Hut 伪同步自转 ~11.4 d（随 e 带 10.8–11.7 d 呼吸）。
+  # 陨落末世论：E3 重认证 ~24.3 kyr 处 Hill 越线（e_V 无界爬升；r_H 守卫 0.49）
+  # ——硬度豁免覆盖（0009 §2，用户裁决 2026-09-29「死期豁免」），死期在文明
+  # 可预报范围内 = 「守珠陨落」叙事资产。
   - body_id: satellite_vigil
     parent_id: planet_aegis
-    semi_major_axis_au: 0.0143716578  # 2,150,000 km = 0.44 r_H；P=16.10 d
-    eccentricity: 0.02            # 历元值；长期摆动 0.07–0.34 有界（p5–p95 包络；极端
-    # 0.010–0.461。A4v 认证 33 kyr 健康切片）
-    inclination_deg: 176.0        # 黄道系（离黄道面 4°）；摆动 174.0–176.1°（A4v 认证）
-    longitude_ascending_node_deg: 0.0   # 认证实现要素，勿改
-    argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 90.0        # 认证实现要素，勿改
+    semi_major_axis_au: 0.0116769194
+    eccentricity: 0.11903554
+    inclination_deg: 170.079498
+    longitude_ascending_node_deg: 245.503809
+    argument_of_periapsis_deg: 239.588385
+    mean_anomaly_epoch_deg: 145.756368
     epoch_year: 0.0
 
   # ---- Crucible 捕获小卫星（火卫一类比） ----
@@ -190,7 +234,7 @@ orbits:
     inclination_deg: 1.5          # 近赤道捕获（Crucible 倾角 0 → 赤道面≈黄道面）
     longitude_ascending_node_deg: 242.8
     argument_of_periapsis_deg: 322.8
-    mean_anomaly_epoch_deg: 74.7
+    mean_anomaly_epoch_deg: 164.449246
     epoch_year: 0.0
 
   # ---- Boreal 卫星链（3 颗冰质规则卫星） ----
@@ -199,9 +243,9 @@ orbits:
     semi_major_axis_au: 0.00239   # 357,000 km（5.9 R_B），P≈1.95 d
     eccentricity: 0.001
     inclination_deg: 2.0          # 规则卫星，贴 Boreal 赤道面（倾角 2°）
-    longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享，散布 pass）
+    longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0   # 近圆，近点无定义
-    mean_anomaly_epoch_deg: 158.1
+    mean_anomaly_epoch_deg: 55.174454
     epoch_year: 0.0
 
   - body_id: satellite_umbra
@@ -211,7 +255,7 @@ orbits:
     inclination_deg: 2.0
     longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 295.8
+    mean_anomaly_epoch_deg: 84.343246
     epoch_year: 0.0
 
   - body_id: satellite_sleet
@@ -221,18 +265,20 @@ orbits:
     inclination_deg: 2.5
     longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0
-    mean_anomaly_epoch_deg: 127.2
+    mean_anomaly_epoch_deg: 156.013785
     epoch_year: 0.0
 
-  # ---- Glacis 卫星 — 规则内卫星 + 逆行捕获外卫星 ----
+  # ---- Glacis 卫星 — 规则内卫星 + 逆行捕获卫 ----
+  # 注：Glacis 特洛伊不稳定（0.3 Myr 数值判决 1/24，共振链行星无特洛伊）；
+  # Rogue 在 Glacis e 呼吸峰值（0.14）期的剥离风险登记于 0009 附录待评估。
   - body_id: satellite_shard
     parent_id: planet_glacis
     semi_major_axis_au: 0.00165   # 247,000 km（10 R_G），P≈3.4 d
     eccentricity: 0.01
-    inclination_deg: 5.0          # 规则卫星 = 贴 Glacis 赤道面（倾角 5°；散布 pass 修正原 2° 失配）
+    inclination_deg: 5.0          # 规则卫星 = 贴 Glacis 赤道面（倾角 5°）
     longitude_ascending_node_deg: 20.3   # Glacis 赤道交点
     argument_of_periapsis_deg: 0.0   # 近圆，近点无定义
-    mean_anomaly_epoch_deg: 297.2
+    mean_anomaly_epoch_deg: 238.072956
     epoch_year: 0.0
 
   - body_id: satellite_rogue
@@ -240,20 +286,22 @@ orbits:
     semi_major_axis_au: 0.00496   # 742,000 km（30 R_G），P≈17.8 d
     eccentricity: 0.30            # 轨道扁（捕获）
     inclination_deg: 157.0        # 逆行
-    longitude_ascending_node_deg: 32.2   # 捕获随机化 Ω/ω/M（散布 pass）
+    longitude_ascending_node_deg: 32.2   # 捕获随机化 Ω/ω/M
     argument_of_periapsis_deg: 10.4
-    mean_anomaly_epoch_deg: 210.9
+    mean_anomaly_epoch_deg: 64.3187
     epoch_year: 0.0
 
   # ---- Sentinel 不规则捕获群（散射遗孤） ----
+  # 注：Sentinel 特洛伊「伴行营」数值稳定（23/24，0.3 Myr）——太阳系无类比的
+  # 新种群；未单列天体，群体存在记于墟带 design-note，个体魁首命名留待后续。
   - body_id: satellite_vagrant
     parent_id: planet_sentinel
     semi_major_axis_au: 0.00307   # 459,000 km（30 R_S）
     eccentricity: 0.15
     inclination_deg: 28.0         # 不规则（顺行）
-    longitude_ascending_node_deg: 164.1   # 不规则群随机面（散布 pass）
+    longitude_ascending_node_deg: 164.1   # 不规则群随机面
     argument_of_periapsis_deg: 75.0
-    mean_anomaly_epoch_deg: 198.9
+    mean_anomaly_epoch_deg: 164.573225
     epoch_year: 0.0
 
   - body_id: satellite_guest
@@ -261,9 +309,9 @@ orbits:
     semi_major_axis_au: 0.00511   # 764,000 km（50 R_S）
     eccentricity: 0.30
     inclination_deg: 151.0        # 逆行不规则（~29° 逆行）
-    longitude_ascending_node_deg: 65.7   # 不规则群随机面（散布 pass）
+    longitude_ascending_node_deg: 65.7   # 不规则群随机面
     argument_of_periapsis_deg: 51.8
-    mean_anomaly_epoch_deg: 289.4
+    mean_anomaly_epoch_deg: 28.745365
     epoch_year: 0.0
 
 bodies:
@@ -301,19 +349,18 @@ bodies:
     #   偏慢于类木行星 ~8h 的原生值——早期巨撞击再倾事件同时减速，见下）
     # 潮汐耗散（弱耗散体制，2026-09-08 REBOUND+潮汐自洽核算裁决 P-B）：k₂≈0.35，
     #   Q≈5×10⁶（k₂/Q≈7×10⁻⁸，比木星实测 1.1×10⁻⁵ 弱 ~150×，在气巨星潮汐理论
-    #   不确定带内）。推论：卫星外迁 ~0.8 cm/yr（形成以来累计 +10%，与
-    #   satellite_architecture.md 一致）；自由倾角/4.7yr 摆动阻尼时标 ~80 Gyr ≫
-    #   系统年龄 → 9° 构型为早期巨撞击化石（与 Sentinel 散射同期、Nacrea 冷却期），
-    #   无需持续维持机制；Aegis 自转 5.9 Gyr 减慢 <1%。
-    axial_tilt_deg: 9.0           # 自转轴倾角（早期巨撞击设定；金星式撞击减速类比）。Nacrea 走赤道面轨道，
-    # 所以 Nacrea 相对黄道的有效倾角就是这 9°，它驱动季节。自转轴的自由进动周期约 550 年，
-    # 与轨道面交点进动（约 1.2 千年）同量级，因此合理推断 Aegis 处于 Cassini 态：
-    # 自转轴跟着轨道面一起进动、倾角保持恒定（土星即此状态）。详见 orbital_dynamics.md。
+    #   不确定带内）。推论：Nacrea 外迁 ~0.8 cm/yr；自由倾角阻尼时标 ≫ 系统年龄
+    #   → 18° 倾角为早期巨撞击化石，无需持续维持机制；Aegis 自转 5.9 Gyr 减慢 <1%。
+    axial_tilt_deg: 18.0          # 自转轴倾角（早期巨撞击设定；金星式撞击减速类比）。
+    #   Nacrea 初始贴此赤道面出发，绕拉普拉斯面 ~10 yr 锥摆（出路 b，见 orbits 注）；
+    #   气候层季节倾角 = Nacrea i_ecl 长期均值 14.9°（非本值的直接函数）。
+    #   自转轴处 Cassini 态：自由进动 ~605 yr，跟随轨道面慢进动、倾角恒定（土星类比）。
     albedo: 0.343                 # 类木星 Bond albedo（与 planets.yaml 对齐）
-    j2: 0.008                     # 归一化四极矩（1.6 M_J 快自转类木值；0009 认证的长期算子标度）
-    k2_over_q: 7.0e-8             # 弱耗散 P-B 包（k₂≈0.35, Q≈5×10⁶；2026-09-08 REBOUND+潮汐自洽核算裁决）。
-    #   引擎派生量（Nacrea 外迁 ~0.7 cm/yr、拉普拉斯半径 ~5.0e5 km、自转进动 ~605 yr）由 system_catalog 计算
-    c_over_mr2: 0.26              # 主惯量系数（类木行星 Darwin–Radau，木星 0.254 同级；自转进动 ~604 yr 输入）
+    j2: 0.008                     # 归一化四极矩（1.6 M_J 快自转类木值；认证的长期算子标度）
+    k2_over_q: 7.0e-8             # 弱耗散 P-B 包（k₂≈0.35, Q≈5×10⁶；2026-09-08 裁决）。
+    #   引擎派生量（Nacrea 外迁 ~0.8 cm/yr、拉普拉斯半径 ~5.0e5 km、自转进动 ~605 yr）
+    #   由 system_catalog 计算
+    c_over_mr2: 0.26              # 主惯量系数（类木行星 Darwin–Radau，木星 0.254 同级）
 
   # ---- 行星 IV：沧星（共振链 2:1） ----
   - id: planet_boreal
@@ -337,7 +384,7 @@ bodies:
     axial_tilt_deg: 5.0
     albedo: 0.25
     description:
-      surface: "冰巨星，H₂-He 大气富含 CH₄，深青色；外侧碎片盘的内牧羊犬"
+      surface: "冰巨星，H₂-He 大气富含 CH₄，深青色；墟带内缘的雕刻者"
 
   # ---- 行星 VI：藩星（散射遗孤） ----
   - id: planet_sentinel
@@ -349,7 +396,41 @@ bodies:
     axial_tilt_deg: 15.0
     albedo: 0.20                  # 冰质表面
     description:
-      surface: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分"
+      surface: "远轨道冰质散射体，近日点 3.02 AU / 远日点 4.34 AU，保留原行星盘外层原始冰质成分；墟带外缘雕刻者，自带稳定特洛伊「伴行营」"
+
+  # ---- 墟带矮行星（2026-09-28 新增；群体见墟带 design-note） ----
+  - id: dwarf_relic
+    name: "璞星 · Relic"
+    body_type: "dwarf_planet"
+    mass_earth: 5.03e-4           # D≈1500 km，ρ≈1.7 g/cm³（冰岩分异）
+    radius_km: 750
+    rotation_period_days: 0.479   # ~11.5 h（未潮汐演化）
+    axial_tilt_deg: 8.0
+    albedo: 0.10                  # 托林压暗的原始表面
+    description:
+      surface: "墟带主带最大天体（未琢之玉）：散射期以来未经加工的原始冰岩分异体，托林深染；位于 Glacis 2:1 与 5:2 共振之间的干净窗"
+
+  - id: dwarf_rime
+    name: "皚星 · Rime"
+    body_type: "dwarf_planet"
+    mass_earth: 1.87e-3           # D≈2200 km，ρ≈2.0 g/cm³
+    radius_km: 1100
+    rotation_period_days: 0.621   # ~14.9 h
+    axial_tilt_deg: 12.0
+    albedo: 0.55                  # CO₂/H₂O 霜（55–70 K 冷俘新鲜表面）
+    description:
+      surface: "外散射盘过渡带的亮霜巨体：q=4.55 AU 略出 Sentinel 远日点，Gyr 级寿命但属缓慢加工中的暂现种群；高反照 CO₂/H₂O 霜面"
+
+  - id: dwarf_russet
+    name: "赭星 · Russet"
+    body_type: "dwarf_planet"
+    mass_earth: 3.08e-4           # D≈1300 km，ρ≈1.6 g/cm³
+    radius_km: 650
+    rotation_period_days: 0.408   # ~9.8 h
+    axial_tilt_deg: 20.0
+    albedo: 0.08                  # 深红托林（Gyr 辐照）
+    description:
+      surface: "深外缘红褐色化石（e=0.60，远日点 20.6 AU / 32 K）：N₂·CH₄ 霜在远日点凝覆、近日点侧升华迁移——迷你海卫一式的季节性霜迁"
 
   # ---- 宜居卫星：Nacrea（珠母星） ----
   - id: satellite_nacrea
@@ -357,36 +438,41 @@ bodies:
     body_type: "natural_satellite"
     mass_earth: 1.20
     radius_km: 6817               # 1.07 R⊕
-    rotation_period_days: 3.147   # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 9.0           # 赤道面轨道 + Aegis obliquity 9° → 相对黄道有效倾角 9°（自转轴 ⊥ 轨道面）；驱动气候引擎季节项
+    rotation_period_days: 3.138   # = 公转周期（被 Aegis 潮汐锁定）
+    axial_tilt_deg: 14.9          # 有效季节倾角 = i_ecl 锥摆长期均值（出路 b；当代段
+    #   瞬时带 11.7–17.8°、~10 yr 周期，10 yr ≪ 气候响应时间 → 气候层读均值 + 登记摆动带）
     albedo: 0.30
-    k2_over_q: 3.0e-3             # k₂=0.3, Q=100（physical_params.md 洛夫数；τ_e≈1.4 Myr 与潮汐加热输入）
+    k2_over_q: 1.0e-3             # k₂=0.3, Q=300（「非共振大洋+窄陆架」组合：3.147 d
+    #   潮周期远离洋盆共振、窄陆架主耗散区不发育；岩质 Q 文献带 100–500 中段，
+    #   辩护全文 physical_params.md / tidal_effects.md）。τ_e≈4.2 Myr ≪ 系统年龄。
     description:
-      surface: "宜居卫星，72% 海洋覆盖，潮汐加热驱动板块构造与碳-硅酸盐循环"
+      surface: "宜居卫星，表面 72% 被海洋覆盖。潮汐加热驱动板块构造与碳-硅酸盐循环，是长期气候稳定的能量来源。"
 
-  # ---- 逆行捕获卫：Cadence（韵珠，P=6.715 d，Io 大小） ----
+  # ---- 逆行捕获卫：Cadence（韵珠，Europa 个头，P≈6.54 d） ----
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
     body_type: "natural_satellite"
-    mass_earth: 0.012             # 早期捕获（~0.5 Gyr，Sentinel 散射期）；长期摄动维持 Nacrea 受迫偏心率
-    radius_km: 1810               # 0.284 R⊕（与 planets.yaml 对齐），木卫一大小；ρ≈2884 kg/m³（「Io 个头、Europa 成分」：岩质+深部水层）
-    rotation_period_days: 6.715   # 同步自转（t_lock ~Myr ≪ 年龄，锁定概率 ≈100%）
+    mass_earth: 0.006             # 早期捕获（~0.5 Gyr，Sentinel 散射期）；长期摄动维持 Nacrea 受迫偏心率
+    radius_km: 1436.6             # 0.2255 R⊕（Europa 大小），ρ≈2884 kg/m³ 保持
+    #   （「Europa 个头、Europa 成分」：岩质 + 深部水层）
+    rotation_period_days: 6.54    # 同步自转（t_lock ~Myr ≪ 年龄，锁定概率 ≈100%）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.13                  # 红褐暗珠：形成期原生托林 + Gyr 级辐照聚合 + 磁层等离子体溅射（土卫八前导半球/D 型小行星类比）
+    albedo: 0.13                  # 红褐暗珠：原生托林 + Gyr 辐照 + 等离子体溅射（土卫八/D 型类比）
     description:
-      surface: "逆行岩质捕获卫；表面红褐暗化（托林），深部冰层在自身隔热下保留；Nacrea 潮汐加热（板块构造）的长期维持者；近合 26′ ≈ 0.85× 满月宽、~半满月亮度的暗红巨珠"
+      surface: "韵珠是一颗逆行捕获的岩质卫星，Europa 大小。表面因托林沉积、长期辐照与等离子体溅射而呈红褐色并显著暗化；深部冰层在自身隔热下长期保留。它的长期摄动是维持珠母星潮汐加热（进而维持板块构造）的主要泵浦源之一。从珠母星看，近合时是一颗约 22 角分宽（0.69 倍满月）、亮度约本地满月三分之二（视星等 −11.0）的暗红巨珠；其偏心率带温和，火山活动总体处于间歇期。"
 
-  # ---- 逆行捕获卫：Vigil（守珠，Charon 级，P=16.10 d） ----
+  # ---- 逆行捕获卫：Vigil（守珠，Charon 级，P≈11.8 d） ----
   - id: satellite_vigil
     name: "守珠星 · Vigil"
     body_type: "natural_satellite"
-    mass_earth: 3.05e-4           # Charon 级（Charon 2.66e-4 M⊕）；ρ=1870 kg/m³ 由质量/半径自动导出（土卫六/木卫四冰岩带）
+    mass_earth: 3.05e-4           # Charon 级（Charon 2.66e-4 M⊕）；ρ=1870 kg/m³ 由质量/半径自动导出
     radius_km: 615                # 0.0965 R⊕（与 planets.yaml 对齐），卡戎大小
-    rotation_period_days: 13.9    # Hut 伪同步中值（随恒星潮汐 e 摆动在 10–16 d 漂移——「呼吸锁定」；锁定概率 ≈100%）
+    rotation_period_days: 11.4    # Hut 伪同步中值（随 e 带 0.043–0.121 在 10.8–11.7 d
+    #   漂移——「呼吸锁定」；锁定概率 ≈100%）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.313                 # Charon 型处理水冰的 HZ 辐照压暗版（p=0.209）
     description:
-      surface: "冰岩 Charon 级捕获卫；5 Gyr 老表面，处理结晶冰+托林斑驳；近合 3.0′ 圆盘、~1/60 满月亮度的中灰微蓝亮珠；自转周期随 e 摆动漂移（光变曲线可测）"
+      surface: "守珠是一颗 Charon 级的冰岩捕获卫，表面年龄约 50 亿年，覆盖着辐照处理过的结晶水冰与托林斑块，呈中灰微蓝色。它位于内迁构型（约 0.37 个希尔半径）处；从珠母星看，近合时是视直径约 4.1 角分、视星等约 −8.4 的亮珠。它的自转周期随轨道偏心率摆动在 10.8–11.7 天之间漂移，从珠母星测光变曲线即可察觉。约 2.4 万年内它将越过希尔球边界并解体或被弹射——这场「守珠陨落」是可以用天体力学提前预报的末世级天象。"
 
   # ---- Crucible 捕获小卫星 ----
   - id: satellite_cinder
@@ -434,7 +520,7 @@ bodies:
     description:
       surface: "最外规则卫星，密布陨石坑（木卫四类比）"
 
-  # ---- Glacis 卫星 — 规则内卫星 + 逆行捕获外卫星 ----
+  # ---- Glacis 卫星 — 规则内卫星 + 逆行捕获卫 ----
   - id: satellite_shard
     name: "玄石星 · Shard"         # 霰卫一
     body_type: "natural_satellite"
