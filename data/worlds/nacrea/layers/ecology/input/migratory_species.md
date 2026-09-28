@@ -10,7 +10,7 @@ tags: [migration, USWS, navigation]
 
 | 参数 | 值 |
 |------|-----|
-| 资源带移动距离 | 1071 km（直射点赤道→回归线 9°） |
+| 资源带移动距离 | {{ (entities.satellite_nacrea.radius_km * entities.satellite_nacrea.axial_tilt_deg * 0.0174533) | round0 }} km（直射点赤道→回归线 {{ entities.satellite_nacrea.axial_tilt_deg }}°） |
 | 最低连续迁徙速度 | **61 km/天**（2.55 km/h） |
 | 活跃期配速（12h 移动） | **5.10 km/h** |
 | 年度总迁徙距离 | ~4284 km（4 次往返） |
