@@ -141,7 +141,7 @@ export default function InfoPanel({
 
         {/* Action buttons — at the top so they're reachable without scrolling
             through the field sections */}
-        {selected.type === 'planet' && worldName && (
+        {(onFocus || (selected.type === 'planet' && worldName)) && (
           <div className="mb-3 flex gap-2">
             {onFocus && (
               <button
@@ -151,7 +151,7 @@ export default function InfoPanel({
                 {t('info.focusButton')}
               </button>
             )}
-            {mapPlanetIds?.has(selected.data.id) && (
+            {selected.type === 'planet' && worldName && mapPlanetIds?.has(selected.data.id) && (
               <Link
                 to={`/worlds/${worldName}/globe/${selected.data.id}${branchQS ?? ''}`}
                 onClick={onClose}
@@ -160,7 +160,7 @@ export default function InfoPanel({
                 {t('info.globe3d')}
               </Link>
             )}
-            {mapPlanetIds?.has(selected.data.id) && (
+            {selected.type === 'planet' && worldName && mapPlanetIds?.has(selected.data.id) && (
               <Link
                 to={`/worlds/${worldName}/map/${selected.data.id}${branchQS ?? ''}`}
                 onClick={onClose}
