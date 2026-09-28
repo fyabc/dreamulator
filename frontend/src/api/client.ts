@@ -12,6 +12,7 @@ const API_BASE = '/api'
 // ---------------------------------------------------------------------------
 
 import { decodeMsgpackUrl } from '../workers/msgpackClient'
+import { mark } from '../utils/perf'
 
 /** Fetch CVT mesh as MessagePack, decoded in a Web Worker (non-blocking). */
 function fetchCvtMeshMsgPack(
@@ -20,7 +21,10 @@ function fetchCvtMeshMsgPack(
   query: string,
 ): Promise<any> {
   const url = `${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/cvt-mesh${query}${query ? '&' : '?'}fmt=msgpack`
-  return decodeMsgpackUrl(url) as Promise<any>
+  mark('mesh-fetch-start')
+  // gunzip=true: canonical meshes arrive as application/gzip (the worker
+  // sniffs the magic bytes; plain msgpack passes through).
+  return (decodeMsgpackUrl(url, true) as Promise<any>).finally(() => mark('mesh-fetch-end'))
 }
 
 // ---------------------------------------------------------------------------
@@ -42,9 +46,25 @@ function fetchCvtMeshMsgPack(
 function adaptCvtMesh(raw: any): CVTMesh | null {
   if (!raw || !raw.cells) return null
 
-  // Convert vertices: [x,y,z] → {id, lon, lat}
-  const vertices: CVTVertex[] = (raw.vertices || []).map(
-    (v: number[], i: number) => {
+  // Vertices: worker-packed Float64Array (transferable handoff) or legacy
+  // [x,y,z] arrays from the JSON fallback path → {id, lon, lat}
+  let vertices: CVTVertex[]
+  if (raw.verticesFlat instanceof Float64Array) {
+    const flat: Float64Array = raw.verticesFlat
+    vertices = new Array(flat.length / 3)
+    for (let i = 0; i < vertices.length; i++) {
+      const x = flat[i * 3]
+      const y = flat[i * 3 + 1]
+      const z = flat[i * 3 + 2]
+      const r = Math.sqrt(x * x + y * y + z * z)
+      vertices[i] = {
+        id: i,
+        lat: Math.asin(Math.max(-1, Math.min(1, y / Math.max(r, 1e-12)))) * (180 / Math.PI),
+        lon: Math.atan2(z, x) * (180 / Math.PI),
+      }
+    }
+  } else {
+    vertices = (raw.vertices || []).map((v: number[], i: number) => {
       const [x, y, z] = v
       const r = Math.sqrt(x * x + y * y + z * z)
       const lat =
@@ -52,28 +72,53 @@ function adaptCvtMesh(raw: any): CVTMesh | null {
         (180 / Math.PI)
       const lon = Math.atan2(z, x) * (180 / Math.PI)
       return { id: i, lon, lat }
-    },
-  )
+    })
+  }
 
-  // Convert regions: [v0,v1,...] → {id, vertex_ids, plate_id, boundaries}
-  const regions: CVTRegion[] = (raw.regions || []).map(
-    (r: number[], i: number) => ({
+  // Regions: worker-packed flat Int32Array + offsets, or legacy index arrays
+  // → {id, vertex_ids, plate_id, boundaries}
+  let regions: CVTRegion[]
+  if (raw.regionsFlat instanceof Int32Array && raw.regionOffsets instanceof Uint32Array) {
+    const flat: Int32Array = raw.regionsFlat
+    const offsets: Uint32Array = raw.regionOffsets
+    regions = new Array(offsets.length - 1)
+    for (let i = 0; i < regions.length; i++) {
+      regions[i] = {
+        id: i,
+        vertex_ids: Array.from(flat.subarray(offsets[i], offsets[i + 1])),
+        plate_id: (raw.cells[i] as VoronoiCell | undefined)?.plate_id ?? null,
+        boundaries: null,
+      }
+    }
+  } else {
+    regions = (raw.regions || []).map((r: number[], i: number) => ({
       id: i,
       vertex_ids: r,
       plate_id: (raw.cells[i] as VoronoiCell | undefined)?.plate_id ?? null,
       boundaries: null,
-    }),
-  )
+    }))
+  }
 
+  // adjacency is intentionally dropped: no frontend consumer reads it and
+  // cloning the 200k-key dict cost ~0.4 s per load (2026-09-29 profile).
   return {
     seed: raw.seed ?? 0,
     num_cells: raw.num_cells ?? 0,
     jitter_sigma: raw.jitter_sigma,
     lloyd_iterations: raw.lloyd_iterations,
     cells: (raw.cells ?? []) as VoronoiCell[],
-    adjacency: (raw.adjacency ?? {}) as Record<string, number[]>,
     vertices,
     regions,
+  }
+}
+
+/** adaptCvtMesh wrapped with perf marks (main-thread vertex conversion). */
+function timedAdaptCvtMesh(raw: any): CVTMesh | null {
+  mark('mesh-adapt-start')
+  try {
+    return adaptCvtMesh(raw)
+  } finally {
+    mark('mesh-adapt-end')
   }
 }
 
@@ -456,15 +501,15 @@ const readApi = {
 
   getCvtMesh: (name: string, planetId: string, branch?: string | null): Promise<CVTMesh | null> => {
     if (isStaticMode()) {
-      return staticApi.getCvtMesh(name, planetId, branch).then(adaptCvtMesh)
+      return staticApi.getCvtMesh(name, planetId, branch).then(timedAdaptCvtMesh)
     }
     const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
     // Try MessagePack first (binary, smaller payload, worker-decoded off main thread).
     // Fall back to JSON if the worker or MessagePack decode fails.
     return fetchCvtMeshMsgPack(name, planetId, query)
-      .then(adaptCvtMesh)
+      .then(timedAdaptCvtMesh)
       .catch(() =>
-        fetchJson<any>(`/worlds/${name}/maps/${planetId}/cvt-mesh${query}`).then(adaptCvtMesh),
+        fetchJson<any>(`/worlds/${name}/maps/${planetId}/cvt-mesh${query}`).then(timedAdaptCvtMesh),
       )
   },
 
@@ -477,9 +522,18 @@ const readApi = {
       return staticApi.getMonthlyClimate(name, planetId, branch)
     }
     const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    mark('monthly-fetch-start')
     return fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/climate-monthly${query}`)
       .then((r) => r.arrayBuffer())
-      .then(decodeMonthlyClimate)
+      .then((buf) => {
+        mark('monthly-fetch-end')
+        mark('monthly-decode-start')
+        try {
+          return decodeMonthlyClimate(buf)
+        } finally {
+          mark('monthly-decode-end')
+        }
+      })
       .catch(() => null)
   },
 
@@ -492,9 +546,18 @@ const readApi = {
       return staticApi.getYearlyClimate(name, planetId, branch)
     }
     const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    mark('yearly-fetch-start')
     return fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}/climate-yearly${query}`)
       .then((r) => r.arrayBuffer())
-      .then(decodeYearlyClimate)
+      .then((buf) => {
+        mark('yearly-fetch-end')
+        mark('yearly-decode-start')
+        try {
+          return decodeYearlyClimate(buf)
+        } finally {
+          mark('yearly-decode-end')
+        }
+      })
       .catch(() => null)
   },
 }
