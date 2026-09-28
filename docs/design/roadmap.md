@@ -1,8 +1,9 @@
 # 开发路线图
 
-> 最后更新：2026-09-17（外部审计并入：GPT-6-Astra 审计包 M0–M4 里程碑 + 问题台账
-> 入 §六/§七；气候 rethinking 实施顺序定为「输入契约 → 状态权威化 → 守恒账本 →
-> 机制」，前见 v0.37.0 条目）
+> 最后更新：2026-09-29（v0.38.0：气候速度两轮收口——nacrea 气候段累计 −65%、
+> GW6 湿槽默认开启（D 线收口，κ 68.9% 追偿达成）、nacrea 卫星架构重构落地
+> （E3 纪元态 + 墟带系统 + 天空数字终版）、设计笔记状态分组 UI；外部审计包与
+> 气候 rethinking 实施顺序见 v0.37.0 条目）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
@@ -13,7 +14,7 @@
 
 ---
 
-## 一、当前状态快照（v0.37.0）
+## 一、当前状态快照（v0.38.0）
 
 | 维度 | 状态 |
 |------|------|

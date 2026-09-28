@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] — 2026-09-29
+
+### Added
+
+- **GW6 湿槽默认开启（D 线收口包）**：κ 68.9% 追偿达成、季风盒进带； pickup
+  加热权重臂支持 CLI 构建（debug 自分配守卫）。
+- **设计笔记状态分组显示**：design-notes 列表按状态分组——README 置顶并默认
+  打开、活跃笔记按编号排列、被取代笔记折叠置底灰显；每条带状态徽章（现行/
+  已接受/提案/被取代）。API 与静态导出透出 frontmatter 的 `status`/`date`
+  字段（`export_static.py` / `staticClient.ts` 同步）。
+- **nacrea 卫星架构重构落地（世界数据）**：包 A 终裁 × E3 纪元态——β+ 安静链
+  × FJ 近平衡双珠 × Q=300 × ε=18° 锥摆 × 纪元平移 t₁=37.905 yr（近日点领先
+  北夏至 2.0 d）；死期 24.3 kyr 硬度豁免（「守珠陨落」= 可预报末世天象）；
+  当代段热流 F̄ 0.36 / 极值 1.85 W/m²（0.79×Io）。REBOUND harness 升级：
+  J2 向量算子（节点+近点角，完整拉普拉斯面物理）、`--yaml` 直读、倾角标准
+  诊断。新增 0011 墟带系统笔记（主带 1.4–2.6 AU + 散射盘 + 奥尔特 + 三矮行星
+  璞/皚/赭 + Sentinel 特洛伊）与文明层天文观测/航天环境正典。
+- **mesh 写前备份**：`save_cvt_mesh` 写前保留 1 代 `.prev` 轮转备份。
+- **gpu 可选依赖组**：`cupy-cuda12x[ctk]` + NVIDIA DLL wheels（S6 GPU PoC 判决
+  与 WBP 调研蒸馏入档）。
+
+### Changed
+
+- **气候速度两轮收口**：nacrea 气候段 1448 → 838 → 512.8 s（累计 −65%）——
+  np.add.at 全库清除、splu MMD 对称排序、预算调用不变量外提、CSC 装配结构
+  复用、地质段 bincount 清尾；产物逐位一致验证。
+- mesh 盘上 gzip 级别 9 → 6（读取提速，体积 +~10%）。
+- nacrea 天空数字 1500 yr MC 终版：食频 ~6 次/年 × 最长 2.0 h、连珠阶梯
+  2.1/4.1/6.4 yr、双掩大连珠 ~1500 yr（「一文明一次」，相位 = 新巨行星相）；
+  文档链全量 Jinja 模板化（会合周期、星等、视直径等派生值自动跟踪 yaml）。
+- nacrea 文档文案平实化：设计笔记与天文层文档去电报体、去历史残留
+  （「旧 XX 作废」类表述清零），0010 迁移存根删除，0005/0007 状态改判
+  superseded by 0009。
+
+### Fixed
+
+- **D1 低 Froude 绕流阻挡**：修 slice-1 per-edge 地形过集中。
+- **B4 冷支气团分解**：修 B3 热带高程假高压（永耀岛干旱化根因）。
+- 恒星信息栏缺「聚焦并拉近」按钮（动作区门槛误排除恒星；相机逻辑本就支持）。
+- nacrea 文档链陈旧数值清零：会合周期（旧架构残留 2.14/2.51/14.6 d →
+  6.03/4.28/14.7 d）、双珠星等（引擎目录为准 −11.0/−8.4）、Aegis 满相
+  （−19.6 等 / ~230 lux）、守珠周期（11.79 d）与 Hut 伪同步自转（11.4 d）。
+
 ## [0.37.0] — 2026-09-17
 
 ### Added
