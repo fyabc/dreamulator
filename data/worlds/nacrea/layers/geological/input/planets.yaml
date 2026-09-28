@@ -10,8 +10,8 @@ planets:
     planet_type: ocean_world
     mass: 1.20                    # M⊕
     radius: 1.07                  # R⊕ (6817 km)
-    rotation_period_days: 3.147   # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 9.0           # 相对黄道面的有效倾角 = 轨道倾角 9°（自转轴 ⊥ 绕 Aegis 轨道面）
+    rotation_period_days: 3.138   # = 公转周期（被 Aegis 潮汐锁定）
+    axial_tilt_deg: 14.9          # 有效季节倾角 = i_ecl 锥摆长期均值（当代段瞬时带 11.7–17.8°、~10 yr 周期 ≪ 气候响应时间；出路 b 裁决 2026-09-28，自转轴 ⊥ 轨道面）
     albedo: 0.30
     atmosphere:
       surface_pressure_atm: 1.0
@@ -38,14 +38,16 @@ planets:
     name: "韵珠星 · Cadence"
     orbits: planet_aegis
     planet_type: terrestrial
-    mass: 0.012                   # M⊕
-    radius: 0.2841                # R⊕ (1810 km，木卫一大小)，ρ≈2.88 g/cm³（欧罗巴成分带：岩质+深部水层）
-    rotation_period_days: 6.715   # 同步自转 = 公转周期
+    mass: 0.006                   # M⊕（减半：压 Nacrea 受迫 e + 延寿，93 票矩阵裁决 2026-09-28）
+    radius: 0.2255                # R⊕ (1436.6 km，Europa 大小)，ρ≈2.88 g/cm³ 保持（岩质+深部水层）
+    rotation_period_days: 6.54    # 同步自转 = 公转周期
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.13                  # 红褐暗珠：原生托林 + Gyr 辐照 + 等离子体溅射（土卫八/D 型类比）
 
   # ================================================================
-  # 逆行捕获卫：Vigil — Charon 级小卫（0.44 r_H），早期捕获，Gyr 级准可积
+  # 逆行捕获卫：Vigil — Charon 级小卫（内迁 0.37 r_H 构型），早期捕获；
+  # E3 重认证 ~24.3 kyr Hill 越线（硬度豁免覆盖，用户裁决 2026-09-29 死期豁免；
+  # 「守珠陨落」= 可预报末世天象叙事）
   # ================================================================
   - id: satellite_vigil
     name: "守珠星 · Vigil"
@@ -53,7 +55,7 @@ planets:
     planet_type: terrestrial
     mass: 3.05e-4                 # M⊕（Charon 级）
     radius: 0.0965                # R⊕ (615 km)，ρ≈1.87 g/cm³（冰岩混合，土卫六/木卫四带）
-    rotation_period_days: 13.9    # Hut 伪同步（随恒星潮汐 e 摆动 10–16 d 漂移）
+    rotation_period_days: 11.4    # Hut 伪同步中值（随 e 带 0.043–0.121 在 10.8–11.7 d 漂移）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.313                 # Charon 型处理结晶水冰（HZ 辐照压暗版）
 
@@ -197,7 +199,7 @@ planets:
     mass: 508.5                   # 1.6 M_J × 317.83 M⊕/M_J
     radius: 11.2                  # ~1.0 R_J (Fortney et al. 2007, 1.6 M_J 冷气态巨行星)
     rotation_period_days: 0.4167  # ~10 hours
-    axial_tilt_deg: 9.0           # 与 stellar.yaml 对齐：Aegis 自转轴倾 9°，Nacrea 沿赤道面轨道继承此倾角驱动季节
+    axial_tilt_deg: 18.0          # 与 stellar.yaml 对齐：Aegis 自转轴倾 18°（早期巨撞击化石）；Nacrea 初始贴赤道出发、绕拉普拉斯面 ~10 yr 锥摆（出路 b），气候季节倾角 = 其 i_ecl 长期均值 14.9°
     albedo: 0.343                 # Jupiter-like Bond albedo
     atmosphere:
       surface_pressure_atm: 1000.0
