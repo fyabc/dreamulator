@@ -50,8 +50,9 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 4. **恒星光与气辉**：与地球同量级（~21.8–22），是背星区的天光底。
 
 **半球二分**：背星区永远看不到 Aegis，拥有全系统最干净的光学夜空（正典
-「先知之眼」选址的物理基础）；向星区的光学天文只能压缩进每年约 11 次、
-每次约 2.5 小时的「Aegis 吞日」全食窗口——而窗口里还有极光。换句话说，
+「先知之眼」选址的物理基础）；向星区的光学天文只能压缩进每年约 6 次（锥摆
+十年轮转 4–10 次）、每次全食最长约 2 小时（全程 ~2.5 小时）的「Aegis 吞日」
+全食窗口——而窗口里还有极光。换句话说，
 **向星区人一生中只有食夜能看见墟带与完整星空**，这足以成为宗教与仪式
 意象（「吞日之后天开一隙，露出光桥」）。
 
@@ -80,7 +81,7 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 - **裸眼可见的轨道层级**：韵珠（近合 {{ (sky.satellite_cadence.angular_diameter_deg_near * 60) | round0 }}′，{{ sky.satellite_cadence.apparent_magnitude_full | round1 }} 等）与守珠（近合 {{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }}′，
   {{ sky.satellite_vigil.apparent_magnitude_full | round1 }} 等）明显绕 Aegis 运行——地球需要望远镜才看到的「伽利略证据」，
   Nacrea 天天挂在天上。卫星/层级/引力概念的发展可以早数千年。
-- **高频食象与掩食**：食季内每 {{ entities.satellite_nacrea.period_days | round(3) }} 天一次食、双珠互掩、双珠掩入 Aegis——
+- **高频食象与掩食**：食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 天（会合拍）一次食、双珠互掩、双珠掩入 Aegis——
   短周期、强规律、肉眼可见，历法与天体力学的「巴比伦加速器」。
 - **快节奏的天**：{{ entities.planet_aegis.period_days | round0 }} 天的年 + {{ entities.satellite_nacrea.solar_day_days | round(2) }} 天的太阳日，一代观测者能积累的模式
   重复次数是地球的几十倍。
@@ -125,7 +126,7 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 
 ## 4. 叙事钩子（发散产物，选用自便）
 
-- **食夜台**：向星区的深空观测压缩在每年 ~11 次 ×2.5h 的吞日窗口（极光
+- **食夜台**：向星区的深空观测压缩在每年 ~6 次 ×2h 的吞日全食窗口（极光
   间隙），催生一种只在食时开镜的天文台建筑与观测教团。
 - **墟带 = 天球坐标基准**：16° 宽的光带是背星区航海与测绘的天然黄道参考，
   他们的黄道坐标系可能比地球早千年精确化。
@@ -141,8 +142,10 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 - 墟带存在性与带缘位置：**已判决**——主带 1.4–2.6 AU 数值验证 100% 存活
   （0.3 Myr），详见 design-notes/0011；
 - 墟带亮度档位：**已裁决** f=3×10⁻⁸ 基线档（觉醒事件保留为叙事杠杆）；
-- ε=18 锥摆几何下的食季频率与「每年 ~11 次」食频：重算进行中（继承值基于
-  旧 9° 构型，落地时随 sky_phenomena 更新）；
+- ε=18 锥摆几何下的食季频率：**已判决**（1500 地球年重算，`private/research/
+  2026-09-28-sky-recalc.md`）——全食 ~6 次/年（带 4–10，锥摆十年轮转）、全食最长
+  2.0 h/全程 2.45 h、食季间隔 ~48 d（每岁两季）、季内会合拍 3.24 d；连珠分级
+  15′/掩食/5′/双掩/双掩大连珠 = 2.1/4.1/6.4 年/2.7 次年/~1500 年；
 - 双珠视直径/星等：**已按终选架构（包 A）模板化**——韵珠近合 {{ (sky.satellite_cadence.angular_diameter_deg_near * 60) | round0 }}′/{{ sky.satellite_cadence.apparent_magnitude_full | round1 }}，
   守珠近合 {{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }}′/{{ sky.satellite_vigil.apparent_magnitude_full | round1 }}，会合周期 {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }}/{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }}/{{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 天；
 - 云量与台址气候：以重建后的气候产品为准（重建进行中）。
