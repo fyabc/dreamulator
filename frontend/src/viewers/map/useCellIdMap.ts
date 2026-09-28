@@ -83,21 +83,25 @@ export default function useCellIdMap({
 
     const DEG2RAD = Math.PI / 180
 
+    // Per-column lon trig, precomputed once (~4k entries) instead of two
+    // trig calls per pixel (8.4M at 4096×2048).
+    const cosLon = new Float64Array(width)
+    const sinLon = new Float64Array(width)
+    for (let px = 0; px < width; px++) {
+      const lonRad = ((px / (width - 1)) * 360 - 180) * DEG2RAD
+      cosLon[px] = Math.cos(lonRad)
+      sinLon[px] = Math.sin(lonRad)
+    }
+
     for (let py = 0; py < height; py++) {
       const latDeg = 90 - (py / (height - 1)) * 180
       const latRad = latDeg * DEG2RAD
       const cosLat = Math.cos(latRad)
       const sinLat = Math.sin(latRad)
 
+      const rowOff = py * width
       for (let px = 0; px < width; px++) {
-        const lonDeg = (px / (width - 1)) * 360 - 180
-        const lonRad = lonDeg * DEG2RAD
-
-        const qx = cosLat * Math.cos(lonRad)
-        const qy = sinLat
-        const qz = cosLat * Math.sin(lonRad)
-
-        map[py * width + px] = kdTree.nearest(qx, qy, qz)
+        map[rowOff + px] = kdTree.nearest(cosLat * cosLon[px], sinLat, cosLat * sinLon[px])
       }
     }
     mark('kd-tree-end')

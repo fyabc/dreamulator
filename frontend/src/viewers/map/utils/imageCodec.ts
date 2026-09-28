@@ -8,6 +8,7 @@
 
 import * as THREE from 'three'
 import { generateAdaptiveTerrainScale } from './colorScales'
+import { mark } from '../../../utils/perf'
 
 /**
  * Decode a 16-bit grayscale PNG Blob to Float32Array with normalised [0, 1] values.
@@ -25,22 +26,27 @@ import { generateAdaptiveTerrainScale } from './colorScales'
 export async function decodePngToFloat32(
   blob: Blob,
 ): Promise<{ data: Float32Array; width: number; height: number }> {
-  const bitmap = await createImageBitmap(blob)
-  const { width, height } = bitmap
+  mark('elev-decode-start')
+  try {
+    const bitmap = await createImageBitmap(blob)
+    const { width, height } = bitmap
 
-  const canvas = new OffscreenCanvas(width, height)
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  ctx.drawImage(bitmap, 0, 0)
-  const imageData = ctx.getImageData(0, 0, width, height)
-  bitmap.close()
+    const canvas = new OffscreenCanvas(width, height)
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+    ctx.drawImage(bitmap, 0, 0)
+    const imageData = ctx.getImageData(0, 0, width, height)
+    bitmap.close()
 
-  // Reconstruct 16-bit from R (high byte) and G (low byte)
-  const rgba = imageData.data
-  const floats = new Float32Array(width * height)
-  for (let i = 0; i < width * height; i++) {
-    floats[i] = (rgba[i * 4] * 256 + rgba[i * 4 + 1]) / 65535
+    // Reconstruct 16-bit from R (high byte) and G (low byte)
+    const rgba = imageData.data
+    const floats = new Float32Array(width * height)
+    for (let i = 0; i < width * height; i++) {
+      floats[i] = (rgba[i * 4] * 256 + rgba[i * 4 + 1]) / 65535
+    }
+    return { data: floats, width, height }
+  } finally {
+    mark('elev-decode-end')
   }
-  return { data: floats, width, height }
 }
 
 /**

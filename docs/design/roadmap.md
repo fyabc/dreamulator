@@ -157,7 +157,7 @@
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P2 | **太阳系参照天体 ✅（2026-09-21 建成）**（Mars / Moon / Venus / Titan **并入 earth root 作为额外 planet_ids**——earth 实为「现实世界数据锚」，一个锚世界多真实天体；ID 沿用 stellar.yaml 约定 `planet_*`/`satellite_*`；mesh 按数据精度 Moon 100k/Mars 10k/Venus 10k/Titan 3k；永不 build）：Mars = MOLA+MCD v6.1（全行星 Pn，OOD 门全域实锤）；Moon = LDEM+Diviner GCP（地方时分箱，Cn/Pn 无热带——唯一观测态例外、地表温契约案例）；Titan = TAM 水文 run（甲烷海 Po + Pn，bin=896 地球日时间契约极端案例，非水溶剂 MI 拒绝）；Venus = Magellan+VCD v2.3（热侧外推缺口活体演示 Ra-w）。共享机制 `import_solar_common.py` + `scripts/solar/`；UCC L4 压力测试层、GCM 非真值 provenance 随文件走。细节 → `private/plans/ucc-01-plan.md` 4d + `data/worlds/earth/design-notes/` | ✅ | ★★★ |
 | P3 | **UCC 天体区分度配套**（2026-09-21 登记）：① 文献调研（deep research，2026-09-21 已启动）——学界如何划分 Mars/Venus/Titan/Moon 气候（甲烷水文带/挥发分分区/环流区划/热环境分类），作 v2 溶剂/挥发分专属轴的参照目标；② 前端点击式显示天体 profile 声明 + globe 页天体选择栏显示当前天体 + 世界主页「地图」预览块删除（用户裁决，避免误导海洋配色）。裁决与候选方向 → `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
-| P2 | **前端加载速度 profile & optimization**（用户 2026-09-20 要求排入计划）：先 profile（大 mesh/月度文件/纹理加载路径），再按热点优化；关联评估 = `cvt_mesh.json`（实为 gzip JSON）是否统一 msgpack（大小/加载/一致性，先拟方案再动） | profile 1 天 + 优化另计 | ★★★ |
+| P2 | **前端加载速度 profile & optimization**（用户 2026-09-20 要求排入计划）：**profile + 优化轮 ①–④ ✅（2026-09-29，`feature/frontend-load-profile`）**——2D 页 voronoi gate（285→25 MB）、mesh/monthly/yearly/elevation ETag/304（重访 3.6 MB；手工 Content-Encoding 阻断 Chrome 缓存已改 application/gzip + worker gunzip 合流）、kd-tree 扁平数组重写 + 三消费点共享 + 三角函数预计算（4.3→3.6 s + 省第二棵树）、worker 几何 transferable + adjacency 死重清理（克隆 −0.9 s）；globe first-frame 17.1→14.4 s、堆 −38 MB。剩余大头 = cells 对象图（克隆 80%）归 P1 分离存储 + bake/WebGL init 懒化（候选 #5–#8 未做）。数据/判词/已否证方向 → `private/research/2026-09-29-fe-load-profile.md` | 优化轮 ✅；候选 #5–#8 另计 | ★★★ |
 | P3 | **nullschool 式粒子流可视化**（用户提议 2026-09-21）：GlobeViewer 风场/洋流从矢量箭头升级为粒子平流拖尾动画（参照 cambecc/earth MIT 开源客户端；其数据 = 公开 GFS/OSCAR/HYCOM，我们已有引擎风/流月度场对应物）；视频路线 = Blender P3c 管线或前端离线逐帧。细节 → `private/todos/today.md` 待办 6 | 前端 1–2 周 | ★★ |
 | P3 | **草案七转正 + Hycean 调研**（用户 2026-09-20，创作线）：① Hycean/烟灰行星 deep research → 知识库 astrobiology（起点 `private/chats/chat-Hycean世界生物进化前景.txt`）；② `alternative_solvent_world_drafts.md` 草案七（油水混合溶剂世界）转正式世界：MTE 生态层建模评估、亚极地油水混合层类 LUCA 起源 + 全球扩散适应推演、类真核革命推演、主星中英文命名（Nacrea 风格）、未定留白。细目单一事实源 → `private/todos/today.md` 待办 5 | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（陆地 = CHELSA/WorldClim 30″ 按 cell footprint 面积加权聚合，海洋维持 NCEP/GPCP 2.5°；消除「UCC 比 Beck 糊」的分辨率差、与 Beck 同输入使发散纯归因于规则）：须在 LGM 分支之前做（CHELSA 导入管线两处复用）。评估 → `private/plans/ucc-01-plan.md` 4e 附注 | 1–2 天 | ★★★ |
@@ -640,9 +640,10 @@
    全仓搬移。规模热点：terrain_synthesizer 2719 行 / climate_simulator 2677 行 /
    tectonic_simulator 2024 行。归 M2 必要切片 + 远期。
 6. **spatialReference.ts ~5.4 万行生成观测数据内嵌**（FE-01，外部审计 2026-09-17）—
-   观测数组与采样代码耦合、多个显示组件直接导入；性能影响未实测（不先宣称瓶颈）。
-   修法：先测 bundle/加载耗时，再决定资产化 + 按需加载（数据保留版本/网格/来源
-   元信息）。归 M3。
+   观测数组与采样代码耦合、多个显示组件直接导入。**已实测（2026-09-29 profile）**：
+   独立成 useUccLayer chunk 2.1 MB（gzip 540 KB），map/globe 页必载非按需。
+   修法：资产化 + 按需加载（数据保留版本/网格/来源元信息），4 个直接导入点改造。
+   归 M3。实测数 → `private/research/2026-09-29-fe-load-profile.md` §四。
 7. **API/静态导出/前端三件套手工同步、无一致性夹具**（CONTRACT-01，外部审计
    2026-09-17）— 新增端点/字段需三处手抄（CLAUDE.md 已有纪律但无测试兜底）；
    时间与 geometry 标识跨层使用无格式版本。修法：小型公共结果契约 + 格式版本 +

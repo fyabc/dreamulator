@@ -209,7 +209,7 @@ export interface CVTMesh {
   jitter_sigma?: number
   lloyd_iterations?: number
   cells: VoronoiCell[]
-  adjacency: Record<string, number[]>
+  /** Neighbor adjacency is dropped in adaptCvtMesh — no frontend consumer. */
   vertices: CVTVertex[]
   regions: CVTRegion[]
 }
