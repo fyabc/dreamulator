@@ -68,6 +68,7 @@ export default function LayerDocuments({
 }: LayerDocumentsProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [navOpen, setNavOpen] = useState(false)
+  const [showSuperseded, setShowSuperseded] = useState(false)
   const { t } = useTranslation('worlds')
 
   // Selected document is persisted in the URL (?doc=<filename>) so a refresh
@@ -93,8 +94,13 @@ export default function LayerDocuments({
     if (docParam && documents?.some((d: any) => d.filename === docParam)) return docParam
     if (!documents || documents.length === 0) return null
     if (documents.some((d: any) => d.filename === '_overview.md')) return '_overview.md'
+    // Design notes: open the README index by default
+    if (isDesignNotes) {
+      const readme = documents.find((d: any) => d.filename.toLowerCase() === 'readme.md')
+      if (readme) return readme.filename
+    }
     return documents[0].filename
-  }, [docParam, documents])
+  }, [docParam, documents, isDesignNotes])
 
   const selectDoc = useCallback(
     (filename: string) => {
@@ -136,6 +142,56 @@ export default function LayerDocuments({
       docs: groups[key],
     }))
   }, [documents])
+
+  // Design notes get status-aware grouping instead of type categories:
+  // README pinned first, active notes by number, superseded/deprecated
+  // collapsed at the bottom (server already sorts by filename).
+  const designGroups = useMemo(() => {
+    if (!isDesignNotes || !documents?.length) return null
+    const isHistorical = (s?: string) => /^(superseded|deprecated)/i.test(s || '')
+    const isReadme = (d: any) => d.filename.toLowerCase() === 'readme.md'
+    return {
+      readme: documents.filter((d: any) => isReadme(d)),
+      active: documents.filter((d: any) => !isReadme(d) && !isHistorical(d.status)),
+      superseded: documents.filter((d: any) => !isReadme(d) && isHistorical(d.status)),
+    }
+  }, [isDesignNotes, documents])
+
+  const statusBadge = useCallback(
+    (status?: string) => {
+      if (!status) return null
+      const s = status.toLowerCase()
+      let cls = ''
+      let label = ''
+      if (s.startsWith('certified-current') || s === 'current') {
+        cls = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+        label = t('doc.statusCurrent')
+      } else if (s.startsWith('accepted')) {
+        cls = 'bg-teal-500/15 text-teal-300 border-teal-500/30'
+        label = t('doc.statusAccepted')
+      } else if (s.startsWith('proposed')) {
+        cls = 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+        label = t('doc.statusProposed')
+      } else if (s.startsWith('superseded')) {
+        cls = 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+        label = t('doc.statusSuperseded')
+      } else if (s.startsWith('deprecated')) {
+        cls = 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+        label = t('doc.statusDeprecated')
+      } else {
+        return null
+      }
+      return (
+        <span
+          title={status}
+          className={`ml-1.5 inline-block px-1.5 rounded border text-[10px] leading-4 align-middle whitespace-nowrap ${cls}`}
+        >
+          {label}
+        </span>
+      )
+    },
+    [t],
+  )
 
   // Handle cross-reference clicks (links like `filename.md`)
   const handleLinkClick = useCallback(
@@ -198,29 +254,102 @@ export default function LayerDocuments({
             </button>
           </div>
 
-          {grouped.map((group) => (
-            <div key={group.key}>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
-                {group.label}
-              </h4>
-              <ul className="space-y-0.5">
-                {group.docs.map((doc: any) => (
-                  <li key={doc.filename}>
+          {isDesignNotes && designGroups ? (
+            <>
+              {designGroups.readme.map((doc: any) => (
+                <ul key={doc.filename} className="space-y-0.5">
+                  <li>
                     <button
                       onClick={() => { selectDoc(doc.filename); setNavOpen(false) }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                         effectiveDoc === doc.filename
                           ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
-                          : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
+                          : 'text-gray-300 hover:text-gray-100 hover:bg-space-surface/60'
                       }`}
                     >
                       {doc.title || doc.filename}
                     </button>
                   </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+                </ul>
+              ))}
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
+                  {t('doc.decisionsSection')}
+                </h4>
+                <ul className="space-y-0.5">
+                  {designGroups.active.map((doc: any) => (
+                    <li key={doc.filename}>
+                      <button
+                        onClick={() => { selectDoc(doc.filename); setNavOpen(false) }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                          effectiveDoc === doc.filename
+                            ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
+                            : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
+                        }`}
+                      >
+                        {doc.title || doc.filename}
+                        {statusBadge(doc.status)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {designGroups.superseded.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowSuperseded((v) => !v)}
+                    className="w-full text-left text-xs font-semibold text-gray-500 uppercase
+                      tracking-wide mb-1.5 px-1 hover:text-gray-300 transition-colors"
+                  >
+                    {showSuperseded ? '▾' : '▸'} {t('doc.supersededSection')} · {designGroups.superseded.length}
+                  </button>
+                  {showSuperseded && (
+                    <ul className="space-y-0.5">
+                      {designGroups.superseded.map((doc: any) => (
+                        <li key={doc.filename}>
+                          <button
+                            onClick={() => { selectDoc(doc.filename); setNavOpen(false) }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                              effectiveDoc === doc.filename
+                                ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
+                                : 'text-gray-500 hover:text-gray-300 hover:bg-space-surface/60'
+                            }`}
+                          >
+                            {doc.title || doc.filename}
+                            {statusBadge(doc.status)}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            grouped.map((group) => (
+              <div key={group.key}>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 px-1">
+                  {group.label}
+                </h4>
+                <ul className="space-y-0.5">
+                  {group.docs.map((doc: any) => (
+                    <li key={doc.filename}>
+                      <button
+                        onClick={() => { selectDoc(doc.filename); setNavOpen(false) }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
+                          effectiveDoc === doc.filename
+                            ? 'bg-neon-cyan/10 text-neon-cyan border-l-2 border-neon-cyan'
+                            : 'text-gray-400 hover:text-gray-200 hover:bg-space-surface/60'
+                        }`}
+                      >
+                        {doc.title || doc.filename}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
         </nav>
 
         {/* Content */}

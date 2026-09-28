@@ -15,7 +15,7 @@ checked_against:
 > （任意初相 ~90 yr 瓦解）。现行机制：**双源泵浦** = 恒星四极矩本底（~0.004–0.006）
 > + 双单体逆行捕获卫（韵珠、守珠）长期摄动，使 Nacrea e 受迫振荡（当代段认证带
 > rms 0.0055 / max 0.0123，潮汐加热带均值 0.76 W/m²，k₂/Q=1×10⁻³）。权威设定见
-> `0009-satellite-architecture.md` 重构版。行星链（Aegis–Boreal–Glacis 1:2:4）
+> `0009-satellite-architecture.md`。行星链（Aegis–Boreal–Glacis 1:2:4）
 > 相关内容仍有效（β+ 安静模态 10 Myr 有界验证）。
 
 > Aegis 偏心率（0.005→0.03）与 Nacrea 偏心率（0.002→0.0019）已被 [0007](0007-aegis-seasonal-eccentricity.md) 取代。

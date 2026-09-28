@@ -10,8 +10,8 @@ Nacrea 是一颗**外侧邻近为双单体逆行捕获卫（韵珠、守珠）�
 与地球既相似（有轨道调制）又有本质不同：**天文强迫弱而快**（近日点大年 ~13 yr、
 倾角锥摆 ~10 yr），**内生强迫强而慢**（火山-CO₂ 万年脉冲）——冰期旋回的主驱动
 是内生的，不是天文的。本文档列举各强迫源的机制、时标、量级与当前引擎建模状态，
-作为未来气候变率建模的世界设定依据（2026-09-28 重构版：数值随 β+ 链态与
-新卫星构型更新，判决依据 design-notes/0009 重构版与附录 §9）。
+作为未来气候变率建模的世界设定依据（数值对应 β+ 链态与现行卫星构型，
+判决依据 design-notes/0009 与附录 §9）。
 
 基准日照：Ignis（{{ entities.star_ignis.luminosity_sol }} L☉）@ {{ entities.planet_aegis.semi_major_axis_au }} AU → **{{ entities.satellite_nacrea.instellation_earth_ratio | round2 }} S⊕**（方案2 校准后位于本系统
 保守宜居带几何中心附近；参见 `habitable_zones.yaml`）。
