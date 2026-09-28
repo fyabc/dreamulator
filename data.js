@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790519104497,
+  "lastUpdate": 1790621930910,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -5839,6 +5839,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00017161918933138935",
             "extra": "mean: 5.185828799994852 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "897969de69cb131bb2d54e18e577107b46f4b298",
+          "message": "chore: bump version 0.37.0 → 0.38.0\n\nCHANGELOG 0.38.0：GW6 湿槽默认开、气候速度两轮收口（nacrea −65%）、\nnacrea 卫星架构重构落地（E3 纪元态 + 墟带 + 天空终版）、设计笔记状态分组 UI、\nD1/B4 修复、恒星信息栏聚焦按钮。roadmap 快照同步 v0.38.0。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-09-29T02:54:48+08:00",
+          "tree_id": "25b39f054861605fdf323c8b6f1413b865468c61",
+          "url": "https://github.com/fyabc/dreamulator/commit/897969de69cb131bb2d54e18e577107b46f4b298"
+        },
+        "date": 1790621929494,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.1645502175559762,
+            "unit": "iter/sec",
+            "range": "stddev: 0.20018440921119657",
+            "extra": "mean: 6.077172153599998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.202887497884713,
+            "unit": "iter/sec",
+            "range": "stddev: 0.025717685763800215",
+            "extra": "mean: 312.21827200000973 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4880687023463028,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0726863802619302",
+            "extra": "mean: 672.0119833333342 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 946.4072299437425,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009539473607033905",
+            "extra": "mean: 1.0566276000020025 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.36590335460454,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000971480879422966",
+            "extra": "mean: 5.0925337999956355 msec\nrounds: 5"
           }
         ]
       }
