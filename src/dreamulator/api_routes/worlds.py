@@ -338,6 +338,8 @@ def _list_md_documents(directory: Path | None) -> list[dict[str, Any]]:
                 "type": fm.get("type", ""),
                 "period": fm.get("period", ""),
                 "tags": fm.get("tags", []),
+                "status": str(fm.get("status", "") or ""),
+                "date": str(fm.get("date", "") or ""),
             }
         )
     return documents

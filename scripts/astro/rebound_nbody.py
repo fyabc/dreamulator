@@ -36,7 +36,13 @@ therefore IAS15-throughput-bound (~tens of kyr per hour, benchmark below).
 J2 & tides (``--j2`` / ``--tides``): both effects are secular (74–1879 yr vs
 orbital 3–13 d), so they enter as exact analytic kicks between ≤1-yr IAS15
 point-mass chunks (Lie splitting) — see the operator functions for the rates,
-constants and provenance, and for why ``additional_forces`` is not used.
+constants and provenance, and for why ``additional_forces`` is not used.  The
+J2 kick carries BOTH the nodal and the apsidal rate in vector form, so the
+satellite orbital planes precess around the Laplace-surface balance (J2 half
+from the kick, stellar-torque half from the point-mass N-body) — the
+2026-09-27 satellite-rework upgrade; the earlier apsidal-only variant left the
+planes frozen against J2.  ``run_landed`` records i_eq / i_ecl / Ω per satellite
+as standard diagnostics next to a/e/inc.
 
 Modes::
 
@@ -83,14 +89,17 @@ _ANY_E_MAX = 0.9
 _J2_NOMINAL = 0.008
 
 # Constant-Q tidal dissipation (Murray & Dermott 1999 ch. 4).  Provenance:
-#   Aegis  — gas-giant analogue: k2p = 0.35 (Jupiter 0.379), Qp = 1e5 (measured
-#            lower bound; plausible range 1e4–1e6 → τ_e uncertain by ×10).
-#   Nacrea — landed setting: k2 = 0.30, Q = 100 (physical_params.md, Earth values).
+#   Aegis  — landed weak-dissipation ruling P-B: k2/Q = 7e-8 (k2≈0.35, Q≈5e6;
+#            stellar.yaml `k2_over_q`).  The satellite-e-damping budget is
+#            dominated by the satellite-raised term by ~5 orders of magnitude,
+#            so this constant is a rounding error on every verdict here.
+#   Nacrea — landed setting: k2 = 0.30, Q = 300 (stellar.yaml `k2_over_q` = 1e-3;
+#            "non-resonant ocean + narrow shelf" ruling 2026-09-28).
 #   Cadence/Vigil — icy moons: k2 = 0.25, Q = 100 (Europa/Enceladus-like;
 #            NOT in the yaml — assumption to revisit at adjudication).
-_K2Q_AEGIS = 0.35 / 1.0e5
+_K2Q_AEGIS = 7.0e-8
 _SAT_K2Q = {
-    "satellite_nacrea": 0.30 / 100.0,
+    "satellite_nacrea": 1.0e-3,
     "satellite_cadence": 0.25 / 100.0,
     "satellite_vigil": 0.25 / 100.0,
 }
@@ -185,6 +194,8 @@ def build_landed_system(
 
     aegis = sim.particles[idx["planet_aegis"]]
     for bid in _SATS:
+        if bid not in bodies:
+            continue  # single-pearl variants (0009 appendix §6.7) omit a satellite
         _add_body(sim, bodies[bid], primary=aegis)
         idx[bid] = len(sim.particles) - 1
 
@@ -323,21 +334,28 @@ def sample_state(sim: rebound.Simulation, idx: dict[str, int]) -> dict:
     phi_p = (lam["planet_aegis"] - 3 * lam["planet_boreal"] + 2 * lam["planet_glacis"]) % (
         2 * np.pi
     )
-    phi_s = (
-        lam["satellite_nacrea"] - 3 * lam["satellite_cadence"] + 2 * lam["satellite_vigil"]
-    ) % (2 * np.pi)
+    if all(s in lam for s in _SATS):
+        phi_s = (
+            lam["satellite_nacrea"] - 3 * lam["satellite_cadence"] + 2 * lam["satellite_vigil"]
+        ) % (2 * np.pi)
+    else:
+        phi_s = float("nan")  # single-pearl variant: chain angle undefined
 
     o_a = _orb(sim, idx, "planet_aegis")
     m_ratio = sim.particles[idx["planet_aegis"]].m / (3.0 * sim.particles[idx[_STAR]].m)
     r_hill = o_a.a * (1.0 - o_a.e) * m_ratio ** (1.0 / 3.0)
-    o_v = _orb(sim, idx, "satellite_vigil")
+    if "satellite_vigil" in idx:
+        o_v = _orb(sim, idx, "satellite_vigil")
+        v_rh, v_e = o_v.a / r_hill, o_v.e
+    else:
+        v_rh, v_e = float("nan"), float("nan")
 
     return {
         "state": state,
         "phi_planets": phi_p,
         "phi_sats": phi_s,
-        "vigil_rh_ratio": o_v.a / r_hill,
-        "vigil_e": o_v.e,
+        "vigil_rh_ratio": v_rh,
+        "vigil_e": v_e,
     }
 
 
@@ -360,6 +378,8 @@ def _periods_yr(sysdata: dict, with_extras: bool) -> list[float]:
         order += list(_EXTRAS)
     out = []
     for bid in order:
+        if bid not in bodies:
+            continue  # single-pearl variants omit a satellite
         b = bodies[bid]
         m_central = star_m if b["parent"] == "star_ignis" else bodies["planet_aegis"]["m_earth"]
         m_central_msun = m_central if b["parent"] == "star_ignis" else m_central * MEARTH_MSUN
@@ -396,6 +416,12 @@ def report(sim: rebound.Simulation, idx: dict[str, int], label: str) -> None:
 # analytic kicks — is cleaner AND verifiable against closed-form rates.
 
 
+def _rot_axis(vec: np.ndarray, axis: np.ndarray, theta: float) -> np.ndarray:
+    """Rodrigues rotation of *vec* around unit *axis* by *theta* (right-hand)."""
+    c, s = np.cos(theta), np.sin(theta)
+    return vec * c + np.cross(axis, vec) * s + axis * np.dot(axis, vec) * (1.0 - c)
+
+
 def _apply_j2_secular(
     sim: rebound.Simulation,
     idx: dict[str, int],
@@ -404,18 +430,31 @@ def _apply_j2_secular(
     dt: float,
     eq_normal: tuple[float, float, float] | None = None,
 ) -> None:
-    """Advance each satellite's argument of periapsis by the secular J2 rate.
+    """Advance each satellite's node AND periapsis by the secular J2 rates.
 
-    dϖ/dt = (3/4)·J2·(R_p/a)²·n·(4 − 5 sin²i_eq − 2 cos i_eq)·(1−e²)⁻²
-    (Vallado, combined dΩ/dt + dω/dt), with i_eq the inclination relative to
-    the primary's EQUATOR.  Equatorial prograde (i_eq=0) recovers the classic
-    (3/2)J2(R/a)²n; equatorial retrograde (i_eq≈180°) precesses ~3× faster in
-    the same inertial sense.  *eq_normal* None ⇒ assume equatorial prograde.
-    (a, e, i, M) are preserved; the point-mass orbital energy depends on a
-    alone, so dE/E stays a valid integrator-health check (up to the barycentric
-    cross-term bookkeeping noted in run_landed).
+    Vallado rates, with i_eq the inclination to the primary's EQUATOR
+    (p = a(1−e²))::
+
+        dΩ/dt = −(3/2)·J2·(R_p/a)²·n·cos i_eq·(1−e²)⁻²      (node, about ŝ)
+        dω/dt = +(3/4)·J2·(R_p/a)²·n·(4 − 5 sin²i_eq)·(1−e²)⁻²  (periapsis, about ĥ)
+
+    Applied as rigid rotations of the planet-relative state vector: first about
+    the equatorial normal ŝ (node), then about the new orbit normal ĥ
+    (periapsis).  This is the vector form of the element kicks — unlike the
+    pre-rework apsidal-only version (which folded dΩ into dω and left the plane
+    frozen), the orbital plane now actually precesses, so the J2 half of the
+    Laplace-surface torque balance is captured (the stellar half comes from the
+    point-mass N-body).  Total apsidal rate dϖ = dΩ + dω is unchanged:
+    equatorial prograde recovers (3/2)J2(R/a)²n, equatorial retrograde ~3×
+    faster in the same inertial sense.  (a, e, |i_eq|, M-phase are preserved by
+    construction; validated against the secular Laplace-cone RK4 in
+    private/research/2026-09-27-*prescreen*.)
     """
+    if eq_normal is None:
+        raise ValueError("eq_normal is required (J2 nodal torque needs the spin axis)")
     aegis = sim.particles[idx["planet_aegis"]]
+    k_eq = np.asarray(eq_normal, dtype=float)
+    k_eq = k_eq / np.linalg.norm(k_eq)
     for bid in _SATS:
         if bid not in idx:
             continue  # subsystem tests may carry fewer satellites
@@ -425,29 +464,38 @@ def _apply_j2_secular(
         if not np.isfinite(o.a) or o.a <= 0.0 or o.e >= 1.0:
             continue
         n = 2.0 * np.pi / o.P
-        if eq_normal is None:
-            fac = 2.0  # 4 − 5·0 − 2·1 (equatorial prograde)
-        else:
-            h = np.array(
-                [
-                    np.sin(o.inc) * np.sin(o.Omega),
-                    -np.sin(o.inc) * np.cos(o.Omega),
-                    np.cos(o.inc),
-                ]
-            )
-            cos_ieq = float(np.clip(np.dot(h, np.asarray(eq_normal)), -1.0, 1.0))
-            fac = 4.0 - 5.0 * (1.0 - cos_ieq**2) - 2.0 * cos_ieq
-        dvarpi = 0.75 * j2 * (r_prim_au / o.a) ** 2 * n * dt * fac / (1.0 - o.e**2) ** 2
+        h_hat = np.array(
+            [
+                np.sin(o.inc) * np.sin(o.Omega),
+                -np.sin(o.inc) * np.cos(o.Omega),
+                np.cos(o.inc),
+            ]
+        )
+        cos_ieq = float(np.clip(np.dot(h_hat, k_eq), -1.0, 1.0))
+        sin2_ieq = 1.0 - cos_ieq**2
+        fac = j2 * (r_prim_au / o.a) ** 2 * n * dt / (1.0 - o.e**2) ** 2
+        d_node = -1.5 * fac * cos_ieq
+        d_peri = 0.75 * fac * (4.0 - 5.0 * sin2_ieq)
+
+        r_vec = np.array([p.x - aegis.x, p.y - aegis.y, p.z - aegis.z])
+        v_vec = np.array([p.vx - aegis.vx, p.vy - aegis.vy, p.vz - aegis.vz])
+        r_vec = _rot_axis(r_vec, k_eq, d_node)
+        v_vec = _rot_axis(v_vec, k_eq, d_node)
+        h_new = np.cross(r_vec, v_vec)
+        h_new /= np.linalg.norm(h_new)
+        r_vec = _rot_axis(r_vec, h_new, d_peri)
+        v_vec = _rot_axis(v_vec, h_new, d_peri)
+        # rebound rejects primary + cartesian together → write the absolute
+        # state (Aegis state + rotated planet-relative vector).
         sim.particles[i] = rebound.Particle(
             simulation=sim,
-            primary=aegis,
             m=p.m,
-            a=o.a,
-            e=o.e,
-            inc=o.inc,
-            Omega=o.Omega,
-            omega=o.omega + dvarpi,
-            M=o.M,
+            x=aegis.x + float(r_vec[0]),
+            y=aegis.y + float(r_vec[1]),
+            z=aegis.z + float(r_vec[2]),
+            vx=aegis.vx + float(v_vec[0]),
+            vy=aegis.vy + float(v_vec[1]),
+            vz=aegis.vz + float(v_vec[2]),
         )
 
 
@@ -553,7 +601,11 @@ def run_landed(
         sim.init_megno()  # REBOUND 5.x API (was add_megno in 3.x/4.x)
 
     r_prim_au = sysdata["bodies"]["planet_aegis"]["radius_km"] / _AU_KM
-    sat_radii_au = {bid: sysdata["bodies"][bid]["radius_km"] / _AU_KM for bid in _SATS}
+    sat_radii_au = {
+        bid: sysdata["bodies"][bid]["radius_km"] / _AU_KM
+        for bid in _SATS
+        if bid in sysdata["bodies"]  # single-pearl variants omit a satellite
+    }
     # Aegis equator normal in the sim frame: axial tilt from yaml, node at Ω=0
     # (the landed satellites all sit at inc=tilt, Ω=0 — i.e. in the equator).
     _tilt = np.radians(sysdata["bodies"]["planet_aegis"]["axial_tilt_deg"])
@@ -576,8 +628,9 @@ def run_landed(
 
     t_s: list[float] = []
     series: dict[str, dict[str, list[float]]] = {
-        bid: {"a": [], "e": [], "inc": []} for bid in idx if bid != _STAR
+        bid: {"a": [], "e": [], "inc": [], "ieq": [], "Om": []} for bid in idx if bid != _STAR
     }
+    eq_arr = np.asarray(eq_normal, dtype=float)
     phi_p_s: list[float] = []
     phi_s_s: list[float] = []
     rh_s: list[float] = []
@@ -610,6 +663,20 @@ def run_landed(
             series[bid]["a"].append(st[0])
             series[bid]["e"].append(st[1])
             series[bid]["inc"].append(st[2])
+            series[bid]["Om"].append(st[3])
+            if bid in _SATS:
+                ch = np.array(
+                    [
+                        np.sin(st[2]) * np.sin(st[3]),
+                        -np.sin(st[2]) * np.cos(st[3]),
+                        np.cos(st[2]),
+                    ]
+                )
+                series[bid]["ieq"].append(
+                    float(np.degrees(np.arccos(np.clip(np.dot(ch, eq_arr), -1.0, 1.0))))
+                )
+            else:
+                series[bid]["ieq"].append(float("nan"))
         phi_p_s.append(s["phi_planets"])
         phi_s_s.append(s["phi_sats"])
         rh_s.append(v_rh)
@@ -620,12 +687,11 @@ def run_landed(
             megno_s.append(sim.megno())
         de_s.append((sim.energy() - e0) / abs(e0))
 
+        has_vigil = "satellite_vigil" in idx
         broken = (
-            not np.isfinite(v_e)
-            or not np.isfinite(any_e_max)
-            or v_e > _VIGIL_E_MAX
-            or v_rh > _VIGIL_RH_MAX
+            not np.isfinite(any_e_max)
             or any_e_max > _ANY_E_MAX
+            or (has_vigil and (not np.isfinite(v_e) or v_e > _VIGIL_E_MAX or v_rh > _VIGIL_RH_MAX))
         )
         if broken:
             verdict = (
@@ -658,6 +724,25 @@ def run_landed(
         print(
             f"{bid:18s} {e_init:8.4f} {e_arr.min():8.4f} {e_arr.max():8.4f} "
             f"{100.0 * (a_arr[-1] / a_arr[0] - 1.0):+10.4f}"
+        )
+
+    print("\nSatellite e / plane diagnostics (all recorded samples):")
+    for bid in _SATS:
+        if bid not in series:
+            continue
+        e_arr = np.asarray(series[bid]["e"])
+        ieq_arr = np.asarray(series[bid]["ieq"])
+        iecl_arr = np.degrees(np.asarray(series[bid]["inc"]))
+        print(
+            f"  {bid}: e rms={np.sqrt(float(np.mean(e_arr**2))):.4f} "
+            f"p5={np.percentile(e_arr, 5):.4f} p50={np.percentile(e_arr, 50):.4f} "
+            f"p95={np.percentile(e_arr, 95):.4f} max={e_arr.max():.4f}"
+        )
+        print(
+            f"    i_eq  {np.nanmin(ieq_arr):6.1f}–{np.nanmax(ieq_arr):6.1f}° "
+            f"(mean {np.nanmean(ieq_arr):6.1f})   "
+            f"i_ecl {np.nanmin(iecl_arr):6.1f}–{np.nanmax(iecl_arr):6.1f}° "
+            f"(mean {np.nanmean(iecl_arr):6.1f})"
         )
 
     for label, arr in (("planets", phi_p_s), ("satellites", phi_s_s)):
@@ -767,9 +852,15 @@ def main() -> None:
     parser.add_argument(
         "--out", default="private/tmp/rebound_landed.npz", help="npz output for the landed run"
     )
+    parser.add_argument(
+        "--yaml",
+        type=Path,
+        default=None,
+        help="stellar.yaml variant to read (default: the landed nacrea yaml)",
+    )
     args = parser.parse_args()
 
-    sysdata = load_system()
+    sysdata = load_system(args.yaml)
     if args.baseline:
         run_baseline(sysdata)
         return

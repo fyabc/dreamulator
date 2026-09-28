@@ -170,7 +170,14 @@
     "toc": "目录",
     "selectDoc": "选择文档",
     "docToc": "文档目录",
-    "selectLeftDoc": "选择左侧文档"
+    "selectLeftDoc": "选择左侧文档",
+    "decisionsSection": "决策记录",
+    "supersededSection": "历史笔记（被取代）",
+    "statusCurrent": "现行",
+    "statusAccepted": "已接受",
+    "statusProposed": "提案",
+    "statusSuperseded": "被取代",
+    "statusDeprecated": "已废弃"
   },
   "narrate": {
     "generate": "生成叙述",

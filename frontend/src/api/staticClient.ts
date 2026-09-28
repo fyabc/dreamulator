@@ -14,6 +14,8 @@ interface DocumentMeta {
   type: string
   period?: string
   tags?: string[]
+  status?: string
+  date?: string
 }
 
 // Vite replaces BASE_URL at build time with the configured base path

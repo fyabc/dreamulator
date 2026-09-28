@@ -170,7 +170,14 @@
     "toc": "Contents",
     "selectDoc": "Select document",
     "docToc": "Document contents",
-    "selectLeftDoc": "Select a document on the left"
+    "selectLeftDoc": "Select a document on the left",
+    "decisionsSection": "Decision records",
+    "supersededSection": "Historical notes (superseded)",
+    "statusCurrent": "Current",
+    "statusAccepted": "Accepted",
+    "statusProposed": "Proposed",
+    "statusSuperseded": "Superseded",
+    "statusDeprecated": "Deprecated"
   },
   "narrate": {
     "generate": "Generate narration",
