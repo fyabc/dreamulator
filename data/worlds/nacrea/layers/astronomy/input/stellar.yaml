@@ -201,7 +201,7 @@ orbits:
   # ⚠ 认证实现要素：改动任何字段前必须重跑认证（文件头命令）。
   - body_id: satellite_cadence
     parent_id: planet_aegis
-    semi_major_axis_au: 0.0078845945   # ~1,179,500 km ≈ 0.242 r_H；P≈6.54 d
+    semi_major_axis_au: 0.0078845945   # ~1,179,500 km ≈ 0.252 r_H；P≈6.54 d
     eccentricity: 0.01675059
     inclination_deg: 168.821896
     longitude_ascending_node_deg: 290.545652
