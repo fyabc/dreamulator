@@ -147,7 +147,7 @@ def test_list_endpoint_returns_metadata_only(client: TestClient) -> None:
     docs = resp.json()
     assert {d["filename"] for d in docs} == {"sample.md", "plain.md"}
     for d in docs:
-        assert set(d) == {"filename", "title", "type", "period", "tags"}
+        assert set(d) == {"filename", "title", "type", "period", "tags", "status", "date"}
 
 
 def test_invalid_layer_returns_400(client: TestClient) -> None:
