@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,8 @@ from dreamulator.world_manager import WorldManager
 from ..map.manager import MapManager
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from dreamulator.map.models import RasterLayerMeta, VectorLayerMeta
 
 router = APIRouter(prefix="/api/worlds", tags=["maps"])
@@ -55,6 +57,38 @@ def _get_map_manager(world_name: str, branch: str | None = None) -> MapManager:
     return MapManager(world_dir, branch)
 
 
+def _weak_etag(path: Path) -> str:
+    """Weak ETag from size + mtime.
+
+    The large map artifacts are deterministic build outputs — a stat-based
+    validator is exact for them and avoids hashing tens of MB per request.
+    """
+    stat = path.stat()
+    return f'W/"{stat.st_size:x}-{stat.st_mtime_ns:x}"'
+
+
+def _file_response(
+    request: Request,
+    path: Path,
+    media_type: str,
+    extra_headers: dict[str, str] | None = None,
+) -> Response:
+    """Stream *path* with ETag revalidation (``If-None-Match`` → 304).
+
+    ``Cache-Control: no-cache`` makes the browser revalidate once per load —
+    unchanged files answer 304 with zero body, so page revisits stop
+    re-transferring ~60 MB of mesh/elevation/climate data. The 304 check
+    runs before the file is read, short-circuiting disk I/O as well.
+    """
+    etag = _weak_etag(path)
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if extra_headers:
+        headers.update(extra_headers)
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=path.read_bytes(), media_type=media_type, headers=headers)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -88,6 +122,7 @@ def get_map_meta(
 def get_elevation(
     world_name: str,
     planet_id: str,
+    request: Request,
     branch: str | None = None,
 ) -> Response:
     """Get elevation heightmap as 16-bit PNG."""
@@ -98,8 +133,7 @@ def get_elevation(
     png_path = map_dir / "elevation.png"
     if not png_path.exists():
         raise HTTPException(status_code=404, detail=f"No elevation data for '{planet_id}'")
-    data = png_path.read_bytes()
-    return Response(content=data, media_type="image/png")
+    return _file_response(request, png_path, "image/png")
 
 
 @router.get("/{world_name}/maps/{planet_id}/voronoi")
@@ -144,6 +178,7 @@ def get_features(
 def get_cvt_mesh(
     world_name: str,
     planet_id: str,
+    request: Request,
     branch: str | None = None,
     fmt: str = "json",
 ) -> Any:
@@ -153,9 +188,10 @@ def get_cvt_mesh(
         fmt: ``"json"`` (default) or ``"msgpack"`` — response encoding.
 
     The canonical on-disk format is gzip-framed MessagePack, streamed back
-    byte-for-byte with ``Content-Encoding: gzip`` (the browser decompresses
-    natively) — zero server-side parse.  Legacy gzip-JSON / plain-JSON files
-    are decoded and re-encoded; raw JSON text is never shipped as msgpack.
+    byte-for-byte as ``application/gzip`` (the MessagePack worker gunzips
+    client-side, same as the static site's mesh blobs) — zero server-side
+    parse.  Legacy gzip-JSON / plain-JSON files are decoded and re-encoded;
+    raw JSON text is never shipped as msgpack.
     """
     mgr = _get_map_manager(world_name, branch)
     map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
@@ -170,6 +206,14 @@ def get_cvt_mesh(
             status_code=404,
             detail=f"No CVT mesh data for '{planet_id}'. Run terrain generation first.",
         )
+
+    # Revalidation check runs before the file is read, so revisits skip the
+    # disk read AND the format sniff below (which decompresses the entire
+    # gzip payload just to peek at one byte).
+    etag = _weak_etag(mesh_file)
+    cache_headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if fmt == "msgpack" and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
 
     raw = mesh_file.read_bytes()
     import gzip
@@ -191,15 +235,21 @@ def get_cvt_mesh(
                 content=msgpack.packb(decode_mesh_bytes(raw)),
                 media_type="application/x-msgpack",
             )
-        # Canonical file: stream the stored bytes untouched.  gzip framing is
-        # declared via Content-Encoding so the browser decompresses it for us.
+        # Canonical file: stream the stored gzip bytes untouched, declared as
+        # application/gzip WITHOUT Content-Encoding.  A hand-declared
+        # Content-Encoding makes Chrome refuse to reuse the cache entry
+        # (measured 2026-09-29: ETag revalidation never hits), so the worker
+        # gunzips via DecompressionStream instead — same path the static
+        # site already uses for its cvt_mesh.msgpack.gz blobs.
         if raw[:2] == b"\x1f\x8b":
             return Response(
                 content=raw,
-                media_type="application/x-msgpack",
-                headers={"Content-Encoding": "gzip"},
+                media_type="application/gzip",
+                headers=cache_headers,
             )
-        return Response(content=raw, media_type="application/x-msgpack")
+        return Response(
+            content=raw, media_type="application/x-msgpack", headers=cache_headers
+        )
 
     return decode_mesh_bytes(raw)
 
@@ -208,6 +258,7 @@ def get_cvt_mesh(
 def get_climate_monthly(
     world_name: str,
     planet_id: str,
+    request: Request,
     branch: str | None = None,
 ) -> Response:
     """Get the monthly climate data (Phase 4) as MessagePack.
@@ -227,16 +278,14 @@ def get_climate_monthly(
             detail=f"No monthly climate data for '{planet_id}'. Run the climate engine first.",
         )
 
-    return Response(
-        content=monthly_file.read_bytes(),
-        media_type="application/x-msgpack",
-    )
+    return _file_response(request, monthly_file, "application/x-msgpack")
 
 
 @router.get("/{world_name}/maps/{planet_id}/climate-yearly")
 def get_climate_yearly(
     world_name: str,
     planet_id: str,
+    request: Request,
     branch: str | None = None,
 ) -> Response:
     """Get the yearly climate descriptors (UCC-01) as MessagePack.
@@ -256,10 +305,7 @@ def get_climate_yearly(
             detail=f"No yearly climate data for '{planet_id}'. Run the climate engine first.",
         )
 
-    return Response(
-        content=yearly_file.read_bytes(),
-        media_type="application/x-msgpack",
-    )
+    return _file_response(request, yearly_file, "application/x-msgpack")
 
 
 # ---------------------------------------------------------------------------
