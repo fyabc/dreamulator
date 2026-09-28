@@ -209,26 +209,40 @@ uv run pytest benchmarks -m benchmark --benchmark-compare
 
 ## 5. 前端性能分析
 
-### 5.1 加载性能：Chrome DevTools Network
+### 5.1 加载性能：perf 打点 + CDP 测量
 
 ```bash
 # 启动开发服务器
 uv run dreamulator serve --data-dir data/worlds --reload
 ```
 
-1. 打开 `http://localhost:8000` → F12 → Network 标签
-2. 勾选 "Disable cache"，刷新页面
-3. 按 Size 排序，找最大请求
+**打点体系**（`frontend/src/utils/perf.ts`）：`mark('x-start'/'x-end')` 自动配对成 measure；
+重复阶段记 `#N` 序号；`recordExternal` 记 worker 侧时长；`measureFromStart('first-frame')`
+= 导航 → 首帧渲染完成（交互就绪口径，`GlobeViewer.tsx` 首个 useFrame）。加载完成时控制台
+输出分组瀑布（⏱ dreamulator load）。CDP 自动化采集 = `private/research/2026-09-29-fe-load-profile/cdp-profile.mjs`
+（零依赖 Node 脚本，Chrome --remote-debugging-port，采集 measures/resources/longtasks/堆）。
 
-**当前 200k 基线**（gzip 传输，来自 FastAPI 自动压缩）：
+**当前 200k 基线**（2026-09-29，earth root，冷缓存，本机；含同日优化轮 ①voronoi gate
+②ETag/304 ③kd-tree 重写 ④几何 transferable）：
 
-| 资源 | 原始大小 | gzip 后 | 说明 |
-|------|---------|---------|------|
-| `cvt_mesh.json` | ~220 MB | ~50 MB | 几何 + 气候字段，占加载时间 90%+ |
-| `elevation.png` | ~2 MB | ~2 MB | 已压缩，gzip 无效 |
-| JS bundle | ~1.5 MB | ~400 KB | Vite code-split |
+| 场景 | first-frame（交互就绪） | 传输总量 | JS 堆 used |
+|------|----:|----:|----:|
+| globe 页 | **14.4 s** | ~64 MB（冷） | 271 MB |
+| 2D 地图页 | — | **~25 MB** | ~290 MB |
+| globe 页（热缓存，304） | ~14 s | **3.6 MB** | ~270 MB |
 
-**已落地**：MessagePack 二进制 + Web Worker 解析（FlatBuffers 放弃——无零拷贝需求，评审见 wave1-binary-format-review.md）。
+globe 冷加载瀑布（主线程阻塞加 ★）：mesh fetch（`cvt_mesh.msgpack.gz`，`application/gzip`
++ ETag）0.57 s 净传 → worker gunzip 0.54 s → msgpack 解码 2.1 s → cells 克隆 ~1.9 s
+（序列化 0.98 + 反序列化 ~0.97；vertices/regions 已 transferable 零拷贝、adjacency 已丢弃）
+→ adapt 0.16 s → **kd-tree + 8.4M 查询 3.6 s★** → **layer-bake 3.4 s★** → 纹理就绪 →
+R3F/WebGL 初始化 + 首帧 ~1.4 s★。剩余大头 = cells 对象图（克隆 80%）与 bake——前者归
+P1「几何/气候数据分离存储」。完整数据、优化判词与已否证方向 →
+`private/research/2026-09-29-fe-load-profile.md`。
+
+注意：**手工声明 `Content-Encoding: gzip` 的响应 Chrome 不复用 HTTP 缓存条目**（同 URL
+二次仍全量拉取；实测对照见上文 research 文档 §九.2）——大二进制端点要缓存就走
+`application/gzip` + 客户端 DecompressionStream，或裸体 + ETag。各端点除 mesh 外均
+裸传（无 GZipMiddleware）；JS chunk 中 spatialReference.ts 内嵌观测数据占 2.1 MB（FE-01）。
 
 ### 5.2 渲染性能：React Developer Tools Profiler
 
