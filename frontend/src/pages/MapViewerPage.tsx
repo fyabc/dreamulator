@@ -253,13 +253,6 @@ export default function MapViewerPage() {
     return () => { cancelled = true }
   }, [elevationBlob])
 
-  const { data: voronoi } = useQuery({
-    queryKey: ['voronoi', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getVoronoi(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
   const { isError: platesError } = useQuery({
     queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getPlates(worldName!, selectedPlanet, selectedBranch),
@@ -268,10 +261,21 @@ export default function MapViewerPage() {
   })
 
   // CVT mesh data for polygon rendering
-  const { data: cvtMesh } = useQuery({
+  const { data: cvtMesh, isError: cvtMeshError } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
     enabled: !!worldName && !!selectedPlanet,
+    retry: false,
+  })
+
+  // Legacy voronoi fallback — fetched only when the CVT mesh is unavailable
+  // (query failed or returned null). The mesh's `cells` carry the same data
+  // with a richer property set; on a normal load this endpoint (a ~219 MB
+  // JSON synthesized server-side per request) would be pure waste.
+  const { data: voronoi } = useQuery({
+    queryKey: ['voronoi', worldName, selectedPlanet, selectedBranch],
+    queryFn: () => api.getVoronoi(worldName!, selectedPlanet, selectedBranch),
+    enabled: !!worldName && !!selectedPlanet && (cvtMeshError || cvtMesh === null),
     retry: false,
   })
 
