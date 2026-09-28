@@ -22,6 +22,7 @@ import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { sunDirection } from './utils/solar'
+import { measureFromStart } from '../utils/perf'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -293,10 +294,18 @@ function GlobeScene({
   const controlsRef = useRef<any>(null)
   const { camera, gl } = useThree()
   const northAnimRef = useRef<NorthAnimState | null>(null)
+  // First useFrame tick = first rendered frame — the interactive-ready point.
+  const firstFrameRef = useRef(true)
 
   // Refresh the composited layer texture before the globe renders it
   // (negative priority → runs ahead of the default useFrame subscribers).
-  useFrame(({ gl }) => { renderComposite?.(gl) }, -1)
+  useFrame(({ gl }) => {
+    renderComposite?.(gl)
+    if (firstFrameRef.current) {
+      firstFrameRef.current = false
+      measureFromStart('first-frame')
+    }
+  }, -1)
 
   useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
 
