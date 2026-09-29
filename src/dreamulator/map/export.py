@@ -456,10 +456,97 @@ def _truncate_float_precision(data: bytes) -> bytes:
 
 MESH_FILENAME = "cvt_mesh.msgpack.gz"
 LEGACY_MESH_FILENAME = "cvt_mesh.json"
+# Geometry/fields split (P1 分离存储, 2026-09-29): the combined mesh is joined
+# at build time by everything downstream (climate edits cells in place and the
+# next stage re-reads them), so it stays the canonical Python artifact.  The
+# split pair is the frontend transport format: static geometry (mesh topology
+# + geological identity — stable across climate/ecology/civ rebuilds, so its
+# ETag lets revisits and downstream-layer rebuilds 304) and the dynamic
+# per-cell fields in COLUMNAR form (one f32/u8/interned-string column per
+# field — no 200k × 50-field object graph to decode, clone or hold).
+GEOMETRY_FILENAME = "mesh_geometry.msgpack.gz"
+FIELDS_FILENAME = "mesh_fields.msgpack.gz"
+
+# Dynamic per-cell fields (climate → ecology → civilization engines); every
+# other VoronoiCell field is geological/static.  Kinds:
+#   'f' float-or-null (f32 column, null → NaN)
+#   'b' bool (u8 column)
+#   's' str-or-null (interned string table + u32 index column, null → 0xFFFFFFFF)
+#   'S' list[str] (interned '\x1f'-joined encoding, empty → null)
+# Static (geological) per-cell columns for the split geometry half; ``id``
+# and small ints ride the f32 column kind (exact to 2^24).  ``neighbors``
+# is packed separately as a flat i32 index with u32 offsets (like regions).
+STATIC_CELL_COLUMNS: dict[str, str] = {
+    "id": "f",
+    "lon": "f",
+    "lat": "f",
+    "x": "f",
+    "y": "f",
+    "z": "f",
+    "area_km2": "f",
+    "elevation": "f",
+    "crust_type": "s",
+    "distance_to_boundary_km": "f",
+    "plate_id": "s",
+    "boundary_type": "s",
+    "convergence_rate_cm_yr": "f",
+    "tangential_fraction": "f",
+    "cumulative_convergence_km": "f",
+    "cumulative_divergence_km": "f",
+    "flow_direction": "f",
+    "flow_accumulation": "f",
+    "river_id": "s",
+    "river_order": "f",
+    "is_lake": "b",
+    "water_class": "s",
+    "hotspot_id": "s",
+    "landform": "s",
+    "ice_thickness_m": "f",
+}
+# Everything the frontend needs from CVTMesh besides cells/adjacency.
+_SPLIT_MESH_META = ("seed", "num_cells", "jitter_sigma", "lloyd_iterations")
+
+DYNAMIC_CELL_FIELDS: dict[str, str] = {
+    # climate
+    "temperature_C": "f",
+    "precipitation_mm": "f",
+    "koppen_class": "s",
+    "temperature_hottest_month_C": "f",
+    "temperature_coldest_month_C": "f",
+    "distance_to_coast_km": "f",
+    "ocean_current_east_m_s": "f",
+    "ocean_current_north_m_s": "f",
+    "sst_anomaly_c": "f",
+    "wind_east_m_s": "f",
+    "wind_north_m_s": "f",
+    "slp_annual_hpa": "f",
+    "pressure_anomaly_annual_hpa": "f",
+    "slp_reduction_unreliable": "b",
+    # ecology
+    "biome": "s",
+    "npp_gc_m2_yr": "f",
+    "domesticable_tags": "S",
+    "soil_type": "s",
+    "soil_fertility": "s",
+    "biogeographic_province": "s",
+    "province_id": "s",
+    # civilization
+    "habitable_coast": "b",
+    "agricultural_core": "b",
+    "habitability_score": "f",
+    "agriculture_score": "f",
+}
+_NULL_STR_IDX = 0xFFFFFFFF
+_TAG_SEP = "\x1f"
+
 # 6 = zlib sweet spot: ~3× faster compress than level 9 for ~3-5% larger
 # output (2026-09-27 speed round: gzip at 9 was ~42 s of the build across the
 # per-layer mesh re-saves; level 6 recovers ~2/3 of that).
 _MESH_GZIP_LEVEL = 6
+# Split pair: transport artifact (ETag/304 makes re-transfers rare; size is
+# secondary to the per-mesh-save cost — geometry at lvl6 was 3.6 s of gzip
+# vs 1.0 s at lvl1 for +3.7 MB, 2026-09-29).
+_SPLIT_GZIP_LEVEL = 1
 
 
 def _mesh_json_bytes(mesh: CVTMeshLike) -> bytes:
@@ -477,6 +564,225 @@ def _mesh_json_bytes(mesh: CVTMeshLike) -> bytes:
     from .models import CVTMesh
 
     return _truncate_float_precision(TypeAdapter(CVTMesh).dump_json(mesh))
+
+
+def _pack_one_column(cells: list[dict[str, Any]], name: str, kind: str) -> dict[str, Any]:
+    """Encode a single cell column (see the kind registry docstring)."""
+    vals = [c.get(name) for c in cells]
+    if kind == "f":
+        arr = np.asarray([np.nan if v is None else v for v in vals], dtype="<f4")
+        return {"t": "f", "data": arr.tobytes()}
+    if kind == "b":
+        # 2 = null (bool | None fields, e.g. habitable_coast): the None vs
+        # False distinction survives the round trip.
+        data = [2 if v is None else (1 if v else 0) for v in vals]
+        return {"t": "b", "data": np.asarray(data, dtype=np.uint8).tobytes()}
+    # interned string(s)
+    table: list[str] = []
+    idx: dict[str, int] = {}
+    if kind == "s":
+        keys = [v for v in vals]
+    else:
+        # Empty list stays '' (a real table entry); only None maps to null.
+        keys = [_TAG_SEP.join(v) if v is not None else None for v in vals]
+    out = []
+    for v in keys:
+        if v is None:
+            out.append(_NULL_STR_IDX)
+            continue
+        j = idx.get(v)
+        if j is None:
+            j = len(table)
+            idx[v] = j
+            table.append(v)
+        out.append(j)
+    return {
+        "t": kind,
+        "table": table,
+        "idx": np.asarray(out, dtype="<u4").tobytes(),
+    }
+
+
+def _pack_columns(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Encode the dynamic per-cell fields as columnar blobs (msgpack-bin).
+
+    Floats → little-endian f32 (matches the combined file's 4-decimal
+    precision; null → NaN), bools → u8, nullable strings → interned table +
+    u32 indices (Köppen/biome columns hold ~30 distinct values for 200k
+    cells), string lists (domesticable_tags) → interned ``\\x1f``-joined.
+    """
+    return {
+        "format": "mesh-fields-v1",
+        "num_cells": len(cells),
+        "columns": {
+            name: _pack_one_column(cells, name, kind)
+            for name, kind in DYNAMIC_CELL_FIELDS.items()
+        },
+    }
+
+
+def _pack_neighbors(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Flatten per-cell neighbor lists to i32 indices + u32 offsets."""
+    offsets = np.zeros(len(cells) + 1, dtype="<u4")
+    total = 0
+    for i, c in enumerate(cells):
+        total += len(c.get("neighbors") or ())
+        offsets[i + 1] = total
+    flat = np.zeros(total, dtype="<i4")
+    o = 0
+    for c in cells:
+        for nb in c.get("neighbors") or ():
+            flat[o] = nb
+            o += 1
+    return {"off": offsets.tobytes(), "idx": flat.tobytes()}
+
+
+def save_mesh_split(mesh_dir: Path, mesh_obj: dict[str, Any]) -> None:
+    """Write the geometry/fields split pair next to the combined mesh.
+
+    Takes the DECODED combined-mesh dict (as :func:`save_cvt_mesh` already
+    has it — re-running the pydantic dump for 200k cells would cost another
+    second).  Both halves are COLUMNAR: the worker never materialises a
+    200k-cell object graph — column blobs decode to typed-array buffers that
+    cross the thread boundary as transferables and the main thread builds the
+    cell objects once.
+
+    * geometry (``mesh-geometry-v1``): mesh metadata, flat f64 vertices,
+      flat regions, static geological columns, flat neighbors.  Adjacency is
+      dropped (no frontend consumer — 2026-09-29 profile).  Byte-stable
+      across climate/ecology/civ rebuilds → ETag 304s.
+    * fields (``mesh-fields-v1``): the dynamic columns.
+
+    Unknown model fields (not in either registry) default to STATIC and are
+    silently absent from the split — the combined mesh remains the canonical
+    superset; extend the registries when adding fields.
+    """
+    import gzip
+
+    import msgpack
+
+    obj = mesh_obj
+    cells = obj.get("cells") or []
+    vertices = np.asarray(obj.get("vertices") or [], dtype="<f8").reshape(-1, 3)
+    regions = obj.get("regions") or []
+    region_offsets = np.zeros(len(regions) + 1, dtype="<u4")
+    total = 0
+    for i, r in enumerate(regions):
+        total += len(r)
+        region_offsets[i + 1] = total
+    regions_flat = np.zeros(total, dtype="<i4")
+    o = 0
+    for r in regions:
+        for v in r:
+            regions_flat[o] = v
+            o += 1
+    geometry_obj = {
+        "format": "mesh-geometry-v1",
+        **{k: obj[k] for k in _SPLIT_MESH_META if k in obj},
+        "vertices": vertices.tobytes(),
+        "regions": {"off": region_offsets.tobytes(), "idx": regions_flat.tobytes()},
+        "neighbors": _pack_neighbors(cells),
+        "columns": {
+            name: _pack_one_column(cells, name, kind)
+            for name, kind in STATIC_CELL_COLUMNS.items()
+        },
+    }
+    fields_obj = _pack_columns(cells)
+    mesh_dir.mkdir(parents=True, exist_ok=True)
+    (mesh_dir / GEOMETRY_FILENAME).write_bytes(
+        gzip.compress(
+            msgpack.packb(geometry_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL
+        )
+    )
+    (mesh_dir / FIELDS_FILENAME).write_bytes(
+        gzip.compress(
+            msgpack.packb(fields_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL
+        )
+    )
+
+
+def _decode_columns(columns: dict[str, Any]) -> dict[str, Any]:
+    """Decode a column pack into plain per-field lists (nulls preserved)."""
+    out: dict[str, Any] = {}
+    for name, col in columns.items():
+        t = col["t"]
+        if t == "f":
+            arr = np.frombuffer(col["data"], dtype="<f4")
+            out[name] = [None if np.isnan(v) else float(v) for v in arr]
+        elif t == "b":
+            out[name] = [None if v == 2 else bool(v) for v in col["data"]]
+        elif t in ("s", "S"):
+            table = [s.decode("utf-8") if isinstance(s, bytes) else s for s in col["table"]]
+            idx = np.frombuffer(col["idx"], dtype="<u4")
+            vals = [None if i == _NULL_STR_IDX else table[i] for i in idx]
+            if t == "S":
+                out[name] = [
+                    None if v is None else (v.split(_TAG_SEP) if v else []) for v in vals
+                ]
+            else:
+                out[name] = vals
+        else:  # pragma: no cover - future kinds
+            raise ValueError(f"unknown column kind {t!r} for {name!r}")
+    return out
+
+
+def load_mesh_geometry(path: Path) -> dict[str, Any]:
+    """Decode a split geometry file (metadata + flat geometry + static columns).
+
+    Python-side decoder (round-trip tests, diagnostics); the frontend
+    consumes the same blobs directly as typed-array buffers.
+    """
+    import gzip
+
+    import msgpack
+
+    raw = path.read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    obj = msgpack.unpackb(raw)
+    cells_cols = _decode_columns(obj["columns"])
+    nb = obj["neighbors"]
+    off = np.frombuffer(nb["off"], dtype="<u4")
+    idx = np.frombuffer(nb["idx"], dtype="<i4")
+    neighbors = [idx[off[i] : off[i + 1]].tolist() for i in range(len(off) - 1)]
+    regions_off = np.frombuffer(obj["regions"]["off"], dtype="<u4")
+    regions_idx = np.frombuffer(obj["regions"]["idx"], dtype="<i4")
+    regions = [
+        regions_idx[regions_off[i] : regions_off[i + 1]].tolist()
+        for i in range(len(regions_off) - 1)
+    ]
+    return {
+        **{k: obj[k] for k in _SPLIT_MESH_META if k in obj},
+        "vertices": np.frombuffer(obj["vertices"], dtype="<f8")
+        .reshape(-1, 3)
+        .tolist(),
+        "regions": regions,
+        "neighbors": neighbors,
+        "columns": cells_cols,
+    }
+
+
+def load_mesh_fields(path: Path) -> dict[str, Any]:
+    """Decode a fields file into plain per-field lists (nulls preserved).
+
+    The Python-side decoder (round-trip tests, diagnostics); the frontend
+    consumes the same blobs directly as typed-array buffers.
+    """
+    import gzip
+
+    import msgpack
+
+    raw = path.read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    obj = msgpack.unpackb(raw)
+    n = int(obj["num_cells"])
+    out = _decode_columns(obj["columns"])
+    if n and out:
+        first = next(iter(out.values()))
+        if len(first) != n:
+            raise ValueError(f"fields column length {len(first)} != num_cells {n}")
+    return out
 
 
 def save_cvt_mesh(path: Path, mesh: CVTMeshLike, *, backup_existing: bool = False) -> None:
@@ -521,6 +827,9 @@ def save_cvt_mesh(path: Path, mesh: CVTMeshLike, *, backup_existing: bool = Fals
     legacy = path.with_name(LEGACY_MESH_FILENAME)
     if legacy.exists():
         legacy.unlink()
+    # Split pair (frontend transport).  Written on EVERY mesh save so the
+    # frontend never sees a stale half after a downstream-layer rebuild.
+    save_mesh_split(path.parent, obj)
 
 
 def decode_mesh_bytes(raw: bytes) -> dict[str, Any]:

@@ -12,6 +12,7 @@ const API_BASE = '/api'
 // ---------------------------------------------------------------------------
 
 import { decodeMsgpackUrl } from '../workers/msgpackClient'
+import { composeSplitMesh, isSplitFields, isSplitGeometry } from './meshColumns'
 import { mark } from '../utils/perf'
 
 /** Fetch CVT mesh as MessagePack, decoded in a Web Worker (non-blocking). */
@@ -25,6 +26,30 @@ function fetchCvtMeshMsgPack(
   // gunzip=true: canonical meshes arrive as application/gzip (the worker
   // sniffs the magic bytes; plain msgpack passes through).
   return (decodeMsgpackUrl(url, true) as Promise<any>).finally(() => mark('mesh-fetch-end'))
+}
+
+/** Fetch the geometry/fields split pair in parallel (P1 分离存储, 2026-09-29).
+ *
+ * Both halves arrive as columnar blobs the worker transfers zero-copy; the
+ * static geometry revalidates to 304 across climate/ecology rebuilds. 404
+ * (world predates the split) rejects → the caller falls back to the combined
+ * mesh. */
+function fetchCvtMeshSplit(
+  name: string,
+  planetId: string,
+  query: string,
+): Promise<unknown> {
+  const base = `${API_BASE}/worlds/${encodeURIComponent(name)}/maps/${encodeURIComponent(planetId)}`
+  mark('mesh-fetch-start')
+  return Promise.all([
+    decodeMsgpackUrl(`${base}/cvt-mesh/geometry${query}`, true),
+    decodeMsgpackUrl(`${base}/cvt-mesh/fields${query}`, true),
+  ]).then(([geo, flds]) => {
+    if (!isSplitGeometry(geo) || !isSplitFields(flds)) {
+      throw new Error('unexpected split mesh payload')
+    }
+    return { geo, flds }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -501,16 +526,36 @@ const readApi = {
 
   getCvtMesh: (name: string, planetId: string, branch?: string | null): Promise<CVTMesh | null> => {
     if (isStaticMode()) {
-      return staticApi.getCvtMesh(name, planetId, branch).then(timedAdaptCvtMesh)
+      return staticApi.getCvtMesh(name, planetId, branch).then((raw: any) => {
+        if (raw?.__split) {
+          // Static split pair (meshColumns shapes) — compose the same way
+          // as the API path.
+          return composeSplitMesh(raw.geo, raw.flds)
+        }
+        return timedAdaptCvtMesh(raw)
+      })
     }
     const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
-    // Try MessagePack first (binary, smaller payload, worker-decoded off main thread).
-    // Fall back to JSON if the worker or MessagePack decode fails.
-    return fetchCvtMeshMsgPack(name, planetId, query)
-      .then(timedAdaptCvtMesh)
-      .catch(() =>
-        fetchJson<any>(`/worlds/${name}/maps/${planetId}/cvt-mesh${query}`).then(timedAdaptCvtMesh),
-      )
+    // Split pair first (columnar, zero-copy, geometry 304s across
+    // climate-only rebuilds) → combined msgpack → JSON (legacy).
+    return fetchCvtMeshSplit(name, planetId, query)
+      .then((payload) => {
+        mark('mesh-fetch-end')
+        const split = payload as { geo: Record<string, unknown>; flds: Record<string, unknown> }
+        const mesh = composeSplitMesh(split.geo, split.flds)
+        if (!mesh) throw new Error('empty split mesh')
+        return mesh
+      })
+      .catch((err) => {
+        console.error('[mesh-split] fallback to combined:', err)
+        return fetchCvtMeshMsgPack(name, planetId, query)
+          .then(timedAdaptCvtMesh)
+          .catch(() =>
+            fetchJson<any>(`/worlds/${name}/maps/${planetId}/cvt-mesh${query}`).then(
+              timedAdaptCvtMesh,
+            ),
+          )
+      })
   },
 
   getMonthlyClimate: (
