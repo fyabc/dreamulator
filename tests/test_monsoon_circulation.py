@@ -449,3 +449,134 @@ class TestMonsoonTroughLatitude:
         t = np.array([20.0, 25.0, 27.0, 25.0])
         trough = monsoon_trough_latitude(t, lat, lon, ocean, itcz_ocean_deg=14.0)
         assert np.allclose(trough, 14.0)
+
+
+class TestMonsoonCoupletPressure:
+    """D-line ④ cross-equatorial couplet (2026-09-29 design, obs-anatomy shapes)."""
+
+    def _grid(
+        self,
+        trough_hemi: float,
+        land_ocean_equal: bool = False,
+    ) -> tuple[np.ndarray, ...]:
+        """Synthetic grid: 5° cells, a land band at 15-30° in one hemisphere
+        within the 0-40°E sector, ocean elsewhere; a −10 hPa land trough."""
+        lats = np.arange(-60.0, 61.0, 5.0)
+        lons = np.arange(-180.0, 180.0, 5.0)
+        la, lo = np.meshgrid(lats, lons, indexing="ij")
+        lat, lon = la.ravel(), lo.ravel()
+        s = np.sign(trough_hemi)
+        in_sector = (lon >= 0.0) & (lon < 80.0)
+        land = in_sector & (s * lat > 15.0) & (s * lat < 30.0)
+        dp = np.zeros((len(lat), 12))
+        dp[land, :] = -10.0  # the trough (all months; fade tested via ITCZ)
+        if land_ocean_equal:
+            # Warm-pool case: the ocean 0-25° band carries the SAME anomaly.
+            ocean_band = in_sector & ~land & (s * lat >= 0.0) & (s * lat < 25.0)
+            dp[ocean_band, :] = -10.0
+        itcz = np.full(12, s * 15.0)
+        areas = np.full(len(lat), 25.0 * 25.0)
+        p_ann = np.full(len(lat), 800.0)  # dry regime → g_conv ≈ 0.94
+        return dp, lat, lon, land, itcz, areas, p_ann
+
+    def test_land_zero_and_hemisphere_structure(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp, lat, lon, land, itcz, areas, p_ann = self._grid(15.0)
+        add = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_ann)
+        assert np.allclose(add[land], 0.0), "land cells must stay untouched"
+        jul = 4
+        ocean = ~land
+        # Winter side (SH): positive descent-arm high, plateau ~0.19·|T_L|·g
+        w = ocean & (lat < -15.0) & (lat > -35.0) & (lon >= 0.0) & (lon < 60.0)
+        t_o = dp[ocean & (lat >= 0.0) & (lat < 25.0) & (lon >= 0.0) & (lon < 60.0), jul].mean()
+        g = (t_o + 10.0) / 10.0
+        assert add[w, jul].mean() == pytest.approx(0.19 * 10.0 * g, rel=0.15)
+        assert (add[w, jul] > 0.5).all()
+        # Summer side offshore (10-25°N): negative trough extension
+        s_off = ocean & (lat > 10.0) & (lat < 30.0) & (lon >= 0.0) & (lon < 60.0)
+        assert (add[s_off, jul] < -1.0).all()
+        # Far sectors (no land trough) and |lat|>45: exactly zero
+        far = ocean & (lon > 100.0) & (lon < 160.0)
+        assert np.allclose(add[far], 0.0)
+        polar = ocean & (np.abs(lat) > 45.0)
+        assert np.allclose(add[polar], 0.0)
+
+    def test_equator_continuity(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp, lat, lon, land, itcz, areas, p_ann = self._grid(15.0)
+        add = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_ann)
+        jul = 4
+        inside = (lon >= 25.0) & (lon < 55.0)
+        eq0 = (~land) & (np.abs(lat) < 0.1) & inside
+        eq_n = (~land) & (np.abs(lat - 5.0) < 0.1) & inside
+        eq_s = (~land) & (np.abs(lat + 5.0) < 0.1) & inside
+        assert eq0.sum() > 0 and eq_n.sum() > 0 and eq_s.sum() > 0
+        # The shapes meet at 0.119·|T_L| on the equator (single count, no
+        # double-count) and fall off asymmetrically on the two sides (the obs
+        # anatomy: winter 5° ≈ 0.155, summer 5° ≈ 0.032).
+        assert add[eq0, jul].mean() == pytest.approx(0.119 * 10.0, rel=0.2)
+        assert 0.0 < add[eq_n, jul].mean() < add[eq0, jul].mean()
+        assert add[eq_s, jul].mean() > add[eq0, jul].mean()
+
+    def test_warm_pool_gate_retires_winter_high(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp, lat, lon, land, itcz, areas, p_ann = self._grid(15.0, land_ocean_equal=True)
+        add = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_ann)
+        jul = 4
+        ocean = ~land
+        # T_O = T_L → g_land = 0 → the WHOLE couplet retires (round-3
+        # unification: a purely convective sector has no couplet at all)
+        w = ocean & (lat < -10.0) & (lon >= 25.0) & (lon < 55.0)
+        assert np.allclose(add[w, jul], 0.0, atol=1e-6)
+        s_off = ocean & (lat > 10.0) & (lat < 30.0) & (lon >= 25.0) & (lon < 55.0)
+        assert np.allclose(add[s_off, jul], 0.0, atol=1e-6)
+
+    def test_hemisphere_symmetry(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp_n, lat_n, lon_n, land_n, itcz_n, areas, p_ann = self._grid(15.0)
+        add_n = monsoon_couplet_pressure(dp_n, lat_n, lon_n, land_n, itcz_n, areas, p_ann)
+        dp_s, lat_s, lon_s, land_s, itcz_s, _, p_ann = self._grid(-15.0)
+        add_s = monsoon_couplet_pressure(dp_s, lat_s, lon_s, land_s, itcz_s, areas, p_ann)
+        jul = 4
+        o_s = ~land_s
+        # The SH-summer couplet mirrors: 20-30S offshore negative, 10-35N positive
+        south_off = o_s & (lat_s < -10.0) & (lat_s > -30.0) & (lon_s >= 0.0) & (lon_s < 40.0)
+        north_high = o_s & (lat_s > 10.0) & (lat_s < 35.0) & (lon_s >= 0.0) & (lon_s < 40.0)
+        assert (add_s[south_off, jul] < -1.0).all()
+        assert (add_s[north_high, jul] > 0.5).all()
+        # And equals the NH case mirrored cell-for-cell (flip the lat axis)
+        grid_n = add_n[:, jul].reshape(25, 72)
+        grid_s = add_s[:, jul].reshape(25, 72)
+        assert np.allclose(grid_n, grid_s[::-1], atol=1e-9)
+
+    def test_convective_winter_side_gate(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp, lat, lon, land, itcz, areas, p_ann = self._grid(15.0)
+        jul = 4
+        ocean = ~land
+        # Dry winter ocean (800 mm/yr): the descent high stands
+        add_dry = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_ann)
+        w = ocean & (lat < -10.0) & (lat > -35.0) & (lon >= 0.0) & (lon < 60.0)
+        assert (add_dry[w, jul] > 0.5).all()
+        # Convective winter ocean (2500 mm/yr → g_conv = 0): the high retires,
+        # the summer-side offshore extension is unchanged (not gated)
+        p_wet = p_ann.copy()
+        p_wet[ocean & (lat < 0.0) & (lat > -20.0) & (lon >= 0.0) & (lon < 80.0)] = 2500.0
+        add_wet = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_wet)
+        w_in = ocean & (lat < -10.0) & (lat > -35.0) & (lon >= 25.0) & (lon < 55.0)
+        assert np.allclose(add_wet[w_in, jul], 0.0, atol=1e-6)
+        s_off = ocean & (lat > 10.0) & (lat < 30.0) & (lon >= 0.0) & (lon < 60.0)
+        assert np.allclose(add_wet[s_off, jul], add_dry[s_off, jul], atol=1e-9)
+
+    def test_equinox_fades_out(self):
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        dp, lat, lon, land, itcz, areas, p_ann = self._grid(15.0)
+        itcz = np.zeros(12)
+        add = monsoon_couplet_pressure(dp, lat, lon, land, itcz, areas, p_ann)
+        assert np.allclose(add, 0.0)

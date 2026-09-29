@@ -171,6 +171,31 @@ _DRAG_RATE_LAND_S: float = 2.0e-4  # rough vegetation (C_D ≈ 0.03), ~20× wate
 # see proposal §5.)
 _EPS_U: float = 0.015
 
+# ── Cross-equatorial monsoon couplet (D-line ④, 2026-09-29) ──
+# The monsoon-regime SLP response of the *ocean* to the land monsoon trough
+# (Anderson 1976 source-sink configuration: 30°-latitude low-level
+# convergence sink = the monsoon trough, the descent source lands on the
+# winter-hemisphere ocean).  The B2-referenced thermal ΔP is land-only by
+# construction (ocean cells are their own reference), so the ocean side of
+# the cross-equatorial profile is flat zero where the observed field carries
+# the winter-subtropical high (+2-3 hPa) and the offshore trough extension
+# (diagnosis 2026-09-29: Somali sector gradient −0.014 hPa/deg vs obs ~0.5).
+# The couplet adds both, with the shape normalised on the observed July
+# Somali-sector profile (÷|trough|) and the amplitude anchored to the
+# model's OWN trough depth — no inflation of the upstream (GW6) deficit.
+# Epistemic class: existence/structure = approximate derivation (Anderson);
+# shape table + land-excess gate = observational fit (Earth monsoon sectors).
+_COUPLET_WINTER_SHAPE: tuple[tuple[float, float], ...] = (
+    # (|winter latitude| deg, value / |trough|)
+    (0.0, 0.119), (10.0, 0.19), (35.0, 0.19), (45.0, 0.0),
+)
+_COUPLET_SUMMER_SHAPE: tuple[tuple[float, float], ...] = (
+    # (summer-side latitude deg, value / |trough|) — crosses zero ~5°
+    (0.0, 0.119), (5.0, 0.032), (10.0, -0.329), (15.0, -0.560),
+    (20.0, -0.894), (25.0, -1.0), (32.0, -1.0), (45.0, 0.0),
+)
+_COUPLET_BIN_DEG: float = 5.0
+
 # Sea-level air density (kg/m³), same reference as _geostrophic_wind.
 _AIR_DENSITY_KG_M3: float = 1.225
 
@@ -643,3 +668,171 @@ def cross_equatorial_monsoon_wind(
     bg_east = np.einsum("ij,ij->i", background_wind, east)
     west = (u_cross - bg_east)[:, None] * east
     return np.asarray(np.where(belt[:, None], west, 0.0))
+
+
+def monsoon_couplet_pressure(
+    dp_hpa: np.ndarray,
+    lat_deg: np.ndarray,
+    lon_deg: np.ndarray,
+    land_mask: np.ndarray,
+    itcz_lat_monthly: np.ndarray,
+    cell_area_km2: np.ndarray,
+    p_regime_mm_yr: np.ndarray,
+    sector_width_deg: float = 40.0,
+    return_gate: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Ocean-side monsoon-regime SLP response to the land trough (hPa).
+
+    For each month and longitude sector (running area-weighted mean of width
+    ``sector_width_deg``), the summer-hemisphere LAND monsoon trough
+    (15-30° poleward band, which excludes the 0-12° equatorial warm pool)
+    sets a couplet on the OCEAN cells only (land keeps the thermal + wet
+    trough untouched):
+
+    * the whole couplet is gated by the land-excess fraction
+      ``g_land = clip((T_O − T_L)/|T_L|, 0, 1)`` — it is the ocean response
+      to a LAND-EXCESS trough; a purely convective sector (ocean trough as
+      deep as the land one, e.g. the East-Pacific ITCZ) retires entirely
+      (round-3 unification; its convective pressure signature is the wet
+      trough's domain);
+    * winter hemisphere — the descent-arm high ``|T_L|·g_land·g_conv·S_w``
+      with a broad subtropical-to-equator plateau, additionally gated by
+      the winter side's own convective regime ``g_conv`` — the descent arm
+      only lands on a QUIESCENT winter ocean (round-2 gate: the round-1
+      couplet put a high over the Java Sea where obs has the warm-pool
+      trough; the regime is quasi-permanent, so the indicator is the
+      ANNUAL-mean winter-side ocean precipitation 0-20°, knots 700/2400
+      mm/yr = subtropical-descent ocean vs active-ITCZ convection);
+    * summer hemisphere — the offshore trough extension ``|T_L|·S_s``,
+      crossing zero at ~5° and reaching the trough's own depth offshore
+      (the monsoon trough is a circulation-scale feature, not a surface
+      mosaic; obs 10°N sits at ~1/3 of the axis depth).
+
+    Shape tables are the observed July Somali-sector profile normalised by
+    the trough depth (see module constants); the amplitude anchor is the
+    model's own trough — no inflation of the upstream deficit.  Months with
+    a weak ITCZ excursion fade out linearly (0 at the equator, full at 8°).
+    Land cells and |lat| > 45° return exactly 0; the field is continuous
+    everywhere (both shapes meet at 0.119/|T_L| on the equator).
+
+    Args:
+        dp_hpa: Current monthly ΔP field (hPa), shape (N, 12) — the thermal
+            (+ wet-increment) state the couplet responds to.
+        lat_deg / lon_deg: Cell coordinates (degrees), shape (N,).
+        land_mask: Boolean (N,) — land cells.
+        itcz_lat_monthly: Monthly ITCZ latitude (degrees, signed; the summer
+            hemisphere is its sign), shape (12,).
+        cell_area_km2: Cell areas (km²) for the sector weighting, shape (N,).
+        p_regime_mm_yr: Annual-mean precipitation (mm/yr), shape (N,) — the
+            quasi-permanent convective-regime indicator for g_conv.
+        sector_width_deg: Longitude width of the running sector mean.
+
+    Returns:
+        Monthly couplet increment (hPa), shape (N, 12), ocean cells only;
+        with ``return_gate=True`` a tuple ``(dp_add, gate)`` where gate is the
+        per-cell land-excess gate fade·g_land ∈ [0,1], shape (N, 12) — the
+        complement (1−gate) modulates the legacy uniform belt (round 4: the
+        belt stands down where the couplet serves, stands up over the
+        warm-pool longitudes the couplet retires — H3's "经向调制版").
+    """
+    n = len(lat_deg)
+    dp_add = np.zeros((n, 12), dtype=np.float64)
+    gate_field = np.zeros((n, 12), dtype=np.float64)
+    if sector_width_deg <= 0.0:
+        if return_gate:
+            return dp_add, gate_field
+        return dp_add
+
+    n_bins = int(round(360.0 / _COUPLET_BIN_DEG))
+    half = int(round(sector_width_deg / 2.0 / _COUPLET_BIN_DEG))
+    lon_bin = np.mod(
+        np.floor((np.asarray(lon_deg, dtype=np.float64) + 180.0) / _COUPLET_BIN_DEG),
+        n_bins,
+    ).astype(np.int64)
+
+    land = np.asarray(land_mask, dtype=bool)
+    ocean = ~land
+    winter_w = _COUPLET_WINTER_SHAPE
+    summer_s = _COUPLET_SUMMER_SHAPE
+    shape_w = np.array([v for _, v in winter_w])
+    edges_w = np.array([x for x, _ in winter_w])
+    shape_s = np.array([v for _, v in summer_s])
+    edges_s = np.array([x for x, _ in summer_s])
+
+    areas = np.asarray(cell_area_km2, dtype=np.float64)
+    p_ann = np.asarray(p_regime_mm_yr, dtype=np.float64)
+    # Circular sector running mean helper over the binned field.
+    def _sector_mean(binned: np.ndarray) -> np.ndarray:
+        """Area-weighted running mean over ±`half` longitude bins (wrap)."""
+        acc = np.zeros_like(binned)
+        for k in range(-half, half + 1):
+            acc += np.roll(binned, k, axis=0)
+        return acc
+
+    for m in range(12):
+        itcz = float(itcz_lat_monthly[m])
+        fade = float(np.clip(abs(itcz) / 8.0, 0.0, 1.0))
+        if fade <= 0.0:
+            continue
+        s = 1.0 if itcz >= 0.0 else -1.0
+        lat_s = s * lat_deg  # signed toward the summer hemisphere
+        # T_L: land, 15-30° summer band (monsoon trough, excl. warm pool).
+        band_l = land & (lat_s > 15.0) & (lat_s < 30.0)
+        # T_O: ocean, 0-25° summer band (the sector's offshore reference).
+        band_o = ocean & (lat_s >= 0.0) & (lat_s < 25.0)
+        # Winter-side convective regime: annual P over the winter ocean
+        # 0-20° (quasi-permanent — the warm-pool/SPCZ anchor position).
+        band_pw = ocean & (-lat_s > 0.0) & (-lat_s < 20.0)
+        if not band_l.any():
+            continue
+        w_l = areas * band_l
+        w_o = areas * band_o
+        w_pw = areas * band_pw
+        num_l = _sector_mean(np.bincount(lon_bin, weights=w_l * dp_hpa[:, m], minlength=n_bins))
+        num_o = _sector_mean(np.bincount(lon_bin, weights=w_o * dp_hpa[:, m], minlength=n_bins))
+        num_pw = _sector_mean(np.bincount(lon_bin, weights=w_pw * p_ann, minlength=n_bins))
+        den_l = _sector_mean(np.bincount(lon_bin, weights=w_l, minlength=n_bins))
+        den_o = _sector_mean(np.bincount(lon_bin, weights=w_o, minlength=n_bins))
+        den_pw = _sector_mean(np.bincount(lon_bin, weights=w_pw, minlength=n_bins))
+        t_l = np.where(den_l > 0.0, num_l / np.maximum(den_l, 1e-9), 0.0)
+        t_o = np.where(den_o > 0.0, num_o / np.maximum(den_o, 1e-9), 0.0)
+        p_w = np.where(den_pw > 0.0, num_pw / np.maximum(den_pw, 1e-9), 0.0)
+        t_l_cell = t_l[lon_bin]
+        t_o_cell = t_o[lon_bin]
+        trough = -t_l_cell  # positive where a trough exists
+        g_land = np.clip(
+            (t_o_cell - t_l_cell) / np.maximum(trough, 1e-6), 0.0, 1.0
+        ) * (trough > 0.0)
+        g_conv = np.clip(1.0 - (p_w[lon_bin] - 700.0) / (2400.0 - 700.0), 0.0, 1.0)
+
+        # Each hemisphere gets ONLY its own shape; the equator cell takes the
+        # winter-side value (both anchors agree at 0.119/|T_L| there — the
+        # obs profile's equatorial ridge — so the choice is a convention).
+        winter_side = lat_s <= 0.0
+        s_w = np.where(
+            winter_side,
+            np.interp(np.maximum(-lat_s, 0.0), edges_w, shape_w, left=0.0, right=0.0),
+            0.0,
+        )
+        s_s = np.where(
+            ~winter_side,
+            np.interp(np.maximum(lat_s, 0.0), edges_s, shape_s, left=0.0, right=0.0),
+            0.0,
+        )
+        in_band = ocean & (np.abs(lat_deg) <= 45.0)
+        # Round 3 (2026-09-29): the land-excess gate multiplies the WHOLE
+        # couplet — the couplet is the ocean response to a LAND-EXCESS trough
+        # (Anderson's land-monsoon source-sink); a purely oceanic ITCZ (its
+        # ocean trough as deep as the sector's land one, e.g. the East
+        # Pacific) has no couplet at all — its convective pressure signature
+        # is the wet trough's domain.  Round 2 applied g_land to the winter
+        # side only, which let the Mexico trough drive an East-Pacific
+        # offshore extension + cross-basin zonal gradient and poisoned the
+        # West-Pacific trades and the SCS westerlies.
+        dp_add[in_band, m] = fade * trough[in_band] * g_land[in_band] * (
+            g_conv[in_band] * s_w[in_band] + s_s[in_band]
+        )
+        gate_field[:, m] = fade * g_land * (trough > 0.0)
+    if return_gate:
+        return dp_add, gate_field
+    return dp_add
