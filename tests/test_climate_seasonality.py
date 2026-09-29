@@ -326,6 +326,37 @@ class TestPeriodScaledHeatCapacity:
         assert c[1] > 1.02e7
         assert c[0] == pytest.approx(period_scaled_heat_capacity(2.0e7, 100.0), rel=1e-12)
 
+    def test_coastal_blend_scale_shrinks_with_short_year(self) -> None:
+        """Arm 2: the capacity blend e-folding is the horizontal skin depth.
+
+        A cell one Earth e-folding (d = 500 km) from the coast sits 63% of the
+        way from ocean to land capacity at Earth's year; on a 100 d year the
+        blend length halves, so the same cell sits further along the blend
+        (less ocean drag) — measured relative to each year's own endpoints,
+        which themselves shrink.
+        """
+        is_land = np.array([True])
+        is_ocean = np.array([False])
+        d = np.array([500.0])
+        c_earth = seasonal_heat_capacity(is_land, is_ocean, d)[0]
+        c_short = seasonal_heat_capacity(is_land, is_ocean, d, orbital_period_days=100.0)[0]
+        land_short = period_scaled_heat_capacity(2.0e7, 100.0)
+        ocean_short = period_scaled_heat_capacity(2.0e8, 100.0)
+        frac_to_land_earth = (2.0e8 - c_earth) / (2.0e8 - 2.0e7)
+        frac_to_land_short = (ocean_short - c_short) / (ocean_short - land_short)
+        assert frac_to_land_short > frac_to_land_earth
+        # and the blend is exact at the endpoints: coast cell = scaled ocean
+        c_coast = seasonal_heat_capacity(
+            np.array([True]), np.array([False]), np.array([0.0]), orbital_period_days=100.0
+        )[0]
+        assert c_coast == pytest.approx(ocean_short)
+
+    def test_penetration_ratio_helper(self) -> None:
+        from dreamulator.engine.climate_seasonality import seasonal_penetration_ratio
+
+        assert seasonal_penetration_ratio(365.25) == 1.0
+        assert seasonal_penetration_ratio(100.0) == pytest.approx((100.0 / 365.25) ** 0.5)
+
 
 # ---------------------------------------------------------------------------
 # 4. Monthly temperature

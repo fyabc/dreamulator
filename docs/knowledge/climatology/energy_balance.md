@@ -349,6 +349,17 @@ $$C(P) = C_{atm} + (C_{earth} - C_{atm})\cdot\sqrt{P/P_{earth}}$$
 认识论类别：近似推导（份额分解的大气项来自推导常数；表面项锚在地球站点振幅标定，
 指数来自穿透物理；逐世界 $p_s/g$ 差异对集总常数二阶，取地球值）。
 
+**同一比例的水平对应物（2026-09-30 第二臂）**：海洋影响的内陆 reach 也是周期
+强迫的穿透深度——水平扩散皮肤深度 $\lambda = \sqrt{2K_h/\omega} \propto \sqrt{P}$。
+两个 Earth 标定的空间尺度随 `seasonal_penetration_ratio(P)` 重标定：
+
+- `seasonal_coastal_scale_km`（容量沿海混合 e 折，250 km）——季节机械的一部分；
+- 月度 4.1-B 距平弛豫长度（`maritime_advection_scale_km` 1500 km 的**月度孪生**
+  分支，nacrea → 785 km）——周期机械；**年平孪生是稳态场，不缩**。
+
+注意：地球 1500 km 是「平流（u·τ 气团尺度）+ 涡旋扩散」的复合标定，纯平流份额
+不随周期变化——√P 形式只标度复合中频率依赖的部分（近似推导类，nacrea 实测收口）。
+
 ### 内湖热容量（淡水湖，介于海陆之间）
 
 大型内湖（里海/五大湖/程序化世界的内流海，`is_lake=True` 且 `water_class="ocean"`）
@@ -403,8 +414,8 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 | `seasonal_land_heat_capacity` | 2.0e7 | 陆地+大气热容量 $C_{land}$（J/m²/K，**地球年标定值**——按世界年长 √P 自动重标定，见上节） |
 | `seasonal_ocean_heat_capacity` | 2.0e8 | 海洋混合层热容量 $C_{ocean}$（J/m²/K，同上） |
 | `seasonal_lake_heat_capacity` | 4.0e7 | 内湖季节性温跃层热容量 $C_{lake}$（J/m²/K，~10 m，同上） |
-| `seasonal_coastal_scale_km` | 500.0 | 海洋调节 e-folding 长度（km） |
-| `maritime_advection_scale_km` | 1500.0 | 方向性海洋调节 e-folding 长度（km，0 关闭） |
+| `seasonal_coastal_scale_km` | 500.0 | 海洋调节 e-folding 长度（km，季节机械 → 随年长 √P 重标定） |
+| `maritime_advection_scale_km` | 1500.0 | 方向性海洋调节 e-folding 长度（km，0 关闭；年平稳态版不缩，月度距平孪生随 √P） |
 | `seasonal_ice_albedo` | true | 季节冰反照率反馈开关 |
 | `ice_albedo_surface` | 0.7 | 雪/冰反照率（太阳谱下；其他恒星按 `spectral_ice_albedo` 光谱加权） |
 | `seasonal_ice_threshold_c` | 0.0 | 夏季温度低于此值视为冻结（°C） |

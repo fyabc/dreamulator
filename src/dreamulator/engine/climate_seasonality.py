@@ -562,6 +562,18 @@ _SEASONAL_ATMOSPHERE_CAPACITY = 1.02e7  # J/m²/K
 _EARTH_REFERENCE_PERIOD_DAYS = 365.25
 
 
+def seasonal_penetration_ratio(orbital_period_days: float) -> float:
+    """√(P/P_earth) — the periodic-forcing penetration-depth scaling factor.
+
+    The same skin-depth ratio applies wherever an Earth-calibrated spatial or
+    thermal scale of the *seasonal* machinery embeds the penetration depth of
+    the annual harmonic: the participating heat capacity (vertical) and the
+    inland reach of maritime anomaly moderation (horizontal, λ = √(2K_h/ω)).
+    Earth (P = 365.25 d) returns exactly 1.
+    """
+    return math.sqrt(orbital_period_days / _EARTH_REFERENCE_PERIOD_DAYS)
+
+
 def period_scaled_heat_capacity(
     earth_capacity: float,
     orbital_period_days: float = 365.25,
@@ -597,7 +609,7 @@ def period_scaled_heat_capacity(
     Returns:
         Period-scaled heat capacity in J/m²/K.
     """
-    ratio = math.sqrt(orbital_period_days / _EARTH_REFERENCE_PERIOD_DAYS)
+    ratio = seasonal_penetration_ratio(orbital_period_days)
     return atmosphere_capacity + (earth_capacity - atmosphere_capacity) * ratio
 
 
@@ -628,7 +640,10 @@ def seasonal_heat_capacity(
     world's orbital period by ``period_scaled_heat_capacity`` (√P penetration
     depth, times the period-independent atmospheric share): a short-year world
     (nacrea, ~100 d) participates with ~half the surface depth, amplifying
-    its seasonal response.  Earth's year (365.25 d) leaves them unchanged.
+    its seasonal response.  The ``coastal_scale_km`` blend length carries the
+    same √P scaling — it is the inland reach of the ocean's thermal state in
+    the seasonal response, i.e. the horizontal skin depth.  Earth's year
+    (365.25 d) leaves everything unchanged.
 
     Args:
         is_land: Boolean land mask, shape (N,).
@@ -637,14 +652,16 @@ def seasonal_heat_capacity(
             (ocean cells = 0).
         land_capacity: Land+atmosphere heat capacity at Earth's year (J/m²/K).
         ocean_capacity: Ocean mixed-layer heat capacity at Earth's year (J/m²/K).
-        coastal_scale_km: Maritime-moderation e-folding length.
+        coastal_scale_km: Maritime-moderation e-folding length at Earth's year.
         orbital_period_days: World year length (days) for the √P scaling.
 
     Returns:
         Per-cell heat capacity in J/m²/K, shape (N,).
     """
+    ratio = seasonal_penetration_ratio(orbital_period_days)
     land_capacity = period_scaled_heat_capacity(land_capacity, orbital_period_days)
     ocean_capacity = period_scaled_heat_capacity(ocean_capacity, orbital_period_days)
+    coastal_scale_km = coastal_scale_km * ratio
 
     c = np.full(is_land.shape, land_capacity, dtype=np.float64)
     c[is_ocean] = ocean_capacity
