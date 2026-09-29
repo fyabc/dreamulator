@@ -174,6 +174,61 @@ def get_features(
     return [f.model_dump(mode="json") for f in features]
 
 
+@router.get("/{world_name}/maps/{planet_id}/cvt-mesh/geometry")
+def get_cvt_mesh_geometry(
+    world_name: str,
+    planet_id: str,
+    request: Request,
+    branch: str | None = None,
+) -> Response:
+    """Static half of the geometry/fields split (P1 分离存储, 2026-09-29).
+
+    Mesh topology + geological identity — byte-stable across climate/ecology/
+    civilization rebuilds, so the ETag serves 304s and downstream-layer
+    rebuilds only re-fetch the fields half.  ``application/gzip``: the worker
+    gunzips client-side (a declared ``Content-Encoding`` would block browser
+    cache reuse — same convention as the combined mesh).  404 when the world
+    predates the split; the client falls back to the combined mesh.
+    """
+    from dreamulator.map.export import GEOMETRY_FILENAME
+
+    mgr = _get_map_manager(world_name, branch)
+    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
+    geo_file = None if map_dir is None else map_dir / GEOMETRY_FILENAME
+    if geo_file is None or not geo_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No split geometry for '{planet_id}' (rebuild the world)",
+        )
+    return _file_response(request, geo_file, "application/gzip")
+
+
+@router.get("/{world_name}/maps/{planet_id}/cvt-mesh/fields")
+def get_cvt_mesh_fields(
+    world_name: str,
+    planet_id: str,
+    request: Request,
+    branch: str | None = None,
+) -> Response:
+    """Dynamic half of the split: per-cell climate/ecology/civ fields.
+
+    Columnar (one f32/u8/interned-string column per field) — no 200k object
+    graph to decode or clone; the worker hands the column buffers to the main
+    thread as transferables.  Same ETag/304 + application/gzip conventions.
+    """
+    from dreamulator.map.export import FIELDS_FILENAME
+
+    mgr = _get_map_manager(world_name, branch)
+    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
+    fields_file = None if map_dir is None else map_dir / FIELDS_FILENAME
+    if fields_file is None or not fields_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No split fields for '{planet_id}' (rebuild the world)",
+        )
+    return _file_response(request, fields_file, "application/gzip")
+
+
 @router.get("/{world_name}/maps/{planet_id}/cvt-mesh")
 def get_cvt_mesh(
     world_name: str,

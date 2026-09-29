@@ -351,8 +351,7 @@ Stage 3.5 释放只作用月序（年温与极值由本节聚合重新导出，�
    （热低压是被海陆热力对比**持续强迫**的结构，不存在自由调整问题；早期 500 km 的
    Rossby 半径依据是对自由距平的误用）。Jacobi 平滑到
    `_MONSOON_PRESSURE_SMOOTHING_KM` = 175 km（:2154；pass 数 = 2·(175/cell_km)²，
-   每 pass 是一步惰性随机游走）——2026-09-22 平滑尺度扫描（`private/reviews/
-   climate-baseline-2026-09-22/smoothing-scale-sweep.log`）：σ=150–200 km 把马赛克
+   每 pass 是一步惰性随机游走）——2026-09-22 平滑尺度扫描：σ=150–200 km 把马赛克
    噪声压到季风信号的 ~1/17 同时保住 ~70% 梯度，σ=500 km 砍掉 65–85%。**未平滑的
    raw 场保留**：④ 定常波分量在平滑前叠加（§5.6）。
 4. **梯度**（`_graph_least_squares_gradient` :1590，调用 :667）：逐 cell 最小二乘拟
