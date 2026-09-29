@@ -187,12 +187,21 @@ _EPS_U: float = 0.015
 # shape table + land-excess gate = observational fit (Earth monsoon sectors).
 _COUPLET_WINTER_SHAPE: tuple[tuple[float, float], ...] = (
     # (|winter latitude| deg, value / |trough|)
-    (0.0, 0.119), (10.0, 0.19), (35.0, 0.19), (45.0, 0.0),
+    (0.0, 0.119),
+    (10.0, 0.19),
+    (35.0, 0.19),
+    (45.0, 0.0),
 )
 _COUPLET_SUMMER_SHAPE: tuple[tuple[float, float], ...] = (
     # (summer-side latitude deg, value / |trough|) — crosses zero ~5°
-    (0.0, 0.119), (5.0, 0.032), (10.0, -0.329), (15.0, -0.560),
-    (20.0, -0.894), (25.0, -1.0), (32.0, -1.0), (45.0, 0.0),
+    (0.0, 0.119),
+    (5.0, 0.032),
+    (10.0, -0.329),
+    (15.0, -0.560),
+    (20.0, -0.894),
+    (25.0, -1.0),
+    (32.0, -1.0),
+    (45.0, 0.0),
 )
 _COUPLET_BIN_DEG: float = 5.0
 
@@ -761,6 +770,7 @@ def monsoon_couplet_pressure(
 
     areas = np.asarray(cell_area_km2, dtype=np.float64)
     p_ann = np.asarray(p_regime_mm_yr, dtype=np.float64)
+
     # Circular sector running mean helper over the binned field.
     def _sector_mean(binned: np.ndarray) -> np.ndarray:
         """Area-weighted running mean over ±`half` longitude bins (wrap)."""
@@ -800,9 +810,9 @@ def monsoon_couplet_pressure(
         t_l_cell = t_l[lon_bin]
         t_o_cell = t_o[lon_bin]
         trough = -t_l_cell  # positive where a trough exists
-        g_land = np.clip(
-            (t_o_cell - t_l_cell) / np.maximum(trough, 1e-6), 0.0, 1.0
-        ) * (trough > 0.0)
+        g_land = np.clip((t_o_cell - t_l_cell) / np.maximum(trough, 1e-6), 0.0, 1.0) * (
+            trough > 0.0
+        )
         g_conv = np.clip(1.0 - (p_w[lon_bin] - 700.0) / (2400.0 - 700.0), 0.0, 1.0)
 
         # Each hemisphere gets ONLY its own shape; the equator cell takes the
@@ -829,8 +839,11 @@ def monsoon_couplet_pressure(
         # side only, which let the Mexico trough drive an East-Pacific
         # offshore extension + cross-basin zonal gradient and poisoned the
         # West-Pacific trades and the SCS westerlies.
-        dp_add[in_band, m] = fade * trough[in_band] * g_land[in_band] * (
-            g_conv[in_band] * s_w[in_band] + s_s[in_band]
+        dp_add[in_band, m] = (
+            fade
+            * trough[in_band]
+            * g_land[in_band]
+            * (g_conv[in_band] * s_w[in_band] + s_s[in_band])
         )
         gate_field[:, m] = fade * g_land * (trough > 0.0)
     if return_gate:
