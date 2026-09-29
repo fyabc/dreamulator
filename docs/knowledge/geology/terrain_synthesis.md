@@ -179,20 +179,22 @@ uplift −= D_caldera · exp(−(d / σ_caldera)²)          # 可选中央破�
 
 其中 d 为到热点中心的大圆距离，σ 为热点半径。
 
-### 4.3 内陆古造山带与裂谷
+### 4.3 内陆古造山带
 
 [Şengör (1990)](https://doi.org/10.1016/0012-8252(90)90082-3) 将造山带分为多种类型，
 指出古缝合线可远离活跃板块边界。板块碰撞后漂移分离，残留的造山带
 （如乌拉尔山脉、阿巴拉契亚山脉）作为线状高地保留在大陆内部。
 [Burke & Dewey (1973)](https://doi.org/10.1086/627930) 的三联点演化理论
-解释了拗拉槽（failed rift arm）的形成——裂谷未能发展成洋盆而保留为内陆凹陷。
+解释了拗拉槽（failed rift arm）的形成——裂谷未能发展成洋盆而保留为内陆凹陷
+（实现侧：内陆裂谷臂生成已于 2026-09-29 移除——每板块至多一条、占比过小；
+世界尺度的失败裂谷由 geography.yaml 手写表达）。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `interior_orogeny_count` | 2 | 每大陆板块内陆造山带数量（0 = 关闭） |
 | 造山带幅度 | 500–1500 m | 随机高斯隆起 |
 | 造山带宽度 | 80–200 km | 高斯 sigma |
-| 裂谷概率 | 30%/板块 | 随机线状凹陷 300–800 m |
+| 造山带中线蜿蜒 | ±180 km | 横向位移（`interior_belt_meander_km`，0=直线） |
 
 每板块随机方向放置线状隆起，沿走向增加噪声扰动以模拟自然形态。
 
@@ -208,12 +210,35 @@ uplift −= D_caldera · exp(−(d / σ_caldera)²)          # 可选中央破�
 - 费尔干纳盆地（天山-帕米尔）——断块差异运动
 - Basin and Range（美国西部）——伸展环境地堑
 
-裂谷臂同样使用沿走向深度调制（深 300–800 m，σ = 40–100 km）。
+**中线横向蜿蜒**（2026-09-29）：真实古造山带沿复活弱带弯曲（Şengör 1990），
+而非精确大圆弧。belt 中线以两频 simplex 噪声横向位移 δ(t)（±`interior_belt_meander_km`），
+cell 距离取一阶近似 |signed_d − δ(t)|。
+
+**活跃边界沿线形态**（2026-09-29，同轮上浮）：
+
+- **传播裂谷沿线伸展梯度**（Vink 1982，转引自 Laptev Sea 裂谷建模综述）：裂谷
+  尖端地壳伸展量小、成熟段大——红海成熟段宽 180–350 km，Afar/Manda Hararo
+  传播尖端 ~50 km 地堑（[Illsley-Kemp et al. 2018, *Geochemistry, Geophysics,
+  Geosystems*](https://eprints.bbk.ac.uk/id/eprint/25527/2/25527.pdf)；红海
+  陆-洋过渡经典工作见 Cochran & Martinez 1988, *Tectonophysics*）。实现为
+  宽度+入海深度的平滑沿线调制，一条边界呈现红海↔东非相变。
+- **轴线 en-echelon 错列**：裂谷轴局部化于先存弱带，段间侧向错步——红海系
+  Manda Hararo 段横跨 Danakil 微板块右旋错步（同上 Illsley-Kemp et al. 2018
+  及其引文）。实现为轴线侧向蜿蜒场。
+- **造山带 salient/recess**：阿巴拉契亚 Pennsylvania salient 的运输方向沿走向
+  变化 ~100 km 量级（冲断带 salient-recess 交汇处的斜向汇聚研究，见
+  *Thrust Tectonics and Hydrocarbon Systems* 相关章节综述）。实现为汇聚带
+  剖面中心侧移场。
 
 > 参考文献：
 > - Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar, Turpan and
 >   Alakol basins as Late Permian to Early Triassic extensional structures."
 >   *Journal of the Geological Society*, 152, 327–338.
+> - Cochran, J.R., & Martinez, F. (1988). "Evidence from the northern Red Sea on
+>   the transition from continental to oceanic rifting." *Tectonophysics*.
+> - Illsley-Kemp, F. et al. (2018). "Initiation of a proto-transform fault prior
+>   to seafloor spreading." *G³*.
+>   <https://eprints.bbk.ac.uk/id/eprint/25527/2/25527.pdf>
 > - Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
 
 ### 4.4 内陆低地（克拉通内部系统性下压）
