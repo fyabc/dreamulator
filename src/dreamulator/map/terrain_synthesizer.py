@@ -1168,6 +1168,57 @@ def _asymmetric_boundary_effects(
     polarity = np.where(polarity_noise > 0.0, 1.0, -1.0)
     side = _divergent_side_sign(mesh)
 
+    # Rift along-axis phase field (§3.6): smooth u ∈ [0, 1], ~800 km wavelength.
+    # Low-u segments are incipient rift tips (narrow, emergent grabens), high-u
+    # segments mature drowned seas — the systematic along-strike stretching
+    # gradient of propagating rifts (Vink 1982; Red Sea 180–350 km vs the
+    # Afar/Manda Hararo tip ~50 km).
+    rift_u_noise = fbm_on_points(
+        px,
+        py,
+        pz,
+        int(config.seed) + 9210,
+        octaves=2,
+        lacunarity=2.0,
+        persistence=0.5,
+        base_freq=8.0,
+    )
+    rift_u = 0.5 * (rift_u_noise + 1.0)  # [0, 1]
+
+    # Lateral meander fields (±1, ~650 km): relief centres wander off the
+    # kinematic boundary — rift axes localise on inherited weakness fabric
+    # (Danakil en-echelon step-overs), orogenic belts deflect in
+    # salients/recesses (Pennsylvania salient ~100 km).  Zero config amplitude
+    # restores the old boundary-hugging behaviour.
+    meander_div = (
+        fbm_on_points(
+            px,
+            py,
+            pz,
+            int(config.seed) + 9310,
+            octaves=2,
+            lacunarity=2.0,
+            persistence=0.5,
+            base_freq=10.0,
+        )
+        if config.rift_meander_km > 0
+        else None
+    )
+    meander_conv = (
+        fbm_on_points(
+            px,
+            py,
+            pz,
+            int(config.seed) + 9410,
+            octaves=2,
+            lacunarity=2.0,
+            persistence=0.5,
+            base_freq=10.0,
+        )
+        if config.orogen_meander_km > 0
+        else None
+    )
+
     # Horst-graben fault-block noise: high-frequency anisotropic fBm aligned to
     # boundary strike, so blocks are elongated along the rift axis (not isotropic
     # blobs).  Only used in the continental rift branch, confined to the graben.
@@ -1186,11 +1237,16 @@ def _asymmetric_boundary_effects(
         else generate_fbm_on_cells(mesh, fault_cfg)
     )
 
+    # Influence mask bound: the meander can shift relief centres off the
+    # boundary, so widen the band by the largest configured wander.
+    meander_max = max(config.rift_meander_km, config.orogen_meander_km)
+    band_max = 1.2 * shoulder_sigma + meander_max
+
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
         d = cell.distance_to_boundary_km
-        if d is None or d > 1.2 * shoulder_sigma:
+        if d is None or d > band_max:
             continue
 
         rate = abs(cell.convergence_rate_cm_yr)
@@ -1227,9 +1283,14 @@ def _asymmetric_boundary_effects(
                 sigma_conv * (1.0 - asym * 0.5) * (0.7 + 0.6 * width_u[i])  # steep side
             )
 
+            # Lateral deflection (salient/recess): the whole orogen
+            # cross-section — mountain, intermontane basin, trench — shifts
+            # off the kinematic boundary by δ_conv(x).
+            d_o = d - config.orogen_meander_km * meander_conv[i] if meander_conv is not None else d
+
             # Mountain peak offset toward overriding plate (50–150 km)
             peak_offset = asym * sigma_conv * 0.25
-            dist_from_peak = abs(d - peak_offset)
+            dist_from_peak = abs(d_o - peak_offset)
             mountain = float(
                 _dual_boundary_falloff(
                     np.array([dist_from_peak]), ridge_sigma, sigma_front, shoulder_strength
@@ -1266,7 +1327,7 @@ def _asymmetric_boundary_effects(
                         * basin_strength
                     )
                     delta_h[i] -= basin_depth * np.exp(
-                        -((d - basin_center) ** 2) / (2 * basin_sigma * basin_sigma)
+                        -((d_o - basin_center) ** 2) / (2 * basin_sigma * basin_sigma)
                     )
 
             # Oceanic trench on the subducting side (100–200 km from peak).
@@ -1274,8 +1335,8 @@ def _asymmetric_boundary_effects(
             # collision has no trench.  Deepened to ~6 km relief so trenches
             # reach abyssal-trench depths (~−10 km; Mariana ≈ −11 km).
             trench_dist_km = sigma_conv * 0.35  # ~140 km
-            if d > trench_dist_km and crust == "oceanic":
-                dist_from_trench = abs(d - trench_dist_km - peak_offset)
+            if d_o > trench_dist_km and crust == "oceanic":
+                dist_from_trench = abs(d_o - trench_dist_km - peak_offset)
                 trench_sigma = sigma_conv * 0.25  # narrow, sharp trench
                 trench = -_TRENCH_RELIEF_M * np.exp(
                     -(dist_from_trench * dist_from_trench) / (2 * trench_sigma * trench_sigma)
@@ -1344,10 +1405,22 @@ def _asymmetric_boundary_effects(
                 # as a shallow graben above sea level.  `rate` = |v_n| (full
                 # divergence rate, cm/yr) at the boundary.
                 rift_depth_factor = 0.8 if rate >= config.continental_rift_sea_rate_cm_yr else 0.3
-                # Half-graben: signed distance (ds > 0 = footwall side) puts the
-                # shoulder on ONE side only, so the rift is asymmetric instead of
-                # two symmetric shoulders.
-                ds = d * side[i] * polarity[i]
+                # Along-axis phase (Vink 1982): tips are narrow and stay
+                # emergent (East-Africa stage), mature segments wide and
+                # drowned (Red Sea stage) — one boundary hosts the phase
+                # mosaic instead of a uniform ribbon.
+                u_r = rift_u[i]
+                m_axis = config.rift_axis_modulation
+                rift_depth_factor *= 0.55 + 0.45 * u_r
+                # Half-graben: the shoulder sits on ONE side (polarity), so the
+                # rift is asymmetric instead of two symmetric shoulders.  The
+                # valley axis itself wanders laterally off the kinematic
+                # boundary (en-echelon inherited fabric): ds_side = signed
+                # distance from the *wandered* axis.
+                ds_side = d * side[i]
+                if meander_div is not None:
+                    ds_side -= config.rift_meander_km * meander_div[i]
+                ds = ds_side * polarity[i]
                 # Rift-valley width grows with cumulative divergence E
                 # (distributed extension, East African Rift 50–200 km — §3.6):
                 # a boundary that rifted longer/faster gets a wider graben, so the
@@ -1357,11 +1430,11 @@ def _asymmetric_boundary_effects(
                     config.rift_valley_max_km,
                     config.rift_valley_base_km
                     + config.rift_valley_rate * cell.cumulative_divergence_km,
-                )
+                ) * (1.0 - m_axis + 2.0 * m_axis * u_r)
                 rift = (
                     -config.divergent_depth_m
                     * rift_depth_factor
-                    * np.exp(-(ds * ds) / (2 * valley_sigma * valley_sigma))
+                    * np.exp(-(ds_side * ds_side) / (2 * valley_sigma * valley_sigma))
                 )
                 ridge = (
                     config.divergent_depth_m
@@ -1370,10 +1443,15 @@ def _asymmetric_boundary_effects(
                     * np.exp(-((ds - sigma_div * 0.6) ** 2) / (2 * (sigma_div * 0.3) ** 2))
                 )
                 # Horst-graben: high-freq fault blocks confined to the graben
-                # (d < σ_div), ±fault_amp relief so the rift floor is broken into
-                # along-strike horsts/grabens instead of a smooth valley.
+                # (|ds_side| < σ_div), ±fault_amp relief so the rift floor is
+                # broken into along-strike horsts/grabens instead of a smooth
+                # valley.
                 fault_amp = config.rift_fault_block_amp_m  # m (§3.8)
-                fault = fault_amp * fault_noise[i] * np.exp(-(d * d) / (2 * (sigma_div * 0.4) ** 2))
+                fault = (
+                    fault_amp
+                    * fault_noise[i]
+                    * np.exp(-(ds_side * ds_side) / (2 * (sigma_div * 0.4) ** 2))
+                )
                 # uplift_mod (mod) only modulates the shoulder (ridge), not the
                 # valley (rift) — otherwise the arc noise halves the graben depth
                 # and kills the rift sea (was ~-26 m).
@@ -1896,7 +1974,7 @@ def _apply_interior_lowlands(
     ``interior_lowland_distance_scale_km`` beyond it, soft-clamped above
     ``interior_lowland_floor_m`` (smooth maximum) so the calibrated coastline
     (and target land fraction) is never crossed.  Runs before the island-arc /
-    interior-landform stages so paleo-orogeny belts and rift valleys are carved
+    interior-landform stages so paleo-orogeny belts are carved
     on top of the lowlands.
 
     References:
@@ -2368,7 +2446,7 @@ def _apply_island_arcs(
 
 
 # =========================================================================
-# Interior landforms: paleo-orogeny, rifts, cratonic basins
+# Interior landforms: paleo-orogeny belts, intermontane basins
 # =========================================================================
 
 
@@ -2378,21 +2456,25 @@ def _apply_interior_landforms(
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Paleo-orogeny belts, rift valleys, and intermontane basins.
+    """Paleo-orogeny belts and intermontane basins.
 
     Plate interiors far from active boundaries can appear too flat.
-    On Earth, ancient collision zones (Urals, Appalachians) and failed
-    rift arms persist as linear features long after the plate boundary
-    has migrated away.
+    On Earth, ancient collision zones (Urals, Appalachians) persist as
+    linear features long after the plate boundary has migrated away.
 
     For each continental plate, this places 1–3 belts at random orientation
-    across the interior.  Each belt meanders along a two-frequency path and
-    varies in **both height and width** along strike (0.55–1.45×, correlated
-    with amplitude — collision knots broad and high, transfer segments
-    narrow) via 1D simplex noise — producing natural peaks, passes, and
-    sunken intermontane basins (pull-apart / fault-block depressions like
-    the Turpan Depression at −154 m or the Fergana Valley).  Rift valleys
-    get the same meander + width variation (straight stripes read as fake).
+    across the interior.  Each belt's centre line meanders **laterally** off
+    its great circle (``interior_belt_meander_km``, reactivated weak zones)
+    and varies in **both height and width** along strike (0.55–1.45×,
+    correlated with amplitude — collision knots broad and high, transfer
+    segments narrow) via 1D simplex noise — producing natural peaks, passes,
+    and sunken intermontane basins (pull-apart / fault-block depressions like
+    the Turpan Depression at −154 m or the Fergana Valley).
+
+    Interior rift valleys were removed (2026-09-29): at most one per plate
+    and a few hundred cells — too small a share of the terrain to justify
+    the extra pass.  World-visible failed arms are authored via
+    geography.yaml instead.
 
     References
     ----------
@@ -2433,7 +2515,6 @@ def _apply_interior_landforms(
 
     total_orogeny = 0
     total_basin = 0
-    total_rift = 0
 
     xyz_all = mesh.cell_xyz
     radius_km = config.radius_km
@@ -2506,6 +2587,18 @@ def _apply_interior_landforms(
             basin_depth_max = config.interior_basin_depth_max_m
 
             belt_noise_seed = (belt_seed_base * 100 + belt_idx + 1) * 1000
+            # Reset the opensimplex global state once per belt so every
+            # noise2 call below (meander + strike) is hermetic.  The old
+            # per-cell reseed ran AFTER the first cell's wobble reads — the
+            # first cell always sampled whatever global state an earlier
+            # stage left behind, making back-to-back pipeline runs differ
+            # (caught by the terrain determinism test, 2026-09-29).
+            if _has_noise:
+                import warnings as _w
+
+                with _w.catch_warnings():
+                    _w.filterwarnings("ignore", message="overflow encountered")
+                    opensimplex.seed(belt_noise_seed)
 
             # ---- Pre-filter: dot product with gc_normal is a cheap proxy
             # for angular distance from the great-circle plane.
@@ -2537,36 +2630,35 @@ def _apply_interior_landforms(
                 if _angle_ap[_j] > angle_ab:
                     continue  # projection beyond the belt's end — not in the belt
                 t = float(t_vals[_j])
-                p_proj = _proj[_j]
                 i = interior_arr[ci]
                 pos = cand_xyz[_j]
 
-                # Along-strike wobble
-                if _has_noise:
-                    wobble = (
+                # Lateral meander: displace the belt centre line off its great
+                # circle by δ(t) km.  (The old implementation rotated the
+                # projected reference ALONG the belt — an along-strike shift,
+                # not a lateral one — which fragmented belts into straight
+                # dashes on the same great circle instead of curving them.)
+                # First-order distance to the wandered line:
+                # |signed lateral offset − δ(t)|, valid while |δ| ≪ R.
+                sin_d = np.clip(np.dot(pos, gc_normal), -1.0, 1.0)
+                signed_d_km = np.arcsin(sin_d) * radius_km
+                if _has_noise and config.interior_belt_meander_km > 0:
+                    meander_norm = (
                         opensimplex.noise2(belt_noise_seed + 0.5, t * 2.5) * 0.35
                         + opensimplex.noise2(belt_noise_seed + 1.5, t * 7.0) * 0.12
-                    )
-                    cos_w = np.cos(wobble)
-                    sin_w = np.sin(wobble)
-                    p_proj = p_proj * cos_w + np.cross(gc_normal, p_proj) * sin_w
+                    ) / 0.47  # normalise the two-frequency sum to ±1
+                    dist_km = abs(signed_d_km - config.interior_belt_meander_km * meander_norm)
+                else:
+                    dist_km = abs(signed_d_km)
 
-                # Along-strike modulation: height + width
+                # Along-strike modulation: height + width (opensimplex state
+                # was reset per-belt above, so this call is hermetic)
                 if _has_noise:
-                    import warnings as _w
-
-                    with _w.catch_warnings():
-                        _w.filterwarnings("ignore", message="overflow encountered")
-                        opensimplex.seed(belt_noise_seed)
                     strike_noise = opensimplex.noise2(t * 8.0, belt_noise_seed * 0.01)
                 else:
                     strike_noise = rng.uniform(-1.0, 1.0)
 
                 local_sigma = sigma_km * (0.55 + 0.9 * (strike_noise + 1.0) / 2.0)
-
-                # Angular distance from cell to the (wobbled) belt line
-                dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
-                dist_km = np.arccos(dot_to_arc) * radius_km
 
                 if dist_km >= 2.0 * local_sigma:
                     continue
@@ -2593,106 +2685,12 @@ def _apply_interior_landforms(
             total_orogeny += belt_count
             total_basin += basin_count
 
-        # ---- Rift valleys (1 per plate, gated by interior_rift_chance) ----
-        if rng.random() < config.interior_rift_chance and ni > 20:
-            a_idx = interior[rng.integers(0, ni)]
-            b_idx = interior[rng.integers(0, ni)]
-            if a_idx != b_idx:
-                a_pos = xyz_all[a_idx]
-                b_pos = xyz_all[b_idx]
-                gc_normal = np.cross(a_pos, b_pos)
-                gc_norm = np.linalg.norm(gc_normal)
-                if gc_norm > 1e-12:
-                    gc_normal /= gc_norm
-                    # Cap the rift length like orogeny belts — a full great-circle
-                    # rift reads as one long artificial stripe.  Most rifts ~600 km.
-                    angle_ab_raw = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
-                    rift_length_deg = (
-                        config.interior_belt_length_min_deg
-                        + (
-                            config.interior_belt_length_max_deg
-                            - config.interior_belt_length_min_deg
-                        )
-                        * rng.random() ** 2
-                    )
-                    angle_ab = min(angle_ab_raw, np.radians(rift_length_deg))
-                    rift_sigma = rng.uniform(40.0, 100.0)
-                    rift_depth_base = rng.uniform(300.0, 800.0)
-                    rift_noise_seed = (belt_seed_base * 100 + 99) * 1000
-
-                    # Pre-filter (same principle as orogeny belts)
-                    _abs_dot = np.abs(np.dot(interior_xyz, gc_normal))
-                    _near = _abs_dot < 0.174
-                    candidates = np.where(_near)[0]
-                    if len(candidates) == 0:
-                        continue
-                    cand_xyz = interior_xyz[candidates]
-
-                    _proj = cand_xyz - np.outer(np.dot(cand_xyz, gc_normal), gc_normal)
-                    _pn = np.linalg.norm(_proj, axis=1)
-                    _ok = _pn > 1e-12
-                    _proj[_ok] /= _pn[_ok, np.newaxis]
-
-                    _cos_ap = np.clip(np.dot(_proj, a_pos), -1.0, 1.0)
-                    _angle_ap = np.arccos(_cos_ap)
-                    t_vals = np.clip(_angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
-
-                    for _j, ci in enumerate(candidates):
-                        if not _ok[_j]:
-                            continue
-                        if _angle_ap[_j] > angle_ab:
-                            continue  # projection beyond the rift's end
-                        t = float(t_vals[_j])
-                        p_proj = _proj[_j]
-                        i = interior_arr[ci]
-                        pos = cand_xyz[_j]
-
-                        # Meander
-                        if _has_noise:
-                            wobble = (
-                                opensimplex.noise2(rift_noise_seed + 0.5, t * 2.5) * 0.35
-                                + opensimplex.noise2(rift_noise_seed + 1.5, t * 7.0) * 0.12
-                            )
-                            cos_w = np.cos(wobble)
-                            sin_w = np.sin(wobble)
-                            p_proj = p_proj * cos_w + np.cross(gc_normal, p_proj) * sin_w
-
-                        # Along-strike modulation
-                        if _has_noise:
-                            import warnings as _w
-
-                            with _w.catch_warnings():
-                                _w.filterwarnings("ignore", message="overflow encountered")
-                                opensimplex.seed(rift_noise_seed)
-                            strike_noise = opensimplex.noise2(t * 6.0, rift_noise_seed * 0.01)
-                        else:
-                            strike_noise = rng.uniform(-1.0, 1.0)
-                        depth_mult = 0.4 + 0.6 * (strike_noise + 1.0) / 2.0
-                        local_depth = rift_depth_base * depth_mult
-                        local_rift_sigma = rift_sigma * (0.55 + 0.9 * (strike_noise + 1.0) / 2.0)
-
-                        dot_to_arc = np.clip(np.dot(pos, p_proj), -1.0, 1.0)
-                        dist_km = np.arccos(dot_to_arc) * radius_km
-
-                        if dist_km >= 2.0 * local_rift_sigma:
-                            continue
-
-                        weight = np.exp(
-                            -(dist_km * dist_km) / (2 * local_rift_sigma * local_rift_sigma)
-                        )
-                        jitter = rng.uniform(-0.10, 0.10)
-                        elevation[i] -= local_depth * weight * (1.0 + jitter)
-                        if not mesh.cells[i].landform:
-                            mesh.cells[i].landform = "rift"
-                        total_rift += 1
-
-    if total_orogeny > 0 or total_basin > 0 or total_rift > 0:
+    if total_orogeny > 0 or total_basin > 0:
         logger.info(
-            "  Interior landforms: %d orogeny, %d basin, %d rift cells "
+            "  Interior landforms: %d orogeny, %d basin cells "
             "(%d belts/plate, basin chance %.0f%%)",
             total_orogeny,
             total_basin,
-            total_rift,
             num_orogenies,
             config.interior_basin_chance * 100,
         )

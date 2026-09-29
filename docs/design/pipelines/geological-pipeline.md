@@ -769,6 +769,15 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
    （~800 km 波长，隆起幅度 ∈ [−0.25, 1.35]）：高值段成主岛/山结，负值段沉降为
    弧间断陷海——汇聚带不再均匀缎带；`boundary_uplift_noise` 调制岛弧/洋脊。
+   **沿线形态（2026-09-29）**：(a) 大陆裂谷宽度叠加沿线相位调制
+   `σ × (1−m + 2m·u)`（`rift_axis_modulation`，u 为 ~800 km 平滑 fBm ∈ [0,1]），
+   入海深度同步渐变 `×(0.55+0.45u)`——低 u 段回退为东非式高出海面地堑，一条边界
+   上呈现红海↔东非裂谷相变镶嵌（Vink 1982 传播裂谷沿线伸展梯度）；(b) 剖面中心
+   **侧向蜿蜒**：裂谷轴线 `ds_side = d·side − rift_meander_km·δ_div(x)`、汇聚带
+   山体/山间盆地/海沟整体 `d − orogen_meander_km·δ_conv(x)`（δ 为 ~650 km fBm
+   ±1，`_divergent_side_sign` 提供裂谷的稳定带符号侧向坐标）——水体与山带不再
+   精确贴板块边界，而是随先存弱带蜿蜒（Danakil en-echelon 错列 / 阿巴拉契亚
+   salient-recess ~100 km 量级）。
 3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
    沿板块运动方向（欧拉极速度）追踪链，`hotspot_active_height_m`（默认 8500 m）从洋底抬升露海面成岛，
    沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 3（大型世界可在
@@ -785,32 +794,36 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > `crust_plate_floor`（默认 0.10）避免整板近零陆壳；泄漏陆壳 `_relabel_leaked_crust`
 > 在 base 前重标为洋壳（洒点岛屿只由岛弧/热点/钉扎涌现）。
 
-### 7.2 内部地貌：古造山带、山间盆地与裂谷
+### 7.2 内部地貌：古造山带与山间盆地
 
 板块内部（距边界 >600 km 的大陆区域）放置线性构造带（`_apply_interior_landforms`），
-模拟古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）和裂谷臂。地貌学依据已上浮至
+模拟古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）。地貌学依据已上浮至
 [knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §4.3。
 
 - **沿走向调制**：每条 belt 用 1D simplex 噪声沿大圆弧采样，调制各段振幅
   （振幅 ∈ [base × 0.3, base × 1.7]），造山带呈高峰 + 鞍部而非均匀脊线；
-  路径双频 meander（0.35+0.12 rad），宽度沿走向 0.55–1.45× 变化。
-- **长度封顶**：造山带/裂谷的大圆弧长度按右偏分布随机截断
+  宽度沿走向 0.55–1.45× 变化。
+- **横向蜿蜒**：belt 中线沿大圆弧**横向**位移 δ(t) = `interior_belt_meander_km` ×
+  双频 simplex（归一 ±1），cell 距离取一阶近似 |signed_d − δ(t)|——belt 随弱带
+  弯曲（Şengör 1990 弱带复活），而非直线段。（旧实现把参考点沿走向旋转，几何上是
+  走向偏移而非横向位移，belt 永远贴原大圆、被噪声切成虚线段——2026-09-29 修正。）
+- **长度封顶**：造山带的大圆弧长度按右偏分布随机截断
   `min_deg + (max_deg − min_deg)·rand²`（默认 2–10°，多数 ~600 km、最长 ~1200 km），
   配合 `_angle_ap > angle_ab` 的长度过滤，把「贯穿板块的单条长条」变成「散碎短段」。
 - **山间盆地**：沿走向噪声低于阈值时（`interior_basin_chance`）该段成为断陷盆地，
   深度上限 `interior_basin_depth_max_m`（部分盆底低于海平面）。
-- **裂谷**：每板块 `interior_rift_chance` 概率（默认 0.5）生成一条独立线性凹陷
-  （深 300–800 m，σ=40–100 km），复用同一长度封顶，数量远少于造山带。
+- **内部裂谷已删除**（2026-09-29）：每板块至多一条、数百 cell 量级，占比过小不值
+  单独一步；世界尺度的失败裂谷臂由 geography.yaml 手写（feature `rift`）表达。
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
 | `interior_orogeny_count` | 5 | 0–10 | 基准 belt 数/板块，随 inland cell 数缩放（+1/800 cell），无硬上限 |
-| `interior_belt_length_min_deg` | 2.0 | 0–5 | belt/裂谷大圆弧最短长度（度） |
-| `interior_belt_length_max_deg` | 10.0 | 5–20 | belt/裂谷大圆弧最长长度（度） |
-| `interior_rift_chance` | 0.5 | 0–1 | 每板块生成裂谷的概率 |
+| `interior_belt_length_min_deg` | 2.0 | 0–5 | belt 大圆弧最短长度（度） |
+| `interior_belt_length_max_deg` | 10.0 | 5–20 | belt 大圆弧最长长度（度） |
 | `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
 | `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
 | `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
+| `interior_belt_meander_km` | 180 | 0–400 | belt 中线横向蜿蜒幅度（±km，0=直线） |
 
 ### 7.3 内部低地：大陆内部系统性下压
 
@@ -925,6 +938,9 @@ age = max_age · d_div / (d_div + d_conv)
 | `divergent_depth_m` | 2000 | 500 – 2000 | 离散边界山脊振幅 |
 | `boundary_influence_km` | 500 | 100 – 2000 | 边界效应影响半径 |
 | `mountain_asymmetry` | 0.4 | 0 – 1 | 迎/背风坡不对称度 |
+| `rift_axis_modulation` | 0.525 | 0 – 1 | 裂谷宽度沿线调制跨度（σ × [1−m, 1+m]） |
+| `rift_meander_km` | 80 | 0 – 200 | 裂谷轴线侧向蜿蜒（±km，0=贴边界） |
+| `orogen_meander_km` | 70 | 0 – 200 | 汇聚带剖面中心侧移（±km，0=贴边界） |
 | `noise_amplitude_land_m` | 900 | 200 – 1500 | 细节噪声振幅（陆地） |
 | `noise_amplitude_ocean_m` | 450 | 200 – 1000 | 细节噪声振幅（海洋） |
 | `regional_noise_amplitude_land_m` | 1800 | 500 – 3000 | 区域噪声振幅（陆地） |
