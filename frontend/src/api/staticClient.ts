@@ -222,6 +222,9 @@ export const staticApi = {
       type: d.type as string,
       period: d.period as string | undefined,
       tags: (d.tags as string[]) || [],
+      // Status-aware grouping (LayerDocuments designGroups) reads this;
+      // older exports lack the field → undefined → treated as active.
+      status: (d.status as string) || undefined,
     })) as DocumentMeta[]
   },
 
@@ -254,6 +257,9 @@ export const staticApi = {
       type: d.type as string,
       period: d.period as string | undefined,
       tags: (d.tags as string[]) || [],
+      // Status-aware grouping (LayerDocuments designGroups) reads this;
+      // older exports lack the field → undefined → treated as active.
+      status: (d.status as string) || undefined,
     })) as DocumentMeta[]
   },
 
