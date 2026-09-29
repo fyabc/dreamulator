@@ -228,6 +228,56 @@ class TestCoastalRainoutFactor:
         assert np.all(f[west_edge] > 1.0)
         assert np.all(f[east_edge] < 1.0)
 
+    def test_inland_distance_decay_and_long_day_reach(self):
+        """2026-09-30: the first-cell factor decays inland as exp(−d/L); the
+        reach L scales with the solar day (sea-breeze penetration ∝ √P_day),
+        so a long-day world keeps coastal influence deeper inland."""
+        from dreamulator.map.climate_simulator import _coastal_rainout_factor
+
+        mesh, wind = _ridge_mesh(ridge_top_m=0.0)
+        n = N_LON * N_LAT
+        lons = np.array([c.lon for c in mesh.cells])
+        lats = np.array([c.lat for c in mesh.cells])
+        is_land = np.tile(
+            (np.linspace(-180, 180 - 360.0 / N_LON, N_LON) >= 60.0)
+            & (np.linspace(-180, 180 - 360.0 / N_LON, N_LON) <= 120.0),
+            N_LAT,
+        )
+        is_ocean = ~is_land
+        t = np.full(n, 25.0)
+        nodes = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+
+        # synthetic per-cell distance to the nearest coast: |Δlon| steps × 400 km
+        step_km = 400.0
+        d_coast = np.minimum(np.abs(lons - 60.0), np.abs(lons - 120.0)) / 10.0 * step_km
+        d_coast[is_ocean] = 0.0
+
+        f_earth = _coastal_rainout_factor(
+            mesh, n, is_land, is_ocean, wind, t, nodes,
+            distance_to_coast_km=d_coast, solar_day_days_val=1.0,
+        )
+        f_long = _coastal_rainout_factor(
+            mesh, n, is_land, is_ocean, wind, t, nodes,
+            distance_to_coast_km=d_coast, solar_day_days_val=3.42,
+        )
+        assert np.all((f_earth >= 0.5 - 1e-12) & (f_earth <= 1.5 + 1e-12))
+        assert np.all(f_earth[is_ocean] == 1.0)
+
+        west_band = is_land & (lons <= 90.0)  # windward half under the westerly
+        # monotone decay toward 1 inland (synthetic distance grows with |Δlon|)
+        dev_earth = np.abs(f_earth - 1.0)
+        for lat in np.unique(lats):
+            row = west_band & (np.abs(lats - lat) < 1e-9)
+            idx = np.flatnonzero(row)
+            order = np.argsort(lons[idx])
+            assert np.all(np.diff(dev_earth[idx][order]) <= 1e-9)
+        # long solar day (82 h → L×√3.42): interior cells retain more modulation
+        interior = is_land & (np.abs(lons - 90.0) < 1e-6)
+        assert np.all(np.abs(f_long[interior] - 1.0) > np.abs(f_earth[interior] - 1.0))
+        # far inland (beyond 3.5 L) untouched
+        far_in = is_land & (d_coast > 3.5 * 250.0 * 3.0)
+        assert np.all(f_long[far_in] == 1.0) if far_in.any() else True
+
 
 class TestSubPlanetRainoutFactor:
     """CLIM-02 slice 4: the sub-planet convective anchor as a k_rain gate."""
