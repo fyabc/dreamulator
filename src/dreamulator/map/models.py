@@ -356,6 +356,13 @@ class VoronoiCell(BaseModel):
         default=None,
         description="Landform type: 'orogeny'/'basin' (interior belts), 'transform' (active)",
     )
+    ice_thickness_m: float | None = Field(
+        default=None,
+        description=(
+            "Ice thickness (m) where this cell carries glacier ice; None = ice-free. "
+            "The surface elevation already includes it — bed = elevation − ice_thickness_m."
+        ),
+    )
 
     # Neighbours
     neighbors: list[int] = Field(

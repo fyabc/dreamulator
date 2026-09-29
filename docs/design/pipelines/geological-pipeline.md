@@ -42,6 +42,7 @@
 - `terrain_synthesizer.py` - 地形合成：双峰基底 + 边界效应 + fBm + 后处理（§7）
 - `water_bodies.py` - 海陆分类（连通性洪泛）与大内流湖升级（§8）
 - `hydrology.py` / `river_generator.py` - 流向 / 汇水累积 / 河网 / 湖泊 + 河流矢量特征（§9）
+- `ice_sheets.py` - 极地冰盖追加相位：日照门 + 海陆分域 + 完美塑性穹丘（§8）
 - `terrain_cache.py` - 子阶段内容指纹缓存，增量重建（§2）
 - `export.py` - 等距圆柱栅格导出 + 图层导出（§10）
 - `importer.py` / `elevation_codec.py` - 外部高度图导入与 16-bit PNG 编解码（§10）
@@ -51,8 +52,8 @@
 
 | 调用方 | 入口 | 场景 |
 |--------|------|------|
-| 地质引擎 | `GeologicalEngine` 调 `run_terrain_pipeline`（`terrain_pipeline.py:137`） | `dreamulator build` DAG 主路径 |
-| 气候引擎 | 相位 6/8 内嵌 `simulate_climate`；`ClimateEngine` 独立重建 | [climate-pipeline.md](climate-pipeline.md) §10 |
+| 地质引擎 | `GeologicalEngine` 调 `run_terrain_pipeline`（`terrain_pipeline.py:167`） | `dreamulator build` DAG 主路径 |
+| 气候引擎 | 相位 6/9 内嵌 `simulate_climate`；`ClimateEngine` 独立重建 | [climate-pipeline.md](climate-pipeline.md) §10 |
 | 生态 / 文明引擎 | 读 mesh 上的气候/生态字段 | [world-generation-pipeline.md](world-generation-pipeline.md) |
 | 地图 API / 前端 | `api_routes/maps.py` 与前端查看器消费导出产物 | [map-system.md](map-system.md) |
 
@@ -82,24 +83,25 @@
 
 ## 2. 执行顺序
 
-`run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:137`）按固定
-顺序执行 8 个相位（`_STAGE_NAMES` :64-73，控制台 `1/8`-`8/8`）；`stages` 参数可选子集，
-`_resolve_stages`（:110）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
+`run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:167`）按固定
+顺序执行 9 个相位（`_STAGE_NAMES` :65-75，控制台 `1/9`-`9/9`）；`stages` 参数可选子集，
+`_resolve_stages`（:111）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
 细节章节在 §3-§10 展开。
 
 | 相位 | 名称 | 行号 | 调用 | 产出 → 下游 |
 |------|------|------|------|------------|
-| 1/8 | mesh | `:184` | `generate_cvt_mesh`；geography 栅格偏置采样 | `CVTMesh` → 全部后续相位 |
-| 2/8 | plates | `:217` | `generate_plates`（种子 / 剖分 / 地壳 / 欧拉极 / 地理锚定，§4） | `plate_id` / `crust_type` → 3、4 |
-| 3/8 | tectonics | `:253` | `run_tectonic_evolution`（§5）+ `apply_geography_crust` 重锚定 | 演化后 plates 与累积构造量 → 4、5 |
-| 4/8 | boundaries | `:341` | `detect_boundaries`（§6） | `boundary_type` → 5 |
-| 5/8 | terrain | `:374` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6、7、8 |
-| 6/8 | climate | `:426` | `simulate_climate`（细节全部委托 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 → 7 |
-| 7/8 | rivers | `:441` | `generate_rivers` + `extract_river_features` → features.json（§9） | 河网 / 河流矢量 → 8 |
-| 8/8 | export | `:469` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.json |
+| 1/9 | mesh | `:214` | `generate_cvt_mesh`；geography 栅格偏置采样 | `CVTMesh` → 全部后续相位 |
+| 2/9 | plates | `:247` | `generate_plates`（种子 / 剖分 / 地壳 / 欧拉极 / 地理锚定，§4） | `plate_id` / `crust_type` → 3、4 |
+| 3/9 | tectonics | `:283` | `run_tectonic_evolution`（§5）+ `apply_geography_crust` 重锚定 | 演化后 plates 与累积构造量 → 4、5 |
+| 4/9 | boundaries | `:380` | `detect_boundaries`（§6） | `boundary_type` → 5 |
+| 5/9 | terrain | `:421` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6-9 |
+| 6/9 | climate | `:477` | `simulate_climate`（细节全部委托 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 → 7 |
+| 7/9 | rivers | `:492` | `generate_rivers` + `extract_river_features` → features.json（§9） | 河网 / 河流矢量 → 9 |
+| 8/9 | ice | `:522` | `apply_polar_ice_sheets`（§8 极地冰盖：日照门 + 海陆分域 + Vialov 穹丘） | `ice_thickness_m` / 冰面 `elevation` → 9 |
+| 9/9 | export | `:533` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.msgpack.gz |
 
-海陆分类在 5/8 末尾写入、大内流湖升级在 8/8 开头执行——「海平面与水系统」（§8）横跨
-两个相位，该章开头有说明。
+海陆分类在 5/9 末尾写入、极地冰盖在 7/9 河流之后追加（8/9）、大内流湖升级在
+9/9 开头执行——「海平面与水系统」（§8）横跨三个相位，该章开头有说明。
 
 **增量缓存**（`terrain_cache.py`）：每个相位的输入做内容指纹（config 字段 + 相位
 schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则
@@ -116,6 +118,10 @@ schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint
 `terrain_pipeline.py` 的阶段负载 + 回放，并提升 `terrain_cache._STAGE_SCHEMA_VERSIONS`
 中该相位的版本号（旧 pickle 自动失效）。回归守卫 =
 `tests/test_map/test_cell_field_cache_replay.py`（新鲜运行 vs 全缓存回放逐字段全等）。
+
+**ice 相位不缓存**：极地冰盖是幂等的追加后处理（先从 `elevation − ice_thickness_m`
+重建基岩再重算，`ice_sheets.py`），秒级完成，每次重建从头执行，也不进入
+`_STAGE_SCHEMA_VERSIONS`。
 
 
 ---
@@ -971,8 +977,8 @@ age = max_age · d_div / (d_div + d_conv)
 
 ## 8. 海平面与水系统
 
-> 本章机制横跨两个相位：海陆分类（`water_class`）在 5/8 地形合成末尾写入，大内流湖
-> 升级在 8/8 导出开头执行（见 §2）。
+> 本章机制横跨三个相位：海陆分类（`water_class`）在 5/9 地形合成末尾写入，极地冰盖
+> 在 7/9 河流之后追加（8/9 独立相位），大内流湖升级在 9/9 导出开头执行（见 §2）。
 
 ### 海平面设定
 
@@ -1092,6 +1098,53 @@ def check_polar_configuration(
         "south_pole_node": south_idx,
     }
 ```
+
+### 极地冰盖（8/9 追加相位，`ice_sheets.py`）
+
+极地冰盖在海平面校准、地理钉扎、均衡压缩、平滑与河流全部完成**之后**追加
+（`apply_polar_ice_sheets`，`ice_sheets.py:152`）：冰只堆叠在陆地 cell 上，海平面
+维持校准值不动，**海岸线格局不受影响**；河网在冰期前的基岩面上生成（冰下河道）。
+每个 cell 的 `ice_thickness_m` 字段记录冰厚，基岩高程可由
+`elevation − ice_thickness_m` 重建，重跑幂等（先剥旧冰再重算，不会重复叠加）。
+机制分三段：
+
+1. **日照门（无量纲）**：cell 的年平均大气顶（TOA）日照低于本世界赤道值的
+   `ice_sheet_insolation_fraction`（0.50）即具备成冰资格——经典的米兰科维奇日照
+   控制。年平均由逐日平均日照（Hartmann 2016 式 3.7，与气候层
+   `climate_seasonality` 同一实现）对赤纬周期取样平均；太阳常数
+   S₀ = 1361·L/d² 由恒星光度与轨道距离解析。门的穿越纬度因此跟随黄赤交角与
+   恒星通量走（0.50 在地球 ≈67°；在 ε=14.9° 极区更暗的 nacrea ≈62°），
+   换星无需调参。
+2. **海陆分域（南北不对称的来源）**：地球上北极圈陆地是苔原而南极承大陆穹丘，
+   差异是地理的（北冰洋加热沿岸）而非天文的。以到最近海洋的测地距离
+   （多源 Dijkstra，`_distance_to_sea`）复现该机制：距海超过
+   `ice_maritime_distance_km`（700 km）的大陆内部建完整穹丘；门内近海陆地只在
+   雪线（`ice_cap_snowline_m`）以上长局部冰帽（加拿大北极 / 斯瓦尔巴式，上限
+   `ice_cap_max_m`）。地球参照：苔原海岸距海 < ~500 km，Dome A 内陆 ~1200 km。
+3. **穹丘剖面（完美塑性 Vialov）**：冰厚 h(x) = √(2·τ_d·x/(ρ_i·g))，x 为到冰缘
+   的测地距离（穹丘子图内从边界 cell 多源 Dijkstra；子图隔离保证冰只在陆地上
+   传播、绝不穿过海洋）。驱动应力 τ_d = 40 kPa（观测冰盖范围 50–100 kPa，
+   Cuffey & Paterson 2010），世界重力直接进入——重力更大的世界冰更薄。nacrea
+   北极核心（≥77°N）冰面均值 ~2320 m、峰值 ~4856 m（南极 Bedmap2 地面冰均值
+   ~2048 m，Dome A 4093 m）；南半球暮光大陆全境距海 < 700 km，只出冰帽
+   （≤500 m，斯瓦尔巴式景观）。
+
+| 参数 | 默认值 | 物理含义 |
+|------|--------|----------|
+| `ice_sheet_enabled` | true | 相位开关 |
+| `ice_sheet_insolation_fraction` | 0.50 | 日照门无量纲阈值 q̄(lat)/q̄(eq) |
+| `ice_sheet_driving_stress_kpa` | 40 | 完美塑性驱动应力 τ_d |
+| `ice_maritime_distance_km` | 700 | 穹丘 / 冰帽分域的距海阈值 |
+| `ice_cap_snowline_m` | 1200 | 冰帽雪线（基岩高程门槛） |
+| `ice_cap_max_m` | 500 | 冰帽厚度上限 |
+
+**认识论分类与限制**：日照门 + 穹丘剖面 = 近似推导；雪线 / 冰帽上限 / 距海阈值 =
+观测拟合（地球北极岸类比）。已知限制：门只看热量——假定极地积雪充足（寒冷极区
+在 Myr 尺度即使低降水也持续积累，参照南极），海洋热量输送只通过距海代理进入，
+极向热输送极端强的世界可能过冰；气候层交叉校验：冰 cell 年均温应 < 0 °C。
+下游衔接：气候层的高程递减率直接吃含冰面的 `elevation`，冰原表面自然得到更冷的
+气候（物理正确的反馈）。物理推导与文献全文见
+[knowledge/geology/ice_sheets.md](../../knowledge/geology/ice_sheets.md)。
 
 
 ---
