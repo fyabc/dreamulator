@@ -327,6 +327,28 @@ $$α_{eff} = α_{vis}\,f_{vis} + α_{nir}\,(1-f_{vis})$$
 $\approx 2\times10^7$。热容量随距海岸距离指数插值（`seasonal_heat_capacity`，~500 km
 e-folding）。这决定 C（海洋性）vs D（大陆性）分野——伦敦 Cfb vs 温尼伯 Dfb 相差 ~27°C。
 
+### 有效热容量的周期标度（√P 穿透深度）
+
+上表常数是**地球年标定值**——周期强迫下介质只在热穿透（皮肤）深度内储热：
+
+$$\delta = \sqrt{2\kappa/\omega} \propto \sqrt{P_{orb}}$$
+
+即短年世界的季节参与层更浅、有效热容量更小（Lohmann 2020 对海洋的标度分析
+$h_T = \sqrt{k_v\,\Delta t}$，Eq. 21，并强调有效热容量「反映热量渗入介质的速率」、
+是强迫周期的属性而非介质独有；$\delta=\sqrt{2\kappa/\omega}$ 是半无限固体周期导热的
+经典结果，Carslaw & Jaeger / Turcotte & Schubert 教材）。大气柱份额 $C_{atm} =
+c_p\,p_s/g \approx 1.02\times10^7$ J/m²/K（Lohmann 2020 同值）不随周期变化——大气
+质量就在那里，穿透物理只作用于表面份额：
+
+$$C(P) = C_{atm} + (C_{earth} - C_{atm})\cdot\sqrt{P/P_{earth}}$$
+
+实现：`climate_seasonality.period_scaled_heat_capacity`（`seasonal_heat_capacity` 的
+`orbital_period_days` 参数与湖容量 override 同走此函数）。地球（P = 365.25 d）精确
+回退原值（ratio = 1）；nacrea 短年（P ≈ 100 d）表面份额 ×√(100/365.25) ≈ 0.523 →
+陆地 2×10⁷ → 1.5×10⁷、海洋 2×10⁸ → 1.1×10⁸（≈29 m 等效混合层），季节振幅放大。
+认识论类别：近似推导（份额分解的大气项来自推导常数；表面项锚在地球站点振幅标定，
+指数来自穿透物理；逐世界 $p_s/g$ 差异对集总常数二阶，取地球值）。
+
 ### 内湖热容量（淡水湖，介于海陆之间）
 
 大型内湖（里海/五大湖/程序化世界的内流海，`is_lake=True` 且 `water_class="ocean"`）
@@ -378,9 +400,9 @@ dreamulator.engine.climate_seasonality.compute_seasonal_climate(...)  # 高层�
 |------|------|------|
 | `ebm_olr_b_wm2k` | 2.0 | 辐射阻尼 $B_{rad}$（W/m²/K，与年平 EBM 共用） |
 | `ebm_diffusion_wm2k` | 0.35 | 经向扩散 $D$（与年平 EBM 共用） |
-| `seasonal_land_heat_capacity` | 2.0e7 | 陆地+大气热容量 $C_{land}$（J/m²/K） |
-| `seasonal_ocean_heat_capacity` | 2.0e8 | 海洋混合层热容量 $C_{ocean}$（J/m²/K） |
-| `seasonal_lake_heat_capacity` | 4.0e7 | 内湖季节性温跃层热容量 $C_{lake}$（J/m²/K，~10 m） |
+| `seasonal_land_heat_capacity` | 2.0e7 | 陆地+大气热容量 $C_{land}$（J/m²/K，**地球年标定值**——按世界年长 √P 自动重标定，见上节） |
+| `seasonal_ocean_heat_capacity` | 2.0e8 | 海洋混合层热容量 $C_{ocean}$（J/m²/K，同上） |
+| `seasonal_lake_heat_capacity` | 4.0e7 | 内湖季节性温跃层热容量 $C_{lake}$（J/m²/K，~10 m，同上） |
 | `seasonal_coastal_scale_km` | 500.0 | 海洋调节 e-folding 长度（km） |
 | `maritime_advection_scale_km` | 1500.0 | 方向性海洋调节 e-folding 长度（km，0 关闭） |
 | `seasonal_ice_albedo` | true | 季节冰反照率反馈开关 |
@@ -526,6 +548,10 @@ dreamulator.engine.climate_physics.evaporation_rate                      # 能�
   host star spectral energy distribution and ice-albedo feedback on the climate of extrasolar
   planets." *Astrobiology* 12:1023（M 矮星冰反照率抑制 + 雪 0.8→0.6 / 冰 0.5→0.3 锚点值）.
 - Hartmann, D.L. (2016). *Global Physical Climatology* (2nd ed.). Elsevier. Eq. 3.7.
+- Lohmann, G. (2020). "Temperatures from energy balance models: the effective heat capacity
+  matters." *Earth Syst. Dynam.* 11:1195, doi:10.5194/esd-11-1195-2020（有效热容量随强迫
+  周期变化——Eq. 21 穿透深度 $h_T=\sqrt{k_v\,\Delta t}$、大气柱参考值 $C_{pa}\approx
+  1.02\times10^7$ J/m²/K 出处；√P 季节热容量标度的直接文献锚）.
 - Pierrehumbert, R.T. (2010). *Principles of Planetary Climate*. Cambridge University Press.
 - climlab: Rose, B.E.J. https://climlab.readthedocs.io/（`EBM` / `EBM_seasonal` 的对标实现）.
 - [Energy Balance Model — Wikipedia](https://en.wikipedia.org/wiki/Energy_balance_model)

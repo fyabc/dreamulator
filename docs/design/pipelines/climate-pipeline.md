@@ -245,7 +245,10 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
 
 1. **地表热容量** `seasonal_heat_capacity`（:394-406）：陆地/海洋分型 + 沿海过渡
    （`seasonal_coastal_scale_km`）；季节冰湖换成湖面热容量（~10 m 温跃层——大陆振幅
-   被水的惯性缓和）。
+   被水的惯性缓和）。三个容量都是**地球年标定值**，经 `period_scaled_heat_capacity`
+   按世界年长 √P 重标定（穿透深度 δ=√(2κ/ω)；大气柱份额 C_atm≈1.02e7 周期无关——
+   Lohmann 2020，公式与出处见 energy_balance.md §5「有效热容量的周期标度」）：短年
+   世界（nacrea ~100 d）表面份额 ×0.523，地球（P=365.25 d）精确不变。
 2. **季节 EBM** `compute_seasonal_climate`（:407，实现在 `climate_seasonality.py`）：
    月度辐照驱动 + 冰反照率开关。季节振幅
    `T_amp = ΔQ_ω(1−α) / √(B_eff² + (ωC)²)`，其中 `B_eff = B + 6D`

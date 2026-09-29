@@ -20,6 +20,7 @@ from dreamulator.engine.climate_seasonality import (
     monthly_precipitation_factor,
     monthly_temperature,
     orbital_distance_factor,
+    period_scaled_heat_capacity,
     seasonal_heat_capacity,
     seasonal_precip_extremes,
     solar_declination,
@@ -284,6 +285,46 @@ class TestSeasonalHeatCapacity:
         d = np.array([50.0, 200.0, 500.0, 1000.0, 3000.0])
         c = seasonal_heat_capacity(is_land, is_ocean, d)
         assert np.all(np.diff(c) < 0)
+
+
+class TestPeriodScaledHeatCapacity:
+    """√P penetration scaling of Earth-calibrated seasonal capacities."""
+
+    def test_earth_year_reproduces_capacity_exactly(self) -> None:
+        """P = 365.25 d is the calibration anchor — bitwise identity."""
+        assert period_scaled_heat_capacity(2.0e7, 365.25) == 2.0e7
+        assert period_scaled_heat_capacity(2.0e8, 365.25) == 2.0e8
+        assert period_scaled_heat_capacity(4.0e7, 365.25) == 4.0e7
+
+    def test_short_year_shrinks_surface_share_only(self) -> None:
+        """nacrea-like 100 d year: surface share ×√(100/365.25) ≈ 0.523."""
+        c_atm = 1.02e7
+        c_land = period_scaled_heat_capacity(2.0e7, 100.0)
+        expected = c_atm + (2.0e7 - c_atm) * (100.0 / 365.25) ** 0.5
+        assert c_land == pytest.approx(expected, rel=1e-12)
+        assert c_atm < c_land < 2.0e7
+
+    def test_monotonic_in_period(self) -> None:
+        """Longer year → deeper participating layer → larger capacity."""
+        periods = [30.0, 100.0, 365.25, 1000.0]
+        caps = [period_scaled_heat_capacity(2.0e8, p) for p in periods]
+        assert np.all(np.diff(caps) > 0)
+
+    def test_atmosphere_share_is_the_floor(self) -> None:
+        """As P → 0 only the period-independent atmospheric column remains."""
+        assert period_scaled_heat_capacity(2.0e7, 1e-12) == pytest.approx(1.02e7, rel=1e-6)
+
+    def test_cell_capacity_scaled_in_function(self) -> None:
+        """seasonal_heat_capacity applies the scaling to both surface types."""
+        is_land = np.array([True, False])
+        is_ocean = np.array([False, True])
+        d = np.array([50000.0, 0.0])  # far inland: coastal blend ≈ land capacity
+        c = seasonal_heat_capacity(is_land, is_ocean, d, orbital_period_days=100.0)
+        c_earth = seasonal_heat_capacity(is_land, is_ocean, d)
+        assert np.all(c < c_earth)
+        # ocean stays above the atmospheric floor; deep land matches the helper
+        assert c[1] > 1.02e7
+        assert c[0] == pytest.approx(period_scaled_heat_capacity(2.0e7, 100.0), rel=1e-12)
 
 
 # ---------------------------------------------------------------------------

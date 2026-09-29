@@ -49,6 +49,7 @@ from dreamulator.engine.climate_seasonality import (
     apply_eddy_relaxation,
     compute_seasonal_climate,
     eddy_diffusion_single_cell,
+    period_scaled_heat_capacity,
     radiative_equilibrium_contrast,
     seasonal_heat_capacity,
     seasonal_precip_extremes,
@@ -537,12 +538,15 @@ def simulate_climate(
         land_capacity=config.seasonal_land_heat_capacity,
         ocean_capacity=config.seasonal_ocean_heat_capacity,
         coastal_scale_km=config.seasonal_coastal_scale_km,
+        orbital_period_days=config.orbital_period_days,
     )
     # Seasonal-ice lakes are continental water bodies, not a 50 m maritime mixed
     # layer: they take the lake heat capacity (a ~10 m epilimnion — continental
     # amplitude, moderated by the water's inertia), then the 0 °C freeze clamp
-    # below caps the winter surface.
-    heat_capacity[_seasonal_lake] = config.seasonal_lake_heat_capacity
+    # below caps the winter surface.  Same √P penetration scaling as land/ocean.
+    heat_capacity[_seasonal_lake] = period_scaled_heat_capacity(
+        config.seasonal_lake_heat_capacity, config.orbital_period_days
+    )
     seasonal = compute_seasonal_climate(
         lat_rad,
         t_mean_C,
