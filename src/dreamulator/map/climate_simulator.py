@@ -52,6 +52,7 @@ from dreamulator.engine.climate_seasonality import (
     period_scaled_heat_capacity,
     radiative_equilibrium_contrast,
     seasonal_heat_capacity,
+    seasonal_penetration_ratio,
     seasonal_precip_extremes,
     solve_1d_ebm_temperature,
     solve_held_hou_temperature,
@@ -851,7 +852,19 @@ def simulate_climate(
             mesh.cells, n, is_land, wind, nodes_xyz, radius_km=config.radius_km
         )
         _valid_up = is_land & (_src_up >= 0)
-        _w_up = np.where(_valid_up, np.exp(-_dist_up / config.maritime_advection_scale_km), 0.0)
+        # √P penetration scaling (2026-09-30, arm 2): the inland reach of the
+        # ocean's *seasonal anomaly* is the horizontal skin depth λ=√(2K_h/ω)
+        # ∝ √P — this monthly twin is periodic machinery, so the Earth-
+        # calibrated e-folding shrinks on short-year worlds (nacrea 1500→785
+        # km).  The Stage-1 annual twin above is a steady-state level field
+        # and keeps the unscaled length.  Composite note: the purely
+        # advective share of Earth's 1500 km (u·τ of air masses) does not
+        # scale with period; the √P form is the frequency-dependent part of
+        # the composite — approx-derivation class, measured on nacrea.
+        _scale_km_monthly = config.maritime_advection_scale_km * seasonal_penetration_ratio(
+            config.orbital_period_days
+        )
+        _w_up = np.where(_valid_up, np.exp(-_dist_up / _scale_km_monthly), 0.0)
         # Anomaly-form relaxation (twin reconciliation, 2026-09-19): blend the
         # land *seasonal anomaly* toward the upwind ocean's anomaly instead of
         # pulling the monthly level toward the ocean's monthly level.  Setting
