@@ -132,6 +132,26 @@ class GeographySpec(BaseModel):
         payload = self.plate_view().model_dump_json()
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    def overlay_cell_mask(
+        self, px: np.ndarray, py: np.ndarray, pz: np.ndarray, *, threshold: float = 0.05
+    ) -> np.ndarray | None:
+        """Boolean mask of cells inside any terrain-only overlay (None if none).
+
+        The water-budget calibration solves the global sea level on the
+        *non-overlay* cells only, so an overlay's added/carved land creates a
+        local deviation instead of dragging every coastline on the planet
+        (2026-09-30: a single seaway overlay shifted the calibration by tens
+        of metres and moved every coast).  Noise-free kernel discs — the mask
+        is a conservative boundary, not a coastline.
+        """
+        overlays = [f for f in self.features if f.terrain_only]
+        if not overlays:
+            return None
+        mask = np.zeros(px.shape[0], dtype=bool)
+        for f in overlays:
+            mask |= _feature_kernel(px, py, pz, f, noise=None) > threshold
+        return mask
+
 
 def load_geography_spec(path: Path | None) -> GeographySpec | None:
     """Load and validate a geography spec; None when absent/unreadable."""

@@ -251,8 +251,9 @@ def build_stage_fingerprint(
 #                  tangential_fraction
 #   terrain v2:    + landform
 _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
-    "tectonics": 2,
-    "boundaries": 2,
+    "plates": 2,  # v2: + crust_type cell field (all-cache-hit corruption fix)
+    "tectonics": 3,  # v3: + elevation / crust_type cell fields
+    "boundaries": 3,  # v3: + boundary_type cell field
     "terrain": 2,
 }
 

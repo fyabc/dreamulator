@@ -695,7 +695,9 @@ def _synthesize_gaussian(
 
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
-        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        elevation = _apply_sea_level_calibration(
+            mesh, elevation, config, overlay_mask=_overlay_calibration_mask(mesh, config)
+        )
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
@@ -887,7 +889,9 @@ def _synthesize_asymmetric(
 
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
-        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        elevation = _apply_sea_level_calibration(
+            mesh, elevation, config, overlay_mask=_overlay_calibration_mask(mesh, config)
+        )
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
@@ -1882,10 +1886,28 @@ def _compute_quality_metrics(
 # =========================================================================
 
 
+def _overlay_calibration_mask(mesh: CVTMesh, config: TerrainPipelineConfig) -> np.ndarray | None:
+    """Cells covered by terrain-only overlays (None when there are none).
+
+    The water-budget calibration solves the global sea level blind to these
+    cells, so an overlay's added/carved land stays a local deviation instead
+    of dragging every coastline (2026-09-30).
+    """
+    spec = config.geography
+    if spec is None or not any(f.terrain_only for f in spec.features):
+        return None
+    return spec.overlay_cell_mask(
+        np.array([c.x for c in mesh.cells], dtype=np.float64),
+        np.array([c.y for c in mesh.cells], dtype=np.float64),
+        np.array([c.z for c in mesh.cells], dtype=np.float64),
+    )
+
+
 def _apply_sea_level_calibration(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    overlay_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Calibrate sea level to match the target land fraction.
 
@@ -1894,16 +1916,34 @@ def _apply_sea_level_calibration(
     per iteration instead of scanning all n cells every time.
 
     Complexity: O(n log n)  (one sort + prefix sum, then 60 × O(log n) lookups).
+
+    ``overlay_mask`` (2026-09-30): cells covered by terrain-only geography
+    overlays are excluded from the budget solve — the sea level is set by the
+    plate-stage world and the overlay's added/carved land becomes a *local*
+    deviation (total land fraction may drift from target by the overlay's net
+    contribution, which is the point).  Falls back to the global solve when
+    overlays cover more than 40% of the surface.
     """
     n = mesh.num_cells
     areas = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+
+    if overlay_mask is not None and overlay_mask.mean() <= 0.40:
+        keep = ~overlay_mask
+        calibration_elev = elevation[keep]
+        calibration_areas = areas[keep]
+        cal_note = f" overlay-blind({int(overlay_mask.sum())} cells)"
+    else:
+        calibration_elev = elevation
+        calibration_areas = areas
+        cal_note = ""
+
     total_area = np.sum(areas)
-    target_land_area = config.target_land_fraction * total_area
+    target_land_area = config.target_land_fraction * np.sum(calibration_areas)
 
     # Sort by elevation descending, with area alongside.
-    order = np.argsort(elevation)[::-1]  # highest → lowest
-    elev_sorted = elevation[order]
-    area_sorted = areas[order]
+    order = np.argsort(calibration_elev)[::-1]  # highest → lowest
+    elev_sorted = calibration_elev[order]
+    area_sorted = calibration_areas[order]
 
     # Cumulative land area: cum[i] = sum of areas for cells >= elev_sorted[i].
     cum_land = np.cumsum(area_sorted)
@@ -1935,20 +1975,21 @@ def _apply_sea_level_calibration(
     surface_km2 = total_area
     implied_budget_km = water_km3 / surface_km2
 
-    land_area_final = _land_area(sea_level)
+    land_area_final = float(np.sum(areas[elevation > sea_level]))
     land_pct = 100.0 * land_area_final / surface_km2
     cell_pct = 100.0 * np.sum(elevation > sea_level) / n
 
     logger.warning(
         "  Water calibration: target %.1f%% land → sea level %.0f m → "
         "%.1f%% land by area (%.1f%% by cells), "
-        "implied water budget %.2f km (%.1f million km^3)",
+        "implied water budget %.2f km (%.1f million km^3)%s",
         config.target_land_fraction * 100,
         sea_level,
         land_pct,
         cell_pct,
         implied_budget_km,
         water_km3 / 1e6,
+        cal_note,
     )
 
     return elevation - sea_level
