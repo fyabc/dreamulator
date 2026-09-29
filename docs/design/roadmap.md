@@ -21,7 +21,7 @@
 | 层级管线 | physics → chemistry → astronomy → geological → climate → ecology 全链路打通；civilization 新增宜居/农业 derived 引擎（`engine/civilization.py`），3C 半格式化 Schema 与 LLM narrate 待推进 |
 | 性能 | nacrea（200k 节点）全量构建 ~391 s（地质 238s + 气候 147s + 生态 5s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
-| 气候精度 | Köppen 空间准确率 32.0% / 30 类 Kappa 0.277 / 群组准确率 66.8%（主指标，逐 cell vs Beck 2018，200k ETOPO1；2026-09-17 M2-A0 输入口径修复后新基线，旧 30.8%/0.265/65.8% 系平行验证行星口径）；分布匹配 67.5%（辅助，待复测）；T2 端元复现 4 测试 + T3 物理合理性 7 测试已建 |
+| 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径，2026-09-27 收口、09-29 全字段诊断复核无漂移）；逐格空间一致率 28.0%（Af↔Aw/BSh→BWh 混淆主导）；T 纬向 RMSE 2.08 °C / 逐格 R² 0.939；P 逐格 R² −0.78、风逐格 R² −0.43、洋流速度 6% of SODA——三条主病均在输送场（水汽路由/定常结构/风应力旋度），机制轮按纪律挂起待 GW6 域前置。全字段诊断 → `private/reviews/climate-full-diagnosis-2026-09-29.md` |
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（v0.15.0+ 校准）；25 板 CV=0.87（偏态化）、海洋最深 −10484 m |
 | 网格规模 | 主力分辨率 **200k**（51 km/cell，已达中分辨率 GCM 水平）；ESM 气候验证支持多数据集（Beck 2018 + ERA5 + GPCP）；JSON 浮点截断 4 位 + gzip 传输（~220→~50 MB） |
 
@@ -173,7 +173,7 @@
 | P2 | `ai` CLI 命令组（narrate/imagine/assist/civ 等），设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归守护轴 [harness.md](proposals/harness.md) P0 | 2–3 周 | ★★★ |
 | P1 | **增量重建细化**（`--only terrain` 粒度：改 geography.yaml 后跳过板块构造） | 0.5 周 | ★★★★ |
 | **P0** | **前端加载性能优化**：JSON 截断/gzip/MessagePack 已落地，剩「纹理分辨率匹配 cell 密度」 | 1–2 周 | ★★★★★ |
-| P1 | **几何/气候数据分离存储**（静态网格（x,y,z,neighbors,plate_id）只加载一次；气候/生态字段增量更新。200k 下几何 ~80 MB、气候 ~90 MB，总计 ~170 MB 可接受） | 0.5 周 | ★★★★ |
+| P1 | **几何/气候数据分离存储 ✅（2026-09-30 实现并双路验证，分支 feature/geometry-fields-split-storage）**：`mesh_geometry`（静态地质列式）+ `mesh_fields`（气候/生态/文明动态列）双文件，combined 保留为 Python 正典；API 双端点 ETag/304（geometry 跨 climate 重建 304）+ worker 零拷贝 transfer + 前端单趟列组装。实测：盘上 −41%（38.2→22.4 MB）、dev mesh-fetch −93%（6.8→0.5 s）、layers-done 15.3→9.1 s、静态站零回退。剩余 = 字段级增量更新（fields ETag 已就绪）与 bake/WebGL init 懒化（候选 #5–#8） | 首轮 ✅；增量更新另计 | ★★★★ |
 | P2 | **geography.yaml 编辑原语补全**（`elevation_bias` 区域性海拔乘数、`lock_region` 锁定区域、`lake`/`inland_sea` 内陆水体定义；**注意**：geography.yaml 约束随机生成过程，seed 无关；逐 cell 后处理覆写属 edits.json 层） | 1–2 周 | ★★★ |
 | P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；换 seed 标记 stale + 最近邻迁移） | 1–2 周（Phase 1 ~2 天） | ★★★ |
 | P2 | **分辨率独立性验证**（确保 geography.yaml 锚定特征在 100k/200k/500k 下一致；已发现 sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |

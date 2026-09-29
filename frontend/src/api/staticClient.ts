@@ -91,9 +91,12 @@ async function fetchBranchAwareBlob(
 }
 
 /**
- * Fetch the CVT mesh for a planet, canonical format first.
+ * Fetch the CVT mesh for a planet, split pair first, combined second.
  *
- * 1. ``cvt_mesh.msgpack.gz`` (current exports) — fetched as a blob, handed
+ * 0. ``mesh_geometry.msgpack.gz`` + ``mesh_fields.msgpack.gz`` (2026-09-29
+ *    split export) — columnar blobs, worker-decoded and transferred
+ *    zero-copy; returns ``{ geo, flds }`` for composeSplitMesh.
+ * 1. ``cvt_mesh.msgpack.gz`` (combined) — fetched as a blob, handed
  *    to the shared MessagePack worker as an object URL with gunzip: true,
  *    so neither the gzip decompression nor the decode touches the main
  *    thread (the legacy path JSON.parsed the whole mesh on the main thread).
@@ -106,6 +109,35 @@ async function fetchBranchAwareMesh(
   branch: string | null | undefined,
   planetId: string,
 ): Promise<any | null> {
+  // Split pair (both halves or none — the export writes them together).
+  const geoPath = `/maps/${planetId}/mesh_geometry.msgpack.gz`
+  const fldsPath = `/maps/${planetId}/mesh_fields.msgpack.gz`
+  try {
+    const [geoBlob, fldsBlob] = await Promise.all([
+      fetchBranchAwareBlob(name, branch, geoPath, geoPath),
+      fetchBranchAwareBlob(name, branch, fldsPath, fldsPath),
+    ])
+    if (geoBlob !== null && fldsBlob !== null) {
+      const { decodeMsgpackUrl } = await import('../workers/msgpackClient')
+      const { isSplitFields, isSplitGeometry } = await import('./meshColumns')
+      const geoUrl = URL.createObjectURL(geoBlob)
+      const fldsUrl = URL.createObjectURL(fldsBlob)
+      try {
+        const [geo, flds] = await Promise.all([
+          decodeMsgpackUrl(geoUrl, true),
+          decodeMsgpackUrl(fldsUrl, true),
+        ])
+        if (isSplitGeometry(geo) && isSplitFields(flds)) {
+          return { __split: true, geo, flds }
+        }
+      } finally {
+        URL.revokeObjectURL(geoUrl)
+        URL.revokeObjectURL(fldsUrl)
+      }
+    }
+  } catch {
+    // fall through to the combined path
+  }
   const meshPath = `/maps/${planetId}/cvt_mesh.msgpack.gz`
   const blob = await fetchBranchAwareBlob(name, branch, meshPath, meshPath)
   if (blob !== null) {

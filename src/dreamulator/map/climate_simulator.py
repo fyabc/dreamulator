@@ -668,6 +668,56 @@ def simulate_climate(
         lapse_rate_c_per_km=_lapse_by_cell,
     )
     _dp_hpa = _dp_hpa_raw
+    # ── Shared per-cell fields for the couplet + wet-trough compositions ──
+    _lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
+    _areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+    # Equatorial BL-degeneracy blend (see the wet-trough block for the full
+    # derivation): 1 at |lat| ≤ φ_d → 0 at ≥ 2φ_d, φ_d = arcsin(k_d/(2Ω)).
+    _omega_p = 2.0 * np.pi / (config.rotation_period_days * 86400.0)
+    _phi_d_deg = np.degrees(np.arcsin(np.clip(_DRAG_RATE_S / (2.0 * _omega_p), 0.0, 1.0)))
+    _lat_frac = np.abs(lat_deg) / _phi_d_deg
+    _w_eq = 0.5 * (1.0 + np.cos(np.pi * np.clip(_lat_frac - 1.0, 0.0, 1.0)))
+    # ── Cross-equatorial monsoon couplet (D-line ④, 2026-09-29) ──
+    # The ocean-side monsoon-regime SLP response to the land trough.  Round 2:
+    # it lives INSIDE the wet-trough Picard only (its convective-regime gate
+    # reads the current P and its k(field) amplitude iterates with the
+    # trough, under the same damped accumulation as the wet increment — the
+    # round-1 full-strength recomputation compounded the P→Q→ΔP→wind→P loop
+    # to a 2× wind overshoot), with the (1−w_eq) equatorial taper.
+    _couplet_fn = None
+    if config.monsoon_couplet_enabled:
+        if not config.wet_trough_enabled:
+            raise ValueError(
+                "monsoon_couplet_enabled requires wet_trough_enabled (the "
+                "couplet's convective-regime gate and Picard damping live in "
+                "the wet-trough loop — same contract as the pickup gate)"
+            )
+        from dreamulator.engine.monsoon_circulation import monsoon_couplet_pressure
+
+        _couplet_fn = monsoon_couplet_pressure
+    _couplet_gate: np.ndarray | None = None
+    if (
+        _couplet_fn is not None
+        and config.wet_trough_enabled
+        and config.cross_equatorial_belt_enabled
+    ):
+        # Round 4 — the belt's meridional modulation (H3's 「经向调制版」):
+        # the land-excess gate from the pass-1 thermal field (the gate is a
+        # quasi-static sector property; g_conv's P input is not read by the
+        # gate, so a placeholder P is fine) scales the belt DOWN where the
+        # couplet serves the land-monsoon sectors and keeps it UP over the
+        # warm-pool longitudes the couplet retires by construction.
+        _couplet_gate = _couplet_fn(
+            _dp_hpa_raw,
+            lat_deg,
+            _lon_deg,
+            is_land,
+            itcz_lat_monthly,
+            _areas_km2,
+            np.zeros(len(lat_deg)),
+            sector_width_deg=config.monsoon_couplet_sector_width_deg,
+            return_gate=True,
+        )[1]
     # Scale separation before differentiation: the anomaly field inherits the
     # cell-level land-ocean mosaic (~51 km at 200k cells), whose coastline
     # jumps dominate the raw gradient and drive sea-breeze-scale winds far
@@ -709,20 +759,30 @@ def simulate_climate(
     # stays retired; the meridional branch and the monsoon-trough poleward shift
     # were falsified this round, see proposal §5).
     _itcz_max = float(np.max(np.abs(itcz_lat_monthly)))
-    _sw_wind = np.stack(
-        [
-            cross_equatorial_monsoon_wind(
-                lat_rad,
-                nodes_xyz,
-                float(itcz_lat_monthly[m]),
-                config.radius_km,
-                config.rotation_period_days,
-                _itcz_max,
-                wind,
-            )
-            for m in range(12)
-        ]
-    )
+    if config.cross_equatorial_belt_enabled:
+        _belt_scale = (
+            np.ones((len(lat_rad), 12)) if _couplet_gate is None else (1.0 - _couplet_gate)
+        )
+        _sw_wind = np.stack(
+            [
+                cross_equatorial_monsoon_wind(
+                    lat_rad,
+                    nodes_xyz,
+                    float(itcz_lat_monthly[m]),
+                    config.radius_km,
+                    config.rotation_period_days,
+                    _itcz_max,
+                    wind,
+                )
+                * _belt_scale[:, m][:, None]
+                for m in range(12)
+            ]
+        )
+    else:
+        # D-line ④: the uniform belt is retired — its cross-equatorial
+        # westerly role moves to the couplet's BL response (H3 verdict: not a
+        # naked retirement; the SCS contribution must survive via the couplet).
+        _sw_wind = np.zeros((12, len(lat_rad), 3))
     wind_monthly = np.stack([wind + _sw_wind[m] + _wind_monsoon[m] for m in range(12)])
 
     # Terrain blocking on each monthly field (a per-cell scalar scaling of the
@@ -1224,10 +1284,9 @@ def simulate_climate(
         from dreamulator.map.stationary_wave import DP_CAP_HPA
         from dreamulator.map.stationary_wave_two_level import wet_trough_slp_anomaly
 
-        _lon_deg = np.array([c.lon for c in mesh.cells], dtype=np.float64)
-        _areas_km2 = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
         _u_e = np.einsum("mck,ck->cm", wind_monthly, _east_w)
         _wt_inc = np.zeros((n, 12), dtype=np.float64)  # accumulated wet increment
+        _cpl_inc = np.zeros((n, 12), dtype=np.float64)  # damped couplet increment
         _vlo_inc = np.zeros((n, 12, 3), dtype=np.float64)  # relaxed solver-wind state
         # ── Equatorial consumption blend (rounds 1/2 lesson, round-3 refined) ──
         # The boundary-layer closure misbehaves where the Coriolis term drops
@@ -1248,11 +1307,7 @@ def simulate_climate(
         # smoothness choice).  Ultra-slow rotators (k_d ≥ 2Ω) get φ_d = 90° —
         # the BL closure is degenerate everywhere and the solver wind takes
         # over globally, which is the physically honest limit.
-        _omega_p = 2.0 * np.pi / (config.rotation_period_days * 86400.0)
-        _phi_d_deg = np.degrees(np.arcsin(np.clip(_DRAG_RATE_S / (2.0 * _omega_p), 0.0, 1.0)))
-        _lat_frac = np.abs(lat_deg) / _phi_d_deg
-        _w_eq = 0.5 * (1.0 + np.cos(np.pi * np.clip(_lat_frac - 1.0, 0.0, 1.0)))
-        # 1 at |lat| ≤ φ_d → 0 at ≥ 2φ_d, (n,)
+        # (_w_eq is now computed once before the couplet composition above.)
         # ω-gate state carried out of the loop for the post-pass reporting and
         # debug dump (None when the gate is off — mypy narrows on the check).
         from dreamulator.map.stationary_wave_two_level import TwoLevelSolution
@@ -1331,7 +1386,32 @@ def simulate_climate(
                 + _v_lower[:, :, 1][:, :, None] * _north_w[:, None, :]
             )
             _vlo_inc += config.wet_trough_relaxation * (_vlo_new - _vlo_inc)
-            _dp2 = _smooth_graph(_dp_hpa_raw + (1.0 - _w_eq)[:, None] * _wt_inc, _avg, _n_smooth)
+            # D-line ④ round 2: the couplet recomputes from the CURRENT
+            # trough state (thermal + wet) and accumulates under the SAME
+            # damped Picard as the wet increment (§5-β iterate-once lesson +
+            # the round-1 2× overshoot), validity-domain capped like ④/GW6.
+            if _couplet_fn is not None:
+                _cpl_new = np.clip(
+                    _couplet_fn(
+                        _dp_hpa_raw + (1.0 - _w_eq)[:, None] * _wt_inc,
+                        lat_deg,
+                        _lon_deg,
+                        is_land,
+                        itcz_lat_monthly,
+                        _areas_km2,
+                        p_monthly.mean(axis=1),
+                        sector_width_deg=config.monsoon_couplet_sector_width_deg,
+                    ),
+                    -DP_CAP_HPA,
+                    DP_CAP_HPA,
+                )
+                _cpl_inc += config.wet_trough_relaxation * (_cpl_new - _cpl_inc)
+            _dp2 = _smooth_graph(
+                _dp_hpa_raw
+                + (1.0 - _w_eq)[:, None] * (_wt_inc + _cpl_inc),
+                _avg,
+                _n_smooth,
+            )
             _grad2 = np.stack(
                 [
                     _graph_least_squares_gradient(mesh, _dp2[:, m], nodes_xyz) * 100.0 / _radius_m
@@ -1359,6 +1439,10 @@ def simulate_climate(
                 ]
             )
             wind = wind_monthly.mean(axis=0)
+            # Last Picard pass = the final monthly winds (A/B acceptance reads
+            # the monthly Somali-jet / cross-equatorial sectors from here).
+            if debug is not None:
+                debug["wind_monthly"] = wind_monthly.copy()
             # The next solve's zonal basic state follows the updated winds
             # (the baroclinic response is basic-state insensitive per LWM09,
             # but consistency is free).
@@ -1392,8 +1476,13 @@ def simulate_climate(
         # Same blend as the consumption above: inside the waveguide the wet
         # share is delivered by the solver wind, not by the ΔP field — the
         # stored/exported ΔP must not claim a pressure structure the wind
-        # chain never saw (front-end/validation read this field).
-        _dp_hpa = _smooth_graph(_dp_hpa_raw + (1.0 - _w_eq)[:, None] * _wt_inc, _avg, _n_smooth)
+        # chain never saw (front-end/validation read this field).  The
+        # couplet rides along at its damped accumulated value.
+        _dp_hpa = _smooth_graph(
+            _dp_hpa_raw + (1.0 - _w_eq)[:, None] * (_wt_inc + _cpl_inc),
+            _avg,
+            _n_smooth,
+        )
         _we2, _wn2 = _dec_wind(wind, _east_w, _north_w)
         for _i, _c in enumerate(mesh.cells):
             _c.wind_east_m_s = float(_we2[_i])
