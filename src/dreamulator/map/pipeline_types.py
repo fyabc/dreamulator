@@ -373,6 +373,33 @@ class TerrainPipelineConfig:
     # ancient belts follow reactivated weak zones (Şengör 1990), not exact
     # great circles.  0 = straight belt (old behaviour).
     interior_belt_meander_km: float = 180.0
+    # Polar ice sheets — appended post-pass (after sea-level calibration,
+    # pins, isostasy, smoothing and rivers; coastline untouched).  Thermal
+    # gate: annual-mean TOA insolation below the threshold makes land
+    # ice-eligible (Milankovitch control; computed from this world's
+    # obliquity/luminosity/orbit so the gate latitude follows the star).
+    # Continental-interior cells build a perfect-plastic dome
+    # h(x) = sqrt(2τ·x/ρg) (Cuffey & Paterson 2010; τ 50–100 kPa observed);
+    # maritime cells (adjacency-smoothed ocean share ≥ the threshold) get
+    # local caps above the snow line only — Earth's Arctic-coast analog.
+    # Calibration: Antarctic grounded-ice mean surface ~2048 m (Bedmap2).
+    # Epistemic class: gate + dome = approximate derivation; snow line /
+    # cap ceiling / maritime share = observational fit.  Limitation:
+    # accumulation assumed sufficient; extreme poleward heat transport
+    # would over-ice (cross-check: ice cells should stay < 0 °C annually).
+    ice_sheet_enabled: bool = True
+    # Dimensionless gate: q̄(lat)/q̄(equator) below this fraction → ice-eligible.
+    # 0.50 crosses at ~67° on Earth (Antarctica in, Arctic-coast lands out)
+    # and ~62° on nacrea (ε = 14.9° darkens its poles) — the gate latitude
+    # follows each world's obliquity and stellar flux by construction.
+    ice_sheet_insolation_fraction: float = 0.50
+    ice_sheet_driving_stress_kpa: float = 40.0
+    # Dome-eligible continental interior: farther than this from any sea
+    # (Earth: Arctic-coast tundra < ~500 km from the Arctic Ocean; Dome A
+    # ~1200 km inland).  Nearer in-gate land gets caps only.
+    ice_maritime_distance_km: float = 700.0
+    ice_cap_snowline_m: float = 1200.0
+    ice_cap_max_m: float = 500.0
     # Per-plate random base elevation offset (creates inter-plate variation)
     plate_elevation_spread_m: float = 1500.0
     # Asymmetric mountain profile: 0=symmetric, 0.4=moderate, 1.0=extreme
