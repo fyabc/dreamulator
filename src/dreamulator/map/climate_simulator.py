@@ -65,6 +65,7 @@ from dreamulator.engine.monsoon_circulation import (
     monsoon_boundary_layer_wind,
     pressure_anomaly_monthly,
 )
+from dreamulator.engine.stellar_physics import solar_day_days
 
 if TYPE_CHECKING:
     from .models import CVTMesh, VoronoiCell
@@ -1095,6 +1096,7 @@ def simulate_climate(
         itcz_lat_monthly=itcz_lat_monthly,
         debug=debug,
         edge_table=(_msrc, _mdst),
+        distance_to_coast_km=distance_to_coast_km,
         ice_increment_c=_t_ice_increment,
     )
 
@@ -1202,6 +1204,7 @@ def simulate_climate(
             itcz_lat_monthly=itcz_lat_monthly,
             debug=debug,
             edge_table=(_msrc, _mdst),
+            distance_to_coast_km=distance_to_coast_km,
             ice_increment_c=_t_ice_increment,
         )
         _resid = float(np.abs(p_monthly - _p_pass1).mean())
@@ -1265,6 +1268,7 @@ def simulate_climate(
             itcz_lat_monthly=itcz_lat_monthly,
             debug=debug,
             edge_table=(_msrc, _mdst),
+            distance_to_coast_km=distance_to_coast_km,
             ice_increment_c=_t_ice_increment,
             omega_gate_monthly=_gate_omega,
         )
@@ -1477,6 +1481,7 @@ def simulate_climate(
                 itcz_lat_monthly=itcz_lat_monthly,
                 debug=debug,
                 edge_table=(_msrc, _mdst),
+                distance_to_coast_km=distance_to_coast_km,
                 ice_increment_c=_t_ice_increment,
                 omega_gate_monthly=_wt_omega_gate,
             )
@@ -2728,6 +2733,8 @@ def _coastal_rainout_factor(
     wind: np.ndarray,
     temperature_c: np.ndarray,
     nodes_xyz: np.ndarray,
+    distance_to_coast_km: np.ndarray | None = None,
+    solar_day_days_val: float | None = None,
 ) -> np.ndarray:
     """Coastal rainout-efficiency modulation (CLIM-02 slice 3, astra §2.1/§7).
 
@@ -2742,8 +2749,19 @@ def _coastal_rainout_factor(
     observation-fit — eps windward/leeward and the [0.5, 1.5] clip are
     calibrated magnitudes; the flux form rho·|U|·q_sat is physical.
 
+    Inland reach (2026-09-30): with ``distance_to_coast_km`` supplied the
+    first-cell factor decays inland as exp(−d/L) from the nearest coastal
+    cell — the coastal-convergence / sea-breeze penetration scale.  L scales
+    with the *solar day* (diurnal land-sea circulation penetration ∝ √P_day,
+    the same skin-depth family as the seasonal √P scalings): Earth's 1 d is
+    the calibration anchor (L₀ = 250 km), a long-day world reaches farther
+    (nacrea: 82 h solar day → L ≈ 462 km ≈ 2.7 cells).  Tidally-locked worlds
+    (no day-night cycle) keep the base L.  The eps magnitudes stay
+    Earth-calibrated (not scaled by the larger diurnal amplitude —
+    conservative, avoids double counting).
+
     Returns:
-        Factor in [0.5, 1.5], shape (n,); 1.0 away from coastal land.
+        Factor in [0.5, 1.5], shape (n,); 1.0 away from coastal influence.
     """
     _coastal, _west_coast = _detect_coastal_cells(mesh.cells, n, is_land, is_ocean)
     if not _coastal.any():
@@ -2774,6 +2792,38 @@ def _coastal_rainout_factor(
         eps = _eps_windward if windward else _eps_leeward
         f_i = 1.0 + eps * delta_p / _p_bg if windward else (1.0 - eps * delta_p / _p_bg)
         factor[i] = np.clip(f_i, 0.5, 1.5)
+
+    if distance_to_coast_km is None:
+        return factor  # legacy first-cell-only behaviour
+
+    # Inland decay of the coastal factor: exp(−d/L) from the nearest coastal
+    # cell, L = L₀·√(P_day/P_day,earth) clipped to [1, 3] (locked worlds → 1).
+    _l0_km = 250.0
+    ratio = 1.0
+    if solar_day_days_val is not None and solar_day_days_val > 0.0:
+        ratio = float(np.clip(np.sqrt(solar_day_days_val / 1.0), 1.0, 3.0))
+    l_km = _l0_km * ratio
+
+    coastal_idx = np.flatnonzero(_coastal)
+    from scipy.spatial import cKDTree as _cKDTree
+
+    # Positions may carry the planetary radius; normalise to the unit sphere
+    # and convert the chord back to km (mean planet radius — L is a coarse
+    # scale, ±10% radius differences are immaterial).
+    def _unit(v: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(v, axis=1)
+        return np.asarray(v / np.maximum(norms, 1e-12)[:, None], dtype=np.float64)
+
+    tree = _cKDTree(_unit(nodes_xyz[coastal_idx]))
+    reach = 3.5 * l_km
+    near = np.flatnonzero(
+        is_land & ~_coastal & (np.asarray(distance_to_coast_km, dtype=np.float64) < reach)
+    )
+    if near.size:
+        chord = tree.query(_unit(nodes_xyz[near]), k=1)
+        d_km = chord[0] * 6371.0  # unit-sphere chord ≈ great-circle (small angles)
+        j = coastal_idx[chord[1]]
+        factor[near] = 1.0 + (factor[j] - 1.0) * np.exp(-d_km / l_km)
     return factor
 
 
@@ -2980,6 +3030,7 @@ def _compute_precipitation_monthly_budget(
     edge_table: tuple[np.ndarray, np.ndarray] | None = None,
     ice_increment_c: np.ndarray | None = None,
     omega_gate_monthly: np.ndarray | None = None,
+    distance_to_coast_km: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Precipitation from the monthly mass-conserving moisture budget.
 
@@ -3117,7 +3168,17 @@ def _compute_precipitation_monthly_budget(
     # ── CLIM-02 slice 3: coastal asymmetry as a k_rain modulation ── the
     # same physical factor the former post-budget step applied, but inside
     # the budget so ΣA·P = ΣA·E survives it (see _coastal_rainout_factor).
-    _coastal_k = _coastal_rainout_factor(mesh, n, is_land, is_ocean, wind, temperature_c, nodes_xyz)
+    _coastal_k = _coastal_rainout_factor(
+        mesh,
+        n,
+        is_land,
+        is_ocean,
+        wind,
+        temperature_c,
+        nodes_xyz,
+        distance_to_coast_km=distance_to_coast_km,
+        solar_day_days_val=solar_day_days(config.rotation_period_days, config.orbital_period_days),
+    )
     _rain_ann = (1.0 + _rain_ann) * _coastal_k - 1.0
     # ── CLIM-02 slice 4: sub-planet convective anchor as a k_rain modulation ──
     # nacrea-only (sub_planet_warming_c > 0); conserving, replacing the former

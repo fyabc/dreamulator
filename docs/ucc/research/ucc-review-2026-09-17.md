@@ -186,7 +186,7 @@ P=0、Eref>0 时 AI=0；P=Eref=0 时 AI 未定义。P>0、Eref=0 应单列“无
 
 ## 5. Earth 与 Nacrea：同一套语义，分别验证输入能力
 
-Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年；详见共有物理评审 `private/reviews/earth-nacrea-shared-physics-2026-09-17.md`（未入库）。
+Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年；详见共有物理评审 `private/reviews/climate/earth-nacrea-shared-physics-2026-09-17.md`（未入库）。
 
 | 同步对象 | 近乎固定的天空对象 | 恒星昼夜含义 |
 |---|---|---|
