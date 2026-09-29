@@ -80,6 +80,14 @@ class GeographyFeature(BaseModel):
     #: For rift features this roughens the otherwise smooth cosine-tapered
     #: boundary, creating fractal coastlines.  Typical: 0.1–0.5.
     noise_amplitude: float = Field(default=0.0, ge=0.0, le=5.0)
+    #: Terrain-synthesis-only overlay (2026-09-30): the feature is invisible
+    #: to the plate stage (seeds / crust partition / coast cost / re-anchor)
+    #: and excluded from the plates/tectonics cache fingerprints — editing it
+    #: cannot reshuffle the global plate realization, so coast roughening,
+    #: archipelago noise and local carve/land additions stay local.  The bias
+    #: still enters the terrain-stage land field (and thus the global
+    #: sea-level calibration).
+    terrain_only: bool = Field(default=False)
 
 
 class GeographySpec(BaseModel):
@@ -98,6 +106,31 @@ class GeographySpec(BaseModel):
     #: 0 disables the raster even if present.
     raster_weight: float = Field(default=1.0, ge=0.0, le=3.0)
     features: list[GeographyFeature] = Field(default_factory=list)
+
+    def plate_view(self) -> GeographySpec:
+        """Spec with terrain-only features stripped — what the plate stage sees.
+
+        Plates, tectonics and the crust re-anchor consume this view, so
+        ``terrain_only`` overlays (coast roughening, archipelago noise, local
+        carves) cannot reshape the plate partition or reshuffle the world.
+        """
+        if not any(f.terrain_only for f in self.features):
+            return self
+        return self.model_copy(
+            update={"features": [f for f in self.features if not f.terrain_only]}
+        )
+
+    def plates_fingerprint(self) -> str:
+        """Stable hash of the plate-affecting geography (excludes overlays).
+
+        Used for the plates/tectonics cache fingerprints, replacing the raw
+        geography.yaml file hash there — terrain-only edits keep those caches
+        valid.  The terrain stage keeps using the full-file hash.
+        """
+        import hashlib
+
+        payload = self.plate_view().model_dump_json()
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def load_geography_spec(path: Path | None) -> GeographySpec | None:
