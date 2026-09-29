@@ -437,9 +437,21 @@ features:
     elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
     bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
     noise_amplitude: 0.8        # 可选：边界粗糙化强度（0=光滑椭圆；见「陆地偏置场」）
+    terrain_only: false         # true = 仅地形叠加层（见下）
     elevation_target_m: -120.0  # 可选：高程钉扎（相对校准海面 0 m；负=水深）
     pin_strength: 1.0           # 可选：钉扎信任度 0–1（核提供空间软边）
 ```
+
+**`terrain_only` 叠加层（2026-09-30）**：默认 feature 参与 plate 阶段（板块种子
+`select_geography_seeds` / 地壳切分 `apply_geography_crust` / 海岸代价 / 构造后
+重锚定），且 geography.yaml 任何改动都会使 plates/tectonics 阶段缓存指纹失效
+→ **板块全球重生成**（新洋中脊/海岸——与改动处无关的远端地形剧变）。带
+`terrain_only: true` 的 feature 对 plate 阶段不可见、不进 plates/tectonics 指纹
+（`GeographySpec.plate_view()` / `plates_fingerprint()`）——只在地形合成阶段
+叠加进偏置场（仍在全局海平面校准内）。用于海岸粗化、群岛噪声、局部刻海/补陆
+这类"化妆"层：编辑它们**保持板块缓存命中、改动保持局部**。代价：覆盖区地壳
+类型仍是板块阶段的产物（陆间海=大陆地壳上的浅海，物理正当）；全局陆地预算
+重校准仍会移动海平面（盯构建日志 `sea level −X` 行）。
 
 #### 陆地偏置场
 

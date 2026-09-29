@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -244,12 +244,24 @@ def run_terrain_pipeline(
         else None
     )
 
+    # Plate-stage view of the authored geography (2026-09-30): terrain-only
+    # overlays are invisible to plate seeds / crust partition / coast cost and
+    # excluded from these stages' fingerprints, so editing them cannot
+    # reshuffle the global plate realization (new ridges, islets, coasts).
+    # The terrain stage below still consumes the full spec + full-file hash.
+    if config.geography is not None:
+        _plates_geo_hash = config.geography.plates_fingerprint()
+        _config_plates = replace(config, geography=config.geography.plate_view())
+    else:
+        _plates_geo_hash = geography_hash
+        _config_plates = config
+
     # ---- Stage 2: Plate Tectonics ----
     if "plates" in ordered:
         plates_fp = build_stage_fingerprint(
             "plates",
             config,
-            geography_hash=geography_hash,
+            geography_hash=_plates_geo_hash,
             upstream_fingerprints=upstream_fps,
         )
         upstream_fps["plates"] = plates_fp
@@ -266,7 +278,7 @@ def run_terrain_pipeline(
             _stage_begin("plates")
             t = time.time()
             result.plates, cell_plate_map = generate_plates(
-                result.mesh, config, raster_bias=raster_bias
+                result.mesh, _config_plates, raster_bias=raster_bias
             )
             result.stages_completed.append("plates")
             result.stage_timings["plates"] = time.time() - t
@@ -289,7 +301,7 @@ def run_terrain_pipeline(
         tectonics_fp = build_stage_fingerprint(
             "tectonics",
             config,
-            geography_hash=geography_hash,
+            geography_hash=_plates_geo_hash,
             upstream_fingerprints=upstream_fps,
         )
         upstream_fps["tectonics"] = tectonics_fp
@@ -338,18 +350,19 @@ def run_terrain_pipeline(
             result.plates, cell_plate_map = run_tectonic_evolution(
                 result.mesh,
                 result.plates,
-                config,
+                _config_plates,
                 progress_callback=progress_cb,
                 raster_bias=raster_bias,
             )
             if _progress is not None:
                 _progress.stop()
 
-            # Re-anchor crust to authored geography
+            # Re-anchor crust to authored geography (plate view — terrain-only
+            # overlays must not restamp crust here; they act at terrain stage)
             if config.geography is not None and config.geography.reapply_after_tectonics:
                 from .geography import apply_geography_crust
 
-                apply_geography_crust(result.mesh, config, raster_bias=raster_bias)
+                apply_geography_crust(result.mesh, _config_plates, raster_bias=raster_bias)
 
             result.stages_completed.append("tectonics")
             result.stage_timings["tectonics"] = time.time() - t
