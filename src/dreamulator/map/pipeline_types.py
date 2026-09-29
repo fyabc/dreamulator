@@ -684,6 +684,22 @@ class TerrainPipelineConfig:
     # GW6).  Knots unchanged for round 7 (conservative weak slope); re-calib
     # via diagnose_desert_wetness --wave-gate after the A/B shows the signal.
     wet_trough_omega_gate_enabled: bool = False  # round-7 experiment flag
+    # ── Cross-equatorial monsoon couplet (D-line ④, 2026-09-29) ──
+    # Ocean-side monsoon-regime SLP response to the land trough (Anderson
+    # 1976 source-sink configuration): the winter-hemisphere descent-arm
+    # high + the offshore trough extension, amplitude anchored to the
+    # sector's own land-trough depth (15-30° summer band), shapes from the
+    # observed Somali-sector anatomy.  Composed inside the wet-trough Picard
+    # (recomputed each pass from the current trough state), blended by the
+    # same equatorial-degeneracy taper (1−w_eq) as the wet increment.
+    # Design/acceptance: private/research/2026-09-29-dline-couplet-design.md.
+    monsoon_couplet_enabled: bool = False
+    # The legacy uniform cross-equatorial westerly belt (ε_u·Ω·a, all
+    # longitudes) — the couplet replaces it (H3: the belt's SCS contribution
+    # moves to the couplet's offshore extension).  Default on until the
+    # couplet passes acceptance, then retire.
+    cross_equatorial_belt_enabled: bool = True
+    monsoon_couplet_sector_width_deg: float = 40.0
     # Precipitation
     evaporation_base_mm: float = 1000.0  # annual evaporation at 15 °C ocean (energy-limited)
     itcz_lag_days: int = 30  # ITCZ lag behind subsolar point (thermal inertia)
