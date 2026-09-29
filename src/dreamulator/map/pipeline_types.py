@@ -352,6 +352,27 @@ class TerrainPipelineConfig:
     # level (East African Rift / Baikal).  Nacrea's coherent motion gives a
     # bimodal divergence distribution (~2 and ~10 cm/yr); 6.0 splits the two.
     continental_rift_sea_rate_cm_yr: float = 6.0
+    # Rift-sea along-axis shape (§3.6).  Propagating rifts show a systematic
+    # along-strike stretching gradient (Vink 1982): incipient tips are narrow
+    # grabens above sea level (Afar/Manda Hararo ~50 km), mature segments are
+    # wide drowned seas (Red Sea 180–350 km).  A smooth low-frequency field u
+    # ∈ [0,1] modulates the valley width (σ × (1 − m + 2m·u)) and tapers the
+    # submergence depth toward tips, so one boundary hosts the Red Sea →
+    # East-Africa phase mosaic instead of a uniform ribbon.  Epistemic class:
+    # observational fit; calibration domain = Earth rift systems.
+    rift_axis_modulation: float = 0.525  # width span: σ × [1−m, 1+m]
+    # Lateral wander (± km) of the rift/orogen relief centre about the
+    # kinematic boundary.  Rift axes localise on inherited weakness fabric,
+    # stepping en-echelon between segments (Danakil step-over); orogenic
+    # belts deflect in salients/recesses (Appalachian Pennsylvania salient
+    # ~100 km).  Wavelength ~650 km (fBm base_freq 10).  Epistemic class:
+    # observational fit; 0 = centre exactly on the boundary (old behaviour).
+    rift_meander_km: float = 80.0
+    orogen_meander_km: float = 70.0
+    # Paleo-orogeny belt lateral wander (± km) about its great circle —
+    # ancient belts follow reactivated weak zones (Şengör 1990), not exact
+    # great circles.  0 = straight belt (old behaviour).
+    interior_belt_meander_km: float = 180.0
     # Per-plate random base elevation offset (creates inter-plate variation)
     plate_elevation_spread_m: float = 1500.0
     # Asymmetric mountain profile: 0=symmetric, 0.4=moderate, 1.0=extreme
@@ -395,26 +416,23 @@ class TerrainPipelineConfig:
     coastal_plain_max_elevation_m: float = 500.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
-    # Interior landforms: paleo-orogeny belts, rift valleys, cratonic basins.
+    # Interior landforms: paleo-orogeny belts and cratonic basins.
+    # (Interior rift valleys were removed 2026-09-29 — at most one per plate
+    # and a few hundred cells, too small a share to justify the extra pass;
+    # failed arms visible at world scale are authored via geography.yaml.)
     # 0 = disabled.  Base number of orogenic belts per continental plate.
     # Scales with plate interior area: larger plates get more belts
     # (1 additional belt per ~800 interior cells beyond the first).
     interior_orogeny_count: int = 5
-    # Great-circle arc length of interior orogeny belts and rift valleys (deg).
+    # Great-circle arc length of interior orogeny belts (deg).
     # Lengths are right-skewed (rng.random() ** 2): most belts ~min_deg + a few
     # degrees (~600 km at R_earth), with a rare tail up to max_deg (~1200 km).
-    # Rift valleys reuse the same cap so they don't read as one long stripe
-    # across a whole plate.
     interior_belt_length_min_deg: float = 2.0
     interior_belt_length_max_deg: float = 10.0
     # Probability (0–1) that a segment along an orogenic belt becomes a
     # sunken intermontane basin (pull-apart / fault-block depression)
     # instead of an elevated ridge.
     interior_basin_chance: float = 0.25
-    # Probability (0–1) that a continental plate gets an interior rift valley
-    # (failed rift arm, e.g. East African Rift).  Rifts are far rarer than
-    # orogenic belts — at most one per eligible plate, gated by this chance.
-    interior_rift_chance: float = 0.5
     # Maximum subsidence depth (m) for intermontane basins.  Reference:
     # Turpan Depression −154 m, Fergana Valley ~400 m above sea level,
     # Basin and Range grabens 500–2000 m below surrounding ranges.

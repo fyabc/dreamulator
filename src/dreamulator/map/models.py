@@ -354,7 +354,7 @@ class VoronoiCell(BaseModel):
     )
     landform: str | None = Field(
         default=None,
-        description="Interior landform type: 'orogeny', 'rift', or None",
+        description="Landform type: 'orogeny'/'basin' (interior belts), 'transform' (active)",
     )
 
     # Neighbours
