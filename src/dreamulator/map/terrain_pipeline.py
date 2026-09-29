@@ -9,10 +9,11 @@ Runs the complete CVT terrain generation pipeline:
     5. Terrain synthesis (bimodal base + boundary effects + fBm noise)
     6. Climate simulation (see climate_simulator + pipelines/climate-pipeline.md)
     7. River generation (flow routing + river vector layer)
-    8. Export (equirectangular raster + PNG + JSON)
+    8. Polar ice sheets (appended post-pass; coastline untouched)
+    9. Export (equirectangular raster + PNG + JSON)
 
 See ``docs/design/pipelines/geological-pipeline.md`` for the algorithm
-reference of stages 1-5/7-8 and ``climate-pipeline.md`` for stage 6.
+reference of stages 1-5/7-9 and ``climate-pipeline.md`` for stage 6.
 """
 
 from __future__ import annotations
@@ -56,20 +57,22 @@ VALID_STAGES = frozenset(
         "terrain",
         "climate",
         "rivers",
+        "ice",
         "export",
     }
 )
 
 # Stage display names for stdout
 _STAGE_NAMES: dict[str, str] = {
-    "mesh": "1/8  CVT Mesh",
-    "plates": "2/8  Plate Tectonics",
-    "tectonics": "3/8  Tectonic Evolution",
-    "boundaries": "4/8  Boundary Detection",
-    "terrain": "5/8  Terrain Synthesis",
-    "climate": "6/8  Climate Simulation",
-    "rivers": "7/8  River Generation",
-    "export": "8/8  Export",
+    "mesh": "1/9  CVT Mesh",
+    "plates": "2/9  Plate Tectonics",
+    "tectonics": "3/9  Tectonic Evolution",
+    "boundaries": "4/9  Boundary Detection",
+    "terrain": "5/9  Terrain Synthesis",
+    "climate": "6/9  Climate Simulation",
+    "rivers": "7/9  River Generation",
+    "ice": "8/9  Polar Ice Sheets",
+    "export": "9/9  Export",
 }
 
 
@@ -120,6 +123,7 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
         "terrain",
         "climate",
         "rivers",
+        "ice",
         "export",
     ]
 
@@ -513,7 +517,20 @@ def run_terrain_pipeline(
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
-    # ---- Stage 8: Export ----
+    # ---- Stage 8: Polar ice sheets (appended; rivers run on bedrock below
+    #      the ice — subglacial channels — and the calibrated coastline is
+    #      untouched, ice only stacks onto land cells) ----
+    if "ice" in ordered:
+        _stage_begin("ice")
+        t = time.time()
+        from .ice_sheets import apply_polar_ice_sheets
+
+        apply_polar_ice_sheets(result.mesh, config)
+        result.stages_completed.append("ice")
+        result.stage_timings["ice"] = time.time() - t
+        _stage_end(result.stage_timings["ice"])
+
+    # ---- Stage 9: Export ----
     if "export" in ordered:
         _stage_begin("export")
         t = time.time()

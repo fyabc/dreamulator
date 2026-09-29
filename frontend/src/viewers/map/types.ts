@@ -48,6 +48,8 @@ export interface VoronoiCell {
   z?: number
   area_km2?: number
   crust_type?: string
+  /** Polar ice sheet thickness (m). Elevation is the ice surface; bed = elevation − this. */
+  ice_thickness_m?: number | null
   distance_to_boundary_km?: number
   boundary_type?: string | null
   convergence_rate_cm_yr?: number

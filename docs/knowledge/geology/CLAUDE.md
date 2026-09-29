@@ -10,6 +10,7 @@
 - `tidal_plate_speed.md` — 潮汐加热→板块速度标度律（v ∝ q^β、Valencia vs O'Neill&Lenardic 争论、金星悖论；2026-08）
 - `hydrology.md` — D8 流向 / priority-flood 洼地填平 / 流量累积 / 河网分级（2026-08）
 - `coastal_geomorphology.md` — 海岸侵蚀/堆积地貌分类、潮差控制律（Davies/Hayes/Dalrymple）、44 m 巨潮差外推与 ~50 km 分辨率可表达性（2026-08）
+- `ice_sheets.md` — 极地冰盖物理学：无量纲日照门、距海分域、完美塑性 Vialov 穹丘剖面与 Bedmap2 标定（2026-09）
 
 ## 关键参考
 
