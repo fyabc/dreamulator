@@ -1407,8 +1407,7 @@ def simulate_climate(
                 )
                 _cpl_inc += config.wet_trough_relaxation * (_cpl_new - _cpl_inc)
             _dp2 = _smooth_graph(
-                _dp_hpa_raw
-                + (1.0 - _w_eq)[:, None] * (_wt_inc + _cpl_inc),
+                _dp_hpa_raw + (1.0 - _w_eq)[:, None] * (_wt_inc + _cpl_inc),
                 _avg,
                 _n_smooth,
             )

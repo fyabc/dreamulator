@@ -1,4 +1,5 @@
 """Polar ice sheet post-pass tests (perfect-plastic dome, caps, idempotency)."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -101,9 +102,7 @@ def test_maritime_downgrade_to_caps():
     stats = apply_polar_ice_sheets(mesh, cfg)
     assert stats["dome_cells"] == 0.0, "fully-maritime island must not build a dome"
     assert stats["cap_cells"] >= 1.0, "the above-snowline mountain gets a cap"
-    assert (mountain.ice_thickness_m or 0.0) == pytest.approx(
-        min((1800.0 - 1200.0) * 0.5, 500.0)
-    )
+    assert (mountain.ice_thickness_m or 0.0) == pytest.approx(min((1800.0 - 1200.0) * 0.5, 500.0))
 
 
 def test_thermal_gate_follows_the_star():

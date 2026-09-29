@@ -615,8 +615,7 @@ def _pack_columns(cells: list[dict[str, Any]]) -> dict[str, Any]:
         "format": "mesh-fields-v1",
         "num_cells": len(cells),
         "columns": {
-            name: _pack_one_column(cells, name, kind)
-            for name, kind in DYNAMIC_CELL_FIELDS.items()
+            name: _pack_one_column(cells, name, kind) for name, kind in DYNAMIC_CELL_FIELDS.items()
         },
     }
 
@@ -683,8 +682,7 @@ def save_mesh_split(mesh_dir: Path, mesh_obj: dict[str, Any]) -> None:
         "regions": {"off": region_offsets.tobytes(), "idx": regions_flat.tobytes()},
         "neighbors": _pack_neighbors(cells),
         "columns": {
-            name: _pack_one_column(cells, name, kind)
-            for name, kind in STATIC_CELL_COLUMNS.items()
+            name: _pack_one_column(cells, name, kind) for name, kind in STATIC_CELL_COLUMNS.items()
         },
     }
     fields_obj = _pack_columns(cells)
@@ -695,9 +693,7 @@ def save_mesh_split(mesh_dir: Path, mesh_obj: dict[str, Any]) -> None:
         )
     )
     (mesh_dir / FIELDS_FILENAME).write_bytes(
-        gzip.compress(
-            msgpack.packb(fields_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL
-        )
+        gzip.compress(msgpack.packb(fields_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL)
     )
 
 
@@ -716,9 +712,7 @@ def _decode_columns(columns: dict[str, Any]) -> dict[str, Any]:
             idx = np.frombuffer(col["idx"], dtype="<u4")
             vals = [None if i == _NULL_STR_IDX else table[i] for i in idx]
             if t == "S":
-                out[name] = [
-                    None if v is None else (v.split(_TAG_SEP) if v else []) for v in vals
-                ]
+                out[name] = [None if v is None else (v.split(_TAG_SEP) if v else []) for v in vals]
             else:
                 out[name] = vals
         else:  # pragma: no cover - future kinds
@@ -753,9 +747,7 @@ def load_mesh_geometry(path: Path) -> dict[str, Any]:
     ]
     return {
         **{k: obj[k] for k in _SPLIT_MESH_META if k in obj},
-        "vertices": np.frombuffer(obj["vertices"], dtype="<f8")
-        .reshape(-1, 3)
-        .tolist(),
+        "vertices": np.frombuffer(obj["vertices"], dtype="<f8").reshape(-1, 3).tolist(),
         "regions": regions,
         "neighbors": neighbors,
         "columns": cells_cols,

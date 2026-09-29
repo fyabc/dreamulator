@@ -302,9 +302,7 @@ def get_cvt_mesh(
                 media_type="application/gzip",
                 headers=cache_headers,
             )
-        return Response(
-            content=raw, media_type="application/x-msgpack", headers=cache_headers
-        )
+        return Response(content=raw, media_type="application/x-msgpack", headers=cache_headers)
 
     return decode_mesh_bytes(raw)
 
