@@ -518,22 +518,17 @@ def test_authored_ocean_base_override() -> None:
 
 
 # ---------------------------------------------------------------------------
-# terrain_only overlay split (2026-09-30)
+# overlays: terrain-only overlay split (2026-09-30)
 # ---------------------------------------------------------------------------
 
 
-def test_terrain_only_field_parses_and_splits() -> None:
+def test_overlays_section_parses_and_splits() -> None:
     spec = GeographySpec(
         features=[
             GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
-            GeographyFeature(
-                name="overlay-seaway",
-                lon=120.0,
-                lat=38.0,
-                radius_deg=9.0,
-                strength=-1.8,
-                terrain_only=True,
-            ),
+        ],
+        overlays=[
+            GeographyFeature(name="overlay-seaway", lon=120.0, lat=38.0, radius_deg=9.0, strength=-1.8),
             GeographyFeature(
                 name="overlay-isles",
                 lon=-130.0,
@@ -541,77 +536,70 @@ def test_terrain_only_field_parses_and_splits() -> None:
                 radius_deg=8.0,
                 strength=0.3,
                 noise_amplitude=2.0,
-                terrain_only=True,
             ),
-        ]
+        ],
     )
     plate = spec.plate_view()
     assert [f.name for f in plate.features] == ["continent"]
-    # full spec untouched (terrain stage still sees all three)
-    assert len(spec.features) == 3
+    assert plate.overlays == []
+    # terrain stage still sees everything
+    assert [f.name for f in spec.all_features] == [
+        "continent",
+        "overlay-seaway",
+        "overlay-isles",
+    ]
     # spec with no overlays returns itself (identity, no copy)
-    assert GeographySpec(features=[spec.features[0]]).plate_view().features[0].name == "continent"
+    no_overlay = GeographySpec(features=[spec.features[0]])
+    assert no_overlay.plate_view() is no_overlay
 
 
-def test_plates_fingerprint_ignores_terrain_only_edits() -> None:
+def test_plates_fingerprint_ignores_overlay_edits() -> None:
     base = GeographySpec(
         land_fraction_target=0.28,
         features=[
             GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
-            GeographyFeature(
-                name="overlay", lon=10.0, lat=10.0, radius_deg=5.0, strength=-1.0, terrain_only=True
-            ),
+        ],
+        overlays=[
+            GeographyFeature(name="overlay", lon=10.0, lat=10.0, radius_deg=5.0, strength=-1.0),
         ],
     )
     fp_base = base.plates_fingerprint()
-    # editing a terrain-only feature (strength, radius, adding one) keeps the hash
+    # editing an overlay (strength, radius, adding one) keeps the hash
     edited_overlay = base.model_copy(
         update={
-            "features": [
-                base.features[0],
-                base.features[1].model_copy(update={"strength": -2.5, "radius_deg": 11.0}),
-                GeographyFeature(
-                    name="overlay2",
-                    lon=99.0,
-                    lat=9.0,
-                    radius_deg=4.0,
-                    strength=0.4,
-                    terrain_only=True,
-                ),
+            "overlays": [
+                base.overlays[0].model_copy(update={"strength": -2.5, "radius_deg": 11.0}),
+                GeographyFeature(name="overlay2", lon=99.0, lat=9.0, radius_deg=4.0, strength=0.4),
             ]
         }
     )
     assert edited_overlay.plates_fingerprint() == fp_base
-    # flipping the flag itself (overlay becomes plate-visible) changes the hash
-    flipped = base.model_copy(
+    # promoting an overlay into the plate features changes the hash
+    promoted = base.model_copy(
         update={
-            "features": [
-                base.features[0],
-                base.features[1].model_copy(update={"terrain_only": False}),
-            ]
+            "features": [base.features[0], base.overlays[0]],
+            "overlays": [],
         }
     )
-    assert flipped.plates_fingerprint() != fp_base
+    assert promoted.plates_fingerprint() != fp_base
     # editing a plate feature changes the hash
     edited_continent = base.model_copy(
-        update={
-            "features": [base.features[0].model_copy(update={"strength": 0.9}), base.features[1]]
-        }
+        update={"features": [base.features[0].model_copy(update={"strength": 0.9})]}
     )
     assert edited_continent.plates_fingerprint() != fp_base
 
 
 def test_plate_view_drives_crust_partition(mesh) -> None:
-    """apply_geography_crust must not see terrain-only features (overlay carve
-    at plate stage would restamp crust; at terrain stage it only lowers land)."""
+    """apply_geography_crust must not see overlays (an overlay carve at the
+    plate stage would restamp crust; at the terrain stage it only lowers land)."""
     cfg_full = _config_with(
         GeographySpec(
             features=[
                 GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=15.0, strength=1.0),
-                GeographyFeature(
-                    name="carve", lon=0.0, lat=0.0, radius_deg=6.0, strength=-3.0, terrain_only=True
-                ),
-            ]
+            ],
+            overlays=[
+                GeographyFeature(name="carve", lon=0.0, lat=0.0, radius_deg=6.0, strength=-3.0),
+            ],
         )
     )
     cfg_plate = dataclasses.replace(cfg_full, geography=cfg_full.geography.plate_view())
