@@ -19,7 +19,7 @@ planets:
         N2: 0.78
         O2: 0.21
         Ar: 0.01
-      greenhouse_factor: 61.5     # 隐含厚 CO₂ 大气
+      greenhouse_factor: 62.0     # 隐含厚 CO₂ 大气
     hydrosphere:
       water_coverage: 0.722
       salinity_ppt: 35.0
