@@ -1,9 +1,9 @@
 # 开发路线图
 
-> 最后更新：2026-09-29（v0.38.0：气候速度两轮收口——nacrea 气候段累计 −65%、
-> GW6 湿槽默认开启（D 线收口，κ 68.9% 追偿达成）、nacrea 卫星架构重构落地
-> （E3 纪元态 + 墟带系统 + 天空数字终版）、设计笔记状态分组 UI；外部审计包与
-> 气候 rethinking 实施顺序见 v0.37.0 条目）
+> 最后更新：2026-09-30（未发版工作：√P 季节穿透标度两臂（热容量 + 水平 reach，
+> nacrea 季节振幅 ×2.35）、海岸雨出因子内陆距离衰减（L ∝ √太阳日）、geography
+> 双层结构（features/overlays 分节 + 校准盲解 + 缓存回放修复）、nacrea B 类诊断
+> 收口。外部审计包与气候 rethinking 实施顺序见 v0.37.0 条目）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
@@ -14,16 +14,16 @@
 
 ---
 
-## 一、当前状态快照（v0.38.0）
+## 一、当前状态快照（v0.38.0 + 未发版）
 
 | 维度 | 状态 |
 |------|------|
 | 层级管线 | physics → chemistry → astronomy → geological → climate → ecology 全链路打通；civilization 新增宜居/农业 derived 引擎（`engine/civilization.py`），3C 半格式化 Schema 与 LLM narrate 待推进 |
-| 性能 | nacrea（200k 节点）全量构建 ~391 s（地质 238s + 气候 147s + 生态 5s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
+| 性能 | nacrea（200k）全量 ~13 min（地质 ~230 s + 气候 ~510 s（GW6-on）+ 生态 5 s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
-| 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径，2026-09-27 收口、09-29 全字段诊断复核无漂移）；逐格空间一致率 28.0%（Af↔Aw/BSh→BWh 混淆主导）；T 纬向 RMSE 2.08 °C / 逐格 R² 0.939；P 逐格 R² −0.78、风逐格 R² −0.43、洋流速度 6% of SODA——三条主病均在输送场（水汽路由/定常结构/风应力旋度），机制轮按纪律挂起待 GW6 域前置。全字段诊断 → `private/reviews/climate/climate-full-diagnosis-2026-09-29.md` |
-| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（v0.15.0+ 校准）；25 板 CV=0.87（偏态化）、海洋最深 −10484 m |
-| 网格规模 | 主力分辨率 **200k**（51 km/cell，已达中分辨率 GCM 水平）；ESM 气候验证支持多数据集（Beck 2018 + ERA5 + GPCP）；JSON 浮点截断 4 位 + gzip 传输（~220→~50 MB） |
+| 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选。全字段诊断 → `private/reviews/climate/climate-full-diagnosis-2026-09-29.md`；nacrea B 类诊断 → `private/reviews/climate/nacrea-b-class-diagnosis-2026-09-30.md` |
+| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 61.5 K 微调态）；季节振幅 √P 两臂后陆地 p50 4.0 K（原 1.7 K） |
+| 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
 
 ---
 
@@ -35,8 +35,8 @@
 | 2 | 前端可视化 | ✅ v0.2.0–0.6.0 | 地图系统（栅格+Voronoi）、3D 恒星系、CivMap、3D 球面地球；见 CHANGELOG.md |
 | 2.5 | 地形真实感增强 | ✅ v0.7.0–0.8.0 | 板块剖分（Cortial 2019）、地形合成、海岸线、噪声标定；见 CHANGELOG.md |
 | 3A | 气候与流体引擎 | 🚧 | 核心已合并（v0.9.0），调优进行中；见 三 |
-| 3B | 侵蚀与河流生成 | 🚧 | 河网已落地（D8 流向/流量累积/`river_id`/`river_order` → features.json 矢量河流图层）；**流水侵蚀/沉积 2026-08-26 已从 200k 地质引擎移除**（尺度不匹配，见 §四 3B），河谷雕刻转 Gaea 局地精修；大陆内部低地由地形合成解决 |
-| 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker 映射 + 代谢标度 NPP + 可驯化标签（P0 ✅ 已于 v0.20.0 实施，含前端 Whittaker 群系 / NPP / 文明摇篮三个专题图层）；区域连通物种分布（P1）；简单食物网（P2）；异星物种推演（P3 = body plan 推导 P3a → 演化树 P3b → 图像输出 P3c，推演核心留主仓、图像独立成模块，见 [ecology-layer.md](proposals/ecology-layer.md) §3.5 / 决策 #5）。数学模型见 `docs/knowledge/ecology/ecological_mathematical_models.md` |
+| 3B | 侵蚀与河流生成 | 🚧 | 河网已落地（D8 → `river_id`/`river_order` 矢量图层）；**流水侵蚀 2026-08-26 已从 200k 移除**（尺度不匹配，§四 3B），河谷雕刻归 Gaea 局地精修 |
+| 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker + NPP + 可驯化标签 ✅（v0.20.0，含三个专题图层）；区域连通物种分布（P1）、食物网（P2）、异星物种推演（P3，见 [ecology-layer.md](proposals/ecology-layer.md) §3.5） |
 | 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](proposals/civilization-layer.md) |
 | 3D | 世界线合并可视化 Diff | 📋 | DAG 影响半径分析 / Lyapunov 混沌预警 / 蒙特卡洛不确定性 |
 | 3E | LLM 叙事引擎 | 🚧 | 基础 `narrate` 已实现；史诗叙事桥（`narrative_bridge.py`）未做 |
@@ -45,56 +45,34 @@
 
 ## 三、Phase 3A 气候引擎子状态
 
-详见 [climate-pipeline.md](pipelines/climate-pipeline.md)。输出：temperature.png / precipitation.png / koppen.json / climate_metadata.json。
+详见 [climate-pipeline.md](pipelines/climate-pipeline.md)。实现顺序与已否证方向单一事实源 = [climate-layer-improvement.md](proposals/climate-layer-improvement.md)。
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 能量平衡模型（EBM） | ✅ | `climate_physics.py:equilibrium_temperature()` |
-| 纬度 + 海拔温度修正 | ✅ | 1D EBM 谱解（North 1975 / climlab）+ 大陆度 + 湿度绝热直减率 |
-| Hadley/Ferrel/Polar 风带 | ✅ | v0.19.0：经向分量 + Ω^(-1/3) 标度 (Hill 2019)；`climate_physics.py:hadley_cell_wind()` |
-| 地形降水 + 雨影 | ✅ | 风偏图扩散水汽传输 + 辐合驱动三层降水 |
-| 陆地蒸散循环 | ✅ | 土壤+植被蒸发回收 |
-| ITCZ 对流降水 | ✅ | 热带辐合带 + 局地热对流 |
-| Köppen 气候分类 | ✅ | 空间准确率 30.8% / 30 类 Kappa 0.265 / 群组准确率 65.8%（主指标）；分布匹配 67.5%（辅助，200k vs Beck 2018） |
-| ETOPO1 真实地球验证 | ✅ | `earth/climate-dev` 分支 + `scripts/climate/validate_climate.py` |
-| 热带降水修正（3A.1） | ✅ | v0.11.0：ITCZ 增强、热带对流 ×2、降水底线 |
-| 季节变化（3A.2） | ✅ | **季节能量平衡模型** `T_amp=ΔQ_ω(1−α)/√(B_eff²+(ωC)²)`（North & Coakley 1979，`B_eff=B+6D` 显式热输送）+ 季节冰反照率 + ITCZ 迁移月度降水 + s/w 判别季节感知 |
-| 洋流 + 温度精细化（3A.3） | ✅ | Stommel + GMRES；冰盖反照率（M dwarf 修正）；可变直减率（Γ(T), 热带高地 +3.5°C）；上升流 SST 冷却；~~云反馈~~（SW/LW 抵消→跳过） |
-| 慢自转经向输送（3A.3a） | ✅ | v0.19.0：Ω^(-1/3) 风速标度 (Hill 2019) + 经向风分量；v0.24+：1D EBM 显式经向扩散 D（Ω^0.3 标度） |
-| 空间格局精细化（3A.4） | ✅ | 辐合驱动干带（∇·u 自然涌现，无纬度硬编码）；内陆干旱梯度；海岸不对称；Föhn（C-C 方程，零自由参数） |
+| 能量平衡模型（EBM） | ✅ | `climate_physics.py:equilibrium_temperature()`；1D EBM 谱解 + Held-Hou 单圈分支（+E1 eddy relaxation） |
+| 风场 | ✅ | 三圈/单圈背景（Ω^−1/3 标度）+ 跨赤道季风西风带 + 季风边界层风（月度）；物理东基根部统一 |
+| 降水 | ✅ | 质量守恒逐月水汽预算（k_rain 空间调制族：风暴带/SST 对流门/海岸距离衰减/次星锚）+ 地形凝结 + 冷阱路由 + 收敛哨兵 |
+| 季节模型 | ✅ | 季节 EBM（B+6D 显式输送）+ **√P 穿透标度两臂（09-30：热容量 C(P)=C_atm+…√P + 水平 reach ×√P）** + 季节冰反照率 + B0c/B0b 数据契约 |
+| 洋流 | ✅ | Stommel + GMRES + E4 WBC 亚网格增速 + SST 平流/涌升 + 过程化 OHT 偏差；系统性偏弱 = 输送场主病③（债 20） |
+| 季风动力学（3A.8） | ✅ v1 | ΔP 海陆对比 → 边界层风 → 逐月水汽预算；GW6 湿槽默认开（κ 68.9% 收口）；残余归债 24 |
+| 恒星/轨道参数查找（3A.6） | ✅ | `engine/physical_inputs.py` 统一解析（卫星感知恒星查找 + 开普勒周期） |
+| 潮汐锁定经度效应（3A.7） | ✅ 参数化 | cos 暖化 + 子星体对流增强；完整昼夜半球气候 = §七 1 |
 | 海洋气候分区（3A.5，Longhurst） | 📋 | 海洋省份分类 |
-| 恒星/轨道参数查找（3A.6） | ✅ | v0.14.0：`engine/physical_inputs.py` 统一解析（卫星感知的恒星查找 + 开普勒轨道周期），替换旧硬编码 1.0 AU / 1.0 L☉ |
-| 潮汐锁定经度效应（3A.7） | ✅ | v0.19.0：cos 暖化参数化；v0.24+：子星体对流增强（高斯锚定经纬度，振幅 ∝ ΔT_sub），潮汐锁定/卫星/双星通用 |
-| 季风动力学（3A.8） | 🚧 | v1：海陆热力差异气压异常 → 边界层风场 → 逐月水汽预算，启发式增益已删（技术债 23）；环流胞圈逐月迁移随月度矢量场（技术债 24） |
-| 月度矢量场展示（3A.9） | 📋 | 月度风场先行（季风诊断底座），月度洋流待季节风应力落地，月度 SST 居中；见技术债 24 |
+| 月度矢量场展示（3A.9） | 📋 | 月度风场先行；见 §七 24 |
 
-> **诊断结论（2026-08）**：Köppen 两条线要分开——**BWk（冷荒漠）→ C/D 靠「增湿」**
-> （`moisture_advection_steps` 提高把水汽送进内陆），**ET（苔原）→ C/D 靠「增温」**
-> （t_hot 过 10°C 林线）。ET 主体是「温和但干」（年均 ~5°C、降水中位 ~33mm），增湿
-> 不改其温度、暖化不改其干旱，二者不可互替。nacrea 调参：`evaporation_base_mm` 2000→1850
-> （近地球值）、`moisture_advection_steps` auto17→27（Ω^(−1/3) 经验标度 ±50% 内）。
+---
 
 ## 四、Phase 3B–3E 要点
 
-- **3B 侵蚀与河流**：河网（D8 流向 → 流量累积 → `river_id`/`river_order` →
-  features.json 矢量河流图层）已落地。流水侵蚀机制（stream power 下切 + 坡面扩散
-  + 地貌降水代理 + Bagnold 沉积路由）**已于 2026-08-26 从 200k 地质引擎移除**。
-
-  **尺度决策（2026-08-26）**：51 km 网格上真实河谷（5–50 km 宽）全部亚网格，
-  这个分辨率切出来的是单 cell 宽人工沟壑；且 detachment-limited 无输沙极限会过度
-  夷平/造深谷（诊断：任何 ≥1 Myr、任何合理 K₀ 下干流都直达基准面，参数无解）。
-  河谷雕刻归**管线最后一步的 Gaea 局地高清精修**（米级）；大陆内部低地由地形
-  合成的「内部低地」解决（非侵蚀）。见 `pipelines/geological-pipeline.md` §9.8。
-
-  **DAG 约束（若未来重启侵蚀仍适用）**：完整水力侵蚀需要降水数据，而气候是
-  geological 的下游（geological → climate），直接读会成环；须用地貌降水代理
-  （纯函数 `(地形, 纬度, 行星参数)` → 降水强迫场）避免 DAG 环。
-
-  **管线位置**：`terrain_config.yaml` `erosion_algorithm: none | stream_power`
-  + `surface_evolution_time_myr` + `climate_coupling: none | proxy | full`。
-- **3C 文明层**：三层半格式化架构（实体修饰器 / 事件流 / LLM 渲染层）+ 策略模式建模（HANDY / SDT / Tainter / 标签驱动），见 [civilization-layer.md](proposals/civilization-layer.md)。
+- **3B 侵蚀与河流**：河网已落地；流水侵蚀（stream power + 坡面扩散 + 沉积路由）
+  **2026-08-26 从 200k 移除**——51 km 网格上真实河谷全部亚网格，且 detachment-limited
+  参数无解（诊断：任何 ≥1 Myr、合理 K₀ 下干流直达基准面）。河谷雕刻归 Gaea 局地
+  高清精修；大陆内部低地由地形合成「内部低地」解决。DAG 约束：重启需地貌降水代理
+  避免 geological→climate 环。见 `pipelines/geological-pipeline.md` §9.8。
+- **3C 文明层**：三层半格式化架构（实体修饰器 / 事件流 / LLM 渲染层）+ 策略模式建模
+  （HANDY / SDT / Tainter / 标签驱动），见 [civilization-layer.md](proposals/civilization-layer.md)。
 - **3D 世界线 Diff**：地理热力图 + 文明状态对比；DAG 影响半径、混沌预警、蒙特卡洛置信区间。
-- **3E 叙事引擎**：`narrative_bridge.py` — LLM 读取 YAML/JSON 数据变动，生成符合逻辑的世界线编年史。
+- **3E 叙事引擎**：`narrative_bridge.py` — LLM 读取 YAML/JSON 数据变动，生成世界线编年史。
 
 ---
 
@@ -102,132 +80,104 @@
 
 目标：把 nacrea 打造成物理自洽、内容丰富、可支撑 B 站系列视频的样板世界。
 
-| 项目 | 内容 | 状态 |
-|------|------|------|
-| 天文：卫星系统 | 双单体逆行捕获卫（韵珠 Cadence 0.012 M⊕ @1.2e6 km 赤道化石面 + 守珠 Vigil 615 km @2.15e6 km 黄道锚定面，互倾角 5–13° 弱拍频 → 分级连珠节律），长期摄动维持 Nacrea 受迫偏心率带 0.0008–0.009（A4v 认证，rms 0.0035、11 kyr 火山脉冲）；REBOUND 终判 + 硬度豁免 + 连珠几何重开轮（30 票）见 nacrea `design-notes/0009` | ✅ 2026-09-10 A4v 终版 |
-| 天文：轨道校准 | Aegis a=0.3536 AU（保守宜居带几何中心附近，方案2 校准）、e=0.03（~45 kyr 距离季旋回）；Aegis–Boreal–Glacis 1:2:4 共振链（周期级联 3.147），1 Myr N 体稳定；详见 nacrea `orbital_dynamics.md` | ✅ 2026-09 终版 |
-| 地质：海陆分布 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆（不对称混合案） | ✅ `geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §4.4；海岸线平直为已知限制 |
-| 气候：温度校准 | 温室 75 K（含 3 K 预留次行星半球加温）；ΔT(Ω) + 扩散热输送 + 冰反照率 + 可变直减率 + 子星体对流增强全链路，均温 14.4 °C | ✅ v0.24+ |
-| 气候：文档校验 | `layers/climate/input/*.md` 按引擎实际输出维护（200k seed=42） | ✅ v0.24.0 |
-| 数据：网格规模 | nacrea 主力网格 200k（51 km/cell），数据已提交 | ✅ v0.24.0 |
-| 文明：种子设计 | civilizations.yaml 填充（3 文明 + 地理锚点 + 双语言叙事，2026-08 由 seed_discovery 候选区锚定）；大事年表 / conlang 待推进 | ✅（已填 3 种子） |
-| 视频素材 | 板块漂移/气候/文明 timelapse、3D 自动旋转、纯净视图模式 | 📋 |
+| 项目 | 状态 |
+|------|------|
+| 天文：卫星系统（A4v 双单体逆行捕获卫 + 连珠节律 + 受迫 e 带） | ✅ 2026-09-10 终版（design-notes/0009） |
+| 天文：轨道校准（Aegis a=0.3536 AU / 1:2:4 共振链 / 长周期数字卡） | ✅ 2026-09 终版（orbital_dynamics.md / long_term_cycles.md） |
+| 地质：海陆分布（geography.yaml 锚定；09-30 双层结构 overlays 局部微调） | ✅（海岸线平直为已知限制，§七 2） |
+| 气候：温度校准（温室 62 K → 61.5 K 微调态；√P 季节两臂） | ✅ |
+| 数据：网格 200k + 文档校验 | ✅ v0.24.0 |
+| 文明：种子设计（3 文明 + 地理锚点 + 双语言叙事） | ✅ |
+| 视频素材（timelapse / 自动旋转 / 纯净视图） | 📋 |
 
 ---
 
 ## 六、实施优先级
 
 > 已完成项不在此累积：发版内容见 `CHANGELOG.md`，Phase/功能状态见 §二/§三，
-> 世界设定类决策存档见各世界 `design-notes/`。
+> 世界设定类决策存档见各世界 `design-notes/`。每日执行顺序见 `private/todos/today.md`。
 
-### 待办
-
-#### 外部审计里程碑（GPT-6-Astra 2026-09-17，应用顺序 M0 → M1 → M2 → GUARD/UCC → M4）
-
-> 台账 20 项分级证据 → `private/reviews/project-structure-and-development-outline-2026-09-17.md` §5。
-> M2 = 气候 rethinking 主线的实施框架（today.md ▶ 项），并非独立的第三条线。
+### 外部审计里程碑（GPT-6-Astra 2026-09-17；M0/M1-P0/M2-A0 已收口，细节 = git + private/reviews/）
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P0** | **M0 可信入口与检查覆盖 ✅ 已完成（2026-09-17，`f8eec43`）**（DOC-01/02、DEV-01、CI-01/02/03、TEST-01）：README 10 处失效链接（含审计漏网 3 处）+ `npm ci` + clone URL + 能力摘要对齐当前实现；CI 新增 conlang/frontend/docs 三检查入口 + tests 触发路径补 `packages/**`/`schemas/**`；新工具 `scripts/dev/check_markdown_links.py`（链接+锚点校验，116 文件）；测试分层说明入 tests.yml 头部 + CLAUDE.md | — | — |
-| **P0** | **M1 世界构建与产物来源闭环**（BUILD-01/02、DATA-01）：**P0 ✅ 已完成（2026-09-17）**——分叉层过滤后 astronomy 自动补建（源上下文）、imported 缺文件诚实失败 + 恢复命令、mesh 按 planet ID 精确解析 + 父 maps 继承、分支继承 mesh 先物化副本再写回（父世界零污染）；earth 基线配方裁决 = 4096x2048/200k/seed42；P1 = 版本化开发数据包（manifest/SHA-256/固定索引 + `data fetch` 拟议接口），交付顺序以数据包评估为准（原始 ETOPO1 导入留作后备）。方案 → `private/reviews/branch-build-bootstrap-plan-2026-09-17.md`（P0 范围 §7）+ `github-data-bootstrap-evaluation-2026-09-17.md` | P0 ✅；P1 1–2 周 | ★★★★★ |
-| **P0** | **M2 共同物理输入与可诊断气候**（PHYS-01、CLIM-01/02；= ▶ rethinking 第一阶段）：**A0 ①②③④ ✅ 全部收口（2026-09-17/18）**——恒星温度三级解析（消 5772 K 静默回退）+ 验证配置世界优先（earth 气压单位修复，**主指标改善：32.0%/0.277/66.8% 新基线**）+ 正典 ΔP 统一（SLP − 同月海洋带平均，双修 + 7 锚点验证 + 年均图层贯通）+ 时间单位审计（唯一混窗 = 沉降门 AI，修参考月常量；实测零影响 = Earth 两基重合/nacrea 单圈门休眠，潜伏缺陷已除；「时间基准约定」表入 climate-pipeline §1） → 月度状态权威化（年温双权威）→ 分阶段水量账本（6 处增删水修正）→ 有限耦合；62 K 温室辐射身份与单圈体制判据随后。证据 → `private/reviews/climate/earth-nacrea-shared-physics-2026-09-17.md`（§3 只读实验/§8 A0–E 计划）+ `climate-pipeline-rethinking-2026-09-17.md`（§2 静态确认清单/§9 阶段顺序） | 2–4 周 | ★★★★★ |
-| P1 | **GUARD-01 守护轴反例修复**：同指纹事实漂移漏检、嵌套 YAML（lexicon）漏检、容量归档误标 deprecated、`intentional` 豁免过宽、缺产物状态显示为已验证。反例脚本/JSON + 裁决 → `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
-| P1 | **M3 结果契约与 UCC 小切片**（CONTRACT-01、UCC-01）：**UCC-01 第一至三步 ✅（2026-09-20）**——连续描述量 + climate_yearly.msgpack 描述量浏览 + L2 候选比较 + profile v0 冻结（`classify_v0`）+ 知识文档（`docs/ucc/specification.md`）；第四步 = 分类导出 + 着色 + 用途验证（Nacrea 夹具、AI4 重议）。计划 → `private/plans/ucc-01-plan.md`；重设计全文 → `docs/ucc/research/ucc-review-2026-09-17.md` | 第四步 ~1 周 | ★★★★ |
-| P2 | **M4 有边界的世界创作扩展**：四选一真实用户任务驱动（受控地形精修 / 生态资源描述 / 小型文明事件账本 / 语言谱系小样——各 proposal 的 MVP 定义见 `private/reviews/proposals-review-2026-09-17.md` §3）；16 份 proposal 状态整理（已实现归档 `pipelines/`、统一头部元信息）随后收尾 | 按所选任务 | ★★★ |
+| **P0** | **M1-P1 版本化开发数据包**（manifest/SHA-256/固定索引 + `data fetch` 拟议接口；交付顺序以数据包评估为准）→ `private/reviews/branch-build-bootstrap-plan-2026-09-17.md` | 1–2 周 | ★★★★★ |
+| P1 | **GUARD-01 守护轴反例修复**（同指纹事实漂移漏检、嵌套 YAML 漏检、容量归档误标、`intentional` 过宽、缺产物显示已验证）→ `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
+| P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口）→ `private/plans/ucc-01-plan.md` | ~1 周 | ★★★★ |
+| P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后）→ `private/reviews/proposals-review-2026-09-17.md` §3 | 按所选任务 | ★★★ |
+| P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮）→ `private/reviews/climate/climate-pipeline-rethinking-2026-09-17.md` + today.md ▶ 项 | 随主线 | ★★★★★ |
 
-#### 既有待办
+### 既有待办
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化脚本。完整链路与开源替代调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6，区域导出纸面设计见 `map-workflow.md` §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
-| P3 | ~~构造-侵蚀 Δt 耦合（抬升率场）~~——随流水侵蚀关闭（§四 3B）搁置，侵蚀重启再评估；调研存 `competitor-analysis.md` §4.2.2 | — | ★★ |
-| **P0** | nacrea 样板世界改造（五） | 进行中。天文/地质/气候三大层已就绪；文明种子设计 + 视频素材待推进 | ★★★★★ |
-| **P0** | **单圈体制包（E1-E4）✅ 已完成（2026-09-16）**：E1 eddy relaxation（Kaspi 2015
-  Fig 8b 文献锚，D_eddy=0.69·D_land·min(1,Ω)^0.6）+ 季节 D 统一 P^0.3；E2 斜压带脱离
-  冰缘吸附（冰增量归档 + 风暴幅度自身场化）；E3 **已否证**（Faulk 2017 原文细读方向
-  反转：慢自转收敛带变宽、nacrea 在窄上升体制；宽 Af 带正当物理，压制走调参线）；
-  E4 过程化 OHT 偏差（D=0.37·P^0.3，TC2001 标定）+ WBC 亚网格增速 ψ_max/(R/β)；
-  φ_H 从 Ω 推导（R_t^½ 定律）一并落地（双锚数值命中，两世界显式钉住）。战果与
-  否证记录 → [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §7 | — | — |
-| **P0** | **季风动力学与季节风场**（技术债 23，§七）：v1 + 幅度轮 A/B0/B1/B2 ✅；**Stage C 振幅标定 ✅（2026-09-13 诊断反转）**——季风 ΔP **已标定**（对 NCEP SLP 陆−海对比距平：印度 1.00/哈萨克 1.29/华南 0.73/蒙古 0.78，6 框 4 落 0.73–1.29）；C1 两趟 g(W)/θeb + aridity-keep + `_dt_subsidence` ΔP 帽**全证伪**（pre-flight「干内陆过强」是月份索引 bug 伪影；详见 proposal §2 已否证）；**季风降水残差（恒河 492/1347）归因降水侧**（水分路由/辐合增强 → Stage F），非风场强迫；撒哈拉/西伯利亚 ΔP 残差 = **缺副热带反气旋**（结构项 → ④ 静止波/SLP 逐格）；**副高西缘流（美洲 Cfa）= 条件项**（需 ΔP 框架自然覆盖、不做逐区特调）；**§5 下沉干燥诊断裁决 ✅（2026-09-13，零引擎改动，`diagnose_desert_wetness.py`）**——热沙漠过湿三族分解：内陆/暖岸（撒哈拉 565/27、澳洲 1132/326）→ ④（Rodwell-Hoskins 季风强迫下沉 / Gill 线性响应候选）；寒流岸/赤道干带（加拉帕戈斯 +2611、索马里 +957）→ §4 SST 距平结构死亡（`sst_anomaly_c` std 0.17 °C）+ §5-α SST 对流门（GPCP 标定曲线就绪，暖流零触碰=恒河/华南安全）；纬向杠杆量化证伪（恒河 κ 依赖 78% > 撒哈拉 59%）；**delta 评估裁决（2026-09-13）：④ 定常波响应胜出** → **离线原型 ✅（R&H 签名再现、鲁棒性全过）→ v1 实现 ❌ 已否证（七版迭代链，用户裁决：否证登记 + `stationary_wave_enabled=False` 默认关）**——根因 = 地表-T 热成风**基本态代理保真度低于机制需求下限**（签名只依赖非物理极地波导偶然出现；护栏全套后 P R² 仍 0.354→0.202、撒哈拉更湿）；机制未否证（副高经度结构缺口仍有效），求解器 + 10 项单测保留，v2 前提 = 真高层基本态（双层 Gill / steady-coupling / GCM），详 proposal §2「定常波响应」+ §5 已否证；**④ v2 双层 Gill 已实施（2026-09-17）**——Lee-Wang-Mapes 2009 两模态模型（k-块对角带状求解 0.16 s/月、zonal 平均基本态、w→陆地 k_rain 下沉干燥门、`stationary_wave_v2_enabled` 默认关），求解器全验证（Case-1 退化/Case-4 反气旋对/R&H ω 签名三基本态不变号）；消费门标定无信号 = 强迫自引用（模型沙漠湿偏差加热淹没 R&H 下沉），待供给端沙漠 P 偏差修复后重标定（标定模式存档驱动）；**D/F 水分路由 = W 供给路线轮已收口（2026-09-24，`df31321`）**——湿季风槽 SLP 闭合（LWM09 φ̂ 静力映射 + φ_d 赤道混合 + ±8 hPa 帽 + 阻尼 Picard）+ pickup 门重标定（联锁）；GW6 候选：季风四盒首次全进 obs±25%（恒河 0.95×）、W 对比度 0.97→3.2（三门解锁判据达成）、Köppen 分布匹配 +9.7pp / Group R² 2.1×、Cwa 死类复活；**flag 默认关 = opt-in**（构建 6.4× 超 ≤2× 门槛；默认开前置 = 速度优化 + 赤道供给修复【西非雨带走廊族】，裁决记录 = `private/plans/w-supply-route.md` 收口节 + `profiling.md` §2.1）；ω 门合成 FAIL-fast 否证（R&H 下沉舌在纬向平均基本态下不涌现——④ 系列三连否证，重启前提 = 真经度依赖基本态或 GCM 后端）。总验收（Cwa/Cfa/Am recall >40%）：Cwa recall 0.29 复活但 precision 0.12（撒哈拉边缘错位），Cfa 仍死（D 线），见 [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §2/§5/§7 | GW6 opt-in 收口 | ★★★★★ |
-| P1 | **月度矢量场展示**（技术债 24，§七）：月度风场先行 → 洋流季节化后月度化；前端懒加载抽样箭头 | 1–2 周（风场部分随 23） | ★★★★ |
+| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
+| P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
+| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材待推进 | — | ★★★★★ |
+| P1 | **月度矢量场展示**（§七 24；数据链已就绪，前端懒加载抽样箭头） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
-| P2 | **太阳系参照天体 ✅（2026-09-21 建成）**（Mars / Moon / Venus / Titan **并入 earth root 作为额外 planet_ids**——earth 实为「现实世界数据锚」，一个锚世界多真实天体；ID 沿用 stellar.yaml 约定 `planet_*`/`satellite_*`；mesh 按数据精度 Moon 100k/Mars 10k/Venus 10k/Titan 3k；永不 build）：Mars = MOLA+MCD v6.1（全行星 Pn，OOD 门全域实锤）；Moon = LDEM+Diviner GCP（地方时分箱，Cn/Pn 无热带——唯一观测态例外、地表温契约案例）；Titan = TAM 水文 run（甲烷海 Po + Pn，bin=896 地球日时间契约极端案例，非水溶剂 MI 拒绝）；Venus = Magellan+VCD v2.3（热侧外推缺口活体演示 Ra-w）。共享机制 `import_solar_common.py` + `scripts/solar/`；UCC L4 压力测试层、GCM 非真值 provenance 随文件走。细节 → `private/plans/ucc-01-plan.md` 4d + `data/worlds/earth/design-notes/` | ✅ | ★★★ |
-| P3 | **UCC 天体区分度配套**（2026-09-21 登记）：① 文献调研（deep research，2026-09-21 已启动）——学界如何划分 Mars/Venus/Titan/Moon 气候（甲烷水文带/挥发分分区/环流区划/热环境分类），作 v2 溶剂/挥发分专属轴的参照目标；② 前端点击式显示天体 profile 声明 + globe 页天体选择栏显示当前天体 + 世界主页「地图」预览块删除（用户裁决，避免误导海洋配色）。裁决与候选方向 → `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
-| P2 | **前端加载速度 profile & optimization**（用户 2026-09-20 要求排入计划）：**profile + 优化轮 ①–④ ✅（2026-09-29，`feature/frontend-load-profile`）**——2D 页 voronoi gate（285→25 MB）、mesh/monthly/yearly/elevation ETag/304（重访 3.6 MB；手工 Content-Encoding 阻断 Chrome 缓存已改 application/gzip + worker gunzip 合流）、kd-tree 扁平数组重写 + 三消费点共享 + 三角函数预计算（4.3→3.6 s + 省第二棵树）、worker 几何 transferable + adjacency 死重清理（克隆 −0.9 s）；globe first-frame 17.1→14.4 s、堆 −38 MB。剩余大头 = cells 对象图（克隆 80%）归 P1 分离存储 + bake/WebGL init 懒化（候选 #5–#8 未做）。数据/判词/已否证方向 → `private/research/2026-09-29-fe-load-profile.md` | 优化轮 ✅；候选 #5–#8 另计 | ★★★ |
-| P3 | **nullschool 式粒子流可视化**（用户提议 2026-09-21）：GlobeViewer 风场/洋流从矢量箭头升级为粒子平流拖尾动画（参照 cambecc/earth MIT 开源客户端；其数据 = 公开 GFS/OSCAR/HYCOM，我们已有引擎风/流月度场对应物）；视频路线 = Blender P3c 管线或前端离线逐帧。细节 → `private/todos/today.md` 待办 6 | 前端 1–2 周 | ★★ |
-| P3 | **草案七转正 + Hycean 调研**（用户 2026-09-20，创作线）：① Hycean/烟灰行星 deep research → 知识库 astrobiology（起点 `private/chats/chat-Hycean世界生物进化前景.txt`）；② `alternative_solvent_world_drafts.md` 草案七（油水混合溶剂世界）转正式世界：MTE 生态层建模评估、亚极地油水混合层类 LUCA 起源 + 全球扩散适应推演、类真核革命推演、主星中英文命名（Nacrea 风格）、未定留白。细目单一事实源 → `private/todos/today.md` 待办 5 | ①1–2 天 ②周级 | ★★ |
-| P2 | **earth 观测锚 1km 升级**（陆地 = CHELSA/WorldClim 30″ 按 cell footprint 面积加权聚合，海洋维持 NCEP/GPCP 2.5°；消除「UCC 比 Beck 糊」的分辨率差、与 Beck 同输入使发散纯归因于规则）：须在 LGM 分支之前做（CHELSA 导入管线两处复用）。评估 → `private/plans/ucc-01-plan.md` 4e 附注 | 1–2 天 | ★★★ |
-| P2 | **地球历史气候分支**（`earth/branches/lgm` 导入分支：ICE-6G_C 高程 + −120 m 海平面 + CHELSA-TraCE21k 月度 T/P，复用 200k mesh）：「同一行星、不同真实气候态」的 UCC 稳定性检验 + 冰期创作设定双用途；模式重建（CCSM3 降尺度 + 代用指标约束）非观测真值，provenance 声明。评估 → `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
-| P2 | 河流增强（3B）：河网已落地（矢量图层）；**流水侵蚀对 200k 已关闭**（尺度不匹配，§四 3B），侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
-| P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置，重启再评估）：大尺度指纹可在 200k 表达（喇叭河口、潮间带高程带、海岸平直化、高/低潮双基准；障壁岛/潟湖禁止生成），亚网格地貌归高清化——评估存 `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
-| P2 | **生态层海洋模块**（3B.5）：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——当前生态层全陆相 Whittaker 映射，零海洋 | 1–2 周 | ★★★ |
-| P2 | **生物地理分区算法改进**（生态线）：`biogeography.py` 唯一屏障=海洋（沙漠/山脉不构成屏障，target_provinces_per_realm=1 把 biome 分界几乎全归并、过渡带零建模）→ ① 参数侧先调 target_provinces_per_realm；② 机制侧扩散阻力加权分区（文献锚 Holt 2013 / Udvardy 1975 / WWF）；③ 命名侧 ecology-layer 提案 §2.4 字段；④ 联动 Gleba biome 机制 | 1–2 周 | ★★★ |
-| P2 | **Gleba 实测调研**（竞品线；本地 `E:\Gleba-0.3.5\gleba.exe`，仓库零实测记录）：Godot 背景简注 / 中文帮助 / 非交互运行试验（CLI/headless，能跑则作快速对比源）/ 实测问题对比（板块边界蜿蜒、山脉沿大陆边界、湖泊/内流海/冰川/LGM 遗迹、默认精度与性能对照技术债 10）/ 层设计借鉴；产出落 competitor-analysis.md 新增「Gleba 实测」节，biome 结论喂「生物地理分区改进」 | 2–3 天 | ★★★ |
+| P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示）→ `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
+| P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 6 | 前端 1–2 周 | ★★ |
+| P3 | **草案七转正 + Hycean 调研**（创作线）→ today.md 待办 5 | ①1–2 天 ②周级 | ★★ |
+| P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前）→ `private/plans/ucc-01-plan.md` 4e | 1–2 天 | ★★★ |
+| P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明）→ `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
+| P2 | 河流增强（3B）：侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
+| P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置；大尺度指纹可在 200k 表达）→ `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
+| P2 | **生态层海洋模块**（3B.5：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——生态层现全陆相） | 1–2 周 | ★★★ |
+| P2 | **生物地理分区算法改进**（唯一屏障=海洋；沙漠/山脉不构成屏障、过渡带零建模）→ ① 参数侧 target_provinces_per_realm；② 扩散阻力加权分区（Holt 2013 / WWF）；③ ecology-layer §2.4 字段 | 1–2 周 | ★★★ |
+| P2 | **Gleba 实测调研**（本地 gleba.exe 零实测记录：CLI/headless 试验 + 问题对比 + 层设计借鉴）→ competitor-analysis.md 新增「Gleba 实测」节 | 2–3 天 | ★★★ |
 | P2 | 地质时间轴可视化（板块漂移回放） | 3–4 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
-| P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周（低风险渐进迁移） | ★★★ |
-| P2 | `ai` CLI 命令组（narrate/imagine/assist/civ 等），设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归守护轴 [harness.md](proposals/harness.md) P0 | 2–3 周 | ★★★ |
-| P1 | **增量重建细化**（`--only terrain` 粒度：改 geography.yaml 后跳过板块构造） | 0.5 周 | ★★★★ |
-| **P0** | **前端加载性能优化**：JSON 截断/gzip/MessagePack 已落地，剩「纹理分辨率匹配 cell 密度」 | 1–2 周 | ★★★★★ |
-| P1 | **几何/气候数据分离存储 ✅（2026-09-30 实现并双路验证，分支 feature/geometry-fields-split-storage）**：`mesh_geometry`（静态地质列式）+ `mesh_fields`（气候/生态/文明动态列）双文件，combined 保留为 Python 正典；API 双端点 ETag/304（geometry 跨 climate 重建 304）+ worker 零拷贝 transfer + 前端单趟列组装。实测：盘上 −41%（38.2→22.4 MB）、dev mesh-fetch −93%（6.8→0.5 s）、layers-done 15.3→9.1 s、静态站零回退。剩余 = 字段级增量更新（fields ETag 已就绪）与 bake/WebGL init 懒化（候选 #5–#8） | 首轮 ✅；增量更新另计 | ★★★★ |
-| P2 | **geography.yaml 编辑原语补全**（`elevation_bias` 区域性海拔乘数、`lock_region` 锁定区域、`lake`/`inland_sea` 内陆水体定义；**注意**：geography.yaml 约束随机生成过程，seed 无关；逐 cell 后处理覆写属 edits.json 层） | 1–2 周 | ★★★ |
-| P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；换 seed 标记 stale + 最近邻迁移） | 1–2 周（Phase 1 ~2 天） | ★★★ |
-| P2 | **分辨率独立性验证**（确保 geography.yaml 锚定特征在 100k/200k/500k 下一致；已发现 sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
-| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具编辑 ↔ 回贴 cell，用于 Gaea/World Machine 集成）。**注**：P1 "局部地形精细化管线" 为此项的 MVP 先行版——先打通实用工作流，远期再做全自动往返协议 | 远期 | ★★ |
-| P3 | **构造-地表全双向耦合**（侵蚀/沉积反作用于板块动力学：侵蚀卸载改变板缘应力、沉积载荷影响俯冲）。对齐学术前沿（Underworld2+Badlands ALE 方案，2026 GMD），需先解决地理锚定与动态板块的协调；程序化世界工具无现成实现 | 远期 | ★★ |
+| P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周 | ★★★ |
+| P2 | `ai` CLI 命令组 → [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归 [harness.md](proposals/harness.md) | 2–3 周 | ★★★ |
+| P1 | **前端加载后续**（profile 优化轮 ①–④ 已收口：globe 17.1→14.4 s；剩余 = 字段级增量更新 + bake/WebGL init 懒化 + spatialReference 资产化（§七工程 6）） | 1–2 周 | ★★★★ |
+| P2 | **geography.yaml 编辑原语补全**（overlays 段已承载局部刻海/补陆（09-30）；剩余原语 = `elevation_bias` 区域乘数、`lock_region`、`lake`/`inland_sea`） | 1–2 周 | ★★★ |
+| P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；设计见 [layer-control-model.md](proposals/layer-control-model.md)） | 1–2 周 | ★★★ |
+| P2 | **分辨率独立性验证**（geography.yaml 锚定特征在 100k/200k/500k 一致性；sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
+| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具 ↔ 回贴 cell；P1 局部地形精细化管线为其 MVP 先行版）。**前置使能 = 地形 bake（2026-09-30 用户立项，设计草案 → today.md 待办 22）**：精调后的全球地形冻结为直读基座（`baked_base` + manifest，类似 earth root 导入态），外部编辑不再被构建冲掉 | 远期 | ★★ |
+| P3 | **构造-地表全双向耦合**（侵蚀卸载/沉积载荷反作用于板块动力学；Underworld2+Badlands ALE 方案；需先解决地理锚定与动态板块协调） | 远期 | ★★ |
 | P3 | AI 顾问模式 / 实时协作 / 世界导出包 | 见 vision.md §9 | ★★ |
-| P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算） | 远期，设计概要见 [moltke-engine.md](proposals/moltke-engine.md) | ★★ |
-| P3 | SDE 文明建模（Euler-Maruyama / Milstein / Jump-Euler + 泊松跳跃冲击） | 远期，依赖 Entity ID + Modifier 系统 | ★★ |
-| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上），见 [harness.md](proposals/harness.md) §9.4 | 内核 0.5 周，随 `ai` 命令组推进 | ★★ |
-| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷/断陷随数亿年漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置，见 `pipelines/geological-pipeline.md` §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式或混合骨架方案；参考 GPlates、Underworld2；关联「构造-地表全双向耦合」（P3）「地质时间轴可视化」（P2） | 设计 1–2 周 + 实现远期 | ★★★ |
-| P3 | **地质层生成速度瓶颈评估**：nacrea 200k 地质段 ~230 s，tectonics（50 步演化 + 加权重采样）~105 s 占主导（terrain 44 / mesh 33 / export 27 / plates 13）；先 profile 再定策略（Numba/向量化/并行），交互性硬约束但正确性优先（引擎纪律 4） | 评估 0.5 周 | ★★ |
-| P3 | **GCM PoC 跑通**（[climate-gcm-plan.md](proposals/climate-gcm-plan.md) 的 offline oracle 前提）：ExoPlaSim PoC 风场退化（环流全零，根因未明）；障碍与已修 bug 见 `private/external-projects/exoplasim_poc/README.md`，定性结论已由 Kaspi & Showman (2015) 兜底。**升级候选（用户 2026-09-24 间奏曲）**：① 跑通 ExoPlaSim 给气候层做 baseline；② GPU 多卡加速冲 200k 节点级 GCM（ExoPlaSim 不可行则评估自研/其他 GPU 谱模式或 FV 核）；③ 并行积累 GCM 模拟数据训练 ML 代理模型（超分/参数化学习，DLSS 式思路）。前置 = 先审计 ExoPlaSim GPU 化现状（其内核为 Fortran+MPI，GPU 路径需调研：cupy-fied 谱核 / nvfortran / 替代后端）与 200k 节点的网格-动力核匹配（谱截断 T-number vs CVT 非结构网格插值代价）。资源与排期细节见 `private/todos/today.md` | 远期（调试类→资源到位可提级） | ★★→★★★ |
-| **P2** | **气候「偏差清单」逐场调研 + delta 图层后端**（2026-09-13 用户裁决提级：后端先行、前端缓行）：**后端 ✅**——① `generate_climate_obs.py` committed 生成器（NCEP T/SLP/风 + GPCP P 逐格 → `climate_obs.json`，mesh-bound，替代旧无生成器 ad-hoc 版；验证 id==position、南极 P 匹配 GPCP 直采、land/ocean 均值合理）；② `diagnose_climate_bias` 扩到 **T/P/风/Köppen 逐格排序**（global+zonal+region+top 离群）——新发现：风 \|U\| R²=−0.81（逐格零 skill = 缺定常涡旋→④）、南极 katabatic 缺失（1.0 vs 13.4 m/s）。③ **前端 delta 图层 ✅（2026-09-15 全套）**：ΔT/ΔP/ΔSLP/Δ风/Δ洋流 5 层就地计算（模型 − 逐格观测，非存储）+ 「开发」分组 + inspector 开发组 + 矢量偏差箭头（Δ风/Δ洋流 = 叠加 feature 层）；`generate_spatial_reference.py` 扩 SLP 距平/风/洋流（NCEP/SODA）→ `spatialReference.ts`。= today ④ SLP+风场逐格参考的落地载体 | ✅ 后端 + 前端全套 | ★★★ |
-| P3 | **诊断缓存设计**：诊断脚本中间量落盘带版本号（precip_budget 提速前置）；已知属性：mesh JSON 4 位小数截断致产物 vs rebuild 差 0.2pp | 1 周 | ★★ |
+| P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算）→ [moltke-engine.md](proposals/moltke-engine.md) | 远期 | ★★ |
+| P3 | SDE 文明建模（Euler-Maruyama / Milstein / 泊松跳跃冲击） | 远期，依赖 Entity ID | ★★ |
+| P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上）→ [harness.md](proposals/harness.md) §9.4 | 内核 0.5 周 | ★★ |
+| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例 | 设计 1–2 周 + 实现远期 | ★★★ |
+| P3 | **地质层速度**（terrain 已 56→17 s（09-29）；剩余 = tectonics ~97 s Dijkstra 重采样；债 11 缩放数据） | 评估 0.5 周 | ★★ |
+| P3 | **GCM PoC 跑通**（PoC 风场退化根因未明；定性结论已由 Kaspi & Showman 2015 兜底。升级候选（用户 09-24 间奏曲）：① ExoPlaSim baseline；② GPU 多卡 200k 节点级 GCM；③ 模拟数据训 ML 代理。前置 = ExoPlaSim GPU 化审计 + 网格-动力核匹配调研）→ [climate-gcm-plan.md](proposals/climate-gcm-plan.md) | 远期（资源到位可提级） | ★★→★★★ |
+| P3 | **诊断缓存设计**（诊断脚本中间量落盘带版本号；已知属性：mesh 4 位小数截断致产物 vs rebuild 差 0.2pp） | 1 周 | ★★ |
 
 ---
 
 ## 七、已知技术债务
 
-2026-08-04 更新（v0.14.0 后）。按"功能性 → 工程卫生"排序。
+按"功能性 → 工程卫生"排序。已修复项不入此表（git/CHANGELOG 为史）。
 
 ### 功能性
 
-1. **潮汐锁定经度效应缺失**（Phase 3A.7）— 无昼夜半球 / 次恒星点热源 / 经度
-   不对称，潮汐锁定世界只能产出纬向对称近似气候。nacrea 温室预算已预留 +3 K
-   等待该效应落地。
-2. **海岸线过于平直** — 海陆判定在 cell 粒度（~51 km @ 200k cells），海岸线
-   沿 cell 边延伸、缺乏分形细节（用户反馈，2026-08）。方向（任选/组合）：
-   更高 cell 密度；海岸带高频噪声扰动（沿海岸对陆/海判定做 sub-cell 噪声阈值）；
-   或在导出栅格时对海岸线做分形细分。与地理锚定（pipelines/geological-pipeline.md §4.4）兼容——锚定给出宏观
-   格局，此改进只增海岸微观粗糙度。
-3. **大裂谷海过于对齐经线、边界平直** — 当前用单个拉长偏置场（elongation=11、
-   bearing=0），产生笔直经向裂谷。应似东非大裂谷/红海：蜿蜒走向、不规则边界、
-   局部断块隆起/异常塌陷。已用"多段错列偏置场"初步缓解（见 nacrea
-   geography.yaml）；彻底方案需 geography 逻辑支持"弯曲裂谷带"原语。
-   **~~另一脆弱机制~~** → ✅ 已修复（2026-08-07，feat/geography-elevation-anchor）：
-   地形合成对强负偏置场（authored 裂谷/海盆）的汇聚抬升乘连续阻尼
-   （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)，岛弧同处理）；nacrea 重建核对
-   大裂谷海支持区 max elevation <0 m。同批新增 `elevation_target_m`/`pin_strength`
-   高程钉扎（浅海/地峡水深控制）与 `sea_level_offset_m` 海平面旋钮
-   （冰期/临界海峡实验），见 geological-pipeline.md §4.4。
-   **蜿蜒裂谷原语**仍 open（上段）。
-4. **气候分类体系扩展**（设计轮 ✅ 2026-09-14）— 原 Trewartha/Holdridge 并列方案已被统一方案 **UCC（Unified Climate Classification，统一气候分类）**吸收（锚点法：溶剂液窗 θ 归一化温度轴——Köppen 魔数 {−3,0,10,18} °C 恰为地球水窗节点 {−0.03,0,0.10,0.18}，地球档案按构造重现 Köppen；UNEP AI 水分轴复用现有 PET 链路；广义季节段 + 世界档案 profile）。方案与实施分期（Phase 1–3）见 `docs/ucc/design-anchors.md`（原提案清理后的保留部分；UCC 文档已收拢至 `docs/ucc/`）；地球四体系比较仍见 `climate_classification_comparison.md`。优先级 P2，实现交接其他模型。
-5. **年均温 / 年降水诊断图层**（2026-08-09）— ✅ 已实现：「全球温度/降水图层」直接渲染 `temperature_C` / `precipitation_mm` 原始场（连续色标，非 Köppen 分类滤镜）。
-6. **自动国界 / 行政区划生成**（2026-08-09）— Azgaar's FMG 具有基于地形自动剖分的 burgs/states/provinces 系统，dreamulator 目前无对应模块。roadmap 3C 文明层的当前设计以人工锚定种子 + 事件流程序化填充为主，自动领土剖分是远期扩展项。登记为 P3 技术债，不阻塞 3C 推进。前期调研：Azgaar 的自动国界算法（基于流域 + 距离衰减 + 军事/文化权重）值得参考但不应移植。
-7. **内流盆地 / 海峡连通**（2026-08-26 重新定性）— 曾有「坝路径硬编码」机制
-   试图"冲开被堵海峡"，但它混淆了「被堵浅海峡」与「稳定内流盆地」两类水体
-   （里海/死海本就该稳定断开、永久不连通外洋），已随流水侵蚀一并**移除**。
-   现状：内流盆地（低于海平面、不连通外洋）保持断开；其连通属水量平衡 /
-   海洋过程问题，非流水侵蚀职责，若将来需要走水量平衡或海洋过程建模。
-8. **Cortial 2019 算法对 seed 高度敏感**（2026-08-10 诊断）— 多 seed 对比（42/123/456 @100k）发现：海陆空间一致率仅 74%、海岸线 IoU 仅 8%、海拔相关性 r=0.25、Köppen 空间一致率仅 44%。不同 seed 产生的是**完全不同的星球**，而非同一星球的不同变体。geography.yaml 锚定系统是唯一约束机制，但当前仅覆盖命名地貌，其余区域完全随机。需要 seed 探索器 + 种子目录作为补充工具链。见 六 P1 新增条目。
-9. **气候对网格分辨率敏感**（2026-08-10 诊断）— 100k vs 200k 对比发现 Af（热带雨林）质心偏移 37° 经度、北方内海在 200k 下封闭。全局汇总统计（均温、Köppen 比例）稳定（<3%），但空间分布对分辨率敏感。属于 EBM 级别引擎的已知局限，需在气候验证中建立分辨率敏感度基线。
-10. **JSON 格式是前端可扩展性硬上限**（2026-08-10 诊断）— 500k cells 的 cvt_mesh.json 达 570 MB，浏览器 `JSON.parse()` 直接 OOM（堆内存需求 ~2 GB 超出 V8 限制）。200k（~220 MB, gzip ~50 MB）已验证可用。根本原因：JSON 逐字段文本编码，每 cell ~1 KB；解析后 JS 对象堆膨胀 3–4×。**已缓解**：MessagePack 二进制 + Web Worker 解析已落地（传输 -50%、解析不阻塞主线程，见 六 P0 ③✅）；但解析后的 JS 堆膨胀（3–4×）仍存在，500k 的 OOM 上限只是推迟而非消除。
-11. **后端构建性能缩放数据**（2026-08-10）— 多分辨率基准测试（seed=42，同一 geography.yaml）：
+1. **潮汐锁定经度效应缺失**（Phase 3A.7 参数化之外的完整版）— 无昼夜半球 /
+   次恒星点热源 / 经度不对称的完整气候；nacrea 温室预算已预留 +3 K。
+   与 §六 P3 GCM 线、27（时间表示通用化）同前提。
+2. **海岸线过于平直**（用户反馈 2026-08）— 海陆判定在 cell 粒度（~51 km），
+   缺分形细节。方向：更高 cell 密度 / 海岸带高频噪声扰动 / 导出栅格分形细分。
+   与地理锚定兼容（锚定给宏观格局，只增微观粗糙度）。
+3. **大裂谷海蜿蜒原语** — 多段错列偏置场已缓解（nacrea yaml）+ 09-29 边界形态
+   链（宽度调制/侧向蜿蜒/断块塌陷）；彻底方案 = geography 支持"弯曲裂谷带"
+   polyline 路径原语（多段椭圆链已够用，原生路径为远期；overlays 段可先做局部试错）。
+6. **自动国界 / 行政区划生成**（2026-08-09）— Azgaar 式自动剖分（流域 + 距离衰减 +
+   军事/文化权重）值得参考不移植；3C 当前以人工锚定种子 + 事件流填充为主，
+   自动领土剖分是远期扩展，不阻塞 3C。
+7. **内流盆地连通**（2026-08-26 重新定性）— 「坝路径硬编码」机制已移除（混淆
+   被堵海峡与稳定内流盆地）；连通属水量平衡/海洋过程问题，若需要走该方向建模。
+8. **Cortial 2019 对 seed 高度敏感**（2026-08-10）— 不同 seed = 完全不同的星球
+   （海陆一致率 74%/海岸 IoU 8%）；geography.yaml 锚定是唯一约束机制。需要
+   seed 探索器 + 种子目录作为补充工具链。
+9. **气候对网格分辨率敏感**（2026-08-10）— Af 质心 100k vs 200k 偏移 37° 经度、
+   北方内海 200k 下封闭；全局统计稳定（<3%）但空间分布敏感。需在气候验证中
+   建立分辨率敏感度基线。
+10. **JS 堆膨胀是前端规模上限**（2026-08-10 诊断，msgpack 已缓解传输/解析）—
+   解析后对象堆 3–4×，500k 的 OOM 上限只是推迟而非消除。
+11. **后端构建性能缩放数据**（2026-08-10，seed=42；§六 P3 地质速度行的依据）：
 
 | 阶段 | 100k | 200k | 500k | 1M | 1M/100k | 缩放类型 |
 |------|------|------|------|-----|---------|---------|
@@ -235,424 +185,67 @@
 | plates | ~3s | 5s | 11s | 28s | 9.3× | O(N) |
 | tectonics | ~36s | 85s | 178s | 455s | 12.6× | O(N^1.5) |
 | terrain | ~59s | 104s | 296s | 737s | 12.5× | O(N^1.5) |
-| **地质合计** | **~126s** | **238s** | **583s** | **1434s** | **11.4×** | |
-| temperature | 2.6s | 6.0s | 14.5s | 28.7s | 11.0× | O(N) |
-| wind | 4.5s | 8.2s | 20.5s | 40.7s | 9.0× | O(N) |
-| **ocean** | **32.1s** | **87.6s** | **356.4s** | **764.2s** | **23.8×** | **O(N^1.7)** |
-| precipitation | 13.2s | 25.8s | 64.3s | 128.2s | 9.7× | O(N) |
-| **气候合计** | **68.4s** | **147.1s** | **482.4s** | **1002.9s** | **14.7×** | |
-| ecology | ~3s | 5s | 13s | 27s | 9× | O(N) |
+| ocean (GMRES) | 32.1s | 87.6s | 356.4s | 764.2s | 23.8× | O(N^1.7) |
+| 气候合计 | ~68s | 147s | 482s | 1003s | 14.7× | |
 | **总计** | **~200s** | **391s** | **1079s** | **2464s** | **12.3×** | |
 
-明细（1M=41 min）：地质 23m53s（58%）、气候 16m43s（41%）、生态 27s（1%）。
-
-**ocean (GMRES) 缩放非线性但非爆炸性**：100k→200k 2.75×、200k→500k 4.05×、500k→1M 2.15×。其中 200k→500k 最差（2.5× nodes 但 4.05× 耗时），可能因海盆切分阈值在该区间触发了不同数量的独立 GMRES 求解。1M 有 126 个海盆（500k 约 71 个），最大单盆 680k cells。整体 1M/100k=23.8× 偏离理想 10×，是唯一需要算法优化的阶段。
-
-**地质层缩放健康**：tectonics 和 terrain 均为 O(N^1.5) 预期，mesh 为 O(N log N)，均无意外。
-12. **四层控制模型**（2026-08-11 设计决策）— 将地质层的两层编辑架构（#20）泛化为适用于所有 DAG 层级的统一框架。详见 [layer-control-model.md](proposals/layer-control-model.md)。核心设计：
-
-| 层级 | 载体 | 职责 |
-|------|------|------|
-| 约束层 | 各层 `*_constraints.yaml` | 语义化宏观控制，seed 无关 |
-| 引擎层 | DAG Pipeline | 物理/数学计算 |
-| 校验层 | `conflict_resolution.yaml` | 一致性守卫 |
-| 覆写层 | 各层 `edits.json` / `overrides` | 逐实体强制值，seed 绑定 |
-
-约束类型分级：Hard（必须满足，违反则拒绝）/ Soft（尽量满足，违反则警告）/ Preference（倾向性，记录日志）/ Override（直接覆写，跳过引擎）。
-
-| 层级 | 文件 | seed 依赖 | 粒度 | 示例 |
-|------|------|----------|------|------|
-| 约束层 | geography.yaml | 无关 | 命名地貌 | "这里要有裂谷海" |
-| 覆写层 | edits.json | **绑定** | 逐 cell | "#7244 elevation −20m" |
-
-管线位置：geography.yaml 在 plates/terrain 阶段生效，edits.json 在 terrain synthesis 之后作为后处理叠加。换 seed 时 edits.json 标记 stale，支持最近邻迁移（尽力而为）或丢弃重编辑。详见 六 P2 条目。
-
-13. **生态 NPP 光谱匹配缺失**（2026-08-13）— 当前 `par_ratio = L/d²`
-   （`ecology.py`）是**总辐射通量比**（标量），未按恒星光谱类型修正光合
-   有效辐射（PAR，400–700 nm）。M 矮星（nacrea `star_ignis` 0.036 L☉）辐射峰
-   在近红外（NIR），可见光/PAR 比例低 → 用总通量会**高估**叶绿素型植物的
-   NPP；反之若植物演化出 NIR 吸收色素，可利用红外辐射，NPP 可能不降反升。
-   缺失的修正链：`恒星光谱类型 → 光合色素吸收谱 → 有效 PAR → par_ratio`。
-   当前 `physical_inputs` 只解析 `stellar_luminosity_sol`（总光度），未读恒星
-   有效温度/光谱型。优先级 **P2**（类地球世界不受影响，仅影响 M/K 矮星异星
-   生态的真实性）。配套：`docs/knowledge/ecology/photosynthesis_spectra.md`
-   ✅ 已建（2026-09-13，光合吸收谱 + 恒星光谱匹配（Kiang 2007 / Lehmer 2021）+
-   C3/C4 效率上限 + 异星斑斓星球设计启示）；`par_ratio` 光谱修正本身仍未实现。
-
-14. **世界参数单一来源缺失**（2026-08-13）— 参数（光度、轨道、温室等）散落在
-   `stellar.yaml`/`planets.yaml` 之外，还被**手工抄写**进多个 Markdown 文档
-   （`physical_params.md`、`orbital_dynamics.md`、`giant_brightness.md`、
-   `stellar_decisions.md` 参数表、`long_term_cycles.md` 等），且衍生值
-   （辐照度 `L/4πa²`、太阳日 `1/(1/P自转−1/P公转)`、日照比 `L/a²`、年长/每季/
-   一年日数/极昼极夜/寿命/演化进度）需**手算**。方案2 参数调整时手动同步了 7+
-   文档、20+ 处数值，仍遗漏 `long_term_cycles.md` 两处。修复方向（两阶段）：
-   ① **衍生参数汇总** ✅（2026-08-15）：`physical_inputs.derive_world_parameters()`
-   聚合原始 + 衍生参数（辐照度/日照比/平衡温度/年长/太阳日/一年日数/季节长度/
-   极圈与极点极昼时长/恒星寿命与演化进度/宜居带位置/卫星轨道周期与锁定状态），
-   天文引擎 build 时输出 `layers/astronomy/derived/world_parameters.yaml`（优先用
-   本次构建的内存恒星计算值，首次构建无需回读 stellar_derived.yaml）；nacrea 输出
-   与 `physical_params.md` 手算值逐项一致（g=10.28、太阳日 3.42 d、年 67 d、
-   一年 19.6 太阳日、极圈 ±81°、极点极昼/夜 33.5 d、卫星公转 78 h），回归测试
-   锚定这些值（`test_physical_inputs.py`）。② **文档模板渲染** ✅（2026-08-15）：
-   新增 `doc_render.py`（SandboxedEnvironment + `SourceUndefined` 缺参源码回显 +
-   `round0/1/2`、`hours`、`pct` filter）。参数表类文档写 Jinja2 占位符，在**读取时**
-   （API `layer-documents`/`design-documents` 端点）与**静态导出时**从
-   `world_parameters.yaml` 渲染——渲染产物不落盘、不进 git（纯函数缓存，非引擎产物）；
-   分支沿继承链取自己的参数，覆写天文 input 未构建的分支不回退根世界参数而是降级。
-   响应/导出 JSON 带 `rendered` 标志，缺参时前端显示横幅提示。nacrea 5 个文档已模板化，
-   锚定值渲染后与手写一致（`test_doc_render.py`），并顺带修正 `long_term_cycles.md`
-   两处方案2 遗漏漂移（日照 656→899 W/m²）与 `giant_brightness.md` 898 截断（→899）。
-   叙事类文档保留手写 + 局部引用。两阶段均完成，P1 关闭。
-   **2026-09-10 扩展**：卫星动力学派生量进 catalog（`hill_radius_km`/`a_rh_ratio`/
-   互希尔间距/`synchronous_orbit_radius_km`/自转轴方位约定——赤道参考卫星 Ω−90°），
-   `satellite_architecture`/`space_age`/`habitability_solutions`/`orbital_dynamics`/
-   `long_term_cycles` 再模板化 5 文档并测试锚定，顺带修正 3 处旧值漂移
-   （R_H_s 68,220→66,715、r_sync 98,488→96,396、占顺行稳定区 34.0%→30.8%）。
-   **2026-09-11 扩展**：k₂/Q、J2、C/MR² 参数化派生量（外迁/阻尼/J2 进动/拉普拉斯/
-   自转进动）接入 ✅（OrbitingBody 可选字段 + nacrea authored）；`perihelion_day`
-   精确解析（ϖ 与自转轴方位 λ_pole → 近日点相位）+ 修正 `solar_declination`
-   相位耦合（declination 锚定春分，与 distance 周期解耦）✅——两者对 nacrea
-   （近日点=春分）与 earth（无赤道参考卫星）均为 no-op；自转轴方位符号 bug
-   （Ω+90°→Ω−90°）已修。
-
-15. **天体数据双文件分裂与字段重复**（2026-08-15）— 天体信息分散在
-    `astronomy/input/stellar.yaml`（stars/orbits/bodies 叙事）与
-    `geological/input/planets.yaml`（权威物理参数 + 大气/水圈/岩石圈）两处：
-    5 个物理字段 × 每个天体重复维护（单位还不同：radius_km vs R⊕），已发现
-    3 处漂移（nacrea：Aegis 反照率 0.34/0.343、Cadence 半径 2840/2867 km、
-    Vigil 半径 2470/2485 km，均已按 planets.yaml 权威对齐修复）；前端被迫在
-    `StellarSystemViewer` 里 merge + 按 id 去重、API 里有 `_normalize_body`
-    单位换算补丁。**分裂本身保留**（分支系统依赖：l4-companion 在天文层覆写
-    stellar.yaml、climate-dev/terrain-dev 在地质层覆写 planets.yaml），
-    **重复用派生目录化解**：
-    ① ✅ `physical_inputs.build_system_catalog()` + `check_body_field_consistency()`
-    （0.1% 容差交叉校验，漂移告警），天文引擎 build 时输出
-    `layers/astronomy/derived/system_catalog.yaml`（stars + orbits 透传 +
-    逐天体合并条目：物理参数 planets.yaml 优先，附开普勒周期/辐照度/平衡
-    温度/太阳日/潮汐锁定/宜居带位置；目标天体内嵌 `world_parameters`）；
-    ② ✅ API `/worlds/{name}/system-catalog` + 静态导出三件套同步；
-    3D 视图改读 catalog（删除前端 merge/dedup），WorldDetail 天文 tab 新增
-    天体百科卡片面板；③ 📋 创作规范：共享物理字段以 planets.yaml 为权威，
-    stellar.yaml 的 bodies 仅增补叙事/分类（本条目即规范出处）；④ 📋 远期：
-    `dreamulator validate` 深度模式接入一致性校验、WorldDetail i18n。
-16. **气候参数 per-world 特调违反「同物理」原则**（2026-08-15）— 目标：地球与 nacrea
-    用同一套物理（同一代码路径），只差输入参数（自转/光度/倾角/温室…），不做单世界
-    特调。当前 nacrea `terrain_config.yaml` 把若干「该从物理推导」的量手调成世界专属值：
-    - ✅ `lat_gradient_earth_c=28`（全局参考应为 ~45）：**已解决（2026-08-22）**——Held-Hou
-      单圈剖面落地后，nacrea 温度改走 `ebm_1d=true` + `hadley_extent_deg=90` 的 Held-Hou
-      四次方剖面，不再消费 `lat_gradient_earth_c`；terrain_config.yaml 的 28 覆盖已删。
-    - ⚠️ 新发现（2026-09-11）：storm track 幅度公式的 `_lat_grad` 里，nacrea 走
-      `lat_gradient_c=40`（`auto_lat_gradient` 未设，默认 false），earth 走
-      `auto_lat_gradient=true → 45`——基准不一致（同物理裂缝），应统一 nacrea 也开
-      `auto_lat_gradient=true`。
-    - `hadley_extent_deg=90`、`polar_cell_start_deg=90`（单圈环流，GCM 证实无 Ferrel/极地胞）：
-      ExoPlaSim Ω=0.31 的 mass streamfunction 全半球同号（单 Hadley 胞直抵极地、只在赤道变号），
-      `storm_track_amplitude_mm=0`（无斜压风暴路径）。残留问题：90 应走 Held-Hou 标度
-      φ_H ∝ (gHΔθ)^½/(Ωa)^½ 从 Ω 推导 vs 硬编码（climate-pipeline.md §13 已知局限），
-      归入「自由参数处置」A 可推导类。
-    - 处置方式：M4 阶段先聚焦地球温度纬向形状；这些「该推导却被手调」的旋钮统一留待
-      第二波物理审计的「自由参数处置」逐项裁决，不在 M4 零散单点修。
-    - 配套：`lat_gradient_earth_c` 全局默认已从 40 → 45（地球实测 ΔT）；Earth 验证诊断
-      三脚本 + `climate validate` 已统一走 `build_earth_validation_config()`（单一来源），
-      `auto_lat_gradient`/`diffusive_heat_transport` 默认开启（与 nacrea 同物理），
-      `--no-*` 选项显式关闭以复现 legacy 手动 45 基线。
-    - ✅ 本次已修（2026-08）：storm 中心/宽度可推导化——`storm_track` 中心退出「自由参数」，
-      幅度仍标定旋钮。推导方式 2026-08-29 再进一步：从胞圈边界中点（单圈行星退化为零宽）
-      改为纬向平均温度经向梯度峰值（`_baroclinic_band`，Eady 不稳定性跟随 ∇T），单圈行星
-      得到弱而真实的斜压带（见 20 ⑥）。
-      剩 `hadley_extent_deg`（90 应走 Held-Hou 标度）一项 + 上面新发现的
-      `auto_lat_gradient` 同物理裂缝，待第二波审计裁决。
-17. **降水管线三处 bug 已修 + 剩余调参**（2026-08-16）— 修参考数组后温度 corr 0.981
-    达标，降水曾 corr 0.762。三处 bug 已修：
-    - ✅ **地形降水误套海洋洋底**：`_rain[_q_mask]` 无 `is_land` 限制，海洋按洋底地形
-      错误降水（中纬海洋 +800mm 过湿）。已改 `(_upwind_q > 0.5) & is_land`。
-    - ✅ **ITCZ 用夏至位置**：`itcz_latitude(period/2)` 对地球返回 ~37°N，把对流雨带
-      放到副热带。已改年均位置 0°N（年均太阳直射点=赤道）。
-    - ✅ **缺风暴路径**：水汽扩散到不了极区，60°+ 降水缺失。已补中纬风暴路径
-      （baroclinic cyclones），位置随 Hadley 边界、幅度随 Ω 缩放（同物理）。
-    结果：降水 corr 0.762→0.805、Köppen 30类 26.7%→28.3%、群组 Kappa 0.439→0.457
-    （>0.45 达标）。
-    剩余调参已并入 #20：① 中纬海洋偏干 → #20 ② 中纬干燥（风暴路径欠输送）；② ITCZ
-    北偏 → #20 ① ITCZ 偏强（季节迁移）；③ nacrea 基线重生成——仍待做（③/B/κ/⑤ 改动后
-    需在 nacrea 回归重生成）。
-18. **热带 Af 偏少 → 已反转（Af 过判、Am/Aw 欠判）**（2026-08-16，2026-08-28 更新）—
-    迁移 ③（热带底线迁 `k_rain`）后 Af recall 0.08→**0.81**（不再偏少），但**过判**
-    （sim 5977 vs obs 2786，precision 0.38）：Am（季风）recall 0.02、Aw（稀树草原）recall
-    0.10 被压进 Af（`Am→Af` 1424、`Aw→Af` 1804）。剩余问题从「Af 偏少」变成「Am/Aw 偏少」
-    （热带干季维持），根治仍是「双 ITCZ」/季风动力学（季节风反转 + 内陆水汽输送），属新
-    物理机制——归入 23 季风动力学攻关（两者同源：都缺「季节风反转 + 内陆水汽输送」）。
-19. **潮差参数未入引擎（变量渲染缺口）**（2026-08-16）— 潮差 ~44 m 是 `tidal_effects.md`
-    里的手工推导（Z = (M_p/M_m)(R⁴/a³) → 平衡潮 9.5/19.0 m → 共振 2.3× → ~44 m），
-    `tidal_physics.py` 只算了潮汐**加热**（Peale & Cassen → 板块速度），
-    `derive_world_parameters()` / `world_parameters.yaml` 无潮差字段。后果：ecology /
-    geography / climate_zones / civilization 等文档的潮差值（~44 m、~25 km 潮汐平原）
-    为**写死值**，无法用 doc_render 变量渲染。修复方向：在 `tidal_physics.py` 补潮差计算
-    （Z、平衡潮、共振因子；输入 k₂/h₂/Q/e/a/R/H 均已存在于 stellar/planets/physical_params），
-    接入 `world_parameters.yaml`，潮汐相关文档转 Jinja2 模板。
-
-20. **气候引擎水汽收支标定遗留**（2026-08-28 更新，质量守恒水汽收支 Level 2 后续）—
-    质量守恒水汽收支（∇·(Wu)+W/τ−κ∇²W=E, P=W/τ）已落地并**守恒化收尾**：
-    - ✅ 双重计数 → 对流/热带底线迁为 `k_rain` 空间调制（ΣP=ΣE 恢复）。
-    - ✅ Step 6.5 内陆干旱梯度 → **Budyko 陆地再循环**（`E_land=E_pot·P/(E_pot+P)` 固定点迭代；
-      Savenije 1995 / van der Ent & Savenije 2011 再循环长度 λ 区域依赖）。
-    - ✅ κ（`_MOISTURE_DIFFUSIVITY_M2S`）1e6 → **3.75e5**（抑制海洋→陆地过度扩散湿润，沙漠回干）。
-    - 结果：分布 52.6→64.8%、空间 29.2→32.1%、Kappa 0.232→0.275（含 ⑤，见下）。
-    剩余方向：
-    - **① ITCZ 偏强**（0° 峰值 ~+800）→ **并入「季节 ITCZ 迁移」**（`itcz_lat_monthly` 已实现
-      未接线；固定 0°/8° 都顾不到另一半球，接线后年均雨带自然变宽）。单点杠杆已否证：
-      `_shoulder` 0.2→0.1、热带 κ 宽 10°、M 1.5→1.0、ITCZ 北移 8°（南半球崩）。
-    - **② 中纬干燥**（38–62°N 偏干 −300~−470 mm/yr，峰值 38–42°N）——风暴路径欠输送（斜压涡旋
-      只贡献 ~132 mm/yr 陆均，观测中纬 ~900–1000）。ExoPlaSim 显式解析涡旋、风暴路径降水涌现，
-      无参数化可抄；修法（加大 `storm_track_amplitude_mm`/`kappa_enhancement`）是标定非推导，且
-      与已降的 κ 有张力。**复杂，挂后**。
-    - **④ C/D 群退化**（Dfc→EF/ET）——**已挂起**，根因三个物理量纠缠：
-      ① 北冰洋过度调节（冰封洋当暖洋 2e8，distance 到北冰洋仅 ~665 km 压低西伯利亚夏季振幅）
-      ② 振幅公式高估 ~50%（`T_amp=ΔQ_ω(1−α)/√(B²+(ωC)²)` 用大气顶 ΔQ_ω 没乘透过率，
-      amp_base≈30°C vs 观测 Fairbanks ≈20°C）③ 季节冰反照率反馈（t_hot<0°C 冻结）与 ② 正反馈。
-      单改任一档都推到另一头：ice-aware+2e7→Dfb 2595（Kappa 0.228）、ice-aware+3.5e7→ET
-      3544（0.241）、ice-aware+transmissivity 0.7→ET 3183（0.229）、smooth snow-albedo 宽
-      3°C→Kappa 0.239（sigmoid 在 0°C 处 ice_frac=0.5 把该融雪的 0–3°C 格又压冷）。均 < 基线
-      0.247。**正确方向是「植被掩雪」**（针叶林遮雪→有效反照率 ~0.1，苔原雪裸露 ~0.7，
-      ExoPlaSim 雪深↔反照率耦合的简化版），需 #1+#2+#3 联合标定，与生态植被分布耦合。
-    - **⑤ coastal moderation**——✅ 已修：年平温度向最近海洋 SST 混合（`exp(−d/500)` 海上因子，
-      海平面调节后再套海拔直减率，自动冰感知），亚南极群岛 EF→ET 回收，E 群 72.9→81.4%。
-    - **海洋输送占比按风生环流推导**——`ebm_diffusion_land_wm2k`=0.6×D_total 是地球洋流
-      占比标定，慢自转下海洋占比应更小。
-    - **⑥ 单圈环流中高纬降水底 / 沿海沙漠归因**（2026-08 间奏曲发现）：nacrea 的配置里
-      风暴路径降水被完全关掉（`storm_track_amplitude_mm=0`，理由是单圈环流不形成斜压风暴）。
-      后果是中高纬没有任何涡旋往内陆送水，降水只靠本地蒸发再循环撑着，沙漠因此能一直贴到
-      海岸——实测沙漠细胞到海岸的距离中位数从基线的 1131 km 缩短到 627 km，新增沿海沙漠
-      集中在北纬 30–60°。同一原因的另一面：单圈环流没有副热带下沉干带，热带湿带特别宽，
-      雨林气候（Af）可以伸到南北纬 30°，再叠加这版地形海拔降低（陆地平均 1002→613 m），
-      Af 面积进一步放大。这些是单圈物理的正确行为，不算 bug；但真实慢自转行星的涡旋是
-      「减弱而不为零」，引擎这里可能把中高纬做得偏干了。改进候选：给风暴路径一个按自转
-      标度的弱非零值，或给海岸加一个海洋边界层水汽底。先做敏感性实验再决定是否入账。
-      **实验已做（2026-08-29）**：斜压带改从纬向平均温度梯度推导（`_baroclinic_band`，
-      中心 ~67°、σ≈20°，两个世界同构），nacrea 撤掉 `storm_track_amplitude_mm=0` 覆盖、
-      用共享默认 900（Ω^0.3 标度自动给出有效幅度 ~560 mm）。结果：Earth 空间准确率
-      32.4→32.8%（梯度推导优于胞圈边界）；nacrea 中高纬增湿 +31~+89 mm/年、热带对应
-      减湿（水分重分配，全球均值 +0.5%），BW 沙漠 −910 cell（BWk −829→BSk/Cfb/Aw），
-      沿海沙漠（<200 km）853→636，沙漠-海岸距离中位数 629→676 km——方向正确、幅度
-      温和，距关停前的 1131 km 仍有差距；剩余偏干留给季风动力学（23）与海洋边界层
-      水汽底选项。
-
-21. **低优先级（异星生态 / 天文 / 验证数据）**（2026-08-24）：
-    - Whittaker 群系「平移边界线」——`classify_whittaker_biome` 硬编码地球阈值，异星应平移降水轴。
-    - Aegis 偏心率调高（0.005→~0.03，GJ 876 类比，需 REBOUND 精确值）。
-    - 年度冰反照率光谱统一（B 方案，等 M 矮星 GCM 参考数据再标定）。
-    - 温度源升级 ERA5（需 CDS API）/ CRU TS v4（免注册），当前用 NCEP。
-    - LGM 扩展：22ka 时间片 + 月度版（tasmin/tasmax/pr）+ PMIP4 多模型交叉。
-    - **生态层深时演化门控**（氧阈值、false dawn、多次多细胞化、保存窗口≠存在）——
-      设计见 `proposals/ecology-layer.md` §2.7，地球参照 `knowledge/ecology/pre_ediacaran_macrofossils.md`。
-
-22. **Nacrea 长周期气候循环与轨道面自洽**（2026-08 间奏曲的天体力学调研，结论已部分落地）：
-
-    背景：间奏曲原想给 Nacrea 做「类地球米兰科维奇循环」——近日点今年对着北半球夏季、
-    几万年后对着南半球夏季。调研结论是这个愿望在当前系统架构下做不到（周期差两个量级），
-    但换一组锚点可以得到同样有史诗感、且动力学完全自洽的长周期气候循环。
-
-    - **设定修订（已应用到设定文件）**：Aegis 的自转轴倾角从 3° 改为 **9°**，Nacrea 改为
-      **赤道面轨道**。这样改的好处是规则卫星贴行星赤道面形成本来就是标准图景，原来的
-      「轨道面凭空斜 9°」反而需要解释；改后 Nacrea 相对黄道的有效倾角仍是 9°（= Aegis 的
-      倾角），所以气候引擎的输入和食季几何都不变。stellar.yaml、orbital_dynamics.md、
-      satellite_architecture.md、coupled_magnetic.md 已同步。
-    - **轨道面动力学（新设定下的结论）**：Nacrea 这个距离上恒星扭矩已经比行星四极矩扭矩
-      强约 14 倍，当地的平衡面（Laplace 面）几乎贴着黄道（只偏 0.65°），所以「贴在赤道面上」
-      其实是一个略偏离平衡的构型，会带一个 8.35° 的自由倾角，绕平衡面以约 **4.7 年**的周期
-      摆动——表现为相对黄道倾角在 7.7° 到 9° 之间呼吸，季节幅度随之 ±7% 调制，食季在一年中
-      的位置也每 4.7 年轮转一圈。自由倾角的维持机制已裁决（2026-09，P-B 潮汐包）：
-      **Aegis 弱潮汐耗散**（k₂p/Qp ≈ 7×10⁻⁸，Q_p ≈ 5×10⁶）把阻尼时标拉到 ~150–300 Gyr
-      ≫ 系统年龄——9° 构型是早期巨撞击（Sentinel 散射期，同时把 Aegis 自转减速到 10h）
-      的冻结化石，无需共振泵浦（卫星 1:2:4 共振链后经 REBOUND 积分判定动力学不稳定，
-      架构已重设计为双单体逆行捕获卫，见 design-notes/0009；2026-09-10 连珠几何
-      重开轮落地 A4v 静楔构型——韵珠精确赤道逆行、守珠贴黄道偏 4°）。
-      食季仍然存在——「倾角大于 5.5° 就没有食」是误传，那个角度只是「每个轨道都食」和
-      「只有食季才食」的分界。
-    - **长周期气候循环的数字卡（2026-09 REBOUND 校准完成，1 Myr 行星链积分实测）**：
-      Aegis 自转轴自由进动 ~550 年（设计值存活，J2 带 0.006–0.010 内 490–816 年），与轨道面
-      交点进动同量级 → Cassini 态捕获仍成立；**近日点进动实测 24–60 千年**（一阶估计 ~1.3 千年
-      偏强一个量级，已证伪）；**气候岁差实测 ~540–560 年**（处于发布带 390–640 年内，由自转
-      进动主导）——「哪个半球的夏季对上近日点」的扫掠仍是千年尺度气候纪元交替的叙事锚点。
-      行星共振链长期模实测：**Aegis e 在 0.016–0.062 摆动、周期 ~45 kyr**——与地球 41 kyr
-      倾角旋回同量级的天然「压缩版米兰科维奇旋回」（原以为 e 调制在 1.3 kyr，实测慢 30×，
-      反而更像真实冰期旋回）。年际变率挂在 4.7 年摆动上。「万年尺度反转」恢复可行
-      （45 kyr e 旋回即万年尺度），long_term_cycles.md §3 已按实测改写。
-    - **距离季 + 倾角季叠加方案**：如果把 Aegis 偏心率从 0.005 调到 0.03–0.05（共振链系统里
-      这个量级有 GJ 876 类比背书），距离季贡献约 0.5–0.7°C 的全球同步季节分量；若再把倾角
-      从 9° 加到 15–20°，倾角季从 0.7°C 加到 1.2–1.6°C。两者频率相同、对称性不同（距离季全球
-      对称、倾角季南北相反），叠加后南北半球的季节振幅一个增强一个减弱，公式为
-      T_amp^N/S = √(T_obl² + T_dist² ∓ 2·T_obl·T_dist·sinΔ)，Δ 由近日点相位决定，可当作设定旋钮。
-      合计能把半球季节振幅从现在的 0.7°C 提到约 2°C，在气候图上是看得见的。注意 Nacrea 自己
-      的偏心率不能动：潮汐加热与 e² 成正比，e 加到 0.05 会直接把加热功率推到熔融量级。
-    - **Vigil 稳定性伏笔 → 架构重设计（已关闭）**：伏笔比预想严重——REBOUND 积分判定
-      整个卫星 1:2:4 共振链动力学不稳定（任意初相 ~90 yr 瓦解；μ=2.4×10⁻³ 过大），
-      「留一句话」不够。2026-09 完成约 50 次积分的系统性推演：共振链（90 yr）、
-      顺行外卫（9 kyr）、共动 pair（6–20 kyr）、层级双星（20–45 kyr）、双单体
-      （X8：24.5 kyr，恒星潮汐 e 带重叠定理）全部无法 Gyr 自洽——K8 宜居带
-      （0.35 AU）的恒星潮汐场比木星系强 ~3200×，外区 0.2–0.5 r_H 是多体混沌海。
-      最终裁决（用户，2026-09-09）：采用**双单体逆行捕获卫**天空（韵珠 Io 级
-      @0.245 r_H + 守珠 Charon 级 @0.44 r_H，径向净空 28 互希尔半径），
-      **卫星动力学层按硬度光谱豁免**（vision.md 合法选项：入叙事、不承诺 Gyr
-      自洽）。2026-09-10 连珠定义修订触发重开轮（30 票矩阵）：终选 **A4v**
-      （韵珠 Ω 0→180°、守珠 i 171→176°，静楔 5–13°）——认证 48.0 kyr
-      （死点在 25 kyr 豁免线外，无需豁免覆盖）+ 健康切片 33 kyr，Nacrea
-      受迫 e 带取 A4v 认证实测 **0.0008–0.009（rms 0.0035，加热均值 ~0.9 W/m²，
-      11 kyr「万年火山脉冲」）**。完整终判与实验矩阵见
-      `data/worlds/nacrea/design-notes/0009-satellite-architecture.md`（正文）+
-      `0009-appendix-experiment-log.md`（附录 §8 重开章）；通用机理结论入知识库
-      `docs/knowledge/astrophysics/satellite_system_stability.md` §8.9
-      （工程 κ 边界、静楔/振荡族、重尾彩票认识论）。
-    - **季节增强方案敲定（待办）**：通过 Aegis 偏心率 + Nacrea 轨道倾角微调增强季节
-      （系统稳定前提下）。工作草案与敲定载体：`data/worlds/nacrea/design-notes/
-      0007-aegis-seasonal-eccentricity.md`。2026-08-28 审查意见：① 67 天年的热惯性阻尼
-      对距离季和倾角季一视同仁（同频 ω），草案「倾角事倍功半」的论据不成立，两杠杆的真实
-      区别是空间型态（全球同步 vs 南北相反）；② 倾角杠杆应实现为 Aegis obliquity 9°→15–20°
-      （保持 Nacrea 赤道面轨道），不要给 Nacrea 自由倾角（Laplace 面自洽问题）；③
-      `argument_of_periapsis` 不是静态旋钮——气候岁差 ~390–640 年扫一轮，「近日点对齐某半球
-      夏至」应写成纪元态；④ 采纳前需 REBOUND 钉 e 上限并顺带验 Vigil 稳定性，落地后跑
-      climate_diff 验证。
-
-23. **气候主线：季风动力学与季节风场**（2026-08-28 立项，来自与外部 AI 的方案讨论，
-    已对照代码库核实）— 气候准确率攻关主线。季风机制已落地为第一性参数化
-    （`engine/monsoon_circulation.py` 纯函数 + `map/climate_simulator.py` 逐月水汽
-    预算），不再是降水系数补丁：
-
-    - **已实现（v1）**：月度温度场 → 相对同纬度纬向平均的季节气压异常（静力响应
-      ΔP = −P_sfc·(d/H)·ΔT/T̄，d/H=0.25 可推导）→ ~500 km 尺度分离平滑（罗斯贝变形
-      半径量级，滤掉 51 km 海陆镶嵌的海岸线噪声）→ 最小二乘图梯度 → 边界层动量平衡
-      （气压梯度力 + 科氏力 + 地表摩擦，k_d = C_D·|U|/h_BL ≈ 1e-5 s⁻¹；f→0 退化为
-      沿梯度直流，跨赤道季风气流由此涌现）→ 季风异常叠加年均背景风场，逐月注入
-      水汽预算（12 次独立求解，逐月 ΣP=ΣE），月度降水直接产出（旧的「年均 × ITCZ
-      高斯因子」再分配与热带沿海 ×1.5/×1.3 增益均已删除）。Budyko 再循环曲线按年
-      水量平衡的物理前提在年预算上收敛，逐月求解沿用其水分限制（逐月套用会因
-      Jensen 不等式低估陆地蒸散）。Earth 验证：Am recall 0.02→0.28、Aw 0.10→0.29、
-      Cwa 0.00→0.28（夏季风机制见效）；总分 32.8%→30.5%，代价主要在 Af/Cfa 家族
-      的季节化过头。
-    - **剩余缺口（转技术债 24 一并处理）**：月度风场目前 = 年均背景环流 + 季风异常，
-      环流胞圈本身的逐月迁移（ITCZ 位置的月度风场）未并入——直接并入的试验表明，
-      在没有配套重新标定前，尖锐化的月度辐合带会让副热带过度季节化并高估陆地降水，
-      属「物理方向对、标定未跟上」，待月度矢量场工作里系统处理。验收指标（Cwa/Cfa/Am
-      recall >40%）随之顺延到该轮。
-    - **v1 验收后的遗留 mismatch**（2026-08-29，`scripts/climate/diagnose_monsoon_regional.py`
-      区域诊断定量确认）：① 热带水分输送路由错位——刚果年降水 195（观测 ~1800）、
-      撒哈拉腹地 1132（观测 ~30）、亚马逊单月 1562 mm 爆表：大西洋水汽被年均信风
-      送去亚马逊，进入非洲的部分被抽到撒哈拉深处才雨出，真实世界靠季节反转的西南
-      气流送水进几内亚湾，需环流季节迁移（技术债 24）；② 东亚季风偏弱——海陆
-      ΔT 异常紧邻暖太平洋而偏弱，且青藏高原等高地在模型里是冷异常（海拔直减），
-      ΔP 公式对其给出符号相反的贡献，季风强迫缺高地热源项（高原感热/抬升加热），
-      需查文献后单修；③ 地中海冬雨缺失（风暴路径无季节摆动，技术债 24）；④ 华北
-      降水相位错（季风缺席后被背景场噪声淹没，随 ①② 解决）。
-    - **经向热输送与分类器阈值**：EBM 经向扩散 D 的 Ω^(−0.3) 标度已实现
-      （`map/climate_simulator.py` 的 `d_scaled` 分支），剩的是量级标定与慢自转下的
-      海洋输送占比（见 20 末条）；s/w 判别阈值（干冬月降水 < 湿夏月/10，Kottek et
-      al. 2006）现由真实月度降水驱动，无需单独修正。nacrea 高程与 Köppen 叠图检查
-      已完成（2026-08-29）：EF/ET 边界与地形一致、高海拔为 EF，E 类主体属物理预期。
-
-24. **月度矢量场：风场先行、洋流不伪造**（2026-08-28，与 23 同源）— 现状：
-    `climate_monthly.msgpack` 只有温度与降水两个标量场；风与洋流是逐细胞年均分量
-    （`wind_east/north_m_s`、`ocean_current_east/north_m_s`），洋流本身用年均风应力
-    只解一次（Stommel + GMRES）。季风 v1（技术债 23）完成后，本轮的核心任务升级为
-    环流胞圈的逐月迁移（月度风场 = 月度 ITCZ 位置环流 + 季风异常），验收锚点见
-    23「v1 验收后的遗留 mismatch」（刚果/亚马逊水分路由、地中海冬雨、东亚季风强度）。
-    计划：
-    - **月度风场（优先）**：季风攻关的诊断底座——没有月度风场，夏季风是否建立、有没有
-      跨赤道气流、水汽能不能进内陆，调试全是黑箱。数据约定：局地东/北两个切向分量、
-      12 个月、月度约定与温度/降水一致。200k 下全量 float32 约 19 MB/场、int16 量化
-      约 10 MB，可接受；500k 起必须量化；1M 不适合默认全量进浏览器。前端不默认加载
-      全量：抽样 10k–20k 细胞的箭头场（约 1 MB 级）+ 懒加载 + Web Worker 解码 + 按
-      缩放级别降级箭头密度；不要把全量月度矢量场烘焙成高分辨率纹理（2048×1024 双
-      分量浮点 ×12 月约 200 MB，不可行）。静态站（GitHub Pages）只导出抽样版；API
-      模式支持按月懒加载。静态导出三件套（`export_static.py` / `staticClient.ts` /
-      `client.ts`）需同步。
-    - **月度洋流（靠后，不伪造）**：洋流模型还没响应季节风应力，这时显示「月度洋流」
-      只能是年均加正弦扰动，属启发式伪造。正确顺序：先有月度/季节风应力 → 洋流重新
-      求解 → 再导出月度洋流。洋流只存在于海洋细胞，只存海洋可再省约三成。
-    - **月度 SST（居中）**：洋流季节化落地前，月度海表温度/混合层温度、上升流强度、
-      海冰范围是比伪造月度洋流更有物理意义的替代展示，也为后续生态层（海洋 NPP、
-      渔场）与文明层（季风航线）提供输入。
-    - **风场符号约定 ✅ 根部统一（2026-09-13，季风幅度轮 Stage A）**：源头
-      `hadley_cell_wind`/季风 `_tangent_basis` 改在物理东基（`east = r̂ × north` =
-      经度增加方向 = `east_north_basis`/NCEP）合成；存储 `_we = -_we` FIXME、月度
-      msgpack 翻转、4.1-B `_wind_phys` 配方、降水入口 `_to_physical_wind` 全部退役；
-      Stommel 洋流链（含上升流、海温异常平流）校准不动、入口喂 `wind_mirror`；
-      `import_earth_climate` 不受影响（喂镜像链）。表示层逐位不变实测 ✓（存储风/
-      洋流/SST/ΔP/nacrea 温度全 bitwise）。**季风异常动力学随之物理修正**（旧镜像基
-      闭式解 ≡ f→−f）：东亚 7 月风向转正（上海 SE/广州 SW/北京 S）、华南华北最湿月
-      转正；印度供水回落 = ΔP 热低压太弱（§2 Stage B 收回）。
-    - **镜像 bug ✅ 已修复（2026-09-12，`31837a9`）**：`_compute_precipitation_monthly_budget`
-      内三消费点（水分收支年平+逐月、地形雨 `_wind_unit_m`、海岸不对称 `_uzonal`）吃未翻转
-      镜像风 → 水分平流/迎风岸东西反转 = 地球逐格 P 三大偏差主因 + nacrea 东岸沙漠
-      （镜像对纬向指标不可见——教训与证据链见 proposal §3）。修复 = 降水函数入口
-      `_to_physical_wind` 翻转，不动源头/Stommel/存储链；符号锚定测试（巴塔哥尼亚
-      迎风:背风 + 下行风羽流）。**归本条的剩余部分**：根部约定统一 + 季风模块 f→−f
-      次级泥潭 ✅ 已随季风幅度轮 Stage A 落地（2026-09-13，见上「风场符号约定」）；
-      本条剩余 = 月度矢量场展示（数据链已就绪）+ 环流胞圈逐月迁移（季风幅度轮 Stage D）。
-25. **水系图层内湖终点处理**（2026-09）— 当前水系图层（`river_id`/`flow_accumulation`）中，
-    河流流到内流湖（内湖）就终止、不再向外流。物理上内流湖是封闭盆地、河流流入即终点，
-    这本身合理；需重新思考的是**绘制/展示方案**：①「内湖」是否应在地形图层显示（湖泊 vs
-    海洋的渲染区分）；② 水系图层的可视化逻辑（外流河→外洋 vs 内流河→内湖终点）。可能需
-    区分两类河流终点，并在图层/图例上明确内湖为「封闭水体」。
-26. **气候层残余偏差归档**（2026-09-08）— 残余偏差单一事实源 = 提案
-    `climate-layer-improvement.md` §0（各要素偏差 TOP，逐格 `diagnose_climate_bias` 口径）
-    + §7（已知局限清单）；当前主动项 = 单圈体制包（§7 实现顺序）。
+13. **生态 NPP 光谱匹配缺失**（2026-08-13）— `par_ratio = L/d²` 是总辐射通量比，
+    未按恒星光谱修正 PAR（M 矮星 NIR 峰 → 高估叶绿素型 NPP）。修正链 =
+    恒星光谱型 → 光合色素吸收谱 → 有效 PAR；`physical_inputs` 未读恒星温度/光谱型。
+    知识底座 ✅（`knowledge/ecology/photosynthesis_spectra.md`）；优先级 P2。
+15. **天体数据双文件分裂的残余**（2026-08-15）— 派生目录 + API 已化解重复
+    （`build_system_catalog()` + 交叉校验 ✅）；残余：③ 创作规范以 planets.yaml
+    为权威（本条即出处）；④ 远期 `dreamulator validate` 深度模式接入一致性校验。
+19. **潮差参数未入引擎**（2026-08-16）— 潮差 ~44 m 为文档手工推导值，
+    `world_parameters.yaml` 无潮差字段、潮汐文档无法变量渲染。修法：tidal_physics
+    补潮差计算（输入 k₂/h₂/Q/e/a/R/H 均已存在）接入 derived，文档转 Jinja2。
+20. **水汽收支标定残余**（2026-08-28；守恒化已收尾）— 开放子项：
+    ① ITCZ 偏强（0° 峰值 ~+800）→ 并入 债 24 月度胞圈迁移（单点杠杆已否证）；
+    ② 中纬干燥（38–62°N 偏干 −300~−470 mm/yr）= 风暴路径欠输送，标定非推导
+    与 κ 有张力，**输送场全局重标定轮候选**（与 nacrea B 诊断的引擎侧结论同向，
+    → `private/reviews/climate/nacrea-b-class-diagnosis-2026-09-30.md`）；
+    ④ D 群崩溃挂起（正确方向 = 植被掩雪，需温度×生态耦合联合标定）；
+    ⑤ 海洋输送占比按风生环流推导（`ebm_diffusion_land_wm2k` 地球标定）。
+21. **低优先级杂项**（2026-08-24）：Whittaker 群系异星平移边界线；Aegis e 纪元选择
+    （用户 09-30 裁决天文配置不动，闭合）；年度冰反照率光谱统一（待 M 矮星 GCM 数据）；
+    温度源升级 ERA5/CRU TS；LGM 扩展（22ka 月度 + PMIP4 多模型）。
+24. **月度矢量场：风场先行、洋流不伪造**（2026-08-28）— 核心任务 = 环流胞圈逐月
+    迁移（月度风场 = 月度 ITCZ 环流 + 季风异常；锚点：刚果/亚马逊水分路由、地中海
+    冬雨、东亚季风强度/高地热源项；验收 Cwa/Cfa/Am recall >40%）。数据约定与
+    前端懒加载方案已定；月度洋流待季节风应力（不伪造）；月度 SST 居中。
+    季风 v1 + GW6 湿槽已收口（git/proposal §2/§5 为史）。
+25. **水系图层内湖终点处理**（2026-09）— 内流湖绘制/展示方案：湖泊 vs 海洋渲染
+    区分、外流河→外洋 vs 内流河→内湖终点的图层/图例语义。
+26. **气候层残余偏差归档** — 单一事实源 = [climate-layer-improvement.md](proposals/climate-layer-improvement.md) §0（逐格偏差 TOP）+ §7（已知局限清单）。
 27. **时间表示通用化：12 bin → 世界频谱派生**（2026-09-14 调研裁决）— 「月」=
-    年 12 等分是地球历法遗产与存储约定，不是物理常量。对地球它恰好是充分采样
-    （温度年循环谐波 1–2 阶主导、约 4 阶充分；Nyquist 下 12 bin 可精确表示 ≤6
-    阶谐波）；nacrea 年长 100 d → 「月」= 8.33 d ≈ 2.4 个太阳日，bin 无历法含义
-    （弱季节 = 谐波振幅小 → 采样误差小，未咬人）；高 e 世界日照非正弦谐波丰富、
-    自旋-轨道共振/系外卫星下「日」「年」需由系统几何重定义。季节 EBM 已是频域
-    单谐波解，`(n,12)` 数组只是输出投影。通用化方向 = 三层分离：强迫谱（周日/
-    周年及谐波族、天文长拍——世界物理派生，Dobrovolskis 2013 解析展开）→ 逐频
-    响应（热惯性衰减 + 相移，线性叠加）→ 表示层（bin 数 N ≥ 2·k_max 世界派生，
-    或直接存谐波系数；潮汐锁定 = k_max=0 稳态特例；可变时间采样先例 Mayorga et
-    al. 2021）。现行存储不动（避免过早优化）；与技术债 1（潮汐锁定经度效应）及
-    UCC Phase 3 `-L` 段同一前提捆绑。原则措辞单一事实源 =
-    `climate-layer-improvement.md` §3「B0b 原则泛化」。
+    年 12 等分是地球历法遗产；通用化 = 强迫谱（Dobrovolskis 2013 解析展开）→ 逐频
+    响应 → 表示层（bin 数世界派生 / 谐波系数）。现行存储不动；与技术债 1、
+    UCC Phase 3 `-L` 段同前提。原则措辞 → proposal §3「B0b 原则泛化」。
+28. **洋流链左手基符号债**（2026-09-30 诊断，归输送场重标定轮）— `east_north_basis`
+    切平面基为左手系（east×north=−r̂），`compute_curl_z` 赝标量随之翻转；根镜像
+    `_to_physical_wind` 仅补偿纬向主项 ∂τe/∂n，∂τn/∂e 项以错号进入强迫（带均值占比
+    nacrea 0.28–0.85、earth 热带 0.37–0.71 / 中纬 0.06–0.19）。修法两处协同：curl_z
+    翻正 + Stage 2.5 删镜像；涌升/异常平流的镜像消费点一并核查。nacrea 单圈东风下
+    低纬西/中纬东交替带状流型本身有文献先例（Zeng & Yang 2021 + 地球 NECC），非 bug。
 
 ### 工程卫生
 
-1. **Pillow `mode="I;16"` 弃用（Pillow 13，2026-10-15 移除）** — ✅ 已修复
-   （Sprint A）：`map/export.py`×2、`map/elevation_codec.py`、`map/importer.py`
-   共 4 处去掉显式 mode 参数（uint16 数组原生映射 I;16），测试 253 全绿、
-   往返不变。
-2. **pipelines/ 缺 ecology 与 astronomy 技术参考**（docs 二轮体检 2026-09-16 X3/X4）—
-   两引擎均已实现但 world-generation-pipeline 只能指向 proposals
-   （ecology-layer.md 未带 as-built 状态；astronomy 无文档落点）。过渡：引用处
-   标注「参考暂住 proposals」；补写 `pipelines/ecology-pipeline.md` /
-   `astronomy-pipeline.md` 待排期。
-3. **CI 触发范围与前端/conlang 检查缺口**（CI-01/02，外部审计 2026-09-17 实锤）—
-   tests workflow 触发路径仅 src/tests，`packages/**`（conlang 包）单独改动不触发
-   任何验证、pytest 命令不含包测试；无前端 PR 检查 job（tsc/打包仅在 main 的
-   Pages 部署执行），Vitest 用例无 CI 入口；schema 变动不触发 freshness；文档
-   链接检查脚本未进 CI（本轮 README 8 处失效即证据）。修法：按变更路径触发 +
-   conlang 显式 pytest + 前端 PR job（小夹具、不依赖生产数据下载）。归 M0。
-4. **README 失效链接与安装口径漂移**（DOC-01/02、DEV-01，外部审计 2026-09-17）—
-   两份 README 各 4 处链接指向 docs/ 迁移前旧路径（harness/terrain-pipeline/
-   climate-engine/vision）；安装示例用 `npm install`（换机锁文件漂移，应为
-   `npm ci`）；clone URL 仍为占位符；能力摘要停在旧状态（三圈风/BFS 概述）。
-   归 M0。
-5. **engine ↔ map 双向依赖、编排/领域/mesh 契约混用**（ARCH-01/02，外部审计
-   2026-09-17）— `engine/climate.py ↔ map/climate_simulator.py`、
-   `engine/physical_inputs.py ↔ map/pipeline_types.py` 互引（未证实运行时循环
-   import 报错，但包名不可作依赖层次解释）；共享可写 mesh 分散五文件。修法：
+2. **pipelines/ 缺 ecology 与 astronomy 技术参考**（docs 二轮体检 2026-09-16）—
+   补写 `pipelines/ecology-pipeline.md` / `astronomy-pipeline.md` 待排期。
+5. **engine ↔ map 双向依赖、编排/领域/mesh 契约混用**（ARCH-01/02，2026-09-17）—
    公共契约（时间/物理输入/geometry identity/产物来源/运行状态）下沉低层，先做
-   气候一条切片（`simulate_climate` 显式状态 + 阶段输出），按变更频率拆、不做
-   全仓搬移。规模热点：terrain_synthesizer 2719 行 / climate_simulator 2677 行 /
-   tectonic_simulator 2024 行。归 M2 必要切片 + 远期。
-6. **spatialReference.ts ~5.4 万行生成观测数据内嵌**（FE-01，外部审计 2026-09-17）—
-   观测数组与采样代码耦合、多个显示组件直接导入。**已实测（2026-09-29 profile）**：
-   独立成 useUccLayer chunk 2.1 MB（gzip 540 KB），map/globe 页必载非按需。
-   修法：资产化 + 按需加载（数据保留版本/网格/来源元信息），4 个直接导入点改造。
+   气候一条切片；规模热点：terrain_synthesizer / climate_simulator / tectonic_simulator
+   均 2000+ 行。归 M2 必要切片 + 远期。
+6. **spatialReference.ts ~5.4 万行生成观测数据内嵌**（FE-01，2026-09-17）—
+   实测 useUccLayer chunk 2.1 MB（gzip 540 KB）必载非按需；修法 = 资产化 + 按需加载。
    归 M3。实测数 → `private/research/2026-09-29-fe-load-profile.md` §四。
-7. **API/静态导出/前端三件套手工同步、无一致性夹具**（CONTRACT-01，外部审计
-   2026-09-17）— 新增端点/字段需三处手抄（CLAUDE.md 已有纪律但无测试兜底）；
-   时间与 geometry 标识跨层使用无格式版本。修法：小型公共结果契约 + 格式版本 +
-   最小静态/API 一致性夹具。归 M3。
-8. **Guard 可靠性缺口**（GUARD-01，外部审计 2026-09-17 反例实锤）—
-   `stale.check_decision_records` 同指纹事实漂移漏检、`layer_input_fingerprint`
-   只扫 `*.yaml` 漏嵌套目录、`adr._CHECKED_LAYERS` 固定两层且基线路径用 world
-   root（分支共用）、`archive()` 按容量改 accepted→deprecated、缺产物时空清单
-   被展示为已验证。已列 §六 P1 行，此处登记债本体。
+7. **API/静态导出/前端三件套手工同步、无一致性夹具**（CONTRACT-01，2026-09-17）—
+   修法 = 公共结果契约 + 格式版本 + 最小静态/API 一致性夹具。归 M3。
+8. **阶段缓存对模型演化的护栏**（2026-09-30 overlays 轮暴露并修复）— 09-17 教训
+   （payload 须枚举 in-place 字段）已部分落实，但 unpickled 旧实例缺新增字段仍
+   可崩（ice_thickness_m 实例已修，根因未除）；根治 = 阶段指纹纳入模型 schema 版本
+   或 load 时字段完备性校验。
+
 ## 八、内部文档链接
 
 - `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
@@ -662,10 +255,10 @@
 - `docs/design/pipelines/map-system.md` — 地图系统架构
 - `docs/design/pipelines/climate-pipeline.md` — 气候引擎实现架构
 - `docs/design/pipelines/climate-validation.md` — 气候引擎验证指南
-- `docs/design/proposals/ecology-layer.md` — 生态层设计方案（Whittaker 群系 + NPP + 可驯化标签；引擎已实现，技术参考暂住此文档，`pipelines/ecology-pipeline.md` 待补写）
+- `docs/design/proposals/ecology-layer.md` — 生态层设计方案（引擎已实现，技术参考暂住此文档）
 - `docs/design/proposals/civilization-layer.md` — 文明层详细架构设计（三层半格式化架构）
-- `docs/design/proposals/language-phylogeny.md` — 语言谱系子系统设计稿（待开发；语族树 ↔ 分支系统同构、借用边、地名词源分层、Abrams-Strogatz 语言竞争、比较法往返校验）
-- `docs/design/proposals/myth-strata.md` — 神话层累数据模型设计稿（待开发；母题 UUID 实体、树+网络、层累机制库、物理锚定、上帝/研究双认知视角）
+- `docs/design/proposals/language-phylogeny.md` — 语言谱系子系统设计稿（待开发）
+- `docs/design/proposals/myth-strata.md` — 神话层累数据模型设计稿（待开发）
 - `docs/usage/map-workflow.md` — 地图工作流指南
 - `docs/usage/civmap-guide.md` — 文明地图使用指南
 - `docs/design/profiling.md` — 性能剖析与基准测试指南

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -514,3 +515,296 @@ def test_authored_ocean_base_override() -> None:
     sea_core = [c.elevation for i, c in enumerate(mesh.cells) if xs[i] < -0.9]
     assert sea_core
     assert max(sea_core) < 0.0
+
+
+# ---------------------------------------------------------------------------
+# overlays: terrain-only overlay split (2026-09-30)
+# ---------------------------------------------------------------------------
+
+
+def test_overlays_section_parses_and_splits() -> None:
+    spec = GeographySpec(
+        features=[
+            GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
+        ],
+        overlays=[
+            GeographyFeature(
+                name="overlay-seaway",
+                lon=120.0,
+                lat=38.0,
+                radius_deg=9.0,
+                strength=-1.8,
+            ),
+            GeographyFeature(
+                name="overlay-isles",
+                lon=-130.0,
+                lat=26.0,
+                radius_deg=8.0,
+                strength=0.3,
+                noise_amplitude=2.0,
+            ),
+        ],
+    )
+    plate = spec.plate_view()
+    assert [f.name for f in plate.features] == ["continent"]
+    assert plate.overlays == []
+    # terrain stage still sees everything
+    assert [f.name for f in spec.all_features] == [
+        "continent",
+        "overlay-seaway",
+        "overlay-isles",
+    ]
+    # spec with no overlays returns itself (identity, no copy)
+    no_overlay = GeographySpec(features=[spec.features[0]])
+    assert no_overlay.plate_view() is no_overlay
+
+
+def test_plates_fingerprint_ignores_overlay_edits() -> None:
+    base = GeographySpec(
+        land_fraction_target=0.28,
+        features=[
+            GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
+        ],
+        overlays=[
+            GeographyFeature(name="overlay", lon=10.0, lat=10.0, radius_deg=5.0, strength=-1.0),
+        ],
+    )
+    fp_base = base.plates_fingerprint()
+    # editing an overlay (strength, radius, adding one) keeps the hash
+    edited_overlay = base.model_copy(
+        update={
+            "overlays": [
+                base.overlays[0].model_copy(update={"strength": -2.5, "radius_deg": 11.0}),
+                GeographyFeature(name="overlay2", lon=99.0, lat=9.0, radius_deg=4.0, strength=0.4),
+            ]
+        }
+    )
+    assert edited_overlay.plates_fingerprint() == fp_base
+    # promoting an overlay into the plate features changes the hash
+    promoted = base.model_copy(
+        update={
+            "features": [base.features[0], base.overlays[0]],
+            "overlays": [],
+        }
+    )
+    assert promoted.plates_fingerprint() != fp_base
+    # editing a plate feature changes the hash
+    edited_continent = base.model_copy(
+        update={"features": [base.features[0].model_copy(update={"strength": 0.9})]}
+    )
+    assert edited_continent.plates_fingerprint() != fp_base
+
+
+def test_plate_view_drives_crust_partition(mesh) -> None:
+    """apply_geography_crust must not see overlays (an overlay carve at the
+    plate stage would restamp crust; at the terrain stage it only lowers land)."""
+    cfg_full = _config_with(
+        GeographySpec(
+            features=[
+                GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=15.0, strength=1.0),
+            ],
+            overlays=[
+                GeographyFeature(name="carve", lon=0.0, lat=0.0, radius_deg=6.0, strength=-3.0),
+            ],
+        )
+    )
+    cfg_plate = dataclasses.replace(cfg_full, geography=cfg_full.geography.plate_view())
+    field_plate = build_land_bias_field(mesh, cfg_plate.geography, noise_seed=7)
+    # with the overlay stripped, the plate-stage field equals the field of the
+    # continent feature alone (terrain-only carve invisible at plate stage)
+    spec_continent_only = GeographySpec(features=[cfg_full.geography.features[0]])
+    field_continent = build_land_bias_field(mesh, spec_continent_only, noise_seed=7)
+    assert field_plate is not None and field_continent is not None
+    assert np.allclose(field_plate, field_continent)
+
+
+# ---------------------------------------------------------------------------
+# overlay microcontinent restamp (2026-09-30, 方案 B)
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_positive_restamps_continental_crust() -> None:
+    """A decisively positive overlay claims continental crust at the terrain
+    stage (microcontinent) — cells keep the +850 m base, skip age-depth, and
+    receive full procedural texture.  Oceanic crust elsewhere is untouched."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[
+            GeographyFeature(name="sea", lon=0.0, lat=0.0, radius_deg=40.0, strength=-1.0),
+        ],
+        overlays=[
+            GeographyFeature(name="isles", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    n = _restamp_overlay_microcontinents(m, cfg)
+    assert n > 0
+    xs = np.array([c.x for c in m.cells])
+    near_core = xs > 0.995  # within ~5.7° of the patch centre at lon 0
+    far = xs < 0.95
+    assert all(c.crust_type == "continental" for c in np.array(m.cells)[near_core])
+    assert all(c.crust_type == "oceanic" for c in np.array(m.cells)[far])
+
+
+def test_overlay_below_threshold_no_restamp() -> None:
+    """A weak positive overlay (below the microcontinent threshold) does not
+    claim crust — texture only."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(name="weak", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.05),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    assert _restamp_overlay_microcontinents(m, cfg) == 0
+    assert all(c.crust_type == "oceanic" for c in m.cells)
+
+
+def test_no_overlays_noop() -> None:
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=400, lloyd_iterations=1))
+    cfg = _config_with(GeographySpec(features=[], overlays=[]))
+    assert _restamp_overlay_microcontinents(m, cfg) == 0
+
+
+def test_overlay_restamp_ignores_noise_outliers() -> None:
+    """Crust claim uses the noise-free field: with noise_amplitude 4 the
+    roughened kernel reach extends 5x the semi-major axis, and distant noise
+    outliers must NOT claim one-cell continental dots (global speckle)."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=4000, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="isles",
+                lon=0.0,
+                lat=0.0,
+                radius_deg=8.0,
+                strength=0.8,
+                noise_amplitude=4.0,
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    _restamp_overlay_microcontinents(m, cfg)
+    # noise-free claim: kernel(q) > 0.05/0.8 = 0.0625 → within the
+    # nominal radius; nothing beyond semi-major + slack may be claimed
+    xs = np.array([c.x for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))  # lon 0, lat 0 → x = cos(d)
+    claimed = np.array([c.crust_type == "continental" for c in m.cells])
+    assert claimed.sum() > 0
+    assert d_deg[claimed].max() < 10.0, (
+        f"claim reached {d_deg[claimed].max():.1f}° — noise outlier leaked (nominal radius is 8°)"
+    )
+
+
+def test_overlay_archipelago_texture_modulation() -> None:
+    """Positive-overlay strength = land fraction: the bottom (1 − strength)
+    of the noisy field inside the footprint is pulled to the channel floor,
+    the rest keeps the plateau → islands and channels, not a smooth ellipse."""
+    from dreamulator.map.terrain_synthesizer import (
+        _OVERLAY_TEXTURE_CHANNEL_FLOOR_M,
+        _apply_overlay_archipelago_texture,
+    )
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=4000, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="isles", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.5, noise_amplitude=3.0
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    # recompute the noise-free footprint the same way the cut does
+    single = spec.model_copy(update={"features": [], "overlays": spec.overlays})
+    free = build_land_bias_field(m, single, noise_seed=None)
+    extent = np.asarray(free, dtype=np.float64) > 0.05
+    xs = np.array([c.x for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))
+    outside = d_deg > 40.0
+    elev = np.full(len(m.cells), 850.0)  # the flattened plateau
+    out = _apply_overlay_archipelago_texture(m, cfg, elev)
+    assert np.all(out[outside] == 850.0)  # untouched far away
+    carved = out[extent] <= _OVERLAY_TEXTURE_CHANNEL_FLOOR_M + 1.0
+    kept = out[extent] >= 800.0
+    assert carved.sum() > 3, "no channels carved"
+    assert kept.sum() > 3, "no islands kept"
+    # strength 0.5 → roughly half the footprint carved (allow mesh slack)
+    frac = carved.sum() / (carved.sum() + kept.sum())
+    assert 0.25 < frac < 0.75, f"carved fraction {frac:.2f} far from 0.5"
+
+
+def test_overlay_archipelago_texture_solid_island_no_carve() -> None:
+    """strength >= 1.0 = solid island: nothing is carved."""
+    from dreamulator.map.terrain_synthesizer import _apply_overlay_archipelago_texture
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="solid", lon=0.0, lat=0.0, radius_deg=10.0, strength=1.0, noise_amplitude=3.0
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    elev = np.full(len(m.cells), 850.0)
+    out = _apply_overlay_archipelago_texture(m, cfg, elev)
+    assert np.all(out == 850.0)
+
+
+
+def test_overlay_archipelago_texture_no_overlays_noop() -> None:
+    from dreamulator.map.terrain_synthesizer import _apply_overlay_archipelago_texture
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=400, lloyd_iterations=1))
+    cfg = _config_with(GeographySpec(features=[], overlays=[]))
+    elev = np.full(len(m.cells), 100.0)
+    assert _apply_overlay_archipelago_texture(m, cfg, elev) is elev
+
+
+def test_overlay_restamp_ignores_hemisphere_bias() -> None:
+    """The overlay-only claim field must exclude spec-level terms: with
+    hemisphere_land_bias set, build_land_bias_field adds 0.10·sin(lat) —
+    positive across the northern hemisphere — and a naive overlay-only build
+    would restamp the whole north as continental crust (the 2026-09-30
+    "global bias field" bug)."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=1500, lloyd_iterations=1))
+    spec = GeographySpec(
+        hemisphere_land_bias=0.10,
+        features=[],
+        overlays=[
+            GeographyFeature(name="isles", lon=0.0, lat=0.0, radius_deg=8.0, strength=0.8),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    _restamp_overlay_microcontinents(m, cfg)
+    xs = np.array([c.x for c in m.cells])
+    ys = np.array([c.y for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))
+    claimed = np.array([c.crust_type == "continental" for c in m.cells])
+    assert claimed.sum() > 0
+    north_far = claimed & (ys > 0.3) & (d_deg > 20.0)
+    assert not north_far.any(), (
+        f"hemisphere bias leaked into the claim: {north_far.sum()} far-north cells restamped"
+    )

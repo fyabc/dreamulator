@@ -236,6 +236,70 @@ def _anchor_uplift_damping(geography_bias: np.ndarray | None, n: int) -> np.ndar
     return np.asarray(np.where(geography_bias < _ANCHOR_SUPPRESS_BIAS_THRESHOLD, damp, 1.0))
 
 
+#: Overlay-only field above this level claims continental crust (microcontinent
+#: restamp, 2026-09-30).  0.05 = the nominal kernel footprint (the calibration
+#: mask convention): a positive overlay claims its whole footprint as thinned
+#: continental crust; the *land fraction* within it is the feature's strength
+#: (see _apply_overlay_archipelago_texture), decoupled from the claim.
+_MICROCONTINENT_OVERLAY_THRESHOLD = 0.05
+
+
+def _restamp_overlay_microcontinents(mesh: CVTMesh, config: TerrainPipelineConfig) -> int:
+    """Terrain-stage crust restamp for decisively positive geography overlays.
+
+    Overlays are invisible to the plate stage, so a positive overlay over
+    oceanic crust used to drown: the +850 m continental base was overwritten by
+    ocean age-depth (oceanic crust → −3..−5 km), and sea-level pins could only
+    leave a flat seabed plateau (the convex pin blend cannot lift a −4 km floor
+    above sea level without flattening all texture).  Where the overlay-only
+    bias is decisively positive the author is claiming continental crust — a
+    Zealandia-style microcontinent / crustal fragment — so restamp before the
+    bimodal base: those cells keep the continental base, skip age-depth, and
+    receive the full procedural texture (plate offsets, regional/detail noise,
+    boundary effects) → textured archipelago land from a *local* overlay edit
+    (plate caches stay valid, calibration stays overlay-blind, land is net-added).
+
+    Negative overlays do NOT restamp: a carved sea over continental crust is an
+    epicontinental sea (continental crust under water) — physically correct as-is.
+    Where overlays and authored features disagree, overlays win (they are the
+    tuning layer; the restamp runs after `_relabel_leaked_crust`).  Epistemic
+    class: approx derivation (crustal-thickness transition parameterised as a
+    bias threshold; real microcontinents are rifted fragments with thinned
+    crust, not full cratons — acceptable at 51 km cells).
+
+    The claim uses the **noise-free** overlay field: feature noise roughens the
+    kernel radius by up to (1 + amplitude) — with amplitude 4 the reach extends
+    5× the semi-major axis, and every distant noise outlier crossing the
+    threshold would otherwise claim a one-cell continental dot (global speckle
+    archipelago, user-observed 2026-09-30).  The noise still shapes the *elevation*
+    texture: the restamped cells receive the roughened field downstream via
+    `geography_bias` (base override, uplift damping, boundary effects).
+    """
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return 0
+    # Overlay-only means OVERLAY-ONLY: build_land_bias_field would add the
+    # spec-level hemisphere sin(lat) term, making the field positive across
+    # the whole northern hemisphere and restamping it all as continental
+    # crust (the 2026-09-30 "global bias field" bug).  Strip every spec-level
+    # term; the kernels alone decide the claim.
+    overlay_spec = spec.model_copy(
+        update={"features": [], "hemisphere_land_bias": 0.0, "raster_weight": 0.0}
+    )
+    field = build_land_bias_field(mesh, overlay_spec, noise_seed=None)
+    if field is None:
+        return 0
+    claim = np.asarray(field, dtype=np.float64) > _MICROCONTINENT_OVERLAY_THRESHOLD
+    n = 0
+    for i in np.flatnonzero(claim):
+        if mesh.cells[i].crust_type != "continental":
+            mesh.cells[i].crust_type = "continental"
+            n += 1
+    if n:
+        logger.info("  Overlay microcontinents: %d cells restamped continental", n)
+    return n
+
+
 # ---------------------------------------------------------------------------
 # fBm noise on CVT cells
 # ---------------------------------------------------------------------------
@@ -531,7 +595,7 @@ def synthesize_terrain(
         build_land_bias_field(
             mesh, spec, raster_bias=raster_bias, noise_seed=feature_noise_seed(int(config.seed))
         )
-        if spec is not None and (spec.features or raster_bias is not None)
+        if spec is not None and (spec.features or spec.overlays or raster_bias is not None)
         else None
     )
     # Low-frequency stochastic modulation for divergent-ridge / island-arc
@@ -577,6 +641,7 @@ def _synthesize_gaussian(
     # 1. Bimodal base elevation
     logger.info("  Step 1/5: Bimodal base elevation")
     _relabel_leaked_crust(mesh, geography_bias)
+    _restamp_overlay_microcontinents(mesh, config)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
@@ -693,9 +758,16 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
+    # Overlay archipelago texture: re-inject the overlay noise as an elevation
+    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
+    # level cuts the plateau into textured islands/channels.
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
+
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
-        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        elevation = _apply_sea_level_calibration(
+            mesh, elevation, config, overlay_mask=_overlay_calibration_mask(mesh, config)
+        )
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
@@ -778,6 +850,7 @@ def _synthesize_asymmetric(
     rng = np.random.default_rng(config.seed + 100)
 
     # 1. Bimodal base + per-plate offsets (same as gaussian)
+    _restamp_overlay_microcontinents(mesh, config)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
@@ -885,9 +958,16 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
+    # Overlay archipelago texture: re-inject the overlay noise as an elevation
+    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
+    # level cuts the plateau into textured islands/channels.
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
+
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
-        elevation = _apply_sea_level_calibration(mesh, elevation, config)
+        elevation = _apply_sea_level_calibration(
+            mesh, elevation, config, overlay_mask=_overlay_calibration_mask(mesh, config)
+        )
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
@@ -1878,14 +1958,100 @@ def _compute_quality_metrics(
 
 
 # =========================================================================
+# Overlay archipelago texture
+# =========================================================================
+
+
+#: Channel floor (metres, relative to the calibrated sea surface) for cells
+#: that the overlay-noise cut pulls under water.  Must stay below 0 or the
+#: "channels" never reach the sea.
+_OVERLAY_TEXTURE_CHANNEL_FLOOR_M = -300.0
+
+
+def _apply_overlay_archipelago_texture(
+    mesh: CVTMesh, config: TerrainPipelineConfig, elevation: np.ndarray
+) -> np.ndarray:
+    """Carve archipelagos into positive overlays — ``strength`` = land fraction.
+
+    A positive overlay patch collapses to a uniform continental base plateau
+    at the bimodal step (every field value above the −0.5 override gate maps
+    to one constant), which would erase the feature noise the author set for
+    the archipelago texture.  This re-injects it as a **cut**: within each
+    positive overlay's nominal footprint (the noise-free kernel > 0.05), the
+    cells whose *noisy* field falls in the bottom ``1 − strength`` fraction
+    are pulled down to the channel floor (below sea level), the rest keep the
+    plateau → the (overlay-blind, fixed) sea level turns the patch into
+    islands and channels.  ``strength`` is therefore the **land fraction
+    inside the patch** — 0.3–0.6 gives archipelagos, 1.0 a solid island,
+    values > 1 are clamped (the old "claim threshold" interpretation is gone;
+    the crust restamp claims the whole footprint independently).  Zero or
+    negative strength skips the feature here (negative overlays carve seas
+    through the −0.5 base-override gate instead).
+
+    Runs after the regional/detail noise, before sea-level calibration (the
+    calibration is overlay-blind, so the cut survives as a local deviation).
+    Overlapping features are applied in order; later ones win.
+    """
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return elevation
+    out = np.asarray(elevation, dtype=np.float64)
+    for f in spec.overlays:
+        if f.strength <= 0.0:
+            continue
+        single = spec.model_copy(
+            update={
+                "features": [],
+                "overlays": [f],
+                "hemisphere_land_bias": 0.0,
+                "raster_weight": 0.0,
+            }
+        )
+        free = build_land_bias_field(mesh, single, noise_seed=None)
+        if free is None:
+            continue
+        extent = np.asarray(free, dtype=np.float64) > 0.05
+        if not extent.any():
+            continue
+        noisy = build_land_bias_field(mesh, single, noise_seed=feature_noise_seed(int(config.seed)))
+        vals = np.asarray(noisy, dtype=np.float64)[extent]
+        land_fraction = float(np.clip(f.strength, 0.0, 1.0))
+        if land_fraction >= 1.0:
+            continue  # solid island — nothing to carve
+        thr = float(np.quantile(vals, 1.0 - land_fraction))
+        sea = extent & (np.asarray(noisy, dtype=np.float64) < thr)
+        if sea.any():
+            out[sea] = _OVERLAY_TEXTURE_CHANNEL_FLOOR_M
+    return out
+
+
+# =========================================================================
 # Sea level calibration ("倒水") — volume-driven binary search
 # =========================================================================
+
+
+def _overlay_calibration_mask(mesh: CVTMesh, config: TerrainPipelineConfig) -> np.ndarray | None:
+    """Cells covered by terrain-only overlays (None when there are none).
+
+    The water-budget calibration solves the global sea level blind to these
+    cells, so an overlay's added/carved land stays a local deviation instead
+    of dragging every coastline (2026-09-30).
+    """
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return None
+    return spec.overlay_cell_mask(
+        np.array([c.x for c in mesh.cells], dtype=np.float64),
+        np.array([c.y for c in mesh.cells], dtype=np.float64),
+        np.array([c.z for c in mesh.cells], dtype=np.float64),
+    )
 
 
 def _apply_sea_level_calibration(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    overlay_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Calibrate sea level to match the target land fraction.
 
@@ -1894,16 +2060,34 @@ def _apply_sea_level_calibration(
     per iteration instead of scanning all n cells every time.
 
     Complexity: O(n log n)  (one sort + prefix sum, then 60 × O(log n) lookups).
+
+    ``overlay_mask`` (2026-09-30): cells covered by terrain-only geography
+    overlays are excluded from the budget solve — the sea level is set by the
+    plate-stage world and the overlay's added/carved land becomes a *local*
+    deviation (total land fraction may drift from target by the overlay's net
+    contribution, which is the point).  Falls back to the global solve when
+    overlays cover more than 40% of the surface.
     """
     n = mesh.num_cells
     areas = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+
+    if overlay_mask is not None and overlay_mask.mean() <= 0.40:
+        keep = ~overlay_mask
+        calibration_elev = elevation[keep]
+        calibration_areas = areas[keep]
+        cal_note = f" overlay-blind({int(overlay_mask.sum())} cells)"
+    else:
+        calibration_elev = elevation
+        calibration_areas = areas
+        cal_note = ""
+
     total_area = np.sum(areas)
-    target_land_area = config.target_land_fraction * total_area
+    target_land_area = config.target_land_fraction * np.sum(calibration_areas)
 
     # Sort by elevation descending, with area alongside.
-    order = np.argsort(elevation)[::-1]  # highest → lowest
-    elev_sorted = elevation[order]
-    area_sorted = areas[order]
+    order = np.argsort(calibration_elev)[::-1]  # highest → lowest
+    elev_sorted = calibration_elev[order]
+    area_sorted = calibration_areas[order]
 
     # Cumulative land area: cum[i] = sum of areas for cells >= elev_sorted[i].
     cum_land = np.cumsum(area_sorted)
@@ -1935,20 +2119,21 @@ def _apply_sea_level_calibration(
     surface_km2 = total_area
     implied_budget_km = water_km3 / surface_km2
 
-    land_area_final = _land_area(sea_level)
+    land_area_final = float(np.sum(areas[elevation > sea_level]))
     land_pct = 100.0 * land_area_final / surface_km2
     cell_pct = 100.0 * np.sum(elevation > sea_level) / n
 
     logger.warning(
         "  Water calibration: target %.1f%% land → sea level %.0f m → "
         "%.1f%% land by area (%.1f%% by cells), "
-        "implied water budget %.2f km (%.1f million km^3)",
+        "implied water budget %.2f km (%.1f million km^3)%s",
         config.target_land_fraction * 100,
         sea_level,
         land_pct,
         cell_pct,
         implied_budget_km,
         water_km3 / 1e6,
+        cal_note,
     )
 
     return elevation - sea_level

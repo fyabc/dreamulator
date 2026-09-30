@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -145,12 +145,28 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
 # an all-cache-hit rebuild exports a mesh with these fields empty.  When a
 # stage gains a new in-place cell field, add it to the stage's save/replay
 # payload here AND bump its _STAGE_SCHEMA_VERSIONS entry in terrain_cache.
-_TECTONICS_CELL_FIELDS = ("cumulative_convergence_km", "cumulative_divergence_km")
+_TECTONICS_CELL_FIELDS = (
+    "cumulative_convergence_km",
+    "cumulative_divergence_km",
+    "elevation",
+    "crust_type",
+)
 _BOUNDARIES_CELL_FIELDS = (
     "distance_to_boundary_km",
     "convergence_rate_cm_yr",
     "tangential_fraction",
+    "boundary_type",
 )
+# 2026-09-30 (user-reported all-cache-hit corruption): the plate path writes
+# more in-place cell fields than the stage payloads captured — crust_type
+# (base partition + geography re-anchor) and the tectonic-stage elevation
+# baseline were silently lost on cache hits, so a plates/tectonics-hit +
+# terrain-rerun build (first made reachable by terrain_only overlays, latent
+# since the cache existed) synthesized terrain from crust-less cells and
+# every authored continent vanished.  Payloads now capture + replay all
+# in-place fields of their stage (schema versions bumped to invalidate the
+# old pickles).
+_PLATES_CELL_FIELDS = ("crust_type",)
 
 
 def _cell_field_arrays(mesh: CVTMesh, fields: tuple[str, ...]) -> dict[str, np.ndarray]:
@@ -244,12 +260,24 @@ def run_terrain_pipeline(
         else None
     )
 
+    # Plate-stage view of the authored geography (2026-09-30): terrain-only
+    # overlays are invisible to plate seeds / crust partition / coast cost and
+    # excluded from these stages' fingerprints, so editing them cannot
+    # reshuffle the global plate realization (new ridges, islets, coasts).
+    # The terrain stage below still consumes the full spec + full-file hash.
+    if config.geography is not None:
+        _plates_geo_hash = config.geography.plates_fingerprint()
+        _config_plates = replace(config, geography=config.geography.plate_view())
+    else:
+        _plates_geo_hash = geography_hash
+        _config_plates = config
+
     # ---- Stage 2: Plate Tectonics ----
     if "plates" in ordered:
         plates_fp = build_stage_fingerprint(
             "plates",
             config,
-            geography_hash=geography_hash,
+            geography_hash=_plates_geo_hash,
             upstream_fingerprints=upstream_fps,
         )
         upstream_fps["plates"] = plates_fp
@@ -258,7 +286,8 @@ def run_terrain_pipeline(
             t = time.time()
             cached = tc.load("plates")
             if cached is not None:
-                result.plates, cell_plate_map = cached
+                result.plates, cell_plate_map, plate_cell_fields = cached
+                _replay_cell_fields(result.mesh, plate_cell_fields)
                 result.stages_completed.append("plates")
                 result.stage_timings["plates"] = time.time() - t
                 _stage_end(result.stage_timings["plates"])
@@ -266,13 +295,21 @@ def run_terrain_pipeline(
             _stage_begin("plates")
             t = time.time()
             result.plates, cell_plate_map = generate_plates(
-                result.mesh, config, raster_bias=raster_bias
+                result.mesh, _config_plates, raster_bias=raster_bias
             )
             result.stages_completed.append("plates")
             result.stage_timings["plates"] = time.time() - t
             _stage_end(result.stage_timings["plates"])
             if tc is not None:
-                tc.save("plates", (result.plates, cell_plate_map), plates_fp)
+                tc.save(
+                    "plates",
+                    (
+                        result.plates,
+                        cell_plate_map,
+                        _cell_field_arrays(result.mesh, _PLATES_CELL_FIELDS),
+                    ),
+                    plates_fp,
+                )
     else:
         # Reconstruct cell_plate_map from existing plate data
         cell_plate_map = {}
@@ -289,7 +326,7 @@ def run_terrain_pipeline(
         tectonics_fp = build_stage_fingerprint(
             "tectonics",
             config,
-            geography_hash=geography_hash,
+            geography_hash=_plates_geo_hash,
             upstream_fingerprints=upstream_fps,
         )
         upstream_fps["tectonics"] = tectonics_fp
@@ -338,18 +375,19 @@ def run_terrain_pipeline(
             result.plates, cell_plate_map = run_tectonic_evolution(
                 result.mesh,
                 result.plates,
-                config,
+                _config_plates,
                 progress_callback=progress_cb,
                 raster_bias=raster_bias,
             )
             if _progress is not None:
                 _progress.stop()
 
-            # Re-anchor crust to authored geography
+            # Re-anchor crust to authored geography (plate view — terrain-only
+            # overlays must not restamp crust here; they act at terrain stage)
             if config.geography is not None and config.geography.reapply_after_tectonics:
                 from .geography import apply_geography_crust
 
-                apply_geography_crust(result.mesh, config, raster_bias=raster_bias)
+                apply_geography_crust(result.mesh, _config_plates, raster_bias=raster_bias)
 
             result.stages_completed.append("tectonics")
             result.stage_timings["tectonics"] = time.time() - t

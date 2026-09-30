@@ -19,9 +19,9 @@ planets:
         N2: 0.78
         O2: 0.21
         Ar: 0.01
-      greenhouse_factor: 62.0     # 方案2 + 高纬暖化微调（+2.5K）：恢复中高纬沿海宜居气候（C），60°S 亚南极岛、52°N 北方内海南岸回暖；隐含厚 CO₂ 大气
+      greenhouse_factor: 61.5     # 隐含厚 CO₂ 大气
     hydrosphere:
-      water_coverage: 0.72
+      water_coverage: 0.722
       salinity_ppt: 35.0
       ocean_depth_km: 4.0         # 平均深度 4000 m
     lithosphere:
