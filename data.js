@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790713811480,
+  "lastUpdate": 1790785410772,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6016,6 +6016,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005835627120115926",
             "extra": "mean: 4.04017139996995 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "9e3edd8521f2d85c6d9138676ba59eff72f3b83b",
+          "message": "chore: ruff format 补齐（pre-push 钩子拦下，三测试文件）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-01T00:22:29+08:00",
+          "tree_id": "68fe9bfb3816e43a8062bebdcd459dd9d556d8fd",
+          "url": "https://github.com/fyabc/dreamulator/commit/9e3edd8521f2d85c6d9138676ba59eff72f3b83b"
+        },
+        "date": 1790785409901,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.19815602486921852,
+            "unit": "iter/sec",
+            "range": "stddev: 0.15666875226792007",
+            "extra": "mean: 5.046528363999997 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.34859474923772,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02063267654643451",
+            "extra": "mean: 298.6327324999962 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6258404261814248,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9877650358747403",
+            "extra": "mean: 615.0665119999985 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 826.3094277580434,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001250947259020952",
+            "extra": "mean: 1.2102004000041688 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.8481951157961,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00014454060506551619",
+            "extra": "mean: 5.054380200004971 msec\nrounds: 5"
           }
         ]
       }
