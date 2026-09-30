@@ -531,7 +531,7 @@ def synthesize_terrain(
         build_land_bias_field(
             mesh, spec, raster_bias=raster_bias, noise_seed=feature_noise_seed(int(config.seed))
         )
-        if spec is not None and (spec.features or raster_bias is not None)
+        if spec is not None and (spec.features or spec.overlays or raster_bias is not None)
         else None
     )
     # Low-frequency stochastic modulation for divergent-ridge / island-arc
@@ -1894,7 +1894,7 @@ def _overlay_calibration_mask(mesh: CVTMesh, config: TerrainPipelineConfig) -> n
     of dragging every coastline (2026-09-30).
     """
     spec = config.geography
-    if spec is None or not any(f.terrain_only for f in spec.features):
+    if spec is None or not spec.overlays:
         return None
     return spec.overlay_cell_mask(
         np.array([c.x for c in mesh.cells], dtype=np.float64),

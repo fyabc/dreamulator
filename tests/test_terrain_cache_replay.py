@@ -26,22 +26,25 @@ TINY = dict(num_nodes=800, lloyd_iterations=1, tectonic_steps=2)
 
 
 def _spec(with_overlay: bool) -> GeographySpec:
-    features = [
-        GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=30.0, strength=0.9),
-        GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=25.0, strength=-1.0),
-    ]
+    overlays = []
     if with_overlay:
-        features.append(
+        overlays.append(
             GeographyFeature(
                 name="overlay-carve",
                 lon=10.0,
                 lat=15.0,
                 radius_deg=6.0,
                 strength=-2.0,
-                terrain_only=True,
             )
         )
-    return GeographySpec(land_fraction_target=0.28, features=features)
+    return GeographySpec(
+        land_fraction_target=0.28,
+        features=[
+            GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=30.0, strength=0.9),
+            GeographyFeature(name="sea", lon=180.0, lat=0.0, radius_deg=25.0, strength=-1.0),
+        ],
+        overlays=overlays,
+    )
 
 
 def _snapshot(mesh) -> dict[str, np.ndarray]:
@@ -75,7 +78,6 @@ def test_cache_hit_roundtrip_preserves_cells(tmp_path: Path) -> None:
     tc = TerrainCache(tmp_path)
     from dreamulator.map.plate_generator import generate_plates
     tc = TerrainCache(tmp_path)
-    from dreamulator.map.plate_generator import generate_plates
 
     mesh2 = run_terrain_pipeline(
         replace(cfg, num_nodes=TINY["num_nodes"]),

@@ -437,23 +437,23 @@ features:
     elongation: 1.6             # 半长轴/半短轴（≥1，1=圆）
     bearing_deg: 0.0            # 半长轴朝向（0=北，90=东）
     noise_amplitude: 0.8        # 可选：边界粗糙化强度（0=光滑椭圆；见「陆地偏置场」）
-    terrain_only: false         # true = 仅地形叠加层（见下）
     elevation_target_m: -120.0  # 可选：高程钉扎（相对校准海面 0 m；负=水深）
     pin_strength: 1.0           # 可选：钉扎信任度 0–1（核提供空间软边）
 ```
 
-**`terrain_only` 叠加层（2026-09-30）**：默认 feature 参与 plate 阶段（板块种子
-`select_geography_seeds` / 地壳切分 `apply_geography_crust` / 海岸代价 / 构造后
-重锚定），且 geography.yaml 任何改动都会使 plates/tectonics 阶段缓存指纹失效
-→ **板块全球重生成**（新洋中脊/海岸——与改动处无关的远端地形剧变）。带
-`terrain_only: true` 的 feature 对 plate 阶段不可见、不进 plates/tectonics 指纹
-（`GeographySpec.plate_view()` / `plates_fingerprint()`）——只在地形合成阶段
-叠加进偏置场。用于海岸粗化、群岛噪声、局部刻海/补陆这类"化妆"层：编辑它们
-**保持板块缓存命中、改动保持局部**。水量校准（`_apply_sea_level_calibration`）
-对 overlay 覆盖格**盲解**（`overlay_cell_mask`，>40% 覆盖回退全局）：overlay 的
-增陆/刻海成为局部偏离，不再拖动全球海平面/海岸线——全球陆地比例会随 overlay
-净贡献漂移（这正是局部编辑语义）。覆盖区地壳类型仍是板块阶段产物（陆间海=
-大陆地壳浅海，物理正当）。
+**`overlays`：地形微调层（2026-09-30）**：feature 列表分两层——`features:` 是主特征
+（大陆、裂谷海、海峡），参与板块阶段（板块种子 `select_geography_seeds` / 地壳切分
+`apply_geography_crust` / 海岸代价 / 构造后重锚定），编辑它们使 plates/tectonics
+阶段缓存指纹失效 → **板块全球重生成**（新洋中脊/海岸——与改动处无关的远端地形剧变），
+是"改世界"级操作；`overlays:` 是地形微调层（海岸粗化、群岛噪声、局部刻海/补陆），
+只对地形合成可见（`all_features` 全量叠加），不进板块阶段、不进 plates/tectonics
+指纹（`GeographySpec.plate_view()` / `plates_fingerprint()`，plates/tectonics 用
+plate 视图 hash、terrain 保持全文件 hash）——编辑它们保持板块缓存命中、改动保持局部。
+水量校准（`_apply_sea_level_calibration`）对 overlay 覆盖格**盲解**（`overlay_cell_mask`，
+~86% 半径无噪声核盘，>40% 覆盖回退全局）：overlay 的增陆/刻海成为局部偏离，不拖动
+全球海平面/海岸线；全球陆地比例随 overlay 净贡献漂移（局部编辑语义）。补丁覆盖区
+地壳仍是板块阶段产物（陆间海=大陆地壳浅海，物理正当）。编写规则平实说明在
+`geography.yaml` 文件头部。
 
 #### 陆地偏置场
 
