@@ -769,7 +769,6 @@ def test_overlay_archipelago_texture_solid_island_no_carve() -> None:
     assert np.all(out == 850.0)
 
 
-
 def test_overlay_archipelago_texture_no_overlays_noop() -> None:
     from dreamulator.map.terrain_synthesizer import _apply_overlay_archipelago_texture
 

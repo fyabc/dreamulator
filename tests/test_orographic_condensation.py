@@ -253,12 +253,26 @@ class TestCoastalRainoutFactor:
         d_coast[is_ocean] = 0.0
 
         f_earth = _coastal_rainout_factor(
-            mesh, n, is_land, is_ocean, wind, t, nodes,
-            distance_to_coast_km=d_coast, solar_day_days_val=1.0,
+            mesh,
+            n,
+            is_land,
+            is_ocean,
+            wind,
+            t,
+            nodes,
+            distance_to_coast_km=d_coast,
+            solar_day_days_val=1.0,
         )
         f_long = _coastal_rainout_factor(
-            mesh, n, is_land, is_ocean, wind, t, nodes,
-            distance_to_coast_km=d_coast, solar_day_days_val=3.42,
+            mesh,
+            n,
+            is_land,
+            is_ocean,
+            wind,
+            t,
+            nodes,
+            distance_to_coast_km=d_coast,
+            solar_day_days_val=3.42,
         )
         assert np.all((f_earth >= 0.5 - 1e-12) & (f_earth <= 1.5 + 1e-12))
         assert np.all(f_earth[is_ocean] == 1.0)
