@@ -237,9 +237,11 @@ def _anchor_uplift_damping(geography_bias: np.ndarray | None, n: int) -> np.ndar
 
 
 #: Overlay-only field above this level claims continental crust (microcontinent
-#: restamp, 2026-09-30).  Below the ±0.5 base-override gate: the author is
-#: asserting "this is continental crust here", not merely "slightly landward".
-_MICROCONTINENT_OVERLAY_THRESHOLD = 0.15
+#: restamp, 2026-09-30).  0.05 = the nominal kernel footprint (the calibration
+#: mask convention): a positive overlay claims its whole footprint as thinned
+#: continental crust; the *land fraction* within it is the feature's strength
+#: (see _apply_overlay_archipelago_texture), decoupled from the claim.
+_MICROCONTINENT_OVERLAY_THRESHOLD = 0.05
 
 
 def _restamp_overlay_microcontinents(mesh: CVTMesh, config: TerrainPipelineConfig) -> int:
@@ -276,7 +278,14 @@ def _restamp_overlay_microcontinents(mesh: CVTMesh, config: TerrainPipelineConfi
     spec = config.geography
     if spec is None or not spec.overlays:
         return 0
-    overlay_spec = spec.model_copy(update={"features": []})
+    # Overlay-only means OVERLAY-ONLY: build_land_bias_field would add the
+    # spec-level hemisphere sin(lat) term, making the field positive across
+    # the whole northern hemisphere and restamping it all as continental
+    # crust (the 2026-09-30 "global bias field" bug).  Strip every spec-level
+    # term; the kernels alone decide the claim.
+    overlay_spec = spec.model_copy(
+        update={"features": [], "hemisphere_land_bias": 0.0, "raster_weight": 0.0}
+    )
     field = build_land_bias_field(mesh, overlay_spec, noise_seed=None)
     if field is None:
         return 0
@@ -749,6 +758,11 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
+    # Overlay archipelago texture: re-inject the overlay noise as an elevation
+    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
+    # level cuts the plateau into textured islands/channels.
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
+
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
         elevation = _apply_sea_level_calibration(
@@ -943,6 +957,11 @@ def _synthesize_asymmetric(
 
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
+
+    # Overlay archipelago texture: re-inject the overlay noise as an elevation
+    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
+    # level cuts the plateau into textured islands/channels.
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
 
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
@@ -1936,6 +1955,74 @@ def _compute_quality_metrics(
         trenches,
         p2v,
     )
+
+
+# =========================================================================
+# Overlay archipelago texture
+# =========================================================================
+
+
+#: Channel floor (metres, relative to the calibrated sea surface) for cells
+#: that the overlay-noise cut pulls under water.  Must stay below 0 or the
+#: "channels" never reach the sea.
+_OVERLAY_TEXTURE_CHANNEL_FLOOR_M = -300.0
+
+
+def _apply_overlay_archipelago_texture(
+    mesh: CVTMesh, config: TerrainPipelineConfig, elevation: np.ndarray
+) -> np.ndarray:
+    """Carve archipelagos into positive overlays — ``strength`` = land fraction.
+
+    A positive overlay patch collapses to a uniform continental base plateau
+    at the bimodal step (every field value above the −0.5 override gate maps
+    to one constant), which would erase the feature noise the author set for
+    the archipelago texture.  This re-injects it as a **cut**: within each
+    positive overlay's nominal footprint (the noise-free kernel > 0.05), the
+    cells whose *noisy* field falls in the bottom ``1 − strength`` fraction
+    are pulled down to the channel floor (below sea level), the rest keep the
+    plateau → the (overlay-blind, fixed) sea level turns the patch into
+    islands and channels.  ``strength`` is therefore the **land fraction
+    inside the patch** — 0.3–0.6 gives archipelagos, 1.0 a solid island,
+    values > 1 are clamped (the old "claim threshold" interpretation is gone;
+    the crust restamp claims the whole footprint independently).  Zero or
+    negative strength skips the feature here (negative overlays carve seas
+    through the −0.5 base-override gate instead).
+
+    Runs after the regional/detail noise, before sea-level calibration (the
+    calibration is overlay-blind, so the cut survives as a local deviation).
+    Overlapping features are applied in order; later ones win.
+    """
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return elevation
+    out = np.asarray(elevation, dtype=np.float64)
+    for f in spec.overlays:
+        if f.strength <= 0.0:
+            continue
+        single = spec.model_copy(
+            update={
+                "features": [],
+                "overlays": [f],
+                "hemisphere_land_bias": 0.0,
+                "raster_weight": 0.0,
+            }
+        )
+        free = build_land_bias_field(mesh, single, noise_seed=None)
+        if free is None:
+            continue
+        extent = np.asarray(free, dtype=np.float64) > 0.05
+        if not extent.any():
+            continue
+        noisy = build_land_bias_field(mesh, single, noise_seed=feature_noise_seed(int(config.seed)))
+        vals = np.asarray(noisy, dtype=np.float64)[extent]
+        land_fraction = float(np.clip(f.strength, 0.0, 1.0))
+        if land_fraction >= 1.0:
+            continue  # solid island — nothing to carve
+        thr = float(np.quantile(vals, 1.0 - land_fraction))
+        sea = extent & (np.asarray(noisy, dtype=np.float64) < thr)
+        if sea.any():
+            out[sea] = _OVERLAY_TEXTURE_CHANNEL_FLOOR_M
+    return out
 
 
 # =========================================================================
