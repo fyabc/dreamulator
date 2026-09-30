@@ -22,7 +22,7 @@
 | 性能 | nacrea（200k）全量 ~13 min（地质 ~230 s + 气候 ~510 s（GW6-on）+ 生态 5 s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
 | 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选。全字段诊断 → `private/reviews/climate/climate-full-diagnosis-2026-09-29.md`；nacrea B 类诊断 → `private/reviews/climate/nacrea-b-class-diagnosis-2026-09-30.md` |
-| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 61.5 K 微调态）；季节振幅 √P 两臂后陆地 p50 4.0 K（原 1.7 K） |
+| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 62 K）；季节振幅 √P 两臂后陆地 p50 4.0 K |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
 
 ---
@@ -85,7 +85,7 @@
 | 天文：卫星系统（A4v 双单体逆行捕获卫 + 连珠节律 + 受迫 e 带） | ✅ 2026-09-10 终版（design-notes/0009） |
 | 天文：轨道校准（Aegis a=0.3536 AU / 1:2:4 共振链 / 长周期数字卡） | ✅ 2026-09 终版（orbital_dynamics.md / long_term_cycles.md） |
 | 地质：海陆分布（geography.yaml 锚定；09-30 双层结构 overlays 局部微调） | ✅（海岸线平直为已知限制，§七 2） |
-| 气候：温度校准（温室 62 K → 61.5 K 微调态；√P 季节两臂） | ✅ |
+| 气候：温度校准（温室 62 K；√P 季节两臂） | ✅ |
 | 数据：网格 200k + 文档校验 | ✅ v0.24.0 |
 | 文明：种子设计（3 文明 + 地理锚点 + 双语言叙事） | ✅ |
 | 视频素材（timelapse / 自动旋转 / 纯净视图） | 📋 |
@@ -227,6 +227,15 @@
     nacrea 0.28–0.85、earth 热带 0.37–0.71 / 中纬 0.06–0.19）。修法两处协同：curl_z
     翻正 + Stage 2.5 删镜像；涌升/异常平流的镜像消费点一并核查。nacrea 单圈东风下
     低纬西/中纬东交替带状流型本身有文献先例（Zeng & Yang 2021 + 地球 NECC），非 bug。
+29. **诊断脚本配置与引擎路径不等价**（2026-09-30 实锤）— A/B 与复跑脚本用
+    `load_geography_spec` 覆写 `cfg.geography` 等构造差异，与引擎路径产出**不同行星**
+    （引擎校准 `overlay-blind(3617 cells)+sea level −130 m` vs 脚本 `+148 m` 无
+    blind；高程相关 −0.03、44% 海陆翻转）——**A/B 气候结论对真实管线无效**。修法：
+    定位具体分歧字段（疑 overlay-blind 校准 flag / geography 覆写）；诊断脚本禁止
+    覆写 `cfg.geography`，或引擎暴露与构建逐位等价的配置构造入口；走廊机制 A/B
+    如需保留须修正后重跑。关联（未实锤但同晚验证过的潜在坑）：阶段指纹不含代码
+    版本、`--only X --force` 不失效上游——语义改动必须 bump
+    `_STAGE_SCHEMA_VERSIONS`（本次 clamp 已随改 bump terrain v3）。
 
 ### 工程卫生
 
