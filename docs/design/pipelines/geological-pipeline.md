@@ -451,9 +451,21 @@ features:
 plate 视图 hash、terrain 保持全文件 hash）——编辑它们保持板块缓存命中、改动保持局部。
 水量校准（`_apply_sea_level_calibration`）对 overlay 覆盖格**盲解**（`overlay_cell_mask`，
 ~86% 半径无噪声核盘，>40% 覆盖回退全局）：overlay 的增陆/刻海成为局部偏离，不拖动
-全球海平面/海岸线；全球陆地比例随 overlay 净贡献漂移（局部编辑语义）。补丁覆盖区
-地壳仍是板块阶段产物（陆间海=大陆地壳浅海，物理正当）。编写规则平实说明在
-`geography.yaml` 文件头部。
+全球海平面/海岸线；全球陆地比例随 overlay 净贡献漂移（局部编辑语义）。
+编写规则平实说明在 `geography.yaml` 文件头部。
+
+**overlay 微陆块（2026-09-30，方案 B）**：正 overlay 场 > 0.15 的格在 terrain 合成
+开头 restamp 为大陆壳（`_restamp_overlay_microcontinents`，微陆块/Zealandia 语义）。
+为什么需要：偏置→海拔是 ±0.5 双模门（`_apply_base_override`），且 +850 m 大陆基准
+只给 continental 壳——洋壳格随后被洋底 age-depth 无条件覆写回 −3~−5 km
+（oceanic crust mask），正 overlay 在洋壳上造陆必然失败（负 overlay 刻海不受影响，
+陆壳在水下 = 陆间海语义本来就对）。restamp 后这些格保留 +850 m 基准、跳过
+age-depth、接收全部程序化纹理（板块偏移/区域噪声/边界效应）→ 局部 overlay 编辑
+即可造有纹理的群岛陆，海平面不动、陆地净增。overlay 与主特征冲突时 overlay 优先
+（restamp 在 `_relabel_leaked_crust` 之后）。认识论：近似推导（真实微陆块是减薄
+陆壳碎片而非完整克拉通，51 km 格上可接受）。分工：造陆用正场 restamp，控海峡/
+陆桥高度用 elevation pin（pin 是"作者的地板"语义——校准后抹平纹理，且凸混合
+从 −4 km 抬不到海面：factor=0.9 时 −4000+0.9×4300 = −130 m 海底台地）。
 
 #### 陆地偏置场
 
