@@ -254,7 +254,9 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     "plates": 2,  # v2: + crust_type cell field (all-cache-hit corruption fix)
     "tectonics": 3,  # v3: + elevation / crust_type cell fields
     "boundaries": 3,  # v3: + boundary_type cell field
-    "terrain": 2,
+    # v3 (2026-09-30): deep-ocean floor clamp — continental-crust / coast-ring
+    # Earth envelopes (_clamp_deep_ocean_floors in terrain_synthesizer).
+    "terrain": 3,
 }
 
 
