@@ -683,7 +683,7 @@ def test_overlay_restamp_ignores_noise_outliers() -> None:
     outliers must NOT claim one-cell continental dots (global speckle)."""
     from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
 
-    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=1500, lloyd_iterations=1))
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=4000, lloyd_iterations=1))
     spec = GeographySpec(
         features=[],
         overlays=[
@@ -701,13 +701,110 @@ def test_overlay_restamp_ignores_noise_outliers() -> None:
     for c in m.cells:
         c.crust_type = "oceanic"
     _restamp_overlay_microcontinents(m, cfg)
-    # noise-free claim: kernel(q) > 0.15/0.8 = 0.1875 → q < ~0.63 → within the
+    # noise-free claim: kernel(q) > 0.05/0.8 = 0.0625 → within the
     # nominal radius; nothing beyond semi-major + slack may be claimed
     xs = np.array([c.x for c in m.cells])
     d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))  # lon 0, lat 0 → x = cos(d)
     claimed = np.array([c.crust_type == "continental" for c in m.cells])
     assert claimed.sum() > 0
     assert d_deg[claimed].max() < 10.0, (
-        f"claim reached {d_deg[claimed].max():.1f}° — noise outlier leaked "
-        "(nominal radius is 8°)"
+        f"claim reached {d_deg[claimed].max():.1f}° — noise outlier leaked (nominal radius is 8°)"
+    )
+
+
+def test_overlay_archipelago_texture_modulation() -> None:
+    """Positive-overlay strength = land fraction: the bottom (1 − strength)
+    of the noisy field inside the footprint is pulled to the channel floor,
+    the rest keeps the plateau → islands and channels, not a smooth ellipse."""
+    from dreamulator.map.terrain_synthesizer import (
+        _OVERLAY_TEXTURE_CHANNEL_FLOOR_M,
+        _apply_overlay_archipelago_texture,
+    )
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=4000, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="isles", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.5, noise_amplitude=3.0
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    # recompute the noise-free footprint the same way the cut does
+    single = spec.model_copy(update={"features": [], "overlays": spec.overlays})
+    free = build_land_bias_field(m, single, noise_seed=None)
+    extent = np.asarray(free, dtype=np.float64) > 0.05
+    xs = np.array([c.x for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))
+    outside = d_deg > 40.0
+    elev = np.full(len(m.cells), 850.0)  # the flattened plateau
+    out = _apply_overlay_archipelago_texture(m, cfg, elev)
+    assert np.all(out[outside] == 850.0)  # untouched far away
+    carved = out[extent] <= _OVERLAY_TEXTURE_CHANNEL_FLOOR_M + 1.0
+    kept = out[extent] >= 800.0
+    assert carved.sum() > 3, "no channels carved"
+    assert kept.sum() > 3, "no islands kept"
+    # strength 0.5 → roughly half the footprint carved (allow mesh slack)
+    frac = carved.sum() / (carved.sum() + kept.sum())
+    assert 0.25 < frac < 0.75, f"carved fraction {frac:.2f} far from 0.5"
+
+
+def test_overlay_archipelago_texture_solid_island_no_carve() -> None:
+    """strength >= 1.0 = solid island: nothing is carved."""
+    from dreamulator.map.terrain_synthesizer import _apply_overlay_archipelago_texture
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="solid", lon=0.0, lat=0.0, radius_deg=10.0, strength=1.0, noise_amplitude=3.0
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    elev = np.full(len(m.cells), 850.0)
+    out = _apply_overlay_archipelago_texture(m, cfg, elev)
+    assert np.all(out == 850.0)
+
+
+
+def test_overlay_archipelago_texture_no_overlays_noop() -> None:
+    from dreamulator.map.terrain_synthesizer import _apply_overlay_archipelago_texture
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=400, lloyd_iterations=1))
+    cfg = _config_with(GeographySpec(features=[], overlays=[]))
+    elev = np.full(len(m.cells), 100.0)
+    assert _apply_overlay_archipelago_texture(m, cfg, elev) is elev
+
+
+def test_overlay_restamp_ignores_hemisphere_bias() -> None:
+    """The overlay-only claim field must exclude spec-level terms: with
+    hemisphere_land_bias set, build_land_bias_field adds 0.10·sin(lat) —
+    positive across the northern hemisphere — and a naive overlay-only build
+    would restamp the whole north as continental crust (the 2026-09-30
+    "global bias field" bug)."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=1500, lloyd_iterations=1))
+    spec = GeographySpec(
+        hemisphere_land_bias=0.10,
+        features=[],
+        overlays=[
+            GeographyFeature(name="isles", lon=0.0, lat=0.0, radius_deg=8.0, strength=0.8),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    _restamp_overlay_microcontinents(m, cfg)
+    xs = np.array([c.x for c in m.cells])
+    ys = np.array([c.y for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))
+    claimed = np.array([c.crust_type == "continental" for c in m.cells])
+    assert claimed.sum() > 0
+    north_far = claimed & (ys > 0.3) & (d_deg > 20.0)
+    assert not north_far.any(), (
+        f"hemisphere bias leaked into the claim: {north_far.sum()} far-north cells restamped"
     )
