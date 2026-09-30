@@ -51,6 +51,18 @@ logger = logging.getLogger(__name__)
 # crust on the oceanward side of convergent boundaries.
 _TRENCH_RELIEF_M = 7000.0
 
+# Earth-envelope floors for deep-ocean cells (2026-09-30, nacrea #95271:
+# a −10.5 km continental-crust cell directly on the coast).  Calibrated on the
+# real-Earth CVT mesh (ETOPO1 @ ~51 km cells): continental-crust seafloor is
+# never deeper than −5.3 km (observed min −5312 m; isostasy keeps ~35-km
+# continental crust floating — abyssal depths belong to oceanic lithosphere),
+# and coast-adjacent ocean cells (first ring) never deeper than −6.0 km
+# (observed min −5979 m — Cayman/Hellenic-type trench-adjacent coasts; trench
+# axes sit ≥1 cell offshore).  Closure class: observation-fitted, calibration
+# domain = Earth's tectonic regime.
+_CONTINENTAL_CRUST_FLOOR_M = -5300.0
+_COAST_RING_FLOOR_M = -6000.0
+
 # Authored-geography uplift suppression (roadmap #9): cells inside authored
 # ocean basins / rift seas (strong negative land-bias) must not be lifted out
 # of the water by a convergent boundary that happens to cross them.  Damping
@@ -780,6 +792,7 @@ def _synthesize_gaussian(
     )
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+    elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
 
     # Author elevation pins: the author's final word on elevation, applied
     # after every procedural stage so shelf/arcs cannot overwrite a pinned
@@ -982,6 +995,7 @@ def _synthesize_asymmetric(
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+    elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
@@ -2341,6 +2355,50 @@ def _apply_deposition_fill(
 # =========================================================================
 # Shared post-processing: continental shelf + island arcs
 # =========================================================================
+
+
+def _clamp_deep_ocean_floors(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+) -> np.ndarray:
+    """Clamp physically impossible deep-ocean floors to the Earth envelope.
+
+    Two independent floors (constants documented at the top of this module):
+
+    1. Continental-crust ocean cells: floor −5.3 km.  Trench relief carved
+       into cells the crust relabelling later marks continental produces
+       −10 km continental seafloor, which isostasy forbids.
+    2. Coast-adjacent ocean ring (ocean cells with ≥1 land neighbour):
+       floor −6.0 km.  Real trench axes sit at least one cell offshore;
+       the coast-adjacent fringe bottoms out near −6 km (Cayman, Hellenic).
+
+    Both floors only raise cells that are ≥5 km below sea level, so no cell
+    can cross the sea surface: the downstream land mask and the calibrated
+    sea level are unchanged — the coastline is bit-stable.
+    """
+    sea_level = config.sea_level_offset_m
+    n = len(mesh.cells)
+    ocean = elevation <= sea_level
+
+    elevation = elevation.copy()
+
+    # Floor 1: continental-crust seafloor
+    crust = np.array([c.crust_type or "" for c in mesh.cells], dtype=object)
+    cont = ocean & (crust == "continental")
+    elevation[cont] = np.maximum(elevation[cont], _CONTINENTAL_CRUST_FLOOR_M)
+
+    # Floor 2: coast-adjacent ring
+    land = elevation > sea_level
+    for i, cell in enumerate(mesh.cells):
+        if not ocean[i]:
+            continue
+        for nid in cell.neighbors:
+            if 0 <= nid < n and land[nid]:
+                elevation[i] = max(elevation[i], _COAST_RING_FLOOR_M)
+                break
+
+    return elevation
 
 
 def _apply_continental_shelf(
