@@ -106,7 +106,7 @@
 |------|------|------|
 | 天文：卫星系统 | 双单体逆行捕获卫（韵珠 Cadence 0.012 M⊕ @1.2e6 km 赤道化石面 + 守珠 Vigil 615 km @2.15e6 km 黄道锚定面，互倾角 5–13° 弱拍频 → 分级连珠节律），长期摄动维持 Nacrea 受迫偏心率带 0.0008–0.009（A4v 认证，rms 0.0035、11 kyr 火山脉冲）；REBOUND 终判 + 硬度豁免 + 连珠几何重开轮（30 票）见 nacrea `design-notes/0009` | ✅ 2026-09-10 A4v 终版 |
 | 天文：轨道校准 | Aegis a=0.3536 AU（保守宜居带几何中心附近，方案2 校准）、e=0.03（~45 kyr 距离季旋回）；Aegis–Boreal–Glacis 1:2:4 共振链（周期级联 3.147），1 Myr N 体稳定；详见 nacrea `orbital_dynamics.md` | ✅ 2026-09 终版 |
-| 地质：海陆分布 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆（不对称混合案） | ✅ `geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §4.4；海岸线平直为已知限制 |
+| 地质：海陆分布 | 潮汐物理要求向星/背星点为深海、侧点/极点偏陆（不对称混合案） | ✅ `geography.yaml` 地理锚定（大陆锚点/陆地偏置场 + 全局阈值 + 构造后重锚定），见 geological-pipeline.md §4.4；**2026-09-30 双层结构：features（主特征，改=全球重排）/ overlays（地形微调层，局部、板块缓存命中、校准盲解）**，海岸线平直为已知限制 |
 | 气候：温度校准 | 温室 75 K（含 3 K 预留次行星半球加温）；ΔT(Ω) + 扩散热输送 + 冰反照率 + 可变直减率 + 子星体对流增强全链路，均温 14.4 °C | ✅ v0.24+ |
 | 气候：文档校验 | `layers/climate/input/*.md` 按引擎实际输出维护（200k seed=42） | ✅ v0.24.0 |
 | 数据：网格规模 | nacrea 主力网格 200k（51 km/cell），数据已提交 | ✅ v0.24.0 |
@@ -171,10 +171,10 @@
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周（低风险渐进迁移） | ★★★ |
 | P2 | `ai` CLI 命令组（narrate/imagine/assist/civ 等），设计见 [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归守护轴 [harness.md](proposals/harness.md) P0 | 2–3 周 | ★★★ |
-| P1 | **增量重建细化**（`--only terrain` 粒度：改 geography.yaml 后跳过板块构造） | 0.5 周 | ★★★★ |
+| P1 | **增量重建细化（部分 ✅ 2026-09-30）**：原案 `--only terrain` 粒度（改 geography.yaml 后跳过板块构造）已由 **overlays 分节 + 双指纹**直接解决真实用例——微调特征写入 `overlays:` 段后 plates/tectonics 缓存保持命中、板块逐位不动，只重跑地形（~2 min）；`features:` 改动仍触发全球重生成（语义正确）。剩余 = 引擎级 terrain-only 调用粒度（现已无实际诉求，降为登记） | 0.5 周 → 登记 | ★★★★ |
 | **P0** | **前端加载性能优化**：JSON 截断/gzip/MessagePack 已落地，剩「纹理分辨率匹配 cell 密度」 | 1–2 周 | ★★★★★ |
 | P1 | **几何/气候数据分离存储 ✅（2026-09-30 实现并双路验证，分支 feature/geometry-fields-split-storage）**：`mesh_geometry`（静态地质列式）+ `mesh_fields`（气候/生态/文明动态列）双文件，combined 保留为 Python 正典；API 双端点 ETag/304（geometry 跨 climate 重建 304）+ worker 零拷贝 transfer + 前端单趟列组装。实测：盘上 −41%（38.2→22.4 MB）、dev mesh-fetch −93%（6.8→0.5 s）、layers-done 15.3→9.1 s、静态站零回退。剩余 = 字段级增量更新（fields ETag 已就绪）与 bake/WebGL init 懒化（候选 #5–#8） | 首轮 ✅；增量更新另计 | ★★★★ |
-| P2 | **geography.yaml 编辑原语补全**（`elevation_bias` 区域性海拔乘数、`lock_region` 锁定区域、`lake`/`inland_sea` 内陆水体定义；**注意**：geography.yaml 约束随机生成过程，seed 无关；逐 cell 后处理覆写属 edits.json 层） | 1–2 周 | ★★★ |
+| P2 | **geography.yaml 编辑原语补全**（`elevation_bias` 区域性海拔乘数、`lock_region` 锁定区域、`lake`/`inland_sea` 内陆水体定义；**注意**：geography.yaml 约束随机生成过程，seed 无关；逐 cell 后处理覆写属 edits.json 层）。**局部刻海/补陆工作流已由 overlays 段承载（2026-09-30）**；原语补全仅列三项仍开放 | 1–2 周 | ★★★ |
 | P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；换 seed 标记 stale + 最近邻迁移） | 1–2 周（Phase 1 ~2 天） | ★★★ |
 | P2 | **分辨率独立性验证**（确保 geography.yaml 锚定特征在 100k/200k/500k 下一致；已发现 sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
 | P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具编辑 ↔ 回贴 cell，用于 Gaea/World Machine 集成）。**注**：P1 "局部地形精细化管线" 为此项的 MVP 先行版——先打通实用工作流，远期再做全自动往返协议 | 远期 | ★★ |
@@ -208,14 +208,17 @@
 3. **大裂谷海过于对齐经线、边界平直** — 当前用单个拉长偏置场（elongation=11、
    bearing=0），产生笔直经向裂谷。应似东非大裂谷/红海：蜿蜒走向、不规则边界、
    局部断块隆起/异常塌陷。已用"多段错列偏置场"初步缓解（见 nacrea
-   geography.yaml）；彻底方案需 geography 逻辑支持"弯曲裂谷带"原语。
+   geography.yaml；09-29 地质边界形态链已落地宽度沿线调制 + 轴线侧向蜿蜒 +
+   断块/塌陷段）；彻底方案需 geography 逻辑支持"弯曲裂谷带"原语（多段椭圆链
+   已够用，原生 polyline 路径原语为远期）。
    **~~另一脆弱机制~~** → ✅ 已修复（2026-08-07，feat/geography-elevation-anchor）：
    地形合成对强负偏置场（authored 裂谷/海盆）的汇聚抬升乘连续阻尼
    （bias<−0.5 时 clip(2·bias+2, 0.1, 1.0)，岛弧同处理）；nacrea 重建核对
    大裂谷海支持区 max elevation <0 m。同批新增 `elevation_target_m`/`pin_strength`
    高程钉扎（浅海/地峡水深控制）与 `sea_level_offset_m` 海平面旋钮
    （冰期/临界海峡实验），见 geological-pipeline.md §4.4。
-   **蜿蜒裂谷原语**仍 open（上段）。
+   **蜿蜒裂谷原语**仍 open（上段）；2026-09-30 的 overlays 双层结构为其提供
+   了局部微调承载层（弯曲带原型可先在 overlays 试错，不进板块阶段）。
 4. **气候分类体系扩展**（设计轮 ✅ 2026-09-14）— 原 Trewartha/Holdridge 并列方案已被统一方案 **UCC（Unified Climate Classification，统一气候分类）**吸收（锚点法：溶剂液窗 θ 归一化温度轴——Köppen 魔数 {−3,0,10,18} °C 恰为地球水窗节点 {−0.03,0,0.10,0.18}，地球档案按构造重现 Köppen；UNEP AI 水分轴复用现有 PET 链路；广义季节段 + 世界档案 profile）。方案与实施分期（Phase 1–3）见 `docs/ucc/design-anchors.md`（原提案清理后的保留部分；UCC 文档已收拢至 `docs/ucc/`）；地球四体系比较仍见 `climate_classification_comparison.md`。优先级 P2，实现交接其他模型。
 5. **年均温 / 年降水诊断图层**（2026-08-09）— ✅ 已实现：「全球温度/降水图层」直接渲染 `temperature_C` / `precipitation_mm` 原始场（连续色标，非 Köppen 分类滤镜）。
 6. **自动国界 / 行政区划生成**（2026-08-09）— Azgaar's FMG 具有基于地形自动剖分的 burgs/states/provinces 系统，dreamulator 目前无对应模块。roadmap 3C 文明层的当前设计以人工锚定种子 + 事件流程序化填充为主，自动领土剖分是远期扩展项。登记为 P3 技术债，不阻塞 3C 推进。前期调研：Azgaar 的自动国界算法（基于流域 + 距离衰减 + 军事/文化权重）值得参考但不应移植。
