@@ -65,7 +65,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components, dijkstra
 
 if TYPE_CHECKING:
-    from .models import CVTMesh
+    from .models import CVTMesh, VoronoiCell
     from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -169,11 +169,14 @@ def apply_polar_ice_sheets(mesh: CVTMesh, config: TerrainPipelineConfig) -> dict
     radius_km = config.radius_km
 
     # ---- Bed reconstruction (idempotency) ----
-    bed = np.array(
-        [c.elevation - (c.ice_thickness_m or 0.0) for c in mesh.cells],
-        dtype=np.float64,
-    )
-    old_ice = np.array([(c.ice_thickness_m or 0.0) for c in mesh.cells], dtype=np.float64)
+    # getattr guard: stage-cache pickles predate model fields (mesh.pkl from
+    # before 2026-09-29 lacks ice_thickness_m on the unpickled cells) — stale
+    # cache + model evolution must not crash the phase.
+    def _old_ice(c: VoronoiCell) -> float:
+        return getattr(c, "ice_thickness_m", None) or 0.0
+
+    bed = np.array([c.elevation - _old_ice(c) for c in mesh.cells], dtype=np.float64)
+    old_ice = np.array([_old_ice(c) for c in mesh.cells], dtype=np.float64)
     land = bed > 0.0
 
     # ---- Thermal gate: annual-mean insolation ----

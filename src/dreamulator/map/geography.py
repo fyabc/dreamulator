@@ -97,7 +97,70 @@ class GeographySpec(BaseModel):
     #: Gleba-style probability map) when superposed onto the feature field.
     #: 0 disables the raster even if present.
     raster_weight: float = Field(default=1.0, ge=0.0, le=3.0)
+    #: Plate-affecting features: continents, rift seas, straits — they steer
+    #: the plate seeds / crust partition and re-anchoring, so editing them
+    #: regenerates the global plate realization (new ridges, moved coasts
+    #: everywhere).  Editing them is a *world-shaping* act.
     features: list[GeographyFeature] = Field(default_factory=list)
+    #: Terrain-only overlays (2026-09-30): coast roughening, archipelago
+    #: noise, local seaway carves / land additions.  Invisible to the plate
+    #: stage (seeds, crust, coast cost, re-anchor) and to the
+    #: plates/tectonics cache fingerprints — editing them keeps the plate
+    #: realization bit-identical and the change stays local to the patch.
+    #: The water-budget calibration solves the global sea level blind to the
+    #: overlay discs, so overlays create local deviations instead of moving
+    #: every coastline; the global land fraction drifts by their net
+    #: contribution (the intended "local edit" semantics).  See the yaml
+    #: header for the authoring rules in plain language.
+    overlays: list[GeographyFeature] = Field(default_factory=list)
+
+    @property
+    def all_features(self) -> list[GeographyFeature]:
+        """Every feature the terrain stage consumes (plate + overlay)."""
+        return list(self.features) + list(self.overlays)
+
+    def plate_view(self) -> GeographySpec:
+        """Spec with terrain-only features stripped — what the plate stage sees.
+
+        Plates, tectonics and the crust re-anchor consume this view, so
+        overlays (coast roughening, archipelago noise, local carves) cannot
+        reshape the plate partition or reshuffle the world.
+        """
+        if not self.overlays:
+            return self
+        return self.model_copy(update={"overlays": []})
+
+    def plates_fingerprint(self) -> str:
+        """Stable hash of the plate-affecting geography (excludes overlays).
+
+        Used for the plates/tectonics cache fingerprints, replacing the raw
+        geography.yaml file hash there — overlay-only edits keep those caches
+        valid.  The terrain stage keeps using the full-file hash.
+        """
+        import hashlib
+
+        payload = self.plate_view().model_dump_json()
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def overlay_cell_mask(
+        self, px: np.ndarray, py: np.ndarray, pz: np.ndarray, *, threshold: float = 0.05
+    ) -> np.ndarray | None:
+        """Boolean mask of cells inside any overlay (None when there are none).
+
+        The water-budget calibration solves the global sea level on the
+        *non-overlay* cells only, so an overlay's added/carved land creates a
+        local deviation instead of dragging every coastline on the planet
+        (2026-09-30: a single seaway overlay shifted the calibration by tens
+        of metres and moved every coast).  Noise-free kernel discs — the mask
+        is a conservative boundary (≈86% of each overlay's nominal radius),
+        not a coastline.
+        """
+        if not self.overlays:
+            return None
+        mask = np.zeros(px.shape[0], dtype=bool)
+        for f in self.overlays:
+            mask |= _feature_kernel(px, py, pz, f, noise=None) > threshold
+        return mask
 
 
 def load_geography_spec(path: Path | None) -> GeographySpec | None:
@@ -116,7 +179,7 @@ def load_geography_spec(path: Path | None) -> GeographySpec | None:
     logger.info(
         "Loaded geography spec '%s': %d features",
         path.name,
-        len(spec.features),
+        len(spec.all_features),
     )
     return spec
 
@@ -252,7 +315,7 @@ def build_land_bias_field(
     # Feature-roughening noise (computed once, shared across features) — only
     # when a seed is given and at least one feature declares noise_amplitude.
     noise: np.ndarray | None = None
-    if noise_seed is not None and any(f.noise_amplitude > 0 for f in spec.features):
+    if noise_seed is not None and any(f.noise_amplitude > 0 for f in spec.all_features):
         from .noise_kernels import fbm_on_points
 
         noise = fbm_on_points(
@@ -267,7 +330,7 @@ def build_land_bias_field(
         )
 
     field = np.zeros(n, dtype=np.float64)
-    for feature in spec.features:
+    for feature in spec.all_features:
         field += _feature_contribution(px, py, pz, feature, noise)
 
     if spec.hemisphere_land_bias != 0.0:
@@ -321,7 +384,7 @@ def build_elevation_pins(
     or None when no feature declares a target.  Overlapping pins blend by
     kernel weight.  Pure function of (mesh, spec) — no randomness.
     """
-    pinned = [f for f in spec.features if f.elevation_target_m is not None]
+    pinned = [f for f in spec.all_features if f.elevation_target_m is not None]
     if not pinned:
         return None
 
@@ -438,7 +501,7 @@ def build_geography_coast_cost(
     onto the coast, aligning plate boundaries with continental margins (§5 方案 2).
     """
     spec = config.geography
-    if spec is None or (not spec.features and raster_bias is None):
+    if spec is None or (not spec.features and not spec.overlays and raster_bias is None):
         return None
 
     from .distance import geodesic_bfs
@@ -484,7 +547,7 @@ def apply_geography_crust(
     Modifies ``mesh.cells[*].crust_type`` in place.
     """
     spec: GeographySpec | None = config.geography
-    if spec is None or (not spec.features and raster_bias is None):
+    if spec is None or (not spec.features and not spec.overlays and raster_bias is None):
         return
 
     n = len(mesh.cells)
