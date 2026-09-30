@@ -77,6 +77,7 @@ def test_cache_hit_roundtrip_preserves_cells(tmp_path: Path) -> None:
     # plates: the payload must carry + replay the in-place crust field.
     tc = TerrainCache(tmp_path)
     from dreamulator.map.plate_generator import generate_plates
+
     tc = TerrainCache(tmp_path)
 
     mesh2 = run_terrain_pipeline(
