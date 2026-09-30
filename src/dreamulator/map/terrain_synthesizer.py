@@ -236,6 +236,61 @@ def _anchor_uplift_damping(geography_bias: np.ndarray | None, n: int) -> np.ndar
     return np.asarray(np.where(geography_bias < _ANCHOR_SUPPRESS_BIAS_THRESHOLD, damp, 1.0))
 
 
+#: Overlay-only field above this level claims continental crust (microcontinent
+#: restamp, 2026-09-30).  Below the ±0.5 base-override gate: the author is
+#: asserting "this is continental crust here", not merely "slightly landward".
+_MICROCONTINENT_OVERLAY_THRESHOLD = 0.15
+
+
+def _restamp_overlay_microcontinents(mesh: CVTMesh, config: TerrainPipelineConfig) -> int:
+    """Terrain-stage crust restamp for decisively positive geography overlays.
+
+    Overlays are invisible to the plate stage, so a positive overlay over
+    oceanic crust used to drown: the +850 m continental base was overwritten by
+    ocean age-depth (oceanic crust → −3..−5 km), and sea-level pins could only
+    leave a flat seabed plateau (the convex pin blend cannot lift a −4 km floor
+    above sea level without flattening all texture).  Where the overlay-only
+    bias is decisively positive the author is claiming continental crust — a
+    Zealandia-style microcontinent / crustal fragment — so restamp before the
+    bimodal base: those cells keep the continental base, skip age-depth, and
+    receive the full procedural texture (plate offsets, regional/detail noise,
+    boundary effects) → textured archipelago land from a *local* overlay edit
+    (plate caches stay valid, calibration stays overlay-blind, land is net-added).
+
+    Negative overlays do NOT restamp: a carved sea over continental crust is an
+    epicontinental sea (continental crust under water) — physically correct as-is.
+    Where overlays and authored features disagree, overlays win (they are the
+    tuning layer; the restamp runs after `_relabel_leaked_crust`).  Epistemic
+    class: approx derivation (crustal-thickness transition parameterised as a
+    bias threshold; real microcontinents are rifted fragments with thinned
+    crust, not full cratons — acceptable at 51 km cells).
+
+    The claim uses the **noise-free** overlay field: feature noise roughens the
+    kernel radius by up to (1 + amplitude) — with amplitude 4 the reach extends
+    5× the semi-major axis, and every distant noise outlier crossing the
+    threshold would otherwise claim a one-cell continental dot (global speckle
+    archipelago, user-observed 2026-09-30).  The noise still shapes the *elevation*
+    texture: the restamped cells receive the roughened field downstream via
+    `geography_bias` (base override, uplift damping, boundary effects).
+    """
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return 0
+    overlay_spec = spec.model_copy(update={"features": []})
+    field = build_land_bias_field(mesh, overlay_spec, noise_seed=None)
+    if field is None:
+        return 0
+    claim = np.asarray(field, dtype=np.float64) > _MICROCONTINENT_OVERLAY_THRESHOLD
+    n = 0
+    for i in np.flatnonzero(claim):
+        if mesh.cells[i].crust_type != "continental":
+            mesh.cells[i].crust_type = "continental"
+            n += 1
+    if n:
+        logger.info("  Overlay microcontinents: %d cells restamped continental", n)
+    return n
+
+
 # ---------------------------------------------------------------------------
 # fBm noise on CVT cells
 # ---------------------------------------------------------------------------
@@ -577,6 +632,7 @@ def _synthesize_gaussian(
     # 1. Bimodal base elevation
     logger.info("  Step 1/5: Bimodal base elevation")
     _relabel_leaked_crust(mesh, geography_bias)
+    _restamp_overlay_microcontinents(mesh, config)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":
@@ -780,6 +836,7 @@ def _synthesize_asymmetric(
     rng = np.random.default_rng(config.seed + 100)
 
     # 1. Bimodal base + per-plate offsets (same as gaussian)
+    _restamp_overlay_microcontinents(mesh, config)
     base = np.full(n, config.oceanic_elevation_m, dtype=np.float64)
     for i, cell in enumerate(mesh.cells):
         if cell.crust_type == "continental":

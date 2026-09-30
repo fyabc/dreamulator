@@ -528,7 +528,13 @@ def test_overlays_section_parses_and_splits() -> None:
             GeographyFeature(name="continent", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
         ],
         overlays=[
-            GeographyFeature(name="overlay-seaway", lon=120.0, lat=38.0, radius_deg=9.0, strength=-1.8),
+            GeographyFeature(
+                name="overlay-seaway",
+                lon=120.0,
+                lat=38.0,
+                radius_deg=9.0,
+                strength=-1.8,
+            ),
             GeographyFeature(
                 name="overlay-isles",
                 lon=-130.0,
@@ -610,3 +616,98 @@ def test_plate_view_drives_crust_partition(mesh) -> None:
     field_continent = build_land_bias_field(mesh, spec_continent_only, noise_seed=7)
     assert field_plate is not None and field_continent is not None
     assert np.allclose(field_plate, field_continent)
+
+
+# ---------------------------------------------------------------------------
+# overlay microcontinent restamp (2026-09-30, 方案 B)
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_positive_restamps_continental_crust() -> None:
+    """A decisively positive overlay claims continental crust at the terrain
+    stage (microcontinent) — cells keep the +850 m base, skip age-depth, and
+    receive full procedural texture.  Oceanic crust elsewhere is untouched."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[
+            GeographyFeature(name="sea", lon=0.0, lat=0.0, radius_deg=40.0, strength=-1.0),
+        ],
+        overlays=[
+            GeographyFeature(name="isles", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.8),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    n = _restamp_overlay_microcontinents(m, cfg)
+    assert n > 0
+    xs = np.array([c.x for c in m.cells])
+    near_core = xs > 0.995  # within ~5.7° of the patch centre at lon 0
+    far = xs < 0.95
+    assert all(c.crust_type == "continental" for c in np.array(m.cells)[near_core])
+    assert all(c.crust_type == "oceanic" for c in np.array(m.cells)[far])
+
+
+def test_overlay_below_threshold_no_restamp() -> None:
+    """A weak positive overlay (below the microcontinent threshold) does not
+    claim crust — texture only."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(name="weak", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.05),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    assert _restamp_overlay_microcontinents(m, cfg) == 0
+    assert all(c.crust_type == "oceanic" for c in m.cells)
+
+
+def test_no_overlays_noop() -> None:
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=400, lloyd_iterations=1))
+    cfg = _config_with(GeographySpec(features=[], overlays=[]))
+    assert _restamp_overlay_microcontinents(m, cfg) == 0
+
+
+def test_overlay_restamp_ignores_noise_outliers() -> None:
+    """Crust claim uses the noise-free field: with noise_amplitude 4 the
+    roughened kernel reach extends 5x the semi-major axis, and distant noise
+    outliers must NOT claim one-cell continental dots (global speckle)."""
+    from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=1500, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(
+                name="isles",
+                lon=0.0,
+                lat=0.0,
+                radius_deg=8.0,
+                strength=0.8,
+                noise_amplitude=4.0,
+            ),
+        ],
+    )
+    cfg = _config_with(spec)
+    for c in m.cells:
+        c.crust_type = "oceanic"
+    _restamp_overlay_microcontinents(m, cfg)
+    # noise-free claim: kernel(q) > 0.15/0.8 = 0.1875 → q < ~0.63 → within the
+    # nominal radius; nothing beyond semi-major + slack may be claimed
+    xs = np.array([c.x for c in m.cells])
+    d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))  # lon 0, lat 0 → x = cos(d)
+    claimed = np.array([c.crust_type == "continental" for c in m.cells])
+    assert claimed.sum() > 0
+    assert d_deg[claimed].max() < 10.0, (
+        f"claim reached {d_deg[claimed].max():.1f}° — noise outlier leaked "
+        "(nominal radius is 8°)"
+    )
