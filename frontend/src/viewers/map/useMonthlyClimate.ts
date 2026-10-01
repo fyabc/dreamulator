@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { CVTMesh } from './types'
 import type { CellIdMap } from './useCellIdMap'
-import { bakeMonthlyLayer } from './layerBakes'
+import { bakeMonthlyLayer, getMonthlyStrip, ensureMonthlyStrip } from './layerBakes'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 
 export type MonthlyField = 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp'
@@ -27,6 +27,10 @@ interface UseMonthlyClimateArgs {
   field: MonthlyField | null
   /** Fetch the monthly data at all (monthly mode + a monthly layer active). */
   active: boolean
+  /** Timelapse playback: serve the month from the pre-baked reduced-resolution
+   *  strip cache (idle-filled) instead of a full-res re-bake per month change
+   *  (~100 ms CPU each — a visible stutter in a recording). */
+  playing?: boolean
   cvtMesh: CVTMesh | null
   cellIdMap: CellIdMap | null
   width: number
@@ -50,6 +54,7 @@ export function useMonthlyClimate({
   seasonDeg,
   field,
   active,
+  playing = false,
   cvtMesh,
   cellIdMap,
   width,
@@ -67,8 +72,17 @@ export function useMonthlyClimate({
 
   const texture = useMemo(() => {
     if (!monthly || !cvtMesh || !cellIdMap || field === null) return null
+    if (playing) {
+      // Strip path: current month synchronously (first-ever month ~25 ms),
+      // remaining months trickle in via requestIdleCallback.  Null-safety
+      // fallback keeps a frame on screen if the strip was just invalidated.
+      const key = `${worldName}/${planetId}/${branch ?? '-'}/${field}`
+      const frame = getMonthlyStrip(key, monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal)
+      ensureMonthlyStrip(key, monthly, field, cvtMesh, cellIdMap, width, height, flipHorizontal)
+      if (frame) return frame
+    }
     return bakeMonthlyLayer(monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal)
-  }, [monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal])
+  }, [monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal, playing, worldName, planetId, branch])
 
   return { texture, data: monthly ?? null, month }
 }

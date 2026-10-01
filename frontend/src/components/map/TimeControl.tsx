@@ -25,6 +25,15 @@ interface TimeControlProps {
   onSeasonChange: (deg: number) => void
   /** Axial tilt in degrees — enables the declination readout (annual mode). */
   axialTiltDeg?: number
+  /** Seasonal cycle playback (video materials): month stepper + speed. */
+  playing?: boolean
+  onPlayingChange?: (playing: boolean) => void
+  /** Milliseconds per month step (1000 / 2000 / 5000). */
+  monthMs?: number
+  onMonthMsChange?: (ms: number) => void
+  /** Continuously sweep the sun longitude (one revolution per model year). */
+  sunSweep?: boolean
+  onSunSweepChange?: (v: boolean) => void
 }
 
 /** Season-month index (0 = March vernal equinox) from the season angle. */
@@ -50,6 +59,12 @@ export default function TimeControl({
   seasonDeg,
   onSeasonChange,
   axialTiltDeg = 0,
+  playing = false,
+  onPlayingChange,
+  monthMs = 2000,
+  onMonthMsChange,
+  sunSweep = false,
+  onSunSweepChange,
 }: TimeControlProps) {
   const { t } = useTranslation('map')
 
@@ -120,6 +135,51 @@ export default function TimeControl({
           {t('time.monthly')}
         </button>
       </div>
+
+      {/* Seasonal cycle playback (monthly mode only — annual has no monthly
+          data to animate; the play button explains instead of silently
+          switching modes and pulling a 20 MB file). */}
+      {(onPlayingChange || onMonthMsChange) && (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPlayingChange?.(!playing)}
+            disabled={!monthlyMode}
+            title={monthlyMode ? t('time.playHint') : t('time.playNeedsMonthly')}
+            className={`w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xs border transition-colors ${
+              playing
+                ? 'bg-amber-400/20 text-amber-200 border-amber-400/40'
+                : 'bg-space-surface text-gray-400 border-space-border hover:text-amber-200 hover:border-amber-400/30'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            {playing ? '⏸' : '▶'}
+          </button>
+          <select
+            value={monthMs}
+            onChange={(e) => onMonthMsChange?.(parseInt(e.target.value))}
+            disabled={!monthlyMode || !playing}
+            title={t('time.playSpeed')}
+            className="px-1 py-0.5 rounded bg-space-surface text-[10px] text-gray-400 border border-space-border disabled:opacity-40"
+          >
+            <option value={1000}>{t('time.speedFast')}</option>
+            <option value={2000}>{t('time.speedNormal')}</option>
+            <option value={5000}>{t('time.speedSlow')}</option>
+          </select>
+          <label
+            className="flex items-center gap-1 text-[10px] text-gray-500 select-none cursor-pointer"
+            title={t('time.sunSweepHint')}
+          >
+            <input
+              type="checkbox"
+              checked={sunSweep}
+              onChange={(e) => onSunSweepChange?.(e.target.checked)}
+              disabled={!monthlyMode || !playing}
+              className="accent-amber-400 w-3 h-3"
+            />
+            {t('time.sunSweep')}
+          </label>
+        </div>
+      )}
 
       {/* Season / month slider */}
       <div className="space-y-1">
