@@ -289,7 +289,15 @@
     "seasonLabel": "Season (lighting only)",
     "monthLabel": "Month",
     "annualHint": "Annual mode: layers show annual averages; the season slider affects lighting only.",
-    "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it."
+    "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it.",
+    "playHint": "Seasonal cycle playback: months advance step by step and wrap around (for video recording)",
+    "playNeedsMonthly": "Seasonal playback needs monthly mode (switch to Monthly first)",
+    "playSpeed": "Playback speed (duration per month)",
+    "speedFast": "1 s/month",
+    "speedNormal": "2 s/month",
+    "speedSlow": "5 s/month",
+    "sunSweep": "Sun sweep",
+    "sunSweepHint": "While playing, the subsolar longitude advances continuously (one revolution per model year) so the terminator moves with the months"
   },
   "months": ["March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"],
   "info": {

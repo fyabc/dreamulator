@@ -27,6 +27,7 @@ import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
+import { useSeasonTimelapse } from '../viewers/map/useSeasonTimelapse'
 import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
 import { useUccLayer } from '../viewers/map/useUccLayer'
 
@@ -65,6 +66,11 @@ export default function MapViewerPage() {
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
+
+  // --- Seasonal cycle playback (video materials, ?play=1) ---
+  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
+  const [monthMs, setMonthMs] = useState(2000)
+  const [sunSweep, setSunSweep] = useState(false)
   const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
@@ -84,19 +90,9 @@ export default function MapViewerPage() {
   })
   const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
 
-  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav.
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
-      else next.delete('sun')
-      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
-      else next.delete('season')
-      if (dayNightEnabled) next.set('night', '1')
-      else next.delete('night')
-      return next
-    }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
+  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav
+  // (effect lives with the timelapse wiring below because it is gated on
+  // `sweeping`, which needs monthlyMode — declared after the sun state).
 
   const [layerState, setLayerState] = useState<LayerState>({
     layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 },
@@ -159,6 +155,76 @@ export default function MapViewerPage() {
   const handleMonthlyModeChange = (mode: boolean) => {
     setMonthlyMode(mode)
   }
+
+  // --- Seasonal cycle playback wiring (declared after monthlyMode/seasonDeg) ---
+
+  const sweeping = timelapsePlaying && monthlyMode && sunSweep
+
+  // Lighting URL sync, gated during a sun sweep (continuous rAF → one
+  // history.replace on stop, not one per frame).
+  useEffect(() => {
+    if (sweeping) return
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
+      else next.delete('sun')
+      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
+      else next.delete('season')
+      if (dayNightEnabled) next.set('night', '1')
+      else next.delete('night')
+      return next
+    }, { replace: true })
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
+
+  // Sun sweep: continuously rotate the subsolar longitude (day/night terminator
+  // sweep), one revolution per model year, phase-locked with the month stepper.
+  // The URL write-back above is gated on `sweeping` so it fires once on stop,
+  // not once per frame.
+  useEffect(() => {
+    if (!sweeping) return
+    let raf = 0
+    let last = performance.now()
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000
+      last = now
+      const yearSec = (monthMs * 12) / 1000
+      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [sweeping, monthMs])
+
+  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
+  // user implicitly consents to by sharing/opening the link) and make sure a
+  // monthly layer is visible — otherwise there is nothing to animate.
+  useEffect(() => {
+    if (searchParams.get('play') !== '1') return
+    setMonthlyMode(true)
+    setLayerState((prev) => {
+      const L = prev.layers
+      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
+          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
+      return { layers: { ...L, temperature: 0.85 } }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useSeasonTimelapse({
+    playing: timelapsePlaying && monthlyMode,
+    monthMs,
+    seasonDeg,
+    onSeasonChange: setSeasonDeg,
+  })
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (timelapsePlaying) next.set('play', '1')
+      else next.delete('play')
+      return next
+    }, { replace: true })
+  }, [timelapsePlaying, setSearchParams])
 
   // Decoded elevation data (for rendering)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
@@ -303,7 +369,8 @@ export default function MapViewerPage() {
   })
   const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap,
+    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
+    cvtMesh: cvtMesh ?? null, cellIdMap,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
   // UCC yearly descriptors for the cell inspector (independent of monthly mode).
@@ -690,6 +757,12 @@ export default function MapViewerPage() {
                   seasonDeg={seasonDeg}
                   onSeasonChange={setSeasonDeg}
                   axialTiltDeg={axialTiltDeg}
+                  playing={timelapsePlaying}
+                  onPlayingChange={setTimelapsePlaying}
+                  monthMs={monthMs}
+                  onMonthMsChange={setMonthMs}
+                  sunSweep={sunSweep}
+                  onSunSweepChange={setSunSweep}
                 />
                 <MapLayerPanel
                   state={layerState}
@@ -728,6 +801,12 @@ export default function MapViewerPage() {
               seasonDeg={seasonDeg}
               onSeasonChange={setSeasonDeg}
               axialTiltDeg={axialTiltDeg}
+              playing={timelapsePlaying}
+              onPlayingChange={setTimelapsePlaying}
+              monthMs={monthMs}
+              onMonthMsChange={setMonthMs}
+              sunSweep={sunSweep}
+              onSunSweepChange={setSunSweep}
             />
             <MapLayerPanel
               state={layerState}

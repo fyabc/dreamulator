@@ -473,7 +473,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'map-time',
     title: 'help:section.mapTime.title',
     icon: '🕒',
-    render: (t) => entryKeys('mapTime', 2).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+    render: (t) => entryKeys('mapTime', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
     id: 'map-projections',
