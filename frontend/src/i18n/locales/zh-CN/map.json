@@ -420,7 +420,8 @@
     "stellarShort": "恒星系",
     "minimap": "鸟瞰图",
     "cleanMode": "纯净视图（隐藏全部界面，视频录制用；按 Esc 退出）",
-    "cleanExit": "退出纯净视图（Esc）"
+    "cleanExit": "退出纯净视图（Esc）",
+    "autoSpin": "自动旋转（视频录制用；拖拽或按 N 暂停，松手后恢复）"
   },
   "msg": {
     "heightmapImported": "已导入高度图。请刷新页面查看。",
