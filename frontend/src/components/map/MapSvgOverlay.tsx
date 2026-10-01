@@ -43,6 +43,9 @@ interface MapSvgOverlayProps {
   monthlyWindNorth?: Float32Array | null
   month?: number
 
+  /** Render the 30° graticule. Off in clean/recording mode. */
+  showGraticule?: boolean
+
 }
 
 export default function MapSvgOverlay({
@@ -60,6 +63,7 @@ export default function MapSvgOverlay({
   monthlyWindEast = null,
   monthlyWindNorth = null,
   month = 0,
+  showGraticule = true,
 }: MapSvgOverlayProps) {
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
@@ -403,7 +407,7 @@ export default function MapSvgOverlay({
       height={viewHeight}
       style={{ zIndex: 10 }}
     >
-      <g className="pointer-events-none">{graticuleElements}</g>
+      {showGraticule && <g className="pointer-events-none">{graticuleElements}</g>}
       <g className="pointer-events-none">{currentArrowElements}</g>
       <g className="pointer-events-none">{windArrowElements}</g>
       <g className="pointer-events-none">{highlightElements}</g>

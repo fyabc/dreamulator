@@ -418,7 +418,9 @@
     "switchTo2D": "Switch to 2D map view",
     "switchToStellar": "Switch to stellar system 3D view",
     "stellarShort": "Stellar",
-    "minimap": "Minimap"
+    "minimap": "Minimap",
+    "cleanMode": "Clean view (hide all UI for video recording; press Esc to exit)",
+    "cleanExit": "Exit clean view (Esc)"
   },
   "msg": {
     "heightmapImported": "Heightmap imported. Refresh the page to see it.",

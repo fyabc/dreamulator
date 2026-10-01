@@ -60,22 +60,23 @@ dreamulator 的地图系统为每颗有固体表面的行星提供 2D/3D 交互�
 - 极点变形在 2D 编辑中不影响使用（大部分内容集中在中低纬度）
 - 3D 球体视图（Phase 2）直接贴纹理即可，GPU 自动处理 UV 映射
 
-### 渲染：WebGPU 地形 + SVG 叠加
+### 渲染：WebGL 槽位合成 + SVG 叠加
 
 > **参考**：[Paradox 游戏](https://www.paradoxinteractive.com/) 的 terrain + overlay 渲染分离；
 > [Azgaar](https://github.com/Azgaar/Fantasy-Map-Generator) 的 SVG 图层系统
 
-- **WebGPU**（Three.js `WebGPURenderer`）渲染：CPU 预烘焙纹理 + GPU slot-based 合成
-  - 底图/专题/填充/特征四个槽位依次合成，opacity 控制为 GPU uniform（零重烘）
+- **WebGL**（Three.js `WebGLRenderer`）渲染：CPU 预烘焙纹理 + GPU slot-based 合成
+  - 底图/专题/填充/特征四个槽位依次合成（`WebGLRenderTarget` 全屏 quad），opacity 控制为 GPU uniform（零重烘）
   - 全分辨率 cell 贴图（~8 px/cell），NearestFilter 保持锐利边缘
-  - WebGPU 在 Windows 上使用 D3D12 后端，不受 ANGLE/D3D11 bug 影响
 - **SVG 叠加**渲染矢量特征（洋流箭头）：DOM 层，任意缩放清晰
 - **槽位分离**：slot-based 架构确保互斥层不会同时激活
 
-> **WebGPU 方案的技术动机**：Three.js `WebGPURenderer` 在 Windows 上使用 D3D12 后端，
-> 绕过 AMD 集显 + ANGLE/D3D11 的顶点属性插值 bug（大视口 mesh 上 `uv`/`position`
-> 无法正确插值，导致 WebGL 自定义 shader 纹理采样失效）。CPU 预渲染地形纹理，
-> GPU 负责显示；山体阴影烘焙在纹理中（固定强度 0.7）。
+> **CPU 预烘焙的技术动机**：交互性能——图层切换 = uniform 更新 + 一次便宜的 GPU
+> 合成 pass，零重烘；山体阴影烘焙在纹理中（固定强度 0.7）。本机 AMD 集显 +
+> ANGLE/D3D11 顶点属性插值 bug（大视口 mesh 上 `uv`/`position` 不插值，2026-06
+> 记录）已于 2026-10 探针复核确认**不复现**：同一 GPU 上三种 shader 变体大视口
+> checkerboard 插值全部正常，探针与判定存档 `private/research/2026-10-angle-probe/`
+> （不入库）。它不再是渲染方案的约束条件。
 
 ### 交互：圆柱投影平移 + 缩放
 
@@ -290,6 +291,7 @@ URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素�
 | `?sun=<经度>` | 太阳直射经度（0–360°，周日变化） |
 | `?season=<角度>` | 轨道位置（0=春分 / 90=夏至 / 180=秋分 / 270=冬至，驱动太阳赤纬） |
 | `?night=1` | 开启 2D 昼夜光照叠加（默认关） |
+| `?clean=1` | 纯净视图：隐藏全部 UI 与场景装饰（面板/状态栏/经纬网/极轴），只留地图或球体画面，视频录制用。Esc 或右上角悬停按钮退出；2D/3D 通用 |
 
 > 光照参数（`sun`/`season`/`night`）在 2D↔3D 视图间通过 URL 同步、可分享。
 

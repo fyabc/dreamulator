@@ -51,7 +51,8 @@
     "dblClick": { "action": "Double-click cell", "description": "Select that cell (clearing others); deselect if it is already the only selection." },
     "esc": { "action": "Esc", "description": "Clear all selected cells" },
     "clickPlanet": { "action": "Click a planet", "description": "In the 3D stellar view: opens the info panel and flies the camera to the body (the URL focus parameter is kept in sync, so refreshing or sharing the link returns to the same view). The panel groups orbit / physical / rotation & seasons / atmosphere / insolation fields; expand \"🌍 Terrain data\" if map data exists." },
-    "dblClickPlanet": { "action": "Double-click a planet", "description": "In the 3D stellar view: the camera flies to and centers on the body immediately (zoom unchanged)." }
+    "dblClickPlanet": { "action": "Double-click a planet", "description": "In the 3D stellar view: the camera flies to and centers on the body immediately (zoom unchanged)." },
+    "clean": { "action": "⛶ Clean view", "description": "Hides all UI and scene decoration (panels, status bar, graticule, polar axis), leaving only the map or globe — for video recording. Also reachable via the URL parameter ?clean=1. Exit with Esc or the hover-only top-right button." }
   },
   "projection": {
     "equirectangular": { "label": "Equirectangular", "description": "Orthogonal graticule, polar stretching. The simplest projection, good for data processing." },
