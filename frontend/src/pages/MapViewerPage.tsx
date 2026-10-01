@@ -49,6 +49,22 @@ export default function MapViewerPage() {
       return next
     }, { replace: true })
   }
+
+  // Clean view (video recording): hide every piece of UI and the graticule,
+  // leaving only the map + arrow overlays.  URL is the source of truth
+  // (?clean=1) so a deep link opens straight into recording posture.
+  const cleanMode = searchParams.get('clean') === '1'
+  const setCleanMode = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('clean', '1')
+      else next.delete('clean')
+      return next
+    }, { replace: true })
+  }
+  // Stable empty set — clean mode suppresses hover/selection highlights without
+  // changing cell-picking state underneath.
+  const emptySelection = useMemo(() => new Set<number>(), [])
   const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
@@ -353,14 +369,23 @@ export default function MapViewerPage() {
     })
   }, [])
 
-  // Esc → clear all selections
+  // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedCells(new Set())
+      if (e.key !== 'Escape') return
+      if (searchParams.get('clean') === '1') {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('clean')
+          return next
+        }, { replace: true })
+        return
+      }
+      setSelectedCells(new Set())
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [searchParams, setSearchParams])
 
   // Use cvtMesh.cells (rich property set) when available; fall back to voronoi endpoint
   const voronoiCells: VoronoiCell[] = useMemo(
@@ -436,8 +461,11 @@ export default function MapViewerPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className={cleanMode
+      ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
+      : 'flex flex-col h-[calc(100vh-56px)]'}>
       {/* Top bar */}
+      {!cleanMode && (
       <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link
           to={`/worlds/${worldName}`}
@@ -527,6 +555,15 @@ export default function MapViewerPage() {
           onSelect={setSelectedBranch}
         />
 
+        {/* Clean view (video recording) — hide all UI, keep only the map */}
+        <button
+          onClick={() => setCleanMode(true)}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-sm border bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+          title={t('label.cleanMode')}
+        >
+          ⛶
+        </button>
+
         {/* Help button — opens HelpPage in new tab so users can reference docs
              without leaving their map view. */}
         <a
@@ -540,6 +577,7 @@ export default function MapViewerPage() {
         </a>
 
       </div>
+      )}
 
       {/* Error banner */}
       {worldPlanetsError && (
@@ -549,7 +587,7 @@ export default function MapViewerPage() {
       )}
 
       {/* Import result banner */}
-      {importMsg && (
+      {!cleanMode && importMsg && (
         <div
           className={`${
             importMsg.ok
@@ -581,8 +619,8 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={handleCellClick}
-                    hoveredCell={hoveredCell}
-                    selectedCells={selectedCells}
+                    hoveredCell={cleanMode ? null : hoveredCell}
+                    selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
@@ -596,15 +634,18 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
                 </div>
-                <MobileCellCard
-                  cell={selectedCells.size === 1 ? selectedCellData : null}
-                  cursor={cursor}
-                  onClose={() => setSelectedCells(new Set())}
-                />
+                {!cleanMode && (
+                  <MobileCellCard
+                    cell={selectedCells.size === 1 ? selectedCellData : null}
+                    cursor={cursor}
+                    onClose={() => setSelectedCells(new Set())}
+                  />
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -623,7 +664,7 @@ export default function MapViewerPage() {
           </div>
 
           {/* Floating toggle button (mobile only, visible when drawer closed) */}
-          {!leftPanelOpen && (
+          {!cleanMode && !leftPanelOpen && (
             <button
               onClick={() => setLeftPanelOpen(true)}
               className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
@@ -634,7 +675,7 @@ export default function MapViewerPage() {
           )}
 
           {/* Left panel drawer overlay */}
-          {leftPanelOpen && (
+          {!cleanMode && leftPanelOpen && (
             <>
               <div
                 className="absolute inset-0 bg-black/50 z-40"
@@ -688,6 +729,7 @@ export default function MapViewerPage() {
         {/* === Desktop layout (≥ md, hidden by default) === */}
         <div className="hidden md:flex flex-1 min-h-0">
           {/* Left panel: layers */}
+          {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
@@ -718,6 +760,7 @@ export default function MapViewerPage() {
               />
             </div>
           </div>
+          )}
 
           {/* Center: map viewer */}
           <div className="flex-1 flex flex-col min-w-0">
@@ -735,8 +778,8 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={handleCellClick}
-                    hoveredCell={hoveredCell}
-                    selectedCells={selectedCells}
+                    hoveredCell={cleanMode ? null : hoveredCell}
+                    selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
@@ -750,11 +793,14 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
                 </div>
-                <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
+                {!cleanMode && (
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -773,6 +819,7 @@ export default function MapViewerPage() {
           </div>
 
           {/* Right panel: cell inspector + minimap */}
+          {!cleanMode && (
           <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
             {/* Scrollable inspector area */}
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
@@ -814,10 +861,22 @@ export default function MapViewerPage() {
               </div>
             )}
           </div>
+          )}
         </div>
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
       </div>
+
+      {/* Clean-mode exit — invisible until hovered, so it never pollutes a recording */}
+      {cleanMode && (
+        <button
+          onClick={() => setCleanMode(false)}
+          className="absolute top-2 right-2 z-50 w-9 h-9 rounded-full bg-space-panel/80 border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+          title={t('label.cleanExit')}
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }

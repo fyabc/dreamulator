@@ -418,7 +418,9 @@
     "switchTo2D": "切换到 2D 地图视图（等距圆柱 / Mollweide / Robinson 投影）",
     "switchToStellar": "切换到恒星系 3D 视图（行星轨道、宜居带）",
     "stellarShort": "恒星系",
-    "minimap": "鸟瞰图"
+    "minimap": "鸟瞰图",
+    "cleanMode": "纯净视图（隐藏全部界面，视频录制用；按 Esc 退出）",
+    "cleanExit": "退出纯净视图（Esc）"
   },
   "msg": {
     "heightmapImported": "已导入高度图。请刷新页面查看。",

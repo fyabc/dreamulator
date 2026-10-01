@@ -68,6 +68,13 @@ interface GlobeViewerProps {
   solarDeclinationDeg?: number
   /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
   dayNight?: boolean
+  /** Render scene chrome (graticule + polar axis). Off for clean/recording mode. */
+  chrome?: boolean
+  /** Enable pointer interactions (hover / click cell picking). Off in clean mode
+   *  so mouse movement over the recorded globe draws no highlight polygons. */
+  interactive?: boolean
+  /** Zero the canvas border radius for full-bleed recording. */
+  frameless?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
@@ -269,6 +276,8 @@ interface GlobeSceneProps {
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
+  chrome?: boolean
+  interactive?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
@@ -289,6 +298,7 @@ function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  chrome = true, interactive = true,
   globeProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
@@ -448,9 +458,10 @@ function GlobeScene({
         <SunLight sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg} />
       )}
 
-      {/* Planet sphere with pointer events */}
+      {/* Planet sphere with pointer events (disabled in clean mode so mouse
+          movement over the recorded globe draws no highlight polygons) */}
       <mesh
-        onPointerMove={(e: any) => {
+        onPointerMove={interactive ? (e: any) => {
           // Use UV coordinates to match the texture's equirectangular mapping.
           // This ensures the hovered cell matches the displayed koppen/terrain color.
           const uv = e.uv as { x: number; y: number } | undefined
@@ -459,9 +470,9 @@ function GlobeScene({
             const lat = uv.y * 180 - 90
             onCellHover?.(lon, lat)
           }
-        }}
-        onPointerOut={() => onHoverOut?.()}
-        onClick={(e: any) => {
+        } : undefined}
+        onPointerOut={interactive ? () => onHoverOut?.() : undefined}
+        onClick={interactive ? (e: any) => {
           // Ctrl+click → toggle cell; tap (touch) → select cell.
           const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
           const isTouch = (e.nativeEvent as PointerEvent)?.pointerType === 'touch' ||
@@ -476,8 +487,8 @@ function GlobeScene({
             // A tap fires no pointermove, so refresh the cursor coords too.
             onCellHover?.(lon, lat)
           }
-        }}
-        onDoubleClick={(e: any) => {
+        } : undefined}
+        onDoubleClick={interactive ? (e: any) => {
           const uv = e.uv as { x: number; y: number } | undefined
           if (uv) {
             const lon = uv.x * 360 - 180
@@ -485,7 +496,7 @@ function GlobeScene({
             const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
             onCellClick?.(lon, lat, ctrl)
           }
-        }}
+        } : undefined}
       >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />
         {texture ? (
@@ -499,8 +510,8 @@ function GlobeScene({
       {HoverHighlight}
       {SelectionHighlights}
 
-      <Graticule />
-      <PolarAxis />
+      {chrome && <Graticule />}
+      {chrome && <PolarAxis />}
 
       {/* Atmosphere shell */}
       <mesh scale={1.015}>
@@ -547,6 +558,7 @@ export default function GlobeViewer({
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  chrome = true, interactive = true, frameless = false,
   globeProjectRef,
 }: GlobeViewerProps) {
   const { t } = useTranslation('map')
@@ -580,7 +592,7 @@ export default function GlobeViewer({
         <Canvas
           camera={{ position: [0, 0, 2.8], fov: 40 }}
           gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
-          style={{ background: '#030308', borderRadius: '0.75rem' }}
+          style={{ background: '#030308', borderRadius: frameless ? 0 : '0.75rem' }}
         >
           <GlobeScene
             texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
@@ -590,6 +602,7 @@ export default function GlobeViewer({
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
+            chrome={chrome} interactive={interactive}
             globeProjectRef={globeProjectRef}
           />
         </Canvas>

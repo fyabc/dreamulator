@@ -63,6 +63,22 @@ export default function GlobeViewerPage() {
     }, { replace: true })
   }
 
+  // Clean view (video recording): hide every piece of UI and scene chrome,
+  // leaving only the globe + arrow overlays.  URL is the source of truth
+  // (?clean=1) so a deep link opens straight into recording posture.
+  const cleanMode = searchParams.get('clean') === '1'
+  const setCleanMode = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('clean', '1')
+      else next.delete('clean')
+      return next
+    }, { replace: true })
+  }
+  // Stable empty set — clean mode suppresses hover/selection highlights without
+  // changing cell-picking state underneath.
+  const emptySelection = useMemo(() => new Set<number>(), [])
+
   // --- UI State ---
   const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 } })
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
@@ -427,14 +443,23 @@ export default function GlobeViewerPage() {
     })
   }, [kdTree])
 
-  // Esc → clear all selections
+  // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedCells(new Set())
+      if (e.key !== 'Escape') return
+      if (searchParams.get('clean') === '1') {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('clean')
+          return next
+        }, { replace: true })
+        return
+      }
+      setSelectedCells(new Set())
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [searchParams, setSearchParams])
 
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
@@ -464,8 +489,11 @@ export default function GlobeViewerPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className={cleanMode
+      ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
+      : 'flex flex-col h-[calc(100vh-56px)]'}>
       {/* Top bar */}
+      {!cleanMode && (
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link to={`/worlds/${worldName}`}
           className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">{t('action.back')}</Link>
@@ -526,6 +554,15 @@ export default function GlobeViewerPage() {
 
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
 
+        {/* Clean view (video recording) — hide all UI, keep only the globe */}
+        <button
+          onClick={() => setCleanMode(true)}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-sm border bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+          title={t('label.cleanMode')}
+        >
+          ⛶
+        </button>
+
         {/* Help button — opens HelpPage in new tab */}
         <a
           href="/help#globe-viewer"
@@ -537,9 +574,10 @@ export default function GlobeViewerPage() {
           ?
         </a>
       </div>
+      )}
 
       {/* Error / info banner */}
-      {importMsg && (
+      {!cleanMode && importMsg && (
         <div className={`border-b px-4 py-2 text-sm text-center ${
           importMsg.ok ? 'bg-green-900/20 border-green-700/30 text-green-300' : 'bg-red-900/20 border-red-700/30 text-red-300'
         }`}>
@@ -591,11 +629,14 @@ export default function GlobeViewerPage() {
                 onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
                 regions={globeRegions}
-                hoveredCellId={hoveredCellId}
-                selectedCellIds={selectedCells}
+                hoveredCellId={cleanMode ? null : hoveredCellId}
+                selectedCellIds={cleanMode ? emptySelection : selectedCells}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
+                chrome={!cleanMode}
+                interactive={!cleanMode}
+                frameless={cleanMode}
                 globeProjectRef={globeProjectRef}
               />
             )}
@@ -625,15 +666,17 @@ export default function GlobeViewerPage() {
               deviation
             />
           </div>
-          <MobileCellCard
-            cell={selectedCells.size === 1 ? selectedCellData : null}
-            cursor={cursor}
-            onClose={() => setSelectedCells(new Set())}
-          />
+          {!cleanMode && (
+            <MobileCellCard
+              cell={selectedCells.size === 1 ? selectedCellData : null}
+              cursor={cursor}
+              onClose={() => setSelectedCells(new Set())}
+            />
+          )}
         </div>
 
         {/* Floating toggle (mobile only) */}
-        {!leftPanelOpen && (
+        {!cleanMode && !leftPanelOpen && (
           <button
             onClick={() => setLeftPanelOpen(true)}
             className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
@@ -644,7 +687,7 @@ export default function GlobeViewerPage() {
         )}
 
         {/* Left panel drawer overlay (mobile only) */}
-        {leftPanelOpen && (
+        {!cleanMode && leftPanelOpen && (
           <>
             <div className="absolute inset-0 bg-black/50 z-40" onClick={() => setLeftPanelOpen(false)} />
             <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
@@ -683,6 +726,7 @@ export default function GlobeViewerPage() {
         {/* === Desktop layout (≥ md) === */}
         <div className="hidden md:flex absolute inset-0">
           {/* Left panel: layers */}
+          {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
@@ -708,6 +752,7 @@ export default function GlobeViewerPage() {
                 />
             </div>
           </div>
+          )}
 
       {/* Centre: globe */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -745,11 +790,14 @@ export default function GlobeViewerPage() {
               onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
               regions={globeRegions}
-              hoveredCellId={hoveredCellId}
-              selectedCellIds={selectedCells}
+              hoveredCellId={cleanMode ? null : hoveredCellId}
+              selectedCellIds={cleanMode ? emptySelection : selectedCells}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}
+              chrome={!cleanMode}
+              interactive={!cleanMode}
+              frameless={cleanMode}
               globeProjectRef={globeProjectRef}
             />
           )}
@@ -779,10 +827,13 @@ export default function GlobeViewerPage() {
             deviation
           />
         </div>
-        <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
+        {!cleanMode && (
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
+        )}
       </div>
 
       {/* Right panel: cell inspector */}
+      {!cleanMode && (
       <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
         <MapCellInspector
           cell={inspectorCell}
@@ -797,10 +848,22 @@ export default function GlobeViewerPage() {
           isEarth={worldName === 'earth'}
         />
       </div>
+      )}
     </div>
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
   </div>
+
+  {/* Clean-mode exit — invisible until hovered, so it never pollutes a recording */}
+  {cleanMode && (
+    <button
+      onClick={() => setCleanMode(false)}
+      className="absolute top-2 right-2 z-50 w-9 h-9 rounded-full bg-space-panel/80 border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+      title={t('label.cleanExit')}
+    >
+      ✕
+    </button>
+  )}
   </div>
 )
 }
