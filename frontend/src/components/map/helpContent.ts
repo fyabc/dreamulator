@@ -375,6 +375,7 @@ export const CONTROL_HELP: ControlHelpEntry[] = [
   { action: 'help:control.clickPlanet.action', description: 'help:control.clickPlanet.description' },
   { action: 'help:control.dblClickPlanet.action', description: 'help:control.dblClickPlanet.description' },
   { action: 'help:control.clean.action', description: 'help:control.clean.description' },
+  { action: 'help:control.spin.action', description: 'help:control.spin.description' },
 ]
 
 // ---------------------------------------------------------------------------

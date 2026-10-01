@@ -52,7 +52,8 @@
     "esc": { "action": "Esc", "description": "清除全部选中 cell" },
     "clickPlanet": { "action": "单击行星", "description": "3D 恒星系视图中，弹出信息面板并让镜头飞向该天体（URL 的 focus 参数同步更新，刷新或分享链接可回到同一视野）。面板含轨道/物理/自转与季节/大气/辐照等分组，如有地形数据可展开\"🌍 地形数据\"查看摘要。" },
     "dblClickPlanet": { "action": "双击行星", "description": "3D 恒星系视图中，相机立即飞向并居中该天体（不改变缩放距离）。" },
-    "clean": { "action": "⛶ 纯净视图", "description": "隐藏全部界面与场景装饰（面板/状态栏/经纬网/极轴），只保留地图或球体画面，用于视频录制。也可用 URL 参数 ?clean=1 直达。按 Esc 或悬停右上角退出按钮退出。" }
+    "clean": { "action": "⛶ 纯净视图", "description": "隐藏全部界面与场景装饰（面板/状态栏/经纬网/极轴），只保留地图或球体画面，用于视频录制。也可用 URL 参数 ?clean=1 直达。按 Esc 或悬停右上角退出按钮退出。" },
+    "spin": { "action": "↻ 自动旋转（3D）", "description": "3D 球面视图的慢速匀速自转（约 120 秒/圈），视频录制用。拖拽或按 N（北极回位）期间自动暂停，松手后恢复。也可用 URL 参数 ?spin=1 直达，与纯净视图组合 ?clean=1&spin=1 即标准录制姿态。" }
   },
   "projection": {
     "equirectangular": { "label": "等距圆柱", "description": "经纬线正交，极区拉伸。最简单的投影，适合数据处理。" },

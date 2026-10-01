@@ -75,6 +75,17 @@ export default function GlobeViewerPage() {
       return next
     }, { replace: true })
   }
+  // Auto spin (?spin=1): slow continuous orbit for recording.  Independent of
+  // clean mode so ?clean=1&spin=1 is the standard recording posture.
+  const autoSpin = searchParams.get('spin') === '1'
+  const setAutoSpin = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('spin', '1')
+      else next.delete('spin')
+      return next
+    }, { replace: true })
+  }
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
@@ -554,15 +565,6 @@ export default function GlobeViewerPage() {
 
         <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
 
-        {/* Clean view (video recording) — hide all UI, keep only the globe */}
-        <button
-          onClick={() => setCleanMode(true)}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm border bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
-          title={t('label.cleanMode')}
-        >
-          ⛶
-        </button>
-
         {/* Help button — opens HelpPage in new tab */}
         <a
           href="/help#globe-viewer"
@@ -634,6 +636,7 @@ export default function GlobeViewerPage() {
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
+                autoSpin={autoSpin}
                 chrome={!cleanMode}
                 interactive={!cleanMode}
                 frameless={cleanMode}
@@ -795,6 +798,7 @@ export default function GlobeViewerPage() {
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}
+              autoSpin={autoSpin}
               chrome={!cleanMode}
               interactive={!cleanMode}
               frameless={cleanMode}
@@ -826,6 +830,33 @@ export default function GlobeViewerPage() {
             windOpacity={layerState.layers.windError ?? 0}
             deviation
           />
+
+          {/* Recording controls — float in the globe view's bottom-right corner
+              (the view area has spare room; the top bar is already crowded).
+              Fully hidden in clean mode: the mouse is not controllable during a
+              recording, so even hover-only buttons would pollute the frame. */}
+          {!cleanMode && (
+          <div className="absolute bottom-3 right-3 z-30 flex items-center gap-2">
+            <button
+              onClick={() => setAutoSpin(!autoSpin)}
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-sm border shadow-lg transition-colors ${
+                autoSpin
+                  ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40'
+                  : 'bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40'
+              }`}
+              title={t('label.autoSpin')}
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => setCleanMode(true)}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
+              title={t('label.cleanMode')}
+            >
+              ⛶
+            </button>
+          </div>
+          )}
         </div>
         {!cleanMode && (
           <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />

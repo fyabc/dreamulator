@@ -555,15 +555,6 @@ export default function MapViewerPage() {
           onSelect={setSelectedBranch}
         />
 
-        {/* Clean view (video recording) — hide all UI, keep only the map */}
-        <button
-          onClick={() => setCleanMode(true)}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm border bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
-          title={t('label.cleanMode')}
-        >
-          ⛶
-        </button>
-
         {/* Help button — opens HelpPage in new tab so users can reference docs
              without leaving their map view. */}
         <a
@@ -766,7 +757,7 @@ export default function MapViewerPage() {
           <div className="flex-1 flex flex-col min-w-0">
             {localElevation ? (
               <>
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 relative">
                   <MapViewer
                     metadata={meta}
                     elevation={localElevation}
@@ -797,6 +788,21 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+
+                  {/* Recording control — float in the map view's bottom-right
+                      corner.  Fully hidden in clean mode (zero UI while
+                      recording; exit via Esc). */}
+                  {!cleanMode && (
+                  <div className="absolute bottom-3 right-3 z-30">
+                    <button
+                      onClick={() => setCleanMode(true)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
+                      title={t('label.cleanMode')}
+                    >
+                      ⛶
+                    </button>
+                  </div>
+                  )}
                 </div>
                 {!cleanMode && (
                   <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />

@@ -420,7 +420,8 @@
     "stellarShort": "Stellar",
     "minimap": "Minimap",
     "cleanMode": "Clean view (hide all UI for video recording; press Esc to exit)",
-    "cleanExit": "Exit clean view (Esc)"
+    "cleanExit": "Exit clean view (Esc)",
+    "autoSpin": "Auto rotate (for recording; drag or press N to pause, resumes on release)"
   },
   "msg": {
     "heightmapImported": "Heightmap imported. Refresh the page to see it.",

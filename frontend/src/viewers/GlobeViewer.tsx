@@ -33,6 +33,9 @@ const TRANSITION_START_DIST = 4.5
 const TRANSITION_END_DIST = 8
 const DIST_POLL_MS = 80
 const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
+// OrbitControls autoRotateSpeed: 2.0 = 30s per orbit, so 0.5 ≈ 120s/orbit —
+// a slow, stately pace for recording (tune this one constant only).
+const AUTO_ROTATE_SPEED = 0.5
 
 // ---------------------------------------------------------------------------
 // Types (mirror CVTVertex / CVTRegion from types.ts — transformed by adaptCvtMesh)
@@ -68,6 +71,9 @@ interface GlobeViewerProps {
   solarDeclinationDeg?: number
   /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
   dayNight?: boolean
+  /** Slow continuous camera orbit for video recording (?spin=1). Pauses while
+   *  the user drags or during the N-key north-pole fly animation. */
+  autoSpin?: boolean
   /** Render scene chrome (graticule + polar axis). Off for clean/recording mode. */
   chrome?: boolean
   /** Enable pointer interactions (hover / click cell picking). Off in clean mode
@@ -276,6 +282,7 @@ interface GlobeSceneProps {
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
+  autoSpin?: boolean
   chrome?: boolean
   interactive?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
@@ -298,14 +305,38 @@ function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
-  chrome = true, interactive = true,
+  autoSpin = false, chrome = true, interactive = true,
   globeProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const { camera, gl } = useThree()
   const northAnimRef = useRef<NorthAnimState | null>(null)
+  const userDraggingRef = useRef(false)
   // First useFrame tick = first rendered frame — the interactive-ready point.
   const firstFrameRef = useRef(true)
+
+  // Track drag state so auto-spin yields to the user and resumes on release.
+  useEffect(() => {
+    const controls = controlsRef.current
+    if (!controls) return
+    const onStart = () => { userDraggingRef.current = true }
+    const onEnd = () => { userDraggingRef.current = false }
+    controls.addEventListener('start', onStart)
+    controls.addEventListener('end', onEnd)
+    return () => {
+      controls.removeEventListener('start', onStart)
+      controls.removeEventListener('end', onEnd)
+    }
+  }, [])
+
+  // Auto-spin enablement, recomposed every frame (no React re-render):
+  // paused while dragging or during the north-pole fly animation.
+  useFrame(() => {
+    const controls = controlsRef.current
+    if (controls) {
+      controls.autoRotate = !!autoSpin && !northAnimRef.current && !userDraggingRef.current
+    }
+  })
 
   // Refresh the composited layer texture before the globe renders it
   // (negative priority → runs ahead of the default useFrame subscribers).
@@ -523,7 +554,7 @@ function GlobeScene({
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08}
         minDistance={SPHERE_RADIUS * 1.2} maxDistance={TRANSITION_END_DIST}
         maxPolarAngle={Math.PI} target={[0, 0, 0]}
-        zoomSpeed={0.8} />
+        zoomSpeed={0.8} autoRotateSpeed={AUTO_ROTATE_SPEED} />
     </>
   )
 }
@@ -558,7 +589,7 @@ export default function GlobeViewer({
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
-  chrome = true, interactive = true, frameless = false,
+  autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef,
 }: GlobeViewerProps) {
   const { t } = useTranslation('map')
@@ -602,6 +633,7 @@ export default function GlobeViewer({
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
+            autoSpin={autoSpin}
             chrome={chrome} interactive={interactive}
             globeProjectRef={globeProjectRef}
           />
