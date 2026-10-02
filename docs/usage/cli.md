@@ -316,6 +316,17 @@ dreamulator export region nacrea --lat 30 --lon -40 --span-km 1200 --output priv
 需要球极投影，属 Gaea 精细化链范围）。设计文档见
 [design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
 
+渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
+
+```bash
+blender -b -P scripts/media/blender/region_still.py -- \
+    --datadir private/video/nacrea-0_0_2500km --render still_001.png
+# 输出 private/video/<pack>/renders/still_001.png；--samples/--res/--zscale/--sun-az/--sun-alt 可调
+```
+
+`private/video/` 下的数据包、`.blend` 与渲染输出均不入 git（脚本重建工程模式——
+工程永远可由数据包 + `region_still.py` 一键重建）。
+
 ---
 
 ## 种子探索（explore-seeds）
