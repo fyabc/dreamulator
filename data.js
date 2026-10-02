@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790785410772,
+  "lastUpdate": 1790910273350,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6075,6 +6075,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00014454060506551619",
             "extra": "mean: 5.054380200004971 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "57176e485e81cb624f3c5492c30880881c511363",
+          "message": "Merge feature/blender-render: 最小高清渲染链路 MVP\n\n?layer= 深链+写回 / dreamulator export region / bpy 静帧脚本——区域→\n数据包→Cycles OptiX 渲染端到端（nacrea 永耀岛 1080p 10.7s）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-02T11:03:22+08:00",
+          "tree_id": "e64e9a796fa9352211d5380b8f641625fb80a8df",
+          "url": "https://github.com/fyabc/dreamulator/commit/57176e485e81cb624f3c5492c30880881c511363"
+        },
+        "date": 1790910272366,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.16435477870746962,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1804561892307383",
+            "extra": "mean: 6.084398688399998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.1092706709245905,
+            "unit": "iter/sec",
+            "range": "stddev: 0.021088808503548922",
+            "extra": "mean: 321.6188315000039 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4376359381220942,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1130727362611739",
+            "extra": "mean: 695.5863953333316 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 906.5139372040624,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00015863357142511421",
+            "extra": "mean: 1.1031269999932647 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.6681038488168,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00013133706123319468",
+            "extra": "mean: 5.110695000001897 msec\nrounds: 5"
           }
         ]
       }
