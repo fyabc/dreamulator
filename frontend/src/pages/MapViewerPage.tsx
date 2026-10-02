@@ -15,6 +15,7 @@ import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
 import type { ColorMode } from '../viewers/map/TerrainPlane'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
+import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
@@ -94,9 +95,22 @@ export default function MapViewerPage() {
   // (effect lives with the timelapse wiring below because it is gated on
   // `sweeping`, which needs monthlyMode — declared after the sun state).
 
-  const [layerState, setLayerState] = useState<LayerState>({
-    layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 },
-  })
+  // ?layer=<id> deep link (shareable / automation): initial selection comes
+  // from the URL with the same slot semantics as a panel click.
+  const [layerState, setLayerState] = useState<LayerState>(() =>
+    initialLayerState(searchParams.get('layer'), worldName === 'earth'))
+  // Mirror the active main layer back into ?layer= (replace, no history churn)
+  // so the URL stays a shareable deep link as layers are switched. The default
+  // base (terrain) is not written — a pristine URL stays pristine.
+  const activeMainLayer = activeMainLayerId(layerState)
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (activeMainLayer && activeMainLayer !== 'terrain') next.set('layer', activeMainLayer)
+      else next.delete('layer')
+      return next
+    }, { replace: true })
+  }, [activeMainLayer, setSearchParams])
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
   // arrows switch to the monthly wind field (tech debt 24).
@@ -207,7 +221,6 @@ export default function MapViewerPage() {
           L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
       return { layers: { ...L, temperature: 0.85 } }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useSeasonTimelapse({

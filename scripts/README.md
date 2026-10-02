@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 61 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 62 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
@@ -100,6 +100,17 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   上传 GitHub Release（固定 tag `worlds-data`）；`deploy-pages.yml` 消费该产物。
 - `export_static.py` — 静态站数据导出（`frontend` 的 `npm run export` / `build:static` 调它；
   `deploy-pages.yml` 直接运行）。**移动此文件须同步 CI 的 path trigger 与 package.json。**
+
+## media/ — 视频素材与外部渲染链（1 个）
+
+Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
+`docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
+`private/video/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
+数据侧的正式 CLI 在 in-package（`dreamulator export region`），不在本组。
+
+- `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费
+  `dreamulator export region` 的数据包；`blender -b -P … -- --datadir <pack>
+  [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
 
 ## dev/ — 开发工具（4 个）
 
