@@ -300,6 +300,22 @@ dreamulator export layers nacrea --output out/ --data-dir data/worlds
 
 输出为 RGBA PNG（未着色处透明），文件名 `<layer>.png`。
 
+### 区域数据包（export region）
+
+裁剪一个以千米为边长的正方形区域，产出外部渲染器（Blender 链）直接消费的数据包：
+
+```bash
+dreamulator export region nacrea --lat 0 --lon 0 --span-km 2500
+# → private/video/nacrea-0_0_2500km/{height.meters.npy, height.png, color.png, meta.json}
+dreamulator export region nacrea --lat 30 --lon -40 --span-km 1200 --output private/video/my-shot
+```
+
+高度主通道是 float32 米值的 `.npy`（精确无编码损失）；配色 PNG 与前端同一调色板单源；
+`meta.json` 记录物理范围、千米/像素、精确像素盒与源 mesh 指纹。区域窗口按星球真实
+半径标定（东西向补偿 cos 纬度），触及 |纬度| > 75° 或跨 ±180° 经线会被拒绝（极区
+需要球极投影，属 Gaea 精细化链范围）。设计文档见
+[design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
+
 ---
 
 ## 种子探索（explore-seeds）

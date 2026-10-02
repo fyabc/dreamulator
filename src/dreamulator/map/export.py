@@ -393,8 +393,12 @@ def export_elevation_png(
         min_m: Minimum elevation for normalization.
         max_m: Maximum elevation for normalization.
     """
-    # Normalize to [0, 1]
-    normalized = np.clip((elevation - min_m) / (max_m - min_m), 0, 1)
+    # Normalize to [0, 1].  A degenerate range (uniform-height region) maps to
+    # the minimum instead of 0/0 (same guard as export_layer_png).
+    if max_m - min_m < 1e-12:
+        normalized = np.zeros_like(elevation)
+    else:
+        normalized = np.clip((elevation - min_m) / (max_m - min_m), 0, 1)
 
     # Convert to 16-bit (uint16 array maps natively to Pillow's I;16 mode;
     # explicit mode= is deprecated and removed in Pillow 13)
