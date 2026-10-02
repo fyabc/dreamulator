@@ -54,3 +54,17 @@ export function initialLayerState(layerParam: string | null, isEarth: boolean): 
   }
   return { layers }
 }
+
+/**
+ * The currently active MAIN layer (thematic slot first, then base slot) — the
+ * value mirrored back into the `?layer=` URL param when the user switches
+ * layers, so the URL stays a shareable deep link as the view changes.
+ * Null when both radio slots are off (thematic "none" + base "none").
+ */
+export function activeMainLayerId(state: LayerState): string | null {
+  const layers = state.layers
+  const thematic = LAYER_HELP.find((l) => l.kind === 'thematic' && (layers[l.id] ?? 0) > 0)
+  if (thematic) return thematic.id
+  const base = LAYER_HELP.find((l) => l.kind === 'base' && (layers[l.id] ?? 0) > 0)
+  return base?.id ?? null
+}
