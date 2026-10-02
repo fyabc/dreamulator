@@ -40,6 +40,12 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
+from dreamulator.map.region_export import (
+    RegionWindowError,
+    export_region_pack,
+    mesh_fingerprint,
+    read_radius_km,
+)
 from dreamulator.world_manager import WorldManager
 
 export_app = typer.Typer(
@@ -225,3 +231,110 @@ def export_layers(
         table.add_row(name, str(path), f"{size_kb:.0f} KB · {elapsed:.1f}s")
 
     console.print(table)
+
+
+@export_app.command("region")
+def export_region(
+    world: str = typer.Argument(help="World name"),
+    lat: float = typer.Option(0.0, "--lat", help="Region centre latitude (degrees)"),
+    lon: float = typer.Option(0.0, "--lon", help="Region centre longitude (degrees)"),
+    span_km: float = typer.Option(2500.0, "--span-km", help="Square region side length (km)"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory (default: private/video/<world>-<lat>_<lon>_<span>km)",
+    ),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Export a square region data pack for external renderers (Blender chain)."""
+    _set_data_dir(data_dir)
+
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1) from None
+
+    mm = MapManager(world_dir, branch)
+
+    planet_id = planet
+    if planet_id is None:
+        planets = mm.list_planets_with_maps()
+        if not planets:
+            console.print("[red]No map data found for this world.[/red]")
+            raise typer.Exit(code=1) from None
+        planet_id = planets[0]
+
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+
+    map_dir = mm._maps_dir(planet_id)
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh file found for planet '{planet_id}'.[/red]")
+        raise typer.Exit(code=1) from None
+
+    meta = mm.get_map_metadata(planet_id)
+    width = meta.width if meta else 4096
+    height = meta.height if meta else 2048
+    elev_min = meta.elevation_min_m if meta else -11_000.0
+    elev_max = meta.elevation_max_m if meta else 9_000.0
+    sea_level = meta.sea_level_m if meta else 0.0
+    radius_km = read_radius_km(map_dir)
+
+    mesh = load_cvt_mesh_model(mesh_file)
+
+    out_dir = output or (Path("private/video") / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
+    console.print(
+        f"Exporting region pack for {world}/{planet_id} — "
+        f"centre ({lat:g}, {lon:g}), span {span_km:g} km → {out_dir}"
+    )
+    try:
+        pack_meta = export_region_pack(
+            mesh,
+            center_lat=lat,
+            center_lon=lon,
+            span_km=span_km,
+            radius_km=radius_km,
+            grid_width=width,
+            grid_height=height,
+            elev_min_m=elev_min,
+            elev_max_m=elev_max,
+            sea_level_m=sea_level,
+            out_dir=out_dir,
+            source={
+                "world": world,
+                "planet": planet_id,
+                "branch": branch,
+                **mesh_fingerprint(mesh_file),
+            },
+        )
+    except RegionWindowError as exc:
+        console.print(f"[red]Region rejected: {exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    table = Table(title=f"Region pack — {world}/{planet_id} ({out_dir})")
+    table.add_column("File", style="green")
+    table.add_column("Size", style="dim")
+    for name in ("meta.json", "height.meters.npy", "height.png", "color.png"):
+        path = out_dir / name
+        if path.exists():
+            table.add_row(name, f"{path.stat().st_size / 1024:.0f} KB")
+    console.print(table)
+    console.print(
+        f"Grid {pack_meta['grid']['w']}×{pack_meta['grid']['h']} px · "
+        f"extent {pack_meta['extent_km']['x']}×{pack_meta['extent_km']['y']} km · "
+        f"elev {pack_meta['elevation_m']['min']:.0f}…{pack_meta['elevation_m']['max']:.0f} m · "
+        f"ocean {pack_meta['ocean_fraction'] * 100:.1f}%"
+    )
+    max_off = pack_meta["alignment_probe_max_offset_deg"]
+    if max_off > 1.0:
+        console.print(
+            f"[red]Alignment probe failed (max offset {max_off}° > 1°) — "
+            "pack is suspect, do not use.[/red]"
+        )
+        raise typer.Exit(code=3) from None
+    console.print(f"[green]Alignment probe OK (max offset {max_off}°).[/green]")
