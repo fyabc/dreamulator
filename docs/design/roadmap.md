@@ -88,7 +88,7 @@
 | 气候：温度校准（温室 62 K；√P 季节两臂） | ✅ |
 | 数据：网格 200k + 文档校验 | ✅ v0.24.0 |
 | 文明：种子设计（3 文明 + 地理锚点 + 双语言叙事） | ✅ |
-| 视频素材（timelapse / 自动旋转 / 纯净视图） | 📋 |
+| 视频素材（timelapse / 自动旋转 / 纯净视图） | ✅ |
 
 ---
 
@@ -111,12 +111,13 @@
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
+| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
-| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材待推进 | — | ★★★★★ |
+| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示**（§七 24；数据链已就绪，前端懒加载抽样箭头） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
-| P1 | 视频素材功能（timelapse / 自动旋转 / 纯净视图） | 2–3 周 | ★★★★ |
+| P2 | 视频素材后续（Blender 链扩展：多图层数据包 / 相机动画 / 全球整球；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
+| P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示）→ `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
 | P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 6 | 前端 1–2 周 | ★★ |

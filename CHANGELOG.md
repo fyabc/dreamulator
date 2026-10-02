@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **视频素材三件套（前端录制姿态）**：纯净视图 `?clean=1`（隐藏全部 UI/场景
+  装饰，Esc 退出）、3D 自动旋转 `?spin=1`（~120 s/圈，拖拽/N 键互斥）、季节
+  循环 timelapse `?play=1`（月度纹理预烘焙 strip 换月零卡顿 + 昼夜扫描）。
+  附 `?layer=<id>` 主图层深链（打开时按默认不透明度点亮，槽位语义与面板
+  点击一致；切换主图层时回写 URL（replace），默认地形底不写——CDP 自动化
+  复现/分享用）。
+- **`dreamulator export region`（外部渲染数据包）**：等距圆柱正方形区域裁剪
+  （真实半径标定 + cos 纬度补偿；|lat|>75 或跨 ±180 拒绝），产出
+  `height.meters.npy` + 16-bit `height.png` + 前端同源配色 `color.png` +
+  `meta.json`（精确 pixel_box + mesh 指纹）。对齐探针 + 确定性测试。
+- **Blender 渲染链 MVP（`scripts/media/blender/region_still.py`）**：bpy 脚本
+  重建场景 + Cycles 渲染（OptiX 自动降级、seed 固定、脚本重建工程模式）。
+  nacrea 永耀岛 2500 km 区域 1080p/256s 实测 10.7 s（RTX 3060）。
+  设计文档 `docs/design/proposals/blender-render-pipeline.md`。
+
+### Changed
+
+- `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
+
 ## [0.38.0] — 2026-09-29
 
 ### Added
