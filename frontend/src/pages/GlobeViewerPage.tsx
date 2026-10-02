@@ -18,7 +18,7 @@ import GlobeViewer, { type GlobeVertex, type GlobeRegion } from '../viewers/Glob
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
-import { initialLayerState } from '../components/map/layerStateInit'
+import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
@@ -99,9 +99,21 @@ export default function GlobeViewerPage() {
 
   // --- UI State ---
   // ?layer=<id> deep link (shareable / automation): initial selection comes
-  // from the URL with the same slot semantics as a panel click. Never written back.
+  // from the URL with the same slot semantics as a panel click.
   const [layerState, setLayerState] = useState<LayerState>(() =>
     initialLayerState(searchParams.get('layer'), worldName === 'earth'))
+  // Mirror the active main layer back into ?layer= (replace, no history churn)
+  // so the URL stays a shareable deep link as layers are switched. The default
+  // base (terrain) is not written — a pristine URL stays pristine.
+  const activeMainLayer = activeMainLayerId(layerState)
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (activeMainLayer && activeMainLayer !== 'terrain') next.set('layer', activeMainLayer)
+      else next.delete('layer')
+      return next
+    }, { replace: true })
+  }, [activeMainLayer, setSearchParams])
   // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
   // arrows switch to the monthly wind field (tech debt 24).
