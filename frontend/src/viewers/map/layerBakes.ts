@@ -661,25 +661,21 @@ function bakeCellLayer(
 }
 
 /**
- * Bake a monthly temperature/precipitation/pressure layer (Phase 4 monthly
- * display, pressure added by tech debt 24).
+ * Build the per-cell colour map for one month/field (shared by the
+ * full-resolution baker and the timelapse strip baker).
  *
  * Reads the per-cell monthly value (cell index `i`, month `m` → `i·months + m`)
- * from the backend's compact MessagePack, maps it through a colour scale, and
- * bakes it to a texture via the existing cell-ID map.  Temperature and
- * precipitation are land-only (ocean stays transparent); pressure is an
- * atmospheric field and is drawn over land and ocean alike.
+ * from the backend's compact MessagePack and maps it through a colour scale.
+ * Temperature and precipitation are land-only (ocean stays transparent);
+ * pressure is an atmospheric field and is drawn over land and ocean alike.
  */
-export function bakeMonthlyLayer(
+function buildMonthlyColors(
   monthly: MonthlyClimateData,
   month: number,
   field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp',
   cvtMesh: CVTMesh,
-  cellIdMap: CellIdMap,
-  width: number,
-  height: number,
-  flipHorizontal: boolean,
-): THREE.DataTexture {
+): Map<number, [number, number, number]> {
+  const colors = new Map<number, [number, number, number]>()
   const { months, tMonthly, pMonthly, pressureMonthly, slpMonthly } = monthly
   const arr =
     field === 'temperature'
@@ -689,14 +685,7 @@ export function bakeMonthlyLayer(
         : field === 'slp'
           ? slpMonthly
           : pressureMonthly
-  const colors = new Map<number, [number, number, number]>()
-
-  if (!arr) {
-    // Field absent in this file (older export / world without absolute SLP) —
-    // transparent texture.
-    const empty = new Uint8Array(width * height * 4)
-    return makeTexture(empty, width, height)
-  }
+  if (!arr) return colors  // field absent in this file → transparent layer
 
   // Pressure anomaly ΔP uses a symmetric diverging range centred on 0, fixed at
   // ±20 hPa.  A data-derived max (max |ΔP|) is dominated by the Antarctic polar
@@ -741,9 +730,151 @@ export function bakeMonthlyLayer(
     }
     if (color) colors.set(cell.id, color)
   }
+  return colors
+}
 
+/**
+ * Bake a monthly temperature/precipitation/pressure layer at FULL resolution
+ * (Phase 4 monthly display, pressure added by tech debt 24).
+ */
+export function bakeMonthlyLayer(
+  monthly: MonthlyClimateData,
+  month: number,
+  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp',
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  width: number,
+  height: number,
+  flipHorizontal: boolean,
+): THREE.DataTexture {
+  const colors = buildMonthlyColors(monthly, month, field, cvtMesh)
   const buf = bakeCellLayer(colors, width, height, cellIdMap, flipHorizontal)
   return makeTexture(buf, width, height)
+}
+
+// ---------------------------------------------------------------------------
+// Monthly timelapse strip (video materials feature)
+// ---------------------------------------------------------------------------
+
+/** Strip frames are baked at a reduced resolution (STRIP_SCALE per side).
+ *  12 full-res frames ≈ 400 MB; at 0.375 → ~57 MB total, and cell-colour layers
+ *  are visually lossless well below half res (see the bake cache notes above).
+ *  Calibrated so one idle bake stays under the 50 ms long-task threshold
+ *  (0.5 measured 53–56 ms/task on the dev machine; 0.375 ≈ 31 ms). */
+const STRIP_SCALE = 0.375
+
+export type MonthlyStripField = 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp'
+
+/** Module-level single-entry cache (same pattern as the layer bake cache):
+ *  one strip per world/planet/branch/field; switching key disposes the old
+ *  frames so the strip never doubles in memory.  Shared by 2D and 3D pages. */
+let monthlyStrip: { key: string; frames: (THREE.DataTexture | null)[] } | null = null
+
+function stripDims(fullW: number, fullH: number): { w: number; h: number } {
+  const w = Math.max(1, Math.round(fullW * STRIP_SCALE))
+  const h = Math.max(1, Math.round(fullH * STRIP_SCALE))
+  return { w, h }
+}
+
+/** Bake one strip frame at reduced resolution by down-sampling the
+ *  FULL-resolution cell-id map (no second cell-id map is built).  Each strip
+ *  pixel maps to the full-res pixel at the same fractional position — an
+ *  integer-stride shortcut (x·step with step = round(fullW/w)) walks off the
+ *  end of the map whenever fullW/w is not an integer and misaligns the layer
+ *  against the base map (2026-10-02 report: content jumped ~20° NW). */
+function bakeCellLayerScaled(
+  colors: Map<number, [number, number, number]>,
+  w: number,
+  h: number,
+  cellIdMap: CellIdMap,
+  fullW: number,
+  fullH: number,
+  flipHorizontal: boolean,
+): Uint8Array {
+  const buf = new Uint8Array(w * h * 4)
+  for (let y = 0; y < h; y++) {
+    const srcY = Math.min(fullH - 1, Math.floor((y * fullH) / h))
+    const srcRow = srcY * fullW
+    for (let x = 0; x < w; x++) {
+      const srcX = Math.min(fullW - 1, Math.floor((x * fullW) / w))
+      const cid = cellIdMap[srcRow + srcX]
+      if (cid == null) continue
+      const c = colors.get(cid)
+      if (!c) continue
+      const pi = (y * w + x) * 4
+      buf[pi] = c[0]; buf[pi + 1] = c[1]; buf[pi + 2] = c[2]; buf[pi + 3] = 255
+    }
+  }
+  return flipBuffer(buf, w, h, flipHorizontal)
+}
+
+function bakeStripFrame(
+  monthly: MonthlyClimateData,
+  month: number,
+  field: MonthlyStripField,
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  fullW: number,
+  fullH: number,
+  flipHorizontal: boolean,
+): THREE.DataTexture {
+  const { w, h } = stripDims(fullW, fullH)
+  const colors = buildMonthlyColors(monthly, month, field, cvtMesh)
+  const buf = bakeCellLayerScaled(colors, w, h, cellIdMap, fullW, fullH, flipHorizontal)
+  return makeTexture(buf, w, h)
+}
+
+/** Get (baking synchronously if needed) one month's strip frame. */
+export function getMonthlyStrip(
+  key: string,
+  monthly: MonthlyClimateData,
+  month: number,
+  field: MonthlyStripField,
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  fullW: number,
+  fullH: number,
+  flipHorizontal: boolean,
+): THREE.DataTexture | null {
+  if (monthlyStrip && monthlyStrip.key !== key) {
+    for (const f of monthlyStrip.frames) f?.dispose()
+    monthlyStrip = null
+  }
+  if (!monthlyStrip) monthlyStrip = { key, frames: Array<THREE.DataTexture | null>(12).fill(null) }
+  if (!monthlyStrip.frames[month]) {
+    monthlyStrip.frames[month] = bakeStripFrame(monthly, month, field, cvtMesh, cellIdMap, fullW, fullH, flipHorizontal)
+  }
+  return monthlyStrip.frames[month]
+}
+
+/** Fill in the remaining months of the strip during idle time (one frame per
+ *  tick, ~25 ms each) so playback never stalls on a mid-loop re-bake.  Safe to
+ *  call repeatedly (idempotent — already-baked months are skipped). */
+export function ensureMonthlyStrip(
+  key: string,
+  monthly: MonthlyClimateData,
+  field: MonthlyStripField,
+  cvtMesh: CVTMesh,
+  cellIdMap: CellIdMap,
+  fullW: number,
+  fullH: number,
+  flipHorizontal: boolean,
+): void {
+  if (monthlyStrip?.key !== key) return  // nothing to fill (getMonthlyStrip builds it)
+  const idle: (cb: () => void) => void =
+    typeof requestIdleCallback === 'function'
+      ? (cb) => requestIdleCallback(() => cb())
+      : (cb) => setTimeout(cb, 0)
+  const fill = (m: number) => {
+    if (!monthlyStrip || monthlyStrip.key !== key) return  // replaced/stale chain → stop
+    if (!monthlyStrip.frames[m]) {
+      monthlyStrip.frames[m] = bakeStripFrame(monthly, m, field, cvtMesh, cellIdMap, fullW, fullH, flipHorizontal)
+    }
+    const next = monthlyStrip.frames.findIndex((f) => !f)
+    if (next >= 0) idle(() => fill(next))
+  }
+  const first = monthlyStrip.frames.findIndex((f) => !f)
+  if (first >= 0) idle(() => fill(first))
 }
 
 /**

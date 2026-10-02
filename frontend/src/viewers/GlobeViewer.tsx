@@ -33,6 +33,9 @@ const TRANSITION_START_DIST = 4.5
 const TRANSITION_END_DIST = 8
 const DIST_POLL_MS = 80
 const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
+// OrbitControls autoRotateSpeed: 2.0 = 30s per orbit, so 0.5 ≈ 120s/orbit —
+// a slow, stately pace for recording (tune this one constant only).
+const AUTO_ROTATE_SPEED = 0.5
 
 // ---------------------------------------------------------------------------
 // Types (mirror CVTVertex / CVTRegion from types.ts — transformed by adaptCvtMesh)
@@ -68,6 +71,16 @@ interface GlobeViewerProps {
   solarDeclinationDeg?: number
   /** Enable directional sun lighting (day/night terminator). Off = evenly lit. */
   dayNight?: boolean
+  /** Slow continuous camera orbit for video recording (?spin=1). Pauses while
+   *  the user drags or during the N-key north-pole fly animation. */
+  autoSpin?: boolean
+  /** Render scene chrome (graticule + polar axis). Off for clean/recording mode. */
+  chrome?: boolean
+  /** Enable pointer interactions (hover / click cell picking). Off in clean mode
+   *  so mouse movement over the recorded globe draws no highlight polygons. */
+  interactive?: boolean
+  /** Zero the canvas border radius for full-bleed recording. */
+  frameless?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
@@ -269,6 +282,9 @@ interface GlobeSceneProps {
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
+  autoSpin?: boolean
+  chrome?: boolean
+  interactive?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
 }
@@ -289,13 +305,38 @@ function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  autoSpin = false, chrome = true, interactive = true,
   globeProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const { camera, gl } = useThree()
   const northAnimRef = useRef<NorthAnimState | null>(null)
+  const userDraggingRef = useRef(false)
   // First useFrame tick = first rendered frame — the interactive-ready point.
   const firstFrameRef = useRef(true)
+
+  // Track drag state so auto-spin yields to the user and resumes on release.
+  useEffect(() => {
+    const controls = controlsRef.current
+    if (!controls) return
+    const onStart = () => { userDraggingRef.current = true }
+    const onEnd = () => { userDraggingRef.current = false }
+    controls.addEventListener('start', onStart)
+    controls.addEventListener('end', onEnd)
+    return () => {
+      controls.removeEventListener('start', onStart)
+      controls.removeEventListener('end', onEnd)
+    }
+  }, [])
+
+  // Auto-spin enablement, recomposed every frame (no React re-render):
+  // paused while dragging or during the north-pole fly animation.
+  useFrame(() => {
+    const controls = controlsRef.current
+    if (controls) {
+      controls.autoRotate = !!autoSpin && !northAnimRef.current && !userDraggingRef.current
+    }
+  })
 
   // Refresh the composited layer texture before the globe renders it
   // (negative priority → runs ahead of the default useFrame subscribers).
@@ -448,9 +489,10 @@ function GlobeScene({
         <SunLight sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg} />
       )}
 
-      {/* Planet sphere with pointer events */}
+      {/* Planet sphere with pointer events (disabled in clean mode so mouse
+          movement over the recorded globe draws no highlight polygons) */}
       <mesh
-        onPointerMove={(e: any) => {
+        onPointerMove={interactive ? (e: any) => {
           // Use UV coordinates to match the texture's equirectangular mapping.
           // This ensures the hovered cell matches the displayed koppen/terrain color.
           const uv = e.uv as { x: number; y: number } | undefined
@@ -459,9 +501,9 @@ function GlobeScene({
             const lat = uv.y * 180 - 90
             onCellHover?.(lon, lat)
           }
-        }}
-        onPointerOut={() => onHoverOut?.()}
-        onClick={(e: any) => {
+        } : undefined}
+        onPointerOut={interactive ? () => onHoverOut?.() : undefined}
+        onClick={interactive ? (e: any) => {
           // Ctrl+click → toggle cell; tap (touch) → select cell.
           const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
           const isTouch = (e.nativeEvent as PointerEvent)?.pointerType === 'touch' ||
@@ -476,8 +518,8 @@ function GlobeScene({
             // A tap fires no pointermove, so refresh the cursor coords too.
             onCellHover?.(lon, lat)
           }
-        }}
-        onDoubleClick={(e: any) => {
+        } : undefined}
+        onDoubleClick={interactive ? (e: any) => {
           const uv = e.uv as { x: number; y: number } | undefined
           if (uv) {
             const lon = uv.x * 360 - 180
@@ -485,7 +527,7 @@ function GlobeScene({
             const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
             onCellClick?.(lon, lat, ctrl)
           }
-        }}
+        } : undefined}
       >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />
         {texture ? (
@@ -499,8 +541,8 @@ function GlobeScene({
       {HoverHighlight}
       {SelectionHighlights}
 
-      <Graticule />
-      <PolarAxis />
+      {chrome && <Graticule />}
+      {chrome && <PolarAxis />}
 
       {/* Atmosphere shell */}
       <mesh scale={1.015}>
@@ -512,7 +554,7 @@ function GlobeScene({
       <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08}
         minDistance={SPHERE_RADIUS * 1.2} maxDistance={TRANSITION_END_DIST}
         maxPolarAngle={Math.PI} target={[0, 0, 0]}
-        zoomSpeed={0.8} />
+        zoomSpeed={0.8} autoRotateSpeed={AUTO_ROTATE_SPEED} />
     </>
   )
 }
@@ -547,6 +589,7 @@ export default function GlobeViewer({
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
+  autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef,
 }: GlobeViewerProps) {
   const { t } = useTranslation('map')
@@ -580,7 +623,7 @@ export default function GlobeViewer({
         <Canvas
           camera={{ position: [0, 0, 2.8], fov: 40 }}
           gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
-          style={{ background: '#030308', borderRadius: '0.75rem' }}
+          style={{ background: '#030308', borderRadius: frameless ? 0 : '0.75rem' }}
         >
           <GlobeScene
             texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
@@ -590,6 +633,8 @@ export default function GlobeViewer({
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
+            autoSpin={autoSpin}
+            chrome={chrome} interactive={interactive}
             globeProjectRef={globeProjectRef}
           />
         </Canvas>

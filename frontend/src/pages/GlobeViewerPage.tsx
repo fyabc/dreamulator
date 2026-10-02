@@ -22,6 +22,7 @@ import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspe
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
+import { useSeasonTimelapse } from '../viewers/map/useSeasonTimelapse'
 import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
 import { useUccLayer } from '../viewers/map/useUccLayer'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
@@ -62,6 +63,38 @@ export default function GlobeViewerPage() {
       return next
     }, { replace: true })
   }
+
+  // Clean view (video recording): hide every piece of UI and scene chrome,
+  // leaving only the globe + arrow overlays.  URL is the source of truth
+  // (?clean=1) so a deep link opens straight into recording posture.
+  const cleanMode = searchParams.get('clean') === '1'
+  const setCleanMode = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('clean', '1')
+      else next.delete('clean')
+      return next
+    }, { replace: true })
+  }
+  // Auto spin (?spin=1): slow continuous orbit for recording.  Independent of
+  // clean mode so ?clean=1&spin=1 is the standard recording posture.
+  const autoSpin = searchParams.get('spin') === '1'
+  const setAutoSpin = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('spin', '1')
+      else next.delete('spin')
+      return next
+    }, { replace: true })
+  }
+  // Stable empty set — clean mode suppresses hover/selection highlights without
+  // changing cell-picking state underneath.
+  const emptySelection = useMemo(() => new Set<number>(), [])
+
+  // --- Seasonal cycle playback (video materials, ?play=1) ---
+  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
+  const [monthMs, setMonthMs] = useState(2000)
+  const [sunSweep, setSunSweep] = useState(false)
 
   // --- UI State ---
   const [layerState, setLayerState] = useState<LayerState>({ layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 } })
@@ -209,7 +242,12 @@ export default function GlobeViewerPage() {
   const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
 
   // Write sun/season/night back to the URL so lighting carries across 2D↔3D nav.
+  // Gated during a sun sweep: the continuous rAF below would otherwise fire a
+  // history.replace every frame; when the sweep stops, this effect re-runs and
+  // the final longitude lands in the URL exactly once.
+  const sweeping = timelapsePlaying && monthlyMode && sunSweep
   useEffect(() => {
+    if (sweeping) return
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
@@ -220,7 +258,60 @@ export default function GlobeViewerPage() {
       else next.delete('night')
       return next
     }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
+
+  // Sun sweep: continuously rotate the subsolar longitude so the day/night
+  // terminator sweeps across the globe — one full revolution per model year
+  // (12 × monthMs), phase-locked with the month stepper.
+  useEffect(() => {
+    if (!sweeping) return
+    let raf = 0
+    let last = performance.now()
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000
+      last = now
+      const yearSec = (monthMs * 12) / 1000
+      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [sweeping, monthMs])
+
+  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
+  // user implicitly consents to by sharing/opening the link) and make sure a
+  // monthly layer is visible — otherwise there is nothing to animate.
+  useEffect(() => {
+    if (searchParams.get('play') !== '1') return
+    setMonthlyMode(true)
+    setLayerState((prev) => {
+      const L = prev.layers
+      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
+          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
+      return { layers: { ...L, temperature: 0.85 } }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Month stepper: one discrete step per beat (same semantics as the slider,
+  // so ?season= write-back stays at 12 hits per cycle).
+  useSeasonTimelapse({
+    playing: timelapsePlaying && monthlyMode,
+    monthMs,
+    seasonDeg,
+    onSeasonChange: setSeasonDeg,
+  })
+
+  // Persist the play state to the URL (?play=1) so a deep link reopens in
+  // playing posture; speed/sweep stay ephemeral UI state.
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (timelapsePlaying) next.set('play', '1')
+      else next.delete('play')
+      return next
+    }, { replace: true })
+  }, [timelapsePlaying, setSearchParams])
 
   // Solar declination (subsolar latitude) varies with season + axial tilt.
   const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
@@ -263,7 +354,8 @@ export default function GlobeViewerPage() {
   // --- Monthly climate texture (Phase 4) — loaded + baked on demand ---
   const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
+    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
+    cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
   // UCC yearly descriptors for the cell inspector (independent of monthly mode).
@@ -427,14 +519,23 @@ export default function GlobeViewerPage() {
     })
   }, [kdTree])
 
-  // Esc → clear all selections
+  // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedCells(new Set())
+      if (e.key !== 'Escape') return
+      if (searchParams.get('clean') === '1') {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('clean')
+          return next
+        }, { replace: true })
+        return
+      }
+      setSelectedCells(new Set())
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [searchParams, setSearchParams])
 
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
@@ -464,8 +565,11 @@ export default function GlobeViewerPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className={cleanMode
+      ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
+      : 'flex flex-col h-[calc(100vh-56px)]'}>
       {/* Top bar */}
+      {!cleanMode && (
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link to={`/worlds/${worldName}`}
           className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">{t('action.back')}</Link>
@@ -537,9 +641,10 @@ export default function GlobeViewerPage() {
           ?
         </a>
       </div>
+      )}
 
       {/* Error / info banner */}
-      {importMsg && (
+      {!cleanMode && importMsg && (
         <div className={`border-b px-4 py-2 text-sm text-center ${
           importMsg.ok ? 'bg-green-900/20 border-green-700/30 text-green-300' : 'bg-red-900/20 border-red-700/30 text-red-300'
         }`}>
@@ -591,11 +696,15 @@ export default function GlobeViewerPage() {
                 onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
                 regions={globeRegions}
-                hoveredCellId={hoveredCellId}
-                selectedCellIds={selectedCells}
+                hoveredCellId={cleanMode ? null : hoveredCellId}
+                selectedCellIds={cleanMode ? emptySelection : selectedCells}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
+                autoSpin={autoSpin}
+                chrome={!cleanMode}
+                interactive={!cleanMode}
+                frameless={cleanMode}
                 globeProjectRef={globeProjectRef}
               />
             )}
@@ -625,15 +734,17 @@ export default function GlobeViewerPage() {
               deviation
             />
           </div>
-          <MobileCellCard
-            cell={selectedCells.size === 1 ? selectedCellData : null}
-            cursor={cursor}
-            onClose={() => setSelectedCells(new Set())}
-          />
+          {!cleanMode && (
+            <MobileCellCard
+              cell={selectedCells.size === 1 ? selectedCellData : null}
+              cursor={cursor}
+              onClose={() => setSelectedCells(new Set())}
+            />
+          )}
         </div>
 
         {/* Floating toggle (mobile only) */}
-        {!leftPanelOpen && (
+        {!cleanMode && !leftPanelOpen && (
           <button
             onClick={() => setLeftPanelOpen(true)}
             className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
@@ -644,7 +755,7 @@ export default function GlobeViewerPage() {
         )}
 
         {/* Left panel drawer overlay (mobile only) */}
-        {leftPanelOpen && (
+        {!cleanMode && leftPanelOpen && (
           <>
             <div className="absolute inset-0 bg-black/50 z-40" onClick={() => setLeftPanelOpen(false)} />
             <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
@@ -658,6 +769,12 @@ export default function GlobeViewerPage() {
                 seasonDeg={seasonDeg}
                 onSeasonChange={setSeasonDeg}
                 axialTiltDeg={axialTiltDeg}
+                playing={timelapsePlaying}
+                onPlayingChange={setTimelapsePlaying}
+                monthMs={monthMs}
+                onMonthMsChange={setMonthMs}
+                sunSweep={sunSweep}
+                onSunSweepChange={setSunSweep}
               />
               <MapLayerPanel
                 state={layerState}
@@ -683,6 +800,7 @@ export default function GlobeViewerPage() {
         {/* === Desktop layout (≥ md) === */}
         <div className="hidden md:flex absolute inset-0">
           {/* Left panel: layers */}
+          {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
@@ -690,6 +808,12 @@ export default function GlobeViewerPage() {
               seasonDeg={seasonDeg}
               onSeasonChange={setSeasonDeg}
               axialTiltDeg={axialTiltDeg}
+              playing={timelapsePlaying}
+              onPlayingChange={setTimelapsePlaying}
+              monthMs={monthMs}
+              onMonthMsChange={setMonthMs}
+              sunSweep={sunSweep}
+              onSunSweepChange={setSunSweep}
             />
             <MapLayerPanel
               state={layerState}
@@ -708,6 +832,7 @@ export default function GlobeViewerPage() {
                 />
             </div>
           </div>
+          )}
 
       {/* Centre: globe */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -745,11 +870,15 @@ export default function GlobeViewerPage() {
               onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
               regions={globeRegions}
-              hoveredCellId={hoveredCellId}
-              selectedCellIds={selectedCells}
+              hoveredCellId={cleanMode ? null : hoveredCellId}
+              selectedCellIds={cleanMode ? emptySelection : selectedCells}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}
+              autoSpin={autoSpin}
+              chrome={!cleanMode}
+              interactive={!cleanMode}
+              frameless={cleanMode}
               globeProjectRef={globeProjectRef}
             />
           )}
@@ -778,11 +907,41 @@ export default function GlobeViewerPage() {
             windOpacity={layerState.layers.windError ?? 0}
             deviation
           />
+
+          {/* Recording controls — float in the globe view's bottom-right corner
+              (the view area has spare room; the top bar is already crowded).
+              Fully hidden in clean mode: the mouse is not controllable during a
+              recording, so even hover-only buttons would pollute the frame. */}
+          {!cleanMode && (
+          <div className="absolute bottom-3 right-3 z-30 flex items-center gap-2">
+            <button
+              onClick={() => setAutoSpin(!autoSpin)}
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-sm border shadow-lg transition-colors ${
+                autoSpin
+                  ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40'
+                  : 'bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40'
+              }`}
+              title={t('label.autoSpin')}
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => setCleanMode(true)}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
+              title={t('label.cleanMode')}
+            >
+              ⛶
+            </button>
+          </div>
+          )}
         </div>
-        <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
+        {!cleanMode && (
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
+        )}
       </div>
 
       {/* Right panel: cell inspector */}
+      {!cleanMode && (
       <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
         <MapCellInspector
           cell={inspectorCell}
@@ -797,10 +956,22 @@ export default function GlobeViewerPage() {
           isEarth={worldName === 'earth'}
         />
       </div>
+      )}
     </div>
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
   </div>
+
+  {/* Clean-mode exit — invisible until hovered, so it never pollutes a recording */}
+  {cleanMode && (
+    <button
+      onClick={() => setCleanMode(false)}
+      className="absolute top-2 right-2 z-50 w-9 h-9 rounded-full bg-space-panel/80 border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+      title={t('label.cleanExit')}
+    >
+      ✕
+    </button>
+  )}
   </div>
 )
 }

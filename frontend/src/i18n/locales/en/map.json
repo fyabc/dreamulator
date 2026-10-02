@@ -289,7 +289,15 @@
     "seasonLabel": "Season (lighting only)",
     "monthLabel": "Month",
     "annualHint": "Annual mode: layers show annual averages; the season slider affects lighting only.",
-    "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it."
+    "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it.",
+    "playHint": "Seasonal cycle playback: months advance step by step and wrap around (for video recording)",
+    "playNeedsMonthly": "Seasonal playback needs monthly mode (switch to Monthly first)",
+    "playSpeed": "Playback speed (duration per month)",
+    "speedFast": "1 s/month",
+    "speedNormal": "2 s/month",
+    "speedSlow": "5 s/month",
+    "sunSweep": "Sun sweep",
+    "sunSweepHint": "While playing, the subsolar longitude advances continuously (one revolution per model year) so the terminator moves with the months"
   },
   "months": ["March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"],
   "info": {
@@ -418,7 +426,10 @@
     "switchTo2D": "Switch to 2D map view",
     "switchToStellar": "Switch to stellar system 3D view",
     "stellarShort": "Stellar",
-    "minimap": "Minimap"
+    "minimap": "Minimap",
+    "cleanMode": "Clean view (hide all UI for video recording; press Esc to exit)",
+    "cleanExit": "Exit clean view (Esc)",
+    "autoSpin": "Auto rotate (for recording; drag or press N to pause, resumes on release)"
   },
   "msg": {
     "heightmapImported": "Heightmap imported. Refresh the page to see it.",

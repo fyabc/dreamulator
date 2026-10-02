@@ -27,6 +27,7 @@ import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
+import { useSeasonTimelapse } from '../viewers/map/useSeasonTimelapse'
 import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
 import { useUccLayer } from '../viewers/map/useUccLayer'
 
@@ -49,6 +50,27 @@ export default function MapViewerPage() {
       return next
     }, { replace: true })
   }
+
+  // Clean view (video recording): hide every piece of UI and the graticule,
+  // leaving only the map + arrow overlays.  URL is the source of truth
+  // (?clean=1) so a deep link opens straight into recording posture.
+  const cleanMode = searchParams.get('clean') === '1'
+  const setCleanMode = (v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('clean', '1')
+      else next.delete('clean')
+      return next
+    }, { replace: true })
+  }
+  // Stable empty set — clean mode suppresses hover/selection highlights without
+  // changing cell-picking state underneath.
+  const emptySelection = useMemo(() => new Set<number>(), [])
+
+  // --- Seasonal cycle playback (video materials, ?play=1) ---
+  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
+  const [monthMs, setMonthMs] = useState(2000)
+  const [sunSweep, setSunSweep] = useState(false)
   const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
   const [cursor, setCursor] = useState<CursorInfo | null>(null)
   const [hoveredCell, setHoveredCell] = useState<number | null>(null)
@@ -68,19 +90,9 @@ export default function MapViewerPage() {
   })
   const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
 
-  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav.
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
-      else next.delete('sun')
-      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
-      else next.delete('season')
-      if (dayNightEnabled) next.set('night', '1')
-      else next.delete('night')
-      return next
-    }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams])
+  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav
+  // (effect lives with the timelapse wiring below because it is gated on
+  // `sweeping`, which needs monthlyMode — declared after the sun state).
 
   const [layerState, setLayerState] = useState<LayerState>({
     layers: { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 },
@@ -143,6 +155,76 @@ export default function MapViewerPage() {
   const handleMonthlyModeChange = (mode: boolean) => {
     setMonthlyMode(mode)
   }
+
+  // --- Seasonal cycle playback wiring (declared after monthlyMode/seasonDeg) ---
+
+  const sweeping = timelapsePlaying && monthlyMode && sunSweep
+
+  // Lighting URL sync, gated during a sun sweep (continuous rAF → one
+  // history.replace on stop, not one per frame).
+  useEffect(() => {
+    if (sweeping) return
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
+      else next.delete('sun')
+      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
+      else next.delete('season')
+      if (dayNightEnabled) next.set('night', '1')
+      else next.delete('night')
+      return next
+    }, { replace: true })
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
+
+  // Sun sweep: continuously rotate the subsolar longitude (day/night terminator
+  // sweep), one revolution per model year, phase-locked with the month stepper.
+  // The URL write-back above is gated on `sweeping` so it fires once on stop,
+  // not once per frame.
+  useEffect(() => {
+    if (!sweeping) return
+    let raf = 0
+    let last = performance.now()
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000
+      last = now
+      const yearSec = (monthMs * 12) / 1000
+      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [sweeping, monthMs])
+
+  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
+  // user implicitly consents to by sharing/opening the link) and make sure a
+  // monthly layer is visible — otherwise there is nothing to animate.
+  useEffect(() => {
+    if (searchParams.get('play') !== '1') return
+    setMonthlyMode(true)
+    setLayerState((prev) => {
+      const L = prev.layers
+      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
+          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
+      return { layers: { ...L, temperature: 0.85 } }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useSeasonTimelapse({
+    playing: timelapsePlaying && monthlyMode,
+    monthMs,
+    seasonDeg,
+    onSeasonChange: setSeasonDeg,
+  })
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (timelapsePlaying) next.set('play', '1')
+      else next.delete('play')
+      return next
+    }, { replace: true })
+  }, [timelapsePlaying, setSearchParams])
 
   // Decoded elevation data (for rendering)
   const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
@@ -287,7 +369,8 @@ export default function MapViewerPage() {
   })
   const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, cvtMesh: cvtMesh ?? null, cellIdMap,
+    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
+    cvtMesh: cvtMesh ?? null, cellIdMap,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
   // UCC yearly descriptors for the cell inspector (independent of monthly mode).
@@ -353,14 +436,23 @@ export default function MapViewerPage() {
     })
   }, [])
 
-  // Esc → clear all selections
+  // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedCells(new Set())
+      if (e.key !== 'Escape') return
+      if (searchParams.get('clean') === '1') {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('clean')
+          return next
+        }, { replace: true })
+        return
+      }
+      setSelectedCells(new Set())
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [searchParams, setSearchParams])
 
   // Use cvtMesh.cells (rich property set) when available; fall back to voronoi endpoint
   const voronoiCells: VoronoiCell[] = useMemo(
@@ -436,8 +528,11 @@ export default function MapViewerPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className={cleanMode
+      ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
+      : 'flex flex-col h-[calc(100vh-56px)]'}>
       {/* Top bar */}
+      {!cleanMode && (
       <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link
           to={`/worlds/${worldName}`}
@@ -540,6 +635,7 @@ export default function MapViewerPage() {
         </a>
 
       </div>
+      )}
 
       {/* Error banner */}
       {worldPlanetsError && (
@@ -549,7 +645,7 @@ export default function MapViewerPage() {
       )}
 
       {/* Import result banner */}
-      {importMsg && (
+      {!cleanMode && importMsg && (
         <div
           className={`${
             importMsg.ok
@@ -581,8 +677,8 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={handleCellClick}
-                    hoveredCell={hoveredCell}
-                    selectedCells={selectedCells}
+                    hoveredCell={cleanMode ? null : hoveredCell}
+                    selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
@@ -596,15 +692,18 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
                 </div>
-                <MobileCellCard
-                  cell={selectedCells.size === 1 ? selectedCellData : null}
-                  cursor={cursor}
-                  onClose={() => setSelectedCells(new Set())}
-                />
+                {!cleanMode && (
+                  <MobileCellCard
+                    cell={selectedCells.size === 1 ? selectedCellData : null}
+                    cursor={cursor}
+                    onClose={() => setSelectedCells(new Set())}
+                  />
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -623,7 +722,7 @@ export default function MapViewerPage() {
           </div>
 
           {/* Floating toggle button (mobile only, visible when drawer closed) */}
-          {!leftPanelOpen && (
+          {!cleanMode && !leftPanelOpen && (
             <button
               onClick={() => setLeftPanelOpen(true)}
               className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
@@ -634,7 +733,7 @@ export default function MapViewerPage() {
           )}
 
           {/* Left panel drawer overlay */}
-          {leftPanelOpen && (
+          {!cleanMode && leftPanelOpen && (
             <>
               <div
                 className="absolute inset-0 bg-black/50 z-40"
@@ -658,6 +757,12 @@ export default function MapViewerPage() {
                   seasonDeg={seasonDeg}
                   onSeasonChange={setSeasonDeg}
                   axialTiltDeg={axialTiltDeg}
+                  playing={timelapsePlaying}
+                  onPlayingChange={setTimelapsePlaying}
+                  monthMs={monthMs}
+                  onMonthMsChange={setMonthMs}
+                  sunSweep={sunSweep}
+                  onSunSweepChange={setSunSweep}
                 />
                 <MapLayerPanel
                   state={layerState}
@@ -688,6 +793,7 @@ export default function MapViewerPage() {
         {/* === Desktop layout (≥ md, hidden by default) === */}
         <div className="hidden md:flex flex-1 min-h-0">
           {/* Left panel: layers */}
+          {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
@@ -695,6 +801,12 @@ export default function MapViewerPage() {
               seasonDeg={seasonDeg}
               onSeasonChange={setSeasonDeg}
               axialTiltDeg={axialTiltDeg}
+              playing={timelapsePlaying}
+              onPlayingChange={setTimelapsePlaying}
+              monthMs={monthMs}
+              onMonthMsChange={setMonthMs}
+              sunSweep={sunSweep}
+              onSunSweepChange={setSunSweep}
             />
             <MapLayerPanel
               state={layerState}
@@ -718,12 +830,13 @@ export default function MapViewerPage() {
               />
             </div>
           </div>
+          )}
 
           {/* Center: map viewer */}
           <div className="flex-1 flex flex-col min-w-0">
             {localElevation ? (
               <>
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 relative">
                   <MapViewer
                     metadata={meta}
                     elevation={localElevation}
@@ -735,8 +848,8 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={handleCellClick}
-                    hoveredCell={hoveredCell}
-                    selectedCells={selectedCells}
+                    hoveredCell={cleanMode ? null : hoveredCell}
+                    selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
@@ -750,11 +863,29 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+
+                  {/* Recording control — float in the map view's bottom-right
+                      corner.  Fully hidden in clean mode (zero UI while
+                      recording; exit via Esc). */}
+                  {!cleanMode && (
+                  <div className="absolute bottom-3 right-3 z-30">
+                    <button
+                      onClick={() => setCleanMode(true)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
+                      title={t('label.cleanMode')}
+                    >
+                      ⛶
+                    </button>
+                  </div>
+                  )}
                 </div>
-                <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
+                {!cleanMode && (
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -773,6 +904,7 @@ export default function MapViewerPage() {
           </div>
 
           {/* Right panel: cell inspector + minimap */}
+          {!cleanMode && (
           <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
             {/* Scrollable inspector area */}
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
@@ -814,10 +946,22 @@ export default function MapViewerPage() {
               </div>
             )}
           </div>
+          )}
         </div>
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
       </div>
+
+      {/* Clean-mode exit — invisible until hovered, so it never pollutes a recording */}
+      {cleanMode && (
+        <button
+          onClick={() => setCleanMode(false)}
+          className="absolute top-2 right-2 z-50 w-9 h-9 rounded-full bg-space-panel/80 border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+          title={t('label.cleanExit')}
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }

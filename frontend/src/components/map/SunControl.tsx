@@ -112,7 +112,7 @@ export default function SunControl({
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-gray-500">{t('sun.timeOfDay')}</span>
             <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
-              {sunLongitudeDeg}°
+              {sunLongitudeDeg.toFixed(1)}°
             </span>
           </div>
           <input

@@ -374,6 +374,8 @@ export const CONTROL_HELP: ControlHelpEntry[] = [
   { action: 'help:control.esc.action', description: 'help:control.esc.description' },
   { action: 'help:control.clickPlanet.action', description: 'help:control.clickPlanet.description' },
   { action: 'help:control.dblClickPlanet.action', description: 'help:control.dblClickPlanet.description' },
+  { action: 'help:control.clean.action', description: 'help:control.clean.description' },
+  { action: 'help:control.spin.action', description: 'help:control.spin.description' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -471,7 +473,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'map-time',
     title: 'help:section.mapTime.title',
     icon: '🕒',
-    render: (t) => entryKeys('mapTime', 2).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+    render: (t) => entryKeys('mapTime', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
     id: 'map-projections',
