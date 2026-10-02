@@ -87,6 +87,8 @@ interface MapViewerProps {
   monthlyWindEast?: Float32Array | null
   monthlyWindNorth?: Float32Array | null
   month?: number
+  /** Render the SVG graticule. Off in clean/recording mode. */
+  showGraticule?: boolean
 }
 
 export interface CursorInfo {
@@ -137,6 +139,7 @@ export default function MapViewer({
   monthlyWindEast = null,
   monthlyWindNorth = null,
   month = 0,
+  showGraticule = true,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -702,6 +705,7 @@ export default function MapViewer({
         monthlyWindEast={monthlyWindEast}
         monthlyWindNorth={monthlyWindNorth}
         month={month}
+        showGraticule={showGraticule}
       />
     </div>
   )

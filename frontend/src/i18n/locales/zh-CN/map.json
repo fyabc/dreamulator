@@ -289,7 +289,15 @@
     "seasonLabel": "季节（仅光照）",
     "monthLabel": "月份",
     "annualHint": "年均模式：图层显示年度平均，季节滑条仅影响光照",
-    "monthlyHint": "月度模式：拖动选择月份，温度/降水/气压/风场随之变化"
+    "monthlyHint": "月度模式：拖动选择月份，温度/降水/气压/风场随之变化",
+    "playHint": "季节循环播放：月份逐月推进、循环回绕（视频录制用）",
+    "playNeedsMonthly": "季节循环播放需要月度模式（先切换到月度）",
+    "playSpeed": "播放速度（每月时长）",
+    "speedFast": "1 秒/月",
+    "speedNormal": "2 秒/月",
+    "speedSlow": "5 秒/月",
+    "sunSweep": "昼夜扫描",
+    "sunSweepHint": "播放时太阳直射经度连续推进（一个模型年扫一圈），晨昏线随月份同步移动"
   },
   "months": ["三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月", "一月", "二月"],
   "info": {
@@ -418,7 +426,10 @@
     "switchTo2D": "切换到 2D 地图视图（等距圆柱 / Mollweide / Robinson 投影）",
     "switchToStellar": "切换到恒星系 3D 视图（行星轨道、宜居带）",
     "stellarShort": "恒星系",
-    "minimap": "鸟瞰图"
+    "minimap": "鸟瞰图",
+    "cleanMode": "纯净视图（隐藏全部界面，视频录制用；按 Esc 退出）",
+    "cleanExit": "退出纯净视图（Esc）",
+    "autoSpin": "自动旋转（视频录制用；拖拽或按 N 暂停，松手后恢复）"
   },
   "msg": {
     "heightmapImported": "已导入高度图。请刷新页面查看。",
