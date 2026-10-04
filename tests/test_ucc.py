@@ -257,3 +257,115 @@ def test_v1_splits_arid_at_02() -> None:
     assert c0.water_stress == c1.water_stress
     assert c0.supply == "arid" and c1.supply == "semi_arid"  # the only divergence
     assert c1.profile == PROFILE_V1
+
+
+# ---------------------------------------------------------------------------
+# v2-α descriptors: seasonal-shape harmonics, rain–demand phase, hot-side gate
+# ---------------------------------------------------------------------------
+
+
+def test_harmonics_unimodal_vs_bimodal() -> None:
+    # Shape, not just strength: a single wet season and two opposite wet
+    # seasons can carry similar concentration C_TV but must separate in the
+    # harmonic amplitudes (C_TV's known blind spot, specification §6).
+    # NB a *delta* spike has every harmonic at amplitude 1 — the bimodality
+    # discriminator is the comparison (R2 > R1), never R2 alone.
+    m = 12
+    t = np.full(m, 20.0)
+    p_uni = np.zeros(m)
+    p_uni[2:5] = 4.0  # one wet season spread over ~3 months
+    p_bi = np.zeros(m)
+    p_bi[0] = 6.0
+    p_bi[6] = 6.0  # two wet seasons half a cycle apart
+    p_spike = np.zeros(m)
+    p_spike[3] = 12.0  # single-month spike: R1 = R2 = 1, not bimodal
+
+    d_u = compute_descriptors(t, p_uni)
+    d_b = compute_descriptors(t, p_bi)
+    d_s = compute_descriptors(t, p_spike)
+    assert d_u.p_harmonic1 is not None and d_u.p_harmonic1 > 0.85
+    assert d_u.p_harmonic2 is not None and d_u.p_harmonic2 < 0.75
+    assert d_u.p_harmonic2 < d_u.p_harmonic1  # unimodal: first harmonic dominates
+    assert d_b.p_harmonic2 is not None and d_b.p_harmonic2 > 0.9
+    assert d_b.p_harmonic1 is not None and d_b.p_harmonic1 < 0.2
+    assert d_s.p_harmonic1 == pytest.approx(1.0) and d_s.p_harmonic2 == pytest.approx(1.0)
+    assert d_s.p_harmonic2 <= d_s.p_harmonic1 + 1e-9  # spike is not bimodal
+    # No precipitation at all → shape is undefined (None, matching concentration)
+    d_zero = compute_descriptors(t, np.zeros(m))
+    assert d_zero.p_harmonic1 is None and d_zero.p_harmonic2 is None
+    assert d_zero.concentration is None
+
+
+def test_phase_monsoon_vs_mediterranean() -> None:
+    # Same demand peak, rain with it vs rain half a cycle away: the signed
+    # phase separates 雨热同季 (monsoon) from 雨热反季 (Mediterranean), which
+    # the v1 descriptors cannot (§7.2's pair shares AI and diverges only in
+    # deficit; these two can even share deficit).
+    m = 12
+    t = np.full(m, 20.0)
+    et = np.zeros(m)
+    et[6] = 12.0  # demand peaks in bin 6
+
+    p_monsoon = np.zeros(m)
+    p_monsoon[6] = 12.0  # rain with demand
+    p_medi = np.zeros(m)
+    p_medi[0] = 12.0  # rain half a cycle away
+
+    d_m = compute_descriptors(t, p_monsoon, et_rate=et)
+    d_x = compute_descriptors(t, p_medi, et_rate=et)
+    assert d_m.p_phase_status == VALID
+    assert d_m.p_phase is not None and abs(d_m.p_phase) < 0.05  # ≈0 → in phase
+    assert d_x.p_phase is not None and abs(d_x.p_phase) > 0.45  # ≈±0.5 → anti-phase
+
+
+def test_phase_partial_validity() -> None:
+    m = 12
+    et = np.zeros(m)
+    et[6] = 12.0
+    p_flat = np.full(m, 1.0)  # uniform rain: no dominant cycle → NA
+    p_seasonal = np.zeros(m)
+    p_seasonal[6] = 12.0
+    et_flat = np.full(m, 1.0)  # uniform demand (constant T world): NA too
+
+    d = compute_descriptors(np.full(m, 20.0), p_flat, et_rate=et)
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+    # Constant-temperature world with seasonal rain: the rain season itself
+    # survives (harmonics valid) but phase against demand is NA (§7.1:
+    # 恒温 ≠ 无季节 — but there is no demand season to be out of phase with).
+    d = compute_descriptors(np.full(m, 20.0), p_seasonal, et_rate=et_flat)
+    assert d.p_harmonic1 is not None and d.p_harmonic1 > 0.9
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+    # No demand series at all → missing_input; no rain → NA.
+    d = compute_descriptors(np.full(m, 20.0), p_seasonal, et_rate=None)
+    assert d.p_phase is None and d.p_phase_status == MISSING_INPUT
+    d = compute_descriptors(np.full(m, 20.0), np.zeros(m), et_rate=et)
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+
+def test_hot_side_domain_gate() -> None:
+    # Symmetric with the cold-side freeze rule: a year with *no* bin mean
+    # below HOT_DOMAIN_GATE_C is beyond the Hamon calibration envelope —
+    # the supply–demand family (AI, deficit, phase) refuses to report.
+    m = 12
+    t_hot = np.full(m, 60.0)  # Venus-like: every bin above the gate
+    p = np.full(m, 1.0)
+    et = np.full(m, 2.0)
+    d = compute_descriptors(t_hot, p, et_rate=et)
+    assert d.ai is None and d.ai_status == OUT_OF_DOMAIN
+    assert d.deficit is None and d.deficit_status == OUT_OF_DOMAIN
+    assert d.p_phase is None and d.p_phase_status == OUT_OF_DOMAIN
+    # Temperature/precipitation/shape fields survive the gate.
+    assert d.t_mean == 60.0 and d.p_total == m
+    assert d.p_harmonic1 is not None
+
+    # Just below the gate everywhere → still in domain (boundary check).
+    d = compute_descriptors(np.full(m, 34.9), p, et_rate=et)
+    assert d.ai is not None and d.ai_status == VALID
+
+    # Mixed year (one bin dips below the gate) → not gated.
+    t_mixed = np.full(m, 40.0)
+    t_mixed[0] = 20.0
+    d = compute_descriptors(t_mixed, p, et_rate=et)
+    assert d.ai is not None and d.ai_status == VALID

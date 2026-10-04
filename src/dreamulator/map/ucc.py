@@ -60,6 +60,30 @@ class ClimateDescriptors:
     # Precipitation concentration C_TV = 0.5 Σ |q_i − w_i| (None when P_total=0).
     concentration: float | None
 
+    # Seasonal-shape harmonics of the precipitation mass over circular time
+    # (v2-α candidates).  q_j = P_j·Δt_j / P_total, φ_j = bin-centre phase
+    # (2π·cumulative-time fraction).  ``p_harmonic1`` = |Σ q_j e^{iφ_j}| —
+    # unimodal concentration (≈1 when all rain falls in one season, ≈1/M for
+    # uniform rain); ``p_harmonic2`` = |Σ q_j e^{2iφ_j}| — half-period
+    # (two-season) concentration.  ``p_harmonic2 > p_harmonic1`` marks a
+    # bimodal regime (e.g. equinox double wet seasons), which C_TV and its
+    # single-number kin cannot distinguish from unimodal.  None when P_total=0.
+    p_harmonic1: float | None = None
+    p_harmonic2: float | None = None
+
+    # Rain–demand phase: signed circular phase difference between the
+    # precipitation mass and the reference-demand mass, as a fraction of the
+    # seasonal cycle in (−0.5, 0.5] — 0 = rain peaks with demand (monsoon-like
+    # 雨热同季), ±0.5 = rain peaks half a cycle away from demand
+    # (Mediterranean-like 雨热反季).  Partial validity (``p_phase_status``):
+    # missing_input without a demand series; not_applicable when either axis
+    # has no dominant seasonal cycle (first-harmonic amplitude below
+    # PHASE_CONCENTRATION_GATE) — a constant-temperature world can still have
+    # a precipitation season (§7.1), it just cannot be in/out of phase with
+    # demand; out_of_domain inherits the demand-model domain gates.
+    p_phase: float | None = None
+    p_phase_status: str = MISSING_INPUT
+
 
 def compute_descriptors(
     t: np.ndarray,
@@ -103,19 +127,36 @@ def compute_descriptors(
     deficit, deficit_status = _seasonal_deficit(p_rate, et_rate, dt)
     concentration = _concentration(p_rate, dt, p_total)
 
+    # Seasonal shape / phase (v2-α): circular bin-centre phases weighted by dt.
+    cum = np.cumsum(dt) - 0.5 * dt
+    phi = 2.0 * np.pi * cum / dt.sum()
+    p_harmonic1: float | None = None
+    p_harmonic2: float | None = None
+    if p_total > 0.0:
+        q_p = p_rate * dt / p_total
+        p_harmonic1 = float(np.abs(np.sum(q_p * np.exp(1j * phi))))
+        p_harmonic2 = float(np.abs(np.sum(q_p * np.exp(2j * phi))))
+    p_phase, p_phase_status = _p_phase(p_rate, et_rate, dt, p_total, phi, p_harmonic1)
+
     # Demand-model validity domain (ucc-review §2.3/§4.4): the Hamon reference
     # demand is an empirical formula for evaporation from *liquid* water
-    # surfaces.  When no bin-mean temperature reaches the freeze threshold
-    # (no liquid water all year — ice-cap climates), the reference demand is
-    # undefined in physical terms: Eref collapses toward zero while sublimation
-    # physics takes over, and P/Eref inflates into a meaningless "humid" ice
-    # sheet.  Mark the supply–demand statistics out-of-domain there instead of
-    # reporting a number.  MISSING_INPUT (no PET at all) takes precedence.
-    if t_max < freeze_threshold_c:
+    # surfaces.  Cold side: when no bin-mean temperature reaches the freeze
+    # threshold (no liquid water all year — ice-cap climates), the reference
+    # demand is undefined in physical terms: Eref collapses toward zero while
+    # sublimation physics takes over, and P/Eref inflates into a meaningless
+    # "humid" ice sheet.  Hot side (v2-α gate, symmetric with the cold one):
+    # when no bin-mean temperature falls below HOT_DOMAIN_GATE_C, the whole
+    # year sits beyond the hottest Earth monthly means (~36 °C) — the formula
+    # is pure arithmetic extrapolation there with no calibration anchor
+    # (declared empirical candidate; Venus flips Ra-w → Rn under it).
+    # MISSING_INPUT (no PET at all) takes precedence over both gates.
+    if t_max < freeze_threshold_c or t_min > HOT_DOMAIN_GATE_C:
         if ai_status != MISSING_INPUT:
             ai, ai_status = None, OUT_OF_DOMAIN
         if deficit_status != MISSING_INPUT:
             deficit, deficit_status = None, OUT_OF_DOMAIN
+        if p_phase_status != MISSING_INPUT:
+            p_phase, p_phase_status = None, OUT_OF_DOMAIN
 
     return ClimateDescriptors(
         t_mean=t_mean,
@@ -130,6 +171,10 @@ def compute_descriptors(
         deficit=deficit,
         deficit_status=deficit_status,
         concentration=concentration,
+        p_harmonic1=p_harmonic1,
+        p_harmonic2=p_harmonic2,
+        p_phase=p_phase,
+        p_phase_status=p_phase_status,
     )
 
 
@@ -166,6 +211,53 @@ def _concentration(p_rate: np.ndarray, dt: np.ndarray, p_total: float) -> float 
     q = p_rate * dt / p_total  # precipitation mass fraction per bin
     w = dt / dt.sum()  # uniform-rate reference
     return float(0.5 * np.sum(np.abs(q - w)))
+
+
+#: Gate on the first-harmonic amplitude below which an axis has no dominant
+#: seasonal cycle, so a phase between the two axes is not well defined.
+#: Uniform over M=12 bins gives 1/12 ≈ 0.083; a declared empirical candidate
+#: (calibrated against the L2 observation set in the v2-α experiment).
+PHASE_CONCENTRATION_GATE = 0.25
+
+#: Hot-side domain gate for the reference-demand model (v2-α): when *no*
+#: bin-mean temperature falls below this value, the whole year is hotter than
+#: any Earth monthly mean (~36 °C, e.g. Assab in the earth worked examples
+#: peaks at t_max = 34.5 °C), i.e. beyond the Hamon formula's calibration
+#: envelope — declared empirical candidate, same epistemic category as the
+#: cold-side freeze rule.
+HOT_DOMAIN_GATE_C = 35.0
+
+
+def _p_phase(
+    p_rate: np.ndarray,
+    et_rate: np.ndarray | None,
+    dt: np.ndarray,
+    p_total: float,
+    phi: np.ndarray,
+    p_harmonic1: float | None,
+) -> tuple[float | None, str]:
+    """Signed rain–demand phase (fraction of the seasonal cycle, (−0.5, 0.5])."""
+    if et_rate is None:
+        return None, MISSING_INPUT
+    et_rate = np.asarray(et_rate, dtype=np.float64)
+    et_total = float(np.sum(et_rate * dt))
+    if p_total <= 0.0 or et_total <= 0.0:
+        return None, NOT_APPLICABLE
+    if p_harmonic1 is None or p_harmonic1 < PHASE_CONCENTRATION_GATE:
+        return None, NOT_APPLICABLE
+    q_e = et_rate * dt / et_total
+    r1_e = float(np.abs(np.sum(q_e * np.exp(1j * phi))))
+    if r1_e < PHASE_CONCENTRATION_GATE:
+        return None, NOT_APPLICABLE
+    q_p = p_rate * dt / p_total
+    arg_p = np.angle(np.sum(q_p * np.exp(1j * phi)))
+    arg_e = np.angle(np.sum(q_e * np.exp(1j * phi)))
+    delta = (arg_p - arg_e) / (2.0 * np.pi)
+    # wrap into (−0.5, 0.5]
+    delta = (delta + 0.5) % 1.0 - 0.5
+    if delta == -0.5:
+        delta = 0.5
+    return float(delta), VALID
 
 
 # ---------------------------------------------------------------------------
