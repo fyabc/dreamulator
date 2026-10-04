@@ -70,9 +70,13 @@
 
 UCC-01（描述量 + L0/L1 测试 + climate_yearly 浏览 + L2 比较 + profile v0/v1 冻结 +
 知识文档 + 前端染色简码 + earth 观测派生 + 太阳系四天体 + nacrea 迁移夹具）**全线完成**。
-v2 候选（登记不排期）以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为单一事实源：
-热侧域门（Venus Ra-w→Rn）、世界级气候态前缀、高度-气压修饰语 -H、跨溶剂广义 AI、
-光照 regime、季节性与字母表改造等——轴设计的物理基础见 `design-anchors.md` §3。
+**v2-α 已冻结（2026-10-04，`classify_v2` 为当前导出 profile）**：季节性后缀字母
+（形态 m/d + 相位 h/o，L2 消融证据 65.7% 压缩 + Köppen 恢复 98.7%/61%）、热侧
+域门 35 °C（Venus 翻 `An`）、显示字母表重构（A/C/D/E 同向 Köppen、B 永久留白、
+修饰语 l/g）、p_total 双基准收口（`p_total_ref365_mm`）。v2 其余候选（登记不排期）
+以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为单一事实源：世界级气候态前缀、
+高度-气压修饰语 -H、跨溶剂广义 AI、光照 regime 等——轴设计的物理基础见
+`design-anchors.md` §3。
 
 ## 写作原则
 
