@@ -4,8 +4,9 @@
 
 The bodies live inside the real-world reference-anchor world (``earth``) as
 additional planet_ids.  Reads a body's ``climate_yearly.msgpack`` +
-``climate_monthly.msgpack`` + the mesh file and writes
-``docs/ucc/examples/<body>.md``:
+``climate_monthly.msgpack`` + the mesh file and writes the generated-tables
+file ``docs/ucc/examples/<body>-data.md`` (the handwritten companion
+``<body>.md`` carries the interpretation prose — script never touches it):
 
 - the declared time basis + provenance (epistemic status travels with the file:
   GCM climatology = ucc-review §6.2 L4, NOT error-free truth; Diviner =
@@ -47,68 +48,6 @@ PLANET_IDS = {
 }
 _ANCHOR_WORLD = "earth"  # real-world reference anchor (name is historical)
 
-# Hand-authored interpretation notes per world (live in the script so the
-# document stays fully regenerable).  Kept factual: numbers quote the run.
-WORLD_NOTES: dict[str, list[str]] = {
-    "mars": [
-        "**全行星 100% Pn（polar/供需 OOD）**：日均气温在任何分箱都不达冰点"
-        "（全网格 t_max 最高 −25 °C），冷侧有效域门全域触发——温度/降水轴照常有效，"
-        "AI/deficit 全 OOD 不报数。§8 演练表预测的「赤道低地 t_max≥0 → AI=0 valid →"
-        " polar/arid (Pa)」路径在**日均**序列上不出现（需要箱均温度越过冰点的数据集，"
-        "如正午切片——那是另一个声明的时间语义）。",
-        "**continental ~68%**：t_range（分箱均值的季节幅度）中位 41 °C、最大 ~106 °C，"
-        "远超 25 °C 阈值——修饰语在火星点亮的正是**季节振幅**（日循环已被 diurnal 平均"
-        "移除），与地球上的语义一致；water_stress 0%（deficit 随 AI 一并 OOD）。",
-        "**P ≡ 0 为声明式导入**：现今火星无液态降水，痕量 H₂O/CO₂ 霜不冒充降水；"
-        "C_TV 因此全域无定义（无降水时 concentration=None，非 0）。表面气压全球均"
-        " 626 Pa、季节 CO₂ 循环与文献一致（MCD ps）。热量带全 polar 是日均气温口径的"
-        "结果：t_max<10 °C 判据在火星无一例外。",
-    ],
-    "moon": [
-        "**全行星 Cn/Pn、无热带带**：分箱 = 12 × 2 h **地方时**（非月份）；赤道正午箱"
-        " +118 °C 但夜箱 −177 °C → t_min < −3 °C → **cold**（Cn）；极地所有箱 < 10 °C"
-        " → polar（Pn，含南极 −217 °C 永影冷阱）。「炙热赤道被判 cold」是分箱均值口径"
-        " + 表面温度的诚实结果，不是矛盾——温度轴描述的是分箱序列，声明随文件走。",
-        "**continental = 日较差修饰语**：t_range 是昼夜幅度（赤道 ~295 °C），修饰语在"
-        "月球点亮的是**日内极端**而非季节（季节信息在 2009–2015 累积产品里被平均掉）。"
-        "water_stress/deficit = MI：无大气 → demand_model=None（比 OOD 更强的拒绝）。",
-        "**观测态例外**：data_source = observation（与 earth root 同级），但温度是"
-        "**地表皮肤温度**（Diviner tbol 玻尔兹曼亮温作 SPT 代理，Williams et al. 2017），"
-        "非近地面气温——契约声明随 provenance/元数据走。P ≡ 0（真空，声明式）→ C_TV"
-        " 全域无定义。GCP 覆盖 100%（fill 0.00%，无回退填充）。",
-    ],
-    "venus": [
-        "**全行星 100% Ra-w = §8 热侧外推缺口的活体实锤**：Hamon 在 408–469 °C 是纯"
-        "算术外推（远超液态水标定域），AI=0（valid）/deficit=1.0 → tropical/arid +"
-        " water_stress——**契约上有效、物理上无意义**。provenance 带响亮 "
-        "demand_model_warning；这是有意保留的演示状态，热侧 out_of_domain 门登记为"
-        "profile 未来工作（知识文档 §8），装门后本世界应翻为 Rn。",
-        "**近等温**：t_range 全网格 = 0.0 °C（Ls 箱间不可辨）；t_mean 408–469 °C 的"
-        " 61 °C 差异全部来自高程（麦克斯韦山脉 10.3 km → 408 °C vs 低地 469 °C，"
-        "~10 K/km 干绝热递减）。continental 0%。",
-        "**P ≡ 0 声明式**：H₂SO₄ 云雨在到达地表前蒸发（virga），无地表降水 → C_TV"
-        " 全域无定义。气候切片为**固定地方时 12 Vhrs**（VCD CGI 的 diurnal 平均"
-        "选项挂起）——92 bar 大气下表面日较差可忽略（~K 级），已声明。",
-    ],
-    "titan": [
-        "**全行星 polar + 供需轴 MI**：tsurf 90.5–96.2 K（−183…−178 °C）→ 所有 cell"
-        " 热量带 polar；AI/deficit = **missing_input**（demand_model=None 为显式声明——"
-        "Hamon 是液态水经验式，94 K 甲烷溶剂超出其适用范围，知识文档 §6；这比先算"
-        " Hamon 再靠冷侧 OOD 门拦截是更强的拒绝）。陆地 Pn、甲烷海 Po；"
-        "continental 0%（t_range ~1.6 K——厚大气抹平表面季节）。",
-        "**时间契约极端案例**：bin = 896.4 地球日（Titan 年 = 土星轨道 29.46 年的"
-        " 1/12）；p_total 按 Titan 年报告。相位锚 = 记录日数 mod Titan 年（表面季节"
-        "振幅 ~1 K，相位选择为二级效应，已声明）。",
-        "**甲烷降水**：全球均 ~360 mm 液态 CH₄/Titan 年（≈12 mm/地球年）；极地湖区"
-        "达 ~1500 mm/Titan 年（≈50 mm/地球年，与文献海面蒸发量级一致）；降水强集中"
-        "（C_TV ~0.63——单一季节箱占主导，TAM 的分点/至点风暴特征）。单位换算按"
-        "液态甲烷密度 422.6 kg/m³，随文件元数据声明。",
-        "**甲烷海 = 模型态**：qsurf 时均 > 0.05 m → ~1.4% cells。本 run 时段"
-        "（y241–250）湖区集群偏南半球——Faulk 水文在土星年时标上迁移湖泊；观测名"
-        "锚点（克拉肯/丽姬亚/安大略）在模型里可能是干地 cell，站点表如实记录"
-        "（观测名锚点按最近 cell 取、不限海陆；另有两个模型湖区集群锚点）。",
-    ],
-}
 
 _THERMAL_LETTERS = {"polar": "P", "cold": "C", "temperate": "T", "tropical": "R"}
 _SUPPLY_LETTERS = {"arid": "a", "semi_arid": "s", "transitional": "t", "humid": "h"}
@@ -223,7 +162,7 @@ def main() -> None:
     map_dir = args.map_dir or _ROOT / f"data/worlds/{_ANCHOR_WORLD}/maps" / planet_id
     out = (
         args.out
-        or _ROOT / f"docs/ucc/examples/{world}.md"
+        or _ROOT / f"docs/ucc/examples/{world}-data.md"
     )
 
     print(f"Reading {map_dir}/climate_yearly.msgpack …")
@@ -373,15 +312,14 @@ def main() -> None:
         )
 
     prov_lines = "\n".join(f"> - {k}: {v}" for k, v in provenance.items())
-    notes = WORLD_NOTES.get(world, [])
-    notes_block = "\n".join(f"- {s}" for s in notes) if notes else "- （待补）"
     today = datetime.date.today().isoformat()
     doc = (
-        f"""# {world.capitalize()} · UCC Worked Examples（{profile}）
+        f"""# {world.capitalize()} · UCC Worked Examples — 数据表（{profile}）
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet {world}`
-> 生成日期：{today}。描述量与分类语义见
+> 生成日期：{today}。本天体的解读（世界要点、读法）见手写文档
+> `docs/ucc/examples/{world}.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
 > **状态简写**：`OOD` = out_of_domain（需求模型超出有效域）；`MI` = missing_input、
@@ -393,10 +331,6 @@ def main() -> None:
 **时间基准**：12 分箱 × {bin_days:.2f} 地球日 = 窗口 {window_days:.1f} 日；
 `month_0` = `{month_0}`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界
 直接比较（知识文档 §2）。
-
-## 0. 本世界要点（手写注记，随脚本再生）
-
-{notes_block}
 
 ## 1. 全局分布（{n} cells；陆地 {n_land}，非陆地 {n_ocean}）
 

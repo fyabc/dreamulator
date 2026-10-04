@@ -16,8 +16,10 @@ The document is the migration-semantics fixture: thresholds are globally shared
 semantically correct — not earth-like — labels.  Future profile/engine/config
 changes that move these tables are conscious deltas to accept or investigate.
 
-Output: ``docs/ucc/examples/nacrea.md``
-(regenerate, don't hand-edit).
+Output: the generated-tables file ``docs/ucc/examples/nacrea-data.md``
+(regenerate, don't hand-edit).  The handwritten companion
+``docs/ucc/examples/nacrea.md`` carries the fixture purpose (夹具目的) and
+maintenance prose — the script never touches it.
 
 Usage:
     uv run python scripts/climate/ucc_examples_nacrea.py
@@ -41,7 +43,7 @@ from dreamulator.map.export import find_mesh_file, load_cvt_mesh  # noqa: E402
 from dreamulator.map.ucc import status_short  # noqa: E402
 
 _DEFAULT_MAP = Path("data/worlds/nacrea/maps/satellite_nacrea")
-_DEFAULT_OUT = Path("docs/ucc/examples/nacrea.md")
+_DEFAULT_OUT = Path("docs/ucc/examples/nacrea-data.md")
 
 # Representative sites: (name, lat, lon, want) — anchors from geography.yaml
 # (named continents/oceans/features).  ``want`` forces the nearest cell of that
@@ -208,7 +210,7 @@ def main() -> None:
         ),
         (
             "E3 water_stress 标记季节干旱区（deficit ≥ 0.5）",
-            f"陆地份额 {ws_share:.1%}；极值点见 §5",
+            f"陆地份额 {ws_share:.1%}；极值点见 §4",
             "✓" if ws_share > 0 else "✗",
         ),
         (
@@ -321,21 +323,14 @@ def main() -> None:
 
     today = datetime.date.today().isoformat()
     doc = (
-        f"""---
-title: "UCC 迁移语义夹具：{profile} 应用于 Nacrea"
-type: fixture
-tags: [ucc, climate, classification, fixture, migration]
-date: {today}
-status: accepted
----
-
-# 0010 · UCC 迁移语义夹具（{profile} × Nacrea）
+        f"""# Nacrea · UCC 迁移语义夹具 — 数据表（{profile} × Nacrea）
 
 > UCC-01 第四步 4b/4c 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/climate/ucc_examples_nacrea.py`
 > 数据 = 正典构建导出 `maps/satellite_nacrea/climate_yearly.msgpack`
 > （引擎输出，`data_source: model`，profile {profile}）+ `climate_monthly.msgpack`
-> + 网格文件。描述量与分类语义见
+> + 网格文件。夹具目的与维护说明见手写文档
+> `docs/ucc/examples/nacrea.md`；描述量与分类语义见
 > `docs/ucc/specification.md`；Earth 侧对照例见
 > `docs/ucc/examples/earth.md`。
 > 生成日期：{today}。
@@ -343,19 +338,7 @@ status: accepted
 > ——全年无液态水，AI/deficit 不报数）；`MI` = missing_input、`NA` = not_applicable、
 > `NPD` = no_positive_demand（语义见知识文档 §3）。
 
-## 1. 夹具目的
-
-分类阈值全局共享（绝不按世界取分位数），所以把同一 profile 应用到慢自转
-（Ω=0.31 Ω⊕、90° 单圈）、短年（99.98 地球日）、62 K 温室的 Nacrea 上，必须产出
-**语义正确而非地球样**的标签。本文档记录 {profile} 在当前正典气候态上的结果，
-作为将来 profile / 引擎 / 设定变更的对照基线：下述任何表格的移动都是需要有意
-接受或排查的语义变化，不是可以静默发生的漂移。
-
-时间契约迁移点（知识文档 §2）：12 个分箱是**参考年**（365.25 地球日）的等长
-切片，每箱 ≈ 0.37 个 Nacrea 本地年——月箱序列不是「本地月份」；`p_total` 按
-参考年报告，不等于一个本地年累计。AI 为窗口不变量，可直接跨世界比较。
-
-## 2. 全局分布（{n} cells；陆地 {n_land}，海洋 {n_ocean}）
+## 1. 全局分布（{n} cells；陆地 {n_land}，海洋 {n_ocean}）
 
 **热量带**：陆地+海洋合计 — """
         + "、".join(f"{name} {int((th == i).sum())}" for i, name in enumerate(thermal_bands))
@@ -397,7 +380,7 @@ status: accepted
 t_mean 全域 {t_mean.min():.1f} .. {t_mean.max():.1f} °C；t_range 全域 0 ..
 {t_range.max():.2f} °C。
 
-## 3. 预期 vs 实际（迁移验收）
+## 2. 预期 vs 实际（迁移验收）
 
 计划时（ucc-01-plan 4b）按 v0 记录的预期，v1 语义下逐条核对：
 
@@ -407,7 +390,7 @@ t_mean 全域 {t_mean.min():.1f} .. {t_mean.max():.1f} °C；t_range 全域 0 ..
         + "\n".join(f"| {a} | {b} | {c} |" for a, b, c in checks)
         + """
 
-## 4. 代表地点（命名地理锚点，geography.yaml）
+## 3. 代表地点（命名地理锚点，geography.yaml）
 
 | # | 地点 | 纬 | 经 | 高程 m | T均 | T范围 | P | AI | deficit | 类码 |
 |---|------|----|----|--------|-----|-------|---|----|---------|------|
@@ -420,22 +403,13 @@ t_mean 全域 {t_mean.min():.1f} .. {t_mean.max():.1f} °C；t_range 全域 0 ..
 """
         + "\n".join(site_details)
         + """
-## 5. 极值点
+## 4. 极值点
 
 | 量 | cell | 纬, 经 | 高程 m | 描述量 | 类码 |
 |----|------|--------|--------|--------|------|
 """
         + "\n".join(extremes)
         + """
-
-## 6. 夹具维护
-
-- 正典气候重建后（`uv run dreamulator build nacrea --only climate` 或全量）重跑
-  本脚本刷新文档；数值移动应能与构建改动对应。
-- profile 升级（v2 等）时：标题/元数据随 `climate_yearly.msgpack` 的 `profile`
-  字段自动更新，§3 预期表需人工重述。
-- 本文档是**语义夹具**（记录当前正典的正确行为），不是设定文档；设定变更走
-  ADR 流程，本文档只在重建后刷新。
 """
     )
 
