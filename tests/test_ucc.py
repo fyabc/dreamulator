@@ -17,10 +17,12 @@ from dreamulator.map.ucc import (
     OUT_OF_DOMAIN,
     PROFILE_V0,
     PROFILE_V1,
+    THERMAL_CODE_LETTERS_V2,
     VALID,
     ClimateDescriptors,
     classify_v0,
     classify_v1,
+    classify_v2,
     compute_descriptors,
     status_short,
 )
@@ -369,3 +371,107 @@ def test_hot_side_domain_gate() -> None:
     t_mixed[0] = 20.0
     d = compute_descriptors(t_mixed, p, et_rate=et)
     assert d.ai is not None and d.ai_status == VALID
+
+
+# ---------------------------------------------------------------------------
+# profile v2: alphabet rework + seasonality suffix letters
+# ---------------------------------------------------------------------------
+
+
+def test_v2_alphabet_and_grammar() -> None:
+    # Köppen-direction thermal letters with B permanently blank; modifiers
+    # l (陆) / g (干季); grammar {thermal}{supply}-{mods}{shape}{phase}.
+    d = compute_descriptors(
+        np.array([10.0, 22.0] * 6),  # t_min 10 ≥ ... temperate; mild season
+        np.full(12, 1.0),
+        et_rate=np.full(12, 1.0),
+        dt=np.full(12, 30.4375),
+    )
+    c = classify_v2(d, is_land=True)
+    assert c.thermal == "temperate"
+    assert c.code[0] == "C"  # temperate → C (Köppen-direction, not T)
+    # Venus-like hothouse: tropical + OOD supply → "An" under the hot gate.
+    d_hot = compute_descriptors(np.full(12, 60.0), np.full(12, 1.0), et_rate=np.full(12, 2.0))
+    c_hot = classify_v2(d_hot, is_land=True)
+    assert c_hot.thermal == "tropical" and c_hot.code == "An"
+    # Polar ocean → Eo; B never appears in any thermal letter.
+    assert THERMAL_CODE_LETTERS_V2["tropical"] == "A"
+    assert THERMAL_CODE_LETTERS_V2["temperate"] == "C"
+    assert THERMAL_CODE_LETTERS_V2["cold"] == "D"
+    assert THERMAL_CODE_LETTERS_V2["polar"] == "E"
+    assert "B" not in THERMAL_CODE_LETTERS_V2.values()
+    # Supply ladder a/p/t/u — alphabetically ascending with wetness; s and h
+    # are retired (Köppen Cs echo / suffix-h double duty).
+    from dreamulator.map.ucc import SUPPLY_CODE_LETTERS_V2
+
+    assert SUPPLY_CODE_LETTERS_V2 == {
+        "arid": "a",
+        "semi_arid": "p",
+        "transitional": "t",
+        "humid": "u",
+    }
+    d_humid = compute_descriptors(
+        np.full(12, 20.0), np.full(12, 2.0), et_rate=np.full(12, 1.0), dt=np.full(12, 30.0)
+    )
+    assert classify_v2(d_humid, is_land=True).code[1] == "u"
+
+
+def test_v2_seasonality_suffix_letters() -> None:
+    m = 12
+    et = np.zeros(m)
+    et[6] = 12.0  # single-peak demand in bin 6 (strong first harmonic)
+
+    def make(p: np.ndarray, t_lo: float, t_hi: float) -> ClimateDescriptors:
+        t = np.linspace(t_lo, t_hi, m)  # thermal band set-up only
+        return compute_descriptors(t, p, et_rate=et, dt=np.full(m, 30.4375))
+
+    # Monsoon: single wet season with the demand peak, strong season → m + h
+    # (aligned P and demand → no deficit → no g).
+    p_monsoon = np.zeros(m)
+    p_monsoon[6] = 12.0
+    d = make(p_monsoon, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "unimodal" and c.phase == "in_phase"
+    assert c.code.endswith("mh")
+
+    # Mediterranean mirror: wet season half a cycle away → m + o (misalignment
+    # also earns the g dry-season modifier, so the suffix reads "-gmo").
+    p_medi = np.zeros(m)
+    p_medi[0] = 12.0
+    d = make(p_medi, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "unimodal" and c.phase == "anti_phase"
+    assert c.code.endswith("gmo")
+
+    # Uniform rain: C_TV below the gate → shape silent (no "u" letter), phase NA.
+    d = make(np.full(m, 1.0), 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape is None and c.phase is None
+    assert "-" not in c.code or c.code.split("-")[1] in ("l", "g", "lg")
+
+    # Bimodal wet seasons → d letter (Kashmir-type double rain peak).
+    p_bi = np.zeros(m)
+    p_bi[0] = 6.0
+    p_bi[6] = 6.0
+    d = make(p_bi, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "bimodal" and c.phase is None  # R1 → 0: phase gate blocks
+    assert c.code.endswith("gd")
+
+    # Suffixes never change the main class: same thermal/supply as v1.
+    d = make(p_monsoon, 5.0, 25.0)
+    c1 = classify_v1(d, is_land=True)
+    c2 = classify_v2(d, is_land=True)
+    assert c1.thermal == c2.thermal and c1.supply == c2.supply
+
+
+def test_v2_modifier_letters_renamed() -> None:
+    # continental → l (x avoided as the wildcard convention); water_stress → g.
+    t = np.array([0.0, 40.0] * 6)  # t_range 40 → continental
+    p = np.array([0.0, 4.0] * 6)  # deficit against demand → likely g
+    et = np.array([4.0, 0.1] * 6)  # demand in the cold half (anti-phase set-up)
+    d = compute_descriptors(t, p, et_rate=et, dt=np.full(12, 30.4375))
+    c = classify_v2(d, is_land=True)
+    assert c.continental and "l" in c.code
+    if c.water_stress:
+        assert "g" in c.code and "w" not in c.code and "x" not in c.code

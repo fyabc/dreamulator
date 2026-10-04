@@ -499,11 +499,13 @@ def write_ucc_yearly(
     from .engine.climate_physics import potential_evapotranspiration_hamon_monthly
     from .map.export import find_mesh_file, load_cvt_mesh
     from .map.ucc import (
+        PHASE_CODE_LETTERS_V2,
         PROFILE_CURRENT,
+        SHAPE_CODE_LETTERS_V2,
         STATUS_CODES,
         SUPPLY_BANDS_CURRENT,
         THERMAL_BANDS_CURRENT,
-        classify_v1,
+        classify_v2,
         compute_descriptors,
     )
 
@@ -531,6 +533,10 @@ def write_ucc_yearly(
     status_index = {s: i for i, s in enumerate(status_codes)}
     thermal_index = {s: i for i, s in enumerate(THERMAL_BANDS_CURRENT)}
     supply_index = {s: i for i, s in enumerate(SUPPLY_BANDS_CURRENT)}
+    shape_codes = list(SHAPE_CODE_LETTERS_V2)
+    shape_index = {s: i for i, s in enumerate(shape_codes)}
+    phase_codes = list(PHASE_CODE_LETTERS_V2)
+    phase_index = {s: i for i, s in enumerate(phase_codes)}
 
     desc_f32: dict[str, np.ndarray] = {
         k: np.empty(n, np.float32)
@@ -547,12 +553,18 @@ def write_ucc_yearly(
     ai = np.full(n, np.nan, np.float32)
     deficit = np.full(n, np.nan, np.float32)
     concentration = np.full(n, np.nan, np.float32)
+    p_harmonic1 = np.full(n, np.nan, np.float32)
+    p_harmonic2 = np.full(n, np.nan, np.float32)
+    p_phase = np.full(n, np.nan, np.float32)
+    p_phase_status = np.empty(n, np.uint8)
     ai_status = np.empty(n, np.uint8)
     deficit_status = np.empty(n, np.uint8)
     ucc_thermal = np.empty(n, np.uint8)
     ucc_supply = np.empty(n, np.uint8)
     ucc_supply_status = np.empty(n, np.uint8)
     ucc_modifiers = np.empty(n, np.uint8)
+    ucc_shape = np.empty(n, np.uint8)
+    ucc_phase = np.empty(n, np.uint8)
 
     print(f"  Computing UCC descriptors + {PROFILE_CURRENT} classification ({n} cells) …")
     for i in range(n):
@@ -574,11 +586,20 @@ def write_ucc_yearly(
         deficit_status[i] = status_index[d.deficit_status]
         if d.concentration is not None:
             concentration[i] = d.concentration
-        c = classify_v1(d, is_land=bool(water_class[i] == "land"))
+        if d.p_harmonic1 is not None:
+            p_harmonic1[i] = d.p_harmonic1
+        if d.p_harmonic2 is not None:
+            p_harmonic2[i] = d.p_harmonic2
+        if d.p_phase is not None:
+            p_phase[i] = d.p_phase
+        p_phase_status[i] = status_index[d.p_phase_status]
+        c = classify_v2(d, is_land=bool(water_class[i] == "land"))
         ucc_thermal[i] = thermal_index[c.thermal]
         ucc_supply[i] = supply_index[c.supply] if c.supply is not None else 255
         ucc_supply_status[i] = status_index[c.supply_status]
         ucc_modifiers[i] = (1 if c.continental else 0) | (2 if c.water_stress else 0)
+        ucc_shape[i] = shape_index[c.shape] if c.shape is not None else 255
+        ucc_phase[i] = phase_index[c.phase] if c.phase is not None else 255
 
     payload: dict[str, Any] = {
         **result_metadata(),
@@ -592,20 +613,33 @@ def write_ucc_yearly(
         "profile": PROFILE_CURRENT,
         "thermal_bands": list(THERMAL_BANDS_CURRENT),
         "supply_bands": list(SUPPLY_BANDS_CURRENT),
+        "shape_codes": shape_codes,
+        "phase_codes": phase_codes,
         "bin_days": float(bin_days),
         "window_days": float(bin_days) * 12,
         "data_source": data_source,
         "provenance": provenance,
+        # p_total dual-basis closure (astra ledger #9): p_total_mm follows the
+        # declared local window (e.g. per Martian year); p_total_ref365_mm is
+        # the rate-normalized 365.25-day view for cross-world comparison.
+        "p_total_basis": "local_window",
         **{k: v.tobytes() for k, v in desc_f32.items()},
+        "p_total_ref365_mm": (desc_f32["p_total_mm"] * (365.25 / (float(bin_days) * 12))).tobytes(),
         "ai": ai.tobytes(),
         "ai_status": ai_status.tobytes(),
         "deficit": deficit.tobytes(),
         "deficit_status": deficit_status.tobytes(),
         "concentration": concentration.tobytes(),
+        "p_harmonic1": p_harmonic1.tobytes(),
+        "p_harmonic2": p_harmonic2.tobytes(),
+        "p_phase": p_phase.tobytes(),
+        "p_phase_status": p_phase_status.tobytes(),
         "ucc_thermal": ucc_thermal.tobytes(),
         "ucc_supply": ucc_supply.tobytes(),
         "ucc_supply_status": ucc_supply_status.tobytes(),
         "ucc_modifiers": ucc_modifiers.tobytes(),
+        "ucc_shape": ucc_shape.tobytes(),
+        "ucc_phase": ucc_phase.tobytes(),
     }
     if extra_metadata:
         payload.update(extra_metadata)
