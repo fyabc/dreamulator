@@ -303,11 +303,6 @@ THERMAL_BANDS_V0 = ("polar", "cold", "temperate", "tropical")
 SUPPLY_BANDS_V0 = ("arid", "transitional", "humid")
 SUPPLY_BANDS_V1 = ("arid", "semi_arid", "transitional", "humid")
 
-#: The profile current exports are written with.
-PROFILE_CURRENT = PROFILE_V1
-THERMAL_BANDS_CURRENT = THERMAL_BANDS_V0
-SUPPLY_BANDS_CURRENT = SUPPLY_BANDS_V1
-
 # Compact display codes (the profile's short alphabet, versioned with it).
 # Letters + hyphen only — speakable and safe in URLs/shells/filenames.
 # Thermal: one uppercase letter; supply: one lowercase letter, ``o`` for the
@@ -439,8 +434,153 @@ def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
 
 
 def classify_v1(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
-    """Classify under profile v1 (= v0 + arid split at AI 0.2) — the current
-    export profile."""
+    """Classify under profile v1 (= v0 + arid split at AI 0.2) — kept for
+    reproducibility alongside v0."""
     return _classify(
         d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V1
+    )
+
+
+# ---------------------------------------------------------------------------
+# Classification profile v2 (ucc-v2, frozen 2026-10-04 after the seasonality
+# L2 ablation — private/reviews/ucc-v2-seasonality-l2-2026-10-04.py)
+# ---------------------------------------------------------------------------
+
+PROFILE_V2 = "ucc-v2"
+"""Current profile.  v2 = v1's band structure + the seasonality suffix letters
++ the reworked display alphabet:
+
+- Main classes and thresholds are unchanged from v1 (thermal nodes 10/−3/18 °C,
+  AI edges 0.2/0.5/1.0, modifier gates t_range 25 °C / deficit 0.5).
+- Alphabet rework (breaking, sanctioned by the 2026-09-24 no-compat ruling):
+  thermal letters follow Köppen's direction — ``A`` tropical (hottest) …
+  ``E`` polar (coldest) — with ``B`` permanently reserved-blank (Köppen's B is
+  the dry group; in UCC dryness lives on the lowercase supply axis, so a
+  thermal ``B`` would be a standing misread trap and is never issued).
+- Supply letters: ``a`` arid / ``p`` semi-arid (stePpe — echoing Köppen BS's
+  *concept* in a non-colliding glyph) / ``t`` transitional / ``u`` humid.
+  ``s`` and ``h`` are retired: with v2's thermal C meaning temperate (same as
+  Köppen), a UCC ``Cs`` (temperate·semi-arid) would read as a near-synonym of
+  Köppen ``Cs`` (temperate·dry-summer); ``h`` doubled as the in-phase suffix
+  letter and echoed Köppen's *hot* (BWh) against our humid.  Bonus:
+  a < p < t < u ascends the alphabet with wetness, so legends read monotone.
+- Modifiers: continental → ``l`` (陆, replaces ``x`` — x is the wildcard
+  convention in climate-classification practice and must not be a formal
+  letter); water_stress → ``g`` (干季, replaces ``w`` to stop the echo of
+  Köppen's winter-dry ``w``), display name 干季/seasonal dry.
+- New suffix letters (never change the main class):
+  - precipitation-season shape (gate C_TV ≥ 0.25): ``m`` unimodal wet season /
+    ``d`` bimodal (two wet seasons half a cycle apart, R2 > R1); below the
+    gate the letter is silent ("u"-niform is the default, not printed).
+  - rain–demand phase (valid only where both axes carry a dominant seasonal
+    cycle — an extratropical instrument; see the phase descriptor): ``h``
+    in-phase (|Δφ| ≤ 1/12 cycle, 雨热同季) / ``o`` anti-phase (|Δφ| ≥ 3/12,
+    雨热反季, Mediterranean-type); mid-range and not-applicable are silent.
+- Evidence: shape letter compresses within-class C_TV variance by 65.7 %
+  (v1 modifier benchmarks: x 42 %, w 14 %); phase letter recovers Köppen's
+  precipitation letters almost perfectly (w→98.7 % h, s→61 % o); perturbation
+  swap-rate cost +0.03 pp.
+"""
+
+THERMAL_CODE_LETTERS_V2 = {"tropical": "A", "temperate": "C", "cold": "D", "polar": "E"}
+#: v2 supply letters (a/p/t/u, alphabetically ascending with wetness).  The
+#: v1 map above stays for v0/v1 reproducibility — their codes never change.
+SUPPLY_CODE_LETTERS_V2 = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
+MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g"}
+SHAPE_CODE_LETTERS_V2 = {"unimodal": "m", "bimodal": "d"}
+PHASE_CODE_LETTERS_V2 = {"in_phase": "h", "anti_phase": "o"}
+#: C_TV gate for the shape letter (declared empirical candidate; L2 scan
+#: 0.15/0.20/0.25 → 0.25 wins compression and matches the phase gate).
+SHAPE_GATE_C_TV_V2 = 0.25
+PHASE_LETTER_IN_CYCLE = 1.0 / 12.0
+PHASE_LETTER_ANTI_CYCLE = 3.0 / 12.0
+
+PROFILE_CURRENT = PROFILE_V2
+THERMAL_BANDS_CURRENT = THERMAL_BANDS_V0
+SUPPLY_BANDS_CURRENT = SUPPLY_BANDS_V1
+THERMAL_CODE_LETTERS_CURRENT = THERMAL_CODE_LETTERS_V2
+MOD_CODE_LETTERS_CURRENT = MOD_CODE_LETTERS_V2
+
+
+@dataclass(frozen=True)
+class UCCClassV2:
+    """One cell's classification under profile v2.
+
+    Same main-class semantics as v1 (thermal/supply bands, modifier gates);
+    adds the seasonality suffixes ``shape`` (unimodal/bimodal wet season, None
+    when C_TV is below the gate) and ``phase`` (in_phase/anti_phase, None when
+    the phase descriptor is not valid or mid-range).  Like modifiers, the
+    suffix letters never change the main class.
+    """
+
+    profile: str
+    thermal: str
+    supply: str | None
+    supply_status: str
+    is_land: bool
+    continental: bool
+    water_stress: bool | None
+    shape: str | None
+    phase: str | None
+
+    @property
+    def label(self) -> str:
+        return self.thermal if self.supply is None else f"{self.thermal}/{self.supply}"
+
+    @property
+    def code(self) -> str:
+        """Compact v2 code, e.g. ``Dp-lgmo`` (cold·semi-arid, all suffixes),
+        ``An`` (hot-side OOD Venus), ``Eo`` (polar ocean).  Grammar: thermal ·
+        supply - modifiers · shape · phase; silent letters are simply absent,
+        so codes stay compact."""
+        if self.supply is not None:
+            s = SUPPLY_CODE_LETTERS_V2[self.supply]
+        else:
+            s = LAND_NA_CODE_LETTER if self.is_land else OCEAN_CODE_LETTER
+        code = THERMAL_CODE_LETTERS_V2[self.thermal] + s
+        mods = ""
+        if self.continental:
+            mods += MOD_CODE_LETTERS_V2["continental"]
+        if self.water_stress:
+            mods += MOD_CODE_LETTERS_V2["water_stress"]
+        suffix = mods
+        if self.shape is not None:
+            suffix += SHAPE_CODE_LETTERS_V2[self.shape]
+        if self.phase is not None:
+            suffix += PHASE_CODE_LETTERS_V2[self.phase]
+        return code + ("-" + suffix if suffix else "")
+
+
+def classify_v2(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV2:
+    """Classify under profile v2 (v1 band structure + seasonality letters)."""
+    base = _classify(
+        d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V2
+    )
+    shape: str | None = None
+    if (
+        d.concentration is not None
+        and d.concentration >= SHAPE_GATE_C_TV_V2
+        and d.p_harmonic1 is not None
+        and d.p_harmonic2 is not None
+    ):
+        # Tolerance: a delta spike carries *every* harmonic at amplitude 1 —
+        # float noise must not flip a pure spike to "bimodal".
+        shape = "bimodal" if d.p_harmonic2 > d.p_harmonic1 + 1e-9 else "unimodal"
+    phase: str | None = None
+    if d.p_phase_status == VALID and d.p_phase is not None:
+        abs_phase = abs(d.p_phase)
+        if abs_phase <= PHASE_LETTER_IN_CYCLE:
+            phase = "in_phase"
+        elif abs_phase >= PHASE_LETTER_ANTI_CYCLE:
+            phase = "anti_phase"
+    return UCCClassV2(
+        profile=base.profile,
+        thermal=base.thermal,
+        supply=base.supply,
+        supply_status=base.supply_status,
+        is_land=base.is_land,
+        continental=base.continental,
+        water_stress=base.water_stress,
+        shape=shape,
+        phase=phase,
     )

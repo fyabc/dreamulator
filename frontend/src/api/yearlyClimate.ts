@@ -42,6 +42,16 @@ export interface YearlyClimateData {
   deficitStatus: Uint8Array
   /** Precipitation concentration C_TV; NaN when there is no precipitation. */
   concentration: Float32Array
+  /** First/second circular-harmonic amplitude of the precipitation mass
+   * (v2-α seasonality shape: R2 > R1 = bimodal wet seasons); NaN without
+   * precipitation. */
+  pHarmonic1?: Float32Array
+  pHarmonic2?: Float32Array
+  /** Signed rain–demand phase as a fraction of the seasonal cycle in
+   * (−0.5, 0.5] (0 = in phase, ±0.5 = anti-phase); NaN unless the status is
+   * 'valid'. */
+  pPhase?: Float32Array
+  pPhaseStatus?: Uint8Array
   // --- Classification (UCC-01 step 4a) — optional: older exports predate the
   // frozen profile, so every field below may be absent (layer then degrades to
   // fully transparent and the panel hides the class row).
@@ -62,6 +72,11 @@ export interface YearlyClimateData {
   uccSupplyStatus?: Uint8Array
   /** Per-cell modifier bitmask: bit 0 = continental, bit 1 = water_stress. */
   uccModifiers?: Uint8Array
+  /** shape/phase letter code lists (v2 exports); per-cell index, 255 = none. */
+  shapeCodes?: string[]
+  phaseCodes?: string[]
+  uccShape?: Uint8Array
+  uccPhase?: Uint8Array
   // --- Declarations (data & model semantics, shown on demand in the cell
   // inspector).  bin_days/window_days/provenance are written by the solar
   // importers and the obs-derived earth file; engine exports predate them and
@@ -90,40 +105,74 @@ function toUint8(u8: Uint8Array): Uint8Array {
   return new Uint8Array(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength))
 }
 
-// Compact display codes — mirror of THERMAL_CODE_LETTERS / SUPPLY_CODE_LETTERS
-// in src/dreamulator/map/ucc.py (single source of truth is the Python side;
-// codes are versioned with the profile and are NOT Köppen letters).
-const UCC_THERMAL_LETTERS: Record<string, string> = {
+// Compact display codes — mirror of THERMAL_CODE_LETTERS(_V2) / SUPPLY_CODE_
+// LETTERS / MOD_CODE_LETTERS(_V2) in src/dreamulator/map/ucc.py (single source
+// of truth is the Python side; codes are versioned with the profile and are
+// NOT Köppen letters).  v1: P/C/T/R + x/w.  v2: Köppen-direction A/C/D/E with
+// B permanently blank, modifiers l/g, suffix letters m/d (wet-season shape)
+// and h/o (rain–demand phase).
+const UCC_THERMAL_LETTERS_V1: Record<string, string> = {
   polar: 'P',
   cold: 'C',
   temperate: 'T',
   tropical: 'R',
 }
-const UCC_SUPPLY_LETTERS: Record<string, string> = {
+const UCC_THERMAL_LETTERS_V2: Record<string, string> = {
+  tropical: 'A',
+  temperate: 'C',
+  cold: 'D',
+  polar: 'E',
+}
+const UCC_SUPPLY_LETTERS_V1: Record<string, string> = {
   arid: 'a',
   semi_arid: 's',
   transitional: 't',
   humid: 'h',
 }
+// v2: a/p/t/u — alphabetically ascending with wetness; s retired (with v2's
+// thermal C meaning temperate, UCC "Cs" would read as Köppen's temperate
+// dry-summer), h retired (double duty with the in-phase suffix; Köppen BWh's
+// h means *hot* against our humid).
+const UCC_SUPPLY_LETTERS_V2: Record<string, string> = {
+  arid: 'a',
+  semi_arid: 'p',
+  transitional: 't',
+  humid: 'u',
+}
+const UCC_SHAPE_LETTERS: Record<string, string> = { unimodal: 'm', bimodal: 'd' }
+const UCC_PHASE_LETTERS: Record<string, string> = { in_phase: 'h', anti_phase: 'o' }
 
-/** Compose a cell's short UCC code (e.g. `Rh`, `Cs-xw`, `Ro` ocean, `Pn` ice
- *  cap) from the decoded yearly data.  Null when the file predates the
- *  classification fields. */
+/** Compose a cell's short UCC code (v1 e.g. `Rh`, `Cs-xw`; v2 e.g. `Ct-mh`,
+ * `Dp-lgmo`, `An` hot-side OOD, `Eo` polar ocean) from the decoded yearly
+ * data.  Null when the file predates the classification fields. */
 export function uccCode(d: YearlyClimateData, i: number, isLand: boolean): string | null {
   const { uccThermal, uccSupply, uccModifiers, thermalBands, supplyBands } = d
   if (!uccThermal || !thermalBands || !supplyBands) return null
-  const t = UCC_THERMAL_LETTERS[thermalBands[uccThermal[i]]]
+  const v2 = (d.profile ?? '').startsWith('ucc-v2')
+  const thermalLetters = v2 ? UCC_THERMAL_LETTERS_V2 : UCC_THERMAL_LETTERS_V1
+  const supplyLetters = v2 ? UCC_SUPPLY_LETTERS_V2 : UCC_SUPPLY_LETTERS_V1
+  const t = thermalLetters[thermalBands[uccThermal[i]]]
   if (!t) return null
   const sIdx = uccSupply ? uccSupply[i] : 255
   let code = t
   if (sIdx === 255) {
     code += isLand ? 'n' : 'o'
   } else {
-    code += UCC_SUPPLY_LETTERS[supplyBands[sIdx]] ?? ''
+    code += supplyLetters[supplyBands[sIdx]] ?? ''
   }
   const mods = uccModifiers ? uccModifiers[i] : 0
-  const modStr = (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
-  return modStr ? `${code}-${modStr}` : code
+  let suffix = v2
+    ? (mods & 1 ? 'l' : '') + (mods & 2 ? 'g' : '')
+    : (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
+  if (v2 && d.uccShape && d.shapeCodes) {
+    const s = d.uccShape[i]
+    if (s !== 255) suffix += UCC_SHAPE_LETTERS[d.shapeCodes[s]] ?? ''
+  }
+  if (v2 && d.uccPhase && d.phaseCodes) {
+    const p = d.uccPhase[i]
+    if (p !== 255) suffix += UCC_PHASE_LETTERS[d.phaseCodes[p]] ?? ''
+  }
+  return suffix ? `${code}-${suffix}` : code
 }
 
 export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
@@ -142,6 +191,10 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     tBelowFrac: toFloat32(obj.t_below_frac as Uint8Array),
     pMeanMmPerMonth: toFloat32(obj.p_mean_mm_per_month as Uint8Array),
     pTotalMm: toFloat32(obj.p_total_mm as Uint8Array),
+    pHarmonic1: obj.p_harmonic1 ? toFloat32(obj.p_harmonic1 as Uint8Array) : undefined,
+    pHarmonic2: obj.p_harmonic2 ? toFloat32(obj.p_harmonic2 as Uint8Array) : undefined,
+    pPhase: obj.p_phase ? toFloat32(obj.p_phase as Uint8Array) : undefined,
+    pPhaseStatus: obj.p_phase_status ? toUint8(obj.p_phase_status as Uint8Array) : undefined,
     ai: toFloat32(obj.ai as Uint8Array),
     aiStatus: toUint8(obj.ai_status as Uint8Array),
     deficit: toFloat32(obj.deficit as Uint8Array),
@@ -169,6 +222,10 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     out.uccSupply = toUint8(obj.ucc_supply as Uint8Array)
     out.uccSupplyStatus = toUint8(obj.ucc_supply_status as Uint8Array)
     out.uccModifiers = toUint8(obj.ucc_modifiers as Uint8Array)
+    out.shapeCodes = (obj.shape_codes as string[]) ?? undefined
+    out.phaseCodes = (obj.phase_codes as string[]) ?? undefined
+    out.uccShape = obj.ucc_shape ? toUint8(obj.ucc_shape as Uint8Array) : undefined
+    out.uccPhase = obj.ucc_phase ? toUint8(obj.ucc_phase as Uint8Array) : undefined
   }
   return out
 }

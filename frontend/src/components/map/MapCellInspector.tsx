@@ -477,13 +477,31 @@ function CellDetails({
     ...(uccModBits & 1 ? ['continental'] : []),
     ...(uccModBits & 2 ? ['waterStress'] : []),
   ]
-  // Compact code (e.g. "Ts-xw"); the hover tooltip carries the full name.
+  // Seasonality suffix letters (v2 exports): wet-season shape + rain–demand
+  // phase, both optional per cell (255 = no letter).
+  const uccShapeKey =
+    hasYearly && yearlyData!.uccShape && yearlyData!.shapeCodes
+      ? (() => {
+          const idx = yearlyData!.uccShape![yi]
+          return idx !== 255 ? yearlyData!.shapeCodes![idx] : null
+        })()
+      : null
+  const uccPhaseKey =
+    hasYearly && yearlyData!.uccPhase && yearlyData!.phaseCodes
+      ? (() => {
+          const idx = yearlyData!.uccPhase![yi]
+          return idx !== 255 ? yearlyData!.phaseCodes![idx] : null
+        })()
+      : null
+  // Compact code (v1 "Ts-xw" / v2 "Ds-lgmo"); tooltip carries the full name.
   const uccShortCode = hasYearly && uccClassKey ? uccCode(yearlyData!, yi, !uccIsOcean) : null
+  const uccNameParts = [
+    ...uccModifierKeys.map((k) => t(`uccMod.${k}`)),
+    ...(uccShapeKey ? [t(`uccShape.${uccShapeKey}`)] : []),
+    ...(uccPhaseKey ? [t(`uccPhase.${uccPhaseKey}`)] : []),
+  ]
   const uccFullName = uccClassKey
-    ? t(uccClassKey) +
-      (uccModifierKeys.length > 0
-        ? ' · ' + uccModifierKeys.map((k) => t(`uccMod.${k}`)).join(' · ')
-        : '')
+    ? t(uccClassKey) + (uccNameParts.length > 0 ? ' · ' + uccNameParts.join(' · ') : '')
     : null
 
   // Declaration block (click-to-show): the time basis falls back to the
