@@ -20,16 +20,21 @@
   世界统计分位数、周期性、环流体制、锁定行星空间、海拔气压）——**UCC v2 候选轴的
   设计基础**、已否证方向（防重试）、混合溶剂世界附录（草案七转正的物性参照）。
 
-### `examples/` — worked examples（真实数据例证，脚本可重生成）
+### `examples/` — worked examples（真实数据例证；手写/生成分离）
 
-| 文件 | 世界 | 数据源 | 生成脚本 |
-|---|---|---|---|
-| `earth.md` | Earth（观测） | NCEP/GPCP/Beck | `scripts/climate/ucc_examples_earth.py` |
-| `mars.md` | Mars | MOLA + MCD v6.1（L4） | `scripts/solar/ucc_examples_solar.py --planet mars` |
-| `moon.md` | Moon | LDEM + Diviner GCP（观测态例外） | `--planet moon` |
-| `venus.md` | Venus | Magellan + VCD v2.3（L4） | `--planet venus` |
-| `titan.md` | Titan | TAM 水文 run（L4，CC-BY） | `--planet titan` |
-| `nacrea.md` | Nacrea（架空世界） | 引擎构建产物 | `scripts/climate/ucc_examples_nacrea.py` |
+每个世界两个文件（2026-10-04 重构）：**`<world>.md` = 手写解读**（世界图景、
+数据认知地位、UCC 视角的发现、读表指南——可随时手改）；**`<world>-data.md`
+= 生成数据表**（provenance 头 + 全局分布/站点/极值/覆盖检查，脚本再生、
+勿手改）。生成脚本只写 `-data.md`，绝不触碰手写文件。
+
+| 世界 | 手写解读 | 数据表（生成） | 数据源 | 生成脚本 |
+|---|---|---|---|---|
+| Earth（观测） | `earth.md` | `earth-data.md` | NCEP/GPCP/Beck | `scripts/climate/ucc_examples_earth.py` |
+| Mars | `mars.md` | `mars-data.md` | MOLA + MCD v6.1（L4） | `scripts/solar/ucc_examples_solar.py --planet mars` |
+| Moon | `moon.md` | `moon-data.md` | LDEM + Diviner GCP（观测态例外） | `--planet moon` |
+| Venus | `venus.md` | `venus-data.md` | Magellan + VCD v2.3（L4） | `--planet venus` |
+| Titan | `titan.md` | `titan-data.md` | TAM 水文 run（L4，CC-BY） | `--planet titan` |
+| Nacrea（架空世界） | `nacrea.md` | `nacrea-data.md` | 引擎构建产物 | `scripts/climate/ucc_examples_nacrea.py` |
 
 前五个是 `earth` root 的额外 planet_ids（现实世界数据锚，永不 build）；`nacrea.md`
 是架空世界侧的迁移语义夹具（原 nacrea `design-notes/0010`，该处保留 stub 占位）。

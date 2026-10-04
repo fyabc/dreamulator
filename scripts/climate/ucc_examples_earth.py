@@ -14,8 +14,10 @@ Köppen reference column) and produces a human-review document:
   with the class medoid cell (marked as such), so every class has at least one
   worked example.
 
-Output: ``docs/ucc/examples/earth.md`` (regenerate,
-don't hand-edit).
+Output: the generated-tables file ``docs/ucc/examples/earth-data.md``
+(regenerate, don't hand-edit).  The handwritten companion
+``docs/ucc/examples/earth.md`` carries the interpretation prose — the script
+never touches it.
 
 Usage:
     uv run python scripts/climate/ucc_examples_earth.py
@@ -46,7 +48,7 @@ from dreamulator.map.ucc import (  # noqa: E402
 )
 
 _DEFAULT_DATASET = Path("private/reviews/ucc-l2-earth-obs-2026-09-20.msgpack")
-_DEFAULT_OUT = Path("docs/ucc/examples/earth.md")
+_DEFAULT_OUT = Path("docs/ucc/examples/earth-data.md")
 
 # Curated review sites (4b): name, lat, lon, land/ocean, short geographic
 # context.  Chosen to span every thermal × supply regime a reviewer can check
@@ -304,11 +306,12 @@ def main() -> None:
     # --- Document ----------------------------------------------------------
     prov = d.get("provenance", {})
     out_lines = [
-        "# Earth · UCC Worked Examples（profile v1）",
+        "# Earth · UCC Worked Examples — 数据表（profile v1）",
         "",
         "> UCC-01 第四步 4c 产物，同时是 4b 创作验收的审阅清单（v1 标签对照地理直觉，",
         "> 逐站点人工判读）。本文档由脚本生成，勿手改——重生成：",
         "> `uv run python scripts/climate/ucc_examples_earth.py`。",
+        "> 解读与读法见手写文档 `docs/ucc/examples/earth.md`。",
         f"> 生成日期：{datetime.date.today().isoformat()} · profile：{PROFILE_CURRENT}",
         f"> （`classify_v1`）· 数据集：`{args.dataset.name}`",
         ">",
