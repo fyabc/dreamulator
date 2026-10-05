@@ -83,7 +83,15 @@ Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise
 
 ## 路线（登记不排期）
 
-- 细节增强层：Gaea 侵蚀或 fBm 位移/法线（「编造细节」需与纯数据渲染可区分）。
+- 细节增强层：Gaea 侵蚀、fBm 位移/法线，或 terrain-diffusion 条件化细化
+  （MIT，tiff-export 吃粗 GeoTIFF 高程+温度+降水通道 → 256× 上采样）。
+  2026-10-05 调研通过并接受为管线方案（用户裁决：先用之，不够再改进）——
+  nacrea 永耀岛 550 km 实测：海岸线符号一致率 97.5% @SNR 0.2、同 seed
+  逐位确定、0.6 s/tile @3060 6 GB；注意其温度通道是海平面口径、条件须
+  重采样到模型粗格 23 km/px。脚本与报告在
+  `private/research/2026-10-terrain-diffusion/`。产品化形态 =
+  `export region` 气候通道档 + 独立 venv 子进程调用（不 import 其代码）；
+  「编造细节」需与纯数据渲染可区分（细化层独立成包，不覆盖原始通道）。
 - 多图层数据包（temperature/precipitation/koppen 区域裁剪 + Blender 材质切换），
   服务气候叙事镜头。**每个场一个 `.npy`、不合并 `.npz`**（2026-10-02 裁决）：npz 的
   zip 头带时间戳会破坏逐字节复现，合并容器还牺牲逐层懒加载；外部工具（Gaea）的
