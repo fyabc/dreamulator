@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790910273350,
+  "lastUpdate": 1791160449210,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6134,6 +6134,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00013133706123319468",
             "extra": "mean: 5.110695000001897 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "86b66dd63f813222b66aa68396c38e426c1af90a",
+          "message": "Merge feature/ucc-v2-seasonality: UCC v2-α 全量落地（季节性字母+热侧域门+字母表重构）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-05T08:32:57+08:00",
+          "tree_id": "6e97484008a7f050d9bbb5b5b3c9c0e192bf3eab",
+          "url": "https://github.com/fyabc/dreamulator/commit/86b66dd63f813222b66aa68396c38e426c1af90a"
+        },
+        "date": 1791160448604,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.1643103375261051,
+            "unit": "iter/sec",
+            "range": "stddev: 0.18132457156180454",
+            "extra": "mean: 6.086044341799999 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2384984561357886,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017395008543613866",
+            "extra": "mean: 308.78507849999437 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4560045009486642,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0979947381350228",
+            "extra": "mean: 686.8110636666623 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 902.9074704113533,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011830310024002647",
+            "extra": "mean: 1.1075331999904847 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.54032739625654,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000589166610486975",
+            "extra": "mean: 5.114034600001105 msec\nrounds: 5"
           }
         ]
       }
