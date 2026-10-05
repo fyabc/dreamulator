@@ -113,11 +113,12 @@ function toUint8(u8: Uint8Array): Uint8Array {
 }
 
 // Compact display codes — mirror of THERMAL_CODE_LETTERS(_V2) / SUPPLY_CODE_
-// LETTERS / MOD_CODE_LETTERS(_V2) in src/dreamulator/map/ucc.py (single source
-// of truth is the Python side; codes are versioned with the profile and are
-// NOT Köppen letters).  v1: P/C/T/R + x/w.  v2: Köppen-direction A/C/D/E with
-// B permanently blank, modifiers l/g/H (H = highland, elevation-made band),
-// suffix letters m/d (wet-season shape) and h/o (rain–demand phase).
+// LETTERS / zone registry (ZONE_HEAD_*) in src/dreamulator/map/ucc.py (single
+// source of truth is the Python side; codes are versioned with the profile
+// and are NOT Köppen letters).  v1: P/C/T/R + flat x/w suffix.  v2: Köppen-
+// direction A/C/D/E with B permanently blank; hyphen-separated zones, each
+// headed by an uppercase letter — S seasonality (l g + m/d + h/o), H altitude
+// (elevation-made band).
 const UCC_THERMAL_LETTERS_V1: Record<string, string> = {
   polar: 'P',
   cold: 'C',
@@ -149,9 +150,10 @@ const UCC_SUPPLY_LETTERS_V2: Record<string, string> = {
 const UCC_SHAPE_LETTERS: Record<string, string> = { unimodal: 'm', bimodal: 'd' }
 const UCC_PHASE_LETTERS: Record<string, string> = { in_phase: 'h', anti_phase: 'o' }
 
-/** Compose a cell's short UCC code (v1 e.g. `Rh`, `Cs-xw`; v2 e.g. `Ct-mh`,
- * `Dp-lgmo`, `An` hot-side OOD, `Eo` polar ocean) from the decoded yearly
- * data.  Null when the file predates the classification fields. */
+/** Compose a cell's short UCC code (v1 e.g. `Rh`, `Cs-xw`; v2 zone grammar
+ * e.g. `Ct-Smh`, `Dp-Slgmo-H`, `An` hot-side OOD, `Eo` polar ocean) from the
+ * decoded yearly data.  Null when the file predates the classification
+ * fields. */
 export function uccCode(d: YearlyClimateData, i: number, isLand: boolean): string | null {
   const { uccThermal, uccSupply, uccModifiers, thermalBands, supplyBands } = d
   if (!uccThermal || !thermalBands || !supplyBands) return null
@@ -168,18 +170,29 @@ export function uccCode(d: YearlyClimateData, i: number, isLand: boolean): strin
     code += supplyLetters[supplyBands[sIdx]] ?? ''
   }
   const mods = uccModifiers ? uccModifiers[i] : 0
-  let suffix = v2
-    ? (mods & 1 ? 'l' : '') + (mods & 2 ? 'g' : '') + (mods & 4 ? 'H' : '')
-    : (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
-  if (v2 && d.uccShape && d.shapeCodes) {
+  if (!v2) {
+    // v1 flat suffix: x (continental) / w (water stress).
+    const suffix = (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
+    return suffix ? `${code}-${suffix}` : code
+  }
+  // v2 zone grammar (mirror of ucc.py's ZONE registry): hyphen-separated
+  // zones, each headed by an uppercase letter — S seasonality (l g, m/d,
+  // h/o), H altitude.  Silent zones are omitted.
+  let season = 'S'
+  if (mods & 1) season += 'l'
+  if (mods & 2) season += 'g'
+  if (d.uccShape && d.shapeCodes) {
     const s = d.uccShape[i]
-    if (s !== 255) suffix += UCC_SHAPE_LETTERS[d.shapeCodes[s]] ?? ''
+    if (s !== 255) season += UCC_SHAPE_LETTERS[d.shapeCodes[s]] ?? ''
   }
-  if (v2 && d.uccPhase && d.phaseCodes) {
-    const p = d.uccPhase[i]
-    if (p !== 255) suffix += UCC_PHASE_LETTERS[d.phaseCodes[p]] ?? ''
+  if (d.uccPhase && d.phaseCodes) {
+    const ph = d.uccPhase[i]
+    if (ph !== 255) season += UCC_PHASE_LETTERS[d.phaseCodes[ph]] ?? ''
   }
-  return suffix ? `${code}-${suffix}` : code
+  const zones: string[] = []
+  if (season.length > 1) zones.push(season)
+  if (mods & 4) zones.push('H')
+  return zones.length > 0 ? `${code}-${zones.join('-')}` : code
 }
 
 export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {

@@ -107,10 +107,11 @@ def _fmt(v: float | None, prec: int = 2) -> str:
 
 # v2 alphabet: Köppen-direction A/C/D/E (B permanently blank); modifiers
 # l/g; suffix letters m/d (wet-season shape) + h/o (rain–demand phase).
-_THERMAL_LETTERS = {"tropical": "A", "temperate": "C", "cold": "D", "polar": "E"}
-_SUPPLY_LETTERS = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
-_SHAPE_LETTERS = {"unimodal": "m", "bimodal": "d"}
-_PHASE_LETTERS = {"in_phase": "h", "anti_phase": "o"}
+# Single source: the v2 letter tables in map/ucc.py (no local mirrors to drift).
+from dreamulator.map.ucc import PHASE_CODE_LETTERS_V2 as _PHASE_LETTERS  # noqa: E402
+from dreamulator.map.ucc import SHAPE_CODE_LETTERS_V2 as _SHAPE_LETTERS  # noqa: E402
+from dreamulator.map.ucc import SUPPLY_CODE_LETTERS_V2 as _SUPPLY_LETTERS  # noqa: E402
+from dreamulator.map.ucc import THERMAL_CODE_LETTERS_V2 as _THERMAL_LETTERS  # noqa: E402
 
 
 def main() -> None:
@@ -176,24 +177,28 @@ def main() -> None:
         np.where(land, "n", "o"),
     )
     base = tl[th] + supply_letter
-    suffix = (
-        np.where((mods & 1).astype(bool), "l", "")
+    season = (
+        "S"
+        + np.where((mods & 1).astype(bool), "l", "")
         + np.where((mods & 2).astype(bool), "g", "")
-        + np.where((mods & 4).astype(bool), "H", "")
     ).astype(object)
     if ucc_shape is not None and shape_codes:
         shape_letter = np.array(
             [_SHAPE_LETTERS.get(shape_codes[v], "") if v != 255 else "" for v in ucc_shape],
             dtype=object,
         )
-        suffix = suffix + shape_letter
+        season = season + shape_letter
     if ucc_phase is not None and phase_codes:
         phase_letter = np.array(
             [_PHASE_LETTERS.get(phase_codes[v], "") if v != 255 else "" for v in ucc_phase],
             dtype=object,
         )
-        suffix = suffix + phase_letter
-    all_codes: np.ndarray = (base + np.where(suffix != "", "-" + suffix, "")).astype(object)
+        season = season + phase_letter
+    all_codes: np.ndarray = (
+        base
+        + np.where(season != "S", "-" + season, "")
+        + np.where((mods & 4).astype(bool), "-H", "")
+    ).astype(object)
 
     # --- Global stats -------------------------------------------------------
     n_land, n_ocean = int(land.sum()), int((~land).sum())

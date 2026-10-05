@@ -432,7 +432,7 @@ def test_v2_seasonality_suffix_letters() -> None:
     d = make(p_monsoon, 5.0, 25.0)
     c = classify_v2(d, is_land=True)
     assert c.shape == "unimodal" and c.phase == "in_phase"
-    assert c.code.endswith("mh")
+    assert c.code.endswith("Smh")
 
     # Mediterranean mirror: wet season half a cycle away → m + o (misalignment
     # also earns the g dry-season modifier, so the suffix reads "-gmo").
@@ -441,13 +441,13 @@ def test_v2_seasonality_suffix_letters() -> None:
     d = make(p_medi, 5.0, 25.0)
     c = classify_v2(d, is_land=True)
     assert c.shape == "unimodal" and c.phase == "anti_phase"
-    assert c.code.endswith("gmo")
+    assert c.code.endswith("Sgmo")
 
     # Uniform rain: C_TV below the gate → shape silent (no "u" letter), phase NA.
     d = make(np.full(m, 1.0), 5.0, 25.0)
     c = classify_v2(d, is_land=True)
     assert c.shape is None and c.phase is None
-    assert "-" not in c.code or c.code.split("-")[1] in ("l", "g", "lg")
+    assert "-" not in c.code or c.code.split("-")[1] in ("Sl", "Sg", "Slg")
 
     # Bimodal wet seasons → d letter (Kashmir-type double rain peak).
     p_bi = np.zeros(m)
@@ -456,7 +456,7 @@ def test_v2_seasonality_suffix_letters() -> None:
     d = make(p_bi, 5.0, 25.0)
     c = classify_v2(d, is_land=True)
     assert c.shape == "bimodal" and c.phase is None  # R1 → 0: phase gate blocks
-    assert c.code.endswith("gd")
+    assert c.code.endswith("Sgd")
 
     # Suffixes never change the main class: same thermal/supply as v1.
     d = make(p_monsoon, 5.0, 25.0)
@@ -569,3 +569,85 @@ def test_yearly_cell_arrays_highland_bit() -> None:
     assert not arrays["ucc_modifiers"][1] & 4  # ocean → never
     assert arrays["ucc_thermal"].shape == (2,)
     assert arrays["ai"][0] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# zone grammar: parse_ucc_code (§5.4) — structure, rejection, round trip
+# ---------------------------------------------------------------------------
+
+
+def test_zone_grammar_parse_valid() -> None:
+    from dreamulator.map.ucc import parse_ucc_code
+
+    p = parse_ucc_code("Dp-Slgmo-H")
+    assert p.thermal == "cold" and p.supply == "semi_arid"
+    assert p.continental and p.water_stress
+    assert p.shape == "unimodal" and p.phase == "anti_phase" and p.highland
+    p_an = parse_ucc_code("An")
+    assert p_an.thermal == "tropical" and p_an.supply is None and p_an.slot == "n"
+    p_eo = parse_ucc_code("Eo")
+    assert p_eo.thermal == "polar" and p_eo.slot == "o"
+    p_ct = parse_ucc_code("Ct-Smo")
+    assert p_ct.supply == "transitional" and p_ct.phase == "anti_phase"
+    assert not p_ct.continental and not p_ct.water_stress
+    p_dt = parse_ucc_code("Dt-H")
+    assert p_dt.highland and p_dt.shape is None and p_dt.phase is None
+
+
+def test_zone_grammar_parse_rejects() -> None:
+    import pytest as _pytest
+
+    from dreamulator.map.ucc import UCCGrammarError, parse_ucc_code
+
+    for bad in (
+        "Bt",  # B globally retired
+        "Xt",  # unknown thermal letter
+        "Dq",  # unknown supply letter
+        "Dp-S",  # seasonality zone must carry at least one letter
+        "Dp-Sml",  # followers out of canonical order
+        "Dp-Smd",  # m and d share a rank — both cannot appear
+        "Dp-Sx",  # unknown seasonality letter
+        "Dp-SM",  # uppercase follower
+        "Dp-Hl",  # H zone has no followers in the registry
+        "Dp-H-Sl",  # zones out of registry order
+        "Dp-Sl-Sg",  # duplicate zone
+        "Dp-",  # empty zone
+        "D",  # main segment length
+        "",  # nothing
+    ):
+        with _pytest.raises(UCCGrammarError):
+            parse_ucc_code(bad)
+
+
+def test_zone_grammar_round_trip() -> None:
+    # classify → code → parse → render must be the identity, and the parsed
+    # fields must equal the classified ones (the grammar has one renderer).
+    from dreamulator.map.ucc import parse_ucc_code
+
+    m = 12
+    et_peak = np.zeros(m)
+    et_peak[6] = 12.0
+    cases = [
+        (np.linspace(5.0, 25.0, m), np.full(m, 1.0), et_peak, None, None),  # uniform
+        (np.linspace(5.0, 25.0, m), _peak(m, 6), et_peak, None, None),  # monsoon
+        (np.linspace(5.0, 25.0, m), _peak(m, 0), et_peak, None, None),  # mediterranean
+        (np.linspace(0.0, 40.0, m), _peak(m, 6), et_peak, 5000.0, 6.5),  # highland + l
+        (np.full(m, 60.0), np.full(m, 1.0), np.full(m, 2.0), None, None),  # Venus-like An
+        (np.array([2.0, 12.0] * 6), np.full(m, 1.0), np.full(m, 1.0), 5000.0, 6.5),  # -H
+    ]
+    for t, p, et, z, lapse in cases:
+        d = compute_descriptors(np.asarray(t), np.asarray(p), et_rate=np.asarray(et))
+        cls = classify_v2(d, is_land=True, elevation_m=z, lapse_rate_c_per_km=lapse)
+        parts = parse_ucc_code(cls.code)
+        assert parts.render() == cls.code
+        assert parts.thermal == cls.thermal and parts.supply == cls.supply
+        assert parts.continental == cls.continental
+        assert bool(parts.water_stress) == bool(cls.water_stress)
+        assert parts.shape == cls.shape and parts.phase == cls.phase
+        assert parts.highland == cls.highland
+
+
+def _peak(m: int, idx: int) -> np.ndarray:
+    arr = np.zeros(m)
+    arr[idx] = 12.0
+    return arr
