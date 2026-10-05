@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **pytest 并行化（xdist）**：`-n auto --maxprocesses 8 --dist worksteal` 进
+  默认 addopts，全量测试 344 s → 52 s（6.6×）。单测迭代用 `-n 0` 关并行；
+  `benchmarks.yml` 显式 `-n 0`（pytest-benchmark 在 xdist 下会静默自禁）。
+
+### Changed
+
 - **视频素材三件套（前端录制姿态）**：纯净视图 `?clean=1`（隐藏全部 UI/场景
   装饰，Esc 退出）、3D 自动旋转 `?spin=1`（~120 s/圈，拖拽/N 键互斥）、季节
   循环 timelapse `?play=1`（月度纹理预烘焙 strip 换月零卡顿 + 昼夜扫描）。
@@ -26,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **湿槽求解器逐位等价提速**（`stationary_wave_two_level.py`）：几何不变量
+  （t_op/d_op、逐 k 的 𝓛_k/𝓛_k²）跨月跨 Picard 遍缓存 + `_place`/`_banded_matvec`
+  改基本切片/对角线视图（替换 fancy indexing）。`simulate_climate` 固定成本
+  减半（144-cell 验证网格 6.8 s → 3.4 s），三种合成场景 30 个输出数组逐位
+  一致（bit-identity 校验）。
 - `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
 
 ## [0.38.0] — 2026-09-29
