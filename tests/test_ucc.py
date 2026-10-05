@@ -651,3 +651,34 @@ def _peak(m: int, idx: int) -> np.ndarray:
     arr = np.zeros(m)
     arr[idx] = 12.0
     return arr
+
+
+def test_extension_slot_reserved() -> None:
+    # Reserved hatch (§5.4): braced lowercase words ride in the S zone after
+    # its registered letters, alphabetically.  No vocabulary is registered —
+    # classify never emits them; the parser accepts and round-trips them.
+    from dreamulator.map.ucc import parse_ucc_code
+
+    p = parse_ucc_code("Ct-Smo{melt}")
+    assert p.extensions == ("melt",)
+    assert p.render() == "Ct-Smo{melt}"  # round trip preserves the token
+    p2 = parse_ucc_code("Dp-Slgh{a}{b}")  # extensions rank after ALL registered letters
+    assert p2.extensions == ("a", "b") and p2.phase == "in_phase"
+    assert parse_ucc_code("An").extensions == ()  # zone-free codes stay clean
+    # classify never emits extensions; render of a parts-with-extensions works
+    cls = classify_v2(compute_descriptors(np.full(12, 20.0), np.full(12, 1.0)), is_land=True)
+    assert parse_ucc_code(cls.code).extensions == ()
+
+    from dreamulator.map.ucc import UCCGrammarError
+
+    for bad in (
+        "Ct-S{Melt}mo",  # uppercase inside the word
+        "Ct-S{}",  # empty word
+        "Ct-S{f1}",  # digit inside the word
+        "Ct-S{a}m",  # extension before a registered letter
+        "Ct-S{b}{a}",  # extensions must be alphabetical
+        "Ct-S{unterminated",
+        "Dt-H{x}",  # the H zone has no followers, extensions included
+    ):
+        with pytest.raises(UCCGrammarError):
+            parse_ucc_code(bad)
