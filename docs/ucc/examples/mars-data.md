@@ -2,7 +2,7 @@
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet mars`
-> 生成日期：2026-10-04。本天体的解读（世界要点、读法）见手写文档
+> 生成日期：2026-10-05。本天体的解读（世界要点、读法）见手写文档
 > `docs/ucc/examples/mars.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
@@ -18,6 +18,11 @@
 > - topography: MOLA MEGDR 4ppd (PDS)
 > - epistemic_status: L4 GCM climatology (ucc-review §6.2): a model, not error-free truth
 > - time_basis: bin = 57.25 Earth-days (Martian month); p_total per Martian year (686.98 d)
+> - climate_state: thin_co2_cold — declared world regime (axis F): ~6 hPa CO2, cold (Haberle 2001 liquid-water-favourable domain)
+> - lapse_rate: 2.5 K/km environmental, dust-softened (dry adiabat would be ~4.5 K/km = g/Cp for CO2) — enables the -H highland modifier
+
+**世界级声明**：`climate_state: thin_co2_cold`；递减率
+2.5 K/km（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × 57.25 地球日 = 窗口 687.0 日；
 `month_0` = `ls_15_first_bin_center`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界

@@ -5,7 +5,7 @@
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/ — 气候验证与诊断（31 个）
+## climate/ — 气候验证与诊断（32 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -35,10 +35,12 @@
   Beck Köppen 参照列 + provenance，msgpack 进 private/reviews/）。
 - `ucc_classify_experiments.py` — UCC 分类候选比较实验（分组候选/消融/扰动，profile
   v0/v1 冻结依据）。
-- `ucc_examples_earth.py` — Earth worked examples 文档生成（~33 命名地点 + 未覆盖类的
-  类中心点补位 → `docs/ucc/examples/earth.md`；读 L2 数据集，秒级）。
+- `ucc_examples_earth.py` — Earth worked examples 数据表生成（~33 命名地点 + 未覆盖类的
+  类中心点补位 → `docs/ucc/examples/earth-data.md`；读 L2 数据集 + root mesh 高程，秒级）。
 - `ucc_examples_nacrea.py` — Nacrea 迁移语义夹具生成（全局分布 + 预期核对 + 命名地理锚点 +
-  极值点 → `docs/ucc/examples/nacrea.md`；解析 mesh，~1 min）。
+  极值点 → `docs/ucc/examples/nacrea-data.md`；解析 mesh，~1 min）。
+- `regen_climate_yearly.py` — 引擎世界 climate_yearly.msgpack 免重建重导出（从盘上
+  climate_monthly 反量化 + 共享 writer；描述量/分类语义变更后的刷新通道）。
 
 ## earth/ — 真实地球数据导入与验证参考（10 个）
 
