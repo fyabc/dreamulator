@@ -207,9 +207,37 @@ terrain/boundary 里多处 `cell_km = √(4πR²/n)` 平均间距近似；修 `_
 **未实现 proposal**：
 - 裂谷海宽度沿走向分段（§3.5 transitional 带）。
 - 方案 1：板块从 geography 派生（最彻底，重写板块剖分 + geography 接口）。
+- 热点火山岛建设剖面（§9）。
 
 **待办**：本文件是部分「已实现」设计依据的事实源（§1–§8 的实现 detail 尚未迁入
 `pipelines/geological-pipeline.md`），后续应迁入 pipelines、本文件只留「为什么」+ 未实现 proposal。
+
+---
+
+## 9 热点火山岛建设剖面（立项未实现，优先级低）
+
+**动机**：潮汐固定热点火山岛（永耀岛：向星点潮汐应力 → 地幔局部熔融 → 单一巨型
+火山原地堆积，无板块漂移 hence 无火山链）目前由 geography 锚定 blob 实现——
+形态实测为**正圆平顶高原穹丘**（157,000 km²、长短轴比 1.05、50% 陆地 >1000 m、
+陆面中位坡 0.7 m/km、海底裙 ~10 m/km；量化判据表在
+`private/research/2026-10-terrain-diffusion/README.md` 附录）：夏威夷式盾状
+判据（上凹对数剖面、裂谷带拉长、持续侧翼坡度、陡海底裙）全线不符，冰岛式
+高原判据半符。设定对应的形态族应是**固定点巨火山**（奥林帕斯型：直径与圆度
+实测已同级，坡度缓 ~3×）。
+
+**方案候选**（实现时择一展开 + 判据预注册）：
+- 建设性剖面核：用盾状对数剖面替换 `pin_exponent` 幂核（幂核 ≥2 天然产
+  平顶+边缘落的高原核型）；侧翼坡度从玄武岩流变（岩流长度-坡度标度）推导，
+  不裸调。
+- 裂谷带向拉长选项（夏威夷双裂谷带 / 金星冕状构造环裂）。
+- 锚定强度算术复核：`elevation_target_m` 达成率（永耀岛 1700 → 实测 1210）。
+
+**纪律**：锚定参数值变更属设定变更（设定冻结令），需作者裁决；机制实现
+不动设定值。
+
+---
+
+## 参考资料
 
 ---
 
@@ -222,6 +250,7 @@ terrain/boundary 里多处 `cell_km = √(4πR²/n)` 平均间距近似；修 `_
 - Frisch, Meschede & Blakey (2011). *Plate Tectonics*. Springer. — 边界形态。
 - Davis, Suppe & Dahlen (1983). *Mechanics of fold-and-thrust belts and accretionary wedges*. — 临界楔。
 - Wilson, J. T. (1963). *A possible origin of the Hawaiian Islands*. — 热点链。
+- Smith, D. E. et al. (1999). *The global topography of Mars*. Science 284. — 奥林帕斯山剖面与侧翼坡度（§9 固定点巨火山参照）。
 - Cortial et al. (2019). *Procedural Tectonic Planets*. CGF 38(2). [doi:10.1111/cgf.13614](https://onlinelibrary.wiley.com/doi/10.1111/cgf.13614)
 - [Gleba — Calandiel 幻想世界模拟器](https://indiegoblin.com/games/gleba-v012) + [crustmap/platemap 导入说明](https://itch.io/t/6057077/how-to-get-started-with-crustmap-and-platemap-imports)
 - [Azgaar's Fantasy Map Generator](https://azgaar.github.io/Fantasy-Map-Generator/) — 高度图模板，无板块模拟。
