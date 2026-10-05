@@ -143,7 +143,7 @@ def test_upwind_distance_traces_west_ocean_for_westerly_wind() -> None:
 class TestClimateSimulatorEndToEnd:
     """End-to-end climate simulation on a synthetic 100-cell mesh."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def config(self) -> TerrainPipelineConfig:
         """Earth-like climate configuration."""
         return TerrainPipelineConfig(
@@ -164,17 +164,24 @@ class TestClimateSimulatorEndToEnd:
 
     @pytest.fixture
     def mesh(self) -> CVTMesh:
-        """Synthetic 100-cell CVT mesh."""
+        """Fresh (unsimulated) synthetic 100-cell CVT mesh."""
         return _build_test_mesh(num_bands=10, cells_per_band=10)
 
-    def test_simulate_populates_cells(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
-        """Climate simulation should populate temperature, precipitation, Köppen."""
+    @pytest.fixture(scope="class")
+    def sim_mesh(self, config: TerrainPipelineConfig) -> CVTMesh:
+        """Simulated once for the whole class — simulate_climate is deterministic
+        (test_deterministic_output guards this), so the assertion tests below
+        share one run instead of each paying the ~7 s engine fixed cost."""
         from dreamulator.map.climate_simulator import simulate_climate
 
+        mesh = _build_test_mesh(num_bands=10, cells_per_band=10)
         simulate_climate(mesh, config)
+        return mesh
 
+    def test_simulate_populates_cells(self, sim_mesh: CVTMesh) -> None:
+        """Climate simulation should populate temperature, precipitation, Köppen."""
         n_populated = 0
-        for c in mesh.cells:
+        for c in sim_mesh.cells:
             if c.temperature_C is not None:
                 n_populated += 1
                 assert isinstance(c.temperature_C, float)
@@ -186,8 +193,8 @@ class TestClimateSimulatorEndToEnd:
                 assert c.pressure_anomaly_annual_hpa is not None
                 assert -60.0 < c.pressure_anomaly_annual_hpa < 60.0
 
-        assert n_populated == mesh.num_cells, (
-            f"Expected all {mesh.num_cells} cells populated, got {n_populated}"
+        assert n_populated == sim_mesh.num_cells, (
+            f"Expected all {sim_mesh.num_cells} cells populated, got {n_populated}"
         )
 
     def test_hadley_derive_path_does_not_crash(self, mesh: CVTMesh) -> None:
@@ -215,30 +222,20 @@ class TestClimateSimulatorEndToEnd:
         simulate_climate(mesh, config)
         assert all(c.temperature_C is not None for c in mesh.cells)
 
-    def test_temperature_physically_plausible(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig
-    ) -> None:
+    def test_temperature_physically_plausible(self, sim_mesh: CVTMesh) -> None:
         """Temperature range should be physically plausible for Earth-like planet."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
-        temps = [c.temperature_C for c in mesh.cells if c.temperature_C is not None]
-        assert len(temps) == mesh.num_cells
+        temps = [c.temperature_C for c in sim_mesh.cells if c.temperature_C is not None]
+        assert len(temps) == sim_mesh.num_cells
 
         # Earth range: roughly -50 to +40 °C
         t_min, t_max = min(temps), max(temps)
         assert t_min > -80.0, f"Temperatures implausibly cold: min {t_min:.1f} °C"
         assert t_max < 55.0, f"Temperatures implausibly hot: max {t_max:.1f} °C"
 
-    def test_equator_warmer_than_poles(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_equator_warmer_than_poles(self, sim_mesh: CVTMesh) -> None:
         """Equatorial cells should be warmer than polar cells."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
-        equatorial = [c for c in mesh.cells if abs(c.lat) < 15.0]
-        polar = [c for c in mesh.cells if abs(c.lat) > 60.0]
+        equatorial = [c for c in sim_mesh.cells if abs(c.lat) < 15.0]
+        polar = [c for c in sim_mesh.cells if abs(c.lat) > 60.0]
 
         eq_mean = np.mean([c.temperature_C for c in equatorial if c.temperature_C is not None])  # type: ignore[arg-type]
         pol_mean = np.mean([c.temperature_C for c in polar if c.temperature_C is not None])  # type: ignore[arg-type]
@@ -247,12 +244,8 @@ class TestClimateSimulatorEndToEnd:
             f"Expected equator ({eq_mean:.1f} °C) warmer than poles ({pol_mean:.1f} °C)"
         )
 
-    def test_high_altitude_colder(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_high_altitude_colder(self, sim_mesh: CVTMesh) -> None:
         """High-elevation LAND cells should be colder than nearby low-elevation ones."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
         # Compare each LAND cell with its LAND neighbors: over pairs with a
         # real elevation contrast (> 100 m, within ±5° latitude to control
         # for the lat gradient) the regression of ΔT on Δelevation must have
@@ -268,13 +261,13 @@ class TestClimateSimulatorEndToEnd:
         # 24 pairs — the threshold keeps a wide margin.
         elev_diffs: list[float] = []
         temp_diffs: list[float] = []
-        for c in mesh.cells:
+        for c in sim_mesh.cells:
             if c.temperature_C is None or c.elevation < 0:
                 continue
             for n_id in c.neighbors:
-                if n_id < 0 or n_id >= mesh.num_cells:
+                if n_id < 0 or n_id >= sim_mesh.num_cells:
                     continue
-                n_cell = mesh.cells[n_id]
+                n_cell = sim_mesh.cells[n_id]
                 if n_cell.temperature_C is None or n_cell.elevation < 0:
                     continue
                 if abs(c.lat - n_cell.lat) < 5.0 and abs(c.elevation - n_cell.elevation) > 100.0:
@@ -284,41 +277,27 @@ class TestClimateSimulatorEndToEnd:
         slope = np.polyfit(np.array(elev_diffs), np.array(temp_diffs), 1)[0]
         assert slope < -3.0e-4, f"Altitude gradient inconsistent: slope {slope * 1000:.2f} K/km"
 
-    def test_precipitation_non_negative(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_precipitation_non_negative(self, sim_mesh: CVTMesh) -> None:
         """Precipitation should be non-negative everywhere."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
-        for c in mesh.cells:
+        for c in sim_mesh.cells:
             assert c.precipitation_mm is not None
             assert c.precipitation_mm >= 0.0, (
                 f"Negative precipitation at cell {c.id}: {c.precipitation_mm}"
             )
 
-    def test_koppen_classes_include_ocean(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig
-    ) -> None:
+    def test_koppen_classes_include_ocean(self, sim_mesh: CVTMesh) -> None:
         """Ocean cells should be classified as 'Ocean'."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
-        for c in mesh.cells:
+        for c in sim_mesh.cells:
             if c.elevation < 0.0:
                 assert c.koppen_class == "Ocean", (
                     f"Ocean cell {c.id} got Köppen class '{c.koppen_class}'"
                 )
 
-    def test_koppen_classes_on_land(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_koppen_classes_on_land(self, sim_mesh: CVTMesh) -> None:
         """All land cells should have a valid Köppen code."""
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        simulate_climate(mesh, config)
-
         valid_prefixes = {"A", "B", "C", "D", "E"}
         land_with_class = 0
-        for c in mesh.cells:
+        for c in sim_mesh.cells:
             if c.elevation >= 0.0 and c.koppen_class:
                 land_with_class += 1
                 assert c.koppen_class[0] in valid_prefixes, (
@@ -328,50 +307,49 @@ class TestClimateSimulatorEndToEnd:
         # At least some land cells should have classifications
         assert land_with_class > 0, "No land cells received Köppen classification"
 
-    def test_deterministic_output(self, mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
+    def test_deterministic_output(self, sim_mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """Same input → same output (no RNG dependence)."""
         from dreamulator.map.climate_simulator import simulate_climate
 
-        # Run twice on identical inputs
-        mesh1 = _build_test_mesh(num_bands=10, cells_per_band=10)
+        # The class fixture run and this fresh run are two independent
+        # simulate_climate calls on identical inputs.
         mesh2 = _build_test_mesh(num_bands=10, cells_per_band=10)
-
-        simulate_climate(mesh1, config)
         simulate_climate(mesh2, config)
 
-        for i in range(mesh1.num_cells):
-            assert mesh1.cells[i].temperature_C == pytest.approx(
+        for i in range(sim_mesh.num_cells):
+            assert sim_mesh.cells[i].temperature_C == pytest.approx(
                 mesh2.cells[i].temperature_C, abs=1e-6
             ), (  # type: ignore[arg-type]
                 f"Non-deterministic temperature at cell {i}"
             )
-            assert mesh1.cells[i].precipitation_mm == pytest.approx(
+            assert sim_mesh.cells[i].precipitation_mm == pytest.approx(
                 mesh2.cells[i].precipitation_mm, abs=1e-6
             ), (  # type: ignore[arg-type]
                 f"Non-deterministic precipitation at cell {i}"
             )
 
     def test_export_equirectangular_climate_fields(
-        self, mesh: CVTMesh, config: TerrainPipelineConfig, tmp_path_factory: pytest.TempPathFactory
+        self,
+        sim_mesh: CVTMesh,
+        config: TerrainPipelineConfig,
+        tmp_path_factory: pytest.TempPathFactory,
     ) -> None:
         """Climate raster export should produce valid PNG files."""
-        from dreamulator.map.climate_simulator import simulate_climate
+        import dataclasses
+
         from dreamulator.map.export import (
             _climate_data_available,
             export_climate_layers,
             export_equirectangular,
         )
 
-        simulate_climate(mesh, config)
-        assert _climate_data_available(mesh)
+        assert _climate_data_available(sim_mesh)
 
         output_dir = tmp_path_factory.mktemp("climate_output")
 
-        # Set export resolution
-        config.export_width = 180
-        config.export_height = 90
-
-        export_climate_layers(mesh, output_dir, config)
+        # Set export resolution (replace, not mutate — config is class-scoped)
+        export_config = dataclasses.replace(config, export_width=180, export_height=90)
+        export_climate_layers(sim_mesh, output_dir, export_config)
 
         # Check files exist
         assert (output_dir / "temperature.png").exists()
@@ -387,7 +365,7 @@ class TestClimateSimulatorEndToEnd:
         assert temp_img.mode == "I;16"
 
         # Verify the grids have plausible data
-        temp_grid = export_equirectangular(mesh, 180, 90, field="temperature_C")
+        temp_grid = export_equirectangular(sim_mesh, 180, 90, field="temperature_C")
         assert temp_grid.shape == (90, 180)
         assert np.all(np.isfinite(temp_grid))
 

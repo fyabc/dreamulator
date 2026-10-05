@@ -110,8 +110,10 @@ uv run dreamulator serve --reload             # 开发模式（热重载）
 # 来覆盖默认的 data/worlds/ 数据目录。构建输出（maps/ + layers/*/derived/）已被
 # .gitignore 忽略，直接在 data/worlds 构建不污染 git 工作区，无需单独的开发目录。
 
-# 运行测试
+# 运行测试（默认 xdist 并行，--maxprocesses 8；全量 ~1 min）
 uv run pytest
+# 迭代单个测试时关掉并行（省 worker 启动 ~3-5 s）
+uv run pytest tests/test_foo.py -n 0
 
 # 独立包测试（conlang；根 pytest 的 testpaths 不含包内测试）
 uv run pytest packages/conlang/tests -q
