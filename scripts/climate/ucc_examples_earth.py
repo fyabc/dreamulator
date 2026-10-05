@@ -188,6 +188,8 @@ def _site_block(
         mods.append("continental")
     if cls.water_stress:
         mods.append("water_stress")
+    if cls.highland:
+        mods.append("highland")
     supply_s = cls.supply if cls.supply is not None else f"n/a（{status_short(cls.supply_status)}）"
     return [
         f"### {idx}. {title}（{context}）",
@@ -228,6 +230,20 @@ def main() -> None:
 
     print(f"Dataset: {args.dataset} ({n} cells, {int(land.sum())} land)")
 
+    # Cell-elevation from the earth root mesh (the L2 dataset's cells are the
+    # root mesh's cells, in order — ucc_obs_descriptors.py built it that way)
+    # + the declared ISA lapse rate (mirrors export_earth_yearly.py), enabling
+    # the -H highland modifier in the classification below.
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+
+    _mesh_path = find_mesh_file(Path("data/worlds/earth/maps/planet_earth"))
+    assert _mesh_path is not None, "earth root mesh not found"
+    elevation = np.array(
+        [c["elevation"] for c in load_cvt_mesh(_mesh_path)["cells"]], dtype=np.float64
+    )
+    assert elevation.shape == (n,), f"mesh/dataset cell mismatch {elevation.shape} vs {n}"
+    lapse_c_per_km = 6.5  # ISA environmental (declared, mirrors the importer)
+
     # Classify every cell once (also feeds the coverage check).  Base codes
     # strip the modifier suffix — coverage/medoids are about main classes
     # (Tt and Tt-w are the same class).
@@ -240,6 +256,8 @@ def main() -> None:
         codes[i] = classify_v2(
             compute_descriptors(t_monthly[i], p_monthly[i], _et_all[i]),
             is_land=bool(land[i]),
+            elevation_m=elevation[i],
+            lapse_rate_c_per_km=lapse_c_per_km,
         ).code
     base_codes = np.array([str(c).split("-")[0] for c in codes], dtype=object)
 
@@ -251,7 +269,12 @@ def main() -> None:
         # stored descriptors used that basis — Eref likewise as per-bin totals.
         et12 = potential_evapotranspiration_hamon_monthly(t_monthly[cell], 30.4375)
         desc = compute_descriptors(t_monthly[cell], p_monthly[cell], et12)
-        cls = classify_v2(desc, is_land=bool(land[cell]))
+        cls = classify_v2(
+            desc,
+            is_land=bool(land[cell]),
+            elevation_m=elevation[cell],
+            lapse_rate_c_per_km=lapse_c_per_km,
+        )
         entries.append(
             {
                 "name": name,
@@ -308,7 +331,12 @@ def main() -> None:
         # stored descriptors used that basis — Eref likewise as per-bin totals.
         et12 = potential_evapotranspiration_hamon_monthly(t_monthly[cell], 30.4375)
         desc = compute_descriptors(t_monthly[cell], p_monthly[cell], et12)
-        cls = classify_v2(desc, is_land=bool(land[cell]))
+        cls = classify_v2(
+            desc,
+            is_land=bool(land[cell]),
+            elevation_m=elevation[cell],
+            lapse_rate_c_per_km=lapse_c_per_km,
+        )
         entries.append(
             {
                 "name": f"类中心代表点（{code}）",
@@ -340,7 +368,9 @@ def main() -> None:
         ">",
         f"> 数据源（观测，非引擎输出）：温度 {prov.get('temperature', '—')}；",
         f"> 降水 {prov.get('precipitation', '—')}；Köppen 参照列 {prov.get('koppen_obs', '—')}；",
-        f"> 参考需求 {prov.get('demand_model', '—')}。",
+        f"> 参考需求 {prov.get('demand_model', '—')}。世界级声明：climate_state",
+        "> temperate · 递减率 6.5 K/km（ISA，-H 判据输入；与",
+        "> `scripts/earth/export_earth_yearly.py` 同源）。",
         "> 月度序列 month 0 = 三月（春分）——与引擎约定一致（观测导入器已重排）。",
         "> 读法与描述量语义见 `docs/ucc/specification.md`；",
         "> 分类阈值与简码字母表见该文 §5。",
@@ -357,7 +387,11 @@ def main() -> None:
     ]
     for i, e in enumerate(entries, start=1):
         desc, cls = e["desc"], e["cls"]
-        mods = ("l" if cls.continental else "") + ("g" if cls.water_stress else "")
+        mods = (
+            ("l" if cls.continental else "")
+            + ("g" if cls.water_stress else "")
+            + ("H" if cls.highland else "")
+        )
         ai_s = _fmt(desc.ai) if desc.ai_status == "valid" else status_short(desc.ai_status)
         def_s = (
             _fmt(desc.deficit)

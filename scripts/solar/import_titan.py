@@ -236,8 +236,14 @@ def main() -> None:
             "datum-offset — relative relief only)",
             "epistemic_status": "L4 GCM climatology (ucc-review §6.2): a model, not "
             "error-free truth",
+            "climate_state": "methane_hydrology — declared world regime (axis F); "
+            "Schneider 2012 methane cycle vocabulary",
+            "lapse_rate": "1.38 K/km near-surface (Lindal et al. 1983 Voyager RO; "
+            "Huygens HASI — Fulchignoni et al. 2005)",
         },
         demand_model=None,
+        climate_state="methane_hydrology",
+        lapse_rate_c_per_km=1.38,
     )
     print("Land classes:", sorted(combos.items(), key=lambda kv: -kv[1]))
 

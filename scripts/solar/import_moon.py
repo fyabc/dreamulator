@@ -291,8 +291,11 @@ def main() -> None:
             "but surface-temperature semantics differ from air temperature",
             "time_basis": f"bin = {MOON_BIN_DAYS:.4f} Earth-days (2 h local time); "
             "window = 1 synodic rotation, not a year",
+            "climate_state": "airless — declared world regime (axis F); no "
+            "atmosphere, hence no lapse rate and no -H highland modifier",
         },
         demand_model=None,
+        climate_state="airless",
     )
     print("Land classes:", sorted(combos.items(), key=lambda kv: -kv[1]))
 

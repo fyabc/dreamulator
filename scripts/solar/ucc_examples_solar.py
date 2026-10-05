@@ -164,10 +164,7 @@ def main() -> None:
     world = args.planet
     planet_id = PLANET_IDS[world]
     map_dir = args.map_dir or _ROOT / f"data/worlds/{_ANCHOR_WORLD}/maps" / planet_id
-    out = (
-        args.out
-        or _ROOT / f"docs/ucc/examples/{world}-data.md"
-    )
+    out = args.out or _ROOT / f"docs/ucc/examples/{world}-data.md"
 
     print(f"Reading {map_dir}/climate_yearly.msgpack …")
     with (map_dir / "climate_yearly.msgpack").open("rb") as f:
@@ -179,6 +176,9 @@ def main() -> None:
     status_codes = list(y["status_codes"])
     data_source = str(y.get("data_source", "?"))
     provenance = dict(y.get("provenance", {}))
+    climate_state = str(y.get("climate_state", "—（未声明）"))
+    _lapse = y.get("lapse_rate_c_per_km")
+    lapse_line = f"{float(_lapse):g} K/km" if _lapse is not None else "未声明（无大气 → -H 不适用）"
     bin_days = float(y.get("bin_days", 365.25 / 12))
     window_days = float(y.get("window_days", bin_days * 12))
 
@@ -225,6 +225,7 @@ def main() -> None:
     suffix = (
         np.where((mods & 1).astype(bool), "l", "")
         + np.where((mods & 2).astype(bool), "g", "")
+        + np.where((mods & 4).astype(bool), "H", "")
     ).astype(object)
     if ucc_shape is not None and shape_codes:
         shape_letter = np.array(
@@ -284,6 +285,8 @@ def main() -> None:
             mods_l.append("continental")
         if mods[i] & 2:
             mods_l.append("water_stress")
+        if mods[i] & 4:
+            mods_l.append("highland")
         if sp[i] != 255:
             supply_s = supply_bands[sp[i]]
         elif land[i]:
@@ -344,6 +347,9 @@ def main() -> None:
 
 **数据源**（`data_source: {data_source}`——认知地位见文件内 provenance，随数据走）：
 {prov_lines}
+
+**世界级声明**：`climate_state: {climate_state}`；递减率
+{lapse_line}（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × {bin_days:.2f} 地球日 = 窗口 {window_days:.1f} 日；
 `month_0` = `{month_0}`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界

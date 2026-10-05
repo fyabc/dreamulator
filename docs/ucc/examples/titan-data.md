@@ -2,7 +2,7 @@
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet titan`
-> 生成日期：2026-10-04。本天体的解读（世界要点、读法）见手写文档
+> 生成日期：2026-10-05。本天体的解读（世界要点、读法）见手写文档
 > `docs/ucc/examples/titan.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
@@ -17,6 +17,11 @@
 > - seas: water_class=ocean where time-mean qsurf > 0.05 m (methane seas/lakes, 42 cells)
 > - topography: TAM `dtd` runoff topography (~5.6° GCM grid; possibly datum-offset — relative relief only)
 > - epistemic_status: L4 GCM climatology (ucc-review §6.2): a model, not error-free truth
+> - climate_state: methane_hydrology — declared world regime (axis F); Schneider 2012 methane cycle vocabulary
+> - lapse_rate: 1.38 K/km near-surface (Lindal et al. 1983 Voyager RO; Huygens HASI — Fulchignoni et al. 2005)
+
+**世界级声明**：`climate_state: methane_hydrology`；递减率
+1.38 K/km（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × 896.38 地球日 = 窗口 10756.5 日；
 `month_0` = `titan_year_phase_0_arbitrary_anchor`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界

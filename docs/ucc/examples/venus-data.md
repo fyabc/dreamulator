@@ -2,7 +2,7 @@
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet venus`
-> 生成日期：2026-10-04。本天体的解读（世界要点、读法）见手写文档
+> 生成日期：2026-10-05。本天体的解读（世界要点、读法）见手写文档
 > `docs/ucc/examples/venus.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
@@ -16,8 +16,13 @@
 > - surface_pressure: VCD `ps` diurnal mean; global mean 9268 kPa
 > - topography: USGS Venus Magellan Global Topography 4641m v02
 > - epistemic_status: L4 GCM climatology (ucc-review §6.2): a model, not error-free truth
-> - demand_model_warning: HOT-SIDE EXTRAPOLATION (knowledge doc §8 registered gap): Hamon at ~737 K is arithmetic extrapolation far outside its liquid-water calibration domain; AI=0 (arid) / deficit=1 (water_stress) are contract-valid but physically meaningless here. The cold-side out_of_domain gate does NOT cover the hot side; a hot-side gate is future work.
+> - demand_model_warning: HOT-SIDE DOMAIN GATE (v2): the whole year sits above the 35 °C gate, so AI/deficit/phase report out_of_domain and the supply slot reads n — Hamon at ~737 K is arithmetic extrapolation far outside its liquid-water calibration domain.
 > - time_basis: bin = 18.73 Earth-days (Venus month); p_total per Venus year (224.701 d)
+> - climate_state: runaway_greenhouse — declared world regime (axis F); Wolf 2017 / Goldblatt 2015 runaway-greenhouse lineage
+> - lapse_rate: 8.0 K/km near-adiabatic deep atmosphere (VIRA — Seiff et al. 1985; Zasova et al. 2006) — enables the -H highland modifier (expected to stay silent: every bin is far inside the tropical band)
+
+**世界级声明**：`climate_state: runaway_greenhouse`；递减率
+8 K/km（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × 18.73 地球日 = 窗口 224.7 日；
 `month_0` = `ls_15_first_bin_center`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界

@@ -88,7 +88,15 @@
   },
   "uccMod": {
     "continental": "强季节",
-    "waterStress": "干季"
+    "waterStress": "干季",
+    "highland": "高地"
+  },
+  "uccClimateState": {
+    "temperate": "温和气候态",
+    "runaway_greenhouse": "失控温室",
+    "thin_co2_cold": "薄 CO₂ 冷气候态",
+    "methane_hydrology": "甲烷水文",
+    "airless": "无大气"
   },
   "uccShape": {
     "unimodal": "单雨季",
@@ -242,6 +250,8 @@
     "uccDeclToggle": "显示/隐藏数据与模型声明",
     "declDemandModel": "参考需求模型",
     "declDemandNone": "未应用",
+    "declClimateState": "气候态（世界级）",
+    "declLapseRate": "递减率 {{rate}} K/km",
     "declDaylength": "日长 {{hours}} h",
     "declTimeBasis": "时间基准",
     "declTimeBasisValue": "{{months}} 箱 × {{bin}}（窗口 {{window}}）",

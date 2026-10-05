@@ -475,3 +475,97 @@ def test_v2_modifier_letters_renamed() -> None:
     assert c.continental and "l" in c.code
     if c.water_stress:
         assert "g" in c.code and "w" not in c.code and "x" not in c.code
+
+
+# ---------------------------------------------------------------------------
+# v2 world-level climate state (axis F) + the -H highland modifier
+# ---------------------------------------------------------------------------
+
+
+def test_climate_states_vocabulary() -> None:
+    # Axis F vocabulary (world-archive declaration, not a per-cell axis).
+    from dreamulator.map.ucc import CLIMATE_STATES
+
+    assert CLIMATE_STATES == (
+        "temperate",
+        "runaway_greenhouse",
+        "thin_co2_cold",
+        "methane_hydrology",
+        "airless",
+    )
+
+
+def test_highland_modifier_band_change() -> None:
+    # design-anchors §3.7: reducing the bin extremes to sea level with the
+    # declared lapse rate moves this cell to a *different* thermal band → the
+    # band is elevation-made → -H.  Main class never changes.
+    m = 12
+    t = np.array([2.0, 12.0] * 6)  # t_min 2 ≥ −3, t_max 12 ≥ 10 → temperate
+    p = np.full(m, 1.0)
+    et = np.full(m, 1.0)
+    d = compute_descriptors(t, p, et_rate=et)
+    c_plain = classify_v2(d, is_land=True)
+    assert c_plain.thermal == "temperate" and not c_plain.highland
+
+    # Same cell at 5 km with the Earth ISA lapse (6.5 K/km): the counterfactual
+    # sea-level t_min = 2 + 32.5 = 34.5 ≥ 18 → tropical → -H fires.
+    c_alt = classify_v2(d, is_land=True, elevation_m=5000.0, lapse_rate_c_per_km=6.5)
+    assert c_alt.highland is True
+    assert c_alt.thermal == "temperate"  # cause marker only — band unchanged
+    assert "-H" in c_alt.code
+    assert c_plain.code == c_alt.code.replace("-H", "")  # pure suffix insertion
+
+    # Depression is symmetric: a temperate cell in a −3 km basin whose
+    # sea-level reduction crosses the 10 °C node downward also earns the
+    # marker (t_max 11 − 19.5 = −8.5 < 10 → polar).
+    t_dep = np.array([-2.0, 11.0] * 6)
+    d_dep = compute_descriptors(t_dep, p, et_rate=et)
+    c_dep = classify_v2(d_dep, is_land=True, elevation_m=-3000.0, lapse_rate_c_per_km=6.5)
+    assert c_dep.highland is True and c_dep.thermal == "temperate"
+
+
+def test_highland_no_fire_cases() -> None:
+    m = 12
+    p = np.full(m, 1.0)
+    et = np.full(m, 2.0)
+
+    # Venus-like: every bin far inside the tropical band — no threshold lies
+    # between 408 and 469 °C, so even an 11 km Maxwell at 8 K/km (+88 K)
+    # cannot change the band (the taxonomy's "highland/lowland split" line
+    # does not survive the strict criterion; documented as the known blind
+    # spot — elevation stays a descriptor-layer story there).
+    d_hot = compute_descriptors(np.full(m, 430.0), p, et_rate=et)
+    c_hot = classify_v2(d_hot, is_land=True, elevation_m=11_000.0, lapse_rate_c_per_km=8.0)
+    assert c_hot.thermal == "tropical" and c_hot.highland is False
+
+    # Ocean cells never carry the marker (a submarine "sea level" is
+    # meaningless), and airless worlds declare no lapse rate at all.
+    d = compute_descriptors(np.array([2.0, 12.0] * 6), p, et_rate=et)
+    c_ocean = classify_v2(d, is_land=False, elevation_m=5000.0, lapse_rate_c_per_km=6.5)
+    assert c_ocean.highland is False
+    assert classify_v2(d, is_land=True, elevation_m=5000.0).highland is False
+    assert classify_v2(d, is_land=True, lapse_rate_c_per_km=6.5).highland is False
+
+
+def test_yearly_cell_arrays_highland_bit() -> None:
+    # The shared per-cell writer encodes -H as modifiers bit 2 (bit 0
+    # continental, bit 1 water_stress) and leaves the payload keys in the
+    # climate_yearly.msgpack vocabulary.
+    from dreamulator.map.ucc import yearly_cell_arrays
+
+    t = np.tile(np.array([2.0, 12.0] * 6), (2, 1))  # (2, 12)
+    p = np.full((2, 12), 1.0)
+    et = np.full((2, 12), 1.0)
+    arrays = yearly_cell_arrays(
+        t,
+        p,
+        et,
+        is_land=np.array([True, False]),
+        elevation_m=np.array([5000.0, 5000.0]),
+        lapse_rate_c_per_km=6.5,
+    )
+    assert arrays["ucc_modifiers"].dtype == np.uint8
+    assert arrays["ucc_modifiers"][0] & 4  # land at 5 km → highland bit
+    assert not arrays["ucc_modifiers"][1] & 4  # ocean → never
+    assert arrays["ucc_thermal"].shape == (2,)
+    assert arrays["ai"][0] == pytest.approx(1.0)
