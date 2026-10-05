@@ -179,6 +179,7 @@ def main() -> None:
     suffix = (
         np.where((mods & 1).astype(bool), "l", "")
         + np.where((mods & 2).astype(bool), "g", "")
+        + np.where((mods & 4).astype(bool), "H", "")
     ).astype(object)
     if ucc_shape is not None and shape_codes:
         shape_letter = np.array(
@@ -202,6 +203,7 @@ def main() -> None:
     ocean_bands = Counter(np.array(thermal_bands)[th[~land]].tolist())
     cont_share = float((mods[land] & 1).mean())
     ws_share = float(((mods[land] & 2) > 0).mean())
+    high_share = float(((mods[land] & 4) > 0).mean())
     ai_land_valid = ai[land & (ai_status == 0)]
     status_tally = Counter(status_codes[s] for s in ai_status[land])
     ood_land = int(((ai_status == 4) & land).sum())
@@ -273,6 +275,8 @@ def main() -> None:
             mods_l.append("continental")
         if mods[i] & 2:
             mods_l.append("water_stress")
+        if mods[i] & 4:
+            mods_l.append("highland")
         supply_s = (
             supply_bands[sp[i]]
             if sp[i] != 255
@@ -339,6 +343,8 @@ def main() -> None:
     pt_q_s = " | ".join(f"{v:.0f}" for v in pt_q)
 
     today = datetime.date.today().isoformat()
+    climate_state = y.get("climate_state", "—")
+    lapse = y.get("lapse_rate_c_per_km")
     doc = (
         f"""# Nacrea · UCC 迁移语义夹具 — 数据表（{profile} × Nacrea）
 
@@ -346,7 +352,9 @@ def main() -> None:
 > `uv run python scripts/climate/ucc_examples_nacrea.py`
 > 数据 = 正典构建导出 `maps/satellite_nacrea/climate_yearly.msgpack`
 > （引擎输出，`data_source: model`，profile {profile}）+ `climate_monthly.msgpack`
-> + 网格文件。夹具目的与维护说明见手写文档
+> + 网格文件。世界级声明：`climate_state: {climate_state}`，递减率
+> {f"{lapse} K/km" if lapse is not None else "未声明（-H 不适用）"}。
+> 夹具目的与维护说明见手写文档
 > `docs/ucc/examples/nacrea.md`；描述量与分类语义见
 > `docs/ucc/specification.md`；Earth 侧对照例见
 > `docs/ucc/examples/earth.md`。
@@ -380,7 +388,7 @@ def main() -> None:
         + f"""。
 
 **修饰语**：continental {cont_share:.2%}（构造性为零，见 E2）；water_stress
-{ws_share:.1%} 陆地。
+{ws_share:.1%} 陆地；highland（-H，海拔抬出来的带）{high_share:.1%} 陆地。
 
 **AI 状态（陆地）**："""
         + "、".join(f"{k} {v}" for k, v in status_tally.most_common())

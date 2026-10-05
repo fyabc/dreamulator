@@ -2,7 +2,7 @@
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet moon`
-> 生成日期：2026-10-04。本天体的解读（世界要点、读法）见手写文档
+> 生成日期：2026-10-05。本天体的解读（世界要点、读法）见手写文档
 > `docs/ucc/examples/moon.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
@@ -17,6 +17,10 @@
 > - topography: LRO LDEM_4 (NASA SVS Moon Kit)
 > - epistemic_status: observation-grade (like earth root), NOT a GCM — but surface-temperature semantics differ from air temperature
 > - time_basis: bin = 2.4609 Earth-days (2 h local time); window = 1 synodic rotation, not a year
+> - climate_state: airless — declared world regime (axis F); no atmosphere, hence no lapse rate and no -H highland modifier
+
+**世界级声明**：`climate_state: airless`；递减率
+未声明（无大气 → -H 不适用）（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × 2.46 地球日 = 窗口 29.5 日；
 `month_0` = `local_time_00h`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界
