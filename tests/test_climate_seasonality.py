@@ -11,11 +11,14 @@ import pytest
 from dreamulator.engine.climate_physics import koppen_classify
 from dreamulator.engine.climate_seasonality import (
     apply_eddy_relaxation,
+    coastal_moderation_scale_km,
     compute_effective_obliquity,
     compute_seasonal_climate,
     daily_mean_insolation,
     eddy_diffusion_single_cell,
+    itcz_damping,
     itcz_latitude_monthly,
+    meridional_shift_sample,
     monthly_insolation,
     monthly_precipitation_factor,
     monthly_temperature,
@@ -649,3 +652,47 @@ class TestComputeSeasonalClimate:
         )
         assert not np.isnan(out["T_monthly"]).any()
         assert out["T_monthly"].max() - out["T_monthly"].min() > 0.0
+
+
+class TestItczDampingAndShifts:
+    """R1 (2026-10): derivable ITCZ damping + seasonal background-wind shift."""
+
+    def test_damping_earth_unchanged(self) -> None:
+        assert itcz_damping(365.25) == pytest.approx(0.6)
+
+    def test_damping_short_year_reduced(self) -> None:
+        d_nacrea = itcz_damping(99.7)
+        assert 0.3 < d_nacrea < 0.5  # GCM oracle: ±5.5° realized for ε=14.9°
+        assert d_nacrea < itcz_damping(365.25)
+        assert itcz_damping(50.0) < d_nacrea < itcz_damping(800.0)
+
+    def test_damping_rejects_nonpositive_period(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            itcz_damping(0.0)
+
+    def test_coastal_moderation_scale_derived(self) -> None:
+        scale = coastal_moderation_scale_km()
+        assert 400.0 < scale < 450.0  # BL-advection picture ≈ 420 km
+
+    def test_meridional_shift_identity_and_translation(self) -> None:
+        from scipy.spatial import cKDTree
+
+        lat = np.linspace(-85.0, 85.0, 35)
+        lon = np.linspace(0.0, 350.0, 12)
+        lon_g, lat_g = np.meshgrid(lon, lat)
+        lr, lr2 = np.radians(lat_g), np.radians(lon_g)
+        xyz = np.stack(
+            [np.cos(lr) * np.cos(lr2), np.cos(lr) * np.sin(lr2), np.sin(lr)], axis=-1
+        ).reshape(-1, 3)
+        field = lat_g.reshape(-1) * 1.0
+        tree = cKDTree(xyz)
+        same = meridional_shift_sample(
+            field, tree, np.radians(lat_g.ravel()), np.radians(lon_g.ravel()), 0.0
+        )
+        assert np.array_equal(same, field)
+        shifted = meridional_shift_sample(
+            field, tree, np.radians(lat_g.ravel()), np.radians(lon_g.ravel()), 10.0
+        )
+        # value at lat φ now equals the annual field at φ−10 (nearest cell ≤2.5°)
+        interior = (lat_g.ravel() > -70) & (lat_g.ravel() < 70)
+        assert np.abs(shifted[interior] - (field[interior] - 10.0)).max() < 6.0
