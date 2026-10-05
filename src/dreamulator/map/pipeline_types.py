@@ -778,7 +778,9 @@ class TerrainPipelineConfig:
     # Eurasian interior (Moscow ~-25 → ~-12 °C winter).  0 disables the preset.
     maritime_advection_scale_km: float = 1500.0
     seasonal_coastal_scale_km: float = 250.0  # maritime-moderation e-folding length
-    coastal_moderation_scale_km: float = 500.0  # annual-mean coastal moderation e-folding
+    coastal_moderation_scale_km: float | None = None  # None = derived
+    # (climate_seasonality.coastal_moderation_scale_km ≈ 420 km, BL-advection
+    # picture); set explicitly to override the derivation for a world.
     # Seasonal ice-albedo feedback: a cell whose summer never melts keeps the
     # snow/ice albedo and reflects the summer insolation, shrinking its seasonal
     # amplitude — distinguishes the ice cap (EF, frozen) from the subarctic
