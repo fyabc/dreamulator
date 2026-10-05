@@ -420,3 +420,26 @@ features:
 ---
 
 *模式将持续从代码库中提取和补充。每个模式的 "参考" 给出了源码位置以便查阅。*
+
+## 模式 11：世界气候声明（climate.yaml）
+
+**概念**：气候分类的 cell 级结果（UCC 码）栖身在一个**世界级上下文**里——
+「全行星都是 `An`」对金星和对冰封海洋意义完全不同。作者用 `climate.yaml`
+声明这个上下文（行星气候态 + 递减率等），引擎把它抄进 UCC 导出文件的元数据；
+声明住 YAML、产品住 msgpack，两层永不相混。这是「方案与档案分离」原则在
+作者侧的落点。
+
+**业界先例**：行星气候态类型学（runaway / moist greenhouse / temperate /
+snowball 的全球均温分档，Wolf 2017；Goldblatt 2015）——学界行星级分类与
+格点级分类（Köppen 谱系）本就分属两层，本模式把两层显式接起来。
+
+注释齐全的样例（含各状态的判定线索与现行递减率声明值）：
+`docs/ucc/climate-input.sample.yaml`，放置到 `layers/climate/input/climate.yaml`
+即生效路径；字段语义规范见 `docs/ucc/specification.md` §5.1。
+
+```yaml
+# 最小可用（全部字段可省——缺席即引擎默认）
+version: 1
+climate_state: temperate        # 行星气候态（词汇见样例注释）
+lapse_rate_c_per_km: 6.5        # -H 高地修饰语的环境递减率
+```

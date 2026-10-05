@@ -92,7 +92,7 @@ describe('decodeYearlyClimate', () => {
     expect(uccCode(d, 1, true)).toBe('Rn') // land n/a → explicit n slot
   })
 
-  it('composes v2 codes (A/C/D/E alphabet, l/g/H modifiers, m/d/h/o suffixes)', () => {
+  it('composes v2 codes (A/C/D/E alphabet, S/H zone grammar)', () => {
     const payload = {
       ...basePayload(),
       profile: 'ucc-v2',
@@ -114,15 +114,15 @@ describe('decodeYearlyClimate', () => {
       lapse_rate_c_per_km: 8.0,
     }
     const d = decodeYearlyClimate(toBuffer(payload))
-    // cold · semi-arid (p), all modifiers (l,g,H), unimodal wet season (m),
-    // anti-phase rain (o) — one dash, letters concatenated.
-    expect(uccCode(d, 0, true)).toBe('Dp-lgHmo')
+    // cold · semi-arid (p), seasonality zone fully lit (S + l,g,m,o),
+    // highland zone (H) — hyphen-separated.
+    expect(uccCode(d, 0, true)).toBe('Dp-Slgmo-H')
     // temperate · transitional, no letters → bare code.
     expect(uccCode(d, 1, true)).toBe('Ct')
     // polar land with invalid supply (e.g. ice cap OOD) → explicit n slot;
     // the shape letter survives the domain gate (precipitation seasonality is
     // independent of the demand model's validity).
-    expect(uccCode(d, 2, true)).toBe('En-m')
+    expect(uccCode(d, 2, true)).toBe('En-Sm')
     // New descriptor fields decode (NaN travels).
     expect(d.pHarmonic1![0]).toBeCloseTo(0.5)
     expect(Number.isNaN(d.pPhase![1])).toBe(true)
