@@ -60,6 +60,30 @@ class ClimateDescriptors:
     # Precipitation concentration C_TV = 0.5 Σ |q_i − w_i| (None when P_total=0).
     concentration: float | None
 
+    # Seasonal-shape harmonics of the precipitation mass over circular time
+    # (v2-α candidates).  q_j = P_j·Δt_j / P_total, φ_j = bin-centre phase
+    # (2π·cumulative-time fraction).  ``p_harmonic1`` = |Σ q_j e^{iφ_j}| —
+    # unimodal concentration (≈1 when all rain falls in one season, ≈1/M for
+    # uniform rain); ``p_harmonic2`` = |Σ q_j e^{2iφ_j}| — half-period
+    # (two-season) concentration.  ``p_harmonic2 > p_harmonic1`` marks a
+    # bimodal regime (e.g. equinox double wet seasons), which C_TV and its
+    # single-number kin cannot distinguish from unimodal.  None when P_total=0.
+    p_harmonic1: float | None = None
+    p_harmonic2: float | None = None
+
+    # Rain–demand phase: signed circular phase difference between the
+    # precipitation mass and the reference-demand mass, as a fraction of the
+    # seasonal cycle in (−0.5, 0.5] — 0 = rain peaks with demand (monsoon-like
+    # 雨热同季), ±0.5 = rain peaks half a cycle away from demand
+    # (Mediterranean-like 雨热反季).  Partial validity (``p_phase_status``):
+    # missing_input without a demand series; not_applicable when either axis
+    # has no dominant seasonal cycle (first-harmonic amplitude below
+    # PHASE_CONCENTRATION_GATE) — a constant-temperature world can still have
+    # a precipitation season (§7.1), it just cannot be in/out of phase with
+    # demand; out_of_domain inherits the demand-model domain gates.
+    p_phase: float | None = None
+    p_phase_status: str = MISSING_INPUT
+
 
 def compute_descriptors(
     t: np.ndarray,
@@ -103,19 +127,36 @@ def compute_descriptors(
     deficit, deficit_status = _seasonal_deficit(p_rate, et_rate, dt)
     concentration = _concentration(p_rate, dt, p_total)
 
+    # Seasonal shape / phase (v2-α): circular bin-centre phases weighted by dt.
+    cum = np.cumsum(dt) - 0.5 * dt
+    phi = 2.0 * np.pi * cum / dt.sum()
+    p_harmonic1: float | None = None
+    p_harmonic2: float | None = None
+    if p_total > 0.0:
+        q_p = p_rate * dt / p_total
+        p_harmonic1 = float(np.abs(np.sum(q_p * np.exp(1j * phi))))
+        p_harmonic2 = float(np.abs(np.sum(q_p * np.exp(2j * phi))))
+    p_phase, p_phase_status = _p_phase(p_rate, et_rate, dt, p_total, phi, p_harmonic1)
+
     # Demand-model validity domain (ucc-review §2.3/§4.4): the Hamon reference
     # demand is an empirical formula for evaporation from *liquid* water
-    # surfaces.  When no bin-mean temperature reaches the freeze threshold
-    # (no liquid water all year — ice-cap climates), the reference demand is
-    # undefined in physical terms: Eref collapses toward zero while sublimation
-    # physics takes over, and P/Eref inflates into a meaningless "humid" ice
-    # sheet.  Mark the supply–demand statistics out-of-domain there instead of
-    # reporting a number.  MISSING_INPUT (no PET at all) takes precedence.
-    if t_max < freeze_threshold_c:
+    # surfaces.  Cold side: when no bin-mean temperature reaches the freeze
+    # threshold (no liquid water all year — ice-cap climates), the reference
+    # demand is undefined in physical terms: Eref collapses toward zero while
+    # sublimation physics takes over, and P/Eref inflates into a meaningless
+    # "humid" ice sheet.  Hot side (v2-α gate, symmetric with the cold one):
+    # when no bin-mean temperature falls below HOT_DOMAIN_GATE_C, the whole
+    # year sits beyond the hottest Earth monthly means (~36 °C) — the formula
+    # is pure arithmetic extrapolation there with no calibration anchor
+    # (declared empirical candidate; Venus flips Ra-w → Rn under it).
+    # MISSING_INPUT (no PET at all) takes precedence over both gates.
+    if t_max < freeze_threshold_c or t_min > HOT_DOMAIN_GATE_C:
         if ai_status != MISSING_INPUT:
             ai, ai_status = None, OUT_OF_DOMAIN
         if deficit_status != MISSING_INPUT:
             deficit, deficit_status = None, OUT_OF_DOMAIN
+        if p_phase_status != MISSING_INPUT:
+            p_phase, p_phase_status = None, OUT_OF_DOMAIN
 
     return ClimateDescriptors(
         t_mean=t_mean,
@@ -130,6 +171,10 @@ def compute_descriptors(
         deficit=deficit,
         deficit_status=deficit_status,
         concentration=concentration,
+        p_harmonic1=p_harmonic1,
+        p_harmonic2=p_harmonic2,
+        p_phase=p_phase,
+        p_phase_status=p_phase_status,
     )
 
 
@@ -166,6 +211,53 @@ def _concentration(p_rate: np.ndarray, dt: np.ndarray, p_total: float) -> float 
     q = p_rate * dt / p_total  # precipitation mass fraction per bin
     w = dt / dt.sum()  # uniform-rate reference
     return float(0.5 * np.sum(np.abs(q - w)))
+
+
+#: Gate on the first-harmonic amplitude below which an axis has no dominant
+#: seasonal cycle, so a phase between the two axes is not well defined.
+#: Uniform over M=12 bins gives 1/12 ≈ 0.083; a declared empirical candidate
+#: (calibrated against the L2 observation set in the v2-α experiment).
+PHASE_CONCENTRATION_GATE = 0.25
+
+#: Hot-side domain gate for the reference-demand model (v2-α): when *no*
+#: bin-mean temperature falls below this value, the whole year is hotter than
+#: any Earth monthly mean (~36 °C, e.g. Assab in the earth worked examples
+#: peaks at t_max = 34.5 °C), i.e. beyond the Hamon formula's calibration
+#: envelope — declared empirical candidate, same epistemic category as the
+#: cold-side freeze rule.
+HOT_DOMAIN_GATE_C = 35.0
+
+
+def _p_phase(
+    p_rate: np.ndarray,
+    et_rate: np.ndarray | None,
+    dt: np.ndarray,
+    p_total: float,
+    phi: np.ndarray,
+    p_harmonic1: float | None,
+) -> tuple[float | None, str]:
+    """Signed rain–demand phase (fraction of the seasonal cycle, (−0.5, 0.5])."""
+    if et_rate is None:
+        return None, MISSING_INPUT
+    et_rate = np.asarray(et_rate, dtype=np.float64)
+    et_total = float(np.sum(et_rate * dt))
+    if p_total <= 0.0 or et_total <= 0.0:
+        return None, NOT_APPLICABLE
+    if p_harmonic1 is None or p_harmonic1 < PHASE_CONCENTRATION_GATE:
+        return None, NOT_APPLICABLE
+    q_e = et_rate * dt / et_total
+    r1_e = float(np.abs(np.sum(q_e * np.exp(1j * phi))))
+    if r1_e < PHASE_CONCENTRATION_GATE:
+        return None, NOT_APPLICABLE
+    q_p = p_rate * dt / p_total
+    arg_p = np.angle(np.sum(q_p * np.exp(1j * phi)))
+    arg_e = np.angle(np.sum(q_e * np.exp(1j * phi)))
+    delta = (arg_p - arg_e) / (2.0 * np.pi)
+    # wrap into (−0.5, 0.5]
+    delta = (delta + 0.5) % 1.0 - 0.5
+    if delta == -0.5:
+        delta = 0.5
+    return float(delta), VALID
 
 
 # ---------------------------------------------------------------------------
@@ -210,11 +302,6 @@ MOD_DEFICIT_V0 = 0.5
 THERMAL_BANDS_V0 = ("polar", "cold", "temperate", "tropical")
 SUPPLY_BANDS_V0 = ("arid", "transitional", "humid")
 SUPPLY_BANDS_V1 = ("arid", "semi_arid", "transitional", "humid")
-
-#: The profile current exports are written with.
-PROFILE_CURRENT = PROFILE_V1
-THERMAL_BANDS_CURRENT = THERMAL_BANDS_V0
-SUPPLY_BANDS_CURRENT = SUPPLY_BANDS_V1
 
 # Compact display codes (the profile's short alphabet, versioned with it).
 # Letters + hyphen only — speakable and safe in URLs/shells/filenames.
@@ -347,8 +434,153 @@ def classify_v0(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
 
 
 def classify_v1(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
-    """Classify under profile v1 (= v0 + arid split at AI 0.2) — the current
-    export profile."""
+    """Classify under profile v1 (= v0 + arid split at AI 0.2) — kept for
+    reproducibility alongside v0."""
     return _classify(
         d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V1
+    )
+
+
+# ---------------------------------------------------------------------------
+# Classification profile v2 (ucc-v2, frozen 2026-10-04 after the seasonality
+# L2 ablation — private/reviews/ucc-v2-seasonality-l2-2026-10-04.py)
+# ---------------------------------------------------------------------------
+
+PROFILE_V2 = "ucc-v2"
+"""Current profile.  v2 = v1's band structure + the seasonality suffix letters
++ the reworked display alphabet:
+
+- Main classes and thresholds are unchanged from v1 (thermal nodes 10/−3/18 °C,
+  AI edges 0.2/0.5/1.0, modifier gates t_range 25 °C / deficit 0.5).
+- Alphabet rework (breaking, sanctioned by the 2026-09-24 no-compat ruling):
+  thermal letters follow Köppen's direction — ``A`` tropical (hottest) …
+  ``E`` polar (coldest) — with ``B`` permanently reserved-blank (Köppen's B is
+  the dry group; in UCC dryness lives on the lowercase supply axis, so a
+  thermal ``B`` would be a standing misread trap and is never issued).
+- Supply letters: ``a`` arid / ``p`` semi-arid (stePpe — echoing Köppen BS's
+  *concept* in a non-colliding glyph) / ``t`` transitional / ``u`` humid.
+  ``s`` and ``h`` are retired: with v2's thermal C meaning temperate (same as
+  Köppen), a UCC ``Cs`` (temperate·semi-arid) would read as a near-synonym of
+  Köppen ``Cs`` (temperate·dry-summer); ``h`` doubled as the in-phase suffix
+  letter and echoed Köppen's *hot* (BWh) against our humid.  Bonus:
+  a < p < t < u ascends the alphabet with wetness, so legends read monotone.
+- Modifiers: continental → ``l`` (陆, replaces ``x`` — x is the wildcard
+  convention in climate-classification practice and must not be a formal
+  letter); water_stress → ``g`` (干季, replaces ``w`` to stop the echo of
+  Köppen's winter-dry ``w``), display name 干季/seasonal dry.
+- New suffix letters (never change the main class):
+  - precipitation-season shape (gate C_TV ≥ 0.25): ``m`` unimodal wet season /
+    ``d`` bimodal (two wet seasons half a cycle apart, R2 > R1); below the
+    gate the letter is silent ("u"-niform is the default, not printed).
+  - rain–demand phase (valid only where both axes carry a dominant seasonal
+    cycle — an extratropical instrument; see the phase descriptor): ``h``
+    in-phase (|Δφ| ≤ 1/12 cycle, 雨热同季) / ``o`` anti-phase (|Δφ| ≥ 3/12,
+    雨热反季, Mediterranean-type); mid-range and not-applicable are silent.
+- Evidence: shape letter compresses within-class C_TV variance by 65.7 %
+  (v1 modifier benchmarks: x 42 %, w 14 %); phase letter recovers Köppen's
+  precipitation letters almost perfectly (w→98.7 % h, s→61 % o); perturbation
+  swap-rate cost +0.03 pp.
+"""
+
+THERMAL_CODE_LETTERS_V2 = {"tropical": "A", "temperate": "C", "cold": "D", "polar": "E"}
+#: v2 supply letters (a/p/t/u, alphabetically ascending with wetness).  The
+#: v1 map above stays for v0/v1 reproducibility — their codes never change.
+SUPPLY_CODE_LETTERS_V2 = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
+MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g"}
+SHAPE_CODE_LETTERS_V2 = {"unimodal": "m", "bimodal": "d"}
+PHASE_CODE_LETTERS_V2 = {"in_phase": "h", "anti_phase": "o"}
+#: C_TV gate for the shape letter (declared empirical candidate; L2 scan
+#: 0.15/0.20/0.25 → 0.25 wins compression and matches the phase gate).
+SHAPE_GATE_C_TV_V2 = 0.25
+PHASE_LETTER_IN_CYCLE = 1.0 / 12.0
+PHASE_LETTER_ANTI_CYCLE = 3.0 / 12.0
+
+PROFILE_CURRENT = PROFILE_V2
+THERMAL_BANDS_CURRENT = THERMAL_BANDS_V0
+SUPPLY_BANDS_CURRENT = SUPPLY_BANDS_V1
+THERMAL_CODE_LETTERS_CURRENT = THERMAL_CODE_LETTERS_V2
+MOD_CODE_LETTERS_CURRENT = MOD_CODE_LETTERS_V2
+
+
+@dataclass(frozen=True)
+class UCCClassV2:
+    """One cell's classification under profile v2.
+
+    Same main-class semantics as v1 (thermal/supply bands, modifier gates);
+    adds the seasonality suffixes ``shape`` (unimodal/bimodal wet season, None
+    when C_TV is below the gate) and ``phase`` (in_phase/anti_phase, None when
+    the phase descriptor is not valid or mid-range).  Like modifiers, the
+    suffix letters never change the main class.
+    """
+
+    profile: str
+    thermal: str
+    supply: str | None
+    supply_status: str
+    is_land: bool
+    continental: bool
+    water_stress: bool | None
+    shape: str | None
+    phase: str | None
+
+    @property
+    def label(self) -> str:
+        return self.thermal if self.supply is None else f"{self.thermal}/{self.supply}"
+
+    @property
+    def code(self) -> str:
+        """Compact v2 code, e.g. ``Dp-lgmo`` (cold·semi-arid, all suffixes),
+        ``An`` (hot-side OOD Venus), ``Eo`` (polar ocean).  Grammar: thermal ·
+        supply - modifiers · shape · phase; silent letters are simply absent,
+        so codes stay compact."""
+        if self.supply is not None:
+            s = SUPPLY_CODE_LETTERS_V2[self.supply]
+        else:
+            s = LAND_NA_CODE_LETTER if self.is_land else OCEAN_CODE_LETTER
+        code = THERMAL_CODE_LETTERS_V2[self.thermal] + s
+        mods = ""
+        if self.continental:
+            mods += MOD_CODE_LETTERS_V2["continental"]
+        if self.water_stress:
+            mods += MOD_CODE_LETTERS_V2["water_stress"]
+        suffix = mods
+        if self.shape is not None:
+            suffix += SHAPE_CODE_LETTERS_V2[self.shape]
+        if self.phase is not None:
+            suffix += PHASE_CODE_LETTERS_V2[self.phase]
+        return code + ("-" + suffix if suffix else "")
+
+
+def classify_v2(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV2:
+    """Classify under profile v2 (v1 band structure + seasonality letters)."""
+    base = _classify(
+        d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V2
+    )
+    shape: str | None = None
+    if (
+        d.concentration is not None
+        and d.concentration >= SHAPE_GATE_C_TV_V2
+        and d.p_harmonic1 is not None
+        and d.p_harmonic2 is not None
+    ):
+        # Tolerance: a delta spike carries *every* harmonic at amplitude 1 —
+        # float noise must not flip a pure spike to "bimodal".
+        shape = "bimodal" if d.p_harmonic2 > d.p_harmonic1 + 1e-9 else "unimodal"
+    phase: str | None = None
+    if d.p_phase_status == VALID and d.p_phase is not None:
+        abs_phase = abs(d.p_phase)
+        if abs_phase <= PHASE_LETTER_IN_CYCLE:
+            phase = "in_phase"
+        elif abs_phase >= PHASE_LETTER_ANTI_CYCLE:
+            phase = "anti_phase"
+    return UCCClassV2(
+        profile=base.profile,
+        thermal=base.thermal,
+        supply=base.supply,
+        supply_status=base.supply_status,
+        is_land=base.is_land,
+        continental=base.continental,
+        water_stress=base.water_stress,
+        shape=shape,
+        phase=phase,
     )

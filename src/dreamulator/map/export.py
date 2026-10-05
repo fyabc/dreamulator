@@ -1159,11 +1159,13 @@ def export_climate_layers(
         from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
 
         from .ucc import (
+            PHASE_CODE_LETTERS_V2,
             PROFILE_CURRENT,
+            SHAPE_CODE_LETTERS_V2,
             STATUS_CODES,
             SUPPLY_BANDS_CURRENT,
             THERMAL_BANDS_CURRENT,
-            classify_v1,
+            classify_v2,
             compute_descriptors,
         )
 
@@ -1172,6 +1174,10 @@ def export_climate_layers(
         _status_index = {name: i for i, name in enumerate(_status_codes)}
         _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_CURRENT)}
         _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_CURRENT)}
+        _shape_codes = list(SHAPE_CODE_LETTERS_V2)
+        _shape_index = {name: i for i, name in enumerate(_shape_codes)}
+        _phase_codes = list(PHASE_CODE_LETTERS_V2)
+        _phase_index = {name: i for i, name in enumerate(_phase_codes)}
         _n = mesh.num_cells
         _t_mean = np.empty(_n, dtype=np.float32)
         _t_min = np.empty(_n, dtype=np.float32)
@@ -1185,14 +1191,22 @@ def export_climate_layers(
         _deficit = np.full(_n, np.nan, dtype=np.float32)
         _deficit_status = np.empty(_n, dtype=np.uint8)
         _concentration = np.full(_n, np.nan, dtype=np.float32)
-        # Classification under the frozen profile v0 (UCC-01 step 4a).  Codes are
+        _p_harmonic1 = np.full(_n, np.nan, dtype=np.float32)
+        _p_harmonic2 = np.full(_n, np.nan, dtype=np.float32)
+        _p_phase = np.full(_n, np.nan, dtype=np.float32)
+        _p_phase_status = np.empty(_n, dtype=np.uint8)
+        # Classification under the current profile (UCC-01 step 4a).  Codes are
         # indices into thermal_bands/supply_bands; 255 in ucc_supply = the
         # supply–demand axis does not apply (ocean or invalid AI) — the why is in
         # ucc_supply_status.  ucc_modifiers bit 0 = continental, bit 1 = water_stress.
+        # ucc_shape/ucc_phase: indices into shape_codes/phase_codes, 255 = no
+        # letter (below the gate / not applicable).
         _ucc_thermal = np.empty(_n, dtype=np.uint8)
         _ucc_supply = np.empty(_n, dtype=np.uint8)
         _ucc_supply_status = np.empty(_n, dtype=np.uint8)
         _ucc_modifiers = np.empty(_n, dtype=np.uint8)
+        _ucc_shape = np.empty(_n, dtype=np.uint8)
+        _ucc_phase = np.empty(_n, dtype=np.uint8)
         for i in range(_n):
             d = compute_descriptors(t_monthly[i], p_monthly[i], _et_monthly[i])
             _t_mean[i] = d.t_mean
@@ -1210,11 +1224,20 @@ def export_climate_layers(
             _deficit_status[i] = _status_index[d.deficit_status]
             if d.concentration is not None:
                 _concentration[i] = d.concentration
-            _cls = classify_v1(d, is_land=mesh.cells[i].water_class == "land")
+            if d.p_harmonic1 is not None:
+                _p_harmonic1[i] = d.p_harmonic1
+            if d.p_harmonic2 is not None:
+                _p_harmonic2[i] = d.p_harmonic2
+            if d.p_phase is not None:
+                _p_phase[i] = d.p_phase
+            _p_phase_status[i] = _status_index[d.p_phase_status]
+            _cls = classify_v2(d, is_land=mesh.cells[i].water_class == "land")
             _ucc_thermal[i] = _thermal_index[_cls.thermal]
             _ucc_supply[i] = _supply_index[_cls.supply] if _cls.supply is not None else 255
             _ucc_supply_status[i] = _status_index[_cls.supply_status]
             _ucc_modifiers[i] = (1 if _cls.continental else 0) | (2 if _cls.water_stress else 0)
+            _ucc_shape[i] = _shape_index[_cls.shape] if _cls.shape is not None else 255
+            _ucc_phase[i] = _phase_index[_cls.phase] if _cls.phase is not None else 255
 
         yearly = {
             **result_metadata(),
@@ -1228,9 +1251,16 @@ def export_climate_layers(
             "profile": PROFILE_CURRENT,
             "thermal_bands": list(THERMAL_BANDS_CURRENT),
             "supply_bands": list(SUPPLY_BANDS_CURRENT),
+            "shape_codes": _shape_codes,
+            "phase_codes": _phase_codes,
             # Engine output — the earth root's obs-derived counterpart (written
             # by scripts/earth/export_earth_yearly.py) carries "observation".
             "data_source": "model",
+            # p_total dual-basis closure (astra ledger #9): p_total_mm follows
+            # the file's declared time basis (engine = the 365.25 d reference
+            # year, so here they coincide); p_total_ref365_mm is the always-
+            # reference-year view for cross-world comparison.
+            "p_total_basis": "reference_year",
             "t_mean_c": _t_mean.tobytes(),
             "t_min_c": _t_min.tobytes(),
             "t_max_c": _t_max.tobytes(),
@@ -1238,15 +1268,22 @@ def export_climate_layers(
             "t_below_frac": _t_below.tobytes(),
             "p_mean_mm_per_month": _p_rate.tobytes(),
             "p_total_mm": _p_total.tobytes(),
+            "p_total_ref365_mm": _p_total.tobytes(),
             "ai": _ai.tobytes(),
             "ai_status": _ai_status.tobytes(),
             "deficit": _deficit.tobytes(),
             "deficit_status": _deficit_status.tobytes(),
             "concentration": _concentration.tobytes(),
+            "p_harmonic1": _p_harmonic1.tobytes(),
+            "p_harmonic2": _p_harmonic2.tobytes(),
+            "p_phase": _p_phase.tobytes(),
+            "p_phase_status": _p_phase_status.tobytes(),
             "ucc_thermal": _ucc_thermal.tobytes(),
             "ucc_supply": _ucc_supply.tobytes(),
             "ucc_supply_status": _ucc_supply_status.tobytes(),
             "ucc_modifiers": _ucc_modifiers.tobytes(),
+            "ucc_shape": _ucc_shape.tobytes(),
+            "ucc_phase": _ucc_phase.tobytes(),
         }
         yearly_path = output_dir / "climate_yearly.msgpack"
         with yearly_path.open("wb") as _f:

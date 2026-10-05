@@ -36,6 +36,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from dreamulator.engine.climate_physics import (  # noqa: E402
+    potential_evapotranspiration_hamon_monthly,
+)
 from dreamulator.map.ucc import (  # noqa: E402
     PROFILE_CURRENT,
     STATUS_CODES,
@@ -43,7 +46,8 @@ from dreamulator.map.ucc import (  # noqa: E402
     THERMAL_BANDS_CURRENT,
     ClimateDescriptors,
     UCCClassV0,
-    classify_v1,
+    classify_v2,
+    compute_descriptors,
     status_short,
 )
 
@@ -174,6 +178,11 @@ def _site_block(
         if desc.deficit_status == "valid"
         else f"—（{status_short(desc.deficit_status)}）"
     )
+    phase_s = (
+        _fmt(desc.p_phase, 3)
+        if desc.p_phase_status == "valid"
+        else f"—（{status_short(desc.p_phase_status)}）"
+    )
     mods = []
     if cls.continental:
         mods.append("continental")
@@ -190,7 +199,8 @@ def _site_block(
         f"- 描述量：t_mean {desc.t_mean:.1f} · t_min {desc.t_min:.1f} · t_max {desc.t_max:.1f}"
         f" · t_range {desc.t_range:.1f} · 低于0°C份额 {desc.t_below_frac:.2f}"
         f" · P {desc.p_total:.0f} mm/参考年 · AI {ai_s} · deficit {def_s}"
-        f" · C_TV {_fmt(desc.concentration)}",
+        f" · C_TV {_fmt(desc.concentration)} · 谐波 R1 {_fmt(desc.p_harmonic1)}"
+        f" / R2 {_fmt(desc.p_harmonic2)} · 雨热相位 {phase_s}",
         f"- **分类（{PROFILE_CURRENT}）**：{cls.thermal} / {supply_s} · 简码 **{cls.code}**"
         f" · 修饰语：{'+'.join(mods) if mods else '—'}",
         "",
@@ -221,17 +231,27 @@ def main() -> None:
     # Classify every cell once (also feeds the coverage check).  Base codes
     # strip the modifier suffix — coverage/medoids are about main classes
     # (Tt and Tt-w are the same class).
+    # Same fresh basis as the site rows (Hamon per-bin totals, dt=None) so the
+    # coverage check and the named-site classes can never disagree at band
+    # edges via float32 rounding of the stored descriptors.
+    _et_all = potential_evapotranspiration_hamon_monthly(t_monthly, 30.4375)
     codes = np.empty(n, dtype=object)
     for i in range(n):
-        codes[i] = classify_v1(_descriptors_at(f, i), is_land=bool(land[i])).code
+        codes[i] = classify_v2(
+            compute_descriptors(t_monthly[i], p_monthly[i], _et_all[i]),
+            is_land=bool(land[i]),
+        ).code
     base_codes = np.array([str(c).split("-")[0] for c in codes], dtype=object)
 
     # --- Named sites -------------------------------------------------------
     entries: list[dict] = []
     for name, la, lo, want, ctx in SITES:
         cell = _nearest_cell(la, lo, pts, mask=land if want == "land" else ~land)
-        desc = _descriptors_at(f, cell)
-        cls = classify_v1(desc, is_land=bool(land[cell]))
+        # dt=None: the L2 dataset stores per-bin totals (mm/month) and its
+        # stored descriptors used that basis — Eref likewise as per-bin totals.
+        et12 = potential_evapotranspiration_hamon_monthly(t_monthly[cell], 30.4375)
+        desc = compute_descriptors(t_monthly[cell], p_monthly[cell], et12)
+        cls = classify_v2(desc, is_land=bool(land[cell]))
         entries.append(
             {
                 "name": name,
@@ -284,8 +304,11 @@ def main() -> None:
         spread = np.where(spread > 0, spread, 1.0)
         dist = np.abs(np.where(finite, (feat - med) / spread, 0.0)).sum(axis=1)
         cell = int(idx[int(np.argmin(dist))])
-        desc = _descriptors_at(f, cell)
-        cls = classify_v1(desc, is_land=bool(land[cell]))
+        # dt=None: the L2 dataset stores per-bin totals (mm/month) and its
+        # stored descriptors used that basis — Eref likewise as per-bin totals.
+        et12 = potential_evapotranspiration_hamon_monthly(t_monthly[cell], 30.4375)
+        desc = compute_descriptors(t_monthly[cell], p_monthly[cell], et12)
+        cls = classify_v2(desc, is_land=bool(land[cell]))
         entries.append(
             {
                 "name": f"类中心代表点（{code}）",
@@ -306,7 +329,7 @@ def main() -> None:
     # --- Document ----------------------------------------------------------
     prov = d.get("provenance", {})
     out_lines = [
-        "# Earth · UCC Worked Examples — 数据表（profile v1）",
+        f"# Earth · UCC Worked Examples — 数据表（{PROFILE_CURRENT}）",
         "",
         "> UCC-01 第四步 4c 产物，同时是 4b 创作验收的审阅清单（v1 标签对照地理直觉，",
         "> 逐站点人工判读）。本文档由脚本生成，勿手改——重生成：",
@@ -328,13 +351,13 @@ def main() -> None:
         "## 摘要表（审阅入口）",
         "",
         "| # | 站点 | 纬度 | 经度 | T均 °C | T范围 °C | P mm/年 | AI | deficit"
-        " | UCC v1 | 修饰语 | Beck Köppen |",
+        " | UCC | 修饰语 | Beck Köppen |",
         "|---|------|------|------|--------|----------|---------|----|---------|"
         "--------|--------|-------------|",
     ]
     for i, e in enumerate(entries, start=1):
         desc, cls = e["desc"], e["cls"]
-        mods = ("x" if cls.continental else "") + ("w" if cls.water_stress else "")
+        mods = ("l" if cls.continental else "") + ("g" if cls.water_stress else "")
         ai_s = _fmt(desc.ai) if desc.ai_status == "valid" else status_short(desc.ai_status)
         def_s = (
             _fmt(desc.deficit)
@@ -364,14 +387,14 @@ def main() -> None:
 
     # --- Coverage check -----------------------------------------------------
     out_lines += ["## 类覆盖检查", ""]
-    thermal_letters = {"polar": "P", "cold": "C", "temperate": "T", "tropical": "R"}
-    supply_letters = {"arid": "a", "semi_arid": "s", "transitional": "t", "humid": "h"}
+    thermal_letters = {"tropical": "A", "temperate": "C", "cold": "D", "polar": "E"}
+    supply_letters = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
     land_codes = [
         thermal_letters[t] + supply_letters[s]
         for t in THERMAL_BANDS_CURRENT
         for s in SUPPLY_BANDS_CURRENT
-    ] + ["Pn", "Cn", "Tn", "Rn"]
-    ocean_codes = [thermal_letters[t] + "o" for t in THERMAL_BANDS_CURRENT]
+    ] + ["En", "Dn", "Cn", "An"]
+    ocean_codes = [thermal_letters[t] + "o" for t in THERMAL_BANDS_CURRENT]  # Ao/Co/Do/Eo
     out_lines += [
         "| 类 | cell 数 | 占陆地/海洋 % | 命名站点覆盖 |",
         "|----|---------|----------------|--------------|",

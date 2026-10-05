@@ -91,4 +91,39 @@ describe('decodeYearlyClimate', () => {
     expect(uccCode(d, 1, false)).toBe('Ro') // ocean
     expect(uccCode(d, 1, true)).toBe('Rn') // land n/a → explicit n slot
   })
+
+  it('composes v2 codes (A/C/D/E alphabet, l/g modifiers, m/d/h/o suffixes)', () => {
+    const payload = {
+      ...basePayload(),
+      profile: 'ucc-v2',
+      thermal_bands: ['polar', 'cold', 'temperate', 'tropical'],
+      supply_bands: ['arid', 'semi_arid', 'transitional', 'humid'],
+      ucc_thermal: new Uint8Array([1, 2, 0]),
+      ucc_supply: new Uint8Array([1, 2, 255]),
+      ucc_supply_status: new Uint8Array([0, 0, 4]),
+      ucc_modifiers: new Uint8Array([3, 0, 0]),
+      shape_codes: ['unimodal', 'bimodal'],
+      phase_codes: ['in_phase', 'anti_phase'],
+      ucc_shape: new Uint8Array([0, 255, 0]),
+      ucc_phase: new Uint8Array([1, 255, 255]),
+      p_harmonic1: new Uint8Array(new Float32Array([0.5, 0.4, 0.1]).buffer),
+      p_harmonic2: new Uint8Array(new Float32Array([0.2, 0.3, 0.05]).buffer),
+      p_phase: new Uint8Array(new Float32Array([-0.45, NaN, NaN]).buffer),
+      p_phase_status: new Uint8Array([0, 1, 1]),
+    }
+    const d = decodeYearlyClimate(toBuffer(payload))
+    // cold · semi-arid (p), both modifiers (l,g), unimodal wet season (m),
+    // anti-phase rain (o) — one dash, letters concatenated.
+    expect(uccCode(d, 0, true)).toBe('Dp-lgmo')
+    // temperate · transitional, no letters → bare code.
+    expect(uccCode(d, 1, true)).toBe('Ct')
+    // polar land with invalid supply (e.g. ice cap OOD) → explicit n slot;
+    // the shape letter survives the domain gate (precipitation seasonality is
+    // independent of the demand model's validity).
+    expect(uccCode(d, 2, true)).toBe('En-m')
+    // New descriptor fields decode (NaN travels).
+    expect(d.pHarmonic1![0]).toBeCloseTo(0.5)
+    expect(Number.isNaN(d.pPhase![1])).toBe(true)
+    expect(d.pPhaseStatus![1]).toBe(1)
+  })
 })

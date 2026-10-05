@@ -88,7 +88,15 @@
   },
   "uccMod": {
     "continental": "Strong seasonality",
-    "waterStress": "Seasonal water stress"
+    "waterStress": "Dry season"
+  },
+  "uccShape": {
+    "unimodal": "single wet season",
+    "bimodal": "two wet seasons"
+  },
+  "uccPhase": {
+    "in_phase": "rain in phase with warmth",
+    "anti_phase": "rain against warmth"
   },
   "uccSource": {
     "model": "model",
