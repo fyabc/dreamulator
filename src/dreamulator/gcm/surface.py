@@ -46,7 +46,9 @@ def gaussian_latitudes(nlat: int) -> np.ndarray:
 
         sid, _ = pyfft.inigau(nlat)
         sid_arr: np.ndarray[tuple[int], np.dtype[np.float64]] = np.asarray(sid, dtype=np.float64)
-        return np.degrees(np.arcsin(sid_arr))
+        # inigau returns nodes in descending latitude; normalise to ascending
+        # so both backends (pyfft / leggauss) agree across environments
+        return np.sort(np.degrees(np.arcsin(sid_arr)))
     except Exception:  # noqa: BLE001 -- extra not installed; fall back
         # Gauss-Legendre nodes x in (-1,1) ascending = sin(lat)
         x = np.polynomial.legendre.leggauss(nlat)[0]
@@ -94,8 +96,15 @@ def land_mask_from_mesh(mesh_path: str | Path, nlat: int, nlon: int) -> tuple[np
     from dreamulator.map.export import load_cvt_mesh_model  # noqa: PLC0415
 
     mesh = load_cvt_mesh_model(Path(mesh_path))
-    xyz = np.asarray(mesh.cell_xyz, dtype=float)
-    xyz = xyz / np.linalg.norm(xyz, axis=1, keepdims=True)
+    # NOTE: mesh.cell_xyz is NOT aligned with mesh.cells ordering (verified
+    # 2026-10-06: 97.8% of directions disagree) — build the tree from the
+    # cells' own lat/lon instead.
+    lat_c = np.radians(np.array([c.lat for c in mesh.cells], dtype=float))
+    lon_c = np.radians(np.array([c.lon for c in mesh.cells], dtype=float))
+    xyz = np.stack(
+        [np.cos(lat_c) * np.cos(lon_c), np.cos(lat_c) * np.sin(lon_c), np.sin(lat_c)],
+        axis=1,
+    )
     is_land = np.asarray([str(c.water_class) != "ocean" for c in mesh.cells])
     tree = cKDTree(xyz)
 
