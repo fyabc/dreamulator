@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791208949791,
+  "lastUpdate": 1791223238121,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6429,6 +6429,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0002898514300131207",
             "extra": "mean: 5.174175999998454 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "74c468916327ee641717c6ef3311ccbe30128580",
+          "message": "Merge feature/itcz-position-coastal: R1/R2 季节迁移与可推导尺度 + Aegis 1.2\n\n- R1a itcz_damping：地球拟合 0.6 按海洋惯性低通因子重标度到任意年长\n  （τ_itcz=20 d，GCM 交叉验证 nacrea ±5.9° vs 实测 ±5.5°）\n- R1b 背景风随季节 ITCZ 经向平移（Shepard k=6 采样）；降水实现迁移仍弱，\n  列标定轮开放项（oracle：nacrea ±5.5° / earth ±7.5°）\n- R2 coastal_moderation_scale_km 默认改 BL 平流推导 ≈421 km（可覆盖）\n- nacrea sub_planet_warming_c 1.0→1.2（推导链入注释）\n- earth 年后指标无回归（T RMSE 2.04 / P RMSE 329 / Köppen 66.7% PASS）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-06T01:59:49+08:00",
+          "tree_id": "da8c8d990426f94fccb6d83b9951c51d42382946",
+          "url": "https://github.com/fyabc/dreamulator/commit/74c468916327ee641717c6ef3311ccbe30128580"
+        },
+        "date": 1791223237297,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31214035198398826,
+            "unit": "iter/sec",
+            "range": "stddev: 0.23371044787094525",
+            "extra": "mean: 3.203687038999996 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.141836177159164,
+            "unit": "iter/sec",
+            "range": "stddev: 0.015484518450843346",
+            "extra": "mean: 318.2852139999852 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4092263980099389,
+            "unit": "iter/sec",
+            "range": "stddev: 1.137632605802818",
+            "extra": "mean: 709.6091880000017 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 906.4766304962825,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007514851657649826",
+            "extra": "mean: 1.1031723999906262 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.71817944379328,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008177697471474766",
+            "extra": "mean: 5.109387399994603 msec\nrounds: 5"
           }
         ]
       }
