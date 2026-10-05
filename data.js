@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791165019880,
+  "lastUpdate": 1791169715565,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6252,6 +6252,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009276192410320276",
             "extra": "mean: 5.073106400001848 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "89e6745a320fe34c04c65372cfeefd885fe52f6d",
+          "message": "Merge feature/ucc-grammar-review: UCC 区域语法 + 解析器 + spec 审阅改版\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-05T11:07:26+08:00",
+          "tree_id": "619c521cc7f25148daadfca121100bc403562b60",
+          "url": "https://github.com/fyabc/dreamulator/commit/89e6745a320fe34c04c65372cfeefd885fe52f6d"
+        },
+        "date": 1791169714764,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3577865220473015,
+            "unit": "iter/sec",
+            "range": "stddev: 0.027900094738992878",
+            "extra": "mean: 2.794962745599998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.606221420137805,
+            "unit": "iter/sec",
+            "range": "stddev: 0.008475675328612991",
+            "extra": "mean: 217.09768350000047 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.544830348541255,
+            "unit": "iter/sec",
+            "range": "stddev: 0.629734290279207",
+            "extra": "mean: 392.9535030000011 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1553.6702974983937,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006545229756730601",
+            "extra": "mean: 643.6371999967605 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 297.7401995241847,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000060164252115459527",
+            "extra": "mean: 3.358632799998418 msec\nrounds: 5"
           }
         ]
       }
