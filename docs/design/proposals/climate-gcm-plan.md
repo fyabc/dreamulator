@@ -3,6 +3,9 @@
 > 状态：远期提案。当前主线是「诊断式单向 DAG + 聪明预设」（见
 > `climate-layer-improvement.md`）。本文件是**全动力学 GCM** 的备选路线，
 > 大致列出做法，重点在「涌现 vs 高效」的平衡。不排优先级、不承诺时间。
+> **已实现部分**：ExoPlaSim offline-oracle 薄适配层（`src/dreamulator/gcm/`，
+> 2026-10-05 入库，见 §「ExoPlaSim harness（已实现）」）——GCM 在当前阶段
+> 的角色是**验证 oracle**而非运行时引擎，本文件的远期方案不受影响。
 
 ## 定位
 
@@ -118,6 +121,36 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
 - GCM 是**替换**而非叠加：若切 GCM，诊断式 DAG（温度→风→水汽→降水）整体替换为
   GCM 的单次耦合求解。
 - 中间态：GCM 作为「校准参照」离线运行，不替换主线（见上「判断准则」）。
+
+## ExoPlaSim harness（已实现，2026-10-05）
+
+GCM 当前作为**气候引擎的 offline oracle**使用（验证 Ω 依赖、倾角分支、
+慢自转夹具的动力学侧证），不进 build 管线。入库形态 = 薄适配层：
+
+- `src/dreamulator/gcm/mapping.py` — 世界输入 → `Model.configure` 参数的
+  **纯函数映射**（零 exoplasim 依赖、可单测）。单位换算集中在这一处：
+  `radius` 期望 **R⊕ 不是米**（exoplasim `__init__.py` 写 `PLARAD =
+  radius*6371220.0`；2026-09-07「风场死寂」悬案即传米所致，2026-10-05 破案，
+  回归测试 `tests/test_gcm_mapping.py::test_radius_never_in_metres_regression`
+  钉死）。温室映射遵守设定冻结令：`greenhouse_mode=none|flux_boost|pco2`，
+  绝不擅自补偿 nacrea 的 62 K（辐射身份待裁决）。
+- `src/dreamulator/gcm/runner.py` — 运行编排：`ensure_environment()` 把
+  pyfft/meson 静默失败（上游把异常注释了）变成显式报错；连续多年积分走
+  `N_RUN_YEARS` namelist（`run(years=N)` 每年重启冷 Fortran 进程）；原始
+  MOST 保留；manifest 记 input 哈希/参数/版本。
+- `src/dreamulator/gcm/diagnostics.py` — 从 .nc 提取急流纬度/强度、Hadley
+  边界（质量流函数，**勿用速度势 psi**——其零线在 ITCZ）、热力对比、涡动
+  方差。注意 pyburn 的 lat/lon **本来就是度**（units: deg），勿再 rad2deg。
+- `src/dreamulator/gcm/plotting.py` — 全球概览图（中文 caption + CJK 字体
+  回退链；平均场条带状是 aquaplanet 对称强迫的正确物理，涡动看时间 std）。
+- `scripts/climate/gcm/run_exoplasim.py` — CLI 入口；`bootstrap.sh` — 任意
+  Ubuntu 容器/WSL 的环境引导（刻意不用 uv：仓库树内 uv.toml 覆盖 index 的坑）。
+- 依赖走 `[gcm]` 可选 extra（钉 exoplasim==3.4.2）。
+
+aquaplanet 对照结果（2026-10-05，T21L10 ×2 年）：earth 急流 34.4 m/s@30°；
+nacrea（正确单位）双急流 45–54 m/s@40–50° + Hadley va 12.7 m/s。下一步 =
+通量标定至 T_global≈15°C 后做 Hadley 边界 Ω 依赖 vs 引擎
+`hadley_extent_deg=55` 的正式裁决。
 
 ## 参考
 

@@ -30,6 +30,8 @@ dreamulator/
 │   │   ├── climate_simulator.py # EBM 温度 + 地转风 + BFS 水汽 + Köppen
 │   │   ├── elevation_codec.py  # 高度图 PNG ↔ numpy 编解码
 │   │   ├── importer.py      # 外部高度图导入（PNG/TIFF 解码 + 重采样）
+│   ├── gcm/             # ExoPlaSim offline-oracle 薄适配层（mapping/runner/
+│   │                    # diagnostics/plotting；[gcm] 可选 extra）
 │   │   ├── export.py        # CVT → 等距圆柱栅格导出
 │   │   └── manager.py       # 地图 CRUD + 分支继承 + 图层注册表
 │   ├── civmap/              # 文明地图子系统（真实地球行政区划 + 架空领土涂色）

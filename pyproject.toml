@@ -51,6 +51,17 @@ narrate = [
 heightmap = [
     "matplotlib>=3.8",
 ]
+gcm = [
+    # ExoPlaSim offline-oracle harness (dreamulator.gcm). Pinned: the harness
+    # is verified against 3.4.2 and the pyfft/meson compile path is fragile
+    # across numpy/f2py backend changes. Needs a Fortran toolchain — see
+    # scripts/climate/gcm/bootstrap.sh.
+    "exoplasim==3.4.2",
+    "netCDF4>=1.7",
+    "matplotlib>=3.8",
+    "meson>=1.2",
+    "ninja>=1.11",
+]
 validation = [
     "xarray>=2024.0",
     "netCDF4>=1.7",
@@ -124,6 +135,12 @@ plugins = ["pydantic.mypy"]
 # and are absent from the base dev environment.
 [[tool.mypy.overrides]]
 module = ["astropy.*", "opensimplex", "scipy.*", "anthropic", "xarray", "netCDF4", "msgpack"]
+ignore_missing_imports = true
+
+# exoplasim (gcm extra) ships no types; the harness confines itself to the
+# small Model/configure/pyburn surface.
+[[tool.mypy.overrides]]
+module = ["exoplasim", "exoplasim.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
