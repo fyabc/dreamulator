@@ -169,6 +169,68 @@ def _zonal_relative_vorticity(u_lat: np.ndarray, grid: WaveGrid, radius_m: float
     return np.asarray(-np.gradient(u_lat * grid.cosf, grid.dlat) / (radius_m * c))
 
 
+# ── 几何不变量缓存 ──────────────────────────────────────────────────────────
+# solve_two_level_month 的算子里有一层与月份/基本态完全无关的纯几何量：t_op/d_op
+# （纬向 Laplacian/∂y）、逐 k 的 𝓛_k = 𝓛_φ − k²c₂ 与 𝓛_k²、交织索引。一次
+# simulate 要调它 12 月 × 3 Picard 遍 = 36 次（外加 ω 入口 12 次），每次 90 个 k
+# 全部重建同一套矩阵是纯 Python 开销（实测 ~40% 的求解时间）。缓存数组只读，
+# 调用方不得原地写入。
+@dataclass(frozen=True)
+class _SolverGeometry:
+    inner: np.ndarray  # interior 行索引（~wall）
+    ni: int
+    t_op: np.ndarray  # 纬向 Laplacian 三对角（dense ni×ni）
+    d_op: np.ndarray  # ∂y 中心差分
+    eye: np.ndarray
+    c2: np.ndarray  # ∂xx 谱系数 1/(a·cosφ)²（interior）
+    sb: np.ndarray  # ∂x 谱系数 1/(a·cosφ)
+    place_idx: tuple[tuple[int, int, int], ...]  # (e, i0, i1)——行区间 [i0, i1)
+    lap_by_k: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]]  # k → (𝓛_k, 𝓛_k², diag(k²c₂))
+
+    def lap_k_or_build(self, k: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(𝓛_k, 𝓛_k², diag(k²c₂))——首次访问时构建，之后逐位复用。"""
+        cached = self.lap_by_k.get(k)
+        if cached is None:
+            lap_k = self.t_op - k * k * np.diag(self.c2)
+            cached = (lap_k, lap_k @ lap_k, k * k * np.diag(self.c2))
+            self.lap_by_k[k] = cached
+        return cached
+
+
+_GEOMETRY_CACHE: dict[tuple[int | float | bytes, ...], _SolverGeometry] = {}
+
+
+def _get_solver_geometry(grid: WaveGrid, radius_m: float) -> _SolverGeometry:
+    key = (grid.nlat, grid.nlon, float(grid.dlat), float(radius_m), grid.wall.tobytes())
+    geo = _GEOMETRY_CACHE.get(key)
+    if geo is not None:
+        return geo
+
+    inner = np.flatnonzero(~grid.wall)
+    ni = len(inner)
+    t_op, d_op = _meridional_operators(grid, radius_m, inner)
+    eye = np.eye(ni)
+    c2 = 1.0 / (radius_m * grid.cosf[inner]) ** 2
+    sb = 1.0 / (radius_m * grid.cosf[inner])
+    place_idx = tuple(
+        (e, i0, i1) for e in range(-2, 3) if (i0 := max(0, e)) < (i1 := min(ni, ni + e))
+    )
+    lap_by_k: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    geo = _SolverGeometry(
+        inner=inner,
+        ni=ni,
+        t_op=t_op,
+        d_op=d_op,
+        eye=eye,
+        c2=c2,
+        sb=sb,
+        place_idx=place_idx,
+        lap_by_k=lap_by_k,
+    )
+    _GEOMETRY_CACHE[key] = geo
+    return geo
+
+
 def _meridional_operators(
     grid: WaveGrid, radius_m: float, inner: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -221,11 +283,10 @@ def solve_two_level_month(
         dict：psi / psi_hat / chi_hat / phi_hat / omega_mid（均 (nlat, nlon)，
         墙行 0）+ residual（最大 ‖Ax−b‖，数值自查量）。
     """
-    inner = np.flatnonzero(~grid.wall)
-    ni = len(inner)
+    geo = _get_solver_geometry(grid, radius_m)
+    inner, ni = geo.inner, geo.ni
     nlon_h = grid.nlon // 2 + 1  # rfft bins（含 k=0 与 Nyquist）
-    t_op, d_op = _meridional_operators(grid, radius_m, inner)
-    eye = np.eye(ni)
+    d_op, eye = geo.d_op, geo.eye
 
     # 基本态廓线（interior 切片）
     f_full = 2.0 * omega_planet * grid.sinf
@@ -247,8 +308,7 @@ def solve_two_level_month(
     r0_eff = R_BAROTROPIC_INV_S * np.minimum(
         1.0 + (U_CRIT_MS / np.maximum(np.abs(u_i), 0.1)) ** 2, R_ENHANCE_CAP
     )
-    c2 = 1.0 / (radius_m * grid.cosf[inner]) ** 2  # ∂xx 的谱系数
-    sb = 1.0 / (radius_m * grid.cosf[inner])  # ∂x 的谱系数（× ik）
+    sb = geo.sb  # ∂x 的谱系数（× ik）
 
     q_spec = np.fft.rfft(q_eddy_grid, axis=1)  # (nlat, nlon_h)
 
@@ -262,32 +322,32 @@ def solve_two_level_month(
     # 带宽 |4e+(rb−cb)| ≤ 11。带状求解器 O(n·b²)（本机 BLAS 慢路径下稠密 zgesv
     # 一次 126 ms = 单月 11 s；带状版亚毫秒）。
     l_bw = u_bw = 11
-    diag_rows4 = 4 * np.arange(ni)
+    place_idx = geo.place_idx
 
     def _place(ab: np.ndarray, rb: int, cb: int, block: np.ndarray) -> None:
-        """把 (ni, ni) 带状场块放进交织 banded 存储（scipy ab[u+d, col] = a[row,col]）。"""
-        for e in range(-2, 3):
-            i0, i1 = max(0, e), min(ni, ni + e)
-            if i0 >= i1:
-                continue
+        """把 (ni, ni) 带状场块放进交织 banded 存储（scipy ab[u+d, col] = a[row,col]）。
+
+        源 = block 的第 −e 条对角线（配对索引 block[i, i−e]，i ∈ [i0, i1) 恰为该
+        对角线的全部有效元），目标列 = 4i + cb 为步长 4 等差序列 → 基本切片 +
+        diagonal 视图，不走 fancy indexing。"""
+        for e, i0, i1 in place_idx:
             d = 4 * e + (rb - cb)
             if -l_bw <= d <= u_bw:
-                ii_ = np.arange(i0, i1)
-                cols4 = diag_rows4[ii_] - 4 * e + cb  # = 4j + cb, j = i − e
-                ab[u_bw + d, cols4] = block[ii_, ii_ - e]
+                c0 = 4 * i0 + cb - 4 * e
+                ab[u_bw + d, c0 : c0 + 4 * (i1 - i0) : 4] = block.diagonal(-e)
 
     def _banded_matvec(ab: np.ndarray, x: np.ndarray) -> np.ndarray:
         y = np.zeros_like(x)
         n_tot = x.size
         for d in range(-l_bw, u_bw + 1):
-            j = np.arange(max(0, -d), min(n_tot, n_tot - d))
-            y[j + d] += ab[u_bw + d, j] * x[j]
+            j0, j1 = max(0, -d), min(n_tot, n_tot - d)
+            if j0 < j1:
+                y[j0 + d : j1 + d] += ab[u_bw + d, j0:j1] * x[j0:j1]
         return y
 
     for k in range(1, nlon_h):
         s = 1j * k * sb  # ∂x 谱对子
-        lap_k = t_op - k * k * np.diag(c2)  # 𝓛_k = 𝓛_φ − k²c₂（三对角）
-        lap2_k = lap_k @ lap_k  # ∇⁴_k（五对角）
+        lap_k, lap2_k, k2_c2 = geo.lap_k_or_build(k)  # 𝓛_k / ∇⁴_k（几何缓存）
 
         # 对角缩放算子（diag 乘在左侧 = 作用于算子输出的行）
         u_s_lap = (u_i * s)[:, None] * lap_k
@@ -300,7 +360,6 @@ def solve_two_level_month(
         r0_lap = r0_eff[:, None] * lap_k
         r1_lap = R_BAROCLINIC_INV_S * lap_k
         diff2_b = A_MOMENTUM_DIFF_M2S * lap2_k
-        k2_c2 = k * k * np.diag(c2)
 
         ab = np.zeros((l_bw + u_bw + 1, 4 * ni), dtype=np.complex128)
         # ── E1（正压涡度；阻尼 +r₀∇²ψ、扩散 −A₀∇⁴ψ = v1 约定）──
