@@ -484,6 +484,8 @@ def write_ucc_yearly(
     provenance: dict[str, str],
     demand_model: str | None = "hamon-1961",
     demand_daylength_h: float = 12.0,
+    climate_state: str | None = None,
+    lapse_rate_c_per_km: float | None = None,
     extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Compute UCC descriptors + current-profile classes → climate_yearly.msgpack.
@@ -493,6 +495,11 @@ def write_ucc_yearly(
     computation entirely (AI/deficit → ``missing_input`` — the Moon case: no
     atmosphere, no PET model applies).  ``bin_days`` travels from the monthly
     file into Hamon's accumulation window and the yearly metadata.
+
+    ``climate_state`` declares the world-level regime (axis F vocabulary,
+    ``ucc.CLIMATE_STATES``) and ``lapse_rate_c_per_km`` the declared
+    environmental lapse rate enabling the ``-H`` highland modifier (None for
+    airless bodies — no lapse rate exists, the modifier is not applicable).
 
     Returns the land class distribution (code → cell count) for console output.
     """
@@ -505,8 +512,7 @@ def write_ucc_yearly(
         STATUS_CODES,
         SUPPLY_BANDS_CURRENT,
         THERMAL_BANDS_CURRENT,
-        classify_v2,
-        compute_descriptors,
+        yearly_cell_arrays,
     )
 
     t_monthly, p_monthly, bin_days = load_monthly_climate(output_dir / "climate_monthly.msgpack")
@@ -529,77 +535,21 @@ def write_ucc_yearly(
     elif demand_model is not None:
         raise ValueError(f"unsupported demand_model {demand_model!r}")
 
-    status_codes = list(STATUS_CODES)
-    status_index = {s: i for i, s in enumerate(status_codes)}
-    thermal_index = {s: i for i, s in enumerate(THERMAL_BANDS_CURRENT)}
-    supply_index = {s: i for i, s in enumerate(SUPPLY_BANDS_CURRENT)}
-    shape_codes = list(SHAPE_CODE_LETTERS_V2)
-    shape_index = {s: i for i, s in enumerate(shape_codes)}
-    phase_codes = list(PHASE_CODE_LETTERS_V2)
-    phase_index = {s: i for i, s in enumerate(phase_codes)}
-
-    desc_f32: dict[str, np.ndarray] = {
-        k: np.empty(n, np.float32)
-        for k in (
-            "t_mean_c",
-            "t_min_c",
-            "t_max_c",
-            "t_range_c",
-            "t_below_frac",
-            "p_mean_mm_per_month",
-            "p_total_mm",
-        )
-    }
-    ai = np.full(n, np.nan, np.float32)
-    deficit = np.full(n, np.nan, np.float32)
-    concentration = np.full(n, np.nan, np.float32)
-    p_harmonic1 = np.full(n, np.nan, np.float32)
-    p_harmonic2 = np.full(n, np.nan, np.float32)
-    p_phase = np.full(n, np.nan, np.float32)
-    p_phase_status = np.empty(n, np.uint8)
-    ai_status = np.empty(n, np.uint8)
-    deficit_status = np.empty(n, np.uint8)
-    ucc_thermal = np.empty(n, np.uint8)
-    ucc_supply = np.empty(n, np.uint8)
-    ucc_supply_status = np.empty(n, np.uint8)
-    ucc_modifiers = np.empty(n, np.uint8)
-    ucc_shape = np.empty(n, np.uint8)
-    ucc_phase = np.empty(n, np.uint8)
-
+    is_land = water_class == "land"
+    elevation_m = (
+        np.array([float(c.get("elevation") or 0.0) for c in mesh["cells"]])
+        if lapse_rate_c_per_km is not None
+        else None
+    )
     print(f"  Computing UCC descriptors + {PROFILE_CURRENT} classification ({n} cells) …")
-    for i in range(n):
-        d = compute_descriptors(
-            t_monthly[i], p_monthly[i], None if et_monthly is None else et_monthly[i]
-        )
-        desc_f32["t_mean_c"][i] = d.t_mean
-        desc_f32["t_min_c"][i] = d.t_min
-        desc_f32["t_max_c"][i] = d.t_max
-        desc_f32["t_range_c"][i] = d.t_range
-        desc_f32["t_below_frac"][i] = d.t_below_frac
-        desc_f32["p_mean_mm_per_month"][i] = d.p_mean_rate
-        desc_f32["p_total_mm"][i] = d.p_total
-        if d.ai is not None:
-            ai[i] = d.ai
-        ai_status[i] = status_index[d.ai_status]
-        if d.deficit is not None:
-            deficit[i] = d.deficit
-        deficit_status[i] = status_index[d.deficit_status]
-        if d.concentration is not None:
-            concentration[i] = d.concentration
-        if d.p_harmonic1 is not None:
-            p_harmonic1[i] = d.p_harmonic1
-        if d.p_harmonic2 is not None:
-            p_harmonic2[i] = d.p_harmonic2
-        if d.p_phase is not None:
-            p_phase[i] = d.p_phase
-        p_phase_status[i] = status_index[d.p_phase_status]
-        c = classify_v2(d, is_land=bool(water_class[i] == "land"))
-        ucc_thermal[i] = thermal_index[c.thermal]
-        ucc_supply[i] = supply_index[c.supply] if c.supply is not None else 255
-        ucc_supply_status[i] = status_index[c.supply_status]
-        ucc_modifiers[i] = (1 if c.continental else 0) | (2 if c.water_stress else 0)
-        ucc_shape[i] = shape_index[c.shape] if c.shape is not None else 255
-        ucc_phase[i] = phase_index[c.phase] if c.phase is not None else 255
+    arrays = yearly_cell_arrays(
+        t_monthly,
+        p_monthly,
+        et_monthly,
+        is_land,
+        elevation_m=elevation_m,
+        lapse_rate_c_per_km=lapse_rate_c_per_km,
+    )
 
     payload: dict[str, Any] = {
         **result_metadata(),
@@ -609,12 +559,12 @@ def write_ucc_yearly(
         "demand_model": demand_model,
         "demand_daylength_h": demand_daylength_h,
         "freeze_threshold_c": 0.0,
-        "status_codes": status_codes,
+        "status_codes": list(STATUS_CODES),
         "profile": PROFILE_CURRENT,
         "thermal_bands": list(THERMAL_BANDS_CURRENT),
         "supply_bands": list(SUPPLY_BANDS_CURRENT),
-        "shape_codes": shape_codes,
-        "phase_codes": phase_codes,
+        "shape_codes": list(SHAPE_CODE_LETTERS_V2),
+        "phase_codes": list(PHASE_CODE_LETTERS_V2),
         "bin_days": float(bin_days),
         "window_days": float(bin_days) * 12,
         "data_source": data_source,
@@ -623,24 +573,15 @@ def write_ucc_yearly(
         # declared local window (e.g. per Martian year); p_total_ref365_mm is
         # the rate-normalized 365.25-day view for cross-world comparison.
         "p_total_basis": "local_window",
-        **{k: v.tobytes() for k, v in desc_f32.items()},
-        "p_total_ref365_mm": (desc_f32["p_total_mm"] * (365.25 / (float(bin_days) * 12))).tobytes(),
-        "ai": ai.tobytes(),
-        "ai_status": ai_status.tobytes(),
-        "deficit": deficit.tobytes(),
-        "deficit_status": deficit_status.tobytes(),
-        "concentration": concentration.tobytes(),
-        "p_harmonic1": p_harmonic1.tobytes(),
-        "p_harmonic2": p_harmonic2.tobytes(),
-        "p_phase": p_phase.tobytes(),
-        "p_phase_status": p_phase_status.tobytes(),
-        "ucc_thermal": ucc_thermal.tobytes(),
-        "ucc_supply": ucc_supply.tobytes(),
-        "ucc_supply_status": ucc_supply_status.tobytes(),
-        "ucc_modifiers": ucc_modifiers.tobytes(),
-        "ucc_shape": ucc_shape.tobytes(),
-        "ucc_phase": ucc_phase.tobytes(),
+        **{k: v.tobytes() for k, v in arrays.items()},
+        "p_total_ref365_mm": (arrays["p_total_mm"] * (365.25 / (float(bin_days) * 12))).tobytes(),
     }
+    # World-level declarations (axis F + the -H modifier's lapse rate): written
+    # only when declared — absent keys read as "not declared" downstream.
+    if climate_state is not None:
+        payload["climate_state"] = climate_state
+    if lapse_rate_c_per_km is not None:
+        payload["lapse_rate_c_per_km"] = lapse_rate_c_per_km
     if extra_metadata:
         payload.update(extra_metadata)
     out = output_dir / "climate_yearly.msgpack"
@@ -648,10 +589,11 @@ def write_ucc_yearly(
     print(f"  Wrote {out.name} ({out.stat().st_size / 1e6:.1f} MB)")
 
     # Land class distribution for the console summary.
-    land = water_class == "land"
+    ucc_thermal = arrays["ucc_thermal"]
+    ucc_supply = arrays["ucc_supply"]
     combos: dict[str, int] = {}
     for i in range(n):
-        if not land[i]:
+        if not is_land[i]:
             continue
         t_name = THERMAL_BANDS_CURRENT[ucc_thermal[i]]
         s_name = SUPPLY_BANDS_CURRENT[ucc_supply[i]] if ucc_supply[i] != 255 else "n-a"

@@ -92,7 +92,7 @@ describe('decodeYearlyClimate', () => {
     expect(uccCode(d, 1, true)).toBe('Rn') // land n/a → explicit n slot
   })
 
-  it('composes v2 codes (A/C/D/E alphabet, l/g modifiers, m/d/h/o suffixes)', () => {
+  it('composes v2 codes (A/C/D/E alphabet, l/g/H modifiers, m/d/h/o suffixes)', () => {
     const payload = {
       ...basePayload(),
       profile: 'ucc-v2',
@@ -101,7 +101,7 @@ describe('decodeYearlyClimate', () => {
       ucc_thermal: new Uint8Array([1, 2, 0]),
       ucc_supply: new Uint8Array([1, 2, 255]),
       ucc_supply_status: new Uint8Array([0, 0, 4]),
-      ucc_modifiers: new Uint8Array([3, 0, 0]),
+      ucc_modifiers: new Uint8Array([7, 0, 0]),
       shape_codes: ['unimodal', 'bimodal'],
       phase_codes: ['in_phase', 'anti_phase'],
       ucc_shape: new Uint8Array([0, 255, 0]),
@@ -110,11 +110,13 @@ describe('decodeYearlyClimate', () => {
       p_harmonic2: new Uint8Array(new Float32Array([0.2, 0.3, 0.05]).buffer),
       p_phase: new Uint8Array(new Float32Array([-0.45, NaN, NaN]).buffer),
       p_phase_status: new Uint8Array([0, 1, 1]),
+      climate_state: 'runaway_greenhouse',
+      lapse_rate_c_per_km: 8.0,
     }
     const d = decodeYearlyClimate(toBuffer(payload))
-    // cold · semi-arid (p), both modifiers (l,g), unimodal wet season (m),
+    // cold · semi-arid (p), all modifiers (l,g,H), unimodal wet season (m),
     // anti-phase rain (o) — one dash, letters concatenated.
-    expect(uccCode(d, 0, true)).toBe('Dp-lgmo')
+    expect(uccCode(d, 0, true)).toBe('Dp-lgHmo')
     // temperate · transitional, no letters → bare code.
     expect(uccCode(d, 1, true)).toBe('Ct')
     // polar land with invalid supply (e.g. ice cap OOD) → explicit n slot;
@@ -125,5 +127,8 @@ describe('decodeYearlyClimate', () => {
     expect(d.pHarmonic1![0]).toBeCloseTo(0.5)
     expect(Number.isNaN(d.pPhase![1])).toBe(true)
     expect(d.pPhaseStatus![1]).toBe(1)
+    // World-level declarations decode.
+    expect(d.climateState).toBe('runaway_greenhouse')
+    expect(d.lapseRateCPerKm).toBe(8.0)
   })
 })

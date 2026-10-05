@@ -1005,6 +1005,113 @@ def _climate_data_available(mesh: CVTMesh) -> bool:
     return mesh.cells[0].temperature_C is not None
 
 
+#: World-level declarations for engine-built worlds (axis F + the -H modifier's
+#: declared lapse rate).  climate_state names the bulk regime (vocabulary in
+#: ucc.CLIMATE_STATES); the lapse rate is an observed/model-fitted
+#: environmental value — Earth's ISA 6.5 K/km, applied to engine worlds as the
+#: moist N2-O2 analog (epistemology: observation-fitted, calibration domain
+#: "Earth-like moist atmospheres"; overridable per call for future worlds).
+ENGINE_CLIMATE_STATE = "temperate"
+ENGINE_LAPSE_RATE_C_PER_KM = 6.5
+
+
+def write_engine_climate_yearly(
+    mesh: CVTMesh,
+    output_dir: Path,
+    *,
+    t_monthly: np.ndarray | None = None,
+    p_monthly: np.ndarray | None = None,
+    climate_state: str = ENGINE_CLIMATE_STATE,
+    lapse_rate_c_per_km: float | None = ENGINE_LAPSE_RATE_C_PER_KM,
+) -> None:
+    """Write ``climate_yearly.msgpack`` for an engine-built world.
+
+    The engine-side counterpart of ``import_solar_common.write_ucc_yearly``:
+    same per-cell computation (shared :func:`ucc.yearly_cell_arrays`),
+    engine-specific declarations — the 365.25 d reference-year time basis
+    (12 equal reference months), the Hamon demand model, ``data_source:
+    "model"``, and the world-level climate-state + lapse-rate declarations.
+    Called from :func:`export_climate_layers` during a build; the
+    regeneration script calls it directly with monthly arrays dequantized
+    from the persisted ``climate_monthly.msgpack`` (the in-memory ``_t_*``
+    stash does not survive a mesh save/load round trip).
+    """
+    import msgpack
+
+    from dreamulator.engine.climate_physics import (
+        potential_evapotranspiration_hamon_monthly,
+    )
+    from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
+
+    from .ucc import (
+        PHASE_CODE_LETTERS_V2,
+        PROFILE_CURRENT,
+        SHAPE_CODE_LETTERS_V2,
+        STATUS_CODES,
+        SUPPLY_BANDS_CURRENT,
+        THERMAL_BANDS_CURRENT,
+        yearly_cell_arrays,
+    )
+
+    if t_monthly is None:
+        t_monthly = getattr(mesh, "_t_monthly_c", None)
+    if p_monthly is None:
+        p_monthly = getattr(mesh, "_p_monthly_mm", None)
+    if t_monthly is None or p_monthly is None:
+        return
+
+    is_land = np.array([c.water_class == "land" for c in mesh.cells])
+    elevation_m = np.array([float(c.elevation) for c in mesh.cells])
+    et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
+    arrays = yearly_cell_arrays(
+        t_monthly,
+        p_monthly,
+        et_monthly,
+        is_land,
+        elevation_m=elevation_m,
+        lapse_rate_c_per_km=lapse_rate_c_per_km,
+    )
+
+    payload: dict[str, object] = {
+        **result_metadata(),
+        "num_cells": mesh.num_cells,
+        "months": 12,
+        "dtype": "float32",
+        "demand_model": "hamon-1961",
+        "demand_daylength_h": 12.0,
+        "freeze_threshold_c": 0.0,
+        "status_codes": list(STATUS_CODES),
+        "profile": PROFILE_CURRENT,
+        "thermal_bands": list(THERMAL_BANDS_CURRENT),
+        "supply_bands": list(SUPPLY_BANDS_CURRENT),
+        "shape_codes": list(SHAPE_CODE_LETTERS_V2),
+        "phase_codes": list(PHASE_CODE_LETTERS_V2),
+        # Engine output — the earth root's obs-derived counterpart (written
+        # by scripts/earth/export_earth_yearly.py) carries "observation".
+        "data_source": "model",
+        "climate_state": climate_state,
+        "lapse_rate_c_per_km": lapse_rate_c_per_km,
+        "provenance": {
+            "climate_state_basis": "engine default declaration",
+            "lapse_rate_basis": (
+                "declared default 6.5 K/km — Earth ISA observed environmental"
+                " value, applied to engine worlds as the moist N2-O2 analog"
+            ),
+        },
+        # p_total dual-basis closure (astra ledger #9): p_total_mm follows
+        # the file's declared time basis (engine = the 365.25 d reference
+        # year, so here they coincide); p_total_ref365_mm is the always-
+        # reference-year view for cross-world comparison.
+        "p_total_basis": "reference_year",
+        **{k: v.tobytes() for k, v in arrays.items()},
+        "p_total_ref365_mm": arrays["p_total_mm"].tobytes(),
+    }
+    yearly_path = output_dir / "climate_yearly.msgpack"
+    with yearly_path.open("wb") as _f:
+        _f.write(msgpack.packb(payload))
+    logger.info("  Exported climate_yearly.msgpack (%d cells)", mesh.num_cells)
+
+
 def export_climate_layers(
     mesh: CVTMesh,
     output_dir: Path,
@@ -1145,150 +1252,10 @@ def export_climate_layers(
             _f.write(msgpack.packb(monthly))
         logger.info("  Exported climate_monthly.msgpack (%d×%d)", mesh.num_cells, 12)
 
-        # 6. Yearly climate descriptors (UCC-01 step 2) — the continuous
-        # UCC descriptions (ucc-review §4.2) computed per cell from the
-        # monthly series above, plus the monthly Hamon reference demand the
-        # supply–demand statistics need.  Value arrays are raw float32 with
-        # NaN wherever the descriptor is undefined — the *status* arrays
-        # carry why (§4.4), so no placeholder value is ever read as data.
-        # Time basis: 12 equal reference months (365.25/12 d), so p_total is
-        # mm per reference year and AI is window-invariant (M2-A0④).
-        from dreamulator.engine.climate_physics import (
-            potential_evapotranspiration_hamon_monthly,
-        )
-        from dreamulator.result_contract import REFERENCE_MONTH_DAYS, result_metadata
-
-        from .ucc import (
-            PHASE_CODE_LETTERS_V2,
-            PROFILE_CURRENT,
-            SHAPE_CODE_LETTERS_V2,
-            STATUS_CODES,
-            SUPPLY_BANDS_CURRENT,
-            THERMAL_BANDS_CURRENT,
-            classify_v2,
-            compute_descriptors,
-        )
-
-        _et_monthly = potential_evapotranspiration_hamon_monthly(t_monthly, REFERENCE_MONTH_DAYS)
-        _status_codes = list(STATUS_CODES)
-        _status_index = {name: i for i, name in enumerate(_status_codes)}
-        _thermal_index = {name: i for i, name in enumerate(THERMAL_BANDS_CURRENT)}
-        _supply_index = {name: i for i, name in enumerate(SUPPLY_BANDS_CURRENT)}
-        _shape_codes = list(SHAPE_CODE_LETTERS_V2)
-        _shape_index = {name: i for i, name in enumerate(_shape_codes)}
-        _phase_codes = list(PHASE_CODE_LETTERS_V2)
-        _phase_index = {name: i for i, name in enumerate(_phase_codes)}
-        _n = mesh.num_cells
-        _t_mean = np.empty(_n, dtype=np.float32)
-        _t_min = np.empty(_n, dtype=np.float32)
-        _t_max = np.empty(_n, dtype=np.float32)
-        _t_range = np.empty(_n, dtype=np.float32)
-        _t_below = np.empty(_n, dtype=np.float32)
-        _p_rate = np.empty(_n, dtype=np.float32)
-        _p_total = np.empty(_n, dtype=np.float32)
-        _ai = np.full(_n, np.nan, dtype=np.float32)
-        _ai_status = np.empty(_n, dtype=np.uint8)
-        _deficit = np.full(_n, np.nan, dtype=np.float32)
-        _deficit_status = np.empty(_n, dtype=np.uint8)
-        _concentration = np.full(_n, np.nan, dtype=np.float32)
-        _p_harmonic1 = np.full(_n, np.nan, dtype=np.float32)
-        _p_harmonic2 = np.full(_n, np.nan, dtype=np.float32)
-        _p_phase = np.full(_n, np.nan, dtype=np.float32)
-        _p_phase_status = np.empty(_n, dtype=np.uint8)
-        # Classification under the current profile (UCC-01 step 4a).  Codes are
-        # indices into thermal_bands/supply_bands; 255 in ucc_supply = the
-        # supply–demand axis does not apply (ocean or invalid AI) — the why is in
-        # ucc_supply_status.  ucc_modifiers bit 0 = continental, bit 1 = water_stress.
-        # ucc_shape/ucc_phase: indices into shape_codes/phase_codes, 255 = no
-        # letter (below the gate / not applicable).
-        _ucc_thermal = np.empty(_n, dtype=np.uint8)
-        _ucc_supply = np.empty(_n, dtype=np.uint8)
-        _ucc_supply_status = np.empty(_n, dtype=np.uint8)
-        _ucc_modifiers = np.empty(_n, dtype=np.uint8)
-        _ucc_shape = np.empty(_n, dtype=np.uint8)
-        _ucc_phase = np.empty(_n, dtype=np.uint8)
-        for i in range(_n):
-            d = compute_descriptors(t_monthly[i], p_monthly[i], _et_monthly[i])
-            _t_mean[i] = d.t_mean
-            _t_min[i] = d.t_min
-            _t_max[i] = d.t_max
-            _t_range[i] = d.t_range
-            _t_below[i] = d.t_below_frac
-            _p_rate[i] = d.p_mean_rate
-            _p_total[i] = d.p_total
-            if d.ai is not None:
-                _ai[i] = d.ai
-            _ai_status[i] = _status_index[d.ai_status]
-            if d.deficit is not None:
-                _deficit[i] = d.deficit
-            _deficit_status[i] = _status_index[d.deficit_status]
-            if d.concentration is not None:
-                _concentration[i] = d.concentration
-            if d.p_harmonic1 is not None:
-                _p_harmonic1[i] = d.p_harmonic1
-            if d.p_harmonic2 is not None:
-                _p_harmonic2[i] = d.p_harmonic2
-            if d.p_phase is not None:
-                _p_phase[i] = d.p_phase
-            _p_phase_status[i] = _status_index[d.p_phase_status]
-            _cls = classify_v2(d, is_land=mesh.cells[i].water_class == "land")
-            _ucc_thermal[i] = _thermal_index[_cls.thermal]
-            _ucc_supply[i] = _supply_index[_cls.supply] if _cls.supply is not None else 255
-            _ucc_supply_status[i] = _status_index[_cls.supply_status]
-            _ucc_modifiers[i] = (1 if _cls.continental else 0) | (2 if _cls.water_stress else 0)
-            _ucc_shape[i] = _shape_index[_cls.shape] if _cls.shape is not None else 255
-            _ucc_phase[i] = _phase_index[_cls.phase] if _cls.phase is not None else 255
-
-        yearly = {
-            **result_metadata(),
-            "num_cells": _n,
-            "months": 12,
-            "dtype": "float32",
-            "demand_model": "hamon-1961",
-            "demand_daylength_h": 12.0,
-            "freeze_threshold_c": 0.0,
-            "status_codes": _status_codes,
-            "profile": PROFILE_CURRENT,
-            "thermal_bands": list(THERMAL_BANDS_CURRENT),
-            "supply_bands": list(SUPPLY_BANDS_CURRENT),
-            "shape_codes": _shape_codes,
-            "phase_codes": _phase_codes,
-            # Engine output — the earth root's obs-derived counterpart (written
-            # by scripts/earth/export_earth_yearly.py) carries "observation".
-            "data_source": "model",
-            # p_total dual-basis closure (astra ledger #9): p_total_mm follows
-            # the file's declared time basis (engine = the 365.25 d reference
-            # year, so here they coincide); p_total_ref365_mm is the always-
-            # reference-year view for cross-world comparison.
-            "p_total_basis": "reference_year",
-            "t_mean_c": _t_mean.tobytes(),
-            "t_min_c": _t_min.tobytes(),
-            "t_max_c": _t_max.tobytes(),
-            "t_range_c": _t_range.tobytes(),
-            "t_below_frac": _t_below.tobytes(),
-            "p_mean_mm_per_month": _p_rate.tobytes(),
-            "p_total_mm": _p_total.tobytes(),
-            "p_total_ref365_mm": _p_total.tobytes(),
-            "ai": _ai.tobytes(),
-            "ai_status": _ai_status.tobytes(),
-            "deficit": _deficit.tobytes(),
-            "deficit_status": _deficit_status.tobytes(),
-            "concentration": _concentration.tobytes(),
-            "p_harmonic1": _p_harmonic1.tobytes(),
-            "p_harmonic2": _p_harmonic2.tobytes(),
-            "p_phase": _p_phase.tobytes(),
-            "p_phase_status": _p_phase_status.tobytes(),
-            "ucc_thermal": _ucc_thermal.tobytes(),
-            "ucc_supply": _ucc_supply.tobytes(),
-            "ucc_supply_status": _ucc_supply_status.tobytes(),
-            "ucc_modifiers": _ucc_modifiers.tobytes(),
-            "ucc_shape": _ucc_shape.tobytes(),
-            "ucc_phase": _ucc_phase.tobytes(),
-        }
-        yearly_path = output_dir / "climate_yearly.msgpack"
-        with yearly_path.open("wb") as _f:
-            _f.write(msgpack.packb(yearly))
-        logger.info("  Exported climate_yearly.msgpack (%d cells)", _n)
+        # 6. Yearly climate descriptors (UCC-01 step 2) — computed by the
+        # shared writer (declarations: reference-year basis, Hamon demand,
+        # engine climate_state + declared lapse rate for the -H modifier).
+        write_engine_climate_yearly(mesh, output_dir)
 
 
 def _nice_range(

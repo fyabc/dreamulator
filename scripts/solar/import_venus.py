@@ -227,16 +227,21 @@ def main() -> None:
             "topography": "USGS Venus Magellan Global Topography 4641m v02",
             "epistemic_status": "L4 GCM climatology (ucc-review §6.2): a model, "
             "not error-free truth",
-            "demand_model_warning": "HOT-SIDE EXTRAPOLATION (knowledge doc §8 "
-            "registered gap): Hamon at ~737 K is arithmetic extrapolation far "
-            "outside its liquid-water calibration domain; AI=0 (arid) / deficit=1 "
-            "(water_stress) are contract-valid but physically meaningless here. "
-            "The cold-side out_of_domain gate does NOT cover the hot side; a "
-            "hot-side gate is future work.",
+            "demand_model_warning": "HOT-SIDE DOMAIN GATE (v2): the whole year "
+            "sits above the 35 °C gate, so AI/deficit/phase report out_of_domain "
+            "and the supply slot reads n — Hamon at ~737 K is arithmetic "
+            "extrapolation far outside its liquid-water calibration domain.",
             "time_basis": f"bin = {VENUS_BIN_DAYS:.2f} Earth-days (Venus month); "
             f"p_total per Venus year ({VENUS_YEAR_DAYS} d)",
+            "climate_state": "runaway_greenhouse — declared world regime (axis F); "
+            "Wolf 2017 / Goldblatt 2015 runaway-greenhouse lineage",
+            "lapse_rate": "8.0 K/km near-adiabatic deep atmosphere (VIRA — Seiff "
+            "et al. 1985; Zasova et al. 2006) — enables the -H highland modifier "
+            "(expected to stay silent: every bin is far inside the tropical band)",
         },
         demand_model="hamon-1961",
+        climate_state="runaway_greenhouse",
+        lapse_rate_c_per_km=8.0,
     )
     print("Land classes:", sorted(combos.items(), key=lambda kv: -kv[1]))
 

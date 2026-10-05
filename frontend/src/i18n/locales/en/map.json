@@ -88,7 +88,15 @@
   },
   "uccMod": {
     "continental": "Strong seasonality",
-    "waterStress": "Dry season"
+    "waterStress": "Dry season",
+    "highland": "Highland"
+  },
+  "uccClimateState": {
+    "temperate": "temperate",
+    "runaway_greenhouse": "runaway greenhouse",
+    "thin_co2_cold": "thin CO₂ cold",
+    "methane_hydrology": "methane hydrology",
+    "airless": "airless"
   },
   "uccShape": {
     "unimodal": "single wet season",
@@ -242,6 +250,8 @@
     "uccDeclToggle": "Show/hide data & model declarations",
     "declDemandModel": "Reference demand model",
     "declDemandNone": "not applied",
+    "declClimateState": "Climate state (world-level)",
+    "declLapseRate": "lapse rate {{rate}} K/km",
     "declDaylength": "day length {{hours}} h",
     "declTimeBasis": "Time basis",
     "declTimeBasisValue": "{{months}} bins × {{bin}} (window {{window}})",

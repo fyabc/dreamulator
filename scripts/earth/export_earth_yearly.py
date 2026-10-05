@@ -40,6 +40,9 @@ _PROVENANCE = {
     "precipitation": "GPCP v2.3 precip.mon.mean (2.5°, monthly climatology)",
     "note": "UCC descriptors + current-profile classification computed from the "
     "observed monthly series; no engine output involved.",
+    "climate_state": "temperate — declared world regime (axis F): modern Holocene N2-H2O hydrology",
+    "lapse_rate": "6.5 K/km environmental (ICAO standard atmosphere — observed "
+    "value) — enables the -H highland modifier",
 }
 
 
@@ -59,6 +62,8 @@ def main() -> None:
         args.output_dir,
         data_source="observation",
         provenance=_PROVENANCE,
+        climate_state="temperate",
+        lapse_rate_c_per_km=6.5,
     )
 
     total_land = sum(combos.values())

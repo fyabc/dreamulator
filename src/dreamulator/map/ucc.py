@@ -227,6 +227,24 @@ PHASE_CONCENTRATION_GATE = 0.25
 #: cold-side freeze rule.
 HOT_DOMAIN_GATE_C = 35.0
 
+#: World-level climate-state vocabulary (axis F — taxonomy §6.2, evidence A).
+#: A *world-archive declaration*, not a per-cell axis: it names the bulk
+#: regime the cell-level classes live inside, which is the first root cause
+#: of the homogeneous solar-body maps (Venus is all-`An` *because* it is a
+#: runaway greenhouse; Mars is all-`Pn` because it is a thin cold CO2
+#: regime).  Assigned by whoever writes the file — solar importers state a
+#: literature fact, engine worlds carry the declared default — travels with
+#: provenance, and never touches the cell-level shared thresholds (the
+#: plan/archive separation principle).  Open-ended vocabulary: new states are
+#: added by declaration and documented here, not by a profile bump.
+CLIMATE_STATES = (
+    "temperate",  # Earth-like N2–H2O hydrology (earth obs, engine default)
+    "runaway_greenhouse",  # Venus (Wolf 2017 / Goldblatt 2015 lineage)
+    "thin_co2_cold",  # Mars (p ∼ 6 hPa, CO2, cold — Haberle 2001 domain)
+    "methane_hydrology",  # Titan (Schneider 2012 methane cycle)
+    "airless",  # Moon / Mercury-type (no atmosphere, no lapse rate)
+)
+
 
 def _p_phase(
     p_rate: np.ndarray,
@@ -382,6 +400,22 @@ class UCCClassV0:
         return code + ("-" + mods if mods else "")
 
 
+def _thermal_band_for_extremes(t_max: float, t_min: float) -> str:
+    """Thermal band from bin-extreme temperatures (the v0 node ladder).
+
+    Shared by the main classification path and the sea-level reduction check
+    of the v2 highland modifier — both must answer "which band do these
+    extremes fall in" with the same thresholds.
+    """
+    if t_max < T_NODE_POLAR_C_V0:
+        return THERMAL_BANDS_V0[0]
+    if t_min < T_NODE_COLD_C_V0:
+        return THERMAL_BANDS_V0[1]
+    if t_min < T_NODE_TROPICAL_C_V0:
+        return THERMAL_BANDS_V0[2]
+    return THERMAL_BANDS_V0[3]
+
+
 def _classify(
     d: ClimateDescriptors,
     *,
@@ -391,14 +425,7 @@ def _classify(
     profile: str,
 ) -> UCCClassV0:
     """Shared classification core: thermal nodes + AI digitize + modifiers."""
-    if d.t_max < T_NODE_POLAR_C_V0:
-        thermal = THERMAL_BANDS_V0[0]
-    elif d.t_min < T_NODE_COLD_C_V0:
-        thermal = THERMAL_BANDS_V0[1]
-    elif d.t_min < T_NODE_TROPICAL_C_V0:
-        thermal = THERMAL_BANDS_V0[2]
-    else:
-        thermal = THERMAL_BANDS_V0[3]
+    thermal = _thermal_band_for_extremes(d.t_max, d.t_min)
 
     supply: str | None = None
     supply_status = NOT_APPLICABLE
@@ -467,7 +494,13 @@ PROFILE_V2 = "ucc-v2"
 - Modifiers: continental → ``l`` (陆, replaces ``x`` — x is the wildcard
   convention in climate-classification practice and must not be a formal
   letter); water_stress → ``g`` (干季, replaces ``w`` to stop the echo of
-  Köppen's winter-dry ``w``), display name 干季/seasonal dry.
+  Köppen's winter-dry ``w``), display name 干季/seasonal dry; highland →
+  ``H`` (uppercase, Köppen/Trewartha pedigree — design-anchors §3.7): fires
+  when the sea-level-reduced thermal band differs from the actual one, i.e.
+  the cell's band is *elevation-made* rather than latitude-made.  Parameter-
+  gated (needs cell elevation + a declared lapse rate; airless worlds carry
+  no lapse rate, so the modifier is not applicable there).  Cause marker
+  only — never changes the main class.
 - New suffix letters (never change the main class):
   - precipitation-season shape (gate C_TV ≥ 0.25): ``m`` unimodal wet season /
     ``d`` bimodal (two wet seasons half a cycle apart, R2 > R1); below the
@@ -486,7 +519,7 @@ THERMAL_CODE_LETTERS_V2 = {"tropical": "A", "temperate": "C", "cold": "D", "pola
 #: v2 supply letters (a/p/t/u, alphabetically ascending with wetness).  The
 #: v1 map above stays for v0/v1 reproducibility — their codes never change.
 SUPPLY_CODE_LETTERS_V2 = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
-MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g"}
+MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g", "highland": "H"}
 SHAPE_CODE_LETTERS_V2 = {"unimodal": "m", "bimodal": "d"}
 PHASE_CODE_LETTERS_V2 = {"in_phase": "h", "anti_phase": "o"}
 #: C_TV gate for the shape letter (declared empirical candidate; L2 scan
@@ -509,8 +542,9 @@ class UCCClassV2:
     Same main-class semantics as v1 (thermal/supply bands, modifier gates);
     adds the seasonality suffixes ``shape`` (unimodal/bimodal wet season, None
     when C_TV is below the gate) and ``phase`` (in_phase/anti_phase, None when
-    the phase descriptor is not valid or mid-range).  Like modifiers, the
-    suffix letters never change the main class.
+    the phase descriptor is not valid or mid-range), plus the ``highland``
+    modifier (elevation-made band, parameter-gated).  Like the other
+    modifiers, none of these ever change the main class.
     """
 
     profile: str
@@ -520,8 +554,14 @@ class UCCClassV2:
     is_land: bool
     continental: bool
     water_stress: bool | None
-    shape: str | None
-    phase: str | None
+    shape: str | None = None
+    phase: str | None = None
+    #: -H (design-anchors §3.7): True when reducing the bin extremes to sea
+    #: level with the declared lapse rate moves the cell to a *different*
+    #: thermal band — the band is elevation-made.  False when no elevation /
+    #: lapse rate was supplied (airless worlds: no lapse rate exists) as well
+    #: as when the reduction leaves the band unchanged.
+    highland: bool = False
 
     @property
     def label(self) -> str:
@@ -529,10 +569,11 @@ class UCCClassV2:
 
     @property
     def code(self) -> str:
-        """Compact v2 code, e.g. ``Dp-lgmo`` (cold·semi-arid, all suffixes),
-        ``An`` (hot-side OOD Venus), ``Eo`` (polar ocean).  Grammar: thermal ·
-        supply - modifiers · shape · phase; silent letters are simply absent,
-        so codes stay compact."""
+        """Compact v2 code, e.g. ``Dp-lgHmo`` (cold·semi-arid, all modifiers,
+        elevation-made band, unimodal wet season in phase), ``An`` (hot-side
+        OOD Venus), ``Eo`` (polar ocean).  Grammar: thermal · supply -
+        modifiers · shape · phase; silent letters are simply absent, so codes
+        stay compact."""
         if self.supply is not None:
             s = SUPPLY_CODE_LETTERS_V2[self.supply]
         else:
@@ -543,6 +584,8 @@ class UCCClassV2:
             mods += MOD_CODE_LETTERS_V2["continental"]
         if self.water_stress:
             mods += MOD_CODE_LETTERS_V2["water_stress"]
+        if self.highland:
+            mods += MOD_CODE_LETTERS_V2["highland"]
         suffix = mods
         if self.shape is not None:
             suffix += SHAPE_CODE_LETTERS_V2[self.shape]
@@ -551,11 +594,37 @@ class UCCClassV2:
         return code + ("-" + suffix if suffix else "")
 
 
-def classify_v2(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV2:
-    """Classify under profile v2 (v1 band structure + seasonality letters)."""
+def classify_v2(
+    d: ClimateDescriptors,
+    *,
+    is_land: bool,
+    elevation_m: float | None = None,
+    lapse_rate_c_per_km: float | None = None,
+) -> UCCClassV2:
+    """Classify under profile v2 (v1 band structure + seasonality letters).
+
+    ``elevation_m`` + ``lapse_rate_c_per_km`` (both or neither) enable the
+    ``-H`` highland modifier: the bin extremes are reduced to sea level with
+    the declared lapse rate, and a band change marks an elevation-made band.
+    The lapse rate is a *world-level declared quantity* (epistemology:
+    observed/model-fitted environmental value — Earth ISA 6.5, Venus VIRA
+    ~8 near-adiabatic, Mars ~2.5 dust-softened vs 4.5 dry adiabat, Titan
+    ~1.38 Lindal/HASI); airless worlds declare none, so the modifier stays
+    off there by construction.
+    """
     base = _classify(
         d, is_land=is_land, ai_edges=AI_EDGES_V1, supply_bands=SUPPLY_BANDS_V1, profile=PROFILE_V2
     )
+    highland = False
+    if (
+        is_land
+        and elevation_m is not None
+        and lapse_rate_c_per_km is not None
+        and elevation_m != 0.0
+    ):
+        delta = float(lapse_rate_c_per_km) * float(elevation_m) / 1000.0
+        band_reduced = _thermal_band_for_extremes(d.t_max + delta, d.t_min + delta)
+        highland = band_reduced != base.thermal
     shape: str | None = None
     if (
         d.concentration is not None
@@ -583,4 +652,127 @@ def classify_v2(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV2:
         water_stress=base.water_stress,
         shape=shape,
         phase=phase,
+        highland=highland,
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared per-cell yearly computation (used by both writers: the engine export
+# path in map/export.py and the solar/obs path in import_solar_common.py)
+# ---------------------------------------------------------------------------
+
+
+def yearly_cell_arrays(
+    t_monthly: np.ndarray,
+    p_monthly: np.ndarray,
+    et_monthly: np.ndarray | None,
+    is_land: np.ndarray,
+    elevation_m: np.ndarray | None = None,
+    lapse_rate_c_per_km: float | None = None,
+) -> dict[str, np.ndarray]:
+    """Compute the per-cell descriptor + classification arrays in one pass.
+
+    Args:
+        t_monthly: (N, M) bin-mean temperatures (°C).
+        p_monthly: (N, M) precipitation per bin (rate or total — with equal
+            bins the distinction is a constant factor that cancels in every
+            ratio; ``p_total`` follows the value basis of the inputs).
+        et_monthly: (N, M) reference demand per bin, same basis as p; None =
+            no demand model (AI/deficit/phase → missing_input).
+        is_land: (N,) bool land mask (ocean cells keep the thermal band and
+            take the n/a supply slot).
+        elevation_m: (N,) cell elevations for the -H modifier; None disables.
+        lapse_rate_c_per_km: declared world-level lapse rate; None disables.
+
+    Returns:
+        float32/uint8 arrays keyed by the ``climate_yearly.msgpack`` payload
+        names (``.tobytes()`` by the caller).  Undefined descriptor values are
+        NaN; ``ucc_supply``/``ucc_shape``/``ucc_phase`` use 255 for n/a;
+        ``ucc_modifiers`` bitmask: bit 0 continental, bit 1 water_stress,
+        bit 2 highland.
+    """
+    t_monthly = np.asarray(t_monthly, dtype=np.float64)
+    p_monthly = np.asarray(p_monthly, dtype=np.float64)
+    n = t_monthly.shape[0]
+    is_land = np.asarray(is_land, dtype=bool)
+
+    status_index = {s: i for i, s in enumerate(STATUS_CODES)}
+    thermal_index = {b: i for i, b in enumerate(THERMAL_BANDS_CURRENT)}
+    supply_index = {b: i for i, b in enumerate(SUPPLY_BANDS_CURRENT)}
+    shape_codes = list(SHAPE_CODE_LETTERS_V2)
+    shape_index = {c: i for i, c in enumerate(shape_codes)}
+    phase_codes = list(PHASE_CODE_LETTERS_V2)
+    phase_index = {c: i for i, c in enumerate(phase_codes)}
+
+    out: dict[str, np.ndarray] = {
+        "t_mean_c": np.empty(n, np.float32),
+        "t_min_c": np.empty(n, np.float32),
+        "t_max_c": np.empty(n, np.float32),
+        "t_range_c": np.empty(n, np.float32),
+        "t_below_frac": np.empty(n, np.float32),
+        "p_mean_mm_per_month": np.empty(n, np.float32),
+        "p_total_mm": np.empty(n, np.float32),
+        "ai": np.full(n, np.nan, np.float32),
+        "ai_status": np.empty(n, np.uint8),
+        "deficit": np.full(n, np.nan, np.float32),
+        "deficit_status": np.empty(n, np.uint8),
+        "concentration": np.full(n, np.nan, np.float32),
+        "p_harmonic1": np.full(n, np.nan, np.float32),
+        "p_harmonic2": np.full(n, np.nan, np.float32),
+        "p_phase": np.full(n, np.nan, np.float32),
+        "p_phase_status": np.empty(n, np.uint8),
+        "ucc_thermal": np.empty(n, np.uint8),
+        "ucc_supply": np.empty(n, np.uint8),
+        "ucc_supply_status": np.empty(n, np.uint8),
+        "ucc_modifiers": np.empty(n, np.uint8),
+        "ucc_shape": np.empty(n, np.uint8),
+        "ucc_phase": np.empty(n, np.uint8),
+    }
+
+    elev_arr: np.ndarray | None = None
+    cell_lapse: float | None = None
+    if elevation_m is not None and lapse_rate_c_per_km is not None:
+        elev_arr = np.asarray(elevation_m, dtype=np.float64)
+        cell_lapse = float(lapse_rate_c_per_km)
+    for i in range(n):
+        et_i = None if et_monthly is None else et_monthly[i]
+        d = compute_descriptors(t_monthly[i], p_monthly[i], et_i)
+        out["t_mean_c"][i] = d.t_mean
+        out["t_min_c"][i] = d.t_min
+        out["t_max_c"][i] = d.t_max
+        out["t_range_c"][i] = d.t_range
+        out["t_below_frac"][i] = d.t_below_frac
+        out["p_mean_mm_per_month"][i] = d.p_mean_rate
+        out["p_total_mm"][i] = d.p_total
+        if d.ai is not None:
+            out["ai"][i] = d.ai
+        out["ai_status"][i] = status_index[d.ai_status]
+        if d.deficit is not None:
+            out["deficit"][i] = d.deficit
+        out["deficit_status"][i] = status_index[d.deficit_status]
+        if d.concentration is not None:
+            out["concentration"][i] = d.concentration
+        if d.p_harmonic1 is not None:
+            out["p_harmonic1"][i] = d.p_harmonic1
+        if d.p_harmonic2 is not None:
+            out["p_harmonic2"][i] = d.p_harmonic2
+        if d.p_phase is not None:
+            out["p_phase"][i] = d.p_phase
+        out["p_phase_status"][i] = status_index[d.p_phase_status]
+        cls = classify_v2(
+            d,
+            is_land=bool(is_land[i]),
+            elevation_m=float(elev_arr[i]) if elev_arr is not None else None,
+            lapse_rate_c_per_km=cell_lapse,
+        )
+        out["ucc_thermal"][i] = thermal_index[cls.thermal]
+        out["ucc_supply"][i] = supply_index[cls.supply] if cls.supply is not None else 255
+        out["ucc_supply_status"][i] = status_index[cls.supply_status]
+        out["ucc_modifiers"][i] = (
+            (1 if cls.continental else 0)
+            | (2 if cls.water_stress else 0)
+            | (4 if cls.highland else 0)
+        )
+        out["ucc_shape"][i] = shape_index[cls.shape] if cls.shape is not None else 255
+        out["ucc_phase"][i] = phase_index[cls.phase] if cls.phase is not None else 255
+    return out
