@@ -208,7 +208,7 @@ def map_planet(
             raise MappingError("pco2 mode requires a non-negative pco2_bar")
     elif greenhouse_mode != "none":
         raise MappingError(f"unknown greenhouse_mode {greenhouse_mode!r}")
-    if "greenhouse_factor" in planet.get("atmosphere", {}) and greenhouse_mode == "none":
+    if greenhouse_mode == "none" and "greenhouse_factor" in planet.get("atmosphere", {}):
         warnings.append(
             f"greenhouse_factor {planet['atmosphere']['greenhouse_factor']} K not "
             "compensated (radiative identity pending author decision)"
@@ -227,6 +227,13 @@ def map_planet(
         pco2 = pco2_bar
     else:
         pco2 = pressure_bar * float(composition["CO2"]) if "CO2" in composition else None
+    if greenhouse_mode == "none" and "CO2" not in composition:
+        warnings.append(
+            "atmosphere composition carries no CO2: the GCM arm has no carbon "
+            "greenhouse and will collapse to a snowball unless pCO2/flux is "
+            "supplied explicitly (earth ≈ 2.8e-4 bar; nacrea pending the "
+            "radiative-identity adjudication)"
+        )
 
     star_temp = star.get("effective_temperature_k") or star.get("teff_k")
     params = ExoPlaSimParams(
