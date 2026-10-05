@@ -476,6 +476,7 @@ function CellDetails({
   const uccModifierKeys = [
     ...(uccModBits & 1 ? ['continental'] : []),
     ...(uccModBits & 2 ? ['waterStress'] : []),
+    ...(uccModBits & 4 ? ['highland'] : []),
   ]
   // Seasonality suffix letters (v2 exports): wet-season shape + rain–demand
   // phase, both optional per cell (255 = no letter).
@@ -838,10 +839,24 @@ function CellDetails({
                   title={t('inspector.uccDeclToggle')}
                 >
                   {showDecl ? '▾' : '▸'} {t('inspector.uccProfile', { profile: yearlyData!.profile })}
+                  {yearlyData!.climateState &&
+                    ` · ${t(`uccClimateState.${yearlyData!.climateState}`, {
+                      defaultValue: yearlyData!.climateState,
+                    })}`}
                   {yearlyData!.dataSource && ` · ${t(`uccSource.${yearlyData!.dataSource}`)}`}
                 </button>
                 {showDecl && (
                   <div className="mt-1 ml-3 space-y-0.5 text-[10px] text-gray-500">
+                    {yearlyData!.climateState && (
+                      <div>
+                        {t('inspector.declClimateState')}:{' '}
+                        {t(`uccClimateState.${yearlyData!.climateState}`, {
+                          defaultValue: yearlyData!.climateState,
+                        })}
+                        {yearlyData!.lapseRateCPerKm != null &&
+                          ` · ${t('inspector.declLapseRate', { rate: yearlyData!.lapseRateCPerKm })}`}
+                      </div>
+                    )}
                     <div>
                       {t('inspector.declDemandModel')}:{' '}
                       {yearlyData!.demandModel

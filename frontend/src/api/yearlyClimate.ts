@@ -70,7 +70,8 @@ export interface YearlyClimateData {
   uccSupply?: Uint8Array
   /** Per-cell supply-axis status code (index into statusCodes). */
   uccSupplyStatus?: Uint8Array
-  /** Per-cell modifier bitmask: bit 0 = continental, bit 1 = water_stress. */
+  /** Per-cell modifier bitmask: bit 0 = continental, bit 1 = water_stress,
+   * bit 2 = highland (-H, v2: sea-level-reduced thermal band differs). */
   uccModifiers?: Uint8Array
   /** shape/phase letter code lists (v2 exports); per-cell index, 255 = none. */
   shapeCodes?: string[]
@@ -93,6 +94,12 @@ export interface YearlyClimateData {
   /** Result-contract reference year / month (days), from shared metadata. */
   referenceYearDays?: number
   referenceMonthDays?: number
+  /** World-level climate-state declaration (axis F vocabulary, e.g.
+   * 'temperate', 'runaway_greenhouse'); absent when not declared. */
+  climateState?: string
+  /** Declared environmental lapse rate (K/km) behind the -H modifier;
+   * absent for airless worlds (no lapse rate exists). */
+  lapseRateCPerKm?: number
 }
 
 /** Reinterpret a MessagePack `bin` (Uint8Array) as little-endian float32. */
@@ -109,8 +116,8 @@ function toUint8(u8: Uint8Array): Uint8Array {
 // LETTERS / MOD_CODE_LETTERS(_V2) in src/dreamulator/map/ucc.py (single source
 // of truth is the Python side; codes are versioned with the profile and are
 // NOT Köppen letters).  v1: P/C/T/R + x/w.  v2: Köppen-direction A/C/D/E with
-// B permanently blank, modifiers l/g, suffix letters m/d (wet-season shape)
-// and h/o (rain–demand phase).
+// B permanently blank, modifiers l/g/H (H = highland, elevation-made band),
+// suffix letters m/d (wet-season shape) and h/o (rain–demand phase).
 const UCC_THERMAL_LETTERS_V1: Record<string, string> = {
   polar: 'P',
   cold: 'C',
@@ -162,7 +169,7 @@ export function uccCode(d: YearlyClimateData, i: number, isLand: boolean): strin
   }
   const mods = uccModifiers ? uccModifiers[i] : 0
   let suffix = v2
-    ? (mods & 1 ? 'l' : '') + (mods & 2 ? 'g' : '')
+    ? (mods & 1 ? 'l' : '') + (mods & 2 ? 'g' : '') + (mods & 4 ? 'H' : '')
     : (mods & 1 ? 'x' : '') + (mods & 2 ? 'w' : '')
   if (v2 && d.uccShape && d.shapeCodes) {
     const s = d.uccShape[i]
@@ -213,6 +220,8 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
   const time = obj.time as { reference_year_days?: number; reference_month_days?: number } | undefined
   out.referenceYearDays = time?.reference_year_days
   out.referenceMonthDays = time?.reference_month_days
+  out.climateState = (obj.climate_state as string) ?? undefined
+  out.lapseRateCPerKm = (obj.lapse_rate_c_per_km as number) ?? undefined
   // Classification fields (UCC-01 step 4a) are absent in older exports.
   if (obj.ucc_thermal !== undefined) {
     out.profile = (obj.profile as string) ?? ''
