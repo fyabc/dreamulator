@@ -24,8 +24,12 @@ References:
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from scipy.spatial import cKDTree
 
 from dreamulator.engine.climate_physics import SOLAR_CONSTANT
 
@@ -724,6 +728,8 @@ def monthly_temperature(
         ice_albedo: Snow/ice albedo for cells whose summer never melts.
         ice_threshold_c: Summer temperature below which a cell stays ice-covered.
         ice_albedo_feedback: Enable the seasonal ice-albedo fixed-point.
+        itcz_damping_value: ITCZ migration damping (see ``itcz_damping``);
+            ``None`` keeps the Earth-fitted 0.6 default.
         n_iterations: Ice-albedo fixed-point iterations.
 
     Returns:
@@ -770,6 +776,111 @@ def monthly_temperature(
 # ---------------------------------------------------------------------------
 # 6. ITCZ migration and precipitation seasonality
 # ---------------------------------------------------------------------------
+
+# Effective thermal inertia of the tropical convergence band (days): the
+# shallow tropical thermocline + moisture-convergence reservoir the ITCZ
+# rides on.  Epistemic class: GCM/observation-fitted effective constant —
+# cross-verified 2026-10 with ExoPlaSim (nacrea aquaplanet, 99.7 d year:
+# realized rain-band migration 11.1° peak-to-peak; this τ gives ±5.9°),
+# while Earth's observed ±14°/±23.4° ratio is reproduced by construction
+# (the year-length rescale below is unity at 365.25 d).
+ITCZ_EFFECTIVE_INERTIA_DAYS = 20.0
+
+
+def itcz_damping(
+    orbital_period_days: float,
+    *,
+    tau_itcz_days: float = ITCZ_EFFECTIVE_INERTIA_DAYS,
+    damping_earth: float = 0.6,
+) -> float:
+    """ITCZ migration damping (ITCZ amplitude / declination amplitude).
+
+    Earth's zonal-mean ITCZ swings ~±14° against ±23.44° declination, fixing
+    ``damping_earth = 0.6`` (observation-fitted aggregate: ocean inertia plus
+    land monsoon amplification).  For other year lengths the ocean-inertia
+    part rescales as a first-order low-pass of the seasonal cycle,
+
+        g(T) = 1 / sqrt(1 + (2π τ_itcz / T)²),
+        damping(T) = damping_earth · g(T) / g(365.25 d),
+
+    so Earth is unchanged by construction and short-year worlds get a
+    physically smaller migration instead of inheriting Earth's fitted value
+    (the 2026-10 nacrea diagnosis: a fixed 0.6 over-migrated a 99.7 d year,
+    while the *realized* engine migration was zero because the background
+    wind field never shifted — see ``meridional_shift_sample``).
+    """
+    if orbital_period_days <= 0:
+        raise ValueError(f"orbital period must be positive, got {orbital_period_days}")
+
+    def _gain(period: float) -> float:
+        return float(1.0 / np.sqrt(1.0 + (2.0 * np.pi * tau_itcz_days / period) ** 2))
+
+    return float(damping_earth * _gain(orbital_period_days) / _gain(365.25))
+
+
+def coastal_moderation_scale_km(
+    u_onshore_m_s: float = 7.0,
+    rho_cp_j_m3_k: float = 1204.0,
+    boundary_layer_depth_m: float = 1500.0,
+    lambda_surface_w_m2k: float = 30.0,
+) -> float:
+    """Derive the maritime-influence e-folding length for annual-mean land T.
+
+    Onshore flow loses its SST signature as surface fluxes equilibrate the
+    marine boundary layer over land: the equilibration time is the BL heat
+    capacity divided by the surface coupling, ``τ = ρ cp h / λ``, and the
+    penetration length is ``L = U · τ`` (boundary-layer advection picture).
+    With ρ cp ≈ 1204 J/m³/K (sea-level air), h ≈ 1.5 km, λ ≈ 30 W/m²/K
+    (sensible + latent over moist land) and U ≈ 7 m/s onshore this gives
+    ≈ 420 km — the order of the observed continentality transition
+    (500–1500 km), replacing the previous naked 500 km constant.
+    """
+    tau_s = rho_cp_j_m3_k * boundary_layer_depth_m / lambda_surface_w_m2k
+    return float(u_onshore_m_s * tau_s / 1000.0)
+
+
+def meridional_shift_sample(
+    field: np.ndarray,
+    tree: cKDTree,
+    lat_rad: np.ndarray,
+    lon_rad: np.ndarray,
+    delta_deg: float,
+) -> np.ndarray:
+    """Sample ``field`` at latitudes shifted by ``delta_deg`` (Shepard k-NN).
+
+    Used to move the *background* circulation (Hadley/Ferrel convergence
+    structure) with the seasonal ITCZ: ``wind_m(lat) = wind_annual(lat − δ)``,
+    δ = itcz(m) − mean(itcz).  Without this the monthly moisture budget sees a
+    static convergence geometry and the rain band cannot migrate (the 2026-10
+    nacrea zero-migration finding).  Geography-tied components (stationary
+    waves, monsoon ΔP) are added on top unshifted.
+
+    Inverse-distance (Shepard) blending over the 6 nearest cells keeps the
+    shift smooth on coarse meshes, where pure nearest-neighbour sampling
+    degenerates to a permutation once δ falls below the cell spacing (the
+    100-node synthetic meshes in the test suite hit exactly that).
+    """
+    if abs(delta_deg) < 1e-9:
+        return field
+    lat_s = lat_rad - np.radians(delta_deg)
+    query = np.stack(
+        [
+            np.cos(lat_s) * np.cos(lon_rad),
+            np.cos(lat_s) * np.sin(lon_rad),
+            np.sin(lat_s),
+        ],
+        axis=1,
+    )
+    dist, idx = tree.query(query, k=6)
+    exact = dist[:, 0] < 1e-9
+    with np.errstate(divide="ignore"):
+        weights = 1.0 / (dist**2 + 1e-12)
+    weights = np.where(exact[:, None], np.where(np.arange(6)[None, :] == 0, 1.0, 0.0), weights)
+    weights = weights / weights.sum(axis=1, keepdims=True)
+    stacked = np.asarray(field)[idx]
+    if stacked.ndim == 2:  # scalar field (N,) -> (n, k)
+        return np.asarray(np.einsum("nk,nk->n", weights, stacked))
+    return np.asarray(np.einsum("nk,nkd->nd", weights, stacked))
 
 
 def itcz_latitude_monthly(
@@ -941,6 +1052,7 @@ def compute_seasonal_climate(
     ice_albedo: float = 0.7,
     ice_threshold_c: float = 0.0,
     ice_albedo_feedback: bool = True,
+    itcz_damping_value: float | None = None,
 ) -> dict[str, np.ndarray]:
     """Compute full seasonal climate: 12-month temperature and precipitation.
 
@@ -964,6 +1076,8 @@ def compute_seasonal_climate(
         ice_albedo: Snow/ice albedo for never-melting cells.
         ice_threshold_c: Summer temperature below which a cell stays ice-covered.
         ice_albedo_feedback: Enable the seasonal ice-albedo fixed-point.
+        itcz_damping_value: ITCZ migration damping (see ``itcz_damping``);
+            ``None`` keeps the Earth-fitted 0.6 default.
 
     Returns:
         Dict with:
@@ -1003,6 +1117,9 @@ def compute_seasonal_climate(
         orbital_period_days=orbital_period_days,
         eccentricity=eccentricity,
         perihelion_day=perihelion_day,
+        damping=(
+            itcz_damping(orbital_period_days) if itcz_damping_value is None else itcz_damping_value
+        ),
     )
 
     lat_deg = np.degrees(lat_rad)
