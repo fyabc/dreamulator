@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import sparse
+from scipy.spatial import cKDTree
 
 from dreamulator.engine.climate_physics import (
     SOLAR_CONSTANT,
@@ -47,8 +48,11 @@ from dreamulator.engine.climate_physics import (
 )
 from dreamulator.engine.climate_seasonality import (
     apply_eddy_relaxation,
+    coastal_moderation_scale_km,
     compute_seasonal_climate,
     eddy_diffusion_single_cell,
+    itcz_damping,
+    meridional_shift_sample,
     period_scaled_heat_capacity,
     radiative_equilibrium_contrast,
     seasonal_heat_capacity,
@@ -461,9 +465,14 @@ def simulate_climate(
     # (NaN − T)·0 would still be NaN, so sanitise the SST too.
     _has_sst = np.isfinite(nearest_sst)
     nearest_sst = np.where(_has_sst, nearest_sst, t_mean_C)
+    _moderation_scale_km = (
+        config.coastal_moderation_scale_km
+        if config.coastal_moderation_scale_km is not None
+        else coastal_moderation_scale_km()
+    )
     _maritime = np.where(
         is_land & _has_sst,
-        np.exp(-distance_to_coast_km / config.coastal_moderation_scale_km),
+        np.exp(-distance_to_coast_km / _moderation_scale_km),
         0.0,
     )
     t_mean_C = t_mean_C + (nearest_sst - t_mean_C) * _maritime
@@ -557,6 +566,7 @@ def simulate_climate(
         t_mean_C,
         is_land,
         heat_capacity,
+        itcz_damping_value=itcz_damping(config.orbital_period_days),
         obliquity_deg=config.axial_tilt_deg,
         solar_constant=solar_const,
         orbital_period_days=config.orbital_period_days,
@@ -792,7 +802,27 @@ def simulate_climate(
         # westerly role moves to the couplet's BL response (H3 verdict: not a
         # naked retirement; the SCS contribution must survive via the couplet).
         _sw_wind = np.zeros((12, len(lat_rad), 3))
-    wind_monthly = np.stack([wind + _sw_wind[m] + _wind_monsoon[m] for m in range(12)])
+    # R1 (2026-10): the background circulation (Hadley/Ferrel convergence
+    # geometry) follows the seasonal ITCZ: wind_m(lat) = wind_annual(lat - δ),
+    # δ = itcz(m) - mean(itcz).  Without the shift the monthly moisture budget
+    # sees a static convergence band and the rain belt cannot migrate (nacrea
+    # zero-migration diagnosis; ExoPlaSim oracle: ±5.5° realized migration for
+    # nacrea's 99.7 d year).  Geography-tied components (stationary waves,
+    # monsoon ΔP) stay unshifted on top.
+    _itcz_delta = np.asarray(itcz_lat_monthly, dtype=np.float64)
+    _itcz_delta = _itcz_delta - float(_itcz_delta.mean())
+    _lon_rad_shift = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
+    _shift_tree = cKDTree(nodes_xyz)
+    wind_monthly = np.stack(
+        [
+            meridional_shift_sample(
+                wind, _shift_tree, lat_rad, _lon_rad_shift, float(_itcz_delta[m])
+            )
+            + _sw_wind[m]
+            + _wind_monsoon[m]
+            for m in range(12)
+        ]
+    )
 
     # Terrain blocking on each monthly field (a per-cell scalar scaling of the
     # wind vector — linear, so the mean identity below is exact).
