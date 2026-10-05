@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791160449210,
+  "lastUpdate": 1791165019880,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6193,6 +6193,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000589166610486975",
             "extra": "mean: 5.114034600001105 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e306856cea0a4279719d0a8e58fb2320b9747858",
+          "message": "Merge feature/ucc-v2-world-state: UCC v2 轴 F+B（世界级气候态声明 + -H 高地修饰语）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-05T09:49:21+08:00",
+          "tree_id": "ddc345824ca797c7ed802ba0af3c0e866b53dd54",
+          "url": "https://github.com/fyabc/dreamulator/commit/e306856cea0a4279719d0a8e58fb2320b9747858"
+        },
+        "date": 1791165019235,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.16744810430367496,
+            "unit": "iter/sec",
+            "range": "stddev: 0.15357323068855372",
+            "extra": "mean: 5.9719995288 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.3194059358778314,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01987448625003753",
+            "extra": "mean: 301.25872500000384 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5123445989929305,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0542258143498386",
+            "extra": "mean: 661.2249619999963 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 956.8676592657572,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010251153136618229",
+            "extra": "mean: 1.0450766000047906 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.1178842217139,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009276192410320276",
+            "extra": "mean: 5.073106400001848 msec\nrounds: 5"
           }
         ]
       }
