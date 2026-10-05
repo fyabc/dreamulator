@@ -179,12 +179,16 @@ climate:
   # storm_track_amplitude_mm 用共享默认 900：幅度公式自带 Ω^0.3 标度，
   # 慢自转自动得到减弱的斜压雨出增强；斜压带位置由引擎从经向温度梯度推导
   # （GCM 结论：慢自转行星瞬变涡旋减弱而不为零）。见技术债 20 ⑥ 实验。
-  # Sub-Aegis hemisphere warming: tidally-locked to gas giant →
-  # Aegis IR + reflected starlight ≈ 1–1.5 W/m² → ~1°C warmer
-  # on the permanently planet-facing side.  This fixed longitudinal
-  # temperature gradient drives wind & ocean currents on a slow
-  # rotator where Coriolis-driven circulation is inherently weak.
-  sub_planet_warming_c: 1.0
+  # Sub-Aegis hemisphere warming: tidally-locked to gas giant → the
+  # sub-Aegis point receives Aegis IR + reflected starlight
+  # E_sub = (A_g·F_star + σT_A⁴)·(R_p/d)² ≈ (283+133)×0.0102 ≈ 4.2 W/m²
+  # （A_g=0.34、F_star@Aegis=831 W/m²、d=724 000 km ≈ 10.1 R_p；Heller &
+  # Barnes 2013 框架——比 ~270–300 W/m² 失控温室阈低两个量级，即老年冷巨
+  # 行星的 modest 辐照体制）。向星半球均值 ≈2.1 W/m²、全球均值 ≈1.05 W/m²。
+  # 局地响应被侧向输送阻尼（λ_local ≈ B_eff + 2D ≈ 3.5 W/m²K）→
+  # ΔT_sub ≈ 4.2/3.5 ≈ 1.2 K = 下方钉值。该固定经向温度梯度在慢自转（科氏
+  # 环流本征弱）下驱动风场与洋流的纵向结构。
+  sub_planet_warming_c: 1.2
   sub_planet_longitude_deg: 0.0  # Aegis深渊洋 = 向星点 (geography.yaml)
   # 水汽输送：蒸发基准用共享物理默认（能量限制 ~1000 mm @15°C），
   # 不再单世界覆盖（蒸发是水的物理属性，不随恒星/卫星变化）。
