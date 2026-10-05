@@ -699,6 +699,12 @@ class UCCCodeParts:
     shape: str | None
     phase: str | None
     highland: bool
+    #: Reserved extension slot (spec §5.4): braced lowercase words carried in
+    #: the seasonality zone after its registered letters, alphabetically.
+    #: No vocabulary is registered — classify never emits them; the parser
+    #: accepts and round-trips them so downstream tooling can adopt the hatch
+    #: without a grammar change.
+    extensions: tuple[str, ...] = ()
 
     def render(self) -> str:
         t = THERMAL_CODE_LETTERS_V2[self.thermal]
@@ -715,6 +721,8 @@ class UCCCodeParts:
             season += SHAPE_CODE_LETTERS_V2[self.shape]
         if self.phase is not None:
             season += PHASE_CODE_LETTERS_V2[self.phase]
+        for word in self.extensions:
+            season += "{" + word + "}"
         zones = []
         if len(season) > 1:
             zones.append(season)
@@ -759,6 +767,7 @@ def parse_ucc_code(code: str) -> UCCCodeParts:
     continental = water_stress = highland = False
     shape: str | None = None
     phase: str | None = None
+    extensions: list[str] = []
     last_zone_rank = -1
     for zone in segs[1:]:
         if not zone:
@@ -774,27 +783,54 @@ def parse_ucc_code(code: str) -> UCCCodeParts:
                 raise UCCGrammarError("the H zone has no followers in the registry")
             highland = True
             continue
-        # Seasonality zone: followers must be known, lowercase, and in
-        # strictly increasing canonical rank (l < g < m|d < h|o).
+        # Seasonality zone: followers must be known letters or reserved
+        # extension words (``{word}``, spec §5.4), and in strictly increasing
+        # canonical order — l < g < m|d < h|o < extensions, the latter
+        # alphabetical among themselves.
         if not followers:
             raise UCCGrammarError("the S zone must carry at least one letter")
-        ranks: list[int] = []
-        for f in followers:
-            rank = _SEASONALITY_FOLLOWER_RANKS.get(f)
+        tokens: list[str] = []
+        i = 0
+        while i < len(followers):
+            ch = followers[i]
+            if ch == "{":
+                end = followers.find("}", i + 1)
+                if end < 0:
+                    raise UCCGrammarError(f"unterminated extension word in {followers!r}")
+                tokens.append(followers[i : end + 1])
+                i = end + 1
+            elif ch.isalpha() and ch.islower():
+                tokens.append(ch)
+                i += 1
+            else:
+                raise UCCGrammarError(f"invalid seasonality follower {ch!r}")
+        extension_base = len(_SEASONALITY_FOLLOWER_RANKS)
+        rank_keys: list[tuple[int, str]] = []
+        for tok in tokens:
+            if tok.startswith("{"):
+                word = tok[1:-1]
+                if not word or not (word.isalpha() and word.islower()):
+                    raise UCCGrammarError(
+                        f"invalid extension word {tok!r} — lowercase letters only"
+                    )
+                rank_keys.append((extension_base, word))
+                extensions.append(word)
+                continue
+            rank = _SEASONALITY_FOLLOWER_RANKS.get(tok)
             if rank is None:
-                raise UCCGrammarError(f"unknown seasonality letter {f!r}")
-            ranks.append(rank)
-        if any(ranks[k + 1] <= ranks[k] for k in range(len(ranks) - 1)):
-            raise UCCGrammarError(f"seasonality letters {followers!r} not in canonical order")
-        continental = "l" in followers
-        water_stress = "g" in followers
-        if "m" in followers:
+                raise UCCGrammarError(f"unknown seasonality letter {tok!r}")
+            rank_keys.append((rank, ""))
+        if any(rank_keys[k + 1] <= rank_keys[k] for k in range(len(rank_keys) - 1)):
+            raise UCCGrammarError(f"seasonality followers {followers!r} not in canonical order")
+        continental = "l" in tokens
+        water_stress = "g" in tokens
+        if "m" in tokens:
             shape = "unimodal"
-        elif "d" in followers:
+        elif "d" in tokens:
             shape = "bimodal"
-        if "h" in followers:
+        if "h" in tokens:
             phase = "in_phase"
-        elif "o" in followers:
+        elif "o" in tokens:
             phase = "anti_phase"
     return UCCCodeParts(
         thermal=thermal,
@@ -805,6 +841,7 @@ def parse_ucc_code(code: str) -> UCCCodeParts:
         shape=shape,
         phase=phase,
         highland=highland,
+        extensions=tuple(extensions),
     )
 
 
