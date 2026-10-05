@@ -217,7 +217,12 @@ def map_planet(
     year = year_days_from_kepler(a_au, float(star["mass"]))
 
     atmosphere = dict(planet.get("atmosphere", {}))
+    # surface_pressure_atm is the *background* (non-CO2) atmosphere; an explicit
+    # pCO2 sits ON TOP of it, so the total passed to ExoPlaSim must include it
+    # (partial pressures must sum to the total — the 2026-10-06 scan bug).
     pressure_bar = float(atmosphere.get("surface_pressure_atm", 1.0)) * ATM_TO_BAR
+    if greenhouse_mode == "pco2" and pco2_bar:
+        pressure_bar += pco2_bar  # total = background + CO2 (composition closure)
     composition = dict(atmosphere.get("composition", {}))
     # Partial pressures in bar; keys follow exoplasim spelling (pN2/pO2/pAr).
     pn2 = pressure_bar * float(composition["N2"]) if "N2" in composition else None
