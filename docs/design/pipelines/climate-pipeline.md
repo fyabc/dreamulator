@@ -454,7 +454,7 @@ k_rain 下沉干燥门**（`climate_physics.subsidence_rainout_gate`，质量守
 （守卫 `climate_simulator.py:1021-1028`：一次只开一个闭合回路——每轮一个闭合假设）。
 开启时在 Stage 3 内：pass-1 降水 → 柱潜热（`wet_trough_heating_weight = "total"`；
 备选 `"pickup"` = NPH09 深对流份额加权，预登记消融臂）→ **湿槽 ΔSLP**
-（`stationary_wave_two_level.py::wet_trough_slp_anomaly` :430：湿槽静力映射 +
+（`stationary_wave_two_level.py::wet_trough_slp_anomaly` :489：湿槽静力映射 +
 赤道混合 + ΔP_wet 幅度帽）叠加到 raw ΔP 重过「平滑 → 梯度 → 边界层风 → 年风」链
 → 重解水汽收支；Picard 欠松弛 `wet_trough_relaxation = 0.5`、
 `wet_trough_iterations = 3`（回路块 :1206-1395）。**pickup 门与本回路联锁**
