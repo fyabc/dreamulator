@@ -121,8 +121,8 @@
 | P3 | **热点火山岛建设剖面**（潮汐固定热点岛的盾状对数剖面 + 裂谷拉长选项，替换锚定幂核；形态判据实测 → [geology-layer-improvement.md](proposals/geology-layer-improvement.md) §9；2026-10-05 立项，优先级低） | 3–5 天 | ★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示）→ `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
-| P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 6 | 前端 1–2 周 | ★★ |
-| P3 | **草案七转正 + Hycean 调研**（创作线）→ today.md 待办 5 | ①1–2 天 ②周级 | ★★ |
+| P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 5 | 前端 1–2 周 | ★★ |
+| P3 | **草案七转正 + Hycean 调研**（创作线）→ today.md 待办 3 | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前）→ `private/plans/ucc-01-plan.md` 4e | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明）→ `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
@@ -138,7 +138,7 @@
 | P2 | **geography.yaml 编辑原语补全**（overlays 段已承载局部刻海/补陆（09-30）；剩余原语 = `elevation_bias` 区域乘数、`lock_region`、`lake`/`inland_sea`） | 1–2 周 | ★★★ |
 | P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；设计见 [layer-control-model.md](proposals/layer-control-model.md)） | 1–2 周 | ★★★ |
 | P2 | **分辨率独立性验证**（geography.yaml 锚定特征在 100k/200k/500k 一致性；sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
-| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具 ↔ 回贴 cell；P1 局部地形精细化管线为其 MVP 先行版）。**前置使能 = 地形 bake（2026-09-30 用户立项，设计草案 → today.md 待办 22）**：精调后的全球地形冻结为直读基座（`baked_base` + manifest，类似 earth root 导入态），外部编辑不再被构建冲掉 | 远期 | ★★ |
+| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具 ↔ 回贴 cell；P1 局部地形精细化管线为其 MVP 先行版）。**前置使能 = 地形 bake（2026-09-30 用户立项，设计草案 → today.md 待办 4）**：精调后的全球地形冻结为直读基座（`baked_base` + manifest，类似 earth root 导入态），外部编辑不再被构建冲掉 | 远期 | ★★ |
 | P3 | **构造-地表全双向耦合**（侵蚀卸载/沉积载荷反作用于板块动力学；Underworld2+Badlands ALE 方案；需先解决地理锚定与动态板块协调） | 远期 | ★★ |
 | P3 | AI 顾问模式 / 实时协作 / 世界导出包 | 见 vision.md §9 | ★★ |
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算）→ [moltke-engine.md](proposals/moltke-engine.md) | 远期 | ★★ |
