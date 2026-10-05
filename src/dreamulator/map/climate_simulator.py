@@ -245,9 +245,11 @@ def simulate_climate(
     # "derive" — the Held-Hou thermal-Rossby scaling φ_H ≈ R_t^(1/2) with Δ_H
     # from the model's own radiative-equilibrium contrast (same insolation
     # geometry as the EBM).  An explicit config value pins it (escape hatch
-    # for the GCM-evidenced global-cell regime — nacrea's PoC mass
-    # streamfunction is single-signed to the pole where the axisymmetric
-    # formula only reaches ~60°; see hadley_extent_from_rotation).
+    # for GCM-evidenced extents: nacrea's corrected-geometry GCM streamfunction
+    # (ExoPlaSim T21, 2026-10-05) flips sign at ~47° with an eddy-driven
+    # indirect cell poleward to 90° — two-cell regime the axisymmetric
+    # formula misplaces, sitting on its regime cliff; see
+    # hadley_extent_from_rotation).
     if config.hadley_extent_deg > 0.0:
         hadley_extent_deg = config.hadley_extent_deg
     else:
@@ -274,8 +276,9 @@ def simulate_climate(
     polar_cell_start_deg = max(config.polar_cell_start_deg, hadley_extent_deg)
 
     # Archived 4.2 subsidence-warming increment (°C), released over humid land
-    # by the Stage 3.5 aridity gate (subsidence_aridity_gate).  Stays zero for
-    # single-cell worlds (nacrea) and when subsidence_warming_c = 0.
+    # by the Stage 3.5 aridity gate (subsidence_aridity_gate).  Stays zero in
+    # the single-cell branch (hadley_extent_deg >= 90, where the Held-Hou
+    # profile already has flat subtropics) and when subsidence_warming_c = 0.
     _dt_subsidence = np.zeros(n)
 
     if config.ebm_1d:
