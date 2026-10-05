@@ -1,9 +1,17 @@
 # scripts/ 目录说明
 
-按域分组，共 62 个脚本。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 64 个脚本（含 gcm/ 子组 2 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
+
+## climate/gcm/ — ExoPlaSim offline oracle（2 个）
+
+GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
+`src/dreamulator/gcm/mapping.py` docstring）。
+
+- `run_exoplasim.py` — 世界→GCM 参数映射 → 运行 → 诊断 → overview.png；`--nc` 可只诊断已有 run
+- `bootstrap.sh` — 任意 Ubuntu 容器/WSL 环境引导（含 pyfft/meson 坑的修复）
 
 ## climate/ — 气候验证与诊断（32 个）
 
