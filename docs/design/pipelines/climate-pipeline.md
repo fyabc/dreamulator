@@ -802,18 +802,25 @@ AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用�
 arid/semi_arid/transitional/humid）、`ucc_thermal`（uint8 热量带码）、`ucc_supply`
 （uint8 供需档码，255 = 不适用——海洋或 AI 非 valid）、`ucc_supply_status`（uint8，
 复用 `status_codes`）、`ucc_modifiers`（uint8 位掩码：bit0 = continental、
-bit1 = water_stress）。v2 新增：`p_harmonic1` / `p_harmonic2`（降水质量的一/二次
-圆谐幅度，f32）、`p_phase` + `p_phase_status`（雨-需求相位，符号化周期分数）、
-`ucc_shape` / `ucc_phase`（uint8 索引进 `shape_codes`/`phase_codes`，255 = 无字母）、
-以及 `p_total_ref365_mm` + `p_total_basis`（p_total 双基准收口：`p_total_mm` 随文件
-声明的时间基（引擎 = 参考年；太阳系导入 = 本地窗口年），`p_total_ref365_mm` 恒为
-365.25 日口径，跨世界可比）。v2 显示字母表：热量 A/C/D/E（Köppen 同向，B 永久
-留白）、修饰语 l（陆）/g（干季）、后缀 m/d（单/双雨季）与 h/o（雨热同/反季）；
+bit1 = water_stress、bit2 = highland）。v2 新增：`p_harmonic1` / `p_harmonic2`
+（降水质量的一/二次圆谐幅度，f32）、`p_phase` + `p_phase_status`（雨-需求相位，
+符号化周期分数）、`ucc_shape` / `ucc_phase`（uint8 索引进 `shape_codes`/
+`phase_codes`，255 = 无字母）、以及 `p_total_ref365_mm` + `p_total_basis`
+（p_total 双基准收口：`p_total_mm` 随文件声明的时间基（引擎 = 参考年；太阳系
+导入 = 本地窗口年），`p_total_ref365_mm` 恒为 365.25 日口径，跨世界可比）。
+**世界级声明**（轴 F + -H 判据输入，2026-10-05）：`climate_state`（行星气候态
+词汇，见 spec §5.5）与 `lapse_rate_c_per_km`（声明的环境递减率；无大气天体
+不声明）。v2 显示字母表：热量 A/C/D/E（Köppen 同向，B 永久留白）、修饰语
+l（陆）/g（干季）/H（高地）、后缀 m/d（单/双雨季）与 h/o（雨热同/反季）；
 v1 及更早文件由前端按 `profile` 字段自动回退旧字母。分类在导出层一次性算好，
 前端只读码不重新分类（阈值共享由构造保证）；无这些字段的旧导出在前端降级为
 透明图层。`data_source` 区分 `"model"`（引擎导出）、`"observation"`（earth root
 的观测派生文件，见 earth-real-data.md §2.4 末）与 `"gcm-climatology"`（太阳系
-参照天体）。
+参照天体）。逐 cell 计算由共享助手 `ucc.yearly_cell_arrays()` 承担（引擎导出
+`map/export.py:write_engine_climate_yearly()` 与太阳系/观测导出
+`import_solar_common.write_ucc_yearly()` 两个写入端共用）；引擎世界在描述量/
+分类语义变更后无需全量重建——`scripts/climate/regen_climate_yearly.py` 从盘上
+`climate_monthly.msgpack`（int16 量化，分辨率远低于数据自身精度）反量化重导出。
 
 写入端有两处：引擎构建路径（`export.py`），以及导入器侧共享模块
 `import_solar_common.write_ucc_yearly`——earth root 的 `export_earth_yearly.py`

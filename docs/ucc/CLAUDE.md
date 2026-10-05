@@ -73,9 +73,15 @@ UCC-01（描述量 + L0/L1 测试 + climate_yearly 浏览 + L2 比较 + profile 
 **v2-α 已冻结（2026-10-04，`classify_v2` 为当前导出 profile）**：季节性后缀字母
 （形态 m/d + 相位 h/o，L2 消融证据 65.7% 压缩 + Köppen 恢复 98.7%/61%）、热侧
 域门 35 °C（Venus 翻 `An`）、显示字母表重构（A/C/D/E 同向 Köppen、B 永久留白、
-修饰语 l/g）、p_total 双基准收口（`p_total_ref365_mm`）。v2 其余候选（登记不排期）
-以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为单一事实源：世界级气候态前缀、
-高度-气压修饰语 -H、跨溶剂广义 AI、光照 regime 等——轴设计的物理基础见
+修饰语 l/g）、p_total 双基准收口（`p_total_ref365_mm`）。
+**v2 轴 F + 轴 B 已落地（2026-10-05）**：世界级气候态声明 `climate_state`
+（temperate/runaway_greenhouse/thin_co2_cold/methane_hydrology/airless，文件元数据
+层 + 前端声明块显示，不进 cell 码）与高地修饰语 `-H`（海平面还原带改变 = 海拔
+成因；声明递减率 Earth 6.5/Venus 8.0/Mars 2.5/Titan 1.38，无大气不适用）；
+两个写入端共用 `ucc.yearly_cell_arrays()`，引擎世界可用
+`scripts/climate/regen_climate_yearly.py` 免重建重导出。
+v2 其余候选（登记不排期）以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为
+单一事实源：跨溶剂广义 AI（轴 C）、光照 regime（轴 D）等——轴设计的物理基础见
 `design-anchors.md` §3。
 
 ## 写作原则

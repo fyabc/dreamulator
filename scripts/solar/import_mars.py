@@ -244,8 +244,14 @@ def main() -> None:
             "not error-free truth",
             "time_basis": f"bin = {MARS_BIN_DAYS:.2f} Earth-days (Martian month); "
             f"p_total per Martian year ({MARS_YEAR_DAYS} d)",
+            "climate_state": "thin_co2_cold — declared world regime (axis F): "
+            "~6 hPa CO2, cold (Haberle 2001 liquid-water-favourable domain)",
+            "lapse_rate": "2.5 K/km environmental, dust-softened (dry adiabat "
+            "would be ~4.5 K/km = g/Cp for CO2) — enables the -H highland modifier",
         },
         demand_model="hamon-1961",
+        climate_state="thin_co2_cold",
+        lapse_rate_c_per_km=2.5,
     )
     print("Land classes:", sorted(combos.items(), key=lambda kv: -kv[1]))
 
