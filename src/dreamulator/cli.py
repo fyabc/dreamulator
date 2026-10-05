@@ -211,6 +211,11 @@ from dreamulator.cli_data import data_app  # noqa: E402
 
 app.add_typer(data_app, name="data")
 
+# UCC short-code inspection — thin shell over map/ucc.py's parser.
+from dreamulator.cli_ucc import ucc_app  # noqa: E402
+
+app.add_typer(ucc_app, name="ucc")
+
 # Seed explorer — top-level command, imported late to avoid a circular import
 # (cli_explore_seeds imports the terrain-config loader from this module lazily).
 from dreamulator.cli_explore_seeds import explore_seeds  # noqa: E402
