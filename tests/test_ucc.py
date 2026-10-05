@@ -17,10 +17,12 @@ from dreamulator.map.ucc import (
     OUT_OF_DOMAIN,
     PROFILE_V0,
     PROFILE_V1,
+    THERMAL_CODE_LETTERS_V2,
     VALID,
     ClimateDescriptors,
     classify_v0,
     classify_v1,
+    classify_v2,
     compute_descriptors,
     status_short,
 )
@@ -257,3 +259,219 @@ def test_v1_splits_arid_at_02() -> None:
     assert c0.water_stress == c1.water_stress
     assert c0.supply == "arid" and c1.supply == "semi_arid"  # the only divergence
     assert c1.profile == PROFILE_V1
+
+
+# ---------------------------------------------------------------------------
+# v2-α descriptors: seasonal-shape harmonics, rain–demand phase, hot-side gate
+# ---------------------------------------------------------------------------
+
+
+def test_harmonics_unimodal_vs_bimodal() -> None:
+    # Shape, not just strength: a single wet season and two opposite wet
+    # seasons can carry similar concentration C_TV but must separate in the
+    # harmonic amplitudes (C_TV's known blind spot, specification §6).
+    # NB a *delta* spike has every harmonic at amplitude 1 — the bimodality
+    # discriminator is the comparison (R2 > R1), never R2 alone.
+    m = 12
+    t = np.full(m, 20.0)
+    p_uni = np.zeros(m)
+    p_uni[2:5] = 4.0  # one wet season spread over ~3 months
+    p_bi = np.zeros(m)
+    p_bi[0] = 6.0
+    p_bi[6] = 6.0  # two wet seasons half a cycle apart
+    p_spike = np.zeros(m)
+    p_spike[3] = 12.0  # single-month spike: R1 = R2 = 1, not bimodal
+
+    d_u = compute_descriptors(t, p_uni)
+    d_b = compute_descriptors(t, p_bi)
+    d_s = compute_descriptors(t, p_spike)
+    assert d_u.p_harmonic1 is not None and d_u.p_harmonic1 > 0.85
+    assert d_u.p_harmonic2 is not None and d_u.p_harmonic2 < 0.75
+    assert d_u.p_harmonic2 < d_u.p_harmonic1  # unimodal: first harmonic dominates
+    assert d_b.p_harmonic2 is not None and d_b.p_harmonic2 > 0.9
+    assert d_b.p_harmonic1 is not None and d_b.p_harmonic1 < 0.2
+    assert d_s.p_harmonic1 == pytest.approx(1.0) and d_s.p_harmonic2 == pytest.approx(1.0)
+    assert d_s.p_harmonic2 <= d_s.p_harmonic1 + 1e-9  # spike is not bimodal
+    # No precipitation at all → shape is undefined (None, matching concentration)
+    d_zero = compute_descriptors(t, np.zeros(m))
+    assert d_zero.p_harmonic1 is None and d_zero.p_harmonic2 is None
+    assert d_zero.concentration is None
+
+
+def test_phase_monsoon_vs_mediterranean() -> None:
+    # Same demand peak, rain with it vs rain half a cycle away: the signed
+    # phase separates 雨热同季 (monsoon) from 雨热反季 (Mediterranean), which
+    # the v1 descriptors cannot (§7.2's pair shares AI and diverges only in
+    # deficit; these two can even share deficit).
+    m = 12
+    t = np.full(m, 20.0)
+    et = np.zeros(m)
+    et[6] = 12.0  # demand peaks in bin 6
+
+    p_monsoon = np.zeros(m)
+    p_monsoon[6] = 12.0  # rain with demand
+    p_medi = np.zeros(m)
+    p_medi[0] = 12.0  # rain half a cycle away
+
+    d_m = compute_descriptors(t, p_monsoon, et_rate=et)
+    d_x = compute_descriptors(t, p_medi, et_rate=et)
+    assert d_m.p_phase_status == VALID
+    assert d_m.p_phase is not None and abs(d_m.p_phase) < 0.05  # ≈0 → in phase
+    assert d_x.p_phase is not None and abs(d_x.p_phase) > 0.45  # ≈±0.5 → anti-phase
+
+
+def test_phase_partial_validity() -> None:
+    m = 12
+    et = np.zeros(m)
+    et[6] = 12.0
+    p_flat = np.full(m, 1.0)  # uniform rain: no dominant cycle → NA
+    p_seasonal = np.zeros(m)
+    p_seasonal[6] = 12.0
+    et_flat = np.full(m, 1.0)  # uniform demand (constant T world): NA too
+
+    d = compute_descriptors(np.full(m, 20.0), p_flat, et_rate=et)
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+    # Constant-temperature world with seasonal rain: the rain season itself
+    # survives (harmonics valid) but phase against demand is NA (§7.1:
+    # 恒温 ≠ 无季节 — but there is no demand season to be out of phase with).
+    d = compute_descriptors(np.full(m, 20.0), p_seasonal, et_rate=et_flat)
+    assert d.p_harmonic1 is not None and d.p_harmonic1 > 0.9
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+    # No demand series at all → missing_input; no rain → NA.
+    d = compute_descriptors(np.full(m, 20.0), p_seasonal, et_rate=None)
+    assert d.p_phase is None and d.p_phase_status == MISSING_INPUT
+    d = compute_descriptors(np.full(m, 20.0), np.zeros(m), et_rate=et)
+    assert d.p_phase is None and d.p_phase_status == NOT_APPLICABLE
+
+
+def test_hot_side_domain_gate() -> None:
+    # Symmetric with the cold-side freeze rule: a year with *no* bin mean
+    # below HOT_DOMAIN_GATE_C is beyond the Hamon calibration envelope —
+    # the supply–demand family (AI, deficit, phase) refuses to report.
+    m = 12
+    t_hot = np.full(m, 60.0)  # Venus-like: every bin above the gate
+    p = np.full(m, 1.0)
+    et = np.full(m, 2.0)
+    d = compute_descriptors(t_hot, p, et_rate=et)
+    assert d.ai is None and d.ai_status == OUT_OF_DOMAIN
+    assert d.deficit is None and d.deficit_status == OUT_OF_DOMAIN
+    assert d.p_phase is None and d.p_phase_status == OUT_OF_DOMAIN
+    # Temperature/precipitation/shape fields survive the gate.
+    assert d.t_mean == 60.0 and d.p_total == m
+    assert d.p_harmonic1 is not None
+
+    # Just below the gate everywhere → still in domain (boundary check).
+    d = compute_descriptors(np.full(m, 34.9), p, et_rate=et)
+    assert d.ai is not None and d.ai_status == VALID
+
+    # Mixed year (one bin dips below the gate) → not gated.
+    t_mixed = np.full(m, 40.0)
+    t_mixed[0] = 20.0
+    d = compute_descriptors(t_mixed, p, et_rate=et)
+    assert d.ai is not None and d.ai_status == VALID
+
+
+# ---------------------------------------------------------------------------
+# profile v2: alphabet rework + seasonality suffix letters
+# ---------------------------------------------------------------------------
+
+
+def test_v2_alphabet_and_grammar() -> None:
+    # Köppen-direction thermal letters with B permanently blank; modifiers
+    # l (陆) / g (干季); grammar {thermal}{supply}-{mods}{shape}{phase}.
+    d = compute_descriptors(
+        np.array([10.0, 22.0] * 6),  # t_min 10 ≥ ... temperate; mild season
+        np.full(12, 1.0),
+        et_rate=np.full(12, 1.0),
+        dt=np.full(12, 30.4375),
+    )
+    c = classify_v2(d, is_land=True)
+    assert c.thermal == "temperate"
+    assert c.code[0] == "C"  # temperate → C (Köppen-direction, not T)
+    # Venus-like hothouse: tropical + OOD supply → "An" under the hot gate.
+    d_hot = compute_descriptors(np.full(12, 60.0), np.full(12, 1.0), et_rate=np.full(12, 2.0))
+    c_hot = classify_v2(d_hot, is_land=True)
+    assert c_hot.thermal == "tropical" and c_hot.code == "An"
+    # Polar ocean → Eo; B never appears in any thermal letter.
+    assert THERMAL_CODE_LETTERS_V2["tropical"] == "A"
+    assert THERMAL_CODE_LETTERS_V2["temperate"] == "C"
+    assert THERMAL_CODE_LETTERS_V2["cold"] == "D"
+    assert THERMAL_CODE_LETTERS_V2["polar"] == "E"
+    assert "B" not in THERMAL_CODE_LETTERS_V2.values()
+    # Supply ladder a/p/t/u — alphabetically ascending with wetness; s and h
+    # are retired (Köppen Cs echo / suffix-h double duty).
+    from dreamulator.map.ucc import SUPPLY_CODE_LETTERS_V2
+
+    assert SUPPLY_CODE_LETTERS_V2 == {
+        "arid": "a",
+        "semi_arid": "p",
+        "transitional": "t",
+        "humid": "u",
+    }
+    d_humid = compute_descriptors(
+        np.full(12, 20.0), np.full(12, 2.0), et_rate=np.full(12, 1.0), dt=np.full(12, 30.0)
+    )
+    assert classify_v2(d_humid, is_land=True).code[1] == "u"
+
+
+def test_v2_seasonality_suffix_letters() -> None:
+    m = 12
+    et = np.zeros(m)
+    et[6] = 12.0  # single-peak demand in bin 6 (strong first harmonic)
+
+    def make(p: np.ndarray, t_lo: float, t_hi: float) -> ClimateDescriptors:
+        t = np.linspace(t_lo, t_hi, m)  # thermal band set-up only
+        return compute_descriptors(t, p, et_rate=et, dt=np.full(m, 30.4375))
+
+    # Monsoon: single wet season with the demand peak, strong season → m + h
+    # (aligned P and demand → no deficit → no g).
+    p_monsoon = np.zeros(m)
+    p_monsoon[6] = 12.0
+    d = make(p_monsoon, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "unimodal" and c.phase == "in_phase"
+    assert c.code.endswith("mh")
+
+    # Mediterranean mirror: wet season half a cycle away → m + o (misalignment
+    # also earns the g dry-season modifier, so the suffix reads "-gmo").
+    p_medi = np.zeros(m)
+    p_medi[0] = 12.0
+    d = make(p_medi, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "unimodal" and c.phase == "anti_phase"
+    assert c.code.endswith("gmo")
+
+    # Uniform rain: C_TV below the gate → shape silent (no "u" letter), phase NA.
+    d = make(np.full(m, 1.0), 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape is None and c.phase is None
+    assert "-" not in c.code or c.code.split("-")[1] in ("l", "g", "lg")
+
+    # Bimodal wet seasons → d letter (Kashmir-type double rain peak).
+    p_bi = np.zeros(m)
+    p_bi[0] = 6.0
+    p_bi[6] = 6.0
+    d = make(p_bi, 5.0, 25.0)
+    c = classify_v2(d, is_land=True)
+    assert c.shape == "bimodal" and c.phase is None  # R1 → 0: phase gate blocks
+    assert c.code.endswith("gd")
+
+    # Suffixes never change the main class: same thermal/supply as v1.
+    d = make(p_monsoon, 5.0, 25.0)
+    c1 = classify_v1(d, is_land=True)
+    c2 = classify_v2(d, is_land=True)
+    assert c1.thermal == c2.thermal and c1.supply == c2.supply
+
+
+def test_v2_modifier_letters_renamed() -> None:
+    # continental → l (x avoided as the wildcard convention); water_stress → g.
+    t = np.array([0.0, 40.0] * 6)  # t_range 40 → continental
+    p = np.array([0.0, 4.0] * 6)  # deficit against demand → likely g
+    et = np.array([4.0, 0.1] * 6)  # demand in the cold half (anti-phase set-up)
+    d = compute_descriptors(t, p, et_rate=et, dt=np.full(12, 30.4375))
+    c = classify_v2(d, is_land=True)
+    assert c.continental and "l" in c.code
+    if c.water_stress:
+        assert "g" in c.code and "w" not in c.code and "x" not in c.code

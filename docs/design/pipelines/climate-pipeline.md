@@ -796,16 +796,24 @@ AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用�
 年辐射）也归入此文件。API 侧 `GET /maps/{world}/climate-yearly`
 （`api_routes/maps.py` 的 `get_climate_yearly`）。
 
-同一文件还带 **UCC 分类字段**（UCC-01 第四步，当前 profile = v1，见 `map/ucc.py`
-的 `classify_v1` 与 `PROFILE_CURRENT`；v0 保留可复现）：`profile`（版本标识）、`thermal_bands` /
-`supply_bands`（码 → 名枚举，v1 = arid/semi_arid/transitional/humid）、
-`ucc_thermal`（uint8 热量带码）、`ucc_supply`
+同一文件还带 **UCC 分类字段与季节性描述量**（UCC-01 第四步，当前 profile =
+**v2**，见 `map/ucc.py` 的 `classify_v2` 与 `PROFILE_CURRENT`；v0/v1 保留可复现）：
+`profile`（版本标识）、`thermal_bands` / `supply_bands`（码 → 名枚举，供需档 =
+arid/semi_arid/transitional/humid）、`ucc_thermal`（uint8 热量带码）、`ucc_supply`
 （uint8 供需档码，255 = 不适用——海洋或 AI 非 valid）、`ucc_supply_status`（uint8，
 复用 `status_codes`）、`ucc_modifiers`（uint8 位掩码：bit0 = continental、
-bit1 = water_stress）。分类在导出层一次性算好，前端只读码不重新分类（阈值共享由
-构造保证）；无这些字段的旧导出在前端降级为透明图层。`data_source` 区分
-`"model"`（引擎导出）与 `"observation"`（earth root 的观测派生文件，见
-earth-real-data.md §2.4 末）。
+bit1 = water_stress）。v2 新增：`p_harmonic1` / `p_harmonic2`（降水质量的一/二次
+圆谐幅度，f32）、`p_phase` + `p_phase_status`（雨-需求相位，符号化周期分数）、
+`ucc_shape` / `ucc_phase`（uint8 索引进 `shape_codes`/`phase_codes`，255 = 无字母）、
+以及 `p_total_ref365_mm` + `p_total_basis`（p_total 双基准收口：`p_total_mm` 随文件
+声明的时间基（引擎 = 参考年；太阳系导入 = 本地窗口年），`p_total_ref365_mm` 恒为
+365.25 日口径，跨世界可比）。v2 显示字母表：热量 A/C/D/E（Köppen 同向，B 永久
+留白）、修饰语 l（陆）/g（干季）、后缀 m/d（单/双雨季）与 h/o（雨热同/反季）；
+v1 及更早文件由前端按 `profile` 字段自动回退旧字母。分类在导出层一次性算好，
+前端只读码不重新分类（阈值共享由构造保证）；无这些字段的旧导出在前端降级为
+透明图层。`data_source` 区分 `"model"`（引擎导出）、`"observation"`（earth root
+的观测派生文件，见 earth-real-data.md §2.4 末）与 `"gcm-climatology"`（太阳系
+参照天体）。
 
 写入端有两处：引擎构建路径（`export.py`），以及导入器侧共享模块
 `import_solar_common.write_ucc_yearly`——earth root 的 `export_earth_yearly.py`

@@ -49,8 +49,12 @@ PLANET_IDS = {
 _ANCHOR_WORLD = "earth"  # real-world reference anchor (name is historical)
 
 
-_THERMAL_LETTERS = {"polar": "P", "cold": "C", "temperate": "T", "tropical": "R"}
-_SUPPLY_LETTERS = {"arid": "a", "semi_arid": "s", "transitional": "t", "humid": "h"}
+# v2 alphabet: Köppen-direction A/C/D/E with B permanently blank; modifiers
+# l/g; suffix letters m/d (wet-season shape) + h/o (rain–demand phase).
+_THERMAL_LETTERS = {"tropical": "A", "temperate": "C", "cold": "D", "polar": "E"}
+_SUPPLY_LETTERS = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
+_SHAPE_LETTERS = {"unimodal": "m", "bimodal": "d"}
+_PHASE_LETTERS = {"in_phase": "h", "anti_phase": "o"}
 
 # Named features per world: (name, lat, lon, want) — literature-typical
 # coordinates of well-known landmarks, for geographic-intuition review.
@@ -209,19 +213,32 @@ def main() -> None:
     sp = _u8(y, "ucc_supply")
     sp_status = _u8(y, "ucc_supply_status")
     mods = _u8(y, "ucc_modifiers")
+    shape_codes = list(y.get("shape_codes", []))
+    phase_codes = list(y.get("phase_codes", []))
+    ucc_shape = _u8(y, "ucc_shape") if "ucc_shape" in y else None
+    ucc_phase = _u8(y, "ucc_phase") if "ucc_phase" in y else None
 
     tl = np.array([_THERMAL_LETTERS[b] for b in thermal_bands])
     sl = np.array([_SUPPLY_LETTERS[b] for b in supply_bands])
     supply_letter = np.where(sp != 255, sl[np.clip(sp, 0, len(sl) - 1)], np.where(land, "n", "o"))
     base = tl[th] + supply_letter
-    suffix = np.where(
-        (mods & 1).astype(bool) | (mods & 2).astype(bool),
-        "-"
-        + np.where((mods & 1).astype(bool), "x", "")
-        + np.where((mods & 2).astype(bool), "w", ""),
-        "",
-    )
-    all_codes: np.ndarray = (base + suffix).astype(object)
+    suffix = (
+        np.where((mods & 1).astype(bool), "l", "")
+        + np.where((mods & 2).astype(bool), "g", "")
+    ).astype(object)
+    if ucc_shape is not None and shape_codes:
+        shape_letter = np.array(
+            [_SHAPE_LETTERS.get(shape_codes[v], "") if v != 255 else "" for v in ucc_shape],
+            dtype=object,
+        )
+        suffix = suffix + shape_letter
+    if ucc_phase is not None and phase_codes:
+        phase_letter = np.array(
+            [_PHASE_LETTERS.get(phase_codes[v], "") if v != 255 else "" for v in ucc_phase],
+            dtype=object,
+        )
+        suffix = suffix + phase_letter
+    all_codes: np.ndarray = (base + np.where(suffix != "", "-" + suffix, "")).astype(object)
 
     n_land, n_ocean = int(land.sum()), int((~land).sum())
     land_base = Counter(base[land].tolist())
@@ -233,7 +250,7 @@ def main() -> None:
     band_rows = []
     for t_name in thermal_bands:
         for s_name in supply_bands:
-            code = _THERMAL_LETTERS[t_name] + _SUPPLY_LETTERS[s_name]
+            code = _THERMAL_LETTERS[t_name] + ("n" if s_name == "n-a" else _SUPPLY_LETTERS[s_name])
             cnt = land_base.get(code, 0)
             if cnt or code in {k[:2] for k in land_base}:
                 pct = cnt / max(n_land, 1)

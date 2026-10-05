@@ -88,7 +88,15 @@
   },
   "uccMod": {
     "continental": "强季节",
-    "waterStress": "季节水压力"
+    "waterStress": "干季"
+  },
+  "uccShape": {
+    "unimodal": "单雨季",
+    "bimodal": "双雨季"
+  },
+  "uccPhase": {
+    "in_phase": "雨热同季",
+    "anti_phase": "雨热反季"
   },
   "uccSource": {
     "model": "引擎",
