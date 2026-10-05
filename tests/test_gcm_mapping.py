@@ -102,6 +102,7 @@ def test_greenhouse_modes() -> None:
     params = map_planet(green, STAR, ORBIT, greenhouse_mode="pco2", pco2_bar=0.2)
     assert params.flux == pytest.approx(1361.0)
     assert params.pco2 == pytest.approx(0.2)
+    assert params.pressure == pytest.approx(ATM_TO_BAR + 0.2)
     # missing factor / unknown mode are hard errors
     with pytest.raises(MappingError, match="flux_boost_factor"):
         map_planet(green, STAR, ORBIT, greenhouse_mode="flux_boost")
