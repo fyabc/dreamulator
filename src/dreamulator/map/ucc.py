@@ -501,14 +501,17 @@ PROFILE_V2 = "ucc-v2"
   gated (needs cell elevation + a declared lapse rate; airless worlds carry
   no lapse rate, so the modifier is not applicable there).  Cause marker
   only — never changes the main class.
-- New suffix letters (never change the main class):
-  - precipitation-season shape (gate C_TV ≥ 0.25): ``m`` unimodal wet season /
-    ``d`` bimodal (two wet seasons half a cycle apart, R2 > R1); below the
-    gate the letter is silent ("u"-niform is the default, not printed).
-  - rain–demand phase (valid only where both axes carry a dominant seasonal
+- Suffix zones (never change the main class; hyphen-separated, each headed
+  by an uppercase letter — see the ZONE registry and ``parse_ucc_code``):
+  - ``S`` seasonality — followers ``l``/``g`` (the modifiers above), then
+    precipitation-season shape (gate C_TV ≥ 0.25): ``m`` unimodal wet season /
+    ``d`` bimodal (two wet seasons half a cycle apart, R2 > R1; below the gate
+    the letter is silent — "u"-niform is the default, not printed), then
+    rain–demand phase (valid only where both axes carry a dominant seasonal
     cycle — an extratropical instrument; see the phase descriptor): ``h``
     in-phase (|Δφ| ≤ 1/12 cycle, 雨热同季) / ``o`` anti-phase (|Δφ| ≥ 3/12,
-    雨热反季, Mediterranean-type); mid-range and not-applicable are silent.
+    雨热反季, Mediterranean-type; mid-range and not-applicable are silent).
+  - ``H`` altitude — the highland zone above (no followers yet).
 - Evidence: shape letter compresses within-class C_TV variance by 65.7 %
   (v1 modifier benchmarks: x 42 %, w 14 %); phase letter recovers Köppen's
   precipitation letters almost perfectly (w→98.7 % h, s→61 % o); perturbation
@@ -519,7 +522,23 @@ THERMAL_CODE_LETTERS_V2 = {"tropical": "A", "temperate": "C", "cold": "D", "pola
 #: v2 supply letters (a/p/t/u, alphabetically ascending with wetness).  The
 #: v1 map above stays for v0/v1 reproducibility — their codes never change.
 SUPPLY_CODE_LETTERS_V2 = {"arid": "a", "semi_arid": "p", "transitional": "t", "humid": "u"}
-MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g", "highland": "H"}
+MOD_CODE_LETTERS_V2 = {"continental": "l", "water_stress": "g"}
+#: Zone grammar (specification §5.4): the suffix is a sequence of
+#: hyphen-separated *zones*, each headed by an uppercase letter whose
+#: lowercase followers are scoped to the zone (letters may repeat across
+#: zones without ambiguity).  Registry, in canonical order:
+#: - ``S`` seasonality — followers l g (modifiers), then m/d (wet-season
+#:   shape), then h/o (rain–demand phase);
+#: - ``H`` altitude/pressure — no followers yet (a future triple-point /
+#:   pressure marker would land here).
+#: ``B`` is globally retired (the Köppen-B misread trap applies to the whole
+#: code, not just the thermal slot).
+ZONE_HEAD_SEASONALITY = "S"
+ZONE_HEAD_HIGHLAND = "H"
+#: Canonical within-zone order for the seasonality followers, as ranks:
+#: strictly increasing ranks = a well-formed zone (m and d share a rank, so
+#: both cannot appear; same for h and o).
+_SEASONALITY_FOLLOWER_RANKS = {"l": 0, "g": 1, "m": 2, "d": 2, "h": 3, "o": 3}
 SHAPE_CODE_LETTERS_V2 = {"unimodal": "m", "bimodal": "d"}
 PHASE_CODE_LETTERS_V2 = {"in_phase": "h", "anti_phase": "o"}
 #: C_TV gate for the shape letter (declared empirical candidate; L2 scan
@@ -569,29 +588,22 @@ class UCCClassV2:
 
     @property
     def code(self) -> str:
-        """Compact v2 code, e.g. ``Dp-lgHmo`` (cold·semi-arid, all modifiers,
-        elevation-made band, unimodal wet season in phase), ``An`` (hot-side
-        OOD Venus), ``Eo`` (polar ocean).  Grammar: thermal · supply -
-        modifiers · shape · phase; silent letters are simply absent, so codes
-        stay compact."""
-        if self.supply is not None:
-            s = SUPPLY_CODE_LETTERS_V2[self.supply]
-        else:
-            s = LAND_NA_CODE_LETTER if self.is_land else OCEAN_CODE_LETTER
-        code = THERMAL_CODE_LETTERS_V2[self.thermal] + s
-        mods = ""
-        if self.continental:
-            mods += MOD_CODE_LETTERS_V2["continental"]
-        if self.water_stress:
-            mods += MOD_CODE_LETTERS_V2["water_stress"]
-        if self.highland:
-            mods += MOD_CODE_LETTERS_V2["highland"]
-        suffix = mods
-        if self.shape is not None:
-            suffix += SHAPE_CODE_LETTERS_V2[self.shape]
-        if self.phase is not None:
-            suffix += PHASE_CODE_LETTERS_V2[self.phase]
-        return code + ("-" + suffix if suffix else "")
+        """Compact v2 code (zone grammar, §5.4), e.g. ``Dp-Slgmo-H`` (cold·
+        semi-arid, seasonality zone fully lit, elevation-made band), ``An``
+        (hot-side OOD Venus), ``Eo`` (polar ocean).  Silent zones are simply
+        absent, so codes stay compact."""
+        return UCCCodeParts(
+            thermal=self.thermal,
+            supply=self.supply,
+            slot=None
+            if self.supply is not None
+            else (LAND_NA_CODE_LETTER if self.is_land else OCEAN_CODE_LETTER),
+            continental=self.continental,
+            water_stress=bool(self.water_stress),
+            shape=self.shape,
+            phase=self.phase,
+            highland=self.highland,
+        ).render()
 
 
 def classify_v2(
@@ -650,6 +662,146 @@ def classify_v2(
         is_land=base.is_land,
         continental=base.continental,
         water_stress=base.water_stress,
+        shape=shape,
+        phase=phase,
+        highland=highland,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Zone grammar: canonical parts + parser (specification §5.4)
+#
+# code   := main ( "-" zone )*
+# main   := thermal supply | thermal slot          # exactly two characters
+# zone   := head followers?                        # head uppercase, followers
+#                                                   # zone-scoped lowercase
+# ---------------------------------------------------------------------------
+
+
+class UCCGrammarError(ValueError):
+    """A code string violates the v2 zone grammar (§5.4)."""
+
+
+@dataclass(frozen=True)
+class UCCCodeParts:
+    """Parsed v2 code — the semantic content behind the letter display.
+
+    ``parse_ucc_code`` fills this from a string; ``render`` re-emits the
+    canonical code.  ``UCCClassV2.code`` renders through this type, so the
+    grammar has exactly one implementation.
+    """
+
+    thermal: str
+    supply: str | None  # band name; None → the slot letter was used
+    slot: str | None  # "o" ocean / "n" land supply-NA; None when supply present
+    continental: bool
+    water_stress: bool
+    shape: str | None
+    phase: str | None
+    highland: bool
+
+    def render(self) -> str:
+        t = THERMAL_CODE_LETTERS_V2[self.thermal]
+        if self.supply is not None:
+            main = t + SUPPLY_CODE_LETTERS_V2[self.supply]
+        else:
+            main = t + (self.slot or OCEAN_CODE_LETTER)
+        season = ZONE_HEAD_SEASONALITY
+        if self.continental:
+            season += MOD_CODE_LETTERS_V2["continental"]
+        if self.water_stress:
+            season += MOD_CODE_LETTERS_V2["water_stress"]
+        if self.shape is not None:
+            season += SHAPE_CODE_LETTERS_V2[self.shape]
+        if self.phase is not None:
+            season += PHASE_CODE_LETTERS_V2[self.phase]
+        zones = []
+        if len(season) > 1:
+            zones.append(season)
+        if self.highland:
+            zones.append(ZONE_HEAD_HIGHLAND)
+        return "-".join([main, *zones])
+
+
+_THERMAL_LETTER_TO_BAND = {v: k for k, v in THERMAL_CODE_LETTERS_V2.items()}
+_SUPPLY_LETTER_TO_BAND = {v: k for k, v in SUPPLY_CODE_LETTERS_V2.items()}
+#: Zone registry in canonical order (spec §5.4); B globally retired.
+_ZONE_ORDER = {ZONE_HEAD_SEASONALITY: 0, ZONE_HEAD_HIGHLAND: 1}
+
+
+def parse_ucc_code(code: str) -> UCCCodeParts:
+    """Parse a v2 zone-grammar code, validating structure and letter order.
+
+    Raises :class:`UCCGrammarError` on any violation — unknown/retired
+    letters, a zone without followers' content where none is allowed,
+    followers in non-canonical order, duplicate zones, or zones out of
+    registry order.  Round-trip guarantee: ``parse_ucc_code(c).render()``
+    re-emits any canonical code unchanged.
+    """
+    segs = code.split("-")
+    main = segs[0]
+    if len(main) != 2:
+        raise UCCGrammarError(f"main segment {main!r} must be exactly 2 characters")
+    thermal = _THERMAL_LETTER_TO_BAND.get(main[0])
+    if thermal is None:
+        raise UCCGrammarError(f"unknown thermal letter {main[0]!r} (B is retired)")
+    supply: str | None = None
+    slot: str | None = None
+    if main[1] == OCEAN_CODE_LETTER:
+        slot = OCEAN_CODE_LETTER
+    elif main[1] == LAND_NA_CODE_LETTER:
+        slot = LAND_NA_CODE_LETTER
+    else:
+        supply = _SUPPLY_LETTER_TO_BAND.get(main[1])
+        if supply is None:
+            raise UCCGrammarError(f"unknown supply letter {main[1]!r}")
+
+    continental = water_stress = highland = False
+    shape: str | None = None
+    phase: str | None = None
+    last_zone_rank = -1
+    for zone in segs[1:]:
+        if not zone:
+            raise UCCGrammarError("empty zone (trailing or doubled hyphen)")
+        head, followers = zone[0], zone[1:]
+        if head not in _ZONE_ORDER:
+            raise UCCGrammarError(f"unknown zone head {head!r}")
+        if _ZONE_ORDER[head] <= last_zone_rank:
+            raise UCCGrammarError(f"zone {head!r} out of registry order or duplicated")
+        last_zone_rank = _ZONE_ORDER[head]
+        if head == ZONE_HEAD_HIGHLAND:
+            if followers:
+                raise UCCGrammarError("the H zone has no followers in the registry")
+            highland = True
+            continue
+        # Seasonality zone: followers must be known, lowercase, and in
+        # strictly increasing canonical rank (l < g < m|d < h|o).
+        if not followers:
+            raise UCCGrammarError("the S zone must carry at least one letter")
+        ranks: list[int] = []
+        for f in followers:
+            rank = _SEASONALITY_FOLLOWER_RANKS.get(f)
+            if rank is None:
+                raise UCCGrammarError(f"unknown seasonality letter {f!r}")
+            ranks.append(rank)
+        if any(ranks[k + 1] <= ranks[k] for k in range(len(ranks) - 1)):
+            raise UCCGrammarError(f"seasonality letters {followers!r} not in canonical order")
+        continental = "l" in followers
+        water_stress = "g" in followers
+        if "m" in followers:
+            shape = "unimodal"
+        elif "d" in followers:
+            shape = "bimodal"
+        if "h" in followers:
+            phase = "in_phase"
+        elif "o" in followers:
+            phase = "anti_phase"
+    return UCCCodeParts(
+        thermal=thermal,
+        supply=supply,
+        slot=slot,
+        continental=continental,
+        water_stress=water_stress,
         shape=shape,
         phase=phase,
         highland=highland,

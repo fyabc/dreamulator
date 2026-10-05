@@ -147,6 +147,17 @@ dreamulator build earth --branch climate-dev --only climate
 
 ## 气候工具
 
+### 解码 UCC 简码
+
+```bash
+dreamulator ucc decode "Dp-Slgmo-H" "Ct-Smo" "An"   # 多码同查，表格输出
+dreamulator ucc decode "Dt-H" --json                 # 机器可读（脚本/校验用）
+```
+
+解析 v2 区域语法简码为完整分类（热量带·供需·修饰语·形态·相位），并校验
+语法——非法码给出原因并以退出码 1 结束。语法与字母表见
+`docs/ucc/specification.md` §5.4。
+
 ### 查看气候状态
 
 ```bash
