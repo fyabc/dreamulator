@@ -15,6 +15,9 @@
   参考需求模型声明与有效域（冻结线规则）、分类 profile v1（热量 4 节点 × AI 4 档 +
   continental/water_stress 修饰语 + 简码）、L2 实验冻结依据、范围限制、canonical
   合成序列反例对、迁移语义演练表。
+- `climate-input.sample.yaml` — 世界气候声明的注释样例（作者输入面
+  `layers/climate/input/climate.yaml` 的模板；climate_state 判定线索与
+  递减率声明值参考）。
 - `design-anchors.md` — 2026-09-14 设计提案的保留部分：设计原则（物理第一性 /
   方案与档案分离 / 时间序列优先 / 可扩展性）、锚点体系（溶剂相窗 θ、能量-水分 AI、
   世界统计分位数、周期性、环流体制、锁定行星空间、海拔气压）——**UCC v2 候选轴的
@@ -74,10 +77,11 @@ UCC-01（描述量 + L0/L1 测试 + climate_yearly 浏览 + L2 比较 + profile 
 （形态 m/d + 相位 h/o，L2 消融证据 65.7% 压缩 + Köppen 恢复 98.7%/61%）、热侧
 域门 35 °C（Venus 翻 `An`）、显示字母表重构（A/C/D/E 同向 Köppen、B 永久留白、
 修饰语 l/g）、p_total 双基准收口（`p_total_ref365_mm`）。
-**v2 轴 F + 轴 B 已落地（2026-10-05）**：世界级气候态声明 `climate_state`
+**轴 F + 轴 B 已落地**：世界级气候态声明 `climate_state`
 （temperate/runaway_greenhouse/thin_co2_cold/methane_hydrology/airless，文件元数据
-层 + 前端声明块显示，不进 cell 码）与高地修饰语 `-H`（海平面还原带改变 = 海拔
+层 + 前端声明块显示，不进 cell 码）与高地区域 `-H`（海平面还原带改变 = 海拔
 成因；声明递减率 Earth 6.5/Venus 8.0/Mars 2.5/Titan 1.38，无大气不适用）；
+简码用区域语法（连字符分隔、大写头区域，解析器 `parse_ucc_code`）；
 两个写入端共用 `ucc.yearly_cell_arrays()`，引擎世界可用
 `scripts/climate/regen_climate_yearly.py` 免重建重导出。
 v2 其余候选（登记不排期）以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为

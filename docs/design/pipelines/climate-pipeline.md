@@ -808,10 +808,12 @@ bit1 = water_stress、bit2 = highland）。v2 新增：`p_harmonic1` / `p_harmon
 `phase_codes`，255 = 无字母）、以及 `p_total_ref365_mm` + `p_total_basis`
 （p_total 双基准收口：`p_total_mm` 随文件声明的时间基（引擎 = 参考年；太阳系
 导入 = 本地窗口年），`p_total_ref365_mm` 恒为 365.25 日口径，跨世界可比）。
-**世界级声明**（轴 F + -H 判据输入，2026-10-05）：`climate_state`（行星气候态
-词汇，见 spec §5.5）与 `lapse_rate_c_per_km`（声明的环境递减率；无大气天体
-不声明）。v2 显示字母表：热量 A/C/D/E（Köppen 同向，B 永久留白）、修饰语
-l（陆）/g（干季）/H（高地）、后缀 m/d（单/双雨季）与 h/o（雨热同/反季）；
+**世界级声明**（-H 判据输入）：`climate_state`（行星气候态词汇，见 spec §5.3）
+与 `lapse_rate_c_per_km`（声明的环境递减率；无大气天体不声明）。v2 简码用
+区域语法（spec §5.4，解析器 `ucc.parse_ucc_code`）：热量 A/C/D/E（Köppen
+同向，B 全局退役）+ 供需 a/p/t/u；连字符分隔的区域各以大写字母开头——
+`S` 季节性区（l 强季节、g 干季、m/d 单·双雨季、h/o 雨热同·反季）、`H`
+高程区；
 v1 及更早文件由前端按 `profile` 字段自动回退旧字母。分类在导出层一次性算好，
 前端只读码不重新分类（阈值共享由构造保证）；无这些字段的旧导出在前端降级为
 透明图层。`data_source` 区分 `"model"`（引擎导出）、`"observation"`（earth root
