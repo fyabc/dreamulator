@@ -34,6 +34,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "pytest-benchmark>=4.0",
+    "pytest-xdist>=3.6",
     "hypothesis>=6.0",
     "mypy>=1.14",
     "ruff>=0.9",
@@ -127,7 +128,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb=short -q -m \"not slow and not benchmark\""
+# -n auto --maxprocesses 8: xdist parallel workers, capped at 8 — 16 workers
+# OOM'd a 32 GB laptop (each worker holds the full numpy/scipy/pydantic stack
+# plus a test world). worksteal balances the long tail (the 32 s cache-replay
+# test anchors one worker while others steal the queue). Override with `-n 0`
+# when iterating on a single test (worker spawn ~3-5 s).
+addopts = "--tb=short -q -n auto --maxprocesses 8 --dist worksteal -m \"not slow and not benchmark\""
 markers = [
     "slow: long-running tests (deselect with '-m \"not slow\"')",
     "benchmark: performance benchmarks (deselect with '-m \"not benchmark\"')",

@@ -47,7 +47,9 @@ jobs:
         run: git checkout -- uv.lock
 
       - name: Run micro benchmarks (slow excluded)
-        run: uv run pytest benchmarks -m "benchmark and not slow" --benchmark-json bench.json
+        # -n 0: root addopts enable xdist, under which pytest-benchmark
+        # silently disables itself — benchmarks must run single-process.
+        run: uv run pytest benchmarks -n 0 -m "benchmark and not slow" --benchmark-json bench.json
 
       - name: Track results
         uses: benchmark-action/github-action-benchmark@v1
