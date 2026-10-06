@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791249487604,
+  "lastUpdate": 1791321212631,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6547,6 +6547,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00011391231227826298",
             "extra": "mean: 5.0499661999992895 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "a228c406515d30774822e8b486bac07e7629f327",
+          "message": "chore(release): v0.39.0——路线 1 重标定 + GCM harness + 渲染链 MVP\n\npyproject/uv.lock/frontend lock 三处同步 0.39.0；CHANGELOG Unreleased\n收编为 [0.39.0] — 2026-10-07（Added/Changed/Fixed 归并去重）；roadmap\n头部与状态快照更新。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-07T05:08:50+08:00",
+          "tree_id": "af8aea599bca5e1e43f37948cf6f77ff1c6bfe70",
+          "url": "https://github.com/fyabc/dreamulator/commit/a228c406515d30774822e8b486bac07e7629f327"
+        },
+        "date": 1791321211831,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.6604843477953611,
+            "unit": "iter/sec",
+            "range": "stddev: 0.08470123399087967",
+            "extra": "mean: 1.5140404210000014 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.75423969368016,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01750345326802322",
+            "extra": "mean: 210.3385744999997 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.59143068913093,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6178716471087026",
+            "extra": "mean: 385.88722599999886 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1575.8101791675012,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000055536381010614346",
+            "extra": "mean: 634.594199999583 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 298.60178519659985,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006218547192837596",
+            "extra": "mean: 3.348941800001626 msec\nrounds: 5"
           }
         ]
       }
