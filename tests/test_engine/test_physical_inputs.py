@@ -395,7 +395,7 @@ def test_build_system_catalog_nacrea(tmp_path: Path) -> None:
     assert star["luminosity_sol"] == pytest.approx(0.0414)
     assert star["temperature_k"] == pytest.approx(3931.0)
     assert "habitable_zone" in star
-    assert star["habitable_zone_center_au"] == pytest.approx(0.2994, rel=1e-2)
+    assert star["habitable_zone_center_au"] == pytest.approx(0.2886, rel=1e-2)
 
     # Union of bodies: planet_aegis (bodies only) + satellite_nacrea (planets only)
     assert sorted(b["id"] for b in catalog["bodies"]) == ["planet_aegis", "satellite_nacrea"]

@@ -316,13 +316,24 @@ def compute_stellar_parameters(
 # ===================================================================
 
 # Polynomial coefficients: (S_eff_sun, a, b, c, d)
-# Ref: Kopparapu et al. (2013), ApJ, 765(2), 131, Table 3
-# T* = T_eff - 5780 K (note: 5780, not 5772 — per Kopparapu convention)
+# Source: the official coefficient table distributed by R. Kopparapu's Penn
+# State HZ calculator (HZ_coefficients.dat, personal.ems.psu.edu/~jfk4/ruk15/
+# planets/) — the current standard reflecting Kopparapu et al. (2013, ApJ,
+# 765, 131), its erratum (2014, ApJ, 770, 82) and the 1 M⊕ mass-dependent
+# runaway-greenhouse update (Kopparapu et al. 2014, ApJL, 787, L29).
+# T* = T_eff - 5780 K (note: 5780, not 5772 — per Kopparapu convention).
+# Verified 2026-10-06 against the .dat file; the previous table matched no
+# published version (RG intercept 1.0512 vs 1.107, c off 10×, RV a–d off
+# ~33%), which pulled the solar inner edge to 0.976 AU — Earth's perihelion
+# (0.983 AU) visually grazed it in the frontend.  Official: 0.950 AU.
+# For planets above ~1 M⊕ the RG limit is slightly stronger (5 M⊕: Seff
+# 1.188); using the 1 M⊕ row is the standard simplification (nacrea 1.2 M⊕
+# shifts the inner edge <0.5%).
 HABITABLE_ZONE_COEFFICIENTS: dict[str, tuple[float, float, float, float, float]] = {
-    "recent_venus": (1.776, 1.4335e-4, 2.9811e-9, -7.5702e-12, -1.1634e-15),
-    "runaway_greenhouse": (1.0512, 1.3322e-4, 1.5802e-8, -8.3085e-13, -1.9314e-15),
-    "max_greenhouse": (0.3438, 5.8942e-5, 1.6538e-9, -3.0045e-12, -5.1919e-16),
-    "early_mars": (0.32, 5.5467e-5, 1.5261e-9, -2.7633e-12, -4.7609e-16),
+    "recent_venus": (1.776, 2.136e-4, 2.533e-8, -1.332e-11, -3.097e-15),
+    "runaway_greenhouse": (1.107, 1.332e-4, 1.580e-8, -8.308e-12, -1.931e-15),
+    "max_greenhouse": (0.356, 6.171e-5, 1.698e-9, -3.198e-12, -5.575e-16),
+    "early_mars": (0.320, 5.547e-5, 1.526e-9, -2.874e-12, -5.011e-16),
 }
 
 # Kopparapu uses T_ref = 5780 K (not IAU 5772 K)

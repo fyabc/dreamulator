@@ -217,8 +217,8 @@ class TestHabitableZone:
     def test_solar_hz(self):
         """Solar HZ boundaries should match Kopparapu (2013) values."""
         hz = habitable_zone_boundaries(1.0, 5772.0)
-        assert hz["runaway_greenhouse_au"] == pytest.approx(0.976, rel=0.02)
-        assert hz["max_greenhouse_au"] == pytest.approx(1.707, rel=0.02)
+        assert hz["runaway_greenhouse_au"] == pytest.approx(0.951, rel=0.02)
+        assert hz["max_greenhouse_au"] == pytest.approx(1.677, rel=0.02)
         assert hz["recent_venus_au"] < hz["runaway_greenhouse_au"]
         assert hz["early_mars_au"] > hz["max_greenhouse_au"]
 
@@ -288,14 +288,14 @@ class TestCondensationLines:
 
 class TestHabitableZoneCenter:
     def test_solar_hz_center(self):
-        """Solar HZ center ≈ 1.29 AU (log-mean of 0.976 and 1.707 AU)."""
+        """Solar HZ center ≈ 1.26 AU (log-mean of 0.951 and 1.677 AU)."""
         d = habitable_zone_center(1.0, 5772.0)
-        assert d == pytest.approx(1.29, rel=0.02)
+        assert d == pytest.approx(1.263, rel=0.02)
 
     def test_nacrea_hz_center(self):
-        """Nacrea HZ center ≈ 0.28 AU."""
+        """Nacrea-stub HZ center ≈ 0.27 AU."""
         d = habitable_zone_center(0.0357, 3858.0)
-        assert d == pytest.approx(0.2795, rel=0.01)
+        assert d == pytest.approx(0.2689, rel=0.01)
 
     def test_between_boundaries(self):
         """HZ center must lie between inner and outer boundaries."""

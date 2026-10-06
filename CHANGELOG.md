@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **宜居带系数表修正（`stellar_physics.py`）**：原 HABITABLE_ZONE_COEFFICIENTS
+  四行均不匹配任何权威版本（RG 截距 1.0512 vs 官方 1.107、c 系数差一个量级、
+  RV 的 a–d 偏差 ~33%、MG 整行偏差），太阳保守宜居带内缘被拉到 0.976 AU——
+  地球近日点 0.983 AU 仅余 0.8% 边距，前端显示地球轨道贴/越内缘。已替换为
+  Kopparapu 官方 Penn State HZ 计算器的现行系数表（HZ_coefficients.dat，
+  = 2013 ApJ 765:131 + 勘误 ApJ 770:82 + 2014 ApJL 787:L29 的 1 M⊕ 版）：
+  太阳 RG 0.951 / MG 1.677 AU（地球余量 3.4%）；nacrea 系（Ignis 0.0761 L☉,
+  4055 K）RG 0.283 / MG 0.535 AU，Aegis 0.353 AU 带内余量 24.8%。两世界
+  astronomy 派生已重建；4 处钉旧值的测试更新。
 - **GCM harness「持续温室失效」破案（四层 bug，辐射物理无罪）**：
   ① 积分时长静默截断——ExoPlaSim `configure()` 在 `rotationperiod≠1` 时写死
   `N_RUN_STEPS=11520`（1 年步数），Fortran 主循环步数倒计时归零即无条件
