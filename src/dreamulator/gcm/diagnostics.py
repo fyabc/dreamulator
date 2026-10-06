@@ -82,6 +82,35 @@ def hadley_boundary_deg(lat_deg: np.ndarray, psi: np.ndarray) -> float:
     return 90.0
 
 
+def orbital_phase_of_records(
+    time_axis: np.ndarray,
+    *,
+    orbital_year_days: float,
+    steps_per_model_day: float = 32.0,
+    perihelion_day: float = 0.0,
+) -> np.ndarray:
+    """Orbital (seasonal) phase in [0, 1) for each NetCDF output record.
+
+    ExoPlaSim's model calendar can drift against the true orbital year:
+    ``configure()`` derives ``N_DAYS_PER_YEAR`` from the rotation period
+    (nacrea: 120 model days) while insolation follows ``SIDEREAL_YEAR``
+    (nacrea: 99.8 days) — each model year spans ~1.2 orbital years, so the
+    record index aliases through the seasons and a "month k" climatology
+    mixes seasons.  Seasonal analysis (e.g. the C5 ITCZ-migration criterion)
+    must bin records by orbital phase instead.
+
+    Args:
+        time_axis: the NetCDF ``time`` variable (units: timesteps).
+        orbital_year_days: true sidereal/orbital year in days.
+        steps_per_model_day: integration steps per model day (MPSTEP=45 min
+            gives 32; check the run's ``Timesteps / day`` diag line).
+        perihelion_day: day-of-year of perihelion passage (phase origin;
+            0 keeps the raw orbital angle).
+    """
+    days = np.asarray(time_axis, dtype=float) / steps_per_model_day
+    return ((days - perihelion_day) % orbital_year_days) / orbital_year_days
+
+
 def summarize(
     nc_path: str | Path,
     *,
@@ -161,5 +190,6 @@ __all__ = [
     "WIND_ALIVE_THRESHOLD_MS",
     "hadley_boundary_deg",
     "mass_streamfunction",
+    "orbital_phase_of_records",
     "summarize",
 ]

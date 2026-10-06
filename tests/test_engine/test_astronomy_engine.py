@@ -273,3 +273,31 @@ class TestAstronomyEngine:
 
         assert sc["target_body_id"] == "planet_test"
         assert "target_parameters" not in sc  # role-flattened duplicate removed
+
+
+def test_star_temperature_consistency_warning_threshold() -> None:
+    """Authored T within 20% of the SB prediction: silent; beyond: warned.
+
+    Route-1 Ignis lists T=4365 vs predicted ~4328 (+0.9%) -> silent accept.
+    """
+    from dreamulator.engine.astronomy import _compute_star_derived
+
+    quiet = _compute_star_derived(
+        "star_ignis",
+        mass=0.65,
+        luminosity=0.1216,
+        age_gyr=5.9,
+        metallicity_dex=0.0,
+        temperature=4365.0,
+    )
+    assert quiet == []
+    loud = _compute_star_derived(
+        "star_ignis",
+        mass=0.65,
+        luminosity=0.1216,
+        age_gyr=5.9,
+        metallicity_dex=0.0,
+        temperature=6000.0,
+    )
+    assert len(loud) == 1
+    assert "T_eff" in loud[0]

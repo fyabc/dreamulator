@@ -24,6 +24,12 @@ Design points (2026-10-05 harness decision):
 - **Manifest** records world-input hashes, mapped parameters, versions and
   wall-clock timing next to the outputs, matching the repo's reproducibility
   discipline.
+- **Warm starts / continuations** must go through
+  ``configure(restartfile=<path>)`` (passed via ``params.extras``): ExoPlaSim
+  copies the seed to ``workdir/plasim_restart`` itself, and *deletes* any
+  pre-placed ``plasim_restart`` when ``restartfile`` is falsy — a silently
+  cold-started run otherwise (verify via the ``Found N variables in file``
+  line in ``MOST_DIAG``, or a year-1 temperature sanity check).
 """
 
 from __future__ import annotations

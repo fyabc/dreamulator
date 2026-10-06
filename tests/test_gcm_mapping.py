@@ -167,14 +167,15 @@ def test_map_world_nacrea() -> None:
     assert params.rotationperiod == pytest.approx(3.138)
     assert params.obliquity == pytest.approx(14.9)
     assert params.eccentricity == pytest.approx(0.06786252)
-    assert params.flux == pytest.approx(1361.0 * 0.0761 / 0.3532124639**2, rel=1e-6)
-    assert params.year == pytest.approx(99.8, abs=0.5)
+    assert params.flux == pytest.approx(1361.0 * 0.1227 / 0.3648**2, rel=1e-6)
+    assert params.year == pytest.approx(99.8, abs=0.5)  # year-locked scaling
     assert params.pressure == pytest.approx(1.0 * ATM_TO_BAR)
     assert any("greenhouse" in w for w in params.warnings)
-    # K8 star: the explicit temperature field drives ExoPlaSim's spectral
-    # partition (NIR fraction ~72% vs the 5772 K default's 48%) — without it
-    # the greenhouse is computed for a G2 spectrum (2026-10-06 bug).
-    assert params.startemp == pytest.approx(4055.0)
+    # K6 star (route-1 recalibration): the explicit temperature field drives
+    # ExoPlaSim's spectral partition (visible fraction ~0.33 at 4365 K vs the
+    # 5772 K default's 0.52) — without it the greenhouse is computed for a
+    # G2 spectrum (2026-10-06 bug).
+    assert params.startemp == pytest.approx(4365.0)
 
 
 def test_multi_year_otherargs_disables_step_cap() -> None:

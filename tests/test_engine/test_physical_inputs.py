@@ -424,6 +424,56 @@ def test_build_system_catalog_nacrea(tmp_path: Path) -> None:
     assert "target_parameters" not in catalog
 
 
+def test_catalog_computed_stars_beat_stale_derived(tmp_path: Path) -> None:
+    """Regression (2026-10-06): in-memory computed stars must override disk.
+
+    The astronomy engine calls ``build_system_catalog`` BEFORE writing
+    ``stellar_derived.yaml``, so on a rebuild after input changes the on-disk
+    derived copy is one build stale.  The original bug: nacrea instellation
+    came out with the pre-edit luminosity (736.6 instead of 1137.3 W/m²)
+    while the star section and HZ used the new one.
+    """
+    stub = _gaia_stub(tmp_path)
+    # Pretend the previous build had a brighter star (stale derived on disk).
+    _write(
+        tmp_path,
+        "stellar_derived.yaml",
+        {
+            "stars": [
+                {"id": "star_ignis", "computed_luminosity": 0.0900, "computed_temperature": 3931.0}
+            ]
+        },
+    )
+    fresh = {
+        "star_ignis": {
+            "luminosity": 0.0414,
+            "mass": 0.4665,
+            "radius": 0.44,
+            "temperature": 3931.0,
+            "ms_lifetime_gyr": 60.0,
+            "evolution_progress": 0.1,
+            "age_gyr": 5.9,
+        }
+    }
+    s_eff_stale = 0.0900 / 0.2504**2
+    s_eff_fresh = 0.0414 / 0.2504**2
+
+    # Without computed_stars the stale on-disk value still drives bodies
+    # (documented disk-precedence fallback).
+    cat_stale, _ = build_system_catalog(stub)
+    nac_stale = next(b for b in cat_stale["bodies"] if b["id"] == "satellite_nacrea")
+    assert nac_stale["derived"]["instellation_w_m2"] == pytest.approx(
+        1361.0 * s_eff_stale, rel=1e-3
+    )
+
+    # With same-build computed_stars, the fresh values win everywhere.
+    cat_fresh, _ = build_system_catalog(stub, computed_stars=fresh)
+    nac_fresh = next(b for b in cat_fresh["bodies"] if b["id"] == "satellite_nacrea")
+    assert nac_fresh["derived"]["instellation_w_m2"] == pytest.approx(
+        1361.0 * s_eff_fresh, rel=1e-3
+    )
+
+
 def test_build_system_catalog_earth_analog(tmp_path: Path) -> None:
     """Sanity: Sun/Earth analog reproduces textbook values via the catalog."""
     stellar = _write(

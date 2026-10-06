@@ -175,7 +175,7 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 | 12 | **食夜现墟带**（向星区唯一暗夜窗口：全食中烬星与满相 Aegis 双灭，墟带光与完整星空在极光幕布间隙显现） | 食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍） | ★★★★ 仪式级天象 |
 | 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠距巨神星角距 ≤1.3°，始终嵌于光带内；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
 | 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.35 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
-| 15 | **守珠陨落**（远期：E3 落地实现 ~2.4 万年内守珠 e 无界爬升 → Hill 越线解体/弹射；死前 ~8 千年亮度剧增与碎片云阶段可察） | 一次性（末世级） | ★★★★★ 可预报末世天象——先知级天体力学叙事 |
+| 15 | **韵珠远行**（远期：draw-0 落地实现 ~2.23 万年内韵珠 e 无界增长 → 弹射出系；死前 ~6 千年珠母星潮汐增温与韵珠自身亮化前兆可察；叙事豁免下双珠与文明长期相伴） | 一次性（末世级） | ★★★★★ 可预报末世天象——先知级天体力学叙事 |
 
 > **两处几何修正**：
 > 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（{{ sky.planet_aegis.distance_km | round0 }} km），韵珠/守珠轨道
