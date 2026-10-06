@@ -82,6 +82,7 @@ class AstronomyEngine(BaseEngine):
                 luminosity=star.luminosity,
                 age_gyr=star.age_gyr,
                 metallicity_dex=star.metallicity,
+                temperature=star.temperature,
             )
             for w in star_warnings:
                 warnings.append(w)
@@ -92,6 +93,7 @@ class AstronomyEngine(BaseEngine):
                 luminosity=star.luminosity,
                 age_gyr=star.age_gyr,
                 metallicity_dex=star.metallicity,
+                temperature=star.temperature,
             )
 
             computed_stars[star.id] = {
@@ -195,8 +197,14 @@ def _compute_star_derived(
     luminosity: float | None,
     age_gyr: float,
     metallicity_dex: float,
+    temperature: float | None = None,
 ) -> list[str]:
     """Check consistency when both mass and luminosity are provided.
+
+    Also checks an authored temperature against the Stefan-Boltzmann
+    prediction at the adopted luminosity and MLR radius (same dependent-
+    variable override pattern; deviation > threshold warns but the authored
+    value is used).
 
     Returns:
         List of warning messages (empty if consistent or single-input mode).
@@ -211,20 +219,37 @@ def _compute_star_derived(
     # Apply same age/metallicity corrections for fair comparison
     from dreamulator.engine.stellar_physics import (
         apply_age_metallicity,
+        effective_temperature,
         evolution_progress,
         mass_radius_zams,
     )
 
     tau = evolution_progress(age_gyr, mass)
     z = 10.0**metallicity_dex
-    l_predicted_corrected, _ = apply_age_metallicity(l_predicted, mass_radius_zams(mass), tau, z)
+    l_predicted_corrected, r_predicted = apply_age_metallicity(
+        l_predicted, mass_radius_zams(mass), tau, z
+    )
 
+    warnings: list[str] = []
     deviation = abs(luminosity - l_predicted_corrected) / l_predicted_corrected
 
     if deviation > _CONSISTENCY_THRESHOLD:
-        return [
+        warnings.append(
             f"Star '{star_id}': mass={mass} M☉ predicts L={l_predicted_corrected:.4f} L☉ "
             f"but user provided L={luminosity} L☉ (deviation {deviation:.1%}). "
             f"Using user-provided luminosity as override."
-        ]
-    return []
+        )
+
+    if temperature is not None and temperature > 0:
+        # SB prediction at the ADOPTED luminosity (authored L wins) and the
+        # MLR radius — i.e. the temperature the engine would compute unprompted.
+        t_predicted = effective_temperature(luminosity, r_predicted)
+        t_deviation = abs(temperature - t_predicted) / t_predicted
+        if t_deviation > _CONSISTENCY_THRESHOLD:
+            warnings.append(
+                f"Star '{star_id}': L={luminosity} L☉ with MLR radius predicts "
+                f"T_eff={t_predicted:.0f} K but user provided T={temperature} K "
+                f"(deviation {t_deviation:.1%}). Using user-provided temperature; "
+                f"radius re-derived from Stefan-Boltzmann."
+            )
+    return warnings

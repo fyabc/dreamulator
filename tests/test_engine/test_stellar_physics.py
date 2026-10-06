@@ -392,3 +392,37 @@ class TestPolarGeometry:
     def test_monotonic_in_latitude(self):
         fracs = [polar_day_fraction_of_year(23.44, lat) for lat in (67.0, 75.0, 85.0, 90.0)]
         assert fracs == sorted(fracs)
+
+
+class TestTemperatureOverride:
+    """Authored T_eff override (route-1 Ignis: slightly hotter/bluer than MLR).
+
+    The (L, R, T) triple must stay Stefan-Boltzmann consistent: an authored
+    temperature re-derives the radius, R = sqrt(L) / (T/T_sun)^2.
+    """
+
+    def test_override_adopted_and_radius_rederived(self):
+        p = compute_stellar_parameters(
+            mass=0.65, luminosity=0.1216, age_gyr=5.9, temperature=4365.0
+        )
+        assert p["temperature"] == pytest.approx(4365.0)
+        assert p["luminosity"] == pytest.approx(0.1216)
+        expected_r = 0.1216**0.5 / (4365.0 / 5772.0) ** 2
+        assert p["radius"] == pytest.approx(expected_r, rel=1e-4)
+
+    def test_no_override_gives_sb_temperature(self):
+        p = compute_stellar_parameters(mass=0.65, luminosity=0.1216, age_gyr=5.9)
+        # SB prediction at the MLR radius (route-1 Ignis: ~4328 K, i.e. the
+        # authored 4365 is a +0.9% override — within the silent-accept band)
+        assert p["temperature"] == pytest.approx(
+            effective_temperature(p["luminosity"], p["radius"]), abs=0.2
+        )
+        assert p["temperature"] < 4365.0
+
+    def test_metallicity_lowers_radius_raises_temperature(self):
+        """Metal-poor (Z<1): L up, R down, T up (Eker 2018 scalings)."""
+        p_solar = compute_stellar_parameters(mass=0.65, age_gyr=5.9, metallicity_dex=0.0)
+        p_poor = compute_stellar_parameters(mass=0.65, age_gyr=5.9, metallicity_dex=-0.15)
+        assert p_poor["luminosity"] > p_solar["luminosity"]
+        assert p_poor["radius"] < p_solar["radius"]
+        assert p_poor["temperature"] > p_solar["temperature"]

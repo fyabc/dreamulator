@@ -6,7 +6,7 @@ date: 2026-09-29
 status: accepted
 ---
 
-# 0010 · UCC 迁移语义夹具（ucc-v1 × Nacrea）——解读与维护
+# UCC 迁移语义夹具（ucc-v1 × Nacrea）——解读与维护
 
 > 手写解读文档；数据表（全局分布 / 预期 vs 实际 / 代表地点 / 极值点）在
 > [`nacrea-data.md`](nacrea-data.md)，由

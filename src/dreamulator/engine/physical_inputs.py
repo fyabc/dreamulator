@@ -856,6 +856,28 @@ def build_system_catalog(
         return {}, warnings
 
     index = _index_stellar_data(engine)
+    if computed_stars:
+        # Same-build stellar parameters win over the on-disk
+        # stellar_derived.yaml: the astronomy engine builds this catalog
+        # BEFORE writing that file, so on a rebuild after input changes the
+        # disk copy is one build stale (2026-10-06 bug: body instellation
+        # came out with the pre-edit luminosity while the star section and
+        # HZ used the new one).
+        _computed_to_index = {
+            "luminosity": index.luminosities,
+            "mass": index.masses,
+            "radius": index.radii,
+            "temperature": index.temperatures,
+            "age_gyr": index.ages,
+            "ms_lifetime_gyr": index.ms_lifetimes,
+            "evolution_progress": index.evolution_progresses,
+        }
+        for star_id, cs in computed_stars.items():
+            index.star_ids.add(star_id)
+            for key, table in _computed_to_index.items():
+                value = cs.get(key)
+                if value is not None:
+                    table[star_id] = float(value)
 
     planets: list[Planet] = []
     planets_path = engine.find_input("planets.yaml")

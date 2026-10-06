@@ -40,7 +40,7 @@
 | Nacrea（架空世界） | `nacrea.md` | `nacrea-data.md` | 引擎构建产物 | `scripts/climate/ucc_examples_nacrea.py` |
 
 前五个是 `earth` root 的额外 planet_ids（现实世界数据锚，永不 build）；`nacrea.md`
-是架空世界侧的迁移语义夹具（原 nacrea `design-notes/0010`，该处保留 stub 占位）。
+是架空世界侧的迁移语义夹具（原 nacrea `design-notes/0010`；该编号现已由墟带系统笔记复用）。
 
 ### `research/` — 评审与研究记录
 

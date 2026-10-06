@@ -242,6 +242,7 @@ def compute_stellar_parameters(
     luminosity: float | None = None,
     age_gyr: float = 4.6,
     metallicity_dex: float = 0.0,
+    temperature: float | None = None,
 ) -> dict[str, float | str]:
     """Compute full stellar parameters using hybrid input mode.
 
@@ -250,11 +251,21 @@ def compute_stellar_parameters(
     - luminosity only: invert to get mass, then compute R, T_eff.
     - both: mass takes priority; reported input_mode is "both".
 
+    An authored ``temperature`` acts as a T_eff override (same dependent-
+    variable pattern as luminosity): the (L, R, T) triple is kept
+    Stefan-Boltzmann-consistent by re-deriving the radius from the adopted
+    L and T, so an override shifts R away from the mass-radius relation —
+    that deviation is the consistency metric the engine checks.  Use case:
+    slightly hotter/bluer spectrum than the MLR prediction (nacrea's Ignis,
+    +2% — shifts NIR fraction down, which matters for GCM greenhouse and
+    Kopparapu HZ thresholds).
+
     Args:
         mass: Stellar mass (M☉), or None.
         luminosity: Stellar luminosity (L☉), or None.
         age_gyr: Age in gigayears (default 4.6).
         metallicity_dex: Metallicity [Fe/H] in dex (default 0.0 = solar).
+        temperature: Authored effective temperature (K), or None to compute.
 
     Returns:
         Dict with keys: mass, luminosity, radius, temperature,
@@ -289,13 +300,15 @@ def compute_stellar_parameters(
     # Apply corrections
     l_final, r_final = apply_age_metallicity(l_zams, r_zams, tau, z)
 
-    # If user provided luminosity as override (both mode), use it
+    # Authored luminosity wins as override (both mode); then an authored
+    # temperature re-derives the radius via Stefan-Boltzmann so the
+    # (L, R, T) triple stays self-consistent: R = √L / (T/T☉)².
     if input_mode == "both" and luminosity is not None:
         l_final = luminosity
-        # Recompute temperature with overridden luminosity
-        t_eff = effective_temperature(l_final, r_final)
-    else:
-        t_eff = effective_temperature(l_final, r_final)
+    t_eff = effective_temperature(l_final, r_final)
+    if temperature is not None and temperature > 0:
+        r_final = math.sqrt(l_final) / (temperature / T_SUN_K) ** 2
+        t_eff = temperature
 
     t_ms = main_sequence_lifetime(mass)
 

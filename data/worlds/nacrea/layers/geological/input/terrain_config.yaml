@@ -151,15 +151,15 @@ tidal:
 
 # ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────
 # Nacrea 自转 Ω=0.318 Ω⊕（75.5h）：科氏力弱 → 经向热输送更强 →
-# 赤道-极地温差小于地球的 40°C。环流为两圈体制：Hadley 胞 0–47° +
-# 涡旋驱动的间接胞 47–90°（Ferrel 型、抵极，无极地胞）——GCM 质量流函数
-# 符号翻转纬度实测（ExoPlaSim T21，2026-10-05；与 Kaspi & Showman 2015 的
+# 赤道-极地温差小于地球的 40°C。环流为两圈体制：Hadley 胞 0–52° +
+# 涡旋驱动的间接胞 52–90°（Ferrel 型、抵极，无极地胞）——GCM 质量流函数
+# 符号翻转纬度实测（ExoPlaSim T21，2026-10-07；与 Kaspi & Showman 2015 的
 # Ω 体制判据、Held-Hou 量级三方一致）。
 climate:
-  # ── 温度：两圈 EBM（Hadley 0–47° 翻转 + 47–90° 涡旋扩散） ──
-  # hadley_extent_deg=47：温度闭合走扩散 EBM 分支——47° 以外的间接胞是
+  # ── 温度：两圈 EBM（Hadley 0–52° 翻转 + 52–90° 涡旋扩散） ──
+  # hadley_extent_deg=52：温度闭合走扩散 EBM 分支——52° 以外的间接胞是
   # 涡旋驱动的，经向输送用扩散表示且 D ∝ P_rot^0.3（Kaspi & Showman 2015，
-  # Ω 标度自动）；47° 以内叠加 Held-Hou 下沉增温补偿（subsidence_warming_c
+  # Ω 标度自动）；52° 以内叠加 Held-Hou 下沉增温补偿（subsidence_warming_c
   # 共享默认 1.0，经干湿门释放）= Hadley 下沉支机制。该分支在 Earth 上验证过。
   # ebm_1d=true 启用；ebm_diffusion_* 走共享默认（本轮不单独调参）。
   ebm_1d: true
@@ -169,26 +169,27 @@ climate:
   # 3A.3: ice-albedo feedback — T<-10C → albedo 0.7 → less solar abs → cooler
   variable_lapse_rate: true  # T-dependent Γ: tropical highlands stay warmer
   ice_albedo_feedback: true
-  ice_albedo_max_cooling_c: 3.0   # K dwarf (K8): ice albedo in NIR is much lower (~0.2 vs ~0.7 visible)
+  ice_albedo_max_cooling_c: 3.0   # K dwarf (K6): ice albedo in NIR is much lower (~0.2 vs ~0.7 visible)
   ice_albedo_threshold_c: -5.0    # default -10; lower = earlier activation
-  hadley_extent_deg: 47.0     # Hadley 胞极向边界 = GCM 流函数符号翻转纬度
-    # （ExoPlaSim T21 aquaplanet 实测 47.1°，2026-10-05；标定轮暖态后复核，
-    # 残余不确定度量级 ±几度，体制结论两圈不变）。Held-Hou 热罗斯贝推导在
-    # 本体制贴悬崖边且偏宽，故显式钉 GCM 实测值而非走推导。
-  polar_cell_start_deg: 90.0  # 无极地胞：47–90° 为涡旋驱动间接胞（Ferrel 型）抵极
+  hadley_extent_deg: 52.0     # Hadley 胞极向边界 = GCM 流函数符号翻转纬度
+    # （ExoPlaSim T21 实测 52.6°，路线 1 定标网格配置：陆掩膜+海冰+S=1244 W/m²/
+    # K6 4365 K 光谱，pCO2 450–1500 ppm 四臂同值、对成分鲁棒，2026-10-07；
+    # 体制结论两圈不变）。Held-Hou 热罗斯贝推导在本体制贴悬崖边且偏宽，
+    # 故显式钉 GCM 实测值而非走推导。
+  polar_cell_start_deg: 90.0  # 无极地胞：52–90° 为涡旋驱动间接胞（Ferrel 型）抵极
   # storm_track_amplitude_mm 用共享默认 900：幅度公式自带 Ω^0.3 标度，
   # 慢自转自动得到减弱的斜压雨出增强；斜压带位置由引擎从经向温度梯度推导
   # （GCM 结论：慢自转行星瞬变涡旋减弱而不为零）。见技术债 20 ⑥ 实验。
   # Sub-Aegis hemisphere warming: tidally-locked to gas giant → the
   # sub-Aegis point receives Aegis IR + reflected starlight
-  # E_sub = (A_g·F_star + σT_A⁴)·(R_p/d)² ≈ (283+133)×0.0102 ≈ 4.2 W/m²
-  # （A_g=0.34、F_star@Aegis=831 W/m²、d=724 000 km ≈ 10.1 R_p；Heller &
-  # Barnes 2013 框架——比 ~270–300 W/m² 失控温室阈低两个量级，即老年冷巨
-  # 行星的 modest 辐照体制）。向星半球均值 ≈2.1 W/m²、全球均值 ≈1.05 W/m²。
-  # 局地响应被侧向输送阻尼（λ_local ≈ B_eff + 2D ≈ 3.5 W/m²K）→
-  # ΔT_sub ≈ 4.2/3.5 ≈ 1.2 K = 下方钉值。该固定经向温度梯度在慢自转（科氏
+  # E_sub = (A_g·F_star + σT_A⁴)·(R_p/d)² ≈ (427+189)×0.0102 ≈ 6.3 W/m²
+  # （A_g=0.34、F_star@Aegis=1255 W/m²、T_A=240.2 K、d=724 000 km ≈ 10.1 R_p；
+  # Heller & Barnes 2013 框架——比 ~270–300 W/m² 失控温室阈低两个量级，即
+  # 老年冷巨行星的 modest 辐照体制）。向星半球均值 ≈3.1 W/m²、全球均值
+  # ≈1.56 W/m²。局地响应被侧向输送阻尼（λ_local ≈ B_eff + 2D ≈ 3.5 W/m²K）→
+  # ΔT_sub ≈ 6.3/3.5 ≈ 1.8 K = 下方钉值。该固定经向温度梯度在慢自转（科氏
   # 环流本征弱）下驱动风场与洋流的纵向结构。
-  sub_planet_warming_c: 1.2
+  sub_planet_warming_c: 1.8
   sub_planet_longitude_deg: 0.0  # Aegis深渊洋 = 向星点 (geography.yaml)
   # 水汽输送：蒸发基准用共享物理默认（能量限制 ~1000 mm @15°C），
   # 不再单世界覆盖（蒸发是水的物理属性，不随恒星/卫星变化）。

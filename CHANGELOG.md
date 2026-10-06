@@ -39,8 +39,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   一致（bit-identity 校验）。
 - `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
 
+### Added
+
+- **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：提案
+  `docs/design/proposals/nacrea-insolation-recalibration.md`（Ts-pCO2-RG
+  三难结构 + 候选参数组 + GCM 定标判决 + 连锁清单）。终案「年长锁定 +
+  [Fe/H]=−0.19 + pCO2=712 ppm」：M 0.59→0.65 M☉、L 0.0761→0.1227 L☉
+  （MLR+Z 自然值）、T_eff 4055→4365 K（作者光谱钉值，较 SB 自然值低 0.5%、
+  一致性阈内）、a_Aegis 0.3532→0.3648 AU（P 精确还原 99.8 d，历法叙事零
+  改动；共振链 ×1.0328 通约比保持）、S_eff 0.610→0.922（1D RG 余量 4.8%，
+  通量 1255 W/m²）；大气 CO2 712 ppm + CH4 100 ppb、greenhouse_factor
+  62→35 K——**GCM 定标终值**：pCO2 网格（450/600/800/1500/30000 ppm）+
+  冷暖双臂 @712 收敛判决 → 唯一冷缘冰边平衡态（订正 Ts ≈ 11.3±3°C，落
+  目标带 12±2；暖支不驻定、hysteresis 闭合；海冰 ~20%），转移函数
+  ghf ≈ 7.3×ln(ppm)−16.1 K、λ_eff ≈ 1.37 K/(W/m²)、earth 参照偏差订正
+  −9.6±3 K；Hadley 47→52°（GCM 六臂同值 52.6°，earth 臂动力学背书）；
+  sub_planet_warming_c 1.2→1.8（E_sub 6.3/3.1/1.56 W/m² 机械重推）。
+  design-notes：0009 **draw-0 重认证落地**（年长锁定第三体项 ×0.9999 但
+  强混沌重认证 = 全新抽签——初确认跑 16.4 kyr 韵珠弹射/热流超带触发重采样；
+  相位 6 + 韵珠扰动 9 抽系综无热流带内更优构型（存活与热流反相关），作者
+  裁决「draw 0 + 叙事豁免」：守珠三角重采样，30 kyr 认证 = 韵珠弹射
+  @22.3 kyr、热流 0.34 W/m² 带内、守珠有界存活；末世天象资产「守珠陨落」
+  换绑「韵珠远行」，双珠叙事豁免长期存活）、0011→0010 改号 + 墟带数值重标
+  （温度场 164/√a、PR 时标 ×0.67 等）。
+- **知识库两篇**：`astrophysics/hz_inner_edge_cool_stars.md`（Kopparapu 官方
+  系数表、各谱型 S_eff 阈值、NIR 双通道机制、1D/3D 内缘之争、HZ_CL 复杂
+  生命约束、火山-风化稳态标度）+ `climatology/atmospheric_co2_ch4_history.md`
+  （显生宙 CO2 逐期表、CH4 太古宙→GOE→冰芯旋回、世界构建锚点表）。
+- **GCM harness**：`orbital_phase_of_records()`（nacrea 模型日历 120 d/年 vs
+  轨道年 99.8 d 的季节混叠，按轨道相位重对齐）+ 测试。
+
 ### Fixed
 
+- **天文引擎两 bug（route-1 验证中破案）**：① system_catalog 的 body 派生
+  （instellation 等）读盘上**上一轮**的 stellar_derived.yaml（引擎先建
+  catalog 后写 derived）→ 改光度后 instellation 用旧值（实测 736.6 vs 应为
+  1137.3 W/m²）；修：`build_system_catalog` 以同构建 `computed_stars` 覆盖
+  index（回归测试钉死）。② 作者 `temperature` 字段被引擎忽略（HZ/派生全用
+  SB 计算值）；修：`compute_stellar_parameters(temperature=...)` 覆盖接入，
+  R 由 Stefan-Boltzmann 反推保持 (L,R,T) 自洽，`_compute_star_derived` 加
+  >20% 一致性警告（与 L 覆盖同模式）。
 - **宜居带系数表修正（`stellar_physics.py`）**：原 HABITABLE_ZONE_COEFFICIENTS
   四行均不匹配任何权威版本（RG 截距 1.0512 vs 官方 1.107、c 系数差一个量级、
   RV 的 a–d 偏差 ~33%、MG 整行偏差），太阳保守宜居带内缘被拉到 0.976 AU——

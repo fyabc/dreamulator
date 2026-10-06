@@ -41,11 +41,11 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 **紧凑方案**热流反而升高（线性标定在该区失效）；0.3–0.5 r_H 带内不存在
 100 kyr 级的长寿解（93 票的天花板是 35–60 kyr）。最终的双单体方案
 （{{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 个互希尔半径的径向净空）+ 内迁守珠（0.37 r_H）+ 减质量韵珠
-（遭遇扩散速率 ∝ m_C²）是天空美学与动力学寿命之间的最优折衷。它超过 25 kyr
-的长期动力学按**硬度豁免**处理：当代段（0–15 kyr）是生态、气候与文明的正典
-窗口；E3 落地实现的死期约 24.3 kyr，即可以提前预报的末世天象「守珠陨落」
-（用户 2026-09-29 裁决豁免死期）。判决与豁免记录见 design-notes/0009 §2 与
-附录实验日志。
+（遭遇扩散速率 ∝ m_C²）是天空美学与动力学寿命之间的最优折衷。其长期动力学
+按**叙事豁免**处理（用户 2026-10-07 裁决「draw 0 + 叙事豁免」，双珠长期存活）：
+当代段（0–12 kyr）是生态、气候与文明的正典窗口；draw-0 落地实现的首失稳为
+约 2.23 万年后的韵珠弹射，即可以提前预报的末世天象「韵珠远行」。判决与豁免
+记录见 design-notes/0009 §2 与附录实验日志。
 
 ### 因变量 — 长期摄动：受迫偏心率的 60 亿年维持机制
 
@@ -55,7 +55,7 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 |------|-----|---------|
 | 偏心率阻尼时标 τ_e | **~{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**（k₂/Q=1×10⁻³，Q=300） | (1/e)(de/dt) = (21/2)(k₂/Q)(M_p/M_m)(R_m/a_m)⁵n_m |
 | 无泵浦时的结局 | e → 0，潮汐加热熄灭 | 板块构造与碳循环停摆 → 宜居性丧失 |
-| 泵浦机制（双源） | **恒星四极矩本底（主项）+ 韵珠/守珠长期摄动（次项）** | 0.35 AU 的强恒星场经四极矩给出 ~0.004–0.006 的偏心率本底——这是测试粒子效应，与双珠质量一阶无关；双珠的受迫项线性系数 coef=Σmᵢ(a_N/aᵢ)³=1.35×10⁻³（韵珠贡献 98.3%）。三星周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }}，全部脱离低阶共振或仅触及可忽略的高阶项。**当代段认证带 rms 0.0037 / max 0.0084**（E3 落地实现经 25 kyr 独立重认证，当代段取 0–15 kyr；硬度豁免见 design-notes/0009 §2） |
+| 泵浦机制（双源） | **恒星四极矩本底（主项）+ 韵珠/守珠长期摄动（次项）** | 0.35 AU 的强恒星场经四极矩给出 ~0.004–0.006 的偏心率本底——这是测试粒子效应，与双珠质量一阶无关；双珠的受迫项线性系数 coef=Σmᵢ(a_N/aᵢ)³=1.35×10⁻³（韵珠贡献 98.3%）。三星周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }}，全部脱离低阶共振或仅触及可忽略的高阶项。**当代段认证带 rms 0.0036 / max 0.0098**（draw-0 落地实现 30 kyr 认证，当代段取 0–12 kyr；叙事豁免见 design-notes/0009 §2） |
 | 泵浦源稳定性 | 两珠均为单体远距逆行轨道（有界 e 摆动、迁移 ~μm/yr 冻结） | {{ entities.satellite_cadence.a_rh_ratio }}/{{ entities.satellite_vigil.a_rh_ratio }} r_H 逆行；径向净空 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} r_H,m；长期动力学判决与硬度豁免见 design-notes/0009 §2 |
 | 巨行星潮汐耗散 | k₂p/Qp ≈ 7×10⁻⁸（Q_p ≈ 5×10⁶，弱耗散 P-B 包） | 两珠外迁均 ≤7 μm/yr（∝ m_s·a⁻⁵）→ 泵浦频率 5.9 Gyr 恒定 |
 | 潮汐加热平衡 | 历元 e={{ entities.satellite_nacrea.eccentricity }} → {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW（{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²，冷谷快照）；当代段均值 **0.36 W/m²**（4.1× 地球内热流）、瞬时极值 1.85（0.79×Io，百年级）、500-yr 平滑持续脉冲占空 0% | 加热功率 ≈**2.6×10⁴**·e² W/m²（k₂/Q=1×10⁻³；见 tidal_effects.md）；带内主调制 **~20 kyr** =「万年火山脉冲」（long_term_cycles §4）；远期增温 = 失稳前兆（诊断律） |
