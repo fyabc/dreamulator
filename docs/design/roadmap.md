@@ -1,9 +1,9 @@
 # 开发路线图
 
-> 最后更新：2026-09-30（未发版工作：√P 季节穿透标度两臂（热容量 + 水平 reach，
-> nacrea 季节振幅 ×2.35）、海岸雨出因子内陆距离衰减（L ∝ √太阳日）、geography
-> 双层结构（features/overlays 分节 + 校准盲解 + 缓存回放修复）、nacrea B 类诊断
-> 收口。外部审计包与气候 rethinking 实施顺序见 v0.37.0 条目）
+> 最后更新：2026-10-07（v0.39.0 发版：nacrea 路线 1 辐照重标定终案落地
+> （GCM 定标判决 + draw-0 卫星正典）、GCM offline-oracle harness 入库、
+> HZ 官方系数表、export region / Blender 渲染链 MVP / 视频素材三件套。
+> 外部审计包与气候 rethinking 实施顺序见 v0.37.0 条目）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
@@ -14,7 +14,7 @@
 
 ---
 
-## 一、当前状态快照（v0.38.0 + 未发版）
+## 一、当前状态快照（v0.39.0）
 
 | 维度 | 状态 |
 |------|------|
