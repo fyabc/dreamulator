@@ -13,7 +13,14 @@ Design points (2026-10-05 harness decision):
 - **Multi-year integration** uses the ``N_RUN_YEARS`` namelist knob so the
   Fortran binary integrates continuously in a single process —
   ``Model.run(years=N)`` restarts a fresh process per year and historically
-  reset the spun-up wind state.
+  reset the spun-up wind state.  ``N_RUN_STEPS`` **must** be forced to 0
+  alongside it: ``configure()`` writes ``N_RUN_STEPS=11520`` (one 360-day
+  year) whenever ``rotationperiod != 1.0``, and the Fortran main loop
+  returns unconditionally when the step countdown reaches zero
+  (``plasim.f90``: ``if (nscd == 0) return``), silently truncating any
+  ``N_RUN_YEARS`` to a single year.  The 2026-10-06 "greenhouse failure"
+  and "snowball basin lock" narratives were both this truncation: every
+  harness run had integrated 1 year (12 *monthly* records), not 12-50.
 - **Manifest** records world-input hashes, mapped parameters, versions and
   wall-clock timing next to the outputs, matching the repo's reproducibility
   discipline.
@@ -118,6 +125,22 @@ def write_manifest(
     )
 
 
+def multi_year_otherargs(years: int) -> dict[str, str]:
+    """Namelist overrides for a continuous single-process multi-year run.
+
+    ``N_RUN_STEPS=0`` disables the step countdown that would otherwise
+    silently cap the integration at ``configure()``'s default of one
+    360-day year (see module docstring); the month countdown derived from
+    ``N_RUN_YEARS`` then controls the duration (``plasim.f90`` main loop:
+    ``do while (mocd > 0 .or. nscd > 0)`` with an early ``return`` only
+    when the *step* countdown hits zero).
+    """
+    return {
+        "N_RUN_YEARS@plasim_namelist": str(years),
+        "N_RUN_STEPS@plasim_namelist": "0",
+    }
+
+
 def run_gcm(
     params: ExoPlaSimParams,
     workdir: str | Path,
@@ -167,9 +190,16 @@ def run_gcm(
     model.configure(
         aquaplanet=landmap is None,
         landmap=str(landmap) if landmap is not None else None,
-        otherargs={"N_RUN_YEARS@plasim_namelist": str(years)},
+        otherargs=multi_year_otherargs(years),
         **kwargs,
     )
+    # pyburn defaults to timeaverage=True with times=12: it would squash the
+    # whole integration into 12 equally spaced records regardless of length
+    # (a 1-year run's records look monthly, a 50-year run's are 50-month
+    # means — the 2026-10-06 "12 months per run" confusion).  Request one
+    # record per model month instead.  The extension must be re-stated:
+    # cfgpostprocessor's default would silently switch the output to .npz.
+    model.cfgpostprocessor(extension=".nc", times=years * 12)
     started = time.time()
     model.run(clean=False)  # keep raw MOST.* for postprocessing cross-checks
 
@@ -230,6 +260,7 @@ def subprocess_env_hint() -> str:
 
 __all__ = [
     "ensure_environment",
+    "multi_year_otherargs",
     "postprocess_raw",
     "run_gcm",
     "subprocess_env_hint",

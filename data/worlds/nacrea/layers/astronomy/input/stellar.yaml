@@ -60,6 +60,7 @@ stars:
     luminosity_class: V
     mass: 0.59                 # M☉ 自变量（双输入；MLR 偏差 ~3%）
     luminosity: 0.0761        # L☉ 自变量；T≈4055 K（调低 2%），光照 0.61×地球
+    temperature: 4055.0        # K — GCM 光谱分割用（K8 星 NIR 占比高，影响温室）
     metallicity: 0.0
     age_gyr: 5.90
     position:

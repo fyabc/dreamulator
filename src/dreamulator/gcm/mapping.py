@@ -240,7 +240,11 @@ def map_planet(
             "radiative-identity adjudication)"
         )
 
-    star_temp = star.get("effective_temperature_k") or star.get("teff_k")
+    star_temp = (
+        star.get("effective_temperature_k")
+        or star.get("teff_k")
+        or star.get("temperature")  # common alternative key (earth stellar.yaml)
+    )
     params = ExoPlaSimParams(
         radius=radius_earth,
         gravity=gravity,
