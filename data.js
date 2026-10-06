@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791223238121,
+  "lastUpdate": 1791249487604,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6488,6 +6488,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008177697471474766",
             "extra": "mean: 5.109387399994603 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "6677634185db4b8897b3a9366f9fef6977d6104f",
+          "message": "docs(nacrea): Sub-Aegis 辐照口径统一（向星点 4.2 / 半球均 2.1 / 全球均 1.05 W/m²，\nΔT_sub≈1.2 K）——climate_zones 与 long_term_cycles 的旧 1–1.5 W/m² 口径修正\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-06T09:17:23+08:00",
+          "tree_id": "fc6edc3c1a7ca99747d14e5f7f9f0cbdecaf3863",
+          "url": "https://github.com/fyabc/dreamulator/commit/6677634185db4b8897b3a9366f9fef6977d6104f"
+        },
+        "date": 1791249486838,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.35748847498321423,
+            "unit": "iter/sec",
+            "range": "stddev: 0.15186118889970648",
+            "extra": "mean: 2.7972929758000022 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.71417421530638,
+            "unit": "iter/sec",
+            "range": "stddev: 0.028088591466583376",
+            "extra": "mean: 269.23885149999904 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.7314441546931094,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9230734756266477",
+            "extra": "mean: 577.5525576666638 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 846.2083940467606,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010355304067917946",
+            "extra": "mean: 1.1817420000028278 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.02112734935545,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011391231227826298",
+            "extra": "mean: 5.0499661999992895 msec\nrounds: 5"
           }
         ]
       }
