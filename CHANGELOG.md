@@ -7,40 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-10-07
+
 ### Added
 
 - **pytest 并行化（xdist）**：`-n auto --maxprocesses 8 --dist worksteal` 进
   默认 addopts，全量测试 344 s → 52 s（6.6×）。单测迭代用 `-n 0` 关并行；
   `benchmarks.yml` 显式 `-n 0`（pytest-benchmark 在 xdist 下会静默自禁）。
-
-### Changed
-
-- **视频素材三件套（前端录制姿态）**：纯净视图 `?clean=1`（隐藏全部 UI/场景
-  装饰，Esc 退出）、3D 自动旋转 `?spin=1`（~120 s/圈，拖拽/N 键互斥）、季节
-  循环 timelapse `?play=1`（月度纹理预烘焙 strip 换月零卡顿 + 昼夜扫描）。
-  附 `?layer=<id>` 主图层深链（打开时按默认不透明度点亮，槽位语义与面板
-  点击一致；切换主图层时回写 URL（replace），默认地形底不写——CDP 自动化
-  复现/分享用）。
-- **`dreamulator export region`（外部渲染数据包）**：等距圆柱正方形区域裁剪
-  （真实半径标定 + cos 纬度补偿；|lat|>75 或跨 ±180 拒绝），产出
-  `height.meters.npy` + 16-bit `height.png` + 前端同源配色 `color.png` +
-  `meta.json`（精确 pixel_box + mesh 指纹）。对齐探针 + 确定性测试。
-- **Blender 渲染链 MVP（`scripts/media/blender/region_still.py`）**：bpy 脚本
-  重建场景 + Cycles 渲染（OptiX 自动降级、seed 固定、脚本重建工程模式）。
-  nacrea 永耀岛 2500 km 区域 1080p/256s 实测 10.7 s（RTX 3060）。
-  设计文档 `docs/design/proposals/blender-render-pipeline.md`。
-
-### Changed
-
-- **湿槽求解器逐位等价提速**（`stationary_wave_two_level.py`）：几何不变量
-  （t_op/d_op、逐 k 的 𝓛_k/𝓛_k²）跨月跨 Picard 遍缓存 + `_place`/`_banded_matvec`
-  改基本切片/对角线视图（替换 fancy indexing）。`simulate_climate` 固定成本
-  减半（144-cell 验证网格 6.8 s → 3.4 s），三种合成场景 30 个输出数组逐位
-  一致（bit-identity 校验）。
-- `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
-
-### Added
-
 - **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：提案
   `docs/design/proposals/nacrea-insolation-recalibration.md`（Ts-pCO2-RG
   三难结构 + 候选参数组 + GCM 定标判决 + 连锁清单）。终案「年长锁定 +
@@ -68,6 +41,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   （显生宙 CO2 逐期表、CH4 太古宙→GOE→冰芯旋回、世界构建锚点表）。
 - **GCM harness**：`orbital_phase_of_records()`（nacrea 模型日历 120 d/年 vs
   轨道年 99.8 d 的季节混叠，按轨道相位重对齐）+ 测试。
+
+### Changed
+
+- **视频素材三件套（前端录制姿态）**：纯净视图 `?clean=1`（隐藏全部 UI/场景
+  装饰，Esc 退出）、3D 自动旋转 `?spin=1`（~120 s/圈，拖拽/N 键互斥）、季节
+  循环 timelapse `?play=1`（月度纹理预烘焙 strip 换月零卡顿 + 昼夜扫描）。
+  附 `?layer=<id>` 主图层深链（打开时按默认不透明度点亮，槽位语义与面板
+  点击一致；切换主图层时回写 URL（replace），默认地形底不写——CDP 自动化
+  复现/分享用）。
+- **`dreamulator export region`（外部渲染数据包）**：等距圆柱正方形区域裁剪
+  （真实半径标定 + cos 纬度补偿；|lat|>75 或跨 ±180 拒绝），产出
+  `height.meters.npy` + 16-bit `height.png` + 前端同源配色 `color.png` +
+  `meta.json`（精确 pixel_box + mesh 指纹）。对齐探针 + 确定性测试。
+- **Blender 渲染链 MVP（`scripts/media/blender/region_still.py`）**：bpy 脚本
+  重建场景 + Cycles 渲染（OptiX 自动降级、seed 固定、脚本重建工程模式）。
+  nacrea 永耀岛 2500 km 区域 1080p/256s 实测 10.7 s（RTX 3060）。
+  设计文档 `docs/design/proposals/blender-render-pipeline.md`。
+- **湿槽求解器逐位等价提速**（`stationary_wave_two_level.py`）：几何不变量
+  （t_op/d_op、逐 k 的 𝓛_k/𝓛_k²）跨月跨 Picard 遍缓存 + `_place`/`_banded_matvec`
+  改基本切片/对角线视图（替换 fancy indexing）。`simulate_climate` 固定成本
+  减半（144-cell 验证网格 6.8 s → 3.4 s），三种合成场景 30 个输出数组逐位
+  一致（bit-identity 校验）。
+- `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
 
 ### Fixed
 
