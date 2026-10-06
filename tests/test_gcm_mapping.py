@@ -150,6 +150,8 @@ def test_map_world_earth_planet_orbits_star() -> None:
     assert params.radius == pytest.approx(1.0)
     assert params.flux == pytest.approx(1361.0)
     assert params.year == pytest.approx(365.25, rel=1e-3)
+    # stellar temperature flows through for the radiation spectral split
+    assert params.startemp == pytest.approx(5772.0)
 
 
 def test_map_world_nacrea() -> None:
@@ -169,3 +171,24 @@ def test_map_world_nacrea() -> None:
     assert params.year == pytest.approx(99.8, abs=0.5)
     assert params.pressure == pytest.approx(1.0 * ATM_TO_BAR)
     assert any("greenhouse" in w for w in params.warnings)
+    # K8 star: the explicit temperature field drives ExoPlaSim's spectral
+    # partition (NIR fraction ~72% vs the 5772 K default's 48%) — without it
+    # the greenhouse is computed for a G2 spectrum (2026-10-06 bug).
+    assert params.startemp == pytest.approx(4055.0)
+
+
+def test_multi_year_otherargs_disables_step_cap() -> None:
+    """N_RUN_YEARS alone is silently truncated to one year.
+
+    ``configure()`` writes ``N_RUN_STEPS=11520`` whenever rotationperiod
+    differs from 1.0, and the Fortran main loop returns when the step
+    countdown reaches zero regardless of the month countdown — so the
+    harness must force ``N_RUN_STEPS=0`` next to ``N_RUN_YEARS``.
+    """
+    from dreamulator.gcm.runner import multi_year_otherargs
+
+    otherargs = multi_year_otherargs(50)
+    assert otherargs == {
+        "N_RUN_YEARS@plasim_namelist": "50",
+        "N_RUN_STEPS@plasim_namelist": "0",
+    }

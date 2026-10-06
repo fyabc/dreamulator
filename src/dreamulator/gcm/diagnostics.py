@@ -87,12 +87,14 @@ def summarize(
     *,
     radius_m: float = 6.37122e6,
     gravity: float = _G,
-    tail_records: int = 6,
+    tail_records: int = 12,
 ) -> dict[str, Any]:
     """Extract the oracle-comparison diagnostics from one run.
 
     ``radius_m``/``gravity`` should match the mapped ExoPlaSim parameters
-    (they set physical units of the streamfunction only).
+    (they set physical units of the streamfunction only).  ``tail_records``
+    defaults to 12: run_gcm now writes one record per model month, so the
+    tail spans exactly one full seasonal cycle (a seasonally unbiased mean).
     """
     ds = netCDF4.Dataset(str(nc_path))
     try:
@@ -122,7 +124,18 @@ def summarize(
         i_eq = int(np.argmin(np.abs(lat)))
         out["t_eq_c"] = float(t_zm[:, i_eq].mean() - 273.15)
         out["t_pole_c"] = float(0.5 * (t_zm[:, 0].mean() + t_zm[:, -1].mean()) - 273.15)
-        out["t_global_c"] = float(ta_t.mean() - 273.15)
+
+        # Surface temperature: prefer tas (2m air temp) over ta column mean.
+        # ta includes the stratosphere (−100°C+) which dominates a 3D average
+        # and gives a misleading "global temperature" (the 2026-10-06 bug:
+        # reported −45.6°C when the actual surface was −2°C).
+        if "tas" in ds.variables:
+            tas_t = _tail(np.asarray(ds.variables["tas"][:]), tail_records)
+            out["t_global_c"] = float(tas_t.mean() - 273.15)
+        else:
+            # Fallback: bottom level of ta (sigma closest to 1)
+            out["t_global_c"] = float(ta_t[:, -1, :, :].mean() - 273.15)
+        out["t_global_column_c"] = float(ta_t.mean() - 273.15)
 
         if "levp" in ds.variables and "ps" in ds.variables:
             levp = np.asarray(ds.variables["levp"][:])

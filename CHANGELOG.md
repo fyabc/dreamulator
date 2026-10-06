@@ -39,6 +39,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   一致（bit-identity 校验）。
 - `export_elevation_png` 补等高区域 0/0 守卫（与 `export_layer_png` 一致）。
 
+### Fixed
+
+- **GCM harness「持续温室失效」破案（四层 bug，辐射物理无罪）**：
+  ① 积分时长静默截断——ExoPlaSim `configure()` 在 `rotationperiod≠1` 时写死
+  `N_RUN_STEPS=11520`（1 年步数），Fortran 主循环步数倒计时归零即无条件
+  return，`N_RUN_YEARS` 被无声吞掉：此前所有 harness「12/50 年」run 实际只
+  积分了 1 地球年。`run_gcm` 现经 `multi_year_otherargs()` 同时清零
+  N_RUN_STEPS（回归测试护住）。② pyburn 默认把任意时长聚合成 12 条记录
+  （`times=12`），「12 条」曾被误读为 12 年——现按 `times=years*12` 输出真
+  月度记录，`summarize` tail 默认改 12（完整季节循环）。③ `summarize()` 的
+  t_global_c 曾取 ta 全层平均（含 −118°C 平流层）误报 −45.6°C，实际地表
+  tas=−2°C——改用 tas，旧口径保留为 t_global_column_c。④ 恒星有效温度漏传
+  ——mapping 只查 `effective_temperature_k`/`teff_k` 键，nacrea K8 星（4055 K）
+  温度只在注释里，ExoPlaSim 一直用 5772 K 太阳光谱分割（NIR 48% vs K8 实际
+  72%，高估地表温室）——mapping 增查 `temperature` 键，nacrea stellar.yaml
+  补显式字段。验证：2 年 aquaplanet 对照产出 24 条月度记录、双季节循环可辨；
+  K8 光谱分割实测 NIR 72%。此前经 run_gcm 的多年 run 温度态结论全部作废
+  （「雪ball 盆锁定」叙事不成立——模型从未跑过 1 年以上）。
+
 ## [0.38.0] — 2026-09-29
 
 ### Added
