@@ -246,7 +246,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "15° / ±75°",
         "75 小时",
     ],
-    "layers/astronomy/input/giant_brightness.md": [
+    "layers/astronomy/input/sky_phenomena.md": [
         "**1255 W/m²**",
         "**2.79 W/m²**",
         "**约 821 倍**",

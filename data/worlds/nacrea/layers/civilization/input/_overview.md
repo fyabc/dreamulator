@@ -11,9 +11,9 @@ type: overview
 
 | 文档 | 类型 | 简述 |
 |------|------|------|
-| [climate_portrait.md](climate_portrait.md) | 气候画像 | 气候画像与文明启示——暖湿海洋性世界、无大陆性 D、宜居海岸 63.5%、海洋文明倾向 |
+| [climate_portrait.md](climate_portrait.md) | 气候画像 | 气候画像与文明启示——凉温带湿润世界（滚动文档）、无大陆性 D、干旱带与冰盖双约束下的农业地理 |
 | [habitability_solutions.md](habitability_solutions.md) | 主题推演 | 橙矮星宜居缺陷的综合解法——10 项经典橙矮星宜居难题在本设计中的逐一破解方案 |
-| [scientific_enlightenment.md](scientific_enlightenment.md) | 主题推演 | 对文明科学启蒙的影响——核心观测优势与科学里程碑时间线对比（地球 vs Nacrea） |
+| [scientific_enlightenment.md](scientific_enlightenment.md) | 主题推演 | 对文明科学启蒙的影响——核心观测优势与科学里程碑时间线（地球对比见 design-notes/0011） |
 | [space_age.md](space_age.md) | 主题推演 | 太空时代发展推演——核心轨道约束、科技树分歧、航空/低轨时代、磁帆技术与星际探测 |
 | [civilization_divergence.md](civilization_divergence.md) | 地缘政治 | 文明地理大分流——向星区/背星区/边缘区在石器、古典、海洋、太空时代的深刻分化与角色逆转 |
 | [civilizations.yaml](civilizations.yaml) | 数据文件 | 文明层结构化输入数据（YAML） |

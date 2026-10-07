@@ -263,9 +263,9 @@ def tidal_amplitude(m_parent_kg: float, m_sat_kg: float, a_m: float, r_sat_m: fl
 #
 # 这些是「天空可视量」的纯计算：视星等、反照率、本影几何、食季、恒星视差。
 # 与上面的「拷问原语」不同，它们直接服务 build_system_catalog 的 derived sky 段
-# （模板渲染 sky_phenomena.md / giant_brightness.md 等），故不做 @query 注册
+# （模板渲染 sky_phenomena.md 等），故不做 @query 注册
 # （不是守护轴「有哪些查询」的索引项）。公式与锚定值均出自 nacrea 的
-# sky_phenomena.md / giant_brightness.md / orbital_dynamics.md。
+# sky_phenomena.md / orbital_dynamics.md。
 
 
 def geometric_albedo_from_bond(bond_albedo: float) -> float:
@@ -332,7 +332,7 @@ def reflected_illuminance_w_m2(
 ) -> float:
     """满相反射光照度（W/m²，满相 α=0 默认）。
 
-    ``F = F★·p·Φ(α)·(R/Δ)²``（giant_brightness.md）。锚定值：Aegis 满相 ≈ 1.9 W/m²。
+    ``F = F★·p·Φ(α)·(R/Δ)²``（sky_phenomena.md 亮度参数表）。锚定值：Aegis 满相 ≈ 2.8 W/m²。
     """
     return (
         star_flux_w_m2

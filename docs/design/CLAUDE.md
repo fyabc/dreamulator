@@ -7,7 +7,7 @@
 - **根目录** — 总览、路线图、竞品分析、审计计划
 - [`pipelines/`](pipelines/) — **已实现管线技术参考**（`scripts/dev/check_doc_refs.py` 的审计对象）
 - [`proposals/`](proposals/) — **设计提案 + 方法论**（未来子系统、未实现）
-- [`audit/`](audit/) — 审计结果（三波审计的发现记录）
+- [`audit/`](audit/) — 审计结果（各波审计的发现记录；最新 wave5 = 对外设定文案审计，含「对外设定 vs 设计笔记」划分规范的执行台账）
 
 ## 文档列表
 
