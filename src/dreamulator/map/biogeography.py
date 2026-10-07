@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from dreamulator.map.water_bodies import resolve_land_mask
+
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
 
@@ -52,7 +54,12 @@ def partition_biogeographic_provinces(
     cells = mesh.cells
 
     id_to_index = {c.id: i for i, c in enumerate(cells)}
-    is_land = [c.elevation >= 0.0 for c in cells]
+    # Authoritative water split (water_class, connectivity fallback) minus
+    # lake surfaces: a lake is a basin *inside* a landmass, so excluding it
+    # does not break realm connectivity — the surrounding land stays one
+    # connected realm, and lake cells get no province (like the ocean).
+    is_land_mask = resolve_land_mask(cells)
+    is_land = [bool(is_land_mask[i]) and not cells[i].is_lake for i in range(n)]
 
     # ---- adjacency (id → index, keep only in-range) ----
     adj: list[list[int]] = [[] for _ in range(n)]

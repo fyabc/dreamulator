@@ -27,6 +27,7 @@ from dreamulator.engine.physical_inputs import (
     resolve_stellar_forcing,
 )
 from dreamulator.map.biogeography import partition_biogeographic_provinces
+from dreamulator.map.water_bodies import resolve_land_mask
 from dreamulator.models.layers import Layer
 
 logger = logging.getLogger(__name__)
@@ -110,14 +111,19 @@ class EcologyEngine(BaseEngine):
                 par_ratio = luminosity / distance**2
 
         # ---- 4. Classify every cell (biome / NPP / domesticable / soil) ----
+        # Authoritative land/ocean split: water_class (connectivity fallback
+        # for legacy meshes), never a bare elevation sign and never crust_type
+        # (that is the plate split, not the surface water split).
+        is_land_arr = resolve_land_mask(mesh.cells)
         biome_counts: dict[str, int] = {}
-        for cell in mesh.cells:
-            is_ocean = cell.elevation < 0.0
+        for i, cell in enumerate(mesh.cells):
+            is_ocean = not is_land_arr[i]
             eco = classify_cell_ecology(
                 temperature_c=cell.temperature_C,
                 precipitation_mm=cell.precipitation_mm,
                 elevation_m=cell.elevation,
                 is_ocean=is_ocean,
+                is_lake=cell.is_lake,
                 par_ratio=par_ratio,
             )
             cell.biome = eco.biome.value
@@ -129,7 +135,7 @@ class EcologyEngine(BaseEngine):
                 precipitation_mm=cell.precipitation_mm,
                 elevation_m=cell.elevation,
                 crust_type=cell.crust_type,
-                is_ocean=is_ocean,
+                is_ocean=is_ocean or cell.is_lake,
             )
             cell.soil_type = soil_type
             cell.soil_fertility = soil_fertility
@@ -227,8 +233,13 @@ def _build_ecology_summary(
     from collections import Counter
 
     n_cells = mesh.num_cells
-    land_cells = [c for c in mesh.cells if c.crust_type == "continental"]
-    ocean_cells = [c for c in mesh.cells if c.crust_type in ("oceanic", "transitional")]
+    # Water-split stats follow the authoritative water_class (with lake cells
+    # broken out), not crust_type — crust_type is the plate split and can
+    # disagree with the surface water split (a lake sits on continental crust).
+    is_land_arr = resolve_land_mask(mesh.cells)
+    lake_cells = [c for c in mesh.cells if c.is_lake]
+    land_cells = [c for i, c in enumerate(mesh.cells) if is_land_arr[i] and not c.is_lake]
+    ocean_cells = [c for i, c in enumerate(mesh.cells) if not is_land_arr[i] and not c.is_lake]
 
     # Land NPP stats
     land_npp = [c.npp_gc_m2_yr for c in land_cells if c.npp_gc_m2_yr is not None]
@@ -247,6 +258,7 @@ def _build_ecology_summary(
         "n_cells": n_cells,
         "n_land": len(land_cells),
         "n_ocean": len(ocean_cells),
+        "n_lake": len(lake_cells),
         "biome_counts": biome_counts,
         "npp_gc_m2_yr": {
             "land": {

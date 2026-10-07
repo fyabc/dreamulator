@@ -61,6 +61,12 @@ COAST_THRESHOLD_KM: float = 200.0
 #: is the standard tree-line (Köppen 1936; Peel et al. 2007).
 TREE_LINE_C: float = 10.0
 
+#: Freshwater bonus for land cells adjacent to a lake — a ×1.15 multiplier on
+#: the habitability score (capped at 100).  Epistemic class: observational fit
+#: (lake-shore population density advantage on Earth), not first-principles;
+#: calibration domain = Earth-like planets.  See ``habitability_score``.
+FRESHWATER_BONUS: float = 1.15
+
 
 def classify_habitable_coast(
     temperature_c: float | None,
@@ -186,17 +192,24 @@ def habitability_score(
     precipitation_mm: float | None,
     *,
     is_ocean: bool = False,
+    near_freshwater: bool = False,
 ) -> float:
     """Graded settleability 0–100 (宜居等级).
 
     A climate-based suitability index (the human climate niche is defined by
     temperature and water, not by coastal access — Xu et al. 2020):
 
-        f_T (thermal niche band) × f_P (aridity ramp).
+        f_T (thermal niche band) × f_P (aridity ramp) [× freshwater bonus].
 
     - f_T is an asymmetric band peaking ~13 °C MAT (Xu et al. 2020): steep cold
       side, gentle hot side (secondary tropical cluster).
     - f_P = min(1, P / 500 mm) — rain-fed settlement's water floor.
+    - Freshwater bonus: a ×1.15 multiplier for land cells adjacent to a lake
+      (reliable drinking water + irrigation + transport regardless of the
+      aridity ramp).  Epistemic class: observational fit — lake-shore
+      population advantage on Earth (Great Lakes, Lake Victoria shore) —
+      not a first-principles derivation; calibration domain = Earth-like
+      planets.
 
     Coastal access is intentionally NOT a factor here: it is an economic/trade
     advantage (Small & Nicholls 2003 describes *where* people concentrate, not a
@@ -206,7 +219,10 @@ def habitability_score(
         return 0.0
     f_t = _climate_niche(temperature_c)
     f_p = min(1.0, precipitation_mm / P_MIN_MM)
-    return 100.0 * f_t * f_p
+    score = 100.0 * f_t * f_p
+    if near_freshwater:
+        score = min(100.0, score * FRESHWATER_BONUS)
+    return score
 
 
 def agriculture_score(

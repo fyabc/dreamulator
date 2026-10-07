@@ -44,7 +44,11 @@ class WhittakerBiome(StrEnum):
     TUNDRA = "tundra"
     ICE = "ice"
 
-    # Ocean sentinel
+    # Water sentinels — lake surface (freshwater body, any water_class) and
+    # open ocean.  A lake cell is not classified on the T/P plane: the
+    # Whittaker axes describe terrestrial vegetation, and a lake surface has
+    # neither vegetation nor soil.
+    LAKE = "lake"
     OCEAN = "ocean"
 
 
@@ -226,6 +230,7 @@ _DOMESTICATION_TABLE: dict[WhittakerBiome, DomesticableProfile] = {
     WhittakerBiome.BOREAL_SHRUBLAND: DomesticableProfile("low", "low", "low"),
     WhittakerBiome.TUNDRA: DomesticableProfile("low", "low", "low"),
     WhittakerBiome.ICE: DomesticableProfile("low", "low", "low"),
+    WhittakerBiome.LAKE: DomesticableProfile("low", "low", "low"),
     WhittakerBiome.OCEAN: DomesticableProfile("low", "low", "low"),
 }
 
@@ -255,6 +260,7 @@ def classify_cell_ecology(
     elevation_m: float | None,
     *,
     is_ocean: bool = False,
+    is_lake: bool = False,
     par_ratio: float = 1.0,
 ) -> EcologyCellOutput:
     """Run the full ecology P0 pipeline for a single cell.
@@ -268,7 +274,12 @@ def classify_cell_ecology(
     elevation_m:
         Cell elevation in metres (unused in P0, reserved for P1 altitudinal belts).
     is_ocean:
-        Whether the cell is ocean (elevation < 0 or crust type oceanic).
+        Whether the cell is open ocean (``water_class == "ocean"`` and not a
+        lake; the authoritative split, never a bare elevation test).
+    is_lake:
+        Whether the cell is an inland lake / inland-sea surface
+        (``is_lake=True``, any ``water_class``).  Short-circuits to the LAKE
+        biome: a lake surface has no terrestrial vegetation or soil.
     par_ratio:
         PAR scaling factor for non-solar-standard stars.
 
@@ -276,6 +287,14 @@ def classify_cell_ecology(
     -------
     EcologyCellOutput
     """
+    if is_lake:
+        # Lake surface — not a point on the terrestrial T/P plane.  Aquatic
+        # NPP (and lake products) is a later refinement; None for now.
+        return EcologyCellOutput(
+            biome=WhittakerBiome.LAKE,
+            npp_gc_m2_yr=None,
+            domesticable_tags=get_domesticable_profile(WhittakerBiome.LAKE).to_tags(),
+        )
     biome = classify_whittaker_biome(
         temperature_c=temperature_c or 0.0,
         precipitation_mm=precipitation_mm or 0.0,
