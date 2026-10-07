@@ -271,7 +271,11 @@ export const LAYER_HELP: LayerHelpEntry[] = [
     detail: 'help:layer.domesticable.detail',
     defaultOpacity: 0.85,
     kind: 'thematic',
-    group: 'ecology',
+    // Domestication potential is a civilization-layer concern (where
+    // societies can arise); it reads ecology inputs but the panel group is
+    // information architecture only — the thematic compositing slot is
+    // unchanged (decoupled by design, see MapLayerPanel header comment).
+    group: 'civilization',
   },
   {
     id: 'soil',

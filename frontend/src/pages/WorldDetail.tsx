@@ -10,6 +10,7 @@ import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
 import CivMapPreview from '../components/civmap/CivMapPreview'
 import LayerDag from '../components/LayerDag'
+import LayerTabSection from '../components/world/LayerTabSection'
 import StarfieldBackground from '../components/StarfieldBackground'
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
@@ -386,11 +387,12 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'astronomy' && (
-              <div className="space-y-6">
-              <div className="glass-panel p-4 sm:p-6">
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  {t('tab.astronomy')}
-                </h2>
+              <LayerTabSection
+                worldName={worldName!}
+                tab="astronomy"
+                documents={<LayerDocuments worldName={worldName!} layer="astronomy" branch={selectedBranch} />}
+                derived={
+              <div>
                 {stellarSystem ? (
                   <div>
                     <p className="mb-4">
@@ -618,16 +620,17 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noStarSystem')}</p>
                 )}
               </div>
-              <LayerDocuments worldName={worldName!} layer="astronomy" branch={selectedBranch} />
-              </div>
+                }
+              />
             )}
 
             {activeTab === 'planets' && (
-              <div className="space-y-6">
-              <div className="glass-panel p-4 sm:p-6">
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  {t('tab.planets')}
-                </h2>
+              <LayerTabSection
+                worldName={worldName!}
+                tab="planets"
+                documents={<LayerDocuments worldName={worldName!} layer="geological" branch={selectedBranch} />}
+                derived={
+              <div>
                 {planets ? (
                   <div className="space-y-4">
                     {planets.length > 0 ? (
@@ -729,16 +732,17 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noGeologyLayer')}</p>
                 )}
               </div>
-              <LayerDocuments worldName={worldName!} layer="geological" branch={selectedBranch} />
-              </div>
+                }
+              />
             )}
 
             {activeTab === 'climate' && (
-              <div className="space-y-6">
-              <div className="glass-panel p-4 sm:p-6">
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  {t('tab.climate')}
-                </h2>
+              <LayerTabSection
+                worldName={worldName!}
+                tab="climate"
+                documents={<LayerDocuments worldName={worldName!} layer="climate" branch={selectedBranch} />}
+                derived={
+              <div>
                 {climateData ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
                     {JSON.stringify(climateData, null, 2)}
@@ -747,16 +751,17 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noClimateData')}</p>
                 )}
               </div>
-              <LayerDocuments worldName={worldName!} layer="climate" branch={selectedBranch} />
-              </div>
+                }
+              />
             )}
 
             {activeTab === 'ecology' && (
-              <div className="space-y-6">
-              <div className="glass-panel p-4 sm:p-6">
-                <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
-                  {t('tab.ecology')}
-                </h2>
+              <LayerTabSection
+                worldName={worldName!}
+                tab="ecology"
+                documents={<LayerDocuments worldName={worldName!} layer="ecology" branch={selectedBranch} />}
+                derived={
+              <div>
                 {ecologyData ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
                     {JSON.stringify(ecologyData, null, 2)}
@@ -765,18 +770,17 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noEcologyData')}</p>
                 )}
               </div>
-              <LayerDocuments worldName={worldName!} layer="ecology" branch={selectedBranch} />
-              </div>
+                }
+              />
             )}
 
             {activeTab === 'civilization' && (
-              <div className="space-y-6">
-                {/* Civilization Map preview */}
-                <CivMapPreview worldName={worldName!} branch={selectedBranch} />
-
-                {/* Markdown document viewer — shows docs or nothing */}
-                <LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />
-              </div>
+              <LayerTabSection
+                worldName={worldName!}
+                tab="civilization"
+                documents={<LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />}
+                derived={<CivMapPreview worldName={worldName!} branch={selectedBranch} />}
+              />
             )}
 
             {activeTab === 'design-notes' && (

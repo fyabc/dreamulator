@@ -28,8 +28,12 @@
     "title": "层级架构",
     "forkPoint": "分叉点",
     "branchData": "分支数据",
-    "configured": "已配置",
-    "unconfigured": "未配置"
+    "fresh": "已构建",
+    "stale": "待重建",
+    "absent": "无数据",
+    "inheritedFrom": "该层输入继承自分支",
+    "docCount": "{{count}} 篇文档",
+    "buildAge": "构建于 {{age}} 前"
   },
   "branch": {
     "label": "分支",
@@ -101,7 +105,9 @@
     "noGeologyData": "未定义地质数据",
     "noGeologyLayer": "无地质层数据",
     "noClimateData": "无气候层数据",
-    "noEcologyData": "无生态层数据"
+    "noEcologyData": "无生态层数据",
+    "derivedData": "引擎计算数据",
+    "derivedDataHint": "由物理引擎从设定推导"
   },
   "field": {
     "name": "名称：",

@@ -46,6 +46,7 @@
       "boreal_shrubland": "#90A4AE",
       "tundra": "#A1887F",
       "ice": "#ECEFF1",
+      "lake": "#4FC3F7",
       "ocean": "#1565C0"
     },
     "soil": {
