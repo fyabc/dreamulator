@@ -221,7 +221,7 @@ SotE `koppen.lua` 的 B 类阈值公式（`20·T + offset`，offset 由夏/冬�
 **通用性评估（对异星适应度）**：SotE 的「方向性」「2 月分解」「saldo」是**概念可借鉴**，
 但其**实现是 Earth 特调**——方向用 `6*lat/90` sigmoid 硬编码三圈环流、基础温度用 Earth
 观测纬度剖面（`80/68.5/59.5/43.1/21/5°` 分段线性）、Hadley/ITCZ 为预计算 Earth 场。对
-Nacrea 单圈环流（`hadley_extent=90`）或三圈纬度不同的行星会错位。dreamulator 的正确做法
+Nacrea 宽 Hadley 两圈体制（`hadley_extent=52`）或三圈纬度不同的行星会错位。dreamulator 的正确做法
 是**从自己的 `hadley_cell_wind`（`hadley_extent_deg`/`polar_cell_start_deg` 参数化）推导
 「向风方向」**，替换各向同性 `distance_to_coast`——抄概念、第一性重推实现（「第一性 > 先验」）。
 

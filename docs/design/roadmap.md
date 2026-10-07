@@ -1,7 +1,7 @@
 # 开发路线图
 
 > 最后更新：2026-10-07（v0.39.0 发版：nacrea 路线 1 辐照重标定终案落地
-> （GCM 定标判决 + draw-0 卫星正典）、GCM offline-oracle harness 入库、
+> （GCM 定标判决 + 10-07 定版卫星正典）、GCM offline-oracle harness 入库、
 > HZ 官方系数表、export region / Blender 渲染链 MVP / 视频素材三件套。
 > 外部审计包与气候 rethinking 实施顺序见 v0.37.0 条目）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；

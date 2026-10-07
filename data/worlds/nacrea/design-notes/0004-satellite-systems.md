@@ -4,8 +4,13 @@ type: design
 tags: [satellite, astronomy, formation]
 status: proposed
 checked_against:
-  astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
-  geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
+  physics: ''
+  chemistry: ''
+  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
+  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  climate: <no-yaml>
+  ecology: <no-yaml>
+  civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
 ---
 
 # 0004 · 其他行星的卫星系统设计
@@ -13,6 +18,9 @@ checked_against:
 > **⚠ 部分被取代（2026-09-09）**：本文提及的 Aegis 卫星系统架构（Nacrea + Cadence +
 > Vigil 拉普拉斯共振链）已被 0009 取代（双单体逆行捕获卫架构）。其他行星（Ember/Crucible/
 > Boreal/Glacis/Sentinel）的卫星系统设计与命名词族仍有效。
+>
+> **更新历史**：2026-10-07 路线 1 辐照重标定后，本文轨道与 Hill 球数值按现行
+> stellar.yaml（M*=0.65 M☉、年长锁定轨道）刷新。
 
 ## 决策背景
 
@@ -21,15 +29,16 @@ checked_against:
 
 ## 物理判定（证据）
 
-Hill 球半径 `R_H = a·(m/3M_star)^(1/3)`，`M_star = 0.59 M☉`（来自 `world_parameters.yaml`）：
+Hill 球半径 `R_H = a·(m/3M_star)^(1/3)`，`M_star = 0.65 M☉`（来自 `stellar.yaml`；
+Hill 值为引擎 system_catalog 派生量）：
 
 | 行星 | 质量 | 轨道 (AU) | Hill 球 | 判定 |
 |---|---|---|---|---|
-| Ember | 0.35 M⊕ | 0.046 | ~63,000 km | ❌ 恒星潮汐剥离 → 无卫星 |
-| Crucible | 0.90 M⊕ | 0.098 | ~182,000 km | ⚠️ 仅能保留极近的捕获小卫星（火卫一类比） |
-| Boreal | 159 M⊕ | 0.5614 | ~5.4×10⁶ km | ✅ 规则卫星系统 |
-| Glacis | 17 M⊕ | 0.8911 | ~4.1×10⁶ km | ✅ 规则内卫星 + 逆行捕获外卫星 |
-| Sentinel | 8.5 M⊕ | 3.68 (e=0.18) | ~14.5×10⁶ km | ✅ 但散射起源限制（仅不规则捕获） |
+| Ember | 0.35 M⊕ | 0.0475 | ~57,500 km | ❌ 恒星潮汐剥离 → 无卫星 |
+| Crucible | 0.90 M⊕ | 0.1012 | ~167,000 km | ⚠️ 仅能保留极近的捕获小卫星（火卫一类比） |
+| Boreal | 159 M⊕ | 0.5777 | ~5.2×10⁶ km | ✅ 规则卫星系统 |
+| Glacis | 17 M⊕ | 0.9296 | ~4.0×10⁶ km | ✅ 规则内卫星 + 逆行捕获外卫星 |
+| Sentinel | 8.5 M⊕ | 3.80 (e=0.18) | ~11.0×10⁶ km | ✅ 但散射起源限制（仅不规则捕获） |
 
 **太阳系类比**：水星无卫星（潮汐剥离）；火星有火卫一（捕获小行星）；木星伽利略=规则共振链；
 海王星海卫一=逆行捕获；阋神星 Dysnomia=不规则捕获。
@@ -38,7 +47,7 @@ Hill 球半径 `R_H = a·(m/3M_star)^(1/3)`，`M_star = 0.59 M☉`（来自 `wor
 
 ### Ember（焦星）— 无卫星
 
-0.046 AU + 0.35 M⊕ + 5.9 Gyr 潮汐锁定 → 恒星潮汐剥离任何原始卫星（水星类比）。
+0.0475 AU + 0.35 M⊕ + 5.9 Gyr 潮汐锁定 → 恒星潮汐剥离任何原始卫星（水星类比）。
 
 ### Crucible（鼎星）— 1 颗捕获小卫星（火卫一类比）
 

@@ -60,7 +60,7 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 
 > **3e 因子的物理含义**：径向潮（bulge "呼吸"）幅度 ∝ r⁻³，r = a(1±e) → 分数变化 3e，
 > 峰谷差 6e。表值是**历元冷谷的平衡潮理论上限**（完美流体球 + 全球共振）；受迫带
-> 内潮差随 e 同步呼吸（e 达 max 0.0084 时 ~3.5×，即 ~210 m 上限——百年级「大潮纪元」）。
+> 内潮差随 e 同步呼吸（e 达 max 0.0098 时 ~4×，即 ~250 m 上限——百年级「大潮纪元」）。
 > 实际海岸潮差由地形决定：开阔大洋 4–12 m，普通海岸 10–25 m，喇叭形海湾共振放大
 > 可达 40–80 m，封闭内海 <5 m（见 §潮汐对生态与文明的影响）。
 
@@ -69,31 +69,31 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
 | 潮汐加热功率 Ė | **{{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW**（历元冷谷） | Peale & Cassen (1978)：Ė = (21/2)(k₂/Q)(GM_p²R⁵/a⁶)·n·e² = 1.52×10¹⁹·e² |
-| 潮汐热流密度 | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²**（历元）；**受迫带均值 0.36 W/m²**（210 TW） | Ė / 4πR² |
-| 对比 | 地球内热流 0.087 W/m²、Io 2.2–2.5（潮汐） | 带均值 = 4.1× 地球内热流 |
+| 潮汐热流密度 | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²**（历元）；**受迫带均值 0.34 W/m²**（197 TW） | Ė / 4πR² |
+| 对比 | 地球内热流 0.087 W/m²、Io 2.2–2.5（潮汐） | 带均值 = 3.9× 地球内热流 |
 | 偏心率阻尼时标 τ_e | **{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr** | (2/21)(Q/k₂)(M_m/M_p)(a/R)⁵(1/n) |
 
 > 历元 {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW ≈ {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 4.7e13) | round(2) }}× 地球总热流（47 TW）——历元值是受迫带的**冷谷快照**；
-> 带均值 0.36 W/m²（210 TW ≈ 4.5× 地球总热流）才是地质时间上的常态热源，
+> 带均值 0.34 W/m²（197 TW ≈ 4.2× 地球总热流）才是地质时间上的常态热源，
 > 为 Nacrea 主导热源（~85%），驱动板块构造与碳-硅酸盐循环。瞬时极值
-> 1.85 W/m²（0.79×Io）为百年级短暂尖峰，500-yr 平滑持续脉冲占空 0%
-> （平滑 p95 仅 0.78）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
-> 泵浦为**双源**：恒星四极矩本底（0.35 AU 强场，~0.004–0.006）+ 韵珠/守珠
-> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段认证带 rms 0.0037 / max 0.0084
-> （详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
+> 2.50 W/m²（0.89×Io）为百年级短暂尖峰，500-yr 平滑持续脉冲占空 0%
+> （平滑 p95 仅 0.77）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
+> 泵浦为**双源**：恒星四极矩本底（0.365 AU 强场，~0.004–0.006）+ 韵珠/守珠
+> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段认证带 rms 0.0036 / max 0.0098
+> （10-07 定版实现 30 kyr 认证；详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
 
 ## 因变量 — Q 敏感性
 
 潮汐加热 Ė ∝ k₂/Q，而 Q 是唯一缺乏实测锚定的自由参数（洛夫数 k₂/h₂ 取地球实测值）。
-下表展示受迫带固定（当代段 rms 0.0037）、Q 取不同值时潮汐加热的变化范围：
+下表展示受迫带固定（当代段 rms 0.0036）、Q 取不同值时潮汐加热的变化范围：
 
 | Q | k₂/Q | 带均值热流 | 历元热流（e={{ entities.satellite_nacrea.eccentricity }}） | 相对地球内热流（带均值） | 地质状态 |
 |---|------|---------|---------|---------------|---------|
-| 150 | 2×10⁻³ | 0.72 W/m² | {{ (5.21e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 8.3× | 正典带内活跃端 |
-| **300（本设定）** | **1×10⁻³** | **0.36 W/m²** | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²** | **4.1×** | 活跃健康（正典带，板块构造旺盛） |
-| 500（近月球刚性） | 6×10⁻⁴ | 0.22 W/m² | {{ (1.564e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 2.5× | 增强板块构造 |
+| 150 | 2×10⁻³ | 0.68 W/m² | {{ (5.21e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 7.8× | 正典带内活跃端 |
+| **300（本设定）** | **1×10⁻³** | **0.34 W/m²** | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²** | **3.9×** | 活跃健康（正典带，板块构造旺盛） |
+| 500（近月球刚性） | 6×10⁻⁴ | 0.20 W/m² | {{ (1.564e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 2.3× | 增强板块构造 |
 
-> **结论**：Q 在 150–500 之间浮动时，带均值加热在 2.5–8× 地球内热流之间变化，
+> **结论**：Q 在 150–500 之间浮动时，带均值加热在 2.3–7.8× 地球内热流之间变化，
 > 始终处于"活跃但不失控"区间（Io 的 2.2–2.5 W/m² 岩浆海量级之下）。Q=300 为
 > 裁决值（「非共振大洋 + 窄陆架」组合，选值依据见 physical_params.md）；
 > 加热 ∝ 1/Q 线性，文献带内取值属设定判断，可随未来约束折算。
@@ -141,10 +141,10 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 
 ## 潮汐效应 — 地质结果
 
-- **板块运动速度**：10–15 cm/yr（地球 5 cm/yr 的 2–3 倍，带均值 0.36 W/m² 潮汐加热驱动）
+- **板块运动速度**：10–15 cm/yr（地球 5 cm/yr 的 2–3 倍，带均值 0.34 W/m² 潮汐加热驱动）
 - **超大陆旋回周期**：~2 亿年（地球 3–5 亿年）
 - **地震规律**：每 {{ entities.satellite_nacrea.period_days | hours | round1 }} h 触发一次里氏 4–5 级周期性微震；大规模地震（≥8 级）频率比地球低 ~60%
-- **海岸线进退**：{{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差（受迫带内随 e 呼吸至 ~210 m 上限）+ 0.1° 大陆架坡度 → 每 38 h 理论最大进退 ~35 km（实际海岸 10–25 m 潮差 → 6–14 km）
+- **海岸线进退**：{{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差（受迫带内随 e 呼吸至 ~250 m 上限）+ 0.1° 大陆架坡度 → 每 38 h 理论最大进退 ~35 km（实际海岸 10–25 m 潮差 → 6–14 km）
 
 ## 潮汐对生态与文明的影响（伏笔）
 
@@ -157,7 +157,7 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 |------|------|---------|
 | 潮间带宽度 | {{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 历元潮差 + 缓坡（0.02–0.1°）→ 数 km 宽潮间带，地球上不存在的大规模生态位 | 生态层海洋模块 |
 | 海洋初级生产力 | 潮汐混合将深海营养盐带上表层，沿海 NPP 提升 2–5× | 同上 |
-| 深海热泉 | 潮汐加热（带均值 210 TW）→ 洋中脊热泉密集，化能合成生态（独立于太阳） | 同上 |
+| 深海热泉 | 潮汐加热（带均值 197 TW）→ 洋中脊热泉密集，化能合成生态（独立于太阳） | 同上 |
 | 相位漂移稀释热应力 | 潮间带在一个 Aegis 年内经历全部热环境并平均（无固定暴晒/冻结） | 简化生态建模 |
 
 ### 文明层
@@ -169,13 +169,7 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 | 沿海城市形态 | 悬崖城 / 浮动城 / 内海城三分；弱 spring/neap 使港口工程压力低于地球强 spring/neap 场景 | 文明地理锚点 |
 | 海岸侵蚀 | 潮汐冲刷（tidal scour）主导，河口被反复冲刷成潮汐峡谷 | 海岸侵蚀·潮汐冲刷主导 |
 
-## 变更记录
-
-| 日期 | 变更 | 潮汐加热 | 共振潮差 | 阻尼时标 |
-|------|------|---------|---------|---------|
-| 旧（e=0.0025, k₂/Q=10⁻³） | 初版 | 52–82 TW | 78 m | ~5.6 Myr |
-| 旧（e=0.0018, k₂/Q=3×10⁻³） | 2026-08 重算 | 148 TW | ~46 m | 1.4 Myr |
-| **现行（e=0.00242, k₂/Q=1×10⁻³）** | 2026-10-07 draw-0 历元 | **89 TW 历元 / 197 TW 带均值** | **~61 m** | **4.1 Myr** |
-
-> 现行值与 `physical_params.md`（k₂=0.3, Q=300）一致；全部因变量按同一 3e 标度
-> 与 F = 2.6×10⁴·e² 系数统一重算。
+> 现行值（e=0.00242 历元、k₂/Q=1×10⁻³，2026-10-07 定版历元）与
+> `physical_params.md`（k₂=0.3, Q=300）一致：89 TW 历元 / 197 TW 带均值、
+> 共振潮差 ~61 m、阻尼时标 4.1 Myr；全部因变量按同一 3e 标度与
+> F = 2.6×10⁴·e² 系数统一计算。
