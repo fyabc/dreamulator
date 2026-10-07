@@ -210,7 +210,7 @@ export default function LayerDocuments({
   if (!documents?.length) return null
 
   return (
-    <div className="min-h-[600px]">
+    <div>
       {/* Mobile: TOC toggle button */}
       <button
         onClick={() => setNavOpen(!navOpen)}

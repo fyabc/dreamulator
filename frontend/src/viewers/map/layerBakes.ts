@@ -84,6 +84,11 @@ const LANDFORM_COLORS: Record<string, [number, number, number]> = {
 /** Closed inland-lake colour — light cyan, distinct from the deep ocean blue. */
 const LAKE_COLOR: [number, number, number] = hexRgb('#67e6dc')
 
+/** Frozen-lake colour — pale grey-blue for lakes whose mean annual land
+ *  temperature is below 0 °C (same criterion as the engine's seasonal-lake
+ *  freeze clamp), visually distinct from liquid lakes. */
+const FROZEN_LAKE_COLOR: [number, number, number] = [200, 225, 235]
+
 /** River channel colour — matches the former 2D SVG stroke (rgb 70,140,215). */
 const RIVER_COLOR: [number, number, number] = hexRgb('#468cd7')
 
@@ -383,10 +388,20 @@ function buildCellPalettes(
     const isOcean = cell.water_class != null
       ? cell.water_class === 'ocean'
       : cell.elevation < seaLevel
-    // Terrain thematic — hypsometric tint per cell
-    terrainThematic.set(cell.id, terrainColor(cell.elevation, isOcean))
-    // Landsea thematic — binary
-    landseaThematic.set(cell.id, isOcean ? [21, 101, 192] : [76, 175, 80])
+    // Lake surface (any water_class): rendered as water on the terrain and
+    // landsea bases, so a land-class lake no longer tints as green/brown land.
+    // Frozen lakes (mean annual temperature < 0 °C, the engine's seasonal-lake
+    // criterion) get a pale ice tint instead of the liquid-lake cyan.
+    if (cell.is_lake) {
+      const frozen = cell.temperature_C != null && cell.temperature_C < 0
+      terrainThematic.set(cell.id, frozen ? FROZEN_LAKE_COLOR : LAKE_COLOR)
+      landseaThematic.set(cell.id, frozen ? FROZEN_LAKE_COLOR : LAKE_COLOR)
+    } else {
+      // Terrain thematic — hypsometric tint per cell
+      terrainThematic.set(cell.id, terrainColor(cell.elevation, isOcean))
+      // Landsea thematic — binary
+      landseaThematic.set(cell.id, isOcean ? [21, 101, 192] : [76, 175, 80])
+    }
 
     // Köppen thematic
     const kc = cell.koppen_class

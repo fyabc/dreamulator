@@ -86,7 +86,7 @@ const COLOR_MODE_TO_GROUP: Partial<Record<ColorMode, string>> = {
   currents: 'climate',
   biomes: 'ecology',
   npp: 'ecology',
-  domesticable: 'ecology',
+  domesticable: 'civilization',
   soil: 'ecology',
   provinces: 'ecology',
   habitable: 'civilization',
@@ -119,6 +119,7 @@ const BIOME_LABELS: Record<string, string> = {
   boreal_shrubland: 'biome.boreal_shrubland',
   tundra: 'biome.tundra',
   ice: 'biome.ice',
+  lake: 'biome.lake',
   ocean: 'biome.ocean',
 }
 

@@ -28,8 +28,12 @@
     "title": "Layer Architecture",
     "forkPoint": "Fork point",
     "branchData": "Branch data",
-    "configured": "Configured",
-    "unconfigured": "Unconfigured"
+    "fresh": "Built",
+    "stale": "Stale",
+    "absent": "No data",
+    "inheritedFrom": "Layer input inherited from branch",
+    "docCount": "{{count}} docs",
+    "buildAge": "built {{age}} ago"
   },
   "branch": {
     "label": "Branch",
@@ -101,7 +105,9 @@
     "noGeologyData": "No geology data defined",
     "noGeologyLayer": "No geology layer data",
     "noClimateData": "No climate layer data",
-    "noEcologyData": "No ecology layer data"
+    "noEcologyData": "No ecology layer data",
+    "derivedData": "Engine-derived data",
+    "derivedDataHint": "Computed from the settings by the physics engines"
   },
   "field": {
     "name": "Name: ",

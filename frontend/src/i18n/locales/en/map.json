@@ -124,6 +124,7 @@
     "boreal_shrubland": "Boreal shrubland",
     "tundra": "Tundra",
     "ice": "Ice",
+    "lake": "Lake",
     "ocean": "Ocean"
   },
   "tag": {
@@ -412,6 +413,12 @@
     "scaleHint": "True scale · 1 unit = 1 AU",
     "transitionToStellar": "Switch to stellar view",
     "loadingGlobe": "Loading 3D globe..."
+  },
+  "legend": {
+    "ocean": "Ocean",
+    "land": "Land",
+    "lake": "Lake",
+    "frozenLake": "Frozen lake"
   },
   "panel": {
     "none": "None",

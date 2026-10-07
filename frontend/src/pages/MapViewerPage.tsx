@@ -17,6 +17,7 @@ import type { ColorMode } from '../viewers/map/TerrainPlane'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
+import MapLegend from '../components/map/MapLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
@@ -894,6 +895,12 @@ export default function MapViewerPage() {
                       ⛶
                     </button>
                   </div>
+                  )}
+
+                  {/* Base-map water/land legend — bottom-left, only while the
+                      terrain or landsea base map is the active main layer. */}
+                  {!cleanMode && (
+                    <MapLegend visible={activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
                   )}
                 </div>
                 {!cleanMode && (

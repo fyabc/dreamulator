@@ -124,6 +124,7 @@
     "boreal_shrubland": "北方灌丛",
     "tundra": "冻原",
     "ice": "冰原",
+    "lake": "湖泊",
     "ocean": "海洋"
   },
   "tag": {
@@ -412,6 +413,12 @@
     "scaleHint": "真实比例 · 1 单位 = 1 AU",
     "transitionToStellar": "转入星系视图",
     "loadingGlobe": "加载 3D 地球..."
+  },
+  "legend": {
+    "ocean": "海洋",
+    "land": "陆地",
+    "lake": "湖泊",
+    "frozenLake": "冰湖"
   },
   "panel": {
     "none": "无",
