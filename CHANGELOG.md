@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **nacrea design-notes 全量整理（公开可读性 + 单一现行真值）**：
+  「draw-0」更名「**10-07 定版**」（0009/附录/README/stellar/planets/
+  long_term_cycles/sky_phenomena/satellite_architecture/tidal_effects +
+  roadmap/proposal 全线统一；附录 §10 保留系综 draw 0 溯源）；0009 正文
+  重写（§2 巨型表格拆分条目、去电报体、认证数字全对齐定版实现）；
+  0001/0003 重写为现行态（0001 收敛为决策点 + 引擎渲染快照，0003 五阶段
+  形成史 + Kopparapu 现行系数 HZ 表 + 雪线 0.89 AU）；0002/0004/0005/
+  0006/0008/0010 数值与横幅刷新（Hill 球、K6/0.65 M☉、hadley 52 口径）。
+- **路线 1 天空亮度/热流残留清扫（12 文件）**：烬星 −26.21→−26.65 等、
+  本地满月 −11.5→−12.65、韵珠 −11.0→−11.5（0.34× 本地满月）、守珠
+  −8.4→−8.8、Aegis −19.6→−20.0 / 230→345 lux / 550→820× 满月、墟带光
+  μ_V 23.8→23.4（觉醒 22.4→22.0）、i_ecl 带 11.7–17.8→10.9–18.3°、
+  e 带 rms 0.0037/max 0.0084→0.0036/0.0098、热流 0.36→0.34 W/m²
+  （210→197 TW）、极值 1.85→2.50、食季锥摆带 4–10→5–9 次/年、矮行星
+  q/远日点/霜温、Sentinel 近远日点、永耀岛坐标注记——全部对齐引擎目录
+  现值与 10-07 定版认证。
+- **公开文档去 private/ 链接**：0009/附录/0010/三份 layer 文档的私有档案
+  路径清除；连珠 MC 判决（1500 地球年、37,728 次会合）方法与统计表移植
+  为 0009 附录 **§9.5**（原 private/research/2026-09-28-sky-recalc.md）。
+- **guard 台账刷新**：0001–0006 `checked_against` 指纹重打（七层全指纹），
+  `.guard-baseline.json` 按路线 1 后现值重生成——`guard check nacrea`
+  归零（此前基线停留在 0.0761 L☉ 旧口径）。tidal_effects.md 移除文内
+  变更记录表（历史归 git）。
+
 ## [0.39.0] — 2026-10-07
 
 ### Added

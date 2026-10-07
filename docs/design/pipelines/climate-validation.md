@@ -313,7 +313,7 @@ uv run python tests/validation/baselines/generate_baseline.py nacrea \
 （`climate validate --generalize`）。
 
 **与「同物理 / 第一性」原则的呼应**：泛化得分正是「同物理」的可测量形态——引擎对
-Earth（三圈环流）、LGM（冷体制）、金星/火星（极端端元）、nacrea（单圈环流）用**同一套
+Earth（三圈环流）、LGM（冷体制）、金星/火星（极端端元）、nacrea（宽 Hadley 两圈）用**同一套
 代码路径**，泛化得分衡量的是这套路径在离开地球标定域后还剩多少正确性。
 
 ---

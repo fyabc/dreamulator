@@ -1,20 +1,26 @@
 ---
-title: "单圈环流的临界不稳定性（未来丰富设定源）"
+title: "宽 Hadley 环流的临界不稳定性（未来丰富设定源）"
 type: design
 tags: [circulation, instability, baroclinic, superrotation, enrichment]
 status: proposed
 ---
 
-# 0008 · 单圈环流的临界不稳定性（未来丰富设定源）
+# 0008 · 宽 Hadley 环流的临界不稳定性（未来丰富设定源）
 
-> 记录 Nacrea 单圈环流的两个「临界不稳定性」，作为后续丰富设定的**候选来源**（看情况
-> 是否实现）。物理底座见 `docs/knowledge/climatology/atmospheric_circulation.md` §7。
+> 记录 Nacrea 宽 Hadley 环流的两个「临界不稳定性」，作为后续丰富设定的**候选来源**
+> （看情况是否实现）。物理底座见 `docs/knowledge/climatology/atmospheric_circulation.md` §7。
+>
+> **更新历史**：2026-09 初版（单圈假设，hadley_extent_deg=90）。2026-10-07 路线 1
+> GCM 定标：Hadley 外缘按 ExoPlaSim 六臂同值校准为 52°（`terrain_config.yaml`
+> hadley_extent_deg=52，极圈浅极地胞 52–90°），背景段随之改写；两个不稳定性
+> 候选的地位不变。
 
 ## 背景
 
-Nacrea Ω=0.31 Ω⊕ 是单圈环流（Hadley 胞直抵极地，`hadley_extent_deg=90`）。但单圈不是
-「干净稳定」的——它处在两个临界不稳定性的边缘，这是 Nacrea 区别于「干净单圈」的物理
-特征，可用来丰富环流/气候纹理。
+Nacrea Ω≈0.32 Ω⊕（恒星日 3.14 d）是**宽 Hadley 慢自转体制**：Hadley 胞外缘
+52°（GCM 定标值），其外为浅弱的极地胞，**没有组织化的 Ferrel 胞**——但也不是
+「干净的单圈」：它处在两个临界不稳定性的边缘，这是 Nacrea 区别于「干净宽
+Hadley」的物理特征，可用来丰富环流/气候纹理。
 
 ## ① 弱斜压不稳定（已在引擎，可进一步丰富）
 
@@ -47,8 +53,10 @@ Nacrea Ω=0.31 Ω⊕ 是单圈环流（Hadley 胞直抵极地，`hadley_extent_d
 ## 决策
 
 暂不实现，两条都留作「看情况」的丰富设定源。当前引擎的弱斜压带已足够体现「临界」。
-若未来引入简化 GCM（roadmap P3「GCM PoC 能正常跑起来」）或需更精细的环流纹理，再按需
-实现。
+GCM offline-oracle 已上线（`src/dreamulator/gcm/`，ExoPlaSim T21 harness；nacrea
+定标判决见 `docs/design/proposals/nacrea-insolation-recalibration.md` 与
+`climate-gcm-plan.md`）——未来若需更精细的环流纹理，实现前先用 GCM 输出仲裁
+参数带（本轮 hadley_extent_deg 47→52 即为 GCM 仲裁的实例）。
 
 ## 参考
 

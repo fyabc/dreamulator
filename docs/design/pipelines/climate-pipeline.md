@@ -666,7 +666,7 @@ Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上）
    过浓的根治归阶段 D W 场供给路线。按月度值等比例封顶保持季节形状。
 
 **关键设计**：ITCZ、副热带干带、极锋全部从水汽收支的 ∇·(W u) 自然涌现，**无纬度硬
-编码**——对 Earth 三圈环流与 nacrea 单圈环流（`hadley_extent=90`）同一套代码自动适配
+编码**——对 Earth 三圈环流与 nacrea 宽 Hadley 两圈体制（`hadley_extent=52`，GCM 定标）同一套代码自动适配
 （见 `scripts/climate/diagnose_wind_divergence.py`）。
 
 **区域诊断**：`scripts/climate/diagnose_monsoon_regional.py` 读已构建地图的月度数据，

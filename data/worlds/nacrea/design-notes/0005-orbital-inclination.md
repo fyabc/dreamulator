@@ -4,17 +4,24 @@ type: design
 tags: [orbital-inclination, seasons, dynamics]
 status: superseded by 0009（ε=18° 锥摆）
 checked_against:
-  astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
-  geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
+  physics: ''
+  chemistry: ''
+  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
+  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  climate: <no-yaml>
+  ecology: <no-yaml>
+  civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
 ---
 
 # 0005 · 轨道倾角 9° 的设定原因
 
-> **⚠ 部分被取代（2026-09-09）**：本文论据 3「拉普拉斯共振共面要求」随卫星共振链
-> 判死失效。9° 倾角结论不变，现行支撑 = P-B 潮汐包：早期巨撞击（Sentinel 散射期）
-> 撞出 9° 并减速 Aegis 自转至 10h；弱潮汐耗散（k₂/Q≈7×10⁻⁸）把倾角阻尼时标拉到
-> ~150–300 Gyr ≫ 系统年龄，构型为冻结化石。见 `0009-satellite-architecture.md`
-> 与 stellar.yaml Aegis 注释。
+> **⚠ 已被取代（2026-09-09 论据修订；2026-09-28 重构后 9° 设定整体作废）**：
+> 本文的「9° 倾角」结论与论据 3「拉普拉斯共振共面要求」均已失效。现行正典：
+> Aegis 自转轴倾角 **ε=18°**（早期巨撞击化石；P-B 弱耗散包 k₂/Q≈7×10⁻⁸ 把
+> 倾角阻尼时标拉到 ~150–300 Gyr ≫ 系统年龄，无需维持机制）；Nacrea 轨道面在
+> r_L 之外绕**拉普拉斯面**做 ~10 yr 锥摆，当代段 i_ecl 10.9–18.3°，长期均值
+> **14.9° = 气候层有效季节倾角**。见 `0009-satellite-architecture.md` §5 与
+> stellar.yaml Aegis 注释。本文仅作「为什么当年选 9°」的决策档案保留。
 
 ## 决策背景
 

@@ -4,23 +4,32 @@ type: design
 tags: [flare, magnetic-shielding, impact, habitability]
 status: accepted
 checked_against:
-  astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
-  geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
+  physics: ''
+  chemistry: ''
+  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
+  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  climate: <no-yaml>
+  ecology: <no-yaml>
+  civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
 ---
 
 # 0006 · 橙矮星环境下的宜居保护
 
+> **更新历史**：2026-09 初版。2026-10-07 路线 1 辐照重标定后刷新：恒星参数
+> （0.65 M☉ / K6V / 主序寿命 29.4 Gyr）与潮汐加热数字（10-07 定版当代段
+> 认证带）对齐现行正典。
+
 ## 决策背景
 
-#4 拷问两个宜居性风险：① 0.59 M☉ K8 橙矮星的耀斑是否温和、Nacrea 如何躲过早期强活动；② Aegis
+#4 拷问两个宜居性风险：① 0.65 M☉ K6 橙矮星的耀斑是否温和、Nacrea 如何躲过早期强活动；② Aegis
 吸引陨石是否抬高 Nacrea 撞击概率。本记录给出物理判定与设定依据。
 
 ## 一、耀斑活动与早期生存
 
 ### 现状（5.9 Gyr）：温和
 
-- 恒星年龄 5.9 Gyr，K8V（0.59 M☉）主序寿命数十 Gyr（引擎 stellar_derived 为准）——仍处主序早期。
-- K8 星磁活动随年龄衰减（磁制动 → 自转减慢 → 发电机减弱）。
+- 恒星年龄 5.9 Gyr，K6V（0.65 M☉）主序寿命 29.4 Gyr（引擎 stellar_derived 为准）——演化进度 20%，仍处主序早期。
+- K6 星磁活动随年龄衰减（磁制动 → 自转减慢 → 发电机减弱）。
   5.9 Gyr 时已远过「饱和活动期」（<~100 Myr），XUV 通量衰减约 2 个量级，耀斑转为偶发、低能。
 - **结论**：当前耀斑温和，不构成大气威胁。
 
@@ -31,9 +40,9 @@ checked_against:
 
 | 机制 | 物理依据 |
 |---|---|
-| **Aegis 磁层屏蔽（关键）** | Aegis 磁场 400 μT（8×木星）→ 磁层尺度数百万 km；Nacrea 轨道 724,000 km（10.1 R_Aegis）深在磁层内，恒星风与耀斑粒子被偏转 |
+| **Aegis 磁层屏蔽（关键）** | Aegis 磁场 400 μT（8×木星）→ 磁层尺度数百万 km；Nacrea 轨道 723,300 km（10.15 R_Aegis）深在磁层内，恒星风与耀斑粒子被偏转 |
 | **Nacrea 自身磁场** | 30 μT，潮汐加热维持熔融核 → 发电机效应（`coupled_magnetic.md`） |
-| **潮汐加热 → 磁场 → 保护 正反馈** | 双源泵浦（恒星四极矩本底 + 韵珠/守珠长期摄动）维持受迫 e（当代段 rms 0.0037 / max 0.0084）→ 潮汐热流带均值 0.36 W/m²（历元 89 TW）→ 熔融核 → 发电机 → 磁场贯穿地质史 |
+| **潮汐加热 → 磁场 → 保护 正反馈** | 双源泵浦（恒星四极矩本底 + 韵珠/守珠长期摄动）维持受迫 e（10-07 定版当代段认证带 rms 0.0036 / max 0.0098）→ 潮汐热流带均值 0.34 W/m²（历元 89 TW）→ 熔融核 → 发电机 → 磁场贯穿地质史 |
 
 - **结论**：磁层屏蔽 + 自身磁场 + 正反馈，使 Nacrea 在早期强活动中保留了水与大气。
 
@@ -50,7 +59,7 @@ Aegis（1.6 M_J）引力聚焦临近小天体。聚焦因子 F ≈ 1 + (v_esc/v_
 ### 但被三重机制抵消
 
 1. **Aegis 直接遮挡**：Aegis 截面积（11.2 R⊕）是 Nacrea（1.07 R⊕）的 ~110×，绝大多数聚焦体撞向 Aegis。
-2. **轨道清空**：Nacrea 希尔球（~66,800 km）数十亿年前已清空共轨碎石（`satellite_architecture.md`）。
+2. **轨道清空**：Nacrea 希尔球（~66,600 km）数十亿年前已清空共轨碎石（`satellite_architecture.md`）。
 3. **古在共振过滤 + 弹射**：Aegis 引力弹射大量彗星出内系，降低背景彗星通量。
 
 ### 净效应
@@ -67,7 +76,7 @@ Aegis（1.6 M_J）引力聚焦临近小天体。聚焦因子 F ≈ 1 + (v_esc/v_
 
 ## 结论
 
-橙矮星（K8）耀斑在 5.9 Gyr 已温和；早期大气靠 Aegis 磁层屏蔽 + Nacrea 自身磁场（潮汐加热正反馈）保留；
+橙矮星（K6）耀斑在 5.9 Gyr 已温和；早期大气靠 Aegis 磁层屏蔽 + Nacrea 自身磁场（潮汐加热正反馈）保留；
 Aegis 引力聚焦使撞击率适度抬升（~数倍），但被遮挡/清空/弹射抵消，净效应可承受——并为世界提供
 「挥发分补给 + 周期性撞击冬天」两个文明叙事钩子。
 
@@ -77,5 +86,5 @@ Aegis 引力聚焦使撞击率适度抬升（~数倍），但被遮挡/清空/�
 - 磁层屏蔽系外卫星大气：Heller & Zuluaga (2013) *magnetic shielding of exomoons*
 - 引力聚焦因子 1 + (v_esc/v_inf)²：标准行星吸积公式
 - 木星「盾 vs 吸」争论：Horner & Jones (2008, 2009)；卫星系统外推见 Heller & Pudritz (2015)
-- 潮汐加热维持磁场：`satellite_architecture.md`（带均值 210 TW / 历元 89 TW）
+- 潮汐加热维持磁场：`satellite_architecture.md`（带均值 197 TW / 历元 89 TW）
 - 现有撞击防护：`satellite_architecture.md`「三重撞击防护机制」

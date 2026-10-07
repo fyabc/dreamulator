@@ -4,19 +4,25 @@ type: design
 tags: [eccentricity, resonance, tidal-circularization]
 status: superseded by 0007
 checked_against:
-  astronomy: 00ccdbfec25dc88a9f23e5eefbaed4fce89e5048eed7a8152534bce344bc9b99
-  geological: 7a607fc4934f8f69b1a9c4b47de203c524450410611ce293b698bb511b139471
+  physics: ''
+  chemistry: ''
+  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
+  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  climate: <no-yaml>
+  ecology: <no-yaml>
+  civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
 ---
 
 # 0002 · 偏心率设定依据
 
-> **⚠ 部分被取代（2026-09-09；数字随 2026-09-28 重构更新）**：本文「Nacrea e 由
-> 1:2:4 卫星共振链泵浦维持」条目失效——卫星共振链经 REBOUND 积分判定动力学不稳定
-> （任意初相 ~90 yr 瓦解）。现行机制：**双源泵浦** = 恒星四极矩本底（~0.004–0.006）
-> + 双单体逆行捕获卫（韵珠、守珠）长期摄动，使 Nacrea e 受迫振荡（当代段认证带
-> rms 0.0055 / max 0.0123，潮汐加热带均值 0.76 W/m²，k₂/Q=1×10⁻³）。权威设定见
-> `0009-satellite-architecture.md`。行星链（Aegis–Boreal–Glacis 1:2:4）
-> 相关内容仍有效（β+ 安静模态 10 Myr 有界验证）。
+> **⚠ 部分被取代（2026-09-09；横幅数字 2026-10-07 按定版认证更新）**：本文
+> 「Nacrea e 由 1:2:4 卫星共振链泵浦维持」条目失效——卫星共振链经 REBOUND 积分
+> 判定动力学不稳定（任意初相 ~90 yr 瓦解）。现行机制：**双源泵浦** = 恒星四极矩
+> 本底（~0.004–0.006）+ 双单体逆行捕获卫（韵珠、守珠）长期摄动，使 Nacrea e
+> 受迫振荡（10-07 定版认证当代段带 rms 0.0036 / max 0.0098，潮汐加热带均值
+> 0.34 W/m²，k₂/Q=1×10⁻³）。权威设定见 `0009-satellite-architecture.md`。
+> 行星链（Aegis–Boreal–Glacis 1:2:4 周期通约）相关内容仍有效（β+ 安静模态
+> 10 Myr 有界验证，见 0003）。
 
 > Aegis 偏心率（0.005→0.03）与 Nacrea 偏心率（0.002→0.0019）已被 [0007](0007-aegis-seasonal-eccentricity.md) 取代。
 

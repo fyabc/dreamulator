@@ -200,20 +200,24 @@ u_scale = ε_u · Ω a · sin(φ_itcz_max)      # 西风（科氏偏转）
 
 ### 7.3 dreamulator 中的应用
 
-**nacrea**：Ω = 0.31 Ω⊕（周期 3.25 天，潮汐锁定于 Aegis 巨行星）。专用 GCM 模拟证实
-科氏力弱到不产生 Ferrel/极地胞——环流为**单圈 Hadley 胞直抵极地**
-（`hadley_extent_deg=90`、`polar_cell_start_deg=90`，见 `terrain_config.yaml`）。
+**nacrea**：Ω ≈ 0.32 Ω⊕（恒星自转周期 3.14 天，潮汐锁定于 Aegis 巨行星）。
+专用 GCM（ExoPlaSim T21，2026-10 路线 1 定标轮）给出 Hadley 外缘 **52.6°**
+（pCO2 450–1500 ppm 四臂同值）——引擎取 `hadley_extent_deg=52`、
+`polar_cell_start_deg=52`（`terrain_config.yaml`）：**宽 Hadley + 高纬浅极地胞
+的两圈体制，无组织化 Ferrel 胞**。
 
 | 指标 | 地球 | nacrea | 说明 |
 |------|------|--------|------|
-| Ω | 1 Ω⊕ | 0.31 Ω⊕ | 潮汐锁定 |
-| Hadley 边界 | 30° | 90°（抵极） | 单圈 |
-| Ferrel / 极地胞 | 有（30°–90°） | 无 | 单圈 |
-| 温度剖面 | 扩散 EBM | Held–Hou 四次方 | `ebm_1d=true` |
+| Ω | 1 Ω⊕ | 0.32 Ω⊕ | 潮汐锁定于巨行星 |
+| Hadley 边界 | 30° | 52°（GCM 定标） | 慢自转宽 Hadley |
+| Ferrel / 极地胞 | 有（30°–90°） | 仅浅极地胞（52°–90°），无 Ferrel | 两圈体制 |
+| 温度剖面 | 扩散 EBM | 扩散 EBM（D ∝ P_rot^0.3 自动 Ω 标度） | 同一闭合分支 |
 
-**结论**：nacrea 是单圈环流，经向热输送由翻转环流（MOC）主导，而非地球的三胞涡旋输送。
-温度剖面用 Held & Hou (1980) 四次方 T(φ)=T_mean+ΔT·(1/5−sin⁴φ)，ΔT=Ω²a²θ₀/(2gH)——
-副热带平（无冷荒漠）、极地有冰盖。
+**结论**：nacrea 是宽 Hadley 两圈体制，经向热输送仍以翻转环流（MOC）为主导、
+涡旋输送弱（§7.6）；温度闭合走扩散 EBM 分支（与地球同一套代码，Ω 标度自动）。
+Held–Hou (1980) 四次方剖面 T(φ)=T_mean+ΔT·(1/5−sin⁴φ) 仅在
+`hadley_extent_deg=90` 的单圈闭合分支使用（nacrea 已切换出去，分支保留给
+真正的抵极单圈世界）。
 
 ### 7.4 罗斯贝变形半径
 
@@ -237,8 +241,8 @@ L_d 决定了大气的"记忆长度"——小于 L_d 的结构受重力波调控
 | 洋流西边界层宽度 | ∝ L_d^(1/2) | Stommel 边界层理论 |
 
 **dreamulator 应用**：`climate_simulator.py` Step 6 的 Gaussian subtropical
-suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea（H=90°，单圈）
-→ σ=2.5°。
+suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea（H=52°，
+GCM 定标）→ σ≈3.2°。
 
 **参考资料**：
 - Vallis, G.K. (2017). *Atmospheric and Oceanic Fluid Dynamics*, ch. 5.
@@ -252,9 +256,9 @@ suppression 宽度 σ = 2.5° / sin(H)。地球（H=30°）→ σ=5°；nacrea�
 这对 Ferrel 是过高估计（慢自转时涡动应减弱而非增强）。
 **已知局限**：roadmap 3A.3a 中期计划细化 Ferrel/polar 强度标度。
 
-### 7.6 单圈环流下的涡旋活动
+### 7.6 宽 Hadley（慢自转）体制下的涡旋活动
 
-「单圈环流 = 没有涡旋」是不成立的过度简化。慢自转 GCM 的一致结论是：
+「宽 Hadley/单圈 = 没有涡旋」是不成立的过度简化。慢自转 GCM 的一致结论是：
 瞬变涡旋随 Ω 降低而减弱，但不消失；定常涡旋（驻波）的比重上升。
 Gnanaraj et al. (2025) 的水行星旋转速率扫描显示，慢自转端 Hadley 胞扩张、
 对流层变干，但斜压涡旋热通量依然可测；Hermosilla Canobra (2026) 用 Isca
