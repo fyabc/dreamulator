@@ -21,7 +21,7 @@ tags: [illumination, eclipse, albedo]
 | Aegis 满相照度（Nacrea 表面） | **{{ sky.planet_aegis.illuminance_full_w_m2 | round2 }} W/m²** | F_star × A_g × (R_p/a_m)²，A_g = 0.228 |
 | 满相 = 地球满月倍数 | **约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034) | round0 }} 倍** | {{ sky.planet_aegis.illuminance_full_w_m2 | round2 }} / 0.0034 |
 | 半相（90°）= 地球满月倍数 | **约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 0.318) | round0 }} 倍** | × 朗伯相位函数 Φ(90°)=0.318 |
-| 极细相（170°）= 地球满月倍数 | **约 0.3 倍** | × Φ(170°)≈5.7×10⁻⁴ |
+| 极细相（170°）= 地球满月倍数 | **约 {{ (sky.planet_aegis.illuminance_full_w_m2 / 0.0034 * 5.7e-4) | round(1) }} 倍** | × Φ(170°)≈5.7×10⁻⁴ |
 | Aegis 视直径 | **{{ sky.planet_aegis.angular_diameter_deg | round2 }}°** | 2 arctan(R_p/a_m)；地球月球仅 0.52°，面积比 ~{{ ((sky.planet_aegis.angular_diameter_deg / 0.52) ** 2) | round0 }} 倍 |
 | 满相可见光照度（估算） | **~111 lux** | 民用暮光 ~10 lux；足以投射清晰阴影，支持微弱光合作用 |
 

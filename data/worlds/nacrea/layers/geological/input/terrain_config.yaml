@@ -24,7 +24,7 @@ planet:
   seed: 42
   radius_km: 6817.0            # 1.07 R_earth
   gravity_m_s2: 10.28          # 1.05g (G*1.2M_earth/(1.07R_earth)^2)
-  rotation_period_days: 3.147   # 潮汐锁定于 Aegis 巨行星
+  rotation_period_days: 3.138   # 潮汐锁定于 Aegis 巨行星（= 公转周期，与 stellar.yaml 权威值对齐）
 
 # ── CVT 网格 + 地形合成 ───────────────────────────────────────────────────────
 terrain:
@@ -150,7 +150,7 @@ tidal:
   spreading_ratio: 0.4            # 半扩张 ≈ 0.4 × 最快板块速度
 
 # ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────
-# Nacrea 自转 Ω=0.318 Ω⊕（75.5h）：科氏力弱 → 经向热输送更强 →
+# Nacrea 自转 Ω=0.319 Ω⊕（75.3h）：科氏力弱 → 经向热输送更强 →
 # 赤道-极地温差小于地球的 40°C。环流为两圈体制：Hadley 胞 0–52° +
 # 涡旋驱动的间接胞 52–90°（Ferrel 型、抵极，无极地胞）——GCM 质量流函数
 # 符号翻转纬度实测（ExoPlaSim T21，2026-10-07；与 Kaspi & Showman 2015 的
@@ -183,7 +183,7 @@ climate:
   # Sub-Aegis hemisphere warming: tidally-locked to gas giant → the
   # sub-Aegis point receives Aegis IR + reflected starlight
   # E_sub = (A_g·F_star + σT_A⁴)·(R_p/d)² ≈ (427+189)×0.0102 ≈ 6.3 W/m²
-  # （A_g=0.34、F_star@Aegis=1255 W/m²、T_A=240.2 K、d=724 000 km ≈ 10.1 R_p；
+  # （A_g=0.34、F_star@Aegis=1255 W/m²、T_A=240.2 K、d=723 300 km ≈ 10.15 R_p；
   # Heller & Barnes 2013 框架——比 ~270–300 W/m² 失控温室阈低两个量级，即
   # 老年冷巨行星的 modest 辐照体制）。向星半球均值 ≈3.1 W/m²、全球均值
   # ≈1.56 W/m²。局地响应被侧向输送阻尼（λ_local ≈ B_eff + 2D ≈ 3.5 W/m²K）→

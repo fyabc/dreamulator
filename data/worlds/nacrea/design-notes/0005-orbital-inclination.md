@@ -6,8 +6,8 @@ status: superseded by 0009（ε=18° 锥摆）
 checked_against:
   physics: ''
   chemistry: ''
-  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
-  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  astronomy: 3890f2e5604b863494ad24d750cd7e7f059c805f9376f70d7825ca1c5a440db9
+  geological: 217417b9ecf5de229c6823466dd4554c1e3eb2394cd6b98c7715283dd23c73da
   climate: <no-yaml>
   ecology: <no-yaml>
   civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
