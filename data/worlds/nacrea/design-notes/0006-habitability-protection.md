@@ -6,8 +6,8 @@ status: accepted
 checked_against:
   physics: ''
   chemistry: ''
-  astronomy: 1c8fc65502dc0d897f3aa36b38bcf1a5b3e62415c7c803b8d70bc4e703861465
-  geological: 93cd93dd10252aa486cf594fcc8f6c8180188434a2a74157c76b10f3a95175e7
+  astronomy: 3890f2e5604b863494ad24d750cd7e7f059c805f9376f70d7825ca1c5a440db9
+  geological: 217417b9ecf5de229c6823466dd4554c1e3eb2394cd6b98c7715283dd23c73da
   climate: <no-yaml>
   ecology: <no-yaml>
   civilization: 9ebb3179aacbe9b1db82d2bfec37a16c4582d43f20bc56c3c7463f5f0f3243d5
@@ -40,7 +40,7 @@ checked_against:
 
 | 机制 | 物理依据 |
 |---|---|
-| **Aegis 磁层屏蔽（关键）** | Aegis 磁场 400 μT（8×木星）→ 磁层尺度数百万 km；Nacrea 轨道 723,300 km（10.15 R_Aegis）深在磁层内，恒星风与耀斑粒子被偏转 |
+| **Aegis 磁层屏蔽（关键）** | Aegis 表面赤道磁场 400 μT（木星级）→ 磁层尺度数百万 km；Nacrea 轨道 723,300 km（10.15 R_Aegis）深在磁层内，恒星风与耀斑粒子被偏转 |
 | **Nacrea 自身磁场** | 30 μT，潮汐加热维持熔融核 → 发电机效应（`coupled_magnetic.md`） |
 | **潮汐加热 → 磁场 → 保护 正反馈** | 双源泵浦（恒星四极矩本底 + 韵珠/守珠长期摄动）维持受迫 e（10-07 定版当代段认证带 rms 0.0036 / max 0.0098）→ 潮汐热流带均值 0.34 W/m²（历元 89 TW）→ 熔融核 → 发电机 → 磁场贯穿地质史 |
 

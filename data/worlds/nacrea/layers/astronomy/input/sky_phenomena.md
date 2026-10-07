@@ -56,7 +56,7 @@ $R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.ra
 | **视直径** | **{{ sky.star_ignis.angular_diameter_deg | round2 }}°（{{ (sky.star_ignis.angular_diameter_deg * 60) | round0 }} 角分）** | 地球看太阳 0.53°；烬星**宽约 {{ (sky.star_ignis.angular_diameter_deg / 0.53) | round1 }} 倍** |
 | **视星等** | **{{ sky.star_ignis.apparent_magnitude | round2 }}** | 地球看太阳 −26.74；仅暗 {{ (sky.star_ignis.apparent_magnitude + 26.74) | round2 }} 等 |
 
-直观感受：烬星是一枚橙红色的大圆盘，面积约太阳 {{ ((sky.star_ignis.angular_diameter_deg / 0.53) ** 2) | round1 }} 倍，但因 K8 表面亮度低，
+直观感受：烬星是一枚橙红色的大圆盘，面积约太阳 {{ ((sky.star_ignis.angular_diameter_deg / 0.53) ** 2) | round1 }} 倍，但因 K6 表面亮度低，
 总视觉亮度与地球的太阳几乎相当。
 
 ## 2. 巨神星（Aegis，气态巨行星）
@@ -94,8 +94,8 @@ $R={{ entities.star_ignis.radius_sol | round(3) }}\,R_\odot={{ sky.star_ignis.ra
 两者为**互相独立的单体逆行捕获卫**（非共振、非绑定——动力学依据见
 satellite_architecture.md 与 design-notes/0009），从珠母星看是两颗一暗红
 一灰蓝、会"游走"的月亮。**两珠轨道面不共面**：双双绕各自的**逆行拉普拉斯面**
-有界进动（r_L 外侧平衡面 = 拉普拉斯面而非赤道面；i_ecl 为准不变量——韵珠认证带
-166.2–174.5°、守珠 168.1–171.2°，i_eq 大幅锥摆），互倾角 0.2–23.9°（均 12.7°）
+有界进动（r_L 外侧平衡面 = 拉普拉斯面而非赤道面；i_ecl 为准不变量——韵珠 i_ecl
+长期范围 166.2–174.5°、守珠 168.1–171.2°，i_eq 大幅锥摆），互倾角 0.2–23.9°（均 12.7°）
 慢拍频——两珠在天球上沿**不同的行迹带**游走，大部分时间彼此远离（会合事件
 口径 p50 相距 7.9°，仅 1% 达盘缘相切）。二者恒近满相：同轨共转天体互看的
 相位角 ≤3.4°（Λ 满相亮度即实际亮度）。
@@ -123,7 +123,7 @@ design-notes/0009 附录 §9.5；见 §6 #4/#7）。
 
 | 行星 | 位置 | 视直径 | 最大距角 / 冲日 | 视星等 | 特殊现象 |
 |------|:---:|--------|----------------|:---:|------|
-| **焦星 Ember** | 内 | {{ sky.planet_ember.angular_diameter_arcmin | round1 }} 角分 | 距角 {{ sky.planet_ember.elongation_deg | round1 }}° | **{{ sky.planet_ember.apparent_magnitude_elongation | round1 }}** | 类金星大距，仅晨昏可见 |
+| **焦星 Ember** | 内 | {{ sky.planet_ember.angular_diameter_arcmin | round1 }} 角分 | 距角 {{ sky.planet_ember.elongation_deg | round1 }}° | **{{ sky.planet_ember.apparent_magnitude_elongation | round1 }}** | 内行星大距，仅晨昏可见 |
 | **鼎星 Crucible** | 内 | {{ sky.planet_crucible.angular_diameter_arcmin | round1 }} 角分 | 距角 {{ sky.planet_crucible.elongation_deg | round1 }}° | **{{ sky.planet_crucible.apparent_magnitude_elongation | round1 }}** | 最亮的"晨星/昏星" |
 | **沧星 Boreal** | 外 | {{ sky.planet_boreal.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_boreal.distance_au_opposition | round2 }} AU | **{{ sky.planet_boreal.apparent_magnitude_opposition | round1 }}** | 冰蓝巨盘，肉眼可见圆面 |
 | **霰星 Glacis** | 外 | {{ sky.planet_glacis.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_glacis.distance_au_opposition | round2 }} AU | **{{ sky.planet_glacis.apparent_magnitude_opposition | round1 }}** | 深青色亮点 |
@@ -175,8 +175,7 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 | 11 | **墟带光**（Glacis 外碎片带的黄道漫射光带，16° 宽绕天一周；最贴烬星处也有 72° 距角 → 整夜可见不被晨昏淹没） | 常驻（基线 μ_V≈23.4 幽带，背星区极暗夜肉眼边缘可辨）；**墟带觉醒**（带内矮行星级碰撞 → f≈1×10⁻⁷，μ_V≈22.0 肉眼清晰带，持续几十年~百年）一代人一次 | ★★★★ |
 | 12 | **食夜现墟带**（向星区唯一暗夜窗口：全食中烬星与满相 Aegis 双灭，墟带光与完整星空在极光幕布间隙显现） | 食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍） | ★★★★ 仪式级天象 |
 | 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠距巨神星角距 ≤1.3°，始终嵌于光带内；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
-| 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.35 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
-| 15 | **韵珠远行**（远期：10-07 定版实现 ~2.23 万年内韵珠 e 无界增长 → 弹射出系；死前 ~6 千年珠母星潮汐增温与韵珠自身亮化前兆可察；叙事豁免下双珠与文明长期相伴） | 一次性（末世级） | ★★★★★ 可预报末世天象——先知级天体力学叙事 |
+| 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.365 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
 
 > **两处几何修正**：
 > 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（{{ sky.planet_aegis.distance_km | round0 }} km），韵珠/守珠轨道

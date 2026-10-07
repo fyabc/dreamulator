@@ -10,7 +10,7 @@ date: 2026-09-28
 
 > **更新历史**：2026-09-28 正典化（卫星架构重构终裁数字、墟带存活判决回填）。
 > 2026-10-07 路线 1 辐照重标定：Aegis 亮度/照度、墟带光档位、食季频率与
-> 视差基线对齐现行引擎目录值与 10-07 定版认证带。
+> 视差基线对齐现行引擎目录值与 10-07 定版数值审计带。
 
 本文回答两个问题：珠母星（Nacrea）的天空环境对天文观测有多友好，以及从这颗
 卫星上发展航天要跨过哪些坎。结论先行：**墟带光只是第三梯队因素；真正塑造
@@ -66,7 +66,7 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 2. **视差基线短**：Nacrea 绕 Ignis 的轨道半径只有 0.365 AU，三角视差的基线
    直径 0.73 AU（地球是 2 AU）——用几何法测恒星距离难约 3 倍，距离阶梯更早被迫
    依赖标准烛光与分光视差。小补偿：100 天的「年」让视差周期采样快 3.65 倍。
-3. **射电环境**：Aegis 的千米波射电爆发（木星系 DAM 类比）+ 磁层等离子体
+3. **射电环境**：Aegis 的千米波射电爆发（磁层电子回旋机制）+ 磁层等离子体
    让向星区的低频射电天文不可行；背星区因 Nacrea 本体遮挡（半径 6817 km，
    对米—千米波是干净掩体）而成为唯一射电净土。电离层对 ~10 MHz 以下全行星
    封死——超长波天文只能去守珠背面或墟带。
@@ -80,10 +80,10 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 **反向清单（Nacrea 天文学的先天优势）**：
 
 - **裸眼可见的轨道层级**：韵珠（近合 {{ (sky.satellite_cadence.angular_diameter_deg_near * 60) | round0 }}′，{{ sky.satellite_cadence.apparent_magnitude_full | round1 }} 等）与守珠（近合 {{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }}′，
-  {{ sky.satellite_vigil.apparent_magnitude_full | round1 }} 等）明显绕 Aegis 运行——地球需要望远镜才看到的「伽利略证据」，
-  Nacrea 天天挂在天上。卫星/层级/引力概念的发展可以早数千年。
+  {{ sky.satellite_vigil.apparent_magnitude_full | round1 }} 等）明显绕 Aegis 运行——轨道层级证据肉眼天天可见，
+  无需望远镜。卫星/层级/引力概念的发展可以早数千年。
 - **高频食象与掩食**：食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 天（会合拍）一次食、双珠互掩、双珠掩入 Aegis——
-  短周期、强规律、肉眼可见，历法与天体力学的「巴比伦加速器」。
+  短周期、强规律、肉眼可见，是历法与天体力学发展的强加速器。
 - **快节奏的天**：{{ entities.planet_aegis.period_days | round0 }} 天的年 + {{ entities.satellite_nacrea.solar_day_days | round(2) }} 天的太阳日，一代观测者能积累的模式
   重复次数是地球的几十倍。
 - **Aegis 本身就是一颗可研究的行星**：云带 {{ entities.planet_aegis.rotation_period_days | hours | round0 }} 小时自转肉眼可见、双珠影子
@@ -96,8 +96,8 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
    处脱离 Aegis 所需的 {{ (0.4142 * sky.eclipse.orbit_speed_kmh / 3600) | round(1) }}；两者平方和开根）。对比地球表面脱离约 11.2 km/s
    ——只贵两成。想用 Aegis 近旁的奥伯特效应进一步省燃料，就要俯冲进辐射带
    内缘——省 Δv 与保电子设备二选一。
-2. **辐射环境（第一阻碍）**：Nacrea 位于 {{ (sky.planet_aegis.distance_km / entities.planet_aegis.radius_km) | round(1) }} 个 Aegis 半径处——类木辐射带
-   强度分布的外缘（木卫一在 5.9 R_J 的温和版）。后果：本土低轨道航天器从
+2. **辐射环境（第一阻碍）**：Nacrea 位于 {{ (sky.planet_aegis.distance_km / entities.planet_aegis.radius_km) | round(1) }} 个 Aegis 半径处——巨行星辐射带
+   强度分布的外缘，环境相对温和但持续。后果：本土低轨道航天器从
    第一天就需要抗辐照设计（他们的航天电子天生 rad-hard，这反而成为日后
    深空任务的技术优势）；极轨叠加 Nacrea 自身极光带的剂量；食季 = 周期性
    等离子体充电风暴，发射窗口与在轨操作要避开食季相位；出港航线要挑
@@ -140,13 +140,13 @@ Nacrea 天文与航天命运的，是头顶那颗巨行星 Aegis**——它同�
 
 ## 5. 依赖状态
 
-- 墟带存在性与带缘位置：**已判决**——主带 1.4–2.7 AU 数值验证 100% 存活
+- 墟带存在性与带缘位置：**已数值验证**——主带 1.4–2.7 AU 100% 存活
   （0.3 Myr），详见 design-notes/0010；
-- 墟带亮度档位：**已裁决** f=3×10⁻⁸ 基线档（觉醒事件保留为叙事杠杆）；
-- ε=18 锥摆几何下的食季频率：**已判决**（1500 地球年重算，方法与统计见
+- 墟带亮度档位：**已定档** f=3×10⁻⁸ 基线档（觉醒事件保留为叙事杠杆）；
+- ε=18 锥摆几何下的食季频率：**已定案**（1500 地球年重算，方法与统计见
   design-notes/0009 附录 §9.5）——全食 ~6 次/年（带 5–9，锥摆十年轮转）、全食最长
   2.0 h/全程 2.45 h、食季间隔 ~48 d（每岁两季）、季内会合拍 3.24 d；连珠分级
   15′/掩食/5′/双掩/双掩大连珠 = 2.1/4.1/6.4 年/2.7 次年/~1500 年；
-- 双珠视直径/星等：**已按终选架构（包 A）模板化**——韵珠近合 {{ (sky.satellite_cadence.angular_diameter_deg_near * 60) | round0 }}′/{{ sky.satellite_cadence.apparent_magnitude_full | round1 }}，
+- 双珠视直径/星等：**已模板化（随引擎目录渲染）**——韵珠近合 {{ (sky.satellite_cadence.angular_diameter_deg_near * 60) | round0 }}′/{{ sky.satellite_cadence.apparent_magnitude_full | round1 }}，
   守珠近合 {{ (sky.satellite_vigil.angular_diameter_deg_near * 60) | round(1) }}′/{{ sky.satellite_vigil.apparent_magnitude_full | round1 }}，会合周期 {{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_cadence.period_days)) | round(2) }}/{{ (1/(1/entities.satellite_nacrea.period_days - 1/entities.satellite_vigil.period_days)) | round(2) }}/{{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 天；
 - 云量与台址气候：以重建后的气候产品为准（重建进行中）。

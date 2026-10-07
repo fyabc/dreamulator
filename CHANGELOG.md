@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **design-notes/0011 文明层地球对比框架（档案）**：作者裁决（2026-10-07）
+  文明层对外设定不再使用「地球 vs Nacrea」并排对比框架——四篇对外文档
+  （space_age / scientific_enlightenment / coupled_magnetic /
+  civilization_divergence）的对比列移入 0011 存档，对外只留世界内叙述与
+  单位参照。climate_portrait 对比列随 Phase 2 重生成迁入。
+- **docs/design/audit/wave5-external-canon-audit.md**：对外设定文案审计
+  （豁免叙事成文位置 / 类比词 / 数值一致性 / 电报体）完整台账与裁决记录。
+- **Boreal 卫星 Umbra 升级为潜在宜居冰卫星**（作者裁决 2026-10-07）：
+  受迫偏心率 e=0.010（与 Frostine 2:1 共振维持）→ 潮汐加热 ~0.1 W/m²
+  （Enceladus 级）→ 全球冰壳 + 冰下海洋 + 冰火山 + 冰裂谷；几何判决
+  0.121 r_H（稳定限 0.48）、4.7× 洛希；Boreal 心 WHFast 10 Myr 三案验证
+  （含 β+ 链 e 带上缘 worst case）。
+
 ### Changed
 
 - **nacrea design-notes 全量整理（公开可读性 + 单一现行真值）**：
@@ -32,6 +47,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `.guard-baseline.json` 按路线 1 后现值重生成——`guard check nacrea`
   归零（此前基线停留在 0.0761 L☉ 旧口径）。tidal_effects.md 移除文内
   变更记录表（历史归 git）。
+- **对外设定文案审计轮（wave5，作者四项裁决全部执行）**：① 文明层「地球 vs
+  Nacrea」对比框架移 design-notes/0011，四篇对外文档只留世界内叙述（历史
+  专名类比「哥白尼革命/伽利略证据/巴比伦加速器」同步清除）；② Aegis 磁场
+  400 μT 为定值，错误表述「8× 木星」全库删除；③ ×Io/×满月单位倍率按
+  单位参照保留；④ 0008 §① 按 GCM Hadley 52° 设定重算（L_R≈2440 km、
+  a/L_R≈2.8、两圈体制图景）。另：豁免叙事（韵珠弹射/死期/末世天象）依
+  裁决全部退出对外设定、仅存设计笔记；数值一致性修复 ~45 处 + 模板化 8 处
+  （K6/[Fe/H]−0.19/φ82.7°/Ember 凌星 4.9 d/食频 6 次/75.3h 潮汐钟与 77.8h
+  太阳日双口径/coupled_magnetic 磁倾角 18° 与背景场 0.384 μT/space_age
+  全篇数值）；**terrain_config `rotation_period_days` 3.147→3.138**（与
+  stellar.yaml 权威值统一；气候产物 0.3% Ω 差随 Phase 2 重建归一）。
+  划分规范入根 CLAUDE.md + memory；台账 = wave5-external-canon-audit.md。
 
 ## [0.39.0] — 2026-10-07
 

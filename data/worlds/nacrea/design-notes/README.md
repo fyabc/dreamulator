@@ -32,3 +32,4 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 | [0008](0008-circulation-critical-instabilities.md) | 宽 Hadley 环流的临界不稳定性（弱斜压 + 赤道超旋转，未来丰富设定源） | proposed |
 | [0009](0009-satellite-architecture.md) | Aegis 卫星架构：β+ 安静链态 × FJ 近平衡双珠 × ε=18 锥摆 × Q=300 × 10-07 定版纪元态（实验矩阵见[附录](0009-appendix-experiment-log.md) §8–§10） | certified-current |
 | [0010](0010-transglacis-system.md) | 墟带系统：Glacis 外碎片带 + 散射盘 + 奥尔特 + 三矮行星（璞/皚/赭）+ 墟带光 | current |
+| [0011](0011-civilization-earth-comparison.md) | 文明层推演的地球对比框架（档案；作者裁决 2026-10-07：对外文档只留世界内叙述） | accepted |

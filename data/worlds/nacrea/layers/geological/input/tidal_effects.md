@@ -6,8 +6,8 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 
 # 潮汐效应
 
-> 偏心率历元 **{{ entities.satellite_nacrea.eccentricity }}**（认证轨迹
-> 纪元平移态的受迫带冷谷快照；t₁ 见 stellar.yaml 纪元约定）；耗散因子取 `physical_params.md`（k₂=0.3, Q=300）→
+> 偏心率历元 **{{ entities.satellite_nacrea.eccentricity }}**（轨道历元的
+> 受迫带冷谷快照；t₁ 见 stellar.yaml 纪元约定）；耗散因子取 `physical_params.md`（k₂=0.3, Q=300）→
 > k₂/Q = **1×10⁻³**（「非共振大洋 + 窄陆架」组合，选值依据见 physical_params.md）。
 > 加热系数 **F = 2.6×10⁴·e² W/m²**；泵浦归因为**双源**：恒星四极矩本底
 > （~0.004–0.006）+ 双珠长期摄动（coef=1.35×10⁻³）。
@@ -55,7 +55,7 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 | 固体潮振幅（峰谷差） | **{{ (1447*3*entities.satellite_nacrea.eccentricity) | round(1) }} m（{{ (2*1447*3*entities.satellite_nacrea.eccentricity) | round(1) }} m）** | h₂·Z·3e = 1447 × {{ (3*entities.satellite_nacrea.eccentricity) | round(5) }} |
 | 海洋平衡潮振幅（峰谷差） | **{{ (1688*3*entities.satellite_nacrea.eccentricity) | round(1) }} m（{{ (2*1688*3*entities.satellite_nacrea.eccentricity) | round(1) }} m）** | (1+k₂−h₂)·Z·3e = 1688 × {{ (3*entities.satellite_nacrea.eccentricity) | round(5) }} |
 | 海洋固有周期 | 58.7 h | 2πR/√(gH) = 2π·6.817e6 / 202.8 |
-| 共振放大系数 | **2.5×** | 1/(1−(58.7/75.5)²)，弱阻尼 |
+| 共振放大系数 | **2.5×** | 1/(1−(58.7/75.3)²)，弱阻尼 |
 | **共振潮差（峰谷差）** | **~{{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m** | 峰谷平衡潮 × 2.5 |
 
 > **3e 因子的物理含义**：径向潮（bulge "呼吸"）幅度 ∝ r⁻³，r = a(1±e) → 分数变化 3e，
@@ -79,8 +79,8 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 > 2.50 W/m²（0.89×Io）为百年级短暂尖峰，500-yr 平滑持续脉冲占空 0%
 > （平滑 p95 仅 0.77）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
 > 泵浦为**双源**：恒星四极矩本底（0.365 AU 强场，~0.004–0.006）+ 韵珠/守珠
-> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段认证带 rms 0.0036 / max 0.0098
-> （10-07 定版实现 30 kyr 认证；详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
+> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段长期摆动带 rms 0.0036 / max 0.0098
+> （10-07 定版数值审计；详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
 
 ## 因变量 — Q 敏感性
 
@@ -100,8 +100,8 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 
 ## 因变量 — 大潮相位漂移
 
-Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**随时间持续漂移**（此前文档
-误认为"潮汐周期 = 昼夜周期 = 3.147 d 且相位可固定"，已更正）：
+Nacrea 的潮汐周期（恒星自转 = 公转，3.138 d）与昼夜周期（太阳日，3.24 d）
+**并不完全同步**，二者相位差**随时间持续漂移**：
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
@@ -132,7 +132,7 @@ Nacrea 的潮汐周期与昼夜周期**并不完全同步**，二者相位差**�
 
 **整体潮汐规律**：
 
-1. **主潮**：Aegis 偏心率潮，周期 3.147 d，占 ~97% 动态潮汐。
+1. **主潮**：Aegis 偏心率潮，周期 3.138 d，占 ~97% 动态潮汐。
 2. **极弱 spring/neap（大潮/小潮）**：外天体叠加仅 ±3.0% 调制，潮高 spring/neap 比 ≈ 1.06。
    与地球不同（太阳≈月球 46%，spring/neap 可达 ~2.7×），Nacrea 的大潮/小潮差异**极弱**。
 3. **相位漂移拍**：潮汐峰 vs 正午以 100 d 周期缓慢漂移（见上节）。
