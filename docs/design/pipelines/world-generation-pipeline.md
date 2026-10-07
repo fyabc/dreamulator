@@ -30,8 +30,8 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 | `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py` |
 | `GeologicalEngine` | geological | astronomy | `maps/{planet}/`（cvt_mesh.json、elevation.png、plates.json、features.json、图层导出） | [geological-pipeline.md](geological-pipeline.md) |
 | `ClimateEngine` | climate | astronomy, geological | 温度/降水/Köppen/风/洋流/月度场，写回 mesh | [climate-pipeline.md](climate-pipeline.md) |
-| `EcologyEngine` | ecology | climate, geological | 群系/NPP/可驯化/土纲/生物地理省图层 | 引擎已实现；参考暂住 [ecology-layer.md](../proposals/ecology-layer.md)，`pipelines/ecology-pipeline.md` 待补写（roadmap §七-2） |
-| `CivilizationEngine` | civilization | ecology, climate, geological | 文明层 derived（消费 mesh 上的气候/生态字段） | [civilization-layer.md](../proposals/civilization-layer.md) |
+| `EcologyEngine` | ecology | climate, geological | 群系/NPP/可驯化/土纲/生物地理省图层 | [ecology-pipeline.md](ecology-pipeline.md)；设计动机见 [ecology-layer.md](../proposals/ecology-layer.md) |
+| `CivilizationEngine` | civilization | ecology, climate, geological | 文明层 derived（消费 mesh 上的气候/生态字段） | [civilization-pipeline.md](civilization-pipeline.md)；Phase 3C 半结构化设计见 [civilization-layer.md](../proposals/civilization-layer.md) |
 
 **地形管线 8 相位**（`GeologicalEngine` 内部，`map/terrain_pipeline.py:184-469`，
 配置 = `terrain_config.yaml`；每相位有内容指纹缓存，详见 geological-pipeline）：

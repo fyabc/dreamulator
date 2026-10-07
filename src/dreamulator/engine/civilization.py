@@ -23,6 +23,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.habitability import (
     agriculture_score,
@@ -33,6 +35,7 @@ from dreamulator.engine.habitability import (
 from dreamulator.engine.physical_inputs import load_planet_for_engine
 from dreamulator.engine.seed_discovery import discover_seed_candidates
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
+from dreamulator.map.water_bodies import resolve_land_mask
 from dreamulator.models.layers import Layer
 
 if TYPE_CHECKING:
@@ -41,6 +44,26 @@ if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_near_freshwater(mesh: CVTMesh, is_land: np.ndarray, is_lake: np.ndarray) -> np.ndarray:
+    """Per-cell flag: land cell adjacent to at least one lake cell.
+
+    The freshwater bonus covers lakes of any ``water_class`` — a small lake
+    (``water_class == "land"``) produces no coastline (the climate BFS uses
+    the land mask), so without this flag its shore would get no water-access
+    signal at all; a large inland sea (``water_class == "ocean"``) already
+    reads as coastal, and the bonus simply adds the freshwater signal on top.
+    """
+    id_to_index = {c.id: i for i, c in enumerate(mesh.cells)}
+    near = np.zeros(mesh.num_cells, dtype=bool)
+    for i, cell in enumerate(mesh.cells):
+        if is_lake[i]:
+            for nid in cell.neighbors:
+                j = id_to_index.get(nid)
+                if j is not None and is_land[j] and not is_lake[j]:
+                    near[j] = True
+    return near
 
 
 class CivilizationEngine(BaseEngine):
@@ -132,8 +155,15 @@ class CivilizationEngine(BaseEngine):
             "neither": 0,
         }
         n_land = 0
-        for cell in mesh.cells:
-            is_ocean = cell.elevation < 0.0
+        # Authoritative land/ocean split (water_class, connectivity fallback)
+        # — never a bare elevation sign.  Lake cells are water surface: no
+        # settlement, no agriculture (their shores get the freshwater bonus
+        # below, but the lake cell itself is uninhabitable).
+        is_land_arr = resolve_land_mask(mesh.cells)
+        is_lake_arr = np.array([c.is_lake for c in mesh.cells], dtype=bool)
+        near_freshwater = _compute_near_freshwater(mesh, is_land_arr, is_lake_arr)
+        for i, cell in enumerate(mesh.cells):
+            is_ocean = not is_land_arr[i] or is_lake_arr[i]
             if not is_ocean:
                 n_land += 1
 
@@ -153,6 +183,7 @@ class CivilizationEngine(BaseEngine):
                 temperature_c=cell.temperature_C,
                 precipitation_mm=cell.precipitation_mm,
                 is_ocean=is_ocean,
+                near_freshwater=near_freshwater[i],
             )
             cell.agriculture_score = agriculture_score(
                 temperature_hottest_month_c=cell.temperature_hottest_month_C,

@@ -70,6 +70,7 @@ from dreamulator.engine.monsoon_circulation import (
     pressure_anomaly_monthly,
 )
 from dreamulator.engine.stellar_physics import solar_day_days
+from dreamulator.map.water_bodies import resolve_land_mask
 
 if TYPE_CHECKING:
     from .models import CVTMesh, VoronoiCell
@@ -204,11 +205,7 @@ def simulate_climate(
     # would misclassify endorheic basins below sea level (Turpan −154 m,
     # Qattara, Afar, Death Valley) as ocean.  Fall back to connectivity if
     # water_class is unset (legacy mesh with no water_class written).
-    is_land = np.array([c.water_class == "land" for c in mesh.cells], dtype=bool)
-    if not is_land.any():
-        from dreamulator.map.water_bodies import compute_land_mask
-
-        is_land = compute_land_mask(mesh.cells, config.sea_level_offset_m)
+    is_land = resolve_land_mask(mesh.cells, config.sea_level_offset_m)
     is_ocean = ~is_land
     # Inland lakes that are ocean-like in size (Caspian, Great Lakes, nacrea's
     # endorheic seas) are ``water_class == "ocean"`` but *not* the open ocean:

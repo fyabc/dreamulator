@@ -269,6 +269,35 @@ def compute_land_mask(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> np.
     return ~ocean
 
 
+def resolve_land_mask(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> np.ndarray:
+    """Authoritative land mask for downstream engines (ecology / civilization).
+
+    ``water_class`` is the authoritative land/ocean split (written by the
+    terrain pipeline or the GSHHG importer), but its model default is
+    ``"ocean"`` — a mesh that was never classified deserialises as all-ocean.
+    This helper reads ``water_class`` when any cell is marked land and falls
+    back to connectivity (:func:`compute_land_mask`) for legacy meshes.
+
+    Downstream engines must use this (or the pre-computed mask) instead of a
+    bare ``elevation < 0`` test, which misclassifies below-sea-level land
+    (Turpan) as ocean and lakes as either; and instead of ``crust_type``,
+    which is the *plate* split (continental / oceanic / transitional), not the
+    surface water split.
+
+    Args:
+        cells: All VoronoiCell objects (needs ``neighbors`` for the fallback).
+        sea_level_m: Sea-level offset (from TerrainPipelineConfig).
+
+    Returns:
+        Boolean land mask, shape (N,).  True = land (incl. small lakes and
+        dry below-sea-level basins), False = ocean (incl. large inland seas).
+    """
+    is_land = np.array([c.water_class == "land" for c in cells], dtype=bool)
+    if not is_land.any():
+        is_land = compute_land_mask(cells, sea_level_m)
+    return is_land
+
+
 def upgrade_large_endorheic_lakes(cells: list[VoronoiCell], sea_level_m: float = 0.0) -> int:
     """Reclassify large endorheic lakes as ocean-like (Caspian analogues).
 

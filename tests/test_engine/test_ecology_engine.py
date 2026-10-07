@@ -8,7 +8,12 @@ from dreamulator.map.models import CVTMesh, VoronoiCell
 
 
 def _build_mesh_with_climate() -> CVTMesh:
-    """Four-cell mesh: two adjacent land cells (forest + grassland) + two ocean."""
+    """Six-cell mesh: two land, one lake (land-class), three ocean.
+
+    water_class is written explicitly — the authoritative water split — so the
+    lake cell (water_class="land" + is_lake=True, elevation below sea level)
+    exercises the inland-water semantics that a bare elevation sign misses.
+    """
     cells = [
         VoronoiCell(
             id=0,
@@ -16,6 +21,7 @@ def _build_mesh_with_climate() -> CVTMesh:
             lat=10.0,
             elevation=200.0,
             crust_type="continental",
+            water_class="land",
             temperature_C=12.0,
             precipitation_mm=800.0,
             neighbors=[1, 3],
@@ -26,6 +32,7 @@ def _build_mesh_with_climate() -> CVTMesh:
             lat=10.0,
             elevation=100.0,
             crust_type="continental",
+            water_class="land",
             temperature_C=8.0,
             precipitation_mm=500.0,
             neighbors=[0, 2],
@@ -34,10 +41,12 @@ def _build_mesh_with_climate() -> CVTMesh:
             id=2,
             lon=20.0,
             lat=10.0,
-            elevation=-500.0,
-            crust_type="oceanic",
-            temperature_C=15.0,
-            precipitation_mm=1000.0,
+            elevation=-50.0,
+            crust_type="continental",
+            water_class="land",
+            is_lake=True,
+            temperature_C=10.0,
+            precipitation_mm=600.0,
             neighbors=[1, 3],
         ),
         VoronoiCell(
@@ -46,6 +55,7 @@ def _build_mesh_with_climate() -> CVTMesh:
             lat=10.0,
             elevation=-500.0,
             crust_type="oceanic",
+            water_class="ocean",
             temperature_C=15.0,
             precipitation_mm=1000.0,
             neighbors=[0, 2],
@@ -96,16 +106,42 @@ def test_ecology_engine_populates_p1_fields(tmp_path) -> None:
     if mesh_file is None:
         pytest.skip("nacrea mesh not available (LFS not pulled or not built)")
     mesh = load_cvt_mesh_model(mesh_file)
-    land = [c for c in mesh.cells if c.crust_type == "continental"]
-    ocean = [c for c in mesh.cells if c.crust_type != "continental"]
-    assert len(land) == 2 and len(ocean) == 2
+    land = [c for c in mesh.cells if c.water_class == "land" and not c.is_lake]
+    lake = [c for c in mesh.cells if c.is_lake]
+    ocean = [c for c in mesh.cells if c.water_class == "ocean" and not c.is_lake]
+    assert len(land) == 2 and len(ocean) == 1 and len(lake) == 1
     for c in land:
         assert c.soil_type is not None
         assert c.soil_fertility is not None
         assert c.biogeographic_province is not None
+        assert c.biome != "ocean"
+        assert c.npp_gc_m2_yr is not None
     for c in ocean:
+        assert c.soil_type is None
+        assert c.biogeographic_province is None
+        assert c.biome == "ocean"
+    # Inland-water invariants: a lake cell never materialises the chimeric
+    # state (water_class=land + biome=ocean + NPP/soil=None + habitability=0
+    # with no lake semantics) — it is an explicit lake surface instead.
+    for c in lake:
+        assert c.biome == "lake"
+        assert c.npp_gc_m2_yr is None
         assert c.soil_type is None
         assert c.biogeographic_province is None
 
     # Summary YAML written.
     assert (world / "layers" / "ecology" / "derived" / "ecology_summary.yaml").exists()
+
+    # Summary water-split stats follow water_class (not crust_type), with the
+    # lake broken out: 2 land + 1 lake + 1 ocean here.
+    import yaml
+
+    summary = yaml.safe_load(
+        (world / "layers" / "ecology" / "derived" / "ecology_summary.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert summary["n_land"] == 2
+    assert summary["n_ocean"] == 1
+    assert summary["n_lake"] == 1
+    assert summary["biome_counts"].get("lake") == 1
