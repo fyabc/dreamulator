@@ -1,6 +1,7 @@
 """Tests for dreamulator.engine.sky_geometry — sky phenomenon primitives.
 
-Anchor values from nacrea's sky_phenomena.md (Aegis 11°, 永耀岛 89°, 外卫星掩).
+Anchor values from nacrea's sky_phenomena.md (10-07 route-1 canon: Aegis 11.3°,
+Ignis −26.65, Aegis full −20.0 / 2.79 W/m², 永耀岛 89°, 外卫星掩).
 """
 
 from __future__ import annotations
@@ -32,42 +33,42 @@ ENTITIES: dict[str, dict[str, object]] = {
     "planet_aegis": {
         "id": "planet_aegis",
         "radius_km": 71355.2,
-        "semi_major_axis_au": 0.2504,
+        "semi_major_axis_au": 0.3648,
         "albedo": 0.343,
     },
     "satellite_nacrea": {
         "id": "satellite_nacrea",
         "parent_id": "planet_aegis",
-        "semi_major_axis_au": 0.00494,
+        "semi_major_axis_au": 0.0048348095,
         "radius_km": 6817.0,
-        "instellation_w_m2": 898.73,
+        "instellation_w_m2": 1254.97,
     },
     "satellite_cadence": {
         "id": "satellite_cadence",
         "parent_id": "planet_aegis",
-        "semi_major_axis_au": 0.007842,
+        "semi_major_axis_au": 0.0078845945,
     },
     "satellite_vigil": {
         "id": "satellite_vigil",
         "parent_id": "planet_aegis",
-        "semi_major_axis_au": 0.012448,
+        "semi_major_axis_au": 0.0116769194,
     },
 }
 
 
 def test_angular_size_aegis() -> None:
-    assert angular_size(71355.2, 0.00494 * 149_597_870.7) == pytest.approx(11.0, abs=0.1)
+    assert angular_size(71355.2, 0.0048348095 * 149_597_870.7) == pytest.approx(11.27, abs=0.1)
 
 
 def test_angular_size_ignis() -> None:
-    assert angular_size(305222.0, 0.2504 * 149_597_870.7) == pytest.approx(0.93, abs=0.05)
+    assert angular_size(426116.0, 0.3648 * 149_597_870.7) == pytest.approx(0.89, abs=0.05)
 
 
 def test_sky_position_yongyao_island() -> None:
-    """金丝雀：永耀岛（lon 0.5°, lat −0.8°）看 Aegis 仰角 ≈ 89°（sky_phenomena.md）。"""
-    pos = sky_position(ENTITIES, "satellite_nacrea", "planet_aegis", 0.5, -0.8)
-    assert pos.altitude_deg == pytest.approx(89.0, abs=1.0)
-    assert pos.angular_size_deg == pytest.approx(11.0, abs=0.1)
+    """金丝雀：永耀岛（lon 0.4°, lat −0.6°）看 Aegis 仰角 ≈ 89°（sky_phenomena.md）。"""
+    pos = sky_position(ENTITIES, "satellite_nacrea", "planet_aegis", 0.4, -0.6)
+    assert pos.altitude_deg == pytest.approx(89.3, abs=1.0)
+    assert pos.angular_size_deg == pytest.approx(11.27, abs=0.1)
     assert pos.visible is True
 
 
@@ -116,9 +117,9 @@ def test_hill_radius_moon() -> None:
 
 
 def test_apparent_illuminance_aegis_full_phase() -> None:
-    # sky_phenomena.md / giant_brightness.md：Aegis 满相照度 1.91 W/m²。
+    # sky_phenomena.md：Aegis 满相照度 2.79 W/m²（引擎目录 illuminance_full_w_m2）。
     assert apparent_illuminance(ENTITIES, "satellite_nacrea", "planet_aegis") == pytest.approx(
-        1.91, abs=0.05
+        2.79, abs=0.05
     )
 
 
@@ -144,55 +145,55 @@ def test_lambert_phase_half_moon() -> None:
 
 
 def test_stellar_apparent_magnitude_ignis() -> None:
-    # Ignis（L=0.0761, d=0.3536 AU）→ −26.20（sky_phenomena.md §1）。
-    assert stellar_apparent_magnitude(0.0761, 0.3536) == pytest.approx(-26.20, abs=0.02)
+    # Ignis（L=0.1227, d=0.3648 AU）→ −26.65（sky_phenomena.md §1）。
+    assert stellar_apparent_magnitude(0.1227, 0.3648) == pytest.approx(-26.65, abs=0.02)
 
 
 def test_reflected_apparent_magnitude_aegis_full() -> None:
-    # Aegis 满相 ≈ −19.6（sky_phenomena.md §2）。
-    m_star = stellar_apparent_magnitude(0.0761, 0.3536)
+    # Aegis 满相 ≈ −20.0（sky_phenomena.md §2；引擎目录 apparent_magnitude_full）。
+    m_star = stellar_apparent_magnitude(0.1227, 0.3648)
     m = reflected_apparent_magnitude(
         star_magnitude=m_star,
         geometric_albedo=geometric_albedo_from_bond(0.343),
         radius_km=71355.0,
-        observer_distance_km=724_054.0,
-        star_body_distance_au=0.3536,
-        star_observer_distance_au=0.3536,
+        observer_distance_km=723_277.0,
+        star_body_distance_au=0.3648,
+        star_observer_distance_au=0.3648,
     )
-    assert m == pytest.approx(-19.57, abs=0.05)
+    assert m == pytest.approx(-20.02, abs=0.05)
 
 
 def test_reflected_illuminance_aegis_full() -> None:
-    # Aegis 满相照度 ≈ 1.84 W/m²（giant_brightness.md）。
-    flux = 1361.0 * 0.0761 / 0.3536**2
+    # Aegis 满相照度 ≈ 2.79 W/m²（sky_phenomena.md §2 亮度参数表）。
+    flux = 1361.0 * 0.1227 / 0.3648**2
     f = reflected_illuminance_w_m2(
         star_flux_w_m2=flux,
         geometric_albedo=geometric_albedo_from_bond(0.343),
         radius_km=71355.0,
-        observer_distance_km=724_054.0,
+        observer_distance_km=723_277.0,
     )
-    assert f == pytest.approx(1.84, abs=0.02)
+    assert f == pytest.approx(2.79, abs=0.02)
 
 
 def test_umbra_length_aegis() -> None:
-    # 本影锥 ≈ 11.9M km，远超珠母星轨道（sky_phenomena.md §5）。
-    length = umbra_length_km(71355.0, 388_881.0, 52_897_807.0)
-    assert length == pytest.approx(11_887_300.0, rel=1e-3)
+    # 本影锥 ≈ 10.98M km，远超珠母星轨道（sky_phenomena.md §5）。
+    length = umbra_length_km(71355.0, 426_116.0, 54_573_303.0)
+    assert length == pytest.approx(10_976_653.0, rel=1e-3)
 
 
 def test_umbra_radius_at_orbit_aegis() -> None:
-    # 本影在珠母星轨道处的半径 ≈ 67,009 km。
-    length = umbra_length_km(71355.0, 388_881.0, 52_897_807.0)
-    radius = umbra_radius_at_distance_km(71355.0, length, 724_054.0)
-    assert radius == pytest.approx(67_009.0, rel=1e-3)
+    # 本影在珠母星轨道处的半径 ≈ 66,653 km。
+    length = umbra_length_km(71355.0, 426_116.0, 54_573_303.0)
+    radius = umbra_radius_at_distance_km(71355.0, length, 723_277.0)
+    assert radius == pytest.approx(66_653.0, rel=1e-3)
 
 
 def test_eclipse_season_fraction_nacrea() -> None:
-    # 食季窗口 ≈ 22.6%（sky_phenomena.md §5）。
-    fraction = eclipse_season_fraction(math.radians(9.0), 67_009.0, 6817.0, 724_054.0)
-    assert fraction == pytest.approx(0.226, abs=0.005)
+    # 食季窗口 ≈ 14.2%（sky_phenomena.md §5；历元倾角 13.64°，引擎目录 season_fraction）。
+    fraction = eclipse_season_fraction(math.radians(13.637092), 66_653.0, 6817.0, 723_277.0)
+    assert fraction == pytest.approx(0.142, abs=0.005)
 
 
 def test_stellar_parallax_nacrea() -> None:
-    # 视差摆动 ≈ ±0.78°（orbital_dynamics.md）。
-    assert stellar_parallax_deg(724_054.0, 52_897_807.0) == pytest.approx(0.784, abs=0.01)
+    # 视差摆动 ≈ ±0.76°（orbital_dynamics.md；引擎目录 parallax_deg）。
+    assert stellar_parallax_deg(723_277.0, 54_573_303.0) == pytest.approx(0.76, abs=0.01)

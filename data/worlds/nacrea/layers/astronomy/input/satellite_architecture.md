@@ -1,10 +1,10 @@
 ---
-title: "Aegis 卫星系统架构与动力学清场"
+title: "Aegis 卫星系统架构"
 type: satellite
 tags: [satellite, impact-shield, CPD, retrograde-capture]
 ---
 
-# Aegis 卫星系统架构与动力学清场
+# Aegis 卫星系统架构
 
 ### 自变量
 

@@ -1516,9 +1516,9 @@ def _catalog_sky(
     magnitude, and full-phase illuminance *as seen from the target body*, plus
     the eclipse season and stellar parallax.  Document templates render these
     via ``{{ sky.<body_id>... }}`` so their headline numbers never drift from
-    the derived data (方案 A — sky_phenomena.md / giant_brightness.md /
-    orbital_dynamics.md).  Returns ``None`` when the observer's orbital chain
-    cannot be resolved (no sky view to describe).
+    the derived data (方案 A — sky_phenomena.md / orbital_dynamics.md).
+    Returns ``None`` when the observer's orbital chain cannot be resolved
+    (no sky view to describe).
     """
     from dreamulator.engine import sky_geometry as sky
 

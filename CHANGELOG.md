@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   单位参照。climate_portrait 对比列随 Phase 2 重生成迁入。
 - **docs/design/audit/wave5-external-canon-audit.md**：对外设定文案审计
   （豁免叙事成文位置 / 类比词 / 数值一致性 / 电报体）完整台账与裁决记录。
+- **nacrea 对外设定结构重组**：新增天文学层 `cycles_registry.md`（全系统
+  周期登记册：10 h 磁场扫掠 → 20 kyr 万年火山脉冲 → 120 Myr 超大陆旋回的
+  单一查阅入口）；`giant_brightness.md` 并入 `sky_phenomena.md`（亮度参数表
+  + 日食地理隔离）；生态层 `ecology.md` 由四篇全文合并版改为层导览（消除
+  数字漂移），迁徙动力学按 99.8 d 年重算（71 km/天、年行程 ~7,100 km），
+  稳定气候带群系带界按定版气候修订（雨林簇 20°S–20°N / 苔原缘雾林
+  52°–62°）；气候层三篇（atmospheric_dynamics / climate_zones /
+  climate_portrait）按定版构建全量刷新并加「滚动文档」标记；
+  test_sky_geometry 与 test_doc_render 锚升级为现行正典（2.79 W/m² /
+  −26.65 / −20.02 / 14.2% 食季）；超大陆旋回口径统一（太古宙 ~70 Myr →
+  现行 ~120 Myr）；geological_history 地球对比表迁 0011；geography.md
+  全局指标重测（陆地 29.9% / 174.3 M km² / 陆块 303 / 内湖 5）。
+- **design-notes/0012 气候 GCM 定标与温室转移函数**：收拢 ghf 律
+  （7.3×ln(ppm)−16.1 K，356–1400 ppm 臂间差复验通过）、λ_eff 1.37 K/(W/m²)、
+  earth 参照偏差 −9.6±3 K、地质年代 CO2 网格三判决（ghf 律跨域成立 /
+  冰缘体制包络内稳健 / Hadley 52.6° 七臂 CO2 不敏感）与万年脉冲振幅语义
+  （作者澄清：[356,1400] 为包络非每旋回满摆，硅酸盐风化调制）；
+  long_term_cycles §5 同步对外口径。
 - **Boreal 卫星 Umbra 升级为潜在宜居冰卫星**（作者裁决 2026-10-07）：
   受迫偏心率 e=0.010（与 Frostine 2:1 共振维持）→ 潮汐加热 ~0.1 W/m²
   （Enceladus 级）→ 全球冰壳 + 冰下海洋 + 冰火山 + 冰裂谷；几何判决
