@@ -143,7 +143,7 @@ Aegis 弱潮汐耗散（k₂/Q ≈ 7×10⁻⁸，Q ≈ 5×10⁶）的持续角�
 Ignis 为 K6（0.65 M☉，[Fe/H]=−0.19），前主序阶段（~1 Gyr）光度可达当前数倍：
 
 - 早期 nacrea 承受远超 runaway greenhouse 极限（0.97 S⊕）的日照
-  → **早期湿温室风险**：原始水库存是否部分散失？当前 72% 海洋覆盖是幸存结果
+  → **早期湿温室风险**：原始水库存是否部分散失？当前 ~70% 海洋覆盖是幸存结果
   还是需要设定更大的初始水量？（重标定后 S_eff 0.92 更贴近 RG 阈，早期失水
   章 + 彗星再补给叙事权重上升——奥尔特/墟带彗星族现成）
 - 天文引擎已计算 evolution_progress={{ entities.star_ignis.evolution_progress }}（主序寿命 {{ entities.star_ignis.ms_lifetime_gyr | round1 }} Gyr 的 {{ entities.star_ignis.evolution_progress | pct }}）——

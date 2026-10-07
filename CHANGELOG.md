@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **nacrea 海洋覆盖口径统一到构建实测**（作者裁决 2026-10-07）：叙事
+  「72% 被海洋覆盖」全库 8 处改为 ~70%（实测陆地 29.9% = 目标 27.8% +
+  overlay 净增陆）；land_fraction_target 目标语义不变。Boreal 链 Gyr 级
+  认证经裁决不立项（0004 记录）。
 - **nacrea design-notes 全量整理（公开可读性 + 单一现行真值）**：
   「draw-0」更名「**10-07 定版**」（0009/附录/README/stellar/planets/
   long_term_cycles/sky_phenomena/satellite_architecture/tidal_effects +
