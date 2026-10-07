@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791321212631,
+  "lastUpdate": 1791387710739,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6606,6 +6606,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006218547192837596",
             "extra": "mean: 3.348941800001626 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7fab06ecc58fe4f7d428431204272f962fe9c60b",
+          "message": "docs(nacrea): Umbra 判决数字精修——2 Myr 全程 e 带 0.010–0.021（加热 0.1–0.5 W/m²）入 0004/CHANGELOG\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-07T23:34:31+08:00",
+          "tree_id": "c52ddf091faf66b51a86ab91ffdac3e9dd13387d",
+          "url": "https://github.com/fyabc/dreamulator/commit/7fab06ecc58fe4f7d428431204272f962fe9c60b"
+        },
+        "date": 1791387710234,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.35727182497311943,
+            "unit": "iter/sec",
+            "range": "stddev: 0.22263036180118445",
+            "extra": "mean: 2.7989892572 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.0583184179016993,
+            "unit": "iter/sec",
+            "range": "stddev: 0.012996718097624925",
+            "extra": "mean: 326.97707149999644 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5518674143576225,
+            "unit": "iter/sec",
+            "range": "stddev: 1.027914606637962",
+            "extra": "mean: 644.3849460000024 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 965.7675949809545,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007090921383010885",
+            "extra": "mean: 1.0354458000009004 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 191.30405970557223,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010326803022899207",
+            "extra": "mean: 5.227280599999062 msec\nrounds: 5"
           }
         ]
       }
