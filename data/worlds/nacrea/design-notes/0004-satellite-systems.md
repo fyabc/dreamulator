@@ -6,7 +6,7 @@ status: accepted
 checked_against:
   physics: ''
   chemistry: ''
-  astronomy: 4002e14d99ef10f67163f81e406d20d22d91b93e3b1cb07eef5c8fd1516849db
+  astronomy: 90fd7148db6e1a2b65b44d33bc15a34f1353f8572eb6abf46eb88645afa37fbb
   geological: 217417b9ecf5de229c6823466dd4554c1e3eb2394cd6b98c7715283dd23c73da
   climate: <no-yaml>
   ecology: <no-yaml>
@@ -80,8 +80,9 @@ Nacrea 等的影响可忽略）**：
   落空）。**结论：通约间距既是受迫偏心率的加热泵，也是遭遇保护机制——
   不得拿脱调当稳定杠杆。**
 - **登记**：Sleet 的偏心率呼吸（带 ~0.003–0.10）是正典链在恒星潮汐下的
-  固有属性（升级前基线相同），历元值 0.003 为冷谷快照；Gyr 级全链认证
-  （含潮汐算子，0009 同款流程）是否立项已入设定待裁决队列。
+  固有属性（升级前基线相同），历元值 0.003 为冷谷快照。Gyr 级全链认证
+  （0009 同款流程）经作者裁决**不立项**（开销过大，2026-10-07）——Boreal
+  链按「规则卫星链 + 历元快照 + 本节 Myr 级筛查」口径运行。
 
 ### Glacis（霰星）— 2 颗卫星（规则内 + 逆行捕获外）
 

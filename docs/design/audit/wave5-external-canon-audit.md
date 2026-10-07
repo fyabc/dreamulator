@@ -149,9 +149,13 @@
 6. **geological_history 地球对比表迁 0011**（0011 标题相应泛化为
    「对外设定的地球对比框架」）；geography.md 全局指标按当前网格重测
    （陆地 59,731 格 29.9% / 174.3 M km² / 陆块 303 / 封闭内湖 5 处）。
-7. **登记待裁决（新）**：叙事口径「海洋覆盖 72%」（stellar.yaml 描述等多处）
-   与构建实测 70.1%（陆地 29.9%）差 ~2 个百分点——统一到哪边需作者定
-   （改叙事 = 动多处 description；改目标 = 动 land_fraction_target）。
+7. **已裁决（作者 2026-10-07）**：叙事口径「海洋覆盖 72%」与构建实测
+   70.1%（陆地 29.9%）的 2 个百分点差——**统一到实测**：全库 8 处
+   （stellar.yaml 描述、physical_params ×2、tidal_effects、long_term_cycles、
+   climate_portrait ×2、astronomy_spaceflight）改为 ~70%/~30%；
+   land_fraction_target=0.278 与 terrain_config 的目标语义注释不变
+   （目标 27.8% + overlay 净增陆 = 实测 29.9%，口径已在 physical_params
+   写明）。
 
 ## 六、遗留（并入 Phase 2 / 登记不排期）
 

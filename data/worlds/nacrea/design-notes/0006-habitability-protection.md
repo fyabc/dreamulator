@@ -6,7 +6,7 @@ status: accepted
 checked_against:
   physics: ''
   chemistry: ''
-  astronomy: 4002e14d99ef10f67163f81e406d20d22d91b93e3b1cb07eef5c8fd1516849db
+  astronomy: 90fd7148db6e1a2b65b44d33bc15a34f1353f8572eb6abf46eb88645afa37fbb
   geological: 217417b9ecf5de229c6823466dd4554c1e3eb2394cd6b98c7715283dd23c73da
   climate: <no-yaml>
   ecology: <no-yaml>

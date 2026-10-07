@@ -475,7 +475,7 @@ bodies:
     #   潮周期远离洋盆共振、窄陆架主耗散区不发育；岩质 Q 文献带 100–500 中段，
     #   辩护全文 physical_params.md / tidal_effects.md）。τ_e≈4.1 Myr ≪ 系统年龄。
     description:
-      surface: "宜居卫星，表面 72% 被海洋覆盖。潮汐加热驱动板块构造与碳-硅酸盐循环，是长期气候稳定的能量来源。"
+      surface: "宜居卫星，表面约 70% 被海洋覆盖。潮汐加热驱动板块构造与碳-硅酸盐循环，是长期气候稳定的能量来源。"
 
   # ---- 逆行捕获卫：Cadence（韵珠，Europa 个头，P≈6.54 d） ----
   - id: satellite_cadence

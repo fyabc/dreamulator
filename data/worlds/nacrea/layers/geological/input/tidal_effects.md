@@ -28,7 +28,7 @@ tags: [tidal, heating, plate-tectonics, phase-drift, tidal-rhythm]
 | 洛夫数 h₂ / k₂ | 0.6 / 0.3 | physical_params.md |
 | 潮汐耗散因子 Q | 300（→ k₂/Q = 1×10⁻³） | physical_params.md |
 | 表面重力 g | 10.28 m/s² | physical_params.md |
-| 海洋平均深度 H | 4000 m（覆盖 72%） | physical_params.md |
+| 海洋平均深度 H | 4000 m（覆盖 ~70%） | physical_params.md |
 
 ## 因变量 — 潮汐势高度标度
 
