@@ -482,11 +482,18 @@ def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict
     result: dict = {}
     skip = skip_branches or set()
 
-    # 1. World config (world.yaml)
+    # 1. World config (world.yaml) — with per-layer build status enriched
+    # (same fields as the live API's get_world) so the static LayerDag shows
+    # freshness instead of the stale hand-maintained `configured` flags.
     world_data = load_yaml(world_dir / "world.yaml")
     if world_data is None:
         print(f"  WARNING: {world_dir.name}/world.yaml not found, skipping")
         return result
+    layers = world_data.get("layers")
+    if isinstance(layers, dict) and layers:
+        from dreamulator.world_layer_status import enrich_layer_summaries
+
+        world_data["layers"] = enrich_layer_summaries(world_dir, layers)
     result["world"] = world_data
 
     # 2. Branches metadata

@@ -75,7 +75,7 @@
       "type": "string"
     },
     "LayerSummary": {
-      "description": "Summary information about a layer in a world.\n\nThe layer name is the dict key in WorldConfig.layers, so the 'layer'\nfield here is optional — it can be populated from the key at load time.",
+      "description": "Summary information about a layer in a world.\n\nThe layer name is the dict key in WorldConfig.layers, so the 'layer'\nfield here is optional — it can be populated from the key at load time.\n\nThe ``input_source`` / ``input_doc_count`` / ``derived_fresh`` /\n``last_build_time`` fields are computed on demand by\n``world_layer_status.enrich_layer_summaries`` (API + static export) and\nare not persisted in world.yaml.",
       "properties": {
         "layer": {
           "anyOf": [
@@ -113,6 +113,44 @@
           "default": null,
           "description": "Parent world/branch this layer is inherited from",
           "title": "Inherited From"
+        },
+        "input_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the layer input resolves from ('root' / 'branch:<name>' / None)",
+          "title": "Input Source"
+        },
+        "input_doc_count": {
+          "default": 0,
+          "description": "Number of authored *.md documents in the layer input",
+          "title": "Input Doc Count",
+          "type": "integer"
+        },
+        "derived_fresh": {
+          "default": "absent",
+          "description": "Build freshness: 'fresh' / 'stale' (input YAML newer than derived) / 'absent'",
+          "title": "Derived Fresh",
+          "type": "string"
+        },
+        "last_build_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp of the newest derived product file",
+          "title": "Last Build Time"
         }
       },
       "title": "LayerSummary",

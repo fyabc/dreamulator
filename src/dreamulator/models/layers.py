@@ -145,6 +145,11 @@ class LayerSummary(BaseModel):
 
     The layer name is the dict key in WorldConfig.layers, so the 'layer'
     field here is optional — it can be populated from the key at load time.
+
+    The ``input_source`` / ``input_doc_count`` / ``derived_fresh`` /
+    ``last_build_time`` fields are computed on demand by
+    ``world_layer_status.enrich_layer_summaries`` (API + static export) and
+    are not persisted in world.yaml.
     """
 
     layer: Layer | None = Field(default=None, description="Layer identifier (from dict key)")
@@ -152,4 +157,18 @@ class LayerSummary(BaseModel):
     engine: str = Field(default="", description="Engine that processes this layer")
     inherited_from: str | None = Field(
         default=None, description="Parent world/branch this layer is inherited from"
+    )
+    input_source: str | None = Field(
+        default=None,
+        description="Where the layer input resolves from ('root' / 'branch:<name>' / None)",
+    )
+    input_doc_count: int = Field(
+        default=0, description="Number of authored *.md documents in the layer input"
+    )
+    derived_fresh: str = Field(
+        default="absent",
+        description="Build freshness: 'fresh' / 'stale' (input YAML newer than derived) / 'absent'",
+    )
+    last_build_time: str | None = Field(
+        default=None, description="ISO timestamp of the newest derived product file"
     )

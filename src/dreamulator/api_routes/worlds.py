@@ -80,10 +80,21 @@ def create_world(req: WorldCreateRequest) -> WorldInfoResponse:
 
 @router.get("/{world_name}", response_model=WorldInfoResponse)
 def get_world(world_name: str) -> WorldInfoResponse:
-    """Get world root data."""
+    """Get world root data.
+
+    Layer summaries are enriched with on-disk build status (input source,
+    document count, derived freshness, last build time) so the UI shows the
+    actual data state instead of the hand-maintained ``configured`` flag.
+    """
+    from dreamulator.world_layer_status import enrich_layer_summaries
+
     try:
         config = _manager.load_world(world_name)
-        return WorldInfoResponse(data=config.model_dump(mode="json"))
+        data = config.model_dump(mode="json")
+        layers = data.get("layers")
+        if isinstance(layers, dict) and layers:
+            data["layers"] = enrich_layer_summaries(_manager.world_dir(world_name), layers)
+        return WorldInfoResponse(data=data)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

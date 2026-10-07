@@ -28,7 +28,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_result_metadata_has_format_version_and_time() -> None:
     meta = result_metadata()
-    assert meta["format_version"] == FORMAT_VERSION == "1"
+    assert meta["format_version"] == FORMAT_VERSION == "2"
     time = meta["time"]
     assert time["reference_year_days"] == REFERENCE_YEAR_DAYS == 365.25
     assert time["reference_month_days"] == REFERENCE_MONTH_DAYS == 365.25 / 12.0
