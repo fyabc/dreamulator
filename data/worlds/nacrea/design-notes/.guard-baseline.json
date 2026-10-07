@@ -8,5 +8,6 @@
     "{{ entities.star_ignis.evolution_progress }}": "0.201",
     "{{ entities.planet_aegis.semi_major_axis_au }}": "0.3648",
     "{{ entities.satellite_nacrea.instellation_earth_ratio | round2 }}": "0.92"
-  }
+  },
+  "0004-satellite-systems.md": {}
 }
