@@ -35,10 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   （作者澄清：[356,1400] 为包络非每旋回满摆，硅酸盐风化调制）；
   long_term_cycles §5 同步对外口径。
 - **Boreal 卫星 Umbra 升级为潜在宜居冰卫星**（作者裁决 2026-10-07）：
-  受迫偏心率 e=0.010（与 Frostine 2:1 共振维持）→ 潮汐加热 ~0.1 W/m²
-  （Enceladus 级）→ 全球冰壳 + 冰下海洋 + 冰火山 + 冰裂谷；几何判决
-  0.121 r_H（稳定限 0.48）、4.7× 洛希；Boreal 心 WHFast 10 Myr 三案验证
-  （含 β+ 链 e 带上缘 worst case）。
+  受迫偏心率 e=0.010（与 Frostine 2:1 共振维持，k₂/Q=2.5×10⁻³ 冰壳口径）
+  → 潮汐加热 ~0.1 W/m² → 全球冰壳 + 冰下海洋 + 冰火山 + 冰裂谷；几何
+  判决 0.121 r_H（稳定限 0.48）、4.7× 洛希；Boreal 心 WHFast 筛查：正典
+  几何在 β+ 带有效恒星偏心率下健康（Umbra e 带 0.010–0.020 = 加热
+  0.1–0.4 W/m² 呼吸），**「Sleet 内收脱调」加固方案证伪**（弹射 + 受迫
+  e 塌缩——通约间距既是加热泵也是保护机制）。判决记录 design-notes/0004。
 
 ### Changed
 

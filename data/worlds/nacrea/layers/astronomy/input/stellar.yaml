@@ -270,10 +270,17 @@ orbits:
     mean_anomaly_epoch_deg: 55.174454
     epoch_year: 0.0
 
+  # ---- Umbra = 潜在宜居冰卫星（2026-10-07 作者裁决升级）：受迫偏心率
+  #   e=0.010 由与 Frostine 的 2:1 共振维持，潮汐加热 ~0.1 W/m²（冰壳口径
+  #   k₂/Q=2.5e-3）→ 冰下海洋 + 冰火山 + 冰裂谷。Boreal 心 WHFast 验证：
+  #   正典几何在 β+ 带有效恒星偏心率（0.078）下 1.75 Myr 三卫全健康，
+  #   Umbra e 带 0.010–0.020（加热 0.1–0.4 W/m² 呼吸）；「Sleet 内收脱调」
+  #   加固方案已证伪（弹射 + 受迫 e 塌缩）——1:2:4 通约间距既是加热泵也是
+  #   保护机制，勿脱调。判决记录见 design-notes/0004。
   - body_id: satellite_umbra
     parent_id: planet_boreal
-    semi_major_axis_au: 0.00380   # 569,000 km（9.4 R_B），P≈3.9 d
-    eccentricity: 0.002
+    semi_major_axis_au: 0.00380   # 569,000 km（9.4 R_B = 0.121 r_H，4.7× 洛希），P≈3.9 d
+    eccentricity: 0.010           # 受迫偏心率（Frostine 2:1 共振维持；历元值，带 0.010–0.020）
     inclination_deg: 2.0
     longitude_ascending_node_deg: 11.5   # Boreal 赤道交点（三卫共享）
     argument_of_periapsis_deg: 0.0
@@ -524,12 +531,13 @@ bodies:
     name: "玄冰星 · Umbra"         # 沧卫二
     body_type: "natural_satellite"
     mass_earth: 0.018
-    radius_km: 2400.0               # 0.377 R⊕
+    radius_km: 2400.0               # 0.377 R⊕（0.6–0.85 R⊕ 潜在宜居带内）
     rotation_period_days: 3.90    # 同步自转
     axial_tilt_deg: 0.0
     albedo: 0.43
+    k2_over_q: 2.5e-3               # 冰壳口径（受迫 e=0.010 → 潮汐加热 ~0.1 W/m²，冰火山活跃）
     description:
-      surface: "Boreal 卫星链最大者；冰下海洋 + 微弱磁场"
+      surface: "沧星卫星链中最大的一颗（半径 2400 公里），也是系统内最重要的潜在宜居世界：共振维持的受迫偏心率驱动潮汐加热，在全球冰壳之下保有液态水海洋，冰火山与纵横的冰裂谷网络遍布表面；表层还带有晚期散射期陨击带来的矿物与有机物沉积，并拥有微弱的自身磁场。它是文明深空基地的首选目标；随着冰壳在数十亿年间持续演化，也可能成为生命的候选环境。"
 
   - id: satellite_sleet
     name: "霜冰星 · Sleet"         # 沧卫三
