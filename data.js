@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791387710739,
+  "lastUpdate": 1791399793940,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6665,6 +6665,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010326803022899207",
             "extra": "mean: 5.227280599999062 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "bba9e4e96184a2668ab7988d273b66e025e7258a",
+          "message": "docs(design): 目录索引登记生态/文明 pipeline 与内陆水体 refine 提案\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-08T03:02:19+08:00",
+          "tree_id": "cb2e07ecce5c2e550edb0bcba5a6c55e6f4a6eaa",
+          "url": "https://github.com/fyabc/dreamulator/commit/bba9e4e96184a2668ab7988d273b66e025e7258a"
+        },
+        "date": 1791399793149,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.30440082740876484,
+            "unit": "iter/sec",
+            "range": "stddev: 0.2669543861923693",
+            "extra": "mean: 3.285142187400001 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.0946723033007117,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02135428750189931",
+            "extra": "mean: 323.13599050000266 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.488066131492184,
+            "unit": "iter/sec",
+            "range": "stddev: 1.073773347003997",
+            "extra": "mean: 672.013144333332 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 921.6567775930442,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007352360804896282",
+            "extra": "mean: 1.085002600004259 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.18889094568104,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006275106365101534",
+            "extra": "mean: 5.071279600002754 msec\nrounds: 5"
           }
         ]
       }
