@@ -27,6 +27,8 @@
 - `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、水文、侵蚀）
 - `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
 - `climate-pipeline.md` — 气候层 pipeline（温度/降水/Köppen 实现架构与参数）
+- `ecology-pipeline.md` — 生态层 pipeline（海陆判据、Whittaker 群系含湖泊哨兵、Miami NPP、可驯化标签、土纲、生物地理分区）
+- `civilization-pipeline.md` — 文明层 pipeline（宜居/农业分类与评分、湖滨淡水修正、摇篮候选发现）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
 
@@ -45,6 +47,7 @@
 - `blender-render-pipeline.md` — Blender 高清渲染链（区域数据包 `dreamulator export region` + bpy 脚本重建场景；MVP 已实现，路线节登记扩展）
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）
+- `inland-water-refine.md` — 内陆水体 refine 提案（湖命运 P−E 判决四类结局、溢流河网接通、rim/spill 字段缺口；未实现，2026-10 立案）
 - `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）
 - `climate-steady-coupling.md` — 气候层稳态耦合中间态（远期提案：DAG 某一步 T↔P 耦合解定点，介于单向 DAG 与瞬态 GCM 之间，先关 T↔P 干旱度反馈）
