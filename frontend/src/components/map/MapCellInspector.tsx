@@ -524,12 +524,12 @@ function CellDetails({
   )
   const hasEcology = Boolean(
     cell.biome || cell.npp_gc_m2_yr != null ||
-    (cell.domesticable_tags && cell.domesticable_tags.length > 0) ||
     cell.soil_type || cell.soil_fertility || cell.biogeographic_province,
   )
   const hasCivilization = Boolean(
     cell.habitable_coast != null || cell.agricultural_core != null ||
-    cell.habitability_score != null || cell.agriculture_score != null,
+    cell.habitability_score != null || cell.agriculture_score != null ||
+    (cell.domesticable_tags && cell.domesticable_tags.length > 0),
   )
 
   // Δ* vs the per-grid observed climatology (the same values the ΔT/ΔP/ΔSLP/
@@ -979,17 +979,6 @@ function CellDetails({
                 <dd className="font-mono">{cell.npp_gc_m2_yr.toFixed(0)} gC/m²/yr</dd>
               </div>
             )}
-            {cell.domesticable_tags && cell.domesticable_tags.length > 0 && (
-              <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.domesticable')}</dt>
-                <dd className="text-xs text-amber-300">
-                  {cell.domesticable_tags
-                    .filter((tag: string) => tag.endsWith('_high'))
-                    .map((tag: string) => t(TAG_LABELS[tag] ?? tag))
-                    .join(' · ') || '—'}
-                </dd>
-              </div>
-            )}
             {cell.soil_type && (
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.soilType')}>{t('inspector.soilType')}</dt>
@@ -1030,6 +1019,17 @@ function CellDetails({
               <div className="flex justify-between">
                 <dt className="text-gray-500">{t('inspector.agriculturalCore')}</dt>
                 <dd className="font-mono text-green-400">{cell.agriculture_score.toFixed(1)}</dd>
+              </div>
+            )}
+            {cell.domesticable_tags && cell.domesticable_tags.length > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">{t('inspector.domesticable')}</dt>
+                <dd className="text-xs text-amber-300">
+                  {cell.domesticable_tags
+                    .filter((tag: string) => tag.endsWith('_high'))
+                    .map((tag: string) => t(TAG_LABELS[tag] ?? tag))
+                    .join(' · ') || '—'}
+                </dd>
               </div>
             )}
           </FieldGroup>
