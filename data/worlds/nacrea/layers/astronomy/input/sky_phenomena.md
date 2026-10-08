@@ -142,6 +142,32 @@ design-notes/0009 附录 §9.5；见 §6 #4/#7）。
 | **霰星 Glacis** | 外 | {{ sky.planet_glacis.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_glacis.distance_au_opposition | round2 }} AU | **{{ sky.planet_glacis.apparent_magnitude_opposition | round1 }}** | 深青色亮点 |
 | **藩星 Sentinel** | 外 | {{ sky.planet_sentinel.angular_diameter_arcmin | round1 }} 角分 | 冲日 {{ sky.planet_sentinel.distance_au_opposition | round2 }} AU | **{{ sky.planet_sentinel.apparent_magnitude_opposition | round1 }}** | 肉眼勉强可见的暗弱"流浪星" |
 
+### 4a. 其他行星的卫星（从珠母星看）
+
+除韵珠/守珠外，其余天然卫星多为暗弱天体；例外是沧星三卫——它们从珠母星
+**肉眼可见**，冲日时挂在沧星冰蓝巨盘旁的光点群（玄冰星是夜空第五亮天体，
+次于烬星、巨神星、韵珠与守珠）。霰星双卫在暗夜贴盘可辨；藩星双卫与鼎卫一
+是望远镜天体。下表为 Lambert 口径满相最近值（计算存档 =
+private/research/2026-10-08-umbra-resize/satellite_visibility.py，锚点与
+本文公式校验一致）：
+
+| 天体 | 满相视星等（最近） | 角直径 | 距母星最大角距 | 裁决 |
+|------|------|--------|-----------|------|
+| **玄冰星 Umbra**（沧卫二，4778 km） | **约 −5.3**（亮于金星） | ~1.1′ | ≤1.1° | **肉眼**——沧星旁最亮的光点 |
+| 凝冰星 Frostine（沧卫一） | 约 −3.3 | ~0.3′ | ≤0.7° | 肉眼 |
+| 霜冰星 Sleet（沧卫三） | 约 −1.1 | ~0.2′ | ≤2.0° | 肉眼 |
+| 玄石星 Shard（霰卫一，750 km） | 约 +2.3 | — | ≤0.2° | 肉眼（贴霰星眩光，暗夜可辨） |
+| 逆石星 Rogue（霰卫二，375 km） | 约 +4.3 | — | ≤0.5° | 肉眼边缘 |
+| 焦砾星 Cinder（鼎卫一，11 km） | 约 +6.6 | — | — | 肉眼极限之下 |
+| 近客星 Vagrant（藩卫一） | 约 +10.0 | — | — | 望远镜天体 |
+| 远客星 Guest（藩卫二） | 约 +15.0 | — | — | 望远镜天体 |
+
+沧星三卫与母星的角距都在 2° 以内（沧星视半径 ~0.1°），冲日时构成
+「巨盘 + 三光点」的组合；玄冰星亮度随会合周期呼吸（±0.3 等），是文明
+历法与导航的天然信标。背星半球永远看不到巨神星与连珠（见 §5 的地理
+隔离表），韵珠/守珠与沧星三卫则全天可见——背星半球的夜空里，这五颗
+游走的光点就是「主宰者不在场」的天穹上全部的移动天象。
+
 ## 5. 食季（巨神星遮蔽烬星）
 
 **本影锥**：$L_{\mathrm{umbra}} = R_{\mathrm{Aegis}}\,d_\star/(R_\star-R_{\mathrm{Aegis}})$
@@ -196,7 +222,7 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 | 10 | **星环掩星**（若巨神星有环，环面遮挡烬星光） | 视几何 | ★★★ 远期扩展 |
 | 11 | **墟带光**（Glacis 外碎片带的黄道漫射光带，16° 宽绕天一周；最贴烬星处也有 72° 距角 → 整夜可见不被晨昏淹没） | 常驻（基线 μ_V≈23.4 幽带，背星区极暗夜肉眼边缘可辨）；**墟带觉醒**（带内矮行星级碰撞 → f≈1×10⁻⁷，μ_V≈22.0 肉眼清晰带，持续几十年~百年）一代人一次 | ★★★★ |
 | 12 | **食夜现墟带**（向星区唯一暗夜窗口：全食中烬星与满相 Aegis 双灭，墟带光与完整星空在极光幕布间隙显现） | 食季内每 {{ entities.satellite_nacrea.solar_day_days | round(2) }} 地球日（会合拍） | ★★★★ 仪式级天象 |
-| 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠距巨神星角距 ≤1.3°，始终嵌于光带内；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
+| 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠沿黄道带游走，轨迹黄纬 \|β\|≲14°（与墟带光带同带）；对巨神星的距角随会合在 0°–约 89° 全域摆动，仅近合时回到巨盘旁；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
 | 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.365 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
 
 > **两处几何修正**：

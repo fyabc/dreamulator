@@ -72,7 +72,7 @@ MEARTH_MSUN = 3.003e-6  # Earth mass in solar masses
 
 _STAR = "star"
 _CHAIN = ("planet_aegis", "planet_boreal", "planet_glacis")
-_SATS = ("satellite_nacrea", "satellite_cadence", "satellite_vigil")
+_SATS = ("satellite_nacrea", "satellite_cadence", "satellite_vigil", "satellite_pendant")
 _EXTRAS = ("planet_ember", "planet_crucible", "planet_sentinel")
 
 _STELLAR_YAML_RELPATH = "data/worlds/nacrea/layers/astronomy/input/stellar.yaml"
@@ -102,6 +102,8 @@ _SAT_K2Q = {
     "satellite_nacrea": 1.0e-3,
     "satellite_cadence": 0.25 / 100.0,
     "satellite_vigil": 0.25 / 100.0,
+    # inner-capture experiment body (absent from the canonical yaml; rocky)
+    "satellite_pendant": 0.30 / 100.0,
 }
 _AU_KM = 1.496e8
 
@@ -586,6 +588,7 @@ def run_landed(
     j2: float = 0.0,
     tides: bool = False,
     tide_boost: float = 1.0,
+    vigil_rh_max: float = _VIGIL_RH_MAX,
 ) -> None:
     sim, idx = build_landed_system(sysdata, with_extras)
     sim.integrator = integrator
@@ -691,7 +694,7 @@ def run_landed(
         broken = (
             not np.isfinite(any_e_max)
             or any_e_max > _ANY_E_MAX
-            or (has_vigil and (not np.isfinite(v_e) or v_e > _VIGIL_E_MAX or v_rh > _VIGIL_RH_MAX))
+            or (has_vigil and (not np.isfinite(v_e) or v_e > _VIGIL_E_MAX or v_rh > vigil_rh_max))
         )
         if broken:
             verdict = (
@@ -842,6 +845,13 @@ def main() -> None:
         default=1.0,
         help="nonphysical tidal-strength multiplier (equilibrium-capture probe)",
     )
+    parser.add_argument(
+        "--vigil-rh-max",
+        type=float,
+        default=_VIGIL_RH_MAX,
+        help="aegis-relative a/r_H guard for vigil (0.55 = prograde limit; use "
+        "~0.93 for the retrograde landed vigil or distant retrograde variants)",
+    )
     parser.add_argument("--baseline", action="store_true", help="10 yr IAS15 sanity run only")
     parser.add_argument("--scan", action="store_true", help="legacy Laplace-phase scan only")
     parser.add_argument(
@@ -881,6 +891,7 @@ def main() -> None:
         j2=args.j2,
         tides=args.tides,
         tide_boost=args.tide_boost,
+        vigil_rh_max=args.vigil_rh_max,
     )
 
 
