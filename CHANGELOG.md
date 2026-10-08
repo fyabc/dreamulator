@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Boreal 卫星链解耦 + Umbra 定尺寸 0.75 R⊕（作者裁决 2026-10-08）**：
+  0004 表「4800 km（0.75 R⊕）」原为直径/半径混标，本意为半径 0.75 R⊕。
+  REBOUND 扫描判决：1:2:4 链内任何 ≥2.3× 增重（0.5/0.6/0.75 R⊕ 档多初相）
+  都会 <2 Myr 内 Sleet 弹射；Sleet 外移保 1:2 对则 Umbra 受迫 e 塌缩、加热
+  不达标。落定构型 = 非共振宽间距（F:U 周期比 1.80、U:S 2.55），Umbra
+  0.1421 M⊕ / 4778 km、Frostine/Sleet 物理不变仅挪轨；2 Myr × 四初相认证
+  全绿（伴星带安静，Umbra 潮汐加热 0.02–0.13 W/m² + 放射性 ~13 mW/m² →
+  总热流 ~30–75 mW/m²，「温和潮汐暖冰月 / 文明第二基地」口径）。同步：
+  stellar.yaml / planets.yaml / 0004 / satellite_architecture / space_age /
+  sky_phenomena（新增 §4a 卫星可见性：沧星三卫肉眼可见、玄冰星 −5.3 等
+  夜空第五亮；§13 两珠距角勘误）。判决记录 =
+  private/research/2026-10-08-umbra-resize/。
+- **Aegis 认证时效登记（附带发现）**：A4v 卫星架构的 48 kyr 认证签发于
+  09-10 旧 J2 算子，09-29 算子重构（cabb6f7）后未重跑；正典控制案在现行
+  算子下 16.7 kyr 死（寿命为混沌彩票，11.8–25.1 kyr 散布），当代段
+  0–12 kyr 的 Nacrea 受迫带统计复现（rms 0.0038 vs 0.0036）。架构维持
+  A4v + 硬度豁免，重审登记待排。
+
 ### Added
 
 - **design-notes/0011 文明层地球对比框架（档案）**：作者裁决（2026-10-07）

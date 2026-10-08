@@ -100,15 +100,15 @@ planets:
     albedo: 0.071                   # 暗色捕获岩体
 
   # ================================================================
-  # Boreal（沧星）卫星链 — 3 颗冰质规则卫星
+  # Boreal（沧星）卫星链 — 3 颗冰质规则卫星（非共振宽间距，见 astronomy/stellar.yaml）
   # ================================================================
   - id: satellite_frostine
     name: "凝冰星 · Frostine"      # 沧卫一
     orbits: planet_boreal
     planet_type: terrestrial
     mass: 0.008                    # M⊕
-    radius: 0.2440                  # R⊕ (1550 km)，ρ≈1.9 g/cm³ 冰质
-    rotation_period_days: 1.95     # 同步自转 = 公转周期
+    radius: 0.2440                  # R⊕ (1554 km)，ρ≈1.9 g/cm³ 冰质
+    rotation_period_days: 2.17     # 同步自转 = 公转周期
     axial_tilt_deg: 0.0
     albedo: 0.67                   # 富冰表面，冰下海洋（欧罗巴类比）
 
@@ -116,11 +116,11 @@ planets:
     name: "玄冰星 · Umbra"         # 沧卫二
     orbits: planet_boreal
     planet_type: terrestrial
-    mass: 0.018                    # M⊕
-    radius: 0.3767                  # R⊕ (2400 km)，ρ≈1.8 g/cm³ 冰岩混合
+    mass: 0.1421                   # M⊕
+    radius: 0.7500                  # R⊕ (4778 km)，ρ≈1.86 g/cm³ 冰岩分异
     rotation_period_days: 3.90     # 同步自转 = 公转周期
     axial_tilt_deg: 0.0
-    albedo: 0.43                   # 最大者，冰下海洋 + 微弱磁场（木卫三类比）
+    albedo: 0.43                   # 最大者，冰下海洋 + 微弱磁场（温和潮汐暖冰月，总热流 ~30–75 mW/m²）
 
   - id: satellite_sleet
     name: "霜冰星 · Sleet"         # 沧卫三
@@ -128,7 +128,7 @@ planets:
     planet_type: terrestrial
     mass: 0.002                    # M⊕
     radius: 0.1491                  # R⊕ (950 km)，ρ≈1.5 g/cm³ 冰质
-    rotation_period_days: 7.90     # 同步自转 = 公转周期
+    rotation_period_days: 9.97     # 同步自转 = 公转周期
     axial_tilt_deg: 0.0
     albedo: 0.22                   # 密布陨石坑（木卫四类比）
 
