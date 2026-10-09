@@ -424,3 +424,15 @@ fiction 里的宜居卫星多为**地球级或更小**（潘多拉≈地球、�
 的「超级卫星」**，比绝大多数虚构宜居卫星都大——这是 nacrea 相对稀缺的差异化定位，可作为卖点。
 
 - [Pandora (Avatar) — Wikipedia](https://en.wikipedia.org/wiki/Pandora_(Avatar))
+
+### dayside.studio（2026-10 登记）
+
+[dayside.studio](https://dayside.studio/)——架空行星「卫星视角」制图应用（Windows 私有
+beta，一次性买断）。定位「行星尺度中间层，不替代地形工具」：球面分区低失真雕刻
+（画笔以公里/米计）→ 16-bit 高度场往返 Gaea/Wilbur 做侵蚀（米制量程与范围保全）→
+回装全球（~15 s）→ Blender 插件（位移球 + 预对齐颜色 + Cycles，瓦片至 32K）。地形
+合成 = 公开 DEM（SRTM/Copernicus）训练的扩散模型，附 5,090 条真实海岸线库与 55 个
+真实尺度地物印章（细节重生成而非拉伸）；Köppen 手绘覆盖纬度一猜，着色由坡度/高程/
+排水/气候计算，河流自动生成，雪线由温度+直减率导出；90 m/px 大陆级、30 m/px 近景级。
+导入源：Gleba / Rock 3。对本库启示与差异化（带物理的模拟器 vs 其雕刻/呈现层）分析见
+`proposals/gaea-refinement.md` §7。

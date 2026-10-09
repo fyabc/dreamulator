@@ -249,3 +249,45 @@ flow mask 与提取的河网天然自洽（河一定在谷底）。
 
 **预算**：全开源路线 $0；最小商业组合是 Gaea Indie $99（8K 上限，对 4K 成图够用）或
 WorldMachine Indie $119；全套商业工具约 $500 一次性（不含 PS 订阅）。
+
+## 7 2026-10 调研补充：Gaea 2 实战教程系列与 dayside.studio
+
+来源：Chris Radoux（剑桥计算化学博士、架空地图爱好者，频道 KilroysKartography）
+「终极写实主义」三集教程（B 站中文转载 BV15EHR6NEoC / BV1Jyps6fEVv，Part 3 待出）
+与其在研项目 dayside.studio。对本库有直接映射价值的发现：
+
+**三集工作流**：Part 1 高度图制备（博客揭示其核心手法：山脉用**真实 DEM 数据
+裁切拼贴**而非纯程序噪声——"Forging Mountains with Real-World Data"）；Part 2
+将高度图载入 Gaea 2（01:14 载入准备 → 05:28 **编辑降雨量与地形** → 11:06 自定
+义颜色纹理 → 14:52 导出）；Part 3 Blender 地球仪渲染 + 大气 + 电影级镜头。
+示例高度图出自 Joshua Goff 的 Wilbur（免费侵蚀工具）工作流。
+
+**对本库管线的四点映射**：
+
+1. **降雨图驱动侵蚀已是商业工具的一等公民**（Gaea 2 把「编辑降雨量」放在
+   界面正中）——印证 §6 的判断：降水→侵蚀耦合做进引擎/导出面，而非留给
+   后期均匀降雨。落地 = gaea_refine 导出面除 16-bit 高程外**同分辨率导出
+   precipitation_mm 栅格**，Gaea 侧作降雨 mask。
+2. **往返协议的字段契约**：dayside 的区域往返承诺「米制量程与范围在往返中
+   保全」——对应本库 baked_base manifest 必须记录（高程 min/max、地理范围、
+   投影参数），即 §6 第 0 步「写入球面经纬坐标参考」的具体化。
+3. **气候权威着色被同类产品验证**：dayside 的着色 = 坡度 + 高程 + 排水 +
+   手绘 Köppen（覆盖纬度一猜），与本库「water_class/气候层权威、前端只读」
+   的数据模型同构；高清纹理 pass 应把引擎气候/生态栅格直接烘焙成颜色，
+   不用 Gaea 通用色带。
+4. **Blender 地球仪渲染层**：dayside 的 Blender 插件（位移球 + 预对齐颜色 +
+   单太阳灯 + Cycles，瓦片至 32K）与 Part 3 教程同款——对应本库
+   blender-render-pipeline 的全球级扩展：位移球用 16K 单纹理（本机 GPU
+   上限 16384 恰好够），更高分辨率走瓦片拼接；大气/电影镜头进 EP1 分镜
+   素材清单。配套转载视频「用 Gaea2 和 Blender 程序化创建城市灯光」=
+   文明层夜景渲染的现成参照。
+
+**dayside.studio 产品速记**（竞品详见 competitor-analysis.md 条目）：Windows
+本地应用、私有 beta；球面分区低失真雕刻 + Gaea/Wilbur 侵蚀往返 + Blender
+导出；地形合成用公开 DEM（SRTM/Copernicus）训练的扩散模型（从未见过艺术家
+高度图）；5,090 条真实海岸线库与 55 个真实尺度地物印章可缩放盖章（细节重生成
+而非拉伸）；Köppen 手绘覆盖；河流自动生成（树枝/辫状）；雪线由温度+直减率
+导出；90 m/px 大陆级、30 m/px「可步行」级；全球重建 ~15 s；一次性买断制
+（Free 1K / Indie 8K + Blender 插件 / Pro 无上限 + CLI）。定位是「行星尺度
+中间层，不替代地形工具」，导入源列有 Gleba 与 Rock 3——本库在生态链中的
+差异化位置 = 带物理的模拟器（气候/生态/文明层），与其互补而非竞争。
