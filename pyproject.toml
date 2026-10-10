@@ -67,6 +67,12 @@ validation = [
     "netCDF4>=1.7",
     "imagecodecs>=2024.0",
 ]
+experiments = [
+    # Orbital experiment server (packages/experiment-server): long-integration
+    # process management, exact state recovery, plotting. Optional tool —
+    # not a runtime engine dependency.
+    "experiment-server",
+]
 gpu = [
     "cupy-cuda12x[ctk]>=14.2.0",
     "nvidia-cublas-cu12>=12.9.2.10",
@@ -91,6 +97,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 conlang = { workspace = true }
+experiment-server = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"

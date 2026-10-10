@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "model": "coupled_ctl",
+  "units": [
+    "yr",
+    "AU",
+    "Msun"
+  ],
+  "initial_state": {
+    "epoch_yr": 0.0,
+    "G": 39.476926421373,
+    "settings": {
+      "radii_au": [
+        0.0,
+        0.00047697871410946495,
+        4.5568830412503994e-05,
+        9.60307785985085e-06,
+        4.111021080195094e-06
+      ],
+      "k2": [
+        0.0,
+        0.35,
+        0.3,
+        0.25,
+        0.25
+      ],
+      "k2tau_yr": [
+        0.0,
+        6.042964993170014e-12,
+        1.367610420356114e-06,
+        7.128722015871406e-06,
+        1.2848058085074714e-05
+      ],
+      "inertias": [
+        0.0,
+        9.03270099607805e-11,
+        2.46937065028083e-15,
+        5.815613379664615e-19,
+        6.19176650270367e-21
+      ],
+      "j2": 0.04,
+      "j2_array": [
+        0.0,
+        0.04,
+        0.0006,
+        1.276018136387359e-05,
+        6.062816111524091e-06
+      ],
+      "body_ids": [
+        "star_ignis",
+        "planet_aegis",
+        "satellite_nacrea",
+        "satellite_cadence",
+        "satellite_vigil"
+      ],
+      "case": "config2",
+      "source_sha256": "1522b881404bf91b1c755dadd7427154c0d85b0ad46966d618e4ea46e9709672",
+      "initial_orbits": {
+        "planet_aegis": {
+          "body_id": "planet_aegis",
+          "parent_id": "star_ignis",
+          "semi_major_axis_au": 0.3648,
+          "eccentricity": 0.06786252,
+          "inclination_deg": 0.025812,
+          "longitude_ascending_node_deg": 131.099119,
+          "argument_of_periapsis_deg": 88.993305,
+          "mean_anomaly_epoch_deg": 47.539366,
+          "epoch_year": 0.0
+        },
+        "satellite_nacrea": {
+          "body_id": "satellite_nacrea",
+          "parent_id": "planet_aegis",
+          "semi_major_axis_au": 0.0048348095,
+          "eccentricity": 0.0024175,
+          "inclination_deg": 19.56939901961686,
+          "longitude_ascending_node_deg": 137.4092702552726,
+          "argument_of_periapsis_deg": 247.930961,
+          "mean_anomaly_epoch_deg": 97.912075,
+          "epoch_year": 0.0
+        },
+        "satellite_cadence": {
+          "body_id": "satellite_cadence",
+          "parent_id": "planet_aegis",
+          "semi_major_axis_au": 0.0078845945,
+          "eccentricity": 0.01675059,
+          "inclination_deg": 168.821896,
+          "longitude_ascending_node_deg": 290.545652,
+          "argument_of_periapsis_deg": 117.95592,
+          "mean_anomaly_epoch_deg": 164.805827,
+          "epoch_year": 0.0
+        },
+        "satellite_vigil": {
+          "body_id": "satellite_vigil",
+          "parent_id": "planet_aegis",
+          "semi_major_axis_au": 0.0116769194,
+          "eccentricity": 0.05,
+          "inclination_deg": 170.079498,
+          "longitude_ascending_node_deg": 178.12836,
+          "argument_of_periapsis_deg": 242.650103,
+          "mean_anomaly_epoch_deg": 330.18051,
+          "epoch_year": 0.0
+        }
+      },
+      "host_properties": {
+        "id": "planet_aegis",
+        "name": "巨神星 · Aegis",
+        "body_type": "planet",
+        "mass_earth": 508.5,
+        "radius_km": 71355,
+        "rotation_period_days": 0.18635390524483247,
+        "axial_tilt_deg": 45.0,
+        "albedo": 0.343,
+        "j2": 0.04,
+        "k2_over_q": 7e-08,
+        "c_over_mr2": 0.26
+      },
+      "assumptions": {
+        "host_spin_azimuth": "same reference-plane node as original Nacrea orbit; YAML missing this parameter",
+        "moons_spin": "initially aligned with own orbital normal, speed synchronous to actual initial Kepler n",
+        "satellite_figure": "axisymmetric hydrostatic initial rotational J2, fixed magnitude; triaxiality absent",
+        "Q_convention": "k2tau=(k2/Q)/n_ref to match small-e synchronous production heating; CTL thereafter",
+        "c_over_mr2": [
+          0.0,
+          0.26,
+          0.33,
+          0.35,
+          0.4
+        ],
+        "outer_k2q": 0.0025,
+        "scope": "Ignis+Aegis+three moons+Boreal+Glacis; planets explicitly star-centred; their mutual gravity and host-J2 reaction included, tides/figures on Boreal/Glacis omitted",
+        "equilibrium": "test-satellite initial Laplace surface for star + host J2; multi-moon equilibrium not solved",
+        "heat_targets": "No requiredminimumheat/Iopeak. Meanseason>=15 andoriginalsiderealday. No imposedperiods.",
+        "nacrea_figure": "hypothetical permanent/frozen axisymmetric J2; must independently justify preservation in an ocean/tectonic world; no material confirmation",
+        "nacrea_frozen_j2": 0.0006,
+        "cassini_initializer": {
+          "orbit_tilt": 19.569399019616867,
+          "spin_tilt": 19.86279379495623,
+          "psi": 0.2933947753393634,
+          "precession_rad_yr": -0.019988940819556728,
+          "residual": 3.495809829201502e-14,
+          "omitted": "outer moon torque, eccentricity corrections, reference-plane tiny inclination; approximate initializer only"
+        },
+        "zeroepoch_rebuild": {
+          "original_json": "cfrozen0.0004-bs-eps1e-11-t3000-chain.json",
+          "original_json_sha256": "77b37013b6eaf46b1e2975c45daebdebd442ada144269d1bf838c5a4c0ab5097",
+          "original_binary_sha256": "10e9877ad0d9b47d83e70d9d2d733f38684429c75599505296597b65c7411d71",
+          "actual_original_epoch_yr": 0,
+          "mass_radius_G_from_verified_original_pair": true,
+          "original_terminal_epoch_yr": 3000.0,
+          "Vigil_e_before": 0.11903554,
+          "Vigil_e_after": 0.05,
+          "spin16_source": "originalJSONsampleat0yr, not mature100k",
+          "new_initial_condition_not_natural_formation": true,
+          "Nacrea_J2": 0.0006,
+          "physical_CTL_lag_factor": 1.0,
+          "all_cases_same_particles_and16state": true,
+          "no_variant_specific_Cassini_refit": true
+        }
+      },
+      "planetary_orbits": {
+        "planet_boreal": {
+          "body_id": "planet_boreal",
+          "parent_id": "star_ignis",
+          "semi_major_axis_au": 0.5776538,
+          "eccentricity": 0.04614538,
+          "inclination_deg": 0.00838,
+          "longitude_ascending_node_deg": 251.335687,
+          "argument_of_periapsis_deg": 232.272881,
+          "mean_anomaly_epoch_deg": 298.081383,
+          "epoch_year": 0.0
+        },
+        "planet_glacis": {
+          "body_id": "planet_glacis",
+          "parent_id": "star_ignis",
+          "semi_major_axis_au": 0.9295924,
+          "eccentricity": 0.0442664,
+          "inclination_deg": 0.001616,
+          "longitude_ascending_node_deg": 267.063883,
+          "argument_of_periapsis_deg": 123.652606,
+          "mean_anomaly_epoch_deg": 45.95449,
+          "epoch_year": 0.0
+        }
+      },
+      "with_chain": true
+    },
+    "particles": [
+      {
+        "x": -0.0002915069497224886,
+        "y": 0.0003997026990208617,
+        "z": -2.3736094157583799e-07,
+        "vx": -0.01585461314874628,
+        "vy": -0.00287434365631713,
+        "vz": 1.436347656999912e-06,
+        "m": 0.65,
+        "r": 0.0
+      },
+      {
+        "x": 0.022264554442050225,
+        "y": -0.3479376572485285,
+        "z": 9.526357080158017e-05,
+        "vx": 8.750520178497354,
+        "vy": 0.10403407177260794,
+        "vz": -0.003006304784161004,
+        "m": 0.0015270255,
+        "r": 0.00047697871410946495
+      },
+      {
+        "x": 0.019547906910614365,
+        "y": -0.3439552005370534,
+        "z": -0.0002934211298816032,
+        "vx": 5.933822303159704,
+        "vy": -1.6950249868517435,
+        "vz": 1.1454498856556843,
+        "m": 3.6035999999999997e-06,
+        "r": 4.5568830412503994e-05
+      },
+      {
+        "x": 0.03007343489325377,
+        "y": -0.3469727886404919,
+        "z": -0.0014165981949529657,
+        "vx": 9.11832547135904,
+        "vy": -2.5890612559099884,
+        "vz": 0.11570510030349221,
+        "m": 1.8018e-08,
+        "r": 9.60307785985085e-06
+      },
+      {
+        "x": 0.031778577755444695,
+        "y": -0.3537269560964196,
+        "z": -0.0008623793657488204,
+        "vx": 7.453680232524139,
+        "vy": -1.8503596716883879,
+        "vz": -0.352048761069705,
+        "m": 9.159149999999999e-10,
+        "r": 4.111021080195094e-06
+      },
+      {
+        "x": 0.3088529307701697,
+        "y": 0.4746283412801338,
+        "z": 2.0403005164340527e-05,
+        "vx": -5.863706130178623,
+        "vy": 3.4715781939379196,
+        "vz": -0.0009715074498845781,
+        "m": 0.0004783779,
+        "r": 0.0
+      },
+      {
+        "x": 0.14919865130620616,
+        "y": 0.8898949818858537,
+        "z": 2.6883436472833543e-06,
+        "vx": -5.321300967073683,
+        "vy": 1.0689300282412257,
+        "vz": -0.00014955323154525896,
+        "m": 5.1351300000000004e-05,
+        "r": 0.0
+      }
+    ],
+    "spin_state16": [
+      5892.568691813823,
+      6411.416491504933,
+      8707.963436721924,
+      168.13335132022434,
+      182.90303155471258,
+      687.7023948330187,
+      -63.66099377079364,
+      -23.859701800995275,
+      -344.0410881521571,
+      1.0948732098557636,
+      33.50500048053896,
+      -191.67249548980058,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "origin": {
+      "original_json": "cfrozen0.0004-bs-eps1e-11-t3000-chain.json",
+      "original_json_sha256": "77b37013b6eaf46b1e2975c45daebdebd442ada144269d1bf838c5a4c0ab5097",
+      "original_binary_sha256": "10e9877ad0d9b47d83e70d9d2d733f38684429c75599505296597b65c7411d71",
+      "actual_original_epoch_yr": 0,
+      "mass_radius_G_from_verified_original_pair": true,
+      "original_terminal_epoch_yr": 3000.0,
+      "Vigil_e_before": 0.11903554,
+      "Vigil_e_after": 0.05,
+      "spin16_source": "originalJSONsampleat0yr, not mature100k",
+      "new_initial_condition_not_natural_formation": true
+    },
+    "restart_note": "Full particles and16ODEstates preserved; freshBS caches onexplicitresume; chaotic trajectories can diverge."
+  },
+  "body_names": [
+    "star_ignis",
+    "planet_aegis",
+    "satellite_nacrea",
+    "satellite_cadence",
+    "satellite_vigil",
+    "planet_5",
+    "planet_6"
+  ],
+  "diagnostics": {
+    "star": 0,
+    "host": 1,
+    "moons": [
+      2,
+      3,
+      4
+    ],
+    "heat_body": 2,
+    "pairs": [
+      [
+        3,
+        4
+      ]
+    ]
+  },
+  "provenance": {
+    "imported_portable_full_state": true,
+    "reference_k2tau_yr": 1.367610420356114e-06
+  },
+  "integration": {
+    "eps_rel": 1e-11,
+    "eps_abs": 1e-14,
+    "interval_yr": 2.0,
+    "checkpoint_yr": 1000.0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "model": "point_mass",
+  "units": ["yr", "AU", "Msun"],
+  "body_names": ["star", "planet"],
+  "initial_state": {
+    "epoch_yr": 0.0,
+    "G": 39.476926421373,
+    "particles": [
+      {"x": 0.0, "y": 0.0, "z": 0.0, "vx": 0.0, "vy": 0.0, "vz": 0.0, "m": 1.0, "r": 0.00465},
+      {"x": 1.0, "y": 0.0, "z": 0.0, "vx": 0.0, "vy": 6.283067438090104, "vz": 0.0, "m": 0.000003, "r": 0.0000426}
+    ]
+  },
+  "diagnostics": {"primary": 0, "pairs": [[0, 1]]},
+  "integration": {"eps_rel": 1e-11, "eps_abs": 1e-14, "interval_yr": 0.01, "checkpoint_yr": 0.1},
+  "provenance": {"purpose": "Generic conservative two-body example, not Nacrea physics"}
+}
