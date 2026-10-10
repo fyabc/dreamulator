@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "experiment-server"
+version = "0.2.0"
+description = "Configurable orbital experiments, exact state recovery, process management and plots"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["typer>=0.15,<1", "numpy==2.4.6", "scipy==1.18.0", "rebound==5.1.1", "numba==0.66.0", "matplotlib>=3.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+server = "experiment_server.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["experiment_server*"]
+
+[tool.setuptools.package-data]
+experiment_server = ["examples/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Imported verified package (SHA-pinned against the 2026-10-11 handoff
+# snapshot): dense-numerics style retained; only real-defect checks on.
+select = ["F", "B", "E9"]
+ignore = ["F401", "B905", "B007", "B904", "F841"]
