@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   都会 <2 Myr 内 Sleet 弹射；Sleet 外移保 1:2 对则 Umbra 受迫 e 塌缩、加热
   不达标。落定构型 = 非共振宽间距（F:U 周期比 1.80、U:S 2.55），Umbra
   0.1421 M⊕ / 4778 km、Frostine/Sleet 物理不变仅挪轨；2 Myr × 四初相认证
-  全绿（伴星带安静，Umbra 潮汐加热 0.02–0.13 W/m² + 放射性 ~13 mW/m² →
-  总热流 ~30–75 mW/m²，「温和潮汐暖冰月 / 文明第二基地」口径）。同步：
+  全绿（伴星带安静，Umbra 潮汐加热 0.02–0.13 W/m² + 放射性 ~13 mW/m²
+  （估算）+ 分异/吸积余热 ~10 mW/m²（估算）→ 总热流 ~40–85 mW/m²，
+  「温和潮汐暖冰月 / 文明第二基地」口径）。同步：
   stellar.yaml / planets.yaml / 0004 / satellite_architecture / space_age /
   sky_phenomena（新增 §4a 卫星可见性：沧星三卫肉眼可见、玄冰星 −5.3 等
   夜空第五亮；§13 两珠距角勘误）。判决记录 =
