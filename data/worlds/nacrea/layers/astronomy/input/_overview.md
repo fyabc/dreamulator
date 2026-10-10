@@ -13,7 +13,7 @@ type: overview
 | 文件 | 说明 |
 |------|------|
 | `satellite_architecture.md` | Aegis 卫星系统架构 |
-| `cycles_registry.md` | 周期登记册——全部周期节律（10 h 磁场扫掠 → 20 kyr 万年火山脉冲 → 120 Myr 超大陆旋回）的单一查阅入口 |
+| `cycles_registry.md` | 周期登记册——全部周期节律（4.5 h 磁场扫掠 → 火山-地热包络 → 120 Myr 超大陆旋回）的单一查阅入口 |
 | `orbital_dynamics.md` | Nacrea 轨道动力学（日食、季节、共振） |
 | `sky_phenomena.md` | 天象全景——从 Nacrea 表面看去的行星/卫星视亮度与天空节律 |
 | `coupled_magnetic.md` | 巨行星-卫星耦合磁场 |

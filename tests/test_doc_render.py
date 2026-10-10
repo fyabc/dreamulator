@@ -228,12 +228,12 @@ _GAIA_CATALOG = _GAIA_WORLD / "layers" / "astronomy" / "derived" / "system_catal
 
 _DOC_ANCHORS: dict[str, list[str]] = {
     "layers/astronomy/input/orbital_dynamics.md": [
-        "| 有效季节倾角 | 14.9° |",
-        "南北纬 75°",
+        "| 恒星季节角 | 19.9° |",
+        "南北纬 70°",
         "**49.9 天**",
         "**100 天**",
-        "**3.24 天（77.8 小时）**",
-        "**30.8 个**",
+        "**3.24 天（77.6 小时）**",
+        "**30.9 个**",
         "每 3.24 天（会合拍）发生一次食",
         "~0.0073 m/年",
     ],
@@ -241,9 +241,9 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "1.20 M⊕",
         "1.07 R⊕（6817 km）",
         "10.28 m/s²（≈1.05g）",
-        "**3.24 地球日（77.8 小时）**",
+        "**3.24 地球日（77.6 小时）**",
         "**100 地球日**",
-        "15° / ±75°",
+        "20° / ±70°",
         "75 小时",
     ],
     "layers/astronomy/input/sky_phenomena.md": [
@@ -281,13 +281,13 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "~4.1 Myr",
     ],
     "layers/civilization/input/space_age.md": [
-        "**96,212 km**（高度 89,395 km）",
+        "**96,122 km**（高度 89,305 km）",
         "**66,602 km**（9.8 R_s）",
-        "r_sync (96,212 km) > R_H_s (66,602 km)",
+        "r_sync (96,122 km) > R_H_s (66,602 km)",
         "**1.44**",
     ],
     "layers/civilization/input/habitability_solutions.md": [
-        "r_sync (96,212 km) > R_H_s (66,602 km)",
+        "r_sync (96,122 km) > R_H_s (66,602 km)",
         "~0.7 cm/年外迁",
     ],
 }

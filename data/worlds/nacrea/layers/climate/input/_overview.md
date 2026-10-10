@@ -5,7 +5,7 @@ type: overview
 
 # Nacrea 气候学
 
-> 基于路线 1 定版构建的引擎推演结果编写（200k 节点；ghf 35.0、Hadley 52°、
+> 基于当前构建的引擎推演结果编写（200k 节点；ghf 35.0、Hadley 52°、
 > 712 ppm CO2）。`climate_zones.md` 和 `atmospheric_dynamics.md` 是构建产物的
 > 描述快照（滚动文档，气候侧重建后须复核）；`long_term_cycles.md` 为长期
 > 变率设计文档，尚未耦合到气候引擎。

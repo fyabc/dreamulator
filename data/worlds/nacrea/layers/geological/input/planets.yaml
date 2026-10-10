@@ -10,8 +10,10 @@ planets:
     planet_type: ocean_world
     mass: 1.20                    # M⊕
     radius: 1.07                  # R⊕ (6817 km)
-    rotation_period_days: 3.138   # = 公转周期（被 Aegis 潮汐锁定）
-    axial_tilt_deg: 14.9          # 有效季节倾角 = i_ecl 锥摆长期均值（当代段瞬时带 10.9–18.3°、~10 yr 周期 ≪ 气候响应时间；出路 b 裁决 2026-09-28，自转轴 ⊥ 轨道面）
+    rotation_period_days: 3.1336  # 恒星自转日（近同步，26-10-11 定版 500 kyr 实测）；太阳日 ≈3.24 地球日
+    axial_tilt_deg: 19.9          # 恒星季节角时权均（26-10-11 定版主窗 161–500 kyr 实测 19.85）；长期波动带
+    #   17.55–22.05（约 8.39 地球年季幅潮 ≈ 30.7 当地年）——波动时标 ≫ 气候响应时间，
+    #   气候层读均值 + 登记波动带（与 astronomy/stellar.yaml 同源）
     albedo: 0.30
     atmosphere:
       surface_pressure_atm: 1.0
@@ -36,7 +38,7 @@ planets:
         # 裁决，若类地产甲烷生物圈成立可上探 0.3-1 ppm）。辐射效应
         # ΔF ≈ 0.36 W/m²（0.036√C，C 单位 ppb）→ ΔT ≈ +0.3 K，计入
         # greenhouse_factor 总账；PlaSim 辐射方案不含 CH4 吸收带，GCM 侧
-        # 不可见（低于噪声）。叙事抓手：20 kyr 火山脉冲下 CH4 线性跟随
+        # 不可见（低于噪声）。叙事抓手：火山-地热包络的活跃段 CH4 线性跟随
         # （寿命 10 yr ≪ 周期）50-150 ppb 摆动（ΔT ±0.07 K，冰芯可辨）；
         # 百年级潮汐尖峰（5×）时 CH4→~500 ppb（+0.35 K）+ CO2 +50-60 ppm
         # （+0.4 K）= 「火山世纪」+0.7 K 级短期增温事件，冰芯层位可与
@@ -44,9 +46,9 @@ planets:
       greenhouse_factor: 35.0     # 终值（Ts 锚 11.3°C = GCM 订正唯一平衡态、
       # S_eff 0.922 → Te 249.6 K，G = 284.4−249.6 ≈ 35 K，量级地球式；
       # GCM 交叉验证：ghf 律 7.3×ln(712)−16.1 = 31.9 K @1244 W/m² + 通量
-      # +0.9% 反馈增温 ≈ 2.7 K → ≈34.6 K，与 35.0 一致）。20 kyr 火山脉冲在
-      # 712 ppm 基座上按 1/n≈3.3 放大 → pCO2 70–2700 ppm 摆动 → ±3-4 K 冰期旋回
-      # （long_term_cycles §5「火山驱动」的定量版）。
+      # +0.9% 反馈增温 ≈ 2.7 K → ≈34.6 K，与 35.0 一致）。火山-地热包络在
+      # 712 ppm 基座上按 1/n≈3.3 放大 → pCO2 70–2700 ppm 包络摆动 → ±3-4 K
+      # 冰期旋回（无固定周期；long_term_cycles §5 的定量版）。
     hydrosphere:
       water_coverage: 0.722
       salinity_ppt: 35.0
@@ -58,8 +60,8 @@ planets:
     magnetic_field_strength: 30.0 # 潮汐加热维持熔融地核 → 发电机效应
 
   # ================================================================
-  # 逆行捕获卫：Cadence — 早期捕获（~0.5 Gyr），非共振，Gyr 级准可积
-  # 认证实现（design-notes/0009）：轨道要素见 stellar.yaml，勿单独改动
+  # 逆行捕获卫：Cadence — 早期捕获（~0.5 Gyr），非共振单体；现行认证 =
+  # 26-10-11 定版 500 kyr（design-notes/0009）：轨道要素见 stellar.yaml，勿单独改动
   # ================================================================
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
@@ -73,8 +75,8 @@ planets:
 
   # ================================================================
   # 逆行捕获卫：Vigil — Charon 级小卫（内迁 0.37 r_H 构型），早期捕获；
-  # 10-07 定版认证：a/r_H ≤ 0.453 全窗有界存活。对外正典 = 双珠与文明长期
-  # 相伴（作者裁决 2026-10-07）；长期动力学审计与豁免裁决仅见 0009 §2
+  # 26-10-11 定版 500 kyr 认证：双珠全程存活、韵珠-守珠实际最小距离
+  # 408,239 km。对外正典 = 双珠与文明长期相伴；豁免与命名规则见 0009 §2
   # ================================================================
   - id: satellite_vigil
     name: "守珠星 · Vigil"
@@ -82,7 +84,7 @@ planets:
     planet_type: terrestrial
     mass: 3.05e-4                 # M⊕（Charon 级）
     radius: 0.0965                # R⊕ (615 km)，ρ≈1.87 g/cm³（冰岩混合，土卫六/木卫四带）
-    rotation_period_days: 10.2    # Hut 伪同步中值（随 e 带 0.099–0.228 在 9.0–11.1 d 漂移）
+    rotation_period_days: 10.29   # Hut 伪同步（26-10-11 定版实测 10.286 d；随 e 带 0.037–0.128 小幅漂移）
     axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
     albedo: 0.313                 # Charon 型处理结晶水冰（HZ 辐照压暗版）
 
@@ -120,7 +122,7 @@ planets:
     radius: 0.7500                  # R⊕ (4778 km)，ρ≈1.86 g/cm³ 冰岩分异
     rotation_period_days: 3.90     # 同步自转 = 公转周期
     axial_tilt_deg: 0.0
-    albedo: 0.43                   # 最大者，冰下海洋 + 微弱磁场（温和潮汐暖冰月，总热流 ~30–75 mW/m²）
+    albedo: 0.43                   # 最大者，冰下海洋 + 微弱磁场（温和潮汐暖冰月，总热流 ~35–80 mW/m²）
 
   - id: satellite_sleet
     name: "霜冰星 · Sleet"         # 沧卫三
@@ -225,8 +227,8 @@ planets:
     planet_type: gas_giant
     mass: 508.5                   # 1.6 M_J × 317.83 M⊕/M_J
     radius: 11.2                  # ~1.0 R_J (Fortney et al. 2007, 1.6 M_J 冷气态巨行星)
-    rotation_period_days: 0.4167  # ~10 hours
-    axial_tilt_deg: 18.0          # 与 stellar.yaml 对齐：Aegis 自转轴倾 18°（早期巨撞击化石）；Nacrea 初始贴赤道出发、绕拉普拉斯面 ~10 yr 锥摆（出路 b），气候季节倾角 = 其 i_ecl 长期均值 14.9°
+    rotation_period_days: 0.1863539  # 4.4725 h 快自转（26-10-11 定版成熟态；机制待实验认证，见 astronomy/stellar.yaml）
+    axial_tilt_deg: 44.8374718    # 自转轴倾角（26-10-11 定版成熟态；机制待实验认证）。气候层恒星季节角 = Nacrea 定版主窗时权均 19.9°（非本值直接函数）
     albedo: 0.343                 # Jupiter-like Bond albedo
     atmosphere:
       surface_pressure_atm: 1000.0

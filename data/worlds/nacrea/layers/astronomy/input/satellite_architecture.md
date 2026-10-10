@@ -12,7 +12,7 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 |------|-----|------|
 | Aegis 几何反照率 A_g | 0.228 | Sudarsky et al. (2000) Class II/III 温巨行星；碱金属吸收压低可见光反照率 |
 | Aegis 表面赤道磁场 | **400 μT** | planets.yaml 设定值 |
-| Aegis 磁偶极轴倾角 | 18.0° | 与自转轴倾角一致（axial_tilt_deg） |
+| Aegis 磁偶极轴倾角 | 44.8° | 与自转轴倾角一致（axial_tilt_deg；成因见 design-notes/0009） |
 
 ### 因变量 — Nacrea 轨道定位
 
@@ -41,8 +41,8 @@ design-notes/0009 附录）穷尽了其余选项：只留一颗韵珠的**单珠
 0.3–0.5 r_H 带内不存在 100 kyr 级的长寿解。最终的双单体方案
 （{{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 个互希尔半径的径向净空）+ 内迁守珠（0.37 r_H）+ 减质量韵珠
 （遭遇扩散速率 ∝ m_C²）是天空美学与动力学寿命之间的最优折衷。对外正典 =
-**双珠与珠母星及文明长期相伴**（作者 2026-10-07 裁决）：当代段（0–12 kyr）
-是生态、气候与文明的正典窗口；长期动力学的数值审计仅见 design-notes/0009。
+**双珠与珠母星及文明长期相伴**：生态、气候与文明以当代为正典窗口；
+长期动力学见 design-notes/0009。
 
 ### 因变量 — 长期摄动：受迫偏心率的 60 亿年维持机制
 
@@ -52,10 +52,10 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 |------|-----|---------|
 | 偏心率阻尼时标 τ_e | **~{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**（k₂/Q=1×10⁻³，Q=300） | (1/e)(de/dt) = (21/2)(k₂/Q)(M_p/M_m)(R_m/a_m)⁵n_m |
 | 无泵浦时的结局 | e → 0，潮汐加热熄灭 | 板块构造与碳循环停摆 → 宜居性丧失 |
-| 泵浦机制（双源） | **恒星四极矩本底（主项）+ 韵珠/守珠长期摄动（次项）** | 0.365 AU 的强恒星场经四极矩给出 ~0.004–0.006 的偏心率本底——这是测试粒子效应，与双珠质量一阶无关；双珠的受迫项线性系数 coef=Σmᵢ(a_N/aᵢ)³=1.35×10⁻³（韵珠贡献 98.3%）。三星周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }}，全部脱离低阶共振或仅触及可忽略的高阶项。**当代段摆动带 rms 0.0036 / max 0.0098**（10-07 定版数值审计，当代段取 0–12 kyr；详见 design-notes/0009 §2） |
-| 泵浦源稳定性 | 两珠均为单体远距逆行轨道（有界 e 摆动、迁移 ~μm/yr 冻结） | {{ entities.satellite_cadence.a_rh_ratio }}/{{ entities.satellite_vigil.a_rh_ratio }} r_H 逆行；径向净空 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} r_H,m；长期动力学见 design-notes/0009 §2 |
+| 加热驱动 | **自转-轨道失配 ψ 为主、偏心率为次** | 长期积分中热流与 ψ² 相关约 0.973、与 e² 仅约 0.111——加热主要由 ψ 驱动。轨道偏心率保有恒星四极矩本底（~0.003 量级，测试粒子效应，与双珠质量一阶无关），长期带宽 p5–p95 0.0008–0.0045。三星周期比 {{ (entities.satellite_cadence.period_days / entities.satellite_nacrea.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_cadence.period_days) | round(2) }}/{{ (entities.satellite_vigil.period_days / entities.satellite_nacrea.period_days) | round(2) }}，全部脱离低阶共振或仅触及可忽略的高阶项（详见 design-notes/0009 §2–§3） |
+| 长期稳定性 | 双珠在 500 kyr 积分内全程存活，韵珠–守珠实际最小距离 408,239 km（径向壳余量 201,418 km）；迁移 μm/yr 级冻结 | {{ entities.satellite_cadence.a_rh_ratio }}/{{ entities.satellite_vigil.a_rh_ratio }} r_H 逆行；径向净空 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} r_H,m；豁免与命名规则见 design-notes/0009 §2 |
 | 巨行星潮汐耗散 | k₂p/Qp ≈ 7×10⁻⁸（Q_p ≈ 5×10⁶，弱耗散 P-B 包） | 两珠外迁均 ≤7 μm/yr（∝ m_s·a⁻⁵）→ 泵浦频率 5.9 Gyr 恒定 |
-| 潮汐加热平衡 | 历元 e={{ entities.satellite_nacrea.eccentricity }} → {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW（{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²，冷谷快照）；当代段均值 **0.34 W/m²**（3.9× 地球内热流）、瞬时极值 2.50（0.89×Io，百年级）、500-yr 平滑持续脉冲占空 0% | 加热功率 ≈**2.6×10⁴**·e² W/m²（k₂/Q=1×10⁻³；见 tidal_effects.md）；带内主调制 **~20 kyr** =「万年火山脉冲」（long_term_cycles §4）；远期增温趋势 = 诊断信号（design-notes/0009 §3） |
+| 潮汐加热平衡 | 长期均热 **0.592 W/m²**（0.26×Io，约 6.8× 地球内热流）；万年尺度均热带 0.269–0.933，活跃时代后回落；20/100/500 yr 窗均峰 1.121/1.063/1.032 W/m²；**无固定周期**（火山-地热-CO₂ 包络，见 long_term_cycles §5） | 潮汐模型 k₂=0.3（与 Q=300 的换算约定见 physical_params.md）；另账放射性 18.8 TW ≈ 0.032 W/m² 独立深部预算（physical_params.md 分核素表）；热账全貌见 design-notes/0009 §3 |
 
 > 注：k₂/Q 取 `physical_params.md`（k₂=0.3, Q=300，「非共振大洋+窄陆架」组合，
 > 2026-09-28 裁决）→ 1×10⁻³，与 tidal_effects.md / geological_history.md 一致。
@@ -74,8 +74,9 @@ N 体 MC 判决，方法与统计见 design-notes/0009 附录 §9.5）。详见 
 
 ### 因变量 — 60 亿年离心率演化简史（受迫振荡）
 
-Nacrea 的偏心率**不是自由衰减的**，而是**受迫偏心率（forced eccentricity）**——
-由韵珠/守珠的长期摄动持续维持。区分两个时间尺度至关重要：
+Nacrea 的偏心率**不是自由衰减的**，而是受恒星四极矩与伴星摄动维持的
+**受迫偏心率（forced eccentricity）**；潮汐加热的主驱动是自转-轨道失配
+ψ 而非偏心率（见 design-notes/0009 §3）。区分两个时间尺度至关重要：
 
 - **潮汐阻尼时标 τ_e ≈ {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr**：泵浦一旦消失，自由 e 在此尺度内归零。
 - **泵浦源寿命 ~Gyr**：两珠轨道准可积、迁移 ~μm–cm/yr——受迫带 5.4 Gyr 恒定。
@@ -84,12 +85,12 @@ Nacrea 的偏心率**不是自由衰减的**，而是**受迫偏心率（forced 
 |------|-----------|-----|----------------|------|
 | **冥古宙（捕获前）** | 0–0.5 | ~0.015（自由）→ 衰减 | （形成热主导 → 递减） | 自由偏心率潮汐阻尼快速衰减；四极矩本底泵浦此时已在（~0.004–0.006） |
 | **晚期散射期（双珠捕获）** | ~0.5 | 受迫带接管 | — | 本系统的「晚期重轰炸期」：韵珠、守珠先后逆行捕获（与墟带雕塑/散射盘/奥尔特供给同事件）；双珠摄动叠加四极矩本底 |
-| **捕获后至今** | 0.5–5.9 | **当代段 0.0009–0.0098 振荡（rms 0.0036）** | 0.02–2.50（均值 ~0.34） | 泵浦源冻结（迁移 μm/yr）；主调制 ~20 kyr（长期摄动拍频）=「万年火山脉冲」 |
-| **当前历元** | 5.9 | **{{ entities.satellite_nacrea.eccentricity }}**（带下缘冷谷快照） | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }}**（{{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW） | stellar.yaml 历元值（t₁=37.905 yr 平移态）；与 tidal_effects.md / geological_history.md 一致 |
+| **捕获后至今** | 0.5–5.9 | 长期带宽 0.0008–0.0045（p5–p95） | 万年尺度均热带 0.269–0.933（长期均 0.592） | 加热主驱动 ψ、偏心率为次；火山-地热包络**无固定周期**（long_term_cycles §5） |
+| **当前历元** | 5.9 | **{{ entities.satellite_nacrea.eccentricity }}**（带内快照） | CTL 口径下无单一换算数，读主窗带 | stellar.yaml 历元值（t₁=37.905 yr 平移态）；与 tidal_effects.md / geological_history.md 一致 |
 
-> 热流 ∝ e²：地质叙事取「长期均值 ~3.9× 地球内热流（0.34 W/m²）、瞬时尖峰
-> ~0.9× Io（百年级脉冲）」的活跃板块构造世界；历元值为冷谷快照。
-> 加热系数 2.6×10⁴·e² 对应 Q=300（2026-09-28 裁决）。
+> 地质叙事取「主窗均热 0.592 W/m²（约 6.8× 地球内热流）、10 kyr 均热带
+> 0.269–0.933、无固定周期包络」的活跃板块构造世界；CTL 参数与放射性
+> 独立预算见 physical_params.md，热账全貌见 design-notes/0009 §3。
 
 ### 因变量 — 三重撞击防护机制
 
