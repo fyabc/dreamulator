@@ -51,7 +51,30 @@ tags: [mass, radius, gravity, love-numbers]
 | 系统稳定性 | 0.2 R_H 处 | 长期绝对稳定区 |
 | 昼夜交替周期（太阳日） | **{{ entities.satellite_nacrea.solar_day_days | round2 }} 地球日（{{ entities.satellite_nacrea.solar_day_days | hours | round1 }} 小时）** | 恒星自转 {{ entities.satellite_nacrea.period_days | hours | round0 }}h（=绕 Aegis 公转）+ Aegis 公转 {{ entities.planet_aegis.period_days | round0 }} 天 → 1/(1/{{ entities.satellite_nacrea.rotation_period_days }} − 1/{{ entities.planet_aegis.period_days | round0 }}) |
 | 年（季节周期） | **{{ entities.planet_aegis.period_days | round0 }} 地球日** | = Aegis 绕恒星公转周期（{{ entities.planet_aegis.semi_major_axis_au }} AU）；一年 = {{ entities.satellite_nacrea.days_per_year | round1 }} 个太阳日 |
-| 有效倾角 / 极圈 | {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}° / ±{{ entities.satellite_nacrea.polar_circle_latitude_deg | round0 }}° | 有效倾角 = 轨道面锥摆的长期均值（瞬时黄道倾角带 10.9–18.3°、~10 yr 周期，拉普拉斯面平衡物理见 design-notes/0009）；极点极昼极夜各 ~{{ entities.satellite_nacrea.polar_day_at_pole_days | round1 }} 天 |
+| 有效倾角 / 极圈 | {{ entities.satellite_nacrea.axial_tilt_deg | round0 }}° / ±{{ entities.satellite_nacrea.polar_circle_latitude_deg | round0 }}° | 恒星季节角长期时权均（19.85°，保存带 17.55–22.05°、主谱峰 ~8.39 地球年「季幅潮」）；极点极昼极夜各 ~{{ entities.satellite_nacrea.polar_day_at_pole_days | round1 }} 天 |
 | 浅水重力波速 | 202.8 m/s | √(gH) |
+
+### 放射性生热独立预算
+
+类地化学库存模型（McDonough、Šrámek、Wipperfurth 2020 全文表 3：地球当代
+硅酸盐平均 U=20 ppb、Th=75.4 ppb、K=280 ppm，另计微量 Rb、Sm；热系数已扣
+中微子能量）按 Nacrea 硅酸盐份额 67.5%（4.84×10²⁴ kg，类地内部分层假设）
+回推形成库存再演化到系统年龄。**5.9 Gyr 当代生热 ≈ 18.8 TW，折合全球面积
+0.032 W/m²**（全球面积 5.84×10¹⁴ m²，1 W/m² = 584 TW）。这是内部释放功率，
+不含潮汐、吸积、分异与长期冷却，也与潮汐热（design-notes/0009 §3）分账。
+
+| 自形成以来年龄 | 生热 (TW) | 折合 (W/m²) |
+|---:|---:|---:|
+| 0.5 Gyr | 94.0 | 0.161 |
+| 2.5 Gyr | 40.8 | 0.070 |
+| 4.5 Gyr | 24.2 | 0.041 |
+| 5.9 Gyr | 18.8 | 0.0323 |
+
+5.9 Gyr 时 ²³²Th 约占 48%、²³⁸U 39%、⁴⁰K 12%。较宽创作情景（初始库存
+×0.5–2、硅酸盐份额 0.60–0.80）为 8–44 TW（0.014–0.075 W/m²），不是测量
+误差带。最初数 Myr 的 ²⁶Al/⁶⁰Fe 短寿命核素另算（形成早期功率可高数千倍），
+不据此延长到 0.5 Gyr。参照：地球类地模型当代 19.9±3.0 TW（0.039 W/m²）、
+观测总地表散热 47±2 TW（0.092 W/m²，含长期冷却）——不能把总散热全当核素
+产热。恒星 [Fe/H]=−0.19 不唯一确定 U/Th/K 含量，上表按类地比例假设。
 
 ---

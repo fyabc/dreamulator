@@ -164,8 +164,8 @@ def test_map_world_nacrea() -> None:
     params = map_world(world, "satellite_nacrea")
     assert params.radius == pytest.approx(1.07)
     assert params.gravity == pytest.approx(10.28, abs=0.01)
-    assert params.rotationperiod == pytest.approx(3.138)
-    assert params.obliquity == pytest.approx(14.9)
+    assert params.rotationperiod == pytest.approx(3.1336)
+    assert params.obliquity == pytest.approx(19.9)
     assert params.eccentricity == pytest.approx(0.06786252)
     assert params.flux == pytest.approx(1361.0 * 0.1227 / 0.3648**2, rel=1e-6)
     assert params.year == pytest.approx(99.8, abs=0.5)  # year-locked scaling

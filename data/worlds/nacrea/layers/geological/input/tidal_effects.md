@@ -69,28 +69,28 @@ $$Z = \frac{M_p}{M_m}\frac{R_m^4}{a^3} = 423.75 \times \frac{(6.817\times10^6)^4
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
 | 潮汐加热功率 Ė | **{{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW**（历元冷谷） | Peale & Cassen (1978)：Ė = (21/2)(k₂/Q)(GM_p²R⁵/a⁶)·n·e² = 1.52×10¹⁹·e² |
-| 潮汐热流密度 | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²**（历元）；**受迫带均值 0.34 W/m²**（197 TW） | Ė / 4πR² |
+| 潮汐热流密度 | **长期均热 0.592 W/m²**（万年尺度均热带 0.269–0.933，无固定周期） | 自转态-轨道耦合口径（design-notes/0009 §3） |
 | 对比 | 地球内热流 0.087 W/m²、Io 2.2–2.5（潮汐） | 带均值 = 3.9× 地球内热流 |
 | 偏心率阻尼时标 τ_e | **{{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr** | (2/21)(Q/k₂)(M_m/M_p)(a/R)⁵(1/n) |
 
 > 历元 {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 1e12) | round0 }} TW ≈ {{ (1.52e19 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity / 4.7e13) | round(2) }}× 地球总热流（47 TW）——历元值是受迫带的**冷谷快照**；
-> 带均值 0.34 W/m²（197 TW ≈ 4.2× 地球总热流）才是地质时间上的常态热源，
+> 主窗均热 0.592 W/m²（约 6.8× 地球内热流）才是地质时间上的常态热源，
 > 为 Nacrea 主导热源（~85%），驱动板块构造与碳-硅酸盐循环。瞬时极值
-> 2.50 W/m²（0.89×Io）为百年级短暂尖峰，500-yr 平滑持续脉冲占空 0%
-> （平滑 p95 仅 0.77）——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
+> 20/100/500 yr 窗均峰 1.121/1.063/1.032 W/m²，主窗无 >0.5×Io 持续事件
+> ——「活跃但不至岩浆海」。τ_e = {{ (entities.satellite_nacrea.tidal_e_damping_timescale_yr / 1e6) | round1 }} Myr 意味着**泵浦一旦移除，e 在百万年尺度内归零**——
 > 泵浦为**双源**：恒星四极矩本底（0.365 AU 强场，~0.004–0.006）+ 韵珠/守珠
-> 长期摄动（coef=1.35×10⁻³，韵珠占 98.3%）；当代段长期摆动带 rms 0.0036 / max 0.0098
+> 伴星长期摄动；定版主窗 e 带 p5–p95 0.0008–0.0045（加热主驱动为 ψ，e 为次）
 > （10-07 定版数值审计；详见 `satellite_architecture.md` 与 design-notes/0009 §3）。
 
 ## 因变量 — Q 敏感性
 
 潮汐加热 Ė ∝ k₂/Q，而 Q 是唯一缺乏实测锚定的自由参数（洛夫数 k₂/h₂ 取地球实测值）。
-下表展示受迫带固定（当代段 rms 0.0036）、Q 取不同值时潮汐加热的变化范围：
+下表展示偏心率带宽固定、Q 取不同值时 e² 口径加热的变化范围（敏感性参考）：
 
 | Q | k₂/Q | 带均值热流 | 历元热流（e={{ entities.satellite_nacrea.eccentricity }}） | 相对地球内热流（带均值） | 地质状态 |
 |---|------|---------|---------|---------------|---------|
 | 150 | 2×10⁻³ | 0.68 W/m² | {{ (5.21e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 7.8× | 正典带内活跃端 |
-| **300（本设定）** | **1×10⁻³** | **0.34 W/m²** | **{{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²** | **3.9×** | 活跃健康（正典带，板块构造旺盛） |
+| **300（本设定）** | **1×10⁻³** | — | {{ (2.607e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m²（e² 换算口径） | ~6.8×（耦合口径） | 活跃健康（板块构造旺盛） |
 | 500（近月球刚性） | 6×10⁻⁴ | 0.20 W/m² | {{ (1.564e4 * entities.satellite_nacrea.eccentricity * entities.satellite_nacrea.eccentricity) | round(3) }} W/m² | 2.3× | 增强板块构造 |
 
 > **结论**：Q 在 150–500 之间浮动时，带均值加热在 2.3–7.8× 地球内热流之间变化，
@@ -141,7 +141,7 @@ Nacrea 的潮汐周期（恒星自转 = 公转，3.138 d）与昼夜周期（太
 
 ## 潮汐效应 — 地质结果
 
-- **板块运动速度**：10–15 cm/yr（地球 5 cm/yr 的 2–3 倍，带均值 0.34 W/m² 潮汐加热驱动）
+- **板块运动速度**：10–15 cm/yr（地球 5 cm/yr 的 2–3 倍，主窗均热 0.592 W/m² 潮汐加热驱动）
 - **超大陆旋回**：太古宙（板块速度 30–40 cm/yr）约 7000 万年一周，随板块
   减速放缓至现行 ~1.2 亿年（当前处于第 51 次旋回裂解中期，与
   geological_history.md 分期一致）

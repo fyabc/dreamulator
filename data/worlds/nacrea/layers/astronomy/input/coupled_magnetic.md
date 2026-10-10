@@ -12,7 +12,7 @@ tags: [magnetic-field, dynamo, current-sheet]
 |------|-----|------|
 | Aegis 表面赤道磁场 B_p | **400 μT** | planets.yaml（Christensen 2009 发电机标度律） |
 | Nacrea 表面赤道磁场 B_s | **30 μT** | planets.yaml；潮汐加热维持熔融地核 → 发电机效应 |
-| Aegis 磁偶极轴倾角 | 18.0° | 等于自转轴倾角 |
+| Aegis 磁偶极轴倾角 | 44.8° | 等于自转轴倾角 |
 
 ### 因变量 — 磁场参数
 
@@ -29,7 +29,7 @@ tags: [magnetic-field, dynamo, current-sheet]
 
 | 现象 | 周期 | 物理机制 | 地表表现 |
 |------|------|---------|---------|
-| **磁场扫掠 (Magnetic Sweeping)** | **10 小时** | Aegis 快速自转 → 磁偶极轴在空间高速旋转 | Nacrea 表面的外部 0.38 μT 磁场方向以 10h 周期 360° 扫掠；频率 **27.78 μHz** 的超低频交变磁场 |
+| **磁场扫掠 (Magnetic Sweeping)** | **4.47 小时** | Aegis 快速自转 → 磁偶极轴在空间高速旋转 | Nacrea 表面的外部 0.38 μT 磁场方向以 4.47 h 周期 360° 扫掠；频率 **62.0 μHz** 的超低频交变磁场 |
 | **电流片穿越 (Current Sheet Crossing)** | **38 小时** | Nacrea 每 {{ entities.satellite_nacrea.period_days | hours | round1 }}h 公转中上下穿透 Aegis 磁赤道面 | 每 38h 经历一次磁场极性瞬间翻转 + 等离子体注入 + 阿尔芬波轰击 → 全球性地磁暴 |
 
 ### 因变量 — 生物学效应
