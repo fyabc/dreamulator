@@ -101,7 +101,6 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 ## astro/ — 天文 N 体与恒星诊断（5 个）
 
 - `rebound_nbody.py` — REBOUND 自旋-轨道积分（轨道稳定性、Laplace 共振角）。
-- `rebound_scan.py`、`rebound_phase_scan.py` — 参数扫描 / 共振相位扫描。
 - `diagnose_stellar_physics.py` — 恒星物理公式（质光关系、演化时标）诊断。
 
 ## release/ — 发布与静态导出（2 个）
