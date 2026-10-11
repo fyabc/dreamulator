@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791399793940,
+  "lastUpdate": 1791690274241,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6724,6 +6724,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006275106365101534",
             "extra": "mean: 5.071279600002754 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "7864999a8e9927538e622d590c44f04105256ce3",
+          "message": "feat(nacrea): 26-10-11 定版正典同步 + Aegis 快自转落典\n\n作者 2026-10-11 九项裁决 + 快自转改落典：500 kyr coupled_ctl 长积分为\n新认证基准（名称钉死，后续数据原位替换、名称不变）。\n\n参数落典：Nacrea 恒星季节角 19.9°（波动带 17.55–22.05、季幅潮谱峰\n~8.39 地球年）、恒星自转 3.1336 d（太阳日 3.24）、J₂=0.0006 /\nC/MR²=0.33 / CTL k2tau；Aegis 自转 4.4725 h / 倾角 44.837° / J₂=0.04\n（旧 10 h/18°/0.008 删除；机制待实验认证——成因候选与旋转结构核验\n见 0009 文首，巨撞击化石说退役）；磁偶极轴 44.8°、扫掠 4.47 h /\n62.0 μHz；拉普拉斯半径 5.0→6.9×10⁵ km（Nacrea ~1.05 r_L，季节角\n几何自洽）。\n\n口径换轨：潮汐热 0.34→0.592 W/m² 长期均值（万年均热带 0.269–0.933，\n无固定周期——「20 kyr 万年火山脉冲」按不规则包络改写）；加热主驱动\nψ（相关 0.973）非偏心率（0.111）；放射性 18.8 TW/0.032 W/m² 独立\n预算（McDonough 2020 分核素表入 physical_params；Umbra 放射性手估\n顺修 13→6.5 mW/m²）；C–V 余量 408,239 km 入档；旧 10-07 定版认证与\nrebound_nbody 算子链退役（0009 重写，正文最新版 + 更新历史）。\n\n文风纪律：input 层文档零开发语（定版/待认证/认证过程全归\ndesign-notes，input 只留正典数字 + 一句指针；连既有「定版构建」等\n措辞一并清理）；公开文档无私有档案引用与本地实验叙事。\n\n验证：全链重建 5/5（地理逐位不变；气候 diff：全球 +0.06°C、\nEF→ET/D 类出现 106 格、Cfb/BSk +1100——带界叙事完整重生成挂排期 1）；\nguard 指纹二次重打归零；1076 tests 全绿（倾角/太阳日 77.6h/回归线\n20°/极圈 70°/r_sync 96,122/Aegis 自转锚更新）；mypy/ruff 零错。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-11T07:59:57+08:00",
+          "tree_id": "0c0835b1d13e80ffad06dd39e2a0a776d698c4ed",
+          "url": "https://github.com/fyabc/dreamulator/commit/7864999a8e9927538e622d590c44f04105256ce3"
+        },
+        "date": 1791690273423,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3909434381518387,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0975211457616944",
+            "extra": "mean: 2.557914783599999 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.0644873761929965,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03288518950558231",
+            "extra": "mean: 246.0334865 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9557824117121445,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8193547442539943",
+            "extra": "mean: 511.30432199999854 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 915.5119771842471,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011386419943090905",
+            "extra": "mean: 1.092285000001425 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 221.64261201564253,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010791427422602592",
+            "extra": "mean: 4.511767799999689 msec\nrounds: 5"
           }
         ]
       }
