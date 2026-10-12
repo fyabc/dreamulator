@@ -36,6 +36,13 @@ Design points (2026-10-05 harness decision):
   inherited ``MAKEFLAGS=-jN`` (common on shared servers) races the build and
   fails with ``Cannot open module file 'landmod.mod'``; :func:`run_gcm`
   strips the parallel-make variables before constructing the model.
+- **Linear-time raw reader.**  ``pyburn.readallvariables`` grows each
+  variable with ``np.append`` per Fortran record (quadratic copying) after
+  unpacking every value into a Python float.  On a 15-year T21 run (918 MB
+  raw) it took 680 s; :func:`fast_readallvariables` reads the same buffer
+  with ``np.frombuffer`` in under 1 s and returns bit-identical arrays.
+  :func:`install_pyburn_patches` swaps it in for both the regular and the
+  snapshot postprocessing.
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ import json
 import logging
 import os
 import platform
+import struct
 import sys
 import time
 from dataclasses import asdict
@@ -111,6 +119,57 @@ def serial_make_environment() -> list[str]:
     PlaSim must be built serially.
     """
     return [name for name in _PARALLEL_MAKE_VARS if os.environ.pop(name, None) is not None]
+
+
+def fast_readallvariables(fbuffer: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Drop-in replacement for ``exoplasim.pyburn.readallvariables``.
+
+    Returns the same ``(headers, variables)`` pair with bit-identical values:
+    data records are read with ``np.frombuffer`` and concatenated once per
+    variable, then widened to float64 exactly as the upstream
+    ``np.array(struct.unpack(...))`` path does.
+    """
+    import numpy as np
+    from exoplasim import pyburn as pb
+
+    en = pb._getEndian(fbuffer)
+    ml, mf = pb._getwordlength(fbuffer, 0, en)
+    n = 0
+    mainheader, zsig, n = pb.readrecord(fbuffer, n, en, ml, mf)
+    headers: dict[str, Any] = {"main": mainheader}
+    variables: dict[str, Any] = {"main": zsig}
+    variables["sigmah"] = zsig[: mainheader[6]]
+    variables["time"] = []
+
+    chunks: dict[str, list[Any]] = {}
+    marker = en + mf
+    while n < len(fbuffer):
+        wl, fmt = pb._getknownwordlength(fbuffer, n, en, ml, mf)
+        header_words = struct.unpack(marker, fbuffer[n : n + ml])[0] // 4
+        n += ml
+        header = struct.unpack(en + header_words * "i", fbuffer[n : n + header_words * 4])
+        n += header_words * 4 + ml
+        data_words = struct.unpack(marker, fbuffer[n : n + ml])[0] // wl
+        n += ml
+        field = np.frombuffer(fbuffer, dtype=en + fmt, count=data_words, offset=n)
+        n += data_words * wl + ml
+        kcode = str(header[0])
+        if kcode == "139":
+            variables["time"].append(header[6])  # nstep-nstep1, as upstream
+        if kcode not in chunks:
+            chunks[kcode] = []
+            headers[kcode] = header
+        chunks[kcode].append(field)
+    for kcode, parts in chunks.items():
+        variables[kcode] = np.concatenate(parts).astype(np.float64)
+    return headers, variables
+
+
+def install_pyburn_patches() -> None:
+    """Swap the linear-time raw reader into ``exoplasim.pyburn``."""
+    from exoplasim import pyburn as pb
+
+    pb.readallvariables = fast_readallvariables
 
 
 def _hash_file(path: Path) -> str:
@@ -204,6 +263,7 @@ def run_gcm(
         )
 
     exoplasim.Model._crash = _hard_crash
+    install_pyburn_patches()
 
     removed = serial_make_environment()
     if removed:
@@ -271,6 +331,7 @@ def postprocess_raw(raw: str | Path, out_nc: str | Path, params: ExoPlaSimParams
     ensure_environment()
     import exoplasim.pyburn as pb
 
+    install_pyburn_patches()
     pb.postprocess(
         str(raw),
         str(out_nc),
@@ -290,6 +351,8 @@ def subprocess_env_hint() -> str:
 
 __all__ = [
     "ensure_environment",
+    "fast_readallvariables",
+    "install_pyburn_patches",
     "multi_year_otherargs",
     "postprocess_raw",
     "run_gcm",
