@@ -21,7 +21,7 @@ nacrea 的正式定标配置与结论数字在
 |---|---|
 | `scripts/climate/gcm/bootstrap.sh` | 在任意 Ubuntu 机器或 WSL 上准备 Fortran 工具链和 Python 虚拟环境 |
 | `scripts/climate/gcm/run_exoplasim.py` | 命令行入口：参数映射、运行模式、写 manifest、提取诊断、出概览图 |
-| `scripts/climate/gcm/make_landmap.py` | 把世界网格的海陆分布重采样成 ExoPlaSim 的 `.sra` 海陆掩膜 |
+| `scripts/climate/gcm/make_landmap.py` | 把世界网格重采样成 ExoPlaSim 的 `.sra` 地表文件：海陆掩膜，以及可选的地表位势（地形） |
 | `src/dreamulator/gcm/mapping.py` | 世界输入到 ExoPlaSim 参数的纯函数映射，所有单位换算都集中在这里 |
 | `src/dreamulator/gcm/runner.py` | 运行编排：环境自检、多年连续积分、续算、manifest |
 | `src/dreamulator/gcm/diagnostics.py` | 从 NetCDF 输出提取急流、Hadley 环流边界、全球均温等指标 |
@@ -41,8 +41,9 @@ bash scripts/climate/gcm/bootstrap.sh private/gcm/venv
 ```
 
 脚本分四步：用 apt 安装 gfortran、gcc 和 make；在指定目录建立 Python 虚拟环境并安装
-`exoplasim==3.4.2`、netCDF4、matplotlib、meson、ninja、pyyaml、scipy；强制编译 ExoPlaSim
-的 pyfft 扩展并验证能导入；最后对 nacrea 做一次参数映射冒烟（不运行模式）。
+`exoplasim==3.4.2`、netCDF4、matplotlib、meson、ninja、pyyaml、scipy，以及参数映射要用到的
+dreamulator 引擎核心依赖（安装时锁住 numpy 版本）；强制编译 ExoPlaSim 的 pyfft 扩展并验证
+能导入；最后对 nacrea 做一次参数映射冒烟（不运行模式）。
 
 这里刻意使用 pip 加 venv，而不是 uv。原因是仓库里的 `uv.toml` 会覆盖包索引配置，
 在安装 meson 等构建依赖时出过两次问题。国内网络可以设置镜像：
@@ -86,19 +87,29 @@ Fortran 程序，约需两分钟；之后同样的配置直接复用编译结果
 
 ## 4. 正式运行：带海陆分布
 
-### 4.1 生成海陆掩膜
+### 4.1 生成海陆掩膜和地形
 
-海陆掩膜从世界网格生成，所以要先构建该世界的地质层：
+地表文件从世界网格生成，所以要先构建该世界的地质层：
 
 ```bash
 uv run dreamulator build nacrea --only geological
-uv run python scripts/climate/gcm/make_landmap.py --world nacrea \
-    --mesh data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz \
-    --resolution T21 --out private/gcm/surf/nacrea_N032_surf_0172.sra
+uv run python scripts/climate/gcm/make_landmap.py --world nacrea --planet satellite_nacrea \
+    --mesh data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz --resolution T21 \
+    --out private/gcm/surf/nacrea_N032_surf_0172.sra \
+    --topo-out private/gcm/surf/nacrea_N032_surf_0129.sra
 ```
 
-`make_landmap.py` 依赖 dreamulator 的地图模块，用项目的 uv 环境运行即可。脚本会打印
-重采样后的陆地占比，nacrea 在 T21 下约为 0.30。掩膜只区分海陆，不含地形高度。
+`make_landmap.py` 依赖 dreamulator 的地图模块，用项目的 uv 环境运行即可。
+
+- `--out` 是海陆掩膜（代码 172），用最近邻重采样；脚本会打印陆地占比，nacrea 在 T21
+  下约为 0.30。
+- `--topo-out` 是地表位势（代码 129，单位 m²/s²），等于格点框内陆地格点的面积加权平均
+  高程乘以该行星的重力加速度，海洋为 0。重力由 `--planet` 从世界输入算出，保证和运行用的
+  重力一致。nacrea 在 T21 下陆地平均高程约 670 m；地球的结果和 ExoPlaSim 自带的地球地形
+  逐格点相关系数为 0.995。
+
+地球参照臂也用同样的流程从 earth root 网格生成地表文件，不使用 ExoPlaSim 自带的地球文件，
+这样两边只差输入数据，不差处理方法。
 
 ### 4.2 运行
 
@@ -106,30 +117,62 @@ uv run python scripts/climate/gcm/make_landmap.py --world nacrea \
 source private/gcm/venv/bin/activate
 export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1   # 仅 root 需要
 python scripts/climate/gcm/run_exoplasim.py \
-    --world data/worlds/nacrea --planet satellite_nacrea \
-    --years 15 --ncpus 8 \
+    --world data/worlds/nacrea --planet satellite_nacrea --years 30 --ncpus 8 \
     --landmap private/gcm/surf/nacrea_N032_surf_0172.sra \
-    --workdir private/gcm/runs/nacrea_land15
+    --topomap private/gcm/surf/nacrea_N032_surf_0129.sra \
+    --configure '{"twobandalbedo": true}' \
+    --override '{"lonvernaleq": 180}' \
+    --workdir private/gcm/runs/nacrea_aligned
 ```
 
-这与 0012 设计笔记的定版配置一致：T21 分辨率、10 层、nacrea 海陆掩膜、海冰开启、
-冷启动 15 个模式年。
+### 4.3 对齐配置
 
-### 4.3 运行耗时参考
+GCM 与 EBM 比较、或与地球参照臂比较时，尽量只让输入数据不同、处理方法相同。下面这些
+设置构成当前的对齐配置，地球参照臂和 nacrea 运行都使用它：
+
+| 设置 | 取值 | 理由 |
+|---|---|---|
+| 海陆掩膜与地形 | 都从世界网格生成（§4.1） | EBM 和观测都带地形；GCM 平地表会系统性偏暖约 1.5 K（地球陆地平均高程约 0.8 km） |
+| 双波段反照率 | `twobandalbedo: true` | EBM 对非太阳型恒星使用光谱冰反照率；冰在近红外反照率低，K 型星近红外份额高，宽带反照率会高估冰面反照 |
+| 平流层臭氧 | 保持默认（关闭） | ExoPlaSim 默认配置在地球上已基本校准，内部参数吸收了「无臭氧」；打开后地球参照臂偏暖约 3.7 K |
+| 物理滤波 | 保持默认（关闭） | 属于数值稳定手段，却使地球参照臂偏暖约 2.9 K；T21 带地形不开滤波也稳定 |
+| 近日点相位 | nacrea `lonvernaleq: 180`，地球保留默认 102.7° | 见下文 |
+| 混合层深度 | 50 m（默认） | 与 EBM 的 `ocean_mixed_layer_depth_m` 相同 |
+
+**近日点相位。** PlaSim 的 `MVELP` 是从春分点量起的近日点经度，内部按 `MVELP + 180°`
+使用，所以近日点落在春分时 `MVELP = 180°`。映射函数会用 EBM 的同一套推导
+（`resolve_perihelion_day`）计算它；推导不出来时（地球，以及 26-10-11 定版后的 nacrea）
+映射会给出警告，ExoPlaSim 退回地球的 102.7°，而 EBM 退回「近日点在春分」。nacrea 的
+春分方向随约 10 年周期的轨道锥摆轮转，不存在固定相位，「近日点在春分」对南北半球是中性
+的选择，所以 nacrea 运行显式传 `lonvernaleq: 180` 与 EBM 对齐。
+
+两边都没有考虑的因素：宿主行星造成的食、宿主行星的反照光和红外辐射、内部热流（约
+0.5 W/m²，相对日照可忽略）。陆地冰盖在 GCM 里没有掩膜，只靠积雪体现。
+
+### 4.4 运行耗时参考
 
 以下数字在 nacrea、T21、10 层配置下测得，换机器会有出入：
 
-| 核数 | 每个模式年的墙钟时间 | 15 年积分耗时 |
+| 分辨率与核数 | 每个模式年的墙钟时间 | 30 年积分耗时 |
 |---|---|---|
-| 1 | 约 4 分钟 | 约 1 小时 |
-| 8（MPI） | 约 1 分钟 | 约 15 分钟 |
+| T21，1 核 | 约 4 分钟 | 约 2 小时 |
+| T21，4 核（MPI） | 约 1.5 分钟 | 约 45 分钟 |
+| T21，8 核（MPI） | 约 1 分钟 | 约 30 分钟 |
+| T42，16 核（MPI） | 约 2.3 分钟 | 约 70 分钟 |
+
+T42 的数字来自 1 年试跑，测量时机器接近满载。ExoPlaSim 在 T42 下沿用 T21 的 45 分钟时间步长，
+网格变细后 CFL 稳定余量变小；做长时间 T42 积分时，可以考虑把步长缩短到 30 分钟左右（计算量
+相应增加约 1.5 倍），上游也有 T42 崩溃的未决 issue（#23）。命令行的 `--override` 只能改映射
+结果里已有的字段，步长要走 Python API：`params.extras["timestep"] = 30.0`（写法同 §8）。
 
 积分结束后还有单线程的后处理：ExoPlaSim 自带的 pyburn 把原始输出转成 NetCDF，
 主输出和快照各处理一遍。15 年运行的后处理约需 3 分钟。上游 pyburn 读取原始文件的
 写法是平方复杂度，同样的工作原本要十几分钟；`run_gcm` 已换用线性时间的读取函数
 （`runner.fast_readallvariables`），输出与上游逐位一致。
 
-`--ncpus` 应取能整除模式纬圈数的值。T21 有 32 个纬圈，可选 1、2、4、8、16。
+`--ncpus` 应取能整除模式纬圈数的值。T21 有 32 个纬圈，可选 1、2、4、8、16；T42 有 64 个纬圈，
+可选到 32。同时启动多个运行时，如果某个核数的程序还没编译过，先单独启动一个运行让它完成编译，
+再启动其余运行：所有运行共用 venv 里的同一棵源码树，并发编译会互相干扰。
 
 ## 5. 命令行参数
 
@@ -144,17 +187,20 @@ python scripts/climate/gcm/run_exoplasim.py \
 | `--ncpus` | 1 | MPI 进程数，大于 1 时需要 OpenMPI |
 | `--workdir` | `gcm_runs/<天体>_<分辨率>` | 运行目录，建议显式指定到 `private/` 下 |
 | `--landmap` | 无 | `.sra` 海陆掩膜；不传时为纯海洋行星 |
+| `--topomap` | 无 | `.sra` 地表位势（地形），必须和 `--landmap` 一起使用 |
+| `--configure` | `{}` | 以 JSON 传入额外的 `Model.configure` 参数，例如对齐配置的三个开关 |
+| `--namelist` | `{}` | 以 JSON 传入额外的 namelist 项，格式为 `"键@namelist文件": "值"`，例如平板海洋水平扩散 `{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "5.0E4"}` |
 | `--greenhouse-mode` | none | 温室处理方式，见下文 |
 | `--pco2-bar` | 无 | `pco2` 模式下显式给定的 CO₂ 分压，单位 bar |
 | `--flux-boost-factor` | 无 | `flux_boost` 模式下的恒星通量放大倍数 |
-| `--override` | `{}` | 以 JSON 覆盖映射结果中的字段，例如 `'{"obliquity": 0}'` |
+| `--override` | `{}` | 以 JSON 覆盖映射结果中的字段，例如 `'{"obliquity": 0}'`、`'{"lonvernaleq": 180}'` |
 | `--nc` | 无 | 只诊断一个已有的 NetCDF 文件，不重新运行 |
 | `--no-plot` | 关 | 不生成概览图 |
 
 **温室模式。** 默认的 `none` 模式会按世界大气成分里的 CO₂ 比例自动换算 pCO2
 传给模式（nacrea 约 720 ppm），这就是定标所用的配置。此时日志里出现的
-`greenhouse_factor ... not compensated` 警告只是提示 EBM 的温室参数没有对应物，
-可以忽略。`pco2` 模式用 `--pco2-bar` 显式指定 CO₂ 分压，用于做 pCO2 扫描。
+`greenhouse_factor ... is the EBM parametrisation and is not mapped` 只是提示 EBM 的
+温室参数没有对应物，可以忽略。`pco2` 模式用 `--pco2-bar` 显式指定 CO₂ 分压，用于做 pCO2 扫描。
 `flux_boost` 是早期原型阶段放大恒星通量的做法，现在不推荐使用。
 
 **参数映射的单位约定。** `radius` 以地球半径为单位而不是米，`year` 以 24 小时
