@@ -450,10 +450,12 @@ def resolve_perihelion_day(
     sun's longitude matches ``λ_pole − 90°`` (``λ_pole`` the spin-axis azimuth).
     The offset is ``φ = ϖ − λ_pole + 270°``, so ``perihelion_day = P·φ/360°``.
 
-    For nacrea ``ϖ = 0°`` and ``λ_pole = 270°`` coincide → ``φ = 0``, so the
-    resolution returns 0 and the climate is unchanged.  Returns ``None`` when
-    the spin-axis azimuth is underivable (e.g. Earth — its moon is ecliptic,
-    not equatorial, so there is no equatorial reference satellite).
+    Returns ``None`` when the spin-axis azimuth is underivable, i.e. no
+    prograde satellite lies within ``_EQUATORIAL_TOLERANCE_DEG`` of the
+    parent's tilt (Earth: its moon is ecliptic, not equatorial; nacrea since
+    the 26-10-11 canon: Aegis tilts 44.8° while nacrea orbits at ~13.6°).  The
+    caller then keeps ``config.perihelion_day`` at its default 0 (perihelion at
+    the vernal equinox), and a warning says so.
     """
     warnings: list[str] = []
     if planet is None or period_days is None:
@@ -472,6 +474,13 @@ def resolve_perihelion_day(
     peri_longitude = (omega + (node or 0.0)) % 360.0
     pole = _spin_axis_longitude_deg(member, index)
     if pole is None:
+        warnings.append(
+            f"Perihelion phase for '{planet.id}' is underivable: '{member}' has no "
+            f"equatorial reference satellite (prograde orbit within "
+            f"{_EQUATORIAL_TOLERANCE_DEG:g}° of its axial tilt), so its spin-axis azimuth is "
+            "unknown. The seasonal model keeps perihelion at the vernal equinox "
+            "(perihelion_day = 0)."
+        )
         return None, warnings
     offset = (peri_longitude - pole + 270.0) % 360.0
     perihelion_day = period_days * offset / 360.0
