@@ -1,7 +1,8 @@
-# ExoPlaSim GCM 参照臂运行指南
+# ExoPlaSim GCM 参照臂运行指南与踩坑记录
 
 本文说明如何为一个 dreamulator 世界运行 ExoPlaSim 全球气候模式（GCM），并读取
-结果与 EBM 气候引擎对比。
+结果与 EBM 气候引擎对比；运行中遇到过的坑与处理方法集中在 §2.3（环境变量）、
+§4.3（对齐配置的归因）、§4.4（T42 的已知数值问题）、§7（读结果的口径）和 §9（常见问题）。
 
 ExoPlaSim 是 PlaSim 的系外行星扩展版本（Paradise et al., MNRAS 2022），能显式求解
 大气原始方程，因此副热带高压、急流、季风等大尺度特征会自然涌现。在本项目里它的
@@ -158,12 +159,18 @@ GCM 与 EBM 比较、或与地球参照臂比较时，尽量只让输入数据�
 | T21，1 核 | 约 4 分钟 | 约 2 小时 |
 | T21，4 核（MPI） | 约 1.5 分钟 | 约 45 分钟 |
 | T21，8 核（MPI） | 约 1 分钟 | 约 30 分钟 |
-| T42，16 核（MPI） | 约 2.3 分钟 | 约 70 分钟 |
+| T42，16 核（MPI），45 分钟步长 | 约 2.3 分钟 | 约 70 分钟 |
 
-T42 的数字来自 1 年试跑，测量时机器接近满载。ExoPlaSim 在 T42 下沿用 T21 的 45 分钟时间步长，
-网格变细后 CFL 稳定余量变小；做长时间 T42 积分时，可以考虑把步长缩短到 30 分钟左右（计算量
-相应增加约 1.5 倍），上游也有 T42 崩溃的未决 issue（#23）。命令行的 `--override` 只能改映射
-结果里已有的字段，步长要走 Python API：`params.extras["timestep"] = 30.0`（写法同 §8）。
+T42 的数字来自 1 年试跑，测量时机器接近满载。T42 有两个已知的数值问题：
+
+- **短波辐射会触发浮点异常。** 多年积分会在短波辐射子程序 `swr_` 中崩溃（SIGFPE），
+  单波段和双波段反照率、有无地形都会发生，气候越暖越早（712 ppm 约第 8–10 年，2000 ppm
+  约第 7 年）；缩短步长只能推迟。陷阱位置是 `radmod.f90:1783` 的 `SQRT(273./dt)`，说明某格点
+  气温已在上游发散成非物理值。T21 不受影响，上游尚未修复。T42 目前只适合 10 年以内的短期运行。
+- **高 CO₂ 下 Kuo 对流方案会溢出**，6000 ppm 在第 5 年崩溃。高 CO₂ 端只用 T21。
+
+此外 T42 运行目前用 30 分钟步长（`--configure '{"timestep": 30.0}'`，计算量约为 45 分钟步长的
+1.5 倍）；45 分钟步长在单波段下是否稳定还没有单独验证。
 
 积分结束后还有单线程的后处理：ExoPlaSim 自带的 pyburn 把原始输出转成 NetCDF，
 主输出和快照各处理一遍。15 年运行的后处理约需 3 分钟。上游 pyburn 读取原始文件的
@@ -263,6 +270,7 @@ run_gcm(params, "private/gcm/runs/nacrea_land15_cont", years=10, ncpus=8,
 | 现象 | 原因与处理 |
 |---|---|
 | 编译时报 `Cannot open module file 'landmod.mod'` | make 在并行编译。`run_gcm` 会自动清掉 `MAKEFLAGS` 等变量；如果是绕过 `run_gcm` 直接调用 exoplasim，需要手动 `unset MAKEFLAGS` |
+| T42 运行在 `swr_` 中报 `SIGFPE` | T42 短波辐射的已知缺陷，单双波段都会发生（见 roadmap 技术债）；长期积分改用 T21 |
 | `ModuleNotFoundError: No module named 'yaml'` | 虚拟环境是旧版引导脚本建的，执行 `pip install pyyaml scipy` |
 | 报 `exoplasim.pyfft failed to compile` | 虚拟环境缺 meson 或 ninja，或者它们不在 `PATH` 上；激活虚拟环境后重新运行引导脚本 |
 | 报 `ExoPlaSim reported a crash` | Fortran 侧出错，查看运行目录里的 `plasim_diag`、`plasim_output` 和运行日志 |
