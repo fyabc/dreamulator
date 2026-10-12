@@ -67,6 +67,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="path to a .sra land-mask file (see make_landmap.py); "
         "without it the run is an aquaplanet",
     )
+    ap.add_argument(
+        "--configure",
+        default="{}",
+        help="JSON dict of extra Model.configure kwargs, e.g. "
+        '\'{"twobandalbedo": true, "ozone": true, "physicsfilter": "gp|exp|sp"}\'',
+    )
+    ap.add_argument(
+        "--topomap",
+        default=None,
+        help="path to the matching code-129 geopotential .sra (make_landmap.py --topo-out)",
+    )
+    ap.add_argument(
+        "--namelist",
+        default="{}",
+        help="JSON dict of extra ExoPlaSim namelist entries, e.g. "
+        '\'{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "5.0E4"}\'',
+    )
     ap.add_argument("--nc", default=None, help="existing .nc to diagnose (skips the run)")
     ap.add_argument("--no-plot", action="store_true")
     return ap.parse_args(argv)
@@ -94,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         flux_boost_factor=args.flux_boost_factor,
         pco2_bar=args.pco2_bar,
         overrides=overrides,
+        extras=json.loads(args.configure),
     )
     print(f"[map] {args.planet}: {json.dumps(params.to_configure_kwargs(), indent=2)}")
     for warning in params.warnings:
@@ -117,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
                 "stellar": world / "layers/astronomy/input/stellar.yaml",
             },
             landmap=args.landmap,
+            topomap=args.topomap,
+            namelist_overrides=json.loads(args.namelist),
         )
         nc_path = outputs["nc"]
 

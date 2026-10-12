@@ -238,6 +238,8 @@ def run_gcm(
     ncpus: int = 1,
     input_files: dict[str, Path] | None = None,
     landmap: str | Path | None = None,
+    topomap: str | Path | None = None,
+    namelist_overrides: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Run ExoPlaSim for ``years`` model years and return output paths.
 
@@ -248,8 +250,18 @@ def run_gcm(
     an error.
 
     ``landmap`` is a ``.sra`` land-mask file (see :mod:`dreamulator.gcm.surface`);
-    when given, the run uses it instead of the aquaplanet surface.
+    when given, the run uses it instead of the aquaplanet surface.  ``topomap``
+    is the matching surface-geopotential file (code 129) and requires
+    ``landmap``.
+
+    ``namelist_overrides`` adds ExoPlaSim ``otherargs`` entries
+    (``"KEY@namelist_file": "value"``), e.g. the slab-ocean horizontal heat
+    diffusion ``{"NHDIFF@oceanmod_namelist": "1",
+    "HDIFFK@oceanmod_namelist": "5.0E4"}``.  The multi-year keys from
+    :func:`multi_year_otherargs` cannot be overridden.
     """
+    if topomap is not None and landmap is None:
+        raise ValueError("topomap requires landmap (ExoPlaSim reads both or neither)")
     ensure_environment()
     import exoplasim
 
@@ -280,7 +292,8 @@ def run_gcm(
     model.configure(
         aquaplanet=landmap is None,
         landmap=str(landmap) if landmap is not None else None,
-        otherargs=multi_year_otherargs(years),
+        topomap=str(topomap) if topomap is not None else None,
+        otherargs={**(namelist_overrides or {}), **multi_year_otherargs(years)},
         **kwargs,
     )
     # pyburn defaults to timeaverage=True with times=12: it would squash the
@@ -305,6 +318,8 @@ def run_gcm(
     all_inputs = dict(input_files or {})
     if landmap is not None:
         all_inputs["landmap"] = Path(landmap)
+    if topomap is not None:
+        all_inputs["topomap"] = Path(topomap)
     write_manifest(
         workdir / "manifest.json",
         params=params,
@@ -315,6 +330,8 @@ def run_gcm(
             "layers": layers,
             "ncpus": ncpus,
             "aquaplanet": landmap is None,
+            "topography": topomap is not None,
+            "namelist_overrides": dict(namelist_overrides or {}),
             "wall_seconds": round(time.time() - started, 1),
         },
     )
