@@ -112,6 +112,8 @@ uv run dreamulator serve --reload             # 开发模式（热重载）
 # 来覆盖默认的 data/worlds/ 数据目录。构建输出（maps/ + layers/*/derived/）已被
 # .gitignore 忽略，直接在 data/worlds 构建不污染 git 工作区，无需单独的开发目录。
 
+# ExoPlaSim GCM 参照臂（独立 pip venv，不走 uv）：见 docs/usage/exoplasim-gcm.md
+
 # 运行测试（默认 xdist 并行，--maxprocesses 8；全量 ~1 min）
 uv run pytest
 # 迭代单个测试时关掉并行（省 worker 启动 ~3-5 s）

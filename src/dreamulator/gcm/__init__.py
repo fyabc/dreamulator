@@ -1,8 +1,9 @@
 """GCM (ExoPlaSim) offline-oracle harness.
 
 ExoPlaSim is used as an *offline* validation oracle for the heuristic climate
-engine — never as a runtime engine in the build pipeline (see
-``docs/design/proposals/climate-gcm-plan.md``).  This package is the thin
+engine — never as a runtime engine in the build pipeline (design rationale in
+``docs/design/proposals/climate-gcm-plan.md``; how to run it in
+``docs/usage/exoplasim-gcm.md``).  This package is the thin
 adapter between dreamulator world inputs and ExoPlaSim runs:
 
 - :mod:`dreamulator.gcm.mapping` — pure world-input → ``Model.configure``

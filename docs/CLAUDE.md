@@ -43,6 +43,7 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 
 - CLI 命令参考（`cli.md`）
 - 地图工作流指南（`map-workflow.md`）
+- ExoPlaSim GCM 参照臂运行指南（`exoplasim-gcm.md`）
 - 文明地图使用指南（`civmap-guide.md`）
 - 3D 恒星系可视化器操作（`frontend-3d-viewer.md`）
 
