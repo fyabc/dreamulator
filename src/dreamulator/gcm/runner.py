@@ -27,15 +27,22 @@ Design points (2026-10-05 harness decision):
 - **Warm starts / continuations** must go through
   ``configure(restartfile=<path>)`` (passed via ``params.extras``): ExoPlaSim
   copies the seed to ``workdir/plasim_restart`` itself, and *deletes* any
-  pre-placed ``plasim_restart`` when ``restartfile`` is falsy — a silently
+  pre-placed ``plasim_restart`` when ``restartfile`` is falsy
+  (``exoplasim/__init__.py`` 3.4.2, L2643-2646) — a silently
   cold-started run otherwise (verify via the ``Found N variables in file``
   line in ``MOST_DIAG``, or a year-1 temperature sanity check).
+- **Serial make.**  ``exoplasim.Model()`` compiles PlaSim with ``make``, and
+  PlaSim's makefile does not declare all Fortran module dependencies.  An
+  inherited ``MAKEFLAGS=-jN`` (common on shared servers) races the build and
+  fails with ``Cannot open module file 'landmod.mod'``; :func:`run_gcm`
+  strips the parallel-make variables before constructing the model.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import platform
 import sys
@@ -47,8 +54,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from dreamulator.gcm.mapping import ExoPlaSimParams
 
+logger = logging.getLogger(__name__)
+
 _REQUIREMENT = (
-    "pip install 'exoplasim==3.4.2' netCDF4 matplotlib meson ninja "
+    "pip install 'exoplasim==3.4.2' netCDF4 matplotlib meson ninja pyyaml scipy "
     "&& scripts/climate/gcm/bootstrap.sh"
 )
 
@@ -90,6 +99,18 @@ def ensure_environment() -> None:
             raise RuntimeError(
                 f"exoplasim.pyfft failed to compile (numpy f2py meson backend). Fix: {_REQUIREMENT}"
             ) from exc
+
+
+_PARALLEL_MAKE_VARS = ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS")
+
+
+def serial_make_environment() -> list[str]:
+    """Remove inherited parallel-make flags from ``os.environ``.
+
+    Returns the names that were removed.  See the module docstring for why
+    PlaSim must be built serially.
+    """
+    return [name for name in _PARALLEL_MAKE_VARS if os.environ.pop(name, None) is not None]
 
 
 def _hash_file(path: Path) -> str:
@@ -184,6 +205,9 @@ def run_gcm(
 
     exoplasim.Model._crash = _hard_crash
 
+    removed = serial_make_environment()
+    if removed:
+        logger.info("unset %s: PlaSim must be built with serial make", ", ".join(removed))
     model = exoplasim.Model(
         workdir=str(workdir),
         modelname=model_name,
@@ -269,6 +293,7 @@ __all__ = [
     "multi_year_otherargs",
     "postprocess_raw",
     "run_gcm",
+    "serial_make_environment",
     "subprocess_env_hint",
     "write_manifest",
     "_REQUIREMENT",

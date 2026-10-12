@@ -16,6 +16,11 @@ set -euo pipefail
 
 VENV_DIR="${1:-gcm_venv}"
 
+# 共享服务器常预设 MAKEFLAGS=-jN；PlaSim 的 makefile 缺 Fortran 模块依赖，
+# 并行 make 会报 "Cannot open module file 'landmod.mod'"。runner.run_gcm
+# 构建模型前也会清掉这些变量，这里先清，保证引导过程同样串行。
+unset MAKEFLAGS MFLAGS GNUMAKEFLAGS
+
 echo "== [1/4] Fortran 工具链 =="
 if ! command -v gfortran >/dev/null; then
     if command -v apt-get >/dev/null; then
@@ -37,7 +42,8 @@ python3 -m venv "$VENV_DIR"
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python3 -m pip install --upgrade pip --quiet
-python3 -m pip install "exoplasim==3.4.2" netCDF4 matplotlib meson ninja
+# pyyaml：dreamulator.gcm.mapping 读世界 YAML；scipy：make_landmap 的最近邻重采样。
+python3 -m pip install "exoplasim==3.4.2" netCDF4 matplotlib meson ninja pyyaml scipy
 
 echo "== [3/4] 编译 pyfft 扩展（PATH 需含 venv/bin 供 meson/ninja 探测）=="
 python3 - <<'EOF'

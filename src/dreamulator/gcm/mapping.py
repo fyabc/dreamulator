@@ -27,13 +27,20 @@ ExoPlaSim unit conventions (verified against 3.4.2 source, 2026-10-05):
 ``startemp``            stellar effective temp (K)    star entry (if present)
 ======================  =============================  =====================
 
-Greenhouse handling: dreamulator's ``greenhouse_factor`` (e.g. Nacrea's 62 K)
-has no direct ExoPlaSim equivalent — its radiative identity (prescribed
-boundary vs. composition-driven) is a pending author decision (设定待裁决).
-This mapping therefore never invents one: with ``greenhouse_mode="none"``
-(default) nothing is compensated and a warning is recorded in the manifest;
-``"flux_boost"`` applies an explicit, user-supplied factor (the historical PoC
-hack — discouraged); ``"pco2"`` passes an explicit CO₂ partial pressure.
+``startemp`` matters beyond bookkeeping: ExoPlaSim uses it to split stellar
+flux between its two shortwave bands.  A K star puts a larger share into the
+near-infrared band, so omitting it makes the model radiate as a G2 star and
+misjudges water-vapour absorption and the greenhouse response.
+
+Greenhouse handling: the greenhouse is composition-driven (route-1
+adjudication, ``nacrea-insolation-recalibration.md``).  With
+``greenhouse_mode="none"`` (default) the CO₂ fraction of the world's
+atmosphere composition is passed as pCO2 and ExoPlaSim computes the
+greenhouse itself.  dreamulator's ``greenhouse_factor`` is the EBM's own
+parametrisation and is deliberately not mapped; a note is recorded in the
+manifest.  ``"pco2"`` overrides pCO2 with an explicit partial pressure (used
+for scans); ``"flux_boost"`` applies an explicit, user-supplied flux factor
+(the historical PoC hack — discouraged).
 """
 
 from __future__ import annotations
@@ -171,12 +178,12 @@ def map_planet(
     """Map one planet entry (+ star + host orbit) to ExoPlaSim parameters.
 
     ``greenhouse_mode``:
-      - ``"none"`` (default): no compensation; a warning is recorded.
+      - ``"none"`` (default): pCO2 from the atmosphere composition;
+        ``greenhouse_factor`` is not mapped (a note is recorded).
       - ``"flux_boost"``: multiply stellar flux by ``flux_boost_factor``
         (explicit, discouraged — the PoC-era hack; overshoots in the tropics).
-      - ``"pco2"``: pass ``pco2_bar`` as the CO₂ partial pressure
-        (composition-driven; requires an author decision on the radiative
-        identity of dreamulator's ``greenhouse_factor``).
+      - ``"pco2"``: pass ``pco2_bar`` as the CO₂ partial pressure on top of
+        the background atmosphere (pCO2 scans).
 
     ``overrides`` replaces any computed scalar after mapping (keys use the
     :class:`ExoPlaSimParams` field names, e.g. ``{"year": 99.7}``).
@@ -210,8 +217,9 @@ def map_planet(
         raise MappingError(f"unknown greenhouse_mode {greenhouse_mode!r}")
     if greenhouse_mode == "none" and "greenhouse_factor" in planet.get("atmosphere", {}):
         warnings.append(
-            f"greenhouse_factor {planet['atmosphere']['greenhouse_factor']} K not "
-            "compensated (radiative identity pending author decision)"
+            f"greenhouse_factor {planet['atmosphere']['greenhouse_factor']} K is the "
+            "EBM parametrisation and is not mapped; the GCM greenhouse comes from "
+            "composition pCO2"
         )
 
     year = year_days_from_kepler(a_au, float(star["mass"]))
@@ -236,8 +244,7 @@ def map_planet(
         warnings.append(
             "atmosphere composition carries no CO2: the GCM arm has no carbon "
             "greenhouse and will collapse to a snowball unless pCO2/flux is "
-            "supplied explicitly (earth ≈ 2.8e-4 bar; nacrea pending the "
-            "radiative-identity adjudication)"
+            "supplied explicitly (earth ≈ 2.8e-4 bar)"
         )
 
     star_temp = (
