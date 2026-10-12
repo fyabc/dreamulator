@@ -20,8 +20,8 @@ status: accepted
 火山-CO₂ 脉冲，冰芯主周期归因火山而非轨道）记录在 `long_term_cycles.md`
 §4/§5。中段——pCO2 变化如何换算成温室增温，全球温度、海冰与降水各响应
 多少——由本笔记承载。数据来源是 ExoPlaSim 离线神谕：harness 代码在
-`src/dreamulator/gcm/`，运行手册见 `docs/design/proposals/climate-gcm-plan.md`
-与私有研究工作区的 README。
+`src/dreamulator/gcm/`，运行手册见 `docs/usage/exoplasim-gcm.md`，
+网格结果见私有研究工作区的 README。
 
 ## 1. 定版 GCM 配置（复现口径）
 
@@ -108,6 +108,6 @@ CO2 慢变量的地质历史框架见
 - `long_term_cycles.md` §4/§5：冰期旋回主驱动与振幅语义（对外口径）。
 - `planets.yaml`：greenhouse_factor 35.0 与 CO2 712 ppm 的定值注释。
 - 提案 `nacrea-insolation-recalibration.md`：路线 1 终裁头（完整判决链）；
-  `climate-gcm-plan.md`：harness 与已知陷阱。
+  `docs/usage/exoplasim-gcm.md`：harness 运行手册与已知陷阱。
 - 私有台账（不入库）：research/2026-10-calibration-01/README.md（网格结果
   表）与 plans/gcm-calibration-round-01.md（裁决台账）。

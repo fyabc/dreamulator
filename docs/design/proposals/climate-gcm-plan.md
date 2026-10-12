@@ -3,9 +3,8 @@
 > 状态：远期提案。当前主线是「诊断式单向 DAG + 聪明预设」（见
 > `climate-layer-improvement.md`）。本文件是**全动力学 GCM** 的备选路线，
 > 大致列出做法，重点在「涌现 vs 高效」的平衡。不排优先级、不承诺时间。
-> **已实现部分**：ExoPlaSim offline-oracle 薄适配层（`src/dreamulator/gcm/`，
-> 2026-10-05 入库，见 §「ExoPlaSim harness（已实现）」）——GCM 在当前阶段
-> 的角色是**验证 oracle**而非运行时引擎，本文件的远期方案不受影响。
+> **已实现部分**：ExoPlaSim 离线参照适配层，见下文 §「ExoPlaSim harness（✅ 已实现）」。
+> GCM 在当前阶段的角色是验证参照而非运行时引擎，本文件的远期方案不受影响。
 
 ## 定位
 
@@ -122,56 +121,12 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
   GCM 的单次耦合求解。
 - 中间态：GCM 作为「校准参照」离线运行，不替换主线（见上「判断准则」）。
 
-## ExoPlaSim harness（已实现，2026-10-05）
+## ExoPlaSim harness（✅ 已实现）
 
-GCM 当前作为**气候引擎的 offline oracle**使用（验证 Ω 依赖、倾角分支、
-慢自转夹具的动力学侧证），不进 build 管线。入库形态 = 薄适配层：
-
-- `src/dreamulator/gcm/mapping.py` — 世界输入 → `Model.configure` 参数的
-  **纯函数映射**（零 exoplasim 依赖、可单测）。单位换算集中在这一处：
-  `radius` 期望 **R⊕ 不是米**（exoplasim `__init__.py` 写 `PLARAD =
-  radius*6371220.0`；2026-09-07「风场死寂」悬案即传米所致，2026-10-05 破案，
-  回归测试 `tests/test_gcm_mapping.py::test_radius_never_in_metres_regression`
-  钉死）。恒星有效温度经 `temperature` 键传入 `startemp`（ExoPlaSim 据此
-  算两带光谱分割——K 星 NIR 份额高，漏传会按 G2 光谱算温室）。温室映射：
-  `greenhouse_mode=none|flux_boost|pco2`；nacrea 辐射身份已经路线 1 裁决
-  （pCO2 成分驱动，见 `nacrea-insolation-recalibration.md`）。
-- `src/dreamulator/gcm/runner.py` — 运行编排：`ensure_environment()` 把
-  pyfft/meson 静默失败（上游把异常注释了）变成显式报错；连续多年积分走
-  `N_RUN_YEARS` namelist（`run(years=N)` 每年重启冷 Fortran 进程）——
-  **必须同时清零 `N_RUN_STEPS`**（`multi_year_otherargs()`）：configure 对
-  rotationperiod≠1 写死 11520 步，Fortran 主循环步数倒计时归零即无条件
-  return，N_RUN_YEARS 被静默截断成 1 年（2026-10-06 破案，回归测试钉死）；
-  后处理经 `cfgpostprocessor(times=years*12)` 输出真月度记录（pyburn 默认
-  `times=12` 会把任意时长聚合成 12 条）。**暖起动/续算走
-  `configure(restartfile=<path>)`**（一等 API，configure 自己把种子 cp 成
-  workdir/plasim_restart，Fortran `restart_ini` 按存在性加载，证据行
-  "Found N variables in file" 落 MOST_DIAG）——**预置 workdir/plasim_restart
-  会被 configure 静默删除**（restartfile 为空即 `rm`，`__init__.py`
-  L2643-2646；2026-10-07 暖支实验首跑因此变成冷起动，yr1 温度体检抓获）。
-  原始 MOST 保留；manifest 记 input 哈希/参数/版本。
-- `src/dreamulator/gcm/diagnostics.py` — 从 .nc 提取急流纬度/强度、Hadley
-  边界（质量流函数，**勿用速度势 psi**——其零线在 ITCZ）、热力对比、涡动
-  方差。注意 pyburn 的 lat/lon **本来就是度**（units: deg），勿再 rad2deg。
-  `t_global_c` 用 **tas（2m 气温）**——ta 全层平均含 −100°C 级平流层，会
-  误报 ~40 K 冷偏（旧口径保留为 `t_global_column_c`）。能量收支：净 TOA =
-  `rst + rlut`（PlaSim 通量正向下；rlut=−OLR；rsut 与 rst 不闭合，短波
-  收支科学暂勿用）。**模型日历漂移**：N_DAYS_PER_YEAR 由自转周期取整
-  （nacrea 120 模型日/年 vs 真实轨道年 99.8 日），季节在 record 索引里
-  漂移——季节分析用 `orbital_phase_of_records()` 按轨道相位重对齐。
-- `src/dreamulator/gcm/plotting.py` — 全球概览图（中文 caption + CJK 字体
-  回退链；平均场条带状是 aquaplanet 对称强迫的正确物理，涡动看时间 std）。
-- `scripts/climate/gcm/run_exoplasim.py` — CLI 入口；`bootstrap.sh` — 任意
-  Ubuntu 容器/WSL 的环境引导（刻意不用 uv：仓库树内 uv.toml 覆盖 index 的坑）。
-- 依赖走 `[gcm]` 可选 extra（钉 exoplasim==3.4.2）。
-
-当前状态（2026-10-06）：harness 四层 bug 破案后（时长截断/输出聚合/ta 诊断/
-恒星光谱），earth 参照臂 50 yr 收敛 +4.1°C（配置冷偏 −9.6 K，主体 = slab
-海洋无动力热输送 → 海冰过量 → 反照率锁；绝对 Ts 对标需 earth 参照偏差订正）。
-nacrea 标定走路线 1 新恒星参数 × pCO2 网格（SoT = `private/plans/
-gcm-calibration-round-01.md`，判据与偏差订正协议见 `nacrea-insolation-
-recalibration.md` §3.7）。早期 aquaplanet 对照数字（2026-10-05 批）因时长
-截断作废。
+GCM 当前作为气候引擎的离线参照使用，不进 build 管线，代码在 `src/dreamulator/gcm/`。
+运行步骤、参数和输出口径见 [`../../usage/exoplasim-gcm.md`](../../usage/exoplasim-gcm.md)；
+各个已知陷阱的机理和源码证据写在 `runner.py`、`mapping.py`、`diagnostics.py` 的模块说明里；
+nacrea 的定标配置与结论见 `data/worlds/nacrea/design-notes/0012-climate-gcm-calibration.md`。
 
 ## 参考
 

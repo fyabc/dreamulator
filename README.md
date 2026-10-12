@@ -183,6 +183,7 @@ See `docs/usage/cli.md` for deployment options and the `dreamulator serve` comma
 | [CLI Reference](docs/usage/cli.md) | All CLI commands (init/build/branch/climate/narrate/serve…) |
 | [Map Workflow](docs/usage/map-workflow.md) | CVT mesh terrain generation → viewer inspection → Gaea refinement |
 | [Climate Validation](docs/usage/climate-validation-workflow.md) | Real-Earth observation data import, multi-dataset validation, regression test suite |
+| [ExoPlaSim GCM](docs/usage/exoplasim-gcm.md) | Running the ExoPlaSim GCM as an offline reference for the climate engine (setup, land mask, run, diagnostics) |
 | [Profiling](docs/design/profiling.md) | Build timing profiles, py-spy flamegraphs, CI benchmarks; [optimization log](docs/design/performance-optimizations.md) |
 | [CivMap Guide](docs/usage/civmap-guide.md) | Real-Earth basemap, fictional territory coloring, temporal snapshots |
 | [3D Viewer](docs/usage/frontend-3d-viewer.md) | Star system view + globe interaction guide |

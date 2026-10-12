@@ -8,7 +8,8 @@
 ## climate/gcm/ — ExoPlaSim offline oracle（2 个）
 
 GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
-`src/dreamulator/gcm/mapping.py` docstring）。
+`src/dreamulator/gcm/mapping.py` docstring）。完整运行步骤见
+[`docs/usage/exoplasim-gcm.md`](../docs/usage/exoplasim-gcm.md)。
 
 - `run_exoplasim.py` — 世界→GCM 参数映射 → 运行 → 诊断 → overview.png；`--nc` 可只诊断已有 run
 - `bootstrap.sh` — 任意 Ubuntu 容器/WSL 环境引导（含 pyfft/meson 坑的修复）
