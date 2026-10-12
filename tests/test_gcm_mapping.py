@@ -10,6 +10,7 @@ field.
 from __future__ import annotations
 
 import math
+import os
 
 import pytest
 
@@ -193,3 +194,16 @@ def test_multi_year_otherargs_disables_step_cap() -> None:
         "N_RUN_YEARS@plasim_namelist": "50",
         "N_RUN_STEPS@plasim_namelist": "0",
     }
+
+
+def test_serial_make_environment_strips_parallel_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An inherited ``MAKEFLAGS=-jN`` races PlaSim's makefile (missing module deps)."""
+    from dreamulator.gcm.runner import serial_make_environment
+
+    monkeypatch.setenv("MAKEFLAGS", "-j12")
+    monkeypatch.delenv("MFLAGS", raising=False)
+    monkeypatch.setenv("GNUMAKEFLAGS", "-j4")
+
+    assert serial_make_environment() == ["MAKEFLAGS", "GNUMAKEFLAGS"]
+    assert "MAKEFLAGS" not in os.environ
+    assert "GNUMAKEFLAGS" not in os.environ
