@@ -29,7 +29,7 @@ tags: [coriolis, hadley, atmospheric-circulation]
   经向 SST 不对称；该干带绝对量级是否偏干，已登记为 GCM 轮 02 仲裁项）。
 - **温度场**：纬向平均 EBM 闭合（扩散系数随自转 Ω^0.3 标度）+ 地形/海陆
   修正；极冠与高山冰盖群（EF/ET）和亚热带干带并存，全球均温
-  13.1°C（引擎口径；GCM 订正 11.3±3°C，见 design-notes/0012）。
+  13.1°C（引擎口径；GCM 参照约 12.9°C，见 design-notes/0012）。
 
 ### 未建模现象（保留为世界设定参考）
 
