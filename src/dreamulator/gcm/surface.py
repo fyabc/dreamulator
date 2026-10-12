@@ -84,6 +84,27 @@ def write_sra(
     return path
 
 
+def _mesh_arrays(mesh_path: str | Path) -> dict[str, np.ndarray]:
+    """Per-cell lat/lon (deg), area (km²), elevation (m) and land flag of a mesh."""
+    from dreamulator.map.export import load_cvt_mesh_model  # noqa: PLC0415
+
+    mesh = load_cvt_mesh_model(Path(mesh_path))
+    return {
+        "lat": np.array([c.lat for c in mesh.cells], dtype=float),
+        "lon": np.array([c.lon for c in mesh.cells], dtype=float),
+        "area": np.array([c.area_km2 for c in mesh.cells], dtype=float),
+        "elevation": np.array([c.elevation for c in mesh.cells], dtype=float),
+        "is_land": np.asarray([str(c.water_class) != "ocean" for c in mesh.cells]),
+    }
+
+
+def _unit_vectors(lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
+    lat_r, lon_r = np.radians(lat_deg), np.radians(lon_deg)
+    return np.stack(
+        [np.cos(lat_r) * np.cos(lon_r), np.cos(lat_r) * np.sin(lon_r), np.sin(lat_r)], axis=-1
+    )
+
+
 def land_mask_from_mesh(mesh_path: str | Path, nlat: int, nlon: int) -> tuple[np.ndarray, float]:
     """Nearest-cell regrid of a dreamulator CVT mesh land mask to the Gaussian grid.
 
@@ -93,19 +114,12 @@ def land_mask_from_mesh(mesh_path: str | Path, nlat: int, nlon: int) -> tuple[np
     """
     from scipy.spatial import cKDTree  # noqa: PLC0415
 
-    from dreamulator.map.export import load_cvt_mesh_model  # noqa: PLC0415
-
-    mesh = load_cvt_mesh_model(Path(mesh_path))
+    cells = _mesh_arrays(mesh_path)
     # NOTE: mesh.cell_xyz is NOT aligned with mesh.cells ordering (verified
     # 2026-10-06: 97.8% of directions disagree) — build the tree from the
     # cells' own lat/lon instead.
-    lat_c = np.radians(np.array([c.lat for c in mesh.cells], dtype=float))
-    lon_c = np.radians(np.array([c.lon for c in mesh.cells], dtype=float))
-    xyz = np.stack(
-        [np.cos(lat_c) * np.cos(lon_c), np.cos(lat_c) * np.sin(lon_c), np.sin(lat_c)],
-        axis=1,
-    )
-    is_land = np.asarray([str(c.water_class) != "ocean" for c in mesh.cells])
+    xyz = _unit_vectors(cells["lat"], cells["lon"])
+    is_land = cells["is_land"]
     tree = cKDTree(xyz)
 
     lat = gaussian_latitudes(nlat)
@@ -129,12 +143,91 @@ def make_landmap(
     return write_sra(out_path, KCODE_LAND_MASK, mask, nlat, nlon), frac
 
 
+def grid_land_elevation(
+    lat: np.ndarray,
+    lon: np.ndarray,
+    area: np.ndarray,
+    elevation: np.ndarray,
+    is_land: np.ndarray,
+    mask: np.ndarray,
+) -> np.ndarray:
+    """Area-weighted mean land elevation (m) per Gaussian grid box (pure function).
+
+    Box edges are the midpoints between Gaussian latitudes (poles at ±90°) and
+    the uniform longitude spacing centred on each grid longitude.  Only land
+    cells contribute, so coastal boxes are not dragged down by sea level;
+    negative land elevations (depressions) count as 0.  Boxes the ``mask``
+    marks as land but that contain no land cell (the nearest-cell mask and the
+    box average can disagree at coasts) take the nearest land cell's
+    elevation.  Ocean boxes are 0.  Returns ``(nlat, nlon)`` with ascending
+    latitudes, the same layout as ``mask``.
+    """
+    from scipy.spatial import cKDTree  # noqa: PLC0415
+
+    nlat, nlon = mask.shape
+    glat = gaussian_latitudes(nlat)
+    lat_edges = np.concatenate([[-90.0], 0.5 * (glat[1:] + glat[:-1]), [90.0]])
+    dlon = 360.0 / nlon
+    land_elev = np.clip(elevation[is_land], 0.0, None)
+    land_lat, land_lon, land_area = lat[is_land], lon[is_land] % 360.0, area[is_land]
+    ilat = np.clip(np.searchsorted(lat_edges, land_lat, side="right") - 1, 0, nlat - 1)
+    ilon = np.floor((land_lon + 0.5 * dlon) / dlon).astype(int) % nlon
+    flat = ilat * nlon + ilon
+    weight = np.bincount(flat, weights=land_area, minlength=nlat * nlon)
+    total = np.bincount(flat, weights=land_area * land_elev, minlength=nlat * nlon)
+    mean = np.divide(total, weight, out=np.zeros_like(total), where=weight > 0)
+    out = mean.reshape(nlat, nlon)
+
+    empty = (mask > 0.5) & (weight.reshape(nlat, nlon) == 0)
+    if empty.any() and land_elev.size:
+        tree = cKDTree(_unit_vectors(land_lat, land_lon))
+        glon = uniform_longitudes(nlon)
+        jlat, jlon = np.nonzero(empty)
+        _, idx = tree.query(_unit_vectors(glat[jlat], glon[jlon]))
+        out[jlat, jlon] = land_elev[idx]
+    return np.where(mask > 0.5, out, 0.0)
+
+
+def make_topomap(
+    mesh_path: str | Path,
+    out_path: str | Path,
+    gravity_m_s2: float,
+    nlat: int = 32,
+    nlon: int = 64,
+) -> tuple[Path, dict[str, float]]:
+    """Write the surface-geopotential ``.sra`` (code 129, m²/s²) for a mesh.
+
+    Geopotential = ``gravity_m_s2`` × grid-box mean land elevation (see
+    :func:`grid_land_elevation`), 0 over ocean, on the same land mask as
+    :func:`make_landmap` so the two files agree box by box.  ExoPlaSim's
+    shipped Earth file uses the same unit (max ≈ 4.77e4 m²/s² ≈ 4.9 km).
+    Returns ``(path, stats)`` with the land-box mean and maximum elevation (m).
+    """
+    mask, _ = land_mask_from_mesh(mesh_path, nlat, nlon)
+    cells = _mesh_arrays(mesh_path)
+    elev = grid_land_elevation(
+        cells["lat"], cells["lon"], cells["area"], cells["elevation"], cells["is_land"], mask
+    )
+    land = mask > 0.5
+    w = np.cos(np.radians(gaussian_latitudes(nlat)))[:, None] * np.ones((1, nlon))
+    stats = {
+        "mean_land_elevation_m": float((elev * w)[land].sum() / w[land].sum())
+        if land.any()
+        else 0.0,
+        "max_elevation_m": float(elev.max()),
+    }
+    path = write_sra(out_path, KCODE_GEOPOTENTIAL, gravity_m_s2 * elev, nlat, nlon)
+    return path, stats
+
+
 __all__: Sequence[str] = (
     "KCODE_GEOPOTENTIAL",
     "KCODE_LAND_MASK",
     "gaussian_latitudes",
+    "grid_land_elevation",
     "land_mask_from_mesh",
     "make_landmap",
+    "make_topomap",
     "uniform_longitudes",
     "write_sra",
 )

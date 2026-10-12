@@ -46,7 +46,7 @@ for scans); ``"flux_boost"`` applies an explicit, user-supplied flux factor
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -92,6 +92,7 @@ class ExoPlaSimParams:
     po2: float | None = None
     par: float | None = None
     pco2: float | None = None
+    lonvernaleq: float | None = None  # MVELP, degrees (None = ExoPlaSim's Earth 102.7°)
     extras: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
@@ -110,6 +111,8 @@ class ExoPlaSimParams:
         }
         if self.startemp is not None:
             kwargs["startemp"] = self.startemp
+        if self.lonvernaleq is not None:
+            kwargs["lonvernaleq"] = self.lonvernaleq
         for key, value in (
             ("pN2", self.pn2),
             ("pO2", self.po2),
@@ -278,6 +281,49 @@ def map_planet(
     return params
 
 
+def mvelp_from_perihelion_day(perihelion_day: float, year_days: float) -> float:
+    """PlaSim ``MVELP`` (deg) for perihelion ``perihelion_day`` days after the vernal equinox.
+
+    PlaSim's orbit code sets ``mvelpp = MVELP + 180°`` and the true solar
+    longitude ``λ = mvelpp + ν`` (``radmod.f90`` ``orb_params`` /
+    ``gen_orb_decl``), with ``λ = 0`` at the northern vernal equinox.  Perihelion
+    (``ν = 0``) at solar longitude ``λ_p`` therefore needs ``MVELP = λ_p − 180°``;
+    Earth's 102.7° puts perihelion at ``λ_p ≈ 283°`` (early January).  The EBM
+    places perihelion by *time* (``perihelion_day``, mean anomaly zero), which
+    equals the longitude offset exactly at the equinox and to O(e) otherwise.
+    """
+    return (360.0 * perihelion_day / year_days + 180.0) % 360.0
+
+
+class _WorldInputs:
+    """Minimal ``find_input`` shim so the EBM's input resolvers can read a world."""
+
+    def __init__(self, world: Path) -> None:
+        self._world = world
+
+    def find_input(self, relative_path: str) -> Path | None:
+        for layer in ("astronomy", "geological"):
+            for kind in ("input", "derived"):
+                path = self._world / "layers" / layer / kind / relative_path
+                if path.exists():
+                    return path
+        return None
+
+
+def _perihelion_lonvernaleq(world: Path, planet_id: str, year_days: float) -> float | None:
+    """MVELP from the same perihelion-phase derivation the EBM uses, or None."""
+    from types import SimpleNamespace
+
+    from dreamulator.engine.physical_inputs import resolve_perihelion_day
+
+    day, _ = resolve_perihelion_day(
+        _WorldInputs(world),  # type: ignore[arg-type]
+        SimpleNamespace(id=planet_id),  # type: ignore[arg-type]
+        year_days,
+    )
+    return None if day is None else mvelp_from_perihelion_day(day, year_days)
+
+
 def map_world(
     world_dir: str | Path,
     planet_id: str,
@@ -314,4 +360,21 @@ def map_world(
     else:
         # A satellite: insolation is set by the host planet's orbit.
         host_orbit = _find_entry(stellar_doc.get("orbits"), orbit_ref)
-    return map_planet(planet, star, host_orbit, **kwargs)
+    params = map_planet(planet, star, host_orbit, **kwargs)
+    if params.lonvernaleq is None:
+        # Same perihelion phase as the EBM (resolve_perihelion_day); worlds where
+        # it is underivable (e.g. Earth) keep ExoPlaSim's Earth default.
+        lonvernaleq = _perihelion_lonvernaleq(world, planet_id, params.year)
+        if lonvernaleq is not None:
+            params = replace(params, lonvernaleq=lonvernaleq)
+        else:
+            params = replace(
+                params,
+                warnings=(
+                    *params.warnings,
+                    "perihelion phase underivable from the world inputs; ExoPlaSim uses "
+                    "Earth's MVELP 102.7° while the EBM falls back to perihelion at the "
+                    "vernal equinox (MVELP 180°) — pass lonvernaleq explicitly to align",
+                ),
+            )
+    return params
