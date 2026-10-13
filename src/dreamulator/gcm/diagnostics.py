@@ -111,6 +111,32 @@ def orbital_phase_of_records(
     return ((days - perihelion_day) % orbital_year_days) / orbital_year_days
 
 
+def equinox_day_from_declination(
+    time_axis: np.ndarray,
+    declination_deg: np.ndarray,
+    *,
+    orbital_year_days: float,
+    steps_per_model_day: float = 32.0,
+) -> float:
+    """Day (on the :func:`orbital_phase_of_records` clock) of the northern vernal equinox.
+
+    Fits the records' declination ``zdec`` with its first annual harmonic
+    ``A·sin(2πd/P) + B·cos(2πd/P) + C`` and returns the day of its ascending
+    zero crossing.  Passing it as ``perihelion_day`` to
+    :func:`orbital_phase_of_records` gives phase 0 at the equinox, the engine's
+    month origin.  The first harmonic ignores the equation of centre, so the
+    origin can be off by up to ``e·P/π`` (2.2 days for nacrea, a quarter of a
+    month bin) — an approximate-derivation closure, adequate for monthly bins.
+    """
+    days = np.asarray(time_axis, dtype=float) / steps_per_model_day
+    ang = _2PI * days / orbital_year_days
+    design = np.stack([np.sin(ang), np.cos(ang), np.ones_like(ang)], axis=1)
+    (a, b, _), *_ = np.linalg.lstsq(design, np.asarray(declination_deg, dtype=float), rcond=None)
+    # A·sin x + B·cos x = R·sin(x + δ), δ = atan2(B, A); ascending zero at x = −δ.
+    delta = float(np.arctan2(b, a))
+    return float((-delta / _2PI) % 1.0 * orbital_year_days)
+
+
 def summarize(
     nc_path: str | Path,
     *,
@@ -188,6 +214,7 @@ def summarize(
 
 __all__ = [
     "WIND_ALIVE_THRESHOLD_MS",
+    "equinox_day_from_declination",
     "hadley_boundary_deg",
     "mass_streamfunction",
     "orbital_phase_of_records",

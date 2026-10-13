@@ -1,17 +1,22 @@
-"""Project an ExoPlaSim run onto a dreamulator CVT mesh (GCM-vs-EBM comparison).
+"""Project an ExoPlaSim run onto a dreamulator CVT mesh.
 
-The output is a mesh file in the same format as an engine build, with the
-climate fields replaced by the GCM's, so ``dreamulator export layers --mesh``
-renders it through exactly the frontend palettes and the two can be compared
-pixel for pixel.
+Two outputs share one computation (:func:`compute_field_set`):
+
+- a mesh file in the same format as an engine build, with the climate fields
+  replaced by the GCM's, so ``dreamulator export layers --mesh`` renders it
+  through exactly the frontend palettes and GCM and EBM can be compared pixel
+  for pixel (:func:`project_to_mesh`);
+- a pinned field set (:mod:`dreamulator.gcm.fields`) for a branch whose climate
+  layer is frozen to the GCM result (``climate_source: gcm``).
 
 Method (all on the tail of the run, default last 5 model years):
 
 - **Seasonal climatology.**  Monthly records are binned into 12 equal bins of
   orbital phase (:func:`~dreamulator.gcm.diagnostics.orbital_phase_of_records`),
-  because the model calendar drifts against the true orbital year.  The phase
-  origin is arbitrary; nothing below depends on it (Köppen uses extremes and
-  warm/cold-half rankings).
+  because the model calendar drifts against the true orbital year.  Phase 0 is
+  the northern vernal equinox, fitted from the records' declination
+  (:func:`~dreamulator.gcm.diagnostics.equinox_day_from_declination`), so
+  month ``m`` covers the same part of the orbit as the engine's month ``m``.
 - **Regridding.**  Bilinear interpolation from the Gaussian grid to each cell's
   lat/lon, periodic in longitude, latitudes clamped at the outermost rows.
 - **Temperature.**  2 m air temperature corrected from the GCM's smooth
@@ -34,10 +39,10 @@ Method (all on the tail of the run, default last 5 model years):
   cells whose GCM surface height is at least ``SLP_UNRELIABLE_HEIGHT_M`` get
   ``slp_reduction_unreliable = True`` (the same flag and threshold the
   observed Earth root uses; the frontend and the exporter grey them out).
-- **Wind.**  Annual-mean 10 m wind (``uas``/``vas``) when the run wrote it,
-  otherwise the lowest model level of ``ua``/``va`` (sigma ≈ 0.99, the same
-  kind of near-surface wind as the NCEP sigma-0.995 reference the engine is
-  compared against).
+- **Wind.**  10 m wind (``uas``/``vas``) when the run wrote it, otherwise the
+  lowest model level of ``ua``/``va`` (sigma ≈ 0.99, the same kind of
+  near-surface wind as the NCEP sigma-0.995 reference the engine is compared
+  against); annual mean on the cells, phase-binned in the monthly arrays.
 
 Fields the slab-ocean GCM cannot provide, or that the engine derives
 downstream of its own climate (ocean currents, SST anomaly, biome, NPP,
@@ -50,25 +55,19 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from dreamulator.gcm.fields import CLEARED_FIELDS, GcmFieldSet, apply_field_set, mesh_fingerprint
+
+if TYPE_CHECKING:
+    from dreamulator.map.models import CVTMesh
 
 LAPSE_K_PER_M = 0.0065
 SLP_UNRELIABLE_HEIGHT_M = 1500.0
 SLP_SMOOTHING_N0 = 21
 SECONDS_PER_EARTH_MONTH = 365.25 / 12.0 * 86400.0
-
-#: Engine-derived fields that would be inconsistent with GCM climate.
-CLEARED_FIELDS = (
-    "ocean_current_east_m_s",
-    "ocean_current_north_m_s",
-    "sst_anomaly_c",
-    "biome",
-    "npp_gc_m2_yr",
-    "agriculture_score",
-    "habitability_score",
-)
 
 
 def bilinear_to_points(
@@ -179,22 +178,17 @@ def phase_climatology(values: np.ndarray, phase: np.ndarray, n_bins: int = 12) -
     return out
 
 
-def project_to_mesh(
+def compute_field_set(
     nc_path: str | Path,
-    mesh_path: str | Path,
-    out_path: str | Path,
+    mesh: CVTMesh,
     *,
     orbital_year_days: float,
     gravity_m_s2: float,
     steps_per_model_day: float = 32.0,
     tail_years: int = 5,
     sea_level_m: float = 0.0,
-) -> dict[str, Any]:
-    """Write a copy of ``mesh_path`` whose climate fields come from ``nc_path``.
-
-    Returns a provenance/summary dict, also written next to the output as
-    ``<out>.gcm.json``.
-    """
+) -> GcmFieldSet:
+    """Per-cell GCM climate of ``nc_path`` on ``mesh`` (see the module docstring)."""
     import netCDF4
 
     from dreamulator.engine.climate_physics import koppen_classify
@@ -202,8 +196,10 @@ def project_to_mesh(
         seasonal_precip_extremes,
         warm_cold_half_precip,
     )
-    from dreamulator.gcm.diagnostics import orbital_phase_of_records
-    from dreamulator.map.export import load_cvt_mesh_model, save_cvt_mesh
+    from dreamulator.gcm.diagnostics import (
+        equinox_day_from_declination,
+        orbital_phase_of_records,
+    )
 
     ds = netCDF4.Dataset(str(nc_path))
     lat_raw = np.asarray(ds["lat"][:], dtype=float)
@@ -215,28 +211,41 @@ def project_to_mesh(
     def tail(name: str) -> np.ndarray:
         return np.asarray(ds[name][-n_tail:], dtype=float)[..., order, :]
 
+    time_axis = np.asarray(ds["time"][:], dtype=float)
+    if "zdec" in ds.variables:
+        equinox_day = equinox_day_from_declination(
+            time_axis,
+            np.asarray(ds["zdec"][:], dtype=float),
+            orbital_year_days=orbital_year_days,
+            steps_per_model_day=steps_per_model_day,
+        )
+        phase_origin = "northern vernal equinox (fitted from zdec)"
+    else:
+        equinox_day, phase_origin = 0.0, "arbitrary (run has no zdec)"
     phase = orbital_phase_of_records(
-        np.asarray(ds["time"][-n_tail:], dtype=float),
+        time_axis[-n_tail:],
         orbital_year_days=orbital_year_days,
         steps_per_model_day=steps_per_model_day,
+        perihelion_day=equinox_day,
     )
     tas_m = phase_climatology(tail("tas") - 273.15, phase)  # (12, nlat, nlon) °C
     pr_m = phase_climatology(tail("pr") * 1000.0 * SECONDS_PER_EARTH_MONTH, phase)  # mm/month
-    psl = spectral_smooth(tail("psl") / 100.0, lat_grid, SLP_SMOOTHING_N0)  # hPa
+    psl_m = phase_climatology(
+        spectral_smooth(tail("psl") / 100.0, lat_grid, SLP_SMOOTHING_N0), phase
+    )  # hPa
     ocean_grid = np.asarray(ds["lsm"][0], dtype=float)[order, :] < 0.5
-    dp_annual = band_ocean_anomaly(psl, ocean_grid).mean(axis=0)
-    slp_annual = psl.mean(axis=0)
+    dp_m = band_ocean_anomaly(psl_m, ocean_grid)
     if "uas" in ds.variables and "vas" in ds.variables:
-        uas, vas = tail("uas").mean(axis=0), tail("vas").mean(axis=0)
+        u_m, v_m = phase_climatology(tail("uas"), phase), phase_climatology(tail("vas"), phase)
         wind_source = "uas/vas (10 m)"
     else:  # lowest model level is the last lev index (sigma closest to 1)
-        uas, vas = tail("ua")[:, -1].mean(axis=0), tail("va")[:, -1].mean(axis=0)
+        u_m = phase_climatology(tail("ua")[:, -1], phase)
+        v_m = phase_climatology(tail("va")[:, -1], phase)
         wind_source = "ua/va lowest model level"
     zsurf = None
     if "sg" in ds.variables:  # surface geopotential (m²/s²) → GCM surface height (m)
         zsurf = np.asarray(ds["sg"][0], dtype=float)[order, :] / gravity_m_s2
 
-    mesh = load_cvt_mesh_model(Path(mesh_path))
     cells = mesh.cells
     lat = np.array([c.lat for c in cells], dtype=float)
     lon = np.array([c.lon for c in cells], dtype=float)
@@ -244,17 +253,18 @@ def project_to_mesh(
     is_land = elev >= sea_level_m
     z_cell = np.where(is_land, np.maximum(elev - sea_level_m, 0.0), 0.0)
 
-    t_monthly = bilinear_to_points(lat_grid, lon_grid, tas_m, lat, lon).T  # (N, 12)
+    def to_cells(grid_field: np.ndarray) -> np.ndarray:
+        return bilinear_to_points(lat_grid, lon_grid, grid_field, lat, lon)
+
+    t_monthly = to_cells(tas_m).T  # (N, 12)
     z_gcm = np.zeros_like(lat)
     if zsurf is not None:
-        z_gcm = bilinear_to_points(lat_grid, lon_grid, np.maximum(zsurf, 0.0), lat, lon)
+        z_gcm = to_cells(np.maximum(zsurf, 0.0))
         t_monthly = t_monthly + LAPSE_K_PER_M * (z_gcm - z_cell)[:, None]
     slp_unreliable = is_land & (z_gcm >= SLP_UNRELIABLE_HEIGHT_M)
-    p_monthly = np.maximum(bilinear_to_points(lat_grid, lon_grid, pr_m, lat, lon).T, 0.0)
-    dp_cell = bilinear_to_points(lat_grid, lon_grid, dp_annual, lat, lon)
-    slp_cell = bilinear_to_points(lat_grid, lon_grid, slp_annual, lat, lon)
-    u_cell = bilinear_to_points(lat_grid, lon_grid, uas, lat, lon)
-    v_cell = bilinear_to_points(lat_grid, lon_grid, vas, lat, lon)
+    p_monthly = np.maximum(to_cells(pr_m).T, 0.0)
+    dp_monthly = to_cells(dp_m).T
+    u_monthly, v_monthly = to_cells(u_m).T, to_cells(v_m).T
 
     t_mean, t_cold, t_hot = t_monthly.mean(axis=1), t_monthly.min(axis=1), t_monthly.max(axis=1)
     p_annual = p_monthly.sum(axis=1)
@@ -277,50 +287,111 @@ def project_to_mesh(
         t_months_ge10=(t_monthly >= 10.0).sum(axis=1),
     )
 
-    for i, cell in enumerate(cells):
-        cell.temperature_C = float(t_mean[i])
-        cell.temperature_hottest_month_C = float(t_hot[i])
-        cell.temperature_coldest_month_C = float(t_cold[i])
-        cell.precipitation_mm = float(p_annual[i])
-        cell.koppen_class = koppen[i]
-        cell.pressure_anomaly_annual_hpa = float(dp_cell[i])
-        cell.slp_annual_hpa = float(slp_cell[i])
-        cell.slp_reduction_unreliable = bool(slp_unreliable[i])
-        cell.wind_east_m_s = float(u_cell[i])
-        cell.wind_north_m_s = float(v_cell[i])
-        for name in CLEARED_FIELDS:
-            setattr(cell, name, None)
+    return GcmFieldSet(
+        num_cells=mesh.num_cells,
+        mesh_fingerprint=mesh_fingerprint(mesh),
+        annual={
+            "temperature_C": t_mean,
+            "temperature_hottest_month_C": t_hot,
+            "temperature_coldest_month_C": t_cold,
+            "precipitation_mm": p_annual,
+            "pressure_anomaly_annual_hpa": dp_monthly.mean(axis=1),
+            "slp_annual_hpa": to_cells(psl_m.mean(axis=0)),
+            "wind_east_m_s": u_monthly.mean(axis=1),
+            "wind_north_m_s": v_monthly.mean(axis=1),
+        },
+        monthly={
+            "t_monthly_c": t_monthly,
+            "p_monthly_mm": p_monthly,
+            "wind_east_monthly": u_monthly,
+            "wind_north_monthly": v_monthly,
+            "pressure_monthly": dp_monthly,
+        },
+        koppen=[None if k is None else str(k) for k in koppen],
+        slp_reduction_unreliable=slp_unreliable,
+        provenance={
+            "source_nc": str(nc_path),
+            "tail_years": n_tail / 12,
+            "grid": [int(lat_grid.size), int(lon_grid.size)],
+            "phase_origin": phase_origin,
+            "lapse_k_per_m": LAPSE_K_PER_M if zsurf is not None else None,
+            "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
+            "wind_source": wind_source,
+            "slp_smoothing": f"Hoskins spectral filter, 0.1 at n = {SLP_SMOOTHING_N0}",
+            "sea_level_m": sea_level_m,
+        },
+    )
 
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    save_cvt_mesh(out_path, mesh)
 
-    area = np.array([c.area_km2 for c in cells], dtype=float)
-    summary = {
-        "source_nc": str(nc_path),
-        "source_mesh": str(mesh_path),
-        "tail_years": n_tail / 12,
-        "grid": [int(lat_grid.size), int(lon_grid.size)],
-        "lapse_k_per_m": LAPSE_K_PER_M if zsurf is not None else None,
-        "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
-        "wind_source": wind_source,
-        "slp_unreliable_cells": int(slp_unreliable.sum()),
-        "slp_smoothing": f"Hoskins spectral filter, 0.1 at n = {SLP_SMOOTHING_N0}",
+def summarize_field_set(fs: GcmFieldSet, mesh: CVTMesh, sea_level_m: float = 0.0) -> dict[str, Any]:
+    """Global and land means plus the land Köppen counts of a field set (pure)."""
+    area = np.array([c.area_km2 for c in mesh.cells], dtype=float)
+    is_land = np.array([c.elevation for c in mesh.cells], dtype=float) >= sea_level_m
+    t_mean, p_annual = fs.annual["temperature_C"], fs.annual["precipitation_mm"]
+    koppen = np.array(["" if k is None else k for k in fs.koppen])
+    names, counts = np.unique(koppen[is_land], return_counts=True)
+    return {
+        **fs.provenance,
+        "slp_unreliable_cells": int(fs.slp_reduction_unreliable.sum()),
         "cleared_fields": list(CLEARED_FIELDS),
         "global_mean_temperature_c": float(np.average(t_mean, weights=area)),
         "land_mean_temperature_c": float(np.average(t_mean[is_land], weights=area[is_land])),
         "land_mean_precipitation_mm": float(np.average(p_annual[is_land], weights=area[is_land])),
-        "koppen_land_counts": {
-            k: int(v)
-            for k, v in zip(
-                *np.unique(np.asarray(koppen)[is_land], return_counts=True), strict=True
-            )
-        },  # fmt: skip
+        "koppen_land_counts": {str(k): int(v) for k, v in zip(names, counts, strict=True)},
     }
-    sidecar = out_path.with_name(out_path.name + ".gcm.json")
-    sidecar.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def project_to_mesh(
+    nc_path: str | Path,
+    mesh_path: str | Path,
+    out_path: str | Path | None = None,
+    *,
+    orbital_year_days: float,
+    gravity_m_s2: float,
+    steps_per_model_day: float = 32.0,
+    tail_years: int = 5,
+    sea_level_m: float = 0.0,
+    fields_out: str | Path | None = None,
+    extra_provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Project ``nc_path`` onto the mesh at ``mesh_path``.
+
+    Writes a copy of the mesh with GCM climate to ``out_path`` (plus a
+    ``<out>.gcm.json`` summary) and/or the pinned field set to ``fields_out``
+    (plus its ``.provenance.json``).  ``extra_provenance`` (for example the
+    run's manifest) is merged into the field set's provenance.  Returns the
+    summary dict.
+    """
+    from dreamulator.gcm.fields import save_field_set
+    from dreamulator.map.export import load_cvt_mesh_model, save_cvt_mesh
+
+    if out_path is None and fields_out is None:
+        raise ValueError("nothing to write: pass out_path and/or fields_out")
+    mesh = load_cvt_mesh_model(Path(mesh_path))
+    fs = compute_field_set(
+        nc_path,
+        mesh,
+        orbital_year_days=orbital_year_days,
+        gravity_m_s2=gravity_m_s2,
+        steps_per_model_day=steps_per_model_day,
+        tail_years=tail_years,
+        sea_level_m=sea_level_m,
+    )
+    fs.provenance.update(extra_provenance or {})
+    summary = {"source_mesh": str(mesh_path), **summarize_field_set(fs, mesh, sea_level_m)}
     if not math.isfinite(summary["global_mean_temperature_c"]):
         raise ValueError("projected temperature is not finite; check the source run")
+    if fields_out is not None:
+        save_field_set(fields_out, fs)
+    if out_path is not None:
+        apply_field_set(mesh, fs)
+        out = Path(out_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        save_cvt_mesh(out, mesh)
+        sidecar = out.with_name(out.name + ".gcm.json")
+        sidecar.write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     return summary
 
 
@@ -331,7 +402,9 @@ __all__ = [
     "SLP_UNRELIABLE_HEIGHT_M",
     "band_ocean_anomaly",
     "bilinear_to_points",
+    "compute_field_set",
     "phase_climatology",
     "project_to_mesh",
     "spectral_smooth",
+    "summarize_field_set",
 ]

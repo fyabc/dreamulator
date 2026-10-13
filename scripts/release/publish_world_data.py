@@ -13,7 +13,11 @@ This script performs the whole "rebuild + publish" loop in one command:
      is gitignored, so it does not dirty the working tree). Procedural worlds run
      ``dreamulator build``; imported (real-data) worlds such as ``earth`` run their
      importer scripts instead.
-  2. Package the generated maps + derived into a tarball.
+     Frozen-climate branches (``climate_source: gcm``, listed in ``_BRANCH_BUILDS``)
+     are built after their world; they need their pinned GCM field set present.
+  2. Package the generated maps + derived, plus the pinned GCM field sets
+     (``branches/<b>/layers/climate/input/gcm_fields.msgpack.gz``, too large for git),
+     into a tarball.
   3. Upload the tarball to the ``worlds-data`` release.
 
 Usage::
@@ -53,14 +57,24 @@ def _dreamulator_cli() -> Path:
     return Path(sys.executable).with_name(name)
 
 
-def _build_world(world: str, worlds_dir: Path) -> None:
+# Branches rebuilt after their world.  Frozen-climate branches (climate_source: gcm)
+# rebuild cheaply — the climate is applied from the pinned field set, not simulated —
+# and must follow the root so their inherited terrain is current (a stale field set
+# fails the build loudly instead of shipping).
+_BRANCH_BUILDS: dict[str, tuple[str, ...]] = {"nacrea": ("gcm-t42-712",)}
+
+# Pinned inputs that are too large for git and travel with the release instead.
+PINNED_INPUT_GLOB = "branches/*/layers/climate/input/gcm_fields.msgpack.gz"
+
+
+def _build_world(world: str, worlds_dir: Path, branch: str | None = None) -> None:
     cli = _dreamulator_cli()
-    if cli.exists():
-        cmd = [str(cli), "build", world, "--force", "--data-dir", str(worlds_dir)]
-    else:
-        # Fallback: uv run (slower, but works if the console script is missing).
-        cmd = ["uv", "run", "dreamulator", "build", world, "--force", "--data-dir", str(worlds_dir)]
-    print(f"Building '{world}' ...")
+    args = ["build", world, "--force", "--data-dir", str(worlds_dir)]
+    if branch is not None:
+        args += ["--branch", branch]
+    # Fallback: uv run (slower, but works if the console script is missing).
+    cmd = [str(cli), *args] if cli.exists() else ["uv", "run", "dreamulator", *args]
+    print(f"Building '{world}'" + (f" branch '{branch}'" if branch else "") + " ...")
     subprocess.run(cmd, check=True)
 
 
@@ -221,6 +235,7 @@ def collect_generated(worlds_dir: Path) -> list[Path]:
         for derived_dir in world.rglob("derived"):
             if derived_dir.is_dir() and _is_derived_dir(derived_dir):
                 files.extend(p for p in derived_dir.rglob("*") if p.is_file() and _keep(p))
+        files.extend(p for p in world.glob(PINNED_INPUT_GLOB) if p.is_file() and _keep(p))
     return files
 
 
@@ -294,6 +309,8 @@ def main() -> None:
                 _import_world(world, worlds_dir, proxy=args.proxy)
             else:
                 _build_world(world, worlds_dir)
+            for branch in _BRANCH_BUILDS.get(world, ()):
+                _build_world(world, worlds_dir, branch=branch)
 
     if not worlds_dir.is_dir():
         print(f"Worlds directory not found: {worlds_dir}", file=sys.stderr)

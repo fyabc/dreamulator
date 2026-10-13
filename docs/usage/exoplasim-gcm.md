@@ -2,12 +2,13 @@
 
 本文说明如何为一个 dreamulator 世界运行 ExoPlaSim 全球气候模式（GCM），并读取
 结果与 EBM 气候引擎对比；运行中遇到过的坑与处理方法集中在 §2.3（环境变量）、
-§4.3（对齐配置的归因）、§4.4（T42 的已知数值问题）、§7（读结果的口径）、§8（与 EBM 对比的已知限制）和 §10（常见问题）。
+§4.3（对齐配置的归因）、§4.4（T42 的已知数值问题）、§7（读结果的口径）、§8（与 EBM 对比的已知限制）和 §11（常见问题）。
 
 ExoPlaSim 是 PlaSim 的系外行星扩展版本（Paradise et al., MNRAS 2022），能显式求解
 大气原始方程，因此副热带高压、急流、季风等大尺度特征会自然涌现。在本项目里它的
 角色是**离线参照**：用来检验 EBM 引擎在 Ω、倾角、温室强度等杠杆上的响应是否
-合理，它不进入 `dreamulator build` 管线，也不写回任何世界数据。
+合理，它不进入 `dreamulator build` 的模拟管线。唯一的例外是作者指定的固定气候分支（§9）：
+这种分支的气候层直接使用一次 GCM 运行的结果，`build` 只导入预先算好的逐格字段，不做模拟。
 
 为什么要接 GCM、各后端如何取舍、nacrea 需要哪些特化输入，这些设计讨论在
 [`../design/proposals/climate-gcm-plan.md`](../design/proposals/climate-gcm-plan.md)；
@@ -27,6 +28,9 @@ nacrea 的正式定标配置与结论数字在
 | `src/dreamulator/gcm/runner.py` | 运行编排：环境自检、多年连续积分、续算、manifest |
 | `src/dreamulator/gcm/diagnostics.py` | 从 NetCDF 输出提取急流、Hadley 环流边界、全球均温等指标 |
 | `src/dreamulator/gcm/plotting.py` | 生成全球概览图 `overview.png` |
+| `src/dreamulator/gcm/to_mesh.py` | 把 GCM 结果投影到世界的 CVT 网格（§8、§9） |
+| `src/dreamulator/gcm/fields.py` | 固定气候分支的逐格字段文件：读写、网格指纹校验、写回网格（§9）；不依赖 netCDF4 |
+| `scripts/climate/gcm/gcm_to_mesh.py` | 投影的命令行入口，可输出对比用网格或固定气候分支的字段文件 |
 
 ExoPlaSim 的版本固定为 3.4.2（`pyproject.toml` 的 `[gcm]` 可选依赖组），适配层的
 所有修复都是针对这个版本验证的，不要随意升级。
@@ -270,7 +274,11 @@ uv run dreamulator export layers nacrea -l temperature_diff,precipitation_diff,k
 ```
 
 投影（`src/dreamulator/gcm/to_mesh.py`）取运行最后 5 年，按轨道相位分成 12 个「月」，双线性
-插值到每个格点，写出与引擎构建同格式的网格，并在旁边写一个 `.gcm.json` 记录来源和摘要：
+插值到每个格点，写出与引擎构建同格式的网格，并在旁边写一个 `.gcm.json` 记录来源和摘要。
+第 0 个月从北半球春分开始，和引擎的月序一致；春分时刻由 GCM 输出的太阳赤纬 `zdec` 拟合
+一阶年谐波得到，忽略偏心率的中心差，误差最多约 2 天（nacrea 一个「月」约 8 天）。
+
+逐格字段的处理方式如下：
 
 - **气温**按 6.5 K/km 的递减率从 GCM 的平滑地表订正到格点自身的高程（认识论类别：近似推导）；
 - **降水**按地球年口径（每月 365.25/12 天）累计，与引擎的 `precipitation_mm` 一致；
@@ -290,8 +298,58 @@ uv run dreamulator export layers nacrea -l temperature_diff,precipitation_diff,k
 - 谱滤波后的 GCM 气压异常只保留约 1000 km 以上的天气尺度结构，适合比较副热带高压和季风低压
   的位置与强度，不适合比较海岸尺度的细节。
 - 风场图层与逐月图层暂不导出。
+- 平板海洋没有洋流，只有扩散式的海洋热输送。同样配置的地球参照在 55–65°N 偏冷约 10 K，在
+  45–65°S 偏暖 3–5 K，全球平均偏差小是南北误差抵消的结果。因此 GCM 对高纬陆地（岛屿是否为 ET、
+  南方大陆是否出现非 E 气候）的判断带有约 ±5–10 K 的洋流不确定度。
 
-## 9. 续算与暖启动
+## 9. 固定为 GCM 结果的气候分支
+
+作者可以把一次 GCM 运行的结果固定为某个世界的一个分支。这种分支在 climate 层分叉，天文层和
+地质层从父世界继承；它的 `branch.yaml` 写有 `climate_source: gcm`，气候引擎遇到这个标记时不做
+模拟（加 `--force` 也不会），只把固定的逐格字段写进继承来的网格，然后照常导出气候产物，下游的
+生态层和文明层再从 GCM 气候构建。目前的分支是 `nacrea/branches/gcm-t42-712`，内容是 T42 加物理
+滤波、712 ppm 的冷启动基线。
+
+建立一个固定气候分支分三步：
+
+```bash
+# 1. 建分支（climate_source: gcm 要求在 climate 层分叉）
+uv run dreamulator branch create nacrea gcm-t42-712 --at climate --climate-source gcm \
+    -d "气候层固定为 ExoPlaSim T42 GCM 结果（712 ppm 冷启动基线）"
+
+# 2. 在 gcm 环境里输出字段文件（需要父世界已构建，网格就是 GCM 运行时用的那份）
+source private/gcm/venv/bin/activate
+python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
+    --nc private/gcm/runs/t42f/cold/MOST.00000.nc \
+    --emit-fields data/worlds/nacrea/branches/gcm-t42-712/layers/climate/input/gcm_fields.msgpack.gz
+deactivate
+
+# 3. 构建分支（不需要 gcm 依赖）
+uv run dreamulator build nacrea --branch gcm-t42-712
+```
+
+字段文件包含年均气温、最热月和最冷月气温、年降水、气压异常、海平面气压、地面风、Köppen 分类，
+以及逐月的气温、降水、风和气压异常。洋流和海温距平没有对应的 GCM 量，分支里留空，不从 EBM
+补，以免混用两套模型。
+
+字段文件约 50 MB，不进 git，随 `worlds-data` release 发布（`scripts/release/publish_world_data.py`
+会在构建父世界之后构建这个分支，并把字段文件一起打包）。旁边的 `gcm_fields.msgpack.gz.provenance.json`
+进 git，记录来源运行的 manifest（pCO₂、分辨率、积分年数、namelist 覆盖项）、生成时的代码版本、
+字段文件的 SHA-256 和网格指纹。在别的机器上构建这个分支之前，先把 release 解包到 `data/worlds`：
+
+```bash
+gh release download worlds-data --pattern 'worlds-data.tar.gz' --dir /tmp/worlds-data --clobber
+tar xzf /tmp/worlds-data/worlds-data.tar.gz -C data/worlds
+```
+
+构建时有两道校验，任何一道不通过都会让气候层构建失败并给出原因，不会悄悄沿用旧数据：
+
+- 字段文件的 SHA-256 必须和 git 里的 provenance 一致，防止 release 里的文件和当前提交不配套；
+- 继承来的网格的指纹（格点 id、经纬度、高程和海陆掩膜）必须和生成字段文件时的一致。父世界的
+  地形一旦改变，GCM 运行本身就失效了，因为它是按旧的海陆分布跑的，这时要在新网格上重跑 GCM，
+  再重新输出字段文件。
+
+## 10. 续算与暖启动
 
 命令行入口目前没有续算参数，需要在 Python 里调用 `run_gcm`，通过映射结果的
 `extras` 传入 `restartfile`：
@@ -311,7 +369,7 @@ run_gcm(params, "private/gcm/runs/nacrea_land15_cont", years=10, ncpus=8,
 `MOST_DIAG` 里找 `Found N variables in file` 这一行，或者检查第一年的温度是否延续了
 上一段运行。
 
-## 10. 常见问题
+## 11. 常见问题
 
 | 现象 | 原因与处理 |
 |---|---|

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from .models.branch import BranchMetadata
+from .models.branch import BranchMetadata, ClimateSource
 from .models.layers import Layer, get_layers_from
 
 if TYPE_CHECKING:
@@ -35,6 +35,7 @@ class BranchManager:
         parent: str | None = None,
         description: str = "",
         tags: list[str] | None = None,
+        climate_source: ClimateSource | str = ClimateSource.ENGINE,
     ) -> Path:
         """Create a new branch at the specified layer.
 
@@ -44,13 +45,16 @@ class BranchManager:
             parent: Parent world/branch name (None means root world).
             description: Human-readable description.
             tags: Tags for categorization.
+            climate_source: ``gcm`` pins the climate layer to an imported GCM
+                result (needs ``fork_layer`` climate); ``engine`` simulates it.
 
         Returns:
             Path to the created branch directory.
 
         Raises:
             FileExistsError: If branch with this name already exists.
-            ValueError: If fork_layer is invalid.
+            ValueError: If fork_layer is invalid, or climate_source is
+                ``gcm`` on a branch that does not fork at climate.
         """
         if isinstance(fork_layer, str):
             fork_layer = Layer(fork_layer)
@@ -58,6 +62,17 @@ class BranchManager:
         branch_dir = self.branches_dir / name
         if branch_dir.exists():
             raise FileExistsError(f"Branch '{name}' already exists at {branch_dir}")
+
+        # Validate the metadata before touching the filesystem.
+        metadata = BranchMetadata(
+            name=name,
+            parent=parent,
+            fork_layer=fork_layer,
+            description=description,
+            created=datetime.now(),
+            tags=tags or [],
+            climate_source=ClimateSource(climate_source),
+        )
 
         # Create branch directory structure
         branch_dir.mkdir(parents=True, exist_ok=True)
@@ -70,14 +85,6 @@ class BranchManager:
             (layer_dir / "derived").mkdir(parents=True, exist_ok=True)
 
         # Write branch.yaml
-        metadata = BranchMetadata(
-            name=name,
-            parent=parent,
-            fork_layer=fork_layer,
-            description=description,
-            created=datetime.now(),
-            tags=tags or [],
-        )
         branch_yaml = branch_dir / "branch.yaml"
         with branch_yaml.open("w", encoding="utf-8") as f:
             yaml.dump(

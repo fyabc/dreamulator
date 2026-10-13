@@ -70,6 +70,9 @@ export/
 # NOT committed (no git LFS). Rebuild locally in data/worlds + publish.
 data/worlds/**/maps/
 data/worlds/**/derived/
+# Pinned GCM field sets of frozen-climate branches (tens of MB): shipped with the
+# worlds-data release; the small .provenance.json next to each stays in git.
+data/worlds/*/branches/*/layers/climate/input/gcm_fields.msgpack.gz
 
 # Dev-data package artifacts (tarballs); the committed index lives at
 # data/dev-data/index.json and is NOT ignored.

@@ -34,6 +34,14 @@ dreamulator branch promote earth pangea                  # 将分支提升为独
 
 分支类似 Git——在某一层分叉，共享上层数据，仅存储分叉层及之后的数据。
 
+`--climate-source gcm` 建立固定气候分支：分支必须在 climate 层分叉，气候层直接使用一次
+ExoPlaSim GCM 运行的结果，`build` 只导入预先算好的逐格字段，不做模拟。建法和校验规则见
+[exoplasim-gcm.md](exoplasim-gcm.md) §9。
+
+```bash
+dreamulator branch create nacrea gcm-t42-712 --at climate --climate-source gcm
+```
+
 ### 其他基础命令
 
 ```bash
