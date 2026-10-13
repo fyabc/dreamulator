@@ -53,3 +53,32 @@ def test_phase_climatology_bins_and_fills_empty_bins() -> None:
     assert clim.shape == (4, 1)
     assert clim[0, 0] == 2.0 and clim[2, 0] == 15.0
     assert np.isfinite(clim).all()  # bins 1 and 3 filled from their nearest neighbour
+
+
+def _gaussian_grid(nlat: int, nlon: int) -> tuple[np.ndarray, np.ndarray]:
+    x, _ = np.polynomial.legendre.leggauss(nlat)
+    return np.degrees(np.arcsin(x)), np.arange(nlon) * 360.0 / nlon
+
+
+def test_spectral_smooth_keeps_large_scales_and_damps_small_ones() -> None:
+    from dreamulator.gcm.to_mesh import spectral_smooth
+
+    lat, lon = _gaussian_grid(32, 64)
+    la, lo = np.meshgrid(np.radians(lat), np.radians(lon), indexing="ij")
+    large = 3.0 * np.sin(la) + np.cos(la) * np.cos(lo)  # degrees 1 (wavenumbers 0 and 1)
+    small = np.cos(la) ** 15 * np.cos(15 * lo)  # sectoral harmonic of degree 15
+    out_large = spectral_smooth(large, lat, n0=10)
+    assert np.allclose(out_large, large, atol=0.02 * np.abs(large).max())
+    out_small = spectral_smooth(small, lat, n0=10)
+    damping = np.exp(-np.log(10.0) * (15 * 16 / 110) ** 2)  # predicted response at n = 15
+    assert np.allclose(out_small, damping * small, atol=1e-6)
+
+
+def test_spectral_smooth_preserves_constant_and_leading_axes() -> None:
+    from dreamulator.gcm.to_mesh import spectral_smooth
+
+    lat, _ = _gaussian_grid(16, 32)
+    field = np.full((3, 16, 32), 1013.0)
+    out = spectral_smooth(field, lat, n0=5)
+    assert out.shape == field.shape
+    assert np.allclose(out, 1013.0)
