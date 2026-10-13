@@ -6,11 +6,19 @@ rebuildable from the data pack produced by ``dreamulator export region``
 kilometres (1 unit = 1 km) with a physically correct vertical scale by
 default (``--zscale`` exaggerates if a shot needs it).
 
+Terrain defaults to the Gaea-eroded heightfield (``gaea-out/rivers-h.exr``,
+falling back to ``erosion2-h.exr``; both are 8K builds storing the 0..1
+normalised height — metres = value × (max − min) + min over the pack's
+``height_gaea_png_range_m``).  ``--terrain input`` renders the raw engine
+pack instead.  EXR row order was verified against the 16-bit PNG twin
+(corr 0.997 same-order, 0.19 flipped).
+
 Usage (Blender's bundled Python — args after ``--`` are ours):
     blender -b -P scripts/media/blender/region_still.py -- \
-        --datadir private/video/nacrea-0_0_2500km \
+        --datadir private/video/nacrea-15_-100_2350km \
         [--render renders/still_001.png] [--res 1920x1080] \
-        [--samples 256] [--zscale 1.0] [--blend out.blend]
+        [--samples 256] [--zscale 1.0] [--mesh-res 2048] \
+        [--terrain gaea|input] [--subsurf 0] [--blend out.blend]
 
 Render: Cycles, device auto-fallback OptiX > CUDA > CPU, fixed seed 42,
 OpenImageDenoise — deterministic given the same pack and flags.
@@ -38,6 +46,11 @@ SUN_ALTITUDE_DEG = 35.0
 SKY_COLOR = (0.028, 0.075, 0.118)
 SKY_STRENGTH = 0.6
 
+#: EXR build resolution → mesh vertex budget.  8K heights are box-averaged
+#: down to ``--mesh-res`` (default 2048 = 4.2 M verts; subsurf would multiply
+#: faces 16× per level, so it stays off by default on the 6 GB card).
+GAEA_HEIGHT_EXRS = ("rivers-h.exr", "erosion2-h.exr")
+
 
 def parse_args() -> argparse.Namespace:
     """Parse our flags from Blender's trailing ``--`` arguments."""
@@ -53,6 +66,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--res", default="1920x1080", help="Render resolution WxH")
     p.add_argument("--samples", type=int, default=256)
     p.add_argument("--zscale", type=float, default=1.0, help="Vertical exaggeration")
+    p.add_argument("--mesh-res", type=int, default=2048, help="Terrain mesh resolution")
+    p.add_argument(
+        "--terrain", choices=("gaea", "input"), default="gaea", help="Height source"
+    )
+    p.add_argument(
+        "--subsurf", type=int, default=0, help="Subsurf levels (0 = off; each level ×16 faces)"
+    )
     p.add_argument("--blend", type=Path, default=None, help=".blend output path")
     p.add_argument("--sun-az", type=float, default=SUN_AZIMUTH_DEG)
     p.add_argument("--sun-alt", type=float, default=SUN_ALTITUDE_DEG)
@@ -70,7 +90,50 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def build_terrain(height: np.ndarray, km_per_px: dict, zscale: float) -> bpy.types.Object:
+def _box_downsample(a: np.ndarray, target: int) -> np.ndarray:
+    """Box-average ``a`` down to ``target × target`` (integer factor only)."""
+    h, w = a.shape
+    if h <= target or w <= target:
+        return a
+    f = min(h // target, w // target)
+    usable = target * f
+    return a[:usable, :usable].reshape(target, f, target, f).mean(axis=(1, 3))
+
+
+def load_height(args: argparse.Namespace, meta: dict) -> tuple[np.ndarray, str]:
+    """Height in metres, row 0 = north, downsampled to ``--mesh-res``."""
+    if args.terrain == "gaea":
+        lo, hi = meta["height_gaea_png_range_m"]
+        for name in GAEA_HEIGHT_EXRS:
+            p = args.datadir / "gaea-out" / name
+            if not p.exists():
+                continue
+            # Blender reads EXR natively (its bundled Python has no OpenEXR
+            # module).  img.pixels is row-major bottom-up RGBA; flip to the
+            # pack's row-0=north convention and take the R channel (Gaea's
+            # single-channel Y export replicates into RGB).
+            img = bpy.data.images.load(str(p))
+            w, h = img.size
+            px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+            bpy.data.images.remove(img)
+            raw = px[::-1, :, 0].astype(np.float64)
+            return _box_downsample(raw * (hi - lo) + lo, args.mesh_res), name
+        print("[region_still] no Gaea EXR found — falling back to input heights")
+    arr = np.load(args.datadir / "input" / "height.meters.npy").astype(np.float64)
+    return _box_downsample(arr, args.mesh_res), "input/height.meters.npy"
+
+
+def albedo_png(datadir: Path) -> Path:
+    """Colour-authority albedo: colorize output first, engine tint fallback."""
+    for p in (datadir / "color" / "albedo.png", datadir / "input" / "color.png"):
+        if p.exists():
+            return p
+    raise FileNotFoundError(f"no albedo under {datadir}")
+
+
+def build_terrain(
+    height: np.ndarray, km_per_px: dict, zscale: float, subsurf: int = 0
+) -> bpy.types.Object:
     """Grid mesh from the height field: row 0 = north (+Y), x/y in km, z km."""
     h, w = height.shape
     x_km = (np.arange(w) - (w - 1) / 2) * km_per_px["x"]
@@ -93,16 +156,17 @@ def build_terrain(height: np.ndarray, km_per_px: dict, zscale: float) -> bpy.typ
     mesh.validate()
     uv = mesh.uv_layers.new(name="UVMap")
     if uv is not None:
-        for loop, co in zip(uv.data, _loop_uvs(mesh, uvs)):
+        for loop, co in zip(uv.data, _loop_uvs(mesh, uvs), strict=False):
             loop.uv = co
     for poly in mesh.polygons:
         poly.use_smooth = True
 
     obj = bpy.data.objects.new("Terrain", mesh)
     bpy.context.collection.objects.link(obj)
-    mod = obj.modifiers.new("Subsurf", "SUBSURF")
-    mod.levels = 3
-    mod.render_levels = 3
+    if subsurf > 0:
+        mod = obj.modifiers.new("Subsurf", "SUBSURF")
+        mod.levels = subsurf
+        mod.render_levels = subsurf
     return obj
 
 
@@ -138,8 +202,12 @@ def ocean_plane(extent_km: dict) -> bpy.types.Object:
     mat = bpy.data.materials.new("Ocean")
     mat.use_nodes = True
     bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = (0.03, 0.10, 0.18, 1.0)
-    bsdf.inputs["Roughness"].default_value = 0.12
+    # Satellite-ocean blue (not photographic near-black): with only a sun and
+    # a dim sky world, a physically dark water colour reads as void.
+    bsdf.inputs["Base Color"].default_value = (0.09, 0.21, 0.33, 1.0)
+    # Rougher than a mirror: kills the specular banding a flat plane shows at
+    # glancing sun angles, and matches satellite-view water.
+    bsdf.inputs["Roughness"].default_value = 0.35
     bsdf.inputs["IOR"].default_value = 1.33
     obj.data.materials.append(mat)
     return obj
@@ -150,7 +218,13 @@ def sun_light(az_deg: float, alt_deg: float) -> None:
 
     az, alt = math.radians(az_deg), math.radians(alt_deg)
     sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
-    sun.data.energy = 3.0
+    # LDR colour-authority pipeline: the albedo PNG is the reference look and
+    # Standard view has no highlight rolloff, so the sun is calibrated (not
+    # physical) — mid-tones land at L ≈ albedo·E·cosθ/π ≈ 0.5.  Blender's
+    # default 1000 W/m² only works with an HDR view (AgX/Filmic), where this
+    # scene renders near-white; verify changes with PIL statistics, not by
+    # viewing the render (image viewers auto-tone-map).
+    sun.data.energy = 6.0
     sun.data.color = SUN_COLOR
     sun.data.angle = math.radians(SUN_ANGLE_DEG)
     # Direction points from the sun toward the origin; place on the unit sphere.
@@ -163,12 +237,12 @@ def sun_light(az_deg: float, alt_deg: float) -> None:
 
 
 def camera(extent_km: dict) -> None:
-    """High-oblique view: slant distance ~2.2× the region extent, 30° up."""
+    """High-oblique view: slant distance ~1.5× the region extent, 25° up."""
     import math
 
     e = max(extent_km["x"], extent_km["y"])
-    slant = 2.2 * e
-    alt = math.radians(30.0)
+    slant = 1.5 * e
+    alt = math.radians(25.0)
     cam_data = bpy.data.cameras.new("Camera")
     cam_data.lens = 35.0
     cam_data.clip_end = 1.0e6  # km
@@ -192,14 +266,20 @@ def world_sky() -> None:
     bg.inputs["Color"].default_value = (*SKY_COLOR, 1.0)
     bg.inputs["Strength"].default_value = SKY_STRENGTH
     bpy.context.scene.world = world
+    # The albedo PNG is the colour authority (climate-coloured satellite look).
+    # AgX — 5.x's default view transform — darkens midtones to protect HDR
+    # highlights, which we don't have; Standard keeps the sRGB look faithful.
+    bpy.context.scene.view_settings.view_transform = "Standard"
 
 
 def pick_cycles_device() -> str:
+    import contextlib
+
     prefs = bpy.context.preferences.addons["cycles"].preferences
-    try:
+    # Device enumeration varies across builds — failure just means the
+    # already-registered device list is used as-is.
+    with contextlib.suppress(Exception):
         prefs.get_devices()
-    except Exception:  # noqa: BLE001 — device enumeration varies across builds
-        pass
     types = {d.type for d in prefs.devices}
     for t in ("OPTIX", "CUDA"):
         if t in types:
@@ -212,19 +292,25 @@ def pick_cycles_device() -> str:
 
 def main() -> int:
     args = parse_args()
-    meta = json.loads((args.datadir / "meta.json").read_text(encoding="utf-8"))
-    height = np.load(args.datadir / "height.meters.npy")
+    input_dir = args.datadir / "input"  # pack layout: input/ + gaea-out/ + color/
+    meta = json.loads((input_dir / "meta.json").read_text(encoding="utf-8"))
+    height, height_src = load_height(args, meta)
 
     t0 = time.perf_counter()
-    terrain = build_terrain(height, meta["km_per_px"], args.zscale)
-    terrain.data.materials.append(terrain_material(args.datadir / "color.png"))
+    kmpp = meta["km_per_px"]
+    km_per_px = kmpp if isinstance(kmpp, dict) else {"x": float(kmpp), "y": float(kmpp)}
+    terrain = build_terrain(height, km_per_px, args.zscale, args.subsurf)
+    terrain.data.materials.append(terrain_material(albedo_png(args.datadir)))
     ocean_plane(meta["extent_km"])
     sun_light(args.sun_az, args.sun_alt)
     camera(meta["extent_km"])
     world_sky()
     print(
         f"[region_still] scene built: {len(terrain.data.vertices):,} verts, "
-        f"{len(terrain.data.polygons):,} faces (pre-subsurf) in {time.perf_counter() - t0:.1f}s"
+        f"{len(terrain.data.polygons):,} faces (pre-subsurf), "
+        f"terrain={height_src} {height.shape[0]}×{height.shape[1]} "
+        f"range [{height.min():.0f}, {height.max():.0f}] m "
+        f"in {time.perf_counter() - t0:.1f}s"
     )
 
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend))

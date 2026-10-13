@@ -22,10 +22,26 @@ nacrea 永耀岛 (0, 0) 2500 km。
 dreamulator export region <world> --lat .. --lon .. --span-km ..
         │  (src/dreamulator/map/region_export.py)
         ▼
-private/video/<world>-<lat>_<lon>_<span>km/     ← 不入 git
+private/video/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
+  ├─ input/   引擎导出通道（下表）
+  ├─ gaea-out/   Gaea 构建产物（见 gaea-video-chain.md）
+  └─ color/      着色产物（export colorize）
+  input/
   ├─ height.meters.npy   float32 米值，主数据通道（bpy 精确读取，无色彩空间坑）
   ├─ height.png          16-bit，按区域 min/max 归一化，人看参考
+  ├─ height.gaea.png     16-bit，海底按 --seafloor-clamp（默认 −400 m）预压平，
+  │                      归一量程见 meta（Gaea 2.3 TD 上限 Height 10 km / Width 2400 km）
   ├─ color.png           地形配色裁剪（调色板单源 map/palettes.py，与前端一致）
+  ├─ precipitation.mm.{npy,png}   年降水量 mm（pack v2 气候通道，Gaea 2 降雨 mask）
+  ├─ temperature.C.{npy,png}      年均温 °C
+  ├─ ice.m.{npy,png}              冰川厚度 m（无冰格为 0；雪线 mask 由下游导出）
+  ├─ npp.gc_m2_yr.{npy,png}       Miami NPP gC/m²/yr（着色器的连续植被密度通道）
+  ├─ headwaters.png               水量盈余区掩膜（P > Hamon PET；Gaea Rivers 的
+  │                               Headwaters 输入，约束河流只从盈余区发源）
+  ├─ glacier.mask.png             冰川活动掩膜（冰厚>0 ∪ 群系ice；Gaea Glacier 的
+  │                               Reference 输入；Snow 输出建议导出供着色）
+  ├─ koppen.{codes.npy,png}       uint8 类别码 + 调色板配色 PNG
+  ├─ biome.{codes.npy,png}        同上（Whittaker 群系）
   └─ meta.json           见下
         │
         ▼
@@ -35,11 +51,26 @@ blender -b -P scripts/media/blender/region_still.py -- --datadir <pack> [--rende
 renders/*.png + scene.blend（同目录，可随时由脚本重建）
 ```
 
-`meta.json` 字段：`center_lat/lon`、`span_km`、`radius_km`、`grid{w,h}`、
-`pixel_box[x0,y0,x1,y1]`（全网格精确像素盒，消费方免猜 floor/ceil）、
+`meta.json` 字段：`pack_version`（3 = 输出网格与引擎网格解耦 + 插值 +
+Gaea 变体；2 = 气候通道；1 = 仅高度与配色）、
+`center_lat/lon`、`span_km`、`radius_km`、`grid{w,h}`（输出栅格分辨率，
+`--out-res` 正方形，默认 2048）、`sampling`（采样口径说明：标量通道
+在 cell 中心 Delaunay 三角网上 Clough-Tocher C1 插值并裁剪到所在三角形顶点值域
+（防三次下溢产生假盆地）、中心保真；类别通道与配色
+最近邻）、
+`pixel_box[x0,y0,x1,y1]`（全网格精确像素盒，v3 起为溯源信息，
+供与全局导出对齐核对）、
 `extent_km`、`km_per_px`、`elevation_m{min,max}`、`height_png_range_m`、
-`sea_level_m`、`ocean_fraction`、`alignment_probe_max_offset_deg`、
-`source`（world/planet/branch + mesh sha256 指纹，无时间戳——跨机可复现）。
+`height_gaea_png_range_m` 与 `seafloor_clamp_m`（Gaea 变体的归一量程与
+压平深度）、`cell_pitch_km`（CVT 平均 cell 间距，供下游按 cell 尺度
+自适应效果参数）、`sea_level_m`、`ocean_fraction`、`alignment_probe_max_offset_deg`、
+`source`（world/planet/branch + mesh sha256 指纹，无时间戳——跨机可复现）、
+`climate`（每个气候通道的 PNG 归一化区间 `png_range`、缺值像素数 `missing`；
+Köppen 与群系另有 `legend` 类别码 → 类名映射，类别码在全网格按类名字典序
+分配、跨区域稳定，legend 只列本窗口出现的类）。气候通道可用
+`export region --no-climate` 关闭。所有通道共用同一输出网格
+（`--out-res` 正方形，覆盖同一地理窗口），套准由构造保证；雪线不归档
+为独立栅格，由下游从 `ice.m` 与 `temperature.C` 两通道导出。
 
 ## 区域窗口数学（等距圆柱裁剪）
 
