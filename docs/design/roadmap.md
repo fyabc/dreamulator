@@ -252,7 +252,7 @@
     snan 初始化未在别处提前触发，可基本排除读取未初始化变量。待办：在源码副本中加逐步诊断
     （全场最低气温及其格点），追到发散的过程后修复；属于改动 Fortran，需与上游未合并修复
     （PR #62、issue #69）一并决定是否维护 ExoPlaSim fork（见
-    [climate-gcm-plan.md](proposals/climate-gcm-plan.md) 分层策略）。
+    [climate-gcm-plan.md](proposals/climate-gcm-plan.md)「上游维护状况与 fork 策略」）。
 
 ### 工程卫生
 
