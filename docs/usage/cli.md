@@ -335,19 +335,111 @@ dreamulator export layers nacrea -l temperature_diff,koppen_agreement \
 
 ### 区域数据包（export region）
 
-裁剪一个以千米为边长的正方形区域，产出外部渲染器（Blender 链）直接消费的数据包：
+裁剪一个以千米为边长的正方形区域，产出外部渲染器（Gaea / Blender 链）直接消费的数据包：
 
 ```bash
-dreamulator export region nacrea --lat 0 --lon 0 --span-km 2500
-# → private/video/nacrea-0_0_2500km/{height.meters.npy, height.png, color.png, meta.json}
+dreamulator export region nacrea --lat 0 --lon 0 --span-km 2350
+# → private/video/nacrea-0_0_2350km/input/{height.meters.npy, height.png, height.gaea.png,
+#    color.png, precipitation.mm.*, temperature.C.*, ice.m.*, npp.gc_m2_yr.*,
+#    headwaters.png, koppen.*, biome.*, meta.json}
+# pack 根目录布局：input/（引擎通道）+ gaea-out/（Gaea 产物）+ color/（着色产物）
 dreamulator export region nacrea --lat 30 --lon -40 --span-km 1200 --output private/video/my-shot
+dreamulator export region nacrea --no-climate   # 只出高度 + 配色（旧行为）
+dreamulator export region nacrea --seafloor-clamp -800   # height.gaea.png 的海底压平深度
+dreamulator export region nacrea --out-res 4096   # 数据包栅格分辨率（默认 2048，正方形）
 ```
+
+pack v3 起栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
+中心的 Delaunay 三角网上 Clough-Tocher C1 插值（cell 中心保真，消除 Voronoi 平台与折痕），类别通道
+最近邻，所有通道共用同一正方形输出网格。
 
 高度主通道是 float32 米值的 `.npy`（精确无编码损失）；配色 PNG 与前端同一调色板单源；
 `meta.json` 记录物理范围、千米/像素、精确像素盒与源 mesh 指纹。区域窗口按星球真实
 半径标定（东西向补偿 cos 纬度），触及 |纬度| > 75° 或跨 ±180° 经线会被拒绝（极区
-需要球极投影，属 Gaea 精细化链范围）。设计文档见
+需要球极投影，属 Gaea 精细化链范围）。
+
+`height.gaea.png` 是 Gaea 2 专用的高程变体：海底按 `--seafloor-clamp`（默认 −400 m）
+预压平后按新量程归一（记录在 meta 的 `height_gaea_png_range_m`），因为 Gaea 2.3 的
+Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟不压平就装不下。
+喂给 Gaea 时区域 span 建议 ≤ 2350 km；操作配方见
+[gaea-video-chain.md](gaea-video-chain.md)。
+
+### 卫星真彩合成（export colorize）
+
+视频素材链第 ③ 步：读取区域数据包 + Gaea 构建产物，合成卫星真彩色贴图：
+
+```bash
+uv sync --extra media        # 首次需要（OpenEXR）
+dreamulator export colorize private/video/nacrea-15_90_2350km
+# 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
+# --gaea / --output 可覆盖
+```
+
+基色由引擎群系驱动（气候权威），Gaea 掩膜只做质感调制；`albedo.png` 供
+Blender 当贴图（不烘焙光照），`preview.png` 叠软 hillshade 供肉眼快检。
+色表与调制权重在 `src/dreamulator/media/satellite_color.py` 顶部常量。
+
+默认附带同分辨率气候通道（卫星影像契约，`--no-climate` 关闭）：年降水量
+`precipitation.mm`（float32 `.npy` 为主，16-bit PNG 按区域最大值归一，供 Gaea 2 作
+降雨 mask）、年均温 `temperature.C`、冰川厚度 `ice.m`（无冰格为 0，雪线 mask 由下游
+从冰厚与温度导出）、NPP `npp.gc_m2_yr`（着色器的连续植被密度通道）、河源掩膜
+`headwaters.png`（陆地且 P > Hamon PET，接 Gaea Rivers 的 Headwaters 输入）、
+Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
+类别码在全网格上按类名字典序分配，同一世界不同区域的同类同码；`meta.json` 的
+`climate.*.legend` 只列本窗口出现的类，`missing` 字段给出缺值像素数。所有通道与高度
+共用同一次全网格索引切片的像素盒，套准由构造保证。设计文档见
 [design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
+
+### 程序化侵蚀（export erode）
+
+视频链第②步的程序化变体（一条命令替代 Gaea 手动构建）：
+
+```bash
+dreamulator export erode private/video/nacrea-15_-100_2350km
+# 写 <pack>/prog-out/（gaea-out 文件词汇，渲染腿 --gaea 指向它即可）
+# --steps 30 / --dt 5e4 / --k 2e-7 / --river-threshold 3000（默认即定版）
+```
+
+Priority-Flood 排水（Barnes 2014）+ 隐式流水功率侵蚀（Braun & Willett
+2013），吃 pack 的降水场。参数语义见 [usage/terrain-chain.md](terrain-chain.md) 与
+[knowledge/cartography/](../knowledge/cartography/README.md)。
+
+### terrain-diffusion 细化 + 水文（export refine）
+
+地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
+
+```bash
+dreamulator export refine private/video/nacrea-15_-100_550km     --td private/external-projects/terrain-diffusion
+# 写 <pack>/refined-out/；推理在外部 td venv（安装见 terrain-chain 手册）
+```
+
+550 km 约 2.5 分钟。模型机制与能力边界见
+[usage/terrain-chain.md](terrain-chain.md) 第②步。
+
+### 制图（export carto）
+
+视频素材链的制图变体腿（共用 ①pack → ②Gaea 的产物），三种风格一个
+命令（`--style`）：
+
+```bash
+dreamulator export carto private/video/nacrea-15_-100_2350km                 # survey（默认）
+dreamulator export carto <pack> --style hand                                 # 旧印刷质感
+dreamulator export carto <pack> --style medieval --title "珠母星 · 未知海域"  # 中世纪羊皮纸
+# 读 <pack>/input + <pack>/gaea-out
+# survey → carto/{topo.svg, topo.png}；hand → carto/topo.hand.png；
+# medieval → carto/medieval.png
+# --title 自定义标题（默认「Nacrea —— 15°N 100°W 附近」式）
+# --res 网格分辨率（默认 2048） / --dpi PNG 输出 DPI
+# --contour-labels 等高线 inline 高程标注（默认关，仅 survey/hand）
+```
+
+survey = 分层设色（前端 terrain 同源色阶）+ hillshade + 两级等高线 +
+自适应经纬网 + 海部平色 + 河流 + 高程色阶图例/比例尺/指北针。
+hand = survey 叠印刷伪影（水彩晕/套色偏移/墨线重描/楷体/磨白）。
+medieval = 羊皮纸插画（山峰/树群符号、粗河流、绶带标题、罗盘玫瑰，
+无图例无等高线；画风迭代中，暂搁置）。操作细节见
+[usage/gaea-video-chain.md](gaea-video-chain.md) 第③'步；色表与等高距
+在 `src/dreamulator/media/carto_render.py` 顶部常量。
 
 渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
 

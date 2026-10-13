@@ -360,17 +360,36 @@ def export_region(
     lat: float = typer.Option(0.0, "--lat", help="Region centre latitude (degrees)"),
     lon: float = typer.Option(0.0, "--lon", help="Region centre longitude (degrees)"),
     span_km: float = typer.Option(2500.0, "--span-km", help="Square region side length (km)"),
+    climate: bool = typer.Option(
+        True,
+        "--climate/--no-climate",
+        help="Also export the climate channels (precipitation/temperature/ice/köppen/biome)",
+    ),
+    seafloor_clamp: float = typer.Option(
+        -400.0,
+        "--seafloor-clamp",
+        help="Gaea-ready height.gaea.png: seafloor clamp depth in metres "
+        "(Gaea 2.3 caps Terrain Definition Height at 10 km)",
+    ),
+    out_res: int = typer.Option(
+        2048,
+        "--out-res",
+        help="Pack raster resolution (square N×N; scalar channels are "
+        "Delaunay-interpolated from cell centres, so N can exceed the "
+        "base-grid crop without terracing)",
+    ),
     planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
     output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Output directory (default: private/video/<world>-<lat>_<lon>_<span>km)",
+        help="Pack ROOT dir (channels land in <root>/input/; "
+        "default: private/video/<world>-<lat>_<lon>_<span>km)",
     ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """Export a square region data pack for external renderers (Blender chain)."""
+    """Export a square region data pack for external renderers (Gaea/Blender chain)."""
     _set_data_dir(data_dir)
 
     mgr = WorldManager()
@@ -409,9 +428,10 @@ def export_region(
     mesh = load_cvt_mesh_model(mesh_file)
 
     out_dir = output or (Path("private/video") / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
+    input_dir = out_dir / "input"  # pack layout: input/ + gaea-out/ + color/
     console.print(
         f"Exporting region pack for {world}/{planet_id} — "
-        f"centre ({lat:g}, {lon:g}), span {span_km:g} km → {out_dir}"
+        f"centre ({lat:g}, {lon:g}), span {span_km:g} km → {input_dir}"
     )
     try:
         pack_meta = export_region_pack(
@@ -425,13 +445,16 @@ def export_region(
             elev_min_m=elev_min,
             elev_max_m=elev_max,
             sea_level_m=sea_level,
-            out_dir=out_dir,
+            out_dir=input_dir,
             source={
                 "world": world,
                 "planet": planet_id,
                 "branch": branch,
                 **mesh_fingerprint(mesh_file),
             },
+            include_climate=climate,
+            seafloor_clamp_m=seafloor_clamp,
+            out_res=out_res,
         )
     except RegionWindowError as exc:
         console.print(f"[red]Region rejected: {exc}[/red]")
@@ -440,10 +463,9 @@ def export_region(
     table = Table(title=f"Region pack — {world}/{planet_id} ({out_dir})")
     table.add_column("File", style="green")
     table.add_column("Size", style="dim")
-    for name in ("meta.json", "height.meters.npy", "height.png", "color.png"):
-        path = out_dir / name
-        if path.exists():
-            table.add_row(name, f"{path.stat().st_size / 1024:.0f} KB")
+    for path in sorted(input_dir.iterdir()):
+        if path.is_file():
+            table.add_row(path.name, f"{path.stat().st_size / 1024:.0f} KB")
     console.print(table)
     console.print(
         f"Grid {pack_meta['grid']['w']}×{pack_meta['grid']['h']} px · "
@@ -459,3 +481,198 @@ def export_region(
         )
         raise typer.Exit(code=3) from None
     console.print(f"[green]Alignment probe OK (max offset {max_off}°).[/green]")
+
+
+@export_app.command("colorize")
+def export_colorize(
+    pack: Path = typer.Argument(
+        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
+    ),
+    gaea: Path | None = typer.Option(
+        None, "--gaea", "-g", help="Gaea build output dir (default: <pack>/gaea-out)"
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Output dir (default: <pack>/color)"
+    ),
+) -> None:
+    """Satellite true-color compositing (video chain step ③).
+
+    Engine biomes drive the base colours; Gaea masks (slope/wear/deposits/
+    rivers/sea) modulate texture. Needs the 'media' extra (OpenEXR).
+    """
+    from dreamulator.media.satellite_color import colorize_region
+
+    gaea_dir = gaea or (pack / "gaea-out")
+    out_dir = output or (pack / "color")
+    if not (pack / "input" / "meta.json").exists():
+        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+        raise typer.Exit(code=2) from None
+    if not gaea_dir.is_dir():
+        console.print(f"[red]Gaea output dir not found: {gaea_dir}[/red]")
+        raise typer.Exit(code=2) from None
+
+    console.print(f"Colorizing {pack}/input + {gaea_dir} → {out_dir}")
+    try:
+        paths = colorize_region(pack, gaea_dir, out_dir)
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    for name, path in paths.items():
+        console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+
+
+@export_app.command("erode")
+def export_erode(
+    pack: Path = typer.Argument(
+        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
+    ),
+    steps: int = typer.Option(30, "--steps", help="SPL time steps"),
+    dt_yr: float = typer.Option(5e4, "--dt", help="Step length (years)"),
+    k_spl: float = typer.Option(2e-7, "--k", help="Stream-power erodibility K"),
+    river_threshold: int = typer.Option(
+        3000, "--river-threshold", help="Channel onset: upstream cells (rain-weighted)"
+    ),
+) -> None:
+    """Programmatic SPL erosion (video chain step ② programmatic variant).
+
+    Priority-Flood drainage (Barnes 2014) + implicit stream-power erosion
+    (Braun & Willett 2013), driven by the pack's own precipitation field.
+    Writes the gaea-out file vocabulary to <pack>/prog-out/ so every render
+    leg (colorize/carto/blender) consumes it unchanged.
+    """
+    from typing import cast
+
+    from dreamulator.map.prog_erosion import erode_region_pack
+
+    if not (pack / "input" / "meta.json").exists():
+        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+        raise typer.Exit(code=2) from None
+
+    console.print(f"Eroding {pack} (steps={steps}, dt={dt_yr:.0e} yr, K={k_spl:.0e})")
+    info: dict[str, object] = erode_region_pack(
+        pack, steps=steps, dt_yr=dt_yr, k_spl=k_spl, river_threshold=river_threshold
+    )
+    rng = cast("list[float]", info["height_range_m"])
+    console.print(
+        f"  prog-out/: rivers {info['river_pct_of_land']}% of land · "
+        f"height [{rng[0]:.0f}, {rng[1]:.0f}] m"
+    )
+
+
+@export_app.command("refine")
+def export_refine(
+    pack: Path = typer.Argument(
+        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_-100_550km"
+    ),
+    td: Path = typer.Option(
+        ..., "--td", help="terrain-diffusion repo clone (with .venv) — "
+        "external tool, see terrain-chain manual for setup"
+    ),
+    river_threshold: int | None = typer.Option(
+        None, "--river-threshold", help="Channel onset in upstream cells "
+        "(default scales with grid: 3000 at pack resolution)"
+    ),
+    coast_warp: bool = typer.Option(
+        False, "--coast-warp", help="Warp conditioning sea-land edges before "
+        "inference (bends straight Voronoi shorelines; off by default)"
+    ),
+) -> None:
+    """Terrain-diffusion refinement + hydrology (terrain chain step ②, main).
+
+    Regenerates the landscape at 90 m from the pack's conditioning fields
+    (inference runs in the external td venv), then extracts drainage
+    (Priority-Flood rivers + endorheic lakes). Writes <pack>/refined-out/.
+    """
+    from dreamulator.media.terrain_refine import refine_region_pack
+
+    if not (pack / "input" / "meta.json").exists():
+        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+        raise typer.Exit(code=2) from None
+
+    console.print(f"Refining {pack} via terrain-diffusion ({td.name})")
+    info = refine_region_pack(pack, td, river_threshold=river_threshold, coast_warp=coast_warp)
+    console.print(
+        f"  refined-out/: res {info['res']}² · lakes {info['lakes_pct']}% of land · "
+        f"{info['river_segments']} river segments"
+    )
+
+
+@export_app.command("carto")
+def export_carto(
+    pack: Path = typer.Argument(
+        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Output dir (default: <pack>/carto)"
+    ),
+    gaea: Path | None = typer.Option(
+        None, "--gaea", "-g", help="Build dir (default: <pack>/gaea-out; pass "
+        "<pack>/prog-out for programmatic-erosion builds)"
+    ),
+    style: str = typer.Option(
+        "survey",
+        "--style",
+        help="Sheet style: survey (contours+legend, topo.svg+topo.png) | "
+        "hand (print-artefact variant, topo.hand.png) | "
+        "medieval (parchment illustration, medieval.png)",
+    ),
+    title: str | None = typer.Option(
+        None, "--title", help="Override the default sheet title"
+    ),
+    res: int = typer.Option(2048, "--res", help="Contour grid resolution"),
+    dpi: int = typer.Option(300, "--dpi", help="PNG output DPI"),
+    data_dir: Path | None = typer.Option(
+        None, "--data-dir", help="Worlds data dir (for the catalog body name in the title)"
+    ),
+    contour_labels: bool = typer.Option(
+        False, "--contour-labels", help="Inline elevation labels on index contours (default off)"
+    ),
+    contours: bool = typer.Option(
+        False, "--contours/--no-contours", help="Draw contour lines (default off — "
+        "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)"
+    ),
+) -> None:
+    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval.
+
+    survey = hypsometric tints + contours + legend/scale/graticule/north
+    arrow (SVG + PNG).  hand = survey with print artefacts (watercolour,
+    misregistration, re-inked lines).  medieval = parchment illustration
+    (symbol herds, ribbon title, no contours/legend).  Needs the 'media'
+    extra (OpenEXR + matplotlib).
+    """
+    if style not in ("survey", "hand", "medieval"):
+        console.print(f"[red]Unknown style '{style}' — use survey | hand | medieval[/red]")
+        raise typer.Exit(code=2) from None
+    build_dir = gaea or (pack / "gaea-out")
+    if not (pack / "input" / "meta.json").exists():
+        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+        raise typer.Exit(code=2) from None
+    if not build_dir.is_dir():
+        console.print(f"[red]Build dir not found: {build_dir}[/red]")
+        raise typer.Exit(code=2) from None
+
+    out_dir = output or (pack / "carto")
+    console.print(f"Rendering [{style}] sheet {pack} ({build_dir.name}) → {out_dir}")
+    if style == "medieval":
+        from dreamulator.media.medieval_render import medieval_region
+
+        info = medieval_region(pack, out_dir, res=res, dpi=dpi, title=title, gaea_dir=gaea)
+        p = out_dir / "medieval.png"
+        console.print(f"  [green]medieval.png[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
+        console.print(
+            f"  symbols: {info['mountains']} mountains, {info['trees']} trees, "
+            f"{info['rivers']} river lines"
+        )
+        return
+
+    from dreamulator.media.carto_render import carto_region
+
+    info = carto_region(
+        pack, out_dir, res=res, dpi=dpi, data_dir=data_dir,
+        contour_labels=contour_labels, contours=contours,
+        hand=(style == "hand"), title=title, gaea_dir=gaea,
+    )
+    for ext in (("hand.png",) if style == "hand" else ("svg", "png")):
+        p = out_dir / f"topo.{ext}"
+        console.print(f"  [green]topo.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
+    console.print(f"  contours: {info['minor_levels']} minor + {info['major_levels']} index")
