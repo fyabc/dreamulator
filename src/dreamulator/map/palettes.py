@@ -72,6 +72,44 @@ def sequential_color(value: float, stops: list[ColorStop]) -> tuple[int, int, in
     return (c[0], c[1], c[2])
 
 
+def adaptive_terrain_breaks(
+    min_elev: float,
+    max_elev: float,
+    sea_level: float,
+    palette: str = "adaptive_terrain",
+) -> list[tuple[float, tuple[int, int, int]]]:
+    """Resolve the palette's break specs into sorted ``(elevation, rgb)`` pairs.
+
+    Shared by the LUT builder and downstream consumers that need the actual
+    band boundaries (e.g. the cartographic sheet's hypsometric legend).
+    """
+    range_ = max_elev - min_elev or 1.0
+    anchors = {"min": min_elev, "sea": sea_level, "max": max_elev}
+    color_breaks: list[tuple[float, tuple[int, int, int]]] = []
+    for b in _PALETTES[palette]["breaks"]:
+        anchor_elev = anchors[b["anchor"]]
+        if "fixed_m" in b:
+            # Absolute offset in metres (charted depths are physical): the
+            # sea bands use this so they land at their charted depth on
+            # every range, narrow or planet-wide.
+            offset = float(b["fixed_m"])
+        else:
+            fraction = float(b["fraction"])
+            clamp_m = b["clamp_m"]
+            if clamp_m is not None:
+                # Clamp caps the offset: on planet-wide ranges the fraction
+                # term would stretch the bands absurdly (a −200 m band
+                # landing at −413 m) — the fraction only tightens bands on
+                # narrow ranges.
+                offset = min(range_ * fraction, float(clamp_m))
+            else:
+                offset = range_ * fraction
+        elev = anchor_elev + float(b["sign"]) * offset
+        color_breaks.append((elev, hex_to_rgb(b["color"])))
+    color_breaks.sort(key=lambda item: item[0])
+    return color_breaks
+
+
 def build_adaptive_terrain_lut(
     min_elev: float,
     max_elev: float,
@@ -88,23 +126,8 @@ def build_adaptive_terrain_lut(
     ``"adaptive_terrain_land"`` (waterless hypsometric ramp: no ocean blues,
     datum-anchored arid tones for e.g. Mars/Moon/Venus/Titan).
     """
+    color_breaks = adaptive_terrain_breaks(min_elev, max_elev, sea_level, palette)
     range_ = max_elev - min_elev or 1.0
-    break_specs = _PALETTES[palette]["breaks"]
-
-    anchors = {"min": min_elev, "sea": sea_level, "max": max_elev}
-    color_breaks: list[tuple[float, tuple[int, int, int]]] = []
-    for b in break_specs:
-        anchor_elev = anchors[b["anchor"]]
-        fraction = float(b["fraction"])
-        clamp_m = b["clamp_m"]
-        if clamp_m is not None:
-            offset = max(range_ * fraction, float(clamp_m))
-        else:
-            offset = range_ * fraction
-        elev = anchor_elev + float(b["sign"]) * offset
-        color_breaks.append((elev, hex_to_rgb(b["color"])))
-    color_breaks.sort(key=lambda item: item[0])
-
     lut_size = int(_PALETTES[palette]["lut_size"])
     lut = np.zeros((lut_size, 3), dtype=np.uint8)
 

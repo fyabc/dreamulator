@@ -117,7 +117,15 @@ export function generateAdaptiveTerrainScale(
   // Resolve declarative breaks (anchor/fraction/clamp_m/sign) → elevation stops.
   const colorBreaks = palette.breaks.map((b) => {
     const anchorElev = b.anchor === 'min' ? minElev : b.anchor === 'sea' ? seaLevel : maxElev
-    const offset = b.clamp_m != null ? Math.max(range * b.fraction, b.clamp_m) : range * b.fraction
+    // fixed_m: absolute offset in metres (charted depths are physical);
+    // clamp caps fraction-derived offsets (planet-wide ranges would stretch
+    // them beyond their charted depths). Mirrors palettes.py exactly.
+    const offset =
+      'fixed_m' in b && b.fixed_m != null
+        ? (b.fixed_m as number)
+        : b.clamp_m != null
+          ? Math.min(range * (b.fraction ?? 0), b.clamp_m)
+          : range * (b.fraction ?? 0)
     const elev = anchorElev + b.sign * offset
     return { elev, color: hexToRgb(b.color) }
   })
