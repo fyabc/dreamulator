@@ -14,6 +14,7 @@ knowledge/
 ├── ecology/             # 生态学（生物群落、食物网、种群动态）
 ├── linguistics/         # 语言学（语言/文字分类、语序类型学、历时演化、核心词表）
 ├── sociology/           # 社会学（聚落模式、政治制度、文化演化）
+├── cartography/         # 制图学（河流符号化线宽规范、水文后处理语义；2026-10）
 └── agent-engineering/   # Agent 工程（自维护系统模式：agent 框架/世界托管平台如何防漂移）
 ```
 
