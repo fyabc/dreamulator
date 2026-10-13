@@ -2,7 +2,7 @@
 
 本文说明如何为一个 dreamulator 世界运行 ExoPlaSim 全球气候模式（GCM），并读取
 结果与 EBM 气候引擎对比；运行中遇到过的坑与处理方法集中在 §2.3（环境变量）、
-§4.3（对齐配置的归因）、§4.4（T42 的已知数值问题）、§7（读结果的口径）和 §9（常见问题）。
+§4.3（对齐配置的归因）、§4.4（T42 的已知数值问题）、§7（读结果的口径）、§8（与 EBM 对比的已知限制）和 §10（常见问题）。
 
 ExoPlaSim 是 PlaSim 的系外行星扩展版本（Paradise et al., MNRAS 2022），能显式求解
 大气原始方程，因此副热带高压、急流、季风等大尺度特征会自然涌现。在本项目里它的
@@ -248,7 +248,49 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 - **能量收支只看净 TOA。** 净 TOA 辐射等于 `rst + rlut`（PlaSim 的通量以向下为正）。
   短波各分量之间不闭合，暂不要用来做短波收支分析。
 
-## 8. 续算与暖启动
+## 8. 与 EBM 对比：投影到网格并导出图层
+
+为了让 GCM 和 EBM 用完全相同的配色、投影和分辨率比较，先把 GCM 结果投影到世界的 CVT 网格上，
+再用 `dreamulator export layers` 渲染：
+
+```bash
+source private/gcm/venv/bin/activate
+python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
+    --nc private/gcm/runs/t42f/cold/MOST.00000.nc \
+    --out private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
+deactivate
+G=private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
+E=data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz
+uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
+    --mesh $G -o private/gcm/export/gcm
+uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
+    -o private/gcm/export/ebm
+uv run dreamulator export layers nacrea -l temperature_diff,precipitation_diff,koppen_agreement \
+    --mesh $G --compare-mesh $E -o private/gcm/export/diff
+```
+
+投影（`src/dreamulator/gcm/to_mesh.py`）取运行最后 5 年，按轨道相位分成 12 个「月」，双线性
+插值到每个格点，写出与引擎构建同格式的网格，并在旁边写一个 `.gcm.json` 记录来源和摘要：
+
+- **气温**按 6.5 K/km 的递减率从 GCM 的平滑地表订正到格点自身的高程（认识论类别：近似推导）；
+- **降水**按地球年口径（每月 365.25/12 天）累计，与引擎的 `precipitation_mm` 一致；
+- **Köppen** 用引擎自己的 `koppen_classify` 和同样的季节输入，两边分类器完全相同；
+- **气压异常**按引擎的 ΔP 定义（海平面气压减去同月同纬带海洋平均，取年平均）；GCM 地表高度
+  不低于 1500 m 的陆地格点标记 `slp_reduction_unreliable`；
+- **风**取 10 米风，输出里没有时取最低模式层；
+- 平板海洋给不出、或引擎在自身气候之下派生的字段（洋流、海温距平、生物群系、NPP、农业、
+  宜居度）被清空，避免被误读为 GCM 结果。
+
+**已知限制**：
+
+- 即使是 T42（约 310 km），插值到网格后的场也比 EBM 平滑得多，差值图里的小尺度差异大多反映
+  分辨率差，不是物理差。
+- **GCM 的气压异常图层目前不可用于比较。** 谱模式的海平面气压在 T42 下被地形激发的吉布斯振荡
+  整体污染，振荡从高原一直扩散到海洋，屏蔽高原格点只能去掉核心。可能的改进是先做谱截断平滑，
+  或改用 850 hPa 位势高度距平，尚未实现。
+- 风场图层与逐月图层暂不导出。
+
+## 9. 续算与暖启动
 
 命令行入口目前没有续算参数，需要在 Python 里调用 `run_gcm`，通过映射结果的
 `extras` 传入 `restartfile`：
@@ -268,7 +310,7 @@ run_gcm(params, "private/gcm/runs/nacrea_land15_cont", years=10, ncpus=8,
 `MOST_DIAG` 里找 `Found N variables in file` 这一行，或者检查第一年的温度是否延续了
 上一段运行。
 
-## 9. 常见问题
+## 10. 常见问题
 
 | 现象 | 原因与处理 |
 |---|---|
