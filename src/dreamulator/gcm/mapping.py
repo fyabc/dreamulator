@@ -93,6 +93,11 @@ class ExoPlaSimParams:
     par: float | None = None
     pco2: float | None = None
     lonvernaleq: float | None = None  # MVELP, degrees (None = ExoPlaSim's Earth 102.7°)
+    # True = PlaSim uses the eccentricity/obliquity/MVELP given here (NFIXORB=1).
+    # ExoPlaSim's default False makes PlaSim ignore them and compute Earth's
+    # Berger (1978) orbit for year 1 AD (e 0.0175, obliquity 23.7°) instead —
+    # every run before 2026-10-13 silently used that Earth orbit.
+    fixedorbit: bool = True
     extras: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
@@ -107,6 +112,7 @@ class ExoPlaSimParams:
             "flux": self.flux,
             "year": self.year,
             "pressure": self.pressure,
+            "fixedorbit": self.fixedorbit,
             **self.extras,
         }
         if self.startemp is not None:
@@ -310,7 +316,9 @@ class _WorldInputs:
         return None
 
 
-def _perihelion_lonvernaleq(world: Path, planet_id: str, year_days: float) -> float | None:
+def _perihelion_lonvernaleq(
+    world: Path, planet_id: str, year_days: float, rotation_days: float | None = None
+) -> float | None:
     """MVELP from the same perihelion-phase derivation the EBM uses, or None."""
     from types import SimpleNamespace
 
@@ -318,7 +326,7 @@ def _perihelion_lonvernaleq(world: Path, planet_id: str, year_days: float) -> fl
 
     day, _ = resolve_perihelion_day(
         _WorldInputs(world),  # type: ignore[arg-type]
-        SimpleNamespace(id=planet_id),  # type: ignore[arg-type]
+        SimpleNamespace(id=planet_id, rotation_period_days=rotation_days),  # type: ignore[arg-type]
         year_days,
     )
     return None if day is None else mvelp_from_perihelion_day(day, year_days)
@@ -364,7 +372,9 @@ def map_world(
     if params.lonvernaleq is None:
         # Same perihelion phase as the EBM (resolve_perihelion_day); worlds where
         # it is underivable (e.g. Earth) keep ExoPlaSim's Earth default.
-        lonvernaleq = _perihelion_lonvernaleq(world, planet_id, params.year)
+        lonvernaleq = _perihelion_lonvernaleq(
+            world, planet_id, params.year, planet.get("rotation_period_days")
+        )
         if lonvernaleq is not None:
             params = replace(params, lonvernaleq=lonvernaleq)
         else:

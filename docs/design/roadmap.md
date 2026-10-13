@@ -149,7 +149,7 @@
 | P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例 | 设计 1–2 周 + 实现远期 | ★★★ |
 | P3 | **地质层速度**（terrain 已 56→17 s（09-29）；剩余 = tectonics ~97 s Dijkstra 重采样；债 11 缩放数据） | 评估 0.5 周 | ★★ |
 | P3 | **GCM PoC 跑通**（PoC 风场退化根因未明；定性结论已由 Kaspi & Showman 2015 兜底。升级候选（用户 09-24 间奏曲）：① ExoPlaSim baseline；② GPU 多卡 200k 节点级 GCM；③ 模拟数据训 ML 代理。前置 = ExoPlaSim GPU 化审计 + 网格-动力核匹配调研）→ [climate-gcm-plan.md](proposals/climate-gcm-plan.md) | 远期（资源到位可提级） | ★★→★★★ |
-| P3 | **EBM 全球冰反照率耦合**（EBM 全球均温锚定在固定反照率 0.3 的平衡温度加温室增温上，冰反照率只做局地降温，改倾角 14.9°→19.9° 时 EBM 全球均温仅变 0.06 K，GCM 至少 9 K；现状按定标点用 GCM 重定标，复杂度与耦合面待评估）→ `solve_1d_ebm_temperature` / `ice_albedo_feedback` + nacrea design-notes 0012 §2 | 调研后估 | ★★★ |
+| P3 | **EBM 全球冰反照率耦合**（EBM 全球均温锚定在固定反照率 0.3 的平衡温度加温室增温上，冰反照率只做局地降温，改倾角 14.9°→19.9° 时 EBM 全球均温仅变 0.06 K；现状按定标点用 GCM 重定标，复杂度与耦合面待评估）→ `solve_1d_ebm_temperature` / `ice_albedo_feedback` + nacrea design-notes 0012 §2 | 调研后估 | ★★★ |
 | P3 | **诊断缓存设计**（诊断脚本中间量落盘带版本号；已知属性：mesh 4 位小数截断致产物 vs rebuild 差 0.2pp） | 1 周 | ★★ |
 
 ---

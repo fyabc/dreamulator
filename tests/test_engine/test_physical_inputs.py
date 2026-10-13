@@ -1061,3 +1061,57 @@ class TestWorldFirstDiagnostics:
         # Legacy hardcoded block survives for contexts without a data tree.
         assert cfg.rotation_period_days == 1.0
         assert cfg.hadley_extent_deg == 30.0
+
+
+def _inclined_nacrea_stub(tmp_path: Path) -> _StubEngine:
+    """26-10-11 geometry: Aegis tilts 44.8°, nacrea orbits at 13.6° (not equatorial)."""
+    stellar = _write(
+        tmp_path,
+        "stellar.yaml",
+        {
+            "stars": [{"id": "star_ignis", "luminosity": 0.1227, "mass": 0.4665}],
+            "orbits": [
+                {
+                    "body_id": "planet_aegis",
+                    "parent_id": "star_ignis",
+                    "semi_major_axis_au": 0.3648,
+                    "eccentricity": 0.0679,
+                    "longitude_ascending_node_deg": 131.099119,
+                    "argument_of_periapsis_deg": 88.993305,
+                },
+                {
+                    "body_id": "satellite_nacrea",
+                    "parent_id": "planet_aegis",
+                    "semi_major_axis_au": 0.0048348095,
+                    "inclination_deg": 13.637092,
+                    "longitude_ascending_node_deg": 137.41468,
+                },
+            ],
+            "bodies": [
+                {"id": "planet_aegis", "mass_earth": 508.5, "axial_tilt_deg": 44.8},
+                {"id": "satellite_nacrea", "mass_earth": 1.2, "body_type": "natural_satellite"},
+            ],
+        },
+    )
+    return _StubEngine({"stellar.yaml": stellar})
+
+
+def test_perihelion_day_from_synchronous_satellite_orbit_normal(tmp_path: Path) -> None:
+    """Synchronous moon: its own orbit normal is the spin axis → φ = ϖ_Aegis − Ω_nacrea."""
+    engine = _inclined_nacrea_stub(tmp_path)
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
+    planet.rotation_period_days = 3.1336
+    perihelion_day, warnings = resolve_perihelion_day(engine, planet, 99.82)
+    assert warnings == []
+    phase = (131.099119 + 88.993305 - 137.41468) % 360.0  # 82.68°, the canon value
+    assert perihelion_day == pytest.approx(99.82 * phase / 360.0, abs=1e-6)
+
+
+def test_perihelion_day_none_for_non_synchronous_inclined_satellite(tmp_path: Path) -> None:
+    """Not synchronous and no equatorial reference → underivable, with a warning."""
+    engine = _inclined_nacrea_stub(tmp_path)
+    planet = _make_planet("satellite_nacrea", "planet_aegis")
+    planet.rotation_period_days = 1.0
+    perihelion_day, warnings = resolve_perihelion_day(engine, planet, 99.82)
+    assert perihelion_day is None
+    assert any("synchronous" in w for w in warnings)

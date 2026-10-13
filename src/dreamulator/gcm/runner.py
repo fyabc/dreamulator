@@ -31,6 +31,13 @@ Design points (2026-10-05 harness decision):
   (``exoplasim/__init__.py`` 3.4.2, L2643-2646) — a silently
   cold-started run otherwise (verify via the ``Found N variables in file``
   line in ``MOST_DIAG``, or a year-1 temperature sanity check).
+- **Orbit actually used.**  ExoPlaSim's ``fixedorbit`` defaults to False,
+  which makes PlaSim ignore the given eccentricity, obliquity and MVELP and
+  compute Earth's Berger (1978) orbit for year 1 AD instead — the manifest
+  then records parameters the model never used.  :func:`run_gcm` checks
+  ``NFIXORB`` before integrating and, afterwards, compares the
+  ``Computed Orbital Parameters`` block of ``MOST_DIAG`` with the request
+  (:func:`verify_orbit`), raising on any mismatch.
 - **Serial make.**  ``exoplasim.Model()`` compiles PlaSim with ``make``, and
   PlaSim's makefile does not declare all Fortran module dependencies.  An
   inherited ``MAKEFLAGS=-jN`` (common on shared servers) races the build and
@@ -52,6 +59,7 @@ import json
 import logging
 import os
 import platform
+import re
 import struct
 import sys
 import time
@@ -211,6 +219,63 @@ def write_manifest(
     )
 
 
+_ORBIT_FIELDS = {
+    "Eccentricity": ("eccentricity", 1e-5),
+    "Obliquity (deg)": ("obliquity", 1e-3),
+    "Long of perh(deg)": ("lonvernaleq", 1e-3),
+}
+
+
+def parse_orbit_block(diag_text: str) -> dict[str, float]:
+    """Values of PlaSim's ``Computed Orbital Parameters`` block (pure).
+
+    PlaSim prints the block for both fixed (``NFIXORB=1``) and Berger orbits;
+    the keys are the printed labels (``Eccentricity``, ``Obliquity (deg)``,
+    ``Long of perh(deg)``).  Missing block → empty dict.
+    """
+    out: dict[str, float] = {}
+    start = diag_text.find("Computed Orbital Parameters")
+    if start < 0:
+        return out
+    for line in diag_text[start:].splitlines()[1:12]:
+        body = line.strip().strip("*").strip()
+        if "=" not in body:
+            continue
+        label, value = (part.strip() for part in body.split("=", 1))
+        if label in _ORBIT_FIELDS:
+            try:
+                out[label] = float(value)
+            except ValueError:
+                continue
+    return out
+
+
+def verify_orbit(diag_text: str, params: ExoPlaSimParams) -> None:
+    """Raise when the orbit PlaSim printed differs from the requested one (pure).
+
+    MVELP is only checked when the request set it; ExoPlaSim's own default
+    (Earth's 102.7°) is not ours to verify.
+    """
+    found = parse_orbit_block(diag_text)
+    if not found:
+        raise RuntimeError("MOST_DIAG has no 'Computed Orbital Parameters' block")
+    if "Using Berger orbit" in diag_text and params.fixedorbit:
+        raise RuntimeError("PlaSim used the Berger Earth orbit although fixedorbit was requested")
+    problems = []
+    for label, (attr, tol) in _ORBIT_FIELDS.items():
+        want = getattr(params, attr)
+        if want is None or label not in found:
+            continue
+        got = found[label]
+        diff = (
+            abs((got - want + 180.0) % 360.0 - 180.0) if attr == "lonvernaleq" else abs(got - want)
+        )
+        if diff > tol:
+            problems.append(f"{label}: requested {want}, PlaSim used {got}")
+    if problems:
+        raise RuntimeError("orbit mismatch — " + "; ".join(problems))
+
+
 def multi_year_otherargs(years: int) -> dict[str, str]:
     """Namelist overrides for a continuous single-process multi-year run.
 
@@ -296,6 +361,12 @@ def run_gcm(
         otherargs={**(namelist_overrides or {}), **multi_year_otherargs(years)},
         **kwargs,
     )
+    if params.fixedorbit:
+        namelist = (workdir / "planet_namelist").read_text(encoding="utf-8")
+        if not re.search(r"NFIXORB\s*=\s*1\b", namelist):
+            raise RuntimeError(
+                "planet_namelist does not have NFIXORB = 1; the orbit would be ignored"
+            )
     # pyburn defaults to timeaverage=True with times=12: it would squash the
     # whole integration into 12 equally spaced records regardless of length
     # (a 1-year run's records look monthly, a 50-year run's are 50-month
@@ -315,6 +386,8 @@ def run_gcm(
             "(see burnout log; after fixing the environment, re-run via "
             "exoplasim.pyburn.postprocess on the kept raw output)"
         )
+    if diag_candidates:
+        verify_orbit(diag_candidates[0].read_text(encoding="utf-8", errors="replace"), params)
     all_inputs = dict(input_files or {})
     if landmap is not None:
         all_inputs["landmap"] = Path(landmap)

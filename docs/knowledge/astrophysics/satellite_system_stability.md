@@ -485,7 +485,9 @@ Nacrea 1:2:4 链实测（μ'≈3.4×10⁻³，周期比失谐 ~0.2%——按 Wis
   模板渲染；k₂/Q、J2、C/MR² 参数化派生量（外迁/e 阻尼/J2 进动/拉普拉斯/
   自转进动）经 `OrbitingBody` 可选字段 authored 后接入。`perihelion_day`
   由近日点经度 ϖ=Ω+ω 与自转轴方位 λ_pole 推出（近日点相对春分相位），
-  供气候季节模型使用。
+  供气候季节模型使用。自转轴方位优先取天体自身：同步自转的卫星处在卡西尼态 1，
+  自转轴贴近自身轨道法向，λ_pole = Ω_sat − 90°（nacrea：φ = ϖ_Aegis − Ω_nacrea =
+  82.7°）；不满足同步条件时才用母星赤道参考卫星的方位。
 - `scripts/astro/rebound_nbody.py` — 全部判据的可执行实现（landed/baseline/
   sat-scan 模式 + `--j2/--tides/--tide-boost` 长期算子 + `--yaml` 变体直读 +
   单珠构型容错；J2 算子为**向量式节点+近点角**，即 §9.1 的完整拉普拉斯面

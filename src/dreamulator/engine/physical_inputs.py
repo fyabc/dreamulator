@@ -108,6 +108,11 @@ _ONE_ATM_HPA = 1013.25
 # unknown and Kepler's third law cannot be applied.
 _EARTH_ORBITAL_PERIOD_DAYS = 365.25
 
+# A satellite whose sidereal rotation period is within this fraction of its
+# orbital period around its parent counts as synchronous: tides hold it in
+# Cassini state 1, with its spin axis close to its own orbit normal.
+_SYNCHRONOUS_TOLERANCE = 0.05
+
 # Equatorial-orbit convention (Cassini-state fossil): a prograde satellite
 # within this many degrees of the parent's axial tilt counts as lying in the
 # equatorial plane and fixes the spin-axis azimuth (see
@@ -437,6 +442,38 @@ def _spin_axis_longitude_deg(parent_id: str, index: _StellarIndex) -> float | No
     return (node - 90.0) % 360.0
 
 
+def _synchronous_satellite_pole(
+    body_id: str, rotation_days: float | None, index: _StellarIndex
+) -> float | None:
+    """Spin-axis azimuth of a synchronously rotating satellite, or None.
+
+    A synchronous satellite sits in Cassini state 1: its spin axis stays within
+    a small angle of its own orbit normal (nacrea: about 1°), so the axis
+    projects to the orbit normal's ecliptic longitude ``Ω − 90°``.  Returns
+    None for bodies orbiting a star, for unknown masses or elements, or when
+    the rotation is not within ``_SYNCHRONOUS_TOLERANCE`` of the orbital period.
+    """
+    from dreamulator.engine.tidal_physics import AU_M, EARTH_MASS_KG, mean_motion_rad_s
+
+    orbit = index.orbits.get(body_id)
+    if orbit is None or rotation_days is None:
+        return None
+    parent = str(orbit.get("parent_id"))
+    if parent in index.star_ids:
+        return None
+    a_au = _as_float(orbit.get("semi_major_axis_au"))
+    node = _as_float(orbit.get("longitude_ascending_node_deg"))
+    parent_mass = index.body_masses.get(parent)
+    if a_au is None or node is None or parent_mass is None:
+        return None
+    mass = parent_mass + index.body_masses.get(body_id, 0.0)
+    n = mean_motion_rad_s(mass * EARTH_MASS_KG, a_au * AU_M)
+    orbital_days = 2.0 * math.pi / n / 86400.0
+    if abs(rotation_days / orbital_days - 1.0) > _SYNCHRONOUS_TOLERANCE:
+        return None
+    return (node - 90.0) % 360.0
+
+
 def resolve_perihelion_day(
     engine: BaseEngine,
     planet: Planet | None,
@@ -450,12 +487,13 @@ def resolve_perihelion_day(
     sun's longitude matches ``λ_pole − 90°`` (``λ_pole`` the spin-axis azimuth).
     The offset is ``φ = ϖ − λ_pole + 270°``, so ``perihelion_day = P·φ/360°``.
 
-    Returns ``None`` when the spin-axis azimuth is underivable, i.e. no
-    prograde satellite lies within ``_EQUATORIAL_TOLERANCE_DEG`` of the
-    parent's tilt (Earth: its moon is ecliptic, not equatorial; nacrea since
-    the 26-10-11 canon: Aegis tilts 44.8° while nacrea orbits at ~13.6°).  The
-    caller then keeps ``config.perihelion_day`` at its default 0 (perihelion at
-    the vernal equinox), and a warning says so.
+    The spin axis comes, in order of preference, from the body itself when it
+    is a synchronously rotating satellite (its own orbit normal, Cassini state
+    1 — nacrea: ``φ = ϖ_Aegis − Ω_nacrea``), otherwise from the heliocentric
+    chain member's equatorial reference satellite.  Returns ``None`` when
+    neither applies (Earth: not a satellite, and its moon is ecliptic, not
+    equatorial).  The caller then keeps ``config.perihelion_day`` at its default
+    0 (perihelion at the vernal equinox), and a warning says so.
     """
     warnings: list[str] = []
     if planet is None or period_days is None:
@@ -472,14 +510,18 @@ def resolve_perihelion_day(
     if omega is None:
         return None, warnings
     peri_longitude = (omega + (node or 0.0)) % 360.0
-    pole = _spin_axis_longitude_deg(member, index)
+    pole = _synchronous_satellite_pole(
+        planet.id, _as_float(getattr(planet, "rotation_period_days", None)), index
+    )
+    if pole is None:
+        pole = _spin_axis_longitude_deg(member, index)
     if pole is None:
         warnings.append(
-            f"Perihelion phase for '{planet.id}' is underivable: '{member}' has no "
-            f"equatorial reference satellite (prograde orbit within "
-            f"{_EQUATORIAL_TOLERANCE_DEG:g}° of its axial tilt), so its spin-axis azimuth is "
-            "unknown. The seasonal model keeps perihelion at the vernal equinox "
-            "(perihelion_day = 0)."
+            f"Perihelion phase for '{planet.id}' is underivable: it is not a synchronous "
+            f"satellite, and '{member}' has no equatorial reference satellite (prograde "
+            f"orbit within {_EQUATORIAL_TOLERANCE_DEG:g}° of its axial tilt), so the "
+            "spin-axis azimuth is unknown. The seasonal model keeps perihelion at the "
+            "vernal equinox (perihelion_day = 0)."
         )
         return None, warnings
     offset = (peri_longitude - pole + 270.0) % 360.0

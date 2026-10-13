@@ -244,3 +244,9 @@ def test_fast_readallvariables_matches_upstream() -> None:
     for key in ("139", "130"):
         assert v_new[key].dtype == v_ref[key].dtype
         np.testing.assert_array_equal(v_new[key], v_ref[key])
+
+
+def test_fixed_orbit_is_requested_by_default() -> None:
+    """Without fixedorbit PlaSim ignores the mapped orbit and uses Earth's Berger orbit."""
+    kwargs = map_planet(PLANET, STAR, ORBIT).to_configure_kwargs()
+    assert kwargs["fixedorbit"] is True
