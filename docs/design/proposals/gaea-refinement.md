@@ -268,6 +268,8 @@ WorldMachine Indie $119；全套商业工具约 $500 一次性（不含 PS 订�
    界面正中）——印证 §6 的判断：降水→侵蚀耦合做进引擎/导出面，而非留给
    后期均匀降雨。落地 = gaea_refine 导出面除 16-bit 高程外**同分辨率导出
    precipitation_mm 栅格**，Gaea 侧作降雨 mask。
+   ✅ 导出面已落地（2026-10-11，`export region` pack v2 气候通道），
+   契约见 blender-render-pipeline.md「链路与数据包契约」。
 2. **往返协议的字段契约**：dayside 的区域往返承诺「米制量程与范围在往返中
    保全」——对应本库 baked_base manifest 必须记录（高程 min/max、地理范围、
    投影参数），即 §6 第 0 步「写入球面经纬坐标参考」的具体化。
