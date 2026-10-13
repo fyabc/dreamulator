@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **固定气候分支（`climate_source: gcm`）**：分支元数据新增 `climate_source` 字段，设为
+  `gcm` 的分支必须在 climate 层分叉，气候引擎不再模拟它，只把一次 ExoPlaSim 运行的逐格
+  字段写进继承来的网格，下游生态层和文明层照常构建。字段文件随 `worlds-data` release 发布，
+  git 只存 provenance；构建时核对文件 SHA-256 和网格指纹，父世界地形变化后拒绝过期数据。
+  首个分支 `nacrea/branches/gcm-t42-712` 固定为 T42 加物理滤波、712 ppm 的冷启动基线。
+  GCM 投影的月序改为从北半球春分起算，与引擎一致。用法见 `docs/usage/exoplasim-gcm.md` §9。
+
 - **design-notes/0011 文明层地球对比框架（档案）**：作者裁决（2026-10-07）
   文明层对外设定不再使用「地球 vs Nacrea」并排对比框架——四篇对外文档
   （space_age / scientific_enlightenment / coupled_magnetic /

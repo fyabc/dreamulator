@@ -698,10 +698,18 @@ def branch_create(
     name: str = typer.Argument(help="Branch name"),
     at: str = typer.Option(..., "--at", help="Layer to fork at"),
     description: str = typer.Option("", "--description", "-d", help="Branch description"),
+    climate_source: str = typer.Option(
+        "engine",
+        "--climate-source",
+        help="engine (simulate climate) or gcm (pin climate to an imported GCM result; "
+        "needs --at climate)",
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Create a new branch at the specified layer."""
     _set_data_dir(data_dir)
+    from pydantic import ValidationError
+
     from dreamulator.branch_manager import BranchManager
     from dreamulator.models.layers import Layer
 
@@ -721,9 +729,11 @@ def branch_create(
 
     try:
         branch_mgr = BranchManager(world_dir)
-        branch_dir = branch_mgr.create_branch(name, fork_layer, description=description)
+        branch_dir = branch_mgr.create_branch(
+            name, fork_layer, description=description, climate_source=climate_source
+        )
         console.print(f"[green]Created branch '{name}' at layer '{at}' in {branch_dir}[/green]")
-    except FileExistsError as e:
+    except (FileExistsError, ValueError, ValidationError) as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1) from None
 

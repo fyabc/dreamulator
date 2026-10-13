@@ -14,7 +14,7 @@ GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
 - `run_exoplasim.py` — 世界→GCM 参数映射 → 运行 → 诊断 → overview.png；`--nc` 可只诊断已有 run
 - `bootstrap.sh` — 任意 Ubuntu 容器/WSL 环境引导（含 pyfft/meson 坑的修复）
 - `make_landmap.py` — 世界网格 → ExoPlaSim `.sra` 海陆掩膜与地表位势
-- `gcm_to_mesh.py` — GCM 结果投影到世界网格，供 `dreamulator export layers --mesh` 与 EBM 对比
+- `gcm_to_mesh.py` — GCM 结果投影到世界网格：`--out` 输出对比用网格，供 `dreamulator export layers --mesh` 与 EBM 对比；`--emit-fields` 输出固定气候分支（`climate_source: gcm`）的字段文件
 
 ## climate/ — 气候验证与诊断（32 个）
 

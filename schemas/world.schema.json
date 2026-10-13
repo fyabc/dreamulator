@@ -52,6 +52,11 @@
           },
           "title": "Tags",
           "type": "array"
+        },
+        "climate_source": {
+          "$ref": "#/$defs/ClimateSource",
+          "default": "engine",
+          "description": "engine = simulated climate; gcm = climate pinned to an imported GCM result (requires fork_layer == climate)"
         }
       },
       "required": [
@@ -59,6 +64,15 @@
       ],
       "title": "BranchMetadata",
       "type": "object"
+    },
+    "ClimateSource": {
+      "description": "Where a branch's climate layer comes from.\n\n- ``engine``: the climate engine simulates it (default).\n- ``gcm``: the climate is pinned to an imported ExoPlaSim result\n  (``layers/climate/input/gcm_fields.msgpack.gz``).  The engine never\n  simulates such a branch, ``--force`` included; it only writes the pinned\n  fields onto the inherited mesh so the downstream layers can build.",
+      "enum": [
+        "engine",
+        "gcm"
+      ],
+      "title": "ClimateSource",
+      "type": "string"
     },
     "Layer": {
       "description": "World building layers, ordered from fundamental to derived.",
