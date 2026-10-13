@@ -223,6 +223,29 @@ def render_continuous_layer(
     return np.asarray(cell_colors[indices])
 
 
+def render_value_layer(
+    values: np.ndarray,
+    indices: np.ndarray,
+    scale: list[ColorStop],
+    normalize: Callable[[np.ndarray], np.ndarray],
+    mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Render per-cell numeric ``values`` (shape ``(num_cells,)``) through a scale.
+
+    Like :func:`render_continuous_layer` but for values that are not a mesh
+    field (e.g. a difference between two meshes).  Cells with non-finite values
+    or ``mask == False`` stay transparent.
+    """
+    values = np.asarray(values, dtype=float)
+    keep = np.isfinite(values) if mask is None else (np.isfinite(values) & mask)
+    cell_colors = np.zeros((values.size, 4), dtype=np.uint8)
+    norm = normalize(np.where(keep, values, 0.0))
+    for i in np.flatnonzero(keep):
+        cell_colors[i, :3] = sequential_color(float(norm[i]), scale)
+        cell_colors[i, 3] = 255
+    return np.asarray(cell_colors[indices])
+
+
 def render_terrain_layer(
     mesh: CVTMesh,
     indices: np.ndarray,

@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -30,6 +31,7 @@ from dreamulator.map.export import (
     render_continuous_layer,
     render_plate_motion_layer,
     render_terrain_layer,
+    render_value_layer,
     save_rgba_png,
 )
 from dreamulator.map.manager import MapManager
@@ -55,8 +57,23 @@ export_app = typer.Typer(
 console = Console()
 
 _VALID_LAYERS = frozenset(
-    {"terrain", "koppen", "biome", "agriculture", "habitability", "plate_motion"}
+    {
+        "terrain",
+        "koppen",
+        "biome",
+        "agriculture",
+        "habitability",
+        "plate_motion",
+        "temperature",
+        "precipitation",
+        "pressure",
+    }
 )
+#: Layers comparing --mesh (or the world mesh) against --compare-mesh.
+_DIFF_LAYERS = frozenset({"temperature_diff", "precipitation_diff", "koppen_agreement"})
+
+#: Köppen agreement colours: same class / same main group / different group.
+_KOPPEN_AGREEMENT_COLORS = {"same": (46, 160, 67), "group": (234, 179, 8), "differ": (220, 38, 38)}
 
 
 def _set_data_dir(data_dir: Path | None) -> None:
@@ -109,7 +126,77 @@ def _render_layer(
         if omega_by_plate is None:
             raise ValueError("plate_motion layer requires loaded plate Euler poles")
         return render_plate_motion_layer(mesh, indices, omega_by_plate, radius_km)
+    # Climate layers: same ranges and land masks as frontend layerBakes.ts.
+    if name == "temperature":  # fixed −40…+40 °C, land only
+        return render_continuous_layer(
+            mesh,
+            indices,
+            "temperature_C",
+            continuous_scale("temperature"),
+            normalize=lambda t: (t + 40.0) / 80.0,
+            land_only=True,
+            sea_level=sea_level,
+        )
+    if name == "precipitation":  # log10(P + 1) / log10(30001), land only
+        return render_continuous_layer(
+            mesh,
+            indices,
+            "precipitation_mm",
+            continuous_scale("precip"),
+            normalize=lambda p: math.log10(p + 1.0) / math.log10(30001.0),
+            land_only=True,
+            sea_level=sea_level,
+        )
+    if name == "pressure":  # annual ΔP, ±5 hPa, land and ocean; ice-cap/high-terrain mask
+        import numpy as np
+
+        dp = _cell_array(mesh, "pressure_anomaly_annual_hpa")
+        reliable = np.array([c.slp_reduction_unreliable is not True for c in mesh.cells])
+        return render_value_layer(
+            dp, indices, continuous_scale("temperature"), lambda d: (d + 5.0) / 10.0, reliable
+        )
     raise ValueError(f"Unknown layer: {name}")
+
+
+def _cell_array(mesh: CVTMesh, field: str) -> np.ndarray:
+    import numpy as np
+
+    return np.array(
+        [
+            np.nan if getattr(c, field, None) is None else float(getattr(c, field))
+            for c in mesh.cells
+        ]
+    )
+
+
+def _render_diff_layer(
+    name: str, mesh: CVTMesh, ref: CVTMesh, indices: np.ndarray, sea_level: float
+) -> np.ndarray:
+    """Difference layers ``mesh − ref`` (same ranges as the frontend error layers)."""
+    import numpy as np
+
+    land = np.array([c.elevation >= sea_level for c in mesh.cells])
+    if name == "temperature_diff":  # ±20 K, land only
+        delta = _cell_array(mesh, "temperature_C") - _cell_array(ref, "temperature_C")
+        return render_value_layer(
+            delta, indices, continuous_scale("temperature"), lambda d: (d + 20.0) / 40.0, land
+        )
+    if name == "precipitation_diff":  # ±2000 mm/yr, land only
+        delta = _cell_array(mesh, "precipitation_mm") - _cell_array(ref, "precipitation_mm")
+        return render_value_layer(
+            delta, indices, continuous_scale("temperature"), lambda d: (d + 2000.0) / 4000.0, land
+        )
+    if name == "koppen_agreement":  # same class / same main group / different, land only
+        colors = np.zeros((mesh.num_cells, 4), dtype=np.uint8)
+        for i, (a, b) in enumerate(zip(mesh.cells, ref.cells, strict=True)):
+            ka, kb = a.koppen_class, b.koppen_class
+            if not land[i] or not ka or not kb or "Ocean" in (ka, kb):
+                continue
+            key = "same" if ka == kb else ("group" if ka[0] == kb[0] else "differ")
+            colors[i, :3] = _KOPPEN_AGREEMENT_COLORS[key]
+            colors[i, 3] = 255
+        return np.asarray(colors[indices])
+    raise ValueError(f"Unknown diff layer: {name}")
 
 
 @export_app.command("layers")
@@ -119,7 +206,21 @@ def export_layers(
         "terrain,koppen,biome,agriculture,habitability",
         "--layers",
         "-l",
-        help="Comma-separated layer names: terrain,koppen,biome,agriculture,habitability",
+        help="Comma-separated layer names: terrain,koppen,biome,agriculture,habitability,"
+        "plate_motion,temperature,precipitation,pressure; with --compare-mesh also "
+        "temperature_diff,precipitation_diff,koppen_agreement",
+    ),
+    mesh_path: Path | None = typer.Option(
+        None,
+        "--mesh",
+        help="Render this mesh file instead of the world's built mesh (e.g. a GCM projection "
+        "from scripts/climate/gcm/gcm_to_mesh.py); map metadata still comes from the world",
+    ),
+    compare_mesh: Path | None = typer.Option(
+        None,
+        "--compare-mesh",
+        help="Reference mesh for the *_diff / koppen_agreement layers (rendered as mesh − "
+        "reference); must share the cell geometry",
     ),
     grid: str | None = typer.Option(
         None,
@@ -139,10 +240,13 @@ def export_layers(
     if not requested:
         console.print("[red]No layers requested.[/red]")
         raise typer.Exit(code=2) from None
-    invalid = [name for name in requested if name not in _VALID_LAYERS]
+    invalid = [name for name in requested if name not in _VALID_LAYERS | _DIFF_LAYERS]
     if invalid:
         console.print(f"[red]Unknown layer(s): {', '.join(invalid)}[/red]")
-        console.print(f"  Valid layers: {', '.join(sorted(_VALID_LAYERS))}")
+        console.print(f"  Valid layers: {', '.join(sorted(_VALID_LAYERS | _DIFF_LAYERS))}")
+        raise typer.Exit(code=2) from None
+    if any(name in _DIFF_LAYERS for name in requested) and compare_mesh is None:
+        console.print("[red]*_diff / koppen_agreement layers need --compare-mesh.[/red]")
         raise typer.Exit(code=2) from None
 
     mgr = WorldManager()
@@ -187,7 +291,20 @@ def export_layers(
 
     from dreamulator.map.export import load_cvt_mesh_model
 
+    if mesh_path is not None:
+        if not mesh_path.exists():
+            console.print(f"[red]Mesh file not found: {mesh_path}[/red]")
+            raise typer.Exit(code=1) from None
+        mesh_file = mesh_path
     mesh = load_cvt_mesh_model(mesh_file)
+    ref_mesh: CVTMesh | None = None
+    if compare_mesh is not None:
+        ref_mesh = load_cvt_mesh_model(compare_mesh)
+        if ref_mesh.num_cells != mesh.num_cells or any(
+            a.id != b.id for a, b in zip(mesh.cells, ref_mesh.cells, strict=True)
+        ):
+            console.print("[red]--compare-mesh has a different cell geometry.[/red]")
+            raise typer.Exit(code=1) from None
 
     console.print(
         f"Baking {len(requested)} layer(s) for {world}/{planet_id} "
@@ -221,9 +338,13 @@ def export_layers(
 
     for name in requested:
         start = time.perf_counter()
-        rgba = _render_layer(
-            name, mesh, indices, elev_min, elev_max, sea_level, omega_by_plate, radius_km
-        )
+        if name in _DIFF_LAYERS:
+            assert ref_mesh is not None
+            rgba = _render_diff_layer(name, mesh, ref_mesh, indices, sea_level)
+        else:
+            rgba = _render_layer(
+                name, mesh, indices, elev_min, elev_max, sea_level, omega_by_plate, radius_km
+            )
         path = output / f"{name}.png"
         save_rgba_png(rgba, path)
         elapsed = time.perf_counter() - start
