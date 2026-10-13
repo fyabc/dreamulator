@@ -126,7 +126,6 @@ python scripts/climate/gcm/run_exoplasim.py \
     --landmap private/gcm/surf/nacrea_N032_surf_0172.sra \
     --topomap private/gcm/surf/nacrea_N032_surf_0129.sra \
     --configure '{"twobandalbedo": true}' \
-    --override '{"lonvernaleq": 180}' \
     --workdir private/gcm/runs/nacrea_aligned
 ```
 
@@ -141,15 +140,23 @@ GCM 与 EBM 比较、或与地球参照臂比较时，尽量只让输入数据�
 | 双波段反照率 | `twobandalbedo: true` | EBM 对非太阳型恒星使用光谱冰反照率；冰在近红外反照率低，K 型星近红外份额高，宽带反照率会高估冰面反照 |
 | 平流层臭氧 | 保持默认（关闭） | ExoPlaSim 默认配置在地球上已基本校准，内部参数吸收了「无臭氧」；打开后地球参照臂偏暖约 3.7 K |
 | 物理滤波 | 保持默认（关闭） | 属于数值稳定手段，却使地球参照臂偏暖约 2.9 K；T21 带地形不开滤波也稳定 |
-| 近日点相位 | nacrea `lonvernaleq: 180`，地球保留默认 102.7° | 见下文 |
+| 固定轨道 | `fixedorbit: true`（映射默认开启） | 不开时 PlaSim 忽略给定的偏心率、倾角和近日点，改用地球公元 1 年的 Berger 轨道 |
+| 近日点相位 | 由正典推导：nacrea `MVELP = 262.68°`，地球保留默认 102.7° | 见下文 |
 | 混合层深度 | 50 m（默认） | 与 EBM 的 `ocean_mixed_layer_depth_m` 相同 |
 
+**固定轨道与核对。** ExoPlaSim 的 `fixedorbit` 默认是关闭的，这时 PlaSim 不读给定的
+轨道参数，而是按 Berger（1978）的地球轨道解计算公元 1 年的轨道（偏心率 0.0175、倾角
+23.7°）；manifest 里记录的却仍是请求的值。映射现在默认开启 `fixedorbit`，`run_gcm` 在积分
+前检查 `NFIXORB = 1`，积分后读取 `MOST_DIAG` 里「Computed Orbital Parameters」一段，
+与请求的偏心率、倾角和近日点逐项核对，不一致就报错（`runner.verify_orbit`）。
+
 **近日点相位。** PlaSim 的 `MVELP` 是从春分点量起的近日点经度，内部按 `MVELP + 180°`
-使用，所以近日点落在春分时 `MVELP = 180°`。映射函数会用 EBM 的同一套推导
-（`resolve_perihelion_day`）计算它；推导不出来时（地球，以及 26-10-11 定版后的 nacrea）
-映射会给出警告，ExoPlaSim 退回地球的 102.7°，而 EBM 退回「近日点在春分」。nacrea 的
-春分方向随约 10 年周期的轨道锥摆轮转，不存在固定相位，「近日点在春分」对南北半球是中性
-的选择，所以 nacrea 运行显式传 `lonvernaleq: 180` 与 EBM 对齐。
+使用，所以近日点落在春分时 `MVELP = 180°`。映射函数用 EBM 的同一套推导
+（`resolve_perihelion_day`）计算它。nacrea 是同步自转的卫星，自转轴近似垂直于自己的
+轨道面，推导得到正典当前历元的相位 φ = 82.7°（近日点在北半球夏至前约 2 天），对应
+`MVELP = 262.68°`。这个相位随约 13 年的「近日点大年」轮转，正典取当前历元的快照，
+目的正是保留南北半球季节性的不对称。推导不出来时（地球）映射给出警告，ExoPlaSim 用
+地球的 102.7°，EBM 退回「近日点在春分」。
 
 两边都没有考虑的因素：宿主行星造成的食、宿主行星的反照光和红外辐射、内部热流（约
 0.5 W/m²，相对日照可忽略）。陆地冰盖在 GCM 里没有掩膜，只靠积雪体现。
@@ -207,7 +214,7 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 | `--greenhouse-mode` | none | 温室处理方式，见下文 |
 | `--pco2-bar` | 无 | `pco2` 模式下显式给定的 CO₂ 分压，单位 bar |
 | `--flux-boost-factor` | 无 | `flux_boost` 模式下的恒星通量放大倍数 |
-| `--override` | `{}` | 以 JSON 覆盖映射结果中的字段，例如 `'{"obliquity": 0}'`、`'{"lonvernaleq": 180}'` |
+| `--override` | `{}` | 以 JSON 覆盖映射结果中的字段，例如 `'{"obliquity": 0}'` |
 | `--nc` | 无 | 只诊断一个已有的 NetCDF 文件，不重新运行 |
 | `--no-plot` | 关 | 不生成概览图 |
 
@@ -387,4 +394,5 @@ run_gcm(params, "private/gcm/runs/nacrea_land15_cont", years=10, ncpus=8,
 | 报 `ExoPlaSim reported a crash` | Fortran 侧出错，查看运行目录里的 `plasim_diag`、`plasim_output` 和运行日志 |
 | MPI 拒绝以 root 运行 | 设置 `OMPI_ALLOW_RUN_AS_ROOT=1` 和 `OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1` |
 | `wind_alive` 为 false，风速接近零 | 多半是半径单位传错（米而不是地球半径）；检查 `--override` 是否改了 `radius` |
+| GCM 结果的季节性或温度和预期差很多，日距只变化约 ±1.5% | 多半没开固定轨道，PlaSim 用了地球的 Berger 轨道。查看 `MOST_DIAG` 里的「Computed Orbital Parameters」：`Year AD = 1`、偏心率 0.017465、倾角 23.695° 就是这种情况。开启 `fixedorbit`（映射已默认开启）后重跑 |
 | 运行了多年，输出却只有 12 条记录 | 说明绕过了 `run_gcm`。多年积分必须同时设置 `N_RUN_YEARS` 并把 `N_RUN_STEPS` 清零，后处理时 `times` 也要设为年数乘以 12；`run_gcm` 已经处理好这些 |
