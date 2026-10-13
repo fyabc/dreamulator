@@ -26,9 +26,12 @@ Method (all on the tail of the run, default last 5 model years):
 - **Pressure.**  ``pressure_anomaly_annual_hpa`` uses the engine's definition
   (SLP minus the same-month ocean mean of the latitude band, 12-month mean);
   ``slp_annual_hpa`` is the absolute annual mean.  pyburn labels ``psl`` "hPa"
-  but its values are Pa.  Over high terrain the GCM's sea-level reduction is a
-  hypothetical extrapolation that rings in spectral space, so land cells whose
-  GCM surface height is at least ``SLP_UNRELIABLE_HEIGHT_M`` get
+  but its values are Pa.  The SLP field is first smoothed with a Hoskins (1980)
+  spectral filter (:func:`spectral_smooth`, damping 0.1 at total wavenumber
+  ``SLP_SMOOTHING_N0`` = 21), because the spectral model's sea-level reduction
+  over topography rings (Gibbs oscillations) far beyond the terrain.  Over the
+  high terrain itself the reduction is a hypothetical extrapolation, so land
+  cells whose GCM surface height is at least ``SLP_UNRELIABLE_HEIGHT_M`` get
   ``slp_reduction_unreliable = True`` (the same flag and threshold the
   observed Earth root uses; the frontend and the exporter grey them out).
 - **Wind.**  Annual-mean 10 m wind (``uas``/``vas``) when the run wrote it,
@@ -53,6 +56,7 @@ import numpy as np
 
 LAPSE_K_PER_M = 0.0065
 SLP_UNRELIABLE_HEIGHT_M = 1500.0
+SLP_SMOOTHING_N0 = 21
 SECONDS_PER_EARTH_MONTH = 365.25 / 12.0 * 86400.0
 
 #: Engine-derived fields that would be inconsistent with GCM climate.
@@ -89,6 +93,54 @@ def bilinear_to_points(
     f00, f01 = field[..., j0, i0], field[..., j0, i1]
     f10, f11 = field[..., j1, i0], field[..., j1, i1]
     out: np.ndarray = (1 - fy) * ((1 - fx) * f00 + fx * f01) + fy * ((1 - fx) * f10 + fx * f11)
+    return out
+
+
+def _normalized_legendre(x: np.ndarray, nmax: int) -> np.ndarray:
+    """Orthonormal associated Legendre functions ``P[m, n, j]`` on ``x`` (pure).
+
+    Normalized so that ``∫_{-1}^{1} P_n^m(x)² dx = 1``; entries with ``n < m``
+    are zero.  Standard stable three-term recursion in ``n`` for each ``m``.
+    """
+    x = np.asarray(x, dtype=float)
+    sx = np.sqrt(np.maximum(1.0 - x * x, 0.0))
+    p = np.zeros((nmax + 1, nmax + 1, x.size))
+    pmm = np.full(x.size, 1.0 / math.sqrt(2.0))
+    for m in range(nmax + 1):
+        if m > 0:
+            pmm = -math.sqrt((2 * m + 1) / (2 * m)) * sx * pmm
+        p[m, m] = pmm
+        if m + 1 <= nmax:
+            p[m, m + 1] = math.sqrt(2 * m + 3) * x * pmm
+        for n in range(m + 2, nmax + 1):
+            a_n = math.sqrt((4 * n * n - 1) / (n * n - m * m))
+            a_prev = math.sqrt((4 * (n - 1) ** 2 - 1) / ((n - 1) ** 2 - m * m))
+            p[m, n] = a_n * (x * p[m, n - 1] - p[m, n - 2] / a_prev)
+    return p
+
+
+def spectral_smooth(field: np.ndarray, lat_deg: np.ndarray, n0: int) -> np.ndarray:
+    """Hoskins (1980) spectral filter of ``field[..., nlat, nlon]`` on a Gaussian grid (pure).
+
+    The field is expanded in spherical harmonics up to the grid's triangular
+    truncation (``nlat - 1`` and ``nlon // 2``, whichever is smaller), each total
+    wavenumber ``n`` is multiplied by ``exp(-ln10 · [n(n+1) / (n0(n0+1))]²)``
+    (0.1 at ``n = n0``), and the result is transformed back.  ``lat_deg`` must be
+    the ascending Gaussian latitudes of the grid.
+    """
+    nlat, nlon = field.shape[-2], field.shape[-1]
+    nmax = min(nlat - 1, nlon // 2)
+    x = np.sin(np.radians(lat_deg))
+    _, weights = np.polynomial.legendre.leggauss(nlat)
+    leg = _normalized_legendre(x, nmax)  # (m, n, lat)
+    n = np.arange(nmax + 1)
+    response = np.exp(-math.log(10.0) * (n * (n + 1) / (n0 * (n0 + 1))) ** 2)
+    fourier = np.fft.rfft(field, axis=-1)[..., : nmax + 1]  # (..., lat, m)
+    coeff = np.einsum("...jm,mnj,j->...mn", fourier, leg, weights)
+    smoothed = np.einsum("...mn,n,mnj->...jm", coeff, response, leg)
+    full = np.zeros((*field.shape[:-1], nlon // 2 + 1), dtype=complex)
+    full[..., : nmax + 1] = smoothed
+    out: np.ndarray = np.fft.irfft(full, n=nlon, axis=-1)
     return out
 
 
@@ -170,7 +222,7 @@ def project_to_mesh(
     )
     tas_m = phase_climatology(tail("tas") - 273.15, phase)  # (12, nlat, nlon) °C
     pr_m = phase_climatology(tail("pr") * 1000.0 * SECONDS_PER_EARTH_MONTH, phase)  # mm/month
-    psl = tail("psl") / 100.0  # hPa
+    psl = spectral_smooth(tail("psl") / 100.0, lat_grid, SLP_SMOOTHING_N0)  # hPa
     ocean_grid = np.asarray(ds["lsm"][0], dtype=float)[order, :] < 0.5
     dp_annual = band_ocean_anomaly(psl, ocean_grid).mean(axis=0)
     slp_annual = psl.mean(axis=0)
@@ -253,6 +305,7 @@ def project_to_mesh(
         "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
         "wind_source": wind_source,
         "slp_unreliable_cells": int(slp_unreliable.sum()),
+        "slp_smoothing": f"Hoskins spectral filter, 0.1 at n = {SLP_SMOOTHING_N0}",
         "cleared_fields": list(CLEARED_FIELDS),
         "global_mean_temperature_c": float(np.average(t_mean, weights=area)),
         "land_mean_temperature_c": float(np.average(t_mean[is_land], weights=area[is_land])),
@@ -274,9 +327,11 @@ def project_to_mesh(
 __all__ = [
     "CLEARED_FIELDS",
     "LAPSE_K_PER_M",
+    "SLP_SMOOTHING_N0",
     "SLP_UNRELIABLE_HEIGHT_M",
     "band_ocean_anomaly",
     "bilinear_to_points",
     "phase_climatology",
     "project_to_mesh",
+    "spectral_smooth",
 ]
