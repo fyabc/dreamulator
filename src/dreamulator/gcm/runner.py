@@ -21,9 +21,10 @@ Design points (2026-10-05 harness decision):
   ``N_RUN_YEARS`` to a single year.  The 2026-10-06 "greenhouse failure"
   and "snowball basin lock" narratives were both this truncation: every
   harness run had integrated 1 year (12 *monthly* records), not 12-50.
-- **Manifest** records world-input hashes, mapped parameters, versions and
-  wall-clock timing next to the outputs, matching the repo's reproducibility
-  discipline.
+- **Manifest** records world-input paths and hashes, mapped parameters, the
+  exact command line, the code version (``git describe --dirty``), library
+  versions and wall-clock timing next to the outputs, so a run can be
+  reproduced from its manifest alone.
 - **Warm starts / continuations** must go through
   ``configure(restartfile=<path>)`` (passed via ``params.extras``): ExoPlaSim
   copies the seed to ``workdir/plasim_restart`` itself, and *deletes* any
@@ -188,14 +189,33 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def code_version() -> str | None:
+    """``git describe --always --dirty`` of the repository holding this module, or None."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--always", "--dirty", "--abbrev=12"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parent,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return out.stdout.strip() or None
+
+
 def write_manifest(
     manifest_path: Path,
     *,
     params: ExoPlaSimParams,
     input_files: dict[str, Path],
     model_options: dict[str, Any],
+    command: list[str] | None = None,
 ) -> None:
     """Write the provenance manifest for one GCM run."""
+    import shlex
     from importlib.metadata import PackageNotFoundError, version
 
     try:
@@ -205,8 +225,11 @@ def write_manifest(
     manifest = {
         "params": asdict(params),
         "configure_kwargs": params.to_configure_kwargs(),
+        "input_paths": {name: str(path) for name, path in input_files.items()},
         "input_hashes": {name: _hash_file(path) for name, path in input_files.items()},
         "model_options": model_options,
+        "command": shlex.join(command) if command else None,
+        "code_version": code_version(),
         "versions": {
             "python": sys.version.split()[0],
             "exoplasim": exoplasim_version,
@@ -305,6 +328,7 @@ def run_gcm(
     landmap: str | Path | None = None,
     topomap: str | Path | None = None,
     namelist_overrides: dict[str, str] | None = None,
+    command: list[str] | None = None,
 ) -> dict[str, Path]:
     """Run ExoPlaSim for ``years`` model years and return output paths.
 
@@ -324,6 +348,11 @@ def run_gcm(
     diffusion ``{"NHDIFF@oceanmod_namelist": "1",
     "HDIFFK@oceanmod_namelist": "5.0E4"}``.  The multi-year keys from
     :func:`multi_year_otherargs` cannot be overridden.
+
+    ``command`` is the command line that launched the run; it is stored in the
+    manifest so the run can be reproduced.  A warm start passes
+    ``params.extras["restartfile"]``; the run then fails unless ``MOST_DIAG``
+    confirms the restart file was loaded.
     """
     if topomap is not None and landmap is None:
         raise ValueError("topomap requires landmap (ExoPlaSim reads both or neither)")
@@ -387,7 +416,12 @@ def run_gcm(
             "exoplasim.pyburn.postprocess on the kept raw output)"
         )
     if diag_candidates:
-        verify_orbit(diag_candidates[0].read_text(encoding="utf-8", errors="replace"), params)
+        diag_text = diag_candidates[0].read_text(encoding="utf-8", errors="replace")
+        verify_orbit(diag_text, params)
+        if params.extras.get("restartfile") and not re.search(
+            r"Found\s+\d+\s+variables in file", diag_text
+        ):
+            raise RuntimeError("restart file was not loaded (no 'Found N variables' in MOST_DIAG)")
     all_inputs = dict(input_files or {})
     if landmap is not None:
         all_inputs["landmap"] = Path(landmap)
@@ -407,6 +441,7 @@ def run_gcm(
             "namelist_overrides": dict(namelist_overrides or {}),
             "wall_seconds": round(time.time() - started, 1),
         },
+        command=command,
     )
     return {
         "workdir": workdir,

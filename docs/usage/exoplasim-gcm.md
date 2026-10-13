@@ -31,6 +31,7 @@ nacrea 的正式定标配置与结论数字在
 | `src/dreamulator/gcm/to_mesh.py` | 把 GCM 结果投影到世界的 CVT 网格（§8、§9） |
 | `src/dreamulator/gcm/fields.py` | 固定气候分支的逐格字段文件：读写、网格指纹校验、写回网格（§9）；不依赖 netCDF4 |
 | `scripts/climate/gcm/gcm_to_mesh.py` | 投影的命令行入口，可输出对比用网格或固定气候分支的字段文件 |
+| `scripts/climate/gcm/gcm_runs_appendix.py` | 把一组运行渲染成带复现命令的 Markdown 附录（§10） |
 
 ExoPlaSim 的版本固定为 3.4.2（`pyproject.toml` 的 `[gcm]` 可选依赖组），适配层的
 所有修复都是针对这个版本验证的，不要随意升级。
@@ -215,6 +216,7 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 | `--pco2-bar` | 无 | `pco2` 模式下显式给定的 CO₂ 分压，单位 bar |
 | `--flux-boost-factor` | 无 | `flux_boost` 模式下的恒星通量放大倍数 |
 | `--override` | `{}` | 以 JSON 覆盖映射结果中的字段，例如 `'{"obliquity": 0}'` |
+| `--restart` | 无 | 从另一个运行的重启文件（如 `<运行目录>/MOST_REST.00000`）暖启动；`MOST_DIAG` 里没有确认加载就报错（§10） |
 | `--nc` | 无 | 只诊断一个已有的 NetCDF 文件，不重新运行 |
 | `--no-plot` | 关 | 不生成概览图 |
 
@@ -365,23 +367,30 @@ tar xzf /tmp/worlds-data/worlds-data.tar.gz -C data/worlds
 
 ## 10. 续算与暖启动
 
-命令行入口目前没有续算参数，需要在 Python 里调用 `run_gcm`，通过映射结果的
-`extras` 传入 `restartfile`：
+用 `--restart` 指定另一个运行的重启文件即可暖启动或续算，例如以 2000 ppm 熔穿 10 年的终态
+作为 712 ppm 暖臂的种子：
 
-```python
-from dreamulator.gcm.mapping import map_world
-from dreamulator.gcm.runner import run_gcm
-
-params = map_world("data/worlds/nacrea", "satellite_nacrea")
-params.extras["restartfile"] = "private/gcm/runs/nacrea_land15/MOST_REST.00000"
-run_gcm(params, "private/gcm/runs/nacrea_land15_cont", years=10, ncpus=8,
-        landmap="private/gcm/surf/nacrea_N032_surf_0172.sra")
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea \
+    --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 \
+    --landmap private/gcm/surf/nacrea_N064_surf_0172.sra \
+    --topomap private/gcm/surf/nacrea_N064_surf_0129.sra \
+    --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp"}' \
+    --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' \
+    --restart private/gcm/runs/t42o/melt_2000/MOST_REST.00000 \
+    --workdir private/gcm/runs/t42o/warm_712
 ```
 
-不要手动把重启文件复制成运行目录里的 `plasim_restart`。ExoPlaSim 在没有收到
-`restartfile` 参数时会删除这个文件，结果悄悄变成冷启动。确认续算生效的办法是在
-`MOST_DIAG` 里找 `Found N variables in file` 这一行，或者检查第一年的温度是否延续了
-上一段运行。
+在 Python 里则是把重启文件写进映射结果的 `params.extras["restartfile"]` 再调用 `run_gcm`。
+不要手动把重启文件复制成运行目录里的 `plasim_restart`：ExoPlaSim 在没有收到 `restartfile`
+参数时会删除这个文件，结果悄悄变成冷启动。`run_gcm` 在积分后检查 `MOST_DIAG` 里有没有
+`Found N variables in file` 这一行，没有就报错。
+
+**复现与存档。** 每个运行的 `manifest.json` 记录完整命令行、代码版本（`git describe`）、
+输入文件路径与哈希、映射后的全部参数。`scripts/climate/gcm/gcm_runs_appendix.py` 把一组
+运行渲染成 Markdown 附录：配置表、实际使用的轨道、结果摘要和逐运行的复现命令；manifest
+里没有命令行的旧运行，会从参数重建一条等价的显式命令。设计笔记的实验附录（如 nacrea 的
+`0012-appendix-gcm-runs.md`）用它生成。
 
 ## 11. 常见问题
 
