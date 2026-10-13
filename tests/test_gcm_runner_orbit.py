@@ -58,3 +58,23 @@ def test_verify_orbit_accepts_the_requested_fixed_orbit() -> None:
 def test_verify_orbit_reports_each_mismatch() -> None:
     with pytest.raises(RuntimeError, match="Obliquity"):
         verify_orbit(FIXED, replace(PARAMS, obliquity=23.44))
+
+
+def test_manifest_records_command_paths_and_code_version(tmp_path) -> None:  # noqa: ANN001
+    import json
+
+    from dreamulator.gcm.runner import write_manifest
+
+    land = tmp_path / "land.sra"
+    land.write_bytes(b"x")
+    write_manifest(
+        tmp_path / "manifest.json",
+        params=PARAMS,
+        input_files={"landmap": land},
+        model_options={"years": 1},
+        command=["python", "run.py", "--configure", '{"twobandalbedo": true}'],
+    )
+    m = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert m["command"] == "python run.py --configure '{\"twobandalbedo\": true}'"
+    assert m["input_paths"] == {"landmap": str(land)}
+    assert "code_version" in m
