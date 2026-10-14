@@ -870,6 +870,12 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
   深度上限 `interior_basin_depth_max_m`（部分盆底低于海平面）。
 - **内部裂谷已删除**（2026-09-29）：每板块至多一条、数百 cell 量级，占比过小不值
   单独一步；世界尺度的失败裂谷臂由 geography.yaml 手写（feature `rift`）表达。
+- **剖面在 2σ 处降到零**：权重取高斯减去 e⁻² 再归一，cell 落在截断线上不产生跳变。
+- **跨平台确定性**：每条 belt 先为全部 inland cell 一次抽好 ±10% 扰动，再按 cell 取用；
+  inland 判定前把离边界距离舍入到 1 mm。地形合成里凡是随机抽取，都不能放在由浮点阈值
+  决定是否执行的分支里（大陆架噪声、海岸平原目标高度、湖盆取舍同样按 cell 编号取值），
+  否则一个 cell 在另一台机器上越过阈值，就会让共享随机数流错位、下游地形整片改变。
+  回归测试为 `tests/test_map/test_terrain_simd_determinism.py`；残余与边界见 roadmap 技术债 31。
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
