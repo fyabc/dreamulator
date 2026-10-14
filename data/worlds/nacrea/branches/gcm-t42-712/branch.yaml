@@ -1,0 +1,7 @@
+name: gcm-t42-712
+parent: null
+fork_layer: climate
+description: 气候层固定为 ExoPlaSim T42 GCM 结果（712 ppm 冷启动基线），不由气候引擎模拟
+created: '2026-10-13T15:51:14.913353'
+tags: []
+climate_source: gcm
