@@ -134,6 +134,32 @@ x = W/W_sat(T)（W_sat 用冷阱同一个 `column_water_saturation`，冷区 x�
 k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——每次求解仍是线性的。结点
 标定与验收现状 → `docs/design/proposals/climate-layer-improvement.md` §5-β。
 
+## 大陆西侧为什么干（副热带）
+
+地球上副热带的大沙漠多半贴着大陆西岸或占据大陆西部，例如阿塔卡马、纳米布、撒哈拉西部和
+澳大利亚西部，而同纬度的大陆东岸往往湿润。三种机制叠加造成这种东湿西干：
+
+1. **西部处在信风的下游。** 副热带低空盛行东风，海洋水汽从大陆东岸进入，沿途不断降落，
+   到大陆西部时空气已经穿过整片陆地。西岸吹的是离岸风，近旁的海洋反而送不进水汽。
+2. **西部受副热带高压东翼的下沉控制。** 副热带反气旋的东翼伴随下沉运动和向赤道的低空气流，
+   把高纬的干冷空气带向低纬。Rodwell 和 Hoskins（1996）指出，大陆东部夏季风的凝结加热会
+   激发向西传播的 Rossby 波，在加热区以西造成下沉，这就是「季风与沙漠」的联系；他们 2001 年
+   的工作进一步说明，副热带反气旋的东翼下沉与夏季风加热直接相关。
+3. **沿岸寒流和上升流稳定了边界层。** 东翼向赤道的沿岸风驱动离岸的 Ekman 输送，深层冷水
+   上翻，海面变冷，低层大气被稳定，形成信风逆温和大片层积云（Klein & Hartmann 1993），
+   只下毛毛雨或形成海雾，沿岸因此成为雾漠（Garreaud et al. 2002）。
+
+三者的相对重要性因地而异。nacrea 的 T42 GCM 对照提供了一个干净的检验：平板海洋没有洋流和
+上升流，第三种机制不存在，但 12–38° 副热带陆地仍然明显东湿西干。西部三分之一年降水约
+794 mm、干旱类（Köppen B）占 45%，东部三分之一约 1298 mm、干旱类占 16%；低层相对湿度从
+东部的 80% 降到西部的 68%。可见只靠前两种大气机制，就足以造成这种不对称。
+
+引擎实现：前两种机制由质量守恒水汽收支的迎风平流自然给出（`climate_simulator.py:
+_solve_moisture_budget()`，水汽沿风场从东岸进入、向西耗尽）；第三种由涌升冷舌
+（`map/ocean_circulation.py:apply_upwelling_sst_correction()`）和 SST 对流门
+（`climate_physics.sst_convection_gate`）表示。引擎没有动力副热带高压，第二种机制只能
+间接体现（见 `docs/design/pipelines/climate-pipeline.md` §5.1）。
+
 ## 参考来源
 
 - Smith, R.B. (1979). "The influence of mountains on the atmosphere."
@@ -164,6 +190,12 @@ k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——�
   （冷洋面上的低层结构与沿海干旱）— *J. Climate 15*, 75 ff.
 - Xie, S.-P., & Philander, S.G.H. (1994). "A coupled ocean-atmosphere model of
   the tropical Pacific: the cold tongue–ITCZ interaction." *J. Climate* 7.
+- Rodwell, M.J., & Hoskins, B.J. (1996). "Monsoons and the dynamics of deserts."
+  *QJRMS* 122, 1385–1404, doi:10.1002/qj.49712253408.
+- Rodwell, M.J., & Hoskins, B.J. (2001). "Subtropical anticyclones and summer
+  monsoons." *J. Climate* 14, 3192–3211.
+- Klein, S.A., & Hartmann, D.L. (1993). "The seasonal cycle of low stratiform
+  clouds." *J. Climate* 6, 1587–1606.
 
 - 陈仁升等. *固液态降水分离方法探讨* — [ResearchGate PDF](https://www.researchgate.net/profile/Chen_Rensheng/publication/283600062_A_discuss_of_the_separating_solid_and_liquid_precipitations/links/568e601208aef987e567b150.pdf)
 - 中国天山山区降水形态分离及降雪影响因素分析 — [知网](https://d.wanfangdata.com.cn/thesis/Y3443596)

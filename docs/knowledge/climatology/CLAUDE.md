@@ -11,6 +11,8 @@
 - 统一气候描述（UCC）→ **已迁至专门目录 `docs/ucc/`**（主文档 `docs/ucc/specification.md`：时间基准契约、连续描述量、Hamon-1961 需求模型声明与有效域、分类 profile v1 与 L2 实验冻结依据）
 - `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学、ENSO 类振荡（3A.3 科学底座）
 - `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
+- `obliquity_ice_albedo.md` — 轴倾角只重新分配日照（全球年平均恒为 S/4，极点年平均 S·sin ε/π），冰反照率把高纬夏季的增量整流成全球净增温；在 GCM 中检验时的注意事项（必须固定轨道）；EBM 为什么复现不了（全球均温锚定、冰反照率只做局地降温）
+- `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）
 - `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 地质历史（显生宙逐期表 + 前寒武、CH4 快变量/CO2 慢变量框架、冰期旋回耦合、火山-风化稳态与脉冲放大标度律、世界构建锚点速查表；2026-10 nacrea 路线 1 调研沉淀）
 
 ## 规划中的文档
@@ -32,6 +34,7 @@
 | `energy_balance.md` §4.5 | `climate_simulator.py`（`subsidence_warming_c`，Stage 1） | 副热带下沉增温（等面积均质化） |
 | `energy_balance.md` §4.6 | `climate_physics.py:subsidence_aridity_gate()`（Stage 3.5） | 下沉增温的干燥度门控释放 |
 | `energy_balance.md` §6 | `climate_seasonality.py:compute_seasonal_climate()` | 月度温度/降水（显式热输送 + 冰反照率） |
+| `obliquity_ice_albedo.md` §4 | `climate_seasonality.py:solve_1d_ebm_temperature()`、`climate_physics.py:ice_albedo_feedback()` | 倾角的纬向重新分配（全球冰反照率耦合未实现） |
 | `energy_balance.md` §8 | `climate_simulator.py:_solve_moisture_budget()` | 质量守恒水汽收支 |
 | `atmospheric_circulation.md` | `climate_physics.py:hadley_cell_wind()` | 风场矢量 |
 | `polar_pressure_regimes.md` | `climate_simulator.py`（`hadley_extent_deg`/`polar_cell_start_deg` 体制切换） | 两圈/三圈体制与极地气压/降水体制 |

@@ -87,6 +87,18 @@ Dfd = 亚寒带针叶林(严冬)（旧译「亚寒带 / 极端大陆性」两名
 依据：中文维基「温带干旱半干旱气候」、百度百科「亚寒带针叶林气候/副极地气候」、
 Beck et al. (2018) 图例（英文）。
 
+### 4.2 海洋性 ET：夏季凉，而不是冬季冷
+
+ET（苔原）只看最暖月：最暖月在 0–10 °C 之间就是 ET，与冬季多冷无关。海洋性很强的亚极地
+岛屿因此常被归为 ET：海洋把冬季保持在冰点上下，同时也把夏季压得很凉，季节振幅只有几度，
+最暖月够不到 10 °C。地球上的例子是南大洋的凯尔盖朗群岛和南乔治亚岛，它们在 Beck 等
+（2018）的 1 km 分类图中属于 ET。所以看到岛屿被判成 ET，不要直接理解为严寒；先看最冷月，
+冬季温和、夏季凉才是海洋性 ET 的特征。
+
+nacrea 的例子：50–65° 的岛屿在 EBM 和 T42 GCM 中都以 ET 为主，两边的最冷月都在 −3 °C 左右，
+最暖月只有 1–3 °C。nacrea 一年约 100 天，海洋热惯性把季节振幅压得比地球同纬度更小，最暖月
+只比年均高 2–3 K，这是它比地球同纬度岛屿更容易落入 ET 的原因。
+
 ## 5. 空类（理论存在、地球上无现代类比）
 
 柯本矩阵里存在一个**理论成立、但经典教科书称地球上没有任何气象站符合**的亚型：**Dsd**（夏干型极端严寒大陆性）。
@@ -117,4 +129,5 @@ Beck et al. (2018) 图例（英文）。
 
 - Köppen, W. (1936). "Das geographische System der Klimate." *Handbuch der Klimatologie I.C*.
 - Beck, H.E. et al. (2018). "Present and future Köppen–Geiger climate classification maps at 1-km resolution." *Scientific Data 5:180214*.
+- Kottek, M., Grieser, J., Beck, C., Rudolf, B., & Rubel, F. (2006). "World Map of the Köppen-Geiger climate classification updated." *Meteorologische Zeitschrift 15*, 259–263.
 - Peel, M.C. et al. (2007). "Updated world map of the Köppen-Geiger climate classification." *HESS 11*.
