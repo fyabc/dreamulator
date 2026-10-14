@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Nacrea GCM 定标按真实轨道重做（2026-10-14）**：此前的 ExoPlaSim 运行没有开启固定轨道，
+  实际用的是地球的 Berger 轨道。全部 nacrea 运行改用真实轨道与正典近日点相位、以 T42 重跑
+  （CO₂ 扫描 140–6000 ppm，加地球参照臂、冷暖双臂和三个轨道消融），设计笔记 0012 整体重写，
+  新增运行附录 `0012-appendix-gcm-runs.md`（配置、实际轨道、结果与复现命令）。主要结论：
+  712 ppm 全球 11.9 °C，地球参照偏差 −0.7 K，`greenhouse_factor` 35 不变；140–712 ppm 只有一个
+  平衡态；南大洋在 6000 ppm 仍有海冰；倾角从 23.7° 降到 19.9° 使全球降温约 1 K，距离季节使
+  北半球低纬季节显著强于南半球。对外设定的 CO₂ 两档范围温度与海冰描述同步更新；固定气候分支
+  `gcm-t42-712` 改用真实轨道的 712 ppm 冷臂。
+- **GCM 交叉核查 wave6 按真实轨道重写（2026-10-14）**：`docs/design/audit/wave6-gcm-ebm-crosscheck.md`
+  用真实轨道的 GCM 重做全部比较，并补上季节振幅、夏干气候与 UCC、岛屿三项。副热带偏干的结论不变；新发现
+  引擎高纬陆地的季节振幅严重偏弱（60–75° 引擎约 10 K，GCM 约 35 K），以及引擎缺少中纬冬雨型
+  的夏干气候。两条残余登记在 `climate-layer-improvement.md` §7。
+
 - **Nacrea「26-10-11 定版」正典同步（作者 2026-10-11 裁决，九项）**：500 kyr
   真实长积分（coupled_ctl 七体 + 16 自转/热状态 ODE，experiment-server）为
   新认证基准，名称钉死——后续更强验证数据到达后原位替换数字、名称不变。

@@ -106,7 +106,7 @@
 | P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口）→ `private/plans/ucc-01-plan.md` | ~1 周 | ★★★★ |
 | P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后）→ `private/reviews/proposals-review-2026-09-17.md` §3 | 按所选任务 | ★★★ |
 | P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮）→ `private/reviews/climate/climate-pipeline-rethinking-2026-09-17.md` + today.md ▶ 项 | 随主线 | ★★★★★ |
-| P2 | **宽 Hadley 体制下副热带过干**（GCM 交叉核查：nacrea 副热带降水约为 GCM 的三分之一，地球同纬带正常，属体制外推问题；首要线索为背景信风，先做规定低层风的干预实验）→ `audit/wave6-gcm-ebm-crosscheck.md` §4 + `proposals/climate-layer-improvement.md` §7 | 随气候层开发 | ★★★★ |
+| P2 | **宽 Hadley 体制下副热带过干**（GCM 交叉核查：nacrea 副热带降水约为 GCM 的三分之一，地球同纬带正常，属体制外推问题；首要线索为背景信风，先做规定低层风的干预实验）→ `audit/wave6-gcm-ebm-crosscheck.md` + `proposals/climate-layer-improvement.md` §7；同处登记高纬陆地季节振幅偏弱 | 随气候层开发 | ★★★★ |
 
 ### 既有待办
 
