@@ -494,6 +494,11 @@ def export_colorize(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Output dir (default: <pack>/color)"
     ),
+    texture: bool = typer.Option(
+        True,
+        "--texture/--no-texture",
+        help="Per-biome vegetation/surface grain (Sentinel-2-style mottling; default on)",
+    ),
 ) -> None:
     """Satellite true-color compositing (video chain step ③).
 
@@ -513,7 +518,7 @@ def export_colorize(
 
     console.print(f"Colorizing {pack}/input + {gaea_dir} → {out_dir}")
     try:
-        paths = colorize_region(pack, gaea_dir, out_dir)
+        paths = colorize_region(pack, gaea_dir, out_dir, texture=texture)
     except RuntimeError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from None
@@ -565,16 +570,21 @@ def export_refine(
         help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_-100_550km"
     ),
     td: Path = typer.Option(
-        ..., "--td", help="terrain-diffusion repo clone (with .venv) — "
-        "external tool, see terrain-chain manual for setup"
+        ...,
+        "--td",
+        help="terrain-diffusion repo clone (with .venv) — "
+        "external tool, see terrain-chain manual for setup",
     ),
     river_threshold: int | None = typer.Option(
-        None, "--river-threshold", help="Channel onset in upstream cells "
-        "(default scales with grid: 3000 at pack resolution)"
+        None,
+        "--river-threshold",
+        help="Channel onset in upstream cells (default scales with grid: 3000 at pack resolution)",
     ),
     coast_warp: bool = typer.Option(
-        False, "--coast-warp", help="Warp conditioning sea-land edges before "
-        "inference (bends straight Voronoi shorelines; off by default)"
+        False,
+        "--coast-warp",
+        help="Warp conditioning sea-land edges before "
+        "inference (bends straight Voronoi shorelines; off by default)",
     ),
 ) -> None:
     """Terrain-diffusion refinement + hydrology (terrain chain step ②, main).
@@ -606,19 +616,21 @@ def export_carto(
         None, "--output", "-o", help="Output dir (default: <pack>/carto)"
     ),
     gaea: Path | None = typer.Option(
-        None, "--gaea", "-g", help="Build dir (default: <pack>/gaea-out; pass "
-        "<pack>/prog-out for programmatic-erosion builds)"
+        None,
+        "--gaea",
+        "-g",
+        help="Build dir (default: <pack>/gaea-out; pass "
+        "<pack>/prog-out for programmatic-erosion builds)",
     ),
     style: str = typer.Option(
         "survey",
         "--style",
         help="Sheet style: survey (contours+legend, topo.svg+topo.png) | "
         "hand (print-artefact variant, topo.hand.png) | "
-        "medieval (parchment illustration, medieval.png)",
+        "medieval (parchment illustration, medieval.png) | "
+        "biome (categorical biome sheet, biome.svg+biome.png)",
     ),
-    title: str | None = typer.Option(
-        None, "--title", help="Override the default sheet title"
-    ),
+    title: str | None = typer.Option(None, "--title", help="Override the default sheet title"),
     res: int = typer.Option(2048, "--res", help="Contour grid resolution"),
     dpi: int = typer.Option(300, "--dpi", help="PNG output DPI"),
     data_dir: Path | None = typer.Option(
@@ -628,30 +640,55 @@ def export_carto(
         False, "--contour-labels", help="Inline elevation labels on index contours (default off)"
     ),
     contours: bool = typer.Option(
-        False, "--contours/--no-contours", help="Draw contour lines (default off — "
-        "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)"
+        False,
+        "--contours/--no-contours",
+        help="Draw contour lines (default off — "
+        "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)",
     ),
 ) -> None:
-    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval.
+    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome.
 
     survey = hypsometric tints + contours + legend/scale/graticule/north
     arrow (SVG + PNG).  hand = survey with print artefacts (watercolour,
     misregistration, re-inked lines).  medieval = parchment illustration
-    (symbol herds, ribbon title, no contours/legend).  Needs the 'media'
-    extra (OpenEXR + matplotlib).
+    (symbol herds, ribbon title, no contours/legend).  biome = categorical
+    Whittaker biome sheet (flat class fills, palette single source,
+    class legend + graticule).  Needs the 'media' extra (OpenEXR + matplotlib).
     """
-    if style not in ("survey", "hand", "medieval"):
-        console.print(f"[red]Unknown style '{style}' — use survey | hand | medieval[/red]")
+    if style not in ("survey", "hand", "medieval", "biome"):
+        console.print(f"[red]Unknown style '{style}' — use survey | hand | medieval | biome[/red]")
         raise typer.Exit(code=2) from None
     build_dir = gaea or (pack / "gaea-out")
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
+
+    out_dir = output or (pack / "carto")
+    if style == "biome":
+        # Biome sheet needs no build: without --gaea it falls back to the
+        # best available terrain source (refined-out → gaea-out → input/).
+        from dreamulator.media.biome_render import biome_region
+
+        console.print(f"Rendering [biome] sheet {pack} → {out_dir}")
+        info = biome_region(
+            pack,
+            out_dir,
+            gaea_dir=gaea,
+            res=res,
+            dpi=dpi,
+            data_dir=data_dir,
+            title=title,
+        )
+        for ext in ("svg", "png"):
+            p = out_dir / f"biome.{ext}"
+            console.print(f"  [green]biome.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
+        console.print(f"  classes: {info['classes']}")
+        return
+
     if not build_dir.is_dir():
         console.print(f"[red]Build dir not found: {build_dir}[/red]")
         raise typer.Exit(code=2) from None
 
-    out_dir = output or (pack / "carto")
     console.print(f"Rendering [{style}] sheet {pack} ({build_dir.name}) → {out_dir}")
     if style == "medieval":
         from dreamulator.media.medieval_render import medieval_region
@@ -668,11 +705,18 @@ def export_carto(
     from dreamulator.media.carto_render import carto_region
 
     info = carto_region(
-        pack, out_dir, res=res, dpi=dpi, data_dir=data_dir,
-        contour_labels=contour_labels, contours=contours,
-        hand=(style == "hand"), title=title, gaea_dir=gaea,
+        pack,
+        out_dir,
+        res=res,
+        dpi=dpi,
+        data_dir=data_dir,
+        contour_labels=contour_labels,
+        contours=contours,
+        hand=(style == "hand"),
+        title=title,
+        gaea_dir=gaea,
     )
-    for ext in (("hand.png",) if style == "hand" else ("svg", "png")):
+    for ext in ("hand.png",) if style == "hand" else ("svg", "png"):
         p = out_dir / f"topo.{ext}"
         console.print(f"  [green]topo.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
     console.print(f"  contours: {info['minor_levels']} minor + {info['major_levels']} index")

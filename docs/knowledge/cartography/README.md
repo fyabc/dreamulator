@@ -14,6 +14,10 @@
 - `terrain_diffusion.md` — terrain-diffusion 学习式地形细化器：条件
   扩散机制、实测能力边界（确定性/海岸线漂移/不管水文）、与 SPL 链
   的分工（2026-10）
+- `vegetation_cartography.md` — 植被/群系可视化两路线的惯例：分类
+  群系图（Olson/WWF 标杆：平色填充、海洋留白、图例只列现出类）与
+  卫星遥感风（Blue Marble/Sentinel-2：色相族+长势明暗+地表纹理）
+  （2026-10）
 
 ## 关键参考
 

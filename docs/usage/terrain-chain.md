@@ -120,14 +120,25 @@ Gaea 8K 路径；有 `height.meters.npy` 走本链路径（缺的掩膜读零）
 ## ③'/④ 渲染支持（共用）
 
 ```bash
-dreamulator export colorize <pack> --gaea <pack>/refined-out   # 卫星真彩
+dreamulator export colorize <pack> --gaea <pack>/refined-out   # 卫星真彩（默认带
+                                                  # 植被纹理，--no-texture 关闭）
 dreamulator export carto <pack> --gaea <pack>/refined-out      # 测绘图（默认无等高线，
                                                                 # --contours 开启）
+dreamulator export carto <pack> --style biome                  # 群系图（分类平色 +
+                                                  # 类图例；不需要构建产物，
+                                                  # 无 --gaea 时自动回退
+                                                  # refined-out → gaea-out → input/）
 dreamulator export carto <pack> --gaea <pack>/refined-out \
     --style hand            # 旧印刷质感 / --style medieval 中世纪
 blender -b -P scripts/media/blender/region_still.py -- \
     --datadir <pack> --render still_4k.png --res 3840x2160     # 4K 静帧
 ```
+
+群系图（`--style biome`）的色表与前端 biome 图层同一事实源
+（palettes.json 的 whittaker 色表），海洋留白、图例只列窗内出现的类；
+植被纹理（colorize）按群系参数化 fBm 斑驳（森林细密、荒漠宽场、冰原
+微起伏）。两路线的参考依据见
+[knowledge/cartography/vegetation_cartography.md](../knowledge/cartography/vegetation_cartography.md)。
 
 渲染细节（色彩权威、三风格制图、Blender 曝光链）见
 [gaea-video-chain.md](gaea-video-chain.md) 的第③③'④步——两链的

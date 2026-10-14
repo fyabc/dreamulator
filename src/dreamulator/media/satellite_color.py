@@ -121,6 +121,33 @@ LAKE_FEATHER_PX = 2.0
 NPP_MOD_STRENGTH = 0.22  # ±22% brightness across a biome's 2× NPP spread
 NPP_MIN_CELLS = 50  # skip modulation for biomes with too little valid data
 
+#: Vegetation/surface texture (Sentinel-2 / Blue Marble reference: real
+#: imagery is never a flat fill — forest canopy mottles at the kilometre
+#: scale, dune fields streak at several kilometres, ice sheets barely vary).
+#: Per-biome (wavelength_km, amplitude): a seeded fBm brightness field
+#: modulates each class's pixels around 1.0.  Amplitudes are deliberately
+#: asymmetric to the dark side (shadowed canopy clumps dominate visually).
+TEXTURE_SEED = 1234
+TEXTURE_PARAMS: dict[str, tuple[float, float]] = {
+    "tropical_rainforest": (1.0, 0.16),
+    "temperate_rainforest": (1.0, 0.15),
+    "tropical_seasonal_forest": (1.3, 0.13),
+    "temperate_forest": (1.3, 0.13),
+    "boreal_forest": (1.5, 0.12),
+    "tropical_savanna": (2.2, 0.11),
+    "temperate_grassland": (2.2, 0.10),
+    "boreal_shrubland": (2.5, 0.09),
+    "tropical_desert": (4.5, 0.09),
+    "temperate_desert": (4.5, 0.08),
+    "tundra": (2.5, 0.07),
+    "ice": (6.0, 0.03),
+}
+TEXTURE_DEFAULT = (2.0, 0.08)
+#: Universal fine grain on all land (sub-pixel-scale soil/canopy speckle —
+#: without it smooth plains read as vector fills at full zoom).
+TEXTURE_FINE_WAVELENGTH_PX = 3.0
+TEXTURE_FINE_AMPLITUDE = 0.025
+
 
 @dataclass
 class ColorizeInputs:
@@ -251,8 +278,40 @@ def reconcile_ocean_on_land(
     return np.where(dry_ocean, biome_codes[tuple(nearest)], biome_codes)
 
 
-def colorize(inp: ColorizeInputs) -> np.ndarray:
-    """Composite the albedo; returns (N, N, 3) uint8 sRGB."""
+def _vegetation_texture(
+    n: int,
+    km_per_px: float,
+    biome: np.ndarray,
+    legend: dict[int, str],
+    land: np.ndarray,
+) -> np.ndarray:
+    """Per-biome fBm brightness texture (1.0 = neutral), land only.
+
+    Each class gets its own wavelength/amplitude and seed offset (see
+    TEXTURE_PARAMS), so the Amazon-grade rainforest mottles tightly while
+    dune fields streak broadly.  Applied as a brightness multiplier — hue
+    stays climate-authoritative, only luminance gains the canopy/soil grain.
+    """
+    tex = np.ones((n, n), dtype=np.float32)
+    for code in np.unique(biome[land]):
+        if code == 0:
+            continue
+        wl_km, amp = TEXTURE_PARAMS.get(legend.get(int(code), ""), TEXTURE_DEFAULT)
+        wl_px = max(wl_km / km_per_px, 2.0)
+        field = _fbm_field(n, wl_px, TEXTURE_SEED + int(code)).astype(np.float32)
+        sel = land & (biome == code)
+        tex[sel] = 1.0 + amp * field[sel]
+    fine = _fbm_field(n, TEXTURE_FINE_WAVELENGTH_PX, TEXTURE_SEED + 999).astype(np.float32)
+    tex[land] *= 1.0 + TEXTURE_FINE_AMPLITUDE * fine[land]
+    return tex
+
+
+def colorize(inp: ColorizeInputs, *, texture: bool = True) -> np.ndarray:
+    """Composite the albedo; returns (N, N, 3) uint8 sRGB.
+
+    ``texture`` adds the per-biome vegetation/surface grain (Sentinel-2-like
+    mottling); turn it off for a flat fill (debug or downstream re-texturing).
+    """
     from scipy.ndimage import gaussian_filter
 
     n = inp.height_m.shape[0]
@@ -291,6 +350,12 @@ def colorize(inp: ColorizeInputs) -> np.ndarray:
         rel = np.where(np.isnan(rel), 1.0, rel)
         npp_factor[sel] = 1.0 + NPP_MOD_STRENGTH * (rel - 1.0)
     base = np.clip(base * npp_factor[..., None], 0.0, 1.0)
+
+    # Vegetation/surface grain (Sentinel-2-style mottling), land only.
+    if texture:
+        land_mask = ~inp.sea_water & (biome != 0)
+        tex = _vegetation_texture(n, inp.km_per_px, biome, inp.biome_legend, land_mask)
+        base = np.clip(base * tex[..., None], 0.0, 1.0)
 
     # Slope from the physical height field (rise/run).
     step_m = inp.km_per_px * 1000.0
@@ -495,19 +560,13 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         else height_m <= 0.0
     )
     rivers_path = gaea_dir / "rivers.png"
-    rivers = (
-        _read_mask_bool(rivers_path)
-        if rivers_path.exists()
-        else np.zeros((n, n), dtype=bool)
-    )
+    rivers = _read_mask_bool(rivers_path) if rivers_path.exists() else np.zeros((n, n), dtype=bool)
     lake_path = gaea_dir / "lake.png"
     lake = _read_mask_bool(lake_path) if lake_path.exists() else None
     seg_path = gaea_dir / "rivers.line.npy"
     river_segs = np.load(seg_path) if seg_path.exists() else None
     river_flows = (
-        np.load(gaea_dir / "rivers.flow.npy")
-        if (gaea_dir / "rivers.flow.npy").exists()
-        else None
+        np.load(gaea_dir / "rivers.flow.npy") if (gaea_dir / "rivers.flow.npy").exists() else None
     )
     return ColorizeInputs(
         height_m=height_m,
@@ -529,16 +588,19 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     )
 
 
-def colorize_region(pack_dir: Path, gaea_dir: Path, out_dir: Path) -> dict[str, Path]:
+def colorize_region(
+    pack_dir: Path, gaea_dir: Path, out_dir: Path, *, texture: bool = True
+) -> dict[str, Path]:
     """Full step-③ pass: load → composite → write albedo.png + preview.png.
 
     ``pack_dir`` is the pack ROOT; channels are read from its ``input/``
     subdirectory (pack layout: ``input/`` + ``gaea-out/`` + ``color/``).
+    ``texture`` toggles the per-biome vegetation grain (default on).
     """
     from PIL import Image
 
     inp = load_inputs(pack_dir / "input", gaea_dir)
-    albedo = colorize(inp)
+    albedo = colorize(inp, texture=texture)
     preview = compose_preview(albedo, inp.height_m, inp.km_per_px)
 
     out_dir.mkdir(parents=True, exist_ok=True)

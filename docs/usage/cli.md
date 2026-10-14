@@ -372,12 +372,14 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 uv sync --extra media        # 首次需要（OpenEXR）
 dreamulator export colorize private/video/nacrea-15_90_2350km
 # 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
-# --gaea / --output 可覆盖
+# --gaea / --output 可覆盖；--no-texture 关闭植被纹理（默认开）
 ```
 
 基色由引擎群系驱动（气候权威），Gaea 掩膜只做质感调制；`albedo.png` 供
 Blender 当贴图（不烘焙光照），`preview.png` 叠软 hillshade 供肉眼快检。
-色表与调制权重在 `src/dreamulator/media/satellite_color.py` 顶部常量。
+植被纹理 pass 按群系参数化 fBm 斑驳（森林细密 / 荒漠宽场 / 冰原微起伏，
+参数在 `TEXTURE_PARAMS`）。色表与调制权重在
+`src/dreamulator/media/satellite_color.py` 顶部常量。
 
 默认附带同分辨率气候通道（卫星影像契约，`--no-climate` 关闭）：年降水量
 `precipitation.mm`（float32 `.npy` 为主，16-bit PNG 按区域最大值归一，供 Gaea 2 作
@@ -425,9 +427,10 @@ dreamulator export refine private/video/nacrea-15_-100_550km     --td private/ex
 dreamulator export carto private/video/nacrea-15_-100_2350km                 # survey（默认）
 dreamulator export carto <pack> --style hand                                 # 旧印刷质感
 dreamulator export carto <pack> --style medieval --title "珠母星 · 未知海域"  # 中世纪羊皮纸
+dreamulator export carto <pack> --style biome                                # 群系图
 # 读 <pack>/input + <pack>/gaea-out
 # survey → carto/{topo.svg, topo.png}；hand → carto/topo.hand.png；
-# medieval → carto/medieval.png
+# medieval → carto/medieval.png；biome → carto/{biome.svg, biome.png}
 # --title 自定义标题（默认「Nacrea —— 15°N 100°W 附近」式）
 # --res 网格分辨率（默认 2048） / --dpi PNG 输出 DPI
 # --contour-labels 等高线 inline 高程标注（默认关，仅 survey/hand）
@@ -437,7 +440,10 @@ survey = 分层设色（前端 terrain 同源色阶）+ hillshade + 两级等高
 自适应经纬网 + 海部平色 + 河流 + 高程色阶图例/比例尺/指北针。
 hand = survey 叠印刷伪影（水彩晕/套色偏移/墨线重描/楷体/磨白）。
 medieval = 羊皮纸插画（山峰/树群符号、粗河流、绶带标题、罗盘玫瑰，
-无图例无等高线；画风迭代中，暂搁置）。操作细节见
+无图例无等高线；画风迭代中，暂搁置）。
+biome = 分类群系图（whittaker 色表平色填充 + 类界发线 + 海洋留白 +
+群系图例；不需要构建产物，无 --gaea 时自动回退
+refined-out → gaea-out → input/）。操作细节见
 [usage/gaea-video-chain.md](gaea-video-chain.md) 第③'步；色表与等高距
 在 `src/dreamulator/media/carto_render.py` 顶部常量。
 

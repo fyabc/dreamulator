@@ -41,14 +41,17 @@ def _inputs(**overrides: object) -> ColorizeInputs:
 
 
 def test_base_biome_color() -> None:
-    rgb = colorize(_inputs())
+    rgb = colorize(_inputs(), texture=False)
     assert rgb.shape == (N, N, 3)
     assert rgb.dtype == np.uint8
     assert tuple(rgb[0, 0]) == BIOME_COLORS["temperate_grassland"]
 
 
 def test_missing_biome_gets_neutral_grey() -> None:
-    rgb = colorize(_inputs(biome_codes=np.zeros((N, N), dtype=np.uint8), biome_legend={}))
+    rgb = colorize(
+        _inputs(biome_codes=np.zeros((N, N), dtype=np.uint8), biome_legend={}),
+        texture=False,
+    )
     assert tuple(rgb[0, 0]) == MISSING_COLOR
 
 
@@ -58,7 +61,7 @@ def test_sea_overrides_biome_and_grades_by_depth() -> None:
     depth = np.zeros((N, N))
     depth[:, : N // 4] = 0.0  # shallow
     depth[:, N // 4 : N // 2] = 10_000.0  # deep
-    rgb = colorize(_inputs(sea_water=sea, sea_depth_m=depth))
+    rgb = colorize(texture=False, inp=_inputs(sea_water=sea, sea_depth_m=depth))
     assert tuple(rgb[0, 0]) == SEA_SHALLOW
     assert tuple(rgb[0, N // 3]) == SEA_DEEP
     # land side keeps the biome colour
@@ -68,14 +71,14 @@ def test_sea_overrides_biome_and_grades_by_depth() -> None:
 def test_rivers_override_land() -> None:
     riv = np.zeros((N, N), dtype=bool)
     riv[N // 2, :] = True
-    rgb = colorize(_inputs(rivers=riv))
+    rgb = colorize(texture=False, inp=_inputs(rivers=riv))
     land = BIOME_COLORS["temperate_grassland"]
     assert tuple(rgb[N // 2, 0]) != land
     assert tuple(rgb[0, 0]) == land
 
 
 def test_ice_beats_biome() -> None:
-    rgb = colorize(_inputs(ice_m=np.full((N, N), 50.0)))
+    rgb = colorize(texture=False, inp=_inputs(ice_m=np.full((N, N), 50.0)))
     assert tuple(rgb[0, 0]) == (238, 242, 245)
 
 
@@ -85,7 +88,7 @@ def test_steep_slope_exposes_rock() -> None:
     h = np.zeros((N, N))
     h[:, N // 2 :] = np.clip(np.arange(N // 2), 0, 4) * 1000.0  # steep west face
     h = np.broadcast_to(h, (N, N)).copy()
-    rgb = colorize(_inputs(height_m=h, km_per_px=1.0))
+    rgb = colorize(texture=False, inp=_inputs(height_m=h, km_per_px=1.0))
     grass = np.asarray(BIOME_COLORS["temperate_grassland"], dtype=int)
     rock = np.array((107, 97, 90))
     steep_px = rgb[N // 2, N // 2 + 2].astype(int)
@@ -103,7 +106,7 @@ def test_npp_modulates_within_biome() -> None:
     # Same biome everywhere; left half twice as productive as the median.
     npp = np.full((N, N), 500.0)
     npp[:, : N // 2] = 1000.0  # median over the biome = 750; left rel = 1.33
-    rgb = colorize(_inputs(npp_gc_m2_yr=npp))
+    rgb = colorize(_inputs(npp_gc_m2_yr=npp), texture=False)
     base = np.asarray(BIOME_COLORS["temperate_grassland"], dtype=int)
     left = rgb[0, 0].astype(int)
     right = rgb[0, -1].astype(int)
@@ -112,7 +115,7 @@ def test_npp_modulates_within_biome() -> None:
 
 
 def test_npp_missing_is_noop() -> None:
-    rgb = colorize(_inputs())
+    rgb = colorize(_inputs(), texture=False)
     assert tuple(rgb[0, 0]) == BIOME_COLORS["temperate_grassland"]
 
 
@@ -124,7 +127,8 @@ def test_ocean_on_land_filled_from_neighbour() -> None:
         _inputs(
             biome_codes=codes,
             biome_legend={1: "temperate_grassland", 2: "ocean"},
-        )
+        ),
+        texture=False,
     )
     # Dry ocean (left half) takes the land biome's colour, not the navy fallback.
     assert tuple(rgb[0, 0]) == BIOME_COLORS["temperate_grassland"]
@@ -141,7 +145,8 @@ def test_ocean_under_sea_stays_sea() -> None:
             biome_codes=codes,
             biome_legend={1: "temperate_grassland", 2: "ocean"},
             sea_water=sea,
-        )
+        ),
+        texture=False,
     )
     assert tuple(rgb[0, 0]) == SEA_SHALLOW  # depth 0 → shallow end
 
