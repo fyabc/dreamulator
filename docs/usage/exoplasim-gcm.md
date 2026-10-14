@@ -276,7 +276,7 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 ```bash
 source private/gcm/venv/bin/activate
 python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
-    --nc private/gcm/runs/t42f/cold/MOST.00000.nc \
+    --nc private/gcm/runs/t42o/cold_712/MOST.00000.nc \
     --out private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
 deactivate
 G=private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
@@ -336,7 +336,7 @@ uv run dreamulator branch create nacrea gcm-t42-712 --at climate --climate-sourc
 # 2. 在 gcm 环境里输出字段文件（需要父世界已构建，网格就是 GCM 运行时用的那份）
 source private/gcm/venv/bin/activate
 python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
-    --nc private/gcm/runs/t42f/cold/MOST.00000.nc \
+    --nc private/gcm/runs/t42o/cold_712/MOST.00000.nc \
     --emit-fields data/worlds/nacrea/branches/gcm-t42-712/layers/climate/input/gcm_fields.msgpack.gz
 deactivate
 
