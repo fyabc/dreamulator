@@ -8,11 +8,13 @@
 - `planetary_climate_taxonomy.md` — 无生命天体的气候划分：学界实践（Mars/Titan/
   Venus/Moon 各自区划语言 + 四类通用框架）与 UCC 三层分工含义（2026-09-21
   文献调研沉淀；完整证据在 private/reviews/）
+- `tidal_heating.md` — 潮汐加热的热流尺度（地球、Io）、文献宜居界限（h_max 约 2 W/m²、
+  h_min 约 0.04 W/m²）、生物影响 0–4 级定性分级、大火成岩省与大灭绝的地球类比，以及用
+  极值统计从有限模拟估计事件频率的方法
 
 ## 规划中的文档
 
 - `equilibrium_temperature.md` — 平衡温度与温室效应
-- `tidal_heating.md` — 潮汐加热与轨道共振
 - `magnetic_field.md` — 行星磁场与发电机理论
 
 ## 关键参考
