@@ -12,7 +12,7 @@ environment (netCDF4).
 
 Example:
     python scripts/climate/gcm/gcm_runs_appendix.py private/gcm/runs/t42o/* \\
-        private/gcm/runs/t42a/* --out /tmp/appendix.md
+        private/gcm/runs/t42a/* --out /tmp/appendix.md --preamble /tmp/preamble.md
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def rebuild_command(run: Path, manifest: dict) -> str:
         args += ["--configure", json.dumps(extras, ensure_ascii=False)]
     if opts.get("namelist_overrides"):
         args += ["--namelist", json.dumps(opts["namelist_overrides"], ensure_ascii=False)]
-    orbit = {k: kw[k] for k in ("eccentricity", "obliquity", "lonvernaleq") if k in kw}
+    orbit = {k: round(kw[k], 6) for k in ("eccentricity", "obliquity", "lonvernaleq") if k in kw}
     args += ["--override", json.dumps(orbit)]
     if kw.get("restartfile"):
         args += ["--restart", _rel(kw["restartfile"])]
@@ -192,9 +192,15 @@ def main(argv: list[str] | None = None) -> int:
         "runs", nargs="+", help="run directories (those without manifest.json are skipped)"
     )
     ap.add_argument("--out", required=True, help="output Markdown path")
+    ap.add_argument(
+        "--preamble", help="Markdown file placed before the generated sections (title, scope)"
+    )
     args = ap.parse_args(argv)
     runs = [Path(r) for r in args.runs if Path(r).is_dir()]
-    Path(args.out).write_text(render(runs), encoding="utf-8")
+    head = (
+        Path(args.preamble).read_text(encoding="utf-8").rstrip() + "\n\n" if args.preamble else ""
+    )
+    Path(args.out).write_text(head + render(runs), encoding="utf-8")
     print(f"wrote {args.out} ({len(runs)} run directories)")
     return 0
 
