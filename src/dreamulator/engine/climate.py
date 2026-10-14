@@ -369,11 +369,22 @@ class ClimateEngine(BaseEngine):
             )
         try:
             fs = load_field_set(path)
-            apply_field_set(mesh, fs)
+            match = apply_field_set(mesh, fs)
         except StaleFieldSetError as e:
             return f"pinned GCM climate refused: {e}"
-        logger.info("Applied pinned GCM climate from %s", path)
-        return dict(fs.provenance)
+        provenance = dict(fs.provenance)
+        if match is None:
+            logger.info("Applied pinned GCM climate from %s", path)
+        else:
+            # Same inputs built on another CPU: a few coastline cells may differ.
+            provenance["mesh_match"] = match.describe()
+            logger.warning(
+                "Applied pinned GCM climate from %s to a mesh that differs within the "
+                "platform tolerance: %s",
+                path,
+                match.describe(),
+            )
+        return provenance
 
     def _dev_data_recovery_hint(self, config: TerrainPipelineConfig, planet_id: str) -> str:
         """Recovery message for a missing mesh: prefer ``data fetch`` when indexed."""

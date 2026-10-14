@@ -18,6 +18,7 @@ from dreamulator.gcm.fields import (
     apply_field_set,
     load_field_set,
     mesh_fingerprint,
+    mesh_reference_geometry,
     provenance_path,
     save_field_set,
 )
@@ -102,10 +103,66 @@ def test_apply_writes_fields_clears_engine_derived_and_attaches_monthly() -> Non
     assert mesh._t_monthly_c.shape == (3, 12)  # type: ignore[attr-defined]
 
 
-def test_apply_refuses_field_set_from_another_terrain() -> None:
-    fs = _field_set(_mesh())
-    with pytest.raises(StaleFieldSetError, match="stale"):
+def test_apply_refuses_format1_field_set_on_a_different_mesh() -> None:
+    fs = _field_set(_mesh())  # no reference geometry, as in format-1 files
+    with pytest.raises(StaleFieldSetError, match="no reference geometry"):
         apply_field_set(_mesh(elev0=250.0), fs)
+
+
+def _big_mesh(elev: np.ndarray) -> CVTMesh:
+    n = len(elev)
+    lat = np.linspace(-80.0, 80.0, n)
+    lon = np.linspace(-179.0, 179.0, n)
+    cells = [
+        VoronoiCell(id=i, lon=float(lon[i]), lat=float(lat[i]), elevation=float(elev[i]))
+        for i in range(n)
+    ]
+    return CVTMesh(seed=1, num_cells=n, cells=cells, adjacency={str(i): [] for i in range(n)})
+
+
+def _big_field_set(mesh: CVTMesh) -> GcmFieldSet:
+    n = mesh.num_cells
+    return GcmFieldSet(
+        num_cells=n,
+        mesh_fingerprint=mesh_fingerprint(mesh),
+        annual={k: np.zeros(n) for k in ANNUAL_FIELDS},
+        monthly={},
+        koppen=[None] * n,
+        slp_reduction_unreliable=np.zeros(n, dtype=bool),
+        reference_geometry=mesh_reference_geometry(mesh),
+    )
+
+
+def test_format2_round_trip_keeps_reference_geometry(tmp_path: Path) -> None:
+    elev = np.random.default_rng(0).normal(0.0, 2000.0, 4000)
+    mesh = _big_mesh(elev)
+    path = save_field_set(tmp_path / GCM_FIELDS_FILENAME, _big_field_set(mesh))
+    fs = load_field_set(path)
+    assert fs.reference_geometry is not None
+    assert np.array_equal(fs.reference_geometry["land"], elev >= 0.0)
+    assert apply_field_set(_big_mesh(elev), fs) is None  # identical mesh: exact match
+
+
+def test_apply_accepts_platform_noise_within_tolerance() -> None:
+    # Builds on another CPU differ in a few coastline cells (2026-10-15): accepted.
+    elev = np.random.default_rng(1).normal(0.0, 2000.0, 4000)
+    fs = _big_field_set(_big_mesh(elev))
+    noisy = elev.copy()
+    noisy += 1e-4  # sub-metre noise everywhere
+    coast = int(np.argmin(np.abs(elev)))
+    noisy[coast] = -noisy[coast] - 30.0  # one cell crosses sea level and moves 30 m
+    match = apply_field_set(_big_mesh(noisy), fs)
+    assert match is not None and match.land_flips == 1 and match.changed_cells == 1
+    assert "1 land-mask flips" in match.describe()
+
+
+def test_apply_refuses_changed_terrain_beyond_tolerance() -> None:
+    elev = np.random.default_rng(2).normal(0.0, 2000.0, 4000)
+    fs = _big_field_set(_big_mesh(elev))
+    changed = elev.copy()
+    changed[:400] += 800.0  # an authored change: a tenth of the cells rise by 800 m
+    with pytest.raises(StaleFieldSetError, match="beyond the platform tolerance"):
+        apply_field_set(_big_mesh(changed), fs)
 
 
 def test_gcm_climate_source_requires_climate_fork() -> None:

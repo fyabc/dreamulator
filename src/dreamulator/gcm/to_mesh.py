@@ -59,7 +59,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from dreamulator.gcm.fields import CLEARED_FIELDS, GcmFieldSet, apply_field_set, mesh_fingerprint
+from dreamulator.gcm.fields import (
+    CLEARED_FIELDS,
+    GcmFieldSet,
+    apply_field_set,
+    mesh_fingerprint,
+    mesh_reference_geometry,
+)
 
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
@@ -309,6 +315,7 @@ def compute_field_set(
         },
         koppen=[None if k is None else str(k) for k in koppen],
         slp_reduction_unreliable=slp_unreliable,
+        reference_geometry=mesh_reference_geometry(mesh),
         provenance={
             "source_nc": str(nc_path),
             "tail_years": n_tail / 12,
