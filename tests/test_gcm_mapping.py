@@ -10,6 +10,7 @@ field.
 from __future__ import annotations
 
 import math
+import os
 
 import pytest
 
@@ -193,3 +194,59 @@ def test_multi_year_otherargs_disables_step_cap() -> None:
         "N_RUN_YEARS@plasim_namelist": "50",
         "N_RUN_STEPS@plasim_namelist": "0",
     }
+
+
+def test_serial_make_environment_strips_parallel_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An inherited ``MAKEFLAGS=-jN`` races PlaSim's makefile (missing module deps)."""
+    from dreamulator.gcm.runner import serial_make_environment
+
+    monkeypatch.setenv("MAKEFLAGS", "-j12")
+    monkeypatch.delenv("MFLAGS", raising=False)
+    monkeypatch.setenv("GNUMAKEFLAGS", "-j4")
+
+    assert serial_make_environment() == ["MAKEFLAGS", "GNUMAKEFLAGS"]
+    assert "MAKEFLAGS" not in os.environ
+    assert "GNUMAKEFLAGS" not in os.environ
+
+
+def _fortran_block(header: tuple[int, ...], data: list[float]) -> bytes:
+    """One PlaSim output block: an 8-int header record, then a float32 data record."""
+    import struct
+
+    head = struct.pack("<8i", *header)
+    body = struct.pack(f"<{len(data)}f", *data)
+    return (
+        struct.pack("<i", len(head)) + head + struct.pack("<i", len(head))
+        + struct.pack("<i", len(body)) + body + struct.pack("<i", len(body))
+    )  # fmt: skip
+
+
+def test_fast_readallvariables_matches_upstream() -> None:
+    """The linear-time reader must reproduce pyburn's quadratic one exactly."""
+    pb = pytest.importorskip("exoplasim.pyburn")
+    import numpy as np
+
+    from dreamulator.gcm.runner import fast_readallvariables
+
+    nlev = 3
+    buffer = _fortran_block((0, 0, 0, 0, 2 * nlev, 1, nlev, 21), [0.1, 0.5, 0.9, 0, 0, 0])
+    for step in range(4):  # two variables interleaved over four output steps
+        buffer += _fortran_block((139, 0, 0, 0, 4, 2, step * 45, 0), [280.0 + step] * 8)
+        ramp = [1.5 * step + i for i in range(8)]
+        buffer += _fortran_block((130, 0, 0, 0, 4, 2, step * 45, 0), ramp)
+
+    h_ref, v_ref = pb.readallvariables(buffer)
+    h_new, v_new = fast_readallvariables(buffer)
+
+    assert h_new == h_ref
+    assert v_new.keys() == v_ref.keys()
+    assert v_new["time"] == v_ref["time"] == [0, 45, 90, 135]
+    for key in ("139", "130"):
+        assert v_new[key].dtype == v_ref[key].dtype
+        np.testing.assert_array_equal(v_new[key], v_ref[key])
+
+
+def test_fixed_orbit_is_requested_by_default() -> None:
+    """Without fixedorbit PlaSim ignores the mapped orbit and uses Earth's Berger orbit."""
+    kwargs = map_planet(PLANET, STAR, ORBIT).to_configure_kwargs()
+    assert kwargs["fixedorbit"] is True

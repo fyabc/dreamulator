@@ -27,19 +27,26 @@ ExoPlaSim unit conventions (verified against 3.4.2 source, 2026-10-05):
 ``startemp``            stellar effective temp (K)    star entry (if present)
 ======================  =============================  =====================
 
-Greenhouse handling: dreamulator's ``greenhouse_factor`` (e.g. Nacrea's 62 K)
-has no direct ExoPlaSim equivalent — its radiative identity (prescribed
-boundary vs. composition-driven) is a pending author decision (设定待裁决).
-This mapping therefore never invents one: with ``greenhouse_mode="none"``
-(default) nothing is compensated and a warning is recorded in the manifest;
-``"flux_boost"`` applies an explicit, user-supplied factor (the historical PoC
-hack — discouraged); ``"pco2"`` passes an explicit CO₂ partial pressure.
+``startemp`` matters beyond bookkeeping: ExoPlaSim uses it to split stellar
+flux between its two shortwave bands.  A K star puts a larger share into the
+near-infrared band, so omitting it makes the model radiate as a G2 star and
+misjudges water-vapour absorption and the greenhouse response.
+
+Greenhouse handling: the greenhouse is composition-driven (route-1
+adjudication, ``nacrea-insolation-recalibration.md``).  With
+``greenhouse_mode="none"`` (default) the CO₂ fraction of the world's
+atmosphere composition is passed as pCO2 and ExoPlaSim computes the
+greenhouse itself.  dreamulator's ``greenhouse_factor`` is the EBM's own
+parametrisation and is deliberately not mapped; a note is recorded in the
+manifest.  ``"pco2"`` overrides pCO2 with an explicit partial pressure (used
+for scans); ``"flux_boost"`` applies an explicit, user-supplied flux factor
+(the historical PoC hack — discouraged).
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -85,6 +92,12 @@ class ExoPlaSimParams:
     po2: float | None = None
     par: float | None = None
     pco2: float | None = None
+    lonvernaleq: float | None = None  # MVELP, degrees (None = ExoPlaSim's Earth 102.7°)
+    # True = PlaSim uses the eccentricity/obliquity/MVELP given here (NFIXORB=1).
+    # ExoPlaSim's default False makes PlaSim ignore them and compute Earth's
+    # Berger (1978) orbit for year 1 AD (e 0.0175, obliquity 23.7°) instead —
+    # every run before 2026-10-13 silently used that Earth orbit.
+    fixedorbit: bool = True
     extras: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
@@ -99,10 +112,13 @@ class ExoPlaSimParams:
             "flux": self.flux,
             "year": self.year,
             "pressure": self.pressure,
+            "fixedorbit": self.fixedorbit,
             **self.extras,
         }
         if self.startemp is not None:
             kwargs["startemp"] = self.startemp
+        if self.lonvernaleq is not None:
+            kwargs["lonvernaleq"] = self.lonvernaleq
         for key, value in (
             ("pN2", self.pn2),
             ("pO2", self.po2),
@@ -171,12 +187,12 @@ def map_planet(
     """Map one planet entry (+ star + host orbit) to ExoPlaSim parameters.
 
     ``greenhouse_mode``:
-      - ``"none"`` (default): no compensation; a warning is recorded.
+      - ``"none"`` (default): pCO2 from the atmosphere composition;
+        ``greenhouse_factor`` is not mapped (a note is recorded).
       - ``"flux_boost"``: multiply stellar flux by ``flux_boost_factor``
         (explicit, discouraged — the PoC-era hack; overshoots in the tropics).
-      - ``"pco2"``: pass ``pco2_bar`` as the CO₂ partial pressure
-        (composition-driven; requires an author decision on the radiative
-        identity of dreamulator's ``greenhouse_factor``).
+      - ``"pco2"``: pass ``pco2_bar`` as the CO₂ partial pressure on top of
+        the background atmosphere (pCO2 scans).
 
     ``overrides`` replaces any computed scalar after mapping (keys use the
     :class:`ExoPlaSimParams` field names, e.g. ``{"year": 99.7}``).
@@ -210,8 +226,9 @@ def map_planet(
         raise MappingError(f"unknown greenhouse_mode {greenhouse_mode!r}")
     if greenhouse_mode == "none" and "greenhouse_factor" in planet.get("atmosphere", {}):
         warnings.append(
-            f"greenhouse_factor {planet['atmosphere']['greenhouse_factor']} K not "
-            "compensated (radiative identity pending author decision)"
+            f"greenhouse_factor {planet['atmosphere']['greenhouse_factor']} K is the "
+            "EBM parametrisation and is not mapped; the GCM greenhouse comes from "
+            "composition pCO2"
         )
 
     year = year_days_from_kepler(a_au, float(star["mass"]))
@@ -236,8 +253,7 @@ def map_planet(
         warnings.append(
             "atmosphere composition carries no CO2: the GCM arm has no carbon "
             "greenhouse and will collapse to a snowball unless pCO2/flux is "
-            "supplied explicitly (earth ≈ 2.8e-4 bar; nacrea pending the "
-            "radiative-identity adjudication)"
+            "supplied explicitly (earth ≈ 2.8e-4 bar)"
         )
 
     star_temp = (
@@ -269,6 +285,51 @@ def map_planet(
                 raise MappingError(f"unknown override field {key!r}")
             object.__setattr__(params, key, float(value))  # noqa: PLW0642
     return params
+
+
+def mvelp_from_perihelion_day(perihelion_day: float, year_days: float) -> float:
+    """PlaSim ``MVELP`` (deg) for perihelion ``perihelion_day`` days after the vernal equinox.
+
+    PlaSim's orbit code sets ``mvelpp = MVELP + 180°`` and the true solar
+    longitude ``λ = mvelpp + ν`` (``radmod.f90`` ``orb_params`` /
+    ``gen_orb_decl``), with ``λ = 0`` at the northern vernal equinox.  Perihelion
+    (``ν = 0``) at solar longitude ``λ_p`` therefore needs ``MVELP = λ_p − 180°``;
+    Earth's 102.7° puts perihelion at ``λ_p ≈ 283°`` (early January).  The EBM
+    places perihelion by *time* (``perihelion_day``, mean anomaly zero), which
+    equals the longitude offset exactly at the equinox and to O(e) otherwise.
+    """
+    return (360.0 * perihelion_day / year_days + 180.0) % 360.0
+
+
+class _WorldInputs:
+    """Minimal ``find_input`` shim so the EBM's input resolvers can read a world."""
+
+    def __init__(self, world: Path) -> None:
+        self._world = world
+
+    def find_input(self, relative_path: str) -> Path | None:
+        for layer in ("astronomy", "geological"):
+            for kind in ("input", "derived"):
+                path = self._world / "layers" / layer / kind / relative_path
+                if path.exists():
+                    return path
+        return None
+
+
+def _perihelion_lonvernaleq(
+    world: Path, planet_id: str, year_days: float, rotation_days: float | None = None
+) -> float | None:
+    """MVELP from the same perihelion-phase derivation the EBM uses, or None."""
+    from types import SimpleNamespace
+
+    from dreamulator.engine.physical_inputs import resolve_perihelion_day
+
+    day, _ = resolve_perihelion_day(
+        _WorldInputs(world),  # type: ignore[arg-type]
+        SimpleNamespace(id=planet_id, rotation_period_days=rotation_days),  # type: ignore[arg-type]
+        year_days,
+    )
+    return None if day is None else mvelp_from_perihelion_day(day, year_days)
 
 
 def map_world(
@@ -307,4 +368,23 @@ def map_world(
     else:
         # A satellite: insolation is set by the host planet's orbit.
         host_orbit = _find_entry(stellar_doc.get("orbits"), orbit_ref)
-    return map_planet(planet, star, host_orbit, **kwargs)
+    params = map_planet(planet, star, host_orbit, **kwargs)
+    if params.lonvernaleq is None:
+        # Same perihelion phase as the EBM (resolve_perihelion_day); worlds where
+        # it is underivable (e.g. Earth) keep ExoPlaSim's Earth default.
+        lonvernaleq = _perihelion_lonvernaleq(
+            world, planet_id, params.year, planet.get("rotation_period_days")
+        )
+        if lonvernaleq is not None:
+            params = replace(params, lonvernaleq=lonvernaleq)
+        else:
+            params = replace(
+                params,
+                warnings=(
+                    *params.warnings,
+                    "perihelion phase underivable from the world inputs; ExoPlaSim uses "
+                    "Earth's MVELP 102.7° while the EBM falls back to perihelion at the "
+                    "vernal equinox (MVELP 180°) — pass lonvernaleq explicitly to align",
+                ),
+            )
+    return params
