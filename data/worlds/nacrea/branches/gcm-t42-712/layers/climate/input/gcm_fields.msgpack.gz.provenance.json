@@ -1,5 +1,5 @@
 {
-  "source_nc": "private/gcm/runs/t42f/cold/MOST.00000.nc",
+  "source_nc": "private/gcm/runs/t42o/cold_712/MOST.00000.nc",
   "tail_years": 5.0,
   "grid": [
     64,
@@ -21,10 +21,11 @@
       "flux": 1254.8535066078023,
       "year": 99.81959208267338,
       "pressure": 1.013971434,
+      "fixedorbit": true,
       "twobandalbedo": true,
       "physicsfilter": "gp|exp|sp",
       "startemp": 4365.0,
-      "lonvernaleq": 180.0,
+      "lonvernaleq": 262.67774399999996,
       "pN2": 0.7903907328029999,
       "pO2": 0.21283260399659998,
       "pAr": 0.01013971434,
@@ -47,19 +48,19 @@
         "NHDIFF@oceanmod_namelist": "1",
         "HDIFFK@oceanmod_namelist": "1.0E4"
       },
-      "wall_seconds": 7965.0
+      "wall_seconds": 7925.0
     },
     "versions": {
       "python": "3.12.3",
       "exoplasim": "3.4.2",
       "platform": "Linux-5.10.134-19.103.al8.x86_64-x86_64-with-glibc2.39"
     },
-    "created_utc": "2026-10-13T05:28:37Z"
+    "created_utc": "2026-10-13T16:25:51Z"
   },
   "pco2_ppm": 711.5,
-  "code_commit": "v0.39.0-32-g5a87f19b6525",
+  "code_commit": "v0.39.0-39-gee89f4c91f00",
   "file": "gcm_fields.msgpack.gz",
-  "sha256": "e92a354efcdbb487282f3c193d4d4530e040374821e108cfb285fb9b3acd47e6",
+  "sha256": "8f59f2dc52e85ca00b57d56c302b6574742279d0e126ea894efc56c94b6dd55b",
   "num_cells": 200000,
   "mesh_fingerprint": "98d1507ae82d65305796fa24453c15b7f24741eec18e2a2e5c36b62680d78ac9",
   "format_version": 1
