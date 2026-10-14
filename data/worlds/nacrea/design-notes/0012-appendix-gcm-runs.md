@@ -14,14 +14,19 @@ status: accepted
 
 ```bash
 private/gcm/venv/bin/python scripts/climate/gcm/gcm_runs_appendix.py \
-    private/gcm/runs/t42o/* private/gcm/runs/t42a/* \
+    private/gcm/runs/t42o/* private/gcm/runs/t42a/* private/gcm/runs/t42s/obl_* \
     --preamble private/gcm/tools/appendix_preamble.md --out data/worlds/nacrea/design-notes/0012-appendix-gcm-runs.md
 ```
 
 运行目录的分组：`t42o/cold_*` 是 CO₂ 扫描的冷臂；`t42o/warm_*` 是暖臂，种子为
 `t42o/melt_2000`（2000 ppm 积分 10 年，只作种子，不作平衡结果）；`t42o/earth_pi` 是地球参照臂；
 `t42a/` 是 712 ppm 下的消融（`abl_obliq_only` 只改倾角，`abl_sh_year` 为南半球大年相位，
-`abl_equinox_year` 为均衡年相位）。表中「代码版本」为「未记录」的运行早于 manifest 记录代码
+`abl_equinox_year` 为均衡年相位）。`t42s/obl_14.5` 与 `t42s/obl_26.0` 是季节角固定为 14.5° 与 26° 的平衡态。季节角
+瞬变运行是重启链 `t42s/trans2/seg_000` 至 `seg_033`（每段 1 个模式年，季节角按
+20.6° + 5.8° sin(2π(k + 0.5)/8.49) 逐段取值，8.49 个模式年约等于 8.6 地球年），由
+`private/gcm/tools/t42_season_trans2.sh` 生成、`private/gcm/tools/transient_obliquity.py` 分析，
+各段配置相同，不逐段列入下表。`t42s/trans` 是同样做法、但周期误按轨道年设成约 32 地球年的
+早期链，只作慢摆动的对照。注意 PlaSim 的一个模式年约 370 地球日，约等于 3.7 个轨道年。表中「代码版本」为「未记录」的运行早于 manifest 记录代码
 版本的功能，复现命令由记录的参数重建，轨道显式写出。运行需要 `private/gcm/venv` 环境与
 `docs/usage/exoplasim-gcm.md` 所述的集群环境变量。
 
@@ -54,6 +59,8 @@ private/gcm/venv/bin/python scripts/climate/gcm/gcm_runs_appendix.py \
 | `private/gcm/runs/t42o/warm_140` | 140.0 ppm | 30 | 暖启动，种子 `private/gcm/runs/t42o/melt_2000/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 3.44 °C | -0.03 K | 20.4 % | v0.39.0-38-g123210fdcec8 |
 | `private/gcm/runs/t42o/warm_356` | 355.9 ppm | 30 | 暖启动，种子 `private/gcm/runs/t42o/melt_2000/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 8.25 °C | +0.05 K | 15.4 % | v0.39.0-38-g123210fdcec8 |
 | `private/gcm/runs/t42o/warm_712` | 711.5 ppm | 30 | 暖启动，种子 `private/gcm/runs/t42o/melt_2000/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 12.02 °C | +0.02 K | 11.6 % | v0.39.0-38-g123210fdcec8 |
+| `private/gcm/runs/t42s/obl_14.5` | 711.5 ppm | 30 | 冷启动 | 0.067863 | 14.500° | 262.678°（φ = 82.7°） | 11.48 °C | +0.10 K | 13.4 % | v0.39.0-42-gf501bc64f5cd |
+| `private/gcm/runs/t42s/obl_26.0` | 711.5 ppm | 30 | 冷启动 | 0.067863 | 26.000° | 262.678°（φ = 82.7°） | 13.51 °C | +0.07 K | 6.8 % | v0.39.0-42-gf501bc64f5cd |
 
 ## 地表文件哈希
 
@@ -170,5 +177,17 @@ python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet 
 
 ```bash
 python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap private/gcm/surf/nacrea_N064_surf_0172.sra --topomap private/gcm/surf/nacrea_N064_surf_0129.sra --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp"}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --override '{"eccentricity": 0.067863, "obliquity": 19.9, "lonvernaleq": 262.677744}' --restart private/gcm/runs/t42o/melt_2000/MOST_REST.00000 --workdir private/gcm/runs/t42o/warm_712
+```
+
+**`private/gcm/runs/t42s/obl_14.5`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap private/gcm/surf/nacrea_N064_surf_0172.sra --topomap private/gcm/surf/nacrea_N064_surf_0129.sra --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp"}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --override '{"obliquity": 14.5}' --workdir private/gcm/runs/t42s/obl_14.5
+```
+
+**`private/gcm/runs/t42s/obl_26.0`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap private/gcm/surf/nacrea_N064_surf_0172.sra --topomap private/gcm/surf/nacrea_N064_surf_0129.sra --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp"}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --override '{"obliquity": 26.0}' --workdir private/gcm/runs/t42s/obl_26.0
 ```
 

@@ -33,6 +33,6 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 | [0009](0009-satellite-architecture.md) | Aegis 卫星架构：β+ 安静链态 × FJ 近平衡双珠 × ε=18 锥摆 × Q=300 × 10-07 定版纪元态（实验矩阵见[附录](0009-appendix-experiment-log.md) §8–§10） | certified-current |
 | [0010](0010-transglacis-system.md) | 墟带系统：Glacis 外碎片带 + 散射盘 + 奥尔特 + 三矮行星（璞/皚/赭）+ 墟带光 | current |
 | [0011](0011-civilization-earth-comparison.md) | 对外设定的地球对比框架（档案；作者裁决 2026-10-07：对外文档只留世界内叙述；含文明层四篇 + 气候画像 + 地质历史对比表） | accepted |
-| [0012](0012-climate-gcm-calibration.md) | 气候 GCM 定标与温室转移函数（T42、nacrea 真实轨道与正典近日点相位）：地球参照偏差 −0.7±2 K、140–6000 ppm 扫描（单一平衡态、每 e 倍 CO₂ 约 5.2 K、南大洋始终有冰）、倾角与距离季节分解、近日点相位消融、greenhouse_factor 35 交叉验证、CO₂ 混沌变化的两档范围（万年 356–1400 ppm，千万年 140–3000 ppm）；运行配置与复现命令见[附录](0012-appendix-gcm-runs.md) | accepted |
+| [0012](0012-climate-gcm-calibration.md) | 气候 GCM 定标与温室转移函数（T42、nacrea 真实轨道与正典近日点相位）：地球参照偏差 −0.7±2 K、140–6000 ppm 扫描（单一平衡态、每 e 倍 CO₂ 约 5.2 K、南大洋始终有冰）、倾角与距离季节分解、季节角敏感度与季幅潮、近日点相位消融、greenhouse_factor 35 交叉验证、CO₂ 混沌变化的两档范围（万年 356–1400 ppm，千万年 140–3000 ppm）；运行配置与复现命令见[附录](0012-appendix-gcm-runs.md) | accepted |
 | [0013](0013-climate-canon-source.md) | 气候正典的来源：对外设定以气候引擎为准，GCM T42 712 ppm 结果固定在分支 `gcm-t42-712` 作参照；引擎副热带偏干由后续气候层开发解决 | accepted |
 | [0014](0014-tidal-heat-long-term-statistics.md) | Nacrea 潮汐加热的长期统计：热流由轨道自由倾角的受迫响应决定（热流 ∝ sin²ψ，响应比 ν/(α−ν)）；百万年积分出现平静段（0.2–0.6 W/m²）与活跃段（1.5–2.9 W/m²）；季节角摆幅随热流放大；以 CTL045 为主候选、灭绝阈值 2 W/m²，集合运行加极值统计外推重现期；实验矩阵见[附录](0014-appendix-orbit-runs.md) | proposed |
