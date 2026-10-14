@@ -21,23 +21,47 @@ Design points (2026-10-05 harness decision):
   ``N_RUN_YEARS`` to a single year.  The 2026-10-06 "greenhouse failure"
   and "snowball basin lock" narratives were both this truncation: every
   harness run had integrated 1 year (12 *monthly* records), not 12-50.
-- **Manifest** records world-input hashes, mapped parameters, versions and
-  wall-clock timing next to the outputs, matching the repo's reproducibility
-  discipline.
+- **Manifest** records world-input paths and hashes, mapped parameters, the
+  exact command line, the code version (``git describe --dirty``), library
+  versions and wall-clock timing next to the outputs, so a run can be
+  reproduced from its manifest alone.
 - **Warm starts / continuations** must go through
   ``configure(restartfile=<path>)`` (passed via ``params.extras``): ExoPlaSim
   copies the seed to ``workdir/plasim_restart`` itself, and *deletes* any
-  pre-placed ``plasim_restart`` when ``restartfile`` is falsy — a silently
+  pre-placed ``plasim_restart`` when ``restartfile`` is falsy
+  (``exoplasim/__init__.py`` 3.4.2, L2643-2646) — a silently
   cold-started run otherwise (verify via the ``Found N variables in file``
   line in ``MOST_DIAG``, or a year-1 temperature sanity check).
+- **Orbit actually used.**  ExoPlaSim's ``fixedorbit`` defaults to False,
+  which makes PlaSim ignore the given eccentricity, obliquity and MVELP and
+  compute Earth's Berger (1978) orbit for year 1 AD instead — the manifest
+  then records parameters the model never used.  :func:`run_gcm` checks
+  ``NFIXORB`` before integrating and, afterwards, compares the
+  ``Computed Orbital Parameters`` block of ``MOST_DIAG`` with the request
+  (:func:`verify_orbit`), raising on any mismatch.
+- **Serial make.**  ``exoplasim.Model()`` compiles PlaSim with ``make``, and
+  PlaSim's makefile does not declare all Fortran module dependencies.  An
+  inherited ``MAKEFLAGS=-jN`` (common on shared servers) races the build and
+  fails with ``Cannot open module file 'landmod.mod'``; :func:`run_gcm`
+  strips the parallel-make variables before constructing the model.
+- **Linear-time raw reader.**  ``pyburn.readallvariables`` grows each
+  variable with ``np.append`` per Fortran record (quadratic copying) after
+  unpacking every value into a Python float.  On a 15-year T21 run (918 MB
+  raw) it took 680 s; :func:`fast_readallvariables` reads the same buffer
+  with ``np.frombuffer`` in under 1 s and returns bit-identical arrays.
+  :func:`install_pyburn_patches` swaps it in for both the regular and the
+  snapshot postprocessing.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import platform
+import re
+import struct
 import sys
 import time
 from dataclasses import asdict
@@ -47,8 +71,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from dreamulator.gcm.mapping import ExoPlaSimParams
 
+logger = logging.getLogger(__name__)
+
 _REQUIREMENT = (
-    "pip install 'exoplasim==3.4.2' netCDF4 matplotlib meson ninja "
+    "pip install 'exoplasim==3.4.2' netCDF4 matplotlib meson ninja pyyaml scipy "
     "&& scripts/climate/gcm/bootstrap.sh"
 )
 
@@ -92,6 +118,69 @@ def ensure_environment() -> None:
             ) from exc
 
 
+_PARALLEL_MAKE_VARS = ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS")
+
+
+def serial_make_environment() -> list[str]:
+    """Remove inherited parallel-make flags from ``os.environ``.
+
+    Returns the names that were removed.  See the module docstring for why
+    PlaSim must be built serially.
+    """
+    return [name for name in _PARALLEL_MAKE_VARS if os.environ.pop(name, None) is not None]
+
+
+def fast_readallvariables(fbuffer: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Drop-in replacement for ``exoplasim.pyburn.readallvariables``.
+
+    Returns the same ``(headers, variables)`` pair with bit-identical values:
+    data records are read with ``np.frombuffer`` and concatenated once per
+    variable, then widened to float64 exactly as the upstream
+    ``np.array(struct.unpack(...))`` path does.
+    """
+    import numpy as np
+    from exoplasim import pyburn as pb
+
+    en = pb._getEndian(fbuffer)
+    ml, mf = pb._getwordlength(fbuffer, 0, en)
+    n = 0
+    mainheader, zsig, n = pb.readrecord(fbuffer, n, en, ml, mf)
+    headers: dict[str, Any] = {"main": mainheader}
+    variables: dict[str, Any] = {"main": zsig}
+    variables["sigmah"] = zsig[: mainheader[6]]
+    variables["time"] = []
+
+    chunks: dict[str, list[Any]] = {}
+    marker = en + mf
+    while n < len(fbuffer):
+        wl, fmt = pb._getknownwordlength(fbuffer, n, en, ml, mf)
+        header_words = struct.unpack(marker, fbuffer[n : n + ml])[0] // 4
+        n += ml
+        header = struct.unpack(en + header_words * "i", fbuffer[n : n + header_words * 4])
+        n += header_words * 4 + ml
+        data_words = struct.unpack(marker, fbuffer[n : n + ml])[0] // wl
+        n += ml
+        field = np.frombuffer(fbuffer, dtype=en + fmt, count=data_words, offset=n)
+        n += data_words * wl + ml
+        kcode = str(header[0])
+        if kcode == "139":
+            variables["time"].append(header[6])  # nstep-nstep1, as upstream
+        if kcode not in chunks:
+            chunks[kcode] = []
+            headers[kcode] = header
+        chunks[kcode].append(field)
+    for kcode, parts in chunks.items():
+        variables[kcode] = np.concatenate(parts).astype(np.float64)
+    return headers, variables
+
+
+def install_pyburn_patches() -> None:
+    """Swap the linear-time raw reader into ``exoplasim.pyburn``."""
+    from exoplasim import pyburn as pb
+
+    pb.readallvariables = fast_readallvariables
+
+
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as f:
@@ -100,14 +189,33 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def code_version() -> str | None:
+    """``git describe --always --dirty`` of the repository holding this module, or None."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--always", "--dirty", "--abbrev=12"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parent,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return out.stdout.strip() or None
+
+
 def write_manifest(
     manifest_path: Path,
     *,
     params: ExoPlaSimParams,
     input_files: dict[str, Path],
     model_options: dict[str, Any],
+    command: list[str] | None = None,
 ) -> None:
     """Write the provenance manifest for one GCM run."""
+    import shlex
     from importlib.metadata import PackageNotFoundError, version
 
     try:
@@ -117,8 +225,11 @@ def write_manifest(
     manifest = {
         "params": asdict(params),
         "configure_kwargs": params.to_configure_kwargs(),
+        "input_paths": {name: str(path) for name, path in input_files.items()},
         "input_hashes": {name: _hash_file(path) for name, path in input_files.items()},
         "model_options": model_options,
+        "command": shlex.join(command) if command else None,
+        "code_version": code_version(),
         "versions": {
             "python": sys.version.split()[0],
             "exoplasim": exoplasim_version,
@@ -129,6 +240,63 @@ def write_manifest(
     manifest_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+
+
+_ORBIT_FIELDS = {
+    "Eccentricity": ("eccentricity", 1e-5),
+    "Obliquity (deg)": ("obliquity", 1e-3),
+    "Long of perh(deg)": ("lonvernaleq", 1e-3),
+}
+
+
+def parse_orbit_block(diag_text: str) -> dict[str, float]:
+    """Values of PlaSim's ``Computed Orbital Parameters`` block (pure).
+
+    PlaSim prints the block for both fixed (``NFIXORB=1``) and Berger orbits;
+    the keys are the printed labels (``Eccentricity``, ``Obliquity (deg)``,
+    ``Long of perh(deg)``).  Missing block → empty dict.
+    """
+    out: dict[str, float] = {}
+    start = diag_text.find("Computed Orbital Parameters")
+    if start < 0:
+        return out
+    for line in diag_text[start:].splitlines()[1:12]:
+        body = line.strip().strip("*").strip()
+        if "=" not in body:
+            continue
+        label, value = (part.strip() for part in body.split("=", 1))
+        if label in _ORBIT_FIELDS:
+            try:
+                out[label] = float(value)
+            except ValueError:
+                continue
+    return out
+
+
+def verify_orbit(diag_text: str, params: ExoPlaSimParams) -> None:
+    """Raise when the orbit PlaSim printed differs from the requested one (pure).
+
+    MVELP is only checked when the request set it; ExoPlaSim's own default
+    (Earth's 102.7°) is not ours to verify.
+    """
+    found = parse_orbit_block(diag_text)
+    if not found:
+        raise RuntimeError("MOST_DIAG has no 'Computed Orbital Parameters' block")
+    if "Using Berger orbit" in diag_text and params.fixedorbit:
+        raise RuntimeError("PlaSim used the Berger Earth orbit although fixedorbit was requested")
+    problems = []
+    for label, (attr, tol) in _ORBIT_FIELDS.items():
+        want = getattr(params, attr)
+        if want is None or label not in found:
+            continue
+        got = found[label]
+        diff = (
+            abs((got - want + 180.0) % 360.0 - 180.0) if attr == "lonvernaleq" else abs(got - want)
+        )
+        if diff > tol:
+            problems.append(f"{label}: requested {want}, PlaSim used {got}")
+    if problems:
+        raise RuntimeError("orbit mismatch — " + "; ".join(problems))
 
 
 def multi_year_otherargs(years: int) -> dict[str, str]:
@@ -158,6 +326,9 @@ def run_gcm(
     ncpus: int = 1,
     input_files: dict[str, Path] | None = None,
     landmap: str | Path | None = None,
+    topomap: str | Path | None = None,
+    namelist_overrides: dict[str, str] | None = None,
+    command: list[str] | None = None,
 ) -> dict[str, Path]:
     """Run ExoPlaSim for ``years`` model years and return output paths.
 
@@ -168,8 +339,23 @@ def run_gcm(
     an error.
 
     ``landmap`` is a ``.sra`` land-mask file (see :mod:`dreamulator.gcm.surface`);
-    when given, the run uses it instead of the aquaplanet surface.
+    when given, the run uses it instead of the aquaplanet surface.  ``topomap``
+    is the matching surface-geopotential file (code 129) and requires
+    ``landmap``.
+
+    ``namelist_overrides`` adds ExoPlaSim ``otherargs`` entries
+    (``"KEY@namelist_file": "value"``), e.g. the slab-ocean horizontal heat
+    diffusion ``{"NHDIFF@oceanmod_namelist": "1",
+    "HDIFFK@oceanmod_namelist": "5.0E4"}``.  The multi-year keys from
+    :func:`multi_year_otherargs` cannot be overridden.
+
+    ``command`` is the command line that launched the run; it is stored in the
+    manifest so the run can be reproduced.  A warm start passes
+    ``params.extras["restartfile"]``; the run then fails unless ``MOST_DIAG``
+    confirms the restart file was loaded.
     """
+    if topomap is not None and landmap is None:
+        raise ValueError("topomap requires landmap (ExoPlaSim reads both or neither)")
     ensure_environment()
     import exoplasim
 
@@ -183,7 +369,11 @@ def run_gcm(
         )
 
     exoplasim.Model._crash = _hard_crash
+    install_pyburn_patches()
 
+    removed = serial_make_environment()
+    if removed:
+        logger.info("unset %s: PlaSim must be built with serial make", ", ".join(removed))
     model = exoplasim.Model(
         workdir=str(workdir),
         modelname=model_name,
@@ -196,9 +386,16 @@ def run_gcm(
     model.configure(
         aquaplanet=landmap is None,
         landmap=str(landmap) if landmap is not None else None,
-        otherargs=multi_year_otherargs(years),
+        topomap=str(topomap) if topomap is not None else None,
+        otherargs={**(namelist_overrides or {}), **multi_year_otherargs(years)},
         **kwargs,
     )
+    if params.fixedorbit:
+        namelist = (workdir / "planet_namelist").read_text(encoding="utf-8")
+        if not re.search(r"NFIXORB\s*=\s*1\b", namelist):
+            raise RuntimeError(
+                "planet_namelist does not have NFIXORB = 1; the orbit would be ignored"
+            )
     # pyburn defaults to timeaverage=True with times=12: it would squash the
     # whole integration into 12 equally spaced records regardless of length
     # (a 1-year run's records look monthly, a 50-year run's are 50-month
@@ -218,9 +415,18 @@ def run_gcm(
             "(see burnout log; after fixing the environment, re-run via "
             "exoplasim.pyburn.postprocess on the kept raw output)"
         )
+    if diag_candidates:
+        diag_text = diag_candidates[0].read_text(encoding="utf-8", errors="replace")
+        verify_orbit(diag_text, params)
+        if params.extras.get("restartfile") and not re.search(
+            r"Found\s+\d+\s+variables in file", diag_text
+        ):
+            raise RuntimeError("restart file was not loaded (no 'Found N variables' in MOST_DIAG)")
     all_inputs = dict(input_files or {})
     if landmap is not None:
         all_inputs["landmap"] = Path(landmap)
+    if topomap is not None:
+        all_inputs["topomap"] = Path(topomap)
     write_manifest(
         workdir / "manifest.json",
         params=params,
@@ -231,8 +437,11 @@ def run_gcm(
             "layers": layers,
             "ncpus": ncpus,
             "aquaplanet": landmap is None,
+            "topography": topomap is not None,
+            "namelist_overrides": dict(namelist_overrides or {}),
             "wall_seconds": round(time.time() - started, 1),
         },
+        command=command,
     )
     return {
         "workdir": workdir,
@@ -247,6 +456,7 @@ def postprocess_raw(raw: str | Path, out_nc: str | Path, params: ExoPlaSimParams
     ensure_environment()
     import exoplasim.pyburn as pb
 
+    install_pyburn_patches()
     pb.postprocess(
         str(raw),
         str(out_nc),
@@ -266,9 +476,12 @@ def subprocess_env_hint() -> str:
 
 __all__ = [
     "ensure_environment",
+    "fast_readallvariables",
+    "install_pyburn_patches",
     "multi_year_otherargs",
     "postprocess_raw",
     "run_gcm",
+    "serial_make_environment",
     "subprocess_env_hint",
     "write_manifest",
     "_REQUIREMENT",

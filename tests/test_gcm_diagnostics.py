@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dreamulator.gcm.diagnostics import orbital_phase_of_records
+from dreamulator.gcm.diagnostics import equinox_day_from_declination, orbital_phase_of_records
 
 
 def test_phase_wraps_within_orbital_year() -> None:
@@ -25,3 +25,14 @@ def test_perihelion_offset_shifts_phase_origin() -> None:
     raw = orbital_phase_of_records(time_axis, orbital_year_days=99.8)
     shifted = orbital_phase_of_records(time_axis, orbital_year_days=99.8, perihelion_day=22.9)
     assert np.isclose((raw[0] - shifted[0]) % 1.0, 22.9 / 99.8)
+
+
+def test_equinox_day_recovers_declination_phase() -> None:
+    year, spd = 99.8, 32.0
+    days = np.arange(0.0, 5 * year, 10.0) + 3.0
+    equinox = 37.0
+    zdec = 20.0 * np.sin(2 * np.pi * (days - equinox) / year)
+    got = equinox_day_from_declination(
+        days * spd, zdec, orbital_year_days=year, steps_per_model_day=spd
+    )
+    assert abs(got - equinox) < 1e-6

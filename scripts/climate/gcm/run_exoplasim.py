@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 # Allow running from a source checkout without installation.
-SRC = Path(__file__).resolve().parents[2] / "src"
+SRC = Path(__file__).resolve().parents[3] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -67,6 +67,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="path to a .sra land-mask file (see make_landmap.py); "
         "without it the run is an aquaplanet",
     )
+    ap.add_argument(
+        "--configure",
+        default="{}",
+        help="JSON dict of extra Model.configure kwargs, e.g. "
+        '\'{"twobandalbedo": true, "ozone": true, "physicsfilter": "gp|exp|sp"}\'',
+    )
+    ap.add_argument(
+        "--topomap",
+        default=None,
+        help="path to the matching code-129 geopotential .sra (make_landmap.py --topo-out)",
+    )
+    ap.add_argument(
+        "--namelist",
+        default="{}",
+        help="JSON dict of extra ExoPlaSim namelist entries, e.g. "
+        '\'{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "5.0E4"}\'',
+    )
+    ap.add_argument(
+        "--restart",
+        default=None,
+        help="warm start from another run's restart file (e.g. <run>/MOST_REST.00000); "
+        "the run fails unless MOST_DIAG confirms it was loaded",
+    )
     ap.add_argument("--nc", default=None, help="existing .nc to diagnose (skips the run)")
     ap.add_argument("--no-plot", action="store_true")
     return ap.parse_args(argv)
@@ -83,6 +106,7 @@ def resolve_world(world: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    command = ["python", *(sys.argv if argv is None else [__file__, *argv])]
     args = parse_args(argv)
     world = resolve_world(args.world)
     overrides = json.loads(args.override)
@@ -94,7 +118,15 @@ def main(argv: list[str] | None = None) -> int:
         flux_boost_factor=args.flux_boost_factor,
         pco2_bar=args.pco2_bar,
         overrides=overrides,
+        extras=json.loads(args.configure),
     )
+    input_files = {
+        "planets": world / "layers/geological/input/planets.yaml",
+        "stellar": world / "layers/astronomy/input/stellar.yaml",
+    }
+    if args.restart:
+        params.extras["restartfile"] = str(Path(args.restart).resolve())
+        input_files["restart_seed"] = Path(args.restart)
     print(f"[map] {args.planet}: {json.dumps(params.to_configure_kwargs(), indent=2)}")
     for warning in params.warnings:
         print(f"[warn] {warning}", file=sys.stderr)
@@ -112,11 +144,11 @@ def main(argv: list[str] | None = None) -> int:
             resolution=args.resolution,
             layers=args.layers,
             ncpus=args.ncpus,
-            input_files={
-                "planets": world / "layers/geological/input/planets.yaml",
-                "stellar": world / "layers/astronomy/input/stellar.yaml",
-            },
+            input_files=input_files,
             landmap=args.landmap,
+            topomap=args.topomap,
+            namelist_overrides=json.loads(args.namelist),
+            command=command,
         )
         nc_path = outputs["nc"]
 

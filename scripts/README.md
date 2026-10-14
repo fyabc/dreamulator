@@ -1,17 +1,21 @@
 # scripts/ 目录说明
 
-按域分组，共 64 个脚本（含 gcm/ 子组 2 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 67 个脚本（含 gcm/ 子组 5 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
 
-## climate/gcm/ — ExoPlaSim offline oracle（2 个）
+## climate/gcm/ — ExoPlaSim offline oracle（5 个）
 
 GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
-`src/dreamulator/gcm/mapping.py` docstring）。
+`src/dreamulator/gcm/mapping.py` docstring）。完整运行步骤见
+[`docs/usage/exoplasim-gcm.md`](../docs/usage/exoplasim-gcm.md)。
 
-- `run_exoplasim.py` — 世界→GCM 参数映射 → 运行 → 诊断 → overview.png；`--nc` 可只诊断已有 run
+- `run_exoplasim.py` — 世界→GCM 参数映射 → 运行 → 诊断 → overview.png；`--restart` 暖启动，`--nc` 可只诊断已有 run
+- `gcm_runs_appendix.py` — 一组运行 → 带配置表、实际轨道、结果摘要与复现命令的 Markdown 附录
 - `bootstrap.sh` — 任意 Ubuntu 容器/WSL 环境引导（含 pyfft/meson 坑的修复）
+- `make_landmap.py` — 世界网格 → ExoPlaSim `.sra` 海陆掩膜与地表位势
+- `gcm_to_mesh.py` — GCM 结果投影到世界网格：`--out` 输出对比用网格，供 `dreamulator export layers --mesh` 与 EBM 对比；`--emit-fields` 输出固定气候分支（`climate_source: gcm`）的字段文件
 
 ## climate/ — 气候验证与诊断（32 个）
 

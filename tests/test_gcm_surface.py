@@ -8,6 +8,7 @@ import pytest
 from dreamulator.gcm.surface import (
     KCODE_LAND_MASK,
     gaussian_latitudes,
+    grid_land_elevation,
     land_mask_from_mesh,
     uniform_longitudes,
     write_sra,
@@ -76,3 +77,49 @@ def test_land_mask_from_earth_mesh() -> None:
     nh = mask[lat > 20].mean()
     sh = mask[lat < -40].mean()
     assert nh > sh
+
+
+def _synthetic_cells(nlat: int, nlon: int) -> dict[str, np.ndarray]:
+    """Four cells per Gaussian box, placed inside the box around its centre."""
+    glat = gaussian_latitudes(nlat)
+    glon = uniform_longitudes(nlon)
+    lat, lon = np.meshgrid(glat, glon, indexing="ij")
+    offsets = [(-0.3, -1.0), (-0.3, 1.0), (0.3, -1.0), (0.3, 1.0)]
+    return {
+        "lat": np.concatenate([(lat + dy).ravel() for dy, _ in offsets]),
+        "lon": np.concatenate([((lon + dx) % 360.0).ravel() for _, dx in offsets]),
+    }
+
+
+def test_grid_land_elevation_area_weighted_land_only() -> None:
+    nlat, nlon = 4, 8
+    cells = _synthetic_cells(nlat, nlon)
+    n = cells["lat"].size
+    per_box = n // 4
+    # In every box: two land cells (1000 m with area 1, 3000 m with area 3),
+    # one ocean cell at −4000 m and one land cell below sea level (−50 m, area 0).
+    elevation = np.concatenate([np.full(per_box, 1000.0), np.full(per_box, 3000.0),
+                                np.full(per_box, -4000.0), np.full(per_box, -50.0)])  # fmt: skip
+    area = np.concatenate([np.ones(per_box), np.full(per_box, 3.0),
+                           np.ones(per_box), np.full(per_box, 1e-9)])  # fmt: skip
+    is_land = np.concatenate([np.ones(per_box, bool), np.ones(per_box, bool),
+                              np.zeros(per_box, bool), np.ones(per_box, bool)])  # fmt: skip
+    mask = np.ones((nlat, nlon))
+    mask[0, :] = 0.0  # southernmost row is ocean in the model mask
+    elev = grid_land_elevation(cells["lat"], cells["lon"], area, elevation, is_land, mask)
+    assert elev.shape == (nlat, nlon)
+    # (1·1000 + 3·3000) / 4 = 2500 m; the ocean cell and the clipped depression do not count
+    assert np.allclose(elev[1:], 2500.0, atol=1e-3)
+    assert np.allclose(elev[0], 0.0)
+
+
+def test_grid_land_elevation_fills_land_boxes_without_land_cells() -> None:
+    nlat, nlon = 4, 8
+    cells = _synthetic_cells(nlat, nlon)
+    n = cells["lat"].size
+    elevation = np.full(n, 500.0)
+    is_land = np.zeros(n, bool)
+    is_land[0] = True  # a single land cell somewhere
+    mask = np.ones((nlat, nlon))  # but the model mask calls every box land
+    elev = grid_land_elevation(cells["lat"], cells["lon"], np.ones(n), elevation, is_land, mask)
+    assert np.allclose(elev, 500.0)
