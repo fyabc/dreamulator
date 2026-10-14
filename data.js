@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791690274241,
+  "lastUpdate": 1792013598953,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6783,6 +6783,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010791427422602592",
             "extra": "mean: 4.511767799999689 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "320fba5546b5dbac049fa7f53d1a6b1ca19e2485",
+          "message": "data(nacrea): GCM 定标与潮汐加热长期统计入设计笔记；对外设定同步；固定气候分支 gcm-t42-712\n\n- 0012 重写：真实轨道 T42 定标（地球参照偏差 −0.7 K、greenhouse_factor 35 不变）、\n  140–6000 ppm 扫描（单一平衡态、每 e 倍约 5.2 K、南大洋始终有冰）、倾角与距离季节分解、\n  季节角敏感度与季幅潮、近日点相位消融、南端大陆门槛约 1250 ppm；附录列出全部运行的\n  配置、实际轨道与复现命令\n- 0013（新）：气候正典以引擎为准，GCM 结果固定在分支作参照\n- 0014（新，proposed）：潮汐热流的平静段与活跃段、季节角随热流放大、生物影响约束、\n  作者裁决与集合运行加极值统计的外推方案；附录为实验矩阵与统计明细\n- 0009 §3、README 索引同步\n- 对外设定：CO₂ 两档范围的温度与海冰、南大洋有冰、Hadley 口径、近日点相位新构建的气候\n  统计数字；过时的仲裁说法改为指向 0013\n- 分支 gcm-t42-712：climate_source: gcm，字段集来自 712 ppm 真实轨道冷臂\n  （字段文件不入 git，随 worlds-data release 发布）\n- CHANGELOG\n\nCo-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-10-14T19:37:28+08:00",
+          "tree_id": "49e37cec6c2ad16fd04cb525dd3bfc3445915794",
+          "url": "https://github.com/fyabc/dreamulator/commit/320fba5546b5dbac049fa7f53d1a6b1ca19e2485"
+        },
+        "date": 1792013597876,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31100358545024126,
+            "unit": "iter/sec",
+            "range": "stddev: 0.27041566261295147",
+            "extra": "mean: 3.2153970140000014 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.262342285813873,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01391098665960611",
+            "extra": "mean: 306.52822800000126 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4897370902002,
+            "unit": "iter/sec",
+            "range": "stddev: 1.070399149673725",
+            "extra": "mean: 671.2593829999989 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 939.7312744466963,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005586016182607586",
+            "extra": "mean: 1.0641339999978072 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.31202616006476,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006584831878256133",
+            "extra": "mean: 5.068114800000956 msec\nrounds: 5"
           }
         ]
       }
