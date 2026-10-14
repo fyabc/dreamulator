@@ -723,11 +723,19 @@ class ClimateEngine(BaseEngine):
 2. `terrain_config.yaml`（经 `find_input` 沿层级链继承）加载 `TerrainPipelineConfig`
    ——与地形管线同源，调参不分叉；随后 `resolve_and_apply_physical_parameters` 用
    正典物理量（光度/距离/倾角/自转/温室）覆写 config 中的任何同名值
-   （`climate.py:121-137`）。
+   （`climate.py:134-139`）。
 3. 从 geological 层派生目录加载带海拔的 CVT mesh（`_load_cvt_mesh_from_geological`）；
    缺 mesh 则引擎失败返回。
-4. `simulate_climate(mesh, config)`（:184）→ 写回 `cvt_mesh.msgpack.gz` →
-   `export_climate_layers(mesh, export_dir, config)`（:197）。
+4. 按分支的 `climate_source` 选择气候来源（`_climate_source`，:171、:336）：
+   - `engine`（默认，root 构建恒为此值）：`simulate_climate(mesh, config)`（:200）；
+   - `gcm`（固定气候分支）：不模拟，`--force` 也不会；`_apply_pinned_gcm_climate`（:348）
+     从分支的 `layers/climate/input/gcm_fields.msgpack.gz` 读取逐格 GCM 字段，先核对文件的
+     SHA-256 与 git 里的 provenance 一致，再核对网格指纹（格点 id、经纬度、高程、海陆掩膜）
+     与生成字段时一致，然后写回年均字段、Köppen 和逐月数组，清空洋流、海温距平与下游派生字段
+     （`gcm/fields.py::apply_field_set`）。任何一道校验失败，引擎都返回失败并说明原因。
+     使用方法见 [`../../usage/exoplasim-gcm.md`](../../usage/exoplasim-gcm.md) §9。
+5. 把结果写回 `cvt_mesh.msgpack.gz`，再用 `export_climate_layers(mesh, export_dir, config)`（:213）导出图层；
+   `climate_summary.yaml` 记录 `climate_source`，固定气候分支还记录 `gcm_provenance`。
 
 诊断脚本侧的对应物是 `map/climate_config.py::load_climate_config`——同一套
 terrain_config + 物理参数解析，保证诊断与构建读同样的配置。

@@ -3,9 +3,8 @@
 > 状态：远期提案。当前主线是「诊断式单向 DAG + 聪明预设」（见
 > `climate-layer-improvement.md`）。本文件是**全动力学 GCM** 的备选路线，
 > 大致列出做法，重点在「涌现 vs 高效」的平衡。不排优先级、不承诺时间。
-> **已实现部分**：ExoPlaSim offline-oracle 薄适配层（`src/dreamulator/gcm/`，
-> 2026-10-05 入库，见 §「ExoPlaSim harness（已实现）」）——GCM 在当前阶段
-> 的角色是**验证 oracle**而非运行时引擎，本文件的远期方案不受影响。
+> **已实现部分**：ExoPlaSim 离线参照适配层，见下文 §「ExoPlaSim harness（✅ 已实现）」。
+> GCM 在当前阶段的角色是验证参照而非运行时引擎，本文件的远期方案不受影响。
 
 ## 定位
 
@@ -44,16 +43,16 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
 才值得切 GCM。在此之前，GCM 可用作**离线校准参照**（跑几个世界，验证诊断式预设的
 物理合理性，不接入主线）。
 
-## 后端引擎矩阵（2026-09-27 查证版）
+## 后端引擎矩阵（2026-10-12 更新）
 
 **CPU 阵营**（成熟度按降序）：
 
 | 引擎 | 定位 | 算力 | 备注 |
 |------|------|------|------|
-| [ExoPlaSim](https://exoplasim.readthedocs.io/)（EMIC 级） | 系外行星 GCM 入口 | T21 8 核 1-5 min/模拟年 | 本项目 PoC 已在 nacrea 参数跑通；潮汐锁定/非太阳光谱原生支持 |
+| [ExoPlaSim](https://exoplasim.readthedocs.io/)（EMIC 级） | 系外行星 GCM 入口，本项目现役参照臂 | 本机实测 T21 8 核约 1 min/模式年，T42 16 核约 2.3 min/模式年 | 潮汐锁定和非太阳光谱原生支持；海洋只有平板混合层，没有动力海洋（PlaSim 的 LSG 海洋在 ExoPlaSim 中只是空壳），极向热输送只能靠混合层水平扩散或给定热通量补 |
 | [Isca](https://www.exeter.ac.uk/research/isca/)（Exeter） | 理想化 GCM，理论扫描 | 工作站可跑 | 快速验证「慢自转下哈德利宽度/急流形态」类问题 |
 | [ExoCAM](https://github.com/storyofthewolf/ExoCAM) | CESM 系外分支，全复杂度 | HPC 级 | 云微物理/辐射最精；海洋模块简化 |
-| [ROCKE-3D](https://www.giss.nasa.gov/tools/rocke-3d/)（NASA GISS） | 耦合 GCM，古气候/系外 | HPC 级 | 支持自定义底边界条件（潮汐热流注入点） |
+| [ROCKE-3D](https://www.giss.nasa.gov/tools/rocke-3d/)（NASA GISS） | 耦合 GCM，古气候/系外 | CPU 集群级，动力海洋需数百模式年起转 | 完整耦合的动力海洋与海冰；支持非太阳光谱、任意地形与海底地形；THAI 互比参与者；支持自定义底边界条件（潮汐热流注入点）；公开版需在 GISS 注册下载 |
 | MITgcm | 海洋王者 | HPC-超算级 | 深海热液环流类问题唯一解；大气需外挂耦合 |
 
 **GPU-native 阵营**（Julia 生态，2026 查证属实）：
@@ -72,20 +71,41 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
 代理模型只在训练分布内插值可靠——对未见强迫域（如 11 kyr 潮汐加热扫描）外推不成立，
 只可作加速器不可作真值源。
 
+### 分层策略
+
+选型按四条标准排序：第一，有动力海洋和海冰，这是 ExoPlaSim 最大的短板，平板海洋会让海冰
+偏多、高纬偏冷，直接影响冰反照率反馈和双稳态判断；第二，支持系外行星设定（K 型星光谱、
+任意自转与倾角、自定义地形与海底地形）；第三，有维护、有互比基准；第四，能用上本机资源。
+按这四条，没有单一后端能兼顾扫描成本和物理完整度，所以分三层使用：
+
+| 层级 | 后端 | 用途 | 状态 |
+|---|---|---|---|
+| 扫描层 | ExoPlaSim（对齐配置，混合层水平扩散） | CO₂、倾角等参数的大规模扫描与冷暖双臂滞后扫描；单次 30 年运行约半小时 | 现役，运行手册见 `docs/usage/exoplasim-gcm.md` |
+| 验证层 | ROCKE-3D | 在扫描层选出的少数关键点上做动力海洋验证，检验平板海洋的结论（双稳态、冰缘位置、敏感度）是否成立 | 待引入：需注册下载源码，评估编译与地球冒烟 |
+| GPU 层 | CliMA 系列（ClimaAtmos、Oceananigans、ClimaSeaIce 与耦合器） | 高分辨率或长时间的耦合积分，用满 8 张 GPU | 远期观望：大气辐射需改造以处理非太阳光谱，耦合系统仍在成熟中 |
+
+不选的后端及理由：ExoCAM 的海洋通常仍是平板加给定热通量，补不上动力海洋这块短板，
+CESM 构建体系又很重；Isca 同样只有平板海洋；SpeedyWeather.jl 的物理过程过于简化，算不准
+冰反照率一类问题。三层都用现成后端，符合 CLAUDE.md 引擎纪律第 7 条（需要更强动力学时转向
+现成后端，而非自建小 GCM）。
+
 ## GPU 加速杠杆与本机资源
 
 - 谱方法（球谐变换）和有限体积在 GPU 上可大规模并行（FFT/球谐、批处理）。
-- **可用资源（2026-09-27 登记）：本机 RTX 3060 6GB（PoC 级）+ 可获取 多卡 GPU 服务器
-  （单卡百 GB 级高带宽显存）**——后者把 GPU-native GCM 的「慢」从障碍变成可选项，
-  也让「自研简化引擎 + GPU 内核」成为现实选项。
+- **可用资源**：开发笔记本 RTX 3060 6GB（PoC 级）；计算服务器（2026-10-12 实测）为
+  多卡 GPU 服务器（单卡百 GB 级显存），矩阵乘法实测 FP64 约
+  数十 TFLOPS 量级、双精度完整可用；多核服务器 CPU
+  （容器配额数十核）；内存 TB 级。GPU 让 GPU-native GCM 的「慢」从障碍变成可选项，
+  也让「自研简化引擎 + GPU 内核」成为现实选项；CPU 配额决定了 Fortran CPU 模式（ExoPlaSim、
+  ROCKE-3D）的并发上限，例如 ExoPlaSim T21 约 8 个 8 核运行同时进行。
 - 传统 Fortran CPU GCM 无法利用 GPU；若走 GCM 路线且要 GPU，候选收窄到
   SpeedyWeather.jl / CliMA（均需系外辐射魔改）或神经代理（需先有真值生成器）。
 - **本机 S6 PoC 判负（2026-09-27，RTX 3060 Laptop 6GB）**：真实预算矩阵
   （n=200k、nnz=1.4M、MMD 排序后 nnz(L+U)=22.6M）上 CuPy splu 分解+求解
   7.2 s vs scipy SuperLU 2.0 s（**3.5× 慢**）；精度等价（rel 5e-15）、VRAM
   2.15 GB 装得下、传输 0.22 s——瓶颈是填充因子的散射访存，GPU 不擅长。
-  结论：本地 GPU 直接稀疏 LU 无收益，不集成求解路径；GPU 服务器（带宽 ~50× +
-  cuDSS）留作未来服务器实验。已验证的安装配方固化在 pyproject `gpu`
+  结论：本地 GPU 直接稀疏 LU 无收益，不集成求解路径；计算服务器的  卡（带宽约
+  50 倍，可用 cuDSS）上的复测尚未进行。已验证的安装配方固化在 pyproject `gpu`
   可选组（cupy-cuda12x[ctk] + nvidia DLL wheels，Windows 下缺一不可）。
 - 作为备选：只有当 GCM 涌现的收益确立、且 GPU 加速能把成本压到可接受时，才投入。
 
@@ -122,56 +142,40 @@ GCM 方案是**换一种方式**：用完整原始方程显式求解，让这些
   GCM 的单次耦合求解。
 - 中间态：GCM 作为「校准参照」离线运行，不替换主线（见上「判断准则」）。
 
-## ExoPlaSim harness（已实现，2026-10-05）
+## ExoPlaSim harness（✅ 已实现）
 
-GCM 当前作为**气候引擎的 offline oracle**使用（验证 Ω 依赖、倾角分支、
-慢自转夹具的动力学侧证），不进 build 管线。入库形态 = 薄适配层：
+GCM 当前作为气候引擎的离线参照使用，不进 build 的模拟管线，代码在 `src/dreamulator/gcm/`。
+例外是作者指定的固定气候分支（`climate_source: gcm`）：build 只导入一次 GCM 运行预先算好的
+逐格字段，不运行 GCM。
+运行步骤、参数和输出口径见 [`../../usage/exoplasim-gcm.md`](../../usage/exoplasim-gcm.md)；
+各个已知陷阱的机理和源码证据写在 `runner.py`、`mapping.py`、`diagnostics.py` 的模块说明里；
+nacrea 的定标配置与结论见 `data/worlds/nacrea/design-notes/0012-climate-gcm-calibration.md`。
 
-- `src/dreamulator/gcm/mapping.py` — 世界输入 → `Model.configure` 参数的
-  **纯函数映射**（零 exoplasim 依赖、可单测）。单位换算集中在这一处：
-  `radius` 期望 **R⊕ 不是米**（exoplasim `__init__.py` 写 `PLARAD =
-  radius*6371220.0`；2026-09-07「风场死寂」悬案即传米所致，2026-10-05 破案，
-  回归测试 `tests/test_gcm_mapping.py::test_radius_never_in_metres_regression`
-  钉死）。恒星有效温度经 `temperature` 键传入 `startemp`（ExoPlaSim 据此
-  算两带光谱分割——K 星 NIR 份额高，漏传会按 G2 光谱算温室）。温室映射：
-  `greenhouse_mode=none|flux_boost|pco2`；nacrea 辐射身份已经路线 1 裁决
-  （pCO2 成分驱动，见 `nacrea-insolation-recalibration.md`）。
-- `src/dreamulator/gcm/runner.py` — 运行编排：`ensure_environment()` 把
-  pyfft/meson 静默失败（上游把异常注释了）变成显式报错；连续多年积分走
-  `N_RUN_YEARS` namelist（`run(years=N)` 每年重启冷 Fortran 进程）——
-  **必须同时清零 `N_RUN_STEPS`**（`multi_year_otherargs()`）：configure 对
-  rotationperiod≠1 写死 11520 步，Fortran 主循环步数倒计时归零即无条件
-  return，N_RUN_YEARS 被静默截断成 1 年（2026-10-06 破案，回归测试钉死）；
-  后处理经 `cfgpostprocessor(times=years*12)` 输出真月度记录（pyburn 默认
-  `times=12` 会把任意时长聚合成 12 条）。**暖起动/续算走
-  `configure(restartfile=<path>)`**（一等 API，configure 自己把种子 cp 成
-  workdir/plasim_restart，Fortran `restart_ini` 按存在性加载，证据行
-  "Found N variables in file" 落 MOST_DIAG）——**预置 workdir/plasim_restart
-  会被 configure 静默删除**（restartfile 为空即 `rm`，`__init__.py`
-  L2643-2646；2026-10-07 暖支实验首跑因此变成冷起动，yr1 温度体检抓获）。
-  原始 MOST 保留；manifest 记 input 哈希/参数/版本。
-- `src/dreamulator/gcm/diagnostics.py` — 从 .nc 提取急流纬度/强度、Hadley
-  边界（质量流函数，**勿用速度势 psi**——其零线在 ITCZ）、热力对比、涡动
-  方差。注意 pyburn 的 lat/lon **本来就是度**（units: deg），勿再 rad2deg。
-  `t_global_c` 用 **tas（2m 气温）**——ta 全层平均含 −100°C 级平流层，会
-  误报 ~40 K 冷偏（旧口径保留为 `t_global_column_c`）。能量收支：净 TOA =
-  `rst + rlut`（PlaSim 通量正向下；rlut=−OLR；rsut 与 rst 不闭合，短波
-  收支科学暂勿用）。**模型日历漂移**：N_DAYS_PER_YEAR 由自转周期取整
-  （nacrea 120 模型日/年 vs 真实轨道年 99.8 日），季节在 record 索引里
-  漂移——季节分析用 `orbital_phase_of_records()` 按轨道相位重对齐。
-- `src/dreamulator/gcm/plotting.py` — 全球概览图（中文 caption + CJK 字体
-  回退链；平均场条带状是 aquaplanet 对称强迫的正确物理，涡动看时间 std）。
-- `scripts/climate/gcm/run_exoplasim.py` — CLI 入口；`bootstrap.sh` — 任意
-  Ubuntu 容器/WSL 的环境引导（刻意不用 uv：仓库树内 uv.toml 覆盖 index 的坑）。
-- 依赖走 `[gcm]` 可选 extra（钉 exoplasim==3.4.2）。
+### 上游维护状况与 fork 策略（2026-10-12 核查）
 
-当前状态（2026-10-06）：harness 四层 bug 破案后（时长截断/输出聚合/ta 诊断/
-恒星光谱），earth 参照臂 50 yr 收敛 +4.1°C（配置冷偏 −9.6 K，主体 = slab
-海洋无动力热输送 → 海冰过量 → 反照率锁；绝对 Ts 对标需 earth 参照偏差订正）。
-nacrea 标定走路线 1 新恒星参数 × pCO2 网格（SoT = `private/plans/
-gcm-calibration-round-01.md`，判据与偏差订正协议见 `nacrea-insolation-
-recalibration.md` §3.7）。早期 aquaplanet 对照数字（2026-10-05 批）因时长
-截断作废。
+ExoPlaSim 处于低维护状态。最后一次发版是 3.4.2（2025-01），之后作者只零星合并小改动，
+最近一次在 2026-09。2026-08 一位外部贡献者提交了 14 个实质性修复，至今没有合并，其中几项
+直接影响本项目：
+
+| 上游编号 | 内容 | 对本项目的影响 | 处理 |
+|---|---|---|---|
+| PR #52 | pyburn 读取原始输出的复杂度是平方级 | 后处理耗时从约 16 分钟降到约 3 分钟 | 已在本地 Python 层用同样思路修复，输出逐位一致 |
+| PR #62 | 短波气体吸收按太阳光谱拟合，非太阳型主星需要重新加权 | nacrea 的主星是 K6 型，温室与水汽吸收可能有系统偏差 | 未处理，需要改 Fortran |
+| Issue #69 | 自转周期不等于 1 天时，日照在经向上有固定偏差 | nacrea 自转 3.13 天；纬向平均不受影响，海陆空间分布会受影响 | 未处理，需要改 Fortran |
+| PR #53、#54 | MPI 广播缺失、重启时累加器丢失，可能死锁或静默损坏输出 | 多核运行和暖启动续算都会用到 | 未处理 |
+
+不自研 GCM 的理由有三条：GCM 的作用是独立检验 EBM，自研模型与 EBM 出自同一套假设就失去了
+参照意义；引擎纪律第 7 条要求需要更强动力学时转向现成后端；目前的补丁全部在 Python 包装层，
+没有改动物理部分。按情况分级处理：
+
+| 情况 | 做法 |
+|---|---|
+| 补丁只涉及 Python 包装层（现状） | 继续在 `runner.py` 里打补丁，注明对应的上游编号，并附回归测试 |
+| 需要修改 Fortran 物理部分（#62、#69 很可能需要，T42 短波浮点异常也属此类） | 维护一个固定 commit 的 fork，选择性合入外部贡献者的修复，从 fork 安装 |
+| 上游停止维护，或 fork 负担过重 | 按上文的分层策略换用其他现成后端，系外行星辐射部分需要自行补齐 |
+
+是否建立 fork 的决定登记在 `docs/design/roadmap.md` 的技术债表里，目前按作者裁决先只做问题
+定位，修复往后放。
 
 ## 参考
 

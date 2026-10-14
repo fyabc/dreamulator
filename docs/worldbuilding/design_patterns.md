@@ -443,3 +443,36 @@ version: 1
 climate_state: temperate        # 行星气候态（词汇见样例注释）
 lapse_rate_c_per_km: 6.5        # -H 高地修饰语的环境递减率
 ```
+
+## 模式 12：固定气候分支（climate_source: gcm）
+
+**概念**：作者有时想让某个分支的气候直接采用一次全球气候模式（GCM）运行的结果，而不是
+EBM 引擎的模拟结果，比如拿 GCM 当作这个世界气候的参照版本，再在它上面推演生态和文明。
+固定气候分支在 climate 层分叉，天文层和地质层从父世界继承；`branch.yaml` 里的
+`climate_source: gcm` 让气候引擎只导入预先算好的逐格字段，不做模拟，`--force` 也不例外。
+下游的生态层和文明层照常从这份气候构建。GCM 的结果属于模型态，所以它只出现在分支上，
+这与「模型态只写在分支上」的规则一致。
+
+**数据放置**：逐格字段文件 `layers/climate/input/gcm_fields.msgpack.gz` 是作者指定的输入，
+但 `build` 无法重新生成它（重新生成要跑好几个小时的 GCM），而且体积在几十 MB 量级，
+所以它不进 git，随 `worlds-data` release 发布。旁边的 `.provenance.json` 进 git，记录来源
+运行、代码版本、文件的 SHA-256 和网格指纹。
+
+**两道校验**：构建时文件的 SHA-256 必须和 provenance 一致，继承网格的指纹（格点 id、经纬度、
+高程、海陆掩膜）必须和生成字段时一致。父世界地形一旦变化，GCM 运行本身就失效，构建会失败
+并要求在新网格上重跑 GCM，不会悄悄沿用旧数据。
+
+```yaml
+# data/worlds/nacrea/branches/gcm-t42-712/branch.yaml
+name: gcm-t42-712
+parent: null
+fork_layer: climate          # climate_source: gcm 要求在 climate 层分叉
+description: 气候层固定为 ExoPlaSim T42 GCM 结果（712 ppm 冷启动基线），不由气候引擎模拟
+climate_source: gcm          # engine（默认，模拟）或 gcm（导入固定的 GCM 字段）
+```
+
+**参考**：
+- `src/dreamulator/models/branch.py` — `ClimateSource` 枚举与分叉层校验
+- `src/dreamulator/gcm/fields.py` — 字段文件读写、网格指纹、`apply_field_set`
+- `src/dreamulator/engine/climate.py` — `_climate_source` 与 `_apply_pinned_gcm_climate`
+- `docs/usage/exoplasim-gcm.md` §9 — 建立分支、输出字段文件、release 发布与校验规则
