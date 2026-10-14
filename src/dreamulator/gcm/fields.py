@@ -7,10 +7,13 @@ and the climate engine only writes those fields onto the inherited mesh
 (:func:`apply_field_set`).  This module has no netCDF dependency, so applying a
 field set works without the ``[gcm]`` extra.
 
-The field set is tied to the exact mesh the GCM was run on through
-:func:`mesh_fingerprint` (cell geometry, elevation and the land mask).  When the
-parent world's terrain changes, the GCM run itself is invalid (it saw the old
-continents), so a stale field set is refused rather than re-projected.
+The field set is tied to the mesh the GCM was projected onto.  It stores
+:func:`mesh_fingerprint` (cell geometry, elevation and the land mask) and, from
+format 2 on, a copy of that reference geometry.  A mesh with the same fingerprint
+is accepted directly.  Otherwise the meshes are compared cell by cell
+(:func:`compare_mesh`): builds of the same inputs on different CPUs may differ in
+a few coastline cells, which is accepted within :data:`MESH_TOLERANCES`, while a
+changed terrain (the GCM run saw other continents) is refused.
 
 The binary file is large (tens of MB) and is distributed with the ``worlds-data``
 release, not git; the small ``<name>.provenance.json`` next to it is tracked and
@@ -34,7 +37,19 @@ if TYPE_CHECKING:
 
 GCM_FIELDS_FILENAME = "gcm_fields.msgpack.gz"
 PROVENANCE_SUFFIX = ".provenance.json"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+SUPPORTED_FORMATS = (1, 2)
+
+#: Tolerances for accepting a mesh whose fingerprint differs from the reference.
+#: Numerical-stabilisation constants (not physics): they absorb platform float
+#: noise that moves a handful of coastline cells across sea level, and are far
+#: below what any authored terrain change produces (thousands of cells).
+MESH_TOLERANCES = {
+    "position_deg": 1e-3,  # max |Δlat|, |Δlon| per cell
+    "elevation_m": 5.0,  # a cell counts as changed above this |Δelevation|
+    "changed_fraction": 1e-3,  # max share of cells changed by more than elevation_m
+    "land_flip_fraction": 1e-3,  # max share of cells whose land mask differs
+}
 
 #: Per-cell float fields written onto ``VoronoiCell`` (attribute names).
 ANNUAL_FIELDS = (
@@ -87,6 +102,35 @@ class GcmFieldSet:
     koppen: list[str | None]
     slp_reduction_unreliable: np.ndarray
     provenance: dict[str, Any] = field(default_factory=dict)
+    #: lat/lon/elevation/land of the mesh the fields were projected onto (format 2+).
+    reference_geometry: dict[str, np.ndarray] | None = None
+
+
+@dataclass
+class MeshMatch:
+    """Cell-by-cell comparison of a mesh against a field set's reference geometry."""
+
+    num_cells: int
+    max_position_diff_deg: float
+    max_elevation_diff_m: float
+    changed_cells: int
+    land_flips: int
+
+    def within_tolerance(self) -> bool:
+        tol = MESH_TOLERANCES
+        return (
+            self.max_position_diff_deg <= tol["position_deg"]
+            and self.changed_cells <= tol["changed_fraction"] * self.num_cells
+            and self.land_flips <= tol["land_flip_fraction"] * self.num_cells
+        )
+
+    def describe(self) -> str:
+        return (
+            f"max position difference {self.max_position_diff_deg:.2e}°, "
+            f"{self.changed_cells} cells differ by more than "
+            f"{MESH_TOLERANCES['elevation_m']:g} m (max {self.max_elevation_diff_m:.1f} m), "
+            f"{self.land_flips} land-mask flips, of {self.num_cells} cells"
+        )
 
 
 def mesh_fingerprint(mesh: CVTMesh) -> str:
@@ -103,6 +147,34 @@ def mesh_fingerprint(mesh: CVTMesh) -> str:
     for arr in (ids, pos, elev, elev >= 0.0):
         h.update(np.ascontiguousarray(arr).tobytes())
     return h.hexdigest()
+
+
+def mesh_reference_geometry(mesh: CVTMesh) -> dict[str, np.ndarray]:
+    """Per-cell lat, lon, elevation and land mask, as stored in a format-2 field set."""
+    cells = mesh.cells
+    elev = np.array([c.elevation for c in cells], dtype=np.float64)
+    return {
+        "lat": np.array([c.lat for c in cells], dtype=np.float64),
+        "lon": np.array([c.lon for c in cells], dtype=np.float64),
+        "elevation": elev.astype(np.float32),
+        "land": elev >= 0.0,
+    }
+
+
+def compare_mesh(mesh: CVTMesh, reference: dict[str, np.ndarray]) -> MeshMatch:
+    """Compare ``mesh`` cell by cell against a stored reference geometry."""
+    cur = mesh_reference_geometry(mesh)
+    dlon = np.abs(cur["lon"] - reference["lon"])
+    dlon = np.minimum(dlon, 360.0 - dlon)
+    dpos = np.maximum(np.abs(cur["lat"] - reference["lat"]), dlon)
+    delev = np.abs(cur["elevation"].astype(np.float64) - reference["elevation"])
+    return MeshMatch(
+        num_cells=len(delev),
+        max_position_diff_deg=float(dpos.max()) if dpos.size else 0.0,
+        max_elevation_diff_m=float(delev.max()) if delev.size else 0.0,
+        changed_cells=int((delev > MESH_TOLERANCES["elevation_m"]).sum()),
+        land_flips=int((cur["land"] != reference["land"]).sum()),
+    )
 
 
 def _pack_array(a: np.ndarray) -> dict[str, Any]:
@@ -140,6 +212,10 @@ def save_field_set(path: str | Path, fs: GcmFieldSet) -> Path:
         "slp_reduction_unreliable": _pack_array(fs.slp_reduction_unreliable.astype(np.bool_)),
         "provenance": fs.provenance,
     }
+    if fs.reference_geometry is not None:
+        payload["reference_geometry"] = {
+            k: _pack_array(v) for k, v in fs.reference_geometry.items()
+        }
     # mtime=0 keeps the gzip bytes (and so the SHA-256) a pure function of the content.
     with gzip.GzipFile(path, "wb", compresslevel=6, mtime=0) as f:
         f.write(msgpack.packb(payload, use_bin_type=True))
@@ -178,8 +254,9 @@ def load_field_set(path: str | Path, *, verify_provenance: bool = True) -> GcmFi
             )
     with gzip.open(path, "rb") as f:
         payload = msgpack.unpackb(f.read(), raw=False)
-    if payload.get("format_version") != FORMAT_VERSION:
+    if payload.get("format_version") not in SUPPORTED_FORMATS:
         raise ValueError(f"unsupported field-set format {payload.get('format_version')}")
+    ref = payload.get("reference_geometry")
     return GcmFieldSet(
         num_cells=int(payload["num_cells"]),
         mesh_fingerprint=str(payload["mesh_fingerprint"]),
@@ -188,29 +265,41 @@ def load_field_set(path: str | Path, *, verify_provenance: bool = True) -> GcmFi
         koppen=list(payload["koppen"]),
         slp_reduction_unreliable=_unpack_array(payload["slp_reduction_unreliable"]),
         provenance=dict(payload.get("provenance", {})),
+        reference_geometry={k: _unpack_array(v) for k, v in ref.items()} if ref else None,
     )
 
 
-def apply_field_set(mesh: CVTMesh, fs: GcmFieldSet) -> None:
+def apply_field_set(mesh: CVTMesh, fs: GcmFieldSet) -> MeshMatch | None:
     """Write the pinned GCM climate onto ``mesh`` in place.
 
-    Raises :class:`StaleFieldSetError` when the mesh is not the one the field set
-    was computed on.  Sets the per-cell annual fields and Köppen class, clears
-    :data:`CLEARED_FIELDS`, and attaches the monthly arrays under the private
-    names the climate exporter reads.
+    Returns ``None`` when the mesh fingerprint matches exactly, or the
+    :class:`MeshMatch` when a differing mesh was accepted within
+    :data:`MESH_TOLERANCES`.  Raises :class:`StaleFieldSetError` when the mesh is
+    not the one the field set was computed on.  Sets the per-cell annual fields
+    and Köppen class, clears :data:`CLEARED_FIELDS`, and attaches the monthly
+    arrays under the private names the climate exporter reads.
     """
     if mesh.num_cells != fs.num_cells:
         raise StaleFieldSetError(
             f"field set has {fs.num_cells} cells, mesh has {mesh.num_cells}; the parent "
             "terrain changed since the GCM run — rerun the GCM on the new mesh"
         )
-    fingerprint = mesh_fingerprint(mesh)
-    if fingerprint != fs.mesh_fingerprint:
-        raise StaleFieldSetError(
-            "mesh fingerprint differs from the one the GCM field set was computed on "
-            "(cell geometry, elevation or land mask changed); the GCM run is stale — "
-            "rerun the GCM on the new mesh"
-        )
+    match: MeshMatch | None = None
+    if mesh_fingerprint(mesh) != fs.mesh_fingerprint:
+        if fs.reference_geometry is None:
+            raise StaleFieldSetError(
+                "mesh fingerprint differs from the one the GCM field set was computed on "
+                "(cell geometry, elevation or land mask changed), and this format-1 field "
+                "set has no reference geometry to compare against; regenerate it with "
+                "scripts/climate/gcm/gcm_to_mesh.py --emit-fields"
+            )
+        match = compare_mesh(mesh, fs.reference_geometry)
+        if not match.within_tolerance():
+            raise StaleFieldSetError(
+                "the mesh differs from the one the GCM field set was computed on beyond the "
+                f"platform tolerance ({match.describe()}); the parent terrain changed, so "
+                "the GCM run is stale — rerun the GCM on the new mesh"
+            )
     annual = {k: fs.annual[k].astype(np.float64) for k in ANNUAL_FIELDS}
     unreliable = fs.slp_reduction_unreliable
     for i, cell in enumerate(mesh.cells):
@@ -223,6 +312,7 @@ def apply_field_set(mesh: CVTMesh, fs: GcmFieldSet) -> None:
     for key, attr in MONTHLY_FIELDS.items():
         if key in fs.monthly:
             object.__setattr__(mesh, attr, fs.monthly[key].astype(np.float32))
+    return match
 
 
 __all__ = [
@@ -230,12 +320,16 @@ __all__ = [
     "CLEARED_FIELDS",
     "GCM_FIELDS_FILENAME",
     "MONTHLY_FIELDS",
+    "MESH_TOLERANCES",
     "GcmFieldSet",
+    "MeshMatch",
     "StaleFieldSetError",
     "apply_field_set",
+    "compare_mesh",
     "file_sha256",
     "load_field_set",
     "mesh_fingerprint",
+    "mesh_reference_geometry",
     "provenance_path",
     "save_field_set",
 ]

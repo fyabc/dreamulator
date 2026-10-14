@@ -2312,6 +2312,10 @@ def _apply_deposition_fill(
     visited = np.zeros(n, dtype=bool)
     n_filled = 0
     n_lake = 0
+    # One uniform per cell, addressed by the basin's lowest cell id: the draw a
+    # basin gets must not depend on how many basins (or small pits) were met
+    # before it, which shifts with float noise in the depression test.
+    basin_u = rng.random(n)
     for s in range(n):
         if not depressed[s] or visited[s]:
             continue
@@ -2326,7 +2330,7 @@ def _apply_deposition_fill(
                     visited[j] = True
                     bq.append(j)
 
-        if len(basin) >= 20 and rng.random() < config.lake_fraction:
+        if len(basin) >= 20 and basin_u[min(basin)] < config.lake_fraction:
             # Leave a lake: fill to spill − lake_depth (never below the floor).
             # Only large basins become lakes; tiny noise pits are always filled.
             for i in basin:
@@ -2449,6 +2453,9 @@ def _apply_continental_shelf(
 
     # 3. Two-stage shelf profile: shallow platform → shelf break → deep ocean
     shelf_edge_depth = sea_level + rng.uniform(-5.0, -1.0)  # near-surface
+    # Per-cell ±5% variation addressed by cell id (not drawn in BFS order), so
+    # the values do not shift when float noise changes the shelf's cell set.
+    shelf_noise = rng.uniform(-0.05, 0.05, size=len(mesh.cells))
     shelf_break_depth = sea_level - 200.0  # typical shelf-break depth (m)
     drop_fold = 30.0  # e-folding for the drop beyond the shelf break (km)
     shelf_cells = 0
@@ -2471,8 +2478,7 @@ def _apply_continental_shelf(
             t_drop = 1.0 - np.exp(-d_below / drop_fold)
             z_shelf = shelf_break_depth * (1.0 - t_drop) + orig_z * t_drop
         # Random ±5% variation
-        noise = 1.0 + rng.uniform(-0.05, 0.05)
-        elevation[cid] = z_shelf * noise
+        elevation[cid] = z_shelf * (1.0 + shelf_noise[cid])
         # The continental shelf is submerged CONTINENTAL crust, not oceanic
         # (§8 地壳类型正交化): the crust boundary should be the shelf edge,
         # not the coastline itself.
@@ -2575,6 +2581,8 @@ def _apply_coastal_plain(
     # relief ≈ 500–900 m — the coastal range/plain (Chilean Cordillera de la
     # Costa ~500–1500 m), not the 4000–6000 m main arc.
     mountain_coast_ratio = 0.15
+    # Lowland targets addressed by cell id (see the shelf note above).
+    lowland_targets = sea_level + rng.uniform(10.0, 50.0, size=len(mesh.cells))
 
     for cid, d_km in inland_dist.items():
         if elevation[cid] <= sea_level:
@@ -2587,7 +2595,7 @@ def _apply_coastal_plain(
 
         # Coast elevation target: ~30 m above sea for lowlands, 40% of
         # original for mountains
-        lowland_target = sea_level + rng.uniform(10.0, 50.0)
+        lowland_target = lowland_targets[cid]
         mountain_target = elevation[cid] * mountain_coast_ratio
         coast_target = lowland_target * elev_factor + mountain_target * (1.0 - elev_factor)
 
@@ -2693,6 +2701,9 @@ def _apply_island_arcs(
 # =========================================================================
 
 
+_EXP_M2 = float(np.exp(-2.0))
+
+
 def _apply_interior_landforms(
     mesh: CVTMesh,
     elevation: np.ndarray,
@@ -2770,13 +2781,18 @@ def _apply_interior_landforms(
         if n_cont < len(cell_indices) * 0.2:
             continue
 
-        # Find interior cells (beyond the boundary influence zone)
+        # Find interior cells (beyond the boundary influence zone).  The interior
+        # count ``ni`` drives the rng draws below, so one cell crossing the
+        # threshold re-rolls every belt on every later plate.  The distance is
+        # rounded to 1 mm first: it differs across CPUs/libm builds by ~1e-9 km,
+        # and without rounding that alone produced a different continent
+        # interior on another machine (2026-10-15).
         interior_threshold = config.boundary_influence_km * 1.2
         interior = [
             i
             for i in cell_indices
             if (dist_i := mesh.cells[i].distance_to_boundary_km) is not None
-            and dist_i > interior_threshold
+            and round(dist_i, 6) > interior_threshold
             and getattr(mesh.cells[i], "crust_type", "") == "continental"
         ]
         ni = len(interior)
@@ -2866,6 +2882,11 @@ def _apply_interior_landforms(
 
             belt_count = 0
             basin_count = 0
+            # One jitter per interior cell, drawn up front: the number of draws
+            # must not depend on which cells pass the float threshold below
+            # (dist_km < 2σ), or a single cell flipping across it on another
+            # CPU shifts the shared rng stream for every later belt and plate.
+            belt_jitter = rng.uniform(-0.10, 0.10, size=ni)
 
             for _j, ci in enumerate(candidates):
                 if not _ok[_j]:
@@ -2918,9 +2939,14 @@ def _apply_interior_landforms(
                     landform_type = "orogeny"
                     belt_count += 1
 
-                weight = np.exp(-(dist_km * dist_km) / (2 * local_sigma * local_sigma))
-                jitter = rng.uniform(-0.10, 0.10)
-                elevation[i] += local_amp * weight * (1.0 + jitter)
+                # Gaussian profile shifted to reach zero at the 2σ cut-off, so a
+                # cell sitting on the cut-off gets no step (the unshifted weight
+                # is still e^-2 ≈ 0.14 there and jumped by ~0.14 × amplitude
+                # when float noise moved a cell across it).
+                weight = (
+                    np.exp(-(dist_km * dist_km) / (2 * local_sigma * local_sigma)) - _EXP_M2
+                ) / (1.0 - _EXP_M2)
+                elevation[i] += local_amp * weight * (1.0 + belt_jitter[ci])
 
                 if not mesh.cells[i].landform:
                     mesh.cells[i].landform = landform_type
