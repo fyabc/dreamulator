@@ -34,6 +34,14 @@ dreamulator branch promote earth pangea                  # 将分支提升为独
 
 分支类似 Git——在某一层分叉，共享上层数据，仅存储分叉层及之后的数据。
 
+`--climate-source gcm` 建立固定气候分支：分支必须在 climate 层分叉，气候层直接使用一次
+ExoPlaSim GCM 运行的结果，`build` 只导入预先算好的逐格字段，不做模拟。建法和校验规则见
+[exoplasim-gcm.md](exoplasim-gcm.md) §9。
+
+```bash
+dreamulator branch create nacrea gcm-t42-712 --at climate --climate-source gcm
+```
+
 ### 其他基础命令
 
 ```bash
@@ -299,6 +307,10 @@ dreamulator export layers nacrea                                # 全部 5 层�
 dreamulator export layers nacrea --layers terrain,koppen        # 指定图层（逗号分隔）
 dreamulator export layers nacrea --grid 4096x2048               # 指定输出分辨率 WxH
 dreamulator export layers nacrea --output out/ --data-dir data/worlds
+dreamulator export layers nacrea -l temperature,precipitation,pressure    # 气候图层
+dreamulator export layers nacrea -l koppen,temperature --mesh <其他网格>    # 渲染另一份网格（如 GCM 投影）
+dreamulator export layers nacrea -l temperature_diff,koppen_agreement \
+    --mesh <网格A> --compare-mesh <网格B>                                  # 差值图层：A − B
 ```
 
 | 图层 | 类型 | 字段 | 说明 |
@@ -308,6 +320,16 @@ dreamulator export layers nacrea --output out/ --data-dir data/worlds
 | `biome` | 分类（Whittaker） | `biome` | 未匹配处透明 |
 | `agriculture` | 0–100 连续 | `agriculture_score` | 仅陆地 |
 | `habitability` | 0–100 连续 | `habitability_score` | 仅陆地 |
+| `plate_motion` | 板块速度 | 欧拉极 | 需要 `plates.json` |
+| `temperature` | −40…+40 °C 连续 | `temperature_C` | 仅陆地，与前端温度图层同色标同区间 |
+| `precipitation` | 对数连续 | `precipitation_mm` | 仅陆地，log10(P+1)/log10(30001)，与前端一致 |
+| `pressure` | ±5 hPa 发散 | `pressure_anomaly_annual_hpa` | 陆地与海洋；`slp_reduction_unreliable` 的格点透明 |
+| `temperature_diff` | ±20 K 发散 | `temperature_C` 之差 | 需要 `--compare-mesh`；仅陆地，区间同前端误差图层 |
+| `precipitation_diff` | ±2000 mm/年 发散 | `precipitation_mm` 之差 | 需要 `--compare-mesh`；仅陆地 |
+| `koppen_agreement` | 三类 | `koppen_class` | 需要 `--compare-mesh`；绿＝同一类，黄＝同一大组，红＝不同大组 |
+
+`--mesh` 渲染指定的网格文件而不是世界的构建产物，地图元数据（分辨率、海平面）仍取自世界；
+`--compare-mesh` 指定差值图层的参照网格，两者必须是同一套格点。
 
 输出为 RGBA PNG（未着色处透明），文件名 `<layer>.png`。
 

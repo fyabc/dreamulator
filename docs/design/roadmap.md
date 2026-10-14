@@ -106,6 +106,7 @@
 | P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口）→ `private/plans/ucc-01-plan.md` | ~1 周 | ★★★★ |
 | P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后）→ `private/reviews/proposals-review-2026-09-17.md` §3 | 按所选任务 | ★★★ |
 | P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮）→ `private/reviews/climate/climate-pipeline-rethinking-2026-09-17.md` + today.md ▶ 项 | 随主线 | ★★★★★ |
+| P2 | **宽 Hadley 体制下副热带过干**（GCM 交叉核查：nacrea 副热带降水约为 GCM 的三分之一，地球同纬带正常，属体制外推问题；首要线索为背景信风，先做规定低层风的干预实验）→ `audit/wave6-gcm-ebm-crosscheck.md` + `proposals/climate-layer-improvement.md` §7；同处登记高纬陆地季节振幅偏弱 | 随气候层开发 | ★★★★ |
 
 ### 既有待办
 
@@ -148,6 +149,7 @@
 | P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例 | 设计 1–2 周 + 实现远期 | ★★★ |
 | P3 | **地质层速度**（terrain 已 56→17 s（09-29）；剩余 = tectonics ~97 s Dijkstra 重采样；债 11 缩放数据） | 评估 0.5 周 | ★★ |
 | P3 | **GCM PoC 跑通**（PoC 风场退化根因未明；定性结论已由 Kaspi & Showman 2015 兜底。升级候选（用户 09-24 间奏曲）：① ExoPlaSim baseline；② GPU 多卡 200k 节点级 GCM；③ 模拟数据训 ML 代理。前置 = ExoPlaSim GPU 化审计 + 网格-动力核匹配调研）→ [climate-gcm-plan.md](proposals/climate-gcm-plan.md) | 远期（资源到位可提级） | ★★→★★★ |
+| P3 | **EBM 全球冰反照率耦合**（EBM 全球均温锚定在固定反照率 0.3 的平衡温度加温室增温上，冰反照率只做局地降温，改倾角 14.9°→19.9° 时 EBM 全球均温仅变 0.06 K；现状按定标点用 GCM 重定标，复杂度与耦合面待评估）→ `solve_1d_ebm_temperature` / `ice_albedo_feedback` + nacrea design-notes 0012 §2 | 调研后估 | ★★★ |
 | P3 | **诊断缓存设计**（诊断脚本中间量落盘带版本号；已知属性：mesh 4 位小数截断致产物 vs rebuild 差 0.2pp） | 1 周 | ★★ |
 
 ---
@@ -239,6 +241,19 @@
     如需保留须修正后重跑。关联（未实锤但同晚验证过的潜在坑）：阶段指纹不含代码
     版本、`--only X --force` 不失效上游——语义改动必须 bump
     `_STAGE_SCHEMA_VERSIONS`（本次 clamp 已随改 bump terrain v3）。
+30. **ExoPlaSim T42 短波辐射浮点异常**（2026-10-13）— T42 多年积分会在短波辐射子程序
+    `swr_` 中触发 SIGFPE，单波段与双波段反照率、有无地形都会发生（712 ppm 双波段无地形第 8 年、
+    712 ppm 单波段带地形第 10 年、2000 ppm 单波段带地形第 7 年），缩短步长到 30 分钟只推迟不
+    根除，气候越暖越早；T21 在
+    140–6000 ppm 全部稳定，上游 3.4.2 与主干均未修复。另有 T42 在 6000 ppm 时 Kuo 对流方案
+    溢出。规避：打开物理滤波（`gp|exp|sp`）后 T42 多年积分稳定（地球与 nacrea 冷暖双臂最长
+    40 年无异常，地球偏差与 T21 一致），T42 确认已据此完成（0012 判决五）。调试编译定位（`-ggdb -Og -finit-real=snan`）：
+    陷阱在 `radmod.f90:1783` 计算水汽路径的 `SQRT(273./dt(:,jlev))`，即某格点气温已变为
+    ≤ 0 K 或非法值；短波辐射只是每步第一个对气温开方和除法的地方，根源在其上游的数值发散；
+    snan 初始化未在别处提前触发，可基本排除读取未初始化变量。待办：在源码副本中加逐步诊断
+    （全场最低气温及其格点），追到发散的过程后修复；属于改动 Fortran，需与上游未合并修复
+    （PR #62、issue #69）一并决定是否维护 ExoPlaSim fork（见
+    [climate-gcm-plan.md](proposals/climate-gcm-plan.md)「上游维护状况与 fork 策略」）。
 
 ### 工程卫生
 
