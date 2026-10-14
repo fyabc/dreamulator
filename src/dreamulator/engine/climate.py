@@ -26,6 +26,7 @@ from dreamulator.engine.physical_inputs import (
     resolve_and_apply_physical_parameters,
 )
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
+from dreamulator.models.branch import BranchMetadata, ClimateSource
 from dreamulator.models.layers import Layer
 from dreamulator.models.planet import Planet  # noqa: TCH001 — used at runtime
 
@@ -54,6 +55,7 @@ class ClimateEngine(BaseEngine):
     ]
     optional_input_files = [
         "terrain_config.yaml",  # → geological input (climate tuning knobs; defaults ok)
+        "gcm_fields.msgpack.gz",  # → climate input of a climate_source: gcm branch
     ]
     output_files = [
         "climate_summary.yaml",
@@ -162,26 +164,40 @@ class ClimateEngine(BaseEngine):
         # (M1-P0: 分支不回写父世界 / base-mesh isolation).
         mesh_target = _materialize_writable_mesh(mesh_source, self.maps_output_dir, planet.id)
 
-        # ---- 5. Run climate simulation ----
-        from dreamulator.map.climate_simulator import simulate_climate
+        # ---- 5. Climate: pinned GCM result, or simulate ----
+        # A climate_source: gcm branch is frozen to an imported ExoPlaSim result:
+        # never simulated (``force`` included), only written onto the inherited
+        # mesh so the downstream layers build from the GCM climate.
+        climate_source = self._climate_source()
+        gcm_provenance: dict[str, object] | None = None
+        if climate_source is ClimateSource.GCM:
+            pinned = self._apply_pinned_gcm_climate(mesh)
+            if isinstance(pinned, str):
+                return EngineResult(
+                    engine_name=self.name, success=False, warnings=[*warnings, pinned]
+                )
+            gcm_provenance = pinned
+            phase_timings: dict[str, float] = {}
+        else:
+            from dreamulator.map.climate_simulator import simulate_climate
 
-        # Override from parameters dict
-        pars = parameters or {}
-        for key in (
-            "lapse_rate_c_km",
-            "lat_gradient_c",
-            "hadley_extent_deg",
-            "polar_cell_start_deg",
-            "greenhouse_warming_K",
-            "evaporation_base_mm",
-            "wind_blocking_height_m",
-            "itcz_lag_days",
-        ):
-            if key in pars:
-                setattr(config, key, pars[key])
+            # Override from parameters dict
+            pars = parameters or {}
+            for key in (
+                "lapse_rate_c_km",
+                "lat_gradient_c",
+                "hadley_extent_deg",
+                "polar_cell_start_deg",
+                "greenhouse_warming_K",
+                "evaporation_base_mm",
+                "wind_blocking_height_m",
+                "itcz_lag_days",
+            ):
+                if key in pars:
+                    setattr(config, key, pars[key])
 
-        # simulate_climate returns per-phase wall-clock timings (M0)
-        phase_timings = simulate_climate(mesh, config)
+            # simulate_climate returns per-phase wall-clock timings (M0)
+            phase_timings = simulate_climate(mesh, config)
 
         # ---- 5b. Write climate data back to the source mesh file ----
         # The frontend reads the mesh (geological layer) and expects
@@ -198,6 +214,9 @@ class ClimateEngine(BaseEngine):
 
         # ---- 7. Write summary YAML ----
         summary = _build_climate_summary(mesh, planet, config)
+        summary["climate_source"] = climate_source.value
+        if gcm_provenance is not None:
+            summary["gcm_provenance"] = gcm_provenance
         self._write_yaml("climate_summary.yaml", summary)
 
         n_cells = mesh.num_cells
@@ -232,6 +251,7 @@ class ClimateEngine(BaseEngine):
                 "num_land_cells": n_land,
                 "koppen_class_counts": koppen_counts,
                 "phase_timings": phase_timings,
+                "climate_source": climate_source.value,
             },
         )
 
@@ -312,6 +332,48 @@ class ClimateEngine(BaseEngine):
         if len(parts) >= 2 and parts[0] == "branches":
             return parts[1]
         return None
+
+    def _climate_source(self) -> ClimateSource:
+        """The branch's ``climate_source`` (root builds always simulate)."""
+        branch = self._branch_name()
+        if branch is None:
+            return ClimateSource.ENGINE
+        branch_yaml = self.world_dir / "branches" / branch / "branch.yaml"
+        try:
+            data = yaml.safe_load(branch_yaml.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return ClimateSource.ENGINE
+        return BranchMetadata.model_validate(data).climate_source
+
+    def _apply_pinned_gcm_climate(self, mesh: CVTMesh) -> dict[str, object] | str:
+        """Write the branch's pinned GCM field set onto ``mesh``.
+
+        Returns the field set's provenance, or an error message when the field
+        set is missing, does not match its tracked provenance, or was computed
+        on a different mesh (the parent terrain changed since the GCM run).
+        """
+        from dreamulator.gcm.fields import (
+            GCM_FIELDS_FILENAME,
+            StaleFieldSetError,
+            apply_field_set,
+            load_field_set,
+        )
+
+        path = self.find_input(GCM_FIELDS_FILENAME)
+        if path is None:
+            return (
+                f"branch '{self._branch_name()}' pins its climate to a GCM result "
+                f"(climate_source: gcm) but layers/climate/input/{GCM_FIELDS_FILENAME} is "
+                "missing. Unpack the worlds-data release into data/worlds, or regenerate it "
+                "with scripts/climate/gcm/gcm_to_mesh.py --emit-fields."
+            )
+        try:
+            fs = load_field_set(path)
+            apply_field_set(mesh, fs)
+        except StaleFieldSetError as e:
+            return f"pinned GCM climate refused: {e}"
+        logger.info("Applied pinned GCM climate from %s", path)
+        return dict(fs.provenance)
 
     def _dev_data_recovery_hint(self, config: TerrainPipelineConfig, planet_id: str) -> str:
         """Recovery message for a missing mesh: prefer ``data fetch`` when indexed."""

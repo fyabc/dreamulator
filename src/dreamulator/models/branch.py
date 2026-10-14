@@ -6,10 +6,26 @@ from the fork point onwards can have custom data.
 """
 
 from datetime import datetime
+from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .layers import Layer
+
+
+class ClimateSource(StrEnum):
+    """Where a branch's climate layer comes from.
+
+    - ``engine``: the climate engine simulates it (default).
+    - ``gcm``: the climate is pinned to an imported ExoPlaSim result
+      (``layers/climate/input/gcm_fields.msgpack.gz``).  The engine never
+      simulates such a branch, ``--force`` included; it only writes the pinned
+      fields onto the inherited mesh so the downstream layers can build.
+    """
+
+    ENGINE = "engine"
+    GCM = "gcm"
 
 
 class BranchMetadata(BaseModel):
@@ -35,6 +51,20 @@ class BranchMetadata(BaseModel):
         description="Creation timestamp",
     )
     tags: list[str] = Field(default_factory=list, description="Tags for categorization")
+    climate_source: ClimateSource = Field(
+        default=ClimateSource.ENGINE,
+        description="engine = simulated climate; gcm = climate pinned to an imported GCM "
+        "result (requires fork_layer == climate)",
+    )
+
+    @model_validator(mode="after")
+    def _gcm_climate_forks_at_climate(self) -> Self:
+        # A pinned GCM climate only makes sense on a branch that owns the climate
+        # layer but inherits geology: forking earlier would rebuild the terrain the
+        # GCM was run on, forking later would inherit someone else's climate.
+        if self.climate_source is ClimateSource.GCM and self.fork_layer is not Layer.CLIMATE:
+            raise ValueError("climate_source 'gcm' requires fork_layer 'climate'")
+        return self
 
     def is_root(self) -> bool:
         """Check if this is a root world (not a branch)."""
