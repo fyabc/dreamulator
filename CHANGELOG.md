@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Nacrea 潮汐加热长期统计提案 0014（2026-10-14）**：百万年 coupled_ctl 积分表明，热流由轨道
+  自由倾角的受迫响应决定（热流 ∝ sin²ψ，响应比 ν/(α−ν) 随 J₂ 减小），在平静段（0.2–0.6 W/m²）
+  与活跃段（1.5–2.9 W/m²）之间无周期切换，现行 CTL 时滞的轨迹约 0.5–0.8 Myr 后长期越过 Io 级；
+  季节角摆幅与 ψ 成正比，活跃段约 14–26°。作者裁决以 CTL045 为主候选、灭绝阈值 2 W/m²，用集合
+  运行加极值统计外推重现期，参数方案待裁决（状态 proposed，正典暂不变）。新增知识文档
+  `planetary_science/tidal_heating.md`（热流尺度、宜居界限、生物影响分级、极值外推方法），
+  `satellite_system_stability.md` 新增 §10（卡西尼态受迫响应与季节角）。
 - **Nacrea GCM 定标按真实轨道重做（2026-10-14）**：此前的 ExoPlaSim 运行没有开启固定轨道，
   实际用的是地球的 Berger 轨道。全部 nacrea 运行改用真实轨道与正典近日点相位、以 T42 重跑
   （CO₂ 扫描 140–6000 ppm，加地球参照臂、冷暖双臂和三个轨道消融），设计笔记 0012 整体重写，
