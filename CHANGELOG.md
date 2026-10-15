@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-10-16
+
+### Fixed
+
+- **分支地图数据逐文件回退（2026-10-16）**：气候分叉分支的 `maps/` 目录只含气候产品，
+  地形产品（`map.yaml`、`elevation.png`、plates/features）只在根世界——目录级解析命中
+  分支目录后不做逐文件回退，造成三处症状，本版全部修复：
+  - API 模式（`dreamulator serve` / Vite 开发服务器）下分支地图的 meta 与 elevation
+    端点返回 404，前端显示「部分数据加载失败」。`api_routes/maps.py` 的十个读取端点
+    改为「分支覆盖 → 根世界」逐文件解析。
+  - 静态导出（`export_static.py`）用 `elevation.png` 是否存在作为行星目录门槛，
+    气候分叉分支被整体跳过，GitHub Pages 上该分支回退显示根世界的 EBM 气候。
+    分支模式改为接受无 elevation 的目录并逐文件导出。
+  - vite preview 的 SPA 回退给缺失文件返回 200 HTML（与 GitHub Pages 的真实 404
+    语义不同），前端分支→根回退不触发、页面解码卡死。静态导出现在把分支缺失的
+    文件从根世界逐文件填充，导出结果自洽、不依赖宿主服务器的 404 行为；分支模式
+    同时不再写空的 plates/features 占位文件（占位文件会以 200 空数据遮蔽根世界
+    的真实文件）。新增 12 个回归测试（API 8 个 + 导出 4 个）。
+- **服务器 t42n GCM 结果恢复（2026-10-16，`8491164`）**：恢复 0012 设计笔记的
+  t42n 扫描表/判决/范围表、0012 附录（30 个运行）与 GCM 字段集 provenance 中
+  被公开化清理合并 `9636839` 解冲突时静默回退为 t42o 的内容。
+
+### Added
+
+- **Blender 静帧腿接入 terrain-diffusion 主链（2026-10-16）**：`region_still.py`
+  的 `--terrain` 新增 `auto`/`refined` 选项（默认 `auto`），地形来源按
+  `refined-out/`（TD 细化）→ `gaea-out/`（Gaea）→ `input/`（引擎原始场）顺序
+  自动检测，TD 主链的 4K 静帧不再需要手动指定地形来源。
+
 ## [1.0.0] — 2026-10-16
 
 ### Added
