@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-10-16
+
 ### Added
 
 - **experiment-server 0.2.1 速度扰动变体**：`kick` 命令从已有运行的状态复制出新运行，给指定天体相对
