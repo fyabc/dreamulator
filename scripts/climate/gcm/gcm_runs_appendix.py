@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import json
 import shlex
 import sys
@@ -34,7 +35,10 @@ from dreamulator.gcm.runner import parse_orbit_block  # noqa: E402
 PARAM_FIELDS = {"radius", "gravity", "rotationperiod", "obliquity", "eccentricity", "flux",
                 "year", "pressure", "startemp", "pN2", "pO2", "pAr", "pCO2", "lonvernaleq",
                 "fixedorbit"}  # fmt: skip
-SURFACE_DIRS = (REPO / "private/gcm/surf",)
+# Surface files (.sra) live in the author-local GCM archive, which is not part of
+# the repository; set GCM_ARCHIVE to its root so recorded hashes can be resolved.
+_archive = os.environ.get("GCM_ARCHIVE")
+SURFACE_DIRS = (Path(_archive) / "surf",) if _archive else ()
 
 
 def _sha256(path: Path) -> str:

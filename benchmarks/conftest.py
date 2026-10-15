@@ -1,7 +1,7 @@
 """Shared fixtures for performance benchmarks.
 
 Run:  uv run pytest benchmarks -m benchmark
-See docs/usage/profiling.md §6 and private/plans/perf-profiling-and-optimization.md.
+See docs/design/profiling.md §4.
 
 Benchmarks are marked ``benchmark`` and excluded from the default test run
 (pyproject addopts). Size-parametrized micro-benchmarks expose accidental

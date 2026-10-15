@@ -46,6 +46,13 @@ data/worlds/*/simulations/
 /private/
 .env
 
+# User-created worlds (the getting-started tutorial has every reader create one
+# under data/worlds/) are local content, not repo content.  Only the canonical
+# shipped worlds are tracked — add a negation here when a new world goes canonical.
+data/worlds/*
+!data/worlds/earth/
+!data/worlds/nacrea/
+
 # Claude Code
 .claude/settings.local.json
 .claude/notes/

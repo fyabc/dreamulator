@@ -82,10 +82,6 @@ gpu = [
     "nvidia-cusparse-cu12>=12.5.10.65",
 ]
 
-[[tool.uv.index]]
-url = "https://pypi.org/simple"
-default = true
-
 [project.scripts]
 dreamulator = "dreamulator.cli:app"
 

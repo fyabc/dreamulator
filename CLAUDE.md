@@ -352,16 +352,16 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 | 层 | 文件 | 入库 | 记什么 | 不记什么 |
 |------|------|:--:|--------|---------|
-| 收集箱 | `private/todos/interlude.txt` | ✗ | 开发中闪现的原始想法，append-only | 不排序不细化；**条目全部落入执行层后即清空（总量优先）** |
-| 执行台 | `private/todos/today.md` | ✗ | 本周执行顺序、分支/构建状态快照、教训一行、进行中项指针 | 不复述 roadmap/proposal 条目；已完成项删掉换一行 ✅ 指针 |
+| 收集箱 | 本机私有收集箱文件（gitignored） | ✗ | 开发中闪现的原始想法，append-only | 不排序不细化；**条目全部落入执行层后即清空（总量优先）** |
+| 执行台 | 本机私有执行台文件（gitignored） | ✗ | 本周执行顺序、分支/构建状态快照、教训一行、进行中项指针 | 不复述 roadmap/proposal 条目；已完成项删掉换一行 ✅ 指针 |
 | 战略图 | `docs/design/roadmap.md` | ✓ | Phase 状态机、P0–P3 待办表（每格 ≤2 行 = 一句话摘要 + 指针）、技术债登记表 | 不记每日进度、不堆积已完成项、条目不写成段落 |
 | 设计文档 | `docs/design/proposals/`（未实现设计+方法论）、`docs/design/pipelines/`（已实现技术参考） | ✓ | 物理第一性推理 + 文献 + **当前**方案 + 已否证方向各一行 | **不堆积实验记录**（敏感性扫描/正负结果数值）；不记优先级/技术债（roadmap 的事）、不记每日进度（today 的事）；不写「已修正/旧值」叙事 |
 | 归档层 | `CHANGELOG.md`、各世界 `design-notes/`、git | ✓ | 已完成工作与最终决策的全部细节 | — |
 
-**分诊规则**（收集箱 → 其他层，开/收工时扫一眼）：当场可做 → today.md 待办；
+**分诊规则**（收集箱 → 其他层，开/收工时扫一眼）：当场可做 → 执行台待办；
 方向性/功能提案 → roadmap 一行（需展开则写 `proposals/`）；纯知识 → `docs/knowledge/`；
 无价值 → 删。roadmap.md 回答「接下来几个月做什么、为什么是这个顺序」，月更频率；
-每日待办只写 today.md，不进 roadmap。
+每日待办只写执行台文件，不进 roadmap。
 
 **proposal 生命周期**（「活的但稳定」的设计文档，非工作日志、非一次性总结）：
 立项（物理+方案）→ 迭代执行（**方案变更才动**，实验记录进 git/CHANGELOG）→ 完成后
@@ -483,8 +483,8 @@ cd frontend && npm run build:static:local && npm run preview:static
    - 输出数据结构和可视化方式
    - 单元测试中的验证基准
 4. **本地引擎资源**（开源 & 闭源）— 决策方案时对照它们的实现：
-   - `private/external-projects/` — 已克隆的外部项目（如 exoplasim_poc 实验）
-   - 本机安装的工具（如 `E:\Gleba-0.3.5\gleba.exe`，可用性/用途见 today.md 调研记录）
+   - 本机私有目录中克隆的外部项目（不随仓库分发，如 ExoPlaSim 实验副本）
+   - 本机安装的工具（如 Gleba；可用性/用途见本机任务记录）
    - 能跑则跑（对照输出），闭源则读文档/数据文件推断其方案
 
 **各层级参照工具速查**：
