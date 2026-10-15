@@ -68,10 +68,7 @@ def _roughness(
 
     rng = opensimplex.OpenSimplex(seed)
     xs = np.arange(n) / wavelength
-    field = sum(
-        (0.5**o) * rng.noise2array(xs * (2.0**o), xs * (2.0**o))
-        for o in range(3)
-    )
+    field = sum((0.5**o) * rng.noise2array(xs * (2.0**o), xs * (2.0**o)) for o in range(3))
     return np.asarray(amplitude * field / np.abs(field).max(), dtype=np.float64)
 
 
@@ -93,19 +90,23 @@ def priority_flood(
     """
     from ._erosion_kernels import _priority_flood_numba
 
-    return _priority_flood_numba(np.ascontiguousarray(dem, dtype=np.float64),
-                                 np.ascontiguousarray(land, dtype=np.uint8), eps, breach)
+    return _priority_flood_numba(
+        np.ascontiguousarray(dem, dtype=np.float64),
+        np.ascontiguousarray(land, dtype=np.uint8),
+        eps,
+        breach,
+    )
 
 
-def flow_accumulation(
-    order: np.ndarray, receiver: np.ndarray, weight: np.ndarray
-) -> np.ndarray:
+def flow_accumulation(order: np.ndarray, receiver: np.ndarray, weight: np.ndarray) -> np.ndarray:
     """Upstream sum of ``weight`` along receivers (downstream-first order)."""
     from ._erosion_kernels import _accumulate_numba
 
-    return _accumulate_numba(np.ascontiguousarray(order, dtype=np.int64),
-                             np.ascontiguousarray(receiver, dtype=np.int64),
-                             np.ascontiguousarray(weight, dtype=np.float64))
+    return _accumulate_numba(
+        np.ascontiguousarray(order, dtype=np.int64),
+        np.ascontiguousarray(receiver, dtype=np.int64),
+        np.ascontiguousarray(weight, dtype=np.float64),
+    )
 
 
 def spl_erode(
@@ -143,8 +144,9 @@ def spl_erode(
     for _ in range(steps):
         _priority_flood_inplace(h, land8, PF_EPS_M, filled, order, receiver)
         acc = flow_accumulation(order, receiver, rain)
-        _spl_step_numba(h, land8, order, receiver, acc, dt_yr, k_spl,
-                        SPL_M, uplift_m_yr, sea_level_m)
+        _spl_step_numba(
+            h, land8, order, receiver, acc, dt_yr, k_spl, SPL_M, uplift_m_yr, sea_level_m
+        )
         _hillslope_step(h, land8, HILLSLOPE_SIGMA_PX)
     return h, acc
 
@@ -160,8 +162,12 @@ def _hillslope_step(h: np.ndarray, land8: np.ndarray, sigma_px: float) -> None:
 
 
 def _priority_flood_inplace(
-    h: np.ndarray, land8: np.ndarray, eps: float,
-    filled: np.ndarray, order: np.ndarray, receiver: np.ndarray,
+    h: np.ndarray,
+    land8: np.ndarray,
+    eps: float,
+    filled: np.ndarray,
+    order: np.ndarray,
+    receiver: np.ndarray,
 ) -> None:
     from ._erosion_kernels import _priority_flood_into
 
@@ -236,7 +242,7 @@ def river_segments(
     riv_flat = rivers.reshape(-1)
     riv_cells = np.nonzero(riv_flat)[0]
     riv_set = set(riv_cells.tolist())
-    lake_flat = (lake.reshape(-1) if lake is not None else np.zeros(h * w, dtype=bool))
+    lake_flat = lake.reshape(-1) if lake is not None else np.zeros(h * w, dtype=bool)
     lake_set = {int(c) for c in np.nonzero(lake_flat)[0]}
     # Spill points: lake cells draining into a non-lake cell — the outlet
     # chain resumes just downstream of them.
@@ -334,10 +340,16 @@ def erode_region_pack(
     land = dem > float(meta["sea_level_m"])
     rain_w = rain / rain[land].mean()
 
-    h, acc = spl_erode(dem, land, rain_w, steps=steps, dt_yr=dt_yr, k_spl=k_spl,
-                       sea_level_m=float(meta["sea_level_m"]))
+    h, acc = spl_erode(
+        dem,
+        land,
+        rain_w,
+        steps=steps,
+        dt_yr=dt_yr,
+        k_spl=k_spl,
+        sea_level_m=float(meta["sea_level_m"]),
+    )
     rivers = river_mask(acc, land, river_threshold)
-
 
     out = pack_dir / "prog-out"
     out.mkdir(exist_ok=True)
@@ -367,10 +379,19 @@ def erode_region_pack(
         out / "flow-accum.png"
     )
     (out / "meta.json").write_text(
-        json.dumps({"height_gaea_png_range_m": [lo, hi], "sea_level_m": meta["sea_level_m"],
-                    "steps": steps, "dt_yr": dt_yr, "k_spl": k_spl,
-                    "river_threshold": river_threshold},
-                   ensure_ascii=False, indent=1) + "\n",
+        json.dumps(
+            {
+                "height_gaea_png_range_m": [lo, hi],
+                "sea_level_m": meta["sea_level_m"],
+                "steps": steps,
+                "dt_yr": dt_yr,
+                "k_spl": k_spl,
+                "river_threshold": river_threshold,
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return {

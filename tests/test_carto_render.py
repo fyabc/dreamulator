@@ -96,8 +96,6 @@ def test_render_carto_smoke(tmp_path: Path) -> None:
 def test_render_carto_hand_smoke(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     pytest.importorskip("opensimplex")
-    cr.render_carto(
-        _inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="手绘", hand=True
-    )
+    cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="手绘", hand=True)
     assert (tmp_path / "topo.hand.png").exists()
     assert not (tmp_path / "topo.png").exists()  # hand run replaces the output set

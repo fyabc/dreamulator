@@ -115,8 +115,9 @@ def test_no_hydrosphere_keeps_default(tmp_path: Path) -> None:
 def test_land_target_above_crust_supply_warns(tmp_path: Path) -> None:
     world = tmp_path / "world"
     _write_planets_yaml(world, water_coverage=0.4)  # land target 0.60
-    _write_terrain_config(world, {"plates": {"continental_fraction_min": 0.28,
-                                             "continental_fraction_max": 0.36}})
+    _write_terrain_config(
+        world, {"plates": {"continental_fraction_min": 0.28, "continental_fraction_max": 0.36}}
+    )
 
     cfg, warnings = _make_engine(world)._load_config({})
 
@@ -128,8 +129,9 @@ def test_land_target_above_crust_supply_warns(tmp_path: Path) -> None:
 def test_land_target_within_crust_supply_no_extra_warning(tmp_path: Path) -> None:
     world = tmp_path / "world"
     _write_planets_yaml(world, water_coverage=0.65)  # land target 0.35
-    _write_terrain_config(world, {"plates": {"continental_fraction_min": 0.38,
-                                             "continental_fraction_max": 0.48}})
+    _write_terrain_config(
+        world, {"plates": {"continental_fraction_min": 0.38, "continental_fraction_max": 0.48}}
+    )
 
     _, warnings = _make_engine(world)._load_config({})
 
