@@ -134,6 +134,9 @@ blender -b -P scripts/media/blender/region_still.py -- \
     --datadir <pack> --render still_4k.png --res 3840x2160     # 4K 静帧
 ```
 
+Blender 腿的地形来源自动检测：`refined-out/`（本链）→ `gaea-out/`（Gaea 链）
+→ `input/`（引擎原始场），`--terrain refined|gaea|input` 可强制指定。
+
 群系图（`--style biome`）的色表与前端 biome 图层同一事实源
 （palettes.json 的 whittaker 色表），海洋留白、图例只列窗内出现的类；
 植被纹理（colorize）按群系参数化 fBm 斑驳（森林细密、荒漠宽场、冰原

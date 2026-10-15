@@ -6,19 +6,21 @@ rebuildable from the data pack produced by ``dreamulator export region``
 kilometres (1 unit = 1 km) with a physically correct vertical scale by
 default (``--zscale`` exaggerates if a shot needs it).
 
-Terrain defaults to the Gaea-eroded heightfield (``gaea-out/rivers-h.exr``,
-falling back to ``erosion2-h.exr``; both are 8K builds storing the 0..1
-normalised height — metres = value × (max − min) + min over the pack's
-``height_gaea_png_range_m``).  ``--terrain input`` renders the raw engine
-pack instead.  EXR row order was verified against the 16-bit PNG twin
-(corr 0.997 same-order, 0.19 flipped).
+Terrain source is selected by ``--terrain`` (default ``auto``): the
+terrain-diffusion refined heightfield (``refined-out/height.meters.npy``,
+metres directly) wins when present, then the Gaea-eroded heightfield
+(``gaea-out/rivers-h.exr``, falling back to ``erosion2-h.exr``; both are 8K
+builds storing the 0..1 normalised height — metres = value × (max − min) +
+min over the pack's ``height_gaea_png_range_m``), then the raw engine pack
+(``input/height.meters.npy``).  EXR row order was verified against the
+16-bit PNG twin (corr 0.997 same-order, 0.19 flipped).
 
 Usage (Blender's bundled Python — args after ``--`` are ours):
     blender -b -P scripts/media/blender/region_still.py -- \
         --datadir private/video/nacrea-15_-100_2350km \
         [--render renders/still_001.png] [--res 1920x1080] \
         [--samples 256] [--zscale 1.0] [--mesh-res 2048] \
-        [--terrain gaea|input] [--subsurf 0] [--blend out.blend]
+        [--terrain auto|refined|gaea|input] [--subsurf 0] [--blend out.blend]
 
 Render: Cycles, device auto-fallback OptiX > CUDA > CPU, fixed seed 42,
 OpenImageDenoise — deterministic given the same pack and flags.
@@ -68,7 +70,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--zscale", type=float, default=1.0, help="Vertical exaggeration")
     p.add_argument("--mesh-res", type=int, default=2048, help="Terrain mesh resolution")
     p.add_argument(
-        "--terrain", choices=("gaea", "input"), default="gaea", help="Height source"
+        "--terrain",
+        choices=("auto", "refined", "gaea", "input"),
+        default="auto",
+        help="Height source (auto = refined-out → gaea-out → input)",
     )
     p.add_argument(
         "--subsurf", type=int, default=0, help="Subsurf levels (0 = off; each level ×16 faces)"
@@ -102,7 +107,16 @@ def _box_downsample(a: np.ndarray, target: int) -> np.ndarray:
 
 def load_height(args: argparse.Namespace, meta: dict) -> tuple[np.ndarray, str]:
     """Height in metres, row 0 = north, downsampled to ``--mesh-res``."""
-    if args.terrain == "gaea":
+    if args.terrain in ("auto", "refined"):
+        # terrain-diffusion chain: refined-out/height.meters.npy stores metres
+        # directly (f32), no range decode needed.
+        p = args.datadir / "refined-out" / "height.meters.npy"
+        if p.exists():
+            arr = np.load(p).astype(np.float64)
+            return _box_downsample(arr, args.mesh_res), "refined-out/height.meters.npy"
+        if args.terrain == "refined":
+            raise FileNotFoundError(f"--terrain refined but no {p}")
+    if args.terrain in ("auto", "gaea"):
         lo, hi = meta["height_gaea_png_range_m"]
         for name in GAEA_HEIGHT_EXRS:
             p = args.datadir / "gaea-out" / name
@@ -118,7 +132,9 @@ def load_height(args: argparse.Namespace, meta: dict) -> tuple[np.ndarray, str]:
             bpy.data.images.remove(img)
             raw = px[::-1, :, 0].astype(np.float64)
             return _box_downsample(raw * (hi - lo) + lo, args.mesh_res), name
-        print("[region_still] no Gaea EXR found — falling back to input heights")
+        if args.terrain == "gaea":
+            raise FileNotFoundError(f"--terrain gaea but no EXR under {args.datadir}/gaea-out")
+        print("[region_still] no refined/Gaea heightfield — falling back to input heights")
     arr = np.load(args.datadir / "input" / "height.meters.npy").astype(np.float64)
     return _box_downsample(arr, args.mesh_res), "input/height.meters.npy"
 
