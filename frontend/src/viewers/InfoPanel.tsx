@@ -206,6 +206,12 @@ export default function InfoPanel({
                   <div className="space-y-0.5">
                     <InfoRow
                       label={t('info.habitableZoneRange')}
+                      value={hz.runaway_greenhouse_au != null && hz.max_greenhouse_au != null
+                        ? `${sig(hz.runaway_greenhouse_au)} – ${sig(hz.max_greenhouse_au)} AU`
+                        : undefined}
+                    />
+                    <InfoRow
+                      label={t('info.habitableZoneRangeOptimistic')}
                       value={hz.recent_venus_au != null && hz.early_mars_au != null
                         ? `${sig(hz.recent_venus_au)} – ${sig(hz.early_mars_au)} AU`
                         : undefined}

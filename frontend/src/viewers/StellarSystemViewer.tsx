@@ -646,6 +646,8 @@ export default function StellarSystemViewer({
         <div className="flex items-center gap-1 text-xs text-gray-600">
           <span className="inline-block w-3 h-1.5 rounded-sm bg-green-600/30 border border-green-600/20" />
           {t('viewer.habitableZone')}
+          <span className="ml-2 inline-block w-3 border-t border-dashed border-green-500/40" />
+          {t('viewer.habitableZoneOptimistic')}
           <span className="ml-2 inline-block w-3 border-t border-dashed border-blue-500/40" />
           {t('viewer.snowLine')}
         </div>

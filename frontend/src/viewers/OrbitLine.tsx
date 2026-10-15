@@ -28,8 +28,8 @@ interface OrbitLineProps {
 export default function OrbitLine({
   orbit,
   parentPosition,
-  color = '#3a3a7a',
-  opacity = 0.35,
+  color = '#5a5ab8',
+  opacity = 0.55,
 }: OrbitLineProps) {
   const linePoints = useMemo(() => {
     const path = computeOrbitPath(orbit, 128) as [number, number, number][]
