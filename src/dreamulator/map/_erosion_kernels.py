@@ -65,8 +65,12 @@ def _priority_flood_numba(
 
 @numba.njit(cache=True)
 def _priority_flood_into(
-    dem: np.ndarray, land: np.ndarray, eps: float,
-    filled: np.ndarray, order: np.ndarray, receiver: np.ndarray,
+    dem: np.ndarray,
+    land: np.ndarray,
+    eps: float,
+    filled: np.ndarray,
+    order: np.ndarray,
+    receiver: np.ndarray,
     breach: bool = False,
 ) -> None:
     _pf_core(dem, land, eps, filled, order, receiver, breach)
@@ -74,8 +78,12 @@ def _priority_flood_into(
 
 @numba.njit(cache=True)
 def _pf_core(
-    dem: np.ndarray, land: np.ndarray, eps: float,
-    filled: np.ndarray, order: np.ndarray, receiver: np.ndarray,
+    dem: np.ndarray,
+    land: np.ndarray,
+    eps: float,
+    filled: np.ndarray,
+    order: np.ndarray,
+    receiver: np.ndarray,
     breach: bool,
 ) -> None:
     h, w = dem.shape
@@ -170,9 +178,7 @@ def _pf_core(
 
 
 @numba.njit(cache=True)
-def _accumulate_numba(
-    order: np.ndarray, receiver: np.ndarray, weight: np.ndarray
-) -> np.ndarray:
+def _accumulate_numba(order: np.ndarray, receiver: np.ndarray, weight: np.ndarray) -> np.ndarray:
     out = weight.copy()
     flat = out.reshape(-1)
     for a in range(order.size - 1, -1, -1):
@@ -187,8 +193,15 @@ def _accumulate_numba(
 
 @numba.njit(cache=True)
 def _spl_step_numba(
-    h: np.ndarray, land: np.ndarray, order: np.ndarray, receiver: np.ndarray,
-    acc: np.ndarray, dt: float, k: float, m: float, uplift: float,
+    h: np.ndarray,
+    land: np.ndarray,
+    order: np.ndarray,
+    receiver: np.ndarray,
+    acc: np.ndarray,
+    dt: float,
+    k: float,
+    m: float,
+    uplift: float,
     sea_level: float,
 ) -> None:
     """One implicit Braun–Willett SPL step over the drainage order."""

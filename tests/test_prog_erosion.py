@@ -129,9 +129,7 @@ def test_lake_mask_and_river_chain_stops_at_lake() -> None:
     weight = np.where(land, 1.0, 0.0)
     acc = flow_accumulation(order, rec, weight)
     rivers = river_mask(acc, land, 10)
-    segs, _flows = river_segments(
-        rivers, rec, acc, 1.0, lake=lakes
-    )
+    segs, _flows = river_segments(rivers, rec, acc, 1.0, lake=lakes)
     # No segment endpoint sits inside a lake.
     for a, b in segs:
         for px, py in (a, b):

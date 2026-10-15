@@ -140,13 +140,24 @@ def _mountains(ax: Axes, height: np.ndarray, sea: np.ndarray, km: float, seed: i
         cx, cy = x * kmpp, (n - 1 - y) * kmpp
         w = h_km * 1.15
         ax.add_patch(
-            Polygon([(cx - w, cy), (cx - w * 0.12, cy + h_km), (cx + w, cy)],
-                    closed=True, fill=False, edgecolor=MOUNTAIN_INK, lw=0.8, zorder=5)
+            Polygon(
+                [(cx - w, cy), (cx - w * 0.12, cy + h_km), (cx + w, cy)],
+                closed=True,
+                fill=False,
+                edgecolor=MOUNTAIN_INK,
+                lw=0.8,
+                zorder=5,
+            )
         )
         ax.add_patch(
-            Polygon([(cx - w * 0.12, cy + h_km), (cx + w, cy), (cx + w * 0.35, cy)],
-                    closed=True, facecolor=MOUNTAIN_SHADE, edgecolor="none",
-                    alpha=0.55, zorder=4)
+            Polygon(
+                [(cx - w * 0.12, cy + h_km), (cx + w, cy), (cx + w * 0.35, cy)],
+                closed=True,
+                facecolor=MOUNTAIN_SHADE,
+                edgecolor="none",
+                alpha=0.55,
+                zorder=4,
+            )
         )
     return len(ys)
 
@@ -179,16 +190,26 @@ def _trees(
 def _rivers(ax: Axes, rivers: np.ndarray, km: float) -> int:
     """Broad indicative channels: only the deep mask contours get ink."""
     cs = ax.contour(
-        rivers, extent=(0, km, 0, km), origin="upper", levels=[RIVER_LEVEL, 0.55],
-        colors=[RIVER_BLUE], linewidths=[RIVER_TAPER_LW, RIVER_LW], zorder=6,
+        rivers,
+        extent=(0, km, 0, km),
+        origin="upper",
+        levels=[RIVER_LEVEL, 0.55],
+        colors=[RIVER_BLUE],
+        linewidths=[RIVER_TAPER_LW, RIVER_LW],
+        zorder=6,
     )
     return len(cs.get_paths())
 
 
 def _coastline(ax: Axes, sea: np.ndarray, km: float) -> None:
     ax.contour(
-        sea.astype(float), extent=(0, km, 0, km), origin="upper", levels=[0.5],
-        colors=[INK], linewidths=[1.4], zorder=6,
+        sea.astype(float),
+        extent=(0, km, 0, km),
+        origin="upper",
+        levels=[0.5],
+        colors=[INK],
+        linewidths=[1.4],
+        zorder=6,
     )
 
 
@@ -202,10 +223,19 @@ def _title_banner(ax: Axes, km: float, title: str) -> None:
     tail_l = [(cx - w, y - h), (cx - w, y + h), (cx - w - km * 0.022, y)]
     tail_r = [(cx + w, y - h), (cx + w, y + h), (cx + w + km * 0.022, y)]
     for pts in (body, tail_l, tail_r):
-        ax.add_patch(Polygon(pts, closed=True, facecolor=BANNER_RED, edgecolor=GOLD,
-                             lw=1.2, zorder=9))
-    ax.text(cx, y - h * 0.28, title, fontsize=TITLE_SIZE, color="#e8d9a8",
-            ha="center", va="center", zorder=10)
+        ax.add_patch(
+            Polygon(pts, closed=True, facecolor=BANNER_RED, edgecolor=GOLD, lw=1.2, zorder=9)
+        )
+    ax.text(
+        cx,
+        y - h * 0.28,
+        title,
+        fontsize=TITLE_SIZE,
+        color="#e8d9a8",
+        ha="center",
+        va="center",
+        zorder=10,
+    )
 
 
 def _compass_rose(ax: Axes, km: float) -> None:
@@ -221,12 +251,13 @@ def _compass_rose(ax: Axes, km: float) -> None:
             ang = math.pi / 8 * i + math.pi / 2
             r = r0 * (long_frac if i % 2 == 0 else 0.42)
             pts.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
-        ax.add_patch(Polygon(pts, closed=True, facecolor=color,
-                             edgecolor="#3a2818", lw=0.5, zorder=z))
-    ax.add_patch(Circle((cx, cy), r0 * 0.10, facecolor="#e8d9a8",
-                        edgecolor="#3a2818", lw=0.6, zorder=10))
-    ax.text(cx, cy + r0 * 1.18, "N", fontsize=15, color="#3a2818",
-            ha="center", zorder=10)
+        ax.add_patch(
+            Polygon(pts, closed=True, facecolor=color, edgecolor="#3a2818", lw=0.5, zorder=z)
+        )
+    ax.add_patch(
+        Circle((cx, cy), r0 * 0.10, facecolor="#e8d9a8", edgecolor="#3a2818", lw=0.6, zorder=10)
+    )
+    ax.text(cx, cy + r0 * 1.18, "N", fontsize=15, color="#3a2818", ha="center", zorder=10)
 
 
 def _frame(ax: Axes, km: float) -> None:
@@ -235,14 +266,33 @@ def _frame(ax: Axes, km: float) -> None:
 
     for off, lw in ((0.012, 1.6), (0.026, 0.7)):
         x0, x1 = km * off, km * (1 - off)
-        ax.add_patch(Polygon([(x0, x0), (x1, x0), (x1, x1), (x0, x1)], closed=True,
-                             fill=False, edgecolor=INK, lw=lw, zorder=8))
+        ax.add_patch(
+            Polygon(
+                [(x0, x0), (x1, x0), (x1, x1), (x0, x1)],
+                closed=True,
+                fill=False,
+                edgecolor=INK,
+                lw=lw,
+                zorder=8,
+            )
+        )
     d = km * 0.008
-    for cx, cy in ((km * 0.019, km * 0.019), (km * 0.981, km * 0.019),
-                   (km * 0.019, km * 0.981), (km * 0.981, km * 0.981)):
-        ax.add_patch(Polygon([(cx - d, cy), (cx, cy + d), (cx + d, cy), (cx, cy - d)],
-                             closed=True, facecolor=GOLD, edgecolor="#3a2818",
-                             lw=0.5, zorder=8))
+    for cx, cy in (
+        (km * 0.019, km * 0.019),
+        (km * 0.981, km * 0.019),
+        (km * 0.019, km * 0.981),
+        (km * 0.981, km * 0.981),
+    ):
+        ax.add_patch(
+            Polygon(
+                [(cx - d, cy), (cx, cy + d), (cx + d, cy), (cx, cy - d)],
+                closed=True,
+                facecolor=GOLD,
+                edgecolor="#3a2818",
+                lw=0.5,
+                zorder=8,
+            )
+        )
 
 
 def render_medieval(

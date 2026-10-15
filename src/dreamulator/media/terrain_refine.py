@@ -27,7 +27,8 @@ TD_SEED = 42
 #: Target refined grid resolution: pack grid × this factor.
 REFINE_FACTOR = 2
 
-_TD_DRIVER = r'''
+_TD_DRIVER = (
+    r"""
 import sys
 from pathlib import Path
 
@@ -82,7 +83,10 @@ elif mode == "tonpy":
     im = Image.fromarray((a + 32768).astype(np.int32))
     im = im.resize((size, size), Image.LANCZOS)
     np.save(npy, (np.asarray(im).astype(np.float64) - 32768).astype(np.float32))
-'''.replace("{km}", str(TD_COARSE_KM)).replace("{snr}", TD_SNR).replace("{seed}", str(TD_SEED))
+""".replace("{km}", str(TD_COARSE_KM))
+    .replace("{snr}", TD_SNR)
+    .replace("{seed}", str(TD_SEED))
+)
 
 
 def _td_python(td_repo: Path) -> Path:
@@ -111,8 +115,9 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     mesh = load_cvt_mesh_model(mesh_file)
     radius_km = read_radius_km(map_dir)
     grid_w, grid_h = 4096, 2048
-    window = region_window(meta["center_lat"], meta["center_lon"], meta["span_km"],
-                           radius_km, grid_w, grid_h)
+    window = region_window(
+        meta["center_lat"], meta["center_lon"], meta["span_km"], radius_km, grid_w, grid_h
+    )
     indices_full = export_cell_index_grid(mesh, grid_w, grid_h)
     indices = indices_full[window.y0 : window.y1, window.x0 : window.x1]
 
@@ -150,13 +155,9 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     if coast_warp:
         from dreamulator.media.satellite_color import apply_boundary_warp
 
-        cell_px = float(meta["cell_pitch_km"]) / (
-            float(meta["extent_km"]["x"]) / window.grid_w
-        )
+        cell_px = float(meta["cell_pitch_km"]) / (float(meta["extent_km"]["x"]) / window.grid_w)
         out_fields = {
-            name: apply_boundary_warp(
-                arr, cell_px, order=0 if name == "elevation_m" else 1
-            )
+            name: apply_boundary_warp(arr, cell_px, order=0 if name == "elevation_m" else 1)
             for name, arr in out_fields.items()
         }
     for name, arr in out_fields.items():
@@ -175,8 +176,15 @@ def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif:
     driver.write_text(_TD_DRIVER, encoding="utf-8")
     tiff_dir = tmp / "cond"
     subprocess.run(
-        [str(py), str(driver), "condition", str(tmp / "fields"), str(tiff_dir),
-         str(span_km), str(n)],
+        [
+            str(py),
+            str(driver),
+            "condition",
+            str(tmp / "fields"),
+            str(tiff_dir),
+            str(span_km),
+            str(n),
+        ],
         check=True,
     )
     subprocess.run(
@@ -218,8 +226,14 @@ def refine_region_pack(
 
     res = pack_res * REFINE_FACTOR
     subprocess.run(
-        [str(py), str(tmp / "_td_driver.py"), "tonpy", str(raw_tif),
-         str(tmp / "refined.npy"), str(res)],
+        [
+            str(py),
+            str(tmp / "_td_driver.py"),
+            "tonpy",
+            str(raw_tif),
+            str(tmp / "refined.npy"),
+            str(res),
+        ],
         check=True,
     )
     h = np.load(tmp / "refined.npy").astype(np.float64)
@@ -244,9 +258,7 @@ def refine_region_pack(
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    segs, flows = river_segments(
-        rivers, rec, acc, float(meta["extent_km"]["x"]) / res, lake=lakes
-    )
+    segs, flows = river_segments(rivers, rec, acc, float(meta["extent_km"]["x"]) / res, lake=lakes)
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
     rivers &= ~lakes

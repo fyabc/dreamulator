@@ -54,8 +54,9 @@ def test_jitter_grid_respects_mask_and_spacing() -> None:
 
 
 def test_parchment_ranges_and_scorch() -> None:
-    rgb = mr._parchment(128, np.zeros((128, 128), dtype=bool),
-                        np.zeros((128, 128)), (-400.0, 8000.0), seed=1)
+    rgb = mr._parchment(
+        128, np.zeros((128, 128), dtype=bool), np.zeros((128, 128)), (-400.0, 8000.0), seed=1
+    )
     assert rgb.shape == (128, 128, 3)
     assert rgb.min() >= 0.0 and rgb.max() <= 1.0
     # Corners are scorched darker than the centre.

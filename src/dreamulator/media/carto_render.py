@@ -94,8 +94,26 @@ HAND_FONT_STACK = ["KaiTi", "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "De
 #: at these rounded boundaries (survey convention: legends list round values
 #: that occur in the sheet, not the palette's anchored fractions).
 LEGEND_LADDER_M = [
-    -6000.0, -4000.0, -2000.0, -1000.0, -500.0, -200.0, -80.0, -30.0, -10.0, 0.0,
-    200.0, 500.0, 1000.0, 1500.0, 2000.0, 3000.0, 4000.0, 5000.0, 6000.0, 8000.0,
+    -6000.0,
+    -4000.0,
+    -2000.0,
+    -1000.0,
+    -500.0,
+    -200.0,
+    -80.0,
+    -30.0,
+    -10.0,
+    0.0,
+    200.0,
+    500.0,
+    1000.0,
+    1500.0,
+    2000.0,
+    3000.0,
+    4000.0,
+    5000.0,
+    6000.0,
+    8000.0,
 ]
 
 
@@ -121,9 +139,7 @@ def _lut_rgb(
     idx = np.where(height_m >= 0, np.ceil(frac), np.rint(frac))
     idx = np.clip(idx, 0, len(lut) - 1)
     rgb = lut[idx.astype(np.int32)] / 255.0
-    sea_idx = np.clip(
-        np.rint((-sea_depth_m - lo) / (hi - lo) * (len(lut) - 1)), 0, len(lut) - 1
-    )
+    sea_idx = np.clip(np.rint((-sea_depth_m - lo) / (hi - lo) * (len(lut) - 1)), 0, len(lut) - 1)
     rgb[sea] = lut[sea_idx[sea].astype(np.int32)] / 255.0
     return rgb
 
@@ -195,7 +211,7 @@ def _hand_tint_pass(rgb: np.ndarray, res: int) -> np.ndarray:
     # Misregistration: the colour plate drifts off the ink plate — shift the
     # chroma layers a hair in opposite directions, luminance stays put.
     d = MISREGISTER_PX
-    yy, xx = np.mgrid[0:rgb.shape[0], 0:rgb.shape[1]]
+    yy, xx = np.mgrid[0 : rgb.shape[0], 0 : rgb.shape[1]]
     r = map_coordinates(rgb[..., 0], [yy + d, xx + d], order=1, mode="nearest")
     b = map_coordinates(rgb[..., 2], [yy - d, xx - d], order=1, mode="nearest")
     rgb[..., 0], rgb[..., 2] = r, b
@@ -334,16 +350,18 @@ def _ink_restroke(ax: Axes, cs: object, rgb: tuple[int, int, int], px_km: float,
                 piece = v[a : b + 1]
                 segs.append(piece)
                 mid = piece[len(piece) // 2]
-                n = rng.noise2array(
-                    np.array([mid[0] / wl_km]), np.array([mid[1] / wl_km])
-                )[0, 0]
+                n = rng.noise2array(np.array([mid[0] / wl_km]), np.array([mid[1] / wl_km]))[0, 0]
                 lws.append(1.0 + INK_LW_JITTER * n)
             if not segs:
                 continue
             ax.add_collection(
                 LineCollection(
-                    segs, colors=[base_hex], linewidths=lws, zorder=6,
-                    capstyle="round", joinstyle="round",
+                    segs,
+                    colors=[base_hex],
+                    linewidths=lws,
+                    zorder=6,
+                    capstyle="round",
+                    joinstyle="round",
                 )
             )
     # Blank the uniform source ink (geometry object stays for clabel).
@@ -377,9 +395,16 @@ def render_carto(
     # CJK-capable stack first (titles carry the body's Chinese name; without
     # this the glyphs render as boxes on a default matplotlib install).
     # Hand-drawn mode prefers KaiTi (brush script) for the annotations.
-    stack = HAND_FONT_STACK if hand else [
-        "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans",
-    ]
+    stack = (
+        HAND_FONT_STACK
+        if hand
+        else [
+            "Microsoft YaHei",
+            "SimHei",
+            "Noto Sans CJK SC",
+            "DejaVu Sans",
+        ]
+    )
     matplotlib.rcParams["font.sans-serif"] = stack
     matplotlib.rcParams["axes.unicode_minus"] = False
     import matplotlib.pyplot as plt
@@ -408,12 +433,22 @@ def render_carto(
     px_km = inputs.km_per_px * f
     if contours:
         cs_minor = ax.contour(
-            height, extent=extent, origin="upper", levels=minor,
-            colors=[_hex(CONTOUR_MINOR_COLOR)], linewidths=CONTOUR_MINOR_LW, zorder=3,
+            height,
+            extent=extent,
+            origin="upper",
+            levels=minor,
+            colors=[_hex(CONTOUR_MINOR_COLOR)],
+            linewidths=CONTOUR_MINOR_LW,
+            zorder=3,
         )
         cs_major = ax.contour(
-            height, extent=extent, origin="upper", levels=major,
-            colors=[_hex(CONTOUR_MAJOR_COLOR)], linewidths=CONTOUR_MAJOR_LW, zorder=4,
+            height,
+            extent=extent,
+            origin="upper",
+            levels=major,
+            colors=[_hex(CONTOUR_MAJOR_COLOR)],
+            linewidths=CONTOUR_MAJOR_LW,
+            zorder=4,
         )
         # Inked-line feel: displace contour vertices along a low-frequency
         # noise field (amplitude ≪ one contour interval in plan distance).
@@ -425,8 +460,9 @@ def render_carto(
             _ink_restroke(ax, cs_minor, CONTOUR_MINOR_COLOR, px_km, WOBBLE_SEED + 2)
             _ink_restroke(ax, cs_major, CONTOUR_MAJOR_COLOR, px_km, WOBBLE_SEED + 3)
         if contour_labels:
-            ax.clabel(cs_major, fmt=lambda m: f"{m:.0f}",
-                      fontsize=CONTOUR_LABEL_SIZE, colors="#6c4a28")
+            ax.clabel(
+                cs_major, fmt=lambda m: f"{m:.0f}", fontsize=CONTOUR_LABEL_SIZE, colors="#6c4a28"
+            )
 
     if inputs.river_segments is not None and inputs.river_segment_flows is not None:
         # Vector channels (flow-graded width): mask-contour rendering of the
@@ -441,14 +477,24 @@ def render_carto(
         w_n = np.clip(flows / max(flows.max(), 1.0), 0.0, 1.0) ** 0.5
         widths = 0.25 + 1.15 * w_n
         seg_list = [tuple(map(tuple, seg)) for seg in inputs.river_segments]
-        ax.add_collection(LineCollection(
-            seg_list, colors=[_hex(RIVER_COLOR)],
-            linewidths=widths, zorder=5, capstyle="round",
-        ))
+        ax.add_collection(
+            LineCollection(
+                seg_list,
+                colors=[_hex(RIVER_COLOR)],
+                linewidths=widths,
+                zorder=5,
+                capstyle="round",
+            )
+        )
     elif rivers.any():
         ax.contour(
-            rivers, extent=extent, origin="upper", levels=[0.02, 0.2, 0.5],
-            colors=[_hex(RIVER_COLOR)], linewidths=[RIVER_MIN_LW, 0.55, 0.8], zorder=5,
+            rivers,
+            extent=extent,
+            origin="upper",
+            levels=[0.02, 0.2, 0.5],
+            colors=[_hex(RIVER_COLOR)],
+            linewidths=[RIVER_MIN_LW, 0.55, 0.8],
+            zorder=5,
         )
 
     ax.set_xlim(0, km)
@@ -506,25 +552,35 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
         return f"{abs(v):g}°{hemi[0 if v >= 0 else 1]}"
 
     half_lat, half_lon = lat_span / 2, lon_span / 2
-    lats = np.arange(
-        math.ceil((center_lat - half_lat) / step) * step, center_lat + half_lat, step
-    )
-    lons = np.arange(
-        math.ceil((center_lon - half_lon) / step) * step, center_lon + half_lon, step
-    )
+    lats = np.arange(math.ceil((center_lat - half_lat) / step) * step, center_lat + half_lat, step)
+    lons = np.arange(math.ceil((center_lon - half_lon) / step) * step, center_lon + half_lon, step)
     pad = km * 0.012
     for lat in lats:
         y = (lat - center_lat) * 111.19 + km / 2
-        ax.plot([0, km], [y, y], ls=(0, (6, 4)), color=GRATICULE_COLOR,
-                lw=GRATICULE_LW, zorder=7)
-        ax.text(km + pad * 0.3, y, deg_fmt(lat, True), fontsize=SCALEBAR_SIZE * 0.85,
-                ha="left", va="center", color=GRATICULE_COLOR, zorder=7)
+        ax.plot([0, km], [y, y], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
+        ax.text(
+            km + pad * 0.3,
+            y,
+            deg_fmt(lat, True),
+            fontsize=SCALEBAR_SIZE * 0.85,
+            ha="left",
+            va="center",
+            color=GRATICULE_COLOR,
+            zorder=7,
+        )
     for lon in lons:
         x = (lon - center_lon) * 111.19 * math.cos(math.radians(center_lat)) + km / 2
-        ax.plot([x, x], [0, km], ls=(0, (6, 4)), color=GRATICULE_COLOR,
-                lw=GRATICULE_LW, zorder=7)
-        ax.text(x, -pad, deg_fmt(lon, False), fontsize=SCALEBAR_SIZE * 0.85,
-                ha="center", va="top", color=GRATICULE_COLOR, zorder=7)
+        ax.plot([x, x], [0, km], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
+        ax.text(
+            x,
+            -pad,
+            deg_fmt(lon, False),
+            fontsize=SCALEBAR_SIZE * 0.85,
+            ha="center",
+            va="top",
+            color=GRATICULE_COLOR,
+            zorder=7,
+        )
     return step
 
 
@@ -558,15 +614,38 @@ def _elevation_legend(ax: Axes, km: float, rng_m: tuple[float, float]) -> None:
     w, h = km * 0.013, km * 0.020
     for i in range(len(edges) - 1):
         ax.add_patch(
-            Rectangle((x0, y0 + i * h), w, h, facecolor=_hex(lut_at(edges[i])),
-                      edgecolor="#5a4632", linewidth=0.6, zorder=8)
+            Rectangle(
+                (x0, y0 + i * h),
+                w,
+                h,
+                facecolor=_hex(lut_at(edges[i])),
+                edgecolor="#5a4632",
+                linewidth=0.6,
+                zorder=8,
+            )
         )
     for i, elev in enumerate(edges[1:-1]):
-        ax.text(x0 + w + km * 0.006, y0 + (i + 1) * h, f"{elev:.0f}", fontsize=SCALEBAR_SIZE,
-                ha="left", va="center", color="#1a1a1a", zorder=8)
+        ax.text(
+            x0 + w + km * 0.006,
+            y0 + (i + 1) * h,
+            f"{elev:.0f}",
+            fontsize=SCALEBAR_SIZE,
+            ha="left",
+            va="center",
+            color="#1a1a1a",
+            zorder=8,
+        )
     n_bands = len(edges) - 1
-    ax.text(x0 + w / 2, y0 + n_bands * h + km * 0.008, "高程 / m",
-            fontsize=LEGEND_SIZE, ha="center", va="bottom", color="#1a1a1a", zorder=8)
+    ax.text(
+        x0 + w / 2,
+        y0 + n_bands * h + km * 0.008,
+        "高程 / m",
+        fontsize=LEGEND_SIZE,
+        ha="center",
+        va="bottom",
+        color="#1a1a1a",
+        zorder=8,
+    )
 
 
 def _scale_bar(ax: Axes, km: float) -> None:
@@ -579,14 +658,28 @@ def _scale_bar(ax: Axes, km: float) -> None:
     x0, y0, h = km * 0.90 - n_seg * seg_km, km * 0.05, km * 0.007
     for i in range(n_seg):
         ax.add_patch(
-            Rectangle((x0 + i * seg_km, y0), seg_km, h,
-                      facecolor="#1a1a1a" if i % 2 == 0 else "#f8f4e9",
-                      edgecolor="#1a1a1a", linewidth=0.7, zorder=8)
+            Rectangle(
+                (x0 + i * seg_km, y0),
+                seg_km,
+                h,
+                facecolor="#1a1a1a" if i % 2 == 0 else "#f8f4e9",
+                edgecolor="#1a1a1a",
+                linewidth=0.7,
+                zorder=8,
+            )
         )
-    ax.text(x0, y0 - km * 0.024, "0", fontsize=SCALEBAR_SIZE, ha="center",
-            color="#1a1a1a", zorder=8)
-    ax.text(x0 + n_seg * seg_km, y0 - km * 0.024, f"{n_seg * seg_km:.0f} km",
-            fontsize=SCALEBAR_SIZE, ha="center", color="#1a1a1a", zorder=8)
+    ax.text(
+        x0, y0 - km * 0.024, "0", fontsize=SCALEBAR_SIZE, ha="center", color="#1a1a1a", zorder=8
+    )
+    ax.text(
+        x0 + n_seg * seg_km,
+        y0 - km * 0.024,
+        f"{n_seg * seg_km:.0f} km",
+        fontsize=SCALEBAR_SIZE,
+        ha="center",
+        color="#1a1a1a",
+        zorder=8,
+    )
 
 
 def _nice_segment(v: float) -> float:
@@ -603,15 +696,28 @@ def _north_arrow(ax: Axes, km: float) -> None:
     cx, tip = km * 0.945, km * 0.945
     w, dh = km * 0.009, km * 0.030
     ax.add_patch(
-        Polygon([(cx, tip), (cx - w, tip - dh), (cx, tip - dh * 0.55)],
-                closed=True, facecolor="#1a1a1a", edgecolor="#1a1a1a", lw=0.6, zorder=9)
+        Polygon(
+            [(cx, tip), (cx - w, tip - dh), (cx, tip - dh * 0.55)],
+            closed=True,
+            facecolor="#1a1a1a",
+            edgecolor="#1a1a1a",
+            lw=0.6,
+            zorder=9,
+        )
     )
     ax.add_patch(
-        Polygon([(cx, tip), (cx + w, tip - dh), (cx, tip - dh * 0.55)],
-                closed=True, facecolor="#f8f4e9", edgecolor="#1a1a1a", lw=0.6, zorder=9)
+        Polygon(
+            [(cx, tip), (cx + w, tip - dh), (cx, tip - dh * 0.55)],
+            closed=True,
+            facecolor="#f8f4e9",
+            edgecolor="#1a1a1a",
+            lw=0.6,
+            zorder=9,
+        )
     )
-    ax.text(cx, tip + km * 0.008, "N", fontsize=16, color="#1a1a1a",
-            ha="center", va="bottom", zorder=9)
+    ax.text(
+        cx, tip + km * 0.008, "N", fontsize=16, color="#1a1a1a", ha="center", va="bottom", zorder=9
+    )
 
 
 def planet_display_name(data_dir: Path, world: str, planet_id: str) -> str:
@@ -658,19 +764,12 @@ def carto_region(
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
     world = str(meta["source"].get("world", "?"))
     planet_id = str(meta["source"].get("planet", ""))
-    name = (
-        planet_display_name(data_dir or Path("data"), world, planet_id)
-        if planet_id
-        else world
-    )
+    name = planet_display_name(data_dir or Path("data"), world, planet_id) if planet_id else world
     center_lat, center_lon = float(meta["center_lat"]), float(meta["center_lon"])
     if title is None:
         lat_ns = "N" if center_lat >= 0 else "S"
         lon_ew = "E" if center_lon >= 0 else "W"
-        title = (
-            f"{name} —— "
-            f"{abs(center_lat):.0f}°{lat_ns} {abs(center_lon):.0f}°{lon_ew} 附近"
-        )
+        title = f"{name} —— {abs(center_lat):.0f}°{lat_ns} {abs(center_lon):.0f}°{lon_ew} 附近"
     # Unclamped engine range drives the shared palette (seafloor-clamped
     # Gaea heights would misplace the min-anchored deep-water gradient).
     # Palette anchor range: the planet-wide elevation range when the pack
@@ -687,7 +786,15 @@ def carto_region(
             rng_lo = float(meta["sea_level_m"]) - 1000.0
         rng_m = (rng_lo, rng_hi)
     return render_carto(
-        inputs, out_dir or pack_dir / "carto", rng_m, res=res, dpi=dpi, title=title,
-        contour_labels=contour_labels, contours=contours, hand=hand,
-        center_lat=center_lat, center_lon=center_lon,
+        inputs,
+        out_dir or pack_dir / "carto",
+        rng_m,
+        res=res,
+        dpi=dpi,
+        title=title,
+        contour_labels=contour_labels,
+        contours=contours,
+        hand=hand,
+        center_lat=center_lat,
+        center_lon=center_lon,
     )
