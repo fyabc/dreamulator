@@ -166,6 +166,6 @@ Gyr 尺度的直接积分不可行，所以用极值统计从百万年记录外�
 - [附录：轨道实验矩阵与统计明细](0014-appendix-orbit-runs.md)。
 - 普适机制：`docs/knowledge/astrophysics/satellite_system_stability.md` §10；热流尺度、宜居界限、
   生物影响分级与极值外推方法：`docs/knowledge/planetary_science/tidal_heating.md`。
-- 私有台账（不入库）：实验工作目录 `private/experiments/nacrea-python/`（运行与检查点），调参台账
-  `tuning-notes.md`，统计脚本 `private/experiments/tools/`（`orbit_stats.py`、`orbit_segments.py`、
+- 私有台账（不入库）：实验运行、检查点、调参台账与统计脚本都在作者本机的实验
+  存档中（不随仓库分发；统计脚本为 `orbit_stats.py`、`orbit_segments.py`、
   `season_vs_heat.py`、`heat_tail.py`）。

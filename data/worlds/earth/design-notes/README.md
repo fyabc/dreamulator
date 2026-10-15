@@ -21,4 +21,4 @@ Venus 10k（VCD ~1.9°）· Titan 3k（TAM T21 5.6°）。
 | UCC worked examples（Earth/Mars/Moon/Venus/Titan） | — | **已迁至 `docs/ucc/examples/`**（2026-09-24 文档收拢） | `scripts/climate/ucc_examples_earth.py` / `scripts/solar/ucc_examples_solar.py` |
 
 均为脚本生成，勿手改。导入管线：`scripts/earth/`（地球）+ `scripts/solar/`
-（四天体；数据缓存 `private/tmp/solar/`，LMD 抓取用 `fetch_lmd_slices.py`）。
+（四天体；数据源缓存于作者本机临时目录，LMD 抓取用 `fetch_lmd_slices.py`）。

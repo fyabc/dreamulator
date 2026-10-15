@@ -1,5 +1,5 @@
 {
-  "source_nc": "private/gcm/runs/t42n/cold_712/MOST.00000.nc",
+  "source_nc": "t42o/cold_712/MOST.00000.nc",
   "tail_years": 5.0,
   "grid": [
     64,
@@ -31,17 +31,11 @@
       "pAr": 0.01013971434,
       "pCO2": 0.000721434
     },
-    "input_paths": {
-      "planets": "data/worlds/nacrea/layers/geological/input/planets.yaml",
-      "stellar": "data/worlds/nacrea/layers/astronomy/input/stellar.yaml",
-      "landmap": "private/gcm/surf/det/nacrea_N064_surf_0172.sra",
-      "topomap": "private/gcm/surf/det/nacrea_N064_surf_0129.sra"
-    },
     "input_hashes": {
-      "planets": "9a491141f6af8e808a483107e84978740f891d54a87090f972b368ed70af8c61",
+      "planets": "a039ae66935358263ea01635d8a46e717c09fb925bea1cf03b1d040e4ed05e70",
       "stellar": "08f731cacb2e0287240574392e7adb343e24063aeba975f374c3349304f244b5",
-      "landmap": "0a27aeee841fa091e1db04007efd357a6083da4f70215a7a87b98eb8a10f7942",
-      "topomap": "8ab37f748cdb33562ef2f6359c265561b3fcd6eab9649177ffc9c17810dabeab"
+      "landmap": "8e832135467e227ef8aafe8d03869cf63119d15011d32e09b27b90659582ff2b",
+      "topomap": "ffdfe8be5fa7f0c315b4ba0b4fc36762b77a3ff0de490892f1c39bba9cdf8ce2"
     },
     "model_options": {
       "years": 30,
@@ -54,22 +48,20 @@
         "NHDIFF@oceanmod_namelist": "1",
         "HDIFFK@oceanmod_namelist": "1.0E4"
       },
-      "wall_seconds": 8174.6
+      "wall_seconds": 7925.0
     },
-    "command": "python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap private/gcm/surf/det/nacrea_N064_surf_0172.sra --topomap private/gcm/surf/det/nacrea_N064_surf_0129.sra --configure '{\"twobandalbedo\": true, \"physicsfilter\": \"gp|exp|sp\"}' --namelist '{\"NHDIFF@oceanmod_namelist\": \"1\", \"HDIFFK@oceanmod_namelist\": \"1.0E4\"}' --workdir private/gcm/runs/t42n/cold_712",
-    "code_version": "v0.39.0-27-gb1f1ae5ba5ea",
     "versions": {
       "python": "3.12.3",
       "exoplasim": "3.4.2",
       "platform": "Linux-5.10.134-19.103.al8.x86_64-x86_64-with-glibc2.39"
     },
-    "created_utc": "2026-10-15T00:53:11Z"
+    "created_utc": "2026-10-13T16:25:51Z"
   },
   "pco2_ppm": 711.5,
-  "code_commit": "v0.39.0-27-gb1f1ae5ba5ea",
+  "code_commit": "v0.39.0-23-g32d5a9a5f2a8",
   "file": "gcm_fields.msgpack.gz",
-  "sha256": "28a6cabb997aac328f2d8f48a3042ef08fd0a8b52ae71986e3c0f79c5221282c",
+  "sha256": "1cf042ccb2b5af0ecb5b33251a0220a968bbd2a1f5565379b905663de291bb6c",
   "num_cells": 200000,
-  "mesh_fingerprint": "ba9558e71b1e08ec3a4223c9d5e87a467992067a735523399a14bf939944b484",
-  "format_version": 2
+  "mesh_fingerprint": "98d1507ae82d65305796fa24453c15b7f24741eec18e2a2e5c36b62680d78ac9",
+  "format_version": 1
 }

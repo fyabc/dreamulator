@@ -12,15 +12,16 @@ description: 用视觉模型 + 数据交叉校验读取世界地图图层，抽�
 1. **必须用带视觉能力的模型**。纯文本模型读图返回 `[Unsupported Image]`——若当前模型不支持，
    先提醒用户 `/model` 切换，再继续。
 2. 图层来源（优先级）：
-   1. `dreamulator export layers <world> --planet <id>`（headless 直出，含 30° 经纬网；CLI 待建，见下）
+   1. `dreamulator export layers <world> --planet <id>`（headless 直出；无经纬网叠加，坐标按第 1 步公式换算）
    2. `data/worlds/<w>/maps/<planet>/`：elevation.png / temperature.png / precipitation.png（build 已产出）
-   3. 用户手动截图（如 `private/tmp/images/`）
+   3. 用户手动截图（任意本地路径）
 3. 中文文件名在 Windows 下会因控制台编码（gbk）崩脚本——先复制成 ASCII 名再处理。
 
 ## 第 1 步：投影与坐标换算
 
 等距圆柱（equirectangular）：`lon = (x/W − 0.5)×360`，`lat = (0.5 − y/H)×180`。
-导出图**必须带 30° 经纬网**（视觉定位的唯一锚）。前端截图通常有网格；自建导出时加 `--grid`。
+读图定位依赖 30° 经纬网（视觉定位的唯一锚）：前端截图通常自带网格；`export layers` 的 PNG
+没有网格叠加，用它读图时按上面的公式换算经纬度。
 
 ## 第 2 步：视觉路（定性）
 
@@ -68,11 +69,5 @@ def bfs(pred, pool):
 
 - 对 `civilizations.yaml` 每个 anchor，用 `cell_facts(lon, lat)` 读 koppen / 驯化潜力
   （domesticable_tags）/ 农业 / 宜居图层，逐条核对叙事（如「锚点驯化全黑 → 文明应起源自内陆」）。
-- 文明层图层目前无后端 PNG 导出；用数据路直接按 cell 统计（农业核心区/宜居海岸计数）。
-
-## 待建 CLI（设计）
-
-`dreamulator export layers <world> --planet <id> --layers terrain,koppen,biome,agriculture,habitability --grid`
-headless 烘焙各层 PNG（复用 `map/export.py::export_equirectangular`；配色与前端共享单一来源
-——把 `KOPPEN_COLORS` 等 LUT 抽成后端/前端共读的调色板规格）。理由：免除前端 + 手动截图，
-使本 skill、ai civ、CI 审计都能自动取图。
+- 文明层图层用 `dreamulator export layers <world> -l agriculture,habitability` 直出；
+  也可以用数据路直接按 cell 统计（农业核心区/宜居海岸计数）。
