@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792013598953,
+  "lastUpdate": 1792095448223,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6842,6 +6842,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006584831878256133",
             "extra": "mean: 5.068114800000956 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "9f96cf7521fd5cd99b2a0984cd61be4f4219b257",
+          "message": "data(nacrea): 文明/生态对外设定按新气候正典改写\n\n气候层已删「纬度 15° 以内无台风」与「行星尺度飑线」（正典：热带气旋\n少而大，10–25° 生成、每年约 4–5 个、外围半径 1500–2500 km；29° 夜间\n强对流带），同步三处下游旧说法：\n- space_age.md：航空技术依据改为「热带气旋少而大、大气总体稳定」，\n  飞艇气旋季转场规避。\n- ecology.md：三主轴之一改为「热带气旋少而大」。\n- stable_ecosystems.md：百米巨树存活条件落到 8–10° 以内与 25° 以外的\n  无气旋带（按交付指令的纬度约束）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-16T03:25:46+08:00",
+          "tree_id": "89f488eda346a14e16ab28d8354a859c1f155604",
+          "url": "https://github.com/fyabc/dreamulator/commit/9f96cf7521fd5cd99b2a0984cd61be4f4219b257"
+        },
+        "date": 1792095447151,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4830679577672672,
+            "unit": "iter/sec",
+            "range": "stddev: 0.060275685481015126",
+            "extra": "mean: 2.070102112799998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.0177376528282425,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014283559808387452",
+            "extra": "mean: 248.8962910000012 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.0532266569841733,
+            "unit": "iter/sec",
+            "range": "stddev: 0.7753977618135227",
+            "extra": "mean: 487.0382900000057 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1208.5395403900714,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006513297966851507",
+            "extra": "mean: 827.4450000016031 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 247.21167479866696,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006739988258506675",
+            "extra": "mean: 4.0451164000018025 msec\nrounds: 5"
           }
         ]
       }
