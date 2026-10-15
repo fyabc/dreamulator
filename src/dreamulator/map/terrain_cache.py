@@ -55,7 +55,8 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
     between runs.
     """
     # Fields that each stage reads from config (declared here for visibility).
-    stage_fields: dict[str, list[str]] = {
+    # Terrain uses None → all fields minus _TERRAIN_FP_EXCLUDES.
+    stage_fields: dict[str, list[str] | None] = {
         "mesh": [
             "num_nodes",
             "jitter_sigma",
@@ -68,13 +69,23 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
             "num_plates",
             "plate_size_factor_min",
             "plate_size_factor_max",
+            "plate_algorithm",
+            "plate_speed_range_cm_yr",
+            "continental_fraction_min",
+            "continental_fraction_max",
+            "lat_bias",
+            "crust_noise_freq_scale",
             "seed",
         ],
         "tectonics": [
             "tectonic_steps",
+            "tectonic_dt_my",
+            "tectonic_algorithm",
             "resample_every",
             "convergence_rate_mm_yr",
             "trench_arc",
+            "rift_base_rate",
+            "boundary_warp",
             "seed",
         ],
         "boundaries": [
@@ -82,34 +93,32 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
             "boundary_outer_sigma",
             "seed",
         ],
-        "terrain": [
-            "continental_elevation_m",
-            "ocean_depth_m",
-            "noise_octaves",
-            "noise_lacunarity",
-            "noise_persistence",
-            "noise_base_freq",
-            "sea_level_offset_m",
-            "isostasy_tail_compression",
-            "interior_lowland_enabled",
-            "interior_lowland_depth_m",
-            "interior_lowland_distance_scale_km",
-            "interior_lowland_floor_m",
-            "deposition_enabled",
-            "lake_fraction",
-            "lake_depth_m",
-            "seed",
-        ],
+        "terrain": None,  # None = all fields except _TERRAIN_FP_EXCLUDES (see below)
     }
 
-    relevant: dict[str, Any] = {}
+    # sort keys for deterministic serialisation
     cfg_dict = asdict(config)
+    relevant: dict[str, Any] = {}
     for stage in stages:
-        for field in stage_fields.get(stage, []):
+        fields = stage_fields.get(stage, [])
+        if fields is None:
+            # Terrain is the most-tuned stage; an allowlist kept going stale
+            # (dead field names silently skipped), so fingerprint everything
+            # except the fields that only affect post-terrain stages.
+            for field in cfg_dict:
+                if field not in _TERRAIN_FP_EXCLUDES:
+                    relevant[field] = cfg_dict[field]
+            continue
+        for field in fields:
             if field in cfg_dict:
                 relevant[field] = cfg_dict[field]
-    # sort keys for deterministic serialisation
     return _sha256_hex(json.dumps(relevant, sort_keys=True, default=str).encode())
+
+
+# Fields excluded from the terrain-stage fingerprint: they only affect stages
+# after terrain (rivers / ice / export), so changing them must not invalidate
+# the terrain cache.
+_TERRAIN_FP_EXCLUDES = frozenset({"export_width", "export_height"})
 
 
 # ── cache store / load ────────────────────────────────────────────────

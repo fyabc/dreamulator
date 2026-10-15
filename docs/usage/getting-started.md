@@ -1,7 +1,7 @@
 # 新手教程：创建你的第一个世界
 
 > 本教程带你从空仓库出发，走到「在浏览器里看到自己星球的地图，并导出高清图像」。
-> 全程约 20 分钟，其中约 6 分钟是引擎在后台计算。你只需要基本的命令行操作经验，
+> 全程约 30 分钟，其中约 15 分钟是引擎在后台计算。你只需要基本的命令行操作经验，
 > 不需要天文学背景。卡住时先看该节末尾的「如果出错」，再查 [CLI 命令参考](cli.md)，
 > 或到 GitHub Issues 提问。
 
@@ -69,6 +69,7 @@ data/worlds/myworld/
 └── layers/
     ├── astronomy/input/stellar.yaml    # 恒星系设定 ← 下一节编辑它
     ├── geological/input/planets.yaml   # 行星设定（自转、大气、海洋…）
+    ├── geological/input/terrain_config.yaml  # 地形生成参数（分辨率、板块、演化步数）
     └── civilization/input/             # 文明设定（本教程不涉及）
 ```
 
@@ -124,10 +125,10 @@ Results: 1 succeeded, 0 failed, 4 skipped
 打开 `data/worlds/myworld/layers/geological/input/planets.yaml`，做两处改动：
 
 1. `axial_tilt_deg: 23.4` 改成 `37.0`——更大的自转轴倾角意味着更极端的季节。
-2. `hydrosphere` 下的 `water_coverage: 0.708` 改成 `0.55`——海洋覆盖率降到 55%，
-   陆地更多。地形引擎的海平面校准目标默认就取「1 − 水覆盖率」：设定里写多少水，
-   生成的地图上就有多少水，两者不会脱节（细节见
-   [地质管线](../design/pipelines/geological-pipeline.md) §7.5）。
+2. `hydrosphere` 下的 `water_coverage: 0.708` 改成 `0.65`——海洋覆盖率 65%，
+   陆地比地球略多但保留开阔大洋。地形引擎的海平面校准目标默认就取
+   「1 − 水覆盖率」：设定里写多少水，生成的地图上就有多少水，两者不会脱节
+   （细节见 [地质管线](../design/pipelines/geological-pipeline.md) §7.5）。
 
 再改世界种子。`init` 给每个世界随机分配了一个种子（`world.yaml` 里的
 `seed.seed`），而引擎遵守「相同输入 + 相同种子 = 相同结果」。为了让你得到和本教程
@@ -140,8 +141,12 @@ seed:
 
 日常创作时不必固定种子——保持随机，换个种子就是另一颗星球。
 
+（地形生成的更多旋钮——网格分辨率、板块数量、构造演化步数——在同目录的
+`terrain_config.yaml` 里，本教程保持模板值；完整参数表见
+[CLI 参考](cli.md) 的「配置」一节。）
+
 构建地质层（地形管线：球面网格 → 板块 → 构造演化 → 地形合成 → 河流 → 冰盖 →
-导出，约 1 分钟）：
+导出，约 3–4 分钟）：
 
 ```bash
 uv run dreamulator build myworld --only geological
@@ -158,14 +163,15 @@ uv run dreamulator terrain info myworld --planet planet_gaia
 ```
 Terrain Data: myworld / planet_gaia
   Seed: 42
-  Nodes: 100,000
-  Plates: 20
-  Elevation: [-5300, 10905] m
+  Nodes: 200,000
+  Plates: 22
+  Elevation: [-11575, 6206] m
   ...
-  Emergent land:       231,110,835 km2 (45.3%)
+  Emergent land:       185,542,461 km2 (36.4%)
 ```
 
-陆地占比 45.3%，正是我们设定的 1 − 0.55 该有的样子。
+陆地占比 36.4%，正是我们设定的 1 − 0.65 该有的样子；板块数 22 是
+50 步构造演化（裂解）后的实际数量，多于初始请求的 20。
 
 **如果出错**：改了 input 之后重跑同一层需要加 `--force`
 （`build myworld --only geological --force`）——引擎默认跳过已有输出的层。
@@ -176,7 +182,7 @@ Terrain Data: myworld / planet_gaia
 uv run dreamulator build myworld --only climate
 ```
 
-这一步约 3–4 分钟：引擎计算温度场、风场、水汽输送、降水，最后做气候分类
+这一步约 9 分钟：引擎计算温度场、风场、水汽输送、降水，最后做气候分类
 （[气候管线](../design/pipelines/climate-pipeline.md)）。
 
 验证：
@@ -189,18 +195,18 @@ uv run dreamulator climate info myworld
 
 ```
              Climate Summary
-┌─────────────────────┬──────────────────┐
-│ Metric              │ Value            │
-├─────────────────────┼──────────────────┤
-│ Mean Temperature    │ 11.4 C           │
-│ Temperature Range   │ -31 to 28 C      │
-│ Mean Precipitation  │ 769 mm/yr        │
-│ Precipitation Range │ 41 to 6637 mm/yr │
-│ Koppen Classes      │ 30 types         │
-└─────────────────────┴──────────────────┘
+┌─────────────────────┬───────────────────┐
+│ Metric              │ Value             │
+├─────────────────────┼───────────────────┤
+│ Mean Temperature    │ 17.2 C            │
+│ Temperature Range   │ -19 to 28 C       │
+│ Mean Precipitation  │ 933 mm/yr         │
+│ Precipitation Range │ 58 to 4850 mm/yr  │
+│ Koppen Classes      │ 29 types          │
+└─────────────────────┴───────────────────┘
 ```
 
-均温 11.4 °C、30 种气候类型——0.75 AU 的补偿轨道让这颗行星保持了和地球相近的
+均温 17.2 °C、29 种气候类型——0.75 AU 的补偿轨道让这颗行星保持了和地球相近的
 能量收支，而 37° 的轴倾角会给它带来比地球更剧烈的季节。
 
 ## 6. 在浏览器里看你的世界
@@ -231,8 +237,8 @@ uv run dreamulator export layers myworld --layers terrain,koppen --output export
 ┌─────────┬─────────────────────────┬────────────────┐
 │ Layer   │ File                    │ Size           │
 ├─────────┼─────────────────────────┼────────────────┤
-│ terrain │ export/terrain.png      │ 1489 KB · 0.7s │
-│ koppen  │ export/koppen.png       │ 303 KB · 0.4s  │
+│ terrain │ export/terrain.png      │ 2138 KB · 0.9s │
+│ koppen  │ export/koppen.png       │ 379 KB · 0.6s  │
 └─────────┴─────────────────────────┴────────────────┘
 ```
 

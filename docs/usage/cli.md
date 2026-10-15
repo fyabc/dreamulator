@@ -431,6 +431,11 @@ terrain:
 
 plates:
   num_plates: 20            # 板块数量
+  continental_fraction_min: 0.38   # 大陆地壳配额下限；地壳面积必须大于出露陆地
+  continental_fraction_max: 0.48   # 目标（1 − 水覆盖率），否则海平面压到克拉通
+                                   # 基座之下、洋中脊出露成陆（引擎会告警）
+  crust_noise_freq_scale: 4.0  # 地壳分配噪声频率倍率；默认 1.0 海岸线会呈
+                               # 大圆式长直线段（逐板块得分场过低频所致）
   plate_algorithm: cortial2019
   tectonic_algorithm: cortial2019   # 默认启用时间演化；"" = 静态板块
   tectonic_steps: 0         # 演化步数（0 = 跳过演化；nacrea 覆写 50）

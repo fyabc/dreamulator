@@ -546,6 +546,7 @@ def assign_crust_types(
     continental_fraction_min: float = 0.25,
     continental_fraction_max: float = 0.65,
     lat_bias: float = 0.7,
+    crust_noise_freq_scale: float = 1.0,
 ) -> None:
     """Assign crust types to cells based on their plate.
 
@@ -594,7 +595,7 @@ def assign_crust_types(
 
         noise_seed = rng.integers(0, 1 << 20)
         n_cells = len(cell_ids)
-        base_freq = 2.0 / max(n_cells, 1) ** 0.15
+        base_freq = (2.0 / max(n_cells, 1) ** 0.15) * crust_noise_freq_scale
         octaves = 5
         lacunarity = 2.5
         persistence = 0.5
@@ -1046,6 +1047,7 @@ def _generate_plates_impl(
             config.continental_fraction_min,
             config.continental_fraction_max,
             config.lat_bias,
+            config.crust_noise_freq_scale,
         )
 
     # 5. Euler poles

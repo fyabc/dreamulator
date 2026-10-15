@@ -371,6 +371,19 @@ class GeologicalEngine(BaseEngine):
             else:
                 cfg.target_land_fraction = canonical_land
 
+        # Consistency: the emergent-land target must stay below the continental
+        # crust supply.  Otherwise the sea-level calibration drops below the
+        # craton base — all continental crust emerges at full height and
+        # mid-ocean ridge crests surface as artificial land strips.
+        crust_supply = (cfg.continental_fraction_min + cfg.continental_fraction_max) / 2.0
+        if cfg.target_land_fraction > crust_supply:
+            warnings.append(
+                f"target_land_fraction ({cfg.target_land_fraction:.2f}) exceeds the "
+                f"continental crust supply (~{crust_supply:.2f} from "
+                f"continental_fraction_min/max); raise continental_fraction_* or lower "
+                f"the land target to keep mid-ocean ridges submerged"
+            )
+
         return cfg, warnings
 
     def _detect_planet_id(self) -> str:
