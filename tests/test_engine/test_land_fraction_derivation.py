@@ -110,3 +110,27 @@ def test_no_hydrosphere_keeps_default(tmp_path: Path) -> None:
 
     assert cfg is not None
     assert cfg.target_land_fraction == 0.29
+
+
+def test_land_target_above_crust_supply_warns(tmp_path: Path) -> None:
+    world = tmp_path / "world"
+    _write_planets_yaml(world, water_coverage=0.4)  # land target 0.60
+    _write_terrain_config(world, {"plates": {"continental_fraction_min": 0.28,
+                                             "continental_fraction_max": 0.36}})
+
+    cfg, warnings = _make_engine(world)._load_config({})
+
+    assert cfg is not None
+    assert cfg.target_land_fraction == pytest.approx(0.6)
+    assert any("crust supply" in w for w in warnings)
+
+
+def test_land_target_within_crust_supply_no_extra_warning(tmp_path: Path) -> None:
+    world = tmp_path / "world"
+    _write_planets_yaml(world, water_coverage=0.65)  # land target 0.35
+    _write_terrain_config(world, {"plates": {"continental_fraction_min": 0.38,
+                                             "continental_fraction_max": 0.48}})
+
+    _, warnings = _make_engine(world)._load_config({})
+
+    assert not any("crust supply" in w for w in warnings)

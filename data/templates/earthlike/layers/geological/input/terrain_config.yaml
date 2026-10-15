@@ -1,0 +1,81 @@
+# Terrain pipeline configuration for the earthlike template.
+#
+# Copied into the world at `init`; editing it afterwards only affects that
+# world.  The values below are the quality-tuned set (ported from the nacrea
+# world); the full knob set and the engine defaults are documented in
+# docs/usage/cli.md (Configuration).
+
+terrain:
+  num_nodes: 200000        # CVT mesh resolution (engine default: 100k, visibly coarse)
+  lloyd_iterations: 8      # Lloyd relaxation iterations
+  continental_elevation_m: 650.0   # eroded craton base (Earth land mode ~200–500 m)
+  oceanic_elevation_m: -3800.0     # abyssal base
+  boundary_influence_km: 250.0     # orogen shoulder half-width
+  divergent_width_km: 100.0        # rift valley width
+  transform_width_km: 60.0         # transform fault width
+  convergent_uplift_m: 5000.0      # peak uplift at continent–continent collision
+  divergent_depth_m: 1500.0        # rift floor depth / ridge crest scale
+                               # (weaker crests keep mid-ocean ridges submerged)
+  plate_elevation_spread_m: 500.0  # per-plate base elevation spread (oceanic
+                               # plates take it undamped; too high lifts
+                               # mid-ocean ridges above sea level)
+  continental_undulation_m: 300.0  # intra-plate dynamic relief (cratons stay flat)
+  hotspot_count: 3         # volcanic hotspot chains
+  mountain_asymmetry: 0.4  # mountain-range asymmetry (0 = symmetric)
+  shelf_width_km: 150.0    # continental shelf width
+  terrain_algorithm: cortial2019_asymmetric  # terrain synthesis strategy
+  # Interior lowlands: lower deep continental interiors toward cratonic plains,
+  # so continents read as "low plains + orogenic belts" instead of high plateau.
+  interior_lowland_depth_m: 500.0          # max lowering of the deep interior
+  interior_lowland_distance_scale_km: 600.0  # ramp distance from orogenic margins
+
+plates:
+  num_plates: 20           # plate count (requested; rifting may increase it)
+  plate_algorithm: cortial2019
+  tectonic_algorithm: cortial2019   # time evolution; "" = static plates
+  tectonic_steps: 50       # evolution steps (0 = skip; coastlines look blocky)
+  tectonic_dt_my: 0.0      # step size in Myr (0 = auto-scale)
+  rift_base_rate: 0.005    # plate rifting rate (lower = large plates survive)
+  boundary_warp: 0.6       # low-frequency warp of plate boundaries (0 = straight
+                           # geodesics; 0.5–0.8 gives arc-shaped, segmented margins)
+  boundary_uplift_noise: 0.8  # low-frequency uplift modulation along margins
+  continental_fraction_min: 0.38   # continental crust must comfortably exceed the
+  continental_fraction_max: 0.48   # emergent-land target (Earth: ~41% crust vs 29%
+                               # land); otherwise sea level drops below the craton
+                               # base and mid-ocean ridges emerge as land strips
+  lat_bias: 0.33           # latitude weight in crust assignment (engine default
+                           # 0.7 produces latitude-striped continents per plate;
+                           # lower values let the fBm field shape organic continents)
+  crust_noise_freq_scale: 4.0  # crust-noise frequency multiplier: the default
+                           # per-plate base frequency is near-linear within a
+                           # plate, so coastlines come out as long straight
+                           # segments; 4× adds Earth-like coastal wiggle
+
+noise:
+  noise_scale: 2.0         # detail noise frequency; wavelength ≈ radius/scale
+  noise_octaves: 6
+  noise_persistence: 0.5
+  noise_lacunarity: 2.0
+  noise_amplitude_land_m: 600.0
+  noise_amplitude_ocean_m: 300.0
+  regional_noise_scale: 3.0       # plate-scale swells (wavelength ≈ radius/3)
+  regional_noise_amplitude_land_m: 500.0   # at scale 3.0 this is near-constant
+                               # within a plate — high values park whole
+                               # continents at 2000+ m
+  regional_noise_amplitude_ocean_m: 500.0
+
+# Ocean-floor age–depth subsidence: depth grows with distance from mid-ocean
+# ridges (plate cooling model), so shallow shelf area and mean abyssal depth
+# both come out Earth-like.
+ocean:
+  age_depth_enabled: true
+  ridge_depth_m: 2500.0
+  subsidence_coeff: 350.0
+  max_age_myr: 100.0
+  max_age_depth_m: 5500.0
+
+# Physical elevation limits (mountain height capped by rock strength vs gravity).
+isostasy:
+  enabled: true
+  max_continental_elevation_m: 8848.0   # Earth: Everest
+  max_ocean_depth_m: 11034.0            # Earth: Challenger Deep

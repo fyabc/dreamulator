@@ -209,6 +209,13 @@ class TerrainPipelineConfig:
     # rotating bodies have weak latitude preference → set lower (0.3–0.5).
     lat_bias: float = 0.7
 
+    # Crust-assignment noise frequency multiplier.  The per-plate base
+    # frequency (2.0 / n_cells**0.15) makes the score field near-linear
+    # within a plate, so crust/coast iso-contours come out as great-circle
+    # straight lines; >1 adds smaller-scale wiggle (still far above the
+    # single-cell checkerboard scale).
+    crust_noise_freq_scale: float = 1.0
+
     # Sea level auto-calibration ("倒水")
     # True  = determine sea level from target land fraction (binary search on
     #         elevation × area distribution).  The elevation datum is shifted

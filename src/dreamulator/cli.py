@@ -408,6 +408,12 @@ def build(
         console.print("[yellow]No engines registered. Nothing to build.[/yellow]")
         return
 
+    # Validate --only engine name (an unknown name would silently build nothing)
+    if only is not None and only not in {e.name for e in engines}:
+        valid = [e.name for e in engines]
+        console.print(f"[red]Unknown engine '{only}'. Valid engines: {valid}[/red]")
+        raise typer.Exit(code=1) from None
+
     # Validate layer if specified
     if layer is not None:
         try:
