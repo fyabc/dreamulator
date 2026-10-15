@@ -482,7 +482,9 @@ def _materialize_writable_mesh(
     except ValueError:
         pass
     target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
+    # Copy when missing, and refresh a copy older than its source (the parent
+    # terrain was rebuilt since the branch last materialized it).
+    if not target.exists() or mesh_source.stat().st_mtime > target.stat().st_mtime:
         shutil.copyfile(mesh_source, target)
         logger.info(
             "Materialized branch mesh copy: %s (source: %s — parent mesh stays untouched)",
@@ -490,6 +492,20 @@ def _materialize_writable_mesh(
             mesh_source,
         )
     return target
+
+
+def _parent_mesh_is_newer(maps_dir: Path, parent: list[Path], planet_id: str | None) -> bool:
+    """True when a branch without its own geology holds an older copy of the parent mesh.
+
+    A branch that forked after the geological layer inherits the terrain; its
+    ``maps/`` copy only exists so that climate write-backs stay in the branch.
+    """
+    if not parent or (maps_dir.parent / "layers" / "geological").exists():
+        return False
+    local = _mesh_candidates(maps_dir, planet_id)
+    if not local:
+        return False
+    return parent[0].stat().st_mtime > local[0].stat().st_mtime
 
 
 def _load_cvt_mesh_from_geological(
@@ -527,7 +543,15 @@ def _load_cvt_mesh_from_geological(
     if maps_dir is not None:
         candidates.extend(_mesh_candidates(maps_dir, planet_id))
     if world_dir is not None and (world_dir / "maps") != maps_dir:
-        candidates.extend(_mesh_candidates(world_dir / "maps", planet_id))
+        parent = _mesh_candidates(world_dir / "maps", planet_id)
+        if maps_dir is not None and _parent_mesh_is_newer(maps_dir, parent, planet_id):
+            # A branch that inherits its geology keeps a materialized copy of the
+            # parent mesh; once the parent terrain is rebuilt that copy is stale,
+            # so the parent mesh goes first (and is re-copied by
+            # _materialize_writable_mesh).
+            candidates = parent + candidates
+        else:
+            candidates.extend(parent)
 
     # Legacy layer-based locations (pre-migration layouts).
     legacy_dirs: list[Path] = []

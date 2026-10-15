@@ -344,6 +344,45 @@ class TestBranchMeshIsolation:
         target.write_bytes(b'{"seed": 99}')
         assert root_mesh.read_bytes() == root_bytes
 
+    def test_stale_branch_copy_is_replaced_after_parent_rebuild(self, tmp_path: Path) -> None:
+        """A branch without its own geology must not keep using an old copy of the
+        parent terrain once the parent mesh is rebuilt (2026-10-15)."""
+        import os
+
+        world = tmp_path / "world"
+        root_mesh = world / "maps" / "planet_x" / "cvt_mesh.json"
+        branch_maps = world / "branches" / "cl-fork" / "maps"
+        stale = branch_maps / "planet_x" / "cvt_mesh.msgpack.gz"
+        _write_mesh(stale, seed=1, lon=5.0)
+        _write_mesh(root_mesh, seed=2, lon=6.0)  # parent rebuilt after the copy
+        os.utime(stale, (1_000_000, 1_000_000))
+        os.utime(root_mesh, (2_000_000, 2_000_000))
+
+        mesh, source, _ = _load_cvt_mesh_from_geological(
+            {}, maps_dir=branch_maps, planet_id="planet_x", world_dir=world
+        )
+        assert source == root_mesh and mesh is not None and mesh.seed == 2
+        target = _materialize_writable_mesh(source, branch_maps, "planet_x")
+        assert target == stale and target.read_bytes() == root_mesh.read_bytes()
+
+    def test_branch_with_own_geology_keeps_its_mesh(self, tmp_path: Path) -> None:
+        import os
+
+        world = tmp_path / "world"
+        root_mesh = world / "maps" / "planet_x" / "cvt_mesh.json"
+        branch = world / "branches" / "geo-fork"
+        own = branch / "maps" / "planet_x" / "cvt_mesh.json"
+        (branch / "layers" / "geological").mkdir(parents=True)
+        _write_mesh(own, seed=1)
+        _write_mesh(root_mesh, seed=2)
+        os.utime(own, (1_000_000, 1_000_000))
+        os.utime(root_mesh, (2_000_000, 2_000_000))
+
+        _, source, _ = _load_cvt_mesh_from_geological(
+            {}, maps_dir=branch / "maps", planet_id="planet_x", world_dir=world
+        )
+        assert source == own
+
     def test_own_mesh_is_not_copied(self, tmp_path: Path) -> None:
         maps = tmp_path / "maps"
         own = maps / "planet_x" / "cvt_mesh.msgpack.gz"
