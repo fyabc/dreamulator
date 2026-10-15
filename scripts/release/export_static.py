@@ -83,9 +83,7 @@ def _normalize_body(body: dict, orbit_lookup: dict) -> dict:
     return normalized
 
 
-def _export_dir_documents(
-    directory: Path, render_context: dict | None
-) -> list[dict] | None:
+def _export_dir_documents(directory: Path, render_context: dict | None) -> list[dict] | None:
     """Export .md files from a directory, rendering template bodies.
 
     Returns a list of document metadata dicts with frontmatter, filename,
@@ -105,18 +103,20 @@ def _export_dir_documents(
             content = f.read()
         fm, body = doc_render.parse_frontmatter(content)
         body, rendered = doc_render.render_body(body, render_context)
-        documents.append({
-            "filename": fp.name,
-            "title": fm.get("title", fp.stem),
-            "type": fm.get("type", ""),
-            "period": fm.get("period", ""),
-            "tags": fm.get("tags", []),
-            "status": str(fm.get("status", "") or ""),
-            "date": str(fm.get("date", "") or ""),
-            "frontmatter": fm,
-            "content": body,
-            "rendered": rendered,
-        })
+        documents.append(
+            {
+                "filename": fp.name,
+                "title": fm.get("title", fp.stem),
+                "type": fm.get("type", ""),
+                "period": fm.get("period", ""),
+                "tags": fm.get("tags", []),
+                "status": str(fm.get("status", "") or ""),
+                "date": str(fm.get("date", "") or ""),
+                "frontmatter": fm,
+                "content": body,
+                "rendered": rendered,
+            }
+        )
     return documents
 
 
@@ -142,9 +142,7 @@ def _export_layer_documents(
     return _export_dir_documents(md_files[0].parent, render_context)
 
 
-def _export_layer_data(
-    world_dir: Path, branch: str | None = None
-) -> dict:
+def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
     """Export layer data for a world or branch using the resolver.
 
     Handles _inherit: true merge for input files.
@@ -168,9 +166,7 @@ def _export_layer_data(
         if derived_dir is not None:
             stellar_derived = load_yaml(derived_dir / "stellar_derived.yaml")
             if stellar_derived and "stars" in stellar_derived:
-                derived_by_id = {
-                    s["id"]: s for s in stellar_derived["stars"] if "id" in s
-                }
+                derived_by_id = {s["id"]: s for s in stellar_derived["stars"] if "id" in s}
                 if "stars" in stellar:
                     for star in stellar["stars"]:
                         star_id = star.get("id")
@@ -182,9 +178,7 @@ def _export_layer_data(
         # Normalize bodies (moons, asteroids) to planet-compatible format
         bodies = stellar.get("bodies", [])
         if bodies:
-            orbit_lookup = {
-                o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o
-            }
+            orbit_lookup = {o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o}
             stellar["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
 
     # 2. Habitable zones (derived only — no inheritance)
@@ -254,8 +248,12 @@ def _export_map_data(
     to the static output directory.
 
     Branches without their own ``maps/`` directory inherit the root world's
-    maps at view time — the static frontend falls back to the root URL, so
-    no duplication is needed here.
+    maps at view time.  Branches WITH a maps/ dir are per-file overlays
+    (a climate-fork branch ships only climate products); missing files are
+    filled from the root world's maps dir below, keeping the static export
+    self-contained — the frontend's branch→root 404 fallback depends on
+    host 404 semantics that not every static server honours (vite preview's
+    SPA fallback answers missing files with 200 HTML).
 
     Args:
         world_dir: Path to the world root directory.
@@ -277,10 +275,15 @@ def _export_map_data(
     for planet_dir in sorted(maps_dir.iterdir()):
         if not planet_dir.is_dir():
             continue
-        # Only planet directories have elevation.png — this also skips
-        # non-planet subdirectories such as earth_reference/ (civmap GeoJSON)
+        # Root worlds: only planet directories have elevation.png — this also
+        # skips non-planet subdirectories such as earth_reference/ (civmap
+        # GeoJSON).  Branch overlays that fork at the climate layer
+        # legitimately lack terrain products (elevation.png, map.yaml,
+        # features.json — inherited from root at view time), so for branches
+        # accept any non-empty directory; the per-file copies below simply
+        # skip what isn't there.
         elevation_png = planet_dir / "elevation.png"
-        if not elevation_png.exists():
+        if not elevation_png.exists() and (branch is None or not any(planet_dir.iterdir())):
             continue
 
         planet_id = planet_dir.name
@@ -289,36 +292,49 @@ def _export_map_data(
         planet_out = maps_out_dir / planet_id
         planet_out.mkdir(parents=True, exist_ok=True)
 
-        # Copy elevation PNG (binary)
-        planet_out.joinpath("elevation.png").write_bytes(
-            elevation_png.read_bytes()
-        )
+        root_planet_dir = world_dir / "maps" / planet_id if branch is not None else None
+
+        def _inherit(
+            name: str,
+            _dir: Path = planet_dir,
+            _root: Path | None = root_planet_dir,
+        ) -> Path | None:
+            """Branch overlay file, else the root world's (per-file branch
+            inheritance — a climate-fork branch's terrain products live only
+            in root)."""
+            p = _dir / name
+            if p.exists():
+                return p
+            if _root is not None:
+                p = _root / name
+                if p.exists():
+                    return p
+            return None
+
+        # Copy elevation PNG (binary), with root inheritance for overlays.
+        elevation_src = _inherit("elevation.png")
+        if elevation_src is not None:
+            planet_out.joinpath("elevation.png").write_bytes(elevation_src.read_bytes())
 
         # Copy monthly climate MessagePack (Phase 4 monthly display), if present.
-        monthly_msgpack = planet_dir / "climate_monthly.msgpack"
-        if monthly_msgpack.exists():
-            planet_out.joinpath("climate_monthly.msgpack").write_bytes(
-                monthly_msgpack.read_bytes()
-            )
+        monthly_msgpack = _inherit("climate_monthly.msgpack")
+        if monthly_msgpack is not None:
+            planet_out.joinpath("climate_monthly.msgpack").write_bytes(monthly_msgpack.read_bytes())
 
         # Copy yearly climate descriptors (UCC-01), if present.
-        yearly_msgpack = planet_dir / "climate_yearly.msgpack"
-        if yearly_msgpack.exists():
+        yearly_msgpack = _inherit("climate_yearly.msgpack")
+        if yearly_msgpack is not None:
             planet_out.joinpath("climate_yearly.msgpack").write_bytes(yearly_msgpack.read_bytes())
 
         # Export map metadata (map.yaml → meta.json) + result-contract metadata
         # (format_version + time convention, CONTRACT-01).
-        map_yaml = planet_dir / "map.yaml"
-        if map_yaml.exists():
+        map_yaml = _inherit("map.yaml")
+        if map_yaml is not None:
             meta = load_yaml(map_yaml)
             if meta:
                 meta.update(result_metadata())
-                with planet_out.joinpath("meta.json").open(
-                    "w", encoding="utf-8"
-                ) as f:
-                    json.dump(
-                        meta, f, ensure_ascii=False, separators=(",", ":"), default=str
-                    )
+                with planet_out.joinpath("meta.json").open("w", encoding="utf-8") as f:
+                    json.dump(meta, f, ensure_ascii=False, separators=(",", ":"), default=str)
 
         # Export JSON map files (voronoi, plates, features).
         # Each is read-validated-rewritten to catch LFS pointers or corrupt
@@ -337,6 +353,9 @@ def _export_map_data(
         )
 
         mesh_src = find_mesh_file(planet_dir)
+        if mesh_src is None and root_planet_dir is not None and root_planet_dir.is_dir():
+            # Branch overlay without its own mesh inherits root terrain.
+            mesh_src = find_mesh_file(root_planet_dir)
         if mesh_src is not None:
             try:
                 save_cvt_mesh(
@@ -349,26 +368,30 @@ def _export_map_data(
                 )
 
         for filename in ("voronoi.json", "plates.json", "features.json"):
-            src_path = planet_dir / filename
-            if not src_path.exists():
+            src_path = _inherit(filename)
+            if src_path is None:
                 continue
             try:
                 data = sanitize_nonfinite(json.loads(src_path.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 print(
-                    f"\n  WARNING: {src_path} is not valid JSON "
-                    f"(possible LFS pointer) — skipping",
+                    f"\n  WARNING: {src_path} is not valid JSON (possible LFS pointer) — skipping",
                 )
                 continue
             with planet_out.joinpath(filename).open("w", encoding="utf-8") as dst:
                 json.dump(data, dst, ensure_ascii=False, separators=(",", ":"))
 
         # Write placeholders for optional files the frontend may request
-        # (avoids 404 console noise — same philosophy as _write_branch_defaults)
+        # (avoids 404 console noise — same philosophy as _write_branch_defaults).
+        # Root only: on a branch a placeholder would answer 200-empty and
+        # shadow the root world's real file — the frontend's branch→root
+        # fallback only fires on 404.
         for placeholder_name, placeholder in (
             ("plates.json", {"plates": []}),
             ("features.json", {"features": []}),
         ):
+            if branch is not None:
+                break
             placeholder_path = planet_out / placeholder_name
             if not placeholder_path.exists():
                 with placeholder_path.open("w", encoding="utf-8") as f:
@@ -637,4 +660,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

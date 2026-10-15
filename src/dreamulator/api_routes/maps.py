@@ -57,6 +57,48 @@ def _get_map_manager(world_name: str, branch: str | None = None) -> MapManager:
     return MapManager(world_dir, branch)
 
 
+def _map_dirs_overlay_first(mgr: MapManager, planet_id: str) -> list[Path]:
+    """Candidate map dirs for *planet_id*, most specific first.
+
+    Branch ``maps/`` dirs are overlays on the root world's: a branch that
+    forks at the climate layer legitimately ships only climate products,
+    while terrain products (map.yaml, elevation.png, plates/features…)
+    live only in the root's ``maps/``.  Directory-level resolution alone
+    (``MapManager._map_input_dir``) 404s those files for such branches —
+    the branch dir exists, so it wins — hence per-file fallback here,
+    mirroring the static frontend's branch→root fetch fallback.
+    """
+    dirs: list[Path] = []
+    if mgr.branch is not None:
+        overlay = mgr.world_dir / "branches" / mgr.branch / "maps" / planet_id
+        if overlay.is_dir():
+            dirs.append(overlay)
+        root_dir = MapManager(mgr.world_dir, None)._map_input_dir(planet_id)  # noqa: SLF001
+    else:
+        root_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
+    if root_dir is not None:
+        dirs.append(root_dir)
+    return dirs
+
+
+def _map_file_overlay_first(mgr: MapManager, planet_id: str, filename: str) -> Path | None:
+    """First existing *filename* across the overlay-first candidate dirs."""
+    for d in _map_dirs_overlay_first(mgr, planet_id):
+        candidate = d / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _mgr_reading(mgr: MapManager, planet_id: str, filename: str) -> MapManager:
+    """The manager (branch overlay or root) whose map dir provides *filename*."""
+    if mgr.branch is not None:
+        overlay = mgr.world_dir / "branches" / mgr.branch / "maps" / planet_id / filename
+        if not overlay.exists():
+            return MapManager(mgr.world_dir, None)
+    return mgr
+
+
 def _weak_etag(path: Path) -> str:
     """Weak ETag from size + mtime.
 
@@ -111,7 +153,7 @@ def get_map_meta(
     branch: str | None = None,
 ) -> dict[str, Any]:
     """Get map metadata for a planet."""
-    mgr = _get_map_manager(world_name, branch)
+    mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "map.yaml")
     meta = mgr.get_map_metadata(planet_id)
     if meta is None:
         raise HTTPException(status_code=404, detail=f"No map metadata for '{planet_id}'")
@@ -127,11 +169,8 @@ def get_elevation(
 ) -> Response:
     """Get elevation heightmap as 16-bit PNG."""
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    if map_dir is None:
-        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
-    png_path = map_dir / "elevation.png"
-    if not png_path.exists():
+    png_path = _map_file_overlay_first(mgr, planet_id, "elevation.png")
+    if png_path is None:
         raise HTTPException(status_code=404, detail=f"No elevation data for '{planet_id}'")
     return _file_response(request, png_path, "image/png")
 
@@ -145,6 +184,9 @@ def get_voronoi(
     """Get the Voronoi network for a planet."""
     mgr = _get_map_manager(world_name, branch)
     network = mgr.get_voronoi(planet_id)
+    if network is None and mgr.branch is not None:
+        # Branch overlay lacks voronoi data — inherit from the root world.
+        network = MapManager(mgr.world_dir, None).get_voronoi(planet_id)
     if network is None:
         raise HTTPException(status_code=404, detail=f"No Voronoi data for '{planet_id}'")
     return network.model_dump(mode="json")
@@ -157,7 +199,7 @@ def get_plates(
     branch: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get tectonic plate definitions for a planet."""
-    mgr = _get_map_manager(world_name, branch)
+    mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "plates.json")
     plates = mgr.get_plates(planet_id)
     return [p.model_dump(mode="json") for p in plates]
 
@@ -169,7 +211,7 @@ def get_features(
     branch: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get map features (rivers, ridges, etc.) for a planet."""
-    mgr = _get_map_manager(world_name, branch)
+    mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "features.json")
     features = mgr.get_features(planet_id)
     return [f.model_dump(mode="json") for f in features]
 
@@ -193,9 +235,8 @@ def get_cvt_mesh_geometry(
     from dreamulator.map.export import GEOMETRY_FILENAME
 
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    geo_file = None if map_dir is None else map_dir / GEOMETRY_FILENAME
-    if geo_file is None or not geo_file.exists():
+    geo_file = _map_file_overlay_first(mgr, planet_id, GEOMETRY_FILENAME)
+    if geo_file is None:
         raise HTTPException(
             status_code=404,
             detail=f"No split geometry for '{planet_id}' (rebuild the world)",
@@ -219,9 +260,8 @@ def get_cvt_mesh_fields(
     from dreamulator.map.export import FIELDS_FILENAME
 
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    fields_file = None if map_dir is None else map_dir / FIELDS_FILENAME
-    if fields_file is None or not fields_file.exists():
+    fields_file = _map_file_overlay_first(mgr, planet_id, FIELDS_FILENAME)
+    if fields_file is None:
         raise HTTPException(
             status_code=404,
             detail=f"No split fields for '{planet_id}' (rebuild the world)",
@@ -249,13 +289,14 @@ def get_cvt_mesh(
     raw JSON text is never shipped as msgpack.
     """
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    if map_dir is None:
-        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
 
     from dreamulator.map.export import decode_mesh_bytes, find_mesh_file
 
-    mesh_file = find_mesh_file(map_dir)
+    mesh_file = None
+    for candidate_dir in _map_dirs_overlay_first(mgr, planet_id):
+        mesh_file = find_mesh_file(candidate_dir)
+        if mesh_file is not None:
+            break
     if mesh_file is None:
         raise HTTPException(
             status_code=404,
@@ -320,12 +361,8 @@ def get_climate_monthly(
     this endpoint streams the raw bytes.
     """
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    if map_dir is None:
-        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
-
-    monthly_file = map_dir / "climate_monthly.msgpack"
-    if not monthly_file.exists():
+    monthly_file = _map_file_overlay_first(mgr, planet_id, "climate_monthly.msgpack")
+    if monthly_file is None:
         raise HTTPException(
             status_code=404,
             detail=f"No monthly climate data for '{planet_id}'. Run the climate engine first.",
@@ -347,12 +384,8 @@ def get_climate_yearly(
     this endpoint streams the raw bytes.
     """
     mgr = _get_map_manager(world_name, branch)
-    map_dir = mgr._map_input_dir(planet_id)  # noqa: SLF001
-    if map_dir is None:
-        raise HTTPException(status_code=404, detail=f"No map data for '{planet_id}'")
-
-    yearly_file = map_dir / "climate_yearly.msgpack"
-    if not yearly_file.exists():
+    yearly_file = _map_file_overlay_first(mgr, planet_id, "climate_yearly.msgpack")
+    if yearly_file is None:
         raise HTTPException(
             status_code=404,
             detail=f"No yearly climate data for '{planet_id}'. Run the climate engine first.",
