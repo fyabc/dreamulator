@@ -133,14 +133,33 @@ export default function HabitableZoneRing({
 
   const innerAU = hz.runaway_greenhouse_au ?? 0
   const outerAU = hz.max_greenhouse_au ?? 0
+  // Optimistic bounds (recent Venus / early Mars) drawn as a fainter halo.
+  const optInnerAU = hz.recent_venus_au ?? 0
+  const optOuterAU = hz.early_mars_au ?? 0
 
   if (innerAU <= 0 || outerAU <= innerAU) return null
+  const hasOptimistic = optInnerAU > 0 && optInnerAU < innerAU && optOuterAU > outerAU
 
   const condensation = data.condensation_lines
 
   return (
     <group>
-      {/* Habitable zone fill */}
+      {/* Optimistic habitable zone halo (recent Venus – early Mars) */}
+      {hasOptimistic && (
+        <>
+          <FlatRing
+            innerRadius={optInnerAU}
+            outerRadius={optOuterAU}
+            color="#22aa44"
+            opacity={0.035}
+            yOffset={yOffset}
+          />
+          <CircleLine radius={optInnerAU} color="#22aa44" opacity={0.12} yOffset={yOffset} dashed />
+          <CircleLine radius={optOuterAU} color="#22aa44" opacity={0.12} yOffset={yOffset} dashed />
+        </>
+      )}
+
+      {/* Conservative habitable zone fill (runaway greenhouse – max greenhouse) */}
       <FlatRing
         innerRadius={innerAU}
         outerRadius={outerAU}
@@ -158,7 +177,7 @@ export default function HabitableZoneRing({
         <CircleLine
           radius={condensation.water_snow_line_au}
           color="#4488cc"
-          opacity={0.15}
+          opacity={0.35}
           yOffset={yOffset}
           dashed
         />
@@ -168,7 +187,7 @@ export default function HabitableZoneRing({
         <CircleLine
           radius={condensation.rock_line_au}
           color="#cc6633"
-          opacity={0.15}
+          opacity={0.25}
           yOffset={yOffset}
           dashed
         />
