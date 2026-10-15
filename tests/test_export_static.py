@@ -138,3 +138,87 @@ def test_export_layer_data_branch_without_derived_degrades(
     sample = next(d for d in astro if d["filename"] == "sample.md")
     assert sample["rendered"] is False
     assert "{{ entities.planet_test.solar_day_days | round2 }}" in sample["content"]
+
+
+def test_export_map_data_branch_overlay_without_elevation(
+    export_static: Any, tmp_path: Path
+) -> None:
+    """Branch-only planet (no root maps): a climate-fork branch maps dir
+    lacking terrain products must still be exported (the static frontend
+    would otherwise fall back to root climate), and must NOT get empty
+    plates/features placeholders (those would shadow root's real files)."""
+    world = tmp_path / "test-world"
+    _build_world(world)
+    branch_maps = world / "branches" / "gcm" / "maps" / "planet_x"
+    _write_yaml(world / "branches" / "gcm" / "branch.yaml", {"name": "gcm"})
+    branch_maps.mkdir(parents=True)
+    (branch_maps / "climate_monthly.msgpack").write_bytes(b"gcm-monthly")
+
+    out = tmp_path / "out" / "maps"
+    planets = export_static._export_map_data(world, out, branch="gcm")
+
+    assert planets == ["planet_x"]
+    assert (out / "planet_x" / "climate_monthly.msgpack").read_bytes() == b"gcm-monthly"
+    assert not (out / "planet_x" / "elevation.png").exists()
+    assert not (out / "planet_x" / "plates.json").exists()
+    assert not (out / "planet_x" / "features.json").exists()
+    import json as _json
+
+    assert _json.loads((out / "maps.json").read_text(encoding="utf-8")) == ["planet_x"]
+
+
+def test_export_map_data_branch_overlay_inherits_root_files(
+    export_static: Any, tmp_path: Path
+) -> None:
+    """Per-file branch inheritance: files the overlay lacks are filled from
+    the root world's maps dir so the static export is self-contained (host
+    404 semantics are not reliable — vite preview answers missing files
+    with 200 HTML).  The branch's own files always win."""
+    world = tmp_path / "test-world"
+    _build_world(world)
+    root_maps = world / "maps" / "planet_x"
+    _write_yaml(root_maps / "map.yaml", {"planet_id": "planet_x"})
+    (root_maps / "elevation.png").write_bytes(b"root-png")
+    (root_maps / "climate_monthly.msgpack").write_bytes(b"root-monthly")
+    (root_maps / "climate_yearly.msgpack").write_bytes(b"root-yearly")
+    _write(root_maps / "plates.json", '{"plates": [{"id": "root-plate"}]}')
+    branch_maps = world / "branches" / "gcm" / "maps" / "planet_x"
+    _write_yaml(world / "branches" / "gcm" / "branch.yaml", {"name": "gcm"})
+    branch_maps.mkdir(parents=True)
+    (branch_maps / "climate_monthly.msgpack").write_bytes(b"gcm-monthly")
+
+    out = tmp_path / "out" / "maps"
+    planets = export_static._export_map_data(world, out, branch="gcm")
+
+    assert planets == ["planet_x"]
+    planet_out = out / "planet_x"
+    # Branch's own climate wins; everything else is filled from root.
+    assert (planet_out / "climate_monthly.msgpack").read_bytes() == b"gcm-monthly"
+    assert (planet_out / "climate_yearly.msgpack").read_bytes() == b"root-yearly"
+    assert (planet_out / "elevation.png").read_bytes() == b"root-png"
+    import json as _json
+
+    meta = _json.loads((planet_out / "meta.json").read_text(encoding="utf-8"))
+    assert meta["planet_id"] == "planet_x"
+    plates = _json.loads((planet_out / "plates.json").read_text(encoding="utf-8"))
+    assert plates == {"plates": [{"id": "root-plate"}]}
+
+
+def test_export_map_data_root_writes_placeholders(export_static: Any, tmp_path: Path) -> None:
+    """Root export keeps the elevation gate and empty plates/features
+    placeholders (404-noise avoidance) — unchanged by the branch fix."""
+    world = tmp_path / "test-world"
+    _build_world(world)
+    root_maps = world / "maps" / "planet_x"
+    root_maps.mkdir(parents=True)
+    (root_maps / "elevation.png").write_bytes(b"png")
+
+    out = tmp_path / "out" / "maps"
+    planets = export_static._export_map_data(world, out, branch=None)
+
+    assert planets == ["planet_x"]
+    import json as _json
+
+    assert _json.loads((out / "planet_x" / "plates.json").read_text(encoding="utf-8")) == {
+        "plates": []
+    }
