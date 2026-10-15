@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792097840546,
+  "lastUpdate": 1792106123899,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -6960,6 +6960,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008696791866724126",
             "extra": "mean: 5.095790000001443 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "42c88f8b980a696eb553013fef95a6b094909598",
+          "message": "fix(maps): 分支地图数据逐文件回退——API 404、Pages EBM 回退、预览卡死三修复\n\n气候分叉分支的 maps/ 只有气候产品，地形产品（map.yaml/elevation.png/\nplates/features）只在 root；目录级解析命中分支后无逐文件回退，造成：\n\n① API 模式 meta/elevation 404（前端 banner 数据加载失败）——\n   api_routes/maps.py 十个端点改「分支覆盖 → root」逐文件解析；\n② 静态导出用 elevation.png 当行星目录门槛，气候分叉分支整体被跳过，\n   Pages 回退显示 root EBM 气候——分支模式接受无 elevation 的目录；\n③ vite preview SPA 回退给缺失文件喂 200 HTML（ Pages 语义不符），\n   页面解码卡死——导出侧逐文件从 root 填充，静态导出自洽、\n   免疫宿主 404 语义；分支模式不再写空 plates/features 占位符\n   （会遮蔽 root 真实文件）。\n\n12 个新回归测试（API 8 + 导出 4）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-16T07:14:19+08:00",
+          "tree_id": "392fec56cf95af76c82bb867e0c46e8d89c72b00",
+          "url": "https://github.com/fyabc/dreamulator/commit/42c88f8b980a696eb553013fef95a6b094909598"
+        },
+        "date": 1792106122921,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.2926070718800911,
+            "unit": "iter/sec",
+            "range": "stddev: 0.3845062303114144",
+            "extra": "mean: 3.4175523974000015 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.9457216584600263,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017482575940307138",
+            "extra": "mean: 339.47538700000024 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3782874508554321,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1643824817832038",
+            "extra": "mean: 725.5380576666729 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 938.9276394752131,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00013684838040000996",
+            "extra": "mean: 1.0650448000006918 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 191.1150827373357,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009497353835690757",
+            "extra": "mean: 5.232449400000405 msec\nrounds: 5"
           }
         ]
       }
