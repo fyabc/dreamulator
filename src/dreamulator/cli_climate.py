@@ -73,8 +73,25 @@ def climate_info(
         console.print(f"[red]World '{world}' not found[/red]")
         raise typer.Exit(code=1) from None
 
+    # Auto-detect planet ID (same convention as ``climate validate``).
+    if planet == "earth":
+        detected = _detect_planet_id(world, branch, data_dir)
+        if detected is not None:
+            planet = detected
+
     resolver = LayerResolver(world_dir, branch)
     derived_dir = resolver.get_derived_dir("climate")
+
+    if derived_dir is None:
+        # Layers that need no authored input (climate derives everything from
+        # the inherited planet/star inputs) have no input/ directory, so the
+        # resolver reports them as "not configured" even after a build — fall
+        # back to checking the derived directories directly.
+        candidates = []
+        if branch is not None:
+            candidates.append(world_dir / "branches" / branch / "layers" / "climate" / "derived")
+        candidates.append(world_dir / "layers" / "climate" / "derived")
+        derived_dir = next((d for d in candidates if d.is_dir() and any(d.iterdir())), None)
 
     if derived_dir is None:
         console.print("[yellow]Climate layer has not been built yet.[/yellow]")
@@ -82,7 +99,11 @@ def climate_info(
         return
 
     # Look for climate outputs
-    maps_dir = derived_dir / "maps" / planet
+    from dreamulator.map.manager import MapManager
+
+    maps_dir = MapManager(world_dir, branch)._map_input_dir(planet)  # noqa: SLF001
+    if maps_dir is None:
+        maps_dir = derived_dir / "maps" / planet
     summary_path = derived_dir / "climate_summary.yaml"
 
     console.print(

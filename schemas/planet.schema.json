@@ -48,7 +48,7 @@
       "properties": {
         "water_coverage": {
           "default": 0.71,
-          "description": "Fraction of surface covered by water",
+          "description": "Fraction of surface covered by water; the terrain pipeline derives its default sea-level calibration target as 1 − water_coverage",
           "maximum": 1,
           "minimum": 0,
           "title": "Water Coverage",

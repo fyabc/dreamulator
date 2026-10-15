@@ -1397,21 +1397,13 @@ def terrain_info(
         console.print(f"[red]World '{world}' not found[/red]")
         raise typer.Exit(code=1) from None
 
-    from dreamulator.resolver import LayerResolver
-
-    resolver = LayerResolver(world_dir, branch)
+    from dreamulator.map.manager import MapManager
 
     planet_id = planet or "earth"
 
-    # Check input first, then derived
-    map_dir = None
-    for get_dir in (resolver.get_input_dir, resolver.get_derived_dir):
-        base_dir = get_dir("geological")
-        if base_dir is not None:
-            candidate = base_dir / "maps" / planet_id
-            if candidate.exists():
-                map_dir = candidate
-                break
+    # Same resolution order as the rest of the stack: branch maps → world
+    # maps → legacy layer-based locations.
+    map_dir = MapManager(world_dir, branch)._map_input_dir(planet_id)  # noqa: SLF001
 
     if map_dir is None:
         console.print(f"[yellow]No terrain data for planet '{planet_id}'[/yellow]")
@@ -1535,21 +1527,13 @@ def terrain_export(
         console.print(f"[red]World '{world}' not found[/red]")
         raise typer.Exit(code=1) from None
 
-    from dreamulator.resolver import LayerResolver
-
-    resolver = LayerResolver(world_dir, branch)
+    from dreamulator.map.manager import MapManager
 
     planet_id = planet or "earth"
 
-    # Check input first, then derived
-    map_dir = None
-    for get_dir in (resolver.get_input_dir, resolver.get_derived_dir):
-        base_dir = get_dir("geological")
-        if base_dir is not None:
-            candidate = base_dir / "maps" / planet_id
-            if candidate.exists():
-                map_dir = candidate
-                break
+    # Same resolution order as the rest of the stack: branch maps → world
+    # maps → legacy layer-based locations.
+    map_dir = MapManager(world_dir, branch)._map_input_dir(planet_id)  # noqa: SLF001
 
     if map_dir is None:
         console.print(f"[red]No terrain data for planet '{planet_id}'[/red]")

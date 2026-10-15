@@ -3,9 +3,6 @@
 This enables ``dreamulator build --only geological`` to run the full terrain
 pipeline (CVT mesh → plates → boundaries → terrain synthesis → export)
 through the standard BaseEngine interface.
-
-For fine-grained stage control during development, use
-``dreamulator terrain generate --stages ...`` instead.
 """
 
 from __future__ import annotations
@@ -22,6 +19,28 @@ if TYPE_CHECKING:
     from dreamulator.map.pipeline_types import TerrainImportRecipe, TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
+
+# Sections that TerrainPipelineConfig.from_dict flattens without a prefix, so
+# ``target_land_fraction`` under any of them lands on the config field.
+_CONFIG_FLAT_SECTIONS = ("planet", "terrain", "plates", "noise", "climate", "export")
+
+
+def _yaml_authors_land_fraction(path: Path) -> bool:
+    """True when a terrain_config YAML sets ``target_land_fraction`` anywhere
+    that ``TerrainPipelineConfig.from_dict`` would pick it up (top level or an
+    unprefixed section)."""
+    import yaml
+
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        return False
+    if "target_land_fraction" in data:
+        return True
+    return any(
+        isinstance(data.get(sec), dict) and "target_land_fraction" in data[sec]
+        for sec in _CONFIG_FLAT_SECTIONS
+    )
 
 
 class GeologicalEngine(BaseEngine):
@@ -266,8 +285,12 @@ class GeologicalEngine(BaseEngine):
 
         # Try to find terrain_config.yaml
         config_path = self.find_input("terrain_config.yaml")
+        # Whether target_land_fraction was authored explicitly; otherwise it
+        # derives from the canonical planets.yaml hydrosphere below.
+        land_fraction_authored = False
         if config_path is not None:
             cfg = TerrainPipelineConfig.from_yaml(config_path)
+            land_fraction_authored = _yaml_authors_land_fraction(config_path)
         else:
             # Fall back to planets.yaml for basic parameters
             planets_path = self.find_input("planets.yaml")
@@ -279,6 +302,13 @@ class GeologicalEngine(BaseEngine):
                 planets = data.get("planets", [])
                 if planets:
                     cfg = TerrainPipelineConfig.from_planet_config(planets[0])
+                    terrain_overrides = (
+                        planets[0].get("terrain") if isinstance(planets[0], dict) else None
+                    )
+                    land_fraction_authored = (
+                        isinstance(terrain_overrides, dict)
+                        and "target_land_fraction" in terrain_overrides
+                    )
                 else:
                     cfg = TerrainPipelineConfig()
             else:
@@ -318,6 +348,28 @@ class GeologicalEngine(BaseEngine):
                         f"terrain_config {key}={old} differs from canonical "
                         f"planets/stellar value {new} ({rel:.0%}); using canonical value"
                     )
+
+        # Sea-level calibration target derives from the canonical hydrosphere
+        # (planets.yaml ``water_coverage``) unless authored explicitly.  An
+        # authored value diverging by more than 20% is kept with a warning
+        # (manual-override + consistency-check pattern).
+        from dreamulator.engine.physical_inputs import load_planet_for_engine
+
+        planet, planet_warnings = load_planet_for_engine(self, planet_id=planet_id)
+        warnings.extend(planet_warnings)
+        if planet is not None and planet.hydrosphere is not None:
+            canonical_land = 1.0 - planet.hydrosphere.water_coverage
+            if land_fraction_authored:
+                authored = cfg.target_land_fraction
+                rel = abs(authored - canonical_land) / max(canonical_land, 1e-9)
+                if rel > 0.2:
+                    warnings.append(
+                        f"terrain_config target_land_fraction={authored} differs from "
+                        f"canonical 1 - water_coverage = {canonical_land:.3f} "
+                        f"({rel:.0%}); using authored value"
+                    )
+            else:
+                cfg.target_land_fraction = canonical_land
 
         return cfg, warnings
 
