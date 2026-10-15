@@ -60,6 +60,8 @@ cd frontend && npm ci && cd ..
 
 ### Create Your First World
 
+> New here? Follow the step-by-step tutorial: [Getting Started](docs/usage/getting-started.md) (中文).
+
 ```bash
 # Create a new Earth-like world
 uv run dreamulator init myworld --template earthlike
@@ -180,6 +182,7 @@ See `docs/usage/cli.md` for deployment options and the `dreamulator serve` comma
 
 | Document | Description |
 |----------|-------------|
+| [Getting Started](docs/usage/getting-started.md) | Step-by-step tutorial: create a world, set parameters, build, view, export (中文) |
 | [CLI Reference](docs/usage/cli.md) | All CLI commands (init/build/branch/climate/narrate/serve…) |
 | [Map Workflow](docs/usage/map-workflow.md) | CVT mesh terrain generation → viewer inspection → Gaea refinement |
 | [Climate Validation](docs/usage/climate-validation-workflow.md) | Real-Earth observation data import, multi-dataset validation, regression test suite |

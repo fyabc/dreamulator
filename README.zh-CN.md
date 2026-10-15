@@ -59,6 +59,8 @@ cd frontend && npm ci && cd ..
 
 ### 创建你的第一个世界
 
+> 第一次使用？跟着 [新手教程](docs/usage/getting-started.md) 一步步走通完整链路。
+
 ```bash
 # 创建一个类地球世界
 uv run dreamulator init myworld --template earthlike
@@ -179,6 +181,7 @@ uv run dreamulator serve
 
 | 文档 | 说明 |
 |------|------|
+| [新手教程](docs/usage/getting-started.md) | 零基础完整链路：创建世界 → 设参数 → 构建 → 查看 → 出图 |
 | [CLI 命令参考](docs/usage/cli.md) | 全部 CLI 命令 (init/build/branch/climate/narrate/serve…) |
 | [地图工作流](docs/usage/map-workflow.md) | CVT 网格地形生成 → 查看器检查 → Gaea 精细化 |
 | [气候验证工作流](docs/usage/climate-validation-workflow.md) | 真实地球观测数据导入、多数据集验证、回归测试体系 |
