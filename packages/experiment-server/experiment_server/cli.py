@@ -48,6 +48,13 @@ def variant(work_dir:Work,name:Annotated[str,typer.Option(help='新实验名。'
 
 
 @app.command()
+def kick(work_dir:Work,name:Annotated[str,typer.Option(help='新实验名。')],from_name:Annotated[str,typer.Option('--from-name',help='已注册实验的原始完整初态。')],body:Annotated[str,typer.Option(help='受扰动天体的body_name。')],dv_m_s:Annotated[float,typer.Option('--dv-m-s',help='初态瞬时速度变化（m/s），可为负。')],direction:Annotated[str,typer.Option(help='相对母体的轨道系方向：tangential / radial / normal。')]='tangential'):
+    """对指定天体在初态施加瞬时速度扰动（模拟撞击），以新名字注册；不改质量、位置与16state。"""
+    from .variants import kick as _kick
+    output(execute(_kick,work_dir.resolve(),name,from_name,body,dv_m_s,direction))
+
+
+@app.command()
 def capacity(work_dir:Work,max_active:Annotated[int,typer.Option(min=1)]):
     """修改并发上限，不停止或启动已有实验。"""
     with locked(work_dir.resolve()):

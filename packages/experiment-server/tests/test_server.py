@@ -89,6 +89,24 @@ def test_ctl_variant_keeps_particles_spin_and_changes_only_declared_material(tmp
     assert new['initial_state']['particles']!=c['initial_state']['particles'] and new['initial_state']['spin_state16']==c['initial_state']['spin_state16']
 
 
+def test_kick_changes_only_the_declared_velocity(tmp_path):
+    from experiment_server.variants import kick
+    from experiment_server.config import AU,YEAR
+    root=tmp_path/'work';init(root,8);c=read_config(PACKAGE/'examples/nacrea-zero.json');register(root,'base',c)
+    names=c['body_names'];i=names.index('satellite_cadence')
+    kick(root,'kick_t','base','satellite_cadence',10.0,'tangential');_,new=get_case(root,'kick_t')
+    old_p,new_p=c['initial_state']['particles'],new['initial_state']['particles']
+    assert [p['m'] for p in old_p]==[p['m'] for p in new_p]
+    assert new['initial_state']['spin_state16']==c['initial_state']['spin_state16']
+    v=new['provenance']['variant'];assert v['kick_body']=='satellite_cadence' and v['kick_dv_m_s']==10.0
+    da=v['orbit_after']['a_AU']/v['orbit_before']['a_AU']-1
+    assert 0<da<0.01  # a prograde-along-velocity kick raises the orbit by ~2 dv/v
+    kick(root,'kick_n','base','satellite_cadence',10.0,'normal');_,n=get_case(root,'kick_n')
+    vn=n['provenance']['variant'];assert abs(vn['orbit_after']['a_AU']/vn['orbit_before']['a_AU']-1)<1e-6
+    assert abs(vn['orbit_after']['inc_deg']-vn['orbit_before']['inc_deg'])>1e-3
+    with pytest.raises(ValueError):kick(root,'bad','base','satellite_cadence',10.0,'sideways')
+
+
 def test_dynamic_plot_conservative_saved_pairs(tmp_path):
     from experiment_server.plotting import render
     root=tmp_path/'work';init(root,8);c=read_config(PACKAGE/'examples/two-body.json');register(root,'arbitrary',c);run(root,'arbitrary',.2)
