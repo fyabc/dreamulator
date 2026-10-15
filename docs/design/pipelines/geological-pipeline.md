@@ -969,7 +969,9 @@ age = max_age · d_div / (d_div + d_conv)
 
 合成后按序执行（弧/造山带增加高程，架/平原必须最后，否则被覆盖）：
 
-1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§8）。
+1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§8；该值未在
+   terrain_config 显式配置时，从 planets.yaml 的 `hydrosphere.water_coverage` 推导为
+   1 − 水覆盖率，保证设定文档与生成地形不脱节）。
 2. **内部低地** `_apply_interior_lowlands`（见 §7.3）：以汇聚边界为源做多源 BFS，
    大陆内部按 `depth × smoothstep(d/scale)` 下压。
 3. **沉积填充** `_apply_deposition_fill`（见 §7.3）：把低于海平面的闭合盆地填到溢流

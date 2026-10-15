@@ -424,6 +424,9 @@ terrain:
   hotspot_count: 3          # 热点链数量（默认 3；nacrea 覆写 9）
   mountain_asymmetry: 0.4   # 山脉不对称度（0=对称， 1=强不对称）
   shelf_width_km: 150.0     # 大陆架宽度
+  target_land_fraction: 0.29  # 陆地占比目标；缺省从 planets.yaml 的
+                              # hydrosphere.water_coverage 推导（1 − 水覆盖率），
+                              # 显式值与之偏差 >20% 时保留并告警
   terrain_algorithm: cortial2019_asymmetric  # 地形合成策略
 
 plates:

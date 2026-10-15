@@ -48,7 +48,11 @@ class Hydrosphere(BaseModel):
     """Planetary hydrosphere properties."""
 
     water_coverage: float = Field(
-        default=0.71, ge=0, le=1, description="Fraction of surface covered by water"
+        default=0.71,
+        ge=0,
+        le=1,
+        description="Fraction of surface covered by water; the terrain pipeline "
+        "derives its default sea-level calibration target as 1 − water_coverage",
     )
     salinity_ppt: float = Field(
         default=35.0, ge=0, description="Average ocean salinity in parts per thousand"
