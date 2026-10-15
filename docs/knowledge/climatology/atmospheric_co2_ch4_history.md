@@ -98,6 +98,18 @@ CO2 是「慢指针」**——冰芯里两条曲线与温度三者的相位关�
   这约束「平均脱气率 ≥ 脉冲谷值补偿」。
 - 验证工具：ExoPlaSim carbonmod（`VOLCANCO2` 以地球脱气为单位、
   `NCARBON`/`NCO2EVOLVE` 开关）可直接数值积分该稳态与脉冲响应。
+- **内部热流到脱气的标度。** 板块构造下洋壳生成与俯冲速率约正比于全球热流的平方，脱气随之变化，
+  变质脱碳正比于热流的 1–2 次方（Sleep & Zahnle 2001）；以火山为主要散热方式的热管体制下，
+  岩浆通量正比于热流（Moore & Webb 2013）。所以脱气 ∝ Q^a，a 取 1–2。
+- **风化一侧的时间尺度。** 硅酸盐风化负反馈的响应时间约 17–38 万年（Colbourn、Ridgwell & Lenton
+  2015），持续更久的脱气变化会让 pCO₂ 接近新的稳态。新鲜玄武岩只占大陆约 5% 却贡献大陆硅酸盐风化
+  耗碳的 30–35%（Dessert 等 2003），所以大规模喷发之后风化能力本身会升高；造山抬升经物质供给加强
+  风化，但时间尺度为百万到千万年，主要决定长期基线。
+- **地球大灭绝的 CO₂ 尺度。** 三叠纪末中大西洋岩浆省每一次脉冲使 pCO₂ 约翻倍到三倍（Schaller、
+  Wright & Kent 2011）；二叠纪末约 7.5 万年内从约 430 ppm 升到约 2500 ppm（Wu 等 2021），火山碳排放
+  总量约 3.6 万 Gt 碳、峰值每年约 5 Gt（Cui 等 2021）。灭绝与 CO₂ 的快速上升相伴，长期偏高的 CO₂
+  本身（如白垩纪）并不对应灭绝；对内部热流起伏的世界，灭绝的触发量应取热流或脱气相对前一段的
+  升幅，而不是绝对值（nacrea 的应用见设计笔记 0014 §4）。
 
 ## 5. 世界构建速查（锚点表）
 
@@ -135,5 +147,18 @@ CO2 是「慢指针」**——冰芯里两条曲线与温度三者的相位关�
 - Archer, D. (2011). *The Long Thaw*. Princeton UP.（碳循环长时标命运）
 - Myhre, G., et al. (1998). New estimates of radiative forcing due to CO2,
   CH4 and N2O. *GRL*, 25, 2715.（两条 ΔF 公式出处）
+- Colbourn, G., Ridgwell, A., & Lenton, T. M. (2015). The time scale of the silicate weathering negative
+  feedback on atmospheric CO2. *Global Biogeochemical Cycles*, 29, 583–596.
+- Cui, Y., et al. (2021). Massive and rapid predominantly volcanic CO2 emission during the end-Permian
+  mass extinction. *PNAS*, 118, e2014701118.
+- Dessert, C., Dupré, B., Gaillardet, J., François, L. M., & Allègre, C. J. (2003). Basalt weathering laws
+  and the impact of basalt weathering on the global carbon cycle. *Chemical Geology*, 202, 257–273.
+- Moore, W. B., & Webb, A. A. G. (2013). Heat-pipe Earth. *Nature*, 501, 501–505.
+- Schaller, M. F., Wright, J. D., & Kent, D. V. (2011). Atmospheric PCO2 perturbations associated with the
+  Central Atlantic Magmatic Province. *Science*, 331, 1404–1409.
+- Sleep, N. H., & Zahnle, K. (2001). Carbon dioxide cycling and implications for climate on ancient Earth.
+  *JGR*, 106, 1373–1399.
+- Wu, Y., et al. (2021). Six-fold increase of atmospheric pCO2 during the Permian–Triassic mass extinction.
+  *Nature Communications*, 12, 2137.
 - Ruddiman, W. F. (2003). The anthropogenic greenhouse era began thousands
   of years ago. *Climatic Change*, 61, 261.（全新世 CH4 农业上升）
