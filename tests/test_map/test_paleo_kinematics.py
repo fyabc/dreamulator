@@ -256,3 +256,22 @@ def test_history_merges_plates_when_a_rift_closes(two_plates) -> None:
     snaps, log = run_history(rift, age, elev, orogens, OceanDepth(**DEPTH), [4.0], cfg)
     assert log.merges, "the closing rift should merge the two plates"
     assert np.unique(snaps[0].plate[snaps[0].continental]).size == 1
+
+
+def test_clean_fragments_absorbs_enclaves_but_keeps_microplates(two_plates) -> None:
+    from scipy.spatial import cKDTree
+
+    from dreamulator.map.paleo_history import _clean_fragments
+
+    kin, _, _ = two_plates
+    plate = kin.plate.copy()
+    # an enclave of plate 1 deep inside plate 0, and a separate one-piece microplate 2
+    enclave = np.flatnonzero(np.linalg.norm(kin.xyz - [1.0, 0.0, 0.0], axis=1) < 0.08)
+    micro = np.flatnonzero(np.linalg.norm(kin.xyz - [0.0, 0.0, 1.0], axis=1) < 0.08)
+    plate[enclave] = 1
+    plate[micro] = 2
+    parcels = plate.copy()
+    moved = _clean_fragments(kin.xyz, parcels, plate, cKDTree(kin.xyz), kin)
+    assert moved == enclave.size
+    assert np.all(parcels[enclave] == 0)
+    assert np.all(parcels[micro] == 2)

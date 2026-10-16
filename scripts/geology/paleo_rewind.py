@@ -63,6 +63,7 @@ from dreamulator.map.paleo_history import (
     OceanDepth,
     Snapshot,
     active_orogens,
+    rift_onsets,
     run_history,
 )
 from dreamulator.map.paleo_kinematics import (
@@ -131,6 +132,7 @@ class World:
         self.divergent = np.array([c.boundary_type == "divergent" for c in cells])
         self.convergent = np.array([c.boundary_type == "convergent" for c in cells])
         self.cumulative_convergence_km = np.array([c.cumulative_convergence_km for c in cells])
+        self.cumulative_divergence_km = np.array([c.cumulative_divergence_km for c in cells])
 
 
 def ocean_params(map_dir: Path, config_path: Path | None) -> dict[str, float]:
@@ -288,8 +290,9 @@ def run_history_mode(
         merge_contact_km=args.merge_contact_km,
         seed=args.seed,
     )
+    rifts = rift_onsets(w.kin, w.divergent, w.cumulative_divergence_km)
     snaps, log = run_history(
-        w.kin, age, w.elevation, orogens, OceanDepth(**params), list(args.epochs), cfg
+        w.kin, age, w.elevation, orogens, OceanDepth(**params), list(args.epochs), cfg, rifts
     )
     a = w.kin.area_km2
     oro = orogens.relief_m > 0
@@ -302,6 +305,11 @@ def run_history_mode(
         ]
         if oro.any()
         else [],
+        "young_rifts": {
+            f"{a}-{b}": {k: round(x, 2) for k, x in asdict(v).items()}
+            for (a, b), v in sorted(rifts.items())
+        },
+        "rift_onsets": log.rift_onsets,
         "reorganizations": log.reorganizations,
         "hinges": log.hinges,
         "merges": log.merges,

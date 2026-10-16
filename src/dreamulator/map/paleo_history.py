@@ -50,6 +50,24 @@ backward in steps of ``dt_myr`` over a set of crust parcels.  Each step:
    merge the conjugate-margin misfit is recorded (Bullard et al. 1965 measured
    the same quantity at the 500-fathom isobath).
 
+7. **Absorb enclaves**: with the terrain engine's rule
+   (``tectonic_simulator._merge_plate_enclaves``), every piece of a plate other
+   than its largest, smaller than ``max(50, 0.3 % of the cells)``, joins the
+   surrounding plate.  Resampling and gap filling leave such enclaves; without
+   this they accumulate into multiply-connected plates (numerical
+   stabilization; the count is logged).
+
+**Young rifts** (optional ``rifts``): continental crust of two plates that touch
+across a boundary the terrain engine drew as a rift has only just started rifting,
+so the continents are not yet apart.  Its onset time is the extension the
+terrain engine recorded there (``cumulative_divergence_km``, which also sets the
+rift-valley width) divided by the opening rate.  Before the onset is reached the
+two sides overlap going back; the lower parcel of each overlapping pair is
+deleted, which restores the narrower, unstretched crust (the rift valley
+disappears).  At the onset stretching ends; when the rift makes up at least
+``merge_contact_frac`` of the plates' common boundary it is where they
+separated, and the two plates merge.
+
 Continental elevation rolls back active orogens linearly to their build time;
 oceanic elevation follows the plate-cooling increment, so at ``t = 0`` every cell
 is exactly the present field.  Seeded RNG: same inputs and seed give the same
@@ -177,6 +195,7 @@ class HistoryLog:
     """Events and per-step bookkeeping of a backward walk."""
 
     reorganizations: list[dict[str, float]] = field(default_factory=list)
+    rift_onsets: list[dict[str, float | int | str | bool]] = field(default_factory=list)
     hinges: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int]] = field(default_factory=list)
     steps: list[dict[str, float]] = field(default_factory=list)
@@ -225,8 +244,12 @@ def run_history(
     depth: OceanDepth,
     epochs: list[float],
     cfg: HistoryConfig,
+    rifts: dict[tuple[int, int], YoungRift] | None = None,
 ) -> tuple[list[Snapshot], HistoryLog]:
     """Walk the plates back to ``max(epochs)``, snapshotting each epoch.
+
+    ``rifts`` maps a plate pair (smaller index first) to its young rift
+    (``rift_onsets``); see the module docstring.
 
     ``kin`` should carry the reconstruction plate model (``reconstruction_plates``)
     and ``age_myr`` the synthetic present seafloor age.  The inputs are not
@@ -298,6 +321,32 @@ def run_history(
     t_end = targets[-1] if targets else 0.0
     next_reorg = float(rng.uniform(*cfg.reorg_interval_myr))
     hinged: set[tuple[int, int]] = set()
+    active_rifts: dict[tuple[int, int], YoungRift] = dict(rifts or {})
+    n_pl = omega.shape[0]
+
+    def merge(p_a: int, p_b: int) -> None:
+        """Plate p_b joins p_a; the pole is refitted to both; pair keys follow."""
+        nonlocal active_rifts, hinged
+        both = (plate == p_a) | (plate == p_b)
+        vel = np.cross(omega[plate[both]], pos[both])
+        plate[plate == p_b] = p_a
+        omega[p_a] = fit_rotation(pos[both], vel, np.ones(int(both.sum())))
+        omega[p_b] = 0.0
+
+        def ren(k: tuple[int, int]) -> tuple[int, int]:
+            x, y = (p_a if k[0] == p_b else k[0]), (p_a if k[1] == p_b else k[1])
+            return (min(x, y), max(x, y))
+
+        new_rifts: dict[tuple[int, int], YoungRift] = {}
+        for k, v in active_rifts.items():
+            kk = ren(k)
+            if kk[0] == kk[1]:
+                continue
+            if kk not in new_rifts or v.onset_myr < new_rifts[kk].onset_myr:
+                new_rifts[kk] = v
+        active_rifts = new_rifts
+        hinged = {ren(k) for k in hinged}
+
     cont_area0 = float(kin.area_km2[kin.continental].sum())
 
     while t < t_end - 1e-9:
@@ -357,6 +406,30 @@ def run_history(
         pos = np.einsum("nij,nj->ni", rot[plate], pos)
         pos /= np.linalg.norm(pos, axis=1, keepdims=True)
 
+        # 2b. rifts whose onset is passed: stretching ends; a rift that makes up
+        # most of the plates' common boundary is where they separated, so before
+        # the onset they were one plate
+        for pair, rift in sorted(active_rifts.items(), key=lambda kv: kv[1].onset_myr):
+            if rift.onset_myr > t_new or pair not in active_rifts:
+                continue
+            merged = rift.share >= cfg.merge_contact_frac
+            if merged:
+                p_a, p_b = pair
+                if (plate == p_b).sum() > (plate == p_a).sum():
+                    p_a, p_b = p_b, p_a
+                merge(p_a, p_b)
+            else:
+                del active_rifts[pair]
+            log.rift_onsets.append(
+                {
+                    "t_myr": t_new,
+                    "plates": f"{pair[0]}-{pair[1]}",
+                    "onset_myr": round(rift.onset_myr, 1),
+                    "share": round(rift.share, 2),
+                    "merged": merged,
+                }
+            )
+
         # 3. drop crust younger than t_new
         keep = cont | ~np.isfinite(born) | (born >= t_new)
         n_dropped = int((~keep).sum())
@@ -374,6 +447,14 @@ def run_history(
             # delete a when it is oceanic and b is continental or older ocean
             del_a = ~cont[a] & (cont[b] | (age_b > age_a))
             del_b = ~cont[b] & ~del_a & (cont[a] | (age_a >= age_b))
+            if active_rifts:
+                # stretched rift crust: the lower parcel of a continental pair goes
+                keys = np.minimum(plate[a], plate[b]) * n_pl + np.maximum(plate[a], plate[b])
+                rift_keys = np.array([x * n_pl + y for x, y in active_rifts])
+                in_rift = cont[a] & cont[b] & np.isin(keys, rift_keys)
+                lower_a = z_ref[a] <= z_ref[b]
+                del_a |= in_rift & lower_a
+                del_b |= in_rift & ~lower_a
             keep[a[del_a]] = False
             keep[b[del_b]] = False
         n_overlap_deleted = int(len(pos) - keep.sum() - n_dropped)
@@ -394,30 +475,19 @@ def run_history(
         gaps = np.flatnonzero(dist_km > cfg.gap_factor * spacing)
         n_ridge_gap = 0
         if gaps.size:
-            ocean_idx = np.flatnonzero(~cont)
-            if ocean_idx.size:
-                otree = cKDTree(pos[ocean_idx])
-                kq = min(8, ocean_idx.size)
-                od, oi = otree.query(kin.xyz[gaps], k=kq)
-                od = od.reshape(gaps.size, kq)
-                cand = ocean_idx[oi.reshape(gaps.size, kq)]
-                cand_age = np.where(np.isfinite(born[cand]), born[cand] - t_new, default_age)
-                rows_g = np.arange(gaps.size)
-                side = plate[cand[rows_g, np.argmax(cand_age, axis=1)]]
-                # nearest candidate on the consumed plate (candidates are sorted by
-                # distance, so the first match is the nearest)
-                pick = np.argmax(plate[cand] == side[:, None], axis=1)
-                src = cand[rows_g, pick]
-                src_age = cand_age[rows_g, pick]
-                od_km = 2.0 * radius * np.arcsin(np.clip(od[rows_g, pick] / 2.0, 0.0, 1.0))
-                ridge_gap = cand_age.max(axis=1) < cfg.ridge_gap_age_myr
-                new_age = src_age + od_km / tracer_km_per_myr
-                new_plate = plate[src]
-            else:
-                _, ni = tree.query(kin.xyz[gaps])
-                ridge_gap = np.zeros(gaps.size, dtype=bool)
-                new_age = np.full(gaps.size, default_age)
-                new_plate = plate[ni]
+            new_plate, new_age, ridge_gap = _gap_crust(
+                kin.xyz[gaps],
+                pos,
+                plate,
+                cont,
+                born,
+                t_new,
+                n_pl,
+                radius,
+                default_age,
+                tracer_km_per_myr,
+                cfg.ridge_gap_age_myr,
+            )
             new_age = np.where(ridge_gap, 0.0, new_age)
             new_born = t_new + new_age
             n_ridge_gap = int(ridge_gap.sum())
@@ -431,8 +501,11 @@ def run_history(
             build = np.concatenate([build, np.ones(gaps.size)])
             synthetic = np.concatenate([synthetic, np.ones(gaps.size, dtype=bool)])
 
-        # 6. merges: continental contact between two plates that close backward
+        # 7 (before merging). clean plate fragments on the resampled mesh
         _, src_all = cKDTree(pos).query(kin.xyz)
+        n_relabel = _clean_fragments(pos, plate, plate[src_all], mesh_tree, kin)
+
+        # 6. merges: continental contact between two plates that close backward
         c_plate = plate[src_all]
         c_cont = cont[src_all]
         rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
@@ -463,17 +536,19 @@ def run_history(
                 if contact < cfg.merge_contact_km or float(np.median(opening[m])) <= 0.0:
                     continue
                 p_a, p_b = int(key // omega.shape[0]), int(key % omega.shape[0])
+                if (p_a, p_b) in active_rifts:
+                    continue  # young rifts merge at their onset
                 if (plate == p_b).sum() > (plate == p_a).sum():
                     p_a, p_b = p_b, p_a
                 if share < cfg.merge_contact_frac:
-                    if (p_a, p_b) in hinged:
+                    if (min(p_a, p_b), max(p_a, p_b)) in hinged:
                         continue
                     hinge = x[m].mean(axis=0)
                     hinge /= max(float(np.linalg.norm(hinge)), 1e-15)
                     omega[p_b] = _hinged_pole(
                         omega, pos, plate, cont, p_a, p_b, hinge, dt, cfg.speed_max_cm_yr, radius
                     )
-                    hinged.add((p_a, p_b))
+                    hinged.add((min(p_a, p_b), max(p_a, p_b)))
                     log.hinges.append(
                         {
                             "t_myr": t_new,
@@ -485,11 +560,7 @@ def run_history(
                     )
                     break
                 misfit = _margin_misfit(pos, plate, cont, p_a, p_b, radius, spacing)
-                both = (plate == p_a) | (plate == p_b)
-                vel = np.cross(omega[plate[both]], pos[both])
-                plate[plate == p_b] = p_a
-                omega[p_a] = fit_rotation(pos[both], vel, np.ones(int(both.sum())))
-                omega[p_b] = 0.0
+                merge(p_a, p_b)
                 log.merges.append(
                     {
                         "t_myr": t_new,
@@ -511,6 +582,7 @@ def run_history(
                 "overlap_deleted": n_overlap_deleted,
                 "gaps_filled": int(gaps.size),
                 "ridge_mismatch_filled": n_ridge_gap,
+                "fragment_parcels_relabeled": n_relabel,
                 "continental_area_ratio": round(
                     float(cont.sum()) * cell_area / cont_area0 if cont_area0 else 0.0, 4
                 ),
@@ -519,6 +591,176 @@ def run_history(
         if any(abs(t - e) < 1e-9 for e in targets):
             snaps.append(snapshot(t))
     return snaps, log
+
+
+@dataclass(frozen=True)
+class YoungRift:
+    """A rift between two plates' continents that has only just started.
+
+    Attributes:
+        onset_myr: rift onset (recorded extension / opening rate, median).
+        share: rift length / length of the plates' whole common boundary.
+        length_km: rift length.
+    """
+
+    onset_myr: float
+    share: float
+    length_km: float
+
+
+def rift_onsets(
+    kin: PlateKinematics,
+    divergent: np.ndarray,
+    divergence_km: np.ndarray,
+    min_opening_cm_yr: float = 0.2,
+) -> dict[tuple[int, int], YoungRift]:
+    """Young rifts between plate pairs, from the terrain engine's rift record.
+
+    A rift edge joins continental cells of two plates that the boundary detector
+    flagged divergent and where the terrain engine recorded extension (it drew a
+    rift valley there).  The onset is the median, over edges that open faster
+    than ``min_opening_cm_yr``, of the recorded extension divided by the opening
+    rate.
+    """
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    cross = (rows < cols) & (kin.plate[rows] != kin.plate[cols])
+    pa_all = np.minimum(kin.plate[rows], kin.plate[cols])
+    pb_all = np.maximum(kin.plate[rows], kin.plate[cols])
+    ext_all = np.maximum(divergence_km[rows], divergence_km[cols])
+    m = cross & kin.continental[rows] & kin.continental[cols]
+    m &= divergent[rows] & divergent[cols] & (ext_all > 0)
+    i, j = rows[m], cols[m]
+    x = kin.xyz[i] + kin.xyz[j]
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    n = kin.xyz[i] - kin.xyz[j]
+    n -= np.einsum("ij,ij->i", n, x)[:, None] * x
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-15)
+    v = np.cross(kin.omega[kin.plate[i]] - kin.omega[kin.plate[j]], x) * kin.radius_km * _CM_PER_KM
+    opening = np.einsum("ij,ij->i", v, n)
+    ok = opening > min_opening_cm_yr
+    onset = ext_all[m] / np.maximum(opening, 1e-9) / _KM_PER_MYR_PER_CM_YR
+    pa, pb = pa_all[m], pb_all[m]
+    edge_km = kin.spacing_km / np.sqrt(3.0)
+    out: dict[tuple[int, int], YoungRift] = {}
+    for a, b in sorted({(int(a), int(b)) for a, b in zip(pa, pb, strict=True)}):
+        sel = (pa == a) & (pb == b)
+        if not (sel & ok).any():
+            continue
+        total = int((cross & (pa_all == a) & (pb_all == b)).sum())
+        out[(a, b)] = YoungRift(
+            onset_myr=float(np.median(onset[sel & ok])),
+            share=float(sel.sum() / max(total, 1)),
+            length_km=float(sel.sum() * edge_km),
+        )
+    return out
+
+
+def _gap_crust(
+    gap_xyz: np.ndarray,
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    born: np.ndarray,
+    t: float,
+    n_plates: int,
+    radius_km: float,
+    default_age: float,
+    tracer_km_per_myr: float,
+    ridge_gap_age_myr: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Plate, age and ridge-gap flag of the crust filling each gap cell.
+
+    Each gap lies between its nearest plate and the nearest different plate.  The
+    consumed plate of a plate pair is decided once for the whole pair: the one
+    with the older ocean next to the gaps (continental crust is never consumed).
+    Deciding per cell would alternate along a trench and speckle the plates.
+    The filler's age is the age of the nearest oceanic parcel of the consumed
+    plate plus distance / spreading half-rate.
+    """
+    k = min(12, len(pos))
+    dist, idx = cKDTree(pos).query(gap_xyz, k=k)
+    dist, idx = dist.reshape(len(gap_xyz), k), idx.reshape(len(gap_xyz), k)
+    rows = np.arange(len(gap_xyz))
+    pk = plate[idx]
+    p1 = pk[:, 0]
+    differs = pk != p1[:, None]
+    p2 = np.where(differs.any(axis=1), pk[rows, np.argmax(differs, axis=1)], p1)
+    ocean_k = ~cont[idx]
+    age_k = np.where(ocean_k, np.where(np.isfinite(born[idx]), born[idx] - t, default_age), np.nan)
+
+    pair = np.minimum(p1, p2) * n_plates + np.maximum(p1, p2)
+    consumed = np.empty(len(gap_xyz), dtype=plate.dtype)
+    for key in np.unique(pair):
+        sel = pair == key
+        a, b = int(key // n_plates), int(key % n_plates)
+        mean_age = []
+        for q in (a, b):
+            vals = age_k[sel][pk[sel] == q]
+            vals = vals[np.isfinite(vals)]
+            mean_age.append(float(vals.mean()) if vals.size else -np.inf)
+        consumed[sel] = a if mean_age[0] >= mean_age[1] else b
+    on_plate = (pk == consumed[:, None]) & ocean_k
+    has = on_plate.any(axis=1)
+    pick = np.argmax(on_plate, axis=1)
+    src_age = np.where(has, age_k[rows, pick], default_age)
+    src_km = 2.0 * radius_km * np.arcsin(np.clip(dist[rows, pick] / 2.0, 0.0, 1.0))
+    age = src_age + np.where(has, src_km, 0.0) / tracer_km_per_myr
+    young = np.where(np.isfinite(age_k), age_k, np.inf).min(axis=1) < ridge_gap_age_myr
+    ridge_gap = young & (
+        np.nanmax(np.where(np.isfinite(age_k), age_k, -np.inf), axis=1) < ridge_gap_age_myr
+    )
+    return consumed, age, ridge_gap
+
+
+def _clean_fragments(
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cell_plate: np.ndarray,
+    mesh_tree: cKDTree,
+    kin: PlateKinematics,
+) -> int:
+    """Absorb plate enclaves into the surrounding plate (in place).
+
+    Same rule as the terrain engine's ``tectonic_simulator._merge_plate_enclaves``:
+    on the resampled mesh each plate keeps its largest connected piece; every
+    other piece smaller than ``max(50, 0.3 % of the cells)`` (about the share of
+    the smallest recognised Earth plate) takes the most common plate among the
+    cells bordering it.  A plate that is a single piece is never touched, so
+    microplates survive.  Returns the number of parcels relabeled.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    same = cell_plate[rows] == cell_plate[cols]
+    g = csr_matrix((np.ones(int(same.sum())), (rows[same], cols[same])), shape=(kin.n, kin.n))
+    _, label = connected_components(g, directed=False)
+    size = np.bincount(label)
+    comp_plate = np.zeros(size.size, dtype=cell_plate.dtype)
+    comp_plate[label] = cell_plate
+    # largest piece of each plate
+    order = np.lexsort((-size, comp_plate))  # by plate, largest piece first
+    first = np.ones(order.size, dtype=bool)
+    first[1:] = comp_plate[order[1:]] != comp_plate[order[:-1]]
+    largest = np.zeros(size.size, dtype=bool)
+    largest[order[first]] = True
+    min_keep = max(50, int(0.003 * kin.n))
+    enclave = ~largest & (size < min_keep)
+    if not enclave.any():
+        return 0
+    border = ~same & enclave[label[rows]]
+    b_lab, b_nb = label[rows[border]], cell_plate[cols[border]]
+    target = np.full(size.size, -1)
+    for comp in np.unique(b_lab):
+        vals, counts = np.unique(b_nb[b_lab == comp], return_counts=True)
+        target[comp] = vals[np.argmax(counts)]
+    _, parcel_cell = mesh_tree.query(pos)
+    new = target[label[parcel_cell]]
+    move = new >= 0
+    plate[move] = new[move]
+    return int(move.sum())
 
 
 def _closing_fraction(
