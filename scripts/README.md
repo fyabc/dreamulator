@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 68 个脚本（含 gcm/ 子组 5 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 69 个脚本（含 gcm/ 子组 5 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
@@ -109,6 +109,13 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 
 - `rebound_nbody.py` — REBOUND 自旋-轨道积分（轨道稳定性、Laplace 共振角）。
 - `diagnose_stellar_physics.py` — 恒星物理公式（质光关系、演化时标）诊断。
+
+## geology/ — 地质与古地理（1 个）
+
+- `paleo_rewind.py` — 地质时间轴 M1 诊断：读已构建的地图（只读），由洋中脊与欧拉极合成现状海底
+  年龄，再按现状欧拉极把板块倒推到若干时刻，输出各时刻的地壳、年龄、高程以及空缺与重叠面积；
+  `--observed-age` 用观测年龄网格（Seton 等 2020）检验合成年龄，用于 earth 地图。设计见
+  `docs/design/proposals/geological-timeline.md`。
 
 ## release/ — 发布与静态导出（2 个）
 
