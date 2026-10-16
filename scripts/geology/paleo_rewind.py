@@ -19,8 +19,13 @@ then the plate-boundary ocean cells that open.  ``--plate-model present`` uses
 the map's own plates and its divergent boundary flags (right for the earth map,
 whose plates and boundaries are PB2002 observations).
 
-M1 holds the Euler poles fixed, fills gaps with old ocean and keeps continental
-elevation unchanged; see
+Without ``--history`` each epoch is one rotation with fixed poles (M1: gaps
+are left as old ocean, continental elevation unchanged).  With ``--history`` the
+plates are walked back step by step (``dreamulator.map.paleo_history``, M2):
+stage poles change at drawn reorganizations scored by tectonic rules, consumed
+crust is restored behind trenches, active orogens are rolled back, and plates
+merge where a rift closes; the summary gains a ``history`` block (events and
+per-step counts) and ``--plot`` draws ``history.png``.  See
 ``docs/design/proposals/geological-timeline.md`` §4 and §10.
 
 Outputs into ``--out-dir``: ``summary.json`` (age statistics, passive-margin
@@ -45,7 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -53,12 +58,20 @@ import numpy as np
 import yaml
 
 from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+from dreamulator.map.paleo_history import (
+    HistoryConfig,
+    OceanDepth,
+    Snapshot,
+    active_orogens,
+    run_history,
+)
 from dreamulator.map.paleo_kinematics import (
     PaleoFields,
     PlateKinematics,
     RewoundState,
     adjacency_csr,
     boundary_cells,
+    boundary_opening_rates,
     paleo_fields,
     reconstruction_plates,
     rewind,
@@ -117,6 +130,7 @@ class World:
         self.elevation = np.array([c.elevation for c in cells], dtype=float)
         self.divergent = np.array([c.boundary_type == "divergent" for c in cells])
         self.convergent = np.array([c.boundary_type == "convergent" for c in cells])
+        self.cumulative_convergence_km = np.array([c.cumulative_convergence_km for c in cells])
 
 
 def ocean_params(map_dir: Path, config_path: Path | None) -> dict[str, float]:
@@ -259,6 +273,91 @@ def plot_observed(w: World, age: np.ndarray, obs: np.ndarray, out: Path) -> None
     plt.close(fig)
 
 
+def run_history_mode(
+    w: World, age: np.ndarray, params: dict[str, float], args: argparse.Namespace
+) -> tuple[list[Snapshot], dict[str, Any]]:
+    """M2: stepwise backward walk on the current (reconstruction) plates."""
+    opening, _ = boundary_opening_rates(w.kin, boundary_cells(w.kin))
+    orogens = active_orogens(w.kin, w.elevation, opening, w.cumulative_convergence_km)
+    speed_cap = args.speed_max_cm_yr
+    if speed_cap is None:
+        speed_cap = float(np.linalg.norm(w.kin.omega, axis=1).max() * w.kin.radius_km * 1.0e5)
+    cfg = HistoryConfig(
+        dt_myr=args.dt_myr,
+        speed_max_cm_yr=speed_cap,
+        merge_contact_km=args.merge_contact_km,
+        seed=args.seed,
+    )
+    snaps, log = run_history(
+        w.kin, age, w.elevation, orogens, OceanDepth(**params), list(args.epochs), cfg
+    )
+    a = w.kin.area_km2
+    oro = orogens.relief_m > 0
+    info: dict[str, Any] = {
+        "config": {k: v for k, v in asdict(cfg).items()},
+        "orogen_area_frac": round(float(a[oro].sum() / a.sum()), 4),
+        "orogen_build_myr_p10_50_90": [
+            round(float(v), 1)
+            for v in weighted_percentiles(orogens.build_myr[oro], a[oro], [10, 50, 90])
+        ]
+        if oro.any()
+        else [],
+        "reorganizations": log.reorganizations,
+        "hinges": log.hinges,
+        "merges": log.merges,
+        "steps": log.steps,
+    }
+    return snaps, info
+
+
+def snapshot_summary(w: World, s: Snapshot) -> dict[str, Any]:
+    a = w.kin.area_km2
+    total = a.sum()
+    ocean = ~s.continental & np.isfinite(s.age_myr)
+    return {
+        "t_myr": s.t_myr,
+        "land_frac": round(float(a[s.elevation_m > 0].sum() / total), 4),
+        "continental_area_ratio": round(
+            float(a[s.continental].sum() / a[w.kin.continental].sum()), 4
+        ),
+        "synthetic_frac": round(float(a[s.synthetic].sum() / total), 4),
+        "ridge_mismatch_frac": round(float(a[s.ridge_mismatch].sum() / total), 4),
+        "enclosed_ocean_frac": round(float(a[s.enclosed_ocean].sum() / total), 4),
+        "plates": int(np.unique(s.plate).size),
+        "ocean_age_myr_p50_p90": [
+            round(v, 1) for v in weighted_percentiles(s.age_myr[ocean], a[ocean], [50, 90])
+        ]
+        if ocean.any()
+        else [],
+    }
+
+
+def plot_history(w: World, snaps: list[Snapshot], out: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    s = max(0.05, 2.0e4 / w.kin.n)
+    ncol = 2
+    nrow = (len(snaps) + 1) // ncol
+    fig, axes = plt.subplots(nrow, ncol, figsize=(13, 3.4 * nrow), squeeze=False)
+    for ax, sn in zip(axes.ravel(), snaps, strict=False):
+        z = np.clip(sn.elevation_m, -6000, 4000)
+        ax.scatter(w.lon, w.lat, s=s, c=z, cmap="terrain", vmin=-6000, vmax=4000, lw=0)
+        # plate boundaries
+        rows = np.repeat(np.arange(w.kin.n), np.diff(w.kin.nbr_ptr))
+        edge = rows[sn.plate[rows] != sn.plate[w.kin.nbr_idx]]
+        ax.scatter(w.lon[edge], w.lat[edge], s=s, c="k", lw=0)
+        ax.set(xlim=(-180, 180), ylim=(-90, 90), aspect="equal", xticks=[], yticks=[])
+        n_pl = np.unique(sn.plate).size
+        ax.set_title(f"−{sn.t_myr:g} Myr  ({n_pl} plates; black: plate boundaries)", fontsize=9)
+    for ax in axes.ravel()[len(snaps) :]:
+        ax.axis("off")
+    fig.savefig(out / "history.png", dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot(
     w: World,
     age: np.ndarray,
@@ -293,6 +392,8 @@ def plot(
     fig.savefig(out / "age_area.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
+    if not slices:
+        return
     ncol = 2
     nrow = (len(slices) + 1) // ncol
     fig, axes = plt.subplots(nrow, ncol, figsize=(13, 3.4 * nrow), squeeze=False)
@@ -317,6 +418,11 @@ def main() -> None:
     ap.add_argument("--terrain-config", type=Path, default=None)
     ap.add_argument("--min-opening-cm-yr", type=float, default=0.2)
     ap.add_argument("--plate-model", choices=("blocks", "present"), default="blocks")
+    ap.add_argument("--history", action="store_true", help="stepwise backward walk (M2)")
+    ap.add_argument("--dt-myr", type=float, default=1.0)
+    ap.add_argument("--speed-max-cm-yr", type=float, default=None, help="default: fastest plate")
+    ap.add_argument("--merge-contact-km", type=float, default=1000.0)
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--observed-age", type=Path, default=None, help="netCDF age grid (Myr)")
     ap.add_argument("--plot", action="store_true")
     args = ap.parse_args()
@@ -357,6 +463,28 @@ def main() -> None:
         obs = sample_observed_age(args.observed_age, w.lon, w.lat)
         summary["observed_age"] = observed_summary(w, age, obs)
         print(json.dumps(summary["observed_age"], indent=2, ensure_ascii=False))
+    if args.history:
+        snaps, info = run_history_mode(w, age, params, args)
+        summary["history"] = info
+        for sn in snaps:
+            summary["epochs"].append(snapshot_summary(w, sn))
+            np.savez_compressed(
+                args.out_dir / f"epoch_{sn.t_myr:g}.npz",
+                plate=sn.plate,
+                continental=sn.continental,
+                age_myr=sn.age_myr,
+                elevation_m=sn.elevation_m,
+                synthetic=sn.synthetic,
+            )
+            print(json.dumps(summary["epochs"][-1], ensure_ascii=False))
+        (args.out_dir / "summary.json").write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print(json.dumps({k: info[k] for k in ("reorganizations", "merges")}, ensure_ascii=False))
+        if args.plot:
+            plot(w, age, [], args.out_dir)
+            plot_history(w, snaps, args.out_dir)
+        return
     slices: list[tuple[RewoundState, PaleoFields]] = []
     for t in sorted(args.epochs):
         st = rewind(w.kin, age, t)

@@ -115,7 +115,8 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 - `paleo_rewind.py` — 地质时间轴 M1 诊断：读已构建的地图（只读），由洋中脊与欧拉极合成现状海底
   年龄，再把板块倒推到若干时刻（默认先换成大陆块刚性的重建用板块模型），输出各时刻的地壳、
   年龄、高程以及空缺与重叠面积；
-  `--observed-age` 用观测年龄网格（Seton 等 2020）检验合成年龄，用于 earth 地图。设计见
+  `--observed-age` 用观测年龄网格（Seton 等 2020）检验合成年龄，用于 earth 地图；`--history`
+  改为逐步倒推（阶段欧拉极、补洋壳、造山带回退、裂谷合拢与板块合并）。设计见
   `docs/design/proposals/geological-timeline.md`。
 
 ## release/ — 发布与静态导出（2 个）

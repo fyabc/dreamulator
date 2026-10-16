@@ -233,43 +233,38 @@ def rotation_matrices(omega: np.ndarray, t_yr: float) -> np.ndarray:
     return rot
 
 
-def ridge_half_rates(
-    kin: PlateKinematics,
-    divergent: np.ndarray,
-    min_opening_cm_yr: float = 0.2,
+def boundary_opening_rates(
+    kin: PlateKinematics, cells: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Spreading half-rate (cm/yr) and ridge offset (km) of each ridge cell.
+    """Signed opening rate (cm/yr) across the plate boundary at the given cells.
 
-    A ridge cell is an oceanic cell flagged divergent whose neighbours across the
-    plate boundary actually move away from it.  The opening rate is the relative
-    velocity (own plate minus the neighbour's plate) projected on the boundary
-    normal, averaged over the across-boundary neighbours; the half-rate is half of
-    it.  The offset is half the distance to the nearest across-boundary neighbour,
-    because the boundary (age 0) lies between the two cell centres.
+    The opening rate is the relative velocity (own plate minus the mean rotation of
+    the across-boundary neighbours' plates) projected on the boundary normal:
+    positive where the plates separate, negative where they converge.  The normal
+    is the gradient of plate membership over the two-ring neighbourhood (centroid
+    of own-plate cells minus centroid of the other plates' cells), in the tangent
+    plane.  The nearest across-boundary neighbours alone tilt it by tens of
+    degrees on an irregular mesh, and projecting on each neighbour direction then
+    averaging shrinks the rate by the cosine of their spread.
 
     Args:
         kin: present-day kinematics.
-        divergent: (N,) True where the boundary detector flagged a divergent boundary.
-        min_opening_cm_yr: cells opening slower than this are not ridges.
+        cells: (N,) cells to evaluate; cells without an across-boundary neighbour
+            stay NaN.
 
     Returns:
-        (half_rate, offset_km), both NaN outside ridge cells.
+        (opening_cm_yr, half_gap_km): half_gap is half the distance to the nearest
+        across-boundary neighbour (the boundary lies between the two centres).
     """
-    half = np.full(kin.n, np.nan)
-    offset = np.full(kin.n, np.nan)
+    opening = np.full(kin.n, np.nan)
+    half_gap = np.full(kin.n, np.nan)
     cm_per_rad = kin.radius_km * _CM_PER_KM
-    for i in np.flatnonzero(divergent & ~kin.continental):
+    for i in np.flatnonzero(cells):
         nb = kin.neighbors(int(i))
         across = nb[kin.plate[nb] != kin.plate[i]]
         if across.size == 0:
             continue
         x = kin.xyz[i]
-        # Boundary normal: the gradient of plate membership over the two-ring
-        # neighbourhood (centroid of own-plate cells minus centroid of the other
-        # plates' cells), in the tangent plane.  The nearest across-boundary
-        # neighbours alone tilt it by tens of degrees on an irregular mesh, and
-        # projecting on each neighbour direction then averaging shrinks the rate
-        # by the cosine of their spread.
         ring = np.unique(np.concatenate([nb] + [kin.neighbors(int(j)) for j in nb]))
         own = kin.plate[ring] == kin.plate[i]
         normal = kin.xyz[ring[own]].mean(axis=0) - kin.xyz[ring[~own]].mean(axis=0)
@@ -280,11 +275,36 @@ def ridge_half_rates(
         normal /= norm
         omega_across = kin.omega[kin.plate[across]].mean(axis=0)
         v_rel = np.cross(kin.omega[kin.plate[i]] - omega_across, x) * cm_per_rad
-        opening = float(v_rel @ normal)
-        if opening < min_opening_cm_yr:
-            continue
-        half[i] = 0.5 * opening
-        offset[i] = 0.5 * float(arc_km(x, kin.xyz[across], kin.radius_km).min())
+        opening[i] = float(v_rel @ normal)
+        half_gap[i] = 0.5 * float(arc_km(x, kin.xyz[across], kin.radius_km).min())
+    return opening, half_gap
+
+
+def ridge_half_rates(
+    kin: PlateKinematics,
+    divergent: np.ndarray,
+    min_opening_cm_yr: float = 0.2,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Spreading half-rate (cm/yr) and ridge offset (km) of each ridge cell.
+
+    A ridge cell is an oceanic cell flagged divergent whose plate boundary opens
+    faster than ``min_opening_cm_yr`` (:func:`boundary_opening_rates`); the
+    half-rate is half the opening rate.  The offset is half the distance to the
+    nearest across-boundary neighbour, because the boundary (age 0) lies between
+    the two cell centres.
+
+    Args:
+        kin: present-day kinematics.
+        divergent: (N,) True where the boundary detector flagged a divergent boundary.
+        min_opening_cm_yr: cells opening slower than this are not ridges.
+
+    Returns:
+        (half_rate, offset_km), both NaN outside ridge cells.
+    """
+    opening, half_gap = boundary_opening_rates(kin, divergent & ~kin.continental)
+    ridge = opening >= min_opening_cm_yr
+    half = np.where(ridge, 0.5 * opening, np.nan)
+    offset = np.where(ridge, half_gap, np.nan)
     return half, offset
 
 

@@ -169,3 +169,90 @@ def test_reconstruction_plates_keep_a_straddling_continent_rigid(two_plates) -> 
     np.testing.assert_array_equal(rp2.plate, kin.plate)
     np.testing.assert_allclose(rp2.omega, kin.omega, rtol=1e-9, atol=1e-20)
     assert rp2.misfit_cm_yr.max() < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Stepwise backward history (M2)
+# ---------------------------------------------------------------------------
+
+
+def _history_inputs(kin: PlateKinematics, boundary: np.ndarray):
+    from dreamulator.map.paleo_history import Orogens
+
+    half, offset = ridge_half_rates(kin, boundary)
+    age, _ = synthesize_seafloor_age(kin, half, offset)
+    orogens = Orogens(relief_m=np.zeros(kin.n), build_myr=np.ones(kin.n))
+    return age, orogens
+
+
+def test_net_rotation_limits() -> None:
+    from dreamulator.map.paleo_history import net_rotation
+
+    pts = fibonacci_sphere(2000)
+    area = np.ones(len(pts))
+    same = net_rotation(np.array([[0.0, 1e-8, 0.0]]), np.zeros(len(pts), dtype=int), pts, area)
+    assert same == pytest.approx(1.0, rel=0.01)
+    halves = (pts[:, 1] > 0).astype(int)
+    opposite = net_rotation(np.array([[0.0, 1e-8, 0.0], [0.0, -1e-8, 0.0]]), halves, pts, area)
+    assert opposite < 0.02
+
+
+def test_history_starts_at_present_and_is_deterministic(two_plates) -> None:
+    from dreamulator.map.paleo_history import HistoryConfig, OceanDepth, run_history
+
+    kin, boundary, elevation = two_plates
+    age, orogens = _history_inputs(kin, boundary)
+    cfg = HistoryConfig(reorg_interval_myr=(2.0, 3.0), n_candidates=4, speed_max_cm_yr=6.0)
+    depth = OceanDepth(**DEPTH)
+    snaps, log = run_history(kin, age, elevation, orogens, depth, [0.0, 6.0], cfg)
+    np.testing.assert_array_equal(snaps[0].elevation_m, elevation)
+    np.testing.assert_array_equal(snaps[0].continental, kin.continental)
+    assert log.reorganizations  # at least one reorganization in 6 Myr
+    again, _ = run_history(kin, age, elevation, orogens, depth, [0.0, 6.0], cfg)
+    np.testing.assert_array_equal(again[1].elevation_m, snaps[1].elevation_m)
+    np.testing.assert_array_equal(again[1].plate, snaps[1].plate)
+
+    last = snaps[1]
+    a = kin.area_km2
+    ratio = a[last.continental].sum() / a[kin.continental].sum()
+    assert 0.95 < ratio < 1.05
+    ocean = ~last.continental & np.isfinite(last.age_myr)
+    assert np.all(last.age_myr[ocean] >= 0)
+
+
+def test_history_restores_trench_crust_and_rolls_back_orogens(two_plates) -> None:
+    from dreamulator.map.paleo_history import HistoryConfig, OceanDepth, Orogens, run_history
+
+    kin, boundary, elevation = two_plates
+    age, _ = _history_inputs(kin, boundary)
+    relief = np.where(kin.continental, 1000.0, 0.0)
+    orogens = Orogens(relief_m=relief, build_myr=np.full(kin.n, 2.0))
+    cfg = HistoryConfig(reorg_interval_myr=(100.0, 100.0))  # no reorganization
+    snaps, log = run_history(kin, age, elevation, orogens, OceanDepth(**DEPTH), [4.0], cfg)
+    assert sum(s["gaps_filled"] for s in log.steps) > 0
+    s = snaps[0]
+    assert s.synthetic.any()
+    # Behind the trench (z < 0 half of the boundary) the restored crust is synthetic.
+    near_trench = (np.abs(kin.xyz[:, 0]) < 0.15) & (kin.xyz[:, 2] < -0.5)
+    assert s.synthetic[near_trench].mean() > 0.3
+    # Orogens built in 2 Myr are fully removed by 4 Myr.
+    cont = s.continental
+    assert np.median(s.elevation_m[cont]) < np.median(elevation[kin.continental]) - 900.0
+
+
+def test_history_merges_plates_when_a_rift_closes(two_plates) -> None:
+    from dreamulator.map.paleo_history import HistoryConfig, OceanDepth, run_history
+
+    kin, boundary, elevation = two_plates
+    # Two continents facing each other across the ridge (the z > 0 half).
+    rift = replace(
+        kin, continental=_frozen((kin.xyz[:, 2] > 0.75) & (np.abs(kin.xyz[:, 0]) > 0.04))
+    )
+    age, orogens = _history_inputs(rift, boundary)
+    cfg = HistoryConfig(
+        reorg_interval_myr=(100.0, 100.0), merge_contact_km=300.0, merge_contact_frac=0.1
+    )
+    elev = np.where(rift.continental, 500.0, -4000.0)
+    snaps, log = run_history(rift, age, elev, orogens, OceanDepth(**DEPTH), [4.0], cfg)
+    assert log.merges, "the closing rift should merge the two plates"
+    assert np.unique(snaps[0].plate[snaps[0].continental]).size == 1
