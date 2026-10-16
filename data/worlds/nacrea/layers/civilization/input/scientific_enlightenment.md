@@ -13,7 +13,7 @@ tags: [science, enlightenment, observation]
 | Aegis 视直径 | {{ sky.planet_aegis.angular_diameter_deg | round2 }}°（面积 {{ ((sky.planet_aegis.angular_diameter_deg / 0.52) ** 2) | round0 }}× 月球） | 宇宙观觉醒的物理基础 |
 | 外圈捕获卫星数 | 30–50 颗 | 开普勒定律的大样本验证 |
 | 日全食时长 | **最长 ~2.2 小时**（全程 ~2.45 h），每年 ~6 次（锥摆十年轮转 5–9 次） | 广义相对论验证的从容窗口 |
-| 潮汐幅度 | {{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 海洋 + 10 m 固体 | 引力形变成为直观常识 |
+| 潮汐幅度 | {{ entities.satellite_nacrea.tidal_range_m | round0 }} m 海洋 + 10 m 固体 | 引力形变成为直观常识 |
 
 ## 科学里程碑时间线
 
@@ -21,7 +21,7 @@ tags: [science, enlightenment, observation]
 |-----------|------------|------|
 | **中心天体认知** | **古典时代（青铜/铁器时代）** | Aegis 视直径 11°、相位与云带自转肉眼可见 → 地心说逻辑无法自洽 |
 | **行星运动三定律** | **中世纪早期** | 外圈 30+ 颗捕获卫星提供完美轨道验证样本 |
-| **万有引力与潮汐理论** | **文艺复兴时期** | {{ (2*1688*3*entities.satellite_nacrea.eccentricity*2.5) | round0 }} m 巨浪 + 10 m 固体潮使"引力形变"成为直观常识；潮汐力 ∝ 1/r³ vs 重力 ∝ 1/r² 的比较推导出平方反比定律 |
+| **万有引力与潮汐理论** | **文艺复兴时期** | {{ entities.satellite_nacrea.tidal_range_m | round0 }} m 巨浪 + 10 m 固体潮使"引力形变"成为直观常识；潮汐力 ∝ 1/r³ vs 重力 ∝ 1/r² 的比较推导出平方反比定律 |
 | **光速有限性精确测定** | **大航海时代（误差 <1%）** | Aegis 光环与小卫星频繁掩星 → 极佳的"宇宙钟" |
 | **系外行星 / 内行星发现** | **第一次工业革命** | 内侧行星频繁凌日（Ember 会合周期 ~4.9 天），早期光度计即可捕捉；凌星光谱分析 Crucible 大气 CO₂/SO₂ |
 | **广义相对论验证** | **19 世纪中叶** | 每年 ~6 次、每次最长 ~2.2 小时（全程 ~2.45 h）的日全食；Aegis 引力偏折角 **0.0261 角秒**（太阳 1.75″），19 世纪照相天体测量仪可测 |
