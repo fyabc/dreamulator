@@ -91,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- roadmap 登记技术债 37：大陆内部系统性欠起伏。550 km 内陆窗口中起伏达 1000 m 的比例，地球为
+  15–25%，nacrea 为 4–5%；缺的是热点穹隆与板内动力地形量级的大山块（Windows 端水文工作中发现）。
 - 潮差统一由引擎派生字段 `tidal_range_m` 渲染（`tidal_effects.md`、`scientific_enlightenment.md` 不再各自写公式）；
   roadmap 技术债 19 改为登记残余手写值。0016 中指向尚未入库的四期框架的引用改为 0014 §2 的平静段与活跃段。
 - roadmap 登记技术债 32：大陆架高程按网格间距量化，窄海峡门槛被锁在约 −30 m 与 −105 m。
