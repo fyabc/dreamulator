@@ -133,6 +133,7 @@ class HistoryConfig:
         hinge_contact_km: continental contact length that hinges two plates.
         boundary_relax_km: disc radius of the oceanic boundary relaxation (0 = off).
         boundary_relax_majority: plate share in the disc needed to flip a cell.
+        split_speed_cm_yr: relative speed across a suture after it is split.
         ridge_gap_age_myr: a gap next to ocean younger than this is a ridge gap.
         ridge_rule_weight: weight of the closing-ridge fraction in the score.
         seed: RNG seed.
@@ -151,6 +152,7 @@ class HistoryConfig:
     hinge_contact_km: float = 300.0
     boundary_relax_km: float = 200.0
     boundary_relax_majority: float = 0.6
+    split_speed_cm_yr: float = 5.0
     ridge_gap_age_myr: float = 2.0
     ridge_rule_weight: float = 2.0
     seed: int = 0
@@ -217,6 +219,7 @@ class HistoryLog:
 
     reorganizations: list[dict[str, float]] = field(default_factory=list)
     rift_onsets: list[dict[str, float | int | str | bool]] = field(default_factory=list)
+    splits: list[dict[str, float | int | str]] = field(default_factory=list)
     hinges: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int]] = field(default_factory=list)
     steps: list[dict[str, float | dict[str, int]]] = field(default_factory=list)
@@ -266,11 +269,13 @@ def run_history(
     epochs: list[float],
     cfg: HistoryConfig,
     rifts: dict[tuple[int, int], YoungRift] | None = None,
+    sutures: list[Suture] | None = None,
 ) -> tuple[list[Snapshot], HistoryLog]:
     """Walk the plates back to ``max(epochs)``, snapshotting each epoch.
 
     ``rifts`` maps a plate pair (smaller index first) to its young rift
-    (``rift_onsets``); see the module docstring.
+    (``rift_onsets``); ``sutures`` (``find_sutures``) are split going back at
+    their collision ages; see the module docstring.
 
     ``kin`` should carry the reconstruction plate model (``reconstruction_plates``)
     and ``age_myr`` the synthetic present seafloor age.  The inputs are not
@@ -294,7 +299,11 @@ def run_history(
     relief = np.where(cont, orogens.relief_m, 0.0)
     build = np.maximum(orogens.build_myr, 1e-6)
     synthetic = np.zeros(kin.n, dtype=bool)
-    omega = kin.omega.copy()
+    origin = np.arange(kin.n)  # present cell of each parcel, -1 for synthetic crust
+    pending = sorted(sutures or [], key=lambda s: s.age_myr)
+    # room for the plates that suture splits will create
+    omega = np.vstack([kin.omega, np.zeros((len(pending), 3))])
+    next_plate = kin.omega.shape[0]
 
     ok_age = ~cont & np.isfinite(age_myr)
     # Age gradient of gap-filling crust: half the median surface speed of the
@@ -445,6 +454,40 @@ def run_history(
         pos = np.einsum("nij,nj->ni", rot[plate], pos)
         pos /= np.linalg.norm(pos, axis=1, keepdims=True)
 
+        # 2a. sutures whose collision age is passed: before it the two sides were
+        # separate plates (going back, a collision un-happens)
+        while pending and pending[0].age_myr <= t_new:
+            sut = pending.pop(0)
+            piece = np.zeros(kin.n, dtype=bool)
+            piece[sut.piece_cells] = True
+            on_piece = cont & (origin >= 0) & piece[np.maximum(origin, 0)]
+            if not on_piece.any():
+                continue
+            parent = int(np.bincount(plate[on_piece]).argmax())
+            rest = cont & (plate == parent) & ~on_piece
+            if not rest.any():
+                continue
+            new_id = next_plate
+            next_plate += 1
+            # oceanic parcels of the parent go with whichever continental side is nearer
+            ocean_parent = np.flatnonzero(~cont & (plate == parent))
+            if ocean_parent.size:
+                d_piece, _ = cKDTree(pos[on_piece]).query(pos[ocean_parent])
+                d_rest, _ = cKDTree(pos[rest]).query(pos[ocean_parent])
+                plate[ocean_parent[d_piece < d_rest]] = new_id
+            plate[on_piece] = new_id
+            omega[new_id] = _suture_pole(omega[parent], pos[on_piece], pos[rest], rng, cfg, radius)
+            log.splits.append(
+                {
+                    "t_myr": t_new,
+                    "parent": parent,
+                    "new_plate": new_id,
+                    "age_myr": round(sut.age_myr, 1),
+                    "age_source": sut.age_source,
+                    "piece_area_frac": round(sut.piece_area_frac, 4),
+                }
+            )
+
         # 2b. rifts whose onset is passed: stretching ends; a rift that makes up
         # most of the plates' common boundary is where they separated, so before
         # the onset they were one plate
@@ -509,12 +552,13 @@ def run_history(
         n_overlap_deleted = int(len(pos) - keep.sum() - n_dropped)
         sel = np.flatnonzero(keep)
         pos, plate, cont, born = pos[sel], plate[sel], cont[sel], born[sel]
-        z_ref, t_ref, relief, build, synthetic = (
+        z_ref, t_ref, relief, build, synthetic, origin = (
             z_ref[sel],
             t_ref[sel],
             relief[sel],
             build[sel],
             synthetic[sel],
+            origin[sel],
         )
 
         # 5. fill gaps with older ocean
@@ -549,6 +593,7 @@ def run_history(
             relief = np.concatenate([relief, np.zeros(gaps.size)])
             build = np.concatenate([build, np.ones(gaps.size)])
             synthetic = np.concatenate([synthetic, np.ones(gaps.size, dtype=bool)])
+            origin = np.concatenate([origin, np.full(gaps.size, -1)])
 
         # 7 (before merging). clean plate fragments on the resampled mesh
         _, src_all = cKDTree(pos).query(kin.xyz)
@@ -863,6 +908,148 @@ def _clean_fragments(
     move = new >= 0
     plate[move] = new[move]
     return int(move.sum())
+
+
+@dataclass(frozen=True)
+class Suture:
+    """A suture inside a continental block, split going back at its collision age.
+
+    Attributes:
+        age_myr: collision age (the two sides were separate plates before it).
+        piece_cells: present cells of the side that becomes a new plate.
+        piece_area_frac: that side's share of the planet's area.
+        age_source: ``"convergence"`` (accumulated shortening / rate at an active
+            orogen) or ``"relief_decay"`` (residual relief of an inactive orogen).
+    """
+
+    age_myr: float
+    piece_cells: np.ndarray
+    piece_area_frac: float
+    age_source: str
+
+
+def find_sutures(
+    kin: PlateKinematics,
+    block: np.ndarray,
+    present_plate: np.ndarray,
+    elevation_m: np.ndarray,
+    orogens: Orogens,
+    *,
+    decay_myr: float = 50.0,
+    max_age_myr: float = 400.0,
+) -> list[Suture]:
+    """Sutures inside the reconstruction model's rigid continental blocks.
+
+    A block glues together continental crust that the terrain engine put on
+    different plates; the engine boundaries running through the block are read
+    as sutures, where the parts once collided (geological-timeline §4.0, §4.4).
+    Cutting the block along them gives its sub-blocks; sub-blocks of at least
+    ``max(50, 0.3 %)`` cells (the enclave rule's size) are kept, smaller pieces
+    join the nearest kept one.  The largest sub-block keeps the block's plate;
+    every other one is split off going back at its collision age, estimated from
+    its seam (cells within two spacings of the rest of the block):
+
+    * at an active orogen (``orogens.relief_m > 0`` on at least half the seam):
+      the orogen build time, accumulated shortening / convergence rate;
+    * otherwise from relief decay of the seam's mountains (90th percentile of
+      relief above the continental baseline): the median active build time plus
+      ``decay_myr`` · ln(R_active / R).  Post-orogenic decay with isostatic
+      rebound has e-folding times of tens of Myr (36–90 Myr maximum decay times,
+      Baldwin et al. 2003); observational fit with wide uncertainty, and a seam
+      with little relief gets an old age, capped at ``max_age_myr``.
+    """
+    from scipy.sparse.csgraph import connected_components
+
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    cont = kin.continental
+    baseline = float(np.median(elevation_m[cont & (orogens.relief_m <= 0)]))
+    relief = elevation_m - baseline
+    active = orogens.relief_m > 0
+    r_active = float(np.median(relief[active])) if active.any() else 2000.0
+    t_active = float(np.median(orogens.build_myr[active])) if active.any() else 30.0
+    min_cells = max(50, int(0.003 * kin.n))
+    total_area = float(kin.area_km2.sum())
+    reach = 2.0 * kin.spacing_km
+    out: list[Suture] = []
+    for b in np.unique(block[block >= 0]):
+        in_b = block == b
+        keep = in_b[rows] & in_b[cols] & (present_plate[rows] == present_plate[cols])
+        g = csr_matrix((np.ones(int(keep.sum())), (rows[keep], cols[keep])), shape=(kin.n, kin.n))
+        _, lab = connected_components(g, directed=False)
+        sizes = np.bincount(lab[in_b], minlength=lab.max() + 1)
+        big = np.flatnonzero(sizes >= min_cells)
+        if big.size < 2:
+            continue
+        big_cells = np.flatnonzero(in_b & np.isin(lab, big))
+        _, near = cKDTree(kin.xyz[big_cells]).query(kin.xyz[in_b])
+        piece_of = np.full(kin.n, -1)
+        piece_of[np.flatnonzero(in_b)] = lab[big_cells[near]]
+        areas = {int(p): float(kin.area_km2[piece_of == p].sum()) for p in big}
+        main = max(areas, key=lambda p: areas[p])
+        for p in big:
+            if int(p) == main:
+                continue
+            cells_p = np.flatnonzero(piece_of == p)
+            others = np.flatnonzero(in_b & (piece_of != p))
+            d, _ = cKDTree(kin.xyz[others]).query(kin.xyz[cells_p])
+            seam = cells_p[d * kin.radius_km < reach]
+            if seam.size == 0:
+                continue
+            act = seam[active[seam]]
+            if act.size >= max(1, seam.size // 2):
+                age = float(np.median(orogens.build_myr[act]))
+                source = "convergence"
+            else:
+                r = max(float(np.percentile(relief[seam], 90)), 1.0)
+                age = t_active + decay_myr * float(np.log(max(r_active / r, 1.0)))
+                source = "relief_decay"
+            out.append(
+                Suture(
+                    age_myr=float(min(age, max_age_myr)),
+                    piece_cells=cells_p,
+                    piece_area_frac=float(kin.area_km2[cells_p].sum() / total_area),
+                    age_source=source,
+                )
+            )
+    return out
+
+
+def _suture_pole(
+    omega_parent: np.ndarray,
+    piece: np.ndarray,
+    rest: np.ndarray,
+    rng: np.random.Generator,
+    cfg: HistoryConfig,
+    radius_km: float,
+) -> np.ndarray:
+    """Pole of a plate split off along a suture.
+
+    Relative to its parent the new plate rotates about the axis n × c, where c is
+    the suture midpoint and n the unit direction from the parent side to the new
+    side at c; then the forward relative velocity at c is −n (the sides converge
+    forward, so they separate going back).  The rate gives ``split_speed_cm_yr``
+    at the suture; the axis is tilted by up to ``axis_sigma_deg``.
+    """
+    _, i_rest = cKDTree(rest).query(piece)
+    d = np.linalg.norm(piece - rest[i_rest], axis=1)
+    k = np.argsort(d)[: max(1, len(d) // 20)]  # the seam: closest 5 % of pairs
+    c = (piece[k] + rest[i_rest[k]]).mean(axis=0)
+    c /= np.linalg.norm(c)
+    n = piece.mean(axis=0) - rest.mean(axis=0)
+    n -= (n @ c) * c
+    n /= max(float(np.linalg.norm(n)), 1e-15)
+    axis = np.cross(n, c)
+    perp = np.cross(axis, rng.normal(size=3))
+    perp /= max(float(np.linalg.norm(perp)), 1e-15)
+    tilt = np.radians(abs(rng.normal(0.0, cfg.axis_sigma_deg)))
+    axis = np.cos(tilt) * axis + np.sin(tilt) * perp
+    rate = cfg.split_speed_cm_yr / (radius_km * _CM_PER_KM)
+    new = omega_parent + rate * axis
+    cap = cfg.speed_max_cm_yr / (radius_km * _CM_PER_KM)
+    norm = float(np.linalg.norm(new))
+    result: np.ndarray = new * (cap / norm) if norm > cap else new
+    return result
 
 
 def _keep_hinges(

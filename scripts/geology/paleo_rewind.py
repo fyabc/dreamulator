@@ -63,6 +63,7 @@ from dreamulator.map.paleo_history import (
     OceanDepth,
     Snapshot,
     active_orogens,
+    find_sutures,
     rift_onsets,
     run_history,
 )
@@ -133,6 +134,8 @@ class World:
         self.convergent = np.array([c.boundary_type == "convergent" for c in cells])
         self.cumulative_convergence_km = np.array([c.cumulative_convergence_km for c in cells])
         self.cumulative_divergence_km = np.array([c.cumulative_divergence_km for c in cells])
+        self.block: np.ndarray | None = None  # continental blocks of the reconstruction model
+        self.present_plate = self.kin.plate.copy()  # the terrain engine's plates
 
 
 def ocean_params(map_dir: Path, config_path: Path | None) -> dict[str, float]:
@@ -288,11 +291,23 @@ def run_history_mode(
         dt_myr=args.dt_myr,
         speed_max_cm_yr=speed_cap,
         merge_contact_km=args.merge_contact_km,
+        merge_contact_frac=args.merge_contact_frac,
         seed=args.seed,
     )
     rifts = rift_onsets(w.kin, w.divergent, w.cumulative_divergence_km)
+    sutures = []
+    if w.block is not None and not args.no_sutures:
+        sutures = find_sutures(w.kin, w.block, w.present_plate, w.elevation, orogens)
     snaps, log = run_history(
-        w.kin, age, w.elevation, orogens, OceanDepth(**params), list(args.epochs), cfg, rifts
+        w.kin,
+        age,
+        w.elevation,
+        orogens,
+        OceanDepth(**params),
+        list(args.epochs),
+        cfg,
+        rifts,
+        sutures,
     )
     a = w.kin.area_km2
     oro = orogens.relief_m > 0
@@ -310,6 +325,15 @@ def run_history_mode(
             for (a, b), v in sorted(rifts.items())
         },
         "rift_onsets": log.rift_onsets,
+        "sutures": [
+            {
+                "age_myr": round(s.age_myr, 1),
+                "age_source": s.age_source,
+                "piece_area_frac": round(s.piece_area_frac, 4),
+            }
+            for s in sutures
+        ],
+        "splits": log.splits,
         "reorganizations": log.reorganizations,
         "hinges": log.hinges,
         "merges": log.merges,
@@ -430,7 +454,9 @@ def main() -> None:
     ap.add_argument("--dt-myr", type=float, default=1.0)
     ap.add_argument("--speed-max-cm-yr", type=float, default=None, help="default: fastest plate")
     ap.add_argument("--merge-contact-km", type=float, default=1000.0)
+    ap.add_argument("--merge-contact-frac", type=float, default=0.6)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--no-sutures", action="store_true", help="do not split along sutures")
     ap.add_argument("--observed-age", type=Path, default=None, help="netCDF age grid (Myr)")
     ap.add_argument("--plot", action="store_true")
     args = ap.parse_args()
@@ -451,6 +477,7 @@ def main() -> None:
             ],
         }
         w.kin = replace(w.kin, plate=rp.plate, omega=rp.omega)
+        w.block = rp.block
         divergent = boundary_cells(w.kin)
     half, offset = ridge_half_rates(w.kin, divergent, args.min_opening_cm_yr)
     age, _ = synthesize_seafloor_age(w.kin, half, offset)

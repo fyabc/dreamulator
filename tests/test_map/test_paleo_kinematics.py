@@ -275,3 +275,21 @@ def test_clean_fragments_absorbs_enclaves_but_keeps_microplates(two_plates) -> N
     assert moved == enclave.size
     assert np.all(parcels[enclave] == 0)
     assert np.all(parcels[micro] == 2)
+
+
+def test_find_sutures_cuts_a_glued_block_along_the_present_boundary(two_plates) -> None:
+    from dreamulator.map.paleo_history import Orogens, find_sutures
+
+    kin, _, _ = two_plates
+    # one continent around the +z pole straddles the boundary; the block model glues it
+    straddle = replace(kin, continental=_frozen(kin.xyz[:, 2] > 0.6))
+    rp = reconstruction_plates(straddle, np.zeros(kin.n, dtype=bool))
+    elevation = np.where(straddle.continental, 300.0, -4000.0)
+    orogens = Orogens(relief_m=np.zeros(kin.n), build_myr=np.ones(kin.n))
+    sutures = find_sutures(straddle, rp.block, kin.plate, elevation, orogens)
+    assert len(sutures) == 1
+    s = sutures[0]
+    assert s.age_source == "relief_decay"
+    # the split-off side is the continental part of one present plate
+    assert np.unique(kin.plate[s.piece_cells]).size == 1
+    assert s.age_myr > 0
