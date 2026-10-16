@@ -6,6 +6,12 @@ reads (design: ``docs/design/proposals/geological-timeline.md`` §4, §7).
 
 Every present-day cell is treated as a crust parcel that rides on its plate.
 
+* :func:`reconstruction_plates` builds the plate model the reconstruction rides
+  on.  A generated world's present plates are partitioned independently of its
+  crust, so their boundaries can run through continents; the reconstruction model
+  keeps each continental block rigid, attaches it to the plate that owns most of
+  its area, and fits every plate's Euler pole to the present velocity field
+  (proposal §4.0).
 * :func:`synthesize_seafloor_age` gives each oceanic parcel an age: the time the
   spreading half-rate of its plate's ridge needs to carry crust from the ridge to
   the parcel.  Both ridge flanks are measured the same way, so the isochrons come
@@ -37,6 +43,8 @@ import heapq
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 #: 1 cm/yr = 10 km/Myr.
@@ -97,6 +105,106 @@ def arc_km(a: np.ndarray, b: np.ndarray, radius_km: float) -> np.ndarray:
     dots = np.clip(np.einsum("...j,...j->...", a, b), -1.0, 1.0)
     d: np.ndarray = radius_km * np.arccos(dots)
     return d
+
+
+def boundary_cells(kin: PlateKinematics) -> np.ndarray:
+    """(N,) True for cells with at least one neighbour on another plate."""
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cross = kin.plate[rows] != kin.plate[kin.nbr_idx]
+    out = np.zeros(kin.n, dtype=bool)
+    out[rows[cross]] = True
+    return out
+
+
+def fit_rotation(xyz: np.ndarray, velocity: np.ndarray, weight: np.ndarray) -> np.ndarray:
+    """Rotation vector ω minimising Σ w |ω × x − v|² (weighted least squares).
+
+    ω × x = −[x]× ω is linear in ω, so the fit is a 3-unknown linear problem.  For
+    cells that already move rigidly with one rotation it returns that rotation.
+    """
+    x0, x1, x2 = xyz[:, 0], xyz[:, 1], xyz[:, 2]
+    zero = np.zeros_like(x0)
+    a = np.stack(
+        [
+            np.stack([zero, x2, -x1], axis=1),
+            np.stack([-x2, zero, x0], axis=1),
+            np.stack([x1, -x0, zero], axis=1),
+        ],
+        axis=1,
+    )
+    sw = np.sqrt(weight)
+    lhs = (a * sw[:, None, None]).reshape(-1, 3)
+    rhs = (velocity * sw[:, None]).reshape(-1)
+    omega: np.ndarray = np.linalg.lstsq(lhs, rhs, rcond=None)[0]
+    return omega
+
+
+@dataclass(frozen=True)
+class ReconstructionPlates:
+    """Plate model for the reconstruction (proposal §4.0).
+
+    Attributes:
+        plate: (N,) plate index of each cell, into ``omega`` (same indices as the
+            present plates; a plate can lose or gain continental blocks).
+        omega: (P, 3) Euler rotation vectors fitted to the present velocity field.
+        block: (N,) continental block label, −1 on oceanic crust.
+        misfit_cm_yr: (N,) |velocity under ``omega`` − present velocity|.
+    """
+
+    plate: np.ndarray
+    omega: np.ndarray
+    block: np.ndarray
+    misfit_cm_yr: np.ndarray
+
+
+def reconstruction_plates(kin: PlateKinematics, suture: np.ndarray) -> ReconstructionPlates:
+    """Make continents rigid: one plate per continental block, poles refitted.
+
+    1. Continental blocks are the connected components of continental crust, cut
+       only along suture edges: neighbour pairs on different present plates whose
+       cells are both flagged in ``suture``.  The default caller flags convergent
+       boundary cells, so a block splits only where a present orogen cuts it
+       through; boundaries that cut it partly, or that are divergent or transform,
+       are treated as inactive inside the block.
+    2. Every block joins the present plate that owns most of its area; oceanic
+       cells keep their present plate.
+    3. Every plate's Euler pole is refitted (:func:`fit_rotation`, area-weighted)
+       to the present velocity field of its new cells, so present motions are
+       kept on average.  A plate whose membership did not change gets its present
+       pole back.
+
+    Args:
+        kin: present-day kinematics.
+        suture: (N,) cells allowed to separate two continental blocks.
+    """
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    cont = kin.continental
+    cut = (kin.plate[rows] != kin.plate[cols]) & suture[rows] & suture[cols]
+    keep = cont[rows] & cont[cols] & ~cut
+    graph = csr_matrix((np.ones(int(keep.sum())), (rows[keep], cols[keep])), shape=(kin.n, kin.n))
+    _, label = connected_components(graph, directed=False)
+    block = np.where(cont, label, -1)
+    # relabel blocks 0..B-1 in order of first appearance
+    _, block_ids = np.unique(block[cont], return_inverse=True)
+    block[cont] = block_ids
+
+    n_plates = kin.omega.shape[0]
+    plate = kin.plate.copy()
+    for b in range(int(block_ids.max()) + 1 if block_ids.size else 0):
+        m = block == b
+        owner = np.bincount(kin.plate[m], weights=kin.area_km2[m], minlength=n_plates)
+        plate[m] = int(np.argmax(owner))
+
+    velocity = np.cross(kin.omega[kin.plate], kin.xyz)
+    omega = kin.omega.copy()
+    for p in range(n_plates):
+        m = plate == p
+        if m.any():
+            omega[p] = fit_rotation(kin.xyz[m], velocity[m], kin.area_km2[m])
+    misfit = np.linalg.norm(np.cross(omega[plate], kin.xyz) - velocity, axis=1)
+    misfit *= kin.radius_km * _CM_PER_KM
+    return ReconstructionPlates(plate=plate, omega=omega, block=block, misfit_cm_yr=misfit)
 
 
 def rotation_matrices(omega: np.ndarray, t_yr: float) -> np.ndarray:

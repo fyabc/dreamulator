@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 from scipy.spatial import SphericalVoronoi
@@ -10,7 +12,10 @@ from dreamulator.map.cvt_mesh import build_adjacency_graph, fibonacci_sphere
 from dreamulator.map.paleo_kinematics import (
     PlateKinematics,
     adjacency_csr,
+    boundary_cells,
+    fit_rotation,
     paleo_fields,
+    reconstruction_plates,
     rewind,
     ridge_half_rates,
     rotation_matrices,
@@ -133,3 +138,34 @@ def test_rewind_closes_ridge_and_opens_trench_gap(two_plates) -> None:
     a = kin.area_km2
     ratio = a[f.continental].sum() / a[kin.continental].sum()
     assert 0.95 < ratio < 1.05
+
+
+def test_fit_rotation_recovers_rigid_motion() -> None:
+    rng = np.random.default_rng(0)
+    xyz = rng.normal(size=(200, 3))
+    xyz /= np.linalg.norm(xyz, axis=1, keepdims=True)
+    omega = np.array([1.0e-8, -2.0e-8, 0.5e-8])
+    fitted = fit_rotation(xyz, np.cross(omega, xyz), np.ones(200))
+    np.testing.assert_allclose(fitted, omega, rtol=1e-9)
+
+
+def test_reconstruction_plates_keep_a_straddling_continent_rigid(two_plates) -> None:
+    kin, _, _ = two_plates
+    # A continent around the +z pole straddles the plate boundary.
+    straddle = replace(kin, continental=_frozen(kin.xyz[:, 2] > 0.8))
+    rp = reconstruction_plates(straddle, np.zeros(kin.n, dtype=bool))
+    block = straddle.continental
+    assert np.unique(rp.block[block]).size == 1
+    assert np.unique(rp.plate[block]).size == 1  # the whole block rides one plate
+    np.testing.assert_array_equal(rp.plate[~block], kin.plate[~block])  # ocean unchanged
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    inside = block[rows] & block[cols]
+    assert np.all(rp.plate[rows[inside]] == rp.plate[cols[inside]])  # no boundary inside
+
+    # Flagging the boundary as a suture splits the continent back along it, and
+    # unchanged plates get their present poles back.
+    rp2 = reconstruction_plates(straddle, boundary_cells(kin))
+    np.testing.assert_array_equal(rp2.plate, kin.plate)
+    np.testing.assert_allclose(rp2.omega, kin.omega, rtol=1e-9, atol=1e-20)
+    assert rp2.misfit_cm_yr.max() < 1e-6

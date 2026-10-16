@@ -11,8 +11,16 @@ Reads a built planet map (mesh + ``plates.json``) without changing it, then:
 3. derives crust type, age and elevation at that epoch (``paleo_fields``), using
    the world's own ocean age-depth parameters from ``terrain_config.yaml``.
 
-M1 holds the present Euler poles fixed, fills gaps with old ocean and keeps
-continental elevation unchanged; see
+By default the plates are first converted to the reconstruction model
+(``--plate-model blocks``, ``reconstruction_plates``): continental blocks stay
+rigid and split only where a present convergent boundary cuts them through, and
+every plate's Euler pole is refitted to the present velocity field; ridges are
+then the plate-boundary ocean cells that open.  ``--plate-model present`` uses
+the map's own plates and its divergent boundary flags (right for the earth map,
+whose plates and boundaries are PB2002 observations).
+
+M1 holds the Euler poles fixed, fills gaps with old ocean and keeps continental
+elevation unchanged; see
 ``docs/design/proposals/geological-timeline.md`` §4 and §10.
 
 Outputs into ``--out-dir``: ``summary.json`` (age statistics, passive-margin
@@ -37,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +58,9 @@ from dreamulator.map.paleo_kinematics import (
     PlateKinematics,
     RewoundState,
     adjacency_csr,
+    boundary_cells,
     paleo_fields,
+    reconstruction_plates,
     rewind,
     ridge_half_rates,
     synthesize_seafloor_age,
@@ -105,6 +116,7 @@ class World:
         )
         self.elevation = np.array([c.elevation for c in cells], dtype=float)
         self.divergent = np.array([c.boundary_type == "divergent" for c in cells])
+        self.convergent = np.array([c.boundary_type == "convergent" for c in cells])
 
 
 def ocean_params(map_dir: Path, config_path: Path | None) -> dict[str, float]:
@@ -304,13 +316,29 @@ def main() -> None:
     ap.add_argument("--epochs", type=float, nargs="+", default=list(DEFAULT_EPOCHS))
     ap.add_argument("--terrain-config", type=Path, default=None)
     ap.add_argument("--min-opening-cm-yr", type=float, default=0.2)
+    ap.add_argument("--plate-model", choices=("blocks", "present"), default="blocks")
     ap.add_argument("--observed-age", type=Path, default=None, help="netCDF age grid (Myr)")
     ap.add_argument("--plot", action="store_true")
     args = ap.parse_args()
 
     w = World(args.map_dir)
     params = ocean_params(args.map_dir, args.terrain_config)
-    half, offset = ridge_half_rates(w.kin, w.divergent, args.min_opening_cm_yr)
+    model: dict[str, Any] = {"kind": args.plate_model}
+    divergent = w.divergent
+    if args.plate_model == "blocks":
+        rp = reconstruction_plates(w.kin, w.convergent)
+        a = w.kin.area_km2
+        moved = rp.plate != w.kin.plate
+        model |= {
+            "continental_blocks": int(rp.block.max()) + 1,
+            "reassigned_area_frac": round(float(a[moved].sum() / a.sum()), 4),
+            "velocity_misfit_cm_yr_p50_p90": [
+                round(float(v), 2) for v in weighted_percentiles(rp.misfit_cm_yr, a, [50, 90])
+            ],
+        }
+        w.kin = replace(w.kin, plate=rp.plate, omega=rp.omega)
+        divergent = boundary_cells(w.kin)
+    half, offset = ridge_half_rates(w.kin, divergent, args.min_opening_cm_yr)
     age, _ = synthesize_seafloor_age(w.kin, half, offset)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -320,6 +348,7 @@ def main() -> None:
         "radius_km": round(w.kin.radius_km, 2),
         "spacing_km": round(w.kin.spacing_km, 1),
         "ocean_params": params,
+        "plate_model": model,
         "present": age_summary(w, age, half),
         "epochs": [],
     }
