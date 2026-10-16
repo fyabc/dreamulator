@@ -9,9 +9,10 @@ backward in steps of ``dt_myr`` over a set of crust parcels.  Each step:
 1. **Reorganize** (at drawn times): every plate gets a new stage pole.  Candidate
    pole sets are drawn around the current ones under the speed cap and scored by
    two tectonic rules (Tetley et al. 2019; Müller et al. 2022): small lithospheric
-   net rotation, and the ridges in force keep opening in forward time (an ocean
+   net rotation; the ridges in force keep opening in forward time (an ocean
    closes in the reverse order of its opening, so a reorganization may not turn
-   a spreading ridge into a convergent boundary).
+   a spreading ridge into a convergent boundary).  A hinged plate keeps its
+   rotation about the hinge through a reorganization.
 2. **Rotate** every parcel back by its plate's stage rotation.
 3. **Drop** oceanic parcels born after the new time (younger than ``t``).
 4. **Delete overlaps**: an oceanic parcel closer than ``overlap_factor`` cell
@@ -43,9 +44,10 @@ backward in steps of ``dt_myr`` over a set of crust parcels.  Each step:
    separate forward in time, so this is a rift closing), they become one plate
    whose pole is refitted to both.  The fraction rule closes a basin like a
    zipper: merging on first contact would freeze the still-open part of the
-   ocean between them inside one rigid plate.  At first contact the smaller
-   plate is hinged instead: its pole relative to the other plate moves to the
-   contact (the rift tip, where conjugate plates rotate about a nearby pole), so
+   ocean between them inside one rigid plate.  At first contact (at least
+   ``hinge_contact_km``) the smaller plate is hinged instead: its pole relative
+   to the other plate moves to the contact (the rift tip, where conjugate plates
+   rotate about a nearby pole), so
    the rest of the basin keeps closing without the contact overlapping.  At a
    merge the conjugate-margin misfit is recorded (Bullard et al. 1965 measured
    the same quantity at the 500-fathom isobath).
@@ -56,6 +58,18 @@ backward in steps of ``dt_myr`` over a set of crust parcels.  Each step:
    surrounding plate.  Resampling and gap filling leave such enclaves; without
    this they accumulate into multiply-connected plates (numerical
    stabilization; the count is logged).
+
+8. **Relax oceanic boundaries**: plate boundaries are kinematic objects, not
+   material lines — ridges sit midway between their flanks and trenches are
+   smooth arcs (Frank 1968; Macdonald et al. 1988; Schellart et al. 2007) — but
+   here a boundary is wherever the parcels of two plates meet, so gap and
+   overlap noise accumulates on it.  Each step, an oceanic boundary cell joins
+   the plate that holds at least ``boundary_relax_majority`` of the cells within
+   ``boundary_relax_km``; continental cells never change plate.  This is a
+   curvature flow that removes embayments narrower than about twice the radius
+   and the coastline-shaped boundaries a reassigned continental block brings
+   (passive margins are intraplate).  Numerical stabilization, with the radius
+   set by the observed smoothness scale of oceanic boundaries.
 
 **Young rifts** (optional ``rifts``): continental crust of two plates that touch
 across a boundary the terrain engine drew as a rift has only just started rifting,
@@ -81,6 +95,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 
 from dreamulator.map.paleo_kinematics import (
@@ -115,6 +130,9 @@ class HistoryConfig:
         merge_contact_km: continental contact length that merges two plates.
         merge_contact_frac: and the share of the two plates' common boundary
             that the continental contact must cover.
+        hinge_contact_km: continental contact length that hinges two plates.
+        boundary_relax_km: disc radius of the oceanic boundary relaxation (0 = off).
+        boundary_relax_majority: plate share in the disc needed to flip a cell.
         ridge_gap_age_myr: a gap next to ocean younger than this is a ridge gap.
         ridge_rule_weight: weight of the closing-ridge fraction in the score.
         seed: RNG seed.
@@ -130,6 +148,9 @@ class HistoryConfig:
     overlap_factor: float = 0.35
     merge_contact_km: float = 1000.0
     merge_contact_frac: float = 0.6
+    hinge_contact_km: float = 300.0
+    boundary_relax_km: float = 200.0
+    boundary_relax_majority: float = 0.6
     ridge_gap_age_myr: float = 2.0
     ridge_rule_weight: float = 2.0
     seed: int = 0
@@ -198,7 +219,7 @@ class HistoryLog:
     rift_onsets: list[dict[str, float | int | str | bool]] = field(default_factory=list)
     hinges: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int]] = field(default_factory=list)
-    steps: list[dict[str, float]] = field(default_factory=list)
+    steps: list[dict[str, float | dict[str, int]]] = field(default_factory=list)
 
 
 def net_rotation(omega: np.ndarray, plate: np.ndarray, xyz: np.ndarray, area: np.ndarray) -> float:
@@ -294,6 +315,7 @@ def run_history(
 
     rows_m = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols_m = kin.nbr_idx
+    disc = _disc_matrix(kin, cfg.boundary_relax_km) if cfg.boundary_relax_km > 0 else None
 
     def snapshot(t: float) -> Snapshot:
         _, src = cKDTree(pos).query(kin.xyz)
@@ -313,6 +335,16 @@ def run_history(
             omega=omega.copy(),
         )
 
+    if disc is not None:
+        # the starting plates come from the reconstruction model, whose block
+        # reassignment leaves coastline-shaped oceanic boundaries: relax them first
+        identity = np.arange(kin.n)
+        for _ in range(20):
+            if not _relax_ocean_boundaries(
+                plate, cont, identity, disc, kin, omega.shape[0], cfg.boundary_relax_majority
+            ):
+                break
+
     targets = sorted({float(e) for e in epochs})
     snaps: list[Snapshot] = []
     if targets and targets[0] <= 0.0:
@@ -320,7 +352,8 @@ def run_history(
     t = 0.0
     t_end = targets[-1] if targets else 0.0
     next_reorg = float(rng.uniform(*cfg.reorg_interval_myr))
-    hinged: set[tuple[int, int]] = set()
+    # pair (smaller index first) -> (fixed plate, hinged plate)
+    hinged: dict[tuple[int, int], tuple[int, int]] = {}
     active_rifts: dict[tuple[int, int], YoungRift] = dict(rifts or {})
     n_pl = omega.shape[0]
 
@@ -345,7 +378,13 @@ def run_history(
             if kk not in new_rifts or v.onset_myr < new_rifts[kk].onset_myr:
                 new_rifts[kk] = v
         active_rifts = new_rifts
-        hinged = {ren(k) for k in hinged}
+        new_hinged: dict[tuple[int, int], tuple[int, int]] = {}
+        for k, (fx, hg) in hinged.items():
+            kk = ren(k)
+            fx2, hg2 = (p_a if fx == p_b else fx), (p_a if hg == p_b else hg)
+            if kk[0] != kk[1] and fx2 != hg2:
+                new_hinged[kk] = (fx2, hg2)
+        hinged = new_hinged
 
     cont_area0 = float(kin.area_km2[kin.continental].sum())
 
@@ -358,10 +397,10 @@ def run_history(
             live = np.unique(plate)
             area_w = np.full(len(pos), cell_area)
             ridge_x, ridge_n, ridge_a, ridge_b = _live_ridges(kin, pos, plate, cont, omega)
-
-            best, best_score, best_parts = omega, np.inf, (0.0, 0.0)
+            best, best_score = omega, np.inf
+            best_parts = (0.0, 0.0)
             for _ in range(cfg.n_candidates):
-                cand = _perturb(omega, rng, cfg, radius)
+                cand = _keep_hinges(_perturb(omega, rng, cfg, radius), omega, hinged)
                 nr = net_rotation(cand, plate, pos, area_w)
                 closing = _closing_fraction(cand, ridge_x, ridge_n, ridge_a, ridge_b)
                 score = nr + cfg.ridge_rule_weight * closing
@@ -438,6 +477,7 @@ def run_history(
         tree = cKDTree(pos)
         chord = 2.0 * np.sin(cfg.overlap_factor * spacing / (2.0 * radius))
         pairs = tree.query_pairs(chord, output_type="ndarray")
+        cont_overlap_pairs: dict[str, int] = {}
         if len(pairs):
             a, b = pairs[:, 0], pairs[:, 1]
             cross = plate[a] != plate[b]
@@ -447,6 +487,15 @@ def run_history(
             # delete a when it is oceanic and b is continental or older ocean
             del_a = ~cont[a] & (cont[b] | (age_b > age_a))
             del_b = ~cont[b] & ~del_a & (cont[a] | (age_a >= age_b))
+            cc = cont[a] & cont[b]
+            if cc.any():
+                ka = np.minimum(plate[a[cc]], plate[b[cc]])
+                kb = np.maximum(plate[a[cc]], plate[b[cc]])
+                keys_cc, counts_cc = np.unique(ka * n_pl + kb, return_counts=True)
+                for kk, cnt in sorted(zip(keys_cc, counts_cc, strict=True), key=lambda z: -z[1])[
+                    :3
+                ]:
+                    cont_overlap_pairs[f"{kk // n_pl}-{kk % n_pl}"] = int(cnt)
             if active_rifts:
                 # stretched rift crust: the lower parcel of a continental pair goes
                 keys = np.minimum(plate[a], plate[b]) * n_pl + np.maximum(plate[a], plate[b])
@@ -504,6 +553,11 @@ def run_history(
         # 7 (before merging). clean plate fragments on the resampled mesh
         _, src_all = cKDTree(pos).query(kin.xyz)
         n_relabel = _clean_fragments(pos, plate, plate[src_all], mesh_tree, kin)
+        n_relaxed = 0
+        if disc is not None:
+            n_relaxed = _relax_ocean_boundaries(
+                plate, cont, src_all, disc, kin, n_pl, cfg.boundary_relax_majority
+            )
 
         # 6. merges: continental contact between two plates that close backward
         c_plate = plate[src_all]
@@ -533,14 +587,14 @@ def run_history(
                 m = (pa * omega.shape[0] + pb) == key
                 contact = float(m.sum() * edge_km)
                 share = contact / max(float(boundary_len[key]), 1e-9)
-                if contact < cfg.merge_contact_km or float(np.median(opening[m])) <= 0.0:
+                if contact < cfg.hinge_contact_km or float(np.median(opening[m])) <= 0.0:
                     continue
                 p_a, p_b = int(key // omega.shape[0]), int(key % omega.shape[0])
                 if (p_a, p_b) in active_rifts:
                     continue  # young rifts merge at their onset
                 if (plate == p_b).sum() > (plate == p_a).sum():
                     p_a, p_b = p_b, p_a
-                if share < cfg.merge_contact_frac:
+                if share < cfg.merge_contact_frac or contact < cfg.merge_contact_km:
                     if (min(p_a, p_b), max(p_a, p_b)) in hinged:
                         continue
                     hinge = x[m].mean(axis=0)
@@ -548,7 +602,7 @@ def run_history(
                     omega[p_b] = _hinged_pole(
                         omega, pos, plate, cont, p_a, p_b, hinge, dt, cfg.speed_max_cm_yr, radius
                     )
-                    hinged.add((min(p_a, p_b), max(p_a, p_b)))
+                    hinged[(min(p_a, p_b), max(p_a, p_b))] = (p_a, p_b)
                     log.hinges.append(
                         {
                             "t_myr": t_new,
@@ -583,6 +637,11 @@ def run_history(
                 "gaps_filled": int(gaps.size),
                 "ridge_mismatch_filled": n_ridge_gap,
                 "fragment_parcels_relabeled": n_relabel,
+                "boundary_cells_relaxed": n_relaxed,
+                "continental_cells_ratio": round(
+                    float(kin.area_km2[cont[src_all]].sum()) / cont_area0 if cont_area0 else 0.0, 4
+                ),
+                "continental_overlap_pairs": cont_overlap_pairs,
                 "continental_area_ratio": round(
                     float(cont.sum()) * cell_area / cont_area0 if cont_area0 else 0.0, 4
                 ),
@@ -713,6 +772,49 @@ def _gap_crust(
     return consumed, age, ridge_gap
 
 
+def _disc_matrix(kin: PlateKinematics, radius_km: float) -> csr_matrix:
+    """Sparse (N, N) area weights of the cells within ``radius_km`` of each cell."""
+    chord = 2.0 * np.sin(radius_km / (2.0 * kin.radius_km))
+    nbrs = cKDTree(kin.xyz).query_ball_point(kin.xyz, chord)
+    lens = np.fromiter((len(x) for x in nbrs), dtype=np.int64, count=kin.n)
+    rows = np.repeat(np.arange(kin.n), lens)
+    cols = np.fromiter((j for x in nbrs for j in x), dtype=np.int64, count=int(lens.sum()))
+    return csr_matrix((kin.area_km2[cols], (rows, cols)), shape=(kin.n, kin.n))
+
+
+def _relax_ocean_boundaries(
+    plate: np.ndarray,
+    cont: np.ndarray,
+    src: np.ndarray,
+    disc: csr_matrix,
+    kin: PlateKinematics,
+    n_plates: int,
+    majority: float,
+) -> int:
+    """One pass of the oceanic boundary relaxation (in place); returns flipped cells.
+
+    ``src`` maps each mesh cell to its parcel.  An oceanic cell on a plate
+    boundary takes the plate holding at least ``majority`` of the disc area
+    around it; the parcel behind the cell follows.
+    """
+    cell_plate = plate[src]
+    cell_ocean = ~cont[src]
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    on_boundary = np.zeros(kin.n, dtype=bool)
+    on_boundary[rows[cell_plate[rows] != cell_plate[kin.nbr_idx]]] = True
+    cand = np.flatnonzero(on_boundary & cell_ocean)
+    if cand.size == 0:
+        return 0
+    onehot = csr_matrix((np.ones(kin.n), (np.arange(kin.n), cell_plate)), shape=(kin.n, n_plates))
+    share = (disc[cand] @ onehot).toarray()
+    share /= np.maximum(share.sum(axis=1, keepdims=True), 1e-12)
+    best = np.argmax(share, axis=1)
+    flip = (best != cell_plate[cand]) & (share[np.arange(cand.size), best] >= majority)
+    cells = cand[flip]
+    plate[src[cells]] = best[flip]
+    return int(cells.size)
+
+
 def _clean_fragments(
     pos: np.ndarray,
     plate: np.ndarray,
@@ -761,6 +863,15 @@ def _clean_fragments(
     move = new >= 0
     plate[move] = new[move]
     return int(move.sum())
+
+
+def _keep_hinges(
+    cand: np.ndarray, omega: np.ndarray, hinged: dict[tuple[int, int], tuple[int, int]]
+) -> np.ndarray:
+    """A hinged plate keeps its rotation about the hinge relative to its partner."""
+    for fixed, hinge in hinged.values():
+        cand[hinge] = cand[fixed] + (omega[hinge] - omega[fixed])
+    return cand
 
 
 def _closing_fraction(
