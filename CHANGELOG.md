@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **地质时间轴提案（2026-10-16）**：新增 `docs/design/proposals/geological-timeline.md`。为任意
+  世界生成历史时刻的板块与地形快照：约 2 亿年以内用合成海底年龄驱动运动学倒推，更早用作者
+  关键帧，未来用同一套运动学正向外推；快照通过在地质层分叉的分支接入气候与生态，现状地形逐格
+  不变。roadmap 登记技术债 33–35（构造演化实际位移偏小、不搬运地壳、geography.yaml 注释中的
+  失效字段），并修正 `geological-pipeline.md` 中「地壳随板块漂移」的错误描述。
 - **海平面敏感海峡诊断（2026-10-16）**：新增 `scripts/climate/diagnose_ocean_gateways.py`，
   在世界网格上找出门槛落在给定海平面窗口内的海峡。分隔型由全网格自下而上灌水得到（门槛深度与
   被断开的水体面积），捷径型由局部窗口灌水加全网格海上路径比较得到（关闭后的绕行倍数）；

@@ -536,9 +536,9 @@ fBm 的 seed = `config.seed + 500`（确定性）。按 score 降序取前
 - **plates 阶段**：`_generate_plates_impl` 检测到 `config.geography` 时改走
   `apply_geography_crust`（板块仍照常生成，供 tectonics/boundaries 使用，
   只有地壳被锚定）。
-- **tectonics 阶段后**：板块运动会带着地壳漂移（crust 粘在 cell 上），大陆会
-  离开锚点。若 `reapply_after_tectonics: true`，演化结束后用**同一 seed-确定场**
-  重新锚定一次，大陆回到设定位置；而 tectonics 产生的边界/造山数据
+- **tectonics 阶段后**：构造演化只读取地壳数组，不搬运地壳，大陆不会离开锚点
+  （roadmap 技术债 34）。若 `reapply_after_tectonics: true`，演化结束后用**同一 seed-确定场**
+  重新锚定一次，得到的掩膜与演化前相同，差别只在按板块施加的地壳下限；而 tectonics 产生的边界/造山数据
   （`boundary_type`、`distance_to_boundary_km`、`convergence_rate_cm_yr`）独立存储，
   山脉得以保留。注意：重锚只重盖**地壳类型**（此时刻高程尚不存在）；
   高程锚定统一在地形合成阶段完成（见下）。

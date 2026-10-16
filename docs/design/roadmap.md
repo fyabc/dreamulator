@@ -133,7 +133,7 @@
 | P2 | **生态层海洋模块**（3B.5：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——生态层现全陆相） | 1–2 周 | ★★★ |
 | P2 | **生物地理分区算法改进**（唯一屏障=海洋；沙漠/山脉不构成屏障、过渡带零建模）→ ① 参数侧 target_provinces_per_realm；② 扩散阻力加权分区（Holt 2013 / WWF）；③ ecology-layer §2.4 字段 | 1–2 周 | ★★★ |
 | P2 | **Gleba 实测调研**（本地 gleba.exe 零实测记录：CLI/headless 试验 + 问题对比 + 层设计借鉴）→ competitor-analysis.md 新增「Gleba 实测」节 | 2–3 天 | ★★★ |
-| P2 | 地质时间轴可视化（板块漂移回放） | 3–4 周 | ★★★ |
+| P2 | **地质时间轴**（运动学倒推加作者关键帧生成历史时刻快照，时刻分支接气候与生态，前端时间滑块；现状逐格不变）→ [geological-timeline.md](proposals/geological-timeline.md) | M1–M4 各 1–2 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周 | ★★★ |
 | P2 | `ai` CLI 命令组 → [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归 [harness.md](proposals/harness.md) | 2–3 周 | ★★★ |
@@ -147,7 +147,7 @@
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算）→ [moltke-engine.md](proposals/moltke-engine.md) | 远期 | ★★ |
 | P3 | SDE 文明建模（Euler-Maruyama / Milstein / 泊松跳跃冲击） | 远期，依赖 Entity ID | ★★ |
 | P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上）→ [harness.md](proposals/harness.md) §9.4 | 内核 0.5 周 | ★★ |
-| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例 | 设计 1–2 周 + 实现远期 | ★★★ |
+| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例。历史时刻快照另走 [geological-timeline.md](proposals/geological-timeline.md)，不改现状管线 | 设计 1–2 周 + 实现远期 | ★★★ |
 | P3 | **地质层速度**（terrain 已 56→17 s（09-29）；剩余 = tectonics ~97 s Dijkstra 重采样；债 11 缩放数据） | 评估 0.5 周 | ★★ |
 | P3 | **GCM PoC 跑通**（PoC 风场退化根因未明；定性结论已由 Kaspi & Showman 2015 兜底。升级候选（用户 09-24 间奏曲）：① ExoPlaSim baseline；② GPU 多卡 200k 节点级 GCM；③ 模拟数据训 ML 代理。前置 = ExoPlaSim GPU 化审计 + 网格-动力核匹配调研）→ [climate-gcm-plan.md](proposals/climate-gcm-plan.md) | 远期（资源到位可提级） | ★★→★★★ |
 | P3 | **EBM 全球冰反照率耦合**（EBM 全球均温锚定在固定反照率 0.3 的平衡温度加温室增温上，冰反照率只做局地降温，改倾角 14.9°→19.9° 时 EBM 全球均温仅变 0.06 K；现状按定标点用 GCM 重定标，复杂度与耦合面待评估）→ `solve_1d_ebm_temperature` / `ice_albedo_feedback` + nacrea design-notes 0012 §2 | 调研后估 | ★★★ |
@@ -271,6 +271,20 @@
     修复要求：海岸线完全不动（海陆判定逐格不变），只调整陆架内部高程，例如按到海岸线而非海岸格心的
     连续距离定深，或在剖面上叠加与距离无关的起伏。修复会改变世界数据的高程，需重新发布并核对
     GCM 地表文件。
+33. **构造演化的板块实际位移约为名义时长的十分之一**（2026-10-16）— `tectonic_simulator.py`
+    每一步都按板块当前的格子重新求质心，再只转一个时间步；两次重采样之间格子不变，所以每 10 步
+    实际只前进一步的距离，而累计汇聚量与张裂量按完整的 10 步积分。nacrea 名义演化约 8100 万年
+    （50 步，每步约 1.62 Myr），板块实际只走了约 800 万年的距离；时间步公式还假设最快板块
+    10 cm/yr，而 nacrea 最快约 23 cm/yr。修复会改变板块划分与造山带宽度，进而改变所有世界的
+    现状地形，需与重新发布世界数据一并排期。古地理推演不依赖这条（见
+    [geological-timeline.md](proposals/geological-timeline.md) §1.3）。
+34. **构造演化不搬运地壳**（2026-10-16）— 演化过程中只读取地壳数组，剖分代价场全程钉在现状
+    海岸线上，大陆不会离开原位；`reapply_after_tectonics` 因此重算出的是同一张掩膜。现有模拟器
+    无法用于向未来推演大陆漂移，地质时间轴改用独立的地壳质点运动学。是否让现状管线也搬运地壳，
+    取决于「指定/演化」双模式的裁决（§六 P2「基于地质时间的板块运动演化」）。
+35. **geography.yaml 文件头写有单个地物的 `sea_level_offset_m`，模型没有这个字段**（2026-10-16）—
+    nacrea `geography.yaml` 第 30 行把它列为地物参数，但 `GeographyFeature` 没有定义它，写了也会
+    被静默忽略。修法二选一：删掉注释，或实现局部海平面偏移并让未知字段报错。
 
 ### 工程卫生
 
@@ -288,7 +302,9 @@
 8. **阶段缓存对模型演化的护栏**（2026-09-30 overlays 轮暴露并修复）— 09-17 教训
    （payload 须枚举 in-place 字段）已部分落实，但 unpickled 旧实例缺新增字段仍
    可崩（ice_thickness_m 实例已修，根因未除）；根治 = 阶段指纹纳入模型 schema 版本
-   或 load 时字段完备性校验。
+   或 load 时字段完备性校验。另一缺口（2026-10-16 核实）：阶段指纹只含配置与 schema 版本，不含
+   代码版本，改了算法而未提升 schema 版本时旧缓存仍会命中；`plates` 阶段的字段清单也漏了
+   `coherent_motion`、`convection_harmonics` 等板块运动参数。
 
 ## 八、内部文档链接
 
