@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **演化模式提案（2026-10-16）**：新增 `docs/design/proposals/evolution-mode.md`。面向新建世界，
+  `geography.yaml` 从现状偏置场改为演化目标：读出目标大陆块与地物约束，逆向规划超大陆（拼合、
+  紧凑、速度上限与地物约束打分），以块间接缝为裂谷，再用地壳质点运动学正向模拟到现在；造山带、
+  裂谷、共轭陆缘与海底年龄都由历史产生，地质时间轴是副产品。与现行指定模式并存，排在地质时间轴
+  M2 之后；roadmap「基于地质时间的板块运动演化」挂指针。
 - **地质时间轴 M1：重建用板块模型（2026-10-16）**：`paleo_kinematics.reconstruction_plates` 让连通的
   大陆壳成为刚性块（只在现状汇聚边界整条切断处拆开），并入占其面积最多的板块，再按面积加权
   最小二乘把各板块欧拉极拟合到现状速度场；`paleo_rewind.py` 默认使用它（`--plate-model present`

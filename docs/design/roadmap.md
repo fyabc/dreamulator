@@ -147,7 +147,7 @@
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算）→ [moltke-engine.md](proposals/moltke-engine.md) | 远期 | ★★ |
 | P3 | SDE 文明建模（Euler-Maruyama / Milstein / 泊松跳跃冲击） | 远期，依赖 Entity ID | ★★ |
 | P3 | **harness environment 统一底层**（ai 命令组统一跑在「事实上下文 + 原语/verifier 注册表 + 证据三分类」上）→ [harness.md](proposals/harness.md) §9.4 | 内核 0.5 周 | ★★ |
-| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：核心矛盾 = geography.yaml 静态锚定 vs 动态地形，需调研「指定/演化」双模式；overlays 双层结构为其提供先例。历史时刻快照另走 [geological-timeline.md](proposals/geological-timeline.md)，不改现状管线 | 设计 1–2 周 + 实现远期 | ★★★ |
+| P2 | **基于地质时间的板块运动演化**（古造山带/裂谷随漂移-碰撞-裂解自然涌现，替代 `_apply_interior_landforms` 手动放置 → geological-pipeline §7.2）：新建世界走「演化模式」：geography.yaml 作为演化目标，逆向规划超大陆后正向运动学模拟出现状，与现行「指定模式」并存 → [evolution-mode.md](proposals/evolution-mode.md)（排在 geological-timeline M2 之后）。已有正典世界的历史时刻快照另走 [geological-timeline.md](proposals/geological-timeline.md)，不改现状管线 | E1–E4 各 1–3 周 | ★★★ |
 | P3 | **地质层速度**（terrain 已 56→17 s（09-29）；剩余 = tectonics ~97 s Dijkstra 重采样；债 11 缩放数据） | 评估 0.5 周 | ★★ |
 | P3 | **GCM PoC 跑通**（PoC 风场退化根因未明；定性结论已由 Kaspi & Showman 2015 兜底。升级候选（用户 09-24 间奏曲）：① ExoPlaSim baseline；② GPU 多卡 200k 节点级 GCM；③ 模拟数据训 ML 代理。前置 = ExoPlaSim GPU 化审计 + 网格-动力核匹配调研）→ [climate-gcm-plan.md](proposals/climate-gcm-plan.md) | 远期（资源到位可提级） | ★★→★★★ |
 | P3 | **EBM 全球冰反照率耦合**（EBM 全球均温锚定在固定反照率 0.3 的平衡温度加温室增温上，冰反照率只做局地降温，改倾角 14.9°→19.9° 时 EBM 全球均温仅变 0.06 K；现状按定标点用 GCM 重定标，复杂度与耦合面待评估）→ `solve_1d_ebm_temperature` / `ice_albedo_feedback` + nacrea design-notes 0012 §2 | 调研后估 | ★★★ |
@@ -281,7 +281,8 @@
 34. **构造演化不搬运地壳**（2026-10-16）— 演化过程中只读取地壳数组，剖分代价场全程钉在现状
     海岸线上，大陆不会离开原位；`reapply_after_tectonics` 因此重算出的是同一张掩膜。现有模拟器
     无法用于向未来推演大陆漂移，地质时间轴改用独立的地壳质点运动学。是否让现状管线也搬运地壳，
-    取决于「指定/演化」双模式的裁决（§六 P2「基于地质时间的板块运动演化」）。
+    取决于「指定/演化」双模式的裁决（§六 P2「基于地质时间的板块运动演化」；新建世界的演化模式见
+    [evolution-mode.md](proposals/evolution-mode.md)，在那里由运动学模拟真正搬运地壳）。
 35. **geography.yaml 文件头写有单个地物的 `sea_level_offset_m`，模型没有这个字段**（2026-10-16）—
     nacrea `geography.yaml` 第 30 行把它列为地物参数，但 `GeographyFeature` 没有定义它，写了也会
     被静默忽略。修法二选一：删掉注释，或实现局部海平面偏移并让未知字段报错。
