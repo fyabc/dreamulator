@@ -431,14 +431,18 @@ def euler_pole_from_latlon_rate(
     """Convert a PB2002 pole (lat, lon, deg/Ma CCW) to the model's EulerPole dict.
 
     The outward unit vector at (lat, lon) is the rotation axis; the magnitude is
-    deg/Ma converted to rad/yr.  Positive rate = counter-clockwise as seen from
-    outside the Earth (the same convention as ``boundary_detector``).
+    deg/Ma converted to rad/yr.  PB2002 rates are counter-clockwise as seen from
+    outside the Earth.  The engine frame (y north, lon = atan2(z, x)) is
+    left-handed — east × north points into the sphere — so under the engine's
+    v = ω × P a counter-clockwise rotation needs a *negative* ``omega_rad_yr`` on
+    the outward axis.  With the sign as returned here, PB2002 ridges open and
+    trenches close (``tests/test_map/test_import_earth_tectonics.py``).
     """
     lat = math.radians(lat_deg)
     lon = math.radians(lon_deg)
     cos_lat = math.cos(lat)
     axis = (cos_lat * math.cos(lon), math.sin(lat), cos_lat * math.sin(lon))
-    omega_rad_yr = deg_per_ma * (math.pi / 180.0) / 1.0e6
+    omega_rad_yr = -deg_per_ma * (math.pi / 180.0) / 1.0e6
     return {
         "x": axis[0],
         "y": axis[1],

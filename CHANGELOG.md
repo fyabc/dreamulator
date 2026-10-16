@@ -60,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   roadmap 技术债 19 改为登记残余手写值。0016 中指向尚未入库的四期框架的引用改为 0014 §2 的平静段与活跃段。
 - roadmap 登记技术债 32：大陆架高程按网格间距量化，窄海峡门槛被锁在约 −30 m 与 −105 m。
 
+### Fixed
+
+- **earth 的 PB2002 欧拉极转向取反（2026-10-16）**：引擎坐标系（y 朝北，经度 = atan2(z, x)）是左手系，
+  `euler_pole_from_latlon_rate` 原先把逆时针转动写成正 ω，按 v = ω × P 计算时转向相反，PB2002 洋中脊有 99%
+  算成汇聚。现取负 ω，新增转向单元测试；earth 根世界 `plates.json` 已按新函数更新（只有 ω 符号变化，与 PB2002
+  原始欧拉极逐板块核对一致），earth 的 `plate_motion` 图层方向随之改正。
+
 ## [1.0.1] — 2026-10-16
 
 ### Fixed

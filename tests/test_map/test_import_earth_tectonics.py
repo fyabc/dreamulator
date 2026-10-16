@@ -65,7 +65,8 @@ def test_euler_pole_axis_is_unit_vector() -> None:
     pole = euler_pole_from_latlon_rate(59.16, -73.174, 0.927)
     norm = math.sqrt(pole["x"] ** 2 + pole["y"] ** 2 + pole["z"] ** 2)
     assert norm == pytest.approx(1.0)
-    assert pole["omega_rad_yr"] == pytest.approx(0.927 * math.pi / 180.0 / 1.0e6)
+    # negative: the engine frame is left-handed (see euler_pole_from_latlon_rate)
+    assert pole["omega_rad_yr"] == pytest.approx(-0.927 * math.pi / 180.0 / 1.0e6)
 
 
 def test_euler_pole_equatorial_axis() -> None:
@@ -74,6 +75,19 @@ def test_euler_pole_equatorial_axis() -> None:
     assert pole["x"] == pytest.approx(0.0)
     assert pole["y"] == pytest.approx(0.0)
     assert pole["z"] == pytest.approx(1.0)
+
+
+def test_euler_pole_rotation_sense_is_counter_clockwise() -> None:
+    """A CCW pole at the north pole must move the equator eastward (v = ω × P)."""
+    import numpy as np
+
+    from dreamulator.map.pipeline_types import lonlat_to_xyz
+
+    pole = euler_pole_from_latlon_rate(90.0, 0.0, 1.0)
+    omega = np.array([pole["x"], pole["y"], pole["z"]]) * pole["omega_rad_yr"]
+    p = np.array(lonlat_to_xyz(0.0, 0.0))
+    east = np.array(lonlat_to_xyz(90.0, 0.0))  # the eastward tangent at (0°, 0°)
+    assert float(np.cross(omega, p) @ east) > 0
 
 
 # ---------------------------------------------------------------------------
