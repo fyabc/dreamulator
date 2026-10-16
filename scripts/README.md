@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 67 个脚本（含 gcm/ 子组 5 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 68 个脚本（含 gcm/ 子组 5 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
@@ -17,7 +17,7 @@ GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
 - `make_landmap.py` — 世界网格 → ExoPlaSim `.sra` 海陆掩膜与地表位势
 - `gcm_to_mesh.py` — GCM 结果投影到世界网格：`--out` 输出对比用网格，供 `dreamulator export layers --mesh` 与 EBM 对比；`--emit-fields` 输出固定气候分支（`climate_source: gcm`）的字段文件
 
-## climate/ — 气候验证与诊断（32 个）
+## climate/ — 气候验证与诊断（33 个）
 
 围绕 earth/climate-dev 验证环与气候攻关的诊断脚本群。
 
@@ -30,6 +30,9 @@ GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
 - `climate_diff.py` — 两次构建的差异对比（全局摘要 + 纬度带平均 + Top-N 变化细胞）。
 - `convert_koppen_map.py` — Beck Köppen GeoTIFF → 网格观测参考。
 - `detect_ocean_bottlenecks.py` — 海盆连通瓶颈探测（洋流求解上下文）。
+- `diagnose_ocean_gateways.py` — 海平面敏感海峡诊断：分隔型（唯一出口，全网格灌水的门槛深度与被断开的水体面积）
+  与捷径型（局部窗口灌水后比较开、关两种状态的海上路径，给出绕行倍数），附门槛处宽度随海平面的变化；
+  `--plot` 出地图（读网格，约 4 min）。
 - `generate_climate_obs.py` — committed 逐格 obs 生成器：NCEP T/SLP/风 + GPCP P → `climate_obs.json`
   （年平、mesh-bound；重建后用本脚本重生成，替代旧无生成器的 ad-hoc 版）。
 - `diagnose_climate_bias.py` — 逐格 T/P/风/Köppen 偏差审计（对 `climate_obs.json` + `koppen_obs.json`，

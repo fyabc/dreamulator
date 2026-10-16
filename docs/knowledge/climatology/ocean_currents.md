@@ -104,6 +104,43 @@ L = |u|·τ —— 这是洋流对气候影响的距离标度，也是引擎 SST
 3. 微扰放大器——周期性强迫（潮汐、季节）或单事件（地震、岛弧火山）触发跃迁。
 
 源码/设计接口：geography.yaml 的 `isthmus`/`shallow_sea` feature + 高程锚定
+
+### 3.1 水力控制：输运随门槛水深的标度
+
+门槛（sill）是海峡中最浅的截面。门槛之上的输运受水力控制，可以用三个公式估计：
+
+- **窄海峡，非旋转溢流**：Q ≈ (2/3)^{3/2} · W · √g′ · h^{3/2} ≈ 0.54 · W · √g′ · h^{3/2}。W 是海峡宽度，g′ = g·Δρ/ρ 是
+  两侧密度差对应的约化重力，h 是上游界面高出门槛的高度（Whitehead 1998 的综述）。
+- **宽海峡，旋转限制**：Q_max = g′h² / (2f)，f 是科氏参数。这个上限与宽度无关（Whitehead, Leetmaa & Knox 1974）。
+- **两层交换**：密度不同的两股水反向通过海峡时，存在最大交换流量，由门槛和收缩段共同控制（Farmer & Armi 1986）。
+
+判断用哪个公式，比较宽度 W 与内 Rossby 半径 L_R = √(g′h) / f：W ≲ L_R 时旋转不限制流量，用溢流公式；W ≫ L_R
+时用旋转上限；实际流量大约取两者中的较小值（Pratt 1991）。
+
+两种情况下输运都随 h 的 1.5–2 次方变化，相对灵敏度 dQ/Q ≈ (1.5–2)·dh/h。海平面接近门槛时 h → 0，输运迅速归零，
+所以门槛浅的海峡在海平面变化中是阈值开关；门槛深的海峡不会关闭，但输运随海平面单调调制。
+
+**自转速率的影响。** 科氏参数 f = 2Ω sin φ 与自转角速度 Ω 成正比。自转越慢，L_R 越大，更多海峡落入「窄海峡」
+区间；对宽海峡，旋转上限 g′h²/(2f) 与 Ω 成反比。例如自转角速度为地球 0.32 倍的行星，同样几何与密度差的宽海峡
+可以通过约 3 倍的输运，海峡在热量和盐分输送中的份量相应变重。
+
+### 3.2 地球上的海平面门控案例
+
+| 海峡 | 门槛与宽度 | 现代输运 | 开合的气候效应 |
+|---|---|---|---|
+| 白令海峡 | 约 50 m 深、约 85 km 宽 | 约 0.8 Sv（1990 年代）增至约 1.0 Sv（2010 年代）（Woodgate 2018） | 海平面低于约 −50 m 时关闭。开着时北大西洋的低盐异常可以被冲入太平洋，翻转环流更稳定；关闭后异常被困在大西洋，翻转环流出现滞回（De Boer & Nof 2004；Hu et al. 2012）；海平面回升重开时较淡的水进入北大西洋（Hu et al. 2010） |
+| 曼德海峡（红海出口） | 门槛约 137 m | 冬季交换不足 1 Sv | 冰期海平面约 −120 m 时门槛只剩数十米，红海停留时间暴增、盐度出现极值；Siddall et al. 2003 用这套水力交换模型从红海氧同位素反演冰期海平面 |
+| 直布罗陀海峡 | 门槛约 284 m | 两层交换，约 0.7–0.9 Sv（Bryden & Kinder 1991） | 墨西拿盐度危机期间（约 5.97–5.33 Ma）地中海与外海隔绝、蒸发干涸（Hsü et al. 1973；Krijgsman et al. 1999）；重新连通时的洪水在数年内灌满地中海（Garcia-Castellanos et al. 2009） |
+| 格陵兰–苏格兰海脊 | 丹麦海峡门槛约 620 m | 溢流合计约 6 Sv（Dickson & Brown 1994） | 溢流受水力控制，符合 g′h²/2f 的估算（Whitehead 1998）；新生代海脊下沉被认为控制了北大西洋深层水的出现（Wright & Miller 1996） |
+| 印尼贯穿流 | 多个通道，门槛数百米 | 约 15 Sv（Gordon 2005；Sprintall et al. 2014） | 冰期巽他陆架出露、浅通道收窄；约 3–4 Ma 新几内亚北移使水源改为北太平洋冷水，印度洋表层变冷，东非随之变干（Cane & Molnar 2001） |
+
+表中门槛深度与曼德海峡、直布罗陀海峡的输运是常用的海洋学数值，未逐一对应到单篇文献；使用时以量级为准。
+
+### 3.3 诊断工具
+
+`scripts/climate/diagnose_ocean_gateways.py` 在世界网格上找出门槛落在给定海平面窗口内的海峡：分隔型（某片
+水体的唯一出口，给出门槛深度与被断开的面积）与捷径型（关闭后两侧仍连通但需绕行，给出绕行倍数），并估计
+门槛处宽度随海平面的变化。海平面本身随温度的变化见 [sea_level.md](sea_level.md)。
 详见 `docs/design/pipelines/geological-pipeline.md` §3.5（高程锚定 + sea_level_offset_m）
 
 ## 4. 年际变率：ENSO 类振荡
@@ -124,7 +161,7 @@ L = |u|·τ —— 这是洋流对气候影响的距离标度，也是引擎 SST
 | Ekman 偏转 45° / 流速 2% | `climate_physics.py:ekman_current_direction()` | ✅ 已实现、待接入 |
 | 西边界强化 / 沿岸热输送 | roadmap 3A.3 子任务表 | 📋 |
 | 上升流（东边界离岸风） | roadmap 3A.3 子任务表 | 📋 |
-| 海峡水力学约束流 | 问题 1 方案 §4（临界洋流） | 📋 设计 |
+| 海峡水力学约束流 | `map/ocean_circulation.py:detect_straits()`、`compute_strait_flux()`（已实现，未接入管线）；海平面敏感海峡诊断 `scripts/climate/diagnose_ocean_gateways.py` | 📋 设计 |
 | 海洋省份子省（WBC/EBC/GYRE…） | 3A.5 Phase 2，见 `ocean_provinces.md` | 📋 |
 | 热盐多稳态 / ENSO 时变 | 长期愿景（简化 GCM 之后） | ❌ |
 
@@ -172,3 +209,21 @@ span{r₀, Ar₀, …, A^{k−1}r₀}）中取残差 ‖b − Ax‖₂ 最小的
 - Trenberth, K. E., & Caron, J. M. (2001). "Estimates of Meridional Atmosphere and
   Ocean Heat Transports." *J. Climate* 14, 3433–3443.
 - Saad, Y., & Schultz, M. H. (1986). "GMRES: A generalized minimal residual algorithm for solving nonsymmetric linear systems." *SIAM J. Sci. Stat. Comput.* 7(3), 856–869.
+- Whitehead, J. A., Leetmaa, A. & Knox, R. A. (1974). "Rotating hydraulics of strait and sill flows." *Geophys. Fluid Dyn.* 6. doi:10.1080/03091927409365790
+- Whitehead, J. A. (1998). "Topographic control of oceanic flows in deep passages and straits." *Rev. Geophys.* 36. doi:10.1029/98RG01014
+- Pratt, L. J. (1991). "Hydraulics of rotating strait and sill flow." *Annu. Rev. Fluid Mech.* 23. doi:10.1146/annurev.fluid.23.1.81
+- Farmer, D. M. & Armi, L. (1986). "Maximal two-layer exchange over a sill and through the combination of a sill and contraction with barotropic flow." *J. Fluid Mech.* 164. doi:10.1017/s002211208600246x
+- Woodgate, R. A. (2018). "Increases in the Pacific inflow to the Arctic from 1990 to 2015." *Prog. Oceanogr.* 160. doi:10.1016/j.pocean.2017.12.007
+- De Boer, A. M. & Nof, D. (2004). "The Bering Strait's grip on the northern hemisphere climate." *Deep-Sea Res. I* 51. doi:10.1016/j.dsr.2004.05.003
+- Hu, A. et al. (2010). "Influence of Bering Strait flow and North Atlantic circulation on glacial sea-level changes." *Nat. Geosci.* 3. doi:10.1038/ngeo729
+- Hu, A. et al. (2012). "Role of the Bering Strait on the hysteresis of the ocean conveyor belt circulation and glacial climate stability." *PNAS* 109. doi:10.1073/pnas.1116014109
+- Siddall, M. et al. (2003). "Sea-level fluctuations during the last glacial cycle." *Nature* 423. doi:10.1038/nature01690
+- Bryden, H. L. & Kinder, T. H. (1991). "Steady two-layer exchange through the Strait of Gibraltar." *Deep-Sea Res. A* 38. doi:10.1016/s0198-0149(12)80020-3
+- Hsü, K. J., Ryan, W. B. F. & Cita, M. B. (1973). "Late Miocene desiccation of the Mediterranean." *Nature* 242. doi:10.1038/242240a0
+- Krijgsman, W. et al. (1999). "Chronology, causes and progression of the Messinian salinity crisis." *Nature* 400. doi:10.1038/23231
+- Garcia-Castellanos, D. et al. (2009). "Catastrophic flood of the Mediterranean after the Messinian salinity crisis." *Nature* 462. doi:10.1038/nature08555
+- Dickson, R. R. & Brown, J. (1994). "The production of North Atlantic Deep Water: sources, rates, and pathways." *JGR Oceans* 99. doi:10.1029/94JC00530
+- Wright, J. D. & Miller, K. G. (1996). "Control of North Atlantic Deep Water circulation by the Greenland-Scotland Ridge." *Paleoceanography* 11. doi:10.1029/95pa03696
+- Gordon, A. L. (2005). "Oceanography of the Indonesian Seas and their throughflow." *Oceanography* 18. doi:10.5670/oceanog.2005.01
+- Sprintall, J. et al. (2014). "The Indonesian seas and their role in the coupled ocean–climate system." *Nat. Geosci.* 7. doi:10.1038/ngeo2188
+- Cane, M. A. & Molnar, P. (2001). "Closing of the Indonesian seaway as a precursor to east African aridification around 3–4 million years ago." *Nature* 411. doi:10.1038/35075500

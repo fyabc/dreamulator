@@ -9,7 +9,8 @@
 - `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
 - `climate_classification_comparison.md` — 四大分类体系比较（Köppen / Trewartha / Thornthwaite / Holdridge）与 dreamulator 适配建议（2026-08）
 - 统一气候描述（UCC）→ **已迁至专门目录 `docs/ucc/`**（主文档 `docs/ucc/specification.md`：时间基准契约、连续描述量、Hamon-1961 需求模型声明与有效域、分类 profile v1 与 L2 实验冻结依据）
-- `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学、ENSO 类振荡（3A.3 科学底座）
+- `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学（水力控制公式、门槛水深标度与自转速率的影响、地球海平面门控案例、海平面敏感海峡诊断工具）、ENSO 类振荡（3A.3 科学底座）
+- `sea_level.md` — 海平面与气候：冰量与热膨胀两个来源（冰盖剖面与平均厚度、热膨胀系数）、地球数值与时间尺度、海平面变化对气候的反作用、在 GCM 中只作边界条件的处理与估算方法
 - `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
 - `obliquity_ice_albedo.md` — 轴倾角只重新分配日照（全球年平均恒为 S/4，极点年平均 S·sin ε/π），冰反照率把高纬夏季的增量整流成全球净增温；在 GCM 中检验时的注意事项（必须固定轨道）；EBM 为什么复现不了（全球均温锚定、冰反照率只做局地降温）
 - `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）、极端天气（温带风暴与热带气旋的自转标度律、寒潮与热浪、夜间强对流，含 Nacrea 与地球的 GCM 对照）
@@ -40,5 +41,6 @@
 | `polar_pressure_regimes.md` | `climate_simulator.py`（`hadley_extent_deg`/`polar_cell_start_deg` 体制切换） | 两圈/三圈体制与极地气压/降水体制 |
 | `precipitation.md` | `climate_simulator.py:_compute_precipitation_monthly_budget()` | 年/月降水量 |
 | `ocean_currents.md` | `map/ocean_circulation.py`（`solve_ocean_gyre` 等） | 洋流矢量 |
+| `ocean_currents.md` §3.3 | `scripts/climate/diagnose_ocean_gateways.py` | 海平面敏感海峡（诊断，非引擎） |
 | `koppen_classification.md` | `climate_physics.py:koppen_classify()` | 气候类型 |
 | `docs/ucc/specification.md` | `map/ucc.py:compute_descriptors()` / `classify_v1()` | 气候描述量 / UCC 分类 |
