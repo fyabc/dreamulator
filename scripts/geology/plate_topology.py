@@ -103,12 +103,18 @@ def walk(
 
     from dreamulator.map.paleo_history import OceanDepth, active_orogens, rift_onsets
     from dreamulator.map.paleo_kinematics import boundary_opening_rates
-    from dreamulator.map.paleo_walk import WalkConfig, run_topology_walk
+    from dreamulator.map.paleo_walk import WalkConfig, crust_thickness_km, run_topology_walk
 
     opening, _ = boundary_opening_rates(kin, boundary_cells(kin))
     orogens = active_orogens(kin, w.elevation, opening, w.cumulative_convergence_km)
     rifts = rift_onsets(kin, w.divergent, w.cumulative_divergence_km)
-    cfg = WalkConfig(dt_myr=args.dt_myr, rift_cap_km=args.rift_cap_km, event_grid=args.event_grid)
+    cfg = WalkConfig(
+        dt_myr=args.dt_myr,
+        rift_cap_km=args.rift_cap_km,
+        event_grid=args.event_grid,
+        reorg_interval_myr=(args.reorg_min_myr, args.reorg_max_myr),
+        seed=args.seed,
+    )
     snaps, log = run_topology_walk(
         kin,
         topo,
@@ -123,6 +129,7 @@ def walk(
     )
     a = kin.area_km2
     cont0 = a[kin.continental].sum()
+    thick0 = np.where(kin.continental, crust_thickness_km(w.elevation), 0.0)
     frames = []
     for s in snaps:
         chk = pt.check(kin, s.plate)
@@ -136,9 +143,17 @@ def walk(
             "continental_area_ratio": round(float(a[s.continental].sum() / cont0), 4),
             "synthetic_frac": round(float(a[s.synthetic].sum() / a.sum()), 4),
             "land_frac": round(float(a[s.elevation_m > 0].sum() / a.sum()), 4),
+            "volume_visible_ratio": round(
+                float((a * s.thickness_km).sum() / (a * thick0).sum()), 4
+            ),
             **{
                 k: step[k]
-                for k in ("continental_parcels_ratio", "continental_overlap_km2")
+                for k in (
+                    "continental_parcels_ratio",
+                    "continental_overlap_km2",
+                    "volume_parcels_ratio",
+                    "volume_hidden_ratio",
+                )
                 if k in step
             },
         }
@@ -148,14 +163,16 @@ def walk(
     summary["young_rifts"] = len(rifts)
     summary["collision_events"] = log.collisions
     summary["merges"] = log.merges
+    summary["reorganizations"] = log.reorganizations
     summary["steps"] = log.steps
-    restored = sum(float(str(x["rift_restored_km2"])) for x in log.steps)
-    summary["rift_restored_km2"] = round(restored)
+    restored = float(str(log.steps[-1]["unstretched_km3"])) if log.steps else 0.0
+    summary["unstretched_km3"] = round(restored)
     print(
         json.dumps(
             {
                 "collision_events": len(log.collisions),
-                "rift_restored_Mkm2": round(restored / 1e6, 2),
+                "reorganizations": log.reorganizations,
+                "unstretched_Mkm3": round(restored / 1e6, 2),
             }
         )
     )
@@ -179,6 +196,15 @@ def main() -> None:
         help="T2: walk crust parcels on the topology (reconcile, gaps, young rifts)",
     )
     ap.add_argument("--rift-cap-km", type=float, default=300.0)
+    ap.add_argument(
+        "--reorg-min-myr",
+        type=float,
+        default=10.0,
+        help="plate reorganizations are drawn every reorg-min to reorg-max Myr "
+        "(a huge value keeps the present poles)",
+    )
+    ap.add_argument("--reorg-max-myr", type=float, default=40.0)
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
         "--event-grid",
         type=int,

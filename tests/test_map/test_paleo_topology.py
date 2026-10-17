@@ -195,3 +195,80 @@ def test_split_thin_parts_divides_a_ribbon_along_its_midline() -> None:
     west = ribbon & (lon < -1)
     east = ribbon & (lon > 1)
     assert np.mean(out[west] == 0) > 0.9 and np.mean(out[east] == 1) > 0.9
+
+
+def test_net_rotation_is_one_for_a_rigid_planet_and_zero_for_opposite_halves() -> None:
+    from dreamulator.map.paleo_walk import _net_rotation
+
+    pts, ptr, idx, area = _mesh(4000)
+    half = (pts[:, 1] > 0).astype(np.int64)
+    kin = PlateKinematics(pts, ptr, idx, half, np.zeros((2, 3)), half > 0, area, RADIUS_KM)
+    same = np.array([[0.0, 1e-8, 0.0], [0.0, 1e-8, 0.0]])
+    assert abs(_net_rotation(same, half, kin) - 1.0) < 0.02
+    opposite = np.array([[0.0, 1e-8, 0.0], [0.0, -1e-8, 0.0]])
+    assert _net_rotation(opposite, half, kin) < 0.02
+
+
+def test_segment_probes_and_opening_fraction_follow_the_poles() -> None:
+    from dreamulator.map.paleo_walk import _opening_fraction, _segment_probes
+
+    kin = _three_plates()
+    sp = kin.spacing_km / kin.radius_km
+    topo = pt.prepare(pt.extract(kin.xyz, kin.plate), 0.5 * sp)
+    omega = np.zeros((3, 3))
+    omega[1] = [0.0, 2.0e-8, 0.0]
+    pt.classify(topo, omega, kin.radius_km)
+    cont = np.ones(kin.n, dtype=bool)
+    side = (kin.xyz, cont, np.full(kin.n, np.nan), pt.cKDTree(kin.xyz))
+    ridge = _segment_probes(topo, side, sp, want="ridge")
+    both = _segment_probes(topo, side, sp, want="continental")
+    assert len(ridge[0]) > 0 and len(both[0]) > len(ridge[0])
+    assert _opening_fraction(omega, ridge, opening=False) < 0.05  # ridges open
+    reversed_ = -omega
+    assert _opening_fraction(reversed_, ridge, opening=False) > 0.95
+    # one of plate 1's two boundaries opens: about half of all boundary points
+    assert 0.2 < _opening_fraction(omega, both, opening=True) < 0.8
+
+
+def test_perturb_poles_respects_the_speed_cap_and_idle_plates() -> None:
+    from dreamulator.map.paleo_walk import WalkConfig, _perturb_poles
+
+    omega = np.array([[0.0, 1e-8, 0.0], [0.0, 0.0, 0.0], [3e-8, 0.0, 0.0]])
+    cap_cm_yr = 1e-8 * RADIUS_KM * 1e5
+    rng = np.random.default_rng(1)
+    for _ in range(20):
+        out = _perturb_poles(omega, np.array([0, 1, 2]), rng, WalkConfig(), cap_cm_yr, RADIUS_KM)
+        assert np.all(np.linalg.norm(out, axis=1) <= 1e-8 * (1 + 1e-9))
+        np.testing.assert_array_equal(out[1], 0.0)
+
+
+def test_airy_thickness_round_trips_and_follows_isostasy() -> None:
+    from dreamulator.map.paleo_walk import crust_thickness_km, elevation_from_thickness_m
+
+    z = np.array([-3000.0, -200.0, 0.0, 500.0, 5000.0])
+    h = crust_thickness_km(z)
+    np.testing.assert_allclose(h[2], 35.0)
+    np.testing.assert_allclose(h[4], 35.0 + 5.0 * 3300 / 500, rtol=1e-12)  # 5 km plateau: 68 km
+    np.testing.assert_allclose(elevation_from_thickness_m(h), z, atol=1e-9)
+
+
+def test_unstretch_conserves_volume_and_caps_thickness() -> None:
+    from dreamulator.map.paleo_walk import _unstretch
+
+    pos = np.array([[1.0, 0.0, 0.0], [1.0, 0.001, 0.0], [1.0, -0.001, 0.0], [0.0, 1.0, 0.0]])
+    pos /= np.linalg.norm(pos, axis=1, keepdims=True)
+    plate = np.array([1, 0, 0, 0])
+    thick = np.array([20.0, 20.0, 25.0, 10.0])  # parcel 0 overlaps plate 0's thinned crust
+    total = thick.sum()
+    receivers = np.array([False, True, True, True])
+    done, moved = _unstretch(pos, plate, thick, np.array([0]), np.array([0]), receivers, 35.0, 0.01)
+    assert done[0] and moved == 20.0  # room 15 + 10 km
+    np.testing.assert_allclose(thick.sum(), total)
+    assert thick[1] <= 35.0 and thick[2] <= 35.0
+    assert thick[3] == 10.0  # out of reach
+    # more than the room left (5 + 0 km): the parcel stays, thinner
+    thick2 = np.array([30.0, 35.0, 30.0, 10.0])
+    done2, moved2 = _unstretch(
+        pos, plate, thick2, np.array([0]), np.array([0]), receivers, 35.0, 0.01
+    )
+    assert not done2[0] and moved2 == 5.0 and thick2[0] == 25.0

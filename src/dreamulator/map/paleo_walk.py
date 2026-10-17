@@ -13,23 +13,37 @@ Each step:
 3. the graph is rasterized: every cell gets its owning plate;
 4. parcels inside another plate's polygon are reconciled by kind:
    * oceanic: overridden or past a closing ridge — deleted;
-   * continental across a young rift (``YoungRift``) before its onset: stretched
-     crust restored — deleted, at most ``rift_cap_km`` per side times the rift
-     length per plate pair (the terrain engine's recorded extension is
-     inflated, roadmap tech debt 33, so a physical cap of rift width at
-     stretching factors 2–3 applies);
-   * other continental: kept and reported as continental overlap, a signal
-     that an event (rift closure, suture) is due;
+   * continental over thinned continental crust of the owning plate: the
+     stretching is undone — its volume moves into that crust, which thickens
+     back to at most the unstretched thickness (pure shear conserves volume,
+     as in the deforming networks of Gurnis et al. 2018 and Müller et al.
+     2019); a fully absorbed parcel is deleted;
+   * the rest: kept and reported as continental overlap — more convergence
+     than the thinned crust can take back, a kinematic contradiction or a
+     signal that an event (rift closure, suture) is due;
 5. cells with no parcel of their owning plate within ``gap_factor`` spacings get
    synthetic oceanic crust of that plate, aged from the ridges of the current
    plate layout (``synthesize_seafloor_age``) — behind trenches this is crust
    consumed after ``t``, between colliding continents it is the ocean that
    closed.
 
+Plate reorganizations (stage poles) happen at drawn times: candidate pole sets
+around the current ones are scored by three tectonic rules — small
+lithospheric net rotation (Tetley et al. 2019; Müller et al. 2022), ridges in
+force keep opening forward in time, and boundaries with continent on both sides
+do not open forward (going back that would push the continents into each
+other) — measured on the boundary graph's segments.  After a reorganization the
+segment types are reclassified and the continental rifts re-registered with the
+new motion, onsets counted from the reorganization.
+
+Continental parcels carry a crustal thickness from the present elevation by
+Airy isostasy (``crust_thickness_km``); the walk keeps a volume ledger
+(parcel volume, volume hidden in overlap, volume moved by unstretching).
+
 Snapshots sample, for every cell, the nearest parcel of its owning plate.
 Elevations follow ``paleo_history``: oceanic parcels by the plate-cooling
-increment, active orogens rolled back to their build time.  Poles are fixed in
-T2.  Pure functions on numpy arrays, no IO, no RNG.
+increment, active orogens rolled back to their build time.  Pure functions on
+numpy arrays, no IO; the only randomness is the seeded reorganization draw.
 """
 
 from __future__ import annotations
@@ -53,6 +67,36 @@ if TYPE_CHECKING:
     from dreamulator.map.paleo_history import OceanDepth, Orogens, YoungRift
 
 
+# Airy isostasy (docs/knowledge/geology/isostasy_elevation_limits.md).  Category:
+# approximate derivation with standard densities; the sea-level thickness is an
+# Earth observation (about 35 km, uncertainty ±5 km) and sets only the absolute
+# volume, not the restorable share.
+RHO_CRUST = 2800.0  # kg/m³
+RHO_MANTLE = 3300.0  # kg/m³
+RHO_WATER = 1030.0  # kg/m³
+CRUST_AT_SEA_LEVEL_KM = 35.0
+_MIN_CRUST_KM = 5.0
+
+
+def crust_thickness_km(elevation_m: np.ndarray) -> np.ndarray:
+    """Continental crustal thickness compensating the elevation (Airy): land
+    carries a root of ρc/(ρm − ρc) times its height, sea floor is loaded by water."""
+    z = np.asarray(elevation_m, dtype=float) / 1000.0
+    land = z * RHO_MANTLE / (RHO_MANTLE - RHO_CRUST)
+    sea = z * (RHO_MANTLE - RHO_WATER) / (RHO_MANTLE - RHO_CRUST)
+    out: np.ndarray = np.maximum(CRUST_AT_SEA_LEVEL_KM + np.where(z >= 0, land, sea), _MIN_CRUST_KM)
+    return out
+
+
+def elevation_from_thickness_m(thickness_km: np.ndarray) -> np.ndarray:
+    """Inverse of ``crust_thickness_km``."""
+    dh = np.asarray(thickness_km, dtype=float) - CRUST_AT_SEA_LEVEL_KM
+    land = dh * (RHO_MANTLE - RHO_CRUST) / RHO_MANTLE
+    sea = dh * (RHO_MANTLE - RHO_CRUST) / (RHO_MANTLE - RHO_WATER)
+    out: np.ndarray = 1000.0 * np.where(dh >= 0, land, sea)
+    return out
+
+
 @dataclass(frozen=True)
 class WalkConfig:
     """Parameters of the topology walk.
@@ -61,10 +105,20 @@ class WalkConfig:
         dt_myr: step length.
         gap_factor: a cell with no parcel of its plate within this many spacings
             gets synthetic ocean.
-        rift_cap_km: largest stretched width restored per rift side.
+        rift_cap_km: stretched width per rift side used for rift onsets
+            (onset = 2 · rift_cap_km / opening rate).
         event_grid: points of the fixed sampling sphere for collision events.
         merge_contact_share: two plates merge (a rift closes) when this share of
             their common boundary is continent against continent.
+        reorg_interval_myr: plate reorganizations are drawn uniformly in this range.
+        n_candidates: pole sets drawn per reorganization.
+        axis_sigma_deg, speed_sigma: spread of the pole-axis tilt and of the
+            log-normal angular-speed change at a reorganization.
+        speed_max_cm_yr: cap on any plate's equatorial speed (None = the fastest
+            present plate).
+        ridge_rule_weight, continent_rule_weight: weights of the closing-ridge and
+            opening-continental-boundary fractions in the score.
+        seed: RNG seed of the reorganizations.
     """
 
     dt_myr: float = 1.0
@@ -72,6 +126,14 @@ class WalkConfig:
     rift_cap_km: float = 300.0
     event_grid: int = 200_000
     merge_contact_share: float = 0.6
+    reorg_interval_myr: tuple[float, float] = (10.0, 40.0)
+    n_candidates: int = 32
+    axis_sigma_deg: float = 20.0
+    speed_sigma: float = 0.3
+    speed_max_cm_yr: float | None = None
+    ridge_rule_weight: float = 2.0
+    continent_rule_weight: float = 2.0
+    seed: int = 0
 
 
 @dataclass(frozen=True)
@@ -86,6 +148,7 @@ class WalkSnapshot:
         elevation_m: (N,) elevation relative to the present datum.
         synthetic: (N,) crust added in gaps (not present-day crust).
         topology: the boundary graph at ``t_myr``.
+        thickness_km: (N,) continental crustal thickness (0 on ocean).
     """
 
     t_myr: float
@@ -95,6 +158,7 @@ class WalkSnapshot:
     elevation_m: np.ndarray
     synthetic: np.ndarray
     topology: pt.Topology
+    thickness_km: np.ndarray
 
 
 @dataclass
@@ -102,6 +166,7 @@ class WalkLog:
     steps: list[dict[str, float | int | dict[str, float]]] = field(default_factory=list)
     collisions: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int | str]] = field(default_factory=list)
+    reorganizations: list[dict[str, float | int]] = field(default_factory=list)
 
 
 def run_topology_walk(
@@ -135,6 +200,12 @@ def run_topology_walk(
     cont = kin.continental.copy()
     born = np.where(cont, np.nan, age_myr)
     z_ref = elevation_m.astype(float).copy()
+    thick = np.where(cont, crust_thickness_km(z_ref), 0.0)
+    plain = cont & (z_ref > 0) & (orogens.relief_m <= 0)
+    # unstretched thickness: the median of continental land outside orogens
+    h_full = float(np.median(thick[plain])) if plain.any() else CRUST_AT_SEA_LEVEL_KM
+    volume0 = float(thick.sum() * np.median(kin.area_km2))
+    unstretched_km3 = 0.0
     t_ref = np.zeros(kin.n)
     relief = np.where(cont, orogens.relief_m, 0.0)
     build = np.maximum(orogens.build_myr, 1e-6)
@@ -144,9 +215,24 @@ def run_topology_walk(
 
     # continental rifts: every continent-continent boundary that opens forward
     budget, onset = continental_rifts(kin, cfg.rift_cap_km, rifts)
+    rng = np.random.default_rng(cfg.seed)
+    next_reorg = float(rng.uniform(*cfg.reorg_interval_myr))
+    speed_cap = cfg.speed_max_cm_yr or float(
+        np.linalg.norm(kin.omega, axis=1).max() * radius * 1.0e5
+    )
     jumped: set[tuple[int, int]] = set()
     n_pl = omega.shape[0]
     cont_parcels0 = int(cont.sum())
+
+    def side_now() -> tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree]:
+        """Continent and seafloor age per cell from the current parcels (for
+        trench polarity and new boundaries)."""
+        lab = pt.rasterize(topo, kin, spacing / 3.0)
+        src = _owner_parcels(kin.xyz, lab, pos, plate, None)
+        s = np.maximum(src, 0)
+        cc = (src >= 0) & cont[s]
+        ages = np.where(~cc & np.isfinite(born[s]), born[s] - t, np.nan)
+        return kin.xyz, cc, ages, mesh_tree
 
     def snapshot(t: float, label: np.ndarray) -> WalkSnapshot:
         src = _owner_parcels(kin.xyz, label, pos, plate, None)
@@ -166,6 +252,7 @@ def run_topology_walk(
             elevation_m=np.where(has, z[s], -depth(np.array([default_age]))[0]),
             synthetic=np.where(has, synthetic[s], True),
             topology=topo,
+            thickness_km=np.where(has & cont[s], thick[s], 0.0),
         )
 
     targets = sorted({float(e) for e in epochs})
@@ -178,6 +265,53 @@ def run_topology_walk(
     while t < t_end - 1e-9:
         t_new = min(t + cfg.dt_myr, t_end)
         dt = t_new - t
+
+        # 0. plate reorganization: new stage poles
+        if t_new >= next_reorg:
+            label_now = pt.rasterize(topo, kin, spacing / 3.0)
+            side = side_now()
+            cell_cont = side[1]
+            live = np.unique(label_now)
+            ridge = _segment_probes(topo, side, spacing, want="ridge")
+            contb = _segment_probes(topo, side, spacing, want="continental")
+            best, best_score, parts = omega, np.inf, (0.0, 0.0, 0.0)
+            for _ in range(cfg.n_candidates):
+                cand = _perturb_poles(omega, live, rng, cfg, speed_cap, radius)
+                nr = _net_rotation(cand, label_now, kin)
+                closing = _opening_fraction(cand, ridge, opening=False)
+                opening_c = _opening_fraction(cand, contb, opening=True)
+                score = nr + cfg.ridge_rule_weight * closing + cfg.continent_rule_weight * opening_c
+                if score < best_score:
+                    best, best_score, parts = cand, score, (nr, closing, opening_c)
+            omega = best
+            pt.classify(topo, omega, radius, side)
+            new_budget, new_onset = continental_rifts(
+                PlateKinematics(
+                    xyz=kin.xyz,
+                    nbr_ptr=kin.nbr_ptr,
+                    nbr_idx=kin.nbr_idx,
+                    plate=label_now,
+                    omega=omega,
+                    continental=cell_cont,
+                    area_km2=kin.area_km2,
+                    radius_km=radius,
+                ),
+                cfg.rift_cap_km,
+            )
+            budget = new_budget
+            onset = {k: t_new + v for k, v in new_onset.items()}
+            log.reorganizations.append(
+                {
+                    "t_myr": t_new,
+                    "net_rotation": round(parts[0], 4),
+                    "closing_ridge_frac": round(parts[1], 4),
+                    "opening_continental_frac": round(parts[2], 4),
+                    "ridge_probes": int(len(ridge[0])),
+                    "continental_probes": int(len(contb[0])),
+                    "rifts": len(budget),
+                }
+            )
+            next_reorg += float(rng.uniform(*cfg.reorg_interval_myr))
 
         # 1. parcels back with their plates; drop crust younger than t_new
         rot = pt._rotate_points(pos, omega[plate], -dt * 1.0e6)
@@ -192,7 +326,7 @@ def run_topology_walk(
         hits = pt.find_crossings(topo, 2.0 * spacing) if grid is not None else []
         if hits and grid is not None:
             before = pt.rasterize(topo, kin, spacing / 3.0)
-            topo, stats = pt.reclose(topo, grid, spacing, side_info, omega, radius)
+            topo, stats = pt.reclose(topo, grid, spacing, side_now(), omega, radius)
             stats["parcels_followed"] = _follow_ownership(
                 mesh_tree, pos, plate, before, pt.rasterize(topo, kin, spacing / 3.0)
             )
@@ -207,11 +341,20 @@ def run_topology_walk(
         foreign = keep & (owner != plate)
         del_ocean = foreign & ~cont
         keep &= ~del_ocean
-        rift_deleted = 0.0
-        overlap = 0.0
-        by_pair: dict[str, float] = {}
         fc = np.flatnonzero(foreign & cont)
+        absorbed, moved = _unstretch(
+            pos, plate, thick, fc, owner[fc], keep & cont & ~foreign, h_full, spacing
+        )
+        keep[fc[absorbed]] = False
+        unstretched_km3 += moved * cell_area
+        # thickened crust stands higher (Airy)
+        z_ref = np.where(cont, elevation_from_thickness_m(thick), z_ref)
+        overlap = 0.0
+        hidden_km3 = 0.0
+        by_pair: dict[str, float] = {}
+        fc = fc[~absorbed]
         if fc.size:
+            hidden_km3 = float(thick[fc].sum() * cell_area)
             pa = np.minimum(plate[fc], owner[fc])
             pb = np.maximum(plate[fc], owner[fc])
             keys = pa * n_pl + pb
@@ -219,28 +362,19 @@ def run_topology_walk(
                 sel = fc[keys == key]
                 pair = (int(key // n_pl), int(key % n_pl))
                 area = sel.size * cell_area
-                if pair in budget and t_new <= onset[pair] and budget[pair] > 0:
-                    # stretched rift crust: restore up to the budget, lowest first
-                    order = sel[np.argsort(z_ref[sel])]
-                    n_take = int(min(order.size, budget[pair] // cell_area))
-                    keep[order[:n_take]] = False
-                    budget[pair] -= n_take * cell_area
-                    rift_deleted += n_take * cell_area
-                    overlap += (order.size - n_take) * cell_area
-                else:
-                    overlap += area
-                    tag = (
-                        "jumped"
-                        if pair in jumped
-                        else (
-                            "rift_after_onset"
-                            if pair in budget and t_new > onset[pair]
-                            else ("rift_budget_spent" if pair in budget else "not_rift")
-                        )
+                overlap += area
+                tag = (
+                    "jumped"
+                    if pair in jumped
+                    else (
+                        "rift_after_onset"
+                        if pair in budget and t_new > onset[pair]
+                        else ("rift" if pair in budget else "not_rift")
                     )
-                    by_pair[f"{pair[0]}-{pair[1]}:{tag}"] = round(area / 1e6, 2)
+                )
+                by_pair[f"{pair[0]}-{pair[1]}:{tag}"] = round(area / 1e6, 2)
         sel = np.flatnonzero(keep)
-        pos, plate, cont, born = pos[sel], plate[sel], cont[sel], born[sel]
+        pos, plate, cont, born, thick = pos[sel], plate[sel], cont[sel], born[sel], thick[sel]
         z_ref, t_ref, relief, build, synthetic = (
             z_ref[sel],
             t_ref[sel],
@@ -280,7 +414,9 @@ def run_topology_walk(
                 for gone, kept in relabel.items():
                     plate[plate == gone] = kept
                 before = label.copy()
-                topo, _ = pt.reclose(topo, grid, spacing, side_info, omega, radius, relabel=relabel)
+                topo, _ = pt.reclose(
+                    topo, grid, spacing, side_now(), omega, radius, relabel=relabel
+                )
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 _follow_ownership(mesh_tree, pos, plate, before, label)
                 budget, onset = _rename_pairs(budget, onset, relabel)
@@ -319,7 +455,7 @@ def run_topology_walk(
             if transfers:
                 before = label.copy()
                 topo, _ = pt.reclose(
-                    topo, grid, spacing, side_info, omega, radius, transfers=transfers
+                    topo, grid, spacing, side_now(), omega, radius, transfers=transfers
                 )
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 _follow_ownership(mesh_tree, pos, plate, before, label)
@@ -335,6 +471,7 @@ def run_topology_walk(
             pos = np.vstack([pos, kin.xyz[gaps]])
             plate = np.concatenate([plate, label[gaps]])
             cont = np.concatenate([cont, np.zeros(gaps.size, dtype=bool)])
+            thick = np.concatenate([thick, np.zeros(gaps.size)])
             born = np.concatenate([born, t_new + a])
             z_ref = np.concatenate([z_ref, -depth(a)])
             t_ref = np.concatenate([t_ref, np.full(gaps.size, t_new)])
@@ -350,8 +487,10 @@ def run_topology_walk(
                 "dropped": n_dropped,
                 "ocean_overridden": int(del_ocean.sum()),
                 "gaps_filled": int(gaps.size),
-                "rift_restored_km2": round(rift_deleted),
+                "unstretched_km3": round(unstretched_km3),
                 "continental_overlap_km2": round(overlap),
+                "volume_parcels_ratio": round(float(thick[cont].sum()) * cell_area / volume0, 4),
+                "volume_hidden_ratio": round(hidden_km3 / volume0, 4),
                 "continental_parcels_ratio": round(int(cont.sum()) / max(cont_parcels0, 1), 4),
                 "overlap_by_pair_Mkm2": dict(sorted(by_pair.items(), key=lambda kv: -kv[1])[:6]),
             }
@@ -359,6 +498,137 @@ def run_topology_walk(
         if any(abs(t - e) < 1e-9 for e in targets):
             snaps.append(snapshot(t, label))
     return snaps, log
+
+
+def _unstretch(
+    pos: np.ndarray,
+    plate: np.ndarray,
+    thick: np.ndarray,
+    foreign: np.ndarray,
+    owner: np.ndarray,
+    receivers: np.ndarray,
+    h_full: float,
+    reach_rad: float,
+) -> tuple[np.ndarray, float]:
+    """Undo stretching: move the thickness of foreign continental parcels into
+    thinned continental parcels of the plate they lie in (in place on ``thick``).
+
+    Each receiver thickens to at most ``h_full``; a foreign parcel gives its
+    thickness to receivers within ``reach_rad``, nearest first, and is absorbed
+    when nothing is left.  Volume is conserved (parcels stand for equal areas).
+    Returns the absorbed mask over ``foreign`` and the thickness moved (km summed
+    over parcels).
+    """
+    done = np.zeros(foreign.size, dtype=bool)
+    rec = np.flatnonzero(receivers & (thick < h_full))
+    if rec.size == 0 or foreign.size == 0:
+        return done, 0.0
+    _, nb = cKDTree(pos[rec]).query(pos[foreign], k=8, distance_upper_bound=reach_rad)
+    room = h_full - thick[rec]
+    moved = 0.0
+    for i, f in enumerate(foreign.tolist()):
+        need = float(thick[f])
+        for j in nb[i].tolist():
+            if j >= rec.size:
+                break
+            if plate[rec[j]] != owner[i] or room[j] <= 0.0:
+                continue
+            take = min(need, float(room[j]))
+            room[j] -= take
+            thick[rec[j]] += take
+            need -= take
+            moved += take
+            if need <= 1e-9:
+                break
+        thick[f] = need
+        done[i] = need <= 1e-9
+    return done, moved
+
+
+def _segment_probes(
+    topo: pt.Topology,
+    side: tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree],
+    spacing: float,
+    want: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Boundary points for scoring candidate poles: (points, left normals, left
+    plate, right plate).
+
+    ``want="ridge"``: points of ridge segments.  ``want="continental"``: points of
+    any segment with continental crust within one spacing on both sides.
+    """
+    _, cc, _, tree = side
+    pts, nrm, lp, rp = [], [], [], []
+    for seg in topo.segments:
+        q = seg.points
+        n = np.cross(q, pt.tangents(q))
+        if want == "ridge":
+            keep = np.full(len(q), seg.kind == pt.RIDGE)
+        else:
+            sides = []
+            for sign in (1.0, -1.0):
+                x = q + sign * spacing * n
+                x /= np.linalg.norm(x, axis=1, keepdims=True)
+                _, idx = tree.query(x)
+                sides.append(cc[idx])
+            keep = sides[0] & sides[1]
+        if keep.any():
+            pts.append(q[keep])
+            nrm.append(n[keep])
+            lp.append(np.full(int(keep.sum()), seg.left))
+            rp.append(np.full(int(keep.sum()), seg.right))
+    if not pts:
+        empty = np.zeros((0, 3))
+        return empty, empty, np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    return np.vstack(pts), np.vstack(nrm), np.concatenate(lp), np.concatenate(rp)
+
+
+def _opening_fraction(
+    omega: np.ndarray,
+    probes: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    *,
+    opening: bool,
+) -> float:
+    """Share of probe points that open (``opening``) or close forward in time."""
+    x, n, a, b = probes
+    if len(x) == 0:
+        return 0.0
+    rate = np.einsum("ij,ij->i", np.cross(omega[a] - omega[b], x), n)
+    return float(np.mean(rate > 0) if opening else np.mean(rate < 0))
+
+
+def _net_rotation(omega: np.ndarray, label: np.ndarray, kin: PlateKinematics) -> float:
+    """Lithospheric net rotation as a share of the mean plate angular speed."""
+    w = omega[label]
+    integrand = w - np.einsum("ij,ij->i", w, kin.xyz)[:, None] * kin.xyz
+    a = kin.area_km2
+    net = 1.5 * (integrand * a[:, None]).sum(axis=0) / a.sum()
+    mean = float((np.linalg.norm(w, axis=1) * a).sum() / a.sum())
+    return float(np.linalg.norm(net) / mean) if mean > 0 else 0.0
+
+
+def _perturb_poles(
+    omega: np.ndarray,
+    live: np.ndarray,
+    rng: np.random.Generator,
+    cfg: WalkConfig,
+    speed_cap_cm_yr: float,
+    radius_km: float,
+) -> np.ndarray:
+    """One candidate pole set: each live plate's axis tilted and speed rescaled."""
+    out = omega.copy()
+    cap = speed_cap_cm_yr / (radius_km * 1.0e5)
+    for p in live.tolist():
+        rate = float(np.linalg.norm(omega[p]))
+        if rate == 0.0:
+            continue
+        axis = omega[p] / rate
+        perp = np.cross(axis, rng.normal(size=3))
+        perp /= max(float(np.linalg.norm(perp)), 1e-15)
+        tilt = np.radians(abs(rng.normal(0.0, cfg.axis_sigma_deg)))
+        axis = np.cos(tilt) * axis + np.sin(tilt) * perp
+        out[p] = axis * min(rate * float(np.exp(rng.normal(0.0, cfg.speed_sigma))), cap)
+    return out
 
 
 def _follow_ownership(
