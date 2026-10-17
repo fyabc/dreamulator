@@ -92,6 +92,140 @@ SCALEBAR_SIZE = 13.0
 #: stay a step smaller than scale-bar labels.
 LEGEND_SMALL_SIZE = 10.5
 
+#: Chinese display names for biome legend rows (print artefact convention,
+#: same as the Chinese sheet title).  Missing names fall back to the
+#: English biome id.
+BIOME_DISPLAY_ZH: dict[str, str] = {
+    "tropical_rainforest": "热带雨林",
+    "tropical_seasonal_forest": "热带季雨林",
+    "tropical_savanna": "热带稀树草原",
+    "tropical_desert": "热带荒漠",
+    "temperate_rainforest": "温带雨林",
+    "temperate_forest": "温带森林",
+    "temperate_grassland": "温带草原",
+    "temperate_desert": "温带荒漠",
+    "boreal_forest": "北方针叶林",
+    "boreal_shrubland": "北方灌丛",
+    "tundra": "苔原",
+    "ice": "冰盖",
+    "lake": "湖泊",
+    "ocean": "海洋",
+}
+
+
+def _combined_legend(
+    ax: Axes,
+    km: float,
+    regimes: np.ndarray | None,
+    biome_entries: list[tuple[str, tuple[int, int, int]]],
+    *,
+    river_rgb: tuple[int, int, int] = RIVER_COLOR,
+) -> None:
+    """The sheet's single legend box: river regime rows with biome swatches
+    appended below (one frame for everything — sheets that carry no class
+    legend at all pass an empty list and get the river-only box).
+
+    River rows reuse the survey sheet's continuous-dash samples; biome rows
+    are swatch + display name, same pitch.  Box geometry follows
+    :func:`_river_regime_legend` so both stay in the same visual family.
+    """
+    from matplotlib.collections import LineCollection
+    from matplotlib.patches import Rectangle
+
+    present = [r for r in (0, 1) if regimes is not None and np.any(regimes == r)]
+    if not present and not biome_entries:
+        return
+
+    x0 = ax.get_xlim()[0] + (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.035
+    points_per_unit = _points_per_data_unit(ax)
+    pad_x, pad_y = km * 0.009, km * 0.006
+    sample_len = km * 0.026
+    swatch_w = km * 0.011
+    text_gap = km * 0.007
+    row_h = title_h = km * 0.0195
+    names = ["常流河", "非常流河"] + [BIOME_DISPLAY_ZH.get(nm, nm) for nm, _ in biome_entries]
+    text_w = max(len(s) for s in names) * LEGEND_SMALL_SIZE * 0.95 / 72 / (12 * 0.90) * km
+    n_rows = len(present) + len(biome_entries)
+    box_w = pad_x + max(sample_len, swatch_w) + text_gap + text_w + pad_x
+    box_h = pad_y + title_h + row_h * n_rows + pad_y
+    y0 = km * 0.003
+    ax.add_patch(
+        Rectangle(
+            (x0 - pad_x, y0),
+            box_w,
+            box_h,
+            facecolor="#ffffff",
+            edgecolor=_hex(river_rgb),
+            linewidth=0.9,
+            zorder=8,
+        )
+    )
+    ax.text(
+        x0 - pad_x + box_w / 2,
+        y0 + box_h - pad_y - title_h / 2,
+        "图例",
+        fontsize=LEGEND_SMALL_SIZE + 1,
+        ha="center",
+        va="center",
+        color="#1a1a1a",
+        zorder=9,
+    )
+    sample = np.array([[[x0, 0.0], [x0 + sample_len, 0.0]]])
+    y_top = y0 + box_h - pad_y - title_h
+
+    def row_label(y: float, label: str) -> None:
+        ax.text(
+            x0 + max(sample_len, swatch_w) + text_gap,
+            y,
+            label,
+            fontsize=LEGEND_SMALL_SIZE,
+            ha="left",
+            va="center",
+            color="#1a1a1a",
+            zorder=9,
+        )
+
+    for i, regime in enumerate(present):
+        y = y_top - (i + 0.5) * row_h
+        sample[0, :, 1] = y
+        if regime == 0:
+            paths = [sample[0].copy()]
+            capstyle = "round"
+            label = "常流河"
+        else:
+            paths, _widths = _continuous_dash_paths(
+                sample, np.ones(1), RIVER_LS_NON_PERENNIAL[1], points_per_unit
+            )
+            capstyle = "butt"
+            label = "非常流河"
+        ax.add_collection(
+            LineCollection(
+                paths,
+                colors=[_hex(river_rgb)],
+                linewidths=[1.0] * len(paths),
+                linestyles="solid",
+                capstyle=capstyle,
+                joinstyle="round",
+                zorder=9,
+            )
+        )
+        row_label(y, label)
+    for j, (name, rgb) in enumerate(biome_entries):
+        y = y_top - (len(present) + j + 0.5) * row_h
+        ax.add_patch(
+            Rectangle(
+                (x0, y - row_h * 0.33),
+                swatch_w,
+                row_h * 0.66,
+                facecolor="#{:02x}{:02x}{:02x}".format(*rgb),
+                edgecolor="#5a4632",
+                linewidth=0.6,
+                zorder=9,
+            )
+        )
+        row_label(y, BIOME_DISPLAY_ZH.get(name, name))
+
+
 #: Hand-drawn feel (stage-two pass, but part of the MVP chain deliverable:
 #: the wobbled sheet doubles as video material).
 PAPER_TEXTURE_STRENGTH = 0.030  # multiply grain depth (reduced: stacked
@@ -245,6 +379,26 @@ def _hand_tint_pass(rgb: np.ndarray, res: int) -> np.ndarray:
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float64)
 
 
+def two_scale_relief(
+    height_m: np.ndarray, km_per_px: float, *, struct_sigma_px: float | None = None
+) -> np.ndarray:
+    """Structural + fine hillshade blend, 0..1 (see HILLSHADE_* constants).
+
+    Reference sheets (OpenTopoMap style) read as two stacked shades — a
+    structural shadow on the smoothed field plus a fine relief on the raw
+    field.  A single-scale shade leaves the mid-frequencies flat.
+    ``struct_sigma_px`` overrides the structural smoothing (callers working
+    at a different grid resolution scale it to keep the same ground scale).
+    """
+    from scipy.ndimage import gaussian_filter
+
+    sigma = HILLSHADE_STRUCT_SIGMA_PX if struct_sigma_px is None else struct_sigma_px
+    hs = hillshade(height_m, km_per_px)
+    smooth = gaussian_filter(height_m, sigma=sigma)
+    hs_struct = hillshade(smooth, km_per_px)
+    return HILLSHADE_STRUCT_WEIGHT * hs_struct + (1.0 - HILLSHADE_STRUCT_WEIGHT) * hs
+
+
 def compose_rgb(
     inputs: ColorizeInputs,
     rng_m: tuple[float, float],
@@ -276,19 +430,12 @@ def compose_rgb(
         if inputs.lake is not None
         else None
     )
-    hs = hillshade(height, inputs.km_per_px * f)
 
     rgb = _lut_rgb(height, sea, sea_depth, rng_m)
-    # Two-scale relief (see HILLSHADE_* constants): structural shadow from
-    # the smoothed field, fine relief from the raw one.
-    from scipy.ndimage import gaussian_filter
-
-    smooth = gaussian_filter(height, sigma=HILLSHADE_STRUCT_SIGMA_PX)
-    hs_struct = hillshade(smooth, inputs.km_per_px * f)
-    relief = HILLSHADE_STRUCT_WEIGHT * hs_struct + (1.0 - HILLSHADE_STRUCT_WEIGHT) * hs
-    # Multiply the relief into the land only (paper LDR pipeline — same
-    # doctrine as the Blender leg's Standard view: the tint table is the
+    # Multiply the two-scale relief into the land only (paper LDR pipeline —
+    # same doctrine as the Blender leg's Standard view: the tint table is the
     # colour authority; survey convention keeps water flat ink).
+    relief = two_scale_relief(height, inputs.km_per_px * f)
     shade = (1.0 - HILLSHADE_STRENGTH) + HILLSHADE_STRENGTH * relief[..., None]
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
     # Saturation lift around the pixel's own luminance (keeps the palette's
@@ -415,6 +562,7 @@ def _river_collections(
     *,
     zorder: float = 5,
     points_per_unit: float = 1.0,
+    ink: tuple[int, int, int] = RIVER_COLOR,
 ) -> list[LineCollection]:
     """Vector river collections, partitioned by perennial/non-perennial.
 
@@ -476,7 +624,7 @@ def _river_collections(
         collections.append(
             LineCollection(
                 paths,
-                colors=[_hex(RIVER_COLOR)],
+                colors=[_hex(ink)],
                 linewidths=widths_by_regime[regime],
                 linestyles="solid",
                 zorder=zorder,
@@ -578,13 +726,14 @@ def render_carto(
     contour_labels: bool = False,
     contours: bool = False,
     hand: bool = False,
+    svg: bool = False,
     center_lat: float = 0.0,
     center_lon: float = 0.0,
 ) -> dict[str, object]:
-    """Write ``carto/topo.svg`` + ``carto/topo.png``; returns sheet metadata.
+    """Write ``carto/topo.png`` (+ ``topo.svg`` when ``svg``); returns metadata.
 
-    ``hand`` additionally writes ``topo_hand.png`` — the video-material
-    variant with printing/material artefacts (watercolour tints, misregistered
+    ``hand`` writes ``topo_hand.png`` instead — the video-material variant
+    with printing/material artefacts (watercolour tints, misregistered
     colour plates, re-inked line widths, brush-script annotations, corner
     wear).  The clean survey sheet stays the default deliverable.
     """
@@ -704,7 +853,7 @@ def render_carto(
         # this size, suptitle sits above it regardless of layout.
         fig.suptitle(title, fontsize=TITLE_SIZE, color="#4a3620")
 
-    outputs = ["svg", "png"] if not hand else ["hand.png"]
+    outputs = ["hand.png"] if hand else (["png"] + (["svg"] if svg else []))
     for ext in outputs:
         fig.savefig(out_dir / f"topo.{ext}", dpi=dpi, facecolor="#f8f4e9")
     plt.close(fig)
@@ -1006,6 +1155,13 @@ def _north_arrow(ax: Axes, km: float) -> None:
     )
 
 
+def fmt_deg(v: float) -> str:
+    """Format a centre coordinate for titles: integral values drop the
+    decimal, half-degree centres keep one (a plain ``:.0f`` rounds 21.5 up
+    to 22 and the sheet stops matching its pack directory name)."""
+    return f"{v:.0f}" if float(v) == int(v) else f"{v:.1f}"
+
+
 def planet_display_name(data_dir: Path, world: str, planet_id: str) -> str:
     """Display body name from the world's system catalog.
 
@@ -1041,6 +1197,7 @@ def carto_region(
     contour_labels: bool = False,
     contours: bool = False,
     hand: bool = False,
+    svg: bool = False,
     title: str | None = None,
 ) -> dict[str, object]:
     """CLI entry: render the topographic sheet for a region pack directory."""
@@ -1055,7 +1212,10 @@ def carto_region(
     if title is None:
         lat_ns = "N" if center_lat >= 0 else "S"
         lon_ew = "E" if center_lon >= 0 else "W"
-        title = f"{name} —— {abs(center_lat):.0f}°{lat_ns} {abs(center_lon):.0f}°{lon_ew} 附近"
+        title = (
+            f"{name} 地形图 —— {fmt_deg(abs(center_lat))}°{lat_ns} "
+            f"{fmt_deg(abs(center_lon))}°{lon_ew} 附近"
+        )
     # Unclamped engine range drives the shared palette (seafloor-clamped
     # Gaea heights would misplace the min-anchored deep-water gradient).
     # Palette anchor range: the planet-wide elevation range when the pack
@@ -1081,6 +1241,7 @@ def carto_region(
         contour_labels=contour_labels,
         contours=contours,
         hand=hand,
+        svg=svg,
         center_lat=center_lat,
         center_lon=center_lon,
     )

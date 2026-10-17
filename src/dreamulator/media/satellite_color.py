@@ -111,6 +111,16 @@ DEPOSIT_SLOPE_CAP = 0.15  # alluvium only settles on gentle ground
 LAKE_SHALLOW = (128, 166, 196)
 LAKE_DEEP = (74, 116, 156)
 LAKE_FEATHER_PX = 2.0
+#: Channel polylines whose midpoint falls inside a lake (within this
+#: distance of its water) are dropped at load time: the lake surface is
+#: the water truth there.  Nothing NEAR the lake is clipped — with river
+#: and lake inks in one family per sheet (user ruling 2026-10-17, the
+#: survey sheet's single-water-colour convention), a channel on the rim
+#: land simply reads as a river, and cutting it broke passing rivers into
+#: pieces (断续河道).  Hydrology's proper fix — terminus semantics for
+#: endorheic basins — is registered separately.
+RIVER_LAKE_WATER_KM = 0.3
+
 
 #: NPP (Miami net primary productivity) drives continuous WITHIN-biome
 #: variation: each biome's pixels are brightness-modulated around that biome's
@@ -178,6 +188,10 @@ class ColorizeInputs:
     # Endorheic lakes from the programmatic chain (lake.png).  None/empty
     # on Gaea builds.
     lake: np.ndarray | None = None
+    # Engine cell pitch in grid pixels (set by load_inputs; 0.0 when
+    # unknown).  Sheet legs scale their ecotone blur to this so transitions
+    # keep a fixed fraction of a cell at any resolution.
+    cell_px: float = 0.0
 
 
 def _to_rgb(colors: list[tuple[int, int, int]]) -> np.ndarray:
@@ -256,7 +270,11 @@ def apply_boundary_warp(
 
 
 def reconcile_ocean_on_land(
-    biome_codes: np.ndarray, legend: dict[int, str], sea_water: np.ndarray
+    biome_codes: np.ndarray,
+    legend: dict[int, str],
+    sea_water: np.ndarray,
+    *,
+    fill_water: bool = False,
 ) -> np.ndarray:
     """Dry engine-ocean pixels get the nearest land biome's code.
 
@@ -267,6 +285,11 @@ def reconcile_ocean_on_land(
     (user-reported).  The rendered water surface is authoritative for water;
     dry-ex-ocean land is filled from the nearest land biome (distance-
     transform nearest fill).
+
+    With ``fill_water=True``, sea-COVERED ocean cells are filled as well:
+    the satellite compositor paints the sea from its depth channel, so any
+    ocean fallback left in the base layer only serves to bleed navy into
+    the coastal ecotone blur (blue-tinted shores, user-reported).
     """
     ocean_codes = [c for c, nm in legend.items() if nm == "ocean"]
     if not ocean_codes:
@@ -274,7 +297,7 @@ def reconcile_ocean_on_land(
     from scipy.ndimage import distance_transform_edt
 
     is_ocean = np.isin(biome_codes, ocean_codes)
-    dry_ocean = is_ocean & ~sea_water
+    dry_ocean = is_ocean if fill_water else (is_ocean & ~sea_water)
     land = ~is_ocean & (biome_codes != 0)
     if not dry_ocean.any() or not land.any():
         return biome_codes
@@ -288,6 +311,8 @@ def _vegetation_texture(
     biome: np.ndarray,
     legend: dict[int, str],
     land: np.ndarray,
+    *,
+    gain: float = 1.0,
 ) -> np.ndarray:
     """Per-biome fBm brightness texture (1.0 = neutral), land only.
 
@@ -295,6 +320,9 @@ def _vegetation_texture(
     TEXTURE_PARAMS), so the Amazon-grade rainforest mottles tightly while
     dune fields streak broadly.  Applied as a brightness multiplier — hue
     stays climate-authoritative, only luminance gains the canopy/soil grain.
+    ``gain`` scales every amplitude together: sheet legs with baked
+    hillshade run a reduced gain, where the full uncorrelated mottle
+    measured LARGER than the relief signal itself and drowned the terrain.
     """
     tex = np.ones((n, n), dtype=np.float32)
     for code in np.unique(biome[land]):
@@ -304,23 +332,37 @@ def _vegetation_texture(
         wl_px = max(wl_km / km_per_px, 2.0)
         field = _fbm_field(n, wl_px, TEXTURE_SEED + int(code)).astype(np.float32)
         sel = land & (biome == code)
-        tex[sel] = 1.0 + amp * field[sel]
+        tex[sel] = 1.0 + amp * gain * field[sel]
     fine = _fbm_field(n, TEXTURE_FINE_WAVELENGTH_PX, TEXTURE_SEED + 999).astype(np.float32)
-    tex[land] *= 1.0 + TEXTURE_FINE_AMPLITUDE * fine[land]
+    tex[land] *= 1.0 + TEXTURE_FINE_AMPLITUDE * gain * fine[land]
     return tex
 
 
-def colorize(inp: ColorizeInputs, *, texture: bool = True) -> np.ndarray:
+def colorize(
+    inp: ColorizeInputs,
+    *,
+    texture: bool = True,
+    ecotone_sigma_px: float | None = None,
+    texture_gain: float = 1.0,
+) -> np.ndarray:
     """Composite the albedo; returns (N, N, 3) uint8 sRGB.
 
     ``texture`` adds the per-biome vegetation/surface grain (Sentinel-2-like
     mottling); turn it off for a flat fill (debug or downstream re-texturing).
+    ``ecotone_sigma_px`` overrides the ecotone blur width (both the base
+    colour layer and the NPP vigour field); the sheet legs pass a wider one
+    scaled to the engine cell pitch for imagery-style transitions.
+    ``texture_gain`` scales the grain amplitudes (sheet legs run a reduced
+    gain — see :func:`_vegetation_texture`).
     """
     from scipy.ndimage import gaussian_filter
 
     n = inp.height_m.shape[0]
+    sigma = BIOME_BLUR_SIGMA_PX if ecotone_sigma_px is None else ecotone_sigma_px
 
-    biome = reconcile_ocean_on_land(inp.biome_codes, inp.biome_legend, inp.sea_water)
+    biome = reconcile_ocean_on_land(
+        inp.biome_codes, inp.biome_legend, inp.sea_water, fill_water=True
+    )
 
     # Base layer: engine biome colours, lightly blurred so cell boundaries
     # become ecotone-style transitions instead of crisp polygons.
@@ -334,10 +376,13 @@ def colorize(inp: ColorizeInputs, *, texture: bool = True) -> np.ndarray:
         palette[code] = BIOME_COLORS.get(name, MISSING_COLOR)
     base = _to_rgb(palette)[biome].reshape(n, n, 3)
     for ch in range(3):
-        base[..., ch] = gaussian_filter(base[..., ch], BIOME_BLUR_SIGMA_PX)
+        base[..., ch] = gaussian_filter(base[..., ch], sigma)
 
     # Continuous within-biome variation from engine NPP (per-biome median
-    # normalisation, land only — water/ice/missing stay untouched).
+    # normalisation, land only — water/ice/missing stay untouched).  The
+    # factor is blurred with the ecotone sigma: the per-biome normalisation
+    # makes it piecewise-constant, and an unsmoothed vigour field re-etches
+    # the very class boundaries the base blur just softened.
     npp_factor = np.ones((n, n), dtype=np.float32)
     for code in np.unique(biome):
         if code == 0:
@@ -353,12 +398,15 @@ def colorize(inp: ColorizeInputs, *, texture: bool = True) -> np.ndarray:
         rel = np.clip(inp.npp_gc_m2_yr[sel] / median, 0.0, 2.0)
         rel = np.where(np.isnan(rel), 1.0, rel)
         npp_factor[sel] = 1.0 + NPP_MOD_STRENGTH * (rel - 1.0)
+    npp_factor = gaussian_filter(npp_factor, sigma)
     base = np.clip(base * npp_factor[..., None], 0.0, 1.0)
 
     # Vegetation/surface grain (Sentinel-2-style mottling), land only.
     if texture:
         land_mask = ~inp.sea_water & (biome != 0)
-        tex = _vegetation_texture(n, inp.km_per_px, biome, inp.biome_legend, land_mask)
+        tex = _vegetation_texture(
+            n, inp.km_per_px, biome, inp.biome_legend, land_mask, gain=texture_gain
+        )
         base = np.clip(base * tex[..., None], 0.0, 1.0)
 
     # Slope from the physical height field (rise/run).
@@ -406,9 +454,14 @@ def colorize(inp: ColorizeInputs, *, texture: bool = True) -> np.ndarray:
     rgb = np.where(inp.rivers[..., None], river_rgb, rgb)
 
     # Lakes: pseudo-depth from the shoreline distance transform, edges
-    # feathered into the shore.
+    # feathered into the shore.  Two lake sources, unioned: the biome-code
+    # lake sentinel (engine classification) and the explicit ``lake`` mask
+    # (programmatic-chain endorheic fills, exported as lake.png — packs
+    # whose legend carries no lake code rendered no lakes at all).
     lake_codes = [c for c, nm in inp.biome_legend.items() if nm == "lake"]
-    lake_mask = np.isin(biome, lake_codes) if lake_codes else None
+    lake_mask: np.ndarray | None = np.isin(biome, lake_codes) if lake_codes else None
+    if inp.lake is not None and inp.lake.any():
+        lake_mask = inp.lake if lake_mask is None else (lake_mask | inp.lake)
     if lake_mask is not None and lake_mask.any():
         from scipy.ndimage import distance_transform_edt
 
@@ -574,6 +627,28 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     )
     regime_path = gaea_dir / "rivers.regime.npy"
     river_regimes = np.load(regime_path) if regime_path.exists() else None
+
+    # Lake clip: only strictly-in-water geometry goes (see
+    # RIVER_LAKE_WATER_KM).  Everything on the rim land stays — with the
+    # per-sheet single water family, a near-shore channel just reads as a
+    # river instead of doubled shore ink.
+    if lake is not None and lake.any() and river_segs is not None:
+        from scipy.ndimage import distance_transform_edt
+
+        dist_km: np.ndarray = np.asarray(distance_transform_edt(~lake) * km_per_px)
+        col: np.ndarray = np.clip(
+            (river_segs[..., 0].mean(axis=1) / km_per_px).astype(int), 0, n - 1
+        )
+        row: np.ndarray = np.clip(
+            (n - 1 - (river_segs[..., 1].mean(axis=1) / km_per_px)).astype(int), 0, n - 1
+        )
+        keep = dist_km[row, col] > RIVER_LAKE_WATER_KM
+        river_segs = river_segs[keep]
+        if river_flows is not None:
+            river_flows = river_flows[keep]
+        if river_regimes is not None:
+            river_regimes = river_regimes[keep]
+        rivers = rivers & ~lake
     return ColorizeInputs(
         height_m=height_m,
         km_per_px=km_per_px,
@@ -592,6 +667,7 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         river_segment_flows=river_flows,
         river_segment_regimes=river_regimes,
         lake=lake,
+        cell_px=float(cell_px),
     )
 
 
