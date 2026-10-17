@@ -15,7 +15,9 @@ from dreamulator.map.prog_erosion import (
     keep_large_lakes,
     lake_mask,
     lake_mmu_cells,
+    month_active_counts,
     priority_flood,
+    regime_active_cells,
     river_mask,
     river_segments,
     spl_erode,
@@ -136,7 +138,7 @@ def test_lake_mask_and_river_chain_stops_at_lake() -> None:
     weight = np.where(land, 1.0, 0.0)
     acc = flow_accumulation(order, rec, weight)
     rivers = river_mask(acc, land, 10)
-    segs, _flows = river_segments(rivers, rec, acc, 1.0, lake=lakes)
+    segs, _flows, _regimes = river_segments(rivers, rec, acc, 1.0, lake=lakes)
     # Chains END at the lake but touch the water: endpoints may sit on the
     # shore ring (one cell in), never in the eroded core — and no endpoint
     # appears beyond the lake on its far side.
@@ -216,7 +218,7 @@ def test_river_segments_keeps_short_final_reach() -> None:
     rec = np.full(n * n, -1, dtype=np.int64)
     rec[3 * n + 6] = 3 * n + 7  # drains into the sea
     acc = np.where(rivers, 100.0, 0.0)
-    segs, flows = river_segments(rivers, rec, acc, 1.0, lake=None)
+    segs, flows, _regimes = river_segments(rivers, rec, acc, 1.0, lake=None)
     assert len(segs) >= 1
     assert flows[0] == pytest.approx(100.0)  # mouth width not sagged to 0
 
@@ -241,7 +243,7 @@ def test_river_segments_flows_grow_downstream() -> None:
     acc = np.zeros((n, n))
     acc[2, 1:4] = [10.0, 20.0, 30.0]
     acc[3, 4:6] = [40.0, 50.0]
-    segs, flows = river_segments(rivers, rec, acc, 1.0)
+    segs, flows, _regimes = river_segments(rivers, rec, acc, 1.0)
     assert len(flows) > 5  # bent path keeps multiple segments after merge
     assert (np.diff(flows) >= -1e-9).all()  # monotone along the chain
     # Chaikin keeps the endpoint but blends the penultimate point, so the
@@ -269,7 +271,7 @@ def test_river_segments_crosses_submmu_lake_stops_at_big() -> None:
     assert big.sum() >= mmu, "big basin must be an MMU lake"
     acc = flow_accumulation(order, rec, np.where(land, 1.0, 0.0))
     rivers = river_mask(acc, land, 10)
-    segs, _flows = river_segments(rivers, rec, acc, kmpp, lake=lakes)
+    segs, _flows, _regimes = river_segments(rivers, rec, acc, kmpp, lake=lakes)
     # Sub-MMU basin: the network crosses — some segment past the basin's
     # east rim (x=58) within its y band (the claiming chain may thread the
     # basin on any row of the band).
@@ -390,7 +392,7 @@ def test_terminal_lakes_arid_vs_humid_balance() -> None:
         return best
 
     # Humid scenario: full production sequence minus the (empty) verdict.
-    segs_humid, flows_humid = river_segments(
+    segs_humid, flows_humid, _regimes_humid = river_segments(
         river_mask(acc, land, 10), rec, acc, 1.0, lake=lakes_draw
     )
     # Arid scenario: verdict → equilibrium rewrite → re-route → re-accumulate.
@@ -412,7 +414,9 @@ def test_terminal_lakes_arid_vs_humid_balance() -> None:
     assert int(water.sum()) == stats["dry_playas"] >= 1
     _f2, order2, rec2 = priority_flood(h2, land2)
     acc2 = flow_accumulation(order2, rec2, weight)
-    segs_arid, flows_arid = river_segments(river_mask(acc2, land2, 10), rec2, acc2, 1.0, lake=water)
+    segs_arid, flows_arid, _regimes_arid = river_segments(
+        river_mask(acc2, land2, 10), rec2, acc2, 1.0, lake=water
+    )
     assert east_trunk_flow(segs_humid, flows_humid) > 15.0, "pass-through lake resumes the trunk"
     assert east_trunk_flow(segs_arid, flows_arid) == 0.0, "dry playa ends the trunk"
 
@@ -594,12 +598,71 @@ def test_river_segments_extends_shrunk_fringe_to_water() -> None:
     desc[3 * n + 4] = 3 * n + 5
     desc[3 * n + 5] = 3 * n + 6
     desc[3 * n + 6] = 3 * n + 6
-    segs_new, flows_new = river_segments(rivers, rec, acc, 1.0, lake=footprint, lake_descend=desc)
+    segs_new, flows_new, _regimes_new = river_segments(
+        rivers, rec, acc, 1.0, lake=footprint, lake_descend=desc
+    )
     xmax_new = max(max(a[0], b[0]) for a, b in segs_new)
     assert xmax_new == pytest.approx(6.0)  # reaches the water cell
     # The merged straight reach interpolates its endpoint flows (10 → 30,
     # clamped at the mouth) — the check is that it never sags to zero.
     assert flows_new[-1] >= 10.0
-    segs_old, _ = river_segments(rivers, rec, acc, 1.0, lake=footprint)
+    segs_old, _, _regimes_old = river_segments(rivers, rec, acc, 1.0, lake=footprint)
     xmax_old = max(max(a[0], b[0]) for a, b in segs_old)
     assert xmax_old == pytest.approx(4.0)  # legacy: stops at the basin edge
+
+
+def test_month_active_counts_independent_active_rule() -> None:
+    # Two cells draining 0 → 1.  With reference 1 mm and active rule 1,
+    # uniform 1 mm/month is active at both cells all year; the same annual
+    # water in two months gives two active months.  This rule is independent
+    # of the annual cartographic threshold.
+    land = np.ones((1, 2), dtype=bool)
+    rec = np.array([1, -1], dtype=np.int64)
+    order = np.array([1, 0], dtype=np.int64)  # downstream first
+    uniform = np.ones((1, 2, 12), dtype=np.float64)
+    counts = month_active_counts(order, rec, uniform, land, 1.0, reference_mm=1.0)
+    assert counts.tolist() == [[12, 12]]
+    # At active rule 2 the head (accumulation 1) is inactive while the mouth
+    # (accumulation 2) remains active.
+    counts_high = month_active_counts(order, rec, uniform, land, 2.0, reference_mm=1.0)
+    assert counts_high.tolist() == [[0, 12]]
+    seasonal = np.zeros((1, 2, 12), dtype=np.float64)
+    seasonal[..., 3:5] = 6.0
+    counts_seasonal = month_active_counts(order, rec, seasonal, land, 1.0, reference_mm=1.0)
+    assert counts_seasonal.tolist() == [[2, 2]]
+    zeros = month_active_counts(order, rec, np.zeros_like(uniform), land, 1.0)
+    assert not zeros.any()
+
+
+def test_regime_active_cells_roundtrip_discharge() -> None:
+    # The accumulation-unit conversion must recover the same monthly-mean
+    # discharge at every grid resolution.
+    for km_pp in (0.1, 0.2):
+        cells = regime_active_cells(km_pp)
+        seconds_per_month = 365.25 * 86400.0 / 12.0
+        discharge = cells * 0.3 * (km_pp * 1000.0) ** 2 / seconds_per_month
+        assert discharge == pytest.approx(0.001)
+
+
+def test_river_segments_regime_is_reach_based() -> None:
+    # Contiguous cells form independent perennial/non-perennial reaches; one
+    # dry headwater cell no longer downgrades the whole chain.  The appended
+    # downstream outlet does not create an extra reach.
+    n = 8
+    rivers = np.zeros((n, n), dtype=bool)
+    rivers[3, 1:4] = True
+    rec = np.full(n * n, -1, dtype=np.int64)
+    rec[3 * n + 1] = 3 * n + 2
+    rec[3 * n + 2] = 3 * n + 3
+    rec[3 * n + 3] = 3 * n + 4
+    acc = np.zeros((n, n))
+    acc[3, 1:4] = [10.0, 20.0, 30.0]
+    month_active = np.zeros((n, n), dtype=np.uint8)
+    month_active[3, 1:4] = 12
+    _s, _f, perennial = river_segments(rivers, rec, acc, 1.0, month_active=month_active)
+    assert len(perennial) and (perennial == 0).all()
+    month_active[3, 2] = 3
+    _s, _f, reaches = river_segments(rivers, rec, acc, 1.0, month_active=month_active)
+    assert reaches.tolist() == [0, 1, 0]
+    _s, _f, legacy = river_segments(rivers, rec, acc, 1.0)
+    assert (legacy == 0).all()

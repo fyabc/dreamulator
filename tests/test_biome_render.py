@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from dreamulator.media import biome_render as br
 from dreamulator.media import satellite_color as sc
@@ -80,3 +81,20 @@ def test_colorize_texture_flag_changes_land_only() -> None:
     tex = sc.colorize(inp, texture=True)
     assert not np.array_equal(flat, tex)
     assert np.array_equal(flat[inp.sea_water], tex[inp.sea_water])  # sea untouched
+
+
+def test_biome_sheet_regime_smoke(tmp_path) -> None:
+    pytest.importorskip("matplotlib")
+    inp = _inputs()
+    inp.river_segments = np.array(
+        [
+            [[10.0, 10.0], [20.0, 20.0]],
+            [[20.0, 20.0], [30.0, 30.0]],
+            [[30.0, 30.0], [40.0, 40.0]],
+        ]
+    )
+    inp.river_segment_flows = np.array([100.0, 50.0, 10.0])
+    inp.river_segment_regimes = np.array([0, 1, 0], dtype=np.uint8)
+    br.render_biome_sheet(inp, tmp_path, res=N, dpi=72, title="时令河")
+    assert (tmp_path / "biome.svg").exists()
+    assert (tmp_path / "biome.png").exists()

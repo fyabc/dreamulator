@@ -163,6 +163,17 @@ dreamulator export refine private/video/nacrea-15_-100_550km \
   区间），**逐段流量沿链插值**（宽度向下游渐变，汇合处不再跳变）。
   语义细节与踩坑实录见
   [knowledge/cartography/drainage_cartography.md](../knowledge/cartography/drainage_cartography.md)。
+- **月度情相与时令符号**：最终排水树上再做十二次月径流累积。月径流
+  由 Manabe 桶与一个线性地下水库共同给出，年总量严格乘回 pack 的
+  Turc–Pike 年径流通道，因此基流只改变年内分配。活动月采用独立的
+  月均 1 L/s 小流量门槛，不从年度成图门槛推导。河道格十二个月都
+  活跃时为常流实线，否则为非常流点划虚线；相邻同类格组成河段，
+  不再整链取最干格。月数据不再细分严格的间歇与暂时河。图例只列
+  图内实际出现的类别。世界缺月度气候或 pack 缺年径流通道时不做
+  分类，所有河保持实线。数学口径、参数不确定性与降级规则见
+  [knowledge/geology/hydrology.md](../knowledge/geology/hydrology.md) §7，
+  符号依据见
+  [knowledge/cartography/river_symbolization.md](../knowledge/cartography/river_symbolization.md)。
 
 ## 输出契约（refined-out/，与 prog-out/gaea-out 同词汇）
 
@@ -171,6 +182,7 @@ dreamulator export refine private/video/nacrea-15_-100_550km \
 | `height.meters.npy` | 高度 f32 米（pack 网格的整数倍） |
 | `height.gaea.png` | 16-bit 高度孪生（量程在本目录 meta.json） |
 | `rivers.line.npy` + `rivers.flow.npy` | 平滑矢量河段 (M, 2, 2) km + 流量 (M,) |
+| `rivers.regime.npy` | 逐河段情相 uint8 (M,)：0 常流、1 非常流；缺月度气候或年径流通道时不写 |
 | `rivers.png` | 河道掩膜（8-bit，已排湖） |
 | `sea-water.png` / `sea-depth.png` | 海掩膜 / 真实水深 |
 | `lake.png` | 内流湖掩膜 |

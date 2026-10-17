@@ -50,6 +50,30 @@ width = w_min + (w_max − w_min) · (A / A_max)^0.5
 与符号区间同数量级，因此平方根分级不会产生「画笔感」（超粗干流）；
 若线性映射或指数取 1，干流会到 2–3 mm，明显脱离惯例。
 
+## 常流与非常流符号
+
+US Topo 的水系规范用蓝色实线表示常流河，用同色的点划虚线表示间歇河；
+线型表达季节情相，不改变水色。本库沿用这条双色同线的原则，但产品只
+分常流与非常流两类，因为月度气候资料不能可靠地区分严格的间歇河与
+事件尺度暂时河。图例列出图内实际出现的类别，避免读者把不同线型误解
+为流量或咸淡差异。
+
+两类线共用 `RIVER_COLOR`，流量的平方根线宽律也保持不变。常流河使用
+实线和圆角端点；非常流河使用平头端点，避免圆形点划读作小湖。非常流
+河使用 `RIVER_LS_NON_PERENNIAL = (0, (12.0, 2.4, 1.8, 2.4, 1.8,
+2.4))`，即一段长划后接两个短划，数值以 pt 为单位。加长点划和改用
+平头都是为了消除圆珠串般的湖面错觉。两类线由 `_river_collections`
+分成至多两个 `LineCollection`，carto 与 biome 两种图共用同一实现，
+因此不会出现同一条河在不同图种里线型不一致；`_river_regime_legend`
+用同一套笔划生成图例样线。
+
+非常流线不能交给 Matplotlib 按提取短段分别画 dash：Chaikin 平滑后的
+河段中位长度不足 0.1 pt，逐段重起 dash 会把虚线画成实线，给逐段补偿
+dash offset 又会形成不规则蓝色碎块。实现改为沿原河链在显示点坐标中
+裁切连续笔划；每个笔划是一条可含多个原始顶点的折线，平头端点只出现
+在真实笔划两端。笔划线宽取内部源段按长度加权的平均值，因此下游渐变
+保留，而同一笔划内没有密集封口和宽度碎变。
+
 ## 常见错误（本库踩过）
 
 1. **线宽跨度失控**（0.7→3.9 pt）：干流成「画笔粗细」——超惯例上限
@@ -62,9 +86,13 @@ width = w_min + (w_max − w_min) · (A / A_max)^0.5
 
 ## 源码与参考
 
-- 实现：`src/dreamulator/media/carto_render.py`（矢量河渲染段，
-  `widths = 0.25 + 1.15 * w_n`）
+- 实现：`src/dreamulator/media/carto_render.py` 的
+  `_river_collections`（流量线宽与情相线型），
+  `src/dreamulator/map/prog_erosion.py` 的 `river_segments`（河段情相）
 - Natural Earth rivers：https://www.naturalearthdata.com/downloads/
   10m-physical-vectors/10m-rivers-lake-centerlines（strokeweig 字段）
 - QGIS 官方教程用法：https://baharmon.github.io/cartography-in-qgis
 - Leopold & Maddock (1953), USGS Professional Paper 252
+- USGS. *US Topo Cartographic Specifications: Hydrography* — 常流实线、
+  间歇点划虚线与统一水色的官方规范：
+  https://www.usgs.gov/ngp-standards-and-specifications/us-topo-cartographic-specifications-hydrography

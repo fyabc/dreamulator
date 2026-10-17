@@ -30,6 +30,7 @@ from dreamulator.engine.climate_physics import (
     potential_evapotranspiration_hamon,
     potential_evapotranspiration_hamon_monthly,
     pressure_from_temperature,
+    route_runoff_with_baseflow,
     runoff_monthly_mm,
     saturation_specific_humidity,
     soil_bucket_monthly,
@@ -1053,6 +1054,37 @@ class TestLandRunoff:
         t_arid = np.full((1, 12), 30.0)
         annual = annual_runoff_mm(t_arid, p_arid, days_per_month=dpm)
         assert float(annual[0]) == pytest.approx(0.0, abs=1e-9)
+
+    def test_baseflow_route_conserves_annual_and_uniform(self) -> None:
+        # The linear store is initialised at periodic steady state: annual
+        # quickflow + baseflow equals annual runoff production for every
+        # sensitivity scenario, and uniform forcing yields uniform streamflow.
+        rng = np.random.default_rng(11)
+        runoff = rng.uniform(0.0, 300.0, size=(4, 12))
+        for fraction, tau in [(0.5, 40.0), (0.25, 40.0), (0.75, 40.0), (0.5, 10.0), (0.5, 200.0)]:
+            routed = route_runoff_with_baseflow(
+                runoff,
+                days_per_month=365.25 / 12.0,
+                recharge_fraction=fraction,
+                residence_time_days=tau,
+            )
+            np.testing.assert_allclose(routed.sum(axis=1), runoff.sum(axis=1), rtol=1e-11)
+            assert (routed >= 0.0).all()
+        uniform = np.full((1, 12), 100.0)
+        routed_uniform = route_runoff_with_baseflow(uniform, days_per_month=365.25 / 12.0)
+        np.testing.assert_allclose(routed_uniform, uniform, rtol=1e-11)
+
+    def test_baseflow_route_pulse_recesses_without_changing_budget(self) -> None:
+        # A single annual pulse has quickflow in its month and a positive,
+        # decaying baseflow tail afterwards; no reservoir-free month is
+        # manufactured by starting the climatology with empty storage.
+        runoff = np.zeros((1, 12))
+        runoff[0, 2] = 120.0
+        routed = route_runoff_with_baseflow(runoff, days_per_month=365.25 / 12.0)
+        assert float(routed[0, 2]) > 60.0  # quickflow plus this month's baseflow
+        assert (routed[0, 3:] > 0.0).all()
+        assert (np.diff(routed[0, 2:]) < 0.0).all()
+        assert float(routed.sum()) == pytest.approx(120.0, rel=1e-11)
 
     def test_annual_runoff_turc_pike_limits_and_yield(self) -> None:
         # Budyko limits: energy-limited (humid) R → P − PET from above

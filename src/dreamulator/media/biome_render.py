@@ -32,6 +32,9 @@ from .carto_render import (
     _graticule,
     _north_arrow,
     _paper_texture,
+    _points_per_data_unit,
+    _river_collections,
+    _river_regime_legend,
     _scale_bar,
     planet_display_name,
 )
@@ -169,16 +172,17 @@ def compose_biome_rgb(
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32), sea, entries
 
 
-def _biome_legend(ax: Axes, km: float, entries: list[tuple[str, tuple[int, int, int]]]) -> None:
+def _biome_legend(ax: Axes, km: float, entries: list[tuple[str, tuple[int, int, int]]]) -> float:
     """Categorical legend: swatch + Chinese display name, bottom-left stack.
 
     A paper backing panel keeps the labels readable over dark class fills
-    (pure-land windows have no blank ocean to host the legend).
+    (pure-land windows have no blank ocean to host the legend).  Returns the
+    panel's top y coordinate so the river-regime legend can stack above it.
     """
     from matplotlib.patches import Rectangle
 
     if not entries:
-        return
+        return 0.0
     x0, y0 = km * 0.035, km * 0.055
     w, h, gap = km * 0.020, km * 0.014, km * 0.007
     # Text width estimate: CJK glyphs ≈ 0.9 em square; the axes spans km
@@ -230,6 +234,7 @@ def _biome_legend(ax: Axes, km: float, entries: list[tuple[str, tuple[int, int, 
         color="#1a1a1a",
         zorder=8,
     )
+    return y0 - km * 0.016 + len(entries) * (h + gap) + km * 0.042
 
 
 def render_biome_sheet(
@@ -269,22 +274,17 @@ def render_biome_sheet(
     ax.set_position((0.04, 0.06, 0.90, 0.86))
     ax.imshow(rgb, extent=(0, km, 0, km), interpolation="nearest", zorder=1)
 
+    ax.set_xlim(0, km)
+    ax.set_ylim(0, km)
+    ax.set_aspect("equal")
     if inputs.river_segments is not None and inputs.river_segment_flows is not None:
-        from matplotlib.collections import LineCollection
-
-        flows = inputs.river_segment_flows
-        w_n = np.clip(flows / max(flows.max(), 1.0), 0.0, 1.0) ** 0.5
-        widths = 0.25 + 1.15 * w_n
-        seg_list = [tuple(map(tuple, seg)) for seg in inputs.river_segments]
-        ax.add_collection(
-            LineCollection(
-                seg_list,
-                colors=[_hex_river()],
-                linewidths=widths,
-                zorder=5,
-                capstyle="round",
-            )
-        )
+        for collection in _river_collections(
+            inputs.river_segments,
+            inputs.river_segment_flows,
+            inputs.river_segment_regimes,
+            points_per_unit=_points_per_data_unit(ax),
+        ):
+            ax.add_collection(collection)
     elif rivers.any():
         ax.contour(
             rivers,
@@ -296,16 +296,19 @@ def render_biome_sheet(
             zorder=5,
         )
 
-    ax.set_xlim(0, km)
-    ax.set_ylim(0, km)
-    ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_edgecolor("#5a4632")
         spine.set_linewidth(1.2)
 
-    _biome_legend(ax, km, entries)
+    legend_top = _biome_legend(ax, km, entries)
+    _river_regime_legend(
+        ax,
+        inputs.river_segment_regimes,
+        y_base_km=legend_top + km * 0.006,
+        x_frac=0.035,
+    )
     _scale_bar(ax, km)
     _north_arrow(ax, km)
     _graticule(ax, km, center_lat, center_lon)
