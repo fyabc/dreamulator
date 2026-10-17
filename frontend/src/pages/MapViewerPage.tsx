@@ -86,7 +86,7 @@ export default function MapViewerPage() {
   return (
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
-      : 'flex flex-col h-[calc(100vh-56px)]'}>
+      : 'flex flex-col h-[calc(100vh-56px)] md:h-screen'}>
       {/* Top bar */}
       {!cleanMode && (
       <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">

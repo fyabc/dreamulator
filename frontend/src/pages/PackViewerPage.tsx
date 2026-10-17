@@ -165,7 +165,7 @@ export default function PackViewerPage() {
     'flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 cursor-pointer select-none'
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className="flex flex-col h-[calc(100vh-56px)] md:h-screen">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 bg-space-panel/80 border-b border-space-border">
         <div className="flex items-center gap-2">
