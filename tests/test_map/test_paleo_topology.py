@@ -152,3 +152,32 @@ def test_topology_walk_is_identity_without_motion() -> None:
     ocean = ~s3.continental & np.isfinite(s3.age_myr)
     np.testing.assert_allclose(np.median(s3.age_myr[ocean]), 17.0, atol=0.5)
     assert np.median(s3.elevation_m[ocean]) > -4000.0
+
+
+def test_continental_rifts_registers_only_opening_pairs() -> None:
+    from dreamulator.map.paleo_walk import continental_rifts
+
+    kin = _three_plates()
+    omega = np.zeros((3, 3))
+    omega[1] = [
+        0.0,
+        2.0e-8,
+        0.0,
+    ]  # plate 1 turns about the polar axis: opens one side, closes the other
+    cont = np.ones(kin.n, dtype=bool)
+    kin = PlateKinematics(**{**kin.__dict__, "omega": omega, "continental": cont})
+    budget, onset = continental_rifts(kin, 300.0)
+    assert len(budget) == 1  # one of its two boundaries opens, the other closes
+    (pair,) = budget
+    assert 1 in pair
+    assert onset[pair] > 0
+
+
+def test_rename_pairs_after_merge() -> None:
+    from dreamulator.map.paleo_walk import _rename_pairs
+
+    budget = {(0, 1): 10.0, (1, 2): 5.0, (0, 2): 7.0}
+    onset = {(0, 1): 3.0, (1, 2): 4.0, (0, 2): 2.0}
+    nb, no = _rename_pairs(budget, onset, {1: 0})
+    assert nb == {(0, 2): 12.0}
+    assert no == {(0, 2): 2.0}

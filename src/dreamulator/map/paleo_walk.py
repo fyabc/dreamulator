@@ -44,6 +44,7 @@ from dreamulator.map import paleo_topology as pt
 from dreamulator.map.paleo_kinematics import (
     PlateKinematics,
     boundary_cells,
+    fit_rotation,
     ridge_half_rates,
     synthesize_seafloor_age,
 )
@@ -62,12 +63,15 @@ class WalkConfig:
             gets synthetic ocean.
         rift_cap_km: largest stretched width restored per rift side.
         event_grid: points of the fixed sampling sphere for collision events.
+        merge_contact_share: two plates merge (a rift closes) when this share of
+            their common boundary is continent against continent.
     """
 
     dt_myr: float = 1.0
     gap_factor: float = 1.0
     rift_cap_km: float = 300.0
     event_grid: int = 200_000
+    merge_contact_share: float = 0.6
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,7 @@ class WalkSnapshot:
 class WalkLog:
     steps: list[dict[str, float | int | dict[str, float]]] = field(default_factory=list)
     collisions: list[dict[str, float | int]] = field(default_factory=list)
+    merges: list[dict[str, float | int | str]] = field(default_factory=list)
 
 
 def run_topology_walk(
@@ -122,7 +127,7 @@ def run_topology_walk(
     mesh_tree = cKDTree(kin.xyz)
     cell_area = float(np.median(kin.area_km2))
     grid = pt.event_grid(cfg.event_grid, radius) if cfg.event_grid > 0 else None
-    omega = kin.omega
+    omega = kin.omega.copy()
     log = WalkLog()
 
     pos = kin.xyz.copy()
@@ -137,12 +142,8 @@ def run_topology_walk(
     ok_age = ~cont & np.isfinite(age_myr)
     default_age = float(np.nanmedian(age_myr[ok_age])) if ok_age.any() else 50.0
 
-    # young-rift budgets: area of stretched continental crust that may be restored
-    budget: dict[tuple[int, int], float] = {}
-    onset: dict[tuple[int, int], float] = {}
-    for pair, rift in (rifts or {}).items():
-        budget[pair] = 2.0 * cfg.rift_cap_km * rift.length_km
-        onset[pair] = rift.onset_myr
+    # continental rifts: every continent-continent boundary that opens forward
+    budget, onset = continental_rifts(kin, cfg.rift_cap_km, rifts)
     n_pl = omega.shape[0]
     cont_parcels0 = int(cont.sum())
 
@@ -239,6 +240,40 @@ def run_topology_walk(
             synthetic[sel],
         )
 
+        # 4b. rift closure: plates whose common boundary is now mostly continent
+        # against continent were one plate before the rift opened
+        if grid is not None:
+            merges = _closed_rifts(
+                kin, label, pos, plate, cont, omega, cfg.merge_contact_share, t_new, onset
+            )
+            if merges:
+                relabel: dict[int, int] = {}
+                for kept, gone, why, share in merges:
+                    kept = relabel.get(kept, kept)
+                    if kept == gone or gone in relabel:
+                        continue
+                    both = (plate == kept) | (plate == gone)
+                    vel = np.cross(omega[plate[both]], pos[both])
+                    omega[kept] = fit_rotation(pos[both], vel, np.ones(int(both.sum())))
+                    relabel[gone] = kept
+                    for k2, v2 in list(relabel.items()):
+                        if v2 == gone:
+                            relabel[k2] = kept
+                    log.merges.append(
+                        {
+                            "t_myr": t_new,
+                            "kept": kept,
+                            "merged": gone,
+                            "trigger": why,
+                            "contact_share": round(share, 3),
+                        }
+                    )
+                for gone, kept in relabel.items():
+                    plate[plate == gone] = kept
+                topo, _ = pt.reclose(topo, grid, spacing, side_info, omega, radius, relabel=relabel)
+                label = pt.rasterize(topo, kin, spacing / 3.0)
+                budget, onset = _rename_pairs(budget, onset, relabel)
+
         # 5. fill cells that no parcel of their plate covers
         src = _owner_parcels(kin.xyz, label, pos, plate, cfg.gap_factor * spacing)
         gaps = np.flatnonzero(src < 0)
@@ -274,6 +309,124 @@ def run_topology_walk(
         if any(abs(t - e) < 1e-9 for e in targets):
             snaps.append(snapshot(t, label))
     return snaps, log
+
+
+def _rename_pairs(
+    budget: dict[tuple[int, int], float],
+    onset: dict[tuple[int, int], float],
+    relabel: dict[int, int],
+) -> tuple[dict[tuple[int, int], float], dict[tuple[int, int], float]]:
+    """Rift registries after plate merges: pairs renamed, internal pairs dropped,
+    pairs that became the same summed (budget) or the earlier taken (onset)."""
+    nb: dict[tuple[int, int], float] = {}
+    no: dict[tuple[int, int], float] = {}
+    for (a, b), v in budget.items():
+        a2, b2 = relabel.get(a, a), relabel.get(b, b)
+        if a2 == b2:
+            continue
+        key = (min(a2, b2), max(a2, b2))
+        nb[key] = nb.get(key, 0.0) + v
+        no[key] = min(no.get(key, np.inf), onset[(a, b)])
+    return nb, no
+
+
+def continental_rifts(
+    kin: PlateKinematics,
+    cap_km: float,
+    recorded: dict[tuple[int, int], YoungRift] | None = None,
+    min_opening_cm_yr: float = 0.2,
+) -> tuple[dict[tuple[int, int], float], dict[tuple[int, int], float]]:
+    """Restoration budget (km²) and onset (Myr) of every continental rift.
+
+    A continental rift is the set of mesh edges joining continental crust of two
+    plates whose relative motion opens them forward in time.  Its stretched crust
+    is at most ``cap_km`` wide on each side (stretching factors 2–3 over rift
+    widths of about 100 km), so the budget is 2 · cap_km · length and the onset
+    is at most 2 · cap_km / opening rate.  Where the terrain engine recorded the
+    rift (``recorded``, extension / rate) the earlier of the two onsets is used,
+    since the recorded extension is inflated (roadmap tech debt 33).
+    """
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = (rows < cols) & (kin.plate[rows] != kin.plate[cols])
+    m &= kin.continental[rows] & kin.continental[cols]
+    i, j = rows[m], cols[m]
+    x = kin.xyz[i] + kin.xyz[j]
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    n = kin.xyz[i] - kin.xyz[j]
+    n -= np.einsum("ij,ij->i", n, x)[:, None] * x
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-15)
+    v = np.cross(kin.omega[kin.plate[i]] - kin.omega[kin.plate[j]], x) * kin.radius_km * 1.0e5
+    opening = np.einsum("ij,ij->i", v, n)
+    pa = np.minimum(kin.plate[i], kin.plate[j])
+    pb = np.maximum(kin.plate[i], kin.plate[j])
+    edge_km = kin.spacing_km / np.sqrt(3.0)
+    budget: dict[tuple[int, int], float] = {}
+    onset: dict[tuple[int, int], float] = {}
+    for a, b in sorted({(int(a), int(b)) for a, b in zip(pa, pb, strict=True)}):
+        sel = (pa == a) & (pb == b)
+        rate = float(np.median(opening[sel]))
+        if rate <= min_opening_cm_yr:
+            continue
+        budget[(a, b)] = 2.0 * cap_km * float(sel.sum() * edge_km)
+        t_cap = 2.0 * cap_km / (rate * 10.0)
+        t_rec = recorded[(a, b)].onset_myr if recorded and (a, b) in recorded else np.inf
+        onset[(a, b)] = float(min(t_cap, t_rec))
+    return budget, onset
+
+
+def _closed_rifts(
+    kin: PlateKinematics,
+    label: np.ndarray,
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    omega: np.ndarray,
+    share_needed: float,
+    t: float,
+    onset: dict[tuple[int, int], float],
+) -> list[tuple[int, int, str, float]]:
+    """Plate pairs to merge: (kept, merged, trigger, contact share).
+
+    Only pairs that open forward in time (a rift, not a collision) merge.  A pair
+    whose common boundary is at least ``share_needed`` continent against
+    continent merges at its rift onset; one with ocean still between them merges
+    once the share reaches ``share_needed`` (the ocean has closed going back).
+    The larger plate is kept.
+    """
+    src = _owner_parcels(kin.xyz, label, pos, plate, kin.spacing_km / kin.radius_km)
+    cell_cont = (src >= 0) & cont[np.maximum(src, 0)]
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = (rows < cols) & (label[rows] != label[cols])
+    i, j = rows[m], cols[m]
+    a, b = np.minimum(label[i], label[j]), np.maximum(label[i], label[j])
+    both = cell_cont[i] & cell_cont[j]
+    x = kin.xyz[i] + kin.xyz[j]
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    nrm = kin.xyz[i] - kin.xyz[j]
+    nrm -= np.einsum("ij,ij->i", nrm, x)[:, None] * x
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-15)
+    opening = np.einsum("ij,ij->i", np.cross(omega[label[i]] - omega[label[j]], x), nrm)
+    area = np.bincount(label, weights=kin.area_km2)
+    out: list[tuple[int, int, str, float]] = []
+    n_lab = int(label.max()) + 1
+    keys = a * n_lab + b
+    for key in np.unique(keys):
+        sel = keys == key
+        contact = sel & both
+        if sel.sum() < 5 or not contact.any():
+            continue
+        share = float(contact.sum() / sel.sum())
+        pa, pb = int(key // n_lab), int(key % n_lab)
+        opening_ok = float(np.median(opening[contact])) > 0  # forward opening: a rift
+        due = onset.get((pa, pb), 0.0)
+        if share < share_needed or not opening_ok or t < due:
+            continue
+        trigger = "rift_onset" if (pa, pb) in onset else "ocean_closed"
+        kept, gone = (pa, pb) if area[pa] >= area[pb] else (pb, pa)
+        out.append((kept, gone, trigger, share))
+    return out
 
 
 def _owner_parcels(

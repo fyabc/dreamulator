@@ -147,6 +147,7 @@ def walk(
         print(json.dumps(entry, ensure_ascii=False))
     summary["young_rifts"] = len(rifts)
     summary["collision_events"] = log.collisions
+    summary["merges"] = log.merges
     summary["steps"] = log.steps
     restored = sum(float(str(x["rift_restored_km2"])) for x in log.steps)
     summary["rift_restored_km2"] = round(restored)

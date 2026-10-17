@@ -726,8 +726,14 @@ def reclose(
     omega: np.ndarray,
     radius_km: float,
     smooth_iterations: int = 3,
+    relabel: dict[int, int] | None = None,
 ) -> tuple[Topology, dict[str, int]]:
     """Resolve boundary collisions by closing the plates again.
+
+    ``relabel`` merges plates while closing (merged → kept): a merged plate's
+    cells take the kept plate's label before extraction, so the boundary between
+    them disappears and the merged plate's other boundaries carry over to the
+    kept plate.
 
     The graph is rasterized on the fixed event grid (``event_grid``), enclaves
     are absorbed (terrain engine's rule), and the graph is extracted again: a
@@ -738,13 +744,19 @@ def reclose(
     """
     grid_spacing = float(np.sqrt(4.0 * np.pi / grid.n))
     lab = rasterize(topo, grid, grid_spacing / 3.0)
+    if relabel:
+        for old, new_label in relabel.items():
+            lab[lab == old] = new_label
     lab = clean_labels(grid, lab)
     before = {s.left for s in topo.segments} | {s.right for s in topo.segments}
     new = prepare(extract(grid.xyz, lab), 0.5 * spacing_rad, smooth_iterations)
     kinds: dict[tuple[int, int], tuple[str, int]] = {}
+    remap = relabel or {}
     for seg in topo.segments:
-        kinds[(seg.left, seg.right)] = (seg.kind, seg.over)
-        kinds[(seg.right, seg.left)] = (seg.kind, seg.over)
+        left, right = remap.get(seg.left, seg.left), remap.get(seg.right, seg.right)
+        over = remap.get(seg.over, seg.over)
+        kinds.setdefault((left, right), (seg.kind, over))
+        kinds.setdefault((right, left), (seg.kind, over))
     untyped: list[Segment] = []
     for seg in new.segments:
         if (seg.left, seg.right) in kinds:
