@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import typer
 from pydantic import TypeAdapter
 from rich.console import Console
@@ -42,6 +43,7 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
+from dreamulator.map.prog_erosion import RIVER_THRESHOLD_CELLS
 from dreamulator.map.region_export import (
     RegionWindowError,
     export_region_pack,
@@ -427,6 +429,23 @@ def export_region(
 
     mesh = load_cvt_mesh_model(mesh_file)
 
+    # Monthly climate series → the runoff channel (Manabe-bucket annual land
+    # runoff, the hydrology legs' accumulation weight).  Worlds whose build
+    # products lack the series export without it; hydrology then falls back
+    # to the precipitation weight with a notice at refine time.
+    climate_monthly: tuple[np.ndarray, np.ndarray] | None = None
+    if climate:
+        from dreamulator.map.export import load_climate_monthly
+
+        try:
+            climate_monthly = load_climate_monthly(map_dir)
+        except FileNotFoundError:
+            console.print(
+                "[yellow]no climate_monthly.msgpack under "
+                f"{map_dir} — runoff.mm channel not written; hydrology legs "
+                "will fall back to the precipitation weight[/yellow]"
+            )
+
     out_dir = output or (Path("private/video") / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
     input_dir = out_dir / "input"  # pack layout: input/ + gaea-out/ + color/
     console.print(
@@ -453,6 +472,7 @@ def export_region(
                 **mesh_fingerprint(mesh_file),
             },
             include_climate=climate,
+            climate_monthly=climate_monthly,
             seafloor_clamp_m=seafloor_clamp,
             out_res=out_res,
         )
@@ -535,7 +555,10 @@ def export_erode(
     dt_yr: float = typer.Option(5e4, "--dt", help="Step length (years)"),
     k_spl: float = typer.Option(2e-7, "--k", help="Stream-power erodibility K"),
     river_threshold: int = typer.Option(
-        3000, "--river-threshold", help="Channel onset: upstream cells (rain-weighted)"
+        RIVER_THRESHOLD_CELLS,
+        "--river-threshold",
+        help="Channel onset: upstream cells (runoff-weighted); the default "
+        "reads physically as a ~1.7 m³/s minimum mean discharge",
     ),
 ) -> None:
     """Programmatic SPL erosion (video chain step ② programmatic variant).

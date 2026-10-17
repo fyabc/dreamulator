@@ -101,7 +101,12 @@ def _td_python(td_repo: Path) -> Path:
 
 def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False) -> int:
     """Stage 1 (main env): window the mesh + monthly climate → .npy fields."""
-    from dreamulator.map.export import export_cell_index_grid, find_mesh_file, load_cvt_mesh_model
+    from dreamulator.map.export import (
+        export_cell_index_grid,
+        find_mesh_file,
+        load_climate_monthly,
+        load_cvt_mesh_model,
+    )
     from dreamulator.map.region_export import read_radius_km, region_window
 
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
@@ -121,23 +126,12 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     indices_full = export_cell_index_grid(mesh, grid_w, grid_h)
     indices = indices_full[window.y0 : window.y1, window.x0 : window.x1]
 
-    import msgpack
-
-    monthly = map_dir / "climate_monthly.msgpack"
-    if not monthly.exists():
-        raise FileNotFoundError(f"monthly climate series missing: {monthly}")
-    with monthly.open("rb") as f:
-        d = msgpack.unpackb(f.read())
-    n, m = int(d["num_cells"]), int(d["months"])
-
-    def deq(prefix: str) -> np.ndarray:
-        q = np.frombuffer(d[f"{prefix}_monthly"], dtype="<i2").astype(np.float64)
-        return (q * float(d[f"{prefix}_scale"]) + float(d[f"{prefix}_offset"])).reshape(n, m)
-
-    t_m, p_m = deq("t"), deq("p")
+    t_m, p_m = load_climate_monthly(map_dir)
     t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
     fields = {
-        "elevation_m": np.fromiter((c.elevation for c in mesh.cells), dtype=np.float64, count=n),
+        "elevation_m": np.fromiter(
+            (c.elevation for c in mesh.cells), dtype=np.float64, count=t_m.shape[0]
+        ),
         "temperature_mean_c": t_mean,
         "temperature_std_c": t_m.std(axis=1),
         "precipitation_total_mm": p_m.sum(axis=1),
@@ -212,15 +206,18 @@ def refine_region_pack(
 
     from dreamulator.map.export import export_elevation_png
     from dreamulator.map.prog_erosion import (
+        LAKE_EVAPORATION_FACTOR,
         LAKE_MIN_WIDTH_KM,
-        flow_accumulation,
+        RIVER_THRESHOLD_CELLS,
         heal_inland_water,
+        hydrology_weight,
         keep_large_lakes,
         lake_mask,
         lake_mmu_cells,
         priority_flood,
         river_mask,
         river_segments,
+        terminal_equilibrium_routing,
     )
 
     pack_dir = pack_dir.resolve()  # td subprocess runs with cwd=repo —
@@ -230,7 +227,12 @@ def refine_region_pack(
     res = pack_res * REFINE_FACTOR
     tmp = pack_dir / "refine-tmp"
 
-    cached = pack_dir / "refined-out" / "height.meters.npy"
+    # Reuse cache: prefer the PRE-equilibrium field (post-heal, before the
+    # terminal-lake rewrite) so the equilibrium verdict re-derives from the
+    # true depression geometry on every reuse — the product height flattens
+    # dried playa floors, which would erase the evidence.
+    cached_pre = pack_dir / "refined-out" / "height.pre-equilibrium.npy"
+    cached = cached_pre if cached_pre.exists() else pack_dir / "refined-out" / "height.meters.npy"
     if reuse_height:
         if not cached.exists():
             raise FileNotFoundError(
@@ -275,36 +277,75 @@ def refine_region_pack(
         min_width_km=LAKE_MIN_WIDTH_KM,
     )
 
-    rain = np.nan_to_num(
+    # Extraction weight: the annual runoff channel (Manabe-bucket water
+    # balance) when the pack carries it, precipitation for legacy packs —
+    # hydrology_weight prints which.  The P/T annual channels ride along
+    # (kron-upsampled to the refined grid) for the terminal-lake balance.
+    weight, run_norm_mm, weight_src = hydrology_weight(pack_dir / "input", res, land)
+    precip_p = np.nan_to_num(
         np.load(pack_dir / "input" / "precipitation.mm.npy").astype(np.float64), nan=0.0
     )
-    factor = res // rain.shape[0]
-    rain_r = np.kron(rain, np.ones((factor, factor)))[:res, :res]
-    weight = rain_r / rain_r[land].mean() if rain_r[land].any() else np.where(land, 1.0, 0.0)
+    factor = res // precip_p.shape[0]
+    precip_r = np.kron(precip_p, np.ones((factor, factor)))[:res, :res]
+    t_path = pack_dir / "input" / "temperature.C.npy"
+    temp_r: np.ndarray | None = None
+    if t_path.exists():
+        temp_p = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
+        temp_r = np.kron(temp_p, np.ones((factor, factor)))[:res, :res]
+    else:
+        print(f"[refine] no temperature.C.npy in {pack_dir / 'input'}; terminal-lake balance off")
 
     filled, order, rec = priority_flood(h, land)
     lakes = lake_mask(filled, h)
     mmu = lake_mmu_cells(km_pp)
-    lakes_draw = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
-    acc = flow_accumulation(order, rec, weight)
-    thr = river_threshold if river_threshold is not None else 3000 * factor * factor
-    rivers = river_mask(acc, land, thr)
-
+    lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
     out = pack_dir / "refined-out"
     out.mkdir(exist_ok=True)
+    # Reuse cache: the field BEFORE the terminal-lake rewrite (see the
+    # loader) — written whenever a rewrite may happen.
+    np.save(out / "height.pre-equilibrium.npy", h.astype(np.float32))
+    # Terminal-lake equilibrium with through-flow depletion (the shared
+    # helper): pass-through lakes deduct their net evaporation from the
+    # through-flow; routing stays on the pre-rewrite tree.
+    h, land, lakes_draw, chain_stop, fringe_desc, rec, acc, term_water, lake_stats = (
+        terminal_equilibrium_routing(
+            h,
+            land,
+            lakes_draw0,
+            order,
+            rec,
+            weight,
+            precip_mm=precip_r if temp_r is not None else np.zeros_like(land),
+            temp_c=temp_r if temp_r is not None else np.full_like(h, 0.0),
+            runoff_land_mean_mm=run_norm_mm
+            if (temp_r is not None and weight_src == "runoff")
+            else 0.0,
+            mmu_cells=mmu,
+            km_per_px=km_pp,
+            sea_level_m=float(meta["sea_level_m"]),
+        )
+    )
+    thr = (
+        river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS * factor * factor
+    )
+    rivers = river_mask(acc, land, thr)
+
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    segs, flows = river_segments(rivers, rec, acc, km_pp, lake=lakes_draw)
+    segs, flows = river_segments(rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc)
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
     rivers &= ~lakes_draw
     Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
     Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
-    Image.fromarray(((~land & ~inland_big) * 255).astype(np.uint8)).save(out / "sea-water.png")
+    not_sea = term_water  # equilibrium water (kept surfaces + playa sinks)
+    Image.fromarray(((~land & ~not_sea & ~lakes_draw) * 255).astype(np.uint8)).save(
+        out / "sea-water.png"
+    )
     sea_depth = np.clip(float(meta["sea_level_m"]) - h, 0, None) / span
-    sea_depth[inland_big] = 0.0
+    sea_depth[not_sea] = 0.0
     Image.fromarray(np.clip(sea_depth * 65535, 0, 65535).astype(np.uint16)).save(
         out / "sea-depth.png"
     )
@@ -321,6 +362,15 @@ def refine_region_pack(
                 "td_seed": TD_SEED,
                 "river_threshold": thr,
                 "lake_mmu_cells": mmu,
+                "hydrology_weight": weight_src,
+                "runoff_normalizer_mm": round(run_norm_mm, 3),
+                "terminal_lakes": lake_stats["terminal"],
+                "dry_playas": lake_stats["dry_playas"],
+                "shrunk_lakes": lake_stats["shrunk"],
+                "lake_balance": {
+                    "pet": "hamon-annual",
+                    "evaporation_factor": LAKE_EVAPORATION_FACTOR,
+                },
             },
             ensure_ascii=False,
             indent=1,

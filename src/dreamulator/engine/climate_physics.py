@@ -1186,6 +1186,81 @@ def soil_bucket_monthly(
     return e_out, r_out, cycles, max_ds
 
 
+#: Default bucket capacity (mm) for consumers without a world config:
+#: Manabe (1969)'s canonical 150 mm root-zone store — the same default as
+#: ``TerrainPipelineConfig.soil_water_capacity_mm`` (map/pipeline_types.py).
+SOIL_WATER_CAPACITY_MM: float = 150.0
+
+
+def runoff_monthly_mm(
+    t_monthly_c: np.ndarray,
+    p_monthly_mm: np.ndarray,
+    capacity_mm: float = SOIL_WATER_CAPACITY_MM,
+    *,
+    days_per_month: float,
+) -> np.ndarray:
+    """Monthly Manabe-bucket land runoff, mm per month, shape (N, 12).
+
+    Wraps :func:`soil_bucket_monthly` with a Hamon (1961) atmospheric demand
+    so the result is a pure function of persisted monthly data (the
+    simulator's in-build bucket uses ``evaporation_rate`` instead, which is
+    not recoverable from files — this wrapper is deliberately independent of
+    it).  Pass ``days_per_month=REFERENCE_MONTH_DAYS`` (365.25/12) so the
+    demand basis matches the monthly-precipitation basis.
+    """
+    pet_m = potential_evapotranspiration_hamon_monthly(t_monthly_c, days_per_month)
+    _e, r, _cycles, _ds = soil_bucket_monthly(p_monthly_mm, pet_m, capacity_mm)
+    return r
+
+
+def annual_runoff_mm(
+    t_monthly_c: np.ndarray,
+    p_monthly_mm: np.ndarray,
+    capacity_mm: float = SOIL_WATER_CAPACITY_MM,
+    *,
+    days_per_month: float,
+) -> np.ndarray:
+    """Annual land runoff, mm/yr, shape (N,) — :func:`runoff_monthly_mm` summed.
+
+    The per-month balance closes by the bucket contract (P = E + R + ΔS with
+    ΔS = 0 at periodic steady state), so the annual sum needs no separate
+    accounting.
+    """
+    return np.asarray(
+        runoff_monthly_mm(
+            t_monthly_c, p_monthly_mm, capacity_mm, days_per_month=days_per_month
+        ).sum(axis=-1)
+    )
+
+
+def annual_runoff_turc_pike(
+    p_annual_mm: np.ndarray,
+    pet_annual_mm: np.ndarray,
+    n: float = 2.0,
+) -> np.ndarray:
+    """Annual land runoff via the Turc–Pike (Budyko) curve, mm/yr.
+
+    ``E/P = (1 + φ^{-n})^{-1/n}`` with the aridity index ``φ = PET/P``
+    (Turc 1954 / Pike 1964, who used n = 2 — the literature default);
+    runoff is the residual ``R = P − E``.  The curve interpolates the two
+    Budyko limits: the water limit ``φ → ∞`` gives ``E → P``, ``R → 0``
+    (hyperarid ~2% yield — wadi country), the energy limit ``φ → 0``
+    gives ``E → PET``, ``R → P − PET``.  Used for the ANNUAL runoff
+    weight: a single-layer monthly bucket underestimates annual yield in
+    strongly seasonal climates (the wet-season surplus must exceed the
+    whole storage capacity before any overflow — a 900 mm/yr Csa slope
+    with 150 mm capacity yields exactly nothing, where Budyko and real
+    rivers give R/P ≈ 0.2), so the bucket is reserved for the monthly
+    regime shape and this curve carries the annual total.
+    """
+    p = np.asarray(p_annual_mm, dtype=np.float64)
+    pet = np.asarray(pet_annual_mm, dtype=np.float64)
+    phi = pet / np.maximum(p, 1e-9)
+    e_over_p = (1.0 + phi ** (-n)) ** (-1.0 / n)
+    runoff = p * (1.0 - e_over_p)
+    return np.asarray(np.where(p > 0.0, np.maximum(runoff, 0.0), 0.0))
+
+
 def aridity_index_keep(
     p_annual_mm: np.ndarray,
     pet_annual_mm: np.ndarray,

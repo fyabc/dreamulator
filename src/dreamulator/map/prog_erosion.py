@@ -2,9 +2,12 @@
 
 Replaces the manual Gaea leg with a seeded, scriptable one: Priority-Flood
 drainage (Barnes et al. 2014) + implicit stream-power erosion (Braun &
-Willett 2013) on the regular pack grid, driven by the pack's own
-precipitation field (same physical doctrine as the Gaea chain: storm
-runoff is the erosion agent).
+Willett 2013) on the regular pack grid.  Two water-weighting doctrines on
+purpose: the erosion physics runs on the pack's precipitation field (storm
+runoff is the erosion agent, same doctrine as the Gaea chain), while the
+channel extraction accumulates the pack's annual runoff field (the
+Turc–Pike water balance) so channels start where the water balance
+allows and endorheic lakes can be terminal.
 
     pack input (height + precipitation)  →  eroded height + tree-shaped
     river network (flow accumulation)
@@ -83,6 +86,33 @@ LAKE_MIN_WIDTH_KM = 1.5
 #: on nacrea the tidal range (±18–57 m quiescent) overtops them outright.
 #: Wider causeways keep genuine endorheic lagoons terminal.
 OCEAN_MERGE_CAUSEWAY_KM = 3.0
+#: Open-water evaporation factor on Hamon PET in the terminal-lake balance
+#: (terminal_lakes).  Deep-lake annual evaporation lands at roughly
+#: 0.9–1.3 × a reference ET surface; 1.0 keeps the verdict conservative
+#: exactly in the arid belt where it must not misfire — a lake stays
+#: terminal only if it truly cannot fill and spill.
+LAKE_EVAPORATION_FACTOR = 1.0
+#: Reference land runoff anchoring the channel-onset threshold, mm/yr:
+#: Earth's land-surface mean annual runoff ≈ 300 mm/yr (global land P
+#: ≈ 800 mm/yr, R ≈ 306 — the literature value).  The runoff weight is
+#: normalised by this FIXED reference, not the window's land mean, so the
+#: river threshold reads as an absolute minimum mean discharge in every
+#: window: a hyperarid window must not re-denominate its few trickles
+#: into rivers (at its own R̄ ≈ 20 mm/yr the threshold would fall to
+#: ~0.1 m³/s and wadis would sprawl — the 2026-10-17 desert-window lesson).
+RUNOFF_REFERENCE_MM = 300.0
+#: Channel-onset threshold, in reference-runoff-cell units on the PACK grid
+#: (refine scales it by factor² for the finer raster).  Three layers of
+#: rationale.  The ×factor² scaling keeps a window's network
+#: resolution-invariant: the threshold counts cells, and cells per unit
+#: area grow as res².  The 3000 base was calibrated 2026-10 against
+#: Natural Earth-style sheet density — "the smallest permanently drawn
+#: river".  With the runoff weight normalised by RUNOFF_REFERENCE_MM it
+#: reads physically as a fixed minimum mean annual discharge
+#: Q ≈ thr × R₀ × cell_area ≈ 2.1 m³/s at the 2048/550 km pack grid —
+#: the headwater scale of the finest (0.09 mm) river symbol; denser
+#: headwaters mean lowering it (halve it ≈ 1 m³/s).
+RIVER_THRESHOLD_CELLS = 3000
 
 
 def _roughness(
@@ -282,6 +312,461 @@ def keep_large_lakes(
     return out
 
 
+def hydrology_weight(input_dir: Path, res: int, land: np.ndarray) -> tuple[np.ndarray, float, str]:
+    """Extraction accumulation weight on the ``res``×``res`` grid + its normaliser.
+
+    Source chain, first that works: ``runoff.mm.npy`` (the pack's annual
+    Turc–Pike runoff — channels start where the water balance allows, arid
+    interiors stop generating headwaters), then ``precipitation.mm.npy``
+    (legacy packs; a printed notice, never a silent behaviour change), then
+    a uniform land weight.  The chosen grid is NaN-scrubbed and
+    ``np.kron``-upsampled by ``res // grid.shape[0]``.  The normaliser is
+    ``RUNOFF_REFERENCE_MM`` for the runoff source — a FIXED reference, so
+    the river threshold reads as an absolute minimum discharge in every
+    window (a window's own land mean would re-denominate the threshold in
+    dry country: at R̄ ≈ 20 mm/yr the 3000-cell onset falls to ~0.1 m³/s
+    and wadis sprawl); the legacy precipitation fallback keeps its
+    land-mean convention.  Returns ``(weight, normaliser_mm, source)``;
+    ``normaliser_mm`` is the divisor in mm/yr (0.0 for the uniform
+    fallback) and is shared with the terminal-lake water balance.
+    """
+    from pathlib import Path
+
+    input_dir = Path(input_dir)
+    candidates: list[tuple[str, Path]] = [
+        ("runoff", input_dir / "runoff.mm.npy"),
+        ("precipitation", input_dir / "precipitation.mm.npy"),
+    ]
+    if not candidates[0][1].exists():
+        print(f"[hydrology] no runoff.mm.npy under {input_dir}; trying precipitation")
+    for source, path in candidates:
+        if not path.exists():
+            continue
+        grid = np.nan_to_num(np.load(path).astype(np.float64), nan=0.0)
+        factor = res // grid.shape[0]
+        if factor > 1:
+            grid = np.kron(grid, np.ones((factor, factor)))[:res, :res]
+        if source == "runoff":
+            print(
+                f"[hydrology] weight source runoff "
+                f"(land mean {float(grid[land].mean()) if land.any() else 0.0:.1f} mm/yr, "
+                f"normaliser = RUNOFF_REFERENCE_MM {RUNOFF_REFERENCE_MM:.0f})"
+            )
+            return grid / RUNOFF_REFERENCE_MM, RUNOFF_REFERENCE_MM, source
+        mean_mm = float(grid[land].mean()) if land.any() else 0.0
+        if mean_mm <= 1e-9:
+            # Hyperarid window: normalising on a ~zero land mean would
+            # explode the weights — degrade down the chain instead.
+            print(f"[hydrology] {path.name} land mean ~0 mm; uniform land weight")
+            continue
+        print(f"[hydrology] weight source {source} (land mean {mean_mm:.1f} mm/yr)")
+        return grid / mean_mm, mean_mm, source
+    print(f"[hydrology] no usable climate channel under {input_dir}; uniform land weight")
+    return np.where(land, 1.0, 0.0), 0.0, "uniform-land"
+
+
+def _lake_balances(
+    lake: np.ndarray,
+    receiver: np.ndarray,
+    accumulation: np.ndarray,
+    precip_mm: np.ndarray,
+    temp_c: np.ndarray,
+    runoff_land_mean_mm: float,
+    evaporation_factor: float,
+) -> tuple[np.ndarray, int, np.ndarray, np.ndarray, np.ndarray]:
+    """Per-component water-balance terms of a lake mask.
+
+    Returns ``(labels, n, inflow_acc, pet_sum_mm_cells, p_sum_mm_cells)``:
+    ``inflow_acc[k]`` is the runoff accumulation entering component k (in
+    reference-cell units), the sums are Hamon annual PET and annual
+    precipitation over the component's cells (mm·cells).  Entry
+    accounting: any cell OUTSIDE the component whose receiver is inside it
+    delivers its whole upstream accumulation — a land shore cell, and the
+    SPILL CELL OF AN UPSTREAM LAKE alike (a pass-through lake chain
+    delivers its water via its spill cell; counting only land donors
+    starved chained basins and dried them falsely — a 164 m³/s trunk once
+    "ended" at an invisible playa this way, 2026-10-17).  Distinct donor
+    cells have disjoint upstream sets in the drainage tree, so one
+    vectorised pass sums each component's inflow exactly once.
+    """
+    from scipy.ndimage import label
+
+    from dreamulator.engine.climate_physics import potential_evapotranspiration_hamon
+
+    lbl, n = label(lake)
+    lake_flat = lbl.reshape(-1)
+    lake_mask_flat = lake.reshape(-1)
+    acc_flat = accumulation.reshape(-1)
+    rec_flat = receiver.reshape(-1)
+    r_all = np.where(rec_flat >= 0, rec_flat, 0)
+    enters = (rec_flat >= 0) & (lake_flat[r_all] > 0) & (lake_flat[r_all] != lake_flat)
+    cand = np.nonzero(enters)[0]
+    inflow = np.bincount(lake_flat[r_all[cand]], weights=acc_flat[cand], minlength=n + 1)
+
+    lake_idx = np.nonzero(lake_mask_flat)[0]
+    t_lake = np.where(np.isnan(temp_c.reshape(-1)[lake_idx]), 0.0, temp_c.reshape(-1)[lake_idx])
+    t12 = np.repeat(t_lake.reshape(-1, 1), 12, axis=1)
+    pet_lake = np.asarray(potential_evapotranspiration_hamon(t12, 365.25 / 12))
+    p_cells = precip_mm.reshape(-1)[lake_idx]
+    p_lake = np.where(np.isnan(p_cells), 0.0, p_cells)
+    pet_sum = np.bincount(lake_flat[lake_idx], weights=pet_lake, minlength=n + 1)
+    p_sum = np.bincount(lake_flat[lake_idx], weights=p_lake, minlength=n + 1)
+    return lbl, n, inflow, pet_sum, p_sum
+
+
+def terminal_lakes(
+    lake: np.ndarray,
+    receiver: np.ndarray,
+    accumulation: np.ndarray,
+    *,
+    land: np.ndarray,
+    precip_mm: np.ndarray,
+    temp_c: np.ndarray,
+    runoff_land_mean_mm: float,
+    evaporation_factor: float = LAKE_EVAPORATION_FACTOR,
+) -> np.ndarray:
+    """Lakes whose water balance never overflows — terminal drains.
+
+    A drawn lake is **terminal** (it cannot fill to its spill level) when
+    the evaporation demand over its area exceeds what the rivers and the
+    sky deliver::
+
+        Σ_in acc × R̄  <  f·Σ_lake PET − Σ_lake P
+
+    Both sides are mm·cells: the weight is land-mean-normalised runoff, so
+    ``acc`` reads in average land cells and ``R̄`` (``runoff_land_mean_mm``)
+    restores mm/yr, while the demand side is mm/yr summed over lake cells —
+    the cell area appears on both sides and cancels; no km constant enters.
+    PET is Hamon on the annual-mean temperature (the documented annual
+    approximation, same as the headwaters mask; by convexity of the Magnus
+    ``e_s`` it slightly *underestimates`` the monthly-mean demand, biasing
+    the verdict toward pass-through — the conservative direction).
+    Components touching the frame edge are forced pass-through: their
+    catchment is truncated by the window, so resumption is the safer
+    reading.  A degenerate normaliser (uniform fallback weight, R̄ ≤ 0)
+    disables the balance: every lake passes through.
+    """
+    out = np.zeros_like(lake, dtype=bool)
+    if runoff_land_mean_mm <= 0.0:
+        return out
+    lbl, n, inflow, pet_sum, p_sum = _lake_balances(
+        lake,
+        receiver,
+        accumulation,
+        precip_mm,
+        temp_c,
+        runoff_land_mean_mm,
+        evaporation_factor,
+    )
+    if not n:
+        return out
+    edge_lbl = set(lbl[0, :]) | set(lbl[-1, :]) | set(lbl[:, 0]) | set(lbl[:, -1])
+    edge_lbl.discard(0)
+
+    for i in range(1, n + 1):
+        if i in edge_lbl:
+            continue
+        demand = evaporation_factor * pet_sum[i] - p_sum[i]
+        if demand <= 0.0:
+            continue
+        if inflow[i] * runoff_land_mean_mm < demand:
+            out[lbl == i] = True
+    return out
+
+
+def _equilibrium_water(
+    h: np.ndarray,
+    land: np.ndarray,
+    lake_terminal: np.ndarray,
+    inflow_cells: np.ndarray,
+    demand_cells: np.ndarray,
+    *,
+    mmu_cells: int,
+    sea_level_m: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int]]:
+    """Rewrite terminal lakes to their equilibrium water surface.
+
+    Takes per-label inflow and net-demand in reference-cell units (the
+    caller's cascade verdict).  A terminal lake cannot fill to its spill
+    level; it settles where the annual balance closes, at area
+    ``A* = inflow / demand_per_cell`` cells.  The water surface becomes
+    the ``ceil(A*)`` deepest cells of the depression (by DEM); the exposed
+    floor becomes land (below-sea floors raised to ``sea_level_m``, the
+    heal convention).  ``A*`` below the render MMU cannot hold a visible
+    surface — a dry playa — but its deepest cell stays a 1-cell non-land
+    sink: sub-MMU water is invisible in every render mask, yet the river
+    network and the accumulation must END at the playa (rivers to Lake
+    Eyre's bed do not walk across it to the sea).  The returned water is
+    marked NON-LAND (the ``inland_big`` mechanism) for the render masks.
+
+    Returns ``(h, land, water, stats)``.
+    """
+    import math
+
+    from scipy.ndimage import label
+
+    out_h = h.copy()
+    out_land = land.copy()
+    water = np.zeros_like(land, dtype=bool)
+    stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}
+    lbl, n = label(lake_terminal)
+    if not n:
+        return out_h, out_land, water, stats
+    sizes = np.bincount(lbl.ravel(), minlength=n + 1)
+    for i in range(1, n + 1):
+        stats["terminal"] += 1
+        ys, xs = np.nonzero(lbl == i)
+        n_cells = int(sizes[i])
+        demand = demand_cells[i]
+        if demand <= 0.0:
+            continue  # balance-positive: keep as drawn (verdict disagreed — skip)
+        a_star = inflow_cells[i] / demand * n_cells
+        k = min(int(math.ceil(a_star)), n_cells)
+        if k < mmu_cells:
+            k = 1  # dry playa: the deepest cell remains the sink
+            stats["dry_playas"] += 1
+        else:
+            stats["shrunk"] += 1
+        deepest = np.argsort(h[ys, xs])[:k]
+        wy, wx = ys[deepest], xs[deepest]
+        water[wy, wx] = True
+        out_land[wy, wx] = False
+        rest = np.ones(n_cells, dtype=bool)
+        rest[deepest] = False
+        ry, rx = ys[rest], xs[rest]
+        out_land[ry, rx] = True
+        out_h[ry, rx] = np.maximum(out_h[ry, rx], sea_level_m)
+    return out_h, out_land, water, stats
+
+
+def apply_terminal_equilibrium(
+    h: np.ndarray,
+    land: np.ndarray,
+    lake_terminal: np.ndarray,
+    receiver: np.ndarray,
+    accumulation: np.ndarray,
+    *,
+    precip_mm: np.ndarray,
+    temp_c: np.ndarray,
+    runoff_land_mean_mm: float,
+    mmu_cells: int,
+    sea_level_m: float,
+    evaporation_factor: float = LAKE_EVAPORATION_FACTOR,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int]]:
+    """Rewrite terminal lakes from a single (receiver, accumulation) pair.
+
+    Convenience wrapper around :func:`_equilibrium_water` computing the
+    per-label balances in place (``_lake_balances``); the routing helper
+    uses the cascaded verdicts instead — lake-to-lake re-entry makes a
+    single-pair accounting overcount (the dendritic-arm lesson).
+    """
+
+    lbl, n, inflow, pet_sum, p_sum = _lake_balances(
+        lake_terminal,
+        receiver,
+        accumulation,
+        precip_mm,
+        temp_c,
+        runoff_land_mean_mm,
+        evaporation_factor,
+    )
+    demand = (evaporation_factor * pet_sum - p_sum) / runoff_land_mean_mm
+    return _equilibrium_water(
+        h,
+        land,
+        lake_terminal,
+        inflow,
+        demand,
+        mmu_cells=mmu_cells,
+        sea_level_m=sea_level_m,
+    )
+
+
+def terminal_equilibrium_routing(
+    h: np.ndarray,
+    land: np.ndarray,
+    lakes_draw: np.ndarray,
+    order: np.ndarray,
+    receiver: np.ndarray,
+    weight: np.ndarray,
+    *,
+    precip_mm: np.ndarray,
+    temp_c: np.ndarray,
+    runoff_land_mean_mm: float,
+    mmu_cells: int,
+    km_per_px: float,
+    sea_level_m: float,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    dict[str, int],
+]:
+    """Terminal-lake equilibrium with an exact lake-graph cascade.
+
+    A lake's water balance is NOT readable from a single accumulation
+    pass: dendritic lakes re-enter themselves (water leaves one arm,
+    crosses land, comes back through another), so every shore touch would
+    add the same flood again — the 2026-10-17 21.5N/95.5E sheet measured
+    a lake "receiving" 2.5x the window's total water this way, and the
+    falsely-pass-through verdicts let a desert trunk punch out of an
+    endorheic district.  The exact accounting is a cascade on the lake
+    graph (the receiver forest contracted over lake components — a DAG):
+
+    1. **First-touch inflow**: with EVERY lake cut into a sink, each land
+       cell's water is credited exactly once, to the first lake its path
+       reaches (or to the sea/frame).
+    2. **Cascade** in topological order:
+       ``total(L) = external(L) + Σ outflow(A)`` over lakes A draining
+       into L; ``demand(L) = (f·PET − P)·cells``; overflow keeps
+       ``outflow(L) = total(L) − demand(L)``, deficit makes L terminal
+       with equilibrium area ``A* = external-equivalent inflow / demand
+       per cell``.
+    3. Pass-through lakes deduct their demand from the through-flow as a
+       negative point weight on their exit cells (Landlab's documented
+       transmission-loss mechanism), so river widths and downstream
+       onsets see the depleted water.
+
+    Routing stays on the PRE-rewrite drainage tree throughout (terminal
+    footprints cut into sinks); re-routing on a rewritten field is
+    unstable — a dried basin's sink captures big rivers that never fed it
+    pre-verdict.
+
+    Returns ``(h, land, lakes_render, chain_stop, fringe_desc, rec_route,
+    acc, term_water, stats)``: the rewritten field and render mask, the
+    chain-stopping mask (render water plus dry-playa footprints), the
+    in-footprint descent tree for chain extraction across shrunk fringes
+    (see ``lake_fringe_descend``), receivers with terminal sinks cut, the
+    final (depleted, cut) accumulation, the equilibrium water mask (kept
+    surfaces plus playa sinks — exclude it from the sea masks), and the
+    component counts.
+    """
+
+    stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}
+    empty = np.zeros_like(lakes_draw, dtype=bool)
+    empty_desc = np.full(h.size, -1, dtype=np.int64)
+    if runoff_land_mean_mm <= 0.0:
+        acc = flow_accumulation(order, receiver, weight)
+        return h, land, lakes_draw, lakes_draw, empty_desc, receiver, acc, empty, stats
+
+    lbl, n, _i, _ps, _pp = _lake_balances(
+        lakes_draw,
+        receiver,
+        flow_accumulation(order, receiver, weight),
+        precip_mm,
+        temp_c,
+        runoff_land_mean_mm,
+        LAKE_EVAPORATION_FACTOR,
+    )
+    if not n:
+        acc = flow_accumulation(order, receiver, weight)
+        return h, land, lakes_draw, lakes_draw, empty_desc, receiver, acc, empty, stats
+    lake_flat = lbl.reshape(-1)
+    rec_flat = receiver.reshape(-1)
+
+    # 1) first-touch inflow: all lakes as sinks.
+    rec_all = receiver.copy()
+    rec_all[np.nonzero(lakes_draw.reshape(-1))[0]] = -1
+    acc_all = flow_accumulation(order, rec_all, weight)
+    r_all = np.where(rec_all >= 0, rec_all, 0)
+    enters = (rec_all >= 0) & (lake_flat[r_all] > 0)
+    donors = np.nonzero(enters)[0]
+    external = np.bincount(
+        lake_flat[r_all[donors]], weights=acc_all.reshape(-1)[donors], minlength=n + 1
+    )
+
+    # 2) lake-graph edges: each component's exits, walked to the next
+    #    lake / the sea / the frame sink along the receiver forest.
+    r_orig = np.where(rec_flat >= 0, rec_flat, 0)
+    is_exit = (rec_flat >= 0) & (lake_flat[r_orig] != lake_flat) & (lake_flat > 0)
+    exits = np.nonzero(is_exit)[0]
+    downstream_of = np.zeros(n + 1, dtype=np.int64)  # 0 = sea/frame
+    for e in exits:
+        src_lbl = int(lake_flat[e])
+        if downstream_of[src_lbl] == 0:
+            t = int(rec_flat[e])
+            while t >= 0 and lake_flat[t] == 0:
+                t = int(rec_flat[t])
+            tgt = int(lake_flat[t]) if t >= 0 else 0
+            if tgt != src_lbl:  # self re-entry (dendritic arm) is internal
+                downstream_of[src_lbl] = tgt
+    # Kahn topological order over the (forest-contracted, hence acyclic) graph.
+    indeg = np.zeros(n + 1, dtype=np.int64)
+    for a in range(1, n + 1):
+        b = int(downstream_of[a])
+        if b > 0:
+            indeg[b] += 1
+    from collections import deque
+
+    dq = deque(a for a in range(1, n + 1) if indeg[a] == 0)
+    topo = []
+    while dq:
+        a = dq.popleft()
+        topo.append(a)
+        b = int(downstream_of[a])
+        if b > 0:
+            indeg[b] -= 1
+            if indeg[b] == 0:
+                dq.append(b)
+
+    _l2, _n2, _in2, pet_sum, p_sum = _lake_balances(
+        lakes_draw,
+        receiver,
+        acc_all,
+        precip_mm,
+        temp_c,
+        runoff_land_mean_mm,
+        LAKE_EVAPORATION_FACTOR,
+    )
+    demand = (LAKE_EVAPORATION_FACTOR * pet_sum - p_sum) / runoff_land_mean_mm
+    total = external.copy()
+    is_term = (demand > 0.0) & (total < demand)
+    for a in topo:  # predecessors first: total[a] is final when popped
+        if is_term[a]:
+            continue  # terminal lakes hand nothing on
+        b = int(downstream_of[a])
+        if b > 0:
+            total[b] += total[a] - demand[a]  # outflow (demand<0 adds net water)
+    lake_term = np.isin(lbl, np.nonzero(is_term)[0])
+
+    # 3) rewrite the terminal footprints; depletion at pass-through exits.
+    h_rw, land_rw, term_water, stats = _equilibrium_water(
+        h,
+        land,
+        lake_term,
+        total,
+        demand,
+        mmu_cells=mmu_cells,
+        sea_level_m=sea_level_m,
+    )
+    water_kept = keep_large_lakes(term_water, mmu_cells, LAKE_MIN_WIDTH_KM, km_per_px)
+    lakes_render = (lakes_draw & ~lake_term) | water_kept
+    chain_stop = lakes_render | lake_term
+    # Descent across dried fringes toward the kept water, on the field as
+    # it was BEFORE the rewrite (flattened playa floors erased the slope).
+    fringe_desc = lake_fringe_descend(h, chain_stop, lakes_render)
+    rec_route = receiver.copy()
+    rec_route[lake_term.reshape(-1)] = -1
+    weight_depl = weight.copy()
+    for a in topo:
+        if is_term[a] or demand[a] == 0.0:
+            continue
+        # Pass-through: deduct the net demand at the component's exits,
+        # split evenly (the accumulation carries inflow through the lake
+        # interior to these cells; a negative demand adds the lake's own
+        # water surplus).
+        ex = exits[lake_flat[exits] == a]
+        if ex.size:
+            weight_depl.reshape(-1)[ex] -= demand[a] / ex.size
+    acc = flow_accumulation(order, rec_route, weight_depl)
+    return h_rw, land_rw, lakes_render, chain_stop, fringe_desc, rec_route, acc, term_water, stats
+
+
 def heal_inland_water(
     h: np.ndarray,
     land: np.ndarray,
@@ -383,12 +868,71 @@ def _chaikin(pts: np.ndarray, rounds: int = 2) -> np.ndarray:
     return pts
 
 
+def lake_fringe_descend(h: np.ndarray, footprint: np.ndarray, water: np.ndarray) -> np.ndarray:
+    """Flat-index descent tree inside terminal footprints, toward the water.
+
+    Chain extraction stops where a channel meets a terminal footprint, but
+    a shrunk lake's visible surface can sit kilometres inside its
+    pre-verdict basin (the dried fringe is exposed lake bed) — stopping at
+    the outer edge reads as a broken river on the sheet.  Inside
+    water-bearing footprints this array gives each cell's descent
+    neighbour on the PRE-rewrite surface, resolved lowest-first: a cell
+    points at the lowest already-resolved neighbour (water counts as
+    resolved).  Processing in height order makes the tree acyclic by
+    construction AND able to cross the near-flat rim band a lake floor
+    carries at its spill elevation — one-step steepest descent dead-ends
+    there (no strictly lower neighbour), which is exactly where channels
+    enter the basin.  Water cells self-loop (``descend[c] == c``) so a
+    walk stops one cell into the visible surface; dry-playa footprints
+    (no visible water) and everything outside footprints get −1, keeping
+    the chain at the playa's outer edge — sub-MMU surfaces must stay
+    unreached.
+    """
+    desc = np.full(h.size, -1, dtype=np.int64)
+    if not water.any():
+        return desc
+    from scipy.ndimage import label
+
+    lbl, _n = label(footprint)
+    water_lbl = set(int(v) for v in np.unique(lbl[water]) if v > 0)
+    if not water_lbl:
+        return desc
+    hgt, wid = h.shape
+    hflat = h.reshape(-1)
+    water_flat = water.reshape(-1)
+    done = np.zeros(h.size, dtype=bool)  # resolved: water or desc assigned
+    for wl in sorted(water_lbl):
+        cells = np.nonzero((lbl == wl).reshape(-1) & water_flat)[0]
+        desc[cells] = cells
+        done[cells] = True
+        fringe = np.nonzero((lbl == wl).reshape(-1) & ~water_flat)[0]
+        for c in fringe[np.argsort(hflat[fringe], kind="stable")].tolist():
+            y, x = divmod(c, wid)
+            best, best_key = -1, (np.inf, np.inf, -1)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dy == 0 and dx == 0:
+                        continue
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < hgt and 0 <= nx < wid:
+                        nc = ny * wid + nx
+                        if done[nc]:
+                            key = (hflat[nc], (dy * dy + dx * dx) ** 0.5, nc)
+                            if key < best_key:
+                                best_key, best = key, nc
+            desc[c] = best
+            if best >= 0:
+                done[c] = True
+    return desc
+
+
 def river_segments(
     rivers: np.ndarray,
     receiver: np.ndarray,
     accumulation: np.ndarray,
     km_per_px: float,
     lake: np.ndarray | None = None,
+    lake_descend: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Channel polylines for vector rendering, smoothed.
 
@@ -402,7 +946,16 @@ def river_segments(
     lakes, ending one cell *into* the water (the line visibly touches the
     shore; stopping one cell short read as a gap at render scale) and
     resume at the lake's spill point — the straight crossing on the filled
-    surface was the "river cuts through hills" artefact.  Short chains are
+    surface was the "river cuts through hills" artefact.  Terminal lakes
+    (the water-balance verdict of ``terminal_lakes`` /
+    ``apply_terminal_equilibrium``) hold non-land equilibrium water, so
+    chains end at their shore and nothing resumes downstream — endorheic
+    drain semantics by construction.  A shrunk lake's visible surface sits
+    inside its pre-verdict basin behind a fringe of dried lake bed: with
+    ``lake_descend`` (see ``lake_fringe_descend``) the chain keeps
+    descending the pre-rewrite bathymetry across that fringe and stops one
+    cell into the visible water, while dry playas (no visible surface)
+    still stop at the footprint's outer edge.  Short chains are
     kept: a legitimate final reach to the sea/lake/frame can be two cells
     long, and dropping it erased whole trunks (their cells were already
     marked visited, so nothing ever redrew them).
@@ -423,7 +976,9 @@ def river_segments(
     lake_flat = lake_big.reshape(-1)
     lake_set = {int(c) for c in np.nonzero(lake_flat)[0]}
     # Spill points: lake cells draining into a non-lake cell — the outlet
-    # chain resumes just downstream of them.
+    # chain resumes just downstream of them.  (Terminal lakes carry no
+    # spill cell: their equilibrium water is non-land and receiver-less, so
+    # nothing resumes below them by construction.)
     spill_next = set()
     for c in lake_set:
         r = int(receiver[c])
@@ -456,11 +1011,6 @@ def river_segments(
             visited.add(c)
             chain.append(c)
             c = int(receiver[c])
-        # Always connect the chain's end to its downstream cell — the
-        # junction when a tributary meets an already-traced trunk (missing
-        # this link left every tributary one segment short: "broken rivers")
-        # or the sea/frame outlet.  Lakes stay unconnected (rivers end at
-        # the shore).
         # Always connect the chain's end to its downstream cell: the
         # junction when a tributary meets an already-traced trunk (missing
         # this link left every tributary one segment short: "broken
@@ -468,6 +1018,19 @@ def river_segments(
         # ends in (drawn one cell into the water so the line touches it).
         if c >= 0 and len(chain) >= 1:
             chain.append(c)
+        # Terminal footprint entered: descend the pre-rewrite bathymetry
+        # across a shrunk lake's dried fringe to the visible water (the
+        # cut receiver ends the walk at the basin's outer edge, which read
+        # as a broken river when the water sits kilometres inside).  Dry
+        # playas descend nowhere (-1) and keep the outer-edge semantics.
+        if lake_descend is not None and chain and chain[-1] in lake_set:
+            c = chain[-1]
+            while True:
+                dn = int(lake_descend[c])
+                if dn < 0 or dn == c:
+                    break
+                chain.append(dn)
+                c = dn
         # Two cells = a legal short reach (e.g. a trunk's final step into
         # the sea); only a genuinely empty chain is dropped.
         if len(chain) < 2:
@@ -508,14 +1071,15 @@ def erode_region_pack(
     steps: int = 30,
     dt_yr: float = 5e4,
     k_spl: float = 2e-7,
-    river_threshold: int = 3000,
+    river_threshold: int = RIVER_THRESHOLD_CELLS,
 ) -> dict[str, object]:
     """CLI entry: erode a region pack's DEM, write ``prog-out/``.
 
     Writes the gaea-out file vocabulary (height PNG plus ``rivers.png``/
     ``sea-water.png`` masks and a float32 metres ``height.meters.npy``) so
-    the colorize/carto legs consume it without changes.  Rain weight is
-    normalised to mean-land-precipitation-per-cell so the river threshold
+    the colorize/carto legs consume it without changes.  Erosion uses the
+    precipitation weight; channel extraction uses the runoff weight
+    (``hydrology_weight``), land-mean-normalised so the river threshold
     reads in units of upstream cells.
     """
     import json
@@ -541,9 +1105,13 @@ def erode_region_pack(
         km_per_px=km_pp,
         min_width_km=LAKE_MIN_WIDTH_KM,
     )
+    # Two water-weighting doctrines on purpose (module docstring): erosion
+    # runs on the precipitation weight (storm runoff carves), extraction on
+    # the water balance (runoff) so the channel network obeys the climate.
     rain_w = rain / rain[land].mean()
+    weight, run_norm_mm, weight_src = hydrology_weight(inp, dem.shape[0], land)
 
-    h, acc = spl_erode(
+    h, _acc_erosion = spl_erode(
         dem,
         land,
         rain_w,
@@ -552,29 +1120,62 @@ def erode_region_pack(
         k_spl=k_spl,
         sea_level_m=float(meta["sea_level_m"]),
     )
-    rivers = river_mask(acc, land, river_threshold)
 
     out = pack_dir / "prog-out"
     out.mkdir(exist_ok=True)
+    filled2, order2, receiver = priority_flood(h, land)
+    lakes = lake_mask(filled2, h)
+    mmu = lake_mmu_cells(km_pp)
+    lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
+    temp_c: np.ndarray | None = None
+    t_path = inp / "temperature.C.npy"
+    if t_path.exists():
+        temp_c = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
+    else:
+        print(f"[erode] no temperature.C.npy under {inp}; terminal-lake balance off")
+    # Terminal-lake equilibrium with through-flow depletion (the shared
+    # helper): pass-through lakes deduct their net evaporation from the
+    # through-flow; routing stays on the pre-rewrite tree.
+    h, land, lakes_draw, chain_stop, fringe_desc, rec_route, acc, term_water, lake_stats = (
+        terminal_equilibrium_routing(
+            h,
+            land,
+            lakes_draw0,
+            order2,
+            receiver,
+            weight,
+            precip_mm=rain if temp_c is not None else np.zeros_like(land, dtype=np.float64),
+            temp_c=temp_c if temp_c is not None else np.zeros_like(land, dtype=np.float64),
+            runoff_land_mean_mm=run_norm_mm
+            if (temp_c is not None and weight_src == "runoff")
+            else 0.0,
+            mmu_cells=mmu,
+            km_per_px=km_pp,
+            sea_level_m=float(meta["sea_level_m"]),
+        )
+    )
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    filled2, _order2, receiver = priority_flood(h, land)
-    lakes = lake_mask(filled2, h)
-    mmu = lake_mmu_cells(km_pp)
-    lakes_draw = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
-    segs, flows = river_segments(rivers, receiver, acc, km_pp, lake=lakes_draw)
+    rivers = river_mask(acc, land, river_threshold)
+    segs, flows = river_segments(
+        rivers, rec_route, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc
+    )
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
     rivers = rivers & ~lakes_draw
     Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
     Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
-    Image.fromarray(((~land & ~inland_big) * 255).astype(np.uint8)).save(out / "sea-water.png")
+    not_sea = term_water  # equilibrium water (kept surfaces + playa sinks)
+    Image.fromarray(((~land & ~not_sea & ~lakes_draw) * 255).astype(np.uint8)).save(
+        out / "sea-water.png"
+    )
     # True post-erosion depth (Gaea-mask vocabulary: 0..1 over the span) —
     # without it render legs read zero depth and tint the sea at the
     # shoreline band instead of the ocean ramp.
     sea_depth = np.clip(float(meta["sea_level_m"]) - h, 0.0, None) / span
+    sea_depth[not_sea] = 0.0
     Image.fromarray(np.clip(sea_depth * 65535.0, 0, 65535).astype(np.uint16)).save(
         out / "sea-depth.png"
     )
@@ -591,6 +1192,15 @@ def erode_region_pack(
                 "k_spl": k_spl,
                 "river_threshold": river_threshold,
                 "lake_mmu_cells": mmu,
+                "hydrology_weight": weight_src,
+                "runoff_normalizer_mm": round(run_norm_mm, 3),
+                "terminal_lakes": lake_stats["terminal"],
+                "dry_playas": lake_stats["dry_playas"],
+                "shrunk_lakes": lake_stats["shrunk"],
+                "lake_balance": {
+                    "pet": "hamon-annual",
+                    "evaporation_factor": LAKE_EVAPORATION_FACTOR,
+                },
             },
             ensure_ascii=False,
             indent=1,

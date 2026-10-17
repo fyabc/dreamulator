@@ -26,6 +26,11 @@ same-resolution climate channels of the satellite-imagery contract
   normalised to ``[0, region max]`` (range recorded in meta);
 * ``temperature.C.npy`` / ``temperature.C.png`` — float32 / 16-bit mean
   annual temperature (°C), normalised to the region's own [min, max];
+* ``runoff.mm.npy`` / ``runoff.mm.png`` — float32 annual land runoff (mm/yr)
+  from the Turc–Pike (Budyko, n = 2) curve on annual P vs Hamon annual PET,
+  written when the caller passes the monthly climate series; the hydrology
+  legs weight their flow accumulation by this channel so channels start
+  where the water balance allows, not on bare slopes;
 * ``ice.m.npy`` / ``ice.m.png`` — float32 glacier ice thickness (m, ice-free
   cells = 0.0); the snowline mask is derived downstream from this channel and
   ``temperature.C.npy`` rather than baked here;
@@ -82,6 +87,7 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
+from dreamulator.result_contract import REFERENCE_MONTH_DAYS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -551,7 +557,7 @@ def _export_climate_channels(
     biome_meta, biome_codes = _export_categorical_channel(
         mesh, indices, out_dir, "biome", "biome", whittaker_colors()
     )
-    return {
+    channels: dict[str, Any] = {
         "precipitation_mm": _export_scalar_channel(
             precip, out_dir, "precipitation.mm", png_min=0.0, png_max=precip_max
         ),
@@ -566,6 +572,21 @@ def _export_climate_channels(
         "biome": biome_meta,
         "glacier_mask": _export_glacier_mask(ice, biome_codes, biome_meta["legend"], out_dir),
     }
+    runoff = scalars.get("runoff_mm")
+    if runoff is not None:
+        from dreamulator.engine.climate_physics import SOIL_WATER_CAPACITY_MM
+
+        runoff_max = float(np.nanmax(runoff)) if not np.isnan(runoff).all() else 0.0
+        runoff_meta = _export_scalar_channel(
+            runoff, out_dir, "runoff.mm", png_min=0.0, png_max=runoff_max
+        )
+        runoff_meta.update(
+            capacity_mm=SOIL_WATER_CAPACITY_MM,
+            demand_model="hamon-1961",
+            criterion="Turc-Pike (Budyko n=2) annual runoff (annual P vs Hamon annual PET)",
+        )
+        channels["runoff_mm"] = runoff_meta
+    return channels
 
 
 def export_region_pack(
@@ -583,6 +604,7 @@ def export_region_pack(
     out_dir: Path,
     source: dict[str, Any] | None = None,
     include_climate: bool = True,
+    climate_monthly: tuple[np.ndarray, np.ndarray] | None = None,
     seafloor_clamp_m: float = -400.0,
     out_res: int = DEFAULT_OUT_RES,
 ) -> dict[str, Any]:
@@ -699,6 +721,24 @@ def export_region_pack(
             column = _cell_column_f32(mesh, field, none_as=none_as).astype(np.float64)
             clim_scalars[field] = _interpolate_window(
                 mesh, window, out_res, column, column[indices_fine]
+            )
+        if climate_monthly is not None:
+            # Annual land runoff — the hydrology legs' accumulation weight.
+            # Turc–Pike (Budyko) on the annual totals: the monthly bucket
+            # underestimates annual yield in strongly seasonal climates
+            # (annual_runoff_turc_pike docstring).  Computed per cell (mesh
+            # order, matching every other column) then interpolated C1 like
+            # the other scalars.
+            from dreamulator.engine.climate_physics import (
+                annual_runoff_turc_pike,
+                potential_evapotranspiration_hamon,
+            )
+
+            t_monthly, p_monthly = climate_monthly
+            pet_annual = potential_evapotranspiration_hamon(t_monthly, REFERENCE_MONTH_DAYS)
+            runoff_col = annual_runoff_turc_pike(p_monthly.sum(axis=1), pet_annual)
+            clim_scalars["runoff_mm"] = _interpolate_window(
+                mesh, window, out_res, runoff_col, runoff_col[indices_fine]
             )
         meta["climate"] = _export_climate_channels(mesh, indices_fine, out_dir, clim_scalars)
         meta["climate"]["headwaters"] = _export_headwaters(
