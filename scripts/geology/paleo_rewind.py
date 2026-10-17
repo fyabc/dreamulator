@@ -132,6 +132,7 @@ class World:
         self.elevation = np.array([c.elevation for c in cells], dtype=float)
         self.divergent = np.array([c.boundary_type == "divergent" for c in cells])
         self.convergent = np.array([c.boundary_type == "convergent" for c in cells])
+        self.boundary_type = np.array([c.boundary_type or "" for c in cells])
         self.cumulative_convergence_km = np.array([c.cumulative_convergence_km for c in cells])
         self.cumulative_divergence_km = np.array([c.cumulative_divergence_km for c in cells])
         self.block: np.ndarray | None = None  # continental blocks of the reconstruction model
