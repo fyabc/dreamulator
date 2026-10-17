@@ -248,46 +248,26 @@ maps/
   - 水面深度暗化
   - 由 `WebGPURenderer` + `MeshBasicMaterial` 在 GPU 上显示
   - 缩放/平移通过调整 Three.js 相机和 mesh 位置实现
-  - Mollweide/Robinson 的 CPU 重投影调试路径走 `useTerrainTexture`
-    （OffscreenCanvas → CanvasTexture，见下节）
 - **矢量叠加**：SVG 层覆盖在地形 Canvas 上
-  - 经纬网（按当前投影实时绘制）
-  - 单元格高亮（蓝=悬停 / 黄=选中，三投影行为一致）
+  - 经纬网（等距圆柱直线网格实时绘制）
+  - 单元格高亮（蓝=悬停 / 黄=选中）
   - 板块边界、地壳类型、河流等特征层烘焙进纹理（特征槽位，见「图层系统」）
 - **鸟瞰图**：`MapMinimap` 组件，Canvas 2D 缩略图 + SVG 视口矩形
 
-### 多投影渲染与调试路径
+### 2D 渲染与昼夜光照
 
-2D 地图支持三种投影：**等距圆柱**（Plate Carrée）、**Mollweide**、**Robinson**。
+2D 地图使用**等距圆柱**（Plate Carrée）单一投影，与引擎栅格数据同构（GPU 纹理直贴，
+`useGPUTerrain` 预渲染 → `ShaderMaterial` 显示）。极区形状/面积的真实比例用 3D 球面
+视图查看；其他投影的静态出图走导出侧。
 
-**渲染架构（默认全 GPU）**：
-
-| 投影 | 渲染方式 | 实现 |
-|------|----------|------|
-| 等距圆柱 | GPU 纹理直贴 | `useGPUTerrain` 预渲染等距圆柱纹理 → `ShaderMaterial` 直接显示 |
-| Mollweide / Robinson | GPU 逆 warp shader | `gpuReproject.ts`：片元着色器对每个像素跑投影逆变换，采样等距圆柱纹理 |
-
-三种投影的昼夜光照、经纬网、单元格高亮均在叠加层 / shader 中计算（不烘焙进纹理）：
+昼夜光照、经纬网、单元格高亮均在叠加层 / shader 中计算（不烘焙进纹理）：
 
 - **昼夜**：着色器内按太阳天顶角 `cos θz = sinφ·sinδ + cosφ·cosδ·cos(λ−λ☉)` 计算，晨昏线 smoothstep 柔化 + 夜间冷色调。
-- **经纬网**：SVG 叠加层按 `project()` 实时绘制（等距圆柱为直线、Mollweide/Robinson 为平滑曲线）。
-- **单元格高亮**：SVG 叠加层（蓝=悬停 / 黄=选中），三投影行为一致。
-
-**CPU 重投影调试路径（`?reproject=cpu`）**：
-
-URL 加 `?reproject=cpu` 可强制 Mollweide/Robinson 走旧的 **CPU 逐像素重投影**
-（`useTerrainTexture`：在 OffscreenCanvas 上对每个输出像素跑投影逆变换 + 双线性采样等距圆柱源）。
-
-- **用途**：与 GPU 逆 warp 结果做 **A/B 对照验证**——排查重投影正确性时的参照基准。
-- **⚠️ 这不是"无 GPU 兜底"**：无论 GPU 还是 CPU 路径，最终都通过 WebGL 显示纹理；没有
-  WebGL 的环境**整个地图都无法渲染**。CPU 路径只是把"重投影计算"挪到 CPU，显示仍依赖 GPU。
-- CPU 路径明显慢于 GPU（逐像素 JS 循环），仅作调试，不作常规使用。
+- **经纬网**：SVG 叠加层按 `project()` 实时绘制（直线网格）。
+- **单元格高亮**：SVG 叠加层（蓝=悬停 / 黄=选中）。
 
 **相关 URL 参数**：
 
-| 参数 | 说明 |
-|------|------|
-| `?reproject=cpu` | Mollweide/Robinson 强制走 CPU 重投影（调试对照，非无 GPU 兜底） |
 | `?sun=<经度>` | 太阳直射经度（0–360°，周日变化） |
 | `?season=<角度>` | 轨道位置（0=春分 / 90=夏至 / 180=秋分 / 270=冬至，驱动太阳赤纬） |
 | `?night=1` | 开启 2D 昼夜光照叠加（默认关） |
@@ -357,10 +337,9 @@ UI 按学科组织为五个面板组：**地形** / **气候** / **生态** / **
 
 - **3D 球面地球视图** — equirectangular 纹理贴 SphereGeometry + OrbitControls + 昼夜光照 + 风/洋流/偏差箭头 + 月度模式 + 星系过渡（见上文"3D 球面渲染"）
 - **行星纹理** — 恒星系中有地图的行星显示真实地形纹理
-- **多投影 2D 地图** — 等距圆柱（GPU 纹理直贴）/ Mollweide / Robinson（GPU 逆 warp shader，`gpuReproject.ts`）+ 经纬线网格
+- **2D 等距圆柱地图** — GPU 纹理直贴（`useGPUTerrain`）+ 经纬线网格
 - **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
-- **CPU 重投影调试路径** — `?reproject=cpu` 保留为 A/B 对照（见上文"多投影渲染与调试路径"）
-- **SVG 单元格高亮 + 经纬网** — 三投影统一叠加层
+- **SVG 单元格高亮 + 经纬网** — 统一 SVG 叠加层
 - **气候图层与月度模式** — 温度/降水/气压/Köppen 专题层 + 月度切换（`climate-monthly` 端点）
 - **河流矢量图层** — features.json 渲染外流河与内流河
 - **偏差诊断图层** — ΔT/ΔP/ΔSLP 热力层 + 风/洋流偏差箭头（开发组，devMode + Earth）

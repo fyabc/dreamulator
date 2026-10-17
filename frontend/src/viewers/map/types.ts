@@ -3,8 +3,6 @@
  * Mirrors the Python models in src/dreamulator/map/models.py.
  */
 
-import type { ProjectionType } from './utils/projection'
-
 // ---------------------------------------------------------------------------
 // Metadata
 // ---------------------------------------------------------------------------
@@ -22,9 +20,6 @@ export interface MapMetadata {
   voronoi_seed: number | null
   voronoi_num_cells: number
 }
-
-// Re-export ProjectionType for convenience
-export type { ProjectionType }
 
 // ---------------------------------------------------------------------------
 // Voronoi network
@@ -168,6 +163,14 @@ export type MapLayerType =
  * - 'boundaries': show boundary_type (convergent=red, divergent=green, transform=yellow)
  */
 export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 'koppen' | 'currents'
+
+/** Layer colour modes shared by the 2D map and 3D globe pages. */
+export type ColorMode =
+  'terrain' | 'landsea' | 'plates' | 'boundaries' | 'coastlines' | 'rivers' | 'koppen'
+  | 'ucc' | 'currents' | 'winds' | 'biomes' | 'npp' | 'domesticable' | 'soil' | 'provinces'
+  | 'temperature' | 'precipitation' | 'temperatureError' | 'precipitationError'
+  | 'pressureError' | 'windError' | 'currentError' | 'pressure' | 'slp' | 'habitable'
+  | 'agriculture' | 'flow'
 
 // ---------------------------------------------------------------------------
 // Layer visibility state

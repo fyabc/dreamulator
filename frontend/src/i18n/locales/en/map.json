@@ -23,11 +23,6 @@
     "scroll": "Scroll",
     "helpButton": "Help (opens in new tab)"
   },
-  "projection": {
-    "equirectangular": "Equirectangular",
-    "mollweide": "Mollweide",
-    "robinson": "Robinson"
-  },
   "action": {
     "back": "← Back",
     "uploadRaster": "⬆ Geography Raster",

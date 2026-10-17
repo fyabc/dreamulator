@@ -14,7 +14,7 @@
 import { useState, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
-import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import type { ColorMode } from '../../viewers/map/types'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { YearlyClimateData } from '../../api/yearlyClimate'
 import { uccCode } from '../../api/yearlyClimate'

@@ -85,9 +85,8 @@ export default function MapSvgOverlay({
     return map
   }, [cvtMesh])
 
-  // Graticule: lat/lon grid lines drawn as polylines via project().  Straight for
-  // equirectangular, smooth curves for Mollweide/Robinson (this replaces the old
-  // texture-baked grid, which warped coarsely when reprojected).  Rendered under
+  // Graticule: lat/lon grid lines drawn as polylines via project() (this
+  // replaces the old texture-baked grid).  Rendered under
   // the cell highlights.  Recomputes only when `project` changes (pan/zoom/resize).
   const graticuleElements = useMemo(() => {
     const STEP = 30   // degrees between grid lines

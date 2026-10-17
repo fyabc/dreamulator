@@ -43,8 +43,7 @@
     "sunTime": { "action": "光照·时刻滑块", "description": "调整太阳直射经度（周日变化，0° = 本初子午线正午），即昼夜明暗界线的位置。需先打开光照开关（默认关）。" },
     "timeMode": { "action": "时间·年均/月度", "description": "左侧面板「时间」区：切换年均 / 月度两种时间模式。年均模式显示年度平均（温度/降水/风场）与海平面气压（副热带高压）；月度模式用季节滑块选择具体月份，温度/降水/气压（季节异常 ΔP）/风场随之逐月变化。" },
     "timeSeason": { "action": "时间·季节/月份滑块", "description": "「时间」区的单一滑条，双角色：月度模式下吸附 12 档选月份（0 = 三月春分，七月 = 北半球夏季），太阳直射纬度随之保持一致；年均模式下连续 0–360°，仅影响光照（太阳直射纬度），不改数据。刻度标签随模式切换为月份（3/6/9/12 月）或节气（春分/夏至/秋分/冬至）。" },
-    "sunToggle": { "action": "光照开关", "description": "2D/3D 左侧面板：开/关昼夜光照（默认关，不影响常规阅图）。2D 三种投影（等距圆柱 / Mollweide / Robinson）与 3D 均走 GPU、拖动顺滑。设置经 URL（?sun=&season=&night=）在 2D↔3D 间同步、可分享。" },
-    "debugReproject": { "action": "调试·CPU 重投影", "description": "URL 加 ?reproject=cpu 强制 Mollweide/Robinson 走旧的 CPU 重投影，用于与 GPU 结果对照验证。仅调试用途——主地图显示始终依赖 WebGL，这不是无 GPU 兜底。" },
+    "sunToggle": { "action": "光照开关", "description": "2D/3D 左侧面板：开/关昼夜光照（默认关，不影响常规阅图）。2D 与 3D 均走 GPU、拖动顺滑。设置经 URL（?sun=&season=&night=）在 2D↔3D 间同步、可分享。" },
     "hoverCell": { "action": "悬停 cell", "description": "右侧面板显示 cell 属性。如有选中 cell 则优先显示选中信息" },
     "hoverLeave": { "action": "悬停离开", "description": "无选中 cell 时恢复行星摘要；有选中时面板锁定（不跳回摘要）" },
     "ctrlClick": { "action": "Ctrl+单击 cell", "description": "追加/移除选中（不替换已有选中）。标准桌面应用风格" },
@@ -54,11 +53,6 @@
     "dblClickPlanet": { "action": "双击行星", "description": "3D 恒星系视图中，相机立即飞向并居中该天体（不改变缩放距离）。" },
     "clean": { "action": "⛶ 纯净视图", "description": "隐藏全部界面与场景装饰（面板/状态栏/经纬网/极轴），只保留地图或球体画面，用于视频录制。也可用 URL 参数 ?clean=1 直达。按 Esc 或悬停右上角退出按钮退出。" },
     "spin": { "action": "↻ 自动旋转（3D）", "description": "3D 球面视图的慢速匀速自转（约 120 秒/圈），视频录制用。拖拽或按 N（北极回位）期间自动暂停，松手后恢复。也可用 URL 参数 ?spin=1 直达，与纯净视图组合 ?clean=1&spin=1 即标准录制姿态。" }
-  },
-  "projection": {
-    "equirectangular": { "label": "等距圆柱", "description": "经纬线正交，极区拉伸。最简单的投影，适合数据处理。" },
-    "mollweide": { "label": "摩尔威德", "description": "等面积伪圆柱投影，椭圆外形。适合面积对比。" },
-    "robinson": { "label": "罗宾逊", "description": "折中方案，视觉舒适。国家地理等出版物的常用投影。" }
   },
   "concept": {
     "dag": { "title": "DAG 层级架构", "summary": "世界数据按学科层级组织：physics → chemistry → astronomy → geological → climate → ecology → civilization。上游层级的输入决定下游层级的输出，形成有向无环图（DAG）推演管线。" },
@@ -97,7 +91,6 @@
         { "title": "季节循环播放", "content": "「时间」区的 ▶ 按钮启动季节循环（视频录制功能，仅月度模式可用）：\n\n- **▶/⏸** — 月份逐月推进、十二月后回绕循环；暂停后可拖滑块选新起点再播\n- **速度** — 1/2/5 秒每月三档\n- **昼夜扫描** — 播放时太阳直射经度连续推进（一个模型年扫一圈），晨昏线与月份同步移动\n- URL 参数 `?play=1` 深链直达（自动切入月度模式并点亮温度层）\n\n播放期间月度纹理来自预烘焙缓存（半分辨率、后台逐月填充），换月不卡顿；光照赤纬与风场箭头自动随月份联动。" }
       ]
     },
-    "mapProjections": { "title": "地图投影" },
     "stellarViewer": {
       "title": "恒星系 3D 视图",
       "entries": [

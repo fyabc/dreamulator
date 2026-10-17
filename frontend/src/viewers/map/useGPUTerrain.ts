@@ -12,7 +12,7 @@
  *  - The returned display material shows the composited texture.  The public
  *    interface is unchanged from the old single-texture design:
  *    `material.uniforms.u_colorMap.value` IS the composited texture, so
- *    reprojection (Mollweide/Robinson) and the 3D globe consume it as-is.
+ *    the 3D globe consumes it as-is.
  *
  * Opacity slider drag = uniform update + one cheap GPU composite pass — no
  * CPU re-bake (the old pipeline re-baked ~8.4M pixels per drag event).
@@ -26,7 +26,7 @@
 
 import { useMemo, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
-import type { ColorMode } from './TerrainPlane'
+import type { ColorMode } from './types'
 import type { CVTMesh } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import { getLayerTextures, type LayerTextures } from './layerBakes'
@@ -182,7 +182,7 @@ export interface GPUTerrainResult {
   /** Display material for the equirectangular path. Null when no elevation
    *  data is available. */
   material: THREE.ShaderMaterial | null
-  /** Texture to sample for reprojection / 3D globe: the FBO composite while
+  /** Texture to sample for the 3D globe: the FBO composite while
    *  overlays are active, otherwise the plain baked base texture. */
   texture: THREE.Texture | null
   /** Composite pass — call once per frame before the main render. No-op while
@@ -418,7 +418,7 @@ export default function useGPUTerrain({
     [composite, overlayActive],
   )
 
-  /** The texture consumers (reprojection, 3D globe) should sample: the FBO
+  /** The texture consumers (3D globe) should sample: the FBO
    *  composite while substantive overlays (Köppen, plates, biomes, etc.) are
    *  active, otherwise a pre-baked texture incorporating the coastline feature
    *  layer at its current binary on/off state.  Feature layers avoid the FBO
