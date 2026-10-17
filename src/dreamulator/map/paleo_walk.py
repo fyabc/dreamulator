@@ -45,6 +45,12 @@ Continental parcels carry a crustal thickness from the present elevation by
 Airy isostasy (``crust_thickness_km``); the walk keeps a volume ledger
 (parcel volume, volume hidden in overlap, volume moved by unstretching).
 
+Sutures split plates going back (``SutureBelt``, ``inactive_sutures``): at a
+suture's collision age the plate holding it is cut along the belt — the
+continent on each side, and the rest of the plate by nearest side — and the
+split-off side gets a pole that makes the two sides converge across the suture
+forward in time (a collision undone going back).
+
 Snapshots sample, for every cell, the nearest parcel of its owning plate.
 Elevations follow ``paleo_history``: oceanic parcels by the plate-cooling
 increment, active orogens rolled back to their build time.  Pure functions on
@@ -187,6 +193,74 @@ class WalkLog:
     collisions: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int | str]] = field(default_factory=list)
     reorganizations: list[dict[str, float | int]] = field(default_factory=list)
+    splits: list[dict[str, float | int | str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SutureBelt:
+    """A suture: an inactive orogenic belt inside a continent.
+
+    Attributes:
+        age_myr: collision age; before it the two sides were separate plates.
+        cells: present cells of the belt.
+        age_source: how the age was estimated.
+    """
+
+    age_myr: float
+    cells: np.ndarray
+    age_source: str
+
+
+def inactive_sutures(
+    kin: PlateKinematics,
+    elevation_m: np.ndarray,
+    orogens: Orogens,
+    *,
+    min_relief_m: float = 500.0,
+    reach_km: float = 300.0,
+    min_cells: int = 50,
+    decay_myr: float = 50.0,
+    max_age_myr: float = 400.0,
+) -> list[SutureBelt]:
+    """Sutures from the present terrain (geological-timeline §4.0, §4.4).
+
+    A suture is a belt of continental crust standing more than ``min_relief_m``
+    above the continental baseline (area median outside active orogens), not an
+    active orogen and farther than ``reach_km`` from any plate boundary: high
+    ground inside a continent, away from active convergence, is where two
+    continents once collided.  Belts are connected sets of such cells with at
+    least ``min_cells`` cells.  The collision age comes from post-orogenic
+    relief decay as in ``paleo_history.find_sutures``: the median active build
+    time plus ``decay_myr`` · ln(R_active / R), R the belt's 90th-percentile
+    relief (e-folding times of tens of Myr, Baldwin et al. 2003; observational
+    fit with wide uncertainty), capped at ``max_age_myr``.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    cont = kin.continental
+    active = orogens.relief_m > 0
+    baseline = float(np.median(elevation_m[cont & ~active]))
+    relief = elevation_m - baseline
+    bnd = np.flatnonzero(boundary_cells(kin))
+    d, _ = cKDTree(kin.xyz[bnd]).query(kin.xyz)
+    belt = cont & ~active & (relief > min_relief_m) & (d * kin.radius_km > reach_km)
+    r_active = float(np.median(relief[active])) if active.any() else 2.0 * min_relief_m
+    t_active = float(np.median(orogens.build_myr[active])) if active.any() else 30.0
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = belt[rows] & belt[cols]
+    g = csr_matrix((np.ones(int(m.sum())), (rows[m], cols[m])), shape=(kin.n, kin.n))
+    _, lab = connected_components(g, directed=False)
+    out: list[SutureBelt] = []
+    for b in np.unique(lab[belt]):
+        cells = np.flatnonzero(belt & (lab == b))
+        if cells.size < min_cells:
+            continue
+        r = max(float(np.percentile(relief[cells], 90)), 1.0)
+        age = t_active + decay_myr * float(np.log(max(r_active / r, 1.0)))
+        out.append(SutureBelt(float(min(age, max_age_myr)), cells, "relief_decay"))
+    return sorted(out, key=lambda s: s.age_myr)
 
 
 def run_topology_walk(
@@ -200,6 +274,7 @@ def run_topology_walk(
     cfg: WalkConfig,
     side_info: tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree],
     rifts: dict[tuple[int, int], YoungRift] | None = None,
+    sutures: list[SutureBelt] | None = None,
 ) -> tuple[list[WalkSnapshot], WalkLog]:
     """Walk crust parcels and the boundary graph back to ``max(epochs)``.
 
@@ -218,6 +293,7 @@ def run_topology_walk(
     pos = kin.xyz.copy()
     plate = kin.plate.copy()
     cont = kin.continental.copy()
+    home = np.arange(kin.n)  # present cell of each parcel (−1: synthetic)
     born = np.where(cont, np.nan, age_myr)
     z_ref = elevation_m.astype(float).copy()
     thick = np.where(cont, crust_thickness_km(z_ref), 0.0)
@@ -241,8 +317,9 @@ def run_topology_walk(
         np.linalg.norm(kin.omega, axis=1).max() * radius * 1.0e5
     )
     jumped: set[tuple[int, int]] = set()
-    n_pl = omega.shape[0]
     cont_parcels0 = int(cont.sum())
+    pending = list(sutures or [])
+    min_piece = max(50, int(0.003 * kin.n))  # the enclave rule's size
 
     def side_now() -> tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree]:
         """Continent and seafloor age per cell from the current parcels (for
@@ -396,6 +473,7 @@ def run_topology_walk(
             hidden_km3 = float(thick[fc].sum() * cell_area)
             pa = np.minimum(plate[fc], owner[fc])
             pb = np.maximum(plate[fc], owner[fc])
+            n_pl = omega.shape[0]
             keys = pa * n_pl + pb
             for key in np.unique(keys):
                 sel = fc[keys == key]
@@ -414,6 +492,7 @@ def run_topology_walk(
                 by_pair[f"{pair[0]}-{pair[1]}:{tag}"] = round(area / 1e6, 2)
         sel = np.flatnonzero(keep)
         pos, plate, cont, born, thick = pos[sel], plate[sel], cont[sel], born[sel], thick[sel]
+        home = home[sel]
         z_ref, t_ref, relief, build, synthetic = (
             z_ref[sel],
             t_ref[sel],
@@ -499,6 +578,44 @@ def run_topology_walk(
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 _follow_ownership(mesh_tree, pos, plate, before, label)
 
+        # 4d. suture split: at its collision age a plate holding a suture splits
+        # along it; the split-off side converges on the parent forward in time
+        while grid is not None and pending and pending[0].age_myr <= t_new:
+            belt = pending.pop(0)
+            cut = _suture_pieces(
+                pos, plate, cont, home, belt.cells, kin.n, 1.2 * spacing, min_piece
+            )
+            if cut is None:
+                continue
+            parent, pieces = cut
+            transfers = []
+            for piece in pieces:
+                new_id = omega.shape[0]
+                rest = np.flatnonzero((plate == parent) & cont)
+                share = float(cont[piece].mean())
+                rate = speed_cap * (1.0 - (1.0 - cfg.continental_speed_factor) * share)
+                omega = np.vstack(
+                    [omega, _suture_pole(omega[parent], pos[piece], pos[rest], rate, radius)]
+                )
+                plate[piece] = new_id
+                transfers.append((pos[piece], new_id))
+                log.splits.append(
+                    {
+                        "t_myr": t_new,
+                        "parent": int(parent),
+                        "new": int(new_id),
+                        "age_myr": round(belt.age_myr, 2),
+                        "piece_Mkm2": round(piece.size * cell_area / 1e6, 2),
+                        "age_source": belt.age_source,
+                    }
+                )
+            before = label.copy()
+            topo, _ = pt.reclose(
+                topo, grid, spacing, side_now(), omega, radius, transfers=transfers
+            )
+            label = pt.rasterize(topo, kin, spacing / 3.0)
+            _follow_ownership(mesh_tree, pos, plate, before, label)
+
         # 5. fill cells that no parcel of their plate covers
         src = _owner_parcels(kin.xyz, label, pos, plate, cfg.gap_factor * spacing)
         gaps = np.flatnonzero(src < 0)
@@ -510,6 +627,7 @@ def run_topology_walk(
             pos = np.vstack([pos, kin.xyz[gaps]])
             plate = np.concatenate([plate, label[gaps]])
             cont = np.concatenate([cont, np.zeros(gaps.size, dtype=bool)])
+            home = np.concatenate([home, np.full(gaps.size, -1)])
             thick = np.concatenate([thick, np.zeros(gaps.size)])
             born = np.concatenate([born, t_new + a])
             z_ref = np.concatenate([z_ref, -depth(a)])
@@ -670,6 +788,87 @@ def _perturb_poles(
         tilt = np.radians(abs(rng.normal(0.0, cfg.axis_sigma_deg)))
         axis = np.cos(tilt) * axis + np.sin(tilt) * perp
         out[p] = axis * min(rate * float(np.exp(rng.normal(0.0, cfg.speed_sigma))), cap)
+    return out
+
+
+def _suture_pieces(
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    home: np.ndarray,
+    belt_cells: np.ndarray,
+    n_cells: int,
+    reach_rad: float,
+    min_parcels: int,
+) -> tuple[int, list[np.ndarray]] | None:
+    """Parcels of the sides a suture splits off its plate.
+
+    The plate holding most of the belt's continental parcels is cut: its other
+    continental parcels, linked through neighbours within ``reach_rad``, form
+    blocks; blocks touching the belt with at least ``min_parcels`` parcels are
+    the sides.  Every parcel of the plate (belt and ocean included) goes to the
+    nearest side, so the cut runs along the belt and, across the ocean, midway
+    between the sides.  The largest side keeps the plate.  Returns (plate, the
+    other sides' parcel indices), or None when the belt does not separate two
+    sides of one plate.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    in_belt = np.zeros(n_cells, dtype=bool)
+    in_belt[belt_cells] = True
+    is_belt = cont & (home >= 0) & in_belt[np.maximum(home, 0)]
+    if not is_belt.any():
+        return None
+    parent = int(np.bincount(plate[is_belt]).argmax())
+    if np.mean(plate[is_belt] == parent) < 0.5:
+        return None
+    chord = 2.0 * np.sin(reach_rad / 2.0)
+    idx = np.flatnonzero(cont & (plate == parent) & ~is_belt)
+    bp = pos[is_belt & (plate == parent)]
+    if idx.size == 0 or bp.size == 0:
+        return None
+    pairs = cKDTree(pos[idx]).query_pairs(chord, output_type="ndarray")
+    g = csr_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(idx.size, idx.size))
+    _, comp = connected_components(g, directed=False)
+    touch = np.isfinite(cKDTree(bp).query(pos[idx], distance_upper_bound=chord)[0])
+    sizes = np.bincount(comp, minlength=comp.max() + 1)
+    sides = [c for c in np.unique(comp[touch]) if sizes[c] >= min_parcels]
+    if len(sides) < 2:
+        return None
+    seeds = np.flatnonzero(np.isin(comp, sides))
+    members = np.flatnonzero(plate == parent)
+    _, near = cKDTree(pos[idx[seeds]]).query(pos[members])
+    side_of = comp[seeds][near]
+    counts = {c: int(np.sum(side_of == c)) for c in sides}
+    main = max(counts, key=lambda c: counts[c])
+    return parent, [members[side_of == c] for c in sides if c != main]
+
+
+def _suture_pole(
+    omega_parent: np.ndarray,
+    piece: np.ndarray,
+    rest: np.ndarray,
+    rate_cm_yr: float,
+    radius_km: float,
+) -> np.ndarray:
+    """Pole of a side split off along a suture.
+
+    Relative to the parent the side rotates about n × c, c the suture midpoint
+    (mean of the closest 5 % of piece–rest parcel pairs) and n the direction from
+    the parent side to the new side at c, so its forward velocity at c relative
+    to the parent is −n at ``rate_cm_yr``: the sides converge forward and
+    separate going back.
+    """
+    _, i_rest = cKDTree(rest).query(piece)
+    d = np.linalg.norm(piece - rest[i_rest], axis=1)
+    k = np.argsort(d)[: max(1, len(d) // 20)]
+    c = (piece[k] + rest[i_rest[k]]).mean(axis=0)
+    c /= np.linalg.norm(c)
+    n = piece.mean(axis=0) - rest.mean(axis=0)
+    n -= (n @ c) * c
+    n /= max(float(np.linalg.norm(n)), 1e-15)
+    out: np.ndarray = omega_parent + rate_cm_yr / (radius_km * 1.0e5) * np.cross(n, c)
     return out
 
 

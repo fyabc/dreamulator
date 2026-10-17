@@ -104,11 +104,20 @@ def walk(
 
     from dreamulator.map.paleo_history import OceanDepth, active_orogens, rift_onsets
     from dreamulator.map.paleo_kinematics import boundary_opening_rates
-    from dreamulator.map.paleo_walk import WalkConfig, crust_thickness_km, run_topology_walk
+    from dreamulator.map.paleo_walk import (
+        WalkConfig,
+        crust_thickness_km,
+        inactive_sutures,
+        run_topology_walk,
+    )
 
     opening, _ = boundary_opening_rates(kin, boundary_cells(kin))
     orogens = active_orogens(kin, w.elevation, opening, w.cumulative_convergence_km)
     rifts = rift_onsets(kin, w.divergent, w.cumulative_divergence_km)
+    sutures = inactive_sutures(kin, w.elevation, orogens) if args.sutures else []
+    summary["sutures"] = [
+        {"age_myr": round(s.age_myr, 2), "cells": int(s.cells.size)} for s in sutures
+    ]
     cfg = WalkConfig(
         dt_myr=args.dt_myr,
         rift_cap_km=args.rift_cap_km,
@@ -129,6 +138,7 @@ def walk(
         cfg,
         side_info,
         rifts,
+        sutures,
     )
     a = kin.area_km2
     cont0 = a[kin.continental].sum()
@@ -176,6 +186,7 @@ def walk(
     summary["collision_events"] = log.collisions
     summary["merges"] = log.merges
     summary["reorganizations"] = log.reorganizations
+    summary["splits"] = log.splits
     summary["steps"] = log.steps
     restored = float(str(log.steps[-1]["unstretched_km3"])) if log.steps else 0.0
     summary["unstretched_km3"] = round(restored)
@@ -184,6 +195,7 @@ def walk(
             {
                 "collision_events": len(log.collisions),
                 "reorganizations": log.reorganizations,
+                "splits": log.splits,
                 "unstretched_Mkm3": round(restored / 1e6, 2),
             }
         )
@@ -257,6 +269,12 @@ def main() -> None:
         "and time t/k should match scale 1 at time t)",
     )
     ap.add_argument("--save-snapshots", action="store_true", help="write snapshots.npz")
+    ap.add_argument(
+        "--no-sutures",
+        dest="sutures",
+        action="store_false",
+        help="do not split plates along inactive orogenic belts at their collision ages",
+    )
     ap.add_argument(
         "--initial-speeds",
         choices=("continental", "engine"),

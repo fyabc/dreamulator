@@ -294,3 +294,29 @@ def test_rate_thresholds_are_scale_invariant() -> None:
     assert rifts[0][0] == rifts[1][0]
     for p in rifts[0][1]:
         np.testing.assert_allclose(rifts[0][1][p], rifts[1][1][p], rtol=1e-9)
+
+
+def test_suture_split_cuts_a_continent_along_its_belt_and_converges_forward() -> None:
+    from dreamulator.map.paleo_walk import _suture_pieces, _suture_pole
+
+    kin = _three_plates()
+    pos = kin.xyz.copy()
+    plate = np.zeros(kin.n, dtype=np.int64)  # one plate everywhere
+    lon = np.degrees(np.arctan2(pos[:, 2], pos[:, 0]))
+    cont = np.abs(pos[:, 1]) < 0.7  # a belt-shaped continent around the equator
+    belt = np.flatnonzero(cont & (np.abs(lon) < 4))  # a north-south belt at lon 0
+    sp = kin.spacing_km / kin.radius_km
+    # break the ring elsewhere so the belt separates two sides
+    cont &= np.abs(np.abs(lon) - 180) > 20
+    cut = _suture_pieces(pos, plate, cont, np.arange(kin.n), belt, kin.n, 1.2 * sp, 50)
+    assert cut is not None
+    parent, pieces = cut
+    assert parent == 0 and len(pieces) == 1
+    side = np.sign(np.median(lon[pieces[0]]))
+    assert np.mean(np.sign(lon[pieces[0]][cont[pieces[0]]]) == side) > 0.95
+    rest = np.flatnonzero(cont & ~np.isin(np.arange(kin.n), pieces[0]))
+    w = _suture_pole(np.zeros(3), pos[pieces[0]], pos[rest], 2.0, RADIUS_KM)
+    c = np.array([1.0, 0.0, 0.0])  # the belt crosses the equator at lon 0
+    v = np.cross(w, c)
+    towards_piece = np.array([0.0, 0.0, side])  # +z is lon +90
+    assert v @ towards_piece < 0  # the piece moves back onto the parent forward in time
