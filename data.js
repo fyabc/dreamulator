@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785851937267,
+  "lastUpdate": 1792273769027,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -118,6 +118,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004200962984674447",
             "extra": "mean: 4.23285200000123 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "90b8b3ece88ce2f1570452b445ddfc525c3137e7",
+          "message": "docs(privacy): 计算环境规格泛化——型号与配额出库，测速环境保留\n\n设计文档不再记录计算环境的具体硬件型号与配额数字：资源登记块改为\n量级表述（多卡 GPU 服务器/单卡百 GB 级显存/配额数十核/TB 级内存），\n本机侧改消费级 GPU 泛称；渲染链硬件基线保留 RTX 3060 作跑通样例但\n去整机型号；S6 PoC 与实测能力表等测速记录保留实测环境。全历史同步\n泛化随后以 filter-repo 文本替换完成（提交结构不变）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-18T05:45:05+08:00",
+          "tree_id": "ef86143cd9f76f5ab0159f977905af890091d141",
+          "url": "https://github.com/fyabc/dreamulator/commit/90b8b3ece88ce2f1570452b445ddfc525c3137e7"
+        },
+        "date": 1792273768640,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31557961947576996,
+            "unit": "iter/sec",
+            "range": "stddev: 0.14790347627314548",
+            "extra": "mean: 3.1687724374 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.977990059629997,
+            "unit": "iter/sec",
+            "range": "stddev: 0.028428625682628158",
+            "extra": "mean: 335.79695699999945 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4235318546570213,
+            "unit": "iter/sec",
+            "range": "stddev: 1.125963996436519",
+            "extra": "mean: 702.4781333333318 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 950.0866288986189,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008101019120404393",
+            "extra": "mean: 1.0525356000002262 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.60803623546886,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012348853976584497",
+            "extra": "mean: 5.112264399997457 msec\nrounds: 5"
           }
         ]
       }
