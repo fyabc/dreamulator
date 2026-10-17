@@ -88,8 +88,10 @@ def test_compose_rgb_ranges_and_sea_ink() -> None:
 def test_render_carto_smoke(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     info = cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="冒烟")
-    assert (tmp_path / "topo.svg").stat().st_size > 1000
     assert (tmp_path / "topo.png").exists()
+    assert not (tmp_path / "topo.svg").exists()  # SVG is opt-in
+    cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, svg=True)
+    assert (tmp_path / "topo.svg").stat().st_size > 1000
     assert info["major_levels"] == 2  # 1000 + 2000 m on a 3000 m ridge
 
 
@@ -105,7 +107,6 @@ def test_render_carto_regime_legend_smoke(tmp_path: Path) -> None:
     inp.river_segment_flows = np.array([100.0, 50.0])
     inp.river_segment_regimes = np.array([0, 1], dtype=np.uint8)
     cr.render_carto(inp, tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="情相")
-    assert (tmp_path / "topo.svg").exists()
     assert (tmp_path / "topo.png").exists()
 
 

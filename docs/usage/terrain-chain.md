@@ -199,6 +199,8 @@ dreamulator export colorize <pack> --gaea <pack>/refined-out   # 卫星真彩（
                                                   # 植被纹理，--no-texture 关闭）
 dreamulator export carto <pack> --gaea <pack>/refined-out      # 测绘图（默认无等高线，
                                                                 # --contours 开启）
+dreamulator export carto <pack> --style relief                 # 遥感图（自然色晕渲，
+                                                  # 见下；同样自动回退构建目录）
 dreamulator export carto <pack> --style biome                  # 群系图（分类平色 +
                                                   # 类图例；不需要构建产物，
                                                   # 无 --gaea 时自动回退
@@ -209,6 +211,11 @@ blender -b -P scripts/media/blender/region_still.py -- \
     --datadir <pack> --render still_4k.png --res 3840x2160     # 4K 静帧
 ```
 
+所有制图风格默认只写 PNG；`--svg` 才附带矢量版（单张十几 MB，无消费方）。
+默认标题按风格命名（地形图 / 遥感图 / 群系图 / 古地图 + 中心经纬度），
+`--title` 覆盖。`--style relief` 可加 `--biome-legend` 把群系色标并入
+河流情相图例（单框）。
+
 Blender 腿的地形来源自动检测：`refined-out/`（本链）→ `gaea-out/`（Gaea 链）
 → `input/`（引擎原始场），`--terrain refined|gaea|input` 可强制指定。
 
@@ -217,6 +224,14 @@ Blender 腿的地形来源自动检测：`refined-out/`（本链）→ `gaea-out
 植被纹理（colorize）按群系参数化 fBm 斑驳（森林细密、荒漠宽场、冰原
 微起伏）。两路线的参考依据见
 [knowledge/cartography/vegetation_cartography.md](../knowledge/cartography/vegetation_cartography.md)。
+
+遥感图（`--style relief`，`relief_render.py`）以 NASA Blue Marble NG
+地形/水深版为参照：陆面色相完全来自引擎群系分类（经卫星合成器的边界
+变形 + 生态过渡带模糊 + NPP 明度调制，过渡带宽约 0.2 个气候细胞），
+高程不着色、地形只以双尺度晕渲呈现（在全分辨率网格上乘入后再降采样，
+保住沙丘级细部；明暗围绕 1.0 摆动而非纯乘性压暗），海洋为水深渐变蓝；
+纹理噪声按 0.35 增益压低（全幅 fBm 斑驳实测大于晕渲信号本身，会淹没
+地形）。
 
 渲染细节（色彩权威、三风格制图、Blender 曝光链）见
 [gaea-video-chain.md](gaea-video-chain.md) 的第③③'④步——两链的

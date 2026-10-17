@@ -675,7 +675,8 @@ def export_carto(
         help="Sheet style: survey (contours+legend, topo.svg+topo.png) | "
         "hand (print-artefact variant, topo.hand.png) | "
         "medieval (parchment illustration, medieval.png) | "
-        "biome (categorical biome sheet, biome.svg+biome.png)",
+        "biome (categorical biome sheet, biome.svg+biome.png) | "
+        "relief (natural-colour shaded relief, relief.svg+relief.png)",
     ),
     title: str | None = typer.Option(None, "--title", help="Override the default sheet title"),
     res: int = typer.Option(2048, "--res", help="Contour grid resolution"),
@@ -692,18 +693,35 @@ def export_carto(
         help="Draw contour lines (default off — "
         "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)",
     ),
+    biome_legend: bool = typer.Option(
+        False,
+        "--biome-legend/--no-biome-legend",
+        help="relief style only: append biome swatches to the river-regime legend "
+        "(default off — the Blue-Marble reference imagery carries no legend)",
+    ),
+    svg: bool = typer.Option(
+        False,
+        "--svg/--no-svg",
+        help="Also write the vector SVG sheet (default off — PNG only, the SVGs run "
+        "tens of MB per sheet and no consumer needs them)",
+    ),
 ) -> None:
-    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome.
+    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome
+    | relief.
 
     survey = hypsometric tints + contours + legend/scale/graticule/north
     arrow (SVG + PNG).  hand = survey with print artefacts (watercolour,
     misregistration, re-inked lines).  medieval = parchment illustration
     (symbol herds, ribbon title, no contours/legend).  biome = categorical
     Whittaker biome sheet (flat class fills, palette single source,
-    class legend + graticule).  Needs the 'media' extra (OpenEXR + matplotlib).
+    class legend + graticule).  relief = natural-colour shaded relief
+    (satellite biome colour, hillshade-only terrain, bathy sea).
+    Needs the 'media' extra (OpenEXR + matplotlib).
     """
-    if style not in ("survey", "hand", "medieval", "biome"):
-        console.print(f"[red]Unknown style '{style}' — use survey | hand | medieval | biome[/red]")
+    if style not in ("survey", "hand", "medieval", "biome", "relief"):
+        console.print(
+            f"[red]Unknown style '{style}' — use survey | hand | medieval | biome | relief[/red]"
+        )
         raise typer.Exit(code=2) from None
     build_dir = gaea or (pack / "gaea-out")
     if not (pack / "input" / "meta.json").exists():
@@ -725,10 +743,34 @@ def export_carto(
             dpi=dpi,
             data_dir=data_dir,
             title=title,
+            svg=svg,
         )
-        for ext in ("svg", "png"):
+        for ext in ("png", "svg") if svg else ("png",):
             p = out_dir / f"biome.{ext}"
             console.print(f"  [green]biome.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
+        console.print(f"  classes: {info['classes']}")
+        return
+
+    if style == "relief":
+        # Relief sheet needs no build either: same best-available fallback
+        # as the biome sheet (refined-out → gaea-out → input/).
+        from dreamulator.media.relief_render import relief_region
+
+        console.print(f"Rendering [relief] sheet {pack} → {out_dir}")
+        info = relief_region(
+            pack,
+            out_dir,
+            gaea_dir=gaea,
+            res=res,
+            dpi=dpi,
+            data_dir=data_dir,
+            title=title,
+            biome_legend=biome_legend,
+            svg=svg,
+        )
+        for ext in ("png", "svg") if svg else ("png",):
+            p = out_dir / f"relief.{ext}"
+            console.print(f"  [green]relief.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
         console.print(f"  classes: {info['classes']}")
         return
 
@@ -760,10 +802,12 @@ def export_carto(
         contour_labels=contour_labels,
         contours=contours,
         hand=(style == "hand"),
+        svg=svg,
         title=title,
         gaea_dir=gaea,
     )
-    for ext in ("hand.png",) if style == "hand" else ("svg", "png"):
+    exts = ("hand.png",) if style == "hand" else ("png", "svg") if svg else ("png",)
+    for ext in exts:
         p = out_dir / f"topo.{ext}"
         console.print(f"  [green]topo.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
     console.print(f"  contours: {info['minor_levels']} minor + {info['major_levels']} index")

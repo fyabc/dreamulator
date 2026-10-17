@@ -96,5 +96,5 @@ def test_biome_sheet_regime_smoke(tmp_path) -> None:
     inp.river_segment_flows = np.array([100.0, 50.0, 10.0])
     inp.river_segment_regimes = np.array([0, 1, 0], dtype=np.uint8)
     br.render_biome_sheet(inp, tmp_path, res=N, dpi=72, title="时令河")
-    assert (tmp_path / "biome.svg").exists()
     assert (tmp_path / "biome.png").exists()
+    assert not (tmp_path / "biome.svg").exists()  # SVG is opt-in
