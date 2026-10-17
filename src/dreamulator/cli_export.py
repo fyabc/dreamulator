@@ -446,7 +446,13 @@ def export_region(
                 "will fall back to the precipitation weight[/yellow]"
             )
 
-    out_dir = output or (Path("private/video") / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
+    # Default pack home: inside the world's data dir next to maps/ (both are
+    # gitignored build outputs — one place for all bulk world data).  The
+    # basename keeps the world prefix so pack names stay unique across worlds
+    # (the /packs API and deep links key on the directory name).
+    from dreamulator.world_manager import _data_dir
+
+    out_dir = output or (_data_dir() / world / "packs" / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
     input_dir = out_dir / "input"  # pack layout: input/ + gaea-out/ + color/
     console.print(
         f"Exporting region pack for {world}/{planet_id} — "

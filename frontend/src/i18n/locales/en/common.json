@@ -9,7 +9,8 @@
     "help": "Help",
     "overview": "Overview",
     "map": "Map",
-    "viewer3d": "3D View"
+    "viewer3d": "3D View",
+    "packs": "Region packs"
   },
   "action": {
     "back": "← Back",

@@ -56,7 +56,7 @@ flowchart LR
 
 ```bash
 dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
-    -o private/video/nacrea-15_-100_550km
+    -o data/worlds/nacrea/packs/nacrea-15_-100_550km
 ```
 
 从世界数据切出方形窗口数据包（`<pack>/input/`）：高程、气候通道
@@ -72,7 +72,7 @@ dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
 ## ② terrain-diffusion 细化（主方法）
 
 ```bash
-dreamulator export refine private/video/nacrea-15_-100_550km \
+dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
     --td private/external-projects/terrain-diffusion
 ```
 
@@ -222,6 +222,38 @@ Blender 腿的地形来源自动检测：`refined-out/`（本链）→ `gaea-out
 [gaea-video-chain.md](gaea-video-chain.md) 的第③③'④步——两链的
 渲染支持完全共用，该手册的这些章节对本链同样有效。
 
+## QA 循环：`/packs` 子地图页（前端）
+
+验收渲染结果时不必再手算 km↔经纬度：启动 `dreamulator serve` 后打开
+前端的「子地图」页（路由 `/packs`，仅本地 API 模式可用——区域包是
+世界数据目录下的本地数据，不随静态站点发布）。区域包默认住在
+`data/worlds/<world>/packs/<world>-<lat>_<lon>_<span>km/`（与 maps/、
+layers/*/derived/ 同为 gitignored 构建产物，一处管理）；`DREAMULATOR_PACKS_DIR`
+或 `serve --packs-dir` 可覆盖。
+
+页面列出全部包（`GET /api/packs`，扫描各世界的 packs/ 目录），视觉即
+topo 成图的正文：默认底图是服务端实时合成的 **topo 合成图**
+（`GET /{pack}/topo.png`——`compose_rgb` 全分辨率渲染：地形 LUT、双层
+山影、湖平涂与海面，湖海固定渲入、无图例装帧、全出血精确配准，按源
+文件 mtime 缓存）；河线是**矢量叠加**（`GET /{pack}/rivers.json`，√律
+线宽按屏幕像素、非常流河段虚线——与印刷图同一套符号语义，任意缩放
+级别不消失也不变糊，且不会像栅格掩膜叠层那样压暗底图）。备选底图：
+卫星预览、反照率（需 colorize 腿）、分层设色、柯本、群系。
+
+悬停状态条给出精确经纬度；点击任意点返回该格的探值
+（`GET /api/packs/{pack}/probe`）：高程（精化 4096² 优先，缺精化腿
+回退 input 2048²）、群系与柯本分类码（按 meta 里的图例译名）、三个
+水体掩膜、最近河段的相对累积流量与常流/非常流情相。坐标复制按钮
+直接产出 `--lat … --lon … --span-km …` 参数串，可原样贴进
+`export region/refine/carto` 命令重导出该窗口。
+
+窗口几何是 `region_window` 的精确逆（度/公里换算用 meta 的 `radius_km`，
+东西向按 cos(中心纬) 折算）；屏幕上的经纬网与印刷 topo 图同款墨色、
+同一步长阶梯（1/2/5/10/15/30°，最长跨 ≤8 线），可与成图对照定位。
+注意 `carto/` 成图本身有版面装帧（边距、图例、图名），不在本页显示
+之列——本页只显示与地面精确配准的合成图。Windows 下 mmap 句柄会锁
+文件，重生成包后需重启 serve。
+
 ## 差距清单（随更新维护）
 
 1. **湖数量/面积的过程控制**：当前靠深度 + 面积双阈值（渲染/断链以
@@ -243,3 +275,8 @@ Blender 腿的地形来源自动检测：`refined-out/`（本链）→ `gaea-out
    Markstrom 2007 的月水量平衡雪库：雨雪分区约 +1 °C 过渡带、度日
    因子 1.6–6.0 mm/°C/d）留给有春汛语义的窗口再上。设计要点登记在
    [knowledge/geology/hydrology.md](../knowledge/geology/hydrology.md) §7。
+8. **carto 经纬网的地球常数**：`carto_render._graticule` 的 km↔度换算
+   硬编码 111.19 km/°（地球值），而导出窗口用 meta 的 `radius_km`——
+   半径 = 6371 km 的世界两者一致到 0.01%，其他半径会渐偏（6000 km
+   行星约 0.005°/550 km 窗）。`/packs` 子地图页已按 radius_km 口径
+   显示；carto 侧待有非地球半径世界的验收需求时一并修正。

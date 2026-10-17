@@ -504,6 +504,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     render: (t) => entryKeys('civmap', 2).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
+    id: 'packs',
+    title: 'help:section.packs.title',
+    icon: '🧭',
+    render: (t) => entryKeys('packs', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+  },
+  {
     id: 'concepts',
     title: 'help:section.concepts.title',
     icon: '💡',

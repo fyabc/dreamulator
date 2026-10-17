@@ -122,6 +122,14 @@
         { "title": "Basics", "content": "**Click a country** — select and highlight its borders\n**Paint mode** — pick a color and click a country to paint (simulate territorial division)\n**Snapshots** — create/switch time snapshots, each saving the territorial assignments at that time\n\nData lives in GeoJSON + LFS, with branch inheritance." }
       ]
     },
+    "packs": {
+      "title": "Region Packs (sub-maps)",
+      "entries": [
+        { "title": "Overview", "content": "The Region packs page (sidebar “Region packs”) browses terrain video-chain packs: a server-rendered topo-style base (refined terrain + flat lake/sea fills, no sheet furniture) with vector rivers (√-law widths, non-perennial dashes), exact lon/lat on hover, and click-to-probe cell values (elevation, biome, Köppen class, water masks, river accumulation and perennial regime). Local API mode only — packs live under the world data directory packs/ (local data) and never ship with the static site." },
+        { "title": "QA workflow", "content": "When chasing a rendering issue: find the spot on the sub-map → click → copy the `--lat … --lon …` arguments → paste them straight into `dreamulator export region/refine/carto` to re-export that window. The graticule lines share the printed topo sheet's ink, so on-screen positions line up with the rendered sheet." },
+        { "title": "Data & conventions", "content": "The default base is the full-resolution topo composite (compose_rgb, rendered on demand and cached); alternates: satellite preview, albedo, hypsometric, Köppen, biomes. The probe returns refined-grid (4096²) elevation and input-grid (2048²) class codes; river accumulation is relative upstream cells (not m³/s). Window geometry converts kilometres to degrees with the planet radius from the meta — the exact inverse of the export window." }
+      ]
+    },
     "concepts": { "title": "Core Concepts" },
     "docs": {
       "title": "Design Docs Index",

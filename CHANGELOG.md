@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`/packs` 子地图页与 `/api/packs` 区域包 API（2026-10-17，0a-2）**：地形视频链的
+  QA 循环闭环——启动 `dreamulator serve` 后前端「子地图」页浏览全部区域包，悬停显
+  精确经纬度、点击探测格点值（高程/群系/柯本/水体掩膜/最近河段流量与常流情相），
+  复制按钮产出可直接贴给 `export region/refine/carto` 的参数串。视觉即 topo 成图
+  正文：默认底图为服务端 `compose_rgb` 全精化分辨率实时合成的 topo 图（湖海平涂
+  固定渲入、无装帧，按源 mtime 缓存），河线为矢量叠加（√律线宽按屏幕像素、非常流
+  虚线）；备选卫星预览/反照率/分层设色/柯本/群系底图与经纬网开关。API-only 设计
+  （区域包是本地数据不随静态站发布，页面守卫 + 侧栏隐藏；窗口几何为
+  `region_window` 精确逆，按 meta 行星半径换算）。配套：区域包默认根从
+  `private/video/` 迁至 `data/worlds/<world>/packs/`（与世界其余构建产物同级管理），
+  `export region` 默认输出与 API 扫描根同步迁移；`serve --packs-dir` 可覆盖。
+  后端 14 项新测试 + 前端坐标数学 vitest 已知答案套件；carto 经纬网 111.19 km/°
+  硬编码与行星半径口径的不一致登记入 terrain-chain 差距清单（#8）。
+
 ## [1.0.1] — 2026-10-16
 
 ### Fixed
