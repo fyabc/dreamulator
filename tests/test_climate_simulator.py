@@ -4,6 +4,11 @@ Verifies end-to-end pipeline: CVT mesh → temperature → precipitation → Kö
 Uses a small synthetic mesh (100 cells) for fast execution.
 """
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -686,41 +691,104 @@ class TestConvectivePickupGateWiring:
     redistribution (sums are untouched up to the Budyko feedback), so the
     flag-on run must move precipitation from dry columns to moist ones
     instead of removing it.
+
+    The budget is an iterated solve with convergence caps and truncations,
+    which amplifies ulp-level float differences between numpy CPU-dispatch
+    branches into a different equilibrium: on GitHub's Intel runners the
+    AVX-512 kernels put the three bitten cells on a branch where they gain
+    precipitation and the sign assertion below flips (CI 2026-10-17, same
+    failure class as terrain tech-debt 31).  The comparison arms therefore
+    run in subprocesses with the dispatch pinned to the baseline, so every
+    machine evaluates the assertion on the same branch.
     """
+
+    _SCRIPT = """
+import sys
+from pathlib import Path
+
+import numpy as np
+
+tests_dir, src_dir, out_path, gate = sys.argv[1:5]
+sys.path.insert(0, tests_dir)
+sys.path.insert(0, src_dir)
+
+from test_climate_simulator import _build_test_mesh
+from dreamulator.map.climate_simulator import simulate_climate
+from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
+on = gate == "1"
+mesh = _build_test_mesh(num_bands=10, cells_per_band=10)
+cfg = TerrainPipelineConfig(
+    seed=42,
+    radius_km=6371.0,
+    rotation_period_days=1.0,
+    stellar_luminosity_sol=1.0,
+    orbital_distance_au=1.0,
+    axial_tilt_deg=23.44,
+    greenhouse_warming_K=33.0,
+    lat_gradient_c=45.0,
+    evaporation_base_mm=1000.0,
+    num_nodes=100,
+    convective_pickup_gate_enabled=on,
+    # The gate's knots are calibrated on the post-supply-fix W regime,
+    # so the product configuration enables both (simulate_climate
+    # raises on gate-without-trough — tested separately below).
+    wet_trough_enabled=on,
+)
+debug: dict[str, np.ndarray] = {}
+simulate_climate(mesh, cfg, debug=debug)
+np.savez(out_path, **{k: v for k, v in debug.items() if isinstance(v, np.ndarray)})
+"""
+
+    #: Same recipe as tests/test_map/test_terrain_simd_determinism.py: disable
+    #: every AVX-512 dispatch family numpy may pick on Intel CPUs, and pin the
+    #: bundled OpenBLAS to its AVX2 kernel so dense paths cannot re-introduce a
+    #: CPU-dependent branch either.
+    _DISABLE = "AVX512_SPR AVX512_ICL X86_V4 AVX512F AVX512CD AVX512_SKX AVX512_CLX AVX512_CNL"
+
+    @staticmethod
+    def _run_pinned(out: Path, gate: bool) -> dict[str, np.ndarray]:
+        """One budget solve in a subprocess on the pinned baseline float branch."""
+        env = dict(os.environ)
+        env["NPY_DISABLE_CPU_FEATURES"] = TestConvectivePickupGateWiring._DISABLE
+        env["OPENBLAS_CORETYPE"] = "Haswell"
+        this_file = Path(__file__).resolve()
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                TestConvectivePickupGateWiring._SCRIPT,
+                str(this_file.parent),
+                str(this_file.parents[1] / "src"),
+                str(out),
+                str(int(gate)),
+            ],
+            check=True,
+            env=env,
+        )
+        with np.load(out) as data:
+            return {k: data[k] for k in data.files}
+
+    @pytest.fixture(scope="class")
+    def arms(self, tmp_path_factory: pytest.TempPathFactory) -> dict[str, dict[str, np.ndarray]]:
+        """The three comparison arms, each solved once in a subprocess and shared."""
+        base = tmp_path_factory.mktemp("pickup_gate")
+        return {
+            "off": self._run_pinned(base / "off.npz", False),
+            "off_repeat": self._run_pinned(base / "off_repeat.npz", False),
+            "on": self._run_pinned(base / "on.npz", True),
+        }
 
     @pytest.fixture
     def mesh(self) -> CVTMesh:
         """Synthetic 100-cell CVT mesh (same geometry as the end-to-end class)."""
         return _build_test_mesh(num_bands=10, cells_per_band=10)
 
-    def _run(self, mesh: CVTMesh, gate: bool) -> dict[str, np.ndarray]:
-        from dreamulator.map.climate_simulator import simulate_climate
-
-        cfg = TerrainPipelineConfig(
-            seed=42,
-            radius_km=6371.0,
-            rotation_period_days=1.0,
-            stellar_luminosity_sol=1.0,
-            orbital_distance_au=1.0,
-            axial_tilt_deg=23.44,
-            greenhouse_warming_K=33.0,
-            lat_gradient_c=45.0,
-            evaporation_base_mm=1000.0,
-            num_nodes=100,
-            convective_pickup_gate_enabled=gate,
-            # The gate's knots are calibrated on the post-supply-fix W regime,
-            # so the product configuration enables both (simulate_climate
-            # raises on gate-without-trough — tested separately below).
-            wet_trough_enabled=gate,
-        )
-        debug: dict[str, np.ndarray] = {}
-        simulate_climate(mesh, cfg, debug=debug)
-        return debug
-
     def test_gate_requires_wet_trough(self, mesh: CVTMesh) -> None:
         """Interlock: gate without the supply-route closure is a config error
         (knot calibration domain — the 2026-09-17 monsoon-stranglement failure
-        mode on an unfixed W field)."""
+        mode on an unfixed W field).  Raises during config validation, before
+        any float-sensitive solve, so it stays in-process."""
         from dreamulator.map.climate_simulator import simulate_climate
 
         cfg = TerrainPipelineConfig(
@@ -740,18 +808,22 @@ class TestConvectivePickupGateWiring:
         with pytest.raises(ValueError, match="requires wet_trough_enabled"):
             simulate_climate(mesh, cfg)
 
-    def test_flag_off_deterministic_and_ungated(self, mesh: CVTMesh) -> None:
+    def test_flag_off_deterministic_and_ungated(
+        self, arms: dict[str, dict[str, np.ndarray]]
+    ) -> None:
         """Two flag-off runs are bit-identical and store the calibration field."""
-        d1 = self._run(mesh, False)
-        d2 = self._run(mesh, False)
+        d1 = arms["off"]
+        d2 = arms["off_repeat"]
         assert np.array_equal(d1["moisture_budget"], d2["moisture_budget"])
         assert "w_column_annual" in d1
         assert "pickup_gate_annual" not in d1
 
-    def test_gate_redistributes_rather_than_removes(self, mesh: CVTMesh) -> None:
+    def test_gate_redistributes_rather_than_removes(
+        self, arms: dict[str, dict[str, np.ndarray]]
+    ) -> None:
         """Flag-on: bounded gate field, dry cells lose, global mean survives."""
-        d_off = self._run(mesh, False)
-        d_on = self._run(mesh, True)
+        d_off = arms["off"]
+        d_on = arms["on"]
         p_off = d_off["moisture_budget"]
         p_on = d_on["moisture_budget"]
         gate = d_on["pickup_gate_annual"]
@@ -766,13 +838,13 @@ class TestConvectivePickupGateWiring:
         if bitten.any():
             assert p_on[bitten].mean() < p_off[bitten].mean()
 
-    def test_gate_uses_monthly_columns(self, mesh: CVTMesh) -> None:
+    def test_gate_uses_monthly_columns(self, arms: dict[str, dict[str, np.ndarray]]) -> None:
         """The monthly gate is not the annual gate pasted twelve times.
 
         The annual factor multiplies the twelve monthly factors element-wise;
         equality everywhere would mean the monthly solve ignored its own
         column water (the lagged/degenerate failure mode)."""
-        d_on = self._run(mesh, True)
+        d_on = arms["on"]
         g_ann = d_on["pickup_gate_annual"]
         g_mon = d_on["pickup_gate_monthly_mean"]
         if (g_ann < 0.99).any():

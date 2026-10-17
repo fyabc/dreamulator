@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **CI 对流门测试随机红（2026-10-18）**：GitHub 的 ubuntu-latest 机队是 Intel 与 AMD 混池，
+  Intel runner 激活 numpy 的 AVX-512 内核后，月度水分预算的迭代把最后几位浮点差异放大成宏观
+  不同的平衡态，`TestConvectivePickupGateWiring::test_gate_redistributes_rather_than_removes`
+  里受门格点的均值断言翻号（10-15 与 10-17 三次红、同代码穿插绿）。该测试类的比较臂改为在
+  固定浮点分支的子进程中运行（`NPY_DISABLE_CPU_FEATURES` 关 AVX-512 分派加
+  `OPENBLAS_CORETYPE` 钉 AVX2 内核，配方同地形确定性测试），使断言在任何 CPU 上都评测基线
+  分支。跨平台分叉本体登记为 roadmap 技术债 32，归气候批次彻底修复。顺带 tests.yml
+  的测试命令钉 `-n 4`（runner 只有 4 vCPU，`-n auto` 的 8 worker 过订阅）。
 - **制图链 `--style relief` 遥感图风格（2026-10-17，本日制图会战主件）**：以 NASA
   Blue Marble NG 地形/水深版为参照的自然色晕渲图（`relief_render.py`，输出
   `carto/relief.png`）。陆面色相完全来自引擎群系分类并经卫星合成器处理（边界变形
