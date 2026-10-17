@@ -569,11 +569,11 @@ def export_refine(
     pack: Path = typer.Argument(
         help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_-100_550km"
     ),
-    td: Path = typer.Option(
-        ...,
+    td: Path | None = typer.Option(
+        None,
         "--td",
         help="terrain-diffusion repo clone (with .venv) — "
-        "external tool, see terrain-chain manual for setup",
+        "external tool, see terrain-chain manual for setup (not needed with --reuse-height)",
     ),
     river_threshold: int | None = typer.Option(
         None,
@@ -585,6 +585,12 @@ def export_refine(
         "--coast-warp",
         help="Warp conditioning sea-land edges before "
         "inference (bends straight Voronoi shorelines; off by default)",
+    ),
+    reuse_height: bool = typer.Option(
+        False,
+        "--reuse-height",
+        help="Skip TD inference and re-extract hydrology from the existing "
+        "refined-out/height.meters.npy (fast iteration on drainage semantics)",
     ),
 ) -> None:
     """Terrain-diffusion refinement + hydrology (terrain chain step ②, main).
@@ -598,9 +604,21 @@ def export_refine(
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
+    if td is None and not reuse_height:
+        console.print(
+            "[red]--td is required for a full refine (or pass --reuse-height "
+            "to re-extract from the cached refined DEM)[/red]"
+        )
+        raise typer.Exit(code=2) from None
 
-    console.print(f"Refining {pack} via terrain-diffusion ({td.name})")
-    info = refine_region_pack(pack, td, river_threshold=river_threshold, coast_warp=coast_warp)
+    console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
+    info = refine_region_pack(
+        pack,
+        td,
+        river_threshold=river_threshold,
+        coast_warp=coast_warp,
+        reuse_height=reuse_height,
+    )
     console.print(
         f"  refined-out/: res {info['res']}² · lakes {info['lakes_pct']}% of land · "
         f"{info['river_segments']} river segments"
