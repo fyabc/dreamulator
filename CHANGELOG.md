@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **板块拓扑层：边界碰撞事件（2026-10-17）**：`paleo_topology.find_crossings` 检测非相邻边界段的交叉
+  （段切成不超过约 30° 的小块逐对判交，跨度大的段不再漏检）；`reclose` 在固定 20 万点的内部采样球面
+  （`event_grid`，与世界网格分辨率无关）上栅格化、按引擎飞地规则清理并重新提取边界图，段类型与海沟极性
+  按两侧板块对继承，新板块对按相对运动定类型。nacrea 引擎板块固定欧拉极 20 Myr 内触发 14 次，事件后
+  无残留交叉，碎片外面积为 0，与最大邻居的边界占比 0.37–0.48。每次事件会重新采样整张边界图，倒推更久时
+  可改为局部重新闭合。诊断脚本新增 `--event-grid`。
 - **板块拓扑层 T1（2026-10-17）**：新增纯函数模块 `map/paleo_topology.py` 与诊断脚本
   `scripts/geology/plate_topology.py`。按 Voronoi–Delaunay 对偶从格子标签精确提取边界图（Delaunay
   三角形外心为 Voronoi 顶点，三个格子分属三板块的三角形为三联点），提取前按引擎飞地规则清理标签；

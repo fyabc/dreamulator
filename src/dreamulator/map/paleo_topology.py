@@ -613,6 +613,156 @@ def rasterize(
     return label
 
 
+def event_grid(n: int, radius_km: float) -> PlateKinematics:
+    """Fixed sampling sphere for boundary-collision events.
+
+    ``n`` Fibonacci points with Delaunay adjacency and equal areas.  Re-closing
+    the graph on this grid instead of the world's mesh keeps event handling the
+    same whatever the world's cell count (plate-topology.md §11).
+    """
+    from dreamulator.map.cvt_mesh import fibonacci_sphere
+    from dreamulator.map.paleo_kinematics import PlateKinematics, adjacency_csr
+
+    xyz = fibonacci_sphere(n)
+    tri, _ = delaunay(xyz)
+    nbrs: list[set[int]] = [set() for _ in range(n)]
+    for a, b, c in tri.tolist():
+        nbrs[a].update((b, c))
+        nbrs[b].update((a, c))
+        nbrs[c].update((a, b))
+    ptr, idx = adjacency_csr([sorted(s) for s in nbrs])
+    return PlateKinematics(
+        xyz=xyz,
+        nbr_ptr=ptr,
+        nbr_idx=idx,
+        plate=np.zeros(n, dtype=np.int64),
+        omega=np.zeros((1, 3)),
+        continental=np.zeros(n, dtype=bool),
+        area_km2=np.full(n, 4.0 * np.pi * radius_km**2 / n),
+        radius_km=radius_km,
+    )
+
+
+def _chunks(points: np.ndarray, max_rad: float) -> list[tuple[int, np.ndarray]]:
+    """Split a polyline into overlapping pieces no longer than ``max_rad``; each
+    piece comes with the index of its first point in the full polyline."""
+    seg = np.arccos(np.clip(np.einsum("ij,ij->i", points[:-1], points[1:]), -1.0, 1.0))
+    s = np.r_[0.0, np.cumsum(seg)]
+    out: list[tuple[int, np.ndarray]] = []
+    i = 0
+    while i < len(points) - 1:
+        j = int(np.searchsorted(s, s[i] + max_rad, side="right"))
+        j = min(max(j, i + 2), len(points))
+        out.append((i, points[i:j]))
+        i = j - 1
+    return out
+
+
+def find_crossings(
+    topo: Topology, near_rad: float, chunk_rad: float = 0.5
+) -> list[tuple[int, int, np.ndarray]]:
+    """Crossings between boundary segments away from their shared junctions.
+
+    Returns (segment a, segment b, crossing point) for every pair of polyline
+    pieces that properly intersect (a segment with itself included), skipping
+    contacts within ``near_rad`` of a junction they share.  Segments are tested
+    in pieces of at most ``chunk_rad`` so that each pair fits one gnomonic chart.
+    """
+    out: list[tuple[int, int, np.ndarray]] = []
+    segs = topo.segments
+    pieces = [
+        (k, off, p) for k, seg in enumerate(segs) for off, p in _chunks(seg.points, chunk_rad)
+    ]
+    centres = np.array([_normalize(p.mean(axis=0)) for _, _, p in pieces])
+    reach = np.cos(chunk_rad + 2.0 * near_rad)
+    for u in range(len(pieces)):
+        a, off_a, pa = pieces[u]
+        for v in range(u, len(pieces)):
+            b, off_b, pb = pieces[v]
+            if centres[u] @ centres[v] < reach:
+                continue
+            shared = [
+                topo.nodes[n]
+                for n in {segs[a].start, segs[a].end} & {segs[b].start, segs[b].end}
+                if n >= 0
+            ]
+            centre = _normalize(centres[u] + centres[v])
+            e1 = np.cross(centre, [0.0, 1.0, 0.0] if abs(centre[1]) < 0.9 else [1.0, 0.0, 0.0])
+            e1 /= np.linalg.norm(e1)
+            e2 = np.cross(centre, e1)
+            ga = np.column_stack([(pa @ e1) / (pa @ centre), (pa @ e2) / (pa @ centre)])
+            gb = np.column_stack([(pb @ e1) / (pb @ centre), (pb @ e2) / (pb @ centre)])
+            b1, s = gb[:-1], gb[1:] - gb[:-1]
+            for i in range(len(ga) - 1):
+                p, r = ga[i], ga[i + 1] - ga[i]
+                den = r[0] * s[:, 1] - r[1] * s[:, 0]
+                ok = np.abs(den) > 1e-15
+                qp = b1 - p
+                safe = np.where(ok, den, 1.0)
+                tt = np.where(ok, (qp[:, 0] * s[:, 1] - qp[:, 1] * s[:, 0]) / safe, -1.0)
+                uu = np.where(ok, (qp[:, 0] * r[1] - qp[:, 1] * r[0]) / safe, -1.0)
+                hit = ok & (tt > 1e-9) & (tt < 1 - 1e-9) & (uu > 1e-9) & (uu < 1 - 1e-9)
+                if a == b:
+                    hit &= np.abs((off_b + np.arange(len(b1))) - (off_a + i)) > 1
+                for j in np.flatnonzero(hit):
+                    g = p + tt[j] * r
+                    x = _normalize(centre + g[0] * e1 + g[1] * e2)
+                    if any(float(x @ n) > np.cos(near_rad) for n in shared):
+                        continue
+                    out.append((a, b, x))
+    # pieces overlap by one point, so a crossing at a shared piece end can repeat
+    unique: list[tuple[int, int, np.ndarray]] = []
+    for a, b, x in out:
+        if not any(a == a2 and b == b2 and float(x @ x2) > np.cos(1e-6) for a2, b2, x2 in unique):
+            unique.append((a, b, x))
+    return unique
+
+
+def reclose(
+    topo: Topology,
+    grid: PlateKinematics,
+    spacing_rad: float,
+    side_info: tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree],
+    omega: np.ndarray,
+    radius_km: float,
+    smooth_iterations: int = 3,
+) -> tuple[Topology, dict[str, int]]:
+    """Resolve boundary collisions by closing the plates again.
+
+    The graph is rasterized on the fixed event grid (``event_grid``), enclaves
+    are absorbed (terrain engine's rule), and the graph is extracted again: a
+    plate whose width went to zero disappears or leaves a fragment that is
+    absorbed, and new junctions and new plate pairs appear where boundaries met.
+    Segment types and trench polarities carry over by plate pair; a plate pair
+    that did not exist before is typed from its relative motion.
+    """
+    grid_spacing = float(np.sqrt(4.0 * np.pi / grid.n))
+    lab = rasterize(topo, grid, grid_spacing / 3.0)
+    lab = clean_labels(grid, lab)
+    before = {s.left for s in topo.segments} | {s.right for s in topo.segments}
+    new = prepare(extract(grid.xyz, lab), 0.5 * spacing_rad, smooth_iterations)
+    kinds: dict[tuple[int, int], tuple[str, int]] = {}
+    for seg in topo.segments:
+        kinds[(seg.left, seg.right)] = (seg.kind, seg.over)
+        kinds[(seg.right, seg.left)] = (seg.kind, seg.over)
+    untyped: list[Segment] = []
+    for seg in new.segments:
+        if (seg.left, seg.right) in kinds:
+            seg.kind, seg.over = kinds[(seg.left, seg.right)]
+        else:
+            untyped.append(seg)
+    if untyped:
+        classify(Topology(nodes=new.nodes, segments=untyped), omega, radius_km, side_info)
+    after = {s.left for s in new.segments} | {s.right for s in new.segments}
+    stats = {
+        "plates_removed": len(before - after),
+        "new_plate_pairs": len(untyped),
+        "segments": len(new.segments),
+        "junctions": len(new.nodes),
+    }
+    return new, stats
+
+
 @dataclass(frozen=True)
 class TopologyCheck:
     """Topology rules of plate-topology.md §5 on rasterized labels.

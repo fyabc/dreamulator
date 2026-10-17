@@ -97,6 +97,12 @@ def main() -> None:
     ap.add_argument("--dt-myr", type=float, default=1.0)
     ap.add_argument("--smooth", type=int, default=8)
     ap.add_argument(
+        "--event-grid",
+        type=int,
+        default=200_000,
+        help="points of the fixed sampling sphere for boundary-collision events (0 = off)",
+    )
+    ap.add_argument(
         "--plates",
         choices=("blocks", "engine"),
         default="engine",
@@ -159,6 +165,8 @@ def main() -> None:
         out: np.ndarray = np.einsum("nij,nj->ni", rot[label[cont_idx]], k.xyz[cont_idx])
         return out
 
+    grid = pt.event_grid(args.event_grid, kin.radius_km) if args.event_grid > 0 else None
+    events: list[dict[str, Any]] = []
     frames = []
     t = 0.0
     a = kin.area_km2
@@ -172,6 +180,13 @@ def main() -> None:
                 topo, kin.omega, dt, 0.5 * spacing_rad, (cpos, start_label[cont_idx], cKDTree(cpos))
             )
             t += dt
+            if grid is not None:
+                hits = pt.find_crossings(topo, 2.0 * spacing_rad)
+                if hits:
+                    topo, stats = pt.reclose(
+                        topo, grid, spacing_rad, side_info, kin.omega, kin.radius_km
+                    )
+                    events.append({"t_myr": round(t, 3), "crossings": len(hits), **stats})
         lab = pt.rasterize(topo, kin, spacing_rad / 3.0)
         chk = pt.check(kin, lab)
         entry: dict[str, Any] = {"t_myr": t, **asdict(chk)}
@@ -188,6 +203,8 @@ def main() -> None:
         cont_now[ok] = True
         frames.append((t, lab, topo, cont_now))
         print(json.dumps(entry, ensure_ascii=False))
+    summary["collision_events"] = events
+    print(json.dumps({"collision_events": len(events)}, ensure_ascii=False))
     (args.out_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
     )

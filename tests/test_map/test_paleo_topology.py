@@ -104,3 +104,24 @@ def test_rigid_common_rotation_moves_graph_rigidly() -> None:
         # light per-step smoothing and resampling move points only slightly
         d = np.arccos(np.clip(np.max(after.points @ expected.T, axis=1), -1, 1))
         assert d.max() < 0.5 * sp
+
+
+def test_collision_is_detected_and_resolved_by_reclosing() -> None:
+    kin = _three_plates()
+    sp = kin.spacing_km / kin.radius_km
+    topo = pt.prepare(pt.extract(kin.xyz, kin.plate), 0.5 * sp)
+    for seg in topo.segments:
+        seg.kind = pt.RIDGE
+    assert not pt.find_crossings(topo, 2.0 * sp)
+    # swing one pole-to-pole boundary about the polar axis until it crosses another
+    seg = topo.segments[0]
+    w = np.tile([0.0, np.radians(125.0), 0.0], (len(seg.points), 1))
+    seg.points = pt._rotate_points(seg.points, w, 1.0)
+    seg.points[0], seg.points[-1] = topo.nodes[seg.start], topo.nodes[seg.end]
+    assert pt.find_crossings(topo, 2.0 * sp)
+    grid = pt.event_grid(6000, kin.radius_km)
+    side = (kin.xyz, kin.continental, np.full(kin.n, 10.0), pt.cKDTree(kin.xyz))
+    new, stats = pt.reclose(topo, grid, sp, side, kin.omega, kin.radius_km)
+    assert not pt.find_crossings(new, 2.0 * sp)
+    assert all(s.kind == pt.RIDGE for s in new.segments if s.kind)  # types carried by plate pair
+    assert stats["segments"] >= 3
