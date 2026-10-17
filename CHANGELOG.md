@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **板块拓扑层：尺度不变的倒推（2026-10-17）**：古板块重建中按绝对速率设的五处阈值（裂谷登记、洋中脊判定、
+  引擎裂谷开始时间、边界分类、造山带回退）改为边界中位相对速度（`paleo_kinematics.boundary_speed_scale`）的比例，
+  取值等于 nacrea 现状下原来的 0.2 与 0.5 cm/年；倒推步长取 1 Myr 与「最快板块走 0.5 个网格间距所需时间」中的较小者。
+  所有欧拉极乘 0.25 后倒推 40 Myr，与原速度倒推 10 Myr 逐格完全一致（修正前板块归属只有 76–84% 一致），只剩洋底按
+  绝对年龄冷却的高程差。新增可选的首次接触触发（`contact_onsets`）与重组时的大陆板块限速（`continental_speed_factor`），
+  前者默认关闭。诊断脚本新增 `--speed-scale`、`--save-snapshots`、`--max-step-spacings`、`--contact-onsets`。
 - **板块拓扑层：陆壳体积账本（2026-10-17）**：陆壳质点按 Airy 均衡由现状高程得到地壳厚度（海平面处 35 km）。
   落入他板块范围的陆壳把体积填回所在板块邻近的减薄陆壳，最多恢复到未拉伸厚度（非造山陆地的中位厚度），
   对应 GPlates 可变形网络的纯剪切体积守恒；填不下的部分作为重叠保留，即运动学矛盾。每侧 300 km 的面积额度

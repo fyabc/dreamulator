@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.spatial import ConvexHull, cKDTree
 
+from dreamulator.map.paleo_kinematics import MIN_MOTION_FRAC
+
 if TYPE_CHECKING:
     from dreamulator.map.paleo_kinematics import PlateKinematics
 
@@ -260,27 +262,34 @@ def classify(
     omega: np.ndarray,
     radius_km: float,
     side_info: tuple[np.ndarray, np.ndarray, np.ndarray, cKDTree] | None = None,
-    threshold_cm_yr: float = 0.5,
+    threshold_frac: float = MIN_MOTION_FRAC,
 ) -> None:
     """Set each segment's type from the relative motion of its plates (in place).
 
     The forward opening rate is the velocity of the left plate relative to the
     right projected on the left normal.  Ridge: median opening above the
     threshold and larger than the shear; trench: median closing above it;
-    otherwise transform.  A trench's overriding plate is the side with
+    otherwise transform.  The threshold is ``threshold_frac`` of the median
+    relative speed over all boundary points, so the types depend on the
+    motion's geometry, not its overall speed.  A trench's overriding plate is the side with
     continental crust, else the side with younger ocean (older ocean is denser
     and subducts), read from ``side_info`` = (cell_xyz, continental, age, tree).
     """
-    for seg in topo.segments:
+    rel = [np.cross(omega[s.left] - omega[s.right], s.points) for s in topo.segments]
+    if not rel:
+        return
+    scale = float(np.median(np.linalg.norm(np.vstack(rel), axis=1))) * radius_km * _CM_PER_KM
+    threshold = threshold_frac * scale
+    for seg, v in zip(topo.segments, rel, strict=True):
         q = seg.points
         t = tangents(q)
         left_n = np.cross(q, t)
-        v = np.cross(omega[seg.left] - omega[seg.right], q) * radius_km * _CM_PER_KM
+        v = v * radius_km * _CM_PER_KM
         opening = float(np.median(np.einsum("ij,ij->i", v, left_n)))
         shear = float(np.median(np.abs(np.einsum("ij,ij->i", v, t))))
-        if opening > threshold_cm_yr and opening >= 0.5 * shear:
+        if opening > threshold and opening >= 0.5 * shear:
             seg.kind, seg.over = RIDGE, -1
-        elif opening < -threshold_cm_yr and -opening >= 0.5 * shear:
+        elif opening < -threshold and -opening >= 0.5 * shear:
             seg.kind = TRENCH
             seg.over = _overriding(seg, left_n, side_info)
         else:

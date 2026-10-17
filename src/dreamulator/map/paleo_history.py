@@ -99,8 +99,11 @@ from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 
 from dreamulator.map.paleo_kinematics import (
+    MIN_MOTION_FRAC,
+    MIN_OPENING_FRAC,
     PlateKinematics,
     boundary_cells,
+    boundary_speed_scale,
     fit_rotation,
     ocean_depth_m,
     ridge_half_rates,
@@ -716,15 +719,15 @@ def rift_onsets(
     kin: PlateKinematics,
     divergent: np.ndarray,
     divergence_km: np.ndarray,
-    min_opening_cm_yr: float = 0.2,
+    min_opening_frac: float = MIN_OPENING_FRAC,
 ) -> dict[tuple[int, int], YoungRift]:
     """Young rifts between plate pairs, from the terrain engine's rift record.
 
     A rift edge joins continental cells of two plates that the boundary detector
     flagged divergent and where the terrain engine recorded extension (it drew a
     rift valley there).  The onset is the median, over edges that open faster
-    than ``min_opening_cm_yr``, of the recorded extension divided by the opening
-    rate.
+    than ``min_opening_frac`` of the boundary speed scale, of the recorded
+    extension divided by the opening rate.
     """
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols = kin.nbr_idx
@@ -742,7 +745,7 @@ def rift_onsets(
     n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-15)
     v = np.cross(kin.omega[kin.plate[i]] - kin.omega[kin.plate[j]], x) * kin.radius_km * _CM_PER_KM
     opening = np.einsum("ij,ij->i", v, n)
-    ok = opening > min_opening_cm_yr
+    ok = opening > min_opening_frac * boundary_speed_scale(kin)
     onset = ext_all[m] / np.maximum(opening, 1e-9) / _KM_PER_MYR_PER_CM_YR
     pa, pb = pa_all[m], pb_all[m]
     edge_km = kin.spacing_km / np.sqrt(3.0)
@@ -1231,6 +1234,7 @@ def active_orogens(
     min_relief_m: float = 500.0,
     reach_km: float = 500.0,
     build_range_myr: tuple[float, float] = (5.0, 100.0),
+    min_closing_frac: float = MIN_MOTION_FRAC,
 ) -> Orogens:
     """Relief and build time of orogens next to active convergent boundaries.
 
@@ -1249,7 +1253,8 @@ def active_orogens(
             closing; NaN off the boundary), from ``boundary_opening_rates``.
         cumulative_convergence_km: (N,) present-day accumulated shortening.
     """
-    closing = np.isfinite(closing_cm_yr) & (closing_cm_yr < -0.5)
+    floor = min_closing_frac * boundary_speed_scale(kin)
+    closing = np.isfinite(closing_cm_yr) & (closing_cm_yr < -floor)
     relief = np.zeros(kin.n)
     build = np.full(kin.n, build_range_myr[1])
     if not closing.any():

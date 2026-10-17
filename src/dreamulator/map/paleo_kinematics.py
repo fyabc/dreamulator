@@ -280,15 +280,39 @@ def boundary_opening_rates(
     return opening, half_gap
 
 
+# Rate thresholds below are fractions of ``boundary_speed_scale`` so that the
+# results depend on the motion's geometry, not its overall speed (scaling every
+# pole by k only rescales time).  Category: numerical stabilization (noise floor
+# below which a boundary is treated as not moving); the defaults equal the
+# former 0.2 and 0.5 cm/yr floors at nacrea's present scale of 14 cm/yr.
+MIN_OPENING_FRAC = 0.015
+MIN_MOTION_FRAC = 0.035
+
+
+def boundary_speed_scale(kin: PlateKinematics) -> float:
+    """Median relative plate speed (cm/yr) across plate-boundary mesh edges."""
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = (rows < cols) & (kin.plate[rows] != kin.plate[cols])
+    if not m.any():
+        return 0.0
+    i, j = rows[m], cols[m]
+    x = kin.xyz[i] + kin.xyz[j]
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    v = np.cross(kin.omega[kin.plate[i]] - kin.omega[kin.plate[j]], x)
+    return float(np.median(np.linalg.norm(v, axis=1))) * kin.radius_km * _CM_PER_KM
+
+
 def ridge_half_rates(
     kin: PlateKinematics,
     divergent: np.ndarray,
-    min_opening_cm_yr: float = 0.2,
+    min_opening_frac: float = MIN_OPENING_FRAC,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Spreading half-rate (cm/yr) and ridge offset (km) of each ridge cell.
 
     A ridge cell is an oceanic cell flagged divergent whose plate boundary opens
-    faster than ``min_opening_cm_yr`` (:func:`boundary_opening_rates`); the
+    faster than ``min_opening_frac`` of the boundary speed scale
+    (:func:`boundary_opening_rates`, :func:`boundary_speed_scale`); the
     half-rate is half the opening rate.  The offset is half the distance to the
     nearest across-boundary neighbour, because the boundary (age 0) lies between
     the two cell centres.
@@ -296,13 +320,14 @@ def ridge_half_rates(
     Args:
         kin: present-day kinematics.
         divergent: (N,) True where the boundary detector flagged a divergent boundary.
-        min_opening_cm_yr: cells opening slower than this are not ridges.
+        min_opening_frac: cells opening slower than this fraction of the
+            boundary speed scale are not ridges.
 
     Returns:
         (half_rate, offset_km), both NaN outside ridge cells.
     """
     opening, half_gap = boundary_opening_rates(kin, divergent & ~kin.continental)
-    ridge = opening >= min_opening_cm_yr
+    ridge = opening >= min_opening_frac * boundary_speed_scale(kin)
     half = np.where(ridge, 0.5 * opening, np.nan)
     offset = np.where(ridge, half_gap, np.nan)
     return half, offset

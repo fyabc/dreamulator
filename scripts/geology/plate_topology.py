@@ -113,6 +113,8 @@ def walk(
         rift_cap_km=args.rift_cap_km,
         event_grid=args.event_grid,
         reorg_interval_myr=(args.reorg_min_myr, args.reorg_max_myr),
+        contact_onsets=args.contact_onsets,
+        max_step_spacings=args.max_step_spacings,
         seed=args.seed,
     )
     snaps, log = run_topology_walk(
@@ -160,6 +162,15 @@ def walk(
         summary["epochs"].append(entry)
         frames.append((s.t_myr, s.plate, s.topology, s.continental))
         print(json.dumps(entry, ensure_ascii=False))
+    if args.save_snapshots:
+        np.savez_compressed(
+            args.out_dir / "snapshots.npz",
+            t_myr=np.array([s.t_myr for s in snaps]),
+            plate=np.stack([s.plate for s in snaps]),
+            continental=np.stack([s.continental for s in snaps]),
+            thickness_km=np.stack([s.thickness_km for s in snaps]),
+            elevation_m=np.stack([s.elevation_m for s in snaps]),
+        )
     summary["young_rifts"] = len(rifts)
     summary["collision_events"] = log.collisions
     summary["merges"] = log.merges
@@ -206,6 +217,17 @@ def main() -> None:
     ap.add_argument("--reorg-max-myr", type=float, default=40.0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
+        "--max-step-spacings",
+        type=float,
+        default=0.5,
+        help="a step is no longer than the fastest plate needs to move this many spacings",
+    )
+    ap.add_argument(
+        "--contact-onsets",
+        action="store_true",
+        help="set a pair's rift onset when its continents close up to the pre-rift fit",
+    )
+    ap.add_argument(
         "--event-grid",
         type=int,
         default=200_000,
@@ -226,6 +248,14 @@ def main() -> None:
         "per-cell boundary types (aligned with the present orogens and rifts)",
     )
     ap.add_argument("--plot", action="store_true")
+    ap.add_argument(
+        "--speed-scale",
+        type=float,
+        default=1.0,
+        help="multiply every Euler pole rate (scale-invariance check: the walk at scale k "
+        "and time t/k should match scale 1 at time t)",
+    )
+    ap.add_argument("--save-snapshots", action="store_true", help="write snapshots.npz")
     args = ap.parse_args()
 
     w = World(args.map_dir)
@@ -234,6 +264,8 @@ def main() -> None:
     else:
         rp = reconstruction_plates(w.kin, w.convergent)
         kin = replace(w.kin, plate=rp.plate, omega=rp.omega)
+    if args.speed_scale != 1.0:
+        kin = replace(kin, omega=kin.omega * args.speed_scale)
     half, offset = ridge_half_rates(kin, boundary_cells(kin))
     age, _ = synthesize_seafloor_age(kin, half, offset)
     spacing_rad = kin.spacing_km / kin.radius_km

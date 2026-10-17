@@ -68,6 +68,7 @@ from dreamulator.map.paleo_history import (
     run_history,
 )
 from dreamulator.map.paleo_kinematics import (
+    MIN_OPENING_FRAC,
     PaleoFields,
     PlateKinematics,
     RewoundState,
@@ -449,7 +450,12 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--epochs", type=float, nargs="+", default=list(DEFAULT_EPOCHS))
     ap.add_argument("--terrain-config", type=Path, default=None)
-    ap.add_argument("--min-opening-cm-yr", type=float, default=0.2)
+    ap.add_argument(
+        "--min-opening-frac",
+        type=float,
+        default=MIN_OPENING_FRAC,
+        help="ridge floor as a fraction of the median relative boundary speed",
+    )
     ap.add_argument("--plate-model", choices=("blocks", "present"), default="blocks")
     ap.add_argument("--history", action="store_true", help="stepwise backward walk (M2)")
     ap.add_argument("--dt-myr", type=float, default=1.0)
@@ -480,7 +486,7 @@ def main() -> None:
         w.kin = replace(w.kin, plate=rp.plate, omega=rp.omega)
         w.block = rp.block
         divergent = boundary_cells(w.kin)
-    half, offset = ridge_half_rates(w.kin, divergent, args.min_opening_cm_yr)
+    half, offset = ridge_half_rates(w.kin, divergent, args.min_opening_frac)
     age, _ = synthesize_seafloor_age(w.kin, half, offset)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)

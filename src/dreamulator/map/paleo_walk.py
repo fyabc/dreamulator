@@ -19,8 +19,13 @@ Each step:
      as in the deforming networks of Gurnis et al. 2018 and Müller et al.
      2019); a fully absorbed parcel is deleted;
    * the rest: kept and reported as continental overlap — more convergence
-     than the thinned crust can take back, a kinematic contradiction or a
-     signal that an event (rift closure, suture) is due;
+     than the thinned crust can take back.  Where the two plates separate
+     forward in time and the overlap is deeper than one spacing on average,
+     the pre-rift configuration has been reached: the pair's rift onset is set
+     to now, whether or not it was a registered rift (an ocean that closed
+     going back brings continents into first contact; their breakup time is
+     when the conjugate margins stop overlapping, Gurnis et al. 2018).  The
+     rift-closure and boundary-jump events below then act on it;
 5. cells with no parcel of their owning plate within ``gap_factor`` spacings get
    synthetic oceanic crust of that plate, aged from the ridges of the current
    plate layout (``synthesize_seafloor_age``) — behind trenches this is crust
@@ -56,8 +61,10 @@ from scipy.spatial import cKDTree
 
 from dreamulator.map import paleo_topology as pt
 from dreamulator.map.paleo_kinematics import (
+    MIN_OPENING_FRAC,
     PlateKinematics,
     boundary_cells,
+    boundary_speed_scale,
     fit_rotation,
     ridge_half_rates,
     synthesize_seafloor_age,
@@ -102,7 +109,10 @@ class WalkConfig:
     """Parameters of the topology walk.
 
     Attributes:
-        dt_myr: step length.
+        dt_myr: longest step.
+        max_step_spacings: a step is also no longer than the time the fastest
+            plate needs to move this many mesh spacings, so the outcome depends
+            on displacement per step, not on the plates' overall speed.
         gap_factor: a cell with no parcel of its plate within this many spacings
             gets synthetic ocean.
         rift_cap_km: stretched width per rift side used for rift onsets
@@ -118,10 +128,18 @@ class WalkConfig:
             present plate).
         ridge_rule_weight, continent_rule_weight: weights of the closing-ridge and
             opening-continental-boundary fractions in the score.
+        continental_speed_factor: at a reorganization a plate's speed is capped at
+            speed_max · (1 − (1 − factor) · continental share): plates without
+            an attached slab and with continental keels are slow (Forsyth &
+            Uyeda 1975; Africa about 2 against Pacific about 10 cm/yr).  Same
+            form and default as the terrain engine's continental slowdown.
+        contact_onsets: set a pair's rift onset when its continents close up to
+            the pre-rift fit (``_contact_onsets``), registered rift or not.
         seed: RNG seed of the reorganizations.
     """
 
     dt_myr: float = 1.0
+    max_step_spacings: float = 0.5
     gap_factor: float = 1.0
     rift_cap_km: float = 300.0
     event_grid: int = 200_000
@@ -133,6 +151,8 @@ class WalkConfig:
     speed_max_cm_yr: float | None = None
     ridge_rule_weight: float = 2.0
     continent_rule_weight: float = 2.0
+    continental_speed_factor: float = 0.3
+    contact_onsets: bool = False
     seed: int = 0
 
 
@@ -263,7 +283,13 @@ def run_topology_walk(
     t = 0.0
     t_end = targets[-1] if targets else 0.0
     while t < t_end - 1e-9:
-        t_new = min(t + cfg.dt_myr, t_end)
+        live_w = np.linalg.norm(omega[np.unique(plate)], axis=1)
+        v_max_km_myr = float(live_w.max()) * radius * 1.0e6 if live_w.size else 0.0
+        step = cfg.dt_myr
+        if v_max_km_myr > 0:
+            step = min(step, cfg.max_step_spacings * kin.spacing_km / v_max_km_myr)
+        next_target = min(e for e in targets if e > t + 1e-9)
+        t_new = min(t + step, next_target)
         dt = t_new - t
 
         # 0. plate reorganization: new stage poles
@@ -274,9 +300,14 @@ def run_topology_walk(
             live = np.unique(label_now)
             ridge = _segment_probes(topo, side, spacing, want="ridge")
             contb = _segment_probes(topo, side, spacing, want="continental")
+            area_p = np.bincount(label_now, weights=kin.area_km2, minlength=omega.shape[0])
+            cont_p = np.bincount(
+                label_now, weights=kin.area_km2 * cell_cont, minlength=omega.shape[0]
+            ) / np.maximum(area_p, 1e-9)
+            caps = speed_cap * (1.0 - (1.0 - cfg.continental_speed_factor) * cont_p)
             best, best_score, parts = omega, np.inf, (0.0, 0.0, 0.0)
             for _ in range(cfg.n_candidates):
-                cand = _perturb_poles(omega, live, rng, cfg, speed_cap, radius)
+                cand = _perturb_poles(omega, live, rng, cfg, caps, radius)
                 nr = _net_rotation(cand, label_now, kin)
                 closing = _opening_fraction(cand, ridge, opening=False)
                 opening_c = _opening_fraction(cand, contb, opening=True)
@@ -353,6 +384,14 @@ def run_topology_walk(
         hidden_km3 = 0.0
         by_pair: dict[str, float] = {}
         fc = fc[~absorbed]
+        contact_due = (
+            _contact_onsets(kin, label, pos, plate, cont, omega, fc, owner[fc])
+            if cfg.contact_onsets
+            else []
+        )
+        for pair in contact_due:
+            onset[pair] = min(onset.get(pair, np.inf), t_new)
+            budget.setdefault(pair, 0.0)
         if fc.size:
             hidden_km3 = float(thick[fc].sum() * cell_area)
             pa = np.minimum(plate[fc], owner[fc])
@@ -489,6 +528,7 @@ def run_topology_walk(
                 "gaps_filled": int(gaps.size),
                 "unstretched_km3": round(unstretched_km3),
                 "continental_overlap_km2": round(overlap),
+                "contact_onsets": len(contact_due),
                 "volume_parcels_ratio": round(float(thick[cont].sum()) * cell_area / volume0, 4),
                 "volume_hidden_ratio": round(hidden_km3 / volume0, 4),
                 "continental_parcels_ratio": round(int(cont.sum()) / max(cont_parcels0, 1), 4),
@@ -612,13 +652,15 @@ def _perturb_poles(
     live: np.ndarray,
     rng: np.random.Generator,
     cfg: WalkConfig,
-    speed_cap_cm_yr: float,
+    speed_cap_cm_yr: float | np.ndarray,
     radius_km: float,
 ) -> np.ndarray:
-    """One candidate pole set: each live plate's axis tilted and speed rescaled."""
+    """One candidate pole set: each live plate's axis tilted and speed rescaled,
+    capped at ``speed_cap_cm_yr`` (one value, or one per plate)."""
     out = omega.copy()
-    cap = speed_cap_cm_yr / (radius_km * 1.0e5)
+    caps = np.broadcast_to(np.asarray(speed_cap_cm_yr, dtype=float), (omega.shape[0],))
     for p in live.tolist():
+        cap = float(caps[p]) / (radius_km * 1.0e5)
         rate = float(np.linalg.norm(omega[p]))
         if rate == 0.0:
             continue
@@ -648,6 +690,58 @@ def _follow_ownership(
     move = (before[cell] != after[cell]) & (plate == before[cell])
     plate[move] = after[cell[move]]
     return int(move.sum())
+
+
+def _contact_onsets(
+    kin: PlateKinematics,
+    label: np.ndarray,
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    omega: np.ndarray,
+    foreign: np.ndarray,
+    owner: np.ndarray,
+) -> list[tuple[int, int]]:
+    """Plate pairs whose continents have closed up to the pre-rift fit.
+
+    ``foreign`` are continental parcels left in another plate's polygon after
+    unstretching, ``owner`` that plate.  A pair qualifies when its plates
+    separate forward in time at those parcels (median of the relative velocity
+    towards the nearest common boundary edge) and the overlap is on average
+    deeper than one spacing along the pair's boundary (parcels stand for one
+    cell each; the boundary length counts mesh edges between the two plates).
+    Converging pairs do not qualify: their overlap is not a closed rift.
+    """
+    if foreign.size == 0:
+        return []
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = (rows < cols) & (label[rows] != label[cols])
+    i, j = rows[m], cols[m]
+    ea, eb = np.minimum(label[i], label[j]), np.maximum(label[i], label[j])
+    mid = kin.xyz[i] + kin.xyz[j]
+    mid /= np.linalg.norm(mid, axis=1, keepdims=True)
+    # parcels per boundary edge for a mean depth of one spacing: edge length
+    # (Voronoi edge = spacing / √3) times one spacing over the cell area
+    per_edge = kin.spacing_km**2 / np.sqrt(3.0) / float(np.median(kin.area_km2))
+    pa = np.minimum(plate[foreign], owner)
+    pb = np.maximum(plate[foreign], owner)
+    out: list[tuple[int, int]] = []
+    for a, b in sorted({(int(x), int(y)) for x, y in zip(pa, pb, strict=True)}):
+        sel = foreign[(pa == a) & (pb == b)]
+        on_edge = np.flatnonzero((ea == a) & (eb == b))
+        if on_edge.size == 0 or sel.size < max(5.0, on_edge.size * per_edge):
+            continue
+        x = pos[sel]
+        _, k = cKDTree(mid[on_edge]).query(x)
+        u = mid[on_edge][k] - x
+        u -= np.einsum("ij,ij->i", u, x)[:, None] * x
+        u /= np.maximum(np.linalg.norm(u, axis=1, keepdims=True), 1e-15)
+        other = np.where(plate[sel] == a, b, a)
+        v_rel = np.cross(omega[plate[sel]] - omega[other], x)
+        if float(np.median(np.einsum("ij,ij->i", v_rel, u))) > 0.0:
+            out.append((a, b))
+    return out
 
 
 def _jump_block(
@@ -717,18 +811,20 @@ def continental_rifts(
     kin: PlateKinematics,
     cap_km: float,
     recorded: dict[tuple[int, int], YoungRift] | None = None,
-    min_opening_cm_yr: float = 0.2,
+    min_opening_frac: float = MIN_OPENING_FRAC,
 ) -> tuple[dict[tuple[int, int], float], dict[tuple[int, int], float]]:
     """Restoration budget (km²) and onset (Myr) of every continental rift.
 
     A continental rift is the set of mesh edges joining continental crust of two
-    plates whose relative motion opens them forward in time.  Its stretched crust
+    plates whose relative motion opens them forward in time (median opening above
+    ``min_opening_frac`` of ``boundary_speed_scale``).  Its stretched crust
     is at most ``cap_km`` wide on each side (stretching factors 2–3 over rift
     widths of about 100 km), so the budget is 2 · cap_km · length and the onset
     is at most 2 · cap_km / opening rate.  Where the terrain engine recorded the
     rift (``recorded``, extension / rate) the earlier of the two onsets is used,
     since the recorded extension is inflated (roadmap tech debt 33).
     """
+    floor = min_opening_frac * boundary_speed_scale(kin)
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols = kin.nbr_idx
     m = (rows < cols) & (kin.plate[rows] != kin.plate[cols])
@@ -749,7 +845,7 @@ def continental_rifts(
     for a, b in sorted({(int(a), int(b)) for a, b in zip(pa, pb, strict=True)}):
         sel = (pa == a) & (pb == b)
         rate = float(np.median(opening[sel]))
-        if rate <= min_opening_cm_yr:
+        if rate <= floor:
             continue
         budget[(a, b)] = 2.0 * cap_km * float(sel.sum() * edge_km)
         t_cap = 2.0 * cap_km / (rate * 10.0)

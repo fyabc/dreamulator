@@ -272,3 +272,25 @@ def test_unstretch_conserves_volume_and_caps_thickness() -> None:
         pos, plate, thick2, np.array([0]), np.array([0]), receivers, 35.0, 0.01
     )
     assert not done2[0] and moved2 == 5.0 and thick2[0] == 25.0
+
+
+def test_rate_thresholds_are_scale_invariant() -> None:
+    from dreamulator.map.paleo_walk import continental_rifts
+
+    kin = _three_plates()
+    omega = np.array([[0.0, 0.0, 0.0], [0.0, 2.0e-8, 0.0], [1.0e-9, 0.0, 3.0e-10]])
+    cont = np.ones(kin.n, dtype=bool)
+    sp = kin.spacing_km / kin.radius_km
+    kinds = []
+    rifts = []
+    for k in (1.0, 0.01):
+        kk = PlateKinematics(**{**kin.__dict__, "omega": omega * k, "continental": cont})
+        topo = pt.prepare(pt.extract(kk.xyz, kk.plate), 0.5 * sp)
+        pt.classify(topo, kk.omega, kk.radius_km)
+        kinds.append([s.kind for s in topo.segments])
+        budget, onset = continental_rifts(kk, 300.0)
+        rifts.append((sorted(budget), {p: v * k for p, v in onset.items()}))
+    assert kinds[0] == kinds[1]
+    assert rifts[0][0] == rifts[1][0]
+    for p in rifts[0][1]:
+        np.testing.assert_allclose(rifts[0][1][p], rifts[1][1][p], rtol=1e-9)
