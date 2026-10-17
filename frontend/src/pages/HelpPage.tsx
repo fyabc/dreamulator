@@ -108,7 +108,7 @@ export default function HelpPage() {
   }, [activeSection])
 
   return (
-    <div className="flex h-[calc(100vh-56px)]">
+    <div className="flex h-[calc(100vh-56px)] md:h-screen">
       {/* Sidebar */}
       <nav className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2">

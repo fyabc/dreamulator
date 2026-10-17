@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **viewer 页底部黑色带（2026-10-17，用户报告）**：2D 地图 / 3D 球面 / 帮助 / 子地图
+  四页底部一块约 222px（视口的 25%）的纯色黑带，成因为两层叠加——Layout 的 56px
+  头部仅在移动端渲染而页面统一按 `h-[calc(100vh-56px)]` 扣减（桌面端留出 56px 死
+  区），以及 viewer 页高度不确定时（`min-h-screen` 可长高容器）右栏自然高度把页面
+  撑过视口、地图 canvas 在布局抖动期取到中间尺寸后不再更新，剩余区域露出 Three.js
+  场景背景 `#0a0a1a`。修法 = 四页改确定高度：桌面 `md:h-screen`（无头部正好全高）、
+  移动端保留原 calc（头部确实存在）。实测黑带 222px → 0px、页面无滚动、canvas
+  缓冲区与容器完全一致。
+
 ### Changed
 
 - **2D/3D 视图页共享状态收敛为 `usePlanetViewState`（2026-10-17，0a-3 视图精简批②）**：
