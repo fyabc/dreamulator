@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792215451636,
+  "lastUpdate": 1792250974030,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -7196,6 +7196,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000054121101591638347",
             "extra": "mean: 3.1712688000027356 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "fc4ec27221b87d8a433d0904b9030b58cbe89364",
+          "message": "feat(map): whittaker 分类色表改经典制图家族\n\n原 Material 色值使温带草原（亮黄）与热带荒漠（琥珀橙）视觉相邻而\n语义疏远（用户报告）。改经典世界群系图惯例：荒漠一族棕橙/灰褐、\n草原一族麦秆黄/橄榄绿、针叶林墨绿、苔原灰紫。色表单源\npalettes.json，前端 biome 图层与导出 PNG 同步生效。CHANGELOG 补\n本日制图会战全部条目。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-17T23:18:44+08:00",
+          "tree_id": "28795edb945c742123cc6b6af86216d6b33baa1d",
+          "url": "https://github.com/fyabc/dreamulator/commit/fc4ec27221b87d8a433d0904b9030b58cbe89364"
+        },
+        "date": 1792250973402,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.45020179009014255,
+            "unit": "iter/sec",
+            "range": "stddev: 0.13181839433970938",
+            "extra": "mean: 2.221226174600001 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.726917985666456,
+            "unit": "iter/sec",
+            "range": "stddev: 0.018833770732130075",
+            "extra": "mean: 268.3182199999976 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9539043483320726,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8170146002696147",
+            "extra": "mean: 511.7957799999976 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1151.7688059106424,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007618070193873995",
+            "extra": "mean: 868.2297999982325 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 242.7614601615686,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010333595064866933",
+            "extra": "mean: 4.119270000001052 msec\nrounds: 5"
           }
         ]
       }
