@@ -113,6 +113,21 @@ RUNOFF_REFERENCE_MM = 300.0
 #: the headwater scale of the finest (0.09 mm) river symbol; denser
 #: headwaters mean lowering it (halve it ≈ 1 m³/s).
 RIVER_THRESHOLD_CELLS = 3000
+#: River flow-regime classes (rivers.regime.npy, uint8).  Monthly data can
+#: separate model-perennial from model-non-perennial reaches, but cannot
+#: reliably split intermittent from event-scale ephemeral flow; the product
+#: therefore uses two classes only.  US Topo's solid perennial and dashed
+#: non-perennial inks are the cartographic precedent.
+RIVER_REGIME_PERENNIAL = 0
+RIVER_REGIME_NON_PERENNIAL = 1
+#: Operational monthly-mean discharge above which an already-mapped reach is
+#: considered active for regime classification.  This is deliberately NOT
+#: derived from RIVER_THRESHOLD_CELLS: the latter controls cartographic
+#: visibility, while this small nonzero value is only a zero-flow detection
+#: convention.  Fritz et al. (2020) document 1 L/s as one regional study's
+#: operational threshold, not a universal standard; the same value is used
+#: everywhere here and its sensitivity is reported rather than tuned.
+REGIME_ACTIVE_DISCHARGE_M3S = 0.001
 
 
 def _roughness(
@@ -926,6 +941,70 @@ def lake_fringe_descend(h: np.ndarray, footprint: np.ndarray, water: np.ndarray)
     return desc
 
 
+def regime_active_cells(
+    km_per_px: float,
+    discharge_m3s: float = REGIME_ACTIVE_DISCHARGE_M3S,
+) -> float:
+    """Convert monthly-mean active discharge to accumulation reference cells.
+
+    One reference cell of MONTHLY accumulation represents R₀ × cell area
+    of water in one month.  Dividing by the reference month's seconds,
+    rather than by the year's seconds, keeps the discharge conversion
+    independent of the annual mapping threshold and of grid resolution.
+    """
+    cell_area_m2 = (km_per_px * 1000.0) ** 2
+    seconds_per_month = 365.25 * 86400.0 / 12.0
+    return float(
+        discharge_m3s * seconds_per_month / ((RUNOFF_REFERENCE_MM / 1000.0) * cell_area_m2)
+    )
+
+
+def month_active_counts(
+    order: np.ndarray,
+    receiver: np.ndarray,
+    runoff_monthly_pack: np.ndarray,
+    land: np.ndarray,
+    active_cells: float,
+    *,
+    factor: int = 1,
+    reference_mm: float = RUNOFF_REFERENCE_MM,
+) -> np.ndarray:
+    """Months per cell whose accumulated streamflow clears the active rule.
+
+    The monthly family shares the ANNUAL family's fixed reference: weights
+    ``r_m / reference_mm`` accumulated on the final routing (terminal
+    footprints cut, no monthly lake depletion — the demand verdict is an
+    annual one, and omitting its monthly split only biases months below
+    desert lakes toward active, i.e. toward perennial, the conservative
+    direction).  Linearity of the accumulation gives ``Σ_m acc_m ≡`` the
+    no-depletion annual accumulation on the same normaliser, keeping the
+    monthly classification and the annual extraction on one water field.
+
+    ``active_cells`` is the independent small-discharge active rule from
+    ``regime_active_cells``; it is deliberately unrelated to the annual
+    cartographic threshold.  ``river_segments`` classifies contiguous
+    reaches as perennial when all twelve months are active and as
+    non-perennial otherwise.
+
+    ``runoff_monthly_pack`` is (pack_res, pack_res, 12) mm/month; each
+    month is kron-upsampled to the refined grid inside so peak memory is
+    one refined f64 field.  All-zero input or ``reference_mm ≤ 0`` returns
+    zeroes (callers skip the regime channel then).
+    """
+    counts = np.zeros(land.shape, dtype=np.uint8)
+    if active_cells <= 0.0:
+        raise ValueError(f"active_cells must be positive, got {active_cells}")
+    if reference_mm <= 0.0 or not runoff_monthly_pack.any():
+        return counts
+    for m in range(runoff_monthly_pack.shape[-1]):
+        r_pack = np.nan_to_num(runoff_monthly_pack[..., m], nan=0.0)
+        if factor > 1:
+            r_pack = np.kron(r_pack, np.ones((factor, factor), dtype=r_pack.dtype))
+        acc_m = flow_accumulation(order, receiver, r_pack / reference_mm)
+        counts += acc_m >= active_cells
+    return counts
+
+
 def river_segments(
     rivers: np.ndarray,
     receiver: np.ndarray,
@@ -933,7 +1012,8 @@ def river_segments(
     km_per_px: float,
     lake: np.ndarray | None = None,
     lake_descend: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+    month_active: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Channel polylines for vector rendering, smoothed.
 
     D8 walks step cell-by-step in 8 directions; rendered raw they read as
@@ -963,7 +1043,15 @@ def river_segments(
     Returns (segments (M, 2, 2) in km, row 0 north, flows (M,) per segment
     in accumulation units — the mean of the interpolated end flows, so the
     width grading grows downstream within a chain instead of jumping at
-    confluences).
+    confluences — and regimes (M,) uint8).  With ``month_active`` (see
+    ``month_active_counts``), each chain cell is perennial when all twelve
+    months are active and non-perennial otherwise; CONTIGUOUS cells of one
+    class form reaches, and each reach is smoothed and emitted with its own
+    class.  This is reach-scale classification, not the former chain-wide
+    minimum: a dry headwater reach no longer reclassifies a whole wet trunk.
+    Appended outlets and fringe cells inherit the last channel cell's count
+    and never create an artificial mouth reach.  ``month_active=None``
+    grades everything perennial.
     """
     h, w = rivers.shape
     riv_flat = rivers.reshape(-1)
@@ -1003,6 +1091,8 @@ def river_segments(
 
     segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
     flows: list[float] = []
+    regimes: list[int] = []
+    month_flat = None if month_active is None else month_active.reshape(-1)
     visited: set[int] = set()
     for head in heads:
         chain = []
@@ -1011,6 +1101,7 @@ def river_segments(
             visited.add(c)
             chain.append(c)
             c = int(receiver[c])
+        n_channel = len(chain)  # channel cells only — appended cells never gate
         # Always connect the chain's end to its downstream cell: the
         # junction when a tributary meets an already-traced trunk (missing
         # this link left every tributary one segment short: "broken
@@ -1035,33 +1126,55 @@ def river_segments(
         # the sea); only a genuinely empty chain is dropped.
         if len(chain) < 2:
             continue
+        if month_flat is None:
+            active_chain = np.full(len(chain), 12, dtype=np.uint8)
+        else:
+            active_chain = np.empty(len(chain), dtype=np.uint8)
+            for i, cell in enumerate(chain):
+                # Appended outlet/fringe cells are not new channel reaches;
+                # inherit the last real channel cell's active-month count.
+                active_chain[i] = month_flat[cell] if i < n_channel else active_chain[i - 1]
         pts = np.asarray([cell_xyz_km(c) for c in chain], dtype=np.float64)
         # The appended outlet can be a sea cell (accumulation ≈ 0) or a
         # lake shore — its flow coordinate must not sag at the mouth, or
         # the final reach renders thinner than the channel above it.
         np.maximum.accumulate(pts[:, 2], out=pts[:, 2])
-        # Merge collinear runs (the 8-direction walks have long straight bits).
-        d = np.diff(pts[:, :2], axis=0)
-        keep = np.ones(len(pts), dtype=bool)
-        for i in range(1, len(pts) - 1):
-            v0, v1 = d[i - 1], d[i]
-            cross = v0[0] * v1[1] - v0[1] * v1[0]
-            if abs(cross) < 1e-9:
-                keep[i] = False
-        pts = pts[keep]
-        if len(pts) < 2:
-            continue
-        # Two points after the merge = one long straight run — a legal
-        # channel (dropping <3-point chains erased whole straight rivers
-        # and left region-scale gaps).
-        smooth = _chaikin(pts) if len(pts) >= 3 else pts
-        for a, b in zip(smooth[:-1], smooth[1:], strict=True):
-            segs.append(((a[0], a[1]), (b[0], b[1])))
-            flows.append(float(0.5 * (a[2] + b[2])))
+        # One regime per inter-point reach, labelled by its upstream cell.
+        # Adjacent runs share exactly one boundary point, never a segment.
+        labels = np.where(
+            active_chain[:-1] >= 12,
+            RIVER_REGIME_PERENNIAL,
+            RIVER_REGIME_NON_PERENNIAL,
+        )
+        run_start = 0
+        for run_end in range(1, len(labels) + 1):
+            if run_end < len(labels) and labels[run_end] == labels[run_start]:
+                continue
+            reach = pts[run_start : run_end + 1]
+            regime = int(labels[run_start])
+            # Merge collinear runs (the 8-direction walks have long straight bits).
+            d = np.diff(reach[:, :2], axis=0)
+            keep = np.ones(len(reach), dtype=bool)
+            for i in range(1, len(reach) - 1):
+                v0, v1 = d[i - 1], d[i]
+                cross = v0[0] * v1[1] - v0[1] * v1[0]
+                if abs(cross) < 1e-9:
+                    keep[i] = False
+            reach = reach[keep]
+            # Two points after the merge = one long straight run — a legal
+            # channel (dropping <3-point chains erased whole straight rivers
+            # and left region-scale gaps).
+            smooth = _chaikin(reach) if len(reach) >= 3 else reach
+            for a, b in zip(smooth[:-1], smooth[1:], strict=True):
+                segs.append(((a[0], a[1]), (b[0], b[1])))
+                flows.append(float(0.5 * (a[2] + b[2])))
+                regimes.append(regime)
+            run_start = run_end
 
     return (
         np.asarray(segs, dtype=np.float64).reshape(-1, 2, 2),
         np.asarray(flows, dtype=np.float64),
+        np.asarray(regimes, dtype=np.uint8),
     )
 
 
@@ -1159,7 +1272,7 @@ def erode_region_pack(
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
     rivers = river_mask(acc, land, river_threshold)
-    segs, flows = river_segments(
+    segs, flows, _regimes = river_segments(
         rivers, rec_route, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc
     )
     np.save(out / "rivers.line.npy", segs)

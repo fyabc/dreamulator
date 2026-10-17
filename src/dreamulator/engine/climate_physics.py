@@ -1191,6 +1191,75 @@ def soil_bucket_monthly(
 #: ``TerrainPipelineConfig.soil_water_capacity_mm`` (map/pipeline_types.py).
 SOIL_WATER_CAPACITY_MM: float = 150.0
 
+#: Empirical allocation parameters for the WBM-inspired linear baseflow
+#: reservoir.  Grogan et al. (2022) use a 0.5 recharge fraction and a
+#: 0.025 d⁻¹ shallow-groundwater runoff coefficient (τ = 40 d) as model
+#: defaults.  They are observation-calibration parameters, NOT universal
+#: constants; the hydrology legs run the same values everywhere and report
+#: sensitivity rather than tuning them to a particular climate class.
+BASEFLOW_RECHARGE_FRACTION: float = 0.5
+BASEFLOW_RESIDENCE_TIME_DAYS: float = 40.0
+
+
+def route_runoff_with_baseflow(
+    runoff_monthly: np.ndarray,
+    *,
+    days_per_month: float,
+    recharge_fraction: float = BASEFLOW_RECHARGE_FRACTION,
+    residence_time_days: float = BASEFLOW_RESIDENCE_TIME_DAYS,
+) -> np.ndarray:
+    """Route monthly runoff through quickflow and one linear groundwater store.
+
+    This is a WBM-inspired conceptual baseflow model, not a groundwater
+    distribution model.  A fraction ``f`` of each month's runoff production
+    recharges a cell-local store; the rest is quickflow.  The store obeys
+    ``dS/dt = recharge/days − S/τ`` and is integrated exactly over the
+    month.  With ``a = exp(−days/τ)`` and ``c = τ/days · (1−a)``::
+
+        S_m = a·S_(m−1) + c·G_m
+        B_m = S_(m−1) + G_m − S_m
+        stream_m = (1−f)·runoff_m + B_m
+
+    The initial storage is the analytical periodic steady state for the
+    twelve-month climatology, so the annual streamflow sum equals the input
+    runoff sum exactly (to floating-point precision): baseflow only changes
+    the seasonal distribution, never the annual water budget.  No negative
+    storage or discharge clipping is needed.
+
+    Args:
+        runoff_monthly: Monthly runoff production, mm/month, shape (N, 12).
+        days_per_month: Accumulation window length, days (use the same
+            reference month as the input water balance).
+        recharge_fraction: Fraction of runoff production entering the store.
+        residence_time_days: Groundwater recession timescale τ, days.
+
+    Returns:
+        Monthly quickflow plus baseflow, mm/month, shape (N, 12).
+    """
+    if not 0.0 <= recharge_fraction <= 1.0:
+        raise ValueError(f"recharge_fraction must be in [0, 1], got {recharge_fraction}")
+    if residence_time_days <= 0.0 or days_per_month <= 0.0:
+        raise ValueError("residence_time_days and days_per_month must be positive")
+    runoff = np.maximum(np.nan_to_num(runoff_monthly, nan=0.0), 0.0)
+    if runoff.ndim != 2 or runoff.shape[1] != 12:
+        raise ValueError(f"runoff_monthly must have shape (N, 12), got {runoff.shape}")
+    a = float(np.exp(-days_per_month / residence_time_days))
+    c = float(
+        residence_time_days / days_per_month * (-np.expm1(-days_per_month / residence_time_days))
+    )
+    recharge = runoff * recharge_fraction
+    # S0 before month 1 of the periodic year.  Month j's recharge has decayed
+    # by a**(12−j) when the year wraps back to this point.
+    weights = a ** np.arange(11, -1, -1, dtype=np.float64)
+    storage = c / (1.0 - a**12) * (recharge * weights).sum(axis=1)
+    stream = np.empty_like(runoff)
+    for m in range(12):
+        next_storage = a * storage + c * recharge[:, m]
+        baseflow = storage + recharge[:, m] - next_storage
+        stream[:, m] = (1.0 - recharge_fraction) * runoff[:, m] + baseflow
+        storage = next_storage
+    return np.asarray(stream)
+
 
 def runoff_monthly_mm(
     t_monthly_c: np.ndarray,

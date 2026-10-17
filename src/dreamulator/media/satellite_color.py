@@ -171,6 +171,10 @@ class ColorizeInputs:
     # Gaea builds (mask-contour fallback there).
     river_segments: np.ndarray | None = None
     river_segment_flows: np.ndarray | None = None
+    # Per-segment flow regime, uint8 (0 perennial / 1 non-perennial,
+    # prog_erosion's RIVER_REGIME_*); None when the leg wrote
+    # no regime channel (legacy packs — render everything solid).
+    river_segment_regimes: np.ndarray | None = None
     # Endorheic lakes from the programmatic chain (lake.png).  None/empty
     # on Gaea builds.
     lake: np.ndarray | None = None
@@ -568,6 +572,8 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     river_flows = (
         np.load(gaea_dir / "rivers.flow.npy") if (gaea_dir / "rivers.flow.npy").exists() else None
     )
+    regime_path = gaea_dir / "rivers.regime.npy"
+    river_regimes = np.load(regime_path) if regime_path.exists() else None
     return ColorizeInputs(
         height_m=height_m,
         km_per_px=km_per_px,
@@ -584,6 +590,7 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         npp_gc_m2_yr=npp_grid,
         river_segments=river_segs,
         river_segment_flows=river_flows,
+        river_segment_regimes=river_regimes,
         lake=lake,
     )
 

@@ -16,8 +16,13 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from dreamulator.map.models import CVTMesh
+    from dreamulator.map.region_export import RegionWindow
 
 #: Coarse conditioning pixel size (km) of the 90 m model — fixed upstream.
 TD_COARSE_KM = 23.0
@@ -99,32 +104,130 @@ def _td_python(td_repo: Path) -> Path:
     return py
 
 
-def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False) -> int:
-    """Stage 1 (main env): window the mesh + monthly climate → .npy fields."""
-    from dreamulator.map.export import (
-        export_cell_index_grid,
-        find_mesh_file,
-        load_climate_monthly,
-        load_cvt_mesh_model,
-    )
+def _mesh_and_window(pack_dir: Path) -> tuple[CVTMesh, RegionWindow]:
+    """The pack's source mesh and its geographic window on the export grid.
+
+    Shared by the conditioning export and the monthly-regime loader.  The
+    two consumers sample at different resolutions: conditioning uses the
+    coarse TD crop, while the regime uses the pack's own 2048-class grid.
+    """
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
     from dreamulator.map.region_export import read_radius_km, region_window
 
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
     src = meta["source"]
-    world_dir = Path("data") / "worlds" / src["world"]
-    map_dir = world_dir / "maps" / src["planet"]
-
+    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
     mesh_file = find_mesh_file(map_dir)
     if mesh_file is None:
         raise FileNotFoundError(f"no cvt mesh under {map_dir}")
     mesh = load_cvt_mesh_model(mesh_file)
     radius_km = read_radius_km(map_dir)
-    grid_w, grid_h = 4096, 2048
     window = region_window(
-        meta["center_lat"], meta["center_lon"], meta["span_km"], radius_km, grid_w, grid_h
+        meta["center_lat"], meta["center_lon"], meta["span_km"], radius_km, 4096, 2048
     )
-    indices_full = export_cell_index_grid(mesh, grid_w, grid_h)
+    return mesh, window
+
+
+def _pack_monthly_runoff(
+    pack_dir: Path,
+    *,
+    recharge_fraction: float | None = None,
+    residence_time_days: float | None = None,
+) -> np.ndarray | None:
+    """Monthly runoff on the PACK grid (pack_res, pack_res, 12), mm/month.
+
+    The monthly shape comes from the Manabe bucket at periodic steady state
+    followed by one linear groundwater store (WBM-inspired quickflow plus
+    baseflow); the annual total is the pack's Turc–Pike channel itself, so
+    the twelve fields sum EXACTLY to the annual extraction weight.  The
+    un-routed bucket alone zeroes yield in strongly seasonal climates (its
+    documented blind spot) and would grade Mediterranean-slope rivers
+    non-perennial by artefact.  Where the bucket yields nothing the shape falls
+    back to the monthly moisture surplus (P − PET)+; where that is empty
+    too (hyperarid interiors) the total spreads uniformly over twelve
+    months — no seasonal information reads as perennial, the same
+    degradation as missing monthly data.  Sampling is nearest-CVT: the
+    regime is classification input, not a rendered surface, and the C1
+    smoothness the render channels pay for buys nothing here.  Returns None
+    when the world carries no monthly series or the pack has no annual
+    runoff channel (regime off, all rivers solid — the documented fallback).
+    The two optional parameters are sensitivity-experiment overrides;
+    production uses the documented WBM-default constants.
+    """
+    from dreamulator.engine.climate_physics import (
+        BASEFLOW_RECHARGE_FRACTION,
+        BASEFLOW_RESIDENCE_TIME_DAYS,
+        SOIL_WATER_CAPACITY_MM,
+        potential_evapotranspiration_hamon_monthly,
+        route_runoff_with_baseflow,
+        soil_bucket_monthly,
+    )
+    from dreamulator.map.export import build_export_tree, find_mesh_file, load_climate_monthly
+    from dreamulator.map.region_export import _nearest_indices_on_grid, _window_out_grid
+    from dreamulator.result_contract import REFERENCE_MONTH_DAYS
+
+    annual_path = pack_dir / "input" / "runoff.mm.npy"
+    if not annual_path.exists():
+        print(f"[refine] no {annual_path}; river regime off (all solid)")
+        return None
+    annual = np.nan_to_num(np.load(annual_path).astype(np.float64), nan=0.0)
+
+    meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
+    src = meta["source"]
+    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
+    if find_mesh_file(map_dir) is None:
+        print(f"[refine] no cvt mesh under {map_dir}; river regime off (all solid)")
+        return None
+    try:
+        t_m, p_m = load_climate_monthly(map_dir)
+    except FileNotFoundError:
+        print(f"[refine] no climate_monthly under {map_dir}; river regime off (all solid)")
+        return None
+    pet_m = potential_evapotranspiration_hamon_monthly(t_m, REFERENCE_MONTH_DAYS)
+    _e, r_m, _cycles, _resid = soil_bucket_monthly(p_m, pet_m, SOIL_WATER_CAPACITY_MM)
+    r_m = route_runoff_with_baseflow(
+        r_m,
+        days_per_month=REFERENCE_MONTH_DAYS,
+        recharge_fraction=(
+            BASEFLOW_RECHARGE_FRACTION if recharge_fraction is None else recharge_fraction
+        ),
+        residence_time_days=(
+            BASEFLOW_RESIDENCE_TIME_DAYS if residence_time_days is None else residence_time_days
+        ),
+    )
+
+    # Normalised monthly shape: every cell's twelve shares sum to one, so
+    # multiplying by the pack's annual channel preserves that channel
+    # exactly (including its C1 interpolation, which nearest-CVT sampling
+    # of a mesh-annual field would not reproduce).
+    shape = np.zeros_like(r_m)
+    bucket_total = r_m.sum(axis=1)
+    has_bucket = bucket_total > 1e-6
+    shape[has_bucket] = r_m[has_bucket] / bucket_total[has_bucket, None]
+    surplus = np.maximum(p_m - pet_m, 0.0)
+    surplus_total = surplus.sum(axis=1)
+    has_surplus = ~has_bucket & (surplus_total > 1e-6)
+    shape[has_surplus] = surplus[has_surplus] / surplus_total[has_surplus, None]
+    shape[~has_bucket & ~has_surplus] = 1.0 / 12.0
+
+    mesh, window = _mesh_and_window(pack_dir)
+    tree = build_export_tree(mesh)
+    lon_grid, lat_grid = _window_out_grid(window, annual.shape[0])
+    indices = _nearest_indices_on_grid(tree, lon_grid, lat_grid)
+    monthly = shape[indices] * annual[..., None]
+    return np.asarray(monthly, dtype=np.float32)
+
+
+def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False) -> int:
+    """Stage 1 (main env): window the mesh + monthly climate → .npy fields."""
+    from dreamulator.map.export import export_cell_index_grid, load_climate_monthly
+
+    mesh, window = _mesh_and_window(pack_dir)
+    indices_full = export_cell_index_grid(mesh, 4096, 2048)
     indices = indices_full[window.y0 : window.y1, window.x0 : window.x1]
+    meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
+    src = meta["source"]
+    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
 
     t_m, p_m = load_climate_monthly(map_dir)
     t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
@@ -208,13 +311,18 @@ def refine_region_pack(
     from dreamulator.map.prog_erosion import (
         LAKE_EVAPORATION_FACTOR,
         LAKE_MIN_WIDTH_KM,
+        REGIME_ACTIVE_DISCHARGE_M3S,
+        RIVER_REGIME_NON_PERENNIAL,
+        RIVER_REGIME_PERENNIAL,
         RIVER_THRESHOLD_CELLS,
         heal_inland_water,
         hydrology_weight,
         keep_large_lakes,
         lake_mask,
         lake_mmu_cells,
+        month_active_counts,
         priority_flood,
+        regime_active_cells,
         river_mask,
         river_segments,
         terminal_equilibrium_routing,
@@ -329,14 +437,29 @@ def refine_region_pack(
         river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS * factor * factor
     )
     rivers = river_mask(acc, land, thr)
+    # Monthly flow regime (12 accumulations on the final routing, R₀ shared
+    # with the annual family — see month_active_counts).  None on legacy
+    # worlds: every river renders solid, the documented degradation.
+    monthly_pack = _pack_monthly_runoff(pack_dir)
+    month_act = (
+        None
+        if monthly_pack is None
+        else month_active_counts(
+            order, rec, monthly_pack, land, regime_active_cells(km_pp), factor=factor
+        )
+    )
 
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    segs, flows = river_segments(rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc)
+    segs, flows, regimes = river_segments(
+        rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc, month_active=month_act
+    )
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
+    if month_act is not None:
+        np.save(out / "rivers.regime.npy", regimes)
     rivers &= ~lakes_draw
     Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
     Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
@@ -352,39 +475,48 @@ def refine_region_pack(
     Image.fromarray(np.clip(acc / max(acc.max(), 1.0) * 65535.0).astype(np.uint16)).save(
         out / "flow-accum.png"
     )
+    sheet_meta: dict[str, object] = {
+        "height_gaea_png_range_m": [lo, hi],
+        "sea_level_m": meta["sea_level_m"],
+        "source": "terrain-diffusion 90m refined",
+        "td_snr": TD_SNR,
+        "td_seed": TD_SEED,
+        "river_threshold": thr,
+        "lake_mmu_cells": mmu,
+        "hydrology_weight": weight_src,
+        "runoff_normalizer_mm": round(run_norm_mm, 3),
+        "terminal_lakes": lake_stats["terminal"],
+        "dry_playas": lake_stats["dry_playas"],
+        "shrunk_lakes": lake_stats["shrunk"],
+        "lake_balance": {
+            "pet": "hamon-annual",
+            "evaporation_factor": LAKE_EVAPORATION_FACTOR,
+        },
+    }
+    if month_act is not None:
+        sheet_meta["regime"] = {
+            "encoding": "0 perennial / 1 non-perennial",
+            "shape": "manabe-bucket + linear-baseflow monthly, anchored to turc-pike annual",
+            "active_rule": "12 active months = perennial; otherwise non-perennial, by reach",
+            "active_discharge_m3s": REGIME_ACTIVE_DISCHARGE_M3S,
+            "active_cells": regime_active_cells(km_pp),
+        }
     (out / "meta.json").write_text(
-        json.dumps(
-            {
-                "height_gaea_png_range_m": [lo, hi],
-                "sea_level_m": meta["sea_level_m"],
-                "source": "terrain-diffusion 90m refined",
-                "td_snr": TD_SNR,
-                "td_seed": TD_SEED,
-                "river_threshold": thr,
-                "lake_mmu_cells": mmu,
-                "hydrology_weight": weight_src,
-                "runoff_normalizer_mm": round(run_norm_mm, 3),
-                "terminal_lakes": lake_stats["terminal"],
-                "dry_playas": lake_stats["dry_playas"],
-                "shrunk_lakes": lake_stats["shrunk"],
-                "lake_balance": {
-                    "pet": "hamon-annual",
-                    "evaporation_factor": LAKE_EVAPORATION_FACTOR,
-                },
-            },
-            ensure_ascii=False,
-            indent=1,
-        )
-        + "\n",
+        json.dumps(sheet_meta, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8",
     )
     # The intermediates are reproducible from the pack — remove the scratch.
     import shutil
 
     shutil.rmtree(tmp, ignore_errors=True)
-    return {
+    result: dict[str, object] = {
         "res": res,
         "lakes_pct": round(float(lakes_draw.sum() / max(land.sum(), 1) * 100), 1),
         "river_segments": int(len(segs)),
         "height_range_m": [round(lo, 1), round(hi, 1)],
     }
+    if month_act is not None:
+        result["regime_segments"] = [
+            int((regimes == r).sum()) for r in (RIVER_REGIME_PERENNIAL, RIVER_REGIME_NON_PERENNIAL)
+        ]
+    return result
