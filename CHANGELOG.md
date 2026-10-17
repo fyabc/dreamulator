@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **内流区径流终端语义 + 河源约束（2026-10-18，待办⑤收口）**：refine 水文链三项——
+  ① **序派生流方向**：填平面上最陡下降的平局裁决改取淹没前驱（Barnes
+  Priority-Flood +FlowDirs 惯例），填区内流路沿 ε 递减直达溢出口——入湖河穿湖心
+  到鞍口，不再沿盆缘描边（普通地形上前驱从不与真梯度平局，receiver 与纯最陡
+  下降逐格一致，A/B 实证）；② **河源门控**：降水回退权重仅 P > Hamon PET 的
+  格计重（与 Gaea headwaters 同一判据），干旱腹地不再凭微弱降水长坡累积发河
+  （35S-93W 实测：荒原 wadi 消失、最大干流仍贴海入海）；③ **spill/判决落盘**：
+  `terminal_equilibrium_routing` 逐湖输出 verdict/溢流格与鞍口高程/下游湖标/入流
+  与需求，写入 refined-out/meta.json 的 `lakes`——「rim/spill 高度不落盘」的
+  refine 侧缺口闭合。配套标定：`LAKE_EVAPORATION_FACTOR` 1.0 → 0.9（作者裁决；
+  正确首触路由下 nacrea 南部大湖收支恰在 99–100%，边缘湖被 ~1% 入流归属变化翻
+  成终局并经宽度门碎化；0.9 恢复湖景且判决分明的湖不受扰动——认识论类别=观测
+  拟合）。水文测试 24 → 29 项。
+
+### Fixed
+
 - **制图链 `--style relief` 遥感图风格（2026-10-17，本日制图会战主件）**：以 NASA
   Blue Marble NG 地形/水深版为参照的自然色晕渲图（`relief_render.py`，输出
   `carto/relief.png`）。陆面色相完全来自引擎群系分类并经卫星合成器处理（边界变形
@@ -22,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **终局湖改写的标签错位（2026-10-18，经 meta 湖记录发现）**：`_equilibrium_water`
+  对终局湖联合掩膜重新连通编号，但入流/需求按**原湖图标号**读——终局湖不满半数时
+  第 i 个组件读到第 i 个原标签的收支，A* 保水面张冠李戴（169 湖 132 终局时：收支
+  比 8.6% 的湖整片保水、其他被碎化）。修为按终局标签序重映射后传入；测试加 A*
+  一致性不变量（保水 ≤ ⌈入流/需求 × 绘制⌉）。
 - **colorize 湖渲染缺失（2026-10-17，用户报告）**：合成器只认 biome 码表里的
   lake 哨兵，而程序化链的湖在 `lake.png` 掩膜——此类包的湖完全不渲染。修为两源
   并集（哨兵 ∪ 掩膜），伪水深 + 岸羽化渲染，卫星链同类包同享修复。

@@ -87,11 +87,18 @@ LAKE_MIN_WIDTH_KM = 1.5
 #: Wider causeways keep genuine endorheic lagoons terminal.
 OCEAN_MERGE_CAUSEWAY_KM = 3.0
 #: Open-water evaporation factor on Hamon PET in the terminal-lake balance
-#: (terminal_lakes).  Deep-lake annual evaporation lands at roughly
-#: 0.9–1.3 × a reference ET surface; 1.0 keeps the verdict conservative
-#: exactly in the arid belt where it must not misfire — a lake stays
-#: terminal only if it truly cannot fill and spill.
-LAKE_EVAPORATION_FACTOR = 1.0
+#: (terminal_lakes / terminal_equilibrium_routing).  Annual large-lake
+#: evaporation lands near a reference-ET surface (heat storage shifts the
+#: season, not much of the year; USGS SIR 2012-5202, Bai et al. 2023 WRR).
+#: 0.9 is a CALIBRATED value (epistemics: observation fit, 2026-10-18
+#: author ruling) — with order-derived receivers the big southern nacrea
+#: basins sit at 99–100% of their P−E balance, and the ~1% inflow
+#: attribution shift of correct first-touch routing flipped the marginal
+#: ones terminal (their depth-sliced equilibrium water then shreds on the
+#: width gate).  0.9 restores the calibrated-for lake-rich intent and
+#: leaves decisively-separated verdicts untouched (25N-100W re-check:
+#: render lakes 1.61% → 1.62%).
+LAKE_EVAPORATION_FACTOR = 0.9
 #: Reference land runoff anchoring the channel-onset threshold, mm/yr:
 #: Earth's land-surface mean annual runoff ≈ 300 mm/yr (global land P
 #: ≈ 800 mm/yr, R ≈ 306 — the literature value).  The runoff weight is
@@ -374,6 +381,40 @@ def hydrology_weight(input_dir: Path, res: int, land: np.ndarray) -> tuple[np.nd
             # explode the weights — degrade down the chain instead.
             print(f"[hydrology] {path.name} land mean ~0 mm; uniform land weight")
             continue
+        # Headwater gate (todo ⑤): rivers should START where a water
+        # surplus exists (P > PET), not wherever faint precipitation can
+        # accumulate over long slopes — the same criterion as the Gaea
+        # headwaters mask (region_export._export_headwaters).  PET is the
+        # engine's Hamon form on the annual-mean temperature.  Runoff
+        # needs no gate (Turc–Pike already encodes the water balance);
+        # hyperarid-but-nonzero P windows keep the mean normalisation of
+        # the GATED field so the threshold still reads as cell counts.
+        if source == "precipitation":
+            t_path = input_dir / "temperature.C.npy"
+            if t_path.exists():
+                from dreamulator.engine.climate_physics import (
+                    potential_evapotranspiration_hamon,
+                )
+
+                t = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
+                tf = res // t.shape[0]
+                if tf > 1:
+                    t = np.kron(t, np.ones((tf, tf)))[:res, :res]
+                t12 = np.repeat(t.reshape(-1, 1), 12, axis=1)
+                pet = np.asarray(potential_evapotranspiration_hamon(t12, 365.25 / 12)).reshape(
+                    res, res
+                )
+                gate = grid > pet
+                if gate.any():
+                    gated = np.where(gate, grid, 0.0)
+                    gmean = float(gated[land].mean()) if land.any() else 0.0
+                    if gmean > 1e-9:
+                        print(
+                            f"[hydrology] headwater gate P>PET: "
+                            f"{int(gate[land].sum())}/{int(land.sum())} land cells keep weight"
+                        )
+                        grid = gated
+                        mean_mm = gmean
         print(f"[hydrology] weight source {source} (land mean {mean_mm:.1f} mm/yr)")
         return grid / mean_mm, mean_mm, source
     print(f"[hydrology] no usable climate channel under {input_dir}; uniform land weight")
@@ -621,6 +662,7 @@ def terminal_equilibrium_routing(
     np.ndarray,
     np.ndarray,
     dict[str, int],
+    list[dict[str, object]],
 ]:
     """Terminal-lake equilibrium with an exact lake-graph cascade.
 
@@ -653,21 +695,35 @@ def terminal_equilibrium_routing(
     pre-verdict.
 
     Returns ``(h, land, lakes_render, chain_stop, fringe_desc, rec_route,
-    acc, term_water, stats)``: the rewritten field and render mask, the
-    chain-stopping mask (render water plus dry-playa footprints), the
-    in-footprint descent tree for chain extraction across shrunk fringes
+    acc, term_water, stats, lake_records)``: the rewritten field and render
+    mask, the chain-stopping mask (render water plus dry-playa footprints),
+    the in-footprint descent tree for chain extraction across shrunk fringes
     (see ``lake_fringe_descend``), receivers with terminal sinks cut, the
     final (depleted, cut) accumulation, the equilibrium water mask (kept
-    surfaces plus playa sinks — exclude it from the sea masks), and the
-    component counts.
+    surfaces plus playa sinks — exclude it from the sea masks), the
+    component counts, and per-drawn-lake records (label, verdict, spill
+    cell + elevation, downstream label, inflow/demand in mm-equivalents) —
+    the spill data that used to live only in transient arrays.
     """
 
     stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}
+    lake_records: list[dict[str, object]] = []
     empty = np.zeros_like(lakes_draw, dtype=bool)
     empty_desc = np.full(h.size, -1, dtype=np.int64)
     if runoff_land_mean_mm <= 0.0:
         acc = flow_accumulation(order, receiver, weight)
-        return h, land, lakes_draw, lakes_draw, empty_desc, receiver, acc, empty, stats
+        return (
+            h,
+            land,
+            lakes_draw,
+            lakes_draw,
+            empty_desc,
+            receiver,
+            acc,
+            empty,
+            stats,
+            lake_records,
+        )
 
     lbl, n, _i, _ps, _pp = _lake_balances(
         lakes_draw,
@@ -680,7 +736,18 @@ def terminal_equilibrium_routing(
     )
     if not n:
         acc = flow_accumulation(order, receiver, weight)
-        return h, land, lakes_draw, lakes_draw, empty_desc, receiver, acc, empty, stats
+        return (
+            h,
+            land,
+            lakes_draw,
+            lakes_draw,
+            empty_desc,
+            receiver,
+            acc,
+            empty,
+            stats,
+            lake_records,
+        )
     lake_flat = lbl.reshape(-1)
     rec_flat = receiver.reshape(-1)
 
@@ -750,12 +817,20 @@ def terminal_equilibrium_routing(
     lake_term = np.isin(lbl, np.nonzero(is_term)[0])
 
     # 3) rewrite the terminal footprints; depletion at pass-through exits.
+    # _equilibrium_water re-labels the terminal UNION mask with its own
+    # component numbering (row-major first-appearance order); the per-label
+    # inflow/demand must be re-indexed to that order — passing the
+    # original-label arrays made the i-th terminal component read the i-th
+    # ORIGINAL label's budget (with 132 terminal of 169 lakes the offset
+    # misassigned A* wholesale: lakes kept 100% water at 8% balance while
+    # others shredded; found 2026-10-18 via meta lake records).
+    term_labels = np.flatnonzero(is_term)
     h_rw, land_rw, term_water, stats = _equilibrium_water(
         h,
         land,
         lake_term,
-        total,
-        demand,
+        np.concatenate(([0.0], total[term_labels])),
+        np.concatenate(([0.0], demand[term_labels])),
         mmu_cells=mmu_cells,
         sea_level_m=sea_level_m,
     )
@@ -779,7 +854,56 @@ def terminal_equilibrium_routing(
         if ex.size:
             weight_depl.reshape(-1)[ex] -= demand[a] / ex.size
     acc = flow_accumulation(order, rec_route, weight_depl)
-    return h_rw, land_rw, lakes_render, chain_stop, fringe_desc, rec_route, acc, term_water, stats
+
+    # Per-drawn-lake records: verdict, spill (the lowest receiver crossing
+    # out of the component) and the lake-graph successor, persisted by the
+    # callers into the pack meta — the rim/spill data that used to live
+    # only in transient arrays (inland-water-refine's "不落盘" gap).
+    h_flat = h.reshape(-1)
+    _hh, ww = h.shape
+    for a in range(1, n + 1):
+        member = lbl == a
+        if not member.any():
+            continue
+        ex = exits[lake_flat[exits] == a]
+        spill_cell = None
+        spill_elev_m = None
+        if ex.size:
+            tgt = rec_flat[ex]
+            pick = int(ex[int(np.argmin(h_flat[tgt]))])
+            spill_cell = [int(pick // ww), int(pick % ww)]
+            spill_elev_m = round(float(h_flat[int(rec_flat[pick])]), 3)
+        draw_cells = int(member.sum())
+        kept = int((member & water_kept).sum())
+        if is_term[a]:
+            verdict = "dry_playa" if kept == 0 else ("shrunk" if kept < draw_cells else "terminal")
+        else:
+            verdict = "passthrough"
+        lake_records.append(
+            {
+                "label": a,
+                "verdict": verdict,
+                "draw_cells": draw_cells,
+                "kept_water_cells": kept,
+                "spill_cell": spill_cell,
+                "spill_elev_m": spill_elev_m,
+                "downstream_label": int(downstream_of[a]),
+                "inflow_mm": round(float(total[a]), 3),
+                "demand_mm": round(float(demand[a]), 3),
+            }
+        )
+    return (
+        h_rw,
+        land_rw,
+        lakes_render,
+        chain_stop,
+        fringe_desc,
+        rec_route,
+        acc,
+        term_water,
+        stats,
+        lake_records,
+    )
 
 
 def heal_inland_water(
@@ -1249,23 +1373,30 @@ def erode_region_pack(
     # Terminal-lake equilibrium with through-flow depletion (the shared
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
-    h, land, lakes_draw, chain_stop, fringe_desc, rec_route, acc, term_water, lake_stats = (
-        terminal_equilibrium_routing(
-            h,
-            land,
-            lakes_draw0,
-            order2,
-            receiver,
-            weight,
-            precip_mm=rain if temp_c is not None else np.zeros_like(land, dtype=np.float64),
-            temp_c=temp_c if temp_c is not None else np.zeros_like(land, dtype=np.float64),
-            runoff_land_mean_mm=run_norm_mm
-            if (temp_c is not None and weight_src == "runoff")
-            else 0.0,
-            mmu_cells=mmu,
-            km_per_px=km_pp,
-            sea_level_m=float(meta["sea_level_m"]),
-        )
+    (
+        h,
+        land,
+        lakes_draw,
+        chain_stop,
+        fringe_desc,
+        rec_route,
+        acc,
+        term_water,
+        lake_stats,
+        _lake_records,
+    ) = terminal_equilibrium_routing(
+        h,
+        land,
+        lakes_draw0,
+        order2,
+        receiver,
+        weight,
+        precip_mm=rain if temp_c is not None else np.zeros_like(land, dtype=np.float64),
+        temp_c=temp_c if temp_c is not None else np.zeros_like(land, dtype=np.float64),
+        runoff_land_mean_mm=run_norm_mm if (temp_c is not None and weight_src == "runoff") else 0.0,
+        mmu_cells=mmu,
+        km_per_px=km_pp,
+        sea_level_m=float(meta["sea_level_m"]),
     )
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0

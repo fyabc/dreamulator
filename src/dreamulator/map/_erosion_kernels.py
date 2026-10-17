@@ -122,6 +122,7 @@ def _pf_core(
                         state[ny, nx] = 1
                         base = filled[y, x] - eps if breach else filled[y, x] + eps
                         filled[ny, nx] = max(dem[ny, nx], base)
+                        receiver[ny * w + nx] = y * w + x
                         heap_len = _push(heap, heap_len, filled[ny, nx], ny * w + nx)
 
     while heap_len > 0:
@@ -141,6 +142,7 @@ def _pf_core(
                 if 0 <= ny < h and 0 <= nx < w and land[ny, nx] and state[ny, nx] == 0:
                     state[ny, nx] = 1
                     filled[ny, nx] = max(dem[ny, nx], filled[y0, x0] + eps)
+                    receiver[ny * w + nx] = cell
                     heap_len = _push(heap, heap_len, filled[ny, nx], ny * w + nx)
 
     # Unused tail slots would hold garbage int64s - downstream consumers
@@ -148,10 +150,21 @@ def _pf_core(
     for a in range(order_len, order.size):
         order[a] = -1
 
-    # Steepest descent receiver on the filled surface (D8).  The fill
-    # guarantees every land cell has a strictly lower filled neighbour
-    # (ocean counts at its own height, which is < land fill + eps only if
-    # the ocean cell is below sea level — true by construction).
+    # Steepest descent receiver on the filled surface (D8), with the
+    # discovery-order predecessor (recorded above) as the tie-break.
+    # A filled depression grades at eps/step toward its spill; on that
+    # near-flat rim band every strictly-lower neighbour has an eps-scale
+    # slope, so the plain steepest rule picks by scan order and the path
+    # wanders the perimeter — channels hugged the shoreline instead of
+    # entering the lake (user-reported 2026-10-17).  Preferring the
+    # predecessor when its slope ties the best (within eps) makes fill
+    # cells follow the Barnes Priority-Flood +FlowDirs convention: the
+    # discovery chain is the direct ramp descent to the spill.  On
+    # ordinary terrain the true gradient dwarfs eps, the predecessor
+    # loses, and the receiver is bit-identical to plain steepest descent.
+    # Predecessors are always popped first (they discovered this cell),
+    # so `order` stays a topological order of the tree; filled[predecessor]
+    # <= filled[cell] - eps keeps it acyclic.
     dist_card = 1.0
     dist_diag = np.sqrt(2.0)
     for a in range(order_len):
@@ -174,6 +187,15 @@ def _pf_core(
                     if slope > best_slope:
                         best_slope = slope
                         best = ny * w + nx
+        pred = receiver[cell]
+        if pred >= 0:
+            py, px = pred // w, pred % w
+            fp = filled[py, px]
+            dy = abs(py - y0) + abs(px - x0)
+            dist = dist_diag if dy == 2 else dist_card
+            pred_slope = (f0 - fp) / dist
+            if fp < f0 and best_slope - pred_slope <= eps:
+                best = pred
         receiver[cell] = best
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from scipy.ndimage import binary_erosion
@@ -21,6 +23,7 @@ from dreamulator.map.prog_erosion import (
     river_mask,
     river_segments,
     spl_erode,
+    terminal_equilibrium_routing,
     terminal_lakes,
 )
 
@@ -254,19 +257,24 @@ def test_river_segments_flows_grow_downstream() -> None:
 
 def test_river_segments_crosses_submmu_lake_stops_at_big() -> None:
     # Same slope with two basins: a sub-MMU lake (between LAKE_MIN_CELLS and
-    # the MMU) is crossed invisible; an MMU lake stops the chain at its shore.
+    # the MMU) is crossed invisible; a wide flat-floored basin makes an
+    # MMU + min-width lake that stops the chain at its shore.  The big
+    # basin is a flat floor set deep below the surrounding slope so the
+    # fill covers the whole box (river_segments gates its stop-lakes by
+    # MMU AND min width — a fixture whose fill stays narrow is a
+    # crossable valley, which order-derived receivers rightly cross).
     n = 128
     _y, x = np.mgrid[0:n, 0:n]
     kmpp = 0.1
     mmu = lake_mmu_cells(kmpp)
-    dem = (n - 1 - x).astype(np.float64) * 5.0  # slope to the eastern sea
+    dem = (n - 1 - x).astype(np.float64) * 5.0  # slope draining to the east frame
     dem[18:28, 48:58] -= 60.0  # 10x10 basin — sub-MMU lake
-    dem[55:115, 50:110] -= 60.0  # 60x60 basin — MMU lake
+    dem[55:115, 30:80] = 10.0  # wide flat-floored bowl, rim > 200 m on all sides
     land = dem > 0.0
     filled, order, rec = priority_flood(dem, land)
     lakes = lake_mask(filled, dem)
     small = lakes[10:40, 40:60]
-    big = lakes[50:120, 45:115]
+    big = lakes[50:120, 25:85]
     assert 64 <= small.sum() < mmu, "small basin must be a sub-MMU lake"
     assert big.sum() >= mmu, "big basin must be an MMU lake"
     acc = flow_accumulation(order, rec, np.where(land, 1.0, 0.0))
@@ -277,17 +285,18 @@ def test_river_segments_crosses_submmu_lake_stops_at_big() -> None:
     # basin on any row of the band).
     beyond_small = any(a[0] > 60.0 * kmpp for a, _b in segs if 12 < (n - 1 - a[1] / kmpp) < 34)
     assert beyond_small, "sub-MMU lake must not break the channel"
-    # MMU basin (x 50..110, y 55..115): no chain crosses the interior of
-    # its MMU-scale lake.  (Fringe fragments below the MMU inside the box
-    # are legitimately crossed, so restrict the interior to big components.)
-    from dreamulator.map.prog_erosion import keep_large_lakes
+    # Wide basin (x 30..80, y 55..115): no chain crosses the interior of
+    # its lake — gated the way river_segments gates it (MMU AND min
+    # width); narrower fills are legitimately crossed as valleys.
+    from dreamulator.map.prog_erosion import LAKE_MIN_WIDTH_KM, keep_large_lakes
 
-    lakes_big = keep_large_lakes(lakes, mmu)
+    lakes_big = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, kmpp)
+    assert lakes_big.any(), "fixture lake must pass the width gate"
     core = binary_erosion(lakes_big, iterations=1)
     for a, b in segs:
         for px, py in (a, b):
             ix, iy = int(round(px / kmpp)), int(round((n - 1) - py / kmpp))
-            if 0 <= ix < n and 0 <= iy < n and 50 < ix < 110 and 55 < iy < 115:
+            if 0 <= ix < n and 0 <= iy < n and 30 < ix < 80 and 55 < iy < 115:
                 assert not core[iy, ix], "channel crossed the MMU lake"
 
 
@@ -666,3 +675,158 @@ def test_river_segments_regime_is_reach_based() -> None:
     assert reaches.tolist() == [0, 1, 0]
     _s, _f, legacy = river_segments(rivers, rec, acc, 1.0)
     assert (legacy == 0).all()
+
+
+def _bowl_dem(n: int = 96) -> tuple[np.ndarray, np.ndarray]:
+    """East slope with a wide deep flat-floored bowl mid-west."""
+    _y, x = np.mgrid[0:n, 0:n]
+    dem = (n - 1 - x).astype(np.float64) * 5.0
+    dem[30:60, 30:60] = 5.0  # flat floor far below the >150 m rim
+    return dem, dem > 0.0
+
+
+def test_fill_receiver_routes_to_spill() -> None:
+    # Order-derived receivers (todo ⑤): the chain entering a fill must cut
+    # across the interior to the spill — the discovery chain — instead of
+    # hugging the shoreline.  Bowl mid-west, entry at mid-row on the west
+    # rim: the receiver walk stays near that row and exits on the east
+    # (spill) side; a rim walk would detour along the north/south shore.
+    n = 96
+    dem, land = _bowl_dem(n)
+    filled, order, rec = priority_flood(dem, land)
+    lakes = lake_mask(filled, dem)
+    assert lakes[30:60, 30:60].all()
+    r2 = rec.reshape(n, n)
+    assert r2[45, 29] == 45 * n + 30  # descends into the fill
+    rows, cols = [], []
+    c = 45 * n + 30
+    for _ in range(400):
+        y, x = c // n, c % n
+        rows.append(y)
+        cols.append(x)
+        c = int(rec[c])
+        if c < 0 or not lakes[c // n, c % n]:
+            break
+    assert max(cols) >= 58, "path must reach the east (spill) side of the fill"
+    # Discovery chains weave (diagonal merges): +/-8 on a 30-row fill is a
+    # crossing; a rim walk rides the boundary at +/-15.
+    assert max(abs(np.asarray(rows) - 45)) <= 8, "path must cut across, not hug the rim"
+
+
+def test_receiver_order_topological() -> None:
+    # The discovery-predecessor tie-break keeps the receiver forest acyclic
+    # and consistent with the pop order (flow_accumulation's contract).
+    n = 96
+    dem, land = _bowl_dem(n)
+    dem[10:20, 10:20] -= 30.0  # a second, smaller depression
+    _f, order, rec = priority_flood(dem, land)
+    pos = np.full(n * n, -1, dtype=np.int64)
+    for a, c in enumerate(order):
+        if c >= 0:
+            pos[c] = a
+    for a in np.nonzero(order >= 0)[0]:
+        cell = int(order[a])
+        r = int(rec[cell])
+        if r >= 0:
+            assert pos[r] < pos[cell], "receiver must pop before the cell it drains"
+
+
+def test_ordinary_terrain_receiver_unchanged() -> None:
+    # Zero-regression: on a depressionless slope the predecessor never ties
+    # the true gradient, and the receiver equals plain steepest descent on
+    # the filled surface (the pre-change behaviour).
+    dem, land = _slope_east(48)
+    filled, _order, rec = priority_flood(dem, land)
+    h, w = dem.shape
+    ref = np.full(h * w, -1, dtype=np.int64)
+    dist_card, dist_diag = 1.0, np.sqrt(2.0)
+    for y in range(h):
+        for x in range(w):
+            if not land[y, x]:
+                continue
+            f0 = filled[y, x]
+            best, best_slope = -1, 0.0
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    if dx == 0 and dy == 0:
+                        continue
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < h and 0 <= nx < w:
+                        fj = filled[ny, nx]
+                        if land[ny, nx] and fj >= f0:
+                            continue
+                        dist = dist_diag if (dx != 0 and dy != 0) else dist_card
+                        slope = (f0 - fj) / dist
+                        if slope > best_slope:
+                            best_slope, best = slope, ny * w + nx
+            ref[y * w + x] = best
+    mask = land.reshape(-1) & (rec >= 0)
+    assert (rec[mask] == ref[mask]).all()
+
+
+def test_hydrology_weight_precip_gated_by_pet(tmp_path) -> None:
+    # Todo ⑤ headwater gate: on the precipitation fallback, cells without a
+    # water surplus (P <= PET_hamon) carry zero weight — rivers cannot
+    # start in the arid east.
+    n = 64
+    half = n // 2
+    _y, x = np.mgrid[0:half, 0:half]
+    land = np.ones((n, n), dtype=bool)
+    precip = np.where(x < half // 2, 2500.0, 50.0)
+    temp = np.where(x < half // 2, 10.0, 30.0)
+    np.save(tmp_path / "precipitation.mm.npy", precip)
+    np.save(tmp_path / "temperature.C.npy", temp)
+    weight, norm_mm, source = hydrology_weight(tmp_path, n, land)
+    assert source == "precipitation"
+    assert norm_mm > 0.0
+    # Kron-upsampled arid east: zero weight; wet west: positive.
+    assert (weight[:, half + 2 :] == 0.0).all()
+    assert (weight[:, : half // 2 - 1] > 0.0).all()
+
+
+def test_terminal_routing_emits_lake_records() -> None:
+    # The spill/verdict record closes the "rim/spill 不落盘" gap: every
+    # drawn lake gets a verdict, and pass-through lakes carry their spill.
+    n = 64
+    _y, x = np.mgrid[0:n, 0:n]
+    dem = (n - 1 - x).astype(np.float64) * 5.0
+    dem[24:40, 36:52] -= 50.0
+    land = dem > 0.0
+    runoff = np.where(x < 22, 1.0, 0.0)
+    rbar = float(runoff[land].mean())
+    filled, order, rec = priority_flood(dem, land)
+    lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    assert lakes_draw.any()
+    common = dict(
+        weight=runoff / rbar,
+        precip_mm=np.full((n, n), 2100.0),
+        temp_c=np.full((n, n), 10.0),
+        runoff_land_mean_mm=rbar,
+        mmu_cells=lake_mmu_cells(1.0),
+        km_per_px=1.0,
+        sea_level_m=0.0,
+    )
+    _h, _l, _lr, _cs, _fd, _rr, _acc, _tw, _st, records = terminal_equilibrium_routing(
+        dem, land, lakes_draw, order, rec, **common
+    )
+    assert len(records) >= 1
+    # The bowl is the component spilling on its east rim (rows 24..40);
+    # frame-corner fill fringes may appear as extra small components.
+    bowl = [r for r in records if r["spill_cell"] and 24 <= r["spill_cell"][0] <= 40]
+    assert bowl, "fixture bowl must be recorded"
+    assert bowl[0]["verdict"] == "passthrough"  # humid forcing: demand < 0
+    assert bowl[0]["spill_elev_m"] > 0.0
+    assert bowl[0]["inflow_mm"] > 0.0
+    # Arid forcing: the same geometry dries to a terminal verdict.
+    arid = dict(common, precip_mm=np.full((n, n), 50.0), temp_c=np.full((n, n), 30.0))
+    _h2, _l2, _lr2, _cs2, _fd2, _rr2, _acc2, _tw2, _st2, records2 = terminal_equilibrium_routing(
+        dem, land, lakes_draw, order, rec, **arid
+    )
+    assert any(r["verdict"] in ("terminal", "dry_playa", "shrunk") for r in records2)
+    # A* consistency invariant (label-remap regression, 2026-10-18): every
+    # terminal-class lake keeps at most ceil(inflow/demand × draw) cells —
+    # the pre-fix label mismatch kept whole lakes at ~8% of their balance.
+    for r in records2:
+        if r["verdict"] in ("terminal", "dry_playa", "shrunk"):
+            cap = math.ceil(r["inflow_mm"] / r["demand_mm"] * r["draw_cells"]) + 1
+            assert r["kept_water_cells"] <= cap, (r["label"], r["kept_water_cells"], cap)

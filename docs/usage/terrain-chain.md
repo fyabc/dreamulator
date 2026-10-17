@@ -57,6 +57,10 @@ flowchart LR
 ```bash
 dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
     -o data/worlds/nacrea/packs/nacrea-15_-100_550km
+
+# 气候通道改用 GCM 结果（固定气候分支）：
+dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
+    --branch gcm-t42-712 -o data/worlds/nacrea/packs/nacrea-15_-100_550km
 ```
 
 从世界数据切出方形窗口数据包（`<pack>/input/`）：高程、气候通道
@@ -68,6 +72,12 @@ dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
 窗口数学与通道语义见
 [design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)
 的契约一节。
+
+**GCM 气候分支导出**：加 `--branch gcm-t42-712`（气候层固定为 ExoPlaSim T42
+投影结果的分支，`climate_source: gcm`）时，降水/温度/径流/Köppen/群系全部取
+GCM 投影场而非引擎 EBM 模拟。同一窗口在两种气候源之间切换后，**必须做全量
+refine**（不能 `--reuse-height`）——TD 推理以温度/降水为条件场，气候源换了，
+缓存高度与新条件不再对应。
 
 ## ② terrain-diffusion 细化（主方法）
 
@@ -104,7 +114,10 @@ dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
 ## ③ 水文语义（第②步产出，供渲染使用）
 
 - **排水**：Priority-Flood（Barnes et al. 2014 + ε）从海向内陆涨水，
-  图边界 = 流出域（陆锁窗也能排水、河流可流出画框）；
+  图边界 = 流出域（陆锁窗也能排水、河流可流出画框）。流方向 = 填平面上的
+  最陡下降，**平局裁决取淹没前驱**（Barnes +FlowDirs 惯例）：填区内前驱链
+  沿 ε 递减直达溢出口，入湖河穿湖心到鞍口而非沿盆缘描边（普通地形上前驱
+  从不与真梯度平局，receiver 与纯最陡下降逐格一致）；
 - **河网权重（年径流）**：汇流累积按年径流场加权（`runoff.mm.npy`
   通道：Turc–Pike/Budyko 年曲线（n = 2）对年降水与 Hamon 年蒸散；
   月桶因强季节性气候零产流的盲区见
@@ -118,7 +131,9 @@ dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
   归一会按气候重新计价，荒漠窗曾因此 wadi 蔓生）。
   侵蚀物理仍用降水权重——暴雨径流是干旱区侵蚀的
   主力，两个口径有意不同（Gaea 链时代裁决）。旧包没有该通道时回退到
-  降水权重并打印提示，重新 `export region` 即可补上。物理推导见
+  降水权重并打印提示，重新 `export region` 即可补上；回退权重带**河源
+  门控**（P > Hamon PET 的格才计重，与 Gaea headwaters 掩码同一判据），
+  干旱腹地不再凭微弱降水长坡累积发河。物理推导见
   [knowledge/geology/hydrology.md](../knowledge/geology/hydrology.md) §7；
 - **内陆水体分类**：`h≤0` 且不与外海连通的水体先分类——小于制图
   MMU（`LAKE_MMU_KM2` ≈ 4.6 km²，精化网格上 256 格；550 km 幅面成图
@@ -141,8 +156,9 @@ dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
 - **终点湖/过路湖（级联水量收支 + 平衡水位）**：达到渲染门槛的湖
   按**湖图级联**算收支——全部湖先当汇做「首触」累积（每滴水只记
   一次、记给第一个到达的湖；树枝状湖的自重入不会重复计账），再沿
-  湖图拓扑序传递 `出流 = 总入流 − 净蒸散需求`（Hamon 年 PET − 湖面
-  降水，按湖面积累计；湿润湖净需求为负、净增水）。装不满的判
+  湖图拓扑序传递 `出流 = 总入流 − 净蒸散需求`（Hamon 年 PET × 0.9 开阔水面
+  标定系数 − 湖面降水，按湖面积累计；湿润湖净需求为负、净增水；0.9 为观测
+  拟合标定——正确首触路由下大湖收支压在刀刃上，见 CHANGELOG 2026-10-18）。装不满的判
   **终点湖**并改写到平衡水位：湖面缩到收支闭合面积（A* = 入库 ÷
   每格需求，取洼地最深格），出露湖床成陆地；A* 低于渲染 MMU 的
   干化为**盐滩**（整片成陆地，最深处留 1 格不可见汇点终止河网）。
@@ -152,8 +168,10 @@ dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
   图边界上的湖按过路处理（流域被窗口截断）。缩水湖的入流河沿改写前
   湖底地形的下降树走过干出的湖床、画进新岸一格（干盐滩的河止于滩缘，
   没有可见水可接）。refined-out 的 meta 记
-  `terminal_lakes / dry_playas / shrunk_lakes` 三个计数。公式、教训
-  与近似依据见
+  `terminal_lakes / dry_playas / shrunk_lakes` 三个计数，且每片湖一条
+  **`lakes` 记录**（verdict / spill 格与鞍口高程 / 下游湖标 / 入流与
+  需求 mm 当量）——溢流与判决数据落盘，不再只活在瞬态数组里。公式、
+  教训与近似依据见
   [knowledge/geology/hydrology.md](../knowledge/geology/hydrology.md) §7；
 - **河链**：河源沿 receiver 聚合，遇 MMU 级湖即止（终点画进湖岸格
   一格、线触水）、过路湖溢口续流（终点湖不续流）；终点在海/湖/画框

@@ -415,7 +415,7 @@ def refine_region_pack(
     # Terminal-lake equilibrium with through-flow depletion (the shared
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
-    h, land, lakes_draw, chain_stop, fringe_desc, rec, acc, term_water, lake_stats = (
+    h, land, lakes_draw, chain_stop, fringe_desc, rec, acc, term_water, lake_stats, lake_records = (
         terminal_equilibrium_routing(
             h,
             land,
@@ -488,6 +488,7 @@ def refine_region_pack(
         "terminal_lakes": lake_stats["terminal"],
         "dry_playas": lake_stats["dry_playas"],
         "shrunk_lakes": lake_stats["shrunk"],
+        "lakes": lake_records,
         "lake_balance": {
             "pet": "hamon-annual",
             "evaporation_factor": LAKE_EVAPORATION_FACTOR,
