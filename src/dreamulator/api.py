@@ -13,6 +13,7 @@ from dreamulator.api_routes.civmap import router as civmap_router
 from dreamulator.api_routes.guard import router as guard_router
 from dreamulator.api_routes.maps import router as maps_router
 from dreamulator.api_routes.narrate import router as narrate_router
+from dreamulator.api_routes.packs import router as packs_router
 from dreamulator.api_routes.worlds import router as worlds_router
 
 app = FastAPI(
@@ -36,6 +37,7 @@ app.include_router(narrate_router)
 app.include_router(maps_router)
 app.include_router(civmap_router)
 app.include_router(guard_router)
+app.include_router(packs_router)
 
 
 @app.get("/api/health")

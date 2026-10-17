@@ -473,5 +473,46 @@
     "listSeparator": "、",
     "noPlateData": "该地图无板块构造数据（导入的高度图不含 plates）。",
     "escClearSelection": "Esc 清除全部选中"
+  },
+  "packs": {
+    "staticModeHint": "子地图页只在本地 API 模式可用：区域包在世界数据目录的 packs/ 下（本地数据），不随静态站点发布。请用 dreamulator serve 打开。",
+    "hoverPrompt": "移动鼠标查看经纬度",
+    "loadingBase": "底图加载中…",
+    "clickToProbe": "点击探测格点值",
+    "pickPrompt": "区域包",
+    "noPacks": "未找到区域包",
+    "noMeta": "缺少 meta.json——先运行 export region 生成包",
+    "base": "底图",
+    "baseOptions": {
+      "topo": "地形（测绘体）",
+      "preview": "卫星预览",
+      "albedo": "反照率",
+      "color": "分层设色",
+      "koppen": "柯本气候",
+      "biome": "群系"
+    },
+    "graticule": "经纬网",
+    "probePrompt": "点击地图任意点，探测高程 / 群系 / 水体 / 河流情相",
+    "probeTitle": "格点探测",
+    "probing": "探测中…",
+    "field": {
+      "height": "高程",
+      "biome": "群系",
+      "koppen": "柯本",
+      "cell": "格点",
+      "riverFlow": "河流累积"
+    },
+    "chip": {
+      "river": "河",
+      "lake": "湖",
+      "sea": "海"
+    },
+    "regime": {
+      "perennial": "常流",
+      "nonPerennial": "非常流"
+    },
+    "copied": "已复制",
+    "copyCliTitle": "复制为 export CLI 参数",
+    "copyPlainTitle": "复制纯坐标"
   }
 }

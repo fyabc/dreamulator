@@ -473,5 +473,46 @@
     "listSeparator": ", ",
     "noPlateData": "This map has no tectonic plate data (imported heightmaps contain no plates).",
     "escClearSelection": "Esc clears all selections"
+  },
+  "packs": {
+    "staticModeHint": "The region pack page is API-mode only: packs live under the world data directory packs/ (local data) and are not published with the static site. Start it with dreamulator serve.",
+    "hoverPrompt": "Move the cursor for lon/lat",
+    "loadingBase": "Loading base map…",
+    "clickToProbe": "Click to probe cell values",
+    "pickPrompt": "Pack",
+    "noPacks": "No region packs found",
+    "noMeta": "meta.json missing — run export region first",
+    "base": "Base",
+    "baseOptions": {
+      "topo": "Topo body",
+      "preview": "Satellite preview",
+      "albedo": "Albedo",
+      "color": "Hypsometric",
+      "koppen": "Köppen",
+      "biome": "Biomes"
+    },
+    "graticule": "Graticule",
+    "probePrompt": "Click anywhere to probe elevation / biome / water / river regime",
+    "probeTitle": "Cell probe",
+    "probing": "Probing…",
+    "field": {
+      "height": "Height",
+      "biome": "Biome",
+      "koppen": "Köppen",
+      "cell": "Cell",
+      "riverFlow": "River accum."
+    },
+    "chip": {
+      "river": "River",
+      "lake": "Lake",
+      "sea": "Sea"
+    },
+    "regime": {
+      "perennial": "Perennial",
+      "nonPerennial": "Non-perennial"
+    },
+    "copied": "Copied",
+    "copyCliTitle": "Copy as export CLI arguments",
+    "copyPlainTitle": "Copy plain coordinates"
   }
 }

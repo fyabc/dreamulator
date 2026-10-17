@@ -32,6 +32,8 @@ export default function Sidebar({
   const navItems = [
     { path: '/', label: t('nav.home'), icon: '🏠' },
     { path: '/worlds', label: t('nav.worlds'), icon: '🌍' },
+    // Region pack QA page — local packs only, hidden in the static build.
+    ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: '🧭' }]),
     { path: '/help', label: t('nav.help'), icon: '❓' },
   ]
 

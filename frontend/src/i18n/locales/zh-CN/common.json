@@ -9,7 +9,8 @@
     "help": "帮助",
     "overview": "概览",
     "map": "地图",
-    "viewer3d": "3D 视图"
+    "viewer3d": "3D 视图",
+    "packs": "子地图"
   },
   "action": {
     "back": "← 返回",
