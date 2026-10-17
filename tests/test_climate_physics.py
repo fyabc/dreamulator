@@ -9,7 +9,10 @@ import pytest
 
 from dreamulator.engine.climate_physics import (
     _PICKUP_GATE_F_MIN,
+    SOIL_WATER_CAPACITY_MM,
     altitude_lapse_rate,
+    annual_runoff_mm,
+    annual_runoff_turc_pike,
     aridity_index_keep,
     column_water_saturation,
     convective_pickup_gate,
@@ -27,7 +30,9 @@ from dreamulator.engine.climate_physics import (
     potential_evapotranspiration_hamon,
     potential_evapotranspiration_hamon_monthly,
     pressure_from_temperature,
+    runoff_monthly_mm,
     saturation_specific_humidity,
+    soil_bucket_monthly,
     sst_convection_gate,
     subsidence_aridity_gate,
     surface_temperature,
@@ -1013,3 +1018,56 @@ class TestSubsidenceAridityGate:
             p_cold_mm=p_cold,
         )
         assert codes == ["BWh", "BSh", "BSk"]
+
+
+class TestLandRunoff:
+    """The hydrology legs' water-balance weight: Hamon-demand bucket runoff."""
+
+    def test_annual_runoff_matches_bucket_sum(self) -> None:
+        # The helpers are exact wrappers: monthly == the raw bucket's runoff
+        # with a Hamon demand, annual == its 12-month sum.
+        rng = np.random.default_rng(3)
+        t = rng.uniform(-10.0, 30.0, size=(6, 12))
+        p = rng.uniform(150.0, 500.0, size=(6, 12))  # mm/month
+        dpm = 365.25 / 12.0
+        pet = potential_evapotranspiration_hamon_monthly(t, dpm)
+        _e, r_direct, _cycles, _ds = soil_bucket_monthly(p, pet, SOIL_WATER_CAPACITY_MM)
+        monthly = runoff_monthly_mm(t, p, days_per_month=dpm)
+        annual = annual_runoff_mm(t, p, days_per_month=dpm)
+        np.testing.assert_allclose(monthly, r_direct, rtol=1e-12)
+        np.testing.assert_allclose(annual, r_direct.sum(axis=-1), rtol=1e-12)
+
+    def test_runoff_wet_and_arid_forcing(self) -> None:
+        # Wet forcing (P > PET every month): the bucket stays saturated and
+        # runoff = P − PET per month (within the periodic-convergence
+        # tolerance of 0.05 mm).  Arid forcing (P ≪ PET): the bucket empties,
+        # evaporation is storage-limited and runoff is exactly zero — the
+        # property the desert-headwater suppression relies on.
+        dpm = 365.25 / 12.0
+        t = np.full((1, 12), 20.0)
+        p_wet = np.full((1, 12), 400.0)
+        pet = potential_evapotranspiration_hamon_monthly(t, dpm)
+        monthly = runoff_monthly_mm(t, p_wet, days_per_month=dpm)
+        np.testing.assert_allclose(monthly, p_wet - pet, atol=0.06)
+        p_arid = np.full((1, 12), 5.0)
+        t_arid = np.full((1, 12), 30.0)
+        annual = annual_runoff_mm(t_arid, p_arid, days_per_month=dpm)
+        assert float(annual[0]) == pytest.approx(0.0, abs=1e-9)
+
+    def test_annual_runoff_turc_pike_limits_and_yield(self) -> None:
+        # Budyko limits: energy-limited (humid) R → P − PET from above
+        # (E slightly under PET), water-limited (hyperarid) R → small
+        # fraction of P.  The seasonal-blind-spot anchor: a 900 mm/yr Csa
+        # slope with PET 1218 (bucket yield exactly 0) keeps R/P ≈ 0.20.
+        p_humid = np.array([3000.0])
+        pet_humid = np.array([1200.0])
+        r = annual_runoff_turc_pike(p_humid, pet_humid)
+        assert 1800.0 < float(r[0]) < 1900.0  # above P − PET = 1800 (φ = 0.4 not yet at the limit)
+        p_arid = np.array([180.0])
+        pet_arid = np.array([900.0])
+        r = annual_runoff_turc_pike(p_arid, pet_arid)
+        assert 0.0 < float(r[0]) < 10.0  # hyperarid wadi yield, a few mm/yr
+        r_csa = annual_runoff_turc_pike(np.array([900.0]), np.array([1218.0]))
+        assert 150.0 < float(r_csa[0]) < 200.0  # ≈ 176: real rivers where the bucket yields 0
+        # Zero precipitation is a hard zero, not a division artefact.
+        assert float(annual_runoff_turc_pike(np.array([0.0]), np.array([1500.0]))[0]) == 0.0

@@ -1135,6 +1135,31 @@ def write_engine_climate_yearly(
     logger.info("  Exported climate_yearly.msgpack (%d cells)", mesh.num_cells)
 
 
+def load_climate_monthly(map_dir: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Dequantize ``climate_monthly.msgpack`` into the monthly t/p arrays.
+
+    Returns ``(t_monthly_c, p_monthly_mm)``: per-cell monthly-mean temperature
+    in °C and monthly precipitation in mm per month, both float64 of shape
+    (num_cells, 12) in mesh-cell order — the reading inverse of the writer in
+    ``export_climate_layers`` (int16 + per-field scale/offset).  Raises
+    FileNotFoundError naming the path when the file is missing.
+    """
+    import msgpack
+
+    path = map_dir / "climate_monthly.msgpack"
+    if not path.exists():
+        raise FileNotFoundError(f"monthly climate series missing: {path}")
+    with path.open("rb") as f:
+        d = msgpack.unpackb(f.read())
+    n, m = int(d["num_cells"]), int(d["months"])
+
+    def deq(prefix: str) -> np.ndarray:
+        q = np.frombuffer(d[f"{prefix}_monthly"], dtype="<i2").astype(np.float64)
+        return (q * float(d[f"{prefix}_scale"]) + float(d[f"{prefix}_offset"])).reshape(n, m)
+
+    return deq("t"), deq("p")
+
+
 def export_climate_layers(
     mesh: CVTMesh,
     output_dir: Path,
