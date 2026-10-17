@@ -88,7 +88,7 @@
 | [**Gaia Pro**](https://www.procedural-worlds.com/products/professional/gaia-pro/) (Unity) | 商用 | Unity 地形 + 植被/水体一键生成；2024 最佳开发工具奖 | 游戏引擎资产生成器，非科学模拟 |
 | [**TerreSculptor**](https://www.demenzunmedia.com/terresculptor/) | 商用 | 高度图雕刻 + 侵蚀滤镜 | 同 Gaea/World Machine |
 | [**Nixis**](https://github.com/MightyBOBcnc/nixis) | 开源 Python | 球面类地行星程序化生成：构造 + 水力侵蚀 + 河流/流域 | 早期阶段（仅灰度输出）；算法思路可参考 |
-| [**the-dark-candle**](https://github.com/feinorgh/the-dark-candle) | 开源 Rust/Bevy | 3D 测地线行星生成：多构造模式 + 侵蚀 + 等距圆柱/Mollweide/正射投影 + GPU 着色器 | CVT 而非 Voronoi；3D globe 交互 + 构造 timelapse 回放是 Dreamulator 的待做项 |
+| [**the-dark-candle**](https://github.com/feinorgh/the-dark-candle) | 开源 Rust/Bevy | 3D 测地线行星生成：多构造模式 + 侵蚀 + 等距圆柱/Mollweide/正射投影 + GPU 着色器 | CVT 而非 Voronoi；构造 timelapse 回放是 Dreamulator 的待做项（视图配置业界对照见 §九） |
 | [**Cartographer 2**](https://apps.apple.com/tw/app/cartographer-2-rpg-world-maker/id6744778305) | iOS 商用 | 一键程序化世界 + 气候/生物群系模拟 + 海平面/冰盖调节 | 移动端；简化但完整的"气候→群系"链 |
 | [**Inkarnate**](https://inkarnate.com/) | Web 商用 | 手绘风格地图；资产库（城堡/树木/山脉图标） | 纯视觉；无模拟 |
 | [**Wonderdraft**](https://www.wonderdraft.net/) | 桌面商用 | 手绘风格地图；自定义资产 | 纯视觉；无模拟 |
@@ -436,3 +436,23 @@ beta，一次性买断）。定位「行星尺度中间层，不替代地形工�
 排水/气候计算，河流自动生成，雪线由温度+直减率导出；90 m/px 大陆级、30 m/px 近景级。
 导入源：Gleba / Rock 3。对本库启示与差异化（带物理的模拟器 vs 其雕刻/呈现层）分析见
 `proposals/gaea-refinement.md` §7。
+
+## 九、视图配置业界对照（2026-10-17 调研）
+
+「同一份世界数据提供哪些视图（2D 平面图、3D 球面、投影切换）」的业界分布，服务于前端
+视图精简决策。逐工具证据（官网原文、changelog、官方论坛与 issue）存私有调研档
+（`private/research/2026-10-17-view-simplification-competitors.md`）；本节只登记对配置
+决策有效的结论。
+
+| 阵营 | 代表 | 做法 | 对 dreamulator 的启示 |
+|------|------|------|---------------------|
+| 纯 2D 单视图（绝对主流） | [World Anvil](https://www.worldanvil.com/)、[Inkarnate](https://inkarnate.com/)、[Wonderdraft](https://www.wonderdraft.net/)、CC3+、donjon、Dwarf Fortress、CK3 及全部调研到的新兴 AI 世界观工具 | 只提供平面地图，无球面、无投影概念。World Anvil 官方拒绝过球面提案（"3D maps are too complex and not within the scope of World Anvil"），CK3 社区也反对换球面（Paradox 论坛 "Faking a Globe" 讨论） | 平面图是创作类产品的工作面共识，球面不是必备能力 |
+| 球面 = 查看器而非编辑面 | [Azgaar FMG](https://azgaar.github.io/Fantasy-Map-Generator/) | 同一数据有 Standard（2D 编辑）、3D scene、Globe 三种视图，编辑只能在 2D 进行；Globe 隐含等距圆柱假设，与默认 2D 数据在几何上不严格一致（issue #990，两极挤压变形） | 3D 球面的合理定位是查看器与展示门面，不是编辑面 |
+| 多投影只在生成/导出环节 | [donjon](https://donjon.bin.sh/world) Fractal World Generator（11 种投影）、[FT3+](https://www.profantasy.com/products/fractal-terrains-3)（24 种投影 + 自定义） | 投影是生成时的下拉参数或导出目标，不是交互浏览中的切换项；所有交互式 fantasy 工具（World Anvil、Inkarnate、Wonderdraft、Azgaar 2D）投影选项为零 | 「同一数据多投影交互浏览」在竞品中没有先例——这是 2026-10 交互投影裁撤的依据 |
+| 专业 GIS 引擎 | [CesiumJS](https://cesium.com/platform/cesiumjs/)、Google Earth、NASA World Wind | 3D 球面优先。Cesium 是唯一正式支持运行时 3D/2D/2.5D（Columbus 视图）三模式切换的产品；Google Earth 带 2D 开关；World Wind 的平面模式是开发者 API 选项而非界面开关 | 运行时多视图切换是专业 GIS 引擎的能力与预期，创作工具不背这个预期 |
+| 球面优先的创作工具 | [dayside.studio](https://dayside.studio/)（§八末条）、FT3+ | 以可拖拽的轨道球面为产品入口；dayside 的工作面是从球上切出的低变形 section，FT3+ 的工作面是可旋转到任意视角的投影视图 | 调研中仅有的两个球面优先产品都是「球面作门面、平面作工作面」的两段式 |
+
+**dreamulator 当前配置**：2D 等距圆柱地图页（`/map`）与 3D 球面页（`/globe`）双视图并存，
+视图状态（图层、昼夜光照、季节、月度气候、单元格选择）经 `usePlanetViewState` 单点接线，
+页头按钮互相跳转并携带 URL 状态。2D 页为等距圆柱单投影——交互式多投影浏览
+2026-10 裁撤，依据见上表。技术参考见 `pipelines/map-system.md`。
