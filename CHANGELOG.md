@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **2D/3D 视图页共享状态收敛为 `usePlanetViewState`（2026-10-17，0a-3 视图精简批②）**：
+  MapViewerPage 与 GlobeViewerPage 原本各带约 500 行平行接线（分支/图层/月度气候/
+  昼夜光照/单元格选择的 URL 姿态与数据查询），每个图层或气候功能都要两处同步。
+  现收敛为单一 hook（viewers/map/usePlanetViewState.ts，参数 viewKind 决定行星
+  重定向目标），两页只剩各自渲染器与页面装饰（2D：Three.js 平面 + SVG 叠加 +
+  鸟瞰图；3D：R3F 球面 + 轨道控制 + 自转/系外过渡 + 3D 箭头）。统一顺带升级
+  3D 页两处：高度图导入改用带查询失效与详细消息的版本、CVT 网格缺失时获得
+  旧 voronoi 端点回退与板块数据提示。tsc/eslint/vitest 39/build 与两页 CDP
+  冒烟（图层深链、零控制台报错）全绿。
+
 - **2D 地图收敛为等距圆柱单投影（2026-10-17，0a-3 视图精简批①，作者裁决）**：撤裁
   Mollweide/Robinson 交互投影及 `?reproject=cpu` CPU 重投影调试路径——该子系统自
   仓库基线化以来零提交、全部工作流零引用，且竞品调研（10 工具）确认「同一数据多
