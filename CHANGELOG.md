@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **板块拓扑层：按大陆占比修正初始板块速度（2026-10-18）**：`paleo_kinematics.continental_speed_poles` 保留引擎
+  欧拉极的转轴，把各板块角速度设为与 1 − 0.7 × 当前大陆占比成正比（引擎大陆减速的同一形式；引擎在分配欧拉极时
+  按当时地壳减速，大陆迁移后已对不上），整体倍数保持洋壳面积加权均方根速度不变。nacrea 板块速度与大陆占比的相关
+  系数由 −0.24 变为 −0.93。40 Myr 被他板块遮住的陆壳体积由 35% 降到 18–20%；合拢合并增多，出现持续长大的板块。
+  诊断脚本新增 `--initial-speeds`（默认 continental，engine 为 nacrea 原行为）。
 - **板块拓扑层：尺度不变的倒推（2026-10-17）**：古板块重建中按绝对速率设的五处阈值（裂谷登记、洋中脊判定、
   引擎裂谷开始时间、边界分类、造山带回退）改为边界中位相对速度（`paleo_kinematics.boundary_speed_scale`）的比例，
   取值等于 nacrea 现状下原来的 0.2 与 0.5 cm/年；倒推步长取 1 Myr 与「最快板块走 0.5 个网格间距所需时间」中的较小者。

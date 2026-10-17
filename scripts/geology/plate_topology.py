@@ -37,6 +37,7 @@ from scipy.spatial import cKDTree
 from dreamulator.map import paleo_topology as pt
 from dreamulator.map.paleo_kinematics import (
     boundary_cells,
+    continental_speed_poles,
     reconstruction_plates,
     rewind,
     ridge_half_rates,
@@ -256,6 +257,13 @@ def main() -> None:
         "and time t/k should match scale 1 at time t)",
     )
     ap.add_argument("--save-snapshots", action="store_true", help="write snapshots.npz")
+    ap.add_argument(
+        "--initial-speeds",
+        choices=("continental", "engine"),
+        default="continental",
+        help="continental: present pole speeds set by each plate's continental share "
+        "(axes kept, oceanic RMS speed kept); engine: plates.json as is (legacy nacrea)",
+    )
     args = ap.parse_args()
 
     w = World(args.map_dir)
@@ -264,6 +272,8 @@ def main() -> None:
     else:
         rp = reconstruction_plates(w.kin, w.convergent)
         kin = replace(w.kin, plate=rp.plate, omega=rp.omega)
+    if args.initial_speeds == "continental":
+        kin = replace(kin, omega=continental_speed_poles(kin))
     if args.speed_scale != 1.0:
         kin = replace(kin, omega=kin.omega * args.speed_scale)
     half, offset = ridge_half_rates(kin, boundary_cells(kin))

@@ -293,3 +293,24 @@ def test_find_sutures_cuts_a_glued_block_along_the_present_boundary(two_plates) 
     # the split-off side is the continental part of one present plate
     assert np.unique(kin.plate[s.piece_cells]).size == 1
     assert s.age_myr > 0
+
+
+def test_continental_speed_poles_slow_continental_plates_and_keep_axes(two_plates) -> None:
+    from dataclasses import replace
+
+    from dreamulator.map.paleo_kinematics import continental_speed_poles
+
+    kin, _, _ = two_plates
+    cont = np.asarray(kin.continental) | (kin.xyz[:, 0] < -0.3)  # plate 1 more continental
+    k2 = replace(kin, continental=_frozen(cont))
+    new = continental_speed_poles(k2, factor=0.3)
+    rate = np.linalg.norm(new, axis=1)
+    assert rate[1] < rate[0]
+    np.testing.assert_allclose(new / rate[:, None], kin.omega / OMEGA * [[1], [1]], atol=1e-12)
+    ocean = ~cont
+
+    def rms(w: np.ndarray) -> float:
+        v = np.cross(w[kin.plate[ocean]], kin.xyz[ocean])
+        return float(np.sqrt(np.average((v**2).sum(1), weights=kin.area_km2[ocean])))
+
+    np.testing.assert_allclose(rms(new), rms(np.asarray(kin.omega)), rtol=1e-9)

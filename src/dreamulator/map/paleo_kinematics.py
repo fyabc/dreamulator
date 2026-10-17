@@ -289,6 +289,35 @@ MIN_OPENING_FRAC = 0.015
 MIN_MOTION_FRAC = 0.035
 
 
+def continental_speed_poles(kin: PlateKinematics, factor: float = 0.3) -> np.ndarray:
+    """Euler poles with speeds set by each plate's continental share.
+
+    Plates with continental keels and no attached slab move slowly (Forsyth &
+    Uyeda 1975; Africa about 2 against Pacific about 10 cm/yr): a plate's
+    angular speed is set proportional to 1 − (1 − ``factor``) · its continental
+    area share, the form and default of the terrain engine's continental
+    slowdown, which the engine applies to the crust at pole assignment and which
+    no longer matches after the continents have moved between plates.  Pole axes
+    are kept.  The common scale keeps the area-weighted RMS speed of oceanic
+    crust, so seafloor spreading keeps the engine's pace.
+    """
+    area = np.bincount(kin.plate, weights=kin.area_km2, minlength=kin.omega.shape[0])
+    cont = np.bincount(
+        kin.plate, weights=kin.area_km2 * kin.continental, minlength=kin.omega.shape[0]
+    ) / np.maximum(area, 1e-9)
+    rate = np.linalg.norm(kin.omega, axis=1)
+    axis = kin.omega / np.maximum(rate, 1e-30)[:, None]
+    new = axis * (1.0 - (1.0 - factor) * cont)[:, None]
+    ocean = ~kin.continental
+
+    def rms(w: np.ndarray) -> float:
+        v = np.cross(w[kin.plate[ocean]], kin.xyz[ocean])
+        return float(np.sqrt(np.average(np.einsum("ij,ij->i", v, v), weights=kin.area_km2[ocean])))
+
+    out: np.ndarray = new * (rms(kin.omega) / max(rms(new), 1e-30))
+    return out
+
+
 def boundary_speed_scale(kin: PlateKinematics) -> float:
     """Median relative plate speed (cm/yr) across plate-boundary mesh edges."""
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
