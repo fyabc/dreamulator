@@ -49,7 +49,8 @@ terrain_diffusion.inference.tiff_export` 模块直跑（绕开训练栈 import�
 封装了三段编排：条件场导出（主库）→ 条件 GeoTIFF 与扩散推理（td venv
 子进程）→ 水文提取（主库）。
 
-安装一次性步骤（Windows + RTX GPU）：
+安装一次性步骤（CUDA GPU；Linux 上把 `.venv/Scripts/python.exe` 换成
+`.venv/bin/python` 即可，`export refine` 两种布局都认）：
 
 ```bash
 git clone https://github.com/xandergos/terrain-diffusion <clone>
@@ -57,10 +58,19 @@ cd <clone> && uv venv --python 3.12 .venv
 # CUDA 轮子必须直连官方源安装（--no-config 防止镜像覆盖 index；
 # 经代理下载 2.7 GB 需 UV_HTTP_TIMEOUT=600）
 cd ~ && UV_HTTP_TIMEOUT=600 uv --no-config pip install     --python <clone>/.venv/Scripts/python.exe     "https://download.pytorch.org/whl/cu128/torch-2.9.1%2Bcu128-cp312-cp312-win_amd64.whl"     "https://download.pytorch.org/whl/cu128/torchvision-0.24.1%2Bcu128-cp312-cp312-win_amd64.whl"
-cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     numpy diffusers accelerate tifffile imagecodecs pillow scipy tqdm click h5py
+# 其余依赖按上游 requirements.txt 安装——推理路径还要 rasterio、
+# infinite-tensor、numba、pyfastnoiselite 等，手工清单列不全；
+# 已装好的 CUDA 版 torch 满足其版本约束，不会被替换
+cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -r requirements.txt
 ```
 
 首次推理自动从 HuggingFace 拉权重（约 1.1 GB，走代理）。
+
+还需预下载 WorldClim 10′ 气候数据：上游 `inference/synthetic_map.py` 读
+`<clone>/data/global/` 下的 `wc2.1_10m_bio_{1,4,12,15}.tif`，缺文件时它会用
+`input()` 询问是否下载，而 `export refine` 以子进程调用、无法应答，直接中止。
+从 `https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_bio.zip`
+（约 50 MB）解压取出这四个文件放入该目录即可。
 
 ## 参考
 

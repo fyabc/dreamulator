@@ -21,9 +21,12 @@
    `uv sync --all-extras` 或 `--extra dev --extra terrain` 组合。
 3. **terrain-diffusion**（第②步主方法的外部模型）：独立 venv，不入
    本项目依赖——它带 3 GB CUDA torch，进 pyproject 会拖累所有环境。
-   一次性安装（克隆、CUDA 轮子直连、权重拉取）见
+   一次性安装（克隆、CUDA 轮子直连、上游 requirements.txt、WorldClim 10′
+   数据预下载、权重拉取）见
    [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)
-   的「工程形态」一节；装好后 `export refine --td <克隆路径>` 即用；
+   的「工程形态」一节——尤其别漏 WorldClim 一步，缺它时上游会在子进程里
+   `input()` 询问、refine 直接中止；装好后 `export refine --td <克隆路径>`
+   即用（venv 的 Windows 与 Linux 布局都认）；
 4. **Blender**（第④步渲染支持）：本机安装 Blender 5.x，命令行可执行。
 
 ### 前置数据

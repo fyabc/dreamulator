@@ -95,13 +95,17 @@ elif mode == "tonpy":
 
 
 def _td_python(td_repo: Path) -> Path:
-    py = td_repo / ".venv" / "Scripts" / "python.exe"
-    if not py.exists():
-        raise FileNotFoundError(
-            f"terrain-diffusion venv not found at {py} — see the manual's "
-            "setup section (uv venv + CUDA wheels, external to this project)"
-        )
-    return py
+    # venv layouts differ by platform: Scripts/python.exe on Windows,
+    # bin/python on Linux (the server refines there too; before this it
+    # symlinked bin/python → Scripts/python.exe to be found, handoff 2026-10-16).
+    for rel in ((".venv", "Scripts", "python.exe"), (".venv", "bin", "python")):
+        py = td_repo.joinpath(*rel)
+        if py.exists():
+            return py
+    raise FileNotFoundError(
+        f"terrain-diffusion venv not found under {td_repo / '.venv'} — see the manual's "
+        "setup section (uv venv + CUDA wheels, external to this project)"
+    )
 
 
 def _mesh_and_window(pack_dir: Path) -> tuple[CVTMesh, RegionWindow]:

@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **terrain-diffusion 链跨平台与手册补全（2026-10-18，服务器 10-16 handoff 批）**：
+  ① `export refine` 的 td 解释器解析同时认 Windows（`.venv/Scripts/python.exe`）与
+  Linux（`.venv/bin/python`）布局——服务器此前用软链接绕过；②③ 手册与知识库安装
+  步骤改为上游 `requirements.txt`（推理路径还需 rasterio、infinite-tensor、numba、
+  pyfastnoiselite 等，手工清单列不全；已装的 CUDA torch 满足其版本约束不会被替换），
+  并补 WorldClim 10′ 数据预下载步骤（缺它时上游在子进程里 `input()` 询问、refine
+  直接中止）；④ 15N-100W 测绘图南边缘碎小水体收案为正典——当前导出上是 12.7°N
+  湿带的湖乡（15 片过路湖、P−E 收支全部富余，最大两片 308/306 km²），非伪影；
+  ⑤ 倾角潮/四期框架/可预报性正典同步入文明与生态层：ecology 总览潮差改引擎模板
+  字段并注中纬最强、climate_portrait 季幅潮条补可预报性一句、civilization_divergence
+  补四期框架与文明时间线一段。
 - **CI 对流门测试随机红（2026-10-18）**：GitHub 的 ubuntu-latest 机队是 Intel 与 AMD 混池，
   Intel runner 激活 numpy 的 AVX-512 内核后，月度水分预算的迭代把最后几位浮点差异放大成宏观
   不同的平衡态，`TestConvectivePickupGateWiring::test_gate_redistributes_rather_than_removes`
