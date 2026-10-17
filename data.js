@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792208700954,
+  "lastUpdate": 1792215451636,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -7137,6 +7137,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00023443631424211554",
             "extra": "mean: 5.192498000002388 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "68a936c2fe25a03f27c4f37afb65ec77dcdf358b",
+          "message": "feat(packs): /packs 子地图页与 /api/packs 区域包 API——地形链 QA 循环闭环\n\n悬停精确经纬度 + 点击格点探测（refined 高程/input 群系柯本码/水体掩膜/\n最近河段流量与情相，窗外 422），复制按钮产出 export CLI 参数串。视觉即\ntopo 正文：默认底图 = compose_rgb 全精化分辨率服务端实时合成（湖海平涂\n固定渲入、无装帧、源 mtime ETag 缓存、加载中徽章）；河线矢量叠加（√律\n线宽按屏幕像素、非常流虚线、canvas renderer）——v1 栅格掩膜叠加压暗底\n图被否证。备选 preview/albedo/color/koppen/biome 底图 + 经纬网开关。\n窗口几何为 region_window 精确逆（meta radius_km；carto _graticule 硬编码\n111.19 的不一致登记差距清单 #8）。\n\n区域包默认根迁至 data/worlds/<world>/packs/（与 maps/ 同级管理，\ngitignore data/worlds/*/packs/）；export region 默认输出、API 多根扫描\n（DREAMULATOR_PACKS_DIR 单根覆盖）、盘上 6 包与文档路径同步迁移；\nserve --packs-dir 新选项。API-only 设计（静态站守卫 + 侧栏隐藏，先例\nnarrate SSE）；i18n 双语 + helpContent/help 词典同步。\n\n后端 14 测试（合成图水色已知答案、rivers.json 中心原点换算、多根扫描、\n穿越全 404）+ 前端 packCoords vitest（真包数字往返）；全量 pytest/\nmypy/ruff/format/check_doc_refs 与 tsc/lint/构建、CDP E2E（回归湖探测、\n95E/20N 交叉读数、静态守卫）全绿。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-17T13:24:55+08:00",
+          "tree_id": "60bf27ef9129a200394eb618fa3418ce51982f1e",
+          "url": "https://github.com/fyabc/dreamulator/commit/68a936c2fe25a03f27c4f37afb65ec77dcdf358b"
+        },
+        "date": 1792215450958,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.7226533194460101,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04017486440540831",
+            "extra": "mean: 1.3837893954000038 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.94484902333835,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013390790120996759",
+            "extra": "mean: 202.23064349998765 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.693865527803782,
+            "unit": "iter/sec",
+            "range": "stddev: 0.5944124755109759",
+            "extra": "mean: 371.2137779999978 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1679.9946239976591,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004409445175132008",
+            "extra": "mean: 595.2400000069247 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 315.33120118961136,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000054121101591638347",
+            "extra": "mean: 3.1712688000027356 msec\nrounds: 5"
           }
         ]
       }
