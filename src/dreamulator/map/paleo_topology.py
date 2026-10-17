@@ -727,13 +727,16 @@ def reclose(
     radius_km: float,
     smooth_iterations: int = 3,
     relabel: dict[int, int] | None = None,
+    transfers: list[tuple[np.ndarray, int]] | None = None,
 ) -> tuple[Topology, dict[str, int]]:
     """Resolve boundary collisions by closing the plates again.
 
     ``relabel`` merges plates while closing (merged → kept): a merged plate's
     cells take the kept plate's label before extraction, so the boundary between
     them disappears and the merged plate's other boundaries carry over to the
-    kept plate.
+    kept plate.  ``transfers`` moves regions to another plate while closing: each
+    (points, plate) pair gives the event-grid cells nearest to ``points`` (within
+    about one spacing of them) to ``plate`` (a boundary jump).
 
     The graph is rasterized on the fixed event grid (``event_grid``), enclaves
     are absorbed (terrain engine's rule), and the graph is extracted again: a
@@ -747,6 +750,10 @@ def reclose(
     if relabel:
         for old, new_label in relabel.items():
             lab[lab == old] = new_label
+    for pts, new_plate in transfers or []:
+        if len(pts):
+            d, _ = cKDTree(pts).query(grid.xyz, distance_upper_bound=1.5 * spacing_rad)
+            lab[np.isfinite(d)] = new_plate
     lab = clean_labels(grid, lab)
     before = {s.left for s in topo.segments} | {s.right for s in topo.segments}
     new = prepare(extract(grid.xyz, lab), 0.5 * spacing_rad, smooth_iterations)

@@ -144,6 +144,7 @@ def run_topology_walk(
 
     # continental rifts: every continent-continent boundary that opens forward
     budget, onset = continental_rifts(kin, cfg.rift_cap_km, rifts)
+    jumped: set[tuple[int, int]] = set()
     n_pl = omega.shape[0]
     cont_parcels0 = int(cont.sum())
 
@@ -225,9 +226,13 @@ def run_topology_walk(
                 else:
                     overlap += area
                     tag = (
-                        "rift_after_onset"
-                        if pair in budget and t_new > onset[pair]
-                        else ("rift_budget_spent" if pair in budget else "not_rift")
+                        "jumped"
+                        if pair in jumped
+                        else (
+                            "rift_after_onset"
+                            if pair in budget and t_new > onset[pair]
+                            else ("rift_budget_spent" if pair in budget else "not_rift")
+                        )
                     )
                     by_pair[f"{pair[0]}-{pair[1]}:{tag}"] = round(area / 1e6, 2)
         sel = np.flatnonzero(keep)
@@ -274,6 +279,43 @@ def run_topology_walk(
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 budget, onset = _rename_pairs(budget, onset, relabel)
 
+        # 4c. boundary jump: a partial rift (older ocean still between the plates)
+        # at its onset.  Before the rift opened the continent was whole on one
+        # plate and the plate boundary ran around it; the smaller continental
+        # block beside the rift goes to the plate across it.
+        if grid is not None:
+            due = [p for p, d in onset.items() if t_new >= d]
+            transfers: list[tuple[np.ndarray, int]] = []
+            for pair in due:
+                block, to_plate = _jump_block(pos, plate, cont, pair, 1.2 * spacing)
+                if block is None:
+                    continue
+                transfers.append((pos[block], to_plate))
+                from_plate = int(pair[0] if pair[1] == to_plate else pair[1])
+                # the block and the ocean parcels sitting on its cells go across
+                _, parcel_cell = mesh_tree.query(pos)
+                block_cells = np.unique(parcel_cell[block])
+                on_cells = np.isin(parcel_cell, block_cells) & (plate == from_plate)
+                plate[block] = to_plate
+                plate[on_cells] = to_plate
+                budget.pop(pair, None)
+                onset.pop(pair, None)
+                jumped.add(pair)
+                log.merges.append(
+                    {
+                        "t_myr": t_new,
+                        "kept": to_plate,
+                        "merged": from_plate,
+                        "trigger": "boundary_jump",
+                        "contact_share": round(float(block.size * cell_area / 1e6), 2),
+                    }
+                )
+            if transfers:
+                topo, _ = pt.reclose(
+                    topo, grid, spacing, side_info, omega, radius, transfers=transfers
+                )
+                label = pt.rasterize(topo, kin, spacing / 3.0)
+
         # 5. fill cells that no parcel of their plate covers
         src = _owner_parcels(kin.xyz, label, pos, plate, cfg.gap_factor * spacing)
         gaps = np.flatnonzero(src < 0)
@@ -309,6 +351,50 @@ def run_topology_walk(
         if any(abs(t - e) < 1e-9 for e in targets):
             snaps.append(snapshot(t, label))
     return snaps, log
+
+
+def _jump_block(
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    pair: tuple[int, int],
+    reach_rad: float,
+) -> tuple[np.ndarray | None, int]:
+    """The continental block that changes plate in a boundary jump (parcels).
+
+    Continental parcels of the two plates within ``reach_rad`` of each other are
+    the rift contact.  On each side, the continental parcels of that plate linked
+    to the contact through neighbours within ``reach_rad`` form a block — parcels
+    already pushed into the other plate's polygon included, which cell sampling
+    would miss.  The smaller block goes to the other plate.  Returns (parcel
+    indices, receiving plate), or (None, −1) without contact.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    a, b = pair
+    chord = 2.0 * np.sin(reach_rad / 2.0)
+    ia = np.flatnonzero(cont & (plate == a))
+    ib = np.flatnonzero(cont & (plate == b))
+    if ia.size == 0 or ib.size == 0:
+        return None, -1
+    near = cKDTree(pos[ib]).query_ball_point(pos[ia], chord)
+    seed_a = ia[[k for k, lst in enumerate(near) if lst]]
+    seed_b = np.unique(ib[[j for lst in near for j in lst]]) if seed_a.size else ib[:0]
+    if seed_a.size == 0:
+        return None, -1
+    blocks = {}
+    for side, idx, seeds in ((a, ia, seed_a), (b, ib, seed_b)):
+        pairs = cKDTree(pos[idx]).query_pairs(chord, output_type="ndarray")
+        g = csr_matrix(
+            (np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(idx.size, idx.size)
+        )
+        _, comp = connected_components(g, directed=False)
+        local = np.searchsorted(idx, seeds)
+        blocks[side] = idx[np.isin(comp, np.unique(comp[local]))]
+    small = a if blocks[a].size <= blocks[b].size else b
+    other = b if small == a else a
+    return blocks[small], other
 
 
 def _rename_pairs(
