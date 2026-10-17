@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792106334306,
+  "lastUpdate": 1792208700954,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -7078,6 +7078,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006397813791241786",
             "extra": "mean: 4.038277200004359 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "adfd7cbcf1f1895a472b5278211ad0870491a30c",
+          "message": "feat(maps): 月度情相——线性基流、独立活动阈值与常流/非常流两类河段\n\n月径流 = Manabe 桶 + WBM 启发单线性地下水库（f=0.5、τ=40 d 文献默认，\n两轮敏感性包络 94.9–98.0% 常流长度写入文档），解析周期稳态保证年守恒，\n再逐格乘回 Turc–Pike 年通道——年河网不变。活动门槛独立为月均 1 L/s\n（regime_active_cells），不再从成图阈值推导；分类按连续河段（十二个月\n全活跃=常流），废弃整链取最干。渲染为连续笔划裁切（平头只在真实笔划\n端点），两类线型 + 白底蓝框「图例」（行距 1.4 倍字高，样线与正文同源），\ncarto/biome 共用；高程图例缩小 10% 移至左下角。rivers.regime.npy 两类\n编码，缺月度气候回退全实线。全量 1199 tests + mypy/ruff/check_doc_refs 绿。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-17T11:43:53+08:00",
+          "tree_id": "017ef51111e599e25e206e1eb6c718e2cc3c8f61",
+          "url": "https://github.com/fyabc/dreamulator/commit/adfd7cbcf1f1895a472b5278211ad0870491a30c"
+        },
+        "date": 1792208700188,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31375317361060634,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1305152941416504",
+            "extra": "mean: 3.187218756999994 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.1083484607328598,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014303859429873287",
+            "extra": "mean: 321.7142519999925 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4506719101505718,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1028711019811663",
+            "extra": "mean: 689.3357436666747 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 972.7374758541624,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000626889687195693",
+            "extra": "mean: 1.0280266000052052 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.58553397604393,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00023443631424211554",
+            "extra": "mean: 5.192498000002388 msec\nrounds: 5"
           }
         ]
       }
