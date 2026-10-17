@@ -55,6 +55,34 @@ LAKE_MIN_FILL_M = 5.0
 #: and is invisible at sheet scale), which keeps TD-generated DEMs from
 #: shattering into micro-lakes (13.7% of land lake-ised before this).
 LAKE_MIN_CELLS = 64
+#: Minimum mapping unit (MMU) for lakes, in ground km²: lakes smaller than
+#: this neither render nor interrupt the channel network — the channel
+#: draws straight across (the same invisibility argument as
+#: LAKE_MIN_CELLS, one notch up at sheet scale).  Sheet anchor: a 550 km
+#: window on the 12 in figure gives 1 mm ≈ 1.8 km, so 1 mm² ≈ 3.3 km²;
+#: the value below is 256 cells × (550 km / 4096 px)² exactly — 256 cells
+#: (≈ 4.6 km², ~2.1 km across) on the refined 4096 grid (0.134 km/px),
+#: 64 cells on the pack grid; other resolutions convert via
+#: lake_mmu_cells(km_per_px).  The same
+#: threshold classifies inland h≤0 water bodies (heal_inland_water):
+#: smaller = TD quantisation noise healed to land so rivers continue,
+#: larger = endorheic terminal lake where rivers legitimately end.
+LAKE_MMU_KM2 = 4.616
+#: Minimum extent (bounding-box side, km) for a lake to render and to break
+#: the channel network: a lake thinner than ~1.6x the widest river symbol
+#: (0.49 mm ≈ 0.9 km on the 550 km sheet) cannot visually "receive" the
+#: rivers that feed it — a thick river line ending in a sliver of pixels
+#: reads as a break, whatever the sliver's area (2026-10-16 user ruling:
+#: align the render scales of rivers and lakes).  Narrower closed basins
+#: are river valleys: healed to land, the channel keeps flowing.
+LAKE_MIN_WIDTH_KM = 1.5
+#: Below-sea-level inland depressions within this causeway width of the
+#: ocean merge back into it (stay water, render sea, rivers ending there
+#: reach the sea): a depression behind a bar a couple of kilometres wide is
+#: the ocean in all but name — storm overwash keeps such bars breached, and
+#: on nacrea the tidal range (±18–57 m quiescent) overtops them outright.
+#: Wider causeways keep genuine endorheic lagoons terminal.
+OCEAN_MERGE_CAUSEWAY_KM = 3.0
 
 
 def _roughness(
@@ -208,12 +236,147 @@ def lake_mask(
     return np.asarray(out, dtype=bool)
 
 
+def lake_mmu_cells(km_per_px: float) -> int:
+    """Lake MMU (LAKE_MMU_KM2) converted to grid cells at this pixel size."""
+    return max(1, int(round(LAKE_MMU_KM2 / (km_per_px * km_per_px))))
+
+
+def keep_large_lakes(
+    lake: np.ndarray,
+    min_cells: int,
+    min_width_km: float = 0.0,
+    km_per_px: float = 1.0,
+) -> np.ndarray:
+    """Lake mask reduced to components that pass BOTH gates — at least
+    ``min_cells`` cells (the MMU) and, when ``min_width_km`` > 0, a minimum
+    bounding-box extent of that many kilometres.  This is the rendered /
+    chain-breaking set: a lake the channel network may visibly terminate in
+    must be able to visually "receive" the river — a sliver narrower than
+    ~1.6x the widest river symbol cannot (LAKE_MIN_WIDTH_KM), whatever its
+    area.  Failing lakes stay internal: channels cross them and the sheet
+    never shows them."""
+    from scipy.ndimage import find_objects, label
+
+    out = np.zeros_like(lake, dtype=bool)
+    lbl, n = label(lake)
+    if n:
+        sizes = np.bincount(lbl.ravel())
+        big = np.nonzero(sizes >= max(min_cells, 1))[0]
+        big = big[big > 0]
+        if min_width_km > 0.0:
+            slices = find_objects(lbl)
+            min_px = min_width_km / max(km_per_px, 1e-9)
+            big_list = [
+                int(i)
+                for i in big
+                if min(
+                    slices[i - 1][0].stop - slices[i - 1][0].start,
+                    slices[i - 1][1].stop - slices[i - 1][1].start,
+                )
+                >= min_px
+            ]
+        else:
+            big_list = [int(i) for i in big]
+        if big_list:
+            out[np.isin(lbl, big_list)] = True
+    return out
+
+
+def heal_inland_water(
+    h: np.ndarray,
+    land: np.ndarray,
+    min_cells: int,
+    sea_level_m: float = 0.0,
+    km_per_px: float = 1.0,
+    min_width_km: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Classify non-land water: the ocean is the component touching the
+    frame edge; every other water body is inland water.
+
+    TD-generated DEMs scatter 1–6-cell bodies at or just below sea level
+    (quantisation noise — 858 bodies over 72 km² on the 25N-100W window,
+    2026-10-16).  Priority-Flood seeds *every* non-land cell as an outlet,
+    so rivers terminated in these invisible pits — including the window's
+    two largest trunks — reading on the sheet as "rivers vanish in the
+    plain".  Three classes come back:
+
+    - **healed to land** (returned via the new ``h``/``land``): bodies below
+      ``min_cells`` (the MMU), frame-edge specks below it as well (same
+      noise on the window border), and — when ``min_width_km`` > 0 —
+      slivers of any area narrower than that width (a below-sea trench
+      that thin is a river valley, not a water body).  Healed cells sit at
+      ``sea_level_m`` and the drainage walk continues through them.
+    - **``inland_big``**: genuine below-sea-level depressions of MMU area
+      and width — endorheic terminal lakes (Dead Sea style), rendered as
+      lakes — minus those within ``OCEAN_MERGE_CAUSEWAY_KM`` of the ocean,
+      which merge back into it: a below-sea lagoon behind a bar a couple of
+      kilometres wide is the sea in all but name (storm overwash; on nacrea
+      the tidal range overtops such bars outright), and a river ending
+      there reaches the sea, not a puddle.
+
+    Returns ``(h, land, inland_big)`` with the noise healed.
+    """
+    from scipy.ndimage import distance_transform_edt, find_objects, label
+
+    water_lbl, n = label(~land)
+    inland_big = np.zeros_like(land, dtype=bool)
+    small = np.zeros_like(land, dtype=bool)
+    if n:
+        edge = (
+            set(water_lbl[0, :])
+            | set(water_lbl[-1, :])
+            | set(water_lbl[:, 0])
+            | set(water_lbl[:, -1])
+        )
+        edge.discard(0)
+        sizes = np.bincount(water_lbl.ravel())
+        slices = find_objects(water_lbl)
+        min_px = min_width_km / max(km_per_px, 1e-9) if min_width_km > 0 else 0.0
+        for i in range(1, n + 1):
+            body = water_lbl == i
+            on_edge = i in edge
+            # The width gate applies to inland bodies only — a narrow bay
+            # arm or strait touching the frame edge is the ocean, however
+            # thin; a narrow inland sliver is a river valley, not a lake.
+            narrow = (
+                not on_edge
+                and min_px > 0
+                and slices[i - 1] is not None
+                and min(
+                    slices[i - 1][0].stop - slices[i - 1][0].start,
+                    slices[i - 1][1].stop - slices[i - 1][1].start,
+                )
+                < min_px
+            )
+            if sizes[i] < min_cells or narrow:
+                # Sub-MMU anywhere (border specks included) and inland
+                # slivers of any area: noise / river valleys, not water.
+                small |= body
+            elif not on_edge:
+                inland_big |= body
+        # Near-ocean below-sea bodies merge back into the ocean: drop them
+        # from inland_big (they stay non-land, so every downstream mask and
+        # the chain walk treat them as sea).
+        if inland_big.any():
+            ocean = ~land & ~inland_big & ~small
+            dist_ocean = distance_transform_edt(~ocean, sampling=(km_per_px, km_per_px))
+            for i in range(1, n + 1):
+                body = water_lbl == i
+                if (inland_big & body).any() and dist_ocean[body].min() <= OCEAN_MERGE_CAUSEWAY_KM:
+                    inland_big &= ~body
+    h2 = np.where(small, sea_level_m, h)
+    return h2, land | small, inland_big
+
+
 def _chaikin(pts: np.ndarray, rounds: int = 2) -> np.ndarray:
-    """Chaikin corner-cutting: polylines become smooth curves, endpoints kept."""
+    """Chaikin corner-cutting: polylines become smooth curves, endpoints kept.
+
+    Works on (N, K) points — extra columns beyond xy (e.g. per-cell flow)
+    ride along and interpolate linearly through the cut."""
     for _ in range(rounds):
         a = pts[:-1]
         b = pts[1:]
-        cut = np.empty((2 * (len(pts) - 1), 2), dtype=np.float64)
+        cut = np.empty((2 * (len(pts) - 1), pts.shape[1]), dtype=np.float64)
         cut[0::2] = 0.75 * a + 0.25 * b
         cut[1::2] = 0.25 * a + 0.75 * b
         pts = np.vstack([pts[:1], cut, pts[-1:]])
@@ -229,20 +392,35 @@ def river_segments(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Channel polylines for vector rendering, smoothed.
 
-    D8 walks step cell-by-cell in 8 directions; rendered raw they read as
+    D8 walks step cell-by-step in 8 directions; rendered raw they read as
     45°/90° zigzags.  Chains are aggregated from channel heads, collinear
     runs merged, then Chaikin-smoothed (2 rounds) into survey-curve rivers.
-    Channels never cross lakes: a chain stops where it enters one (the
-    inflow) and resumes at the lake's spill point — the straight crossing
-    on the filled surface was the "river cuts through hills" artefact.
-    Returns (segments (M, 2, 2) in km, row 0 north, flows (M,) in
-    accumulation units) for width grading.
+
+    Lake semantics are MMU-gated: the mask is first reduced to components
+    of at least ``lake_mmu_cells(km_per_px)`` (LAKE_MMU_KM2).  Channels
+    cross smaller lakes — invisible at sheet scale; they stop only at MMU
+    lakes, ending one cell *into* the water (the line visibly touches the
+    shore; stopping one cell short read as a gap at render scale) and
+    resume at the lake's spill point — the straight crossing on the filled
+    surface was the "river cuts through hills" artefact.  Short chains are
+    kept: a legitimate final reach to the sea/lake/frame can be two cells
+    long, and dropping it erased whole trunks (their cells were already
+    marked visited, so nothing ever redrew them).
+
+    Returns (segments (M, 2, 2) in km, row 0 north, flows (M,) per segment
+    in accumulation units — the mean of the interpolated end flows, so the
+    width grading grows downstream within a chain instead of jumping at
+    confluences).
     """
     h, w = rivers.shape
     riv_flat = rivers.reshape(-1)
     riv_cells = np.nonzero(riv_flat)[0]
     riv_set = set(riv_cells.tolist())
-    lake_flat = lake.reshape(-1) if lake is not None else np.zeros(h * w, dtype=bool)
+    if lake is not None:
+        lake_big = keep_large_lakes(lake, lake_mmu_cells(km_per_px), LAKE_MIN_WIDTH_KM, km_per_px)
+    else:
+        lake_big = np.zeros(h * w, dtype=bool)
+    lake_flat = lake_big.reshape(-1)
     lake_set = {int(c) for c in np.nonzero(lake_flat)[0]}
     # Spill points: lake cells draining into a non-lake cell — the outlet
     # chain resumes just downstream of them.
@@ -262,9 +440,11 @@ def river_segments(
     # Downstream resumptions at lake spill points (their receiver leads out).
     heads += [c for c in spill_next if c in riv_set]
 
-    def cell_xy_km(c: int) -> tuple[float, float]:
+    acc_flat = accumulation.reshape(-1)
+
+    def cell_xyz_km(c: int) -> tuple[float, float, float]:
         y, x = c // w, c % w
-        return (x * km_per_px, (h - 1 - y) * km_per_px)
+        return (x * km_per_px, (h - 1 - y) * km_per_px, float(acc_flat[c]))
 
     segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
     flows: list[float] = []
@@ -281,13 +461,24 @@ def river_segments(
         # this link left every tributary one segment short: "broken rivers")
         # or the sea/frame outlet.  Lakes stay unconnected (rivers end at
         # the shore).
-        if c >= 0 and c not in lake_set and len(chain) >= 1:
+        # Always connect the chain's end to its downstream cell: the
+        # junction when a tributary meets an already-traced trunk (missing
+        # this link left every tributary one segment short: "broken
+        # rivers"), the sea/frame outlet, or the shore cell of the lake it
+        # ends in (drawn one cell into the water so the line touches it).
+        if c >= 0 and len(chain) >= 1:
             chain.append(c)
-        if len(chain) < 3:
+        # Two cells = a legal short reach (e.g. a trunk's final step into
+        # the sea); only a genuinely empty chain is dropped.
+        if len(chain) < 2:
             continue
-        pts = np.asarray([cell_xy_km(c) for c in chain], dtype=np.float64)
+        pts = np.asarray([cell_xyz_km(c) for c in chain], dtype=np.float64)
+        # The appended outlet can be a sea cell (accumulation ≈ 0) or a
+        # lake shore — its flow coordinate must not sag at the mouth, or
+        # the final reach renders thinner than the channel above it.
+        np.maximum.accumulate(pts[:, 2], out=pts[:, 2])
         # Merge collinear runs (the 8-direction walks have long straight bits).
-        d = np.diff(pts, axis=0)
+        d = np.diff(pts[:, :2], axis=0)
         keep = np.ones(len(pts), dtype=bool)
         for i in range(1, len(pts) - 1):
             v0, v1 = d[i - 1], d[i]
@@ -303,7 +494,7 @@ def river_segments(
         smooth = _chaikin(pts) if len(pts) >= 3 else pts
         for a, b in zip(smooth[:-1], smooth[1:], strict=True):
             segs.append(((a[0], a[1]), (b[0], b[1])))
-        flows.extend([float(accumulation.reshape(-1)[chain[-1]])] * (len(smooth) - 1))
+            flows.append(float(0.5 * (a[2] + b[2])))
 
     return (
         np.asarray(segs, dtype=np.float64).reshape(-1, 2, 2),
@@ -338,6 +529,18 @@ def erode_region_pack(
     dem = np.load(inp / "height.meters.npy").astype(np.float64)
     rain = np.nan_to_num(np.load(inp / "precipitation.mm.npy").astype(np.float64), nan=0.0)
     land = dem > float(meta["sea_level_m"])
+    km_pp = float(meta["extent_km"]["x"]) / dem.shape[0]
+    # Sub-MMU inland water bodies (h≤0, not connected to the ocean) are
+    # quantisation noise: heal to land so rivers continue through; larger
+    # ones stay water as endorheic terminal lakes.
+    dem, land, inland_big = heal_inland_water(
+        dem,
+        land,
+        lake_mmu_cells(km_pp),
+        float(meta["sea_level_m"]),
+        km_per_px=km_pp,
+        min_width_km=LAKE_MIN_WIDTH_KM,
+    )
     rain_w = rain / rain[land].mean()
 
     h, acc = spl_erode(
@@ -359,15 +562,15 @@ def erode_region_pack(
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
     filled2, _order2, receiver = priority_flood(h, land)
     lakes = lake_mask(filled2, h)
-    segs, flows = river_segments(
-        rivers, receiver, acc, float(meta["extent_km"]["x"]) / h.shape[0], lake=lakes
-    )
+    mmu = lake_mmu_cells(km_pp)
+    lakes_draw = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
+    segs, flows = river_segments(rivers, receiver, acc, km_pp, lake=lakes_draw)
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
-    rivers = rivers & ~lakes
+    rivers = rivers & ~lakes_draw
     Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
-    Image.fromarray((lakes * 255).astype(np.uint8)).save(out / "lake.png")
-    Image.fromarray(((~land) * 255).astype(np.uint8)).save(out / "sea-water.png")
+    Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
+    Image.fromarray(((~land & ~inland_big) * 255).astype(np.uint8)).save(out / "sea-water.png")
     # True post-erosion depth (Gaea-mask vocabulary: 0..1 over the span) —
     # without it render legs read zero depth and tint the sea at the
     # shoreline band instead of the ocean ramp.
@@ -387,6 +590,7 @@ def erode_region_pack(
                 "dt_yr": dt_yr,
                 "k_spl": k_spl,
                 "river_threshold": river_threshold,
+                "lake_mmu_cells": mmu,
             },
             ensure_ascii=False,
             indent=1,

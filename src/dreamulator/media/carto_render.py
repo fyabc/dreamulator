@@ -44,7 +44,16 @@ CONTOUR_MINOR_LW = 0.35
 CONTOUR_MAJOR_LW = 0.9
 CONTOUR_LABEL_SIZE = 10.0
 
-RIVER_COLOR = (72, 119, 148)
+#: The one water ink for rivers and lakes alike (survey single-colour
+#: convention).  Depth is tuned for lowland legibility: the lowland greens
+#: of the shared terrain LUT sit at luminance ≈107 (Rec.709), so the ink
+#: stays ≈20 points darker (≈84) — at (72,119,148) it matched the greens'
+#: luminance almost exactly and vanished on 0–200 m plains (2026-10-16
+#: user feedback).  Deep sea (LUT) reaches ≈73, so the ink never crosses it.
+RIVER_COLOR = (44, 92, 130)
+#: Lake shore ring: the same blue a step deeper — a crisp outline keeps
+#: small lakes readable where the fill alone would wash against greens.
+LAKE_SHORE_COLOR = (34, 78, 116)
 RIVER_MIN_LW = 0.7
 
 #: Ocean ink comes from the shared LUT on the planet-wide anchor (same
@@ -247,21 +256,17 @@ def compose_rgb(
     sea = inputs.sea_water.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.5
     sea_depth = inputs.sea_depth_m.reshape(res, f, res, f).mean(axis=(1, 3))
     lake = (
-        inputs.lake.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.5
+        # 0.25 (any-of-4 at the 2x downsample): branched lakes end in narrow
+        # arms a cell or two wide, and a 0.5 mean erodes those tips whole —
+        # the river line then touched the mask edge over water that never
+        # rendered, reading as a gap (2026-10-16 red-box report).
+        inputs.lake.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.25
         if inputs.lake is not None
         else None
     )
     hs = hillshade(height, inputs.km_per_px * f)
 
     rgb = _lut_rgb(height, sea, sea_depth, rng_m)
-    if lake is not None and lake.any():
-        # Freshwater lakes: pale blue, flat ink (survey water convention) —
-        # the filled surface is the water level, the DEM below is invisible.
-        from scipy.ndimage import binary_erosion
-
-        shore = lake & ~binary_erosion(lake)
-        rgb[lake] = np.asarray((92, 148, 188)) / 255.0
-        rgb[shore] = np.asarray((64, 120, 168)) / 255.0
     # Two-scale relief (see HILLSHADE_* constants): structural shadow from
     # the smoothed field, fine relief from the raw one.
     from scipy.ndimage import gaussian_filter
@@ -281,6 +286,18 @@ def compose_rgb(
     rgb *= _paper_texture(res)[..., None]
     if hand:
         rgb = _hand_tint_pass(rgb, res)
+    if lake is not None and lake.any():
+        # Freshwater lakes go in LAST, after every multiply: the SAME water
+        # blue as the river ink, flat — survey sheets use one water colour,
+        # and the vector river lines carry no shade/saturation/paper either,
+        # so a lake filled before the multiplies drifted away from them
+        # (most visibly on flat lowlands, 2026-10-16 user feedback).  The
+        # filled surface is the water level; the DEM below is invisible.
+        from scipy.ndimage import binary_erosion
+
+        shore = lake & ~binary_erosion(lake)
+        rgb[lake] = np.asarray(RIVER_COLOR) / 255.0
+        rgb[shore] = np.asarray(LAKE_SHORE_COLOR) / 255.0
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
 

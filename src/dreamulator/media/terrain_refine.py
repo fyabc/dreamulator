@@ -195,18 +195,29 @@ def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif:
 
 def refine_region_pack(
     pack_dir: Path,
-    td_repo: Path,
+    td_repo: Path | None,
     *,
     river_threshold: int | None = None,
     coast_warp: bool = False,
+    reuse_height: bool = False,
 ) -> dict[str, object]:
-    """CLI entry: refine a region pack's terrain, write ``refined-out/``."""
+    """CLI entry: refine a region pack's terrain, write ``refined-out/``.
+
+    ``reuse_height=True`` skips the TD inference and re-extracts the
+    hydrology from the previous ``refined-out/height.meters.npy`` — the
+    iteration loop for drainage/lake semantics changes (a full re-run is
+    deterministic for the same seed but pays the whole inference again).
+    """
     from PIL import Image
 
     from dreamulator.map.export import export_elevation_png
     from dreamulator.map.prog_erosion import (
+        LAKE_MIN_WIDTH_KM,
         flow_accumulation,
+        heal_inland_water,
+        keep_large_lakes,
         lake_mask,
+        lake_mmu_cells,
         priority_flood,
         river_mask,
         river_segments,
@@ -216,28 +227,53 @@ def refine_region_pack(
     # every path handed to it must be absolute or it resolves under the repo
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
     pack_res = int(meta["grid"]["w"])
+    res = pack_res * REFINE_FACTOR
     tmp = pack_dir / "refine-tmp"
 
-    n = _export_conditioning(pack_dir, tmp / "fields", coast_warp=coast_warp)
-    extent_km = float(meta["extent_km"]["x"])
-    py = _td_python(td_repo)
-    raw_tif = tmp / "refined.tif"
-    _run_td(py, td_repo, tmp, extent_km, n, raw_tif)
+    cached = pack_dir / "refined-out" / "height.meters.npy"
+    if reuse_height:
+        if not cached.exists():
+            raise FileNotFoundError(
+                f"--reuse-height needs a previous full refine — {cached} is missing"
+            )
+        h = np.load(cached).astype(np.float64)
+        if h.shape[0] != res:
+            raise ValueError(f"cached height is {h.shape[0]}², expected {res}² — run a full refine")
+        print(f"[refine] reusing {cached} (TD inference skipped)")
+    else:
+        if td_repo is None:
+            raise ValueError("td_repo is required for a full refine (or pass reuse_height)")
+        n = _export_conditioning(pack_dir, tmp / "fields", coast_warp=coast_warp)
+        extent_km = float(meta["extent_km"]["x"])
+        py = _td_python(td_repo)
+        raw_tif = tmp / "refined.tif"
+        _run_td(py, td_repo, tmp, extent_km, n, raw_tif)
+        subprocess.run(
+            [
+                str(py),
+                str(tmp / "_td_driver.py"),
+                "tonpy",
+                str(raw_tif),
+                str(tmp / "refined.npy"),
+                str(res),
+            ],
+            check=True,
+        )
+        h = np.load(tmp / "refined.npy").astype(np.float64)
 
-    res = pack_res * REFINE_FACTOR
-    subprocess.run(
-        [
-            str(py),
-            str(tmp / "_td_driver.py"),
-            "tonpy",
-            str(raw_tif),
-            str(tmp / "refined.npy"),
-            str(res),
-        ],
-        check=True,
-    )
-    h = np.load(tmp / "refined.npy").astype(np.float64)
     land = h > float(meta["sea_level_m"])
+    km_pp = float(meta["extent_km"]["x"]) / res
+    # Sub-MMU inland water bodies (h≤0, not connected to the ocean) are TD
+    # quantisation noise — heal to land so rivers continue through them to
+    # the real sea or sink; larger ones stay water as endorheic lakes.
+    h, land, inland_big = heal_inland_water(
+        h,
+        land,
+        lake_mmu_cells(km_pp),
+        float(meta["sea_level_m"]),
+        km_per_px=km_pp,
+        min_width_km=LAKE_MIN_WIDTH_KM,
+    )
 
     rain = np.nan_to_num(
         np.load(pack_dir / "input" / "precipitation.mm.npy").astype(np.float64), nan=0.0
@@ -248,6 +284,8 @@ def refine_region_pack(
 
     filled, order, rec = priority_flood(h, land)
     lakes = lake_mask(filled, h)
+    mmu = lake_mmu_cells(km_pp)
+    lakes_draw = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
     acc = flow_accumulation(order, rec, weight)
     thr = river_threshold if river_threshold is not None else 3000 * factor * factor
     rivers = river_mask(acc, land, thr)
@@ -258,14 +296,15 @@ def refine_region_pack(
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
     export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    segs, flows = river_segments(rivers, rec, acc, float(meta["extent_km"]["x"]) / res, lake=lakes)
+    segs, flows = river_segments(rivers, rec, acc, km_pp, lake=lakes_draw)
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
-    rivers &= ~lakes
+    rivers &= ~lakes_draw
     Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
-    Image.fromarray((lakes * 255).astype(np.uint8)).save(out / "lake.png")
-    Image.fromarray(((~land) * 255).astype(np.uint8)).save(out / "sea-water.png")
+    Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
+    Image.fromarray(((~land & ~inland_big) * 255).astype(np.uint8)).save(out / "sea-water.png")
     sea_depth = np.clip(float(meta["sea_level_m"]) - h, 0, None) / span
+    sea_depth[inland_big] = 0.0
     Image.fromarray(np.clip(sea_depth * 65535, 0, 65535).astype(np.uint16)).save(
         out / "sea-depth.png"
     )
@@ -281,6 +320,7 @@ def refine_region_pack(
                 "td_snr": TD_SNR,
                 "td_seed": TD_SEED,
                 "river_threshold": thr,
+                "lake_mmu_cells": mmu,
             },
             ensure_ascii=False,
             indent=1,
@@ -294,7 +334,7 @@ def refine_region_pack(
     shutil.rmtree(tmp, ignore_errors=True)
     return {
         "res": res,
-        "lakes_pct": round(float(lakes.sum() / max(land.sum(), 1) * 100), 1),
+        "lakes_pct": round(float(lakes_draw.sum() / max(land.sum(), 1) * 100), 1),
         "river_segments": int(len(segs)),
         "height_range_m": [round(lo, 1), round(hi, 1)],
     }
