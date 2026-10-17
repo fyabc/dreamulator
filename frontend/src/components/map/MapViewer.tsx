@@ -14,18 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
-import useTerrainTexture, { type ColorMode } from '../../viewers/map/TerrainPlane'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
-import { useGPUReproject, type ReprojectableProjection } from '../../viewers/map/gpuReproject'
 import MapSvgOverlay from './MapSvgOverlay'
-import {
-  normalisedToMeters,
-  projectForward,
-  projectInverse,
-  type ProjectionType,
-} from '../../viewers/map/utils/projection'
+import { normalisedToMeters } from '../../viewers/map/utils/mapCoords'
 import {
   lonLatToScreen,
   screenToLonLat,
@@ -35,6 +28,7 @@ import {
   type Viewport,
 } from '../../viewers/map/utils/mapCoords'
 import type {
+  ColorMode,
   MapMetadata,
   VoronoiCell,
   CVTMesh,
@@ -51,7 +45,6 @@ interface MapViewerProps {
   voronoiCells: VoronoiCell[]
   cvtMesh?: CVTMesh | null
   layers?: Record<ColorMode, number>
-  projection?: ProjectionType // equirectangular (GPU) | mollweide | robinson (CPU)
   onZoomChange?: (zoom: number) => void
   onViewStateChange?: (state: {
     mapCenter: LonLat
@@ -70,9 +63,6 @@ interface MapViewerProps {
   solarDeclinationDeg?: number
   /** Enable the day/night overlay. */
   dayNight?: boolean
-  /** Force the legacy CPU reprojection for Mollweide/Robinson (?reproject=cpu).
-   *  Debug / A-B comparison only — NOT a no-GPU fallback (display needs WebGL). */
-  forceCpuReproject?: boolean
   /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
    *  baked by the caller.  Pressure is monthly-only (no annual counterpart). */
   monthlyTemperature?: THREE.DataTexture | null
@@ -118,7 +108,6 @@ export default function MapViewer({
   voronoiCells,
   cvtMesh,
   layers,
-  projection = 'equirectangular',
   onZoomChange,
   onViewStateChange,
   onCursorMove,
@@ -129,7 +118,6 @@ export default function MapViewer({
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
-  forceCpuReproject = false,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
   monthlyPressure = null,
@@ -225,18 +213,15 @@ export default function MapViewer({
   const sunDecRad = (solarDeclinationDeg * Math.PI) / 180
   const dayNightNum = dayNight ? 1 : 0
 
-  // --- GPU / CPU materials ---
-  // Mollweide/Robinson are reprojected on the GPU by inverse-warping the baked
-  // equirectangular texture (gpuReproject.ts).  Cell hover/selection highlights
-  // are drawn by the SVG overlay for ALL projections (not baked into the
-  // texture), so hovering never triggers a texture re-bake.
-  const reprojectable = projection === 'mollweide' || projection === 'robinson'
+  // --- GPU materials ---
+  // Cell hover/selection highlights are drawn by the SVG overlay (not baked
+  // into the texture), so hovering never triggers a texture re-bake.
 
   // Opacity sliders fire many events per frame; coalesce so the composite
   // pass (and any data-driven re-bake) runs at most once per animation frame.
   const renderLayers = useRafCoalesced(layers)
 
-  const { material: gpuMaterial, texture: gpuTexture, renderComposite: gpuRenderComposite } = useGPUTerrain({
+  const { material: gpuMaterial, renderComposite: gpuRenderComposite } = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
@@ -251,37 +236,7 @@ export default function MapViewer({
   const gpuCompositeRef = useRef(gpuRenderComposite)
   gpuCompositeRef.current = gpuRenderComposite
 
-  // GPU reprojection (Mollweide/Robinson): inverse-warp the baked equirect
-  // texture.  useGPUReproject manages the material and keeps the sun uniforms
-  // updated reactively, so the day/night slider never recompiles the shader.
-  // Sample whatever the hook exposes as the current colour source: the FBO
-  // composite while overlays are active, otherwise the plain base texture.
-  // (The FBO is only rendered while overlays are active, so sampling it in the
-  // no-overlay case would read a stale target.)
-  const reprojectSource = gpuTexture
-  const gpuReprojectActive = reprojectable && !forceCpuReproject
-  const reprojectMaterial = useGPUReproject(
-    gpuReprojectActive ? (projection as ReprojectableProjection) : null,
-    reprojectSource,
-    sunLonRad,
-    sunDecRad,
-    dayNightNum,
-  )
-  const gpuReprojectOn = gpuReprojectActive && reprojectMaterial !== null
-
-  const cpuTexture = useTerrainTexture({
-    elevation, width: mapW, height: mapH, seaLevel,
-    elevMinM: elevMin, elevMaxM: elevMax,
-    colorMode: (renderLayers?.landsea ?? 0) > 0 ? 'landsea' : 'terrain', cvtMesh, cellIdMap,
-    projection,
-    sunLonRad, sunDecRad, dayNight: dayNightNum,
-    // CPU texture is only needed for the CPU paths: Robinson always, and
-    // Mollweide when GPU reproject is disabled (?reproject=cpu).  Equirectangular
-    // always uses the GPU path.
-    enabled: projection !== 'equirectangular' && !gpuReprojectOn,
-  })
-  const useGPU = gpuMaterial !== null && projection === 'equirectangular'
-  const terrainTexture = useGPU || gpuReprojectOn ? null : cpuTexture
+  const useGPU = gpuMaterial !== null
 
   // --- WebGL init ---
   useEffect(() => {
@@ -326,14 +281,6 @@ export default function MapViewer({
     let mat: THREE.Material | null
     if (useGPU) {
       mat = gpuMaterial!
-    } else if (gpuReprojectOn) {
-      mat = reprojectMaterial
-    } else if (terrainTexture) {
-      mat = new THREE.MeshBasicMaterial({
-        map: terrainTexture,
-        side: THREE.DoubleSide,
-        transparent: projection !== 'equirectangular', // alpha edges for Robinson
-      })
     } else {
       mat = null
     }
@@ -346,22 +293,14 @@ export default function MapViewer({
     scene.add(mesh)
     meshRef.current = mesh
 
-    // Ghost meshes only for equirectangular (cylindrical projection wraps horizontally).
-    // Non-equirectangular projections (Mollweide, Robinson) have natural edges
-    // — ghost meshes would create artificial left-right connection.
-    if (projection === 'equirectangular') {
-      for (const dir of [-1, 1]) {
-        const g = new THREE.Mesh(geo, useGPU
-          ? gpuMaterial!
-          : new THREE.MeshBasicMaterial({ map: terrainTexture!, side: THREE.DoubleSide }))
-        g.rotation.x = -Math.PI / 2
-        scene.add(g)
-        if (dir === -1) ghostLeftRef.current = g
-        else ghostRightRef.current = g
-      }
-    } else {
-      ghostLeftRef.current = null
-      ghostRightRef.current = null
+    // Ghost meshes: the cylindrical projection wraps horizontally, so the
+    // seam is hidden by repeating the plane one width to each side.
+    for (const dir of [-1, 1]) {
+      const g = new THREE.Mesh(geo, gpuMaterial!)
+      g.rotation.x = -Math.PI / 2
+      scene.add(g)
+      if (dir === -1) ghostLeftRef.current = g
+      else ghostRightRef.current = g
     }
 
     camera.aspect = containerSize.width / containerSize.height
@@ -381,7 +320,7 @@ export default function MapViewer({
         }
       }
     }
-  }, [webgpuReady, terrainTexture, useGPU, gpuReprojectOn, reprojectMaterial, gpuMaterial, projection, mapW, mapH, containerSize])
+  }, [webgpuReady, useGPU, gpuMaterial, mapW, mapH, containerSize])
 
   // --- Viewport (used by mapCoords functions) ---
   // Memoised so `project` (and the SVG graticule that depends on it) only
@@ -394,38 +333,20 @@ export default function MapViewer({
   // --- Forward projection (for SVG overlay) ---
   const project = useCallback(
     (lon: number, lat: number) => {
-      if (projection === 'equirectangular') {
-        // Use ref for zoom to stay in sync with render loop (no 1-frame lag)
-        return lonLatToScreen({ lon, lat }, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
-      }
-      // Non-equirectangular: refs for pan/zoom (instant sync), state for size
-      const mc = mapCenterRef.current
-      const z = zoomRef.current
-      const pc = projectForward(projection, mc.lon, mc.lat)
-      const { nx, ny } = projectForward(projection, lon, lat)
-      const x = (nx - pc.nx) * containerSize.width * z + containerSize.width / 2
-      const y = (ny - pc.ny) * containerSize.height * z + containerSize.height / 2
-      return { x, y }
+      // Use ref for zoom to stay in sync with render loop (no 1-frame lag)
+      return lonLatToScreen({ lon, lat }, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
     },
     // Refs used inside for accuracy (no 1-frame lag), but mapCenter/zoom
     // in deps to trigger SVG re-render on pan.
-    [projection, vp, mapCenter, zoom, containerSize],
+    [vp, mapCenter, zoom, containerSize],
   )
 
   // --- Reverse projection (screen → geographic) ---
   const unproject = useCallback(
     (px: number, py: number) => {
-      if (projection === 'equirectangular') {
-        return screenToLonLat(px, py, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
-      }
-      const mc = mapCenterRef.current
-      const z = zoomRef.current
-      const pc = projectForward(projection, mc.lon, mc.lat)
-      const nx = (px - containerSize.width / 2) / (containerSize.width * z) + pc.nx
-      const ny = (py - containerSize.height / 2) / (containerSize.height * z) + pc.ny
-      return projectInverse(projection, nx, ny)
+      return screenToLonLat(px, py, { mapCenter: mapCenterRef.current, zoom: zoomRef.current }, vp)
     },
-    [projection, vp, mapCenter, zoom, containerSize],
+    [vp, mapCenter, zoom, containerSize],
   )
 
   // --- Continuous render loop ---
@@ -448,14 +369,8 @@ export default function MapViewer({
         // Mesh displacement: mapCentre lon/lat → world X/Z.
         // Rotation -π/2 around X: world = (lx+meshX, 0, ly+meshZ).
         // meshX = -(nx - 0.5) * visW, meshZ = -(ny - 0.5) * BASE_VIS_H
-        if (projection === 'equirectangular') {
-          mesh.position.x = -(mc.lon / 360) * visW
-          mesh.position.z = (mc.lat / 180) * BASE_VIS_H
-        } else {
-          const pc = projectForward(projection, mc.lon, mc.lat)
-          mesh.position.x = -(pc.nx - 0.5) * visW
-          mesh.position.z = -(pc.ny - 0.5) * BASE_VIS_H
-        }
+        mesh.position.x = -(mc.lon / 360) * visW
+        mesh.position.z = (mc.lat / 180) * BASE_VIS_H
 
         const worldW = (mesh.geometry as THREE.PlaneGeometry).parameters.width
         if (ghostLeftRef.current)
@@ -471,10 +386,7 @@ export default function MapViewer({
     }
     rafId = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafId)
-    // `projection` must be live: the loop positions the mesh per-projection, so a
-    // stale capture (e.g. always 'equirectangular') mis-positions Mollweide/Robinson
-    // vertically (linear-in-lat instead of the projection's non-linear ny).
-  }, [projection])
+  }, [])
 
   // --- Mouse handlers ---
 
@@ -513,18 +425,7 @@ export default function MapViewer({
         // Clamp lat so the map never shows blank space above/below
         const vMargin = 90 / zoom
         const clampedLat = Math.max(-90 + vMargin, Math.min(90 - vMargin, next.mapCenter.lat))
-        // Non-cylindrical projections: clamp in projection space (nonlinear lon→nx)
-        let clampedLon = next.mapCenter.lon
-        if (projection !== 'equirectangular') {
-          const nxt = projectForward(projection, next.mapCenter.lon, clampedLat)
-          const nMargin = 0.5 / zoom
-          const clampedNx = Math.max(nMargin, Math.min(1 - nMargin, nxt.nx))
-          if (Math.abs(clampedNx - nxt.nx) > 1e-10) {
-            const back = projectInverse(projection, clampedNx, nxt.ny)
-            clampedLon = back.lon
-          }
-        }
-        syncMapCenter({ lon: clampedLon, lat: clampedLat })
+        syncMapCenter({ lon: next.mapCenter.lon, lat: clampedLat })
         return
       }
 
@@ -537,7 +438,7 @@ export default function MapViewer({
         if (!pos || !elevation) return
 
         const ll = unproject(pos.px, pos.py)
-        // Outside projection boundary (non-equirectangular) or out of lat range
+        // Out of lat range
         if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) {
           onCursorMove?.(null)
           onCellHover?.(null)
@@ -633,7 +534,7 @@ export default function MapViewer({
         e.clientX - rect.left,
         e.clientY - rect.top,
       )
-      // Outside projection boundary (non-equirectangular) — ignore
+      // Out of lat range — ignore
       if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
       const lonRad = (ll.lon * Math.PI) / 180
       const latRad = (ll.lat * Math.PI) / 180
@@ -687,7 +588,7 @@ export default function MapViewer({
         </div>
       )}
 
-      {/* Cell hover/selection highlights — SVG overlay for all projections.
+      {/* Cell hover/selection highlights — SVG overlay (never baked into the texture,
           (Equirectangular previously baked these into the GPU texture; the SVG
           overlay avoids a full texture re-bake on every hover.) */}
       <MapSvgOverlay

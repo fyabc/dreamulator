@@ -6,7 +6,7 @@
  * lazy initialisers.
  */
 
-import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import type { ColorMode } from '../../viewers/map/types'
 import { LAYER_HELP } from './helpContent'
 import type { LayerState } from './MapLayerPanel'
 

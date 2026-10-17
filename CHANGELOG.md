@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **2D 地图收敛为等距圆柱单投影（2026-10-17，0a-3 视图精简批①，作者裁决）**：撤裁
+  Mollweide/Robinson 交互投影及 `?reproject=cpu` CPU 重投影调试路径——该子系统自
+  仓库基线化以来零提交、全部工作流零引用，且竞品调研（10 工具）确认「同一数据多
+  投影交互浏览」在同类工具中无先例（多投影只出现在生成/导出参数）。删除
+  `gpuReproject.ts`（GPU 逆 warp）与 `TerrainPlane.tsx`（CPU 重投影 + `ColorMode`
+  类型迁至 `viewers/map/types.ts`），`MapViewer` 投影分支与拖拽投影空间钳制一并移
+  除；极区真实比例的查看口径 = 3D 球面视图（帮助页 FAQ 同此建议），其他投影的静态
+  出图未来走导出侧。帮助页「地图投影」节与控制词条、i18n 键同步清理。
+
 ### Added
 
 - **`/packs` 子地图页与 `/api/packs` 区域包 API（2026-10-17，0a-2）**：地形视频链的

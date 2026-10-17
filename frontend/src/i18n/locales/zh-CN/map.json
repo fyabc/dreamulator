@@ -23,11 +23,6 @@
     "scroll": "滚轮",
     "helpButton": "帮助（新标签页打开）"
   },
-  "projection": {
-    "equirectangular": "等距圆柱",
-    "mollweide": "摩尔威德",
-    "robinson": "罗宾逊"
-  },
   "action": {
     "back": "← 返回",
     "uploadRaster": "⬆ 锚定灰度图",
@@ -450,7 +445,7 @@
     "generatingTexture": "生成纹理中...",
     "dataLoadFailed": "部分数据加载失败，请检查网络连接或切换分支重试。",
     "layerSettings": "图层设置",
-    "switchTo2D": "切换到 2D 地图视图（等距圆柱 / Mollweide / Robinson 投影）",
+    "switchTo2D": "切换到 2D 地图视图（等距圆柱投影）",
     "switchToStellar": "切换到恒星系 3D 视图（行星轨道、宜居带）",
     "stellarShort": "恒星系",
     "minimap": "鸟瞰图",

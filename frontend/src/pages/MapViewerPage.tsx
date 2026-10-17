@@ -13,7 +13,7 @@ import ImportElevationButton, { type ImportElevationResult } from '../components
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
-import type { ColorMode } from '../viewers/map/TerrainPlane'
+import type { ColorMode } from '../viewers/map/types'
 import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
 import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
@@ -23,9 +23,8 @@ import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import { solarDeclinationDeg } from '../viewers/utils/solar'
-import { PROJECTION_HELP, LAYER_HELP } from '../components/map/helpContent'
+import { LAYER_HELP } from '../components/map/helpContent'
 import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
-import type { ProjectionType } from '../viewers/map/utils/projection'
 import type { VoronoiCell } from '../viewers/map/types'
 import useCellIdMap from '../viewers/map/useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
@@ -79,7 +78,6 @@ export default function MapViewerPage() {
   /** Last hovered cell — retained so the inspector doesn't reset on mouse-leave. */
   const [lastCell, setLastCell] = useState<number | null>(null)
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
-  const [projection, setProjection] = useState<ProjectionType>('equirectangular')
 
   // --- Sun / day-night state (synced to URL: ?sun=&season=&night=) ---
   const [sunLongitudeDeg, setSunLongitudeDeg] = useState(() => {
@@ -532,11 +530,6 @@ export default function MapViewerPage() {
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
   const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
 
-  // Debug / A-B flag: ?reproject=cpu forces the legacy CPU reprojection
-  // (Mollweide/Robinson) for comparison with the GPU result.  NOT a no-GPU
-  // fallback — the map display always requires WebGL.
-  const forceCpuReproject = searchParams.get('reproject') === 'cpu'
-
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
   }
@@ -571,17 +564,6 @@ export default function MapViewerPage() {
             🌐 3D
           </Link>
         )}
-
-        {/* Projection selector */}
-        <select
-          value={projection}
-          onChange={(e) => setProjection(e.target.value as ProjectionType)}
-          className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-        >
-          {PROJECTION_HELP.map((p) => (
-            <option key={p.id} value={p.id}>{t(p.label)}</option>
-          ))}
-        </select>
 
         {/* Import external heightmap (live mode only) */}
         {selectedPlanet && (
@@ -686,7 +668,6 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    projection={projection}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -696,7 +677,6 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
@@ -857,7 +837,6 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    projection={projection}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -867,7 +846,6 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}

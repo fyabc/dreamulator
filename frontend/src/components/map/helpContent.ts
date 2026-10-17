@@ -10,7 +10,7 @@
  * stay in sync automatically.
  */
 
-import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import type { ColorMode } from '../../viewers/map/types'
 
 /** Minimal translation function shape (matches i18next's `t`). */
 type TFunc = (key: string, options?: Record<string, unknown>) => string
@@ -370,7 +370,6 @@ export const CONTROL_HELP: ControlHelpEntry[] = [
   { action: 'help:control.timeSeason.action', description: 'help:control.timeSeason.description' },
   { action: 'help:control.sunTime.action', description: 'help:control.sunTime.description' },
   { action: 'help:control.sunToggle.action', description: 'help:control.sunToggle.description' },
-  { action: 'help:control.debugReproject.action', description: 'help:control.debugReproject.description' },
   { action: 'help:control.hoverCell.action', description: 'help:control.hoverCell.description' },
   { action: 'help:control.hoverLeave.action', description: 'help:control.hoverLeave.description' },
   { action: 'help:control.ctrlClick.action', description: 'help:control.ctrlClick.description' },
@@ -380,22 +379,6 @@ export const CONTROL_HELP: ControlHelpEntry[] = [
   { action: 'help:control.dblClickPlanet.action', description: 'help:control.dblClickPlanet.description' },
   { action: 'help:control.clean.action', description: 'help:control.clean.description' },
   { action: 'help:control.spin.action', description: 'help:control.spin.description' },
-]
-
-// ---------------------------------------------------------------------------
-// Projections
-// ---------------------------------------------------------------------------
-
-export interface ProjectionHelpEntry {
-  id: string
-  label: string
-  description: string
-}
-
-export const PROJECTION_HELP: ProjectionHelpEntry[] = [
-  { id: 'equirectangular', label: 'help:projection.equirectangular.label', description: 'help:projection.equirectangular.description' },
-  { id: 'mollweide', label: 'help:projection.mollweide.label', description: 'help:projection.mollweide.description' },
-  { id: 'robinson', label: 'help:projection.robinson.label', description: 'help:projection.robinson.description' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -478,12 +461,6 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'help:section.mapTime.title',
     icon: '🕒',
     render: (t) => entryKeys('mapTime', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
-  },
-  {
-    id: 'map-projections',
-    title: 'help:section.mapProjections.title',
-    icon: '📐',
-    render: (t) => PROJECTION_HELP.map((p) => ({ title: t(p.label), content: t(p.description) })),
   },
   {
     id: 'stellar-viewer',
