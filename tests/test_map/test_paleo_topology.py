@@ -124,7 +124,8 @@ def test_collision_is_detected_and_resolved_by_reclosing() -> None:
     new, stats = pt.reclose(topo, grid, sp, side, kin.omega, kin.radius_km)
     assert not pt.find_crossings(new, 2.0 * sp)
     assert all(s.kind == pt.RIDGE for s in new.segments if s.kind)  # types carried by plate pair
-    assert stats["segments"] >= 3
+    # the plate squeezed between the crossed boundaries is split away as a thin part
+    assert stats["segments"] >= 1
 
 
 def test_topology_walk_is_identity_without_motion() -> None:
@@ -181,3 +182,16 @@ def test_rename_pairs_after_merge() -> None:
     nb, no = _rename_pairs(budget, onset, {1: 0})
     assert nb == {(0, 2): 12.0}
     assert no == {(0, 2): 2.0}
+
+
+def test_split_thin_parts_divides_a_ribbon_along_its_midline() -> None:
+    grid = pt.event_grid(8000, RADIUS_KM)
+    lon = np.degrees(np.arctan2(grid.xyz[:, 2], grid.xyz[:, 0]))
+    lab = np.where(lon < 0, 0, 1)
+    ribbon = (lon > -3) & (lon < 3) & (np.abs(grid.xyz[:, 1]) < 0.8)  # ~6 deg wide strip
+    lab = np.where(ribbon, 2, lab)
+    out = pt.split_thin_parts(grid, lab, 3)
+    assert not np.any(out == 2)  # the ribbon is gone
+    west = ribbon & (lon < -1)
+    east = ribbon & (lon > 1)
+    assert np.mean(out[west] == 0) > 0.9 and np.mean(out[east] == 1) > 0.9

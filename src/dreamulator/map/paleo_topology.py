@@ -718,6 +718,73 @@ def find_crossings(
     return unique
 
 
+def _hop_distance(
+    ptr: np.ndarray, idx: np.ndarray, sources: np.ndarray, allowed: np.ndarray, max_hops: int
+) -> np.ndarray:
+    """Graph hop distance from ``sources`` through ``allowed`` cells (−1 beyond
+    ``max_hops`` or unreachable)."""
+    dist = np.full(len(ptr) - 1, -1, dtype=np.int64)
+    frontier = np.flatnonzero(sources & allowed)
+    dist[frontier] = 0
+    for h in range(1, max_hops + 1):
+        if frontier.size == 0:
+            break
+        starts, ends = ptr[frontier], ptr[frontier + 1]
+        nbr = np.concatenate([idx[s:e] for s, e in zip(starts, ends, strict=True)])
+        nbr = np.unique(nbr)
+        nbr = nbr[allowed[nbr] & (dist[nbr] < 0)]
+        dist[nbr] = h
+        frontier = nbr
+    return dist
+
+
+def split_thin_parts(grid: PlateKinematics, lab: np.ndarray, r_hops: int) -> np.ndarray:
+    """Split plate parts narrower than about 2 · r_hops cells along their midline.
+
+    Morphological opening per plate: cells at least ``r_hops`` from any other
+    plate are its core; cells within ``r_hops`` of its core survive; the rest are
+    thin parts (ribbons, fingers) that cannot be rigid plates.  Every thin cell
+    goes to the nearest surviving cell's plate, so a ribbon between two plates is
+    divided along its midline and its neighbours meet there in a new boundary.
+    """
+    ptr, idx = grid.nbr_ptr, grid.nbr_idx
+    rows = np.repeat(np.arange(grid.n), np.diff(ptr))
+    on_edge = np.zeros(grid.n, dtype=bool)
+    on_edge[rows[lab[rows] != lab[idx]]] = True
+    everywhere = np.ones(grid.n, dtype=bool)
+    d_edge = _hop_distance(ptr, idx, on_edge, everywhere, r_hops)
+    core = (d_edge < 0) | (d_edge >= r_hops)
+    keep = np.zeros(grid.n, dtype=bool)
+    for p in np.unique(lab):
+        own = lab == p
+        d = _hop_distance(ptr, idx, core & own, own, r_hops)
+        keep |= own & (d >= 0)
+    thin = ~keep
+    if not thin.any():
+        return lab
+    out = lab.copy()
+    # nearest surviving cell: grow the surviving labels into the thin cells
+    frontier_label = np.where(keep, lab, -1)
+    for _ in range(4 * r_hops + 4):
+        todo = np.flatnonzero(frontier_label < 0)
+        if todo.size == 0:
+            break
+        nb_rows = np.repeat(todo, np.diff(ptr)[todo])
+        nb = np.concatenate([idx[ptr[c] : ptr[c + 1]] for c in todo])
+        cand = frontier_label[nb]
+        ok = cand >= 0
+        if not ok.any():
+            break
+        first: dict[int, int] = {}
+        for cell, lab_c in zip(nb_rows[ok].tolist(), cand[ok].tolist(), strict=True):
+            first.setdefault(cell, lab_c)
+        cells = np.fromiter(first.keys(), dtype=np.int64)
+        frontier_label[cells] = np.fromiter(first.values(), dtype=np.int64)
+    filled = frontier_label >= 0
+    out[filled] = frontier_label[filled]
+    return out
+
+
 def reclose(
     topo: Topology,
     grid: PlateKinematics,
@@ -728,6 +795,7 @@ def reclose(
     smooth_iterations: int = 3,
     relabel: dict[int, int] | None = None,
     transfers: list[tuple[np.ndarray, int]] | None = None,
+    thin_hops: int = 2,
 ) -> tuple[Topology, dict[str, int]]:
     """Resolve boundary collisions by closing the plates again.
 
@@ -736,7 +804,9 @@ def reclose(
     them disappears and the merged plate's other boundaries carry over to the
     kept plate.  ``transfers`` moves regions to another plate while closing: each
     (points, plate) pair gives the event-grid cells nearest to ``points`` (within
-    about one spacing of them) to ``plate`` (a boundary jump).
+    about one spacing of them) to ``plate`` (a boundary jump).  Plate parts
+    narrower than about 2 · ``thin_hops`` event-grid cells are split along their
+    midline between the neighbouring plates (``split_thin_parts``).
 
     The graph is rasterized on the fixed event grid (``event_grid``), enclaves
     are absorbed (terrain engine's rule), and the graph is extracted again: a
@@ -755,6 +825,8 @@ def reclose(
             d, _ = cKDTree(pts).query(grid.xyz, distance_upper_bound=1.5 * spacing_rad)
             lab[np.isfinite(d)] = new_plate
     lab = clean_labels(grid, lab)
+    if thin_hops > 0:
+        lab = clean_labels(grid, split_thin_parts(grid, lab, thin_hops))
     before = {s.left for s in topo.segments} | {s.right for s in topo.segments}
     new = prepare(extract(grid.xyz, lab), 0.5 * spacing_rad, smooth_iterations)
     kinds: dict[tuple[int, int], tuple[str, int]] = {}

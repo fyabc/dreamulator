@@ -191,7 +191,11 @@ def run_topology_walk(
         topo = pt.step(topo, omega, dt, 0.5 * spacing, continents)
         hits = pt.find_crossings(topo, 2.0 * spacing) if grid is not None else []
         if hits and grid is not None:
+            before = pt.rasterize(topo, kin, spacing / 3.0)
             topo, stats = pt.reclose(topo, grid, spacing, side_info, omega, radius)
+            stats["parcels_followed"] = _follow_ownership(
+                mesh_tree, pos, plate, before, pt.rasterize(topo, kin, spacing / 3.0)
+            )
             log.collisions.append({"t_myr": t_new, "crossings": len(hits), **stats})
 
         # 3. owning plate of every cell
@@ -275,8 +279,10 @@ def run_topology_walk(
                     )
                 for gone, kept in relabel.items():
                     plate[plate == gone] = kept
+                before = label.copy()
                 topo, _ = pt.reclose(topo, grid, spacing, side_info, omega, radius, relabel=relabel)
                 label = pt.rasterize(topo, kin, spacing / 3.0)
+                _follow_ownership(mesh_tree, pos, plate, before, label)
                 budget, onset = _rename_pairs(budget, onset, relabel)
 
         # 4c. boundary jump: a partial rift (older ocean still between the plates)
@@ -311,10 +317,12 @@ def run_topology_walk(
                     }
                 )
             if transfers:
+                before = label.copy()
                 topo, _ = pt.reclose(
                     topo, grid, spacing, side_info, omega, radius, transfers=transfers
                 )
                 label = pt.rasterize(topo, kin, spacing / 3.0)
+                _follow_ownership(mesh_tree, pos, plate, before, label)
 
         # 5. fill cells that no parcel of their plate covers
         src = _owner_parcels(kin.xyz, label, pos, plate, cfg.gap_factor * spacing)
@@ -351,6 +359,25 @@ def run_topology_walk(
         if any(abs(t - e) < 1e-9 for e in targets):
             snaps.append(snapshot(t, label))
     return snaps, log
+
+
+def _follow_ownership(
+    mesh_tree: cKDTree,
+    pos: np.ndarray,
+    plate: np.ndarray,
+    before: np.ndarray,
+    after: np.ndarray,
+) -> int:
+    """Crust follows a change of ownership made by re-closing (in place).
+
+    Where re-closing gives a cell to another plate (a ribbon split along its
+    midline, a block transfer, a collision), the parcels there that belonged to
+    the old owner now ride with the new one.  Returns the number moved.
+    """
+    _, cell = mesh_tree.query(pos)
+    move = (before[cell] != after[cell]) & (plate == before[cell])
+    plate[move] = after[cell[move]]
+    return int(move.sum())
 
 
 def _jump_block(
