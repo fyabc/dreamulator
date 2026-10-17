@@ -89,6 +89,82 @@ def plot(
     plt.close(fig)
 
 
+def walk(
+    args: argparse.Namespace,
+    w: World,
+    kin: Any,
+    topo: pt.Topology,
+    age: np.ndarray,
+    side_info: Any,
+    summary: dict[str, Any],
+) -> None:
+    """T2: parcels walked on the boundary graph (``paleo_walk``)."""
+    from paleo_rewind import ocean_params
+
+    from dreamulator.map.paleo_history import OceanDepth, active_orogens, rift_onsets
+    from dreamulator.map.paleo_kinematics import boundary_opening_rates
+    from dreamulator.map.paleo_walk import WalkConfig, run_topology_walk
+
+    opening, _ = boundary_opening_rates(kin, boundary_cells(kin))
+    orogens = active_orogens(kin, w.elevation, opening, w.cumulative_convergence_km)
+    rifts = rift_onsets(kin, w.divergent, w.cumulative_divergence_km)
+    cfg = WalkConfig(dt_myr=args.dt_myr, rift_cap_km=args.rift_cap_km, event_grid=args.event_grid)
+    snaps, log = run_topology_walk(
+        kin,
+        topo,
+        age,
+        w.elevation,
+        orogens,
+        OceanDepth(**ocean_params(args.map_dir, None)),
+        list(args.epochs),
+        cfg,
+        side_info,
+        rifts,
+    )
+    a = kin.area_km2
+    cont0 = a[kin.continental].sum()
+    frames = []
+    for s in snaps:
+        chk = pt.check(kin, s.plate)
+        empty: dict[str, Any] = {}
+        step: dict[str, Any] = next(
+            (x for x in log.steps if abs(float(str(x["t_myr"])) - s.t_myr) < 1e-9), empty
+        )
+        entry: dict[str, Any] = {
+            "t_myr": s.t_myr,
+            **asdict(chk),
+            "continental_area_ratio": round(float(a[s.continental].sum() / cont0), 4),
+            "synthetic_frac": round(float(a[s.synthetic].sum() / a.sum()), 4),
+            "land_frac": round(float(a[s.elevation_m > 0].sum() / a.sum()), 4),
+            **{
+                k: step[k]
+                for k in ("continental_parcels_ratio", "continental_overlap_km2")
+                if k in step
+            },
+        }
+        summary["epochs"].append(entry)
+        frames.append((s.t_myr, s.plate, s.topology, s.continental))
+        print(json.dumps(entry, ensure_ascii=False))
+    summary["young_rifts"] = len(rifts)
+    summary["collision_events"] = log.collisions
+    summary["steps"] = log.steps
+    restored = sum(float(str(x["rift_restored_km2"])) for x in log.steps)
+    summary["rift_restored_km2"] = round(restored)
+    print(
+        json.dumps(
+            {
+                "collision_events": len(log.collisions),
+                "rift_restored_Mkm2": round(restored / 1e6, 2),
+            }
+        )
+    )
+    (args.out_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    if args.plot:
+        plot(w, frames, args.out_dir)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("map_dir", type=Path)
@@ -96,6 +172,12 @@ def main() -> None:
     ap.add_argument("--epochs", type=float, nargs="+", default=[0.0, 5.0, 10.0, 20.0])
     ap.add_argument("--dt-myr", type=float, default=1.0)
     ap.add_argument("--smooth", type=int, default=8)
+    ap.add_argument(
+        "--walk",
+        action="store_true",
+        help="T2: walk crust parcels on the topology (reconcile, gaps, young rifts)",
+    )
+    ap.add_argument("--rift-cap-km", type=float, default=300.0)
     ap.add_argument(
         "--event-grid",
         type=int,
@@ -164,6 +246,10 @@ def main() -> None:
         rot = rotation_matrices(k.omega, -tt * 1.0e6)
         out: np.ndarray = np.einsum("nij,nj->ni", rot[label[cont_idx]], k.xyz[cont_idx])
         return out
+
+    if args.walk:
+        walk(args, w, kin, topo, age, side_info, summary)
+        return
 
     grid = pt.event_grid(args.event_grid, kin.radius_km) if args.event_grid > 0 else None
     events: list[dict[str, Any]] = []

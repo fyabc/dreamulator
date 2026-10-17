@@ -120,7 +120,8 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   `docs/design/proposals/geological-timeline.md`。
 - `plate_topology.py` — 板块拓扑层 T1 诊断：从重建用板块模型提取球面边界图（三联点与带类型的边界段），
   按运动学用固定欧拉极倒推，每个时刻栅格化并报告拓扑规则、与起点标签及与 M1 质点倒推的一致率；
-  `--plot` 画出各时刻的边界类型与三联点。设计见 `docs/design/proposals/plate-topology.md`。
+  `--plot` 画出各时刻的边界类型与三联点；`--walk` 接入地壳质点（T2）。设计见
+  `docs/design/proposals/plate-topology.md`。
 
 ## release/ — 发布与静态导出（2 个）
 

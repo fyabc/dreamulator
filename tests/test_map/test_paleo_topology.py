@@ -125,3 +125,30 @@ def test_collision_is_detected_and_resolved_by_reclosing() -> None:
     assert not pt.find_crossings(new, 2.0 * sp)
     assert all(s.kind == pt.RIDGE for s in new.segments if s.kind)  # types carried by plate pair
     assert stats["segments"] >= 3
+
+
+def test_topology_walk_is_identity_without_motion() -> None:
+    from dreamulator.map.paleo_history import OceanDepth, Orogens
+    from dreamulator.map.paleo_walk import WalkConfig, run_topology_walk
+
+    kin = _three_plates()
+    cont = kin.xyz[:, 1] > 0.6
+    kin = PlateKinematics(**{**kin.__dict__, "continental": cont})
+    sp = kin.spacing_km / kin.radius_km
+    topo = pt.prepare(pt.extract(kin.xyz, kin.plate), 0.5 * sp)
+    pt.classify(topo, kin.omega, kin.radius_km)
+    age = np.where(cont, np.nan, 20.0)
+    elev = np.where(cont, 500.0, -4000.0)
+    orogens = Orogens(relief_m=np.zeros(kin.n), build_myr=np.ones(kin.n))
+    depth = OceanDepth(ridge_depth_m=2500.0, subsidence_coeff=350.0, max_depth_m=5500.0)
+    side = (kin.xyz, cont, age, pt.cKDTree(kin.xyz))
+    cfg = WalkConfig(event_grid=0)
+    snaps, log = run_topology_walk(kin, topo, age, elev, orogens, depth, [0.0, 3.0], cfg, side)
+    s0, s3 = snaps
+    np.testing.assert_array_equal(s0.continental, cont)
+    assert np.mean(s3.continental == cont) > 0.99
+    assert log.steps[-1]["continental_parcels_ratio"] == 1.0
+    # oceanic parcels age with time: 20 Myr crust is 17 Myr old at −3 Myr and shallower
+    ocean = ~s3.continental & np.isfinite(s3.age_myr)
+    np.testing.assert_allclose(np.median(s3.age_myr[ocean]), 17.0, atol=0.5)
+    assert np.median(s3.elevation_m[ocean]) > -4000.0
