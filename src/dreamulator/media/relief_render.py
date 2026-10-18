@@ -213,7 +213,7 @@ def render_relief_sheet(
     _scale_bar(ax, km)
     _north_arrow(ax, km)
     if graticule:
-        _graticule(ax, km, center_lat, center_lon)
+        _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
     if title:
         fig.suptitle(title, fontsize=TITLE_SIZE, color="#4a3620")
 

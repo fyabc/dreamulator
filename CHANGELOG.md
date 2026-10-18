@@ -29,9 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   读不到手写 `map.yaml`，`read_radius_km` 静默回退地球 6371 km——分支导出包的
   meta `radius_km` 与窗口数学整体失真（nacrea 6816.97 km 半径下标称 550 km 的窗
   实际覆盖约 588 km，横向比例差 6.5%）。修复 = `read_radius_km` 加 root maps 兜底
-  （分支目录无 `map.yaml` 时取同行星根目录）；连带 carto/biome 图纸经纬网与度数
+  （分支目录无 `map.yaml` 时取同行星根目录）；连带 carto/biome/relief 图纸经纬网与度数
   刻度的 km↔度换算从硬编码地球 111.19 改为按 meta 半径（`ColorizeInputs.km_per_deg`，
-  旧包回退地球值）。gcm-t42-712 导出的现有区域包带此比例误差，重导出后下游
+  旧包回退地球值；relief 腿调用点首批漏改，随即补上）。gcm-t42-712 导出的现有区域包带此比例误差，重导出后下游
   refine/渲染链需随跑。
 - **terrain-diffusion 链跨平台与手册补全（2026-10-18，服务器 10-16 handoff 批）**：
   ① `export refine` 的 td 解释器解析同时认 Windows（`.venv/Scripts/python.exe`）与
