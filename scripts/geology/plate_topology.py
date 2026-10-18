@@ -114,9 +114,33 @@ def walk(
     opening, _ = boundary_opening_rates(kin, boundary_cells(kin))
     orogens = active_orogens(kin, w.elevation, opening, w.cumulative_convergence_km)
     rifts = rift_onsets(kin, w.divergent, w.cumulative_divergence_km)
-    sutures = inactive_sutures(kin, w.elevation, orogens) if args.sutures else []
+    sutures: list[Any] = []
+    if args.sutures == "relief":
+        sutures = inactive_sutures(kin, w.elevation, orogens)
+    elif args.sutures == "author":
+        from dreamulator.map.paleo_sutures import author_suture_belts, load_sutures
+
+        hist = args.plate_history or (
+            args.map_dir.resolve().parents[1]
+            / "layers"
+            / "geological"
+            / "input"
+            / "plate_history.yaml"
+        )
+        sutures, checks = author_suture_belts(kin, load_sutures(hist))
+        summary["suture_checks"] = [
+            {
+                "id": sid,
+                "plate": c.plate,
+                "severed": c.severed,
+                "leaving_Mkm2": round(c.leaving_km2 / 1e6, 2),
+                "staying_Mkm2": round(c.staying_km2 / 1e6, 2),
+                "warnings": c.warnings,
+            }
+            for sid, c in checks
+        ]
     summary["sutures"] = [
-        {"age_myr": round(s.age_myr, 2), "cells": int(s.cells.size)} for s in sutures
+        {"id": s.id, "age_myr": round(s.age_myr, 2), "cells": int(s.cells.size)} for s in sutures
     ]
     cfg = WalkConfig(
         dt_myr=args.dt_myr,
@@ -271,11 +295,13 @@ def main() -> None:
     )
     ap.add_argument("--save-snapshots", action="store_true", help="write snapshots.npz")
     ap.add_argument(
-        "--no-sutures",
-        dest="sutures",
-        action="store_false",
-        help="do not split plates along inactive orogenic belts at their collision ages",
+        "--sutures",
+        choices=("author", "relief", "none"),
+        default="author",
+        help="author: plate_history.yaml of the world (or --plate-history); relief: inactive "
+        "highland belts (paleo-orogeny landforms, ages from relief decay); none: no splits",
     )
+    ap.add_argument("--plate-history", type=Path, default=None)
     ap.add_argument(
         "--initial-speeds",
         choices=("continental", "engine"),

@@ -213,11 +213,21 @@ class SutureBelt:
         age_myr: collision age; before it the two sides were separate plates.
         cells: present cells of the belt.
         age_source: how the age was estimated.
+        leaving_cells: present continental cells of the side that leaves going
+            back, when the sides are given (an author suture split by its path,
+            ``paleo_sutures.author_suture_belts``); None to find the sides from
+            the belt's connectivity.
+        closing_rate_cm_yr: convergence rate before the collision, or None for
+            the continental-share speed law.
+        id: identifier for the log.
     """
 
     age_myr: float
     cells: np.ndarray
     age_source: str
+    leaving_cells: np.ndarray | None = None
+    closing_rate_cm_yr: float | None = None
+    id: str = ""
 
 
 def inactive_sutures(
@@ -624,7 +634,15 @@ def run_topology_walk(
         while grid is not None and pending and pending[0].age_myr <= t_new:
             belt = pending.pop(0)
             cut = _suture_pieces(
-                pos, plate, cont, home, belt.cells, kin.n, 1.2 * spacing, min_piece
+                pos,
+                plate,
+                cont,
+                home,
+                belt.cells,
+                kin.n,
+                1.2 * spacing,
+                min_piece,
+                belt.leaving_cells,
             )
             if cut is None:
                 continue
@@ -634,7 +652,9 @@ def run_topology_walk(
                 new_id = omega.shape[0]
                 rest = np.flatnonzero((plate == parent) & cont)
                 share = float(cont[piece].mean())
-                rate = speed_cap * (1.0 - (1.0 - cfg.continental_speed_factor) * share)
+                rate = belt.closing_rate_cm_yr or speed_cap * (
+                    1.0 - (1.0 - cfg.continental_speed_factor) * share
+                )
                 omega = np.vstack(
                     [omega, _suture_pole(omega[parent], pos[piece], pos[rest], rate, radius)]
                 )
@@ -648,6 +668,7 @@ def run_topology_walk(
                         "age_myr": round(belt.age_myr, 2),
                         "piece_Mkm2": round(piece.size * cell_area / 1e6, 2),
                         "age_source": belt.age_source,
+                        "suture": belt.id,
                     }
                 )
             before = label.copy()
@@ -842,8 +863,16 @@ def _suture_pieces(
     n_cells: int,
     reach_rad: float,
     min_parcels: int,
+    leaving_cells: np.ndarray | None = None,
 ) -> tuple[int, list[np.ndarray]] | None:
     """Parcels of the sides a suture splits off its plate.
+
+    With ``leaving_cells`` (sides given by an author's path) the parent is the
+    plate holding most continental parcels of the leaving side; its continental
+    parcels from those cells seed the leaving side, its other continental
+    parcels outside the belt seed the staying side, and every parcel of the
+    plate goes to the nearer seed.  Both sides need ``min_parcels`` seeds.
+    Without it the sides are found from the belt's connectivity:
 
     The plate holding most of the belt's continental parcels is cut: its other
     continental parcels, linked through neighbours within ``reach_rad``, form
@@ -860,6 +889,21 @@ def _suture_pieces(
     in_belt = np.zeros(n_cells, dtype=bool)
     in_belt[belt_cells] = True
     is_belt = cont & (home >= 0) & in_belt[np.maximum(home, 0)]
+    if leaving_cells is not None:
+        in_leave = np.zeros(n_cells, dtype=bool)
+        in_leave[leaving_cells] = True
+        is_leave = cont & (home >= 0) & in_leave[np.maximum(home, 0)]
+        if not is_leave.any():
+            return None
+        parent = int(np.bincount(plate[is_leave]).argmax())
+        lseed = np.flatnonzero(is_leave & (plate == parent))
+        sseed = np.flatnonzero(cont & (plate == parent) & ~is_leave & ~is_belt)
+        if lseed.size < min_parcels or sseed.size < min_parcels:
+            return None
+        members = np.flatnonzero(plate == parent)
+        d_l, _ = cKDTree(pos[lseed]).query(pos[members])
+        d_s, _ = cKDTree(pos[sseed]).query(pos[members])
+        return parent, [members[d_l < d_s]]
     if not is_belt.any():
         return None
     parent = int(np.bincount(plate[is_belt]).argmax())
@@ -1131,10 +1175,12 @@ def _closed_rifts(
     whose common boundary is at least ``share_needed`` continent against
     continent merges at its rift onset; one with ocean still between them merges
     once the share reaches ``share_needed``.  The trigger says why: a
-    registered rift at its onset (``rift_onset``), a pair that an event (boundary
-    jump, merger, suture split) first made adjacent (``event_contact``), or a
-    pair brought into contact by the plates' own motion, the ocean between them
-    having closed going back (``ocean_closed``).  The larger plate is kept.
+    registered rift at its onset (``rift_onset``), or a pair brought into
+    contact by the plates' own motion, the ocean between them having closed going
+    back (``ocean_closed``).  A pair that an event (boundary jump, merger, suture
+    split) first made adjacent does not merge unless it is a registered rift: its
+    contact is the event's doing, not a closed rift (a block split off along a
+    suture would otherwise rejoin a neighbour at once).  The larger plate is kept.
     """
     src = _owner_parcels(kin.xyz, label, pos, plate, kin.spacing_km / kin.radius_km)
     cell_cont = (src >= 0) & cont[np.maximum(src, 0)]
@@ -1168,7 +1214,7 @@ def _closed_rifts(
         if (pa, pb) in onset:
             trigger = "rift_onset"
         elif event_pairs and (pa, pb) in event_pairs:
-            trigger = "event_contact"
+            continue  # contact made by an event is no rift closure
         else:
             trigger = "ocean_closed"
         kept, gone = (pa, pb) if area[pa] >= area[pb] else (pb, pa)

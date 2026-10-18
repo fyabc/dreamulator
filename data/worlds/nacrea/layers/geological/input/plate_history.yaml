@@ -1,0 +1,44 @@
+# Nacrea 地质历史的创作设定（可选输入）
+#
+# 只供古地理倒推（板块拓扑层，src/dreamulator/map/paleo_walk.py）读取，不参与现状地形合成；
+# 改动本文件不会触发地形重建。格式见 docs/design/proposals/geological-timeline.md §5.1。
+#
+# sutures：古缝合带。倒推到碰撞年龄时，持有缝合带的板块沿折线切开，离开的一侧在倒推中远离、
+# 在正向时间里与另一侧相向汇聚。
+#   path               [经度, 纬度]（度）的折线，按大圆段连接，两端落在海里或板块边界上
+#   collision_age_myr  碰撞完成时刻（距今百万年）
+#   width_km           缝合带半宽
+#   moving_side        离开的一侧：left / right（相对折线前进方向）或方位（north、southwest 等）
+#
+# 碰撞年龄按缝合带上陆壳的平均高程推算：比大陆基准高出越少，碰撞越古老（造山后起伏衰减，
+# 活动造山带的中位成形时间加 50 Myr × ln(活动造山带起伏 / 该带起伏)）。50 Myr 的衰减时间是地球观测
+# 拟合（Baldwin 等 2003），nacrea 热流更高、岩石圈更弱，取值约有 2 倍不确定；年龄属创作设定。名称待定。
+
+sutures:
+  - id: suture_p12_transverse
+    name: 待命名（西北陆横向古缝合带）
+    collision_age_myr: 69          # 带上平均高程约 700 m
+    path: [[170, 51], [-180, 51], [-160, 54], [-150, 50], [-145, 55], [-140, 60], [-125, 60]]
+    width_km: 119                  # 半宽 1°
+    moving_side: south
+
+  - id: suture_p1_arctic
+    name: 待命名（北极古缝合带）
+    collision_age_myr: 74          # 带上平均高程约 650 m
+    path: [[100, 66], [110, 75], [87, 80], [60, 73], [44, 70], [30, 73], [13, 73]]
+    width_km: 238                  # 半宽 2°
+    moving_side: south
+
+  - id: suture_p0_a
+    name: 待命名（北方大陆古缝合带甲）
+    collision_age_myr: 127         # 带上平均高程约 280 m
+    path: [[-124, 55], [-110, 57], [-95, 59], [-85, 61], [-77, 64.5], [-76, 66], [-81, 69], [-88.5, 74.5]]
+    width_km: 119
+    moving_side: northwest
+
+  - id: suture_p0_b
+    name: 待命名（北方大陆古缝合带乙）
+    collision_age_myr: 115         # 带上平均高程约 330 m；与甲共用前半段
+    path: [[-124, 55], [-110, 57], [-95, 59], [-87, 56], [-80, 53], [-72.5, 51], [-62, 49.5], [-58, 42.5], [-54, 38.5]]
+    width_km: 119
+    moving_side: northeast
