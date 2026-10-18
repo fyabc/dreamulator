@@ -187,6 +187,7 @@ def walk(
     summary["merges"] = log.merges
     summary["reorganizations"] = log.reorganizations
     summary["splits"] = log.splits
+    summary["refused_jumps"] = log.refused_jumps
     summary["steps"] = log.steps
     restored = float(str(log.steps[-1]["unstretched_km3"])) if log.steps else 0.0
     summary["unstretched_km3"] = round(restored)

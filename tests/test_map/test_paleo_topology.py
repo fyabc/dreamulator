@@ -320,3 +320,12 @@ def test_suture_split_cuts_a_continent_along_its_belt_and_converges_forward() ->
     v = np.cross(w, c)
     towards_piece = np.array([0.0, 0.0, side])  # +z is lon +90
     assert v @ towards_piece < 0  # the piece moves back onto the parent forward in time
+
+
+def test_adjacent_pairs_and_renaming_after_a_merger() -> None:
+    from dreamulator.map.paleo_walk import _adjacent_pairs, _renamed
+
+    kin = _three_plates()
+    pairs = _adjacent_pairs(kin, kin.plate)
+    assert pairs == {(0, 1), (0, 2), (1, 2)}
+    assert _renamed(pairs, {2: 0}) == {(0, 1)}  # (0, 2) falls inside the merged plate

@@ -126,6 +126,13 @@ class WalkConfig:
         event_grid: points of the fixed sampling sphere for collision events.
         merge_contact_share: two plates merge (a rift closes) when this share of
             their common boundary is continent against continent.
+        jump_max_share: a boundary jump moves a continental block only if it has
+            at most this share of the smaller plate's continental parcels.  A
+            ridge jump strands a microcontinent (Jan Mayen, the Seychelles bank:
+            far smaller than either side); a larger block crossing over is a
+            merger in disguise and is refused — the pair then merges when its
+            contact reaches ``merge_contact_share`` or stays reported as overlap.
+            Numerical convention separating the two events, not a fitted value.
         reorg_interval_myr: plate reorganizations are drawn uniformly in this range.
         n_candidates: pole sets drawn per reorganization.
         axis_sigma_deg, speed_sigma: spread of the pole-axis tilt and of the
@@ -150,6 +157,7 @@ class WalkConfig:
     rift_cap_km: float = 300.0
     event_grid: int = 200_000
     merge_contact_share: float = 0.6
+    jump_max_share: float = 0.1
     reorg_interval_myr: tuple[float, float] = (10.0, 40.0)
     n_candidates: int = 32
     axis_sigma_deg: float = 20.0
@@ -193,6 +201,7 @@ class WalkLog:
     collisions: list[dict[str, float | int]] = field(default_factory=list)
     merges: list[dict[str, float | int | str]] = field(default_factory=list)
     reorganizations: list[dict[str, float | int]] = field(default_factory=list)
+    refused_jumps: list[dict[str, float | int]] = field(default_factory=list)
     splits: list[dict[str, float | int | str]] = field(default_factory=list)
 
 
@@ -317,6 +326,8 @@ def run_topology_walk(
         np.linalg.norm(kin.omega, axis=1).max() * radius * 1.0e5
     )
     jumped: set[tuple[int, int]] = set()
+    refused: set[tuple[int, int]] = set()
+    event_pairs: set[tuple[int, int]] = set()  # plate pairs first made adjacent by an event
     cont_parcels0 = int(cont.sum())
     pending = list(sutures or [])
     min_piece = max(50, int(0.003 * kin.n))  # the enclave rule's size
@@ -505,7 +516,16 @@ def run_topology_walk(
         # against continent were one plate before the rift opened
         if grid is not None:
             merges = _closed_rifts(
-                kin, label, pos, plate, cont, omega, cfg.merge_contact_share, t_new, onset
+                kin,
+                label,
+                pos,
+                plate,
+                cont,
+                omega,
+                cfg.merge_contact_share,
+                t_new,
+                onset,
+                event_pairs,
             )
             if merges:
                 relabel: dict[int, int] = {}
@@ -538,17 +558,37 @@ def run_topology_walk(
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 _follow_ownership(mesh_tree, pos, plate, before, label)
                 budget, onset = _rename_pairs(budget, onset, relabel)
+                event_pairs = _renamed(event_pairs, relabel)
+                refused = _renamed(refused, relabel)
+                event_pairs |= _adjacent_pairs(kin, label) - _renamed(
+                    _adjacent_pairs(kin, before), relabel
+                )
 
         # 4c. boundary jump: a partial rift (older ocean still between the plates)
         # at its onset.  Before the rift opened the continent was whole on one
         # plate and the plate boundary ran around it; the smaller continental
         # block beside the rift goes to the plate across it.
         if grid is not None:
-            due = [p for p, d in onset.items() if t_new >= d]
+            due = [p for p, d in onset.items() if t_new >= d and p not in refused]
             transfers: list[tuple[np.ndarray, int]] = []
             for pair in due:
                 block, to_plate = _jump_block(pos, plate, cont, pair, 1.2 * spacing)
                 if block is None:
+                    continue
+                smaller = min(int(np.sum(cont & (plate == p))) for p in pair)
+                if block.size > cfg.jump_max_share * smaller:
+                    refused.add(pair)
+                    log.refused_jumps.append(
+                        {
+                            "t_myr": t_new,
+                            "a": int(pair[0]),
+                            "b": int(pair[1]),
+                            "block_Mkm2": round(float(block.size * cell_area / 1e6), 2),
+                            "limit_Mkm2": round(
+                                float(cfg.jump_max_share * smaller * cell_area / 1e6), 2
+                            ),
+                        }
+                    )
                     continue
                 transfers.append((pos[block], to_plate))
                 from_plate = int(pair[0] if pair[1] == to_plate else pair[1])
@@ -577,6 +617,7 @@ def run_topology_walk(
                 )
                 label = pt.rasterize(topo, kin, spacing / 3.0)
                 _follow_ownership(mesh_tree, pos, plate, before, label)
+                event_pairs |= _adjacent_pairs(kin, label) - _adjacent_pairs(kin, before)
 
         # 4d. suture split: at its collision age a plate holding a suture splits
         # along it; the split-off side converges on the parent forward in time
@@ -615,6 +656,7 @@ def run_topology_walk(
             )
             label = pt.rasterize(topo, kin, spacing / 3.0)
             _follow_ownership(mesh_tree, pos, plate, before, label)
+            event_pairs |= _adjacent_pairs(kin, label) - _adjacent_pairs(kin, before)
 
         # 5. fill cells that no parcel of their plate covers
         src = _owner_parcels(kin.xyz, label, pos, plate, cfg.gap_factor * spacing)
@@ -987,6 +1029,24 @@ def _jump_block(
     return blocks[small], other
 
 
+def _adjacent_pairs(kin: PlateKinematics, label: np.ndarray) -> set[tuple[int, int]]:
+    """Plate pairs sharing a mesh edge, as (smaller, larger)."""
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    a, b = label[rows], label[kin.nbr_idx]
+    m = a < b
+    return {(int(x), int(y)) for x, y in set(zip(a[m].tolist(), b[m].tolist(), strict=True))}
+
+
+def _renamed(pairs: set[tuple[int, int]], relabel: dict[int, int]) -> set[tuple[int, int]]:
+    """Plate pairs after a merger (merged → kept); pairs inside one plate drop out."""
+    out = set()
+    for a, b in pairs:
+        ra, rb = relabel.get(a, a), relabel.get(b, b)
+        if ra != rb:
+            out.add((min(ra, rb), max(ra, rb)))
+    return out
+
+
 def _rename_pairs(
     budget: dict[tuple[int, int], float],
     onset: dict[tuple[int, int], float],
@@ -1063,14 +1123,18 @@ def _closed_rifts(
     share_needed: float,
     t: float,
     onset: dict[tuple[int, int], float],
+    event_pairs: set[tuple[int, int]] | None = None,
 ) -> list[tuple[int, int, str, float]]:
     """Plate pairs to merge: (kept, merged, trigger, contact share).
 
     Only pairs that open forward in time (a rift, not a collision) merge.  A pair
     whose common boundary is at least ``share_needed`` continent against
     continent merges at its rift onset; one with ocean still between them merges
-    once the share reaches ``share_needed`` (the ocean has closed going back).
-    The larger plate is kept.
+    once the share reaches ``share_needed``.  The trigger says why: a
+    registered rift at its onset (``rift_onset``), a pair that an event (boundary
+    jump, merger, suture split) first made adjacent (``event_contact``), or a
+    pair brought into contact by the plates' own motion, the ocean between them
+    having closed going back (``ocean_closed``).  The larger plate is kept.
     """
     src = _owner_parcels(kin.xyz, label, pos, plate, kin.spacing_km / kin.radius_km)
     cell_cont = (src >= 0) & cont[np.maximum(src, 0)]
@@ -1101,7 +1165,12 @@ def _closed_rifts(
         due = onset.get((pa, pb), 0.0)
         if share < share_needed or not opening_ok or t < due:
             continue
-        trigger = "rift_onset" if (pa, pb) in onset else "ocean_closed"
+        if (pa, pb) in onset:
+            trigger = "rift_onset"
+        elif event_pairs and (pa, pb) in event_pairs:
+            trigger = "event_contact"
+        else:
+            trigger = "ocean_closed"
         kept, gone = (pa, pb) if area[pa] >= area[pb] else (pb, pa)
         out.append((kept, gone, trigger, share))
     return out
