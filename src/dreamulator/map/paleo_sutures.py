@@ -167,8 +167,11 @@ class SutureCheck:
         belt: (N,) cells within ``width_km`` of the path.
         leaving: (N,) continental cells of the plate on the leaving side.
         staying: (N,) continental cells of the plate on the other side.
-        severed: no continental path joins the two sides around the belt.
+        severed: no block of the continent outside the belt lies in force on both
+            sides near the path (the continent does not go round an end).
         leaving_km2, staying_km2: continental areas of the two sides.
+        leak_cells: (N,) cells near the path where the continent goes round the
+            belt (the minority side of a block lying on both sides).
         orogeny_share: share of the belt's continental cells that are
             paleo-orogeny belt cells (``landform == "orogeny"`` or ``"basin"``).
         warnings: human-readable findings.
@@ -182,6 +185,7 @@ class SutureCheck:
     severed: bool
     leaving_km2: float
     staying_km2: float
+    leak_cells: np.ndarray
     orogeny_share: float
     warnings: list[str]
 
@@ -212,7 +216,7 @@ def check_suture(
     if not bc.any():
         empty = np.zeros(kin.n, dtype=bool)
         return SutureCheck(
-            -1, 0.0, belt, empty, empty, False, 0.0, 0.0, 0.0, ["belt has no continental crust"]
+            -1, 0.0, belt, empty, empty, False, 0.0, 0.0, empty, 0.0, ["no continental crust"]
         )
     plate = int(np.bincount(kin.plate[bc]).argmax())
     share = float(np.mean(kin.plate[bc] == plate))
@@ -229,24 +233,37 @@ def check_suture(
     m2 = rest[rows] & rest[cols]
     g2 = csr_matrix((np.ones(int(m2.sum())), (rows[m2], cols[m2])), shape=(kin.n, kin.n))
     _, lab2 = connected_components(g2, directed=False)
-    leak = set(lab2[rest & (side > 0)].tolist()) & set(lab2[rest & (side < 0)].tolist())
-    # components that touch both sides with real weight (a few edge cells do not count)
-    big_leak = [
-        c
-        for c in leak
-        if min(np.sum(rest & (lab2 == c) & (side > 0)), np.sum(rest & (lab2 == c) & (side < 0)))
-        >= min_cells // 10
-    ]
+    # Sides are read only near the path (within two half-widths): far away the
+    # nearest-segment side flips between the bisectors of a winding path, which
+    # says nothing about the cut.  A block of the continent outside the belt
+    # takes the side of its near cells; it leaks when its near cells sit on both
+    # sides in force, i.e. the continent goes round an end of the belt.
+    near = rest & (dist * kin.radius_km <= 1.5 * suture.width_km)
+    block_side = np.zeros(int(lab2.max()) + 1)
+    big_leak = []
+    leak_cells = np.zeros(kin.n, dtype=bool)
+    for c in np.unique(lab2[near]):
+        nl = int(np.sum(near & (lab2 == c) & (side > 0)))
+        nr = int(np.sum(near & (lab2 == c) & (side < 0)))
+        block_side[c] = 1.0 if nl >= nr else -1.0
+        if min(nl, nr) >= 5:
+            minority = 1.0 if nl < nr else -1.0
+            leak_cells |= near & (lab2 == c) & (side == minority)
+            if min(nl, nr) >= max(5, min_cells // 10):
+                big_leak.append(int(c))
     severed = not big_leak
-    sgn = resolve_side(suture.moving_side, kin.xyz, side, kin.area_km2 * rest, suture.path)
-    leaving = rest & (side == sgn)
-    staying = rest & (side == -sgn)
+    cell_side = np.where(rest, block_side[lab2], 0.0)
+    sgn = resolve_side(suture.moving_side, kin.xyz, cell_side, kin.area_km2 * rest, suture.path)
+    leaving = rest & (cell_side == sgn)
+    staying = rest & (cell_side == -sgn)
     a_leave = float(kin.area_km2[leaving].sum())
     a_stay = float(kin.area_km2[staying].sum())
     if share < 0.5:
         warnings.append(f"belt spans several plates (plate {plate} holds {share:.0%})")
     if not severed:
         warnings.append("does not sever the continent: the two sides join around the belt")
+    elif leak_cells.any():
+        warnings.append(f"continent goes round the belt in {int(leak_cells.sum())} cells (minor)")
     if min(leaving.sum(), staying.sum()) < min_cells:
         warnings.append(f"a side is smaller than the enclave size ({min_cells} cells)")
     if a_leave > a_stay:
@@ -257,7 +274,7 @@ def check_suture(
     if suture.collision_age_myr is None:
         warnings.append("collision_age_myr not set")
     return SutureCheck(
-        plate, share, belt, leaving, staying, severed, a_leave, a_stay, oro, warnings
+        plate, share, belt, leaving, staying, severed, a_leave, a_stay, leak_cells, oro, warnings
     )
 
 

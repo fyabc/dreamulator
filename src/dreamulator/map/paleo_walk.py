@@ -148,6 +148,11 @@ class WalkConfig:
             form and default as the terrain engine's continental slowdown.
         contact_onsets: set a pair's rift onset when its continents close up to
             the pre-rift fit (``_contact_onsets``), registered rift or not.
+        suture_candidates: pole candidates drawn for a block split off along a
+            suture; the one whose continent runs least into other plates'
+            continents over ``suture_horizon_km`` of separation is kept.
+        suture_horizon_km: separation distance over which candidates are scored
+            (a distance, so the choice does not depend on the overall speed).
         seed: RNG seed of the reorganizations.
     """
 
@@ -167,6 +172,8 @@ class WalkConfig:
     continent_rule_weight: float = 2.0
     continental_speed_factor: float = 0.3
     contact_onsets: bool = False
+    suture_candidates: int = 16
+    suture_horizon_km: float = 500.0
     seed: int = 0
 
 
@@ -650,14 +657,29 @@ def run_topology_walk(
             transfers = []
             for piece in pieces:
                 new_id = omega.shape[0]
-                rest = np.flatnonzero((plate == parent) & cont)
+                in_piece = np.zeros(len(pos), dtype=bool)
+                in_piece[piece] = True
+                rest = np.flatnonzero((plate == parent) & cont & ~in_piece)
                 share = float(cont[piece].mean())
                 rate = belt.closing_rate_cm_yr or speed_cap * (
                     1.0 - (1.0 - cfg.continental_speed_factor) * share
                 )
-                omega = np.vstack(
-                    [omega, _suture_pole(omega[parent], pos[piece], pos[rest], rate, radius)]
+                pole, overlap_frac = _best_suture_pole(
+                    omega,
+                    parent,
+                    piece[cont[piece]],
+                    rest,
+                    pos,
+                    plate,
+                    cont,
+                    rate,
+                    belt.closing_rate_cm_yr is None,
+                    radius,
+                    spacing,
+                    rng,
+                    cfg,
                 )
+                omega = np.vstack([omega, pole])
                 plate[piece] = new_id
                 transfers.append((pos[piece], new_id))
                 log.splits.append(
@@ -669,6 +691,7 @@ def run_topology_walk(
                         "piece_Mkm2": round(piece.size * cell_area / 1e6, 2),
                         "age_source": belt.age_source,
                         "suture": belt.id,
+                        "predicted_overlap": round(overlap_frac, 3),
                     }
                 )
             before = label.copy()
@@ -956,6 +979,77 @@ def _suture_pole(
     n /= max(float(np.linalg.norm(n)), 1e-15)
     out: np.ndarray = omega_parent + rate_cm_yr / (radius_km * 1.0e5) * np.cross(n, c)
     return out
+
+
+def _best_suture_pole(
+    omega: np.ndarray,
+    parent: int,
+    piece_cont: np.ndarray,
+    rest: np.ndarray,
+    pos: np.ndarray,
+    plate: np.ndarray,
+    cont: np.ndarray,
+    rate_cm_yr: float,
+    vary_rate: bool,
+    radius_km: float,
+    spacing_rad: float,
+    rng: np.random.Generator,
+    cfg: WalkConfig,
+) -> tuple[np.ndarray, float]:
+    """Pole of a block split off along a suture, chosen to run least into others.
+
+    The base pole separates the block from its parent across the suture
+    (``_suture_pole``).  Candidates turn the separation direction by up to 60°
+    either way about the suture midpoint and, when the rate is not the author's,
+    scale it log-normally (σ 0.3, never above the base rate).  Each candidate
+    moves the block's continental parcels back over ``suture_horizon_km`` of
+    separation, the other plates' continental parcels moving with their poles;
+    the score is the share of block parcels then within one spacing of another
+    plate's continent.  The least-overlapping candidate wins; ties keep the one
+    nearer the base pole.  Returns (pole, its overlap share).
+    """
+    piece_xyz = pos[piece_cont]
+    base = _suture_pole(omega[parent], piece_xyz, pos[rest], rate_cm_yr, radius_km)
+    rel = base - omega[parent]
+    rel_rate = float(np.linalg.norm(rel))
+    if rel_rate == 0.0 or piece_cont.size == 0:
+        return base, 0.0
+    horizon_yr = cfg.suture_horizon_km * 1.0e5 / max(rate_cm_yr, 1e-9)
+    _, i_rest = cKDTree(pos[rest]).query(piece_xyz)
+    k = np.argsort(np.linalg.norm(piece_xyz - pos[rest][i_rest], axis=1))[
+        : max(1, len(piece_xyz) // 20)
+    ]
+    c = (piece_xyz[k] + pos[rest][i_rest[k]]).mean(axis=0)
+    c /= np.linalg.norm(c)
+    others = np.flatnonzero(cont & (plate != parent) & (plate >= 0))
+    others = others[~np.isin(others, piece_cont)]
+    other_xyz = pt._rotate_points(pos[others], omega[plate[others]], -horizon_yr)
+    tree = cKDTree(other_xyz) if len(others) else None
+    chord = 2.0 * np.sin(spacing_rad / 2.0)
+
+    def overlap(w: np.ndarray) -> float:
+        if tree is None:
+            return 0.0
+        moved = pt._rotate_points(piece_xyz, np.repeat(w[None], len(piece_xyz), 0), -horizon_yr)
+        d, _ = tree.query(moved, distance_upper_bound=chord)
+        return float(np.mean(np.isfinite(d)))
+
+    best, best_key = base, (overlap(base), 0.0)
+    axis = rel / rel_rate
+    for _ in range(cfg.suture_candidates):
+        turn = np.radians(rng.uniform(-60.0, 60.0))
+        # rotate the relative axis about c: turns the separation direction at c
+        a = (
+            axis * np.cos(turn)
+            + np.cross(c, axis) * np.sin(turn)
+            + c * (c @ axis) * (1.0 - np.cos(turn))
+        )
+        scale = min(1.0, float(np.exp(rng.normal(0.0, 0.3)))) if vary_rate else 1.0
+        cand = omega[parent] + rel_rate * scale * a
+        key = (overlap(cand), abs(float(turn)) + abs(np.log(scale)))
+        if key < best_key:
+            best, best_key = cand, key
+    return best, best_key[0]
 
 
 def _follow_ownership(
