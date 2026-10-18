@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792273769027,
+  "lastUpdate": 1792292533328,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -177,6 +177,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00012348853976584497",
             "extra": "mean: 5.112264399997457 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "9c81817dfa8b13955ac2703b2e5b917f11919264",
+          "message": "fix(map,media): 区域链行星半径两修——分支导出 root 兜底 + 图纸经纬网按 meta 半径\n\n- read_radius_km 加 world_dir 参数：分支 maps 目录只有构建产物、没有手写\n  map.yaml 时回退同行星根目录，不再静默回退地球 6371 km（此前 --branch 导出\n  的包 meta radius_km 与窗口数学整体失真：nacrea 6817 km 半径下 550 km 窗\n  实盖约 588 km，横向比例差 6.5%）\n- carto/biome 图纸经纬网与度数刻度从硬编码 111.19 km/° 改为按 meta 半径\n  （ColorizeInputs.km_per_deg，load_inputs 从 radius_km 取 πR/180；旧包\n  回退地球值）\n- 手册差距清单勾销（经纬网地球常数项删除；相邻块对齐项改已定向画布方案）\n- 测试：半径回退 2 项 + 经纬网行星比例 1 项\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-18T10:12:25+08:00",
+          "tree_id": "fff07ab514bfa68ee29fe4f5fc1cb18f32130b9a",
+          "url": "https://github.com/fyabc/dreamulator/commit/9c81817dfa8b13955ac2703b2e5b917f11919264"
+        },
+        "date": 1792292532598,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.32537031647417536,
+            "unit": "iter/sec",
+            "range": "stddev: 0.08542385494318512",
+            "extra": "mean: 3.0734211123999997 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2722140360698084,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011681116939844853",
+            "extra": "mean: 305.60348100000215 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5047392266029505,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0611758702248044",
+            "extra": "mean: 664.5669776666665 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 977.1932859061588,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009458676810187867",
+            "extra": "mean: 1.023338999993939 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 199.71174405715522,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004982537417140781",
+            "extra": "mean: 5.0072167999985595 msec\nrounds: 5"
           }
         ]
       }
