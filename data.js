@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792292533328,
+  "lastUpdate": 1792296121177,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -236,6 +236,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004982537417140781",
             "extra": "mean: 5.0072167999985595 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "45d2c3bcbb657b8ba4793821a87269476dc3994b",
+          "message": "fix(media): relief 遥感图经纬网补传行星半径——_graticule 第三调用点漏改\n\n首批半径修复只改了 carto/biome 两处调用点，relief_render 的同名调用仍走\n地球默认 111.19 km/°，三种图纸度数刻度不一致（~7%）。补传\ninputs.km_per_deg 后三图同源；五包遥感图已重渲，探针实证 118.98。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-18T11:26:39+08:00",
+          "tree_id": "6e8260eaceec5db9577d1b69250af4ac0de162fa",
+          "url": "https://github.com/fyabc/dreamulator/commit/45d2c3bcbb657b8ba4793821a87269476dc3994b"
+        },
+        "date": 1792296120666,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4602645772837127,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05762751854081117",
+            "extra": "mean: 2.1726633969999996 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.817945987476151,
+            "unit": "iter/sec",
+            "range": "stddev: 0.004209598294343169",
+            "extra": "mean: 261.92093949999776 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9586330229016642,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8149485731947738",
+            "extra": "mean: 510.56016533333326 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1237.9350846656318,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000047964847583896186",
+            "extra": "mean: 807.7967999994939 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 240.27278457548644,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000257459136285368",
+            "extra": "mean: 4.161936200002003 msec\nrounds: 5"
           }
         ]
       }
