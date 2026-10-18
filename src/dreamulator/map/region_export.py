@@ -240,15 +240,24 @@ def probe_alignment(
     return probes
 
 
-def read_radius_km(map_dir: Path) -> float:
-    """Planet radius from ``map.yaml`` (extra field dropped by MapMetadata)."""
+def read_radius_km(map_dir: Path, world_dir: Path | None = None) -> float:
+    """Planet radius from ``map.yaml`` (extra field dropped by MapMetadata).
+
+    Branch maps dirs hold build products only — the hand-written
+    ``map.yaml`` stays in the root maps dir.  When ``map_dir`` is a
+    branch's (no ``map.yaml`` of its own), fall back to the same planet's
+    root map via ``world_dir`` before defaulting to Earth.
+    """
     import yaml
 
-    map_yaml = map_dir / "map.yaml"
-    if map_yaml.exists():
-        raw = yaml.safe_load(map_yaml.read_text(encoding="utf-8")) or {}
-        if raw.get("radius_km"):
-            return float(raw["radius_km"])
+    candidates = [map_dir / "map.yaml"]
+    if world_dir is not None:
+        candidates.append(world_dir / "maps" / map_dir.name / "map.yaml")
+    for map_yaml in candidates:
+        if map_yaml.exists():
+            raw = yaml.safe_load(map_yaml.read_text(encoding="utf-8")) or {}
+            if raw.get("radius_km"):
+                return float(raw["radius_km"])
     return 6371.0
 
 

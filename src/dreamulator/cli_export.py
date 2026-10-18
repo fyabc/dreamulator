@@ -425,7 +425,7 @@ def export_region(
     elev_min = meta.elevation_min_m if meta else -11_000.0
     elev_max = meta.elevation_max_m if meta else 9_000.0
     sea_level = meta.sea_level_m if meta else 0.0
-    radius_km = read_radius_km(map_dir)
+    radius_km = read_radius_km(map_dir, world_dir)
 
     mesh = load_cvt_mesh_model(mesh_file)
 

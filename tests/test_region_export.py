@@ -409,3 +409,36 @@ def test_runoff_channel_absent_without_monthly(tmp_path: Path) -> None:
     assert "runoff_mm" not in meta["climate"]
     # The rest of the climate block still ran.
     assert (tmp_path / "headwaters.png").exists()
+
+
+# ---------------------------------------------------------------------------
+# Planet radius resolution (branch maps lack the hand-written map.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_read_radius_km_falls_back_to_root_map(tmp_path: Path) -> None:
+    from dreamulator.map.region_export import read_radius_km
+
+    root_map = tmp_path / "maps" / "satellite_x"
+    root_map.mkdir(parents=True)
+    (root_map / "map.yaml").write_text("radius_km: 6816.97\n", encoding="utf-8")
+    branch_map = tmp_path / "branches" / "gcm-1" / "maps" / "satellite_x"
+    branch_map.mkdir(parents=True)
+
+    # Branch maps dir has build products but no map.yaml → root wins.
+    assert read_radius_km(branch_map, tmp_path) == 6816.97
+    # Without the world root the caller cannot resolve it → Earth default.
+    assert read_radius_km(branch_map) == 6371.0
+
+
+def test_read_radius_km_own_map_wins_over_root(tmp_path: Path) -> None:
+    from dreamulator.map.region_export import read_radius_km
+
+    root_map = tmp_path / "maps" / "satellite_x"
+    root_map.mkdir(parents=True)
+    (root_map / "map.yaml").write_text("radius_km: 6816.97\n", encoding="utf-8")
+    own_map = tmp_path / "other"
+    own_map.mkdir()
+    (own_map / "map.yaml").write_text("radius_km: 3000.0\n", encoding="utf-8")
+
+    assert read_radius_km(own_map, tmp_path) == 3000.0

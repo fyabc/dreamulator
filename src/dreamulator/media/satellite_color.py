@@ -24,6 +24,7 @@ Blender's job, never bake it into the albedo).
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -159,6 +160,12 @@ TEXTURE_FINE_WAVELENGTH_PX = 3.0
 TEXTURE_FINE_AMPLITUDE = 0.025
 
 
+#: Kilometres per degree of latitude on Earth (πR/180, R = 6371 km — the
+#: same default as ``region_export.read_radius_km``).  Fallback for packs
+#: whose meta predates the ``radius_km`` field.
+EARTH_KM_PER_DEG = math.pi * 6371.0 / 180.0
+
+
 @dataclass
 class ColorizeInputs:
     """All channels on one square grid (N×N); float32 everywhere (8K memory)."""
@@ -192,6 +199,9 @@ class ColorizeInputs:
     # unknown).  Sheet legs scale their ecotone blur to this so transitions
     # keep a fixed fraction of a cell at any resolution.
     cell_px: float = 0.0
+    # Kilometres per degree of latitude (π·radius/180; set by load_inputs
+    # from meta ``radius_km``) — graticule and axis math are planet-correct.
+    km_per_deg: float = EARTH_KM_PER_DEG
 
 
 def _to_rgb(colors: list[tuple[int, int, int]]) -> np.ndarray:
@@ -668,6 +678,7 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         river_segment_regimes=river_regimes,
         lake=lake,
         cell_px=float(cell_px),
+        km_per_deg=math.pi * float(meta.get("radius_km", 6371.0)) / 180.0,
     )
 
 

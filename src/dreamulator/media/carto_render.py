@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 from dreamulator.map.palettes import build_adaptive_terrain_lut
 
-from .satellite_color import ColorizeInputs, hillshade, load_inputs
+from .satellite_color import EARTH_KM_PER_DEG, ColorizeInputs, hillshade, load_inputs
 
 # --- paper & inks -----------------------------------------------------------
 PAPER_RGB = (248, 244, 233)
@@ -847,7 +847,7 @@ def render_carto(
     _river_regime_legend(ax, inputs.river_segment_regimes, y_base_km=km * 0.003)
     _scale_bar(ax, km)
     _north_arrow(ax, km)
-    _graticule(ax, km, center_lat, center_lon)
+    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
     if title:
         # Figure-level title: an axes title gets clipped by the axes box at
         # this size, suptitle sits above it regardless of layout.
@@ -873,12 +873,18 @@ GRATICULE_LW = 0.5
 GRATICULE_STEPS_DEG = (1.0, 2.0, 5.0, 10.0, 15.0, 30.0)
 
 
-def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> float:
+def _graticule(
+    ax: Axes,
+    km: float,
+    center_lat: float,
+    center_lon: float,
+    km_per_deg: float = EARTH_KM_PER_DEG,
+) -> float:
     """Dashed lon/lat grid + edge degree labels; returns the step in degrees."""
     import math
 
-    lat_span = km / 111.19
-    lon_span = km / (111.19 * math.cos(math.radians(center_lat)))
+    lat_span = km / km_per_deg
+    lon_span = km / (km_per_deg * math.cos(math.radians(center_lat)))
     step = GRATICULE_STEPS_DEG[-1]
     for s in GRATICULE_STEPS_DEG:
         if max(lat_span, lon_span) / s <= 8:
@@ -894,7 +900,7 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
     lons = np.arange(math.ceil((center_lon - half_lon) / step) * step, center_lon + half_lon, step)
     pad = km * 0.012
     for lat in lats:
-        y = (lat - center_lat) * 111.19 + km / 2
+        y = (lat - center_lat) * km_per_deg + km / 2
         ax.plot([0, km], [y, y], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
         ax.text(
             km + pad * 0.3,
@@ -907,7 +913,7 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
             zorder=7,
         )
     for lon in lons:
-        x = (lon - center_lon) * 111.19 * math.cos(math.radians(center_lat)) + km / 2
+        x = (lon - center_lon) * km_per_deg * math.cos(math.radians(center_lat)) + km / 2
         ax.plot([x, x], [0, km], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
         ax.text(
             x,

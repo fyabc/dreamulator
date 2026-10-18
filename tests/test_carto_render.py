@@ -165,3 +165,21 @@ def test_continuous_dash_paths_cross_extraction_segments() -> None:
     # are real geometry rather than a dash style restarted per segment.
     covered = sum(float(np.hypot(*(path[1:] - path[:-1]).T).sum()) for path in paths)
     assert 0.0 < covered < 2.0
+
+
+def test_graticule_uses_planet_km_per_deg() -> None:
+    # Latitude rules must sit at (deg − centre)·km_per_deg: a 6817 km-radius
+    # planet (118.8 km/°) puts the 36°N rule at 118.8 + 275 = 393.8 km on a
+    # 550 km sheet — Earth's 111.19 would compress the grid by 6.8%.
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    cr._graticule(ax, km=550.0, center_lat=35.0, center_lon=-93.0, km_per_deg=118.8)
+    ys = {round(r.get_ydata()[0], 3) for r in ax.lines if r.get_ydata()[0] == r.get_ydata()[-1]}
+    assert 393.8 in ys  # the 36°N rule
+
+    fig_e, ax_e = plt.subplots()
+    cr._graticule(ax_e, km=550.0, center_lat=35.0, center_lon=-93.0)
+    ys_e = {round(r.get_ydata()[0], 3) for r in ax_e.lines if r.get_ydata()[0] == r.get_ydata()[-1]}
+    assert ys != ys_e  # default (Earth) is a different planet than 6817 km
+    plt.close("all")
