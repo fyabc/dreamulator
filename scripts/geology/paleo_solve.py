@@ -109,6 +109,7 @@ def main() -> None:
         "config": asdict(config),
         "seconds": {"setup": round(t1 - t0, 1), "solve": round(t2 - t1, 1)},
         "ridges": [list(r) for r in setup.ridge_plates],
+        "soft_margin_share": round(float(a[setup.cell_soft].sum() / a[blocks.block >= 0].sum()), 4),
         "stages": [
             {**st, "continental_rms_cm_yr": round(r, 2), **gr}
             for st, r, gr in zip(res.stats, rms_cm, groups, strict=True)

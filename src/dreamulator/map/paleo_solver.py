@@ -13,7 +13,10 @@ all dimensionless:
   Present seafloor was never subducted, so it cannot have lain on other crust.
   Depth is read from each block's signed distance field on the present mesh
   (its continental crust plus its seafloor older than t), linearised about the
-  nearest cell so the term has a gradient;
+  nearest cell so the term has a gradient.  Continental crust within
+  ``margin_km`` of another plate's present ridge is a stretched margin with no
+  conjugate seafloor on its side; like the overlap across a rift, it is taken
+  back by thinning and leaves the term in both directions;
 * **isochron fit** (hard): the two flanks of a present ridge meet at the ridge
   when their crust of age t forms, so at t the age-t isochrons of the two flanks
   coincide (Hellinger 1981).  A flank particle of age a ≥ t lies (a − t) times
@@ -82,6 +85,9 @@ class SolverConfig:
         contact_km: distance within which two margins count as touching.
         contact_share: margin share of the smaller block that must touch for a
             contact weld.
+        margin_km: width of the stretched margin next to another plate's ridge,
+            equal to the per-side stretching width of the rift onsets
+            (``paleo_walk.continental_rifts``).
         reorg_eps: pseudo-Huber smoothing of the reorganisation term, in units of
             the reference angular speed.
         memory_myr: oldest seafloor that takes part (§3.3); older seafloor, made
@@ -102,6 +108,7 @@ class SolverConfig:
     isochron_check_km: float = 150.0
     contact_km: float = 100.0
     contact_share: float = 0.2
+    margin_km: float = 300.0
     reorg_eps: float = 0.05
     memory_myr: float = 150.0
     w_overlap: float = 1000.0
@@ -141,12 +148,14 @@ class SolverSetup:
         ocean: (Pn,) seafloor particle.
         age: (Pn,) seafloor age (Myr), NaN on continental particles.
         margin: (Pn,) continental particle on its block's edge.
+        soft: (Pn,) continental particle on a stretched margin next to a ridge.
         ridge: (Pn,) ridge (index into ``ridge_plates``) that made a seafloor
             particle, −1 elsewhere; flank: (Pn,) 0 or 1, which side of it.
         half_km_myr: (Pn,) half-rate of that ridge (km/Myr).
         ridge_plates: (plate a, plate b) of each present ridge.
         cont_field: continental crust only (contact detection).
         cell_block: (N,) block of each continental cell, −1 elsewhere.
+        cell_soft: (N,) continental cell on a stretched margin next to a ridge.
         cell_host: (N,) block a seafloor cell moves with, −1 where it is left out.
         cell_age: (N,) seafloor age (Myr) of the cells that take part.
         cell_ridge, cell_flank: (N,) the same as ``ridge`` and ``flank`` per cell.
@@ -166,12 +175,14 @@ class SolverSetup:
     ocean: np.ndarray
     age: np.ndarray
     margin: np.ndarray
+    soft: np.ndarray
     ridge: np.ndarray
     flank: np.ndarray
     half_km_myr: np.ndarray
     ridge_plates: list[tuple[int, int]]
     cont_field: Field
     cell_block: np.ndarray
+    cell_soft: np.ndarray
     cell_host: np.ndarray
     cell_age: np.ndarray
     cell_ridge: np.ndarray
@@ -284,6 +295,16 @@ def build_setup(
         ridge_of[cell] = keys.setdefault(key, len(keys))
         flank_of[cell] = 0 if kin.plate[cell] == key[0] else 1
 
+    # stretched margins: continental crust within margin_km of another plate's ridge
+    soft = np.zeros(kin.n, dtype=bool)
+    ridge_cells = np.flatnonzero(np.isfinite(half_rate))
+    if ridge_cells.size:
+        d, j = cKDTree(kin.xyz[ridge_cells]).query(
+            kin.xyz[cont], distance_upper_bound=config.margin_km / kin.radius_km
+        )
+        hit = np.isfinite(d)
+        soft[cont[hit]] = kin.plate[ridge_cells[j[hit]]] != kin.plate[cont[hit]]
+
     # particles: uniform subsamples, each block keeping its own area
     pick_c = np.sort(rng.choice(cont, size=min(config.n_particles, cont.size), replace=False))
     sea = np.flatnonzero(host >= 0)
@@ -306,6 +327,7 @@ def build_setup(
         ocean=np.arange(pick.size) >= n_c,
         age=np.concatenate([np.full(n_c, np.nan), cell_age[pick_o]]),
         margin=np.concatenate([edge[pick_c], np.zeros(pick_o.size, dtype=bool)]),
+        soft=np.concatenate([soft[pick_c], np.zeros(pick_o.size, dtype=bool)]),
         ridge=np.concatenate([np.full(n_c, -1), ridge_of[pick_o]]),
         flank=np.concatenate([np.zeros(n_c, dtype=np.int64), flank_of[pick_o]]),
         half_km_myr=np.concatenate(
@@ -314,6 +336,7 @@ def build_setup(
         ridge_plates=sorted(keys, key=lambda k: keys[k]),
         cont_field=Field(np.zeros((0, 0)), np.zeros((0, 0)), np.zeros((0, 3)), np.zeros(0)),
         cell_block=blocks.block.copy(),
+        cell_soft=soft,
         cell_host=host,
         cell_age=cell_age,
         cell_ridge=ridge_of,
@@ -346,6 +369,8 @@ def _consistent_ridge(
     """
     ridge = setup.ridge.copy()
     idx = np.flatnonzero(ridge >= 0)
+    if idx.size == 0:
+        return ridge
     cells = setup.tree.query(setup.p0[idx])[1]
     step = 0.5 * config.stage_myr
     for t in np.arange(0.0, float(np.nanmax(setup.age[idx])) + step, step):
@@ -472,7 +497,8 @@ def crust_field(setup: SolverSetup, config: SolverConfig, t_myr: float) -> Field
         nb = setup.present_omega.shape[0]
         ids = np.arange(nb)[:, None]
         sea = (setup.cell_host >= 0) & (setup.cell_age >= t_myr)
-        member = (setup.cell_block[None] == ids) | (sea[None] & (setup.cell_host[None] == ids))
+        land = np.where(setup.cell_soft, -1, setup.cell_block)
+        member = (land[None] == ids) | (sea[None] & (setup.cell_host[None] == ids))
         setup.cache[key] = _region_field(setup, config, member)
     return setup.cache[key]
 
@@ -615,7 +641,7 @@ def _window_objective(
     for s in range(n_st):
         t = t_ends[s]
         x = np.einsum("pij,pj->pi", frames[s][setup.pblock], setup.p0)
-        active = ~setup.ocean | (setup.age >= t)
+        active = (~setup.ocean & ~setup.soft) | (setup.age >= t)
         fld = crust_field(setup, config, t)
         for cand, c, depth, gw in _penetration(
             setup, fld, x, active, frames[s], group_lists[s], exempts[s]
@@ -719,7 +745,7 @@ def stage_diagnostics(
     The misfit is the 90th percentile (km) of the distance beyond the allowed one.
     """
     x = np.einsum("pij,pj->pi", frame[setup.pblock], setup.p0)
-    active = ~setup.ocean | (setup.age >= t_myr)
+    active = (~setup.ocean & ~setup.soft) | (setup.age >= t_myr)
     worst = 0.0
     hit = np.zeros(setup.p0.shape[0], dtype=bool)
     fld = crust_field(setup, config, t_myr)
