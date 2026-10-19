@@ -267,7 +267,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "当前 ~0.7 cm/年",
     ],
     "layers/geological/input/tidal_effects.md": [
-        "**4.1 Myr**",
+        "**9.2 Myr**",
     ],
     # Satellite-dynamics derived fields (#13): Hill geometry, stability
     # metrics, sibling separations, synchronous-orbit economics.
@@ -278,7 +278,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
         "≈ 0.373 r_H",
         "24 个互希尔半径的径向净空",
         "希尔球（66,602 km）",
-        "~4.1 Myr",
+        "~9.2 Myr",
     ],
     "layers/civilization/input/space_age.md": [
         "**96,122 km**（高度 89,305 km）",
