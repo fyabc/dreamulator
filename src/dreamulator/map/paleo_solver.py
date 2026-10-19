@@ -33,10 +33,11 @@ all dimensionless:
 * **net rotation**: the area-weighted mean rotation of the continents stays near
   that of the stage-0 poles (the frame of the engine's poles is kept).
 
-Rift welds give way to the seafloor record: a rift whose weld would put the two
-flanks of a present ridge into one group while seafloor older than the weld
-time lies between them is welded only from that seafloor's age on
-(``seafloor_welds``); the rift onset is an estimate, the seafloor a record.
+Welds give way to the seafloor record: no weld may put the two flanks of a
+present ridge into one group while seafloor older than the weld time lies
+between them (``ridge_record``).  A rift weld that would is postponed to that
+seafloor's age (``seafloor_welds``); a contact weld that would is not made.
+Rift onsets and contacts are estimates, the seafloor is a record.
 
 The solve slides a window of ``window_stages`` stages back in time, optimises it
 with L-BFGS and keeps only its first stage.  After each kept stage, groups whose
@@ -402,14 +403,12 @@ def _consistent_ridge(
     return ridge
 
 
-def seafloor_welds(blocks: Blocks, setup: SolverSetup) -> tuple[Blocks, list[dict[str, float]]]:
-    """Rift welds postponed so that no weld group spans a ridge with older seafloor.
+def ridge_record(setup: SolverSetup) -> dict[tuple[int, int], float]:
+    """Block pairs that may not share a weld group before a seafloor age.
 
     For each present ridge the record age is the 90th percentile age of its
     particles that passed the isochron check; the blocks hosting its two flanks
-    may not share a group before that age.  Rift welds are added in order of
-    onset; one that would join such a pair is postponed to the pair's record age
-    and tried again.  Returns the new blocks and the postponed welds.
+    moved apart over that time.
     """
     forbid: dict[tuple[int, int], float] = {}
     for r in np.unique(setup.ridge[setup.ridge >= 0]):
@@ -421,6 +420,17 @@ def seafloor_welds(blocks: Blocks, setup: SolverSetup) -> tuple[Blocks, list[dic
                 if a != b:
                     key = (min(a, b), max(a, b))
                     forbid[key] = max(forbid.get(key, 0.0), age)
+    return forbid
+
+
+def seafloor_welds(blocks: Blocks, setup: SolverSetup) -> tuple[Blocks, list[dict[str, float]]]:
+    """Rift welds postponed so that no weld group spans a ridge with older seafloor.
+
+    Rift welds are added in order of onset; one that would join a pair of
+    ``ridge_record`` is postponed to the pair's record age and tried again.
+    Returns the new blocks and the postponed welds.
+    """
+    forbid = ridge_record(setup)
     welds = [w for w in blocks.welds if w.kind != "rift"]
     pending = sorted(
         (w for w in blocks.welds if w.kind == "rift"), key=lambda w: (w.since_myr or 0.0, w.a, w.b)
@@ -777,13 +787,19 @@ def _contact_welds(
     frame: np.ndarray,
     group: np.ndarray,
     present_share: dict[tuple[int, int], float],
+    forbid: dict[tuple[int, int], float],
     t_myr: float,
-) -> list[Weld]:
-    """New welds between groups whose continental margins touch at ``t_myr`` (§4.5)."""
+) -> tuple[list[Weld], int]:
+    """New welds between groups whose continental margins touch at ``t_myr`` (§4.5).
+
+    A contact that would join a pair of ``ridge_record`` before its record age is
+    not welded.  Returns the welds and the number of contacts refused.
+    """
     # pairs with a weld relation already (rift, suture) follow that relation
     related = {(min(w.a, w.b), max(w.a, w.b)) for w in blocks.welds}
     share = _margin_contact(setup, config, frame, group)
     out = []
+    refused = 0
     for (a, b), sh in sorted(share.items()):
         if group[a] == group[b] or (a, b) in related:
             continue
@@ -791,9 +807,13 @@ def _contact_welds(
             sh >= config.contact_share
             and present_share.get((a, b), 0.0) < 0.5 * config.contact_share
         ):
+            pair = {group[a], group[b]}
+            if any({group[x], group[y]} == pair and age > t_myr for (x, y), age in forbid.items()):
+                refused += 1
+                continue
             out.append(Weld(a, b, "contact", since_myr=t_myr))
             group = np.where(group == group[b], group[a], group)
-    return out
+    return out, refused
 
 
 def _margin_contact(
@@ -846,7 +866,8 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
         {"t_myr": dt, **stage_diagnostics(setup, config, frame, groups[0], _exempt(blocks, dt), dt)}
     ]
     present_share = _margin_contact(setup, config, np.repeat(np.eye(3)[None], nb, axis=0), None)
-    welds += _contact_welds(setup, config, blocks, frame, groups[0], present_share, dt)
+    forbid = ridge_record(setup)
+    welds += _contact_welds(setup, config, blocks, frame, groups[0], present_share, forbid, dt)[0]
     for k in range(1, n_stages):
         stages = list(range(k, min(k + config.window_stages, n_stages)))
         glists = []
@@ -879,7 +900,9 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
         omegas.append(om0)
         groups.append(groups_at(blocks, welds, (k + 0.5) * dt))
         frame = np.einsum("bij,bjk->bik", rotation_matrices(om0, -dt * 1.0e6), frame)
-        new = _contact_welds(setup, config, blocks, frame, groups[-1], present_share, (k + 1) * dt)
+        new, refused = _contact_welds(
+            setup, config, blocks, frame, groups[-1], present_share, forbid, (k + 1) * dt
+        )
         welds += new
         stats.append(
             {
@@ -887,6 +910,7 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
                 "value": float(res.fun),
                 "iterations": float(res.nit),
                 "new_contact_welds": float(len(new)),
+                "refused_contacts": float(refused),
                 **{key: float(v) for key, v in terms.items()},
                 **stage_diagnostics(setup, config, frame, groups[-1], exempts[0], (k + 1) * dt),
             }

@@ -18,6 +18,7 @@ from dreamulator.map.paleo_solver import (
     build_setup,
     crust_field,
     left_jacobian,
+    ridge_record,
     skew,
     solve,
     stage_diagnostics,
@@ -53,8 +54,12 @@ def _kin() -> PlateKinematics:
     )
 
 
-def _setup(config: SolverConfig):  # type: ignore[no-untyped-def]
-    """Seafloor between the two continents made by a ridge on the lon-90 boundary."""
+def _setup(config: SolverConfig, sea_deg: float = 30.0):  # type: ignore[no-untyped-def]
+    """Seafloor within ``sea_deg`` of a ridge on the lon-90 boundary.
+
+    With ``sea_deg`` above 8 the seafloor at high latitude is older than the gap
+    between the equatorial continents allows (they meet after about 7 Myr).
+    """
     kin = _kin()
     blocks = build_blocks(kin)
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
@@ -63,7 +68,7 @@ def _setup(config: SolverConfig):  # type: ignore[no-untyped-def]
     ridge = ridge[np.abs(lon[ridge] - 90.0) < 30.0]
     age = np.full(kin.n, np.nan)
     source = np.full(kin.n, -1)
-    sea = np.flatnonzero(~kin.continental & (np.abs(lon - 90.0) < 30.0))
+    sea = np.flatnonzero(~kin.continental & (np.abs(lon - 90.0) < sea_deg))
     for p in (0, 1):
         own = ridge[kin.plate[ridge] == p]
         cells = sea[kin.plate[sea] == p]
@@ -117,7 +122,7 @@ def test_solve_keeps_converging_continents_apart() -> None:
     config = SolverConfig(
         n_particles=800, n_ocean_particles=800, end_myr=20.0, contact_km=200.0, max_iter=60
     )
-    kin, blocks, setup = _setup(config)
+    kin, blocks, setup = _setup(config, sea_deg=8.0)
     res = solve(blocks, setup, config)
     assert res.stage_omega.shape == (4, 2, 3)
     # the present poles would push the continents through each other within 20 Myr;
@@ -162,3 +167,15 @@ def test_continent_next_to_a_ridge_is_a_soft_margin() -> None:
     assert not soft.cell_soft[kin.continental & (np.abs(lon - 90.0) > 25.0)].any()
     inside = crust_field(soft, config, 0.0).sdf > 0
     assert not inside[:, near & (kin.plate == 0)].any()
+
+
+def test_contact_is_not_welded_across_older_seafloor() -> None:
+    # the seafloor says the two continents moved apart for about 26 Myr
+    config = SolverConfig(
+        n_particles=800, n_ocean_particles=800, end_myr=20.0, contact_km=200.0, max_iter=60
+    )
+    kin, blocks, setup = _setup(config)
+    assert ridge_record(setup)[(0, 1)] > 20.0
+    res = solve(blocks, setup, config)
+    assert not res.contact_welds
+    assert sum(st.get("refused_contacts", 0.0) for st in res.stats) > 0
