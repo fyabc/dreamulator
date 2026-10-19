@@ -48,6 +48,9 @@ class AuthorSuture:
         moving_side: side that leaves going back: ``left`` / ``right`` (relative to
             the path direction), a compass direction, or None for the smaller side.
         closing_rate_cm_yr: convergence rate before the collision, or None.
+        reopened_by_rift: the path follows a present continental rift that tore
+            the suture open again (Wilson cycle); it cuts no block, it ends the
+            rift's weld at the collision age (``reopened_rift_pairs``).
     """
 
     id: str
@@ -57,6 +60,7 @@ class AuthorSuture:
     width_km: float = 150.0
     moving_side: str | None = None
     closing_rate_cm_yr: float | None = None
+    reopened_by_rift: bool = False
 
 
 def load_sutures(path: Path) -> list[AuthorSuture]:
@@ -82,8 +86,47 @@ def load_sutures(path: Path) -> list[AuthorSuture]:
                 width_km=float(item.get("width_km", 150.0)),
                 moving_side=side,
                 closing_rate_cm_yr=None if rate is None else float(rate),
+                reopened_by_rift=bool(item.get("reopened_by_rift", False)),
             )
         )
+    return out
+
+
+# share of a rift's continental contact edges that must lie in a reopened
+# suture's belt for the suture to claim the rift (numerical convention)
+REOPENED_RIFT_MIN_COVER = 0.5
+
+
+def reopened_rift_pairs(
+    kin: PlateKinematics, suture: AuthorSuture, rift_pairs: set[tuple[int, int]]
+) -> dict[tuple[int, int], float]:
+    """Rifts a ``reopened_by_rift`` suture lies along, with their covered share.
+
+    Rifts often open along old sutures, where the lithosphere is weakened (Wilson
+    1966; Buiter & Torsvik 2014).  A rift (plate pair, smaller first) belongs to
+    the suture when at least ``REOPENED_RIFT_MIN_COVER`` of its continental
+    contact edges have their midpoint within ``width_km`` of the path.  Returns
+    {pair: covered share} for the pairs that pass.
+    """
+    rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
+    cols = kin.nbr_idx
+    m = (rows < cols) & (kin.plate[rows] != kin.plate[cols])
+    m &= kin.continental[rows] & kin.continental[cols]
+    i, j = rows[m], cols[m]
+    x = kin.xyz[i] + kin.xyz[j]
+    x /= np.linalg.norm(x, axis=1, keepdims=True)
+    dist, _ = polyline_geometry(x, suture.path)
+    near = dist * kin.radius_km <= suture.width_km
+    pa = np.minimum(kin.plate[i], kin.plate[j])
+    pb = np.maximum(kin.plate[i], kin.plate[j])
+    out: dict[tuple[int, int], float] = {}
+    for a, b in sorted(rift_pairs):
+        sel = (pa == a) & (pb == b)
+        if not sel.any():
+            continue
+        share = float(near[sel].mean())
+        if share >= REOPENED_RIFT_MIN_COVER:
+            out[(a, b)] = share
     return out
 
 

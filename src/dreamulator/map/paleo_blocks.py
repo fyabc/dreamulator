@@ -8,7 +8,9 @@ one rigid body:
 * blocks of one present plate separated by sutures are welded until the
   youngest of those sutures' collision ages (before it they were apart);
 * blocks of two plates across a continental rift are welded before the rift's
-  onset (going back past the onset the rift has closed).
+  onset (going back past the onset the rift has closed); when the rift reopened
+  an author suture (``reopened_by_rift``), only back to that suture's
+  collision age, before which the two sides were apart.
 
 The weld groups at a time are the continental plates of that time.  This module
 also composes stage rotations into finite rotations and derives a snapshot from
@@ -36,7 +38,8 @@ class Weld:
     Attributes:
         a, b: block indices.
         kind: ``suture`` or ``rift``.
-        until_myr: welded for t ≤ until_myr (a suture's collision age), or None.
+        until_myr: welded for t ≤ until_myr (the collision age of a suture, or of
+            the suture a rift reopened), or None.
         since_myr: welded for t ≥ since_myr (a rift's onset), or None.
     """
 
@@ -104,14 +107,16 @@ def build_blocks(
     their continent, or have no age, cut nothing.  ``rift_onsets`` maps a plate
     pair (smaller, larger) to its rift onset (``paleo_walk.continental_rifts``);
     blocks touching across that pair's continental boundary are welded before
-    the onset.
+    the onset, and after the collision age of a ``reopened_by_rift`` suture
+    lying along the rift (the youngest such suture older than the rift's
+    onset; younger ones are ignored).
     """
-    from dreamulator.map.paleo_sutures import check_suture
+    from dreamulator.map.paleo_sutures import check_suture, reopened_rift_pairs
 
     cont = kin.continental
     usable: list[tuple[AuthorSuture, np.ndarray]] = []
     for s in sutures or []:
-        if s.collision_age_myr is None:
+        if s.collision_age_myr is None or s.reopened_by_rift:
             continue
         c = check_suture(kin, s)
         if c.severed and c.leaving.any() and c.staying.any():
@@ -150,6 +155,13 @@ def build_blocks(
                 welds.append(Weld(a, b, "suture", until_myr=age))
     # rift welds: blocks touching across a continental rift, before its onset
     if rift_onsets:
+        reopened: dict[tuple[int, int], float] = {}
+        for s in sutures or []:
+            if not s.reopened_by_rift or s.collision_age_myr is None:
+                continue
+            for pair in reopened_rift_pairs(kin, s, set(rift_onsets)):
+                if s.collision_age_myr > rift_onsets[pair]:
+                    reopened[pair] = min(reopened.get(pair, np.inf), s.collision_age_myr)
         rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
         cols = kin.nbr_idx
         m = (rows < cols) & cont[rows] & cont[cols] & (kin.plate[rows] != kin.plate[cols])
@@ -161,7 +173,8 @@ def build_blocks(
             pa, pb = int(plate[a]), int(plate[b])
             onset = rift_onsets.get((min(pa, pb), max(pa, pb)))
             if onset is not None:
-                welds.append(Weld(a, b, "rift", since_myr=float(onset)))
+                until = reopened.get((min(pa, pb), max(pa, pb)))
+                welds.append(Weld(a, b, "rift", until_myr=until, since_myr=float(onset)))
     return Blocks(block=block, plate=plate, welds=welds, names=names)
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from scipy.spatial import SphericalVoronoi
 
@@ -19,7 +21,7 @@ from dreamulator.map.paleo_kinematics import (
     rewind,
     rotation_matrices,
 )
-from dreamulator.map.paleo_sutures import AuthorSuture
+from dreamulator.map.paleo_sutures import AuthorSuture, reopened_rift_pairs
 
 RADIUS_KM = 6371.0
 OMEGA = 1.0e-8
@@ -97,3 +99,28 @@ def test_sutures_cut_blocks_and_rifts_weld_them() -> None:
     suture_welds = [w for w in blocks.welds if w.kind == "suture"]
     assert len(suture_welds) == 1 and suture_welds[0].active(30.0)
     assert not suture_welds[0].active(50.0)  # before the collision the two sides are apart
+
+
+def test_rift_that_reopened_a_suture_is_welded_only_since_the_collision() -> None:
+    kin = _kin()
+    # continent only around lon 90, so the plates touch across one rift there
+    kin = replace(kin, continental=kin.continental & (kin.xyz[:, 2] > 0.2))
+    s = AuthorSuture(
+        id="s",
+        name="s",
+        collision_age_myr=100.0,
+        path=np.array([[90.0, -40.0], [90.0, 40.0]]),
+        width_km=500.0,
+        reopened_by_rift=True,
+    )
+    assert reopened_rift_pairs(kin, s, {(0, 1)}) == {(0, 1): 1.0}
+    blocks = build_blocks(kin, [s], rift_onsets={(0, 1): 8.0})
+    assert blocks.n == 2  # a reopened suture cuts no block
+    (rift,) = blocks.welds
+    assert rift.since_myr == 8.0 and rift.until_myr == 100.0
+    assert len(set(blocks.groups(50.0).tolist())) == 1  # rift closed, suture holds
+    assert len(set(blocks.groups(120.0).tolist())) == 2  # before the collision
+    # a suture younger than the rift's onset cannot have been reopened by it
+    young = replace(s, collision_age_myr=5.0)
+    (rift,) = build_blocks(kin, [young], rift_onsets={(0, 1): 8.0}).welds
+    assert rift.until_myr is None
