@@ -146,7 +146,7 @@ tidal:
   plate_speed_beta: 1.0           # v ∝ q^β，文献范围 [0.5, 1.5]
   plate_speed_v_ref_cm_yr: 5.0    # 地球平均板块速度
   plate_speed_q_ref_w_m2: 0.09    # 地球总表面热流（47 TW）
-  k2_over_q: 0.003                # k₂=0.3 / Q=100（physical_params.md）
+  k2_over_q: 0.003                # 板块速度标定值：e² 公式只含偏心率项，这里用等效 k₂/Q 计入以 ψ 为主的长期热流（物理参数 k₂/Q=4.5e-4 见 physical_params.md）
   spreading_ratio: 0.4            # 半扩张 ≈ 0.4 × 最快板块速度
 
 # ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────

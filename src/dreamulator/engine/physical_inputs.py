@@ -190,7 +190,7 @@ class _StellarIndex:
     body_radii: dict[str, float] = field(default_factory=dict)  # body id -> R_km
     body_tilt: dict[str, float] = field(default_factory=dict)  # body id -> axial tilt (deg)
     # Rotational / tidal dynamics authored on stellar.yaml bodies:
-    # body id -> {"j2": …, "k2_over_q": …, "c_over_mr2": …}
+    # body id -> {"j2": …, "k2_over_q": …, "c_over_mr2": …, "love_k2": …, "love_h2": …}
     body_dynamics: dict[str, dict[str, float]] = field(default_factory=dict)
     orbits: dict[str, dict[str, Any]] = field(default_factory=dict)  # body id -> entry
     star_ids: set[str] = field(default_factory=set)
@@ -276,7 +276,7 @@ def _index_stellar_data(engine: BaseEngine) -> _StellarIndex:
                 index.body_tilt[body_id] = tilt
             dynamics = {
                 key: value
-                for key in ("j2", "k2_over_q", "c_over_mr2")
+                for key in ("j2", "k2_over_q", "c_over_mr2", "love_k2", "love_h2")
                 if (value := _first_float(body, key)) is not None
             }
             if dynamics:
@@ -1399,8 +1399,15 @@ def _catalog_body_entry(
         and "gravity_m_s2" in physical
         and _ocean_depth_m is not None
     ):
-        from dreamulator.engine.tidal_physics import AU_M, EARTH_MASS_KG, resonant_tidal_range_m
+        from dreamulator.engine.tidal_physics import (
+            AU_M,
+            EARTH_MASS_KG,
+            LOVE_NUMBER_H2,
+            LOVE_NUMBER_K2,
+            resonant_tidal_range_m,
+        )
 
+        _love = index.body_dynamics.get(body_id, {})
         _range_m = resonant_tidal_range_m(
             mass_primary_kg=float(index.body_masses[parent_id]) * EARTH_MASS_KG,
             mass_satellite_kg=float(mass_earth) * EARTH_MASS_KG,
@@ -1410,6 +1417,8 @@ def _catalog_body_entry(
             gravity_m_s2=float(physical["gravity_m_s2"]),
             ocean_depth_m=_ocean_depth_m,
             tidal_period_h=float(orbital_period) * 24.0,
+            k2=_love.get("love_k2", LOVE_NUMBER_K2),
+            h2=_love.get("love_h2", LOVE_NUMBER_H2),
         )
         derived["tidal_range_m"] = round(_range_m, 1)
 
