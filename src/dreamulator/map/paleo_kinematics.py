@@ -450,10 +450,31 @@ def rewind(
             spaced parcels sit about one spacing apart, so two parcels inside
             0.35 spacings of one point are closer than the mesh allows.
     """
+    rot = rotation_matrices(kin.omega, -t_myr * 1.0e6)
+    return rewind_rotated(kin, age_myr, t_myr, rot[kin.plate], gap_factor, overlap_factor)
+
+
+def rewind_rotated(
+    kin: PlateKinematics,
+    age_myr: np.ndarray,
+    t_myr: float,
+    cell_rotation: np.ndarray,
+    gap_factor: float = 1.0,
+    overlap_factor: float = 0.35,
+    body: np.ndarray | None = None,
+) -> RewoundState:
+    """``rewind`` with a given finite rotation per present cell, (N, 3, 3).
+
+    The rotation takes each cell's present position to its position at
+    ``t_myr``; parcels with the same rotation move as one rigid body (a plate or
+    a continental block).  ``body`` (N,) labels the rigid bodies for the overlap
+    test (default: the present plates).  Gaps, overlaps and resampling as in
+    :func:`rewind`.
+    """
+    body = kin.plate if body is None else body
     dropped = ~kin.continental & np.isfinite(age_myr) & (age_myr < t_myr)
     keep = np.flatnonzero(~dropped)
-    rot = rotation_matrices(kin.omega, -t_myr * 1.0e6)
-    moved = np.einsum("nij,nj->ni", rot[kin.plate[keep]], kin.xyz[keep])
+    moved = np.einsum("nij,nj->ni", cell_rotation[keep], kin.xyz[keep])
 
     tree = cKDTree(moved)
     spacing = kin.spacing_km
@@ -467,7 +488,7 @@ def rewind(
     gap = dist_km[:, 0] > gap_factor * spacing
 
     close = dist_km < overlap_factor * spacing
-    plates_k = kin.plate[keep[idx]]
+    plates_k = body[keep[idx]]
     other_plate_close = close & (plates_k != plates_k[:, :1]) & close[:, :1]
     overlap = other_plate_close.any(axis=1) & ~gap
 

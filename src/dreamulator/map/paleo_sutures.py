@@ -233,12 +233,14 @@ def check_suture(
     m2 = rest[rows] & rest[cols]
     g2 = csr_matrix((np.ones(int(m2.sum())), (rows[m2], cols[m2])), shape=(kin.n, kin.n))
     _, lab2 = connected_components(g2, directed=False)
-    # Sides are read only near the path (within two half-widths): far away the
+    # Sides are read only near the path (within two half-widths, and at least two
+    # spacings beyond the belt on coarse meshes): far away the
     # nearest-segment side flips between the bisectors of a winding path, which
     # says nothing about the cut.  A block of the continent outside the belt
     # takes the side of its near cells; it leaks when its near cells sit on both
     # sides in force, i.e. the continent goes round an end of the belt.
-    near = rest & (dist * kin.radius_km <= 1.5 * suture.width_km)
+    reach_km = max(2.0 * suture.width_km, suture.width_km + 2.0 * kin.spacing_km)
+    near = rest & (dist * kin.radius_km <= reach_km)
     block_side = np.zeros(int(lab2.max()) + 1)
     big_leak = []
     leak_cells = np.zeros(kin.n, dtype=bool)
