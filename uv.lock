@@ -624,6 +624,7 @@ terrain = [
 validation = [
     { name = "imagecodecs" },
     { name = "netcdf4" },
+    { name = "pygplates" },
     { name = "xarray" },
 ]
 
@@ -663,6 +664,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pydantic", specifier = ">=2.11" },
+    { name = "pygplates", marker = "extra == 'validation'", specifier = ">=1.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-benchmark", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
@@ -2113,6 +2115,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+]
+
+[[package]]
+name = "pygplates"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e6/5f/70715fd309e975b22aa5a0982ece00065349719da95eb582a22648ebb7c7/pygplates-1.0.0.tar.gz", hash = "sha256:620a130eb1cdc042868d2e1251596b2edb6e1ce1596fabe1de38962190499320", size = 10149482, upload-time = "2025-03-26T11:02:45.503Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2f/d9/8654945d88a2b469b3c3b94f639b84d465ee174a7eafda1f990f5b9be5f0/pygplates-1.0.0-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:bb8e42eb3b138fc8d418eaf3c75efe617510e66fc2206e33680c81e882a3471e", size = 62587193, upload-time = "2025-03-26T05:22:29.007Z" },
+    { url = "https://files.pythonhosted.org/packages/95/ab/e93da41ad5653c63814ddacfe7dbcc5dda70d6b060b1be8c387a8688c502/pygplates-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4d0a8096d12ae9b0ff6322f3bbdb81d8c69930e3645ba8e915e1a32550a69be9", size = 59967543, upload-time = "2025-03-26T01:56:07.017Z" },
+    { url = "https://files.pythonhosted.org/packages/23/45/5b0e3f17c35b36283490c59ac28793655bf19e231c18d46eae1a85e1e831/pygplates-1.0.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e5788632847db8b726cf7bf3f56275f548a7cc9c325cdb51fce70067b36b8a77", size = 70893629, upload-time = "2025-03-26T02:13:24.237Z" },
+    { url = "https://files.pythonhosted.org/packages/02/e1/bd5d784d82d42898cb0171171a82bd1a2de9691055b3719b2b0c7444babf/pygplates-1.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:050085f89b168f60b7f150e964d7ed2f8cd6349bb4e4610d9f519087fa21181a", size = 72590940, upload-time = "2025-03-26T01:36:54.232Z" },
+    { url = "https://files.pythonhosted.org/packages/87/a8/0fee59a628f1e26df99a4bd1d0522a302d6f015705f916398a97134873fd/pygplates-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:4796520c5eaea2c0db8e5885cd559a8feba65e939ff939069bf6186d3c520e7b", size = 30867379, upload-time = "2025-03-26T01:19:21.155Z" },
+    { url = "https://files.pythonhosted.org/packages/30/d8/5f93040fcbc734dfcd60cf09c358c91a7c42854332a44da68581357e81dc/pygplates-1.0.0-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:382beed9a2a80fdc3b2f3855d282f8701be3cb9e981408ef6f14f609cf4fb405", size = 63236972, upload-time = "2025-04-21T12:55:27.526Z" },
+    { url = "https://files.pythonhosted.org/packages/41/4d/d352844804b0d291514d2922eada5a66ae4b41564dbfc0e03049bab8c0ee/pygplates-1.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:a93a47427071a236a9097ce9d58375faa7458fdd190fca6feda2cd1ba97aa1a7", size = 61189425, upload-time = "2025-04-21T13:06:54.655Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/03/36bf1372ea297d8a8a7c0ed5dd295d2396f82b854834ad1bd2ca4665f0b5/pygplates-1.0.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:57341da0cd849febf2fea98bcfab0f2ca0c2367813305ade29c1920103308d94", size = 70893694, upload-time = "2025-03-26T02:14:06.133Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/32/ed93928cdcc511bbe3de57eae2e17b8181c4ef22b4c651bbe78193d42211/pygplates-1.0.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:dfb26f5e23230cc8e2e17b6794ce5637d9034f3124e15917f351f3195cd36385", size = 72590984, upload-time = "2025-03-26T01:37:44.107Z" },
+    { url = "https://files.pythonhosted.org/packages/39/a4/380e77d22b73223fedd29e14071d1075461aee91277bc7c91f372770a3ff/pygplates-1.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:d63c4999012944d28a6fc31be5fd733e9f9c5517820fb60c12d04e03894d3387", size = 30867255, upload-time = "2025-03-26T01:19:49.672Z" },
 ]
 
 [[package]]

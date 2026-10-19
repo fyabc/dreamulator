@@ -79,6 +79,7 @@ validation = [
     "xarray>=2024.0",
     "netCDF4>=1.7",
     "imagecodecs>=2024.0",
+    "pygplates>=1.0.0",
 ]
 experiments = [
     # Orbital experiment server (packages/experiment-server): long-integration
