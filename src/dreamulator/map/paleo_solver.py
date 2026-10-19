@@ -1,30 +1,48 @@
-"""Receding-horizon solver for the motions of the continental blocks (G2).
+"""Receding-horizon solver for the motions of the continental blocks (G2, §4.6).
 
-Design: ``docs/design/proposals/geological-timeline.md`` §4.3–4.5.  The unknowns
+Design: ``docs/design/proposals/geological-timeline.md`` §4.3–4.6.  The unknowns
 are the Euler poles of every weld group (``paleo_blocks``) in every stage of
-``stage_myr``, going back from the present.  The objective adds one hard term
-and four priors, all dimensionless:
+``stage_myr``, going back from the present.  Present seafloor moves rigidly with
+the nearest continental block of its plate (a passive margin) and exists at a
+time t only where it is at least t old; seafloor older than ``memory_myr`` or of
+unknown age is left out.  The objective adds two hard terms and three priors,
+all dimensionless:
 
-* **overlap** (hard, large weight): continental crust of one group may not
-  reach deeper than ``overlap_tol_km`` into another group's block.  Depth is read
-  from each block's signed distance field on the present mesh, linearised about
-  the nearest cell so the term has a gradient;
+* **overlap** (hard, large weight): crust that exists at t may not reach deeper
+  than ``overlap_tol_km`` into another group's crust, continental or oceanic.
+  Present seafloor was never subducted, so it cannot have lain on other crust.
+  Depth is read from each block's signed distance field on the present mesh
+  (its continental crust plus its seafloor older than t), linearised about the
+  nearest cell so the term has a gradient;
+* **isochron fit** (hard): the two flanks of a present ridge meet at the ridge
+  when their crust of age t forms, so at t the age-t isochrons of the two flanks
+  coincide (Hellinger 1981).  A flank particle of age a ≥ t lies (a − t) times
+  its ridge's half-rate from the ridge, so it may be that far, plus
+  ``isochron_tol_km``, from the nearest conjugate cell of age about t; beyond
+  that it is pulled towards it.  Particles that miss their conjugate isochron
+  by more than ``isochron_check_km`` under the very poles that synthesised the
+  ages (seafloor reached along a transform rather than a flowline) are left out
+  of this term;
 * **speed**: each group's angular speed stays near the continental-share law of
   ``paleo_kinematics.continental_speed_poles``;
 * **reorganisation**: a pseudo-Huber penalty on each block's pole change from one
   stage to the next, so poles stay put most of the time and change at once;
 * **net rotation**: the area-weighted mean rotation of the continents stays near
-  that of the present poles (the frame of the engine's poles is kept);
-* **seafloor record**: two blocks separated by a present ridge keep the present
-  relative motion while the seafloor between them exists (memory window).
+  that of the stage-0 poles (the frame of the engine's poles is kept).
+
+Rift welds give way to the seafloor record: a rift whose weld would put the two
+flanks of a present ridge into one group while seafloor older than the weld
+time lies between them is welded only from that seafloor's age on
+(``seafloor_welds``); the rift onset is an estimate, the seafloor a record.
 
 The solve slides a window of ``window_stages`` stages back in time, optimises it
 with L-BFGS and keeps only its first stage.  After each kept stage, groups whose
-margins have come into contact going back (and were apart at present) are welded
-from that time on: the contact time is their break-up time (§4.5).  Stage 0 uses
-the present poles.  Gradients are exact: a stage rotation exp([θ]×) varies by
-the world rotation J_l(θ)·dθ (left Jacobian of SO(3)), carried back through the
-later stages by an adjoint pass.  Pure numpy/scipy, no IO; deterministic.
+continental margins have come into contact going back (and were apart at
+present) are welded from that time on: the contact time is their break-up time
+(§4.5).  Stage 0 uses the poles the seafloor ages were synthesised with.
+Gradients are exact: a stage rotation exp([θ]×) varies by the world rotation
+J_l(θ)·dθ (left Jacobian of SO(3)), carried back through the later stages by an
+adjoint pass.  Pure numpy/scipy, no IO; deterministic.
 """
 
 from __future__ import annotations
@@ -52,17 +70,23 @@ class SolverConfig:
         window_stages: stages optimised together; only the first is kept.
         end_myr: how far back to solve.
         n_particles: continental particles taking part in the objective.
+        n_ocean_particles: seafloor particles taking part in the objective.
         seed: subsampling seed.
         overlap_tol_km: penetration tolerated before the overlap term acts
             (margin crust that thinned stretching can take back).
-        depth_ref_km: depth that counts as one unit in the overlap term.
+        depth_ref_km: distance that counts as one unit in the overlap and
+            isochron terms.
+        isochron_tol_km: isochron misfit tolerated before the isochron term acts.
+        isochron_check_km: largest misfit under the synthesising poles for a
+            particle to take part in the isochron term.
         contact_km: distance within which two margins count as touching.
         contact_share: margin share of the smaller block that must touch for a
             contact weld.
         reorg_eps: pseudo-Huber smoothing of the reorganisation term, in units of
             the reference angular speed.
-        memory_myr: longest time the seafloor record constrains (§3.3).
-        w_overlap, w_speed, w_reorg, w_net_rotation, w_seafloor: term weights.
+        memory_myr: oldest seafloor that takes part (§3.3); older seafloor, made
+            by ridges of about 1 cm/yr, is left unconstrained.
+        w_overlap, w_isochron, w_speed, w_reorg, w_net_rotation: term weights.
         max_iter: L-BFGS iterations per window.
     """
 
@@ -70,19 +94,40 @@ class SolverConfig:
     window_stages: int = 4
     end_myr: float = 150.0
     n_particles: int = 6000
+    n_ocean_particles: int = 6000
     seed: int = 0
     overlap_tol_km: float = 30.0
     depth_ref_km: float = 100.0
+    isochron_tol_km: float = 60.0
+    isochron_check_km: float = 150.0
     contact_km: float = 100.0
     contact_share: float = 0.2
     reorg_eps: float = 0.05
     memory_myr: float = 150.0
     w_overlap: float = 1000.0
+    w_isochron: float = 100.0
     w_speed: float = 1.0
     w_reorg: float = 1.0
     w_net_rotation: float = 1.0
-    w_seafloor: float = 1.0
     max_iter: int = 200
+
+
+@dataclass(frozen=True)
+class Field:
+    """Signed distance (km) to the edge of each block's crust on the present mesh.
+
+    Attributes:
+        sdf: (B, N) positive inside, negative outside, −inf beyond the contact band.
+        near: (B, N) the nearest cell across the edge, from which the gradient
+            direction is read.
+        centre: (B, 3) and cap_cos: (B,) a spherical cap holding each block's
+            crust plus the contact band.
+    """
+
+    sdf: np.ndarray
+    near: np.ndarray
+    centre: np.ndarray
+    cap_cos: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -90,42 +135,57 @@ class SolverSetup:
     """Everything the objective needs that does not change during the solve.
 
     Attributes:
-        p0: (Pn, 3) present positions of the particles.
-        pblock: (Pn,) block of each particle.
-        weight: (Pn,) area share of each particle (sums to 1).
-        margin: (Pn,) particle on its block's edge (next to ocean or another block).
-        sdf: (B, N) signed distance (km) to each block's edge on the present
-            mesh: positive inside, negative outside, −inf beyond the contact band.
-        grad: (B, N, 3) unit tangent along which ``sdf`` grows.
-        cap_centre: (B, 3) and cap_cos: (B,) a spherical cap holding each block
-            plus the contact band.
+        p0: (Pn, 3) present positions of the particles, continental first.
+        pblock: (Pn,) block each particle moves with.
+        weight: (Pn,) area of each particle over the continental area.
+        ocean: (Pn,) seafloor particle.
+        age: (Pn,) seafloor age (Myr), NaN on continental particles.
+        margin: (Pn,) continental particle on its block's edge.
+        ridge: (Pn,) ridge (index into ``ridge_plates``) that made a seafloor
+            particle, −1 elsewhere; flank: (Pn,) 0 or 1, which side of it.
+        half_km_myr: (Pn,) half-rate of that ridge (km/Myr).
+        ridge_plates: (plate a, plate b) of each present ridge.
+        cont_field: continental crust only (contact detection).
+        cell_block: (N,) block of each continental cell, −1 elsewhere.
+        cell_host: (N,) block a seafloor cell moves with, −1 where it is left out.
+        cell_age: (N,) seafloor age (Myr) of the cells that take part.
+        cell_ridge, cell_flank: (N,) the same as ``ridge`` and ``flank`` per cell.
         target_rate: (B,) angular speed (rad/yr) of each block's present plate
             under the continental-share law.
-        present_omega: (B, 3) present (continental-share) pole of each block's plate.
+        present_omega: (B, 3) stage-0 pole of each block's plate.
         rate_ref: reference angular speed (area-weighted mean of target_rate).
-        ridge_pairs: (block a, block b, seafloor age Myr) of blocks separated by a
-            present ridge; the age is the 90th percentile of the seafloor that
-            ridge made, at most ``memory_myr``.
         tree: KD-tree of the present cell centres.
-        xyz: (N, 3) present cell centres.
-        radius_km: planet radius.
+        xyz: (N, 3) present cell centres; nbr_rows, nbr_cols: mesh edges.
+        radius_km: planet radius; spacing_km: mesh spacing.
+        cache: crust fields by time (``crust_field``).
     """
 
     p0: np.ndarray
     pblock: np.ndarray
     weight: np.ndarray
+    ocean: np.ndarray
+    age: np.ndarray
     margin: np.ndarray
-    sdf: np.ndarray
-    grad: np.ndarray
-    cap_centre: np.ndarray
-    cap_cos: np.ndarray
+    ridge: np.ndarray
+    flank: np.ndarray
+    half_km_myr: np.ndarray
+    ridge_plates: list[tuple[int, int]]
+    cont_field: Field
+    cell_block: np.ndarray
+    cell_host: np.ndarray
+    cell_age: np.ndarray
+    cell_ridge: np.ndarray
+    cell_flank: np.ndarray
     target_rate: np.ndarray
     present_omega: np.ndarray
     rate_ref: float
-    ridge_pairs: list[tuple[int, int, float]]
     tree: cKDTree
     xyz: np.ndarray
+    nbr_rows: np.ndarray
+    nbr_cols: np.ndarray
     radius_km: float
+    spacing_km: float
+    cache: dict[float, Field] = field(default_factory=dict)
 
 
 @dataclass
@@ -173,112 +233,248 @@ def left_jacobian(theta: np.ndarray) -> np.ndarray:
 def build_setup(
     kin: PlateKinematics,
     blocks: Blocks,
-    present_omega: np.ndarray,
+    stage0_omega: np.ndarray,
+    target_omega: np.ndarray,
     seafloor_age: np.ndarray,
     ridge_source: np.ndarray,
+    half_rate: np.ndarray,
     config: SolverConfig,
 ) -> SolverSetup:
-    """Particles, signed distance fields and prior targets for a solve.
+    """Particles, crust fields and prior targets for a solve.
 
-    ``present_omega`` is the (P, 3) continental-share pole of each present plate
-    (``continental_speed_poles``); ``seafloor_age`` and ``ridge_source`` come from
-    ``synthesize_seafloor_age``.
+    ``stage0_omega`` (P, 3) are the poles the seafloor ages were synthesised with
+    (``synthesize_seafloor_age`` gives ``seafloor_age`` and ``ridge_source``,
+    ``ridge_half_rates`` the ``half_rate`` (cm/yr) of the ridge cells);
+    ``target_omega`` (P, 3) the continental-share poles (``continental_speed_poles``)
+    that set the speed prior.
     """
     rng = np.random.default_rng(config.seed)
+    area = kin.area_km2
     cont = np.flatnonzero(blocks.block >= 0)
-    a_cont = float(kin.area_km2[cont].sum())
-    # particles: a uniform subsample, each block keeping its own area
-    pick = np.sort(rng.choice(cont, size=min(config.n_particles, cont.size), replace=False))
-    pblock = blocks.block[pick]
-    weight = kin.area_km2[pick].copy()
-    for b in range(blocks.n):
-        sel = pblock == b
-        if sel.any():
-            weight[sel] *= kin.area_km2[blocks.block == b].sum() / weight[sel].sum()
-    weight /= a_cont
+    a_cont = float(area[cont].sum())
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols = kin.nbr_idx
-    edge = np.zeros(kin.n, dtype=bool)
-    edge[rows[blocks.block[rows] != blocks.block[cols]]] = True
-    margin = edge[pick]
 
-    tree = cKDTree(kin.xyz)
-    band = config.contact_km / kin.radius_km
-    sdf = np.full((blocks.n, kin.n), -np.inf, dtype=np.float32)
-    grad = np.zeros((blocks.n, kin.n, 3), dtype=np.float32)
-    centre = np.zeros((blocks.n, 3))
-    cap_cos = np.zeros(blocks.n)
-    half = 0.5 * kin.spacing_km
-    for b in range(blocks.n):
-        inside = blocks.block == b
-        edge_in = np.zeros(kin.n, dtype=bool)  # block cells next to a non-block cell
-        edge_out = np.zeros(kin.n, dtype=bool)  # non-block cells next to the block
-        cross = inside[rows] & ~inside[cols]
-        edge_in[rows[cross]] = True
-        edge_out[cols[cross]] = True
-        cells_in = np.flatnonzero(inside)
-        c = kin.xyz[cells_in].mean(axis=0)
-        c /= np.linalg.norm(c)
-        centre[b] = c
-        ang = float(np.arccos(np.clip(kin.xyz[cells_in] @ c, -1.0, 1.0)).max())
-        cap_cos[b] = np.cos(min(ang + 2.0 * band, np.pi))
-        out_pts = np.flatnonzero(edge_out)
-        if out_pts.size:
-            d, j = cKDTree(kin.xyz[out_pts]).query(kin.xyz[cells_in])
-            near = kin.xyz[out_pts[j]]
-            sdf[b, cells_in] = d * kin.radius_km - half
-            grad[b, cells_in] = _tangent_away(kin.xyz[cells_in], near)
-        else:
-            sdf[b, cells_in] = np.inf
-        in_pts = np.flatnonzero(edge_in)
-        cand = np.flatnonzero((kin.xyz @ c >= cap_cos[b]) & ~inside)
-        if in_pts.size and cand.size:
-            d, j = cKDTree(kin.xyz[in_pts]).query(kin.xyz[cand], distance_upper_bound=band * 1.5)
-            ok = np.isfinite(d)
-            near = kin.xyz[in_pts[j[ok]]]
-            sdf[b, cand[ok]] = -(d[ok] * kin.radius_km) + half
-            grad[b, cand[ok]] = -_tangent_away(kin.xyz[cand[ok]], near)
+    # seafloor that takes part: known age within the memory window; it moves with
+    # the nearest continental block of its plate
+    ok = (~kin.continental) & np.isfinite(seafloor_age) & (seafloor_age <= config.memory_myr)
+    host = np.full(kin.n, -1)
+    for p in np.unique(kin.plate[ok]):
+        sea = np.flatnonzero(ok & (kin.plate == p))
+        land = np.flatnonzero((blocks.block >= 0) & (kin.plate == p))
+        if land.size == 0:
+            continue
+        _, j = cKDTree(kin.xyz[land]).query(kin.xyz[sea])
+        host[sea] = blocks.block[land[j]]
+    cell_age = np.where(host >= 0, seafloor_age, np.nan)
 
-    rate_p = np.linalg.norm(present_omega, axis=1)
-    target = rate_p[blocks.plate]
-    barea = np.array([kin.area_km2[blocks.block == b].sum() for b in range(blocks.n)])
-    rate_ref = float(np.average(target, weights=barea))
-
-    # blocks separated by a present ridge: largest block of each plate, oldest age
-    big: dict[int, int] = {}
-    for b in np.argsort(-barea):
-        big.setdefault(int(blocks.plate[b]), int(b))
-    ages: dict[tuple[int, int], list[float]] = {}
-    ocean = np.isfinite(seafloor_age) & (ridge_source >= 0)
-    for cell in np.flatnonzero(ocean):
+    # present ridges and the flank of each seafloor cell
+    ridge_of = np.full(kin.n, -1)
+    flank_of = np.zeros(kin.n, dtype=np.int64)
+    keys: dict[tuple[int, int], int] = {}
+    for cell in np.flatnonzero(host >= 0):
         r = int(ridge_source[cell])
+        if r < 0:
+            continue
         nb = kin.neighbors(r)
         other = kin.plate[nb][kin.plate[nb] != kin.plate[r]]
         if other.size == 0:
             continue
         key = (int(min(kin.plate[cell], other[0])), int(max(kin.plate[cell], other[0])))
-        ages.setdefault(key, []).append(float(seafloor_age[cell]))
-    oldest = {k: min(float(np.percentile(v, 90)), config.memory_myr) for k, v in ages.items()}
-    ridge_pairs = [
-        (big[p], big[q], age) for (p, q), age in sorted(oldest.items()) if p in big and q in big
-    ]
-    return SolverSetup(
+        ridge_of[cell] = keys.setdefault(key, len(keys))
+        flank_of[cell] = 0 if kin.plate[cell] == key[0] else 1
+
+    # particles: uniform subsamples, each block keeping its own area
+    pick_c = np.sort(rng.choice(cont, size=min(config.n_particles, cont.size), replace=False))
+    sea = np.flatnonzero(host >= 0)
+    pick_o = np.sort(rng.choice(sea, size=min(config.n_ocean_particles, sea.size), replace=False))
+    w_c = area[pick_c].copy()
+    for b in range(blocks.n):
+        sel = blocks.block[pick_c] == b
+        if sel.any():
+            w_c[sel] *= area[blocks.block == b].sum() / w_c[sel].sum()
+    w_o = area[pick_o] * (area[sea].sum() / max(area[pick_o].sum(), 1e-30))
+    pick = np.concatenate([pick_c, pick_o])
+    edge = np.zeros(kin.n, dtype=bool)
+    edge[rows[blocks.block[rows] != blocks.block[cols]]] = True
+    n_c = pick_c.size
+
+    setup = SolverSetup(
         p0=kin.xyz[pick],
-        pblock=pblock,
-        weight=weight,
-        margin=margin,
-        sdf=sdf,
-        grad=grad,
-        cap_centre=centre,
-        cap_cos=cap_cos,
-        target_rate=target,
-        present_omega=present_omega[blocks.plate],
-        rate_ref=rate_ref,
-        ridge_pairs=ridge_pairs,
-        tree=tree,
+        pblock=np.concatenate([blocks.block[pick_c], host[pick_o]]),
+        weight=np.concatenate([w_c, w_o]) / a_cont,
+        ocean=np.arange(pick.size) >= n_c,
+        age=np.concatenate([np.full(n_c, np.nan), cell_age[pick_o]]),
+        margin=np.concatenate([edge[pick_c], np.zeros(pick_o.size, dtype=bool)]),
+        ridge=np.concatenate([np.full(n_c, -1), ridge_of[pick_o]]),
+        flank=np.concatenate([np.zeros(n_c, dtype=np.int64), flank_of[pick_o]]),
+        half_km_myr=np.concatenate(
+            [np.zeros(n_c), 10.0 * half_rate[np.maximum(ridge_source[pick_o], 0)]]
+        ),
+        ridge_plates=sorted(keys, key=lambda k: keys[k]),
+        cont_field=Field(np.zeros((0, 0)), np.zeros((0, 0)), np.zeros((0, 3)), np.zeros(0)),
+        cell_block=blocks.block.copy(),
+        cell_host=host,
+        cell_age=cell_age,
+        cell_ridge=ridge_of,
+        cell_flank=flank_of,
+        target_rate=np.linalg.norm(target_omega, axis=1)[blocks.plate],
+        present_omega=stage0_omega[blocks.plate],
+        rate_ref=0.0,
+        tree=cKDTree(kin.xyz),
         xyz=kin.xyz,
+        nbr_rows=rows,
+        nbr_cols=cols,
         radius_km=kin.radius_km,
+        spacing_km=kin.spacing_km,
     )
+    barea = np.array([area[blocks.block == b].sum() for b in range(blocks.n)])
+    rate_ref = float(np.average(setup.target_rate, weights=barea))
+    setup = _replace_setup(setup, ridge=_consistent_ridge(setup, config, stage0_omega, kin.plate))
+    cont_field = _region_field(setup, config, blocks.block[None] == np.arange(blocks.n)[:, None])
+    return _replace_setup(setup, cont_field=cont_field, rate_ref=rate_ref)
+
+
+def _consistent_ridge(
+    setup: SolverSetup, config: SolverConfig, omega: np.ndarray, plate: np.ndarray
+) -> np.ndarray:
+    """``setup.ridge`` with particles that miss their own isochron set to −1.
+
+    Each ridge particle is turned back to its own age with the present poles
+    (``omega`` per plate, the poles that synthesised the ages); there it should
+    lie on the conjugate isochron (§4.1).
+    """
+    ridge = setup.ridge.copy()
+    idx = np.flatnonzero(ridge >= 0)
+    cells = setup.tree.query(setup.p0[idx])[1]
+    step = 0.5 * config.stage_myr
+    for t in np.arange(0.0, float(np.nanmax(setup.age[idx])) + step, step):
+        sel = idx[(setup.age[idx] >= t) & (setup.age[idx] < t + step)]
+        if sel.size == 0:
+            continue
+        own = cells[np.searchsorted(idx, sel)]
+        x = np.einsum("pij,pj->pi", rotation_matrices(omega[plate[own]], -t * 1.0e6), setup.p0[sel])
+        for r in np.unique(ridge[sel]):
+            for side in (0, 1):
+                src = sel[(ridge[sel] == r) & (setup.flank[sel] == side)]
+                if src.size == 0:
+                    continue
+                dst = np.flatnonzero(
+                    (setup.cell_ridge == r)
+                    & (setup.cell_flank == 1 - side)
+                    & (setup.cell_age >= t)
+                    & (setup.cell_age <= t + step)
+                )
+                if dst.size == 0:
+                    ridge[src] = -1
+                    continue
+                xd = np.einsum(
+                    "pij,pj->pi", rotation_matrices(omega[plate[dst]], -t * 1.0e6), setup.xyz[dst]
+                )
+                d, _ = cKDTree(xd).query(x[np.searchsorted(sel, src)])
+                miss = d * setup.radius_km - (setup.age[src] - t) * setup.half_km_myr[src]
+                ridge[src[miss > config.isochron_check_km]] = -1
+    return ridge
+
+
+def seafloor_welds(blocks: Blocks, setup: SolverSetup) -> tuple[Blocks, list[dict[str, float]]]:
+    """Rift welds postponed so that no weld group spans a ridge with older seafloor.
+
+    For each present ridge the record age is the 90th percentile age of its
+    particles that passed the isochron check; the blocks hosting its two flanks
+    may not share a group before that age.  Rift welds are added in order of
+    onset; one that would join such a pair is postponed to the pair's record age
+    and tried again.  Returns the new blocks and the postponed welds.
+    """
+    forbid: dict[tuple[int, int], float] = {}
+    for r in np.unique(setup.ridge[setup.ridge >= 0]):
+        sel = setup.ridge == r
+        age = float(np.percentile(setup.age[sel], 90))
+        sides = [set(setup.pblock[sel & (setup.flank == f)].tolist()) for f in (0, 1)]
+        for a in sides[0]:
+            for b in sides[1]:
+                if a != b:
+                    key = (min(a, b), max(a, b))
+                    forbid[key] = max(forbid.get(key, 0.0), age)
+    welds = [w for w in blocks.welds if w.kind != "rift"]
+    pending = sorted(
+        (w for w in blocks.welds if w.kind == "rift"), key=lambda w: (w.since_myr or 0.0, w.a, w.b)
+    )
+    changed: list[dict[str, float]] = []
+    while pending:
+        w = pending.pop(0)
+        t = float(w.since_myr or 0.0)
+        trial = Blocks(block=blocks.block, plate=blocks.plate, welds=[*welds, w])
+        g = trial.groups(t + 1e-6)
+        clash = [age for (a, b), age in forbid.items() if g[a] == g[b] and age > t + 1e-6]
+        if not clash:
+            welds.append(w)
+            continue
+        later = min(max(clash), w.until_myr if w.until_myr is not None else np.inf)
+        changed.append({"a": w.a, "b": w.b, "from_myr": t, "to_myr": later})
+        if w.until_myr is None or later < w.until_myr:
+            moved = Weld(w.a, w.b, w.kind, until_myr=w.until_myr, since_myr=later)
+            pending.append(moved)
+            pending.sort(key=lambda x: (x.since_myr or 0.0, x.a, x.b))
+    return Blocks(block=blocks.block, plate=blocks.plate, welds=welds, names=blocks.names), changed
+
+
+def _replace_setup(setup: SolverSetup, **changes: object) -> SolverSetup:
+    from dataclasses import replace
+
+    return replace(setup, **changes)  # type: ignore[arg-type]
+
+
+def _region_field(setup: SolverSetup, config: SolverConfig, member: np.ndarray) -> Field:
+    """Signed distance field of each block's region ``member`` (B, N)."""
+    nb, n = member.shape
+    band = config.contact_km / setup.radius_km
+    half = 0.5 * setup.spacing_km
+    sdf = np.full((nb, n), -np.inf, dtype=np.float32)
+    near = np.zeros((nb, n), dtype=np.int32)
+    centre = np.zeros((nb, 3))
+    cap_cos = np.full(nb, 2.0)  # an empty region matches nothing
+    rows, cols = setup.nbr_rows, setup.nbr_cols
+    for b in range(nb):
+        inside = member[b]
+        cells_in = np.flatnonzero(inside)
+        if cells_in.size == 0:
+            continue
+        cross = inside[rows] & ~inside[cols]
+        edge_in = np.unique(rows[cross])
+        edge_out = np.unique(cols[cross])
+        c = setup.xyz[cells_in].mean(axis=0)
+        c /= max(float(np.linalg.norm(c)), 1e-15)
+        centre[b] = c
+        ang = float(np.arccos(np.clip(setup.xyz[cells_in] @ c, -1.0, 1.0)).max())
+        cap_cos[b] = np.cos(min(ang + 2.0 * band, np.pi))
+        if edge_out.size:
+            d, j = cKDTree(setup.xyz[edge_out]).query(setup.xyz[cells_in])
+            sdf[b, cells_in] = d * setup.radius_km - half
+            near[b, cells_in] = edge_out[j]
+        else:
+            sdf[b, cells_in] = np.inf
+        cand = np.flatnonzero((setup.xyz @ c >= cap_cos[b]) & ~inside)
+        if edge_in.size and cand.size:
+            d, j = cKDTree(setup.xyz[edge_in]).query(
+                setup.xyz[cand], distance_upper_bound=band * 1.5
+            )
+            hit = np.isfinite(d)
+            sdf[b, cand[hit]] = -(d[hit] * setup.radius_km) + half
+            near[b, cand[hit]] = edge_in[j[hit]]
+    return Field(sdf=sdf, near=near, centre=centre, cap_cos=cap_cos)
+
+
+def crust_field(setup: SolverSetup, config: SolverConfig, t_myr: float) -> Field:
+    """Field of each block's crust at ``t_myr``: continent plus seafloor ≥ t old."""
+    key = round(t_myr, 6)
+    if key not in setup.cache:
+        nb = setup.present_omega.shape[0]
+        ids = np.arange(nb)[:, None]
+        sea = (setup.cell_host >= 0) & (setup.cell_age >= t_myr)
+        member = (setup.cell_block[None] == ids) | (sea[None] & (setup.cell_host[None] == ids))
+        setup.cache[key] = _region_field(setup, config, member)
+    return setup.cache[key]
 
 
 def _tangent_away(x: np.ndarray, p: np.ndarray) -> np.ndarray:
@@ -310,37 +506,81 @@ def _exempt(blocks: Blocks, t_myr: float) -> np.ndarray:
 
 
 def _penetration(
-    setup: SolverSetup, x: np.ndarray, frame: np.ndarray, group: np.ndarray, exempt: np.ndarray
+    setup: SolverSetup,
+    fld: Field,
+    x: np.ndarray,
+    active: np.ndarray,
+    frame: np.ndarray,
+    group: np.ndarray,
+    exempt: np.ndarray,
 ) -> list[tuple[np.ndarray, int, np.ndarray, np.ndarray]]:
-    """Particles reaching into other groups' blocks at one stage.
+    """Particles reaching into other groups' crust at one stage.
 
-    ``x`` (Pn, 3) are particle positions, ``frame`` (B, 3, 3) the finite
-    rotations of the blocks, ``group`` (B,) their groups, ``exempt`` (B, B) the
-    block pairs whose overlap is allowed (``_exempt``).  Returns, per block c,
-    (particle indices, c, depth km, world gradient of depth per unit
-    displacement) for particles of other groups inside c's contact band.
+    ``x`` (Pn, 3) are particle positions, ``active`` (Pn,) the particles whose
+    crust exists, ``frame`` (B, 3, 3) the finite rotations of the blocks,
+    ``group`` (B,) their groups, ``exempt`` (B, B) the block pairs whose overlap
+    is allowed (``_exempt``).  Returns, per block c, (particle indices, c, depth
+    km, world gradient of depth per unit displacement) for active particles of
+    other groups inside c's contact band.
     """
     out = []
     pg = group[setup.pblock]
-    for c in range(setup.sdf.shape[0]):
-        cand = np.flatnonzero((pg != group[c]) & ~exempt[setup.pblock, c])
+    for c in range(fld.sdf.shape[0]):
+        cand = np.flatnonzero(active & (pg != group[c]) & ~exempt[setup.pblock, c])
         if cand.size == 0:
             continue
         y = x[cand] @ frame[c]  # rows: R_cᵀ x
-        near = y @ setup.cap_centre[c] >= setup.cap_cos[c]
-        cand, y = cand[near], y[near]
+        inside_cap = y @ fld.centre[c] >= fld.cap_cos[c]
+        cand, y = cand[inside_cap], y[inside_cap]
         if cand.size == 0:
             continue
         _, k = setup.tree.query(y)
-        s = setup.sdf[c, k].astype(float)
+        s = fld.sdf[c, k].astype(float)
         live = np.isfinite(s)
         if not live.any():
             continue
         cand, y, k, s = cand[live], y[live], k[live], s[live]
-        g = setup.grad[c, k].astype(float)
+        g = np.sign(s)[:, None] * _tangent_away(setup.xyz[k], setup.xyz[fld.near[c, k]])
         depth = s + setup.radius_km * np.einsum("ij,ij->i", g, y - setup.xyz[k])
         gw = setup.radius_km * (g @ frame[c].T)  # R_c g
         out.append((cand, c, depth, gw))
+    return out
+
+
+def _isochron_pairs(
+    setup: SolverSetup,
+    config: SolverConfig,
+    x: np.ndarray,
+    frame: np.ndarray,
+    group: np.ndarray,
+    t_myr: float,
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    """Flank particles of age ≥ t and their nearest conjugate cells of age about t.
+
+    Returns per ridge flank (particles, their allowed distance km, conjugate
+    cells' host blocks, conjugate cells' world positions).  Particles within
+    one stage of age t take part; conjugate cells within half a stage above t.
+    Pairs whose blocks are in one group are left out (their misfit cannot change).
+    """
+    out = []
+    iso = setup.ocean & (setup.age >= t_myr) & (setup.age <= t_myr + config.stage_myr)
+    iso &= setup.ridge >= 0
+    edge = (setup.cell_ridge >= 0) & (setup.cell_age >= t_myr)
+    edge &= setup.cell_age <= t_myr + 0.5 * config.stage_myr
+    for r in np.unique(setup.ridge[iso]):
+        for side in (0, 1):
+            src = np.flatnonzero(iso & (setup.ridge == r) & (setup.flank == side))
+            dst = np.flatnonzero(edge & (setup.cell_ridge == r) & (setup.cell_flank == 1 - side))
+            if src.size == 0 or dst.size == 0:
+                continue
+            host = setup.cell_host[dst]
+            xd = np.einsum("pij,pj->pi", frame[host], setup.xyz[dst])
+            _, j = cKDTree(xd).query(x[src])
+            keep = group[setup.pblock[src]] != group[host[j]]
+            if keep.any():
+                src, j = src[keep], j[keep]
+                allow = (setup.age[src] - t_myr) * setup.half_km_myr[src] + config.isochron_tol_km
+                out.append((src, allow, host[j], xd[j]))
     return out
 
 
@@ -369,24 +609,44 @@ def _window_objective(
     for s in range(n_st):
         f = np.einsum("bij,bjk->bik", rot[s], f)
         frames.append(f)
-    terms = {"overlap": 0.0, "speed": 0.0, "reorg": 0.0, "net_rotation": 0.0, "seafloor": 0.0}
+    terms = {"overlap": 0.0, "isochron": 0.0, "speed": 0.0, "reorg": 0.0, "net_rotation": 0.0}
     gamma = [np.zeros((nb, 3)) for _ in range(n_st)]  # dL / d(world rotation of block)
-    worst = 0.0
+    d_ref = config.depth_ref_km
     for s in range(n_st):
+        t = t_ends[s]
         x = np.einsum("pij,pj->pi", frames[s][setup.pblock], setup.p0)
-        for cand, c, depth, gw in _penetration(setup, x, frames[s], group_lists[s], exempts[s]):
+        active = ~setup.ocean | (setup.age >= t)
+        fld = crust_field(setup, config, t)
+        for cand, c, depth, gw in _penetration(
+            setup, fld, x, active, frames[s], group_lists[s], exempts[s]
+        ):
             over = depth - config.overlap_tol_km
             hit = over > 0
             if not hit.any():
                 continue
             cand, over, gw = cand[hit], over[hit], gw[hit]
-            worst = max(worst, float(over.max() + config.overlap_tol_km))
             w = setup.weight[cand]
-            terms["overlap"] += float(np.sum(w * (over / config.depth_ref_km) ** 2))
-            dldp = config.w_overlap * 2.0 * w * over / config.depth_ref_km**2
+            terms["overlap"] += float(np.sum(w * (over / d_ref) ** 2))
+            dldp = config.w_overlap * 2.0 * w * over / d_ref**2
             torque = dldp[:, None] * np.cross(x[cand], gw)
             np.add.at(gamma[s], setup.pblock[cand], torque)
             gamma[s][c] -= torque.sum(axis=0)
+        pairs = _isochron_pairs(setup, config, x, frames[s], group_lists[s], t)
+        n_iso = sum(p[0].size for p in pairs)
+        for src, allow, mate_block, xm in pairs:
+            diff = x[src] - xm
+            dist = np.linalg.norm(diff, axis=1)
+            miss = dist * setup.radius_km - allow
+            hit = miss > 0
+            if not hit.any():
+                continue
+            src, mate_block, xm = src[hit], mate_block[hit], xm[hit]
+            diff, dist, miss = diff[hit], dist[hit], miss[hit]
+            terms["isochron"] += float(np.sum((miss / d_ref) ** 2)) / n_iso
+            dldd = config.w_isochron * 2.0 * miss / d_ref**2 / n_iso * setup.radius_km
+            gx = (dldd / np.maximum(dist, 1e-15))[:, None] * diff  # dL/dx_src = −dL/dx_mate
+            np.add.at(gamma[s], setup.pblock[src], np.cross(x[src], gx))
+            np.add.at(gamma[s], mate_block, -np.cross(xm, gx))
     # adjoint pass: world rotations at stage s carried to later stages
     lam = np.zeros((nb, 3))
     for s in range(n_st - 1, -1, -1):
@@ -395,14 +655,15 @@ def _window_objective(
         g_omega = -dt_yr * np.einsum("bji,bj->bi", jl, lam)  # per block
         np.add.at(grad_g, offsets[s] + group_lists[s], g_omega)
 
-    barea = np.bincount(setup.pblock, weights=setup.weight, minlength=nb)
+    land = ~setup.ocean
+    barea = np.bincount(setup.pblock[land], weights=setup.weight[land], minlength=nb)
     # continental inertia at the window start (held fixed so the gradient is exact)
-    x0 = np.einsum("pij,pj->pi", frame0[setup.pblock], setup.p0)
+    x0 = np.einsum("pij,pj->pi", frame0[setup.pblock[land]], setup.p0[land])
     ib = np.zeros((nb, 3, 3))
     np.add.at(
         ib,
-        setup.pblock,
-        setup.weight[:, None, None] * (np.eye(3)[None] - x0[:, :, None] * x0[:, None, :]),
+        setup.pblock[land],
+        setup.weight[land, None, None] * (np.eye(3)[None] - x0[:, :, None] * x0[:, None, :]),
     )
     m_inv = np.linalg.inv(ib.sum(axis=0))
     for s in range(n_st):
@@ -430,48 +691,52 @@ def _window_objective(
         np.add.at(grad_g, offsets[s] + gl, gd)
         if s > 0:
             np.add.at(grad_g, offsets[s - 1] + group_lists[s - 1], -gd)
-        # net rotation of the continents relative to that of the present poles
+        # net rotation of the continents relative to that of the stage-0 poles
         net = m_inv @ np.einsum("bij,bj->i", ib, om_b[s] - setup.present_omega)
         terms["net_rotation"] += float(net @ net) / ref**2
         gn = config.w_net_rotation * 2.0 / ref**2 * np.einsum("bij,jk,k->bi", ib, m_inv, net)
         np.add.at(grad_g, offsets[s] + gl, gn)
-        # seafloor record: relative motion across present ridges in the memory window
-        for a, b, age in setup.ridge_pairs:
-            if t_ends[s] > age or gl[a] == gl[b]:
-                continue
-            r = (om_b[s][a] - om_b[s][b] - setup.present_omega[a] + setup.present_omega[b]) / ref
-            k = max(len(setup.ridge_pairs), 1)
-            terms["seafloor"] += float(r @ r) / k
-            gr = config.w_seafloor * 2.0 * r / ref / k
-            grad_g[offsets[s] + gl[a]] += gr
-            grad_g[offsets[s] + gl[b]] -= gr
     value = (
         config.w_overlap * terms["overlap"]
+        + config.w_isochron * terms["isochron"]
         + config.w_speed * terms["speed"]
         + config.w_reorg * terms["reorg"]
         + config.w_net_rotation * terms["net_rotation"]
-        + config.w_seafloor * terms["seafloor"]
     )
-    terms["worst_depth_km"] = worst
     return value, (grad_g * ref).ravel(), terms
 
 
-def stage_overlap(
+def stage_diagnostics(
     setup: SolverSetup,
     config: SolverConfig,
     frame: np.ndarray,
     group: np.ndarray,
     exempt: np.ndarray,
+    t_myr: float,
 ) -> dict[str, float]:
-    """Deepest penetration (km) and continental area share beyond the tolerance."""
+    """Deepest penetration (km), overlapping area share and isochron misfit.
+
+    The misfit is the 90th percentile (km) of the distance beyond the allowed one.
+    """
     x = np.einsum("pij,pj->pi", frame[setup.pblock], setup.p0)
+    active = ~setup.ocean | (setup.age >= t_myr)
     worst = 0.0
     hit = np.zeros(setup.p0.shape[0], dtype=bool)
-    for cand, _, depth, _ in _penetration(setup, x, frame, group, exempt):
+    fld = crust_field(setup, config, t_myr)
+    for cand, _, depth, _ in _penetration(setup, fld, x, active, frame, group, exempt):
         if depth.size:
             worst = max(worst, float(depth.max()))
             hit[cand[depth > config.overlap_tol_km]] = True
-    return {"worst_depth_km": worst, "overlap_area_share": float(setup.weight[hit].sum())}
+    miss = [
+        np.maximum(np.linalg.norm(x[a] - xm, axis=1) * setup.radius_km - allow, 0.0)
+        for a, allow, _, xm in _isochron_pairs(setup, config, x, frame, group, t_myr)
+    ]
+    return {
+        "worst_depth_km": worst,
+        "overlap_area_share": float(setup.weight[hit].sum()),
+        "ocean_overlap_share": float(setup.weight[hit & setup.ocean].sum()),
+        "isochron_misfit_km": float(np.percentile(np.concatenate(miss), 90)) if miss else 0.0,
+    }
 
 
 def _value_and_grad(u: np.ndarray, *args: object) -> tuple[float, np.ndarray]:
@@ -488,7 +753,7 @@ def _contact_welds(
     present_share: dict[tuple[int, int], float],
     t_myr: float,
 ) -> list[Weld]:
-    """New welds between groups whose margins touch at ``t_myr`` (§4.5)."""
+    """New welds between groups whose continental margins touch at ``t_myr`` (§4.5)."""
     # pairs with a weld relation already (rift, suture) follow that relation
     related = {(min(w.a, w.b), max(w.a, w.b)) for w in blocks.welds}
     share = _margin_contact(setup, config, frame, group)
@@ -510,6 +775,7 @@ def _margin_contact(
 ) -> dict[tuple[int, int], float]:
     """Share of the smaller block's margin particles within ``contact_km`` of the other."""
     nb = frame.shape[0]
+    fld = setup.cont_field
     x = np.einsum("pij,pj->pi", frame[setup.pblock], setup.p0)
     n_margin = np.bincount(setup.pblock[setup.margin], minlength=nb)
     touch: dict[tuple[int, int], int] = {}
@@ -519,12 +785,12 @@ def _margin_contact(
         if group is not None:
             cand = cand[group[setup.pblock[cand]] != group[c]]
         y = x[cand] @ frame[c]
-        near = y @ setup.cap_centre[c] >= setup.cap_cos[c]
-        cand, y = cand[near], y[near]
+        inside_cap = y @ fld.centre[c] >= fld.cap_cos[c]
+        cand, y = cand[inside_cap], y[inside_cap]
         if cand.size == 0:
             continue
         _, k = setup.tree.query(y)
-        s = setup.sdf[c, k]
+        s = fld.sdf[c, k]
         hit = cand[np.isfinite(s) & (s > -config.contact_km)]
         for b, n in zip(*np.unique(setup.pblock[hit], return_counts=True), strict=True):
             key = (int(min(b, c)), int(max(b, c)))
@@ -536,33 +802,23 @@ def _margin_contact(
     return out
 
 
-def solve(
-    blocks: Blocks, setup: SolverSetup, config: SolverConfig, present_block_omega: np.ndarray
-) -> SolveResult:
+def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResult:
     """Solve the block motions from the present back to ``config.end_myr``.
 
-    ``present_block_omega`` (B, 3) is used for stage 0 (§4.3, start).
+    Stage 0 uses ``setup.present_omega`` (§4.3, start).
     """
     dt = config.stage_myr
     n_stages = int(round(config.end_myr / dt))
     nb = blocks.n
-    barea = np.bincount(setup.pblock, weights=setup.weight, minlength=nb)
-    omegas = [present_block_omega.copy()]
+    land = ~setup.ocean
+    barea = np.bincount(setup.pblock[land], weights=setup.weight[land], minlength=nb)
+    omegas = [setup.present_omega.copy()]
     welds: list[Weld] = []
     groups = [groups_at(blocks, welds, 0.5 * dt)]
+    frame = rotation_matrices(setup.present_omega, -dt * 1.0e6)
     stats: list[dict[str, float]] = [
-        {
-            "t_myr": dt,
-            **stage_overlap(
-                setup,
-                config,
-                frame0 := rotation_matrices(present_block_omega, -dt * 1.0e6),
-                groups[0],
-                _exempt(blocks, dt),
-            ),
-        }
+        {"t_myr": dt, **stage_diagnostics(setup, config, frame, groups[0], _exempt(blocks, dt), dt)}
     ]
-    frame = frame0
     present_share = _margin_contact(setup, config, np.repeat(np.eye(3)[None], nb, axis=0), None)
     welds += _contact_welds(setup, config, blocks, frame, groups[0], present_share, dt)
     for k in range(1, n_stages):
@@ -574,6 +830,8 @@ def solve(
             glists.append(inv.astype(np.int64))
         exempts = [_exempt(blocks, (s + 1) * dt) for s in stages]
         t_ends = [(s + 1) * dt for s in stages]
+        for key in [key for key in setup.cache if key < t_ends[0] - 1e-6]:
+            del setup.cache[key]
         prev = omegas[-1]
         x0 = np.concatenate([_group_mean(prev, gl, barea) for gl in glists]).ravel()
         x0 /= setup.rate_ref
@@ -603,8 +861,8 @@ def solve(
                 "value": float(res.fun),
                 "iterations": float(res.nit),
                 "new_contact_welds": float(len(new)),
-                **{key: float(v) for key, v in terms.items() if key != "worst_depth_km"},
-                **stage_overlap(setup, config, frame, groups[-1], exempts[0]),
+                **{key: float(v) for key, v in terms.items()},
+                **stage_diagnostics(setup, config, frame, groups[-1], exempts[0], (k + 1) * dt),
             }
         )
     return SolveResult(

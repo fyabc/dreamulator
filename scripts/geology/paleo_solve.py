@@ -9,8 +9,10 @@ continental speeds) and ``solve.npz`` (stage poles and groups); with ``--plot``
 it maps the continents at a few epochs (``continents.png``), coloured by weld
 group and drawn at their solved positions.
 
-``--scale term=factor`` multiplies a term weight (overlap, speed, reorg,
-net_rotation, seafloor) for the weight-sensitivity runs of §4.3.
+``--scale term=factor`` multiplies a term weight (overlap, isochron, speed,
+reorg, net_rotation) for the weight-sensitivity runs of §4.3.  Stage 0 and the
+seafloor ages use the engine's own poles; the speed prior uses the
+continental-share poles.
 
 Usage::
 
@@ -36,11 +38,11 @@ from dreamulator.map.paleo_kinematics import (
     ridge_half_rates,
     synthesize_seafloor_age,
 )
-from dreamulator.map.paleo_solver import SolverConfig, build_setup, solve
+from dreamulator.map.paleo_solver import SolverConfig, build_setup, seafloor_welds, solve
 from dreamulator.map.paleo_sutures import load_sutures
 from dreamulator.map.paleo_walk import continental_rifts
 
-TERMS = ("overlap", "speed", "reorg", "net_rotation", "seafloor")
+TERMS = ("overlap", "isochron", "speed", "reorg", "net_rotation")
 
 
 def main() -> None:
@@ -76,9 +78,15 @@ def main() -> None:
     half, offset = ridge_half_rates(w.kin, boundary_cells(w.kin))
     age, source = synthesize_seafloor_age(w.kin, half, offset)
     t0 = time.time()
-    setup = build_setup(kin, blocks, kin.omega, age, source, config)
+    setup = build_setup(kin, blocks, w.kin.omega, kin.omega, age, source, half, config)
+    blocks, postponed = seafloor_welds(blocks, setup)
+    for c in postponed:
+        print(
+            f"rift weld {blocks.names[int(c['a'])]} – {blocks.names[int(c['b'])]}"
+            f" postponed {c['from_myr']:.1f} → {c['to_myr']:.1f} Myr (seafloor record)"
+        )
     t1 = time.time()
-    res = solve(blocks, setup, config, kin.omega[blocks.plate])
+    res = solve(blocks, setup, config)
     t2 = time.time()
     print(f"setup {t1 - t0:.1f} s, solve {t2 - t1:.1f} s")
 
@@ -87,9 +95,11 @@ def main() -> None:
     rms_cm = []
     for s in range(res.stage_omega.shape[0]):
         frames = finite_rotations(res.stage_omega, config.stage_myr, s * config.stage_myr)
-        x = np.einsum("pij,pj->pi", frames[setup.pblock], setup.p0)
-        v = np.cross(res.stage_omega[s][setup.pblock], x) * kin.radius_km * 1.0e5
-        rms_cm.append(float(np.sqrt(np.average(np.sum(v**2, axis=1), weights=setup.weight))))
+        land = ~setup.ocean
+        x = np.einsum("pij,pj->pi", frames[setup.pblock[land]], setup.p0[land])
+        v = np.cross(res.stage_omega[s][setup.pblock[land]], x) * kin.radius_km * 1.0e5
+        rms = np.sqrt(np.average(np.sum(v**2, axis=1), weights=setup.weight[land]))
+        rms_cm.append(float(rms))
     groups = []
     for s in range(res.groups.shape[0]):
         g = res.groups[s]
@@ -98,10 +108,19 @@ def main() -> None:
     summary = {
         "config": asdict(config),
         "seconds": {"setup": round(t1 - t0, 1), "solve": round(t2 - t1, 1)},
-        "ridge_pairs": [[a_, b_, round(x, 1)] for a_, b_, x in setup.ridge_pairs],
+        "ridges": [list(r) for r in setup.ridge_plates],
         "stages": [
             {**st, "continental_rms_cm_yr": round(r, 2), **gr}
             for st, r, gr in zip(res.stats, rms_cm, groups, strict=True)
+        ],
+        "postponed_rift_welds": [
+            {
+                "a": blocks.names[int(c["a"])],
+                "b": blocks.names[int(c["b"])],
+                "from_myr": round(c["from_myr"], 1),
+                "to_myr": round(c["to_myr"], 1),
+            }
+            for c in postponed
         ],
         "contact_welds": [
             {"a": blocks.names[c.a], "b": blocks.names[c.b], "since_myr": c.since_myr}
@@ -118,7 +137,8 @@ def main() -> None:
         print(
             f"t={st['t_myr']:5.0f}  groups {st['n']:2d} ({st['largest_Mkm2']:6.1f} Mkm²)"
             f"  v {st['continental_rms_cm_yr']:4.1f} cm/yr  depth {st['worst_depth_km']:5.0f} km"
-            f"  over {st['overlap_area_share']:.3f}  it {st.get('iterations', 0):.0f}  {terms}"
+            f"  over {st['overlap_area_share']:.3f} (sea {st['ocean_overlap_share']:.3f})"
+            f"  iso {st['isochron_misfit_km']:4.0f} km  it {st.get('iterations', 0):.0f}  {terms}"
         )
     for c in summary["contact_welds"]:
         print("contact weld", c)
@@ -137,6 +157,16 @@ def main() -> None:
         fig, axes = plt.subplots((n + 1) // 2, 2, figsize=(18, 4.6 * ((n + 1) // 2)), squeeze=False)
         for ax, t in zip(axes.ravel(), args.epochs, strict=False):
             frames = finite_rotations(res.stage_omega, config.stage_myr, t)
+            sea = np.flatnonzero((setup.cell_host >= 0) & (setup.cell_age >= t))
+            xs = np.einsum("pij,pj->pi", frames[setup.cell_host[sea]], kin.xyz[sea])
+            ax.scatter(
+                np.degrees(np.arctan2(xs[:, 2], xs[:, 0])),
+                np.degrees(np.arcsin(np.clip(xs[:, 1], -1, 1))),
+                s=0.3,
+                c=[(0.62, 0.72, 0.85)],
+                lw=0,
+                rasterized=True,
+            )
             x = np.einsum("pij,pj->pi", frames[blocks.block[cont]], kin.xyz[cont])
             lon = np.degrees(np.arctan2(x[:, 2], x[:, 0]))
             lat = np.degrees(np.arcsin(np.clip(x[:, 1], -1, 1)))
@@ -145,7 +175,10 @@ def main() -> None:
             ax.scatter(lon, lat, s=0.6, c=col, lw=0, rasterized=True)
             ax.set(xlim=(-180, 180), ylim=(-90, 90), aspect="equal", xticks=[], yticks=[])
             ax.set_facecolor((0.9, 0.93, 0.97))
-            ax.set_title(f"continents at −{t:g} Myr ({len(np.unique(res.groups[s]))} weld groups)")
+            ax.set_title(
+                f"−{t:g} Myr: continents by weld group ({len(np.unique(res.groups[s]))}),"
+                " blue = present seafloor that exists"
+            )
         for ax in axes.ravel()[n:]:
             ax.axis("off")
         fig.tight_layout()

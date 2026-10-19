@@ -72,6 +72,7 @@ def main() -> None:
             "v_45_100": round(float(v[(t >= 45) & (t <= 100)].mean()), 2),
             "v_105_150": round(float(v[t >= 105].mean()), 2),
             "worst_depth_km": round(max(x["worst_depth_km"] for x in st[1:]), 0),
+            "iso_misfit_km": round(float(np.median([x["isochron_misfit_km"] for x in st])), 0),
             "mean_overlap_share": round(float(np.mean([x["overlap_area_share"] for x in st])), 4),
             "reorgs": int((dpole > REORG_FRAC).any(axis=1).sum()),
             "groups_150": st[-1]["n"],
