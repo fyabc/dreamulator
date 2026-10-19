@@ -207,6 +207,36 @@
           "description": "Principal moment of inertia coefficient C/MR² (uniform sphere 0.4)",
           "title": "C Over Mr2"
         },
+        "love_k2": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1.5,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tidal Love number k₂ (gravitational potential); default Earth's 0.3",
+          "title": "Love K2"
+        },
+        "love_h2": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 2.5,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tidal Love number h₂ (solid-surface deformation); default Earth's 0.6",
+          "title": "Love H2"
+        },
         "surface": {
           "anyOf": [
             {

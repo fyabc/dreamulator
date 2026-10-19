@@ -150,6 +150,18 @@ class OrbitingBody(BaseModel):
         le=0.4,
         description="Principal moment of inertia coefficient C/MR² (uniform sphere 0.4)",
     )
+    love_k2: float | None = Field(
+        default=None,
+        gt=0,
+        lt=1.5,
+        description="Tidal Love number k₂ (gravitational potential); default Earth's 0.3",
+    )
+    love_h2: float | None = Field(
+        default=None,
+        gt=0,
+        lt=2.5,
+        description="Tidal Love number h₂ (solid-surface deformation); default Earth's 0.6",
+    )
 
     # Extensible surface properties (composition, atmosphere presence, etc.)
     surface: dict[str, Any] | None = Field(
