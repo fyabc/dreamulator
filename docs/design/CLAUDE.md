@@ -48,8 +48,7 @@
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）
 - `evolution-mode.md` — 演化模式提案（新建世界：geography.yaml 作为演化目标，逆向规划超大陆后正向运动学模拟出现状，时间轴为副产品；未实现，2026-10 立案）
-- `plate-topology.md` — 板块拓扑层提案（地质时间轴的逐步倒推改为显式维护三联点与边界段的球面边界图，合并、切开、新生为显式事件，拓扑规则每步检查；未实现，2026-10 立案）
-- `geological-timeline.md` — 地质时间轴提案（运动学倒推加作者关键帧生成历史时刻快照，时刻分支接气候与生态；现状逐格不变；未实现，2026-10 立案）
+- `geological-timeline.md` — 地质时间轴提案（大陆块为主体，整段历史作为带约束的求解问题：陆壳守恒为硬约束，速度、重组稀疏、净旋转为先验，合并与切开由焊接关系表示；板块与边界由大陆块运动推出；时刻分支接气候与生态；2026-10 立案，10-18 重构）
 - `inland-water-refine.md` — 内陆水体 refine 提案（湖命运 P−E 判决四类结局、溢流河网接通、rim/spill 字段缺口；未实现，2026-10 立案）
 - `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）

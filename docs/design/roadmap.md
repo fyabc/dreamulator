@@ -133,7 +133,7 @@
 | P2 | **生态层海洋模块**（3B.5：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——生态层现全陆相） | 1–2 周 | ★★★ |
 | P2 | **生物地理分区算法改进**（唯一屏障=海洋；沙漠/山脉不构成屏障、过渡带零建模）→ ① 参数侧 target_provinces_per_realm；② 扩散阻力加权分区（Holt 2013 / WWF）；③ ecology-layer §2.4 字段 | 1–2 周 | ★★★ |
 | P2 | **Gleba 实测调研**（本地 gleba.exe 零实测记录：CLI/headless 试验 + 问题对比 + 层设计借鉴）→ competitor-analysis.md 新增「Gleba 实测」节 | 2–3 天 | ★★★ |
-| P2 | **地质时间轴**（运动学倒推加作者关键帧生成历史时刻快照，时刻分支接气候与生态，前端时间滑块；现状逐格不变）→ [geological-timeline.md](proposals/geological-timeline.md)；逐步倒推的拓扑层 → [plate-topology.md](proposals/plate-topology.md) | M1–M4 各 1–2 周 | ★★★ |
+| P2 | **地质时间轴**（大陆块运动学的约束求解生成历史时刻快照，作者缝合带与关键帧为输入，时刻分支接气候与生态，前端时间滑块；现状逐格不变）→ [geological-timeline.md](proposals/geological-timeline.md)（快照的边界表示即板块拓扑层，见该文附录 A） | G1–G5 各 1–2 周 | ★★★ |
 | P2 | 世界线 Diff 可视化（3D） | 2 周 | ★★★ |
 | P2 | Entity ID 系统（UUIDv7 + slug 双主键，为 DAG 精确寻址铺路） | 1 周 | ★★★ |
 | P2 | `ai` CLI 命令组 → [ai-cli-commands.md](proposals/ai-cli-commands.md)；critique/trace/reconcile 归 [harness.md](proposals/harness.md) | 2–3 周 | ★★★ |

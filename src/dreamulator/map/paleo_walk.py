@@ -1,6 +1,7 @@
 """Backward walk of crust parcels on the plate topology layer (T2).
 
-Design: ``docs/design/proposals/plate-topology.md`` §3.  The plate-boundary
+Design: ``docs/design/proposals/geological-timeline.md`` (this step-by-step walk is
+kept for comparison, §3.1 and §12; the solver of §4 replaces it).  The plate-boundary
 graph (``paleo_topology``) decides which plate owns every place; crust parcels
 only carry the crust (type, age, elevation) and keep the plate they belong to.
 Each step:

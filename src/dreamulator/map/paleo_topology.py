@@ -1,6 +1,6 @@
 """Explicit plate-boundary graph for the backward walk (plate topology layer, T1).
 
-Design: ``docs/design/proposals/plate-topology.md``.  Plates are not whatever
+Design: ``docs/design/proposals/geological-timeline.md`` appendix A.  Plates are not whatever
 cells their crust parcels happen to cover; they are closed by an explicit graph
 of boundary segments on the sphere:
 
@@ -627,7 +627,7 @@ def event_grid(n: int, radius_km: float) -> PlateKinematics:
 
     ``n`` Fibonacci points with Delaunay adjacency and equal areas.  Re-closing
     the graph on this grid instead of the world's mesh keeps event handling the
-    same whatever the world's cell count (plate-topology.md §11).
+    same whatever the world's cell count (geological-timeline.md §12).
     """
     from dreamulator.map.cvt_mesh import fibonacci_sphere
     from dreamulator.map.paleo_kinematics import PlateKinematics, adjacency_csr
@@ -865,7 +865,7 @@ def reclose(
 
 @dataclass(frozen=True)
 class TopologyCheck:
-    """Topology rules of plate-topology.md §5 on rasterized labels.
+    """Topology rules of geological-timeline.md appendix A.3 on rasterized labels.
 
     Attributes:
         plates: number of plates.

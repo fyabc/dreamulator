@@ -7,7 +7,7 @@ Reads a built map (read-only), builds the reconstruction plate model
 (``dreamulator.map.paleo_topology``), and walks it back with the present poles.
 At each epoch it rasterizes the graph to cells and reports:
 
-* the topology rules of ``docs/design/proposals/plate-topology.md`` §5;
+* the topology rules of ``docs/design/proposals/geological-timeline.md`` appendix A.3;
 * agreement with the starting labels at t = 0 (smoothing moves boundaries a
   little);
 * agreement with the M1 parcel rewind (``paleo_kinematics.rewind``, same poles):

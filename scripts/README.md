@@ -118,10 +118,10 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   `--observed-age` 用观测年龄网格（Seton 等 2020）检验合成年龄，用于 earth 地图；`--history`
   改为逐步倒推（阶段欧拉极、补洋壳、造山带回退、裂谷合拢与板块合并）。设计见
   `docs/design/proposals/geological-timeline.md`。
-- `plate_topology.py` — 板块拓扑层 T1 诊断：从重建用板块模型提取球面边界图（三联点与带类型的边界段），
-  按运动学用固定欧拉极倒推，每个时刻栅格化并报告拓扑规则、与起点标签及与 M1 质点倒推的一致率；
-  `--plot` 画出各时刻的边界类型与三联点；`--walk` 接入地壳质点（T2）。设计见
-  `docs/design/proposals/plate-topology.md`。
+- `plate_topology.py` — 板块拓扑层诊断：从引擎板块提取球面边界图（三联点与带类型的边界段），每个
+  时刻栅格化并报告拓扑规则；`--walk` 跑逐步倒推（地壳质点、体积账本、作者缝合带，保留作对照），
+  `--plot` 画出各时刻的边界类型与三联点。设计见 `docs/design/proposals/geological-timeline.md`
+  （板块拓扑层在附录 A）。
 
 ## release/ — 发布与静态导出（2 个）
 
