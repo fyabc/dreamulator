@@ -9,6 +9,10 @@ continental speeds) and ``solve.npz`` (stage poles and groups); with ``--plot``
 it maps the continents at a few epochs (``continents.png``), coloured by weld
 group and drawn at their solved positions.
 
+``--observed-age grid.nc`` replaces the synthetic seafloor ages by an observed
+age grid sampled at the cells (G3 on the earth map, §9 item 3); the ridge each
+cell belongs to and the half-rates still come from the synthesis.
+
 ``--scale term=factor`` multiplies a term weight (overlap, isochron, speed,
 reorg, net_rotation) for the weight-sensitivity runs of §4.3.  Stage 0 and the
 seafloor ages use the engine's own poles; the speed prior uses the
@@ -35,6 +39,7 @@ from dreamulator.map.paleo_blocks import build_blocks, finite_rotations
 from dreamulator.map.paleo_kinematics import (
     boundary_cells,
     continental_speed_poles,
+    no_net_rotation,
     ridge_half_rates,
     synthesize_seafloor_age,
 )
@@ -55,6 +60,7 @@ def main() -> None:
     ap.add_argument("--max-iter", type=int, default=200)
     ap.add_argument("--scale", action="append", default=[], metavar="TERM=FACTOR")
     ap.add_argument("--plate-history", type=Path, default=None)
+    ap.add_argument("--observed-age", type=Path, default=None, help="netCDF age grid (Myr)")
     ap.add_argument("--plot", action="store_true")
     args = ap.parse_args()
 
@@ -67,6 +73,8 @@ def main() -> None:
         config = replace(config, **{key: getattr(config, key) * float(factor)})
 
     w = World(args.map_dir)
+    # absolute speeds refer to the no-net-rotation frame (PB2002 holds the Pacific fixed)
+    w.kin = replace(w.kin, omega=no_net_rotation(w.kin))
     kin = replace(w.kin, omega=continental_speed_poles(w.kin))
     hist = args.plate_history or (
         args.map_dir.resolve().parents[1] / "layers" / "geological" / "input" / "plate_history.yaml"
@@ -77,6 +85,11 @@ def main() -> None:
     # correction slows some ridges to a few mm/yr and inflates their ages
     half, offset = ridge_half_rates(w.kin, boundary_cells(w.kin))
     age, source = synthesize_seafloor_age(w.kin, half, offset)
+    if args.observed_age is not None:
+        from paleo_rewind import sample_observed_age
+
+        obs = sample_observed_age(args.observed_age, w.lon, w.lat)
+        age = np.where(w.kin.continental, np.nan, obs)
     t0 = time.time()
     setup = build_setup(kin, blocks, w.kin.omega, kin.omega, age, source, half, config)
     blocks, postponed = seafloor_welds(blocks, setup)
@@ -107,6 +120,7 @@ def main() -> None:
         groups.append({"n": len(sizes), "largest_Mkm2": round(sizes[0], 1)})
     summary = {
         "config": asdict(config),
+        "observed_age": str(args.observed_age) if args.observed_age else None,
         "seconds": {"setup": round(t1 - t0, 1), "solve": round(t2 - t1, 1)},
         "ridges": [list(r) for r in setup.ridge_plates],
         "soft_margin_share": round(float(a[setup.cell_soft].sum() / a[blocks.block >= 0].sum()), 4),

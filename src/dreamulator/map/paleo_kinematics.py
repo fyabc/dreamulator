@@ -289,6 +289,23 @@ MIN_OPENING_FRAC = 0.015
 MIN_MOTION_FRAC = 0.035
 
 
+def no_net_rotation(kin: PlateKinematics) -> np.ndarray:
+    """Plate poles with the lithosphere's net rotation removed, (P, 3).
+
+    The net rotation is the area-weighted mean rotation of the whole surface,
+    ω_net = (Σ a (I − x xᵀ))⁻¹ Σ a (I − x xᵀ) ω(x).  Relative plate motions do not
+    change; absolute speeds then refer to the no-net-rotation frame, the usual
+    stand-in for the mantle frame (PB2002 poles, for example, hold the Pacific
+    plate fixed).
+    """
+    proj = np.eye(3)[None] - kin.xyz[:, :, None] * kin.xyz[:, None, :]
+    inertia = np.einsum("n,nij->ij", kin.area_km2, proj)
+    moment = np.einsum("n,nij,nj->i", kin.area_km2, proj, kin.omega[kin.plate])
+    net = np.linalg.solve(inertia, moment)
+    out: np.ndarray = kin.omega - net[None, :]
+    return out
+
+
 def continental_speed_poles(kin: PlateKinematics, factor: float = 0.3) -> np.ndarray:
     """Euler poles with speeds set by each plate's continental share.
 

@@ -27,7 +27,9 @@ all dimensionless:
   ages (seafloor reached along a transform rather than a flowline) are left out
   of this term;
 * **speed**: each group's angular speed stays near the continental-share law of
-  ``paleo_kinematics.continental_speed_poles``;
+  ``paleo_kinematics.continental_speed_poles``; poles should be given in the
+  no-net-rotation frame (``paleo_kinematics.no_net_rotation``), where absolute
+  speeds mean something;
 * **reorganisation**: a pseudo-Huber penalty on each block's pole change from one
   stage to the next, so poles stay put most of the time and change at once;
 * **net rotation**: the area-weighted mean rotation of the continents stays near
@@ -63,6 +65,11 @@ from dreamulator.map.paleo_kinematics import rotation_matrices
 
 if TYPE_CHECKING:
     from dreamulator.map.paleo_kinematics import PlateKinematics
+
+
+# floor of a group's target angular speed, as a share of the reference speed
+# (numerical safeguard: plates nearly at rest in the frame of the poles)
+MIN_TARGET_FRAC = 0.1
 
 
 @dataclass(frozen=True)
@@ -709,6 +716,8 @@ def _window_objective(
         tgt = np.bincount(gl, weights=barea * setup.target_rate, minlength=ng) / np.maximum(
             ga, 1e-30
         )
+        # a target near zero would make the relative deviation blow up
+        tgt = np.maximum(tgt, MIN_TARGET_FRAC * ref)
         om = omega_g[offsets[s] : offsets[s] + ng]
         rate = np.linalg.norm(om, axis=1)
         dev = (rate - tgt) / np.maximum(tgt, 1e-30)

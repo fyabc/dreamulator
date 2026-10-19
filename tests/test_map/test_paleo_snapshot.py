@@ -109,3 +109,19 @@ def test_land_mask_keeps_closed_basins_as_land() -> None:
     elev[basin] = -100.0  # below sea level but enclosed
     land = land_mask(kin, elev, 0.0)
     assert land[basin].all() and land[ring].all() and not land[~ring].any()
+
+
+def test_no_net_rotation_keeps_relative_motion() -> None:
+    from dataclasses import replace
+
+    from dreamulator.map.paleo_kinematics import no_net_rotation
+
+    kin, _, _ = _world()
+    spin = np.array([0.3, -0.2, 0.5]) * OMEGA
+    shifted = replace(kin, omega=kin.omega + spin)  # same relative motion, other frame
+    a, b = no_net_rotation(kin), no_net_rotation(shifted)
+    np.testing.assert_allclose(a, b, atol=1e-22)
+    np.testing.assert_allclose(a[0] - a[1], kin.omega[0] - kin.omega[1], atol=1e-22)
+    # one rigid rotation of the whole surface has no motion left
+    solid = replace(kin, omega=np.repeat(spin[None], 2, axis=0))
+    np.testing.assert_allclose(no_net_rotation(solid), 0.0, atol=1e-22)

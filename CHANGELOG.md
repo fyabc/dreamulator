@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **地质时间轴 G3 第二步：地球上运行求解器（2026-10-19）**：新增 `scripts/geology/paleo_earth_compare.py`，用
+  pyGPlates 读取 Müller 等 2019 模型，与求解结果比较大陆位置；`paleo_solve.py` 可用 `--observed-age` 改用观测海底
+  年龄。只输入现状板块与合成年龄时，30–150 Myr 的大陆偏差为 1.7°–13.1°，90 Myr 以前与沿用现状欧拉极相当、更早
+  时更好；南美与非洲在 140 Myr 接触焊接（已发表约 130 Ma）；印度偏差 35–48°。改用观测年龄反而更差。新增
+  `paleo_kinematics.no_net_rotation`，求解前把现状欧拉极换到无净旋转参考系（PB2002 固定太平洋板块，速度先验的
+  目标因此为零，优化在 10–30 Myr 一步即停）；速度目标设下限。
 - **地质时间轴 §4.6/§4.8：由求解结果推出快照（2026-10-19）**：新增 `map/paleo_snapshot.py` 与 `scripts/geology/
   paleo_snapshot.py`。每个时刻把当时存在的地壳随所属的块转回去、重采样到现状网格；不再有地壳到达的格子是后来
   被俯冲的洋壳，归最近的板块，年龄按到正中洋中脊的距离推出。板块取该时刻的焊接组，边界按相对运动分类并检查

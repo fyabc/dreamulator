@@ -32,6 +32,7 @@ from dreamulator.map.paleo_kinematics import (
     boundary_cells,
     boundary_opening_rates,
     continental_speed_poles,
+    no_net_rotation,
     ridge_half_rates,
     synthesize_seafloor_age,
 )
@@ -56,6 +57,8 @@ def main() -> None:
     config = SolverConfig(**summary["config"])
     solved = np.load(args.solve_dir / "solve.npz")
     w = World(args.map_dir)
+    # absolute speeds refer to the no-net-rotation frame (PB2002 holds the Pacific fixed)
+    w.kin = replace(w.kin, omega=no_net_rotation(w.kin))
     kin = replace(w.kin, omega=continental_speed_poles(w.kin))
     hist = args.plate_history or (
         args.map_dir.resolve().parents[1] / "layers" / "geological" / "input" / "plate_history.yaml"
