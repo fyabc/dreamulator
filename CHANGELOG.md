@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **地质时间轴 §4.7：共轭陆缘拟合（2026-10-19）**：接触焊接时，较小一侧的陆缘格子与对方陆缘做迭代最近点最小二乘
+  拟合（Bullard 式），并入刚保留阶段的欧拉极；至少 20 对、角度不超过 5° 才采用。地球南美与非洲在 140 Myr 接触时
+  拟合要求转 10°（陆缘错位约 300 km 降到 80 km），放宽上限采用后 150 Myr 南美偏差反从 2.4° 增到 10.1°：南大西洋
+  由南向北分段张开，接触时只有南段贴合，大角度拟合不采用。`paleo_earth_compare.py` 加 `--plot`，`paleo_solve.py`
+  加 `--fit-max-deg`。
 - **地质时间轴 G3 第二步：地球上运行求解器（2026-10-19）**：新增 `scripts/geology/paleo_earth_compare.py`，用
   pyGPlates 读取 Müller 等 2019 模型，与求解结果比较大陆位置；`paleo_solve.py` 可用 `--observed-age` 改用观测海底
   年龄。只输入现状板块与合成年龄时，30–150 Myr 的大陆偏差为 1.7°–13.1°，90 Myr 以前与沿用现状欧拉极相当、更早

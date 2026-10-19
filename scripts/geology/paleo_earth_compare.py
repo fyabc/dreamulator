@@ -108,6 +108,7 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--points", type=int, default=6000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--plot", action="store_true", help="earth_compare.png: solved over published")
     args = ap.parse_args()
 
     summary = json.loads((args.solve_dir / "summary.json").read_text(encoding="utf-8"))
@@ -135,6 +136,7 @@ def main() -> None:
 
     t_max = stage * stage_omega.shape[0]
     rows = []
+    frames: list[tuple[float, np.ndarray, np.ndarray]] = []
     for t in EPOCHS:
         if t > t_max + 1e-9:
             continue
@@ -145,6 +147,8 @@ def main() -> None:
             "pij,pj->pi", rotation_matrices(w.kin.omega, -t * 1.0e6)[w.kin.plate[pick]], x0
         )
         row: dict[str, object] = {"t_myr": t}
+        r_fit = best_fit(solved[ok], pub[t][ok], area[ok])
+        frames.append((t, solved @ r_fit.T, pub[t]))
         for name, pos in (("solver", solved), ("fixed_present_poles", fixed), ("no_motion", x0)):
             r = best_fit(pos[ok], pub[t][ok], area[ok])
             err = misfit_deg(pos @ r.T, pub[t])
@@ -175,6 +179,8 @@ def main() -> None:
         }
         rows.append(row)
         print(json.dumps(row, ensure_ascii=False))
+    if args.plot:
+        _plot(frames, code, ok, args.out_dir)
     welds = [
         c
         for c in summary.get("contact_welds", [])
@@ -193,6 +199,54 @@ def main() -> None:
     (args.out_dir / "earth_compare.json").write_text(
         json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+
+
+def _plot(
+    frames: list[tuple[float, np.ndarray, np.ndarray]],
+    code: np.ndarray,
+    ok: np.ndarray,
+    out: Path,
+) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    colours = dict(
+        zip(
+            PLATES,
+            (
+                "tab:red",
+                "tab:orange",
+                "tab:blue",
+                "tab:green",
+                "tab:purple",
+                "tab:brown",
+                "tab:cyan",
+            ),
+            strict=True,
+        )
+    )
+    rows = len(frames)
+    fig, axes = plt.subplots(rows, 1, figsize=(13, 6.2 * rows), squeeze=False)
+    for ax, (t, solved, pub) in zip(axes[:, 0], frames, strict=True):
+        lon_p, lat_p = to_lonlat(pub[ok])
+        ax.scatter(lon_p, lat_p, s=7, c="0.72", lw=0, label="Müller et al. 2019")
+        lon_s, lat_s = to_lonlat(solved[ok])
+        col = [colours.get(c, "0.35") for c in code[ok]]
+        ax.scatter(lon_s, lat_s, s=2, c=col, lw=0)
+        for c, colour in colours.items():
+            ax.scatter([], [], s=20, c=colour, label=f"solver {c}")
+        ax.set(xlim=(-180, 180), ylim=(-90, 90), aspect="equal", xticks=range(-180, 181, 60))
+        ax.grid(alpha=0.3)
+        ax.set_title(
+            f"−{t:g} Myr: grey = published continents,"
+            " colour = solver (best-fit frame rotation removed)"
+        )
+        ax.legend(loc="lower left", fontsize=7, ncol=4, markerscale=1.5)
+    fig.tight_layout()
+    fig.savefig(out / "earth_compare.png", dpi=80)
+    plt.close(fig)
 
 
 if __name__ == "__main__":

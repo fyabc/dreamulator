@@ -45,7 +45,10 @@ The solve slides a window of ``window_stages`` stages back in time, optimises it
 with L-BFGS and keeps only its first stage.  After each kept stage, groups whose
 continental margins have come into contact going back (and were apart at
 present) are welded from that time on: the contact time is their break-up time
-(§4.5).  Stage 0 uses the poles the seafloor ages were synthesised with.
+(§4.5).  The welded margins are then fitted Bullard-style (§4.7): an iterative
+closest-point least-squares rotation of the smaller group brings its margin
+onto the other's, folded into the kept stage's pole.  Stage 0 uses the poles
+the seafloor ages were synthesised with.
 Gradients are exact: a stage rotation exp([θ]×) varies by the world rotation
 J_l(θ)·dθ (left Jacobian of SO(3)), carried back through the later stages by an
 adjoint pass.  Pure numpy/scipy, no IO; deterministic.
@@ -93,6 +96,13 @@ class SolverConfig:
         contact_km: distance within which two margins count as touching.
         contact_share: margin share of the smaller block that must touch for a
             contact weld.
+        fit_window_km: margin cells within this distance of the other side's
+            margin take part in the conjugate-margin fit; 0 turns the fit off.
+        fit_iterations: iterative closest-point rounds of the fit.
+        fit_min_pairs: fewest margin pairs for a fit to be applied.
+        fit_max_deg: largest fit rotation applied, about the distance a plate
+            covers in one stage (5 Myr at 10 cm/yr); a larger one means the two
+            margins are not conjugate.
         margin_km: width of the stretched margin next to another plate's ridge,
             equal to the per-side stretching width of the rift onsets
             (``paleo_walk.continental_rifts``).
@@ -116,6 +126,10 @@ class SolverConfig:
     isochron_check_km: float = 150.0
     contact_km: float = 100.0
     contact_share: float = 0.2
+    fit_window_km: float = 500.0
+    fit_iterations: int = 20
+    fit_min_pairs: int = 20
+    fit_max_deg: float = 5.0
     margin_km: float = 300.0
     reorg_eps: float = 0.05
     memory_myr: float = 150.0
@@ -216,12 +230,15 @@ class SolveResult:
         groups: (S, B) weld group of each block in each stage.
         contact_welds: welds added when margins touched going back.
         stats: one dict per stage (objective terms, worst penetration, iterations).
+        fits: one dict per conjugate-margin fit (weld, moved blocks, rotation
+            angle, margin misfit before and after, number of margin pairs).
     """
 
     stage_omega: np.ndarray
     groups: np.ndarray
     contact_welds: list[Weld] = field(default_factory=list)
     stats: list[dict[str, float]] = field(default_factory=list)
+    fits: list[dict[str, object]] = field(default_factory=list)
 
 
 def skew(v: np.ndarray) -> np.ndarray:
@@ -235,6 +252,65 @@ def skew(v: np.ndarray) -> np.ndarray:
         ],
         axis=-2,
     )
+
+
+def rotation_vector(rot: np.ndarray) -> np.ndarray:
+    """Rotation vector θ of a rotation matrix, exp([θ]×) = rot (angle below π)."""
+    angle = float(np.arccos(np.clip((np.trace(rot) - 1.0) / 2.0, -1.0, 1.0)))
+    w = np.array([rot[2, 1] - rot[1, 2], rot[0, 2] - rot[2, 0], rot[1, 0] - rot[0, 1]])
+    if angle < 1e-12:
+        return 0.5 * w
+    out: np.ndarray = w * (angle / (2.0 * np.sin(angle)))
+    return out
+
+
+def conjugate_fit(
+    setup: SolverSetup,
+    config: SolverConfig,
+    frame: np.ndarray,
+    moving: np.ndarray,
+    fixed: np.ndarray,
+) -> tuple[np.ndarray, float, float, int]:
+    """Least-squares rotation bringing the moving blocks' margin onto the fixed ones' (§4.7).
+
+    Margin cells (continental cells next to a cell of another block or of the
+    ocean) of the moving side within ``fit_window_km`` of the fixed side's margin
+    are paired with their nearest counterpart; the rotation minimising the
+    squared chord distances (Kabsch) is applied and the pairing repeated
+    (iterative closest point; Bullard et al. 1965 fitted the Atlantic margins the
+    same way).  Returns the rotation, the median margin misfit (km) before and
+    after, and the number of pairs.
+    """
+    rows, cols = setup.nbr_rows, setup.nbr_cols
+    blk = setup.cell_block
+    edge = np.zeros(blk.size, dtype=bool)
+    edge[rows[(blk[rows] >= 0) & (blk[rows] != blk[cols])]] = True
+    cells_a = np.flatnonzero(edge & np.isin(blk, moving))
+    cells_b = np.flatnonzero(edge & np.isin(blk, fixed))
+    if cells_a.size < 3 or cells_b.size < 3:
+        return np.eye(3), 0.0, 0.0, 0
+    a = np.einsum("pij,pj->pi", frame[blk[cells_a]], setup.xyz[cells_a])
+    b = np.einsum("pij,pj->pi", frame[blk[cells_b]], setup.xyz[cells_b])
+    tree_b = cKDTree(b)
+    d0, _ = tree_b.query(a)
+    near = d0 <= config.fit_window_km / setup.radius_km
+    if near.sum() < 3:
+        return np.eye(3), 0.0, 0.0, int(near.sum())
+    a = a[near]
+    before = float(np.median(d0[near])) * setup.radius_km
+    rot = np.eye(3)
+    for _ in range(config.fit_iterations):
+        moved = a @ rot.T
+        _, j = tree_b.query(moved)
+        h = moved.T @ b[j]
+        u, _, vt = np.linalg.svd(h)
+        d = np.sign(np.linalg.det(vt.T @ u.T))
+        step = vt.T @ np.diag([1.0, 1.0, d]) @ u.T
+        rot = step @ rot
+        if np.linalg.norm(step - np.eye(3)) < 1e-9:
+            break
+    after = float(np.median(tree_b.query(a @ rot.T)[0])) * setup.radius_km
+    return rot, before, after, int(near.sum())
 
 
 def left_jacobian(theta: np.ndarray) -> np.ndarray:
@@ -877,6 +953,7 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
     present_share = _margin_contact(setup, config, np.repeat(np.eye(3)[None], nb, axis=0), None)
     forbid = ridge_record(setup)
     welds += _contact_welds(setup, config, blocks, frame, groups[0], present_share, forbid, dt)[0]
+    fits: list[dict[str, object]] = []
     for k in range(1, n_stages):
         stages = list(range(k, min(k + config.window_stages, n_stages)))
         glists = []
@@ -908,11 +985,41 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
         om0 = (res.x[: 3 * ng0] * setup.rate_ref).reshape(-1, 3)[glists[0]]
         omegas.append(om0)
         groups.append(groups_at(blocks, welds, (k + 0.5) * dt))
+        frame_before = frame
         frame = np.einsum("bij,bjk->bik", rotation_matrices(om0, -dt * 1.0e6), frame)
         new, refused = _contact_welds(
             setup, config, blocks, frame, groups[-1], present_share, forbid, (k + 1) * dt
         )
         welds += new
+        if config.fit_window_km > 0:
+            for wd in new:
+                g = groups_at(blocks, [x for x in welds if x is not wd], (k + 1) * dt)
+                side_a = np.flatnonzero(g == g[wd.a])
+                side_b = np.flatnonzero(g == g[wd.b])
+                if barea[side_a].sum() > barea[side_b].sum():
+                    side_a, side_b = side_b, side_a
+                rot, before, after, pairs = conjugate_fit(setup, config, frame, side_a, side_b)
+                angle = float(np.degrees(np.arccos(np.clip((np.trace(rot) - 1) / 2, -1, 1))))
+                applied = pairs >= config.fit_min_pairs and angle <= config.fit_max_deg
+                fits.append(
+                    {
+                        "t_myr": (k + 1) * dt,
+                        "weld": (int(wd.a), int(wd.b)),
+                        "moved_blocks": side_a.tolist(),
+                        "angle_deg": angle,
+                        "misfit_before_km": before,
+                        "misfit_after_km": after,
+                        "pairs": pairs,
+                        "applied": applied,
+                    }
+                )
+                if not applied:
+                    continue
+                frame[side_a] = np.einsum("ij,bjk->bik", rot, frame[side_a])
+                # fold the fit into the kept stage: its rotation becomes rot · stage rotation
+                for b in side_a:
+                    stage_rot = frame[b] @ frame_before[b].T
+                    om0[b] = -rotation_vector(stage_rot) / (dt * 1.0e6)
         stats.append(
             {
                 "t_myr": (k + 1) * dt,
@@ -925,7 +1032,11 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
             }
         )
     return SolveResult(
-        stage_omega=np.stack(omegas), groups=np.stack(groups), contact_welds=welds, stats=stats
+        stage_omega=np.stack(omegas),
+        groups=np.stack(groups),
+        contact_welds=welds,
+        stats=stats,
+        fits=fits,
     )
 
 

@@ -16,9 +16,11 @@ from dreamulator.map.paleo_solver import (
     _exempt,
     _window_objective,
     build_setup,
+    conjugate_fit,
     crust_field,
     left_jacobian,
     ridge_record,
+    rotation_vector,
     skew,
     solve,
     stage_diagnostics,
@@ -179,3 +181,34 @@ def test_contact_is_not_welded_across_older_seafloor() -> None:
     res = solve(blocks, setup, config)
     assert not res.contact_welds
     assert sum(st.get("refused_contacts", 0.0) for st in res.stats) > 0
+
+
+def test_rotation_vector_inverts_the_exponential() -> None:
+    theta = np.array([0.3, -0.5, 0.2])
+    np.testing.assert_allclose(rotation_vector(expm(skew(theta))), theta, atol=1e-12)
+    np.testing.assert_allclose(rotation_vector(np.eye(3)), 0.0, atol=1e-15)
+
+
+def test_conjugate_fit_recovers_a_known_offset() -> None:
+    # a round continent cut in two by the lon-90 boundary; turn one half by 3° and fit it back
+    config = SolverConfig(n_particles=2500, n_ocean_particles=100, fit_window_km=800.0)
+    kin, blocks, setup = _setup(config)
+    centre = np.array([0.0, 0.0, 1.0])  # lon 90, lat 0
+    disc = kin.xyz @ centre > np.cos(np.radians(30.0))
+    touching = replace(kin, continental=disc)
+    blocks = build_blocks(touching)
+    nan = np.full(kin.n, np.nan)
+    setup = build_setup(
+        touching, blocks, kin.omega, kin.omega, nan, np.full(kin.n, -1), nan, config
+    )
+    frame = np.repeat(np.eye(3)[None], blocks.n, axis=0)
+    # on this coarse mesh (spacing ~3.6°) the fit already pulls the facing edges
+    # together; the nudge must come back on top of that
+    rot0 = conjugate_fit(setup, config, frame, np.array([0]), np.array([1]))[0]
+    nudge = expm(skew(np.radians(6.0) * np.array([0.0, 1.0, 0.0])))
+    frame[0] = nudge
+    rot, before, after, pairs = conjugate_fit(setup, config, frame, np.array([0]), np.array([1]))
+    assert pairs > 0 and after < 0.5 * before
+    left = rot @ nudge @ rot0.T
+    angle = np.degrees(np.arccos(np.clip((np.trace(left) - 1) / 2, -1, 1)))
+    assert angle < 1.5  # the 6° nudge is undone to well within a mesh spacing

@@ -60,11 +60,14 @@ def main() -> None:
     ap.add_argument("--max-iter", type=int, default=200)
     ap.add_argument("--scale", action="append", default=[], metavar="TERM=FACTOR")
     ap.add_argument("--plate-history", type=Path, default=None)
+    ap.add_argument("--fit-max-deg", type=float, default=None, help="conjugate-fit angle cap")
     ap.add_argument("--observed-age", type=Path, default=None, help="netCDF age grid (Myr)")
     ap.add_argument("--plot", action="store_true")
     args = ap.parse_args()
 
     config = SolverConfig(end_myr=args.end, n_particles=args.particles, max_iter=args.max_iter)
+    if args.fit_max_deg is not None:
+        config = replace(config, fit_max_deg=args.fit_max_deg)
     for item in args.scale:
         term, factor = item.split("=")
         if term not in TERMS:
@@ -137,6 +140,14 @@ def main() -> None:
             }
             for c in postponed
         ],
+        "conjugate_fits": [
+            {
+                **{k: v for k, v in f.items() if k not in ("weld", "moved_blocks")},
+                "weld": [blocks.names[i] for i in f["weld"]],  # type: ignore[union-attr]
+                "moved": [blocks.names[i] for i in f["moved_blocks"]],  # type: ignore[union-attr]
+            }
+            for f in res.fits
+        ],
         "contact_welds": [
             {"a": blocks.names[c.a], "b": blocks.names[c.b], "since_myr": c.since_myr}
             for c in res.contact_welds
@@ -157,6 +168,8 @@ def main() -> None:
         )
     for c in summary["contact_welds"]:
         print("contact weld", c)
+    for f in summary["conjugate_fits"]:
+        print("conjugate fit", json.dumps(f, ensure_ascii=False))
 
     if args.plot:
         import colorsys
