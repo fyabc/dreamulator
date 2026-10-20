@@ -4,7 +4,7 @@
 模型生成（90 m 地貌），水系由本库的排水算法提取（树状河网 + 内流湖），
 渲染支持输出制图与 Blender 素材。**Gaea 2 手动 GUI 构建是本链第②步的
 手动替代**（见 [gaea-video-chain.md](gaea-video-chain.md)）；引擎 DEM
-的 SPL 程序化侵蚀（`export erode`）是另一个替代，见 cli.md 与
+的 SPL 程序化侵蚀（`export build --method spl`）是另一个替代，见 cli.md 与
 [knowledge/cartography/](../knowledge/cartography/README.md)。
 
 ## 准备
@@ -25,7 +25,7 @@
    数据预下载、权重拉取）见
    [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)
    的「工程形态」一节——尤其别漏 WorldClim 一步，缺它时上游会在子进程里
-   `input()` 询问、refine 直接中止；装好后 `export refine --td <克隆路径>`
+   `input()` 询问、refine 直接中止；装好后 `export build --td <克隆路径>`
    即用（venv 的 Windows 与 Linux 布局都认）；
 4. **Blender**（第④步渲染支持）：本机安装 Blender 5.x，命令行可执行。
 
@@ -45,13 +45,13 @@ dreamulator build nacrea       # geological + climate 两层
 
 ```mermaid
 flowchart LR
-    A[① export region<br/>pack v3 数据包] --> B{② 地形来源}
+    A[① export region<br/>pack v4 数据包] --> B{② 地形来源}
     B -->|主方法| C[terrain-diffusion 细化<br/>90m 地貌重生成]
-    B -.->|替代| D[Gaea 手动构建 /<br/>export erode SPL]
+    B -.->|替代| D[Gaea 手动构建 /<br/>export build --method spl SPL]
     C --> E[水文提取<br/>排水 · 河网 · 湖]
     D --> E
-    E --> F[③ export colorize<br/>卫星真彩]
-    E --> G[③' export carto<br/>测绘/手绘/中世纪图]
+    E --> F[③ export render --style satellite<br/>卫星真彩]
+    E --> G[③' export render --style survey<br/>测绘/手绘/中世纪图]
     E --> H[④ blender region_still<br/>4K 渲染]
 ```
 
@@ -85,7 +85,7 @@ refine**（不能 `--reuse-height`）——TD 推理以温度/降水为条件场
 ## ② terrain-diffusion 细化（主方法）
 
 ```bash
-dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
+dreamulator export build data/worlds/nacrea/packs/nacrea-15_-100_550km \
     --td private/external-projects/terrain-diffusion
 ```
 
@@ -219,17 +219,17 @@ Gaea 8K 路径；有 `height.meters.npy` 走本链路径（缺的掩膜读零）
 ## ③'/④ 渲染支持（共用）
 
 ```bash
-dreamulator export colorize <pack> --gaea <pack>/refined-out   # 卫星真彩（默认带
+dreamulator export render --style satellite <pack> --gaea <pack>/refined-out   # 卫星真彩（默认带
                                                   # 植被纹理，--no-texture 关闭）
-dreamulator export carto <pack> --gaea <pack>/refined-out      # 测绘图（默认无等高线，
+dreamulator export render <pack> --style survey --gaea <pack>/refined-out      # 测绘图（默认无等高线，
                                                                 # --contours 开启）
-dreamulator export carto <pack> --style relief                 # 遥感图（自然色晕渲，
+dreamulator export render <pack> --style relief                 # 遥感图（自然色晕渲，
                                                   # 见下；同样自动回退构建目录）
-dreamulator export carto <pack> --style biome                  # 群系图（分类平色 +
+dreamulator export render <pack> --style biome                  # 群系图（分类平色 +
                                                   # 类图例；不需要构建产物，
                                                   # 无 --gaea 时自动回退
                                                   # refined-out → gaea-out → input/）
-dreamulator export carto <pack> --gaea <pack>/refined-out \
+dreamulator export render <pack> --style survey --gaea <pack>/refined-out \
     --style hand            # 旧印刷质感 / --style medieval 中世纪
 blender -b -P scripts/media/blender/region_still.py -- \
     --datadir <pack> --render still_4k.png --res 3840x2160     # 4K 静帧
@@ -284,7 +284,7 @@ topo 成图的正文：默认底图是服务端实时合成的 **topo 合成图*
 回退 input 2048²）、群系与柯本分类码（按 meta 里的图例译名）、三个
 水体掩膜、最近河段的相对累积流量与常流/非常流情相。坐标复制按钮
 直接产出 `--lat … --lon … --span-km …` 参数串，可原样贴进
-`export region/refine/carto` 命令重导出该窗口。
+`export region/build/render` 命令重导出该窗口。
 
 窗口几何是 `region_window` 的精确逆（pack v4 起为局部方位等距投影，换算与
 全球画布链共用 `map/td_canvas.py`；旧 v3 包仍按等距圆柱裁剪逆算，QA 端点按

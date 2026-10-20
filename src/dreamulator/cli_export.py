@@ -509,150 +509,225 @@ def export_region(
     console.print(f"[green]Alignment probe OK (max offset {max_off}°).[/green]")
 
 
-@export_app.command("colorize")
-def export_colorize(
-    pack: Path = typer.Argument(
-        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
-    ),
-    gaea: Path | None = typer.Option(
-        None, "--gaea", "-g", help="Gaea build output dir (default: <pack>/gaea-out)"
-    ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output dir (default: <pack>/color)"
-    ),
-    texture: bool = typer.Option(
-        True,
-        "--texture/--no-texture",
-        help="Per-biome vegetation/surface grain (Sentinel-2-style mottling; default on)",
-    ),
-) -> None:
-    """Satellite true-color compositing (video chain step ③).
-
-    Engine biomes drive the base colours; Gaea masks (slope/wear/deposits/
-    rivers/sea) modulate texture. Needs the 'media' extra (OpenEXR).
-    """
-    from dreamulator.media.satellite_color import colorize_region
-
-    gaea_dir = gaea or (pack / "gaea-out")
-    out_dir = output or (pack / "color")
-    if not (pack / "input" / "meta.json").exists():
-        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
-        raise typer.Exit(code=2) from None
-    if not gaea_dir.is_dir():
-        console.print(f"[red]Gaea output dir not found: {gaea_dir}[/red]")
-        raise typer.Exit(code=2) from None
-
-    console.print(f"Colorizing {pack}/input + {gaea_dir} → {out_dir}")
-    try:
-        paths = colorize_region(pack, gaea_dir, out_dir, texture=texture)
-    except RuntimeError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from None
-    for name, path in paths.items():
-        console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
-
-
-@export_app.command("erode")
-def export_erode(
-    pack: Path = typer.Argument(
-        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
-    ),
-    steps: int = typer.Option(30, "--steps", help="SPL time steps"),
-    dt_yr: float = typer.Option(5e4, "--dt", help="Step length (years)"),
-    k_spl: float = typer.Option(2e-7, "--k", help="Stream-power erodibility K"),
-    river_threshold: int = typer.Option(
-        RIVER_THRESHOLD_CELLS,
-        "--river-threshold",
-        help="Channel onset: upstream cells (runoff-weighted); the default "
-        "reads physically as a ~1.7 m³/s minimum mean discharge",
-    ),
-) -> None:
-    """Programmatic SPL erosion (video chain step ② programmatic variant).
-
-    Priority-Flood drainage (Barnes 2014) + implicit stream-power erosion
-    (Braun & Willett 2013), driven by the pack's own precipitation field.
-    Writes the gaea-out file vocabulary to <pack>/prog-out/ so every render
-    leg (colorize/carto/blender) consumes it unchanged.
-    """
-    from typing import cast
-
-    from dreamulator.map.prog_erosion import erode_region_pack
-
-    if not (pack / "input" / "meta.json").exists():
-        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
-        raise typer.Exit(code=2) from None
-
-    console.print(f"Eroding {pack} (steps={steps}, dt={dt_yr:.0e} yr, K={k_spl:.0e})")
-    info: dict[str, object] = erode_region_pack(
-        pack, steps=steps, dt_yr=dt_yr, k_spl=k_spl, river_threshold=river_threshold
-    )
-    rng = cast("list[float]", info["height_range_m"])
-    console.print(
-        f"  prog-out/: rivers {info['river_pct_of_land']}% of land · "
-        f"height [{rng[0]:.0f}, {rng[1]:.0f}] m"
-    )
-
-
-@export_app.command("refine")
-def export_refine(
+@export_app.command("build")
+def export_build(
     pack: Path = typer.Argument(
         help="Region pack ROOT dir (with input/ subdir), e.g. "
         "data/worlds/nacrea/packs/nacrea-15_-100_550km"
     ),
+    method: str = typer.Option(
+        "td", "--method", help="Terrain build method: td (terrain-diffusion) | spl (programmatic)"
+    ),
     td: Path | None = typer.Option(
         None,
         "--td",
-        help="terrain-diffusion repo clone (with .venv) — "
-        "external tool, see terrain-chain manual for setup (not needed with --reuse-height)",
+        help="terrain-diffusion repo clone (with .venv) — required for --method td "
+        "(not needed with --reuse-height); see terrain-chain manual",
     ),
     river_threshold: int | None = typer.Option(
         None,
         "--river-threshold",
-        help="Channel onset in upstream cells (default scales with grid: 3000 at pack resolution)",
+        help="Channel onset in upstream cells (default scales with grid)",
     ),
     coast_warp: bool = typer.Option(
-        False,
-        "--coast-warp",
-        help="Warp conditioning sea-land edges before "
-        "inference (bends straight Voronoi shorelines; off by default)",
+        False, "--coast-warp", help="Warp conditioning sea-land edges before TD inference"
     ),
     reuse_height: bool = typer.Option(
         False,
         "--reuse-height",
-        help="Skip TD inference and re-extract hydrology from the existing "
-        "refined-out/height.meters.npy (fast iteration on drainage semantics)",
+        help="TD method only: skip inference and re-extract hydrology from the cached refined DEM",
     ),
+    steps: int = typer.Option(30, "--steps", help="SPL method: time steps"),
+    dt_yr: float = typer.Option(5e4, "--dt", help="SPL method: step length (years)"),
+    k_spl: float = typer.Option(2e-7, "--k", help="SPL method: stream-power erodibility K"),
 ) -> None:
-    """Terrain-diffusion refinement + hydrology (terrain chain step ②, main).
+    """Build the high-resolution terrain of a region pack.
 
-    Regenerates the landscape at 90 m from the pack's conditioning fields
-    (inference runs in the external td venv), then extracts drainage
-    (Priority-Flood rivers + endorheic lakes). Writes <pack>/refined-out/.
+    --method td  : terrain-diffusion refinement + hydrology -> <pack>/refined-out/
+    --method spl : programmatic SPL erosion -> <pack>/prog-out/ (same legend as gaea-out)
     """
-    from dreamulator.media.terrain_refine import refine_region_pack
-
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
-    if td is None and not reuse_height:
-        console.print(
-            "[red]--td is required for a full refine (or pass --reuse-height "
-            "to re-extract from the cached refined DEM)[/red]"
-        )
-        raise typer.Exit(code=2) from None
+    if method == "td":
+        from dreamulator.media.terrain_refine import refine_region_pack
 
-    console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
-    info = refine_region_pack(
-        pack,
-        td,
-        river_threshold=river_threshold,
-        coast_warp=coast_warp,
-        reuse_height=reuse_height,
-    )
+        if td is None and not reuse_height:
+            console.print(
+                "[red]--td is required for --method td (or pass --reuse-height "
+                "to re-extract from the cached refined DEM)[/red]"
+            )
+            raise typer.Exit(code=2) from None
+        console.print(
+            f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})"
+        )
+        td_info = refine_region_pack(
+            pack,
+            td,
+            river_threshold=river_threshold,
+            coast_warp=coast_warp,
+            reuse_height=reuse_height,
+        )
+        console.print(
+            f"  refined-out/: res {td_info['res']}² · lakes {td_info['lakes_pct']}% of land · "
+            f"{td_info['river_segments']} river segments"
+        )
+        return
+    if method == "spl":
+        from typing import cast
+
+        from dreamulator.map.prog_erosion import erode_region_pack
+
+        threshold = river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS
+        console.print(f"Eroding {pack} (steps={steps}, dt={dt_yr:.0e} yr, K={k_spl:.0e})")
+        info: dict[str, object] = erode_region_pack(
+            pack, steps=steps, dt_yr=dt_yr, k_spl=k_spl, river_threshold=threshold
+        )
+        rng = cast("list[float]", info["height_range_m"])
+        console.print(
+            f"  prog-out/: rivers {info['river_pct_of_land']}% of land · "
+            f"height [{rng[0]:.0f}, {rng[1]:.0f}] m"
+        )
+        return
+    console.print(f"[red]Unknown method '{method}' — use td | spl[/red]")
+    raise typer.Exit(code=2) from None
+
+
+@export_app.command("render")
+def export_render(
+    pack: Path = typer.Argument(
+        help="Region pack ROOT dir (with input/ subdir), e.g. "
+        "data/worlds/nacrea/packs/nacrea-15_-100_550km"
+    ),
+    style: str = typer.Option(
+        "satellite",
+        "--style",
+        help="satellite | survey | hand | medieval | biome | relief | all "
+        "(all = the three user-facing HD sheets: survey topo + relief + biome)",
+    ),
+    gaea: Path | None = typer.Option(
+        None, "--gaea", "-g", help="Build dir (default: <pack>/gaea-out; also refined-out/prog-out)"
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Output dir (default: <pack>/color or <pack>/carto)"
+    ),
+    texture: bool = typer.Option(
+        True,
+        "--texture/--no-texture",
+        help="satellite only: per-biome vegetation/surface grain",
+    ),
+    title: str | None = typer.Option(None, "--title", help="Sheet title override (sheets)"),
+    res: int = typer.Option(2048, "--res", help="Sheet grid resolution"),
+    dpi: int = typer.Option(300, "--dpi", help="PNG output DPI"),
+    data_dir: Path | None = typer.Option(
+        None, "--data-dir", help="Worlds data dir (catalog body name in sheet titles)"
+    ),
+    contour_labels: bool = typer.Option(
+        False, "--contour-labels", help="Inline elevation labels on index contours"
+    ),
+    contours: bool = typer.Option(
+        False, "--contours/--no-contours", help="Draw contour lines (sheets)"
+    ),
+    biome_legend: bool = typer.Option(
+        False, "--biome-legend/--no-biome-legend", help="relief only: append biome swatches"
+    ),
+    svg: bool = typer.Option(False, "--svg/--no-svg", help="Also write the vector SVG sheet"),
+) -> None:
+    """Render a region pack: satellite true colour or a cartographic sheet."""
+    if style == "all":
+        for each in ("survey", "relief", "biome"):
+            export_render(
+                pack=pack,
+                style=each,
+                gaea=gaea,
+                output=output,
+                texture=texture,
+                title=title,
+                res=res,
+                dpi=dpi,
+                data_dir=data_dir,
+                contour_labels=contour_labels,
+                contours=contours,
+                biome_legend=biome_legend,
+                svg=svg,
+            )
+        return
+    if not (pack / "input" / "meta.json").exists():
+        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+        raise typer.Exit(code=2) from None
+    build_dir = gaea or (pack / "gaea-out")
+    if style == "satellite":
+        from dreamulator.media.satellite_color import colorize_region
+
+        if not build_dir.is_dir():
+            console.print(f"[red]Build dir not found: {build_dir}[/red]")
+            raise typer.Exit(code=2) from None
+        out_dir = output or (pack / "color")
+        console.print(f"Colorizing {pack}/input + {build_dir} → {out_dir}")
+        try:
+            paths = colorize_region(pack, build_dir, out_dir, texture=texture)
+        except RuntimeError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from None
+        for name, path in paths.items():
+            console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+        return
+    if style in ("survey", "hand", "medieval", "biome", "relief"):
+        from dreamulator.media.biome_render import biome_region
+        from dreamulator.media.carto_render import carto_region
+        from dreamulator.media.medieval_render import medieval_region
+        from dreamulator.media.relief_render import relief_region
+
+        out_dir = output or (pack / "carto")
+        if style in ("biome", "relief"):
+            fn = biome_region if style == "biome" else relief_region
+            info = fn(
+                pack,
+                out_dir,
+                gaea_dir=gaea,
+                res=res,
+                dpi=dpi,
+                data_dir=data_dir,
+                title=title,
+                svg=svg,
+            )
+            name = f"{style}.png"
+            path = out_dir / name
+            console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+            console.print(f"  classes: {info['classes']}")
+            return
+        if not build_dir.is_dir():
+            console.print(f"[red]Build dir not found: {build_dir}[/red]")
+            raise typer.Exit(code=2) from None
+        console.print(f'Rendering "{style}" sheet {pack} ({build_dir.name}) → {out_dir}')
+        if style == "medieval":
+            medieval_region(pack, out_dir, res=res, dpi=dpi, title=title, gaea_dir=gaea)
+        else:
+            carto_region(
+                pack,
+                out_dir,
+                gaea_dir=gaea,
+                res=res,
+                dpi=dpi,
+                data_dir=data_dir,
+                contour_labels=contour_labels,
+                contours=contours,
+                hand=style == "hand",
+                svg=svg,
+                title=title,
+            )
+        exts = ("hand.png",) if style == "hand" else ("png", "svg") if svg else ("png",)
+        for ext in exts:
+            path = out_dir / f"topo.{ext}"
+            console.print(
+                f"  [green]topo.{ext}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)"
+            )
+        return
     console.print(
-        f"  refined-out/: res {info['res']}² · lakes {info['lakes_pct']}% of land · "
-        f"{info['river_segments']} river segments"
+        f"[red]Unknown style '{style}' — use satellite | survey | hand | medieval | "
+        "biome | relief | all[/red]"
     )
+    raise typer.Exit(code=2) from None
 
 
 @export_app.command("clouds")
@@ -769,160 +844,96 @@ def export_clouds(
     console.print(f"  done in {elapsed:.1f}s")
 
 
-@export_app.command("carto")
-def export_carto(
-    pack: Path = typer.Argument(
-        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_90_2350km"
+@export_app.command("canvas")
+def export_canvas(
+    canvas: Path = typer.Argument(help="S1 canvas directory (canvas.json + chunks/ + climate/)"),
+    lat: float | None = typer.Option(None, "--lat", help="Window centre latitude (degrees)"),
+    lon: float | None = typer.Option(None, "--lon", help="Window centre longitude (degrees)"),
+    span_km: float = typer.Option(550.0, "--span-km", help="Square window side (km)"),
+    out_res: int = typer.Option(2048, "--out-res", help="Window raster resolution (square N×N)"),
+    stage: str = typer.Option(
+        "all", "--stage", help="all | hydrology | window (all = hydrology then window)"
     ),
     output: Path | None = typer.Option(
-        None, "--output", "-o", help="Output dir (default: <pack>/carto)"
-    ),
-    gaea: Path | None = typer.Option(
         None,
-        "--gaea",
-        "-g",
-        help="Build dir (default: <pack>/gaea-out; pass "
-        "<pack>/prog-out for programmatic-erosion builds)",
+        "--output",
+        "-o",
+        help="Output pack dir (default: <canvas>/windows/<canvas>-<lat>_<lon>_<span>km)",
     ),
-    style: str = typer.Option(
-        "survey",
-        "--style",
-        help="Sheet style: survey (contours+legend, topo.svg+topo.png) | "
-        "hand (print-artefact variant, topo.hand.png) | "
-        "medieval (parchment illustration, medieval.png) | "
-        "biome (categorical biome sheet, biome.svg+biome.png) | "
-        "relief (natural-colour shaded relief, relief.svg+relief.png)",
+    resume: bool = typer.Option(
+        True, "--resume/--no-resume", help="Resume from checksummed work files"
     ),
-    title: str | None = typer.Option(None, "--title", help="Override the default sheet title"),
-    res: int = typer.Option(2048, "--res", help="Contour grid resolution"),
-    dpi: int = typer.Option(300, "--dpi", help="PNG output DPI"),
-    data_dir: Path | None = typer.Option(
-        None, "--data-dir", help="Worlds data dir (for the catalog body name in the title)"
+    force: bool = typer.Option(
+        False, "--force", help="Re-run hydrology even when finished work files exist"
     ),
-    contour_labels: bool = typer.Option(
-        False, "--contour-labels", help="Inline elevation labels on index contours (default off)"
-    ),
-    contours: bool = typer.Option(
-        False,
-        "--contours/--no-contours",
-        help="Draw contour lines (default off — "
-        "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)",
-    ),
-    biome_legend: bool = typer.Option(
-        False,
-        "--biome-legend/--no-biome-legend",
-        help="relief style only: append biome swatches to the river-regime legend "
-        "(default off — the Blue-Marble reference imagery carries no legend)",
-    ),
-    svg: bool = typer.Option(
-        False,
-        "--svg/--no-svg",
-        help="Also write the vector SVG sheet (default off — PNG only, the SVGs run "
-        "tens of MB per sheet and no consumer needs them)",
+    threshold_cells: int = typer.Option(
+        27000,
+        "--threshold-cells",
+        help="Channel onset in runoff-weighted cells (27000 ≈ 2.1 m³/s mean "
+        "discharge at 90 m — the region chain's calibrated onset; lower values "
+        "give a denser network)",
     ),
 ) -> None:
-    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome
-    | relief.
+    """Canvas chain: out-of-core hydrology, then crop a region window.
 
-    survey = hypsometric tints + contours + legend/scale/graticule/north
-    arrow (SVG + PNG).  hand = survey with print artefacts (watercolour,
-    misregistration, re-inked lines).  medieval = parchment illustration
-    (symbol herds, ribbon title, no contours/legend).  biome = categorical
-    Whittaker biome sheet (flat class fills, palette single source,
-    class legend + graticule).  relief = natural-colour shaded relief
-    (satellite biome colour, hillshade-only terrain, bathy sea).
-    Needs the 'media' extra (OpenEXR + matplotlib).
+    One command for the user-facing action (a window pack ready for
+    `export render`); `--stage hydrology` exposes the intermediate result.
     """
-    if style not in ("survey", "hand", "medieval", "biome", "relief"):
-        console.print(
-            f"[red]Unknown style '{style}' — use survey | hand | medieval | biome | relief[/red]"
-        )
+    if stage not in ("all", "hydrology", "window"):
+        console.print(f"[red]Unknown stage '{stage}' — use all | hydrology | window[/red]")
         raise typer.Exit(code=2) from None
-    build_dir = gaea or (pack / "gaea-out")
-    if not (pack / "input" / "meta.json").exists():
-        console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
+    if not (canvas / "canvas.json").is_file():
+        console.print(f"[red]No canvas.json in {canvas} — is this a canvas dir?[/red]")
         raise typer.Exit(code=2) from None
 
-    out_dir = output or (pack / "carto")
-    if style == "biome":
-        # Biome sheet needs no build: without --gaea it falls back to the
-        # best available terrain source (refined-out → gaea-out → input/).
-        from dreamulator.media.biome_render import biome_region
-
-        console.print(f"Rendering [biome] sheet {pack} → {out_dir}")
-        info = biome_region(
-            pack,
-            out_dir,
-            gaea_dir=gaea,
-            res=res,
-            dpi=dpi,
-            data_dir=data_dir,
-            title=title,
-            svg=svg,
+    if stage in ("all", "hydrology"):
+        from dreamulator.media.canvas_pipeline import (
+            CanvasStore,
+            run_canvas_fill,
+            run_canvas_rivers,
         )
-        for ext in ("png", "svg") if svg else ("png",):
-            p = out_dir / f"biome.{ext}"
-            console.print(f"  [green]biome.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
-        console.print(f"  classes: {info['classes']}")
+
+        store = CanvasStore.load(canvas)
+        finals = list((store.work / "final").glob("r*_c*.npy"))
+        if force or len(finals) < len(store.chunks):
+            console.print(f"Running hydrology on {canvas.name} ({len(store.chunks)} chunks)")
+            stats = run_canvas_fill(store, resume=resume)
+            console.print(
+                f"  {int(stats['watersheds'])} watersheds · {stats['stages_seconds']:.1f} s"
+            )
+        else:
+            console.print(f"Hydrology already complete under {store.work}")
+        if force or not (canvas / "hydro" / "rivers.line.npy").exists():
+            run_canvas_rivers(store, threshold_cells=threshold_cells)
+
+    if stage == "hydrology":
         return
 
-    if style == "relief":
-        # Relief sheet needs no build either: same best-available fallback
-        # as the biome sheet (refined-out → gaea-out → input/).
-        from dreamulator.media.relief_render import relief_region
-
-        console.print(f"Rendering [relief] sheet {pack} → {out_dir}")
-        info = relief_region(
-            pack,
-            out_dir,
-            gaea_dir=gaea,
-            res=res,
-            dpi=dpi,
-            data_dir=data_dir,
-            title=title,
-            biome_legend=biome_legend,
-            svg=svg,
-        )
-        for ext in ("png", "svg") if svg else ("png",):
-            p = out_dir / f"relief.{ext}"
-            console.print(f"  [green]relief.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
-        console.print(f"  classes: {info['classes']}")
+    if lat is None or lon is None:
+        if stage == "window":
+            console.print("[red]--lat and --lon are required for --stage window[/red]")
+            raise typer.Exit(code=2) from None
+        console.print("[yellow]No --lat/--lon given: hydrology only (window skipped)[/yellow]")
         return
 
-    if not build_dir.is_dir():
-        console.print(f"[red]Build dir not found: {build_dir}[/red]")
-        raise typer.Exit(code=2) from None
+    from typing import cast
 
-    console.print(f'Rendering "{style}" sheet {pack} ({build_dir.name}) → {out_dir}')
-    if style == "medieval":
-        from dreamulator.media.medieval_render import medieval_region
+    from dreamulator.media.canvas_window import CanvasSource, crop_canvas_window
 
-        info = medieval_region(pack, out_dir, res=res, dpi=dpi, title=title, gaea_dir=gaea)
-        p = out_dir / "medieval.png"
-        console.print(f"  [green]medieval.png[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
-        console.print(
-            f"  symbols: {info['mountains']} mountains, {info['trees']} trees, "
-            f"{info['rivers']} river lines"
-        )
-        return
-
-    from dreamulator.media.carto_render import carto_region
-
-    info = carto_region(
-        pack,
-        out_dir,
-        res=res,
-        dpi=dpi,
-        data_dir=data_dir,
-        contour_labels=contour_labels,
-        contours=contours,
-        hand=(style == "hand"),
-        svg=svg,
-        title=title,
-        gaea_dir=gaea,
+    out_dir = output or (canvas / "windows" / f"{canvas.name}-{lat:g}_{lon:g}_{span_km:g}km")
+    source = CanvasSource.load(canvas)
+    meta = crop_canvas_window(
+        source,
+        center_lat=lat,
+        center_lon=lon,
+        span_km=span_km,
+        out_res=out_res,
+        out_dir=out_dir,
     )
-    exts = ("hand.png",) if style == "hand" else ("png", "svg") if svg else ("png",)
-    for ext in exts:
-        p = out_dir / f"topo.{ext}"
-        console.print(f"  [green]topo.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
-    console.print(f"  contours: {info['minor_levels']} minor + {info['major_levels']} index")
+    grid = cast("dict[str, int]", meta["grid"])
+    elev = cast("dict[str, float]", meta["elevation_m"])
+    ocean = float(cast("float", meta["ocean_fraction"]))
+    console.print(
+        f"Cropped {canvas.name} → {out_dir} · grid {grid['w']}×{grid['h']}"
+        f" · elev {elev['min']:.0f}…{elev['max']:.0f} m · ocean {ocean * 100:.1f}%"
+    )

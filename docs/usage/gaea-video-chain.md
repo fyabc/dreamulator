@@ -1,7 +1,7 @@
 # Gaea 2 视频素材链操作手册和踩坑记录
 
 本文档是卫星影像素材 MVP 第 ② 步的操作配方：把 `export region` 数据包
-（pack v3，契约见 [../design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)）
+（pack v4，契约见 [../design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)）
 送进 Gaea 2 做米级侵蚀，导出供第 ③ 步气候权威着色和第 ④ 步 Blender 渲染
 使用的 8K 高程与掩膜。GUI 操作细节（按钮位置、节点面板）以 KilroysKartography
 「终极写实主义」教程 Part 2（B 站转载 BV15EHR6NEoC，05:28 起）为准；本文只固定
@@ -45,7 +45,7 @@ Build Options → 左侧 Terrain 页**，不是底部的 Terrain 页签），且
   Gaea 只用它的空间分布作 0–1 乘子，毫米绝对值（量程在
   `climate.precipitation_mm.png_range`）不参与侵蚀计算。
 
-注意 pack v3 起数据包是 2048×2048 正方像素（`--out-res` 可调），标量通道
+注意数据包是 2048×2048 正方像素（`--out-res` 可调），标量通道
 （高程/降水/温度/冰厚/NPP）在 cell 中心的 Delaunay 三角网上
 Clough-Tocher C1 插值——cell 中心保真、梯度连续（C1 而非 C0 是侵蚀链的
 硬要求：线性插值的梯度在三角边上不连续，折痕是网格伪影而非地质，
@@ -188,7 +188,7 @@ graph TD
    **下溢**——海岸陆 cell（+10 m 级）紧邻深渊 cell（−10 000 m 级）时，
    三次曲面在陆侧挖出海平面以下的假盆地（对照区 C1 插值产生 45103 px
    封闭水下盆地，换线性插值只剩 1501 px；旧图可见海岸隆起+内侧凹陷的
-   振铃纹），Sea 一淹即成近岸假湖/假湾。**修复（pack v3 起）**：插值结果
+   振铃纹），Sea 一淹即成近岸假湖/假湾。**当前实现**：插值结果
    裁剪到所在三角形顶点的值域（与线性/自然邻域插值同等的局部有界保证），
    对照区伪湖降至 8069 px（残余均为触及真负值 cell 的三角形），梯度
    平滑度与 C1 持平、cell 中心值不变。修复对全部标量通道同时生效（共用
@@ -249,7 +249,7 @@ graph TD
 
 Gaea 的输出不回流引擎（地形 bake 往返协议是另一条待办线）；它的消费方是：
 
-- 第 ③ 步着色：`dreamulator export colorize <pack 目录>`——见下节。
+- 第 ③ 步着色：`dreamulator export render --style satellite <pack 目录>`——见下节。
 - 第 ④ 步 Blender：EXR 高度做位移，着色贴图做 albedo，flow 掩膜辅助
   河流/水面材质。
 
@@ -264,7 +264,7 @@ Gaea 的输出不回流引擎（地形 bake 往返协议是另一条待办线）
 
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR 读 Gaea 的高度 EXR）
-dreamulator export colorize private/video/nacrea-15_90_2350km
+dreamulator export render --style satellite private/video/nacrea-15_90_2350km
 # 读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
 ```
 
@@ -291,7 +291,7 @@ cell 痕迹——**域扭曲**（fBm 噪声扰动采样坐标，真实幅度 0.5
 `cell_pitch_km` 自适应网格密度。
 
 **着色器调参表**（全是 `satellite_color.py` 顶部常量，改后重跑
-`export colorize` 即可，无需动 Gaea）：
+`export render --style satellite` 即可，无需动 Gaea）：
 
 | 常量 | 当前值 | 作用 |
 |------|--------|------|
@@ -357,16 +357,16 @@ Sea 的 Level（右击输 `400m` 最稳，或手算 −min/Height）。
 东南 35° 暖光）。后续：低空掠海镜头、大气透视、河流水面、夜景城市
 灯光（文明层）、相机动画（视频成品主线）。
 
-## 第③'步（变体腿）：制图（export carto --style survey|hand|medieval）
+## 第③'步（变体腿）：制图（export render --style survey|hand|medieval）
 
 与第④步 Blender 平行的另一条渲染腿，共用 ①② 的产物（pack + Gaea
 构建）。**一个命令三种风格**（10-13 用户裁决收敛 CLI：medieval 不做
 子命令，作风格参数；`--title` 可自定义标题）：
 
 ```bash
-dreamulator export carto private/video/nacrea-15_-100_2350km              # survey
-dreamulator export carto <pack> --style hand                              # topo.hand.png
-dreamulator export carto <pack> --style medieval --title "珠母星 · 海"
+dreamulator export render --style survey private/video/nacrea-15_-100_2350km              # survey
+dreamulator export render <pack> --style hand                              # topo.hand.png
+dreamulator export render <pack> --style medieval --title "珠母星 · 海"
 # 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/
 ```
 
@@ -427,7 +427,7 @@ Earth 陆），`_lut_rgb` 查表上色；**查表值域用未 clamp 的引擎值
 ## 第③''步（变体腿）：中世纪羊皮纸插画图（medieval_render）
 
 ```bash
-dreamulator export carto private/video/nacrea-15_-100_2350km --style medieval
+dreamulator export render --style survey private/video/nacrea-15_-100_2350km --style medieval
 # 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/medieval.png
 ```
 
