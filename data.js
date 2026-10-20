@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792523939982,
+  "lastUpdate": 1792524864911,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -590,6 +590,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004105612778241318",
             "extra": "mean: 4.036356000000296 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "887cdc15d3abac0bad340161b401c6441a44b712",
+          "message": "Merge feature/private-refs-cleanup: 公开库清除 private/ 引用\n\n- 公开文档删除私有指针，路径改占位符；历史快照与结构说明豁免\n- 脚本/代码本地路径改由 DREAMULATOR_WORK_DIR 与 DREAMULATOR_EXPORT_DIR 指定\n- 非豁免文件 private/ 引用归零；pytest/mypy/ruff/format/doc-refs 全绿",
+          "timestamp": "2026-10-21T03:30:50+08:00",
+          "tree_id": "e3998af278a958be7c214208a9dfa40eb1612849",
+          "url": "https://github.com/fyabc/dreamulator/commit/887cdc15d3abac0bad340161b401c6441a44b712"
+        },
+        "date": 1792524864547,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3118952100217238,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1344865944959711",
+            "extra": "mean: 3.2062050581999926 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.118404253418786,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014601090351135583",
+            "extra": "mean: 320.67683299997896 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.449512831034192,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1035758918022767",
+            "extra": "mean: 689.8869596666657 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 891.6328990357215,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001290808146433515",
+            "extra": "mean: 1.1215378000088094 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.9096526529669,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010219744474379299",
+            "extra": "mean: 5.0784711999995125 msec\nrounds: 5"
           }
         ]
       }
