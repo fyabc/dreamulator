@@ -55,8 +55,10 @@ nacrea 的半径为 1.07 R⊕，取 T⊕ = 3–7 亿年：
 | 正典显生宙板块速度 | 15–25 cm/yr | 约 0.6–2.5 亿年 |
 
 几种来源合起来，理论范围约 0.3–2.5 亿年。正典的现行周期约 1.2 亿年落在范围中段，与理论相容。
-古地理倒推用到的阶段推算：nacrea 现状最老的一批陆连裂谷张裂于约 48–62 Myr 前，取 T ≈ 120 Myr，
-超大陆约在 90 Myr 前拼成，拼合碰撞落在约 90–120 Myr。这就是
+古地理倒推用到的阶段推算：正典把当代定为裂解中期，取这次裂解约 60 Myr 前开始（按引擎相对运动估算，
+现状陆连裂谷的张裂时间多在 40 Myr 以内；张开极慢的裂谷用「伸展量 ÷ 现状速率」会严重高估，因为裂谷早期
+是全速率低于 10 mm/yr 的慢速阶段、破裂前约 10 Myr 才加速，Brune 等 2016），取 T ≈ 120 Myr，超大陆约在
+90 Myr 前拼成，拼合碰撞落在约 90–120 Myr。这就是
 `data/worlds/nacrea/layers/geological/input/plate_history.yaml` 中拼合缝合带的年龄窗口。
 
 ## 参考资料
@@ -69,4 +71,6 @@ nacrea 的半径为 1.07 R⊕，取 T⊕ = 3–7 亿年：
   Geophysical Research Letters 41:2351. doi:10.1002/2014GL059595
 - Buiter S.J.H., Torsvik T.H. 2014, A review of Wilson Cycle plate margins: a role for mantle
   plumes in continental break-up along sutures? Gondwana Research 26:627. doi:10.1016/j.gr.2014.02.007
+- Brune S., Williams S.E., Butterworth N.P., Müller R.D. 2016, Abrupt plate accelerations shape rifted
+  continental margins. Nature 536:201. doi:10.1038/nature18319
 - Wilson J.T. 1966, Did the Atlantic close and then re-open? Nature 211:676. doi:10.1038/211676a0

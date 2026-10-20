@@ -53,7 +53,8 @@ def main() -> None:
         args.map_dir.resolve().parents[1] / "layers" / "geological" / "input" / "plate_history.yaml"
     )
     sutures = load_sutures(hist)
-    _, onsets = continental_rifts(kin, args.rift_cap_km)
+    # rift onsets from the engine's own relative motion (see paleo_solve.py)
+    _, onsets = continental_rifts(w.kin, args.rift_cap_km)
     blocks = build_blocks(kin, sutures, onsets)
     a = kin.area_km2
     rows = []

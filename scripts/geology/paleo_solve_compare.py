@@ -45,7 +45,9 @@ def main() -> None:
     w = World(args.map_dir)
     kin = replace(w.kin, omega=continental_speed_poles(w.kin))
     hist = args.map_dir.resolve().parents[1] / "layers" / "geological" / "input"
-    _, onsets = continental_rifts(kin, 300.0)
+    # rift onsets from the engine's own relative motion (the continental-share
+    # rescaling distorts relative motions; the rift-kinematics prior uses these)
+    _, onsets = continental_rifts(w.kin, 300.0)
     blocks = build_blocks(kin, load_sutures(hist / "plate_history.yaml"), onsets)
     cont = blocks.block >= 0
     barea = np.bincount(blocks.block[cont], weights=kin.area_km2[cont], minlength=blocks.n)

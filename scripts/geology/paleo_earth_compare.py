@@ -118,7 +118,9 @@ def main() -> None:
     # absolute speeds refer to the no-net-rotation frame (PB2002 holds the Pacific fixed)
     w.kin = replace(w.kin, omega=no_net_rotation(w.kin))
     kin = replace(w.kin, omega=continental_speed_poles(w.kin))
-    _, onsets = continental_rifts(kin, 300.0)
+    # rift onsets from the engine's own relative motion (the continental-share
+    # rescaling distorts relative motions; the rift-kinematics prior uses these)
+    _, onsets = continental_rifts(w.kin, 300.0)
     blocks = build_blocks(kin, [], onsets)
 
     rng = np.random.default_rng(args.seed)

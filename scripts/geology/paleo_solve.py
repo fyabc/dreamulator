@@ -82,7 +82,9 @@ def main() -> None:
     hist = args.plate_history or (
         args.map_dir.resolve().parents[1] / "layers" / "geological" / "input" / "plate_history.yaml"
     )
-    _, onsets = continental_rifts(kin, 300.0)
+    # rift onsets from the engine's own relative motion (the continental-share
+    # rescaling distorts relative motions; the rift-kinematics prior uses these)
+    _, onsets = continental_rifts(w.kin, 300.0)
     blocks = build_blocks(kin, load_sutures(hist), onsets)
     # seafloor ages from the engine's own poles: the continental-share
     # correction slows some ridges to a few mm/yr and inflates their ages
