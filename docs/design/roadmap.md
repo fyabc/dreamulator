@@ -119,6 +119,7 @@
 | P1 | **月度矢量场展示**（§七 24；数据链已就绪，前端懒加载抽样箭头） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P2 | 视频素材后续（Blender 链扩展：多图层数据包 / 相机动画 / 全球整球；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
+| P2 | **气象图层与太空镜头链**（L2 程序化云纹理原型 ✅ 2026-10-18：`export clouds`，球面逐点 fBm + 流场扭曲 + 卷云拉丝 + 正交预览；L1 GCM 图层包 / L3 气旋模板 / L4 时间平流 / L5 大气渲染待后续批次，触发 = 服务器气象图层包）→ spec：`private/plans/orbital-weather-globe-requirements-20261018.md` | 随服务器批 | ★★★★ |
 | P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |
 | P3 | **热点火山岛建设剖面**（潮汐固定热点岛的盾状对数剖面 + 裂谷拉长选项，替换锚定幂核；形态判据实测 → [geology-layer-improvement.md](proposals/geology-layer-improvement.md) §9；2026-10-05 立项，优先级低） | 3–5 天 | ★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |

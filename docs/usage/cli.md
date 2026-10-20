@@ -447,6 +447,28 @@ refined-out → gaea-out → input/）。操作细节见
 [usage/gaea-video-chain.md](gaea-video-chain.md) 第③'步；色表与等高距
 在 `src/dreamulator/media/carto_render.py` 顶部常量。
 
+### 程序化云纹理（export clouds）
+
+太空俯瞰镜头链的 L2 层（全球等距圆柱云不透明度贴图 + 正交球面预览）：
+
+```bash
+dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
+# 写 <out>/{clouds.png（RGBA straight alpha）, cloud_cover.png, surface.png,
+#        globe.png, meta.json}；默认 out = private/video/clouds/<world>[-<branch>]/
+# --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
+# --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
+# --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
+```
+
+大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
+等服务器 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
+律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及
+它们到生成参数的映射见
+[knowledge/climatology/cloud_field_statistics.md](../knowledge/climatology/cloud_field_statistics.md)；
+与 NASA Blue Marble 参照图的定量验收脚本在 private/video/temp/cloud_compare.py
+（透明度直方图对数线性度 / 梯度分位 / 径向功率谱三指标）。需求与分工见
+private/plans/orbital-weather-globe-requirements-20261018.md。
+
 渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
 
 ```bash
