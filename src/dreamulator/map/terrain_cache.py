@@ -265,7 +265,9 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     "boundaries": 3,  # v3: + boundary_type cell field
     # v3 (2026-09-30): deep-ocean floor clamp — continental-crust / coast-ring
     # Earth envelopes (_clamp_deep_ocean_floors in terrain_synthesizer).
-    "terrain": 3,
+    # v4 (2026-10-20): continental shelf on submerged continental crust with a
+    # continental slope; the shelf no longer relabels crust_type.
+    "terrain": 4,
 }
 
 

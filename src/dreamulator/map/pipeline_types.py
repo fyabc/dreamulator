@@ -436,9 +436,21 @@ class TerrainPipelineConfig:
     # to the young, still-surfacing portion so chains stay a compact
     # archipelago (~7 volcanoes) rather than a long bar.
     hotspot_chain_length_km: float = 1200.0
-    # Continental shelf: width in km from coastline into ocean.
-    # Earth average: 80 km; passive margins: 100–200 km.
+    # Continental shelf on/off switch (<= 0 disables the stage).  The shelf
+    # width itself is not a parameter: it is the distance from the coastline
+    # to the continent–ocean boundary of the submerged continental crust.
     shelf_width_km: float = 150.0
+    # Shelf-break depth (m below sea level) ≈ the long-term lowstand: Earth's
+    # mean break of 132 m (Shepard 1963) sits at the Last Glacial Maximum sea
+    # level of −134 m (Lambeck et al. 2014).  Closure class: approximate
+    # derivation; set per world from its own sea-level history.
+    shelf_break_depth_m: float = 130.0
+    # Legacy switch for worlds whose canonical coastline was fixed by the old
+    # distance-only shelf (the author pins lift shallow coastal cells into
+    # land, so the coastline depends on those depths).  The land mask is then
+    # decided with the old shelf and the physical shelf is written onto the
+    # remaining ocean.  New worlds leave it off.
+    shelf_legacy_coastline: bool = False
     # Coastal plain: width in km from coastline inland for gentle
     # elevation ramp-down.  Earth average: 50–100 km; wider passive
     # margins 100–200 km.

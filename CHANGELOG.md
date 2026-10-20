@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **大陆架改为铺在淹没的大陆地壳上（技术债 32，2026-10-20）**：旧算法按到海岸陆地格格心的距离赋深度，
+  海底高程只有两档（第一环约 −35 m、第二环约 −139 m），全球深度分布在 −20 至 −50 m 有约 27 M km² 的尖峰，
+  且陆坡段缺失。新算法以物理为准：陆架是淹没的大陆地壳，宽度取海岸线到陆洋边界的距离，没有宽度参数；
+  平台从岸边线性降到坡折深度 `shelf_break_depth_m`（新世界输入，约等于长期最低海面幅度，地球式默认 130 m），
+  坡折以外按约 4° 的陆坡降到原有海底；距离从海陆 Voronoi 边量起，每格取剖面在本格范围内的平均值。陆架不再
+  把洋壳改写为陆壳。nacrea 打开 `shelf_legacy_coastline`：海陆判定沿用旧陆架，物理陆架写到钉扎之后仍是
+  海洋的格子上，海陆掩膜、陆地高程与地壳类型逐格不变；海底深度分布的尖峰消失，0 至 −200 m 海底从海洋面积的
+  14.4% 降到 3.0%，多数海岸外直接是陆坡（陆洋边界贴着海岸，登记为技术债 40）；nacrea 坡折取 60 m（冷端低海面
+  约 −60 m）。驻波模块用未截断高程算地面气压，海底变化因此会传到气候（技术债 41，另行修复）。地形阶段缓存版本升至 v4。
+  物理依据见 `docs/knowledge/geology/continental_margins.md`。
+
 ## [1.1.0] — 2026-10-20
 
 ### Added

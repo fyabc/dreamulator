@@ -12,6 +12,7 @@
 - `hydrology.md` — D8 流向 / priority-flood 洼地填平 / 流量累积 / 河网分级（2026-08）
 - `inland_water_classification.md` — 内陆水体分类学：water_class × is_lake 二维语义矩阵、尺寸分界依据、各层湖语义与不变式（2026-10）
 - `coastal_geomorphology.md` — 海岸侵蚀/堆积地貌分类、潮差控制律（Davies/Hayes/Dalrymple）、44 m 巨潮差外推与 ~50 km 分辨率可表达性（2026-08）
+- `continental_margins.md` — 大陆边缘：陆架即淹没陆壳、坡折深度 = 低海面幅度 + 浪基面、陆缘类型与宽度、陆坡坡度（2026-10）
 - `ice_sheets.md` — 极地冰盖物理学：无量纲日照门、距海分域、完美塑性 Vialov 穹丘剖面与 Bedmap2 标定（2026-09）
 
 ## 关键参考

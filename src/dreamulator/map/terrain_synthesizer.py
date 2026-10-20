@@ -63,6 +63,12 @@ _TRENCH_RELIEF_M = 7000.0
 _CONTINENTAL_CRUST_FLOOR_M = -5300.0
 _COAST_RING_FLOOR_M = -6000.0
 
+# Continental slope seaward of the shelf break: mean gradient about 4° (the
+# commonly quoted average of Earth's continental slopes, e.g. Brothers et al.
+# 2018).  Closure class: observation-fitted, calibration domain = Earth's
+# margins.
+_CONTINENTAL_SLOPE_M_PER_KM = 1000.0 * float(np.tan(np.radians(4.0)))
+
 # Authored-geography uplift suppression (roadmap #9): cells inside authored
 # ocean basins / rift seas (strong negative land-bias) must not be lifted out
 # of the water by a convergent boundary that happens to cross them.  Damping
@@ -790,7 +796,7 @@ def _synthesize_gaussian(
     elevation = _apply_island_arcs(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
-    elevation = _apply_continental_shelf(mesh, elevation, config, rng)
+    elevation, deferred_shelf = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
 
@@ -798,6 +804,7 @@ def _synthesize_gaussian(
     # after every procedural stage so shelf/arcs cannot overwrite a pinned
     # strait depth or isthmus height.
     elevation = _apply_geography_pins(mesh, elevation, config)
+    elevation = _apply_deferred_shelf(mesh, elevation, config, deferred_shelf)
 
     # Isostasy: compress only the tail that exceeds physical limits.
     # Unlike global scaling (which compresses the entire distribution),
@@ -993,12 +1000,13 @@ def _synthesize_asymmetric(
         mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
     )
     elevation = _apply_interior_landforms(mesh, elevation, config, rng)
-    elevation = _apply_continental_shelf(mesh, elevation, config, rng)
+    elevation, deferred_shelf = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
+    elevation = _apply_deferred_shelf(mesh, elevation, config, deferred_shelf)
 
     # Isostasy: compress only the tail that exceeds physical limits.
     # Asymptotic (not hard-clip): the tail approaches the limit without
@@ -2410,25 +2418,232 @@ def _apply_continental_shelf(
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
-) -> np.ndarray:
-    """Exponential continental shelf depth profile from coastline.
+) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray] | None]:
+    """Continental shelf and slope (see ``_shelf_profile`` for the physics).
 
-    Finds ocean cells adjacent to land and applies a gradual depth
-    decay: z = z_shelf + (z_deep − z_shelf) · (1 − exp(−d / λ))
-    where λ = shelf_width_km / 3 (e-folding distance) and z_shelf ≈ −200m.
+    Returns ``(elevation, deferred)``.  ``deferred`` is None except under
+    ``shelf_legacy_coastline``: worlds whose canonical coastline was fixed by
+    the earlier distance-only shelf (Nacrea) keep that shelf here, because the
+    author elevation pins that follow lift some shallow coastal cells into
+    land and the coastline therefore depends on the old shelf depths.  The
+    physical profile is then returned as ``deferred`` and written onto the
+    cells that are still ocean after the pins (``_apply_deferred_shelf``).
 
     Modifies *elevation* in-place.
+    """
+    if config.shelf_width_km <= 0:
+        return elevation, None
+    # Draws kept identical in kind and order (one scalar, one per-cell array)
+    # so the downstream stages see the same RNG state.
+    shore_level = rng.uniform(-5.0, -1.0)  # shoreline depth below sea level (m)
+    shelf_noise = rng.uniform(-0.05, 0.05, size=len(mesh.cells))  # per-cell ±5%, by cell id
+    if not config.shelf_legacy_coastline:
+        touched, z_new = _shelf_profile(mesh, elevation, config, -shore_level, shelf_noise)
+        elevation[touched] = z_new
+        return elevation, None
+    touched, z_new = _shelf_profile(mesh, elevation.copy(), config, -shore_level, shelf_noise)
+    _legacy_distance_shelf(mesh, elevation, config, shore_level, shelf_noise)
+    return elevation, (touched, z_new)
 
-    References:
-      Shepard, F.P. (1963). *Submarine Geology*. Harper & Row.
-      — global average continental shelf width ~80 km, depth ~200 m.
+
+def _apply_deferred_shelf(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+    deferred: tuple[np.ndarray, np.ndarray] | None,
+) -> np.ndarray:
+    """Write the deferred physical shelf onto cells that are ocean after the pins.
+
+    The pins are applied to the physical profile too (strait pins keep the
+    final word), and the result is held below sea level so the coastline
+    fixed by the legacy shelf stays bit-identical.
+    """
+    if deferred is None:
+        return elevation
+    touched, z_new = deferred
+    sea_level = config.sea_level_offset_m
+    still_ocean = elevation[touched] <= sea_level
+    trial = elevation.copy()
+    trial[touched] = z_new
+    trial = _apply_geography_pins(mesh, trial, config)
+    cells = touched[still_ocean]
+    held = trial[cells] > sea_level - 1.0
+    elevation[cells] = np.minimum(trial[cells], sea_level - 1.0)
+    logger.info(
+        "  Continental shelf (legacy coastline): physical profile on %d ocean cells, "
+        "%d held just below sea level",
+        int(cells.size),
+        int(held.sum()),
+    )
+    return elevation
+
+
+def _shelf_profile(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+    shore_depth: float,
+    shelf_noise: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Continental shelf on submerged continental crust, continental slope beyond it.
+
+    A continental shelf is continental crust below sea level: buoyant crust
+    that the sea has drowned, planed by waves and filled by sediment down to
+    the shelf break.  Its seaward edge is the continent–ocean boundary (COB),
+    where the continental slope drops to the oceanic floor.  So the shelf
+    width of each stretch of coast is the distance from the coastline to the
+    COB of the submerged continental crust connected to it — wide where the
+    crust partition left a drowned continental margin (rift seas, inland
+    seas), zero where the COB is at the coast (subduction margins, oceanic
+    islands).  No width parameter enters.
+
+    Profile, with ``d`` the distance (km) from the coastline itself and ``W``
+    the shelf width of the nearest coast:
+
+    * shelf platform, ``0 ≤ d ≤ W``: linear from a near-surface depth at the
+      shore to the shelf break ``h_b`` (``shelf_break_depth_m``);
+    * continental slope, ``d > W``: deepening at ``tan 4°`` from the shelf
+      break (from the shore where ``W = 0``) until it meets the original
+      seafloor, which is kept where it is shallower.
+
+    The coastline is the land–ocean Voronoi edge: a coast-adjacent ocean cell
+    sits half a centre spacing from it, and distances grow through the ocean
+    by geodesic Dijkstra.  Each cell takes the profile averaged over its own
+    footprint (a disc of the cell's area projected onto the coast normal), so
+    the depth follows the coastline and crust geometry instead of the cell
+    index.  Only ocean cells change, and every new value stays below sea
+    level.
+
+    The shelf break sits at about the long-term lowstand (Earth: mean break
+    132 m, Shepard 1963; Last Glacial Maximum sea level −134 m, Lambeck et al.
+    2014), so ``shelf_break_depth_m`` is a world input derived from that
+    world's sea-level history.
+
+    Returns ``(touched, z_new)``: the changed cell ids and their elevations.
+    """
+    import heapq
+
+    sea_level = config.sea_level_offset_m
+    n = len(mesh.cells)
+    ocean = elevation <= sea_level
+    xyz = mesh.cell_xyz
+    area = np.array([c.area_km2 for c in mesh.cells])
+    footprint_r = np.sqrt(area / np.pi)
+
+    def arc_km(i: int, j: int) -> float:
+        return float(config.radius_km * np.arccos(np.clip(xyz[i] @ xyz[j], -1.0, 1.0)))
+
+    # 1. Coast-adjacent ocean cells start at half the spacing to their nearest
+    #    land neighbour (the shared Voronoi edge bisects the two centres); that
+    #    land cell is the coast source the cell's shelf width is read from.
+    dist = np.full(n, np.inf)
+    source = np.full(n, -1, dtype=np.int64)
+    for oc in np.nonzero(ocean)[0]:
+        for nid in mesh.cells[oc].neighbors:
+            if not ocean[nid]:
+                h = 0.5 * arc_km(int(oc), nid)
+                if h < dist[oc]:
+                    dist[oc] = h
+                    source[oc] = nid
+    seeds = np.nonzero(np.isfinite(dist))[0]
+    if seeds.size == 0:
+        logger.info("  Continental shelf: no coastline cells detected")
+        return np.zeros(0, dtype=np.int64), np.zeros(0)
+
+    # 2. Submerged continental crust connected to the coast (the drowned margin).
+    crust = np.array([c.crust_type or "" for c in mesh.cells], dtype=object)
+    drowned = ocean & (crust == "continental")
+    margin = np.zeros(n, dtype=bool)
+    stack = [int(i) for i in seeds if drowned[i]]
+    margin[stack] = True
+    while stack:
+        i = stack.pop()
+        for nid in mesh.cells[i].neighbors:
+            if drowned[nid] and not margin[nid]:
+                margin[nid] = True
+                stack.append(nid)
+
+    # 3. Geodesic Dijkstra through the ocean, carrying the coast source.
+    heap = [(float(dist[i]), int(i)) for i in seeds]
+    heapq.heapify(heap)
+    while heap:
+        d, i = heapq.heappop(heap)
+        if d > dist[i]:
+            continue
+        for nid in mesh.cells[i].neighbors:
+            if ocean[nid]:
+                nd = d + arc_km(i, nid)
+                if nd < dist[nid]:
+                    dist[nid] = nd
+                    source[nid] = source[i]
+                    heapq.heappush(heap, (nd, nid))
+
+    # 4. Shelf width per coast source: out to the seaward edge of the farthest
+    #    drowned-margin cell it is nearest to (the COB).
+    width = np.zeros(n)
+    for j in np.nonzero(margin)[0]:
+        width[source[j]] = max(width[source[j]], dist[j] + footprint_r[j])
+
+    shelf_break = config.shelf_break_depth_m
+    deepest = float(-(elevation[ocean].min() - sea_level))
+    reach = float(width.max()) + max(0.0, deepest - shore_depth) / _CONTINENTAL_SLOPE_M_PER_KM
+    touched = np.nonzero(np.isfinite(dist) & (dist <= reach))[0]
+    w_cell = width[source[touched]][:, None]
+
+    # Footprint average: a disc of radius r projected onto the coast normal has
+    # density ∝ sqrt(1 − u²) — Gauss–Chebyshev (second kind) nodes are exact.
+    k = np.arange(1, 8)
+    nodes = np.cos(k * np.pi / 8.0)
+    weights = np.sin(k * np.pi / 8.0) ** 2
+    weights /= weights.sum()
+    d_s = np.maximum(dist[touched, None] + footprint_r[touched, None] * nodes[None, :], 0.0)
+    has_shelf = w_cell > 0.0
+    platform = shore_depth + (shelf_break - shore_depth) * np.minimum(
+        d_s / np.where(has_shelf, w_cell, 1.0), 1.0
+    )
+    edge_depth = np.where(has_shelf, shelf_break, shore_depth)
+    slope = edge_depth + np.maximum(d_s - w_cell, 0.0) * _CONTINENTAL_SLOPE_M_PER_KM
+    profile = np.where(has_shelf & (d_s <= w_cell), platform, slope)
+    depth = (profile * weights[None, :]).sum(axis=1)
+
+    z_new = sea_level - depth * (1.0 + shelf_noise[touched])
+    on_shelf = dist[touched] <= width[source[touched]]
+    # The slope only deepens: the original seafloor wins where it is shallower
+    # (seamounts, ridges, shallow-sea features).  The shelf itself overwrites.
+    z_new = np.where(on_shelf, z_new, np.maximum(z_new, elevation[touched]))
+
+    coast_sources = np.unique(source[seeds])
+    logger.info(
+        "  Continental shelf: %d shelf + %d slope cells; %d of %d coast cells with a shelf "
+        "(median width %.0f km), break=%.0f m",
+        int(on_shelf.sum()),
+        int((~on_shelf).sum()),
+        int((width[coast_sources] > 0).sum()),
+        coast_sources.size,
+        float(np.median(width[coast_sources][width[coast_sources] > 0]))
+        if (width[coast_sources] > 0).any()
+        else 0.0,
+        shelf_break,
+    )
+    return touched, z_new
+
+
+def _legacy_distance_shelf(
+    mesh: CVTMesh,
+    elevation: np.ndarray,
+    config: TerrainPipelineConfig,
+    shore_level: float,
+    shelf_noise: np.ndarray,
+) -> None:
+    """The distance-only shelf that fixed Nacrea's canonical coastline (legacy).
+
+    Depth by graph distance from coastline land-cell centres, quadratic ramp to
+    −200 m over ``shelf_width_km``, and every cell reached relabelled as
+    continental crust.  Kept bit-exact for ``shelf_legacy_coastline`` only;
+    its depths quantise to one level per cell ring.  Modifies in place.
     """
     shelf_width = config.shelf_width_km
-    if shelf_width <= 0:
-        return elevation
     sea_level = config.sea_level_offset_m
-
-    # 1. Identify coastline cells (land with at least one ocean neighbour)
     coastline: set[int] = set()
     for i, cell in enumerate(mesh.cells):
         if elevation[i] <= sea_level:
@@ -2437,12 +2652,8 @@ def _apply_continental_shelf(
             if elevation[nid] <= sea_level:
                 coastline.add(i)
                 break
-
     if not coastline:
-        logger.info("  Continental shelf: no coastline cells detected")
-        return elevation
-
-    # 2. Geodesic BFS from coastline into ocean (only seaward cells).
+        return
     shelf_dist = geodesic_bfs(
         mesh,
         coastline,
@@ -2450,50 +2661,22 @@ def _apply_continental_shelf(
         max_dist_km=shelf_width,
         can_expand=lambda nid: elevation[nid] <= sea_level,
     )
-
-    # 3. Two-stage shelf profile: shallow platform → shelf break → deep ocean
-    shelf_edge_depth = sea_level + rng.uniform(-5.0, -1.0)  # near-surface
-    # Per-cell ±5% variation addressed by cell id (not drawn in BFS order), so
-    # the values do not shift when float noise changes the shelf's cell set.
-    shelf_noise = rng.uniform(-0.05, 0.05, size=len(mesh.cells))
-    shelf_break_depth = sea_level - 200.0  # typical shelf-break depth (m)
+    shelf_edge_depth = sea_level + shore_level
+    shelf_break_depth = sea_level - 200.0
     drop_fold = 30.0  # e-folding for the drop beyond the shelf break (km)
-    shelf_cells = 0
-    shelf_cont = 0
-
     for cid, d_km in shelf_dist.items():
         if d_km <= 0:
             continue
         orig_z = elevation[cid]
         if d_km <= shelf_width:
-            # Shelf platform: quadratic ramp (gentler near the coast).  A linear
-            # ramp reaches ~-75 m at the first 54 km cell — a hard coastal cliff.
-            # Squaring the normalised distance keeps the nearshore shallow (~-30 m
-            # at 54 km) and only steepens toward the shelf break.
             t_ramp = (d_km / shelf_width) ** 2
             z_shelf = shelf_edge_depth + t_ramp * (shelf_break_depth - shelf_edge_depth)
         else:
-            # Below shelf break: exponential drop to original ocean depth
-            d_below = d_km - shelf_width
-            t_drop = 1.0 - np.exp(-d_below / drop_fold)
+            t_drop = 1.0 - np.exp(-(d_km - shelf_width) / drop_fold)
             z_shelf = shelf_break_depth * (1.0 - t_drop) + orig_z * t_drop
-        # Random ±5% variation
         elevation[cid] = z_shelf * (1.0 + shelf_noise[cid])
-        # The continental shelf is submerged CONTINENTAL crust, not oceanic
-        # (§8 地壳类型正交化): the crust boundary should be the shelf edge,
-        # not the coastline itself.
         if mesh.cells[cid].crust_type == "oceanic":
             mesh.cells[cid].crust_type = "continental"
-            shelf_cont += 1
-        shelf_cells += 1
-
-    logger.info(
-        "  Continental shelf: %d cells (%d → continental), width=%.0f km",
-        shelf_cells,
-        shelf_cont,
-        shelf_width,
-    )
-    return elevation
 
 
 def _apply_coastal_plain(

@@ -978,7 +978,12 @@ age = max_age · d_div / (d_div + d_conv)
    点，留一小部分为内流湖。
 4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
 5. **内部地貌** `_apply_interior_landforms`（见 §7.2）。
-6. **大陆架** `_apply_continental_shelf`（`shelf_width_km`）。
+6. **大陆架** `_apply_continental_shelf`：陆架铺在与海岸相连的淹没大陆地壳上，宽度是海岸线到陆洋边界的
+   距离（`_shelf_profile`）；平台从岸边线性降到坡折深度 `shelf_break_depth_m`，坡折以外按约 4° 的陆坡降到
+   原有海底；距离从海陆 Voronoi 边量起，每格取剖面在本格范围内的平均。`shelf_width_km <= 0` 关闭此步。
+   `shelf_legacy_coastline` 为真时（nacrea），海陆判定沿用旧的按距离量化的陆架，物理陆架在钉扎之后写到
+   仍是海洋的格子上（`_apply_deferred_shelf`），海岸线逐格不变。物理依据见
+   `docs/knowledge/geology/continental_margins.md`。
 7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
    （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。
