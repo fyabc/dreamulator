@@ -7,16 +7,16 @@ bands (90 bands, 90N → 88S) for seasonal validation of the climate engine:
     - temperature   : NCEP/NCAR Reanalysis 1 ``air.mon.ltm.nc`` (12-month ltm, °C)
     - precipitation : GPCP v2.3 ``precip.mon.mean.nc`` (monthly mean, mm/day → mm/month)
 
-Both files live in ``private/tmp/climatology/``. Output is a JSON reference
+Both files live in ``<workdir>/climatology/``. Output is a JSON reference
 (``monthly_zonal_reference.json``) plus printed Python literals for pasting into
 ``validate_climate.py``.
 
 Usage::
 
     uv run python scripts/earth/generate_monthly_reference.py \
-        --temp private/tmp/climatology/ncep_air.mon.ltm.nc \
-        --precip private/tmp/climatology/gpcp_precip.mon.mean.nc \
-        --output private/tmp/climatology/monthly_zonal_reference.json
+        --temp <workdir>/climatology/ncep_air.mon.ltm.nc \
+        --precip <workdir>/climatology/gpcp_precip.mon.mean.nc \
+        --output <workdir>/climatology/monthly_zonal_reference.json
 """
 
 from __future__ import annotations

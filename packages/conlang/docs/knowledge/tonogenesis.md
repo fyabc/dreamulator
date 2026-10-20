@@ -4,7 +4,7 @@
 音变链条变成声调语言。这条链条方向明确、机制清楚，是少数可以写成
 引擎规则的历时语言演化过程之一。
 
-> 调研来源：2026-08-15 interlude 调研（见主仓 `private/research/2026-08-15-linguistics-architecture.md`）。
+> 调研来源：2026-08-15 interlude 调研。
 > 奠基文献：Haudricourt (1954)；命名与推广：Matisoff (1973)。
 
 ---

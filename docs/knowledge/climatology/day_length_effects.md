@@ -113,8 +113,8 @@ Nacrea 的 GCM 对照数字。
 
 数据来自 ExoPlaSim T42 的 712 ppm 运行（新地表），与同一模式、同一分辨率的地球工业化前运行
 对照，各取最后 10 个模式年的月平均输出。月平均只能描述风暴所处的环境，不能直接统计风暴；
-T42 网格约 300 km，也解析不出热带气旋本身。诊断脚本在私有目录
-`private/gcm/tools/extreme_weather_indices.py`。
+T42 网格约 300 km，也解析不出热带气旋本身。诊断脚本在
+`<gcm-workdir>/tools/extreme_weather_indices.py`。
 
 | 指标 | Nacrea | 地球（同模式） | 含义 |
 |---|---|---|---|

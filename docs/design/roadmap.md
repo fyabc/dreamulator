@@ -9,9 +9,6 @@
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
 > 文明种子见 `data/worlds/nacrea/layers/civilization/input/civilizations.yaml`。
-> **外部审计（2026-09-17）**：全仓评审证据包 = `private/HANDOFF-2026-09-17.md` +
-> `private/reviews/`（问题台账 20 项 N/P/R 分级、16 份 proposal 裁决、UCC 重设计、
-> 构建复现方案）；§六 M0–M4 各行指针指向对应评审文档。
 
 ---
 
@@ -22,7 +19,7 @@
 | 层级管线 | physics → chemistry → astronomy → geological → climate → ecology 全链路打通；civilization 新增宜居/农业 derived 引擎（`engine/civilization.py`），3C 半格式化 Schema 与 LLM narrate 待推进 |
 | 性能 | nacrea（200k）全量 ~13 min（地质 ~230 s + 气候 ~510 s（GW6-on）+ 生态 5 s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
-| 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选。全字段诊断 → `private/reviews/climate/climate-full-diagnosis-2026-09-29.md`；nacrea B 类诊断 → `private/reviews/climate/nacrea-b-class-diagnosis-2026-09-30.md` |
+| 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选 |
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 62 K）；季节振幅 √P 两臂后陆地 p50 4.0 K |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
 
@@ -96,17 +93,17 @@
 ## 六、实施优先级
 
 > 已完成项不在此累积：发版内容见 `CHANGELOG.md`，Phase/功能状态见 §二/§三，
-> 世界设定类决策存档见各世界 `design-notes/`。每日执行顺序见 `private/todos/today.md`。
+> 世界设定类决策存档见各世界 `design-notes/`。每日执行顺序见内部工作记录。
 
-### 外部审计里程碑（GPT-6-Astra 2026-09-17；M0/M1-P0/M2-A0 已收口，细节 = git + private/reviews/）
+### 外部审计里程碑（GPT-6-Astra 2026-09-17；M0/M1-P0/M2-A0 已收口，细节见 git 历史）
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P0** | **M1-P1 版本化开发数据包**（manifest/SHA-256/固定索引 + `data fetch` 拟议接口；交付顺序以数据包评估为准）→ `private/reviews/branch-build-bootstrap-plan-2026-09-17.md` | 1–2 周 | ★★★★★ |
-| P1 | **GUARD-01 守护轴反例修复**（同指纹事实漂移漏检、嵌套 YAML 漏检、容量归档误标、`intentional` 过宽、缺产物显示已验证）→ `private/reviews/proposals-review-2026-09-17.md` §3.3 | 3–5 天 | ★★★★ |
-| P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口）→ `private/plans/ucc-01-plan.md` | ~1 周 | ★★★★ |
-| P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后）→ `private/reviews/proposals-review-2026-09-17.md` §3 | 按所选任务 | ★★★ |
-| P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮）→ `private/reviews/climate/climate-pipeline-rethinking-2026-09-17.md` + today.md ▶ 项 | 随主线 | ★★★★★ |
+| **P0** | **M1-P1 版本化开发数据包**（manifest/SHA-256/固定索引 + `data fetch` 拟议接口；交付顺序以数据包评估为准） | 1–2 周 | ★★★★★ |
+| P1 | **GUARD-01 守护轴反例修复**（同指纹事实漂移漏检、嵌套 YAML 漏检、容量归档误标、`intentional` 过宽、缺产物显示已验证） | 3–5 天 | ★★★★ |
+| P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口） | ~1 周 | ★★★★ |
+| P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后） | 按所选任务 | ★★★ |
+| P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮） | 随主线 | ★★★★★ |
 | P2 | **宽 Hadley 体制下副热带过干**（GCM 交叉核查：nacrea 副热带降水约为 GCM 的三分之一，地球同纬带正常，属体制外推问题；首要线索为背景信风，先做规定低层风的干预实验）→ `audit/wave6-gcm-ebm-crosscheck.md` + `proposals/climate-layer-improvement.md` §7；同处登记高纬陆地季节振幅偏弱 | 随气候层开发 | ★★★★ |
 
 ### 既有待办
@@ -119,15 +116,15 @@
 | P1 | **月度矢量场展示**（§七 24；数据链已就绪，前端懒加载抽样箭头） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P2 | 视频素材后续（Blender 链扩展：多图层数据包 / 相机动画 / 全球整球；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
-| P2 | **气象图层与太空镜头链**（L2 程序化云纹理原型 ✅ 2026-10-18：`export clouds`，球面逐点 fBm + 流场扭曲 + 卷云拉丝 + 正交预览；L1 GCM 图层包 / L3 气旋模板 / L4 时间平流 / L5 大气渲染待后续批次，触发 = 服务器气象图层包）→ spec：`private/plans/orbital-weather-globe-requirements-20261018.md` | 随服务器批 | ★★★★ |
+| P2 | **气象图层与太空镜头链**（L2 程序化云纹理原型 ✅ 2026-10-18：`export clouds`，球面逐点 fBm + 流场扭曲 + 卷云拉丝 + 正交预览；L1 GCM 图层包 / L3 气旋模板 / L4 时间平流 / L5 大气渲染待后续批次，触发 = 服务器气象图层包） | 随服务器批 | ★★★★ |
 | P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |
 | P3 | **热点火山岛建设剖面**（潮汐固定热点岛的盾状对数剖面 + 裂谷拉长选项，替换锚定幂核；形态判据实测 → [geology-layer-improvement.md](proposals/geology-layer-improvement.md) §9；2026-10-05 立项，优先级低） | 3–5 天 | ★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
-| P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示）→ `private/plans/ucc-01-plan.md` v2 候选节 | 调研 1–2 天 | ★★ |
+| P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示） | 调研 1–2 天 | ★★ |
 | P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 5 | 前端 1–2 周 | ★★ |
 | P3 | **草案七转正 + Hycean 调研**（创作线）→ today.md 待办 3 | ①1–2 天 ②周级 | ★★ |
-| P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前）→ `private/plans/ucc-01-plan.md` 4e | 1–2 天 | ★★★ |
-| P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明）→ `private/plans/ucc-01-plan.md` 4e | ~1 周级 | ★★★ |
+| P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |
+| P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明） | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
 | P2 | **内陆水体物理 refine**（湖命运 P−E 判决四类结局 + 溢流湖接通河网 + rim/spill 落盘字段；语义闭合 (a)+(b) 已于 10-08 收口）→ [inland-water-refine.md](proposals/inland-water-refine.md) | 1–2 周 | ★★★ |
 | P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置；大尺度指纹可在 200k 表达）→ `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
@@ -210,8 +207,7 @@
 20. **水汽收支标定残余**（2026-08-28；守恒化已收尾）— 开放子项：
     ① ITCZ 偏强（0° 峰值 ~+800）→ 并入 债 24 月度胞圈迁移（单点杠杆已否证）；
     ② 中纬干燥（38–62°N 偏干 −300~−470 mm/yr）= 风暴路径欠输送，标定非推导
-    与 κ 有张力，**输送场全局重标定轮候选**（与 nacrea B 诊断的引擎侧结论同向，
-    → `private/reviews/climate/nacrea-b-class-diagnosis-2026-09-30.md`）；
+    与 κ 有张力，**输送场全局重标定轮候选**（与 nacrea B 诊断的引擎侧结论同向）；
     ④ D 群崩溃挂起（正确方向 = 植被掩雪，需温度×生态耦合联合标定）；
     ⑤ 海洋输送占比按风生环流推导（`ebm_diffusion_land_wm2k` 地球标定）。
 21. **低优先级杂项**（2026-08-24）：Whittaker 群系异星平移边界线；Aegis e 纪元选择
@@ -327,7 +323,7 @@
    均 2000+ 行。归 M2 必要切片 + 远期。
 6. **spatialReference.ts ~5.4 万行生成观测数据内嵌**（FE-01，2026-09-17）—
    实测 useUccLayer chunk 2.1 MB（gzip 540 KB）必载非按需；修法 = 资产化 + 按需加载。
-   归 M3。实测数 → `private/research/2026-09-29-fe-load-profile.md` §四。
+   归 M3。
 7. **API/静态导出/前端三件套手工同步、无一致性夹具**（CONTRACT-01，2026-09-17）—
    修法 = 公共结果契约 + 格式版本 + 最小静态/API 一致性夹具。归 M3。
 8. **阶段缓存对模型演化的护栏**（2026-09-30 overlays 轮暴露并修复）— 09-17 教训

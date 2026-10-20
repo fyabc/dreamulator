@@ -79,7 +79,7 @@ def main() -> None:
     parser.add_argument(
         "--data-dir",
         default=None,
-        help="obs netCDF dir (default: private/tmp/climatology)",
+        help="obs netCDF dir (default: <workdir>/climatology)",
     )
     args = parser.parse_args()
 

@@ -158,7 +158,7 @@ dreamulator 曾实现流水侵蚀（Fastscape 式隐式 stream power + 坡面扩
 **结论**：51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见
 河谷，ETOPO1 导入 200k 实测确认）。流水侵蚀从 200k 地质引擎移除；河网可见性由
 **矢量河流图层**承担，河谷雕刻归 **Gaea 局地精修**。大陆内部低地由地形合成的
-「内部低地」解决（非侵蚀）。执行清单见 `private/todos/today.md` #5。
+「内部低地」解决（非侵蚀）。执行清单见内部工作记录 #5。
 
 ### 4.2.2 构造-地表过程耦合：业界做法调研（2026-08-26）
 
@@ -199,7 +199,7 @@ K₀ 下 nacrea 100 Myr 起伏度 1365→37 m）。各引擎如何处理构造�
 | **程序化云生成工业实现**（Guerrilla Decima HZD / Frostbite / SatelliteCloudGenerator / Gaia Sky / CloudNoiseGen） | weather map 三通道契约、形状/侵蚀噪声分离、locality 尺度多变、球面 3D 采样无缝、Perlin-Worley 平铺体积噪声 | L2 云纹理与 L1 图层包契约的对照系；取舍明细见 [knowledge/climatology/cloud_generation_competitors.md](../knowledge/climatology/cloud_generation_competitors.md) |
 | [**climlab**](https://climlab.readthedocs.io/) | Python 气候建模工具箱：EBM/RCE/辐射对流。Brian Rose (SUNY Albany) | Dreamulator 同架构（Python 纯函数模块）；其 `climlab.EBM` 类（1D 纬度能量平衡模型，解 `0 = D∇²T + Q(φ)(1−α) − (A+BT)`）是温度模型「sin² → 正式 EBM 求解」的直接对标 |
 | [**ExoCAM**](https://github.com/storyofthewolf/ExoCAM) | CESM 的系外行星分支 | 与 ExoPlaSim 同赛道；全复杂度 |
-| [**worldbuildingpasta**](https://worldbuildingpasta.blogspot.com)（实践者博客，2019–2026） | 硬科幻世界构建「教学 + 公式 + 亲手模拟」：[Climate Explorations](https://worldbuildingpasta.blogspot.com/2022/07/climate-explorations-supplement-climate.html) 系列 = ExoPlaSim 单参数扫描画廊（倾角/日长/离心率/[压强](https://worldbuildingpasta.blogspot.com/2025/11/climate-explorations-pressure.html)/[行星尺寸](https://worldbuildingpasta.blogspot.com/2026/04/climate-explorations-planet-size.html)，附公开的断点续跑跑批 harness）；[宜居卫星昼夜几何](https://worldbuildingpasta.blogspot.com/2025/09/day-and-night-on-habitable-moons.html)与[多体潮汐](https://worldbuildingpasta.blogspot.com/2024/05/hurried-thoughts-multiple-moon-tides.html)第一性公式；[Li 2022](https://worldbuildingpasta.blogspot.com/2023/08/hurried-thoughts-phanerozoic-koppen.html) / [Farnsworth 2023](https://worldbuildingpasta.blogspot.com/2026/07/public-climate-data-explorations-pangea.html) 公共 GCM 数据应用 | 同方法论实践者、工具层互补（手算/跑批 vs 自动引擎）；扫描画廊与数据源清单 = 引擎响应对照与 GCM 离线参照臂的现成基准；逐篇判定 → `private/research/2026-09-27-wbp-site-survey.md` |
+| [**worldbuildingpasta**](https://worldbuildingpasta.blogspot.com)（实践者博客，2019–2026） | 硬科幻世界构建「教学 + 公式 + 亲手模拟」：[Climate Explorations](https://worldbuildingpasta.blogspot.com/2022/07/climate-explorations-supplement-climate.html) 系列 = ExoPlaSim 单参数扫描画廊（倾角/日长/离心率/[压强](https://worldbuildingpasta.blogspot.com/2025/11/climate-explorations-pressure.html)/[行星尺寸](https://worldbuildingpasta.blogspot.com/2026/04/climate-explorations-planet-size.html)，附公开的断点续跑跑批 harness）；[宜居卫星昼夜几何](https://worldbuildingpasta.blogspot.com/2025/09/day-and-night-on-habitable-moons.html)与[多体潮汐](https://worldbuildingpasta.blogspot.com/2024/05/hurried-thoughts-multiple-moon-tides.html)第一性公式；[Li 2022](https://worldbuildingpasta.blogspot.com/2023/08/hurried-thoughts-phanerozoic-koppen.html) / [Farnsworth 2023](https://worldbuildingpasta.blogspot.com/2026/07/public-climate-data-explorations-pangea.html) 公共 GCM 数据应用 | 同方法论实践者、工具层互补（手算/跑批 vs 自动引擎）；扫描画廊与数据源清单 = 引擎响应对照与 GCM 离线参照臂的现成基准 |
 
 **游戏侧快速气候引擎参照（2026-08-21 调研）**：Gleba（Calandiel）闭源，但同作者的
 SotE FOSS 版 SongsOfGPL（Lua，`github.com/Calandiel/SongsOfGPL`）**含完整气候代码**
@@ -237,7 +237,7 @@ Stommel 线化洋流 → 全球严格守恒的柱水汽收支（地形雨在预�
 参照臂**（GPL、无数据 API、精度不及 ExoPlaSim），而是同模型类的**验证工装参照实现**（分阶段打分、
 truth-swap 归因、大洲等权「任何大洲不得更差」接受规则、文献先验表、合成测试行星物理门槛、inert-lever
 probe）与一批已测量的负结果（锋面雨、风暴路径、湿暖定位雨带、细化气候网格均无效）。GPL 代码一行不
-抄；方法数字引用须回溯原始文献。完整报告 `private/research/2026-10-20-orogen-studio-climate-engine.md`。
+抄；方法数字引用须回溯原始文献。
 
 ### 4.4 生态层
 
@@ -454,9 +454,8 @@ beta，一次性买断）。定位「行星尺度中间层，不替代地形工�
 ## 九、视图配置业界对照（2026-10-17 调研）
 
 「同一份世界数据提供哪些视图（2D 平面图、3D 球面、投影切换）」的业界分布，服务于前端
-视图精简决策。逐工具证据（官网原文、changelog、官方论坛与 issue）存私有调研档
-（`private/research/2026-10-17-view-simplification-competitors.md`）；本节只登记对配置
-决策有效的结论。
+视图精简决策。逐工具证据（官网原文、changelog、官方论坛与 issue）已另行存档；
+本节只登记对配置决策有效的结论。
 
 | 阵营 | 代表 | 做法 | 对 dreamulator 的启示 |
 |------|------|------|---------------------|

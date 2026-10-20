@@ -58,10 +58,6 @@ def _data_dir() -> Path:
     if env:
         return Path(env)
     root = _find_project_root()
-    # Prefer private/ over data/ for local dev (mirrors CLI default)
-    private = root / "private" / "worlds"
-    if private.exists():
-        return private
     return root / "data" / "worlds"
 
 

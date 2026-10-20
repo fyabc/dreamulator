@@ -470,7 +470,7 @@ def classify_v1(d: ClimateDescriptors, *, is_land: bool) -> UCCClassV0:
 
 # ---------------------------------------------------------------------------
 # Classification profile v2 (ucc-v2, frozen 2026-10-04 after the seasonality
-# L2 ablation — private/reviews/ucc-v2-seasonality-l2-2026-10-04.py)
+# L2 ablation — internal experiment)
 # ---------------------------------------------------------------------------
 
 PROFILE_V2 = "ucc-v2"

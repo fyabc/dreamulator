@@ -7,7 +7,7 @@
 ## 定位
 
 前端 200k cell 的实时展示（~51 km/格的信息密度）对视频素材「用处不大、地位
-尴尬」；视频计划（`private/plans/bilibili-video-plan.md` §四-B）的硬约束是
+尴尬」；视频计划的硬约束是
 「全球/区域尺度镜头必须走 Blender，前端录屏只用于 UI/FUI 镜头」。本链路把
 引擎产出的世界数据交给外部渲染器：**区域数据包 → bpy 脚本重建场景 → Cycles
 渲染静帧/动画**，全链 CLI 可复现、不入库任何二进制工程（脚本重建工程模式）。
@@ -22,7 +22,7 @@ nacrea 永耀岛 (0, 0) 2500 km。
 dreamulator export region <world> --lat .. --lon .. --span-km ..
         │  (src/dreamulator/map/region_export.py)
         ▼
-private/video/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
+<render-workdir>/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
   ├─ input/   引擎导出通道（下表）
   ├─ gaea-out/   Gaea 构建产物（见 gaea-video-chain.md）
   └─ color/      着色产物（export render --style satellite）
@@ -90,7 +90,7 @@ Köppen 与群系另有 `legend` 类别码 → 类名映射，类别码在全网
 float32，而 `elevation.png` 是构建期用内存 f64 网格栅格化的。区域包用盘上
 mesh 重新 NN 栅格化，约 1% 像素的并列最近邻会翻到相邻 cell（孤立散点、多在
 深海、量级几十米）。验收口径：与 elevation.png 的海陆符号一致率 ≥ 99.9%、
-平均差 < 5 m 即判对齐（验证脚本 `private/research/2026-10-blender-region/`）。
+平均差 < 5 m 即判对齐。
 回贴链（Gaea round-trip）将来比较时应对 cell 空间，勿对 PNG 逐字节。
 
 ## 与相邻链路的关系
@@ -103,8 +103,8 @@ mesh 重新 NN 栅格化，约 1% 像素的并列最近邻会翻到相邻 cell�
   本链是纯消费者，无交互。
 - **资产管理约定**：正式 CLI 入 in-package（`dreamulator export region`，
   与 `export layers` 同族）；Blender 专属胶水入 `scripts/media/blender/`；
-  数据包与渲染输出入 `private/video/<项目>/`（不入 git）；试验脚本入
-  `private/research/<topic>/`。
+  数据包与渲染输出入 `<render-workdir>/<项目>/`（不入 git）；试验脚本另存本地
+  工作目录。
 
 ## 硬件与渲染参数基线（2026-10-02 实测）
 
@@ -120,8 +120,7 @@ Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise
   2026-10-05 调研通过并接受为管线方案（用户裁决：先用之，不够再改进）——
   nacrea 永耀岛 550 km 实测：海岸线符号一致率 97.5% @SNR 0.2、同 seed
   逐位确定、0.6 s/tile @3060 6 GB；注意其温度通道是海平面口径、条件须
-  重采样到模型粗格 23 km/px。脚本与报告在
-  `private/research/2026-10-terrain-diffusion/`。产品化形态 =
+  重采样到模型粗格 23 km/px。产品化形态 =
   `export region` 气候通道档 + 独立 venv 子进程调用（不 import 其代码）；
   「编造细节」需与纯数据渲染可区分（细化层独立成包，不覆盖原始通道）。
 - 多图层数据包（temperature/precipitation/koppen 区域裁剪 + Blender 材质切换），
@@ -134,7 +133,6 @@ Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise
 
 ## 参考
 
-- 需求 SoT：`private/plans/bilibili-video-plan.md` §四/§四-B/§五
 - Gaea 链接口词汇：`docs/design/proposals/gaea-refinement.md` §2/§3/§6
 - 区域导出实现：`src/dreamulator/map/region_export.py`、`src/dreamulator/cli_export.py`
 - bpy 场景构建：`scripts/media/blender/region_still.py`

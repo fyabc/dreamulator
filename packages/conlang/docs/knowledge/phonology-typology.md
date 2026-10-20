@@ -4,7 +4,7 @@
 的跨语言统计分布，作为设计架空语言音系时的"真实性先验"——音库大小和
 组合方式不是自由参数，它们之间存在统计耦合。
 
-> 调研来源：2026-08-15 interlude 调研（见主仓 `private/research/2026-08-15-linguistics-architecture.md`）。
+> 调研来源：2026-08-15 interlude 调研。
 > 主要数据源：UPSID（Maddieson 1984，扩展版 566 种语言）、PHOIBLE 2.0（2000+ 语言）、WALS Online。
 
 ---

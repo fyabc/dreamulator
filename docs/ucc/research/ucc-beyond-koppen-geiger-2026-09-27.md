@@ -8,8 +8,6 @@
 > <https://worldbuildingpasta.blogspot.com/2025/03/beyond-koppen-geiger-climate.html>、
 > Part III（2025-05，系统自评）
 > <https://worldbuildingpasta.blogspot.com/2025/05/beyond-koppen-geiger-climate.html>。
-> 三篇全文的抓取存档在 `private/research/ucc-beyond-koppen-geiger-part{1,2,3}.md`
-> （private 目录不入 git；原文因版权不转载进仓库，仅存档供内部核对）。
 > 对照材料：`docs/ucc/specification.md`、`docs/ucc/design-anchors.md`、
 > `docs/ucc/research/ucc-body-climate-taxonomy-2026-09-21.md`。
 > 本文性质：UCC 参照调研——对灰色文献（个人博客，非同行评审）的实践者方法论
@@ -152,8 +150,7 @@ productivity 旋钮补偿后 CD（温和）带又整个消失**。作者的总�
 1. **GrS（GDD 加权降水除以未加权 AET）及其失败替代方案清单**——判定：借鉴。
    作者在试出 GrS 之前把 GAr/Ar 比、累积亏缺、加权 AET 对比等几十种替代都
    试过并记录为更差，这是 UCC v2 候选「雨热相位描述量」与「季节性轴」的实现级
-   先例，而且附送现成的负结果库防止我们重试。去向：`private/plans/ucc-01-plan.md`
-   「v2 候选」节引用。
+   先例，而且附送现成的负结果库防止我们重试。
 2. **光照 regime 词汇**（GDDl、TF/TG/Ofg 类别、约 200 W/m² 光合减速阈值、
    「黑暗压过干旱」的优先级规则）——判定：借鉴。轴 D（光照 regime）从「词汇
    方案评级 A」升级为「有工作先例」。去向：taxonomy 轴 D 证据段 +
@@ -217,8 +214,7 @@ Hargreaves 等为博客转述、元数据核实级，按需再升级）。原草
 > Bioclimate Classification System" (2025-03), "Part III: Assessing the Pasta
 > Bioclimate Classification System" (2025-05).
 > worldbuildingpasta.blogspot.com。灰色文献（博客，非同行评审）；实践者
-> 方法论参照。全文存档 → `private/research/ucc-beyond-koppen-geiger-part{1,2,3}.md`
-> （2026-09-27 抓取）。要点：PBS = biome 预测导向的 Köppen 替代；9 参数
+> 方法论参照。要点：PBS = biome 预测导向的 Köppen 替代；9 参数
 > （GDD/GDDz/GDDl、GInt、Ar/GAr/GrS/Evr、MinIce/MinT/MaxT）；T/C/H/E/A/O 群
 > + 优先级规则；光照与热中断一等化；ExoPlaSim 生态；per-model 阈值重调
 > （GrS 1.15→0.8）自认。

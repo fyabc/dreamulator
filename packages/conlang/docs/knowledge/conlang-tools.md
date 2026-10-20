@@ -5,8 +5,7 @@
 工具（同源推断、谱系建树）。前者提供音变规则 DSL 的设计参照，
 后者提供校验回路（"比较法往返"）的算法来源。
 
-> 调研来源：2026-08-15 interlude 调研（完整版含全部链接见主仓
-> `private/research/2026-08-15-conlang-methodology-tools.md`）。
+> 调研来源：2026-08-15 interlude 调研。
 
 ---
 

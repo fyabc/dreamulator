@@ -11,16 +11,16 @@ spelled out and the surface files located by their recorded hashes.  Needs the `
 environment (netCDF4).
 
 Example:
-    python scripts/climate/gcm/gcm_runs_appendix.py private/gcm/runs/t42o/* \\
-        private/gcm/runs/t42a/* --out /tmp/appendix.md --preamble /tmp/preamble.md
+    python scripts/climate/gcm/gcm_runs_appendix.py <gcm-workdir>/runs/t42o/* \\
+        <gcm-workdir>/runs/t42a/* --out /tmp/appendix.md --preamble /tmp/preamble.md
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import json
+import os
 import shlex
 import sys
 from pathlib import Path

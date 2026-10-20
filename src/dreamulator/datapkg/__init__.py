@@ -7,8 +7,7 @@ fingerprint).  A small, git-committed index pins the immutable asset address +
 package digest; the ``data fetch`` CLI command resolves the effective recipe,
 finds the matching index entry, verifies and atomically installs it.
 
-See docs/design/roadmap.md §六 M1-P1 and
-private/reviews/github-data-bootstrap-evaluation-2026-09-17.md.
+See docs/design/roadmap.md §六 M1-P1.
 """
 
 from dreamulator.datapkg.fingerprint import (

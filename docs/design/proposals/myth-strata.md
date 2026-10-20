@@ -202,8 +202,6 @@ ground truth**：
 ## 参考资料
 
 - 知识底座：`docs/knowledge/sociology/myth-phylogenetics.md`
-- 调研全文：主仓 `private/research/2026-08-15-pcm-cultural-phylogenetics.md`、
-  `2026-08-15-myth-case-studies.md`
 - Graça da Silva, S. & Tehrani, J. J. (2016). *R. Soc. Open Sci.* 3: 150645.
 - Tehrani, J. J. (2013). *PLOS ONE* 8: e78871.
 - Nunn, P. D. & Reid, N. J. (2016). *Australian Geographer* 47: 11–25.

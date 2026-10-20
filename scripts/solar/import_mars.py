@@ -32,7 +32,7 @@ Mars lives inside the real-world reference anchor (``earth`` world, planet_id
 Time contract: bins are Martian months = 686.98/12 ≈ 57.25 Earth-days each;
 ``p_total`` is per Martian year; AI/deficit are window-invariant.
 
-Data cache: ``private/tmp/solar/mars/`` (re-download when missing).
+Data cache: ``<workdir>/solar/mars/`` (re-download when missing).
 
 Usage:
     uv run python scripts/solar/import_mars.py [--mesh-nodes 10000]
@@ -42,6 +42,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -62,7 +63,7 @@ from dreamulator.import_solar_common import (  # noqa: E402
     write_ucc_yearly,
 )
 
-_CACHE = _ROOT / "private/tmp/solar/mars"
+_CACHE = _ROOT / os.environ.get("DREAMULATOR_WORK_DIR", "work") / "solar" / "mars"
 _MOLA_IMG = "megt90n000cb.img"
 _MOLA_URL = (
     "https://pds-geosciences.wustl.edu/mgs/"

@@ -25,9 +25,9 @@ polite: 2.5 s between requests; ``--max-time`` guards against silent hangs.
 
 Usage:
     uv run python scripts/solar/fetch_lmd_slices.py --db mcd --var t \
-        --prefix mcd_t --out-dir private/tmp/solar/mars
+        --prefix mcd_t --out-dir <workdir>/solar/mars
     uv run python scripts/solar/fetch_lmd_slices.py --db vcd --var tsurf \
-        --prefix vcd_tsurf --out-dir private/tmp/solar/venus
+        --prefix vcd_tsurf --out-dir <workdir>/solar/venus
 """
 
 from __future__ import annotations

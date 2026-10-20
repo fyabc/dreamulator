@@ -387,7 +387,7 @@ def export_region(
         "--output",
         "-o",
         help="Pack ROOT dir (channels land in <root>/input/; "
-        "default: private/video/<world>-<lat>_<lon>_<span>km)",
+        "default: <data-dir>/<world>/packs/<world>-<lat>_<lon>_<span>km)",
     ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
@@ -746,7 +746,8 @@ def export_clouds(
         None,
         "--output",
         "-o",
-        help="Output dir (default: private/video/clouds/<world>[-<branch>]/)",
+        help="Output dir (default: <export-dir>/clouds/<world>[-<branch>]/; "
+        "export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
     ),
     globe_res: int = typer.Option(1600, "--globe-res", help="Globe preview resolution"),
     center_lon: float = typer.Option(90.0, "--center-lon", help="Globe view centre longitude"),
@@ -806,9 +807,10 @@ def export_clouds(
     sea_level = meta.sea_level_m if meta else 0.0
     radius_km = read_radius_km(map_dir, world_dir)
 
-    out_dir = output or (
-        Path("private") / "video" / "clouds" / (world + (f"-{branch}" if branch else ""))
-    )
+    import os
+
+    export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
+    out_dir = output or (export_root / "clouds" / (world + (f"-{branch}" if branch else "")))
     console.print(
         f"Synthesising cloud texture for {world}/{planet_id} "
         f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"

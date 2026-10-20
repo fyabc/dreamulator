@@ -8,7 +8,7 @@ Two modes:
 
 Flame graphs (sampling profiler, recommended for hotspot analysis):
 
-    uv run py-spy record -o private/prof/flame.svg -- \
+    uv run py-spy record -o <profile-dir>/flame.svg -- \
         uv run dreamulator build WORLD --force
 
 See docs/design/profiling.md for the full workflow.

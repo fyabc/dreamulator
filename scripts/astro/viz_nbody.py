@@ -11,13 +11,13 @@
 用法示例（repo 根目录）：
   uv run python scripts/astro/viz_nbody.py live --t-end 2000 --port 1234
   uv run python scripts/astro/viz_nbody.py dump --t-end 5000 --sample-every 2 \
-      --out private/tmp/viz/states.npz
-  uv run python scripts/astro/viz_nbody.py replay --npz private/tmp/viz/states.npz \
-      --mode static --zoom sat --out private/tmp/viz/orbits_sat.png
-  uv run python scripts/astro/viz_nbody.py replay --npz private/tmp/viz/states.npz \
-      --mode anim --zoom sat --stride 4 --out private/tmp/viz/orbits.gif
-  uv run python scripts/astro/viz_nbody.py replay --npz private/tmp/viz/states.npz \
-      --mode diag --out private/tmp/viz/diag.png
+      --out <workdir>/viz/states.npz
+  uv run python scripts/astro/viz_nbody.py replay --npz <workdir>/viz/states.npz \
+      --mode static --zoom sat --out <workdir>/viz/orbits_sat.png
+  uv run python scripts/astro/viz_nbody.py replay --npz <workdir>/viz/states.npz \
+      --mode anim --zoom sat --stride 4 --out <workdir>/viz/orbits.gif
+  uv run python scripts/astro/viz_nbody.py replay --npz <workdir>/viz/states.npz \
+      --mode diag --out <workdir>/viz/diag.png
 """
 
 from __future__ import annotations

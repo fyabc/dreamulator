@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -207,10 +208,9 @@ _DAYS_PER_MONTH = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dty
 # frontend hardcodes this.  Observation files are January-first, so reorder.
 _MARCH_FIRST = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1]
 
-# Local observation data under private/tmp/climatology/ (gitignored).
-_NCEP_AIR = "private/tmp/climatology/ncep_air.mon.ltm.nc"
-_NCEP_SLP = "private/tmp/climatology/ncep_slp.mon.ltm.nc"
-_GPCP = "private/tmp/climatology/gpcp_precip.mon.mean.nc"
+# Local observation data under $DREAMULATOR_WORK_DIR/climatology (default
+# work/climatology, gitignored).
+_WORK_DIR = Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
 _SODA_CURRENTS_NC = "soda_currents_mon_clim.nc"
 
 
@@ -517,7 +517,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
     from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model, save_cvt_mesh
 
     project_root = _find_project_root()
-    data_dir = data_dir or (project_root / "private/tmp/climatology")
+    data_dir = data_dir or (project_root / _WORK_DIR / "climatology")
     beck_path = (
         Path(__import__("tempfile").gettempdir())
         / "dreamulator_koppen"

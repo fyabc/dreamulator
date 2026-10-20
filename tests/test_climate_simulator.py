@@ -976,7 +976,7 @@ class TestConvergenceSentinel:
         )
 
 
-# ── D1: low-Froude flow splitting (设计 → private/research/2026-09-26-d1-fr-blocking-design.md) ──
+# ── D1: low-Froude flow splitting (设计见 docs/design/proposals/climate-layer-improvement.md) ──
 
 
 def test_froude_climb_share_supercritical_unchanged() -> None:

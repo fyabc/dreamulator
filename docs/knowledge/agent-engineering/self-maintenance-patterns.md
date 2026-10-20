@@ -101,7 +101,7 @@ agent 贡献仓库的规则写成文件：PR 需 Summary+Verification、附本�
 新兴工具（[CanonGuard](https://peerpush.com/p/canonguard)、[LitMemo](https://www.producthunt.com/p/litmemo)）
 都在解决 **lore drift**，解法高度一致：`Status: Canon` 元数据标记、scratchpad 隔离非 canon 想法、
 canon ledger + 证据链接、AI consistency guardian 扫描矛盾。→ 全部映射到 Dreamulator 决策记录的
-`status` / `private/tmp` / 台账 / `/grill-world`。
+`status` / `<workdir>` / 台账 / `/grill-world`。
 
 ---
 

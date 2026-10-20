@@ -17,7 +17,7 @@ min over the pack's ``height_gaea_png_range_m``), then the raw engine pack
 
 Usage (Blender's bundled Python — args after ``--`` are ours):
     blender -b -P scripts/media/blender/region_still.py -- \
-        --datadir private/video/nacrea-15_-100_2350km \
+        --datadir <pack-dir> \
         [--render renders/still_001.png] [--res 1920x1080] \
         [--samples 256] [--zscale 1.0] [--mesh-res 2048] \
         [--terrain auto|refined|gaea|input] [--subsurf 0] [--blend out.blend]

@@ -1,6 +1,6 @@
 # UCC 专项评审与重新设计：气候描述、分类和验证
 
-日期：2026-09-17；代码核对基线 `450981a`（v0.37.0）。评审对象：2026-09-14 设计提案（清理后的保留部分 = [design-anchors.md](../design-anchors.md)，全文见 git 历史）。本文合并原专项评审与 rethink 方案，是 UCC 评审、设计建议和验证计划的唯一维护正文（2026-09-24 自 private/reviews 迁入库）。
+日期：2026-09-17；代码核对基线 `450981a`（v0.37.0）。评审对象：2026-09-14 设计提案（清理后的保留部分 = [design-anchors.md](../design-anchors.md)，全文见 git 历史）。本文合并原专项评审与 rethink 方案，是 UCC 评审、设计建议和验证计划的唯一维护正文（2026-09-24 迁入库）。
 
 **已确认前提：接受 Köppen 的局限性，不要求 UCC 精确复现 Köppen。** 下述 Cfa/Cfb 反例说明分类码不能无损反推 Köppen，不把这项差异本身视为 UCC 失败。本文保留独立命名和跨世界描述的目标，调整实现范围与验收方式。
 
@@ -32,7 +32,7 @@ UCC 的统一性应来自一致的变量含义和计算契约。Earth 与 Nacrea
 
 按原提案节点解释，两者同为 `C3/C12o-Wu-Pf`；当前 `koppen_classify()` 分别得到 `Cfb`、`Cfa`。原 UCC 码未保留最热月是否达到 22°C 的区别，所以别名表无法唯一恢复 Köppen。需要时从原始月度序列独立计算 Köppen，并列保存即可。
 
-PET 在这里是受控输入，不是对两个气候运行完整 PET 模型得到的结果；UCC 码按原提案解释，并非已有正式 UCC 实现。证据见反例脚本 `private/reviews/proposal-review-probes-2026-09-17.py` 和结果 `private/reviews/proposal-review-probes-2026-09-17.json`（未入库）。它支持撤除无损映射承诺，不要求为了分开 Cfa/Cfb 而再加一条 UCC 规则。若报告两种分类的差异，应说明全样本与分歧来源，不通过排除不一致样本改善分数。
+PET 在这里是受控输入，不是对两个气候运行完整 PET 模型得到的结果；UCC 码按原提案解释，并非已有正式 UCC 实现。它支持撤除无损映射承诺，不要求为了分开 Cfa/Cfb 而再加一条 UCC 规则。若报告两种分类的差异，应说明全样本与分歧来源，不通过排除不一致样本改善分数。
 
 ## 2. 文献给出的关键启发
 
@@ -186,7 +186,7 @@ P=0、Eref>0 时 AI=0；P=Eref=0 时 AI 未定义。P>0、Eref=0 应单列“无
 
 ## 5. Earth 与 Nacrea：同一套语义，分别验证输入能力
 
-Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年；详见共有物理评审 `private/reviews/climate/earth-nacrea-shared-physics-2026-09-17.md`（未入库）。
+Nacrea 对 Aegis 同步，不是对 Ignis 同步。当前设定约 3.147 地球日自转/绕母星周期、约 3.25 地球日太阳日、约 100 地球日周年。
 
 | 同步对象 | 近乎固定的天空对象 | 恒星昼夜含义 |
 |---|---|---|
@@ -248,7 +248,7 @@ Earth 初期人工审阅可选择约 20–30 个代表地点，但这不是统�
 
 ### 6.3 本轮已经执行的测试
 
-合成实验脚本 `private/reviews/ucc-design-experiments-2026-09-17.py` 与结果 JSON `private/reviews/ucc-design-experiments-2026-09-17.json`（未入库）中，**26 项描述量语义检查通过**。
+合成实验中，**26 项描述量语义检查通过**。
 
 其中两个直观结果：
 
@@ -314,4 +314,4 @@ Earth 初期人工审阅可选择约 20–30 个代表地点，但这不是统�
 
 另外检索了 Feng、Porporato 与 Rodríguez-Iturbe（2013）的 *Changes in rainfall seasonality in the tropics*（[10.1038/nclimate1907](https://doi.org/10.1038/nclimate1907)）及 Walsh & Lawler（1981）的降水季节性工作；未据此声称已复现其公式。原提案的 Olcott & Lora 2024 Titan 分类来源，本轮未独立核实，不能用作已确认的关键依据，也不能据此断言它不存在。“不存在同类工作”“本方案首次物理锚定”的优先权表述亦不受本次检索支持。
 
-复核材料（均在 `private/reviews/`，未入库）：检索脚本 `ucc-literature-search-2026-09-17.py`、检索结果 `ucc-literature-search-2026-09-17.json`、来源获取脚本 `ucc-literature-fetch-2026-09-17.py`、访问记录 `ucc-literature-fetch-2026-09-17.json`、`ucc-literature-sources-2026-09-17/` 下的原始页面与抽取文本，以及上述合成实验脚本和 JSON。未运行全球真实数据验证、独立径流评估或新 GCM 模拟。
+未运行全球真实数据验证、独立径流评估或新 GCM 模拟。
