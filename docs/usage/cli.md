@@ -493,7 +493,7 @@ dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
 ```
 
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
-等服务器 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
+等 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
 律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及
 它们到生成参数的映射见
 [knowledge/climatology/cloud_field_statistics.md](../knowledge/climatology/cloud_field_statistics.md)；
