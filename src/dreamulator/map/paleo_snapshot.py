@@ -63,8 +63,9 @@ class Snapshot:
 
     Attributes:
         t_myr: time before present.
-        label: (N,) plate of each cell (weld group, or ``n_groups + plate`` for
-            plates without continental crust).
+        label: (N,) plate of each cell: the weld group's smallest block index, or
+            ``n_blocks + plate`` for plates without continental crust.  Labels
+            are stable across times, so snapshots can be compared cell by cell.
         continental: (N,) continental crust.
         age_myr: (N,) seafloor age at t (NaN on continents).
         elevation_m: (N,) elevation relative to the present datum.
@@ -151,8 +152,7 @@ def snapshot(
     """
     nb = blocks.n
     s = min(max(int(np.ceil(t_myr / stage_myr)) - 1, 0), groups.shape[0] - 1)
-    group = np.unique(groups[s], return_inverse=True)[1]
-    n_groups = int(group.max()) + 1
+    group = groups[s]  # smallest block index of each block's weld group
 
     frame = (
         finite_rotations(stage_omega, stage_myr, t_myr)
@@ -172,11 +172,11 @@ def snapshot(
     ok = state.src >= 0
     src = np.where(ok, state.src, 0)
     b = body[src]
-    label = np.where(b < nb, group[np.minimum(b, nb - 1)], n_groups + kin.plate[src])
-    omega = np.zeros((n_groups + present_omega.shape[0], 3))
-    for g in range(n_groups):
+    label = np.where(b < nb, group[np.minimum(b, nb - 1)], nb + kin.plate[src])
+    omega = np.zeros((nb + present_omega.shape[0], 3))
+    for g in np.unique(group):
         omega[g] = stage_omega[s][np.flatnonzero(group == g)[0]]
-    omega[n_groups:] = present_omega
+    omega[nb:] = present_omega
 
     # subducted seafloor: nearest plate; age from a ridge midway to the next plate
     gap = ~ok
