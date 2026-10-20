@@ -16,10 +16,18 @@ Implements the published tiled schemes the S2 design adopts:
   system (each transfer follows its downstream path to the next border exit);
   stage 3 folds the external contributions back into every tile.
 
-This skeleton uses eps = 0 (the fill has no eps-graded ramps); the eps > 0
-grading is a finalize-time refinement kept out of the first cut.  The oracle
-in :mod:`dreamulator.media.canvas_hydrology` is the acceptance reference: the
-tests assert bit equality on synthetic DEMs.
+The eps > 0 variant follows Priority-Flood + ε (Barnes, Lehman & Mulla 2014,
+"Priority-Flood...", Computers & Geosciences 62:117-127; RichDEM's
+``ResolveFlatsEpsilon`` is the reference implementation): every filled cell
+gets an ε-descending path to its depression outlet.  The tiled path adds that
+grading in its finalize stage as a multi-source Dijkstra over each flat level
+of the filled surface (seeds = outlets and spill saddles), which reproduces
+the oracle's discovery wave bit-for-bit.  The alternative flat-resolution
+scheme of Barnes et al. (2014, C&G 62:128-135) is not adopted: it bends flow
+directions across flats toward convergent patterns, while the region chain's
+semantics (and our oracle) use plain PF+ε.  The oracle in
+:mod:`dreamulator.media.canvas_hydrology` is the acceptance reference: the
+tests assert bit equality on synthetic DEMs, eps = 0 and eps > 0.
 """
 
 from __future__ import annotations
@@ -111,8 +119,16 @@ def fill_canvas_tiled(
     tiles: CanvasTiles,
     *,
     sea_level: float = 0.0,
+    eps: float = 0.0,
 ) -> None:
-    """Three-stage tiled Priority-Flood (Barnes 2016); fills ``tiles.filled``."""
+    """Three-stage tiled Priority-Flood (Barnes 2016); fills ``tiles.filled``.
+
+    With ``eps > 0`` the final stage adds the eps ramp on top of the flat
+    spill levels: each depression's marginal cells are flooded from the
+    spill cell with the same ``max(dem, level + eps)`` rule the oracle uses,
+    so flat filled surfaces grade toward their outlet instead of being
+    exactly level (flow directions stay well-defined).
+    """
     keys = list(tiles.raw.keys())
     grid = tiles.grid
     t = grid.tile
@@ -259,6 +275,93 @@ def fill_canvas_tiled(
             final[mask] = np.maximum(final[mask], lv)
         out[key] = final
     tiles.filled = out
+    if eps > 0.0:
+        _apply_eps_ramp(tiles, sea_level=sea_level, eps=eps)
+
+
+def _apply_eps_ramp(tiles: CanvasTiles, *, sea_level: float, eps: float) -> None:
+    """Grade the flat spill levels toward their outlets (oracle-equivalent).
+
+    The eps flood raises each depression cell by ``eps`` per step of the
+    discovery wave that starts at the outlet.  On the *flat* filled surface
+    that wave is a multi-source Dijkstra over equal-value cells:
+
+    * seeds are outlets (ocean / canvas edge / missing chunk) and cells of a
+      flat region that touch a strictly lower flat value (the spill saddle),
+      all at their flat level;
+    * moving inside the same flat level costs ``eps``; moving to a lower or
+      higher flat level is not part of the wave.
+
+    This reproduces the oracle's ``max(dem, level + eps)`` discovery exactly
+    (the global heap tie-break only reorders equal levels, not the depths).
+    """
+    keys = list(tiles.raw.keys())
+    grid = tiles.grid
+    t = grid.tile
+    nrows, ncols = grid.shape
+    dem = np.empty((nrows, ncols * t), dtype=np.float64)
+    filled = np.empty_like(dem)
+    open_mask = np.zeros_like(dem, dtype=bool)
+    for key, arr in tiles.raw.items():
+        ci, cj = key
+        dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = arr
+        filled[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = tiles.filled[key]
+        ext = arr <= sea_level
+        if ci == 0:
+            ext[0, :] = True
+        if ci == nrows - 1:
+            ext[-1, :] = True
+        if cj == 0:
+            ext[:, 0] = True
+        if cj == ncols - 1:
+            ext[:, -1] = True
+        open_mask[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = ext
+
+    h, w = filled.shape
+    flat = filled.ravel()
+    dem_flat = dem.ravel()
+    mask_flat = open_mask.ravel()
+    level = np.full(flat.size, np.inf, dtype=np.float64)
+    heap: list[tuple[float, int]] = []
+    for c in range(flat.size):
+        if mask_flat[c] or dem_flat[c] <= sea_level:
+            level[c] = flat[c]
+            heap.append((flat[c], c))
+            continue
+        cr, cc = divmod(c, w)
+        low = False
+        for dy, dx in _NEIGHBOURS:
+            nr, nc = cr + dy, cc + dx
+            if 0 <= nr < h and 0 <= nc < w and filled[nr, nc] < flat[c] - 1e-9:
+                low = True
+                break
+        if low:
+            level[c] = flat[c]
+            heap.append((flat[c], c))
+    heapq.heapify(heap)
+    while heap:
+        lv, c = heapq.heappop(heap)
+        if lv != level[c]:
+            continue
+        cr, cc = divmod(c, w)
+        for dy, dx in _NEIGHBOURS:
+            nr, nc = cr + dy, cc + dx
+            if not (0 <= nr < h and 0 <= nc < w):
+                continue
+            nid = nr * w + nc
+            if filled[nr, nc] != flat[c]:
+                continue  # only inside the same flat level
+            nl = lv + eps
+            if nl < level[nid]:
+                level[nid] = nl
+                heapq.heappush(heap, (nl, nid))
+    out_flat = np.where(np.isfinite(level), np.maximum(level, dem_flat), flat)
+    out = out_flat.reshape(h, w)
+    result: dict[tuple[int, int], np.ndarray] = {}
+    for key in keys:
+        ci, cj = key
+        result[key] = out[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t].copy()
+    tiles.filled = result
 
 
 # ---------------------------------------------------------------------------

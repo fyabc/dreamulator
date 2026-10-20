@@ -77,3 +77,24 @@ def test_tiled_accumulation_matches_oracle(rows: int, cols: int, seed: int, sea:
     flood_canvas(oracle, sea_level=0.0, eps=0.0)
     ref = _assemble(flow_accumulation_canvas(oracle, _split(weights, grid)), grid)
     assert np.allclose(got, ref, rtol=1e-12, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("rows", "cols", "seed", "sea"),
+    [(1, 1, 3, False), (2, 2, 7, False), (2, 3, 11, True)],
+)
+def test_tiled_fill_eps_ramp_matches_oracle(
+    rows: int, cols: int, seed: int, sea: bool
+) -> None:
+    """eps > 0: the per-depression ramp must reproduce the oracle's grading."""
+    eps = 1e-3
+    t = 16
+    dem = _dem(seed=seed, shape=(rows * t, cols * t), sea=sea)
+    grid = ChunkGrid(rows, cols, t)
+    oracle = CanvasTiles(raw=_split(dem, grid), grid=grid)
+    flood_canvas(oracle, sea_level=0.0, eps=eps)
+    ref = _assemble(oracle.filled, grid)
+    tiled = CanvasTiles(raw=_split(dem, grid), grid=grid)
+    fill_canvas_tiled(tiled, sea_level=0.0, eps=eps)
+    got = _assemble(tiled.filled, grid)
+    assert np.array_equal(got, ref), f"eps={eps}: max |diff| = {np.abs(got - ref).max():.3e}"
