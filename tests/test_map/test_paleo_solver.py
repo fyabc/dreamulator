@@ -106,9 +106,10 @@ def test_window_gradient_matches_finite_differences() -> None:
     pole = kin.omega[blocks.plate]  # blocks are not numbered like plates
     u = (np.vstack([pole, pole]) / setup.rate_ref).ravel() + rng.normal(size=12) * 0.1
     prev = pole * 0.9
-    args = (setup, config, frame0, prev, glists, exempts, [15.0, 20.0])
+    rifts = np.array([[0.0, 1.0, 100.0, np.inf]])  # an unwelded rift between the blocks
+    args = (setup, config, frame0, prev, glists, exempts, [15.0, 20.0], rifts)
     value, grad, terms = _window_objective(u, *args)
-    assert terms["overlap"] > 0 and terms["isochron"] > 0
+    assert terms["overlap"] > 0 and terms["isochron"] > 0 and terms["rift"] > 0
     h = 1e-6
     fd = np.array(
         [

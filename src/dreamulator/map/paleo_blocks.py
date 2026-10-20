@@ -41,6 +41,9 @@ class Weld:
         until_myr: welded for t ≤ until_myr (the collision age of a suture, or of
             the suture a rift reopened), or None.
         since_myr: welded for t ≥ since_myr (a rift's onset), or None.
+        closed_myr: for a rift, the time its present opening rate has closed the
+            stretched margin (the onset estimate); later than ``since_myr`` only
+            when the seafloor record postponed the weld.  None for other welds.
     """
 
     a: int
@@ -48,6 +51,7 @@ class Weld:
     kind: str
     until_myr: float | None = None
     since_myr: float | None = None
+    closed_myr: float | None = None
 
     def active(self, t_myr: float) -> bool:
         """Whether the weld holds at ``t_myr`` (Myr before present)."""
@@ -174,7 +178,16 @@ def build_blocks(
             onset = rift_onsets.get((min(pa, pb), max(pa, pb)))
             if onset is not None:
                 until = reopened.get((min(pa, pb), max(pa, pb)))
-                welds.append(Weld(a, b, "rift", until_myr=until, since_myr=float(onset)))
+                welds.append(
+                    Weld(
+                        a,
+                        b,
+                        "rift",
+                        until_myr=until,
+                        since_myr=float(onset),
+                        closed_myr=float(onset),
+                    )
+                )
     return Blocks(block=block, plate=plate, welds=welds, names=names)
 
 

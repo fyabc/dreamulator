@@ -13,7 +13,7 @@ group and drawn at their solved positions.
 age grid sampled at the cells (G3 on the earth map, §9 item 3); the ridge each
 cell belongs to and the half-rates still come from the synthesis.
 
-``--scale term=factor`` multiplies a term weight (overlap, isochron, speed,
+``--scale term=factor`` multiplies a term weight (overlap, isochron, rift, speed,
 reorg, net_rotation) for the weight-sensitivity runs of §4.3.  Stage 0 and the
 seafloor ages use the engine's own poles; the speed prior uses the
 continental-share poles.
@@ -47,7 +47,7 @@ from dreamulator.map.paleo_solver import SolverConfig, build_setup, seafloor_wel
 from dreamulator.map.paleo_sutures import load_sutures
 from dreamulator.map.paleo_walk import continental_rifts
 
-TERMS = ("overlap", "isochron", "speed", "reorg", "net_rotation")
+TERMS = ("overlap", "isochron", "rift", "speed", "reorg", "net_rotation")
 
 
 def main() -> None:

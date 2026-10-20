@@ -26,6 +26,15 @@ all dimensionless:
   by more than ``isochron_check_km`` under the very poles that synthesised the
   ages (seafloor reached along a transform rather than a flowline) are left out
   of this term;
+* **rift kinematics** (prior): until a continental rift is welded, and at most
+  until its present opening rate has closed the stretched margin, its two sides
+  keep the present relative motion, the same assumption the rift onset is
+  derived from (published plate models never leave relative motions free:
+  rift phases follow restored extension, Heine et al. 2013, and present rifts
+  geodetic poles, Saria et al. 2014; only the absolute frame is optimised,
+  Tetley et al. 2019).  A prior, not a hard term: where the present map's
+  rifts, ridges and coasts contradict one another (nacrea plate 16) a hard
+  version drives speeds to 30–47 cm/yr;
 * **speed**: each group's angular speed stays near the continental-share law of
   ``paleo_kinematics.continental_speed_poles``; poles should be given in the
   no-net-rotation frame (``paleo_kinematics.no_net_rotation``), where absolute
@@ -110,7 +119,8 @@ class SolverConfig:
             the reference angular speed.
         memory_myr: oldest seafloor that takes part (§3.3); older seafloor, made
             by ridges of about 1 cm/yr, is left unconstrained.
-        w_overlap, w_isochron, w_speed, w_reorg, w_net_rotation: term weights.
+        w_overlap, w_isochron, w_rift, w_speed, w_reorg, w_net_rotation: term
+            weights.
         max_iter: L-BFGS iterations per window.
     """
 
@@ -135,6 +145,7 @@ class SolverConfig:
     memory_myr: float = 150.0
     w_overlap: float = 1000.0
     w_isochron: float = 100.0
+    w_rift: float = 1.0
     w_speed: float = 1.0
     w_reorg: float = 1.0
     w_net_rotation: float = 1.0
@@ -531,7 +542,9 @@ def seafloor_welds(blocks: Blocks, setup: SolverSetup) -> tuple[Blocks, list[dic
         later = min(max(clash), w.until_myr if w.until_myr is not None else np.inf)
         changed.append({"a": w.a, "b": w.b, "from_myr": t, "to_myr": later})
         if w.until_myr is None or later < w.until_myr:
-            moved = Weld(w.a, w.b, w.kind, until_myr=w.until_myr, since_myr=later)
+            moved = Weld(
+                w.a, w.b, w.kind, until_myr=w.until_myr, since_myr=later, closed_myr=w.closed_myr
+            )
             pending.append(moved)
             pending.sort(key=lambda x: (x.since_myr or 0.0, x.a, x.b))
     return Blocks(block=blocks.block, plate=blocks.plate, welds=welds, names=blocks.names), changed
@@ -712,8 +725,13 @@ def _window_objective(
     group_lists: list[np.ndarray],
     exempts: list[np.ndarray],
     t_ends: list[float],
+    rifts: np.ndarray | None = None,
 ) -> tuple[float, np.ndarray, dict[str, float]]:
-    """Objective and gradient of one window in scaled unknowns u = ω / rate_ref."""
+    """Objective and gradient of one window in scaled unknowns u = ω / rate_ref.
+
+    ``rifts`` (K, 4) lists the rift welds as (block a, block b, onset Myr,
+    reopened suture age Myr or inf) for the rift-kinematics term.
+    """
     nb = frame0.shape[0]
     dt_yr = config.stage_myr * 1.0e6
     ref = setup.rate_ref
@@ -728,7 +746,14 @@ def _window_objective(
     for s in range(n_st):
         f = np.einsum("bij,bjk->bik", rot[s], f)
         frames.append(f)
-    terms = {"overlap": 0.0, "isochron": 0.0, "speed": 0.0, "reorg": 0.0, "net_rotation": 0.0}
+    terms = {
+        "overlap": 0.0,
+        "isochron": 0.0,
+        "rift": 0.0,
+        "speed": 0.0,
+        "reorg": 0.0,
+        "net_rotation": 0.0,
+    }
     gamma = [np.zeros((nb, 3)) for _ in range(n_st)]  # dL / d(world rotation of block)
     d_ref = config.depth_ref_km
     for s in range(n_st):
@@ -817,9 +842,25 @@ def _window_objective(
         terms["net_rotation"] += float(net @ net) / ref**2
         gn = config.w_net_rotation * 2.0 / ref**2 * np.einsum("bij,jk,k->bi", ib, m_inv, net)
         np.add.at(grad_g, offsets[s] + gl, gn)
+        # rift kinematics: unwelded rifts keep the present relative motion
+        if rifts is not None and rifts.size:
+            a = rifts[:, 0].astype(np.int64)
+            b = rifts[:, 1].astype(np.int64)
+            live = (t_ends[s] < rifts[:, 2]) & (t_ends[s] <= rifts[:, 3]) & (gl[a] != gl[b])
+            if live.any():
+                a, b = a[live], b[live]
+                # each rift counts on its own: summed, not averaged
+                d = (
+                    om_b[s][a] - om_b[s][b] - setup.present_omega[a] + setup.present_omega[b]
+                ) / ref
+                terms["rift"] += float(np.sum(d**2))
+                gr = config.w_rift * 2.0 * d / ref
+                np.add.at(grad_g, offsets[s] + gl[a], gr)
+                np.add.at(grad_g, offsets[s] + gl[b], -gr)
     value = (
         config.w_overlap * terms["overlap"]
         + config.w_isochron * terms["isochron"]
+        + config.w_rift * terms["rift"]
         + config.w_speed * terms["speed"]
         + config.w_reorg * terms["reorg"]
         + config.w_net_rotation * terms["net_rotation"]
@@ -952,6 +993,19 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
     ]
     present_share = _margin_contact(setup, config, np.repeat(np.eye(3)[None], nb, axis=0), None)
     forbid = ridge_record(setup)
+    rifts = np.array(
+        [
+            (
+                w.a,
+                w.b,
+                min(w.since_myr, w.closed_myr if w.closed_myr is not None else np.inf),
+                np.inf if w.until_myr is None else w.until_myr,
+            )
+            for w in blocks.welds
+            if w.kind == "rift" and w.since_myr is not None
+        ],
+        dtype=float,
+    ).reshape(-1, 4)
     welds += _contact_welds(setup, config, blocks, frame, groups[0], present_share, forbid, dt)[0]
     fits: list[dict[str, object]] = []
     for k in range(1, n_stages):
@@ -969,7 +1023,7 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
         x0 = np.concatenate([_group_mean(prev, gl, barea) for gl in glists]).ravel()
         x0 /= setup.rate_ref
 
-        args = (setup, config, frame, prev, glists, exempts, t_ends)
+        args = (setup, config, frame, prev, glists, exempts, t_ends, rifts)
         res = minimize(
             _value_and_grad,
             x0,
@@ -980,7 +1034,15 @@ def solve(blocks: Blocks, setup: SolverSetup, config: SolverConfig) -> SolveResu
         )
         ng0 = int(glists[0].max()) + 1
         _, _, terms = _window_objective(
-            res.x[: 3 * ng0], setup, config, frame, prev, glists[:1], exempts[:1], t_ends[:1]
+            res.x[: 3 * ng0],
+            setup,
+            config,
+            frame,
+            prev,
+            glists[:1],
+            exempts[:1],
+            t_ends[:1],
+            rifts,
         )
         om0 = (res.x[: 3 * ng0] * setup.rate_ref).reshape(-1, 3)[glists[0]]
         omegas.append(om0)
