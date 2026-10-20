@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792458859864,
+  "lastUpdate": 1792468278928,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -354,6 +354,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001293857226989099",
             "extra": "mean: 4.131219400001385 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2f38fe190453c14526b19ea95d1532951e85753b",
+          "message": "chore(release): v1.1.0 发布准备——CHANGELOG 重排与版本号同步\n\nCHANGELOG 未发布区 64 条重排为 [1.1.0]：面向用户的新功能、行为变化\n（含区域包目录迁移方法、2D 地图 WebGL 2 要求）、修复列在前面；新增\n「数据与正典」小节（nacrea 轨道集合收尾与两档口径、earth plates.json\n修正、兼容性说明）与「已知问题」小节（板块速度两处写法不一致、第 51\n次旋回周期矛盾）；51 条地质时间轴等研究条目原文收进「内部与研究」。\n补写两个漏记条目：export clouds 程序化云纹理（51dc3ea）、轨道集合\n收尾（637bf2a）。\n\n版本号 1.0.1 → 1.1.0：pyproject.toml + uv.lock（已 uv sync\n--all-extras）、frontend/package.json + package-lock.json；roadmap\n头部「最后更新」与状态快照版本号同步。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-20T11:13:46+08:00",
+          "tree_id": "3f6b8dbf4df11431a47e71553ffd920157deb6fe",
+          "url": "https://github.com/fyabc/dreamulator/commit/2f38fe190453c14526b19ea95d1532951e85753b"
+        },
+        "date": 1792468278366,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3154733102976315,
+            "unit": "iter/sec",
+            "range": "stddev: 0.14536063052633777",
+            "extra": "mean: 3.1698402602000018 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.0311990619312326,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00828746966641766",
+            "extra": "mean: 329.90245099999527 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.436587029399248,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1165603864267384",
+            "extra": "mean: 696.094270333333 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 975.4150537388128,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006554585440920315",
+            "extra": "mean: 1.0252045999976644 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.28751690990933,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012913403173100716",
+            "extra": "mean: 5.200545599996076 msec\nrounds: 5"
           }
         ]
       }
