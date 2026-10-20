@@ -479,8 +479,7 @@ PASS（永耀岛/山脉/台账全保）。**iterations 3→2 实测否决**（�
 κ −4.3pp、华南出带——第三趟 Picard 是季风幅度收敛的必要趟）。**已登记局限
 （用户裁决）**：西非雨带走廊族（撒哈拉/萨赫勒过湿、伪湿槽干锚 2.4×、几内亚
 过冲）= 单层框架局限，三条机制路线（本地 k 门/轨迹 k 调制/加热权重）独立
-证伪，归 ④/GCM 阶段 E 或长期登记。全部轮次记录 → `private/plans/w-supply-route.md`
-+ `private/research/2026-09-2{6,7}-d{1,2}-*`；设计依据 → proposal §5。
+证伪，归 ④/GCM 阶段 E 或长期登记。设计依据 → proposal §5。
 
 ---
 
@@ -946,7 +945,7 @@ GCM（求解原始方程）技术上能取代参数化管线，但**不适合做
 
 - **远期备选：全动力学 GCM** — [proposals/climate-gcm-plan.md](../proposals/climate-gcm-plan.md)：
   涌现 vs 高效的关键取舍、GPU 加速杠杆、与现有 DAG 的关系；本地 ExoPlaSim PoC
-  （`private/external-projects/exoplasim_poc`，结论已入该文档）作为对标先导。
+  （`<exoplasim-poc-repo>`，结论已入该文档）作为对标先导。
 - **中间态：稳态耦合** — [proposals/climate-steady-coupling.md](../proposals/climate-steady-coupling.md)：
   在 DAG 的某一步内做 T↔P 耦合定点求解，介于单向 DAG 与瞬态 GCM 之间——§3.7 的
   「Stage 2–3 消费释放前温度」单遍近似残余正是它要移除的不自洽。

@@ -38,6 +38,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -57,7 +58,7 @@ from dreamulator.import_solar_common import (  # noqa: E402
     write_ucc_yearly,
 )
 
-_CACHE = _ROOT / "private/tmp/solar"
+_CACHE = _ROOT / os.environ.get("DREAMULATOR_WORK_DIR", "work") / "solar"
 _TOPO_TIF = "venus_magellan_topo.tif"
 _TOPO_URL = "https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif"
 

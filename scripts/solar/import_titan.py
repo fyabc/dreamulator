@@ -34,7 +34,7 @@ Epistemic status: ucc-review §6.2 **L4** — GCM climatology, a model, not
 error-free truth.  Citation: Lora, Faulk, Mitchell & Milly (2019), Zenodo
 10.5281/zenodo.3473571 (CC-BY-4.0).
 
-Data cache: ``private/tmp/solar/titan_hydro_k1e-5_y241-250.nc`` (232 MB;
+Data cache: ``<workdir>/solar/titan_hydro_k1e-5_y241-250.nc`` (232 MB;
 download from the Zenodo record when missing).
 
 Usage:
@@ -44,6 +44,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -62,7 +63,7 @@ from dreamulator.import_solar_common import (  # noqa: E402
     write_ucc_yearly,
 )
 
-_CACHE = _ROOT / "private/tmp/solar"
+_CACHE = _ROOT / os.environ.get("DREAMULATOR_WORK_DIR", "work") / "solar"
 _NC = "titan_hydro_k1e-5_y241-250.nc"
 _NC_URL = "https://zenodo.org/records/3473571/files/full_phys.hydro.k1e-5.y241-250.nc"
 

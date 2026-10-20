@@ -22,7 +22,7 @@ to encode existing frames without re-rendering).
 Usage::
 
     uv run python scripts/geology/paleo_render.py data/worlds/nacrea/maps/satellite_nacrea \\
-        --solve-dir private/tmp/paleo_solve --out-dir private/tmp/paleo_video
+        --solve-dir <workdir>/paleo_solve --out-dir <workdir>/paleo_video
 """
 
 from __future__ import annotations

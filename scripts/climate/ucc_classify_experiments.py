@@ -25,7 +25,7 @@ rate; near-threshold fraction), coverage (valid / not-applicable), complexity
 (classes / thresholds).  All thresholds are declared empirical candidates —
 none is claimed to be cross-world physics (§4.3).
 
-Output: ``private/reviews/ucc-l2-classify-<date>.json`` + stdout summary.
+Output: ``<workdir>/ucc/ucc-l2-classify-<date>.json`` + stdout summary.
 
 Usage:
     uv run python scripts/climate/ucc_classify_experiments.py
@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -334,12 +335,17 @@ def main() -> None:
 
     l2 = args.l2
     if l2 is None:
-        candidates = sorted(Path("private/reviews").glob(_L2_GLOB))
+        ucc_dir = Path(os.environ.get("DREAMULATOR_WORK_DIR", "work")) / "ucc"
+        candidates = sorted(ucc_dir.glob(_L2_GLOB))
         if not candidates:
             sys.exit("No L2 dataset found; run scripts/climate/ucc_obs_descriptors.py first")
         l2 = candidates[-1]
     stamp = datetime.date.today().isoformat()
-    out = args.out or Path(f"private/reviews/ucc-l2-classify-{stamp}.json")
+    out = args.out or (
+        Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
+        / "ucc"
+        / f"ucc-l2-classify-{stamp}.json"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading L2 dataset {l2} …")

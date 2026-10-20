@@ -10,10 +10,10 @@ summary; render it with ``dreamulator export layers <world> --mesh <out>``.
 
 Examples:
     python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea \
-        --planet satellite_nacrea --nc private/gcm/runs/t42n/cold_712/MOST.00000.nc \
-        --out private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
+        --planet satellite_nacrea --nc <gcm-workdir>/runs/t42n/cold_712/MOST.00000.nc \
+        --out <gcm-workdir>/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
     python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea \
-        --planet satellite_nacrea --nc private/gcm/runs/t42n/cold_712/MOST.00000.nc \
+        --planet satellite_nacrea --nc <gcm-workdir>/runs/t42n/cold_712/MOST.00000.nc \
         --emit-fields \
         data/worlds/nacrea/branches/gcm-t42-712/layers/climate/input/gcm_fields.msgpack.gz
 """

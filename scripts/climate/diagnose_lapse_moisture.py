@@ -38,7 +38,7 @@ Usage (earth climate-dev only — a fictional world has no observed reference)::
 
     uv run python scripts/climate/diagnose_lapse_moisture.py \
         data/worlds/earth/branches/climate-dev/maps/planet_earth \
-        --temp private/tmp/climatology/ncep_air.mon.ltm.nc
+        --temp <workdir>/climatology/ncep_air.mon.ltm.nc
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 > 来源：Curious Archive《The Evolution of Speculative Evolution》
 > （[YouTube](https://www.youtube.com/watch?v=NifBVOeVdO0)，2022-06-23；B 站熟肉 BV1YE421A7rW）。
-> 转写存档：`private/external-resources/bv_EVOL/NifBVOeVdO0_en_transcript.txt`（原片英文音轨，本地 ASR）。
+> 转写存档：本地存档（未随仓库分发），原片英文音轨经本地 ASR 转写。
 
 ## 定义
 
@@ -58,6 +58,6 @@
 
 ## 参考
 
-- 视频转写：`private/external-resources/bv_EVOL/NifBVOeVdO0_en_transcript.txt`
+- 视频转写：本地存档（未随仓库分发）
 - [Serina: A Natural History of the World of Birds](https://sites.google.com/site/worldofserina/home)（Dylan Bajda）
 - [All Tomorrows（Wikipedia）](https://en.wikipedia.org/wiki/All_Tomorrows)（C.M. Kösemen）

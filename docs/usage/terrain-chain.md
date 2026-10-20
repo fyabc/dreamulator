@@ -86,7 +86,7 @@ refine**（不能 `--reuse-height`）——TD 推理以温度/降水为条件场
 
 ```bash
 dreamulator export build data/worlds/nacrea/packs/nacrea-15_-100_550km \
-    --td private/external-projects/terrain-diffusion
+    --td <terrain-diffusion-repo>
 ```
 
 地形由 terrain-diffusion 模型从引擎粗条件场**重新生成**——90 m 地貌

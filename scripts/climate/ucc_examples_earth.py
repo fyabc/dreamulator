@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the Earth UCC worked-examples document (UCC-01 第四步 4c).
 
-Reads the L2 external-climate-state dataset (``private/reviews/ucc-l2-earth-obs-
+Reads the L2 external-climate-state dataset (``<workdir>/ucc/ucc-l2-earth-obs-
 *.msgpack``, built by ``ucc_obs_descriptors.py`` from the earth root's observed
 monthly series: NCEP R1 temperature + GPCP v2.3 precipitation + Beck 2018
 Köppen reference column) and produces a human-review document:
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import sys
 from pathlib import Path
 
@@ -51,7 +52,11 @@ from dreamulator.map.ucc import (  # noqa: E402
     status_short,
 )
 
-_DEFAULT_DATASET = Path("private/reviews/ucc-l2-earth-obs-2026-09-20.msgpack")
+_DEFAULT_DATASET = (
+    Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
+    / "ucc"
+    / "ucc-l2-earth-obs-2026-09-20.msgpack"
+)
 _DEFAULT_OUT = Path("docs/ucc/examples/earth-data.md")
 
 # Curated review sites (4b): name, lat, lon, land/ocean, short geographic

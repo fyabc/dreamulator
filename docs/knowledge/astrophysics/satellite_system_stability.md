@@ -395,8 +395,7 @@ $$\frac{d\hat w}{dt} = -A(\hat w\cdot\hat z)(\hat z\times\hat w) - B(\hat w\cdot
 
 下进动，i_eq/i_ecl 锥摆包络须与 N 体实测吻合（数十年包络下 ≤0.4° = 采样+
 Lie 分裂噪声级；顺行贴赤道、逆行赤道、大 ε 三案起）。实现与校验脚本：
-`scripts/astro/rebound_nbody.py::_apply_j2_secular`、
-`private/research/2026-09-27-harness-j2-validation.py`。**警示**：包络校验对
+`scripts/astro/rebound_nbody.py::_apply_j2_secular`。**警示**：包络校验对
 进动方向不敏感（锥摆带关于方向对称）——符号正确性只能靠 Vallado 约定
 （顺行节点退行）声明，不能从包络吻合反推。
 
@@ -452,8 +451,7 @@ Nacrea 1:2:4 链实测（μ'≈3.4×10⁻³，周期比失谐 ~0.2%——按 Wis
 测试粒子判决。
 
 > 数据来源：Nacrea 卫星架构重构轮（93 票卫星矩阵 + 31 票链扫描 + 536 粒子
-> 带扫描，2026-09-27~28；台账 `private/plans/nacrea-satellite-rework.md`，
-> 终裁菜单 `private/research/2026-09-28-rework-final-menu.md`，实验记录
+> 带扫描，2026-09-27~28；实验记录
 > `data/worlds/nacrea/design-notes/0009-appendix-experiment-log.md` §9）。
 > 理论锚：Tremaine, Touma & Pepe (2009)（Laplace 面）；Wisdom (1980)（共振
 > 重叠判据）；线性长期理论（Laplace–Lagrange，Murray & Dermott ch.6）。

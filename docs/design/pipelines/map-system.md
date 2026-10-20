@@ -75,8 +75,7 @@ dreamulator 的地图系统为每颗有固体表面的行星提供 2D/3D 交互�
 > 合成 pass，零重烘；山体阴影烘焙在纹理中（固定强度 0.7）。本机 AMD 集显 +
 > ANGLE/D3D11 顶点属性插值 bug（大视口 mesh 上 `uv`/`position` 不插值，2026-06
 > 记录）已于 2026-10 探针复核确认**不复现**：同一 GPU 上三种 shader 变体大视口
-> checkerboard 插值全部正常，探针与判定存档 `private/research/2026-10-angle-probe/`
-> （不入库）。它不再是渲染方案的约束条件。
+> checkerboard 插值全部正常。它不再是渲染方案的约束条件。
 
 ### 交互：圆柱投影平移 + 缩放
 

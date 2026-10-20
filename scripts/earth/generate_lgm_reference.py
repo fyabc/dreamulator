@@ -19,8 +19,8 @@ Download the LGM time slice (``-190`` = -21 000 BP; 100-year steps, time_bp =
 Usage::
 
     uv run python scripts/earth/generate_lgm_reference.py \
-        --temp private/tmp/climatology/lgm/bio01_-190.tif \
-        --precip private/tmp/climatology/lgm/bio12_-190.tif \
+        --temp <workdir>/climatology/lgm/bio01_-190.tif \
+        --precip <workdir>/climatology/lgm/bio12_-190.tif \
         --time-bp -21000 \
         --output tests/validation/reference/lgm_zonal_reference.json
 """

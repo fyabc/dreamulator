@@ -4,7 +4,7 @@
 （祖语/原始语），以及这套方法对架空语系设计的意义。喉音理论案例作为"预测→验证"
 的方法论样板单列一节。
 
-> 调研来源：2026-08-15 interlude 调研（见主仓 `private/research/2026-08-15-linguistics-architecture.md`）。
+> 调研来源：2026-08-15 interlude 调研。
 > 主要依据：Campbell (2021) *Historical Linguistics*（第 4 版）、Trask (1996) *Historical Linguistics*。
 
 ---

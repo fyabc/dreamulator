@@ -41,7 +41,7 @@
 
 ## 工程形态
 
-以外部 venv 子进程调用（克隆在本机 `private/external-projects/
+以外部 venv 子进程调用（克隆在本机 `<external-project-dir>/
 terrain-diffusion/`，`.venv` 随仓库），不进主项目依赖——其 3 GB CUDA
 torch 会拖累 `uv sync --all-extras` 与 CI。推理走 `python -m
 terrain_diffusion.inference.tiff_export` 模块直跑（绕开训练栈 import）。
@@ -77,4 +77,3 @@ cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -
 - 仓库与权重：https://github.com/xandergos/terrain-diffusion
   （HF 权重 `xandergos/terrain-diffusion-90m`，约 1.1 GB）
 - 论文：arXiv 2512.08309（SIGGRAPH 2026）
-- 本库验收数据存 private 研究档案（2026-10-05 调研轮），结论已并入本文

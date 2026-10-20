@@ -5,7 +5,7 @@ Downloads ETOPO1 elevation (~400 MB) and Beck et al. (2018) Koppen map
 (~68 MB) to the system temp directory, where they are cached and reused
 by ``import_earth_elevation.py`` and ``convert_koppen_map.py``, plus a
 SODA v3.15.2 surface-current monthly climatology (~690 MB streamed via
-OPeNDAP, folded to a ~19 MB netCDF under ``private/tmp/climatology/``)
+OPeNDAP, folded to a ~19 MB netCDF under ``<workdir>/climatology/``)
 consumed by ``import_earth_climate.py``.
 
 Usage::
@@ -90,7 +90,11 @@ _SODA_DAP_URL = "http://apdrc.soest.hawaii.edu/dods/public_data/SODA/soda_3.15.2
 _SODA_START_YEAR = 1980  # dataset time axis: Jan 1980 onward, monthly (516 months)
 _SODA_CLIM_YEARS = (1993, 2022)  # altimetry era used for the climatology
 _SODA_SURFACE_LEVEL = 0  # lev[0] ≈ 5 m — the near-surface level
-_SODA_DEST_RELPATH = "private/tmp/climatology/soda_currents_mon_clim.nc"
+_SODA_DEST_RELPATH = str(
+    Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
+    / "climatology"
+    / "soda_currents_mon_clim.nc"
+)
 _SODA_SIZE_MB = 690  # approx. DAP transfer for surface u+v over 30 years
 
 

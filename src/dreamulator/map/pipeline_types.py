@@ -667,8 +667,8 @@ class TerrainPipelineConfig:
     # (Sahara/Sahel overshoot, spurious wet-trough over the Sahara, Guinea
     # overshoot) is registered as a single-layer-framework limitation — three
     # independent mechanism routes were falsified inside this framework.
-    # Full record: private/plans/w-supply-route.md + docs/design/profiling.md
-    # §2.1 + private/research/2026-09-2{6,7}-d{1,2}-*-design.md.
+    # Full record: docs/design/proposals/climate-layer-improvement.md §5 and
+    # docs/design/profiling.md §2.1.
     wet_trough_enabled: bool = True
     wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment
     wet_trough_iterations: int = 3  # moisture-budget re-solves after pass 1 (round-6 config)
@@ -699,7 +699,7 @@ class TerrainPipelineConfig:
     # observed Somali-sector anatomy.  Composed inside the wet-trough Picard
     # (recomputed each pass from the current trough state), blended by the
     # same equatorial-degeneracy taper (1−w_eq) as the wet increment.
-    # Design/acceptance: private/research/2026-09-29-dline-couplet-design.md.
+    # Design/acceptance: docs/design/proposals/climate-layer-improvement.md.
     monsoon_couplet_enabled: bool = False
     # The legacy uniform cross-equatorial westerly belt (ε_u·Ω·a, all
     # longitudes) — the couplet replaces it (H3: the belt's SCS contribution

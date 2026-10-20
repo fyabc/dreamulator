@@ -222,7 +222,7 @@ graph TD
    落盘位置由节点 Location 设置：Build Folder = Build Settings → Build 页的
    Build Destination（默认 `<Documents>\Gaea\Builds\<项目名>\###` 自增）；
    建议改成 Explicit 直接指到 pack 根的 `gaea-out/` 子目录
-   （`private/video/` 整体不入 git）。格式：**只有主地形（Out）导 32-bit
+   （`<render-workdir>/` 整体不入 git）。格式：**只有主地形（Out）导 32-bit
    EXR**——它是 Blender 位移的数据源，需要浮点保真；**所有掩膜一律
    PNG 16**（Erosion2 的 Flow/Wear/Deposits、Rivers 的 Rivers/Depth、
    Sea 的 Water/Depth），16-bit 的 65536 级对掩膜绰绰有余。
@@ -264,7 +264,7 @@ Gaea 的输出不回流引擎（地形 bake 往返协议是另一条待办线）
 
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR 读 Gaea 的高度 EXR）
-dreamulator export render --style satellite private/video/nacrea-15_90_2350km
+dreamulator export render --style satellite <render-workdir>/nacrea-15_90_2350km
 # 读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
 ```
 
@@ -321,7 +321,7 @@ Sea 的 Level（右击输 `400m` 最稳，或手算 −min/Height）。
 
 ```bash
 "/d/Blender 5.2/blender.exe" -b -P scripts/media/blender/region_still.py -- \
-    --datadir private/video/nacrea-15_-100_2350km \
+    --datadir <render-workdir>/nacrea-15_-100_2350km \
     --render still_4k.png --res 3840x2160 --samples 256
 # 写 <pack>/renders/*.png + <pack>/scene.blend（可随时由脚本重建）
 ```
@@ -364,7 +364,7 @@ Sea 的 Level（右击输 `400m` 最稳，或手算 −min/Height）。
 子命令，作风格参数；`--title` 可自定义标题）：
 
 ```bash
-dreamulator export render --style survey private/video/nacrea-15_-100_2350km              # survey
+dreamulator export render --style survey <render-workdir>/nacrea-15_-100_2350km              # survey
 dreamulator export render <pack> --style hand                              # topo.hand.png
 dreamulator export render <pack> --style medieval --title "珠母星 · 海"
 # 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/
@@ -427,7 +427,7 @@ Earth 陆），`_lut_rgb` 查表上色；**查表值域用未 clamp 的引擎值
 ## 第③''步（变体腿）：中世纪羊皮纸插画图（medieval_render）
 
 ```bash
-dreamulator export render --style survey private/video/nacrea-15_-100_2350km --style medieval
+dreamulator export render --style survey <render-workdir>/nacrea-15_-100_2350km --style medieval
 # 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/medieval.png
 ```
 
@@ -444,7 +444,7 @@ contour，示意主干）、海岸墨线；羊皮纸底（斑驳 + 噪声破缺�
 **画风自评未达 CK 水准（10-13 用户裁决：暂搁置，之后调研作图方法
 再迭代）**。
 
-**风格参考库（private/video/reference/styles/，Wikimedia 公共领域）**：
+**风格参考库（<render-workdir>/reference/styles/，Wikimedia 公共领域）**：
 中世纪 = Catalan Atlas 1375 / Tabula Rogeriana 1154 / Hereford
 Mappa Mundi 1300；近代铜版测绘 = Dufour 1865；现代标准等高线 =
 USGS 1:24000 quad 1959 / 瑞士 Landeskarte 1975。CK3/韦诺为商业

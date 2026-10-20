@@ -3,7 +3,6 @@
 > 领域：为架空/异星世界设计"从发声器官推导语言"的科学依据。
 > 关联：`docs/design/proposals/language-phylogeny.md` §6（异星发声模式）、
 > `docs/design/proposals/ecology-layer.md` §四（生态→文明接口）。
-> 调研来源：`private/plans/video/alien-biosphere-analysis.md`（Biblaridion 方法论）的补充。
 
 ---
 
@@ -93,5 +92,3 @@ ASCIIPA 的「特征即代码」哲学（base + 修饰符 = 特征束，`@bind` 
 
 - **Anthöny Pain**：推测演化圈的「项目盘点者」，系统梳理全网推测演化项目清单。
 - Biblaridion（YouTube）：conlang + 推测生物学创作者。
-
-详见 `private/plans/video/alien-biosphere-analysis.md` §五（参考资料）。

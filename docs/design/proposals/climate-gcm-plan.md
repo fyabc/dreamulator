@@ -193,6 +193,5 @@ ExoPlaSim 处于低维护状态。最后一次发版是 3.4.2（2025-01），之
   [多体潮汐叠加式](https://worldbuildingpasta.blogspot.com/2024/05/hurried-thoughts-multiple-moon-tides.html)
   （分量正弦和，Earth 校验 36/60 cm）→ 待办 11 卫星轮参照。
 - Miyasaka & Nakamura (2010, J. Climate)：副热带反气旋的海陆热力对比生成机制。
-- 外部聊天核查记录：`private/chats/chat-撒哈拉沙漠干湿周期驱动力.txt`（2026-09-27
-  核查：GPU 段 CliMA/SpeedyWeather 属实；EOS-ESTM「GPU 加速」与 HEXTOR「THAI 广泛
-  使用」两处为幻觉/夸大；神经代理外推限制已注记）。
+- 外部聊天核查（2026-09-27）：GPU 段 CliMA/SpeedyWeather 属实；EOS-ESTM「GPU 加速」与 HEXTOR「THAI 广泛
+  使用」两处为幻觉/夸大；神经代理外推限制已注记。

@@ -2,8 +2,7 @@
 
 本文登记云纹理与云渲染方向的竞品实现，供太空俯瞰镜头链（L2 程序化云纹理、
 L5 渲染）决策时对照。统计律依据（光学厚度分布与空间谱）见同目录
-`cloud_field_statistics.md`；本项目的需求与分工见
-private/plans/orbital-weather-globe-requirements-20261018.md（不入库）。
+`cloud_field_statistics.md`。
 
 ## 一、游戏引擎的实时体积云（Guerrilla Decima / EA Frostbite）
 

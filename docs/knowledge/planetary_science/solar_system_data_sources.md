@@ -3,7 +3,7 @@
 > 2026-09-21 整理，来自太阳系参照天体导入（UCC-01 4d：Mars / Moon / Venus /
 > Titan 并入 earth root）的实际抓取经验。所有 URL 当日实测；「坑」均为当场踩过。
 > 消费方 = `scripts/solar/` 导入器与 `scripts/earth/`；数据缓存约定
-> `private/tmp/solar/`（gitignored）。
+> `<solar-cache>/`（gitignored）。
 
 给一颗真实天体找数据时按四类需求走：**物理/轨道参数**（进 stellar.yaml 型目录）、
 **地形**（DEM → CVT mesh）、**气候**（温度/降水气候态 → UCC 描述量）、**表面覆盖**

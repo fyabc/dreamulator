@@ -3,7 +3,7 @@
 Re-runs the climate simulation on the Earth validation mesh, then compares the
 model's monthly surface temperature / zonal wind (u) / meridional wind (v)
 against the NCEP Reanalysis monthly long-term means (sigma 0.995 surface level,
-``private/tmp/climatology/ncep_{air,uwnd,vwnd}.mon.ltm.nc``).  This fills the
+``<workdir>/climatology/ncep_{air,uwnd,vwnd}.mon.ltm.nc``).  This fills the
 "monthly accuracy" gap the annual metrics cannot see: the seasonal cycle shape,
 the monsoon wind reversal, and the mid-latitude westerly belt.
 

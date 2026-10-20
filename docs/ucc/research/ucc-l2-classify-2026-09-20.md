@@ -1,9 +1,8 @@
 # UCC-01 第三步：分类候选比较结果与 profile v0 冻结建议
 
-> 2026-09-20。实验脚本 `scripts/climate/ucc_classify_experiments.py`（已入库），
-> 结果数据 `private/reviews/ucc-l2-classify-2026-09-20.json`。
-> 数据集 `private/reviews/ucc-l2-earth-obs-2026-09-20.msgpack`（earth root 观测月度网格，
-> 20 万 cell，58060 陆地）。评审框架见 ucc-review-2026-09-17.md §6.4 / §7 第二步。
+> 2026-09-20。实验脚本 `scripts/climate/ucc_classify_experiments.py`（已入库）。数据集为
+> earth root 观测月度网格（20 万 cell，58060 陆地）。评审框架见 ucc-review-2026-09-17.md
+> §6.4 / §7 第二步。
 
 ## 候选与参照
 

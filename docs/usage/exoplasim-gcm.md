@@ -43,7 +43,7 @@ ExoPlaSim 的版本固定为 3.4.2（`pyproject.toml` 的 `[gcm]` 可选依赖�
 在仓库根目录执行：
 
 ```bash
-bash scripts/climate/gcm/bootstrap.sh private/gcm/venv
+bash scripts/climate/gcm/bootstrap.sh <gcm-workdir>/venv
 ```
 
 脚本分四步：用 apt 安装 gfortran、gcc 和 make；在指定目录建立 Python 虚拟环境并安装
@@ -55,10 +55,10 @@ dreamulator 引擎核心依赖（安装时锁住 numpy 版本）；强制编译 
 在安装 meson 等构建依赖时出过两次问题。国内网络可以设置镜像：
 
 ```bash
-PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple bash scripts/climate/gcm/bootstrap.sh private/gcm/venv
+PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple bash scripts/climate/gcm/bootstrap.sh <gcm-workdir>/venv
 ```
 
-虚拟环境和所有运行输出建议放在 `private/` 下，该目录已被 git 忽略。
+虚拟环境和所有运行输出建议放在不入 git 的本地工作目录 `<gcm-workdir>/` 下。
 
 ### 2.2 多核运行需要 MPI
 
@@ -78,10 +78,10 @@ PlaSim 的 makefile 没有声明完整的 Fortran 模块依赖，必须串行编
 ## 3. 快速上手：两年纯海洋行星冒烟
 
 ```bash
-source private/gcm/venv/bin/activate
+source <gcm-workdir>/venv/bin/activate
 python scripts/climate/gcm/run_exoplasim.py \
     --world data/worlds/nacrea --planet satellite_nacrea \
-    --years 2 --workdir private/gcm/runs/nacrea_smoke
+    --years 2 --workdir <gcm-workdir>/runs/nacrea_smoke
 ```
 
 不传 `--landmap` 时，模式按全海洋表面运行。第一次运行会先编译对应分辨率和核数的
@@ -101,8 +101,8 @@ Fortran 程序，约需两分钟；之后同样的配置直接复用编译结果
 uv run dreamulator build nacrea --only geological
 uv run python scripts/climate/gcm/make_landmap.py --world nacrea --planet satellite_nacrea \
     --mesh data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz --resolution T21 \
-    --out private/gcm/surf/nacrea_N032_surf_0172.sra \
-    --topo-out private/gcm/surf/nacrea_N032_surf_0129.sra
+    --out <gcm-workdir>/surf/nacrea_N032_surf_0172.sra \
+    --topo-out <gcm-workdir>/surf/nacrea_N032_surf_0129.sra
 ```
 
 `make_landmap.py` 依赖 dreamulator 的地图模块，用项目的 uv 环境运行即可。
@@ -120,14 +120,14 @@ uv run python scripts/climate/gcm/make_landmap.py --world nacrea --planet satell
 ### 4.2 运行
 
 ```bash
-source private/gcm/venv/bin/activate
+source <gcm-workdir>/venv/bin/activate
 export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1   # 仅 root 需要
 python scripts/climate/gcm/run_exoplasim.py \
     --world data/worlds/nacrea --planet satellite_nacrea --years 30 --ncpus 8 \
-    --landmap private/gcm/surf/nacrea_N032_surf_0172.sra \
-    --topomap private/gcm/surf/nacrea_N032_surf_0129.sra \
+    --landmap <gcm-workdir>/surf/nacrea_N032_surf_0172.sra \
+    --topomap <gcm-workdir>/surf/nacrea_N032_surf_0129.sra \
     --configure '{"twobandalbedo": true}' \
-    --workdir private/gcm/runs/nacrea_aligned
+    --workdir <gcm-workdir>/runs/nacrea_aligned
 ```
 
 ### 4.3 对齐配置
@@ -207,7 +207,7 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 | `--resolution` | T21 | 谱分辨率；T21 网格约 620 km，T42 约 310 km |
 | `--layers` | 10 | 垂直层数 |
 | `--ncpus` | 1 | MPI 进程数，大于 1 时需要 OpenMPI |
-| `--workdir` | `gcm_runs/<天体>_<分辨率>` | 运行目录，建议显式指定到 `private/` 下 |
+| `--workdir` | `gcm_runs/<天体>_<分辨率>` | 运行目录，建议显式指定到不入 git 的本地工作目录下 |
 | `--landmap` | 无 | `.sra` 海陆掩膜；不传时为纯海洋行星 |
 | `--topomap` | 无 | `.sra` 地表位势（地形），必须和 `--landmap` 一起使用 |
 | `--configure` | `{}` | 以 JSON 传入额外的 `Model.configure` 参数，例如对齐配置的三个开关 |
@@ -276,19 +276,19 @@ T42 的数字来自 1 年试跑，测量时机器接近满载；带地形和物�
 再用 `dreamulator export layers` 渲染：
 
 ```bash
-source private/gcm/venv/bin/activate
+source <gcm-workdir>/venv/bin/activate
 python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
-    --nc private/gcm/runs/t42o/cold_712/MOST.00000.nc \
-    --out private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
+    --nc <gcm-workdir>/runs/t42o/cold_712/MOST.00000.nc \
+    --out <gcm-workdir>/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
 deactivate
-G=private/gcm/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
+G=<gcm-workdir>/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
 E=data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz
 uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
-    --mesh $G -o private/gcm/export/gcm
+    --mesh $G -o <gcm-workdir>/export/gcm
 uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
-    -o private/gcm/export/ebm
+    -o <gcm-workdir>/export/ebm
 uv run dreamulator export layers nacrea -l temperature_diff,precipitation_diff,koppen_agreement \
-    --mesh $G --compare-mesh $E -o private/gcm/export/diff
+    --mesh $G --compare-mesh $E -o <gcm-workdir>/export/diff
 ```
 
 投影（`src/dreamulator/gcm/to_mesh.py`）取运行最后 5 年，按轨道相位分成 12 个「月」，双线性
@@ -336,9 +336,9 @@ uv run dreamulator branch create nacrea gcm-t42-712 --at climate --climate-sourc
     -d "气候层固定为 ExoPlaSim T42 GCM 结果（712 ppm 冷启动基线）"
 
 # 2. 在 gcm 环境里输出字段文件（需要父世界已构建，网格就是 GCM 运行时用的那份）
-source private/gcm/venv/bin/activate
+source <gcm-workdir>/venv/bin/activate
 python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet satellite_nacrea \
-    --nc private/gcm/runs/t42o/cold_712/MOST.00000.nc \
+    --nc <gcm-workdir>/runs/t42o/cold_712/MOST.00000.nc \
     --emit-fields data/worlds/nacrea/branches/gcm-t42-712/layers/climate/input/gcm_fields.msgpack.gz
 deactivate
 
@@ -378,12 +378,12 @@ tar xzf /tmp/worlds-data/worlds-data.tar.gz -C data/worlds
 ```bash
 python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea \
     --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 \
-    --landmap private/gcm/surf/nacrea_N064_surf_0172.sra \
-    --topomap private/gcm/surf/nacrea_N064_surf_0129.sra \
+    --landmap <gcm-workdir>/surf/nacrea_N064_surf_0172.sra \
+    --topomap <gcm-workdir>/surf/nacrea_N064_surf_0129.sra \
     --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp"}' \
     --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' \
-    --restart private/gcm/runs/t42o/melt_2000/MOST_REST.00000 \
-    --workdir private/gcm/runs/t42o/warm_712
+    --restart <gcm-workdir>/runs/t42o/melt_2000/MOST_REST.00000 \
+    --workdir <gcm-workdir>/runs/t42o/warm_712
 ```
 
 在 Python 里则是把重启文件写进映射结果的 `params.extras["restartfile"]` 再调用 `run_gcm`。
