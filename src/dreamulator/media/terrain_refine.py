@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from dreamulator.media.lake_masks import lake_footprint
+
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
     from dreamulator.map.region_export import RegionWindow
@@ -430,7 +432,7 @@ def refine_region_pack(
         print(f"[refine] no temperature.C.npy in {pack_dir / 'input'}; terminal-lake balance off")
 
     filled, order, rec = priority_flood(h, land)
-    lakes = lake_mask(filled, h)
+    lakes = lake_footprint(lake_mask(filled, h), filled, h)
     mmu = lake_mmu_cells(km_pp)
     lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
     out = pack_dir / "refined-out"

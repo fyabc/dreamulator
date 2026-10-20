@@ -35,6 +35,7 @@ import numpy as np
 
 from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.media.canvas_hydrology_tiled import _local_flood
+from dreamulator.media.lake_masks import lake_footprint
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -455,7 +456,9 @@ def run_canvas_rivers(
             idx = data["idx"].astype(np.int64)
             lake[(idx // t + ci * t).astype(int), (idx % t + cj * t).astype(int)] = True
     if not lake.any() and np.isfinite(dem).any():
-        lake = lake_mask(np.nan_to_num(filled, nan=0.0), np.nan_to_num(dem, nan=0.0))
+        filled_n = np.nan_to_num(filled, nan=0.0)
+        dem_n = np.nan_to_num(dem, nan=0.0)
+        lake = lake_footprint(lake_mask(filled_n, dem_n), filled_n, dem_n)
 
     # Monthly regime (canvas climate has runoff_monthly per the contract).
     month_active = None
