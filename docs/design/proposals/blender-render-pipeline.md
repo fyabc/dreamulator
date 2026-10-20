@@ -25,7 +25,7 @@ dreamulator export region <world> --lat .. --lon .. --span-km ..
 private/video/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
   ├─ input/   引擎导出通道（下表）
   ├─ gaea-out/   Gaea 构建产物（见 gaea-video-chain.md）
-  └─ color/      着色产物（export colorize）
+  └─ color/      着色产物（export render --style satellite）
   input/
   ├─ height.meters.npy   float32 米值，主数据通道（bpy 精确读取，无色彩空间坑）
   ├─ height.png          16-bit，按区域 min/max 归一化，人看参考

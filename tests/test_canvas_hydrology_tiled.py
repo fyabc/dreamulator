@@ -83,9 +83,7 @@ def test_tiled_accumulation_matches_oracle(rows: int, cols: int, seed: int, sea:
     ("rows", "cols", "seed", "sea"),
     [(1, 1, 3, False), (2, 2, 7, False), (2, 3, 11, True)],
 )
-def test_tiled_fill_eps_ramp_matches_oracle(
-    rows: int, cols: int, seed: int, sea: bool
-) -> None:
+def test_tiled_fill_eps_ramp_matches_oracle(rows: int, cols: int, seed: int, sea: bool) -> None:
     """eps > 0: the per-depression ramp must reproduce the oracle's grading."""
     eps = 1e-3
     t = 16
