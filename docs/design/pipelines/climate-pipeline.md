@@ -429,6 +429,9 @@ involution 换回镜像（:653-662、:1965、:2050-2058）。
 
 ### 5.6 ④ 定常波两趟回路（v1 默认关；v2 两层 Gill 已实施，默认关）
 
+这几条路径（v1、v2 与 GW6 湿槽 `wet_trough_slp_anomaly`）的柱压项 p_s = p₀·e^(−z/H) 用大气下垫面高度
+`atmos_surface_m`：陆地取地表高程，海洋取海面高度，不读海底深度。
+
 **v1**：`stationary_wave_enabled = false`。开启时在 Stage 3 内跑两趟定点
 （`climate_simulator.py` ④ 块）：pass-1 降水 → 柱潜热 → 定常线性正压涡度方程
 （`map/stationary_wave.py::compute_slp_wave_anomaly`，Sardeshmukh & Hoskins 1988 /

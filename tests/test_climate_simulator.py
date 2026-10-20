@@ -312,6 +312,22 @@ class TestClimateSimulatorEndToEnd:
         # At least some land cells should have classifications
         assert land_with_class > 0, "No land cells received Köppen classification"
 
+    def test_climate_ignores_seafloor_depth(
+        self, sim_mesh: CVTMesh, config: TerrainPipelineConfig
+    ) -> None:
+        """The atmosphere sits on the sea surface: deepening the ocean floor
+        (bathymetry only, same land mask) must not change the climate."""
+        from dreamulator.map.climate_simulator import simulate_climate
+
+        deep = _build_test_mesh(num_bands=10, cells_per_band=10)
+        for c in deep.cells:
+            if c.elevation <= 0.0:
+                c.elevation -= 2000.0
+        simulate_climate(deep, config)
+        for a, b in zip(sim_mesh.cells, deep.cells, strict=True):
+            assert a.temperature_C == pytest.approx(b.temperature_C, abs=1e-9)
+            assert a.precipitation_mm == pytest.approx(b.precipitation_mm, abs=1e-9)
+
     def test_deterministic_output(self, sim_mesh: CVTMesh, config: TerrainPipelineConfig) -> None:
         """Same input → same output (no RNG dependence)."""
         from dreamulator.map.climate_simulator import simulate_climate

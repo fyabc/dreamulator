@@ -360,7 +360,7 @@ def precip_to_divergence(
     Args:
         p_rate_kg_m2_s: 降水率 (n, 12) 或 (n,)，1 mm/month 已换算 kg/m²/s。
         t_annual_mean_c: 年均表面温度 °C (n,)。
-        elevation_m: 海拔 (n,)。
+        elevation_m: 大气下垫面高度 (n,)：陆地为地表高程，海洋为海面高度（不是海底深度）。
         surface_pressure_pa: 海平面气压 Pa。
 
     Returns:

@@ -207,6 +207,10 @@ def simulate_climate(
     # water_class is unset (legacy mesh with no water_class written).
     is_land = resolve_land_mask(mesh.cells, config.sea_level_offset_m)
     is_ocean = ~is_land
+    # Height of the atmosphere's lower boundary: the land surface over land,
+    # the sea surface over the ocean.  Column-pressure terms (p_s = p0·e^(−z/H)
+    # in the stationary-wave forcing) must not see the seafloor depth.
+    atmos_surface_m = np.where(is_ocean, config.sea_level_offset_m, elevation_m)
     # Inland lakes that are ocean-like in size (Caspian, Great Lakes, nacrea's
     # endorheic seas) are ``water_class == "ocean"`` but *not* the open ocean:
     # they are continental water bodies that equilibrate with the overlying air,
@@ -1177,7 +1181,7 @@ def simulate_climate(
         _wave = compute_slp_wave_anomaly(
             p_monthly_mm=p_monthly,
             t_monthly_c=t_monthly_C,
-            elevation_m=elevation_m,
+            elevation_m=atmos_surface_m,
             cell_lat_deg=lat_deg,
             cell_lon_deg=_lon_deg,
             cell_area_km2=_areas_km2,
@@ -1267,7 +1271,7 @@ def simulate_climate(
         _wave2 = compute_omega_wave_anomaly(
             p_monthly_mm=p_monthly,
             t_monthly_c=t_monthly_C,
-            elevation_m=elevation_m,
+            elevation_m=atmos_surface_m,
             cell_lat_deg=lat_deg,
             cell_lon_deg=_lon_deg,
             cell_area_km2=_areas_km2,
@@ -1389,7 +1393,7 @@ def simulate_climate(
             _dp_wet_new, _v_lower, _wt_sol = wet_trough_slp_anomaly(
                 p_monthly_mm=np.maximum(p_monthly, 0.0),
                 t_monthly_c=t_monthly_C,
-                elevation_m=elevation_m,
+                elevation_m=atmos_surface_m,
                 cell_lat_deg=lat_deg,
                 cell_lon_deg=_lon_deg,
                 cell_area_km2=_areas_km2,

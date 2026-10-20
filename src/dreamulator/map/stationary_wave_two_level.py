@@ -106,7 +106,8 @@ def precip_to_heating(
     Args:
         p_rate_kg_m2_s: 降水率 kg/m²/s（1 mm/day = 1.157e-5），(n,) 或 (n, 12)。
         surface_pressure_pa: 海平面气压 Pa。
-        elevation_m: 海拔 m（高原柱压小 → 同降水率加热更强）。
+        elevation_m: 大气下垫面高度 m：陆地为地表高程，海洋为海面高度（不是海底深度）；高原柱压小，
+            同降水率加热更强。
 
     Returns:
         Q̇（K/s），与输入同形。
