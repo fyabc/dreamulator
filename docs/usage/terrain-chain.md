@@ -45,7 +45,7 @@ dreamulator build nacrea       # geological + climate 两层
 
 ```mermaid
 flowchart LR
-    A[① export region<br/>pack v3 数据包] --> B{② 地形来源}
+    A[① export region<br/>pack v4 数据包] --> B{② 地形来源}
     B -->|主方法| C[terrain-diffusion 细化<br/>90m 地貌重生成]
     B -.->|替代| D[Gaea 手动构建 /<br/>export build --method spl SPL]
     C --> E[水文提取<br/>排水 · 河网 · 湖]
@@ -284,7 +284,7 @@ topo 成图的正文：默认底图是服务端实时合成的 **topo 合成图*
 回退 input 2048²）、群系与柯本分类码（按 meta 里的图例译名）、三个
 水体掩膜、最近河段的相对累积流量与常流/非常流情相。坐标复制按钮
 直接产出 `--lat … --lon … --span-km …` 参数串，可原样贴进
-`export region/refine/carto` 命令重导出该窗口。
+`export region/build/render` 命令重导出该窗口。
 
 窗口几何是 `region_window` 的精确逆（pack v4 起为局部方位等距投影，换算与
 全球画布链共用 `map/td_canvas.py`；旧 v3 包仍按等距圆柱裁剪逆算，QA 端点按

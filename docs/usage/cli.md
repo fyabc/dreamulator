@@ -360,7 +360,7 @@ dreamulator export region nacrea --seafloor-clamp -800   # height.gaea.png 的�
 dreamulator export region nacrea --out-res 4096   # 数据包栅格分辨率（默认 2048，正方形）
 ```
 
-pack v3 起栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
+数据包的栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
 中心的 Delaunay 三角网上 Clough-Tocher C1 插值（cell 中心保真，消除 Voronoi 平台与折痕），类别通道
 最近邻，所有通道共用同一正方形输出网格。
 
