@@ -867,11 +867,11 @@ def export_canvas(
         False, "--force", help="Re-run hydrology even when finished work files exist"
     ),
     threshold_cells: int = typer.Option(
-        7000,
+        27000,
         "--threshold-cells",
-        help="Channel onset in runoff-weighted cells (7000 ≈ 0.55 m³/s mean "
-        "discharge at 90 m; the region chain's calibrated onset is ≈2.1 m³/s, "
-        "≈27000 cells here)",
+        help="Channel onset in runoff-weighted cells (27000 ≈ 2.1 m³/s mean "
+        "discharge at 90 m — the region chain's calibrated onset; lower values "
+        "give a denser network)",
     ),
 ) -> None:
     """Canvas chain: out-of-core hydrology, then crop a region window.

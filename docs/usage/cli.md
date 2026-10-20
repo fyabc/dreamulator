@@ -390,7 +390,9 @@ dreamulator export render <窗口包> --style all                             # 
 ```
 
 水文结果缓存在 `<canvas>/hydro-work/`（每个分块校验和，支持断点续算；`--force` 重跑）。
-水文算法与输出契约见设计文档（`docs/design/pipelines/` 待落档）。
+河网起始阈值 `--threshold-cells` 默认 27000，对应区域链校准的约 2.1 m³/s 平均流量
+（90 m 像素）；需要更密的小溪网时可调低。水文算法与输出契约见设计文档
+（`docs/design/pipelines/` 待落档）。
 
 ### 卫星真彩合成（export render --style satellite）
 
