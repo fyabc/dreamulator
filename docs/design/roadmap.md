@@ -1,10 +1,10 @@
 # 开发路线图
 
-> 最后更新：2026-10-16（v1.0.1：分支地图数据逐文件回退三修复；v1.0.0 发版：地形跨平台确定性闭环、earthlike 模板
-> 地形质量定稿、公开化清理与新手教程、宜居带双口径前端、渲染链全链
-> （region pack / 卫星真彩 / 制图三风格 / 程序化侵蚀+TD 细化 / biome 群系图）
-> 与 GCM 参照臂按新地形重定标。外部审计包与气候 rethinking 实施顺序见
-> v0.37.0 条目；v0.39.0 条目见 [0.39.0] CHANGELOG）
+> 最后更新：2026-10-20（v1.1.0 发版：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
+> 2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典（洛夫数 k₂=0.20/h₂=0.40、
+> Q≈445、τ_e 9.2 Myr）、earth 板块运动 PB2002 欧拉极修正；地质时间轴研究线 G1–G3 入库
+> （proposals/geological-timeline.md + `paleo_*` 模块，未接入 CLI/API/前端）。
+> v1.0.x 及更早版本详情见 CHANGELOG）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
@@ -15,7 +15,7 @@
 
 ---
 
-## 一、当前状态快照（v1.0.1）
+## 一、当前状态快照（v1.1.0）
 
 | 维度 | 状态 |
 |------|------|
