@@ -596,7 +596,8 @@ def export_erode(
 @export_app.command("refine")
 def export_refine(
     pack: Path = typer.Argument(
-        help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_-100_550km"
+        help="Region pack ROOT dir (with input/ subdir), e.g. "
+        "data/worlds/nacrea/packs/nacrea-15_-100_550km"
     ),
     td: Path | None = typer.Option(
         None,
@@ -892,7 +893,7 @@ def export_carto(
         console.print(f"[red]Build dir not found: {build_dir}[/red]")
         raise typer.Exit(code=2) from None
 
-    console.print(f"Rendering [{style}] sheet {pack} ({build_dir.name}) → {out_dir}")
+    console.print(f'Rendering "{style}" sheet {pack} ({build_dir.name}) → {out_dir}')
     if style == "medieval":
         from dreamulator.media.medieval_render import medieval_region
 

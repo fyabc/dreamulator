@@ -219,7 +219,7 @@ def render_biome_sheet(
     _combined_legend(ax, km, inputs.river_segment_regimes, entries, river_rgb=BIOME_WATER_RGB)
     _scale_bar(ax, km)
     _north_arrow(ax, km)
-    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
+    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg, inputs.projection)
     if title:
         fig.suptitle(title, fontsize=TITLE_SIZE, color="#4a3620")
 

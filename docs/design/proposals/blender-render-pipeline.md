@@ -51,15 +51,14 @@ blender -b -P scripts/media/blender/region_still.py -- --datadir <pack> [--rende
 renders/*.png + scene.blend（同目录，可随时由脚本重建）
 ```
 
-`meta.json` 字段：`pack_version`（3 = 输出网格与引擎网格解耦 + 插值 +
-Gaea 变体；2 = 气候通道；1 = 仅高度与配色）、
+`meta.json` 字段：`pack_version`（4 = 方位等距窗口 + 统一千米/像素；
+3 = 输出网格与引擎网格解耦 + 插值 + Gaea 变体；2 = 气候通道；1 = 仅高度与配色）、
+`projection`（窗口投影，v4 起为 `azimuthal_equidistant`）、
 `center_lat/lon`、`span_km`、`radius_km`、`grid{w,h}`（输出栅格分辨率，
 `--out-res` 正方形，默认 2048）、`sampling`（采样口径说明：标量通道
 在 cell 中心 Delaunay 三角网上 Clough-Tocher C1 插值并裁剪到所在三角形顶点值域
 （防三次下溢产生假盆地）、中心保真；类别通道与配色
 最近邻）、
-`pixel_box[x0,y0,x1,y1]`（全网格精确像素盒，v3 起为溯源信息，
-供与全局导出对齐核对）、
 `extent_km`、`km_per_px`、`elevation_m{min,max}`、`height_png_range_m`、
 `height_gaea_png_range_m` 与 `seafloor_clamp_m`（Gaea 变体的归一量程与
 压平深度）、`cell_pitch_km`（CVT 平均 cell 间距，供下游按 cell 尺度
@@ -72,16 +71,18 @@ Köppen 与群系另有 `legend` 类别码 → 类名映射，类别码在全网
 （`--out-res` 正方形，覆盖同一地理窗口），套准由构造保证；雪线不归档
 为独立栅格，由下游从 `ice.m` 与 `temperature.C` 两通道导出。
 
-## 区域窗口数学（等距圆柱裁剪）
+## 区域窗口数学（局部方位等距，pack v4）
 
-- 1° 纬度 = πR/180 km（用 `map.yaml` 的真实 `radius_km`，nacrea = 6816.97；
-  该字段是 MapMetadata 之外的额外字段，经 `read_radius_km` 直读 yaml）。
-- 东西向半宽除以 cos(lat) 补偿等距圆柱的纬向拉伸——裁剪窗在中心纬度处
-  按千米为正方形。
-- **边界保护**：窗口触及 |lat| > 75° 或跨 ±180° 经线即拒绝（指路 Gaea 链的
-  球极投影方案，见 `gaea-refinement.md` §3）。
-- 像素映射与 `make_equirect_grid` 逐像素一致（列 edge-aligned、行 endpoint
-  linspace），裁剪自全网格 NN 索引的切片——**对齐按构造保证，不重投影**。
+- 窗口是星球真实半径球面上以请求中心为切点的方位等距平面（x 东、y 北，
+  千米），与全球画布链共用 `map/td_canvas.py` 的 `CanvasGeometry` 换算单源。
+- 平面内 `|x| ≤ span/2`、`|y| ≤ span/2` 即窗口；中心距离在任何方位上都是
+  真实公里数，窗口在任意纬度都是真实千米正方形（旧等距圆柱裁剪只在中心
+  纬度近似成立，高纬东西向误差随跨度增大）。
+- 极区中心与跨 ±180° 经线的窗口均可导出；只有 span 触及对跖点（πR）时才
+  拒绝——那里方位等距投影本身退化。
+- 输出栅格是窗口平面上的均匀网格（`extent_km = span_km`，
+  `km_per_px = span/out_res`）；标量通道的 Clough-Tocher 插值同样在平面
+  坐标（km）里做。旧 v3 包的等距圆柱像素盒（`pixel_box`）已退役。
 
 ## 已知数值口径（f32 tie-flip）
 

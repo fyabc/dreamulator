@@ -202,6 +202,14 @@ class ColorizeInputs:
     # Kilometres per degree of latitude (π·radius/180; set by load_inputs
     # from meta ``radius_km``) — graticule and axis math are planet-correct.
     km_per_deg: float = EARTH_KM_PER_DEG
+    # Window projection from meta (pack v4+: "azimuthal_equidistant"; legacy
+    # packs and pre-v4 builders: "equirect").  Graticule legs dispatch on it.
+    projection: str = "equirect"
+    # Lake freeze regime: months per year with monthly mean air temperature
+    # below 0 °C (uint8 0-12), nearest-sampled onto the grid — a class
+    # channel, never smoothed.  12 = perennially ice-covered.  None on packs
+    # exported without a monthly climate series.
+    lake_ice_months: np.ndarray | None = None
 
 
 def _to_rgb(colors: list[tuple[int, int, int]]) -> np.ndarray:
@@ -679,6 +687,12 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         lake=lake,
         cell_px=float(cell_px),
         km_per_deg=math.pi * float(meta.get("radius_km", 6371.0)) / 180.0,
+        projection=str(meta.get("projection", "equirect")),
+        lake_ice_months=(
+            upsample_nearest(np.load(pack_dir / "lake_ice.months.npy"), factor)
+            if (pack_dir / "lake_ice.months.npy").exists()
+            else None
+        ),
     )
 
 

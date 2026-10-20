@@ -100,7 +100,10 @@ dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km \
 引擎海陆边界是平直的 Voronoi 边，而 TD 把海岸线锚定在条件的粗格
 （23 km）形态上——不扭曲的话 0 m 等值线会是大段直线（实测曲折度
 9.1 vs 等高线 10.5），扭曲后 14.6 反超（2026-10-14 实验）。
-输出写 `<pack>/refined-out/`（词汇见「输出契约」）。550 km 是单次
+输出写 `<pack>/refined-out/`（词汇见「输出契约」）。包用 `--branch` 导出时
+（例如 `gcm-t42-712`），细化按包 meta 的 `source.branch` 解析该分支的 mesh
+与月度气候（`MapManager` 的 branch → root 解析顺序），条件场与月径流形状都
+跟随分支气候，不会回落到根世界的引擎气候。550 km 是单次
 推理的实用上限，更大的窗分块跑或后台长任务。**可复现性**：模型无
 固有随机性（噪声全由 seed 决定），同 pack + 同 seed 重跑逐位一致
 （实测两次全等）；条件场变一点（如窗口切法不同）则会得到另一张
@@ -283,8 +286,9 @@ topo 成图的正文：默认底图是服务端实时合成的 **topo 合成图*
 直接产出 `--lat … --lon … --span-km …` 参数串，可原样贴进
 `export region/refine/carto` 命令重导出该窗口。
 
-窗口几何是 `region_window` 的精确逆（度/公里换算用 meta 的 `radius_km`，
-东西向按 cos(中心纬) 折算）；屏幕上的经纬网与印刷 topo 图同款墨色、
+窗口几何是 `region_window` 的精确逆（pack v4 起为局部方位等距投影，换算与
+全球画布链共用 `map/td_canvas.py`；旧 v3 包仍按等距圆柱裁剪逆算，QA 端点按
+`meta.json` 的 `projection` 字段分派）；屏幕上的经纬网与印刷 topo 图同款墨色、
 同一步长阶梯（1/2/5/10/15/30°，最长跨 ≤8 线），可与成图对照定位。
 注意 `carto/` 成图本身有版面装帧（边距、图例、图名），不在本页显示
 之列——本页只显示与地面精确配准的合成图。Windows 下 mmap 句柄会锁

@@ -45,81 +45,18 @@ refine_regions:
     erosion_passes: 5
 ```
 
-## 3 球极平面投影
+## 3 区域投影：局部方位等距
 
-将球面区域投影到平面高度图（用于 Gaea 导入）：
+区域包（`export region`）把球面窗口投影到平面高度图供 Gaea/Blender 链导入。
+当前实现是**局部方位等距投影**（azimuthal equidistant，pack v4 起）：以请求中心为
+切点，x 东、y 北，平面坐标即真实公里数，与全球画布链共用 `map/td_canvas.py` 的
+`CanvasGeometry` 换算单源。窗口在任意纬度都是真实千米正方形，极区中心与跨 ±180°
+经线的窗口都可直接导出；只有 span 触及对跖点（πR）时才拒绝，那里投影本身退化。
+区域窗口的投影约定与输出栅格见 `blender-render-pipeline.md`「区域窗口数学」。
 
-**球极平面投影 (Stereographic Projection)**：
-
-```
-设投影中心为 (φ₀, λ₀)，球面点为 (φ, λ)：
-
-k = 2R / (1 + sin(φ₀)·sin(φ) + cos(φ₀)·cos(φ)·cos(λ - λ₀))
-
-x = k · cos(φ) · sin(λ - λ₀)
-y = k · (cos(φ₀)·sin(φ) - sin(φ₀)·cos(φ)·cos(λ - λ₀))
-```
-
-**优点**：
-- 保角（conformal）：局部形状不变
-- 圆变圆：圆形特征保持圆形
-- 适合小区域（< ~30° 跨度）
-
-```python
-def stereographic_project(
-    mesh: CVTMesh,
-    elevation_m: np.ndarray,
-    center_lat_deg: float,
-    center_lon_deg: float,
-    radius_deg: float,
-    resolution: int = 4096,
-) -> tuple[np.ndarray, dict]:
-    """Project a spherical region to stereographic plane.
-
-    Returns:
-        (heightmap_2d, projection_params) for Gaea import.
-    """
-    lat0 = radians(center_lat_deg)
-    lon0 = radians(center_lon_deg)
-
-    # Select nodes within radius
-    dist = angular_distance_from_center(mesh.nodes, lat0, lon0)
-    mask = dist < radians(radius_deg)
-
-    selected_nodes = mesh.nodes[mask]
-    selected_elev = elevation_m[mask]
-
-    # Stereographic projection
-    lat = arcsin(clip(selected_nodes[:, 1], -1, 1))
-    lon = arctan2(selected_nodes[:, 2], selected_nodes[:, 0])
-
-    cos_c = sin(lat0)*sin(lat) + cos(lat0)*cos(lat)*cos(lon - lon0)
-    k = 2 / (1 + cos_c)
-
-    x = k * cos(lat) * sin(lon - lon0)
-    y = k * (cos(lat0)*sin(lat) - sin(lat0)*cos(lat)*cos(lon - lon0))
-
-    # Interpolate to regular grid
-    grid_x = linspace(-x.max(), x.max(), resolution)
-    grid_y = linspace(-y.max(), y.max(), resolution)
-    heightmap = griddata(
-        stack([x, y], axis=-1),
-        selected_elev,
-        meshgrid(grid_x, grid_y),
-        method='cubic',
-    )
-
-    params = {
-        "center_lat": center_lat_deg,
-        "center_lon": center_lon_deg,
-        "radius_deg": radius_deg,
-        "resolution": resolution,
-        "x_range": (float(-x.max()), float(x.max())),
-        "y_range": (float(-y.max()), float(y.max())),
-    }
-
-    return heightmap, params
-```
+**已否证方向**：球极平面投影（保角、<30° 跨度适用）曾作为极区窗口的候选方案，
+但方位等距在同样的窗口尺度上角点变形约 0.03%（550 km 窗口，变形量 = c/sin c），
+且与画布链共享一套换算，无需为极区另写一条腿，故不采用。
 
 ## 4 Gaea 处理
 
