@@ -654,6 +654,120 @@ def export_refine(
     )
 
 
+@export_app.command("clouds")
+def export_clouds(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    grid: str = typer.Option(
+        "8192x4096",
+        "--grid",
+        "-g",
+        help="Equirect cloud texture resolution WxH (16K×8K = 4K full-disk per the spec)",
+    ),
+    seed: int = typer.Option(7, "--seed", help="Noise seed (same fields + seed = same image)"),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output dir (default: private/video/clouds/<world>[-<branch>]/)",
+    ),
+    globe_res: int = typer.Option(1600, "--globe-res", help="Globe preview resolution"),
+    center_lon: float = typer.Option(90.0, "--center-lon", help="Globe view centre longitude"),
+    center_lat: float = typer.Option(15.0, "--center-lat", help="Globe view centre latitude"),
+    sun_lon: float | None = typer.Option(
+        None, "--sun-lon", help="Sub-solar longitude (default: centre − 25°)"
+    ),
+    sun_lat: float = typer.Option(20.0, "--sun-lat", help="Sub-solar latitude"),
+    cover_scale: float = typer.Option(
+        1.0,
+        "--cover-scale",
+        help="Multiplier on the conditioning cover field; 0 skips texture "
+        "synthesis entirely (surface/biome QA: surface.png + cloud-free globe)",
+    ),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
+
+    The large-scale cover field is a placeholder (precipitation + SLP-anomaly
+    proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
+    the permanent part.  Needs the 'media' extra (numba noise kernel).
+    """
+    _set_data_dir(data_dir)
+    try:
+        w_str, h_str = grid.lower().split("x")
+        width, height = int(w_str), int(h_str)
+    except ValueError:
+        console.print(f"[red]Invalid --grid '{grid}' (expected WxH, e.g. 8192x4096)[/red]")
+        raise typer.Exit(code=2) from None
+
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1) from None
+
+    mm = MapManager(world_dir, branch)
+    planet_id = planet
+    if planet_id is None:
+        planets = mm.list_planets_with_maps()
+        if not planets:
+            console.print("[red]No map data found for this world.[/red]")
+            raise typer.Exit(code=1) from None
+        planet_id = planets[0]
+
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+
+    map_dir = mm._maps_dir(planet_id)
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh file found for planet '{planet_id}'.[/red]")
+        raise typer.Exit(code=1) from None
+    mesh = load_cvt_mesh_model(mesh_file)
+
+    meta = mm.get_map_metadata(planet_id)
+    sea_level = meta.sea_level_m if meta else 0.0
+    radius_km = read_radius_km(map_dir, world_dir)
+
+    out_dir = output or (
+        Path("private") / "video" / "clouds" / (world + (f"-{branch}" if branch else ""))
+    )
+    console.print(
+        f"Synthesising cloud texture for {world}/{planet_id} "
+        f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
+    )
+    start = time.perf_counter()
+
+    from dreamulator.media.cloud_render import clouds_globe
+
+    paths = clouds_globe(
+        mesh,
+        out_dir,
+        radius_km=radius_km,
+        sea_level_m=sea_level,
+        width=width,
+        height=height,
+        seed=seed,
+        globe_res=globe_res,
+        center_lon_deg=center_lon,
+        center_lat_deg=center_lat,
+        sun_lon_deg=sun_lon,
+        sun_lat_deg=sun_lat,
+        cover_scale=cover_scale,
+        provenance={
+            "world": world,
+            "branch": branch or "root",
+            "planet": planet_id,
+            "mesh": str(mesh_file),
+        },
+    )
+    elapsed = time.perf_counter() - start
+    for name, path in paths.items():
+        console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+    console.print(f"  done in {elapsed:.1f}s")
+
+
 @export_app.command("carto")
 def export_carto(
     pack: Path = typer.Argument(
