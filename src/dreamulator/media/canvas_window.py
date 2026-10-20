@@ -92,6 +92,26 @@ class CanvasSource:
         path = self.root / "climate" / f"{name}.npy"
         return np.load(path) if path.exists() else None
 
+    def elevation_range(self) -> tuple[float, float]:
+        """Canvas-wide elevation range (palette anchor across windows).
+
+        Reads ``canvas.json``'s ``elevation_m`` when the server writes it;
+        otherwise scans the chunk headers with mmap (one read of the canvas,
+        cached on the instance).
+        """
+        meta_path = self.root / "canvas.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        rng = meta.get("elevation_m") or meta.get("elevation_range")
+        if isinstance(rng, list) and len(rng) == 2:
+            return (float(rng[0]), float(rng[1]))
+        lo, hi = np.inf, -np.inf
+        for ci, cj in self.chunks:
+            path = self.root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"
+            arr = np.load(path, mmap_mode="r")
+            lo = min(lo, float(arr.min()))
+            hi = max(hi, float(arr.max()))
+        return (lo, hi)
+
 
 def _canvas_raster(source: CanvasSource, r0: int, c0: int, r1: int, c1: int) -> np.ndarray:
     """Assemble the canvas sub-rectangle [r0:r1, c0:c1] from its chunks."""
@@ -144,12 +164,56 @@ def _coarse_indices(rows: np.ndarray, cols: np.ndarray) -> tuple[np.ndarray, np.
     return (rows - (CELL_PX - 1) / 2.0) / CELL_PX, (cols - (CELL_PX - 1) / 2.0) / CELL_PX
 
 
+def _fill_raster(source: CanvasSource, r0: int, c0: int, r1: int, c1: int) -> np.ndarray:
+    """Stage-3 filled surface for the crop [r0:r1, c0:c1] (NaN outside chunks)."""
+    out = np.full((r1 - r0, c1 - c0), np.nan, dtype=np.float64)
+    t = source.tile
+    final = source.root / "hydro-work" / "final"
+    if not final.is_dir():
+        final = source.root / "hydrology-work" / "final"
+    for ci in range(r0 // t, (r1 - 1) // t + 1):
+        for cj in range(c0 // t, (c1 - 1) // t + 1):
+            path = final / f"r{ci:03d}_c{cj:03d}.i16.npy"
+            if not path.exists():
+                continue
+            arr = np.load(path)
+            tr0, tc0 = ci * t, cj * t
+            ir0, ic0 = max(r0, tr0), max(c0, tc0)
+            ir1, ic1 = min(r1, tr0 + t), min(c1, tc0 + t)
+            out[ir0 - r0 : ir1 - r0, ic0 - c0 : ic1 - c0] = arr[
+                ir0 - tr0 : ir1 - tr0, ic0 - tc0 : ic1 - tc0
+            ]
+    return out
+
+
 def _lake_raster(source: CanvasSource, r0: int, c0: int, r1: int, c1: int) -> np.ndarray:
-    """Lake id per canvas pixel in the crop (0 = dry), from S2 sparse files."""
+    """Lake id per canvas pixel in the crop (0 = dry).
+
+    Reads the S2 sparse lake files; when those are absent (the lake product
+    is not extracted yet) falls back to the filled surface.  The draw mask is
+    the whole footprint above a shallow fill threshold, not only the 5 m-deep
+    core the river chain uses to stop reaches: the fill surface is the water
+    level, and a core-only mask leaves shallow rims as ragged holes and opens
+    a land sliver where a river meets the lake (2026-10-21 user report).  The
+    component MMU still rejects TD speckle.
+    """
     out = np.zeros((r1 - r0, c1 - c0), dtype=np.uint16)
     t = source.tile
     sparse_dir = source.root / "hydro" / "lakes.sparse"
     if not sparse_dir.is_dir():
+        from dreamulator.map.prog_erosion import lake_mask
+
+        raw = _canvas_raster(source, r0, c0, r1, c1)
+        fill = _fill_raster(source, r0, c0, r1, c1)
+        ok = np.isfinite(raw) & np.isfinite(fill)
+        if ok.any():
+            from scipy.ndimage import binary_fill_holes
+
+            mask = lake_mask(np.where(ok, fill, 0.0), np.where(ok, raw, 0.0), 0.5) & ok
+            # Interior holes are quantisation residuals (the rounded fill
+            # meets the rounded ground inside one water body); fill them so
+            # the sheet does not show speckled lake surfaces.
+            out[binary_fill_holes(mask)] = 1
         return out
     for ci in range(r0 // t, (r1 - 1) // t + 1):
         for cj in range(c0 // t, (c1 - 1) // t + 1):
@@ -180,7 +244,9 @@ def _rasterise_rivers(
     geom = source.geometry
     half = window.half_km
     for seg in segs:
-        lat, lon = geom.xy_to_latlon(seg[:, 0], seg[:, 1])
+        # S2 vectors are SW-origin canvas km (``cell_xyz_km`` convention);
+        # the projection plane is centred, so shift by the canvas half-side.
+        lat, lon = geom.xy_to_latlon(seg[:, 0] - geom.half_km, seg[:, 1] - geom.half_km)
         wx, wy = window.latlon_to_xy(lat, lon)
         col = (np.asarray(wx) + half) / window.span_km * out_res
         row = (half - np.asarray(wy)) / window.span_km * out_res
@@ -236,6 +302,17 @@ def crop_canvas_window(
 
     lake_raster = _lake_raster(source, r_lo, c_lo, r_hi, c_hi)
     lake = (_nearest(lake_raster, rows - r_lo, cols - c_lo) > 0) & ~np.isnan(height)
+    if lake.any():
+        # Same MMU gates the river chain used to stop reaches at lakes, at
+        # the window's own pixel pitch (the mask is on the window grid).
+        km_px = span_km / out_res
+        from dreamulator.map.prog_erosion import (
+            LAKE_MIN_WIDTH_KM,
+            keep_large_lakes,
+            lake_mmu_cells,
+        )
+
+        lake = keep_large_lakes(lake, lake_mmu_cells(km_px), LAKE_MIN_WIDTH_KM, km_px)
     sea = (height <= 0.0) & ~np.isnan(height)
     river = _rasterise_rivers(source, window, out_res)
 
@@ -259,7 +336,7 @@ def crop_canvas_window(
     regimes_path = source.root / "hydro" / "rivers.regime.npy"
     if line_path.exists():
         segs = np.load(line_path).astype(np.float64)
-        lat, lon = geom.xy_to_latlon(segs[..., 0], segs[..., 1])
+        lat, lon = geom.xy_to_latlon(segs[..., 0] - geom.half_km, segs[..., 1] - geom.half_km)
         wx, wy = window.latlon_to_xy(lat, lon)
         half = window.half_km
         np.save(
@@ -315,6 +392,28 @@ def crop_canvas_window(
 
     h_lo = float(np.nanmin(height32)) if np.isfinite(height32).any() else 0.0
     h_hi = float(np.nanmax(height32)) if np.isfinite(height32).any() else 0.0
+    g_lo, g_hi = source.elevation_range()
+    # Anchor the shared palette on the canvas-wide range (sea level 0 inside),
+    # not the window's own range — otherwise a high window renders all-sea-blue.
+    g_lo = min(g_lo, h_lo, 0.0)
+    g_hi = max(g_hi, h_hi, 1.0)
+    # Sea-depth mask in the pack's convention: depth normalised by the same
+    # span the renderer multiplies back (height_gaea_png_range_m).  Without
+    # it the carto LUT reads zero depth everywhere and paints the ocean at
+    # sea level (the 0 m land stop, i.e. green).
+    span_m = g_hi - g_lo or 1.0
+    depth = np.clip(-np.nan_to_num(height32, nan=0.0), 0.0, None) / span_m
+    from PIL import Image
+
+    Image.fromarray(np.clip(depth * 65535, 0, 65535).astype(np.uint16)).save(
+        refined / "sea-depth.png"
+    )
+    canvas_source = canvas_meta.get("source")
+    inherited = (
+        {k: canvas_source[k] for k in ("world", "planet", "branch") if k in canvas_source}
+        if isinstance(canvas_source, dict)
+        else {}
+    )
     meta: dict[str, object] = {
         "pack_version": 4,
         "projection": "azimuthal_equidistant",
@@ -326,15 +425,16 @@ def crop_canvas_window(
         "extent_km": {"x": float(span_km), "y": float(span_km)},
         "km_per_px": {"x": span_km / out_res, "y": span_km / out_res},
         "elevation_m": {"min": h_lo, "max": h_hi},
-        "elevation_m_global": [h_lo, h_hi],
+        "elevation_m_global": [g_lo, g_hi],
         "height_png_range_m": [h_lo, h_hi],
-        "height_gaea_png_range_m": [h_lo, h_hi],
+        "height_gaea_png_range_m": [g_lo, g_hi],
         "seafloor_clamp_m": -400.0,
         "sea_level_m": 0.0,
         "cell_pitch_km": round(2 * np.pi * geom.radius_km / np.sqrt(2e5), 2),
         "ocean_fraction": round(float(sea.mean()), 4),
         "missing_cells": missing,
         "source": {
+            **inherited,
             "canvas": source.root.name,
             "geometry_center": [geom.center_lat, geom.center_lon],
             "projection": "azimuthal_equidistant",

@@ -866,6 +866,13 @@ def export_canvas(
     force: bool = typer.Option(
         False, "--force", help="Re-run hydrology even when finished work files exist"
     ),
+    threshold_cells: int = typer.Option(
+        7000,
+        "--threshold-cells",
+        help="Channel onset in runoff-weighted cells (7000 ≈ 0.55 m³/s mean "
+        "discharge at 90 m; the region chain's calibrated onset is ≈2.1 m³/s, "
+        "≈27000 cells here)",
+    ),
 ) -> None:
     """Canvas chain: out-of-core hydrology, then crop a region window.
 
@@ -880,7 +887,11 @@ def export_canvas(
         raise typer.Exit(code=2) from None
 
     if stage in ("all", "hydrology"):
-        from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill
+        from dreamulator.media.canvas_pipeline import (
+            CanvasStore,
+            run_canvas_fill,
+            run_canvas_rivers,
+        )
 
         store = CanvasStore.load(canvas)
         finals = list((store.work / "final").glob("r*_c*.npy"))
@@ -892,6 +903,8 @@ def export_canvas(
             )
         else:
             console.print(f"Hydrology already complete under {store.work}")
+        if force or not (canvas / "hydro" / "rivers.line.npy").exists():
+            run_canvas_rivers(store, threshold_cells=threshold_cells)
 
     if stage == "hydrology":
         return

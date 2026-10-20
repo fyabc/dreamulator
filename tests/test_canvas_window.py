@@ -67,7 +67,10 @@ def _make_canvas(root: Path) -> CanvasGeometry:
             )
     np.save(
         root / "hydro" / "rivers.line.npy",
-        np.array([[[-50.0, -50.0], [50.0, 50.0]]], dtype=np.float32),
+        # SW-origin canvas km (cell_xyz_km convention); the canvas is 16 cells
+        # (368 km), so the centre sits at 184 km.  A segment through the centre
+        # maps to the window centre (275 km) in the crop.
+        np.array([[[134.0, 134.0], [234.0, 234.0]]], dtype=np.float32),
     )
     np.save(root / "hydro" / "rivers.flow.npy", np.array([10.0], dtype=np.float32))
     np.save(root / "hydro" / "rivers.regime.npy", np.array([0], dtype=np.uint8))

@@ -307,3 +307,197 @@ def run_canvas_fill(
     if verbose:
         print(f"[hydrology] done in {stats['stages_seconds']:.1f} s")
     return stats
+
+
+def _shift(f: np.ndarray, dy: int, dx: int) -> np.ndarray:
+    """Neighbour view ``out[y, x] = f[y + dy, x + dx]`` (+inf outside)."""
+    h, w = f.shape
+    out = np.full_like(f, np.inf)
+    src_r = slice(max(0, dy), h + min(0, dy))
+    src_c = slice(max(0, dx), w + min(0, dx))
+    dst_r = slice(max(0, -dy), h + min(0, -dy))
+    dst_c = slice(max(0, -dx), w + min(0, -dx))
+    out[dst_r, dst_c] = f[src_r, src_c]
+    return out
+
+
+def _grade_flats(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray:
+    """PF+ε ramp for flow routing: equal-value flats grade toward their outlets.
+
+    Mirrors the in-memory fill's ramp (multi-source Dijkstra over each flat
+    level: seeds are outlets and cells touching a strictly lower level).
+    The result is used only for flow directions, not written back.
+    """
+    h, w = filled.shape
+    flat = filled.ravel().astype(np.float64)
+    level = np.full(flat.size, np.inf)
+    hq: list[tuple[float, int]] = []
+    for c in range(flat.size):
+        v = flat[c]
+        if not np.isfinite(v):
+            continue
+        r, col = divmod(c, w)
+        if v <= sea_level:
+            level[c] = v
+            hq.append((v, c))
+            continue
+        low = False
+        for dy, dx in _NEIGHBOURS:
+            nr, nc = r + dy, col + dx
+            if 0 <= nr < h and 0 <= nc < w and filled[nr, nc] < v - 1e-9:
+                low = True
+                break
+        if low:
+            level[c] = v
+            hq.append((v, c))
+    heapq.heapify(hq)
+    while hq:
+        lv, c = heapq.heappop(hq)
+        if lv != level[c]:
+            continue
+        r, col = divmod(c, w)
+        for dy, dx in _NEIGHBOURS:
+            nr, nc = r + dy, col + dx
+            if not (0 <= nr < h and 0 <= nc < w):
+                continue
+            nid = nr * w + nc
+            if filled[nr, nc] != filled[r, col]:
+                continue
+            nl = lv + eps
+            if nl < level[nid]:
+                level[nid] = nl
+                heapq.heappush(hq, (nl, nid))
+    out = np.where(np.isfinite(level), np.maximum(level, flat), flat)
+    return out.reshape(h, w).astype(np.float32)
+
+
+def canvas_flow_fields(
+    store: CanvasStore, *, sea_level: float = 0.0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Assembled (filled, dem, receiver, accumulation, land) for QA/extraction.
+
+    Applies the PF+ε flat grading before the D8 receivers so depressions have
+    defined flow directions.  Memory scales with the canvas (QA/demo path).
+    """
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM, flow_accumulation
+
+    t = store.tile
+    nrow = (max(ci for ci, _ in store.chunks) + 1) * t
+    ncol = (max(cj for _, cj in store.chunks) + 1) * t
+    filled = np.full((nrow, ncol), np.nan, dtype=np.float32)
+    dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
+    for ci, cj in store.chunks:
+        filled[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = np.load(
+            store.path("final", ci, cj, "i16.npy")
+        ).astype(np.float32)
+        dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
+    h, w = filled.shape
+    filled = _grade_flats(filled, sea_level, 1e-3)
+    rr, cc = np.mgrid[0:h, 0:w]
+    rec2d = -np.ones((h, w), dtype=np.int64)
+    best = np.zeros((h, w), dtype=np.float64)
+    diag = 2**0.5
+    for dy, dx in _NEIGHBOURS:
+        nb = _shift(filled, dy, dx)
+        slope = (filled - nb) / (diag if dy and dx else 1.0)
+        better = np.isfinite(slope) & (nb < filled) & (slope > best)
+        best = np.where(better, slope, best)
+        rec2d = np.where(better, (rr + dy) * w + (cc + dx), rec2d)
+    land = np.isfinite(filled) & (filled > sea_level)
+    rec = rec2d.reshape(-1)
+    rec[~land.reshape(-1)] = -1
+    order = np.argsort(np.nan_to_num(filled, nan=1e30).ravel(), kind="stable")
+    runoff_path = store.root / "climate" / "runoff.mm.npy"
+    if runoff_path.exists():
+        coarse = np.nan_to_num(np.load(runoff_path).astype(np.float64), nan=0.0)
+        factor = h // coarse.shape[0]
+        up = np.kron(coarse, np.ones((factor, factor)))[:h, :w]
+        weight = np.where(land, np.maximum(up, 0.0) / RUNOFF_REFERENCE_MM, 0.0)
+    else:
+        weight = land.astype(np.float64)
+    acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
+    return filled, dem, rec, acc, land
+
+
+def run_canvas_rivers(
+    store: CanvasStore,
+    *,
+    sea_level: float = 0.0,
+    threshold_cells: int = 7000,
+    verbose: bool = True,
+) -> dict[str, object]:
+    """Extract channel mask and vector river segments from the final fill."""
+    from dreamulator.map.prog_erosion import (
+        lake_mask,
+        month_active_counts,
+        regime_active_cells,
+        river_mask,
+        river_segments,
+    )
+
+    filled, dem, rec, acc, land = canvas_flow_fields(store, sea_level=sea_level)
+    h, w = filled.shape
+    t = store.tile
+    order = np.argsort(np.nan_to_num(filled, nan=1e30).ravel(), kind="stable")
+    weight_source = (
+        "runoff.mm" if (store.root / "climate" / "runoff.mm.npy").exists() else "uniform"
+    )
+    rivers = river_mask(acc, land, threshold_cells)
+
+    lake = np.zeros((h, w), dtype=bool)
+    sparse_dir = store.root / "hydro" / "lakes.sparse"
+    if sparse_dir.is_dir():
+        for ci, cj in store.chunks:
+            path = sparse_dir / f"lake.r{ci:03d}_c{cj:03d}.npz"
+            if not path.exists():
+                continue
+            data = np.load(path)
+            idx = data["idx"].astype(np.int64)
+            lake[(idx // t + ci * t).astype(int), (idx % t + cj * t).astype(int)] = True
+    if not lake.any() and np.isfinite(dem).any():
+        lake = lake_mask(np.nan_to_num(filled, nan=0.0), np.nan_to_num(dem, nan=0.0))
+
+    # Monthly regime (canvas climate has runoff_monthly per the contract).
+    month_active = None
+    monthly_path = store.root / "climate" / "runoff_monthly.mm.npy"
+    if monthly_path.exists():
+        monthly = np.load(monthly_path).astype(np.float64)
+        if monthly.ndim == 3:
+            monthly = np.moveaxis(monthly, 0, -1)  # (12,n,n) -> (n,n,12)
+            active = regime_active_cells(store.geometry.px_km)
+            factor = h // monthly.shape[0]
+            month_active = month_active_counts(order, rec, monthly, land, active, factor=factor)
+
+    segs, flows, regimes = river_segments(
+        rivers, rec, acc, store.geometry.px_km, lake=lake, month_active=month_active
+    )
+    hydro = store.root / "hydro"
+    hydro.mkdir(exist_ok=True)
+    np.save(hydro / "rivers.line.npy", segs.astype(np.float32))
+    np.save(hydro / "rivers.flow.npy", flows.astype(np.float32))
+    np.save(hydro / "rivers.regime.npy", regimes.astype(np.uint8))
+    from PIL import Image
+
+    Image.fromarray((rivers.astype(np.uint8) * 255), mode="L").save(hydro / "rivers.png")
+    meta = {
+        "threshold_cells": threshold_cells,
+        "weight_source": weight_source,
+        "km_per_px": store.geometry.px_km,
+        "segments": int(len(flows)),
+        "perennial": int((regimes == 0).sum()),
+        "non_perennial": int((regimes == 1).sum()),
+        "regime_source": "monthly-runoff" if month_active is not None else "annual-default",
+    }
+    (hydro / "rivers.meta.json").write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    if verbose:
+        print(
+            f"[hydrology] rivers: {len(flows)} segments "
+            f"({int((regimes == 0).sum())} perennial / {int((regimes == 1).sum())} non-perennial)"
+        )
+    return {
+        "segments": float(len(flows)),
+        "perennial": float((regimes == 0).sum()),
+        "non_perennial": float((regimes == 1).sum()),
+    }
