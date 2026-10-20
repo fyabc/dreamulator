@@ -226,6 +226,19 @@ Nacrea 宽 Hadley 两圈体制（`hadley_extent=52`）或三圈纬度不同的�
 是**从自己的 `hadley_cell_wind`（`hadley_extent_deg`/`polar_cell_start_deg` 参数化）推导
 「向风方向」**，替换各向同性 `distance_to_coast`——抄概念、第一性重推实现（「第一性 > 先验」）。
 
+**World Orogen（[orogen.studio](https://orogen.studio/)，2026-10-20 调研）**：免费浏览器端程序化行星
+生成器（vanilla JS + Web Worker，GPL-3.0，`github.com/raguilar011095/planet_heightmap_generation`），
+定位「行星概念图，可信度优先而非精度优先」。其 v2 气候与本库自建管线是**同一模型类的平行实现**：
+季节 EBM（频域谐波直接解 + 多重网格，免 spin-up）→ 温度推导气压/风（Held-Hou 与 Lindzen-Hou 标度）→
+Stommel 线化洋流 → 全球严格守恒的柱水汽收支（地形雨在预算内核里再分配，「moved not made」）→ Köppen；
+动力 3° 经纬网格与地形网格解耦（160K–2.5M cell 零漂移）。自述全球一年气候 0.8–1.0 s；对 Beck 2023
+陆地 Köppen 精确匹配 48.5%（大组 78.6%、陆地温度典型误差 3.75 °C），剩余误差恰落在 astra 审计预判的
+瞬变涡旋/上层基本态墙（地中海气候召回 13%、季风偏弱、南大洋西风不足）。对本库的价值**不是后端或
+参照臂**（GPL、无数据 API、精度不及 ExoPlaSim），而是同模型类的**验证工装参照实现**（分阶段打分、
+truth-swap 归因、大洲等权「任何大洲不得更差」接受规则、文献先验表、合成测试行星物理门槛、inert-lever
+probe）与一批已测量的负结果（锋面雨、风暴路径、湿暖定位雨带、细化气候网格均无效）。GPL 代码一行不
+抄；方法数字引用须回溯原始文献。完整报告 `private/research/2026-10-20-orogen-studio-climate-engine.md`。
+
 ### 4.4 生态层
 
 | 工具 | 用途 | 与 Dreamulator 的关系 |

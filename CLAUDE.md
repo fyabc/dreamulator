@@ -493,7 +493,7 @@ cd frontend && npm run build:static:local && npm run preview:static
 |------|---------|:--:|
 | 天文 | MESA（恒星演化）、REBOUND（N 体轨道） | ✅ |
 | 地质 | GPlates（板块重建）、Landlab（地表过程）、Fastscape（河流侵蚀） | ✅ |
-| 气候 | ExoPlaSim（系外行星 GCM）、climlab（Python 气候工具箱） | ✅ |
+| 气候 | ExoPlaSim（系外行星 GCM）、climlab（Python 气候工具箱）、World Orogen（同类 EBM 验证工装参照，GPL 勿抄码） | ✅ |
 | 生态 | Madingley Model（通用生态系统）、Biblaridion Alien Biosphere（方法论） | ✅ |
 | 文明 | Seshat Databank（历史验证数据）、HANDY（人口-资源 ODE） | ✅ |
 
