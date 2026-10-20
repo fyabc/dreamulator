@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792523311823,
+  "lastUpdate": 1792523939982,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -531,6 +531,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006316016484580995",
             "extra": "mean: 5.196070400000963 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "bb05849d5f67f389fcf5271e1adb7359291650e5",
+          "message": "Merge docs/canvas-hydrology: 画布链技术参考 + td_canvas 正式入库\n\n- 新增 docs/design/pipelines/canvas-hydrology.md（画布契约、外存水文、\n  裁窗与渲染衔接、验证与限制），CLI 用法页与设计索引同步\n- td_canvas 几何换算模块入库，修复干净克隆下 region_export 导入失败\n  导致的 tests workflow 红灯",
+          "timestamp": "2026-10-21T03:18:00+08:00",
+          "tree_id": "6a5806d1e96e610d7c204afc0e33212356438fc9",
+          "url": "https://github.com/fyabc/dreamulator/commit/bb05849d5f67f389fcf5271e1adb7359291650e5"
+        },
+        "date": 1792523938022,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.46700842002862225,
+            "unit": "iter/sec",
+            "range": "stddev: 0.10542387457224148",
+            "extra": "mean: 2.1412890156000004 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7806392789571173,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00900472342990807",
+            "extra": "mean: 264.5055309999975 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9356165118989967,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8255416096685161",
+            "extra": "mean: 516.6312613333304 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1201.307695500609,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007330882624680758",
+            "extra": "mean: 832.4262000030558 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 247.7482164605715,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004105612778241318",
+            "extra": "mean: 4.036356000000296 msec\nrounds: 5"
           }
         ]
       }
