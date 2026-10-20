@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792509389441,
+  "lastUpdate": 1792523311823,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -472,6 +472,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007331549786574537",
             "extra": "mean: 5.065661399996202 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "12f264696c9f9f1aa19906945fc90d98422f6b70",
+          "message": "Merge feature/s2-canvas-hydrology: S2 外存水文 + S3 画布裁窗 + CLI 收敛\n\n- S2：分块 Priority-Flood 三段式（Barnes 2016）、eps 坡道、Fill-Spill-Merge\n  湖级联、Barnes 2017 分块汇流、磁盘管线与矢量河段提取\n- S3：AEQ 画布裁窗写出既有 pack 词汇，海深/湖面/河段与渲染链对齐\n- 渲染：河湖裁剪改为只删除完全在水中的河段；湖体按完整填平足迹断链绘制\n- CLI：export 收敛为六命令（layers/region/build/render/clouds/canvas），\n  画布河网阈值默认 27000（与区域链同物理起点）\n- 文档与测试同步（沙盒 oracle 对拍、画布链测试、湖足迹单测）",
+          "timestamp": "2026-10-21T03:07:11+08:00",
+          "tree_id": "9a67bf2f3b3ff7e4521fd4673a54d27b8444e455",
+          "url": "https://github.com/fyabc/dreamulator/commit/12f264696c9f9f1aa19906945fc90d98422f6b70"
+        },
+        "date": 1792523311156,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.30967344090062754,
+            "unit": "iter/sec",
+            "range": "stddev: 0.14099538147828064",
+            "extra": "mean: 3.2292081525999974 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.78957304571921,
+            "unit": "iter/sec",
+            "range": "stddev: 0.023887485524691564",
+            "extra": "mean: 358.47779699999904 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.3598057253900306,
+            "unit": "iter/sec",
+            "range": "stddev: 1.182226693352025",
+            "extra": "mean: 735.3991686666651 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 900.8070871204721,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021481066683680188",
+            "extra": "mean: 1.110115599996675 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 192.4531276558175,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006316016484580995",
+            "extra": "mean: 5.196070400000963 msec\nrounds: 5"
           }
         ]
       }
