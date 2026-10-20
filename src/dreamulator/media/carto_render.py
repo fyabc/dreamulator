@@ -25,10 +25,11 @@ import numpy as np
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.collections import LineCollection
 
 from dreamulator.map.palettes import build_adaptive_terrain_lut
 
-from .satellite_color import ColorizeInputs, hillshade, load_inputs
+from .satellite_color import EARTH_KM_PER_DEG, ColorizeInputs, hillshade, load_inputs
 
 # --- paper & inks -----------------------------------------------------------
 PAPER_RGB = (248, 244, 233)
@@ -44,8 +45,24 @@ CONTOUR_MINOR_LW = 0.35
 CONTOUR_MAJOR_LW = 0.9
 CONTOUR_LABEL_SIZE = 10.0
 
-RIVER_COLOR = (72, 119, 148)
+#: The one water ink for rivers and lakes alike (survey single-colour
+#: convention).  Depth is tuned for lowland legibility: the lowland greens
+#: of the shared terrain LUT sit at luminance ≈107 (Rec.709), so the ink
+#: stays ≈20 points darker (≈84) — at (72,119,148) it matched the greens'
+#: luminance almost exactly and vanished on 0–200 m plains (2026-10-16
+#: user feedback).  Deep sea (LUT) reaches ≈73, so the ink never crosses it.
+RIVER_COLOR = (44, 92, 130)
+#: Lake shore ring: the same blue a step deeper — a crisp outline keeps
+#: small lakes readable where the fill alone would wash against greens.
+LAKE_SHORE_COLOR = (34, 78, 116)
 RIVER_MIN_LW = 0.7
+#: Flow-regime line styles: US Topo's solid perennial and dash-dot
+#: non-perennial convention, restricted to the two classes monthly data can
+#: support honestly.  Dash and gap lengths are in points.  Non-perennial
+#: channels use butt caps, and their marks are longer than the line width:
+#: round, width-long dots read as a string of tiny lakes rather than as a
+#: river (2026-10-17 sheet review).
+RIVER_LS_NON_PERENNIAL = (0, (12.0, 2.4, 1.8, 2.4, 1.8, 2.4))
 
 #: Ocean ink comes from the shared LUT on the planet-wide anchor (same
 #: elevation → same colour on every sheet).  Historically the LUT's sea
@@ -70,6 +87,144 @@ COLOR_SATURATION = 1.30
 TITLE_SIZE = 22.0
 LEGEND_SIZE = 14.0
 SCALEBAR_SIZE = 13.0
+#: Legend annotation tier (2026-10-17 review): elevation numbers/titles and
+#: the boxed river-regime legend read as furniture, not map content, and
+#: stay a step smaller than scale-bar labels.
+LEGEND_SMALL_SIZE = 10.5
+
+#: Chinese display names for biome legend rows (print artefact convention,
+#: same as the Chinese sheet title).  Missing names fall back to the
+#: English biome id.
+BIOME_DISPLAY_ZH: dict[str, str] = {
+    "tropical_rainforest": "热带雨林",
+    "tropical_seasonal_forest": "热带季雨林",
+    "tropical_savanna": "热带稀树草原",
+    "tropical_desert": "热带荒漠",
+    "temperate_rainforest": "温带雨林",
+    "temperate_forest": "温带森林",
+    "temperate_grassland": "温带草原",
+    "temperate_desert": "温带荒漠",
+    "boreal_forest": "北方针叶林",
+    "boreal_shrubland": "北方灌丛",
+    "tundra": "苔原",
+    "ice": "冰盖",
+    "lake": "湖泊",
+    "ocean": "海洋",
+}
+
+
+def _combined_legend(
+    ax: Axes,
+    km: float,
+    regimes: np.ndarray | None,
+    biome_entries: list[tuple[str, tuple[int, int, int]]],
+    *,
+    river_rgb: tuple[int, int, int] = RIVER_COLOR,
+) -> None:
+    """The sheet's single legend box: river regime rows with biome swatches
+    appended below (one frame for everything — sheets that carry no class
+    legend at all pass an empty list and get the river-only box).
+
+    River rows reuse the survey sheet's continuous-dash samples; biome rows
+    are swatch + display name, same pitch.  Box geometry follows
+    :func:`_river_regime_legend` so both stay in the same visual family.
+    """
+    from matplotlib.collections import LineCollection
+    from matplotlib.patches import Rectangle
+
+    present = [r for r in (0, 1) if regimes is not None and np.any(regimes == r)]
+    if not present and not biome_entries:
+        return
+
+    x0 = ax.get_xlim()[0] + (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.035
+    points_per_unit = _points_per_data_unit(ax)
+    pad_x, pad_y = km * 0.009, km * 0.006
+    sample_len = km * 0.026
+    swatch_w = km * 0.011
+    text_gap = km * 0.007
+    row_h = title_h = km * 0.0195
+    names = ["常流河", "非常流河"] + [BIOME_DISPLAY_ZH.get(nm, nm) for nm, _ in biome_entries]
+    text_w = max(len(s) for s in names) * LEGEND_SMALL_SIZE * 0.95 / 72 / (12 * 0.90) * km
+    n_rows = len(present) + len(biome_entries)
+    box_w = pad_x + max(sample_len, swatch_w) + text_gap + text_w + pad_x
+    box_h = pad_y + title_h + row_h * n_rows + pad_y
+    y0 = km * 0.003
+    ax.add_patch(
+        Rectangle(
+            (x0 - pad_x, y0),
+            box_w,
+            box_h,
+            facecolor="#ffffff",
+            edgecolor=_hex(river_rgb),
+            linewidth=0.9,
+            zorder=8,
+        )
+    )
+    ax.text(
+        x0 - pad_x + box_w / 2,
+        y0 + box_h - pad_y - title_h / 2,
+        "图例",
+        fontsize=LEGEND_SMALL_SIZE + 1,
+        ha="center",
+        va="center",
+        color="#1a1a1a",
+        zorder=9,
+    )
+    sample = np.array([[[x0, 0.0], [x0 + sample_len, 0.0]]])
+    y_top = y0 + box_h - pad_y - title_h
+
+    def row_label(y: float, label: str) -> None:
+        ax.text(
+            x0 + max(sample_len, swatch_w) + text_gap,
+            y,
+            label,
+            fontsize=LEGEND_SMALL_SIZE,
+            ha="left",
+            va="center",
+            color="#1a1a1a",
+            zorder=9,
+        )
+
+    for i, regime in enumerate(present):
+        y = y_top - (i + 0.5) * row_h
+        sample[0, :, 1] = y
+        if regime == 0:
+            paths = [sample[0].copy()]
+            capstyle = "round"
+            label = "常流河"
+        else:
+            paths, _widths = _continuous_dash_paths(
+                sample, np.ones(1), RIVER_LS_NON_PERENNIAL[1], points_per_unit
+            )
+            capstyle = "butt"
+            label = "非常流河"
+        ax.add_collection(
+            LineCollection(
+                paths,
+                colors=[_hex(river_rgb)],
+                linewidths=[1.0] * len(paths),
+                linestyles="solid",
+                capstyle=capstyle,
+                joinstyle="round",
+                zorder=9,
+            )
+        )
+        row_label(y, label)
+    for j, (name, rgb) in enumerate(biome_entries):
+        y = y_top - (len(present) + j + 0.5) * row_h
+        ax.add_patch(
+            Rectangle(
+                (x0, y - row_h * 0.33),
+                swatch_w,
+                row_h * 0.66,
+                facecolor="#{:02x}{:02x}{:02x}".format(*rgb),
+                edgecolor="#5a4632",
+                linewidth=0.6,
+                zorder=9,
+            )
+        )
+        row_label(y, BIOME_DISPLAY_ZH.get(name, name))
+
 
 #: Hand-drawn feel (stage-two pass, but part of the MVP chain deliverable:
 #: the wobbled sheet doubles as video material).
@@ -224,6 +379,26 @@ def _hand_tint_pass(rgb: np.ndarray, res: int) -> np.ndarray:
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float64)
 
 
+def two_scale_relief(
+    height_m: np.ndarray, km_per_px: float, *, struct_sigma_px: float | None = None
+) -> np.ndarray:
+    """Structural + fine hillshade blend, 0..1 (see HILLSHADE_* constants).
+
+    Reference sheets (OpenTopoMap style) read as two stacked shades — a
+    structural shadow on the smoothed field plus a fine relief on the raw
+    field.  A single-scale shade leaves the mid-frequencies flat.
+    ``struct_sigma_px`` overrides the structural smoothing (callers working
+    at a different grid resolution scale it to keep the same ground scale).
+    """
+    from scipy.ndimage import gaussian_filter
+
+    sigma = HILLSHADE_STRUCT_SIGMA_PX if struct_sigma_px is None else struct_sigma_px
+    hs = hillshade(height_m, km_per_px)
+    smooth = gaussian_filter(height_m, sigma=sigma)
+    hs_struct = hillshade(smooth, km_per_px)
+    return HILLSHADE_STRUCT_WEIGHT * hs_struct + (1.0 - HILLSHADE_STRUCT_WEIGHT) * hs
+
+
 def compose_rgb(
     inputs: ColorizeInputs,
     rng_m: tuple[float, float],
@@ -247,31 +422,20 @@ def compose_rgb(
     sea = inputs.sea_water.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.5
     sea_depth = inputs.sea_depth_m.reshape(res, f, res, f).mean(axis=(1, 3))
     lake = (
-        inputs.lake.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.5
+        # 0.25 (any-of-4 at the 2x downsample): branched lakes end in narrow
+        # arms a cell or two wide, and a 0.5 mean erodes those tips whole —
+        # the river line then touched the mask edge over water that never
+        # rendered, reading as a gap (2026-10-16 red-box report).
+        inputs.lake.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.25
         if inputs.lake is not None
         else None
     )
-    hs = hillshade(height, inputs.km_per_px * f)
 
     rgb = _lut_rgb(height, sea, sea_depth, rng_m)
-    if lake is not None and lake.any():
-        # Freshwater lakes: pale blue, flat ink (survey water convention) —
-        # the filled surface is the water level, the DEM below is invisible.
-        from scipy.ndimage import binary_erosion
-
-        shore = lake & ~binary_erosion(lake)
-        rgb[lake] = np.asarray((92, 148, 188)) / 255.0
-        rgb[shore] = np.asarray((64, 120, 168)) / 255.0
-    # Two-scale relief (see HILLSHADE_* constants): structural shadow from
-    # the smoothed field, fine relief from the raw one.
-    from scipy.ndimage import gaussian_filter
-
-    smooth = gaussian_filter(height, sigma=HILLSHADE_STRUCT_SIGMA_PX)
-    hs_struct = hillshade(smooth, inputs.km_per_px * f)
-    relief = HILLSHADE_STRUCT_WEIGHT * hs_struct + (1.0 - HILLSHADE_STRUCT_WEIGHT) * hs
-    # Multiply the relief into the land only (paper LDR pipeline — same
-    # doctrine as the Blender leg's Standard view: the tint table is the
+    # Multiply the two-scale relief into the land only (paper LDR pipeline —
+    # same doctrine as the Blender leg's Standard view: the tint table is the
     # colour authority; survey convention keeps water flat ink).
+    relief = two_scale_relief(height, inputs.km_per_px * f)
     shade = (1.0 - HILLSHADE_STRENGTH) + HILLSHADE_STRENGTH * relief[..., None]
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
     # Saturation lift around the pixel's own luminance (keeps the palette's
@@ -281,11 +445,194 @@ def compose_rgb(
     rgb *= _paper_texture(res)[..., None]
     if hand:
         rgb = _hand_tint_pass(rgb, res)
+    if lake is not None and lake.any():
+        # Freshwater lakes go in LAST, after every multiply: the SAME water
+        # blue as the river ink, flat — survey sheets use one water colour,
+        # and the vector river lines carry no shade/saturation/paper either,
+        # so a lake filled before the multiplies drifted away from them
+        # (most visibly on flat lowlands, 2026-10-16 user feedback).  The
+        # filled surface is the water level; the DEM below is invisible.
+        from scipy.ndimage import binary_erosion
+
+        shore = lake & ~binary_erosion(lake)
+        rgb[lake] = np.asarray(RIVER_COLOR) / 255.0
+        rgb[shore] = np.asarray(LAKE_SHORE_COLOR) / 255.0
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
 
 def _hex(rgb: tuple[int, int, int]) -> str:
     return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _points_per_data_unit(ax: Axes) -> float:
+    """Display points per data unit on an equal-aspect sheet."""
+    ax.apply_aspect()
+    x0, x1 = ax.get_xlim()
+    return float(ax.get_window_extent().width * 72.0 / ax.figure.dpi / abs(x1 - x0))
+
+
+def _continuous_dash_paths(
+    segments: np.ndarray,
+    widths: np.ndarray,
+    pattern: tuple[float, ...],
+    points_per_unit: float,
+) -> tuple[list[np.ndarray], list[float]]:
+    """Cut one chain into continuous on-strokes for an on/off dash pattern.
+
+    Each output path is ONE visible stroke, possibly following many of the
+    original sub-pixel segments around bends.  Butt caps therefore occur
+    only at true dash ends, never at the extraction segments inside a
+    stroke.  The pattern is scaled once by the chain's median width, while
+    each stroke's own width is the overlap-length-weighted mean of its
+    source segments; downstream width grading survives without changing
+    the dash rhythm from segment to segment.
+    """
+    lengths = np.hypot(*(segments[:, 1] - segments[:, 0]).T) * points_per_unit
+    if len(segments) == 0 or float(lengths.sum()) <= 0.0:
+        return [], []
+    pattern_scaled = np.asarray(pattern, dtype=np.float64) * float(np.median(widths))
+    period = float(pattern_scaled.sum())
+    on_offsets: list[float] = []
+    on_lengths: list[float] = []
+    cursor = 0.0
+    for j, dash in enumerate(pattern_scaled):
+        if j % 2 == 0:
+            on_offsets.append(cursor)
+            on_lengths.append(float(dash))
+        cursor += float(dash)
+
+    starts = np.concatenate(([0.0], np.cumsum(lengths)))
+    total = float(starts[-1])
+    periods = max(1, int(np.ceil(total / period)))
+    bases = np.arange(periods, dtype=np.float64) * period
+    on_starts = bases[:, None] + np.asarray(on_offsets)[None, :]
+    on_ends = on_starts + np.asarray(on_lengths)[None, :]
+    on_starts_flat = on_starts.ravel()
+    on_ends_flat = on_ends.ravel()
+
+    # (on-interval id, clipped start, clipped end, width, overlap length)
+    pieces: list[tuple[int, np.ndarray, np.ndarray, float, float]] = []
+    for i, (xy0, xy1) in enumerate(segments):
+        start, end = float(starts[i]), float(starts[i + 1])
+        if end <= start:
+            continue
+        k0 = int(np.searchsorted(on_ends_flat, start, side="right"))
+        k1 = int(np.searchsorted(on_starts_flat, end, side="left"))
+        for k in range(k0, min(k1, len(on_starts_flat))):
+            a = max(start, float(on_starts_flat[k]))
+            b = min(end, float(on_ends_flat[k]))
+            if b <= a:
+                continue
+            f0 = (a - start) / (end - start)
+            f1 = (b - start) / (end - start)
+            p0 = xy0 + (xy1 - xy0) * f0
+            p1 = xy0 + (xy1 - xy0) * f1
+            pieces.append((k, p0, p1, float(widths[i]), b - a))
+
+    paths: list[np.ndarray] = []
+    path_widths: list[float] = []
+    current_id = -1
+    path: list[np.ndarray] = []
+    overlap_sum = 0.0
+    weighted_width = 0.0
+    for on_id, p0, p1, width, overlap in pieces:
+        if on_id != current_id:
+            if path:
+                paths.append(np.asarray(path))
+                path_widths.append(weighted_width / overlap_sum)
+            current_id = on_id
+            path = [p0]
+            overlap_sum = 0.0
+            weighted_width = 0.0
+        if not np.allclose(path[-1], p0, atol=1e-9, rtol=0.0):
+            path.append(p0)
+        path.append(p1)
+        overlap_sum += overlap
+        weighted_width += width * overlap
+    if path:
+        paths.append(np.asarray(path))
+        path_widths.append(weighted_width / overlap_sum)
+    return paths, path_widths
+
+
+def _river_collections(
+    segments: np.ndarray,
+    flows: np.ndarray,
+    regimes: np.ndarray | None,
+    *,
+    zorder: float = 5,
+    points_per_unit: float = 1.0,
+    ink: tuple[int, int, int] = RIVER_COLOR,
+) -> list[LineCollection]:
+    """Vector river collections, partitioned by perennial/non-perennial.
+
+    Width reads discharge (a square-root law on upstream accumulation —
+    hydraulic geometry, Leopold & Maddock) but stays inside survey-ink
+    limits: at the 550 km sheet's ~1:1.8 M scale, 0.25–1.4 pt is
+    0.09–0.49 mm, or roughly 160–880 m on the ground; real sheets draw
+    rivers no wider than about 0.6 mm.  Both regimes use the same water
+    ink; only the line style changes.  ``regimes=None`` is the legacy
+    all-perennial rendering.
+
+    Seasonal dashes are cut as continuous paths rather than delegated to
+    Matplotlib per segment.  Chaikin chains contain thousands of sub-pixel
+    segments: independent dash state makes them solid, while per-segment
+    dash offsets make a noisy string of blue fragments.  Continuous strokes
+    avoid both artefacts and put butt caps only at genuine dash ends.
+    """
+    from matplotlib.collections import LineCollection
+
+    if len(segments) == 0:
+        return []
+    flows = np.asarray(flows, dtype=np.float64)
+    w_n = np.clip(flows / max(float(flows.max()), 1.0), 0.0, 1.0) ** 0.5
+    widths = 0.25 + 1.15 * w_n
+    if regimes is None:
+        regime_arr = np.zeros(len(segments), dtype=np.uint8)
+    else:
+        regime_arr = np.asarray(regimes)
+        if regime_arr.shape != (len(segments),):
+            raise ValueError(
+                f"river regime shape {regime_arr.shape} does not match {len(segments)} segments"
+            )
+
+    new_chain = np.ones(len(segments), dtype=bool)
+    new_chain[1:] = np.any(segments[1:, 0] != segments[:-1, 1], axis=1) | (
+        regime_arr[1:] != regime_arr[:-1]
+    )
+    bounds = np.flatnonzero(new_chain).tolist() + [len(segments)]
+    paths_by_regime: dict[int, list[np.ndarray]] = {0: [], 1: []}
+    widths_by_regime: dict[int, list[float]] = {0: [], 1: []}
+    for start, end in zip(bounds[:-1], bounds[1:], strict=True):
+        regime = int(regime_arr[start])
+        chain_widths = widths[start:end]
+        if regime == 0:
+            paths = [np.asarray(seg) for seg in segments[start:end]]
+            path_widths = chain_widths.tolist()
+        else:
+            paths, path_widths = _continuous_dash_paths(
+                segments[start:end], chain_widths, RIVER_LS_NON_PERENNIAL[1], points_per_unit
+            )
+        paths_by_regime[regime].extend(paths)
+        widths_by_regime[regime].extend(path_widths)
+
+    collections: list[LineCollection] = []
+    for regime in (0, 1):
+        paths = paths_by_regime[regime]
+        if not paths:
+            continue
+        collections.append(
+            LineCollection(
+                paths,
+                colors=[_hex(ink)],
+                linewidths=widths_by_regime[regime],
+                linestyles="solid",
+                zorder=zorder,
+                capstyle="round" if regime == 0 else "butt",
+                joinstyle="round",
+            )
+        )
+    return collections
 
 
 def _subpaths(path: object) -> list[np.ndarray]:
@@ -379,13 +726,14 @@ def render_carto(
     contour_labels: bool = False,
     contours: bool = False,
     hand: bool = False,
+    svg: bool = False,
     center_lat: float = 0.0,
     center_lon: float = 0.0,
 ) -> dict[str, object]:
-    """Write ``carto/topo.svg`` + ``carto/topo.png``; returns sheet metadata.
+    """Write ``carto/topo.png`` (+ ``topo.svg`` when ``svg``); returns metadata.
 
-    ``hand`` additionally writes ``topo_hand.png`` — the video-material
-    variant with printing/material artefacts (watercolour tints, misregistered
+    ``hand`` writes ``topo_hand.png`` instead — the video-material variant
+    with printing/material artefacts (watercolour tints, misregistered
     colour plates, re-inked line widths, brush-script annotations, corner
     wear).  The clean survey sheet stays the default deliverable.
     """
@@ -464,28 +812,20 @@ def render_carto(
                 cs_major, fmt=lambda m: f"{m:.0f}", fontsize=CONTOUR_LABEL_SIZE, colors="#6c4a28"
             )
 
+    ax.set_xlim(0, km)
+    ax.set_ylim(0, km)
+    ax.set_aspect("equal")
     if inputs.river_segments is not None and inputs.river_segment_flows is not None:
-        # Vector channels (flow-graded width): mask-contour rendering of the
-        # 1-cell channel band straightens rivers onto grid/45° lines.
-        from matplotlib.collections import LineCollection
-
-        flows = inputs.river_segment_flows
-        # Width reads discharge (√-law on upstream cells — hydraulic
-        # geometry, Leopold & Maddock) but stays inside survey-ink limits:
-        # at this sheet's ~1:1.8 M scale, 0.25–1.4 pt = 0.09–0.5 mm ≈
-        # 160–880 m on the ground — real sheets draw rivers ≤ 0.6 mm.
-        w_n = np.clip(flows / max(flows.max(), 1.0), 0.0, 1.0) ** 0.5
-        widths = 0.25 + 1.15 * w_n
-        seg_list = [tuple(map(tuple, seg)) for seg in inputs.river_segments]
-        ax.add_collection(
-            LineCollection(
-                seg_list,
-                colors=[_hex(RIVER_COLOR)],
-                linewidths=widths,
-                zorder=5,
-                capstyle="round",
-            )
-        )
+        # Vector channels: mask-contour rendering of the 1-cell channel band
+        # straightens rivers onto grid/45° lines.  Line style carries the
+        # monthly flow regime; width still carries discharge.
+        for collection in _river_collections(
+            inputs.river_segments,
+            inputs.river_segment_flows,
+            inputs.river_segment_regimes,
+            points_per_unit=_points_per_data_unit(ax),
+        ):
+            ax.add_collection(collection)
     elif rivers.any():
         ax.contour(
             rivers,
@@ -497,9 +837,6 @@ def render_carto(
             zorder=5,
         )
 
-    ax.set_xlim(0, km)
-    ax.set_ylim(0, km)
-    ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
     for spine in ax.spines.values():
@@ -507,15 +844,16 @@ def render_carto(
         spine.set_linewidth(1.2)
 
     _elevation_legend(ax, km, rng_m)
+    _river_regime_legend(ax, inputs.river_segment_regimes, y_base_km=km * 0.003)
     _scale_bar(ax, km)
     _north_arrow(ax, km)
-    _graticule(ax, km, center_lat, center_lon)
+    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
     if title:
         # Figure-level title: an axes title gets clipped by the axes box at
         # this size, suptitle sits above it regardless of layout.
         fig.suptitle(title, fontsize=TITLE_SIZE, color="#4a3620")
 
-    outputs = ["svg", "png"] if not hand else ["hand.png"]
+    outputs = ["hand.png"] if hand else (["png"] + (["svg"] if svg else []))
     for ext in outputs:
         fig.savefig(out_dir / f"topo.{ext}", dpi=dpi, facecolor="#f8f4e9")
     plt.close(fig)
@@ -535,12 +873,18 @@ GRATICULE_LW = 0.5
 GRATICULE_STEPS_DEG = (1.0, 2.0, 5.0, 10.0, 15.0, 30.0)
 
 
-def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> float:
+def _graticule(
+    ax: Axes,
+    km: float,
+    center_lat: float,
+    center_lon: float,
+    km_per_deg: float = EARTH_KM_PER_DEG,
+) -> float:
     """Dashed lon/lat grid + edge degree labels; returns the step in degrees."""
     import math
 
-    lat_span = km / 111.19
-    lon_span = km / (111.19 * math.cos(math.radians(center_lat)))
+    lat_span = km / km_per_deg
+    lon_span = km / (km_per_deg * math.cos(math.radians(center_lat)))
     step = GRATICULE_STEPS_DEG[-1]
     for s in GRATICULE_STEPS_DEG:
         if max(lat_span, lon_span) / s <= 8:
@@ -556,7 +900,7 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
     lons = np.arange(math.ceil((center_lon - half_lon) / step) * step, center_lon + half_lon, step)
     pad = km * 0.012
     for lat in lats:
-        y = (lat - center_lat) * 111.19 + km / 2
+        y = (lat - center_lat) * km_per_deg + km / 2
         ax.plot([0, km], [y, y], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
         ax.text(
             km + pad * 0.3,
@@ -569,7 +913,7 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
             zorder=7,
         )
     for lon in lons:
-        x = (lon - center_lon) * 111.19 * math.cos(math.radians(center_lat)) + km / 2
+        x = (lon - center_lon) * km_per_deg * math.cos(math.radians(center_lat)) + km / 2
         ax.plot([x, x], [0, km], ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
         ax.text(
             x,
@@ -582,6 +926,103 @@ def _graticule(ax: Axes, km: float, center_lat: float, center_lon: float) -> flo
             zorder=7,
         )
     return step
+
+
+def _river_regime_legend(
+    ax: Axes,
+    regimes: np.ndarray | None,
+    *,
+    y_base_km: float = 0.0,
+    x_frac: float = 0.118,
+) -> None:
+    """Boxed two-class river-regime legend, listing only classes present.
+
+    The samples are generated by the same continuous-stroke cutter as the
+    map itself, so the legend cannot drift away from the sheet's dash
+    rhythm.  The box is white with a water-blue border and titled「图例」
+    generically so later legends can join the same panel.  Line pitch is
+    ~1.4x the glyph height — rows at the font's own size read as touching
+    (2026-10-17 review).  ``x_frac`` places the box clear of the elevation
+    numbers on the survey sheet (whose bar sits in the bottom-left corner);
+    the biome sheet passes a smaller value to align with its categorical
+    panel, and ``y_base_km`` stacks it above that panel without overlap.
+    """
+    from matplotlib.collections import LineCollection
+    from matplotlib.patches import Rectangle
+
+    if regimes is None or len(regimes) == 0:
+        return
+    present = [regime for regime in (0, 1) if np.any(regimes == regime)]
+    if not present:
+        return
+    x0 = ax.get_xlim()[0] + (ax.get_xlim()[1] - ax.get_xlim()[0]) * x_frac
+    km = ax.get_xlim()[1] - ax.get_xlim()[0]
+    points_per_unit = _points_per_data_unit(ax)
+
+    pad_x, pad_y = km * 0.009, km * 0.006
+    sample_len = km * 0.026
+    text_gap = km * 0.007
+    row_h = title_h = km * 0.0195
+    text_w = 4 * LEGEND_SMALL_SIZE * 0.95 / 72 / (12 * 0.90) * km
+    box_w = pad_x + sample_len + text_gap + text_w + pad_x
+    box_h = pad_y + title_h + row_h * len(present) + pad_y
+    ax.add_patch(
+        Rectangle(
+            (x0 - pad_x, y_base_km),
+            box_w,
+            box_h,
+            facecolor="#ffffff",
+            edgecolor=_hex(RIVER_COLOR),
+            linewidth=0.9,
+            zorder=8,
+        )
+    )
+    ax.text(
+        x0 - pad_x + box_w / 2,
+        y_base_km + box_h - pad_y - title_h / 2,
+        "图例",
+        fontsize=LEGEND_SMALL_SIZE + 1,
+        ha="center",
+        va="center",
+        color="#1a1a1a",
+        zorder=9,
+    )
+    sample = np.array([[[x0, 0.0], [x0 + sample_len, 0.0]]])
+    y_top = y_base_km + box_h - pad_y - title_h
+    for i, regime in enumerate(present):
+        y = y_top - (i + 0.5) * row_h
+        sample[0, :, 1] = y
+        if regime == 0:
+            paths = [sample[0].copy()]
+            capstyle = "round"
+            label = "常流河"
+        else:
+            paths, _widths = _continuous_dash_paths(
+                sample, np.ones(1), RIVER_LS_NON_PERENNIAL[1], points_per_unit
+            )
+            capstyle = "butt"
+            label = "非常流河"
+        ax.add_collection(
+            LineCollection(
+                paths,
+                colors=[_hex(RIVER_COLOR)],
+                linewidths=[1.0] * len(paths),
+                linestyles="solid",
+                capstyle=capstyle,
+                joinstyle="round",
+                zorder=9,
+            )
+        )
+        ax.text(
+            x0 + sample_len + text_gap,
+            y,
+            label,
+            fontsize=LEGEND_SMALL_SIZE,
+            ha="left",
+            va="center",
+            color="#1a1a1a",
+            zorder=9,
+        )
 
 
 def _elevation_legend(ax: Axes, km: float, rng_m: tuple[float, float]) -> None:
@@ -610,8 +1051,8 @@ def _elevation_legend(ax: Axes, km: float, rng_m: tuple[float, float]) -> None:
         c = lut[idx]
         return (int(c[0]), int(c[1]), int(c[2]))
 
-    x0, y0 = km * 0.035, km * 0.055
-    w, h = km * 0.013, km * 0.020
+    x0, y0 = km * 0.035, km * 0.006
+    w, h = km * 0.013 * 0.9, km * 0.020 * 0.9
     for i in range(len(edges) - 1):
         ax.add_patch(
             Rectangle(
@@ -626,10 +1067,10 @@ def _elevation_legend(ax: Axes, km: float, rng_m: tuple[float, float]) -> None:
         )
     for i, elev in enumerate(edges[1:-1]):
         ax.text(
-            x0 + w + km * 0.006,
+            x0 + w + km * 0.005,
             y0 + (i + 1) * h,
             f"{elev:.0f}",
-            fontsize=SCALEBAR_SIZE,
+            fontsize=LEGEND_SMALL_SIZE,
             ha="left",
             va="center",
             color="#1a1a1a",
@@ -638,9 +1079,9 @@ def _elevation_legend(ax: Axes, km: float, rng_m: tuple[float, float]) -> None:
     n_bands = len(edges) - 1
     ax.text(
         x0 + w / 2,
-        y0 + n_bands * h + km * 0.008,
+        y0 + n_bands * h + km * 0.006,
         "高程 / m",
-        fontsize=LEGEND_SIZE,
+        fontsize=LEGEND_SMALL_SIZE + 1,
         ha="center",
         va="bottom",
         color="#1a1a1a",
@@ -720,6 +1161,13 @@ def _north_arrow(ax: Axes, km: float) -> None:
     )
 
 
+def fmt_deg(v: float) -> str:
+    """Format a centre coordinate for titles: integral values drop the
+    decimal, half-degree centres keep one (a plain ``:.0f`` rounds 21.5 up
+    to 22 and the sheet stops matching its pack directory name)."""
+    return f"{v:.0f}" if float(v) == int(v) else f"{v:.1f}"
+
+
 def planet_display_name(data_dir: Path, world: str, planet_id: str) -> str:
     """Display body name from the world's system catalog.
 
@@ -755,6 +1203,7 @@ def carto_region(
     contour_labels: bool = False,
     contours: bool = False,
     hand: bool = False,
+    svg: bool = False,
     title: str | None = None,
 ) -> dict[str, object]:
     """CLI entry: render the topographic sheet for a region pack directory."""
@@ -769,7 +1218,10 @@ def carto_region(
     if title is None:
         lat_ns = "N" if center_lat >= 0 else "S"
         lon_ew = "E" if center_lon >= 0 else "W"
-        title = f"{name} —— {abs(center_lat):.0f}°{lat_ns} {abs(center_lon):.0f}°{lon_ew} 附近"
+        title = (
+            f"{name} 地形图 —— {fmt_deg(abs(center_lat))}°{lat_ns} "
+            f"{fmt_deg(abs(center_lon))}°{lon_ew} 附近"
+        )
     # Unclamped engine range drives the shared palette (seafloor-clamped
     # Gaea heights would misplace the min-anchored deep-water gradient).
     # Palette anchor range: the planet-wide elevation range when the pack
@@ -795,6 +1247,7 @@ def carto_region(
         contour_labels=contour_labels,
         contours=contours,
         hand=hand,
+        svg=svg,
         center_lat=center_lat,
         center_lon=center_lon,
     )

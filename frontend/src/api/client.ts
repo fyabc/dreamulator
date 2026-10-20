@@ -4,8 +4,22 @@ import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
+import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
 
 const API_BASE = '/api'
+
+/**
+ * URL for a pack image served by /api/packs/{pack}/image/{path} — used
+ * directly as an <img>/imageOverlay src (no fetch involved).
+ */
+export function packImageUrl(pack: string, path: string): string {
+  return `${API_BASE}/packs/${encodeURIComponent(pack)}/image/${path}`
+}
+
+/** URL of the server-rendered topo composite (compose_rgb, no furniture). */
+export function packTopoUrl(pack: string): string {
+  return `${API_BASE}/packs/${encodeURIComponent(pack)}/topo.png`
+}
 
 // ---------------------------------------------------------------------------
 // MessagePack CVT mesh loading (worker-based, non-blocking)
@@ -605,6 +619,23 @@ const readApi = {
       })
       .catch(() => null)
   },
+
+  // ---- Region packs (/packs QA page) — API-only dev tool by design; the
+  // pack root is a gitignored local directory that never reaches the static
+  // export, so there is no staticClient mirror. The page guards static mode.
+
+  listPacks: () => fetchJson<PackSummary[]>('/packs'),
+
+  getPackMeta: (pack: string) =>
+    fetchJson<PackMeta>(`/packs/${encodeURIComponent(pack)}/meta`),
+
+  getPackRivers: (pack: string) =>
+    fetchJson<RiverData>(`/packs/${encodeURIComponent(pack)}/rivers.json`),
+
+  probePack: (pack: string, lat: number, lon: number) =>
+    fetchJson<ProbeResult>(
+      `/packs/${encodeURIComponent(pack)}/probe?lat=${lat}&lon=${lon}`,
+    ),
 }
 
 export const api = {

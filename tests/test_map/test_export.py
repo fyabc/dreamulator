@@ -8,6 +8,7 @@ ValidationError.  The export must write a self-contained map.yaml.
 """
 
 import numpy as np
+import pytest
 import yaml
 
 from dreamulator.map.export import save_outputs
@@ -227,3 +228,34 @@ class TestMeshSplitRoundTrip:
                     ), (i, k)
                 else:
                     assert rebuilt[k] == v, (i, k, v, rebuilt[k])
+
+
+def test_load_climate_monthly_roundtrip(tmp_path):
+    """The reading inverse of export_climate_layers' monthly writer."""
+    import msgpack
+
+    from dreamulator.map.export import _quantize_int16, load_climate_monthly
+
+    rng = np.random.default_rng(7)
+    t = rng.uniform(-30.0, 40.0, size=(5, 12))
+    p = rng.uniform(0.0, 400.0, size=(5, 12))
+    tq, ts, to = _quantize_int16(t)
+    pq, ps, po = _quantize_int16(p)
+    monthly = {
+        "num_cells": 5,
+        "months": 12,
+        "dtype": "int16",
+        "t_monthly": tq,
+        "t_scale": ts,
+        "t_offset": to,
+        "p_monthly": pq,
+        "p_scale": ps,
+        "p_offset": po,
+    }
+    (tmp_path / "climate_monthly.msgpack").write_bytes(msgpack.packb(monthly))
+    t2, p2 = load_climate_monthly(tmp_path)
+    assert t2.shape == (5, 12) and p2.shape == (5, 12)
+    assert np.allclose(t2, t, atol=2e-3)  # int16 quantisation tolerance
+    assert np.allclose(p2, p, atol=1e-2)
+    with pytest.raises(FileNotFoundError):
+        load_climate_monthly(tmp_path / "elsewhere")

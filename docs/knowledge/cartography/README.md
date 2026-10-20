@@ -7,10 +7,11 @@
 ## 已有文档
 
 - `river_symbolization.md` — 河流符号化：线宽规范（Natural Earth
-  strokeweig 惯例 0.1–0.7 mm）、单双线判据、水力几何分级（2026-10）
+  strokeweig 惯例 0.1–0.7 mm）、单双线判据、水力几何分级，以及常流
+  实线与非常流点划虚线的情相符号（2026-10）
 - `drainage_cartography.md` — 制图用途的水文后处理：洼地语义二分
-  （fill 产湖 / breach 凿谷）、河链聚合与平滑、湖的最小面积阈值
-  （2026-10）
+  （fill 产湖 / breach 凿谷）、河链聚合与平滑、湖的最小面积阈值、
+  终点湖/过路湖的水量收支二分、河链月度情相（2026-10）
 - `terrain_diffusion.md` — terrain-diffusion 学习式地形细化器：条件
   扩散机制、实测能力边界（确定性/海岸线漂移/不管水文）、与 SPL 链
   的分工（2026-10）

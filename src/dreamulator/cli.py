@@ -28,6 +28,12 @@ def _set_data_dir(data_dir: Path | None) -> None:
         os.environ["DREAMULATOR_DATA_DIR"] = str(data_dir.resolve())
 
 
+def _set_packs_dir(packs_dir: Path | None) -> None:
+    """Override the region pack root via environment variable."""
+    if packs_dir is not None:
+        os.environ["DREAMULATOR_PACKS_DIR"] = str(packs_dir.resolve())
+
+
 app = typer.Typer(
     name="dreamulator",
     help="Fantasy world building and simulation tool grounded in real science.",
@@ -632,19 +638,30 @@ def serve(
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
     open_browser: bool = typer.Option(False, "--open", help="Open browser on start"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+    packs_dir: Path | None = typer.Option(
+        None, "--packs-dir", help="Region pack root (default: each world packs/ under the data dir)"
+    ),
 ) -> None:
     """Start the server (API + frontend)."""
     _set_data_dir(data_dir)
+    _set_packs_dir(packs_dir)
     import threading
     import webbrowser
 
     import uvicorn
 
+    from dreamulator.api_routes.packs import _pack_roots
     from dreamulator.world_manager import _data_dir
 
     resolved = _data_dir()
     source = "[cyan]env[/cyan]" if os.environ.get("DREAMULATOR_DATA_DIR") else "[dim]default[/dim]"
     console.print(f"[dim]data dir: {resolved} ({source})[/dim]")
+    packs_roots = _pack_roots()
+    pack_source = (
+        "[cyan]env[/cyan]" if os.environ.get("DREAMULATOR_PACKS_DIR") else "[dim]default[/dim]"
+    )
+    roots_text = ", ".join(str(p) for p in packs_roots) or "(none)"
+    console.print(f"[dim]packs dirs: {roots_text} ({pack_source})[/dim]")
 
     url = f"http://{host}:{port}"
     console.print(f"[cyan]Starting dreamulator server at {url}[/cyan]")

@@ -188,3 +188,11 @@ export function clampViewState(
     zoom: Math.max(minZoom, Math.min(maxZoom, state.zoom)),
   }
 }
+
+/**
+ * Convert a normalised [0, 1] elevation to metres (inverse of the elevation
+ * PNG encoding: 0 = elevation_min_m, 1 = elevation_max_m).
+ */
+export function normalisedToMeters(normalised: number, minM: number, maxM: number): number {
+  return minM + normalised * (maxM - minM)
+}

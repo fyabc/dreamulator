@@ -2,36 +2,27 @@
  * MapViewerPage — full-page read-only map viewer with Three.js terrain + SVG overlay.
  *
  * Route: /worlds/:worldName/map and /worlds/:worldName/map/:planetId
+ *
+ * Shared posture (layers / branch / lighting / monthly climate / cell
+ * selection) lives in usePlanetViewState — this page adds the 2D renderer
+ * (Three.js plane + SVG overlay), the minimap, and the map-specific panels.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
-import ImportElevationButton, { type ImportElevationResult } from '../components/map/ImportElevationButton'
+import ImportElevationButton from '../components/map/ImportElevationButton'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
-import MapViewer, { type CursorInfo } from '../components/map/MapViewer'
-import type { ColorMode } from '../viewers/map/TerrainPlane'
-import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
-import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
+import MapViewer from '../components/map/MapViewer'
+import MapLayerPanel from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import MapLegend from '../components/map/MapLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
-import { solarDeclinationDeg } from '../viewers/utils/solar'
-import { PROJECTION_HELP, LAYER_HELP } from '../components/map/helpContent'
-import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
-import type { ProjectionType } from '../viewers/map/utils/projection'
-import type { VoronoiCell } from '../viewers/map/types'
-import useCellIdMap from '../viewers/map/useCellIdMap'
-import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
-import { useSeasonTimelapse } from '../viewers/map/useSeasonTimelapse'
-import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
-import { useUccLayer } from '../viewers/map/useUccLayer'
+import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -39,209 +30,32 @@ export default function MapViewerPage() {
     planetId?: string
   }>()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const { t } = useTranslation('map')
 
-  // Derive branch from URL (not local state) — stays in sync with browser back/forward
-  const selectedBranch = searchParams.get('branch') || null
-  const setSelectedBranch = (branch: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (branch) next.set('branch', branch)
-      else next.delete('branch')
-      return next
-    }, { replace: true })
-  }
+  const vs = usePlanetViewState(worldName, routePlanetId, 'map')
+  const {
+    selectedBranch, setSelectedBranch,
+    cleanMode, setCleanMode,
+    timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs,
+    sunSweep, setSunSweep,
+    layerState, setLayerState, activeMainLayer,
+    monthlyMode, handleMonthlyModeChange, monthlyField,
+    sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
+    dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
+    selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName,
+    worldPlanetsError, platesError,
+    elevation, cvtMesh, voronoiCells,
+    monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
+    cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
+    selectCell, clearSelection,
+    hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
+    importMsg, setImportMsg, handleImported,
+  } = vs
 
-  // Clean view (video recording): hide every piece of UI and the graticule,
-  // leaving only the map + arrow overlays.  URL is the source of truth
-  // (?clean=1) so a deep link opens straight into recording posture.
-  const cleanMode = searchParams.get('clean') === '1'
-  const setCleanMode = (v: boolean) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (v) next.set('clean', '1')
-      else next.delete('clean')
-      return next
-    }, { replace: true })
-  }
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
-
-  // --- Seasonal cycle playback (video materials, ?play=1) ---
-  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
-  const [monthMs, setMonthMs] = useState(2000)
-  const [sunSweep, setSunSweep] = useState(false)
-  const [selectedPlanet, setSelectedPlanet] = useState<string>(routePlanetId ?? '')
-  const [cursor, setCursor] = useState<CursorInfo | null>(null)
-  const [hoveredCell, setHoveredCell] = useState<number | null>(null)
-  /** Last hovered cell — retained so the inspector doesn't reset on mouse-leave. */
-  const [lastCell, setLastCell] = useState<number | null>(null)
-  const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
-  const [projection, setProjection] = useState<ProjectionType>('equirectangular')
-
-  // --- Sun / day-night state (synced to URL: ?sun=&season=&night=) ---
-  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(() => {
-    const v = Number(searchParams.get('sun'))
-    return Number.isFinite(v) ? v : 0
-  })
-  const [seasonDeg, setSeasonDeg] = useState(() => {
-    const v = Number(searchParams.get('season'))
-    return Number.isFinite(v) ? v : 0
-  })
-  const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
-
-  // Keep the URL in sync so lighting is shareable and carries across 2D↔3D nav
-  // (effect lives with the timelapse wiring below because it is gated on
-  // `sweeping`, which needs monthlyMode — declared after the sun state).
-
-  // ?layer=<id> deep link (shareable / automation): initial selection comes
-  // from the URL with the same slot semantics as a panel click.
-  const [layerState, setLayerState] = useState<LayerState>(() =>
-    initialLayerState(searchParams.get('layer'), worldName === 'earth'))
-  // Mirror the active main layer back into ?layer= (replace, no history churn)
-  // so the URL stays a shareable deep link as layers are switched. The default
-  // base (terrain) is not written — a pristine URL stays pristine.
-  const activeMainLayer = activeMainLayerId(layerState)
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (activeMainLayer && activeMainLayer !== 'terrain') next.set('layer', activeMainLayer)
-      else next.delete('layer')
-      return next
-    }, { replace: true })
-  }, [activeMainLayer, setSearchParams])
-  // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
-  // pressure layer shows monthly data driven by the season slider, and the wind
-  // arrows switch to the monthly wind field (tech debt 24).
-  const [monthlyMode, setMonthlyMode] = useState(false)
-  const monthlyField: MonthlyField | null = monthlyMode
-    ? layerState.layers.temperature > 0
-      ? 'temperature'
-      : layerState.layers.precipitation > 0
-        ? 'precipitation'
-        : layerState.layers.pressure > 0
-          ? 'pressure'
-          : layerState.layers.pressureError > 0
-            ? 'pressureError'
-            : layerState.layers.slp > 0
-              ? 'slp'
-              : null
-    : null
-  // Fetch monthly data when monthly mode is on and any monthly-driven layer
-  // (temperature / precipitation / pressure / wind arrows) is visible.
-  const monthlyActive = monthlyMode && (
-    layerState.layers.temperature > 0 ||
-    layerState.layers.precipitation > 0 ||
-    layerState.layers.pressure > 0 ||
-    layerState.layers.pressureError > 0 ||
-    layerState.layers.slp > 0 ||
-    layerState.layers.winds > 0
-  )
-  // --- Inspector auto-expand linkage ---
-  // Track the most recently activated layer (opacity 0 → >0) so eye-toggled
-  // overlays (winds/currents/windError/currentError) auto-expand their group
-  // just like radio-selected thematic layers do.  The default base (terrain)
-  // is always active, so a naive "prefer thematic" would always pick terrain
-  // and never surface an overlay's group.
-  const prevLayersRef = useRef(layerState.layers)
-  const [lastActivated, setLastActivated] = useState<ColorMode | null>(null)
-  useEffect(() => {
-    const prev = prevLayersRef.current
-    for (const [id, v] of Object.entries(layerState.layers)) {
-      if (v > 0 && (prev[id as ColorMode] ?? 0) <= 0) {
-        setLastActivated(id as ColorMode)
-      }
-    }
-    prevLayersRef.current = layerState.layers
-  }, [layerState])
-
-  // Active map layer for the inspector's auto-expand: the most recently
-  // activated layer wins while still visible; otherwise fall back to the
-  // mutually-exclusive thematic layer, then a toggle overlay.
-  const activeColorMode = useMemo<ColorMode | null>(() => {
-    if (lastActivated && (layerState.layers[lastActivated] ?? 0) > 0) return lastActivated
-    const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
-    const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
-    const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
-    return (thematic ?? overlay)?.id ?? null
-  }, [layerState, lastActivated])
-  const handleMonthlyModeChange = (mode: boolean) => {
-    setMonthlyMode(mode)
-  }
-
-  // --- Seasonal cycle playback wiring (declared after monthlyMode/seasonDeg) ---
-
-  const sweeping = timelapsePlaying && monthlyMode && sunSweep
-
-  // Lighting URL sync, gated during a sun sweep (continuous rAF → one
-  // history.replace on stop, not one per frame).
-  useEffect(() => {
-    if (sweeping) return
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
-      else next.delete('sun')
-      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
-      else next.delete('season')
-      if (dayNightEnabled) next.set('night', '1')
-      else next.delete('night')
-      return next
-    }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
-
-  // Sun sweep: continuously rotate the subsolar longitude (day/night terminator
-  // sweep), one revolution per model year, phase-locked with the month stepper.
-  // The URL write-back above is gated on `sweeping` so it fires once on stop,
-  // not once per frame.
-  useEffect(() => {
-    if (!sweeping) return
-    let raf = 0
-    let last = performance.now()
-    const loop = (now: number) => {
-      const dt = (now - last) / 1000
-      last = now
-      const yearSec = (monthMs * 12) / 1000
-      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [sweeping, monthMs])
-
-  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
-  // user implicitly consents to by sharing/opening the link) and make sure a
-  // monthly layer is visible — otherwise there is nothing to animate.
-  useEffect(() => {
-    if (searchParams.get('play') !== '1') return
-    setMonthlyMode(true)
-    setLayerState((prev) => {
-      const L = prev.layers
-      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
-          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
-      return { layers: { ...L, temperature: 0.85 } }
-    })
-  }, [])
-
-  useSeasonTimelapse({
-    playing: timelapsePlaying && monthlyMode,
-    monthMs,
-    seasonDeg,
-    onSeasonChange: setSeasonDeg,
-  })
-
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (timelapsePlaying) next.set('play', '1')
-      else next.delete('play')
-      return next
-    }, { replace: true })
-  }, [timelapsePlaying, setSearchParams])
-
-  // Decoded elevation data (for rendering)
-  const [localElevation, setLocalElevation] = useState<Float32Array | null>(null)
 
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
@@ -262,280 +76,8 @@ export default function MapViewerPage() {
     containerHeight: 400,
   })
 
-  // --- Data fetching ---
-
-  const { data: mapPlanets } = useQuery({
-    queryKey: ['mapPlanets', worldName, selectedBranch],
-    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
-    enabled: !!worldName,
-  })
-
-  // World planet definitions (for default planet ID)
-  const { data: worldPlanets, isError: worldPlanetsError } = useQuery({
-    queryKey: ['worldPlanets', worldName, selectedBranch],
-    queryFn: () => api.getPlanets(worldName!, selectedBranch),
-    enabled: !!worldName,
-  })
-
-  // Stellar system catalog — satellites (satellite_moon, satellite_titan, …)
-  // live only here, not in the geological planets catalog. Needed for body
-  // names and axial tilt of every mapped body (solar-system reference bodies
-  // inside the earth anchor world have no planets.yaml entries).
-  const { data: stellarSystem } = useQuery({
-    queryKey: ['astronomy', worldName, selectedBranch],
-    queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
-    enabled: !!worldName,
-  })
-
-  // id → body lookup across both catalogs (planets.yaml wins on conflicts).
-  const bodyByName = useMemo(() => {
-    const m = new Map<string, any>()
-    for (const b of stellarSystem?.bodies ?? []) if (b?.id) m.set(b.id, b)
-    for (const p of worldPlanets ?? []) if (p?.id) m.set(p.id, { ...m.get(p.id), ...p })
-    return m
-  }, [stellarSystem, worldPlanets])
-
-  // Auto-select / reconcile the active planet:
-  // - none selected → first available map (or first defined planet if no maps)
-  // - selected planet has no map data in the current branch → redirect to the
-  //   branch's first available map.  Map IDs differ per branch (e.g.
-  //   climate-dev stores "planet_earth" while terrain-dev stores "earth"),
-  //   so a branch switch can leave a stale ID in the URL that 404s.
-  useEffect(() => {
-    if (selectedPlanet && mapPlanets && mapPlanets.includes(selectedPlanet)) return
-    if (selectedPlanet && !mapPlanets) return // list not loaded yet — wait
-
-    if (mapPlanets && mapPlanets.length > 0) {
-      const target = mapPlanets[0]
-      setSelectedPlanet(target)
-      const qs = searchParams.toString()
-      navigate(`/worlds/${worldName}/map/${target}${qs ? `?${qs}` : ''}`, {
-        replace: true,
-      })
-      return
-    }
-    // No maps available anywhere — fall back to a defined planet ID
-    if (!selectedPlanet && worldPlanets && worldPlanets.length > 0) {
-      setSelectedPlanet(worldPlanets[0].id)
-    }
-  }, [mapPlanets, worldPlanets, selectedPlanet, navigate, worldName, searchParams])
-
-  const { data: meta } = useQuery({
-    queryKey: ['mapMeta', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getMapMeta(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-  })
-
-  const { data: elevationBlob } = useQuery({
-    queryKey: ['elevationBlob', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getElevationBlob(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
-  // Decode elevation blob to Float32Array for rendering
-  useEffect(() => {
-    if (!elevationBlob) {
-      setLocalElevation(null)
-      return
-    }
-    let cancelled = false
-    decodePngToFloat32(elevationBlob).then(({ data }) => {
-      if (!cancelled) setLocalElevation(data)
-    }).catch(() => {
-      // Decode failure (e.g. corrupted PNG) → treat as no data
-      if (!cancelled) setLocalElevation(null)
-    })
-    return () => { cancelled = true }
-  }, [elevationBlob])
-
-  const { isError: platesError } = useQuery({
-    queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getPlates(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
-  // CVT mesh data for polygon rendering
-  const { data: cvtMesh, isError: cvtMeshError } = useQuery({
-    queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
-    retry: false,
-  })
-
-  // Legacy voronoi fallback — fetched only when the CVT mesh is unavailable
-  // (query failed or returned null). The mesh's `cells` carry the same data
-  // with a richer property set; on a normal load this endpoint (a ~219 MB
-  // JSON synthesized server-side per request) would be pure waste.
-  const { data: voronoi } = useQuery({
-    queryKey: ['voronoi', worldName, selectedPlanet, selectedBranch],
-    queryFn: () => api.getVoronoi(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet && (cvtMeshError || cvtMesh === null),
-    retry: false,
-  })
-
-  // --- Monthly climate texture (Phase 4) ---
-  const cellIdMap = useCellIdMap({
-    cvtMesh: cvtMesh ?? null,
-    width: meta?.width ?? 2048,
-    height: meta?.height ?? 1024,
-  })
-  const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
-    worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
-    cvtMesh: cvtMesh ?? null, cellIdMap,
-    width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
-  })
-  // UCC yearly descriptors for the cell inspector (independent of monthly mode).
-  const yearlyData = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
-  // UCC classification thematic texture (step 4a); null when the yearly file
-  // predates the classification fields — the layer degrades to transparent.
-  const uccTexture = useUccLayer(
-    yearlyData, cvtMesh ?? null, cellIdMap,
-    meta?.width ?? 2048, meta?.height ?? 1024, false,
-  )
-
-  // --- Heightmap import (write op; live mode only) ---
-  const queryClient = useQueryClient()
-  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
-
-  const handleImported = useCallback(
-    (r: ImportElevationResult) => {
-      if (r.ok) {
-        for (const key of ['elevationBlob', 'voronoi', 'cvtMesh', 'plates', 'mapMeta']) {
-          queryClient.invalidateQueries({
-            queryKey: [key, worldName, selectedPlanet, selectedBranch],
-          })
-        }
-        const res = r.output_resolution
-          ? t('msg.outputResolution', { w: r.output_resolution[0], h: r.output_resolution[1] })
-          : ''
-        const stale = r.stale_layers?.length
-          ? t('msg.staleLayers', { layers: r.stale_layers.join(t('msg.listSeparator')) })
-          : ''
-        setImportMsg({
-          ok: true,
-          text: t('msg.importedHeightmap', {
-            format: r.source_format ?? t('msg.sourceFormatFallback'),
-            resolution: res,
-            stale: stale,
-          }),
-        })
-      } else {
-        setImportMsg({ ok: false, text: t('msg.importFailed', { detail: r.detail ?? t('msg.importFailedFallback') }) })
-      }
-    },
-    [queryClient, worldName, selectedPlanet, selectedBranch]
-  )
-
-  // --- Interaction handlers ---
-
-  const handleCellClick = useCallback((cellId: number, ctrlKey: boolean) => {
-    setSelectedCells((prev) => {
-      const alreadySelected = prev.has(cellId)
-      if (ctrlKey) {
-        // Ctrl+double-click → toggle this cell (keep others)
-        const next = new Set(prev)
-        if (alreadySelected) next.delete(cellId)
-        else next.add(cellId)
-        return next
-      }
-      // Plain double-click → clear others, then toggle
-      if (alreadySelected && prev.size === 1) {
-        // Only this cell selected → deselect it
-        return new Set()
-      }
-      return new Set([cellId])
-    })
-  }, [])
-
-  // Esc → exit clean mode first, otherwise clear all selections
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (searchParams.get('clean') === '1') {
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev)
-          next.delete('clean')
-          return next
-        }, { replace: true })
-        return
-      }
-      setSelectedCells(new Set())
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [searchParams, setSearchParams])
-
-  // Use cvtMesh.cells (rich property set) when available; fall back to voronoi endpoint
-  const voronoiCells: VoronoiCell[] = useMemo(
-    () => cvtMesh?.cells ?? voronoi?.cells ?? [],
-    [cvtMesh, voronoi],
-  )
-
-  // --- Panel state machine ---
-  // 0 selected → show hovered cell (null when mouse leaves → planet summary)
-  // 1 selected → show that cell (locked, survives mouse leave)
-  // >1 selected → show aggregate stats
-
-  const selectedCellData = useMemo(() => {
-    if (selectedCells.size === 0) return null
-    // Show first selected cell for single-selection detail
-    const id = [...selectedCells][0]
-    return voronoiCells.find((c) => c.id === id) ?? null
-  }, [voronoiCells, selectedCells])
-
-  const hoveredCellData = useMemo(() => {
-    if (hoveredCell === null) return null
-    return voronoiCells.find((c) => c.id === hoveredCell) ?? null
-  }, [voronoiCells, hoveredCell])
-
-  /** Hover handler: track the live hover (highlight) and remember the last cell. */
-  const handleCellHover = useCallback((cellId: number | null) => {
-    setHoveredCell(cellId)
-    if (cellId !== null) setLastCell(cellId)
-  }, [])
-
-  const lastCellData = useMemo(() => {
-    if (lastCell === null) return null
-    return voronoiCells.find((c) => c.id === lastCell) ?? null
-  }, [voronoiCells, lastCell])
-
-  /** Cell shown in the inspector: 1 selected → locked; 0 selected → last hovered
-   *  (retained on mouse-leave so the panel and its group state persist). */
-  const inspectorCell = selectedCells.size === 1
-    ? selectedCellData
-    : selectedCells.size > 1
-      ? null  // triggers MultiCellStats
-      : lastCellData
-
-  /** Selected cell objects for aggregate stats (>1 selected). */
-  const selectedCellObjects = useMemo(() => {
-    if (selectedCells.size <= 1) return undefined
-    return [...selectedCells].map((id) => voronoiCells.find((c) => c.id === id)).filter(Boolean) as VoronoiCell[]
-  }, [voronoiCells, selectedCells])
-
-  // Display name for the currently selected body (either catalog)
-  const currentPlanetName = useMemo(() => {
-    if (!selectedPlanet) return null
-    return bodyByName.get(selectedPlanet)?.name ?? null
-  }, [selectedPlanet, bodyByName])
-
-  // Planet axial tilt (amplitude of seasonal declination) + current declination.
-  const axialTiltDeg = useMemo(() => {
-    if (!selectedPlanet) return 0
-    return bodyByName.get(selectedPlanet)?.axial_tilt_deg ?? 0
-  }, [selectedPlanet, bodyByName])
-  const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
-
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
   const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
-
-  // Debug / A-B flag: ?reproject=cpu forces the legacy CPU reprojection
-  // (Mollweide/Robinson) for comparison with the GPU result.  NOT a no-GPU
-  // fallback — the map display always requires WebGL.
-  const forceCpuReproject = searchParams.get('reproject') === 'cpu'
 
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
@@ -544,7 +86,7 @@ export default function MapViewerPage() {
   return (
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
-      : 'flex flex-col h-[calc(100vh-56px)]'}>
+      : 'flex flex-col h-[calc(100vh-56px)] md:h-screen'}>
       {/* Top bar */}
       {!cleanMode && (
       <div className="flex items-center gap-3 px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
@@ -572,17 +114,6 @@ export default function MapViewerPage() {
           </Link>
         )}
 
-        {/* Projection selector */}
-        <select
-          value={projection}
-          onChange={(e) => setProjection(e.target.value as ProjectionType)}
-          className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-        >
-          {PROJECTION_HELP.map((p) => (
-            <option key={p.id} value={p.id}>{t(p.label)}</option>
-          ))}
-        </select>
-
         {/* Import external heightmap (live mode only) */}
         {selectedPlanet && (
           <ImportElevationButton
@@ -600,11 +131,8 @@ export default function MapViewerPage() {
           onUploaded={(r) =>
             setImportMsg(
               r.ok
-                ? {
-                    ok: true,
-                    text: t('msg.geographyRasterSavedDetail', { format: r.source_format ?? '' }),
-                  }
-                : { ok: false, text: t('msg.uploadFailed', { detail: r.detail ?? t('msg.unknownError') }) }
+                ? { ok: true, text: t('msg.geographyRasterSaved') }
+                : { ok: false, text: t('msg.uploadFailed', { detail: r.detail ?? t('msg.unknownError') }) },
             )
           }
         />
@@ -615,7 +143,6 @@ export default function MapViewerPage() {
           <select
             value={selectedPlanet}
             onChange={(e) => {
-              setSelectedPlanet(e.target.value)
               const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
               navigate(`/worlds/${worldName}/map/${e.target.value}${qs}`)
             }}
@@ -677,26 +204,24 @@ export default function MapViewerPage() {
         <div className="flex flex-col flex-1 min-w-0 md:hidden">
           {/* Map area — full width */}
           <div className="flex-1 flex flex-col min-h-0">
-            {localElevation ? (
+            {elevation ? (
               <>
                 <div className="flex-1 min-h-0">
                   <MapViewer
-                    metadata={meta}
-                    elevation={localElevation}
+                    metadata={meta ?? null}
+                    elevation={elevation}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    projection={projection}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
-                    onCellClick={handleCellClick}
+                    onCellClick={selectCell}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
@@ -715,7 +240,7 @@ export default function MapViewerPage() {
                   <MobileCellCard
                     cell={selectedCells.size === 1 ? selectedCellData : null}
                     cursor={cursor}
-                    onClose={() => setSelectedCells(new Set())}
+                    onClose={clearSelection}
                   />
                 )}
               </>
@@ -848,26 +373,24 @@ export default function MapViewerPage() {
 
           {/* Center: map viewer */}
           <div className="flex-1 flex flex-col min-w-0">
-            {localElevation ? (
+            {elevation ? (
               <>
                 <div className="flex-1 min-h-0 relative">
                   <MapViewer
-                    metadata={meta}
-                    elevation={localElevation}
+                    metadata={meta ?? null}
+                    elevation={elevation}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
-                    projection={projection}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
-                    onCellClick={handleCellClick}
+                    onCellClick={selectCell}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    forceCpuReproject={forceCpuReproject}
                     monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
                     monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
@@ -930,10 +453,10 @@ export default function MapViewerPage() {
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
               <MapCellInspector
                 cell={inspectorCell}
-                cvtMesh={cvtMesh ?? null}
+                cvtMesh={cvtMesh}
                 planetName={currentPlanetName}
                 selectedCells={selectedCellObjects}
-                activeColorMode={activeColorMode}
+                activeColorMode={vs.activeColorMode}
                 monthlyMode={monthlyMode}
                 monthIndex={monthlyMonth}
                 monthlyData={monthlyData}
@@ -948,13 +471,13 @@ export default function MapViewerPage() {
             </div>
 
             {/* Minimap — pinned at bottom */}
-            {localElevation && (
+            {elevation && (
               <div className="shrink-0 border-t border-space-border p-3">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                   {t('label.minimap')}
                 </h3>
                 <MapMinimap
-                  elevation={localElevation}
+                  elevation={elevation}
                   width={meta?.width ?? 2048}
                   height={meta?.height ?? 1024}
                   seaLevel={meta?.sea_level_m ?? 0.0}

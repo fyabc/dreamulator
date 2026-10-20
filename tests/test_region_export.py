@@ -359,3 +359,86 @@ def test_gaea_clamp_noop_when_shallow(tmp_path: Path) -> None:
 
 def test_polar_guard_constant() -> None:
     assert MAX_ABS_LAT == 75.0
+
+
+# ---------------------------------------------------------------------------
+# Runoff channel (the hydrology legs' water-balance weight)
+# ---------------------------------------------------------------------------
+
+
+def test_runoff_channel_known_answer(tmp_path: Path) -> None:
+    # Monthly climate built from the plateau's own values (constant months):
+    # the channel must equal the Turc–Pike curve on the same forcing,
+    # cell-exact on the plateau (the island owns the window).
+    from dreamulator.engine.climate_physics import (
+        annual_runoff_turc_pike,
+        potential_evapotranspiration_hamon,
+    )
+
+    mesh = _patch_mesh()
+    n = mesh.num_cells
+    t12 = np.full((n, 12), 24.5)
+    p12 = np.full((n, 12), 2100.0 / 12.0)  # mm/month basis: the annual sum is 2100
+    meta = export_region_pack(
+        mesh,
+        out_dir=tmp_path,
+        climate_monthly=(t12, p12),
+        **(_clim_kwargs()),  # type: ignore[arg-type]
+    )
+    runoff = np.load(tmp_path / "runoff.mm.npy")
+    assert runoff.dtype == np.float32
+    pet_annual = potential_evapotranspiration_hamon(t12[:1], 365.25 / 12.0)
+    expected = float(annual_runoff_turc_pike(p12[:1].sum(axis=1), pet_annual)[0])
+    # Humid forcing (P 2100 vs PET ≈ 1348): R/P ≈ 0.46, between P − PET and P.
+    assert 700.0 < expected < 2100.0
+    assert np.allclose(runoff, expected, rtol=2e-3)  # fp32 channel tolerance
+    clim = meta["climate"]["runoff_mm"]
+    assert clim["demand_model"] == "hamon-1961"
+    assert "Turc-Pike" in clim["criterion"]
+    assert clim["png_range"][0] == 0.0
+    assert (tmp_path / "runoff.mm.png").exists()
+
+
+def test_runoff_channel_absent_without_monthly(tmp_path: Path) -> None:
+    meta = export_region_pack(
+        _patch_mesh(),
+        out_dir=tmp_path,
+        **(_clim_kwargs()),  # type: ignore[arg-type]
+    )
+    assert not (tmp_path / "runoff.mm.npy").exists()
+    assert "runoff_mm" not in meta["climate"]
+    # The rest of the climate block still ran.
+    assert (tmp_path / "headwaters.png").exists()
+
+
+# ---------------------------------------------------------------------------
+# Planet radius resolution (branch maps lack the hand-written map.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_read_radius_km_falls_back_to_root_map(tmp_path: Path) -> None:
+    from dreamulator.map.region_export import read_radius_km
+
+    root_map = tmp_path / "maps" / "satellite_x"
+    root_map.mkdir(parents=True)
+    (root_map / "map.yaml").write_text("radius_km: 6816.97\n", encoding="utf-8")
+    branch_map = tmp_path / "branches" / "gcm-1" / "maps" / "satellite_x"
+    branch_map.mkdir(parents=True)
+
+    # Branch maps dir has build products but no map.yaml → root wins.
+    assert read_radius_km(branch_map, tmp_path) == 6816.97
+    # Without the world root the caller cannot resolve it → Earth default.
+    assert read_radius_km(branch_map) == 6371.0
+
+
+def test_read_radius_km_own_map_wins_over_root(tmp_path: Path) -> None:
+    from dreamulator.map.region_export import read_radius_km
+
+    root_map = tmp_path / "maps" / "satellite_x"
+    root_map.mkdir(parents=True)
+    (root_map / "map.yaml").write_text("radius_km: 6816.97\n", encoding="utf-8")
+    own_map = tmp_path / "other"
+    own_map.mkdir()
+    (own_map / "map.yaml").write_text("radius_km: 3000.0\n", encoding="utf-8")
+
+    assert read_radius_km(own_map, tmp_path) == 3000.0

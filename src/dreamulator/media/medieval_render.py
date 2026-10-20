@@ -363,7 +363,7 @@ def medieval_region(
     """CLI entry: render the medieval sheet for a region pack directory."""
     import json
 
-    from .carto_render import planet_display_name
+    from .carto_render import fmt_deg, planet_display_name
 
     inputs = load_inputs(pack_dir / "input", gaea_dir or pack_dir / "gaea-out")
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
@@ -374,8 +374,8 @@ def medieval_region(
         lat_ns = "N" if meta["center_lat"] >= 0 else "S"
         lon_ew = "E" if meta["center_lon"] >= 0 else "W"
         title = (
-            f"{name} · {abs(meta['center_lat']):.0f}°{lat_ns} "
-            f"{abs(meta['center_lon']):.0f}°{lon_ew}"
+            f"{name} 古地图 · {fmt_deg(abs(meta['center_lat']))}°{lat_ns} "
+            f"{fmt_deg(abs(meta['center_lon']))}°{lon_ew}"
         )
     rng_m = (float(meta["height_png_range_m"][0]), float(meta["height_png_range_m"][1]))
     return render_medieval(

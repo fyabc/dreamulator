@@ -44,7 +44,6 @@
     "timeMode": { "action": "Time · annual/monthly", "description": "Left-panel 'Time' control: switch between annual-average and monthly modes. Annual mode shows annual means (temperature/precipitation/wind) and sea-level pressure (subtropical highs); monthly mode picks a specific month via the season slider, and temperature/precipitation/pressure (seasonal anomaly ΔP)/wind follow it month-by-month." },
     "timeSeason": { "action": "Time · season/month slider", "description": "The single slider in the 'Time' control has two roles: in monthly mode it snaps to 12 stops to pick a month (0 = March equinox, July = N. summer), and the solar declination follows so lighting stays consistent; in annual mode it sweeps 0–360° continuously, affecting only lighting (solar declination), not data. Tick labels switch between month names (Mar/Jun/Sep/Dec) and seasonal markers (equinox/solstice)." },
     "sunToggle": { "action": "Lighting toggle", "description": "2D/3D left panel: turn day/night lighting on/off (off by default). GPU-driven on both 2D and 3D. Settings synced via URL (?sun=&season=&night=) and shareable across 2D↔3D." },
-    "debugReproject": { "action": "Debug · CPU reprojection", "description": "Append ?reproject=cpu to force the legacy CPU reprojection for Mollweide/Robinson, to compare against the GPU result. Debug only — the main map always requires WebGL; this is not a no-GPU fallback." },
     "hoverCell": { "action": "Hover a cell", "description": "The right panel shows cell properties; selected cells take priority if any." },
     "hoverLeave": { "action": "Hover away", "description": "Restores the planet summary when no cell is selected; the panel locks (no jump back) when a cell is selected." },
     "ctrlClick": { "action": "Ctrl+click cell", "description": "Append/remove from the selection (keeps existing). Standard desktop-app style." },
@@ -54,11 +53,6 @@
     "dblClickPlanet": { "action": "Double-click a planet", "description": "In the 3D stellar view: the camera flies to and centers on the body immediately (zoom unchanged)." },
     "clean": { "action": "⛶ Clean view", "description": "Hides all UI and scene decoration (panels, status bar, graticule, polar axis), leaving only the map or globe — for video recording. Also reachable via the URL parameter ?clean=1. Exit with Esc or the hover-only top-right button." },
     "spin": { "action": "↻ Auto rotate (3D)", "description": "Slow continuous orbit of the 3D globe (~120s per revolution) for video recording. Pauses while dragging or during the N-key north-pole fly, resumes on release. Also reachable via ?spin=1; combined with clean view (?clean=1&spin=1) it is the standard recording posture." }
-  },
-  "projection": {
-    "equirectangular": { "label": "Equirectangular", "description": "Orthogonal graticule, polar stretching. The simplest projection, good for data processing." },
-    "mollweide": { "label": "Mollweide", "description": "Equal-area pseudo-cylindrical, elliptical outline. Good for area comparison." },
-    "robinson": { "label": "Robinson", "description": "Compromise projection, visually comfortable. Common in National Geographic-style publications." }
   },
   "concept": {
     "dag": { "title": "DAG Layer Architecture", "summary": "World data is organized by discipline: physics → chemistry → astronomy → geological → climate → ecology → civilization. Upstream layer inputs drive downstream layer outputs, forming a directed acyclic graph (DAG) simulation pipeline." },
@@ -97,7 +91,6 @@
         { "title": "Seasonal cycle playback", "content": "The ▶ button in the 'Time' control starts the seasonal cycle (a video-recording feature; monthly mode only):\n\n- **▶/⏸** — months advance one by one and wrap after December; when paused you can scrub to a new start month and resume\n- **Speed** — 1 / 2 / 5 seconds per month\n- **Sun sweep** — while playing, the subsolar longitude advances continuously (one revolution per model year), so the terminator moves in step with the months\n- URL parameter `?play=1` deep-links straight into playback (auto-enables monthly mode and lights up the temperature layer)\n\nDuring playback the monthly textures come from a pre-baked cache (half resolution, filled month by month in the background), so month changes never stutter; solar declination and wind arrows follow the month automatically." }
       ]
     },
-    "mapProjections": { "title": "Map Projections" },
     "stellarViewer": {
       "title": "Stellar System 3D View",
       "entries": [
@@ -120,6 +113,14 @@
       "entries": [
         { "title": "Overview", "content": "CivMap overlays fictional territorial coloring on a real Earth administrative base map. Leaflet renders GeoJSON boundaries with ADM0 (country) / ADM1 (province) levels." },
         { "title": "Basics", "content": "**Click a country** — select and highlight its borders\n**Paint mode** — pick a color and click a country to paint (simulate territorial division)\n**Snapshots** — create/switch time snapshots, each saving the territorial assignments at that time\n\nData lives in GeoJSON + LFS, with branch inheritance." }
+      ]
+    },
+    "packs": {
+      "title": "Region Packs (sub-maps)",
+      "entries": [
+        { "title": "Overview", "content": "The Region packs page (sidebar “Region packs”) browses terrain video-chain packs: a server-rendered topo-style base (refined terrain + flat lake/sea fills, no sheet furniture) with vector rivers (√-law widths, non-perennial dashes), exact lon/lat on hover, and click-to-probe cell values (elevation, biome, Köppen class, water masks, river accumulation and perennial regime). Local API mode only — packs live under the world data directory packs/ (local data) and never ship with the static site." },
+        { "title": "QA workflow", "content": "When chasing a rendering issue: find the spot on the sub-map → click → copy the `--lat … --lon …` arguments → paste them straight into `dreamulator export region/refine/carto` to re-export that window. The graticule lines share the printed topo sheet's ink, so on-screen positions line up with the rendered sheet." },
+        { "title": "Data & conventions", "content": "The default base is the full-resolution topo composite (compose_rgb, rendered on demand and cached); alternates: satellite preview, albedo, hypsometric, Köppen, biomes. The probe returns refined-grid (4096²) elevation and input-grid (2048²) class codes; river accumulation is relative upstream cells (not m³/s). Window geometry converts kilometres to degrees with the planet radius from the meta — the exact inverse of the export window." }
       ]
     },
     "concepts": { "title": "Core Concepts" },

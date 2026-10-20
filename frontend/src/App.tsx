@@ -14,6 +14,7 @@ const MapViewerPage = lazy(() => import('./pages/MapViewerPage'))
 const StellarSystemViewerPage = lazy(() => import('./pages/StellarSystemViewerPage'))
 const GlobeViewerPage = lazy(() => import('./pages/GlobeViewerPage'))
 const CivMapEditorPage = lazy(() => import('./pages/CivMapEditorPage'))
+const PackViewerPage = lazy(() => import('./pages/PackViewerPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
 
 const PageFallback = () => (
@@ -41,6 +42,7 @@ function App() {
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
             <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
             <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
+            <Route path="packs" element={<PackViewerPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
           {/* Full-page editors (no Layout wrapper) */}

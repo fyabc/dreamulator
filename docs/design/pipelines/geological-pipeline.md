@@ -1520,9 +1520,8 @@ def detect_lakes_and_endorheic(
 - 输出 `MapFeature(type=RIVER, coordinates=[(lon,lat)...], order=级别)`，
   格式 `{"features": [...]}`。
 
-**渲染**（前端 `MapSvgOverlay`，SVG 矢量叠加层）：每条折线逐点经当前投影的
-`project()` 投到屏幕（等距圆柱 / Mollweide / Robinson 通用，与经纬网格同一
-机制）；线宽 `(0.55 + 0.5×order)/√zoom`、圆头/圆角连接，不透明度由图层开关
+**渲染**（前端 `MapSvgOverlay`，SVG 矢量叠加层）：每条折线逐点经
+`project()` 投到屏幕（与经纬网格同一机制）；线宽 `(0.55 + 0.5×order)/√zoom`、圆头/圆角连接，不透明度由图层开关
 控制（默认开，0.9）。制图学路线：51 km 网格上「看得见河」靠矢量线而非 DEM
 切谷（竞品分析 §4.2.1 结论；3D 球面渲染留后续）。
 
@@ -1588,10 +1587,8 @@ def export_equirectangular(
 ### 10.2 投影支持
 
 后端导出固定为**等距圆柱投影**（`MapProjection` 枚举仅 `EQUIRECTANGULAR`）——
-管线产物与导入/导出工作流的统一交换格式。前端查看器在渲染侧支持三种投影：
-等距圆柱、Mollweide、Robinson（`helpContent.ts` 的 `PROJECTION_HELP`；
-2D 地图页 `MapViewerPage` 可切换，重投影在 GPU/CPU 两条路径实现，
-CPU 调试路径 `?reproject=cpu`）。
+管线产物与导入/导出工作流的统一交换格式。前端查看器同样以等距圆柱渲染
+（2D 地图页与 3D 球面视图共用同一套烘焙纹理）。
 
 ### 10.3 前端可视化
 
@@ -1820,9 +1817,8 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 | 平移/缩放 | <16ms | <1ms（无重计算） | — |
 
 **降级策略：**
-- 等距圆柱投影 + WebGL 2 支持 → GPU 路径（ShaderMaterial）
-- 非等距投影或 WebGL 2 不可用 → CPU 路径（CanvasTexture + MeshBasicMaterial）
-- GPU 路径当前仅支持等距圆柱（UV 直接映射）；Mollweide/Robinson 投影仍需 CPU 重采样
+- WebGL 2 可用 → GPU 路径（ShaderMaterial，等距圆柱 UV 直接映射）
+- WebGL 2 不可用 → 地图无法渲染（无 CPU 栅格回退）
 
 **设计参考：**
 - **CesiumJS**：高程瓦片作为纹理 + GLSL shader 渲染地形

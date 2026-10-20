@@ -57,7 +57,9 @@ jobs:
         run: uv sync --frozen --all-extras
 
       - name: Run test suite
-        run: uv run pytest tests/ -q -p no:warnings
+        # -n 4: the runner has 4 vCPUs; pyproject's -n auto (capped at 8)
+        # oversubscribes them. CLI -n overrides the addopts value.
+        run: uv run pytest tests/ -q -p no:warnings -n 4
 
   conlang:
     runs-on: ubuntu-latest

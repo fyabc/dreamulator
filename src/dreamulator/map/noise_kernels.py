@@ -168,3 +168,64 @@ def fbm_on_points(
         float(persistence),
         float(base_freq),
     )
+
+
+@njit(cache=True)
+def _worley_hash(ix: int, iy: int, iz: int, seed: int) -> float:
+    """Deterministic per-lattice-cell hash in [0, 1)."""
+    h = (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791) ^ (seed * 2654435761)
+    h = (h ^ (h >> 13)) * 1274126177
+    h = h ^ (h >> 16)
+    return (h & 0x7FFFFFFF) / 2147483647.0
+
+
+@njit(cache=True)
+def worley_f1(x: float, y: float, z: float, seed: int, jitter: float) -> float:
+    """Distance to the nearest jittered lattice feature point (3D Worley F1).
+
+    Returns roughly [0, ~1.2]; 0 at feature points, large at cell boundaries.
+    Convex blob shapes (cumulus elements) come from 1 - clip(F1/r, 0, 1),
+    which Perlin iso-contours cannot produce (they yield wavy interlocked
+    shapes) — second research pass 2026-10-19.
+    """
+    ix = int(np.floor(x))
+    iy = int(np.floor(y))
+    iz = int(np.floor(z))
+    best = 1e9
+    for dx in range(-1, 2):
+        for dy in range(-1, 2):
+            for dz in range(-1, 2):
+                cx = ix + dx
+                cy = iy + dy
+                cz = iz + dz
+                fx = cx + 0.5 + jitter * (_worley_hash(cx, cy, cz, seed) - 0.5)
+                fy = cy + 0.5 + jitter * (_worley_hash(cx, cy, cz, seed + 1) - 0.5)
+                fz = cz + 0.5 + jitter * (_worley_hash(cx, cy, cz, seed + 2) - 0.5)
+                d = (x - fx) * (x - fx) + (y - fy) * (y - fy) + (z - fz) * (z - fz)
+                if d < best:
+                    best = d
+    return float(np.sqrt(best))
+
+
+@njit(cache=True, parallel=True, fastmath=True)
+def _worley_points(
+    xs: np.ndarray, ys: np.ndarray, zs: np.ndarray, seed: int, jitter: float
+) -> np.ndarray:
+    n = len(xs)
+    out = np.empty(n, dtype=np.float64)
+    for i in prange(n):  # type: ignore[no-untyped-call,attr-defined]
+        out[i] = worley_f1(xs[i], ys[i], zs[i], seed, jitter)
+    return out
+
+
+def worley_on_points(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray, seed: int, jitter: float = 0.8
+) -> np.ndarray:
+    """Worley F1 at scattered 3D points (per-point, numba-parallel)."""
+    return _worley_points(
+        np.ascontiguousarray(x, dtype=np.float64),
+        np.ascontiguousarray(y, dtype=np.float64),
+        np.ascontiguousarray(z, dtype=np.float64),
+        int(seed),
+        float(jitter),
+    )

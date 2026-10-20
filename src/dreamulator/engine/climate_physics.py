@@ -1186,6 +1186,150 @@ def soil_bucket_monthly(
     return e_out, r_out, cycles, max_ds
 
 
+#: Default bucket capacity (mm) for consumers without a world config:
+#: Manabe (1969)'s canonical 150 mm root-zone store — the same default as
+#: ``TerrainPipelineConfig.soil_water_capacity_mm`` (map/pipeline_types.py).
+SOIL_WATER_CAPACITY_MM: float = 150.0
+
+#: Empirical allocation parameters for the WBM-inspired linear baseflow
+#: reservoir.  Grogan et al. (2022) use a 0.5 recharge fraction and a
+#: 0.025 d⁻¹ shallow-groundwater runoff coefficient (τ = 40 d) as model
+#: defaults.  They are observation-calibration parameters, NOT universal
+#: constants; the hydrology legs run the same values everywhere and report
+#: sensitivity rather than tuning them to a particular climate class.
+BASEFLOW_RECHARGE_FRACTION: float = 0.5
+BASEFLOW_RESIDENCE_TIME_DAYS: float = 40.0
+
+
+def route_runoff_with_baseflow(
+    runoff_monthly: np.ndarray,
+    *,
+    days_per_month: float,
+    recharge_fraction: float = BASEFLOW_RECHARGE_FRACTION,
+    residence_time_days: float = BASEFLOW_RESIDENCE_TIME_DAYS,
+) -> np.ndarray:
+    """Route monthly runoff through quickflow and one linear groundwater store.
+
+    This is a WBM-inspired conceptual baseflow model, not a groundwater
+    distribution model.  A fraction ``f`` of each month's runoff production
+    recharges a cell-local store; the rest is quickflow.  The store obeys
+    ``dS/dt = recharge/days − S/τ`` and is integrated exactly over the
+    month.  With ``a = exp(−days/τ)`` and ``c = τ/days · (1−a)``::
+
+        S_m = a·S_(m−1) + c·G_m
+        B_m = S_(m−1) + G_m − S_m
+        stream_m = (1−f)·runoff_m + B_m
+
+    The initial storage is the analytical periodic steady state for the
+    twelve-month climatology, so the annual streamflow sum equals the input
+    runoff sum exactly (to floating-point precision): baseflow only changes
+    the seasonal distribution, never the annual water budget.  No negative
+    storage or discharge clipping is needed.
+
+    Args:
+        runoff_monthly: Monthly runoff production, mm/month, shape (N, 12).
+        days_per_month: Accumulation window length, days (use the same
+            reference month as the input water balance).
+        recharge_fraction: Fraction of runoff production entering the store.
+        residence_time_days: Groundwater recession timescale τ, days.
+
+    Returns:
+        Monthly quickflow plus baseflow, mm/month, shape (N, 12).
+    """
+    if not 0.0 <= recharge_fraction <= 1.0:
+        raise ValueError(f"recharge_fraction must be in [0, 1], got {recharge_fraction}")
+    if residence_time_days <= 0.0 or days_per_month <= 0.0:
+        raise ValueError("residence_time_days and days_per_month must be positive")
+    runoff = np.maximum(np.nan_to_num(runoff_monthly, nan=0.0), 0.0)
+    if runoff.ndim != 2 or runoff.shape[1] != 12:
+        raise ValueError(f"runoff_monthly must have shape (N, 12), got {runoff.shape}")
+    a = float(np.exp(-days_per_month / residence_time_days))
+    c = float(
+        residence_time_days / days_per_month * (-np.expm1(-days_per_month / residence_time_days))
+    )
+    recharge = runoff * recharge_fraction
+    # S0 before month 1 of the periodic year.  Month j's recharge has decayed
+    # by a**(12−j) when the year wraps back to this point.
+    weights = a ** np.arange(11, -1, -1, dtype=np.float64)
+    storage = c / (1.0 - a**12) * (recharge * weights).sum(axis=1)
+    stream = np.empty_like(runoff)
+    for m in range(12):
+        next_storage = a * storage + c * recharge[:, m]
+        baseflow = storage + recharge[:, m] - next_storage
+        stream[:, m] = (1.0 - recharge_fraction) * runoff[:, m] + baseflow
+        storage = next_storage
+    return np.asarray(stream)
+
+
+def runoff_monthly_mm(
+    t_monthly_c: np.ndarray,
+    p_monthly_mm: np.ndarray,
+    capacity_mm: float = SOIL_WATER_CAPACITY_MM,
+    *,
+    days_per_month: float,
+) -> np.ndarray:
+    """Monthly Manabe-bucket land runoff, mm per month, shape (N, 12).
+
+    Wraps :func:`soil_bucket_monthly` with a Hamon (1961) atmospheric demand
+    so the result is a pure function of persisted monthly data (the
+    simulator's in-build bucket uses ``evaporation_rate`` instead, which is
+    not recoverable from files — this wrapper is deliberately independent of
+    it).  Pass ``days_per_month=REFERENCE_MONTH_DAYS`` (365.25/12) so the
+    demand basis matches the monthly-precipitation basis.
+    """
+    pet_m = potential_evapotranspiration_hamon_monthly(t_monthly_c, days_per_month)
+    _e, r, _cycles, _ds = soil_bucket_monthly(p_monthly_mm, pet_m, capacity_mm)
+    return r
+
+
+def annual_runoff_mm(
+    t_monthly_c: np.ndarray,
+    p_monthly_mm: np.ndarray,
+    capacity_mm: float = SOIL_WATER_CAPACITY_MM,
+    *,
+    days_per_month: float,
+) -> np.ndarray:
+    """Annual land runoff, mm/yr, shape (N,) — :func:`runoff_monthly_mm` summed.
+
+    The per-month balance closes by the bucket contract (P = E + R + ΔS with
+    ΔS = 0 at periodic steady state), so the annual sum needs no separate
+    accounting.
+    """
+    return np.asarray(
+        runoff_monthly_mm(
+            t_monthly_c, p_monthly_mm, capacity_mm, days_per_month=days_per_month
+        ).sum(axis=-1)
+    )
+
+
+def annual_runoff_turc_pike(
+    p_annual_mm: np.ndarray,
+    pet_annual_mm: np.ndarray,
+    n: float = 2.0,
+) -> np.ndarray:
+    """Annual land runoff via the Turc–Pike (Budyko) curve, mm/yr.
+
+    ``E/P = (1 + φ^{-n})^{-1/n}`` with the aridity index ``φ = PET/P``
+    (Turc 1954 / Pike 1964, who used n = 2 — the literature default);
+    runoff is the residual ``R = P − E``.  The curve interpolates the two
+    Budyko limits: the water limit ``φ → ∞`` gives ``E → P``, ``R → 0``
+    (hyperarid ~2% yield — wadi country), the energy limit ``φ → 0``
+    gives ``E → PET``, ``R → P − PET``.  Used for the ANNUAL runoff
+    weight: a single-layer monthly bucket underestimates annual yield in
+    strongly seasonal climates (the wet-season surplus must exceed the
+    whole storage capacity before any overflow — a 900 mm/yr Csa slope
+    with 150 mm capacity yields exactly nothing, where Budyko and real
+    rivers give R/P ≈ 0.2), so the bucket is reserved for the monthly
+    regime shape and this curve carries the annual total.
+    """
+    p = np.asarray(p_annual_mm, dtype=np.float64)
+    pet = np.asarray(pet_annual_mm, dtype=np.float64)
+    phi = pet / np.maximum(p, 1e-9)
+    e_over_p = (1.0 + phi ** (-n)) ** (-1.0 / n)
+    runoff = p * (1.0 - e_over_p)
+    return np.asarray(np.where(p > 0.0, np.maximum(runoff, 0.0), 0.0))
+
+
 def aridity_index_keep(
     p_annual_mm: np.ndarray,
     pet_annual_mm: np.ndarray,

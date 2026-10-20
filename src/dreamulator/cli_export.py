@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import typer
 from pydantic import TypeAdapter
 from rich.console import Console
@@ -42,6 +43,7 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
+from dreamulator.map.prog_erosion import RIVER_THRESHOLD_CELLS
 from dreamulator.map.region_export import (
     RegionWindowError,
     export_region_pack,
@@ -423,11 +425,34 @@ def export_region(
     elev_min = meta.elevation_min_m if meta else -11_000.0
     elev_max = meta.elevation_max_m if meta else 9_000.0
     sea_level = meta.sea_level_m if meta else 0.0
-    radius_km = read_radius_km(map_dir)
+    radius_km = read_radius_km(map_dir, world_dir)
 
     mesh = load_cvt_mesh_model(mesh_file)
 
-    out_dir = output or (Path("private/video") / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
+    # Monthly climate series → the runoff channel (Manabe-bucket annual land
+    # runoff, the hydrology legs' accumulation weight).  Worlds whose build
+    # products lack the series export without it; hydrology then falls back
+    # to the precipitation weight with a notice at refine time.
+    climate_monthly: tuple[np.ndarray, np.ndarray] | None = None
+    if climate:
+        from dreamulator.map.export import load_climate_monthly
+
+        try:
+            climate_monthly = load_climate_monthly(map_dir)
+        except FileNotFoundError:
+            console.print(
+                "[yellow]no climate_monthly.msgpack under "
+                f"{map_dir} — runoff.mm channel not written; hydrology legs "
+                "will fall back to the precipitation weight[/yellow]"
+            )
+
+    # Default pack home: inside the world's data dir next to maps/ (both are
+    # gitignored build outputs — one place for all bulk world data).  The
+    # basename keeps the world prefix so pack names stay unique across worlds
+    # (the /packs API and deep links key on the directory name).
+    from dreamulator.world_manager import _data_dir
+
+    out_dir = output or (_data_dir() / world / "packs" / f"{world}-{lat:g}_{lon:g}_{span_km:g}km")
     input_dir = out_dir / "input"  # pack layout: input/ + gaea-out/ + color/
     console.print(
         f"Exporting region pack for {world}/{planet_id} — "
@@ -453,6 +478,7 @@ def export_region(
                 **mesh_fingerprint(mesh_file),
             },
             include_climate=climate,
+            climate_monthly=climate_monthly,
             seafloor_clamp_m=seafloor_clamp,
             out_res=out_res,
         )
@@ -535,7 +561,10 @@ def export_erode(
     dt_yr: float = typer.Option(5e4, "--dt", help="Step length (years)"),
     k_spl: float = typer.Option(2e-7, "--k", help="Stream-power erodibility K"),
     river_threshold: int = typer.Option(
-        3000, "--river-threshold", help="Channel onset: upstream cells (rain-weighted)"
+        RIVER_THRESHOLD_CELLS,
+        "--river-threshold",
+        help="Channel onset: upstream cells (runoff-weighted); the default "
+        "reads physically as a ~1.7 m³/s minimum mean discharge",
     ),
 ) -> None:
     """Programmatic SPL erosion (video chain step ② programmatic variant).
@@ -569,11 +598,11 @@ def export_refine(
     pack: Path = typer.Argument(
         help="Region pack ROOT dir (with input/ subdir), e.g. private/video/nacrea-15_-100_550km"
     ),
-    td: Path = typer.Option(
-        ...,
+    td: Path | None = typer.Option(
+        None,
         "--td",
         help="terrain-diffusion repo clone (with .venv) — "
-        "external tool, see terrain-chain manual for setup",
+        "external tool, see terrain-chain manual for setup (not needed with --reuse-height)",
     ),
     river_threshold: int | None = typer.Option(
         None,
@@ -585,6 +614,12 @@ def export_refine(
         "--coast-warp",
         help="Warp conditioning sea-land edges before "
         "inference (bends straight Voronoi shorelines; off by default)",
+    ),
+    reuse_height: bool = typer.Option(
+        False,
+        "--reuse-height",
+        help="Skip TD inference and re-extract hydrology from the existing "
+        "refined-out/height.meters.npy (fast iteration on drainage semantics)",
     ),
 ) -> None:
     """Terrain-diffusion refinement + hydrology (terrain chain step ②, main).
@@ -598,13 +633,139 @@ def export_refine(
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
+    if td is None and not reuse_height:
+        console.print(
+            "[red]--td is required for a full refine (or pass --reuse-height "
+            "to re-extract from the cached refined DEM)[/red]"
+        )
+        raise typer.Exit(code=2) from None
 
-    console.print(f"Refining {pack} via terrain-diffusion ({td.name})")
-    info = refine_region_pack(pack, td, river_threshold=river_threshold, coast_warp=coast_warp)
+    console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
+    info = refine_region_pack(
+        pack,
+        td,
+        river_threshold=river_threshold,
+        coast_warp=coast_warp,
+        reuse_height=reuse_height,
+    )
     console.print(
         f"  refined-out/: res {info['res']}² · lakes {info['lakes_pct']}% of land · "
         f"{info['river_segments']} river segments"
     )
+
+
+@export_app.command("clouds")
+def export_clouds(
+    world: str = typer.Argument(help="World name"),
+    planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    grid: str = typer.Option(
+        "8192x4096",
+        "--grid",
+        "-g",
+        help="Equirect cloud texture resolution WxH (16K×8K = 4K full-disk per the spec)",
+    ),
+    seed: int = typer.Option(7, "--seed", help="Noise seed (same fields + seed = same image)"),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output dir (default: private/video/clouds/<world>[-<branch>]/)",
+    ),
+    globe_res: int = typer.Option(1600, "--globe-res", help="Globe preview resolution"),
+    center_lon: float = typer.Option(90.0, "--center-lon", help="Globe view centre longitude"),
+    center_lat: float = typer.Option(15.0, "--center-lat", help="Globe view centre latitude"),
+    sun_lon: float | None = typer.Option(
+        None, "--sun-lon", help="Sub-solar longitude (default: centre − 25°)"
+    ),
+    sun_lat: float = typer.Option(20.0, "--sun-lat", help="Sub-solar latitude"),
+    cover_scale: float = typer.Option(
+        1.0,
+        "--cover-scale",
+        help="Multiplier on the conditioning cover field; 0 skips texture "
+        "synthesis entirely (surface/biome QA: surface.png + cloud-free globe)",
+    ),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
+
+    The large-scale cover field is a placeholder (precipitation + SLP-anomaly
+    proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
+    the permanent part.  Needs the 'media' extra (numba noise kernel).
+    """
+    _set_data_dir(data_dir)
+    try:
+        w_str, h_str = grid.lower().split("x")
+        width, height = int(w_str), int(h_str)
+    except ValueError:
+        console.print(f"[red]Invalid --grid '{grid}' (expected WxH, e.g. 8192x4096)[/red]")
+        raise typer.Exit(code=2) from None
+
+    mgr = WorldManager()
+    try:
+        world_dir = mgr.world_dir(world)
+    except FileNotFoundError:
+        console.print(f"[red]World '{world}' not found[/red]")
+        raise typer.Exit(code=1) from None
+
+    mm = MapManager(world_dir, branch)
+    planet_id = planet
+    if planet_id is None:
+        planets = mm.list_planets_with_maps()
+        if not planets:
+            console.print("[red]No map data found for this world.[/red]")
+            raise typer.Exit(code=1) from None
+        planet_id = planets[0]
+
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+
+    map_dir = mm._maps_dir(planet_id)
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh file found for planet '{planet_id}'.[/red]")
+        raise typer.Exit(code=1) from None
+    mesh = load_cvt_mesh_model(mesh_file)
+
+    meta = mm.get_map_metadata(planet_id)
+    sea_level = meta.sea_level_m if meta else 0.0
+    radius_km = read_radius_km(map_dir, world_dir)
+
+    out_dir = output or (
+        Path("private") / "video" / "clouds" / (world + (f"-{branch}" if branch else ""))
+    )
+    console.print(
+        f"Synthesising cloud texture for {world}/{planet_id} "
+        f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
+    )
+    start = time.perf_counter()
+
+    from dreamulator.media.cloud_render import clouds_globe
+
+    paths = clouds_globe(
+        mesh,
+        out_dir,
+        radius_km=radius_km,
+        sea_level_m=sea_level,
+        width=width,
+        height=height,
+        seed=seed,
+        globe_res=globe_res,
+        center_lon_deg=center_lon,
+        center_lat_deg=center_lat,
+        sun_lon_deg=sun_lon,
+        sun_lat_deg=sun_lat,
+        cover_scale=cover_scale,
+        provenance={
+            "world": world,
+            "branch": branch or "root",
+            "planet": planet_id,
+            "mesh": str(mesh_file),
+        },
+    )
+    elapsed = time.perf_counter() - start
+    for name, path in paths.items():
+        console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+    console.print(f"  done in {elapsed:.1f}s")
 
 
 @export_app.command("carto")
@@ -628,7 +789,8 @@ def export_carto(
         help="Sheet style: survey (contours+legend, topo.svg+topo.png) | "
         "hand (print-artefact variant, topo.hand.png) | "
         "medieval (parchment illustration, medieval.png) | "
-        "biome (categorical biome sheet, biome.svg+biome.png)",
+        "biome (categorical biome sheet, biome.svg+biome.png) | "
+        "relief (natural-colour shaded relief, relief.svg+relief.png)",
     ),
     title: str | None = typer.Option(None, "--title", help="Override the default sheet title"),
     res: int = typer.Option(2048, "--res", help="Contour grid resolution"),
@@ -645,18 +807,35 @@ def export_carto(
         help="Draw contour lines (default off — "
         "real-DEM reference sheets at small scale run tint-only, OpenTopoMap z≤11)",
     ),
+    biome_legend: bool = typer.Option(
+        False,
+        "--biome-legend/--no-biome-legend",
+        help="relief style only: append biome swatches to the river-regime legend "
+        "(default off — the Blue-Marble reference imagery carries no legend)",
+    ),
+    svg: bool = typer.Option(
+        False,
+        "--svg/--no-svg",
+        help="Also write the vector SVG sheet (default off — PNG only, the SVGs run "
+        "tens of MB per sheet and no consumer needs them)",
+    ),
 ) -> None:
-    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome.
+    """Cartographic sheet (video chain step ③-alt): --style survey | hand | medieval | biome
+    | relief.
 
     survey = hypsometric tints + contours + legend/scale/graticule/north
     arrow (SVG + PNG).  hand = survey with print artefacts (watercolour,
     misregistration, re-inked lines).  medieval = parchment illustration
     (symbol herds, ribbon title, no contours/legend).  biome = categorical
     Whittaker biome sheet (flat class fills, palette single source,
-    class legend + graticule).  Needs the 'media' extra (OpenEXR + matplotlib).
+    class legend + graticule).  relief = natural-colour shaded relief
+    (satellite biome colour, hillshade-only terrain, bathy sea).
+    Needs the 'media' extra (OpenEXR + matplotlib).
     """
-    if style not in ("survey", "hand", "medieval", "biome"):
-        console.print(f"[red]Unknown style '{style}' — use survey | hand | medieval | biome[/red]")
+    if style not in ("survey", "hand", "medieval", "biome", "relief"):
+        console.print(
+            f"[red]Unknown style '{style}' — use survey | hand | medieval | biome | relief[/red]"
+        )
         raise typer.Exit(code=2) from None
     build_dir = gaea or (pack / "gaea-out")
     if not (pack / "input" / "meta.json").exists():
@@ -678,10 +857,34 @@ def export_carto(
             dpi=dpi,
             data_dir=data_dir,
             title=title,
+            svg=svg,
         )
-        for ext in ("svg", "png"):
+        for ext in ("png", "svg") if svg else ("png",):
             p = out_dir / f"biome.{ext}"
             console.print(f"  [green]biome.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
+        console.print(f"  classes: {info['classes']}")
+        return
+
+    if style == "relief":
+        # Relief sheet needs no build either: same best-available fallback
+        # as the biome sheet (refined-out → gaea-out → input/).
+        from dreamulator.media.relief_render import relief_region
+
+        console.print(f"Rendering [relief] sheet {pack} → {out_dir}")
+        info = relief_region(
+            pack,
+            out_dir,
+            gaea_dir=gaea,
+            res=res,
+            dpi=dpi,
+            data_dir=data_dir,
+            title=title,
+            biome_legend=biome_legend,
+            svg=svg,
+        )
+        for ext in ("png", "svg") if svg else ("png",):
+            p = out_dir / f"relief.{ext}"
+            console.print(f"  [green]relief.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
         console.print(f"  classes: {info['classes']}")
         return
 
@@ -713,10 +916,12 @@ def export_carto(
         contour_labels=contour_labels,
         contours=contours,
         hand=(style == "hand"),
+        svg=svg,
         title=title,
         gaea_dir=gaea,
     )
-    for ext in ("hand.png",) if style == "hand" else ("svg", "png"):
+    exts = ("hand.png",) if style == "hand" else ("png", "svg") if svg else ("png",)
+    for ext in exts:
         p = out_dir / f"topo.{ext}"
         console.print(f"  [green]topo.{ext}[/green] → {p} ({p.stat().st_size / 1024:.0f} KB)")
     console.print(f"  contours: {info['minor_levels']} minor + {info['major_levels']} index")

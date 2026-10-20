@@ -92,19 +92,18 @@ CESM 构建体系又很重；Isca 同样只有平板海洋；SpeedyWeather.jl �
 ## GPU 加速杠杆与本机资源
 
 - 谱方法（球谐变换）和有限体积在 GPU 上可大规模并行（FFT/球谐、批处理）。
-- **可用资源**：开发笔记本 RTX 3060 6GB（PoC 级）；计算服务器（2026-10-12 实测）为
-  多卡 GPU 服务器（单卡百 GB 级显存），矩阵乘法实测 FP64 约
-  数十 TFLOPS 量级、双精度完整可用；多核服务器 CPU
-  （容器配额数十核）；内存 TB 级。GPU 让 GPU-native GCM 的「慢」从障碍变成可选项，
+- **可用资源**：开发笔记本（消费级 6 GB GPU，PoC 级）；计算资源（2026-10-12 实测）为
+  多卡 GPU 服务器（单卡百 GB 级显存、双精度完整可用）+ 多核服务器 CPU（配额数十核）
+  + TB 级内存。GPU 让 GPU-native GCM 的「慢」从障碍变成可选项，
   也让「自研简化引擎 + GPU 内核」成为现实选项；CPU 配额决定了 Fortran CPU 模式（ExoPlaSim、
-  ROCKE-3D）的并发上限，例如 ExoPlaSim T21 约 8 个 8 核运行同时进行。
+  ROCKE-3D）的并发上限，可同时支撑多个 T21 级运行。
 - 传统 Fortran CPU GCM 无法利用 GPU；若走 GCM 路线且要 GPU，候选收窄到
   SpeedyWeather.jl / CliMA（均需系外辐射魔改）或神经代理（需先有真值生成器）。
 - **本机 S6 PoC 判负（2026-09-27，RTX 3060 Laptop 6GB）**：真实预算矩阵
   （n=200k、nnz=1.4M、MMD 排序后 nnz(L+U)=22.6M）上 CuPy splu 分解+求解
   7.2 s vs scipy SuperLU 2.0 s（**3.5× 慢**）；精度等价（rel 5e-15）、VRAM
   2.15 GB 装得下、传输 0.22 s——瓶颈是填充因子的散射访存，GPU 不擅长。
-  结论：本地 GPU 直接稀疏 LU 无收益，不集成求解路径；计算服务器的  卡（带宽约
+  结论：本地 GPU 直接稀疏 LU 无收益，不集成求解路径；GPU 服务器（带宽约
   50 倍，可用 cuDSS）上的复测尚未进行。已验证的安装配方固化在 pyproject `gpu`
   可选组（cupy-cuda12x[ctk] + nvidia DLL wheels，Windows 下缺一不可）。
 - 作为备选：只有当 GCM 涌现的收益确立、且 GPU 加速能把成本压到可接受时，才投入。

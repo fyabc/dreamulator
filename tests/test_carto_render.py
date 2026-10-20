@@ -88,9 +88,26 @@ def test_compose_rgb_ranges_and_sea_ink() -> None:
 def test_render_carto_smoke(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     info = cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="冒烟")
-    assert (tmp_path / "topo.svg").stat().st_size > 1000
     assert (tmp_path / "topo.png").exists()
+    assert not (tmp_path / "topo.svg").exists()  # SVG is opt-in
+    cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, svg=True)
+    assert (tmp_path / "topo.svg").stat().st_size > 1000
     assert info["major_levels"] == 2  # 1000 + 2000 m on a 3000 m ridge
+
+
+def test_render_carto_regime_legend_smoke(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    inp = _inputs()
+    inp.river_segments = np.array(
+        [
+            [[10.0, 10.0], [20.0, 20.0]],
+            [[20.0, 20.0], [30.0, 30.0]],
+        ]
+    )
+    inp.river_segment_flows = np.array([100.0, 50.0])
+    inp.river_segment_regimes = np.array([0, 1], dtype=np.uint8)
+    cr.render_carto(inp, tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="情相")
+    assert (tmp_path / "topo.png").exists()
 
 
 def test_render_carto_hand_smoke(tmp_path: Path) -> None:
@@ -99,3 +116,70 @@ def test_render_carto_hand_smoke(tmp_path: Path) -> None:
     cr.render_carto(_inputs(), tmp_path, (-6000.0, 4000.0), res=N, dpi=72, title="手绘", hand=True)
     assert (tmp_path / "topo.hand.png").exists()
     assert not (tmp_path / "topo.png").exists()  # hand run replaces the output set
+
+
+def test_river_collections_regime_partition() -> None:
+    pytest.importorskip("matplotlib")
+    segments = np.array(
+        [
+            [[0.0, 0.0], [1.0, 1.0]],
+            [[1.0, 1.0], [2.0, 2.0]],
+            [[2.0, 2.0], [3.0, 3.0]],
+        ]
+    )
+    flows = np.full(3, 100.0)
+    collections = cr._river_collections(segments, flows, np.array([0, 1, 0], dtype=np.uint8))
+    assert len(collections) == 2
+    styles = [collection.get_linestyles()[0] for collection in collections]
+    # Seasonal dashes are cut into geometry, so every collection itself is
+    # solid; the regime difference is the on-stroke path layout and capstyle.
+    assert all(style[1] is None for style in styles)
+    assert collections[0].get_capstyle() == "round"
+    assert collections[1].get_capstyle() == "butt"
+    legacy = cr._river_collections(segments, flows, None)
+    assert len(legacy) == 1 and len(legacy[0].get_paths()) == 3
+
+
+def test_continuous_dash_paths_cross_extraction_segments() -> None:
+    # At 20 display points per data unit, two one-unit segments cover 40 pt.
+    # The third on-stroke (18.6–20.4 pt) crosses the extraction boundary at
+    # x=1: it must be ONE polyline containing that boundary vertex, not two
+    # independently capped blue fragments.
+    segments = np.array(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+            [[1.0, 0.0], [2.0, 0.0]],
+        ]
+    )
+    paths, widths = cr._continuous_dash_paths(
+        segments,
+        np.ones(2),
+        cr.RIVER_LS_NON_PERENNIAL[1],
+        points_per_unit=20.0,
+    )
+    assert len(paths) == 5
+    assert widths == pytest.approx([1.0] * 5)
+    crossing = paths[2]
+    assert crossing[:, 0].tolist() == pytest.approx([0.93, 1.0, 1.02])
+    # The five on-strokes cover less than the full two-unit chain: the gaps
+    # are real geometry rather than a dash style restarted per segment.
+    covered = sum(float(np.hypot(*(path[1:] - path[:-1]).T).sum()) for path in paths)
+    assert 0.0 < covered < 2.0
+
+
+def test_graticule_uses_planet_km_per_deg() -> None:
+    # Latitude rules must sit at (deg − centre)·km_per_deg: a 6817 km-radius
+    # planet (118.8 km/°) puts the 36°N rule at 118.8 + 275 = 393.8 km on a
+    # 550 km sheet — Earth's 111.19 would compress the grid by 6.8%.
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    cr._graticule(ax, km=550.0, center_lat=35.0, center_lon=-93.0, km_per_deg=118.8)
+    ys = {round(r.get_ydata()[0], 3) for r in ax.lines if r.get_ydata()[0] == r.get_ydata()[-1]}
+    assert 393.8 in ys  # the 36°N rule
+
+    fig_e, ax_e = plt.subplots()
+    cr._graticule(ax_e, km=550.0, center_lat=35.0, center_lon=-93.0)
+    ys_e = {round(r.get_ydata()[0], 3) for r in ax_e.lines if r.get_ydata()[0] == r.get_ydata()[-1]}
+    assert ys != ys_e  # default (Earth) is a different planet than 6817 km
+    plt.close("all")

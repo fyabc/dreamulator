@@ -18,7 +18,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ColorMode } from '../../viewers/map/TerrainPlane'
+import type { ColorMode } from '../../viewers/map/types'
 import { LAYER_HELP, LAYER_GROUPS, type LayerHelpEntry } from './helpContent'
 import { useDevModeStore } from '../../stores/devModeStore'
 import { useExperimentalStore } from '../../stores/experimentalStore'

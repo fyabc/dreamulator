@@ -339,11 +339,11 @@ dreamulator export layers nacrea -l temperature_diff,koppen_agreement \
 
 ```bash
 dreamulator export region nacrea --lat 0 --lon 0 --span-km 2350
-# → private/video/nacrea-0_0_2350km/input/{height.meters.npy, height.png, height.gaea.png,
+# → data/worlds/nacrea/packs/nacrea-0_0_2350km/input/{height.meters.npy, height.png, height.gaea.png,
 #    color.png, precipitation.mm.*, temperature.C.*, ice.m.*, npp.gc_m2_yr.*,
 #    headwaters.png, koppen.*, biome.*, meta.json}
 # pack 根目录布局：input/（引擎通道）+ gaea-out/（Gaea 产物）+ color/（着色产物）
-dreamulator export region nacrea --lat 30 --lon -40 --span-km 1200 --output private/video/my-shot
+dreamulator export region nacrea --lat 30 --lon -40 --span-km 1200 --output data/worlds/nacrea/packs/my-shot
 dreamulator export region nacrea --no-climate   # 只出高度 + 配色（旧行为）
 dreamulator export region nacrea --seafloor-clamp -800   # height.gaea.png 的海底压平深度
 dreamulator export region nacrea --out-res 4096   # 数据包栅格分辨率（默认 2048，正方形）
@@ -370,7 +370,7 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR）
-dreamulator export colorize private/video/nacrea-15_90_2350km
+dreamulator export colorize data/worlds/nacrea/packs/nacrea-15_90_2350km
 # 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
 # --gaea / --output 可覆盖；--no-texture 关闭植被纹理（默认开）
 ```
@@ -397,7 +397,7 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 视频链第②步的程序化变体（一条命令替代 Gaea 手动构建）：
 
 ```bash
-dreamulator export erode private/video/nacrea-15_-100_2350km
+dreamulator export erode data/worlds/nacrea/packs/nacrea-15_-100_2350km
 # 写 <pack>/prog-out/（gaea-out 文件词汇，渲染腿 --gaea 指向它即可）
 # --steps 30 / --dt 5e4 / --k 2e-7 / --river-threshold 3000（默认即定版）
 ```
@@ -411,7 +411,7 @@ Priority-Flood 排水（Barnes 2014）+ 隐式流水功率侵蚀（Braun & Wille
 地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
 
 ```bash
-dreamulator export refine private/video/nacrea-15_-100_550km     --td private/external-projects/terrain-diffusion
+dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km     --td private/external-projects/terrain-diffusion
 # 写 <pack>/refined-out/；推理在外部 td venv（安装见 terrain-chain 手册）
 ```
 
@@ -424,7 +424,7 @@ dreamulator export refine private/video/nacrea-15_-100_550km     --td private/ex
 命令（`--style`）：
 
 ```bash
-dreamulator export carto private/video/nacrea-15_-100_2350km                 # survey（默认）
+dreamulator export carto data/worlds/nacrea/packs/nacrea-15_-100_2350km                 # survey（默认）
 dreamulator export carto <pack> --style hand                                 # 旧印刷质感
 dreamulator export carto <pack> --style medieval --title "珠母星 · 未知海域"  # 中世纪羊皮纸
 dreamulator export carto <pack> --style biome                                # 群系图
@@ -447,15 +447,37 @@ refined-out → gaea-out → input/）。操作细节见
 [usage/gaea-video-chain.md](gaea-video-chain.md) 第③'步；色表与等高距
 在 `src/dreamulator/media/carto_render.py` 顶部常量。
 
+### 程序化云纹理（export clouds）
+
+太空俯瞰镜头链的 L2 层（全球等距圆柱云不透明度贴图 + 正交球面预览）：
+
+```bash
+dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
+# 写 <out>/{clouds.png（RGBA straight alpha）, cloud_cover.png, surface.png,
+#        globe.png, meta.json}；默认 out = private/video/clouds/<world>[-<branch>]/
+# --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
+# --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
+# --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
+```
+
+大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
+等服务器 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
+律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及
+它们到生成参数的映射见
+[knowledge/climatology/cloud_field_statistics.md](../knowledge/climatology/cloud_field_statistics.md)；
+与 NASA Blue Marble 参照图的定量验收脚本在 private/video/temp/cloud_compare.py
+（透明度直方图对数线性度 / 梯度分位 / 径向功率谱三指标）。需求与分工见
+private/plans/orbital-weather-globe-requirements-20261018.md。
+
 渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
 
 ```bash
 blender -b -P scripts/media/blender/region_still.py -- \
-    --datadir private/video/nacrea-0_0_2500km --render still_001.png
-# 输出 private/video/<pack>/renders/still_001.png；--samples/--res/--zscale/--sun-az/--sun-alt 可调
+    --datadir data/worlds/nacrea/packs/nacrea-0_0_2500km --render still_001.png
+# 输出 <pack>/renders/still_001.png；--samples/--res/--zscale/--sun-az/--sun-alt 可调
 ```
 
-`private/video/` 下的数据包、`.blend` 与渲染输出均不入 git（脚本重建工程模式——
+`data/worlds/<world>/packs/` 下的数据包、`.blend` 与渲染输出均不入 git（脚本重建工程模式——
 工程永远可由数据包 + `region_still.py` 一键重建）。
 
 ---

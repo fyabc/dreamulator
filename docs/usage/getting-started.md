@@ -216,7 +216,7 @@ uv run dreamulator serve --open
 ```
 
 浏览器自动打开 `http://localhost:8000`。进入 **myworld** → 选择行星 **Gaia**，
-可以切换到 2D 地图查看器（等距圆柱 / Mollweide / Robinson 投影，可叠加地形、
+可以切换到 2D 地图查看器（等距圆柱投影，可叠加地形、
 气候分类、温度、降水等图层）或 3D 球体视图。按 Ctrl+C 停止服务。
 
 **如果出错**：页面空白时先确认第 1 步执行过 `npm run build`——`serve` 提供的是

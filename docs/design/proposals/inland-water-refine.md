@@ -2,6 +2,13 @@
 
 > 状态：提案（2026-10 立案，随内陆水体语义闭合轮降级方案一并登记——本轮只修
 > (a) 生态文明消费与 (b) 前端显示，本提案描述完整闭环的后续实现）。
+> **region-refine 侧已另路实现（2026-10-18）**：程序化精化链（prog_erosion +
+> terrain_refine）落地了 P−E 级联判决（四类结局中 1/2/3）、序派生流方向
+> （入湖河穿湖心直达鞍口，Barnes +FlowDirs 前驱平局裁决）与溢流/判决落盘
+> （refined-out/meta.json 的 `lakes` 记录：verdict / spill 格与鞍口高程 /
+> 下游湖标 / 入流与需求）——「rim/spill 高度不落盘」的 refine 侧一半已闭合。
+> 本提案剩余的**引擎侧**（CVT 网格上的 HydroRefineEngine、湖命运入 biome/
+> ecology 产品）仍为未实现提案；两 falsified 教训见文末。
 > 语义基础见 [knowledge/geology/inland_water_classification.md](../../knowledge/geology/inland_water_classification.md)。
 
 ## 为什么要做
@@ -89,3 +96,9 @@ geological → climate → hydro refine → ecology → civilization
 - **用湖面高度迭代求平衡（implicit lake level）**：需要 rim 剖面 + 高程反馈，
   v1 用 P−E 阈值判决 + 分类标签足够表达四类结局，迭代平衡留给
   climate-steady-coupling。
+- **判决后在改写场上重跑 Priority-Flood**（refine 侧 2026-10-17 实证）：干化
+  盆地的汇点会捕获改写前从不入汇的大河——改写后地形重排的路由不再对应真实
+  汇水关系。排水全程必须用改写前的树。
+- **单遍累积读湖的收支**（refine 侧 2026-10-17 实证）：树枝状湖的水从一个
+  臂出、过陆地、从另一个臂回来——单遍每滴水只记一次的记账会漏掉自重入，
+  必须湖图级联传递。

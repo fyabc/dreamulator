@@ -100,7 +100,7 @@ export default function HomePage() {
   // Feature highlight cards (no navigation — visual showcase only)
   // Labels are marketing copy — keep as-is; i18n can come later.
   const features = [
-    { icon: '🌐', label: '3D 球面地图', desc: 'GPU 地形渲染，多投影实时切换' },
+    { icon: '🌐', label: '3D 球面地图', desc: 'GPU 地形渲染，2D/3D 双视图联动' },
     { icon: '🌡️', label: '气候模拟', desc: 'EBM 温度 + BFS 水汽 + Köppen 分类' },
     { icon: '🔭', label: '恒星系可视化', desc: '轨道动画、宜居带、行星纹理' },
     { icon: '🧬', label: '生态桥接', desc: 'Whittaker 群系 + NPP + 驯化潜力' },

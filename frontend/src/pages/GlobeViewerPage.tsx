@@ -3,44 +3,34 @@
  *
  * Route: /worlds/:worldName/globe/:planetId
  *
- * Shares cell interaction, colour modes, sidebar panels, and status bar
- * with the 2D MapViewer.  Layout mirrors MapViewerPage:
+ * Shared posture (layers / branch / lighting / monthly climate / cell
+ * selection) lives in usePlanetViewState — this page adds the 3D renderer
+ * (R3F sphere + orbit controls + spin + stellar transition) and the 3D
+ * wind/current arrow overlays.  Layout mirrors MapViewerPage:
  *   left panel (layers) · centre (globe) · right panel (inspector)
  */
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
-import { api } from '../api/client'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion } from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
-import MapLayerPanel, { type LayerState } from '../components/map/MapLayerPanel'
-import { initialLayerState, activeMainLayerId } from '../components/map/layerStateInit'
+import MapLayerPanel from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
-import { useMonthlyClimate, type MonthlyField } from '../viewers/map/useMonthlyClimate'
-import { useSeasonTimelapse } from '../viewers/map/useSeasonTimelapse'
-import { useYearlyClimate } from '../viewers/map/useYearlyClimate'
-import { useUccLayer } from '../viewers/map/useUccLayer'
-import { solarDeclinationDeg } from '../viewers/utils/solar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
-import useCellIdMap from '../viewers/map/useCellIdMap'
-import type { ColorMode } from '../viewers/map/TerrainPlane'
-import { LAYER_HELP } from '../components/map/helpContent'
-import { decodePngToFloat32 } from '../viewers/map/utils/imageCodec'
-import { normalisedToMeters } from '../viewers/map/utils/projection'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
 import type { VoronoiCell } from '../viewers/map/types'
-import type { CursorInfo } from '../components/map/MapViewer'
+import { normalisedToMeters } from '../viewers/map/utils/mapCoords'
 import GlobeCurrentArrows from '../components/map/GlobeCurrentArrows'
 import GlobeWindArrows from '../components/map/GlobeWindArrows'
-import ImportElevationButton, { type ImportElevationResult } from '../components/map/ImportElevationButton'
+import ImportElevationButton from '../components/map/ImportElevationButton'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
+import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -49,338 +39,53 @@ import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import { getRandomTip } from '../components/map/helpContent'
 
 export default function GlobeViewerPage() {
-  const { worldName, planetId } = useParams<{ worldName: string; planetId: string }>()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { worldName, planetId } = useParams<{ worldName: string; planetId?: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { t } = useTranslation('map')
   const randomTip = useMemo(() => getRandomTip(t), [t])
-  const selectedBranch = searchParams.get('branch') || null
 
-  const setSelectedBranch = (branch: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (branch) next.set('branch', branch)
-      else next.delete('branch')
-      return next
-    }, { replace: true })
-  }
+  const vs = usePlanetViewState(worldName, planetId, 'globe')
+  const {
+    selectedBranch, setSelectedBranch,
+    cleanMode, setCleanMode,
+    timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs,
+    sunSweep, setSunSweep,
+    layerState, setLayerState,
+    monthlyMode, handleMonthlyModeChange, monthlyField,
+    sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
+    dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
+    selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
+    bodyByName,
+    elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap,
+    monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
+    cursor, setCursor, handleCellHover, selectedCells,
+    selectCell, clearSelection,
+    hoveredCell, hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
+    importMsg, setImportMsg, handleImported,
+  } = vs
 
-  // Clean view (video recording): hide every piece of UI and scene chrome,
-  // leaving only the globe + arrow overlays.  URL is the source of truth
-  // (?clean=1) so a deep link opens straight into recording posture.
-  const cleanMode = searchParams.get('clean') === '1'
-  const setCleanMode = (v: boolean) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (v) next.set('clean', '1')
-      else next.delete('clean')
-      return next
-    }, { replace: true })
-  }
   // Auto spin (?spin=1): slow continuous orbit for recording.  Independent of
   // clean mode so ?clean=1&spin=1 is the standard recording posture.
   const autoSpin = searchParams.get('spin') === '1'
   const setAutoSpin = (v: boolean) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (v) next.set('spin', '1')
-      else next.delete('spin')
-      return next
-    }, { replace: true })
+    // The URL is the source of truth; navigate with the param toggled.
+    const next = new URLSearchParams(searchParams)
+    if (v) next.set('spin', '1')
+    else next.delete('spin')
+    navigate(`?${next.toString()}`, { replace: true })
   }
+
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
 
-  // --- Seasonal cycle playback (video materials, ?play=1) ---
-  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
-  const [monthMs, setMonthMs] = useState(2000)
-  const [sunSweep, setSunSweep] = useState(false)
-
-  // --- UI State ---
-  // ?layer=<id> deep link (shareable / automation): initial selection comes
-  // from the URL with the same slot semantics as a panel click.
-  const [layerState, setLayerState] = useState<LayerState>(() =>
-    initialLayerState(searchParams.get('layer'), worldName === 'earth'))
-  // Mirror the active main layer back into ?layer= (replace, no history churn)
-  // so the URL stays a shareable deep link as layers are switched. The default
-  // base (terrain) is not written — a pristine URL stays pristine.
-  const activeMainLayer = activeMainLayerId(layerState)
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (activeMainLayer && activeMainLayer !== 'terrain') next.set('layer', activeMainLayer)
-      else next.delete('layer')
-      return next
-    }, { replace: true })
-  }, [activeMainLayer, setSearchParams])
-  // Monthly climate mode (Phase 4): on = the active temperature/precipitation/
-  // pressure layer shows monthly data driven by the season slider, and the wind
-  // arrows switch to the monthly wind field (tech debt 24).
-  const [monthlyMode, setMonthlyMode] = useState(false)
-  const monthlyField: MonthlyField | null = monthlyMode
-    ? layerState.layers.temperature > 0
-      ? 'temperature'
-      : layerState.layers.precipitation > 0
-        ? 'precipitation'
-        : layerState.layers.pressure > 0
-          ? 'pressure'
-          : layerState.layers.pressureError > 0
-            ? 'pressureError'
-            : layerState.layers.slp > 0
-              ? 'slp'
-              : null
-    : null
-  // Fetch monthly data when monthly mode is on and any monthly-driven layer
-  // (temperature / precipitation / pressure / wind arrows) is visible.
-  const monthlyActive = monthlyMode && (
-    layerState.layers.temperature > 0 ||
-    layerState.layers.precipitation > 0 ||
-    layerState.layers.pressure > 0 ||
-    layerState.layers.pressureError > 0 ||
-    layerState.layers.slp > 0 ||
-    layerState.layers.winds > 0
-  )
-  // --- Inspector auto-expand linkage ---
-  // Track the most recently activated layer (opacity 0 → >0) so eye-toggled
-  // overlays (winds/currents/windError/currentError) auto-expand their group
-  // just like radio-selected thematic layers do.  The default base (terrain)
-  // is always active, so a naive "prefer thematic" would always pick terrain
-  // and never surface an overlay's group.
-  const prevLayersRef = useRef(layerState.layers)
-  const [lastActivated, setLastActivated] = useState<ColorMode | null>(null)
-  useEffect(() => {
-    const prev = prevLayersRef.current
-    for (const [id, v] of Object.entries(layerState.layers)) {
-      if (v > 0 && (prev[id as ColorMode] ?? 0) <= 0) {
-        setLastActivated(id as ColorMode)
-      }
-    }
-    prevLayersRef.current = layerState.layers
-  }, [layerState])
-
-  // Active map layer for the inspector's auto-expand: the most recently
-  // activated layer wins while still visible; otherwise fall back to the
-  // mutually-exclusive thematic layer, then a toggle overlay.
-  const activeColorMode = useMemo<ColorMode | null>(() => {
-    if (lastActivated && (layerState.layers[lastActivated] ?? 0) > 0) return lastActivated
-    const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
-    const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
-    const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
-    return (thematic ?? overlay)?.id ?? null
-  }, [layerState, lastActivated])
-  const handleMonthlyModeChange = (mode: boolean) => {
-    setMonthlyMode(mode)
-  }
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
-  const [cursor, setCursor] = useState<CursorInfo | null>(null)
-  const [hoveredCellId, setHoveredCellId] = useState<number | null>(null)
-  /** Last hovered cell — retained so the inspector doesn't reset on mouse-leave. */
-  const [lastCellId, setLastCellId] = useState<number | null>(null)
-  const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set())
-
-  // --- Data ---
-  const { data: meta, isError: metaError } = useQuery({
-    queryKey: ['mapMeta', worldName, planetId, selectedBranch],
-    queryFn: () => api.getMapMeta(worldName!, planetId!, selectedBranch),
-    enabled: !!worldName && !!planetId,
-  })
-
-  // Planets that actually have map data in the current branch (branch overlay
-  // + root fallback).  Map IDs differ per branch (e.g. climate-dev stores
-  // "planet_earth" while terrain-dev stores "earth"), so after a branch
-  // switch the mapId in the URL path may no longer exist — redirect to the
-  // branch's first available map instead of showing permanent 404s.
-  const { data: mapPlanets } = useQuery({
-    queryKey: ['mapPlanets', worldName, selectedBranch],
-    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
-    enabled: !!worldName,
-  })
-
-  useEffect(() => {
-    if (!mapPlanets || mapPlanets.length === 0) return
-    // No planetId in the URL (sidebar entry) or a stale one after a branch
-    // switch — land on the first body that has map data.
-    if (planetId && mapPlanets.includes(planetId)) return
-    const qs = searchParams.toString()
-    navigate(
-      `/worlds/${worldName}/globe/${mapPlanets[0]}${qs ? `?${qs}` : ''}`,
-      { replace: true },
-    )
-  }, [mapPlanets, planetId, navigate, worldName, searchParams])
-
-  // Planet definitions (for axial tilt, name, etc.)
-  const { data: planets } = useQuery({
-    queryKey: ['planets', worldName, selectedBranch],
-    queryFn: () => api.getPlanets(worldName!, selectedBranch),
-    enabled: !!worldName,
-    retry: false,
-  })
-
-  // Stellar system catalog — satellites (satellite_moon, satellite_titan, …)
-  // live only here, not in the geological planets catalog. Needed for body
-  // names and axial tilt of every mapped body (solar-system reference bodies
-  // inside the earth anchor world have no planets.yaml entries).
-  const { data: stellarSystem } = useQuery({
-    queryKey: ['astronomy', worldName, selectedBranch],
-    queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
-    enabled: !!worldName,
-    retry: false,
-  })
-
-  // id → body lookup across both catalogs (planets.yaml wins on conflicts).
-  const bodyByName = useMemo(() => {
-    const m = new Map<string, any>()
-    for (const b of stellarSystem?.bodies ?? []) if (b?.id) m.set(b.id, b)
-    for (const p of planets ?? []) if (p?.id) m.set(p.id, { ...m.get(p.id), ...p })
-    return m
-  }, [stellarSystem, planets])
-
-  const currentPlanet = useMemo(() => {
-    if (!planetId) return null
-    return bodyByName.get(planetId) ?? null
-  }, [bodyByName, planetId])
-
-  const axialTiltDeg = currentPlanet?.axial_tilt_deg ?? 0
-
-  // --- Sun lighting state (synced to URL: ?sun=&season=, shared with 2D map) ---
-  const [sunLongitudeDeg, setSunLongitudeDeg] = useState(() => {
-    const v = Number(searchParams.get('sun'))
-    return Number.isFinite(v) ? v : 0
-  })
-  // Season (orbital position): 0° = vernal equinox, 90° = N. summer solstice.
-  const [seasonDeg, setSeasonDeg] = useState(() => {
-    const v = Number(searchParams.get('season'))
-    return Number.isFinite(v) ? v : 0
-  })
   const [globeZoom, setGlobeZoom] = useState(1)
-  // Day/night lighting toggle — default off; synced to URL ?night=1 (shared with 2D).
-  const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
-
-  // Write sun/season/night back to the URL so lighting carries across 2D↔3D nav.
-  // Gated during a sun sweep: the continuous rAF below would otherwise fire a
-  // history.replace every frame; when the sweep stops, this effect re-runs and
-  // the final longitude lands in the URL exactly once.
-  const sweeping = timelapsePlaying && monthlyMode && sunSweep
-  useEffect(() => {
-    if (sweeping) return
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
-      else next.delete('sun')
-      if (seasonDeg !== 0) next.set('season', String(seasonDeg))
-      else next.delete('season')
-      if (dayNightEnabled) next.set('night', '1')
-      else next.delete('night')
-      return next
-    }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
-
-  // Sun sweep: continuously rotate the subsolar longitude so the day/night
-  // terminator sweeps across the globe — one full revolution per model year
-  // (12 × monthMs), phase-locked with the month stepper.
-  useEffect(() => {
-    if (!sweeping) return
-    let raf = 0
-    let last = performance.now()
-    const loop = (now: number) => {
-      const dt = (now - last) / 1000
-      last = now
-      const yearSec = (monthMs * 12) / 1000
-      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [sweeping, monthMs])
-
-  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
-  // user implicitly consents to by sharing/opening the link) and make sure a
-  // monthly layer is visible — otherwise there is nothing to animate.
-  useEffect(() => {
-    if (searchParams.get('play') !== '1') return
-    setMonthlyMode(true)
-    setLayerState((prev) => {
-      const L = prev.layers
-      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
-          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
-      return { layers: { ...L, temperature: 0.85 } }
-    })
-  }, [])
-
-  // Month stepper: one discrete step per beat (same semantics as the slider,
-  // so ?season= write-back stays at 12 hits per cycle).
-  useSeasonTimelapse({
-    playing: timelapsePlaying && monthlyMode,
-    monthMs,
-    seasonDeg,
-    onSeasonChange: setSeasonDeg,
-  })
-
-  // Persist the play state to the URL (?play=1) so a deep link reopens in
-  // playing posture; speed/sweep stay ephemeral UI state.
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (timelapsePlaying) next.set('play', '1')
-      else next.delete('play')
-      return next
-    }, { replace: true })
-  }, [timelapsePlaying, setSearchParams])
-
-  // Solar declination (subsolar latitude) varies with season + axial tilt.
-  const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
 
   const elevMin = meta?.elevation_min_m ?? -11000
   const elevMax = meta?.elevation_max_m ?? 9000
   const seaLevel = meta?.sea_level_m ?? 0
-
-  const { data: elevationBlob, isError: elevError } = useQuery({
-    queryKey: ['elevationBlob', worldName, planetId, selectedBranch],
-    queryFn: () => api.getElevationBlob(worldName!, planetId!, selectedBranch),
-    enabled: !!worldName && !!planetId, retry: false,
-  })
-
-  const [elevData, setElevData] = useState<Float32Array | null>(null)
-  const [elevDims, setElevDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
-
-  useEffect(() => {
-    if (!elevationBlob) { setElevData(null); return }
-    let cancelled = false
-    decodePngToFloat32(elevationBlob).then(({ data, width, height }) => {
-      if (!cancelled) { setElevData(data); setElevDims({ w: width, h: height }) }
-    })
-    return () => { cancelled = true }
-  }, [elevationBlob])
-
-  // CVT mesh (for plates/boundaries modes + cell lookup)
-  const { data: cvtMesh, isError: cvtMeshError } = useQuery({
-    queryKey: ['cvtMesh', worldName, planetId, selectedBranch],
-    queryFn: () => api.getCvtMesh(worldName!, planetId!, selectedBranch),
-    enabled: !!worldName && !!planetId, retry: false,
-  })
-
-  const cellIdMap = useCellIdMap({
-    cvtMesh: cvtMesh ?? null,
-    width: meta?.width ?? 2048,
-    height: meta?.height ?? 1024,
-  })
-
-  // --- Monthly climate texture (Phase 4) — loaded + baked on demand ---
-  const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
-    worldName, planetId, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
-    cvtMesh: cvtMesh ?? null, cellIdMap: cellIdMap ?? null,
-    width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
-  })
-  // UCC yearly descriptors for the cell inspector (independent of monthly mode).
-  const yearlyData = useYearlyClimate(worldName, planetId, selectedBranch)
-  // UCC classification thematic texture (step 4a); null when the yearly file
-  // predates the classification fields — the layer degrades to transparent.
-  const uccTexture = useUccLayer(
-    yearlyData, cvtMesh ?? null, cellIdMap ?? null,
-    meta?.width ?? 2048, meta?.height ?? 1024, false,
-  )
 
   // --- GPU texture ---
   // Opacity sliders fire many events per frame; coalesce so the composite
@@ -388,12 +93,12 @@ export default function GlobeViewerPage() {
   const renderLayers = useRafCoalesced(layerState.layers)
 
   const { texture: terrainTexture, renderComposite } = useGPUTerrain({
-    elevation: elevData,
-    width: elevDims.w, height: elevDims.h,
+    elevation,
+    width: elevationDims.w, height: elevationDims.h,
     seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers,
-    cvtMesh: cvtMesh ?? null,
-    cellIdMap: cellIdMap ?? null,
+    cvtMesh,
+    cellIdMap,
     monthlyTemperature: monthlyField === 'temperature' ? monthlyThematic : null,
     monthlyPrecipitation: monthlyField === 'precipitation' ? monthlyThematic : null,
     monthlyPressure: monthlyField === 'pressure' ? monthlyThematic : null,
@@ -426,53 +131,18 @@ export default function GlobeViewerPage() {
     return buildCellKDTree(cells as VoronoiCell[])
   }, [cvtMesh])
 
-  const voronoiCells: VoronoiCell[] = useMemo(
-    () => (cvtMesh?.cells as VoronoiCell[]) ?? [],
-    [cvtMesh],
-  )
-
-  // --- Panel state machine (mirrors MapViewerPage) ---
-  const selectedCellData = useMemo(() => {
-    if (selectedCells.size === 0) return null
-    const id = [...selectedCells][0]
-    return voronoiCells.find((c) => c.id === id) ?? null
-  }, [voronoiCells, selectedCells])
-
-  const hoveredCellData = useMemo(() => {
-    if (hoveredCellId === null) return null
-    return voronoiCells.find((c) => c.id === hoveredCellId) ?? null
-  }, [voronoiCells, hoveredCellId])
-
-  const lastCellData = useMemo(() => {
-    if (lastCellId === null) return null
-    return voronoiCells.find((c) => c.id === lastCellId) ?? null
-  }, [voronoiCells, lastCellId])
-
-  // Inspector shows the last hovered cell (not the live hover), so leaving the
-  // globe doesn't reset the panel or lose its open/closed group state.
-  const inspectorCell = selectedCells.size === 1
-    ? selectedCellData
-    : selectedCells.size > 1
-      ? null
-      : lastCellData
-
-  const selectedCellObjects = useMemo(() => {
-    if (selectedCells.size <= 1) return undefined
-    return [...selectedCells].map((id) => voronoiCells.find((c) => c.id === id)).filter(Boolean) as VoronoiCell[]
-  }, [voronoiCells, selectedCells])
-
   // --- CVT mesh data for polygon highlights ---
   const globeVertices = useMemo<GlobeVertex[] | undefined>(() => cvtMesh?.vertices, [cvtMesh])
   const globeRegions = useMemo<GlobeRegion[] | undefined>(() => cvtMesh?.regions, [cvtMesh])
   // --- Handlers ---
 
-  const handleCellHover = useCallback((lon: number, lat: number) => {
+  const handleCellHoverLonLat = useCallback((lon: number, lat: number) => {
     const mapW = meta?.width ?? 2048
     const mapH = meta?.height ?? 1024
     const px = Math.round(((lon + 180) / 360) * (mapW - 1))
     const py = Math.round(((90 - lat) / 180) * (mapH - 1))
-    const elev = elevData
-      ? (elevData?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
+    const elev = elevation
+      ? (elevation?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
       : 0
 
     if (kdTree) {
@@ -483,8 +153,7 @@ export default function GlobeViewerPage() {
         Math.sin(rad),
         cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
       )
-      setHoveredCellId(cellId >= 0 ? cellId : null)
-      if (cellId >= 0) setLastCellId(cellId)
+      handleCellHover(cellId >= 0 ? cellId : null)
 
       // Use CVT mesh elevation directly — same source as the right panel
       const meshElev = cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
@@ -497,7 +166,7 @@ export default function GlobeViewerPage() {
         pixelY: py,
       })
     } else {
-      setHoveredCellId(null)
+      handleCellHover(null)
       setCursor({
         lon: Math.round(lon * 100) / 100,
         lat: Math.round(lat * 100) / 100,
@@ -507,9 +176,9 @@ export default function GlobeViewerPage() {
         pixelY: py,
       })
     }
-  }, [elevData, meta, elevMin, elevMax, kdTree, voronoiCells])
+  }, [elevation, meta, elevMin, elevMax, kdTree, voronoiCells, handleCellHover, setCursor])
 
-  const handleCellClick = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
+  const handleCellClickLonLat = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
     if (!kdTree) return
     const rad = THREE.MathUtils.degToRad(lat)
     const cosLat = Math.cos(rad)
@@ -519,42 +188,12 @@ export default function GlobeViewerPage() {
       cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
     )
     if (cellId < 0) return
-    setSelectedCells((prev) => {
-      const alreadySelected = prev.has(cellId)
-      if (ctrlKey) {
-        // Ctrl+double-click → toggle this cell (keep others)
-        const next = new Set(prev)
-        if (alreadySelected) next.delete(cellId)
-        else next.add(cellId)
-        return next
-      }
-      // Plain double-click → clear others, then toggle
-      if (alreadySelected && prev.size === 1) return new Set()
-      return new Set([cellId])
-    })
-  }, [kdTree])
-
-  // Esc → exit clean mode first, otherwise clear all selections
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (searchParams.get('clean') === '1') {
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev)
-          next.delete('clean')
-          return next
-        }, { replace: true })
-        return
-      }
-      setSelectedCells(new Set())
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [searchParams, setSearchParams])
+    selectCell(cellId, ctrlKey)
+  }, [kdTree, selectCell])
 
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-  const stellarQS = `${branchQS}${branchQS ? '&' : '?'}focus=${encodeURIComponent(planetId!)}`
+  const stellarQS = `${branchQS}${branchQS ? '&' : '?'}focus=${encodeURIComponent(selectedPlanet)}`
   // Forward current lighting (sun/season) + branch when switching to the 2D map.
   const mapQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
   const handleTransition = useCallback(() => {
@@ -563,35 +202,27 @@ export default function GlobeViewerPage() {
 
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
-  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const handleImported = useCallback(
-    (r: ImportElevationResult) => {
-      setImportMsg(r.ok
-        ? { ok: true, text: t('msg.heightmapImported') }
-        : { ok: false, text: t('msg.importFailed', { detail: r.detail ?? t('msg.unknownError') }) },
-      )
-    },
-    [],
-  )
 
   // --- Render ---
-  if (!worldName || !planetId) {
+  if (!worldName) {
     return <div className="flex items-center justify-center h-full text-gray-500">{t('status.noWorldOrPlanet')}</div>
   }
+
+  const currentPlanet = selectedPlanet ? bodyByName.get(selectedPlanet) : undefined
 
   return (
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
-      : 'flex flex-col h-[calc(100vh-56px)]'}>
+      : 'flex flex-col h-[calc(100vh-56px)] md:h-screen'}>
       {/* Top bar */}
       {!cleanMode && (
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
         <Link to={`/worlds/${worldName}`}
           className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">{t('action.back')}</Link>
         <h1 className="text-base sm:text-lg font-bold text-neon-cyan neon-glow-subtle">{t('title.globe')}</h1>
-        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{currentPlanet?.name ?? planetId}</span>
+        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{currentPlanet?.name ?? selectedPlanet}</span>
         <div className="flex-1" />
-        <Link to={`/worlds/${worldName}/map/${planetId}${mapQS}`}
+        <Link to={`/worlds/${worldName}/map/${selectedPlanet}${mapQS}`}
           className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
           title={t('label.switchTo2D')}>
           🗺️ 2D
@@ -603,10 +234,10 @@ export default function GlobeViewerPage() {
         </Link>
 
         {/* Import elevation (same position as 2D toolbar) */}
-        {planetId && (
+        {selectedPlanet && (
           <ImportElevationButton
             worldName={worldName!}
-            planetId={planetId}
+            planetId={selectedPlanet}
             branch={selectedBranch}
             onImported={handleImported}
           />
@@ -628,7 +259,7 @@ export default function GlobeViewerPage() {
             from the astronomy catalogs (planets + stellar bodies) */}
         {mapPlanets && mapPlanets.length > 0 && (
           <select
-            value={planetId}
+            value={selectedPlanet}
             onChange={(e) => {
               const qs = searchParams.toString()
               navigate(`/worlds/${worldName}/globe/${e.target.value}${qs ? `?${qs}` : ''}`)
@@ -691,8 +322,8 @@ export default function GlobeViewerPage() {
                     <div className="text-sm">
                       {elevError
                         ? t('label.noMapData')
-                        : elevationBlob && !elevData ? t('label.decodingHeightmap')
-                        : elevationBlob && elevData ? t('label.generatingTexture')
+                        : elevation && elevationDims.w === 0 ? t('label.decodingHeightmap')
+                        : elevation ? t('label.generatingTexture')
                         : t('label.mapDataLoading')}
                     </div>
                     <div className="mt-3 text-xs text-gray-600 max-w-xs mx-auto leading-relaxed">
@@ -705,13 +336,13 @@ export default function GlobeViewerPage() {
                 texture={displayTexture}
                 renderComposite={renderComposite}
                 onTransition={handleTransition}
-                onCellHover={handleCellHover}
-                onCellClick={handleCellClick}
-                onHoverOut={() => { setHoveredCellId(null); setCursor(null) }}
+                onCellHover={handleCellHoverLonLat}
+                onCellClick={handleCellClickLonLat}
+                onHoverOut={() => { handleCellHover(null); setCursor(null) }}
                 onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
                 regions={globeRegions}
-                hoveredCellId={cleanMode ? null : hoveredCellId}
+                hoveredCellId={cleanMode ? null : hoveredCell}
                 selectedCellIds={cleanMode ? emptySelection : selectedCells}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
@@ -753,7 +384,7 @@ export default function GlobeViewerPage() {
             <MobileCellCard
               cell={selectedCells.size === 1 ? selectedCellData : null}
               cursor={cursor}
-              onClose={() => setSelectedCells(new Set())}
+              onClose={clearSelection}
             />
           )}
         </div>
@@ -865,8 +496,8 @@ export default function GlobeViewerPage() {
                 <div className="text-sm">
                   {elevError
                     ? t('label.noMapData')
-                    : elevationBlob && !elevData ? t('label.decodingHeightmap')
-                    : elevationBlob && elevData ? t('label.generatingTexture')
+                    : elevation && elevationDims.w === 0 ? t('label.decodingHeightmap')
+                    : elevation ? t('label.generatingTexture')
                     : t('label.mapDataLoading')}
                 </div>
                 <div className="mt-3 text-xs text-gray-600 max-w-xs mx-auto leading-relaxed">
@@ -879,13 +510,13 @@ export default function GlobeViewerPage() {
               texture={displayTexture}
               renderComposite={renderComposite}
               onTransition={handleTransition}
-              onCellHover={handleCellHover}
-              onCellClick={handleCellClick}
-              onHoverOut={() => { setHoveredCellId(null); setCursor(null) }}
+              onCellHover={handleCellHoverLonLat}
+              onCellClick={handleCellClickLonLat}
+              onHoverOut={() => { handleCellHover(null); setCursor(null) }}
               onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
               regions={globeRegions}
-              hoveredCellId={cleanMode ? null : hoveredCellId}
+              hoveredCellId={cleanMode ? null : hoveredCell}
               selectedCellIds={cleanMode ? emptySelection : selectedCells}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
@@ -960,10 +591,10 @@ export default function GlobeViewerPage() {
       <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
         <MapCellInspector
           cell={inspectorCell}
-          cvtMesh={cvtMesh ?? null}
-          planetName={currentPlanet?.name ?? planetId}
+          cvtMesh={cvtMesh}
+          planetName={currentPlanet?.name ?? selectedPlanet}
           selectedCells={selectedCellObjects}
-          activeColorMode={activeColorMode}
+          activeColorMode={vs.activeColorMode}
           monthlyMode={monthlyMode}
           monthIndex={monthlyMonth}
           monthlyData={monthlyData}

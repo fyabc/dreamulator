@@ -19,7 +19,6 @@ with the survey sheet in :mod:`.carto_render`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -27,18 +26,18 @@ from dreamulator.map.palettes import hex_to_rgb, whittaker_colors
 
 from .carto_render import (
     PAPER_RGB,
-    RIVER_COLOR,
     TITLE_SIZE,
+    _combined_legend,
     _graticule,
     _north_arrow,
     _paper_texture,
+    _points_per_data_unit,
+    _river_collections,
     _scale_bar,
+    fmt_deg,
     planet_display_name,
 )
 from .satellite_color import ColorizeInputs, hillshade, load_inputs, reconcile_ocean_on_land
-
-if TYPE_CHECKING:
-    from matplotlib.axes import Axes
 
 # --- sheet constants (cartographic choices) ---------------------------------
 
@@ -57,28 +56,9 @@ HILLSHADE_STRENGTH = 0.28
 LAKE_FILL = (92, 148, 188)
 LAKE_SHORE = (64, 120, 168)
 COASTLINE_RGB = (52, 84, 100)
-
-LEGEND_SIZE = 13.0
-
-#: Chinese display names for the sheet legend (print artefact convention,
-#: same as the Chinese sheet title).  Missing names fall back to the
-#: English biome id.
-BIOME_DISPLAY_ZH: dict[str, str] = {
-    "tropical_rainforest": "热带雨林",
-    "tropical_seasonal_forest": "热带季雨林",
-    "tropical_savanna": "热带稀树草原",
-    "tropical_desert": "热带荒漠",
-    "temperate_rainforest": "温带雨林",
-    "temperate_forest": "温带森林",
-    "temperate_grassland": "温带草原",
-    "temperate_desert": "温带荒漠",
-    "boreal_forest": "北方针叶林",
-    "boreal_shrubland": "北方灌丛",
-    "tundra": "苔原",
-    "ice": "冰盖",
-    "lake": "湖泊",
-    "ocean": "海洋",
-}
+#: One water family (user ruling 2026-10-17): the river ink is the lake
+#: shore-ring tone — channels and lakes read as one hydrology.
+BIOME_WATER_RGB = LAKE_SHORE
 
 
 def compose_biome_rgb(
@@ -169,69 +149,6 @@ def compose_biome_rgb(
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32), sea, entries
 
 
-def _biome_legend(ax: Axes, km: float, entries: list[tuple[str, tuple[int, int, int]]]) -> None:
-    """Categorical legend: swatch + Chinese display name, bottom-left stack.
-
-    A paper backing panel keeps the labels readable over dark class fills
-    (pure-land windows have no blank ocean to host the legend).
-    """
-    from matplotlib.patches import Rectangle
-
-    if not entries:
-        return
-    x0, y0 = km * 0.035, km * 0.055
-    w, h, gap = km * 0.020, km * 0.014, km * 0.007
-    # Text width estimate: CJK glyphs ≈ 0.9 em square; the axes spans km
-    # over 12 in × 0.90 at dpi-independent 72 pt/in.
-    max_chars = max(len(BIOME_DISPLAY_ZH.get(name, name)) for name, _ in entries)
-    text_w = max_chars * LEGEND_SIZE * 0.95 / 72 / (12 * 0.90) * km
-    ax.add_patch(
-        Rectangle(
-            (x0 - km * 0.012, y0 - km * 0.016),
-            w + text_w + km * 0.032,
-            len(entries) * (h + gap) + km * 0.042,
-            facecolor="#f8f4e9",
-            edgecolor="#5a4632",
-            linewidth=0.8,
-            alpha=0.88,
-            zorder=7,
-        )
-    )
-    for i, (name, rgb) in enumerate(entries):
-        y = y0 + i * (h + gap)
-        ax.add_patch(
-            Rectangle(
-                (x0, y),
-                w,
-                h,
-                facecolor="#{:02x}{:02x}{:02x}".format(*rgb),
-                edgecolor="#5a4632",
-                linewidth=0.6,
-                zorder=8,
-            )
-        )
-        ax.text(
-            x0 + w + km * 0.007,
-            y + h / 2,
-            BIOME_DISPLAY_ZH.get(name, name),
-            fontsize=LEGEND_SIZE,
-            ha="left",
-            va="center",
-            color="#1a1a1a",
-            zorder=8,
-        )
-    ax.text(
-        x0 + w / 2,
-        y0 + len(entries) * (h + gap) + km * 0.004,
-        "群系",
-        fontsize=LEGEND_SIZE + 1,
-        ha="center",
-        va="bottom",
-        color="#1a1a1a",
-        zorder=8,
-    )
-
-
 def render_biome_sheet(
     inputs: ColorizeInputs,
     out_dir: Path,
@@ -240,10 +157,11 @@ def render_biome_sheet(
     dpi: int = 300,
     title: str = "",
     hillshade_strength: float = HILLSHADE_STRENGTH,
+    svg: bool = False,
     center_lat: float = 0.0,
     center_lon: float = 0.0,
 ) -> dict[str, object]:
-    """Write ``biome.svg`` + ``biome.png``; returns sheet metadata."""
+    """Write ``biome.png`` (+ ``biome.svg`` when ``svg``); returns sheet metadata."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -269,57 +187,47 @@ def render_biome_sheet(
     ax.set_position((0.04, 0.06, 0.90, 0.86))
     ax.imshow(rgb, extent=(0, km, 0, km), interpolation="nearest", zorder=1)
 
+    ax.set_xlim(0, km)
+    ax.set_ylim(0, km)
+    ax.set_aspect("equal")
     if inputs.river_segments is not None and inputs.river_segment_flows is not None:
-        from matplotlib.collections import LineCollection
-
-        flows = inputs.river_segment_flows
-        w_n = np.clip(flows / max(flows.max(), 1.0), 0.0, 1.0) ** 0.5
-        widths = 0.25 + 1.15 * w_n
-        seg_list = [tuple(map(tuple, seg)) for seg in inputs.river_segments]
-        ax.add_collection(
-            LineCollection(
-                seg_list,
-                colors=[_hex_river()],
-                linewidths=widths,
-                zorder=5,
-                capstyle="round",
-            )
-        )
+        for collection in _river_collections(
+            inputs.river_segments,
+            inputs.river_segment_flows,
+            inputs.river_segment_regimes,
+            points_per_unit=_points_per_data_unit(ax),
+            ink=BIOME_WATER_RGB,
+        ):
+            ax.add_collection(collection)
     elif rivers.any():
         ax.contour(
             rivers,
             extent=(0, km, 0, km),
             origin="upper",
             levels=[0.5],
-            colors=[_hex_river()],
+            colors=["#{:02x}{:02x}{:02x}".format(*BIOME_WATER_RGB)],
             linewidths=[0.7],
             zorder=5,
         )
 
-    ax.set_xlim(0, km)
-    ax.set_ylim(0, km)
-    ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_edgecolor("#5a4632")
         spine.set_linewidth(1.2)
 
-    _biome_legend(ax, km, entries)
+    _combined_legend(ax, km, inputs.river_segment_regimes, entries, river_rgb=BIOME_WATER_RGB)
     _scale_bar(ax, km)
     _north_arrow(ax, km)
-    _graticule(ax, km, center_lat, center_lon)
+    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
     if title:
         fig.suptitle(title, fontsize=TITLE_SIZE, color="#4a3620")
 
-    for ext in ("svg", "png"):
+    outputs = ("png", "svg") if svg else ("png",)
+    for ext in outputs:
         fig.savefig(out_dir / f"biome.{ext}", dpi=dpi, facecolor="#f8f4e9")
     plt.close(fig)
     return {"res": res, "extent_km": round(km, 1), "classes": len(entries)}
-
-
-def _hex_river() -> str:
-    return "#{:02x}{:02x}{:02x}".format(*RIVER_COLOR)
 
 
 def biome_region(
@@ -332,6 +240,7 @@ def biome_region(
     data_dir: Path | None = None,
     title: str | None = None,
     hillshade_strength: float = HILLSHADE_STRENGTH,
+    svg: bool = False,
 ) -> dict[str, object]:
     """CLI entry: render the biome sheet for a region pack directory.
 
@@ -356,7 +265,10 @@ def biome_region(
     if title is None:
         lat_ns = "N" if center_lat >= 0 else "S"
         lon_ew = "E" if center_lon >= 0 else "W"
-        title = f"{name} 群系 —— {abs(center_lat):.0f}°{lat_ns} {abs(center_lon):.0f}°{lon_ew} 附近"
+        title = (
+            f"{name} 群系图 —— {fmt_deg(abs(center_lat))}°{lat_ns} "
+            f"{fmt_deg(abs(center_lon))}°{lon_ew} 附近"
+        )
     return render_biome_sheet(
         inputs,
         out_dir or pack_dir / "carto",
@@ -364,6 +276,7 @@ def biome_region(
         dpi=dpi,
         title=title,
         hillshade_strength=hillshade_strength,
+        svg=svg,
         center_lat=center_lat,
         center_lon=center_lon,
     )
