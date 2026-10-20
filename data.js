@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792296121177,
+  "lastUpdate": 1792458859864,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -295,6 +295,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000257459136285368",
             "extra": "mean: 4.161936200002003 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "5089758fadf52880a77ea78d0b693a567f9945e5",
+          "message": "docs(climatology,usage,design): 云场统计律 + 竞品云生成调研入库与用法登记\n\ncloud_field_statistics.md：单点光学厚度近似指数分布（Marchand 2010 全文核验）、\n空间谱一维 −5/3（Cahalan & Joseph 1989 经 Davis 1997 转引核验）、间歇性乘性级串\n（Lovejoy-Schertzer）与梯度联合指纹，及四条律到生成参数的映射表。\ncloud_generation_competitors.md：Guerrilla Decima（weather map 三通道契约、\n形状/侵蚀分离）、Frostbite、SatelliteCloudGenerator（locality 尺度多变）、\nGaia Sky（球面采样）、CloudNoiseGen、UE-ML 体积云，到本管线的取舍映射。\ncli.md 补 export clouds 用法段；roadmap 登记气象图层链 L2 原型完成；\nclimatology 索引与 competitor-analysis 速查行同步。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-20T09:12:26+08:00",
+          "tree_id": "8e16f785c731047cbad0036f9a4a9042cde63c67",
+          "url": "https://github.com/fyabc/dreamulator/commit/5089758fadf52880a77ea78d0b693a567f9945e5"
+        },
+        "date": 1792458858979,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4521902216935473,
+            "unit": "iter/sec",
+            "range": "stddev: 0.11592463132167634",
+            "extra": "mean: 2.2114587004 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.719473728165913,
+            "unit": "iter/sec",
+            "range": "stddev: 0.012847884848107248",
+            "extra": "mean: 268.8552394999988 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9421095870706824,
+            "unit": "iter/sec",
+            "range": "stddev: 0.821836996623093",
+            "extra": "mean: 514.9040026666659 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1172.6488566348305,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008425232985393759",
+            "extra": "mean: 852.7701999980764 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 242.0592815766853,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001293857226989099",
+            "extra": "mean: 4.131219400001385 msec\nrounds: 5"
           }
         ]
       }
