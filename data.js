@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792468278928,
+  "lastUpdate": 1792509389441,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -413,6 +413,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00012913403173100716",
             "extra": "mean: 5.200545599996076 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "d26230dea8c11839dc0d4a25585d68901df915f1",
+          "message": "feat(export): 0e region_window 方位等距窗口（pack v4）+ 分支感知 refine + 湖泊冰情制图\n\n- region_export：窗口改局部方位等距（换算直用 td_canvas.CanvasGeometry 单源），\n  极区中心与跨 ±180° 窗口解锁，|lat|>75° 上限退休、只剩对跖点退化拒绝；\n  Clough-Tocher 与窗口取格改在 AEQ 平面 km 坐标（经度解缠整段删除）；\n  pack v4：新增 projection 字段、extent_km/km_per_px 精确均匀、pixel_box 退役\n- terrain_refine：conditioning 改 AEQ 采样（pitch 沿用旧导出网格纬向口径）；\n  修复 map_dir 写死根目录、忽略 source.branch 的隐藏 bug——此前 --branch 导出\n  的包细化时会悄悄读根世界引擎气候（TD 条件场与月径流形状），改走 MapManager\n  的 branch → root 解析\n- 新通道 lake_ice.months.npy（月均温 <0 的月数，class 最近邻）+ meta 图例；\n  ColorizeInputs 增 projection 与 lake_ice_months\n- carto/biome/relief：投影感知经纬网（两轴独立步长、经线向极收敛、纬线成弧、\n  标签落图框交点并回绕 ±180°）；carto 对 12 个月冰封湖按永久冰体惯例画淡冰色\n  + 图例「常年封冻湖」\n- packs QA API：按 meta.projection 分派 v4 AEQ / v3 等距圆柱逆算（旧包兼容）\n- cli_export：refine 示例路径改现行包位置、carto rich 标签转义修复\n- 文档：cli/terrain-chain/blender-render-pipeline/gaea-refinement 同步\n- 测试：窗口数学重写（真距/极区/反经线/对跖点）、pack v4 字段、冰封月通道正负断言\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-20T23:07:09+08:00",
+          "tree_id": "b8c9690df62f67fa11e62513705cdea3f85c9b65",
+          "url": "https://github.com/fyabc/dreamulator/commit/d26230dea8c11839dc0d4a25585d68901df915f1"
+        },
+        "date": 1792509388582,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3167201438916869,
+            "unit": "iter/sec",
+            "range": "stddev: 0.14903165317922382",
+            "extra": "mean: 3.157361536000008 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.167555087999809,
+            "unit": "iter/sec",
+            "range": "stddev: 0.019638928475129255",
+            "extra": "mean: 315.70090249999794 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4693635546243184,
+            "unit": "iter/sec",
+            "range": "stddev: 1.088234791696884",
+            "extra": "mean: 680.5667643333351 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 977.1266379596912,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006866439724298568",
+            "extra": "mean: 1.0234087999975827 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.40758827677465,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007331549786574537",
+            "extra": "mean: 5.065661399996202 msec\nrounds: 5"
           }
         ]
       }
