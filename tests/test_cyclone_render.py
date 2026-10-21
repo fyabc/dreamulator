@@ -139,6 +139,21 @@ def test_synthetic_tracks_bands_and_seed() -> None:
     assert tracks != cr.synthetic_cyclones(12)
 
 
+def test_warp_cyclone_texture_local_and_deterministic() -> None:
+    h, w = 128, 256
+    yy, xx = np.mgrid[0:h, 0:w]
+    base = ((np.sin(xx / 9.0) + np.cos(yy / 7.0)) * 0.25 + 0.5).astype(np.float64)
+    cyc = cr.Cyclone(lat_deg=0.0, lon_deg=0.0, rmax_km=120.0, outer_radius_km=2000.0)
+    out1 = cr.warp_cyclone_texture(base, [cyc], radius_km=6800.0)
+    out2 = cr.warp_cyclone_texture(base, [cyc], radius_km=6800.0)
+    np.testing.assert_array_equal(out1, out2)
+    assert out1.shape == base.shape
+    # The warp is local: the far corner is untouched.
+    assert out1[0, 0] == base[0, 0]
+    # Inside the storm footprint the field is reorganised.
+    assert not np.allclose(out1, base)
+
+
 def test_empty_track_set_is_zero() -> None:
     out = cr.cyclone_alpha([], height=16, width=32, radius_km=6800.0)
     assert out.shape == (16, 32)

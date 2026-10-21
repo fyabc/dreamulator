@@ -51,6 +51,7 @@ __all__ = [
     "holland_b_1980",
     "holland_wind_m_s",
     "synthetic_cyclones",
+    "warp_cyclone_texture",
 ]
 
 CycloneKind = Literal["tropical", "extratropical"]
@@ -500,6 +501,81 @@ def composite_alpha(base: np.ndarray, template: np.ndarray) -> np.ndarray:
     """
     textured = template * (0.55 + 0.45 * base)
     return np.clip(1.0 - (1.0 - base) * (1.0 - textured), 0.0, 1.0)
+
+
+def _sample_equirect(field: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
+    """Bilinear sample of an equirectangular field at (lat, lon) degrees."""
+    h, w = field.shape
+    r = (90.0 - lat_deg) / 180.0 * h - 0.5
+    c = (lon_deg + 180.0) / 360.0 * w - 0.5
+    r0 = np.floor(r).astype(np.int64)
+    c0 = np.floor(c).astype(np.int64)
+    fr = r - r0
+    fc = c - c0
+    r0c = np.clip(r0, 0, h - 1)
+    r1c = np.clip(r0 + 1, 0, h - 1)
+    c0w = np.mod(c0, w)
+    c1w = np.mod(c0 + 1, w)
+    sampled: np.ndarray = (
+        field[r0c, c0w] * (1 - fr) * (1 - fc)
+        + field[r1c, c0w] * fr * (1 - fc)
+        + field[r0c, c1w] * (1 - fr) * fc
+        + field[r1c, c1w] * fr * fc
+    )
+    return sampled
+
+
+def warp_cyclone_texture(
+    alpha: np.ndarray,
+    cyclones: list[Cyclone],
+    *,
+    radius_km: float,
+) -> np.ndarray:
+    """Twist the L2 cloud texture into spirals around each tropical cyclone.
+
+    The storm shield is then grown from the same procedural cloud field as the
+    rest of the planet (domain warp), instead of being a separate smooth
+    template; the L3 template only supplies the eye, eyewall and band
+    modulation on top.
+    """
+    if not cyclones:
+        return alpha
+    height, width = alpha.shape
+    lat_deg, lon_deg = _latlon_grid(height, width)
+    x, y, z = _sphere_xyz(lat_deg, lon_deg)
+    out = alpha.copy()
+    for cyc in cyclones:
+        if cyc.kind != "tropical":
+            continue
+        dist, _bearing = _distance_bearing_km(cyc.lat_deg, cyc.lon_deg, lat_deg, lon_deg, radius_km)
+        scale = max(cyc.outer_radius_km, cyc.rmax_km, 1.0)
+        w = np.exp(-((dist / (1.45 * scale)) ** 2))
+        if float(w.max()) < 0.01:
+            continue
+        # Cyclonic twist, stronger toward the centre; sign flips by hemisphere.
+        sign = 1.0 if cyc.lat_deg >= 0.0 else -1.0
+        twist = (
+            0.85
+            * sign
+            * np.clip(np.log(scale / np.maximum(dist, 0.15 * max(cyc.rmax_km, 1.0))), 0.0, 2.5)
+        )
+        lat0 = math.radians(cyc.lat_deg)
+        lon0 = math.radians(cyc.lon_deg)
+        c = np.array(
+            [math.cos(lat0) * math.cos(lon0), math.sin(lat0), math.cos(lat0) * math.sin(lon0)]
+        )
+        p = np.stack([x, y, z], axis=-1)
+        dot = p @ c
+        cross = np.cross(c, p)
+        cos_t = np.cos(twist)[..., None]
+        sin_t = np.sin(twist)[..., None]
+        pr = p * cos_t + cross * sin_t + c * (dot[..., None] * (1.0 - cos_t))
+        lat_r = np.degrees(np.arcsin(np.clip(pr[..., 1], -1.0, 1.0)))
+        lon_r = np.degrees(np.arctan2(pr[..., 2], pr[..., 0]))
+        sampled = _sample_equirect(out, lat_r, lon_r)
+        out = out * (1.0 - w) + sampled * w
+    result: np.ndarray = np.clip(out, 0.0, 1.0)
+    return result
 
 
 def _spread_lons(rng: np.random.Generator, n: int) -> list[float]:

@@ -1394,6 +1394,7 @@ def clouds_globe(
                 cyclone_alpha,
                 cyclone_clear,
                 cyclone_envelope,
+                warp_cyclone_texture,
             )
 
             # Synthetic tracks do not know the coastline; drop tropical
@@ -1410,6 +1411,7 @@ def clouds_globe(
                 if c.kind != "tropical" or oce[r, q] > 0.5
             ]
         if cyclones:
+            alpha = warp_cyclone_texture(alpha, list(cyclones), radius_km=radius_km)
             template = cyclone_alpha(
                 list(cyclones),
                 height=height,
