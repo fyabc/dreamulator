@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792598362376,
+  "lastUpdate": 1792601344916,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -708,6 +708,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009184760245217733",
             "extra": "mean: 4.977609200000188 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "f5155431cde9003692626b5a2178ed80c57ca809",
+          "message": "feat(media): L3 显式卷云丝缕层\n\n外围 r>1.2 Rmax 叠加高方位波数细丝，相位用 noise/fine 打散，\n避免规则辐射纹；中心 400 px 灰度均值 0.711 -> 0.723。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-22T00:43:58+08:00",
+          "tree_id": "bf53e74d3fe8bd85c724c02360dd0555e0006eb9",
+          "url": "https://github.com/fyabc/dreamulator/commit/f5155431cde9003692626b5a2178ed80c57ca809"
+        },
+        "date": 1792601344347,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.35097642527375617,
+            "unit": "iter/sec",
+            "range": "stddev: 0.13411658556007464",
+            "extra": "mean: 2.8491942136000032 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.574601994564204,
+            "unit": "iter/sec",
+            "range": "stddev: 0.021685456720251017",
+            "extra": "mean: 279.7514245000343 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6993825112943963,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9426149651419297",
+            "extra": "mean: 588.4490356666751 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 850.4883929635266,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00010723167364308863",
+            "extra": "mean: 1.1757949999946504 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.89656956705778,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008897000947391182",
+            "extra": "mean: 5.027738800004045 msec\nrounds: 5"
           }
         ]
       }
