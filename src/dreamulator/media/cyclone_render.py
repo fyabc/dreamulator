@@ -242,48 +242,51 @@ def _tropical_template(
     shape = _shape_of(cyc)
 
     # Eye: clear inside the per-storm eye fraction, eyewall ring at Rmax.
-    eye_clear = _smoothstep(0.60 * shape.eye_fraction, 1.60 * shape.eye_fraction, r)
-    eyewall = np.exp(-(((r - 1.0) / 0.24) ** 2)) * 0.98
-    grain = (0.55 + 0.45 * (0.5 + 0.5 * fine)) * (0.70 + 0.30 * (0.5 + 0.5 * mid))
-    core = np.exp(-((r / shape.core_scale) ** 2)) * 0.50 * grain
-
-    # Cirrus shield and logarithmic spiral rainbands, bounded by the outer scale.
-    # Real storms show one dominant band (wavenumber 1) or a pair (wavenumber 2),
-    # strongly asymmetric; three symmetric arms are not observed.  The phase
-    # noise warps the bands so they read as ragged cloud streets, not arcs.
-    # No circular rim: an elongated, noise-perturbed shield that dissolves into
-    # patchy cirrus filaments instead of a smooth radial glow.
-    along = dist * np.cos(rel)
-    cross = dist * np.sin(rel)
-    edge = np.sqrt((along / (1.12 * outer)) ** 2 + (cross / (0.84 * outer)) ** 2)
-    edge = edge / (1.0 + 0.18 * noise + 0.10 * np.cos(rel - shape.shear_phase))
-    shield_env = 1.0 - _smoothstep(0.98, 1.04, edge)
-    phase = (
-        float(shape.band_count) * rel + shape.band_pitch * np.log(np.maximum(r, 0.2)) + 2.2 * noise
+    eye_r = r / (
+        1.0
+        + 0.18 * np.cos(2.0 * rel + shape.shear_phase)
+        + 0.12 * np.cos(rel - shape.shear_phase)
+        + 0.15 * fine
     )
-    bands = (0.5 + 0.5 * np.cos(phase)) ** 1.5 * (0.55 + 0.45 * (0.5 + 0.5 * texture))
-    band_env = np.exp(-(((np.log(np.maximum(r, 0.2) / 2.5)) / 1.4) ** 2))
-    # One side of the storm carries the organised bands (shear/asymmetry).
-    side = 0.5 + 0.5 * np.cos(rel - shape.shear_phase)
-    band_weight = 0.60 + 0.40 * side
-    # The central overcast/eyewall stays nearly symmetric; the asymmetry lives
-    # in the rainbands.  Applying the full asymmetry to the core opened a dark
-    # bite beside the eye (user QA 2026-10-21).
-    core_asym = 1.0 + 0.03 * np.cos(rel - shape.shear_phase)
-    band_asym = 1.0 + 0.40 * shape.asymmetry * np.cos(rel - shape.shear_phase)
-    # Dense shield with band gaps: the storm should read as a bright disk
-    # carved by dark spiral troughs, not as a faint additive spiral.
-    # Spiral gaps carve the shield outside the eyewall but leave the central
-    # dense overcast intact; a uniform gap pattern opened a false 400 km hole
-    # around the eye (user QA 2026-10-21).
-    gap = _smoothstep(0.6, 2.2, r)
-    band_pattern = 1.0 - gap * (0.35 * (1.0 - bands * band_weight))
-    shield = 1.20 * grain * band_pattern * band_asym
-    core_sheet = (core + 0.60 * grain) * band_pattern * shield_env * core_asym
-    band_sheet = 0.75 * shield * band_env * shield_env
-    sheet = core_sheet + band_sheet
+    eye_clear = _smoothstep(0.60 * shape.eye_fraction, 1.60 * shape.eye_fraction, eye_r)
+    grain = (0.55 + 0.45 * (0.5 + 0.5 * fine)) * (0.70 + 0.30 * (0.5 + 0.5 * mid))
 
-    alpha = np.maximum(eyewall, sheet) * eye_clear
+    # Compact central dense overcast, no filled disk around it.
+    core = np.exp(-((r / 2.6) ** 2)) * 1.05 * grain
+    r_ew = r + 0.15 * mid + 0.10 * fine
+    eyewall = np.exp(-(((r_ew - 1.0) / 0.32) ** 2)) * 0.65
+    # Ragged, broken ring: no continuous white circle.
+    eyewall = np.clip(
+        eyewall
+        * (0.40 + 0.60 * (0.5 + 0.5 * fine))
+        * (0.55 + 0.45 * (0.5 + 0.5 * np.cos(2.0 * rel + 1.5 * noise))),
+        0.0,
+        1.0,
+    )
+
+    # Band-dominated structure: one dominant log-spiral arm (wavenumber 1 or 2)
+    # plus a weaker secondary arm and a ragged outer fade.  The storm is mostly
+    # bands with ambient cloud between them, not a bright disk.
+    log_r = np.log(np.maximum(r, 0.3))
+    phase1 = float(shape.band_count) * rel + shape.band_pitch * log_r + 2.2 * noise
+    phase2 = (
+        float(shape.band_count + 1) * rel
+        + (0.75 * shape.band_pitch + 0.8) * log_r
+        + 1.9 * noise
+        + 2.1
+    )
+    primary = np.exp(-((1.0 - np.cos(phase1)) / (2.0 * 0.70**2)))
+    secondary = np.exp(-((1.0 - np.cos(phase2)) / (2.0 * 0.60**2)))
+    side = 0.5 + 0.5 * np.cos(rel - shape.shear_phase)
+    band_weight = 0.55 + 0.45 * side
+    band_fade = np.exp(-((dist / (1.20 * outer)) ** 2))
+    bands_total = 1.45 * primary * band_weight + 0.95 * secondary * band_weight**1.5
+    bands_total *= band_fade * (0.75 + 0.25 * (0.5 + 0.5 * texture)) * grain
+
+    # Thin cirrus veil between bands raises the cloud amount without a disk.
+    veil = 0.65 * np.exp(-((dist / (1.00 * outer)) ** 2)) * grain
+    sheet = np.clip(np.maximum(np.maximum(core, eyewall), bands_total) + veil, 0.0, 1.0)
+    alpha = sheet * eye_clear
     out: np.ndarray = np.clip(alpha * cyc.strength, 0.0, 1.0)
     return out
 
@@ -471,13 +474,19 @@ def cyclone_clear(
     clear = np.zeros((height, width), dtype=np.float64)
     for cyc in cyclones:
         if cyc.kind == "tropical":
-            dist, _bearing = _distance_bearing_km(
+            dist, bearing = _distance_bearing_km(
                 cyc.lat_deg, cyc.lon_deg, lat_deg, lon_deg, radius_km
             )
             r = dist / max(cyc.rmax_km, 1.0)
             shape = _shape_of(cyc)
-            eye = 1.0 - _smoothstep(0.60 * shape.eye_fraction, 1.60 * shape.eye_fraction, r)
-            clear = np.maximum(clear, eye * cyc.strength)
+            rel = bearing - math.atan2(cyc.motion_east_m_s, cyc.motion_north_m_s)
+            eye_r = r / (
+                1.0
+                + 0.18 * np.cos(2.0 * rel + shape.shear_phase)
+                + 0.12 * np.cos(rel - shape.shear_phase)
+            )
+            eye = 1.0 - _smoothstep(0.60 * shape.eye_fraction, 1.60 * shape.eye_fraction, eye_r)
+            clear = np.maximum(clear, 0.90 * eye * cyc.strength)
         else:
             along, cross = _tangent_coords(cyc, lat_deg, lon_deg, radius_km)
             a = along / max(cyc.outer_radius_km, 1.0)

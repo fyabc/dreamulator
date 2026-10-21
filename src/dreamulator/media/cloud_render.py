@@ -1434,9 +1434,9 @@ def clouds_globe(
             # Inside the (irregular) storm footprint the template may only
             # brighten: max() keeps the ambient deck where the template is thin,
             # so there is no dark ring or painted halo around the edge.
-            alpha = np.clip(
-                base * (1.0 - envelope) + envelope * np.maximum(base, template), 0.0, 1.0
-            )
+            # Screen the banded template over the ambient deck: it raises cloud
+            # amount without imposing a hard disk edge, and keeps the L2 texture.
+            alpha = np.clip(1.0 - (1.0 - base) * (1.0 - 0.95 * envelope * template), 0.0, 1.0)
             Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
                 str(out_dir / "cyclone_template.png")
             )
