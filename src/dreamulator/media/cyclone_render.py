@@ -285,7 +285,20 @@ def _tropical_template(
 
     # Thin cirrus veil between bands raises the cloud amount without a disk.
     veil = 0.65 * np.exp(-((dist / (1.00 * outer)) ** 2)) * grain
-    sheet = np.clip(np.maximum(np.maximum(core, eyewall), bands_total) + veil, 0.0, 1.0)
+    # Explicit cirrus filaments: high-azimuthal-wavenumber streaks, broken by
+    # noise and elongated tangentially around the storm.
+    phase_c = (50.0 + 25.0 * (0.5 + 0.5 * mid)) * rel + 2.0 * log_r + 10.0 * noise + 8.0 * fine
+    cirrus = (0.5 + 0.5 * np.cos(phase_c)) ** 4
+    cirrus *= 0.40 + 0.60 * (0.5 + 0.5 * mid)
+    cirrus_env = (
+        np.exp(-((dist / (1.10 * outer)) ** 2)) * _smoothstep(1.2, 2.5, r) * (0.6 + 0.4 * grain)
+    )
+    cirrus_alpha = 0.18 * cirrus * cirrus_env
+    sheet = np.clip(
+        np.maximum(np.maximum(core, eyewall), bands_total) + veil + cirrus_alpha,
+        0.0,
+        1.0,
+    )
     alpha = sheet * eye_clear
     out: np.ndarray = np.clip(alpha * cyc.strength, 0.0, 1.0)
     return out
