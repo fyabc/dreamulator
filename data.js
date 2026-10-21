@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792524864911,
+  "lastUpdate": 1792598362376,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -649,6 +649,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00010219744474379299",
             "extra": "mean: 5.0784711999995125 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2432452c13c973c545fe59fc676fa9f1347f01b7",
+          "message": "Merge feature/cyclone-templates: L3 参数化气旋模板与云盾 L2 域扭曲\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-21T23:58:32+08:00",
+          "tree_id": "a9829d7d776aaad38a6c48cb55f0797575bfcd00",
+          "url": "https://github.com/fyabc/dreamulator/commit/2432452c13c973c545fe59fc676fa9f1347f01b7"
+        },
+        "date": 1792598361627,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3416394630026412,
+            "unit": "iter/sec",
+            "range": "stddev: 0.15341888490112007",
+            "extra": "mean: 2.9270623224000003 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.272070194033485,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03813429770076421",
+            "extra": "mean: 305.6169154999999 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6605157124090797,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9654143547105233",
+            "extra": "mean: 602.2225460000002 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 848.3963273277196,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008286067306618779",
+            "extra": "mean: 1.1786943999979371 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 200.89966082511302,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009184760245217733",
+            "extra": "mean: 4.977609200000188 msec\nrounds: 5"
           }
         ]
       }
