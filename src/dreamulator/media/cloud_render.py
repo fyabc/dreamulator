@@ -1,8 +1,8 @@
 """Procedural cloud texture — layer L2 of the orbital weather-globe chain.
 
-Requirement spec: the orbital weather-globe requirement notes (internal planning record).
+Requirement spec: the orbital weather-globe requirement notes.
 The GCM layer pack (L1: per-layer cloud fraction, cloud-top height, vorticity)
-is still pending on the server side; until it arrives this module derives a
+is still pending; until it arrives this module derives a
 **placeholder large-scale cloud-cover field** from the engine climate fields
 already on the mesh (annual precipitation and sea-level-pressure anomaly), so
 the look of the procedural texture can be settled now.  The texture synthesis
@@ -26,8 +26,9 @@ Design notes:
 * Cloud typing is deliberately minimal for the prototype: one billow layer
   (fair-weather cumulus / stratocumulus texture, thresholded by the cover
   field) and one cirrus layer (double-tap streaks elongated along the wind,
-  strengthening with wind speed).  Cyclone morphology is layer L3 and is NOT
-  handled here.
+  strengthening with wind speed).  Cyclone morphology is layer L3
+  (``media/cyclone_render.py``), composited by :func:`clouds_globe` when a
+  track set is supplied.
 
 Epistemic status (per engine discipline §9): the noise machinery is a
 standard graphics technique; the cover-field coefficients in
@@ -48,9 +49,11 @@ import numpy as np
 from dreamulator.map.noise_kernels import fbm_on_points, worley_on_points
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
+    from dreamulator.media.cyclone_render import Cyclone
 
 # ---------------------------------------------------------------------------
 # Texture constants (lengths in km on the planet surface)
@@ -1351,9 +1354,15 @@ def clouds_globe(
     sun_lon_deg: float | None = None,
     sun_lat_deg: float = 20.0,
     cover_scale: float = 1.0,
+    cyclones: Sequence[Cyclone] | None = None,
+    cyclone_seed: int = 41,
     provenance: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Run the full L2 prototype: texture + cover field + globe preview.
+
+    ``cyclones`` optionally overlays L3 parametric cyclone templates on the
+    texture (a synthetic track set is a QA placeholder until the L1 layer pack
+    provides real tracks).
 
     Writes ``clouds.png`` (RGBA straight-alpha equirect), ``cloud_cover.png``
     (8-bit greyscale placeholder cover field), ``surface.png`` (equirect
@@ -1379,16 +1388,72 @@ def clouds_globe(
         cover, u, v, oce, dp = conditioning_grids(mesh, indices)
         cover = np.clip(cover * cover_scale, 0.0, 1.0)
         products = cloud_texture_equirect(cover, u, v, oce, dp, radius_km=radius_km, seed=seed)
+        alpha = products.alpha
+        if cyclones:
+            from dreamulator.media.cyclone_render import (
+                cyclone_alpha,
+                cyclone_clear,
+                cyclone_envelope,
+                warp_cyclone_texture,
+            )
+
+            # Synthetic tracks do not know the coastline; drop tropical
+            # centres that land on a continent (L1 tracks never do).
+            rows = np.clip(
+                ((90.0 - np.array([c.lat_deg for c in cyclones])) / 180.0 * height), 0, height - 1
+            ).astype(int)
+            cols = np.clip(
+                ((np.array([c.lon_deg for c in cyclones]) + 180.0) / 360.0 * width), 0, width - 1
+            ).astype(int)
+            cyclones = [
+                c
+                for c, r, q in zip(cyclones, rows, cols, strict=True)
+                if c.kind != "tropical" or oce[r, q] > 0.5
+            ]
+        if cyclones:
+            alpha = warp_cyclone_texture(alpha, list(cyclones), radius_km=radius_km)
+            template = cyclone_alpha(
+                list(cyclones),
+                height=height,
+                width=width,
+                radius_km=radius_km,
+                seed=cyclone_seed,
+            )
+            clear = cyclone_clear(list(cyclones), height=height, width=width, radius_km=radius_km)
+            envelope = cyclone_envelope(
+                list(cyclones),
+                height=height,
+                width=width,
+                radius_km=radius_km,
+                seed=cyclone_seed,
+            )
+            # Inside a storm the ambient deck is modulated (not replaced) by the
+            # template: band troughs thin the deck, crests brighten it, so the
+            # cyclone reads without punching a clear moat in the cloud field.
+            base = alpha * (1.0 - clear)
+            # Inside the (irregular) storm footprint the template may only
+            # brighten: max() keeps the ambient deck where the template is thin,
+            # so there is no dark ring or painted halo around the edge.
+            alpha = np.clip(
+                base * (1.0 - envelope) + envelope * np.maximum(base, template), 0.0, 1.0
+            )
+            Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
+                str(out_dir / "cyclone_template.png")
+            )
+            paths["cyclone_template"] = out_dir / "cyclone_template.png"
+            Image.fromarray((envelope * 255.0).astype(np.uint8), "L").save(
+                str(out_dir / "cyclone_envelope.png")
+            )
+            paths["cyclone_envelope"] = out_dir / "cyclone_envelope.png"
         rgba = np.empty((height, width, 4), dtype=np.uint8)
         rgba[..., 0] = CLOUD_RGB[0]
         rgba[..., 1] = CLOUD_RGB[1]
         rgba[..., 2] = CLOUD_RGB[2]
-        rgba[..., 3] = (np.clip(products.alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
+        rgba[..., 3] = (np.clip(alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
         save_rgba_png(rgba, out_dir / "clouds.png")
         Image.fromarray((products.cover * 255.0).astype(np.uint8), "L").save(
             str(out_dir / "cloud_cover.png")
         )
-        alpha = products.alpha
         paths["clouds"] = out_dir / "clouds.png"
         paths["cover"] = out_dir / "cloud_cover.png"
     else:
@@ -1430,6 +1495,11 @@ def clouds_globe(
         },
         "cover_field": "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack",
         "cover_scale": cover_scale,
+        "cyclones": {
+            "count": len(cyclones) if cyclones else 0,
+            "source": "synthetic placeholder (L1 tracks pending)" if cyclones else None,
+            "seed": cyclone_seed if cyclones else None,
+        },
         "provenance": provenance or {},
     }
     with (out_dir / "meta.json").open("w", encoding="utf-8") as fh:

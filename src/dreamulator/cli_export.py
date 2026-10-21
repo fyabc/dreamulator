@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 import typer
@@ -732,9 +732,15 @@ def export_render(
 
 @export_app.command("clouds")
 def export_clouds(
+    ctx: typer.Context,
     world: str = typer.Argument(help="World name"),
     planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        help="YAML settings file (see cli.md); explicit CLI flags override it",
+    ),
     grid: str = typer.Option(
         "8192x4096",
         "--grid",
@@ -762,15 +768,47 @@ def export_clouds(
         help="Multiplier on the conditioning cover field; 0 skips texture "
         "synthesis entirely (surface/biome QA: surface.png + cloud-free globe)",
     ),
+    cyclones: bool = typer.Option(
+        False,
+        "--cyclones",
+        help="Overlay L3 synthetic cyclone templates (placeholder until the L1 track table lands)",
+    ),
+    cyclone_seed: int = typer.Option(31, "--cyclone-seed", help="Synthetic cyclone track seed"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
 
     The large-scale cover field is a placeholder (precipitation + SLP-anomaly
     proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
-    the permanent part.  Needs the 'media' extra (numba noise kernel).
+    the permanent part.  ``--cyclones`` adds L3 parametric templates from a
+    synthetic track set, for visual QA before real tracks exist.  Needs the
+    'media' extra (numba noise kernel).
     """
     _set_data_dir(data_dir)
+
+    # Precedence: explicit CLI flag > YAML config > built-in default.
+    from dreamulator.media.cloud_config import CloudRenderConfig
+
+    cfg = CloudRenderConfig.from_yaml(config) if config is not None else CloudRenderConfig()
+    T = TypeVar("T")
+
+    def _pick(name: str, cli_value: T, cfg_value: T) -> T:
+        source = ctx.get_parameter_source(name)
+        if source is not None and source.name == "COMMANDLINE":
+            return cli_value
+        return cfg_value
+
+    grid = _pick("grid", grid, cfg.grid)
+    seed = _pick("seed", seed, cfg.seed)
+    globe_res = _pick("globe_res", globe_res, cfg.globe_res)
+    center_lon = _pick("center_lon", center_lon, cfg.center_lon)
+    center_lat = _pick("center_lat", center_lat, cfg.center_lat)
+    sun_lon = _pick("sun_lon", sun_lon, cfg.sun_lon)
+    sun_lat = _pick("sun_lat", sun_lat, cfg.sun_lat)
+    cover_scale = _pick("cover_scale", cover_scale, cfg.cover_scale)
+    cyclones = _pick("cyclones", cyclones, cfg.cyclones.enabled)
+    cyclone_seed = _pick("cyclone_seed", cyclone_seed, cfg.cyclones.seed)
+
     try:
         w_str, h_str = grid.lower().split("x")
         width, height = int(w_str), int(h_str)
@@ -818,7 +856,22 @@ def export_clouds(
     start = time.perf_counter()
 
     from dreamulator.media.cloud_render import clouds_globe
+    from dreamulator.media.cyclone_render import Cyclone, synthetic_cyclones
 
+    if cfg.cyclones.tracks:
+        cyclone_set: list[Cyclone] | None = [
+            Cyclone(**track.model_dump()) for track in cfg.cyclones.tracks
+        ]
+    elif cyclones:
+        cyclone_set = synthetic_cyclones(
+            cyclone_seed,
+            tropical_per_hemisphere=cfg.cyclones.tropical_per_hemisphere,
+            extratropical_per_hemisphere=cfg.cyclones.extratropical_per_hemisphere,
+            tropical_scale=cfg.cyclones.tropical_scale,
+            extratropical_scale=cfg.cyclones.extratropical_scale,
+        )
+    else:
+        cyclone_set = None
     paths = clouds_globe(
         mesh,
         out_dir,
@@ -833,6 +886,8 @@ def export_clouds(
         sun_lon_deg=sun_lon,
         sun_lat_deg=sun_lat,
         cover_scale=cover_scale,
+        cyclones=cyclone_set,
+        cyclone_seed=cyclone_seed,
         provenance={
             "world": world,
             "branch": branch or "root",
