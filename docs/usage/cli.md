@@ -489,8 +489,43 @@ dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
 #        globe.png, meta.json}；默认 out = <render-workdir>/clouds/<world>[-<branch>]/
 # --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
 # --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
+# --cyclones 叠加 L3 气旋模板（合成占位轨迹；L1 轨迹表到达后替换）
+# --cyclone-seed 合成轨迹种子
+# --config cloud.yaml 从 YAML 读取全部设置；显式命令行参数覆盖文件
 # --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
 ```
+
+配置文件的字段与命令行参数同名，气旋块单独分组：
+
+```yaml
+grid: 8192x4096
+seed: 7
+globe_res: 1600
+center_lon: 90
+center_lat: 15
+sun_lat: 20
+cover_scale: 1.0
+cyclones:
+  enabled: true
+  seed: 31
+  tropical_per_hemisphere: 1
+  extratropical_per_hemisphere: 2
+  tropical_scale: 1.0
+  extratropical_scale: 1.0
+```
+
+`cyclones.tracks` 可直接给轨迹表（字段与 `Cyclone` 相同：位置、类型、中心气压、
+Rmax、外围尺度、移动矢量）；非空时覆盖合成占位轨迹，也是未来 L1 轨迹表的接入口。
+
+```bash
+dreamulator export clouds nacrea --branch gcm-t42-712 --config cloud.yaml
+```
+
+L3 气旋模板在 `media/cyclone_render.py`：热带气旋用 Holland 1980 风廓线定强度，
+配眼、眼墙、卷云盾与对数螺旋雨带；温带气旋用逗号云与锋面，按移动方向取向。
+温带逗号尺度取 2500–4000 km，依据是 55° 处的变形半径约为地球 45° 的三倍。
+当前 `--cyclones` 使用气候态占位轨迹（热带 10–25°、温带 52–58°），等 GCM 图层包
+（L1）的真实轨迹表到达后替换。
 
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
 等 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
