@@ -1,9 +1,9 @@
 # 植被/群系制图与卫星遥感着色
 
 群系（biome）可视化的两条路线的参考依据与制图惯例。落地代码：
-制图风 = `src/dreamulator/media/biome_render.py`（`export carto --style biome`），
+制图风 = `src/dreamulator/media/biome_render.py`（`export render --style biome`），
 遥感风 = `src/dreamulator/media/satellite_color.py` 的纹理 pass
-（`export colorize --texture`，默认开）。
+（`export render --style satellite --texture`，默认开）。
 
 ## 路线一：分类群系图（制图风）
 
@@ -59,4 +59,4 @@ s2maps.eu，CC BY 4.0）。两者都是「大气校正后的真彩色地表反�
 - Wikipedia「Biome」条目配图 `Vegetation.png`（分类群系图标杆）
 - NASA Blue Marble Next Generation（eoimages.gsfc.nasa.gov，公开领域）
 - EOX Sentinel-2 cloudless（s2maps.eu / tiles.maps.eox.at，CC BY 4.0；
-  本库参考瓦片存 private/video/reference/biome/）
+  本库参考瓦片存 `<render-workdir>/reference/biome/`）

@@ -1,10 +1,8 @@
 # 太阳系无生命天体的气候划分——学界实践调研（UCC v2 参照目标）
 
-> 日期：2026-09-21 ｜ 性质：deep-research 证据文档（2026-09-24 自 private/reviews 迁入库）。
+> 日期：2026-09-21 ｜ 性质：deep-research 证据文档（2026-09-24 迁入库）。
 > 方法：五路并行文献调研（Mars / Titan / Venus / Moon-无大气 / 通用框架），每条文献至少抓到
-> 摘要级核验；禁止编造，负结果如实记录。完整证据文件（含检索日志、判据原文全引、抓取渠道与
-> 失败路径）在 `private/reviews/_research/ucc-taxonomy-{mars,titan,venus,moon,frameworks}.md`，Titan 合并节
-> 另见 `ucc-taxonomy-titan-section.md`。
+> 摘要级核验；禁止编造，负结果如实记录。
 > 核实等级：**已核实原文**（抓到摘要/全文并确认所引判据）＞**仅摘要**＞**元数据核实**
 > （作者/标题/期刊/DOI 经 Crossref/OpenAlex 等交叉确认、摘要未抓到）＞**未核实**（显式标注）。
 > 对照基线：UCC v1（热量带 4 节点 × 供需 4 档 + continental/water_stress 修饰语，
@@ -431,8 +429,7 @@ Moon"）、**airless body**、**surface-bounded exosphere**。检索到的唯一
 ## §5 通用框架：五类独立实践，无统一标准（压缩节）
 
 **结论**：截至 2026-09，不存在统一的、被社区公用的跨行星气候分类标准（没有行星界的
-Köppen）。实际存在五类彼此独立的分类实践（1-4 类的详细判据原文与 30 条文献表见
-`private/reviews/_research/ucc-taxonomy-frameworks.md`；第 5 类为 2026-09-27 补入）：
+Köppen）。实际存在五类彼此独立的分类实践（第 5 类为 2026-09-27 补入）：
 
 1. **气候态温度阈值型**（行星级，一球一态）：**Wolf et al. 2017**（ApJ 837:107，已核实
    摘要）四态 = snowball (Ts<235 K) / waterbelt (235–250 K) / temperate (275–315 K) /
@@ -470,8 +467,7 @@ Köppen）。实际存在五类彼此独立的分类实践（1-4 类的详细判
    世界构建实践者，worldbuildingpasta.blogspot.com）的「Beyond the Köppen-Geiger Climate
    Classification System」三部曲（Part I 2024-12 扩展与替代方案综述、Part II 2025-03
    「Pasta Bioclimate System」（PBS）设计正文、Part III 2025-05 自评；博客，**灰色文献、
-   非同行评审**，定位 = 实践者方法论参照；**已核实原文**——全文抓取存档
-   `private/research/ucc-beyond-koppen-geiger-part{1,2,3}.md`（原文因版权不转载入库），
+   非同行评审**，定位 = 实践者方法论参照；**已核实原文**，
    与 UCC 的逐维对照分析 → `ucc-beyond-koppen-geiger-2026-09-27.md`（本目录））。
    PBS 以**预测生物群系**为第一目标做 Köppen 的替代而非扩展：9 参数（生长度日 GDD 及其
    光照限制版 GDDl、生长中断因子 GInt（冷侧 <15 °C 与**热侧 45→60 °C** 双侧累积）、
@@ -826,6 +822,5 @@ Venus/Moon 连「气候分区」概念都不存在）。这不是巧合：这些
 ---
 
 *调研执行：五个并行子代理（Mars/Titan/Venus/Moon/通用框架）+ 主线独立复核（勘误框 #1/#2/#4
-经主线 WebSearch 二次确认）。原始下载件与批量检索脚本留痕在 `private/reviews/_research/`（tmp/、_scratch/、
-_round*.py/.json 等）。本文档所有引文判据均出自上表「已核实」条目的摘要或开放全文原句；
+经主线 WebSearch 二次确认）。本文档所有引文判据均出自上表「已核实」条目的摘要或开放全文原句；
 未核实数值一律未采用。*

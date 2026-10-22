@@ -22,7 +22,7 @@ ETOPO1（高程）──► PB2002（板块+地壳）──► GSHHG（水掩膜
 | 4 | **NCEP/GPCP/Beck/SODA** 气候 | NOAA PSL / figshare / APDRC | 见下 | `import_earth_climate.py` | `koppen_class`、`temperature_C`、`precipitation_mm`、`ocean_current_east/north_m_s`、月均 msgpack |
 
 前三个缓存到系统临时目录（`tempfile.gettempdir()` 下的 `dreamulator_*`），气候观测数据
-放在 `private/tmp/climatology/`（gitignored），均可重下载。
+放在本地缓存目录 `<climatology-cache>/`（不入 git），均可重下载。
 
 ---
 

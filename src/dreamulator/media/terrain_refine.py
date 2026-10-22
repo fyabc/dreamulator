@@ -14,11 +14,14 @@ dependencies.
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from dreamulator.media.lake_masks import lake_footprint
 
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
@@ -108,27 +111,44 @@ def _td_python(td_repo: Path) -> Path:
     )
 
 
-def _mesh_and_window(pack_dir: Path) -> tuple[CVTMesh, RegionWindow]:
-    """The pack's source mesh and its geographic window on the export grid.
+def _pack_map_dir(meta: dict[str, Any]) -> Path:
+    """Branch-aware maps directory of the pack's source world/planet.
 
-    Shared by the conditioning export and the monthly-regime loader.  The
-    two consumers sample at different resolutions: conditioning uses the
-    coarse TD crop, while the regime uses the pack's own 2048-class grid.
+    A pack exported with ``--branch`` must refine against that branch's mesh
+    and monthly climate (e.g. ``gcm-t42-712``), not the root world's engine
+    climate; MapManager applies the branch → root → legacy resolution order.
+    """
+    from dreamulator.map.manager import MapManager
+
+    src = meta["source"]
+    map_dir = MapManager(Path("data") / "worlds" / src["world"], src.get("branch"))._maps_dir(
+        src["planet"]
+    )
+    if map_dir is None:
+        raise FileNotFoundError(
+            f"no maps for {src['world']}/{src['planet']} (branch {src.get('branch')})"
+        )
+    return map_dir
+
+
+def _mesh_and_window(pack_dir: Path) -> tuple[CVTMesh, RegionWindow]:
+    """The pack's source mesh and its azimuthal-equidistant window.
+
+    Shared by the conditioning export and the monthly-regime loader.  Both
+    sample the window's AEQ plane: conditioning on the coarse TD grid, the
+    regime on the pack's own 2048-class grid.
     """
     from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
     from dreamulator.map.region_export import read_radius_km, region_window
 
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
-    src = meta["source"]
-    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
+    map_dir = _pack_map_dir(meta)
     mesh_file = find_mesh_file(map_dir)
     if mesh_file is None:
         raise FileNotFoundError(f"no cvt mesh under {map_dir}")
     mesh = load_cvt_mesh_model(mesh_file)
     radius_km = read_radius_km(map_dir)
-    window = region_window(
-        meta["center_lat"], meta["center_lon"], meta["span_km"], radius_km, 4096, 2048
-    )
+    window = region_window(meta["center_lat"], meta["center_lon"], meta["span_km"], radius_km)
     return mesh, window
 
 
@@ -167,7 +187,7 @@ def _pack_monthly_runoff(
         soil_bucket_monthly,
     )
     from dreamulator.map.export import build_export_tree, find_mesh_file, load_climate_monthly
-    from dreamulator.map.region_export import _nearest_indices_on_grid, _window_out_grid
+    from dreamulator.map.region_export import _nearest_indices_on_grid
     from dreamulator.result_contract import REFERENCE_MONTH_DAYS
 
     annual_path = pack_dir / "input" / "runoff.mm.npy"
@@ -177,8 +197,7 @@ def _pack_monthly_runoff(
     annual = np.nan_to_num(np.load(annual_path).astype(np.float64), nan=0.0)
 
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
-    src = meta["source"]
-    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
+    map_dir = _pack_map_dir(meta)
     if find_mesh_file(map_dir) is None:
         print(f"[refine] no cvt mesh under {map_dir}; river regime off (all solid)")
         return None
@@ -216,22 +235,27 @@ def _pack_monthly_runoff(
 
     mesh, window = _mesh_and_window(pack_dir)
     tree = build_export_tree(mesh)
-    lon_grid, lat_grid = _window_out_grid(window, annual.shape[0])
+    lon_grid, lat_grid = window.out_latlon(annual.shape[0])
     indices = _nearest_indices_on_grid(tree, lon_grid, lat_grid)
     monthly = shape[indices] * annual[..., None]
     return np.asarray(monthly, dtype=np.float32)
 
 
 def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False) -> int:
-    """Stage 1 (main env): window the mesh + monthly climate → .npy fields."""
-    from dreamulator.map.export import export_cell_index_grid, load_climate_monthly
+    """Stage 1 (main env): sample the mesh + monthly climate on the AEQ window."""
+    from dreamulator.map.export import build_export_tree, load_climate_monthly
+    from dreamulator.map.region_export import _nearest_indices_on_grid
 
     mesh, window = _mesh_and_window(pack_dir)
-    indices_full = export_cell_index_grid(mesh, 4096, 2048)
-    indices = indices_full[window.y0 : window.y1, window.x0 : window.x1]
+    # Conditioning pitch = the legacy equirect export grid's meridional pitch
+    # (2048 rows), the resolution the TD chain was tuned on.  AEQ sampling
+    # holds that ground pitch at every latitude; the TD driver resamples the
+    # fields to round(span / 23 km) coarse cells either way.
+    n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
+    tree = build_export_tree(mesh)
+    indices = _nearest_indices_on_grid(tree, *window.out_latlon(n))
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
-    src = meta["source"]
-    map_dir = Path("data") / "worlds" / src["world"] / "maps" / src["planet"]
+    map_dir = _pack_map_dir(meta)
 
     t_m, p_m = load_climate_monthly(map_dir)
     t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
@@ -256,14 +280,14 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     if coast_warp:
         from dreamulator.media.satellite_color import apply_boundary_warp
 
-        cell_px = float(meta["cell_pitch_km"]) / (float(meta["extent_km"]["x"]) / window.grid_w)
+        cell_px = float(meta["cell_pitch_km"]) / (float(meta["extent_km"]["x"]) / n)
         out_fields = {
             name: apply_boundary_warp(arr, cell_px, order=0 if name == "elevation_m" else 1)
             for name, arr in out_fields.items()
         }
     for name, arr in out_fields.items():
         np.save(tmp / f"{name}.npy", arr.astype(np.float32))
-    return window.grid_w
+    return n
 
 
 def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif: Path) -> None:
@@ -408,7 +432,7 @@ def refine_region_pack(
         print(f"[refine] no temperature.C.npy in {pack_dir / 'input'}; terminal-lake balance off")
 
     filled, order, rec = priority_flood(h, land)
-    lakes = lake_mask(filled, h)
+    lakes = lake_footprint(lake_mask(filled, h), filled, h)
     mmu = lake_mmu_cells(km_pp)
     lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
     out = pack_dir / "refined-out"

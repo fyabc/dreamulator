@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 from dreamulator.map.models import CVTMesh, VoronoiCell
 from dreamulator.map.region_export import (
-    MAX_ABS_LAT,
     RegionWindowError,
     export_region_pack,
     region_window,
@@ -25,48 +24,71 @@ W, H = 360, 180  # ~1°/px grid keeps the arithmetic obvious
 
 
 # ---------------------------------------------------------------------------
-# Window math
+# Window math (azimuthal equidistant)
 # ---------------------------------------------------------------------------
 
 
-def test_window_equator_square_in_km() -> None:
-    win = region_window(0.0, 0.0, 2500.0, R, W, H)
-    # 2500 km at 111.19 km/deg → ±11.24° on both axes at the equator.
-    assert win.lon_min == pytest.approx(-11.24, abs=0.05)
-    assert win.lat_min == pytest.approx(-11.24, abs=0.05)
-    # Snapped pixel box stays square in kilometres — the floor/ceil snapping
-    # adds at most one pixel per side, so allow just over ±2 px total.
-    kx = win.grid_w * win.km_per_px_x
-    ky = win.grid_h * win.km_per_px_y
-    assert kx == pytest.approx(2500.0, abs=2.1 * win.km_per_px_x)
-    assert ky == pytest.approx(2500.0, abs=2.1 * win.km_per_px_y)
+def test_window_square_in_km_at_equator() -> None:
+    win = region_window(0.0, 0.0, 2500.0, R)
+    x_grid, y_grid = win.out_xy(101)
+    # The raster spans exactly the window: pixel centres from −half+p/2 to
+    # +half−p/2, uniform pitch, row 0 at the north edge.
+    pitch = win.span_km / 101
+    assert x_grid[0, 0] == pytest.approx(-win.half_km + pitch / 2)
+    assert x_grid[0, -1] == pytest.approx(win.half_km - pitch / 2)
+    assert y_grid[0, 0] == pytest.approx(win.half_km - pitch / 2)
+    assert y_grid[-1, 0] == pytest.approx(-win.half_km + pitch / 2)
+    # The AEQ plane keeps centre distances true: the north-edge midpoint is
+    # exactly half a span from the centre in great-circle terms too.
+    lat, lon = win.xy_to_latlon(np.array([0.0]), np.array([win.half_km]))
+    assert float(lat[0]) == pytest.approx(math.degrees(1250.0 / R), abs=1e-6)
+    assert float(lon[0]) == pytest.approx(0.0, abs=1e-9)
 
 
-def test_window_high_latitude_widens_in_longitude() -> None:
-    w_eq = region_window(0.0, 0.0, 2500.0, R, W, H)
-    w_60 = region_window(60.0, 0.0, 2500.0, R, W, H)
-    # cos(60°) = 0.5 → degrees-per-km double, pixels shrink to half the km size.
-    assert w_60.km_per_px_x == pytest.approx(w_eq.km_per_px_x / 2.0, rel=0.01)
-    assert w_60.grid_w == pytest.approx(2.0 * w_eq.grid_w, abs=2)
-    assert w_60.grid_h == pytest.approx(w_eq.grid_h, abs=2)
+def test_window_high_latitude_is_true_distance() -> None:
+    win = region_window(60.0, 0.0, 2500.0, R)
+    # At 60° the north edge must still sit 1250 km away, i.e. 11.24° of
+    # latitude north of the centre — the old equirect crop kept that but
+    # stretched the east–west scale unevenly across the window.
+    lat, _ = win.xy_to_latlon(np.array([0.0]), np.array([win.half_km]))
+    assert float(lat[0]) == pytest.approx(60.0 + math.degrees(1250.0 / R), abs=1e-6)
+    # The east edge is 1250 km of true (great-circle) distance; on a sphere
+    # that is Δlon = atan2(sin c, cos φ₀ · cos c), not the flat 1250/(R cos φ₀).
+    c = 1250.0 / R
+    _, lon = win.xy_to_latlon(np.array([win.half_km]), np.array([0.0]))
+    expected_dlon = math.degrees(
+        math.atan2(math.sin(c), math.cos(math.radians(60.0)) * math.cos(c))
+    )
+    assert float(lon[0]) == pytest.approx(expected_dlon, abs=1e-6)
 
 
-def test_window_rejects_polar() -> None:
-    with pytest.raises(RegionWindowError, match="75"):
-        region_window(80.0, 0.0, 1000.0, R, W, H)
-    # A huge span from the equator also reaches the polar band.
-    with pytest.raises(RegionWindowError, match="lat"):
-        region_window(0.0, 0.0, 30_000.0, R, W, H)
+def test_window_accepts_polar_centres() -> None:
+    win = region_window(85.0, 0.0, 1000.0, R)
+    lon_grid, lat_grid = win.out_latlon(33)
+    assert np.all(np.abs(lat_grid) <= 90.0 + 1e-9)
+    # The north edge of a 1 000 km window centred at 85°N comes within a
+    # degree of the pole — a region the old equirect crop refused outright.
+    assert float(np.max(lat_grid)) > 89.0
+    assert float(lat_grid[16, 16]) == pytest.approx(85.0, abs=1e-9)
 
 
-def test_window_rejects_antimeridian() -> None:
-    with pytest.raises(RegionWindowError, match="antimeridian"):
-        region_window(0.0, 179.0, 2500.0, R, W, H)
+def test_window_accepts_antimeridian_centres() -> None:
+    win = region_window(0.0, 179.0, 2500.0, R)
+    lon_grid, lat_grid = win.out_latlon(33)
+    # Normalised longitudes straddle ±180°; round-tripping the plane recovers
+    # the same points (no longitude unwrap tearing at the seam).
+    assert float(lon_grid.min()) < -170.0 and float(lon_grid.max()) > 170.0
+    x, y = win.out_xy(33)
+    x_back, y_back = win.latlon_to_xy(lat_grid, lon_grid)
+    assert np.allclose(x, x_back, atol=1e-6)
+    assert np.allclose(y, y_back, atol=1e-6)
 
 
 def test_window_rejects_bad_span() -> None:
     with pytest.raises(RegionWindowError, match="positive"):
-        region_window(0.0, 0.0, 0.0, R, W, H)
+        region_window(0.0, 0.0, 0.0, R)
+    with pytest.raises(RegionWindowError, match="antipode"):
+        region_window(0.0, 0.0, math.pi * R, R)
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +245,11 @@ def test_climate_channels_roundtrip(tmp_path: Path) -> None:
         out_dir=tmp_path,
         **(_clim_kwargs()),  # type: ignore[arg-type]
     )
-    assert meta["pack_version"] == 3
+    assert meta["pack_version"] == 4
+    assert meta["projection"] == "azimuthal_equidistant"
+    assert meta["extent_km"] == {"x": 500.0, "y": 500.0}
+    assert meta["km_per_px"] == {"x": 500.0 / 64, "y": 500.0 / 64}
+    assert "pixel_box" not in meta
 
     # The island owns the whole window → every channel is uniform on its value.
     precip = np.load(tmp_path / "precipitation.mm.npy")
@@ -259,8 +285,8 @@ def test_climate_channels_roundtrip(tmp_path: Path) -> None:
 
 
 def test_climate_channels_missing_values(tmp_path: Path) -> None:
-    # Ocean filler cells sit at ±45°; an 11 000 km span (half ≈ 49.5°) covers
-    # them while staying inside the polar-band guard.
+    # Ocean filler cells sit 45° away (~6 670 km along the diagonal → AEQ
+    # x = y ≈ 4 718 km); an 11 000 km span (half 5 500 km) covers them.
     mesh = _patch_mesh()
     meta = export_region_pack(
         mesh,
@@ -357,10 +383,6 @@ def test_gaea_clamp_noop_when_shallow(tmp_path: Path) -> None:
     assert meta["height_gaea_png_range_m"] == pytest.approx([1234.0, 1234.0])
 
 
-def test_polar_guard_constant() -> None:
-    assert MAX_ABS_LAT == 75.0
-
-
 # ---------------------------------------------------------------------------
 # Runoff channel (the hydrology legs' water-balance weight)
 # ---------------------------------------------------------------------------
@@ -397,6 +419,12 @@ def test_runoff_channel_known_answer(tmp_path: Path) -> None:
     assert "Turc-Pike" in clim["criterion"]
     assert clim["png_range"][0] == 0.0
     assert (tmp_path / "runoff.mm.png").exists()
+    # Lake freeze regime rides the same monthly input: a warm year (24.5 °C
+    # in every month) freezes no month.
+    lake_ice = np.load(tmp_path / "lake_ice.months.npy")
+    assert lake_ice.dtype == np.uint8
+    assert int(lake_ice.max()) == 0
+    assert meta["climate"]["lake_ice_months"]["perennial_threshold"] == 12
 
 
 def test_runoff_channel_absent_without_monthly(tmp_path: Path) -> None:
@@ -406,7 +434,9 @@ def test_runoff_channel_absent_without_monthly(tmp_path: Path) -> None:
         **(_clim_kwargs()),  # type: ignore[arg-type]
     )
     assert not (tmp_path / "runoff.mm.npy").exists()
+    assert not (tmp_path / "lake_ice.months.npy").exists()
     assert "runoff_mm" not in meta["climate"]
+    assert "lake_ice_months" not in meta["climate"]
     # The rest of the climate block still ran.
     assert (tmp_path / "headwaters.png").exists()
 

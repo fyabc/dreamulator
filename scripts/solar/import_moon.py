@@ -24,7 +24,7 @@ Declared semantics (they travel in provenance / file metadata):
 Data: PDS ``LRO-L-DLRE-5-GCP-V1.0`` (pds-geosciences.wustl.edu, registration-
 free), 18 latitude bands × ~156 MB ASCII ``global_cumul_avg_cyl_<band>_002.tab``
 (columns clon/clat/ltim/t3…t9/tbol; −9999 = no observation; negative tbol =
-below channel sensitivity → invalid).  Cache: ``private/tmp/solar/*.tab``.
+below channel sensitivity → invalid).  Cache: ``<workdir>/solar/*.tab``.
 
 Usage:
     uv run python scripts/solar/import_moon.py [--mesh-nodes 100000]
@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -52,7 +53,7 @@ from dreamulator.import_solar_common import (  # noqa: E402
     write_ucc_yearly,
 )
 
-_CACHE = _ROOT / "private/tmp/solar"
+_CACHE = _ROOT / os.environ.get("DREAMULATOR_WORK_DIR", "work") / "solar"
 _LDEM_TIF = "moon_ldem_4.tif"
 _LDEM_URL = "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_4.tif"
 _GCP_BASE = (

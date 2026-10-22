@@ -2,7 +2,7 @@
 
 > 状态：设计阶段（P0 已实施 v0.20.0；本版重写 P1–P3 架构，2026-08-12）
 > 配套：路线图见 [roadmap.md](../roadmap.md)；数学模型见 [ecological_mathematical_models.md](../../knowledge/ecology/ecological_mathematical_models.md)
-> 竞品调研：异星生命推演引擎见 [competitor-analysis.md](../competitor-analysis.md)；《外星生物圈》方法论见 `private/plans/video/alien-biosphere-analysis.md`
+> 竞品调研：异星生命推演引擎见 [competitor-analysis.md](../competitor-analysis.md)
 
 ---
 
@@ -24,7 +24,7 @@ P0 已全链路闭环（v0.20.0）：`EcologyEngine` 读气候数据，逐 cell 
 | 2 | **生物地理分区先做 Udvardy 量级**（~193 省），预留更精细量级（WWF TEOW ~825 区）的接口 | Udvardy 更适合架空世界尺度；接口用 N 级嵌套而非硬编码 3 级 |
 | 3 | **谱系树兼顾"精选 + 程序化填充"**：少数锚定物种详细设定，大部分叶子程序化生成简单设定 | 关系骨架先行的自然结果——精选物种是锚点，程序化物种是填充 |
 | 4 | **实例化器互斥**，一个世界选一种风格；实现按简单程度排序（类地球 → 奇幻 → 异星） | 简单优先；互斥避免"混合风格"的约束冲突复杂度 |
-| 5 | **异星推演核心（body plan / 演化树 / 食物网）留主仓，不抽独立包**；仅「物种图像输出」单独成模块（类比 `narrator.py`）；是否抽 `packages/specbio` 记为**开放问题** | 关系骨架（生态位/食物网/谱系）风格无关、独立可用（Madingley 功能群先例）；「具体物种设计」依赖关系骨架，抽出去不完整（conlang 包停更教训，见 `private/plans/video/alien-biosphere-analysis.md`） |
+| 5 | **异星推演核心（body plan / 演化树 / 食物网）留主仓，不抽独立包**；仅「物种图像输出」单独成模块（类比 `narrator.py`）；是否抽 `packages/specbio` 记为**开放问题** | 关系骨架（生态位/食物网/谱系）风格无关、独立可用（Madingley 功能群先例）；「具体物种设计」依赖关系骨架，抽出去不完整（conlang 包停更教训） |
 
 ---
 
@@ -441,5 +441,5 @@ niche_construction_potential →  文明技术路径（河狸筑坝 → 灌溉 �
 - Dwarf Fortress raws: <https://dwarffortresswiki.org/index.php/DF2014:Raw_file>
 - Udvardy, M. D. F. (1975). "A Classification of the Biogeographical Provinces of the World." *IUCN Occasional Paper* 18.
 - Olson, D. M. et al. (2001). "Terrestrial Ecoregions of the World." *BioScience* 51:933–938.
-- *Alien Biosphere* by Biblaridion（方法论提取见 `private/plans/video/alien-biosphere-analysis.md`）
+- *Alien Biosphere* by Biblaridion
 - **数学方程**：`docs/knowledge/ecology/ecological_mathematical_models.md`

@@ -7,7 +7,7 @@
 ## 定位
 
 前端 200k cell 的实时展示（~51 km/格的信息密度）对视频素材「用处不大、地位
-尴尬」；视频计划（`private/plans/bilibili-video-plan.md` §四-B）的硬约束是
+尴尬」；视频计划的硬约束是
 「全球/区域尺度镜头必须走 Blender，前端录屏只用于 UI/FUI 镜头」。本链路把
 引擎产出的世界数据交给外部渲染器：**区域数据包 → bpy 脚本重建场景 → Cycles
 渲染静帧/动画**，全链 CLI 可复现、不入库任何二进制工程（脚本重建工程模式）。
@@ -22,10 +22,10 @@ nacrea 永耀岛 (0, 0) 2500 km。
 dreamulator export region <world> --lat .. --lon .. --span-km ..
         │  (src/dreamulator/map/region_export.py)
         ▼
-private/video/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
+<render-workdir>/<world>-<lat>_<lon>_<span>km/     ← 不入 git；pack 根目录
   ├─ input/   引擎导出通道（下表）
   ├─ gaea-out/   Gaea 构建产物（见 gaea-video-chain.md）
-  └─ color/      着色产物（export colorize）
+  └─ color/      着色产物（export render --style satellite）
   input/
   ├─ height.meters.npy   float32 米值，主数据通道（bpy 精确读取，无色彩空间坑）
   ├─ height.png          16-bit，按区域 min/max 归一化，人看参考
@@ -51,15 +51,14 @@ blender -b -P scripts/media/blender/region_still.py -- --datadir <pack> [--rende
 renders/*.png + scene.blend（同目录，可随时由脚本重建）
 ```
 
-`meta.json` 字段：`pack_version`（3 = 输出网格与引擎网格解耦 + 插值 +
-Gaea 变体；2 = 气候通道；1 = 仅高度与配色）、
+`meta.json` 字段：`pack_version`（4 = 方位等距窗口 + 统一千米/像素；
+3 = 输出网格与引擎网格解耦 + 插值 + Gaea 变体；2 = 气候通道；1 = 仅高度与配色）、
+`projection`（窗口投影，v4 起为 `azimuthal_equidistant`）、
 `center_lat/lon`、`span_km`、`radius_km`、`grid{w,h}`（输出栅格分辨率，
 `--out-res` 正方形，默认 2048）、`sampling`（采样口径说明：标量通道
 在 cell 中心 Delaunay 三角网上 Clough-Tocher C1 插值并裁剪到所在三角形顶点值域
 （防三次下溢产生假盆地）、中心保真；类别通道与配色
 最近邻）、
-`pixel_box[x0,y0,x1,y1]`（全网格精确像素盒，v3 起为溯源信息，
-供与全局导出对齐核对）、
 `extent_km`、`km_per_px`、`elevation_m{min,max}`、`height_png_range_m`、
 `height_gaea_png_range_m` 与 `seafloor_clamp_m`（Gaea 变体的归一量程与
 压平深度）、`cell_pitch_km`（CVT 平均 cell 间距，供下游按 cell 尺度
@@ -72,16 +71,18 @@ Köppen 与群系另有 `legend` 类别码 → 类名映射，类别码在全网
 （`--out-res` 正方形，覆盖同一地理窗口），套准由构造保证；雪线不归档
 为独立栅格，由下游从 `ice.m` 与 `temperature.C` 两通道导出。
 
-## 区域窗口数学（等距圆柱裁剪）
+## 区域窗口数学（局部方位等距，pack v4）
 
-- 1° 纬度 = πR/180 km（用 `map.yaml` 的真实 `radius_km`，nacrea = 6816.97；
-  该字段是 MapMetadata 之外的额外字段，经 `read_radius_km` 直读 yaml）。
-- 东西向半宽除以 cos(lat) 补偿等距圆柱的纬向拉伸——裁剪窗在中心纬度处
-  按千米为正方形。
-- **边界保护**：窗口触及 |lat| > 75° 或跨 ±180° 经线即拒绝（指路 Gaea 链的
-  球极投影方案，见 `gaea-refinement.md` §3）。
-- 像素映射与 `make_equirect_grid` 逐像素一致（列 edge-aligned、行 endpoint
-  linspace），裁剪自全网格 NN 索引的切片——**对齐按构造保证，不重投影**。
+- 窗口是星球真实半径球面上以请求中心为切点的方位等距平面（x 东、y 北，
+  千米），与全球画布链共用 `map/td_canvas.py` 的 `CanvasGeometry` 换算单源。
+- 平面内 `|x| ≤ span/2`、`|y| ≤ span/2` 即窗口；中心距离在任何方位上都是
+  真实公里数，窗口在任意纬度都是真实千米正方形（旧等距圆柱裁剪只在中心
+  纬度近似成立，高纬东西向误差随跨度增大）。
+- 极区中心与跨 ±180° 经线的窗口均可导出；只有 span 触及对跖点（πR）时才
+  拒绝——那里方位等距投影本身退化。
+- 输出栅格是窗口平面上的均匀网格（`extent_km = span_km`，
+  `km_per_px = span/out_res`）；标量通道的 Clough-Tocher 插值同样在平面
+  坐标（km）里做。旧 v3 包的等距圆柱像素盒（`pixel_box`）已退役。
 
 ## 已知数值口径（f32 tie-flip）
 
@@ -89,7 +90,7 @@ Köppen 与群系另有 `legend` 类别码 → 类名映射，类别码在全网
 float32，而 `elevation.png` 是构建期用内存 f64 网格栅格化的。区域包用盘上
 mesh 重新 NN 栅格化，约 1% 像素的并列最近邻会翻到相邻 cell（孤立散点、多在
 深海、量级几十米）。验收口径：与 elevation.png 的海陆符号一致率 ≥ 99.9%、
-平均差 < 5 m 即判对齐（验证脚本 `private/research/2026-10-blender-region/`）。
+平均差 < 5 m 即判对齐。
 回贴链（Gaea round-trip）将来比较时应对 cell 空间，勿对 PNG 逐字节。
 
 ## 与相邻链路的关系
@@ -102,8 +103,8 @@ mesh 重新 NN 栅格化，约 1% 像素的并列最近邻会翻到相邻 cell�
   本链是纯消费者，无交互。
 - **资产管理约定**：正式 CLI 入 in-package（`dreamulator export region`，
   与 `export layers` 同族）；Blender 专属胶水入 `scripts/media/blender/`；
-  数据包与渲染输出入 `private/video/<项目>/`（不入 git）；试验脚本入
-  `private/research/<topic>/`。
+  数据包与渲染输出入 `<render-workdir>/<项目>/`（不入 git）；试验脚本另存本地
+  工作目录。
 
 ## 硬件与渲染参数基线（2026-10-02 实测）
 
@@ -119,8 +120,7 @@ Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise
   2026-10-05 调研通过并接受为管线方案（用户裁决：先用之，不够再改进）——
   nacrea 永耀岛 550 km 实测：海岸线符号一致率 97.5% @SNR 0.2、同 seed
   逐位确定、0.6 s/tile @3060 6 GB；注意其温度通道是海平面口径、条件须
-  重采样到模型粗格 23 km/px。脚本与报告在
-  `private/research/2026-10-terrain-diffusion/`。产品化形态 =
+  重采样到模型粗格 23 km/px。产品化形态 =
   `export region` 气候通道档 + 独立 venv 子进程调用（不 import 其代码）；
   「编造细节」需与纯数据渲染可区分（细化层独立成包，不覆盖原始通道）。
 - 多图层数据包（temperature/precipitation/koppen 区域裁剪 + Blender 材质切换），
@@ -133,7 +133,6 @@ Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise
 
 ## 参考
 
-- 需求 SoT：`private/plans/bilibili-video-plan.md` §四/§四-B/§五
 - Gaea 链接口词汇：`docs/design/proposals/gaea-refinement.md` §2/§3/§6
 - 区域导出实现：`src/dreamulator/map/region_export.py`、`src/dreamulator/cli_export.py`
 - bpy 场景构建：`scripts/media/blender/region_still.py`

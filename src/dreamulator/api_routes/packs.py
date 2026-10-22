@@ -7,13 +7,13 @@ root holding ``input/`` (2048² engine channels + meta.json), ``refined-out/``
 full-bleed channel PNGs and probes cell values for the worldbuilding QA loop
 (screenshot → coordinates → attribution).
 
-Window geometry is the exact inverse of
-:func:`dreamulator.map.region_export.region_window`: ``deg_per_km =
-180/(π·radius_km)`` with the planet radius from ``meta.json``, and the
-east–west span divided by ``cos(center_lat)``.  The export grid is cropped to
-whole source pixels (``pixel_box``), so the grid is treated as centred on
-``(center_lat, center_lon)``; the sub-pixel offset this ignores is < 0.3 km —
-irrelevant at QA zoom levels.
+Window geometry inverts :func:`dreamulator.map.region_export.region_window`.
+Pack v4+ windows are the azimuthal-equidistant square projected by
+:class:`dreamulator.map.td_canvas.CanvasGeometry` (x east, y north, km);
+legacy v3 packs are the equirectangular lon/lat crop at the centre latitude
+(``deg_per_km = 180/(π·radius_km)``, east–west divided by
+``cos(center_lat)``).  The QA endpoints dispatch on the pack's ``projection``
+field, so old packs stay served.
 
 API-mode only by design: packs are gitignored multi-hundred-MB local
 artifacts, never shipped to the static export (precedent: the narrate SSE
@@ -29,6 +29,7 @@ import math
 import os
 import re
 from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -112,35 +113,69 @@ def _input_meta(pack_dir: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _window(meta: dict[str, Any]) -> tuple[float, float, float, float, float, float]:
-    """(center_lat, center_lon, deg_per_km, cos_lat, extent_km_x, extent_km_y)."""
-    c_lat = float(meta["center_lat"])
-    c_lon = float(meta["center_lon"])
-    radius_km = float(meta.get("radius_km", 6371.0))
-    ext_x = float(meta["extent_km"]["x"])
-    ext_y = float(meta["extent_km"]["y"])
-    deg_per_km = 180.0 / (math.pi * radius_km)
-    return (c_lat, c_lon, deg_per_km, math.cos(math.radians(c_lat)), ext_x, ext_y)
+@dataclass(frozen=True)
+class _Win:
+    """A pack's window descriptor.
+
+    ``mode`` is ``"aeq"`` for pack v4+ (azimuthal-equidistant square, converted
+    through :class:`dreamulator.map.td_canvas.CanvasGeometry`) and
+    ``"equirect"`` for legacy v3 packs (lon/lat crop at the centre latitude).
+    """
+
+    mode: str
+    c_lat: float
+    c_lon: float
+    radius_km: float
+    ext_x: float
+    ext_y: float
 
 
-def _ll_to_frac(
-    win: tuple[float, float, float, float, float, float], lat: float, lon: float
-) -> tuple[float, float]:
+def _window(meta: dict[str, Any]) -> _Win:
+    """Window descriptor from the pack's ``input/meta.json``."""
+    return _Win(
+        mode="aeq" if meta.get("projection") == "azimuthal_equidistant" else "equirect",
+        c_lat=float(meta["center_lat"]),
+        c_lon=float(meta["center_lon"]),
+        radius_km=float(meta.get("radius_km", 6371.0)),
+        ext_x=float(meta["extent_km"]["x"]),
+        ext_y=float(meta["extent_km"]["y"]),
+    )
+
+
+def _ll_to_frac(win: _Win, lat: float, lon: float) -> tuple[float, float]:
     """(u, v) window fractions: u east 0..1, v from north 0..1."""
-    c_lat, c_lon, deg_per_km, cos_lat, ext_x, ext_y = win
-    lon_u = (lon - c_lon + 180.0) % 360.0 - 180.0 + c_lon  # wrap ±180°
-    u = 0.5 + (lon_u - c_lon) * cos_lat / deg_per_km / ext_x
-    v = 0.5 - (lat - c_lat) / deg_per_km / ext_y
+    if win.mode == "aeq":
+        import numpy as np
+
+        from dreamulator.map.td_canvas import CanvasGeometry
+
+        geom = CanvasGeometry(win.c_lat, win.c_lon, win.radius_km, 1)
+        x, y = geom.latlon_to_xy(np.asarray(lat), np.asarray(lon))
+        return (0.5 + float(x) / win.ext_x, 0.5 - float(y) / win.ext_y)
+    deg_per_km = 180.0 / (math.pi * win.radius_km)
+    cos_lat = math.cos(math.radians(win.c_lat))
+    lon_u = (lon - win.c_lon + 180.0) % 360.0 - 180.0 + win.c_lon  # wrap ±180°
+    u = 0.5 + (lon_u - win.c_lon) * cos_lat / deg_per_km / win.ext_x
+    v = 0.5 - (lat - win.c_lat) / deg_per_km / win.ext_y
     return (u, v)
 
 
-def _frac_to_ll(
-    win: tuple[float, float, float, float, float, float], u: float, v: float
-) -> tuple[float, float]:
+def _frac_to_ll(win: _Win, u: float, v: float) -> tuple[float, float]:
     """Exact inverse of :func:`_ll_to_frac` (frontend graticule cross-check)."""
-    c_lat, c_lon, deg_per_km, cos_lat, ext_x, ext_y = win
-    lon = c_lon + (u - 0.5) * ext_x * deg_per_km / cos_lat
-    lat = c_lat + (0.5 - v) * ext_y * deg_per_km
+    if win.mode == "aeq":
+        import numpy as np
+
+        from dreamulator.map.td_canvas import CanvasGeometry
+
+        geom = CanvasGeometry(win.c_lat, win.c_lon, win.radius_km, 1)
+        aeq_lat, aeq_lon = geom.xy_to_latlon(
+            np.asarray((u - 0.5) * win.ext_x), np.asarray((0.5 - v) * win.ext_y)
+        )
+        return (float(aeq_lat), float(aeq_lon))
+    deg_per_km = 180.0 / (math.pi * win.radius_km)
+    cos_lat = math.cos(math.radians(win.c_lat))
+    lon = win.c_lon + (u - 0.5) * win.ext_x * deg_per_km / cos_lat
+    lat = win.c_lat + (0.5 - v) * win.ext_y * deg_per_km
     return (lat, lon)
 
 
@@ -299,8 +334,8 @@ def probe(pack: str, lat: float, lon: float) -> dict[str, Any]:
         "height_source": height_source,
         "height_m": float(height[row, col]) if height is not None else None,
         "offset_km": {
-            "x": round((u - 0.5) * win[4], 3),
-            "y": round((0.5 - v) * win[5], 3),
+            "x": round((u - 0.5) * win.ext_x, 3),
+            "y": round((0.5 - v) * win.ext_y, 3),
         },
     }
 
@@ -331,9 +366,7 @@ def probe(pack: str, lat: float, lon: float) -> dict[str, Any]:
     return {"ok": True, "data": result}
 
 
-def _river_lookup(
-    pack_dir: Path, u: float, v: float, win: tuple[float, float, float, float, float, float]
-) -> tuple[float | None, int | None]:
+def _river_lookup(pack_dir: Path, u: float, v: float, win: _Win) -> tuple[float | None, int | None]:
     """Nearest river-segment flow/regime.
 
     ``rivers.line.npy`` holds (M, 2, 2) km polylines in the SW-origin frame of
@@ -343,7 +376,7 @@ def _river_lookup(
     lines = _npy(pack_dir, "refined-out/rivers.line.npy")
     if lines is None or len(lines) == 0:
         return (None, None)
-    _, _, _, _, ext_x, ext_y = win
+    ext_x, ext_y = win.ext_x, win.ext_y
     x_q, y_q = u * ext_x, (1.0 - v) * ext_y
     d2 = (lines[..., 0] - x_q) ** 2 + (lines[..., 1] - y_q) ** 2
     idx = int(d2.argmin())

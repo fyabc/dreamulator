@@ -55,6 +55,12 @@ RIVER_COLOR = (44, 92, 130)
 #: Lake shore ring: the same blue a step deeper — a crisp outline keeps
 #: small lakes readable where the fill alone would wash against greens.
 LAKE_SHORE_COLOR = (34, 78, 116)
+#: Perennially ice-covered lakes: pale ice fill over the same shoreline
+#: ring, following the permanent-ice convention of national topo sheets
+#: (blue-tinted ice areas carrying their own symbol rather than the open-
+#: water ink).  Seasonal cover keeps the water ink; lake_ice.months.npy's
+#: 12-month class is the trigger.
+LAKE_ICE_COLOR = (209, 230, 240)
 RIVER_MIN_LW = 0.7
 #: Flow-regime line styles: US Topo's solid perennial and dash-dot
 #: non-perennial convention, restricted to the two classes monthly data can
@@ -456,6 +462,11 @@ def compose_rgb(
 
         shore = lake & ~binary_erosion(lake)
         rgb[lake] = np.asarray(RIVER_COLOR) / 255.0
+        if inputs.lake_ice_months is not None:
+            # Class channel: a block is frozen when any subpixel is (max,
+            # not mean — averaging would dissolve the 12-month class).
+            months = inputs.lake_ice_months.reshape(res, f, res, f).max(axis=(1, 3))
+            rgb[lake & (months >= 12)] = np.asarray(LAKE_ICE_COLOR) / 255.0
         rgb[shore] = np.asarray(LAKE_SHORE_COLOR) / 255.0
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
@@ -844,10 +855,15 @@ def render_carto(
         spine.set_linewidth(1.2)
 
     _elevation_legend(ax, km, rng_m)
-    _river_regime_legend(ax, inputs.river_segment_regimes, y_base_km=km * 0.003)
+    _river_regime_legend(
+        ax,
+        inputs.river_segment_regimes,
+        y_base_km=km * 0.003,
+        ice_lakes=_has_perennial_ice(inputs),
+    )
     _scale_bar(ax, km)
     _north_arrow(ax, km)
-    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg)
+    _graticule(ax, km, center_lat, center_lon, inputs.km_per_deg, inputs.projection)
     if title:
         # Figure-level title: an axes title gets clipped by the axes box at
         # this size, suptitle sits above it regardless of layout.
@@ -873,31 +889,117 @@ GRATICULE_LW = 0.5
 GRATICULE_STEPS_DEG = (1.0, 2.0, 5.0, 10.0, 15.0, 30.0)
 
 
+def _pick_step(span_deg: float) -> float:
+    """Graticule interval for one axis: the smallest class giving ≤8 lines."""
+    for s in GRATICULE_STEPS_DEG:
+        if span_deg / s <= 8:
+            return s
+    return GRATICULE_STEPS_DEG[-1]
+
+
 def _graticule(
     ax: Axes,
     km: float,
     center_lat: float,
     center_lon: float,
     km_per_deg: float = EARTH_KM_PER_DEG,
-) -> float:
-    """Dashed lon/lat grid + edge degree labels; returns the step in degrees."""
-    import math
+    projection: str = "equirect",
+) -> tuple[float, float]:
+    """Dashed lon/lat grid + edge degree labels; returns the (lat, lon) steps.
 
-    lat_span = km / km_per_deg
-    lon_span = km / (km_per_deg * math.cos(math.radians(center_lat)))
-    step = GRATICULE_STEPS_DEG[-1]
-    for s in GRATICULE_STEPS_DEG:
-        if max(lat_span, lon_span) / s <= 8:
-            step = s
-            break
+    The two axes pick their intervals independently: at high latitudes a
+    550 km window spans tens of degrees of longitude but only ~5 of latitude,
+    so a shared step would leave a single parallel on the sheet.
+
+    Pack v4+ windows are azimuthal-equidistant squares: parallels are arcs
+    and meridians converge toward the pole, so the grid is drawn as projected
+    polylines clipped to the frame (labels sit where each curve leaves it).
+    Legacy equirect windows keep the straight-line approximation.
+    """
+    import math
 
     def deg_fmt(v: float, is_lat: bool) -> str:
         hemi = ("N", "S") if is_lat else ("E", "W")
         return f"{abs(v):g}°{hemi[0 if v >= 0 else 1]}"
 
+    if projection == "azimuthal_equidistant":
+        from dreamulator.map.td_canvas import CanvasGeometry
+
+        radius_km = km_per_deg * 180.0 / math.pi
+        geom = CanvasGeometry(center_lat, center_lon, radius_km, 1)
+        half = km / 2.0
+        # Covered ranges from the frame perimeter (a polar window can span
+        # most longitudes; the pole itself may sit outside the frame).
+        t = np.linspace(-half, half, 65)
+        px = np.concatenate([t, t, np.full_like(t, -half), np.full_like(t, half)])
+        py = np.concatenate([np.full_like(t, -half), np.full_like(t, half), t, t])
+        plat, plon = geom.xy_to_latlon(px, py)
+        dlon = (np.asarray(plon) - center_lon + 180.0) % 360.0 - 180.0
+        lat_lo, lat_hi = float(np.min(plat)), float(np.max(plat))
+        lon_lo, lon_hi = float(np.min(dlon)), float(np.max(dlon))
+        lat_step = _pick_step(lat_hi - lat_lo)
+        lon_step = _pick_step(lon_hi - lon_lo)
+        pad = km * 0.012
+        lons_probe = center_lon + np.linspace(lon_lo - lon_step, lon_hi + lon_step, 241)
+        lats_probe = np.linspace(lat_lo - lat_step, lat_hi + lat_step, 241)
+        lat_lines = np.arange(math.ceil(lat_lo / lat_step) * lat_step, lat_hi + 1e-9, lat_step)
+        lon_lines = np.arange(
+            math.ceil((center_lon + lon_lo) / lon_step) * lon_step,
+            center_lon + lon_hi + 1e-9,
+            lon_step,
+        )
+        for lat in lat_lines:
+            xs, ys = geom.latlon_to_xy(np.full_like(lons_probe, lat), lons_probe)
+            xs, ys = np.asarray(xs) + half, np.asarray(ys) + half
+            ax.plot(xs, ys, ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
+            edge = _edge_crossing(xs, ys, km, vertical=True)
+            if edge is not None:
+                side, x_edge, y_edge = edge
+                ax.text(
+                    x_edge + (pad * 0.3 if side == "right" else -pad * 0.3),
+                    y_edge,
+                    deg_fmt(lat, True),
+                    fontsize=SCALEBAR_SIZE * 0.85,
+                    ha="left" if side == "right" else "right",
+                    va="center",
+                    color=GRATICULE_COLOR,
+                    zorder=7,
+                )
+        for lon in lon_lines:
+            xs, ys = geom.latlon_to_xy(lats_probe, np.full_like(lats_probe, lon))
+            xs, ys = np.asarray(xs) + half, np.asarray(ys) + half
+            ax.plot(xs, ys, ls=(0, (6, 4)), color=GRATICULE_COLOR, lw=GRATICULE_LW, zorder=7)
+            edge = _edge_crossing(xs, ys, km, vertical=False)
+            if edge is not None:
+                side, x_edge, y_edge = edge
+                ax.text(
+                    x_edge,
+                    y_edge + (-pad * 0.6 if side == "bottom" else pad * 0.6),
+                    deg_fmt((lon + 180.0) % 360.0 - 180.0, False),
+                    fontsize=SCALEBAR_SIZE * 0.85,
+                    ha="center",
+                    va="top" if side == "bottom" else "bottom",
+                    color=GRATICULE_COLOR,
+                    zorder=7,
+                )
+        return lat_step, lon_step
+
+    lat_span = km / km_per_deg
+    lon_span = km / (km_per_deg * math.cos(math.radians(center_lat)))
+    lat_step = _pick_step(lat_span)
+    lon_step = _pick_step(lon_span)
+
     half_lat, half_lon = lat_span / 2, lon_span / 2
-    lats = np.arange(math.ceil((center_lat - half_lat) / step) * step, center_lat + half_lat, step)
-    lons = np.arange(math.ceil((center_lon - half_lon) / step) * step, center_lon + half_lon, step)
+    lats = np.arange(
+        math.ceil((center_lat - half_lat) / lat_step) * lat_step,
+        center_lat + half_lat,
+        lat_step,
+    )
+    lons = np.arange(
+        math.ceil((center_lon - half_lon) / lon_step) * lon_step,
+        center_lon + half_lon,
+        lon_step,
+    )
     pad = km * 0.012
     for lat in lats:
         y = (lat - center_lat) * km_per_deg + km / 2
@@ -925,7 +1027,44 @@ def _graticule(
             color=GRATICULE_COLOR,
             zorder=7,
         )
-    return step
+    return lat_step, lon_step
+
+
+def _edge_crossing(
+    xs: np.ndarray, ys: np.ndarray, km: float, *, vertical: bool
+) -> tuple[str, float, float] | None:
+    """First crossing of a projected polyline with the sheet frame.
+
+    ``vertical=True`` looks for the right edge first (then left, for
+    latitude labels on curves that exit left); ``vertical=False`` looks for
+    the bottom edge first (then top).  Returns (side, x, y) in frame km.
+    """
+    order = (
+        (("right", km, 0.0), ("left", 0.0, 0.0))
+        if vertical
+        else (("bottom", 0.0, 0.0), ("top", km, 0.0))
+    )
+    for side, edge_val, _ in order:
+        for i in range(len(xs) - 1):
+            a = xs[i] if vertical else ys[i]
+            b = xs[i + 1] if vertical else ys[i + 1]
+            if (a - edge_val) * (b - edge_val) <= 0 and abs(b - a) > 1e-12:
+                f = (edge_val - a) / (b - a)
+                other = ys[i] if vertical else xs[i]
+                other_next = ys[i + 1] if vertical else xs[i + 1]
+                pos = other + f * (other_next - other)
+                if 0.0 <= pos <= km:
+                    return (side, edge_val, pos) if vertical else (side, pos, edge_val)
+    return None
+
+
+def _has_perennial_ice(inputs: ColorizeInputs) -> bool:
+    """True when the sheet carries at least one perennially ice-covered lake."""
+    return bool(
+        inputs.lake is not None
+        and inputs.lake_ice_months is not None
+        and np.any(inputs.lake & (inputs.lake_ice_months >= 12))
+    )
 
 
 def _river_regime_legend(
@@ -934,8 +1073,12 @@ def _river_regime_legend(
     *,
     y_base_km: float = 0.0,
     x_frac: float = 0.118,
+    ice_lakes: bool = False,
 ) -> None:
     """Boxed two-class river-regime legend, listing only classes present.
+
+    ``ice_lakes`` appends the perennial-ice lake swatch (pale ice fill) when
+    the sheet has lakes whose monthly climate keeps them frozen year-round.
 
     The samples are generated by the same continuous-stroke cutter as the
     map itself, so the legend cannot drift away from the sheet's dash
@@ -951,10 +1094,13 @@ def _river_regime_legend(
     from matplotlib.patches import Rectangle
 
     if regimes is None or len(regimes) == 0:
-        return
-    present = [regime for regime in (0, 1) if np.any(regimes == regime)]
-    if not present:
-        return
+        if not ice_lakes:
+            return
+        present = []
+    else:
+        present = [regime for regime in (0, 1) if np.any(regimes == regime)]
+        if not present and not ice_lakes:
+            return
     x0 = ax.get_xlim()[0] + (ax.get_xlim()[1] - ax.get_xlim()[0]) * x_frac
     km = ax.get_xlim()[1] - ax.get_xlim()[0]
     points_per_unit = _points_per_data_unit(ax)
@@ -963,9 +1109,10 @@ def _river_regime_legend(
     sample_len = km * 0.026
     text_gap = km * 0.007
     row_h = title_h = km * 0.0195
-    text_w = 4 * LEGEND_SMALL_SIZE * 0.95 / 72 / (12 * 0.90) * km
+    text_w = 5 * LEGEND_SMALL_SIZE * 0.95 / 72 / (12 * 0.90) * km
     box_w = pad_x + sample_len + text_gap + text_w + pad_x
-    box_h = pad_y + title_h + row_h * len(present) + pad_y
+    n_rows = len(present) + (1 if ice_lakes else 0)
+    box_h = pad_y + title_h + row_h * n_rows + pad_y
     ax.add_patch(
         Rectangle(
             (x0 - pad_x, y_base_km),
@@ -1017,6 +1164,31 @@ def _river_regime_legend(
             x0 + sample_len + text_gap,
             y,
             label,
+            fontsize=LEGEND_SMALL_SIZE,
+            ha="left",
+            va="center",
+            color="#1a1a1a",
+            zorder=9,
+        )
+
+    if ice_lakes:
+        iy = y_top - (len(present) + 0.5) * row_h
+        swatch_w = km * 0.011
+        ax.add_patch(
+            Rectangle(
+                (x0, iy - row_h * 0.32),
+                swatch_w,
+                row_h * 0.64,
+                facecolor=_hex(LAKE_ICE_COLOR),
+                edgecolor=_hex(LAKE_SHORE_COLOR),
+                linewidth=0.7,
+                zorder=9,
+            )
+        )
+        ax.text(
+            x0 + max(sample_len, swatch_w) + text_gap,
+            iy,
+            "常年封冻湖",
             fontsize=LEGEND_SMALL_SIZE,
             ha="left",
             va="center",

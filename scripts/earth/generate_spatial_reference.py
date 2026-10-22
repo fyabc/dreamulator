@@ -16,12 +16,12 @@ Outputs ``frontend/src/viewers/map/spatialReference.ts``.  Regenerate whenever t
 source climatology changes (rare — fixed Earth reference):
 
     uv run python scripts/earth/generate_spatial_reference.py \\
-        --temp private/tmp/climatology/ncep_air.mon.ltm.nc \\
-        --precip private/tmp/climatology/gpcp_precip.mon.mean.nc \\
-        --slp private/tmp/climatology/ncep_slp.mon.ltm.nc \\
-        --wind-u private/tmp/climatology/ncep_uwnd.mon.ltm.nc \\
-        --wind-v private/tmp/climatology/ncep_vwnd.mon.ltm.nc \\
-        --current private/tmp/climatology/soda_currents_mon_clim.nc
+        --temp <workdir>/climatology/ncep_air.mon.ltm.nc \\
+        --precip <workdir>/climatology/gpcp_precip.mon.mean.nc \\
+        --slp <workdir>/climatology/ncep_slp.mon.ltm.nc \\
+        --wind-u <workdir>/climatology/ncep_uwnd.mon.ltm.nc \\
+        --wind-v <workdir>/climatology/ncep_vwnd.mon.ltm.nc \\
+        --current <workdir>/climatology/soda_currents_mon_clim.nc
 
 The extra fields (SLP / wind / currents) are optional: omit them to regenerate
 only the temperature/precipitation reference.

@@ -125,7 +125,7 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 > LU 结构性成本 ~210 s（降水段 60%），再往下只有 S5-full 粗网格（登记）或
 > GPU 服务器实验。
 >
-> **内存画像**（进程树 RSS 轮询，`private/research/2026-09-27-rss-poll.py`）：
+> **内存画像**（进程树 RSS 轮询）：
 > 健康构建峰值 **3.3 GB**（降水 Picard 段，含单次 LU 因子 ~0.5 GB 瞬态）；
 > 每层 mesh 全量重存有 ~2.4-2.8 GB 尖峰（S4 削减对象）。MMD 排序下单 LU
 > 因子 <1 GB。
@@ -149,11 +149,11 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 uv add --dev py-spy
 
 # 生成 SVG 火焰图
-uv run py-spy record -o private/prof/nacrea-flame.svg -- \
+uv run py-spy record -o <profile-dir>/nacrea-flame.svg -- \
     uv run dreamulator build nacrea --data-dir data/worlds --force
 
 # 生成 speedscope 格式（可在 https://speedscope.app 缩放分析）
-uv run py-spy record --format speedscope -o private/prof/nacrea.json -- \
+uv run py-spy record --format speedscope -o <profile-dir>/nacrea.json -- \
     uv run dreamulator build nacrea --data-dir data/worlds --force
 ```
 
@@ -219,8 +219,8 @@ uv run dreamulator serve --data-dir data/worlds --reload
 **打点体系**（`frontend/src/utils/perf.ts`）：`mark('x-start'/'x-end')` 自动配对成 measure；
 重复阶段记 `#N` 序号；`recordExternal` 记 worker 侧时长；`measureFromStart('first-frame')`
 = 导航 → 首帧渲染完成（交互就绪口径，`GlobeViewer.tsx` 首个 useFrame）。加载完成时控制台
-输出分组瀑布（⏱ dreamulator load）。CDP 自动化采集 = `private/research/2026-09-29-fe-load-profile/cdp-profile.mjs`
-（零依赖 Node 脚本，Chrome --remote-debugging-port，采集 measures/resources/longtasks/堆）。
+输出分组瀑布（⏱ dreamulator load）。CDP 自动化采集脚本为零依赖 Node 脚本
+（Chrome --remote-debugging-port，采集 measures/resources/longtasks/堆）。
 
 **当前 200k 基线**（2026-09-29，earth root，冷缓存，本机；含同日优化轮 ①voronoi gate
 ②ETag/304 ③kd-tree 重写 ④几何 transferable）：
@@ -236,11 +236,10 @@ globe 冷加载瀑布（主线程阻塞加 ★）：mesh fetch（`cvt_mesh.msgpa
 （序列化 0.98 + 反序列化 ~0.97；vertices/regions 已 transferable 零拷贝、adjacency 已丢弃）
 → adapt 0.16 s → **kd-tree + 8.4M 查询 3.6 s★** → **layer-bake 3.4 s★** → 纹理就绪 →
 R3F/WebGL 初始化 + 首帧 ~1.4 s★。剩余大头 = cells 对象图（克隆 80%）与 bake——前者归
-P1「几何/气候数据分离存储」。完整数据、优化判词与已否证方向 →
-`private/research/2026-09-29-fe-load-profile.md`。
+P1「几何/气候数据分离存储」。
 
 注意：**手工声明 `Content-Encoding: gzip` 的响应 Chrome 不复用 HTTP 缓存条目**（同 URL
-二次仍全量拉取；实测对照见上文 research 文档 §九.2）——大二进制端点要缓存就走
+二次仍全量拉取）——大二进制端点要缓存就走
 `application/gzip` + 客户端 DecompressionStream，或裸体 + ETag。各端点除 mesh 外均
 裸传（无 GZipMiddleware）；JS chunk 中 spatialReference.ts 内嵌观测数据占 2.1 MB（FE-01）。
 

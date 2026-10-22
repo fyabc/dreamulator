@@ -1,6 +1,6 @@
 """Procedural cloud texture — layer L2 of the orbital weather-globe chain.
 
-Requirement spec: ``private/plans/orbital-weather-globe-requirements-20261018.md``.
+Requirement spec: the orbital weather-globe requirement notes (internal planning record).
 The GCM layer pack (L1: per-layer cloud fraction, cloud-top height, vorticity)
 is still pending on the server side; until it arrives this module derives a
 **placeholder large-scale cloud-cover field** from the engine climate fields
@@ -1408,7 +1408,7 @@ def clouds_globe(
 
     meta = {
         "chain": "L2 procedural cloud texture (prototype)",
-        "spec": "private/plans/orbital-weather-globe-requirements-20261018.md",
+        "spec": "orbital weather-globe L2 procedural cloud texture",
         "radius_km": radius_km,
         "grid": [width, height],
         "seed": seed,

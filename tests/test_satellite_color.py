@@ -163,3 +163,25 @@ def test_upsample_nearest() -> None:
 def test_hillshade_flat_is_uniform() -> None:
     hs = hillshade(np.full((N, N), 100.0), 1.0)
     assert hs.min() == pytest.approx(hs.max(), abs=1e-9)
+
+
+def test_river_lake_clip_keeps_shore_crossing() -> None:
+    """Only segments fully inside a lake are dropped; the entry bridge stays."""
+    from dreamulator.media.satellite_color import _river_lake_keep
+
+    lake = np.zeros((20, 20), dtype=bool)
+    lake[5:10, 5:10] = True
+    # Row 0 is north: a pixel (col, y) maps to row = n - 1 - y.
+    land = (3.0, 4.0)  # row 15, col 3
+    water = (7.0, 12.0)  # row 7, col 7 (inside)
+    deep = (5.0, 14.0)  # row 5, col 5 (inside)
+    segs = np.array(
+        [
+            [land, water],  # crosses the shore: keep
+            [deep, water],  # wholly inside: drop
+            [land, (1.0, 1.0)],  # dry land: keep
+        ],
+        dtype=np.float32,
+    )
+    keep = _river_lake_keep(segs, lake, 1.0)
+    assert keep.tolist() == [True, False, True]

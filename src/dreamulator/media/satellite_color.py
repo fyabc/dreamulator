@@ -112,15 +112,13 @@ DEPOSIT_SLOPE_CAP = 0.15  # alluvium only settles on gentle ground
 LAKE_SHALLOW = (128, 166, 196)
 LAKE_DEEP = (74, 116, 156)
 LAKE_FEATHER_PX = 2.0
-#: Channel polylines whose midpoint falls inside a lake (within this
-#: distance of its water) are dropped at load time: the lake surface is
-#: the water truth there.  Nothing NEAR the lake is clipped — with river
-#: and lake inks in one family per sheet (user ruling 2026-10-17, the
-#: survey sheet's single-water-colour convention), a channel on the rim
-#: land simply reads as a river, and cutting it broke passing rivers into
-#: pieces (断续河道).  Hydrology's proper fix — terminus semantics for
-#: endorheic basins — is registered separately.
-RIVER_LAKE_WATER_KM = 0.3
+#: Channel polylines are clipped only when BOTH endpoints lie inside lake
+#: water: the extraction deliberately ends a chain one cell *into* the
+#: lake, and that shore-crossing segment is the visible link between river
+#: and lake.  Clipping by a rim buffer (the former RIVER_LAKE_WATER_KM =
+#: 0.3 km) erased the bridge and re-opened the river-into-lake gap; with
+#: river and lake inks in one family per sheet (user ruling 2026-10-17),
+#: rim-land channels simply read as rivers.
 
 
 #: NPP (Miami net primary productivity) drives continuous WITHIN-biome
@@ -202,6 +200,14 @@ class ColorizeInputs:
     # Kilometres per degree of latitude (π·radius/180; set by load_inputs
     # from meta ``radius_km``) — graticule and axis math are planet-correct.
     km_per_deg: float = EARTH_KM_PER_DEG
+    # Window projection from meta (pack v4+: "azimuthal_equidistant"; legacy
+    # packs and pre-v4 builders: "equirect").  Graticule legs dispatch on it.
+    projection: str = "equirect"
+    # Lake freeze regime: months per year with monthly mean air temperature
+    # below 0 °C (uint8 0-12), nearest-sampled onto the grid — a class
+    # channel, never smoothed.  12 = perennially ice-covered.  None on packs
+    # exported without a monthly climate series.
+    lake_ice_months: np.ndarray | None = None
 
 
 def _to_rgb(colors: list[tuple[int, int, int]]) -> np.ndarray:
@@ -558,6 +564,29 @@ def _read_mask_bool(path: Path) -> np.ndarray:
     return _read_mask16(path) > 0.5
 
 
+def _river_lake_keep(river_segs: np.ndarray, lake: np.ndarray, km_per_px: float) -> np.ndarray:
+    """True for segments to keep: drop only those with both ends in water.
+
+    Vector coordinates are SW-origin km on the build grid (row 0 north).
+    Shore-crossing segments carry the river's one-cell entry into the lake
+    and must survive; dropping them re-opens the entry gap at sheet scale.
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    n = lake.shape[0]
+    dist_km: np.ndarray = np.asarray(distance_transform_edt(~lake) * km_per_px)
+    col = np.asarray(
+        np.clip(np.rint(river_segs[..., 0] / km_per_px).astype(int), 0, n - 1),
+        dtype=np.int64,
+    )
+    row = np.asarray(
+        np.clip(np.rint(n - 1 - river_segs[..., 1] / km_per_px).astype(int), 0, n - 1),
+        dtype=np.int64,
+    )
+    wet = np.asarray(dist_km[row, col] == 0.0)
+    return np.asarray(~(wet[:, 0] & wet[:, 1]), dtype=bool)
+
+
 def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     """Load pack + build outputs (Gaea or programmatic) onto the build grid.
 
@@ -638,21 +667,11 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     regime_path = gaea_dir / "rivers.regime.npy"
     river_regimes = np.load(regime_path) if regime_path.exists() else None
 
-    # Lake clip: only strictly-in-water geometry goes (see
-    # RIVER_LAKE_WATER_KM).  Everything on the rim land stays — with the
-    # per-sheet single water family, a near-shore channel just reads as a
-    # river instead of doubled shore ink.
+    # Lake clip: drop only segments wholly inside lake water.  A segment
+    # crossing the shore is the deliberate one-cell bridge into the lake;
+    # clipping it re-opened the river-into-lake gap (2026-10-21 user report).
     if lake is not None and lake.any() and river_segs is not None:
-        from scipy.ndimage import distance_transform_edt
-
-        dist_km: np.ndarray = np.asarray(distance_transform_edt(~lake) * km_per_px)
-        col: np.ndarray = np.clip(
-            (river_segs[..., 0].mean(axis=1) / km_per_px).astype(int), 0, n - 1
-        )
-        row: np.ndarray = np.clip(
-            (n - 1 - (river_segs[..., 1].mean(axis=1) / km_per_px)).astype(int), 0, n - 1
-        )
-        keep = dist_km[row, col] > RIVER_LAKE_WATER_KM
+        keep = _river_lake_keep(river_segs, lake, km_per_px)
         river_segs = river_segs[keep]
         if river_flows is not None:
             river_flows = river_flows[keep]
@@ -679,6 +698,12 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         lake=lake,
         cell_px=float(cell_px),
         km_per_deg=math.pi * float(meta.get("radius_km", 6371.0)) / 180.0,
+        projection=str(meta.get("projection", "equirect")),
+        lake_ice_months=(
+            upsample_nearest(np.load(pack_dir / "lake_ice.months.npy"), factor)
+            if (pack_dir / "lake_ice.months.npy").exists()
+            else None
+        ),
     )
 
 

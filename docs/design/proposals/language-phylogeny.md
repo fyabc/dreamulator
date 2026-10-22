@@ -262,7 +262,6 @@ dreamulator 的一致性哲学在语言层的落地：
 
 ## 参考资料
 
-- 调研全文：主仓 `private/research/2026-08-15-conlang-methodology-tools.md`
 - Abrams, D. M. & Strogatz, S. H. (2003). Modelling the dynamics of language death. *Nature* 424: 900.
 - Bouckaert, R. et al. (2012). Mapping the Origins and Expansion of the Indo-European Language Family. *Science* 337: 957–960.（及其争议：Chang et al. 2015, *Language* 91(1)）
 - List, J.-M. et al. LingPy / EDICTOR / Lexibank（lexibank.clld.org）

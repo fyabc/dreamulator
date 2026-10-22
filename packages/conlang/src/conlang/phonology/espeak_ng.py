@@ -20,7 +20,7 @@ Mapping data extracted from ipapy's ``kirshenbaum.dat``:
 
     TODO: Introduce ToucanTTS (IMS-Toucan) as an optional neural TTS
     backend that supports articulatory feature input for non-pulmonic
-    consonants. See ``private/tts-toucan-integration.md``.
+    consonants.
 
 Usage::
 

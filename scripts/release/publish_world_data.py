@@ -84,7 +84,7 @@ def _build_world(world: str, worlds_dir: Path, branch: str | None = None) -> Non
 #   "output-dir" — scripts/earth importers take ``--output-dir <maps/<planet_id>>``
 #   "data-dir"   — scripts/solar importers take ``--data-dir <worlds root>`` and
 #                  register their own planet_id (import_solar_common.register_solar_planet)
-# The raw data is cached (system temp dir for earth; ``private/tmp/solar/`` for
+# The raw data is cached (system temp dir for earth; ``<workdir>/solar/`` for
 # the solar bodies).  DEMs auto-download when missing; the climate sources
 # (MCD/VCD ASCII slices, Diviner GCP bands, TAM nc) do NOT — they must be
 # pre-fetched per docs/knowledge/planetary_science/solar_system_data_sources.md.

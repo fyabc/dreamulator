@@ -39,6 +39,7 @@ point-mass chunks (Lie splitting) — see the operator functions for the rates,
 constants and provenance, and for why ``additional_forces`` is not used.  The
 J2 kick carries BOTH the nodal and the apsidal rate in vector form, so the
 satellite orbital planes precess around the Laplace-surface balance (J2 half
+import os
 from the kick, stellar-torque half from the point-mass N-body) — the
 2026-09-27 satellite-rework upgrade; the earlier apsidal-only variant left the
 planes frozen against J2.  ``run_landed`` records i_eq / i_ecl / Ω per satellite
@@ -56,12 +57,13 @@ Modes::
 
 Units: REBOUND with ``sim.units = ("yr", "AU", "Msun")`` sets G=4π², so
 ``integrate(N)`` advances N sidereal years.  Time series are saved to
-``private/tmp/rebound_landed.npz`` (gitignored) for follow-up analysis.
+``<workdir>/rebound_landed.npz`` (gitignored) for follow-up analysis.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from pathlib import Path
 
@@ -450,7 +452,7 @@ def _apply_j2_secular(
     equatorial prograde recovers (3/2)J2(R/a)²n, equatorial retrograde ~3×
     faster in the same inertial sense.  (a, e, |i_eq|, M-phase are preserved by
     construction; validated against the secular Laplace-cone RK4 in
-    private/research/2026-09-27-*prescreen*.)
+    the local prescreen run.)
     """
     if eq_normal is None:
         raise ValueError("eq_normal is required (J2 nodal torque needs the spin axis)")
@@ -860,7 +862,9 @@ def main() -> None:
     parser.add_argument("--scan-t-end", type=float, default=300.0, help="--sat-scan horizon (yr)")
     parser.add_argument("--scan-grid", type=int, default=6, help="--sat-scan grid per angle")
     parser.add_argument(
-        "--out", default="private/tmp/rebound_landed.npz", help="npz output for the landed run"
+        "--out",
+        default=str(Path(os.environ.get("DREAMULATOR_WORK_DIR", "work")) / "rebound_landed.npz"),
+        help="npz output for the landed run"
     )
     parser.add_argument(
         "--yaml",

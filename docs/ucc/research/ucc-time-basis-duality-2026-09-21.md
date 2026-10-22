@@ -5,7 +5,7 @@
 > 实践全证据）、知识文档 `docs/ucc/specification.md` §2
 > （时间基准契约）、`src/dreamulator/map/ucc.py` + `import_solar_common.py`
 > （bin_days 契约实现）。
-> 本文是思考记录（2026-09-24 自 private/reviews 迁入库）；结论已沉淀进 specification.md §2（2026-09-24）
+> 本文是思考记录（2026-09-24 迁入库）；结论已沉淀进 specification.md §2（2026-09-24）
 > 与 plan「v2 候选」节。
 
 ## 0. 问题重述

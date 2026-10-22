@@ -10,8 +10,7 @@
 > 与 `docs/knowledge/planetary_science/planetary_climate_taxonomy.md`；§4 网格/
 > 归并/世界档案 YAML 与 §5 分段编码语法 → 实现走了更简的「代码内版本化
 > profile + 简码」路线（`specification.md` §5）；§6 世界覆盖矩阵 →
-> `examples/`（六天体实测）；§7 实施分期 → `private/plans/ucc-01-plan.md`
-> （已全部执行）；§8 命名 → UCC 定名，原则已体现于全库用法。
+> `examples/`（六天体实测）；§8 命名 → UCC 定名，原则已体现于全库用法。
 >
 > 现状与实现入口 = `specification.md`；评审与重设计正文 =
 > `research/ucc-review-2026-09-17.md`。

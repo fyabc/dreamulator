@@ -31,6 +31,7 @@
 - `civilization-pipeline.md` — 文明层 pipeline（宜居/农业分类与评分、湖滨淡水修正、摇篮候选发现）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
+- `canvas-hydrology.md` — 全球画布链：画布契约、外存填平/汇流/湖级联、区域裁窗与渲染衔接
 
 ### proposals/ — 设计提案 + 方法论
 

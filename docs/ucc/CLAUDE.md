@@ -3,7 +3,7 @@
 跨世界统一气候分类的单一主题目录。UCC 用「连续描述量 → 版本化分类 profile」两层
 结构替代「给每个地点贴一个 Köppen 式字母码」，目标是让用户在任意世界的地图上读到
 一致、可解释的气候描述。2026-09-24 文档收拢：原本分散在 `knowledge/climatology/`、
-`design/proposals/`、两个世界的 `design-notes/` 与 `private/reviews/` 的 UCC 文档
+`design/proposals/`、两个世界的 `design-notes/` 的 UCC 文档
 统一迁入本目录。
 
 ## 文档列表
@@ -56,9 +56,6 @@
   GrS 先例 + 失败替代清单、光照 regime 词汇、热侧 45→60 °C 曲线、短年行星教训 =
   本地窗口契约外部印证等）/ 存档 4 / 忽略 1；参考文献已合入 taxonomy §5 第 5 类。
 
-调研脚本与数据集留痕仍在 `private/reviews/ucc-*.{py,json,msgpack}` 与
-`private/reviews/_research/ucc-taxonomy-*.md`（未入库）。
-
 ## 实现入口
 
 | 实现 | 位置 |
@@ -84,9 +81,8 @@ UCC-01（描述量 + L0/L1 测试 + climate_yearly 浏览 + L2 比较 + profile 
 简码用区域语法（连字符分隔、大写头区域，解析器 `parse_ucc_code`）；
 两个写入端共用 `ucc.yearly_cell_arrays()`，引擎世界可用
 `scripts/climate/regen_climate_yearly.py` 免重建重导出。
-v2 其余候选（登记不排期）以 `private/plans/ucc-01-plan.md` 的「v2 候选」节为
-单一事实源：跨溶剂广义 AI（轴 C）、光照 regime（轴 D）等——轴设计的物理基础见
-`design-anchors.md` §3。
+v2 其余候选（登记不排期）：跨溶剂广义 AI（轴 C）、光照 regime（轴 D）等——
+轴设计的物理基础见 `design-anchors.md` §3。
 
 ## 写作原则
 

@@ -297,7 +297,18 @@ dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，�
 
 ---
 
-## 地图图层导出（export）
+## 导出（export）
+
+`export` 按「成品动作」组织，共六个命令：
+
+| 命令 | 用途 |
+|---|---|
+| `export layers` | 地图图层烘焙为 PNG（前端同色，守护轴取证） |
+| `export region` | 建区域数据包（Gaea/Blender 链的 `input/`） |
+| `export build` | 区域包的高清地形：`--method td`（terrain-diffusion）/ `spl`（程序化侵蚀） |
+| `export render` | 区域包出图：`--style satellite`（卫星真彩）或制图 `survey/relief/biome/hand/medieval/all` |
+| `export clouds` | 全球程序化云纹理（L2 原型） |
+| `export canvas` | 全球画布链：外存水文 + 裁窗，产出可直接 `export render` 的窗口包 |
 
 headless 烘焙地图图层为彩色 PNG，颜色与前端渲染逐字节一致（配色单源 `palettes.json`，
 前后端共读）。支撑 `/read-map` skill、`ai civ`、CI 审计——守护轴的取证腿。
@@ -349,14 +360,15 @@ dreamulator export region nacrea --seafloor-clamp -800   # height.gaea.png 的�
 dreamulator export region nacrea --out-res 4096   # 数据包栅格分辨率（默认 2048，正方形）
 ```
 
-pack v3 起栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
+数据包的栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
 中心的 Delaunay 三角网上 Clough-Tocher C1 插值（cell 中心保真，消除 Voronoi 平台与折痕），类别通道
 最近邻，所有通道共用同一正方形输出网格。
 
 高度主通道是 float32 米值的 `.npy`（精确无编码损失）；配色 PNG 与前端同一调色板单源；
-`meta.json` 记录物理范围、千米/像素、精确像素盒与源 mesh 指纹。区域窗口按星球真实
-半径标定（东西向补偿 cos 纬度），触及 |纬度| > 75° 或跨 ±180° 经线会被拒绝（极区
-需要球极投影，属 Gaea 精细化链范围）。
+`meta.json` 记录物理范围、千米/像素与源 mesh 指纹。pack v4 起区域窗口是局部方位等距
+投影（`meta.json` 的 `projection` 字段；与全球画布链共用 `map/td_canvas.py` 的换算单源）：
+窗口在任意纬度都是真实千米正方形，极区中心与跨 ±180° 经线的窗口都可直接导出，
+只有 span 触及对跖点（πR）才会被拒绝。
 
 `height.gaea.png` 是 Gaea 2 专用的高程变体：海底按 `--seafloor-clamp`（默认 −400 m）
 预压平后按新量程归一（记录在 meta 的 `height_gaea_png_range_m`），因为 Gaea 2.3 的
@@ -364,13 +376,31 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 喂给 Gaea 时区域 span 建议 ≤ 2350 km；操作配方见
 [gaea-video-chain.md](gaea-video-chain.md)。
 
-### 卫星真彩合成（export colorize）
+### 画布裁窗（export canvas）
+
+高分画布链：一张全球画布（S1，90 m int16 分块 + 粗格气候）→ 外存水文（S2）→
+裁出区域窗口（S3）。窗口包与 `export region` 的 `input/ + refined-out/` 词汇相同，
+可直接交给 `export render` 出图：
+
+```bash
+dreamulator export canvas <canvas_dir> --lat 15 --lon -100 --span-km 550   # 缺省：水文 + 裁窗
+dreamulator export canvas <canvas_dir> --stage hydrology                   # 只跑水文（调试）
+dreamulator export canvas <canvas_dir> --lat 15 --lon -100 --span-km 550 --stage window
+dreamulator export render <窗口包> --style all                             # topo + relief + biome
+```
+
+水文结果缓存在 `<canvas>/hydro-work/`（每个分块校验和，支持断点续算；`--force` 重跑）。
+河网起始阈值 `--threshold-cells` 默认 27000，对应区域链校准的约 2.1 m³/s 平均流量
+（90 m 像素）；需要更密的小溪网时可调低。水文算法与输出契约见
+[画布链技术参考](../design/pipelines/canvas-hydrology.md)。
+
+### 卫星真彩合成（export render --style satellite）
 
 视频素材链第 ③ 步：读取区域数据包 + Gaea 构建产物，合成卫星真彩色贴图：
 
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR）
-dreamulator export colorize data/worlds/nacrea/packs/nacrea-15_90_2350km
+dreamulator export render data/worlds/nacrea/packs/nacrea-15_90_2350km --style satellite
 # 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
 # --gaea / --output 可覆盖；--no-texture 关闭植被纹理（默认开）
 ```
@@ -392,12 +422,12 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 共用同一次全网格索引切片的像素盒，套准由构造保证。设计文档见
 [design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
 
-### 程序化侵蚀（export erode）
+### 程序化侵蚀（export build --method spl）
 
 视频链第②步的程序化变体（一条命令替代 Gaea 手动构建）：
 
 ```bash
-dreamulator export erode data/worlds/nacrea/packs/nacrea-15_-100_2350km
+dreamulator export build data/worlds/nacrea/packs/nacrea-15_-100_2350km --method spl
 # 写 <pack>/prog-out/（gaea-out 文件词汇，渲染腿 --gaea 指向它即可）
 # --steps 30 / --dt 5e4 / --k 2e-7 / --river-threshold 3000（默认即定版）
 ```
@@ -406,31 +436,33 @@ Priority-Flood 排水（Barnes 2014）+ 隐式流水功率侵蚀（Braun & Wille
 2013），吃 pack 的降水场。参数语义见 [usage/terrain-chain.md](terrain-chain.md) 与
 [knowledge/cartography/](../knowledge/cartography/README.md)。
 
-### terrain-diffusion 细化 + 水文（export refine）
+### terrain-diffusion 细化 + 水文（export build）
 
 地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
 
 ```bash
-dreamulator export refine data/worlds/nacrea/packs/nacrea-15_-100_550km     --td private/external-projects/terrain-diffusion
+dreamulator export build data/worlds/nacrea/packs/nacrea-15_-100_550km     --td <terrain-diffusion-repo>
 # 写 <pack>/refined-out/；推理在外部 td venv（安装见 terrain-chain 手册）
 ```
 
 550 km 约 2.5 分钟。模型机制与能力边界见
 [usage/terrain-chain.md](terrain-chain.md) 第②步。
 
-### 制图（export carto）
+### 制图（export render --style survey|relief|biome|hand|medieval）
 
-视频素材链的制图变体腿（共用 ①pack → ②Gaea 的产物），三种风格一个
+视频素材链的制图变体腿（共用 ①pack → ②构建目录的产物），所有风格走一个
 命令（`--style`）：
 
 ```bash
-dreamulator export carto data/worlds/nacrea/packs/nacrea-15_-100_2350km                 # survey（默认）
-dreamulator export carto <pack> --style hand                                 # 旧印刷质感
-dreamulator export carto <pack> --style medieval --title "珠母星 · 未知海域"  # 中世纪羊皮纸
-dreamulator export carto <pack> --style biome                                # 群系图
-# 读 <pack>/input + <pack>/gaea-out
-# survey → carto/{topo.svg, topo.png}；hand → carto/topo.hand.png；
-# medieval → carto/medieval.png；biome → carto/{biome.svg, biome.png}
+dreamulator export render <pack> --style survey                # 分层设色测绘图 topo.png（默认）
+dreamulator export render <pack> --style relief                # 遥感自然色晕渲 relief.png
+dreamulator export render <pack> --style biome                 # 群系图 biome.png
+dreamulator export render <pack> --style all                   # 一键出 topo + relief + biome 三张
+dreamulator export render <pack> --style hand                  # 旧印刷质感 topo.hand.png
+dreamulator export render <pack> --style medieval --title "珠母星 · 未知海域"
+# 读 <pack>/input + <pack>/gaea-out（或 --gaea 指向 refined-out/prog-out）
+# survey → carto/{topo.svg, topo.png}；relief → carto/{relief.svg, relief.png}；
+# biome → carto/{biome.svg, biome.png}；hand → carto/topo.hand.png；medieval → carto/medieval.png
 # --title 自定义标题（默认「Nacrea —— 15°N 100°W 附近」式）
 # --res 网格分辨率（默认 2048） / --dpi PNG 输出 DPI
 # --contour-labels 等高线 inline 高程标注（默认关，仅 survey/hand）
@@ -454,7 +486,7 @@ refined-out → gaea-out → input/）。操作细节见
 ```bash
 dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
 # 写 <out>/{clouds.png（RGBA straight alpha）, cloud_cover.png, surface.png,
-#        globe.png, meta.json}；默认 out = private/video/clouds/<world>[-<branch>]/
+#        globe.png, meta.json}；默认 out = <render-workdir>/clouds/<world>[-<branch>]/
 # --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
 # --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
 # --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
@@ -465,9 +497,8 @@ dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
 律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及
 它们到生成参数的映射见
 [knowledge/climatology/cloud_field_statistics.md](../knowledge/climatology/cloud_field_statistics.md)；
-与 NASA Blue Marble 参照图的定量验收脚本在 private/video/temp/cloud_compare.py
-（透明度直方图对数线性度 / 梯度分位 / 径向功率谱三指标）。需求与分工见
-private/plans/orbital-weather-globe-requirements-20261018.md。
+与 NASA Blue Marble 参照图的定量验收脚本在 `<render-workdir>/temp/cloud_compare.py`
+（透明度直方图对数线性度 / 梯度分位 / 径向功率谱三指标）。
 
 渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
 

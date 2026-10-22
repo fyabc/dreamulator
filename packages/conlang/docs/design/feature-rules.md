@@ -186,7 +186,6 @@ C[+laryngeal] > ∅
 
 ## 参考资料
 
-- 调研全文：主仓 `private/research/2026-08-15-conlang-methodology-tools.md`
 - Lexurgy 规则文档：https://www.lexurgy.com/sc （特征语法参照）
 - Brassica：https://github.com/bradrn/brassica （特征系统参照）
 - 喉音理论：`docs/knowledge/comparative-method.md` §4；

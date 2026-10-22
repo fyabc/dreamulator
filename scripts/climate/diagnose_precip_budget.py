@@ -4,7 +4,7 @@
 Always re-runs the climate engine (no artifact mode): the budget decomposition
 needs solver intermediates (per-cell moisture W and the per-term precipitation
 contributions) that build artifacts do not store — see the diagnostic-cache
-plan in private/todos/today.md §二-E before adding one.
+plan in the internal execution ledger §二-E before adding one.
 
 Runs the climate engine on the Earth (climate-dev) mesh with the shared-physics
 validation config and records the precipitation budget terms.  Since the

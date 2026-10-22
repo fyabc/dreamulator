@@ -47,7 +47,7 @@ GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
 - `build_bridge_branches.py`、`build_bridge_branches_nacrea.py` — Earth↔Nacrea 单参数桥接
   实验分支生成（fork astronomy 覆写自转/倾角/温室/光谱/通量/年长；分支已 gitignore）。
 - `ucc_obs_descriptors.py` — UCC L2 数据集构建（earth root 观测月度序列 → 描述量 +
-  Beck Köppen 参照列 + provenance，msgpack 进 private/reviews/）。
+  Beck Köppen 参照列 + provenance，msgpack 写入内部工作目录）。
 - `ucc_classify_experiments.py` — UCC 分类候选比较实验（分组候选/消融/扰动，profile
   v0/v1 冻结依据）。
 - `ucc_examples_earth.py` — Earth worked examples 数据表生成（~33 命名地点 + 未覆盖类的
@@ -84,7 +84,7 @@ stellar.yaml 约定：`planet_mars` / `satellite_moon` / `planet_venus` /
 精度定**：Moon 100k（GCP 0.5°）> Mars 10k（MCD ~5.7°）= Venus 10k（VCD ~1.9°）>
 Titan 3k（TAM T21 5.6°）。数据为 GCM 气候态（L4 压力测试层，非观测真值；Moon
 Diviner 为观测级地表温度例外），provenance 随导出文件走。原始数据缓存
-`private/tmp/solar/`（Mars/Venus/Titan 缺失自动重下；Moon GCP 2.8GB 见脚本 docstring）。
+`<workdir>/solar/`（Mars/Venus/Titan 缺失自动重下；Moon GCP 2.8GB 见脚本 docstring）。
 
 - `fetch_lmd_slices.py` — LMD Web 接口免注册抓取器（MCD/VCD 通用：POST 配方 +
   txt 链接解析 + `--max-time` 护栏；**VCD 的 averaging=loct 挂起**，用
@@ -134,7 +134,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 
 Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 `docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
-`private/video/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
+`<render-workdir>/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
 数据侧的正式 CLI 在 in-package（`dreamulator export region`），不在本组。
 
 - `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费
@@ -155,5 +155,5 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   新增脚本下移层级时记得同步。
 - **组内兄弟导入**：climate/ 内诊断脚本经 `sys.path.insert(0, 本目录)` 复用
   `station_diagnostics` 的站点表——跨组复用请改走 `dreamulator` 包。
-- **数据文件位置**：观测数据缓存在系统 temp（ETOPO1/Beck）与 `private/tmp/climatology/`
+- **数据文件位置**：观测数据缓存在系统 temp（ETOPO1/Beck）与 `<workdir>/climatology/`（可用 `DREAMULATOR_WORK_DIR` 指定根目录）
   （NCEP/GPCP/SODA，gitignored）。

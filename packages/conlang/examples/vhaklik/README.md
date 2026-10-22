@@ -157,7 +157,7 @@ eSpeak-NG 对**非肺部气流辅音**的支持存在严重缺陷：
 > <!-- TODO: 计划引入 IMS-Toucan (ToucanTTS) 作为可选 TTS 后端。
 >      ToucanTTS 是基于 PyTorch 的神经语音合成系统，支持 7000+ 语言，
 >      使用发音特征向量（articulatory features）表示音素，理论上可以合成
->      搭嘴音、挤喉音等非肺部气流辅音。详见 private/tts-toucan-integration.md -->
+>      搭嘴音、挤喉音等非肺部气流辅音。 -->
 
 ### 4. SCA 方言演化：高原语 → 平原方言
 

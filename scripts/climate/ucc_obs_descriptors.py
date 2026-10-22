@@ -15,20 +15,20 @@ two stay comparable (ucc-review §2.3: record the demand model; do not claim
 FAO-56 calibration).  A FAO-56 ET0 cross-check (e.g. Zomer 2022) is a possible
 later sensitivity pass, not part of this dataset.
 
-Output: ``private/reviews/ucc-l2-earth-obs-<date>.msgpack`` with per-cell
+Output: ``<workdir>/ucc/ucc-l2-earth-obs-<date>.msgpack`` with per-cell
 descriptors + lat/lon/water_class/Beck Köppen + provenance metadata, plus a
 stdout coverage summary (Köppen regime tally × descriptor medians).
 
 Usage:
     uv run python scripts/climate/ucc_obs_descriptors.py
-    uv run python scripts/climate/ucc_obs_descriptors.py --out private/reviews/foo.msgpack
+    uv run python scripts/climate/ucc_obs_descriptors.py --out <workdir>/ucc/foo.msgpack
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
-import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -90,16 +90,20 @@ def main() -> None:
     out = args.out
     if out is None:
         stamp = datetime.date.today().isoformat()
-        out = Path(f"private/reviews/ucc-l2-earth-obs-{stamp}.msgpack")
+        out = (
+            Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
+            / "ucc"
+            / f"ucc-l2-earth-obs-{stamp}.msgpack"
+        )
     out.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Reading monthly obs from {args.map_dir}/climate_monthly.msgpack …")
     t_monthly, p_monthly = _load_monthly(args.map_dir / "climate_monthly.msgpack")
     n = t_monthly.shape[0]
 
-    print(f"Reading mesh fields from {_mf} …")
     _mf = find_mesh_file(args.map_dir)
     assert _mf is not None, f"no mesh file under {args.map_dir}"
+    print(f"Reading mesh fields from {_mf} …")
     mesh = _load_mesh_fields(_mf)
     assert len(mesh["lat"]) == n, "mesh/monthly cell-count mismatch"
 

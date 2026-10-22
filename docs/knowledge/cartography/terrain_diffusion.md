@@ -41,16 +41,16 @@
 
 ## 工程形态
 
-以外部 venv 子进程调用（克隆在本机 `private/external-projects/
+以外部 venv 子进程调用（克隆在本机 `<external-project-dir>/
 terrain-diffusion/`，`.venv` 随仓库），不进主项目依赖——其 3 GB CUDA
 torch 会拖累 `uv sync --all-extras` 与 CI。推理走 `python -m
 terrain_diffusion.inference.tiff_export` 模块直跑（绕开训练栈 import）。
-`dreamulator export refine`（`src/dreamulator/media/terrain_refine.py`）
+`dreamulator export build`（`src/dreamulator/media/terrain_refine.py`）
 封装了三段编排：条件场导出（主库）→ 条件 GeoTIFF 与扩散推理（td venv
 子进程）→ 水文提取（主库）。
 
 安装一次性步骤（CUDA GPU；Linux 上把 `.venv/Scripts/python.exe` 换成
-`.venv/bin/python` 即可，`export refine` 两种布局都认）：
+`.venv/bin/python` 即可，`export build` 两种布局都认）：
 
 ```bash
 git clone https://github.com/xandergos/terrain-diffusion <clone>
@@ -68,7 +68,7 @@ cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -
 
 还需预下载 WorldClim 10′ 气候数据：上游 `inference/synthetic_map.py` 读
 `<clone>/data/global/` 下的 `wc2.1_10m_bio_{1,4,12,15}.tif`，缺文件时它会用
-`input()` 询问是否下载，而 `export refine` 以子进程调用、无法应答，直接中止。
+`input()` 询问是否下载，而 `export build` 以子进程调用、无法应答，直接中止。
 从 `https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_bio.zip`
 （约 50 MB）解压取出这四个文件放入该目录即可。
 
@@ -77,4 +77,3 @@ cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -
 - 仓库与权重：https://github.com/xandergos/terrain-diffusion
   （HF 权重 `xandergos/terrain-diffusion-90m`，约 1.1 GB）
 - 论文：arXiv 2512.08309（SIGGRAPH 2026）
-- 本库验收数据存 private 研究档案（2026-10-05 调研轮），结论已并入本文

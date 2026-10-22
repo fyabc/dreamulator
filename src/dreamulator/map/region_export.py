@@ -57,10 +57,13 @@ channels and 0 in the PNGs; the per-channel ``missing`` counts in meta make
 gaps auditable.
 
 Region selection is a centre + physical span in km on the planet's real
-radius.  The equirectangular crop compensates the cos(lat) east–west stretch
-exactly at the centre latitude; polar regions (|lat| > 75°) and antimeridian
-crossings are rejected — those need the stereographic leg of the Gaea chain
-(``docs/design/proposals/gaea-refinement.md`` §3).
+radius, projected as a local azimuthal-equidistant square (x east, y north)
+centred on the requested point — the same projection as the canvas chain
+(:class:`dreamulator.map.td_canvas.CanvasGeometry`, the single source of the
+conversion).  Distances from the centre are true along every direction, so
+the window is square in real kilometres at any latitude and polar or
+antimeridian-centred windows need no special leg.  The equirectangular export
+grid survives only as the alignment probe's subject.
 """
 
 from __future__ import annotations
@@ -87,6 +90,7 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
+from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS
 
 if TYPE_CHECKING:
@@ -94,44 +98,59 @@ if TYPE_CHECKING:
 
     from dreamulator.map.models import CVTMesh
 
-#: Hard latitude band the equirectangular crop supports (cos-distortion guard).
-MAX_ABS_LAT = 75.0
-
 
 class RegionWindowError(ValueError):
-    """Region rejected by the equirectangular crop guards."""
+    """Region rejected by the window guards."""
 
 
 @dataclass(frozen=True)
 class RegionWindow:
-    """Accepted square region: geographic bounds + pixel box on the export grid.
+    """Accepted square region: an azimuthal-equidistant plane on the planet.
 
-    Pixel mapping follows ``make_equirect_grid`` exactly: column ``x`` ↔
-    ``lon = −180 + 360·x/W`` (edge-aligned), row ``y`` ↔
-    ``lat = 90 − 180·y/(H−1)`` (endpoint linspace).  ``x1``/``y1`` are
-    exclusive, so the crop is ``indices[y0:y1, x0:x1]``.
+    The window is ``|x| <= span/2`` and ``|y| <= span/2`` in the AEQ plane
+    (x east, y north, km) centred on ``(center_lat, center_lon)``.  Plane ↔
+    geographic conversions go through
+    :class:`dreamulator.map.td_canvas.CanvasGeometry` — the canvas chain's
+    single source — so region exports and canvas crops agree by construction.
     """
 
-    #: Requested geographic window (degrees) before floor/ceil snapping.
-    lat_min: float
-    lat_max: float
-    lon_min: float
-    lon_max: float
-    x0: int
-    y0: int
-    x1: int
-    y1: int
-    #: Physical pixel size at the centre latitude (km per pixel, both axes).
-    km_per_px_x: float
-    km_per_px_y: float
+    center_lat: float
+    center_lon: float
+    span_km: float
+    radius_km: float
 
     @property
-    def grid_w(self) -> int:
-        return self.x1 - self.x0
+    def half_km(self) -> float:
+        return self.span_km / 2.0
 
-    @property
-    def grid_h(self) -> int:
-        return self.y1 - self.y0
+    def _geometry(self) -> CanvasGeometry:
+        # ``ncell`` only feeds the canvas pixel-grid properties, unused here;
+        # the projection itself depends solely on (centre, radius).
+        return CanvasGeometry(self.center_lat, self.center_lon, self.radius_km, 1)
+
+    def xy_to_latlon(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Plane (km, y north) → (lat, lon) in degrees."""
+        return self._geometry().xy_to_latlon(x, y)
+
+    def latlon_to_xy(self, lat: np.ndarray, lon: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(lat, lon) in degrees → plane (km, y north)."""
+        return self._geometry().latlon_to_xy(lat, lon)
+
+    def out_xy(self, out_res: int) -> tuple[np.ndarray, np.ndarray]:
+        """Pixel-centre (x, y) meshgrid of the square output raster.
+
+        Row 0 is the north edge (y = +half), matching the PNG/npy row order.
+        """
+        fr = (np.arange(out_res) + 0.5) / out_res - 0.5
+        s = fr * self.span_km
+        x_grid, y_grid = np.meshgrid(s, s[::-1])
+        return x_grid, y_grid
+
+    def out_latlon(self, out_res: int) -> tuple[np.ndarray, np.ndarray]:
+        """Pixel-centre (lon, lat) meshgrid of the square output raster."""
+        x_grid, y_grid = self.out_xy(out_res)
+        lat_grid, lon_grid = self.xy_to_latlon(x_grid, y_grid)
+        return lon_grid, lat_grid
 
 
 def region_window(
@@ -139,66 +158,31 @@ def region_window(
     center_lon: float,
     span_km: float,
     radius_km: float,
-    grid_width: int,
-    grid_height: int,
 ) -> RegionWindow:
-    """Compute the square-in-km region window on the equirectangular grid.
+    """Validate a centre + square span and return the azimuthal-equidistant window.
 
-    The north-south half-extent uses the planet's real meridian scale
-    (1° = πR/180 km); the east-west half-extent is divided by cos(lat) so the
-    crop stays square in kilometres at the centre latitude.
+    The window is square in real kilometres at every latitude: the AEQ plane
+    preserves distance from the centre, so edge midpoints sit exactly
+    ``span/2`` km away along every direction and the corners at most
+    ``span/√2`` km.  Polar and antimeridian-centred windows are valid; only
+    spans reaching the antipode are refused (the projection degenerates
+    there, with the whole far side collapsing onto one circle).
 
     Raises:
-        RegionWindowError: span not positive, polar band exceeded, antimeridian
-            crossing, or the window collapsed to zero pixels.
+        RegionWindowError: span not positive or not below the antipode limit,
+            or the centre outside the lat/lon bounds.
     """
     if span_km <= 0:
         raise RegionWindowError(f"span_km must be positive, got {span_km}")
     if not -90.0 <= center_lat <= 90.0 or not -180.0 <= center_lon <= 180.0:
         raise RegionWindowError(f"centre ({center_lat}, {center_lon}) outside lat/lon bounds")
-
-    deg_per_km = 180.0 / (math.pi * radius_km)
-    half_lat = span_km * deg_per_km / 2.0
-    cos_c = math.cos(math.radians(center_lat))
-    if abs(cos_c) < 1e-4:
-        raise RegionWindowError("centre latitude too close to a pole for an equirect crop")
-    half_lon = span_km * deg_per_km / (2.0 * cos_c)
-
-    lat_min, lat_max = center_lat - half_lat, center_lat + half_lat
-    lon_min, lon_max = center_lon - half_lon, center_lon + half_lon
-    if max(abs(lat_min), abs(lat_max)) > MAX_ABS_LAT:
+    antipode_km = math.pi * radius_km
+    if span_km >= antipode_km:
         raise RegionWindowError(
-            f"window reaches |lat| {max(abs(lat_min), abs(lat_max)):.1f}° "
-            f"(limit {MAX_ABS_LAT}°) — use the stereographic leg for polar regions"
+            f"span_km {span_km:g} reaches the antipode (limit {antipode_km:.0f} km) — "
+            "the azimuthal-equidistant projection degenerates there"
         )
-    if lon_min < -180.0 or lon_max > 180.0:
-        raise RegionWindowError(
-            f"window crosses the antimeridian ({lon_min:.1f}..{lon_max:.1f}°) — "
-            "not supported by the equirect crop"
-        )
-
-    # Snap outwards (floor/ceil) so the pixel box fully covers the request.
-    x0 = max(0, math.floor((lon_min + 180.0) / 360.0 * grid_width))
-    x1 = min(grid_width, math.ceil((lon_max + 180.0) / 360.0 * grid_width))
-    y0 = max(0, math.floor((90.0 - lat_max) / 180.0 * (grid_height - 1)))
-    y1 = min(grid_height, math.ceil((90.0 - lat_min) / 180.0 * (grid_height - 1)))
-    if x1 <= x0 or y1 <= y0:
-        raise RegionWindowError("region collapsed to zero pixels on this grid")
-
-    km_per_px_y = math.pi * radius_km / (grid_height - 1)
-    km_per_px_x = 2.0 * math.pi * radius_km * cos_c / grid_width
-    return RegionWindow(
-        lat_min=lat_min,
-        lat_max=lat_max,
-        lon_min=lon_min,
-        lon_max=lon_max,
-        x0=x0,
-        y0=y0,
-        x1=x1,
-        y1=y1,
-        km_per_px_x=km_per_px_x,
-        km_per_px_y=km_per_px_y,
-    )
+    return RegionWindow(center_lat, center_lon, span_km, radius_km)
 
 
 def probe_alignment(
@@ -214,16 +198,15 @@ def probe_alignment(
     healthy grid shows every probe within about one cell diameter.
     """
     height, width = indices_full.shape
-    inside = [
-        c
-        for c in mesh.cells
-        if window.lon_min <= c.lon <= window.lon_max and window.lat_min <= c.lat <= window.lat_max
-    ]
-    if not inside:
+    clon = np.fromiter((c.lon for c in mesh.cells), dtype=np.float64, count=mesh.num_cells)
+    clat = np.fromiter((c.lat for c in mesh.cells), dtype=np.float64, count=mesh.num_cells)
+    cx, cy = window.latlon_to_xy(clat, clon)
+    inside_ids = np.flatnonzero((np.abs(cx) <= window.half_km) & (np.abs(cy) <= window.half_km))
+    if inside_ids.size == 0:
         return []
-    step = max(1, len(inside) // n)
+    step = max(1, inside_ids.size // n)
     probes: list[dict[str, Any]] = []
-    for cell in inside[::step][:n]:
+    for cell in (mesh.cells[int(i)] for i in inside_ids[::step][:n]):
         x = min(width - 1, max(0, int((cell.lon + 180.0) / 360.0 * width)))
         y = min(height - 1, max(0, int((90.0 - cell.lat) / 180.0 * (height - 1))))
         nearest = mesh.cells[int(indices_full[y, x])]
@@ -277,45 +260,31 @@ def mesh_fingerprint(mesh_file: Path) -> dict[str, Any]:
 #: Pack format version — 2 added the climate channels (precipitation /
 #: temperature / ice / köppen / biome); 3 decoupled the raster resolution
 #: from the engine export grid (square ``out_res`` grid, Clough-Tocher C1
-#: scalar interpolation) and added ``height.gaea.png``.
-PACK_VERSION = 3
+#: scalar interpolation) and added ``height.gaea.png``; 4 switched the window
+#: to the azimuthal-equidistant projection (polar and antimeridian centres
+#: allowed, uniform km/px, the equirect ``pixel_box`` removed).
+PACK_VERSION = 4
 
 #: Default resolution of the pack's square output rasters.
 DEFAULT_OUT_RES = 2048
 
 
-def _window_out_grid(window: RegionWindow, out_res: int) -> tuple[np.ndarray, np.ndarray]:
-    """Pixel-centre (lon, lat) meshgrid of the square output raster.
-
-    Row 0 is the north edge (``lat_max``), matching the PNG/npy row order.
-    """
-    fr = (np.arange(out_res) + 0.5) / out_res
-    lons = window.lon_min + fr * (window.lon_max - window.lon_min)
-    lats = window.lat_max - fr * (window.lat_max - window.lat_min)
-    lon_grid, lat_grid = np.meshgrid(lons, lats)
-    return lon_grid, lat_grid
-
-
 def _window_cells(
-    mesh: CVTMesh, window: RegionWindow, margin_deg: float
+    mesh: CVTMesh, window: RegionWindow, margin_km: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(indices, unwrapped lon, lat) of cells inside the window plus margin.
+    """(indices, x_km, y_km) of cells inside the window plus a plane margin.
 
-    Cell longitudes are unwrapped around the window centre so the margin can
-    reach across the ±180° line without tearing the triangulation.
+    Membership is the AEQ square itself, so antimeridian and polar windows
+    need no longitude unwrapping: the plane is continuous everywhere except
+    the antipode, which the span guard excludes.
     """
-    lon_c = 0.5 * (window.lon_min + window.lon_max)
     clon = np.fromiter((c.lon for c in mesh.cells), dtype=np.float64, count=mesh.num_cells)
     clat = np.fromiter((c.lat for c in mesh.cells), dtype=np.float64, count=mesh.num_cells)
-    lon_u = (clon - lon_c + 180.0) % 360.0 - 180.0 + lon_c
-    mask = (
-        (clat >= window.lat_min - margin_deg)
-        & (clat <= window.lat_max + margin_deg)
-        & (lon_u >= window.lon_min - margin_deg)
-        & (lon_u <= window.lon_max + margin_deg)
-    )
+    cx, cy = window.latlon_to_xy(clat, clon)
+    lim = window.half_km + margin_km
+    mask = (np.abs(cx) <= lim) & (np.abs(cy) <= lim)
     (idx,) = np.nonzero(mask)
-    return idx, lon_u[idx], clat[idx]
+    return idx, cx[idx], cy[idx]
 
 
 def _interpolate_window(
@@ -347,26 +316,26 @@ def _interpolate_window(
     """
     from scipy.interpolate import CloughTocher2DInterpolator
 
-    margin = 1.0
+    margin_km = math.pi * window.radius_km / 180.0  # 1° at the planet radius
     points: np.ndarray | None = None
     values: np.ndarray | None = None
     for _ in range(4):
-        idx, clon, clat = _window_cells(mesh, window, margin)
+        idx, cx, cy = _window_cells(mesh, window, margin_km)
         v = field_values[idx]
         ok = ~np.isnan(v)
         if int(ok.sum()) >= 3:
-            points = np.column_stack([clon[ok], clat[ok]])
+            points = np.column_stack([cx[ok], cy[ok]])
             values = v[ok]
             break
-        margin *= 3.0
+        margin_km *= 3.0
     if points is None or values is None:
         return nearest
-    lon_grid, lat_grid = _window_out_grid(window, out_res)
+    x_grid, y_grid = window.out_xy(out_res)
     interp = CloughTocher2DInterpolator(points, values)
-    out = interp(lon_grid, lat_grid)
+    out = interp(x_grid, y_grid)
     # Local boundedness clip (see docstring).  Values outside the convex hull
     # come back NaN; only interior pixels take part.
-    simplex = interp.tri.find_simplex(np.column_stack([lon_grid.ravel(), lat_grid.ravel()]))
+    simplex = interp.tri.find_simplex(np.column_stack([x_grid.ravel(), y_grid.ravel()]))
     inside = (simplex >= 0) & ~np.isnan(out.ravel())
     if inside.any():
         verts = values[interp.tri.simplices[simplex[inside]]]  # (N, 3)
@@ -618,21 +587,14 @@ def export_region_pack(
     out_res: int = DEFAULT_OUT_RES,
 ) -> dict[str, Any]:
     """Export the region data pack; returns the written ``meta`` dict."""
-    window = region_window(
-        center_lat,
-        center_lon,
-        span_km,
-        radius_km,
-        grid_width,
-        grid_height,
-    )
+    window = region_window(center_lat, center_lon, span_km, radius_km)
 
-    # The base-grid slice survives only as provenance (pixel_box) and as the
-    # alignment probe's subject; pack rasters live on the square output grid.
+    # The equirect index grid survives only as the alignment probe's subject;
+    # pack rasters are sampled from the mesh on the AEQ output grid.
     tree = build_export_tree(mesh)
     indices_full = export_cell_index_grid(mesh, grid_width, grid_height, tree=tree)
 
-    lon_grid, lat_grid = _window_out_grid(window, out_res)
+    lon_grid, lat_grid = window.out_latlon(out_res)
     indices_fine = _nearest_indices_on_grid(tree, lon_grid, lat_grid)
 
     cell_elev = np.fromiter(
@@ -686,18 +648,15 @@ def export_region_pack(
             "local triangle vertex range (centres exact, no cubic undershoot); "
             "categorical channels and colour tint: nearest cell"
         ),
-        # Exact pixel box on the full export grid (x1/y1 exclusive) — lets
-        # consumers crop the global rasters identically instead of guessing
-        # the floor/ceil snapping.
-        "pixel_box": [window.x0, window.y0, window.x1, window.y1],
-        # Actual cropped extents (the snapped pixel box, slightly ≥ span_km).
-        "extent_km": {
-            "x": round(window.grid_w * window.km_per_px_x, 2),
-            "y": round(window.grid_h * window.km_per_px_y, 2),
-        },
+        # Window projection: consumers inverting pixel ↔ lat/lon must use the
+        # same azimuthal-equidistant plane (td_canvas.CanvasGeometry).
+        "projection": "azimuthal_equidistant",
+        # Exact square side (km) and uniform pixel pitch — the AEQ plane needs
+        # no cos(lat) compensation and no floor/ceil snapping.
+        "extent_km": {"x": round(span_km, 2), "y": round(span_km, 2)},
         "km_per_px": {
-            "x": round(window.grid_w * window.km_per_px_x / out_res, 4),
-            "y": round(window.grid_h * window.km_per_px_y / out_res, 4),
+            "x": round(span_km / out_res, 4),
+            "y": round(span_km / out_res, 4),
         },
         # Mean CVT cell spacing (km) — downstream consumers (e.g. the media
         # colorizer's boundary warp) scale their cell-relative effects by it.
@@ -749,7 +708,27 @@ def export_region_pack(
             clim_scalars["runoff_mm"] = _interpolate_window(
                 mesh, window, out_res, runoff_col, runoff_col[indices_fine]
             )
+            # Lake freeze regime: months with monthly mean air temperature
+            # below 0 °C, per cell then nearest-sampled (a class channel —
+            # smoothing would invent intermediate regressions).  Renderers
+            # style perennial-ice lakes (12 months) distinctly; 1–11 months is
+            # seasonal cover, 0 is ice-free.  The threshold is the standard
+            # air-temperature proxy (lake surfaces reach 0 °C a little later
+            # in autumn; monthly means make the proxy adequate).
+            freeze_col = (t_monthly < 0.0).sum(axis=1).astype(np.uint8)
+            lake_ice = freeze_col[indices_fine]
+            np.save(out_dir / "lake_ice.months.npy", lake_ice)
         meta["climate"] = _export_climate_channels(mesh, indices_fine, out_dir, clim_scalars)
+        if climate_monthly is not None:
+            meta["climate"]["lake_ice_months"] = {
+                "units": "months with monthly mean air temperature < 0 °C (uint8, 0-12)",
+                "perennial_threshold": 12,
+                "legend": {
+                    "0": "ice-free",
+                    "1-11": "seasonally frozen",
+                    "12": "perennially ice-covered",
+                },
+            }
         meta["climate"]["headwaters"] = _export_headwaters(
             height,
             clim_scalars["precipitation_mm"],
