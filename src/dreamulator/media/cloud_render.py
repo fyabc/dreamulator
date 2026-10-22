@@ -1513,6 +1513,7 @@ def clouds_globe(
         "chain": "L2 procedural cloud texture (prototype)",
         "spec": "orbital weather-globe L2 procedural cloud texture",
         "radius_km": radius_km,
+        "sea_level_m": sea_level_m,
         "grid": [width, height],
         "seed": seed,
         "globe": {
@@ -1539,13 +1540,17 @@ def clouds_globe(
             "seed": cyclone_seed if cyclones else None,
         },
         "atmosphere": (
-            atmosphere_summary(
-                atmosphere,
-                exposure=atmosphere_exposure,
-                sun_glint=sun_glint,
-                water_roughness=water_roughness,
-                multiple_scattering=multiple_scattering,
-            )
+            {
+                **atmosphere_summary(
+                    atmosphere,
+                    exposure=atmosphere_exposure,
+                    sun_glint=sun_glint,
+                    water_roughness=water_roughness,
+                    multiple_scattering=multiple_scattering,
+                ),
+                "cloud_altitude_km": cloud_altitude_km,
+                "cloud_shadows": cloud_shadows,
+            }
             if atmosphere is not None
             else None
         ),

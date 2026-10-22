@@ -548,6 +548,17 @@ L5 大气渲染在 `media/atmosphere_render.py`：瑞利分子散射、米氏气
 但不做非局地光输运。物理模型、系数来源与已知限制见
 [knowledge/climatology/atmospheric_scattering.md](../knowledge/climatology/atmospheric_scattering.md)。
 
+旋转短视频从一次 `export clouds` 的输出目录生成：相机与恒星固定、晨昏线不动，
+地表与云纹理转动一整圈，末尾定格；大气只预计算一次，每帧只重采样纹理。
+
+```bash
+uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
+    <clouds_dir> -o exports/spin/nacrea_spin_720p.mp4 --res 720 --seconds 8
+# --rotation-seconds 控制转一圈的时间（默认 seconds − 1，留 1 秒定格）
+# --width/--height 输出画幅（默认 1280×720，方形球面居中）；--poster 存首末帧 PNG
+# 云系随行星刚性旋转，不做时间演化
+```
+
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
 等 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
 律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及

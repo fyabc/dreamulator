@@ -79,7 +79,28 @@ GGX 微表面太阳高光（水菲涅耳、波面粗糙度可配），高光受�
 物理模型、系数来源与已知限制见
 [atmospheric_scattering.md](../../knowledge/climatology/atmospheric_scattering.md)。
 
-## 6. 状态与后续
+## 6. 旋转视频
+
+`media/globe_spin.py` 的 `SpinRenderer` 利用一个几何事实：相机与恒星固定时，球对称
+大气的视线散射、透射率和云壳光照都不随行星自转变化，只有地表与云纹理在转。因此
+大气只算一次，每一帧只按经度偏移重采样纹理并重新合成；`frame(0)` 与静态
+`render_globe_atmosphere` 逐位一致。
+
+`scripts/media/spin_video.py` 读取一次 `export clouds` 的输出目录（`surface.png`、
+`clouds.png`、`meta.json`），从 `meta.json` 还原大气模型与海洋掩膜，渲染一整圈旋转
+加一段定格，按 16:9 画布居中并编码 H.264：
+
+```bash
+uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
+    <clouds_dir> -o exports/spin/nacrea_spin_720p.mp4 --res 720 --seconds 8
+```
+
+经度偏移从 0 递减到 −360°，行星按自转方向（向东）转动；相机与太阳不动，所以
+晨昏线在画面中保持固定。云系随行星刚性旋转，不做时间演化（L4 才引入风场平流）。
+720p、30 fps、8 秒（7 秒转一圈 + 1 秒定格）的样片准备约 12 秒、240 帧约 160 秒，
+输出约 6 MB。
+
+## 7. 状态与后续
 
 已实现：L2 纹理、L3 气旋模板、L5 单次与多次散射大气、云影与海面太阳高光，以及
 L2/L3/L5 的 YAML 配置与正交圆盘预览。待办按依赖顺序排列：
