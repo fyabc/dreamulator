@@ -559,6 +559,18 @@ uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
 # 云系随行星刚性旋转，不做时间演化
 ```
 
+云系时间演化（L4 原型）用同一份输出目录，把云纹理沿年均风场做半拉格朗日平流：
+
+```bash
+uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
+    <clouds_dir> -o exports/spin/nacrea_cloudflow_720p.mp4 \
+    --res 720 --seconds 8 --sim-hours 24 --texture-width 2048
+# --sim-hours 是模拟的云演化时长，与片长解耦；--no-bfecc 关闭误差补偿
+# --no-vortex 只用环境风，不叠加风暴 Holland 涡旋（对照组）
+# 热带气旋叠加 Holland 涡旋；温带逗号默认不叠加，随环境风/锋面切变
+# 风场暂用年均值占位，等 L1 的 6 小时风场到达后替换；只输运纹理，不做凝结/蒸发
+```
+
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
 等 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
 律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及

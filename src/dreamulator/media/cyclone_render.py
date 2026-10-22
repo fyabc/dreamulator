@@ -14,6 +14,11 @@ cloud with a frontal band, oriented by the translation vector.  The template
 is a *rendering* layer: positions and intensities are data, not free
 parameters; only the band geometry is a visual choice.
 
+``cyclone_wind_field`` exposes the same Holland profile as an east/north
+vortex wind on an equirectangular grid, for the L4 cloud-advection prototype:
+adding it to the environment wind lets a storm's cloud bands rotate around the
+centre while the storm translates with the steering flow.
+
 All geometry is computed on the sphere in kilometres, so the equirectangular
 output is seamless at the antimeridian and has no polar pinch.  Deterministic
 given (cyclones, grid, radius, seed).
@@ -36,11 +41,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
 from dreamulator.map.noise_kernels import fbm_on_points
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 __all__ = [
     "Cyclone",
@@ -48,6 +56,7 @@ __all__ = [
     "cyclone_alpha",
     "cyclone_clear",
     "cyclone_envelope",
+    "cyclone_wind_field",
     "holland_b_1980",
     "holland_wind_m_s",
     "synthetic_cyclones",
@@ -64,6 +73,12 @@ _AIR_DENSITY_KG_M3 = 1.15
 #: Nacrea tropical-cyclone outer cloud shield (km): 2–3× Earth, 1500–2500 km
 #: per the GCM scaling note.  The L1 track entry may override it.
 _TROPICAL_OUTER_KM = 1800.0
+
+#: Extratropical cyclones are front-driven comma clouds; the track's Rmax is a
+#: tropical-core scale, so a closed-core vortex would spin the comma like a
+#: disc.  The L4 advection therefore suppresses their vortex by default and
+#: lets the environment wind shear the front.
+_EXTRATROPICAL_VORTEX_SCALE = 0.0
 
 
 @dataclass(frozen=True)
@@ -221,6 +236,62 @@ def _distance_bearing_km(
 def _smoothstep(lo: float, hi: float, x: np.ndarray) -> np.ndarray:
     t = np.clip((x - lo) / (hi - lo), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
+
+
+def cyclone_wind_field(
+    cyclones: Sequence[Cyclone],
+    *,
+    height: int,
+    width: int,
+    radius_km: float,
+    centers: Sequence[tuple[float, float]] | None = None,
+    taper: float = 1.25,
+) -> tuple[np.ndarray, np.ndarray]:
+    """East/north vortex wind of the storm tracks on an equirectangular grid.
+
+    Each cyclone contributes its Holland (1980) tangential wind around its
+    current centre, tapered smoothly to zero between ``0.9 × outer`` and
+    ``taper × outer``.  The circulation is counter-clockwise in the northern
+    hemisphere and clockwise in the southern hemisphere.  Adding this field to
+    the environment wind lets an advected cloud texture rotate around the storm
+    while the storm itself translates with the steering flow.
+
+    Extratropical comma clouds are front-driven; their track's ``rmax`` is not
+    a closed-core scale, so their vortex is suppressed by default
+    (``_EXTRATROPICAL_VORTEX_SCALE = 0``) and the environment wind shears the
+    front instead.
+
+    ``centers`` optionally overrides the track positions (for a Lagrangian
+    centre that moves during the animation); otherwise each cyclone's
+    ``lat_deg``/``lon_deg`` is used.  The profile shape is fixed at Holland's
+    common ``B = 1.5``; the cloud template's strength still comes from the
+    pressure deficit.
+    """
+    lat, lon = _latlon_grid(height, width)
+    east = np.zeros((height, width), dtype=np.float64)
+    north = np.zeros((height, width), dtype=np.float64)
+    for index, cyc in enumerate(cyclones):
+        if cyc.deficit_hpa <= 0.0:
+            continue
+        centre = centers[index] if centers is not None else (cyc.lat_deg, cyc.lon_deg)
+        centre_lat, centre_lon = float(centre[0]), float(centre[1])
+        distance, bearing = _distance_bearing_km(centre_lat, centre_lon, lat, lon, radius_km)
+        speed = holland_wind_m_s(
+            distance,
+            rmax_km=cyc.rmax_km,
+            central_pressure_hpa=cyc.central_pressure_hpa,
+            environment_pressure_hpa=cyc.environment_pressure_hpa,
+            lat_deg=centre_lat,
+            b=1.5,
+        )
+        if cyc.kind == "extratropical":
+            speed = speed * _EXTRATROPICAL_VORTEX_SCALE
+        weight = 1.0 - _smoothstep(0.9 * cyc.outer_radius_km, taper * cyc.outer_radius_km, distance)
+        speed = speed * weight
+        sign = 1.0 if centre_lat >= 0.0 else -1.0
+        east += -sign * speed * np.cos(bearing)
+        north += sign * speed * np.sin(bearing)
+    return east, north
 
 
 def _tropical_template(

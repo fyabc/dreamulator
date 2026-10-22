@@ -158,3 +158,70 @@ def test_empty_track_set_is_zero() -> None:
     out = cr.cyclone_alpha([], height=16, width=32, radius_km=6800.0)
     assert out.shape == (16, 32)
     assert not out.any()
+
+
+def test_cyclone_wind_field_direction_and_taper() -> None:
+    # Grid centres: lat 20.5 / lon 0.5 are exact 1-degree grid points.
+    north = cr.Cyclone(
+        lat_deg=20.5,
+        lon_deg=0.5,
+        central_pressure_hpa=950.0,
+        environment_pressure_hpa=1010.0,
+        rmax_km=100.0,
+        outer_radius_km=1000.0,
+    )
+    east, northward = cr.cyclone_wind_field([north], height=180, width=360, radius_km=6800.0)
+    row = 69  # lat 20.5
+    centre_col = 180  # lon 0.5
+    east_col = 181  # lon 1.5: ~111 km east of the centre
+    # Northern-hemisphere cyclone: counter-clockwise, so the east side flows north.
+    assert northward[row, east_col] > 5.0
+    assert abs(east[row, east_col]) < 0.3 * northward[row, east_col]
+    # North of the centre the flow is westward.
+    north_row = 68  # lat 21.5
+    assert east[north_row, centre_col] < -5.0
+    assert abs(northward[north_row, centre_col]) < 0.3 * abs(east[north_row, centre_col])
+    # Far outside the tapered outer radius the vortex contributes nothing.
+    assert abs(east[row, 210]) + abs(northward[row, 210]) < 0.1
+    # The axis itself has no tangential wind.
+    assert abs(east[row, centre_col]) + abs(northward[row, centre_col]) < 0.1
+
+    south = cr.Cyclone(
+        lat_deg=-20.5,
+        lon_deg=0.5,
+        central_pressure_hpa=950.0,
+        environment_pressure_hpa=1010.0,
+        rmax_km=100.0,
+        outer_radius_km=1000.0,
+    )
+    east_s, north_s = cr.cyclone_wind_field([south], height=180, width=360, radius_km=6800.0)
+    south_row = 110  # lat -20.5
+    # Southern-hemisphere cyclone: clockwise, so the east side flows south.
+    assert north_s[south_row, east_col] < -5.0
+
+
+def test_extratropical_vortex_is_suppressed() -> None:
+    extra = cr.Cyclone(
+        lat_deg=20.5,
+        lon_deg=0.5,
+        kind="extratropical",
+        central_pressure_hpa=950.0,
+        environment_pressure_hpa=1010.0,
+        rmax_km=100.0,
+        outer_radius_km=1000.0,
+    )
+    east, north = cr.cyclone_wind_field([extra], height=64, width=128, radius_km=6800.0)
+    assert not np.any(east)
+    assert not np.any(north)
+
+
+def test_cyclone_wind_field_zero_without_deficit() -> None:
+    quiet = cr.Cyclone(
+        lat_deg=20.5,
+        lon_deg=0.5,
+        central_pressure_hpa=1010.0,
+        environment_pressure_hpa=1010.0,
+    )
+    east, north = cr.cyclone_wind_field([quiet], height=32, width=64, radius_km=6800.0)
+    assert not np.any(east)
+    assert not np.any(north)

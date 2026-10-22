@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -1538,6 +1538,7 @@ def clouds_globe(
             "count": len(cyclones) if cyclones else 0,
             "source": "synthetic placeholder (L1 tracks pending)" if cyclones else None,
             "seed": cyclone_seed if cyclones else None,
+            "tracks": [asdict(c) for c in cyclones] if cyclones else [],
         },
         "atmosphere": (
             {

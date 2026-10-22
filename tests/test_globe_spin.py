@@ -63,3 +63,42 @@ def test_rotation_wraps_and_moves() -> None:
     assert not np.array_equal(first, quarter)
     assert first.shape == (96, 96, 3)
     assert first.dtype == np.uint8
+
+
+def test_cloud_grid_may_differ_from_surface() -> None:
+    surface, cloud = _textures()
+    spin = SpinRenderer(
+        surface,
+        cloud[::2, ::2],
+        res=64,
+        center_lon_deg=20.0,
+        center_lat_deg=10.0,
+        sun_lon_deg=30.0,
+        sun_lat_deg=10.0,
+        model=_model(),
+        view_samples=3,
+    )
+    frame = spin.frame(0.0)
+    assert frame.shape == (64, 64, 3)
+    spin.set_cloud(cloud)
+    assert spin.frame(0.0).shape == (64, 64, 3)
+
+
+def test_set_cloud_updates_the_field() -> None:
+    surface, cloud = _textures()
+    spin = SpinRenderer(
+        surface,
+        cloud,
+        res=96,
+        center_lon_deg=20.0,
+        center_lat_deg=10.0,
+        sun_lon_deg=30.0,
+        sun_lat_deg=10.0,
+        model=_model(),
+        view_samples=4,
+    )
+    clear = spin.frame(0.0)
+    spin.set_cloud(np.zeros_like(cloud))
+    assert not np.array_equal(spin.frame(0.0), clear)
+    spin.set_cloud(cloud)
+    np.testing.assert_array_equal(spin.frame(0.0), clear)

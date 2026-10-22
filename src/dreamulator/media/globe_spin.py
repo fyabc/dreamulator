@@ -78,8 +78,8 @@ class SpinRenderer:
         cloud = np.asarray(cloud_alpha, dtype=np.float64)
         if surface.ndim != 3 or surface.shape[2] != 3:
             raise ValueError("surface_rgb must have shape (h, w, 3)")
-        if cloud.shape != surface.shape[:2]:
-            raise ValueError("cloud_alpha must match the surface grid")
+        if cloud.ndim != 2:
+            raise ValueError("cloud_alpha must be a 2-D field")
         if ocean_mask is not None:
             ocean_mask = np.asarray(ocean_mask, dtype=np.float64)
             if ocean_mask.shape != surface.shape[:2]:
@@ -259,6 +259,20 @@ class SpinRenderer:
                 )
                 gain = gain * max(min(1.0 / max(overhead_luminance, 1e-6), 2.0), 0.5)
             self.gain = gain
+
+    def set_cloud(self, cloud_alpha: np.ndarray) -> None:
+        """Replace the cloud field (L4 time evolution) without touching the atmosphere.
+
+        The new field may have a different resolution from the surface texture;
+        the equirect sampler and the emboss tap offsets follow its grid.
+        """
+        cloud = np.asarray(cloud_alpha, dtype=np.float64)
+        if cloud.ndim != 2:
+            raise ValueError("cloud_alpha must be a 2-D field")
+        self.cloud = cloud
+        self.h_tex = gaussian_filter(cloud, 3.0)
+        self.tex_dlon = 360.0 / cloud.shape[1]
+        self.tex_dlat = 180.0 / cloud.shape[0]
 
     def frame(self, lon_offset_deg: float = 0.0) -> np.ndarray:
         """Render one frame with the textures shifted by ``lon_offset_deg``."""
