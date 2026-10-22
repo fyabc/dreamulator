@@ -1,4 +1,4 @@
-"""Unit tests for tidal_physics.py — Peale & Cassen heating + plate-speed scaling."""
+"""Unit tests for tidal_physics.py — Peale & Cassen heating + plate-borne heat flux."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dreamulator.engine.tidal_physics import (
     mean_motion_rad_s,
     ocean_equilibrium_tide_range_m,
     ocean_natural_period_h,
-    plate_speed_cm_yr,
+    plate_heat_flux_w_m2,
     resonance_factor,
     resonant_tidal_range_m,
     tidal_heat_flux_w_m2,
@@ -65,18 +65,24 @@ def test_tidal_heat_flux_nacrea() -> None:
     assert _nacrea_flux_w_m2() == pytest.approx(0.2685, rel=0.01)
 
 
-def test_plate_speed_nacrea_reproduces_15() -> None:
-    v = plate_speed_cm_yr(_nacrea_flux_w_m2(), v_ref_cm_yr=5.0, q_ref_w_m2=0.09, beta=1.0)
-    # Raw ~14.9 cm/yr; the 0.5 cm/yr rounding used in resolve_tidal_heating
-    # keeps the authored 15.0 unchanged.
-    assert v == pytest.approx(14.92, rel=0.01)
-    assert round(v * 2.0) / 2.0 == 15.0
+def test_plate_heat_flux_earth_anchor() -> None:
+    # Earth's mean plate speed and ~29% land reproduce its ~0.09 W/m² total.
+    assert plate_heat_flux_w_m2(5.0, 0.29) == pytest.approx(0.0906, abs=0.001)
 
 
-def test_plate_speed_earth_anchor() -> None:
-    # Earth's own flux (0.09) with β=1 must reproduce Earth's 5 cm/yr.
-    v = plate_speed_cm_yr(0.09, v_ref_cm_yr=5.0, q_ref_w_m2=0.09, beta=1.0)
-    assert v == pytest.approx(5.0)
+def test_plate_heat_flux_nacrea_below_budget() -> None:
+    # 12.5 cm/yr over 72% ocean: ~0.13 W/m², under the 0.19 W/m² quiet-phase
+    # heat flow (design-note 0017).
+    q = plate_heat_flux_w_m2(12.5, 0.278)
+    assert q == pytest.approx(0.133, abs=0.002)
+    assert q < 0.19
+
+
+def test_plate_heat_flux_scales_as_sqrt_speed() -> None:
+    # Oceanic part ∝ √v: quadrupling the speed doubles it.
+    ocean_1 = plate_heat_flux_w_m2(5.0, 0.0)
+    ocean_4 = plate_heat_flux_w_m2(20.0, 0.0)
+    assert ocean_4 == pytest.approx(2.0 * ocean_1)
 
 
 # Tidal-range parameters (tidal_effects.md): the ~44 m resonant equilibrium tide.

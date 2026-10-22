@@ -657,13 +657,64 @@ def _cross_matrix(v: np.ndarray) -> np.ndarray:
     return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
 
 
+def continental_slowdown(
+    mesh: CVTMesh, cell_ids: list[int], config: TerrainPipelineConfig
+) -> float:
+    """Rotation-rate factor of a plate from its current continental-cell fraction.
+
+    Thick, buoyant continental lithosphere resists motion: Earth's continental
+    plates move ~0.2–0.3× as fast as oceanic ones (Africa ~2 vs Pacific
+    ~10 cm/yr).  Linear in the continental fraction (§5.5).
+    """
+    if not cell_ids:
+        return 1.0
+    n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
+    return 1.0 - (1.0 - config.continental_plate_speed_factor) * n_cont / len(cell_ids)
+
+
+def mean_surface_speed_cm_yr(mesh: CVTMesh, plates: list[TectonicPlate], radius_km: float) -> float:
+    """Area-weighted mean surface speed |ω × r| over all cells (cm/yr)."""
+    xyz = mesh.cell_xyz
+    area = np.array([c.area_km2 for c in mesh.cells], dtype=np.float64)
+    if area.sum() <= 0.0:
+        area = np.ones(len(mesh.cells), dtype=np.float64)
+    total = 0.0
+    for p in plates:
+        if not p.cell_ids:
+            continue
+        idx = np.asarray(p.cell_ids, dtype=np.int64)
+        axis = np.array([p.euler_pole.x, p.euler_pole.y, p.euler_pole.z], dtype=np.float64)
+        axis /= max(float(np.linalg.norm(axis)), 1e-12)
+        r = xyz[idx] / np.linalg.norm(xyz[idx], axis=1, keepdims=True)
+        sin_theta = np.linalg.norm(np.cross(axis, r), axis=1)
+        total += p.euler_pole.omega_rad_yr * float((sin_theta * area[idx]).sum())
+    return total * radius_km * 1e5 / float(area.sum())
+
+
+def normalise_plate_speeds(
+    mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
+) -> None:
+    """Scale every rotation rate so the mean surface speed is the world's input.
+
+    Only ratios between plates come from the velocity field, the continental
+    slowdown and rift perturbations; the absolute rate is the authored
+    ``plate_speed_mean_cm_yr``.
+    """
+    v = mean_surface_speed_cm_yr(mesh, plates, config.radius_km)
+    if v <= 1e-12:
+        return
+    scale = config.plate_speed_mean_cm_yr / v
+    for p in plates:
+        p.euler_pole.omega_rad_yr *= scale
+
+
 def _coherent_poloidal_axis(config: TerrainPipelineConfig) -> np.ndarray:
     """Symmetry axis of the coherent poloidal flow.
 
-    Tidally-locked bodies (tidal plate-speed coupling on) anchor the flow to
-    the sub-planet (tidal) axis; otherwise the rotation axis (y = north).
+    Tidally-locked bodies anchor the flow to the sub-planet (tidal) axis;
+    otherwise the rotation axis (y = north).
     """
-    if config.tidal_plate_speed_enabled:
+    if config.tidally_locked:
         ax = lonlat_to_xyz(config.sub_planet_longitude_deg, config.sub_planet_latitude_deg)
         return np.asarray(ax, dtype=np.float64)
     return np.array([0.0, 1.0, 0.0], dtype=np.float64)
@@ -769,10 +820,10 @@ def _assign_coherent_euler_poles(
     fit to that field over its cells, so plate-motion directions are coherent
     but diverse (not all ⊥ the tidal axis).
     """
-    _, speed_max = config.plate_speed_range_cm_yr
     poloidal_axis = _coherent_poloidal_axis(config)
-    # Peak poloidal surface speed = speed_max → A = 2·speed_max.
-    poloidal_amp = 2.0 * speed_max
+    # Only speed ratios matter here: the rates are renormalised to the world's
+    # mean plate speed at the end (``normalise_plate_speeds``).
+    poloidal_amp = 2.0 * config.plate_speed_mean_cm_yr
 
     # Internal-heating convection diversity (§ 方向 3): random extra cells
     # generated ONCE so every plate sees the same global field.
@@ -790,21 +841,12 @@ def _assign_coherent_euler_poles(
         vel = coherent_velocity_field(pts, poloidal_axis, poloidal_amp, extra_fields)
         omega_fit[plate_id] = _fit_rotation_vector(pts, vel)
 
-    # Renormalise so the fastest plate matches speed_max (tidal-derived anchor).
-    max_omega = max((float(np.linalg.norm(w)) for w in omega_fit.values()), default=1.0)
-    scale = speed_max / max_omega if max_omega > 1e-12 else 1.0
-
     plates: list[TectonicPlate] = []
     for plate_id, cell_ids in sorted(plate_cells.items()):
         plate_idx = int(plate_id.split("_")[1])
-        omega_cm_yr = omega_fit[plate_id] * scale
-        # Continental slowdown (§5.5): scale the rotation by the plate's
-        # continental-cell fraction so continental rifts don't open as fast as
+        # Continental slowdown (§5.5): continental rifts don't open as fast as
         # mid-ocean ridges (Africa ~2 vs Pacific ~10 cm/yr ≈ 0.2–0.3).
-        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
-        cont_frac = n_cont / len(cell_ids) if cell_ids else 0.0
-        slowdown = 1.0 - (1.0 - config.continental_plate_speed_factor) * cont_frac
-        omega_cm_yr = omega_cm_yr * slowdown
+        omega_cm_yr = omega_fit[plate_id] * continental_slowdown(mesh, cell_ids, config)
         mag = float(np.linalg.norm(omega_cm_yr))
         if mag < 1e-15:
             axis = np.array([0.0, 0.0, 1.0])
@@ -830,6 +872,7 @@ def _assign_coherent_euler_poles(
         for cid in cell_ids:
             mesh.cells[cid].plate_id = plate_id
 
+    normalise_plate_speeds(mesh, plates, config)
     return plates
 
 
@@ -851,7 +894,6 @@ def assign_euler_poles(
     for cid, pid in cell_plate_map.items():
         plate_cells.setdefault(pid, []).append(cid)
 
-    speed_min, speed_max = config.plate_speed_range_cm_yr
     radius_cm = config.radius_km * 1e5  # for cm/yr → rad/yr conversion
 
     if config.coherent_motion:
@@ -862,8 +904,10 @@ def assign_euler_poles(
     for plate_id, cell_ids in sorted(plate_cells.items()):
         plate_idx = int(plate_id.split("_")[1])
 
-        speed_cm_yr = rng.uniform(speed_min, speed_max)
-        omega_rad_yr = speed_cm_yr / radius_cm
+        # Random relative speed; continental slowdown and the renormalisation to
+        # the mean plate speed below set the absolute rates.
+        speed_cm_yr = rng.uniform(0.2, 2.0) * config.plate_speed_mean_cm_yr
+        omega_rad_yr = speed_cm_yr * continental_slowdown(mesh, cell_ids, config) / radius_cm
 
         # Plate centroid (unit vector)
         centroid = np.array(
@@ -911,6 +955,7 @@ def assign_euler_poles(
         for cid in cell_ids:
             mesh.cells[cid].plate_id = plate_id
 
+    normalise_plate_speeds(mesh, plates, config)
     return plates
 
 

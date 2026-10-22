@@ -27,6 +27,10 @@
 #   pin_exponent           偏差指数化（>0，默认 1.0）。1.0=线性拉近（和旧行为
 #                          一致）；>1=加大高差：山峰被强力下压，平原温和调整。
 #                          配合中等 pin_strength 使用（例 0.3+1.5 或 0.4+2.0）。
+#                          无论指数取多少，拉动量都不超过到目标的偏差（最多拉到目标）。
+#   pin_crosses_sea_level  钉扎能否改变海陆（默认 false）。false：正目标只作用于陆地格、
+#                          负目标只作用于海洋格，只调高度不动海岸线（大陆平均海拔用）；
+#                          true：允许跨越海平面（陆桥、人工海峡）。
 #   sea_level_offset_m     局部海平面偏移（m，相对全局 sea_level_offset_m）。
 #                          正值=抬升局部海平面（淹没陆地/加深浅海），
 #                          负值=降低局部海平面（露出更多陆地）。
@@ -329,6 +333,7 @@ features:
     elongation: 1.0
     bearing_deg: 0.0
     elevation_target_m: 100.0
+    pin_crosses_sea_level: true   # 陆桥：允许把海底拉出海面
 
   - name: 曙光-逐日海峡1
     lon: 73.0
@@ -372,8 +377,9 @@ features:
     strength: -1.0              # 最深海洋
     elongation: 1.0
 
-  # 永耀岛 — 潮汐固定热点火山岛。向星点承受最强潮汐应力→地幔局部熔融→
-  # 单一巨型火山在固定位置持续堆积（不同于地球板块飘过热点形成的火山链）。
+  # 永耀岛：向星点火山省上最年轻的主火山，建成于最近一次潮汐期。火山省相对 Aegis 方向固定，
+  # 板块在其上移动，所以永耀岛已被带离源区约 100 km，其后沿板块运动方向排开更老、更低的
+  # 岛与环礁（design-notes/0017 §5）。
   # 位于 Aegis 深渊洋中央，Aegis 永悬天顶，为 nacrea 文明传说中的"世界之眼"。
   - name: 永耀岛
     lon: 0.4                    # 略偏向星点，不完全重合
@@ -489,3 +495,18 @@ overlays:
     noise_amplitude: 3.0    # 岛/峡密度与粗糙度
     elongation: 1.3
     bearing_deg: 0.0
+
+  # 北方陆间海西南水道（2026-10-21 作者要求）：陆间海主体与西部海盆之间必须保持水道，使内海东西两侧
+  # 都有出口（西侧经西部海盆通向西南外海）。用 overlay 不动板块；刻海场切开陆地，可跨越海平面的
+  # 高程钉扎保证核心一定在水下（门槛深度暂取 80 m，重新生成后随海峡结论重算）。
+  - name: 世界岛-北极陆间海西南水道
+    lon: -77.5
+    lat: 62.0
+    radius_deg: 1.2
+    strength: -1.5
+    noise_amplitude: 0.5
+    elongation: 2.0
+    bearing_deg: 90.0
+    elevation_target_m: -80.0
+    pin_strength: 1.0
+    pin_crosses_sea_level: true

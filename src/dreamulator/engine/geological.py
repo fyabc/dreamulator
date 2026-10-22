@@ -277,7 +277,7 @@ class GeologicalEngine(BaseEngine):
         from dreamulator.engine.physical_inputs import (
             PHYSICAL_CONFIG_FIELDS,
             resolve_and_apply_physical_parameters,
-            resolve_tidal_heating,
+            resolve_tidal_lock,
         )
         from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
@@ -325,15 +325,19 @@ class GeologicalEngine(BaseEngine):
 
         cfg.geography = load_geography_spec(self.find_input("geography.yaml"))
 
+        # History contract overrides (history-contract.md §3.4): optional
+        # `collisions` / `andean_margins` of plate_history.yaml.
+        history_path = self.find_input("plate_history.yaml")
+        if history_path is not None:
+            from dreamulator.map.orogen_contract import load_collision_overrides
+
+            cfg.collision_overrides = load_collision_overrides(history_path)
+
         # Canonical physical parameters from planets.yaml + stellar data
         # (satellite-aware stellar lookup — see physical_inputs docstring).
         planet_id = str(pars.get("planet_id") or "") or None
         before = {key: getattr(cfg, key) for key in PHYSICAL_CONFIG_FIELDS}
         warnings.extend(resolve_and_apply_physical_parameters(self, cfg, planet_id=planet_id))
-
-        # Tidal heating → plate speed coupling (opt-in via terrain_config).
-        # Runs after canonical physical params so radius / rotation are settled.
-        warnings.extend(resolve_tidal_heating(self, cfg, planet_id=planet_id))
 
         # Flag terrain_config physical values overridden by canonical inputs
         # (consistency-check pattern: warn only beyond a 20% divergence).
@@ -383,6 +387,10 @@ class GeologicalEngine(BaseEngine):
                 f"continental_fraction_min/max); raise continental_fraction_* or lower "
                 f"the land target to keep mid-ocean ridges submerged"
             )
+
+        # Tidal lock (anchors the coherent plate-motion field) and the plate-borne
+        # heat-flux check, after the land fraction is settled.
+        warnings.extend(resolve_tidal_lock(self, cfg, planet_id=planet_id))
 
         return cfg, warnings
 

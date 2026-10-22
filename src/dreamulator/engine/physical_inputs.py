@@ -113,6 +113,9 @@ _EARTH_ORBITAL_PERIOD_DAYS = 365.25
 # Cassini state 1, with its spin axis close to its own orbit normal.
 _SYNCHRONOUS_TOLERANCE = 0.05
 
+# Solar mass in Earth masses (IAU nominal values), for Kepler periods about a star.
+_SUN_MASS_EARTH = 332946.0
+
 # Equatorial-orbit convention (Cassini-state fossil): a prograde satellite
 # within this many degrees of the parent's axial tilt counts as lying in the
 # equatorial plane and fixes the spin-axis azimuth (see
@@ -346,9 +349,8 @@ def _heliocentric_eccentricity(body_id: str, index: _StellarIndex) -> float | No
     """Heliocentric-orbit eccentricity of *body_id* from the orbits table.
 
     Returns the eccentricity of the chain member that directly orbits the star.
-    A satellite's own orbit around its planet drives only tidal heating (see
-    ``resolve_tidal_heating``), NOT the seasonal insolation cycle — so it must
-    be ignored here.  Mirrors ``_heliocentric_distance_au``.
+    A satellite's own orbit around its planet drives only tidal heating, NOT the
+    seasonal insolation cycle — so it must be ignored here.  Mirrors ``_heliocentric_distance_au``.
     """
     current = body_id
     seen = {current}
@@ -442,6 +444,31 @@ def _spin_axis_longitude_deg(parent_id: str, index: _StellarIndex) -> float | No
     return (node - 90.0) % 360.0
 
 
+def _orbital_period_about_parent_days(body_id: str, index: _StellarIndex) -> float | None:
+    """Kepler period of *body_id* about its direct parent (days), or None.
+
+    Stars count through their solar masses, bodies through their Earth masses;
+    None when the orbit or a mass is missing.
+    """
+    from dreamulator.engine.tidal_physics import AU_M, EARTH_MASS_KG, mean_motion_rad_s
+
+    orbit = index.orbits.get(body_id)
+    if orbit is None:
+        return None
+    parent = str(orbit.get("parent_id"))
+    a_au = _as_float(orbit.get("semi_major_axis_au"))
+    if parent in index.star_ids:
+        star_mass = index.masses.get(parent)
+        parent_mass = star_mass * _SUN_MASS_EARTH if star_mass is not None else None
+    else:
+        parent_mass = index.body_masses.get(parent)
+    if a_au is None or parent_mass is None:
+        return None
+    mass = parent_mass + index.body_masses.get(body_id, 0.0)
+    n = mean_motion_rad_s(mass * EARTH_MASS_KG, a_au * AU_M)
+    return 2.0 * math.pi / n / 86400.0
+
+
 def _synchronous_satellite_pole(
     body_id: str, rotation_days: float | None, index: _StellarIndex
 ) -> float | None:
@@ -453,22 +480,15 @@ def _synchronous_satellite_pole(
     None for bodies orbiting a star, for unknown masses or elements, or when
     the rotation is not within ``_SYNCHRONOUS_TOLERANCE`` of the orbital period.
     """
-    from dreamulator.engine.tidal_physics import AU_M, EARTH_MASS_KG, mean_motion_rad_s
-
     orbit = index.orbits.get(body_id)
     if orbit is None or rotation_days is None:
         return None
-    parent = str(orbit.get("parent_id"))
-    if parent in index.star_ids:
+    if str(orbit.get("parent_id")) in index.star_ids:
         return None
-    a_au = _as_float(orbit.get("semi_major_axis_au"))
     node = _as_float(orbit.get("longitude_ascending_node_deg"))
-    parent_mass = index.body_masses.get(parent)
-    if a_au is None or node is None or parent_mass is None:
+    orbital_days = _orbital_period_about_parent_days(body_id, index)
+    if node is None or orbital_days is None:
         return None
-    mass = parent_mass + index.body_masses.get(body_id, 0.0)
-    n = mean_motion_rad_s(mass * EARTH_MASS_KG, a_au * AU_M)
-    orbital_days = 2.0 * math.pi / n / 86400.0
     if abs(rotation_days / orbital_days - 1.0) > _SYNCHRONOUS_TOLERANCE:
         return None
     return (node - 90.0) % 360.0
@@ -1805,23 +1825,22 @@ def _catalog_sky(
     return result
 
 
-def resolve_tidal_heating(
+def resolve_tidal_lock(
     engine: BaseEngine,
     config: TerrainPipelineConfig,
     planet_id: str | None = None,
 ) -> list[str]:
-    """Derive plate speed from tidal heating for a satellite (optional coupling).
+    """Derive ``config.tidally_locked`` and check the plate-borne heat flux.
 
-    When ``config.tidal_plate_speed_enabled`` and *planet_id* resolves to a
-    satellite whose orbit (eccentricity, semi-major axis) and parent mass are
-    available in ``stellar.yaml``, compute the Peale & Cassen tidal heat flux
-    and overwrite ``plate_speed_range_cm_yr`` and ``ocean_spreading_rate_cm_yr``
-    via the empirical power law ``v ∝ q^β`` (see ``map/tidal_physics.py`` and
-    ``docs/knowledge/geology/tidal_plate_speed.md``).
+    The body is tidally locked when its rotation period is within
+    ``_SYNCHRONOUS_TOLERANCE`` of its Kepler period about its direct parent
+    (orbit from ``stellar.yaml``, rotation from ``planets.yaml``).  A locked
+    body anchors the coherent plate-motion field to its sub-/anti-planet axis.
 
-    The fastest-plate speed is rounded to 0.5 cm/yr — the meaningful granularity
-    given the ±50% empirical uncertainty of the scaling — which keeps nacrea's
-    authored 15 cm/yr unchanged (the raw computed value is ~14.9 cm/yr).
+    When ``config.plate_heat_flow_budget_w_m2`` is set, the heat flux carried
+    by plates of ``config.plate_speed_mean_cm_yr`` (half-space cooling, see
+    ``tidal_physics.plate_heat_flux_w_m2``) must not exceed it: plates carry
+    only the conductive part of the heat budget (nacrea design-note 0017).
 
     Args:
         engine: Engine whose ``find_input`` resolves ``stellar.yaml``.
@@ -1831,93 +1850,30 @@ def resolve_tidal_heating(
     Returns:
         Warnings suitable for ``EngineResult.warnings``.
     """
+    from dreamulator.engine.tidal_physics import plate_heat_flux_w_m2
+
     warnings: list[str] = []
-    if not config.tidal_plate_speed_enabled:
-        return warnings
-
-    if planet_id is None:
-        planet, planet_warnings = load_planet_for_engine(engine, None)
-        warnings.extend(planet_warnings)
-        if planet is None:
+    budget = config.plate_heat_flow_budget_w_m2
+    if budget is not None:
+        q_plate = plate_heat_flux_w_m2(config.plate_speed_mean_cm_yr, config.target_land_fraction)
+        logger.info(
+            "Plate-borne heat flux %.3f W/m2 at mean plate speed %.1f cm/yr (budget %.3f)",
+            q_plate,
+            config.plate_speed_mean_cm_yr,
+            budget,
+        )
+        if q_plate > budget:
             warnings.append(
-                "tidal_plate_speed enabled but no planet resolved; keeping authored plate speed"
+                f"plates at {config.plate_speed_mean_cm_yr:.1f} cm/yr carry "
+                f"{q_plate:.3f} W/m2, above the heat-flow budget {budget:.3f} W/m2"
             )
-            return warnings
-        planet_id = planet.id
 
-    input_data = _read_mapping(engine, "stellar.yaml")
-    if input_data is None:
-        warnings.append(
-            "tidal_plate_speed enabled but stellar.yaml not found; keeping authored plate speed"
-        )
+    planet, planet_warnings = load_planet_for_engine(engine, planet_id)
+    warnings.extend(planet_warnings)
+    if planet is None:
         return warnings
-
-    # Index body masses (id -> M⊕) from the ``bodies`` section.
-    body_mass_earth: dict[str, float] = {}
-    for body in input_data.get("bodies") or []:
-        if not isinstance(body, dict):
-            continue
-        bid = body.get("id")
-        mass = body.get("mass_earth")
-        if bid is not None and mass is not None:
-            with suppress(TypeError, ValueError):
-                body_mass_earth[str(bid)] = float(mass)
-
-    orbit: dict[str, Any] | None = None
-    for entry in input_data.get("orbits") or []:
-        if isinstance(entry, dict) and str(entry.get("body_id")) == planet_id:
-            orbit = entry
-            break
-    if orbit is None:
-        warnings.append(f"no orbit entry for '{planet_id}'; keeping authored plate speed")
-        return warnings
-
-    parent_id = orbit.get("parent_id")
-    eccentricity = orbit.get("eccentricity")
-    semi_major_axis_au = orbit.get("semi_major_axis_au")
-    parent_mass_earth = body_mass_earth.get(str(parent_id)) if parent_id is not None else None
-    if eccentricity is None or semi_major_axis_au is None or parent_mass_earth is None:
-        warnings.append(
-            f"incomplete orbit/body data for '{planet_id}'; keeping authored plate speed"
-        )
-        return warnings
-
-    from dreamulator.engine.tidal_physics import (
-        AU_M,
-        EARTH_MASS_KG,
-        mean_motion_rad_s,
-        plate_speed_cm_yr,
-        tidal_heat_flux_w_m2,
-        tidal_heating_power_w,
-    )
-
-    radius_m = config.radius_km * 1000.0
-    a_m = float(semi_major_axis_au) * AU_M
-    mp_kg = float(parent_mass_earth) * EARTH_MASS_KG
-    n = mean_motion_rad_s(mp_kg, a_m)
-
-    heating_w = tidal_heating_power_w(
-        mass_primary_kg=mp_kg,
-        radius_m=radius_m,
-        semi_major_axis_m=a_m,
-        eccentricity=float(eccentricity),
-        mean_motion_rad_s=n,
-        k2_over_q=config.tidal_k2_over_q,
-    )
-    flux = tidal_heat_flux_w_m2(heating_w, radius_m)
-    v_max = plate_speed_cm_yr(
-        flux,
-        v_ref_cm_yr=config.tidal_plate_speed_v_ref_cm_yr,
-        q_ref_w_m2=config.tidal_plate_speed_q_ref_w_m2,
-        beta=config.tidal_plate_speed_beta,
-    )
-    v_max = round(v_max * 2.0) / 2.0  # round to 0.5 cm/yr
-    v_min = config.plate_speed_range_cm_yr[0]
-    config.plate_speed_range_cm_yr = (v_min, v_max)
-    config.ocean_spreading_rate_cm_yr = round(config.tidal_spreading_ratio * v_max * 2.0) / 2.0
-
-    warnings.append(
-        f"tidal heating {heating_w:.3e} W ({flux:.3f} W/m2) -> plate speed max "
-        f"{v_max:.1f} cm/yr, half-spreading {config.ocean_spreading_rate_cm_yr:.1f} cm/yr"
-    )
+    rotation = _as_float(getattr(planet, "rotation_period_days", None))
+    orbital_days = _orbital_period_about_parent_days(planet.id, _index_stellar_data(engine))
+    if rotation is not None and orbital_days is not None:
+        config.tidally_locked = abs(rotation / orbital_days - 1.0) <= _SYNCHRONOUS_TOLERANCE
     return warnings

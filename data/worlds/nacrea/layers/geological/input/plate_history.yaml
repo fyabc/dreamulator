@@ -1,7 +1,8 @@
 # Nacrea 地质历史的创作设定（可选输入）
 #
-# 只供古地理倒推（板块拓扑层，src/dreamulator/map/paleo_walk.py）读取，不参与现状地形合成；
-# 改动本文件不会触发地形重建。格式见 docs/design/proposals/geological-timeline.md §5.1。
+# sutures 只供古地理倒推读取，不参与现状地形合成，格式见 docs/design/proposals/geological-timeline.md §5.1。
+# collisions 与 andean_margins（可选，本文件暂未使用）是历史契约的作者覆盖，参与现状地形合成，改动会触发
+# 地形重建，格式见 docs/design/proposals/history-contract.md §3.4；不写时碰撞开始时刻由构造演化推导。
 #
 # sutures：古缝合带。倒推到碰撞年龄时，持有缝合带的板块沿折线切开，离开的一侧在倒推中远离、
 # 在正向时间里与另一侧相向汇聚。

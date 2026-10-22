@@ -194,6 +194,22 @@ class VoronoiCell(BaseModel):
             "(§3.6): a boundary that rifted longer/faster gets a wider rift sea."
         ),
     )
+    convergent_duration_my: float = Field(
+        default=0.0,
+        description=(
+            "How long this cell has been continuously on a convergent boundary at the end "
+            "of tectonic evolution, in Myr (reset whenever the boundary leaves it).  "
+            "Source of the collision onset age in the history contract "
+            "(history-contract.md §3.3)."
+        ),
+    )
+    convergent_run_km: float = Field(
+        default=0.0,
+        description=(
+            "Convergence accumulated during that continuous stretch, in km — the "
+            "integrated convergence since collision onset (history-contract.md §3.3)."
+        ),
+    )
 
     # Climate properties (filled by climate simulator)
     temperature_C: float | None = Field(

@@ -6,7 +6,7 @@ boundary_detector, terrain_synthesizer, export, terrain_pipeline).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .geography import GeographySpec
+    from .orogen_contract import CollisionOverride
 
 
 # ---------------------------------------------------------------------------
@@ -110,25 +111,22 @@ class TerrainPipelineConfig:
 
     # Tectonic plates
     num_plates: int = 20
-    plate_speed_range_cm_yr: tuple[float, float] = (1.0, 10.0)
-    # ---- Tidal heating → plate speed coupling (see tidal_plate_speed.md) ----
-    # When enabled, the fastest-plate speed and ocean half-spreading rate are
-    # *derived* from tidal heating instead of the authored plate_speed_max /
-    # spreading_rate values.  Requires a satellite body whose orbit (e, a) and
-    # parent mass resolve from stellar.yaml (see physical_inputs.resolve_tidal_heating).
-    tidal_plate_speed_enabled: bool = False
-    # Power-law exponent v ∝ q^β.  Literature range [0.5, 1.5]; 1.0 = linear
-    # (matches most thermal-evolution models; reproduces ~15 cm/yr for nacrea).
-    tidal_plate_speed_beta: float = 1.0
-    # Earth reference anchors: mean plate speed (cm/yr) and total surface heat
-    # flux (W/m²).  0.09 = 47 TW over Earth's area (44–47 TW total heat flow).
-    tidal_plate_speed_v_ref_cm_yr: float = 5.0
-    tidal_plate_speed_q_ref_w_m2: float = 0.09
-    # Tidal dissipation factor k₂/Q (physical_params.md: k₂=0.3, Q=100).
-    tidal_k2_over_q: float = 0.003
-    # Ocean half-spreading rate as a fraction of the fastest plate speed
-    # (Earth ~0.4; nacrea authored 6/15 = 0.4).
-    tidal_spreading_ratio: float = 0.4
+    # Area-weighted mean surface speed of all plates (cm/yr) — a world input.
+    # Plates carry only the conductive part of a world's heat loss; with
+    # heat-pipe volcanism the total heat flux does not set plate speed (nacrea
+    # design-note 0017), so the speed is authored and its plate-borne heat flux
+    # is checked against ``plate_heat_flow_budget_w_m2``.  Earth ≈ 5 cm/yr.
+    # Every plate-motion change (pole assignment, each tectonic resample)
+    # renormalises the rotation rates to this mean.
+    plate_speed_mean_cm_yr: float = 5.0
+    # Present surface heat flux the plates must not exceed (W/m²); None skips
+    # the check.  Plate-borne flux follows half-space cooling
+    # (``tidal_physics.plate_heat_flux_w_m2``).
+    plate_heat_flow_budget_w_m2: float | None = None
+    # Derived, not authored: body rotates synchronously with its orbit about its
+    # parent (``physical_inputs.resolve_tidal_lock``).  Anchors the coherent
+    # plate-motion field to the sub-/anti-planet axis.
+    tidally_locked: bool = False
     # ---- Coherent plate motion (2026-08) ----
     # Replace the per-plate *random* Euler-pole direction (Cortial 2019) with a
     # coherent poloidal velocity field derived from tidal-heating geometry
@@ -242,6 +240,10 @@ class TerrainPipelineConfig:
     # procedural (per-plate crust fractions). When present, crust is assigned
     # from a per-cell land-bias field via global threshold instead.
     geography: GeographySpec | None = None
+    # History contract, orogen part (history-contract.md §3.4): optional per-collision
+    # overrides from plate_history.yaml (`collisions`, `andean_margins`), loaded by the
+    # engine.  Empty = every segment uses the values derived from tectonic evolution.
+    collision_overrides: list[CollisionOverride] = field(default_factory=list)
     # Blend weight of the authored land-bias field vs fBm texture when
     # geography is present: score = w*field + (1-w)*fbm.
     # 1.0 = hard anchors (sharp), 0.0 = pure noise (anchors ignored).
@@ -286,6 +288,11 @@ class TerrainPipelineConfig:
     # (Cortial 2019: δt = 2 My at 500K points; Dreamulator scales
     # automatically so the fastest plate moves ~3 cells/step).
     tectonic_dt_my: float = 0.0
+    # Duration of the present tectonic configuration's evolution (My).  > 0
+    # switches to duration mode: δt from the world's actual fastest plate
+    # (≤ 3 cells per step), steps = duration / δt, a re-partition every step.
+    # 0 keeps the step-count mode above.  Closure class: world history input.
+    tectonic_duration_my: float = 0.0
     # ---- Plate rifting (Cortial 2019 §4.4) ----
     # Base Poisson rate λ₀ for plate rifting (Cortial 2019 §4.4).
     # P = λ·e^{-λ} where λ = λ₀ · A/A₀ (A₀ = world mean plate area).
@@ -293,6 +300,9 @@ class TerrainPipelineConfig:
     #  With 3× cap boost + 10-step Voronoi interval, produces:
     #    0.01 → 30-40 plates at 100 steps, ~60 at 200 steps
     rift_base_rate: float = 0.01
+    # Rifting rate per My (same λ semantics as rift_base_rate, but per unit
+    # time so it does not depend on δt).  > 0 overrides rift_base_rate.
+    rift_rate_per_my: float = 0.0
     # Number of sub-plates created per rifting event (2-4 in the paper).
     rift_min_pieces: int = 2
     rift_max_pieces: int = 3
@@ -445,12 +455,6 @@ class TerrainPipelineConfig:
     # level of −134 m (Lambeck et al. 2014).  Closure class: approximate
     # derivation; set per world from its own sea-level history.
     shelf_break_depth_m: float = 130.0
-    # Legacy switch for worlds whose canonical coastline was fixed by the old
-    # distance-only shelf (the author pins lift shallow coastal cells into
-    # land, so the coastline depends on those depths).  The land mask is then
-    # decided with the old shelf and the physical shelf is written onto the
-    # remaining ocean.  New worlds leave it off.
-    shelf_legacy_coastline: bool = False
     # Coastal plain: width in km from coastline inland for gentle
     # elevation ramp-down.  Earth average: 50–100 km; wider passive
     # margins 100–200 km.
@@ -833,9 +837,8 @@ class TerrainPipelineConfig:
     # Replaces the uniform oceanic base elevation with a depth gradient: ocean
     # floor deepens with distance from mid-ocean ridges (divergent boundaries)
     # following depth = ridge_depth + coeff · sqrt(age).
-    # age ≈ distance_to_ridge_km / (spreading_rate_cm_yr × 10).  (×10 = cm/yr → km/Myr)
+    # age = max_age · d_ridge / (d_ridge + d_trench).
     ocean_age_depth_enabled: bool = False
-    ocean_spreading_rate_cm_yr: float = 5.0  # half-rate, Earth: 1–5 cm/yr
     ocean_ridge_depth_m: float = 2500.0  # depth at mid-ocean ridge (age=0)
     ocean_subsidence_coeff: float = 350.0  # sqrt(age) multiplier, Earth ≈ 350
     ocean_max_age_myr: float = 100.0  # steady-state age (lithosphere equilibrates)
@@ -894,18 +897,10 @@ class TerrainPipelineConfig:
         alias_map = {
             "num_cells": "num_nodes",
             "voronoi_num_cells": "num_nodes",
-            "plate_speed_min_cm_yr": "_plate_speed_min",
-            "plate_speed_max_cm_yr": "_plate_speed_max",
         }
         for old, new in alias_map.items():
             if old in flat:
                 flat[new] = flat.pop(old)
-
-        # Reconstruct speed range tuple
-        smin = flat.pop("_plate_speed_min", None)
-        smax = flat.pop("_plate_speed_max", None)
-        if smin is not None and smax is not None:
-            flat["plate_speed_range_cm_yr"] = (smin, smax)
 
         # Filter to known fields
         known = {f.name for f in cls.__dataclass_fields__.values()}

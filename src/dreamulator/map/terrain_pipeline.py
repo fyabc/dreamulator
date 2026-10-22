@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .models import CVTMesh, TectonicPlate
+    from .orogen_contract import OrogenContract
     from .pipeline_types import TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ class TerrainPipelineResult:
     stage_timings: dict[str, float] = field(default_factory=dict)
     elapsed_seconds: float = 0.0
     output_dir: Path | None = None
+    orogen_contract: OrogenContract | None = None
 
 
 def _resolve_stages(requested: list[str] | None) -> list[str]:
@@ -148,6 +150,8 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
 _TECTONICS_CELL_FIELDS = (
     "cumulative_convergence_km",
     "cumulative_divergence_km",
+    "convergent_duration_my",
+    "convergent_run_km",
     "elevation",
     "crust_type",
 )
@@ -364,9 +368,10 @@ def run_terrain_pipeline(
                 )
                 _progress.start()
 
-                def _cb(step: int, _total: int) -> None:
+                def _cb(step: int, total: int) -> None:
                     if _progress is not None:
-                        _progress.update(task_id, completed=step)
+                        # duration mode derives the step count inside the evolution
+                        _progress.update(task_id, completed=step, total=total)
 
                 progress_cb = _cb
             except ImportError:
@@ -462,6 +467,19 @@ def run_terrain_pipeline(
             raise RuntimeError(
                 "Plates are required for terrain synthesis. Run 'plates' stage first."
             )
+        # History contract, orogen part (history-contract.md §3): convergent segments
+        # and their shortening history, read from the tectonic-stage fields.
+        from .orogen_contract import build_orogen_contract
+
+        result.orogen_contract = build_orogen_contract(
+            result.mesh,
+            result.plates,
+            config.radius_km,
+            config.collision_overrides,
+            max_onset_myr=config.tectonic_duration_my or None,
+        )
+        for _w in result.orogen_contract.warnings:
+            logger.warning("  orogen contract: %s", _w)
         terrain_fp = build_stage_fingerprint(
             "terrain",
             config,
@@ -487,7 +505,13 @@ def run_terrain_pipeline(
         if "terrain" not in result.stages_completed:
             _stage_begin("terrain")
             t = time.time()
-            synthesize_terrain(result.mesh, result.plates, config, raster_bias=raster_bias)
+            synthesize_terrain(
+                result.mesh,
+                result.plates,
+                config,
+                raster_bias=raster_bias,
+                orogen_contract=result.orogen_contract,
+            )
             result.stages_completed.append("terrain")
             result.stage_timings["terrain"] = time.time() - t
             _stage_end(result.stage_timings["terrain"])
@@ -599,6 +623,10 @@ def run_terrain_pipeline(
                 output_dir,
                 config,
             )
+            if result.orogen_contract is not None:
+                from .orogen_contract import save_orogen_contract
+
+                save_orogen_contract(output_dir / "orogen_contract.json", result.orogen_contract)
             result.output_dir = output_dir
 
         result.stages_completed.append("export")

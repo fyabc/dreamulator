@@ -33,9 +33,9 @@ plates:
   num_plates: 20           # plate count (requested; rifting may increase it)
   plate_algorithm: cortial2019
   tectonic_algorithm: cortial2019   # time evolution; "" = static plates
-  tectonic_steps: 50       # evolution steps (0 = skip; coastlines look blocky)
+  tectonic_duration_my: 76.0  # evolution duration (My); δt from the fastest plate, steps = duration / δt
   tectonic_dt_my: 0.0      # step size in Myr (0 = auto-scale)
-  rift_base_rate: 0.005    # plate rifting rate (lower = large plates survive)
+  rift_rate_per_my: 0.0033  # plate rifting rate per My (lower = large plates survive)
   boundary_warp: 0.6       # low-frequency warp of plate boundaries (0 = straight
                            # geodesics; 0.5–0.8 gives arc-shaped, segmented margins)
   boundary_uplift_noise: 0.8  # low-frequency uplift modulation along margins

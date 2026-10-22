@@ -520,6 +520,8 @@ STATIC_CELL_COLUMNS: dict[str, str] = {
     "tangential_fraction": "f",
     "cumulative_convergence_km": "f",
     "cumulative_divergence_km": "f",
+    "convergent_duration_my": "f",
+    "convergent_run_km": "f",
     "flow_direction": "f",
     "flow_accumulation": "f",
     "river_id": "s",

@@ -1,4 +1,4 @@
-# 潮汐加热 → 板块速度标度律
+# 内热与板块速度
 
 ## 核心概念
 
@@ -61,15 +61,32 @@ $$v = v_\oplus \left(\frac{q}{q_\oplus}\right)^{\beta}$$
    （0.09）还是地幔对流热流（~0.06），都改变结果。潮汐加热深部集中（挠曲耗散），
    可能比放射性加热（分散）更有效地驱动对流——这是支持 β 偏高的论点，但未定论。
 
+## 热管体制下的限制：总热流不决定板块速度
+
+上面的标度律假定内热全部由板块构造排出。强潮汐加热的岩质天体并非如此：木卫一的热流约
+2.4 W/m²，几乎全部由热管火山排出，没有板块。热管体制里岩浆把热量直接带到地表，喷出层被
+掩埋并向下平流，岩石圈反而变厚变冷（Moore & Webb 2013；Kankanamge & Moore 2016）。热管与
+板块可以并存，此时板块只排出传导部分，其余由火山排出，所以不能用总热流代入 v ∝ q^β。
+
+板块所排热流可以由板块速度直接估算（近似推导）。按半空间冷却，洋底热流 ∝ 1/√年龄；在洋盆
+宽度不变时，洋底年龄 ∝ 1/v，所以洋底平均热流 ∝ √v。以地球为标尺（Pollack, Hurter & Johnson
+1993：洋底平均 0.101 W/m²、大陆 0.065 W/m²，板块平均速度约 5 cm/yr）：
+
+$$q_\text{plate} = (1-f_\text{land})\,q_{\oplus,\text{ocean}}\sqrt{v/v_\oplus} + f_\text{land}\,q_{\oplus,\text{cont}}$$
+
+地球自身（f_land ≈ 0.29）代入得约 0.09 W/m²，与总热流一致。若要让板块排出 1 W/m²，板块速度
+需达到地球的约 100 倍，任何地形都不允许，这正是热管必须存在的论据。
+
 ## 在本项目（dreamulator）中的应用
 
-- 实现：`src/dreamulator/engine/tidal_physics.py`（纯函数）+ `physical_inputs.py:resolve_tidal_heating`
-  （读 stellar.yaml 的 e、a、母体质量 → 算 Ė → 算 v）。
-- 默认参数：β=1.0、`v_⊕`=5 cm/yr、`q_⊕`=0.09 W/m²，v 以 0.5 cm/yr 粒度取整。
-- **nacrea**：q_tidal ≈ 0.27 W/m² = 3× 地球 → v = 5 × 3 = **15 cm/yr**（β=1.0 自然给出，
-  保持手写终值不变）；半扩张速率 = 0.4 × 15 = 6 cm/yr。
-- 定位：**自洽性校验 + 可调参数**，非精确预测。3.3× 与 3.0× 的 10% 差异远小于 Q（±50%）
-  与 β 的不确定，故不为追求整数倍数而微调参数。
+- 板块速度是世界输入：`plate_speed_mean_cm_yr`（面积加权平均地表速度），引擎把全部板块
+  转速按同一比例缩放到这一均值（`plate_generator.py::normalise_plate_speeds`），构造演化中
+  每次重剖分后重算大陆减速并重新归一。
+- 一致性检查：`tidal_physics.py::plate_heat_flux_w_m2` 按上式给出板块所排热流，超过
+  `plate_heat_flow_budget_w_m2`（当代地表热流）时引擎警告（`physical_inputs.py::resolve_tidal_lock`）。
+- **nacrea**：平均 12.5 cm/yr，陆地 27.8%，板块排出约 0.13 W/m²，低于当代静息期热流
+  0.19 W/m²；其余热量与潮汐期的大部分热量由热管火山排出（nacrea design-notes 0017）。
+- 上面的 v ∝ q^β 标度律保留为知识背景，用于讨论纯板块体制的世界；引擎不再用它推导速度。
 
 ## 参考资料
 
@@ -84,5 +101,10 @@ $$v = v_\oplus \left(\frac{q}{q_\oplus}\right)^{\beta}$$
   https://www.sciencedirect.com/science/article/abs/pii/S0012821X11004559
 - O'Neill, C., & Lenardic, A. (2007). Geological consequences of super-sized Earths.
   *Geophysical Research Letters*, 34(19).（Valencia 争论的对立面）
+- Moore, W. B., & Webb, A. A. G. (2013). Heat-pipe Earth. *Nature*, 501, 501–505.
+- Kankanamge, D. G. J., & Moore, W. B. (2016). Heat transport in the Hadean mantle: From heat pipes
+  to plates. *Geophysical Research Letters*, 43, 3208–3214.
+- Pollack, H. N., Hurter, S. J., & Johnson, J. R. (1993). Heat flow from the Earth's interior:
+  Analysis of the global data set. *Reviews of Geophysics*, 31(3), 267–280.
 - Turcotte, D. L., & Schubert, G. (2014). *Geodynamics* (3rd ed.). Cambridge University Press.
   （边界层理论：`Nu ∝ Ra^(1/3)`、`v ∝ Ra^(2/3)`）

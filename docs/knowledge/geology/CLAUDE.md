@@ -7,7 +7,7 @@
 - `terrain_synthesis.md` — 地形合成（双峰基准、构造效应、fBm 噪声）
 - `isostasy_elevation_limits.md` — 地壳均衡与高程极限（Airy/Pratt 补偿、挠曲海沟、重力标度；2026-08）
 - `cortial_2019_notes.md` — Cortial et al. 2019 论文解读（自 geological-pipeline.md 附录 D 上浮）
-- `tidal_plate_speed.md` — 潮汐加热→板块速度标度律（v ∝ q^β、Valencia vs O'Neill&Lenardic 争论、金星悖论；2026-08）
+- `tidal_plate_speed.md` — 内热与板块速度的关系（v ∝ q^β 标度律与争论、金星悖论；热管体制下板块只排出传导部分，板块排热按半空间冷却 ∝ √v）
 - `supercontinent_cycle.md` — 超大陆旋回周期的标度估算（T ∝ R/v、阶段比例、裂谷沿古缝合带张开；nacrea 约 0.3–2.5 亿年；2026-10）
 - `hydrology.md` — D8 流向 / priority-flood 洼地填平 / 流量累积 / 河网分级（2026-08）
 - `inland_water_classification.md` — 内陆水体分类学：water_class × is_lake 二维语义矩阵、尺寸分界依据、各层湖语义与不变式（2026-10）

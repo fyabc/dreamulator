@@ -1,18 +1,15 @@
-"""Tidal heating and its geodynamic consequence (plate speed) — pure physics.
+"""Tidal heating and the heat carried by plates — pure physics.
 
 Implements the Peale & Cassen (1978) equilibrium-tide dissipation power for a
-synchronously rotating satellite, plus an empirical scaling from tidal heat
-flux to plate speed.  No I/O, no RNG — independently unit-testable.
+synchronously rotating satellite, and the half-space-cooling estimate of the
+heat flux that plates of a given mean speed carry.  No I/O, no RNG —
+independently unit-testable.
 
-The plate-speed scaling ``v ∝ q^β`` is an *order-of-magnitude estimate*, not a
-precise law: the exponent spans β ∈ [0.5, 1.5] across the literature and the
-mapping from heat flux to plate speed is regime-dependent — heat flux alone
-does not even guarantee plate tectonics (the Venus paradox).  See
-``docs/knowledge/geology/tidal_plate_speed.md`` for the Valencia vs
-O'Neill & Lenardic debate and the full reference list.
-
-Defaults anchor on Earth (v=5 cm/yr at q=0.09 W/m² total surface heat flux)
-and reproduce ~15 cm/yr for nacrea's ~3× tidal flux with β=1.
+Total tidal heat does not set plate speed: on a strongly tidally heated world
+most of the heat leaves by heat-pipe volcanism and plates carry only the
+conductive part (nacrea design-note 0017).  Plate speed is therefore a world
+input whose plate-borne heat flux is checked against the world's heat budget.
+See ``docs/knowledge/geology/tidal_plate_speed.md``.
 """
 
 from __future__ import annotations
@@ -78,19 +75,28 @@ def tidal_heat_flux_w_m2(tidal_heating_w: float, radius_m: float) -> float:
     return tidal_heating_w / (4.0 * math.pi * radius_m**2)
 
 
-def plate_speed_cm_yr(
-    tidal_flux_w_m2: float,
-    *,
-    v_ref_cm_yr: float,
-    q_ref_w_m2: float,
-    beta: float,
-) -> float:
-    """Empirical power-law from tidal heat flux to plate speed.
+# Earth anchors for the plate-borne heat flux (Pollack, Hurter & Johnson 1993):
+# mean oceanic 0.101 W/m² and continental 0.065 W/m² at a mean plate speed of
+# ~5 cm/yr.  Observation fit; calibration domain = present-day Earth.
+EARTH_OCEANIC_HEAT_FLUX_W_M2 = 0.101
+EARTH_CONTINENTAL_HEAT_FLUX_W_M2 = 0.065
+EARTH_MEAN_PLATE_SPEED_CM_YR = 5.0
 
-    ``v = v_ref · (q / q_ref)^β``.  See ``docs/knowledge/geology/tidal_plate_speed.md``
-    for the literature range (β ∈ [0.5, 1.5]) and the caveats.
+
+def plate_heat_flux_w_m2(mean_plate_speed_cm_yr: float, land_fraction: float) -> float:
+    """Global mean heat flux carried by plate tectonics (W/m²).
+
+    Half-space cooling: sea-floor heat flux ∝ 1/√age, and for a fixed basin
+    width the sea-floor age ∝ 1/v, so the mean oceanic flux scales as √v
+    (approximate derivation, Turcotte & Schubert 2014 §4.16).  Continental
+    lithosphere is not recycled by spreading and keeps Earth's conductive flux.
+
+        q = (1 − f_land) · q⊕,ocean · √(v / v⊕) + f_land · q⊕,cont
     """
-    return v_ref_cm_yr * math.pow(tidal_flux_w_m2 / q_ref_w_m2, beta)
+    ocean = EARTH_OCEANIC_HEAT_FLUX_W_M2 * math.sqrt(
+        max(mean_plate_speed_cm_yr, 0.0) / EARTH_MEAN_PLATE_SPEED_CM_YR
+    )
+    return (1.0 - land_fraction) * ocean + land_fraction * EARTH_CONTINENTAL_HEAT_FLUX_W_M2
 
 
 def tidal_potential_scale_m(

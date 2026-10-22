@@ -11,10 +11,13 @@ Each time step:
     1. Rotate plate centroids around their Euler poles (Rodrigues).
     2. Find nearest CVT cells → new seeds.
     3. Re-run spherical Voronoi partition → shifted boundaries.
-    4. Apply subduction uplift (§4.1) + collision orogeny (§4.2)
-       at convergent cells (those that changed plate).
-    5. Apply ridge profile (§4.3) at divergent cells.
-    6. Apply erosion / subsidence (§5) globally.
+    4. Accumulate convergence / divergence across the plate boundaries
+       (drives orogen and rift widths in terrain synthesis).
+
+Cortial's per-step elevation effects (subduction uplift, collision orogeny,
+ridge profile, erosion) are not run: terrain synthesis rebuilds every cell's
+elevation from the crust, the boundaries and the accumulated convergence, so
+an evolved elevation would be overwritten unread.
 
 Time-step auto-scaling
 ----------------------
@@ -24,7 +27,6 @@ moves ~3 CVT cells per step, regardless of mesh resolution:
 At 4K cells δt ≈ 10 My; at 100K cells δt ≈ 2 My.
 Set ``tectonic_dt_my`` explicitly to override.
 
-All constants from Cortial et al. 2019 Table 1 (see Appendix D.7).
 """
 
 from __future__ import annotations
@@ -45,39 +47,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# Cortial et al. (2019) Table 1 — physical constants
+# Constants
 # =============================================================================
 
-# Reference values
-_RADIUS_KM = 6370.0
-_V0_MM_YR = 100.0  # v₀ — max plate speed (mm/yr)
-_Z_C_KM = 10.0  # z_c — max continental elevation (km)
-_Z_T_KM = -10.0  # z_t — trench depth (km)
-_Z_A_KM = -6.0  # z_a — abyssal plain (km)
-_Z_R_KM = -1.0  # z_r — max ridge elevation (km)
-
-# Subduction (§4.1)
-_U0_MM_YR = 0.6  # u₀ — reference uplift rate (mm/yr)
-_R_S_KM = 1800.0  # r_s — subduction influence radius (km)
-
-# Collision (§4.2)
-_R_C_KM = 4200.0  # r_c — collision influence radius (km)
-_DELTA_C_PER_KM = 1.3e-5  # Δ_c — collision coefficient (km⁻¹)
-
-# Erosion (§5)
-_EPSILON_C_MM_YR = 0.03  # ε_c — continental erosion (mm/yr)
-_EPSILON_O_MM_YR = 0.04  # ε_o — oceanic subsidence (mm/yr)
-_EPSILON_T_MM_YR = 0.3  # ε_t — trench sedimentation (mm/yr)
+# Duration mode (tectonic_duration_my > 0): the fastest plate moves at most this
+# many cells per step, so a re-partition every step tracks its motion
+# (numerical stabilisation, same 3-cell rule as the legacy auto δt).
+_CELLS_PER_STEP = 3.0
+# Rift cooldown: a newborn fragment waits this long before it may rift again
+# (5 legacy steps of 1.62 My; Gondwana's fragments re-rifted on ~10 My scales).
+# Closure class: numerical stabilisation.
+_RIFT_COOLDOWN_MY = 8.0
 
 # =============================================================================
 # Helpers
 # =============================================================================
-
-
-def _smooth_step(x: float) -> float:
-    """Hermite smoothstep: [0,1] → [0,1]."""
-    t = max(0.0, min(1.0, x))
-    return t * t * (3.0 - 2.0 * t)
 
 
 def _bfs_distance(
@@ -160,178 +144,6 @@ def _plate_velocity_cm_yr(
 # =============================================================================
 
 
-def _subduction_uplift(
-    mesh: CVTMesh,
-    cell_plate_map: dict[int, str],
-    plates: list[TectonicPlate],
-    radius_km: float,
-    dt_my: float,
-    convergent_set: set[int],
-    elev_m: np.ndarray,
-    *,
-    adj_offsets: np.ndarray | None = None,
-    adj_nbrs: np.ndarray | None = None,
-) -> float:
-    """Cortial 2019 §4.1 — uplift at convergent boundaries.
-
-    uⱼ(p) = u₀ · f(d) · g(v) · (1 + h(z̃)) · δt
-
-    Note: the oceanward trench itself is carved during terrain synthesis
-    (``terrain_synthesizer._asymmetric_boundary_effects``), which is the stage
-    that sets final elevations.
-
-    Returns total uplift applied (km, summed over all cells).
-    """
-    if not convergent_set:
-        return 0.0
-
-    cell_km = np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells)
-    dist = _bfs_distance(
-        mesh,
-        convergent_set,
-        _R_S_KM,
-        cell_km,
-        adj_offsets=adj_offsets,
-        adj_nbrs=adj_nbrs,
-    )
-    dt_yr = dt_my * 1e6
-    u0_km_yr = _U0_MM_YR * 1e-6
-
-    plate_dict = {p.id: p for p in plates}
-    total_km = 0.0
-
-    for cid, d_km in dist.items():
-        pid = cell_plate_map.get(cid, "")
-        plate = plate_dict.get(pid)
-        if plate is None:
-            continue
-
-        f_d = 1.0 - _smooth_step(d_km / _R_S_KM)
-        v_cm_yr = plate.euler_pole.omega_rad_yr * radius_km * 1e5
-        g_v = max(0.1, min(1.0, v_cm_yr / 10.0))
-        z_km = elev_m[cid] / 1000.0
-        z_above = max(0.0, z_km)
-        h_z = (z_above / _Z_C_KM) ** 2 if _Z_C_KM > 0 else 0.0
-
-        dz_km = u0_km_yr * f_d * g_v * (1.0 + h_z) * dt_yr
-        cur_m = elev_m[cid]
-        elev_m[cid] = max(
-            _Z_T_KM * 1000.0,
-            min(_Z_C_KM * 1000.0, cur_m + dz_km * 1000.0),
-        )
-        total_km += dz_km
-
-    return total_km
-
-
-def _collision_orogeny(
-    mesh: CVTMesh,
-    cell_plate_map: dict[int, str],
-    radius_km: float,
-    dt_my: float,
-    convergent_set: set[int],
-    elev_m: np.ndarray,
-    crust_arr: np.ndarray,
-    *,
-    adj_offsets: np.ndarray | None = None,
-    adj_nbrs: np.ndarray | None = None,
-) -> float:
-    """Cortial 2019 §4.2 — continental collision mountain building.
-
-    Δz(p) = Δ_c · A · (1 − d/r_c)⁴
-
-    Only active where BOTH sides of a convergent boundary are continental.
-    """
-    if not convergent_set:
-        return 0.0
-
-    # Find convergent cells with continental crust on both sides
-    collision_cells: list[int] = []
-    for cid in convergent_set:
-        if crust_arr[cid] != "continental":
-            continue
-        pid = cell_plate_map.get(cid, "")
-        for nid in mesh.cells[cid].neighbors:
-            npid = cell_plate_map.get(nid, "")
-            if npid and npid != pid and crust_arr[nid] == "continental":
-                collision_cells.append(cid)
-                break
-
-    if not collision_cells:
-        return 0.0
-
-    cell_km = np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells)
-    dist = _bfs_distance(
-        mesh,
-        set(collision_cells),
-        _R_C_KM,
-        cell_km,
-        adj_offsets=adj_offsets,
-        adj_nbrs=adj_nbrs,
-    )
-    total_km = 0.0
-
-    for cid, d_km in dist.items():
-        d_norm = d_km / _R_C_KM
-        weight = (1.0 - d_norm) ** 4
-        area_km2 = cell_km**2
-        dz_km = _DELTA_C_PER_KM * area_km2 * weight * dt_my / 2.0
-        elev_m[cid] += dz_km * 1000.0
-        total_km += dz_km
-
-    return total_km
-
-
-def _ridge_profile(
-    mesh: CVTMesh,
-    divergent_set: set[int],
-    radius_km: float,
-) -> None:
-    """Cortial 2019 §4.3 — ridge elevation at divergent boundaries.
-
-    z = α · z̄ + (1−α) · z_Γ  (blend toward ridge template)
-    """
-    if not divergent_set:
-        return
-
-    cell_km = np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells)
-    dist = _bfs_distance(mesh, divergent_set, 200.0, cell_km)
-
-    for cid, d_km in dist.items():
-        alpha = d_km / max(200.0, d_km + 1.0)
-        z_cur_km = getattr(mesh.cells[cid], "elevation", 0.0) / 1000.0
-        z_ridge_km = _Z_R_KM + (d_km / 200.0) * (_Z_A_KM - _Z_R_KM)
-        z_new_km = alpha * z_cur_km + (1.0 - alpha) * z_ridge_km
-        mesh.cells[cid].elevation = z_new_km * 1000.0
-
-
-def _erosion(
-    mesh: CVTMesh,
-    dt_my: float,
-    elev_m: np.ndarray,
-    crust_arr: np.ndarray,
-) -> None:
-    """Cortial 2019 §5 — erosion / subsidence / sedimentation (vectorized)."""
-    dt_yr = dt_my * 1e6
-
-    z_km = elev_m / 1000.0
-    continental = crust_arr == "continental"
-    dz_km = np.where(
-        continental,
-        (z_km / _Z_C_KM) * _EPSILON_C_MM_YR * 1e-6 * dt_yr,
-        (1.0 - z_km / _Z_T_KM) * _EPSILON_O_MM_YR * 1e-6 * dt_yr,
-    )
-    elev_m -= dz_km * 1000.0
-
-    # Trench sedimentation (deep cells) — judged on pre-erosion depth
-    elev_m[z_km < -5.0] += _EPSILON_T_MM_YR * 1e-6 * dt_yr * 1000.0
-
-
-# =============================================================================
-# Boundary classification per step
-# =============================================================================
-
-
 def _accumulate_convergence(
     mesh: CVTMesh,
     cell_plate_map: dict[int, str],
@@ -340,6 +152,10 @@ def _accumulate_convergence(
     interval_my: float,
     s_arr: np.ndarray,
     e_arr: np.ndarray,
+    *,
+    cell_xyz: np.ndarray | None = None,
+    adj_offsets: np.ndarray | None = None,
+    adj_nbrs: np.ndarray | None = None,
 ) -> None:
     """Accumulate cumulative convergence/divergence (km) at boundary cells.
 
@@ -350,44 +166,54 @@ def _accumulate_convergence(
     ``S = ∫ v_n dt`` (convergence) and ``E = ∫ |v_n| dt`` (divergence) that drive
     the orogen and rift widths in terrain synthesis (critical taper / distributed
     extension, proposal §3.6).
-    """
-    plate_dict = {p.id: p for p in plates}
-    interval_yr = interval_my * 1e6  # years since the last resample
 
-    for cid, pid in cell_plate_map.items():
-        cell = mesh.cells[cid]
-        pos = np.array([cell.x, cell.y, cell.z])
-        nb_plates: set[str] = set()
-        for nid in cell.neighbors:
-            npid = cell_plate_map.get(nid, "")
-            if npid and npid != pid:
-                nb_plates.add(npid)
-        if not nb_plates:
-            continue
-        plate = plate_dict.get(pid)
-        if plate is None:
-            continue
-        v_own = _plate_velocity_cm_yr(plate, pos, radius_km)
-        for npid in nb_plates:
-            nplate = plate_dict.get(npid)
-            if nplate is None:
-                continue
-            v_rel = v_own - _plate_velocity_cm_yr(nplate, pos, radius_km)
-            # Normal toward the neighbour plate (great-circle direction).
-            normal = np.zeros(3)
-            for nid in cell.neighbors:
-                if cell_plate_map.get(nid, "") == npid:
-                    nc = mesh.cells[nid]
-                    normal += np.array([nc.x, nc.y, nc.z]) - pos
-            norm = np.linalg.norm(normal)
-            if norm < 1e-12:
-                continue
-            normal /= norm
-            v_n = float(np.dot(v_rel, normal))  # cm/yr, positive = convergent
-            if v_n > 0.0:
-                s_arr[cid] += v_n * interval_yr / 1e5  # cm/yr × yr ÷ (cm/km) → km
-            elif v_n < 0.0:
-                e_arr[cid] += -v_n * interval_yr / 1e5  # divergence (extension)
+    Vectorised over the cross-plate edges: the normal toward a neighbour plate is
+    the sum of the offsets to that plate's neighbouring cells; velocities are
+    ``ω × pos · R`` of each side's Euler pole.
+    """
+    n = mesh.num_cells
+    if cell_xyz is None:
+        cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    if adj_offsets is None or adj_nbrs is None:
+        counts = np.array([len(c.neighbors) for c in mesh.cells], dtype=np.int64)
+        adj_offsets = np.concatenate([[0], np.cumsum(counts)])
+        adj_nbrs = np.array([nid for c in mesh.cells for nid in c.neighbors], dtype=np.int64)
+    plate_index = {p.id: k for k, p in enumerate(plates)}
+    code = np.fromiter(
+        (plate_index.get(cell_plate_map.get(i, ""), -1) for i in range(n)), dtype=np.int64, count=n
+    )
+    src = np.repeat(np.arange(n), np.diff(adj_offsets))
+    dst = adj_nbrs
+    cross = (code[src] >= 0) & (code[dst] >= 0) & (code[src] != code[dst])
+    src, dst = src[cross], dst[cross]
+    if src.size == 0:
+        return
+    # One group per (cell, neighbour plate): the edge order is cell-major, so
+    # np.unique keeps the per-cell sums in neighbour order.
+    key = src * len(plates) + code[dst]
+    groups, inv = np.unique(key, return_inverse=True)
+    normal = np.zeros((groups.size, 3))
+    np.add.at(normal, inv, cell_xyz[dst] - cell_xyz[src])
+    cid = groups // len(plates)
+    other = groups % len(plates)
+    norm = np.linalg.norm(normal, axis=1)
+    ok = norm >= 1e-12
+    cid, other, normal = cid[ok], other[ok], normal[ok] / norm[ok, None]
+    axes = np.array(
+        [[p.euler_pole.x, p.euler_pole.y, p.euler_pole.z] for p in plates], dtype=np.float64
+    )
+    omega = np.array([p.euler_pole.omega_rad_yr for p in plates], dtype=np.float64)
+    radius_cm = radius_km * 1e5
+    pos = cell_xyz[cid]
+    own = code[cid]
+    # same arithmetic order as _plate_velocity_cm_yr: (ω̂ × pos) · ω · R
+    v_own = np.cross(axes[own], pos) * omega[own][:, None] * radius_cm
+    v_oth = np.cross(axes[other], pos) * omega[other][:, None] * radius_cm
+    v_n = np.einsum("ij,ij->i", v_own - v_oth, normal)  # cm/yr, positive = convergent
+    interval_yr = interval_my * 1e6  # years since the last resample
+    conv = v_n > 0.0
+    np.add.at(s_arr, cid[conv], v_n[conv] * interval_yr / 1e5)  # cm/yr × yr ÷ (cm/km) → km
+    np.add.at(e_arr, cid[~conv & (v_n < 0.0)], -v_n[~conv & (v_n < 0.0)] * interval_yr / 1e5)
 
 
 # =============================================================================
@@ -430,7 +256,8 @@ def run_tectonic_evolution(
     """
     algo = config.tectonic_algorithm
     # Backward compatibility: auto-select if YAML overrides default to ""
-    if not algo and config.tectonic_steps > 0:
+    evolves = config.tectonic_steps > 0 or config.tectonic_duration_my > 0.0
+    if not algo and evolves:
         algo = "cortial2019"
 
     # Coast-attraction cost (§5 方案 2): with authored geography, plate
@@ -441,7 +268,7 @@ def run_tectonic_evolution(
 
     coast = build_geography_coast_cost(mesh, config, raster_bias=raster_bias)
     coast_cost = coast[0] if coast is not None else None
-    if not algo or config.tectonic_steps <= 0:
+    if not algo or not evolves:
         # No evolution — reconstruct cell map from plate data
         cell_map: dict[int, str] = {}
         for p in plates:
@@ -514,19 +341,39 @@ def _rodrigues_rotate(
     )
 
 
-def _auto_compute_dt(mesh: CVTMesh, config: TerrainPipelineConfig) -> float:
+def _auto_compute_dt(
+    mesh: CVTMesh,
+    config: TerrainPipelineConfig,
+    plates: list[TectonicPlate] | None = None,
+) -> float:
     """Scale δt so the fastest plate moves ~3 cells per step.
 
-    δt = 3 · cell_size_km / v_max_km_My
-    where cell_size_km = √(4πR² / N), v_max = 10 cm/yr = 100 km/My.
+    δt = 3 · cell_size_km / v_max_km_My, cell_size_km = √(4πR² / N).  In
+    duration mode (``tectonic_duration_my > 0``) v_max is the world's actual
+    fastest plate (max ω·R over the Euler poles); otherwise the legacy 10 cm/yr
+    assumption with a 1 My floor is kept for step-count configurations.
     """
     if config.tectonic_dt_my > 0.0:
         return config.tectonic_dt_my  # user override
 
     cell_km = np.sqrt(4.0 * np.pi * config.radius_km**2 / mesh.num_cells)
+    if config.tectonic_duration_my > 0.0 and plates:
+        v_max_km_my = max(p.euler_pole.omega_rad_yr * config.radius_km * 1e6 for p in plates)
+        if v_max_km_my > 0.0:
+            return float(_CELLS_PER_STEP * cell_km / v_max_km_my)
     v_max_km_my = 100.0  # 10 cm/yr → 100 km/My
-    dt_my = 3.0 * cell_km / v_max_km_my
+    dt_my = _CELLS_PER_STEP * cell_km / v_max_km_my
     return float(max(1.0, dt_my))
+
+
+def _evolution_steps(
+    mesh: CVTMesh, config: TerrainPipelineConfig, plates: list[TectonicPlate]
+) -> tuple[int, float]:
+    """(number of steps, δt in My): from the duration if set, else the step count."""
+    dt_my = _auto_compute_dt(mesh, config, plates)
+    if config.tectonic_duration_my > 0.0:
+        return int(np.ceil(config.tectonic_duration_my / dt_my)), dt_my
+    return config.tectonic_steps, dt_my
 
 
 def _plate_speeds(
@@ -577,17 +424,16 @@ def _evolve_cortial2019(
     ``arc_state`` carries the developed trench-arc sagittae so the final
     boundary warp can re-apply the arcs it re-straightens.
     """
-    from .plate_generator import voronoi_partition_warped
+    from .plate_generator import continental_slowdown, voronoi_partition_warped
 
-    num_steps = config.tectonic_steps
-    dt_my = _auto_compute_dt(mesh, config)
+    num_steps, dt_my = _evolution_steps(mesh, config, plates)
     radius_km = config.radius_km
     rng = np.random.default_rng(config.seed)
     logger.info(
-        "Tectonic evolution: seed=%d, steps=%d, rift_rate=%.4f",
+        "Tectonic evolution: seed=%d, steps=%d, rift_rate=%.4f/step",
         config.seed,
         num_steps,
-        config.rift_base_rate,
+        _rift_probability_per_step(config, dt_my),
     )
 
     # Initial cell→plate map
@@ -601,13 +447,19 @@ def _evolve_cortial2019(
     # Voronoi), so the birth-time size skew survives the Lloyd-style
     # centroid→Voronoi iteration instead of relaxing toward equal areas.
     plate_weight: dict[str, float] = {p.id: float(max(len(p.cell_ids), 1)) for p in plates}
+    # Continental slowdown currently baked into each plate's rotation rate; it is
+    # re-evaluated from the plate's cells at every re-partition (the crust stays
+    # put while plate boundaries move).
+    slowdown_applied: dict[str, float] = {
+        p.id: continental_slowdown(mesh, p.cell_ids, config) for p in plates
+    }
     # Developed trench-arc sagitta per (subducting, overriding) pair.
     arc_state: dict[tuple[str, str], float] = {}
 
     if num_steps <= 0:
         return plates, cell_plate_map, plate_weight, arc_state
 
-    # Stage 1.2: canonical elevation/crust arrays for the whole evolution
+    # Cumulative convergence / divergence arrays for the whole evolution
     # (written back to cells once at the end) + cKDTree for nearest-cell
     # queries (was O(n) Python dot products per plate per step).
     from scipy.spatial import cKDTree
@@ -615,12 +467,15 @@ def _evolve_cortial2019(
     _n = mesh.num_cells
     _cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
     _tree = cKDTree(_cell_xyz)
-    elev_m = np.array([c.elevation for c in mesh.cells], dtype=np.float64)
-    crust_arr = np.array([c.crust_type for c in mesh.cells])
     s_arr = np.zeros(_n, dtype=np.float64)  # cumulative convergence (km)
     e_arr = np.zeros(_n, dtype=np.float64)  # cumulative divergence (km)
+    # Continuous convergent stretch per cell (history contract §3.3): time and
+    # convergence since the cell last became a convergent boundary; reset when
+    # the boundary leaves it.
+    run_my = np.zeros(_n, dtype=np.float64)
+    run_km = np.zeros(_n, dtype=np.float64)
 
-    # Pre-build CSR adjacency for fast BFS (used by _bfs_distance).
+    # Pre-build CSR adjacency for fast BFS (trench-arc relaxation).
     # Flattened neighbour lists: offsets[i]..offsets[i+1]-1 index into nbrs_flat.
     _adj_offsets = np.zeros(_n + 1, dtype=np.int64)
     for i, c in enumerate(mesh.cells):
@@ -659,7 +514,9 @@ def _evolve_cortial2019(
     # the moving centroids), and once immediately after a rifting event so
     # newborn fragments get a clean partition.  Between resamples cell
     # ownership is stable (Cortial 2019 strategy).
-    resample_every = 10
+    # Duration mode re-partitions every step (the fastest plate moves at most
+    # _CELLS_PER_STEP cells per step); the step-count mode keeps the legacy 10.
+    resample_every = 1 if config.tectonic_duration_my > 0.0 else 10
     last_resample_step = -resample_every  # triggers a resample at step 0
     rifted_since_last_resample = False
 
@@ -671,7 +528,11 @@ def _evolve_cortial2019(
             ep = plate.euler_pole
             axis = np.array([ep.x, ep.y, ep.z])
             omega = ep.omega_rad_yr
-            angle_rad = omega * dt_my * 1e6
+            # Cells (and so the centroid) only change at a re-partition: rotate
+            # by every step elapsed since the last one, so the plates travel the
+            # full nominal distance that _accumulate_convergence integrates.
+            elapsed = max(1, step - last_resample_step)
+            angle_rad = omega * dt_my * 1e6 * elapsed
 
             # Current centroid
             cids = plate.cell_ids
@@ -761,7 +622,7 @@ def _evolve_cortial2019(
         else:
             new_cell_map = prev_cell_map
 
-        # 3. Detect changed cells → convergent set (Stage 1.2: vectorized;
+        # 3. Count cells that changed plate (Stage 1.2: vectorized;
         #    identical maps between resamples skip the scan entirely)
         if needs_resample:
             all_pids: dict[str, int] = {}
@@ -778,15 +639,12 @@ def _evolve_cortial2019(
 
             changed_mask = _codes(prev_cell_map, all_pids) != _codes(new_cell_map, all_pids)
             n_changed = int(changed_mask.sum())
-            # Treat all changed cells as convergent for now
-            # (proper divergence detection would track which plate lost cells)
-            convergent = set(np.where(changed_mask)[0].tolist())
         else:
             n_changed = 0
-            convergent = set()
 
-        # 4. Apply elevation effects (array-backed, Stage 1.2)
+        # 4. Accumulate convergence / divergence over the elapsed interval
         if needs_resample:
+            s_before = s_arr.copy()
             _accumulate_convergence(
                 mesh,
                 new_cell_map,
@@ -795,30 +653,14 @@ def _evolve_cortial2019(
                 steps_since_resample * dt_my,
                 s_arr,
                 e_arr,
+                cell_xyz=_cell_xyz,
+                adj_offsets=_adj_offsets,
+                adj_nbrs=_adj_nbrs,
             )
-        _subduction_uplift(
-            mesh,
-            new_cell_map,
-            plates,
-            radius_km,
-            dt_my,
-            convergent,
-            elev_m,
-            adj_offsets=_adj_offsets,
-            adj_nbrs=_adj_nbrs,
-        )
-        _collision_orogeny(
-            mesh,
-            new_cell_map,
-            radius_km,
-            dt_my,
-            convergent,
-            elev_m,
-            crust_arr,
-            adj_offsets=_adj_offsets,
-            adj_nbrs=_adj_nbrs,
-        )
-        _erosion(mesh, dt_my, elev_m, crust_arr)
+            ds = s_arr - s_before
+            converging = ds > 0.0
+            run_my = np.where(converging, run_my + steps_since_resample * dt_my, 0.0)
+            run_km = np.where(converging, run_km + ds, 0.0)
 
         # 5. Plate rifting + cleanup orphan cells
         n_before = len(plates)
@@ -830,6 +672,7 @@ def _evolve_cortial2019(
             rng,
             step=step,
             plate_birth_step=plate_birth_step,
+            dt_my=dt_my,
         )
         if len(plates) != n_before:
             rifted_since_last_resample = True
@@ -856,6 +699,8 @@ def _evolve_cortial2019(
         # 6. Update for next step
         prev_cell_map = new_cell_map
         _rebuild_plate_cells(mesh, new_cell_map, plates)
+        if needs_resample or len(plates) != n_before:
+            _refresh_plate_speeds(mesh, plates, config, slowdown_applied)
 
         if progress_callback is not None:
             # A faulty progress callback must never kill the simulation
@@ -869,11 +714,12 @@ def _evolve_cortial2019(
                 n_changed,
             )
 
-    # Finalise — write the canonical elevation array back to cells once
-    for i, c in enumerate(mesh.cells):
-        c.elevation = float(elev_m[i])
-        c.cumulative_convergence_km = float(s_arr[i])
-        c.cumulative_divergence_km = float(e_arr[i])
+    # Finalise — write the accumulated convergence / divergence back to cells
+    for c, s_km, e_km, r_my, r_km in zip(mesh.cells, s_arr, e_arr, run_my, run_km, strict=True):
+        c.cumulative_convergence_km = float(s_km)
+        c.cumulative_divergence_km = float(e_km)
+        c.convergent_duration_my = float(r_my)
+        c.convergent_run_km = float(r_km)
     logger.info(
         "Tectonic evolution complete: %d steps, %d plates, %d cells",
         num_steps,
@@ -881,6 +727,44 @@ def _evolve_cortial2019(
         mesh.num_cells,
     )
     return plates, prev_cell_map, plate_weight, arc_state
+
+
+def _refresh_plate_speeds(
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    slowdown_applied: dict[str, float],
+) -> None:
+    """Re-apply the continental slowdown from current cells and renormalise.
+
+    Each plate's rate divides out the slowdown it carries and multiplies in the
+    one of its current cells; rift fragments inherit their parent's (their rate
+    was derived from it).  All rates are then rescaled to the world's mean plate
+    speed, so rift perturbations cannot inflate speeds over the evolution.
+    """
+    from .plate_generator import continental_slowdown, normalise_plate_speeds
+
+    alive = {p.id for p in plates}
+    for p in plates:
+        old = slowdown_applied.get(p.id)
+        if old is None:
+            old = slowdown_applied.get(p.id.rsplit("_", 1)[0], 1.0)
+        new = continental_slowdown(mesh, p.cell_ids, config)
+        if old > 1e-12:
+            p.euler_pole.omega_rad_yr *= new / old
+        slowdown_applied[p.id] = new
+    for pid in [k for k in slowdown_applied if k not in alive]:
+        del slowdown_applied[pid]
+    normalise_plate_speeds(mesh, plates, config)
+
+
+def _rift_probability_per_step(config: TerrainPipelineConfig, dt_my: float) -> float:
+    """Base rifting probability per step: ``rift_rate_per_my · δt`` when the
+    rate is given per My (independent of the step size), else the legacy
+    per-step ``rift_base_rate``."""
+    if config.rift_rate_per_my > 0.0:
+        return config.rift_rate_per_my * dt_my
+    return config.rift_base_rate
 
 
 def _rift_plates(
@@ -892,6 +776,7 @@ def _rift_plates(
     *,
     step: int = 0,
     plate_birth_step: dict[str, int] | None = None,
+    dt_my: float = 1.62,
 ) -> tuple[list[TectonicPlate], dict[int, str]]:
     """Cortial 2019 §4.4 — probabilistic plate rifting.
 
@@ -901,15 +786,15 @@ def _rift_plates(
 
     Returns updated (plates, cell_plate_map).
     """
-    if config.rift_base_rate <= 0 or len(plates) < 2:
+    lambda_0 = _rift_probability_per_step(config, dt_my)
+    if lambda_0 <= 0 or len(plates) < 2:
         return plates, cell_plate_map
 
-    lambda_0 = config.rift_base_rate
     min_pieces = config.rift_min_pieces
     max_pieces = config.rift_max_pieces
 
     total_cells = mesh.num_cells
-    cooldown = 5  # steps before a new plate can rift again
+    cooldown = max(1, round(_RIFT_COOLDOWN_MY / dt_my))  # steps before a fragment may rift again
     # Refresh cell counts from current map (Voronoi may have shifted boundaries)
     for plate in plates:
         plate.cell_ids = [cid for cid, pid in cell_plate_map.items() if pid == plate.id]
@@ -937,8 +822,8 @@ def _rift_plates(
             lam *= boost
         elif n_cells > avg_cells * 1.5:
             lam *= 1.3
-        if lam < 0.001:
-            continue
+        if config.rift_rate_per_my <= 0.0 and lam < 0.001:
+            continue  # legacy per-step skip; per-My rates are small per step by design
         r = rng.random()
         if r >= lam:
             continue
@@ -1326,7 +1211,7 @@ def _trench_arc_relaxation(
                     if v in cs and v not in seen:
                         seen.add(v)
                         comp.append(v)
-                        q.append(v)
+                        bq.append(v)
             comps.append(comp)
         if len(comps) < 2:
             continue

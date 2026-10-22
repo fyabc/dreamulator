@@ -76,6 +76,12 @@ class GeographyFeature(BaseModel):
     #: Deviation exponent: >1 exaggerates the pull for cells far from target
     #: (山峰被强力下压, 平原温和调整).  1.0 = linear, 1.5 = moderate, 2.0 = aggressive.
     pin_exponent: float = Field(default=1.0, gt=0.0)
+    #: Whether the pin may move cells across the sea surface.  False (default):
+    #: the pin only adjusts heights on its own side — a positive target acts on
+    #: land cells, a negative one on ocean cells — so mean-elevation pins (a
+    #: continent's ~400 m) never turn coastal sea into land.  True: the pin is
+    #: meant to change the land–sea pattern (a land bridge, a cut strait).
+    pin_crosses_sea_level: bool = False
     #: fBm noise amplitude injected into the bias field kernel (0 = off).
     #: For rift features this roughens the otherwise smooth cosine-tapered
     #: boundary, creating fractal coastlines.  Typical: 0.1–0.5.
@@ -376,15 +382,22 @@ def sample_raster_at_cells(mesh: CVTMesh, raster: np.ndarray) -> np.ndarray:
 
 
 def build_elevation_pins(
-    mesh: CVTMesh, spec: GeographySpec
+    mesh: CVTMesh, spec: GeographySpec, *, crosses_sea_level: bool | None = None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
     """Kernel-weighted elevation pins for features with ``elevation_target_m``.
 
     Returns ``(weight, target_m, strength, exponent)`` arrays of shape (N,),
     or None when no feature declares a target.  Overlapping pins blend by
-    kernel weight.  Pure function of (mesh, spec) — no randomness.
+    kernel weight.  ``crosses_sea_level`` selects only the features with that
+    ``pin_crosses_sea_level`` value (None = all).  Pure function of (mesh,
+    spec) — no randomness.
     """
-    pinned = [f for f in spec.all_features if f.elevation_target_m is not None]
+    pinned = [
+        f
+        for f in spec.all_features
+        if f.elevation_target_m is not None
+        and (crosses_sea_level is None or f.pin_crosses_sea_level == crosses_sea_level)
+    ]
     if not pinned:
         return None
 

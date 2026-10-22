@@ -70,7 +70,14 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
             "plate_size_factor_min",
             "plate_size_factor_max",
             "plate_algorithm",
-            "plate_speed_range_cm_yr",
+            "plate_speed_mean_cm_yr",
+            "continental_plate_speed_factor",
+            "coherent_motion",
+            "convection_harmonics",
+            "convection_harmonic_amp",
+            "tidally_locked",
+            "sub_planet_longitude_deg",
+            "sub_planet_latitude_deg",
             "continental_fraction_min",
             "continental_fraction_max",
             "lat_bias",
@@ -80,11 +87,13 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
         "tectonics": [
             "tectonic_steps",
             "tectonic_dt_my",
+            "tectonic_duration_my",
             "tectonic_algorithm",
             "resample_every",
             "convergence_rate_mm_yr",
             "trench_arc",
             "rift_base_rate",
+            "rift_rate_per_my",
             "boundary_warp",
             "seed",
         ],
@@ -260,14 +269,20 @@ def build_stage_fingerprint(
 #                  tangential_fraction
 #   terrain v2:    + landform
 _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
-    "plates": 2,  # v2: + crust_type cell field (all-cache-hit corruption fix)
-    "tectonics": 3,  # v3: + elevation / crust_type cell fields
+    # v3 (debt 46): rotation rates normalised to the mean plate speed.
+    "plates": 3,  # v2: + crust_type cell field (all-cache-hit corruption fix)
+    # v3: + elevation / crust_type; v4: full-distance rotation (debt 33);
+    # v5: continental slowdown re-evaluated and rates renormalised every
+    # re-partition (debt 46); v6: + convergent_duration_my / convergent_run_km
+    # (history contract §3.3).
+    "tectonics": 6,
     "boundaries": 3,  # v3: + boundary_type cell field
     # v3 (2026-09-30): deep-ocean floor clamp — continental-crust / coast-ring
     # Earth envelopes (_clamp_deep_ocean_floors in terrain_synthesizer).
     # v4 (2026-10-20): continental shelf on submerged continental crust with a
     # continental slope; the shelf no longer relabels crust_type.
-    "terrain": 4,
+    # v5 (debt 46): mid-ocean ridge morphology from the local opening rate.
+    "terrain": 5,
 }
 
 

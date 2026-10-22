@@ -72,21 +72,24 @@ terrain:
 # 来源: geography.md (12主板块 + 8小板 = 20)
 # 注意: num_plates 是**生成请求**（种子数）；构造演化（裂解）后实际板块数
 # 以 plates.json 为准（seed=42 实测 25）。map.yaml/文档引用实际值。
-# 板块速度: ~15 cm/yr 最快（地球 ~3×，潮汐加热驱动；现由下方 tidal 段从
-# 潮汐加热推导，plate_speed_max_cm_yr 为未启用耦合时的回退值）
+# 板块速度：面积加权平均 12.5 cm/yr，是地球（约 5 cm/yr）的 2.5 倍，属创作输入。
+# 板块只排出内热中的传导部分，其余由热管火山带出，所以总潮汐热流不决定板块速度
+# （design-notes/0017）。按半空间冷却，这一速度的板块排出约 0.13 W/m²，须低于当代
+# 静息期热流 0.19 W/m²（design-notes/0014 的集合实测，模型派生值）。
 plates:
   num_plates: 20
-  plate_speed_min_cm_yr: 3.0   # 最慢板块（tidal 段推导时保留此下界）
-  plate_speed_max_cm_yr: 15.0  # 最快板块（tidal_plate_speed_enabled 时被推导值覆盖 ≈ 15）
+  plate_speed_mean_cm_yr: 12.5
+  plate_heat_flow_budget_w_m2: 0.19
   plate_algorithm: cortial2019  # plate partition strategy
   tectonic_algorithm: "cortial2019"  # time-evolution (""=none, "cortial2019")
-  tectonic_steps: 50                # evolution steps (50=preview, 125-250=full)
-  # tectonic_dt_my: 0.0         # My/step (0 = auto-scale to resolution)
+  # 现行构造格局的演化时长（Myr）。步长按最快板块的实际速度推导（每步最多约 3 格），步数 = 时长 ÷ 步长。
+  # 取 81 Myr，与此前「50 步 × 1.62 Myr」的名义时长一致，累计汇聚量的时间尺度不变。认识论类别：世界历史输入。
+  tectonic_duration_my: 81.0
   # 板块大小偏态：select_plate_seeds 用可变密度采样使初始剖分偏态（CV≈0.44），
   # 裂解用加权 Dijkstra 产生不等大碎片，裂解率调低避免大盘被过度拆解。
   # 构造重采样为乘法加权 Voronoi（plate_weight 持久权重 = 出生面积），
   # 偏态在 Lloyd 型迭代中保持而非被洗掉（见 roadmap #6、terrain-pipeline.md §3.2）。
-  rift_base_rate: 0.005
+  rift_rate_per_my: 0.0031           # 板块裂解率（每百万年），= 此前每步 0.005 ÷ 1.62 Myr
   # Cortial 2019 §3 边界噪声扭曲：0=平直测地边界；低频 fBm 扭曲使边界弯曲成
   # 弧形（岛弧/造山带分段弯曲），而非绵延平直（见 terrain-pipeline.md §3.2）。
   boundary_warp: 0.6              # 噪声扭曲幅度（实验：0.3→0.6，对齐 irregular 区间 0.5-0.8）
@@ -108,10 +111,6 @@ plates:
   # 海平面 −134 m 几乎重合。Nacrea 冷端低海面约 −60 m（design-notes/0016 §3 外推），由此取 60 m。
   # 认识论类别：近似推导，低海面幅度来自 GCM 外推，不确定度约 ±20 m。
   shelf_break_depth_m: 60.0
-  # 旧海岸线开关：Nacrea 的正典海岸线由旧陆架（按格距量化的深度）与作者高程钉扎共同决定，
-  # 钉扎会把一部分近岸浅海拉成陆地。打开后海陆判定沿用旧陆架，物理陆架只写到钉扎之后仍是
-  # 海洋的格子上，海岸线逐格不变。新世界不设此项。
-  shelf_legacy_coastline: true
 
 # ── 噪声参数 ──────────────────────────────────────────────────────────────────
 noise:
@@ -136,26 +135,10 @@ noise:
 # 后不再超 12km。
 ocean:
   age_depth_enabled: true
-  spreading_rate_cm_yr: 6.0     # 半扩张速率（地球 1–5），nacrea 潮汐加热+活跃地质体 → 更高
   ridge_depth_m: 2500.0         # 洋中脊深度
   subsidence_coeff: 350.0       # sqrt(age) 系数
   max_age_myr: 100.0            # 稳态年龄（岩石圈热平衡）
   max_age_depth_m: 5500.0       # 纯冷却最大深度（海沟叠加另计）
-
-# ── 潮汐加热 → 板块速度耦合 ──────────────────────────────────────────────────
-# 启用后，最快板块速度与洋底半扩张速率由潮汐加热（Peale & Cassen 1978）通过
-# 经验幂律 v ∝ q^β 推导，替代上面的 plate_speed_max_cm_yr / ocean.spreading_rate_cm_yr。
-# nacrea: q_tidal ≈ 0.27 W/m² = 3× 地球总热流(0.09) → β=1.0 → v ≈ 15 cm/yr，
-# 半扩张 = 0.4 × 15 = 6 cm/yr —— 与手写值一致（终值不变）。
-# 参考 docs/knowledge/geology/tidal_plate_speed.md（含引用与 Valencia vs
-# O'Neill&Lenardic 争论）。v 以 0.5 cm/yr 粒度取整（经验律 ±50% 不确定）。
-tidal:
-  plate_speed_enabled: true
-  plate_speed_beta: 1.0           # v ∝ q^β，文献范围 [0.5, 1.5]
-  plate_speed_v_ref_cm_yr: 5.0    # 地球平均板块速度
-  plate_speed_q_ref_w_m2: 0.09    # 地球总表面热流（47 TW）
-  k2_over_q: 0.003                # 板块速度标定值：e² 公式只含偏心率项，这里用等效 k₂/Q 计入以 ψ 为主的长期热流（物理参数 k₂/Q=4.5e-4 见 physical_params.md）
-  spreading_ratio: 0.4            # 半扩张 ≈ 0.4 × 最快板块速度
 
 # ── 气候参数（慢自转标定，roadmap 3A.3a） ─────────────────────────────────────
 # Nacrea 自转 Ω=0.319 Ω⊕（75.3h）：科氏力弱 → 经向热输送更强 →

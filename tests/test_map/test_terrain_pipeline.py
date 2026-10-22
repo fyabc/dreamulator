@@ -235,6 +235,42 @@ class TestPlateGeneration:
             norm = math.sqrt(plate.euler_pole.x**2 + plate.euler_pole.y**2 + plate.euler_pole.z**2)
             assert abs(norm - 1.0) < 0.01, f"Euler pole not unit vector: norm={norm}"
 
+    @pytest.mark.parametrize("coherent", [True, False])
+    def test_mean_plate_speed_matches_input(self, small_mesh, coherent):
+        """Rotation rates are normalised to the authored mean surface speed."""
+        from dreamulator.map.plate_generator import mean_surface_speed_cm_yr
+
+        cfg = TerrainPipelineConfig(
+            num_nodes=200,
+            seed=42,
+            num_plates=8,
+            plate_speed_mean_cm_yr=12.5,
+            coherent_motion=coherent,
+        )
+        plates, _ = generate_plates(small_mesh, cfg)
+        assert mean_surface_speed_cm_yr(small_mesh, plates, cfg.radius_km) == pytest.approx(12.5)
+
+    def test_refresh_reapplies_continental_slowdown(self, small_mesh):
+        """A plate that becomes continental slows by the continental factor."""
+        from dreamulator.map.plate_generator import continental_slowdown, mean_surface_speed_cm_yr
+        from dreamulator.map.tectonic_simulator import _refresh_plate_speeds
+
+        cfg = TerrainPipelineConfig(num_nodes=200, seed=42, num_plates=8)
+        plates, _ = generate_plates(small_mesh, cfg)
+        for cell in small_mesh.cells:
+            cell.crust_type = "oceanic"
+        applied = {p.id: continental_slowdown(small_mesh, p.cell_ids, cfg) for p in plates}
+        ratio_before = plates[0].euler_pole.omega_rad_yr / plates[1].euler_pole.omega_rad_yr
+        for cid in plates[0].cell_ids:
+            small_mesh.cells[cid].crust_type = "continental"
+        _refresh_plate_speeds(small_mesh, plates, cfg, applied)
+        ratio_after = plates[0].euler_pole.omega_rad_yr / plates[1].euler_pole.omega_rad_yr
+        assert ratio_after == pytest.approx(ratio_before * cfg.continental_plate_speed_factor)
+        assert applied[plates[0].id] == pytest.approx(cfg.continental_plate_speed_factor)
+        assert mean_surface_speed_cm_yr(small_mesh, plates, cfg.radius_km) == pytest.approx(
+            cfg.plate_speed_mean_cm_yr
+        )
+
 
 # ---------------------------------------------------------------------------
 # Full pipeline integration

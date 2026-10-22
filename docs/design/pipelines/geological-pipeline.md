@@ -644,7 +644,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
 | `num_plates` | 20 | 5 – 50 | 构造板块数量 |
-| `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
+| `plate_speed_mean_cm_yr` | 5.0 | 1–25 | 全部板块的面积加权平均地表速度（世界输入；地球约 5，nacrea 12.5） |
 | `continental_fraction` | 0.35 | 0.1 – 0.8 | 大陆板块比例 |
 
 
@@ -665,8 +665,20 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 
 **实现要点**（`tectonic_simulator.py` / `plate_generator.py`）：
 
-- **欧拉极分配**：每板块随机单位旋转轴（高斯采样后归一化），角速度由
-  `plate_speed_range_cm_yr` 均匀采样后经 ω = v/R 换算。
+- **欧拉极分配**：默认（`coherent_motion`）按相干速度场最小二乘拟合每个板块的
+  旋转轴；关闭时用随机单位旋转轴。潮汐锁定的天体（`tidally_locked`，由
+  `physical_inputs.py::resolve_tidal_lock` 按自转周期与绕母体的开普勒周期相差不超过
+  5% 推出）把速度场锚定在向星点与背星点的轴上。
+- **大陆减速与速度归一**：每个板块的转速乘以大陆减速系数
+  `1 − (1 − continental_plate_speed_factor) × 大陆格子占比`
+  （`plate_generator.py::continental_slowdown`），然后全部转速按同一比例缩放，使面积
+  加权平均地表速度等于 `plate_speed_mean_cm_yr`
+  （`plate_generator.py::normalise_plate_speeds`）。板块之间的速度比来自速度场、大陆
+  减速与裂解扰动，绝对速度来自世界输入。
+- **板块排热检查**：总潮汐热流不决定板块速度。强潮汐加热的世界里大部分内热由热管火山
+  带出，板块只排出传导部分（nacrea design-note 0017）。按半空间冷却，洋底平均热流约
+  正比于板块速度的平方根，`tidal_physics.py::plate_heat_flux_w_m2` 由平均速度与陆地
+  比例给出板块所排热流；超过 `plate_heat_flow_budget_w_m2` 时引擎给出警告。
 - **速度场**：向量化叉积一次算出全部节点速度（单位球坐标 → 乘
   `radius_km × 1000` 得 m/yr）。
 - **时间演化的 δt 自动缩放**（实现行为，见 §5 与
@@ -678,7 +690,9 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
-| `plate_speed_range_cm_yr` | (1.0, 10.0) | (0.1, 5.0)–(5.0, 20.0) | 板块速度范围（最慢/最快） |
+| `plate_speed_mean_cm_yr` | 5.0 | 1–25 | 面积加权平均地表速度（世界输入） |
+| `plate_heat_flow_budget_w_m2` | 无 | 0.05–2 | 板块所排热流的上限（当代地表热流）；不设则不检查 |
+| `continental_plate_speed_factor` | 0.3 | 0.2–0.5 | 纯大陆板块相对纯大洋板块的速度比（地球非洲约 2 cm/yr、太平洋约 10 cm/yr） |
 
 
 ---
@@ -690,6 +704,13 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 > **当前实现**；威尔逊循环未实现部分与随时间变化的行星物理参数在 §13
 > 「未实现设计余量」。核心参考：Cortial et al. 2019（见[附录 D](#附录-d-论文解读--cortial-et-al-2019-procedural-tectonic-planets)）。
 
+**现状管线是「指定现状」模式（作者裁决 2026-10-20）**：有 geography.yaml 时，地壳类型由作者的海陆锚点决定，
+演化期间板块边界被海岸吸附成本钉在大陆边缘，演化结束后按锚点重新锚定；构造演化只负责生成现状的板块边界、累积
+汇聚与伸展量和造山带，**不搬运地壳**，这是设计而非缺陷。大陆漂移由地质时间轴（地壳质点运动学，
+[geological-timeline.md](../proposals/geological-timeline.md)）和新世界的演化模式
+（[evolution-mode.md](../proposals/evolution-mode.md)）负责；三者统一到同一套运动学内核的计划见 roadmap
+「历史契约」一项。
+
 ### 5.1 当前实现：质心旋转 + 加权重剖分（固定网格）
 
 **CVT 顶点在整个演化中永不移动**（移动顶点意味着每步都要重构 Delaunay）。
@@ -697,8 +718,8 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 
 1. **网格固定**：200K cell 是不动的观测站；演化状态保存在数组（高程、地壳类型、
    累积汇聚 s_arr / 累积伸展 e_arr）中，演化结束时一次性写回 cell。
-2. **质心旋转**：每步把每个板块的质心按各自欧拉极做 Rodrigues 旋转
-   （`_rodrigues_rotate`，角度 = ω·δt）。
+2. **质心旋转**：重剖分时把每个板块的质心按各自欧拉极做 Rodrigues 旋转
+   （`_rodrigues_rotate`），角度 = ω·δt·（距上次重剖分经过的步数），板块走满名义距离。
 3. **周期重剖分**：每 `resample_every` 步（以及裂解事件后立即一次）以旋转后的
    质心为种子重跑 Voronoi 剖分——使用**出生面积乘性加权**的 Voronoi
    （`voronoi_partition_warped`），让板块尺寸偏态在迭代中不被拉平；有 geography.yaml
@@ -707,11 +728,10 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 4. **海沟弧弛豫**：重剖分的直线二分边界按 Frank (1968) 海沟弧模型弯成弧
    （`_trench_arc_relaxation`，逐（俯冲侧, 上覆侧）对累积弧矢高，最终边界 warping
    时重放）。
-5. **边界检测与高程效应**：重剖分后向量化了「易主 cell」检测（暂按汇聚处理），
-   累积汇聚/伸展量（`_accumulate_convergence` → 驱动 §4.5 造山带/裂谷宽度），
-   然后依次施加**俯冲上隆**（Cortial 完整公式 u₀·f(d)·g(v)·(1+h(z̃))·δt，
-   `_subduction_uplift`）、**碰撞造山**（`_collision_orogeny`）、**侵蚀**
-   （`_erosion`，每步持续作用）。
+5. **累积汇聚与伸展**：重剖分后按经过的时长累积边界两侧的汇聚与伸展量
+   （`_accumulate_convergence`），驱动 §4.5 的造山带与裂谷宽度。Cortial 原文的逐步高程效应
+   （俯冲上隆、碰撞造山、洋脊剖面、侵蚀）不运行：地形合成会从地壳、边界和累积汇聚量重建每个格子的
+   高程，演化出的高程会被整体覆盖（空操作对照实验逐格一致）。
 6. **板块裂解**：`_rift_plates`（Poisson 概率，大板块更易裂解，见 §13 威尔逊循环-D）。
 7. **清理**：零 cell 板块移除（`_cleanup_empty`），尺寸权重与板块名册同步。
 8. **终态整形**：演化结束后按边界类型分段整形（汇聚→弧、离散→雁列链、
@@ -719,14 +739,19 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
    多数票平滑（`_smooth_partition`）→ 飞地合并（`_merge_plate_enclaves` /
    `_merge_enclosed_plates`）。
 
-**δt 自动缩放**（`_auto_compute_dt`）：`δt = 3 · √(4πR²/N) / v_max`——令最快
-板块每步移动 ~3 个 cell（100K cells 时 δt ≈ 2 My）；`tectonic_dt_my > 0` 时显式覆盖。
+**时长模式**（`tectonic_duration_my > 0`，nacrea 与 earthlike 模板）：演化时长是世界输入；步长按该世界最快
+板块的实际速度推导（`_auto_compute_dt`：`δt = 3 · √(4πR²/N) / v_max`，最快板块每步最多移动约 3 格），
+步数 = 时长 ÷ 步长（`_evolution_steps`），每步都重剖分；裂解率按每百万年给出（`rift_rate_per_my`），
+裂解冷却期约 8 Myr。未设时长时沿用步数模式（`tectonic_steps`，v_max 假定 10 cm/yr、每 10 步重剖分）。
+`tectonic_dt_my > 0` 时显式覆盖步长。
 
 ### 5.2 演化状态（当前实现）
 
 cell 在演化中跟踪的状态：所属板块（cell→plate 映射）、地壳类型（continental /
 oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical taper，§4.5）、
-**累积伸展量 e**（km，驱动裂谷宽度）、高程。下方元组是全威尔逊循环的未实现设计：
+**累积伸展量 e**（km，驱动裂谷宽度）、高程，以及**连续汇聚段**：格子落在汇聚边界上时累加经过的
+时间与汇聚量，边界移走即清零，演化结束时写入 `convergent_duration_my` 与 `convergent_run_km`，
+供历史契约推导碰撞开始时刻（§6.1）。下方元组是全威尔逊循环的未实现设计：
 
 | 属性 | 符号 | 类型 | 状态 |
 |------|------|------|------|
@@ -745,9 +770,12 @@ For step = 0 to tectonic_steps:
   2. 周期重剖分（每 resample_every 步 + 裂解后）: 出生面积加权 Voronoi
      （有 geography 锚定时叠加海岸吸附代价）→ 海沟弧弛豫（Frank 1968）
   3. 易主 cell 检测 → 累积汇聚/伸展量（s_arr / e_arr）
-  4. 高程效应: 俯冲上隆（Cortial 完整公式）→ 碰撞造山 → 侵蚀
-  5. 板块裂解: Poisson 概率（rift_base_rate，大板块更易裂）
-  6. 清理: 零 cell 板块移除，权重同步
+  4. 板块裂解: Poisson 概率（rift_base_rate，大板块更易裂）；碎片继承父板块
+     转速并加 ±15% 扰动
+  5. 清理: 零 cell 板块移除，权重同步
+  6. 速度刷新（重剖分或裂解后）: 按板块当前的大陆格子占比重算大陆减速，再把全部
+     转速归一到平均速度（_refresh_plate_speeds）。地壳不随板块搬运，板块边界移动后
+     大陆占比会变，减速随之更新；归一也阻止裂解扰动逐代累积抬高速度
 演化结束后: 边界分段整形 → 噪声 warping → 平滑 → 飞地合并 → 写回 cell
 ```
 
@@ -787,8 +815,8 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > [knowledge/geology/cortial_2019_notes.md](../../knowledge/geology/cortial_2019_notes.md) §D.4）：
 > $u_j(p) = u_0 \cdot f(d) \cdot g(v) \cdot h(\tilde{z})$
 > 其中 $u_0 = 0.6$ mm/y, $r_s = 1800$ km, $h(\tilde{z}) = \tilde{z}^2$。
-> 时间演化阶段的俯冲上隆用该完整公式（`tectonic_simulator._subduction_uplift`，§5）；
-> §7 静态地形合成的边界效应使用简化的高斯衰减剖面。
+> 时间演化阶段不再计算该上隆（其高程会被地形合成覆盖，见 §5.1）；最终高程由 §7 地形合成的边界效应
+> 给出。
 
 ### 参数表
 
@@ -796,6 +824,31 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 |------|--------|------|----------|
 | `boundary_influence_km` | 500.0 | 100 – 2000 | 边界效应影响半径 |
 
+### 6.1 历史契约：汇聚边界段（`orogen_contract.py`）
+
+地形合成开始前，`build_orogen_contract` 按历史契约（`docs/design/proposals/history-contract.md` §3）
+整理每段汇聚边界的缩短史，结果写入 `orogen_contract.json`。地形合成目前还不读取它（技术债 43 阶段 A
+接入）。
+
+1. **接触格与类型**：汇聚边界上、速率高于 0.3 cm/yr、紧邻另一板块的格子。两侧各取该板块 500 km 内
+   的陆壳占比：都过半为碰撞，俯冲侧取较小的板块；一侧过半为安第斯型，洋壳一侧俯冲；都不过半的洋—洋
+   边界留给岛屿目录。同一板块对、相距 150 km 以内的接触格连成一段。
+2. **碰撞开始时刻与积分汇聚量**：演化结束后的边界整形会把边界移开（nacrea 上终态接触格到最近的演化
+   汇聚格中位约 100 km，90 分位约 400 km），所以每个接触格读取 400 km 内最近的演化汇聚格的
+   `convergent_duration_my` 与 `convergent_run_km`。留存缩短量逐格计算（边界会弯折、斜交程度沿走向变化，
+   整段共用一个中位数会把正面段的汇聚量套到斜交段上）；段内中位数只作摘要写入 `orogen_contract.json`。
+3. **作者覆盖**：`plate_history.yaml` 的 `collisions` 与 `andean_margins`（`load_collision_overrides`）
+   按板块对或折线（两倍半宽内过半的接触格）认领段，可改写开始时刻（积分汇聚量随之取现今速率乘开始
+   时刻）、断离时长、安第斯型缩短比与俯冲侧。
+4. **侧向逃逸比**（`escape_ratios`）：碰撞接触格按 150 km 连成造山带前缘，W 为前缘沿走向的测地长度。
+   出口是上覆板块 2W 内的边缘格：面向大洋俯冲的海沟（外移速度取四分之一压入速率），或与正在远离
+   造山带（远离分量大于 0.5 cm/yr）的相邻板块之间的非汇聚边界（外移速度取远离分量，不小于四分之一
+   压入速率）。每格逃逸比 = Σ 外移速度 × 格距 × exp(−D/W) / (U·W)，上限 1。
+5. **留存缩短量**：碰撞格为 (积分汇聚量 − 180 km − 现今速率 × 断离时长) × (1 − 逃逸比)，不小于零；
+   安第斯型为缩短比 × 积分汇聚量。断离时长缺省 10 My，缩短比缺省 0.02。
+
+一致性提示：作者开始时刻超过构造演化长度；碰撞太年轻、尚未开始增厚的段数。nacrea 当前 26 个碰撞段的
+开始时刻中位约 21 My、75 分位约 25 My，其中 13 段尚未开始增厚。
 
 ---
 
@@ -834,6 +887,18 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    ±1，`_divergent_side_sign` 提供裂谷的稳定带符号侧向坐标）——水体与山带不再
    精确贴板块边界，而是随先存弱带蜿蜒（Danakil en-echelon 错列 / 阿巴拉契亚
    salient-recess ~100 km 量级）。
+   **大陆汇聚带不在这一步**：碰撞与安第斯型边缘上覆侧的大陆格子不再取幅度剖面与山间盆地，
+   改由下一步的造山带格子平均高程给出；这里只保留洋—洋岛弧、海沟、裂谷与转换边界。
+2b. **造山带格子平均高程** `orogen_profile.py::orogen_relief`（技术债 43 阶段 A，设计见
+   `docs/design/proposals/orogen-topography.md` §3.2）：读取历史契约（§6.1）每个接触格的留存缩短量，
+   沿走向 300 km 平均后得到地壳截面积 A = 留存缩短量 × 35 km；Airy 均衡（ρc 2800、ρm 3300 kg/m³）下
+   高程截面积为 A / 6.6。剖面两翼坡度都取 0.6°（地球格子平均翼部坡度的中位数，观测拟合；喜马拉雅前缘
+   约 2.8° 的陡前缘类别留待以后）；顶部平均高程不超过
+   上限再减去大陆基准高程：碰撞型上限由力平衡推出（`collision_cap_m`：Airy 补偿高原的浮力
+   ρc·g·h·(H0 + h·ρm/(2Δρ)) 等于以青藏 5.0 km 标定的可传递力，强度系数暂取 1；nacrea 约 4.82 km），
+   安第斯型取阿尔蒂普拉诺 3.8 km 按 9.81/g 缩放（`andean_cap_m`）；截面积超过楔形容量时，
+   多出的部分在上覆板块一侧铺成高原。每个大陆格子取图距离最近的接触格的剖面，属于俯冲板块取前楔、
+   属于上覆板块取后楔，多个造山带重叠取较高者。
 3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
    沿板块运动方向（欧拉极速度）追踪链，`hotspot_active_height_m`（默认 8500 m）从洋底抬升露海面成岛，
    沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 3（大型世界可在
@@ -843,7 +908,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 5. **细节噪声**：`_anisotropic_fbm`（3D Simplex 在节点 (x,y,z) 采样，无投影畸变；
    各向异性 `noise_anisotropy` 沿边界走向拉伸）；近边界 `interior_factor` 增强
    （1.2→1.5×，山体更崎岖）。
-6. **合成**：`elevation = base + boundary + hotspot + regional + detail`。
+6. **合成**：`elevation = base + boundary + orogen + hotspot + regional + detail`。
 
 > **边界平滑**（作用于分区，非高程）：最终分区多数投票 `_smooth_partition`
 > （4 轮）+ 飞地合并 `_merge_plate_enclaves`，消除锯齿边界。per-plate 地壳下限
@@ -957,7 +1022,6 @@ age = max_age · d_div / (d_div + d_conv)
 
 | 参数 | nacrea 值 | 地球参考 |
 |------|----------|---------|
-| `ocean_spreading_rate_cm_yr` | 6.0 | 1–5 |
 | `ocean_ridge_depth_m` | 2500 | ~2500 |
 | `ocean_subsidence_coeff` | 350 | ~350 |
 | `ocean_max_age_myr` | 100 | ~100 |
@@ -979,23 +1043,30 @@ age = max_age · d_div / (d_div + d_conv)
 4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
 5. **内部地貌** `_apply_interior_landforms`（见 §7.2）。
 6. **大陆架** `_apply_continental_shelf`：陆架铺在与海岸相连的淹没大陆地壳上，宽度是海岸线到陆洋边界的
-   距离（`_shelf_profile`）；平台从岸边线性降到坡折深度 `shelf_break_depth_m`，坡折以外按约 4° 的陆坡降到
+   距离（`_shelf_profile`）；地壳划分没有拉薄陆缘这一档，所以每段海岸另按陆缘类型补一条淹没陆缘带（被动 88 km、
+   主动 31 km，Harris et al. 2014；离汇聚或转换边界不足 `boundary_influence_km` 的海岸为主动），陆架取两者中
+   较远的一个；平台从岸边线性降到坡折深度 `shelf_break_depth_m`，坡折以外按约 4° 的陆坡降到
    原有海底；距离从海陆 Voronoi 边量起，每格取剖面在本格范围内的平均。`shelf_width_km <= 0` 关闭此步。
-   `shelf_legacy_coastline` 为真时（nacrea），海陆判定沿用旧的按距离量化的陆架，物理陆架在钉扎之后写到
-   仍是海洋的格子上（`_apply_deferred_shelf`），海岸线逐格不变。物理依据见
+   物理依据见
    `docs/knowledge/geology/continental_margins.md`。
 7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
    （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。
 8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
    （削峰）只放大「高于目标」的下压方向，低于目标（海沟）保持线性上拉——避免把
-   feature 软边上的深沟 cell 对称指数化抬成山（§4.4 钉扎过抬修复）。
-9. **均衡尾部压缩**（`isostasy_enabled`）：只压缩超出物理上限的尾部，指数衰减保序：
-   `compressed = limit + excess · exp(-5·excess/limit)`，不产生「平顶山/平底沟」。
-   上限 `h_max ∝ 1/g`——nacrea g=10.28 → 陆极 ~8443 m、海沟 ~11550 m。
-10. **拉普拉斯平滑** `_smooth_land_discontinuities`：均衡压缩只压超标 cell 会留下
-   悬崖式跳跃，3 轮 30% 邻域均值混合（仅陆地）松弛为连续坡降：
-   `elev_i = 0.7·elev_i + 0.3·mean(land_neighbors)`；>3000m 邻域跳跃 1446→137 cell。
+   feature 软边上的深沟 cell 对称指数化抬成山（§4.4 钉扎过抬修复）。拉动量不超过到目标的偏差
+   （最多拉到目标）。分两遍：`pin_crosses_sea_level` 为假的地物（默认，大陆平均海拔一类）只作用于与
+   目标同侧的格子——正目标只动陆地、负目标只动海洋——所以不改变海岸线；标为真的地物（陆桥、
+   人工海峡）随后作用于所有格子。
+9. **海底尾部压缩**（`isostasy_enabled`）：只压缩深于 `isostasy_max_ocean_depth_m` 的尾部，指数衰减保序
+   （nacrea 约 11 550 m）；海沟改为年龄深度加挠曲后取消（技术债 43 阶段 D）。格子值是格子平均高程，陆地上限
+   `isostasy_max_continental_elevation_m`（峰顶高度，nacrea 8443 m）不再压缩格子平均高程，造山带的平均高程由
+   §7.1 第 2b 步的剖面上限约束；为抹平压缩台阶而设的陆地拉普拉斯平滑一并取消（对称版
+   `cortial2019_gaussian` 仍保留旧的压缩与平滑）。
+
+洋中脊形态按该边界格子所在板块对的实际张开速率（全速率，即 `−convergence_rate_cm_yr`）
+逐格选择：全速率不低于 9 cm/yr 时为平滑的轴部隆起，不高于 5 cm/yr 时为中央裂谷加两侧裂谷山，
+其间过渡（Frisch et al. 2011）。张开速率来自板块运动学，没有单独的扩张速率参数。
 
 ### 7.6 参数表
 
@@ -1889,16 +1960,14 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 #### B. 俯冲消亡（Subduction / Slab Pull）— 已实现高程效应，未实现物质削减
 
 - **条件**：$v_\perp < 0$，至少一侧为洋壳（较老/较重者俯冲）
-- **已实现**：上覆板块 cell 的抬升（Cortial 完整公式 u₀·f(d)·g(v)·(1+h(z̃))·δt，
-  `_subduction_uplift`），火山弧/海岸山脉由高程效应产生。
+- **已实现**：上覆板块一侧的抬升、火山弧与海岸山脉由 §7 地形合成的边界效应（累积汇聚量驱动）产生。
 - **未实现**：老洋壳 `Thickness` 削减与物质转移（无厚度状态）、slab pull 对欧拉极的
   反馈（欧拉极在演化中固定）。
 
 #### C. 大陆拼合（Continental Collision）— 已实现造山，未实现厚度叠加
 
 - **条件**：$v_\perp < 0$，两侧均为陆壳
-- **已实现**：碰撞造山高程事件（`_collision_orogeny`）；累积汇聚量驱动造山带宽度
-  （critical taper，§4.5）。
+- **已实现**：累积汇聚量驱动造山带宽度（critical taper，§4.5），高程由 §7 地形合成给出。
 - **未实现**：陆壳 `Thickness` 叠加（40km + 40km = 80km，无厚度状态）。
 
 #### D. 板块裂解（Plate Rifting）— 已实现
