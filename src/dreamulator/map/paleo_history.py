@@ -938,7 +938,6 @@ def find_sutures(
     elevation_m: np.ndarray,
     orogens: Orogens,
     *,
-    decay_myr: float = 50.0,
     max_age_myr: float = 400.0,
 ) -> list[Suture]:
     """Sutures inside the reconstruction model's rigid continental blocks.
@@ -955,13 +954,14 @@ def find_sutures(
     * at an active orogen (``orogens.relief_m > 0`` on at least half the seam):
       the orogen build time, accumulated shortening / convergence rate;
     * otherwise from relief decay of the seam's mountains (90th percentile of
-      relief above the continental baseline): the median active build time plus
-      ``decay_myr`` · ln(R_active / R).  Post-orogenic decay with isostatic
-      rebound has e-folding times of tens of Myr (36–90 Myr maximum decay times,
-      Baldwin et al. 2003); observational fit with wide uncertainty, and a seam
-      with little relief gets an old age, capped at ``max_age_myr``.
+      relief above the continental baseline), the inverse of the law the terrain
+      engine builds old orogens with (``paleo_orogens.collision_age_from_crest``,
+      R_active the median relief of the active orogens); a seam with little relief
+      gets an old age, capped at ``max_age_myr``.
     """
     from scipy.sparse.csgraph import connected_components
+
+    from dreamulator.map.paleo_orogens import collision_age_from_crest
 
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols = kin.nbr_idx
@@ -970,7 +970,6 @@ def find_sutures(
     relief = elevation_m - baseline
     active = orogens.relief_m > 0
     r_active = float(np.median(relief[active])) if active.any() else 2000.0
-    t_active = float(np.median(orogens.build_myr[active])) if active.any() else 30.0
     min_cells = max(50, int(0.003 * kin.n))
     total_area = float(kin.area_km2.sum())
     reach = 2.0 * kin.spacing_km
@@ -1005,7 +1004,7 @@ def find_sutures(
                 source = "convergence"
             else:
                 r = max(float(np.percentile(relief[seam], 90)), 1.0)
-                age = t_active + decay_myr * float(np.log(max(r_active / r, 1.0)))
+                age = collision_age_from_crest(r, r_active, max_age_myr)
                 source = "relief_decay"
             out.append(
                 Suture(

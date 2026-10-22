@@ -757,7 +757,7 @@ oceanic）、**累积汇聚量 s**（km，驱动造山带宽度——critical ta
 |------|------|------|------|
 | 地壳厚度 | `Thickness` | float (km) | 未实现 |
 | 地壳年龄 | `Age` | float (My) | 未实现 |
-| 造山年龄 | `Orogeny_Age` | float (My) | 未实现（§7.2 古造山带是静态地貌叠加） |
+| 造山年龄 | `Orogeny_Age` | float (My) | 未实现（§7.2 老造山带只读缝合带的碰撞年龄） |
 | 褶皱方向 | `Fold_Dir` | 3D vector | 未实现 |
 | 克拉通 | `craton` 地壳类型 | enum | 未实现 |
 
@@ -844,8 +844,10 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    出口是上覆板块 2W 内的边缘格：面向大洋俯冲的海沟（外移速度取四分之一压入速率），或与正在远离
    造山带（远离分量大于 0.5 cm/yr）的相邻板块之间的非汇聚边界（外移速度取远离分量，不小于四分之一
    压入速率）。每格逃逸比 = Σ 外移速度 × 格距 × exp(−D/W) / (U·W)，上限 1。
-5. **留存缩短量**：碰撞格为 (积分汇聚量 − 180 km − 现今速率 × 断离时长) × (1 − 逃逸比)，不小于零；
-   安第斯型为缩短比 × 积分汇聚量。断离时长缺省 10 My，缩短比缺省 0.02。
+5. **留存缩短量**：碰撞格为 (min(积分汇聚量, 3000 km) − 180 km − 现今速率 × 断离时长) × (1 − 逃逸比)，
+   不小于零，再加缩短比 × 碰撞前汇聚量（碰撞前的安第斯型阶段）；安第斯型为缩短比 × 积分汇聚量。3000 km 是
+   地球最大碰撞（印度—亚洲）的量级：碰撞阻力让板块减速，而「指定现状」模式下大陆不动，合成边界可以在大陆
+   内部持续汇聚几乎整段演化（nacrea 最多约 8000 km）。断离时长缺省 10 My，缩短比缺省 0.026（地球洋陆边缘按汇聚量加权的观测值）。
 
 一致性提示：作者开始时刻超过构造演化长度；碰撞太年轻、尚未开始增厚的段数。nacrea 当前 26 个碰撞段的
 开始时刻中位约 21 My、75 分位约 25 My，其中 13 段尚未开始增厚。
@@ -861,7 +863,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > [knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md)：
 > 双峰高程分布依据（§1）、三类边界剖面公式与速率因子汇总表（§2）、
 > 距边界粗糙度调制（§2）、fBm octave 物理尺度表（§3）、热点/地幔柱高斯隆起
-> 与高程合成叠加式（§6），以及内陆古造山带/山间盆地的地貌学依据（§4.3）。
+> 与高程合成叠加式（§6），以及老造山带的地貌学依据（§4.3）。
 
 ### 7.1 合成流程（6 步）
 
@@ -869,10 +871,16 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 策略由 `terrain_algorithm` 选择；`cortial2019_gaussian` 为对称版）：
 
 1. **基准高程**：按地壳类型双峰分配——continental `continental_elevation_m`
-   （默认 850 m）、oceanic `oceanic_elevation_m`（默认 −3800 m）两个常量；每板块叠加
-   均匀偏移 ±`plate_elevation_spread_m`（陆地取 0.4×）；叠加多尺度「动态地形」起伏
-   `_continental_undulation`（`continental_undulation_m`，默认 600 m，地幔对流类比
-   Flament et al. 2013）。若 `ocean_age_depth_enabled`，洋壳替换为年龄-深度剖面（见 §7.4）。
+   （默认 850 m）、oceanic `oceanic_elevation_m`（默认 −3800 m）两个常量；若 `ocean_age_depth_enabled`，
+   已知年龄的洋壳替换为年龄-深度剖面（见 §7.4）。每板块叠加均匀偏移 ±`plate_elevation_spread_m`（陆地取
+   0.4×），已知年龄的洋底不加（深度由年龄决定）；陆地叠加多尺度起伏 `_continental_undulation`
+   （`continental_undulation_m`，默认 600 m），它代表地幔流场之外的岩石圈厚度差与小尺度对流造成的
+   1000–5000 km 起伏（地球大陆残余地形 ±1–2 km，Stephenson et al. 2024），属启发式。
+   **动力地形**（`dynamic_topography.py`，技术债 43 阶段 E 第 2 步）：引擎地幔流场的径向分量只有绕极向轴
+   （潮汐锁定为潮汐轴，否则为自转轴）的二阶极向环流，所以动力地形为 h = A·P₂(cos θ)，两个上涌点抬升 A、
+   下沉环带下沉 A/2；A 在洋壳上取 800 m（地球残余地形二阶分量的水负载峰值，Davies et al. 2019），陆壳上按
+   (ρm − ρw)/ρm 取约 550 m。浮力与偏转都正比于 g，幅度在各世界间不变。叠加在基准高程上，先于海沟、弧前与
+   海平面校准。
 2. **非对称边界效应**：`_asymmetric_boundary_effects` 按边界类型叠加高斯剖面
    （σ 由 `boundary_influence_km`，振幅 × 速率因子 `min(|v_n|/10, 1)`，
    `mountain_asymmetry` 控制迎/背风坡不对称），叠加 **沿弧分段 fBm 调制**
@@ -888,17 +896,40 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    精确贴板块边界，而是随先存弱带蜿蜒（Danakil en-echelon 错列 / 阿巴拉契亚
    salient-recess ~100 km 量级）。
    **大陆汇聚带不在这一步**：碰撞与安第斯型边缘上覆侧的大陆格子不再取幅度剖面与山间盆地，
-   改由下一步的造山带格子平均高程给出；这里只保留洋—洋岛弧、海沟、裂谷与转换边界。
+   改由下一步的造山带格子平均高程给出，海沟改由第 2c 步的挠曲剖面给出；这里只保留洋—洋岛弧、裂谷与
+   转换边界。
 2b. **造山带格子平均高程** `orogen_profile.py::orogen_relief`（技术债 43 阶段 A，设计见
-   `docs/design/proposals/orogen-topography.md` §3.2）：读取历史契约（§6.1）每个接触格的留存缩短量，
+   `docs/knowledge/geology/orogen_topography.md` §2–4）：读取历史契约（§6.1）每个接触格的留存缩短量，
    沿走向 300 km 平均后得到地壳截面积 A = 留存缩短量 × 35 km；Airy 均衡（ρc 2800、ρm 3300 kg/m³）下
    高程截面积为 A / 6.6。剖面两翼坡度都取 0.6°（地球格子平均翼部坡度的中位数，观测拟合；喜马拉雅前缘
    约 2.8° 的陡前缘类别留待以后）；顶部平均高程不超过
    上限再减去大陆基准高程：碰撞型上限由力平衡推出（`collision_cap_m`：Airy 补偿高原的浮力
    ρc·g·h·(H0 + h·ρm/(2Δρ)) 等于以青藏 5.0 km 标定的可传递力，强度系数暂取 1；nacrea 约 4.82 km），
    安第斯型取阿尔蒂普拉诺 3.8 km 按 9.81/g 缩放（`andean_cap_m`）；截面积超过楔形容量时，
-   多出的部分在上覆板块一侧铺成高原。每个大陆格子取图距离最近的接触格的剖面，属于俯冲板块取前楔、
-   属于上覆板块取后楔，多个造山带重叠取较高者。
+   多出的部分在上覆板块一侧铺成高原。每个非洋壳格子在所有边界段中取最高的剖面：前楔一侧是该段的俯冲板块，
+   后楔一侧是边界以外的全部非洋壳格子（上覆高原可以跨越几块板块），距离沿该侧格子的图距离量；每段的搜索
+   范围覆盖它完整的剖面；离边界越远，留存缩短量越从最近接触格的值过渡到全段平均（混合距离取边界段长度），
+   以免相邻格子取到不同接触格而切出悬崖。地形合成在海平面校准之后，用 `apply_orogen_cap` 把造山带格子的
+   最终平均高程软压在各自的上限附近（超出部分按 300 m·tanh 压缩，青藏高原面格子平均的离散约 ±0.3 km），
+   纹理噪声不能把高原推过上限。
+   **亚格子起伏与峰顶**（阶段 C，`subgrid_relief.py`）：地形阶段之后，陆地格子写入 `relief_std_m`（格内
+   高程标准差）与 `peak_elevation_m`（格内最高点）。μ = c·Δx·S / (1 + c·Δx·S / μ_sat)，S 为与陆地邻格平均
+   高程差的平均坡度，Δx 为格距，c ≈ 0.97、μ_sat ≈ 2.9 km；峰顶 = 平均 + 3.5μ。标定用地球 2722 个被 Copernicus
+   90 m 高程完全覆盖的陆地格（观测拟合，对数残差标准差 0.69），按它推算的地球最高峰 8190 m 落在珠峰所在格。
+   洋格写 None，沟轴最深点见第 2c 步。
+2c. **海沟** `trench_flexure.py::trench_relief`（技术债 43 阶段 D，物理与标定见 `docs/knowledge/geology/orogen_topography.md` §5–6）：
+   只在俯冲板块的洋壳格子上加挠曲下弯 w(x) = −W0·e^(−x/α)·cos(x/α)，叠加在年龄深度海底上。沟轴格是俯冲侧的
+   汇聚接触格：洋陆边界取历史契约安第斯段的俯冲板块，洋洋边界取较快的板块（`contact_polarity`）。x 沿该板块
+   洋壳格子的图距离量，每格取 w 在 [d, d + Δx] 上的解析平均，剖面在 3π/2·α 处归零。Te 取 25 km（地球
+   α ≈ 65 km，随 g 按 g^(−¼) 变化），W0 取 2.0 km（ETOPO 沟轴格相对外侧海底的中位数反推，观测拟合）。
+   地形阶段之后，俯冲侧沟轴格写入 `trench_axis_elevation_m`（沟轴格的最终平均高程减去 0.38·W0，即 W0 与沟轴格平均下弯 0.62·W0 之差），
+   其余格子写 None。
+   **弧前带**（`trench_flexure.py::forearc`，物理见 `docs/knowledge/geology/orogen_topography.md` §6）：洋陆边缘上覆一侧的格子平均高程不高于楔面
+   s(x) = z_axis + tan 1.55° · x（z_axis 为沟轴格平均高程，x 为沿上覆一侧到最近沟轴格的图距离），楔面一直跟到
+   海平面以上 6 km：海平面以下是淹没的弧前带，以上是一道斜坡，使相邻的碰撞高原等上覆板块起伏不会在弧前带上方
+   立成悬崖。楔面在陆架之后施加（海平面校准之前已完成，陆地占比因此低于目标，见 roadmap 技术债 47）。安第斯型
+   剖面的前翼从弧前带内缘（海岸，弧前带宽度 −z_axis / tan α）起抬升，峰脊在其内侧一个翼长（峰高 / tan 0.6°）处
+   （`orogen_relief` 的 `forearc_km`），截面积不变。
 3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
    沿板块运动方向（欧拉极速度）追踪链，`hotspot_active_height_m`（默认 8500 m）从洋底抬升露海面成岛，
    沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 3（大型世界可在
@@ -915,42 +946,27 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > `crust_plate_floor`（默认 0.10）避免整板近零陆壳；泄漏陆壳 `_relabel_leaked_crust`
 > 在 base 前重标为洋壳（洒点岛屿只由岛弧/热点/钉扎涌现）。
 
-### 7.2 内部地貌：古造山带与山间盆地
+### 7.2 老造山带：沿古缝合带的残留山脊
 
-板块内部（距边界 >600 km 的大陆区域）放置线性构造带（`_apply_interior_landforms`），
-模拟古生代/中生代造山带残余（乌拉尔、阿巴拉契亚型）。地貌学依据已上浮至
-[knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §4.3。
+> 实施：`paleo_orogens.py::paleo_orogen_relief`（技术债 43 阶段 E 第 1 步，设计见
+> `docs/design/proposals/orogen-topography.md`）；地貌学依据见
+> [knowledge/geology/terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §4.3。
 
-- **沿走向调制**：每条 belt 用 1D simplex 噪声沿大圆弧采样，调制各段振幅
-  （振幅 ∈ [base × 0.3, base × 1.7]），造山带呈高峰 + 鞍部而非均匀脊线；
-  宽度沿走向 0.55–1.45× 变化。
-- **横向蜿蜒**：belt 中线沿大圆弧**横向**位移 δ(t) = `interior_belt_meander_km` ×
-  双频 simplex（归一 ±1），cell 距离取一阶近似 |signed_d − δ(t)|——belt 随弱带
-  弯曲（Şengör 1990 弱带复活），而非直线段。（旧实现把参考点沿走向旋转，几何上是
-  走向偏移而非横向位移，belt 永远贴原大圆、被噪声切成虚线段——2026-09-29 修正。）
-- **长度封顶**：造山带的大圆弧长度按右偏分布随机截断
-  `min_deg + (max_deg − min_deg)·rand²`（默认 2–10°，多数 ~600 km、最长 ~1200 km），
-  配合 `_angle_ap > angle_ab` 的长度过滤，把「贯穿板块的单条长条」变成「散碎短段」。
-- **山间盆地**：沿走向噪声低于阈值时（`interior_basin_chance`）该段成为断陷盆地，
-  深度上限 `interior_basin_depth_max_m`（部分盆底低于海平面）。
-- **内部裂谷已删除**（2026-09-29）：每板块至多一条、数百 cell 量级，占比过小不值
-  单独一步；世界尺度的失败裂谷臂由 geography.yaml 手写（feature `rift`）表达。
-- **剖面在 2σ 处降到零**：权重取高斯减去 e⁻² 再归一，cell 落在截断线上不产生跳变。
-- **跨平台确定性**：每条 belt 先为全部 inland cell 一次抽好 ±10% 扰动，再按 cell 取用；
-  inland 判定前把离边界距离舍入到 1 mm。地形合成里凡是随机抽取，都不能放在由浮点阈值
-  决定是否执行的分支里（大陆架噪声、海岸平原目标高度、湖盆取舍同样按 cell 编号取值），
-  否则一个 cell 在另一台机器上越过阈值，就会让共享随机数流错位、下游地形整片改变。
-  回归测试为 `tests/test_map/test_terrain_simd_determinism.py`；残余与边界见 roadmap 技术债 31。
+老造山带只来自历史输入：`plate_history.yaml` 中带碰撞年龄的 `sutures`（引擎读入 `paleo_sutures`）。
+没有缝合带的世界没有老造山带。每条缝合带沿折线立起一道山脊，脊线高出大陆基准
 
-| 参数 | 默认值 | 范围 | 含义 |
-|------|--------|------|------|
-| `interior_orogeny_count` | 5 | 0–10 | 基准 belt 数/板块，随 inland cell 数缩放（+1/800 cell），无硬上限 |
-| `interior_belt_length_min_deg` | 2.0 | 0–5 | belt 大圆弧最短长度（度） |
-| `interior_belt_length_max_deg` | 10.0 | 5–20 | belt 大圆弧最长长度（度） |
-| `interior_height_variation` | 0.7 | 0–1 | 沿走向高度变化强度 |
-| `interior_basin_chance` | 0.25 | 0–0.5 | 山间盆地出现概率 |
-| `interior_basin_depth_max_m` | 600 | 100–1500 | 盆地最大沉降深度 |
-| `interior_belt_meander_km` | 180 | 0–400 | belt 中线横向蜿蜒幅度（±km，0=直线） |
+```
+Δh(t) = h_r + (h₀ − h_r) · e^(−t/τ)        t = collision_age_myr
+```
+
+τ = 70 My（含均衡回弹的观测拟合，Pazzaglia & Brandon 1996），h_r = 400 m（地球约 300 My、未经再抬升的老带
+脊线：阿巴拉契亚南段 587 m、北段 301 m、乌拉尔 359 m，20 万格格子平均高出相邻地台的第 90 百分位）。h₀ 是
+本世界典型碰撞的脊线：各碰撞段中值留存缩短量对应的楔形峰高（不超过碰撞型平均高程上限）取中位数
+（`orogen_profile.collision_crests_m`）；世界没有碰撞段时取碰撞型上限减大陆基准。横剖面是活动造山带的楔形，
+半宽 W = h₀ / tan 0.6°（与 §7.1 第 2b 步的翼部坡度相同），按衰减后的脊线缩放：Δh(t)·(1 − d/W)，d 为到折线的
+距离；衰减只降低、不收窄。只作用于非洋壳格子，与造山带剖面取较大者，作为 `orogen` 的一部分在海平面校准
+之前叠加；有残留山脊的格子标记 `landform = "orogeny"`。缝合带的 `width_km` 只是古地理倒推的标记宽度。
+地质时间轴从起伏倒推年龄时用同一公式的反函数（`paleo_orogens.collision_age_from_crest`）。
 
 ### 7.3 内部低地：大陆内部系统性下压
 
@@ -969,8 +985,8 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 
 `floor` 把下压**软钳制**在海平面之上（logsumexp 光滑最大值，非硬钳 `max`）——
 **校准后的海岸线（目标陆面比）不变**，低地也不会全部堆在同一个高度。在 §7.5
-后处理中排在海平面校准之后、岛弧/内部地貌之前——古造山带仍能从低地中崛起，裂谷/
-盆地则下切（部分低于海平面，成内流湖/内海）。
+后处理中排在海平面校准之后、岛弧之前；老造山带在校准之前已叠加，随大陆基准一起下压，相对高度不变，裂谷与
+盆地则下切（部分低于海平面，成内流湖或内海）。
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
@@ -1041,32 +1057,32 @@ age = max_age · d_div / (d_div + d_conv)
 3. **沉积填充** `_apply_deposition_fill`（见 §7.3）：把低于海平面的闭合盆地填到溢流
    点，留一小部分为内流湖。
 4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
-5. **内部地貌** `_apply_interior_landforms`（见 §7.2）。
-6. **大陆架** `_apply_continental_shelf`：陆架铺在与海岸相连的淹没大陆地壳上，宽度是海岸线到陆洋边界的
+5. **大陆架** `_apply_continental_shelf`：陆架铺在与海岸相连的淹没大陆地壳上，宽度是海岸线到陆洋边界的
    距离（`_shelf_profile`）；地壳划分没有拉薄陆缘这一档，所以每段海岸另按陆缘类型补一条淹没陆缘带（被动 88 km、
    主动 31 km，Harris et al. 2014；离汇聚或转换边界不足 `boundary_influence_km` 的海岸为主动），陆架取两者中
    较远的一个；平台从岸边线性降到坡折深度 `shelf_break_depth_m`，坡折以外按约 4° 的陆坡降到
    原有海底；距离从海陆 Voronoi 边量起，每格取剖面在本格范围内的平均。`shelf_width_km <= 0` 关闭此步。
    物理依据见
    `docs/knowledge/geology/continental_margins.md`。
-7. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
+6. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
    （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。
-8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
+7. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
    （削峰）只放大「高于目标」的下压方向，低于目标（海沟）保持线性上拉——避免把
    feature 软边上的深沟 cell 对称指数化抬成山（§4.4 钉扎过抬修复）。拉动量不超过到目标的偏差
    （最多拉到目标）。分两遍：`pin_crosses_sea_level` 为假的地物（默认，大陆平均海拔一类）只作用于与
    目标同侧的格子——正目标只动陆地、负目标只动海洋——所以不改变海岸线；标为真的地物（陆桥、
    人工海峡）随后作用于所有格子。
-9. **海底尾部压缩**（`isostasy_enabled`）：只压缩深于 `isostasy_max_ocean_depth_m` 的尾部，指数衰减保序
-   （nacrea 约 11 550 m）；海沟改为年龄深度加挠曲后取消（技术债 43 阶段 D）。格子值是格子平均高程，陆地上限
+8. **不做渐近压缩**：格子值是格子平均高程，海沟的格子平均深度由第 2c 步的挠曲剖面给出，海洋深度上限
+   `isostasy_max_ocean_depth_m` 只是沟轴点深度的检验量。陆地上限
    `isostasy_max_continental_elevation_m`（峰顶高度，nacrea 8443 m）不再压缩格子平均高程，造山带的平均高程由
    §7.1 第 2b 步的剖面上限约束；为抹平压缩台阶而设的陆地拉普拉斯平滑一并取消（对称版
-   `cortial2019_gaussian` 仍保留旧的压缩与平滑）。
+   `cortial2019_gaussian` 仍保留旧的海沟凹槽、压缩与平滑）。
 
-洋中脊形态按该边界格子所在板块对的实际张开速率（全速率，即 `−convergence_rate_cm_yr`）
-逐格选择：全速率不低于 9 cm/yr 时为平滑的轴部隆起，不高于 5 cm/yr 时为中央裂谷加两侧裂谷山，
-其间过渡（Frisch et al. 2011）。张开速率来自板块运动学，没有单独的扩张速率参数。
+洋中脊在已知年龄的洋底上就是年龄-深度曲线本身（脊轴年龄为 0），边界剖面不再另加脊顶凸起：轴部隆起与
+中央裂谷宽 10–30 km，在格子平均的地图上属亚格子。没有年龄的洋底（只够得到一种边界的板块）沿用按张开速率
+选择的形态：全速率不低于 9 cm/yr 时为平滑的轴部隆起，不高于 5 cm/yr 时为中央裂谷加两侧裂谷山，其间过渡
+（Frisch et al. 2011）。张开速率来自板块运动学，没有单独的扩张速率参数。
 
 ### 7.6 参数表
 
@@ -1091,8 +1107,8 @@ age = max_age · d_div / (d_div + d_conv)
 | `noise_persistence` | 0.5 | 0.3 – 0.7 | fBm 振幅衰减率 |
 | `noise_lacunarity` | 2.0 | 1.5 – 3.0 | fBm 频率增长率 |
 | `noise_anisotropy` | 0.3 | 0 – 1 | 各向异性噪声强度 |
-| `plate_elevation_spread_m` | 1500 | 500 – 3000 | per-plate 均匀偏移 |
-| `continental_undulation_m` | 600 | 200 – 1500 | 大陆动态地形起伏 |
+| `plate_elevation_spread_m` | 1500 | 500 – 3000 | per-plate 均匀偏移（已知年龄的洋底不加） |
+| `continental_undulation_m` | 600 | 200 – 1500 | 地幔流场之外的大陆长波起伏 |
 | `interior_lowland_enabled` | true | — | 内部低地开关 |
 | `interior_lowland_depth_m` | 600 | 200 – 1200 | 内部低地下压量 |
 | `interior_lowland_distance_scale_km` | 1500 | 500 – 3000 | 下压 0→满深距离 |

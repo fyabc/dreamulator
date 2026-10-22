@@ -708,7 +708,7 @@ def normalise_plate_speeds(
         p.euler_pole.omega_rad_yr *= scale
 
 
-def _coherent_poloidal_axis(config: TerrainPipelineConfig) -> np.ndarray:
+def coherent_poloidal_axis(config: TerrainPipelineConfig) -> np.ndarray:
     """Symmetry axis of the coherent poloidal flow.
 
     Tidally-locked bodies anchor the flow to the sub-planet (tidal) axis;
@@ -820,7 +820,7 @@ def _assign_coherent_euler_poles(
     fit to that field over its cells, so plate-motion directions are coherent
     but diverse (not all ⊥ the tidal axis).
     """
-    poloidal_axis = _coherent_poloidal_axis(config)
+    poloidal_axis = coherent_poloidal_axis(config)
     # Only speed ratios matter here: the rates are renormalised to the world's
     # mean plate speed at the end (``normalise_plate_speeds``).
     poloidal_amp = 2.0 * config.plate_speed_mean_cm_yr

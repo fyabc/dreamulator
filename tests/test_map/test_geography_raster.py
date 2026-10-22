@@ -96,7 +96,6 @@ def test_synthesize_raster_ocean_stays_submerged() -> None:
         hotspot_count=0,
         shelf_width_km=0.0,
         coastal_plain_width_km=0.0,
-        interior_orogeny_count=0,
     )
     cfg.geography = GeographySpec(land_fraction_target=0.5, features=[])
     mesh = generate_cvt_mesh(cfg)

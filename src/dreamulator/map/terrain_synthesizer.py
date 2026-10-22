@@ -31,7 +31,6 @@ See ``docs/design/terrain-pipeline.md`` §5 for detailed algorithm reference.
 from __future__ import annotations
 
 import logging
-import zlib
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -49,7 +48,8 @@ logger = logging.getLogger(__name__)
 # Subduction-trench relief below the abyssal floor.  Earth's trenches reach
 # ~−11 km (Mariana) while the abyssal plain sits near −4 km, so a ~7 km relief
 # on the subducting side reproduces trench depths.  Applied only to oceanic
-# crust on the oceanward side of convergent boundaries.
+# crust on the oceanward side of convergent boundaries.  Gaussian (legacy) profile
+# path only; the asymmetric path uses the flexure of the subducting plate.
 _TRENCH_RELIEF_M = 7000.0
 
 # Earth-envelope floors for deep-ocean cells (2026-09-30, nacrea #95271:
@@ -909,8 +909,9 @@ def _synthesize_asymmetric(
     """Cortial 2019 — asymmetric mountain profiles + hotspots + landforms.
 
     Continental convergent relief comes from the history contract
-    (``orogen_profile.orogen_relief``, orogen-topography.md §3.2); the boundary profiles
-    keep only ocean–ocean arcs, trenches, rifts and transforms.
+    (``orogen_profile.orogen_relief``, orogen_topography.md §2–4); the boundary profiles
+    keep only ocean–ocean arcs, rifts and transforms; trenches are the flexure of the
+    subducting plate (``trench_flexure.trench_relief``, §3.4).
     """
     logger.info("Synthesizing terrain (asymmetric)")
     n = mesh.num_cells
@@ -924,11 +925,12 @@ def _synthesize_asymmetric(
             base[i] = config.continental_elevation_m
     _apply_base_override(base, geography_bias, config)
 
+    age_valid = np.zeros(n, dtype=bool)
     if config.ocean_age_depth_enabled:
         age_depth = _compute_ocean_age_depth(mesh, config)
         ocean_mask = np.array([c.crust_type == "oceanic" for c in mesh.cells])
-        valid = ocean_mask & np.isfinite(age_depth)
-        base[valid] = age_depth[valid]
+        age_valid = ocean_mask & np.isfinite(age_depth)
+        base[age_valid] = age_depth[age_valid]
 
     logger.info("  Step 1/6: Base elevation + plate offsets")
     _relabel_leaked_crust(mesh, geography_bias)
@@ -944,13 +946,27 @@ def _synthesize_asymmetric(
             off = plate_offsets[cell.plate_id]
             if cell.crust_type == "continental":
                 base[i] += _PLATE_OFFSET_LAND_FRACTION * off + und[i]
-            else:
+            elif not age_valid[i]:  # seafloor of known age: depth is set by the age
                 base[i] += off
+    # dynamic topography of the mantle flow, degree-2 about the poloidal axis
+    # (knowledge/geology/terrain_synthesis.md §4.3.1)
+    from .dynamic_topography import dynamic_topography
+    from .plate_generator import coherent_poloidal_axis
+
+    base += dynamic_topography(mesh, coherent_poloidal_axis(config))
 
     # 2. Asymmetric boundary effects
     logger.info(
         "  Step 2/6: Asymmetric boundary profiles (asymmetry=%.2f)", config.mountain_asymmetry
     )
+    from .trench_flexure import trench_relief
+
+    trench, _axis_offset, subducting = trench_relief(
+        mesh, plates, orogen_contract, config.radius_km, config.gravity_m_s2
+    )
+    from .trench_flexure import forearc
+
+    forearc_surface, forearc_km = forearc(mesh, orogen_contract, base + trench, config.radius_km)
     boundary_delta, transform_boost = _asymmetric_boundary_effects(
         mesh,
         config,
@@ -959,16 +975,43 @@ def _synthesize_asymmetric(
         plate_offsets=plate_offsets,
         cont_frac=_neighbor_continental_fraction(mesh),
         continental_orogens_from_contract=True,
+        subducting=subducting,
     )
     from .orogen_profile import orogen_relief
 
-    orogen = orogen_relief(
+    orogen, orogen_cap = orogen_relief(
         mesh,
         orogen_contract,
         config.radius_km,
         config.gravity_m_s2,
         config.continental_elevation_m,
+        forearc_km=forearc_km,
     )
+    # old orogens along the history's paleo-sutures (terrain_synthesis.md §4.3): crest
+    # decays from the world's typical collision crest (median over its collision segments)
+    # towards the residual
+    from .orogen_profile import collision_cap_m, collision_crests_m
+    from .paleo_orogens import paleo_orogen_relief
+
+    crests = collision_crests_m(
+        orogen_contract, config.gravity_m_s2, config.continental_elevation_m
+    )
+    active_crest = (
+        float(np.median(crests))
+        if crests
+        else collision_cap_m(config.gravity_m_s2) - config.continental_elevation_m
+    )
+    paleo = paleo_orogen_relief(mesh, config.paleo_sutures, active_crest, config.radius_km)
+    logger.info(
+        "  Old orogens: %d sutures, active crest %.0f m, %d cells",
+        len(config.paleo_sutures),
+        active_crest,
+        int((paleo > 0).sum()),
+    )
+    for k in np.flatnonzero((paleo > orogen) & (paleo > 0.0)).tolist():
+        if not mesh.cells[k].landform:
+            mesh.cells[k].landform = "orogeny"
+    orogen = np.maximum(orogen, paleo)
 
     # 3. Hotspot volcanic chains
     hotspot_delta = np.zeros(n, dtype=np.float64)
@@ -1028,6 +1071,7 @@ def _synthesize_asymmetric(
         base
         + boundary_delta
         + orogen
+        + trench
         + hotspot_delta
         + regional_fbm * regional_amp
         + fbm * noise_amp * interior_factor * transform_boost
@@ -1041,40 +1085,51 @@ def _synthesize_asymmetric(
     # level cuts the plateau into textured islands/channels.
     elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
 
-    # Sea level auto-calibration ("倒水")
+    # Sea level auto-calibration ("倒水"): a uniform shift, which the forearc surface
+    # (computed on the pre-calibration datum) follows
+    datum_shift = 0.0
     if config.sea_level_auto:
+        _before = float(elevation[0])
         elevation = _apply_sea_level_calibration(
             mesh, elevation, config, overlay_mask=_overlay_calibration_mask(mesh, config)
         )
+        datum_shift = float(elevation[0]) - _before
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
     sea_level = config.sea_level_offset_m
+    # the collapse limit bounds the final mean surface of orogen cells (texture noise
+    # must not lift a plateau above its cap; orogen_topography.md §3)
+    from .orogen_profile import apply_orogen_cap
+
+    elevation = apply_orogen_cap(elevation, orogen_cap, sea_level)
     elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
     elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
     elevation = _apply_island_arcs(
-        mesh, elevation, config, geography_bias=geography_bias, uplift_mod=uplift_mod
+        mesh,
+        elevation,
+        config,
+        geography_bias=geography_bias,
+        uplift_mod=uplift_mod,
+        subducting=subducting,
     )
-    elevation = _apply_interior_landforms(mesh, elevation, config, rng)
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+    # forearc wedge of ocean–continent margins bounds the surface between trench and coast
+    # (orogen_topography.md §6); after the shelf, so the wedge rather than a passive-margin
+    # shelf sets it.  It drowns land after the sea-level solve: the land fraction ends below
+    # the target (technical debt 47, the solve runs before the shelf is built)
+    elevation = np.minimum(elevation, forearc_surface + datum_shift + sea_level)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
 
-    # Cell-mean semantics (orogen-topography.md §1.1): the land limit is a peak height
-    # and is no longer applied to cell means; orogen means are capped by the profile.
-    # Ocean depths keep the asymptotic compression until trenches move to the
-    # age-depth + flexure model (phase D).
-    if config.isostasy_enabled:
-        ocean_limit = config.isostasy_max_ocean_depth_m
-        over_deep = elevation < -ocean_limit
-        if np.any(over_deep):
-            excess = -ocean_limit - elevation[over_deep]
-            elevation[over_deep] = -ocean_limit - excess * np.exp(-7.5 * excess / ocean_limit)
+    # Cell-mean semantics (orogen_topography.md §1): no asymptotic compression — the
+    # land limit is a peak height (orogen means are capped by the profile) and the ocean
+    # limit a trench-axis depth (trench means come from the flexure profile).
 
     # Write post-processed elevation back to cells
     for i, cell in enumerate(mesh.cells):
@@ -1195,13 +1250,15 @@ def _asymmetric_boundary_effects(
     plate_offsets: dict[str, float] | None = None,
     cont_frac: np.ndarray | None = None,
     continental_orogens_from_contract: bool = False,
+    subducting: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Boundary-type-specific elevation profiles.
 
     With ``continental_orogens_from_contract`` the convergent uplift of continental
     cells (collision and the overriding side of Andean margins) and the intermontane
-    basins are left to ``orogen_profile`` (history contract); ocean–ocean arcs and
-    trenches stay here.
+    basins are left to ``orogen_profile`` (history contract) and the trenches to
+    ``trench_flexure``; ocean–ocean arcs stay here, kept off the ``subducting`` side
+    (arcs stand on the overriding plate).
 
     Convergent (C-C / C-O / O-O)
         Asymmetric mountain range on the overriding plate: steep front
@@ -1397,6 +1454,8 @@ def _asymmetric_boundary_effects(
     meander_max = max(config.rift_meander_km, config.orogen_meander_km)
     band_max = 1.2 * shoulder_sigma + meander_max
 
+    # cell-mean mode with the age–depth seafloor: no separate ridge bump
+    age_depth_ridges = continental_orogens_from_contract and config.ocean_age_depth_enabled
     for i, cell in enumerate(mesh.cells):
         if cell.boundary_type is None:
             continue
@@ -1464,6 +1523,8 @@ def _asymmetric_boundary_effects(
                 amp = config.convergent_uplift_m * 1.3  # C-C collision
             elif cont_frac is not None and cont_frac[i] >= 0.15:
                 amp = 0.0  # O-C subducting side → trench only
+            elif subducting is not None and subducting[i]:
+                amp = 0.0  # down-going plate of an O-O margin → trench only
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
@@ -1496,7 +1557,11 @@ def _asymmetric_boundary_effects(
             # collision has no trench.  Deepened to ~6 km relief so trenches
             # reach abyssal-trench depths (~−10 km; Mariana ≈ −11 km).
             trench_dist_km = sigma_conv * 0.35  # ~140 km
-            if d_o > trench_dist_km and crust == "oceanic":
+            if (
+                d_o > trench_dist_km
+                and crust == "oceanic"
+                and not continental_orogens_from_contract
+            ):
                 dist_from_trench = abs(d_o - trench_dist_km - peak_offset)
                 trench_sigma = sigma_conv * 0.25  # narrow, sharp trench
                 trench = -_TRENCH_RELIEF_M * np.exp(
@@ -1514,7 +1579,12 @@ def _asymmetric_boundary_effects(
             leaked = crust == "continental" and cont_frac is not None and cont_frac[i] < 0.5
             off_i = plate_offsets.get(cell.plate_id or "", 0.0) if plate_offsets else 0.0
 
-            if crust == "oceanic" or leaked:
+            if (crust == "oceanic" or leaked) and age_depth_ridges:
+                # The plate-cooling age–depth curve already is the ridge (age 0 at the
+                # axis); axial highs and median valleys are 10–30 km features, sub-grid
+                # on the cell-mean map.
+                delta_h[i] = 0.0
+            elif crust == "oceanic" or leaked:
                 # Mid-ocean ridge, morphology by the local FULL spreading rate
                 # (the opening rate of this boundary cell's plate pair).
                 # Earth: ridge crest ~1300 m above the abyss, ~-2500 m below sea
@@ -2793,12 +2863,14 @@ def _apply_island_arcs(
     *,
     geography_bias: np.ndarray | None = None,
     uplift_mod: np.ndarray | None = None,
+    subducting: np.ndarray | None = None,
 ) -> np.ndarray:
     """Island arc uplift at O-O convergent boundaries.
 
     At oceanic-oceanic subduction zones, a volcanic arc forms on the
     overriding plate, ~100–300 km from the trench.  This creates chains
-    of islands like Japan, the Aleutians, and the Marianas.
+    of islands like Japan, the Aleutians, and the Marianas.  With ``subducting``
+    (the down-going side from ``trench_flexure``) those cells get no arc.
 
     Modifies *elevation* in-place.
 
@@ -2846,6 +2918,8 @@ def _apply_island_arcs(
         weight = np.exp(-((d_km - peak_dist) ** 2) / (2 * sigma * sigma))
         dz = arc_height * weight * damp[cid] * mod[cid]
         # Only uplift cells that are oceanic (don't push continental crust)
+        if subducting is not None and subducting[cid]:
+            continue
         if getattr(mesh.cells[cid], "crust_type", "") != "continental":
             elevation[cid] += dz
             arc_count += 1
@@ -2855,277 +2929,6 @@ def _apply_island_arcs(
         arc_count,
         arc_height,
     )
-    return elevation
-
-
-# =========================================================================
-# Interior landforms: paleo-orogeny belts, intermontane basins
-# =========================================================================
-
-
-_EXP_M2 = float(np.exp(-2.0))
-
-
-def _apply_interior_landforms(
-    mesh: CVTMesh,
-    elevation: np.ndarray,
-    config: TerrainPipelineConfig,
-    rng: np.random.Generator,
-) -> np.ndarray:
-    """Paleo-orogeny belts and intermontane basins.
-
-    Plate interiors far from active boundaries can appear too flat.
-    On Earth, ancient collision zones (Urals, Appalachians) persist as
-    linear features long after the plate boundary has migrated away.
-
-    For each continental plate, this places 1–3 belts at random orientation
-    across the interior.  Each belt's centre line meanders **laterally** off
-    its great circle (``interior_belt_meander_km``, reactivated weak zones)
-    and varies in **both height and width** along strike (0.55–1.45×,
-    correlated with amplitude — collision knots broad and high, transfer
-    segments narrow) via 1D simplex noise — producing natural peaks, passes,
-    and sunken intermontane basins (pull-apart / fault-block depressions like
-    the Turpan Depression at −154 m or the Fergana Valley).
-
-    Interior rift valleys were removed (2026-09-29): at most one per plate
-    and a few hundred cells — too small a share of the terrain to justify
-    the extra pass.  World-visible failed arms are authored via
-    geography.yaml instead.
-
-    References
-    ----------
-    * Şengör, A.M.C. (1990). "Plate tectonics and orogenic research
-      after 25 years: A Tethyan perspective." *Earth-Science Reviews*,
-      27(1–2), 1–201.
-    * Burke, K. & Dewey, J.F. (1973). "Plume-generated triple
-      junctions: Key indicators in applying plate tectonics to old
-      rocks." *Journal of Geology*, 81(4), 406–433.
-    * Kröner, A. (1981). "Precambrian plate tectonics." Elsevier.
-      — ancient orogenic belts as linear weak zones reactivated over
-      multiple orogenic cycles.
-    * Allen, M.B., Şengör, A.M.C., & Natal'in, B.A. (1995). "Junggar,
-      Turpan and Alakol basins as Late Permian to Early Triassic
-      extensional structures in a sinistral shear zone." *Journal of
-      the Geological Society*, 152, 327–338. — pull-apart intermontane
-      basin formation in the Tianshan range.
-
-    Modifies *elevation* in-place.
-    """
-    num_orogenies = config.interior_orogeny_count
-    if num_orogenies <= 0:
-        return elevation
-
-    try:
-        import opensimplex
-
-        _has_noise = True
-    except ImportError:
-        _has_noise = False
-
-    # Group cells by plate and identify interiors
-    plate_cells: dict[str, list[int]] = {}
-    for i, cell in enumerate(mesh.cells):
-        pid = cell.plate_id or ""
-        if pid:
-            plate_cells.setdefault(pid, []).append(i)
-
-    total_orogeny = 0
-    total_basin = 0
-
-    xyz_all = mesh.cell_xyz
-    radius_km = config.radius_km
-
-    for pid, cell_indices in plate_cells.items():
-        # Only add orogenies to continental or mixed plates
-        n_cont = sum(
-            1 for i in cell_indices if getattr(mesh.cells[i], "crust_type", "") == "continental"
-        )
-        if n_cont < len(cell_indices) * 0.2:
-            continue
-
-        # Find interior cells (beyond the boundary influence zone).  The interior
-        # count ``ni`` drives the rng draws below, so one cell crossing the
-        # threshold re-rolls every belt on every later plate.  The distance is
-        # rounded to 1 mm first: it differs across CPUs/libm builds by ~1e-9 km,
-        # and without rounding that alone produced a different continent
-        # interior on another machine (2026-10-15).
-        interior_threshold = config.boundary_influence_km * 1.2
-        interior = [
-            i
-            for i in cell_indices
-            if (dist_i := mesh.cells[i].distance_to_boundary_km) is not None
-            and round(dist_i, 6) > interior_threshold
-            and getattr(mesh.cells[i], "crust_type", "") == "continental"
-        ]
-        ni = len(interior)
-        if ni < 10:
-            continue
-        interior_arr = np.array(interior, dtype=np.int64)
-
-        # ---- Orogenic belts: count scales with interior area ----
-        # ``interior_orogeny_count`` is the per-plate base; one extra belt per
-        # 800 interior cells beyond the first 800 (so large plates get more,
-        # small plates fewer).  No hard cap — the base count is authoritative.
-        n_belts = config.interior_orogeny_count + max(0, ni // 800 - 1)
-        belt_seed_base = zlib.crc32(pid.encode("utf-8")) % 10000
-
-        # Pre-extract interior positions (ni, 3)
-        interior_xyz = xyz_all[interior_arr]
-
-        for belt_idx in range(n_belts):
-            if ni < 3:
-                continue
-            a_idx = interior[rng.integers(0, ni)]
-            b_idx = interior[rng.integers(0, ni)]
-            if a_idx == b_idx:
-                continue
-
-            a_pos = xyz_all[a_idx]
-            b_pos = xyz_all[b_idx]
-
-            # Great-circle arc: normal vector
-            gc_normal = np.cross(a_pos, b_pos)
-            gc_norm = np.linalg.norm(gc_normal)
-            if gc_norm < 1e-12:
-                continue
-            gc_normal /= gc_norm
-
-            # Angular length of the belt — random, right-skewed so most are
-            # short (~600 km) with a rare long tail up to ~1200 km (10°).
-            angle_ab_raw = np.arccos(np.clip(np.dot(a_pos, b_pos), -1.0, 1.0))
-            belt_length_deg = (
-                config.interior_belt_length_min_deg
-                + (config.interior_belt_length_max_deg - config.interior_belt_length_min_deg)
-                * rng.random() ** 2
-            )
-            angle_ab = min(angle_ab_raw, np.radians(belt_length_deg))
-
-            # Belt parameters
-            base_amplitude = rng.uniform(500.0, 1500.0)
-            sigma_km = rng.uniform(80.0, 200.0)
-            height_var = config.interior_height_variation
-            basin_chance = config.interior_basin_chance
-            basin_depth_max = config.interior_basin_depth_max_m
-
-            belt_noise_seed = (belt_seed_base * 100 + belt_idx + 1) * 1000
-            # Reset the opensimplex global state once per belt so every
-            # noise2 call below (meander + strike) is hermetic.  The old
-            # per-cell reseed ran AFTER the first cell's wobble reads — the
-            # first cell always sampled whatever global state an earlier
-            # stage left behind, making back-to-back pipeline runs differ
-            # (caught by the terrain determinism test, 2026-09-29).
-            if _has_noise:
-                import warnings as _w
-
-                with _w.catch_warnings():
-                    _w.filterwarnings("ignore", message="overflow encountered")
-                    opensimplex.seed(belt_noise_seed)
-
-            # ---- Pre-filter: dot product with gc_normal is a cheap proxy
-            # for angular distance from the great-circle plane.
-            # sin(10°) ≈ 0.174 → only ~5% of cells pass.
-            _abs_dot = np.abs(np.dot(interior_xyz, gc_normal))
-            _near = _abs_dot < 0.174  # within ~10° of the belt plane
-            candidates = np.where(_near)[0]
-            if len(candidates) == 0:
-                continue
-            cand_xyz = interior_xyz[candidates]
-
-            # ---- Vectorised projection onto great-circle plane ----
-            _proj = cand_xyz - np.outer(np.dot(cand_xyz, gc_normal), gc_normal)
-            _pn = np.linalg.norm(_proj, axis=1)
-            _ok = _pn > 1e-12
-            _proj[_ok] /= _pn[_ok, np.newaxis]
-
-            # Along-belt position t ∈ [0, 1]
-            _cos_ap = np.clip(np.dot(_proj, a_pos), -1.0, 1.0)
-            _angle_ap = np.arccos(_cos_ap)
-            t_vals = np.clip(_angle_ap / max(angle_ab, 1e-12), 0.0, 1.0)
-
-            belt_count = 0
-            basin_count = 0
-            # One jitter per interior cell, drawn up front: the number of draws
-            # must not depend on which cells pass the float threshold below
-            # (dist_km < 2σ), or a single cell flipping across it on another
-            # CPU shifts the shared rng stream for every later belt and plate.
-            belt_jitter = rng.uniform(-0.10, 0.10, size=ni)
-
-            for _j, ci in enumerate(candidates):
-                if not _ok[_j]:
-                    continue
-                if _angle_ap[_j] > angle_ab:
-                    continue  # projection beyond the belt's end — not in the belt
-                t = float(t_vals[_j])
-                i = interior_arr[ci]
-                pos = cand_xyz[_j]
-
-                # Lateral meander: displace the belt centre line off its great
-                # circle by δ(t) km.  (The old implementation rotated the
-                # projected reference ALONG the belt — an along-strike shift,
-                # not a lateral one — which fragmented belts into straight
-                # dashes on the same great circle instead of curving them.)
-                # First-order distance to the wandered line:
-                # |signed lateral offset − δ(t)|, valid while |δ| ≪ R.
-                sin_d = np.clip(np.dot(pos, gc_normal), -1.0, 1.0)
-                signed_d_km = np.arcsin(sin_d) * radius_km
-                if _has_noise and config.interior_belt_meander_km > 0:
-                    meander_norm = (
-                        opensimplex.noise2(belt_noise_seed + 0.5, t * 2.5) * 0.35
-                        + opensimplex.noise2(belt_noise_seed + 1.5, t * 7.0) * 0.12
-                    ) / 0.47  # normalise the two-frequency sum to ±1
-                    dist_km = abs(signed_d_km - config.interior_belt_meander_km * meander_norm)
-                else:
-                    dist_km = abs(signed_d_km)
-
-                # Along-strike modulation: height + width (opensimplex state
-                # was reset per-belt above, so this call is hermetic)
-                if _has_noise:
-                    strike_noise = opensimplex.noise2(t * 8.0, belt_noise_seed * 0.01)
-                else:
-                    strike_noise = rng.uniform(-1.0, 1.0)
-
-                local_sigma = sigma_km * (0.55 + 0.9 * (strike_noise + 1.0) / 2.0)
-
-                if dist_km >= 2.0 * local_sigma:
-                    continue
-
-                # Determine segment type and amplitude
-                if strike_noise < -(1.0 - basin_chance * 2):
-                    basin_depth = basin_depth_max * abs(strike_noise)
-                    local_amp = -basin_depth
-                    landform_type = "basin"
-                    basin_count += 1
-                else:
-                    amp_mult = 0.3 + height_var * (strike_noise + 1.0) / 2.0
-                    local_amp = base_amplitude * amp_mult
-                    landform_type = "orogeny"
-                    belt_count += 1
-
-                # Gaussian profile shifted to reach zero at the 2σ cut-off, so a
-                # cell sitting on the cut-off gets no step (the unshifted weight
-                # is still e^-2 ≈ 0.14 there and jumped by ~0.14 × amplitude
-                # when float noise moved a cell across it).
-                weight = (
-                    np.exp(-(dist_km * dist_km) / (2 * local_sigma * local_sigma)) - _EXP_M2
-                ) / (1.0 - _EXP_M2)
-                elevation[i] += local_amp * weight * (1.0 + belt_jitter[ci])
-
-                if not mesh.cells[i].landform:
-                    mesh.cells[i].landform = landform_type
-
-            total_orogeny += belt_count
-            total_basin += basin_count
-
-    if total_orogeny > 0 or total_basin > 0:
-        logger.info(
-            "  Interior landforms: %d orogeny, %d basin cells "
-            "(%d belts/plate, basin chance %.0f%%)",
-            total_orogeny,
-            total_basin,
-            num_orogenies,
-            config.interior_basin_chance * 100,
-        )
-
     return elevation
 
 

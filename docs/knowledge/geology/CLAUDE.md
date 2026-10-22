@@ -5,6 +5,7 @@
 - `cvt_mesh.md` — CVT 球面网格生成（Fibonacci 螺旋、Lloyd 松弛、球形 Voronoi）
 - `plate_tectonics.md` — 板块构造（欧拉极运动学、洪水填充、边界分类；earth 真实数据导入 PB2002 + OCB）
 - `terrain_synthesis.md` — 地形合成（双峰基准、构造效应、fBm 噪声）
+- `orogen_topography.md` — 造山带与海沟的格子平均地形：亚格子起伏标定、留存缩短量与 Airy 增厚、力平衡平均高程上限、翼部坡度、断板海沟挠曲、弧前楔与地球体积检验（技术债 43，2026-10）
 - `isostasy_elevation_limits.md` — 地壳均衡与高程极限（Airy/Pratt 补偿、挠曲海沟、重力标度；2026-08）
 - `cortial_2019_notes.md` — Cortial et al. 2019 论文解读（自 geological-pipeline.md 附录 D 上浮）
 - `tidal_plate_speed.md` — 内热与板块速度的关系（v ∝ q^β 标度律与争论、金星悖论；热管体制下板块只排出传导部分，板块排热按半空间冷却 ∝ √v）

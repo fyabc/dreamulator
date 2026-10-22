@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
     from .geography import GeographySpec
     from .orogen_contract import CollisionOverride
+    from .paleo_sutures import AuthorSuture
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +245,9 @@ class TerrainPipelineConfig:
     # overrides from plate_history.yaml (`collisions`, `andean_margins`), loaded by the
     # engine.  Empty = every segment uses the values derived from tectonic evolution.
     collision_overrides: list[CollisionOverride] = field(default_factory=list)
+    # Paleo-sutures from plate_history.yaml (`sutures`), loaded by the engine: old orogens
+    # stand along them (map/paleo_orogens.py).  Empty = no old orogens.
+    paleo_sutures: list[AuthorSuture] = field(default_factory=list)
     # Blend weight of the authored land-bias field vs fBm texture when
     # geography is present: score = w*field + (1-w)*fbm.
     # 1.0 = hard anchors (sharp), 0.0 = pure noise (anchors ignored).
@@ -386,10 +390,6 @@ class TerrainPipelineConfig:
     # observational fit; 0 = centre exactly on the boundary (old behaviour).
     rift_meander_km: float = 80.0
     orogen_meander_km: float = 70.0
-    # Paleo-orogeny belt lateral wander (± km) about its great circle —
-    # ancient belts follow reactivated weak zones (Şengör 1990), not exact
-    # great circles.  0 = straight belt (old behaviour).
-    interior_belt_meander_km: float = 180.0
     # Polar ice sheets — appended post-pass (after sea-level calibration,
     # pins, isostasy, smoothing and rivers; coastline untouched).  Thermal
     # gate: annual-mean TOA insolation below the threshold makes land
@@ -466,31 +466,6 @@ class TerrainPipelineConfig:
     coastal_plain_max_elevation_m: float = 500.0
     # Island arc height at O-O convergent boundaries (m).
     island_arc_height_m: float = 1500.0
-    # Interior landforms: paleo-orogeny belts and cratonic basins.
-    # (Interior rift valleys were removed 2026-09-29 — at most one per plate
-    # and a few hundred cells, too small a share to justify the extra pass;
-    # failed arms visible at world scale are authored via geography.yaml.)
-    # 0 = disabled.  Base number of orogenic belts per continental plate.
-    # Scales with plate interior area: larger plates get more belts
-    # (1 additional belt per ~800 interior cells beyond the first).
-    interior_orogeny_count: int = 5
-    # Great-circle arc length of interior orogeny belts (deg).
-    # Lengths are right-skewed (rng.random() ** 2): most belts ~min_deg + a few
-    # degrees (~600 km at R_earth), with a rare tail up to max_deg (~1200 km).
-    interior_belt_length_min_deg: float = 2.0
-    interior_belt_length_max_deg: float = 10.0
-    # Probability (0–1) that a segment along an orogenic belt becomes a
-    # sunken intermontane basin (pull-apart / fault-block depression)
-    # instead of an elevated ridge.
-    interior_basin_chance: float = 0.25
-    # Maximum subsidence depth (m) for intermontane basins.  Reference:
-    # Turpan Depression −154 m, Fergana Valley ~400 m above sea level,
-    # Basin and Range grabens 500–2000 m below surrounding ranges.
-    interior_basin_depth_max_m: float = 600.0
-    # Along-strike height variation strength (0 = uniform ridge, 1 = full
-    # range).  Controls how much the orogenic belt amplitude varies along
-    # its length via 1D noise modulation.
-    interior_height_variation: float = 0.7
     # Interior lowlands: lower the deep continental interior (far from active
     # convergent boundaries) toward cratonic lowland elevation, so continents
     # read as "low plains + orogenic belts" instead of a uniform high plateau.

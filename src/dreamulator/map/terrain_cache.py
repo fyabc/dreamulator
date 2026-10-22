@@ -282,7 +282,15 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # v4 (2026-10-20): continental shelf on submerged continental crust with a
     # continental slope; the shelf no longer relabels crust_type.
     # v5 (debt 46): mid-ocean ridge morphology from the local opening rate.
-    "terrain": 5,
+    # v6 (debt 43 phase D): trenches from the flexure of the subducting plate, no
+    # asymptotic ocean-depth compression.
+    # v7 (debt 43): forearc wedge on ocean–continent margins, Andean φ default 0.026.
+    # v8 (debt 43 phase E step 1): old orogens along plate_history sutures replace the
+    # random interior belts; v9: their start crest is the world's typical collision crest.
+    # v10 (phase E step 2): dynamic topography of the mantle flow; v11: no ridge bump or
+    # plate offset on seafloor of known age; v12: Andean crest one flank length inland,
+    # forearc wedge followed above sea level.
+    "terrain": 13,
 }
 
 

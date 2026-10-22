@@ -246,7 +246,6 @@ def inactive_sutures(
     min_relief_m: float = 500.0,
     reach_km: float = 300.0,
     min_cells: int = 50,
-    decay_myr: float = 50.0,
     max_age_myr: float = 400.0,
 ) -> list[SutureBelt]:
     """Sutures from the present terrain (geological-timeline §4.0, §4.4).
@@ -257,13 +256,14 @@ def inactive_sutures(
     ground inside a continent, away from active convergence, is where two
     continents once collided.  Belts are connected sets of such cells with at
     least ``min_cells`` cells.  The collision age comes from post-orogenic
-    relief decay as in ``paleo_history.find_sutures``: the median active build
-    time plus ``decay_myr`` · ln(R_active / R), R the belt's 90th-percentile
-    relief (e-folding times of tens of Myr, Baldwin et al. 2003; observational
-    fit with wide uncertainty), capped at ``max_age_myr``.
+    relief decay, the inverse of the law the terrain engine builds old orogens with
+    (``paleo_orogens.collision_age_from_crest``): R the belt's 90th-percentile relief,
+    R_active the median relief of the active orogens, capped at ``max_age_myr``.
     """
     from scipy.sparse import csr_matrix
     from scipy.sparse.csgraph import connected_components
+
+    from dreamulator.map.paleo_orogens import collision_age_from_crest
 
     cont = kin.continental
     active = orogens.relief_m > 0
@@ -273,7 +273,6 @@ def inactive_sutures(
     d, _ = cKDTree(kin.xyz[bnd]).query(kin.xyz)
     belt = cont & ~active & (relief > min_relief_m) & (d * kin.radius_km > reach_km)
     r_active = float(np.median(relief[active])) if active.any() else 2.0 * min_relief_m
-    t_active = float(np.median(orogens.build_myr[active])) if active.any() else 30.0
     rows = np.repeat(np.arange(kin.n), np.diff(kin.nbr_ptr))
     cols = kin.nbr_idx
     m = belt[rows] & belt[cols]
@@ -285,8 +284,8 @@ def inactive_sutures(
         if cells.size < min_cells:
             continue
         r = max(float(np.percentile(relief[cells], 90)), 1.0)
-        age = t_active + decay_myr * float(np.log(max(r_active / r, 1.0)))
-        out.append(SutureBelt(float(min(age, max_age_myr)), cells, "relief_decay"))
+        age = collision_age_from_crest(r, r_active, max_age_myr)
+        out.append(SutureBelt(age, cells, "relief_decay"))
     return sorted(out, key=lambda s: s.age_myr)
 
 

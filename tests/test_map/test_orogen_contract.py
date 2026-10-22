@@ -9,6 +9,7 @@ import pytest
 
 from dreamulator.map.orogen_contract import (
     MARGIN_CONSUMED_KM,
+    MAX_POST_COLLISION_CONVERGENCE_KM,
     CollisionOverride,
     build_orogen_contract,
     load_collision_overrides,
@@ -70,6 +71,8 @@ def test_retained_shortening_formula(built) -> None:
         for k in s.cell_ids:
             got = contract.retained_km[k]
             conv = s.cell_convergence_km[k]
+            if s.kind == "collision":
+                conv = min(conv, MAX_POST_COLLISION_CONVERGENCE_KM)
             if s.kind == "andean":
                 assert got == pytest.approx(s.upper_plate_ratio * conv)
             else:
@@ -139,7 +142,7 @@ def test_orogen_relief_cap_and_widening(built) -> None:
     for retained in (50.0, 400.0, 4000.0):
         for k in contact:
             contract.retained_km[k] = retained
-        relief = orogen_relief(res.mesh, contract, cfg.radius_km, cfg.gravity_m_s2, base)
+        relief, _cap = orogen_relief(res.mesh, contract, cfg.radius_km, cfg.gravity_m_s2, base)
         assert relief.max() <= cap + 1e-6
         for i, c in enumerate(res.mesh.cells):
             if c.crust_type != "continental":
@@ -157,3 +160,14 @@ def test_collision_cap_force_balance() -> None:
     assert 4700.0 < nacrea < 5000.0
     # Iran-like warm lithosphere: about one third of the force gives about a 2 km plateau
     assert collision_cap_m(9.80665, strength_factor=2.3 / 7.1) == pytest.approx(2000.0, rel=0.08)
+
+
+def test_apply_orogen_cap_soft() -> None:
+    """Excess over the cap is compressed to at most the softness; others untouched."""
+    from dreamulator.map.orogen_profile import apply_orogen_cap
+
+    elev = np.array([1000.0, 4900.0, 6000.0, 9000.0, 7000.0])
+    cap = np.array([4800.0, 4800.0, 4800.0, 4800.0, np.inf])
+    out = apply_orogen_cap(elev, cap, 0.0)
+    assert out[0] == 1000.0 and out[4] == 7000.0
+    assert 4800.0 < out[1] < 4900.0 and out[2] < out[3] <= 4800.0 + 300.0

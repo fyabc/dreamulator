@@ -369,7 +369,6 @@ def _e2e_run(spec, offset: float = 0.0):
         hotspot_count=0,
         shelf_width_km=0.0,
         coastal_plain_width_km=0.0,
-        interior_orogeny_count=0,
         sea_level_offset_m=offset,
     )
     cfg.geography = spec

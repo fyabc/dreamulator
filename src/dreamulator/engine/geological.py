@@ -325,13 +325,15 @@ class GeologicalEngine(BaseEngine):
 
         cfg.geography = load_geography_spec(self.find_input("geography.yaml"))
 
-        # History contract overrides (history-contract.md §3.4): optional
-        # `collisions` / `andean_margins` of plate_history.yaml.
+        # History contract (history-contract.md §3.4): optional `collisions` /
+        # `andean_margins` overrides and the `sutures` old orogens stand along.
         history_path = self.find_input("plate_history.yaml")
         if history_path is not None:
             from dreamulator.map.orogen_contract import load_collision_overrides
+            from dreamulator.map.paleo_sutures import load_sutures
 
             cfg.collision_overrides = load_collision_overrides(history_path)
+            cfg.paleo_sutures = load_sutures(history_path)
 
         # Canonical physical parameters from planets.yaml + stellar data
         # (satellite-aware stellar lookup — see physical_inputs docstring).

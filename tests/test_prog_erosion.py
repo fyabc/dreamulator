@@ -85,6 +85,61 @@ def test_priority_flood_fills_pit_to_spill() -> None:
     assert (rec[order[order >= 0]] >= 0).all()
 
 
+def test_priority_flood_lowest_outlet_wins() -> None:
+    """A land cell between a high frame cell and a low one fills to the low outlet.
+
+    Landlocked window: the frame is the only outlet.  The cell at (1, 1) touches the
+    high frame corner region and the low frame cell (0, 2); Priority-Flood must reach it
+    from the lowest outlet, so its fill level is its own height (it drains), not raised
+    to the high frame height by scan order (HANDOFF 2026-10-21, `_pf_core` boundary seeds).
+    """
+    n = 6
+    dem = np.full((n, n), 50.0)
+    dem[0, :] = 900.0  # high frame row scanned first
+    dem[:, 0] = 900.0
+    dem[0, 2] = 10.0  # one low outlet on the frame
+    land = np.ones((n, n), dtype=bool)
+    filled, _order, _rec = priority_flood(dem, land)
+    assert filled[1, 1] == pytest.approx(50.0, abs=1e-3)
+    assert filled[1:-1, 1:-1].max() < 51.0
+
+
+def _reference_priority_flood(dem: np.ndarray, outlet: np.ndarray, eps: float) -> np.ndarray:
+    """Plain heapq Priority-Flood + ε (Barnes et al. 2014): outlets enter the queue."""
+    import heapq
+
+    h, w = dem.shape
+    filled = dem.copy()
+    seen = outlet.copy()
+    q = [(float(dem[y, x]), y, x) for y, x in zip(*np.nonzero(outlet), strict=True)]
+    heapq.heapify(q)
+    while q:
+        z, y, x = heapq.heappop(q)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                ny, nx = y + dy, x + dx
+                if (dy or dx) and 0 <= ny < h and 0 <= nx < w and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    filled[ny, nx] = max(dem[ny, nx], z + eps)
+                    heapq.heappush(q, (float(filled[ny, nx]), ny, nx))
+    return filled
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_priority_flood_matches_reference_on_landlocked_window(seed: int) -> None:
+    """Landlocked window (frame = only outlet): fill matches an independent reference."""
+    rng = np.random.default_rng(seed)
+    dem = rng.uniform(0.0, 1000.0, size=(40, 40))
+    land = np.ones_like(dem, dtype=bool)
+    filled, _order, _rec = priority_flood(dem, land)
+    outlet = np.zeros_like(land)
+    outlet[0, :] = outlet[-1, :] = outlet[:, 0] = outlet[:, -1] = True
+    from dreamulator.map.prog_erosion import PF_EPS_M
+
+    ref = _reference_priority_flood(dem, outlet, PF_EPS_M)
+    assert np.abs(filled - ref).max() <= 1e-6
+
+
 def test_accumulation_grows_downstream() -> None:
     dem, land = _slope_east()
     _filled, order, _rec = priority_flood(dem, land)
@@ -131,8 +186,10 @@ def test_lake_mask_and_river_chain_stops_at_lake() -> None:
     _y, x = np.mgrid[0:n, 0:n]
     dem = (n - 1 - x).astype(np.float64) * 5.0  # slope to the east sea
     dem[12:20, 18:26] -= 60.0  # deep basin (below its surroundings)
+    # keep the basin floor positive *before* deriving land: a basin below 0 would be
+    # an inland sea, i.e. an outlet the surrounding land drains into (no lake)
+    dem[12:20, 18:26] = np.maximum(dem[12:20, 18:26], 5.0)
     land = dem > 0.0
-    dem[land & (dem < 0)] = 5.0  # keep basin floor positive
     filled, order, rec = priority_flood(dem, land)
     lakes = lake_mask(filled, dem)
     assert lakes.any()

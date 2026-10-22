@@ -1,7 +1,7 @@
 """History contract, orogen part: convergent boundary segments and their shortening history.
 
 Design: ``docs/design/proposals/history-contract.md`` §3 (contract) and
-``docs/design/proposals/orogen-topography.md`` §3.1 (retained shortening).  For every
+``docs/knowledge/geology/orogen_topography.md`` §2 (retained shortening).  For every
 convergent boundary segment the contract gives the collision onset age, the
 convergence integrated since onset, the post-collision continental subduction time and,
 for Andean margins, the upper-plate shortening ratio.  Onset and convergence are derived
@@ -11,7 +11,8 @@ them per collision.  The lateral escape ratio is not part of the contract: it is
 here from exit geometry and plate motion (Houseman & England 1993).
 
 The retained shortening of a collision cell is
-``(L − W_m − U·τ_b) × (1 − e) + φ·L_pre`` (the second term is the Andean-type phase before
+``(min(L, L_max) − W_m − U·τ_b) × (1 − e) + φ·L_pre`` (``L_max`` = 3000 km, Earth's
+largest collision) (the second term is the Andean-type phase before
 the collision, ``L_pre`` = cumulative convergence − convergence since onset); of an
 Andean cell ``φ·L``.  Pure functions apart from
 ``load_collision_overrides``.
@@ -47,12 +48,24 @@ _SEGMENT_LINK_KM = 150.0
 # Observation fit: Arabian margin ~180 km (McQuarrie & van Hinsbergen 2013);
 # passive-margin necking zones are 150–200 km.
 MARGIN_CONSUMED_KM = 180.0
+# Upper bound on the convergence a collision absorbs after onset (km).  Collision
+# resistance decelerates the plates (India–Asia slowed from ~15 to ~5 cm/yr after
+# contact) and Earth's largest collision has absorbed ~2500–3000 km since ~50 Ma.  In the
+# "specified present" mode continents do not move, so a synthetic boundary can keep
+# converging inside a continent for most of the evolution (nacrea: up to ~8000 km).
+# Observation fit, calibration domain = Cenozoic collisions.
+MAX_POST_COLLISION_CONVERGENCE_KM = 3000.0
 # Default post-collision continental subduction time before slab breakoff (My).
 # Observation fit: Iran ~10 My; Tibet ~25 My (inverted from volume, Ingalls et al. 2016).
 DEFAULT_BREAKOFF_MY = 10.0
-# Default Andean upper-plate shortening ratio φ (observation fit: most margins
-# 0.01–0.02, central Andes ~0.09; the controlling criterion is an open question).
-DEFAULT_UPPER_PLATE_RATIO = 0.02
+# Default Andean upper-plate shortening ratio φ.  Observation fit: on Earth's ocean–continent
+# margins (ETOPO bedrock volume over 50 My of Müller 2019 convergence, Cascadia excluded) the
+# convergence-weighted ratio is 0.026, median 0.015, central Andes ~0.07.  No kinematic
+# criterion tested (upper-plate trenchward velocity, the Lallemand 2008 neutral-arc law,
+# slab-edge distance) predicts the per-margin ratio better than this constant
+# (docs/design/proposals/orogen-topography.md §4); the central Andes excess needs interface
+# friction, which a fictional world cannot derive.
+DEFAULT_UPPER_PLATE_RATIO = 0.026
 # The boundary reshaping after tectonic evolution (segment shaping, noise warping,
 # smoothing) moves the final boundary off the cells that converged during evolution:
 # on nacrea the distance from a final contact cell to the nearest evolution-convergent
@@ -96,7 +109,7 @@ class OrogenSegment:
     upper_plate_ratio: float
     # Convergence before the collision (km): the cumulative convergence of the tectonic
     # evolution minus the convergence since onset — the Andean-type subduction phase
-    # that preceded the collision (orogen-topography.md §3.1).
+    # that preceded the collision (orogen_topography.md §2).
     pre_collision_km: float = 0.0
     sources: dict[str, str] = field(default_factory=dict)  # quantity -> derived/author/default
     # Per contact cell (the segment values above are their medians, kept as summaries):
@@ -176,32 +189,30 @@ def _plate_velocity(plate: TectonicPlate, pos: np.ndarray, radius_cm: float) -> 
     return np.cross(np.array([ep.x, ep.y, ep.z]), pos) * ep.omega_rad_yr * radius_cm
 
 
-def convergent_segments(
-    mesh: CVTMesh,
-    plates: list[TectonicPlate],
-    radius_km: float,
-    overrides: list[CollisionOverride] | None = None,
-) -> tuple[list[OrogenSegment], list[str]]:
-    """Group contact cells of convergent boundaries into segments with contract quantities.
+def contact_polarity(
+    mesh: CVTMesh, plates: list[TectonicPlate], radius_km: float
+) -> dict[int, tuple[str, str, str]]:
+    """Kind and polarity of every convergent contact cell: ``cell -> (kind, down, over)``.
 
     Contact cells are convergent boundary cells (rate above ``_MIN_RATE_CM_YR``) that touch
     another plate.  Each side's crust is the continental share of that plate within
-    ``_CRUST_WINDOW_KM``: both continental → collision (the smaller plate goes down),
-    one → Andean (the oceanic side goes down), none → ocean–ocean (left to the island
-    catalogue).  Onset and convergence are the segment medians of the evolution's
-    continuous convergent stretch, each contact cell reading the nearest
-    evolution-convergent cell within ``_RUN_TRANSFER_KM`` (the post-evolution boundary
-    reshaping moves boundaries); author overrides replace them (§3.4).
+    ``_CRUST_WINDOW_KM``: both continental → ``collision`` (the smaller plate goes down),
+    one → ``andean`` (the oceanic side goes down), none → ``ocean`` (the faster plate of
+    the pair goes down, mean speed over the pair's ocean contact cells — the same rule as
+    the trench-arc shaping of the tectonic evolution).
     """
-    warnings: list[str] = []
     cells = mesh.cells
     xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
     plate_of = np.array([c.plate_id or "" for c in cells])
     cont = np.array([c.crust_type == "continental" for c in cells])
     size = {p.id: len(p.cell_ids) for p in plates}
+    by_id = {p.id: p for p in plates}
     tree = cKDTree(xyz)
+    radius_cm = radius_km * 1.0e5
 
-    pair_of: dict[int, tuple[str, str, str]] = {}  # cell -> (kind, pro, retro)
+    out: dict[int, tuple[str, str, str]] = {}
+    ocean_pairs: dict[tuple[str, str], list[float]] = {}  # (a, b), a < b -> |v_a| − |v_b|
+    ocean_cells: list[tuple[int, str, str]] = []
     for i, c in enumerate(cells):
         if c.boundary_type != "convergent" or c.convergence_rate_cm_yr <= _MIN_RATE_CM_YR:
             continue
@@ -214,9 +225,41 @@ def convergent_segments(
         ccq = float(cont[win][plate_of[win] == q].mean()) if np.any(plate_of[win] == q) else 0.0
         if ccp >= 0.5 and ccq >= 0.5:
             pro, retro = (p, q) if size.get(p, 0) < size.get(q, 0) else (q, p)
-            pair_of[i] = ("collision", pro, retro)
+            out[i] = ("collision", pro, retro)
         elif ccp >= 0.5 or ccq >= 0.5:
-            pair_of[i] = ("andean", q, p) if ccp >= 0.5 else ("andean", p, q)
+            out[i] = ("andean", q, p) if ccp >= 0.5 else ("andean", p, q)
+        elif p in by_id and q in by_id:
+            a, b = sorted((p, q))
+            va = float(np.linalg.norm(_plate_velocity(by_id[a], xyz[i], radius_cm)))
+            vb = float(np.linalg.norm(_plate_velocity(by_id[b], xyz[i], radius_cm)))
+            ocean_pairs.setdefault((a, b), []).append(va - vb)
+            ocean_cells.append((i, a, b))
+    for i, a, b in ocean_cells:
+        down, over = (a, b) if np.mean(ocean_pairs[(a, b)]) > 0.0 else (b, a)
+        out[i] = ("ocean", down, over)
+    return out
+
+
+def convergent_segments(
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    radius_km: float,
+    overrides: list[CollisionOverride] | None = None,
+) -> tuple[list[OrogenSegment], list[str]]:
+    """Group contact cells of convergent boundaries into segments with contract quantities.
+
+    Contact cells and their polarity come from ``contact_polarity``; ocean–ocean contacts
+    carry no orogen and are left out (their trenches are ``trench_flexure``'s).  Onset
+    and convergence are the segment medians of the evolution's
+    continuous convergent stretch, each contact cell reading the nearest
+    evolution-convergent cell within ``_RUN_TRANSFER_KM`` (the post-evolution boundary
+    reshaping moves boundaries); author overrides replace them (§3.4).
+    """
+    warnings: list[str] = []
+    cells = mesh.cells
+    xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
+    polarity = contact_polarity(mesh, plates, radius_km)
+    pair_of = {k: v for k, v in polarity.items() if v[0] != "ocean"}
 
     # continuous convergent stretch carried over from the evolution's boundary cells
     run_dur = np.array([c.convergent_duration_my for c in cells])
@@ -323,7 +366,7 @@ def escape_ratios(
     segments: list[OrogenSegment],
     radius_km: float,
 ) -> dict[int, float]:
-    """Lateral escape ratio per collision contact cell (orogen-topography.md §3.1).
+    """Lateral escape ratio per collision contact cell (orogen_topography.md §2).
 
     Collision cells within ``_SEGMENT_LINK_KM`` form one orogen front of along-strike
     length W (largest geodesic distance between its cells).  Exits are edge cells of the
@@ -461,6 +504,7 @@ def build_orogen_contract(
     escape = escape_ratios(mesh, plates, segments, radius_km)
     retained: dict[int, float] = {}
     n_zero = 0
+    capped = 0
     for s in segments:
         if max_onset_myr is not None and s.onset_age_myr > max_onset_myr:
             warnings.append(
@@ -470,6 +514,9 @@ def build_orogen_contract(
         young = 0
         for k in s.cell_ids:
             conv = s.cell_convergence_km.get(k, s.convergence_km)
+            if s.kind == "collision" and conv > MAX_POST_COLLISION_CONVERGENCE_KM:
+                conv = MAX_POST_COLLISION_CONVERGENCE_KM
+                capped += 1
             if s.kind == "andean":
                 retained[k] = s.upper_plate_ratio * conv
                 continue
@@ -479,10 +526,15 @@ def build_orogen_contract(
             if retained[k] == 0.0:
                 young += 1
             # the margin was Andean-type before the collision: its upper-plate shortening
-            # stays in the orogen (orogen-topography.md §3.1, phase A closure)
+            # stays in the orogen (orogen_topography.md §2)
             retained[k] += s.upper_plate_ratio * s.cell_pre_collision_km.get(k, s.pre_collision_km)
         if s.kind == "collision" and young == len(s.cell_ids):
             n_zero += 1
+    if capped:
+        warnings.append(
+            f"{capped} collision contact cell(s) capped at "
+            f"{MAX_POST_COLLISION_CONVERGENCE_KM:.0f} km of post-collision convergence"
+        )
     if n_zero:
         warnings.append(
             f"{n_zero} collision segment(s) too young to thicken since onset (margin and "

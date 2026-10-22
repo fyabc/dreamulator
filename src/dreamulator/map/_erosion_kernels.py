@@ -102,28 +102,17 @@ def _pf_core(
     heap_len = 0
     order_len = 0
 
-    # Seed: all ocean cells at their own height, then push their land
-    # neighbours (shore seeds — matches Barnes' Priority-Flood + ε).
+    # Seed: every outlet (ocean and frame cells) enters the heap at its own
+    # height, so the lowest outlet discovers each shore cell first (Barnes'
+    # Priority-Flood + ε).  Seeding the outlets' land neighbours directly in
+    # scan order instead let a high frame cell fix a neighbour's fill level
+    # before a lower outlet could reach it (HANDOFF 2026-10-21).
     for y in range(h):
         for x in range(w):
             if not land[y, x]:
-                state[y, x] = 2
+                state[y, x] = 1
                 filled[y, x] = dem[y, x]
-    for y in range(h):
-        for x in range(w):
-            if land[y, x]:
-                continue
-            for dy in range(-1, 2):
-                for dx in range(-1, 2):
-                    if dx == 0 and dy == 0:
-                        continue
-                    ny, nx = y + dy, x + dx
-                    if 0 <= ny < h and 0 <= nx < w and land[ny, nx] and state[ny, nx] == 0:
-                        state[ny, nx] = 1
-                        base = filled[y, x] - eps if breach else filled[y, x] + eps
-                        filled[ny, nx] = max(dem[ny, nx], base)
-                        receiver[ny * w + nx] = y * w + x
-                        heap_len = _push(heap, heap_len, filled[ny, nx], ny * w + nx)
+                heap_len = _push(heap, heap_len, filled[y, x], y * w + x)
 
     while heap_len > 0:
         heap_len, _prio, cell = _pop(heap, heap_len)
@@ -132,8 +121,10 @@ def _pf_core(
         if state[y0, x0] == 2:
             continue  # stale entry (pushed twice before pop)
         state[y0, x0] = 2
-        order[order_len] = cell
-        order_len += 1
+        outlet = not land[y0, x0]
+        if not outlet:
+            order[order_len] = cell
+            order_len += 1
         for dy in range(-1, 2):
             for dx in range(-1, 2):
                 if dx == 0 and dy == 0:
@@ -141,7 +132,9 @@ def _pf_core(
                 ny, nx = y0 + dy, x0 + dx
                 if 0 <= ny < h and 0 <= nx < w and land[ny, nx] and state[ny, nx] == 0:
                     state[ny, nx] = 1
-                    filled[ny, nx] = max(dem[ny, nx], filled[y0, x0] + eps)
+                    # shore cells next to an outlet may breach just below it
+                    base = filled[y0, x0] - eps if (outlet and breach) else filled[y0, x0] + eps
+                    filled[ny, nx] = max(dem[ny, nx], base)
                     receiver[ny * w + nx] = cell
                     heap_len = _push(heap, heap_len, filled[ny, nx], ny * w + nx)
 

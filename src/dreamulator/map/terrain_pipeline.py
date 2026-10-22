@@ -536,6 +536,36 @@ def run_terrain_pipeline(
         for _i, _c in enumerate(result.mesh.cells):
             _c.water_class = "land" if bool(_is_land[_i]) else "ocean"
 
+        # Sub-grid relief and peak elevation of land cells (knowledge/geology/
+        # orogen_topography.md §1): a deterministic function of the cell-mean field,
+        # recomputed after a cache hit.
+        from .subgrid_relief import subgrid_relief
+
+        _std, _peak = subgrid_relief(result.mesh, config.radius_km, config.sea_level_offset_m)
+        for _i, _c in enumerate(result.mesh.cells):
+            _c.relief_std_m = None if np.isnan(_std[_i]) else float(_std[_i])
+            _c.peak_elevation_m = None if np.isnan(_peak[_i]) else float(_peak[_i])
+
+        # Trench axis point depth (knowledge/geology/orogen_topography.md §5): the axis
+        # offset of the flexure profile below the final cell mean, ocean axis cells only.
+        if (
+            result.orogen_contract is not None
+            and result.plates
+            and config.terrain_algorithm == "cortial2019_asymmetric"
+        ):
+            from .trench_flexure import trench_relief
+
+            _, _axis, _ = trench_relief(
+                result.mesh,
+                result.plates,
+                result.orogen_contract,
+                config.radius_km,
+                config.gravity_m_s2,
+            )
+            for _i, _c in enumerate(result.mesh.cells):
+                _ok = not np.isnan(_axis[_i]) and _c.elevation <= config.sea_level_offset_m
+                _c.trench_axis_elevation_m = _c.elevation + float(_axis[_i]) if _ok else None
+
     # ---- Stage 6: Climate ----
     if "climate" in ordered:
         _stage_begin("climate")

@@ -194,6 +194,26 @@ class VoronoiCell(BaseModel):
             "(§3.6): a boundary that rifted longer/faster gets a wider rift sea."
         ),
     )
+    relief_std_m: float | None = Field(
+        default=None,
+        description=(
+            "Standard deviation of elevation inside the cell (m), land only — the cell "
+            "value is a ~50 km mean (map/subgrid_relief.py; "
+            "knowledge/geology/orogen_topography.md §1)."
+        ),
+    )
+    peak_elevation_m: float | None = Field(
+        default=None,
+        description="Highest point inside the cell (m), land only: mean + 3.5 × relief_std_m.",
+    )
+    trench_axis_elevation_m: float | None = Field(
+        default=None,
+        description=(
+            "Trench axis point depth inside the cell (m), axis cells of a subducting plate "
+            "only — the cell value is the flexure profile's ~50 km mean "
+            "(map/trench_flexure.py, knowledge/geology/orogen_topography.md §5)."
+        ),
+    )
     convergent_duration_my: float = Field(
         default=0.0,
         description=(
