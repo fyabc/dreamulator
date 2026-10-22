@@ -20,7 +20,6 @@ terrain:
                                # plates take it undamped; too high lifts
                                # mid-ocean ridges above sea level)
   continental_undulation_m: 300.0  # intra-plate dynamic relief (cratons stay flat)
-  hotspot_count: 3         # volcanic hotspot chains
   mountain_asymmetry: 0.4  # mountain-range asymmetry (0 = symmetric)
   shelf_width_km: 150.0    # continental shelf on (>0) / off; width = coast to continent-ocean boundary
   terrain_algorithm: cortial2019_asymmetric  # terrain synthesis strategy

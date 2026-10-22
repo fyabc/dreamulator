@@ -56,7 +56,7 @@ class GeologicalEngine(BaseEngine):
     # Both optional: absent terrain_config falls back to planet-derived
     # defaults; absent geography.yaml = unauthored (random) continents.
     input_files: list[str] = []
-    optional_input_files = ["terrain_config.yaml", "geography.yaml"]
+    optional_input_files = ["terrain_config.yaml", "geography.yaml", "tidal_heat_history.yaml"]
     output_files = [
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.msgpack.gz",
@@ -334,6 +334,11 @@ class GeologicalEngine(BaseEngine):
 
             cfg.collision_overrides = load_collision_overrides(history_path)
             cfg.paleo_sutures = load_sutures(history_path)
+
+        # Tidal heat history (island-catalog.md §3.3): drives the heat-pipe provinces.
+        from dreamulator.map.heat_pipe import load_tidal_heat_history
+
+        cfg.tidal_heat_history = load_tidal_heat_history(self.find_input("tidal_heat_history.yaml"))
 
         # Canonical physical parameters from planets.yaml + stellar data
         # (satellite-aware stellar lookup — see physical_inputs docstring).

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .geography import GeographySpec
+    from .heat_pipe import TidalHeatHistory
     from .orogen_contract import CollisionOverride
     from .paleo_sutures import AuthorSuture
 
@@ -421,31 +422,14 @@ class TerrainPipelineConfig:
     plate_elevation_spread_m: float = 1500.0
     # Asymmetric mountain profile: 0=symmetric, 0.4=moderate, 1.0=extreme
     mountain_asymmetry: float = 0.4
-    # Number of hotspot volcanic chains (0 = disabled)
-    hotspot_count: int = 3
-    # Hotspot chain: spacing between successive volcanoes along the plate
-    # motion direction.  Earth: Hawaii islands are 50–150 km apart.  Must
-    # exceed ~2× the cell spacing (≈54 km @ nacrea 200K) so islands are
-    # separated by sea rather than merged into a continuous bar.
-    hotspot_eruption_interval_km: float = 180.0
-    # Hotspot volcano cone base radius (km).  Earth large shield islands are
-    # ~50–60 km radius (100–120 km across), but their submarine base spans
-    # ~200 km.  ~100 km lets the active island surface across ~2 cells
-    # (center + nearest neighbours) at nacrea's 54 km spacing.
-    hotspot_volcano_radius_km: float = 100.0
-    # Height (m) of the active (youngest) volcano above the ocean floor
-    # baseline (~-5000 m → ~+3500 m surface).
-    hotspot_active_height_m: float = 8500.0
-    # Age-progressive subsidence along the chain (m per km away from the
-    # active hotspot).  Hawaii subsides from ~+4000 m to ~0 m over ~2500 km
-    # (to Kure atoll) ≈ 1.6 m/km relative to sea level; here ~4 m/km makes
-    # the chain tail subside into seamounts sooner, so fewer volcanoes stay
-    # above sea level at once (a compact archipelago, not a long island bar).
-    hotspot_subsidence_m_per_km: float = 4.0
-    # Total chain length (km).  Emperor-Hawaii chain is ~6000 km; truncated
-    # to the young, still-surfacing portion so chains stay a compact
-    # archipelago (~7 volcanoes) rather than a long bar.
-    hotspot_chain_length_km: float = 1200.0
+    # Sub-grid island catalogue (map/island_catalog.py): hotspot chains, island arcs and
+    # seamounts; the counts, spacings and sizes are derived or Earth-calibrated, not configured.
+    # False = no catalogue (tests that need a bare surface).
+    island_catalog_enabled: bool = True
+    # Tidal heat history from tidal_heat_history.yaml (map/heat_pipe.py), loaded by the
+    # engine: drives the heat-pipe volcanic provinces of a tidally heated body.  None = no
+    # heat-pipe provinces.
+    tidal_heat_history: TidalHeatHistory | None = None
     # Continental shelf on/off switch (<= 0 disables the stage).  The shelf
     # width itself is not a parameter: it is the distance from the coastline
     # to the continent–ocean boundary of the submerged continental crust.
@@ -464,7 +448,8 @@ class TerrainPipelineConfig:
     # largely untouched.  The smoothing effect fades linearly from full
     # strength at sea level to zero at this elevation.
     coastal_plain_max_elevation_m: float = 500.0
-    # Island arc height at O-O convergent boundaries (m).
+    # Island arc height at O-O convergent boundaries (m); used only with the island catalogue
+    # off (the catalogue builds arc crust and arc volcanoes, map/island_catalog.py).
     island_arc_height_m: float = 1500.0
     # Interior lowlands: lower the deep continental interior (far from active
     # convergent boundaries) toward cratonic lowland elevation, so continents

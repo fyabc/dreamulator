@@ -297,7 +297,8 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # v17–v27 (2026-10-21): positive overlays as crustal fragments (polygon or roughened
     # outline, islands cut on the final surface, channels from shelf to fragment basins);
     # oceanic specks filled in the crust partition.  v28: one-octave island cut.
-    "terrain": 28,
+    # v29–v33 (debt 44 phase A): hotspot volcanoes from the island catalogue.
+    "terrain": 42,
 }
 
 

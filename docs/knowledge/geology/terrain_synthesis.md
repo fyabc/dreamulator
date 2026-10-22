@@ -147,7 +147,7 @@ $$H(x) = \sum_{i=0}^{N-1} \text{amplitude}_i \cdot \text{noise}(x \cdot \text{fr
 |------|--------|------|
 | `mountain_asymmetry` | 0.4 | 0 = 对称；1 = 极强不对称 |
 | `convergent_uplift_m` × 1.3 | ~5200 m | 陆-陆碰撞 (C-C) |
-| `convergent_uplift_m` × 0.6 | ~2400 m | 洋-洋俯冲 (O-O, 岛弧) |
+| `convergent_uplift_m` × 0.6 | ~2400 m | 洋-洋俯冲 (O-O, 岛弧)；只在岛屿目录关闭时使用，缺省岛弧由目录给出（`pipelines/geological-pipeline.md` 地形合成第 3 步） |
 
 - 峰顶向俯冲板块方向偏移 `asymmetry × σ × 0.3`
 - 前坡（迎风面）：`σ_front = σ × (1 - asymmetry × 0.5)`

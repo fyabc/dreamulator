@@ -93,7 +93,7 @@ def test_synthesize_raster_ocean_stays_submerged() -> None:
         seed=7,
         num_nodes=1200,
         lloyd_iterations=2,
-        hotspot_count=0,
+        island_catalog_enabled=False,
         shelf_width_km=0.0,
         coastal_plain_width_km=0.0,
     )

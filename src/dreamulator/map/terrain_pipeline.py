@@ -41,6 +41,7 @@ from .terrain_synthesizer import synthesize_terrain
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from .island_catalog import IslandCatalog
     from .models import CVTMesh, TectonicPlate
     from .orogen_contract import OrogenContract
     from .pipeline_types import TerrainPipelineConfig
@@ -109,6 +110,7 @@ class TerrainPipelineResult:
     elapsed_seconds: float = 0.0
     output_dir: Path | None = None
     orogen_contract: OrogenContract | None = None
+    island_catalog: IslandCatalog | None = None
 
 
 def _resolve_stages(requested: list[str] | None) -> list[str]:
@@ -566,6 +568,32 @@ def run_terrain_pipeline(
                 _ok = not np.isnan(_axis[_i]) and _c.elevation <= config.sea_level_offset_m
                 _c.trench_axis_elevation_m = _c.elevation + float(_axis[_i]) if _ok else None
 
+        # Sub-grid island catalogue (island-catalog.md): rebuilt deterministically (also after a
+        # cache hit), summits and emergent areas on the final surface, per-cell summaries.
+        if config.terrain_algorithm == "cortial2019_asymmetric" and result.plates:
+            from .island_catalog import build_island_catalog, summarise_islands, volcano_cell_mean
+
+            result.island_catalog = build_island_catalog(result.mesh, result.plates, config)
+            _contrib = volcano_cell_mean(result.mesh, result.island_catalog, config.radius_km)
+            _isl = summarise_islands(
+                result.mesh, result.island_catalog, _contrib, config.sea_level_offset_m
+            )
+            for _i, _c in enumerate(result.mesh.cells):
+                _c.island_count = int(_isl["island_count"][_i])
+                _c.island_area_frac = float(_isl["island_area_frac"][_i])
+                _pk = _isl["island_peak_m"][_i]
+                _c.island_peak_m = None if np.isnan(_pk) else float(_pk)
+                if _contrib[_i] > 0.0 and _c.peak_elevation_m is not None:
+                    # on a volcanic edifice the highest point is the catalogue summit, not the
+                    # slope statistics calibrated on continental relief
+                    _c.peak_elevation_m = max(
+                        _c.elevation, _c.island_peak_m if _c.island_peak_m is not None else -1e9
+                    )
+                _c.hotspot_id = None
+            for _v in result.island_catalog.volcanoes:
+                if _v.kind == "hotspot":
+                    result.mesh.cells[_v.cell].hotspot_id = _v.source
+
     # ---- Stage 6: Climate ----
     if "climate" in ordered:
         _stage_begin("climate")
@@ -657,6 +685,15 @@ def run_terrain_pipeline(
                 from .orogen_contract import save_orogen_contract
 
                 save_orogen_contract(output_dir / "orogen_contract.json", result.orogen_contract)
+            if result.island_catalog is not None:
+                import json as _json
+
+                from .island_catalog import catalog_to_json
+
+                (output_dir / "island_catalog.json").write_text(
+                    _json.dumps(catalog_to_json(result.island_catalog), ensure_ascii=False),
+                    encoding="utf-8",
+                )
             result.output_dir = output_dir
 
         result.stages_completed.append("export")

@@ -904,8 +904,8 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    精确贴板块边界，而是随先存弱带蜿蜒（Danakil en-echelon 错列 / 阿巴拉契亚
    salient-recess ~100 km 量级）。
    **大陆汇聚带不在这一步**：碰撞与安第斯型边缘上覆侧的大陆格子不再取幅度剖面与山间盆地，
-   改由下一步的造山带格子平均高程给出，海沟改由第 2c 步的挠曲剖面给出；这里只保留洋—洋岛弧、裂谷与
-   转换边界。
+   改由下一步的造山带格子平均高程给出，海沟改由第 2c 步的挠曲剖面给出；洋—洋岛弧改由第 3 步的岛屿目录给出
+   （`island_catalog_enabled` 关闭时才回到这里的岛弧幅度与后处理 `_apply_island_arcs`）；这里只保留裂谷与转换边界。
 2b. **造山带格子平均高程** `orogen_profile.py::orogen_relief`（技术债 43 阶段 A，设计见
    `docs/knowledge/geology/orogen_topography.md` §2–4）：读取历史契约（§6.1）每个接触格的留存缩短量，
    沿走向 300 km 平均后得到地壳截面积 A = 留存缩短量 × 35 km；Airy 均衡（ρc 2800、ρm 3300 kg/m³）下
@@ -938,10 +938,38 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    立成悬崖。楔面在陆架之后施加，它淹没的陆地由后处理第 7 步的海平面末次微调补回。安第斯型
    剖面的前翼从弧前带内缘（海岸，弧前带宽度 −z_axis / tan α）起抬升，峰脊在其内侧一个翼长（峰高 / tan 0.6°）处
    （`orogen_relief` 的 `forearc_km`），截面积不变。
-3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
-   沿板块运动方向（欧拉极速度）追踪链，`hotspot_active_height_m`（默认 8500 m）从洋底抬升露海面成岛，
-   沿链 0.85/cell 指数衰减（~30 cell）；`hotspot_count` 默认 3（大型世界可在
-   terrain_config 中覆写，如 nacrea 用 9）。
+3. **热点链、岛弧与热管火山省（亚格子岛屿目录）**：`island_catalog.build_island_catalog`（技术债 44 阶段 A–C，设计见
+   `docs/design/proposals/island-catalog.md`）。热点数按地球面积比例（每地球面积 49 个，Courtillot et al. 2003），
+   带种子的 Poisson-disc 撒在全球，只有落在洋壳上的建岛。每个热点固定在地幔里，沿所在板块的现今欧拉极回溯
+   2000 万年，每隔 λ = 0.70·α 开一座新火山（α 为洋壳挠曲参数，Te 25 km；0.70 用夏威夷约 45 km 的间距标定），
+   λ 与板块速度无关，喷发间隔 = λ ÷ 板块速度。火山高出原海底的体积 = 热点岩浆通量 × 喷发间隔 × 0.5（另一半
+   在自身挠曲山根里，Robinson & Eakins 2006）；通量按对数正态分布抽取，中位数 0.017 km³/yr、σ_ln 1.0（夏威夷约为
+   中位数的六倍）。火山体为 5° 锥体，高度上限 9 km × 9.81/g，超过上限时变宽而不变高。格子平均高程吸收火山体
+   体积（按锥高分摊到覆盖的格子，`volcano_cell_mean`），老火山按 S(t) = 2 km × (1 − e^(−t/0.8 My)) 相对周围海底
+   下沉，一个格子的抬升不超过覆盖它的最高火山。海山按每地球大洋 3.9 万座高于 1 km（Hillier & Watts 2007）撒在
+   深于 2 km 的洋底上，只进目录。
+   岛弧取洋—洋俯冲接触格（`contact_polarity`）上覆板块一侧，弧轴离海沟 240 km（弧沟距离均值，Perrin et al. 2018；
+   板片深约 105 km，Syracuse & Abers 2006），距离沿同一板块的洋壳格求最短路（`_arc_geometry`）。弧的岩浆供给取
+   每公里弧长 40 km³/Myr（Dimalanta et al. 2002 为 30–95，Reymer & Schubert 1984 为 20–40），侵入与喷出约 5 : 1
+   （White et al. 2006）。侵入部分按弧龄累积，分布在弧轴两侧各 125 km 的三角形截面上（伊豆—小笠原—马里亚纳弧的
+   地震剖面，Takahashi et al. 2007），按水下 Airy 系数 (ρm − ρc)/(ρm − ρw) ≈ 0.22 抬升成弧地壳平台
+   （`arc_platform`）；弧龄取 400 km 内最近的演化汇聚格的连续汇聚时长。喷出部分建弧火山：沿弧轴按平均间距
+   50 km 的一维泊松过程放置（弧上火山没有特征间距，de Bremond d'Ars et al. 1995），每座体积 = 40 × 0.2 × 50 ×
+   1 Myr = 400 km³，年龄在最近 100 万年内均匀抽取，和热点火山一样进入格子平均。
+   热管火山省只在世界提供潮汐热流史（`tidal_heat_history.yaml`，由引擎读入 `tidal_heat_history`）时生成，纯函数在
+   `map/heat_pipe.py`。加热图样取倾角潮在软流圈薄层的 Beuthe 图样 B（`heating_pattern`，Ĥ = 2.5(x² + y²) − 10x²y²，
+   全球均值 1），极大在向星点、背星点与两极，四个火山省按最近的极大划分（`province_index`）。当地热管热流 =
+   max(q(t)·a·Ĥ − q_plate, 0)，q_plate 为板块按半空间冷却排出的热流（`tidal_physics.plate_heat_flux_w_m2`），
+   每 W/m² 合每百万年 5.26 km 岩层（`heat_pipe_rate_km_my`）。`heat_segments` 把时间线分成静息段与潮汐期（阈值
+   `active_threshold_w_m2`）：最近 200 万年用世界给的正典热流，更早到 2000 万年按集合统计带种子抽取；潮汐期各火山省
+   的活跃度按 `province_activity_sigma_ln` 随机抽取，最近一期取 `latest_phase_activity`。每块地壳沿板块欧拉极回溯，
+   离开所在板块即停止；每段内喷口密度 = 当地热管热流 ÷ 单口功率 2.4×10¹¹ W（木卫一 1.0×10¹⁴ W ÷ 417 个火山口），
+   每口建一座 0.4° 的宽缓盾（木卫一盾的坡度 0.2–0.6°），体积 = 单口岩浆量 × min(火山间距 ÷ 板块速度, 段长) ×
+   0.2 × 0.5；其余岩浆铺成熔岩流，掩埋更早时段的火山。每块地壳保留现存最高的一座。热管盾生长时已均衡补偿，不加
+   建成后的沉降；地壳取稳态，不加高原。地形阶段之后 `summarise_islands` 在最终地表上算峰顶（出水部分按 500 万年的
+   e 折时间降低，考艾岛标定）、出水面积与状态（立在陆地上的记为 land volcano），出水部分比格子还宽的火山由网格分辨、
+   不计入汇总，写入格子字段 `island_count`、`island_area_frac`、`island_peak_m`
+   与 `hotspot_id`，火山格的 `peak_elevation_m` 取目录峰顶；地图目录输出 `island_catalog.json`。
 4. **区域噪声**：低频 fBm（`regional_noise_scale`，陆/海不同振幅
    `regional_noise_amplitude_land_m` / `regional_noise_amplitude_ocean_m`）。
 5. **细节噪声**：`_anisotropic_fbm`（3D Simplex 在节点 (x,y,z) 采样，无投影畸变；
@@ -1064,7 +1092,8 @@ age = max_age · d_div / (d_div + d_conv)
    大陆内部按 `depth × smoothstep(d/scale)` 下压。
 3. **沉积填充** `_apply_deposition_fill`（见 §7.3）：把低于海平面的闭合盆地填到溢流
    点，留一小部分为内流湖。
-4. **岛弧** `_apply_island_arcs`：岛弧高度 + 隆起调制。
+4. **岛弧** `_apply_island_arcs`：只在 `island_catalog_enabled` 关闭时运行（岛弧高度加隆起调制）；缺省由岛屿目录
+   给出岛弧（见地形合成第 3 步）。
 5. **大陆架** `_apply_continental_shelf`：陆架铺在与海岸相连的淹没大陆地壳上，宽度是海岸线到陆洋边界的
    距离（`_shelf_profile`）；地壳划分没有拉薄陆缘这一档，所以每段海岸另按陆缘类型补一条淹没陆缘带（被动 88 km、
    主动 31 km，Harris et al. 2014；离汇聚或转换边界不足 `boundary_influence_km` 的海岸为主动），陆架取两者中

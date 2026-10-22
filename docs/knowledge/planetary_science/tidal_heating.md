@@ -82,16 +82,51 @@ h_max 与 h_min 都不是观测定论，而是以太阳系天体为锚的经验�
   独立样本；有物理机制时，先用记录拟合一个符合机制的随机模型，再用蒙特卡洛外推，比纯曲线
   拟合更可靠。
 
+## 6. 加热的空间分布与热管火山
+
+潮汐加热在天体内部并不均匀。Beuthe（2013）证明，球对称分层天体内的耗散功率是三个角函数 Ψ_A、Ψ_B、Ψ_C 的
+线性组合：角函数只由潮汐势决定，权重由内部结构决定。三个角函数由潮汐势模平方 |Φ|² 的 0、2、4 阶球谐分量
+组合而成：Ψ_A = Ψ₀ + Ψ₂ + Ψ₄，Ψ_B = Ψ₀ + Ψ₂/2 − 2Ψ₄/3，Ψ_C = Ψ₀ − Ψ₂ + Ψ₄/6。耗散位置不同，主导的角函数
+也不同：
+
+- **深部地幔**（液核之上）：偏心率潮下加热集中在两极（Segatz et al. 1988；Beuthe 2013）。
+- **软流圈薄层**（贴着更硬的一层的软弱层，例如上地幔的部分熔融层）：径向与切向之间的剪切主导，加热接近图样 B。
+  偏心率潮下极大在赤道附近，这是木卫一火山分布的主流解释。
+
+**哪种潮主导。** 同步自转卫星的总耗散功率正比于 21/2·e² + 3/2·sin²ψ（e 为偏心率，ψ 为自转轴与轨道法线的
+夹角；Beuthe 2013 式 42）。偏心率很小而 ψ 不可忽略时，倾角潮主导。
+
+**倾角潮的图样 B。** 取 x 指向主星（向星点）、y 沿自转轴，倾角潮势正比于 x·y。代入上面的组合，按全球平均归一后，
+软流圈薄层的加热是
+
+  Ĥ = 2.5·(x² + y²) − 10·x²·y²
+
+它在向星点、背星点与南北两极都取极大值 2.5，在与主星成 90° 的赤道上为零，向星子午线上纬度 ±45° 处也为零。图样
+很宽：Ĥ 大于 1 的区域约占半个球面。
+
+**热管火山。** 热流超过板块传导能力时，多出的热由岩浆平流带出，称为热管（Moore & Webb 2013）。每排出 1 W/m²
+约生成每百万年 5 km 的岩层（岩浆密度 3000 kg/m³，每千克从熔融冷却到地表带出约 2 MJ）。木卫一是唯一观测到的
+热管天体，它给出三个可用的标定：
+
+- 全球热流约 1.0×10¹⁴ W（Veeder et al. 2012），经约 417 个火山口排出（Radebaugh et al. 2001），每口约
+  2.4×10¹¹ W；
+- 盾状火山起伏小于 3 km、侧翼坡度 0.2–0.6°（Schenk et al. 2004），熔岩黏度低、铺得很远；
+- 每年重铺约 1 cm，却没有与加热极大对应的高原：持续重铺的地壳处于稳态，新岩层掩埋旧层，旧层在底部重熔或
+  拆沉返回地幔。
+
 ## 与项目的关联
 
 - nacrea 的潮汐热流统计、生物影响评估与灭绝频率外推：nacrea 设计笔记 0014。
 - 卫星自转-轨道失配如何决定潮汐热流：`docs/knowledge/astrophysics/satellite_system_stability.md` §10。
+- 热管火山省的实现（加热图样、潮汐热流时间线、喷口与盾状火山）：`src/dreamulator/map/heat_pipe.py` 与
+  `map/island_catalog.py`，设计见 `docs/design/proposals/island-catalog.md`。
 - 火山 CO₂ 的地质历史框架：`docs/knowledge/climatology/atmospheric_co2_ch4_history.md`。
 
 ## 参考资料
 
 - Barnes, R., Jackson, B., Greenberg, R., & Raymond, S. N. (2009). Tidal limits to planetary habitability. *ApJ*, 700, L30.
 - Barnes, R., Mullins, K., Goldblatt, C., et al. (2013). Tidal Venuses: Triggering a climate catastrophe via tidal heating. *Astrobiology*, 13, 225.
+- Beuthe, M. (2013). Spatial patterns of tidal heating. *Icarus*, 223, 308–329.
 - Bond, D. P. G., & Wignall, P. B. (2014). Large igneous provinces and mass extinctions: An update. *GSA Special Paper*, 505.
 - Burgess, S. D., & Bowring, S. A. (2015). High-precision geochronology confirms voluminous magmatism before, during, and after Earth's most severe extinction. *Science Advances*, 1, e1500470.
 - Chen, Z.-Q., & Benton, M. J. (2012). The timing and pattern of biotic recovery following the end-Permian mass extinction. *Nature Geoscience*, 5, 375.
@@ -101,7 +136,12 @@ h_max 与 h_min 都不是观测定论，而是以太阳系天体为锚的经验�
 - Heller, R., & Barnes, R. (2013). Exomoon habitability constrained by illumination and tidal heating. *Astrobiology*, 13, 18–46.
 - Jackson, B., Barnes, R., & Greenberg, R. (2008). Tidal heating of terrestrial extrasolar planets and implications for their habitability. *MNRAS*, 391, 237.
 - Lainey, V., Arlot, J.-E., Karatekin, Ö., & van Hoolst, T. (2009). Strong tidal dissipation in Io and Jupiter from astrometric observations. *Nature*, 459, 957.
+- Moore, W. B., & Webb, A. A. G. (2013). Heat-pipe Earth. *Nature*, 501, 501–505.
 - Myhre, G., Highwood, E. J., Shine, K. P., & Stordal, F. (1998). New estimates of radiative forcing due to well mixed greenhouse gases. *GRL*, 25, 2715.
+- Radebaugh, J., et al. (2001). Paterae on Io: a new type of volcanic caldera? *JGR*, 106, 33005–33020.
 - Raup, D. M. (1991). A kill curve for Phanerozoic marine species. *Paleobiology*, 17, 37–48.
 - Raup, D. M., & Sepkoski, J. J. (1982). Mass extinctions in the marine fossil record. *Science*, 215, 1501–1503.
+- Schenk, P. M., Wilson, R. R., & Davies, A. G. (2004). Shield volcano topography and the rheology of lava flows on Io. *Icarus*, 169, 98–110.
+- Segatz, M., Spohn, T., Ross, M. N., & Schubert, G. (1988). Tidal dissipation, surface heat flow, and figure of viscoelastic models of Io. *Icarus*, 75, 187–206.
+- Veeder, G. J., et al. (2012). Io: Volcanic thermal sources and global heat flow. *Icarus*, 219, 701–722.
 - Wignall, P. B. (2001). Large igneous provinces and mass extinctions. *Earth-Science Reviews*, 53, 1.

@@ -1036,11 +1036,14 @@ def _synthesize_asymmetric(
             mesh.cells[k].landform = "orogeny"
     orogen = np.maximum(orogen, paleo)
 
-    # 3. Hotspot volcanic chains
-    hotspot_delta = np.zeros(n, dtype=np.float64)
-    if config.hotspot_count > 0:
-        logger.info("  Step 3/6: Hotspot chains (%d hotspots)", config.hotspot_count)
-        hotspot_delta = _generate_hotspots(mesh, plates, config, rng)
+    # 3. Sub-grid island catalogue: hotspot and arc volcanoes enter as cell means of their
+    # volume; the intrusive arc magma thickens the arc crust (island-catalog.md §3.2)
+    from .island_catalog import arc_platform, build_island_catalog, volcano_cell_mean
+
+    logger.info("  Step 3/6: Island catalogue (hotspot chains, island arcs)")
+    hotspot_delta = volcano_cell_mean(
+        mesh, build_island_catalog(mesh, plates, config), config.radius_km
+    ) + arc_platform(mesh, plates, config)
 
     # 4–5. Regional + detail noise (reuse)
     logger.info("  Step 4/6: Regional noise (scale=%.1f)", config.regional_noise_scale)
@@ -1125,14 +1128,15 @@ def _synthesize_asymmetric(
     elevation = apply_orogen_cap(elevation, orogen_cap, sea_level)
     elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
     elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
-    elevation = _apply_island_arcs(
-        mesh,
-        elevation,
-        config,
-        geography_bias=geography_bias,
-        uplift_mod=uplift_mod,
-        subducting=subducting,
-    )
+    if not config.island_catalog_enabled:
+        elevation = _apply_island_arcs(
+            mesh,
+            elevation,
+            config,
+            geography_bias=geography_bias,
+            uplift_mod=uplift_mod,
+            subducting=subducting,
+        )
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
     # forearc wedge of ocean–continent margins bounds the surface between trench and coast
@@ -1558,6 +1562,8 @@ def _asymmetric_boundary_effects(
                 amp = 0.0  # O-C subducting side → trench only
             elif subducting is not None and subducting[i]:
                 amp = 0.0  # down-going plate of an O-O margin → trench only
+            elif continental_orogens_from_contract and config.island_catalog_enabled:
+                amp = 0.0  # arc crust and volcanoes from the island catalogue
             else:
                 amp = config.convergent_uplift_m * 0.6  # O-O island arc
 
@@ -1768,151 +1774,6 @@ def _asymmetric_boundary_effects(
             )
 
     return delta_h, transform_boost
-
-
-def _generate_hotspots(
-    mesh: CVTMesh,
-    plates: list[TectonicPlate],
-    config: TerrainPipelineConfig,
-    rng: np.random.Generator,
-) -> np.ndarray:
-    """Hotspot volcanic chains — discrete age-progressive archipelagos.
-
-    Seeds hotspots randomly on oceanic crust (Poisson-disc).  For each
-    hotspot, traces a chain of *discrete* shield volcanoes following the
-    local plate-motion direction (a small circle about the plate's Euler
-    pole).  Volcanoes are spaced by an eruption interval along the chain;
-    each is a cosine-bell uplift whose height decays with age (distance from
-    the active hotspot), so the young end is an island and the old end
-    subsides into a seamount.  All lengths are real geodesic km
-    (grid-resolution independent — see proposal §7).
-
-    Reference:
-      Wilson, J.T. (1963). "A possible origin of the Hawaiian Islands."
-      — plate moving over a fixed mantle plume produces a linear chain of
-        age-progressive volcanoes.
-    """
-    n = mesh.num_cells
-    radius_km = config.radius_km
-    hotspot_field = np.zeros(n, dtype=np.float64)
-    xyz = mesh.cell_xyz  # (n, 3) unit-sphere positions
-
-    # Poisson-disc hotspot seed placement (angular separation is resolution-
-    # independent; 0.5 rad ≈ 3200 km keeps hotspots well separated).
-    num_hotspots = config.hotspot_count
-    candidates = list(range(n))
-    rng.shuffle(candidates)
-    hotspot_seeds: list[int] = []
-    min_sep = np.sqrt(4 * np.pi / max(num_hotspots, 1)) * 0.5
-    for cid in candidates:
-        if len(hotspot_seeds) >= num_hotspots:
-            break
-        c = mesh.cells[cid]
-        if c.crust_type != "oceanic":
-            continue  # hotspots only on oceanic crust (Earth's ~80% are oceanic)
-        c_xyz = xyz[cid]
-        too_close = False
-        for sid in hotspot_seeds:
-            dot = float(np.clip(c_xyz @ xyz[sid], -1.0, 1.0))
-            if np.arccos(dot) < min_sep:
-                too_close = True
-                break
-        if not too_close:
-            hotspot_seeds.append(cid)
-
-    plate_dict = {p.id: p for p in plates}
-    interval_km = config.hotspot_eruption_interval_km
-    volcano_radius_km = config.hotspot_volcano_radius_km
-    active_height = config.hotspot_active_height_m
-    subsidence = config.hotspot_subsidence_m_per_km
-    chain_length_km = config.hotspot_chain_length_km
-    total_volcanoes = 0
-
-    for hs_idx, seed in enumerate(hotspot_seeds):
-        hs_id = f"hs_{hs_idx}"
-        cell = mesh.cells[seed]
-        pid = cell.plate_id
-        plate = plate_dict.get(pid or "")
-        if plate is None:
-            continue
-
-        axis = np.array([plate.euler_pole.x, plate.euler_pole.y, plate.euler_pole.z])
-
-        # Trace the chain along the small circle about the Euler pole,
-        # accumulating real geodesic distance.  A volcano sits at the seed
-        # (active hotspot) and at each eruption interval along the chain.
-        volcanoes: list[tuple[int, float]] = [(seed, 0.0)]
-        current_cid = seed
-        arc_km = 0.0
-        next_eruption_arc = interval_km
-        visited: set[int] = {seed}
-        mesh.cells[seed].hotspot_id = hs_id
-
-        while arc_km < chain_length_km:
-            current = mesh.cells[current_cid]
-            pos = xyz[current_cid]
-            # Local plate-motion direction (tangent to the Euler small circle).
-            velocity = np.cross(axis, pos)
-            vnorm = np.linalg.norm(velocity)
-            if vnorm < 1e-12:
-                break  # at/near the Euler pole: motion direction undefined
-            velocity /= vnorm
-
-            # Pick the unvisited neighbor most aligned with motion.
-            best_dot = -2.0
-            best_nid = -1
-            for nid in current.neighbors:
-                if nid in visited:
-                    continue
-                npos = xyz[nid]
-                step = npos - pos
-                snorm = np.linalg.norm(step)
-                if snorm < 1e-12:
-                    continue
-                dot = float(np.dot(step / snorm, velocity))
-                if dot > best_dot:
-                    best_dot = dot
-                    best_nid = nid
-
-            if best_nid < 0:
-                break  # dead end (enclosed by land / already visited)
-            if mesh.cells[best_nid].crust_type != "oceanic":
-                break  # chain stays on oceanic crust
-            if mesh.cells[best_nid].plate_id != pid:
-                break  # chain records one plate's motion; never crosses a boundary
-
-            step_km = float(np.arccos(np.clip(xyz[best_nid] @ pos, -1.0, 1.0))) * radius_km
-            arc_km += step_km
-            current_cid = best_nid
-            visited.add(current_cid)
-            mesh.cells[current_cid].hotspot_id = hs_id
-
-            if arc_km >= next_eruption_arc:
-                volcanoes.append((current_cid, arc_km))
-                next_eruption_arc += interval_km
-
-        # Apply each volcano as a cosine-bell uplift with a real-km radius.
-        for center_cid, arc in volcanoes:
-            total_volcanoes += 1
-            h = active_height - subsidence * arc
-            if h <= 0.0:
-                continue  # fully subsided (below the abyssal baseline)
-            cpos = xyz[center_cid]
-            dots = np.clip(xyz @ cpos, -1.0, 1.0)
-            dist_km = np.arccos(dots) * radius_km
-            mask = dist_km < volcano_radius_km
-            if not np.any(mask):
-                continue
-            profile = h * np.cos(0.5 * np.pi * (dist_km[mask] / volcano_radius_km))
-            hotspot_field[mask] += profile
-
-    logger.info(
-        "  Hotspots: %d chains, %d volcanoes, %d cells affected",
-        len(hotspot_seeds),
-        total_volcanoes,
-        int(np.sum(hotspot_field > 0)),
-    )
-    return hotspot_field
 
 
 # =========================================================================

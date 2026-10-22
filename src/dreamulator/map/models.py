@@ -214,6 +214,18 @@ class VoronoiCell(BaseModel):
             "(map/trench_flexure.py, knowledge/geology/orogen_topography.md §5)."
         ),
     )
+    island_count: int = Field(
+        default=0,
+        description="Emergent islands of the sub-grid island catalogue centred in the cell.",
+    )
+    island_area_frac: float = Field(
+        default=0.0,
+        description="Emergent island area of the catalogue in the cell over the cell area (0–1).",
+    )
+    island_peak_m: float | None = Field(
+        default=None,
+        description="Highest catalogue island summit in the cell (m above sea level), if any.",
+    )
     convergent_duration_my: float = Field(
         default=0.0,
         description=(
