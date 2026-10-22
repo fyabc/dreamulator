@@ -113,10 +113,10 @@ features:
     pin_strength: 0.3
     pin_exponent: 0.6           # 偏差指数化：保护高山，低区拉平到 target
 
-  - name: 北极大陆                # 极点大陆（北极点为中心，占陆地 18%；与世界岛分离）
+  - name: 北极大陆                # 极点大陆（北极点为中心；与世界岛分离）
     lon: 150.0
     lat: 86.0
-    radius_deg: 15.0
+    radius_deg: 13.5
     strength: 1.5
     noise_amplitude: 1.45
     elongation: 1.3
@@ -144,6 +144,37 @@ features:
     strength: 0.2
     elongation: 1.6
     bearing_deg: 15.0
+
+  # ---- 曙光大陆黏合：几处弱正场把曙光大陆连成整体，减少碎裂 ----
+  - name: 曙光大陆黏合·西北
+    lon: 45.0
+    lat: 24.0
+    radius_deg: 4.0
+    strength: 0.3
+    noise_amplitude: 1.0
+  - name: 曙光大陆黏合·南
+    lon: 57.0
+    lat: 0.0
+    radius_deg: 5.0
+    strength: 0.3
+    noise_amplitude: 1.0
+  - name: 曙光大陆黏合·东
+    lon: 64.0
+    lat: 20.0
+    radius_deg: 6.0
+    strength: 0.4
+    noise_amplitude: 1.0
+
+  # ---- 暮光大陆：曙光大陆以南的深南大陆（41°E，约 73°S…40°S）。中等正场加中等噪声，
+  #   给出位置与大致范围，海岸形状由噪声与板块剖分决定 ----
+  - name: 暮光大陆
+    lon: 41.0
+    lat: -56.5
+    radius_deg: 11.0            # 半短轴（东西半宽）
+    strength: 0.6
+    noise_amplitude: 1.5
+    elongation: 1.5             # 半长轴 16.5°，南北向
+    bearing_deg: 0.0
 
   # ════════════════════════════════════════════════════════════════════
   # 二、裂谷海系统（陆间海；连通性来源）
@@ -254,33 +285,40 @@ features:
     elongation: 2.0
     bearing_deg: -18.0
 
-  # ---- 北极周缘裂谷（自转减慢松弛裂缝）----
-  # 潮汐锁定过程中自转离心力减弱 → 极点旋转扁率松弛 → 地壳张性裂缝。
-  # 这些裂谷切割北极大陆边缘，连通北方内海与外洋。
-  - name: 北极周缘裂谷·本初段
-    lon: 11.5
-    lat: 59.0
-    radius_deg: 2.25
+  # ---- 北极周缘裂谷 ----
+  # 创作设定：这些裂谷切割北极大陆边缘，打通北方内海通向外洋的水道。
+  - name: 北极周缘裂谷·东段            # 近东西走向，切开北极大陆与曙光大陆
+    lon: 25.0
+    lat: 64.0
+    radius_deg: 2.4
+    strength: -1.8
+    noise_amplitude: 1.5
+    elongation: 4.5
+    bearing_deg: 93.0
+  - name: 北极周缘裂谷·中段
+    lon: -66.0
+    lat: 52.0
+    radius_deg: 1.8
     strength: -2.0
     noise_amplitude: 1.2
-    elongation: 3.5
-    bearing_deg: 130.0
-  - name: 北极周缘裂谷·西段
-    lon: -77.0
-    lat: 50.0
-    radius_deg: 2.0
+    elongation: 3.0
+    bearing_deg: 85.0
+  - name: 北极周缘裂谷·西段1
+    lon: -85.0
+    lat: 59.0
+    radius_deg: 3.0
     strength: -1.5
     noise_amplitude: 1.5
-    elongation: 3.0
-    bearing_deg: 90.0
-  - name: 北极周缘裂谷·中段
-    lon: -52.0
-    lat: 52.0
-    radius_deg: 1.4
-    strength: -2.0
-    noise_amplitude: 1.2
-    elongation: 3.5
-    bearing_deg: 140.0
+    elongation: 2.0
+    bearing_deg: 45.0
+  - name: 北极周缘裂谷·西段2
+    lon: -77.0
+    lat: 47.0
+    radius_deg: 2.5
+    strength: -1.5
+    noise_amplitude: 1.5
+    elongation: 2.5
+    bearing_deg: 65.0
   - name: 北极周缘裂谷·远西段
     lon: -136.3
     lat: 58.5
@@ -289,6 +327,26 @@ features:
     noise_amplitude: 1.2
     elongation: 4.0
     bearing_deg: 133.0
+
+  # 北极大陆西南水道：在北极大陆西部南伸陆块最窄处（北纬约 51°，西经 124°…104°）横切，
+  # 把北纬 50° 以南的陆块从北极大陆分出去，减小北极大陆面积。
+  - name: 北极大陆西南水道
+    lon: -115.0
+    lat: 51.0
+    radius_deg: 2.5
+    strength: -1.0
+    noise_amplitude: 2.5
+    elongation: 4.0
+    bearing_deg: 90.0
+
+  - name: 世界岛-北极-曙光陆间海（北方陆间海东部）
+    lon: 8.0
+    lat: 54.0
+    radius_deg: 8.0
+    strength: -1.0
+    noise_amplitude: 2.5
+    elongation: 1.0
+    bearing_deg: 0.0
 
   # ════════════════════════════════════════════════════════════════════
   # 三、海峡与地峡（关键水道/陆地瓶颈）
@@ -321,16 +379,23 @@ features:
     elongation: 1.20
     bearing_deg: 10.0
 
-  - name: 世界岛南北地峡
-    lon: -73.7
+  - name: 世界岛南北连接处
+    lon: -95.0
     lat: 37.0
-    radius_deg: 2.0
-    strength: 1.0
-    noise_amplitude: 0.5
-    elongation: 1.0
-    bearing_deg: 0.0
-    elevation_target_m: 100.0
-    pin_crosses_sea_level: true   # 陆桥：允许把海底拉出海面
+    radius_deg: 5.0
+    strength: 0.4
+    noise_amplitude: 1.5
+    elongation: 2.0
+    bearing_deg: 165.0
+
+  - name: 世界岛-曙光海峡
+    lon: -5.0
+    lat: 43.0
+    radius_deg: 1.5
+    strength: -0.70
+    noise_amplitude: 0.8
+    elongation: 4.0
+    bearing_deg: 45.0
 
   - name: 曙光-逐日海峡1
     lon: 73.0
@@ -351,15 +416,15 @@ features:
     bearing_deg: 0.0
 
   # ════════════════════════════════════════════════════════════════════
-  # 四、褶皱山系（前导点压缩造山；岛弧/群岛，非大陆）
+  # 四、逐日大陆西南陆块（前导点附近；可与逐日大陆相连，也可分离）
   # ════════════════════════════════════════════════════════════════════
 
-  - name: 前导点褶皱山系
+  - name: 逐日大陆西南陆块
     lon: 94.0
     lat: -2.5
     radius_deg: 6.0
     strength: 1.0
-    noise_amplitude: 0.85
+    noise_amplitude: 1.0
     elongation: 1.3
     bearing_deg: 30.0
 
@@ -385,7 +450,7 @@ features:
     noise_amplitude: 1.2
     elongation: 1.1
     bearing_deg: 0.0
-    elevation_target_m: 1700.0
+    elevation_target_m: 2100.0
     pin_strength: 0.7
     pin_exponent: 3.0           # 削峰——孤立的尖耸火山锥
 
@@ -402,7 +467,7 @@ features:
     lon: 0.0
     lat: -32.0
     radius_deg: 28.0
-    strength: -0.8
+    strength: -0.6
   - name: 南大洋·90
     lon: 90.0
     lat: -39.0
@@ -447,10 +512,8 @@ features:
     lon: 0.0                    # 极点，lon 任意
     lat: -90.0
     radius_deg: 24.0
-    strength: -0.30             # 弱负偏置：浅海倾向，不强制统一深度
+    strength: -0.25             # 弱负偏置：浅海倾向，不强制统一深度
     elongation: 1.0
-
-
     bearing_deg: 0.0
 
 # ════════════════════════════════════════════════════════════════════
@@ -460,8 +523,6 @@ features:
 overlays:
 
   # 逐日大陆改形（2026-09-30 用户裁决）。
-  # 东北部移除：开中纬东风水汽走廊，解除 +90..120 干核（88% BSk）的
-  # 上游自遮蔽；顺带清除北方 (127.5, 55) 大岛。
   - name: 逐日东北海
     lon: 135.0
     lat: 45.0
@@ -476,29 +537,28 @@ overlays:
     polygon: [[143, 12], [150, 8], [152, 16], [162, 12], [154, 10], [152, 4], [156, 2],
               [158, -4], [152, -8], [143.5, -2], [145, 3], [142, 7]]
     edge_deg: 1.0
-    strength: 0.35        # 碎片内陆地占比 35%
+    strength: 0.45        # 碎片内陆地占比 45%
     noise_amplitude: 0.2  # 碎片轮廓起伏幅度
 
-  # 世界岛西北群岛海（2026-09-30 用户裁决）：世界岛西北外海的陆壳碎片，碎片内是岛与海峡
-  # 镶嵌的群岛（文明有效陆地）。
+  # 世界岛西北群岛海（2026-09-30 用户裁决）：世界岛西北外海的陆壳碎片，碎片内是岛与海峡镶嵌的群岛。
   - name: 西北群岛海
     polygon: [[-137, 34], [-133, 28], [-130, 32], [-124.5, 25], [-127.5, 22.5],
               [-126, 18.5], [-131, 19.5], [-133.5, 23.5], [-138, 24]]
     edge_deg: 1.0
-    strength: 0.45          # 碎片内陆地占比 45%
+    strength: 0.42
     noise_amplitude: 0.2    # 碎片轮廓起伏幅度
 
-  # 北方陆间海西南水道（2026-10-21 作者要求）：陆间海主体与西部海盆之间必须保持水道，使内海东西两侧
-  # 都有出口（西侧经西部海盆通向西南外海）。用 overlay 不动板块；刻海场切开陆地，可跨越海平面的
-  # 高程钉扎保证核心一定在水下（门槛深度暂取 80 m，重新生成后随海峡结论重算）。
-  - name: 世界岛-北极陆间海西南水道
-    lon: -77.5
-    lat: 62.0
-    radius_deg: 1.2
-    strength: -1.5
-    noise_amplitude: 0.5
-    elongation: 2.0
-    bearing_deg: 90.0
-    elevation_target_m: -80.0
-    pin_strength: 1.0
-    pin_crosses_sea_level: true
+  # # 北方陆间海西南水道（2026-10-21 作者要求）：陆间海主体与西部海盆之间必须保持水道，使内海东西两侧
+  # # 都有出口（西侧经西部海盆通向西南外海）。用 overlay 不动板块；刻海场切开陆地，可跨越海平面的
+  # # 高程钉扎保证核心一定在水下（门槛深度暂取 80 m，重新生成后随海峡结论重算）。
+  # - name: 世界岛-北极陆间海西南水道
+  #   lon: -77.5
+  #   lat: 62.0
+  #   radius_deg: 1.2
+  #   strength: -1.5
+  #   noise_amplitude: 0.5
+  #   elongation: 2.0
+  #   bearing_deg: 90.0
+  #   elevation_target_m: -80.0
+  #   pin_strength: 1.0
+  #   pin_crosses_sea_level: true

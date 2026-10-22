@@ -14,7 +14,7 @@
 #   tidal_effects.md   — 潮汐效应
 #
 # 海陆锚定（2026-08 实现）: 同目录的 geography.yaml 把 geography.md 的命名
-# 地貌（Aegis 深渊洋、虚空洋、世界岛、前导点褶皱山系、北极大陆、大裂谷海、
+# 地貌（Aegis 深渊洋、虚空洋、世界岛、逐日大陆西南陆块、北极大陆、大裂谷海、
 # 世界岛—北极陆桥）编码为锚点。地质引擎据此构建逐 cell 陆地偏置场并以全局阈值
 # 分配地壳（见 docs/design/terrain-pipeline.md §3.5）。删除 geography.yaml
 # 即回退到随机大陆分布。feature 参数为首轮初值，可按渲染结果微调。

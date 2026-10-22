@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import numpy as np
 
 from dreamulator.map.export import (
+    draw_graticule,
     export_cell_index_grid,
     render_categorical_layer,
     render_continuous_layer,
@@ -234,6 +235,12 @@ def export_layers(
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
     output: Path = typer.Option(Path("export/"), "--output", "-o", help="Output directory"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+    graticule: float = typer.Option(
+        0.0,
+        "--graticule",
+        help="Draw a labelled lon/lat graticule every N degrees (e.g. 30); 0 = none, which "
+        "keeps byte-parity with the frontend",
+    ),
 ) -> None:
     """Headlessly bake map layers to colour PNGs (frontend palette, byte-parity)."""
     _set_data_dir(data_dir)
@@ -347,6 +354,8 @@ def export_layers(
             rgba = _render_layer(
                 name, mesh, indices, elev_min, elev_max, sea_level, omega_by_plate, radius_km
             )
+        if graticule > 0.0:
+            rgba = draw_graticule(rgba, graticule)
         path = output / f"{name}.png"
         save_rgba_png(rgba, path)
         elapsed = time.perf_counter() - start

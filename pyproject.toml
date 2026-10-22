@@ -154,7 +154,7 @@ plugins = ["pydantic.mypy"]
 # anthropic / xarray / netCDF4 live in optional extras (narrate / validation)
 # and are absent from the base dev environment.
 [[tool.mypy.overrides]]
-module = ["astropy.*", "opensimplex", "scipy.*", "anthropic", "xarray", "netCDF4", "msgpack"]
+module = ["astropy.*", "opensimplex", "scipy.*", "anthropic.*", "xarray", "netCDF4", "msgpack"]
 ignore_missing_imports = true
 
 # exoplasim (gcm extra) ships no types; the harness confines itself to the

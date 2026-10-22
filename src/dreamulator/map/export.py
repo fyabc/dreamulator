@@ -284,6 +284,49 @@ def save_rgba_png(rgba: np.ndarray, path: Path) -> None:
     Image.fromarray(rgba, "RGBA").save(str(path))
 
 
+def draw_graticule(rgba: np.ndarray, step_deg: float) -> np.ndarray:
+    """Overlay a labelled longitude/latitude graticule on an equirectangular RGBA image.
+
+    Lines every ``step_deg`` degrees in translucent white, the equator and prime meridian
+    brighter; labels along the left and bottom edges.  Uses the grid of
+    ``make_equirect_grid`` (lon −180° at column 0, lat +90° at row 0).
+    """
+    from PIL import ImageDraw, ImageFont
+
+    h, w = rgba.shape[:2]
+    im = Image.fromarray(rgba, "RGBA")
+    layer = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    size = max(12, h // 70)
+    try:
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont = ImageFont.truetype(
+            "DejaVuSans.ttf", size
+        )
+    except OSError:
+        font = ImageFont.load_default()
+    thin, bold = (255, 255, 255, 110), (255, 230, 120, 180)
+    n_lon = int(round(360.0 / step_deg))
+    for k in range(n_lon + 1):
+        lon = -180.0 + k * step_deg
+        x = (lon + 180.0) / 360.0 * w
+        major = abs(lon) < 1e-9
+        draw.line([(x, 0), (x, h)], fill=bold if major else thin, width=2 if major else 1)
+        if -180.0 < lon < 180.0:
+            hemi = "E" if lon > 0 else "W" if lon < 0 else ""
+            draw.text((x + 4, h - 1.6 * size), f"{abs(lon):g}°{hemi}", fill="white", font=font)
+    n_lat = int(90.0 // step_deg)
+    for k in range(-n_lat, n_lat + 1):
+        lat = k * step_deg
+        if abs(lat) >= 90.0:
+            continue
+        y = (90.0 - lat) / 180.0 * (h - 1)
+        major = abs(lat) < 1e-9
+        draw.line([(0, y), (w, y)], fill=bold if major else thin, width=2 if major else 1)
+        hemi = "N" if lat > 0 else "S" if lat < 0 else ""
+        draw.text((4, y + 2), f"{abs(lat):g}°{hemi}", fill="white", font=font)
+    return np.asarray(Image.alpha_composite(im, layer))
+
+
 def plate_velocity_east_north(
     mesh: CVTMesh,
     omega_by_plate: dict[str, tuple[np.ndarray, float]],
