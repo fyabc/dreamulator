@@ -132,8 +132,16 @@ def main() -> None:
     surface = (
         np.asarray(Image.open(clouds_dir / "surface.png").convert("RGB"), dtype=np.float64) / 255.0
     )
-    cloud_rgba = np.asarray(Image.open(clouds_dir / "clouds.png").convert("RGBA"), dtype=np.float64)
+    low_path = clouds_dir / "clouds_low.png"
+    if not low_path.exists():
+        low_path = clouds_dir / "clouds.png"
+    cloud_rgba = np.asarray(Image.open(low_path).convert("RGBA"), dtype=np.float64)
     cloud_alpha = cloud_rgba[..., 3] / 255.0
+    cirrus_path = clouds_dir / "clouds_cirrus.png"
+    cloud_high = None
+    if cirrus_path.exists():
+        cirrus_rgba = np.asarray(Image.open(cirrus_path).convert("RGBA"), dtype=np.float64)
+        cloud_high = cirrus_rgba[..., 3] / 255.0
     height, width = surface.shape[:2]
     sea_level = float(meta.get("sea_level_m", 0.0))
     ocean = None if args.no_ocean else _load_ocean_mask(meta, width, height, sea_level)
@@ -142,6 +150,7 @@ def main() -> None:
     renderer = SpinRenderer(
         surface,
         cloud_alpha,
+        cloud_high,
         res=args.res,
         center_lon_deg=float(globe.get("center_lon_deg", 90.0)),
         center_lat_deg=float(globe.get("center_lat_deg", 15.0)),
@@ -149,6 +158,7 @@ def main() -> None:
         sun_lat_deg=float(globe.get("sun_lat_deg", 20.0)),
         model=model,
         cloud_altitude_km=float(atmosphere.get("cloud_altitude_km", 4.0)),
+        cirrus_altitude_km=float(atmosphere.get("cirrus_altitude_km", 9.0)),
         cloud_shadows=bool(atmosphere.get("cloud_shadows", True)),
         ocean_mask=ocean,
         sun_glint=bool(atmosphere.get("sun_glint", True)),

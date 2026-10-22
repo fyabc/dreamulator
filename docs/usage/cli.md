@@ -485,8 +485,9 @@ refined-out → gaea-out → input/）。操作细节见
 
 ```bash
 dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
-# 写 <out>/{clouds.png（RGBA straight alpha）, cloud_cover.png, surface.png,
-#        globe.png, meta.json}；默认 out = <render-workdir>/clouds/<world>[-<branch>]/
+# 写 <out>/{clouds.png（RGBA straight alpha 合并）, clouds_low.png（低/中云+霾）,
+#        clouds_cirrus.png（9 km 高壳卷云）, cloud_cover.png, surface.png,
+#        globe.png, meta.json}
 # --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
 # --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
 # --cyclones 叠加 L3 气旋模板（合成占位轨迹；L1 轨迹表到达后替换）
@@ -515,7 +516,8 @@ cyclones:
   extratropical_scale: 1.0
 atmosphere:
   enabled: true
-  cloud_altitude_km: 4.0      # 云壳高度；L1 云顶高度到达后替换
+  cloud_altitude_km: 4.0      # 低/中云壳高度；L1 云顶高度到达后替换
+  cirrus_altitude_km: 9.0     # 高壳卷云高度（必须高于低云壳）
   exposure: white_balance     # white_balance | physical（后者保留 K 型星暖色）
   cloud_shadows: true
   sun_glint: true             # 海面 GGX 太阳高光
@@ -542,7 +544,11 @@ L3 气旋模板在 `media/cyclone_render.py`：热带气旋用 Holland 1980 风�
 
 L5 大气渲染在 `media/atmosphere_render.py`：瑞利分子散射、米氏气溶胶与臭氧吸收，
 按世界自己的恒星光谱（`stellar.yaml` 的温度）与行星重力、气压、大气组成定标；
-地表球、云壳与大气壳分层合成，支持云影、海面太阳高光、圆盘外大气晕与物理晨昏线。默认的
+地表球、云壳与大气壳分层合成，支持云影、海面太阳高光、圆盘外大气晕与物理晨昏线。
+云分为 4 km 的低/中云壳与 9 km 的高壳卷云，各自照明并正确互相透出；`clouds.png`
+仍是合并层，`clouds_low.png` 与 `clouds_cirrus.png` 供 L5/视频使用。高壳卷云带
+一层对比曲线（保留亮丝缕、去掉均匀薄纱）；全圆盘预览的海色比区域制图链更深，
+两套海色互不影响。默认的
 `white_balance` 曝光按画面内直射日光做白平衡，保持地表调色板的中性观感；`physical`
 保留 K 型星的暖色。多次散射用 Hillaire 的局部查找表，提高白天与晨昏线亮度，
 但不做非局地光输运。物理模型、系数来源与已知限制见

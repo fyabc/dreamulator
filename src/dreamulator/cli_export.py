@@ -1034,6 +1034,7 @@ def export_clouds(
         cyclone_seed=cyclone_seed,
         atmosphere=atmosphere_model,
         cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
+        cirrus_altitude_km=cfg.atmosphere.cirrus_altitude_km,
         cloud_shadows=cfg.atmosphere.cloud_shadows,
         sun_glint=cfg.atmosphere.sun_glint,
         water_roughness=cfg.atmosphere.water_roughness,

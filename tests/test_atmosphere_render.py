@@ -199,6 +199,33 @@ def test_ocean_sun_glint_only_on_water() -> None:
     assert with_glint[60, 60].mean() > without_glint[60, 60].mean()
 
 
+def test_two_layer_cirrus_changes_image() -> None:
+    surface, low = _uniform_inputs(64)
+    high = np.zeros_like(low)
+    high[8:24, 30:100] = 0.45
+    model = _earth_model()
+    common = dict(
+        res=160,
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        sun_lon_deg=20.0,
+        sun_lat_deg=0.0,
+        model=model,
+        view_samples=4,
+    )
+    single = ar.render_globe_atmosphere(surface, low, **common)
+    double = ar.render_globe_atmosphere(surface, low, high, cirrus_altitude_km=9.0, **common)
+    assert double.shape == single.shape
+    assert not np.array_equal(double, single)
+    # The high shell sits above the low shell; swapping the altitudes is invalid.
+    try:
+        ar.render_globe_atmosphere(surface, low, high, cirrus_altitude_km=3.0, **common)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("cirrus_altitude_km below the low shell must be rejected")
+
+
 def test_cloud_shadow_changes_surface() -> None:
     surface, _ = _uniform_inputs(64)
     cloud = np.zeros_like(surface[..., 0])

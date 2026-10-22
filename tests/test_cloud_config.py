@@ -20,6 +20,7 @@ def test_defaults() -> None:
     assert cfg.cyclones.tropical_per_hemisphere == 1
     assert cfg.atmosphere.enabled is True
     assert cfg.atmosphere.cloud_altitude_km == 4.0
+    assert cfg.atmosphere.cirrus_altitude_km == 9.0
     assert cfg.atmosphere.exposure == "white_balance"
     assert cfg.atmosphere.sun_glint is True
     assert cfg.atmosphere.water_roughness == 0.08
@@ -47,6 +48,7 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
         "  enabled: true\n"
         "  exposure: physical\n"
         "  cloud_altitude_km: 6\n"
+        "  cirrus_altitude_km: 10\n"
         "  star_temperature_k: 4365\n"
         "  sun_glint: false\n"
         "  water_roughness: 0.05\n"
@@ -66,6 +68,7 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
     assert cfg.cyclones.tracks[0].outer_radius_km == 2000.0
     assert cfg.atmosphere.exposure == "physical"
     assert cfg.atmosphere.cloud_altitude_km == 6.0
+    assert cfg.atmosphere.cirrus_altitude_km == 10.0
     assert cfg.atmosphere.star_temperature_k == 4365.0
     assert cfg.atmosphere.sun_glint is False
     assert cfg.atmosphere.water_roughness == 0.05

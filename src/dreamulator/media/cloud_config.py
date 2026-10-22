@@ -25,6 +25,7 @@ Example::
       enabled: true
       exposure: white_balance
       cloud_altitude_km: 4.0
+      cirrus_altitude_km: 9.0
       sun_glint: true
       multiple_scattering: true
 """
@@ -90,6 +91,7 @@ class AtmosphereSettings(BaseModel):
 
     enabled: bool = True
     cloud_altitude_km: float = Field(4.0, ge=0.0)
+    cirrus_altitude_km: float = Field(9.0, gt=0.0)
     atmosphere_temperature_k: float = Field(273.15, gt=0.0)
     mie_scale: float = Field(1.0, ge=0.0)
     ozone_scale: float = Field(1.0, ge=0.0)

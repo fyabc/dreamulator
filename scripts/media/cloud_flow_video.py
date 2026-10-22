@@ -198,14 +198,24 @@ def main() -> None:
         np.asarray(Image.open(clouds_dir / "surface.png").convert("RGB"), dtype=np.float64) / 255.0
     )
     height, width = surface.shape[:2]
-    cloud_rgba = np.asarray(Image.open(clouds_dir / "clouds.png").convert("RGBA"), dtype=np.float64)
+    low_path = clouds_dir / "clouds_low.png"
+    if not low_path.exists():
+        low_path = clouds_dir / "clouds.png"
+    cloud_rgba = np.asarray(Image.open(low_path).convert("RGBA"), dtype=np.float64)
     cloud_alpha = cloud_rgba[..., 3] / 255.0
+    cirrus_path = clouds_dir / "clouds_cirrus.png"
+    cloud_high = None
+    if cirrus_path.exists():
+        cirrus_rgba = np.asarray(Image.open(cirrus_path).convert("RGBA"), dtype=np.float64)
+        cloud_high = cirrus_rgba[..., 3] / 255.0
 
     tex_width = max(2, args.texture_width // 2 * 2)
     tex_height = tex_width // 2
     indices = export_cell_index_grid(mesh, tex_width, tex_height, tree=tree)
     _, wind_east, wind_north, _, _ = conditioning_grids(mesh, indices)
     cloud = _resize(cloud_alpha, tex_width, tex_height)
+    if cloud_high is not None:
+        cloud_high = _resize(cloud_high, tex_width, tex_height)
     cyclones = [] if args.no_vortex else _load_cyclones(meta)
     centres = [(cyc.lat_deg, cyc.lon_deg) for cyc in cyclones]
     if cyclones:
@@ -221,6 +231,7 @@ def main() -> None:
     renderer = SpinRenderer(
         surface,
         cloud,
+        cloud_high,
         res=args.res,
         center_lon_deg=float(globe.get("center_lon_deg", 90.0)),
         center_lat_deg=float(globe.get("center_lat_deg", 15.0)),
@@ -228,6 +239,7 @@ def main() -> None:
         sun_lat_deg=float(globe.get("sun_lat_deg", 20.0)),
         model=model,
         cloud_altitude_km=float(atmosphere.get("cloud_altitude_km", 4.0)),
+        cirrus_altitude_km=float(atmosphere.get("cirrus_altitude_km", 9.0)),
         cloud_shadows=bool(atmosphere.get("cloud_shadows", True)),
         ocean_mask=ocean,
         sun_glint=bool(atmosphere.get("sun_glint", True)),
@@ -241,7 +253,8 @@ def main() -> None:
     dt = args.sim_hours * 3600.0 / (total - 1)
     print(
         f"advection: {args.sim_hours:g} h over {total} frames at "
-        f"{tex_width}x{tex_height}, vortex={'on' if cyclones else 'off'}"
+        f"{tex_width}x{tex_height}, vortex={'on' if cyclones else 'off'}, "
+        f"cirrus={'on' if cloud_high is not None else 'off'}"
     )
 
     out = args.output or Path("exports") / "spin" / f"{clouds_dir.name}_cloudflow_{args.res}p.mp4"
@@ -320,7 +333,17 @@ def main() -> None:
                     substeps=substeps,
                     bfecc=not args.no_bfecc,
                 )
-            renderer.set_cloud(cloud)
+                if cloud_high is not None:
+                    cloud_high = advect_equirect(
+                        cloud_high,
+                        total_east,
+                        total_north,
+                        dt_seconds=dt,
+                        radius_km=model.planet_radius_km,
+                        substeps=substeps,
+                        bfecc=not args.no_bfecc,
+                    )
+            renderer.set_cloud(cloud, cloud_high)
             frame = renderer.frame(0.0)
             canvas[y0 : y0 + args.res, x0 : x0 + args.res] = frame
             proc.stdin.write(canvas.tobytes())

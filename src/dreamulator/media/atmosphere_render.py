@@ -673,6 +673,7 @@ def _march_segment(
 def render_globe_atmosphere(
     surface_rgb: np.ndarray,
     cloud_alpha: np.ndarray,
+    cloud_alpha_high: np.ndarray | None = None,
     *,
     res: int = 1600,
     center_lon_deg: float = 90.0,
@@ -682,6 +683,7 @@ def render_globe_atmosphere(
     model: AtmosphereModel | None = None,
     cloud_rgb: tuple[int, int, int] = (252, 250, 245),
     cloud_altitude_km: float = CLOUD_ALTITUDE_KM,
+    cirrus_altitude_km: float = 9.0,
     cloud_shadows: bool = True,
     ocean_mask: np.ndarray | None = None,
     sun_glint: bool = True,
@@ -715,6 +717,10 @@ def render_globe_atmosphere(
         raise ValueError("surface_rgb must have shape (h, w, 3)")
     if cloud_alpha.shape != surface_rgb.shape[:2]:
         raise ValueError("cloud_alpha must match the surface grid")
+    if cloud_alpha_high is not None:
+        cloud_alpha_high = np.asarray(cloud_alpha_high, dtype=np.float64)
+        if cloud_alpha_high.shape != surface_rgb.shape[:2]:
+            raise ValueError("cloud_alpha_high must match the surface grid")
     if ocean_mask is not None:
         ocean_mask = np.asarray(ocean_mask, dtype=np.float64)
         if ocean_mask.shape != surface_rgb.shape[:2]:
@@ -723,6 +729,10 @@ def render_globe_atmosphere(
     planet = model.planet_radius_km
     top = planet + model.top_altitude_km
     cloud_radius = planet + cloud_altitude_km
+    high_active = cloud_alpha_high is not None
+    if high_active and cirrus_altitude_km <= cloud_altitude_km:
+        raise ValueError("cirrus_altitude_km must be above cloud_altitude_km")
+    cloud_radius_high = planet + cirrus_altitude_km if high_active else cloud_radius
 
     lam_c = math.radians(center_lon_deg)
     phi_c = math.radians(center_lat_deg)
@@ -754,12 +764,17 @@ def render_globe_atmosphere(
     has_atmosphere = b < top
     hits_surface = b < planet
     hits_cloud = b < cloud_radius
+    hits_cloud_high = b < cloud_radius_high if high_active else np.zeros_like(hits_cloud)
 
     sigma_entry = np.sqrt(np.maximum(top * top - b2, 0.0))
     sigma_surface = np.sqrt(np.maximum(planet * planet - b2, 0.0))
     sigma_cloud = np.sqrt(np.maximum(cloud_radius * cloud_radius - b2, 0.0))
+    sigma_cloud_high = np.sqrt(np.maximum(cloud_radius_high * cloud_radius_high - b2, 0.0))
     sigma_end = np.where(hits_surface, sigma_surface, -sigma_entry)
-    sigma_split = np.where(hits_cloud, sigma_cloud, sigma_end)
+    sigma_split_low = np.where(hits_cloud, sigma_cloud, sigma_end)
+    sigma_split_high = (
+        np.where(hits_cloud_high, sigma_cloud_high, sigma_end) if high_active else sigma_split_low
+    )
 
     lut = build_transmittance_lut(model)
     ms_lut = build_multiscattering_lut(model, lut) if multiple_scattering else None
@@ -770,7 +785,20 @@ def render_globe_atmosphere(
         f=f,
         sun=sun,
         sigma_start=sigma_entry,
-        sigma_end=sigma_split,
+        sigma_end=sigma_split_high,
+        model=model,
+        lut=lut,
+        n_steps=view_samples,
+        ms_lut=ms_lut,
+    )
+    radiance_middle, trans_middle = _march_segment(
+        origin_xy=(origin, origin_y),
+        origin_z=origin_z,
+        b2=b2,
+        f=f,
+        sun=sun,
+        sigma_start=sigma_split_high,
+        sigma_end=sigma_split_low,
         model=model,
         lut=lut,
         n_steps=view_samples,
@@ -782,7 +810,7 @@ def render_globe_atmosphere(
         b2=b2,
         f=f,
         sun=sun,
-        sigma_start=sigma_split,
+        sigma_start=sigma_split_low,
         sigma_end=sigma_end,
         model=model,
         lut=lut,
@@ -790,45 +818,62 @@ def render_globe_atmosphere(
         ms_lut=ms_lut,
     )
 
-    # ---- Cloud shell: coverage, sun transmittance and pseudo-3D shading ----
-    cloud_coverage = np.zeros((res, res), dtype=np.float64)
-    cloud_light = np.zeros((res, res, 3), dtype=np.float64)
-    if np.any(hits_cloud):
-        cx = origin + sigma_cloud * f[0]
-        cy = origin_y + sigma_cloud * f[1]
-        cz = origin_z + sigma_cloud * f[2]
+    # ---- Cloud shells: coverage, sun transmittance and pseudo-3D shading ----
+    from scipy.ndimage import gaussian_filter
+
+    emboss_sigma = 3.0
+    emboss_relief = 8.0
+    thick_base = 0.80
+    thick_amp = 0.40
+    sun_screen = np.array([np.dot(sun, right), np.dot(sun, up), np.dot(sun, f)])
+    sun_screen = sun_screen / max(np.linalg.norm(sun_screen), 1e-9)
+    tint = _srgb_to_linear(np.asarray(cloud_rgb, dtype=np.float64) / 255.0)
+
+    def _cloud_layer(
+        alpha_field: np.ndarray,
+        sigma_shell: np.ndarray,
+        altitude_km: float,
+        hit_mask: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        coverage = np.zeros((res, res), dtype=np.float64)
+        light = np.zeros((res, res, 3), dtype=np.float64)
+        if not np.any(hit_mask):
+            return coverage, light
+        cx = origin + sigma_shell * f[0]
+        cy = origin_y + sigma_shell * f[1]
+        cz = origin_z + sigma_shell * f[2]
         c_radius = np.sqrt(np.maximum(cx * cx + cy * cy + cz * cz, 1e-9))
         c_lat = np.degrees(np.arcsin(np.clip(cy / c_radius, -1.0, 1.0)))
         c_lon = np.degrees(np.arctan2(cz, cx))
-
-        cloud_coverage = np.clip(_sample_equirect(cloud_alpha, c_lat, c_lon), 0.0, 1.0)
+        coverage = np.clip(_sample_equirect(alpha_field, c_lat, c_lon), 0.0, 1.0) * hit_mask
         cos_cloud = np.clip((cx * sun[0] + cy * sun[1] + cz * sun[2]) / c_radius, -1.0, 1.0)
-        sun_cloud = lut.sample(np.full_like(c_lat, cloud_altitude_km), cos_cloud)
-
-        from scipy.ndimage import gaussian_filter
-
-        emboss_sigma = 3.0
-        emboss_relief = 8.0
-        thick_base = 0.80
-        thick_amp = 0.40
-        h_tex = gaussian_filter(cloud_alpha, emboss_sigma)
+        sun_cloud = lut.sample(np.full_like(c_lat, altitude_km), cos_cloud)
+        h_tex = gaussian_filter(alpha_field, emboss_sigma)
         h0 = _sample_equirect(h_tex, c_lat, c_lon)
         hx = _sample_equirect(h_tex, c_lat, c_lon + 360.0 / h_tex.shape[1])
         hy = _sample_equirect(h_tex, c_lat - 180.0 / h_tex.shape[0], c_lon)
-        sun_screen = np.array([np.dot(sun, right), np.dot(sun, up), np.dot(sun, f)])
-        sun_screen = sun_screen / max(np.linalg.norm(sun_screen), 1e-9)
         nx = -(hx - h0) * emboss_relief
         ny = -(hy - h0) * emboss_relief
         nlen = np.sqrt(nx * nx + ny * ny + 1.0)
         shade = np.clip((nx * sun_screen[0] + ny * sun_screen[1] + sun_screen[2]) / nlen, 0.0, 1.0)
         term = 0.45 + 0.95 * np.power(shade, 0.9)
-        gate = np.clip(cloud_coverage / 0.15, 0.0, 1.0)
-        thickness = thick_base + thick_amp * cloud_coverage
+        gate = np.clip(coverage / 0.15, 0.0, 1.0)
+        thickness = thick_base + thick_amp * coverage
         light_mod = 1.0 + gate * (term * thickness - 1.0)
-        tint = _srgb_to_linear(np.asarray(cloud_rgb, dtype=np.float64) / 255.0)
-        cloud_light = tint * (
-            sun_cloud * np.clip(cos_cloud, 0.0, None)[..., None] * light_mod[..., None]
+        light = tint * (sun_cloud * np.clip(cos_cloud, 0.0, None)[..., None] * light_mod[..., None])
+        return coverage, light
+
+    cloud_coverage, cloud_light = _cloud_layer(
+        cloud_alpha, sigma_cloud, cloud_altitude_km, hits_cloud
+    )
+    if high_active:
+        assert cloud_alpha_high is not None
+        cloud_coverage_high, cloud_light_high = _cloud_layer(
+            cloud_alpha_high, sigma_cloud_high, cirrus_altitude_km, hits_cloud_high
         )
+    else:
+        cloud_coverage_high = np.zeros((res, res), dtype=np.float64)
+        cloud_light_high = np.zeros((res, res, 3), dtype=np.float64)
 
     # ---- Surface: sun transmittance, cloud shadow, Lambert ----
     s_lat = np.degrees(
@@ -890,14 +935,16 @@ def render_globe_atmosphere(
         glint = specular * ocean * np.clip(cos_surface, 0.0, None) * shadow * hits_surface
         surface_radiance = surface_radiance + glint[..., None] * sun_surface
 
-    # ---- Composite: upper atmosphere, cloud, lower atmosphere, surface ----
-    behind_cloud = trans_lower * surface_radiance + radiance_lower
-    with_cloud = (
-        cloud_coverage[..., None] * cloud_light + (1.0 - cloud_coverage[..., None]) * behind_cloud
+    # ---- Composite: upper atmosphere, cirrus shell, middle atmosphere,
+    # low cloud shell, lower atmosphere, surface ----
+    bottom = radiance_lower + trans_lower * surface_radiance
+    low_image = radiance_middle + trans_middle * (
+        cloud_coverage[..., None] * cloud_light + (1.0 - cloud_coverage[..., None]) * bottom
     )
-    at_cloud = radiance_upper + trans_upper * with_cloud
-    at_surface = radiance_upper + trans_upper * (trans_lower * surface_radiance + radiance_lower)
-    rgb = np.where(hits_cloud[..., None], at_cloud, at_surface)
+    rgb = radiance_upper + trans_upper * (
+        cloud_coverage_high[..., None] * cloud_light_high
+        + (1.0 - cloud_coverage_high[..., None]) * low_image
+    )
     rgb = np.where(has_atmosphere[..., None], rgb, 0.0)
     # Exposure.  ``white_balance`` behaves like a camera balanced on a white
     # card in the scene's daylight: the sub-solar surface transmittance is

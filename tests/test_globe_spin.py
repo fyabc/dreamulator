@@ -65,6 +65,26 @@ def test_rotation_wraps_and_moves() -> None:
     assert first.dtype == np.uint8
 
 
+def test_two_shell_spin_matches_static_renderer() -> None:
+    surface, low = _textures()
+    high = np.zeros_like(low)
+    high[4:12, 10:40] = 0.35
+    kwargs = dict(
+        res=96,
+        center_lon_deg=20.0,
+        center_lat_deg=10.0,
+        sun_lon_deg=30.0,
+        sun_lat_deg=10.0,
+        model=_model(),
+        view_samples=4,
+    )
+    reference = render_globe_atmosphere(surface, low, high, cirrus_altitude_km=9.0, **kwargs)
+    spin = SpinRenderer(surface, low, high, cirrus_altitude_km=9.0, **kwargs)
+    np.testing.assert_array_equal(spin.frame(0.0), reference)
+    spin.set_cloud(low, high)
+    np.testing.assert_array_equal(spin.frame(0.0), reference)
+
+
 def test_cloud_grid_may_differ_from_surface() -> None:
     surface, cloud = _textures()
     spin = SpinRenderer(

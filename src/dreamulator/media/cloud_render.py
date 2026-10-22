@@ -259,6 +259,24 @@ CIRRUS_THRESHOLD_HI = 0.92
 CIRRUS_BASE_ALPHA = 0.14
 CIRRUS_WIND_ALPHA = 0.40
 
+#: High-shell cirrus recipe: the combined-layer cirrus above is deliberately
+#: near-invisible (it only contributes a few percent to the calibrated total).
+#: The L5 two-shell renderer needs a readable high veil for parallax, so a
+#: separate, slightly thicker cirrus field is generated here and placed on the
+#: 9 km shell; it does NOT enter the legacy combined ``alpha``.
+CIRRUS_HIGH_THRESHOLD_LO = 0.46
+CIRRUS_HIGH_THRESHOLD_HI = 0.72
+CIRRUS_HIGH_BASE_ALPHA = 0.45
+CIRRUS_HIGH_WIND_ALPHA = 0.35
+#: Contrast curve applied to the high-shell cirrus: percentile stretch +
+#: gamma + gain.  The raw recipe is a broad veil; this keeps the brighter
+#: streaks, removes the uniform milkiness, and raises local contrast (the
+#: A/B 2026-10-22 selection).
+CIRRUS_HIGH_CONTRAST_LO_Q = 60
+CIRRUS_HIGH_CONTRAST_HI_Q = 98
+CIRRUS_HIGH_CONTRAST_POWER = 1.4
+CIRRUS_HIGH_CONTRAST_GAIN = 0.55
+
 #: Diffuse haze floor: a very thin (≤5%) fine-textured veil everywhere, weakly
 #: gated by cover — real imagery has micro-texture even in "clear" sky (dust,
 #: thin cirrus, sub-visible cloud); without it our clear regions are
@@ -465,9 +483,18 @@ def _streaked_fbm(
 
 @dataclass
 class CloudProducts:
-    """Outputs of the equirectangular cloud synthesis."""
+    """Outputs of the equirectangular cloud synthesis.
 
-    alpha: np.ndarray  # (h, w) float64 ∈ [0, 1] — effective opacity
+    ``alpha`` is the combined opacity (low/mid + cirrus + haze).  The three
+    components are kept separately so the L5 renderer can place the cirrus on
+    a higher shell and get parallax at the limb; legacy callers use ``alpha``.
+    """
+
+    alpha: np.ndarray  # (h, w) float64 ∈ [0, 1] — combined effective opacity
+    alpha_low: np.ndarray  # low/mid cloud + bright cores, no cirrus/haze
+    alpha_cirrus: np.ndarray  # high cirrus streaks (legacy combined layer)
+    alpha_cirrus_high: np.ndarray  # readable high-shell cirrus for L5 parallax
+    alpha_haze: np.ndarray  # thin diffuse haze floor
     cover: np.ndarray  # (h, w) float64 ∈ [0, 1] — large-scale cover field
     width: int
     height: int
@@ -763,6 +790,10 @@ def cloud_texture_equirect(
 
     # ---------------- pass B: alpha assembly ----------------
     alpha = np.empty((height, width), dtype=np.float64)
+    alpha_low = np.empty((height, width), dtype=np.float64)
+    alpha_cirrus = np.empty((height, width), dtype=np.float64)
+    alpha_cirrus_high = np.empty((height, width), dtype=np.float64)
+    alpha_haze = np.empty((height, width), dtype=np.float64)
     for row0 in range(0, height, BAND_ROWS):
         row1 = min(row0 + BAND_ROWS, height)
         b = _band_basis(row0, row1)
@@ -1058,6 +1089,16 @@ def cloud_texture_equirect(
             * (CIRRUS_BASE_ALPHA + CIRRUS_WIND_ALPHA * np.clip(wmag / CIRRUS_REF_WIND_M_S, 0, 1))
             * (0.25 + 0.75 * cov_local)
         )
+        # L5 high-shell cirrus: same noise field, thicker recipe, kept out of
+        # the legacy combined alpha so the calibrated L2 histogram is unchanged.
+        a_cir_high = (
+            _smoothstep(CIRRUS_HIGH_THRESHOLD_LO, CIRRUS_HIGH_THRESHOLD_HI, density_c)
+            * (
+                CIRRUS_HIGH_BASE_ALPHA
+                + CIRRUS_HIGH_WIND_ALPHA * np.clip(wmag / CIRRUS_REF_WIND_M_S, 0, 1)
+            )
+            * (0.20 + 0.80 * cov_local)
+        )
 
         # Diffuse haze floor: thin fine-textured veil everywhere (weakly
         # cover-gated), gives clear sky the micro-texture the reference has.
@@ -1077,8 +1118,31 @@ def cloud_texture_equirect(
         alpha[row0:row1] = (1.0 - (1.0 - a_low) * (1.0 - a_cir) * (1.0 - a_haze)).reshape(
             row1 - row0, width
         )
+        alpha_low[row0:row1] = a_low.reshape(row1 - row0, width)
+        alpha_cirrus[row0:row1] = a_cir.reshape(row1 - row0, width)
+        alpha_cirrus_high[row0:row1] = a_cir_high.reshape(row1 - row0, width)
+        alpha_haze[row0:row1] = a_haze.reshape(row1 - row0, width)
 
-    return CloudProducts(alpha=alpha, cover=cover_grid, width=width, height=height)
+    # Keep the high-shell cirrus streaky rather than a uniform veil.  The
+    # percentile stretch is global so bands cannot introduce seams.
+    lo_c = float(np.percentile(alpha_cirrus_high, CIRRUS_HIGH_CONTRAST_LO_Q))
+    hi_c = float(np.percentile(alpha_cirrus_high, CIRRUS_HIGH_CONTRAST_HI_Q))
+    alpha_cirrus_high = (
+        np.clip((alpha_cirrus_high - lo_c) / max(hi_c - lo_c, 1e-6), 0.0, 1.0)
+        ** CIRRUS_HIGH_CONTRAST_POWER
+        * CIRRUS_HIGH_CONTRAST_GAIN
+    )
+
+    return CloudProducts(
+        alpha=alpha,
+        alpha_low=alpha_low,
+        alpha_cirrus=alpha_cirrus,
+        alpha_cirrus_high=alpha_cirrus_high,
+        alpha_haze=alpha_haze,
+        cover=cover_grid,
+        width=width,
+        height=height,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1133,6 +1197,13 @@ SURFACE_LAND_TEX_AMP = 0.10
 SURFACE_OCEAN_TEX_KM = 200.0
 SURFACE_OCEAN_TEX_AMP = 0.06
 
+#: Globe-preview ocean palette.  Full-disk references (Blue Marble) keep the
+#: deep ocean much darker than the region satellite renderer's sea colours;
+#: this palette is scoped to the L2/L5 globe base and leaves the carto/region
+#: chain untouched (its surface is the authoritative canvas path anyway).
+SURFACE_SEA_SHALLOW = (30, 80, 110)
+SURFACE_SEA_DEEP = (7, 20, 37)
+
 
 def surface_base_rgb(
     mesh: CVTMesh,
@@ -1157,8 +1228,6 @@ def surface_base_rgb(
         BIOME_COLORS,
         ICE_COLOR,
         MISSING_COLOR,
-        SEA_DEEP,
-        SEA_SHALLOW,
     )
 
     n = mesh.num_cells
@@ -1170,8 +1239,8 @@ def surface_base_rgb(
         else:
             depth = sea_level_m - c.elevation
             t = min(depth / 400.0, 1.0)
-            shallow = np.array(SEA_SHALLOW, dtype=np.float64)
-            deep = np.array(SEA_DEEP, dtype=np.float64)
+            shallow = np.array(SURFACE_SEA_SHALLOW, dtype=np.float64)
+            deep = np.array(SURFACE_SEA_DEEP, dtype=np.float64)
             rgb[i] = shallow + (deep - shallow) * t
     ice = np.array([c.biome == "ice" for c in mesh.cells], dtype=bool)
     rgb[ice] = np.array(ICE_COLOR, dtype=np.float64)
@@ -1365,6 +1434,7 @@ def clouds_globe(
     cyclone_seed: int = 41,
     atmosphere: AtmosphereModel | None = None,
     cloud_altitude_km: float = 4.0,
+    cirrus_altitude_km: float = 9.0,
     cloud_shadows: bool = True,
     sun_glint: bool = True,
     water_roughness: float = 0.08,
@@ -1404,7 +1474,12 @@ def clouds_globe(
         cover, u, v, oce, dp = conditioning_grids(mesh, indices)
         cover = np.clip(cover * cover_scale, 0.0, 1.0)
         products = cloud_texture_equirect(cover, u, v, oce, dp, radius_km=radius_km, seed=seed)
-        alpha = products.alpha
+        # Low/mid cloud (including the thin haze floor) and high cirrus are
+        # kept apart so the L5 renderer can put them on two shells.
+        alpha_low = 1.0 - (1.0 - products.alpha_low) * (1.0 - products.alpha_haze)
+        alpha_cirrus = products.alpha_cirrus_high
+        alpha_cirrus_legacy = products.alpha_cirrus
+        alpha = alpha_low
         if cyclones:
             from dreamulator.media.cyclone_render import (
                 cyclone_alpha,
@@ -1461,19 +1536,33 @@ def clouds_globe(
                 str(out_dir / "cyclone_envelope.png")
             )
             paths["cyclone_envelope"] = out_dir / "cyclone_envelope.png"
+        alpha_low = alpha
+        alpha = 1.0 - (1.0 - alpha_low) * (1.0 - alpha_cirrus_legacy)
         rgba = np.empty((height, width, 4), dtype=np.uint8)
         rgba[..., 0] = CLOUD_RGB[0]
         rgba[..., 1] = CLOUD_RGB[1]
         rgba[..., 2] = CLOUD_RGB[2]
         rgba[..., 3] = (np.clip(alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
         save_rgba_png(rgba, out_dir / "clouds.png")
+        layer_rgba = np.empty((height, width, 4), dtype=np.uint8)
+        layer_rgba[..., 0] = CLOUD_RGB[0]
+        layer_rgba[..., 1] = CLOUD_RGB[1]
+        layer_rgba[..., 2] = CLOUD_RGB[2]
+        layer_rgba[..., 3] = (np.clip(alpha_low, 0.0, 1.0) * 255.0).astype(np.uint8)
+        save_rgba_png(layer_rgba, out_dir / "clouds_low.png")
+        layer_rgba[..., 3] = (np.clip(alpha_cirrus, 0.0, 1.0) * 255.0).astype(np.uint8)
+        save_rgba_png(layer_rgba, out_dir / "clouds_cirrus.png")
         Image.fromarray((products.cover * 255.0).astype(np.uint8), "L").save(
             str(out_dir / "cloud_cover.png")
         )
         paths["clouds"] = out_dir / "clouds.png"
+        paths["clouds_low"] = out_dir / "clouds_low.png"
+        paths["clouds_cirrus"] = out_dir / "clouds_cirrus.png"
         paths["cover"] = out_dir / "cloud_cover.png"
     else:
         alpha = np.zeros((height, width), dtype=np.float64)
+        alpha_low = np.zeros((height, width), dtype=np.float64)
+        alpha_cirrus = np.zeros((height, width), dtype=np.float64)
 
     if atmosphere is not None:
         from dreamulator.media.atmosphere_render import render_globe_atmosphere
@@ -1481,7 +1570,8 @@ def clouds_globe(
         ocean_cells = np.array([c.elevation < sea_level_m for c in mesh.cells], dtype=bool)
         globe = render_globe_atmosphere(
             surface,
-            alpha,
+            alpha_low,
+            cloud_alpha_high=alpha_cirrus,
             res=globe_res,
             center_lon_deg=center_lon_deg,
             center_lat_deg=center_lat_deg,
@@ -1489,6 +1579,7 @@ def clouds_globe(
             sun_lat_deg=sun_lat_deg,
             model=atmosphere,
             cloud_altitude_km=cloud_altitude_km,
+            cirrus_altitude_km=cirrus_altitude_km,
             cloud_shadows=cloud_shadows,
             ocean_mask=ocean_cells[indices].astype(np.float64),
             sun_glint=sun_glint,
@@ -1550,6 +1641,7 @@ def clouds_globe(
                     multiple_scattering=multiple_scattering,
                 ),
                 "cloud_altitude_km": cloud_altitude_km,
+                "cirrus_altitude_km": cirrus_altitude_km,
                 "cloud_shadows": cloud_shadows,
             }
             if atmosphere is not None
