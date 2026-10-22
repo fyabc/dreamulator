@@ -1366,6 +1366,9 @@ def clouds_globe(
     atmosphere: AtmosphereModel | None = None,
     cloud_altitude_km: float = 4.0,
     cloud_shadows: bool = True,
+    sun_glint: bool = True,
+    water_roughness: float = 0.08,
+    multiple_scattering: bool = True,
     atmosphere_exposure: str = "white_balance",
     provenance: dict[str, str] | None = None,
 ) -> dict[str, Path]:
@@ -1475,6 +1478,7 @@ def clouds_globe(
     if atmosphere is not None:
         from dreamulator.media.atmosphere_render import render_globe_atmosphere
 
+        ocean_cells = np.array([c.elevation < sea_level_m for c in mesh.cells], dtype=bool)
         globe = render_globe_atmosphere(
             surface,
             alpha,
@@ -1486,6 +1490,10 @@ def clouds_globe(
             model=atmosphere,
             cloud_altitude_km=cloud_altitude_km,
             cloud_shadows=cloud_shadows,
+            ocean_mask=ocean_cells[indices].astype(np.float64),
+            sun_glint=sun_glint,
+            water_roughness=water_roughness,
+            multiple_scattering=multiple_scattering,
             exposure=atmosphere_exposure,
         )
     else:
@@ -1531,7 +1539,13 @@ def clouds_globe(
             "seed": cyclone_seed if cyclones else None,
         },
         "atmosphere": (
-            atmosphere_summary(atmosphere, exposure=atmosphere_exposure)
+            atmosphere_summary(
+                atmosphere,
+                exposure=atmosphere_exposure,
+                sun_glint=sun_glint,
+                water_roughness=water_roughness,
+                multiple_scattering=multiple_scattering,
+            )
             if atmosphere is not None
             else None
         ),

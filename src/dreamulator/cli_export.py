@@ -835,6 +835,12 @@ def _atmosphere_from_world(
     if mass_earth is not None and radius_earth is not None and radius_earth > 0.0:
         gravity = mass_earth / (radius_earth * radius_earth) * EARTH_GRAVITY
 
+    ground_albedo = 0.3
+    if planet is not None:
+        raw_albedo = planet.get("albedo")
+        if isinstance(raw_albedo, (int, float)):
+            ground_albedo = float(raw_albedo)
+
     return AtmosphereModel(
         planet_radius_km=radius_km,
         gravity_m_s2=gravity,
@@ -844,6 +850,7 @@ def _atmosphere_from_world(
         star_temperature_k=star_temperature,
         mie_scale=cfg.mie_scale,
         ozone_scale=cfg.ozone_scale,
+        ground_albedo=ground_albedo,
     )
 
 
@@ -1028,6 +1035,9 @@ def export_clouds(
         atmosphere=atmosphere_model,
         cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
         cloud_shadows=cfg.atmosphere.cloud_shadows,
+        sun_glint=cfg.atmosphere.sun_glint,
+        water_roughness=cfg.atmosphere.water_roughness,
+        multiple_scattering=cfg.atmosphere.multiple_scattering,
         atmosphere_exposure=cfg.atmosphere.exposure,
         provenance={
             "world": world,

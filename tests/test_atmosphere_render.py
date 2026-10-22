@@ -109,7 +109,10 @@ def test_render_halo_terminator_and_determinism() -> None:
     halo = int(first[row, 200 + int(disk_radius)].mean())
     space = int(first[row, 399].mean())
     # The sunlit limb scatters above the disk; far outside the shell is space.
-    assert centre > halo > 0
+    # Multiple scattering can make the limb brighter than the disk centre, so
+    # the test only requires both to be lit.
+    assert centre > 0
+    assert halo > 0
     assert space == 0
 
 
@@ -143,6 +146,57 @@ def test_physical_exposure_is_warmer() -> None:
     white_ratio = white[..., 0].mean() / max(white[..., 2].mean(), 1e-6)
     physical_ratio = physical[..., 0].mean() / max(physical[..., 2].mean(), 1e-6)
     assert physical_ratio > white_ratio
+
+
+def test_multiple_scattering_lut_and_brightening() -> None:
+    model = _earth_model()
+    transmittance = ar.build_transmittance_lut(model)
+    lut = ar.build_multiscattering_lut(model, transmittance)
+    assert lut.table.shape == (32, 32, 3)
+    assert np.all(np.isfinite(lut.table))
+    assert np.all(lut.table >= 0.0)
+    day = lut.sample(np.array([0.0]), np.array([1.0]))[0]
+    night = lut.sample(np.array([0.0]), np.array([-0.5]))[0]
+    assert day.mean() > night.mean()
+
+    surface, cloud = _uniform_inputs(48)
+    kwargs = dict(
+        res=120,
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        sun_lon_deg=20.0,
+        sun_lat_deg=0.0,
+        model=model,
+        view_samples=4,
+    )
+    single = ar.render_globe_atmosphere(surface, cloud, multiple_scattering=False, **kwargs)
+    multiple = ar.render_globe_atmosphere(surface, cloud, multiple_scattering=True, **kwargs)
+    assert multiple.mean() > single.mean()
+
+
+def test_ocean_sun_glint_only_on_water() -> None:
+    surface, cloud = _uniform_inputs(48)
+    model = _earth_model()
+    kwargs = dict(
+        res=120,
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        sun_lon_deg=0.0,
+        sun_lat_deg=0.0,
+        model=model,
+        view_samples=4,
+    )
+    ocean = np.ones_like(surface[..., 0])
+    land = np.zeros_like(ocean)
+    with_glint = ar.render_globe_atmosphere(surface, cloud, ocean_mask=ocean, **kwargs)
+    without_glint = ar.render_globe_atmosphere(
+        surface, cloud, ocean_mask=ocean, sun_glint=False, **kwargs
+    )
+    land_with_glint = ar.render_globe_atmosphere(surface, cloud, ocean_mask=land, **kwargs)
+    # Land has no specular term: enabling the glint changes nothing.
+    np.testing.assert_array_equal(land_with_glint, without_glint)
+    # The sub-solar ocean pixel is brighter with the glint.
+    assert with_glint[60, 60].mean() > without_glint[60, 60].mean()
 
 
 def test_cloud_shadow_changes_surface() -> None:

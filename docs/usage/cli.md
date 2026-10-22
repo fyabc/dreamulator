@@ -518,6 +518,9 @@ atmosphere:
   cloud_altitude_km: 4.0      # 云壳高度；L1 云顶高度到达后替换
   exposure: white_balance     # white_balance | physical（后者保留 K 型星暖色）
   cloud_shadows: true
+  sun_glint: true             # 海面 GGX 太阳高光
+  water_roughness: 0.08       # 波面粗糙度；越小高光越亮越窄
+  multiple_scattering: true   # Hillaire 多次散射查找表
   mie_scale: 1.0              # 气溶胶比例（地球类比输入的缩放）
   ozone_scale: 1.0            # 臭氧柱比例
   # star_temperature_k: 4365  # 覆盖世界输入，QA 用
@@ -539,10 +542,10 @@ L3 气旋模板在 `media/cyclone_render.py`：热带气旋用 Holland 1980 风�
 
 L5 大气渲染在 `media/atmosphere_render.py`：瑞利分子散射、米氏气溶胶与臭氧吸收，
 按世界自己的恒星光谱（`stellar.yaml` 的温度）与行星重力、气压、大气组成定标；
-地表球、云壳与大气壳分层合成，支持云影、圆盘外大气晕与物理晨昏线。默认的
+地表球、云壳与大气壳分层合成，支持云影、海面太阳高光、圆盘外大气晕与物理晨昏线。默认的
 `white_balance` 曝光按画面内直射日光做白平衡，保持地表调色板的中性观感；`physical`
-保留 K 型星的暖色。当前只计算单次散射，夜侧大气与晨昏线偏暗，多次散射是下一步。
-物理模型、系数来源与已知限制见
+保留 K 型星的暖色。多次散射用 Hillaire 的局部查找表，提高白天与晨昏线亮度，
+但不做非局地光输运。物理模型、系数来源与已知限制见
 [knowledge/climatology/atmospheric_scattering.md](../knowledge/climatology/atmospheric_scattering.md)。
 
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），

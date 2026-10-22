@@ -25,6 +25,8 @@ Example::
       enabled: true
       exposure: white_balance
       cloud_altitude_km: 4.0
+      sun_glint: true
+      multiple_scattering: true
 """
 
 from __future__ import annotations
@@ -92,6 +94,9 @@ class AtmosphereSettings(BaseModel):
     mie_scale: float = Field(1.0, ge=0.0)
     ozone_scale: float = Field(1.0, ge=0.0)
     cloud_shadows: bool = True
+    sun_glint: bool = True
+    water_roughness: float = Field(0.08, gt=0.0)
+    multiple_scattering: bool = True
     exposure: Literal["white_balance", "physical"] = "white_balance"
     star_temperature_k: float | None = Field(None, gt=0.0)
     surface_pressure_atm: float | None = Field(None, gt=0.0)

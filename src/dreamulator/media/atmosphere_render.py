@@ -1,16 +1,17 @@
 """L5 atmosphere rendering for the orbital weather-globe chain.
 
 This module replaces the preview's hand-drawn limb glow with a physically
-grounded single-scattering atmosphere: a spherical shell of Rayleigh
-scattering molecules, Mie-scattering aerosols and absorbing ozone, lit by the
-world's own star.  It is the first L5 increment from the orbital weather-globe
-requirement notes (the layer stack there is surface sphere + translucent cloud
-shell + atmosphere shell); cloud-top height, city lights, ocean glint and
-satellite eclipse shadows remain later increments.
+grounded atmosphere: a spherical shell of Rayleigh-scattering molecules,
+Mie-scattering aerosols and absorbing ozone, lit by the world's own star.  It
+covers the first L5 increment from the orbital weather-globe requirement
+notes (the layer stack there is surface sphere + translucent cloud shell +
+atmosphere shell), plus ocean sun glint and a Hillaire-style
+multiple-scattering lookup table; cloud-top height, city lights and satellite
+eclipse shadows remain later increments.
 
 Model and references
 --------------------
-The radiative transfer is the standard single-scattering formulation used by
+The radiative transfer follows the single-scattering formulation used by
 
 * Bruneton & Neyret (2008), *Precomputed Atmospheric Scattering*, Computer
   Graphics Forum 27(4) — ray/shell geometry, exponential density profiles,
@@ -19,8 +20,9 @@ The radiative transfer is the standard single-scattering formulation used by
   Rendering Technique*, Computer Graphics Forum 39(4) — the RGB coefficient
   set (Rayleigh 5.802/13.558/33.1e-6 m^-1 at 680/550/440 nm, Mie scattering
   3.996e-6 m^-1, Mie absorption 0.444e-6 m^-1, ozone absorption
-  0.650/1.881/0.085e-6 m^-1 in a 25 km tent of half-width 15 km), and the
-  Mie asymmetry g = 0.8.
+  0.650/1.881/0.085e-6 m^-1 in a 25 km tent of half-width 15 km), the Mie
+  asymmetry g = 0.8, and the isotropic multiple-scattering LUT
+  ``L1_mean / (1 - f_ms)``.
 
 The star spectrum enters through the CIE 1931 colour-matching functions
 (analytic multi-lobe fit of Wyman, Sloan & Shirley 2013, JCGT 2(2)).  The
@@ -44,10 +46,12 @@ Epistemic status
 The geometry, density profiles and coefficients are derived or taken from the
 cited literature.  The vertical aerosol and ozone profiles are Earth-analogue
 inputs (``mie_scale`` / ``ozone_scale`` expose them); they are not derived from
-Nacrea's photochemistry.  Multiple scattering, polarisation and spectral
-correlation between extinction and scattering are neglected — the first is
-the main known brightness error near the terminator.  The cloud shell is a
-thin surface at a fixed altitude (L1 will supply cloud-top height).
+Nacrea's photochemistry.  Multiple scattering uses Hillaire's local isotropic
+LUT, which roughly doubles the day-side in-scatter but cannot transport light
+from the day side into the deep night-side atmosphere; polarisation and
+spectral correlation between extinction and scattering are neglected.  The
+cloud shell is a thin surface at a fixed altitude (L1 will supply cloud-top
+height).
 """
 
 from __future__ import annotations
@@ -234,7 +238,9 @@ class AtmosphereModel:
     relative to Earth; the scale height follows from hydrostatic equilibrium
     ``H = R_specific * T / g``.  ``atmosphere_temperature_k`` is a reference
     temperature for the scattering layer (273.15 K, the standard-atmosphere
-    sea-level value), not the planet's surface temperature.
+    sea-level value), not the planet's surface temperature.  ``ground_albedo``
+    is the Bond albedo used by the multiple-scattering LUT's ground-reflected
+    term; the CLI fills it from ``planets.yaml``.
     """
 
     planet_radius_km: float = EARTH_RADIUS_KM
@@ -245,6 +251,7 @@ class AtmosphereModel:
     star_temperature_k: float = 5772.0
     mie_scale: float = 1.0
     ozone_scale: float = 1.0
+    ground_albedo: float = 0.3
 
     @property
     def scale_height_km(self) -> float:
@@ -299,6 +306,30 @@ class AtmosphereModel:
         return np.asarray(white / max(luminance, 1e-9), dtype=np.float64)
 
 
+def _sample_lut_table(
+    table: np.ndarray, top_altitude_km: float, altitude_km: np.ndarray, cos_zenith: np.ndarray
+) -> np.ndarray:
+    """Bilinear lookup in an (altitude, cos zenith) RGB table."""
+    n_alt, n_mu, _ = table.shape
+    a = np.clip(altitude_km / top_altitude_km, 0.0, 1.0) * (n_alt - 1)
+    m = (np.clip(cos_zenith, -1.0, 1.0) + 1.0) * 0.5 * (n_mu - 1)
+    a0 = np.clip(np.floor(a).astype(np.int64), 0, n_alt - 2)
+    m0 = np.clip(np.floor(m).astype(np.int64), 0, n_mu - 2)
+    fa = np.clip(a - a0, 0.0, 1.0)[..., None]
+    fm = np.clip(m - m0, 0.0, 1.0)[..., None]
+    t00 = table[a0, m0]
+    t01 = table[a0, m0 + 1]
+    t10 = table[a0 + 1, m0]
+    t11 = table[a0 + 1, m0 + 1]
+    result: np.ndarray = (
+        t00 * (1.0 - fa) * (1.0 - fm)
+        + t01 * (1.0 - fa) * fm
+        + t10 * fa * (1.0 - fm)
+        + t11 * fa * fm
+    )
+    return result
+
+
 @dataclass(frozen=True)
 class TransmittanceLUT:
     """Tabulated atmospheric transmittance to the star over (altitude, cos zenith)."""
@@ -308,26 +339,7 @@ class TransmittanceLUT:
 
     def sample(self, altitude_km: np.ndarray, cos_zenith: np.ndarray) -> np.ndarray:
         """Bilinear lookup; returns shape ``altitude.shape + (3,)``."""
-        n_alt, n_mu, _ = self.table.shape
-        a = np.clip(altitude_km / self.top_altitude_km, 0.0, 1.0) * (n_alt - 1)
-        m = (np.clip(cos_zenith, -1.0, 1.0) + 1.0) * 0.5 * (n_mu - 1)
-        a0 = np.floor(a).astype(np.int64)
-        m0 = np.floor(m).astype(np.int64)
-        a0 = np.clip(a0, 0, n_alt - 2)
-        m0 = np.clip(m0, 0, n_mu - 2)
-        fa = np.clip(a - a0, 0.0, 1.0)[..., None]
-        fm = np.clip(m - m0, 0.0, 1.0)[..., None]
-        t00 = self.table[a0, m0]
-        t01 = self.table[a0, m0 + 1]
-        t10 = self.table[a0 + 1, m0]
-        t11 = self.table[a0 + 1, m0 + 1]
-        result: np.ndarray = (
-            t00 * (1.0 - fa) * (1.0 - fm)
-            + t01 * (1.0 - fa) * fm
-            + t10 * fa * (1.0 - fm)
-            + t11 * fa * fm
-        )
-        return result
+        return _sample_lut_table(self.table, self.top_altitude_km, altitude_km, cos_zenith)
 
 
 def build_transmittance_lut(
@@ -382,6 +394,157 @@ def build_transmittance_lut(
     transmittance = np.exp(-tau)
     transmittance[blocked] = 0.0
     return TransmittanceLUT(top_altitude_km=model.top_altitude_km, table=transmittance)
+
+
+@dataclass(frozen=True)
+class MultiscatteringLUT:
+    """Mean singly-scattered radiance plus the geometric multiple-scattering factor.
+
+    The table stores ``L1_mean / (1 - f_ms)`` over (altitude, sun zenith
+    cosine), following Hillaire (2020): ``L1_mean`` is the average of the
+    singly-scattered radiance over all directions and ``f_ms`` is the fraction
+    of light that scatters again.  The main march adds ``phi * sigma_s`` at
+    every sample, which approximates all scattering orders past the first.
+    """
+
+    top_altitude_km: float
+    table: np.ndarray  # (n_alt, n_mu, 3)
+
+    def sample(self, altitude_km: np.ndarray, cos_zenith: np.ndarray) -> np.ndarray:
+        return _sample_lut_table(self.table, self.top_altitude_km, altitude_km, cos_zenith)
+
+
+#: Quasi-random sphere directions (R2 sequence; Roberts 2018) used by the
+#: multiple-scattering LUT.  Deterministic and well distributed at n = 16–64.
+_PHI2 = (1.32471795724474602596, 1.75487766624669276005)
+
+
+def _sphere_directions(count: int) -> np.ndarray:
+    """Return ``count`` roughly uniform unit vectors via the R2 sequence."""
+    indices = np.arange(1, count + 1, dtype=np.float64)
+    u = np.mod(0.5 + indices * _PHI2[0], 1.0)
+    v = np.mod(0.5 + indices * _PHI2[1], 1.0)
+    phi = 2.0 * math.pi * v
+    sin_lambda = 2.0 * u - 1.0
+    cos_lambda = np.sqrt(np.maximum(1.0 - sin_lambda * sin_lambda, 0.0))
+    return np.stack([cos_lambda * np.cos(phi), cos_lambda * np.sin(phi), sin_lambda], axis=-1)
+
+
+def build_multiscattering_lut(
+    model: AtmosphereModel,
+    transmittance: TransmittanceLUT,
+    *,
+    n_alt: int = 32,
+    n_mu: int = 32,
+    n_dirs: int = 16,
+    n_steps: int = 16,
+) -> MultiscatteringLUT:
+    """Precompute the Hillaire (2020) multiple-scattering table.
+
+    For every (altitude, sun zenith) grid point the routine marches a bundle
+    of uniform directions through the shell.  Along each direction it
+    accumulates the singly-scattered radiance (second scattering order) and
+    the fraction of light that scatters again; the geometric series of higher
+    orders collapses to ``1 / (1 - f_ms)``.  A ground-reflected term closes
+    the bundle for rays that hit the surface.
+    """
+    planet = model.planet_radius_km
+    top = planet + model.top_altitude_km
+    beta_r = model.rayleigh_rgb * 1000.0
+    beta_m_scat = float(model.mie_scatter * 1000.0)
+    beta_m_ext = float((model.mie_scatter + model.mie_absorb) * 1000.0)
+    beta_o = model.ozone_absorb_rgb * 1000.0
+    h_r = model.scale_height_km
+    g = MIE_ASYMMETRY
+
+    altitudes = np.linspace(0.0, model.top_altitude_km, n_alt)
+    mus = np.linspace(-1.0, 1.0, n_mu)
+    radius = np.broadcast_to(planet + altitudes[:, None], (n_alt, n_mu)).ravel()
+    mu_flat = np.broadcast_to(mus[None, :], (n_alt, n_mu)).ravel()
+    # Local frame: z is up, the star lies in the x–z plane.
+    light = np.stack(
+        [np.sqrt(np.maximum(1.0 - mu_flat * mu_flat, 0.0)), np.zeros_like(mu_flat), mu_flat],
+        axis=-1,
+    )
+    origin = np.stack([np.zeros_like(radius), np.zeros_like(radius), radius], axis=-1)
+    radius2 = radius * radius
+
+    l2_sum = np.zeros((radius.size, 3), dtype=np.float64)
+    f_sum = np.zeros((radius.size, 3), dtype=np.float64)
+    directions = _sphere_directions(n_dirs)
+
+    for ray_dir in directions:
+        along = radius * ray_dir[2]
+        perp2 = np.maximum(radius2 - along * along, 0.0)
+        hits_ground = perp2 < planet * planet
+        t_ground = -along + np.sqrt(np.maximum(along * along + planet * planet - radius2, 0.0))
+        t_top = -along + np.sqrt(np.maximum(along * along + top * top - radius2, 0.0))
+        t_end = np.where(hits_ground, t_ground, t_top)
+        step = t_end / max(n_steps, 1)
+        optical_depth = np.zeros((radius.size, 3), dtype=np.float64)
+        l2_dir = np.zeros((radius.size, 3), dtype=np.float64)
+        f_dir = np.zeros((radius.size, 3), dtype=np.float64)
+
+        cos_theta = light @ ray_dir
+
+        for k in range(n_steps):
+            t = step * (k + 0.5)
+            point = origin + t[:, None] * ray_dir
+            local_r = np.sqrt(np.maximum(np.sum(point * point, axis=-1), 1e-12))
+            up = point / local_r[:, None]
+            altitude = np.maximum(local_r - planet, 0.0)
+            rho_r = np.exp(-altitude / h_r)
+            rho_m = np.exp(-altitude / MIE_SCALE_HEIGHT_KM)
+            rho_o = np.clip(
+                1.0 - np.abs(altitude - OZONE_CENTER_KM) / OZONE_HALF_WIDTH_KM, 0.0, None
+            )
+            extinction = (
+                beta_r[None, :] * rho_r[:, None]
+                + beta_o[None, :] * rho_o[:, None]
+                + beta_m_ext * rho_m[:, None]
+            )
+            optical_depth += extinction * step[:, None]
+            transmittance_to_sample = np.exp(-optical_depth)
+
+            mu_light = np.sum(up * light, axis=-1)
+            sun_transmittance = transmittance.sample(altitude, mu_light)
+            phase_r = 3.0 / (16.0 * math.pi) * (1.0 + cos_theta * cos_theta)
+            phase_m = (1.0 - g * g) / (4.0 * math.pi * (1.0 + g * g - 2.0 * g * cos_theta) ** 1.5)
+            scattering = (
+                beta_r[None, :] * rho_r[:, None] * phase_r[:, None]
+                + beta_m_scat * rho_m[:, None] * phase_m[:, None]
+            )
+            l2_dir += transmittance_to_sample * sun_transmittance * scattering * step[:, None]
+            f_dir += (
+                transmittance_to_sample
+                * (beta_r[None, :] * rho_r[:, None] + beta_m_scat * rho_m[:, None])
+                * step[:, None]
+            )
+
+        # Ground-reflected light closes the bundle where the ray hits the planet.
+        ground_point = origin + t_end[:, None] * ray_dir
+        ground_r = np.sqrt(np.maximum(np.sum(ground_point * ground_point, axis=-1), 1e-12))
+        ground_up = ground_point / ground_r[:, None]
+        mu_ground = np.sum(ground_up * light, axis=-1)
+        ground_sun = transmittance.sample(np.zeros_like(ground_r), mu_ground)
+        ground = (
+            ground_sun
+            * np.exp(-optical_depth)
+            * np.clip(mu_ground, 0.0, None)[:, None]
+            * model.ground_albedo
+        )
+        l2_dir += np.where(hits_ground[:, None], ground, 0.0)
+
+        l2_sum += l2_dir
+        f_sum += f_dir
+
+    l2_mean = l2_sum / max(n_dirs, 1)
+    f_mean = f_sum / max(n_dirs, 1)
+    phi = np.clip(l2_mean / np.clip(1.0 - f_mean, 0.05, None), 0.0, None)
+    return MultiscatteringLUT(
+        top_altitude_km=model.top_altitude_km,
+        table=np.asarray(phi.reshape(n_alt, n_mu, 3), dtype=np.float64),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +611,7 @@ def _march_segment(
     model: AtmosphereModel,
     lut: TransmittanceLUT,
     n_steps: int,
+    ms_lut: MultiscatteringLUT | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Single-scattering radiance and view transmittance over one ray segment.
 
@@ -490,7 +654,15 @@ def _march_segment(
         ]
 
         source = beta_r * rho_r * phase_r + beta_m_scat * rho_m * phase_m
-        radiance += transmittance * source * sun_t * step[..., None]
+        if ms_lut is not None:
+            # Higher scattering orders: the LUT already contains the sun
+            # transmittance and the directional average, so it must NOT be
+            # multiplied by the direct sun transmittance again.
+            multi = ms_lut.sample(altitude, mu).astype(np.float32)
+            source = source * sun_t + multi * (beta_r * rho_r + beta_m_scat * rho_m)
+            radiance += transmittance * source * step[..., None]
+        else:
+            radiance += transmittance * source * sun_t * step[..., None]
 
         extinction = beta_r * rho_r + beta_o * rho_o + beta_m_ext * rho_m
         transmittance *= np.exp(-extinction * step[..., None])
@@ -511,6 +683,10 @@ def render_globe_atmosphere(
     cloud_rgb: tuple[int, int, int] = (252, 250, 245),
     cloud_altitude_km: float = CLOUD_ALTITUDE_KM,
     cloud_shadows: bool = True,
+    ocean_mask: np.ndarray | None = None,
+    sun_glint: bool = True,
+    water_roughness: float = 0.08,
+    multiple_scattering: bool = True,
     exposure: str = "white_balance",
     auto_exposure: bool = True,
     view_samples: int = 14,
@@ -539,6 +715,10 @@ def render_globe_atmosphere(
         raise ValueError("surface_rgb must have shape (h, w, 3)")
     if cloud_alpha.shape != surface_rgb.shape[:2]:
         raise ValueError("cloud_alpha must match the surface grid")
+    if ocean_mask is not None:
+        ocean_mask = np.asarray(ocean_mask, dtype=np.float64)
+        if ocean_mask.shape != surface_rgb.shape[:2]:
+            raise ValueError("ocean_mask must match the surface grid")
 
     planet = model.planet_radius_km
     top = planet + model.top_altitude_km
@@ -582,6 +762,7 @@ def render_globe_atmosphere(
     sigma_split = np.where(hits_cloud, sigma_cloud, sigma_end)
 
     lut = build_transmittance_lut(model)
+    ms_lut = build_multiscattering_lut(model, lut) if multiple_scattering else None
     radiance_upper, trans_upper = _march_segment(
         origin_xy=(origin, origin_y),
         origin_z=origin_z,
@@ -593,6 +774,7 @@ def render_globe_atmosphere(
         model=model,
         lut=lut,
         n_steps=view_samples,
+        ms_lut=ms_lut,
     )
     radiance_lower, trans_lower = _march_segment(
         origin_xy=(origin, origin_y),
@@ -605,6 +787,7 @@ def render_globe_atmosphere(
         model=model,
         lut=lut,
         n_steps=view_samples,
+        ms_lut=ms_lut,
     )
 
     # ---- Cloud shell: coverage, sun transmittance and pseudo-3D shading ----
@@ -684,6 +867,29 @@ def render_globe_atmosphere(
         * hits_surface[..., None]
     )
 
+    # ---- Ocean sun glint (GGX microfacet lobe, water Fresnel) ----
+    # The glint is the specular reflection of the star on wave facets.  GGX
+    # with ``water_roughness`` as the slope parameter reproduces the broad,
+    # slightly elongated highlight of a real full-disk ocean shot.  It is
+    # additive to the diffuse ocean term and is occluded by clouds through the
+    # regular layer composite (and by the cloud shadow term).
+    if sun_glint and ocean_mask is not None:
+        half = sun + f
+        half = half / max(float(np.linalg.norm(half)), 1e-9)
+        cos_half = np.clip(n_x * half[0] + n_y * half[1] + n_z * half[2], 0.0, 1.0)
+        cos_view = np.clip(n_x * f[0] + n_y * f[1] + n_z * f[2], 0.0, 1.0)
+        alpha = max(float(water_roughness), 1e-3)
+        denom = cos_half * cos_half * (alpha * alpha - 1.0) + 1.0
+        distribution = alpha * alpha / (math.pi * np.maximum(denom * denom, 1e-8))
+        fresnel = 0.02 + 0.98 * (1.0 - cos_half) ** 5
+        specular = np.minimum(
+            distribution * fresnel / (4.0 * np.maximum(cos_view * cos_surface, 1e-4)),
+            20.0,
+        )
+        ocean = _sample_equirect(ocean_mask, s_lat, s_lon).clip(0.0, 1.0)
+        glint = specular * ocean * np.clip(cos_surface, 0.0, None) * shadow * hits_surface
+        surface_radiance = surface_radiance + glint[..., None] * sun_surface
+
     # ---- Composite: upper atmosphere, cloud, lower atmosphere, surface ----
     behind_cloud = trans_lower * surface_radiance + radiance_lower
     with_cloud = (
@@ -719,7 +925,12 @@ def render_globe_atmosphere(
 
 
 def atmosphere_summary(
-    model: AtmosphereModel, *, exposure: str = "white_balance"
+    model: AtmosphereModel,
+    *,
+    exposure: str = "white_balance",
+    sun_glint: bool = True,
+    water_roughness: float = 0.08,
+    multiple_scattering: bool = True,
 ) -> dict[str, object]:
     """Small JSON-ready summary for ``meta.json``."""
     return {
@@ -738,5 +949,9 @@ def atmosphere_summary(
         "ozone_absorption_rgb_per_m": [float(v) for v in model.ozone_absorb_rgb],
         "mie_scale": model.mie_scale,
         "ozone_scale": model.ozone_scale,
+        "sun_glint": sun_glint,
+        "water_roughness": water_roughness,
+        "multiple_scattering": multiple_scattering,
+        "ground_albedo": model.ground_albedo,
         "exposure": exposure,
     }
