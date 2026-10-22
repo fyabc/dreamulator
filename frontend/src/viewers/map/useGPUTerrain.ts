@@ -50,14 +50,10 @@ uniform sampler2D u_thematic;   // map mode (terrain / Köppen / Whittaker / NPP
 uniform sampler2D u_fill;       // plates
 uniform sampler2D u_feature;    // boundaries (crust/plate)
 uniform sampler2D u_coastlines; // coastline outline
-uniform sampler2D u_flow;       // drainage / flow accumulation (stackable)
-uniform sampler2D u_rivers;     // river channel cells (stackable)
 uniform float u_thematicOp;
 uniform float u_fillOp;
 uniform float u_featureOp;
 uniform float u_coastlinesOp;
-uniform float u_flowOp;
-uniform float u_riversOp;
 varying vec2 vUv;
 
 vec3 blendLayer(vec3 dst, vec4 src, float op) {
@@ -71,8 +67,6 @@ void main() {
   color = blendLayer(color, texture2D(u_thematic, vUv), u_thematicOp);
   color = blendLayer(color, texture2D(u_fill, vUv), u_fillOp);
   color = blendLayer(color, texture2D(u_feature, vUv), u_featureOp);
-  color = blendLayer(color, texture2D(u_flow, vUv), u_flowOp);
-  color = blendLayer(color, texture2D(u_rivers, vUv), u_riversOp);
   color = blendLayer(color, texture2D(u_coastlines, vUv), u_coastlinesOp);
   gl_FragColor = vec4(color, 1.0);
 }
@@ -197,7 +191,7 @@ export default function useGPUTerrain({
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
-  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0 },
+  layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0 },
   waterDepthFactor = 0.5,
   cvtMesh,
   cellIdMap,
@@ -245,14 +239,10 @@ export default function useGPUTerrain({
         u_fill: { value: baked.plates },
         u_feature: { value: baked.boundaries },
         u_coastlines: { value: baked.coastlines },
-        u_flow: { value: baked.flow },
-        u_rivers: { value: baked.rivers },
         u_thematicOp: { value: layers.terrain ?? 1 },
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
         u_coastlinesOp: { value: layers.coastlines ?? 1 },
-        u_flowOp: { value: layers.flow ?? 0 },
-        u_riversOp: { value: layers.rivers ?? 0 },
         _terrainThematic: { value: baked.terrainThematic },
         _landseaThematic: { value: baked.landseaThematic },
         _koppen: { value: baked.koppen },
@@ -300,9 +290,7 @@ export default function useGPUTerrain({
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
-    (layers.slp ?? 0) > 0 ||
-    (layers.flow ?? 0) > 0 ||
-    (layers.rivers ?? 0) > 0
+    (layers.slp ?? 0) > 0
 
   // needsFboForGlobe: substantive overlays that require the FBO composite.
   // The coastline feature layer is pre-baked into a dedicated globe texture at
@@ -318,9 +306,7 @@ export default function useGPUTerrain({
     (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
-    (layers.slp ?? 0) > 0 ||
-    (layers.flow ?? 0) > 0 ||
-    (layers.rivers ?? 0) > 0
+    (layers.slp ?? 0) > 0
 
   // Dispose composite resources when they are replaced / on unmount.
   useEffect(() => {
@@ -372,8 +358,6 @@ export default function useGPUTerrain({
     u.u_thematicOp.value = thematicOp
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
-    u.u_flowOp.value = layers.flow ?? 0
-    u.u_riversOp.value = layers.rivers ?? 0
     u.u_coastlinesOp.value = layers.coastlines ?? 1
     const d = composite.displayMat.uniforms
     d.u_useComposite.value = overlayActive ? 1 : 0

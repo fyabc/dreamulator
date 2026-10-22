@@ -128,7 +128,8 @@ class OrogenContract:
     segments: list[OrogenSegment]
     escape: dict[int, float]
     retained_km: dict[int, float]
-    warnings: list[str]
+    warnings: list[str]  # author inputs or onsets that need attention
+    notes: list[str] = field(default_factory=list)  # informational summaries
 
 
 def load_collision_overrides(path: Path) -> list[CollisionOverride]:
@@ -485,7 +486,7 @@ def save_orogen_contract(path: Path, contract: OrogenContract) -> None:
                 "sources": s.sources,
             }
         )
-    payload = {"segments": rows, "warnings": contract.warnings}
+    payload = {"segments": rows, "warnings": contract.warnings, "notes": contract.notes}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
@@ -532,15 +533,18 @@ def build_orogen_contract(
             retained[k] += s.upper_plate_ratio * s.cell_pre_collision_km.get(k, s.pre_collision_km)
         if s.kind == "collision" and young == len(s.cell_ids):
             n_zero += 1
+    notes: list[str] = []
     if capped:
-        warnings.append(
+        notes.append(
             f"{capped} collision contact cell(s) capped at "
             f"{MAX_POST_COLLISION_CONVERGENCE_KM:.0f} km of post-collision convergence"
         )
     if n_zero:
-        warnings.append(
+        notes.append(
             f"{n_zero} collision segment(s) too young to thicken since onset (margin and "
             "pre-breakoff subduction exceed the convergence); only their pre-collision "
             "Andean-type thickening remains"
         )
-    return OrogenContract(segments=segments, escape=escape, retained_km=retained, warnings=warnings)
+    return OrogenContract(
+        segments=segments, escape=escape, retained_km=retained, warnings=warnings, notes=notes
+    )

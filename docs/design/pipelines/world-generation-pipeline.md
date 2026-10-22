@@ -28,24 +28,27 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 | 引擎 | 层级 | requires | 产出 | 技术参考 |
 |------|------|----------|------|---------|
 | `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py` |
-| `GeologicalEngine` | geological | astronomy | `maps/{planet}/`（cvt_mesh.json、elevation.png、plates.json、features.json、图层导出） | [geological-pipeline.md](geological-pipeline.md) |
+| `GeologicalEngine` | geological | astronomy | `maps/{planet}/`（cvt_mesh.json、elevation.png、plates.json、图层导出） | [geological-pipeline.md](geological-pipeline.md) |
 | `ClimateEngine` | climate | astronomy, geological | 温度/降水/Köppen/风/洋流/月度场，写回 mesh | [climate-pipeline.md](climate-pipeline.md) |
 | `EcologyEngine` | ecology | climate, geological | 群系/NPP/可驯化/土纲/生物地理省图层 | [ecology-pipeline.md](ecology-pipeline.md)；设计动机见 [ecology-layer.md](../proposals/ecology-layer.md) |
 | `CivilizationEngine` | civilization | ecology, climate, geological | 文明层 derived（消费 mesh 上的气候/生态字段） | [civilization-pipeline.md](civilization-pipeline.md)；Phase 3C 半结构化设计见 [civilization-layer.md](../proposals/civilization-layer.md) |
 
-**地形管线 8 相位**（`GeologicalEngine` 内部，`map/terrain_pipeline.py:184-469`，
+**地形管线 8 相位**（`GeologicalEngine` 内部，`map/terrain_pipeline.py:189-716`，
 配置 = `terrain_config.yaml`；每相位有内容指纹缓存，详见 geological-pipeline）：
 
 | 相位 | 名称 | 行号 | 细节 |
 |------|------|------|------|
-| 1/8 | CVT 网格 | `:184` | geological-pipeline §CVT |
-| 2/8 | 板块剖分 | `:217` | 同 §板块（欧拉极分配在此相位的字段分配里，不单列） |
-| 3/8 | 构造时间演化 | `:253` | 同 §时间演化（Cortial 2019） |
-| 4/8 | 边界检测 | `:341` | 同 §边界 |
-| 5/8 | 地形合成 | `:374` | 同 §地形（海陆分类 water_class 在本相位末尾写入） |
-| 6/8 | 气候模拟 | `:426` | 委托 [climate-pipeline.md](climate-pipeline.md) §10 |
-| 7/8 | 河流水文 | `:441` | geological-pipeline §河流 |
-| 8/8 | 导出 | `:469` | 同 §导出（大内流湖升级在本相位开头） |
+| 1/8 | CVT 网格 | `:235` | geological-pipeline §CVT |
+| 2/8 | 板块剖分 | `:280` | 同 §板块（欧拉极分配在此相位的字段分配里，不单列） |
+| 3/8 | 构造时间演化 | `:325` | 同 §时间演化（Cortial 2019） |
+| 4/8 | 边界检测 | `:424` | 同 §边界 |
+| 5/8 | 地形合成 | `:465` | 同 §地形（海陆分类 water_class 在本相位末尾写入） |
+| 6/8 | 气候模拟 | `:615` | `GeologicalEngine` 默认跳过此相位，气候由 `ClimateEngine` 构建；委托 [climate-pipeline.md](climate-pipeline.md) §10 |
+| 7/8 | 极地冰盖 | `:638` | 同 §8 极地冰盖（相位开始前先标记封闭盆地湖泊，见 §9） |
+| 8/8 | 导出 | `:650` | 同 §导出（大内流湖升级在本相位开头） |
+
+全球网格上不做河网汇流；渲染用的汇流、河流与湖泊在高分辨率画布链上计算，见
+[canvas-hydrology.md](canvas-hydrology.md)。
 
 区域后处理（管线之外）：**Gaea 局部精细化**——跑完全管线拿到地形/气候/土壤/植被后
 选固定区域高分辨率细化，未实现，见 [gaea-refinement.md](../proposals/gaea-refinement.md)。
@@ -56,10 +59,10 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 stellar/planets 参数（astronomy）
       │  luminosity / orbit / tilt / rotation / greenhouse
       ▼
-GeologicalEngine ── terrain_pipeline 8 相位（6/8 内嵌气候）
-      │  maps/{planet}/: elevation / crust / plates / climate / rivers
+GeologicalEngine ── terrain_pipeline 8 相位（默认跳过 6/8 气候）
+      │  maps/{planet}/: elevation / crust / plates / lakes / ice
       ▼
-ClimateEngine（增量重建入口）── 写回 mesh 气候字段
+ClimateEngine ── 写回 mesh 气候字段
       ▼
 EcologyEngine ── 群系 / NPP（消费 mesh 上的 T/P）
       ▼

@@ -162,7 +162,6 @@ maps/
 │   ├── cvt_mesh.msgpack.gz   # CVT 网格（gzip 帧 MessagePack；读端嗅探兼容旧 cvt_mesh.json）
 │   ├── elevation.png         # 高度图
 │   ├── plates.json           # 板块分组
-│   ├── features.json         # 河流矢量图层
 │   ├── temperature.png       # 气候温度图层
 │   ├── precipitation.png     # 气候降水图层
 │   └── koppen.json           # Köppen 分类
@@ -208,7 +207,7 @@ maps/
 
 地图后端路由全部在 `api_routes/maps.py`，前缀 `/api/worlds/{w}/maps/{p}`，按功能分组：
 元数据与栅格图层（elevation PNG / climate-monthly）、CVT 网格（`cvt-mesh`）、矢量数据
-（voronoi / plates / features）、写操作（elevation / import-elevation / generate / DELETE）。
+（voronoi / plates）、写操作（elevation / import-elevation / generate / DELETE）。
 
 **端点的权威参考**：`dreamulator serve` 后访问 `http://localhost:8000/docs`——FastAPI
 从路由代码自动生成的 OpenAPI 交互文档，与实现 by-construction 同步（手写端点表会漂移，
@@ -250,7 +249,7 @@ maps/
 - **矢量叠加**：SVG 层覆盖在地形 Canvas 上
   - 经纬网（等距圆柱直线网格实时绘制）
   - 单元格高亮（蓝=悬停 / 黄=选中）
-  - 板块边界、地壳类型、河流等特征层烘焙进纹理（特征槽位，见「图层系统」）
+  - 板块边界、地壳类型等特征层烘焙进纹理（特征槽位，见「图层系统」）
 - **鸟瞰图**：`MapMinimap` 组件，Canvas 2D 缩略图 + SVG 视口矩形
 
 ### 2D 渲染与昼夜光照
@@ -310,7 +309,7 @@ maps/
 | **底图** (base) | 恰好 1 个（radio） | 不透明画布 | 地形、海陆 |
 | **专题着色** (thematic) | 0 或 1 个（radio） | 全表面着色，alpha 叠在底图上 | Köppen、温度、降水、气压、Whittaker 群系、NPP、宜居/农业、诊断偏差层 |
 | **分类填充** (fill) | 0–N（多选叠加） | 半透明 cell 着色 | 板块 |
-| **特征标注** (feature) | 0–N（多选叠加，永远置顶） | 线/箭头/高亮 | 地壳边界、洋流、风场、海岸线、河流、风/洋流偏差箭头 |
+| **特征标注** (feature) | 0–N（多选叠加，永远置顶） | 线/箭头/高亮 | 地壳边界、洋流、风场、海岸线、风/洋流偏差箭头 |
 
 UI 按学科组织为五个面板组：**地形** / **气候** / **生态** / **文明** / **开发**
 （开发组为诊断偏差层，仅开发者模式 + Earth 世界显示）。专题着色槽内选项互斥（radio）——
@@ -340,7 +339,7 @@ UI 按学科组织为五个面板组：**地形** / **气候** / **生态** / **
 - **昼夜光照（2D + 3D）** — 着色器内太阳天顶角计算，季节/时刻滑块驱动赤纬/经度，URL 同步
 - **SVG 单元格高亮 + 经纬网** — 统一 SVG 叠加层
 - **气候图层与月度模式** — 温度/降水/气压/Köppen 专题层 + 月度切换（`climate-monthly` 端点）
-- **河流矢量图层** — features.json 渲染外流河与内流河
+- **湖泊着色** — 地形底图与海陆底图按 mesh 的 `is_lake` 把湖泊 cell 着为水面色（冰冻湖为浅冰色）；全球网格不提供河流图层，渲染用河流来自高分辨率画布链（见 [canvas-hydrology.md](canvas-hydrology.md)）
 - **偏差诊断图层** — ΔT/ΔP/ΔSLP 热力层 + 风/洋流偏差箭头（开发组，devMode + Earth）
 
 后续方向（文明层 Phase 3C-3E、分支差异可视化等）属路线图事项，单一事实源 =

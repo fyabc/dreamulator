@@ -24,7 +24,7 @@
 ### pipelines/ — 已实现管线技术参考
 
 - `world-generation-pipeline.md` — 世界生成管线总览（阶段 1–12 目录 + 层级映射 + Gaea 指针）
-- `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、水文、侵蚀）
+- `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、封闭盆地湖泊、极地冰盖、导出）
 - `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
 - `climate-pipeline.md` — 气候层 pipeline（温度/降水/Köppen 实现架构与参数）
 - `ecology-pipeline.md` — 生态层 pipeline（海陆判据、Whittaker 群系含湖泊哨兵、Miami NPP、可驯化标签、土纲、生物地理分区）

@@ -204,18 +204,6 @@ def get_plates(
     return [p.model_dump(mode="json") for p in plates]
 
 
-@router.get("/{world_name}/maps/{planet_id}/features")
-def get_features(
-    world_name: str,
-    planet_id: str,
-    branch: str | None = None,
-) -> list[dict[str, Any]]:
-    """Get map features (rivers, ridges, etc.) for a planet."""
-    mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "features.json")
-    features = mgr.get_features(planet_id)
-    return [f.model_dump(mode="json") for f in features]
-
-
 @router.get("/{world_name}/maps/{planet_id}/cvt-mesh/geometry")
 def get_cvt_mesh_geometry(
     world_name: str,
@@ -540,7 +528,7 @@ def generate_map(
     """Procedurally generate terrain using the CVT pipeline.
 
     Runs: CVT mesh -> plates -> boundaries -> terrain synthesis -> export.
-    Climate and river stages are skipped (handled by other endpoints).
+    The climate stage is skipped (handled by other endpoints).
     """
     import logging
 

@@ -33,7 +33,7 @@
 | 2 | 前端可视化 | ✅ v0.2.0–0.6.0 | 地图系统（栅格+Voronoi）、3D 恒星系、CivMap、3D 球面地球；见 CHANGELOG.md |
 | 2.5 | 地形真实感增强 | ✅ v0.7.0–0.8.0 | 板块剖分（Cortial 2019）、地形合成、海岸线、噪声标定；见 CHANGELOG.md |
 | 3A | 气候与流体引擎 | 🚧 | 核心已合并（v0.9.0），调优进行中；见 三 |
-| 3B | 侵蚀与河流生成 | 🚧 | 河网已落地（D8 → `river_id`/`river_order` 矢量图层）；**流水侵蚀 2026-08-26 已从 200k 移除**（尺度不匹配，§四 3B），河谷雕刻归 Gaea 局地精修 |
+| 3B | 侵蚀与河流生成 | 🚧 | 全球 200k 网格不做河网与流水侵蚀（尺度不匹配，§四 3B）；河流在高分辨率画布链上提取（[canvas-hydrology.md](pipelines/canvas-hydrology.md)），河谷雕刻归 Gaea 局地精修 |
 | 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker + NPP + 可驯化标签 ✅（v0.20.0，含三个专题图层）；区域连通物种分布（P1）、食物网（P2）、异星物种推演（P3，见 [ecology-layer.md](proposals/ecology-layer.md) §3.5） |
 | 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](proposals/civilization-layer.md) |
 | 3D | 世界线合并可视化 Diff | 📋 | DAG 影响半径分析 / Lyapunov 混沌预警 / 蒙特卡洛不确定性 |
@@ -62,7 +62,7 @@
 
 ## 四、Phase 3B–3E 要点
 
-- **3B 侵蚀与河流**：河网已落地；流水侵蚀（stream power + 坡面扩散 + 沉积路由）
+- **3B 侵蚀与河流**：全球网格不做河网，河流在高分辨率画布链上提取；流水侵蚀（stream power + 坡面扩散 + 沉积路由）
   **2026-08-26 从 200k 移除**——51 km 网格上真实河谷全部亚网格，且 detachment-limited
   参数无解（诊断：任何 ≥1 Myr、合理 K₀ 下干流直达基准面）。河谷雕刻归 Gaea 局地
   高清精修；大陆内部低地由地形合成「内部低地」解决。DAG 约束：重启需地貌降水代理

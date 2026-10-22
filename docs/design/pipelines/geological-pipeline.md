@@ -4,7 +4,7 @@
 > （§2）、各相位细节（§3-§10）、数据模型与性能（§11-§12）、已知限制与未实现设计
 > 余量（§13）。对应源码：`src/dreamulator/map/` 与 `src/dreamulator/engine/geological.py`。
 > **球面质心 Voronoi 镶嵌（CVT Mesh）是一等公民数据，等距圆柱投影高度图是派生导出产物**：
-> 全部模拟（构造、水文、气候）在 CVT 不规则网格上完成，仅在最终导出阶段投影为栅格。
+> 全部模拟（构造、地形、湖泊标记、气候）在 CVT 不规则网格上完成，仅在最终导出阶段投影为栅格。
 > 使用向操作指南见 [map-workflow.md](../../usage/map-workflow.md)；气候相位细节见
 > [climate-pipeline.md](climate-pipeline.md)；引擎总目录见
 > [world-generation-pipeline.md](world-generation-pipeline.md)。
@@ -19,7 +19,7 @@
 6. [边界检测与分类](#6-边界检测与分类)
 7. [地形合成](#7-地形合成)
 8. [海平面与水系统](#8-海平面与水系统)
-9. [河流与水文](#9-河流与水文)
+9. [封闭盆地湖泊](#9-封闭盆地湖泊)
 10. [导出与可视化](#10-导出与可视化)
 11. [数据模型](#11-数据模型)
 12. [性能](#12-性能)
@@ -41,7 +41,7 @@
 - `boundary_detector.py` - 边界检测、分类与链追踪（§6）
 - `terrain_synthesizer.py` - 地形合成：双峰基底 + 边界效应 + fBm + 后处理（§7）
 - `water_bodies.py` - 海陆分类（连通性洪泛）与大内流湖升级（§8）
-- `hydrology.py` / `river_generator.py` - 流向 / 汇水累积 / 河网 / 湖泊 + 河流矢量特征（§9）
+- `hydrology.py` - 优先洪泛填洼（供地形合成的沉积填充使用）与封闭盆地湖泊标记（§9）
 - `ice_sheets.py` - 极地冰盖追加相位：日照门 + 海陆分域 + 完美塑性穹丘（§8）
 - `terrain_cache.py` - 子阶段内容指纹缓存，增量重建（§2）
 - `export.py` - 等距圆柱栅格导出 + 图层导出（§10）
@@ -52,8 +52,8 @@
 
 | 调用方 | 入口 | 场景 |
 |--------|------|------|
-| 地质引擎 | `GeologicalEngine` 调 `run_terrain_pipeline`（`terrain_pipeline.py:167`） | `dreamulator build` DAG 主路径 |
-| 气候引擎 | 相位 6/9 内嵌 `simulate_climate`；`ClimateEngine` 独立重建 | [climate-pipeline.md](climate-pipeline.md) §10 |
+| 地质引擎 | `GeologicalEngine` 调 `run_terrain_pipeline`（`terrain_pipeline.py:189`） | `dreamulator build` DAG 主路径 |
+| 气候引擎 | 相位 6/8 内嵌 `simulate_climate`（`GeologicalEngine` 的默认阶段列表不含此相位）；`ClimateEngine` 独立重建 | [climate-pipeline.md](climate-pipeline.md) §10 |
 | 生态 / 文明引擎 | 读 mesh 上的气候/生态字段 | [world-generation-pipeline.md](world-generation-pipeline.md) |
 | 地图 API / 前端 | `api_routes/maps.py` 与前端查看器消费导出产物 | [map-system.md](map-system.md) |
 
@@ -68,7 +68,7 @@
 
 ### 关键架构决策
 
-- **CVT 而非 HEALPix**: CVT 可以自然表示不规则边界（板块、河流），HEALPix 的固定层次结构
+- **CVT 而非 HEALPix**: CVT 可以自然表示不规则边界（板块、海岸），HEALPix 的固定层次结构
   不适合线性特征的追踪。但 CVT 的代价是邻接关系需要显式存储。
 - **fBm 在 3D 球面采样**: 避免 2D 投影的极点噪声畸变。每个 CVT 节点的噪声值由其 3D 坐标
   `(x, y, z)` 直接索引 Simplex noise。
@@ -83,25 +83,26 @@
 
 ## 2. 执行顺序
 
-`run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:167`）按固定
-顺序执行 9 个相位（`_STAGE_NAMES` :65-75，控制台 `1/9`-`9/9`）；`stages` 参数可选子集，
-`_resolve_stages`（:111）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
+`run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:189`）按固定
+顺序执行 8 个相位（`_STAGE_NAMES` :69-78，控制台 `1/8`-`8/8`）；`stages` 参数可选子集，
+`_resolve_stages`（:116）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
 细节章节在 §3-§10 展开。
 
 | 相位 | 名称 | 行号 | 调用 | 产出 → 下游 |
 |------|------|------|------|------------|
-| 1/9 | mesh | `:214` | `generate_cvt_mesh`；geography 栅格偏置采样 | `CVTMesh` → 全部后续相位 |
-| 2/9 | plates | `:247` | `generate_plates`（种子 / 剖分 / 地壳 / 欧拉极 / 地理锚定，§4） | `plate_id` / `crust_type` → 3、4 |
-| 3/9 | tectonics | `:283` | `run_tectonic_evolution`（§5）+ `apply_geography_crust` 重锚定 | 演化后 plates 与累积构造量 → 4、5 |
-| 4/9 | boundaries | `:380` | `detect_boundaries`（§6） | `boundary_type` → 5 |
-| 5/9 | terrain | `:421` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6-9 |
-| 6/9 | climate | `:477` | `simulate_climate`（细节全部委托 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 → 7 |
-| 7/9 | rivers | `:492` | `generate_rivers` + `extract_river_features` → features.json（§9） | 河网 / 河流矢量 → 9 |
-| 8/9 | ice | `:522` | `apply_polar_ice_sheets`（§8 极地冰盖：日照门 + 海陆分域 + Vialov 穹丘） | `ice_thickness_m` / 冰面 `elevation` → 9 |
-| 9/9 | export | `:533` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.msgpack.gz |
+| 1/8 | mesh | `:235` | `generate_cvt_mesh`；geography 栅格偏置采样 | `CVTMesh` → 全部后续相位 |
+| 2/8 | plates | `:280` | `generate_plates`（种子 / 剖分 / 地壳 / 欧拉极 / 地理锚定，§4） | `plate_id` / `crust_type` → 3、4 |
+| 3/8 | tectonics | `:325` | `run_tectonic_evolution`（§5）+ `apply_geography_crust` 重锚定 | 演化后 plates 与累积构造量 → 4、5 |
+| 4/8 | boundaries | `:424` | `detect_boundaries`（§6） | `boundary_type` → 5 |
+| 5/8 | terrain | `:465` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6-8 |
+| 6/8 | climate | `:615` | `simulate_climate`；`GeologicalEngine` 的默认阶段列表跳过此相位，因为气候引擎才是气候字段的权威来源（细节见 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 |
+| 7/8 | ice | `:638` | `apply_polar_ice_sheets`（§8 极地冰盖：日照门 + 海陆分域 + Vialov 穹丘） | `ice_thickness_m` / 冰面 `elevation` → 8 |
+| 8/8 | export | `:650` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.msgpack.gz |
 
-海陆分类在 5/9 末尾写入、极地冰盖在 7/9 河流之后追加（8/9）、大内流湖升级在
-9/9 开头执行——「海平面与水系统」（§8）横跨三个相位，该章开头有说明。
+海陆分类在 5/8 末尾写入。气候相位之后、冰盖之前，管线调用 `mark_closed_basin_lakes`
+（`terrain_pipeline.py:634`）把与全球海洋不连通的低于海平面盆地标记为湖泊（§9）。
+极地冰盖在 7/8 追加到陆地上，大内流湖升级在 8/8 开头执行。因此「海平面与水系统」（§8）
+横跨多个相位，该章开头有说明。
 
 **增量缓存**（`terrain_cache.py`）：每个相位的输入做内容指纹（config 字段 + 相位
 schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则
@@ -628,7 +629,7 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
   边、过于平直。改进方向：更高 cell 密度 / 海岸带高频噪声扰动 / sub-cell 阈值化。
 - **~~浅海深度~~**：已由高程钉扎解决（`shallow_sea` + `elevation_target_m: -120`
   表达陆缘浅海，2026-08）。
-- **offset 下游假设**：前端色标/河流生成（TODO）按水面 0 m 假设；
+- **offset 下游假设**：前端色标按水面 0 m 假设；
   `sea_level_offset_m ≠ 0` 仅用于实验性重建。
 - **钉扎与海陆比**：钉扎只动核支撑区，对 `land_fraction_target` 的扰动 ≤
   核面积占比（nacrea 地峡 ≈0.3pp）；大陆级钉扎（>5% 表面）需自行调 target。
@@ -1168,8 +1169,8 @@ age = max_age · d_div / (d_div + d_conv)
 
 ## 8. 海平面与水系统
 
-> 本章机制横跨三个相位：海陆分类（`water_class`）在 5/9 地形合成末尾写入，极地冰盖
-> 在 7/9 河流之后追加（8/9 独立相位），大内流湖升级在 9/9 导出开头执行（见 §2）。
+> 本章机制横跨多个相位：海陆分类（`water_class`）在 5/8 地形合成末尾写入，封闭盆地湖泊
+> 在冰盖之前标记（§9），极地冰盖在 7/8 独立相位追加，大内流湖升级在 8/8 导出开头执行（见 §2）。
 
 ### 海平面设定
 
@@ -1290,11 +1291,11 @@ def check_polar_configuration(
     }
 ```
 
-### 极地冰盖（8/9 追加相位，`ice_sheets.py`）
+### 极地冰盖（7/8 追加相位，`ice_sheets.py`）
 
-极地冰盖在海平面校准、地理钉扎、均衡压缩、平滑与河流全部完成**之后**追加
+极地冰盖在海平面校准、地理钉扎、均衡压缩、平滑与封闭盆地湖泊标记全部完成**之后**追加
 （`apply_polar_ice_sheets`，`ice_sheets.py:165`）：冰只堆叠在陆地 cell 上，海平面
-维持校准值不动，**海岸线格局不受影响**；河网在冰期前的基岩面上生成（冰下河道）。
+维持校准值不动，**海岸线格局不受影响**。
 每个 cell 的 `ice_thickness_m` 字段记录冰厚，受载基岩高程为 `elevation − ice_thickness_m`。冰载荷按局地 Airy
 均衡压低基岩 `ICE_LOAD_DEPRESSION` = ρ_i/ρ_m ≈ 0.28 倍冰厚（技术债 45），冰面 = 无冰基岩 + 0.72·冰厚；重跑幂等
 （先剥旧冰并补回下沉量，再重算，不会重复叠加或重复下压）。
@@ -1341,349 +1342,43 @@ def check_polar_configuration(
 
 ---
 
-## 9. 河流与水文
-
-> 本节是**地形合成后地形**上的一次性水文学产品：洼地填平 → D8 流向 →
-> 流量累积 → 河网提取，填入 `VoronoiCell.flow_direction / flow_accumulation /
-> river_id / river_order`。
-> 物理公式与引用见 [knowledge/geology/hydrology.md](../../knowledge/geology/hydrology.md)。
-
-### 9.0 洼地填平（前置）
-
-CVT 地形合成会产出大量局部洼地（pit）：直接跑 D8 会在每个洼地得到一个 sink、
-河网破碎、流量累积截断。先做 **priority-flood 填平**（Barnes et al. 2014，
-O(N log N)）：
-
-1. 从海洋 / 边界 cell 出发，用最小堆按高程向内扩张；
-2. 每个陆 cell 的临时标高推到 `max(elevation, spill)`，保证至少有更低出口；
-3. 填平只在**临时数组**上进行（供流向 / 累积使用），
-   **不写回** `cell.elevation`——最终河网提取仍在真实地形上做；
-4. 内流盆地（无通海出口）填平后仍保留其最低出口作为 sink（§9.5）。
-
-### 9.1 流向确定
-
-每个节点的流向是其**最陡下降方向**的邻居：
-
-```python
-def compute_flow_directions(
-    mesh: CVTMesh,
-    elevation_m: np.ndarray,
-    is_land: np.ndarray,
-) -> np.ndarray:
-    """Determine flow direction for each node.
-
-    Each node flows to its steepest-descent neighbor.
-    Ocean nodes and local minima flow to -1 (sink).
-
-    Returns:
-        (N,) int array. flow_dir[i] = neighbor index, or -1 for sinks.
-    """
-    flow_dir = np.full(mesh.num_nodes, -1, dtype=np.int32)
-
-    for i in range(mesh.num_nodes):
-        if not is_land[i]:
-            continue  # ocean = sink
-
-        best_neighbor = -1
-        best_gradient = 0.0
-
-        for n in mesh.adjacency[i]:
-            # Compute gradient: elevation drop / distance
-            dist_km = angular_distance_xyz(mesh.nodes[i], mesh.nodes[n]) * mesh.radius_km
-            if dist_km < 1e-6:
-                continue
-            gradient = (elevation_m[i] - elevation_m[n]) / dist_km
-
-            if gradient > best_gradient:
-                best_gradient = gradient
-                best_neighbor = n
-
-        flow_dir[i] = best_neighbor  # -1 if no downhill neighbor (local minimum)
-
-    return flow_dir
-```
-
-### 9.2 汇水累积
-
-通过拓扑排序（从源头到河口）计算每个节点的汇水面积：
-
-```python
-def compute_flow_accumulation(
-    mesh: CVTMesh,
-    flow_dir: np.ndarray,
-    is_land: np.ndarray,
-    areas: np.ndarray,
-) -> np.ndarray:
-    """Compute flow accumulation (upstream catchment area) per node.
-
-    Algorithm:
-    1. Compute in-degree for each node (how many neighbors flow into it)
-    2. Topological sort: process nodes with in-degree 0 first (headwaters)
-    3. Accumulate: each node passes its accumulation to its downstream neighbor
-
-    Returns:
-        (N,) accumulation in km².
-    """
-    accum = areas.copy()  # each node starts with its own area
-    accum[~is_land] = 0   # ocean doesn't contribute
-
-    # Compute in-degree
-    in_degree = np.zeros(mesh.num_nodes, dtype=np.int32)
-    for i in range(mesh.num_nodes):
-        target = flow_dir[i]
-        if target >= 0:
-            in_degree[target] += 1
-
-    # Topological sort (Kahn's algorithm)
-    queue = deque()
-    for i in range(mesh.num_nodes):
-        if in_degree[i] == 0 and is_land[i]:
-            queue.append(i)
-
-    while queue:
-        node = queue.popleft()
-        target = flow_dir[node]
-        if target >= 0:
-            accum[target] += accum[node]
-            in_degree[target] -= 1
-            if in_degree[target] == 0:
-                queue.append(target)
-
-    return accum
-```
-
-### 9.3 河流分类
-
-根据汇水面积对河流进行分级：
-
-| 汇水面积 (km²) | 等级 | 描述 | 例子 |
-|----------------|------|------|------|
-| < 100 | 溪流 | 季节性小溪 | — |
-| 100 – 1,000 | 小河 | 常年流水 | 小河 |
-| 1,000 – 10,000 | 河流 | 中等河流 |  Thames |
-| 10,000 – 100,000 | 大河 | 主要河流 | Rhine |
-| > 100,000 | 巨河 | 大陆级河流 | Amazon, Nile |
-
-```python
-def classify_rivers(
-    accum_km2: np.ndarray,
-    flow_dir: np.ndarray,
-    is_land: np.ndarray,
-    thresholds: dict = None,
-) -> np.ndarray:
-    """Classify river segments by Strahler-like order based on accumulation.
-
-    Returns:
-        (N,) int array. 0 = no river, 1-5 = stream to mega-river.
-    """
-    if thresholds is None:
-        thresholds = {1: 100, 2: 1000, 3: 10000, 4: 100000}
-
-    river_order = np.zeros(len(accum_km2), dtype=np.int32)
-    for order, threshold in sorted(thresholds.items()):
-        river_order[accum_km2 >= threshold] = order
-
-    return river_order
-```
-
-### 9.4 河流网络提取
-
-从河口（海岸节点）逆流追踪到源头，生成 `MapFeature` 对象：
-
-```python
-def extract_river_network(
-    mesh: CVTMesh,
-    flow_dir: np.ndarray,
-    accum_km2: np.ndarray,
-    is_land: np.ndarray,
-    min_accum_km2: float = 1000.0,
-) -> list[MapFeature]:
-    """Trace river networks from mouth to headwaters.
-
-    1. Find river mouths: land nodes flowing into ocean (flow_dir → ocean node)
-    2. For each mouth, trace upstream following reverse flow direction
-    3. At confluences, follow the branch with higher accumulation
-
-    Returns:
-        List of MapFeature objects (type=RIVER).
-    """
-    # Build reverse flow graph: who flows into each node?
-    reverse_flow: dict[int, list[int]] = defaultdict(list)
-    for i in range(mesh.num_nodes):
-        target = flow_dir[i]
-        if target >= 0:
-            reverse_flow[target].append(i)
-
-    # Find river mouths
-    mouths = []
-    for i in range(mesh.num_nodes):
-        if is_land[i] and flow_dir[i] >= 0 and not is_land[flow_dir[i]]:
-            if accum_km2[i] >= min_accum_km2:
-                mouths.append(i)
-
-    # Trace each river
-    rivers = []
-    for mouth_idx, mouth in enumerate(mouths):
-        path = trace_upstream(mouth, reverse_flow, accum_km2, min_accum_km2)
-
-        # Convert node path to (lon, lat) coordinates
-        coords = []
-        for node_id in path:
-            lat, lon = xyz_to_lat_lon(
-                mesh.nodes[node_id, 0],
-                mesh.nodes[node_id, 1],
-                mesh.nodes[node_id, 2],
-            )
-            coords.append((degrees(lon), degrees(lat)))
-
-        rivers.append(MapFeature(
-            id=f"river_{mouth_idx:04d}",
-            name=f"River {mouth_idx}",
-            type=FeatureType.RIVER,
-            coordinates=coords,
-        ))
-
-    return rivers
-
-def trace_upstream(
-    mouth: int,
-    reverse_flow: dict,
-    accum: np.ndarray,
-    min_accum: float,
-) -> list[int]:
-    """Trace upstream from mouth, always following the largest tributary."""
-    path = [mouth]
-    current = mouth
-
-    while True:
-        upstream = reverse_flow.get(current, [])
-        # Filter to nodes above accumulation threshold
-        valid = [u for u in upstream if accum[u] >= min_accum]
-        if not valid:
-            break
-        # Follow the branch with highest accumulation
-        current = max(valid, key=lambda u: accum[u])
-        path.append(current)
-
-    return path
-```
-
-### 9.5 湖泊与内流盆地
-
-局部最小值（没有下坡邻居的陆地节点）形成湖泊或内流盆地。参考 Gleba 的
-endorheic basins 设计——内流盆地（如里海、死海）是重要的地理特征。
-
-```python
-def detect_lakes_and_endorheic(
-    mesh: CVTMesh,
-    flow_dir: np.ndarray,
-    elevation_m: np.ndarray,
-    is_land: np.ndarray,
-    precipitation: np.ndarray,
-) -> tuple[list[Lake], list[EndorheicBasin]]:
-    """Detect lakes (local minima) and endorheic basins.
-
-    Lake: local minimum with positive water balance (precip > evap)
-    Endorheic basin: local minimum with negative water balance
-    (water accumulates to a level, then evaporates — like Dead Sea)
-
-    Reference: Gleba endorheic basins — large inland drainage
-    systems affect regional climate and civilization placement.
-
-    Returns:
-        (lakes, endorheic_basins)
-    """
-    # Find local minima on land
-    sinks = np.where((flow_dir == -1) & is_land)[0]
-
-    lakes = []
-    endorheic = []
-
-    for sink in sinks:
-        # BFS to find the catchment basin
-        basin = find_catchment(sink, flow_dir)
-        basin_area_km2 = sum(mesh.areas[b]) for b in basin
-
-        # Estimate water balance
-        total_precip = sum(precipitation[b] * mesh.areas[b] for b in basin)
-        # Simple evaporation estimate
-        evap = 800 * basin_area_km2  # mm/yr × km² → volume
-
-        if total_precip > evap:
-            # Positive balance → lake fills to spill point
-            lakes.append(Lake(
-                sink_node=sink,
-                basin_nodes=list(basin),
-                area_km2=basin_area_km2,
-                spill_elevation=elevation_m[sink],
-            ))
-        else:
-            # Negative balance → endorheic (salt lake / dry basin)
-            endorheic.append(EndorheicBasin(
-                sink_node=sink,
-                basin_nodes=list(basin),
-                area_km2=basin_area_km2,
-                water_deficit=evap - total_precip,
-            ))
-
-    return lakes, endorheic
-```
-
-### 9.6 输出字段
-
-| `VoronoiCell` 字段 | 类型 | 说明 |
-|---|---|---|
-| `flow_direction` | `int \| None` | 下游邻居 id；`-1` = sink（海洋 / 内流盆出口）；海洋 cell 为 `None` |
-| `flow_accumulation` | `float` | 上游汇水面积（km²，非 cell 数；由 `area_km2` 求和） |
-| `river_id` | `str \| None` | 所属河流 id（`river_XXXX`），无河为 `None` |
-| `river_order` | `int` | Strahler 级数（0 = 无河） |
-
-### 9.7 河流矢量图层（features.json）与渲染
-
-**提取**（`river_generator.extract_river_features`，管线 rivers 阶段末尾调用，
-写入地图目录 `features.json`，`manager.get_features` / API / 静态导出直接消费）：
-
-- **河道 cell**：`river_order >= 1`。order 阈值按 cell 面积缩放（§9.3
-  `classify_rivers`），200k 网格下只画主干河网（陆域按汇水面积前 ~2–3%）——
-  世界地图的河流密度。
-- **折线追踪**：每个河道「源头」（无上游河道邻居的河道 cell）沿
-  `flow_direction` 向下游走；遇到 order 升高（汇合点）当前折线结束、从该
-  cell 起新折线——每条折线只含一个宽度级别。已被走过的 cell（主干先从别的
-  源头到达）使支流游走终止——支流止于主干线上。
-- **反子午线**：相邻点经度跳变 >180° 时折断折线。
-- 输出 `MapFeature(type=RIVER, coordinates=[(lon,lat)...], order=级别)`，
-  格式 `{"features": [...]}`。
-
-**渲染**（前端 `MapSvgOverlay`，SVG 矢量叠加层）：每条折线逐点经
-`project()` 投到屏幕（与经纬网格同一机制）；线宽 `(0.55 + 0.5×order)/√zoom`、圆头/圆角连接，不透明度由图层开关
-控制（默认开，0.9）。制图学路线：51 km 网格上「看得见河」靠矢量线而非 DEM
-切谷（竞品分析 §4.2.1 结论；3D 球面渲染留后续）。
-
-nacrea 实测（200k，seed 42）：103 条折线（order 1 × 97、order 2 × 6），
-1365 个顶点。
-
-### 参数表
-
-| 参数 | 默认值 | 范围 | 物理含义 |
-|------|--------|------|----------|
-| `min_river_accum_km2` | 1000 | 100 – 10000 | 河流最小汇水面积（河网提取阈值） |
-| `evaporation_base_mm` | 800 | 300 – 2000 | 简化蒸发率 |
-
-> 湖泊 / 内流盆地的水收支（§9.5 的 `detect_lakes_and_endorheic`）需要降水强迫，
-> 完整水收支（湖泊面积收敛、盐湖判别）留第二批。
-
-
----
-
-### 9.8 流水侵蚀（为什么没有）
-
-200k 地质层不做流水侵蚀（stream power 下切 + 坡面扩散）与沉积物搬运。尺度理由：
-51 km 网格上真实河谷（5–50 km 宽）全部亚网格，这个分辨率的流水侵蚀只会产生单 cell
-宽的人工沟壑；且 detachment-limited 无输沙极限会过度夷平/造深谷（任何 ≥1 Myr、
-任何合理 K₀ 下干流都直达基准面，参数无解）。河谷雕刻归**管线最后一步的 Gaea 局地
-高清精修**（米级，§10），大陆内部低地由地形合成的「内部低地」解决（非侵蚀）。
-河网（流量累积 / 河流矢量图层）保留，见 §8。详见 `docs/knowledge/geology/hydrology.md`
-与 `competitor-analysis.md` §4.2。
+## 9. 封闭盆地湖泊
+
+> 全球 200k 网格上不做汇流与河网：平均 cell 约 51 km，真实河谷（5–50 km 宽）全部是
+> 亚网格尺度，在这个分辨率上计算的流向与河道只是网格伪迹。渲染用的汇流、河流与湖泊
+> 在高分辨率画布链上计算，见 [canvas-hydrology.md](canvas-hydrology.md)；画布链不读取
+> 网格上的任何水文字段。全球网格只保留下面两类湖泊标记，它们写入 `VoronoiCell.is_lake`，
+> 供气候、生态、文明与海陆划分读取。
+
+### 9.1 沉积填充留下的湖
+
+地形合成的沉积填充（`_apply_deposition_fill`，§7.3）用 `priority_flood_fill`
+（`hydrology.py:25`，Barnes et al. 2014 的优先洪泛，O(N log N)）求每个 cell 的溢流
+高程：从海洋 cell 出发按高程用最小堆向内扩张，把每个洼地抬到它通往海洋的最低出口。
+被内部低地钳制过的盆地大多填到溢流高程；其中一部分大盆地（至少 20 格，比例由
+`lake_fraction` 控制）只填到溢流高程以下 `lake_depth_m`，并被标记为 `is_lake`。
+
+### 9.2 低于海平面的闭合盆地
+
+气候相位之后、冰盖相位之前，管线调用 `mark_closed_basin_lakes(mesh, sea_level_m)`
+（`hydrology.py:120`，调用点 `terrain_pipeline.py:634`）。它委托 `detect_closed_basins`
+（`hydrology.py:68`）对低于海平面的 cell 做连通分量划分：最大的分量视为全球海洋，
+其余低于海平面的分量是没有出海口的内陆海或盐湖，这些 cell 被标记为 `is_lake`。
+沉积填充已经标记的湖泊保持不变。这一判据假设世界有一个占主导的全球海洋；在陆地
+占绝对优势、没有全球海洋的世界上，最大分量本身可能是湖泊，函数不对此做特殊处理。
+
+标记在地形表面上进行，因此先于冰盖堆叠。导出相位开头的
+`upgrade_large_endorheic_lakes` 读取这些标记，把面积不小于 6×10⁴ km² 且大部分由湖泊
+cell 组成的封闭水体升级为 `water_class` 为 "ocean" 的类海水体（§8）。
+
+### 9.3 流水侵蚀（为什么没有）
+
+200k 地质层不做流水侵蚀（stream power 下切与坡面扩散），也不做沉积物搬运。尺度理由
+与不做汇流相同：在 51 km 网格上，流水侵蚀只会产生单 cell 宽的人工沟壑；而且
+detachment-limited 模型没有输沙极限，会过度夷平或造出深谷（任何不少于 1 Myr 的时长、
+任何合理的 K₀ 下，干流都会直接下切到基准面，参数无解）。河谷雕刻归管线最后一步的
+Gaea 局地高清精修（米级，§10），大陆内部低地由地形合成的「内部低地」机制解决，而不是
+靠侵蚀。详见 `docs/knowledge/geology/hydrology.md` 与 `competitor-analysis.md` §4.2。
 
 
 ---
@@ -1738,7 +1433,6 @@ Three.js 渲染使用 CVT 网格的直接映射：
 │  • climate/biome → texture overlay          │
 ├────────────────────────────────────────────┤
 │  SVG Overlay (2D projection)                │
-│  • 河流 polyline                            │
 │  • 板块边界 polyline                        │
 │  • 城市/标记 point                          │
 │  • 等值线 contour                           │
@@ -1800,7 +1494,7 @@ registry.raster_layers["elevation"] = RasterLayerMeta(
 
 | 模型 | 职责 | 关键字段 |
 |------|------|---------|
-| `VoronoiCell` | 单个 CVT cell（管线一等公民，全部物理量挂在 cell 上） | `id`、`lon/lat`、`x/y/z`（单位球）、`area_km2`、`elevation`（绝对米）、`crust_type`、`plate_id`、`boundary_type`、`convergence_rate_cm_yr`、`cumulative_convergence_km` / `cumulative_divergence_km`（构造演化累积量，驱动造山带/裂谷宽度）、`distance_to_boundary_km`（无边界网格序列化为 null），气候/水文/生态字段（`temperature_C`、`precipitation_mm`、`koppen_class`、`flow_accumulation`、`river_order`、`is_lake`、`biome` 等）由各层引擎后填 |
+| `VoronoiCell` | 单个 CVT cell（管线一等公民，全部物理量挂在 cell 上） | `id`、`lon/lat`、`x/y/z`（单位球）、`area_km2`、`elevation`（绝对米）、`crust_type`、`plate_id`、`boundary_type`、`convergence_rate_cm_yr`、`cumulative_convergence_km` / `cumulative_divergence_km`（构造演化累积量，驱动造山带/裂谷宽度）、`distance_to_boundary_km`（无边界网格序列化为 null），气候/水文/生态字段（`temperature_C`、`precipitation_mm`、`koppen_class`、`is_lake`、`biome` 等）由各层引擎后填 |
 | `CVTMesh` | 网格顶层容器（管线的持久化输出） | `seed`、`num_cells`、`lloyd_iterations`、`cells`、`adjacency`（cell_id → 邻接表）、`vertices` / `regions`（SphericalVoronoi 顶点与逐 cell 多边形，供渲染与面积计算） |
 | `TectonicPlate` | 构造板块 | `id`、`name`、`type`、`cell_ids`、`euler_pole`（欧拉极）、`growth_speed_multiplier` |
 | `EulerPole` | 板块运动学：v(P) = ω × P | 单位向量旋转轴 + `omega_rad_yr` |
@@ -1815,7 +1509,7 @@ registry.raster_layers["elevation"] = RasterLayerMeta(
 **模块布局**（`src/dreamulator/map/`）：`cvt_mesh.py`（Fibonacci + Lloyd + 网格构建）、
 `plate_generator.py`（种子选取 + Cortial 2019 剖分 + 地壳分配 + 欧拉极）、
 `boundary_detector.py`（边界检测/分类/链追踪）、`terrain_synthesizer.py`（地形合成）、
-`tectonic_simulator.py`（构造时间演化，§5）、`hydrology.py`（水文）、
+`tectonic_simulator.py`（构造时间演化，§5）、`hydrology.py`（填洼与封闭盆地湖泊，§9）、
 `export.py`（栅格导出）、`elevation_codec.py`（高度图 PNG 编解码）、
 `climate_simulator.py`（气候，见 climate-pipeline.md）、`manager.py`（地图 CRUD +
 分支继承 + 图层注册）。
@@ -1972,7 +1666,7 @@ palette (Uint8Array, N×1) → DataTexture (RGBA)       ┘        ↓
 ### 当前限制
 
 1. **河谷雕刻非地质层职责**：51 km 网格上流水侵蚀只会产生单 cell 宽人工沟壑，
-   故地质层不做流水侵蚀（§9.8）；河谷雕刻归 Gaea 局地高清精修（米级）。
+   故地质层不做流水侵蚀（§9.3）；河谷雕刻归 Gaea 局地高清精修（米级）。
 
 2. **静态气候**：当前气候模型是稳态快照，不模拟气候的季节内变化或年际变率（ENSO 等）。
 
@@ -2089,17 +1783,6 @@ sea_level = base_sea_level + ridge_volume_factor / mean_ocean_age
 | A.4 fBm | octave 叠加公式与归一化 | [terrain_synthesis.md](../../knowledge/geology/terrain_synthesis.md) §3 fBm 噪声 |
 | A.5 Köppen 气候阈值 | 五主群 + 亚型判据 | [koppen_classification.md](../../knowledge/climatology/koppen_classification.md) |
 | A.7 球面多边形面积 | 球面角盈公式 | [cvt_mesh.md](../../knowledge/geology/cvt_mesh.md) §Cell 面积 |
-
-**A.6 汇水累积**（水文学知识文档尚待建立，见 `knowledge/geology/CLAUDE.md`
-规划清单；实现见 §9.2）：
-
-```
-accum(i) = area(i) + Σ accum(j) for j in upstream(i)
-
-其中 upstream(i) = {j | flow_dir(j) = i}
-
-计算顺序：拓扑排序（从源头到河口）
-```
 
 
 ---

@@ -153,11 +153,11 @@ dreamulator 曾实现流水侵蚀（Fastscape 式隐式 stream power + 坡面扩
 | 科学 LEM | Badlands / Fastscape / Landlab / CHILD | 同族隐式 stream power；标配增量：**沉积物搬运 + 沉积（质量守恒）**、transport-limited 冲积段、海进程、侵蚀卸载的挠曲均衡回弹；典型分辨率 100 m–10 km | 它们在 100 m–10 km 分辨率做侵蚀（河谷可分辨）；dreamulator 200k（51 km）河谷亚网格，故侵蚀移除 |
 | 同赛道世界生成器 | [Gleba](https://calandiel.itch.io/gleba)（闭源） | 侵蚀定位为「土壤搬运」（realistic soil transport and erosion）；**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**为显式特性 | 沉积物搬运是业界共识；湖泊/内流盆地、冰川侵蚀也属特性清单（算法细节闭源不可得） |
 | 局部精修工具 | Gaea / World Creator / World Machine | 米级水力侵蚀，只做几 km² 的局部资产（World Creator 2025.1 实时侵蚀/沉积/水/熔岩） | 「可见的侵蚀纹理」属于这一层——河谷雕刻归 Gaea 局地精修（`proposals/gaea-refinement.md`），不在全球 DEM 上做 |
-| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 「看得见河」方案：矢量河流图层（已落地，`geological-pipeline.md` §9.7） |
+| 制图 / 游戏地图 | Azgaar FMG、真实地图制图 | 世界尺度的河流是**折线**（宽度 ∝ 流量），不刻进 DEM | 「看得见河」方案：河流在高分辨率画布链上提取并按矢量折线绘制（`pipelines/canvas-hydrology.md`），全球网格不做河网 |
 
 **结论**：51 km 网格上「可见的网格级河谷」本身是失真（真实地球同分辨率无可见
-河谷，ETOPO1 导入 200k 实测确认）。流水侵蚀从 200k 地质引擎移除；河网可见性由
-**矢量河流图层**承担，河谷雕刻归 **Gaea 局地精修**。大陆内部低地由地形合成的
+河谷，ETOPO1 导入 200k 实测确认）。200k 地质引擎不做流水侵蚀，也不在全球网格上
+做河网；河流由**高分辨率画布链**提取并以矢量折线绘制，河谷雕刻归 **Gaea 局地精修**。大陆内部低地由地形合成的
 「内部低地」解决（非侵蚀）。执行清单见内部工作记录 #5。
 
 ### 4.2.2 构造-地表过程耦合：业界做法调研（2026-08-26）

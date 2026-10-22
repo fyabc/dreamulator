@@ -49,10 +49,20 @@ def test_build_adaptive_terrain_lut_shape_and_ends():
     lut = palettes.build_adaptive_terrain_lut(-11_000.0, 9_000.0, 0.0)
     assert lut.shape == (1024, 3)
     assert lut.dtype == np.uint8
-    # index 0 = deepest ocean (first break #023858 → (2,56,88))
-    assert tuple(int(v) for v in lut[0]) == (2, 56, 88)
+    # index 0 = deepest ocean (first break #032447 → (3,36,71))
+    assert tuple(int(v) for v in lut[0]) == (3, 36, 71)
     # last index = peak white (#FFFFFF)
     assert tuple(int(v) for v in lut[1023]) == (255, 255, 255)
+
+
+def test_adaptive_terrain_ocean_darkens_with_depth():
+    """Deeper water is never lighter than shallower water (a seamount must not read as a
+    pit), on a planet-wide range and on a shallow-ocean range."""
+    for lo in (-11_000.0, -6_500.0):
+        lut = palettes.build_adaptive_terrain_lut(lo, 9_000.0, 0.0)
+        idx = np.arange(int((0.0 - lo) / (9_000.0 - lo) * 1023))
+        lightness = lut[idx].astype(int).sum(axis=1)
+        assert np.all(np.diff(lightness) >= 0)
 
 
 def test_build_adaptive_terrain_land_lut_has_no_water_blues():

@@ -67,6 +67,7 @@ Closures (observation fits):
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -207,10 +208,38 @@ def _rotate(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
     return out
 
 
+_SYNTHESIS_CATALOG: IslandCatalog | None = None
+
+
 def build_island_catalog(
     mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
 ) -> IslandCatalog:
-    """Hotspot-chain volcanoes and seamounts of the present map."""
+    """Hotspot-chain, arc, heat-pipe volcanoes and seamounts of the present map."""
+    return _build_island_catalog(mesh, plates, config)
+
+
+def remember_synthesis_catalog(cat: IslandCatalog) -> None:
+    """Keep the catalogue terrain synthesis put into the cell means for the summary stage."""
+    global _SYNTHESIS_CATALOG
+    _SYNTHESIS_CATALOG = cat
+
+
+def peek_synthesis_catalog() -> IslandCatalog | None:
+    """The catalogue of the last terrain synthesis, left in place (for the terrain cache)."""
+    return copy.deepcopy(_SYNTHESIS_CATALOG)
+
+
+def take_synthesis_catalog() -> IslandCatalog | None:
+    """The catalogue of the last terrain synthesis (once), so the summary describes the same
+    volcanoes whose volume is in the cell means."""
+    global _SYNTHESIS_CATALOG
+    cat, _SYNTHESIS_CATALOG = _SYNTHESIS_CATALOG, None
+    return cat
+
+
+def _build_island_catalog(
+    mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
+) -> IslandCatalog:
     cat = IslandCatalog()
     if not config.island_catalog_enabled:
         return cat

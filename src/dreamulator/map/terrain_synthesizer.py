@@ -164,7 +164,8 @@ def _compute_ocean_age_depth(
         out=np.full_like(d_div, 0.5),
         where=(d_div + d_conv) > 0,
     )
-    age_myr = config.ocean_max_age_myr * fraction
+    # unreached cells carry −1 distances; they are masked out below, keep their age finite
+    age_myr = config.ocean_max_age_myr * np.clip(fraction, 0.0, 1.0)
 
     # ---- Age → depth ----
     depth_m = config.ocean_ridge_depth_m + config.ocean_subsidence_coeff * np.sqrt(age_myr)
@@ -1038,12 +1039,19 @@ def _synthesize_asymmetric(
 
     # 3. Sub-grid island catalogue: hotspot and arc volcanoes enter as cell means of their
     # volume; the intrusive arc magma thickens the arc crust (island-catalog.md §3.2)
-    from .island_catalog import arc_platform, build_island_catalog, volcano_cell_mean
+    from .island_catalog import (
+        arc_platform,
+        build_island_catalog,
+        remember_synthesis_catalog,
+        volcano_cell_mean,
+    )
 
     logger.info("  Step 3/6: Island catalogue (hotspot chains, island arcs)")
-    hotspot_delta = volcano_cell_mean(
-        mesh, build_island_catalog(mesh, plates, config), config.radius_km
-    ) + arc_platform(mesh, plates, config)
+    catalog = build_island_catalog(mesh, plates, config)
+    remember_synthesis_catalog(catalog)
+    hotspot_delta = volcano_cell_mean(mesh, catalog, config.radius_km) + arc_platform(
+        mesh, plates, config
+    )
 
     # 4–5. Regional + detail noise (reuse)
     logger.info("  Step 4/6: Regional noise (scale=%.1f)", config.regional_noise_scale)
@@ -2195,7 +2203,7 @@ def _apply_sea_level_calibration(
     land_pct = 100.0 * land_area_final / surface_km2
     cell_pct = 100.0 * np.sum(elevation > sea_level) / n
 
-    logger.warning(
+    logger.info(
         "  %s: target %.1f%% land → sea level %.0f m → "
         "%.1f%% land by area (%.1f%% by cells), "
         "implied water budget %.2f km (%.1f million km^3)%s",

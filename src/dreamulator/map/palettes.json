@@ -558,48 +558,6 @@
           7
         ]
       }
-    ],
-    "flow": [
-      {
-        "value": 0.0,
-        "color": [
-          8,
-          48,
-          107
-        ]
-      },
-      {
-        "value": 0.4,
-        "color": [
-          37,
-          99,
-          154
-        ]
-      },
-      {
-        "value": 0.65,
-        "color": [
-          66,
-          146,
-          198
-        ]
-      },
-      {
-        "value": 0.85,
-        "color": [
-          158,
-          202,
-          225
-        ]
-      },
-      {
-        "value": 1.0,
-        "color": [
-          240,
-          249,
-          255
-        ]
-      }
     ]
   },
   "adaptive_terrain": {
@@ -610,21 +568,19 @@
         "fraction": 0.0,
         "clamp_m": null,
         "sign": 1,
-        "color": "#023858"
+        "color": "#032447"
       },
       {
-        "anchor": "min",
-        "fraction": 0.15,
-        "clamp_m": null,
-        "sign": 1,
-        "color": "#045A8D"
+        "anchor": "sea",
+        "sign": -1,
+        "fixed_m": 8000,
+        "color": "#062F57"
       },
       {
-        "anchor": "min",
-        "fraction": 0.3,
-        "clamp_m": null,
-        "sign": 1,
-        "color": "#2B8CBE"
+        "anchor": "sea",
+        "sign": -1,
+        "fixed_m": 6000,
+        "color": "#0A3D6B"
       },
       {
         "anchor": "sea",

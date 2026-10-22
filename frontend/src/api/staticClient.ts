@@ -421,16 +421,6 @@ export const staticApi = {
     return result?.plates ?? []
   },
 
-  getFeatures: async (name: string, planetId: string, branch?: string | null) => {
-    const result = await fetchBranchAwareJson<{ features?: any[] }>(
-      name,
-      branch,
-      `/maps/${planetId}/features.json`,
-      `/maps/${planetId}/features.json`,
-    )
-    return result?.features ?? []
-  },
-
   // ---- CivMap read operations ----
 
   getCivBoundaries: async (name: string, level: string): Promise<any> => {

@@ -531,13 +531,6 @@ const readApi = {
           `/worlds/${name}/maps/${planetId}/plates${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
-  getFeatures: (name: string, planetId: string, branch?: string | null) =>
-    isStaticMode()
-      ? staticApi.getFeatures(name, planetId, branch)
-      : fetchJson<any[]>(
-          `/worlds/${name}/maps/${planetId}/features${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
-        ),
-
   getCvtMesh: (name: string, planetId: string, branch?: string | null): Promise<CVTMesh | null> => {
     if (isStaticMode()) {
       return staticApi.getCvtMesh(name, planetId, branch).then((raw: any) => {

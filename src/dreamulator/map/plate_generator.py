@@ -366,6 +366,17 @@ def build_cell_cost(
     return np.maximum(cost, 0.05)
 
 
+def mesh_adjacency_csr(mesh: CVTMesh) -> tuple[np.ndarray, np.ndarray]:
+    """Neighbour lists as CSR arrays: ``nbrs[offsets[i]:offsets[i + 1]]`` are cell i's."""
+    counts = np.fromiter((len(c.neighbors) for c in mesh.cells), dtype=np.int64)
+    offsets = np.zeros(len(counts) + 1, dtype=np.int64)
+    np.cumsum(counts, out=offsets[1:])
+    nbrs = np.fromiter(
+        (j for c in mesh.cells for j in c.neighbors), dtype=np.int64, count=int(offsets[-1])
+    )
+    return offsets, nbrs
+
+
 def voronoi_partition_warped(
     mesh: CVTMesh,
     seeds: list[int],
@@ -374,6 +385,8 @@ def voronoi_partition_warped(
     *,
     plate_speed: np.ndarray | None = None,
     locked: dict[int, str] | None = None,
+    adj_offsets: np.ndarray | None = None,
+    adj_nbrs: np.ndarray | None = None,
 ) -> dict[int, str]:
     """Noise-warped spherical Voronoi — multi-source Dijkstra.
 
@@ -398,17 +411,13 @@ def voronoi_partition_warped(
     cells keep their owner and are opaque to the wavefronts — matching the
     uniform-BFS locked semantics.
     """
-    import heapq
+    from ._partition_kernels import warped_voronoi
 
     n = mesh.num_cells
-    inf = float("inf")
-    dist = np.full(n, inf, dtype=np.float64)
     owner = np.full(n, -1, dtype=np.int64)
-
-    is_locked: np.ndarray | None = None
+    is_locked = np.zeros(n, dtype=np.bool_)
     if locked:
         pid_idx = {pid: i for i, pid in enumerate(plate_ids)}
-        is_locked = np.zeros(n, dtype=np.bool_)
         for cid, pid in locked.items():
             idx = pid_idx.get(pid)
             if idx is not None:
@@ -416,39 +425,26 @@ def voronoi_partition_warped(
                 is_locked[cid] = True
 
     if plate_speed is None:
-        inv_speed = None
+        inv_speed = np.ones(len(seeds), dtype=np.float64)
     else:
         # Clamp away from zero — a zero/negative speed would strand the seed.
         inv_speed = 1.0 / np.maximum(np.asarray(plate_speed, dtype=np.float64), 1e-6)
 
+    if adj_offsets is None or adj_nbrs is None:
+        adj_offsets, adj_nbrs = mesh_adjacency_csr(mesh)
     # Heap entries carry the PROPAGATING plate index explicitly: when a seed
     # falls on a locked cell the lock keeps the cell, but the wavefront still
     # emanates from it (matches the uniform BFS, where every seed starts a
-    # queue regardless of pre-assignment).
-    heap: list[tuple[float, int, int]] = []
-    for i, s in enumerate(seeds):
-        if is_locked is not None and is_locked[s]:
-            heapq.heappush(heap, (0.0, s, i))
-            continue
-        if dist[s] > 0.0:  # first seed at this cell wins
-            dist[s] = 0.0
-            owner[s] = i
-            heapq.heappush(heap, (0.0, s, i))
-
-    neighbors = [c.neighbors for c in mesh.cells]
-    while heap:
-        d, u, i = heapq.heappop(heap)
-        if d > dist[u]:
-            continue  # stale heap entry
-        step_scale = 1.0 if inv_speed is None else inv_speed[i]
-        for v in neighbors[u]:
-            if is_locked is not None and is_locked[v]:
-                continue
-            nd = d + cell_cost[v] * step_scale
-            if nd < dist[v]:
-                dist[v] = nd
-                owner[v] = i
-                heapq.heappush(heap, (nd, v, i))
+    # queue regardless of pre-assignment).  Locked cells are opaque.
+    owner = warped_voronoi(
+        np.asarray(seeds, dtype=np.int64),
+        np.ascontiguousarray(cell_cost, dtype=np.float64),
+        inv_speed,
+        is_locked,
+        owner,
+        adj_offsets,
+        adj_nbrs,
+    )
 
     cell_plate_map: dict[int, str] = {}
     for c in range(n):
@@ -658,7 +654,11 @@ def _cross_matrix(v: np.ndarray) -> np.ndarray:
 
 
 def continental_slowdown(
-    mesh: CVTMesh, cell_ids: list[int], config: TerrainPipelineConfig
+    mesh: CVTMesh,
+    cell_ids: list[int],
+    config: TerrainPipelineConfig,
+    *,
+    continental: np.ndarray | None = None,
 ) -> float:
     """Rotation-rate factor of a plate from its current continental-cell fraction.
 
@@ -668,7 +668,10 @@ def continental_slowdown(
     """
     if not cell_ids:
         return 1.0
-    n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
+    if continental is not None:
+        n_cont = int(np.count_nonzero(continental[np.asarray(cell_ids, dtype=np.int64)]))
+    else:
+        n_cont = sum(1 for c in cell_ids if mesh.cells[c].crust_type == "continental")
     return 1.0 - (1.0 - config.continental_plate_speed_factor) * n_cont / len(cell_ids)
 
 

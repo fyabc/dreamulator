@@ -70,8 +70,6 @@ export const HABITABILITY_SCALE: ColorStop[] = palettesJson.continuous.habitabil
 /** Agriculture grade (农业等级): dark grey → beige → yellow → gold. */
 export const AGRICULTURE_SCALE: ColorStop[] = palettesJson.continuous.agriculture as ColorStop[]
 
-/** Drainage / flow accumulation (流域/排水): navy (low) → white (trunk), log-normalised. */
-export const FLOW_SCALE: ColorStop[] = palettesJson.continuous.flow as ColorStop[]
 
 // ---------------------------------------------------------------------------
 // Utility helpers

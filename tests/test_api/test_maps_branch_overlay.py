@@ -2,7 +2,7 @@
 
 A branch that forks at the climate layer legitimately ships only climate
 products in its own ``maps/`` dir; terrain products (map.yaml, elevation.png,
-plates/features…) live only in the root world's ``maps/``.  Directory-level
+plates…) live only in the root world's ``maps/``.  Directory-level
 resolution alone 404s those files for such branches (the branch dir exists,
 so it wins).  These tests pin the per-file overlay semantics: files present
 in the branch overlay win, missing files fall back to the root world.
@@ -49,10 +49,6 @@ def _build_world(world: Path) -> None:
         root_maps / "plates.json",
         '{"plates": [{"id": "p1", "name": "Plate One", '
         '"euler_pole": {"x": 0.0, "y": 0.0, "z": 1.0, "omega_rad_yr": 1e-8}}]}',
-    )
-    _write(
-        root_maps / "features.json",
-        '{"features": [{"id": "f1", "type": "river", "coordinates": [[0.0, 1.0]]}]}',
     )
     # Climate-fork branch: only its own climate product, no terrain products.
     branch = world / "branches" / "gcm-branch"
@@ -105,12 +101,6 @@ def test_branch_plates_falls_back_to_root(client: TestClient) -> None:
     r = client.get(f"{BASE}/plates{BRANCH_Q}")
     assert r.status_code == 200
     assert [p["id"] for p in r.json()] == ["p1"]
-
-
-def test_branch_features_falls_back_to_root(client: TestClient) -> None:
-    r = client.get(f"{BASE}/features{BRANCH_Q}")
-    assert r.status_code == 200
-    assert [f["id"] for f in r.json()] == ["f1"]
 
 
 def test_root_endpoints_unaffected(client: TestClient) -> None:

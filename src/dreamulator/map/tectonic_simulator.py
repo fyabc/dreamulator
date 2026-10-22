@@ -537,9 +537,10 @@ def _evolve_cortial2019(
             # Current centroid
             cids = plate.cell_ids
             if cids:
-                cx = np.mean([mesh.cells[c].x for c in cids])
-                cy = np.mean([mesh.cells[c].y for c in cids])
-                cz = np.mean([mesh.cells[c].z for c in cids])
+                sel = np.asarray(cids, dtype=np.int64)
+                cx = np.mean(_cell_xyz[sel, 0])  # 1-D copies: same pairwise sums as before
+                cy = np.mean(_cell_xyz[sel, 1])
+                cz = np.mean(_cell_xyz[sel, 2])
                 centroid = np.array([cx, cy, cz])
                 centroid /= np.linalg.norm(centroid)
             else:
@@ -601,6 +602,8 @@ def _evolve_cortial2019(
                     [len(p.cell_ids) for p in plates],
                 ),
                 locked=locked,
+                adj_offsets=_adj_offsets,
+                adj_nbrs=_adj_nbrs,
             )
             # Frank (1968) trench arcs: the Voronoi bisector above is a
             # geodesic; relax convergent oceanic boundaries toward the
@@ -745,11 +748,14 @@ def _refresh_plate_speeds(
     from .plate_generator import continental_slowdown, normalise_plate_speeds
 
     alive = {p.id for p in plates}
+    continental = np.fromiter(
+        (c.crust_type == "continental" for c in mesh.cells), dtype=np.bool_, count=mesh.num_cells
+    )
     for p in plates:
         old = slowdown_applied.get(p.id)
         if old is None:
             old = slowdown_applied.get(p.id.rsplit("_", 1)[0], 1.0)
-        new = continental_slowdown(mesh, p.cell_ids, config)
+        new = continental_slowdown(mesh, p.cell_ids, config, continental=continental)
         if old > 1e-12:
             p.euler_pole.omega_rad_yr *= new / old
         slowdown_applied[p.id] = new
@@ -796,8 +802,11 @@ def _rift_plates(
     total_cells = mesh.num_cells
     cooldown = max(1, round(_RIFT_COOLDOWN_MY / dt_my))  # steps before a fragment may rift again
     # Refresh cell counts from current map (Voronoi may have shifted boundaries)
+    grouped: dict[str, list[int]] = {}
+    for cid, pid in cell_plate_map.items():
+        grouped.setdefault(pid, []).append(cid)
     for plate in plates:
-        plate.cell_ids = [cid for cid, pid in cell_plate_map.items() if pid == plate.id]
+        plate.cell_ids = grouped.get(plate.id, [])
     plate_areas = {p.id: len(p.cell_ids) for p in plates}
     avg_cells = total_cells / len(plates)
 
@@ -1045,10 +1054,12 @@ def _rebuild_plate_cells(
     for cid, pid in cell_plate_map.items():
         if pid in plate_cells:
             plate_cells[pid].append(cid)
+    cells = mesh.cells
     for p in plates:
         p.cell_ids = sorted(plate_cells.get(p.id, []))
         for cid in p.cell_ids:
-            mesh.cells[cid].plate_id = p.id
+            if cells[cid].plate_id != p.id:  # validated assignment is slow; skip no-ops
+                cells[cid].plate_id = p.id
 
 
 def _assign_distinct_seeds(
@@ -1123,15 +1134,28 @@ def _trench_arc_relaxation(
 
     cell_km = np.sqrt(4.0 * np.pi * radius_km**2 / mesh.num_cells)
 
-    # ---- boundary cells grouped by plate pair ----------------------------
-    pair_cells: dict[tuple[str, str], list[int]] = {}
+    if adj_offsets is None or adj_nbrs is None:
+        from .plate_generator import mesh_adjacency_csr
+
+        adj_offsets, adj_nbrs = mesh_adjacency_csr(mesh)
+    n_cells = mesh.num_cells
+    pid_list = sorted(set(cell_plate_map.values()))
+    pid_code = {pid: k for k, pid in enumerate(pid_list)}
+    codes = np.full(n_cells, -1, dtype=np.int64)
     for cid, pid in cell_plate_map.items():
-        for nid in mesh.cells[cid].neighbors:
-            npid = cell_plate_map.get(nid, "")
-            if npid and npid != pid:
-                key = (pid, npid) if pid < npid else (npid, pid)
-                pair_cells.setdefault(key, []).append(cid)
-                break
+        codes[cid] = pid_code[pid]
+    row_of = np.repeat(np.arange(n_cells), np.diff(adj_offsets))
+
+    # ---- boundary cells grouped by plate pair ----------------------------
+    # each cell joins the pair formed with its first neighbour of another plate
+    # (neighbour order), cells in ascending id order
+    differ = np.flatnonzero((codes[adj_nbrs] != codes[row_of]) & (codes[adj_nbrs] >= 0))
+    first_rows, first_at = np.unique(row_of[differ], return_index=True)
+    pair_cells: dict[tuple[str, str], list[int]] = {}
+    for cid, k in zip(first_rows.tolist(), differ[first_at].tolist(), strict=True):
+        pid, npid = pid_list[codes[cid]], pid_list[codes[adj_nbrs[k]]]
+        key = (pid, npid) if pid < npid else (npid, pid)
+        pair_cells.setdefault(key, []).append(cid)
 
     # Local width of each plate (area / boundary length, in cells).  The arc
     # sagitta is capped by this below: an arc deeper than a quarter of the
@@ -1192,10 +1216,33 @@ def _trench_arc_relaxation(
     # same plate — standalone microplates (single component) are untouched.
     from collections import deque
 
+    # only plates split into several pieces need the walk below; find them at once
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    pid_list2 = sorted(set(new_map.values()))
+    code2 = {pid: k for k, pid in enumerate(pid_list2)}
+    codes2 = np.fromiter((code2[new_map[c]] for c in range(n_cells)), dtype=np.int64)
+    same = codes2[adj_nbrs] == codes2[row_of]
+    graph = csr_matrix(
+        (np.ones(int(same.sum()), dtype=np.int8), (row_of[same], adj_nbrs[same])),
+        shape=(n_cells, n_cells),
+    )
+    _, comp_label = connected_components(graph, directed=False)
+    pieces = np.zeros(len(pid_list2), dtype=np.int64)
+    first_label: dict[int, int] = {}
+    for c, lab in zip(codes2.tolist(), comp_label.tolist(), strict=True):
+        if first_label.setdefault(c, lab) != lab:
+            pieces[c] = 2
+    split_plates = {pid_list2[k] for k in np.flatnonzero(pieces > 1).tolist()}
+
     by_plate: dict[str, list[int]] = {}
     for cid, pid in new_map.items():
         by_plate.setdefault(pid, []).append(cid)
+    nb_of = [c.neighbors for c in mesh.cells] if split_plates else []
     for pid, cells in by_plate.items():
+        if pid not in split_plates:
+            continue  # a single piece: nothing to absorb
         cs = set(cells)
         seen: set[int] = set()
         comps: list[list[int]] = []
@@ -1207,7 +1254,7 @@ def _trench_arc_relaxation(
             bq = deque([s])
             while bq:
                 u = bq.popleft()
-                for v in mesh.cells[u].neighbors:
+                for v in nb_of[u]:
                     if v in cs and v not in seen:
                         seen.add(v)
                         comp.append(v)
@@ -1257,8 +1304,8 @@ def _split_bent_segment(
     """
     if len(seg) < 24 or depth >= 2:
         return [seg]
-    pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg])
-    d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+    pts = mesh.cell_xyz[np.asarray(seg, dtype=np.int64)]
+    d2 = _pairwise_sq(pts)
     i, j = np.unravel_index(int(np.argmax(d2)), d2.shape)
     e0, e1 = pts[i], pts[j]
     chord = float(np.sqrt(d2[i, j])) + 1e-12
@@ -1354,8 +1401,8 @@ def _relax_segment(
         retreat, other = (pla, plb) if va > vb else (plb, pla)
 
     # Endpoints (diameter of the segment) and chord frame
-    pts = np.array([[mesh.cells[c].x, mesh.cells[c].y, mesh.cells[c].z] for c in seg])
-    d2 = ((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1)
+    pts = mesh.cell_xyz[np.asarray(seg, dtype=np.int64)]
+    d2 = _pairwise_sq(pts)
     i, j = np.unravel_index(int(np.argmax(d2)), d2.shape)
     e0, e1 = pts[i], pts[j]
     chord = float(np.sqrt(d2[i, j]))
@@ -1447,20 +1494,21 @@ def _relax_segment(
         adj_nbrs=adj_nbrs,
     )
 
+    # each band cell decides from its own position, so the test runs on all at once
+    cand = np.array(
+        [cid for cid in band if not (locked and cid in locked) and cell_map.get(cid) == retreat.id],
+        dtype=np.int64,
+    )
     flipped = 0
-    for cid in band:
-        if locked and cid in locked:
-            continue
-        if cell_map.get(cid) != retreat.id:
-            continue
-        p = np.array([mesh.cells[cid].x, mesh.cells[cid].y, mesh.cells[cid].z])
-        rel = p - e0
-        t = float(np.clip((rel @ t3) / chord, 0.0, 1.0))
-        h = float(rel @ n_so)  # >0 toward the other side
+    if cand.size:
+        rel = mesh.cell_xyz[cand] - e0
+        t = np.clip((rel @ t3) / chord, 0.0, 1.0)
+        h = rel @ n_so  # >0 toward the other side
         h_arc = -4.0 * sag * t * (1.0 - t)  # parabola: 0 at ends, -sag mid
-        if h_arc < h < 0.0 and 0.02 < t < 0.98:
+        hit = (h_arc < h) & (h < 0.0) & (t > 0.02) & (t < 0.98)
+        for cid in cand[hit].tolist():
             cell_map[cid] = other.id
-            flipped += 1
+        flipped = int(hit.sum())
     if flipped:
         logger.info(
             "  Trench arc: %s→%s dip=%.0f° sag=%.0f km, %d cells retreated",
@@ -1470,6 +1518,15 @@ def _relax_segment(
             sag * radius_km,
             flipped,
         )
+
+
+def _pairwise_sq(pts: np.ndarray) -> np.ndarray:
+    """Squared distances between all rows of an (m, 3) array, summed x, y, z in order."""
+    dx = pts[:, None, 0] - pts[None, :, 0]
+    dy = pts[:, None, 1] - pts[None, :, 1]
+    dz = pts[:, None, 2] - pts[None, :, 2]
+    out: np.ndarray = dx * dx + dy * dy + dz * dz
+    return out
 
 
 def _seg_mid(mesh: CVTMesh, seg: list[int]) -> np.ndarray:

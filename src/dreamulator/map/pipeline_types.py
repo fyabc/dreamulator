@@ -478,7 +478,7 @@ class TerrainPipelineConfig:
     # deposit sediment to raise each closed basin to its spill level — the lowest
     # outlet to the global ocean — so it drains again (Landlab SinkFiller /
     # Tucker et al. 2001).  A fraction of basins are left below sea level as
-    # endorheic lakes, auto-detected later by hydrology.detect_closed_basins.
+    # endorheic lakes, marked later by hydrology.mark_closed_basin_lakes.
     deposition_enabled: bool = True
     # Fraction of below-sea-level basins left unfilled as endorheic lakes.
     lake_fraction: float = 0.2
@@ -808,8 +808,8 @@ class TerrainPipelineConfig:
     # (51 km) geological-engine scale real river valleys (5–50 km wide) are all
     # sub-grid, so fluvial erosion there produced one-cell-wide artificial
     # gullies; river carving belongs to the final Gaea local-refinement step
-    # (metre scale).  The river NETWORK (flow routing + river vector layer) is
-    # kept — see hydrology.py / river_generator.py.
+    # (metre scale).  River networks are routed on the high-resolution canvas
+    # chain (media/canvas_hydrology.py), not on this mesh.
 
     @classmethod
     def from_yaml(cls, path: Path) -> TerrainPipelineConfig:

@@ -146,7 +146,7 @@ def test_export_map_data_branch_overlay_without_elevation(
     """Branch-only planet (no root maps): a climate-fork branch maps dir
     lacking terrain products must still be exported (the static frontend
     would otherwise fall back to root climate), and must NOT get empty
-    plates/features placeholders (those would shadow root's real files)."""
+    plates placeholders (those would shadow root's real files)."""
     world = tmp_path / "test-world"
     _build_world(world)
     branch_maps = world / "branches" / "gcm" / "maps" / "planet_x"
@@ -161,7 +161,6 @@ def test_export_map_data_branch_overlay_without_elevation(
     assert (out / "planet_x" / "climate_monthly.msgpack").read_bytes() == b"gcm-monthly"
     assert not (out / "planet_x" / "elevation.png").exists()
     assert not (out / "planet_x" / "plates.json").exists()
-    assert not (out / "planet_x" / "features.json").exists()
     import json as _json
 
     assert _json.loads((out / "maps.json").read_text(encoding="utf-8")) == ["planet_x"]
@@ -205,7 +204,7 @@ def test_export_map_data_branch_overlay_inherits_root_files(
 
 
 def test_export_map_data_root_writes_placeholders(export_static: Any, tmp_path: Path) -> None:
-    """Root export keeps the elevation gate and empty plates/features
+    """Root export keeps the elevation gate and empty plates
     placeholders (404-noise avoidance) — unchanged by the branch fix."""
     world = tmp_path / "test-world"
     _build_world(world)

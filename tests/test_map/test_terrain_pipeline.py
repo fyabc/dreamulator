@@ -318,8 +318,7 @@ class TestTerrainPipeline:
         assert "terrain" in result.stages_completed
         assert "climate" in result.stages_completed
         assert "export" in result.stages_completed
-        # rivers run (fluvial erosion/sediment removed 2026-08-26; river network kept)
-        assert "rivers" in result.stages_completed
+        assert "rivers" not in result.stages_completed  # drainage lives on the canvas chain
 
     def test_partial_stages(self):
         """Should be able to run only specific stages."""

@@ -8,12 +8,14 @@ Runs the complete CVT terrain generation pipeline:
     4. Boundary detection (velocity decomposition + classification)
     5. Terrain synthesis (bimodal base + boundary effects + fBm noise)
     6. Climate simulation (see climate_simulator + pipelines/climate-pipeline.md)
-    7. River generation (flow routing + river vector layer)
-    8. Polar ice sheets (appended post-pass; coastline untouched)
-    9. Export (equirectangular raster + PNG + JSON)
+    7. Polar ice sheets (appended post-pass; coastline untouched)
+    8. Export (equirectangular raster + PNG + JSON)
+
+Rivers are not routed on the global mesh; the canvas chain computes drainage at high
+resolution.  Closed below-sea-level basins are marked as lakes before the ice sheets.
 
 See ``docs/design/pipelines/geological-pipeline.md`` for the algorithm
-reference of stages 1-5/7-9 and ``climate-pipeline.md`` for stage 6.
+reference of stages 1-5/7-8 and ``climate-pipeline.md`` for stage 6.
 """
 
 from __future__ import annotations
@@ -58,7 +60,6 @@ VALID_STAGES = frozenset(
         "boundaries",
         "terrain",
         "climate",
-        "rivers",
         "ice",
         "export",
     }
@@ -66,15 +67,14 @@ VALID_STAGES = frozenset(
 
 # Stage display names for stdout
 _STAGE_NAMES: dict[str, str] = {
-    "mesh": "1/9  CVT Mesh",
-    "plates": "2/9  Plate Tectonics",
-    "tectonics": "3/9  Tectonic Evolution",
-    "boundaries": "4/9  Boundary Detection",
-    "terrain": "5/9  Terrain Synthesis",
-    "climate": "6/9  Climate Simulation",
-    "rivers": "7/9  River Generation",
-    "ice": "8/9  Polar Ice Sheets",
-    "export": "9/9  Export",
+    "mesh": "1/8  CVT Mesh",
+    "plates": "2/8  Plate Tectonics",
+    "tectonics": "3/8  Tectonic Evolution",
+    "boundaries": "4/8  Boundary Detection",
+    "terrain": "5/8  Terrain Synthesis",
+    "climate": "6/8  Climate Simulation",
+    "ice": "7/8  Polar Ice Sheets",
+    "export": "8/8  Export",
 }
 
 
@@ -126,7 +126,6 @@ def _resolve_stages(requested: list[str] | None) -> list[str]:
         "boundaries",
         "terrain",
         "climate",
-        "rivers",
         "ice",
         "export",
     ]
@@ -203,7 +202,7 @@ def run_terrain_pipeline(
         output_dir: Directory for output files. If None, no files are saved.
         stages: Optional list of stages to run. If None, runs all stages.
             Valid stages: mesh, plates, tectonics, boundaries, terrain,
-            climate, rivers, export.
+            climate, ice, export.
         cache: Optional caching configuration. When enabled, intermediate
             results are saved to ``_cache/`` and re-used on subsequent runs
             when inputs haven't changed.
@@ -481,7 +480,9 @@ def run_terrain_pipeline(
             max_onset_myr=config.tectonic_duration_my or None,
         )
         for _w in result.orogen_contract.warnings:
-            logger.warning("  orogen contract: %s", _w)
+            logger.warning("  Collision history: %s", _w)
+        for _w in result.orogen_contract.notes:
+            logger.info("  Collision history: %s", _w)
         terrain_fp = build_stage_fingerprint(
             "terrain",
             config,
@@ -494,13 +495,17 @@ def run_terrain_pipeline(
             t = time.time()
             cached_arrays = tc.load("terrain")
             if cached_arrays is not None:
-                _el, _cr, _bt, _lf, _hs = cached_arrays
+                _el, _cr, _bt, _lf, _hs, _lk, _cat = cached_arrays
+                from .island_catalog import remember_synthesis_catalog
+
+                remember_synthesis_catalog(_cat)
                 for _i in range(len(result.mesh.cells)):
                     result.mesh.cells[_i].elevation = float(_el[_i])
                     result.mesh.cells[_i].crust_type = str(_cr[_i])
                     result.mesh.cells[_i].boundary_type = str(_bt[_i]) if _bt[_i] else None
                     result.mesh.cells[_i].landform = str(_lf[_i]) if _lf[_i] else None
                     result.mesh.cells[_i].hotspot_id = str(_hs[_i]) if _hs[_i] else None
+                    result.mesh.cells[_i].is_lake = bool(_lk[_i])
                 result.stages_completed.append("terrain")
                 result.stage_timings["terrain"] = time.time() - t
                 _stage_end(result.stage_timings["terrain"])
@@ -526,7 +531,15 @@ def run_terrain_pipeline(
                 _btype = np.array([c.boundary_type or "" for c in result.mesh.cells], dtype=object)
                 _landform = np.array([c.landform or "" for c in result.mesh.cells], dtype=object)
                 _hotspot = np.array([c.hotspot_id or "" for c in result.mesh.cells], dtype=object)
-                tc.save("terrain", (_elev, _crust, _btype, _landform, _hotspot), terrain_fp)
+                # deposition fill leaves some closed basins as lakes
+                _lake = np.array([c.is_lake for c in result.mesh.cells], dtype=bool)
+                from .island_catalog import peek_synthesis_catalog
+
+                tc.save(
+                    "terrain",
+                    (_elev, _crust, _btype, _landform, _hotspot, _lake, peek_synthesis_catalog()),
+                    terrain_fp,
+                )
 
         # water_class (land/ocean split) is geological — elevation + sea level +
         # ocean connectivity — not a climate field.  Write it here so the climate
@@ -568,12 +581,20 @@ def run_terrain_pipeline(
                 _ok = not np.isnan(_axis[_i]) and _c.elevation <= config.sea_level_offset_m
                 _c.trench_axis_elevation_m = _c.elevation + float(_axis[_i]) if _ok else None
 
-        # Sub-grid island catalogue (island-catalog.md): rebuilt deterministically (also after a
-        # cache hit), summits and emergent areas on the final surface, per-cell summaries.
+        # Sub-grid island catalogue (island-catalog.md): the catalogue of terrain synthesis (kept
+        # in the terrain cache), summits and emergent areas on the final surface, summaries.
         if config.terrain_algorithm == "cortial2019_asymmetric" and result.plates:
-            from .island_catalog import build_island_catalog, summarise_islands, volcano_cell_mean
+            from .island_catalog import (
+                build_island_catalog,
+                summarise_islands,
+                take_synthesis_catalog,
+                volcano_cell_mean,
+            )
 
-            result.island_catalog = build_island_catalog(result.mesh, result.plates, config)
+            # the volcanoes whose volume terrain synthesis put into the cell means
+            result.island_catalog = take_synthesis_catalog() or build_island_catalog(
+                result.mesh, result.plates, config
+            )
             _contrib = volcano_cell_mean(result.mesh, result.island_catalog, config.radius_km)
             _isl = summarise_islands(
                 result.mesh, result.island_catalog, _contrib, config.sea_level_offset_m
@@ -609,37 +630,16 @@ def run_terrain_pipeline(
             _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
             logger.info("  skipped: %s", str(e).split("\n")[0])
 
-    # ---- Stage 7: Rivers ----
-    if "rivers" in ordered:
-        _stage_begin("rivers")
-        try:
-            from .river_generator import extract_river_features, generate_rivers
+    # ---- Closed-basin lakes: below-sea-level basins cut off from the global ocean are
+    #      lakes (climate, ecology, civilization and the land/ocean split read is_lake).
+    #      Marked on the terrain surface, before the ice sheets stack onto land. ----
+    if result.mesh is not None and ("ice" in ordered or "export" in ordered):
+        from .hydrology import mark_closed_basin_lakes
 
-            t = time.time()
-            generate_rivers(result.mesh, config)
-            # River vector layer: polylines for the frontend (width ∝ order).
-            # Rendering algorithm documented in geological-pipeline.md §9.7.
-            if output_dir is not None:
-                features = extract_river_features(result.mesh)
-                import json as _json
+        mark_closed_basin_lakes(result.mesh, config.sea_level_offset_m)
 
-                with (output_dir / "features.json").open("w", encoding="utf-8") as f:
-                    _json.dump(
-                        {"features": [ft.model_dump(mode="json") for ft in features]},
-                        f,
-                        ensure_ascii=False,
-                    )
-                logger.info("  features.json: %d river polylines", len(features))
-            result.stages_completed.append("rivers")
-            result.stage_timings["rivers"] = time.time() - t
-            _stage_end(result.stage_timings["rivers"])
-        except NotImplementedError as e:
-            _console.print(f"  [dim]skipped: {type(e).__name__}[/]")
-            logger.info("  skipped: %s", str(e).split("\n")[0])
-
-    # ---- Stage 8: Polar ice sheets (appended; rivers run on bedrock below
-    #      the ice — subglacial channels — and the calibrated coastline is
-    #      untouched, ice only stacks onto land cells) ----
+    # ---- Stage 7: Polar ice sheets (the calibrated coastline is untouched, ice only
+    #      stacks onto land cells) ----
     if "ice" in ordered:
         _stage_begin("ice")
         t = time.time()
@@ -650,16 +650,16 @@ def run_terrain_pipeline(
         result.stage_timings["ice"] = time.time() - t
         _stage_end(result.stage_timings["ice"])
 
-    # ---- Stage 9: Export ----
+    # ---- Stage 8: Export ----
     if "export" in ordered:
         _stage_begin("export")
         t = time.time()
 
         # Large endorheic lakes (Caspian analogues) are ocean-like for climate —
         # the same size split the GSHHG import applies on the real Earth.  Runs
-        # here (after rivers): hydrology marks river-terminating endorheic
-        # lakes (is_lake), and those are the climate-relevant inland seas —
-        # terrain-stage deposition lakes alone undercount them.
+        # after the closed-basin lakes are marked (is_lake): those are the
+        # climate-relevant inland seas — terrain-stage deposition lakes alone
+        # undercount them.
         from .water_bodies import upgrade_large_endorheic_lakes
 
         _n_upgraded = upgrade_large_endorheic_lakes(result.mesh.cells, config.sea_level_offset_m)

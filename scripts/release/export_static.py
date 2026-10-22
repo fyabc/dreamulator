@@ -278,8 +278,8 @@ def _export_map_data(
         # Root worlds: only planet directories have elevation.png — this also
         # skips non-planet subdirectories such as earth_reference/ (civmap
         # GeoJSON).  Branch overlays that fork at the climate layer
-        # legitimately lack terrain products (elevation.png, map.yaml,
-        # features.json — inherited from root at view time), so for branches
+        # legitimately lack terrain products (elevation.png, map.yaml —
+        # inherited from root at view time), so for branches
         # accept any non-empty directory; the per-file copies below simply
         # skip what isn't there.
         elevation_png = planet_dir / "elevation.png"
@@ -367,7 +367,7 @@ def _export_map_data(
                     f"(possible LFS pointer) — skipping",
                 )
 
-        for filename in ("voronoi.json", "plates.json", "features.json"):
+        for filename in ("voronoi.json", "plates.json"):
             src_path = _inherit(filename)
             if src_path is None:
                 continue
@@ -388,7 +388,6 @@ def _export_map_data(
         # fallback only fires on 404.
         for placeholder_name, placeholder in (
             ("plates.json", {"plates": []}),
-            ("features.json", {"features": []}),
         ):
             if branch is not None:
                 break

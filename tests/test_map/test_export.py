@@ -107,7 +107,6 @@ class TestMeshSplitRoundTrip:
                     koppen_class=["Af", "BWk", "EF", None][i % 4],
                     wind_east_m_s=-1.5 + 0.1 * i,
                     is_lake=(i % 7 == 0),
-                    river_id=f"river_{i}" if i % 5 == 0 else None,
                     ice_thickness_m=120.0 if (land and i % 6 == 0) else None,
                     domesticable_tags=(["large_herbivores_low"] if i % 4 == 1 else []),
                     habitable_coast=True if land and i % 2 == 0 else None,

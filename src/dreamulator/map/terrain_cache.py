@@ -17,10 +17,8 @@ import logging
 import pickle
 from dataclasses import asdict, dataclass
 from dataclasses import field as dc_field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from dreamulator.models.simulation import ComputationManifest, StepRecord
 
@@ -133,6 +131,21 @@ _TERRAIN_FP_EXCLUDES = frozenset({"export_width", "export_height"})
 # ── cache store / load ────────────────────────────────────────────────
 
 
+def shared_mesh_cache_dir() -> Path | None:
+    """Directory shared by all worlds for cached CVT meshes, or None when disabled.
+
+    A mesh depends only on its node count, jitter, Lloyd iterations, radius and seed, so worlds
+    with the same mesh settings reuse one generation.  ``DREAMULATOR_MESH_CACHE`` overrides the
+    location (an empty value disables sharing); the default is ``~/.cache/dreamulator/meshes``.
+    """
+    import os
+
+    env = os.environ.get("DREAMULATOR_MESH_CACHE")
+    if env is not None:
+        return Path(env) if env.strip() else None
+    return Path.home() / ".cache" / "dreamulator" / "meshes"
+
+
 class TerrainCache:
     """Manages per-stage cached intermediate results."""
 
@@ -164,14 +177,36 @@ class TerrainCache:
         return self.cache_dir / f"{stage}.pkl"
 
     def has_valid(self, stage: str, fingerprint: str) -> bool:
-        """True if *stage* has a cached result whose fingerprint matches."""
+        """True if *stage* has a cached result whose fingerprint matches.
+
+        A mesh missing from this world's cache is taken from the shared mesh cache when another
+        world already generated it.
+        """
         manifest = self.read_manifest()
-        if manifest is None:
+        if manifest is not None:
+            for step in manifest.steps:
+                if step.engine == stage:
+                    if step.input_files.get("fingerprint", "") == fingerprint:
+                        return True
+                    break
+        return stage == "mesh" and self._adopt_shared_mesh(fingerprint)
+
+    def _adopt_shared_mesh(self, fingerprint: str) -> bool:
+        import shutil
+
+        shared = shared_mesh_cache_dir()
+        if shared is None:
             return False
-        for step in manifest.steps:
-            if step.engine == stage:
-                return step.input_files.get("fingerprint", "") == fingerprint
-        return False
+        src = shared / f"{fingerprint}.pkl"
+        if not src.exists():
+            return False
+        try:
+            shutil.copyfile(src, self._pickle_path("mesh"))
+        except OSError:
+            return False
+        self._record("mesh", fingerprint)
+        logger.info("Mesh taken from the shared mesh cache (%s).", src)
+        return True
 
     def load(self, stage: str) -> Any:
         """Load cached data for *stage*.  Returns None on failure."""
@@ -191,7 +226,26 @@ class TerrainCache:
         path = self._pickle_path(stage)
         with path.open("wb") as f:
             pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+        if stage == "mesh":
+            self._share_mesh(path, fingerprint)
+        self._record(stage, fingerprint)
 
+    def _share_mesh(self, path: Path, fingerprint: str) -> None:
+        import shutil
+
+        shared = shared_mesh_cache_dir()
+        if shared is None:
+            return
+        try:
+            shared.mkdir(parents=True, exist_ok=True)
+            tmp = shared / f"{fingerprint}.pkl.tmp"
+            shutil.copyfile(path, tmp)
+            tmp.replace(shared / f"{fingerprint}.pkl")
+        except OSError:
+            logger.warning("Could not write the shared mesh cache.", exc_info=True)
+
+    def _record(self, stage: str, fingerprint: str) -> None:
+        """Record *stage*'s fingerprint in the manifest."""
         # Update manifest
         manifest = self.read_manifest() or ComputationManifest(
             world_name="",
@@ -298,7 +352,7 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # outline, islands cut on the final surface, channels from shelf to fragment basins);
     # oceanic specks filled in the crust partition.  v28: one-octave island cut.
     # v29–v33 (debt 44 phase A): hotspot volcanoes from the island catalogue.
-    "terrain": 42,
+    "terrain": 44,
 }
 
 

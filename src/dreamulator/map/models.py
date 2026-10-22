@@ -356,30 +356,14 @@ class VoronoiCell(BaseModel):
         description="Biogeographic province id (e.g. '3.7' = realm.province)",
     )
 
-    # Hydrology properties (filled by river generator — map/hydrology.py)
-    flow_direction: int | None = Field(
-        default=None,
-        description="Downstream neighbour cell id; -1 = sink (endorheic); None = ocean",
-    )
-    flow_accumulation: float = Field(
-        default=0.0,
-        description="Upstream catchment area in km² (0 for ocean cells)",
-    )
-    river_id: str | None = Field(
-        default=None,
-        description="ID of the river this cell belongs to",
-    )
-    river_order: int = Field(
-        default=0,
-        description="Accumulation-threshold stream order (0 = no channel)",
-    )
     is_lake: bool = Field(
         default=False,
         description=(
             "True for an inland lake / ocean-like inland water body that is "
             "distinct from the global ocean (endorheic basins like the Caspian, "
             "or large exorheic lakes like the Great Lakes).  Set by the GSHHG "
-            "importer (level-2 lakes) or by ``upgrade_large_endorheic_lakes``; "
+            "importer (level-2 lakes), by terrain deposition fill and by "
+            "``hydrology.mark_closed_basin_lakes``; "
             "the climate engine gives these cells a continental (freshwater) "
             "surface-temperature regime rather than the open-ocean profile."
         ),
@@ -597,34 +581,6 @@ class CVTMesh(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class FeatureType(StrEnum):
-    """Classification of map features."""
-
-    RIVER = "river"
-    RIDGE = "ridge"
-    COASTLINE = "coastline"
-    VOLCANO = "volcano"
-    MOUNTAIN_PEAK = "mountain_peak"
-    LAKE = "lake"
-
-
-class MapFeature(BaseModel):
-    """A named linear or point feature on the map."""
-
-    id: str = Field(description="Unique feature identifier")
-    name: str = Field(default="", description="Display name")
-    type: FeatureType
-    coordinates: list[tuple[float, float]] = Field(
-        default_factory=list,
-        description="(lon, lat) pairs forming a polyline or a single point",
-    )
-    order: int = Field(
-        default=0,
-        description="Stream order / width class (rivers, see hydrology "
-        "RIVER_ORDER_THRESHOLDS); 0 = not applicable",
-    )
-
-
 # ---------------------------------------------------------------------------
 # Map layer types
 # ---------------------------------------------------------------------------
@@ -706,12 +662,10 @@ class MapLayerRegistry(BaseModel):
             ├── plates (engine: plate generator)
             │   ├── boundaries (engine: boundary detector)
             │   │   └── elevation (engine: terrain synthesiser)
-            │   │       ├── temperature (engine: climate simulator)
-            │   │       │   └── biomes (engine: ecology engine)
-            │   │       └── flow_accumulation (engine: river generator)
+            │   │       └── temperature (engine: climate simulator)
+            │   │           └── biomes (engine: ecology engine)
             │   └── provinces (engine: voronoi → GeoJSON)
             │       └── civ_territory (manual: civmap painting)
-            └── features (engine: feature_extractor)
     """
 
     planet_id: str = Field(description="Planet this registry belongs to")

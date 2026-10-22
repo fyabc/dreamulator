@@ -39,7 +39,6 @@ import {
   PRECIP_SCALE,
   HABITABILITY_SCALE,
   AGRICULTURE_SCALE,
-  FLOW_SCALE,
   generateAdaptiveTerrainScale,
 } from './utils/colorScales'
 
@@ -89,9 +88,6 @@ const LAKE_COLOR: [number, number, number] = hexRgb('#67e6dc')
  *  freeze clamp), visually distinct from liquid lakes. */
 const FROZEN_LAKE_COLOR: [number, number, number] = [200, 225, 235]
 
-/** River channel colour — matches the former 2D SVG stroke (rgb 70,140,215). */
-const RIVER_COLOR: [number, number, number] = hexRgb('#468cd7')
-
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -138,10 +134,6 @@ export interface LayerTextures {
   pressure: THREE.DataTexture
   /** Absolute annual-mean SLP (obs root only, diverging ±40 hPa). Half res. */
   slp: THREE.DataTexture
-  /** Drainage / flow accumulation thematic (per-cell continuous, log-scaled). Half res. */
-  flow: THREE.DataTexture
-  /** River channel cells (per-cell boolean, river_order ≥ 1). Half res. */
-  rivers: THREE.DataTexture
 }
 
 export interface BakeInputs {
@@ -200,8 +192,6 @@ export function getLayerTextures(inputs: BakeInputs): LayerTextures {
     t.soil.dispose(); t.provinces.dispose()
     t.temperature.dispose(); t.precipitation.dispose()
     t.temperatureError.dispose(); t.precipitationError.dispose()
-    t.flow.dispose()
-    t.rivers.dispose()
     t.terrainWithCoastlines.dispose()
   }
 
@@ -304,8 +294,6 @@ function buildCellPalettes(
   precipitationError: Map<number, [number, number, number]>
   pressure: Map<number, [number, number, number]>
   slp: Map<number, [number, number, number]>
-  flow: Map<number, [number, number, number]>
-  rivers: Map<number, [number, number, number]>
 } {
   const terrainThematic = new Map<number, [number, number, number]>()
   const landseaThematic = new Map<number, [number, number, number]>()
@@ -326,8 +314,6 @@ function buildCellPalettes(
   const precipitationError = new Map<number, [number, number, number]>()
   const pressure = new Map<number, [number, number, number]>()
   const slp = new Map<number, [number, number, number]>()
-  const flow = new Map<number, [number, number, number]>()
-  const rivers = new Map<number, [number, number, number]>()
 
   // NPP range for normalisation.  Dynamic rather than the fixed Miami 3000 gC
   // ceiling — a red dwarf's PAR suppresses NPP far below 3000 (nacrea land NPP
@@ -338,16 +324,6 @@ function buildCellPalettes(
     if (v != null && v > nppMax) nppMax = v
   }
   const NPP_MAX = nppMax > 0 ? nppMax : 3000
-
-  // Flow accumulation range — dynamic max (like NPP): the largest basin maps to
-  // the brightest stop.  Flow is resolution- and world-size-dependent, so a
-  // fixed ceiling would either clip or wash out the drainage structure.
-  let flowMax = 0
-  for (const cell of cvtMesh.cells) {
-    const v = cell.flow_accumulation
-    if (v != null && v > flowMax) flowMax = v
-  }
-  const FLOW_MAX = flowMax > 0 ? flowMax : 1e6
 
   // Build adaptive hypsometric LUT (NOAA ETOPO1 ocean + ESRI Natural Earth land).
   const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
@@ -558,33 +534,12 @@ function buildCellPalettes(
         sequentialColor((slpAnnual - 1013.25) / 80 + 0.5, TEMPERATURE_SCALE),
       )
     }
-
-    // Drainage / flow accumulation — continuous, log-normalised, land only.
-    // Log scale because catchment area spans ~3 orders of magnitude (single-cell
-    // ~2600 km² @200k up to multi-million-km² continental basins).
-    const fAcc: number | null | undefined = cell.flow_accumulation
-    if (fAcc != null && fAcc > 0 && !isOcean) {
-      flow.set(
-        cell.id,
-        sequentialColor(Math.log10(fAcc + 1) / Math.log10(FLOW_MAX + 1), FLOW_SCALE),
-      )
-    }
-    // Closed inland lakes (endorheic basins below sea level) get a distinct
-    // colour so they read as lakes, not ocean, in the drainage layer.
-    if (cell.is_lake) {
-      flow.set(cell.id, LAKE_COLOR)
-    }
-
-    // River channels (accumulation-threshold stream order ≥ 1) — land only.
-    if ((cell.river_order ?? 0) >= 1 && !isOcean) {
-      rivers.set(cell.id, RIVER_COLOR)
-    }
   }
 
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
            coastlines, biomes, npp, domesticable, habitable, agriculture,
            soil, provinces, temperature, precipitation, temperatureError,
-           precipitationError, pressure, slp, flow, rivers }
+           precipitationError, pressure, slp }
 }
 
 /**
@@ -961,8 +916,6 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let precipitationErrorBuf: Uint8Array = empty
   let pressureBuf: Uint8Array = empty
   let slpBuf: Uint8Array = empty
-  let flowBuf: Uint8Array = empty
-  let riversBuf: Uint8Array = empty
   let kw = 1, kh = 1
   if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
     const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
@@ -985,8 +938,6 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     precipitationErrorBuf = bakeCellLayer(palettes.precipitationError, width, height, cellIdMap, flipHorizontal)
     pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
     slpBuf = bakeCellLayer(palettes.slp, width, height, cellIdMap, flipHorizontal)
-    flowBuf = bakeCellLayer(palettes.flow, width, height, cellIdMap, flipHorizontal)
-    riversBuf = bakeCellLayer(palettes.rivers, width, height, cellIdMap, flipHorizontal)
     kw = width; kh = height
   }
 
@@ -1046,7 +997,5 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     precipitationError: makeTexture(precipitationErrorBuf, kw, kh),
     pressure: makeTexture(pressureBuf, kw, kh),
     slp: makeTexture(slpBuf, kw, kh),
-    flow: makeTexture(flowBuf, kw, kh),
-    rivers: makeTexture(riversBuf, kw, kh, { nearestMag: true }),
   }
 }

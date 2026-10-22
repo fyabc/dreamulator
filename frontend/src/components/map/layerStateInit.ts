@@ -14,11 +14,11 @@ type LayerOpacities = Record<ColorMode, number>
 
 /** Default opacities: terrain base + coastline overlay, everything else off. */
 const DEFAULT_LAYER_OPACITIES: LayerOpacities = {
-  terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, rivers: 0,
+  terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1,
   koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0,
   soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0,
   precipitationError: 0, pressureError: 0, windError: 0, currentError: 0,
-  pressure: 0, slp: 0, habitable: 0, agriculture: 0, flow: 0,
+  pressure: 0, slp: 0, habitable: 0, agriculture: 0,
 }
 
 /** True when the layer kind participates in a single-slot (radio) UI. */

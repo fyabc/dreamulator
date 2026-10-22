@@ -46,6 +46,13 @@ geological → climate → hydro refine → ecology → civilization
 
 核心函数 `refine_inland_water(mesh, climate_fields)`（纯函数，无 RNG）：
 
+> 全球网格不再计算流向、汇水累积与河网（地质管线只标记封闭盆地湖泊，见
+> `pipelines/geological-pipeline.md` §9），下面第 1 步与第 4 步依赖的 `flow_direction`、
+> `flow_accumulation`、`river_id` 与 `river_order` 在网格上已不可用。实施本提案时，汇水
+> 面积与溢流河段改在高分辨率画布链上计算（`pipelines/canvas-hydrology.md`），再把逐盆地
+> 结果聚合回网格。
+
+
 1. **逐封闭盆地聚合**：对每个 is_lake 连通盆地，汇水面积 = 盆地面积 + 按流向
    （flow_direction 已经算好）反推的全部上游汇水区面积（flow_accumulation
    已是每格上游面积，直接求和即可）。
@@ -67,7 +74,7 @@ geological → climate → hydro refine → ecology → civilization
 - **rim/spill 高度不落盘**是当前硬缺口：`priority_flood_fill` 的 spill level
   只在临时数组（`hydrology.py`），`_apply_deposition_fill` 的湖深也不输出。
   refine 需要每盆地的 rim 鞍口位置与高度，地形管线导出阶段需新增盆地级
-  元数据（放 features.json 或独立 lakes.json，避免动 cell 模型）。
+  元数据（放独立的 lakes.json，避免动 cell 模型）。
 
 ### v1 边界（明确不做）
 

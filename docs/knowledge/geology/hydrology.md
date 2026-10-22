@@ -1,79 +1,78 @@
-# 水文学：D8 流向与汇水面积
+# 水文学：洼地填平、D8 汇流与河网
 
-> 实现：`src/dreamulator/map/hydrology.py` · 设计：`docs/design/pipelines/geological-pipeline.md` §9
+> 实现：全球网格 `src/dreamulator/map/hydrology.py`（填洼与封闭盆地湖泊）；栅格画布链
+> `src/dreamulator/media/canvas_hydrology.py` 与 `src/dreamulator/map/prog_erosion.py`（汇流、
+> 河网、湖泊）。设计：`docs/design/pipelines/geological-pipeline.md` §9、
+> `docs/design/pipelines/canvas-hydrology.md`。
 
-球面 CVT 网格上的河流网络生成，是**地形合成后地形**的一次性水文学产品：洼地填平 →
-D8 流向 → 流量累积 → 河网分级/提取，填入 `VoronoiCell` 的
-`flow_direction` / `flow_accumulation` / `river_id` / `river_order`，并提取为
-河流矢量图层（features.json）。2026-08-26 起流水侵蚀已移除（见
-`docs/design/pipelines/geological-pipeline.md` §9.8），水文仅做河网提取。
+全球 CVT 网格只做两件水文相关的事：用优先洪泛求溢流高程（供地形合成的沉积填充使用），
+以及标记封闭盆地湖泊。汇流、河网与湖泊水收支都在高分辨率栅格画布链上计算（§7 与
+canvas-hydrology.md）。第 1–3 节说明全球网格上的做法，第 4–6 节给出画布链沿用的通用
+汇流定义。
 
 ---
 
-## 1. 洼地填平（priority-flood）
+## 1. 尺度：全球网格为什么不做汇流
 
-CVT 地形合成会产出大量局部洼地（pit）：直接跑 D8 会在每个洼地得到一个 sink、
-河网破碎。用 **priority-flood**（Barnes et al. 2014，O(N log N)）填平：
+标准全球网格有 20 万个 cell，平均 cell 约 51 km 宽。真实河谷宽 5–50 km，全部小于一个
+cell，所以在这个分辨率上算出的流向与河道只反映网格的离散方式，不反映地形。流水侵蚀
+同理：它会在 51 km 网格上刻出单 cell 宽的人工沟壑（详见 geological-pipeline.md §9.3）。
+因此全球网格不存储流向、汇水面积或河流编号，画布链也不读取网格上的任何水文字段。
 
-1. 从海洋 cell（`elevation < sea_level`）出发，用最小堆按高程向外扩张；
-2. 每个陆 cell 的临时标高推到 `max(elevation, spill)`（spill = 已填邻居的标高）；
-3. 填平只在**临时数组**上进行，**不写回** `cell.elevation`——最终河网提取仍在真实
-   地形上做；
-4. 内流盆地（无通海出口）在连通球面上不存在（priority-flood 从海洋可达全部 cell），
-   完整的湖泊/内流水收支留后续。
+## 2. 洼地填平（priority-flood）
 
-`priority_flood_fill(elevation, is_land, neighbors) -> (filled, connected)`：
-`filled` 是填平后的标高，`connected` 标记海洋可达的 cell（连通球面上恒全真）。
+**priority-flood**（Barnes et al. 2014，O(N log N)）为每个格求它通往海洋的溢流高程：
 
-## 2. D8 流向（最陡下降）
+1. 从全部海洋格出发，把它们放进按高程排序的最小堆；
+2. 每次弹出最低的格，把尚未访问的邻居标高推到 `max(elevation, 当前格标高)` 后入堆；
+3. 结束时每个洼地都被抬到它最低出口的高度。
 
-每个陆 cell 的流向是其**最陡下降**邻居：
+全球网格上的实现是 `priority_flood_fill(elevation, is_land, neighbors) -> (filled, connected)`：
+`filled` 是填平后的临时标高，`connected` 标记海洋可达的格（连通球面上恒为全真）。
+地形合成的沉积填充用 `filled` 判断哪些被钳制的内陆盆地低于溢流高程，把大多数盆地
+填到溢流高程，并把一部分大盆地留成湖（`is_lake`）。画布链使用带分水岭标签的分块版本，
+见 canvas-hydrology.md。
+
+## 3. 闭合内陆湖（endorheic basin）
+
+`detect_closed_basins` 对低于海平面的格做连通分量划分，把最大的分量视为全球海洋，
+其余低于海平面的分量就是不与海洋连通的闭合盆地，即里海、死海或大盐湖型的内陆湖。
+地质管线在冰盖相位之前调用 `mark_closed_basin_lakes`，把这些格标记为
+`VoronoiCell.is_lake = True`，沉积填充已经标记的湖保持不变。这个判据假设存在一个
+占主导的全球海洋。湖在各层的语义与尺寸分界见 `inland_water_classification.md`。
+
+## 4. D8 流向（最陡下降）
+
+画布链在填平后的表面上为每个陆格选取**最陡下降**邻居作为流向（O'Callaghan & Mark 1984）：
 
 ```
 gradient(i→j) = (h_i − h_j) / d_ij
 flow_dir[i] = argmax_j gradient(i→j)    # 无下坡邻居 → −1
 ```
 
-`d_ij` 是大圆距离。D8 只用相对梯度比较，单位（km/m）不影响方向。
+`d_ij` 是格心距离。D8 只比较相对梯度，单位不影响方向。填平后的溢流台地没有严格的下坡
+邻居，需要先给平区加一个朝出口单调下降的微小坡度（priority-flood + ε），流向才处处有定义。
 
-## 3. 平区路由（flat routing）
+## 5. 汇流累积（拓扑排序）
 
-填平后的表面上，溢流台地（spill flat）的 cell 没有严格下坡邻居（`flow_dir=−1`）。
-从所有「已解析」cell（海洋 + 已持有下坡方向的 cell）做多源 BFS，把未解析陆 cell
-路由到**非上坡**的父 cell（`filled[parent] ≤ filled[child]`）——否则上游山脊 cell
-会把平地水导向坡上（已由单元测试覆盖）。
-
-## 4. 流量累积（拓扑排序）
-
-Kahn 拓扑排序，从源头到河口累加上游汇水面积：
+按流向从源头到河口做拓扑排序并累加上游贡献：
 
 ```
-accum(i) = area(i) + Σ accum(j)   (j ∈ upstream(i))
-accum(ocean) = 0                  # 海洋不累积；河口陆 cell 持全流域
+accum(i) = w(i) + Σ accum(j)   (j ∈ upstream(i))
 ```
 
-`flow_accumulation` 单位 **km²**（非 cell 数）。海洋 cell 保持 0，河口陆 cell 的
-累积即整条河的流域面积（径流量可在河口读取）。地形视频链的栅格水文
-（prog_erosion）把这里的均匀面积累积推广为**水量平衡加权**累积，见 §7。
+权重 `w` 取格面积时，累积量就是上游汇水面积；画布链取年径流加权，使累积量正比于
+年平均流量（§7）。
 
-## 5. 河流分级与河网提取
+## 6. 河网阈值
 
-- `classify_rivers`：按累积面积阈值分级 `{100, 1000, 10000, 100000}`（单位「cell
-  数」）→ `river_order` 1–4。阈值按 `cell_area_km2`（平均 cell 面积）缩放，使分级
-  **分辨率无关**——order 1 ≈ 100 个 cell、order 4 ≈ 10 万个 cell，与网格精度无关。
-- `assign_river_ids`：从河口（流入海洋、累积 ≥ 阈值的陆 cell）逆流追溯，每步跟随
-  最大支流，给干流 cell 打 `river_id`；阈值同样按 `cell_area_km2` 缩放。
-
-## 6. 闭合内陆湖（endorheic basin）
-
-`detect_closed_basins`：低于海平面但不连通全球海洋（最大连通分量）的闭合盆地，
-标记为 `VoronoiCell.is_lake = True`——即里海/死海/大盐湖型的内陆湖。它们仍是排水
-终点（sink），只是分类上区别于海洋；完整的湖泊水收支（§9.5）留后续。
+累积量超过阈值的格构成河道。画布链把阈值写成「上游平均陆格数」，并按年径流归一，
+因此同一阈值在任意窗口对应同一个最小年平均流量；阈值、终点湖与河流情相的物理与判据
+见 §7。
 
 ## 7. 河网提取权重、终点湖水收支与月度情相（地形链栅格水文，2026-10）
 
-第 1–6 节是球面 CVT 网格上的引擎水文（均匀面积累积）；地形视频链的
-栅格水文（`map/prog_erosion.py`）自 2026-10 起用**水量平衡加权**的累积
+地形链的栅格水文（`map/prog_erosion.py`）用**水量平衡加权**的累积
 提取河网，本节记录其物理与判据。
 
 ### 权重 = 年径流（Turc–Pike 年曲线，桶做月度形状）

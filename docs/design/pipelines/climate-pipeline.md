@@ -76,7 +76,7 @@
 
 | 调用方 | 入口 | 场景 |
 |--------|------|------|
-| 地形管线 | `terrain_pipeline.py:473`（Stage 6） | `dreamulator build <world>` 主路径：geological 层在管线内顺跑气候 |
+| 地形管线 | `terrain_pipeline.py:615`（Stage 6） | 显式指定 stages 时在地形管线内顺跑气候；`dreamulator build` 默认由 `ClimateEngine` 构建气候 |
 | DAG 引擎 | `ClimateEngine.run()`（`climate.py:184`） | 独立重建气候层（`--only climate` / 分支气候分叉） |
 | 验证器 | `src/dreamulator/validate_climate.py` | 内存重建后逐格对观测基准 |
 | 诊断脚本 | `scripts/climate/diagnose_*.py` | 经 `climate_config.load_climate_config` 加载与构建完全相同的配置 |
@@ -96,7 +96,8 @@
 1. **准备**：从 `mesh.cells` 提取 elevation / 纬度 / 海陆掩码 / 3D 节点。海陆判定用
    地质管线的 `water_class`（连通性洪泛写入；裸 `elevation >= 0` 会把低于海平面的内流
    盆地误判为海洋，`climate_simulator.py:178-183`）；大洋级内陆湖（`is_lake`）单列
-   （:190-196）。
+   （:190-196）。`is_lake` 由地质管线写入：地形合成的沉积填充留下一部分湖，之后
+   `mark_closed_basin_lakes` 再标记低于海平面的封闭盆地。
 2. **Stage 1 温度**（相位 1/6，:206）——产出年平温度场 `t_mean_C`：
    辐射平衡 + 温室 → 全球均温锚点 → 年平纬向剖面（1D EBM 或 Held-Hou 单圈，
    :210-240；副热带下沉增温以「存档增量」形式记在 `_dt_subsidence` 上，:259，
@@ -748,13 +749,16 @@ terrain_config + 物理参数解析，保证诊断与构建读同样的配置。
 
 地形管线（`map/terrain_pipeline.py`）中气候的位置：
 
-- **Stage 6 Climate**（:473-486）：`simulate_climate(result.mesh, config)` 在地形合成
+- **Stage 6 Climate**（:615-627）：`simulate_climate(result.mesh, config)` 在地形合成
   （Stage 5）之后原地执行；配置与 DAG 引擎同源（同一 terrain_config.yaml）。
-- **Stage 7 Rivers**（:488-514）：河流生成**消费气候输出**（降水 → 径流），并抽取
-  `features.json` 河流折线。
-- **Stage 8 Export**（:516 起）：全图层导出；导出前把大河型内流湖（里海类比）升级为
-  气候意义上的洋（`upgrade_large_endorheic_lakes`）——放在河流之后，因为河流标记的
-  「河流终结型内流湖」才是气候相关的内陆海。
+  `GeologicalEngine` 的默认阶段列表不含这一相位，因为 `ClimateEngine` 才是气候字段的
+  权威来源；只有显式指定 stages 时地形管线才会内嵌运行气候。
+- **封闭盆地湖泊**（:630-636）：气候相位之后、冰盖之前，`mark_closed_basin_lakes`
+  把与全球海洋不连通的低于海平面盆地标记为 `is_lake`，沉积填充已标记的湖泊保持不变
+  （见 [geological-pipeline.md](geological-pipeline.md) §9）。地形管线不做河网汇流。
+- **Stage 8 Export**（:650 起）：全图层导出；导出前把大型内流湖（里海类比）升级为
+  气候意义上的洋（`upgrade_large_endorheic_lakes`）。它放在封闭盆地标记之后，因为
+  低于海平面的封闭盆地才是气候相关的内陆海，单靠沉积填充留下的湖会低估它们。
 
 数据流：`terrain_config.yaml → terrain_pipeline → simulate_climate(mesh) → 写回
 cvt_mesh.msgpack.gz + export_climate_layers → maps/{planet}/temperature.png / precipitation.png /

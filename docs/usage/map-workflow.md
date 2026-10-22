@@ -26,17 +26,18 @@
 ## 1. 概述
 
 dreamulator 的地图系统采用**球面质心 Voronoi 镶嵌（Spherical CVT）**作为核心数据
-结构：标准 20 万 cell（~51 km/cell），板块构造、地形合成、气候模拟、河流汇水全部
+结构：标准 20 万 cell（~51 km/cell），板块构造、地形合成、湖泊标记与气候模拟全部
 直接在球面网格上完成，最终投影为 4096×2048 等距圆柱栅格用于渲染与外部交换。
 
 地形生成**没有独立的 `map` 命令**——它由 `dreamulator build` 的 geological 层统一
 驱动（`terrain_config.yaml` + `geography.yaml` 配置），管线内部按固定顺序执行 8 个
-相位（CVT 网格 → 板块 → 构造演化 → 边界 → 地形 → **气候** → 河流 → 导出），每个
-相位按输入内容指纹缓存，改动只重跑受影响的部分。全管线（200k，含气候）基线
+相位，依次是 CVT 网格、板块、构造演化、边界、地形、气候、极地冰盖和导出。`dreamulator build`
+默认跳过管线内的气候相位，气候由 climate 层的引擎单独构建。每个相位按输入内容指纹
+缓存，改动只重跑受影响的部分。全量构建（200k，含 climate 层）基线
 ~391 s（v0.36.0 口径；性能剖析见 [design/profiling.md](../design/profiling.md)）。
 
-各相位的算法原理（Cortial 2019 板块演化、边界效应地形、fBm、海陆判定、河流
-汇水）见 [geological-pipeline.md](../design/pipelines/geological-pipeline.md)。
+各相位的算法原理（Cortial 2019 板块演化、边界效应地形、fBm、海陆判定、封闭盆地
+湖泊）见 [geological-pipeline.md](../design/pipelines/geological-pipeline.md)。
 
 ---
 
@@ -48,7 +49,7 @@ dreamulator 的地图系统采用**球面质心 Voronoi 镶嵌（Spherical CVT�
 # 初始化世界（模板自带合理默认配置）
 uv run dreamulator init myworld --template earthlike
 
-# 构建：按层级 DAG 顺序执行，geological 层内跑地形管线 8 相位（含气候）
+# 构建：按层级 DAG 顺序执行，geological 层内跑地形管线（默认跳过气候相位，由 climate 层构建）
 uv run dreamulator build myworld
 
 # 强制全量重建（跳过指纹缓存）
@@ -131,7 +132,7 @@ UI 按学科组织为五个面板组（**地形 / 气候 / 生态 / 文明 / 开
 | **底图** | radio（恰好 1 个） | 地形（默认）、海陆 |
 | **专题着色** | radio（0 或 1 个） | Köppen、温度、降水、气压、Whittaker 群系、NPP、宜居/农业、诊断偏差热力层 |
 | **分类填充** | 多选叠加 | 板块 |
-| **特征标注** | 多选叠加（永远置顶） | 地壳边界、洋流、风场、海岸线、河流、风/洋流偏差箭头 |
+| **特征标注** | 多选叠加（永远置顶） | 地壳边界、洋流、风场、海岸线、风/洋流偏差箭头 |
 
 专题着色一次只激活一个「地图模式」（仿 Azgaar 的 Style 下拉 / Paradox 的 map
 mode），避免两个全表面涂色叠加的视觉混乱；可用透明度滑块透视底图。月度模式下
@@ -253,10 +254,9 @@ uv run dreamulator serve --open
 ```
 <world>/maps/<planet_id>/              # 主世界地图
 ├── map.yaml                # MapMetadata（CVT 参数、生成时间、投影、导入溯源）
-├── cvt_mesh.json           # CVT 网格（gzip 压缩，主要数据：cell 坐标/邻居/属性）
+├── cvt_mesh.msgpack.gz     # CVT 网格（gzip 帧 MessagePack，主要数据：cell 坐标、邻居与属性）
 ├── elevation.png           # 16-bit 等距圆柱高度图（渲染 + 外部交换）
 ├── plates.json             # 板块定义（名称、类型、cell 列表、欧拉极）
-├── features.json           # 线性特征（河流折线）
 ├── temperature.png / precipitation.png / koppen.json / climate_metadata.json
 ├── climate_monthly.msgpack # N×12 月度场（温度/降水/气压/风）
 └── registry.yaml           # 图层依赖追踪（标记哪些下游层需要重算）
@@ -278,12 +278,11 @@ git、不走 LFS**（`.gitignore` 已忽略）。发版由
 
 | 文件 | 典型大小 |
 |------|----------|
-| `cvt_mesh.json`（gzip） | ~32 MB |
+| `cvt_mesh.msgpack.gz` | ~32 MB |
 | `climate_monthly.msgpack` | ~23 MB |
 | `koppen.json` | ~4 MB |
 | `plates.json` | ~3 MB |
 | `elevation.png`（4096×2048 16-bit） | ~3 MB |
-| `features.json` | ~0.1 MB |
 
 ---
 
@@ -363,11 +362,12 @@ A: 降低 `num_nodes` 是最有效的加速手段（50k 约为 200k 的 1/4 计�
 A: 用 geography.yaml 锚定调整海陆分布（见 5.3），或上传锚定灰度图（见第 7 节）；
 增大 `noise_persistence` 让海岸线更曲折。
 
-**Q: 河流没有流入海洋？**
+**Q: 地图上为什么没有河流？**
 
-A: 河流算法保证水从高处流向低处并最终到达海洋或内陆洼地（内流湖是合法终点）。
-「河流消失」通常是内陆盆地（低于海平面但不与海洋连通）——这是真实地貌
-（里海型），不是 bug。
+A: 全球网格的 cell 约 51 km 宽，真实河谷都比它窄，所以地质层不在网格上计算汇流与
+河网，地图查看器也没有河流图层。河流、排水与细节湖泊在高分辨率画布链上计算，见
+[terrain-chain.md](terrain-chain.md)。网格上能看到的是湖泊：低于海平面、又不与全球
+海洋连通的内陆盆地会被标记为湖泊（里海型），这是真实地貌，不是 bug。
 
 **Q: 极地地区看起来不对？**
 

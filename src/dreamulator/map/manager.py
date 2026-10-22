@@ -17,7 +17,6 @@ from dreamulator.resolver import LayerResolver
 from .elevation_codec import decode_elevation, encode_elevation
 from .models import (
     ElevationImportProvenance,
-    MapFeature,
     MapLayerRegistry,
     MapLayerType,
     MapMetadata,
@@ -317,33 +316,6 @@ class MapManager:
             json.dump(data, f, ensure_ascii=False)
 
     # -------------------------------------------------------------------
-    # Features (rivers, ridges, coastlines, …)
-    # -------------------------------------------------------------------
-
-    def get_features(self, planet_id: str) -> list[MapFeature]:
-        """Load map features for a planet."""
-        map_dir = self._map_input_dir(planet_id)
-        if map_dir is None:
-            return []
-        json_path = map_dir / "features.json"
-        if not json_path.exists():
-            return []
-        with json_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if data is None or not isinstance(data, dict):
-            return []
-        features_data = data.get("features", [])
-        return [MapFeature.model_validate(feat) for feat in features_data]
-
-    def save_features(self, planet_id: str, features: list[MapFeature]) -> None:
-        """Save map features for a planet."""
-        map_dir = self._ensure_input_dir(planet_id)
-        json_path = map_dir / "features.json"
-        data = {"features": [f.model_dump(mode="json") for f in features]}
-        with json_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-
-    # -------------------------------------------------------------------
     # Derived layer images
     # -------------------------------------------------------------------
     # Listing & queries
@@ -501,15 +473,6 @@ class MapManager:
                 format="plates-json",
                 file_path="input/plates.json",
                 depends_on=["voronoi"],
-            )
-
-        # Features
-        if map_dir and (map_dir / "features.json").exists():
-            registry.vector_layers["features"] = VectorLayerMeta(
-                layer_id="features",
-                format="voronoi-json",
-                file_path="input/features.json",
-                depends_on=[MapLayerType.ELEVATION.value],
             )
 
         self.save_registry(planet_id, registry)

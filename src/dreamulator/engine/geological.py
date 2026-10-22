@@ -150,16 +150,15 @@ class GeologicalEngine(BaseEngine):
             # Stage 0.0a: the climate engine is authoritative for climate
             # fields; skip the terrain pipeline's in-line climate pass
             # (~123 s at 100k cells + duplicated climate raster export).
-            # Rivers run on the synthesised terrain (terrain-pipeline §9);
-            # polar ice sheets stack on top after the rivers (subglacial
-            # channels), leaving the calibrated coastline untouched.
+            # Polar ice sheets stack on top of the terrain, leaving the
+            # calibrated coastline untouched.  Rivers are routed on the canvas
+            # chain, not on the global mesh.
             stage_list = [
                 "mesh",
                 "plates",
                 "tectonics",
                 "boundaries",
                 "terrain",
-                "rivers",
                 "ice",
                 "export",
             ]

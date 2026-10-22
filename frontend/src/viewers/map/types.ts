@@ -64,9 +64,6 @@ export interface VoronoiCell {
   /** High ice-cap cell where the reanalysis SLP is a hypothetical reduction
    *  (obs-root only) — greyed out of every pressure-family layer. */
   slp_reduction_unreliable?: boolean | null
-  flow_accumulation?: number
-  river_id?: string | null
-  river_order?: number
   is_lake?: boolean
   water_class?: string
   hotspot_id?: string | null
@@ -115,25 +112,6 @@ export interface TectonicPlate {
 }
 
 // ---------------------------------------------------------------------------
-// Features
-// ---------------------------------------------------------------------------
-
-export type FeatureType =
-  | 'river'
-  | 'ridge'
-  | 'coastline'
-  | 'volcano'
-  | 'mountain_peak'
-  | 'lake'
-
-export interface MapFeature {
-  id: string
-  name: string
-  type: FeatureType
-  coordinates: [number, number][] // [lon, lat] pairs
-}
-
-// ---------------------------------------------------------------------------
 // Layer types
 // ---------------------------------------------------------------------------
 
@@ -166,11 +144,11 @@ export type ViewerColorMode = 'terrain' | 'landsea' | 'plates' | 'boundaries' | 
 
 /** Layer colour modes shared by the 2D map and 3D globe pages. */
 export type ColorMode =
-  'terrain' | 'landsea' | 'plates' | 'boundaries' | 'coastlines' | 'rivers' | 'koppen'
+  'terrain' | 'landsea' | 'plates' | 'boundaries' | 'coastlines' | 'koppen'
   | 'ucc' | 'currents' | 'winds' | 'biomes' | 'npp' | 'domesticable' | 'soil' | 'provinces'
   | 'temperature' | 'precipitation' | 'temperatureError' | 'precipitationError'
   | 'pressureError' | 'windError' | 'currentError' | 'pressure' | 'slp' | 'habitable'
-  | 'agriculture' | 'flow'
+  | 'agriculture'
 
 // ---------------------------------------------------------------------------
 // Layer visibility state
@@ -217,13 +195,4 @@ export interface CVTMesh {
   /** Neighbor adjacency is dropped in adaptCvtMesh — no frontend consumer. */
   vertices: CVTVertex[]
   regions: CVTRegion[]
-}
-
-/** A named linear/point map feature (rivers, ridges, …) from features.json. */
-export interface MapFeatureData {
-  id: string
-  name: string
-  type: string
-  coordinates: [number, number][]
-  order?: number
 }
