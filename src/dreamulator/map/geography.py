@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,10 +54,18 @@ class GeographyFeature(BaseModel):
 
     name: str
     lon: float = Field(default=0.0, ge=-180.0, le=180.0)
-    lat: float = Field(ge=-90.0, le=90.0)
+    #: Centre latitude of an ellipse feature (not used with ``polygon``).
+    lat: float | None = Field(default=None, ge=-90.0, le=90.0)
     #: Circular radius in degrees; for elongated features this is the
-    #: semi-minor axis (half-width).
-    radius_deg: float = Field(gt=0.0, le=90.0)
+    #: semi-minor axis (half-width).  Not used with ``polygon``.
+    radius_deg: float | None = Field(default=None, gt=0.0, le=90.0)
+    #: Outline as [lon, lat] vertices in degrees (GeoJSON order, closed implicitly,
+    #: joined by great circles) — an alternative to the ellipse (lat, radius_deg,
+    #: elongation, bearing_deg), for shapes an ellipse cannot draw.
+    polygon: list[tuple[float, float]] | None = None
+    #: Width (degrees) of a polygon's soft edge: the kernel is 0 on the outline and
+    #: reaches 1 this far inside.
+    edge_deg: float = Field(default=1.0, gt=0.0, le=30.0)
     #: Bias amplitude. + = land, − = ocean. Magnitudes above 1 let a "cutting"
     #: feature (rift_sea, isthmus gap) overwhelm an underlying continent so the
     #: net field goes negative there (e.g. rift −1.8 over continent +0.85).
@@ -90,6 +98,32 @@ class GeographyFeature(BaseModel):
     #: For rift features this roughens the otherwise smooth cosine-tapered
     #: boundary, creating fractal coastlines.  Typical: 0.1–0.5.
     noise_amplitude: float = Field(default=0.0, ge=0.0, le=5.0)
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> GeographyFeature:
+        if self.polygon is not None:
+            if len(self.polygon) < 3:
+                raise ValueError(f"{self.name}: a polygon needs at least 3 vertices")
+            for lon, lat in self.polygon:
+                if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
+                    raise ValueError(f"{self.name}: polygon vertex out of range ({lon}, {lat})")
+            if self.lat is not None or self.radius_deg is not None:
+                raise ValueError(f"{self.name}: give either polygon or lat/radius_deg, not both")
+        elif self.lat is None or self.radius_deg is None:
+            raise ValueError(f"{self.name}: an ellipse feature needs lat and radius_deg")
+        return self
+
+    @property
+    def size_deg(self) -> float:
+        """Characteristic radius (degrees): the ellipse's semi-minor axis, or a polygon's
+        mean centre-to-vertex distance."""
+        if self.polygon is None:
+            assert self.radius_deg is not None
+            return self.radius_deg
+        v = np.array([_lonlat_to_xyz(lon, lat) for lon, lat in self.polygon])
+        c = v.sum(axis=0)
+        c /= np.linalg.norm(c)
+        return float(np.degrees(np.arccos(np.clip(v @ c, -1.0, 1.0))).mean())
 
 
 class GeographySpec(BaseModel):
@@ -250,6 +284,9 @@ def _feature_kernel(
     ``1 + noise_amplitude·noise``, so the ellipse / rift edge becomes a fractal
     coastline instead of a regular shape.
     """
+    if feature.polygon is not None:
+        return _polygon_kernel(px, py, pz, feature, noise)
+    assert feature.lat is not None and feature.radius_deg is not None
     c = _lonlat_to_xyz(feature.lon, feature.lat)
     p = np.stack([px, py, pz], axis=1)
     dot = np.clip(p @ c, -1.0, 1.0)
@@ -290,6 +327,59 @@ def _feature_kernel(
         q = q / (1.0 + feature.noise_amplitude * noise)
     result[within] = _cosine_kernel(q[within])
     return result
+
+
+def _polygon_kernel(
+    px: np.ndarray,
+    py: np.ndarray,
+    pz: np.ndarray,
+    feature: GeographyFeature,
+    noise: np.ndarray | None = None,
+) -> np.ndarray:
+    """Kernel of a polygon feature: 0 outside and on the outline, rising with a cosine
+    taper to 1 at ``edge_deg`` inside.
+
+    Inside/outside is a ray-casting test in the gnomonic projection about the vertex
+    centroid (great-circle edges are straight lines there); the distance is the angular
+    distance to the closed outline.  ``noise`` shifts the signed distance by
+    ``noise_amplitude · edge_deg · noise``, roughening the outline by at most that much.
+    """
+    from .paleo_sutures import polyline_geometry
+
+    assert feature.polygon is not None
+    verts = np.array(feature.polygon, dtype=np.float64)
+    vx = np.array([_lonlat_to_xyz(lon, lat) for lon, lat in verts])
+    c = vx.sum(axis=0)
+    c /= np.linalg.norm(c)
+    edge = np.radians(feature.edge_deg)
+    amp = feature.noise_amplitude if noise is not None else 0.0
+    reach = float(np.arccos(np.clip(vx @ c, -1.0, 1.0)).max()) + edge * (1.0 + amp)
+    p = np.stack([px, py, pz], axis=1)
+    dot = p @ c
+    out = np.zeros(p.shape[0])
+    near = (dot > np.cos(min(reach, np.pi / 2 - 1e-3))) & (dot > 0.0)
+    if not near.any():
+        return out
+    q = p[near]
+    north, east = _tangent_frame(c)
+    qd = q @ c
+    x, y = (q @ east) / qd, (q @ north) / qd
+    vd = vx @ c
+    ux, uy = (vx @ east) / vd, (vx @ north) / vd
+    inside = np.zeros(q.shape[0], dtype=bool)
+    for k in range(len(ux)):  # even–odd ray casting along +x
+        x0, y0, x1, y1 = ux[k - 1], uy[k - 1], ux[k], uy[k]
+        cross = (y0 > y) != (y1 > y)
+        xi = x0 + (y - y0) * (x1 - x0) / np.where(y1 != y0, y1 - y0, 1e-300)
+        inside ^= cross & (x < xi)
+    closed = np.vstack([verts, verts[:1]])
+    dist = polyline_geometry(q, closed)[0]
+    signed = np.where(inside, dist, -dist)
+    if amp > 0.0 and noise is not None:
+        signed = signed + amp * edge * noise[near]
+    t = np.clip(signed / edge, 0.0, 1.0)
+    out[near] = 0.5 * (1.0 - np.cos(np.pi * t))
+    return out
 
 
 def _feature_contribution(
@@ -496,8 +586,56 @@ def compute_geography_land_mask(
     order = np.argsort(score)[::-1]
     mask = np.zeros(n, dtype=np.bool_)
     mask[order[:n_land]] = True
+    _fill_oceanic_specks(
+        mesh, mask, build_land_bias_field(mesh, spec, raster_bias=raster_bias, noise_seed=None)
+    )
 
     return field, score, mask
+
+
+#: An oceanic-crust patch enclosed by continental crust of up to this many cells is a speck
+#: of the noisy threshold (54 km cells: ~20 cells ≈ 60 000 km², the scale of the smallest
+#: trapped ocean basins); larger enclosed patches are basins and stay.  Numerical convention.
+_SPECK_MAX_CELLS = 20
+
+
+def _fill_oceanic_specks(mesh: CVTMesh, mask: np.ndarray, authored: np.ndarray) -> int:
+    """Turn oceanic specks inside continents into continental crust (``mask`` in place).
+
+    The partition takes the top cells of a noisy score, so the noise leaves specks of
+    oceanic crust inside the continents; with the ocean base they become round pits and
+    ponds a few cells wide in continental interiors.  An oceanic component of the mask
+    that is not the world ocean, has at most ``_SPECK_MAX_CELLS`` cells and lies where the
+    author did not ask for sea (noise-free bias ``authored`` nowhere below −0.3) is filled.
+    Returns the number of cells filled.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    cells = mesh.cells
+    n = len(cells)
+    ocean = ~mask
+    if not ocean.any():
+        return 0
+    rows = np.repeat(np.arange(n), [len(c.neighbors) for c in cells])
+    cols = np.array([j for c in cells for j in c.neighbors], dtype=np.int64)
+    both = ocean[rows] & ocean[cols]
+    graph = csr_matrix((np.ones(int(both.sum())), (rows[both], cols[both])), shape=(n, n))
+    _, lab = connected_components(graph, directed=False)
+    labels, sizes = np.unique(lab[ocean], return_counts=True)
+    world_ocean = labels[np.argmax(sizes)]
+    filled = 0
+    for lbl, size in zip(labels, sizes, strict=True):
+        if lbl == world_ocean or size > _SPECK_MAX_CELLS:
+            continue
+        idx = np.flatnonzero(lab == lbl)
+        if np.any(authored[idx] < -0.3):
+            continue  # an authored sea
+        mask[idx] = True
+        filled += int(size)
+    if filled:
+        logger.info("  Crust partition: %d oceanic speck cells filled", filled)
+    return filled
 
 
 def build_geography_coast_cost(

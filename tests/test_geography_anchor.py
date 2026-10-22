@@ -649,16 +649,16 @@ def test_overlay_positive_restamps_continental_crust() -> None:
     assert all(c.crust_type == "oceanic" for c in np.array(m.cells)[far])
 
 
-def test_overlay_below_threshold_no_restamp() -> None:
-    """A weak positive overlay (below the microcontinent threshold) does not
-    claim crust — texture only."""
+def test_negative_overlay_no_restamp() -> None:
+    """A negative overlay carves a sea over whatever crust is there; only positive
+    overlays (crust fragments) claim continental crust, whatever their land fraction."""
     from dreamulator.map.terrain_synthesizer import _restamp_overlay_microcontinents
 
     m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=800, lloyd_iterations=1))
     spec = GeographySpec(
         features=[],
         overlays=[
-            GeographyFeature(name="weak", lon=0.0, lat=0.0, radius_deg=10.0, strength=0.05),
+            GeographyFeature(name="sea", lon=0.0, lat=0.0, radius_deg=10.0, strength=-1.5),
         ],
     )
     cfg = _config_with(spec)
@@ -712,12 +712,12 @@ def test_overlay_restamp_ignores_noise_outliers() -> None:
 
 
 def test_overlay_archipelago_texture_modulation() -> None:
-    """Positive-overlay strength = land fraction: the bottom (1 − strength)
-    of the noisy field inside the footprint is pulled to the channel floor,
-    the rest keeps the plateau → islands and channels, not a smooth ellipse."""
+    """Positive-overlay strength = land fraction: the bottom (1 − strength) of the patch fBm
+    inside the fragment footprint becomes shelf-sea channels that deepen away from the
+    islands, the rest keeps its elevation → islands and channels, not a smooth ellipse."""
     from dreamulator.map.terrain_synthesizer import (
-        _OVERLAY_TEXTURE_CHANNEL_FLOOR_M,
         _apply_overlay_archipelago_texture,
+        _overlay_claims,
     )
 
     m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=4000, lloyd_iterations=1))
@@ -730,17 +730,20 @@ def test_overlay_archipelago_texture_modulation() -> None:
         ],
     )
     cfg = _config_with(spec)
-    # recompute the noise-free footprint the same way the cut does
-    single = spec.model_copy(update={"features": [], "overlays": spec.overlays})
-    free = build_land_bias_field(m, single, noise_seed=None)
-    extent = np.asarray(free, dtype=np.float64) > 0.05
+    # the fragment footprint the cut works in
+    extent = _overlay_claims(m, cfg)[0][1]
     xs = np.array([c.x for c in m.cells])
     d_deg = np.degrees(np.arccos(np.clip(xs, -1, 1)))
     outside = d_deg > 40.0
     elev = np.full(len(m.cells), 850.0)  # the flattened plateau
     out = _apply_overlay_archipelago_texture(m, cfg, elev)
     assert np.all(out[outside] == 850.0)  # untouched far away
-    carved = out[extent] <= _OVERLAY_TEXTURE_CHANNEL_FLOOR_M + 1.0
+    carved = out[extent] < cfg.sea_level_offset_m
+    # channels are shelf seas and fragment basins, never deeper than the basin depth
+    from dreamulator.map.terrain_synthesizer import _FRAGMENT_BASIN_DEPTH_M
+
+    sea_depth = cfg.sea_level_offset_m - out[extent][carved]
+    assert sea_depth.max() <= _FRAGMENT_BASIN_DEPTH_M + 1e-6
     kept = out[extent] >= 800.0
     assert carved.sum() > 3, "no channels carved"
     assert kept.sum() > 3, "no islands kept"
@@ -818,3 +821,89 @@ def test_unknown_feature_key_is_rejected() -> None:
         GeographyFeature(name="x", lat=0.0, radius_deg=5.0, sea_level_offset_m=-50.0)
     with pytest.raises(pydantic.ValidationError):
         GeographySpec(features=[], land_fraction=0.3)
+
+
+def test_polygon_feature_kernel_follows_outline(mesh) -> None:
+    """A polygon feature: 1 well inside (beyond edge_deg), 0 outside, and a concave
+    (L-shaped) outline is respected — the notch stays outside."""
+    from dreamulator.map.geography import _feature_kernel
+
+    f = GeographyFeature(
+        name="L",
+        polygon=[(0, 0), (20, 0), (20, 8), (8, 8), (8, 20), (0, 20)],
+        edge_deg=2.0,
+    )
+    px = np.array([c.x for c in mesh.cells])
+    py = np.array([c.y for c in mesh.cells])
+    pz = np.array([c.z for c in mesh.cells])
+    k = _feature_kernel(px, py, pz, f)
+    lon = np.array([c.lon for c in mesh.cells])
+    lat = np.array([c.lat for c in mesh.cells])
+    deep = (lon > 2.5) & (lon < 5.5) & (lat > 2.5) & (lat < 17.5)
+    notch = (lon > 11) & (lon < 19) & (lat > 11) & (lat < 19)
+    far = (lon < -10) | (lat < -10) | (lon > 30) | (lat > 30)
+    assert deep.any() and notch.any()
+    assert np.allclose(k[deep], 1.0)
+    assert np.all(k[notch] == 0.0)
+    assert np.all(k[far] == 0.0)
+
+
+def test_polygon_feature_validation() -> None:
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):  # too few vertices
+        GeographyFeature(name="x", polygon=[(0, 0), (1, 1)])
+    with pytest.raises(pydantic.ValidationError):  # both shapes
+        GeographyFeature(name="x", lat=0.0, radius_deg=5.0, polygon=[(0, 0), (1, 0), (0, 1)])
+    with pytest.raises(pydantic.ValidationError):  # neither shape
+        GeographyFeature(name="x")
+    f = GeographyFeature(name="x", polygon=[(0, 0), (10, 0), (10, 10), (0, 10)])
+    assert 5.0 < f.size_deg < 9.0
+
+
+def test_overlay_channels_deepen_away_from_islands() -> None:
+    """On a fine mesh the channels next to islands are shallow and deepen outward."""
+    from dreamulator.map.terrain_synthesizer import (
+        _apply_overlay_archipelago_texture,
+        _overlay_claims,
+    )
+
+    m = generate_cvt_mesh(TerrainPipelineConfig(seed=7, num_nodes=40000, lloyd_iterations=1))
+    spec = GeographySpec(
+        features=[],
+        overlays=[
+            GeographyFeature(name="isles", lon=0.0, lat=0.0, radius_deg=8.0, strength=0.4),
+        ],
+    )
+    cfg = _config_with(spec)
+    extent = _overlay_claims(m, cfg)[0][1]
+    out = _apply_overlay_archipelago_texture(m, cfg, np.full(len(m.cells), 500.0))
+    sea = extent & (out < 0.0)
+    land = extent & (out > 0.0)
+    coastal = sea & np.array([any(land[j] for j in c.neighbors) for c in m.cells])
+    depth = -out
+    assert coastal.any() and (sea & ~coastal).any()
+    assert np.median(depth[coastal]) < np.median(depth[sea & ~coastal])
+    assert np.median(depth[coastal]) <= cfg.shelf_break_depth_m  # shelf next to islands
+
+
+def test_crust_partition_fills_oceanic_specks(mesh) -> None:
+    """Small oceanic patches enclosed by continent are specks of the noisy threshold and are
+    filled; an authored sea of the same size and the world ocean stay oceanic."""
+    from dreamulator.map.geography import _fill_oceanic_specks
+
+    lon = np.array([c.lon for c in mesh.cells])
+    lat = np.array([c.lat for c in mesh.cells])
+    mask = (lon > -60) & (lon < 60) & (np.abs(lat) < 50)  # a continent, ocean elsewhere
+    centre = np.argmin((lon - 0) ** 2 + (lat - 0) ** 2)
+    speck = [int(centre)]
+    sea_cell = int(np.argmin((lon - 30) ** 2 + (lat - 20) ** 2))
+    mask[speck] = False
+    mask[sea_cell] = False
+    authored = np.zeros(len(mesh.cells))
+    authored[sea_cell] = -0.8  # the author drew a sea here
+    out = mask.copy()
+    filled = _fill_oceanic_specks(mesh, out, authored)
+    assert filled == 1
+    assert out[centre] and not out[sea_cell]
+    assert not out[(np.abs(lat) > 70)].any()  # the world ocean is untouched

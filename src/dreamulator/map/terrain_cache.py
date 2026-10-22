@@ -269,13 +269,15 @@ def build_stage_fingerprint(
 #                  tangential_fraction
 #   terrain v2:    + landform
 _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
-    # v3 (debt 46): rotation rates normalised to the mean plate speed.
-    "plates": 3,  # v2: + crust_type cell field (all-cache-hit corruption fix)
+    # v2: + crust_type cell field (all-cache-hit corruption fix); v3 (debt 46): rotation
+    # rates normalised to the mean plate speed; v4: oceanic specks inside continents filled
+    # in the crust partition.
+    "plates": 4,
     # v3: + elevation / crust_type; v4: full-distance rotation (debt 33);
     # v5: continental slowdown re-evaluated and rates renormalised every
     # re-partition (debt 46); v6: + convergent_duration_my / convergent_run_km
     # (history contract §3.3).
-    "tectonics": 6,
+    "tectonics": 7,  # v7: crust partition fills oceanic specks (re-anchor)
     "boundaries": 3,  # v3: + boundary_type cell field
     # v3 (2026-09-30): deep-ocean floor clamp — continental-crust / coast-ring
     # Earth envelopes (_clamp_deep_ocean_floors in terrain_synthesizer).
@@ -292,7 +294,10 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # forearc wedge followed above sea level.  v14 (debt 48): contract plate-id ties no
     # longer follow the per-process hash seed.  v15 (debt 47): final sea-level trim; v16: the
     # sea-level solve interpolates between cell elevations (continuous in the inputs).
-    "terrain": 16,
+    # v17–v27 (2026-10-21): positive overlays as crustal fragments (polygon or roughened
+    # outline, islands cut on the final surface, channels from shelf to fragment basins);
+    # oceanic specks filled in the crust partition.  v28: one-octave island cut.
+    "terrain": 28,
 }
 
 

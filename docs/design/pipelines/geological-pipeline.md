@@ -457,37 +457,42 @@ plate 视图 hash、terrain 保持全文件 hash）——编辑它们保持板�
 全球海平面/海岸线；全球陆地比例随 overlay 净贡献漂移（局部编辑语义）。
 编写规则平实说明在 `geography.yaml` 文件头部。
 
-**overlay 微陆块（2026-09-30，方案 B）**：正 overlay 场 > 0.15 的格在 terrain 合成
-开头 restamp 为大陆壳（`_restamp_overlay_microcontinents`，微陆块/Zealandia 语义）。
-为什么需要：偏置→海拔是 ±0.5 双模门（`_apply_base_override`），且 +850 m 大陆基准
-只给 continental 壳——洋壳格随后被洋底 age-depth 无条件覆写回 −3~−5 km
-（oceanic crust mask），正 overlay 在洋壳上造陆必然失败（负 overlay 刻海不受影响，
-陆壳在水下 = 陆间海语义本来就对）。restamp 后这些格保留 +850 m 基准、跳过
-age-depth、接收全部程序化纹理（板块偏移/区域噪声/边界效应）→ 局部 overlay 编辑
-即可造有纹理的群岛陆，海平面不动、陆地净增。overlay 与主特征冲突时 overlay 优先
-（restamp 在 `_relabel_leaked_crust` 之后）。认识论：近似推导（真实微陆块是减薄
-陆壳碎片而非完整克拉通，51 km 格上可接受）。分工：造陆用正场 restamp，控海峡/
-陆桥高度用 elevation pin（pin 是"作者的地板"语义——校准后抹平纹理，且凸混合
-从 −4 km 抬不到海面：factor=0.9 时 −4000+0.9×4300 = −130 m 海底台地）。
+**地物形状**：每个 feature 与 overlay 是椭圆（中心、半径、拉长率、朝向）或多边形（`polygon`，[经度, 纬度] 点列，
+大圆连边，`geography._polygon_kernel`）。多边形的核函数在轮廓外与轮廓上为 0，进入内部 `edge_deg` 后余弦升到 1；
+内外判定在以顶点质心为切点的心射切面投影上用射线法（大圆边在该投影里是直线），距离是到闭合轮廓的角距离。`noise_amplitude` 把带符号距离平移最多
+`noise_amplitude · edge_deg`。补丁尺度噪声的特征半径取 `size_deg`（椭圆的半短轴，或多边形质心到顶点的平均距离）。
 
-**overlay 群岛纹理（2026-09-30 定稿：strength = 陆地占比）**：正 overlay 补丁
-在双模基准处塌缩成均匀 +850 m 台地（场值全部过 −0.5 门 → 常数），噪声无处
-画纹理。`_apply_overlay_archipelago_texture` 在区域/细节噪声之后、校准之前，
-对每个正 overlay 独立处理：在其名义 footprint（无噪声 kernel > 0.05）内，
-把**带噪声场**最低 `1 − strength` 分位的格拉到海峡底（−300 m，
-`_OVERLAY_TEXTURE_CHANNEL_FLOOR_M`），其余保留台地 → 固定海平面切出岛/峡。
-因此 **正 overlay 的 strength = 补丁内陆地占比**（0.3–0.6 群岛、1.0 实心岛、
->1 按 1）；微陆块 restamp 独立地声明整个 footprint（阈值 0.05），与 strength
-解耦。负 overlay 不经过此切割（刻海走 −0.5 base-override 门）。校准
-overlay-blind → 海平面不动、切割成为局部偏差。编写规则平实说明在
-`geography.yaml` 文件头部（strength 符号两层统一：正 = 造陆 / 负 = 刻海；
-正值大小口径：overlays = 占比、features = 场强；`elevation_target_m` 两层
-通用 = 手动海拔/海峡钉扎，最后生效）。
+**overlay 陆壳碎片**：正 overlay 代表陆壳碎片（作者 2026-10-21 裁决，Zealandia 语义）。偏置到海拔是 ±0.5
+的双模门（`_apply_base_override`），+850 m 的大陆基准只给陆壳，洋壳格随后被年龄-深度覆写回 −3 到 −5 km，所以
+正 overlay 在 terrain 合成开头把它的足迹 restamp 为陆壳（`_restamp_overlay_microcontinents`），这些格保留大陆
+基准、跳过年龄-深度、接收全部程序化纹理。足迹是 overlay 核函数 > 0.05 的范围（`_overlay_claims`），半径按补丁
+尺度的 fBm（基础波数 4/半径）乘以 1 ± `noise_amplitude`（轮廓起伏幅度，上限 0.9），所以碎片边缘——陆壳与
+洋壳的台阶，也就是陆架坡折与外缘海岸——是不规则的，不是名义椭圆；起伏有上限，远处噪声离群点不会声明
+单格碎陆。足迹与 strength 无关。负 overlay 不 restamp（刻海走 −0.5 门，陆壳在水下即陆间海）。overlay 与主
+特征冲突时 overlay 优先（restamp 在 `_relabel_leaked_crust` 之后）。认识论：近似推导（真实碎片是减薄陆壳）。
+控海峡与陆桥高度用 elevation pin。
+
+**overlay 群岛切割（strength = 陆地占比）**：`_apply_overlay_archipelago_texture` 在全部后处理与海平面末次
+微调之后、地理钉扎之前，在最终地表上处理每个正 overlay：碎片足迹内，补丁尺度 fBm（单个倍频，基础波数 3/半径，
+岛约为半径的三分之一，在 54 km 格子上有数格大）最低 `1 − strength` 分位的格成为海峡，其余保持原高程，补丁内的
+陆地占比因此精确等于 strength（0.3–0.6 群岛，1.0 实心碎片，大于 1 按 1）。海峡深度按到最近岛屿的图距离（格心距岸
+约半个格距）给出：岛边为岸线深度 3 m，一个被动陆缘陆架宽度（88 km）内加深到 `shelf_break_depth_m`，再经一个陆架
+宽度平滑加深到碎片块体之间的盆地深度 1000 m（拉薄陆壳碎片上的盆地与海槽约 0.5–1.5 km，如西兰洲）；fBm 低于切割
+水平的程度把距离伸缩 0.5–1.5 倍，海峡中轴比两侧深。碎片外侧一个陆架宽度内、比坡折浅的洋壳格（未切割时绕高台
+铺下的陆架，末次微调会让它露出成环）也按同一剖面处理。原本更深的格保持原深度。切割自实际海面量起，后续阶段
+不会把海峡抬回水面。校准不看 overlay 足迹，切割成为局部偏差。编写规则平实说明在 `geography.yaml` 文件头部。
+
+**陆壳划分中的洋壳斑点**：陆壳划分取带噪声得分的前 `target_land_fraction` 个格，噪声会在大陆内部留下零星的
+洋壳格；它们拿洋壳基准，后续又被抬到海平面附近，成为大陆内部圆形的小洼地与小湖。`compute_geography_land_mask`
+切完阈值后由 `_fill_oceanic_specks` 填补：不是世界大洋、不超过 20 格（约 6 万 km²，最小的残留洋盆量级）、且去噪后的
+偏置场处处不低于 −0.3（不是作者画的海）的洋壳连通块改为陆壳。更大的封闭洋壳块视为盆地（与外海隔断的裂谷海、
+深内陆盆地）保留。划分在板块阶段与构造演化后的重新锚定共用，所以板块、构造演化与地形看到同一份地壳；改动它
+会让板块格局整体重新实现（作者 2026-10-21 接受）。
 
 **壳声明与噪声（2026-09-30）**：feature-kernel 噪声把 kernel 实际半径放大到
 (1+A)× 半长轴（A=4 → 5×），因此**阈值型壳决策必须吃无噪声场**——overlay 微陆块
-restamp（`_restamp_overlay_microcontinents`，固定 0.15 硬门）即用 `noise_seed=None`；
-远处噪声尖峰若过门会变成散碎单格陆（全球群岛杂讯，实测踩坑）。features 的壳
+restamp（`_restamp_overlay_microcontinents`）的轮廓起伏有 0.9 的上限；
+不设上限时远处噪声尖峰会过门变成散碎单格陆（全球群岛杂讯，实测踩坑）。features 的壳
 分位数（`compute_geography_land_mask`）仍吃带噪声场：分位数自适应 + 全局排名 +
 `_relabel_leaked_crust` 清理，离群效应表现为特征外围的岛链纹理（现状保留；
 改无噪声场试过、海岸形态劣化已回滚）。有机海岸线形态同时来自 fBm 分数混合与

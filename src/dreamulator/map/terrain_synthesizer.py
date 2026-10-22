@@ -40,6 +40,7 @@ from .geography import build_elevation_pins, build_land_bias_field, feature_nois
 from .pipeline_types import TerrainPipelineConfig
 
 if TYPE_CHECKING:
+    from .geography import GeographyFeature
     from .models import CVTMesh, TectonicPlate
     from .orogen_contract import OrogenContract
 
@@ -266,65 +267,91 @@ def _anchor_uplift_damping(geography_bias: np.ndarray | None, n: int) -> np.ndar
     return np.asarray(np.where(geography_bias < _ANCHOR_SUPPRESS_BIAS_THRESHOLD, damp, 1.0))
 
 
-#: Overlay-only field above this level claims continental crust (microcontinent
-#: restamp, 2026-09-30).  0.05 = the nominal kernel footprint (the calibration
-#: mask convention): a positive overlay claims its whole footprint as thinned
-#: continental crust; the *land fraction* within it is the feature's strength
-#: (see _apply_overlay_archipelago_texture), decoupled from the claim.
+#: Overlay kernel above this level is the overlay's footprint (the calibration mask
+#: convention, ≈ 86% of the nominal radius).
 _MICROCONTINENT_OVERLAY_THRESHOLD = 0.05
+#: Upper bound of a positive overlay's outline roughness (its ``noise_amplitude``): the
+#: footprint radius is scaled by 1 ± roughness with a patch-scale fBm, so the fragment
+#: edge — the continental/oceanic step, hence the shelf break and the outer coasts — is
+#: irregular instead of the nominal ellipse.  Kept below 1 so the scale stays positive
+#: (an unbounded amplitude makes far-field noise outliers claim one-cell dots).
+_OVERLAY_EDGE_WARP_MAX = 0.9
+#: Base wavenumbers (per unit sphere, ×1/radius in radians) of the patch-scale fBm for the
+#: fragment outline and for the island cut: outline bumps of about a quarter radius and
+#: islands of about a third (several cells on the 54 km grid; an eighth gave one-cell
+#: dots).  The world-scale feature fBm (wavelength ~25°) is nearly constant across a
+#: 5–10° patch and gave an ellipse with one blob island.  Numerical convention.
+_OVERLAY_EDGE_WAVENUMBER = 4.0
+_OVERLAY_ISLAND_WAVENUMBER = 3.0
+#: Octaves of the island-cut fBm: one octave gives rounded island bodies; more add small
+#: islets and inlets that read as speckle on the 54 km grid.  Numerical convention.
+_OVERLAY_ISLAND_OCTAVES = 1
+
+
+def _patch_noise(
+    mesh: CVTMesh, f: GeographyFeature, seed: int, wavenumber: float, octaves: int = 4
+) -> np.ndarray:
+    """fBm in [-1, 1] whose base wavelength scales with the overlay's radius."""
+    from .noise_kernels import fbm_on_points
+
+    xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
+    base = wavenumber / np.radians(f.size_deg)
+    return np.asarray(
+        fbm_on_points(xyz[:, 0], xyz[:, 1], xyz[:, 2], seed, octaves=octaves, base_freq=base),
+        dtype=np.float64,
+    )
+
+
+def _overlay_claims(
+    mesh: CVTMesh, config: TerrainPipelineConfig
+) -> list[tuple[GeographyFeature, np.ndarray]]:
+    """Crustal-fragment footprint of every positive overlay: ``[(feature, mask)]``.
+
+    A positive overlay is a continental crust fragment (author ruling 2026-10-21).  Its
+    footprint is the overlay kernel above ``_MICROCONTINENT_OVERLAY_THRESHOLD`` with the
+    radius roughened by the feature's ``noise_amplitude`` (outline roughness, capped at
+    ``_OVERLAY_EDGE_WARP_MAX``) through a patch-scale fBm, not the smooth ellipse.
+    """
+    from .geography import _feature_kernel
+
+    spec = config.geography
+    if spec is None or not spec.overlays:
+        return []
+    xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
+    out = []
+    for k, f in enumerate(spec.overlays):
+        if f.strength <= 0.0:
+            continue
+        seed = feature_noise_seed(int(config.seed)) + 7919 * k
+        noise = _patch_noise(mesh, f, seed, _OVERLAY_EDGE_WAVENUMBER)
+        roughness = float(np.clip(f.noise_amplitude, 0.0, _OVERLAY_EDGE_WARP_MAX))
+        warped = f.model_copy(update={"noise_amplitude": roughness})
+        kern = _feature_kernel(xyz[:, 0], xyz[:, 1], xyz[:, 2], warped, noise)
+        out.append((f, kern > _MICROCONTINENT_OVERLAY_THRESHOLD))
+    return out
 
 
 def _restamp_overlay_microcontinents(mesh: CVTMesh, config: TerrainPipelineConfig) -> int:
-    """Terrain-stage crust restamp for decisively positive geography overlays.
+    """Terrain-stage crust restamp for positive geography overlays (crust fragments).
 
-    Overlays are invisible to the plate stage, so a positive overlay over
-    oceanic crust used to drown: the +850 m continental base was overwritten by
-    ocean age-depth (oceanic crust → −3..−5 km), and sea-level pins could only
-    leave a flat seabed plateau (the convex pin blend cannot lift a −4 km floor
-    above sea level without flattening all texture).  Where the overlay-only
-    bias is decisively positive the author is claiming continental crust — a
-    Zealandia-style microcontinent / crustal fragment — so restamp before the
-    bimodal base: those cells keep the continental base, skip age-depth, and
-    receive the full procedural texture (plate offsets, regional/detail noise,
-    boundary effects) → textured archipelago land from a *local* overlay edit
-    (plate caches stay valid, calibration stays overlay-blind, land is net-added).
+    Overlays are invisible to the plate stage, so a positive overlay over oceanic crust
+    would drown under the ocean age–depth floor.  A positive overlay claims continental
+    crust — a Zealandia-style crustal fragment — over its roughened footprint
+    (``_overlay_claims``), restamped before the bimodal base: those cells keep the
+    continental base, skip age–depth and receive the procedural texture; the islands
+    inside are cut on the final surface (``_apply_overlay_archipelago_texture``).
 
     Negative overlays do NOT restamp: a carved sea over continental crust is an
-    epicontinental sea (continental crust under water) — physically correct as-is.
-    Where overlays and authored features disagree, overlays win (they are the
-    tuning layer; the restamp runs after `_relabel_leaked_crust`).  Epistemic
-    class: approx derivation (crustal-thickness transition parameterised as a
-    bias threshold; real microcontinents are rifted fragments with thinned
-    crust, not full cratons — acceptable at 51 km cells).
-
-    The claim uses the **noise-free** overlay field: feature noise roughens the
-    kernel radius by up to (1 + amplitude) — with amplitude 4 the reach extends
-    5× the semi-major axis, and every distant noise outlier crossing the
-    threshold would otherwise claim a one-cell continental dot (global speckle
-    archipelago, user-observed 2026-09-30).  The noise still shapes the *elevation*
-    texture: the restamped cells receive the roughened field downstream via
-    `geography_bias` (base override, uplift damping, boundary effects).
+    epicontinental sea (continental crust under water).  Where overlays and authored
+    features disagree, overlays win (the restamp runs after ``_relabel_leaked_crust``).
+    Epistemic class: approximate derivation (real fragments are rifted, thinned crust).
     """
-    spec = config.geography
-    if spec is None or not spec.overlays:
-        return 0
-    # Overlay-only means OVERLAY-ONLY: build_land_bias_field would add the
-    # spec-level hemisphere sin(lat) term, making the field positive across
-    # the whole northern hemisphere and restamping it all as continental
-    # crust (the 2026-09-30 "global bias field" bug).  Strip every spec-level
-    # term; the kernels alone decide the claim.
-    overlay_spec = spec.model_copy(
-        update={"features": [], "hemisphere_land_bias": 0.0, "raster_weight": 0.0}
-    )
-    field = build_land_bias_field(mesh, overlay_spec, noise_seed=None)
-    if field is None:
-        return 0
-    claim = np.asarray(field, dtype=np.float64) > _MICROCONTINENT_OVERLAY_THRESHOLD
     n = 0
-    for i in np.flatnonzero(claim):
-        if mesh.cells[i].crust_type != "continental":
-            mesh.cells[i].crust_type = "continental"
-            n += 1
+    for _f, claim in _overlay_claims(mesh, config):
+        for i in np.flatnonzero(claim):
+            if mesh.cells[i].crust_type != "continental":
+                mesh.cells[i].crust_type = "continental"
+                n += 1
     if n:
         logger.info("  Overlay microcontinents: %d cells restamped continental", n)
     return n
@@ -818,11 +845,6 @@ def _synthesize_gaussian(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    # Overlay archipelago texture: re-inject the overlay noise as an elevation
-    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
-    # level cuts the plateau into textured islands/channels.
-    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
-
     # Sea level auto-calibration ("倒水")
     if config.sea_level_auto:
         elevation = _apply_sea_level_calibration(
@@ -841,6 +863,7 @@ def _synthesize_gaussian(
     elevation = _apply_continental_shelf(mesh, elevation, config, rng)
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
 
     # Author elevation pins: the author's final word on elevation, applied
     # after every procedural stage so shelf/arcs cannot overwrite a pinned
@@ -1080,11 +1103,6 @@ def _synthesize_asymmetric(
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
 
-    # Overlay archipelago texture: re-inject the overlay noise as an elevation
-    # modulation BEFORE the (overlay-blind) sea-level solve, so the fixed sea
-    # level cuts the plateau into textured islands/channels.
-    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
-
     # Sea level auto-calibration ("倒水"): a uniform shift, which the forearc surface
     # (computed on the pre-calibration datum) follows
     datum_shift = 0.0
@@ -1136,6 +1154,8 @@ def _synthesize_asymmetric(
             overlay_mask=_overlay_calibration_mask(mesh, config),
             label="Final sea-level trim",
         )
+    # islands of positive overlays, cut from the actual sea surface
+    elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
@@ -2127,66 +2147,99 @@ def _compute_quality_metrics(
 # =========================================================================
 
 
-#: Channel floor (metres, relative to the calibrated sea surface) for cells
-#: that the overlay-noise cut pulls under water.  Must stay below 0 or the
-#: "channels" never reach the sea.
-_OVERLAY_TEXTURE_CHANNEL_FLOOR_M = -300.0
+#: Shoreline depth (m) of the channels between the islands of an overlay fragment: the
+#: middle of the 1–5 m shoreline range the continental shelf uses.
+_FRAGMENT_SHORE_DEPTH_M = 3.0
+#: Deepest basin (m) between the blocks of an overlay fragment beyond the shelf: rifted
+#: continental fragments carry inter-block basins and troughs of roughly 0.5–1.5 km
+#: (Zealandia's plateaus and troughs); observation-scale value.
+_FRAGMENT_BASIN_DEPTH_M = 1000.0
 
 
 def _apply_overlay_archipelago_texture(
     mesh: CVTMesh, config: TerrainPipelineConfig, elevation: np.ndarray
 ) -> np.ndarray:
-    """Carve archipelagos into positive overlays — ``strength`` = land fraction.
+    """Cut the islands of positive overlays on the final surface — ``strength`` = land fraction.
 
-    A positive overlay patch collapses to a uniform continental base plateau
-    at the bimodal step (every field value above the −0.5 override gate maps
-    to one constant), which would erase the feature noise the author set for
-    the archipelago texture.  This re-injects it as a **cut**: within each
-    positive overlay's nominal footprint (the noise-free kernel > 0.05), the
-    cells whose *noisy* field falls in the bottom ``1 − strength`` fraction
-    are pulled down to the channel floor (below sea level), the rest keep the
-    plateau → the (overlay-blind, fixed) sea level turns the patch into
-    islands and channels.  ``strength`` is therefore the **land fraction
-    inside the patch** — 0.3–0.6 gives archipelagos, 1.0 a solid island,
-    values > 1 are clamped (the old "claim threshold" interpretation is gone;
-    the crust restamp claims the whole footprint independently).  Zero or
-    negative strength skips the feature here (negative overlays carve seas
-    through the −0.5 base-override gate instead).
-
-    Runs after the regional/detail noise, before sea-level calibration (the
-    calibration is overlay-blind, so the cut survives as a local deviation).
-    Overlapping features are applied in order; later ones win.
+    Within each positive overlay's fragment footprint (``_overlay_claims``) the cells whose
+    patch-scale fBm (islands of about a third of the radius) falls in the bottom
+    ``1 − strength`` fraction become channels.  The channels between the islands of a
+    crustal fragment start as shelf seas: from the shoreline depth at the islands they deepen
+    with the distance from the nearest island to the shelf-break depth at a passive-margin
+    shelf width (88 km), then, over a second shelf width, into the thinned-crust basins
+    between the fragment's blocks (``_FRAGMENT_BASIN_DEPTH_M``).  Cell means are taken at the
+    cell centre (half a spacing off the coast); the depth of the patch fBm below the cut
+    level stretches the distance by a factor 0.5–1.5, so channel axes run deeper than their
+    banks and the isobaths do not just trace the island outlines.  The shallow shelf left on
+    the oceanic crust just outside the fragment (laid around the uncut plateau) takes the same
+    profile, so it does not surface as a ring of land around the outline.  Cells already
+    deeper keep their depth.  Runs on the final surface, after the sea-level trim and
+    before the author pins, so the cut is measured from the actual sea surface and no later
+    stage can lift the channels back; ``strength`` ≥ 1 is a solid fragment.  Negative
+    overlays carve seas through the base-override gate instead.
     """
-    spec = config.geography
-    if spec is None or not spec.overlays:
+    claims = _overlay_claims(mesh, config)
+    if not claims:
         return elevation
-    out = np.asarray(elevation, dtype=np.float64)
-    for f in spec.overlays:
-        if f.strength <= 0.0:
-            continue
-        single = spec.model_copy(
-            update={
-                "features": [],
-                "overlays": [f],
-                "hemisphere_land_bias": 0.0,
-                "raster_weight": 0.0,
-            }
-        )
-        free = build_land_bias_field(mesh, single, noise_seed=None)
-        if free is None:
-            continue
-        extent = np.asarray(free, dtype=np.float64) > 0.05
-        if not extent.any():
-            continue
-        noisy = build_land_bias_field(mesh, single, noise_seed=feature_noise_seed(int(config.seed)))
-        vals = np.asarray(noisy, dtype=np.float64)[extent]
+    sea_level = config.sea_level_offset_m
+    out = np.asarray(elevation, dtype=np.float64).copy()
+    n = len(mesh.cells)
+    xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
+    rows = np.repeat(np.arange(n), [len(c.neighbors) for c in mesh.cells])
+    cols = np.array([j for c in mesh.cells for j in c.neighbors], dtype=np.int64)
+    w = (
+        np.arccos(np.clip(np.einsum("ij,ij->i", xyz[rows], xyz[cols]), -1.0, 1.0))
+        * config.radius_km
+    )
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import dijkstra
+
+    graph = csr_matrix((w, (rows, cols)), shape=(n, n))
+    half_dx = 0.5 * float(np.sqrt(4.0 * np.pi * config.radius_km**2 / n))
+    oceanic = np.array([c.crust_type == "oceanic" for c in mesh.cells])
+    for k, (f, claim) in enumerate(claims):
         land_fraction = float(np.clip(f.strength, 0.0, 1.0))
-        if land_fraction >= 1.0:
-            continue  # solid island — nothing to carve
-        thr = float(np.quantile(vals, 1.0 - land_fraction))
-        sea = extent & (np.asarray(noisy, dtype=np.float64) < thr)
-        if sea.any():
-            out[sea] = _OVERLAY_TEXTURE_CHANNEL_FLOOR_M
+        if land_fraction >= 1.0 or not claim.any():
+            continue
+        seed = feature_noise_seed(int(config.seed)) + 104729 + 7919 * k
+        noisy = _patch_noise(mesh, f, seed, _OVERLAY_ISLAND_WAVENUMBER, _OVERLAY_ISLAND_OCTAVES)
+        thr = float(np.quantile(noisy[claim], 1.0 - land_fraction))
+        sea = claim & (noisy < thr)
+        # The shelf around the uncut plateau extends a shelf width onto the oceanic crust
+        # outside the fragment; with the plateau cut into islands its shallowest part (the
+        # sea-level trim exposes it) would be a ring of land around the outline.  Those cells
+        # join the channels: oceanic crust within a shelf width outside, shallower than the
+        # shelf break.
+        d_out = dijkstra(
+            graph, indices=np.flatnonzero(claim), min_only=True, limit=_PASSIVE_MARGIN_SHELF_KM
+        )
+        ring = (
+            ~claim & oceanic & np.isfinite(d_out) & (out > sea_level - config.shelf_break_depth_m)
+        )
+        sea = sea | ring
+        islands = claim & ~sea & (out > sea_level)
+        zone = claim | ring
+        nodes = np.flatnonzero(zone)
+        if islands.any():
+            d = dijkstra(
+                graph[nodes][:, nodes],
+                indices=np.searchsorted(nodes, np.flatnonzero(islands)),
+                min_only=True,
+            )
+            dist = np.full(n, np.inf)
+            dist[nodes] = d
+        else:
+            dist = np.full(n, np.inf)
+        idx = np.flatnonzero(sea)
+        lo = float(noisy[claim].min())
+        below = np.clip((thr - noisy[idx]) / max(thr - lo, 1e-12), 0.0, 1.0)  # 1 = deepest
+        x = np.maximum(dist[idx] - half_dx, 0.0) / _PASSIVE_MARGIN_SHELF_KM
+        x = x * (0.5 + 1.0 * below)
+        shelf = config.shelf_break_depth_m
+        depth = _FRAGMENT_SHORE_DEPTH_M + (shelf - _FRAGMENT_SHORE_DEPTH_M) * np.clip(x, 0.0, 1.0)
+        t = np.clip(x - 1.0, 0.0, 1.0)  # beyond one shelf width: thinned-crust basin
+        depth = depth + (max(_FRAGMENT_BASIN_DEPTH_M, shelf) - shelf) * t * t * (3.0 - 2.0 * t)
+        out[idx] = np.minimum(out[idx], sea_level - depth)
     return out
 
 
