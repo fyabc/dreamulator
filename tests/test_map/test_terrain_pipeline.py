@@ -350,3 +350,23 @@ class TestTerrainPipeline:
         r2 = run_terrain_pipeline(cfg)
 
         np.testing.assert_array_equal(r1.elevation_grid, r2.elevation_grid)
+
+
+def test_final_land_fraction_meets_target() -> None:
+    """Post-processing after the sea-level solve (forearc wedge, shelf) must not leave the
+    land fraction off target: the final trim re-solves on the final surface (debt 47)."""
+    import numpy as np
+
+    from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.map.terrain_pipeline import run_terrain_pipeline
+
+    cfg = TerrainPipelineConfig(
+        num_nodes=3000, lloyd_iterations=1, num_plates=8, seed=11, target_land_fraction=0.3
+    )
+    res = run_terrain_pipeline(
+        cfg, stages=["mesh", "plates", "tectonics", "boundaries", "terrain"], cache=None
+    )
+    z = np.array([c.elevation for c in res.mesh.cells])
+    area = np.array([c.area_km2 for c in res.mesh.cells])
+    land = float(area[z > cfg.sea_level_offset_m].sum() / area.sum())
+    assert abs(land - 0.3) < 0.01

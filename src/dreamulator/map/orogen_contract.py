@@ -219,7 +219,9 @@ def contact_polarity(
         others = [plate_of[j] for j in c.neighbors if plate_of[j] != plate_of[i]]
         if not others:
             continue
-        p, q = plate_of[i], max(set(others), key=others.count)
+        # ties go to the smallest id: iterating a set of strings follows the per-process
+        # hash seed, which made the contract differ between runs
+        p, q = plate_of[i], max(sorted(set(others)), key=others.count)
         win = np.array(tree.query_ball_point(xyz[i], _CRUST_WINDOW_KM / radius_km))
         ccp = float(cont[win][plate_of[win] == p].mean()) if np.any(plate_of[win] == p) else 0.0
         ccq = float(cont[win][plate_of[win] == q].mean()) if np.any(plate_of[win] == q) else 0.0
@@ -409,7 +411,7 @@ def escape_ratios(
         fp = xyz[front]
         w_ind = max(float(np.arccos(np.clip(fp @ fp.T, -1.0, 1.0)).max()) * radius_km, spacing)
         retros = [cell_seg[int(k)].retro_plate for k in front]
-        retro = max(set(retros), key=retros.count)
+        retro = max(sorted(set(retros)), key=retros.count)  # deterministic ties
         pros = {cell_seg[int(k)].pro_plate for k in front}
         u = float(np.median([cells[int(k)].convergence_rate_cm_yr for k in front]))
         if u <= 0.0 or retro not in by_id:

@@ -806,3 +806,15 @@ def test_overlay_restamp_ignores_hemisphere_bias() -> None:
     assert not north_far.any(), (
         f"hemisphere bias leaked into the claim: {north_far.sum()} far-north cells restamped"
     )
+
+
+def test_unknown_feature_key_is_rejected() -> None:
+    """A misspelt or unsupported feature parameter fails loudly instead of being dropped."""
+    import pydantic
+
+    from dreamulator.map.geography import GeographyFeature, GeographySpec
+
+    with pytest.raises(pydantic.ValidationError):
+        GeographyFeature(name="x", lat=0.0, radius_deg=5.0, sea_level_offset_m=-50.0)
+    with pytest.raises(pydantic.ValidationError):
+        GeographySpec(features=[], land_fraction=0.3)

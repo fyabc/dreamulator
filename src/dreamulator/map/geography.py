@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -47,6 +47,10 @@ def feature_noise_seed(config_seed: int) -> int:
 
 class GeographyFeature(BaseModel):
     """One authored landmass / ocean feature anchored on the sphere."""
+
+    # unknown keys are authoring errors (a misspelt or unsupported parameter would
+    # otherwise be dropped silently)
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     lon: float = Field(default=0.0, ge=-180.0, le=180.0)
@@ -90,6 +94,8 @@ class GeographyFeature(BaseModel):
 
 class GeographySpec(BaseModel):
     """Machine-readable authored geography (``geography.yaml``)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     version: int = 1
     #: Target land fraction; defaults to config.target_land_fraction when None.

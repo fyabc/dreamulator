@@ -171,3 +171,32 @@ def test_apply_orogen_cap_soft() -> None:
     out = apply_orogen_cap(elev, cap, 0.0)
     assert out[0] == 1000.0 and out[4] == 7000.0
     assert 4800.0 < out[1] < 4900.0 and out[2] < out[3] <= 4800.0 + 300.0
+
+
+def test_contract_independent_of_hash_seed(tmp_path: Path) -> None:
+    """Plate-id ties must not follow the per-process string hash seed (technical debt 48)."""
+    import os
+    import subprocess
+    import sys
+
+    script = tmp_path / "contract.py"
+    script.write_text(
+        "from dreamulator.map.orogen_contract import build_orogen_contract\n"
+        "from dreamulator.map.pipeline_types import TerrainPipelineConfig\n"
+        "from dreamulator.map.terrain_pipeline import run_terrain_pipeline\n"
+        f"cfg = TerrainPipelineConfig(**{TINY!r})\n"
+        "res = run_terrain_pipeline(cfg, stages=['mesh', 'plates', 'tectonics', 'boundaries'],"
+        " cache=None)\n"
+        "c = build_orogen_contract(res.mesh, res.plates, cfg.radius_km)\n"
+        "print(sorted((s.kind, s.pro_plate, s.retro_plate, tuple(s.cell_ids))"
+        " for s in c.segments), sorted(c.retained_km.items()))\n",
+        encoding="utf-8",
+    )
+    outs = []
+    for seed in ("1", "2", "3"):
+        env = {**os.environ, "PYTHONHASHSEED": seed}
+        r = subprocess.run(
+            [sys.executable, str(script)], capture_output=True, text=True, env=env, check=True
+        )
+        outs.append(r.stdout.strip().splitlines()[-1])  # last line: the contract
+    assert outs[0] == outs[1] == outs[2]

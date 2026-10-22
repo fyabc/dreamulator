@@ -1119,10 +1119,23 @@ def _synthesize_asymmetric(
     elevation = _apply_coastal_plain(mesh, elevation, config, rng)
     # forearc wedge of ocean–continent margins bounds the surface between trench and coast
     # (orogen_topography.md §6); after the shelf, so the wedge rather than a passive-margin
-    # shelf sets it.  It drowns land after the sea-level solve: the land fraction ends below
-    # the target (technical debt 47, the solve runs before the shelf is built)
+    # shelf sets it.  The land it drowns is made up by the final sea-level trim below.
     elevation = np.minimum(elevation, forearc_surface + datum_shift + sea_level)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
+
+    # Final sea-level trim (technical debt 47): the forearc and the other post-processing
+    # changed the land area after the solve above.  Solving again on the final surface,
+    # whose submerged continental crust is now shelf, meets the author's land fraction
+    # with a sea-level change of tens of metres; the shelf is not rebuilt (it would follow
+    # the new sea level and the solve would chase it down the pre-shelf slopes).
+    if config.sea_level_auto:
+        elevation = _apply_sea_level_calibration(
+            mesh,
+            elevation,
+            config,
+            overlay_mask=_overlay_calibration_mask(mesh, config),
+            label="Final sea-level trim",
+        )
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
@@ -2204,14 +2217,15 @@ def _apply_sea_level_calibration(
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
     overlay_mask: np.ndarray | None = None,
+    label: str = "Water calibration",
 ) -> np.ndarray:
     """Calibrate sea level to match the target land fraction.
 
-    Sorts (elevation, area) pairs once, builds a cumulative area prefix sum
-    from highest to lowest, then binary-searches the sorted array in O(log n)
-    per iteration instead of scanning all n cells every time.
+    Sorts (elevation, area) pairs once, builds a cumulative area prefix sum from
+    highest to lowest and solves for the sea level on that curve, linearly
+    interpolated between consecutive cell elevations (continuous in the inputs).
 
-    Complexity: O(n log n)  (one sort + prefix sum, then 60 × O(log n) lookups).
+    Complexity: O(n log n)  (one sort + prefix sum + one search).
 
     ``overlay_mask`` (2026-09-30): cells covered by terrain-only geography
     overlays are excluded from the budget solve — the sea level is set by the
@@ -2237,33 +2251,25 @@ def _apply_sea_level_calibration(
     target_land_area = config.target_land_fraction * np.sum(calibration_areas)
 
     # Sort by elevation descending, with area alongside.
-    order = np.argsort(calibration_elev)[::-1]  # highest → lowest
+    order = np.argsort(calibration_elev, kind="stable")[::-1]  # highest → lowest
     elev_sorted = calibration_elev[order]
     area_sorted = calibration_areas[order]
 
-    # Cumulative land area: cum[i] = sum of areas for cells >= elev_sorted[i].
+    # Land area above h, interpolated linearly between consecutive cell elevations so the
+    # solution moves continuously with the elevations: a step function puts the sea level
+    # in the middle of whatever gap the target falls into, and one coastal cell changing
+    # order (last-bit float noise) would shift the whole map by the gap width.
     cum_land = np.cumsum(area_sorted)
-
-    # Helper: land area for a given sea-level h (cells above h).
-    def _land_area(h: float) -> float:
-        # elev_sorted is descending; find first cell <= h.
-        idx = int(np.searchsorted(-elev_sorted, -h))  # searchsorted on negated values
-        if idx == 0:
-            return 0.0
-        return float(cum_land[idx - 1])
-
-    # Binary search for sea level h in [min(elev), max(elev)]
-    lo = float(elev_sorted[-1])  # min elevation
-    hi = float(elev_sorted[0])  # max elevation
-
-    for _ in range(60):
-        mid = (lo + hi) * 0.5
-        if _land_area(mid) > target_land_area:
-            lo = mid  # need higher sea level → less land
-        else:
-            hi = mid  # need lower sea level → more land
-
-    sea_level = (lo + hi) * 0.5
+    k = int(np.searchsorted(cum_land, target_land_area))
+    if k <= 0:
+        sea_level = float(elev_sorted[0])
+    elif k >= len(elev_sorted):
+        sea_level = float(elev_sorted[-1])
+    else:
+        c0, c1 = float(cum_land[k - 1]), float(cum_land[k])
+        e0, e1 = float(elev_sorted[k - 1]), float(elev_sorted[k])
+        t = (target_land_area - c0) / max(c1 - c0, 1e-12)
+        sea_level = e0 + t * (e1 - e0)
 
     # Compute implied water budget
     depths = np.maximum(0.0, sea_level - elevation)  # m
@@ -2276,9 +2282,10 @@ def _apply_sea_level_calibration(
     cell_pct = 100.0 * np.sum(elevation > sea_level) / n
 
     logger.warning(
-        "  Water calibration: target %.1f%% land → sea level %.0f m → "
+        "  %s: target %.1f%% land → sea level %.0f m → "
         "%.1f%% land by area (%.1f%% by cells), "
         "implied water budget %.2f km (%.1f million km^3)%s",
+        label,
         config.target_land_fraction * 100,
         sea_level,
         land_pct,

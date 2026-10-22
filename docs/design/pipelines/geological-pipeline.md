@@ -118,9 +118,12 @@ schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint
 `terrain_pipeline.py` 的阶段负载 + 回放，并提升 `terrain_cache._STAGE_SCHEMA_VERSIONS`
 中该相位的版本号（旧 pickle 自动失效）。回归守卫 =
 `tests/test_map/test_cell_field_cache_replay.py`（新鲜运行 vs 全缓存回放逐字段全等）。
+地形阶段从格子字段现算的量（如历史契约）不得依赖进程级状态：Python 的字符串哈希按进程随机化，遍历字符串
+集合的顺序因此每次运行不同，按出现次数取众数时平局必须按编号决断（`orogen_contract.contact_polarity`），
+`test_orogen_contract.py::test_contract_independent_of_hash_seed` 在三个哈希种子下比较契约。
 
 **ice 相位不缓存**：极地冰盖是幂等的追加后处理（先从 `elevation − ice_thickness_m`
-重建基岩再重算，`ice_sheets.py`），秒级完成，每次重建从头执行，也不进入
+加回冰载荷下沉量重建无冰基岩再重算，`ice_sheets.py`），秒级完成，每次重建从头执行，也不进入
 `_STAGE_SCHEMA_VERSIONS`。
 
 
@@ -927,7 +930,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    **弧前带**（`trench_flexure.py::forearc`，物理见 `docs/knowledge/geology/orogen_topography.md` §6）：洋陆边缘上覆一侧的格子平均高程不高于楔面
    s(x) = z_axis + tan 1.55° · x（z_axis 为沟轴格平均高程，x 为沿上覆一侧到最近沟轴格的图距离），楔面一直跟到
    海平面以上 6 km：海平面以下是淹没的弧前带，以上是一道斜坡，使相邻的碰撞高原等上覆板块起伏不会在弧前带上方
-   立成悬崖。楔面在陆架之后施加（海平面校准之前已完成，陆地占比因此低于目标，见 roadmap 技术债 47）。安第斯型
+   立成悬崖。楔面在陆架之后施加，它淹没的陆地由后处理第 7 步的海平面末次微调补回。安第斯型
    剖面的前翼从弧前带内缘（海岸，弧前带宽度 −z_axis / tan α）起抬升，峰脊在其内侧一个翼长（峰高 / tan 0.6°）处
    （`orogen_relief` 的 `forearc_km`），截面积不变。
 3. **热点链**：`_generate_hotspots` 在洋壳上 Poisson-disc 撒种子（`crust_type == "oceanic"`），
@@ -1049,7 +1052,7 @@ age = max_age · d_div / (d_div + d_conv)
 
 合成后按序执行（弧/造山带增加高程，架/平原必须最后，否则被覆盖）：
 
-1. **海平面校准（倒水）**：二分查找使陆面比例 = `target_land_fraction`（§8；该值未在
+1. **海平面校准（倒水）**：在按高程排序的累计面积曲线上求海平面，使陆面比例 = `target_land_fraction`；曲线在相邻格子高程之间线性插值，解随高程连续变化，一个海岸格的浮点末位差异不会让全图平移一个高程空隙（§8；该值未在
    terrain_config 显式配置时，从 planets.yaml 的 `hydrosphere.water_coverage` 推导为
    1 − 水覆盖率，保证设定文档与生成地形不脱节）。
 2. **内部低地** `_apply_interior_lowlands`（见 §7.3）：以汇聚边界为源做多源 BFS，
@@ -1066,14 +1069,18 @@ age = max_age · d_div / (d_div + d_conv)
    `docs/knowledge/geology/continental_margins.md`。
 6. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
-   （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。
-7. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
+   （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。随后施加弧前楔（§7.1 第 2c 步）。
+7. **海平面末次微调**（技术债 47）：弧前楔等后处理在第 1 步之后改变了陆地面积。在最终地表上按同一口径再解一次
+   海平面，使陆面比例回到 `target_land_fraction`；此时淹没的陆壳已是陆架，海平面只需移动几十米（nacrea 约
+   −18 m），露出陆架内缘一圈浅滩。陆架不重铺：它随海平面而定，重铺会让校准沿铺陆架之前的陡坡一路追下去
+   （nacrea 需压低约 480 m）。
+8. **地理钉扎** `_apply_geography_pins`：钉扎 authored 高程（最后覆盖）。`pin_exponent>1`
    （削峰）只放大「高于目标」的下压方向，低于目标（海沟）保持线性上拉——避免把
    feature 软边上的深沟 cell 对称指数化抬成山（§4.4 钉扎过抬修复）。拉动量不超过到目标的偏差
    （最多拉到目标）。分两遍：`pin_crosses_sea_level` 为假的地物（默认，大陆平均海拔一类）只作用于与
    目标同侧的格子——正目标只动陆地、负目标只动海洋——所以不改变海岸线；标为真的地物（陆桥、
    人工海峡）随后作用于所有格子。
-8. **不做渐近压缩**：格子值是格子平均高程，海沟的格子平均深度由第 2c 步的挠曲剖面给出，海洋深度上限
+9. **不做渐近压缩**：格子值是格子平均高程，海沟的格子平均深度由第 2c 步的挠曲剖面给出，海洋深度上限
    `isostasy_max_ocean_depth_m` 只是沟轴点深度的检验量。陆地上限
    `isostasy_max_continental_elevation_m`（峰顶高度，nacrea 8443 m）不再压缩格子平均高程，造山带的平均高程由
    §7.1 第 2b 步的剖面上限约束；为抹平压缩台阶而设的陆地拉普拉斯平滑一并取消（对称版
@@ -1252,10 +1259,11 @@ def check_polar_configuration(
 ### 极地冰盖（8/9 追加相位，`ice_sheets.py`）
 
 极地冰盖在海平面校准、地理钉扎、均衡压缩、平滑与河流全部完成**之后**追加
-（`apply_polar_ice_sheets`，`ice_sheets.py:152`）：冰只堆叠在陆地 cell 上，海平面
+（`apply_polar_ice_sheets`，`ice_sheets.py:165`）：冰只堆叠在陆地 cell 上，海平面
 维持校准值不动，**海岸线格局不受影响**；河网在冰期前的基岩面上生成（冰下河道）。
-每个 cell 的 `ice_thickness_m` 字段记录冰厚，基岩高程可由
-`elevation − ice_thickness_m` 重建，重跑幂等（先剥旧冰再重算，不会重复叠加）。
+每个 cell 的 `ice_thickness_m` 字段记录冰厚，受载基岩高程为 `elevation − ice_thickness_m`。冰载荷按局地 Airy
+均衡压低基岩 `ICE_LOAD_DEPRESSION` = ρ_i/ρ_m ≈ 0.28 倍冰厚（技术债 45），冰面 = 无冰基岩 + 0.72·冰厚；重跑幂等
+（先剥旧冰并补回下沉量，再重算，不会重复叠加或重复下压）。
 机制分三段：
 
 1. **日照门（无量纲）**：cell 的年平均大气顶（TOA）日照低于本世界赤道值的

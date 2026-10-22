@@ -6,6 +6,16 @@ coastline configuration is untouched: ice is added on top of land cells
 only, the sea level stays where the calibration put it, and bedrock is
 reconstructible as ``elevation - ice_thickness_m``.
 
+Isostatic load (technical debt 45):
+    The ice load depresses its bed by Airy isostasy, Δb = −H·ρ_i/ρ_m ≈ 0.28·H
+    (ρ_m = 3300 kg/m³).  Ice sheets are thousands of km wide, far wider than the
+    lithosphere's flexural wavelength (~100–150 km), so local compensation holds
+    away from the margins; rebound takes ~10 kyr, so long-lived sheets are fully
+    compensated.  The surface stays above the unloaded bed (it rises by 0.72·H),
+    so no land cell turns to sea; bed under thick ice can lie below sea level
+    (Antarctic marine basins).  Epistemic class: conservation law with
+    observation-constrained densities.
+
 Physics
 -------
 Thermal gate (symmetric, dimensionless):
@@ -71,6 +81,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RHO_ICE_KG_M3 = 917.0
+RHO_MANTLE_KG_M3 = 3300.0
+# bed depression per unit ice thickness (local Airy compensation)
+ICE_LOAD_DEPRESSION = RHO_ICE_KG_M3 / RHO_MANTLE_KG_M3
 SOLAR_CONSTANT_WM2 = 1361.0
 
 
@@ -175,8 +188,11 @@ def apply_polar_ice_sheets(mesh: CVTMesh, config: TerrainPipelineConfig) -> dict
     def _old_ice(c: VoronoiCell) -> float:
         return getattr(c, "ice_thickness_m", None) or 0.0
 
-    bed = np.array([c.elevation - _old_ice(c) for c in mesh.cells], dtype=np.float64)
+    # the unloaded bed: surface minus ice, plus the depression the ice had caused
     old_ice = np.array([_old_ice(c) for c in mesh.cells], dtype=np.float64)
+    bed = np.array([c.elevation for c in mesh.cells], dtype=np.float64) - old_ice * (
+        1.0 - ICE_LOAD_DEPRESSION
+    )
     land = bed > 0.0
 
     # ---- Thermal gate: annual-mean insolation ----
@@ -247,14 +263,15 @@ def apply_polar_ice_sheets(mesh: CVTMesh, config: TerrainPipelineConfig) -> dict
         ice[cap_zone] = cap_h
         stats["cap_cells"] = float((cap_h > 0.0).sum())
 
-    # ---- Write back: surface = bed + ice ----
+    # ---- Write back: surface = loaded bed + ice ----
+    surface = bed + ice * (1.0 - ICE_LOAD_DEPRESSION)
     dome_mask = dome_zone & (ice > 0.0)
     if dome_mask.any():
-        stats["dome_mean_surface_m"] = float((bed[dome_mask] + ice[dome_mask]).mean())
+        stats["dome_mean_surface_m"] = float(surface[dome_mask].mean())
     for i, c in enumerate(mesh.cells):
         if ice[i] > 0.0:
             c.ice_thickness_m = float(ice[i])
-            c.elevation = float(bed[i] + ice[i])
+            c.elevation = float(surface[i])
         else:
             c.ice_thickness_m = None
             c.elevation = float(bed[i])

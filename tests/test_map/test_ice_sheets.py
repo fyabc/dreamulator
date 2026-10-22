@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from dreamulator.map.ice_sheets import (
+    ICE_LOAD_DEPRESSION,
     RHO_ICE_KG_M3,
     annual_mean_insolation,
     apply_polar_ice_sheets,
@@ -47,8 +48,11 @@ def test_dome_profile_matches_perfect_plastic():
             assert c.ice_thickness_m is None
             assert c.elevation == pytest.approx(-3000.0)
         else:
-            assert c.elevation >= 200.0  # surface = bed + ice (margin cells: h = 0)
-            assert c.elevation - (c.ice_thickness_m or 0.0) == pytest.approx(200.0, abs=1e-6)
+            # coastline untouched: the surface never drops below the unloaded bed
+            assert c.elevation >= 200.0
+            # the ice load depresses its bed by Airy isostasy: bed = 200 − 0.28·H
+            h = c.ice_thickness_m or 0.0
+            assert c.elevation - h == pytest.approx(200.0 - ICE_LOAD_DEPRESSION * h, abs=1e-6)
             if (c.ice_thickness_m or 0.0) > 0.0:
                 n_iced += 1
     assert n_iced > 50
@@ -130,3 +134,23 @@ def test_disabled_is_noop():
     apply_polar_ice_sheets(mesh, cfg)
     assert [c.elevation for c in mesh.cells] == before
     assert all(c.ice_thickness_m is None for c in mesh.cells)
+
+
+def test_bed_depression_is_airy():
+    assert pytest.approx(917.0 / 3300.0) == ICE_LOAD_DEPRESSION
+    mesh = _flat_world()
+    cfg = dataclasses.replace(
+        TerrainPipelineConfig(num_nodes=4000, lloyd_iterations=1, seed=7),
+        ice_sheet_insolation_fraction=2.0,
+        ice_maritime_distance_km=0.0,
+    )
+    apply_polar_ice_sheets(mesh, cfg)
+    thick = [c for c in mesh.cells if (c.ice_thickness_m or 0.0) > 1000.0]
+    assert thick
+    # under ~1 km of ice or more, the 200 m bed sinks below sea level (marine basins)
+    assert all(c.elevation - (c.ice_thickness_m or 0.0) < 0.0 for c in thick)
+    # removing the ice (gate closed) restores the unloaded bed
+    cfg_off = dataclasses.replace(cfg, ice_sheet_insolation_fraction=0.0)
+    apply_polar_ice_sheets(mesh, cfg_off)
+    land = [c for c in mesh.cells if c.lat > 45.0]
+    assert all(c.elevation == pytest.approx(200.0, abs=1e-6) for c in land)

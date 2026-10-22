@@ -289,8 +289,10 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # random interior belts; v9: their start crest is the world's typical collision crest.
     # v10 (phase E step 2): dynamic topography of the mantle flow; v11: no ridge bump or
     # plate offset on seafloor of known age; v12: Andean crest one flank length inland,
-    # forearc wedge followed above sea level.
-    "terrain": 13,
+    # forearc wedge followed above sea level.  v14 (debt 48): contract plate-id ties no
+    # longer follow the per-process hash seed.  v15 (debt 47): final sea-level trim; v16: the
+    # sea-level solve interpolates between cell elevations (continuous in the inputs).
+    "terrain": 16,
 }
 
 
