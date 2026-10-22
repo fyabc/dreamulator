@@ -224,6 +224,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   从 BSh 变为 BWh，逐格柯本吻合率 30.2% → 34.6%，陆地降水偏差 +207 → +88 mm；季风区陆地降水转为偏弱，纬向
   降水 R² 0.535 → 0.444，登记为标定债 42。nacrea 陆地柯本约 10.7% 的格子变化。
 
+- **浏览器气候实验台温度首图（2026-10-23，实验性）**：新增 `/playground` 页面
+  （打开「实验功能」后出现在侧栏），用 Pyodide 314.0.7 + numpy 在浏览器里运行引擎的
+  纯温度函数，拖入 PNG/JPEG 高度图即可得到年均与逐月温度首图，不需要后端。引擎的
+  `climate_physics.py` / `climate_seasonality.py` 以 Vite `?raw` 写入 Pyodide 虚拟文件
+  系统；页面在 180×90 规则经纬网格上走「能量平衡 → 1D EBM（按自转周期缩放扩散）→
+  湿绝热高程订正 → 季节热容 → 月度温度」链。内置地球与 Nacrea 示例高度图（默认地球），
+  支持两组参数预设、拖放/选择图片、导入后先显示灰度预览、月份滑杆与按月重绘。
+  实测 Pyodide + numpy 加载约 5.9 s、16,200 格温度首图 0.19 s；当前只算温度，
+  不含 CVT、降水、风场、洋流与 Köppen，完整气候仍待降水预算加速。设计、限制与
+  后续路线见 `docs/design/proposals/browser-playground.md`。
+
 ## [1.1.0] — 2026-10-20
 
 ### Added

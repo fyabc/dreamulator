@@ -222,6 +222,13 @@ uv run dreamulator serve --open
 **如果出错**：页面空白时先确认第 1 步执行过 `npm run build`——`serve` 提供的是
 前端构建产物；端口 8000 被占用时用 `--port` 换端口。
 
+**实验性：浏览器气候实验台**：打开侧栏底部的「实验功能」后会出现
+「气候实验台」入口（也可直接访问 `/playground`）。它把引擎的纯温度函数
+放进浏览器的 Pyodide 里运行，拖入一张高度图即可得到年均与逐月温度首图，
+不需要后端。第一次运行会从 CDN 下载 Pyodide（约数 MB）；当前只算温度，
+不含降水、风场、洋流与 Köppen。设计与限制见
+[浏览器 playground 提案](../design/proposals/browser-playground.md)。
+
 ## 7. 导出图像
 
 无需打开浏览器，直接把地图图层导出成 PNG（配色与前端完全同源）：

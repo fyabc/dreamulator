@@ -10,7 +10,8 @@
     "overview": "概览",
     "map": "地图",
     "viewer3d": "3D 视图",
-    "packs": "子地图"
+    "packs": "子地图",
+    "playground": "气候实验台"
   },
   "action": {
     "back": "← 返回",

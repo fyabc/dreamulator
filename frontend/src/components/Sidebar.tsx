@@ -34,6 +34,8 @@ export default function Sidebar({
     { path: '/worlds', label: t('nav.worlds'), icon: '🌍' },
     // Region pack QA page — local packs only, hidden in the static build.
     ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: '🧭' }]),
+    // Experimental browser Pyodide playground — opt-in via the experimental flag.
+    ...(experimental ? [{ path: '/playground', label: t('nav.playground'), icon: '🧪' }] : []),
     { path: '/help', label: t('nav.help'), icon: '❓' },
   ]
 

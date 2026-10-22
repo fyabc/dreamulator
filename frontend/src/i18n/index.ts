@@ -39,11 +39,13 @@ import mapZh from './locales/zh-CN/map.json'
 import worldsZh from './locales/zh-CN/worlds.json'
 import civmapZh from './locales/zh-CN/civmap.json'
 import helpZh from './locales/zh-CN/help.json'
+import playgroundZh from './locales/zh-CN/playground.json'
 import commonEn from './locales/en/common.json'
 import mapEn from './locales/en/map.json'
 import worldsEn from './locales/en/worlds.json'
 import civmapEn from './locales/en/civmap.json'
 import helpEn from './locales/en/help.json'
+import playgroundEn from './locales/en/playground.json'
 
 /** Languages with at least partial translation coverage. */
 export const SUPPORTED_LANGUAGES = [
@@ -69,13 +71,13 @@ function getInitialLanguage(): string {
 
 i18n.use(initReactI18next).init({
   resources: {
-    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh },
-    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn },
+    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh },
+    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn, playground: playgroundEn },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'zh-CN',
   defaultNS: 'common',
-  ns: ['common', 'map', 'worlds', 'civmap', 'help'],
+  ns: ['common', 'map', 'worlds', 'civmap', 'help', 'playground'],
   interpolation: { escapeValue: false }, // React already escapes
   returnNull: false,
   // Show keys in development so missing translations are obvious.

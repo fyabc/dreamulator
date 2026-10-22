@@ -129,6 +129,7 @@
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示） | 调研 1–2 天 | ★★ |
 | P3 | **nullschool 式粒子流可视化** ✅ 2026-10-23：风/洋流粒子平流拖尾并入 2D/3D 查看器；技术参考见 `pipelines/map-system.md` | — | ★★ |
+| P3 | **浏览器气候实验台**（Pyodide；上传高度图 → 温度首图，实验性；温度腿已落地，完整气候等降水预算加速；`proposals/browser-playground.md`） | 按引擎加速 | ★★ |
 | P3 | **草案七转正 + Hycean 调研**（创作线） | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明） | ~1 周级 | ★★★ |
