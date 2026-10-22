@@ -18,6 +18,9 @@ def test_defaults() -> None:
     assert cfg.seed == 7
     assert cfg.cyclones.enabled is False
     assert cfg.cyclones.tropical_per_hemisphere == 1
+    assert cfg.atmosphere.enabled is True
+    assert cfg.atmosphere.cloud_altitude_km == 4.0
+    assert cfg.atmosphere.exposure == "white_balance"
 
 
 def test_yaml_roundtrip(tmp_path: Path) -> None:
@@ -36,7 +39,12 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
         "  tracks:\n"
         "    - lat_deg: 10\n"
         "      lon_deg: 20\n"
-        "      outer_radius_km: 2000\n",
+        "      outer_radius_km: 2000\n"
+        "atmosphere:\n"
+        "  enabled: true\n"
+        "  exposure: physical\n"
+        "  cloud_altitude_km: 6\n"
+        "  star_temperature_k: 4365\n",
         encoding="utf-8",
     )
     cfg = CloudRenderConfig.from_yaml(path)
@@ -50,6 +58,9 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
     assert cfg.cyclones.extratropical_scale == 1.5
     assert len(cfg.cyclones.tracks) == 1
     assert cfg.cyclones.tracks[0].outer_radius_km == 2000.0
+    assert cfg.atmosphere.exposure == "physical"
+    assert cfg.atmosphere.cloud_altitude_km == 6.0
+    assert cfg.atmosphere.star_temperature_k == 4365.0
 
 
 def test_unknown_key_rejected(tmp_path: Path) -> None:

@@ -32,6 +32,7 @@
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
 - `canvas-hydrology.md` — 全球画布链：画布契约、外存填平/汇流/湖级联、区域裁窗与渲染衔接
+- `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
 
 ### proposals/ — 设计提案 + 方法论
 

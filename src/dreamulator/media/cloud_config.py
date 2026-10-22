@@ -21,6 +21,10 @@ Example::
       extratropical_per_hemisphere: 2
       tropical_scale: 1.0
       extratropical_scale: 1.0
+    atmosphere:
+      enabled: true
+      exposure: white_balance
+      cloud_altitude_km: 4.0
 """
 
 from __future__ import annotations
@@ -69,6 +73,30 @@ class CycloneSettings(BaseModel):
     tracks: list[CycloneTrack] = Field(default_factory=list)
 
 
+class AtmosphereSettings(BaseModel):
+    """L5 atmosphere block.
+
+    Coefficients are derived from the world's ``stellar.yaml`` and
+    ``planets.yaml`` at run time; the two override fields exist for QA and
+    for worlds without atmospheric inputs.  ``exposure`` selects whether the
+    camera white-balances the scene's direct daylight (``white_balance``,
+    matching the authored surface palette) or keeps the K star's warm cast
+    (``physical``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    cloud_altitude_km: float = Field(4.0, ge=0.0)
+    atmosphere_temperature_k: float = Field(273.15, gt=0.0)
+    mie_scale: float = Field(1.0, ge=0.0)
+    ozone_scale: float = Field(1.0, ge=0.0)
+    cloud_shadows: bool = True
+    exposure: Literal["white_balance", "physical"] = "white_balance"
+    star_temperature_k: float | None = Field(None, gt=0.0)
+    surface_pressure_atm: float | None = Field(None, gt=0.0)
+
+
 class CloudRenderConfig(BaseModel):
     """Settings for one ``export clouds`` run."""
 
@@ -83,6 +111,7 @@ class CloudRenderConfig(BaseModel):
     sun_lat: float = 20.0
     cover_scale: float = 1.0
     cyclones: CycloneSettings = Field(default_factory=CycloneSettings)
+    atmosphere: AtmosphereSettings = Field(default_factory=AtmosphereSettings)
 
     @classmethod
     def from_yaml(cls, path: Path) -> CloudRenderConfig:

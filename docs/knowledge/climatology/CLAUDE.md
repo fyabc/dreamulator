@@ -15,6 +15,7 @@
 - `obliquity_ice_albedo.md` — 轴倾角只重新分配日照（全球年平均恒为 S/4，极点年平均 S·sin ε/π），冰反照率把高纬夏季的增量整流成全球净增温；在 GCM 中检验时的注意事项（必须固定轨道）；EBM 为什么复现不了（全球均温锚定、冰反照率只做局地降温）
 - `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）、极端天气（温带风暴与热带气旋的自转标度律、寒潮与热浪、夜间强对流，含 Nacrea 与地球的 GCM 对照）
 - `cloud_field_statistics.md` — 云场两条统计律：单点光学厚度近似指数分布（薄云主导，Marchand 2010 直方图评审）+ 空间功率谱一维 −5/3 幂律（Cahalan & Joseph 1989 / Davis 1997 转引）；对程序化云纹理的参数映射（指数逆 CDF + fBm persistence ≈ 0.7）；竞品工程实现调研见 `cloud_generation_competitors.md`
+- `atmospheric_scattering.md` — 行星圆盘 L5 大气渲染：单次散射方程与球壳几何、瑞利/米氏/臭氧系数与柱质量缩放、标高与大气顶、恒星光谱到 sRGB 白点与有效瑞利系数（Wyman CIE 拟合）、透射率查找表、分层云壳与云影、已知限制（无多次散射/偏振/光谱相关）与参考文献
 - `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 地质历史（显生宙逐期表 + 前寒武、CH4 快变量/CO2 慢变量框架、冰期旋回耦合、火山-风化稳态与脉冲放大标度律、世界构建锚点速查表；2026-10 nacrea 路线 1 调研沉淀）
 
 ## 规划中的文档
@@ -41,6 +42,7 @@
 | `atmospheric_circulation.md` | `climate_physics.py:hadley_cell_wind()` | 风场矢量 |
 | `cloud_field_statistics.md` | `media/cloud_render.py`（L2 程序化云纹理） | alpha 分布与谱斜率参数 |
 | `cloud_generation_competitors.md` | `media/cloud_render.py`（L2/L5 路线取舍） | 形状/侵蚀分离、weather map 契约、locality 尺度多变、球面采样 |
+| `atmospheric_scattering.md` | `media/atmosphere_render.py`（L5 大气渲染） | 单次散射大气、透射率查找表、恒星光谱颜色、分层云壳 |
 | `polar_pressure_regimes.md` | `climate_simulator.py`（`hadley_extent_deg`/`polar_cell_start_deg` 体制切换） | 两圈/三圈体制与极地气压/降水体制 |
 | `precipitation.md` | `climate_simulator.py:_compute_precipitation_monthly_budget()` | 年/月降水量 |
 | `ocean_currents.md` | `map/ocean_circulation.py`（`solve_ocean_gyre` 等） | 洋流矢量 |

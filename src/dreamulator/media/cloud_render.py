@@ -29,6 +29,11 @@ Design notes:
   strengthening with wind speed).  Cyclone morphology is layer L3
   (``media/cyclone_render.py``), composited by :func:`clouds_globe` when a
   track set is supplied.
+* The globe preview is layer L5.  The legacy :func:`render_globe_preview`
+  remains the fallback; the physical path is
+  ``media/atmosphere_render.py`` (single-scattering Rayleigh/Mie/ozone shell,
+  star-spectrum colour, layered cloud shell), selected by passing an
+  :class:`AtmosphereModel` to :func:`clouds_globe`.
 
 Epistemic status (per engine discipline §9): the noise machinery is a
 standard graphics technique; the cover-field coefficients in
@@ -47,12 +52,14 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from dreamulator.map.noise_kernels import fbm_on_points, worley_on_points
+from dreamulator.media.atmosphere_render import atmosphere_summary
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
+    from dreamulator.media.atmosphere_render import AtmosphereModel
     from dreamulator.media.cyclone_render import Cyclone
 
 # ---------------------------------------------------------------------------
@@ -1356,13 +1363,19 @@ def clouds_globe(
     cover_scale: float = 1.0,
     cyclones: Sequence[Cyclone] | None = None,
     cyclone_seed: int = 41,
+    atmosphere: AtmosphereModel | None = None,
+    cloud_altitude_km: float = 4.0,
+    cloud_shadows: bool = True,
+    atmosphere_exposure: str = "white_balance",
     provenance: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Run the full L2 prototype: texture + cover field + globe preview.
 
     ``cyclones`` optionally overlays L3 parametric cyclone templates on the
     texture (a synthetic track set is a QA placeholder until the L1 layer pack
-    provides real tracks).
+    provides real tracks).  ``atmosphere`` switches the globe preview from the
+    legacy limb-glow composite to the L5 physical atmosphere shell; the
+    remaining atmosphere arguments configure that path.
 
     Writes ``clouds.png`` (RGBA straight-alpha equirect), ``cloud_cover.png``
     (8-bit greyscale placeholder cover field), ``surface.png`` (equirect
@@ -1459,15 +1472,32 @@ def clouds_globe(
     else:
         alpha = np.zeros((height, width), dtype=np.float64)
 
-    globe = render_globe_preview(
-        surface,
-        alpha,
-        res=globe_res,
-        center_lon_deg=center_lon_deg,
-        center_lat_deg=center_lat_deg,
-        sun_lon_deg=sun_lon_deg,
-        sun_lat_deg=sun_lat_deg,
-    )
+    if atmosphere is not None:
+        from dreamulator.media.atmosphere_render import render_globe_atmosphere
+
+        globe = render_globe_atmosphere(
+            surface,
+            alpha,
+            res=globe_res,
+            center_lon_deg=center_lon_deg,
+            center_lat_deg=center_lat_deg,
+            sun_lon_deg=sun_lon_deg,
+            sun_lat_deg=sun_lat_deg,
+            model=atmosphere,
+            cloud_altitude_km=cloud_altitude_km,
+            cloud_shadows=cloud_shadows,
+            exposure=atmosphere_exposure,
+        )
+    else:
+        globe = render_globe_preview(
+            surface,
+            alpha,
+            res=globe_res,
+            center_lon_deg=center_lon_deg,
+            center_lat_deg=center_lat_deg,
+            sun_lon_deg=sun_lon_deg,
+            sun_lat_deg=sun_lat_deg,
+        )
     Image.fromarray(globe, "RGB").save(str(out_dir / "globe.png"))
     paths["globe"] = out_dir / "globe.png"
 
@@ -1500,6 +1530,11 @@ def clouds_globe(
             "source": "synthetic placeholder (L1 tracks pending)" if cyclones else None,
             "seed": cyclone_seed if cyclones else None,
         },
+        "atmosphere": (
+            atmosphere_summary(atmosphere, exposure=atmosphere_exposure)
+            if atmosphere is not None
+            else None
+        ),
         "provenance": provenance or {},
     }
     with (out_dir / "meta.json").open("w", encoding="utf-8") as fh:

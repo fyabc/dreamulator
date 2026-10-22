@@ -1,0 +1,742 @@
+"""L5 atmosphere rendering for the orbital weather-globe chain.
+
+This module replaces the preview's hand-drawn limb glow with a physically
+grounded single-scattering atmosphere: a spherical shell of Rayleigh
+scattering molecules, Mie-scattering aerosols and absorbing ozone, lit by the
+world's own star.  It is the first L5 increment from the orbital weather-globe
+requirement notes (the layer stack there is surface sphere + translucent cloud
+shell + atmosphere shell); cloud-top height, city lights, ocean glint and
+satellite eclipse shadows remain later increments.
+
+Model and references
+--------------------
+The radiative transfer is the standard single-scattering formulation used by
+
+* Bruneton & Neyret (2008), *Precomputed Atmospheric Scattering*, Computer
+  Graphics Forum 27(4) — ray/shell geometry, exponential density profiles,
+  transmittance lookup table, single-scattering integral;
+* Hillaire (2020), *A Scalable and Production Ready Sky and Atmosphere
+  Rendering Technique*, Computer Graphics Forum 39(4) — the RGB coefficient
+  set (Rayleigh 5.802/13.558/33.1e-6 m^-1 at 680/550/440 nm, Mie scattering
+  3.996e-6 m^-1, Mie absorption 0.444e-6 m^-1, ozone absorption
+  0.650/1.881/0.085e-6 m^-1 in a 25 km tent of half-width 15 km), and the
+  Mie asymmetry g = 0.8.
+
+The star spectrum enters through the CIE 1931 colour-matching functions
+(analytic multi-lobe fit of Wyman, Sloan & Shirley 2013, JCGT 2(2)).  The
+Rayleigh coefficient at every wavelength is ``beta(550) * (550/lambda)^4``;
+integrating the Planck spectrum against the CMFs yields the RGB coefficients
+of the star-referenced display frame.  Since the scattering is linear in the
+incident spectrum, these effective coefficients reproduce the exact
+optically-thin scattered colour.  The star's colour is kept as one explicit
+constant, ``light_color``: the default ``white_balance`` exposure divides out
+the scene's direct daylight (the surface palette is authored for neutral
+daylight), while ``exposure == "physical"`` keeps the K-star's warm cast and
+the paler sky that follows.
+
+Colour management is explicit: the surface PNG and cloud colour are sRGB,
+so they are decoded to linear radiance before the radiative transfer and
+encoded back to sRGB at the end.  Treating sRGB values as linear (as the
+legacy preview did) crushes the midtones.
+
+Epistemic status
+----------------
+The geometry, density profiles and coefficients are derived or taken from the
+cited literature.  The vertical aerosol and ozone profiles are Earth-analogue
+inputs (``mie_scale`` / ``ozone_scale`` expose them); they are not derived from
+Nacrea's photochemistry.  Multiple scattering, polarisation and spectral
+correlation between extinction and scattering are neglected — the first is
+the main known brightness error near the terminator.  The cloud shell is a
+thin surface at a fixed altitude (L1 will supply cloud-top height).
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from functools import lru_cache
+
+import numpy as np
+
+# ---------------------------------------------------------------------------
+# Physical constants and Earth-calibrated reference values
+# ---------------------------------------------------------------------------
+
+EARTH_RADIUS_KM = 6371.0
+EARTH_GRAVITY = 9.80665
+
+#: Rayleigh scattering at 550 nm for a 1 atm Earth-gravity column (m^-1).
+RAYLEIGH_BETA_550 = 13.558e-6
+#: Rayleigh scale height of the Earth standard atmosphere (km).
+RAYLEIGH_SCALE_HEIGHT_EARTH_KM = 8.0
+#: Mie (aerosol) scattering and absorption at sea level (m^-1).
+MIE_SCATTER = 3.996e-6
+MIE_ABSORB = 0.444e-6
+#: Mie scale height of the Earth standard atmosphere (km).
+MIE_SCALE_HEIGHT_KM = 1.2
+#: Mie asymmetry parameter (Hillaire 2020; Cornette-Shanks/Heneyey-Greenstein).
+MIE_ASYMMETRY = 0.8
+#: Ozone absorption coefficients (m^-1), Earth column, R/G/B channels.
+OZONE_ABSORB_RGB = (0.650e-6, 1.881e-6, 0.085e-6)
+#: Ozone tent profile (Hillaire 2020): peak at 25 km, zero at 10 and 40 km.
+OZONE_CENTER_KM = 25.0
+OZONE_HALF_WIDTH_KM = 15.0
+
+#: The atmosphere is truncated where the density has fallen by e^-12.
+ATMOSPHERE_TOP_SCALE_HEIGHTS = 12.0
+
+#: Default shell altitude of the L2 cloud deck; L1 cloud-top height replaces it.
+CLOUD_ALTITUDE_KM = 4.0
+
+#: sRGB primaries for the XYZ→linear-RGB conversion (IEC 61966-2-1).
+_XYZ_TO_RGB = np.array(
+    [
+        [3.2406, -1.5372, -0.4986],
+        [-0.9689, 1.8758, 0.0415],
+        [0.0557, -0.2040, 1.0570],
+    ]
+)
+
+_MOLAR_MASS_KG = {
+    "N2": 0.0280134,
+    "O2": 0.0319988,
+    "AR": 0.039948,
+    "CO2": 0.0440095,
+    "CH4": 0.0160425,
+}
+
+
+# ---------------------------------------------------------------------------
+# Star spectrum → display coefficients
+# ---------------------------------------------------------------------------
+
+
+def _gauss_lobe(
+    wavelength_nm: np.ndarray, mu: float, sigma_lo: float, sigma_hi: float
+) -> np.ndarray:
+    """Asymmetric Gaussian lobe used by the Wyman et al. CMF fit."""
+    sigma = np.where(wavelength_nm < mu, sigma_lo, sigma_hi)
+    return np.asarray(np.exp(-0.5 * ((wavelength_nm - mu) / sigma) ** 2))
+
+
+def cie_xyz_cmf(wavelength_nm: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """CIE 1931 x̄, ȳ, z̄ from the Wyman-Sloan-Shirley multi-lobe fit.
+
+    Valid over 380–780 nm.  The fit is a fit, not the tabulated standard;
+    the authors quantify the error as below the variance between human
+    observer datasets.  It is used here so the star spectrum can enter the
+    coefficients analytically rather than through a hand-picked colour.
+    """
+    x_bar = (
+        1.056 * _gauss_lobe(wavelength_nm, 599.8, 37.9, 31.0)
+        + 0.362 * _gauss_lobe(wavelength_nm, 442.0, 16.0, 26.7)
+        - 0.065 * _gauss_lobe(wavelength_nm, 501.1, 20.4, 26.2)
+    )
+    y_bar = 0.821 * _gauss_lobe(wavelength_nm, 568.8, 46.9, 40.5) + 0.286 * _gauss_lobe(
+        wavelength_nm, 530.9, 16.3, 31.1
+    )
+    z_bar = 1.217 * _gauss_lobe(wavelength_nm, 437.0, 11.8, 36.0) + 0.681 * _gauss_lobe(
+        wavelength_nm, 459.0, 26.0, 13.8
+    )
+    return x_bar, y_bar, z_bar
+
+
+def planck_spectral_radiance(wavelength_nm: np.ndarray, temperature_k: float) -> np.ndarray:
+    """Planck spectral radiance (arbitrary scale) at the given wavelengths."""
+    if temperature_k <= 0.0:
+        raise ValueError("temperature_k must be positive")
+    lam = np.asarray(wavelength_nm, dtype=np.float64) * 1e-9
+    h = 6.62607015e-34
+    c = 2.99792458e8
+    k = 1.380649e-23
+    exponent = h * c / (lam * k * temperature_k)
+    return np.asarray((2.0 * h * c * c / lam**5) / np.expm1(exponent))
+
+
+@dataclass(frozen=True)
+class StarOptics:
+    """Display-frame optical properties of a blackbody star.
+
+    ``rayleigh_rgb`` is the Rayleigh coefficient per unit of the 550 nm
+    reference, expressed in the star's sRGB display frame.  ``white_rgb`` is
+    the star's sRGB white point (an unlit white Lambertian surface under this
+    star); it converts between white-balanced and physical colour.
+    """
+
+    temperature_k: float
+    rayleigh_rgb: tuple[float, float, float]
+    white_rgb: tuple[float, float, float]
+
+
+@lru_cache(maxsize=32)
+def star_optics(temperature_k: float) -> StarOptics:
+    """Derive the star's RGB Rayleigh weights and white point from its Planck spectrum."""
+    wavelengths = np.arange(380.0, 781.0, 1.0)
+    x_bar, y_bar, z_bar = cie_xyz_cmf(wavelengths)
+    spectrum = planck_spectral_radiance(wavelengths, temperature_k)
+
+    xyz = np.array(
+        [
+            float(np.trapezoid(spectrum * x_bar, wavelengths)),
+            float(np.trapezoid(spectrum * y_bar, wavelengths)),
+            float(np.trapezoid(spectrum * z_bar, wavelengths)),
+        ]
+    )
+    white = np.clip(_XYZ_TO_RGB @ xyz, 0.0, None)
+    if not np.any(white > 0.0):
+        raise ValueError("star spectrum has no visible response")
+
+    beta_lambda = (550.0 / wavelengths) ** 4
+    beta_xyz = np.array(
+        [
+            float(np.trapezoid(spectrum * beta_lambda * x_bar, wavelengths)),
+            float(np.trapezoid(spectrum * beta_lambda * y_bar, wavelengths)),
+            float(np.trapezoid(spectrum * beta_lambda * z_bar, wavelengths)),
+        ]
+    )
+    # White-balancing divides each display channel by the star's own white,
+    # so an unlit white surface reads (1, 1, 1).
+    beta_rgb = (_XYZ_TO_RGB @ beta_xyz) / white
+    return StarOptics(
+        temperature_k=float(temperature_k),
+        rayleigh_rgb=(float(beta_rgb[0]), float(beta_rgb[1]), float(beta_rgb[2])),
+        white_rgb=(float(white[0]), float(white[1]), float(white[2])),
+    )
+
+
+def mean_molar_mass_kg_mol(composition: dict[str, float] | None) -> float:
+    """Mean molar mass (kg/mol) of a mole-fraction composition; Earth air if unknown."""
+    if not composition:
+        return 0.0289652
+    total = 0.0
+    mass = 0.0
+    for species, fraction in composition.items():
+        molar = _MOLAR_MASS_KG.get(species.upper())
+        if molar is None:
+            continue
+        total += float(fraction)
+        mass += float(fraction) * molar
+    if total <= 0.0:
+        return 0.0289652
+    return mass / total
+
+
+# ---------------------------------------------------------------------------
+# Atmosphere model and transmittance lookup table
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AtmosphereModel:
+    """Physical description of an Earth-like scattering atmosphere.
+
+    ``gravity_m_s2`` and ``surface_pressure_atm`` set the optical column
+    relative to Earth; the scale height follows from hydrostatic equilibrium
+    ``H = R_specific * T / g``.  ``atmosphere_temperature_k`` is a reference
+    temperature for the scattering layer (273.15 K, the standard-atmosphere
+    sea-level value), not the planet's surface temperature.
+    """
+
+    planet_radius_km: float = EARTH_RADIUS_KM
+    gravity_m_s2: float = EARTH_GRAVITY
+    surface_pressure_atm: float = 1.0
+    atmosphere_temperature_k: float = 273.15
+    mean_molar_mass_kg_mol: float = 0.0289652
+    star_temperature_k: float = 5772.0
+    mie_scale: float = 1.0
+    ozone_scale: float = 1.0
+
+    @property
+    def scale_height_km(self) -> float:
+        specific_gas = 8.314462618 / max(self.mean_molar_mass_kg_mol, 1e-9)
+        return specific_gas * self.atmosphere_temperature_k / self.gravity_m_s2 / 1000.0
+
+    @property
+    def top_altitude_km(self) -> float:
+        return ATMOSPHERE_TOP_SCALE_HEIGHTS * self.scale_height_km
+
+    @property
+    def column_factor(self) -> float:
+        """Optical column relative to Earth: p/p0 * g0/g."""
+        return self.surface_pressure_atm * EARTH_GRAVITY / self.gravity_m_s2
+
+    @property
+    def star(self) -> StarOptics:
+        return star_optics(self.star_temperature_k)
+
+    @property
+    def rayleigh_rgb(self) -> np.ndarray:
+        """Effective Rayleigh coefficient per RGB channel (m^-1)."""
+        scale = RAYLEIGH_BETA_550 * self.column_factor
+        return np.asarray(np.array(self.star.rayleigh_rgb) * scale, dtype=np.float64)
+
+    @property
+    def mie_scatter(self) -> float:
+        return MIE_SCATTER * self.column_factor * self.mie_scale
+
+    @property
+    def mie_absorb(self) -> float:
+        return MIE_ABSORB * self.column_factor * self.mie_scale
+
+    @property
+    def ozone_absorb_rgb(self) -> np.ndarray:
+        return np.asarray(np.array(OZONE_ABSORB_RGB) * self.ozone_scale, dtype=np.float64)
+
+    def light_color(self, exposure: str = "white_balance") -> np.ndarray:
+        """Star colour applied to the final image.
+
+        ``white_balance`` returns (1, 1, 1): the camera neutralises the star,
+        which matches the surface palette's visual intent.  ``physical``
+        returns the star's own sRGB white divided by its luminance, so the
+        scene keeps the star's warm cast.
+        """
+        if exposure == "white_balance":
+            return np.ones(3, dtype=np.float64)
+        if exposure != "physical":
+            raise ValueError("exposure must be 'white_balance' or 'physical'")
+        white = np.asarray(self.star.white_rgb, dtype=np.float64)
+        luminance = float(0.2126 * white[0] + 0.7152 * white[1] + 0.0722 * white[2])
+        return np.asarray(white / max(luminance, 1e-9), dtype=np.float64)
+
+
+@dataclass(frozen=True)
+class TransmittanceLUT:
+    """Tabulated atmospheric transmittance to the star over (altitude, cos zenith)."""
+
+    top_altitude_km: float
+    table: np.ndarray  # (n_alt, n_mu, 3)
+
+    def sample(self, altitude_km: np.ndarray, cos_zenith: np.ndarray) -> np.ndarray:
+        """Bilinear lookup; returns shape ``altitude.shape + (3,)``."""
+        n_alt, n_mu, _ = self.table.shape
+        a = np.clip(altitude_km / self.top_altitude_km, 0.0, 1.0) * (n_alt - 1)
+        m = (np.clip(cos_zenith, -1.0, 1.0) + 1.0) * 0.5 * (n_mu - 1)
+        a0 = np.floor(a).astype(np.int64)
+        m0 = np.floor(m).astype(np.int64)
+        a0 = np.clip(a0, 0, n_alt - 2)
+        m0 = np.clip(m0, 0, n_mu - 2)
+        fa = np.clip(a - a0, 0.0, 1.0)[..., None]
+        fm = np.clip(m - m0, 0.0, 1.0)[..., None]
+        t00 = self.table[a0, m0]
+        t01 = self.table[a0, m0 + 1]
+        t10 = self.table[a0 + 1, m0]
+        t11 = self.table[a0 + 1, m0 + 1]
+        result: np.ndarray = (
+            t00 * (1.0 - fa) * (1.0 - fm)
+            + t01 * (1.0 - fa) * fm
+            + t10 * fa * (1.0 - fm)
+            + t11 * fa * fm
+        )
+        return result
+
+
+def build_transmittance_lut(
+    model: AtmosphereModel,
+    *,
+    n_alt: int = 64,
+    n_mu: int = 128,
+    n_steps: int = 32,
+) -> TransmittanceLUT:
+    """Integrate the optical depth from a point in the shell toward the star.
+
+    A ray that intersects the planet is blocked (transmittance zero); the
+    geometric cutoff plus the growing grazing path give the smooth terminator.
+    """
+    planet = model.planet_radius_km
+    top = planet + model.top_altitude_km
+    # Coefficients are per metre; the geometry below is in kilometres.
+    beta_r = model.rayleigh_rgb * 1000.0
+    beta_m_ext = (model.mie_scatter + model.mie_absorb) * 1000.0
+    beta_o = model.ozone_absorb_rgb * 1000.0
+    h_r = model.scale_height_km
+
+    altitudes = np.linspace(0.0, model.top_altitude_km, n_alt)
+    mus = np.linspace(-1.0, 1.0, n_mu)
+    radius = planet + altitudes[:, None]
+    radius2 = radius * radius
+    along = radius * mus[None, :]
+    perp2 = np.maximum(radius2 - along * along, 0.0)
+    blocked = (along < 0.0) & (perp2 < planet * planet)
+
+    t_end = -along + np.sqrt(np.maximum(along * along + top * top - radius2, 0.0))
+    fractions = np.linspace(0.0, 1.0, n_steps)
+    path = t_end[..., None] * fractions
+    sample_radius = np.sqrt(perp2[..., None] + (along[..., None] + path) ** 2)
+    height = np.maximum(sample_radius - planet, 0.0)
+
+    rho_r = np.exp(-height / h_r)
+    rho_m = np.exp(-height / MIE_SCALE_HEIGHT_KM)
+    rho_o = np.clip(1.0 - np.abs(height - OZONE_CENTER_KM) / OZONE_HALF_WIDTH_KM, 0.0, None)
+
+    extinction = (
+        beta_r[None, None, None, :] * rho_r[..., None]
+        + beta_m_ext * rho_m[..., None]
+        + beta_o[None, None, None, :] * rho_o[..., None]
+    )
+    tau = np.sum(
+        0.5
+        * (extinction[..., 1:, :] + extinction[..., :-1, :])
+        * np.diff(path, axis=-1)[..., None],
+        axis=-2,
+    )
+    transmittance = np.exp(-tau)
+    transmittance[blocked] = 0.0
+    return TransmittanceLUT(top_altitude_km=model.top_altitude_km, table=transmittance)
+
+
+# ---------------------------------------------------------------------------
+# Ray marching and globe compositing
+# ---------------------------------------------------------------------------
+
+
+def _srgb_to_linear(value: np.ndarray) -> np.ndarray:
+    """Decode an sRGB-encoded 0–1 array (IEC 61966-2-1) to linear radiance."""
+    value = np.clip(value, 0.0, 1.0)
+    return np.asarray(
+        np.where(value <= 0.04045, value / 12.92, ((value + 0.055) / 1.055) ** 2.4),
+        dtype=np.float64,
+    )
+
+
+def _linear_to_srgb(value: np.ndarray) -> np.ndarray:
+    """Encode linear radiance to sRGB 0–1 for display."""
+    value = np.clip(value, 0.0, 1.0)
+    return np.asarray(
+        np.where(value <= 0.0031308, value * 12.92, 1.055 * value ** (1.0 / 2.4) - 0.055),
+        dtype=np.float64,
+    )
+
+
+def _sample_equirect(field: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
+    """Bilinear equirectangular sample at (lat, lon) degrees; shape ``lat.shape``."""
+    height, width = field.shape
+    row = (90.0 - lat_deg) / 180.0 * height - 0.5
+    col = (lon_deg + 180.0) / 360.0 * width - 0.5
+    r0 = np.floor(row).astype(np.int64)
+    c0 = np.floor(col).astype(np.int64)
+    fr = row - r0
+    fc = col - c0
+    r0c = np.clip(r0, 0, height - 1)
+    r1c = np.clip(r0 + 1, 0, height - 1)
+    c0w = np.mod(c0, width)
+    c1w = np.mod(c0 + 1, width)
+    sampled: np.ndarray = (
+        field[r0c, c0w] * (1.0 - fr) * (1.0 - fc)
+        + field[r1c, c0w] * fr * (1.0 - fc)
+        + field[r0c, c1w] * (1.0 - fr) * fc
+        + field[r1c, c1w] * fr * fc
+    )
+    return sampled
+
+
+def _sample_equirect_rgb(image: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
+    return np.stack(
+        [_sample_equirect(image[..., c], lat_deg, lon_deg) for c in range(image.shape[2])],
+        axis=-1,
+    )
+
+
+def _march_segment(
+    *,
+    origin_xy: tuple[np.ndarray, np.ndarray],
+    origin_z: np.ndarray,
+    b2: np.ndarray,
+    f: np.ndarray,
+    sun: np.ndarray,
+    sigma_start: np.ndarray,
+    sigma_end: np.ndarray,
+    model: AtmosphereModel,
+    lut: TransmittanceLUT,
+    n_steps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Single-scattering radiance and view transmittance over one ray segment.
+
+    ``origin`` is the view-plane foot point ``b_vec``; a ray point is
+    ``b_vec + sigma * f``.  The view direction toward the camera is ``+f``,
+    so the scattering angle cosine is ``-sun·f``.
+    """
+    rows, cols = origin_z.shape
+    beta_r = (model.rayleigh_rgb * 1000.0).astype(np.float32)
+    beta_m_scat = float(model.mie_scatter * 1000.0)
+    beta_m_ext = float((model.mie_scatter + model.mie_absorb) * 1000.0)
+    beta_o = (model.ozone_absorb_rgb * 1000.0).astype(np.float32)
+    h_r = model.scale_height_km
+    planet = model.planet_radius_km
+
+    cos_scatter = float(np.clip(-np.dot(sun, f), -1.0, 1.0))
+    phase_r = 3.0 / (16.0 * math.pi) * (1.0 + cos_scatter * cos_scatter)
+    g = MIE_ASYMMETRY
+    phase_m = (1.0 - g * g) / (4.0 * math.pi * (1.0 + g * g - 2.0 * g * cos_scatter) ** 1.5)
+
+    f_dot_sun = float(np.dot(f, sun))
+    bx, by = origin_xy
+    b_dot_sun = bx * float(sun[0]) + by * float(sun[1]) + origin_z * float(sun[2])
+    step = np.abs(sigma_end - sigma_start) / max(n_steps, 1)
+    radiance = np.zeros((rows, cols, 3), dtype=np.float32)
+    transmittance = np.ones((rows, cols, 3), dtype=np.float32)
+
+    for i in range(n_steps):
+        frac = (i + 0.5) / n_steps
+        sigma = sigma_start + (sigma_end - sigma_start) * frac
+        radius = np.sqrt(np.maximum(b2 + sigma * sigma, 0.0))
+        altitude = np.maximum(radius - planet, 0.0)
+        mu = np.clip((b_dot_sun + sigma * f_dot_sun) / np.maximum(radius, 1e-6), -1.0, 1.0)
+
+        sun_t = lut.sample(altitude, mu).astype(np.float32)
+        rho_r = np.exp(-altitude / h_r)[..., None]
+        rho_m = np.exp(-altitude / MIE_SCALE_HEIGHT_KM)[..., None]
+        rho_o = np.clip(1.0 - np.abs(altitude - OZONE_CENTER_KM) / OZONE_HALF_WIDTH_KM, 0.0, None)[
+            ..., None
+        ]
+
+        source = beta_r * rho_r * phase_r + beta_m_scat * rho_m * phase_m
+        radiance += transmittance * source * sun_t * step[..., None]
+
+        extinction = beta_r * rho_r + beta_o * rho_o + beta_m_ext * rho_m
+        transmittance *= np.exp(-extinction * step[..., None])
+
+    return radiance, transmittance
+
+
+def render_globe_atmosphere(
+    surface_rgb: np.ndarray,
+    cloud_alpha: np.ndarray,
+    *,
+    res: int = 1600,
+    center_lon_deg: float = 90.0,
+    center_lat_deg: float = 15.0,
+    sun_lon_deg: float | None = None,
+    sun_lat_deg: float = 20.0,
+    model: AtmosphereModel | None = None,
+    cloud_rgb: tuple[int, int, int] = (252, 250, 245),
+    cloud_altitude_km: float = CLOUD_ALTITUDE_KM,
+    cloud_shadows: bool = True,
+    exposure: str = "white_balance",
+    auto_exposure: bool = True,
+    view_samples: int = 14,
+) -> np.ndarray:
+    """Orthographic globe with a physical atmosphere shell.
+
+    Layers, back to front: surface sphere, translucent cloud shell at
+    ``cloud_altitude_km``, atmosphere shell.  The ray is split at the cloud
+    shell so a partial cloud correctly shows the atmosphere behind it.  The
+    atmosphere's in-scatter is integrated twice (above and below the cloud),
+    and the cloud casts a shadow by sampling the deck where the surface's sun
+    ray crosses it.
+
+    Returns an ``(res, res, 3)`` uint8 image.  The view uses the same
+    convention as :func:`dreamulator.media.cloud_render.render_globe_preview`:
+    92% of the frame, orthographic, x = cos φ cos λ, y = sin φ,
+    z = cos φ sin λ.
+    """
+    if model is None:
+        model = AtmosphereModel(planet_radius_km=EARTH_RADIUS_KM)
+    if exposure not in ("white_balance", "physical"):
+        raise ValueError("exposure must be 'white_balance' or 'physical'")
+    surface_rgb = _srgb_to_linear(np.asarray(surface_rgb, dtype=np.float64))
+    cloud_alpha = np.asarray(cloud_alpha, dtype=np.float64)
+    if surface_rgb.ndim != 3 or surface_rgb.shape[2] != 3:
+        raise ValueError("surface_rgb must have shape (h, w, 3)")
+    if cloud_alpha.shape != surface_rgb.shape[:2]:
+        raise ValueError("cloud_alpha must match the surface grid")
+
+    planet = model.planet_radius_km
+    top = planet + model.top_altitude_km
+    cloud_radius = planet + cloud_altitude_km
+
+    lam_c = math.radians(center_lon_deg)
+    phi_c = math.radians(center_lat_deg)
+    if sun_lon_deg is None:
+        sun_lon_deg = center_lon_deg - 25.0
+    lam_s = math.radians(sun_lon_deg)
+    phi_s = math.radians(sun_lat_deg)
+
+    f = np.array(
+        [math.cos(phi_c) * math.cos(lam_c), math.sin(phi_c), math.cos(phi_c) * math.sin(lam_c)]
+    )
+    right = np.array([-math.sin(lam_c), 0.0, math.cos(lam_c)])
+    up = np.cross(right, f)
+    sun = np.array(
+        [math.cos(phi_s) * math.cos(lam_s), math.sin(phi_s), math.cos(phi_s) * math.sin(lam_s)]
+    )
+
+    half = res / 2.0
+    py, px = np.mgrid[0:res, 0:res].astype(np.float64)
+    vx = (px + 0.5 - half) / (half * 0.92)
+    vy = (half - py - 0.5) / (half * 0.92)
+    b2 = (vx * vx + vy * vy) * planet * planet
+    b = np.sqrt(b2)
+
+    origin = (vx * right[0] + vy * up[0]) * planet
+    origin_y = (vx * right[1] + vy * up[1]) * planet
+    origin_z = (vx * right[2] + vy * up[2]) * planet
+
+    has_atmosphere = b < top
+    hits_surface = b < planet
+    hits_cloud = b < cloud_radius
+
+    sigma_entry = np.sqrt(np.maximum(top * top - b2, 0.0))
+    sigma_surface = np.sqrt(np.maximum(planet * planet - b2, 0.0))
+    sigma_cloud = np.sqrt(np.maximum(cloud_radius * cloud_radius - b2, 0.0))
+    sigma_end = np.where(hits_surface, sigma_surface, -sigma_entry)
+    sigma_split = np.where(hits_cloud, sigma_cloud, sigma_end)
+
+    lut = build_transmittance_lut(model)
+    radiance_upper, trans_upper = _march_segment(
+        origin_xy=(origin, origin_y),
+        origin_z=origin_z,
+        b2=b2,
+        f=f,
+        sun=sun,
+        sigma_start=sigma_entry,
+        sigma_end=sigma_split,
+        model=model,
+        lut=lut,
+        n_steps=view_samples,
+    )
+    radiance_lower, trans_lower = _march_segment(
+        origin_xy=(origin, origin_y),
+        origin_z=origin_z,
+        b2=b2,
+        f=f,
+        sun=sun,
+        sigma_start=sigma_split,
+        sigma_end=sigma_end,
+        model=model,
+        lut=lut,
+        n_steps=view_samples,
+    )
+
+    # ---- Cloud shell: coverage, sun transmittance and pseudo-3D shading ----
+    cloud_coverage = np.zeros((res, res), dtype=np.float64)
+    cloud_light = np.zeros((res, res, 3), dtype=np.float64)
+    if np.any(hits_cloud):
+        cx = origin + sigma_cloud * f[0]
+        cy = origin_y + sigma_cloud * f[1]
+        cz = origin_z + sigma_cloud * f[2]
+        c_radius = np.sqrt(np.maximum(cx * cx + cy * cy + cz * cz, 1e-9))
+        c_lat = np.degrees(np.arcsin(np.clip(cy / c_radius, -1.0, 1.0)))
+        c_lon = np.degrees(np.arctan2(cz, cx))
+
+        cloud_coverage = np.clip(_sample_equirect(cloud_alpha, c_lat, c_lon), 0.0, 1.0)
+        cos_cloud = np.clip((cx * sun[0] + cy * sun[1] + cz * sun[2]) / c_radius, -1.0, 1.0)
+        sun_cloud = lut.sample(np.full_like(c_lat, cloud_altitude_km), cos_cloud)
+
+        from scipy.ndimage import gaussian_filter
+
+        emboss_sigma = 3.0
+        emboss_relief = 8.0
+        thick_base = 0.80
+        thick_amp = 0.40
+        h_tex = gaussian_filter(cloud_alpha, emboss_sigma)
+        h0 = _sample_equirect(h_tex, c_lat, c_lon)
+        hx = _sample_equirect(h_tex, c_lat, c_lon + 360.0 / h_tex.shape[1])
+        hy = _sample_equirect(h_tex, c_lat - 180.0 / h_tex.shape[0], c_lon)
+        sun_screen = np.array([np.dot(sun, right), np.dot(sun, up), np.dot(sun, f)])
+        sun_screen = sun_screen / max(np.linalg.norm(sun_screen), 1e-9)
+        nx = -(hx - h0) * emboss_relief
+        ny = -(hy - h0) * emboss_relief
+        nlen = np.sqrt(nx * nx + ny * ny + 1.0)
+        shade = np.clip((nx * sun_screen[0] + ny * sun_screen[1] + sun_screen[2]) / nlen, 0.0, 1.0)
+        term = 0.45 + 0.95 * np.power(shade, 0.9)
+        gate = np.clip(cloud_coverage / 0.15, 0.0, 1.0)
+        thickness = thick_base + thick_amp * cloud_coverage
+        light_mod = 1.0 + gate * (term * thickness - 1.0)
+        tint = _srgb_to_linear(np.asarray(cloud_rgb, dtype=np.float64) / 255.0)
+        cloud_light = tint * (
+            sun_cloud * np.clip(cos_cloud, 0.0, None)[..., None] * light_mod[..., None]
+        )
+
+    # ---- Surface: sun transmittance, cloud shadow, Lambert ----
+    s_lat = np.degrees(
+        np.arcsin(np.clip((origin_y + sigma_surface * f[1]) / np.maximum(planet, 1e-9), -1, 1))
+    )
+    s_lon = np.degrees(np.arctan2(origin_z + sigma_surface * f[2], origin + sigma_surface * f[0]))
+    surface = _sample_equirect_rgb(surface_rgb, s_lat, s_lon)
+    n_x = (origin + sigma_surface * f[0]) / planet
+    n_y = (origin_y + sigma_surface * f[1]) / planet
+    n_z = (origin_z + sigma_surface * f[2]) / planet
+    cos_surface = np.clip(n_x * sun[0] + n_y * sun[1] + n_z * sun[2], -1.0, 1.0)
+    sun_surface = lut.sample(np.zeros_like(cos_surface), cos_surface)
+
+    shadow = np.ones((res, res), dtype=np.float64)
+    if cloud_shadows and np.any(hits_surface):
+        # Where does the surface's sun ray cross the cloud shell?
+        along = n_x * sun[0] + n_y * sun[1] + n_z * sun[2]
+        # |P + t S|^2 = Rc^2 with |P| = R: t = -c + sqrt(c^2 + Rc^2 - R^2)
+        t_shadow = -along * planet + np.sqrt(
+            np.maximum((along * planet) ** 2 + cloud_radius * cloud_radius - planet * planet, 0.0)
+        )
+        sh_x = n_x * planet + t_shadow * sun[0]
+        sh_y = n_y * planet + t_shadow * sun[1]
+        sh_z = n_z * planet + t_shadow * sun[2]
+        sh_radius = np.sqrt(np.maximum(sh_x * sh_x + sh_y * sh_y + sh_z * sh_z, 1e-9))
+        sh_lat = np.degrees(np.arcsin(np.clip(sh_y / sh_radius, -1.0, 1.0)))
+        sh_lon = np.degrees(np.arctan2(sh_z, sh_x))
+        shadow = 1.0 - np.clip(_sample_equirect(cloud_alpha, sh_lat, sh_lon), 0.0, 1.0)
+        shadow = np.where(hits_surface & (cos_surface > 0.0), shadow, 1.0)
+
+    surface_radiance = (
+        surface
+        * sun_surface
+        * np.clip(cos_surface, 0.0, None)[..., None]
+        * shadow[..., None]
+        * hits_surface[..., None]
+    )
+
+    # ---- Composite: upper atmosphere, cloud, lower atmosphere, surface ----
+    behind_cloud = trans_lower * surface_radiance + radiance_lower
+    with_cloud = (
+        cloud_coverage[..., None] * cloud_light + (1.0 - cloud_coverage[..., None]) * behind_cloud
+    )
+    at_cloud = radiance_upper + trans_upper * with_cloud
+    at_surface = radiance_upper + trans_upper * (trans_lower * surface_radiance + radiance_lower)
+    rgb = np.where(hits_cloud[..., None], at_cloud, at_surface)
+    rgb = np.where(has_atmosphere[..., None], rgb, 0.0)
+    # Exposure.  ``white_balance`` behaves like a camera balanced on a white
+    # card in the scene's daylight: the sub-solar surface transmittance is
+    # divided out per channel, so the authored surface palette stays neutral
+    # and the atmosphere's *relative* colour (blue halo, warm terminator)
+    # remains visible.  ``physical`` keeps the star's sRGB white instead, so
+    # the whole scene carries the K star's warm cast.
+    overhead = lut.sample(np.zeros(1), np.ones(1))[0]
+    if exposure == "white_balance":
+        rgb = rgb / np.maximum(overhead, 1e-3)
+    elif exposure == "physical":
+        rgb = rgb * model.light_color("physical")
+
+    # Normalise overall brightness to a white Lambertian surface at the
+    # sub-solar point (the old preview used a 16% night floor, which the
+    # physical model deliberately drops).  White balance already normalises
+    # per channel; physical mode needs a scalar luminance gain.
+    if auto_exposure and exposure == "physical":
+        overhead_luminance = float(
+            0.2126 * overhead[0] + 0.7152 * overhead[1] + 0.0722 * overhead[2]
+        )
+        rgb = rgb * max(min(1.0 / max(overhead_luminance, 1e-6), 2.0), 0.5)
+
+    return np.asarray(np.clip(_linear_to_srgb(rgb), 0.0, 1.0) * 255.0, dtype=np.uint8)
+
+
+def atmosphere_summary(
+    model: AtmosphereModel, *, exposure: str = "white_balance"
+) -> dict[str, object]:
+    """Small JSON-ready summary for ``meta.json``."""
+    return {
+        "model": "single-scattering Rayleigh/Mie/ozone (Bruneton 2008; Hillaire 2020)",
+        "planet_radius_km": model.planet_radius_km,
+        "gravity_m_s2": model.gravity_m_s2,
+        "surface_pressure_atm": model.surface_pressure_atm,
+        "atmosphere_temperature_k": model.atmosphere_temperature_k,
+        "mean_molar_mass_kg_mol": model.mean_molar_mass_kg_mol,
+        "scale_height_km": model.scale_height_km,
+        "top_altitude_km": model.top_altitude_km,
+        "star_temperature_k": model.star_temperature_k,
+        "rayleigh_beta_rgb_per_m": [float(v) for v in model.rayleigh_rgb],
+        "mie_scattering_per_m": model.mie_scatter,
+        "mie_absorption_per_m": model.mie_absorb,
+        "ozone_absorption_rgb_per_m": [float(v) for v in model.ozone_absorb_rgb],
+        "mie_scale": model.mie_scale,
+        "ozone_scale": model.ozone_scale,
+        "exposure": exposure,
+    }

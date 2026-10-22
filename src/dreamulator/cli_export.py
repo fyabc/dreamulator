@@ -26,6 +26,9 @@ from rich.table import Table
 if TYPE_CHECKING:
     import numpy as np
 
+    from dreamulator.media.atmosphere_render import AtmosphereModel
+    from dreamulator.media.cloud_config import AtmosphereSettings
+
 from dreamulator.map.export import (
     export_cell_index_grid,
     render_categorical_layer,
@@ -730,6 +733,120 @@ def export_render(
     raise typer.Exit(code=2) from None
 
 
+def _host_star_temperature(
+    stellar: dict[str, object], planet: dict[str, object] | None
+) -> float | None:
+    """Walk planet → host planet → star and return the star's effective temperature."""
+    stars = stellar.get("stars")
+    orbits = stellar.get("orbits")
+    star_entries = stars if isinstance(stars, list) else []
+    orbit_entries = orbits if isinstance(orbits, list) else []
+    by_body = {
+        str(entry.get("body_id")): entry for entry in orbit_entries if isinstance(entry, dict)
+    }
+    node = str(planet.get("orbits")) if planet and planet.get("orbits") else None
+    seen: set[str] = set()
+    while node is not None and node in by_body and node not in seen:
+        seen.add(node)
+        parent = by_body[node].get("parent_id")
+        node = str(parent) if parent else None
+    star = next(
+        (entry for entry in star_entries if isinstance(entry, dict) and entry.get("id") == node),
+        None,
+    )
+    if star is None and star_entries and isinstance(star_entries[0], dict):
+        star = star_entries[0]
+    if star is None:
+        return None
+    temperature = star.get("temperature")
+    return float(temperature) if isinstance(temperature, (int, float)) else None
+
+
+def _atmosphere_from_world(
+    world_dir: Path,
+    branch: str | None,
+    planet_id: str,
+    radius_km: float,
+    cfg: AtmosphereSettings,
+) -> AtmosphereModel:
+    """Build the L5 atmosphere model from the world's stellar and planet inputs.
+
+    Missing inputs fall back to Earth values; the star temperature and surface
+    pressure can be overridden in the YAML block (QA and worlds without inputs).
+    """
+    from dreamulator.media.atmosphere_render import (
+        EARTH_GRAVITY,
+        AtmosphereModel,
+        mean_molar_mass_kg_mol,
+    )
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+    planets_data = resolver.load_layer_yaml("geological", "planets.yaml")
+    stellar_data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+    planet: dict[str, object] | None = None
+    if isinstance(planets_data, dict):
+        entries = planets_data.get("planets")
+        candidates = entries if isinstance(entries, list) else []
+        planet = next(
+            (
+                entry
+                for entry in candidates
+                if isinstance(entry, dict) and entry.get("id") == planet_id
+            ),
+            None,
+        )
+        if planet is None and candidates and isinstance(candidates[0], dict):
+            planet = candidates[0]
+
+    star_temperature = cfg.star_temperature_k
+    if star_temperature is None and isinstance(stellar_data, dict):
+        star_temperature = _host_star_temperature(stellar_data, planet)
+    if star_temperature is None:
+        star_temperature = 5772.0
+
+    atmosphere_data: dict[str, object] = {}
+    composition: dict[str, float] | None = None
+    mass_earth: float | None = None
+    radius_earth: float | None = None
+    if planet is not None:
+        atmosphere = planet.get("atmosphere")
+        if isinstance(atmosphere, dict):
+            atmosphere_data = atmosphere
+            raw_composition = atmosphere.get("composition")
+            if isinstance(raw_composition, dict):
+                composition = {
+                    str(key): float(value)
+                    for key, value in raw_composition.items()
+                    if isinstance(value, (int, float))
+                }
+        mass = planet.get("mass")
+        radius = planet.get("radius")
+        mass_earth = float(mass) if isinstance(mass, (int, float)) else None
+        radius_earth = float(radius) if isinstance(radius, (int, float)) else None
+
+    surface_pressure = cfg.surface_pressure_atm
+    if surface_pressure is None:
+        raw_pressure = atmosphere_data.get("surface_pressure_atm")
+        surface_pressure = float(raw_pressure) if isinstance(raw_pressure, (int, float)) else 1.0
+
+    gravity = EARTH_GRAVITY
+    if mass_earth is not None and radius_earth is not None and radius_earth > 0.0:
+        gravity = mass_earth / (radius_earth * radius_earth) * EARTH_GRAVITY
+
+    return AtmosphereModel(
+        planet_radius_km=radius_km,
+        gravity_m_s2=gravity,
+        surface_pressure_atm=surface_pressure,
+        atmosphere_temperature_k=cfg.atmosphere_temperature_k,
+        mean_molar_mass_kg_mol=mean_molar_mass_kg_mol(composition),
+        star_temperature_k=star_temperature,
+        mie_scale=cfg.mie_scale,
+        ozone_scale=cfg.ozone_scale,
+    )
+
+
 @export_app.command("clouds")
 def export_clouds(
     ctx: typer.Context,
@@ -774,6 +891,12 @@ def export_clouds(
         help="Overlay L3 synthetic cyclone templates (placeholder until the L1 track table lands)",
     ),
     cyclone_seed: int = typer.Option(31, "--cyclone-seed", help="Synthetic cyclone track seed"),
+    atmosphere: bool = typer.Option(
+        True,
+        "--atmosphere/--no-atmosphere",
+        help="L5 physical atmosphere shell (Rayleigh/Mie/ozone, star spectrum); "
+        "disable for the legacy limb-glow preview",
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
@@ -808,6 +931,7 @@ def export_clouds(
     cover_scale = _pick("cover_scale", cover_scale, cfg.cover_scale)
     cyclones = _pick("cyclones", cyclones, cfg.cyclones.enabled)
     cyclone_seed = _pick("cyclone_seed", cyclone_seed, cfg.cyclones.seed)
+    atmosphere = _pick("atmosphere", atmosphere, cfg.atmosphere.enabled)
 
     try:
         w_str, h_str = grid.lower().split("x")
@@ -872,6 +996,19 @@ def export_clouds(
         )
     else:
         cyclone_set = None
+
+    atmosphere_model = (
+        _atmosphere_from_world(world_dir, branch, planet_id, radius_km, cfg.atmosphere)
+        if atmosphere
+        else None
+    )
+    if atmosphere_model is not None:
+        console.print(
+            f"  atmosphere: star {atmosphere_model.star_temperature_k:.0f} K, "
+            f"p {atmosphere_model.surface_pressure_atm:g} atm, "
+            f"H {atmosphere_model.scale_height_km:.1f} km, "
+            f"{cfg.atmosphere.exposure}"
+        )
     paths = clouds_globe(
         mesh,
         out_dir,
@@ -888,6 +1025,10 @@ def export_clouds(
         cover_scale=cover_scale,
         cyclones=cyclone_set,
         cyclone_seed=cyclone_seed,
+        atmosphere=atmosphere_model,
+        cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
+        cloud_shadows=cfg.atmosphere.cloud_shadows,
+        atmosphere_exposure=cfg.atmosphere.exposure,
         provenance={
             "world": world,
             "branch": branch or "root",

@@ -491,11 +491,12 @@ dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
 # --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
 # --cyclones 叠加 L3 气旋模板（合成占位轨迹；L1 轨迹表到达后替换）
 # --cyclone-seed 合成轨迹种子
+# --atmosphere/--no-atmosphere 开启 L5 物理大气壳（默认开）；关闭退回旧版边缘光晕预览
 # --config cloud.yaml 从 YAML 读取全部设置；显式命令行参数覆盖文件
 # --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
 ```
 
-配置文件的字段与命令行参数同名，气旋块单独分组：
+配置文件的字段与命令行参数同名，气旋块与大气块单独分组：
 
 ```yaml
 grid: 8192x4096
@@ -512,6 +513,15 @@ cyclones:
   extratropical_per_hemisphere: 2
   tropical_scale: 1.0
   extratropical_scale: 1.0
+atmosphere:
+  enabled: true
+  cloud_altitude_km: 4.0      # 云壳高度；L1 云顶高度到达后替换
+  exposure: white_balance     # white_balance | physical（后者保留 K 型星暖色）
+  cloud_shadows: true
+  mie_scale: 1.0              # 气溶胶比例（地球类比输入的缩放）
+  ozone_scale: 1.0            # 臭氧柱比例
+  # star_temperature_k: 4365  # 覆盖世界输入，QA 用
+  # surface_pressure_atm: 1.0
 ```
 
 `cyclones.tracks` 可直接给轨迹表（字段与 `Cyclone` 相同：位置、类型、中心气压、
@@ -526,6 +536,14 @@ L3 气旋模板在 `media/cyclone_render.py`：热带气旋用 Holland 1980 风�
 温带逗号尺度取 2500–4000 km，依据是 55° 处的变形半径约为地球 45° 的三倍。
 当前 `--cyclones` 使用气候态占位轨迹（热带 10–25°、温带 52–58°），等 GCM 图层包
 （L1）的真实轨迹表到达后替换。
+
+L5 大气渲染在 `media/atmosphere_render.py`：瑞利分子散射、米氏气溶胶与臭氧吸收，
+按世界自己的恒星光谱（`stellar.yaml` 的温度）与行星重力、气压、大气组成定标；
+地表球、云壳与大气壳分层合成，支持云影、圆盘外大气晕与物理晨昏线。默认的
+`white_balance` 曝光按画面内直射日光做白平衡，保持地表调色板的中性观感；`physical`
+保留 K 型星的暖色。当前只计算单次散射，夜侧大气与晨昏线偏暗，多次散射是下一步。
+物理模型、系数来源与已知限制见
+[knowledge/climatology/atmospheric_scattering.md](../knowledge/climatology/atmospheric_scattering.md)。
 
 大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
 等 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
