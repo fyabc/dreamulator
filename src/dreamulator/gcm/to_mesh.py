@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -348,6 +349,20 @@ def summarize_field_set(fs: GcmFieldSet, mesh: CVTMesh, sea_level_m: float = 0.0
     }
 
 
+_GCM_WORKDIR_RE = re.compile(r"[^\s'\"]*private/gcm/")
+
+
+def public_provenance(value: Any) -> Any:
+    """Replace local GCM work-directory paths (``…/private/gcm/``) by ``<gcm-workdir>/``."""
+    if isinstance(value, str):
+        return _GCM_WORKDIR_RE.sub("<gcm-workdir>/", value)
+    if isinstance(value, dict):
+        return {k: public_provenance(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [public_provenance(v) for v in value]
+    return value
+
+
 def project_to_mesh(
     nc_path: str | Path,
     mesh_path: str | Path,
@@ -389,6 +404,9 @@ def project_to_mesh(
     if not math.isfinite(summary["global_mean_temperature_c"]):
         raise ValueError("projected temperature is not finite; check the source run")
     if fields_out is not None:
+        # the field set's provenance is tracked in the public repository: name the GCM work
+        # directory by the runbook's placeholder instead of its local path
+        fs.provenance = public_provenance(fs.provenance)
         save_field_set(fields_out, fs)
     if out_path is not None:
         apply_field_set(mesh, fs)

@@ -82,3 +82,25 @@ def test_spectral_smooth_preserves_constant_and_leading_axes() -> None:
     out = spectral_smooth(field, lat, n0=5)
     assert out.shape == field.shape
     assert np.allclose(out, 1013.0)
+
+
+def test_public_provenance_hides_local_gcm_paths() -> None:
+    from dreamulator.gcm.to_mesh import public_provenance
+
+    prov = {
+        "source_nc": "/data/repo/private/gcm/runs/t42r/cold_712/MOST.00000.nc",
+        "run_manifest": {
+            "input_paths": {"landmap": "private/gcm/surf/r22/nacrea_N064_surf_0172.sra"},
+            "command": "run.py --landmap private/gcm/surf/a.sra --workdir 'private/gcm/runs/x'",
+            "years": 30,
+        },
+        "list": ["private/gcm/runs/y", "kept"],
+    }
+    out = public_provenance(prov)
+    assert out["source_nc"] == "<gcm-workdir>/runs/t42r/cold_712/MOST.00000.nc"
+    assert (
+        out["run_manifest"]["input_paths"]["landmap"]
+        == "<gcm-workdir>/surf/r22/nacrea_N064_surf_0172.sra"
+    )
+    assert "private/" not in out["run_manifest"]["command"]
+    assert out["run_manifest"]["years"] == 30 and out["list"] == ["<gcm-workdir>/runs/y", "kept"]
