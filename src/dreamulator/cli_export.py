@@ -854,6 +854,7 @@ def _atmosphere_from_world(
     )
 
 
+@export_app.command("globe")
 @export_app.command("clouds")
 def export_clouds(
     ctx: typer.Context,
@@ -876,7 +877,7 @@ def export_clouds(
         None,
         "--output",
         "-o",
-        help="Output dir (default: <export-dir>/clouds/<world>[-<branch>]/; "
+        help="Output dir (default: <export-dir>/globe/<world>[-<branch>]/; "
         "export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
     ),
     globe_res: int = typer.Option(1600, "--globe-res", help="Globe preview resolution"),
@@ -906,7 +907,12 @@ def export_clouds(
     ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
+    """Orbital space-view shot: surface/cloud layers + L3 cyclones + L5 atmosphere globe.
+
+    ``globe`` is the primary command name; ``clouds`` is the historical alias.
+    The output is the complete space-view shot (equirect surface/cloud layers
+    and an orthographic globe), not just a cloud texture; the rotation and
+    cloud-evolution videos are separate media scripts documented in cli.md.
 
     The large-scale cover field is a placeholder (precipitation + SLP-anomaly
     proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
@@ -979,7 +985,7 @@ def export_clouds(
     import os
 
     export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-    out_dir = output or (export_root / "clouds" / (world + (f"-{branch}" if branch else "")))
+    out_dir = output or (export_root / "globe" / (world + (f"-{branch}" if branch else "")))
     console.print(
         f"Synthesising cloud texture for {world}/{planet_id} "
         f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
@@ -1016,6 +1022,22 @@ def export_clouds(
             f"H {atmosphere_model.scale_height_km:.1f} km, "
             f"{cfg.atmosphere.exposure}"
         )
+    eclipse_shadow = None
+    if cfg.eclipse.enabled:
+        from dreamulator.media.atmosphere_render import EclipseShadow
+
+        eclipse_shadow = EclipseShadow(
+            center_lon_deg=cfg.eclipse.center_lon_deg,
+            center_lat_deg=cfg.eclipse.center_lat_deg,
+            umbra_radius_deg=cfg.eclipse.umbra_radius_deg,
+            penumbra_radius_deg=cfg.eclipse.penumbra_radius_deg,
+            depth=cfg.eclipse.depth,
+        )
+        console.print(
+            f"  eclipse: centre {cfg.eclipse.center_lat_deg:g}N "
+            f"{cfg.eclipse.center_lon_deg:g}E, umbra {cfg.eclipse.umbra_radius_deg:g}°, "
+            f"penumbra {cfg.eclipse.penumbra_radius_deg:g}°, depth {cfg.eclipse.depth:g}"
+        )
     paths = clouds_globe(
         mesh,
         out_dir,
@@ -1035,6 +1057,8 @@ def export_clouds(
         atmosphere=atmosphere_model,
         cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
         cirrus_altitude_km=cfg.atmosphere.cirrus_altitude_km,
+        cirrus_shadow_strength=cfg.atmosphere.cirrus_shadow_strength,
+        eclipse_shadow=eclipse_shadow,
         cloud_shadows=cfg.atmosphere.cloud_shadows,
         sun_glint=cfg.atmosphere.sun_glint,
         water_roughness=cfg.atmosphere.water_roughness,

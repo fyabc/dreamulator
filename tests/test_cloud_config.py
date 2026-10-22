@@ -1,4 +1,4 @@
-"""Tests for the export clouds YAML configuration."""
+"""Tests for the export globe YAML configuration."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ def test_defaults() -> None:
     assert cfg.atmosphere.enabled is True
     assert cfg.atmosphere.cloud_altitude_km == 4.0
     assert cfg.atmosphere.cirrus_altitude_km == 9.0
+    assert cfg.atmosphere.cirrus_shadow_strength == 0.6
+    assert cfg.eclipse.enabled is False
     assert cfg.atmosphere.exposure == "white_balance"
     assert cfg.atmosphere.sun_glint is True
     assert cfg.atmosphere.water_roughness == 0.08
@@ -49,10 +51,18 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
         "  exposure: physical\n"
         "  cloud_altitude_km: 6\n"
         "  cirrus_altitude_km: 10\n"
+        "  cirrus_shadow_strength: 0.4\n"
         "  star_temperature_k: 4365\n"
         "  sun_glint: false\n"
         "  water_roughness: 0.05\n"
-        "  multiple_scattering: false\n",
+        "  multiple_scattering: false\n"
+        "eclipse:\n"
+        "  enabled: true\n"
+        "  center_lon_deg: 50\n"
+        "  center_lat_deg: 10\n"
+        "  umbra_radius_deg: 4\n"
+        "  penumbra_radius_deg: 6\n"
+        "  depth: 0.7\n",
         encoding="utf-8",
     )
     cfg = CloudRenderConfig.from_yaml(path)
@@ -69,10 +79,16 @@ def test_yaml_roundtrip(tmp_path: Path) -> None:
     assert cfg.atmosphere.exposure == "physical"
     assert cfg.atmosphere.cloud_altitude_km == 6.0
     assert cfg.atmosphere.cirrus_altitude_km == 10.0
+    assert cfg.atmosphere.cirrus_shadow_strength == 0.4
     assert cfg.atmosphere.star_temperature_k == 4365.0
     assert cfg.atmosphere.sun_glint is False
     assert cfg.atmosphere.water_roughness == 0.05
     assert cfg.atmosphere.multiple_scattering is False
+    assert cfg.eclipse.enabled is True
+    assert cfg.eclipse.center_lon_deg == 50.0
+    assert cfg.eclipse.center_lat_deg == 10.0
+    assert cfg.eclipse.penumbra_radius_deg == 6.0
+    assert cfg.eclipse.depth == 0.7
 
 
 def test_unknown_key_rejected(tmp_path: Path) -> None:

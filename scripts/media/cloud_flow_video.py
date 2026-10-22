@@ -1,4 +1,4 @@
-"""Render a short cloud-evolution clip (L4 prototype) from an ``export clouds`` run.
+"""Render a short cloud-evolution clip (L4 prototype) from an ``export globe`` run.
 
 The cloud alpha is advected with the engine's annual-mean wind field
 (semi-Lagrangian + BFECC) while the camera and star stay fixed, so the
@@ -32,7 +32,7 @@ from dreamulator.map.export import (
     export_cell_index_grid,
     load_cvt_mesh_model,
 )
-from dreamulator.media.atmosphere_render import AtmosphereModel
+from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
 from dreamulator.media.cloud_advection import advect_equirect, advection_substeps
 from dreamulator.media.cloud_render import conditioning_grids
 from dreamulator.media.cyclone_render import Cyclone, cyclone_wind_field
@@ -52,7 +52,7 @@ def _load_meta(clouds_dir: Path) -> dict[str, Any]:
 def _load_model(meta: dict[str, Any]) -> AtmosphereModel:
     atmosphere = meta.get("atmosphere")
     if not isinstance(atmosphere, dict):
-        raise SystemExit("meta.json has no atmosphere block — re-export with `export clouds` first")
+        raise SystemExit("meta.json has no atmosphere block — re-export with `export globe` first")
     return AtmosphereModel(
         planet_radius_km=float(meta["radius_km"]),
         gravity_m_s2=float(atmosphere["gravity_m_s2"]),
@@ -150,7 +150,7 @@ def _ffmpeg_exe() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("clouds_dir", type=Path, help="an export clouds output directory")
+    parser.add_argument("clouds_dir", type=Path, help="an export globe output directory")
     parser.add_argument("-o", "--output", type=Path, help="output .mp4 path")
     parser.add_argument("--seconds", type=float, default=8.0, help="clip length")
     parser.add_argument("--fps", type=int, default=30)
@@ -189,6 +189,8 @@ def main() -> None:
     meta = _load_meta(clouds_dir)
     model = _load_model(meta)
     atmosphere = meta["atmosphere"]
+    eclipse_meta = meta.get("eclipse")
+    eclipse_shadow = EclipseShadow(**eclipse_meta) if isinstance(eclipse_meta, dict) else None
     globe = meta.get("globe") or {}
     mesh = load_cvt_mesh_model(_mesh_path(meta))
     tree = build_export_tree(mesh)
@@ -240,6 +242,8 @@ def main() -> None:
         model=model,
         cloud_altitude_km=float(atmosphere.get("cloud_altitude_km", 4.0)),
         cirrus_altitude_km=float(atmosphere.get("cirrus_altitude_km", 9.0)),
+        cirrus_shadow_strength=float(atmosphere.get("cirrus_shadow_strength", 0.6)),
+        eclipse_shadow=eclipse_shadow,
         cloud_shadows=bool(atmosphere.get("cloud_shadows", True)),
         ocean_mask=ocean,
         sun_glint=bool(atmosphere.get("sun_glint", True)),

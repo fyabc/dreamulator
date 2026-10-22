@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
-    from dreamulator.media.atmosphere_render import AtmosphereModel
+    from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
     from dreamulator.media.cyclone_render import Cyclone
 
 # ---------------------------------------------------------------------------
@@ -1435,6 +1435,8 @@ def clouds_globe(
     atmosphere: AtmosphereModel | None = None,
     cloud_altitude_km: float = 4.0,
     cirrus_altitude_km: float = 9.0,
+    cirrus_shadow_strength: float = 0.6,
+    eclipse_shadow: EclipseShadow | None = None,
     cloud_shadows: bool = True,
     sun_glint: bool = True,
     water_roughness: float = 0.08,
@@ -1580,6 +1582,8 @@ def clouds_globe(
             model=atmosphere,
             cloud_altitude_km=cloud_altitude_km,
             cirrus_altitude_km=cirrus_altitude_km,
+            cirrus_shadow_strength=cirrus_shadow_strength,
+            eclipse_shadow=eclipse_shadow,
             cloud_shadows=cloud_shadows,
             ocean_mask=ocean_cells[indices].astype(np.float64),
             sun_glint=sun_glint,
@@ -1642,11 +1646,13 @@ def clouds_globe(
                 ),
                 "cloud_altitude_km": cloud_altitude_km,
                 "cirrus_altitude_km": cirrus_altitude_km,
+                "cirrus_shadow_strength": cirrus_shadow_strength,
                 "cloud_shadows": cloud_shadows,
             }
             if atmosphere is not None
             else None
         ),
+        "eclipse": asdict(eclipse_shadow) if eclipse_shadow is not None else None,
         "provenance": provenance or {},
     }
     with (out_dir / "meta.json").open("w", encoding="utf-8") as fh:

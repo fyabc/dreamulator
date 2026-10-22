@@ -226,6 +226,82 @@ def test_two_layer_cirrus_changes_image() -> None:
         raise AssertionError("cirrus_altitude_km below the low shell must be rejected")
 
 
+def test_cirrus_shadow_darkens_low_and_surface() -> None:
+    surface, low = _uniform_inputs(64)
+    high = np.zeros_like(low)
+    high[10:30, 20:80] = 0.35
+    common = dict(
+        res=120,
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        sun_lon_deg=0.0,
+        sun_lat_deg=0.0,
+        model=_earth_model(),
+        view_samples=4,
+    )
+    without = ar.render_globe_atmosphere(surface, low, high, cirrus_shadow_strength=0.0, **common)
+    with_shadow = ar.render_globe_atmosphere(
+        surface, low, high, cirrus_shadow_strength=0.9, **common
+    )
+    diff = without.astype(np.int16) - with_shadow.astype(np.int16)
+    assert diff.max() > 2
+    assert diff.min() >= 0
+
+
+def test_eclipse_shadow_profile_and_darkening() -> None:
+    shadow = ar.EclipseShadow(
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        umbra_radius_deg=4.0,
+        penumbra_radius_deg=6.0,
+        depth=0.8,
+    )
+    factors = shadow.factor(np.array([0.0, 0.0, 0.0, 0.0]), np.array([0.0, 4.0, 5.0, 10.0]))
+    np.testing.assert_allclose(factors[0], 0.2)
+    np.testing.assert_allclose(factors[1], 0.2)
+    assert 0.2 < factors[2] < 1.0
+    np.testing.assert_allclose(factors[3], 1.0)
+
+    annular = ar.EclipseShadow(
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        umbra_radius_deg=0.0,
+        penumbra_radius_deg=5.0,
+        depth=0.4,
+    )
+    annular_factors = annular.factor(np.array([0.0, 0.0]), np.array([0.0, 5.0]))
+    np.testing.assert_allclose(annular_factors[0], 0.6)
+    np.testing.assert_allclose(annular_factors[1], 1.0)
+
+    # A shadow wider than the planet covers the whole visible hemisphere:
+    # the 90-degree profile saturates at the limb as well as at the centre.
+    whole_disk = ar.EclipseShadow(
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        umbra_radius_deg=90.0,
+        penumbra_radius_deg=90.0,
+        depth=0.9,
+    )
+    whole_factors = whole_disk.factor(np.array([0.0, 0.0]), np.array([0.0, 90.0]))
+    np.testing.assert_allclose(whole_factors, [0.1, 0.1])
+
+    surface, cloud = _uniform_inputs(64)
+    kwargs = dict(
+        res=120,
+        center_lon_deg=0.0,
+        center_lat_deg=0.0,
+        sun_lon_deg=0.0,
+        sun_lat_deg=0.0,
+        model=_earth_model(),
+        view_samples=4,
+    )
+    without = ar.render_globe_atmosphere(surface, cloud, **kwargs)
+    with_shadow = ar.render_globe_atmosphere(surface, cloud, eclipse_shadow=shadow, **kwargs)
+    assert with_shadow[60, 60].mean() < without[60, 60].mean()
+    # Far from the shadow the image is unchanged.
+    np.testing.assert_array_equal(with_shadow[20, 20], without[20, 20])
+
+
 def test_cloud_shadow_changes_surface() -> None:
     surface, _ = _uniform_inputs(64)
     cloud = np.zeros_like(surface[..., 0])

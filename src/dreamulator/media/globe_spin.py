@@ -29,6 +29,7 @@ from scipy.ndimage import gaussian_filter
 from dreamulator.media.atmosphere_render import (
     CLOUD_ALTITUDE_KM,
     AtmosphereModel,
+    EclipseShadow,
     _linear_to_srgb,
     _march_segment,
     _sample_equirect,
@@ -63,6 +64,8 @@ class SpinRenderer:
         cloud_rgb: tuple[int, int, int] = (252, 250, 245),
         cloud_altitude_km: float = CLOUD_ALTITUDE_KM,
         cirrus_altitude_km: float = 9.0,
+        cirrus_shadow_strength: float = 0.6,
+        eclipse_shadow: EclipseShadow | None = None,
         cloud_shadows: bool = True,
         ocean_mask: np.ndarray | None = None,
         sun_glint: bool = True,
@@ -89,6 +92,8 @@ class SpinRenderer:
             raise ValueError("cloud_alpha_high must be a 2-D field")
         if cloud_high is not None and cirrus_altitude_km <= cloud_altitude_km:
             raise ValueError("cirrus_altitude_km must be above cloud_altitude_km")
+        if not 0.0 <= cirrus_shadow_strength <= 1.0:
+            raise ValueError("cirrus_shadow_strength must be in [0, 1]")
         if ocean_mask is not None:
             ocean_mask = np.asarray(ocean_mask, dtype=np.float64)
             if ocean_mask.shape != surface.shape[:2]:
@@ -103,6 +108,8 @@ class SpinRenderer:
         self.cloud_rgb = cloud_rgb
         self.cloud_altitude_km = cloud_altitude_km
         self.cirrus_altitude_km = cirrus_altitude_km
+        self.cirrus_shadow_strength = cirrus_shadow_strength
+        self.eclipse_shadow = eclipse_shadow
         self.cloud_shadows = cloud_shadows
         self.sun_glint = sun_glint
         self.water_roughness = water_roughness
@@ -264,12 +271,54 @@ class SpinRenderer:
         self.s_lon = np.degrees(
             np.arctan2(origin_z + sigma_surface * f[2], origin + sigma_surface * f[0])
         )
+        self.eclipse_factor = (
+            eclipse_shadow.factor(self.s_lat, self.s_lon) if eclipse_shadow is not None else None
+        )
+        if self.eclipse_factor is not None:
+            # The shadow is fixed in inertial space while the planet spins,
+            # so the static factor is valid for every frame.
+            scale = self.eclipse_factor[..., None]
+            self.radiance_upper = self.radiance_upper * scale
+            self.radiance_middle = self.radiance_middle * scale
+            self.radiance_lower = self.radiance_lower * scale
         n_x = (origin + sigma_surface * f[0]) / planet
         n_y = (origin_y + sigma_surface * f[1]) / planet
         n_z = (origin_z + sigma_surface * f[2]) / planet
         cos_surface = np.clip(n_x * sun[0] + n_y * sun[1] + n_z * sun[2], -1.0, 1.0)
         self.cos_surface = np.clip(cos_surface, 0.0, None)
         self.sun_surface = lut.sample(np.zeros_like(cos_surface), cos_surface)
+
+        # High-cirrus shadow sample points (surface and low shell).  The
+        # geometry is static; only the high texture changes per frame.
+        self.sh_high_surf_lat = np.zeros((res, res), dtype=np.float64)
+        self.sh_high_surf_lon = np.zeros((res, res), dtype=np.float64)
+        self.sh_high_low_lat = np.zeros((res, res), dtype=np.float64)
+        self.sh_high_low_lon = np.zeros((res, res), dtype=np.float64)
+        if high_active and cirrus_shadow_strength > 0.0:
+
+            def _shadow_point(
+                px: np.ndarray, py: np.ndarray, pz: np.ndarray, radius2: float
+            ) -> tuple[np.ndarray, np.ndarray]:
+                along = px * sun[0] + py * sun[1] + pz * sun[2]
+                disc = along * along + cloud_radius_high * cloud_radius_high - radius2
+                t = -along + np.sqrt(np.maximum(disc, 0.0))
+                qx = px + t * sun[0]
+                qy = py + t * sun[1]
+                qz = pz + t * sun[2]
+                q_radius = np.sqrt(np.maximum(qx * qx + qy * qy + qz * qz, 1e-9))
+                q_lat = np.degrees(np.arcsin(np.clip(qy / q_radius, -1.0, 1.0)))
+                q_lon = np.degrees(np.arctan2(qz, qx))
+                return q_lat, q_lon
+
+            self.sh_high_surf_lat, self.sh_high_surf_lon = _shadow_point(
+                n_x * planet, n_y * planet, n_z * planet, planet * planet
+            )
+            self.sh_high_low_lat, self.sh_high_low_lon = _shadow_point(
+                origin + sigma_cloud * f[0],
+                origin_y + sigma_cloud * f[1],
+                origin_z + sigma_cloud * f[2],
+                cloud_radius * cloud_radius,
+            )
 
         # Shadow ray from the surface point to the cloud shell.
         self.sh_lat = np.zeros((res, res), dtype=np.float64)
@@ -412,6 +461,37 @@ class SpinRenderer:
             coverage_high = np.zeros((self.res, self.res), dtype=np.float64)
             cloud_light_high = np.zeros((self.res, self.res, 3), dtype=np.float64)
 
+        sun_surface = self.sun_surface
+        if self.h_tex_high is not None and self.cirrus_shadow_strength > 0.0:
+            assert self.cloud_high is not None
+            surface_alpha = np.clip(
+                _sample_equirect(
+                    self.cloud_high,
+                    self.sh_high_surf_lat,
+                    self.sh_high_surf_lon + lon_offset_deg,
+                ),
+                0.0,
+                1.0,
+            )
+            surface_shadow = np.clip(1.0 - self.cirrus_shadow_strength * surface_alpha, 0.0, 1.0)
+            sun_surface = sun_surface * surface_shadow[..., None]
+            low_alpha = np.clip(
+                _sample_equirect(
+                    self.cloud_high,
+                    self.sh_high_low_lat,
+                    self.sh_high_low_lon + lon_offset_deg,
+                ),
+                0.0,
+                1.0,
+            )
+            low_shadow = np.clip(1.0 - self.cirrus_shadow_strength * low_alpha, 0.0, 1.0)
+            cloud_light = cloud_light * low_shadow[..., None]
+
+        if self.eclipse_factor is not None:
+            sun_surface = sun_surface * self.eclipse_factor[..., None]
+            cloud_light = cloud_light * self.eclipse_factor[..., None]
+            cloud_light_high = cloud_light_high * self.eclipse_factor[..., None]
+
         shadow = np.ones((self.res, self.res), dtype=np.float64)
         if self.cloud_shadows:
             shadow_sample = 1.0 - np.clip(
@@ -423,7 +503,7 @@ class SpinRenderer:
 
         surface_radiance = (
             surface
-            * self.sun_surface
+            * sun_surface
             * self.cos_surface[..., None]
             * shadow[..., None]
             * self.hits_surface[..., None]

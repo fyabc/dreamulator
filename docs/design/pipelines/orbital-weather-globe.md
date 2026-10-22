@@ -7,14 +7,14 @@
 > 源码：`src/dreamulator/media/cloud_render.py`（L2 纹理与球面合成）、
 > `cyclone_render.py`（L3 模板）、`atmosphere_render.py`（L5 大气）、
 > `cloud_config.py`（YAML 配置）。命令行入口是
-> `src/dreamulator/cli_export.py` 的 `export clouds` 子命令。
+> `src/dreamulator/cli_export.py` 的 `export globe` 子命令。
 
 ## 1. 数据流与命令
 
 一条命令完成纹理、气旋与预览：
 
 ```bash
-dreamulator export clouds nacrea --branch gcm-t42-712 --grid 8192x4096 \
+dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 \
     --cyclones --atmosphere
 ```
 
@@ -26,8 +26,9 @@ dreamulator export clouds nacrea --branch gcm-t42-712 --grid 8192x4096 \
 4. `warp_cyclone_texture` 与 `cyclone_alpha` 按轨迹表叠加气旋模板；
 5. `render_globe_atmosphere` 把地表、云壳与大气壳合成为正交圆盘。
 
-输出目录包含 `clouds.png`（RGBA 直通 alpha）、`cloud_cover.png`、`surface.png`、
-`cyclone_template.png`、`cyclone_envelope.png`、`globe.png` 与 `meta.json`。
+输出目录包含 `clouds.png`（合并 RGBA 直通 alpha）、`clouds_low.png`（低/中云+霾）、
+`clouds_cirrus.png`（高壳卷云）、`cloud_cover.png`、`surface.png`、`cyclone_template.png`、
+`cyclone_envelope.png`、`globe.png` 与 `meta.json`。
 同一份输入与种子逐位可复现；`meta.json` 记录种子、机位、气旋数量与大气参数。
 
 ## 2. L1 接口（待交付）
@@ -67,14 +68,32 @@ screen 方式调制云量，眼区主动清除底云。尺度按 Nacrea 的设�
 臭氧只吸收并取 25 km 帐篷剖面。标高由流体静力学平衡推出，光学厚度按柱质量缩放；
 透射率用高度×太阳天顶角二维表预计算。视线在两个云壳高度分成三段：9 km 的卷云壳、
 4 km 的低/中云壳与地表；半透明云能正确透出其后的大气，云影由低云壳沿太阳方向
-与地表求交得到。卷云层按 9 km 处的太阳透射率单独照明，默认不投影（薄卷云的光学
-厚度低）。`cloud_texture_equirect` 把低/中云、卷云与薄霾分开输出，另给一层更易读
+与地表求交得到。卷云层按 9 km 处的太阳透射率单独照明，并向低云/地表投一层薄衰减
+（见下）。`cloud_texture_equirect` 把低/中云、卷云与薄霾分开输出，另给一层更易读
 的高壳卷云（`alpha_cirrus_high`）；它不进入已标定的合并 `alpha`，只作用于 9 km
 壳。高壳卷云再按全局 p60–p98 拉伸、幂 1.4、增益 0.55 的对比曲线处理，保留亮丝缕、
-去掉均匀薄纱（2026-10-22 作者选定的 A/B）。全圆盘下 5 km 的高度差只有约 1 px
-视差，双层的主要收益是卷云与低云各自的照明/遮挡，而不是明显的立体错位。全圆盘
-地表底图另用一套更深的海洋色（`SURFACE_SEA_*`，仅限 L2/L5 预览）；区域制图/
-carto 链沿用原来的海色，不受影响。
+去掉均匀薄纱（2026-10-22 作者选定的 A/B）。高壳卷云还向低云与地表投影：从低壳/
+地表沿太阳方向与 9 km 壳求交，按交点处的卷云不透明度乘 `1 − strength·α`（默认
+0.6）；这是直接日光的衰减，卷云自身不做自阴影。全圆盘下 5 km 的高度差只有约
+1 px 视差，双层的主要收益是卷云与低云各自的照明/遮挡，而不是明显的立体错位。
+全圆盘地表底图另用一套更深的海洋色（`SURFACE_SEA_*`，仅限 L2/L5 预览）；区域
+制图/carto 链沿用原来的海色，不受影响。
+
+卫星食使用 `EclipseShadow` 接口：中心经纬度、本影/半影角半径与最大暗化深度
+（圆形近似）。角半径以度计；影半径大于行星半径且居中时取 90° 饱和。渲染器在表面与云壳的直接日光上乘一个平滑的圆形剖面；
+大气入射散射按地表次点做同样的局部衰减。天文层负责从轨道数据算出这些量，
+渲染器不依赖具体的食源。Aegis 掩食 Nacrea 的实算本影半径约 66,653 km（9.78
+个行星半径）、半影 77,948 km（11.43 个行星半径）。本影半径大于行星半径，中心食
+时食界在行星表面之外，整个可见半球都在本影内（接口取 90° 饱和），画面是全球
+均匀变暗。偏食时阴影不是以次食点为中心的圆斑，而是沿掩食轴的带：设轴偏离行星
+中心 $b$，表面上法线为 $\mathbf{n}$ 的点到轴的距离为
+$\rho^2 = R_p^2 + b^2 - 2bR_p(\mathbf{n}\cdot\mathbf{u}) - R_p^2(\mathbf{n}\cdot\mathbf{s})^2$，
+其中 $\mathbf{s}$ 是次食点方向、$\mathbf{u}$ 是轴的偏移方向；局部遮蔽率是恒星盘
+（角半径 0.447°）与 Aegis 盘（5.66°）在角距 $\delta=\arctan(\rho/d)$ 下的重叠
+面积。最靠近轴的点落在晨昏线上（与次食点相差 90°），所以影子从晨昏线一侧进入
+昼半球。当前 `EclipseShadow` 的圆形剖面只是中心食与局部近似的接口；真实偏食的
+带形遮蔽场需要按上式逐点计算。4°/6° 的小阴影只是通用接口演示；小卫星
+（Cadence/Vigil）小于恒星角直径，用 `umbra_radius_deg = 0` 的环形/偏食剖面。
 
 多次散射用 Hillaire (2020) 的局部查找表近似：每个格点对一组均匀方向积分单次
 散射的角平均并乘以 1/(1−f_ms) 的几何级数，主光线步进在每个采样点叠加这一源项。
@@ -95,7 +114,7 @@ m/s）先换成角位移，经度项除以 `cos(latitude)`，经度周期采样�
 每步之后用前后误差补偿（BFECC）扣掉一半往返误差，压低半拉格朗日插值的数值扩散。
 `advection_substeps` 按每步位移不超过约 8 个格子给出子步数上限。
 
-`scripts/media/cloud_flow_video.py` 从 `export clouds` 输出目录读取云纹理与网格，
+`scripts/media/cloud_flow_video.py` 从 `export globe` 输出目录读取云纹理与网格，
 用 `conditioning_grids` 取逐格年均风场，把云不透明度重采样到平流网格后逐帧推进，
 再用 `SpinRenderer.set_cloud` 更新云场、渲染固定机位的全圆盘；相机与恒星不动，
 晨昏线固定。平流速度是环境风加上每个风暴的 Holland 涡旋风：`cyclone_wind_field`
@@ -127,8 +146,8 @@ BFECC 明显减缓但未完全消除长时间积分后的细节损失，更长�
 大气只算一次，每一帧只按经度偏移重采样纹理并重新合成；`frame(0)` 与静态
 `render_globe_atmosphere` 逐位一致。
 
-`scripts/media/spin_video.py` 读取一次 `export clouds` 的输出目录（`surface.png`、
-`clouds.png`、`meta.json`），从 `meta.json` 还原大气模型与海洋掩膜，渲染一整圈旋转
+`scripts/media/spin_video.py` 读取一次 `export globe` 的输出目录（`surface.png`、
+`clouds_low.png`、`clouds_cirrus.png`、`meta.json`），从 `meta.json` 还原大气模型与海洋掩膜，渲染一整圈旋转
 加一段定格，按 16:9 画布居中并编码 H.264：
 
 ```bash
@@ -144,11 +163,12 @@ uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
 ## 8. 状态与后续
 
 已实现：L2 纹理、L3 气旋模板、L4 云系平流原型（年均风占位）、L5 单次与多次
-散射大气、云影与海面太阳高光，以及全圆盘旋转与云流视频。待办按依赖顺序排列：
+散射大气、双层云壳与高壳卷云投影、海面太阳高光、卫星食通用接口与演示，以及
+全圆盘旋转与云流视频。待办按依赖顺序排列：
 
 1. L1 气象图层包与真实气旋轨迹表（等图层包交付）；
 2. L4 接入 L1 的 6 小时风场，替换年均风占位；
-3. L5 其余画面要素：夜面城市灯光（文明层）与卫星食在圆盘上的影子（天象数据）；
+3. L5 夜面城市灯光（文明层）；卫星食的真实椭圆/移动几何由天文层逐帧提供；
 4. 云顶高度分布、多层云与次网格云尺寸分布。
 
 全圆盘 4K 的定版贴图是 16K×8K；这一分辨率的纹理合成内存开销较大，当前预览以

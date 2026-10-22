@@ -5,9 +5,10 @@ grounded atmosphere: a spherical shell of Rayleigh-scattering molecules,
 Mie-scattering aerosols and absorbing ozone, lit by the world's own star.  It
 covers the first L5 increment from the orbital weather-globe requirement
 notes (the layer stack there is surface sphere + translucent cloud shell +
-atmosphere shell), plus ocean sun glint and a Hillaire-style
-multiple-scattering lookup table; cloud-top height, city lights and satellite
-eclipse shadows remain later increments.
+atmosphere shell), plus ocean sun glint, a Hillaire-style multiple-scattering
+lookup table, two cloud shells with a high-cirrus shadow, and a generic
+eclipse-shadow interface; cloud-top height and city lights remain later
+increments.
 
 Model and references
 --------------------
@@ -331,6 +332,56 @@ def _sample_lut_table(
 
 
 @dataclass(frozen=True)
+class EclipseShadow:
+    """A circular eclipse shadow on the planet surface.
+
+    This is the rendering-side hand-off for satellite/planet eclipses: the
+    astronomy layer computes the sub-shadow point, the umbra/penumbra angular
+    radii on the sphere (``arcsin(shadow radius / planet radius)`` while the
+    boundary intersects the surface) and the maximum darkening; the renderer
+    only applies the profile.  The shadow
+    attenuates direct sunlight on the surface and cloud shells; the
+    atmosphere's in-scatter is not shadowed in this prototype.
+
+    ``depth`` is the fractional darkening at the umbra centre (1 = fully
+    black); the penumbra blends smoothly to zero at ``penumbra_radius_deg``.
+    ``umbra_radius_deg = 0`` describes an annular/partial event (the occulter
+    is smaller than the star): a smooth penumbra-only dimming.  When the
+    shadow is wider than the planet, the umbra boundary lies off the surface;
+    pass 90° (the whole visible hemisphere) and the profile saturates there.
+    """
+
+    center_lon_deg: float
+    center_lat_deg: float
+    umbra_radius_deg: float
+    penumbra_radius_deg: float
+    depth: float = 0.8
+
+    def __post_init__(self) -> None:
+        if self.umbra_radius_deg < 0.0:
+            raise ValueError("umbra_radius_deg must be >= 0")
+        if self.penumbra_radius_deg <= 0.0:
+            raise ValueError("penumbra_radius_deg must be positive")
+        if self.penumbra_radius_deg < self.umbra_radius_deg:
+            raise ValueError("penumbra_radius_deg must be >= umbra_radius_deg")
+        if not 0.0 <= self.depth <= 1.0:
+            raise ValueError("eclipse depth must be in [0, 1]")
+
+    def factor(self, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
+        """Sunlight transmission factor (1 outside, ``1-depth`` in the umbra)."""
+        lat0 = math.radians(self.center_lat_deg)
+        lon0 = math.radians(self.center_lon_deg)
+        lat = np.radians(lat_deg)
+        dlon = np.radians(lon_deg) - lon0
+        cosine = np.sin(lat) * math.sin(lat0) + np.cos(lat) * math.cos(lat0) * np.cos(dlon)
+        distance = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+        span = max(self.penumbra_radius_deg - self.umbra_radius_deg, 1e-9)
+        t = np.clip((distance - self.umbra_radius_deg) / span, 0.0, 1.0)
+        blend = t * t * (3.0 - 2.0 * t)
+        return np.asarray(1.0 - self.depth * (1.0 - blend), dtype=np.float64)
+
+
+@dataclass(frozen=True)
 class TransmittanceLUT:
     """Tabulated atmospheric transmittance to the star over (altitude, cos zenith)."""
 
@@ -612,6 +663,7 @@ def _march_segment(
     lut: TransmittanceLUT,
     n_steps: int,
     ms_lut: MultiscatteringLUT | None = None,
+    eclipse: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Single-scattering radiance and view transmittance over one ray segment.
 
@@ -667,6 +719,13 @@ def _march_segment(
         extinction = beta_r * rho_r + beta_o * rho_o + beta_m_ext * rho_m
         transmittance *= np.exp(-extinction * step[..., None])
 
+    if eclipse is not None:
+        # Local approximation: the shadow is sampled at the column's surface
+        # sub-point.  Aegis' umbra (9.8 planet radii) is far wider than the
+        # atmosphere's 91 km depth, so a column is essentially uniformly lit
+        # or shadowed; the approximation breaks down only for small shadows.
+        radiance = radiance * np.asarray(eclipse, dtype=np.float32)[..., None]
+
     return radiance, transmittance
 
 
@@ -684,6 +743,9 @@ def render_globe_atmosphere(
     cloud_rgb: tuple[int, int, int] = (252, 250, 245),
     cloud_altitude_km: float = CLOUD_ALTITUDE_KM,
     cirrus_altitude_km: float = 9.0,
+    cirrus_shadow_strength: float = 0.6,
+    eclipse_shadow: EclipseShadow | None = None,
+    eclipse_field: np.ndarray | None = None,
     cloud_shadows: bool = True,
     ocean_mask: np.ndarray | None = None,
     sun_glint: bool = True,
@@ -721,6 +783,8 @@ def render_globe_atmosphere(
         cloud_alpha_high = np.asarray(cloud_alpha_high, dtype=np.float64)
         if cloud_alpha_high.shape != surface_rgb.shape[:2]:
             raise ValueError("cloud_alpha_high must match the surface grid")
+    if not 0.0 <= cirrus_shadow_strength <= 1.0:
+        raise ValueError("cirrus_shadow_strength must be in [0, 1]")
     if ocean_mask is not None:
         ocean_mask = np.asarray(ocean_mask, dtype=np.float64)
         if ocean_mask.shape != surface_rgb.shape[:2]:
@@ -776,6 +840,18 @@ def render_globe_atmosphere(
         np.where(hits_cloud_high, sigma_cloud_high, sigma_end) if high_active else sigma_split_low
     )
 
+    # Surface sub-point (also the local shadow sample for the atmosphere).
+    s_lat = np.degrees(
+        np.arcsin(np.clip((origin_y + sigma_surface * f[1]) / np.maximum(planet, 1e-9), -1, 1))
+    )
+    s_lon = np.degrees(np.arctan2(origin_z + sigma_surface * f[2], origin + sigma_surface * f[0]))
+    if eclipse_field is not None:
+        eclipse_field = np.asarray(eclipse_field, dtype=np.float64)
+        if eclipse_field.shape != (res, res):
+            raise ValueError("eclipse_field must have shape (res, res)")
+    elif eclipse_shadow is not None:
+        eclipse_field = np.asarray(eclipse_shadow.factor(s_lat, s_lon), dtype=np.float64)
+
     lut = build_transmittance_lut(model)
     ms_lut = build_multiscattering_lut(model, lut) if multiple_scattering else None
     radiance_upper, trans_upper = _march_segment(
@@ -790,6 +866,7 @@ def render_globe_atmosphere(
         lut=lut,
         n_steps=view_samples,
         ms_lut=ms_lut,
+        eclipse=eclipse_field,
     )
     radiance_middle, trans_middle = _march_segment(
         origin_xy=(origin, origin_y),
@@ -803,6 +880,7 @@ def render_globe_atmosphere(
         lut=lut,
         n_steps=view_samples,
         ms_lut=ms_lut,
+        eclipse=eclipse_field,
     )
     radiance_lower, trans_lower = _march_segment(
         origin_xy=(origin, origin_y),
@@ -816,6 +894,7 @@ def render_globe_atmosphere(
         lut=lut,
         n_steps=view_samples,
         ms_lut=ms_lut,
+        eclipse=eclipse_field,
     )
 
     # ---- Cloud shells: coverage, sun transmittance and pseudo-3D shading ----
@@ -876,16 +955,59 @@ def render_globe_atmosphere(
         cloud_light_high = np.zeros((res, res, 3), dtype=np.float64)
 
     # ---- Surface: sun transmittance, cloud shadow, Lambert ----
-    s_lat = np.degrees(
-        np.arcsin(np.clip((origin_y + sigma_surface * f[1]) / np.maximum(planet, 1e-9), -1, 1))
-    )
-    s_lon = np.degrees(np.arctan2(origin_z + sigma_surface * f[2], origin + sigma_surface * f[0]))
     surface = _sample_equirect_rgb(surface_rgb, s_lat, s_lon)
     n_x = (origin + sigma_surface * f[0]) / planet
     n_y = (origin_y + sigma_surface * f[1]) / planet
     n_z = (origin_z + sigma_surface * f[2]) / planet
     cos_surface = np.clip(n_x * sun[0] + n_y * sun[1] + n_z * sun[2], -1.0, 1.0)
     sun_surface = lut.sample(np.zeros_like(cos_surface), cos_surface)
+
+    # ---- High cirrus shadow on the low cloud and surface ----
+    # The cirrus is optically thin, so this is a subtle attenuation of the
+    # direct sunlight where the sun ray from the low shell / surface crosses
+    # the high shell.  The high cloud itself is not self-shadowed.
+    if high_active and cirrus_shadow_strength > 0.0:
+        assert cloud_alpha_high is not None
+
+        def _shadow_alpha(
+            px: np.ndarray, py: np.ndarray, pz: np.ndarray, radius2: float
+        ) -> np.ndarray:
+            along = px * sun[0] + py * sun[1] + pz * sun[2]
+            disc = along * along + cloud_radius_high * cloud_radius_high - radius2
+            t = -along + np.sqrt(np.maximum(disc, 0.0))
+            qx = px + t * sun[0]
+            qy = py + t * sun[1]
+            qz = pz + t * sun[2]
+            q_radius = np.sqrt(np.maximum(qx * qx + qy * qy + qz * qz, 1e-9))
+            q_lat = np.degrees(np.arcsin(np.clip(qy / q_radius, -1.0, 1.0)))
+            q_lon = np.degrees(np.arctan2(qz, qx))
+            return np.asarray(
+                np.clip(_sample_equirect(cloud_alpha_high, q_lat, q_lon), 0.0, 1.0),
+                dtype=np.float64,
+            )
+
+        surface_alpha = _shadow_alpha(n_x * planet, n_y * planet, n_z * planet, planet * planet)
+        surface_shadow = np.clip(1.0 - cirrus_shadow_strength * surface_alpha, 0.0, 1.0)
+        sun_surface = sun_surface * surface_shadow[..., None]
+
+        low_x = origin + sigma_cloud * f[0]
+        low_y = origin_y + sigma_cloud * f[1]
+        low_z = origin_z + sigma_cloud * f[2]
+        low_alpha = _shadow_alpha(low_x, low_y, low_z, cloud_radius * cloud_radius)
+        low_shadow = np.clip(1.0 - cirrus_shadow_strength * low_alpha, 0.0, 1.0)
+        cloud_light = cloud_light * low_shadow[..., None]
+
+    # ---- Eclipse shadow: direct sunlight on the surface and cloud shells ----
+    # The atmosphere's in-scatter is attenuated by the same factor in
+    # _march_segment, sampled at the surface sub-point.  That local
+    # approximation is good for Aegis' umbra (9.8 planet radii wide, far
+    # deeper than the atmosphere) but not a full 3-D shadowed transport.
+    # The astronomy interface supplies the sub-shadow point and angular
+    # radii via EclipseShadow.
+    if eclipse_field is not None:
+        sun_surface = sun_surface * eclipse_field[..., None]
+        cloud_light = cloud_light * eclipse_field[..., None]
+        cloud_light_high = cloud_light_high * eclipse_field[..., None]
 
     shadow = np.ones((res, res), dtype=np.float64)
     if cloud_shadows and np.any(hits_surface):

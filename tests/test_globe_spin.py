@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from dreamulator.media.atmosphere_render import AtmosphereModel, render_globe_atmosphere
+from dreamulator.media.atmosphere_render import (
+    AtmosphereModel,
+    EclipseShadow,
+    render_globe_atmosphere,
+)
 from dreamulator.media.globe_spin import SpinRenderer
 
 
@@ -63,6 +67,29 @@ def test_rotation_wraps_and_moves() -> None:
     assert not np.array_equal(first, quarter)
     assert first.shape == (96, 96, 3)
     assert first.dtype == np.uint8
+
+
+def test_eclipse_shadow_spin_matches_static() -> None:
+    surface, cloud = _textures()
+    shadow = EclipseShadow(
+        center_lon_deg=20.0,
+        center_lat_deg=10.0,
+        umbra_radius_deg=5.0,
+        penumbra_radius_deg=8.0,
+        depth=0.8,
+    )
+    kwargs = dict(
+        res=96,
+        center_lon_deg=20.0,
+        center_lat_deg=10.0,
+        sun_lon_deg=30.0,
+        sun_lat_deg=10.0,
+        model=_model(),
+        view_samples=4,
+    )
+    reference = render_globe_atmosphere(surface, cloud, eclipse_shadow=shadow, **kwargs)
+    spin = SpinRenderer(surface, cloud, eclipse_shadow=shadow, **kwargs)
+    np.testing.assert_array_equal(spin.frame(0.0), reference)
 
 
 def test_two_shell_spin_matches_static_renderer() -> None:

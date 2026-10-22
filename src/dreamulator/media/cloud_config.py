@@ -1,4 +1,4 @@
-"""YAML configuration for the ``export clouds`` command.
+"""YAML configuration for the ``export globe`` command.
 
 The command has accumulated enough knobs (grid, seed, view, cover scaling and
 the L3 cyclone block) that a file is easier to keep with a shot than a long
@@ -26,8 +26,16 @@ Example::
       exposure: white_balance
       cloud_altitude_km: 4.0
       cirrus_altitude_km: 9.0
+      cirrus_shadow_strength: 0.6
       sun_glint: true
       multiple_scattering: true
+    eclipse:
+      enabled: false
+      center_lon_deg: 50
+      center_lat_deg: 10
+      umbra_radius_deg: 4
+      penumbra_radius_deg: 6
+      depth: 0.8
 """
 
 from __future__ import annotations
@@ -92,6 +100,7 @@ class AtmosphereSettings(BaseModel):
     enabled: bool = True
     cloud_altitude_km: float = Field(4.0, ge=0.0)
     cirrus_altitude_km: float = Field(9.0, gt=0.0)
+    cirrus_shadow_strength: float = Field(0.6, ge=0.0, le=1.0)
     atmosphere_temperature_k: float = Field(273.15, gt=0.0)
     mie_scale: float = Field(1.0, ge=0.0)
     ozone_scale: float = Field(1.0, ge=0.0)
@@ -104,8 +113,26 @@ class AtmosphereSettings(BaseModel):
     surface_pressure_atm: float | None = Field(None, gt=0.0)
 
 
+class EclipseSettings(BaseModel):
+    """Satellite/planet eclipse shadow block.
+
+    The astronomy layer computes the sub-shadow point, the umbra/penumbra
+    angular radii (degrees on the surface) and the maximum darkening; this
+    block is the rendering-side hand-off.  Disabled by default.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    center_lon_deg: float = 0.0
+    center_lat_deg: float = 0.0
+    umbra_radius_deg: float = Field(4.0, ge=0.0)
+    penumbra_radius_deg: float = Field(6.0, gt=0.0)
+    depth: float = Field(0.8, ge=0.0, le=1.0)
+
+
 class CloudRenderConfig(BaseModel):
-    """Settings for one ``export clouds`` run."""
+    """Settings for one ``export globe`` run."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -119,6 +146,7 @@ class CloudRenderConfig(BaseModel):
     cover_scale: float = 1.0
     cyclones: CycloneSettings = Field(default_factory=CycloneSettings)
     atmosphere: AtmosphereSettings = Field(default_factory=AtmosphereSettings)
+    eclipse: EclipseSettings = Field(default_factory=EclipseSettings)
 
     @classmethod
     def from_yaml(cls, path: Path) -> CloudRenderConfig:
