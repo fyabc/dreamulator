@@ -118,7 +118,7 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 > 与 GW6 收口包逐项同值。GW6 对 flag-off 倍率 ~1.4×（≤2× 门槛重新可达）。
 > flag-off 基线（同机 441.6 s / 气候 ~450 s）同受 add.at 修复惠益。
 >
-> **S5-lite（2026-09-27，`plans/s5-coarse-grid-budget.md` 文末）**：预算调用
+> **S5-lite（2026-09-27 预算实验）**：预算调用
 > 不变量外提（平滑算子/边几何/cell 场挂 `mesh._budget_cache`）+ CSC 装配
 > 结构复用（探针取槽序，矩阵逐位不变）→ 气候段再 −6.7%（550→512.8 s）；
 > 地质 add.at 清尾无计时收益。**小代码量级的可回收池已榨干**——剩余大头 =

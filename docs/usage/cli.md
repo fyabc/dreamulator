@@ -307,7 +307,7 @@ dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，�
 | `export region` | 建区域数据包（Gaea/Blender 链的 `input/`） |
 | `export build` | 区域包的高清地形：`--method td`（terrain-diffusion）/ `spl`（程序化侵蚀） |
 | `export render` | 区域包出图：`--style satellite`（卫星真彩）或制图 `survey/relief/biome/hand/medieval/all` |
-| `export clouds` | 全球程序化云纹理（L2 原型） |
+| `export globe` | 太空俯瞰镜头：地表/云纹理 + 双层云 + 大气 + 圆盘静帧（`clouds` 为历史别名） |
 | `export canvas` | 全球画布链：外存水文 + 裁窗，产出可直接 `export render` 的窗口包 |
 
 headless 烘焙地图图层为彩色 PNG，颜色与前端渲染逐字节一致（配色单源 `palettes.json`，
@@ -480,37 +480,165 @@ refined-out → gaea-out → input/）。操作细节见
 [usage/gaea-video-chain.md](gaea-video-chain.md) 第③'步；色表与等高距
 在 `src/dreamulator/media/carto_render.py` 顶部常量。
 
-### 程序化云纹理（export clouds）
+### 太空俯瞰镜头（export globe；旧名 export clouds）
 
-太空俯瞰镜头链的 L2 层（全球等距圆柱云不透明度贴图 + 正交球面预览）：
+这条链从已构建的世界地图生成三类产物，全部以同一份 `export globe` 输出目录为输入：
 
-```bash
-dreamulator export clouds nacrea --branch gcm-t42-712 --grid 16384x8192
-# 写 <out>/{clouds.png（RGBA straight alpha）, cloud_cover.png, surface.png,
-#        globe.png, meta.json}；默认 out = <render-workdir>/clouds/<world>[-<branch>]/
-# --cover-scale 0.5/1.5 调云量倍率；= 0 跳过纹理合成（无云地表 QA 模式）
-# --center-lon/--center-lat/--sun-lon/--sun-lat 定预览机位与光照
-# --seed 复现（同场 + 同 seed = 逐位相同）；16K×8K 约 3 分钟
-```
+1. **全球纹理与圆盘静帧**：`dreamulator export globe`（`clouds` 是历史别名，命令行为完全相同）；
+2. **全球旋转视频**：`scripts/media/spin_video.py`；
+3. **云系演化视频**：`scripts/media/cloud_flow_video.py`（L4 原型）。
 
-大尺度云量场目前是占位（年降水 + 海平面气压距平的乘法组合，全图均值 ≈0.24），
-等服务器 GCM 气象图层包（L1）到达后替换；噪声/流场扭曲/尺寸交叉淡化/指数透明度
-律是永久部分。两条观测统计律（光学厚度近似指数分布、云场空间谱一维 −5/3）及
-它们到生成参数的映射见
-[knowledge/climatology/cloud_field_statistics.md](../knowledge/climatology/cloud_field_statistics.md)；
-与 NASA Blue Marble 参照图的定量验收脚本在 `<render-workdir>/temp/cloud_compare.py`
-（透明度直方图对数线性度 / 梯度分位 / 径向功率谱三指标）。
+前置条件：世界已构建（`dreamulator build <world> [--branch ...]`）；媒体/噪声依赖随项目环境安装；视频编码需要 ffmpeg，脚本会自动调用 `imageio-ffmpeg`，按下面的方式运行即可。
 
-渲染静帧（完整链路的第二段；`blender` 按本机安装位置调用，Blender 5.x）：
+#### 1. 纹理与静帧：export globe
 
 ```bash
-blender -b -P scripts/media/blender/region_still.py -- \
-    --datadir data/worlds/nacrea/packs/nacrea-0_0_2500km --render still_001.png
-# 输出 <pack>/renders/still_001.png；--samples/--res/--zscale/--sun-az/--sun-alt 可调
+dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-res 1600 --cyclones
 ```
 
-`data/worlds/<world>/packs/` 下的数据包、`.blend` 与渲染输出均不入 git（脚本重建工程模式——
-工程永远可由数据包 + `region_still.py` 一键重建）。
+`export globe` 的完整参数（`clouds` 为别名）：
+
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| `WORLD` | — | 世界名（位置参数） |
+| `--planet, -p` | 自动 | 行星/卫星 ID；默认取第一张地图 |
+| `--branch, -b` | root | 读取的分支 |
+| `--config` | 无 | YAML 配置文件；显式命令行参数覆盖文件 |
+| `--grid, -g` | `8192x4096` | 等距圆柱纹理分辨率 `WxH`；16K×8K 内存开销较大 |
+| `--seed` | 7 | 噪声种子；同场 + 同 seed = 逐位相同 |
+| `--output, -o` | `<export-dir>/globe/<world>[-<branch>]/` | 输出目录 |
+| `--globe-res` | 1600 | 正交圆盘预览分辨率（方形） |
+| `--center-lon/--center-lat` | 90/15 | 视图中心经纬度 |
+| `--sun-lon/--sun-lat` | 中心−25°/20° | 次太阳点 |
+| `--cover-scale` | 1.0 | 云量倍率；0 = 跳过纹理合成，只出地表与无云圆盘 |
+| `--cyclones` | 关 | 叠加 L3 气旋模板（合成占位轨迹） |
+| `--cyclone-seed` | 31 | 合成轨迹种子 |
+| `--atmosphere/--no-atmosphere` | 开 | L5 物理大气壳；关闭退回旧版边缘光晕预览 |
+| `--data-dir` | 环境默认 | 覆盖世界数据目录 |
+
+输出文件：
+
+| 文件 | 内容 |
+|---|---|
+| `surface.png` | 等距圆柱地表底图（sRGB） |
+| `clouds.png` | 合并云不透明度（RGBA straight alpha，兼容旧调用） |
+| `clouds_low.png` | 低/中云壳 + 薄霾（4 km 层） |
+| `clouds_cirrus.png` | 高壳卷云（9 km 层，带对比曲线） |
+| `cloud_cover.png` | 大尺度云量场（占位） |
+| `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络（仅 `--cyclones`） |
+| `globe.png` | 正交圆盘静帧（地表 + 双层云 + 大气 + 高光） |
+| `meta.json` | 网格、种子、机位、气旋轨迹、大气参数、食影参数与 provenance |
+
+#### 2. YAML 配置
+
+推荐把一次镜头用 YAML 固定下来；命令行显式参数会覆盖文件。完整字段：
+
+```yaml
+grid: 8192x4096
+seed: 7
+globe_res: 1600
+center_lon: 60
+center_lat: 15
+sun_lon: 45
+sun_lat: 15
+cover_scale: 1.0
+cyclones:
+  enabled: true
+  seed: 31
+  tropical_per_hemisphere: 1
+  extratropical_per_hemisphere: 2
+  tropical_scale: 1.0
+  extratropical_scale: 1.0
+  tracks:                     # 可选：显式轨迹表，覆盖合成占位轨迹
+    - lat_deg: 5
+      lon_deg: -5
+      kind: tropical          # tropical | extratropical
+      central_pressure_hpa: 950
+      rmax_km: 180
+      outer_radius_km: 2600
+      motion_east_m_s: 6
+      shape_seed: 201
+atmosphere:
+  enabled: true
+  cloud_altitude_km: 4.0      # 低/中云壳；L1 云顶高度到达后替换
+  cirrus_altitude_km: 9.0     # 高壳卷云（必须高于低云壳）
+  cirrus_shadow_strength: 0.6 # 高壳卷云对低云/地表的投影强度
+  exposure: white_balance     # white_balance | physical
+  cloud_shadows: true
+  sun_glint: true
+  water_roughness: 0.08
+  multiple_scattering: true
+  mie_scale: 1.0
+  ozone_scale: 1.0
+  # star_temperature_k: 4365  # 覆盖世界输入（QA）
+  # surface_pressure_atm: 1.0
+eclipse:                      # 卫星食影子（通用接口；天文层提供几何）
+  enabled: false
+  center_lon_deg: 50
+  center_lat_deg: 10
+  umbra_radius_deg: 90        # Aegis 的本影覆盖整个可见半球（见第 5 节）
+  penumbra_radius_deg: 90
+  depth: 0.9
+```
+
+#### 3. 全球旋转视频
+
+相机与恒星固定、晨昏线不动；地表与云纹理旋转一整圈，末尾定格。大气只预计算一次，每帧只重采样纹理，720p 240 帧约数分钟。
+
+```bash
+uv run --with imageio-ffmpeg python scripts/media/spin_video.py <globe_dir> -o exports/spin/nacrea_spin_720p.mp4 --res 720 --seconds 8 --fps 30
+```
+
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| `<globe_dir>` | — | `export globe` 的输出目录（含 `surface.png`、`clouds_low.png`/`clouds_cirrus.png`、`meta.json`） |
+| `--res` | 720 | 方形球面渲染分辨率 |
+| `--seconds` / `--fps` | 8 / 30 | 片长与帧率 |
+| `--rotation-seconds` | `seconds − 1` | 转一整圈的时间；剩余时间定格 |
+| `--width` / `--height` | 1280 / 720 | 输出画幅；方形球面居中，两侧留黑 |
+| `--crf` | 18 | H.264 质量（越小越好） |
+| `--no-ocean` | 关 | 跳过海洋掩膜与太阳高光 |
+| `--poster` | 无 | 额外保存首末帧 PNG |
+
+云系随行星刚性旋转，不做时间演化；两层云壳都会读取。
+
+#### 4. 云系演化视频（L4 原型）
+
+同一份输出目录，把低云与卷云沿年均风场做半拉格朗日平流（BFECC 抑制扩散），固定机位、晨昏线不动；热带气旋叠加 Holland 涡旋，温带逗号默认只随环境风/锋面切变。
+
+```bash
+uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py <globe_dir> -o exports/spin/nacrea_cloudflow_720p.mp4 --res 720 --seconds 8 --fps 30 --sim-hours 24 --texture-width 2048
+```
+
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| `<globe_dir>` | — | 同旋转视频 |
+| `--res` / `--seconds` / `--fps` | 720 / 8 / 30 | 渲染分辨率、片长、帧率 |
+| `--sim-hours` | 24 | 模拟的云演化时长；与片长解耦 |
+| `--texture-width` | 2048 | 平流网格宽度（高度 = 宽度/2） |
+| `--substeps` | 自动 | 每帧子步数（按位移自动，封顶 8） |
+| `--no-bfecc` | 关 | 关闭前后误差补偿（更糊，作对照） |
+| `--no-vortex` | 关 | 只用环境风，不叠加风暴 Holland 涡旋 |
+| `--crf` / `--no-ocean` / `--poster` | 18 / 关 / 无 | 同旋转视频 |
+
+风场暂用年均值占位，等 L1 的 6 小时风场到达后替换；只输运现有纹理，不做凝结/蒸发。更长时段会累积插值扩散，需更强的低扩散格式或 L1 帧间插值。
+
+#### 5. 卫星食影子
+
+`eclipse` 块是渲染侧的通用接口：天文层算好次食点、本影/半影角半径与最大暗化，渲染器在表面与云壳的直接日光上乘一个平滑圆形剖面；大气入射散射按地表次点做同样的局部衰减。`umbra_radius_deg = 0` 表示环形/偏食（掩食体小于恒星），只留下半影式变暗。
+
+Aegis 掩食 Nacrea 的实算（Nacrea 半径 6817 km、轨道 723,300 km、Aegis 半径 71,355 km、Ignis 4365 K）：
+
+- Aegis 角半径 5.66°，恒星角半径 0.447°（角半径比 12.65）；本影锥长 `L = R_Aegis·d★/(R★ − R_Aegis)` ≈ 10.98M km，在 Nacrea 轨道处收束到约 66,653 km（9.78 个 Nacrea 半径），半影约 77,948 km（11.43 个半径）；
+- 中心食时本影半径大于行星半径，食界不落在行星表面上，整个可见半球都在本影内；接口中取本影与半影角半径 90° 表示全覆盖（角半径在 90° 处饱和），画面是**全球均匀变暗**，不是一个小圆斑；
+- 偏食时阴影不是以次食点为中心的圆斑，而是沿掩食轴的带。设掩食轴偏离行星中心 $b$，表面上法线为 $\mathbf{n}$ 的点到轴的距离为 $\rho^2 = R_p^2 + b^2 - 2bR_p(\mathbf{n}\cdot\mathbf{u}) - R_p^2(\mathbf{n}\cdot\mathbf{s})^2$，其中 $\mathbf{s}$ 是次食点方向、$\mathbf{u}$ 是轴的偏移方向；局部遮蔽率是恒星盘（角半径 0.447°）与 Aegis 盘（5.66°）在角距 $\delta=\arctan(\rho/d)$ 下的重叠面积。最靠近轴的点落在晨昏线上（与次食点相差 90°），所以影子从晨昏线一侧进入昼半球。当前 `EclipseShadow` 的圆形剖面是中心食与局部近似接口，真实偏食需要按上式逐点计算；
+- 小卫星（Cadence/Vigil）角半径约 0.07°/0.02°，小于恒星，只有环形/偏食，对应 `umbra_radius_deg: 0` 的半影式变暗。
+
+限制：大气入射散射按地表次点做局部衰减，不是三维遮蔽输运；阴影为圆形且静态，真实椭圆/移动食影需天文层逐帧提供参数。
+
+#### 6. 复现与分辨率
+
+同场 + 同 seed 逐位相同；`meta.json` 记录全部参数。16K×8K 纹理内存开销大，预览以 8K×4K/1600² 为主；需要 4K 全圆盘时按镜头加细。区域数据包的 Blender 静帧是另一条链，见 `export render` 与地形链手册。
 
 ---
 

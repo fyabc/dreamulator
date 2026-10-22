@@ -1,8 +1,8 @@
 """Procedural cloud texture — layer L2 of the orbital weather-globe chain.
 
-Requirement spec: the orbital weather-globe requirement notes (internal planning record).
+Requirement spec: the orbital weather-globe requirement notes.
 The GCM layer pack (L1: per-layer cloud fraction, cloud-top height, vorticity)
-is still pending on the server side; until it arrives this module derives a
+is still pending; until it arrives this module derives a
 **placeholder large-scale cloud-cover field** from the engine climate fields
 already on the mesh (annual precipitation and sea-level-pressure anomaly), so
 the look of the procedural texture can be settled now.  The texture synthesis
@@ -26,8 +26,14 @@ Design notes:
 * Cloud typing is deliberately minimal for the prototype: one billow layer
   (fair-weather cumulus / stratocumulus texture, thresholded by the cover
   field) and one cirrus layer (double-tap streaks elongated along the wind,
-  strengthening with wind speed).  Cyclone morphology is layer L3 and is NOT
-  handled here.
+  strengthening with wind speed).  Cyclone morphology is layer L3
+  (``media/cyclone_render.py``), composited by :func:`clouds_globe` when a
+  track set is supplied.
+* The globe preview is layer L5.  The legacy :func:`render_globe_preview`
+  remains the fallback; the physical path is
+  ``media/atmosphere_render.py`` (single-scattering Rayleigh/Mie/ozone shell,
+  star-spectrum colour, layered cloud shell), selected by passing an
+  :class:`AtmosphereModel` to :func:`clouds_globe`.
 
 Epistemic status (per engine discipline §9): the noise machinery is a
 standard graphics technique; the cover-field coefficients in
@@ -40,17 +46,21 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from dreamulator.map.noise_kernels import fbm_on_points, worley_on_points
+from dreamulator.media.atmosphere_render import atmosphere_summary
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
+    from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
+    from dreamulator.media.cyclone_render import Cyclone
 
 # ---------------------------------------------------------------------------
 # Texture constants (lengths in km on the planet surface)
@@ -248,6 +258,24 @@ CIRRUS_THRESHOLD_LO = 0.66
 CIRRUS_THRESHOLD_HI = 0.92
 CIRRUS_BASE_ALPHA = 0.14
 CIRRUS_WIND_ALPHA = 0.40
+
+#: High-shell cirrus recipe: the combined-layer cirrus above is deliberately
+#: near-invisible (it only contributes a few percent to the calibrated total).
+#: The L5 two-shell renderer needs a readable high veil for parallax, so a
+#: separate, slightly thicker cirrus field is generated here and placed on the
+#: 9 km shell; it does NOT enter the legacy combined ``alpha``.
+CIRRUS_HIGH_THRESHOLD_LO = 0.46
+CIRRUS_HIGH_THRESHOLD_HI = 0.72
+CIRRUS_HIGH_BASE_ALPHA = 0.45
+CIRRUS_HIGH_WIND_ALPHA = 0.35
+#: Contrast curve applied to the high-shell cirrus: percentile stretch +
+#: gamma + gain.  The raw recipe is a broad veil; this keeps the brighter
+#: streaks, removes the uniform milkiness, and raises local contrast (the
+#: A/B 2026-10-22 selection).
+CIRRUS_HIGH_CONTRAST_LO_Q = 60
+CIRRUS_HIGH_CONTRAST_HI_Q = 98
+CIRRUS_HIGH_CONTRAST_POWER = 1.4
+CIRRUS_HIGH_CONTRAST_GAIN = 0.55
 
 #: Diffuse haze floor: a very thin (≤5%) fine-textured veil everywhere, weakly
 #: gated by cover — real imagery has micro-texture even in "clear" sky (dust,
@@ -455,9 +483,18 @@ def _streaked_fbm(
 
 @dataclass
 class CloudProducts:
-    """Outputs of the equirectangular cloud synthesis."""
+    """Outputs of the equirectangular cloud synthesis.
 
-    alpha: np.ndarray  # (h, w) float64 ∈ [0, 1] — effective opacity
+    ``alpha`` is the combined opacity (low/mid + cirrus + haze).  The three
+    components are kept separately so the L5 renderer can place the cirrus on
+    a higher shell and get parallax at the limb; legacy callers use ``alpha``.
+    """
+
+    alpha: np.ndarray  # (h, w) float64 ∈ [0, 1] — combined effective opacity
+    alpha_low: np.ndarray  # low/mid cloud + bright cores, no cirrus/haze
+    alpha_cirrus: np.ndarray  # high cirrus streaks (legacy combined layer)
+    alpha_cirrus_high: np.ndarray  # readable high-shell cirrus for L5 parallax
+    alpha_haze: np.ndarray  # thin diffuse haze floor
     cover: np.ndarray  # (h, w) float64 ∈ [0, 1] — large-scale cover field
     width: int
     height: int
@@ -753,6 +790,10 @@ def cloud_texture_equirect(
 
     # ---------------- pass B: alpha assembly ----------------
     alpha = np.empty((height, width), dtype=np.float64)
+    alpha_low = np.empty((height, width), dtype=np.float64)
+    alpha_cirrus = np.empty((height, width), dtype=np.float64)
+    alpha_cirrus_high = np.empty((height, width), dtype=np.float64)
+    alpha_haze = np.empty((height, width), dtype=np.float64)
     for row0 in range(0, height, BAND_ROWS):
         row1 = min(row0 + BAND_ROWS, height)
         b = _band_basis(row0, row1)
@@ -1048,6 +1089,16 @@ def cloud_texture_equirect(
             * (CIRRUS_BASE_ALPHA + CIRRUS_WIND_ALPHA * np.clip(wmag / CIRRUS_REF_WIND_M_S, 0, 1))
             * (0.25 + 0.75 * cov_local)
         )
+        # L5 high-shell cirrus: same noise field, thicker recipe, kept out of
+        # the legacy combined alpha so the calibrated L2 histogram is unchanged.
+        a_cir_high = (
+            _smoothstep(CIRRUS_HIGH_THRESHOLD_LO, CIRRUS_HIGH_THRESHOLD_HI, density_c)
+            * (
+                CIRRUS_HIGH_BASE_ALPHA
+                + CIRRUS_HIGH_WIND_ALPHA * np.clip(wmag / CIRRUS_REF_WIND_M_S, 0, 1)
+            )
+            * (0.20 + 0.80 * cov_local)
+        )
 
         # Diffuse haze floor: thin fine-textured veil everywhere (weakly
         # cover-gated), gives clear sky the micro-texture the reference has.
@@ -1067,8 +1118,31 @@ def cloud_texture_equirect(
         alpha[row0:row1] = (1.0 - (1.0 - a_low) * (1.0 - a_cir) * (1.0 - a_haze)).reshape(
             row1 - row0, width
         )
+        alpha_low[row0:row1] = a_low.reshape(row1 - row0, width)
+        alpha_cirrus[row0:row1] = a_cir.reshape(row1 - row0, width)
+        alpha_cirrus_high[row0:row1] = a_cir_high.reshape(row1 - row0, width)
+        alpha_haze[row0:row1] = a_haze.reshape(row1 - row0, width)
 
-    return CloudProducts(alpha=alpha, cover=cover_grid, width=width, height=height)
+    # Keep the high-shell cirrus streaky rather than a uniform veil.  The
+    # percentile stretch is global so bands cannot introduce seams.
+    lo_c = float(np.percentile(alpha_cirrus_high, CIRRUS_HIGH_CONTRAST_LO_Q))
+    hi_c = float(np.percentile(alpha_cirrus_high, CIRRUS_HIGH_CONTRAST_HI_Q))
+    alpha_cirrus_high = (
+        np.clip((alpha_cirrus_high - lo_c) / max(hi_c - lo_c, 1e-6), 0.0, 1.0)
+        ** CIRRUS_HIGH_CONTRAST_POWER
+        * CIRRUS_HIGH_CONTRAST_GAIN
+    )
+
+    return CloudProducts(
+        alpha=alpha,
+        alpha_low=alpha_low,
+        alpha_cirrus=alpha_cirrus,
+        alpha_cirrus_high=alpha_cirrus_high,
+        alpha_haze=alpha_haze,
+        cover=cover_grid,
+        width=width,
+        height=height,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1123,6 +1197,13 @@ SURFACE_LAND_TEX_AMP = 0.10
 SURFACE_OCEAN_TEX_KM = 200.0
 SURFACE_OCEAN_TEX_AMP = 0.06
 
+#: Globe-preview ocean palette.  Full-disk references (Blue Marble) keep the
+#: deep ocean much darker than the region satellite renderer's sea colours;
+#: this palette is scoped to the L2/L5 globe base and leaves the carto/region
+#: chain untouched (its surface is the authoritative canvas path anyway).
+SURFACE_SEA_SHALLOW = (30, 80, 110)
+SURFACE_SEA_DEEP = (7, 20, 37)
+
 
 def surface_base_rgb(
     mesh: CVTMesh,
@@ -1147,8 +1228,6 @@ def surface_base_rgb(
         BIOME_COLORS,
         ICE_COLOR,
         MISSING_COLOR,
-        SEA_DEEP,
-        SEA_SHALLOW,
     )
 
     n = mesh.num_cells
@@ -1160,8 +1239,8 @@ def surface_base_rgb(
         else:
             depth = sea_level_m - c.elevation
             t = min(depth / 400.0, 1.0)
-            shallow = np.array(SEA_SHALLOW, dtype=np.float64)
-            deep = np.array(SEA_DEEP, dtype=np.float64)
+            shallow = np.array(SURFACE_SEA_SHALLOW, dtype=np.float64)
+            deep = np.array(SURFACE_SEA_DEEP, dtype=np.float64)
             rgb[i] = shallow + (deep - shallow) * t
     ice = np.array([c.biome == "ice" for c in mesh.cells], dtype=bool)
     rgb[ice] = np.array(ICE_COLOR, dtype=np.float64)
@@ -1351,9 +1430,27 @@ def clouds_globe(
     sun_lon_deg: float | None = None,
     sun_lat_deg: float = 20.0,
     cover_scale: float = 1.0,
+    cyclones: Sequence[Cyclone] | None = None,
+    cyclone_seed: int = 41,
+    atmosphere: AtmosphereModel | None = None,
+    cloud_altitude_km: float = 4.0,
+    cirrus_altitude_km: float = 9.0,
+    cirrus_shadow_strength: float = 0.6,
+    eclipse_shadow: EclipseShadow | None = None,
+    cloud_shadows: bool = True,
+    sun_glint: bool = True,
+    water_roughness: float = 0.08,
+    multiple_scattering: bool = True,
+    atmosphere_exposure: str = "white_balance",
     provenance: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Run the full L2 prototype: texture + cover field + globe preview.
+
+    ``cyclones`` optionally overlays L3 parametric cyclone templates on the
+    texture (a synthetic track set is a QA placeholder until the L1 layer pack
+    provides real tracks).  ``atmosphere`` switches the globe preview from the
+    legacy limb-glow composite to the L5 physical atmosphere shell; the
+    remaining atmosphere arguments configure that path.
 
     Writes ``clouds.png`` (RGBA straight-alpha equirect), ``cloud_cover.png``
     (8-bit greyscale placeholder cover field), ``surface.png`` (equirect
@@ -1379,30 +1476,131 @@ def clouds_globe(
         cover, u, v, oce, dp = conditioning_grids(mesh, indices)
         cover = np.clip(cover * cover_scale, 0.0, 1.0)
         products = cloud_texture_equirect(cover, u, v, oce, dp, radius_km=radius_km, seed=seed)
+        # Low/mid cloud (including the thin haze floor) and high cirrus are
+        # kept apart so the L5 renderer can put them on two shells.
+        alpha_low = 1.0 - (1.0 - products.alpha_low) * (1.0 - products.alpha_haze)
+        alpha_cirrus = products.alpha_cirrus_high
+        alpha_cirrus_legacy = products.alpha_cirrus
+        alpha = alpha_low
+        if cyclones:
+            from dreamulator.media.cyclone_render import (
+                cyclone_alpha,
+                cyclone_clear,
+                cyclone_envelope,
+                warp_cyclone_texture,
+            )
+
+            # Synthetic tracks do not know the coastline; drop tropical
+            # centres that land on a continent (L1 tracks never do).
+            rows = np.clip(
+                ((90.0 - np.array([c.lat_deg for c in cyclones])) / 180.0 * height), 0, height - 1
+            ).astype(int)
+            cols = np.clip(
+                ((np.array([c.lon_deg for c in cyclones]) + 180.0) / 360.0 * width), 0, width - 1
+            ).astype(int)
+            cyclones = [
+                c
+                for c, r, q in zip(cyclones, rows, cols, strict=True)
+                if c.kind != "tropical" or oce[r, q] > 0.5
+            ]
+        if cyclones:
+            alpha = warp_cyclone_texture(alpha, list(cyclones), radius_km=radius_km)
+            template = cyclone_alpha(
+                list(cyclones),
+                height=height,
+                width=width,
+                radius_km=radius_km,
+                seed=cyclone_seed,
+            )
+            clear = cyclone_clear(list(cyclones), height=height, width=width, radius_km=radius_km)
+            envelope = cyclone_envelope(
+                list(cyclones),
+                height=height,
+                width=width,
+                radius_km=radius_km,
+                seed=cyclone_seed,
+            )
+            # Inside a storm the ambient deck is modulated (not replaced) by the
+            # template: band troughs thin the deck, crests brighten it, so the
+            # cyclone reads without punching a clear moat in the cloud field.
+            base = alpha * (1.0 - clear)
+            # Inside the (irregular) storm footprint the template may only
+            # brighten: max() keeps the ambient deck where the template is thin,
+            # so there is no dark ring or painted halo around the edge.
+            # Screen the banded template over the ambient deck: it raises cloud
+            # amount without imposing a hard disk edge, and keeps the L2 texture.
+            alpha = np.clip(1.0 - (1.0 - base) * (1.0 - 0.95 * envelope * template), 0.0, 1.0)
+            Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
+                str(out_dir / "cyclone_template.png")
+            )
+            paths["cyclone_template"] = out_dir / "cyclone_template.png"
+            Image.fromarray((envelope * 255.0).astype(np.uint8), "L").save(
+                str(out_dir / "cyclone_envelope.png")
+            )
+            paths["cyclone_envelope"] = out_dir / "cyclone_envelope.png"
+        alpha_low = alpha
+        alpha = 1.0 - (1.0 - alpha_low) * (1.0 - alpha_cirrus_legacy)
         rgba = np.empty((height, width, 4), dtype=np.uint8)
         rgba[..., 0] = CLOUD_RGB[0]
         rgba[..., 1] = CLOUD_RGB[1]
         rgba[..., 2] = CLOUD_RGB[2]
-        rgba[..., 3] = (np.clip(products.alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
+        rgba[..., 3] = (np.clip(alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
         save_rgba_png(rgba, out_dir / "clouds.png")
+        layer_rgba = np.empty((height, width, 4), dtype=np.uint8)
+        layer_rgba[..., 0] = CLOUD_RGB[0]
+        layer_rgba[..., 1] = CLOUD_RGB[1]
+        layer_rgba[..., 2] = CLOUD_RGB[2]
+        layer_rgba[..., 3] = (np.clip(alpha_low, 0.0, 1.0) * 255.0).astype(np.uint8)
+        save_rgba_png(layer_rgba, out_dir / "clouds_low.png")
+        layer_rgba[..., 3] = (np.clip(alpha_cirrus, 0.0, 1.0) * 255.0).astype(np.uint8)
+        save_rgba_png(layer_rgba, out_dir / "clouds_cirrus.png")
         Image.fromarray((products.cover * 255.0).astype(np.uint8), "L").save(
             str(out_dir / "cloud_cover.png")
         )
-        alpha = products.alpha
         paths["clouds"] = out_dir / "clouds.png"
+        paths["clouds_low"] = out_dir / "clouds_low.png"
+        paths["clouds_cirrus"] = out_dir / "clouds_cirrus.png"
         paths["cover"] = out_dir / "cloud_cover.png"
     else:
         alpha = np.zeros((height, width), dtype=np.float64)
+        alpha_low = np.zeros((height, width), dtype=np.float64)
+        alpha_cirrus = np.zeros((height, width), dtype=np.float64)
 
-    globe = render_globe_preview(
-        surface,
-        alpha,
-        res=globe_res,
-        center_lon_deg=center_lon_deg,
-        center_lat_deg=center_lat_deg,
-        sun_lon_deg=sun_lon_deg,
-        sun_lat_deg=sun_lat_deg,
-    )
+    if atmosphere is not None:
+        from dreamulator.media.atmosphere_render import render_globe_atmosphere
+
+        ocean_cells = np.array([c.elevation < sea_level_m for c in mesh.cells], dtype=bool)
+        globe = render_globe_atmosphere(
+            surface,
+            alpha_low,
+            cloud_alpha_high=alpha_cirrus,
+            res=globe_res,
+            center_lon_deg=center_lon_deg,
+            center_lat_deg=center_lat_deg,
+            sun_lon_deg=sun_lon_deg,
+            sun_lat_deg=sun_lat_deg,
+            model=atmosphere,
+            cloud_altitude_km=cloud_altitude_km,
+            cirrus_altitude_km=cirrus_altitude_km,
+            cirrus_shadow_strength=cirrus_shadow_strength,
+            eclipse_shadow=eclipse_shadow,
+            cloud_shadows=cloud_shadows,
+            ocean_mask=ocean_cells[indices].astype(np.float64),
+            sun_glint=sun_glint,
+            water_roughness=water_roughness,
+            multiple_scattering=multiple_scattering,
+            exposure=atmosphere_exposure,
+        )
+    else:
+        globe = render_globe_preview(
+            surface,
+            alpha,
+            res=globe_res,
+            center_lon_deg=center_lon_deg,
+            center_lat_deg=center_lat_deg,
+            sun_lon_deg=sun_lon_deg,
+            sun_lat_deg=sun_lat_deg,
+        )
     Image.fromarray(globe, "RGB").save(str(out_dir / "globe.png"))
     paths["globe"] = out_dir / "globe.png"
 
@@ -1410,6 +1608,7 @@ def clouds_globe(
         "chain": "L2 procedural cloud texture (prototype)",
         "spec": "orbital weather-globe L2 procedural cloud texture",
         "radius_km": radius_km,
+        "sea_level_m": sea_level_m,
         "grid": [width, height],
         "seed": seed,
         "globe": {
@@ -1430,6 +1629,30 @@ def clouds_globe(
         },
         "cover_field": "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack",
         "cover_scale": cover_scale,
+        "cyclones": {
+            "count": len(cyclones) if cyclones else 0,
+            "source": "synthetic placeholder (L1 tracks pending)" if cyclones else None,
+            "seed": cyclone_seed if cyclones else None,
+            "tracks": [asdict(c) for c in cyclones] if cyclones else [],
+        },
+        "atmosphere": (
+            {
+                **atmosphere_summary(
+                    atmosphere,
+                    exposure=atmosphere_exposure,
+                    sun_glint=sun_glint,
+                    water_roughness=water_roughness,
+                    multiple_scattering=multiple_scattering,
+                ),
+                "cloud_altitude_km": cloud_altitude_km,
+                "cirrus_altitude_km": cirrus_altitude_km,
+                "cirrus_shadow_strength": cirrus_shadow_strength,
+                "cloud_shadows": cloud_shadows,
+            }
+            if atmosphere is not None
+            else None
+        ),
+        "eclipse": asdict(eclipse_shadow) if eclipse_shadow is not None else None,
         "provenance": provenance or {},
     }
     with (out_dir / "meta.json").open("w", encoding="utf-8") as fh:

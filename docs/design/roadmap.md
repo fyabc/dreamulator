@@ -1,6 +1,8 @@
 # 开发路线图
 
-> 最后更新：2026-10-20（v1.1.0 发版：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
+> 最后更新：2026-10-21（main 新增全球画布链：S2 外存水文与 S3 区域裁窗，
+> 技术参考见 [canvas-hydrology.md](pipelines/canvas-hydrology.md)；地质层重写批次待交付合并。
+> v1.1.0 发版内容：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
 > 2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典（洛夫数 k₂=0.20/h₂=0.40、
 > Q≈445、τ_e 9.2 Myr）、earth 板块运动 PB2002 欧拉极修正；地质时间轴研究线 G1–G3 入库
 > （proposals/geological-timeline.md + `paleo_*` 模块，未接入 CLI/API/前端）。
@@ -22,6 +24,7 @@
 | 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选 |
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 62 K）；季节振幅 √P 两臂后陆地 p50 4.0 K |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
+| 未发布（main） | 全球画布链 S2 外存水文与 S3 区域裁窗已并入（`887cdc1`）；地质层重写批次（造山带格子平均高程、历史契约）待交付合并，nacrea 数据冻结后再发布 |
 
 ---
 
@@ -74,7 +77,7 @@
 
 ---
 
-## 五、近期工作：nacrea 样板世界改造（2026 Q3）
+## 五、近期工作：nacrea 样板世界改造（2026 Q3–Q4）
 
 目标：把 nacrea 打造成物理自洽、内容丰富、可支撑 B 站系列视频的样板世界。
 
@@ -113,18 +116,19 @@
 |--------|------|-----------|--------|
 | **P0** | **nacrea 地形修复批次与重新生成**（作者 10-20/21 裁决，排在高清地形画布试点与下一批 GCM 之前，目标一次修完地形层）：§七 33、39、40、正典热流审查与 46、历史契约造山带部分、43（含 37）、45、44、35 依次修复，43 与 44 先写提案；再分两步重新生成（先原 geography 固定种子看大格局，微调尽量放 overlays），删去旧行为开关，冻结板块与构造实现（技术债 49），以同一份构建产物冻结数据版本并经 release 分发 | 5–6 周 | ★★★★★ |
 | **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
+| **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 重叠窗一致性与 S5 全局概览待做；试点画布等 nacrea 数据冻结后交付）→ [canvas-hydrology.md](pipelines/canvas-hydrology.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示**（§七 24；数据链已就绪，前端懒加载抽样箭头） | 1–2 周 | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P2 | 视频素材后续（Blender 链扩展：多图层数据包 / 相机动画 / 全球整球；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
-| P2 | **气象图层与太空镜头链**（L2 程序化云纹理原型 ✅ 2026-10-18：`export clouds`，球面逐点 fBm + 流场扭曲 + 卷云拉丝 + 正交预览；L1 GCM 图层包 / L3 气旋模板 / L4 时间平流 / L5 大气渲染待后续批次，触发 = 服务器气象图层包） | 随服务器批 | ★★★★ |
+| P2 | **气象图层与太空镜头链**（L2 程序化云纹理 ✅ 2026-10-18：`export globe`，球面逐点 fBm + 流场扭曲 + 卷云拉丝；L3 参数化气旋模板 ✅ 2026-10-22；L5 大气渲染原型 ✅ 2026-10-22：恒星光谱定标、透射率表、多次散射表、云壳分层、云影与海面太阳高光；双层云壳（4 km 低云 + 9 km 卷云）✅ 2026-10-22；高壳卷云投影与卫星食通用接口 demo ✅ 2026-10-23；L4 云系平流原型 ✅ 2026-10-22（年均风占位，定版等 L1 6 小时风场）；余 L1 GCM 图层包、L5 夜面城市灯光、真实云顶高度；L2 路线二（真实卫星斑块拼贴）已登记待评估，触发 = 气象图层包） | 随图层包批 | ★★★★ |
 | P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |
 | P3 | **热点火山岛建设剖面**（潮汐固定热点岛的盾状对数剖面 + 裂谷拉长选项，替换锚定幂核；形态判据实测 → [geology-layer-improvement.md](proposals/geology-layer-improvement.md) §9；2026-10-05 立项，优先级低） | 3–5 天 | ★ |
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示） | 调研 1–2 天 | ★★ |
-| P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth）→ today.md 待办 5 | 前端 1–2 周 | ★★ |
-| P3 | **草案七转正 + Hycean 调研**（创作线）→ today.md 待办 3 | ①1–2 天 ②周级 | ★★ |
+| P3 | **nullschool 式粒子流可视化**（风/洋流矢量箭头 → 粒子平流拖尾；参照 cambecc/earth） | 前端 1–2 周 | ★★ |
+| P3 | **草案七转正 + Hycean 调研**（创作线） | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明） | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
@@ -142,7 +146,7 @@
 | P2 | **geography.yaml 编辑原语补全**（overlays 段已承载局部刻海/补陆（09-30）；剩余原语 = `elevation_bias` 区域乘数、`lock_region`、`lake`/`inland_sea`） | 1–2 周 | ★★★ |
 | P2 | **edits.json 逐 cell 编辑系统**（管线后处理叠加层，seed 绑定；点击编辑 → 画笔 → 地形笔刷三期；设计见 [layer-control-model.md](proposals/layer-control-model.md)） | 1–2 周 | ★★★ |
 | P2 | **分辨率独立性验证**（geography.yaml 锚定特征在 100k/200k/500k 一致性；sub-cell 特征如北方内海连通性对分辨率敏感，需文档化边界） | 0.5 周 | ★★★ |
-| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具 ↔ 回贴 cell；P1 局部地形精细化管线为其 MVP 先行版）。**前置使能 = 地形 bake（2026-09-30 用户立项，设计草案 → today.md 待办 4）**：精调后的全球地形冻结为直读基座（`baked_base` + manifest，类似 earth root 导入态），外部编辑不再被构建冲掉 | 远期 | ★★ |
+| P3 | **外部编辑往返协议**（mesh ↔ 高分辨率栅格 ↔ 外部工具 ↔ 回贴 cell；P1 局部地形精细化管线为其 MVP 先行版）。**前置使能 = 地形 bake（2026-09-30 立项，设计草案待整理入库）**：精调后的全球地形冻结为直读基座（`baked_base` + manifest，类似 earth root 导入态），外部编辑不再被构建冲掉 | 远期 | ★★ |
 | P3 | **构造-地表全双向耦合**（侵蚀卸载/沉积载荷反作用于板块动力学；Underworld2+Badlands ALE 方案；需先解决地理锚定与动态板块协调） | 远期 | ★★ |
 | P3 | AI 顾问模式 / 实时协作 / 世界导出包 | 见 vision.md §9 | ★★ |
 | P3 | Moltke Engine — 独立实体引擎（ECS + 差分数据流 + 增量分支计算）→ [moltke-engine.md](proposals/moltke-engine.md) | 远期 | ★★ |

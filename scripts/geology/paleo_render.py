@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Geological timeline: render a plate-motion video from a ``paleo_solve.py`` run.
 
-Windows reference render (delivery summary 2026-10-20 §3): Mollweide projection,
+Reference render: Mollweide projection,
 1920×1080, 20 fps, one frame every 0.5 Myr from ``--start`` back to the present.
 Plate attribution is majority-voted across the surrounding frames (``--vote``,
 default a ±2-frame window) to suppress resampling flicker; boundaries are

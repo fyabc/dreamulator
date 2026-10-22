@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 import typer
@@ -25,6 +25,9 @@ from rich.table import Table
 
 if TYPE_CHECKING:
     import numpy as np
+
+    from dreamulator.media.atmosphere_render import AtmosphereModel
+    from dreamulator.media.cloud_config import AtmosphereSettings
 
 from dreamulator.map.export import (
     draw_graticule,
@@ -739,11 +742,139 @@ def export_render(
     raise typer.Exit(code=2) from None
 
 
+def _host_star_temperature(
+    stellar: dict[str, object], planet: dict[str, object] | None
+) -> float | None:
+    """Walk planet → host planet → star and return the star's effective temperature."""
+    stars = stellar.get("stars")
+    orbits = stellar.get("orbits")
+    star_entries = stars if isinstance(stars, list) else []
+    orbit_entries = orbits if isinstance(orbits, list) else []
+    by_body = {
+        str(entry.get("body_id")): entry for entry in orbit_entries if isinstance(entry, dict)
+    }
+    node = str(planet.get("orbits")) if planet and planet.get("orbits") else None
+    seen: set[str] = set()
+    while node is not None and node in by_body and node not in seen:
+        seen.add(node)
+        parent = by_body[node].get("parent_id")
+        node = str(parent) if parent else None
+    star = next(
+        (entry for entry in star_entries if isinstance(entry, dict) and entry.get("id") == node),
+        None,
+    )
+    if star is None and star_entries and isinstance(star_entries[0], dict):
+        star = star_entries[0]
+    if star is None:
+        return None
+    temperature = star.get("temperature")
+    return float(temperature) if isinstance(temperature, (int, float)) else None
+
+
+def _atmosphere_from_world(
+    world_dir: Path,
+    branch: str | None,
+    planet_id: str,
+    radius_km: float,
+    cfg: AtmosphereSettings,
+) -> AtmosphereModel:
+    """Build the L5 atmosphere model from the world's stellar and planet inputs.
+
+    Missing inputs fall back to Earth values; the star temperature and surface
+    pressure can be overridden in the YAML block (QA and worlds without inputs).
+    """
+    from dreamulator.media.atmosphere_render import (
+        EARTH_GRAVITY,
+        AtmosphereModel,
+        mean_molar_mass_kg_mol,
+    )
+    from dreamulator.resolver import LayerResolver
+
+    resolver = LayerResolver(world_dir, branch)
+    planets_data = resolver.load_layer_yaml("geological", "planets.yaml")
+    stellar_data = resolver.load_layer_yaml("astronomy", "stellar.yaml")
+
+    planet: dict[str, object] | None = None
+    if isinstance(planets_data, dict):
+        entries = planets_data.get("planets")
+        candidates = entries if isinstance(entries, list) else []
+        planet = next(
+            (
+                entry
+                for entry in candidates
+                if isinstance(entry, dict) and entry.get("id") == planet_id
+            ),
+            None,
+        )
+        if planet is None and candidates and isinstance(candidates[0], dict):
+            planet = candidates[0]
+
+    star_temperature = cfg.star_temperature_k
+    if star_temperature is None and isinstance(stellar_data, dict):
+        star_temperature = _host_star_temperature(stellar_data, planet)
+    if star_temperature is None:
+        star_temperature = 5772.0
+
+    atmosphere_data: dict[str, object] = {}
+    composition: dict[str, float] | None = None
+    mass_earth: float | None = None
+    radius_earth: float | None = None
+    if planet is not None:
+        atmosphere = planet.get("atmosphere")
+        if isinstance(atmosphere, dict):
+            atmosphere_data = atmosphere
+            raw_composition = atmosphere.get("composition")
+            if isinstance(raw_composition, dict):
+                composition = {
+                    str(key): float(value)
+                    for key, value in raw_composition.items()
+                    if isinstance(value, (int, float))
+                }
+        mass = planet.get("mass")
+        radius = planet.get("radius")
+        mass_earth = float(mass) if isinstance(mass, (int, float)) else None
+        radius_earth = float(radius) if isinstance(radius, (int, float)) else None
+
+    surface_pressure = cfg.surface_pressure_atm
+    if surface_pressure is None:
+        raw_pressure = atmosphere_data.get("surface_pressure_atm")
+        surface_pressure = float(raw_pressure) if isinstance(raw_pressure, (int, float)) else 1.0
+
+    gravity = EARTH_GRAVITY
+    if mass_earth is not None and radius_earth is not None and radius_earth > 0.0:
+        gravity = mass_earth / (radius_earth * radius_earth) * EARTH_GRAVITY
+
+    ground_albedo = 0.3
+    if planet is not None:
+        raw_albedo = planet.get("albedo")
+        if isinstance(raw_albedo, (int, float)):
+            ground_albedo = float(raw_albedo)
+
+    return AtmosphereModel(
+        planet_radius_km=radius_km,
+        gravity_m_s2=gravity,
+        surface_pressure_atm=surface_pressure,
+        atmosphere_temperature_k=cfg.atmosphere_temperature_k,
+        mean_molar_mass_kg_mol=mean_molar_mass_kg_mol(composition),
+        star_temperature_k=star_temperature,
+        mie_scale=cfg.mie_scale,
+        ozone_scale=cfg.ozone_scale,
+        ground_albedo=ground_albedo,
+    )
+
+
+@export_app.command("globe")
 @export_app.command("clouds")
 def export_clouds(
+    ctx: typer.Context,
     world: str = typer.Argument(help="World name"),
     planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        help="YAML settings file (see cli.md); explicit CLI flags override it",
+    ),
     grid: str = typer.Option(
         "8192x4096",
         "--grid",
@@ -755,7 +886,7 @@ def export_clouds(
         None,
         "--output",
         "-o",
-        help="Output dir (default: <export-dir>/clouds/<world>[-<branch>]/; "
+        help="Output dir (default: <export-dir>/globe/<world>[-<branch>]/; "
         "export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
     ),
     globe_res: int = typer.Option(1600, "--globe-res", help="Globe preview resolution"),
@@ -771,15 +902,59 @@ def export_clouds(
         help="Multiplier on the conditioning cover field; 0 skips texture "
         "synthesis entirely (surface/biome QA: surface.png + cloud-free globe)",
     ),
+    cyclones: bool = typer.Option(
+        False,
+        "--cyclones",
+        help="Overlay L3 synthetic cyclone templates (placeholder until the L1 track table lands)",
+    ),
+    cyclone_seed: int = typer.Option(31, "--cyclone-seed", help="Synthetic cyclone track seed"),
+    atmosphere: bool = typer.Option(
+        True,
+        "--atmosphere/--no-atmosphere",
+        help="L5 physical atmosphere shell (Rayleigh/Mie/ozone, star spectrum); "
+        "disable for the legacy limb-glow preview",
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """L2 procedural cloud texture prototype: clouds.png + cover + globe preview.
+    """Orbital space-view shot: surface/cloud layers + L3 cyclones + L5 atmosphere globe.
+
+    ``globe`` is the primary command name; ``clouds`` is the historical alias.
+    The output is the complete space-view shot (equirect surface/cloud layers
+    and an orthographic globe), not just a cloud texture; the rotation and
+    cloud-evolution videos are separate media scripts documented in cli.md.
 
     The large-scale cover field is a placeholder (precipitation + SLP-anomaly
     proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
-    the permanent part.  Needs the 'media' extra (numba noise kernel).
+    the permanent part.  ``--cyclones`` adds L3 parametric templates from a
+    synthetic track set, for visual QA before real tracks exist.  Needs the
+    'media' extra (numba noise kernel).
     """
     _set_data_dir(data_dir)
+
+    # Precedence: explicit CLI flag > YAML config > built-in default.
+    from dreamulator.media.cloud_config import CloudRenderConfig
+
+    cfg = CloudRenderConfig.from_yaml(config) if config is not None else CloudRenderConfig()
+    T = TypeVar("T")
+
+    def _pick(name: str, cli_value: T, cfg_value: T) -> T:
+        source = ctx.get_parameter_source(name)
+        if source is not None and source.name == "COMMANDLINE":
+            return cli_value
+        return cfg_value
+
+    grid = _pick("grid", grid, cfg.grid)
+    seed = _pick("seed", seed, cfg.seed)
+    globe_res = _pick("globe_res", globe_res, cfg.globe_res)
+    center_lon = _pick("center_lon", center_lon, cfg.center_lon)
+    center_lat = _pick("center_lat", center_lat, cfg.center_lat)
+    sun_lon = _pick("sun_lon", sun_lon, cfg.sun_lon)
+    sun_lat = _pick("sun_lat", sun_lat, cfg.sun_lat)
+    cover_scale = _pick("cover_scale", cover_scale, cfg.cover_scale)
+    cyclones = _pick("cyclones", cyclones, cfg.cyclones.enabled)
+    cyclone_seed = _pick("cyclone_seed", cyclone_seed, cfg.cyclones.seed)
+    atmosphere = _pick("atmosphere", atmosphere, cfg.atmosphere.enabled)
+
     try:
         w_str, h_str = grid.lower().split("x")
         width, height = int(w_str), int(h_str)
@@ -819,7 +994,7 @@ def export_clouds(
     import os
 
     export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-    out_dir = output or (export_root / "clouds" / (world + (f"-{branch}" if branch else "")))
+    out_dir = output or (export_root / "globe" / (world + (f"-{branch}" if branch else "")))
     console.print(
         f"Synthesising cloud texture for {world}/{planet_id} "
         f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
@@ -827,7 +1002,51 @@ def export_clouds(
     start = time.perf_counter()
 
     from dreamulator.media.cloud_render import clouds_globe
+    from dreamulator.media.cyclone_render import Cyclone, synthetic_cyclones
 
+    if cfg.cyclones.tracks:
+        cyclone_set: list[Cyclone] | None = [
+            Cyclone(**track.model_dump()) for track in cfg.cyclones.tracks
+        ]
+    elif cyclones:
+        cyclone_set = synthetic_cyclones(
+            cyclone_seed,
+            tropical_per_hemisphere=cfg.cyclones.tropical_per_hemisphere,
+            extratropical_per_hemisphere=cfg.cyclones.extratropical_per_hemisphere,
+            tropical_scale=cfg.cyclones.tropical_scale,
+            extratropical_scale=cfg.cyclones.extratropical_scale,
+        )
+    else:
+        cyclone_set = None
+
+    atmosphere_model = (
+        _atmosphere_from_world(world_dir, branch, planet_id, radius_km, cfg.atmosphere)
+        if atmosphere
+        else None
+    )
+    if atmosphere_model is not None:
+        console.print(
+            f"  atmosphere: star {atmosphere_model.star_temperature_k:.0f} K, "
+            f"p {atmosphere_model.surface_pressure_atm:g} atm, "
+            f"H {atmosphere_model.scale_height_km:.1f} km, "
+            f"{cfg.atmosphere.exposure}"
+        )
+    eclipse_shadow = None
+    if cfg.eclipse.enabled:
+        from dreamulator.media.atmosphere_render import EclipseShadow
+
+        eclipse_shadow = EclipseShadow(
+            center_lon_deg=cfg.eclipse.center_lon_deg,
+            center_lat_deg=cfg.eclipse.center_lat_deg,
+            umbra_radius_deg=cfg.eclipse.umbra_radius_deg,
+            penumbra_radius_deg=cfg.eclipse.penumbra_radius_deg,
+            depth=cfg.eclipse.depth,
+        )
+        console.print(
+            f"  eclipse: centre {cfg.eclipse.center_lat_deg:g}N "
+            f"{cfg.eclipse.center_lon_deg:g}E, umbra {cfg.eclipse.umbra_radius_deg:g}°, "
+            f"penumbra {cfg.eclipse.penumbra_radius_deg:g}°, depth {cfg.eclipse.depth:g}"
+        )
     paths = clouds_globe(
         mesh,
         out_dir,
@@ -842,6 +1061,18 @@ def export_clouds(
         sun_lon_deg=sun_lon,
         sun_lat_deg=sun_lat,
         cover_scale=cover_scale,
+        cyclones=cyclone_set,
+        cyclone_seed=cyclone_seed,
+        atmosphere=atmosphere_model,
+        cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
+        cirrus_altitude_km=cfg.atmosphere.cirrus_altitude_km,
+        cirrus_shadow_strength=cfg.atmosphere.cirrus_shadow_strength,
+        eclipse_shadow=eclipse_shadow,
+        cloud_shadows=cfg.atmosphere.cloud_shadows,
+        sun_glint=cfg.atmosphere.sun_glint,
+        water_roughness=cfg.atmosphere.water_roughness,
+        multiple_scattering=cfg.atmosphere.multiple_scattering,
+        atmosphere_exposure=cfg.atmosphere.exposure,
         provenance={
             "world": world,
             "branch": branch or "root",

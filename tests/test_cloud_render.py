@@ -110,6 +110,20 @@ def test_cloud_texture_bands_and_determinism() -> None:
     p2 = cr.cloud_texture_equirect(cover, u, v, radius_km=6800.0, seed=7)
     np.testing.assert_array_equal(p1.alpha, p2.alpha)
     assert np.all((p1.alpha >= 0.0) & (p1.alpha <= 1.0))
+    # The three components reconstruct the combined opacity and are valid.
+    combined = 1.0 - (1.0 - p1.alpha_low) * (1.0 - p1.alpha_cirrus) * (1.0 - p1.alpha_haze)
+    np.testing.assert_allclose(p1.alpha, combined, atol=1e-12)
+    for layer in (p1.alpha_low, p1.alpha_cirrus, p1.alpha_haze):
+        assert layer.shape == p1.alpha.shape
+        assert np.all((layer >= 0.0) & (layer <= 1.0))
+    assert p1.alpha_cirrus.mean() < p1.alpha_low.mean()
+    # The readable high-shell cirrus is thicker than the legacy component but
+    # still does not enter the calibrated combined alpha.
+    assert p1.alpha_cirrus_high.shape == p1.alpha.shape
+    assert np.all((p1.alpha_cirrus_high >= 0.0) & (p1.alpha_cirrus_high <= 1.0))
+    assert p1.alpha_cirrus_high.mean() > p1.alpha_cirrus.mean()
+    # The contrast curve caps the high-shell cirrus at its gain.
+    assert p1.alpha_cirrus_high.max() <= cr.CIRRUS_HIGH_CONTRAST_GAIN + 1e-9
     # The wet band must carry more cloud opacity than the dry band.
     a_eq = p1.alpha[np.abs(lat_rows) < 10].mean()
     a_sub = p1.alpha[(np.abs(lat_rows) > 20) & (np.abs(lat_rows) < 35)].mean()
