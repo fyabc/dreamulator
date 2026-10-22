@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792601344916,
+  "lastUpdate": 1792692092157,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -767,6 +767,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008897000947391182",
             "extra": "mean: 5.027738800004045 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "aa318e1234f0686e89bfe17e22019df6f01f5e0d",
+          "message": "feat(media): 高壳卷云投影、卫星食与 export globe 主名\n\n- 高壳卷云向低云/地表投薄衰减，强度可配\n- EclipseShadow 接口、大气次点局部衰减与自定义 eclipse_field\n- export globe 主名（clouds 保留别名），默认输出改 exports/globe/<world>\n- CLI 文档补齐静态球面、旋转视频、云系演化视频、YAML 与食影说明\n- 测试、管线与知识文档同步\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-23T01:58:22+08:00",
+          "tree_id": "3c8571fe0009e73e558ddf24b84dde3d1807d6c8",
+          "url": "https://github.com/fyabc/dreamulator/commit/aa318e1234f0686e89bfe17e22019df6f01f5e0d"
+        },
+        "date": 1792692091512,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31745010457648554,
+            "unit": "iter/sec",
+            "range": "stddev: 0.13895712608525318",
+            "extra": "mean: 3.1501013406000085 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.2065236441365648,
+            "unit": "iter/sec",
+            "range": "stddev: 0.006639051731515198",
+            "extra": "mean: 311.86422150000226 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4753504727997917,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0822712156602743",
+            "extra": "mean: 677.8050493333202 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 997.0531098223112,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006490292007681108",
+            "extra": "mean: 1.0029556000063167 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.8574842092699,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005123803244615484",
+            "extra": "mean: 5.028727000023991 msec\nrounds: 5"
           }
         ]
       }
