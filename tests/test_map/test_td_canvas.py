@@ -199,3 +199,32 @@ def test_plan_layout_join_overrides_the_gap_rule() -> None:
     big, small = int(np.argmax(land.component_km2)), int(np.argmin(land.component_km2))
     joined, _ = tc.plan_layout(land, joins={small: big})
     assert len(joined) == 1 and sorted(joined[0].components) == sorted([big, small])
+
+
+def test_plan_layout_generates_own_shelf_but_not_a_neighbours() -> None:
+    from types import SimpleNamespace
+
+    # land at lon 0-9 (big) and lon 30-33 (small), shallow sea between, deep sea beyond lon 15
+    cells = []
+    for k, lo in enumerate(np.arange(-12.0, 46.0, 0.5)):
+        land = 0.0 <= lo <= 9.0 or 30.0 <= lo <= 33.0
+        depth = -50.0 if lo < 15.0 or lo > 27.0 else -4000.0
+        cells.append(
+            SimpleNamespace(
+                lat=0.0, lon=float(lo), area_km2=3.0e3, elevation=100.0 if land else depth,
+                water_class="land" if land else "ocean",
+                neighbors=[j for j in (k - 1, k + 1) if 0 <= j < 116],
+            )
+        )  # fmt: skip
+    land = tc.land_components(SimpleNamespace(cells=cells), 6371.0)  # type: ignore[arg-type]
+    groups = [[int(np.argmax(land.component_km2))], [int(np.argmin(land.component_km2))]]
+    shelf = tc.shelf_cells(land, groups, 600.0, -2500.0)
+    lons = np.array([c.lon for c in cells])
+    assert lons[shelf[0]].max() < 15.0  # stops at the deep water
+    assert lons[shelf[0]].min() == -5.0  # 600 km reach west of the land at lon 0
+    assert not np.isin(shelf[0], shelf[1]).any()  # each shelf cell has one owner
+    plain, _ = tc.plan_layout(land, shelf_reach_km=0.0)
+    wide, _ = tc.plan_layout(land)
+    big = next(p for p in wide if groups[0][0] in p.components)
+    big0 = next(p for p in plain if groups[0][0] in p.components)
+    assert len(big.chunks) > len(big0.chunks)
