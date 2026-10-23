@@ -339,15 +339,20 @@ def _tropical_template(
     # plus a weaker secondary arm and a ragged outer fade.  The storm is mostly
     # bands with ambient cloud between them, not a bright disk.
     log_r = np.log(np.maximum(r, 0.3))
-    phase1 = float(shape.band_count) * rel + shape.band_pitch * log_r + 2.2 * noise
+    phase1 = float(shape.band_count) * rel + shape.band_pitch * log_r + 2.2 * noise + 1.0 * fine
     phase2 = (
         float(shape.band_count + 1) * rel
         + (0.75 * shape.band_pitch + 0.8) * log_r
         + 1.9 * noise
+        + 0.9 * fine
         + 2.1
     )
-    primary = np.exp(-((1.0 - np.cos(phase1)) / (2.0 * 0.70**2)))
-    secondary = np.exp(-((1.0 - np.cos(phase2)) / (2.0 * 0.60**2)))
+    primary = np.exp(-((1.0 - np.cos(phase1)) / (2.0 * 0.52**2)))
+    secondary = np.exp(-((1.0 - np.cos(phase2)) / (2.0 * 0.44**2)))
+    # A soft threshold sharpens the band edges; the phase already carries
+    # noise, so this does not create a hard geometric contour.
+    primary = _smoothstep(0.06, 0.58, primary)
+    secondary = _smoothstep(0.06, 0.52, secondary)
     side = 0.5 + 0.5 * np.cos(rel - shape.shear_phase)
     band_weight = 0.55 + 0.45 * side
     band_fade = np.exp(-((dist / (1.20 * outer)) ** 2))
@@ -355,7 +360,7 @@ def _tropical_template(
     bands_total *= band_fade * (0.75 + 0.25 * (0.5 + 0.5 * texture)) * grain
 
     # Thin cirrus veil between bands raises the cloud amount without a disk.
-    veil = 0.65 * np.exp(-((dist / (1.00 * outer)) ** 2)) * grain
+    veil = 0.45 * np.exp(-((dist / (1.00 * outer)) ** 2)) * grain
     # Explicit cirrus filaments: high-azimuthal-wavenumber streaks, broken by
     # noise and elongated tangentially around the storm.
     phase_c = (50.0 + 25.0 * (0.5 + 0.5 * mid)) * rel + 2.0 * log_r + 10.0 * noise + 8.0 * fine
@@ -404,6 +409,65 @@ def _tangent_coords(
     return dx * me + dy * mn, -dx * mn + dy * me
 
 
+def _comma_geometry(
+    cyc: Cyclone,
+    lat_deg: np.ndarray,
+    lon_deg: np.ndarray,
+    radius_km: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Along/across-motion coordinates and great-circle distance for a comma.
+
+    ``a`` is positive in the direction of motion, ``c`` is positive to the left
+    of the motion vector; both are normalised by the comma scale.  The true
+    distance is returned separately because the tangent-plane coordinates
+    degenerate at the antipode.
+    """
+    along, cross = _tangent_coords(cyc, lat_deg, lon_deg, radius_km)
+    scale = max(cyc.outer_radius_km, 1.0)
+    a = along / scale
+    c = cross / scale
+    dist, _bearing = _distance_bearing_km(cyc.lat_deg, cyc.lon_deg, lat_deg, lon_deg, radius_km)
+    return a, c, dist, scale
+
+
+def _comma_twist(
+    a: np.ndarray,
+    c: np.ndarray,
+    noise: np.ndarray,
+    texture: np.ndarray | None = None,
+    mid: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Differential-rotation domain warp for the comma cloud.
+
+    Rotating the local coordinates by an angle that grows logarithmically with
+    radius is the classic twist/domain-warp construction (Terragen-style
+    procedural hurricanes; Lygia's spiral SDFs use the same differential
+    rotation idea).  A filled cloud head and a cold-front tail are then
+    evaluated in the *twisted* frame, so the shield curls into a comma without
+    drawing explicit spiral stripes.  Low-frequency noise perturbs the twist
+    and the sampling point, which keeps the edges irregular.
+    """
+    r = np.hypot(a - 0.05, c - 0.08)
+    theta = np.arctan2(c - 0.08, a - 0.05)
+    alpha = 1.10 * np.log(np.maximum(r, 0.25)) + 0.35 * (noise - 0.5)
+    cos_a = np.cos(alpha)
+    sin_a = np.sin(alpha)
+    at = a * cos_a - c * sin_a
+    ct = a * sin_a + c * cos_a
+    if texture is not None:
+        at = at + 0.12 * (texture - 0.5)
+    if mid is not None:
+        ct = ct + 0.12 * (mid - 0.5)
+    return at, ct, r, theta
+
+
+def _comma_slot(r: np.ndarray, theta: np.ndarray) -> np.ndarray:
+    """Curved dry-slot wedge south-east of the low centre."""
+    slot = np.exp(-(((theta + 0.55) / 0.52) ** 2))
+    slot = slot * _smoothstep(0.10, 0.30, r) * (1.0 - _smoothstep(1.05, 1.35, r))
+    return np.asarray(slot, dtype=np.float64)
+
+
 def _extratropical_template(
     cyc: Cyclone,
     lat_deg: np.ndarray,
@@ -413,36 +477,70 @@ def _extratropical_template(
     texture: np.ndarray,
     fine: np.ndarray,
     mid: np.ndarray,
+    erosion: np.ndarray | None = None,
 ) -> np.ndarray:
-    along, cross = _tangent_coords(cyc, lat_deg, lon_deg, radius_km)
+    a, c, dist, scale = _comma_geometry(cyc, lat_deg, lon_deg, radius_km)
+    at, ct, r, theta = _comma_twist(a, c, noise, texture, mid)
 
-    scale = max(cyc.outer_radius_km, 1.0)
-    a = along / scale
-    c = cross / scale
-    # Main comma head plus a curved trailing tail on the cold side.
-    head = np.exp(-((a / 1.1) ** 2 + (c / 0.7) ** 2))
-    tail_line = 0.35 * a
-    tail = np.exp(-(((c - tail_line) / 0.20) ** 2)) * np.exp(-((a / 1.8) ** 2))
-    tail = np.where(a < 0.0, tail, 0.0)  # the tail trails behind the comma head
-    comma = np.maximum(head, 0.85 * tail) * (1.0 + 0.3 * np.tanh(c / 0.6))
-    # Frontal band along the translation direction.
-    front = np.exp(-((c / 0.10) ** 2)) * np.exp(-(((a - 0.15) / 0.9) ** 2))
-    # Dry slot: the dark wedge between the cloud head and the trailing cold
-    # front is what makes a comma read as a comma (GOES/MODIS references).
-    slot_line = -0.55 - 0.20 * a
-    slot = (
-        np.exp(-(((c - slot_line) / 0.26) ** 2))
-        * np.exp(-((a / 1.1) ** 2))
-        * (1.0 - _smoothstep(0.10, 0.45, a))
-    )
-    # Tangent-plane coordinates degenerate at the antipode (the chord vanishes
-    # against the local east/north basis), so gate the template by the true
-    # great-circle distance before compositing.
-    dist, _bearing = _distance_bearing_km(cyc.lat_deg, cyc.lon_deg, lat_deg, lon_deg, radius_km)
-    envelope = np.exp(-((dist / (2.2 * scale)) ** 2))
-    edge = np.clip(1.0 - 0.75 * slot, 0.0, 1.0)
-    grain = (0.50 + 0.50 * (0.5 + 0.5 * fine)) * (0.60 + 0.40 * (0.5 + 0.5 * mid))
-    alpha = (0.85 * comma + 0.15 * front) * grain * edge * envelope
+    # Cloud head evaluated in the twisted frame: a filled shield that curls
+    # around the low instead of an ellipse in the unwarped plane.
+    head_rho = np.sqrt(((at - 0.10) / 1.10) ** 2 + ((ct - 0.38) / 0.55) ** 2)
+    head_rho = head_rho / (1.0 + 0.075 * noise + 0.040 * fine)
+    head = 1.0 - _smoothstep(0.86, 1.01, head_rho)
+
+    # Dry slot in the *unwarped* angular coordinate: a sharp wedge south-east
+    # of the low, the cloud-free notch that makes the comma read.
+    slot = _comma_slot(r, theta)
+    comma = head * (1.0 - 0.95 * slot)
+
+    # Cold-front tail in the twisted frame; it curls with the head and leaves
+    # the south-west edge as one continuous cloud band.
+    tail_axis = -0.28 + 0.45 * at + 0.10 * at * at
+    tail = np.exp(-(np.abs((ct - tail_axis) / 0.24) ** 4))
+    tail = tail * np.exp(-(((at + 0.85) / 1.15) ** 2)) * (at < 0.25)
+    tail = tail * (0.85 + 0.15 * (0.5 + 0.5 * texture))
+    comma = np.maximum(comma, 0.95 * tail)
+
+    # Cloud streets parallel to the twisted front, broken by the texture.
+    street_phase = 95.0 * ct + 8.0 * at + 4.0 * noise + 2.0 * fine
+    streets = (0.5 + 0.5 * np.cos(street_phase)) ** 8
+    streets = streets * (0.50 + 0.50 * (0.5 + 0.5 * texture))
+    comma = comma + 0.12 * streets * (0.35 * head + 0.65 * tail)
+    # Mesoscale holes: break the shield into cloud masses rather than a
+    # uniformly filled wash.
+    holes = _smoothstep(0.30, 0.62, 0.5 + 0.5 * texture + 0.15 * (noise - 0.5))
+    comma = comma * (0.50 + 0.50 * holes) * (0.88 + 0.12 * (0.5 + 0.5 * fine))
+    if erosion is not None:
+        # L2 carries the erosion/grain/MCC texture; use it to break the shield
+        # with the same holes as the surrounding cloud deck.
+        comma = comma * (0.50 + 0.50 * erosion)
+
+    # Broad comma footprint for the outer envelope; evaluate it in the same
+    # twisted frame so the brightening follows the curl.
+    env_at, env_ct, _env_r, _env_theta = _comma_twist(a, c, noise)
+    head_env_rho = np.sqrt(((env_at - 0.10) / 1.28) ** 2 + ((env_ct - 0.38) / 0.68) ** 2)
+    envelope = 1.0 - _smoothstep(0.86, 1.04, head_env_rho)
+    env_axis = -0.28 + 0.45 * env_at + 0.10 * env_at * env_at
+    env_tail = np.exp(-(np.abs((env_ct - env_axis) / 0.36) ** 4))
+    env_tail = env_tail * np.exp(-(((env_at + 0.85) / 1.35) ** 2)) * (env_at < 0.25)
+    envelope = np.maximum(envelope, 0.88 * env_tail)
+    envelope = envelope * (1.0 - 0.55 * slot)
+    # Antipode gate; the tangent-plane coordinates are meaningless there.
+    envelope = envelope * np.exp(-((dist / (2.0 * scale)) ** 4))
+
+    grain = (0.60 + 0.40 * (0.5 + 0.5 * fine)) * (0.75 + 0.25 * (0.5 + 0.5 * mid))
+    alpha = (0.98 * comma + 0.06 * streets) * grain * envelope
+    # Light unsharp mask: semi-Lagrangian/composite pipelines soften the
+    # template edges; a small 3×3 high-pass restores the comma's edge contrast
+    # without an explicit contour line.
+    blur = (
+        alpha
+        + np.roll(alpha, 1, axis=0)
+        + np.roll(alpha, -1, axis=0)
+        + np.roll(alpha, 1, axis=1)
+        + np.roll(alpha, -1, axis=1)
+    ) / 5.0
+    alpha = np.clip(alpha + 0.35 * (alpha - blur), 0.0, 1.0)
     out: np.ndarray = np.clip(alpha * cyc.strength, 0.0, 1.0)
     return out
 
@@ -454,8 +552,17 @@ def cyclone_alpha(
     width: int,
     radius_km: float,
     seed: int = 41,
+    erosion: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Composite cloud-opacity template for a set of cyclone tracks."""
+    """Composite cloud-opacity template for a set of cyclone tracks.
+
+    ``erosion`` is an optional 0–1 local-contrast field from the L2 cloud
+    texture (``cloud_erosion_field``).  Extratropical templates multiply
+    their shield by it so the comma inherits the ambient cloud's holes and
+    grain instead of being a separate smooth white brush stroke.
+    """
+    if erosion is not None and erosion.shape != (height, width):
+        raise ValueError("erosion must match the (height, width) template grid")
     if not cyclones:
         return np.zeros((height, width), dtype=np.float64)
     lat_deg, lon_deg = _latlon_grid(height, width)
@@ -492,7 +599,7 @@ def cyclone_alpha(
             )
         else:
             template = _extratropical_template(
-                cyc, lat_deg, lon_deg, radius_km, noise, texture, fine, mid
+                cyc, lat_deg, lon_deg, radius_km, noise, texture, fine, mid, erosion
             )
         total = 1.0 - (1.0 - total) * (1.0 - template)
     return np.clip(total, 0.0, 1.0)
@@ -533,8 +640,16 @@ def cyclone_envelope(
             edge = edge / (1.0 + 0.18 * noise + 0.10 * np.cos(rel - shape.shear_phase))
             one = 1.0 - _smoothstep(0.75, 1.08, edge)
         else:
-            scale = max(cyc.outer_radius_km, 1.0)
-            one = np.exp(-((dist / (1.8 * scale)) ** 2))
+            a, c, dist, scale = _comma_geometry(cyc, lat_deg, lon_deg, radius_km)
+            at, ct, r, theta = _comma_twist(a, c, noise)
+            head_env_rho = np.sqrt(((at - 0.10) / 1.28) ** 2 + ((ct - 0.38) / 0.68) ** 2)
+            one = 1.0 - _smoothstep(0.86, 1.04, head_env_rho / (1.0 + 0.04 * noise))
+            axis = -0.28 + 0.45 * at + 0.10 * at * at
+            tail_env = np.exp(-(np.abs((ct - axis) / 0.36) ** 4))
+            tail_env = tail_env * np.exp(-(((at + 0.85) / 1.35) ** 2)) * (at < 0.25)
+            one = np.maximum(one, 0.88 * tail_env)
+            one = one * (1.0 - 0.55 * _comma_slot(r, theta))
+            one = one * np.exp(-((dist / (2.0 * scale)) ** 4))
         env = np.maximum(env, one)
     return np.clip(env, 0.0, 1.0)
 
@@ -572,16 +687,10 @@ def cyclone_clear(
             eye = 1.0 - _smoothstep(0.60 * shape.eye_fraction, 1.60 * shape.eye_fraction, eye_r)
             clear = np.maximum(clear, 0.90 * eye * cyc.strength)
         else:
-            along, cross = _tangent_coords(cyc, lat_deg, lon_deg, radius_km)
-            a = along / max(cyc.outer_radius_km, 1.0)
-            c = cross / max(cyc.outer_radius_km, 1.0)
-            slot_line = -0.55 - 0.20 * a
-            slot = (
-                np.exp(-(((c - slot_line) / 0.26) ** 2))
-                * np.exp(-((a / 1.1) ** 2))
-                * (1.0 - _smoothstep(0.10, 0.45, a))
-            )
-            clear = np.maximum(clear, 0.75 * slot * cyc.strength)
+            a, c, _dist, _scale = _comma_geometry(cyc, lat_deg, lon_deg, radius_km)
+            r = np.hypot(a - 0.05, c - 0.08)
+            theta = np.arctan2(c - 0.08, a - 0.05)
+            clear = np.maximum(clear, 0.90 * _comma_slot(r, theta) * cyc.strength)
     return np.clip(clear, 0.0, 1.0)
 
 

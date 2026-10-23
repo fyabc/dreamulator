@@ -64,6 +64,10 @@ export interface PlanetViewState {
   monthlyField: MonthlyField | null
   monthlyActive: boolean
 
+  // --- Particle-flow display for wind / ocean-current layers (?particles=1) ---
+  particleMode: boolean
+  setParticleMode: (v: boolean) => void
+
   // --- Lighting (?sun=&season=&night=, shared with the other view) ---
   sunLongitudeDeg: number
   setSunLongitudeDeg: React.Dispatch<React.SetStateAction<number>>
@@ -78,6 +82,8 @@ export interface PlanetViewState {
   mapPlanets: string[] | undefined
   meta: MapMetadata | undefined
   bodyByName: Map<string, any>
+  /** Planet radius in metres (from the catalog; Earth radius when unknown). */
+  planetRadiusM: number
   currentPlanetName: string | null
   axialTiltDeg: number
   worldPlanetsError: boolean
@@ -175,7 +181,11 @@ export function usePlanetViewState(
   // --- Monthly climate mode (Phase 4): the active temperature/precipitation/
   // pressure layer shows monthly data driven by the season slider, and the wind
   // arrows switch to the monthly wind field (tech debt 24). ---
-  const [monthlyMode, setMonthlyMode] = useState(false)
+  // `?monthly=1` is the shareable monthly-mode deep link (the same ~20 MB
+  // monthly fetch as ?play=1); ?play=1 additionally starts the cycle.
+  const [monthlyMode, setMonthlyMode] = useState(
+    () => searchParams.get('monthly') === '1' || searchParams.get('play') === '1',
+  )
   const monthlyField: MonthlyField | null = monthlyMode
     ? layerState.layers.temperature > 0
       ? 'temperature'
@@ -198,6 +208,31 @@ export function usePlanetViewState(
     layerState.layers.winds > 0
   )
   const handleMonthlyModeChange = (mode: boolean) => setMonthlyMode(mode)
+
+  // Keep the monthly flag in the URL so a monthly wind/particle view is
+  // shareable and survives the 2D↔3D switch.
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const has = prev.get('monthly') === '1'
+      if (has === monthlyMode) return prev
+      const next = new URLSearchParams(prev)
+      if (monthlyMode) next.set('monthly', '1')
+      else next.delete('monthly')
+      return next
+    }, { replace: true })
+  }, [monthlyMode, setSearchParams])
+
+  // --- Particle-flow display (wind / current layers) ---
+  // URL-backed so the 2D↔3D switch and shared links keep the display style.
+  const particleMode = searchParams.get('particles') === '1'
+  const setParticleMode = useCallback((v: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('particles', '1')
+      else next.delete('particles')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
 
   // --- Inspector auto-expand: track the most recently activated layer
   // (opacity 0 → >0) so eye-toggled overlays auto-expand their group too.
@@ -534,6 +569,12 @@ export function usePlanetViewState(
     if (!selectedPlanet) return null
     return bodyByName.get(selectedPlanet)?.name ?? null
   }, [selectedPlanet, bodyByName])
+  // Catalog `radius` is in Earth radii (e.g. Nacrea 1.07); the particle
+  // integrator converts m/s to degrees with the planet's own circumference.
+  const planetRadiusM = useMemo(() => {
+    const r = bodyByName.get(selectedPlanet)?.radius
+    return (typeof r === 'number' && r > 0 ? r : 1) * 6_371_000
+  }, [selectedPlanet, bodyByName])
   const axialTiltDeg = useMemo(() => {
     if (!selectedPlanet) return 0
     return bodyByName.get(selectedPlanet)?.axial_tilt_deg ?? 0
@@ -578,10 +619,11 @@ export function usePlanetViewState(
     timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs, sunSweep, setSunSweep, sweeping,
     layerState, setLayerState, activeMainLayer, activeColorMode,
     monthlyMode, handleMonthlyModeChange, monthlyField, monthlyActive,
+    particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
-    bodyByName, currentPlanetName, axialTiltDeg,
+    bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
     elevation, elevationDims, cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
     monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,

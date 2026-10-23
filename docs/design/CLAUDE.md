@@ -49,6 +49,7 @@
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `blender-render-pipeline.md` — Blender 高清渲染链（区域数据包 `dreamulator export region` + bpy 脚本重建场景；MVP 已实现，路线节登记扩展）
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
+- `browser-playground.md` — 浏览器气候实验台（Gate D 温度首图原型：拖放高度图 → 年均/逐月温度；规则 180×90 网格、只算温度；2026-10-23 原型落地，完整气候待引擎加速）
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）
 - `evolution-mode.md` — 演化模式提案（新建世界：geography.yaml 作为演化目标，逆向规划超大陆后正向运动学模拟出现状，时间轴为副产品；未实现，2026-10 立案）
 - `geological-timeline.md` — 地质时间轴提案（大陆块为主体，整段历史作为带约束的求解问题：陆壳守恒为硬约束，速度、重组稀疏、净旋转为先验，合并与切开由焊接关系表示；板块与边界由大陆块运动推出；时刻分支接气候与生态；2026-10 立案，10-18 重构）

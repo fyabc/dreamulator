@@ -1,0 +1,57 @@
+{
+  "title": "浏览器气候实验台",
+  "badge": "实验",
+  "subtitle": "在浏览器里运行引擎的纯温度模型：拖入一张高度图，得到年均/逐月温度首图。当前只算温度，不含 CVT 网格、降水、风场与 Köppen。",
+  "back": "← 返回世界",
+  "params": {
+    "title": "行星参数",
+    "presetNacrea": "Nacrea",
+    "presetEarth": "地球",
+    "luminosity": "恒星光度 (L☉)",
+    "distance": "轨道半长轴 (AU)",
+    "albedo": "Bond 反照率",
+    "greenhouse": "温室增温 (K)",
+    "tilt": "轴倾角 (°)",
+    "year": "公转周期 (天)",
+    "rotation": "自转周期 (天)",
+    "seaLevel": "海平面 (m)",
+    "elevMin": "灰度 0 对应高程 (m)",
+    "elevMax": "灰度 255 对应高程 (m)",
+    "variableLapse": "温度相关湿绝热递减率"
+  },
+  "heightmap": {
+    "title": "高度图",
+    "drop": "拖入 PNG / JPEG 高度图，或点击选择",
+    "hint": "图像按 180×90 等距圆柱重采样；灰度值线性映射到上面的最低/最高高程。",
+    "none": "尚未载入高度图",
+    "sampleEarth": "地球示例",
+    "sampleNacrea": "Nacrea 示例"
+  },
+  "action": {
+    "run": "运行温度首图",
+    "recompute": "重新计算",
+    "loadingEngine": "正在加载浏览器运行时…",
+    "computing": "正在计算…"
+  },
+  "status": {
+    "engineLoaded": "浏览器运行时加载耗时 {{seconds}} s"
+  },
+  "view": {
+    "title": "温度场",
+    "heightmapPreview": "高度图预览",
+    "annual": "年均",
+    "month": "月份",
+    "placeholder": "载入高度图后点击「运行温度首图」。第一次运行会从 CDN 下载浏览器 Python 运行时（约数 MB），之后切换月份只重算温度，不再重新加载。"
+  },
+  "stats": {
+    "globalMean": "全球均温（能量平衡）",
+    "areaMean": "温度场面积均值",
+    "range": "温度范围",
+    "computeTime": "本次计算",
+    "gridInfo": "{{name}} · {{width}}×{{height}} 规则经纬网格"
+  },
+  "error": {
+    "noHeightmap": "请先载入一张高度图。"
+  },
+  "note": "原型说明：温度来自引擎的 1D EBM 与季节热容模型；高程按湿绝热递减率订正，海岸距离用网格 BFS 近似。降水、风场、洋流与 Köppen 尚未接入。"
+}

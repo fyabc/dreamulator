@@ -20,8 +20,10 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 \
 
 数据流是单向的：
 
-1. 从地图网格栅格化降水、海平面气压距平、风场、海陆掩膜；
-2. `large_scale_cover` 把降水与 SLP 距平组合成占位的大尺度云量场；
+1. 从地图网格栅格化云量、海平面气压距平、风场与海陆掩膜；
+2. 冻结 GCM 气候的世界直接使用模式的总云量 `cloud_total_frac`，并用低/中云与高云的
+   比例在两层云壳之间分配不透明度；没有云量字段的引擎世界退回 `large_scale_cover`，
+   用降水与 SLP 距平构造占位的大尺度云量场；
 3. `cloud_texture_equirect` 在球面逐点采样 3D 噪声，生成等距圆柱云不透明度；
 4. `warp_cyclone_texture` 与 `cyclone_alpha` 按轨迹表叠加气旋模板；
 5. `render_globe_atmosphere` 把地表、云壳与大气壳合成为正交圆盘。
@@ -31,12 +33,16 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 \
 `cyclone_envelope.png`、`globe.png` 与 `meta.json`。
 同一份输入与种子逐位可复现；`meta.json` 记录种子、机位、气旋数量与大气参数。
 
-## 2. L1 接口（待交付）
+## 2. L1 接口（年云量已交付，其余待交付）
 
-L1 是 GCM 气象图层包，负责给出每 6 小时一帧的分层云量、云顶高度、云层风场、涡度
-与降水，以及由涡度或海平面气压追踪出的气旋轨迹表。当前代码用年降水与 SLP 距平
-构造占位云量场，用合成轨迹（热带每半球 1 个、温带每半球 2 个）代替真实轨迹；
-这两处是唯一的占位点，噪声、扭曲、气旋模板与大气渲染都是永久部分。
+L1 是 GCM 气象图层包。冻结 GCM 气候已提供年均总云量 `cloud_total_frac`，以及按
+ISCCP 680 hPa 与 440 hPa 分界的低、中、高云量；渲染链用总云量作为大尺度云量场，
+用低/中云与高云的比例在低云壳与卷云壳之间分配不透明度。三层云量是云所在高度的
+诊断口径，三者合起来不严格等于总云量，因此只用于分配，不用于总量。
+
+尚未交付的是每 6 小时一帧的分层云量、云顶高度、云层风场、涡度与降水，以及由涡度
+或海平面气压追踪出的真实气旋轨迹表。引擎世界没有云量字段，仍用年降水与 SLP 距平
+构造占位云量场；气旋仍用合成轨迹（热带每半球 1 个、温带每半球 2 个）代替真实轨迹。
 
 气旋轨迹表的字段已经确定为 `Cyclone` 的构造参数：纬度、经度、类型、中心气压、
 环境气压、最大风速半径、外围半径、移动矢量与形态种子。`cyclones.tracks` 非空时
@@ -54,11 +60,17 @@ fBm 侵蚀云缘；两套尺度按低频场交叉淡化，避免固定尺度带�
 ## 4. L3 气旋模板
 
 热带气旋按 Holland 1980 风廓线由中心气压与环境气压定强度，形态由眼、眼墙、主
-次对数螺旋雨带与卷云层组成；温带气旋用 Shapiro–Keyser 概念模型的逗号云与干槽。
-每条轨迹的形态种子控制眼径比例、螺旋臂数、螺距、非对称度与核心尺度。气旋不是
-外加的白盘：`warp_cyclone_texture` 先把 L2 纹理按风暴轴做螺旋扭曲，模板再以
-screen 方式调制云量，眼区主动清除底云。尺度按 Nacrea 的设定取值：热带外围
-1500–2500 km、温带 2500–4000 km；真实轨迹到达后复核数量与频率。
+次对数螺旋雨带与卷云层组成；主/次雨带用较窄的高斯和软阈值取边，相位叠加细噪声，
+避免整圈均匀的白色晕。温带气旋用 Shapiro–Keyser 概念模型：`_comma_twist` 把局地
+坐标按 `1.10·ln r` 做差分旋转，并在旋转角与采样点上叠加低频噪声，然后在扭转后的
+坐标系里取一个填充云头与一条冷锋尾——云头因此沿低压卷成逗号，而不是一个椭圆盘；
+干槽在未扭转的角坐标里切成锐利楔形，云街沿扭转后的锋面展开，边缘再做一次轻度
+unsharp。云头的破洞不另造一套噪声：`cloud_erosion_field` 从 L2 低云场取局部高通，
+作为形状/侵蚀分离（Frostbite 思路）中的侵蚀项，让 L3 继承周围云系的 detail/grain/
+MCC/Worley 质感；温带气旋在包络内用 lerp 替换底云，而不是 screen 叠加，避免云头
+被推到纯白，同时保留侵蚀孔洞。气旋不是外加的白盘：`warp_cyclone_texture` 先把
+L2 纹理按风暴轴做螺旋扭曲，眼区主动清除底云。尺度按 Nacrea 的设定取值：
+热带外围 1500–2500 km、温带 2500–4000 km；真实轨迹到达后复核数量与频率。
 
 ## 5. L5 大气渲染
 
@@ -112,7 +124,9 @@ GGX 微表面太阳高光（水菲涅耳、波面粗糙度可配），高光受�
 `media/cloud_advection.py` 实现等距圆柱网格上的半拉格朗日平流：风场（东向/北向，
 m/s）先换成角位移，经度项除以 `cos(latitude)`，经度周期采样、纬度在极点夹取；
 每步之后用前后误差补偿（BFECC）扣掉一半往返误差，压低半拉格朗日插值的数值扩散。
-`advection_substeps` 按每步位移不超过约 8 个格子给出子步数上限。
+采样默认是双线性；`interp="cubic"` 改用 Catmull–Rom 四点插值，进一步保边，代价约
+为双线性的 3 倍。`cloud_flow_video.py` 默认使用三次插值，可用 `--interp linear`
+换回快速版。`advection_substeps` 按每步位移不超过约 8 个格子给出子步数上限。
 
 `scripts/media/cloud_flow_video.py` 从 `export globe` 输出目录读取云纹理与网格，
 用 `conditioning_grids` 取逐格年均风场，把云不透明度重采样到平流网格后逐帧推进，
@@ -136,8 +150,8 @@ uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
 凝结/蒸发与云量再生，也不更新大尺度云量场。热带气旋由涡旋风保持旋转；温带逗号
 默认不叠加涡旋，随环境风与锋面切变。极区经度位移被 `cos(latitude)` 下限保护。
 12 小时版本保留了热带风暴眼，24 小时版本运动更明显但累积插值的扩散也更明显；
-BFECC 明显减缓但未完全消除长时间积分后的细节损失，更长时段需要更强的保守/低扩散
-格式或按 L1 帧间插值。
+BFECC + Catmull–Rom 三次采样明显减缓但未完全消除长时间积分后的细节损失，更长
+时段仍需要更强的保守/低扩散格式或按 L1 帧间插值。凝结/蒸发与云量再生尚未接入。
 
 ## 7. 旋转视频
 
@@ -164,9 +178,10 @@ uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
 
 已实现：L2 纹理、L3 气旋模板、L4 云系平流原型（年均风占位）、L5 单次与多次
 散射大气、双层云壳与高壳卷云投影、海面太阳高光、卫星食通用接口与演示，以及
-全圆盘旋转与云流视频。待办按依赖顺序排列：
+全圆盘旋转与云流视频。GCM 年均云量已接入 L2：有字段时用总云量取代占位场，
+低/中云与高云的比例分配两层云壳。待办按依赖顺序排列：
 
-1. L1 气象图层包与真实气旋轨迹表（等图层包交付）；
+1. L1 的 6 小时帧、云顶高度、云层风场、涡度与真实气旋轨迹表（年均云量已接入）；
 2. L4 接入 L1 的 6 小时风场，替换年均风占位；
 3. L5 夜面城市灯光（文明层）；卫星食的真实椭圆/移动几何由天文层逐帧提供；
 4. 云顶高度分布、多层云与次网格云尺寸分布。
@@ -174,3 +189,29 @@ uv run --with imageio-ffmpeg python scripts/media/spin_video.py \
 全圆盘 4K 的定版贴图是 16K×8K；这一分辨率的纹理合成内存开销较大，当前预览以
 8K×4K 为主，需要 4K 全圆盘时再按镜头加细分辨率。L2 纹理与大气渲染都是确定性
 计算，不受预览分辨率影响。
+
+## 9 参考
+
+- Shapiro, M. A., & Keyser, D. (1990). Fronts, jet streams and the tropopause. In
+  *Extratropical Cyclones: The Erik Palmén Memorial Volume* (pp. 167–191). American
+  Meteorological Society. 用于云头、干槽、弯回锋面与逗号尾的概念模型。
+- Blier, W. (1986). A case study of comma cloud development in the eastern Pacific.
+  *Monthly Weather Review*, 114(9), 1681–1695. 逗号云从对流组织到成熟的结构。
+- Reed, R. J., & Blier, W. (1986). A further study of comma cloud development in the
+  eastern Pacific. *Monthly Weather Review*, 114(9), 1696–1708. 逗号云尺度约
+  1000–1500 km，以及海气感热/潜热通量对发展的作用。
+- Böttger, H., Eckardt, M., & Katergiannakis, U. (1975). Forecasting extratropical
+  storms with hurricane intensity using satellite information. *Journal of Applied
+  Meteorology*, 14(7), 1259–1265. 云头（cloud head）术语与卫星云型描述。
+  Browning, K. A., & Roberts, N. M. (1994). Structure of a frontal cyclone.
+  *Quarterly Journal of the Royal Meteorological Society*, 120, 1535–1557. 云头尖端
+  与弯回锋面的观测描述。
+- 程序化实现的思路参考（只借鉴概念/公式，不复制代码）：Terragen/Planetside 论坛的
+  “按半径旋转坐标后采样 Perlin” 涡旋做法；Lygia `spiralSDF` 与 OpenProcessing
+  “Generative Hurricane” 的多螺旋 SDF/差分旋转参数。链接：
+  <https://www.planetside.co.uk/forums/index.php/topic,3227.msg33361.html>、
+  <https://openprocessing.org/@kfahn/2923986>。
+- Kim, B., Liu, Y., Llamas, I., & Rossignac, J. (2005). Flowfixer: Using BFECC for
+  fluid simulation. *Symposium on Computer Animation*. L4 前后误差补偿的来源。
+- Catmull, E., & Rom, R. (1974). A class of local interpolating splines. 三次采样
+  使用 Catmull–Rom 权重；实现中只做四点局部插值，结果裁剪回 [0, 1]。

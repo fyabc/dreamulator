@@ -85,6 +85,24 @@ export interface VoronoiCell {
   agriculture_score?: number | null
 }
 
+/** Screen-space point written by a point projector (CSS pixels). */
+export interface ScreenPoint {
+  x: number
+  y: number
+  /** 1 at the centre of the visible disk, fading to 0 at the limb / edge. */
+  edgeFade: number
+}
+
+/**
+ * Allocation-free dot projector for the particle overlay.  `epoch` increments
+ * whenever the camera / viewport changed, letting the overlay clear its
+ * screen-space trails instead of smearing them across a moved globe.
+ */
+export interface PointProjector {
+  (lon: number, lat: number, out: ScreenPoint): boolean
+  epoch: number
+}
+
 export interface VoronoiNetwork {
   seed: number
   num_cells: number

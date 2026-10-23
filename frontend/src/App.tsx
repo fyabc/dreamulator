@@ -16,6 +16,7 @@ const GlobeViewerPage = lazy(() => import('./pages/GlobeViewerPage'))
 const CivMapEditorPage = lazy(() => import('./pages/CivMapEditorPage'))
 const PackViewerPage = lazy(() => import('./pages/PackViewerPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'))
 
 const PageFallback = () => (
   <div className="flex items-center justify-center min-h-[60vh]">
@@ -43,6 +44,7 @@ function App() {
             <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
             <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
             <Route path="packs" element={<PackViewerPage />} />
+            <Route path="playground" element={<PlaygroundPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
           {/* Full-page editors (no Layout wrapper) */}

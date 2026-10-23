@@ -18,6 +18,7 @@ import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
 import MapSvgOverlay from './MapSvgOverlay'
+import FlowParticles from './FlowParticles'
 import { normalisedToMeters } from '../../viewers/map/utils/mapCoords'
 import {
   lonLatToScreen,
@@ -30,6 +31,7 @@ import {
 import type {
   ColorMode,
   MapMetadata,
+  PointProjector,
   VoronoiCell,
   CVTMesh,
 } from '../../viewers/map/types'
@@ -77,6 +79,10 @@ interface MapViewerProps {
   monthlyWindEast?: Float32Array | null
   monthlyWindNorth?: Float32Array | null
   month?: number
+  /** Render wind/current layers as particle trails instead of arrows. */
+  particleMode?: boolean
+  /** Planet radius (metres) for the particle integrator. */
+  planetRadiusM?: number
   /** Render the SVG graticule. Off in clean/recording mode. */
   showGraticule?: boolean
 }
@@ -127,6 +133,8 @@ export default function MapViewer({
   monthlyWindEast = null,
   monthlyWindNorth = null,
   month = 0,
+  particleMode = false,
+  planetRadiusM,
   showGraticule = true,
 }: MapViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -148,6 +156,8 @@ export default function MapViewer({
   const mapCenterRef = useRef<LonLat>({ lon: 0, lat: 0 })
   const zoomRef = useRef(1)
   const containerRef2 = useRef({ width: 800, height: 400 })
+  /** Allocation-free projector handed to the particle overlay. */
+  const mapPointProjectRef = useRef<PointProjector | null>(null)
 
   // Sync helpers: update BOTH state and ref immediately
   const syncMapCenter = useCallback((mc: LonLat) => {
@@ -348,6 +358,23 @@ export default function MapViewer({
     },
     [vp, mapCenter, zoom, containerSize],
   )
+
+  // Particle projector: screen positions are CSS pixels relative to the view
+  // container.  The epoch changes with the view, letting the trail canvas clear
+  // on pan/zoom instead of smearing old screen-space segments.
+  if (particleMode) {
+    const projector = ((lon: number, lat: number, out: { x: number; y: number; edgeFade: number }) => {
+      const p = project(lon, lat)
+      out.x = p.x
+      out.y = p.y
+      out.edgeFade = 1
+      return true
+    }) as PointProjector
+    projector.epoch = hashViewKey(
+      `${mapCenter.lon}|${mapCenter.lat}|${zoom}|${containerSize.width}x${containerSize.height}`,
+    )
+    mapPointProjectRef.current = projector
+  }
 
   // --- Continuous render loop ---
   useEffect(() => {
@@ -582,6 +609,33 @@ export default function MapViewer({
     >
       <canvas ref={canvasRef} className="absolute inset-0" style={{ background: '#0a0a1a' }} />
 
+      {particleMode && (
+        <>
+          <FlowParticles
+            projectRef={mapPointProjectRef}
+            kind="current"
+            cells={voronoiCells}
+            opacity={layers?.currents ?? 0}
+            planetRadiusM={planetRadiusM}
+            cellIdMap={cellIdMap}
+            meshWidth={mapW}
+            meshHeight={mapH}
+            positioning="absolute"
+          />
+          <FlowParticles
+            projectRef={mapPointProjectRef}
+            kind="wind"
+            cells={voronoiCells}
+            opacity={layers?.winds ?? 0}
+            monthlyWindEast={monthlyWindEast}
+            monthlyWindNorth={monthlyWindNorth}
+            month={month}
+            planetRadiusM={planetRadiusM}
+            positioning="absolute"
+          />
+        </>
+      )}
+
       {isRendering && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0a0a1a]/70">
           <div className="text-gray-400 text-sm animate-pulse">rendering...</div>
@@ -601,8 +655,8 @@ export default function MapViewer({
         cvtMesh={cvtMesh}
         hoveredCell={hoveredCell}
         selectedCells={selectedCells}
-        currentOpacity={layers?.currents ?? 0}
-        windOpacity={layers?.winds ?? 0}
+        currentOpacity={particleMode ? 0 : layers?.currents ?? 0}
+        windOpacity={particleMode ? 0 : layers?.winds ?? 0}
         monthlyWindEast={monthlyWindEast}
         monthlyWindNorth={monthlyWindNorth}
         month={month}
@@ -610,6 +664,15 @@ export default function MapViewer({
       />
     </div>
   )
+}
+
+/** FNV-1a hash of the view key (pan/zoom/size) — used as a trail epoch. */
+function hashViewKey(key: string): number {
+  let h = 2166136261
+  for (let i = 0; i < key.length; i++) {
+    h = Math.imul(h ^ key.charCodeAt(i), 16777619)
+  }
+  return h >>> 0
 }
 
 // ---------------------------------------------------------------------------

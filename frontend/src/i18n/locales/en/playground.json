@@ -1,0 +1,57 @@
+{
+  "title": "Browser climate lab",
+  "badge": "Experimental",
+  "subtitle": "Run the engine's pure temperature model in the browser: drop in a heightmap and get an annual / monthly temperature first image. Temperature only for now — no CVT mesh, precipitation, winds, or Köppen.",
+  "back": "← Back to worlds",
+  "params": {
+    "title": "Planet parameters",
+    "presetNacrea": "Nacrea",
+    "presetEarth": "Earth",
+    "luminosity": "Stellar luminosity (L☉)",
+    "distance": "Orbital semi-major axis (AU)",
+    "albedo": "Bond albedo",
+    "greenhouse": "Greenhouse warming (K)",
+    "tilt": "Axial tilt (°)",
+    "year": "Orbital period (days)",
+    "rotation": "Rotation period (days)",
+    "seaLevel": "Sea level (m)",
+    "elevMin": "Elevation at gray 0 (m)",
+    "elevMax": "Elevation at gray 255 (m)",
+    "variableLapse": "Temperature-dependent moist lapse rate"
+  },
+  "heightmap": {
+    "title": "Heightmap",
+    "drop": "Drop a PNG / JPEG heightmap, or click to choose",
+    "hint": "The image is resampled to 180×90 equirectangular; gray values map linearly to the elevation range above.",
+    "none": "No heightmap loaded",
+    "sampleEarth": "Earth sample",
+    "sampleNacrea": "Nacrea sample"
+  },
+  "action": {
+    "run": "Run temperature first image",
+    "recompute": "Recompute",
+    "loadingEngine": "Loading the browser runtime…",
+    "computing": "Computing…"
+  },
+  "status": {
+    "engineLoaded": "Browser runtime loaded in {{seconds}} s"
+  },
+  "view": {
+    "title": "Temperature field",
+    "heightmapPreview": "Heightmap preview",
+    "annual": "Annual",
+    "month": "Month",
+    "placeholder": "Load a heightmap, then click Run temperature first image. The first run downloads the browser Python runtime (a few MB) from a CDN; changing months only recomputes temperature."
+  },
+  "stats": {
+    "globalMean": "Global mean (energy balance)",
+    "areaMean": "Field area mean",
+    "range": "Temperature range",
+    "computeTime": "This computation",
+    "gridInfo": "{{name}} · {{width}}×{{height}} regular lon/lat grid"
+  },
+  "error": {
+    "noHeightmap": "Load a heightmap first."
+  },
+  "note": "Prototype note: temperature comes from the engine's 1D EBM and seasonal heat-capacity model; elevation uses the moist lapse rate and coast distance a grid BFS approximation. Precipitation, winds, ocean currents and Köppen are not wired in yet."
+}

@@ -44,6 +44,9 @@ interface MapLayerPanelProps {
    *  layers (ΔT/ΔP vs observed zonal climatology) which are meaningless on
    *  fictional worlds. */
   isEarth: boolean
+  /** Render wind/current layers as advected particle trails instead of arrows. */
+  particleMode?: boolean
+  onParticleModeChange?: (mode: boolean) => void
 }
 
 /** A group with its member layers, split by interaction style. */
@@ -126,7 +129,7 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange, isEarth }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
@@ -267,6 +270,30 @@ export default function MapLayerPanel({ state, onChange, monthlyMode = false, mo
 
   return (
     <div className="space-y-4">
+      {/* Wind/current display style.  The layer opacities still control the
+          strength; this switch only swaps arrows for advected particles. */}
+      {onParticleModeChange && (
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-space-border">
+          <div className="min-w-0 cursor-help" title={t('panel.particlesHint')}>
+            <span className="text-xs text-gray-300">{t('panel.particles')}</span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={particleMode}
+            onClick={() => onParticleModeChange(!particleMode)}
+            className={`relative shrink-0 w-8 h-4 rounded-full transition-colors ${
+              particleMode ? 'bg-neon-cyan/60' : 'bg-gray-600'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                particleMode ? 'translate-x-4' : ''
+              }`}
+            />
+          </button>
+        </div>
+      )}
       {groups.map((g) => {
         const hasToggles = g.toggleMembers.length > 0
         const visCount = g.toggleMembers.filter((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0).length

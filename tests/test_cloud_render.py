@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from dreamulator.map.models import CVTMesh, VoronoiCell
 from dreamulator.media import cloud_render as cr
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_fbm3_deterministic_and_seed_sensitive() -> None:
@@ -53,7 +58,7 @@ def test_large_scale_cover_end_members() -> None:
     assert np.all(np.diff(c) > 0)
 
 
-def _toy_mesh(n: int = 400) -> CVTMesh:
+def _toy_mesh(n: int = 400, *, gcm_clouds: bool = False) -> CVTMesh:
     """Fibonacci-sphere toy mesh with latitude-banded conditioning fields."""
     from scipy.spatial import cKDTree
 
@@ -81,6 +86,26 @@ def _toy_mesh(n: int = 400) -> CVTMesh:
                 pressure_anomaly_annual_hpa=-10.0 if abs(lat) < 15 else 10.0,
                 wind_east_m_s=5.0 if lat > 0 else -5.0,
                 wind_north_m_s=0.0,
+                cloud_total_frac=(
+                    (0.85 if abs(lat) < 15 else 0.15 if abs(lat) < 35 else 0.50)
+                    if gcm_clouds
+                    else None
+                ),
+                cloud_low_frac=(
+                    (0.20 if abs(lat) < 15 else 0.08 if abs(lat) < 35 else 0.35)
+                    if gcm_clouds
+                    else None
+                ),
+                cloud_mid_frac=(
+                    (0.10 if abs(lat) < 15 else 0.03 if abs(lat) < 35 else 0.10)
+                    if gcm_clouds
+                    else None
+                ),
+                cloud_high_frac=(
+                    (0.60 if abs(lat) < 15 else 0.02 if abs(lat) < 35 else 0.20)
+                    if gcm_clouds
+                    else None
+                ),
             )
         )
     xyz = np.array([[c.x, c.y, c.z] for c in cells])
@@ -128,6 +153,56 @@ def test_cloud_texture_bands_and_determinism() -> None:
     a_eq = p1.alpha[np.abs(lat_rows) < 10].mean()
     a_sub = p1.alpha[(np.abs(lat_rows) > 20) & (np.abs(lat_rows) < 35)].mean()
     assert a_eq > a_sub
+
+
+def test_conditioning_prefers_gcm_total_cloud_cover() -> None:
+    """A frozen GCM world uses the model's total cloud cover, not the proxy."""
+    from dreamulator.map.export import export_cell_index_grid
+
+    mesh = _toy_mesh(gcm_clouds=True)
+    indices = export_cell_index_grid(mesh, 256, 128)
+    assert cr.has_gcm_cloud_fields(mesh)
+    cover, *_ = cr.conditioning_grids(mesh, indices, smooth_rounds=0)
+    lat_rows = 90.0 - (np.arange(128) + 0.5) / 128 * 180.0
+    eq = cover[np.abs(lat_rows) < 10].mean()
+    subtrop = cover[(np.abs(lat_rows) > 20) & (np.abs(lat_rows) < 35)].mean()
+    # The toy GCM bands: 0.85 in the tropics, 0.15 in the subtropics.
+    assert 0.80 < eq < 0.90
+    assert 0.10 < subtrop < 0.20
+    # An engine world without the fields falls back to the placeholder path.
+    engine = _toy_mesh()
+    assert not cr.has_gcm_cloud_fields(engine)
+    fallback, *_ = cr.conditioning_grids(engine, indices, smooth_rounds=0)
+    assert not np.allclose(fallback, cover)
+
+
+def test_cloud_vertical_weights_shift_cloud_between_shells() -> None:
+    from dreamulator.map.export import export_cell_index_grid
+
+    mesh = _toy_mesh(gcm_clouds=True)
+    indices = export_cell_index_grid(mesh, 256, 128)
+    weights = cr.cloud_vertical_weights(mesh, indices, smooth_rounds=0)
+    assert weights is not None
+    low_weight, high_weight = weights
+    lat_rows = 90.0 - (np.arange(128) + 0.5) / 128 * 180.0
+    eq = np.abs(lat_rows) < 10
+    sub = (np.abs(lat_rows) > 20) & (np.abs(lat_rows) < 35)
+    # High-dominant tropics → thicker cirrus shell, thinner low shell.
+    assert high_weight[eq].mean() > high_weight[sub].mean()
+    assert low_weight[eq].mean() < low_weight[sub].mean()
+    assert np.all(np.isfinite(low_weight)) and np.all(np.isfinite(high_weight))
+    assert np.all((low_weight >= 0.25) & (low_weight <= 3.0))
+    assert np.all((high_weight >= 0.25) & (high_weight <= 3.0))
+    # Engine worlds have no vertical split.
+    assert cr.cloud_vertical_weights(_toy_mesh(), indices) is None
+
+
+def test_clouds_globe_records_gcm_cover_source(tmp_path: Path) -> None:
+    mesh = _toy_mesh(gcm_clouds=True)
+    cr.clouds_globe(mesh, tmp_path, radius_km=6800.0, width=64, height=32, globe_res=32)
+    meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
+    assert meta["cover_field"].startswith("GCM cloud_total_frac")
+    assert meta["vertical_cloud_weights"].startswith("GCM")
 
 
 def test_globe_preview_day_night() -> None:

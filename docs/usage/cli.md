@@ -524,7 +524,7 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-re
 | `clouds.png` | 合并云不透明度（RGBA straight alpha，兼容旧调用） |
 | `clouds_low.png` | 低/中云壳 + 薄霾（4 km 层） |
 | `clouds_cirrus.png` | 高壳卷云（9 km 层，带对比曲线） |
-| `cloud_cover.png` | 大尺度云量场（占位） |
+| `cloud_cover.png` | 大尺度云量场（GCM 总云量；引擎世界为降水 + SLP 占位） |
 | `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络（仅 `--cyclones`） |
 | `globe.png` | 正交圆盘静帧（地表 + 双层云 + 大气 + 高光） |
 | `meta.json` | 网格、种子、机位、气旋轨迹、大气参数、食影参数与 provenance |
@@ -618,10 +618,11 @@ uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py <globe_dir
 | `--texture-width` | 2048 | 平流网格宽度（高度 = 宽度/2） |
 | `--substeps` | 自动 | 每帧子步数（按位移自动，封顶 8） |
 | `--no-bfecc` | 关 | 关闭前后误差补偿（更糊，作对照） |
+| `--interp` | `cubic` | 半拉格朗日插值：`cubic`（Catmull–Rom，保边但约慢 3 倍）或 `linear` |
 | `--no-vortex` | 关 | 只用环境风，不叠加风暴 Holland 涡旋 |
 | `--crf` / `--no-ocean` / `--poster` | 18 / 关 / 无 | 同旋转视频 |
 
-风场暂用年均值占位，等 L1 的 6 小时风场到达后替换；只输运现有纹理，不做凝结/蒸发。更长时段会累积插值扩散，需更强的低扩散格式或 L1 帧间插值。
+风场暂用年均值占位，等 L1 的 6 小时风场到达后替换；只输运现有纹理，不做凝结/蒸发。平流默认用 Catmull–Rom 三次采样压低插值扩散，代价约为双线性的 3 倍；更长时段仍需要 L1 帧间插值或更强的低扩散格式。
 
 #### 5. 卫星食影子
 

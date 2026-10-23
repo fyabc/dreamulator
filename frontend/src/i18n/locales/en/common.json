@@ -10,7 +10,8 @@
     "overview": "Overview",
     "map": "Map",
     "viewer3d": "3D View",
-    "packs": "Region packs"
+    "packs": "Region packs",
+    "playground": "Climate lab"
   },
   "action": {
     "back": "← Back",

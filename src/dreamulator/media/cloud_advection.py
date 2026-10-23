@@ -55,6 +55,43 @@ def _sample_wrapped(field: np.ndarray, row: np.ndarray, col: np.ndarray) -> np.n
     )
 
 
+def _catmull_rom_weights(t: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Catmull–Rom cubic weights for the four samples around a cell."""
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    )
+
+
+def _sample_wrapped_cubic(field: np.ndarray, row: np.ndarray, col: np.ndarray) -> np.ndarray:
+    """Catmull–Rom sample with periodic longitude and clamped latitude.
+
+    Cubic interpolation substantially reduces the numerical diffusion of the
+    bilinear semi-Lagrangian step, at roughly four times the sampling cost.
+    The result is not renormalised: Catmull–Rom can overshoot at sharp edges,
+    so the caller clips it to the field range.
+    """
+    height, width = field.shape
+    r0 = np.floor(row).astype(np.int64)
+    c0 = np.floor(col).astype(np.int64)
+    fr = row - r0
+    fc = col - c0
+    wr = _catmull_rom_weights(fr)
+    wc = _catmull_rom_weights(fc)
+    rows = [np.clip(r0 + k, 0, height - 1) for k in (-1, 0, 1, 2)]
+    cols = [np.mod(c0 + k, width) for k in (-1, 0, 1, 2)]
+
+    result = np.zeros_like(field, dtype=np.float64)
+    for i, ri in enumerate(rows):
+        for j, cj in enumerate(cols):
+            result += field[ri, cj] * (wr[i] * wc[j])
+    return result
+
+
 def _trace(
     field: np.ndarray,
     dlon: np.ndarray,
@@ -62,6 +99,7 @@ def _trace(
     latitude: np.ndarray,
     *,
     sign: float,
+    interp: str = "linear",
 ) -> np.ndarray:
     """Sample ``field`` at the position displaced by ``-sign * (dlon, dlat)``."""
     height, width = field.shape
@@ -69,6 +107,8 @@ def _trace(
     lat_src = latitude[:, None] - sign * dlat
     row = (0.5 * math.pi - lat_src) / math.pi * height - 0.5
     col = (lon_src + math.pi) / (2.0 * math.pi) * width - 0.5
+    if interp == "cubic":
+        return _sample_wrapped_cubic(field, row, col)
     return _sample_wrapped(field, row, col)
 
 
@@ -81,14 +121,17 @@ def advect_equirect(
     radius_km: float,
     substeps: int = 4,
     bfecc: bool = True,
+    interp: str = "linear",
 ) -> np.ndarray:
     """Advect an equirectangular field by one time step.
 
     ``field``, ``wind_east_m_s`` and ``wind_north_m_s`` share the same grid
     (row 0 = north edge, periodic in longitude).  ``dt_seconds`` is split into
     ``substeps`` to keep the trajectory piecewise smooth; BFECC then reduces
-    the diffusion of the semi-Lagrangian interpolation.  The result is clipped
-    to the field's original [0, 1] range.
+    the diffusion of the semi-Lagrangian interpolation.  ``interp="cubic"``
+    uses Catmull–Rom sampling instead of bilinear, which further limits
+    diffusion at a higher per-step cost.  The result is clipped to the field's
+    original [0, 1] range.
     """
     field = np.asarray(field, dtype=np.float64)
     u = np.asarray(wind_east_m_s, dtype=np.float64)
@@ -97,6 +140,8 @@ def advect_equirect(
         raise ValueError("field, wind_east_m_s and wind_north_m_s must share a 2-D grid")
     if substeps < 1:
         raise ValueError("substeps must be >= 1")
+    if interp not in {"linear", "cubic"}:
+        raise ValueError("interp must be 'linear' or 'cubic'")
     radius_m = radius_km * 1000.0
     height, _ = field.shape
     latitude = _grid_latitude_rad(height)
@@ -107,9 +152,9 @@ def advect_equirect(
     for _ in range(substeps):
         dlon = u * step / (radius_m * cos_lat)
         dlat = v * step / radius_m
-        forward = _trace(result, dlon, dlat, latitude, sign=1.0)
+        forward = _trace(result, dlon, dlat, latitude, sign=1.0, interp=interp)
         if bfecc:
-            backward = _trace(forward, dlon, dlat, latitude, sign=-1.0)
+            backward = _trace(forward, dlon, dlat, latitude, sign=-1.0, interp=interp)
             forward = forward - 0.5 * (backward - result)
         result = np.clip(forward, 0.0, 1.0)
     return np.asarray(result, dtype=np.float64)
