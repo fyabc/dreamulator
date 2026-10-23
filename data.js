@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792770424962,
+  "lastUpdate": 1792772078079,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -944,6 +944,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009465462918966531",
             "extra": "mean: 5.087517999999136 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2f79750ed09b675127734a1a4d27250b990fa820",
+          "message": "feat(media): GCM 年均云量驱动云纹理与双层云壳\n\n冻结 GCM 气候的网格带 cloud_total_frac 时，L2 云纹理直接使用模式总云量，\n取代降水与 SLP 距平的占位场；低/中云与高云的比例归一化后分别缩放低云壳\n与卷云壳，近晴空格子淡出为等权。引擎世界无字段时保持占位路径。meta.json\n记录实际云量来源。新增 3 项测试，全量 1418 passed。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-24T00:08:24+08:00",
+          "tree_id": "ad4fc8c70785e8d365aac0154202be13730dfcaa",
+          "url": "https://github.com/fyabc/dreamulator/commit/2f79750ed09b675127734a1a4d27250b990fa820"
+        },
+        "date": 1792772076552,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3144633560119773,
+            "unit": "iter/sec",
+            "range": "stddev: 0.23273518069557098",
+            "extra": "mean: 3.180020758799992 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.129081471197848,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014062340744803807",
+            "extra": "mean: 319.58260250002013 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4518413214209445,
+            "unit": "iter/sec",
+            "range": "stddev: 1.101620592735551",
+            "extra": "mean: 688.7805059999815 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 970.2667573606345,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007952789157466917",
+            "extra": "mean: 1.0306444000207193 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 191.73875180824902,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00013674920862571176",
+            "extra": "mean: 5.21542980002323 msec\nrounds: 5"
           }
         ]
       }
