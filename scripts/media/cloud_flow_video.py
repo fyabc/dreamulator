@@ -172,6 +172,12 @@ def main() -> None:
     )
     parser.add_argument("--no-bfecc", action="store_true", help="plain semi-Lagrangian step")
     parser.add_argument(
+        "--interp",
+        choices=["linear", "cubic"],
+        default="cubic",
+        help="semi-Lagrangian interpolation (cubic limits diffusion; linear is faster)",
+    )
+    parser.add_argument(
         "--no-vortex",
         action="store_true",
         help="advect with the environment wind only (no storm circulation)",
@@ -336,6 +342,7 @@ def main() -> None:
                     radius_km=model.planet_radius_km,
                     substeps=substeps,
                     bfecc=not args.no_bfecc,
+                    interp=args.interp,
                 )
                 if cloud_high is not None:
                     cloud_high = advect_equirect(
@@ -346,6 +353,7 @@ def main() -> None:
                         radius_km=model.planet_radius_km,
                         substeps=substeps,
                         bfecc=not args.no_bfecc,
+                        interp=args.interp,
                     )
             renderer.set_cloud(cloud, cloud_high)
             frame = renderer.frame(0.0)

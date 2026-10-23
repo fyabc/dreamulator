@@ -118,6 +118,49 @@ def test_extratropical_comma_deterministic() -> None:
     assert np.all((a1 >= 0.0) & (a1 <= 1.0))
 
 
+def test_extratropical_erosion_breaks_the_shield() -> None:
+    cyc = cr.Cyclone(
+        lat_deg=55.0,
+        lon_deg=20.0,
+        kind="extratropical",
+        central_pressure_hpa=975.0,
+        rmax_km=450.0,
+        outer_radius_km=1800.0,
+        motion_east_m_s=9.0,
+    )
+    low = cr.cyclone_alpha(
+        [cyc],
+        height=128,
+        width=256,
+        radius_km=6800.0,
+        erosion=np.full((128, 256), 0.2),
+    )
+    high = cr.cyclone_alpha(
+        [cyc],
+        height=128,
+        width=256,
+        radius_km=6800.0,
+        erosion=np.full((128, 256), 0.9),
+    )
+    assert high.mean() > low.mean()
+    assert np.allclose(
+        high,
+        cr.cyclone_alpha(
+            [cyc],
+            height=128,
+            width=256,
+            radius_km=6800.0,
+            erosion=np.full((128, 256), 0.9),
+        ),
+    )
+    try:
+        cr.cyclone_alpha([cyc], height=64, width=128, radius_km=6800.0, erosion=np.zeros((10, 10)))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("mismatched erosion shape must be rejected")
+
+
 def test_composite_alpha_screen() -> None:
     base = np.array([0.0, 0.5, 1.0])
     template = np.array([0.0, 0.0, 0.5])

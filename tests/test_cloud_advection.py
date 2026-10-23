@@ -70,6 +70,37 @@ def test_blob_wraps_across_the_seam() -> None:
     assert abs((after - expected + 180.0) % 360.0 - 180.0) < 0.2
 
 
+def test_cubic_interpolation_keeps_a_constant_field() -> None:
+    field = np.ones((90, 180))
+    u = np.full_like(field, 12.0)
+    v = np.full_like(field, 3.0)
+    out = advect_equirect(field, u, v, dt_seconds=6.0 * 3600.0, radius_km=6371.0, interp="cubic")
+    np.testing.assert_allclose(out, 1.0, atol=1e-6)
+
+
+def test_cubic_limits_edge_diffusion_versus_linear() -> None:
+    # A sharp longitude step is smoothed by the semi-Lagrangian interpolation;
+    # cubic sampling should retain more of the edge (higher total variation)
+    # at the same displacement.
+    height, width = 180, 360
+    lon = np.linspace(-180.0, 180.0, width, endpoint=False)[None, :]
+    field = ((lon > -10.0) & (lon < 10.0)).astype(np.float64) * np.ones((height, 1))
+    u = np.full((height, width), 10.0)
+    v = np.zeros_like(u)
+    linear = advect_equirect(
+        field, u, v, dt_seconds=6.0 * 3600.0, radius_km=6371.0, substeps=2, interp="linear"
+    )
+    cubic = advect_equirect(
+        field, u, v, dt_seconds=6.0 * 3600.0, radius_km=6371.0, substeps=2, interp="cubic"
+    )
+    tv_linear = float(np.sum(np.abs(np.diff(linear, axis=1))))
+    tv_cubic = float(np.sum(np.abs(np.diff(cubic, axis=1))))
+    assert tv_cubic >= tv_linear
+    # Catmull–Rom can overshoot slightly before the clip; the domain mean is
+    # preserved to the same order as the interpolation error.
+    assert abs(float(cubic.mean() - linear.mean())) < 1e-4
+
+
 def test_substeps_bounded() -> None:
     u = np.full((90, 180), 30.0)
     v = np.zeros_like(u)

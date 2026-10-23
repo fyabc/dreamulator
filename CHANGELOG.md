@@ -235,6 +235,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   不含 CVT、降水、风场、洋流与 Köppen，完整气候仍待降水预算加速。设计、限制与
   后续路线见 `docs/design/proposals/browser-playground.md`。
 
+### Changed
+
+- **L3 温带逗号重做 + L4 三次插值平流（2026-10-23）**：温带气旋不再用椭圆距离场，
+  改为「差分旋转域扭曲」：局地坐标按 `1.10·ln r` 旋转并叠加低频噪声，在扭转后的
+  坐标系里取填充云头与冷锋尾，云头沿低压卷成逗号；干槽在未扭转角坐标里切成锐利
+  楔形，云街沿扭转锋面展开，边缘做轻度 unsharp。云头破洞复用 L2 的局部高通侵蚀场
+  （形状/侵蚀分离），温带气旋在包络内用 lerp 替换底云而非 screen 叠加，避免云头
+  过白。热带雨带收窄并加软阈值、降低卷云 veil，边缘更锐。L4 `advect_equirect` 增加
+  Catmull–Rom 三次采样（`interp="cubic"`），
+  `cloud_flow_video.py` 默认使用，`--interp linear` 可退回快速版；三次插值比双线性
+  慢约 3 倍，常数场保持与边缘总变差测试通过。新增 L3/L4 测试，全量测试、mypy、ruff
+  通过。
+
 ## [1.1.0] — 2026-10-20
 
 ### Added

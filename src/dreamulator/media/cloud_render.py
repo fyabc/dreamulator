@@ -1415,6 +1415,31 @@ def render_globe_preview(
 # ---------------------------------------------------------------------------
 
 
+def cloud_erosion_field(alpha: np.ndarray, radius: int = 3) -> np.ndarray:
+    """Local high-pass of the L2 cloud field, used to erode L3 templates.
+
+    Frostbite's shape/erosion split keeps the large-scale cloud shape separate
+    from the fine erosion detail.  The L2 texture already carries realistic
+    erosion, grain, MCC cells and Worley texture; instead of inventing a second
+    FBM hole field for every cyclone, the L3 template is multiplied by this
+    local-contrast field.  Values are centred on 0.5: below-average pixels
+    (thin cloud / holes) erode the template, above-average pixels keep it.
+    """
+    r = max(1, int(radius))
+    k = 2 * r + 1
+    horizontal = np.zeros_like(alpha, dtype=np.float64)
+    for dx in range(-r, r + 1):
+        horizontal += np.roll(alpha, dx, axis=1)
+    horizontal /= k
+    local = np.zeros_like(alpha, dtype=np.float64)
+    for dy in range(-r, r + 1):
+        local += np.roll(horizontal, dy, axis=0)
+    local /= k
+    detail = alpha - local
+    scale = max(float(np.percentile(np.abs(detail), 85.0)), 1e-3)
+    return np.clip(0.5 + detail / (2.0 * scale), 0.0, 1.0)
+
+
 def clouds_globe(
     mesh: CVTMesh,
     out_dir: Path,
@@ -1505,12 +1530,15 @@ def clouds_globe(
             ]
         if cyclones:
             alpha = warp_cyclone_texture(alpha, list(cyclones), radius_km=radius_km)
+            # L3 supplies the comma shape; L2 supplies the erosion detail.
+            erosion = cloud_erosion_field(alpha_low)
             template = cyclone_alpha(
                 list(cyclones),
                 height=height,
                 width=width,
                 radius_km=radius_km,
                 seed=cyclone_seed,
+                erosion=erosion,
             )
             clear = cyclone_clear(list(cyclones), height=height, width=width, radius_km=radius_km)
             envelope = cyclone_envelope(
@@ -1524,12 +1552,50 @@ def clouds_globe(
             # template: band troughs thin the deck, crests brighten it, so the
             # cyclone reads without punching a clear moat in the cloud field.
             base = alpha * (1.0 - clear)
-            # Inside the (irregular) storm footprint the template may only
-            # brighten: max() keeps the ambient deck where the template is thin,
-            # so there is no dark ring or painted halo around the edge.
-            # Screen the banded template over the ambient deck: it raises cloud
-            # amount without imposing a hard disk edge, and keeps the L2 texture.
-            alpha = np.clip(1.0 - (1.0 - base) * (1.0 - 0.95 * envelope * template), 0.0, 1.0)
+            # Extratropical comma: replace the deck with the textured template
+            # inside the envelope instead of screen-brightening it.  Screen
+            # pushes every bright template pixel to white; the lerp preserves
+            # the template's L2-derived erosion holes and caps the head below
+            # pure white.  Tropical storms keep the screen composite below.
+            extratropical = [c for c in cyclones if c.kind == "extratropical"]
+            if extratropical:
+                extra_env = cyclone_envelope(
+                    extratropical,
+                    height=height,
+                    width=width,
+                    radius_km=radius_km,
+                    seed=cyclone_seed,
+                )
+                extra_template = cyclone_alpha(
+                    extratropical,
+                    height=height,
+                    width=width,
+                    radius_km=radius_km,
+                    seed=cyclone_seed,
+                    erosion=erosion,
+                )
+                base = base * (1.0 - 0.90 * extra_env) + 0.90 * extra_env * extra_template
+            # Tropical storms: screen the banded template over the ambient
+            # deck; it raises cloud amount without a hard disk edge and keeps
+            # the L2 texture.
+            tropical = [c for c in cyclones if c.kind == "tropical"]
+            if tropical:
+                trop_env = cyclone_envelope(
+                    tropical,
+                    height=height,
+                    width=width,
+                    radius_km=radius_km,
+                    seed=cyclone_seed,
+                )
+                trop_template = cyclone_alpha(
+                    tropical,
+                    height=height,
+                    width=width,
+                    radius_km=radius_km,
+                    seed=cyclone_seed,
+                )
+                base = 1.0 - (1.0 - base) * (1.0 - 0.95 * trop_env * trop_template)
+            alpha = np.clip(base, 0.0, 1.0)
             Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
                 str(out_dir / "cyclone_template.png")
             )
