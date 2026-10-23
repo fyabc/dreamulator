@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **气象图层包单帧接入太空镜头链（2026-10-24）**：`export globe` 新增 `--weather-pack`/`--frame`，
+  条件场切换为图层包一帧的模式天气。`media/weather_conditioning.py` 读取一帧的分层云量，按与 GCM
+  侧约定的口径先取以当前帧为中心的 3 帧等权平均（18 小时窗口，序列两端收缩为 2 帧），再做标准差
+  1 个 T42 格距的高斯平滑（经度环绕、纬度边缘延拓），总云量作大尺度云量场、低/中云与高云的比例
+  分配两层云壳；太阳方向默认取包内该帧的日下点，视图中心经度随之，晨昏线与云场同一时刻。平滑
+  参数与帧号写入 `meta.json` 的 `weather_pack` 块。年均路径（网格字段）与引擎占位路径不变。
 - **GCM 气象图层包（2026-10-23）**：太空俯瞰星球链的 L1 数据层。`gcm/weather_pack.py` 把 ExoPlaSim 的高频瞬时
   快照打成逐变量帧数组：ISCCP 三层云量与总云量、云顶气压与高度、降水、海平面气压、三个高度的风、低层涡度、
   海冰、地表温度与热带气旋生成潜势，附逐帧日下点；`gcm/cyclones.py` 按 TempestExtremes 的方法检测与连接气旋，

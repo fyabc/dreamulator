@@ -1,0 +1,158 @@
+"""Weather-pack frame conditioning (L1 adapter) tests."""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+import numpy as np
+import pytest
+
+from dreamulator.media.weather_conditioning import load_weather_frame
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+FRAMES, NLAT, NLON = 5, 16, 32
+
+
+def _write_pack(
+    root: Path,
+    fields: dict[str, np.ndarray],
+    *,
+    subsolar_lon: float = 350.0,
+) -> Path:
+    """Write a minimal valid pack: meta.json + fields/*.npy + tracks.json."""
+    pack = root / "pack"
+    (pack / "fields").mkdir(parents=True)
+    lat = -90.0 + (np.arange(NLAT) + 0.5) * 180.0 / NLAT
+    lon = (np.arange(NLON) + 0.5) * 360.0 / NLON
+    for name in ("cloud_total", "cloud_low", "cloud_mid", "cloud_high"):
+        arr = fields.get(name)
+        if arr is None:
+            arr = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
+        np.save(pack / "fields" / f"{name}.npy", arr)
+    (pack / "tracks.json").write_text(json.dumps({"tracks": []}), encoding="utf-8")
+    meta = {
+        "format": "weather-pack-v1",
+        "frames": FRAMES,
+        "grid": {
+            "lat_deg": [round(float(v), 5) for v in lat],
+            "lon_deg": [round(float(v), 5) for v in lon],
+        },
+        "time": {
+            "hours_since_start": [6.0 * t for t in range(FRAMES)],
+            "subsolar_lat_deg": [10.0] * FRAMES,
+            "subsolar_lon_deg": [subsolar_lon] * FRAMES,
+        },
+        "calendar": {"frame_interval_h": 6.0},
+    }
+    (pack / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return pack
+
+
+def test_time_mean_and_edge_window(tmp_path: Path) -> None:
+    """Centred 3-frame mean; the sequence edges shrink to 2 frames."""
+    total = np.stack(
+        [np.full((NLAT, NLON), 0.10 + 0.05 * t, dtype=np.float32) for t in range(FRAMES)]
+    )
+    pack = _write_pack(tmp_path, {"cloud_total": total})
+    wf = load_weather_frame(pack, 2, 64, 32)
+    # A uniform field is invariant under both smoothing passes, so the output
+    # is exactly the centred window mean.
+    assert wf.cover.shape == (32, 64)
+    np.testing.assert_allclose(wf.cover, 0.20, atol=1e-6)
+    assert wf.meta["time_window_frames"] == 3
+    assert wf.meta["time_window_span_h"] == 12.0
+    assert wf.hours == 12.0
+    # Frame 0 has no predecessor: frames {0, 1} only.
+    wf0 = load_weather_frame(pack, 0, 64, 32)
+    np.testing.assert_allclose(wf0.cover, (0.10 + 0.15) / 2, atol=1e-6)
+    assert wf0.meta["time_window_frames"] == 2
+    assert wf0.meta["time_window_span_h"] == 6.0
+
+
+def test_gaussian_smoothing_spreads_a_spike(tmp_path: Path) -> None:
+    """The spatial pass replaces near-binary values with a spread field."""
+    total = np.full((FRAMES, NLAT, NLON), 0.30, dtype=np.float32)
+    total[:, NLAT // 2, NLON // 2] = 1.0
+    pack = _write_pack(tmp_path, {"cloud_total": total})
+    wf = load_weather_frame(pack, 2, 64, 32)
+    assert wf.cover.max() < 0.55  # the spike is no longer near-binary
+    assert wf.cover.min() > 0.29  # a positive field stays positive
+    assert 0.29 < wf.cover.mean() < 0.32  # mass roughly preserved
+
+
+def test_vertical_split_from_pack(tmp_path: Path) -> None:
+    """Low-dominant north / high-dominant south shifts the two shells."""
+    lat = -90.0 + (np.arange(NLAT) + 0.5) * 180.0 / NLAT
+    north = lat > 0.0
+    low = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
+    low[:, north] = 0.8
+    low[:, ~north] = 0.2
+    high = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
+    high[:, north] = 0.2
+    high[:, ~north] = 0.8
+    total = np.full((FRAMES, NLAT, NLON), 0.6, dtype=np.float32)
+    pack = _write_pack(tmp_path, {"cloud_total": total, "cloud_low": low, "cloud_high": high})
+    wf = load_weather_frame(pack, 2, 64, 32)
+    # Output rows run north to south.  Deep in either hemisphere the split is
+    # exact: shares 0.8/0.2 against a cos-latitude mean of 0.5 → weights
+    # 1.6/0.4; only the equatorial rows blur.
+    assert wf.low_weight.shape == (32, 64)
+    np.testing.assert_allclose(wf.low_weight[0], 1.6, atol=0.35)
+    np.testing.assert_allclose(wf.low_weight[-1], 0.4, atol=0.35)
+    assert wf.low_weight[:8].mean() > 1.2
+    assert wf.low_weight[-8:].mean() < 0.8
+    # cos-latitude symmetry: the global mean weight is one.
+    assert 0.9 < wf.low_weight.mean() < 1.1
+    # The shells move oppositely and stay inside the clip range.
+    assert wf.high_weight[:8].mean() < 0.8
+    for w in (wf.low_weight, wf.high_weight):
+        assert np.all((w >= 0.25) & (w <= 3.0))
+
+
+def test_subsolar_and_meta(tmp_path: Path) -> None:
+    """Sub-solar longitude converts to the media convention; meta records all."""
+    pack = _write_pack(tmp_path, {"cloud_total": np.full((FRAMES, NLAT, NLON), 0.4, np.float32)})
+    wf = load_weather_frame(pack, 3, 64, 32)
+    assert wf.subsolar_lat_deg == 10.0
+    assert wf.subsolar_lon_deg == -10.0  # 350°E → −10°
+    assert wf.hours == 18.0
+    m = wf.meta
+    assert m["frame"] == 3
+    assert m["frames_total"] == FRAMES
+    assert m["space_sigma_grid_units"] == 1.0
+    assert m["cover_field"] == "cloud_total"
+    assert m["subsolar_lon_deg"] == -10.0
+
+
+def test_frame_bounds(tmp_path: Path) -> None:
+    pack = _write_pack(tmp_path, {})
+    with pytest.raises(ValueError, match="outside"):
+        load_weather_frame(pack, FRAMES, 64, 32)
+
+
+def test_clouds_globe_uses_weather_frame(tmp_path: Path) -> None:
+    """clouds_globe consumes the frame: pack cover, shells and sub-solar sun."""
+    from dreamulator.media import cloud_render as cr
+    from tests.test_cloud_render import _toy_mesh
+
+    total = np.full((FRAMES, NLAT, NLON), 0.5, dtype=np.float32)
+    pack = _write_pack(tmp_path / "src", {"cloud_total": total})
+    wf = load_weather_frame(pack, 2, 64, 32)
+    out = tmp_path / "out"
+    # Engine mesh (no GCM fields): the pack still drives the conditioning.
+    cr.clouds_globe(
+        _toy_mesh(), out, radius_km=6800.0, width=64, height=32, globe_res=32, weather=wf
+    )
+    meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+    assert meta["weather_pack"]["frame"] == 2
+    assert meta["weather_pack"]["pack"].endswith("pack")
+    assert meta["cover_field"].startswith("GCM weather pack")
+    assert meta["vertical_cloud_weights"].startswith("weather pack")
+    # The sun follows the pack's sub-solar point when not set explicitly.
+    assert meta["globe"]["sun_lon_deg"] == wf.subsolar_lon_deg
+    assert meta["globe"]["sun_lat_deg"] == wf.subsolar_lat_deg
+    assert (out / "globe.png").is_file()
+    assert (out / "clouds.png").is_file()

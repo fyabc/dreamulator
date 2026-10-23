@@ -1,16 +1,16 @@
 """Procedural cloud texture — layer L2 of the orbital weather-globe chain.
 
 Requirement spec: the orbital weather-globe requirement notes.
-The L1 layer pack is arriving in stages: the frozen GCM climate now supplies
-annual total/low/mid/high cloud fractions, which replace the placeholder
-large-scale cover field when present and split opacity between the two cloud
-shells.  Per-6-hour fields, cloud-top height and storm tracks are still
-pending; until they arrive this module derives a **placeholder cover field**
-from the engine climate fields already on the mesh (annual precipitation and
-sea-level-pressure anomaly) for worlds without GCM cloud fields, so the look
-of the procedural texture can be settled now.  The texture synthesis itself —
-spherical fBm, wind-flow domain warp, cirrus streak taps — is the permanent
-part; only ``large_scale_cover`` is a placeholder.
+The L1 weather pack has landed: annual cloud fractions arrive on the mesh
+(frozen GCM climates), and the per-6-hour pack frames drive the conditioning
+through :mod:`dreamulator.media.weather_conditioning` — one frame supplies
+the cover field, the two-shell vertical split and the sub-solar point.
+Per-frame winds and real cyclone tracks are still ahead: the winds still come
+from the mesh's annual fields and the track set is synthetic.  Engine worlds
+without GCM cloud fields keep the **placeholder cover field** derived from
+annual precipitation and sea-level-pressure anomaly.  The texture synthesis
+itself — spherical fBm, wind-flow domain warp, cirrus streak taps — is the
+permanent part; only ``large_scale_cover`` is a placeholder.
 
 Design notes:
 
@@ -42,7 +42,10 @@ standard graphics technique; the cover-field coefficients in
 ``large_scale_cover`` are observation-fitted placeholders used only for
 engine worlds (no GCM cloud fields).  Frozen GCM climates use the model's own
 ``cloud_total_frac``, and the two-shell split uses the GCM low/mid versus high
-cloud fractions; both are model output, not fitted tuning.
+cloud fractions; both are model output, not fitted tuning.  The per-frame
+pack conditioning (time mean + Gaussian smoothing) is numerical stabilisation
+of a model field, agreed with the GCM side — see
+:mod:`dreamulator.media.weather_conditioning`.
 """
 
 from __future__ import annotations
@@ -64,6 +67,7 @@ if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh
     from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
     from dreamulator.media.cyclone_render import Cyclone
+    from dreamulator.media.weather_conditioning import WeatherFrame
 
 # ---------------------------------------------------------------------------
 # Texture constants (lengths in km on the planet surface)
@@ -1181,22 +1185,57 @@ def has_gcm_cloud_fields(mesh: CVTMesh) -> bool:
     return _mesh_field(mesh, "cloud_total_frac") is not None
 
 
+def vertical_split_weights(
+    low_amount: np.ndarray,
+    high_amount: np.ndarray,
+    *,
+    mean_weights: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Two-shell weights in [0.25, 3] from smoothed low/mid and high amounts.
+
+    The layer fractions say where cloud sits (ISCCP 680/440 hPa levels), not
+    how much of the total it is; their shares of the low+mid versus high total
+    redistribute opacity between the two L5 shells — a place whose high share
+    exceeds the global mean gets a thicker cirrus shell and a thinner low
+    shell.  Each weight is the local share divided by its global mean
+    (``mean_weights`` are per-point weights for that mean: uniform on a CVT
+    mesh, cos-latitude on a lat-lon grid), clipped, and faded toward one where
+    the total cloud is too small for the split to mean anything.
+    """
+    total = low_amount + high_amount
+    valid = total > 1e-6
+    low_share = np.full_like(total, 0.5)
+    high_share = np.full_like(total, 0.5)
+    low_share[valid] = low_amount[valid] / total[valid]
+    high_share[valid] = 1.0 - low_share[valid]
+    w = np.ones_like(total) if mean_weights is None else mean_weights
+    wsum = float(w[valid].sum())
+    mean_low = float((w[valid] * low_share[valid]).sum() / wsum) if wsum > 0.0 else 0.5
+    mean_high = 1.0 - mean_low
+    low_weight = np.ones_like(total)
+    high_weight = np.ones_like(total)
+    if wsum > 0.0 and mean_low > 1e-6 and mean_high > 1e-6:
+        low_weight[valid] = np.clip(low_share[valid] / mean_low, 0.25, 3.0)
+        high_weight[valid] = np.clip(high_share[valid] / mean_high, 0.25, 3.0)
+    # Near-clear cells carry no reliable vertical partition: fade to 1.
+    confidence = np.clip((total - 0.05) / 0.25, 0.0, 1.0)
+    low_weight = 1.0 + confidence * (low_weight - 1.0)
+    high_weight = 1.0 + confidence * (high_weight - 1.0)
+    return low_weight, high_weight
+
+
 def cloud_vertical_weights(
     mesh: CVTMesh,
     indices: np.ndarray,
     *,
     smooth_rounds: int = MESH_SMOOTH_ROUNDS,
 ) -> tuple[np.ndarray, np.ndarray] | None:
-    """Low/mid and high shell weights from the GCM vertical cloud split.
+    """Low/mid and high shell weights from the GCM annual vertical split.
 
-    ``cloud_low_frac``/``cloud_mid_frac``/``cloud_high_frac`` say where the
-    cloud sits (ISCCP 680/440 hPa levels), not how much of the total it is.
-    Their shares of the low+mid versus high total therefore redistribute the
-    two L5 shells: a cell whose high share exceeds the global mean gets a
-    thicker cirrus shell and a thinner low shell.  The weights are normalised
-    to a global mean of one, clipped, and faded toward one in nearly clear
-    cells where the vertical split is ill-defined.  Returns rasterised
-    ``(low_weight, high_weight)`` or ``None`` when the fields are absent.
+    The layer fractions are smoothed on the mesh graph, then
+    :func:`vertical_split_weights` turns the low+mid versus high amounts into
+    per-shell multipliers.  Returns rasterised ``(low_weight, high_weight)``
+    or ``None`` when the mesh carries no cloud fields.
     """
     low = _mesh_field(mesh, "cloud_low_frac")
     high = _mesh_field(mesh, "cloud_high_frac")
@@ -1209,23 +1248,7 @@ def cloud_vertical_weights(
     high_amount = smooth_mesh_field(mesh, high, smooth_rounds)
     low_amount = np.clip(low_amount, 0.0, 1.0)
     high_amount = np.clip(high_amount, 0.0, 1.0)
-    total = low_amount + high_amount
-    valid = total > 1e-6
-    low_share = np.full_like(total, 0.5)
-    high_share = np.full_like(total, 0.5)
-    low_share[valid] = low_amount[valid] / total[valid]
-    high_share[valid] = 1.0 - low_share[valid]
-    mean_low = float(low_share[valid].mean()) if valid.any() else 0.5
-    mean_high = float(high_share[valid].mean()) if valid.any() else 0.5
-    low_weight = np.ones_like(total)
-    high_weight = np.ones_like(total)
-    if valid.any() and mean_low > 1e-6 and mean_high > 1e-6:
-        low_weight[valid] = np.clip(low_share[valid] / mean_low, 0.25, 3.0)
-        high_weight[valid] = np.clip(high_share[valid] / mean_high, 0.25, 3.0)
-    # Near-clear cells carry no reliable vertical partition: fade to 1.
-    confidence = np.clip((total - 0.05) / 0.25, 0.0, 1.0)
-    low_weight = 1.0 + confidence * (low_weight - 1.0)
-    high_weight = 1.0 + confidence * (high_weight - 1.0)
+    low_weight, high_weight = vertical_split_weights(low_amount, high_amount)
     return low_weight[indices], high_weight[indices]
 
 
@@ -1540,10 +1563,11 @@ def clouds_globe(
     center_lon_deg: float = 90.0,
     center_lat_deg: float = 15.0,
     sun_lon_deg: float | None = None,
-    sun_lat_deg: float = 20.0,
+    sun_lat_deg: float | None = None,
     cover_scale: float = 1.0,
     cyclones: Sequence[Cyclone] | None = None,
     cyclone_seed: int = 41,
+    weather: WeatherFrame | None = None,
     atmosphere: AtmosphereModel | None = None,
     cloud_altitude_km: float = 4.0,
     cirrus_altitude_km: float = 9.0,
@@ -1562,7 +1586,11 @@ def clouds_globe(
     texture (a synthetic track set is a QA placeholder until the L1 layer pack
     provides real tracks).  ``atmosphere`` switches the globe preview from the
     legacy limb-glow composite to the L5 physical atmosphere shell; the
-    remaining atmosphere arguments configure that path.
+    remaining atmosphere arguments configure that path.  ``weather`` (a frame
+    from :func:`media.weather_conditioning.load_weather_frame`) replaces the
+    annual conditioning with the model's own weather at that instant: the
+    cover field, the two-shell vertical split and — when the sun arguments are
+    left at ``None`` — the sub-solar point all come from the pack frame.
 
     Writes ``clouds.png`` (RGBA straight-alpha equirect), ``cloud_cover.png``
     (8-bit greyscale placeholder cover field), ``surface.png`` (equirect
@@ -1575,10 +1603,25 @@ def clouds_globe(
 
     from dreamulator.map.export import build_export_tree, export_cell_index_grid, save_rgba_png
 
+    # Sun defaults: a weather frame supplies the model's own sub-solar point;
+    # the legacy default keeps the sun 25° west of the view centre.
+    if weather is not None:
+        sun_lon_deg = weather.subsolar_lon_deg if sun_lon_deg is None else sun_lon_deg
+        sun_lat_deg = weather.subsolar_lat_deg if sun_lat_deg is None else sun_lat_deg
+    if sun_lon_deg is None:
+        sun_lon_deg = center_lon_deg - 25.0
+    if sun_lat_deg is None:
+        sun_lat_deg = 20.0
+
     tree = build_export_tree(mesh)
     indices = export_cell_index_grid(mesh, width, height, tree=tree)
     uses_gcm_cover = has_gcm_cloud_fields(mesh)
     vertical_weights = cloud_vertical_weights(mesh, indices)
+    if weather is not None:
+        # A live weather-pack frame replaces the annual conditioning: the
+        # cover and the two-shell split come from the model's weather at this
+        # instant; wind, ocean and dp still come from the mesh until S2.
+        vertical_weights = (weather.low_weight, weather.high_weight)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     surface = surface_base_rgb(mesh, indices, sea_level_m, radius_km=radius_km)
@@ -1588,6 +1631,9 @@ def clouds_globe(
     paths: dict[str, Path] = {"surface": out_dir / "surface.png"}
     if cover_scale > 0.0:
         cover, u, v, oce, dp = conditioning_grids(mesh, indices)
+        if weather is not None:
+            # The pack frame's own cloud field supersedes the annual cover.
+            cover = weather.cover
         cover = np.clip(cover * cover_scale, 0.0, 1.0)
         products = cloud_texture_equirect(cover, u, v, oce, dp, radius_km=radius_km, seed=seed)
         # Low/mid cloud (including the thin haze floor) and high cirrus are
@@ -1779,7 +1825,7 @@ def clouds_globe(
             "res": globe_res,
             "center_lon_deg": center_lon_deg,
             "center_lat_deg": center_lat_deg,
-            "sun_lon_deg": sun_lon_deg if sun_lon_deg is not None else center_lon_deg - 25.0,
+            "sun_lon_deg": sun_lon_deg,
             "sun_lat_deg": sun_lat_deg,
         },
         "params": {
@@ -1792,13 +1838,20 @@ def clouds_globe(
             "cirrus_ref_wind_m_s": CIRRUS_REF_WIND_M_S,
         },
         "cover_field": (
-            "GCM cloud_total_frac (annual mean, ISCCP total)"
-            if uses_gcm_cover
-            else "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack"
+            "GCM weather pack cloud_total (per-frame, time-averaged + Gaussian-smoothed)"
+            if weather is not None
+            else (
+                "GCM cloud_total_frac (annual mean, ISCCP total)"
+                if uses_gcm_cover
+                else "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack"
+            )
         ),
         "vertical_cloud_weights": (
-            "GCM low/mid vs high cloud fractions" if vertical_weights is not None else None
+            "weather pack low/mid vs high cloud fractions (per-frame)"
+            if weather is not None
+            else ("GCM low/mid vs high cloud fractions" if vertical_weights is not None else None)
         ),
+        "weather_pack": weather.meta if weather is not None else None,
         "cover_scale": cover_scale,
         "cyclones": {
             "count": len(cyclones) if cyclones else 0,

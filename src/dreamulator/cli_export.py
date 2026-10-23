@@ -908,6 +908,15 @@ def export_clouds(
         help="Overlay L3 synthetic cyclone templates (placeholder until the L1 track table lands)",
     ),
     cyclone_seed: int = typer.Option(31, "--cyclone-seed", help="Synthetic cyclone track seed"),
+    weather_pack: Path | None = typer.Option(
+        None,
+        "--weather-pack",
+        help="GCM weather pack dir (meta.json + fields/, e.g. exports/weather/<name>): "
+        "per-frame cloud conditioning and sub-solar point from the model's own weather",
+    ),
+    weather_frame: int = typer.Option(
+        0, "--frame", help="Weather-pack frame index (with --weather-pack; default 0)"
+    ),
     atmosphere: bool = typer.Option(
         True,
         "--atmosphere/--no-atmosphere",
@@ -928,7 +937,13 @@ def export_clouds(
     fall back to the precipitation + SLP-anomaly placeholder.  The
     noise/warp/streak machinery is the permanent part.  ``--cyclones`` adds L3
     parametric templates from a synthetic track set, for visual QA before real
-    tracks exist.  Needs the 'media' extra (numba noise kernel).
+    tracks exist.  ``--weather-pack`` switches the conditioning to the model's
+    own weather: the cover field and the two-shell cloud split come from one
+    6-hourly pack frame (3-frame centred mean, then Gaussian smoothing at
+    sigma = 1 native grid unit), and the sun follows the pack's sub-solar
+    point — the view centre longitude defaults to it too, so the lit
+    hemisphere faces the camera; explicit flags override.  Needs the 'media'
+    extra (numba noise kernel).
     """
     _set_data_dir(data_dir)
 
@@ -995,7 +1010,45 @@ def export_clouds(
     import os
 
     export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-    out_dir = output or (export_root / "globe" / (world + (f"-{branch}" if branch else "")))
+    out_dir = output or (
+        export_root
+        / "globe"
+        / (
+            world
+            + (f"-{branch}" if branch else "")
+            + (f"-f{weather_frame}" if weather_pack is not None else "")
+        )
+    )
+
+    weather = None
+    if weather_pack is not None:
+        if not (weather_pack / "meta.json").is_file():
+            console.print(f"[red]No meta.json in {weather_pack} — is this a weather pack?[/red]")
+            raise typer.Exit(code=2) from None
+        from dreamulator.media.weather_conditioning import load_weather_frame
+
+        weather = load_weather_frame(weather_pack, weather_frame, width, height)
+        # The pack's own sub-solar point drives the sun (and the view-centre
+        # longitude, so the lit hemisphere faces the camera) unless the user
+        # pinned them on the command line or in a config file.
+        if config is None:
+
+            def _cli_flag(name: str) -> bool:
+                source = ctx.get_parameter_source(name)
+                return source is not None and source.name == "COMMANDLINE"
+
+            if not _cli_flag("center_lon"):
+                center_lon = weather.subsolar_lon_deg
+            if not _cli_flag("sun_lon"):
+                sun_lon = weather.subsolar_lon_deg
+            if not _cli_flag("sun_lat"):
+                sun_lat = weather.subsolar_lat_deg
+        console.print(
+            f"  weather pack: frame {weather_frame}/{weather.meta['frames_total'] - 1} "
+            f"(t +{weather.hours:.0f} h), sub-solar "
+            f"({weather.subsolar_lat_deg:+.1f}°, {weather.subsolar_lon_deg:+.1f}°)"
+        )
+
     console.print(
         f"Synthesising cloud texture for {world}/{planet_id} "
         f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
@@ -1064,6 +1117,7 @@ def export_clouds(
         cover_scale=cover_scale,
         cyclones=cyclone_set,
         cyclone_seed=cyclone_seed,
+        weather=weather,
         atmosphere=atmosphere_model,
         cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
         cirrus_altitude_km=cfg.atmosphere.cirrus_altitude_km,
