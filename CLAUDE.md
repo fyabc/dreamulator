@@ -388,6 +388,10 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    `uv run python scripts/release/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
    tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
    input 改动**，否则 Pages 拿到旧数据。mesh 盘上格式 = `cvt_mesh.msgpack.gz`（gzip 帧msgpack）；读写一律走 `map/export.py` 的 `save_cvt_mesh` / `load_cvt_mesh` / `load_cvt_mesh_model` /`find_mesh_file`（嗅探兼容旧 gzip-JSON / 纯 JSON `cvt_mesh.json`，零迁移）。
+8. **导出产物一律进 `exports/`**：图片、视频、QA 静帧与对比图等导出产物统一写到主仓库
+   `exports/`（已 gitignore），按链分子目录（`exports/globe/`、`exports/video/<类>/` 等）；
+   相关导出/渲染脚本放 `scripts/media/` 随版本管理。`exports/` 内的大文件不进 git 也不走
+   release（气象图层包等同理）。
 
 ### 气候修改差异对比
 
