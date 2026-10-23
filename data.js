@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792692092157,
+  "lastUpdate": 1792758131264,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -826,6 +826,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00005123803244615484",
             "extra": "mean: 5.028727000023991 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "55b6980be2aacda791a54baa128d9c4b54806507",
+          "message": "docs: CHANGELOG 与路线图补记地形重新生成、GCM 重跑、气候正典切换与云量字段\n\nCo-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-10-23T17:30:28+08:00",
+          "tree_id": "860bd0ae36d1da12b74f4d0cc1fba59db9f42c35",
+          "url": "https://github.com/fyabc/dreamulator/commit/55b6980be2aacda791a54baa128d9c4b54806507"
+        },
+        "date": 1792758130624,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4499306537945832,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09852947849351744",
+            "extra": "mean: 2.2225647253999994 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.050000209081348,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01963288412636599",
+            "extra": "mean: 246.9135674999947 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.1171654310865957,
+            "unit": "iter/sec",
+            "range": "stddev: 0.760770692760819",
+            "extra": "mean: 472.3296466666606 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 952.0704867283018,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008450091340578518",
+            "extra": "mean: 1.050342400000659 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 253.14663802517725,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00018027685851844413",
+            "extra": "mean: 3.9502796000022045 msec\nrounds: 5"
           }
         ]
       }
