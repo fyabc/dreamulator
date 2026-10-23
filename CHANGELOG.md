@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **nacrea 气候正典改以 GCM 分支为准（design-notes 0013，2026-10-23）**：对外设定的气候、生态与文明内容取自分支
+  `gcm-t42-712`（ExoPlaSim T42 平板海洋、712 ppm 冷臂）；根世界的气候引擎结果只作快速工具与回归对照。
+  `climate_zones.md`、`atmospheric_dynamics.md` 与 `climate_portrait.md` 按分支数据重写：陆地热带类 36.7%、
+  干旱类 20.9%、温带类 13.6%、大陆性 1.9%、极地类 26.2%，全球均温 12.3 °C、陆地 10.1 °C，Hadley 外缘约 53°。
+- **nacrea 的 GCM 运行在新地形上全部重跑（2026-10-23）**：CO₂ 十档冷臂、三档暖臂、轨道与相位消融、季节角
+  平衡态与瞬变链、两组海平面掩膜对照都换成 2026-10-22 重新生成的地形；`gcm-t42-712` 分支改用新结果。
+  0012 与附录、0014 §3 按新结果更新；0016 整体重写：140 ppm 时海平面约 −42 m、3000 ppm 时约 +32 m，北方内海
+  最深出口 206 m、只被节流不会关闭，曙光大陆西北有一道高出海面 0.3 m、随潮汐开合的鞍部。
+- **GCM 字段文件的来源记录不再带本机路径（2026-10-22）**：`gcm/to_mesh.py` 的 `public_provenance` 把 GCM 工作
+  目录换成 `<gcm-workdir>/`；`gcm_runs_appendix.py` 把运行记录的命令改成相对存档根目录的路径。
+
 - **地质层构建提速，结果逐格不变（2026-10-22）**：带权重剖分的多源最短路搬进 numba，圆弧松弛的边界分组、飞地
   查找与翻转判定改用数组，逐格属性只写有变化的；nacrea 强制重建的构造演化 203 s → 88 s，地质层约 317 s →
   190 s。新增跨世界共享的网格缓存（`DREAMULATOR_MESH_CACHE`）。地形缓存同时保存沉积填充留下的湖泊与合成时的
@@ -24,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   WARNING；海平面校准降为 INFO；修正洋底年龄在未到达格子上开平方产生的 NaN 警告。
 
 ### Added
+
+- **GCM 云量字段（2026-10-23）**：冻结 GCM 气候的分支网格新增 `cloud_total_frac`（模式自己的总云量）与
+  `cloud_low_frac`、`cloud_mid_frac`、`cloud_high_frac`（按 ISCCP 的 680 hPa 与 440 hPa 分界、层内随机重叠合成），
+  均为年均、0–1；引擎世界这四个字段为空，旧字段文件照常可用。nacrea 全球云量 0.61。
+- **nacrea 自然地理总览与人类起源（2026-10-22/23）**：地质层新增 `physical_geography.md`（大陆、大洋、海峡与
+  地峡、陆架、山脉的清单与测量口径，design-notes 0018）；文明层新增 `origins.md`（起源地、跨海迁徙与七处文明
+  摇篮，design-notes 0019）。
 
 - **亚格子岛屿目录：热管火山省（技术债 44 阶段 C，2026-10-22）**：新模块 `map/heat_pipe.py` 与目录的 `heatpipe`
   火山。潮汐加热取倾角潮在软流圈薄层的 Beuthe 图样 B，极大在向星点、背星点与南北两极；当地热流超出板块所排部分的

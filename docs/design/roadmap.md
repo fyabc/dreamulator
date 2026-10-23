@@ -1,7 +1,8 @@
 # 开发路线图
 
-> 最后更新：2026-10-21（main 新增全球画布链：S2 外存水文与 S3 区域裁窗，
-> 技术参考见 [canvas-hydrology.md](pipelines/canvas-hydrology.md)；地质层重写批次待交付合并。
+> 最后更新：2026-10-23（地质层重写批次并入 main：造山带格子平均高程、历史契约、亚格子岛屿目录、nacrea 地形
+> 重新生成；nacrea 的 GCM 运行在新地形上全部重跑，气候正典改以 `gcm-t42-712` 分支为准（design-notes 0013），
+> 分支新增 GCM 云量字段。全球画布链 S2 外存水文与 S3 区域裁窗见 [canvas-hydrology.md](pipelines/canvas-hydrology.md)。
 > v1.1.0 发版内容：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
 > 2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典（洛夫数 k₂=0.20/h₂=0.40、
 > Q≈445、τ_e 9.2 Myr）、earth 板块运动 PB2002 欧拉极修正；地质时间轴研究线 G1–G3 入库
@@ -24,7 +25,7 @@
 | 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选 |
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 62 K）；季节振幅 √P 两臂后陆地 p50 4.0 K |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
-| 未发布（main） | 全球画布链 S2 外存水文与 S3 区域裁窗已并入（`887cdc1`）；地质层重写批次（造山带格子平均高程、历史契约）待交付合并，nacrea 数据冻结后再发布 |
+| 未发布（main） | 地质层重写批次、nacrea 地形重新生成、GCM 全量重跑与气候正典切换、GCM 云量字段已并入；全球画布链 S2/S3 已并入（`887cdc1`）；待 publish_world_data 发布新数据 |
 
 ---
 
@@ -114,7 +115,7 @@
 
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
-| **P0** | **nacrea 地形修复批次与重新生成**（作者 10-20/21 裁决，排在高清地形画布试点与下一批 GCM 之前，目标一次修完地形层）：§七 33、39、40、正典热流审查与 46、历史契约造山带部分、43（含 37）、45、44、35 依次修复，43 与 44 先写提案；再分两步重新生成（先原 geography 固定种子看大格局，微调尽量放 overlays），删去旧行为开关，冻结板块与构造实现（技术债 49），以同一份构建产物冻结数据版本并经 release 分发 | 5–6 周 | ★★★★★ |
+| **P0** | **nacrea 地形修复批次与重新生成**：✅ 修复与重新生成已完成并入 main（2026-10-23，见 CHANGELOG）；剩余为冻结板块与构造实现（技术债 49）与经 release 分发新数据 | 剩余 1 周 | ★★★★★ |
 | **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
 | **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 重叠窗一致性与 S5 全局概览待做；试点画布等 nacrea 数据冻结后交付）→ [canvas-hydrology.md](pipelines/canvas-hydrology.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
