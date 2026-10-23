@@ -290,7 +290,18 @@ maps/
   GlobeViewerPage.tsx:36-37），切空间投影用 THREE 相机矩阵解析计算（不用数值差分，
   避免与缩放耦合）；速度与方向分离归一（洋流 ~0.002 m/s 与风速 ~5 m/s 差 3 个量级）。
   偏差（deviation）箭头是独立图层实例，与常规箭头各自控制透明度。
-- **月度模式**：月度风场箭头 + 月度专题层（`climate-monthly` 端点数据，
+- **粒子流**：图层面板顶部开关把风/洋流从箭头切换为平流粒子（`FlowParticles`）。
+  `flowField.ts` 把逐细胞矢量按面积加权聚合成 2° 经纬网格，粒子用 RK2 在球面
+  前向积分（m/s→°/s 以行星半径换算；洋流比风慢约三个量级，用更大的显示倍率）。
+  3D 通过 `GlobeViewer` 的免分配点投影器（`PointProjector`，随相机矩阵递增 epoch）
+  画到覆盖球面的 2D 画布；2D 通过 `MapViewer` 的等距投影画到地图容器。拖尾是
+  屏幕空间轨迹：视图变化时清空旧拖尾，同时用上一帧经纬位置在新视角下补一条
+  至少约 5 像素的短轨迹，静止后重新积累长拖尾。洋流粒子在平流前后各查一次
+  `useCellIdMap` 的逐像素最近细胞（`sampleCellId`），若落在 `water_class === "land"`
+  的细胞上则立即消亡重生；2° 流场网格只负责矢量平滑，不承担陆地掩膜。风场月度数据来自
+  `climate_monthly.msgpack` 的 `wind_east_monthly` / `wind_north_monthly`；
+  洋流当前只有年均场。
+- **月度模式**：月度风场（箭头或粒子）+ 月度专题层（`climate-monthly` 端点数据，
   monthlyMode 状态组，GlobeViewerPage.tsx:69-83）。
 - **缩小过渡**：缩放超出阈值触发「转入星系视图」动画（`onTransition` 回调，
   GlobeViewer.tsx:15、:556-558）——类《戴森球计划》的球面→恒星系过渡。

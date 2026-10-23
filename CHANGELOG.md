@@ -45,6 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **GCM 云量字段（2026-10-23）**：冻结 GCM 气候的分支网格新增 `cloud_total_frac`（模式自己的总云量）与
   `cloud_low_frac`、`cloud_mid_frac`、`cloud_high_frac`（按 ISCCP 的 680 hPa 与 440 hPa 分界、层内随机重叠合成），
   均为年均、0–1；引擎世界这四个字段为空，旧字段文件照常可用。nacrea 全球云量 0.61。
+- **地图/球面风场与洋流粒子流（2026-10-23）**：在 2D 地图和 3D 球面查看器中加入
+  nullschool 式粒子平流显示。图层面板顶部的「粒子流」开关把风场/洋流从箭头切换为
+  粒子拖尾，透明度仍由对应图层滑块控制，偏差诊断箭头不受影响；`?particles=1` 可
+  分享该显示模式。风场粒子按风速着色（蓝慢→红快），月度模式下跟随
+  `climate_monthly.msgpack` 的 `wind_east/north_monthly` 切换流场；earth 参照世界
+  没有月度 NCEP 风场时自动回退年均。洋流粒子按暖/寒着色，当前使用年均流场
+  （月度洋流尚未进入数据契约）。实现上，`flowField.ts` 把 20 万细胞矢量按面积加权
+  聚合成 2° 经纬网格，粒子用 RK2 在球面平流并按行星半径把 m/s 换算为 °/s；洋流粒子
+  另用 `useCellIdMap` 的逐像素最近细胞做陆地判定，避免 2° 平均流场跨过永耀岛这类
+  小岛；3D 新增免分配点投影器，相机或地图视图变化时清空旧拖尾并用上一帧经纬位置
+  补一条短轨迹，静止后重新积累长拖尾。`?monthly=1` 同步进入 URL，月度视图可分享并在 2D/3D 间保持。
+  新增 6 项流场/平流单元测试；实测 2D 风场约 64 fps、3D 风场 100 fps 以上（1600×1000）。
 - **nacrea 自然地理总览与人类起源（2026-10-22/23）**：地质层新增 `physical_geography.md`（大陆、大洋、海峡与
   地峡、陆架、山脉的清单与测量口径，design-notes 0018）；文明层新增 `origins.md`（起源地、跨海迁徙与七处文明
   摇篮，design-notes 0019）。

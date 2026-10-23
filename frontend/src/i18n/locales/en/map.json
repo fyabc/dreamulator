@@ -424,7 +424,9 @@
     "groupToggle": "Toggle group (Ctrl/⌘+click: reset to default)",
     "layerHelp": "{{label}} layer help",
     "hideLayer": "Hide {{label}}",
-    "showLayer": "Show {{label}}"
+    "showLayer": "Show {{label}}",
+    "particles": "Particle flow",
+    "particlesHint": "Show winds/currents as advected particle trails; monthly mode follows the selected month"
   },
   "hint": {
     "staticReadonly": "Not writable in static mode",

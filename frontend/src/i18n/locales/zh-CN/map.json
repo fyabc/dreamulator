@@ -424,7 +424,9 @@
     "groupToggle": "整组开/关（Ctrl/⌘+点击：重置为默认）",
     "layerHelp": "{{label}}图层说明",
     "hideLayer": "隐藏 {{label}}",
-    "showLayer": "显示 {{label}}"
+    "showLayer": "显示 {{label}}",
+    "particles": "粒子流",
+    "particlesHint": "风场/洋流由箭头切换为粒子拖尾；月度模式下风随月份变化"
   },
   "hint": {
     "staticReadonly": "静态模式不可写",

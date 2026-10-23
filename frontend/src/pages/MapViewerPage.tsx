@@ -41,9 +41,10 @@ export default function MapViewerPage() {
     sunSweep, setSunSweep,
     layerState, setLayerState, activeMainLayer,
     monthlyMode, handleMonthlyModeChange, monthlyField,
+    particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
-    selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName,
+    selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
     elevation, cvtMesh, voronoiCells,
     monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
@@ -231,6 +232,8 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    particleMode={particleMode}
+                    planetRadiusM={planetRadiusM}
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
@@ -310,6 +313,8 @@ export default function MapViewerPage() {
                   monthlyMode={monthlyMode}
                   monthIndex={monthlyMonth}
                   onMonthlyModeChange={handleMonthlyModeChange}
+                  particleMode={particleMode}
+                  onParticleModeChange={setParticleMode}
                 />
                 {platesError && selectedPlanet && (
                   <div className="text-xs text-gray-500 pt-2">
@@ -354,6 +359,8 @@ export default function MapViewerPage() {
               monthlyMode={monthlyMode}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
+              particleMode={particleMode}
+              onParticleModeChange={setParticleMode}
             />
             {platesError && selectedPlanet && (
               <div className="text-xs text-gray-500 pt-2">
@@ -400,6 +407,8 @@ export default function MapViewerPage() {
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
+                    particleMode={particleMode}
+                    planetRadiusM={planetRadiusM}
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}

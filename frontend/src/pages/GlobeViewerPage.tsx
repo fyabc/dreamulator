@@ -24,10 +24,11 @@ import TimeControl from '../components/map/TimeControl'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
-import type { VoronoiCell } from '../viewers/map/types'
+import type { PointProjector, VoronoiCell } from '../viewers/map/types'
 import { normalisedToMeters } from '../viewers/map/utils/mapCoords'
 import GlobeCurrentArrows from '../components/map/GlobeCurrentArrows'
 import GlobeWindArrows from '../components/map/GlobeWindArrows'
+import FlowParticles from '../components/map/FlowParticles'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
@@ -53,10 +54,11 @@ export default function GlobeViewerPage() {
     sunSweep, setSunSweep,
     layerState, setLayerState,
     monthlyMode, handleMonthlyModeChange, monthlyField,
+    particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
-    bodyByName,
+    bodyByName, planetRadiusM,
     elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap,
     monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, handleCellHover, selectedCells,
@@ -81,6 +83,7 @@ export default function GlobeViewerPage() {
   const emptySelection = useMemo(() => new Set<number>(), [])
 
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
+  const globePointProjectRef = useRef<PointProjector | null>(null)
   const [globeZoom, setGlobeZoom] = useState(1)
 
   const elevMin = meta?.elevation_min_m ?? -11000
@@ -352,26 +355,54 @@ export default function GlobeViewerPage() {
                 interactive={!cleanMode}
                 frameless={cleanMode}
                 globeProjectRef={globeProjectRef}
+                globePointProjectRef={globePointProjectRef}
               />
             )}
-            <GlobeCurrentArrows
-              projectRef={globeProjectRef}
-              voronoiCells={voronoiCells}
-              currentOpacity={layerState.layers.currents ?? 0}
-            />
+            {particleMode ? (
+              <>
+                <FlowParticles
+                  projectRef={globePointProjectRef}
+                  kind="current"
+                  cells={voronoiCells}
+                  opacity={layerState.layers.currents ?? 0}
+                  planetRadiusM={planetRadiusM}
+                  cellIdMap={cellIdMap}
+                  meshWidth={meta?.width ?? 2048}
+                  meshHeight={meta?.height ?? 1024}
+                />
+                <FlowParticles
+                  projectRef={globePointProjectRef}
+                  kind="wind"
+                  cells={voronoiCells}
+                  opacity={layerState.layers.winds ?? 0}
+                  monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                  monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                  month={monthlyMonth}
+                  planetRadiusM={planetRadiusM}
+                />
+              </>
+            ) : (
+              <>
+                <GlobeCurrentArrows
+                  projectRef={globeProjectRef}
+                  voronoiCells={voronoiCells}
+                  currentOpacity={layerState.layers.currents ?? 0}
+                />
+                <GlobeWindArrows
+                  projectRef={globeProjectRef}
+                  voronoiCells={voronoiCells}
+                  windOpacity={layerState.layers.winds ?? 0}
+                  monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                  monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                  month={monthlyMonth}
+                />
+              </>
+            )}
             <GlobeCurrentArrows
               projectRef={globeProjectRef}
               voronoiCells={voronoiCells}
               currentOpacity={layerState.layers.currentError ?? 0}
               deviation
-            />
-            <GlobeWindArrows
-              projectRef={globeProjectRef}
-              voronoiCells={voronoiCells}
-              windOpacity={layerState.layers.winds ?? 0}
-              monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
-              monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
-              month={monthlyMonth}
             />
             <GlobeWindArrows
               projectRef={globeProjectRef}
@@ -429,6 +460,8 @@ export default function GlobeViewerPage() {
                 monthlyMode={monthlyMode}
                 monthIndex={monthlyMonth}
                 onMonthlyModeChange={handleMonthlyModeChange}
+                particleMode={particleMode}
+                onParticleModeChange={setParticleMode}
               />
               <div className="mt-3 pt-3 border-t border-space-border">
                 <SunControl
@@ -468,6 +501,8 @@ export default function GlobeViewerPage() {
               monthlyMode={monthlyMode}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
+              particleMode={particleMode}
+              onParticleModeChange={setParticleMode}
             />
             <div className="mt-3 pt-3 border-t border-space-border">
               <SunControl
@@ -526,26 +561,54 @@ export default function GlobeViewerPage() {
               interactive={!cleanMode}
               frameless={cleanMode}
               globeProjectRef={globeProjectRef}
+              globePointProjectRef={globePointProjectRef}
             />
           )}
-          <GlobeCurrentArrows
-            projectRef={globeProjectRef}
-            voronoiCells={voronoiCells}
-            currentOpacity={layerState.layers.currents ?? 0}
-          />
+          {particleMode ? (
+            <>
+              <FlowParticles
+                projectRef={globePointProjectRef}
+                kind="current"
+                cells={voronoiCells}
+                opacity={layerState.layers.currents ?? 0}
+                planetRadiusM={planetRadiusM}
+                cellIdMap={cellIdMap}
+                meshWidth={meta?.width ?? 2048}
+                meshHeight={meta?.height ?? 1024}
+              />
+              <FlowParticles
+                projectRef={globePointProjectRef}
+                kind="wind"
+                cells={voronoiCells}
+                opacity={layerState.layers.winds ?? 0}
+                monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                month={monthlyMonth}
+                planetRadiusM={planetRadiusM}
+              />
+            </>
+          ) : (
+            <>
+              <GlobeCurrentArrows
+                projectRef={globeProjectRef}
+                voronoiCells={voronoiCells}
+                currentOpacity={layerState.layers.currents ?? 0}
+              />
+              <GlobeWindArrows
+                projectRef={globeProjectRef}
+                voronoiCells={voronoiCells}
+                windOpacity={layerState.layers.winds ?? 0}
+                monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
+                monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
+                month={monthlyMonth}
+              />
+            </>
+          )}
           <GlobeCurrentArrows
             projectRef={globeProjectRef}
             voronoiCells={voronoiCells}
             currentOpacity={layerState.layers.currentError ?? 0}
             deviation
-          />
-          <GlobeWindArrows
-            projectRef={globeProjectRef}
-            voronoiCells={voronoiCells}
-            windOpacity={layerState.layers.winds ?? 0}
-            monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
-            monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
-            month={monthlyMonth}
           />
           <GlobeWindArrows
             projectRef={globeProjectRef}

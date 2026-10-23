@@ -17,12 +17,13 @@
 
 import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { sunDirection } from './utils/solar'
 import { measureFromStart } from '../utils/perf'
+import type { PointProjector } from './map/types'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -83,6 +84,8 @@ interface GlobeViewerProps {
   frameless?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
+  /** Allocation-free point projector for the particle overlay, updated every frame. */
+  globePointProjectRef?: React.MutableRefObject<PointProjector | null>
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +290,8 @@ interface GlobeSceneProps {
   interactive?: boolean
   /** Ref that receives a (lon,lat)→screen{x,y}|null projector, updated every frame. */
   globeProjectRef?: React.MutableRefObject<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number } | null) | null>
+  /** Allocation-free point projector for the particle overlay, updated every frame. */
+  globePointProjectRef?: React.MutableRefObject<PointProjector | null>
 }
 
 // North-pole fly animation duration (ms)
@@ -306,14 +311,20 @@ function GlobeScene({
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true,
-  globeProjectRef,
+  globeProjectRef, globePointProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
-  const { camera, gl } = useThree()
   const northAnimRef = useRef<NorthAnimState | null>(null)
   const userDraggingRef = useRef(false)
   // First useFrame tick = first rendered frame — the interactive-ready point.
   const firstFrameRef = useRef(true)
+  // Particle-projector state: the epoch bumps whenever the camera or viewport
+  // changed, so the screen-space trail canvas can clear instead of smearing.
+  const pointEpochRef = useRef(0)
+  const prevCameraMatrixRef = useRef<number[] | null>(null)
+  const prevProjectionMatrixRef = useRef<number[] | null>(null)
+  const viewProjRef = useRef(new THREE.Matrix4())
+  const cameraWorldPosRef = useRef(new THREE.Vector3())
 
   // Track drag state so auto-spin yields to the user and resumes on release.
   useEffect(() => {
@@ -362,63 +373,129 @@ function GlobeScene({
     }
   })
 
-  // Update the globe→screen projector for SVG overlay (ocean arrows, etc.)
-  useFrame(() => {
-    if (!globeProjectRef) return
-    const el = gl.domElement
+  // Update the globe→screen projectors for the arrow and particle overlays.
+  useFrame(({ camera: frameCamera, gl: frameGl }) => {
+    if (!globeProjectRef && !globePointProjectRef) return
+    const el = frameGl.domElement
     const w = el.clientWidth
     const h = el.clientHeight
-    globeProjectRef.current = (lon: number, lat: number) => {
-      camera.updateMatrixWorld()
-      const u = (lon + 180) / 360
-      const phi = (90 - lat) / 180 * Math.PI
-      const theta = u * 2 * Math.PI
-      const r = SPHERE_RADIUS
-      const worldPos = new THREE.Vector3(
-        -r * Math.cos(theta) * Math.sin(phi),
-        r * Math.cos(phi),
-        r * Math.sin(theta) * Math.sin(phi),
-      )
-      const normal = worldPos.clone().normalize()
-      const toCamera = camera.position.clone().sub(worldPos).normalize()
-      const facing = normal.dot(toCamera)
-      if (facing < 0) return null
-      const edgeFade = Math.min(1, facing * 4)
-      const screenPos = worldPos.clone().project(camera)
-      const dist = camera.position.length()
-      const zoomScale = Math.max(0.3, Math.min(2.5, 3.0 / Math.max(dist, 1.0)))
-      // Project local east/north tangent basis to screen space.
-      // Uses the camera's world→screen transform directly (no finite diffs).
-      const de = 0.01  // rad (~0.57°) for tangent projection
-      const east3 = new THREE.Vector3(
-        r * Math.sin(theta) * Math.sin(phi) * de,
-        0,
-        r * Math.cos(theta) * Math.sin(phi) * de,
-      )
-      const north3 = new THREE.Vector3(
-        r * Math.cos(theta) * Math.cos(phi) * de,
-        r * Math.sin(phi) * de,
-        -r * Math.sin(theta) * Math.cos(phi) * de,
-      )
-      const sxBase = (screenPos.x * 0.5 + 0.5) * w
-      const syBase = (-screenPos.y * 0.5 + 0.5) * h
-      const pe = worldPos.clone().add(east3).project(camera)
-      const pn = worldPos.clone().add(north3).project(camera)
-      const ex = (pe.x * 0.5 + 0.5) * w - sxBase
-      const ey = (-pe.y * 0.5 + 0.5) * h - syBase
-      const nx = (pn.x * 0.5 + 0.5) * w - sxBase
-      const ny = (-pn.y * 0.5 + 0.5) * h - syBase
-      // Normalise to unit screen-space vectors
-      let exN = 1; let eyN = 0; let nxN = 0; let nyN = -1
-      const ed = Math.sqrt(ex * ex + ey * ey)
-      const nd = Math.sqrt(nx * nx + ny * ny)
-      if (ed > 1e-6) { exN = ex / ed; eyN = ey / ed }
-      if (nd > 1e-6) { nxN = nx / nd; nyN = ny / nd }
-      return {
-        x: sxBase, y: syBase,
-        edgeFade, zoomScale,
-        ex: exN, ey: eyN, nx: nxN, ny: nyN,
+    frameCamera.updateMatrixWorld()
+
+    if (globeProjectRef) {
+      globeProjectRef.current = (lon: number, lat: number) => {
+        const u = (lon + 180) / 360
+        const phi = (90 - lat) / 180 * Math.PI
+        const theta = u * 2 * Math.PI
+        const r = SPHERE_RADIUS
+        const worldPos = new THREE.Vector3(
+          -r * Math.cos(theta) * Math.sin(phi),
+          r * Math.cos(phi),
+          r * Math.sin(theta) * Math.sin(phi),
+        )
+        const normal = worldPos.clone().normalize()
+        const toCamera = frameCamera.position.clone().sub(worldPos).normalize()
+        const facing = normal.dot(toCamera)
+        if (facing < 0) return null
+        const edgeFade = Math.min(1, facing * 4)
+        const screenPos = worldPos.clone().project(frameCamera)
+        const dist = frameCamera.position.length()
+        const zoomScale = Math.max(0.3, Math.min(2.5, 3.0 / Math.max(dist, 1.0)))
+        // Project local east/north tangent basis to screen space.
+        // Uses the camera's world→screen transform directly (no finite diffs).
+        const de = 0.01  // rad (~0.57°) for tangent projection
+        const east3 = new THREE.Vector3(
+          r * Math.sin(theta) * Math.sin(phi) * de,
+          0,
+          r * Math.cos(theta) * Math.sin(phi) * de,
+        )
+        const north3 = new THREE.Vector3(
+          r * Math.cos(theta) * Math.cos(phi) * de,
+          r * Math.sin(phi) * de,
+          -r * Math.sin(theta) * Math.cos(phi) * de,
+        )
+        const sxBase = (screenPos.x * 0.5 + 0.5) * w
+        const syBase = (-screenPos.y * 0.5 + 0.5) * h
+        const pe = worldPos.clone().add(east3).project(frameCamera)
+        const pn = worldPos.clone().add(north3).project(frameCamera)
+        const ex = (pe.x * 0.5 + 0.5) * w - sxBase
+        const ey = (-pe.y * 0.5 + 0.5) * h - syBase
+        const nx = (pn.x * 0.5 + 0.5) * w - sxBase
+        const ny = (-pn.y * 0.5 + 0.5) * h - syBase
+        // Normalise to unit screen-space vectors
+        let exN = 1; let eyN = 0; let nxN = 0; let nyN = -1
+        const ed = Math.sqrt(ex * ex + ey * ey)
+        const nd = Math.sqrt(nx * nx + ny * ny)
+        if (ed > 1e-6) { exN = ex / ed; eyN = ey / ed }
+        if (nd > 1e-6) { nxN = nx / nd; nyN = ny / nd }
+        return {
+          x: sxBase, y: syBase,
+          edgeFade, zoomScale,
+          ex: exN, ey: eyN, nx: nxN, ny: nyN,
+        }
       }
+    }
+
+    if (globePointProjectRef) {
+      // Bump the epoch when the camera or projection changed, so the particle
+      // overlay clears its screen-space trails rather than smearing them.
+      const camM = frameCamera.matrixWorld.elements
+      const projM = frameCamera.projectionMatrix.elements
+      const prevCam = prevCameraMatrixRef.current
+      const prevProj = prevProjectionMatrixRef.current
+      let changed = !prevCam || !prevProj
+      if (!changed) {
+        for (let i = 0; i < 16; i++) {
+          if (Math.abs(camM[i] - prevCam![i]) > 1e-7 ||
+              Math.abs(projM[i] - prevProj![i]) > 1e-7) {
+            changed = true
+            break
+          }
+        }
+      }
+      if (changed) {
+        prevCameraMatrixRef.current = camM.slice()
+        prevProjectionMatrixRef.current = projM.slice()
+        pointEpochRef.current += 1
+      }
+
+      viewProjRef.current.multiplyMatrices(
+        frameCamera.projectionMatrix,
+        frameCamera.matrixWorldInverse,
+      )
+      const e = viewProjRef.current.elements
+      const camPos = frameCamera.getWorldPosition(cameraWorldPosRef.current)
+      const cx = camPos.x
+      const cy = camPos.y
+      const cz = camPos.z
+      const r = SPHERE_RADIUS
+      const epoch = pointEpochRef.current
+      const projector = ((lon: number, lat: number, out: { x: number; y: number; edgeFade: number }) => {
+        const theta = ((lon + 180) / 360) * 2 * Math.PI
+        const phi = ((90 - lat) / 180) * Math.PI
+        const sinPhi = Math.sin(phi)
+        const cosPhi = Math.cos(phi)
+        const sinTheta = Math.sin(theta)
+        const cosTheta = Math.cos(theta)
+        const x = -r * cosTheta * sinPhi
+        const y = r * cosPhi
+        const z = r * sinTheta * sinPhi
+        const dx = cx - x
+        const dy = cy - y
+        const dz = cz - z
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+        const facing = (x * dx + y * dy + z * dz) / (r * dist)
+        if (facing <= 0) return false
+        out.edgeFade = Math.min(1, facing * 4)
+        const clipW = e[3] * x + e[7] * y + e[11] * z + e[15]
+        if (clipW <= 1e-6) return false
+        const clipX = e[0] * x + e[4] * y + e[8] * z + e[12]
+        const clipY = e[1] * x + e[5] * y + e[9] * z + e[13]
+        out.x = ((clipX / clipW) * 0.5 + 0.5) * w
+        out.y = (-(clipY / clipW) * 0.5 + 0.5) * h
+        return true
+      }) as PointProjector
+      projector.epoch = epoch
+      globePointProjectRef.current = projector
     }
   })
 
@@ -590,7 +667,7 @@ export default function GlobeViewer({
   vertices, regions, hoveredCellId, selectedCellIds,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true, frameless = false,
-  globeProjectRef,
+  globeProjectRef, globePointProjectRef,
 }: GlobeViewerProps) {
   const { t } = useTranslation('map')
   const resolvedLabel = transitionLabel ?? t('viewer.transitionToStellar')
@@ -636,6 +713,7 @@ export default function GlobeViewer({
             autoSpin={autoSpin}
             chrome={chrome} interactive={interactive}
             globeProjectRef={globeProjectRef}
+            globePointProjectRef={globePointProjectRef}
           />
         </Canvas>
       </Suspense>
