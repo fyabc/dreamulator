@@ -1,16 +1,21 @@
 """Render a short cloud-evolution clip (L4 prototype) from an ``export globe`` run.
 
-The cloud alpha is advected with the engine's annual-mean wind field
-(semi-Lagrangian + BFECC) while the camera and star stay fixed, so the
-terminator does not move.  This is look-dev: the wind is a placeholder until
-the L1 layer pack supplies 6-hourly winds; cloud condensation/evaporation are
-not modelled, only the existing texture is transported.
+The cloud alpha is advected (semi-Lagrangian + BFECC) while the camera and
+star stay fixed, so the terminator does not move.  With ``--weather-pack``
+the advection follows the model's own 6-hourly winds: the low/mid cloud shell
+rides the mid-level flow (``u_mid``/``v_mid``, sigma ≈ 0.57), the cirrus
+shell the high-level flow (``u_high``/``v_high``, sigma ≈ 0.32), both
+linearly interpolated between pack frames at the clip's time step and
+evaluated at each step's midpoint.  Without a pack the annual-mean mesh wind
+is the placeholder.  Cloud condensation/evaporation are not modelled, only
+the existing texture is transported.
 
 Usage::
 
     uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
         <clouds_dir> -o exports/spin/nacrea_cloudflow_720p.mp4 \
-        --res 720 --seconds 8 --sim-hours 24
+        --res 720 --seconds 8 --sim-hours 24 \
+        --weather-pack exports/weather/nacrea-gcm-t42-712
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from dreamulator.gcm.weather_pack import load_pack
 from dreamulator.map.export import (
     build_export_tree,
     export_cell_index_grid,
@@ -37,6 +43,11 @@ from dreamulator.media.cloud_advection import advect_equirect, advection_substep
 from dreamulator.media.cloud_render import conditioning_grids
 from dreamulator.media.cyclone_render import Cyclone, cyclone_wind_field
 from dreamulator.media.globe_spin import SpinRenderer
+from dreamulator.media.weather_conditioning import (
+    WeatherFrame,
+    blend_weather_frames,
+    frame_from_pack,
+)
 
 
 def _load_meta(clouds_dir: Path) -> dict[str, Any]:
@@ -182,6 +193,19 @@ def main() -> None:
         action="store_true",
         help="advect with the environment wind only (no storm circulation)",
     )
+    parser.add_argument(
+        "--weather-pack",
+        type=Path,
+        default=None,
+        help="weather pack directory; advection uses its 6-hourly winds "
+        "(deck u_mid/v_mid, cirrus u_high/v_high, interpolated between frames)",
+    )
+    parser.add_argument(
+        "--frame",
+        type=float,
+        default=None,
+        help="pack frame at clip start (default: the still's own frame, else 0)",
+    )
     parser.add_argument("--crf", type=int, default=18, help="H.264 quality (lower = better)")
     parser.add_argument("--no-ocean", action="store_true", help="skip the ocean mask / sun glint")
     parser.add_argument(
@@ -220,7 +244,46 @@ def main() -> None:
     tex_width = max(2, args.texture_width // 2 * 2)
     tex_height = tex_width // 2
     indices = export_cell_index_grid(mesh, tex_width, tex_height, tree=tree)
-    _, wind_east, wind_north, _, _ = conditioning_grids(mesh, indices)
+    # Wind source: the pack's own 6-hourly flow when given, else the annual
+    # mesh mean (placeholder).
+    pack = None
+    frame_interval_h = 6.0
+    start_frame = 0.0
+    if args.weather_pack is not None:
+        pack = load_pack(args.weather_pack)
+        calendar = pack.meta.get("calendar") or {}
+        frame_interval_h = float(calendar.get("frame_interval_h", 6.0))
+        still_frame = (meta.get("weather_pack") or {}).get("frame")
+        start_frame = args.frame if args.frame is not None else float(still_frame or 0.0)
+        n_frames = int(pack.meta["frames"])
+        end_frame = start_frame + args.sim_hours / frame_interval_h
+        if end_frame > n_frames - 1:
+            raise SystemExit(
+                f"--sim-hours {args.sim_hours:g} h runs past the pack: "
+                f"frames {start_frame:g}…{end_frame:g} outside 0…{n_frames - 1}"
+            )
+        frame_cache: dict[int, WeatherFrame] = {}
+
+        def pack_frame(f: float) -> WeatherFrame:
+            """Integer frames are processed once; fractional steps blend."""
+            base = int(math.floor(f))
+            frac = f - base
+            if base not in frame_cache:
+                frame_cache[base] = frame_from_pack(pack, base, tex_width, tex_height)
+            if frac == 0.0:
+                return frame_cache[base]
+            if base + 1 not in frame_cache:
+                nxt = frame_from_pack(pack, base + 1, tex_width, tex_height)
+                frame_cache[base + 1] = nxt
+            return blend_weather_frames(frame_cache[base], frame_cache[base + 1], frac)
+
+        print(
+            f"wind: weather pack frames {start_frame:g}…{end_frame:g} "
+            f"(deck u_mid, cirrus u_high, {frame_interval_h:g} h frames, interpolated)"
+        )
+    else:
+        _, wind_east, wind_north, _, _ = conditioning_grids(mesh, indices)
+        print("wind: annual mesh mean (placeholder)")
     cloud = _resize(cloud_alpha, tex_width, tex_height)
     if cloud_high is not None:
         cloud_high = _resize(cloud_high, tex_width, tex_height)
@@ -308,11 +371,21 @@ def main() -> None:
     try:
         for i in range(total):
             if i > 0:
+                # Winds at the step midpoint — half a step into the interval.
+                if pack is not None:
+                    cur = pack_frame(
+                        start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h)
+                    )
+                    deck_east, deck_north = cur.wind_east, cur.wind_north
+                    high_east, high_north = cur.wind_east_high, cur.wind_north_high
+                else:
+                    deck_east = high_east = wind_east
+                    deck_north = high_north = wind_north
                 if cyclones:
                     centres = _advance_centres(
                         centres,
-                        wind_east,
-                        wind_north,
+                        deck_east,
+                        deck_north,
                         dt_seconds=dt,
                         radius_km=model.planet_radius_km,
                     )
@@ -323,21 +396,20 @@ def main() -> None:
                         radius_km=model.planet_radius_km,
                         centers=centres,
                     )
-                    total_east = wind_east + vortex_east
-                    total_north = wind_north + vortex_north
-                else:
-                    total_east = wind_east
-                    total_north = wind_north
+                    deck_east = deck_east + vortex_east
+                    deck_north = deck_north + vortex_north
+                    high_east = high_east + vortex_east
+                    high_north = high_north + vortex_north
                 substeps = args.substeps or advection_substeps(
-                    total_east,
-                    total_north,
+                    deck_east,
+                    deck_north,
                     dt_seconds=dt,
                     radius_km=model.planet_radius_km,
                 )
                 cloud = advect_equirect(
                     cloud,
-                    total_east,
-                    total_north,
+                    deck_east,
+                    deck_north,
                     dt_seconds=dt,
                     radius_km=model.planet_radius_km,
                     substeps=substeps,
@@ -347,8 +419,8 @@ def main() -> None:
                 if cloud_high is not None:
                     cloud_high = advect_equirect(
                         cloud_high,
-                        total_east,
-                        total_north,
+                        high_east,
+                        high_north,
                         dt_seconds=dt,
                         radius_km=model.planet_radius_km,
                         substeps=substeps,

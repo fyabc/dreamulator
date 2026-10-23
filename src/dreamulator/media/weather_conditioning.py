@@ -4,7 +4,10 @@ orbital weather-globe chain.
 The weather pack (:mod:`dreamulator.gcm.weather_pack`) stores instantaneous
 6-hourly T42 fields.  This module turns one frame into the conditioning the
 media chain consumes: the large-scale cover (total cloud), the two-shell
-vertical split (low/mid versus high cloud) and the sub-solar point.
+vertical split (low/mid versus high cloud), the sub-solar point and the
+advecting winds — the mid-level flow (sigma ≈ 0.57) that transports the
+low/mid cloud shell and the high-level flow (sigma ≈ 0.32) that carries the
+cirrus shell (the L4 advection input).
 
 Smoothing recipe (agreed with the GCM side, 2026-10-23): the raw
 instantaneous cloud fields are nearly binary — at frame 400, 68% of grid
@@ -19,11 +22,19 @@ points sit below 0.05 or above 0.95 — so before driving the texture they are
    the spatial step alone → 16% with both, correlation with the raw field
    0.82).
 
-At the sequence edges the window shrinks to the available frames (the first
-and last frame are a 2-frame mean).  Longitude wraps and latitude
-edge-replicates in the spatial pass.  The parameters land in the render
-``meta.json`` so shots stay attributable.  This is rendering-side
-conditioning only; pack files are read, never written.
+The winds go through the same two passes, which matches their role: the
+texture warp and the L4 advection both want the resolved mean flow, not the
+6-hour snapshot noise.  At the sequence edges the window shrinks to the
+available frames (the first and last frame are a 2-frame mean).  Longitude
+wraps and latitude edge-replicates in the spatial pass.  The parameters land
+in the render ``meta.json`` so shots stay attributable.  This is
+rendering-side conditioning only; pack files are read, never written.
+
+Fractional frames: a float ``frame`` blends the two bracketing integer frames
+after each is fully processed (window mean, spatial smoothing, vertical
+split), so callers stepping finer than the pack's 6-hour interval — the L4
+video, for example — get a continuous field.  Sub-solar longitude blends the
+short way around, keeping the day cycle continuous across the 0°/360° seam.
 
 Epistemic status (per engine discipline §9): numerical stabilisation of a
 model field for rendering (an agreed recipe, not an observation fit); the
@@ -32,6 +43,7 @@ fields themselves are GCM output.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +51,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
 from dreamulator.gcm.to_mesh import bilinear_to_points
-from dreamulator.gcm.weather_pack import load_pack
+from dreamulator.gcm.weather_pack import WeatherPack, load_pack
 from dreamulator.media.cloud_render import vertical_split_weights
 
 if TYPE_CHECKING:
@@ -50,26 +62,51 @@ PACK_TIME_WINDOW = 3
 #: Gaussian smoothing sigma in native grid units (1 T42 grid step ≈ 310 km at the equator).
 PACK_SPACE_SIGMA = 1.0
 
-#: Pack fields the frame loader reads.
-_FRAME_FIELDS = ("cloud_total", "cloud_low", "cloud_mid", "cloud_high")
+#: Pack fields the frame loader reads: cloud conditioning plus the two
+#: advecting wind levels.
+_FRAME_FIELDS = (
+    "cloud_total",
+    "cloud_low",
+    "cloud_mid",
+    "cloud_high",
+    "u_mid",
+    "v_mid",
+    "u_high",
+    "v_high",
+)
+
+#: How the wind fields map onto the two cloud shells (recorded in meta).
+_WIND_FIELDS_META = {
+    "deck": "u_mid/v_mid (sigma ~0.57)",
+    "cirrus": "u_high/v_high (sigma ~0.32)",
+}
 
 
 @dataclass
 class WeatherFrame:
     """One weather-pack frame rasterised onto the export equirect grid.
 
-    ``cover``/``low_weight``/``high_weight`` are ``(height, width)`` arrays in
-    the media-chain convention (rows north to south, columns −180° to 180°).
-    The weights are the two-shell multipliers of
-    :func:`cloud_render.vertical_split_weights`.  ``subsolar_lon_deg`` is in
-    the media convention (−180…180), unlike the pack's 0…360.  ``meta`` is
-    copied verbatim into the render ``meta.json``.
+    All arrays are ``(height, width)`` in the media-chain convention (rows
+    north to south, columns −180° to 180°).  ``cover``/``low_weight``/
+    ``high_weight`` are the conditioning of the still renderer (the weights
+    are the two-shell multipliers of
+    :func:`cloud_render.vertical_split_weights`); the winds are the advecting
+    flows in m/s — ``wind_east``/``wind_north`` (mid level, sigma ≈ 0.57)
+    transport the low/mid cloud shell, ``wind_east_high``/
+    ``wind_north_high`` (sigma ≈ 0.32) the cirrus shell.  ``frame`` may be
+    fractional (an interpolation).  ``subsolar_lon_deg`` is in the media
+    convention (−180…180), unlike the pack's 0…360.  ``meta`` is copied
+    verbatim into the render ``meta.json``.
     """
 
     cover: np.ndarray
     low_weight: np.ndarray
     high_weight: np.ndarray
-    frame: int
+    wind_east: np.ndarray
+    wind_north: np.ndarray
+    wind_east_high: np.ndarray
+    wind_north_high: np.ndarray
+    frame: float
     hours: float
     subsolar_lat_deg: float
     subsolar_lon_deg: float
@@ -90,20 +127,17 @@ def _resample_equirect(
     return np.asarray(bilinear_to_points(lat_grid, lon_grid, values, la, lo), dtype=np.float64)
 
 
-def load_weather_frame(
-    pack_dir: str | Path,
+def _integer_frame(
+    pack: WeatherPack,
     frame: int,
     width: int,
     height: int,
     *,
-    time_window: int = PACK_TIME_WINDOW,
-    space_sigma: float = PACK_SPACE_SIGMA,
+    time_window: int,
+    space_sigma: float,
 ) -> WeatherFrame:
-    """Load, smooth and rasterise one pack frame (see the module docstring)."""
-    pack = load_pack(pack_dir)
+    """Process one integer pack frame: window mean, smoothing, resample."""
     n = int(pack.meta["frames"])
-    if not 0 <= frame < n:
-        raise ValueError(f"frame {frame} is outside the pack's 0…{n - 1}")
     half = max(time_window, 1) // 2
     idx = [t for t in range(frame - half, frame + half + 1) if 0 <= t < n]
 
@@ -132,11 +166,18 @@ def load_weather_frame(
     sub_lon_media = (sub_lon + 180.0) % 360.0 - 180.0
     span_h = float(tmeta["hours_since_start"][idx[-1]] - tmeta["hours_since_start"][idx[0]])
 
+    def resample(values: np.ndarray) -> np.ndarray:
+        return _resample_equirect(pack.lat, pack.lon, values, width, height)
+
     return WeatherFrame(
-        cover=_resample_equirect(pack.lat, pack.lon, cover, width, height),
-        low_weight=_resample_equirect(pack.lat, pack.lon, low_w, width, height),
-        high_weight=_resample_equirect(pack.lat, pack.lon, high_w, width, height),
-        frame=frame,
+        cover=resample(cover),
+        low_weight=resample(low_w),
+        high_weight=resample(high_w),
+        wind_east=resample(fields["u_mid"]),
+        wind_north=resample(fields["v_mid"]),
+        wind_east_high=resample(fields["u_high"]),
+        wind_north_high=resample(fields["v_high"]),
+        frame=float(frame),
         hours=hours,
         subsolar_lat_deg=sub_lat,
         subsolar_lon_deg=sub_lon_media,
@@ -153,9 +194,100 @@ def load_weather_frame(
                 "(longitude wraps, latitude edge-replicates)"
             ),
             "cover_field": "cloud_total",
+            "wind_fields": dict(_WIND_FIELDS_META),
             "subsolar_lat_deg": sub_lat,
             "subsolar_lon_deg": sub_lon_media,
         },
+    )
+
+
+def blend_weather_frames(a: WeatherFrame, b: WeatherFrame, frac: float) -> WeatherFrame:
+    """Linearly blend two fully processed frames (``frac`` = weight of ``b``).
+
+    Both frames must share the raster grid; each is already window-averaged,
+    smoothed and vertically split, so the blend is a convex combination of the
+    two rendered states (cover and weights stay inside their ranges).
+    Sub-solar longitude blends the short way around, which keeps the day
+    cycle continuous across the 0°/360° seam — valid while the pack's
+    per-frame sub-solar advance stays under 180° (≈ 29° here).
+    """
+    if a.cover.shape != b.cover.shape:
+        raise ValueError("frames must share the same raster grid to blend")
+    frac = float(np.clip(frac, 0.0, 1.0))
+
+    def mix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return (1.0 - frac) * x + frac * y
+
+    delta_lon = (b.subsolar_lon_deg - a.subsolar_lon_deg + 180.0) % 360.0 - 180.0
+    sub_lon = (a.subsolar_lon_deg + frac * delta_lon + 180.0) % 360.0 - 180.0
+    meta = dict(a.meta)
+    meta["frame"] = (1.0 - frac) * a.frame + frac * b.frame
+    meta["frame_interpolation"] = f"linear blend of frames {a.frame:g} and {b.frame:g}"
+    meta["subsolar_lon_deg"] = sub_lon
+    return WeatherFrame(
+        cover=mix(a.cover, b.cover),
+        low_weight=mix(a.low_weight, b.low_weight),
+        high_weight=mix(a.high_weight, b.high_weight),
+        wind_east=mix(a.wind_east, b.wind_east),
+        wind_north=mix(a.wind_north, b.wind_north),
+        wind_east_high=mix(a.wind_east_high, b.wind_east_high),
+        wind_north_high=mix(a.wind_north_high, b.wind_north_high),
+        frame=(1.0 - frac) * a.frame + frac * b.frame,
+        hours=(1.0 - frac) * a.hours + frac * b.hours,
+        subsolar_lat_deg=(1.0 - frac) * a.subsolar_lat_deg + frac * b.subsolar_lat_deg,
+        subsolar_lon_deg=sub_lon,
+        meta=meta,
+    )
+
+
+def frame_from_pack(
+    pack: WeatherPack,
+    frame: float,
+    width: int,
+    height: int,
+    *,
+    time_window: int = PACK_TIME_WINDOW,
+    space_sigma: float = PACK_SPACE_SIGMA,
+) -> WeatherFrame:
+    """Load one frame from an already-open pack (see the module docstring).
+
+    A fractional ``frame`` fully processes the two bracketing integer frames
+    and blends the results (:func:`blend_weather_frames`), so callers stepping
+    finer than the pack's 6-hour interval get a continuous field.  Reusing the
+    open ``pack`` handle avoids re-reading ``meta.json`` on every call of a
+    frame sequence.
+    """
+    n = int(pack.meta["frames"])
+    if not 0 <= frame <= n - 1:
+        raise ValueError(f"frame {frame} is outside the pack's 0…{n - 1}")
+    base = int(math.floor(frame))
+    frac = float(frame) - base
+    a = _integer_frame(pack, base, width, height, time_window=time_window, space_sigma=space_sigma)
+    if frac == 0.0:
+        return a
+    b = _integer_frame(
+        pack, base + 1, width, height, time_window=time_window, space_sigma=space_sigma
+    )
+    return blend_weather_frames(a, b, frac)
+
+
+def load_weather_frame(
+    pack_dir: str | Path,
+    frame: float,
+    width: int,
+    height: int,
+    *,
+    time_window: int = PACK_TIME_WINDOW,
+    space_sigma: float = PACK_SPACE_SIGMA,
+) -> WeatherFrame:
+    """Load, smooth and rasterise one pack frame (see the module docstring)."""
+    return frame_from_pack(
+        load_pack(pack_dir),
+        frame,
+        width,
+        height,
+        time_window=time_window,
+        space_sigma=space_sigma,
     )
 
 
@@ -163,5 +295,7 @@ __all__ = [
     "PACK_SPACE_SIGMA",
     "PACK_TIME_WINDOW",
     "WeatherFrame",
+    "blend_weather_frames",
+    "frame_from_pack",
     "load_weather_frame",
 ]

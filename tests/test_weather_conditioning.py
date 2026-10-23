@@ -8,12 +8,27 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from dreamulator.media.weather_conditioning import load_weather_frame
+from dreamulator.media.weather_conditioning import (
+    WeatherFrame,
+    blend_weather_frames,
+    load_weather_frame,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 FRAMES, NLAT, NLON = 5, 16, 32
+
+_FIELDS = (
+    "cloud_total",
+    "cloud_low",
+    "cloud_mid",
+    "cloud_high",
+    "u_mid",
+    "v_mid",
+    "u_high",
+    "v_high",
+)
 
 
 def _write_pack(
@@ -21,18 +36,21 @@ def _write_pack(
     fields: dict[str, np.ndarray],
     *,
     subsolar_lon: float = 350.0,
+    subsolar_lons: list[float] | None = None,
 ) -> Path:
     """Write a minimal valid pack: meta.json + fields/*.npy + tracks.json."""
     pack = root / "pack"
     (pack / "fields").mkdir(parents=True)
     lat = -90.0 + (np.arange(NLAT) + 0.5) * 180.0 / NLAT
     lon = (np.arange(NLON) + 0.5) * 360.0 / NLON
-    for name in ("cloud_total", "cloud_low", "cloud_mid", "cloud_high"):
+    for name in _FIELDS:
         arr = fields.get(name)
         if arr is None:
             arr = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
         np.save(pack / "fields" / f"{name}.npy", arr)
     (pack / "tracks.json").write_text(json.dumps({"tracks": []}), encoding="utf-8")
+    if subsolar_lons is None:
+        subsolar_lons = [subsolar_lon] * FRAMES
     meta = {
         "format": "weather-pack-v1",
         "frames": FRAMES,
@@ -43,7 +61,7 @@ def _write_pack(
         "time": {
             "hours_since_start": [6.0 * t for t in range(FRAMES)],
             "subsolar_lat_deg": [10.0] * FRAMES,
-            "subsolar_lon_deg": [subsolar_lon] * FRAMES,
+            "subsolar_lon_deg": subsolar_lons,
         },
         "calendar": {"frame_interval_h": 6.0},
     }
@@ -112,6 +130,24 @@ def test_vertical_split_from_pack(tmp_path: Path) -> None:
         assert np.all((w >= 0.25) & (w <= 3.0))
 
 
+def test_winds_from_pack(tmp_path: Path) -> None:
+    """Deck winds come from u_mid/v_mid, cirrus winds from u_high/v_high."""
+    fields = {
+        "u_mid": np.full((FRAMES, NLAT, NLON), 3.0, dtype=np.float32),
+        "v_mid": np.full((FRAMES, NLAT, NLON), -4.0, dtype=np.float32),
+        "u_high": np.full((FRAMES, NLAT, NLON), 30.0, dtype=np.float32),
+        "v_high": np.full((FRAMES, NLAT, NLON), 0.0, dtype=np.float32),
+    }
+    pack = _write_pack(tmp_path, fields)
+    wf = load_weather_frame(pack, 2, 64, 32)
+    np.testing.assert_allclose(wf.wind_east, 3.0, atol=1e-6)
+    np.testing.assert_allclose(wf.wind_north, -4.0, atol=1e-6)
+    np.testing.assert_allclose(wf.wind_east_high, 30.0, atol=1e-6)
+    np.testing.assert_allclose(wf.wind_north_high, 0.0, atol=1e-6)
+    assert wf.meta["wind_fields"]["deck"] == "u_mid/v_mid (sigma ~0.57)"
+    assert wf.meta["wind_fields"]["cirrus"] == "u_high/v_high (sigma ~0.32)"
+
+
 def test_subsolar_and_meta(tmp_path: Path) -> None:
     """Sub-solar longitude converts to the media convention; meta records all."""
     pack = _write_pack(tmp_path, {"cloud_total": np.full((FRAMES, NLAT, NLON), 0.4, np.float32)})
@@ -127,10 +163,71 @@ def test_subsolar_and_meta(tmp_path: Path) -> None:
     assert m["subsolar_lon_deg"] == -10.0
 
 
+def test_fractional_frame_interpolation(tmp_path: Path) -> None:
+    """A fractional frame blends the two bracketing processed frames."""
+    total = np.stack(
+        [np.full((NLAT, NLON), 0.10 + 0.05 * t, dtype=np.float32) for t in range(FRAMES)]
+    )
+    lons = [350.0 + 28.0 * t for t in range(FRAMES)]
+    pack = _write_pack(tmp_path, {"cloud_total": total}, subsolar_lons=lons)
+    wf = load_weather_frame(pack, 2.5, 64, 32)
+    # Frame 2's window {1, 2, 3} averages to 0.20, frame 3's to 0.25.
+    np.testing.assert_allclose(wf.cover, 0.225, atol=1e-6)
+    assert wf.frame == 2.5
+    assert wf.hours == 15.0
+    assert wf.meta["frame"] == 2.5
+    assert wf.meta["frame_interpolation"] == "linear blend of frames 2 and 3"
+    # Sub-solar longitudes 406°→434° become 46→74 in media convention; the
+    # half-step blend is 60 without wrapping the long way.
+    np.testing.assert_allclose(wf.subsolar_lon_deg, 60.0, atol=1e-6)
+
+
+def _bare_frame(cover: float, lon: float, shape: tuple[int, int] = (4, 8)) -> WeatherFrame:
+    arr = np.full(shape, cover)
+    return WeatherFrame(
+        cover=arr,
+        low_weight=arr.copy(),
+        high_weight=arr.copy(),
+        wind_east=arr.copy(),
+        wind_north=arr.copy(),
+        wind_east_high=arr.copy(),
+        wind_north_high=arr.copy(),
+        frame=1.0,
+        hours=6.0,
+        subsolar_lat_deg=0.0,
+        subsolar_lon_deg=lon,
+        meta={},
+    )
+
+
+def test_blend_weather_frames() -> None:
+    """Blend lerps arrays, hours and frame index; the seam takes the short way."""
+    a = _bare_frame(0.2, 170.0)
+    b = _bare_frame(0.4, -170.0)  # 20° east of a, across the ±180 seam
+    mid = blend_weather_frames(a, b, 0.5)
+    np.testing.assert_allclose(mid.cover, 0.3, atol=1e-12)
+    assert mid.frame == 1.0  # both inputs sit at frame 1
+    assert mid.hours == 6.0
+    # 170° + half of the +20° short-way delta lands on the seam itself.
+    np.testing.assert_allclose(mid.subsolar_lon_deg, -180.0, atol=1e-12)
+    # A quarter blend stays on a's side of the seam.
+    quarter = blend_weather_frames(a, b, 0.25)
+    np.testing.assert_allclose(quarter.subsolar_lon_deg, 175.0, atol=1e-12)
+    with pytest.raises(ValueError, match="grid"):
+        blend_weather_frames(a, _bare_frame(0.1, 0.0, shape=(2, 4)), 0.5)
+
+
 def test_frame_bounds(tmp_path: Path) -> None:
     pack = _write_pack(tmp_path, {})
     with pytest.raises(ValueError, match="outside"):
         load_weather_frame(pack, FRAMES, 64, 32)
+    # A half step short of the end would need the nonexistent frame N.
+    with pytest.raises(ValueError, match="outside"):
+        load_weather_frame(pack, FRAMES - 0.5, 64, 32)
+    with pytest.raises(ValueError, match="outside"):
+        load_weather_frame(pack, -0.5, 64, 32)
+    # The last frame itself is fine (its edge window shrinks).
+    load_weather_frame(pack, FRAMES - 1, 64, 32)
 
 
 def test_clouds_globe_uses_weather_frame(tmp_path: Path) -> None:

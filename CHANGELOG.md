@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **云流视频接入图层包逐帧风场（2026-10-24）**：`cloud_flow_video.py` 新增 `--weather-pack`，L4 平流
+  的风源从年均占位换成模式自己的 6 小时风场——低/中云壳随 `u_mid/v_mid`（σ≈0.57，兼作风暴引导
+  气流），卷云壳随 `u_high/v_high`（σ≈0.32），风场过与云量相同的 3 帧平均 + 1 格距高斯平滑，每个
+  输出帧在步长中点取插值风。`media/weather_conditioning.py` 支持**小数帧**：两个整帧各自完整处理
+  （时间平均、空间平滑、两层分配）后线性混合，日下点经度沿短弧插值，步长得以任意细于 6 小时；
+  起始帧默认取静帧自己的 `weather_pack.frame`，模拟时长越出包范围时报错退出。不给包时年均风
+  路径不变。静帧纹理的丝缕定向仍用年均风（已登记为后续项）。
 - **气象图层包单帧接入太空镜头链（2026-10-24）**：`export globe` 新增 `--weather-pack`/`--frame`，
   条件场切换为图层包一帧的模式天气。`media/weather_conditioning.py` 读取一帧的分层云量，按与 GCM
   侧约定的口径先取以当前帧为中心的 3 帧等权平均（18 小时窗口，序列两端收缩为 2 帧），再做标准差
