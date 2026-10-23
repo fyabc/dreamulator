@@ -19,10 +19,17 @@ consumers import it instead of re-deriving them.
   the merged canvas stays under ``MAX_ANISOTROPY``.  The canvas centre is the minimax
   (smallest covering cap) centre of its land, which minimises edge distortion.  A continent
   too large for one canvas is split by author-placed ``LandCut`` discs (e.g. across an
-  isthmus): land inside a disc belongs to no piece, and ownership then runs through it.
+  isthmus): land inside a disc belongs to no piece, and ownership then runs through it.  A
+  disc wider than the buffer (a neck too broad for a small disc) must ``reattach``: its land
+  only breaks the connectivity, then joins the nearest piece as member land, so every piece
+  still generates it and the ownership line runs across the disc on land.
 * **Ownership.** Where canvases overlap, a point belongs to the canvas whose member land is
   geodesically nearest (``owner_of``) — a mesh-free partition evaluated from the layout's
   land points, so every consumer resolves an overlap identically.
+* **Blending.** Across an ownership line two independent generations meet; consumers blend
+  them with ``blend_overlap`` (a two-band mix that keeps one side's fine detail, falling back
+  to a plain linear mix where the two canvases disagree on land and sea).  Chunk files stay
+  the raw generation.
 """
 
 from __future__ import annotations
@@ -50,6 +57,16 @@ BUFFER_KM = 200.0
 MAX_ANISOTROPY = 1.15
 #: Coarse-channel sampling: nearest CVT cell on a grid this much finer, then block mean.
 OVERSAMPLE = 4
+#: Overlap blending (author rulings 2026-10-24, from the two World Island land seams): the
+#: low-pass skeleton (Gaussian sigma) mixes over a wide band, the residual detail over a narrow
+#: one, and a plain mix over ``BLEND_LINEAR_KM`` is used where the canvases disagree on land/sea.
+#: The wide bands spread the tens-of-metres systematic offset two generations can have on flat
+#: lowland, which a 23 km band left as a straight contour along the seam.  Rendering choices
+#: fitted on two seams (numerical/visual, not physics).
+BLEND_LOWPASS_SIGMA_KM = 15.0
+BLEND_LOW_BAND_KM = 92.0
+BLEND_DETAIL_BAND_KM = 4.0
+BLEND_LINEAR_KM = 92.0
 
 
 def unit_vectors(lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
@@ -172,11 +189,16 @@ class CanvasPlan:
 
 @dataclass(frozen=True)
 class LandCut:
-    """A disc whose land cells are removed from the component graph (splits a continent)."""
+    """A disc whose land cells are removed from the component graph (splits a continent).
+
+    With ``reattach`` the disc's land is given back afterwards to the nearest resulting
+    piece (by great-circle distance to its land cells), so the disc may exceed the buffer.
+    """
 
     lat: float
     lon: float
     radius_km: float
+    reattach: bool = False
 
 
 @dataclass
@@ -202,9 +224,13 @@ def land_components(mesh: CVTMesh, radius_km: float, cuts: tuple[LandCut, ...] =
     area = np.array([c.area_km2 for c in cells], dtype=np.float64)
     is_land = np.array([c.water_class != "ocean" for c in cells])
     in_cut = np.zeros(n, dtype=bool)
+    in_reattach = np.zeros(n, dtype=bool)
     for cut in cuts:
         v = unit_vectors(np.array(cut.lat), np.array(cut.lon))
-        in_cut |= np.arccos(np.clip(xyz @ v, -1, 1)) * radius_km <= cut.radius_km
+        disc = np.arccos(np.clip(xyz @ v, -1, 1)) * radius_km <= cut.radius_km
+        in_cut |= disc
+        if cut.reattach:
+            in_reattach |= disc
     land = is_land & ~in_cut
     labels = np.where(is_land & in_cut, -2, -1).astype(np.int64)
     k = 0
@@ -220,6 +246,14 @@ def land_components(mesh: CVTMesh, radius_km: float, cuts: tuple[LandCut, ...] =
                     labels[j] = k
                     q.append(j)
         k += 1
+    back = is_land & in_reattach
+    if back.any() and land.any():
+        from scipy.spatial import cKDTree
+
+        donors = np.nonzero(land)[0]
+        _, j = cKDTree(xyz[donors]).query(xyz[back])
+        labels[back] = labels[donors[j]]
+        land = land | back
     sizes = np.bincount(labels[land], weights=area[land], minlength=k)
     return LandModel(xyz, area, labels, sizes, radius_km, tuple(cuts))
 
@@ -266,15 +300,18 @@ def plan_layout(
     buffer_km: float = BUFFER_KM,
     max_anisotropy: float = MAX_ANISOTROPY,
     names: dict[int, str] | None = None,
+    joins: dict[int, int] | None = None,
 ) -> tuple[list[CanvasPlan], list[int]]:
     """Group land components into canvases; returns (plans, components over the cap).
 
     Components smaller than one chunk get no canvas (they are generated only where they
     fall inside some canvas's buffer).  A group whose single component already exceeds
     ``max_anisotropy`` is still planned, and reported in the second return value so the
-    caller can refuse it or ask for a split.
+    caller can refuse it or ask for a split.  ``joins`` maps a component to the (larger)
+    component whose group it must join regardless of the gap rule (an author override, e.g.
+    for an island just beyond the merge distance).
     """
-    if any(c.radius_km > buffer_km for c in land.cuts):
+    if any(c.radius_km > buffer_km and not c.reattach for c in land.cuts):
         # cut land must lie inside both pieces' buffers, or nobody generates it
         raise ValueError(f"cut radius exceeds the {buffer_km:g} km buffer")
     chunk_km2 = (CHUNK_CELLS * TD_COARSE_KM) ** 2
@@ -283,9 +320,21 @@ def plan_layout(
     order = [c for c in order if land.component_km2[c] >= chunk_km2]
     groups: list[list[int]] = []
     centres: list[tuple[np.ndarray, float]] = []
+    joins = joins or {}
     for c in order:
         pc = land.xyz[land.labels == c]
         joined = False
+        target = joins.get(c)
+        if target is not None:
+            for g, members in enumerate(groups):
+                if target in members:
+                    members.append(c)
+                    m = np.isin(land.labels, members)
+                    centres[g] = minimax_centre(land.xyz[m], land.area_km2[m])
+                    joined = True
+                    break
+        if joined:
+            continue
         for g, members in enumerate(groups):
             pg = land.xyz[np.isin(land.labels, members)]
             if _gap_km(pg, pc, r) > 2 * buffer_km:
@@ -347,6 +396,68 @@ def owner_of(
 
     _, idx = cKDTree(owner_points).query(unit_vectors(lat, lon).reshape(-1, 3))
     return np.asarray(np.asarray(owner_canvas)[idx]).reshape(np.shape(lat))
+
+
+def blend_weight(dist_a_km: np.ndarray, dist_b_km: np.ndarray, band_km: float) -> np.ndarray:
+    """Weight of canvas A across its ownership line with B (1 = A, 0 = B); band 0 = hard.
+
+    A smoothstep (3t² − 2t³) of the distance difference across the band, not a linear ramp:
+    its slope vanishes at both band edges, so a systematic height offset between the two
+    generations does not leave a crease (a straight slope break) along the band edge.
+    """
+    if band_km <= 0:
+        return (np.asarray(dist_a_km) <= np.asarray(dist_b_km)).astype(np.float64)
+    t = np.clip(0.5 + (dist_b_km - dist_a_km) / (2.0 * band_km), 0.0, 1.0)
+    return np.asarray(t * t * (3.0 - 2.0 * t))
+
+
+def blend_overlap(
+    h_a: np.ndarray,
+    h_b: np.ndarray,
+    dist_a_km: np.ndarray,
+    dist_b_km: np.ndarray,
+    px_km: float,
+    *,
+    sea_level_m: float = 0.0,
+) -> np.ndarray:
+    """Blend two canvases' heights on one common grid across their ownership line (pure).
+
+    ``h_a``, ``h_b`` are the two generations resampled onto the same (rows, cols) grid of
+    ``px_km`` pixels; ``dist_*_km`` the great-circle distances of each pixel to each canvas's
+    member land (the ``owner_points`` table).  Each height splits into a Gaussian low-pass
+    skeleton (``BLEND_LOWPASS_SIGMA_KM``) and the residual detail; the skeleton mixes over
+    ``BLEND_LOW_BAND_KM``, the detail over ``BLEND_DETAIL_BAND_KM``, so the step vanishes and
+    the texture is one canvas's, not an average of two uncorrelated ones.  Where the two
+    disagree on land and sea inside the low band (grown by one coarse cell) a plain linear mix
+    over ``BLEND_LINEAR_KM`` takes over, with one coarse cell of smooth hand-over, so the hard
+    detail switch cannot cut a straight coastline.  NaN in either input falls back to the
+    other.
+    """
+    from scipy.ndimage import binary_dilation, gaussian_filter
+
+    a = np.asarray(h_a, dtype=np.float64)
+    b = np.asarray(h_b, dtype=np.float64)
+    a, b = np.where(np.isnan(a), b, a), np.where(np.isnan(b), a, b)
+    if np.isnan(a).all():
+        return a
+    fill = float(np.nanmean(a))
+    a0, b0 = np.nan_to_num(a, nan=fill), np.nan_to_num(b, nan=fill)
+    sigma = BLEND_LOWPASS_SIGMA_KM / px_km
+    low_a, low_b = gaussian_filter(a0, sigma), gaussian_filter(b0, sigma)
+    w_low = blend_weight(dist_a_km, dist_b_km, BLEND_LOW_BAND_KM)
+    w_det = blend_weight(dist_a_km, dist_b_km, BLEND_DETAIL_BAND_KM)
+    two_band = (
+        w_low * low_a + (1 - w_low) * low_b + w_det * (a0 - low_a) + (1 - w_det) * (b0 - low_b)
+    )
+    w_lin = blend_weight(dist_a_km, dist_b_km, BLEND_LINEAR_KM)
+    linear = w_lin * a0 + (1 - w_lin) * b0
+    band = np.abs(np.asarray(dist_a_km) - np.asarray(dist_b_km)) <= BLEND_LOW_BAND_KM
+    disagree = band & ((a0 > sea_level_m) != (b0 > sea_level_m))
+    cell_px = max(1, round(TD_COARSE_KM / px_km))
+    disagree = binary_dilation(disagree, iterations=cell_px)
+    mix = np.clip(gaussian_filter(disagree.astype(np.float64), cell_px / 2.0) * 2.0, 0.0, 1.0)
+    out = (1 - mix) * two_band + mix * linear
+    return np.asarray(np.where(np.isnan(a), np.nan, out))
 
 
 def sample_mesh_field(

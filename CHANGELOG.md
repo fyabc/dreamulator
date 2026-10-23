@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **画布布局与过渡带（2026-10-24）**：`map/td_canvas.py` 新增归还型切割圆（`LandCut(reattach=True)`：只断开连通，圈内
+  陆地事后还给最近的陆块，半径不受缓冲带限制）、作者指定的强制合并（`plan_layout(joins=...)`）与画布重叠区的混合规则
+  （`blend_overlap`：低通骨架在 92 km 带内、细节在 4 km 带内混合，海陆判定不一致处改 92 km 整体混合，权重为平滑阶跃）。
+  世界岛据此切成两张画布，全部画布的边缘各向异性都在 1.15 以内。
 - **GCM 气象图层包（2026-10-23）**：太空俯瞰星球链的 L1 数据层。`gcm/weather_pack.py` 把 ExoPlaSim 的高频瞬时
   快照打成逐变量帧数组：ISCCP 三层云量与总云量、云顶气压与高度、降水、海平面气压、三个高度的风、低层涡度、
   海冰、地表温度与热带气旋生成潜势，附逐帧日下点；`gcm/cyclones.py` 按 TempestExtremes 的方法检测与连接气旋，
