@@ -1,14 +1,16 @@
 """Procedural cloud texture — layer L2 of the orbital weather-globe chain.
 
 Requirement spec: the orbital weather-globe requirement notes.
-The GCM layer pack (L1: per-layer cloud fraction, cloud-top height, vorticity)
-is still pending; until it arrives this module derives a
-**placeholder large-scale cloud-cover field** from the engine climate fields
-already on the mesh (annual precipitation and sea-level-pressure anomaly), so
-the look of the procedural texture can be settled now.  The texture synthesis
-itself — spherical fBm, wind-flow domain warp, cirrus streak taps — is the
-permanent part; only ``large_scale_cover`` is expected to be replaced by real
-GCM cloud fields later.
+The L1 layer pack is arriving in stages: the frozen GCM climate now supplies
+annual total/low/mid/high cloud fractions, which replace the placeholder
+large-scale cover field when present and split opacity between the two cloud
+shells.  Per-6-hour fields, cloud-top height and storm tracks are still
+pending; until they arrive this module derives a **placeholder cover field**
+from the engine climate fields already on the mesh (annual precipitation and
+sea-level-pressure anomaly) for worlds without GCM cloud fields, so the look
+of the procedural texture can be settled now.  The texture synthesis itself —
+spherical fBm, wind-flow domain warp, cirrus streak taps — is the permanent
+part; only ``large_scale_cover`` is a placeholder.
 
 Design notes:
 
@@ -37,9 +39,10 @@ Design notes:
 
 Epistemic status (per engine discipline §9): the noise machinery is a
 standard graphics technique; the cover-field coefficients in
-``large_scale_cover`` are observation-fitted placeholders (tuned so the
-Hadley-cell band structure of nacrea reads correctly) and must be replaced
-by the GCM layer-pack contract when it lands.
+``large_scale_cover`` are observation-fitted placeholders used only for
+engine worlds (no GCM cloud fields).  Frozen GCM climates use the model's own
+``cloud_total_frac``, and the two-shell split uses the GCM low/mid versus high
+cloud fractions; both are model output, not fitted tuning.
 """
 
 from __future__ import annotations
@@ -1150,6 +1153,82 @@ def cloud_texture_equirect(
 # ---------------------------------------------------------------------------
 
 
+def _mesh_field(mesh: CVTMesh, field: str) -> np.ndarray | None:
+    """Cell values of an optional per-cell field, or ``None`` when absent.
+
+    Frozen GCM climates fill the cloud-cover fields on every cell; engine
+    worlds leave them empty.  A handful of missing cells are filled with the
+    finite mean so the mesh smoothing pass does not spread NaNs; a field that
+    is mostly empty is treated as absent.
+    """
+    values = np.array(
+        [
+            np.nan if getattr(cell, field, None) is None else float(getattr(cell, field))
+            for cell in mesh.cells
+        ],
+        dtype=np.float64,
+    )
+    finite = np.isfinite(values)
+    if not finite.any() or finite.mean() < 0.99:
+        return None
+    if not finite.all():
+        values[~finite] = float(values[finite].mean())
+    return values
+
+
+def has_gcm_cloud_fields(mesh: CVTMesh) -> bool:
+    """Whether the mesh carries the frozen GCM total-cloud field."""
+    return _mesh_field(mesh, "cloud_total_frac") is not None
+
+
+def cloud_vertical_weights(
+    mesh: CVTMesh,
+    indices: np.ndarray,
+    *,
+    smooth_rounds: int = MESH_SMOOTH_ROUNDS,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Low/mid and high shell weights from the GCM vertical cloud split.
+
+    ``cloud_low_frac``/``cloud_mid_frac``/``cloud_high_frac`` say where the
+    cloud sits (ISCCP 680/440 hPa levels), not how much of the total it is.
+    Their shares of the low+mid versus high total therefore redistribute the
+    two L5 shells: a cell whose high share exceeds the global mean gets a
+    thicker cirrus shell and a thinner low shell.  The weights are normalised
+    to a global mean of one, clipped, and faded toward one in nearly clear
+    cells where the vertical split is ill-defined.  Returns rasterised
+    ``(low_weight, high_weight)`` or ``None`` when the fields are absent.
+    """
+    low = _mesh_field(mesh, "cloud_low_frac")
+    high = _mesh_field(mesh, "cloud_high_frac")
+    if low is None or high is None:
+        return None
+    mid = _mesh_field(mesh, "cloud_mid_frac")
+    low_amount = smooth_mesh_field(mesh, low, smooth_rounds)
+    if mid is not None:
+        low_amount = low_amount + smooth_mesh_field(mesh, mid, smooth_rounds)
+    high_amount = smooth_mesh_field(mesh, high, smooth_rounds)
+    low_amount = np.clip(low_amount, 0.0, 1.0)
+    high_amount = np.clip(high_amount, 0.0, 1.0)
+    total = low_amount + high_amount
+    valid = total > 1e-6
+    low_share = np.full_like(total, 0.5)
+    high_share = np.full_like(total, 0.5)
+    low_share[valid] = low_amount[valid] / total[valid]
+    high_share[valid] = 1.0 - low_share[valid]
+    mean_low = float(low_share[valid].mean()) if valid.any() else 0.5
+    mean_high = float(high_share[valid].mean()) if valid.any() else 0.5
+    low_weight = np.ones_like(total)
+    high_weight = np.ones_like(total)
+    if valid.any() and mean_low > 1e-6 and mean_high > 1e-6:
+        low_weight[valid] = np.clip(low_share[valid] / mean_low, 0.25, 3.0)
+        high_weight[valid] = np.clip(high_share[valid] / mean_high, 0.25, 3.0)
+    # Near-clear cells carry no reliable vertical partition: fade to 1.
+    confidence = np.clip((total - 0.05) / 0.25, 0.0, 1.0)
+    low_weight = 1.0 + confidence * (low_weight - 1.0)
+    high_weight = 1.0 + confidence * (high_weight - 1.0)
+    return low_weight[indices], high_weight[indices]
+
+
 def conditioning_grids(
     mesh: CVTMesh,
     indices: np.ndarray,
@@ -1161,7 +1240,9 @@ def conditioning_grids(
     Fields are smoothed on the mesh adjacency graph first (uniform in km),
     then sampled nearest-cell — no Voronoi plateaus survive at output scale.
     ``indices`` comes from ``map.export.export_cell_index_grid``.  ``ocean``
-    and ``dp`` (SLP anomaly, hPa) feed the cloud-regime weights.
+    and ``dp`` (SLP anomaly, hPa) feed the cloud-regime weights.  The cover is
+    the frozen GCM total cloud fraction (``cloud_total_frac``) when the mesh
+    has it; engine worlds fall back to the precipitation/pressure placeholder.
     """
 
     def col(field: str, default: float = 0.0) -> np.ndarray:
@@ -1173,12 +1254,18 @@ def conditioning_grids(
             dtype=np.float64,
         )
 
-    precip = smooth_mesh_field(mesh, col("precipitation_mm"), smooth_rounds)
     dp = smooth_mesh_field(mesh, col("pressure_anomaly_annual_hpa"), smooth_rounds)
     u = smooth_mesh_field(mesh, col("wind_east_m_s"), smooth_rounds)
     v = smooth_mesh_field(mesh, col("wind_north_m_s"), smooth_rounds)
     ocean = np.asarray([c.elevation < 0.0 for c in mesh.cells], dtype=np.float64)
-    cover = large_scale_cover(precip, dp)
+    gcm_cover = _mesh_field(mesh, "cloud_total_frac")
+    if gcm_cover is not None:
+        # Frozen GCM climates carry the model's own total cloud cover; use it
+        # instead of the precipitation/pressure placeholder.
+        cover = np.clip(smooth_mesh_field(mesh, gcm_cover, smooth_rounds), 0.0, 1.0)
+    else:
+        precip = smooth_mesh_field(mesh, col("precipitation_mm"), smooth_rounds)
+        cover = large_scale_cover(precip, dp)
     return cover[indices], u[indices], v[indices], ocean[indices], dp[indices]
 
 
@@ -1490,6 +1577,8 @@ def clouds_globe(
 
     tree = build_export_tree(mesh)
     indices = export_cell_index_grid(mesh, width, height, tree=tree)
+    uses_gcm_cover = has_gcm_cloud_fields(mesh)
+    vertical_weights = cloud_vertical_weights(mesh, indices)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     surface = surface_base_rgb(mesh, indices, sea_level_m, radius_km=radius_km)
@@ -1506,6 +1595,15 @@ def clouds_globe(
         alpha_low = 1.0 - (1.0 - products.alpha_low) * (1.0 - products.alpha_haze)
         alpha_cirrus = products.alpha_cirrus_high
         alpha_cirrus_legacy = products.alpha_cirrus
+        # GCM vertical cloud split: shift opacity between the two shells where
+        # the model puts cloud high or low.  This is applied to the ambient
+        # texture only, before the L3 cyclone composite, so storm intensity is
+        # not scaled down by the ambient low-cloud weight.
+        if vertical_weights is not None:
+            low_weight, high_weight = vertical_weights
+            alpha_low = np.clip(alpha_low * low_weight, 0.0, 1.0)
+            alpha_cirrus = np.clip(alpha_cirrus * high_weight, 0.0, 1.0)
+            alpha_cirrus_legacy = np.clip(alpha_cirrus_legacy * high_weight, 0.0, 1.0)
         alpha = alpha_low
         if cyclones:
             from dreamulator.media.cyclone_render import (
@@ -1693,7 +1791,14 @@ def clouds_globe(
             "cirrus_streak_km": CIRRUS_STREAK_KM,
             "cirrus_ref_wind_m_s": CIRRUS_REF_WIND_M_S,
         },
-        "cover_field": "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack",
+        "cover_field": (
+            "GCM cloud_total_frac (annual mean, ISCCP total)"
+            if uses_gcm_cover
+            else "PLACEHOLDER (precip + SLP-anomaly proxy) — replace with GCM layer pack"
+        ),
+        "vertical_cloud_weights": (
+            "GCM low/mid vs high cloud fractions" if vertical_weights is not None else None
+        ),
         "cover_scale": cover_scale,
         "cyclones": {
             "count": len(cyclones) if cyclones else 0,

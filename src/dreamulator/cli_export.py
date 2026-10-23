@@ -923,11 +923,12 @@ def export_clouds(
     and an orthographic globe), not just a cloud texture; the rotation and
     cloud-evolution videos are separate media scripts documented in cli.md.
 
-    The large-scale cover field is a placeholder (precipitation + SLP-anomaly
-    proxy) until the GCM layer pack lands; the noise/warp/streak machinery is
-    the permanent part.  ``--cyclones`` adds L3 parametric templates from a
-    synthetic track set, for visual QA before real tracks exist.  Needs the
-    'media' extra (numba noise kernel).
+    The large-scale cover field is the frozen GCM total cloud fraction when the
+    branch carries ``cloud_total_frac``; engine worlds without cloud fields
+    fall back to the precipitation + SLP-anomaly placeholder.  The
+    noise/warp/streak machinery is the permanent part.  ``--cyclones`` adds L3
+    parametric templates from a synthetic track set, for visual QA before real
+    tracks exist.  Needs the 'media' extra (numba noise kernel).
     """
     _set_data_dir(data_dir)
 

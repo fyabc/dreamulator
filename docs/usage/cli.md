@@ -524,7 +524,7 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-re
 | `clouds.png` | 合并云不透明度（RGBA straight alpha，兼容旧调用） |
 | `clouds_low.png` | 低/中云壳 + 薄霾（4 km 层） |
 | `clouds_cirrus.png` | 高壳卷云（9 km 层，带对比曲线） |
-| `cloud_cover.png` | 大尺度云量场（占位） |
+| `cloud_cover.png` | 大尺度云量场（GCM 总云量；引擎世界为降水 + SLP 占位） |
 | `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络（仅 `--cyclones`） |
 | `globe.png` | 正交圆盘静帧（地表 + 双层云 + 大气 + 高光） |
 | `meta.json` | 网格、种子、机位、气旋轨迹、大气参数、食影参数与 provenance |

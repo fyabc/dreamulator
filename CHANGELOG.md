@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **GCM 云量字段（2026-10-23）**：冻结 GCM 气候的分支网格新增 `cloud_total_frac`（模式自己的总云量）与
   `cloud_low_frac`、`cloud_mid_frac`、`cloud_high_frac`（按 ISCCP 的 680 hPa 与 440 hPa 分界、层内随机重叠合成），
   均为年均、0–1；引擎世界这四个字段为空，旧字段文件照常可用。nacrea 全球云量 0.61。
+- **GCM 年均云量接入云纹理（2026-10-23）**：冻结 GCM 气候的分支网格带 `cloud_total_frac`
+  时，L2 云纹理直接使用模式总云量作为大尺度云量场，取代降水与 SLP 距平的占位场；
+  低/中云与高云的比例归一化后分别缩放低云壳与卷云壳，近晴空格子淡出为等权。
+  引擎世界没有字段时保持占位路径不变；`meta.json` 的 `cover_field` 与
+  `vertical_cloud_weights` 记录实际来源。
 - **地图/球面风场与洋流粒子流（2026-10-23）**：在 2D 地图和 3D 球面查看器中加入
   nullschool 式粒子平流显示。图层面板顶部的「粒子流」开关把风场/洋流从箭头切换为
   粒子拖尾，透明度仍由对应图层滑块控制，偏差诊断箭头不受影响；`?particles=1` 可
