@@ -13,6 +13,7 @@ from dreamulator.engine.climate import ClimateEngine
 from dreamulator.gcm.fields import (
     ANNUAL_FIELDS,
     GCM_FIELDS_FILENAME,
+    OPTIONAL_ANNUAL_FIELDS,
     GcmFieldSet,
     StaleFieldSetError,
     apply_field_set,
@@ -101,6 +102,17 @@ def test_apply_writes_fields_clears_engine_derived_and_attaches_monthly() -> Non
     assert c2.slp_reduction_unreliable is True
     assert c0.biome is None and c0.sst_anomaly_c is None
     assert mesh._t_monthly_c.shape == (3, 12)  # type: ignore[attr-defined]
+
+
+def test_apply_writes_optional_cloud_fields_only_when_present() -> None:
+    mesh = _mesh()
+    apply_field_set(mesh, _field_set(mesh))  # older set without clouds
+    assert mesh.cells[0].cloud_total_frac is None
+    fs = _field_set(mesh)
+    fs.annual.update({k: np.full(3, 0.1 * (j + 1)) for j, k in enumerate(OPTIONAL_ANNUAL_FIELDS)})
+    apply_field_set(mesh, fs)
+    assert mesh.cells[1].cloud_total_frac == pytest.approx(0.1)
+    assert mesh.cells[2].cloud_high_frac == pytest.approx(0.4)
 
 
 def test_apply_refuses_format1_field_set_on_a_different_mesh() -> None:

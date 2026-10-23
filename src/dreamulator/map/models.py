@@ -293,6 +293,27 @@ class VoronoiCell(BaseModel):
         description="Surface wind north component (m/s, positive=northward)",
     )
 
+    # Annual-mean cloud cover (fraction 0–1).  Written only by a frozen GCM
+    # climate (``climate_source: gcm``, ``gcm/to_mesh.py``); the climate engine
+    # has no cloud model, so engine worlds leave these empty.  Levels follow the
+    # ISCCP pressure convention (low > 680 hPa, mid 440–680 hPa, high < 440 hPa).
+    cloud_total_frac: float | None = Field(
+        default=None,
+        description="Annual-mean total cloud cover (fraction, GCM climate only)",
+    )
+    cloud_low_frac: float | None = Field(
+        default=None,
+        description="Annual-mean low cloud cover, p > 680 hPa (fraction, GCM climate only)",
+    )
+    cloud_mid_frac: float | None = Field(
+        default=None,
+        description="Annual-mean mid cloud cover, 440–680 hPa (fraction, GCM climate only)",
+    )
+    cloud_high_frac: float | None = Field(
+        default=None,
+        description="Annual-mean high cloud cover, p < 440 hPa (fraction, GCM climate only)",
+    )
+
     # Annual-mean sea-level pressure (hPa) — the persistent surface-pressure
     # field (subtropical highs, ITCZ low).  Filled by the real-Earth importer
     # (NCEP SLP annual mean) only; the engine models pressure *anomalies*

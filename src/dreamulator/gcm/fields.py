@@ -63,6 +63,15 @@ ANNUAL_FIELDS = (
     "wind_north_m_s",
 )
 
+#: Per-cell float fields that only some field sets carry (absent from sets written
+#: before the field existed); applied when present, otherwise left empty.
+OPTIONAL_ANNUAL_FIELDS = (
+    "cloud_total_frac",
+    "cloud_low_frac",
+    "cloud_mid_frac",
+    "cloud_high_frac",
+)
+
 #: Per-cell monthly fields (shape ``(N, 12)``), stored on the mesh object under
 #: the private names :func:`dreamulator.map.export.export_climate_layers` reads.
 #: Month 0 starts at the northern vernal equinox, as in the engine.
@@ -276,7 +285,8 @@ def apply_field_set(mesh: CVTMesh, fs: GcmFieldSet) -> MeshMatch | None:
     :class:`MeshMatch` when a differing mesh was accepted within
     :data:`MESH_TOLERANCES`.  Raises :class:`StaleFieldSetError` when the mesh is
     not the one the field set was computed on.  Sets the per-cell annual fields
-    and Köppen class, clears :data:`CLEARED_FIELDS`, and attaches the monthly
+    (plus any :data:`OPTIONAL_ANNUAL_FIELDS` the set carries) and Köppen class,
+    clears :data:`CLEARED_FIELDS`, and attaches the monthly
     arrays under the private names the climate exporter reads.
     """
     if mesh.num_cells != fs.num_cells:
@@ -301,6 +311,9 @@ def apply_field_set(mesh: CVTMesh, fs: GcmFieldSet) -> MeshMatch | None:
                 "the GCM run is stale — rerun the GCM on the new mesh"
             )
     annual = {k: fs.annual[k].astype(np.float64) for k in ANNUAL_FIELDS}
+    annual.update(
+        {k: fs.annual[k].astype(np.float64) for k in OPTIONAL_ANNUAL_FIELDS if k in fs.annual}
+    )
     unreliable = fs.slp_reduction_unreliable
     for i, cell in enumerate(mesh.cells):
         for name, values in annual.items():
@@ -321,6 +334,7 @@ __all__ = [
     "GCM_FIELDS_FILENAME",
     "MONTHLY_FIELDS",
     "MESH_TOLERANCES",
+    "OPTIONAL_ANNUAL_FIELDS",
     "GcmFieldSet",
     "MeshMatch",
     "StaleFieldSetError",

@@ -43,6 +43,16 @@ Method (all on the tail of the run, default last 5 model years):
   lowest model level of ``ua``/``va`` (sigma ≈ 0.99, the same kind of
   near-surface wind as the NCEP sigma-0.995 reference the engine is compared
   against); annual mean on the cells, phase-binned in the monthly arrays.
+- **Cloud cover.**  ``cloud_total_frac`` is the model's own total cloud cover
+  ``clt`` (overlap applied inside the radiation scheme at every time step).
+  ``cloud_low_frac``/``cloud_mid_frac``/``cloud_high_frac`` split the layer
+  cloud fraction ``cl`` by the ISCCP pressure levels (layer pressure = sigma ×
+  surface pressure; low > 680 hPa, mid 440–680 hPa, high < 440 hPa) and combine
+  the layers inside each level with random overlap, 1 − Π(1 − c).  The split is
+  a diagnostic definition (observation convention) applied to monthly means, so
+  the three levels do not recombine exactly into ``clt``; it only says which
+  height the cloud sits at.  Annual means of the tail; written when the run has
+  ``cl`` and ``clt``.
 
 Fields the slab-ocean GCM cannot provide, or that the engine derives
 downstream of its own climate (ocean currents, SST anomaly, biome, NPP,
@@ -75,6 +85,9 @@ LAPSE_K_PER_M = 0.0065
 SLP_UNRELIABLE_HEIGHT_M = 1500.0
 SLP_SMOOTHING_N0 = 21
 SECONDS_PER_EARTH_MONTH = 365.25 / 12.0 * 86400.0
+#: ISCCP cloud-level boundaries (hPa): low below the 680 hPa surface, high above 440 hPa.
+ISCCP_LOW_TOP_HPA = 680.0
+ISCCP_HIGH_BASE_HPA = 440.0
 
 
 def bilinear_to_points(
@@ -164,6 +177,25 @@ def band_ocean_anomaly(slp: np.ndarray, ocean: np.ndarray) -> np.ndarray:
     return anomaly
 
 
+def cloud_levels(
+    cl: np.ndarray, ps_hpa: np.ndarray, sigma: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Low, mid and high cloud cover from layer cloud fractions (pure function).
+
+    ``cl`` has shape ``(..., nlev, nlat, nlon)``, ``ps_hpa`` ``(..., nlat, nlon)``
+    and ``sigma`` the layer-midpoint sigmas ``(nlev,)``.  Each layer is assigned to
+    an ISCCP level by its pressure ``sigma · ps``; layers inside a level combine
+    with random overlap, ``1 − Π(1 − c)``.
+    """
+    p = sigma[:, None, None] * ps_hpa[..., None, :, :]
+    clear = 1.0 - np.clip(cl, 0.0, 1.0)
+    low = p > ISCCP_LOW_TOP_HPA
+    high = p < ISCCP_HIGH_BASE_HPA
+    mid = ~low & ~high
+    levels = tuple(1.0 - np.prod(np.where(sel, clear, 1.0), axis=-3) for sel in (low, mid, high))
+    return levels[0], levels[1], levels[2]
+
+
 def phase_climatology(values: np.ndarray, phase: np.ndarray, n_bins: int = 12) -> np.ndarray:
     """Average records into ``n_bins`` equal orbital-phase bins (pure function).
 
@@ -249,6 +281,15 @@ def compute_field_set(
         u_m = phase_climatology(tail("ua")[:, -1], phase)
         v_m = phase_climatology(tail("va")[:, -1], phase)
         wind_source = "ua/va lowest model level"
+    clouds_grid: dict[str, np.ndarray] = {}
+    if "cl" in ds.variables and "clt" in ds.variables and "lev" in ds.variables:
+        low, mid, high = cloud_levels(tail("cl"), tail("ps"), np.asarray(ds["lev"][:], dtype=float))
+        clouds_grid = {
+            "cloud_total_frac": tail("clt").mean(axis=0),
+            "cloud_low_frac": low.mean(axis=0),
+            "cloud_mid_frac": mid.mean(axis=0),
+            "cloud_high_frac": high.mean(axis=0),
+        }
     zsurf = None
     if "sg" in ds.variables:  # surface geopotential (m²/s²) → GCM surface height (m)
         zsurf = np.asarray(ds["sg"][0], dtype=float)[order, :] / gravity_m_s2
@@ -306,6 +347,7 @@ def compute_field_set(
             "slp_annual_hpa": to_cells(psl_m.mean(axis=0)),
             "wind_east_m_s": u_monthly.mean(axis=1),
             "wind_north_m_s": v_monthly.mean(axis=1),
+            **{k: np.clip(to_cells(v), 0.0, 1.0) for k, v in clouds_grid.items()},
         },
         monthly={
             "t_monthly_c": t_monthly,
@@ -327,6 +369,12 @@ def compute_field_set(
             "wind_source": wind_source,
             "slp_smoothing": f"Hoskins spectral filter, 0.1 at n = {SLP_SMOOTHING_N0}",
             "sea_level_m": sea_level_m,
+            "cloud_levels": (
+                f"ISCCP pressure levels ({ISCCP_HIGH_BASE_HPA:g}/{ISCCP_LOW_TOP_HPA:g} hPa), "
+                "random overlap within a level; total = model clt"
+                if clouds_grid
+                else None
+            ),
         },
     )
 
@@ -345,6 +393,15 @@ def summarize_field_set(fs: GcmFieldSet, mesh: CVTMesh, sea_level_m: float = 0.0
         "global_mean_temperature_c": float(np.average(t_mean, weights=area)),
         "land_mean_temperature_c": float(np.average(t_mean[is_land], weights=area[is_land])),
         "land_mean_precipitation_mm": float(np.average(p_annual[is_land], weights=area[is_land])),
+        **(
+            {
+                "global_mean_cloud_total": float(
+                    np.average(fs.annual["cloud_total_frac"], weights=area)
+                )
+            }
+            if "cloud_total_frac" in fs.annual
+            else {}
+        ),
         "koppen_land_counts": {str(k): int(v) for k, v in zip(names, counts, strict=True)},
     }
 
@@ -427,6 +484,7 @@ __all__ = [
     "SLP_UNRELIABLE_HEIGHT_M",
     "band_ocean_anomaly",
     "bilinear_to_points",
+    "cloud_levels",
     "compute_field_set",
     "phase_climatology",
     "project_to_mesh",

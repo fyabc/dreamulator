@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from dreamulator.gcm.to_mesh import band_ocean_anomaly, bilinear_to_points, phase_climatology
+from dreamulator.gcm.to_mesh import (
+    band_ocean_anomaly,
+    bilinear_to_points,
+    cloud_levels,
+    phase_climatology,
+)
 
 
 def test_bilinear_reproduces_linear_field_and_wraps_longitude() -> None:
@@ -104,3 +109,24 @@ def test_public_provenance_hides_local_gcm_paths() -> None:
     )
     assert "private/" not in out["run_manifest"]["command"]
     assert out["run_manifest"]["years"] == 30 and out["list"] == ["<gcm-workdir>/runs/y", "kept"]
+
+
+def test_cloud_levels_split_by_isccp_pressure_with_random_overlap() -> None:
+    # sigma midpoints at 1000 hPa surface: 200 (high), 500 (mid), 600 (mid), 900 (low) hPa
+    sigma = np.array([0.2, 0.5, 0.6, 0.9])
+    cl = np.zeros((2, 4, 1, 1))
+    cl[0, :, 0, 0] = [0.3, 0.5, 0.5, 0.4]
+    cl[1, :, 0, 0] = [0.0, 0.0, 0.0, 1.0]
+    ps = np.full((2, 1, 1), 1000.0)
+    low, mid, high = cloud_levels(cl, ps, sigma)
+    assert np.allclose(low[:, 0, 0], [0.4, 1.0])
+    assert np.allclose(mid[:, 0, 0], [1 - 0.5 * 0.5, 0.0])  # random overlap of two layers
+    assert np.allclose(high[:, 0, 0], [0.3, 0.0])
+
+
+def test_cloud_levels_follow_surface_pressure() -> None:
+    # over a 600 hPa plateau the sigma-0.9 layer (540 hPa) is mid cloud, not low
+    sigma = np.array([0.9])
+    cl = np.full((1, 1, 1), 0.5)
+    low, mid, _ = cloud_levels(cl, np.full((1, 1), 600.0), sigma)
+    assert low[0, 0] == 0.0 and mid[0, 0] == 0.5

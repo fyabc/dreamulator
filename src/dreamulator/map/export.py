@@ -596,6 +596,10 @@ DYNAMIC_CELL_FIELDS: dict[str, str] = {
     "slp_annual_hpa": "f",
     "pressure_anomaly_annual_hpa": "f",
     "slp_reduction_unreliable": "b",
+    "cloud_total_frac": "f",
+    "cloud_low_frac": "f",
+    "cloud_mid_frac": "f",
+    "cloud_high_frac": "f",
     # ecology
     "biome": "s",
     "npp_gc_m2_yr": "f",

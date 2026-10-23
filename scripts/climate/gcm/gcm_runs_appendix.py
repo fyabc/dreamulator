@@ -18,6 +18,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -36,7 +37,8 @@ PARAM_FIELDS = {"radius", "gravity", "rotationperiod", "obliquity", "eccentricit
                 "year", "pressure", "startemp", "pN2", "pO2", "pAr", "pCO2", "lonvernaleq",
                 "fixedorbit"}  # fmt: skip
 # Surface files (.sra) live in the author-local GCM archive, which is not part of
-# the repository; set GCM_ARCHIVE to its root so recorded hashes can be resolved.
+# the repository; set GCM_ARCHIVE to its root so recorded hashes can be resolved and
+# so that every path in the appendix is written relative to that root.
 _archive = os.environ.get("GCM_ARCHIVE")
 SURFACE_DIRS = (Path(_archive) / "surf",) if _archive else ()
 
@@ -50,11 +52,36 @@ def _sha256(path: Path) -> str:
 
 
 def _rel(path: str | Path) -> str:
+    """Path for the appendix: relative to the GCM archive when it is set, else to the repo.
+
+    The archive is author-local and may sit inside the working tree, so paths are made
+    relative to it first; the published appendix then carries archive-relative paths only.
+    """
     p = Path(path)
-    try:
-        return str(p.resolve().relative_to(REPO))
-    except ValueError:
-        return str(p)
+    for base in ((Path(_archive).resolve(),) if _archive else ()) + (REPO,):
+        try:
+            return str(p.resolve().relative_to(base))
+        except ValueError:
+            continue
+    return str(p)
+
+
+def _archive_relative(text: str) -> str:
+    """Strip the archive root from paths inside recorded commands.
+
+    Manifests record the command as it was typed, so a run launched from the repository
+    root carries ``<archive>/runs/...`` paths; the appendix names archive paths relative
+    to the archive root, like :func:`_rel` does for the paths it builds itself.
+    """
+    if not _archive:
+        return text
+    root = Path(_archive).resolve()
+    prefixes = {str(root)}
+    with contextlib.suppress(ValueError):
+        prefixes.add(str(root.relative_to(REPO)))
+    for prefix in sorted(prefixes, key=len, reverse=True):
+        text = text.replace(prefix + "/", "")
+    return text
 
 
 def _find_by_hash(digest: str) -> str | None:
@@ -204,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     head = (
         Path(args.preamble).read_text(encoding="utf-8").rstrip() + "\n\n" if args.preamble else ""
     )
-    Path(args.out).write_text(head + render(runs), encoding="utf-8")
+    Path(args.out).write_text(head + _archive_relative(render(runs)), encoding="utf-8")
     print(f"wrote {args.out} ({len(runs)} run directories)")
     return 0
 
