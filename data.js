@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792758131264,
+  "lastUpdate": 1792770424962,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -885,6 +885,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00018027685851844413",
             "extra": "mean: 3.9502796000022045 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "14b1f70fbacffd2a2b6e14147913a5ec14953409",
+          "message": "feat(gcm): 气象图层包——高频瞬时快照打包、ISCCP 云量分层与云顶、气旋检测与追踪\n\n- gcm/weather_pack.py：ExoPlaSim 瞬时快照打成逐变量帧数组（云量分层、云顶、降水、海平面气压、\n  三层风、低层涡度、海冰、地表温度、热带气旋生成潜势与潜在强度），附逐帧日下点与日历换算；\n  高度按测高公式由温度积分（快照的 zg 不可用）\n- gcm/cyclones.py：TempestExtremes 式检测与连接；结构长度按变形半径随自转比放大，去噪判据保持\n  地球值；准静止低压保留并标记，热带气旋须为海上暖心\n- scripts/climate/gcm/build_weather_pack.py、管线文档 gcm-weather-pack.md、运行手册 §12；\n  .gitignore 忽略默认导出目录 exports/\n\nCo-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-10-23T22:55:50+08:00",
+          "tree_id": "8124df322d8210f72acc851745187ca5d3fcbe6b",
+          "url": "https://github.com/fyabc/dreamulator/commit/14b1f70fbacffd2a2b6e14147913a5ec14953409"
+        },
+        "date": 1792770423772,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3043361707314388,
+            "unit": "iter/sec",
+            "range": "stddev: 0.2656337246176811",
+            "extra": "mean: 3.2858401207999988 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.263515462152073,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01624742797788147",
+            "extra": "mean: 306.41803649999133 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4884963553759853,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0726396166668593",
+            "extra": "mean: 671.818910666668 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 954.820564391489,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012583017215020672",
+            "extra": "mean: 1.0473171999990427 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.5595011162948,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009465462918966531",
+            "extra": "mean: 5.087517999999136 msec\nrounds: 5"
           }
         ]
       }
