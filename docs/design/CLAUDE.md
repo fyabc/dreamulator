@@ -33,6 +33,7 @@
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
 - `canvas-hydrology.md` — 全球画布链：画布契约、外存填平/汇流/湖级联、区域裁窗与渲染衔接
 - `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
+- `gcm-weather-pack.md` — GCM 气象图层包（L1）：高频瞬时快照、ISCCP 云量分层与云顶、测高公式高度、TempestExtremes 式气旋检测与追踪、包结构与读取
 
 ### proposals/ — 设计提案 + 方法论
 

@@ -412,3 +412,35 @@ python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet 
 | `wind_alive` 为 false，风速接近零 | 多半是半径单位传错（米而不是地球半径）；检查 `--override` 是否改了 `radius` |
 | GCM 结果的季节性或温度和预期差很多，日距只变化约 ±1.5% | 多半没开固定轨道，PlaSim 用了地球的 Berger 轨道。查看 `MOST_DIAG` 里的「Computed Orbital Parameters」：`Year AD = 1`、偏心率 0.017465、倾角 23.695° 就是这种情况。开启 `fixedorbit`（映射已默认开启）后重跑 |
 | 运行了多年，输出却只有 12 条记录 | 说明绕过了 `run_gcm`。多年积分必须同时设置 `N_RUN_YEARS` 并把 `N_RUN_STEPS` 清零，后处理时 `times` 也要设为年数乘以 12；`run_gcm` 已经处理好这些 |
+
+## 12. 高频快照与气象图层包
+
+太空俯瞰星球链需要模式自己的瞬时天气。做法是从已平衡的运行续算一段，打开瞬时快照，再把快照打成
+气象图层包（格式与方法见 `docs/design/pipelines/gcm-weather-pack.md`）：
+
+```bash
+# 1. 续算 1 个模式年，每 2 步一帧瞬时快照，并打开风暴气候诊断
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea \
+    --resolution T42 --ncpus 16 --years 1 --greenhouse-mode pco2 --pco2-bar 0.000721434 \
+    --landmap <gcm-workdir>/surf/r22/nacrea_N064_surf_0172.sra \
+    --topomap <gcm-workdir>/surf/r22/nacrea_N064_surf_0129.sra \
+    --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "snapshots": 2, "stormclim": true}' \
+    --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' \
+    --restart <gcm-workdir>/runs/t42r/cold_712/MOST_REST.00000 \
+    --workdir <gcm-workdir>/runs/t42r/hf_712
+
+# 2. 打包，每 6 小时一帧
+python scripts/climate/gcm/build_weather_pack.py <gcm-workdir>/runs/t42r/hf_712 \
+    --out exports/weather/nacrea-gcm-t42-712 --interval-h 6
+```
+
+口径要点：
+
+- **步长是真实时间。** `MPSTEP = 45` 是 45 分钟，模式日是恒星自转周期，nacrea 一个模式日约 101 步。
+  `snapshots` 的单位是步，`"snapshots": 2` 就是 1.5 小时一帧，一个模式年约 5940 帧。
+- **快照很大。** 原始快照约 32 GB，后处理后的 NetCDF 每帧约 6 MB；后处理把全部帧读进内存，需要约
+  100 GB 内存。打包只取需要的变量并抽帧，6 小时一帧的包约 1 GB。
+- **快照里的 `zg` 不可用。** pyburn 写出的数值不是位势高度，打包时高度由温度按测高公式积分得到。
+- **`psl` 的单位是 Pa**，虽然元数据写的是 hPa（与月平均输出相同）。
+- **太阳日按模式日历走。** PlaSim 让太阳按 `N_DAYS_PER_YEAR` 个模式日的一年移动，nacrea 的太阳日因此是
+  75.75 小时，不是按真实公转算的 77.6 小时；图层包记录模式实际的日下点。

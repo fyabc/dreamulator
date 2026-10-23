@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **GCM 气象图层包（2026-10-23）**：太空俯瞰星球链的 L1 数据层。`gcm/weather_pack.py` 把 ExoPlaSim 的高频瞬时
+  快照打成逐变量帧数组：ISCCP 三层云量与总云量、云顶气压与高度、降水、海平面气压、三个高度的风、低层涡度、
+  海冰、地表温度与热带气旋生成潜势，附逐帧日下点；`gcm/cyclones.py` 按 TempestExtremes 的方法检测与连接气旋，
+  结构长度随变形半径按自转比放大。nacrea（712 ppm、1 个模式年、6 小时一帧）得到 126 条移动的温带气旋与 251 条
+  准静止低压，T42 几乎不生成热带气旋；PlaSim 的太阳按模式日历年移动，太阳日 75.75 小时。技术参考见
+  `pipelines/gcm-weather-pack.md`。
 - **GCM 云量字段（2026-10-23）**：冻结 GCM 气候的分支网格新增 `cloud_total_frac`（模式自己的总云量）与
   `cloud_low_frac`、`cloud_mid_frac`、`cloud_high_frac`（按 ISCCP 的 680 hPa 与 440 hPa 分界、层内随机重叠合成），
   均为年均、0–1；引擎世界这四个字段为空，旧字段文件照常可用。nacrea 全球云量 0.61。

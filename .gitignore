@@ -68,6 +68,9 @@ reports/
 
 # Headless map-layer export artifacts (diagnostic, regeneratable via `dreamulator export`)
 export/
+# Default output root of `dreamulator export globe` and the GCM weather packs
+# ($DREAMULATOR_EXPORT_DIR, default ./exports)
+exports/
 
 # Raw reference data downloads (use scripts to re-download)
 *.grd
