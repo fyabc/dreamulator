@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`export globe` 默认纹理网格降为 4096×2048（2026-10-24）**：样片视频链的工作纹理只有 2048 宽，4K 静帧已满足
+  分享用图需求；8K 风暴版的气旋模板全网格评估内存峰值可超 20 GB，内存不宽裕时易 OOM。印刷级 8K 静帧显式
+  `--grid 8192x4096` 仍可用。
 - **nacrea 气候正典改以 GCM 分支为准（design-notes 0013，2026-10-23）**：对外设定的气候、生态与文明内容取自分支
   `gcm-t42-712`（ExoPlaSim T42 平板海洋、712 ppm 冷臂）；根世界的气候引擎结果只作快速工具与回归对照。
   `climate_zones.md`、`atmospheric_dynamics.md` 与 `climate_portrait.md` 按分支数据重写：陆地热带类 36.7%、

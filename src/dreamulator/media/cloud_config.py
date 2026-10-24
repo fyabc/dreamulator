@@ -7,7 +7,7 @@ not require editing it.
 
 Example::
 
-    grid: 8192x4096
+    grid: 4096x2048
     seed: 7
     globe_res: 1600
     center_lon: 90
@@ -136,7 +136,7 @@ class CloudRenderConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    grid: str = "8192x4096"
+    grid: str = "4096x2048"
     seed: int = 7
     globe_res: int = 1600
     center_lon: float = 90.0

@@ -876,10 +876,12 @@ def export_clouds(
         help="YAML settings file (see cli.md); explicit CLI flags override it",
     ),
     grid: str = typer.Option(
-        "8192x4096",
+        "4096x2048",
         "--grid",
         "-g",
-        help="Equirect cloud texture resolution WxH (16K×8K = 4K full-disk per the spec)",
+        help="Equirect cloud texture resolution WxH (default 4K suits videos and "
+        "share-grade stills; pass 8192x4096 for print-grade stills — the cyclone "
+        "template pass there can peak above 20 GB of RAM)",
     ),
     seed: int = typer.Option(7, "--seed", help="Noise seed (same fields + seed = same image)"),
     output: Path | None = typer.Option(
@@ -988,7 +990,7 @@ def export_clouds(
         w_str, h_str = grid.lower().split("x")
         width, height = int(w_str), int(h_str)
     except ValueError:
-        console.print(f"[red]Invalid --grid '{grid}' (expected WxH, e.g. 8192x4096)[/red]")
+        console.print(f"[red]Invalid --grid '{grid}' (expected WxH, e.g. 4096x2048)[/red]")
         raise typer.Exit(code=2) from None
 
     mgr = WorldManager()

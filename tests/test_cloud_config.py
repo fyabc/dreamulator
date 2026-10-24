@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 def test_defaults() -> None:
     cfg = CloudRenderConfig()
-    assert cfg.grid == "8192x4096"
+    assert cfg.grid == "4096x2048"
     assert cfg.seed == 7
     assert cfg.cyclones.enabled is False
     assert cfg.cyclones.tropical_per_hemisphere == 1
