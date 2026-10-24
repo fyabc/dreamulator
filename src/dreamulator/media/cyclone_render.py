@@ -310,6 +310,16 @@ def _tropical_template(
     outer = max(cyc.outer_radius_km, cyc.rmax_km)
     motion_bearing = math.atan2(cyc.motion_east_m_s, cyc.motion_north_m_s)
     rel = bearing - motion_bearing
+    # Spiral chirality: the bands must trail the cyclonic spin, curling
+    # counter-clockwise inward in the north and clockwise inward in the south
+    # (the Coriolis sense of the circulation, matching ``cyclone_wind_field``
+    # and ``warp_cyclone_texture``).  Mirroring the azimuth flips the curl of
+    # the log-spiral phases, so the north gets the mirror and the south keeps
+    # the original (already clockwise); the motion-asymmetry phases below keep
+    # the original ``rel`` because they are about the translation direction,
+    # not the spin.
+    hemis = 1.0 if cyc.lat_deg >= 0.0 else -1.0
+    rel_s = -hemis * rel
     shape = _shape_of(cyc)
 
     # Eye: clear inside the per-storm eye fraction, eyewall ring at Rmax.
@@ -339,9 +349,9 @@ def _tropical_template(
     # plus a weaker secondary arm and a ragged outer fade.  The storm is mostly
     # bands with ambient cloud between them, not a bright disk.
     log_r = np.log(np.maximum(r, 0.3))
-    phase1 = float(shape.band_count) * rel + shape.band_pitch * log_r + 2.2 * noise + 1.0 * fine
+    phase1 = float(shape.band_count) * rel_s + shape.band_pitch * log_r + 2.2 * noise + 1.0 * fine
     phase2 = (
-        float(shape.band_count + 1) * rel
+        float(shape.band_count + 1) * rel_s
         + (0.75 * shape.band_pitch + 0.8) * log_r
         + 1.9 * noise
         + 0.9 * fine
@@ -363,7 +373,7 @@ def _tropical_template(
     veil = 0.45 * np.exp(-((dist / (1.00 * outer)) ** 2)) * grain
     # Explicit cirrus filaments: high-azimuthal-wavenumber streaks, broken by
     # noise and elongated tangentially around the storm.
-    phase_c = (50.0 + 25.0 * (0.5 + 0.5 * mid)) * rel + 2.0 * log_r + 10.0 * noise + 8.0 * fine
+    phase_c = (50.0 + 25.0 * (0.5 + 0.5 * mid)) * rel_s + 2.0 * log_r + 10.0 * noise + 8.0 * fine
     cirrus = (0.5 + 0.5 * np.cos(phase_c)) ** 4
     cirrus *= 0.40 + 0.60 * (0.5 + 0.5 * mid)
     cirrus_env = (
