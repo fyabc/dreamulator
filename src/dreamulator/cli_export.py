@@ -905,9 +905,28 @@ def export_clouds(
     cyclones: bool = typer.Option(
         False,
         "--cyclones",
-        help="Overlay L3 synthetic cyclone templates (placeholder until the L1 track table lands)",
+        help="Overlay L3 cyclone templates: with --weather-pack the pack's real moving "
+        "extratropical tracks plus canon-parametric tropical storms; otherwise the "
+        "synthetic placeholder set",
     ),
-    cyclone_seed: int = typer.Option(31, "--cyclone-seed", help="Synthetic cyclone track seed"),
+    cyclone_seed: int = typer.Option(
+        31, "--cyclone-seed", help="Cyclone seed (synthetic set, or the tropical canon sampler)"
+    ),
+    weather_pack: Path | None = typer.Option(
+        None,
+        "--weather-pack",
+        help="GCM weather pack dir (meta.json + fields/, e.g. exports/weather/<name>): "
+        "per-frame cloud conditioning and sub-solar point from the model's own weather",
+    ),
+    weather_frame: int = typer.Option(
+        0, "--frame", help="Weather-pack frame index (with --weather-pack; default 0)"
+    ),
+    stationary_lows: bool = typer.Option(
+        False,
+        "--stationary-lows",
+        help="QA only: also draw the weather pack's quasi-stationary lows "
+        "(hidden by default — land heat lows and basin lows, not storms)",
+    ),
     atmosphere: bool = typer.Option(
         True,
         "--atmosphere/--no-atmosphere",
@@ -927,8 +946,17 @@ def export_clouds(
     branch carries ``cloud_total_frac``; engine worlds without cloud fields
     fall back to the precipitation + SLP-anomaly placeholder.  The
     noise/warp/streak machinery is the permanent part.  ``--cyclones`` adds L3
-    parametric templates from a synthetic track set, for visual QA before real
-    tracks exist.  Needs the 'media' extra (numba noise kernel).
+    cyclone templates — with ``--weather-pack`` the set is the pack's real
+    moving extratropical tracks at that frame plus canon-parametric tropical
+    storms (the pack's quasi-stationary lows stay hidden unless
+    ``--stationary-lows``), without a pack it is the synthetic placeholder.
+    ``--weather-pack`` switches the conditioning to the model's
+    own weather: the cover field and the two-shell cloud split come from one
+    6-hourly pack frame (3-frame centred mean, then Gaussian smoothing at
+    sigma = 1 native grid unit), and the sun follows the pack's sub-solar
+    point — the view centre longitude defaults to it too, so the lit
+    hemisphere faces the camera; explicit flags override.  Needs the 'media'
+    extra (numba noise kernel).
     """
     _set_data_dir(data_dir)
 
@@ -995,7 +1023,45 @@ def export_clouds(
     import os
 
     export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-    out_dir = output or (export_root / "globe" / (world + (f"-{branch}" if branch else "")))
+    out_dir = output or (
+        export_root
+        / "globe"
+        / (
+            world
+            + (f"-{branch}" if branch else "")
+            + (f"-f{weather_frame}" if weather_pack is not None else "")
+        )
+    )
+
+    weather = None
+    if weather_pack is not None:
+        if not (weather_pack / "meta.json").is_file():
+            console.print(f"[red]No meta.json in {weather_pack} — is this a weather pack?[/red]")
+            raise typer.Exit(code=2) from None
+        from dreamulator.media.weather_conditioning import load_weather_frame
+
+        weather = load_weather_frame(weather_pack, weather_frame, width, height)
+        # The pack's own sub-solar point drives the sun (and the view-centre
+        # longitude, so the lit hemisphere faces the camera) unless the user
+        # pinned them on the command line or in a config file.
+        if config is None:
+
+            def _cli_flag(name: str) -> bool:
+                source = ctx.get_parameter_source(name)
+                return source is not None and source.name == "COMMANDLINE"
+
+            if not _cli_flag("center_lon"):
+                center_lon = weather.subsolar_lon_deg
+            if not _cli_flag("sun_lon"):
+                sun_lon = weather.subsolar_lon_deg
+            if not _cli_flag("sun_lat"):
+                sun_lat = weather.subsolar_lat_deg
+        console.print(
+            f"  weather pack: frame {weather_frame}/{weather.meta['frames_total'] - 1} "
+            f"(t +{weather.hours:.0f} h), sub-solar "
+            f"({weather.subsolar_lat_deg:+.1f}°, {weather.subsolar_lon_deg:+.1f}°)"
+        )
+
     console.print(
         f"Synthesising cloud texture for {world}/{planet_id} "
         f"({width}×{height}, branch={branch or 'root'}, seed={seed})…"
@@ -1005,10 +1071,32 @@ def export_clouds(
     from dreamulator.media.cloud_render import clouds_globe
     from dreamulator.media.cyclone_render import Cyclone, synthetic_cyclones
 
+    cyclone_source_label: str | None = None
     if cfg.cyclones.tracks:
         cyclone_set: list[Cyclone] | None = [
             Cyclone(**track.model_dump()) for track in cfg.cyclones.tracks
         ]
+        cyclone_source_label = "explicit config tracks"
+    elif cyclones and weather_pack is not None:
+        from dreamulator.gcm.weather_pack import load_pack as _load_pack
+        from dreamulator.media.cyclone_tracks import weather_cyclones_at_frame
+
+        cyclone_set = weather_cyclones_at_frame(
+            _load_pack(weather_pack),
+            weather_frame,
+            seed=cyclone_seed,
+            include_stationary=stationary_lows,
+            radius_km=radius_km,
+        )
+        cyclone_source_label = (
+            "weather pack tracks (moving extratropical) + parametric tropical (canon)"
+        )
+        n_extra = sum(c.kind == "extratropical" for c in cyclone_set)
+        console.print(
+            f"  cyclones: {len(cyclone_set)} from weather pack "
+            f"({n_extra} extratropical, {len(cyclone_set) - n_extra} tropical, "
+            f"seed {cyclone_seed})"
+        )
     elif cyclones:
         cyclone_set = synthetic_cyclones(
             cyclone_seed,
@@ -1064,6 +1152,8 @@ def export_clouds(
         cover_scale=cover_scale,
         cyclones=cyclone_set,
         cyclone_seed=cyclone_seed,
+        cyclone_source=cyclone_source_label,
+        weather=weather,
         atmosphere=atmosphere_model,
         cloud_altitude_km=cfg.atmosphere.cloud_altitude_km,
         cirrus_altitude_km=cfg.atmosphere.cirrus_altitude_km,

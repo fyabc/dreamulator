@@ -494,6 +494,12 @@ refined-out → gaea-out → input/）。操作细节见
 
 ```bash
 dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-res 1600 --cyclones
+# 用气象图层包的一帧做条件场（云量/云层分层/太阳方向都来自模式自身天气）：
+dreamulator export globe nacrea --branch gcm-t42-712 \
+    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 400
+# 同上，并叠加该帧真实气旋（移动温带轨迹 + 正典参数化热带）：
+dreamulator export globe nacrea --branch gcm-t42-712 \
+    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 477 --cyclones
 ```
 
 `export globe` 的完整参数（`clouds` 为别名）：
@@ -506,15 +512,24 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-re
 | `--config` | 无 | YAML 配置文件；显式命令行参数覆盖文件 |
 | `--grid, -g` | `8192x4096` | 等距圆柱纹理分辨率 `WxH`；16K×8K 内存开销较大 |
 | `--seed` | 7 | 噪声种子；同场 + 同 seed = 逐位相同 |
-| `--output, -o` | `<export-dir>/globe/<world>[-<branch>]/` | 输出目录 |
+| `--output, -o` | `<export-dir>/globe/<world>[-<branch>][-f<frame>]/` | 输出目录；带 `--weather-pack` 时追加帧号后缀 |
 | `--globe-res` | 1600 | 正交圆盘预览分辨率（方形） |
-| `--center-lon/--center-lat` | 90/15 | 视图中心经纬度 |
-| `--sun-lon/--sun-lat` | 中心−25°/20° | 次太阳点 |
+| `--center-lon/--center-lat` | 90/15 | 视图中心经纬度；带 `--weather-pack` 且未显式指定时，经度默认取该帧次太阳点（向阳面对着镜头） |
+| `--sun-lon/--sun-lat` | 中心−25°/20° | 次太阳点；带 `--weather-pack` 且未显式指定时，取包内该帧的日下点 |
 | `--cover-scale` | 1.0 | 云量倍率；0 = 跳过纹理合成，只出地表与无云圆盘 |
-| `--cyclones` | 关 | 叠加 L3 气旋模板（合成占位轨迹） |
-| `--cyclone-seed` | 31 | 合成轨迹种子 |
+| `--cyclones` | 关 | 叠加 L3 气旋模板：带 `--weather-pack` 时用包内真实移动温带轨迹 + 正典参数化热带；否则合成占位集 |
+| `--cyclone-seed` | 31 | 合成集种子；带包时为热带正典抽样种子 |
+| `--stationary-lows` | 关 | 仅 QA：同时画出包内准静止低压（默认不画，多为陆上热低压） |
+| `--weather-pack` | 无 | 气象图层包目录（`meta.json` + `fields/`，放在 `exports/weather/` 下，不进 git）：条件场切换为该包的逐帧云量 |
+| `--frame` | 0 | 图层包帧号（配合 `--weather-pack`；6 小时一帧） |
 | `--atmosphere/--no-atmosphere` | 开 | L5 物理大气壳；关闭退回旧版边缘光晕预览 |
 | `--data-dir` | 环境默认 | 覆盖世界数据目录 |
+
+`--weather-pack` 的条件场处理（与 GCM 侧约定的口径，参数记入 `meta.json` 的
+`weather_pack` 块）：瞬时云量接近非 0 即 1，先取以当前帧为中心的 3 帧等权平均
+（18 小时窗口；序列两端收缩为 2 帧），再在原始 T42 网格上做标准差 1 个格距
+（赤道约 310 km）的高斯平滑（经度环绕、纬度边缘延拓）。低/中云与高云的比例经
+同一处理后驱动两层云壳的厚度分配。
 
 输出文件：
 
@@ -524,10 +539,10 @@ dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-re
 | `clouds.png` | 合并云不透明度（RGBA straight alpha，兼容旧调用） |
 | `clouds_low.png` | 低/中云壳 + 薄霾（4 km 层） |
 | `clouds_cirrus.png` | 高壳卷云（9 km 层，带对比曲线） |
-| `cloud_cover.png` | 大尺度云量场（GCM 总云量；引擎世界为降水 + SLP 占位） |
+| `cloud_cover.png` | 大尺度云量场（GCM 总云量，年均或 `--weather-pack` 逐帧；引擎世界为降水 + SLP 占位） |
 | `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络（仅 `--cyclones`） |
 | `globe.png` | 正交圆盘静帧（地表 + 双层云 + 大气 + 高光） |
-| `meta.json` | 网格、种子、机位、气旋轨迹、大气参数、食影参数与 provenance |
+| `meta.json` | 网格、种子、机位、云量来源与图层包参数、气旋轨迹、大气参数、食影参数与 provenance |
 
 #### 2. YAML 配置
 
@@ -604,10 +619,10 @@ uv run --with imageio-ffmpeg python scripts/media/spin_video.py <globe_dir> -o e
 
 #### 4. 云系演化视频（L4 原型）
 
-同一份输出目录，把低云与卷云沿年均风场做半拉格朗日平流（BFECC 抑制扩散），固定机位、晨昏线不动；热带气旋叠加 Holland 涡旋，温带逗号默认只随环境风/锋面切变。
+同一份输出目录，把低云与卷云做半拉格朗日平流（BFECC 抑制扩散），固定机位、晨昏线不动。风源两档：`--weather-pack` 给定时用包内逐帧风（低/中云壳随中层风、卷云壳随高层风，帧间插值），且静帧含气旋时风暴中心与强度逐帧取自真实轨迹（含正典热带）；不带包时用年均风，快照风暴按环境风漂移。热带气旋叠加 Holland 涡旋，温带逗号默认只随环境风/锋面切变。
 
 ```bash
-uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py <globe_dir> -o exports/spin/nacrea_cloudflow_720p.mp4 --res 720 --seconds 8 --fps 30 --sim-hours 24 --texture-width 2048
+uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py <globe_dir> -o exports/video/cloudflow/nacrea_cloudflow_720p.mp4 --res 720 --seconds 8 --fps 30 --sim-hours 24 --texture-width 2048 --weather-pack exports/weather/nacrea-gcm-t42-712
 ```
 
 | 选项 | 默认 | 说明 |
