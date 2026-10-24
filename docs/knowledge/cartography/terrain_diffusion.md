@@ -31,6 +31,27 @@
 | 大尺度锚定 | 高程分位数与条件场吻合（q50 −214 m vs −317 m） |
 | 水文 | **不管**：生成场约 12–13.7% 陆地是封闭盆地（550 km 窗实测），排水、河网、湖语义全部由本库的 Priority-Flood 层补齐 |
 
+## 大画布上的无缝分块生成
+
+上游的采样算法 InfiniteDiffusion 是 MultiDiffusion 的推广。MultiDiffusion 在一张固定大小的画布上，每一步去噪都把
+互相重叠的窗口各自预测一次，再在重叠处取平均，所以窗口之间没有接缝，但整张画布要一次算完。InfiniteDiffusion
+把同一套重叠平均改成按需计算：画布被当作一个只由种子和坐标索引的无限数组，取任何一块时只计算覆盖它所需的
+那些窗口，中间结果按坐标缓存（上游的 infinite-tensor 框架）。论文称之为无界范围、种子一致与常数时间随机访问，
+并报告它相对 MultiDiffusion 几乎没有质量损失。
+
+由此得到全球画布链依赖的三条性质：
+
+1. **分块之间没有接缝。** 一张画布按 2048 像素的分块逐块取出，每一块都是同一个无限数组的一部分，相邻分块
+   在边界两侧来自同一次重叠平均，不是两次独立生成拼起来的。曙光试点画布上，分块边界两侧相邻像素的高差
+   与块内相邻像素的高差之比为 1.02。
+2. **生成顺序与分块方式不影响结果。** 同一种子、同一条件场下，先算哪一块、由哪个进程算，结果都一样，
+   所以一张大陆画布可以拆给多张 GPU 并行生成、中断后续算。不同进程之间只有 GPU 浮点运算顺序带来的差异：
+   约 0.3–3% 的像素相差 1 m。
+3. **无缝只在同一张画布内成立。** 坐标原点和条件场属于一张画布；画布的正方形一旦放大或平移，同一地点的
+   采样坐标就变了，得到的是另一张统计相似的地形，已生成的分块必须重算。两张画布之间也是两次独立生成，
+   重叠区里要按归属规则取舍并混合（`blend_overlap`，见
+   [canvas-chain.md](../../design/pipelines/canvas-chain.md) 2.4 节）。
+
 ## 与本库 SPL 链的分工
 
 细化场自带地貌起伏（平原细节起伏实测 σ 31 m），所以 refined 路径
@@ -76,4 +97,6 @@ cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -
 
 - 仓库与权重：https://github.com/xandergos/terrain-diffusion
   （HF 权重 `xandergos/terrain-diffusion-90m`，约 1.1 GB）
-- 论文：arXiv 2512.08309（SIGGRAPH 2026）
+- 论文：arXiv 2512.08309（SIGGRAPH 2026），Goslin，*InfiniteDiffusion: Bridging Learned Fidelity and
+  Procedural Utility for Open-World Terrain Generation*；采样算法的独立示例见上游仓库的
+  `annotated_infinite_panorama.py`

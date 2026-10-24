@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   超高清总览图，配色与地形图相同，默认写到 `exports/mosaic/`）。原来带 `--stage` 的单条 `export canvas` 拆成
   `hydrology` 与 `window`。库代码在 `map/td_canvas_build.py`、`td_canvas_worker.py` 与 `td_canvas_mosaic.py`；
   画布根目录默认是 `data/worlds/<世界>/canvases/<分支>/`。技术参考改名为 `pipelines/canvas-chain.md` 并补齐 S1 一节。
+- **画布总览图的画法与色表（2026-10-24）**：`export canvas mosaic` 新增 `--style relief`（放大高程的多向光照立体晕渲，
+  海岸外加柔和阴影）、`--palette`（陆地色表：`adaptive`、`pastel`、GMT 的 `etopo1`、`globe`、`relief`，维基百科
+  规范与按画布气候混合的交叉混合分层设色）与 `--sea`（海洋取水深蓝、色表自带色或灰色）。色表数据在
+  `map/hypsometric_palettes.json`，逐套记录来源与许可。
 - **画布的陆架延伸（2026-10-24）**：`map/td_canvas.py` 的分块清单除了成员陆地 200 km 缓冲带，还纳入本画布的陆架
   （`shelf_cells`：水深浅于 2500 m、离本画布陆地 600 km 以内、按最近陆地规则归本画布的海洋格），画布正方形随之放大。
   地形扩散模型会把近海平面的浅陆架抬成陆地，只有缓冲带时这类陆地会被分块边缘截断；归属条件保证画布不伸进邻居的地盘。

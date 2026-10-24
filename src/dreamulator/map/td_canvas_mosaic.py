@@ -3,12 +3,24 @@
 Stitches a canvas's raw chunks (about 89.8 m per pixel) into one image, cropped to the generated
 area, in the export-carto palette: the shared adaptive-terrain LUT anchored on a fixed elevation
 range, the two-scale hillshade multiplied into land only and carto's saturation lift.  Chunks not
-in the manifest (land owned by a neighbouring canvas, open ocean) stay paper-coloured.
+in the manifest (land owned by a neighbouring canvas, open ocean) stay paper-coloured (or the
+sea grey with ``sea="grey"``).
 
 The image is built in bands of one chunk row with a halo, in parallel, so no step holds the whole
 height field.  ``step`` block-averages step x step pixels first (1 = native).  The structural
 hillshade keeps a fixed ground scale (``struct_km``), so crops of a big image and a small overview
 read alike; the fine shade is the true slope at the output pixel size.
+
+Colour and shading are independent options.  ``style`` picks the shading: ``carto`` (default) is
+the export-carto look above; ``relief`` is a shaded-relief look for overview prints, a
+multi-directional hillshade on vertically exaggerated heights (default exaggeration = pixel size
+/ 90 m, so a block-averaged pixel shades about as steeply as the native one) with a soft shadow
+along the coast.  ``palette`` picks the land colours from ``hypsometric_palettes.json`` (or the
+built-in ``adaptive`` export-carto LUT); ``sea`` picks the ocean: ``carto`` (the export-carto
+depth blues, default), ``palette`` (the palette's own bathymetry where it has one) or ``grey``.
+The ``cross-blended`` palette (Patterson & Jenny 2011) blends arid, warm-humid, cold-humid and
+polar ramps per pixel from the canvas's coarse climate channels.  All are rendering choices,
+not terrain changes.
 
 Output by extension: ``.jpg`` (sides up to 65535 px, the format's limit), ``.png`` (lossless, any
 size) or ``.tif`` (BigTIFF, tiled, deflate).  A sidecar ``<out>.json`` records the canvas, step,
@@ -32,9 +44,104 @@ MOSAIC_RANGE_M = (-9000.0, 9000.0)
 #: Structural hillshade sigma (km): 24 sheet px at a 16x overview (about 1.44 km per px).
 STRUCT_KM = 24 * 23.0 / 256 * 16
 PAPER_RGB = (0.97, 0.96, 0.93)
+STYLES = ("carto", "relief")
+#: Relief style: light directions (azimuth deg, weight) at 40 deg altitude, NW key light.
+RELIEF_LIGHTS = ((315.0, 0.5), (270.0, 0.2), (0.0, 0.2), (225.0, 0.1))
+RELIEF_ALTITUDE_DEG = 40.0
+SEAS = ("carto", "palette", "grey")
+SEA_GREY_RGB = (0.88, 0.88, 0.88)
+#: Coast shadow on the sea: depth of the darkening and its e-folding distance (km).
+RELIEF_COAST_SHADOW = (0.12, 2.0)
+#: Default palette per style.
+DEFAULT_PALETTE = {"carto": "adaptive", "relief": "pastel"}
+#: Cross-blended weights (rendering choices): aridity index P/PET from the dry sub-humid bound
+#: 0.65 to the arid bound 0.2 (UNEP classes); warm vs cold humid over a 8–18 °C annual mean;
+#: polar below a 10 °C warmest month (Köppen E) with a ±2 K blend, and wherever ice lies.
+CB_ARID_AI = (0.65, 0.2)
+CB_WARM_C = (8.0, 18.0)
+CB_POLAR_TMAX_C = (12.0, 8.0)
 JPEG_MAX_SIDE = 65535
 
 _ctx: dict[str, Any] = {}
+_HYPSO: dict[str, Any] = json.loads(
+    Path(__file__).with_name("hypsometric_palettes.json").read_text(encoding="utf-8")
+)["palettes"]
+
+
+def palette_names() -> list[str]:
+    """``adaptive`` (the export-carto LUT) plus every palette of ``hypsometric_palettes.json``."""
+    return ["adaptive", *_HYPSO]
+
+
+def _ramp(h: np.ndarray, stops: list[list[float]]) -> np.ndarray:
+    """Piecewise-linear RGB 0..1 over (elevation m, r, g, b) stops, clamped at both ends."""
+    st = np.asarray(stops, dtype=np.float64)
+    return np.stack([np.interp(h, st[:, 0], st[:, k] / 255.0) for k in (1, 2, 3)], axis=-1)
+
+
+def _smoothstep(t: np.ndarray) -> np.ndarray:
+    t = np.clip(t, 0.0, 1.0)
+    return np.asarray(t * t * (3.0 - 2.0 * t))
+
+
+def cross_blend_weights(canvas_dir: Path) -> dict[str, np.ndarray]:
+    """Per coarse cell weights ``arid``, ``warm`` and ``polar`` (0..1) from the climate channels."""
+    from scipy.ndimage import distance_transform_edt
+
+    c = canvas_dir / "climate"
+    p = np.load(c / "precipitation.mm.npy").astype(np.float64)
+    pet = np.load(c / "pet_hamon.mm.npy").astype(np.float64)
+    t = np.load(c / "temperature.C.npy").astype(np.float64)
+    tmax = np.load(c / "temperature_monthly.C.npy").astype(np.float64).max(axis=0)
+    ice = np.load(c / "ice.m.npy").astype(np.float64)
+    ai = p / np.maximum(pet, 1.0)
+    bad = ~np.isfinite(ai)  # ocean cells: take the nearest land value
+    if bad.any() and not bad.all():
+        _, (ii, jj) = distance_transform_edt(bad, return_indices=True)
+        ai = ai[ii, jj]
+    ai = np.where(np.isfinite(ai), ai, 1.0)
+    w_arid = _smoothstep((CB_ARID_AI[0] - ai) / (CB_ARID_AI[0] - CB_ARID_AI[1]))
+    w_warm = _smoothstep((t - CB_WARM_C[0]) / (CB_WARM_C[1] - CB_WARM_C[0]))
+    w_polar = _smoothstep((CB_POLAR_TMAX_C[0] - tmax) / (CB_POLAR_TMAX_C[0] - CB_POLAR_TMAX_C[1]))
+    w_polar = np.maximum(w_polar, (np.nan_to_num(ice) > 0).astype(np.float64))
+    return {"arid": w_arid, "warm": w_warm, "polar": w_polar}
+
+
+def land_rgb(
+    h: np.ndarray, palette: str, weights: dict[str, np.ndarray] | None = None
+) -> np.ndarray:
+    """Land colours (RGB 0..1) of heights ``h`` in a named palette (sea pixels get colours too)."""
+    if palette == "adaptive":
+        from dreamulator.media.carto_render import _lut_rgb
+
+        land = np.zeros(h.shape, dtype=bool)
+        return np.asarray(_lut_rgb(h, land, np.zeros_like(h), MOSAIC_RANGE_M))
+    spec = _HYPSO[palette]
+    if spec.get("kind") == "cross_blended":
+        if weights is None:
+            raise ValueError("the cross-blended palette needs climate weights")
+        r = spec["ramps"]
+        humid = _blend(_ramp(h, r["cold_humid"]), _ramp(h, r["warm_humid"]), weights["warm"])
+        low = _blend(humid, _ramp(h, r["arid"]), weights["arid"])
+        return _blend(low, _ramp(h, r["polar"]), weights["polar"])
+    return _ramp(h, spec["land"])
+
+
+def _blend(a: np.ndarray, b: np.ndarray, w: np.ndarray) -> np.ndarray:
+    return np.asarray(a * (1.0 - w[..., None]) + b * w[..., None])
+
+
+def sea_rgb(h: np.ndarray, sea: str, palette: str) -> np.ndarray:
+    """Ocean colours (RGB 0..1) of heights ``h`` (land pixels get colours too)."""
+    spec = _HYPSO.get(palette, {})
+    if sea == "grey":
+        return np.broadcast_to(np.array(SEA_GREY_RGB), (*h.shape, 3)).copy()
+    if sea == "palette" and spec.get("sea"):
+        return _ramp(h, spec["sea"])
+    from dreamulator.media.carto_render import _lut_rgb
+
+    wet = np.ones(h.shape, dtype=bool)
+    return np.asarray(_lut_rgb(h, wet, -np.minimum(h, 0.0), MOSAIC_RANGE_M))
 
 
 def carto_tint(
@@ -42,8 +149,12 @@ def carto_tint(
     km_per_px: float,
     world_range_m: tuple[float, float] = MOSAIC_RANGE_M,
     struct_sigma_px: float | None = None,
+    *,
+    palette: str = "adaptive",
+    sea_mode: str = "carto",
+    weights: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
-    """Export-carto tint (float RGB 0..1) of a height field; NaN = paper."""
+    """Export-carto shading (float RGB 0..1) of a height field; NaN = paper."""
     from dreamulator.media.carto_render import (
         COLOR_SATURATION,
         HILLSHADE_STRENGTH,
@@ -53,13 +164,51 @@ def carto_tint(
 
     h = np.where(np.isfinite(height_m), height_m, world_range_m[0])
     sea = h <= 0.0
-    rgb = _lut_rgb(h, sea, np.where(sea, -h, 0.0), world_range_m)
+    if palette == "adaptive" and sea_mode == "carto":
+        rgb = _lut_rgb(h, sea, np.where(sea, -h, 0.0), world_range_m)
+    else:
+        rgb = np.where(sea[..., None], sea_rgb(h, sea_mode, palette), land_rgb(h, palette, weights))
     relief = two_scale_relief(h, km_per_px, struct_sigma_px=struct_sigma_px)
     shade = (1.0 - HILLSHADE_STRENGTH) + HILLSHADE_STRENGTH * relief[..., None]
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
     lum = rgb.mean(axis=2, keepdims=True)
     rgb = np.clip(lum + (rgb - lum) * COLOR_SATURATION, 0.0, 1.0)
-    rgb[~np.isfinite(height_m)] = PAPER_RGB
+    rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
+    return np.asarray(rgb)
+
+
+def relief_tint(
+    height_m: np.ndarray,
+    km_per_px: float,
+    exaggeration: float,
+    world_range_m: tuple[float, float] = MOSAIC_RANGE_M,
+    *,
+    palette: str = "pastel",
+    sea_mode: str = "carto",
+    weights: dict[str, np.ndarray] | None = None,
+) -> np.ndarray:
+    """Shaded-relief shading (float RGB 0..1) of a height field; NaN = paper (or the sea grey)."""
+    from scipy.ndimage import distance_transform_edt
+
+    h = np.where(np.isfinite(height_m), height_m, world_range_m[0])
+    sea = h <= 0.0
+    tint = land_rgb(h, palette, weights)
+    gy, gx = np.gradient(np.where(sea, 0.0, h) * exaggeration, km_per_px * 1000.0)
+    slope = np.arctan(np.hypot(gx, gy))
+    aspect = np.arctan2(-gx, gy)
+    alt = np.radians(RELIEF_ALTITUDE_DEG)
+    shade = np.zeros_like(h)
+    for az, wt in RELIEF_LIGHTS:
+        lit = np.sin(alt) * np.cos(slope) + np.cos(alt) * np.sin(slope) * np.cos(
+            np.radians(az) - aspect
+        )
+        shade += wt * np.clip(lit, 0.0, 1.0)
+    rgb = np.clip(tint * (0.35 + 0.85 * shade[..., None]), 0.0, 1.0)
+    depth, efold = RELIEF_COAST_SHADOW
+    dist_km = distance_transform_edt(sea) * km_per_px
+    ocean = sea_rgb(h, sea_mode, palette)
+    rgb[sea] = ocean[sea] * (1.0 - depth * np.exp(-dist_km[sea] / efold))[:, None]
+    rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
     return np.asarray(rgb)
 
 
@@ -93,7 +242,23 @@ def _band(ci: int) -> tuple[int, np.ndarray]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN blocks outside the manifest
             h = np.nanmean(h, axis=(1, 3))
-    rgb = carto_tint(h, _ctx["km_px"], MOSAIC_RANGE_M, struct_sigma_px=_ctx["sigma_px"])
+    weights = None
+    if _ctx["weights"] is not None:
+        from scipy.ndimage import map_coordinates
+
+        # output pixel centres in coarse-cell coordinates (cell i spans pixels [256i, 256i + 256))
+        rr = (a0 + (np.arange(h.shape[0]) + 0.5) * step) / 256.0 - 0.5
+        cc = (_ctx["c0"] + (np.arange(h.shape[1]) + 0.5) * step) / 256.0 - 0.5
+        gr, gc = np.meshgrid(rr, cc, indexing="ij")
+        weights = {
+            k: map_coordinates(v, [gr, gc], order=1, mode="nearest")
+            for k, v in _ctx["weights"].items()
+        }
+    kw = {"palette": _ctx["palette"], "sea_mode": _ctx["sea"], "weights": weights}
+    if _ctx["style"] == "relief":
+        rgb = relief_tint(h, _ctx["km_px"], _ctx["exaggeration"], **kw)
+    else:
+        rgb = carto_tint(h, _ctx["km_px"], MOSAIC_RANGE_M, struct_sigma_px=_ctx["sigma_px"], **kw)
     top = (r0 - a0) // step
     return ci, np.rint(rgb[top : top + CHUNK_PX // step] * 255).astype(np.uint8)
 
@@ -104,12 +269,23 @@ def render_mosaic(
     *,
     step: int = 1,
     struct_km: float = STRUCT_KM,
+    style: str = "carto",
+    palette: str | None = None,
+    sea: str = "carto",
+    exaggeration: float | None = None,
     quality: int = 90,
     workers: int = 8,
 ) -> dict[str, Any]:
     """Write the mosaic image and its sidecar; returns the sidecar dict."""
     if step < 1 or CHUNK_PX % step:
         raise ValueError("step must divide 2048")
+    if style not in STYLES:
+        raise ValueError(f"unknown style {style!r}; use one of {', '.join(STYLES)}")
+    palette = palette or DEFAULT_PALETTE[style]
+    if palette not in palette_names():
+        raise ValueError(f"unknown palette {palette!r}; use one of {', '.join(palette_names())}")
+    if sea not in SEAS:
+        raise ValueError(f"unknown sea {sea!r}; use one of {', '.join(SEAS)}")
     meta = json.loads((canvas_dir / "canvas.json").read_text(encoding="utf-8"))
     g = meta["geometry"]
     files = {
@@ -122,12 +298,20 @@ def render_mosaic(
     cols = sorted({k[1] for k in files})
     km_px = float(g["px_km"]) * step
     sigma_px = struct_km / km_px
+    ve = float(exaggeration) if exaggeration is not None else km_px / (23.0 / 256)
     ctx = {
         "files": files,
         "step": step,
         "halo": int(math.ceil(4 * sigma_px)) + 2,
         "km_px": km_px,
         "sigma_px": sigma_px,
+        "style": style,
+        "palette": palette,
+        "sea": sea,
+        "weights": cross_blend_weights(canvas_dir)
+        if _HYPSO.get(palette, {}).get("kind") == "cross_blended"
+        else None,
+        "exaggeration": ve,
         "r0": rows[0] * CHUNK_PX,
         "r1": (rows[-1] + 1) * CHUNK_PX,
         "c0": cols[0] * CHUNK_PX,
@@ -180,7 +364,10 @@ def render_mosaic(
         "canvas_rows": [ctx["r0"], ctx["r1"]],
         "canvas_cols": [ctx["c0"], ctx["c1"]],
         "geometry": g,
-        "palette": "export-carto LUT, two-scale hillshade",
+        "style": style,
+        "palette": palette,
+        "sea": sea,
+        "exaggeration": round(ve, 3) if style == "relief" else None,
         "struct_km": struct_km,
     }
     Path(str(out) + ".json").write_text(json.dumps(side, indent=1), encoding="utf-8")

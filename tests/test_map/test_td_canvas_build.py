@@ -159,3 +159,36 @@ def test_export_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
     )
     assert res.exit_code == 0, res.output
     assert out.exists() and (tmp_path / "m.jpg.json").exists()
+
+
+def test_mosaic_relief_style_palettes_and_seas(tmp_path: Path) -> None:
+    from PIL import Image
+
+    c = _fake_canvas(tmp_path, [[0, 0], [1, 1]])
+    y, x = np.mgrid[0:2048, 0:2048]
+    for i, j in [(0, 0), (1, 1)]:
+        h = (np.sin(x / 150.0) * 300 + (y - 1024) * 0.5).astype(np.int16)
+        np.save(c / "chunks" / tw.chunk_name(i, j), h)
+    clim = c / "climate"
+    clim.mkdir()
+    n = 16
+    np.save(clim / "precipitation.mm.npy", np.full((n, n), 100.0, np.float32))
+    np.save(clim / "pet_hamon.mm.npy", np.full((n, n), 1200.0, np.float32))  # arid
+    np.save(clim / "temperature.C.npy", np.full((n, n), 25.0, np.float32))
+    np.save(clim / "temperature_monthly.C.npy", np.full((12, n, n), 25.0, np.float32))
+    np.save(clim / "ice.m.npy", np.zeros((n, n), np.float32))
+    w = tm.cross_blend_weights(c)
+    assert np.allclose(w["arid"], 1.0) and np.allclose(w["polar"], 0.0)
+    paper = np.rint(np.array(tm.PAPER_RGB) * 255).astype(np.uint8)
+    grey = np.rint(np.array(tm.SEA_GREY_RGB) * 255).astype(np.uint8)
+    for palette in tm.palette_names():
+        out = tmp_path / f"{palette}.png"
+        side = tm.render_mosaic(c, out, step=16, style="relief", palette=palette, workers=1)
+        assert side["palette"] == palette and side["exaggeration"] == pytest.approx(16.0)
+        assert (np.asarray(Image.open(out))[200, 50] == paper).all()  # outside the manifest
+    tm.render_mosaic(c, tmp_path / "g.png", step=16, style="relief", sea="grey", workers=1)
+    assert (np.asarray(Image.open(tmp_path / "g.png"))[200, 50] == grey).all()
+    with pytest.raises(ValueError, match="unknown style"):
+        tm.render_mosaic(c, out, step=16, style="oil")
+    with pytest.raises(ValueError, match="unknown palette"):
+        tm.render_mosaic(c, out, step=16, palette="nope")

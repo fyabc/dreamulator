@@ -415,6 +415,21 @@ def canvas_mosaic(
     step: int = typer.Option(
         4, "--step", help="Block-average N×N pixels (1 = native 90 m; must divide 2048)"
     ),
+    style: str = typer.Option(
+        "carto", "--style", help="Shading: carto (export-carto) | relief (shaded relief for prints)"
+    ),
+    palette: str | None = typer.Option(
+        None,
+        "--palette",
+        help="Land colours (default: adaptive for carto, pastel for relief): adaptive, pastel, "
+        "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
+    ),
+    sea: str = typer.Option(
+        "carto", "--sea", help="Ocean: carto (depth blues) | palette (the palette's own) | grey"
+    ),
+    exaggeration: float | None = typer.Option(
+        None, "--exaggeration", help="relief: vertical exaggeration (default pixel size / 90 m)"
+    ),
     quality: int = typer.Option(90, "--quality", help="JPEG quality"),
     workers: int = typer.Option(16, "--workers", help="Parallel band workers"),
 ) -> None:
@@ -428,10 +443,22 @@ def canvas_mosaic(
         tag = str(src.get("world", "world")) + (f"-{src['branch']}" if src.get("branch") else "")
         px_m = round(float(meta["geometry"]["px_km"]) * step * 1000)
         root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-        output = root / "mosaic" / tag / f"{meta['id']}_{px_m}m.jpg"
+        tags = [t for t in (style, palette) if t not in (None, "carto")]
+        suffix = "".join(f"_{t}" for t in tags)
+        output = root / "mosaic" / tag / f"{meta['id']}_{px_m}m{suffix}.jpg"
     t0 = time.time()
     try:
-        side = render_mosaic(canvas, output, step=step, quality=quality, workers=workers)
+        side = render_mosaic(
+            canvas,
+            output,
+            step=step,
+            style=style,
+            palette=palette,
+            sea=sea,
+            exaggeration=exaggeration,
+            quality=quality,
+            workers=workers,
+        )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from None
