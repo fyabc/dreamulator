@@ -1185,29 +1185,22 @@ def has_gcm_cloud_fields(mesh: CVTMesh) -> bool:
     return _mesh_field(mesh, "cloud_total_frac") is not None
 
 
-def vertical_split_weights(
-    low_amount: np.ndarray,
-    high_amount: np.ndarray,
+def shell_weights_from_shares(
+    low_share: np.ndarray,
+    high_share: np.ndarray,
+    total: np.ndarray,
     *,
     mean_weights: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Two-shell weights in [0.25, 3] from smoothed low/mid and high amounts.
+    """Two-shell multipliers in [0.25, 3] from local shares of the cloud total.
 
-    The layer fractions say where cloud sits (ISCCP 680/440 hPa levels), not
-    how much of the total it is; their shares of the low+mid versus high total
-    redistribute opacity between the two L5 shells — a place whose high share
-    exceeds the global mean gets a thicker cirrus shell and a thinner low
-    shell.  Each weight is the local share divided by its global mean
-    (``mean_weights`` are per-point weights for that mean: uniform on a CVT
-    mesh, cos-latitude on a lat-lon grid), clipped, and faded toward one where
-    the total cloud is too small for the split to mean anything.
+    A place whose share exceeds the global mean gets a thicker shell there and
+    a thinner opposite shell.  Each weight is the local share divided by its
+    global mean (``mean_weights`` are per-point weights for that mean: uniform
+    on a CVT mesh, cos-latitude on a lat-lon grid), clipped, and faded toward
+    one where ``total`` is too small for the split to mean anything.
     """
-    total = low_amount + high_amount
     valid = total > 1e-6
-    low_share = np.full_like(total, 0.5)
-    high_share = np.full_like(total, 0.5)
-    low_share[valid] = low_amount[valid] / total[valid]
-    high_share[valid] = 1.0 - low_share[valid]
     w = np.ones_like(total) if mean_weights is None else mean_weights
     wsum = float(w[valid].sum())
     mean_low = float((w[valid] * low_share[valid]).sum() / wsum) if wsum > 0.0 else 0.5
@@ -1222,6 +1215,30 @@ def vertical_split_weights(
     low_weight = 1.0 + confidence * (low_weight - 1.0)
     high_weight = 1.0 + confidence * (high_weight - 1.0)
     return low_weight, high_weight
+
+
+def vertical_split_weights(
+    low_amount: np.ndarray,
+    high_amount: np.ndarray,
+    *,
+    mean_weights: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Two-shell weights in [0.25, 3] from smoothed low/mid and high amounts.
+
+    The layer fractions say where cloud sits (ISCCP 680/440 hPa levels), not
+    how much of the total it is; their shares of the low+mid versus high total
+    redistribute opacity between the two L5 shells via
+    :func:`shell_weights_from_shares`.
+    """
+    total = low_amount + high_amount
+    valid = total > 1e-6
+    low_share = np.full_like(total, 0.5)
+    high_share = np.full_like(total, 0.5)
+    low_share[valid] = low_amount[valid] / total[valid]
+    high_share[valid] = 1.0 - low_share[valid]
+    return shell_weights_from_shares(
+        low_share, high_share, total, mean_weights=mean_weights
+    )
 
 
 def cloud_vertical_weights(
@@ -1620,8 +1637,8 @@ def clouds_globe(
     vertical_weights = cloud_vertical_weights(mesh, indices)
     if weather is not None:
         # A live weather-pack frame replaces the annual conditioning: the
-        # cover and the two-shell split come from the model's weather at this
-        # instant; wind, ocean and dp still come from the mesh until S2.
+        # cover and the two-shell split (classified by the visible cloud top)
+        # come from the model's weather at this instant.
         vertical_weights = (weather.low_weight, weather.high_weight)
     out_dir.mkdir(parents=True, exist_ok=True)
 

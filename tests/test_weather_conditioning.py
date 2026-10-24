@@ -24,6 +24,7 @@ _FIELDS = (
     "cloud_low",
     "cloud_mid",
     "cloud_high",
+    "cloud_top_height",
     "u_mid",
     "v_mid",
     "u_high",
@@ -101,33 +102,46 @@ def test_gaussian_smoothing_spreads_a_spike(tmp_path: Path) -> None:
     assert 0.29 < wf.cover.mean() < 0.32  # mass roughly preserved
 
 
-def test_vertical_split_from_pack(tmp_path: Path) -> None:
-    """Low-dominant north / high-dominant south shifts the two shells."""
+def test_vertical_split_from_cloud_top(tmp_path: Path) -> None:
+    """Tops below the split band go deck, tops above go cirrus."""
     lat = -90.0 + (np.arange(NLAT) + 0.5) * 180.0 / NLAT
     north = lat > 0.0
-    low = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
-    low[:, north] = 0.8
-    low[:, ~north] = 0.2
-    high = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
-    high[:, north] = 0.2
-    high[:, ~north] = 0.8
+    top = np.zeros((FRAMES, NLAT, NLON), dtype=np.float32)
+    top[:, north] = 1.0  # stratus deck: visible top below the split band
+    top[:, ~north] = 12.0  # cirrus/deep convection: top above the band
     total = np.full((FRAMES, NLAT, NLON), 0.6, dtype=np.float32)
-    pack = _write_pack(tmp_path, {"cloud_total": total, "cloud_low": low, "cloud_high": high})
+    pack = _write_pack(tmp_path, {"cloud_total": total, "cloud_top_height": top})
     wf = load_weather_frame(pack, 2, 64, 32)
-    # Output rows run north to south.  Deep in either hemisphere the split is
-    # exact: shares 0.8/0.2 against a cos-latitude mean of 0.5 → weights
-    # 1.6/0.4; only the equatorial rows blur.
+    # Output rows run north to south.  Deep in either hemisphere the
+    # classification is exact: shares 1/0 against a cos-latitude mean of 0.5
+    # → the on-shell weight doubles, the off-shell one clips to 0.25; only
+    # the equatorial rows cross the smoothstep band.
     assert wf.low_weight.shape == (32, 64)
-    np.testing.assert_allclose(wf.low_weight[0], 1.6, atol=0.35)
-    np.testing.assert_allclose(wf.low_weight[-1], 0.4, atol=0.35)
+    np.testing.assert_allclose(wf.low_weight[0], 2.0, atol=0.35)
+    np.testing.assert_allclose(wf.low_weight[-1], 0.25, atol=0.35)
     assert wf.low_weight[:8].mean() > 1.2
     assert wf.low_weight[-8:].mean() < 0.8
-    # cos-latitude symmetry: the global mean weight is one.
-    assert 0.9 < wf.low_weight.mean() < 1.1
+    # cos-latitude symmetry: the global mean weight is near one.
+    assert 0.85 < wf.low_weight.mean() < 1.15
     # The shells move oppositely and stay inside the clip range.
     assert wf.high_weight[:8].mean() < 0.8
     for w in (wf.low_weight, wf.high_weight):
         assert np.all((w >= 0.25) & (w <= 3.0))
+    assert "cloud_top_height" in wf.meta["vertical_split"]
+
+
+def test_cloud_top_clear_sky_nan(tmp_path: Path) -> None:
+    """NaN tops (clear sky) never leak into the weights."""
+    top = np.full((FRAMES, NLAT, NLON), np.nan, dtype=np.float32)
+    total = np.full((FRAMES, NLAT, NLON), 0.5, dtype=np.float32)
+    pack = _write_pack(tmp_path, {"cloud_total": total, "cloud_top_height": top})
+    wf = load_weather_frame(pack, 2, 64, 32)
+    # Everywhere clear: the masked mean has no signal, so every cell
+    # classifies as deck and both weights stay at their neutral one.
+    assert np.isfinite(wf.low_weight).all()
+    assert np.isfinite(wf.high_weight).all()
+    np.testing.assert_allclose(wf.low_weight, 1.0, atol=1e-6)
+    np.testing.assert_allclose(wf.high_weight, 1.0, atol=1e-6)
 
 
 def test_winds_from_pack(tmp_path: Path) -> None:

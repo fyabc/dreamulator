@@ -4,10 +4,10 @@ orbital weather-globe chain.
 The weather pack (:mod:`dreamulator.gcm.weather_pack`) stores instantaneous
 6-hourly T42 fields.  This module turns one frame into the conditioning the
 media chain consumes: the large-scale cover (total cloud), the two-shell
-vertical split (low/mid versus high cloud), the sub-solar point and the
-advecting winds — the mid-level flow (sigma ≈ 0.57) that transports the
-low/mid cloud shell and the high-level flow (sigma ≈ 0.32) that carries the
-cirrus shell (the L4 advection input).
+vertical split (the visible cloud top classifies deck versus cirrus), the
+sub-solar point and the advecting winds — the mid-level flow (sigma ≈ 0.57)
+that transports the low/mid cloud shell and the high-level flow (sigma ≈
+0.32) that carries the cirrus shell (the L4 advection input).
 
 Smoothing recipe (agreed with the GCM side, 2026-10-23): the raw
 instantaneous cloud fields are nearly binary — at frame 400, 68% of grid
@@ -52,7 +52,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from dreamulator.gcm.to_mesh import bilinear_to_points
 from dreamulator.gcm.weather_pack import WeatherPack, load_pack
-from dreamulator.media.cloud_render import vertical_split_weights
+from dreamulator.media.cloud_render import shell_weights_from_shares
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -62,13 +62,21 @@ PACK_TIME_WINDOW = 3
 #: Gaussian smoothing sigma in native grid units (1 T42 grid step ≈ 310 km at the equator).
 PACK_SPACE_SIGMA = 1.0
 
-#: Pack fields the frame loader reads: cloud conditioning plus the two
+#: Visible cloud-top heights at/below this km classify all deck; at/above the
+#: companion all cirrus (smoothstep between).  Diagnosis 2026-10-24: the
+#: annual distribution is bimodal — marine stratocumulus tops near 1 km,
+#: cirrus anvils near 10–12 km — with the valley across this band, and the
+#: band midpoint (6.5 km) reproduces the global cirrus share of the layer
+#: -amount split (0.52 versus 0.548), so switching evidence keeps the total.
+SHELL_SPLIT_LOW_KM = 4.75
+SHELL_SPLIT_HIGH_KM = 8.25
+
+#: Pack fields the frame loader reads: cloud conditioning (total cover plus
+#: the visible cloud top that classifies the two shells) and the two
 #: advecting wind levels.
 _FRAME_FIELDS = (
     "cloud_total",
-    "cloud_low",
-    "cloud_mid",
-    "cloud_high",
+    "cloud_top_height",
     "u_mid",
     "v_mid",
     "u_high",
@@ -88,9 +96,11 @@ class WeatherFrame:
 
     All arrays are ``(height, width)`` in the media-chain convention (rows
     north to south, columns −180° to 180°).  ``cover``/``low_weight``/
-    ``high_weight`` are the conditioning of the still renderer (the weights
+    ``high_weight`` are the conditioning of the still renderer: the weights
     are the two-shell multipliers of
-    :func:`cloud_render.vertical_split_weights`); the winds are the advecting
+    :func:`cloud_render.shell_weights_from_shares`, with the shares
+    classified by the visible cloud top (deck below the split band, cirrus
+    above); the winds are the advecting
     flows in m/s — ``wind_east``/``wind_north`` (mid level, sigma ≈ 0.57)
     transport the low/mid cloud shell, ``wind_east_high``/
     ``wind_north_high`` (sigma ≈ 0.32) the cirrus shell.  ``frame`` may be
@@ -127,6 +137,11 @@ def _resample_equirect(
     return np.asarray(bilinear_to_points(lat_grid, lon_grid, values, la, lo), dtype=np.float64)
 
 
+def _smoothstep(lo: float, hi: float, x: np.ndarray) -> np.ndarray:
+    t = np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
 def _integer_frame(
     pack: WeatherPack,
     frame: int,
@@ -150,14 +165,44 @@ def _integer_frame(
         out = gaussian_filter1d(mean, space_sigma, axis=1, mode="wrap")
         return np.asarray(gaussian_filter1d(out, space_sigma, axis=0, mode="nearest"))
 
-    fields = {name: smoothed(name) for name in _FRAME_FIELDS}
+    def smoothed_top(name: str) -> np.ndarray:
+        """Cloud-top smoothing where NaN means clear, not missing.
+
+        Both passes are cloud-frequency weighted (sum of z·m over sum of m):
+        a clear cell must not drag the tops of its cloudy neighbours down.
+        Deep inside clear regions the height tends to 0, which classifies as
+        deck — harmless, those cells carry no cloud to draw.
+        """
+        arrs = [np.asarray(pack.field(name)[t], dtype=np.float64) for t in idx]
+        masks = np.stack([np.isfinite(a) for a in arrs])
+        m_mean = masks.mean(axis=0)
+        z_num = np.sum([np.where(m, a, 0.0) for a, m in zip(arrs, masks, strict=True)], axis=0)
+        z_mean = z_num / np.maximum(m_mean * len(idx), 1e-9)
+        num = gaussian_filter1d(z_mean * m_mean, space_sigma, axis=1, mode="wrap")
+        den = gaussian_filter1d(m_mean, space_sigma, axis=1, mode="wrap")
+        num = np.asarray(gaussian_filter1d(num, space_sigma, axis=0, mode="nearest"))
+        den = np.asarray(gaussian_filter1d(den, space_sigma, axis=0, mode="nearest"))
+        return np.asarray(num / np.maximum(den, 1e-3))
+
+    fields = {name: smoothed(name) for name in _FRAME_FIELDS if name != "cloud_top_height"}
     cover = np.clip(fields["cloud_total"], 0.0, 1.0)
-    low_amount = np.clip(fields["cloud_low"] + fields["cloud_mid"], 0.0, 1.0)
-    high_amount = np.clip(fields["cloud_high"], 0.0, 1.0)
+    z_top = smoothed_top("cloud_top_height")
+    # Visible-top classification: the topmost cloud a space view sees decides
+    # which shell draws the cell (deep-convective tops go to the cirrus shell
+    # even though the low layers are cloudy too).
+    high_share = _smoothstep(SHELL_SPLIT_LOW_KM, SHELL_SPLIT_HIGH_KM, z_top)
+    low_share = 1.0 - high_share
     # cos-latitude weighting: the lat-lon grid over-represents the poles, the
     # CVT mesh (the annual path) is near equal-area.
-    cos_lat = np.broadcast_to(np.cos(np.radians(pack.lat))[:, None], low_amount.shape)
-    low_w, high_w = vertical_split_weights(low_amount, high_amount, mean_weights=cos_lat)
+    cos_lat = np.broadcast_to(np.cos(np.radians(pack.lat))[:, None], cover.shape)
+    low_w, high_w = shell_weights_from_shares(low_share, high_share, cover, mean_weights=cos_lat)
+    # The near-bimodal shares make the clip floor absorb the off-shell
+    # deficit while the on-shell multiplier stays unclipped, so the unweighted
+    # mean weight sits slightly above one (measured 1.17 on f273) and the
+    # split adds a few percent of texture opacity.  That is harmless — the
+    # cover field itself is untouched and the area-weighted budget stays
+    # near one — and renormalising would push weights outside the clip range
+    # for no visible gain, so the bias is accepted and recorded here.
 
     tmeta = pack.meta["time"]
     hours = float(tmeta["hours_since_start"][frame])
@@ -194,6 +239,10 @@ def _integer_frame(
                 "(longitude wraps, latitude edge-replicates)"
             ),
             "cover_field": "cloud_total",
+            "vertical_split": (
+                "cloud_top_height smoothstep 4.75-8.25 km "
+                "(visible top classifies the two shells; clear = deck)"
+            ),
             "wind_fields": dict(_WIND_FIELDS_META),
             "subsolar_lat_deg": sub_lat,
             "subsolar_lon_deg": sub_lon_media,
@@ -294,6 +343,8 @@ def load_weather_frame(
 __all__ = [
     "PACK_SPACE_SIGMA",
     "PACK_TIME_WINDOW",
+    "SHELL_SPLIT_HIGH_KM",
+    "SHELL_SPLIT_LOW_KM",
     "WeatherFrame",
     "blend_weather_frames",
     "frame_from_pack",

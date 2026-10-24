@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **S4 云顶高度驱动两层分配（2026-10-24）**：带 `--weather-pack` 时两层云壳的分配证据从三层云量比例换成可见云顶高度
+  （`cloud_top_height`，随机重叠加权的「太空看到的最高云」）——smoothstep 过渡带 4.75–8.25 km，带下归低/中云壳、带上归
+  卷云壳。全年诊断：云顶高度双峰（层积云约 1 km、卷云砧约 10–12 km）、过渡带落谷值，6.5 km 中点两侧全球卷云份额 0.52 与
+  云量比例口径 0.548 一致，换证据源总量不变。云顶场的时间平均与高斯平滑均为云频加权（晴空不拖低邻居云顶）。归一化骨架
+  抽为 `shell_weights_from_shares` 供两条路径共用；两层壳几何高度保持 4/9 km。年均路径不变。诊断工具
+  `scripts/media/cloud_top_probe.py`（Hovmöller、分布、阈值扫描）。
 - **L3 气旋接入图层包真实轨迹与正典热带（2026-10-24）**：`export globe` 带 `--weather-pack` 时 `--cyclones`
   的集合来自包内真实轨迹——移动温带气旋按渲染帧在轨迹点间插值（位置、中心/环境气压、rmax、外围半径、
   移动矢量，经度走短弧）；准静止低压默认不画（`--stationary-lows` 仅 QA）；包内 32 条热带轨迹弃用（T42 下
