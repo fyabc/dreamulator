@@ -45,9 +45,7 @@ def main() -> None:
     frames = np.arange(n_frames)[::step]
     hours = np.asarray(pack.meta["time"]["hours_since_start"], dtype=float)[::step]
 
-    fig, axes = plt.subplots(
-        2, 1, figsize=(10, 8), sharex=True, constrained_layout=True
-    )
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True, constrained_layout=True)
     for ax, field, title, cmap, vmax in (
         (axes[0], zonal_z, "可见云顶高度（云频加权纬向平均, km）", "viridis", 16.0),
         (axes[1], zonal_f, "云频率（非晴空比例）", "magma", 1.0),
@@ -80,7 +78,10 @@ def main() -> None:
     axes[0].set_title(f"全年分布 · 晴空 {1.0 - cloudy.mean():.1%}")
     for q in (10, 50, 90):
         axes[0].axvline(
-            np.percentile(v, q), color="k", ls=":", lw=1,
+            np.percentile(v, q),
+            color="k",
+            ls=":",
+            lw=1,
             label=f"p{q} = {np.percentile(v, q):.1f} km",
         )
     axes[0].legend(fontsize=8)
