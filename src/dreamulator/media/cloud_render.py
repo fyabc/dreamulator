@@ -1236,9 +1236,7 @@ def vertical_split_weights(
     high_share = np.full_like(total, 0.5)
     low_share[valid] = low_amount[valid] / total[valid]
     high_share[valid] = 1.0 - low_share[valid]
-    return shell_weights_from_shares(
-        low_share, high_share, total, mean_weights=mean_weights
-    )
+    return shell_weights_from_shares(low_share, high_share, total, mean_weights=mean_weights)
 
 
 def cloud_vertical_weights(
