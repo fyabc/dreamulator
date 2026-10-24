@@ -1,16 +1,10 @@
 """Render the chosen Aegis-eclipse satellite still (b = 70,000 km).
 
-Real geometry, not the circular approximation: for every surface normal n,
-the perpendicular distance to the star-Aegis axis is
-
-    rho^2 = R^2 + b^2 - 2 b R (n.u) - R^2 (n.s)^2
-
-where s is the sub-stellar direction and u is the axis-offset direction.
-The local obscuration is the overlap area of the star and Aegis disks.
-
-Camera: centre 60E/15N, sun 40E/20N.  The small night crescent is on the
-right; the shadow centre lies on the terminator, so the shadow band is
-adjacent to the night side.
+The eclipse geometry lives in :mod:`dreamulator.media.eclipse_geometry`
+(exact disk-overlap coverage, impact-parameter shadow placement).  This
+script pins the nacrea/Aegis constants and the framing: camera centre
+60E/15N, sun 40E/20N, the shadow offset toward 60E so the band runs to the
+right of the sub-stellar point, adjacent to the night crescent.
 
 Usage:
     uv run python scripts/media/render_satellite_still.py \
@@ -21,81 +15,24 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 from dreamulator.media.atmosphere_render import AtmosphereModel, render_globe_atmosphere
+from dreamulator.media.eclipse_geometry import eclipse_mask
 
 R_AEGIS = 71355.0
 R_STAR = 426116.0
 D_STAR = 54573303.0
 D_MOON = 723300.0
-ALPHA_A = math.asin(R_AEGIS / D_MOON)
-ALPHA_S = math.asin(R_STAR / D_STAR)
 
 CENTER_LON, CENTER_LAT = 60.0, 15.0
 SUN_LON, SUN_LAT = 40.0, 20.0
 DEFAULT_EXPORT = Path("exports/globe/nacrea")
-DEFAULT_OUT = Path("private/video/eclipse/nacrea_eclipse_b70000.png")
+DEFAULT_OUT = Path("exports/video/eclipse/nacrea_eclipse_b70000.png")
 DEFAULT_B_KM = 70000.0
-
-
-def _unit(lon_deg: float, lat_deg: float) -> np.ndarray:
-    lon = math.radians(lon_deg)
-    lat = math.radians(lat_deg)
-    return np.array([math.cos(lat) * math.cos(lon), math.sin(lat), math.cos(lat) * math.sin(lon)])
-
-
-def _eclipse_field(res: int, planet_km: float, b_km: float) -> np.ndarray:
-    view = _unit(CENTER_LON, CENTER_LAT)
-    sun = _unit(SUN_LON, SUN_LAT)
-    lam = math.radians(CENTER_LON)
-    right = np.array([-math.sin(lam), 0.0, math.cos(lam)])
-    up = np.cross(right, view)
-    # Offset direction: screen-right projected perpendicular to the star
-    # direction, so the shadow centre sits to the right of the view centre.
-    u = right - np.dot(right, sun) * sun
-    u /= np.linalg.norm(u)
-
-    half = res / 2.0
-    py, px = np.mgrid[0:res, 0:res].astype(np.float64)
-    x = (px + 0.5 - half) / (half * 0.92)
-    y = (half - py - 0.5) / (half * 0.92)
-    r2 = x * x + y * y
-    inside = r2 <= 1.0
-    z = np.sqrt(np.clip(1.0 - r2, 0.0, None))
-    n_x = x * right[0] + y * up[0] + z * view[0]
-    n_y = x * right[1] + y * up[1] + z * view[1]
-    n_z = x * right[2] + y * up[2] + z * view[2]
-    cos_sun = n_x * sun[0] + n_y * sun[1] + n_z * sun[2]
-    cos_u = n_x * u[0] + n_y * u[1] + n_z * u[2]
-
-    rho2 = planet_km**2 + b_km**2 - 2.0 * b_km * planet_km * cos_u - (planet_km * cos_sun) ** 2
-    rho = np.sqrt(np.clip(rho2, 0.0, None))
-    sep = np.arctan2(rho, D_MOON)
-
-    cov = np.where(sep <= ALPHA_A - ALPHA_S, 1.0, 0.0)
-    partial = (sep > ALPHA_A - ALPHA_S) & (sep < ALPHA_A + ALPHA_S)
-    if np.any(partial):
-        s = sep[partial]
-        big = ALPHA_A
-        small = ALPHA_S
-        a1 = big * big * np.arccos((s * s + big * big - small * small) / (2 * s * big))
-        a2 = small * small * np.arccos((s * s + small * small - big * big) / (2 * s * small))
-        a3 = 0.5 * np.sqrt(
-            np.clip(
-                (-s + big + small) * (s + big - small) * (s - big + small) * (s + big + small),
-                0.0,
-                None,
-            )
-        )
-        cov[partial] = (a1 + a2 - a3) / (math.pi * small * small)
-    cov = np.clip(cov, 0.0, 1.0)
-    cov = np.where(inside & (cos_sun > 0.0), cov, 0.0)
-    return np.asarray(1.0 - cov, dtype=np.float64)
 
 
 def main() -> None:
@@ -139,7 +76,21 @@ def main() -> None:
         np.asarray(Image.open(export_dir / "clouds_cirrus.png").convert("RGBA"))[..., 3] / 255.0
     )
 
-    field = _eclipse_field(args.res, model.planet_radius_km, args.b_km)
+    field = eclipse_mask(
+        args.res,
+        planet_km=model.planet_radius_km,
+        b_km=args.b_km,
+        center_lon_deg=CENTER_LON,
+        center_lat_deg=CENTER_LAT,
+        sun_lon_deg=SUN_LON,
+        sun_lat_deg=SUN_LAT,
+        shadow_lon_deg=CENTER_LON,
+        shadow_lat_deg=SUN_LAT,
+        occluder_radius_km=R_AEGIS,
+        occluder_distance_km=D_MOON,
+        star_radius_km=R_STAR,
+        star_distance_km=D_STAR,
+    )
     img = render_globe_atmosphere(
         surface,
         clouds_low,
