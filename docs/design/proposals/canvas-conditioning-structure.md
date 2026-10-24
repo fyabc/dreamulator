@@ -5,7 +5,7 @@
 > [orogen-topography.md](orogen-topography.md)；画布链的现行实现见
 > [pipelines/canvas-chain.md](../pipelines/canvas-chain.md) 2.5 节。
 >
-> **状态**：提案，未实现（2026-10-25 立项）。大河与冰川地貌另立提案，本提案只处理山地与高原的形态。
+> **状态**：提案，第 1 步（TD 响应对照）已完成，第 2 步待实现，第 4 步（气候场的地形超分辨率）待第 2 步之后（2026-10-25 立项）。大河与冰川地貌另立提案，本提案只处理山地与高原的形态。
 
 ---
 
@@ -76,7 +76,7 @@ terrain-diffusion（下称 TD）在 90 m 尺度上给出的细节是可信的，
 
 1. **诊断：TD 对条件场的响应。** 不改产品，只做对照实验。在几个窗口上分别改变一项输入，各生成一次：
    （a）气温通道换成同纬度的寒冷值，检验第 2 节第 4 条；（b）高程通道叠加一个已知方向与波长的正弦山脊，检验 TD
-   在 23 km 条件尺度上能保留多少结构；（c）提高高程通道的条件信噪比，检验 TD 贴近条件场的程度与细节质感的
+   在 23 km 条件尺度上能保留多少结构；（c）改变高程通道的条件信噪比，检验 TD 贴近条件场的程度与细节质感的
    取舍。这一步决定后面两步做在哪个尺度上、要不要配合信噪比。
 2. **构造结构场。** 在每条造山带内，用一个零均值的结构场替换格子内部的平滑：沿走向排列的山脊与主谷，主谷间距
    取 Hovius 比值给出的半宽之半，幅度取网格的 `relief_std_m`，最高点不超过 `peak_elevation_m`；高原边缘加镶边
@@ -84,7 +84,64 @@ terrain-diffusion（下称 TD）在 90 m 尺度上给出的细节是可信的，
 3. **取样方式。** 条件场的取样改为在网格格之间平滑插值后再叠加结构场，去掉格子平台。区域数据包已经用
    Clough–Tocher 插值，可以直接复用。
 
+**第 1 步的结论**（2026-10-25，两轮九组对照）：TD 的条件信噪比数值越小、条件越强；高程通道取 0.05 时，800 m、92 km
+的注入山脊有一半以上保留下来，起伏与山峰密度达到地球喜马拉雅前缘的水平，而现行的 0.2 只保留 5%，1.0 时完全不理会
+高程条件。所以第 2 步的结构场做在 23 km 条件尺度上，并把高程通道的信噪比降到约 0.05，其余通道不变。气温条件对起伏
+的影响最大（寒冷高地被画成冰蚀高山），但气温来自 GCM 正典，不作为调节手段。
+
 条件场改变后，所有画布都要重新生成（全球约 9300 块，按现在的速度约一小时）。
+
+### 4.1 第 4 步：GCM 气候场的地形超分辨率
+
+第 1 步之后补做的对照表明，降水对 TD 起伏的影响与气温相当：同一块高原窗口，年降水乘 3 时 10 km 起伏从 412 m 升到
+1150 m，乘 0.3 时降到 171 m。现行条件场的降水来自 T42 GCM（约 310 km 一格），用双线性插值落到全球网格上，格内没有
+迎风坡与背风坡之分；而 TD 训练用的 WorldClim 降水是 10′（约 18 km）分辨率，带有地形尺度的差异。所以条件场里的降水比
+TD 见过的平滑得多，这也是山地读起来千篇一律的一个原因。
+
+**问题的性质。** 这是对 GCM 结果的超分辨率：GCM 在约 310 km 的格子上给出正确的平均气候，格内的分布由更细的地形
+决定。分辨率链是 GCM（约 310 km）→ 全球网格（约 54 km）→ 画布粗格（23 km，TD 的条件尺度）→ 90 m 像素。全球网格是
+正典的下限，所以超分辨率分两级做，用同一套算法：GCM 格到网格格，网格格到画布粗格。每一级都以上一级的格子值为约束：
+
+- **降水守恒质量。** 细化后的降水在每个上一级格子内的面积总量等于该格的值，只在格内重新分配。
+- **气温保持格均值。** 气温的格内差异来自地形高差，以格内平均高程为参照，所以格均值不变。
+- **只细化上一级没有分辨的地形。** 地形降水按「本级地形减去上一级已分辨的平滑地形」计算，避免把 GCM 已经模拟过的
+  大尺度地形降水重复计算一次。
+
+**各个场的处理。**
+
+| 场 | 方法 | 对 TD 条件场的影响 |
+|---|---|---|
+| 年降水与月降水 | 地形降水线性理论（Smith 与 Barstad 2004）：输入 GCM 的低层风、水汽标高与湿稳定度，按上面的质量约束归一 | 主要的一项：迎风坡湿、背风坡干，山地的起伏随之分出档次 |
+| 年均气温与月均气温 | 递减率订正，参照上一级的格内平均高程。网格一级已经这样做（`to_mesh.py`），画布一级补上同样的订正 | TD 的气温通道先订正到海平面，递减率部分互相抵消，影响很小；对雪线、冰川与群系有影响 |
+| 气温变幅、降水变异系数 | 由细化后的月值重新计算，不单独超分 | 次要；降水的季节性随风向季节变化 |
+| 径流、潜在蒸散等派生通道 | 由细化后的气温与降水重新计算 | 水文与渲染保持一致 |
+
+坡向与日照对气温的影响（TopoSCALE、MicroMet 一类方法）、冷空气在谷底积聚等效应先不做：它们改变的主要是局地气温，
+而 TD 的气温通道已经订正到海平面。
+
+**对正典的影响。** 第一级（GCM 格到网格格）会改变 GCM 分支的网格气候，也就改变对外设定里的柯本、群系和降水统计；
+第二级只影响画布。是否让第一级进入正典需要作者裁决；不进入的话，第一级只用于画布的条件场与气候通道。
+
+**GCM 能否只细化一个局地。** ExoPlaSim 是全球谱模式，没有区域嵌套或局地加密的功能，只能整体提高分辨率：可选到
+T170，在 nacrea 上约 84 km 一格，仍比全球网格粗；计算量约按截断波数的三次方增长，T85 约为 T42 的 8 倍，T170 约为 66 倍，
+而且上游只在 T21 与 T42 上充分验证过。区域气候模式（如 WRF）可以用 GCM 的边界场驱动做动力降尺度，但要为 Nacrea 的
+自转、轨道与大气重新配置，工程量很大。介于两者之间的是 ICAR（Gutmann 等 2016）：它用线性理论计算地形扰动风场，再
+接简化的微物理，专为把 GCM 降到公里级而设计，计算量比区域模式小得多。我们已有 1.5 h 间隔的 GCM 高频快照，
+满足它对驱动场时间分辨率的要求。所以方案是先用线性理论，ICAR 留作以后的对照。
+
+**调研结论。** 气候降尺度大致有四类（Maraun 等 2010 的综述）：统计降尺度（差值法、BCSD 等，Wood 等 2004）、动力
+降尺度（区域气候模式）、中等复杂度模式（ICAR），以及近年的机器学习方法（如 CorrDiff，Mardani 等 2025）。统计与机器
+学习方法依赖地球观测或地球上的高分辨率模拟来训练，换到另一颗行星就失去了依据，不符合「所有世界同一套物理」的
+原则。全球高分辨率气候图（WorldClim 2，Fick 与 Hijmans 2017；CHELSA，Karger 等 2017）的做法是以地形协变量为基础，
+CHELSA 还专门加入了风向造成的迎风与背风效应；这些说明地形降水是公里级气候图的核心，但它们的统计系数同样是地球
+标定的。线性理论只需要风、水汽与稳定度这些 GCM 已经给出的量，是这四类里最接近第一性的选择。
+
+**验收。** 科学验收在地球上做：把 ExoPlaSim 地球参照运行的 T42 降水按同样的方法降到全球网格，与观测降水比较安第斯、
+喜马拉雅等山地的迎风与背风对比和格内分布；规定的观测数据只用于检验，不用于标定。创作验收在 nacrea 上做：先看降水
+图本身是否合理，再看 TD 的山地是否分出档次。
+
+**顺序。** 地形降水取决于山脊的位置与走向，所以这一步排在第 2 步（构造结构场）之后，在带结构的条件场上计算第二级；
+按纪律，它与第 2 步分属两轮，各自验收。
 
 ## 5 验收
 
@@ -105,17 +162,40 @@ terrain-diffusion（下称 TD）在 90 m 尺度上给出的细节是可信的，
 | 主谷间距 | 观测拟合 | Hovius（1996）比值 1.91–2.23 |
 | 镶边山脉 | 近似推导 | 位置取自剖面的翼部与高原交界，幅度沿用起伏标定 |
 | TD 对条件场的响应 | 模型行为 | 由第 4 节第 1 步的对照实验测定 |
+| 降水格内守恒 | 守恒约束 | 细化后的降水在上一级格内总量不变 |
+| 地形降水 | 近似推导 | Smith 与 Barstad（2004）线性理论；凝结与降落时间尺度取文献的典型值 |
+| 气温递减率订正 | 近似推导 | 网格一级已用 6.5 K/km |
 
 ## 7 不采用的方向
 
 - **重新训练 TD，加入构造通道。** 需要地球的构造标注数据和大量算力，超出本项目的范围。
-- **只提高条件信噪比。** 它只会让 TD 更贴近平滑的条件场，不会凭空产生构造结构；留作第 4 节第 1 步的对照项。
+- **只加强高程条件。** 它只会让 TD 更贴近平滑的条件场，起伏反而更小（第 1 步对照）；必须与结构场一起使用。
+- **用统计或机器学习方法超分气候场。** 它们的系数来自地球，换到 Nacrea 没有依据（4.1 节）。
+- **用气温条件调起伏。** 气温对 TD 起伏的影响最大，但它是 GCM 正典的一部分，改它等于为了画面改气候。
 - **在 TD 输出上叠加噪声或程序化山脊。** 这会破坏 TD 生成的地貌一致性，也绕开了条件场这个唯一的大尺度入口。
 - **手工编辑大尺度结构。** 群内评审建议过「算法加编辑器」，方向一致，但编辑器属于远期工作；本提案先让引擎已有的
   构造信息进入条件场。
 
 ## 8 参考文献
 
+- Fick, S. E. & Hijmans, R. J. (2017). WorldClim 2: new 1-km spatial resolution climate surfaces for global land
+  areas. *International Journal of Climatology* 37, 4302–4315. doi:10.1002/joc.5086
+- Fiddes, J. & Gruber, S. (2014). TopoSCALE v.1.0: downscaling gridded climate data in complex terrain.
+  *Geoscientific Model Development* 7, 387–405. doi:10.5194/gmd-7-387-2014
+- Gutmann, E. 等 (2016). The Intermediate Complexity Atmospheric Research Model (ICAR). *Journal of
+  Hydrometeorology* 17, 957–973. doi:10.1175/JHM-D-15-0155.1
+- Karger, D. N. 等 (2017). Climatologies at high resolution for the earth's land surface areas. *Scientific Data* 4,
+  170122. doi:10.1038/sdata.2017.122
+- Liston, G. E. & Elder, K. (2006). A meteorological distribution system for high-resolution terrestrial modeling
+  (MicroMet). *Journal of Hydrometeorology* 7, 217–234. doi:10.1175/JHM486.1
+- Mardani, M. 等 (2025). Residual corrective diffusion modeling for km-scale atmospheric downscaling.
+  *Communications Earth & Environment* 6, 124. doi:10.1038/s43247-025-02042-5
+- Maraun, D. 等 (2010). Precipitation downscaling under climate change: recent developments to bridge the gap between
+  dynamical models and the end user. *Reviews of Geophysics* 48, RG3003. doi:10.1029/2009RG000314
+- Smith, R. B. & Barstad, I. (2004). A linear theory of orographic precipitation. *Journal of the Atmospheric
+  Sciences* 61, 1377–1391. doi:10.1175/1520-0469(2004)061<1377:ALTOOP>2.0.CO;2
+- Wood, A. W. 等 (2004). Hydrologic implications of dynamical and statistical approaches to downscaling climate model
+  outputs. *Climatic Change* 62, 189–216. doi:10.1023/B:CLIM.0000013685.99609.9e
 - Cordonnier, G., Cani, M.-P., Benes, B., Braun, J. & Galin, E. (2018). Sculpting mountains: interactive terrain
   modeling based on subsurface geology. *IEEE Transactions on Visualization and Computer Graphics* 24(5).
 - Cortial, Y., Peytavie, A., Galin, E. & Guérin, E. (2019). Procedural tectonic planets. *Computer Graphics Forum*
