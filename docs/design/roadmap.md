@@ -2,7 +2,7 @@
 
 > 最后更新：2026-10-23（地质层重写批次并入 main：造山带格子平均高程、历史契约、亚格子岛屿目录、nacrea 地形
 > 重新生成；nacrea 的 GCM 运行在新地形上全部重跑，气候正典改以 `gcm-t42-712` 分支为准（design-notes 0013），
-> 分支新增 GCM 云量字段。全球画布链 S2 外存水文与 S3 区域裁窗见 [canvas-hydrology.md](pipelines/canvas-hydrology.md)。
+> 分支新增 GCM 云量字段。全球画布链 S2 外存水文与 S3 区域裁窗见 [canvas-chain.md](pipelines/canvas-chain.md)。
 > v1.1.0 发版内容：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
 > 2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典（洛夫数 k₂=0.20/h₂=0.40、
 > Q≈445、τ_e 9.2 Myr）、earth 板块运动 PB2002 欧拉极修正；地质时间轴研究线 G1–G3 入库
@@ -37,7 +37,7 @@
 | 2 | 前端可视化 | ✅ v0.2.0–0.6.0 | 地图系统（栅格+Voronoi）、3D 恒星系、CivMap、3D 球面地球；见 CHANGELOG.md |
 | 2.5 | 地形真实感增强 | ✅ v0.7.0–0.8.0 | 板块剖分（Cortial 2019）、地形合成、海岸线、噪声标定；见 CHANGELOG.md |
 | 3A | 气候与流体引擎 | 🚧 | 核心已合并（v0.9.0），调优进行中；见 三 |
-| 3B | 侵蚀与河流生成 | 🚧 | 全球 200k 网格不做河网与流水侵蚀（尺度不匹配，§四 3B）；河流在高分辨率画布链上提取（[canvas-hydrology.md](pipelines/canvas-hydrology.md)），河谷雕刻归 Gaea 局地精修 |
+| 3B | 侵蚀与河流生成 | 🚧 | 全球 200k 网格不做河网与流水侵蚀（尺度不匹配，§四 3B）；河流在高分辨率画布链上提取（[canvas-chain.md](pipelines/canvas-chain.md)），河谷雕刻归 Gaea 局地精修 |
 | 3B.5 | 生态层：气候→群系→承载力 | 🚧 | Whittaker + NPP + 可驯化标签 ✅（v0.20.0，含三个专题图层）；区域连通物种分布（P1）、食物网（P2）、异星物种推演（P3，见 [ecology-layer.md](proposals/ecology-layer.md) §3.5） |
 | 3C | 文明层半格式化管理 | 📋 | 事件溯源 + 状态机，设计见 [civilization-layer.md](proposals/civilization-layer.md) |
 | 3D | 世界线合并可视化 Diff | 📋 | DAG 影响半径分析 / Lyapunov 混沌预警 / 蒙特卡洛不确定性 |
@@ -117,7 +117,7 @@
 |--------|------|-----------|--------|
 | **P0** | **nacrea 地形修复批次与重新生成**：✅ 修复与重新生成已完成并入 main（2026-10-23，见 CHANGELOG）；剩余为冻结板块与构造实现（技术债 49）与经 release 分发新数据 | 剩余 1 周 | ★★★★★ |
 | **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
-| **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 重叠窗一致性与 S5 全局概览待做；试点画布等 nacrea 数据冻结后交付）→ [canvas-hydrology.md](pipelines/canvas-hydrology.md) | S4/S5 各 1–2 周 | ★★★★ |
+| **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 重叠窗一致性与 S5 全局概览待做；试点画布等 nacrea 数据冻结后交付）→ [canvas-chain.md](pipelines/canvas-chain.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示** ✅ 2026-10-23：月度风场箭头与粒子流、洋流粒子流（洋流为年均场）；操作见 `usage/map-workflow.md` §4 | — | ★★★★ |

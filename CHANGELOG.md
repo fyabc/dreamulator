@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   陆地事后还给最近的陆块，半径不受缓冲带限制）、作者指定的强制合并（`plan_layout(joins=...)`）与画布重叠区的混合规则
   （`blend_overlap`：低通骨架在 92 km 带内、细节在 4 km 带内混合，海陆判定不一致处改 92 km 整体混合，权重为平滑阶跃）。
   世界岛据此切成两张画布，全部画布的边缘各向异性都在 1.15 以内。
+- **全球画布链的命令组（2026-10-24）**：`export canvas` 改为子命令组，按链路顺序是 `plan`（布局、归属表与每张画布的
+  条件场和气候通道，读世界目录下的 `canvas_layout.yaml`）、`generate`（每张 GPU 一个 terrain-diffusion 进程，可续算）、
+  `status`（完成数与校验和）、`hydrology`（外存水文）、`window`（区域裁窗，水文未完成时先补跑）与 `mosaic`（整画布
+  超高清总览图，配色与地形图相同，默认写到 `exports/mosaic/`）。原来带 `--stage` 的单条 `export canvas` 拆成
+  `hydrology` 与 `window`。库代码在 `map/td_canvas_build.py`、`td_canvas_worker.py` 与 `td_canvas_mosaic.py`；
+  画布根目录默认是 `data/worlds/<世界>/canvases/<分支>/`。技术参考改名为 `pipelines/canvas-chain.md` 并补齐 S1 一节。
 - **画布的陆架延伸（2026-10-24）**：`map/td_canvas.py` 的分块清单除了成员陆地 200 km 缓冲带，还纳入本画布的陆架
   （`shelf_cells`：水深浅于 2500 m、离本画布陆地 600 km 以内、按最近陆地规则归本画布的海洋格），画布正方形随之放大。
   地形扩散模型会把近海平面的浅陆架抬成陆地，只有缓冲带时这类陆地会被分块边缘截断；归属条件保证画布不伸进邻居的地盘。

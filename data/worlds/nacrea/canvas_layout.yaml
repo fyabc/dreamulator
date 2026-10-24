@@ -1,0 +1,26 @@
+# Layout of the global terrain-diffusion canvases (S1), read by td_canvas_build.CanvasLayoutConfig.
+# Author choices only; the layout rules themselves live in map/td_canvas.py.
+
+# Climate and mesh source: the frozen GCM climate branch.
+branch: gcm-t42-712
+
+# Discs that split continents too large for one canvas (edge anisotropy cap 1.15).
+cuts:
+  # World Island's north-south isthmus: the smallest disc that separates the two halves.
+  - {lat: 37.0, lon: -70.0, radius_km: 120.0}
+  # The broad neck north-east of 78°W 10°N; wider than the buffer, so its land is given back
+  # to the nearest piece after the split.
+  - {lat: 12.0, lon: -74.0, radius_km: 250.0, reattach: true}
+
+# Fixed canvas ids: a land seed point (lat, lon) per id.  Other canvases are named by centre.
+names:
+  aurora: [18.0, 44.0]
+  world-west: [-10.0, -110.0]
+  world-southeast: [-10.0, -60.0]
+  arctic: [80.0, 0.0]
+
+# Forced joins: the island off World Island's south-east coast belongs with that canvas.
+joins:
+  - {point: [-11.6, -36.3], into: [-10.0, -60.0]}
+
+max_anisotropy_overrides: {}
