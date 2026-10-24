@@ -42,6 +42,10 @@ from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
 from dreamulator.media.cloud_advection import advect_equirect, advection_substeps
 from dreamulator.media.cloud_render import conditioning_grids
 from dreamulator.media.cyclone_render import Cyclone, cyclone_wind_field
+from dreamulator.media.cyclone_tracks import (
+    TropicalCycloneSource,
+    weather_cyclones_at_frame,
+)
 from dreamulator.media.globe_spin import SpinRenderer
 from dreamulator.media.weather_conditioning import (
     WeatherFrame,
@@ -289,8 +293,19 @@ def main() -> None:
         cloud_high = _resize(cloud_high, tex_width, tex_height)
     cyclones = [] if args.no_vortex else _load_cyclones(meta)
     centres = [(cyc.lat_deg, cyc.lon_deg) for cyc in cyclones]
+    storm_seed = 4100
+    tropical_source = None
     if cyclones:
         print(f"vortex: {len(cyclones)} storm circulation(s) added to the advection wind")
+    if pack is not None and cyclones:
+        # The still was rendered with pack cyclones: follow the real tracks
+        # frame by frame instead of drifting the exported snapshot with the wind.
+        seed_meta = (meta.get("cyclones") or {}).get("seed")
+        storm_seed = int(seed_meta) if seed_meta is not None else 4100
+        tropical_source = TropicalCycloneSource(
+            pack, seed=storm_seed, radius_km=model.planet_radius_km
+        )
+        print("  storms follow the weather pack's tracks (incl. canon tropical)")
 
     ocean = None
     if not args.no_ocean:
@@ -373,15 +388,25 @@ def main() -> None:
             if i > 0:
                 # Winds at the step midpoint — half a step into the interval.
                 if pack is not None:
-                    cur = pack_frame(
-                        start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h)
-                    )
+                    cur = pack_frame(start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h))
                     deck_east, deck_north = cur.wind_east, cur.wind_north
                     high_east, high_north = cur.wind_east_high, cur.wind_north_high
                 else:
                     deck_east = high_east = wind_east
                     deck_north = high_north = wind_north
-                if cyclones:
+                storm_list: list[Cyclone] = []
+                if pack is not None and cyclones:
+                    # Real tracks: the storm set and positions at the step midpoint.
+                    f_mid = start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h)
+                    storm_list = weather_cyclones_at_frame(
+                        pack,
+                        f_mid,
+                        seed=storm_seed,
+                        radius_km=model.planet_radius_km,
+                        tropical=tropical_source,
+                    )
+                    centres = [(s.lat_deg, s.lon_deg) for s in storm_list]
+                elif cyclones:
                     centres = _advance_centres(
                         centres,
                         deck_east,
@@ -389,8 +414,10 @@ def main() -> None:
                         dt_seconds=dt,
                         radius_km=model.planet_radius_km,
                     )
+                    storm_list = list(cyclones)
+                if storm_list:
                     vortex_east, vortex_north = cyclone_wind_field(
-                        cyclones,
+                        storm_list,
                         height=tex_height,
                         width=tex_width,
                         radius_km=model.planet_radius_km,

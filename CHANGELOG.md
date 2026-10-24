@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **L3 气旋接入图层包真实轨迹与正典热带（2026-10-24）**：`export globe` 带 `--weather-pack` 时 `--cyclones`
+  的集合来自包内真实轨迹——移动温带气旋按渲染帧在轨迹点间插值（位置、中心/环境气压、rmax、外围半径、
+  移动矢量，经度走短弧）；准静止低压默认不画（`--stationary-lows` 仅 QA）；包内 32 条热带轨迹弃用（T42 下
+  是季风低压）。热带气旋按正典参数化生成（作者裁决「甲」，design-notes 0020）：每当地年约 8 个，生成时刻
+  与位置按 `tc_genesis_potential` 加权并剔除 |lat|<8°，峰值强度受 `tc_potential_intensity` 封顶，云盾
+  1500–2500 km，移动沿包内中层引导气流自生成点积分，中心气压经 Holland (1980) 反解；被引导流推进
+  |lat|<8° 的赤道死区后寿命按涡度亏损加速消耗、一两天内消亡，不漂过赤道；全部种子化可复现。
+  新模块 `media/cyclone_tracks.py`；`cloud_flow_video.py` 带包时风暴中心与强度逐帧取自真实轨迹，不再用
+  环境风漂移快照。年均路径与合成占位集不变。
 - **云流视频接入图层包逐帧风场（2026-10-24）**：`cloud_flow_video.py` 新增 `--weather-pack`，L4 平流
   的风源从年均占位换成模式自己的 6 小时风场——低/中云壳随 `u_mid/v_mid`（σ≈0.57，兼作风暴引导
   气流），卷云壳随 `u_high/v_high`（σ≈0.32），风场过与云量相同的 3 帧平均 + 1 格距高斯平滑，每个

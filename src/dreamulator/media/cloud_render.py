@@ -1567,6 +1567,7 @@ def clouds_globe(
     cover_scale: float = 1.0,
     cyclones: Sequence[Cyclone] | None = None,
     cyclone_seed: int = 41,
+    cyclone_source: str | None = None,
     weather: WeatherFrame | None = None,
     atmosphere: AtmosphereModel | None = None,
     cloud_altitude_km: float = 4.0,
@@ -1855,7 +1856,8 @@ def clouds_globe(
         "cover_scale": cover_scale,
         "cyclones": {
             "count": len(cyclones) if cyclones else 0,
-            "source": "synthetic placeholder (L1 tracks pending)" if cyclones else None,
+            "source": cyclone_source
+            or ("synthetic placeholder (L1 tracks pending)" if cyclones else None),
             "seed": cyclone_seed if cyclones else None,
             "tracks": [asdict(c) for c in cyclones] if cyclones else [],
         },
