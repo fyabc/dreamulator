@@ -1097,6 +1097,7 @@ def write_engine_climate_yearly(
     p_monthly: np.ndarray | None = None,
     climate_state: str = ENGINE_CLIMATE_STATE,
     lapse_rate_c_per_km: float | None = ENGINE_LAPSE_RATE_C_PER_KM,
+    climate_source: str | None = None,
 ) -> None:
     """Write ``climate_yearly.msgpack`` for an engine-built world.
 
@@ -1105,7 +1106,11 @@ def write_engine_climate_yearly(
     engine-specific declarations — the 365.25 d reference-year time basis
     (12 equal reference months), the Hamon demand model, ``data_source:
     "model"``, and the world-level climate-state + lapse-rate declarations.
-    Called from :func:`export_climate_layers` during a build; the
+    ``climate_source`` optionally records where the monthly series came from
+    (e.g. ``"gcm pack import (gcm-t42-712)"`` for a branch whose mesh climate
+    is GCM-derived) — the engine declaration alone does not distinguish an
+    engine-built root from a GCM-imported branch.  Called from
+    :func:`export_climate_layers` during a build; the
     regeneration script calls it directly with monthly arrays dequantized
     from the persisted ``climate_monthly.msgpack`` (the in-memory ``_t_*``
     stash does not survive a mesh save/load round trip).
@@ -1171,6 +1176,7 @@ def write_engine_climate_yearly(
                 "declared default 6.5 K/km — Earth ISA observed environmental"
                 " value, applied to engine worlds as the moist N2-O2 analog"
             ),
+            **({"climate_source": climate_source} if climate_source else {}),
         },
         # p_total dual-basis closure (astra ledger #9): p_total_mm follows
         # the file's declared time basis (engine = the 365.25 d reference

@@ -2,7 +2,7 @@
 
 > UCC-01 第四步 4d 产物。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/solar/ucc_examples_solar.py --planet titan`
-> 生成日期：2026-10-05。本天体的解读（世界要点、读法）见手写文档
+> 生成日期：2026-10-26。本天体的解读（世界要点、读法）见手写文档
 > `docs/ucc/examples/titan.md`；描述量与分类语义见
 > `docs/ucc/specification.md`（§8 有本天体的示意演练行，
 > 本文档是它的真实数据对照）。
@@ -10,18 +10,10 @@
 > `NA` = not_applicable、`NPD` = no_positive_demand（语义见知识文档 §3）。
 
 **数据源**（`data_source: gcm-climatology`——认知地位见文件内 provenance，随数据走）：
-> - gcm: TAM coupled land-hydrology/atmosphere (Lora, Faulk, Mitchell & Milly 2019; Zenodo 10.5281/zenodo.3473571, CC-BY-4.0), run full_phys.hydro.k1e-5, years 241–250 (10 Titan years, 2029 windows)
-> - temperature: TAM `tsurf` (K→°C), DT-weighted bin means; 12 Titan-year phase bins (896.4 Earth-days each)
-> - precipitation: TAM `precip` (methane, kg/m²/s) integrated per bin → mm liquid CH₄ (ρ=422.6 kg/m³); p_total per Titan year (10756.5 Earth-days)
-> - demand_model_note: NOT applied — Hamon is a liquid-water formula; a methane solvent at 94 K is out of scope (knowledge doc §6). AI/deficit = missing_input by declaration (the cold-side OOD gate would also fire).
-> - seas: water_class=ocean where time-mean qsurf > 0.05 m (methane seas/lakes, 42 cells)
-> - topography: TAM `dtd` runoff topography (~5.6° GCM grid; possibly datum-offset — relative relief only)
-> - epistemic_status: L4 GCM climatology (ucc-review §6.2): a model, not error-free truth
-> - climate_state: methane_hydrology — declared world regime (axis F); Schneider 2012 methane cycle vocabulary
-> - lapse_rate: 1.38 K/km near-surface (Lindal et al. 1983 Voyager RO; Huygens HASI — Fulchignoni et al. 2005)
+> - note: regenerated from the persisted climate_monthly.msgpack under the current UCC profile; import provenance: TAM tsurf/precip Titan-year bins (import_titan.py)
 
-**世界级声明**：`climate_state: methane_hydrology`；递减率
-1.38 K/km（-H 高地修饰语的判据输入）。
+**世界级声明**：`climate_state: —（未声明）`；递减率
+未声明（无大气 → -H 不适用）（-H 高地修饰语的判据输入）。
 
 **时间基准**：12 分箱 × 896.38 地球日 = 窗口 10756.5 日；
 `month_0` = `titan_year_phase_0_arbitrary_anchor`。`p_total` 按此窗口报告；AI/deficit 为窗口不变量，可跨世界
@@ -33,7 +25,7 @@
 
 **修饰语**：continental 0.0%；water_stress 0.0%（陆地）。
 
-**AI 状态（全部 cell）**：missing_input 3000。
+**AI 状态（全部 cell）**：out_of_domain 3000。
 
 **陆地主类组合**：
 
@@ -50,47 +42,47 @@
 
 | # | 地点 | 纬 | 经 | 高程 m | T均 | T范围 | P | AI | deficit | 类码 |
 |---|------|----|----|--------|-----|-------|---|----|---------|------|
-| 1 | 克拉肯海（观测名锚点） | 63.0 | -41.8 | 786 | -179.6 | 1.4 | 448 | MI | MI | **En-Sm** |
-| 2 | 丽姬亚海（观测名锚点） | 80.6 | -45.0 | 698 | -179.7 | 1.7 | 562 | MI | MI | **En-Sm** |
-| 3 | 安大略湖（观测名锚点） | -2.9 | -150.0 | 1376 | -178.0 | 0.6 | 13 | MI | MI | **En-Sd** |
-| 4 | 北极甲烷湖区（模型 qsurf 集群） | 80.7 | 40.4 | 503 | -179.8 | 1.5 | 616 | MI | MI | **Eo-Sm** |
-| 5 | 南极甲烷湖区（模型 qsurf 集群） | -68.0 | 6.3 | 402 | -179.4 | 1.9 | 104 | MI | MI | **Eo-Sd** |
-| 6 | 香格里拉（赤道沙丘带） | -9.1 | -158.4 | 1198 | -178.1 | 0.9 | 11 | MI | MI | **En-Sd** |
-| 7 | 阿鲁（Xanadu 亮区） | 8.1 | -99.0 | 1502 | -178.1 | 0.5 | 19 | MI | MI | **En-Sm** |
-| 8 | 赤道区（0° 本初） | 0.0 | -0.9 | 1484 | -177.9 | 0.4 | 16 | MI | MI | **En-Sm** |
-| 9 | Menrva 盆地 | 35.9 | -53.1 | 767 | -178.6 | 1.0 | 82 | MI | MI | **En-Sm** |
-| 10 | 南极区 | -85.1 | 118.2 | 749 | -179.8 | 2.0 | 3785 | MI | MI | **En-Sd** |
+| 1 | 克拉肯海（观测名锚点） | 63.0 | -41.8 | 786 | -179.6 | 1.4 | 448 | OOD | OOD | **En-Sm** |
+| 2 | 丽姬亚海（观测名锚点） | 80.6 | -45.0 | 698 | -179.7 | 1.7 | 562 | OOD | OOD | **En-Sm** |
+| 3 | 安大略湖（观测名锚点） | -2.9 | -150.0 | 1376 | -178.0 | 0.6 | 13 | OOD | OOD | **En-Sd** |
+| 4 | 北极甲烷湖区（模型 qsurf 集群） | 80.7 | 40.4 | 503 | -179.8 | 1.5 | 616 | OOD | OOD | **Eo-Sm** |
+| 5 | 南极甲烷湖区（模型 qsurf 集群） | -68.0 | 6.3 | 402 | -179.4 | 1.9 | 104 | OOD | OOD | **Eo-Sd** |
+| 6 | 香格里拉（赤道沙丘带） | -9.1 | -158.4 | 1198 | -178.1 | 0.9 | 11 | OOD | OOD | **En-Sd** |
+| 7 | 阿鲁（Xanadu 亮区） | 8.1 | -99.0 | 1502 | -178.1 | 0.5 | 19 | OOD | OOD | **En-Sm** |
+| 8 | 赤道区（0° 本初） | 0.0 | -0.9 | 1484 | -177.9 | 0.4 | 16 | OOD | OOD | **En-Sm** |
+| 9 | Menrva 盆地 | 35.9 | -53.1 | 767 | -178.6 | 1.0 | 82 | OOD | OOD | **En-Sm** |
+| 10 | 南极区 | -85.1 | 118.2 | 749 | -179.8 | 2.0 | 3785 | OOD | OOD | **En-Sd** |
 
 ### 1. 克拉肯海（观测名锚点）
 
 - cell #160 · 陆地 · 高程 786 m
 - 分箱均 T（°C）：-179.6 -179.8 -180.0 -180.1 -180.1 -180.0 -179.8 -179.4 -179.0 -178.8 -178.9 -179.3
 - 分箱降水（mm/箱）：7.8 5.2 5.7 2.0 3.9 5.5 5.6 7.1 5.5 7.3 183.2 209.1
-- 描述量：t_mean -179.6 · t_min -180.1 · t_max -178.8 · t_range 1.4 · 低于0°C份额 1.00 · P 448 mm/窗口 · AI MI · deficit MI · C_TV 0.71
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sm** · 修饰语：—
+- 描述量：t_mean -179.6 · t_min -180.1 · t_max -178.8 · t_range 1.4 · 低于0°C份额 1.00 · P 448 mm/窗口 · AI OOD · deficit OOD · C_TV 0.71
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sm** · 修饰语：—
 
 ### 2. 丽姬亚海（观测名锚点）
 
 - cell #16 · 陆地 · 高程 698 m
 - 分箱均 T（°C）：-179.8 -180.1 -180.3 -180.3 -180.4 -180.4 -180.1 -179.6 -179.1 -178.7 -178.9 -179.4
 - 分箱降水（mm/箱）：31.2 11.6 13.7 8.9 9.2 8.1 5.6 5.3 3.8 2.8 364.4 97.7
-- 描述量：t_mean -179.7 · t_min -180.4 · t_max -178.7 · t_range 1.7 · 低于0°C份额 1.00 · P 562 mm/窗口 · AI MI · deficit MI · C_TV 0.66
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sm** · 修饰语：—
+- 描述量：t_mean -179.7 · t_min -180.4 · t_max -178.7 · t_range 1.7 · 低于0°C份额 1.00 · P 562 mm/窗口 · AI OOD · deficit OOD · C_TV 0.66
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sm** · 修饰语：—
 
 ### 3. 安大略湖（观测名锚点）
 
 - cell #1585 · 陆地 · 高程 1376 m
 - 分箱均 T（°C）：-178.3 -178.0 -177.9 -178.0 -177.9 -177.9 -177.8 -177.7 -178.1 -178.3 -178.4 -178.4
 - 分箱降水（mm/箱）：2.5 1.1 0.0 0.0 0.0 1.3 2.6 0.4 0.1 0.2 2.3 2.8
-- 描述量：t_mean -178.0 · t_min -178.4 · t_max -177.7 · t_range 0.6 · 低于0°C份额 1.00 · P 13 mm/窗口 · AI MI · deficit MI · C_TV 0.44
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sd** · 修饰语：—
+- 描述量：t_mean -178.0 · t_min -178.4 · t_max -177.7 · t_range 0.6 · 低于0°C份额 1.00 · P 13 mm/窗口 · AI OOD · deficit OOD · C_TV 0.44
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sd** · 修饰语：—
 
 ### 4. 北极甲烷湖区（模型 qsurf 集群）
 
 - cell #18 · 海洋/海域 · 高程 503 m
 - 分箱均 T（°C）：-179.8 -180.0 -180.2 -180.3 -180.4 -180.4 -180.1 -179.6 -179.2 -178.9 -179.0 -179.5
 - 分箱降水（mm/箱）：23.4 9.7 11.3 9.5 10.7 9.7 6.6 4.9 2.5 4.2 346.9 176.2
-- 描述量：t_mean -179.8 · t_min -180.4 · t_max -178.9 · t_range 1.5 · 低于0°C份额 1.00 · P 616 mm/窗口 · AI MI · deficit MI · C_TV 0.68
+- 描述量：t_mean -179.8 · t_min -180.4 · t_max -178.9 · t_range 1.5 · 低于0°C份额 1.00 · P 616 mm/窗口 · AI OOD · deficit OOD · C_TV 0.68
 - **分类（ucc-v2）**：polar / n/a（非陆地） · 简码 **Eo-Sm** · 修饰语：—
 
 ### 5. 南极甲烷湖区（模型 qsurf 集群）
@@ -98,7 +90,7 @@
 - cell #2885 · 海洋/海域 · 高程 402 m
 - 分箱均 T（°C）：-180.0 -179.6 -178.9 -178.4 -178.4 -178.6 -179.0 -179.5 -179.8 -180.1 -180.2 -180.3
 - 分箱降水（mm/箱）：4.1 0.5 0.0 16.1 1.3 40.0 2.8 8.7 6.7 7.9 10.5 5.8
-- 描述量：t_mean -179.4 · t_min -180.3 · t_max -178.4 · t_range 1.9 · 低于0°C份额 1.00 · P 104 mm/窗口 · AI MI · deficit MI · C_TV 0.39
+- 描述量：t_mean -179.4 · t_min -180.3 · t_max -178.4 · t_range 1.9 · 低于0°C份额 1.00 · P 104 mm/窗口 · AI OOD · deficit OOD · C_TV 0.39
 - **分类（ucc-v2）**：polar / n/a（非陆地） · 简码 **Eo-Sd** · 修饰语：—
 
 ### 6. 香格里拉（赤道沙丘带）
@@ -106,46 +98,46 @@
 - cell #1661 · 陆地 · 高程 1198 m
 - 分箱均 T（°C）：-178.4 -178.1 -177.8 -177.9 -177.8 -177.8 -177.7 -177.8 -178.2 -178.4 -178.5 -178.5
 - 分箱降水（mm/箱）：0.7 0.5 0.0 0.0 0.0 3.2 3.5 0.0 0.0 0.1 1.0 1.6
-- 描述量：t_mean -178.1 · t_min -178.5 · t_max -177.7 · t_range 0.9 · 低于0°C份额 1.00 · P 11 mm/窗口 · AI MI · deficit MI · C_TV 0.54
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sd** · 修饰语：—
+- 描述量：t_mean -178.1 · t_min -178.5 · t_max -177.7 · t_range 0.9 · 低于0°C份额 1.00 · P 11 mm/窗口 · AI OOD · deficit OOD · C_TV 0.54
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sd** · 修饰语：—
 
 ### 7. 阿鲁（Xanadu 亮区）
 
 - cell #1260 · 陆地 · 高程 1502 m
 - 分箱均 T（°C）：-178.1 -178.0 -178.3 -178.3 -178.2 -178.1 -177.9 -177.9 -177.9 -178.0 -178.2 -178.2
 - 分箱降水（mm/箱）：6.4 1.6 0.0 0.0 0.0 0.0 0.8 0.2 0.1 0.5 2.8 6.7
-- 描述量：t_mean -178.1 · t_min -178.3 · t_max -177.9 · t_range 0.5 · 低于0°C份额 1.00 · P 19 mm/窗口 · AI MI · deficit MI · C_TV 0.58
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sm** · 修饰语：—
+- 描述量：t_mean -178.1 · t_min -178.3 · t_max -177.9 · t_range 0.5 · 低于0°C份额 1.00 · P 19 mm/窗口 · AI OOD · deficit OOD · C_TV 0.58
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sm** · 修饰语：—
 
 ### 8. 赤道区（0° 本初）
 
 - cell #1508 · 陆地 · 高程 1484 m
 - 分箱均 T（°C）：-178.1 -177.9 -177.8 -177.9 -177.9 -177.7 -177.7 -177.7 -177.8 -178.0 -178.1 -178.1
 - 分箱降水（mm/箱）：4.3 2.3 0.0 0.0 0.0 0.6 1.0 0.2 0.1 0.4 2.2 4.6
-- 描述量：t_mean -177.9 · t_min -178.1 · t_max -177.7 · t_range 0.4 · 低于0°C份额 1.00 · P 16 mm/窗口 · AI MI · deficit MI · C_TV 0.52
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sm** · 修饰语：—
+- 描述量：t_mean -177.9 · t_min -178.1 · t_max -177.7 · t_range 0.4 · 低于0°C份额 1.00 · P 16 mm/窗口 · AI OOD · deficit OOD · C_TV 0.52
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sm** · 修饰语：—
 
 ### 9. Menrva 盆地
 
 - cell #613 · 陆地 · 高程 767 m
 - 分箱均 T（°C）：-178.7 -178.9 -179.1 -179.0 -178.9 -178.7 -178.5 -178.4 -178.2 -178.1 -178.2 -178.5
 - 分箱降水（mm/箱）：10.3 4.7 1.1 0.0 0.0 0.0 1.1 4.5 3.7 6.7 34.9 14.3
-- 描述量：t_mean -178.6 · t_min -179.1 · t_max -178.1 · t_range 1.0 · 低于0°C份额 1.00 · P 82 mm/窗口 · AI MI · deficit MI · C_TV 0.48
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sm** · 修饰语：—
+- 描述量：t_mean -178.6 · t_min -179.1 · t_max -178.1 · t_range 1.0 · 低于0°C份额 1.00 · P 82 mm/窗口 · AI OOD · deficit OOD · C_TV 0.48
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sm** · 修饰语：—
 
 ### 10. 南极区
 
 - cell #2997 · 陆地 · 高程 749 m
 - 分箱均 T（°C）：-180.5 -179.8 -179.0 -178.7 -178.8 -179.1 -179.5 -179.8 -180.1 -180.5 -180.6 -180.7
 - 分箱降水（mm/箱）：94.1 15.8 2.7 2901.5 242.2 17.4 33.9 54.6 70.3 112.1 111.9 128.2
-- 描述量：t_mean -179.8 · t_min -180.7 · t_max -178.7 · t_range 2.0 · 低于0°C份额 1.00 · P 3785 mm/窗口 · AI MI · deficit MI · C_TV 0.68
-- **分类（ucc-v2）**：polar / n/a（MI） · 简码 **En-Sd** · 修饰语：—
+- 描述量：t_mean -179.8 · t_min -180.7 · t_max -178.7 · t_range 2.0 · 低于0°C份额 1.00 · P 3785 mm/窗口 · AI OOD · deficit OOD · C_TV 0.68
+- **分类（ucc-v2）**：polar / n/a（OOD） · 简码 **En-Sd** · 修饰语：—
 
 ## 3. 极值点
 
 | 量 | cell | 纬, 经 | 高程 m | 描述量 | 类码 |
 |----|------|--------|--------|--------|------|
-| 最冷（t_mean 最低） | #2965 | -77.5, 170.5 | 599 | T均 -181.3 · P 396 · AI MI | **Eo-Sm** |
-| 最热（t_mean 最高） | #1563 | -2.8, -4.2 | 1455 | T均 -177.9 · P 14 · AI MI | **En-Sd** |
-| 季节最强（t_range 最大） | #2933 | -75.0, -109.6 | 910 | T均 -179.8 · P 270 · AI MI | **En-Sm** |
-| 降水最多 | #2995 | -85.4, -5.6 | 726 | T均 -179.7 · P 4084 · AI MI | **En-Sd** |
+| 最冷（t_mean 最低） | #2965 | -77.5, 170.5 | 599 | T均 -181.3 · P 396 · AI OOD | **Eo-Sm** |
+| 最热（t_mean 最高） | #1563 | -2.8, -4.2 | 1455 | T均 -177.9 · P 14 · AI OOD | **En-Sd** |
+| 季节最强（t_range 最大） | #2933 | -75.0, -109.6 | 910 | T均 -179.8 · P 270 · AI OOD | **En-Sm** |
+| 降水最多 | #2995 | -85.4, -5.6 | 726 | T均 -179.7 · P 4084 · AI OOD | **En-Sd** |
