@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792842282238,
+  "lastUpdate": 1792946441496,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1062,6 +1062,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00003299405991417173",
             "extra": "mean: 5.202149600000894 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "8e97486fedfcc7830ddeb61f66669c72f690c07d",
+          "message": "merge: 云流风暴刚体合成与环境对齐、plates 按块着色\n\nfeat(media): 风暴模板逐帧刚体再合成（--storm-mode/--storm-seed），云盾按相干\n半径求解、顺风卷云幡、洋面生成门控、行星自转率与三处 6 h 时间阶跃修复。\nfeat(map): 板块运动视频按大陆块着色并以暗色缝合线标出焊接接触。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-25T21:04:32+08:00",
+          "tree_id": "4607a1f199fdf5fb31193c7b72c95a12d89112d8",
+          "url": "https://github.com/fyabc/dreamulator/commit/8e97486fedfcc7830ddeb61f66669c72f690c07d"
+        },
+        "date": 1792946440754,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.45798276768354657,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1469990723748822",
+            "extra": "mean: 2.183488267599999 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.4495651013404327,
+            "unit": "iter/sec",
+            "range": "stddev: 0.021457293160929838",
+            "extra": "mean: 289.89161550000017 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.8870430687651898,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8491075807246005",
+            "extra": "mean: 529.9296113333346 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1183.8006820557835,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007919160455579168",
+            "extra": "mean: 844.7368000020106 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 243.26422050882246,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0000499373830590057",
+            "extra": "mean: 4.110756599997956 msec\nrounds: 5"
           }
         ]
       }
