@@ -37,7 +37,7 @@
 | Moon | `moon.md` | `moon-data.md` | LDEM + Diviner GCP（观测态例外） | `--planet moon` |
 | Venus | `venus.md` | `venus-data.md` | Magellan + VCD v2.3（L4） | `--planet venus` |
 | Titan | `titan.md` | `titan-data.md` | TAM 水文 run（L4，CC-BY） | `--planet titan` |
-| Nacrea（架空世界） | `nacrea.md` | `nacrea-data.md` | 引擎构建产物 | `scripts/climate/ucc_examples_nacrea.py` |
+| Nacrea（架空世界） | `nacrea.md` | `nacrea-data.md` | `gcm-t42-712` 分支（气候正典；管线传入 `--map-dir`，脚本默认 root） | `scripts/climate/ucc_examples_nacrea.py` |
 
 前五个是 `earth` root 的额外 planet_ids（现实世界数据锚，永不 build）；`nacrea.md`
 是架空世界侧的迁移语义夹具（原 nacrea `design-notes/0010`；该编号现已由墟带系统笔记复用）。
@@ -62,6 +62,7 @@
 |---|---|
 | 描述量 + 分类 profile | `src/dreamulator/map/ucc.py`（`compute_descriptors()` / `classify_v0()` / `classify_v1()`） |
 | 导出格式 | `src/dreamulator/map/export.py` → `maps/<planet_id>/climate_yearly.msgpack` |
+| 一条命令重生成全部 | `scripts/climate/ucc_pipeline.py`（全部 yearly + 例证 + 新鲜度审计；`--plan` 只列动作，`--only fixtures,nacrea` 等可分域） |
 | 时间约定 | `src/dreamulator/result_contract.py`（`REFERENCE_MONTH_DAYS` / `result_metadata()`） |
 | 前端呈现 | `frontend/src/components/map/MapCellInspector.tsx`（气候描述区，「实验功能」开关门控） |
 | 管线技术参考 | `docs/design/pipelines/climate-pipeline.md`（climate_yearly.msgpack 一节） |

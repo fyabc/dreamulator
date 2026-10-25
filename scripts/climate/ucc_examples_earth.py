@@ -52,11 +52,17 @@ from dreamulator.map.ucc import (  # noqa: E402
     status_short,
 )
 
-_DEFAULT_DATASET = (
-    Path(os.environ.get("DREAMULATOR_WORK_DIR", "work"))
-    / "ucc"
-    / "ucc-l2-earth-obs-2026-09-20.msgpack"
-)
+
+def _latest_dataset() -> Path:
+    """The newest ``ucc-l2-earth-obs-*.msgpack`` (or the legacy fixed name)."""
+    ucc_dir = Path(os.environ.get("DREAMULATOR_WORK_DIR", "work")) / "ucc"
+    candidates = sorted(ucc_dir.glob("ucc-l2-earth-obs-*.msgpack"))
+    if candidates:
+        return candidates[-1]
+    return ucc_dir / "ucc-l2-earth-obs-2026-09-20.msgpack"
+
+
+_DEFAULT_DATASET = _latest_dataset()
 _DEFAULT_OUT = Path("docs/ucc/examples/earth-data.md")
 
 # Curated review sites (4b): name, lat, lon, land/ocean, short geographic

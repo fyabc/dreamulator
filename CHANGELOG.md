@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **UCC 派生资产一条命令重生成（2026-10-26）**：新增 `scripts/climate/ucc_pipeline.py` 编排全部
+  `climate_yearly.msgpack`（引擎世界免构建 regen、earth 观测口径、太阳系四天体按各自 importer 的
+  溯源标签）与六份例证数据表的按序重生成，收尾做新鲜度审计（yearly 晚于 monthly、例证不早于其
+  yearly，否则非零退出）；`--plan` 只列动作。例证与正典口径对齐：nacrea 例证改读气候正典分支
+  `gcm-t42-712`（数字随 GCM 气候移动：陆地占比、极地/热带分布等与旧引擎口径整体不同）；
+  `regen_climate_yearly.py` 新增 `--climate-source`，GCM 分支 yearly 的 provenance 记录数据来源
+  而非只有引擎声明；earth 例证的 L2 数据集默认取 `work/ucc` 下最新一份（原写死 2026-09-20 文件名）。
 - **板块运动视频按块着色并画出焊接缝合线（2026-10-25）**：快照新增 `display_label`（陆壳按大陆块、
   洋壳按自身板块着色，不继承宿主大陆颜色）与 `sutures`（两侧运动单元相同的接触带，暗色细线，
   新类型 `paleo_topology.SUTURE`）。修复样片里「大部分时间连成一个超大板块」的观感——运动仍按焊接组

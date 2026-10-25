@@ -82,6 +82,12 @@ def main() -> None:
         default=_ROOT / "data/worlds",
         help="worlds data directory (default: data/worlds)",
     )
+    parser.add_argument(
+        "--climate-source",
+        default=None,
+        help="provenance label for where the monthly series came from "
+        "(e.g. 'gcm pack import (gcm-t42-712)' for a GCM-derived branch)",
+    )
     args = parser.parse_args()
 
     world_dir = args.data_dir / args.world
@@ -104,7 +110,13 @@ def main() -> None:
             continue
         t, p = _load_monthly(monthly)
         mesh = load_cvt_mesh_model(mesh_path)
-        write_engine_climate_yearly(mesh, map_dir, t_monthly=t, p_monthly=p)
+        write_engine_climate_yearly(
+            mesh,
+            map_dir,
+            t_monthly=t,
+            p_monthly=p,
+            climate_source=args.climate_source,
+        )
         print(
             f"[ok]   {args.world}"
             f"{'/' + args.branch if args.branch else ''}/{map_dir.name}: "

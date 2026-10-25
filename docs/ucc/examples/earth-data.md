@@ -4,8 +4,8 @@
 > 逐站点人工判读）。本文档由脚本生成，勿手改——重生成：
 > `uv run python scripts/climate/ucc_examples_earth.py`。
 > 解读与读法见手写文档 `docs/ucc/examples/earth.md`。
-> 生成日期：2026-10-05 · profile：ucc-v2
-> （`classify_v1`）· 数据集：`ucc-l2-earth-obs-2026-09-20.msgpack`
+> 生成日期：2026-10-26 · profile：ucc-v2
+> （`classify_v1`）· 数据集：`ucc-l2-earth-obs-2026-10-26.msgpack`
 >
 > 数据源（观测，非引擎输出）：温度 NCEP/NCAR R1 air.mon.ltm (2.5°, monthly climatology)；
 > 降水 GPCP v2.3 precip.mon.mean (2.5°, monthly climatology)；Köppen 参照列 Beck et al. 2018 present-day Köppen-Geiger (5 arc-min)；
@@ -379,11 +379,11 @@
 | Da | 352 | 0.6% | 中心点 |
 | Dp | 1042 | 1.8% | ✓ |
 | Dt | 2434 | 4.2% | ✓ |
-| Du | 11472 | 19.8% | ✓ |
+| Du | 11471 | 19.8% | ✓ |
 | Ca | 4779 | 8.2% | ✓ |
 | Cp | 3788 | 6.5% | ✓ |
-| Ct | 3543 | 6.1% | ✓ |
-| Cu | 5821 | 10.0% | ✓ |
+| Ct | 3542 | 6.1% | ✓ |
+| Cu | 5822 | 10.0% | ✓ |
 | Aa | 1783 | 3.1% | 中心点 |
 | Ap | 1693 | 2.9% | ✓ |
 | At | 4390 | 7.6% | ✓ |
@@ -393,7 +393,7 @@
 | Cn | 0 | 0.0% | — |
 | An | 0 | 0.0% | — |
 | Eo（海洋） | 26739 | 18.8% | ✓ |
-| Do（海洋） | 1830 | 1.3% | 中心点 |
+| Do（海洋） | 1831 | 1.3% | 中心点 |
 | Co（海洋） | 45974 | 32.4% | ✓ |
 | Ao（海洋） | 67397 | 47.5% | ✓ |
 
