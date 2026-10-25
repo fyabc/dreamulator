@@ -65,12 +65,13 @@ _GRAT = (48, 54, 66)
 _EDGE = (90, 98, 112)
 # kind → (casing colour, core colour, casing width, core width)
 _STYLES = {
+    "suture": ((8, 10, 16), (86, 74, 58), 3, 2),
     "diffuse": ((140, 140, 140), (140, 140, 140), 1, 1),
     "transform": ((38, 30, 8), (255, 196, 40), 5, 3),
     "trench": ((245, 245, 245), (30, 34, 92), 5, 3),
     "ridge": ((245, 245, 245), (214, 64, 48), 5, 3),
 }
-_DRAW_ORDER = ("diffuse", "transform", "trench", "ridge")
+_DRAW_ORDER = ("suture", "diffuse", "transform", "trench", "ridge")
 
 
 def moll_theta(lat_rad: np.ndarray) -> np.ndarray:
@@ -186,9 +187,14 @@ def render_frame(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     pal: np.ndarray,
 ) -> Image.Image:
-    """One video frame: plate colours, coast, boundaries, graticule, time label."""
+    """One video frame: plate colours, coast, boundaries, graticule, time label.
+
+    Colours follow ``snap.display_label`` (per continental block, oceanic crust
+    by its own plate) so a welded superplate still shows its constituent
+    blocks; ``label`` stays the voted motion-unit label for typing.
+    """
     height, width = pm["cellidx"].shape
-    col = pal[np.minimum(label, len(pal) - 1)].astype(np.float32)
+    col = pal[np.minimum(snap.display_label, len(pal) - 1)].astype(np.float32)
     ocean = ~snap.continental
     shade = np.clip((snap.elevation_m + 7000) / 13000, 0, 1)
     col[ocean] *= (0.80 + 0.28 * shade[ocean])[:, None]
@@ -219,6 +225,11 @@ def render_frame(
     )
 
     topo = pt.prepare(snap.topology, np.radians(0.5))
+    for seg in pt.prepare(snap.sutures, np.radians(0.5)).segments:
+        for line in project_segment(seg.points, pm):
+            casing, core, cw, kw = _STYLES["suture"]
+            draw.line(line, fill=casing, width=cw, joint="curve")
+            draw.line(line, fill=core, width=kw, joint="curve")
     for kind in _DRAW_ORDER:
         for seg in topo.segments:
             if seg.kind != kind:
@@ -396,6 +407,8 @@ def main() -> None:
         idxs = [k for k in range(lo, min(len(epochs), j + half_w + 1)) if k in computed]
         snap = computed[j]
         label = vote_labels([computed[k].label for k in idxs], j - lo)
+        disp = vote_labels([computed[k].display_label for k in idxs], j - lo)
+        snap = replace(snap, display_label=disp)
         im = render_frame(snap, label, pm, grat, font, pal)
         im.save(frames_dir / f"frame_{j:05d}.png", compress_level=6)
         timings.append(round(time.time() - t_start, 1))

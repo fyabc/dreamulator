@@ -76,6 +76,14 @@ class Snapshot:
         omega: (L, 3) pole of each label in the stage containing t.
         topology: typed boundary graph.
         check: topology rules of appendix A.3.
+        display_label: (N,) colouring label: the continental block index, or
+            ``n_blocks + plate`` for any oceanic crust (its own plate, hosted
+            or free).  Motion still follows ``label``'s weld groups — colour is
+            per block so a welded superplate shows its constituent blocks.
+        sutures: block-boundary graph restricted to contacts whose two sides
+            share one motion unit (welded blocks and their hosted seafloor);
+            drawn as passive lines, they are where the colour changes without
+            relative motion.
     """
 
     t_myr: float
@@ -89,6 +97,8 @@ class Snapshot:
     omega: np.ndarray
     topology: pt.Topology
     check: pt.TopologyCheck
+    display_label: np.ndarray
+    sutures: pt.Topology
 
 
 def ocean_hosts(kin: PlateKinematics, blocks: Blocks) -> np.ndarray:
@@ -173,6 +183,8 @@ def snapshot(
     src = np.where(ok, state.src, 0)
     b = body[src]
     label = np.where(b < nb, group[np.minimum(b, nb - 1)], nb + kin.plate[src])
+    # Colouring label: per continental block, oceanic crust by its own plate.
+    display_label = np.where(b < nb, np.minimum(b, nb - 1), nb + kin.plate[src])
     omega = np.zeros((nb + present_omega.shape[0], 3))
     for g in np.unique(group):
         omega[g] = stage_omega[s][np.flatnonzero(group == g)[0]]
@@ -184,7 +196,9 @@ def snapshot(
         tree = cKDTree(kin.xyz[ok])
         _, j = tree.query(kin.xyz[gap])
         label[gap] = label[ok][j]
+        display_label[gap] = display_label[ok][j]
     label = pt.clean_labels(kin, label)
+    display_label = pt.clean_labels(kin, display_label)
 
     continental = ok & kin.continental[src]
     age_t = np.full(kin.n, np.nan)
@@ -209,8 +223,10 @@ def snapshot(
         elev[cut] -= frac[cut] * orogens.relief_m[src][cut]
 
     topo = pt.extract(kin.xyz, label)
-    side_info = (kin.xyz, continental, age_t, cKDTree(kin.xyz))
+    cell_tree = cKDTree(kin.xyz)
+    side_info = (kin.xyz, continental, age_t, cell_tree)
     pt.classify(topo, omega, kin.radius_km, side_info)
+    sutures = _extract_sutures(pt.extract(kin.xyz, display_label), label, cell_tree)
     return Snapshot(
         t_myr=t_myr,
         label=label,
@@ -223,7 +239,36 @@ def snapshot(
         omega=omega,
         topology=topo,
         check=pt.check(kin, label),
+        display_label=display_label,
+        sutures=sutures,
     )
+
+
+def _extract_sutures(topo: pt.Topology, label: np.ndarray, tree: cKDTree) -> pt.Topology:
+    """Segments of a display-label graph whose two sides share one motion unit.
+
+    Probes the cells just off each side of every segment (the same ±~60 km
+    offset ``classify`` uses for the overriding plate): a boundary whose sides
+    carry the same weld-group label has no relative motion — a welded block
+    contact or a continent's passive margin — so it is a suture line, not a
+    typed plate boundary.
+    """
+    from dataclasses import replace as _replace
+
+    keep: list[pt.Segment] = []
+    probe = 0.01
+    for seg in topo.segments:
+        t = pt.tangents(seg.points)
+        left_n = np.cross(seg.points, t)
+        xl = seg.points - probe * left_n
+        xr = seg.points + probe * left_n
+        xl /= np.maximum(np.linalg.norm(xl, axis=1, keepdims=True), 1e-15)
+        xr /= np.maximum(np.linalg.norm(xr, axis=1, keepdims=True), 1e-15)
+        _, il = tree.query(xl)
+        _, ir = tree.query(xr)
+        if float(np.mean(label[il] == label[ir])) > 0.5:
+            keep.append(_replace(seg, kind=pt.SUTURE, over=-1))
+    return pt.Topology(nodes=topo.nodes.copy(), segments=keep)
 
 
 def _gap_age(

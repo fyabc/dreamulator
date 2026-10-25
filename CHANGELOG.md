@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **板块运动视频按块着色并画出焊接缝合线（2026-10-25）**：快照新增 `display_label`（陆壳按大陆块、
+  洋壳按自身板块着色，不继承宿主大陆颜色）与 `sutures`（两侧运动单元相同的接触带，暗色细线，
+  新类型 `paleo_topology.SUTURE`）。修复样片里「大部分时间连成一个超大板块」的观感——运动仍按焊接组
+  刚体旋转（37 块在古老阶段并成 3–6 组），但颜色细分到块、缝合线标出无相对运动的块间接触，
+  活动边界照旧按洋脊/海沟/转换断层定型。帧角板块计数仍数运动单元。
 - **云流视频风暴改为刚体合成（2026-10-25）**：`cloud_flow_video.py` 新增 `--storm-mode`
   （默认 `rigid`，旧涡旋平流保留为 `vortex`，`--no-vortex` 变为 `none` 的废弃别名）。
   rigid 档环境云只用环境风平流，风暴模板每帧按真实轨迹重新合成，热带旋臂以
