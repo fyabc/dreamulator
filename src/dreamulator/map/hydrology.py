@@ -1,7 +1,7 @@
 """Depression fill and closed-basin lakes on the spherical CVT mesh.
 
 The global mesh no longer routes rivers: drainage is computed on the high-resolution canvas
-(``docs/design/pipelines/canvas-hydrology.md``), where it is meaningful.  Two pieces stay:
+(``docs/design/pipelines/canvas-chain.md``), where it is meaningful.  Two pieces stay:
 
 - **Priority-flood depression fill** (Barnes et al. 2014, O(N log N)), used by terrain
   synthesis to find closed basins for deposition fill;

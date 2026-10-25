@@ -49,7 +49,7 @@ geological → climate → hydro refine → ecology → civilization
 > 全球网格不再计算流向、汇水累积与河网（地质管线只标记封闭盆地湖泊，见
 > `pipelines/geological-pipeline.md` §9），下面第 1 步与第 4 步依赖的 `flow_direction`、
 > `flow_accumulation`、`river_id` 与 `river_order` 在网格上已不可用。实施本提案时，汇水
-> 面积与溢流河段改在高分辨率画布链上计算（`pipelines/canvas-hydrology.md`），再把逐盆地
+> 面积与溢流河段改在高分辨率画布链上计算（`pipelines/canvas-chain.md`），再把逐盆地
 > 结果聚合回网格。
 
 

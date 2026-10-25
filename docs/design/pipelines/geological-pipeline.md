@@ -1346,7 +1346,7 @@ def check_polar_configuration(
 
 > 全球 200k 网格上不做汇流与河网：平均 cell 约 51 km，真实河谷（5–50 km 宽）全部是
 > 亚网格尺度，在这个分辨率上计算的流向与河道只是网格伪迹。渲染用的汇流、河流与湖泊
-> 在高分辨率画布链上计算，见 [canvas-hydrology.md](canvas-hydrology.md)；画布链不读取
+> 在高分辨率画布链上计算，见 [canvas-chain.md](canvas-chain.md)；画布链不读取
 > 网格上的任何水文字段。全球网格只保留下面两类湖泊标记，它们写入 `VoronoiCell.is_lake`，
 > 供气候、生态、文明与海陆划分读取。
 

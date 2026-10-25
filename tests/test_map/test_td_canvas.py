@@ -117,3 +117,114 @@ def test_land_cut_splits_a_component() -> None:
     assert len(cut.component_km2) == 2
     assert cut.labels[20] == -2 and cut.labels[0] == -1
     assert cut.labels[19] != cut.labels[21]
+
+
+def test_reattached_cut_splits_then_returns_its_land() -> None:
+    from types import SimpleNamespace
+
+    n = 41
+    cells = [
+        SimpleNamespace(
+            lat=0.0,
+            lon=float(i),
+            area_km2=1.0e4,
+            water_class="ocean" if i in (0, n - 1) else "land",
+            neighbors=[j for j in (i - 1, i + 1) if 0 <= j < n],
+        )
+        for i in range(n)
+    ]
+    mesh = SimpleNamespace(cells=cells)
+    cut = tc.land_components(mesh, 6371.0, (tc.LandCut(0.0, 20.0, 300.0, reattach=True),))  # type: ignore[arg-type]
+    assert len(cut.component_km2) == 2
+    assert (cut.labels[1:-1] >= 0).all()  # no land left outside a piece
+    assert cut.labels[18] == cut.labels[1] and cut.labels[22] == cut.labels[39]
+    assert cut.component_km2.sum() == 39 * 1.0e4
+
+
+def _blend_case(offset_b: float = 0.0):
+    rng = np.random.default_rng(0)
+    n = 800
+    x = (np.arange(n) - n / 2) * 0.5  # km, 0.5 km pixels; ownership line at x = 0
+    dist_a = np.tile(np.maximum(x, 0.0), (n, 1))
+    dist_b = np.tile(np.maximum(-x, 0.0), (n, 1))
+    base = 500.0 + np.zeros((n, n))
+    a = base + rng.normal(0, 30, (n, n))
+    b = base + offset_b + rng.normal(0, 30, (n, n))
+    return a, b, dist_a, dist_b
+
+
+def test_blend_overlap_removes_the_step_and_keeps_one_sides_detail() -> None:
+    from scipy.ndimage import gaussian_filter
+
+    a, b, da, db = _blend_case(offset_b=200.0)
+    h = tc.blend_overlap(a, b, da, db, 0.5)
+    hard = np.where(da <= db, a, b)
+    mid = h.shape[1] // 2 + 1  # first column owned by B
+    step = np.abs(h[:, mid] - h[:, mid - 1]).mean()
+    hard_step = np.abs(hard[:, mid] - hard[:, mid - 1]).mean()
+    assert step < 0.3 * hard_step
+    detail = h - gaussian_filter(h, 4)
+    raw = a - gaussian_filter(a, 4)
+    sl = np.s_[:, mid - 80 : mid - 12]  # inside the low band, outside the detail band
+    assert detail[sl].std() > 0.9 * raw[sl].std()
+    far = np.s_[:, :20]  # 200 km from the line: beyond every band
+    assert np.allclose(h[far], a[far], atol=0.5)
+
+
+def test_blend_overlap_falls_back_to_linear_on_land_sea_disagreement() -> None:
+    a, b, da, db = _blend_case()
+    b = b - 1000.0  # B is sea where A is land
+    h = tc.blend_overlap(a, b, da, db, 0.5)
+    w = tc.blend_weight(da, db, tc.BLEND_LINEAR_KM)
+    mid = h.shape[1] // 2
+    lin = w * a + (1 - w) * b
+    assert np.abs(h[:, mid] - lin[:, mid]).max() < 1e-6
+
+
+def test_plan_layout_join_overrides_the_gap_rule() -> None:
+    from types import SimpleNamespace
+
+    # two land strips on the equator ~1100 km apart (beyond two buffer widths)
+    lons = [float(i) for i in range(0, 12)] + [float(i) for i in range(22, 26)]
+    cells = []
+    for k, lo in enumerate(lons):
+        nb = [j for j in (k - 1, k + 1) if 0 <= j < len(lons) and abs(lons[j] - lo) == 1.0]
+        cells.append(
+            SimpleNamespace(lat=0.0, lon=lo, area_km2=5.0e4, water_class="land", neighbors=nb)
+        )
+    land = tc.land_components(SimpleNamespace(cells=cells), 6371.0)  # type: ignore[arg-type]
+    assert len(land.component_km2) == 2
+    plans, _ = tc.plan_layout(land)
+    assert len(plans) == 2
+    big, small = int(np.argmax(land.component_km2)), int(np.argmin(land.component_km2))
+    joined, _ = tc.plan_layout(land, joins={small: big})
+    assert len(joined) == 1 and sorted(joined[0].components) == sorted([big, small])
+
+
+def test_plan_layout_generates_own_shelf_but_not_a_neighbours() -> None:
+    from types import SimpleNamespace
+
+    # land at lon 0-9 (big) and lon 30-33 (small), shallow sea between, deep sea beyond lon 15
+    cells = []
+    for k, lo in enumerate(np.arange(-12.0, 46.0, 0.5)):
+        land = 0.0 <= lo <= 9.0 or 30.0 <= lo <= 33.0
+        depth = -50.0 if lo < 15.0 or lo > 27.0 else -4000.0
+        cells.append(
+            SimpleNamespace(
+                lat=0.0, lon=float(lo), area_km2=3.0e3, elevation=100.0 if land else depth,
+                water_class="land" if land else "ocean",
+                neighbors=[j for j in (k - 1, k + 1) if 0 <= j < 116],
+            )
+        )  # fmt: skip
+    land = tc.land_components(SimpleNamespace(cells=cells), 6371.0)  # type: ignore[arg-type]
+    groups = [[int(np.argmax(land.component_km2))], [int(np.argmin(land.component_km2))]]
+    shelf = tc.shelf_cells(land, groups, 600.0, -2500.0)
+    lons = np.array([c.lon for c in cells])
+    assert lons[shelf[0]].max() < 15.0  # stops at the deep water
+    assert lons[shelf[0]].min() == -5.0  # 600 km reach west of the land at lon 0
+    assert not np.isin(shelf[0], shelf[1]).any()  # each shelf cell has one owner
+    plain, _ = tc.plan_layout(land, shelf_reach_km=0.0)
+    wide, _ = tc.plan_layout(land)
+    big = next(p for p in wide if groups[0][0] in p.components)
+    big0 = next(p for p in plain if groups[0][0] in p.components)
+    assert len(big.chunks) > len(big0.chunks)

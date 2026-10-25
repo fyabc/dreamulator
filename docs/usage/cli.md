@@ -308,7 +308,7 @@ dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，�
 | `export build` | 区域包的高清地形：`--method td`（terrain-diffusion）/ `spl`（程序化侵蚀） |
 | `export render` | 区域包出图：`--style satellite`（卫星真彩）或制图 `survey/relief/biome/hand/medieval/all` |
 | `export globe` | 太空俯瞰镜头：地表/云纹理 + 双层云 + 大气 + 圆盘静帧（`clouds` 为历史别名） |
-| `export canvas` | 全球画布链：外存水文 + 裁窗，产出可直接 `export render` 的窗口包 |
+| `export canvas` | 全球画布链子命令组：`plan`、`generate`、`status`、`hydrology`、`window`、`mosaic`，产出可直接 `export render` 的窗口包与整画布总览图 |
 
 headless 烘焙地图图层为彩色 PNG，颜色与前端渲染逐字节一致（配色单源 `palettes.json`，
 前后端共读）。支撑 `/read-map` skill、`ai civ`、CI 审计——守护轴的取证腿。
@@ -377,23 +377,38 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 喂给 Gaea 时区域 span 建议 ≤ 2350 km；操作配方见
 [gaea-video-chain.md](gaea-video-chain.md)。
 
-### 画布裁窗（export canvas）
+### 全球画布链（export canvas）
 
-高分画布链：一张全球画布（S1，90 m int16 分块 + 粗格气候）→ 外存水文（S2）→
-裁出区域窗口（S3）。窗口包与 `export region` 的 `input/ + refined-out/` 词汇相同，
-可直接交给 `export render` 出图：
+每块大陆整块生成为一张 90 m 分块画布（S1），在画布上做外存水文（S2），再裁出区域窗口（S3）。子命令按链路顺序排列：
 
 ```bash
-dreamulator export canvas <canvas_dir> --lat 15 --lon -100 --span-km 550   # 缺省：水文 + 裁窗
-dreamulator export canvas <canvas_dir> --stage hydrology                   # 只跑水文（调试）
-dreamulator export canvas <canvas_dir> --lat 15 --lon -100 --span-km 550 --stage window
-dreamulator export render <窗口包> --style all                             # topo + relief + biome
+dreamulator export canvas plan nacrea                     # S1 布局与输入，读 <世界>/canvas_layout.yaml
+dreamulator export canvas plan nacrea --canvas aurora     # 只重写一张画布的输入
+dreamulator export canvas generate <root> --td <terrain-diffusion 克隆> --gpus 0-7   # S1 生成，可续算
+dreamulator export canvas status <root> --verify          # 每张画布的完成数与校验和
+dreamulator export canvas hydrology <canvas_dir>          # S2 外存水文
+dreamulator export canvas window <canvas_dir> --lat 15 --lon -100 --span-km 550   # S3 裁窗
+dreamulator export render <窗口包> --style all             # topo + relief + biome
+dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清总览图（约 180 m 一像素）
 ```
 
-水文结果缓存在 `<canvas>/hydro-work/`（每个分块校验和，支持断点续算；`--force` 重跑）。
-河网起始阈值 `--threshold-cells` 默认 27000，对应区域链校准的约 2.1 m³/s 平均流量
-（90 m 像素）；需要更密的小溪网时可调低。水文算法与输出契约见
-[画布链技术参考](../design/pipelines/canvas-hydrology.md)。
+- `plan` 的布局根目录默认是 `data/worlds/<世界>/canvases/<分支>/`（已被 git 忽略），`--root` 可改。
+  分支默认取布局配置的 `branch`。已有分块的画布如果几何、条件场或生成参数变了，`plan` 会拒绝继续，
+  需要先把旧的 `chunks/` 与 `chunks.sha256` 移走（`--force` 只跳过这项检查）。
+- `generate` 每张 GPU 起一个 worker，用 terrain-diffusion 虚拟环境的解释器运行（安装见
+  [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)）；
+  中断后重跑即续算，`--canvas` 可只跑指定的画布。
+- `window` 在水文没做完时先补跑；水文结果缓存在 `<canvas>/hydro-work/`（每个分块带校验和）。
+  河网起始阈值 `--threshold-cells` 默认 27000，对应区域链校准的约 2.1 m³/s 平均流量（90 m 像素）；
+  需要更密的小溪网时可调低。
+- `mosaic` 默认 `--step 4`（约 360 m 一像素）写 JPEG 到 `exports/mosaic/<画布根目录名>/`（每个根目录一个子目录，不同配方的图互不混淆）；JPEG 每边
+  不超过 65535 像素，原生分辨率（`--step 1`）请输出 `.png` 或 `.tif`。
+  `--style relief|carto` 选画法（缺省 `relief`，放大高程的多向光照立体晕渲；缺省画法与色表不加文件名后缀），`--palette` 选陆地色表（`adaptive`、
+  `pastel`、`gmt-etopo1`、`gmt-globe`、`gmt-relief`、`wikipedia`、`cross-blended`），`--sea carto|palette|grey`
+  选海洋颜色，`--intertidal LO,HI` 把海平面附近的高程带画成潮间带色（缺省 `-2,2`，取 IHO S-52 海图标准的潮间带色，`off` 关闭），例如 `--style relief --palette cross-blended`。
+
+布局规则、坐标约定、归属与混合、水文算法与输出契约见
+[画布链技术参考](../design/pipelines/canvas-chain.md)。
 
 ### 卫星真彩合成（export render --style satellite）
 

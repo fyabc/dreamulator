@@ -1,6 +1,6 @@
 """canvas_hydrology — out-of-core hydrology on S1 canvases (S2 scaffold).
 
-The design contract lives in ``docs/design/pipelines/canvas-hydrology.md``.
+The design contract lives in ``docs/design/pipelines/canvas-chain.md``.
 This module is the **correctness oracle** for S2: it implements the classic
 one-shot Priority-Flood (Barnes, Lehman & Mulla 2014) as a single global
 frontier over lazily-touched tiles, cross-chunk lake components, D8 flow

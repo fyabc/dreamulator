@@ -118,6 +118,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   1 个 T42 格距的高斯平滑（经度环绕、纬度边缘延拓），总云量作大尺度云量场、低/中云与高云的比例
   分配两层云壳；太阳方向默认取包内该帧的日下点，视图中心经度随之，晨昏线与云场同一时刻。平滑
   参数与帧号写入 `meta.json` 的 `weather_pack` 块。年均路径（网格字段）与引擎占位路径不变。
+- **画布布局与过渡带（2026-10-24）**：`map/td_canvas.py` 新增归还型切割圆（`LandCut(reattach=True)`：只断开连通，圈内
+  陆地事后还给最近的陆块，半径不受缓冲带限制）、作者指定的强制合并（`plan_layout(joins=...)`）与画布重叠区的混合规则
+  （`blend_overlap`：低通骨架在 92 km 带内、细节在 4 km 带内混合，海陆判定不一致处改 92 km 整体混合，权重为平滑阶跃）。
+  世界岛据此切成两张画布，全部画布的边缘各向异性都在 1.15 以内。
+- **全球画布链的命令组（2026-10-24）**：`export canvas` 改为子命令组，按链路顺序是 `plan`（布局、归属表与每张画布的
+  条件场和气候通道，读世界目录下的 `canvas_layout.yaml`）、`generate`（每张 GPU 一个 terrain-diffusion 进程，可续算）、
+  `status`（完成数与校验和）、`hydrology`（外存水文）、`window`（区域裁窗，水文未完成时先补跑）与 `mosaic`（整画布
+  超高清总览图，配色与地形图相同，默认写到 `exports/mosaic/`）。原来带 `--stage` 的单条 `export canvas` 拆成
+  `hydrology` 与 `window`。库代码在 `map/td_canvas_build.py`、`td_canvas_worker.py` 与 `td_canvas_mosaic.py`；
+  画布根目录默认是 `data/worlds/<世界>/canvases/<分支>/`。技术参考改名为 `pipelines/canvas-chain.md` 并补齐 S1 一节。
+- **画布条件场的构造结构与 TD 细节幅度（2026-10-25）**：`map/td_canvas_structure.py` 给高程条件叠加零均值的构造结构场
+  （横切谷与山嘴，幅度 0.52 倍亚格子起伏，谷间距按 Hovius 1996，网格格均值不变），布局配置的 `structure` 开关控制；
+  生成参数新增 `pipeline_kwargs` 透传给 terrain-diffusion，nacrea 取高程条件信噪比 0.05、输出细节系数 2.0 倍（地球
+  Copernicus 十个地点标定与检验）。
+- **画布总览图的画法与色表（2026-10-24）**：`export canvas mosaic` 新增 `--style relief`（放大高程的多向光照立体晕渲，
+  海岸外加柔和阴影）、`--palette`（陆地色表：`adaptive`、`pastel`、GMT 的 `etopo1`、`globe`、`relief`，维基百科
+  规范与按画布气候混合的交叉混合分层设色）与 `--sea`（海洋取水深蓝、色表自带色或灰色）。色表数据在
+  `map/hypsometric_palettes.json`，逐套记录来源与许可。
+- **画布的陆架延伸（2026-10-24）**：`map/td_canvas.py` 的分块清单除了成员陆地 200 km 缓冲带，还纳入本画布的陆架
+  （`shelf_cells`：水深浅于 2500 m、离本画布陆地 600 km 以内、按最近陆地规则归本画布的海洋格），画布正方形随之放大。
+  地形扩散模型会把近海平面的浅陆架抬成陆地，只有缓冲带时这类陆地会被分块边缘截断；归属条件保证画布不伸进邻居的地盘。
+  nacrea 的分块总数从 8636 增至 9259。
 - **GCM 气象图层包（2026-10-23）**：太空俯瞰星球链的 L1 数据层。`gcm/weather_pack.py` 把 ExoPlaSim 的高频瞬时
   快照打成逐变量帧数组：ISCCP 三层云量与总云量、云顶气压与高度、降水、海平面气压、三个高度的风、低层涡度、
   海冰、地表温度与热带气旋生成潜势，附逐帧日下点；`gcm/cyclones.py` 按 TempestExtremes 的方法检测与连接气旋，

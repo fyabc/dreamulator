@@ -135,6 +135,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 "src/dreamulator/cli.py" = ["B008"]
 "src/dreamulator/cli_climate.py" = ["B008"]
 "src/dreamulator/cli_export.py" = ["B008"]
+"src/dreamulator/cli_export_canvas.py" = ["B008"]
 "src/dreamulator/cli_data.py" = ["B008", "TC003"]
 "src/dreamulator/cli_ucc.py" = ["B008"]
 # Typer evaluates `Path`/`Path | None` annotations at runtime (inspect.get_annotations),

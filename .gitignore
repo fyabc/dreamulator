@@ -43,6 +43,7 @@ frontend/.vite/
 # Project specific
 data/worlds/*/simulations/
 data/worlds/*/packs/
+data/worlds/*/canvases/
 *.log
 /private/
 .env
