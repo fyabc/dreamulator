@@ -411,7 +411,7 @@ def canvas_mosaic(
         None,
         "--output",
         "-o",
-        help="Image (.jpg/.png/.tif; default: <export-dir>/mosaic/<world>-<branch>/"
+        help="Image (.jpg/.png/.tif; default: <export-dir>/mosaic/<layout root name>/"
         "<canvas>_<metres>m.jpg, export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
     ),
     step: int = typer.Option(
@@ -441,8 +441,8 @@ def canvas_mosaic(
     _require_canvas_dir(canvas)
     meta = json.loads((canvas / "canvas.json").read_text(encoding="utf-8"))
     if output is None:
-        src = meta.get("source", {})
-        tag = str(src.get("world", "world")) + (f"-{src['branch']}" if src.get("branch") else "")
+        # one folder per layout root, so canvases built with different recipes stay apart
+        tag = canvas.resolve().parent.name
         px_m = round(float(meta["geometry"]["px_km"]) * step * 1000)
         root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
         tags = [t for t in (style, palette) if t not in (None, "carto")]
