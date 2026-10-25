@@ -432,6 +432,11 @@ def canvas_mosaic(
     exaggeration: float | None = typer.Option(
         None, "--exaggeration", help="relief: vertical exaggeration (default pixel size / 90 m)"
     ),
+    intertidal: str = typer.Option(
+        "-2,2",
+        "--intertidal",
+        help="Height band LO,HI (m) in the intertidal colour (IHO S-52 DEPIT); 'off' disables",
+    ),
     quality: int = typer.Option(90, "--quality", help="JPEG quality"),
     workers: int = typer.Option(16, "--workers", help="Parallel band workers"),
 ) -> None:
@@ -439,6 +444,14 @@ def canvas_mosaic(
     from dreamulator.map.td_canvas_mosaic import render_mosaic
 
     _require_canvas_dir(canvas)
+    band: tuple[float, float] | None = None
+    if intertidal.strip().lower() != "off":
+        try:
+            lo, hi = (float(x) for x in intertidal.split(","))
+        except ValueError:
+            console.print("[red]--intertidal takes LO,HI in metres (e.g. -2,2) or 'off'[/red]")
+            raise typer.Exit(code=2) from None
+        band = (min(lo, hi), max(lo, hi))
     meta = json.loads((canvas / "canvas.json").read_text(encoding="utf-8"))
     if output is None:
         # one folder per layout root, so canvases built with different recipes stay apart
@@ -465,6 +478,7 @@ def canvas_mosaic(
             palette=palette,
             sea=sea,
             exaggeration=exaggeration,
+            intertidal_m=band,
             quality=quality,
             workers=workers,
         )

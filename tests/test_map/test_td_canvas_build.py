@@ -216,3 +216,19 @@ def test_structure_anomaly_keeps_cell_means_and_land() -> None:
     base = tc.sample_mesh_field(geom, elev, xyz)
     assert np.all((base + anom)[base > 1] > 0)
     assert stats["resid_over_mu_p95"] < 0.05
+
+
+def test_mosaic_intertidal_band(tmp_path: Path) -> None:
+    from PIL import Image
+
+    c = _fake_canvas(tmp_path, [[0, 0]])
+    y, x = np.mgrid[0:2048, 0:2048]
+    np.save(c / "chunks" / tw.chunk_name(0, 0), ((x - 1024) // 64).astype(np.int16))  # -16..15 m
+    out = tmp_path / "t.png"
+    tm.render_mosaic(c, out, step=16, style="relief", workers=1)
+    img = np.asarray(Image.open(out)).astype(int)
+    tide = np.rint(np.array(tm.INTERTIDAL_RGB) * 255).astype(int)
+    assert np.abs(img[64, 64] - tide).max() <= 1  # h = 0 m: intertidal
+    assert np.abs(img[64, 4] - tide).max() > 10  # h = -16 m: sea
+    tm.render_mosaic(c, out, step=16, style="relief", intertidal_m=None, workers=1)
+    assert np.abs(np.asarray(Image.open(out)).astype(int)[64, 64] - tide).max() > 10

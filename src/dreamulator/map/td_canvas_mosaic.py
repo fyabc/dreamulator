@@ -18,9 +18,10 @@ multi-directional hillshade on vertically exaggerated heights (default exaggerat
 along the coast.  ``palette`` picks the land colours from ``hypsometric_palettes.json`` (or the
 built-in ``adaptive`` export-carto LUT); ``sea`` picks the ocean: ``carto`` (the export-carto
 depth blues, default), ``palette`` (the palette's own bathymetry where it has one) or ``grey``.
-The ``cross-blended`` palette (Patterson & Jenny 2011) blends arid, warm-humid, cold-humid and
-polar ramps per pixel from the canvas's coarse climate channels.  All are rendering choices,
-not terrain changes.
+``intertidal_m`` paints a height band around sea level (default ±2 m) in the IHO S-52 intertidal
+colour, as charts tint drying areas.  The ``cross-blended`` palette (Patterson & Jenny 2011)
+blends arid, warm-humid, cold-humid and polar ramps per pixel from the canvas's coarse climate
+channels.  All are rendering choices, not terrain changes.
 
 Output by extension: ``.jpg`` (sides up to 65535 px, the format's limit), ``.png`` (lossless, any
 size) or ``.tif`` (BigTIFF, tiled, deflate).  A sidecar ``<out>.json`` records the canvas, step,
@@ -54,6 +55,14 @@ SEA_GREY_RGB = (0.88, 0.88, 0.88)
 RELIEF_COAST_SHADOW = (0.12, 2.0)
 #: Default palette per style.
 DEFAULT_PALETTE = {"carto": "adaptive", "relief": "pastel"}
+#: Intertidal band (m): pixels with height in [lo, hi] get the intertidal colour, the
+#: cartographic convention for drying areas (charts tint the foreshore between low and high water
+#: separately).  Default ±2 m (author choice 2026-10-25); a rendering class, not a land/sea test —
+#: the data contract stays "land is above 0 m".
+INTERTIDAL_M: tuple[float, float] | None = (-2.0, 2.0)
+#: IHO S-52 colour token DEPIT (intertidal area), DAY_BRIGHT table, as shipped in OpenCPN's
+#: chartsymbols.xml: (131, 178, 149).
+INTERTIDAL_RGB = (131 / 255, 178 / 255, 149 / 255)
 #: Default shading of the mosaic command (the print look; carto stays available).
 DEFAULT_STYLE = "relief"
 #: Cross-blended weights (rendering choices): aridity index P/PET from the dry sub-humid bound
@@ -164,6 +173,7 @@ def carto_tint(
     palette: str = "adaptive",
     sea_mode: str = "carto",
     weights: dict[str, np.ndarray] | None = None,
+    intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
 ) -> np.ndarray:
     """Export-carto shading (float RGB 0..1) of a height field; NaN = paper."""
     from dreamulator.media.carto_render import (
@@ -184,6 +194,7 @@ def carto_tint(
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
     lum = rgb.mean(axis=2, keepdims=True)
     rgb = np.clip(lum + (rgb - lum) * COLOR_SATURATION, 0.0, 1.0)
+    _paint_intertidal(rgb, height_m, intertidal_m)
     rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
     return np.asarray(rgb)
 
@@ -197,6 +208,7 @@ def relief_tint(
     palette: str = "pastel",
     sea_mode: str = "carto",
     weights: dict[str, np.ndarray] | None = None,
+    intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
 ) -> np.ndarray:
     """Shaded-relief shading (float RGB 0..1) of a height field; NaN = paper (or the sea grey)."""
     from scipy.ndimage import distance_transform_edt
@@ -219,8 +231,21 @@ def relief_tint(
     dist_km = distance_transform_edt(sea) * km_per_px
     ocean = sea_rgb(h, sea_mode, palette)
     rgb[sea] = ocean[sea] * (1.0 - depth * np.exp(-dist_km[sea] / efold))[:, None]
+    _paint_intertidal(rgb, height_m, intertidal_m)
     rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
     return np.asarray(rgb)
+
+
+def _paint_intertidal(
+    rgb: np.ndarray, height_m: np.ndarray, band: tuple[float, float] | None
+) -> None:
+    """Flat intertidal tint on pixels whose height lies in ``band`` (in place)."""
+    if band is None:
+        return
+    lo, hi = band
+    with np.errstate(invalid="ignore"):
+        m = (height_m >= lo) & (height_m <= hi)
+    rgb[m] = INTERTIDAL_RGB
 
 
 def _init(ctx: dict[str, Any]) -> None:
@@ -265,7 +290,12 @@ def _band(ci: int) -> tuple[int, np.ndarray]:
             k: map_coordinates(v, [gr, gc], order=1, mode="nearest")
             for k, v in _ctx["weights"].items()
         }
-    kw = {"palette": _ctx["palette"], "sea_mode": _ctx["sea"], "weights": weights}
+    kw = {
+        "palette": _ctx["palette"],
+        "sea_mode": _ctx["sea"],
+        "weights": weights,
+        "intertidal_m": _ctx["intertidal"],
+    }
     if _ctx["style"] == "relief":
         rgb = relief_tint(h, _ctx["km_px"], _ctx["exaggeration"], **kw)
     else:
@@ -284,6 +314,7 @@ def render_mosaic(
     palette: str | None = None,
     sea: str = "carto",
     exaggeration: float | None = None,
+    intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
     quality: int = 90,
     workers: int = 8,
 ) -> dict[str, Any]:
@@ -323,6 +354,7 @@ def render_mosaic(
         if _HYPSO.get(palette, {}).get("kind") == "cross_blended"
         else None,
         "exaggeration": ve,
+        "intertidal": intertidal_m,
         "r0": rows[0] * CHUNK_PX,
         "r1": (rows[-1] + 1) * CHUNK_PX,
         "c0": cols[0] * CHUNK_PX,
@@ -378,6 +410,7 @@ def render_mosaic(
         "style": style,
         "palette": palette,
         "sea": sea,
+        "intertidal_m": list(intertidal_m) if intertidal_m else None,
         "exaggeration": round(ve, 3) if style == "relief" else None,
         "struct_km": struct_km,
     }
