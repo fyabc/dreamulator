@@ -56,9 +56,10 @@ ALPHA_S = math.asin(R_STAR / D_STAR)
 
 
 def _resize(field: np.ndarray, width: int, height: int) -> np.ndarray:
-    if field.shape == (height, width):
+    if field.shape[:2] == (height, width) and (field.ndim == 2 or field.shape[2] == 3):
         return field
-    image = Image.fromarray(np.clip(field * 255.0, 0.0, 255.0).astype(np.uint8), "L")
+    arr = np.clip(field * 255.0, 0.0, 255.0).astype(np.uint8)
+    image = Image.fromarray(arr, "L" if field.ndim == 2 else "RGB")
     return np.asarray(image.resize((width, height), Image.LANCZOS), dtype=np.float64) / 255.0
 
 
@@ -122,6 +123,9 @@ def main() -> None:
     surface = np.asarray(Image.open(export_dir / "surface.png").convert("RGB"), dtype=np.float64)
     surface /= 255.0
     tex_w, tex_h = args.texture_width, args.texture_width // 2
+    # render_globe_atmosphere requires all layers on one grid; the video works
+    # at the advection width, so the 8K surface comes down with the clouds.
+    surface = _resize(surface, tex_w, tex_h)
     deck = _resize(
         np.asarray(Image.open(export_dir / "clouds_low.png").convert("RGBA"))[..., 3] / 255.0,
         tex_w,
