@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792946441496,
+  "lastUpdate": 1792951854337,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1121,6 +1121,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0000499373830590057",
             "extra": "mean: 4.110756599997956 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "0ff04de2c5acab52bf0383731955f0a1c86bb002",
+          "message": "merge: UCC 派生资产一条命令重生成管线\n\nucc_pipeline.py 编排全部 yearly 与例证的重生成 + 新鲜度审计；GCM 分支 yearly\n溯源标注、earth L2 数据集取最新、nacrea 例证切正典分支口径。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-26T02:10:11+08:00",
+          "tree_id": "bb099ffaaafad3e2aaf12ff7f85605949ea7149a",
+          "url": "https://github.com/fyabc/dreamulator/commit/0ff04de2c5acab52bf0383731955f0a1c86bb002"
+        },
+        "date": 1792951853601,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3158216322850823,
+            "unit": "iter/sec",
+            "range": "stddev: 0.12337069643461683",
+            "extra": "mean: 3.1663442202 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.146251963558201,
+            "unit": "iter/sec",
+            "range": "stddev: 0.018215593235271013",
+            "extra": "mean: 317.8384984999951 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.4527265204975568,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1004015239726126",
+            "extra": "mean: 688.3608069999999 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 975.1652710072308,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007617812863936736",
+            "extra": "mean: 1.0254672000030496 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.99318273545882,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00004221938477549865",
+            "extra": "mean: 5.076317800006791 msec\nrounds: 5"
           }
         ]
       }
