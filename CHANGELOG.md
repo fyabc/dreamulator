@@ -7,8 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Aegis 掩食几何与掩食视频链（2026-10-24）**：新增 `media/eclipse_geometry.py`，掩食深度用两个圆盘的精确
+  透镜交叠面积计算（不做圆形暗斑近似），掩影带按冲击参数 `b = D_MOON·sin ψ` 朝 Aegis 天顶方向偏置；
+  `scripts/media/eclipse_flow_video.py` 出全过程视频，太阳直射点、掩食相位与云平流共用气象包同一时钟，
+  掩甚帧自动搜索（当前包约第 863 帧），潮汐锁定下相机随地表固定。`render_satellite_still.py` 改用同一
+  几何模块，输出目录从私有路径迁到 `exports/video/eclipse/`。
+- **spin 视频支持自转轴倾角（2026-10-24）**：`--axis-tilt`（nacrea 正典 19.9°，与 GCM 直射点年摆动一致）
+  与 `--axis-azimuth` 让星球绕倾斜轴刚性自转，Rodrigues 逆映射在 1/4 分辨率网格上旋转再由渲染器上采样，
+  720p 整片约 20 分钟。
+
+### Fixed
+
+- **热带气旋雨带卷入手性按半球修正（2026-10-24）**：对数螺旋雨带的相位无半球项，向内恒为罗盘顺时针卷
+  （北半球反、南半球碰巧正确），与涡旋风场的气旋式环流（北逆南顺）相反——视频里初始旋臂被旋转方向
+  「弄坏」即此。螺旋相位按半球镜像方位角（运动不对称相位不受影响），北半球雨带逆时针向内、南半球顺时针，
+  与 `cyclone_wind_field`、`warp_cyclone_texture` 一致；后者经数值复核本就正确。温带逗号的南半球镜像
+  登记为已知简化。
+
 ### Changed
 
+- **`export globe` 默认纹理网格降为 4096×2048（2026-10-24）**：样片视频链的工作纹理只有 2048 宽，4K 静帧已满足
+  分享用图需求；8K 风暴版的气旋模板全网格评估内存峰值可超 20 GB，内存不宽裕时易 OOM。印刷级 8K 静帧显式
+  `--grid 8192x4096` 仍可用。
 - **nacrea 气候正典改以 GCM 分支为准（design-notes 0013，2026-10-23）**：对外设定的气候、生态与文明内容取自分支
   `gcm-t42-712`（ExoPlaSim T42 平板海洋、712 ppm 冷臂）；根世界的气候引擎结果只作快速工具与回归对照。
   `climate_zones.md`、`atmospheric_dynamics.md` 与 `climate_portrait.md` 按分支数据重写：陆地热带类 36.7%、

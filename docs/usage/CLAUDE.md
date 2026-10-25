@@ -15,6 +15,7 @@
 - `climate-validation-workflow.md` — 气候验证工作流（真实高程导入、参考数据下载、运行验证、保存报告）
 - `exoplasim-gcm.md` — ExoPlaSim GCM 参照臂运行指南与踩坑记录（环境引导、地表文件、对齐配置、运行与续算、输出口径、已知问题）
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
+- `video-samples.md` — 样片复现手册（静帧、云流、自转、掩食、板块运动五条链的一条命令重跑配方）
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器操作（架构说明在 [design/frontend-3d-viewer.md](../design/frontend-3d-viewer.md)）
 
 ## 相关设计文档

@@ -268,3 +268,37 @@ def test_cyclone_wind_field_zero_without_deficit() -> None:
     east, north = cr.cyclone_wind_field([quiet], height=32, width=64, radius_km=6800.0)
     assert not np.any(east)
     assert not np.any(north)
+
+
+def _shortest_delta(a: float, b: float) -> float:
+    return (b - a + 180.0) % 360.0 - 180.0
+
+
+def test_texture_warp_rotates_with_cyclonic_sense() -> None:
+    """The texture warp moves features in the same sense as the vortex wind.
+
+    A single cloud speck due east of a northern-hemisphere storm centre must
+    move toward smaller compass bearing (north-east) — counter-clockwise —
+    matching the wind field's northward flow on the storm's east flank.
+    """
+    height, width = 360, 720
+    cyc = cr.Cyclone(
+        lat_deg=20.0,
+        lon_deg=0.0,
+        kind="tropical",
+        central_pressure_hpa=950.0,
+        environment_pressure_hpa=1010.0,
+        rmax_km=150.0,
+        outer_radius_km=2000.0,
+    )
+    alpha = np.zeros((height, width))
+    dlon = np.degrees(800.0 / (6371.0 * np.cos(np.radians(20.0))))
+    row = int((90.0 - 20.0) / 180.0 * height)
+    col = int((0.0 + dlon + 180.0) / 360.0 * width)
+    alpha[row, col] = 1.0
+    warped = cr.warp_cyclone_texture(alpha, [cyc], radius_km=6371.0)
+    peak = np.unravel_index(np.argmax(warped), warped.shape)
+    plat = 90.0 - peak[0] * 180.0 / height
+    plon = peak[1] * 360.0 / width - 180.0
+    bearing = float(np.degrees(np.arctan2(plon * np.cos(np.radians(20.0)), plat - 20.0)) % 360.0)
+    assert _shortest_delta(90.0, bearing) < 0.0  # east flank curls north
