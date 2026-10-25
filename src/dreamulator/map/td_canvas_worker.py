@@ -25,7 +25,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 PX = 256
 #: (file, channel, internal scale, default) as in upstream tiff_export
@@ -74,14 +74,44 @@ def pending(canvas: Path, mine: list[list[int]]) -> list[tuple[int, int]]:
     return todo
 
 
-def append_checksum(sha_file: Path, digest: str, name: str) -> None:
+def _lock_exclusive(f: TextIO) -> None:
+    """Advisory whole-file exclusive lock, portable across POSIX and Windows.
+
+    POSIX uses ``fcntl.flock``; Windows has no fcntl, so ``msvcrt.locking``
+    locks the first byte of the file instead (workers only append lines, so
+    byte 0 is never a data byte anybody writes concurrently).  ``LK_LOCK``
+    retries for ~10 s rather than failing at once, matching flock's
+    block-until-available behaviour closely enough for chunk bookkeeping.
+    """
+    if sys.platform == "win32":
+        import msvcrt
+
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        return
     import fcntl
 
+    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock(f: TextIO) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def append_checksum(sha_file: Path, digest: str, name: str) -> None:
     with open(sha_file, "a", encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock_exclusive(f)
         f.write(f"{digest}  {name}\n")
         f.flush()
-        fcntl.flock(f, fcntl.LOCK_UN)
+        _unlock(f)
 
 
 def main(argv: list[str]) -> None:  # pragma: no cover - needs the terrain-diffusion venv and a GPU
