@@ -403,7 +403,7 @@ dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清�
   需要更密的小溪网时可调低。
 - `mosaic` 默认 `--step 4`（约 360 m 一像素）写 JPEG 到 `exports/mosaic/<画布根目录名>/`（每个根目录一个子目录，不同配方的图互不混淆）；JPEG 每边
   不超过 65535 像素，原生分辨率（`--step 1`）请输出 `.png` 或 `.tif`。
-  `--style carto|relief` 选画法（`relief` 是放大高程的多向光照立体晕渲），`--palette` 选陆地色表（`adaptive`、
+  `--style relief|carto` 选画法（缺省 `relief`，放大高程的多向光照立体晕渲；缺省画法与色表不加文件名后缀），`--palette` 选陆地色表（`adaptive`、
   `pastel`、`gmt-etopo1`、`gmt-globe`、`gmt-relief`、`wikipedia`、`cross-blended`），`--sea carto|palette|grey`
   选海洋颜色，例如 `--style relief --palette cross-blended`。
 

@@ -54,6 +54,8 @@ SEA_GREY_RGB = (0.88, 0.88, 0.88)
 RELIEF_COAST_SHADOW = (0.12, 2.0)
 #: Default palette per style.
 DEFAULT_PALETTE = {"carto": "adaptive", "relief": "pastel"}
+#: Default shading of the mosaic command (the print look; carto stays available).
+DEFAULT_STYLE = "relief"
 #: Cross-blended weights (rendering choices): aridity index P/PET from the dry sub-humid bound
 #: 0.65 to the arid bound 0.2 (UNEP classes); warm vs cold humid over a 8–18 °C annual mean;
 #: polar below a 10 °C warmest month (Köppen E) with a ±2 K blend, and wherever ice lies.
@@ -131,6 +133,15 @@ def _blend(a: np.ndarray, b: np.ndarray, w: np.ndarray) -> np.ndarray:
     return np.asarray(a * (1.0 - w[..., None]) + b * w[..., None])
 
 
+#: Shallowest depth (m) used for the sea-colour lookup: the LUT's 0 m bin is the first land colour,
+#: so pixels sitting exactly on sea level (about 1% of a TD canvas) must look up as shallow sea.
+MIN_SEA_DEPTH_M = 1.0
+
+
+def _sea_depth(h: np.ndarray) -> np.ndarray:
+    return np.asarray(np.maximum(-np.minimum(h, 0.0), MIN_SEA_DEPTH_M))
+
+
 def sea_rgb(h: np.ndarray, sea: str, palette: str) -> np.ndarray:
     """Ocean colours (RGB 0..1) of heights ``h`` (land pixels get colours too)."""
     spec = _HYPSO.get(palette, {})
@@ -141,7 +152,7 @@ def sea_rgb(h: np.ndarray, sea: str, palette: str) -> np.ndarray:
     from dreamulator.media.carto_render import _lut_rgb
 
     wet = np.ones(h.shape, dtype=bool)
-    return np.asarray(_lut_rgb(h, wet, -np.minimum(h, 0.0), MOSAIC_RANGE_M))
+    return np.asarray(_lut_rgb(h, wet, _sea_depth(h), MOSAIC_RANGE_M))
 
 
 def carto_tint(
@@ -165,7 +176,7 @@ def carto_tint(
     h = np.where(np.isfinite(height_m), height_m, world_range_m[0])
     sea = h <= 0.0
     if palette == "adaptive" and sea_mode == "carto":
-        rgb = _lut_rgb(h, sea, np.where(sea, -h, 0.0), world_range_m)
+        rgb = _lut_rgb(h, sea, np.where(sea, _sea_depth(h), 0.0), world_range_m)
     else:
         rgb = np.where(sea[..., None], sea_rgb(h, sea_mode, palette), land_rgb(h, palette, weights))
     relief = two_scale_relief(h, km_per_px, struct_sigma_px=struct_sigma_px)

@@ -418,12 +418,12 @@ def canvas_mosaic(
         4, "--step", help="Block-average N×N pixels (1 = native 90 m; must divide 2048)"
     ),
     style: str = typer.Option(
-        "carto", "--style", help="Shading: carto (export-carto) | relief (shaded relief for prints)"
+        "relief", "--style", help="Shading: relief (shaded relief, default) | carto (export-carto)"
     ),
     palette: str | None = typer.Option(
         None,
         "--palette",
-        help="Land colours (default: adaptive for carto, pastel for relief): adaptive, pastel, "
+        help="Land colours (default: pastel for relief, adaptive for carto): adaptive, pastel, "
         "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
     ),
     sea: str = typer.Option(
@@ -445,7 +445,14 @@ def canvas_mosaic(
         tag = canvas.resolve().parent.name
         px_m = round(float(meta["geometry"]["px_km"]) * step * 1000)
         root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-        tags = [t for t in (style, palette) if t not in (None, "carto")]
+        from dreamulator.map.td_canvas_mosaic import DEFAULT_PALETTE, DEFAULT_STYLE
+
+        # the default look gets no suffix; any other style or palette is named in the file
+        tags = [style] if style != DEFAULT_STYLE else []
+        if palette not in (None, DEFAULT_PALETTE[style]):
+            tags.append(palette)
+        if sea != "carto":
+            tags.append(f"sea-{sea}")
         suffix = "".join(f"_{t}" for t in tags)
         output = root / "mosaic" / tag / f"{meta['id']}_{px_m}m{suffix}.jpg"
     t0 = time.time()
