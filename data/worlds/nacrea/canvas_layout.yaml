@@ -24,3 +24,14 @@ joins:
   - {point: [-11.6, -36.3], into: [-10.0, -60.0]}
 
 max_anisotropy_overrides: {}
+
+# Height conditioning: add the zero-mean tectonic structure field and condition the height
+# channel strongly (SNR 0.05; smaller is stronger), so TD keeps the 70–250 km structure; scale
+# TD's output detail by the Earth-fitted factor below.
+structure: true
+generation:
+  cond_snr: [0.05, 0.2, 1.0, 0.2, 1.0]
+  # TD output detail scale: 2.0 x the upstream residual_std (1.1678), fitted on Earth
+  # (Copernicus GLO-90, five calibration and five validation sites).
+  pipeline_kwargs:
+    residual_std: 2.3356

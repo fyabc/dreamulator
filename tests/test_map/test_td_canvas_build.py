@@ -192,3 +192,27 @@ def test_mosaic_relief_style_palettes_and_seas(tmp_path: Path) -> None:
         tm.render_mosaic(c, out, step=16, style="oil")
     with pytest.raises(ValueError, match="unknown palette"):
         tm.render_mosaic(c, out, step=16, palette="nope")
+
+
+def test_structure_anomaly_keeps_cell_means_and_land() -> None:
+    from scipy.spatial import cKDTree
+
+    from dreamulator.map.td_canvas_structure import structure_anomaly
+
+    # a 1.5-degree mesh over a 30 x 30 degree box: a ridge belt across the middle of an island
+    la, lo = np.meshgrid(np.arange(-15, 15.01, 1.5), np.arange(-15, 15.01, 1.5), indexing="ij")
+    la, lo = la.ravel(), lo.ravel()
+    xyz = tc.unit_vectors(la, lo)
+    elev = np.where(np.abs(lo) < 12, 400 + 2500 * np.exp(-((la / 4) ** 2)), -2000.0)
+    mu = np.where(elev > 0, 50 + 700 * np.exp(-((la / 4) ** 2)), np.nan)
+    geom = tc.CanvasGeometry(0.0, 0.0, 6371.0, 128)
+    anom, stats = structure_anomaly(geom, "toy", xyz, elev, mu)
+    again, _ = structure_anomaly(geom, "toy", xyz, elev, mu)
+    assert np.array_equal(anom, again)  # deterministic per canvas id
+    assert stats["anomaly_std_land_m"] > 50
+    # cell means on the 4x grid are kept (to a few % of the relief) and land stays land
+    la4, lo4 = geom.coarse_centres_latlon(tc.OVERSAMPLE)
+    _, idx = cKDTree(xyz).query(tc.unit_vectors(la4, lo4).reshape(-1, 3))
+    base = tc.sample_mesh_field(geom, elev, xyz)
+    assert np.all((base + anom)[base > 1] > 0)
+    assert stats["resid_over_mu_p95"] < 0.05

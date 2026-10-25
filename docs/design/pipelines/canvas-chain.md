@@ -117,6 +117,15 @@ nacrea 当前是 19 张画布、9259 个分块、约 388 亿像素，int16 存�
   粗格上的陆地专属量记为 NaN。编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致，消费者
   判定海陆一律以高程是否大于 0 m 为准。
 
+### 2.5.1 条件场的构造结构与 TD 的细节幅度
+
+布局配置打开 `structure` 后，`write_canvas_inputs` 在高程条件上叠加零均值的构造结构场（`structure_anomaly`，
+`td_canvas_structure.py`）：沿等高线方向排列的横切谷与山嘴，幅度为网格亚格子起伏的 0.52 倍（地球 Copernicus 拟合），
+谷间距按 Hovius（1996）的山脉半宽之半，每个网格格的平均高程保持不变（残差在亚格子起伏的 5% 以内），陆地不会被
+压到海平面以下。海平面气温订正仍用格子平均高程。配合使用的生成参数是高程通道条件信噪比 0.05（数值越小条件越强），
+以及 TD 输出细节系数 `residual_std` 取上游值的 2.0 倍（在地球十个地点上标定与检验，经 `pipeline_kwargs` 传给生成
+进程）。设计与验证见 [canvas-conditioning-structure.md](../proposals/canvas-conditioning-structure.md)。
+
 ### 2.6 生成、续算与校验
 
 TD 在一张画布上是无缝的：上游的 InfiniteDiffusion 把画布当作只由种子和坐标索引的数组，按需计算互相重叠的去噪窗口，

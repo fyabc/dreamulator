@@ -130,6 +130,7 @@ def main(argv: list[str]) -> None:  # pragma: no cover - needs the terrain-diffu
         dtype=None,
         caching_strategy="direct",
         cache_limit=4 << 30,
+        **gen_cfg.get("pipeline_kwargs", {}),  # e.g. residual_std (output-time detail scale)
     )
     world.to("cuda")
     world.set_cond_snr(gen_cfg["cond_snr"])

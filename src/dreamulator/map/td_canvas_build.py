@@ -94,6 +94,8 @@ class CanvasLayoutConfig(BaseModel):
     #: canvas id -> anisotropy cap allowed for it (above the layout cap)
     max_anisotropy_overrides: dict[str, float] = Field(default_factory=dict)
     generation: dict[str, Any] = Field(default_factory=dict)
+    #: add the zero-mean tectonic structure field to the height conditioning (td_canvas_structure)
+    structure: bool = False
 
     @classmethod
     def load(cls, path: Path) -> CanvasLayoutConfig:
@@ -160,6 +162,7 @@ def write_layout(
         "joins": [{"from": list(j.point), "into": list(j.into)} for j in cfg.joins],
         "cuts": [c.model_dump() for c in cfg.cuts],
         "generation": cfg.generation_params(),
+        "structure": cfg.structure,
         "source": source,
         "canvases": [
             {
@@ -215,6 +218,7 @@ class MeshColumns:
     biome: list[str | None]
     t_monthly_c: np.ndarray  # (n, 12)
     p_monthly_mm: np.ndarray  # (n, 12)
+    relief_std_m: np.ndarray | None = None  # sub-grid relief (NaN off land)
 
     @classmethod
     def from_mesh(
@@ -240,6 +244,13 @@ class MeshColumns:
             biome=[c.biome for c in cells],
             t_monthly_c=t_monthly_c,
             p_monthly_mm=p_monthly_mm,
+            relief_std_m=np.array(
+                [
+                    np.nan if getattr(c, "relief_std_m", None) is None else c.relief_std_m
+                    for c in cells
+                ],
+                dtype=np.float64,
+            ),
         )
 
 
@@ -287,8 +298,15 @@ def write_canvas_inputs(
     cols: MeshColumns,
     generation: dict[str, Any],
     source: dict[str, Any],
+    *,
+    structure: bool = False,
 ) -> Path:
-    """Write ``<root>/<canvas_id>/`` (canvas.json, conditioning/, climate/); returns the dir."""
+    """Write ``<root>/<canvas_id>/`` (canvas.json, conditioning/, climate/); returns the dir.
+
+    With ``structure`` the height conditioning gets the zero-mean tectonic structure field
+    (``td_canvas_structure.structure_anomaly``); the sea-level temperature reduction keeps using
+    the cell-mean height, the height the mesh temperature refers to.
+    """
     geom = plan.geometry
     out = root / plan.canvas_id
     (out / "conditioning").mkdir(parents=True, exist_ok=True)
@@ -308,6 +326,15 @@ def write_canvas_inputs(
     # sea-level temperature, lapse rate from precipitation as in the region chain's refine
     lapse = np.clip(-6.5 + 0.0015 * cond["precipitation"], -9.8, -4.0) / 1000.0
     cond["temperature"] = cond["temperature"] - lapse * np.maximum(0.0, cond["heightmap"])
+    structure_stats: dict[str, Any] | None = None
+    if structure:
+        from .td_canvas_structure import structure_anomaly
+
+        if cols.relief_std_m is None:
+            raise ValueError("structure needs the mesh's relief_std_m")
+        anom, st = structure_anomaly(geom, plan.canvas_id, xyz, cols.elevation_m, cols.relief_std_m)
+        cond["heightmap"] = cond["heightmap"] + anom
+        structure_stats = {k: round(v, 4) for k, v in st.items()}
     cond_sha = {}
     for name, arr in cond.items():
         f = out / "conditioning" / f"{name}.npy"
@@ -382,6 +409,7 @@ def write_canvas_inputs(
         "climate": climate_meta,
         "legends": legends,
         "generation": generation,
+        "structure": structure_stats,
         "source": source,
     }
     (out / "canvas.json").write_text(

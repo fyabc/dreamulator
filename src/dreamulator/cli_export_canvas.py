@@ -183,7 +183,9 @@ def canvas_plan(
         out = root / plan.canvas_id
         old_file = out / "canvas.json"
         old = json.loads(old_file.read_text(encoding="utf-8")) if old_file.exists() else None
-        tb.write_canvas_inputs(root, plan, cols, cfg.generation_params(), source)
+        tb.write_canvas_inputs(
+            root, plan, cols, cfg.generation_params(), source, structure=cfg.structure
+        )
         if old is not None:
             why = _stale_reason(old, json.loads(old_file.read_text(encoding="utf-8")), out)
             if why is not None:
@@ -213,7 +215,7 @@ def _stale_reason(old: dict[str, Any], new: dict[str, Any], out: Path) -> str | 
     """Which input field changed under existing chunks (None when none did or no chunks exist)."""
     if not any((out / "chunks").glob("r*_c*.npy")):
         return None
-    for key in ("geometry", "conditioning_sha256", "generation"):
+    for key in ("geometry", "conditioning_sha256", "generation", "structure"):
         if old.get(key) != new.get(key):
             return key
     return None

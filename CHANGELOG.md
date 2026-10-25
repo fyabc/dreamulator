@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   超高清总览图，配色与地形图相同，默认写到 `exports/mosaic/`）。原来带 `--stage` 的单条 `export canvas` 拆成
   `hydrology` 与 `window`。库代码在 `map/td_canvas_build.py`、`td_canvas_worker.py` 与 `td_canvas_mosaic.py`；
   画布根目录默认是 `data/worlds/<世界>/canvases/<分支>/`。技术参考改名为 `pipelines/canvas-chain.md` 并补齐 S1 一节。
+- **画布条件场的构造结构与 TD 细节幅度（2026-10-25）**：`map/td_canvas_structure.py` 给高程条件叠加零均值的构造结构场
+  （横切谷与山嘴，幅度 0.52 倍亚格子起伏，谷间距按 Hovius 1996，网格格均值不变），布局配置的 `structure` 开关控制；
+  生成参数新增 `pipeline_kwargs` 透传给 terrain-diffusion，nacrea 取高程条件信噪比 0.05、输出细节系数 2.0 倍（地球
+  Copernicus 十个地点标定与检验）。
 - **画布总览图的画法与色表（2026-10-24）**：`export canvas mosaic` 新增 `--style relief`（放大高程的多向光照立体晕渲，
   海岸外加柔和阴影）、`--palette`（陆地色表：`adaptive`、`pastel`、GMT 的 `etopo1`、`globe`、`relief`，维基百科
   规范与按画布气候混合的交叉混合分层设色）与 `--sea`（海洋取水深蓝、色表自带色或灰色）。色表数据在
