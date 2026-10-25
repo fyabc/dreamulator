@@ -101,6 +101,3 @@ layers/geological/input/maps/
 # Backup files
 *.bak
 /rebound.html
-
-# UCC L2 观测数据集等派生工作目录（ucc_obs_descriptors 生成）
-work/
