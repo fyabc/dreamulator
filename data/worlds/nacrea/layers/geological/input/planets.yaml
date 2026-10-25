@@ -186,7 +186,7 @@ planets:
     planet_type: terrestrial
     mass: 0.35                    # M⊕
     radius: 0.63                  # R⊕ — ρ=7.8 g/cm³（参照水星 5.4 + 重力压缩）
-    rotation_period_days: 5.37    # 潮汐锁定于恒星
+    rotation_period_days: 5.56    # 潮汐锁定于恒星（同步于 0.0515 AU 轨道）
     axial_tilt_deg: 0.0
     albedo: 0.10                  # 裸露金属表面
     magnetic_field_strength: 5.0  # 残余铁核微弱磁场 (μT)
@@ -201,7 +201,8 @@ planets:
     planet_type: terrestrial
     mass: 0.90                    # M⊕
     radius: 0.97                  # R⊕
-    rotation_period_days: 16.6    # 潮汐锁定于恒星
+    rotation_period_days: 17.65   # 潮汐锁定于恒星（同步于 0.1113 AU 轨道；旧值 16.6
+                                  # 与原 0.1012 AU 轨道周期 15.3 d 本不符，一并修正）
     axial_tilt_deg: 0.0
     albedo: 0.15                  # 暗色玄武岩表面
     atmosphere:

@@ -97,7 +97,8 @@ orbits:
   # ---- 内行星（Aegis 迁移后残余碎片重组） ----
   - body_id: planet_ember
     parent_id: star_ignis
-    semi_major_axis_au: 0.0475
+    semi_major_axis_au: 0.0515   # 26-10-26 内对间距修复 +8.4%（随系统历次外扩恢复比例；
+                                 # 避开与 Crucible 的 3:1 共振 5.9%；作者裁决）
     eccentricity: 0.005           # 5.9 Gyr 恒星潮汐圆化残余（TRAPPIST-1b 类比）
     inclination_deg: 0.8          # 内残余吸积的小互倾角（水星 7° 同类，缩放版）
     longitude_ascending_node_deg: 324.9
@@ -107,7 +108,8 @@ orbits:
 
   - body_id: planet_crucible
     parent_id: star_ignis
-    semi_major_axis_au: 0.1012
+    semi_major_axis_au: 0.1113   # 26-10-26 内对间距修复 +10%（对 Aegis 系统扰动进一步
+                                 # 减小，NBOUND 实验全部沿用；作者裁决）
     eccentricity: 0.010           # 距恒星较远，恒星潮汐圆化效率低于 Ember
     inclination_deg: 0.4
     longitude_ascending_node_deg: 157.3
