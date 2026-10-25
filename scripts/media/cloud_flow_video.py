@@ -10,10 +10,20 @@ evaluated at each step's midpoint.  Without a pack the annual-mean mesh wind
 is the placeholder.  Cloud condensation/evaporation are not modelled, only
 the existing texture is transported.
 
+``--storm-mode`` picks the storm treatment.  ``rigid`` (default) advects the
+ambient deck with the environment wind only and re-composites the pack's
+storms every frame at their track positions: the template rotates rigidly at
+the cloud-pattern rate (``pattern_spin_rate_rad_s``), so the spiral keeps its
+shape instead of being differentially wound by the eye-wall wind (a passive
+tracer there turns ~5 revolutions/day) — feed it a storm-free (``export
+globe`` without ``--cyclones``) still.  ``vortex`` is the older path: the
+storms' circulation is added to the advection wind and the input still's
+stamped templates shear with it.  ``none`` draws no storms at all.
+
 Usage::
 
     uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
-        <clouds_dir> -o exports/spin/nacrea_cloudflow_720p.mp4 \
+        <clouds_dir> -o exports/video/cloudflow/<name>.mp4 \
         --res 720 --seconds 8 --sim-hours 24 \
         --weather-pack exports/weather/nacrea-gcm-t42-712
 """
@@ -26,6 +36,7 @@ import math
 import shutil
 import subprocess
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +51,16 @@ from dreamulator.map.export import (
 )
 from dreamulator.media.atmosphere_render import AtmosphereModel, EclipseShadow
 from dreamulator.media.cloud_advection import advect_equirect, advection_substeps
-from dreamulator.media.cloud_render import conditioning_grids
-from dreamulator.media.cyclone_render import Cyclone, cyclone_wind_field
+from dreamulator.media.cloud_render import cloud_erosion_field, conditioning_grids
+from dreamulator.media.cyclone_render import (
+    Cyclone,
+    cyclone_alpha,
+    cyclone_clear,
+    cyclone_envelope,
+    cyclone_wind_field,
+    pattern_spin_rate_rad_s,
+    template_fbm_stack,
+)
 from dreamulator.media.cyclone_tracks import (
     TropicalCycloneSource,
     weather_cyclones_at_frame,
@@ -125,6 +144,52 @@ def _sample_wind(field: np.ndarray, latitude_deg: float, longitude_deg: float) -
     )
 
 
+def _composite_storms(
+    base: np.ndarray,
+    storms: list[Cyclone],
+    *,
+    radius_km: float,
+    seed: int,
+    fbm_stack: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+) -> np.ndarray:
+    """Re-composite the pack's storms over the advected ambient deck.
+
+    Mirrors the still export's L3 pass (eye/slot clearing, extratropical
+    envelope lerp, tropical screen) with the storms' current positions,
+    intensities and rigid pattern spin.  The ambient deck is not pre-warped:
+    ``warp_cyclone_texture`` is a still-image treatment and re-warping a
+    re-composited template every frame would double-deform it.
+    """
+    height, width = base.shape
+    clear = cyclone_clear(storms, height=height, width=width, radius_km=radius_km)
+    out = base * (1.0 - clear)
+    extras = [c for c in storms if c.kind != "tropical"]
+    if extras:
+        env = cyclone_envelope(
+            extras, height=height, width=width, radius_km=radius_km, noise=fbm_stack[0]
+        )
+        tmpl = cyclone_alpha(
+            extras,
+            height=height,
+            width=width,
+            radius_km=radius_km,
+            seed=seed,
+            erosion=cloud_erosion_field(base),
+            fbm_stack=fbm_stack,
+        )
+        out = out * (1.0 - 0.90 * env) + 0.90 * env * tmpl
+    trop = [c for c in storms if c.kind == "tropical"]
+    if trop:
+        env = cyclone_envelope(
+            trop, height=height, width=width, radius_km=radius_km, noise=fbm_stack[0]
+        )
+        tmpl = cyclone_alpha(
+            trop, height=height, width=width, radius_km=radius_km, seed=seed, fbm_stack=fbm_stack
+        )
+        out = 1.0 - (1.0 - out) * (1.0 - 0.95 * env * tmpl)
+    return np.clip(out, 0.0, 1.0)
+
+
 def _advance_centres(
     centres: list[tuple[float, float]],
     wind_east: np.ndarray,
@@ -193,9 +258,26 @@ def main() -> None:
         help="semi-Lagrangian interpolation (cubic limits diffusion; linear is faster)",
     )
     parser.add_argument(
+        "--storm-mode",
+        choices=["rigid", "vortex", "none"],
+        default="rigid",
+        help="storm treatment: 'rigid' re-composites the pack's storms every "
+        "frame at their track positions, rotating rigidly at the pattern rate "
+        "(input: a storm-free still); 'vortex' adds the storm circulations to "
+        "the advection wind (input: the cyclone still); 'none' draws no storms",
+    )
+    parser.add_argument(
         "--no-vortex",
         action="store_true",
-        help="advect with the environment wind only (no storm circulation)",
+        help="deprecated alias for --storm-mode none",
+    )
+    parser.add_argument(
+        "--storm-seed",
+        type=int,
+        default=None,
+        help="override the tropical-cyclone sampler seed (default: the still's "
+        "cyclone seed, or 31); pick a seed whose storms sit where the clip "
+        "wants them — all draws are still ocean-gated and shear-sized",
     )
     parser.add_argument(
         "--weather-pack",
@@ -219,6 +301,10 @@ def main() -> None:
 
     if args.res > args.width or args.res > args.height:
         raise SystemExit("--res must fit inside the output frame")
+    if args.no_vortex:
+        if args.storm_mode != "none":
+            raise SystemExit("--no-vortex is deprecated; use --storm-mode none")
+        args.storm_mode = "none"
     clouds_dir: Path = args.clouds_dir
     meta = _load_meta(clouds_dir)
     model = _load_model(meta)
@@ -291,27 +377,62 @@ def main() -> None:
     cloud = _resize(cloud_alpha, tex_width, tex_height)
     if cloud_high is not None:
         cloud_high = _resize(cloud_high, tex_width, tex_height)
-    cyclones = [] if args.no_vortex else _load_cyclones(meta)
-    centres = [(cyc.lat_deg, cyc.lon_deg) for cyc in cyclones]
-    storm_seed = 4100
+    storm_mode = args.storm_mode
+    # Template-noise and tropical-sampler seed: match the still export's
+    # cyclone seed so a rigid clip shows the same storms as the cyclone still.
+    storm_seed = int(args.storm_seed or (meta.get("cyclones") or {}).get("seed") or 31)
+    # Ocean mask written next to the still by `export globe`: tropical
+    # cyclogenesis is an ocean phenomenon, and the GCM's genesis-potential
+    # field does not know surface type.
+    ocean_mask_path = clouds_dir / "ocean_fraction.npy"
+    ocean_fraction = (
+        np.load(ocean_mask_path) if ocean_mask_path.exists() and pack is not None else None
+    )
+    if ocean_fraction is not None:
+        print("  genesis: constrained to ocean by the still's ocean_fraction.npy")
     tropical_source = None
-    if cyclones:
-        print(f"vortex: {len(cyclones)} storm circulation(s) added to the advection wind")
-    if pack is not None and cyclones:
-        # The still was rendered with pack cyclones: follow the real tracks
-        # frame by frame instead of drifting the exported snapshot with the wind.
-        seed_meta = (meta.get("cyclones") or {}).get("seed")
-        storm_seed = int(seed_meta) if seed_meta is not None else 4100
+    cyclones: list[Cyclone] = []
+    centres: list[tuple[float, float]] = []
+    rigid_storms = storm_mode == "rigid" and pack is not None
+    if storm_mode == "vortex":
+        cyclones = _load_cyclones(meta)
+        centres = [(cyc.lat_deg, cyc.lon_deg) for cyc in cyclones]
+        if cyclones:
+            print(f"vortex: {len(cyclones)} storm circulation(s) added to the advection wind")
+        if pack is not None and cyclones:
+            # The still was rendered with pack cyclones: follow the real tracks
+            # frame by frame instead of drifting the exported snapshot with the wind.
+            tropical_source = TropicalCycloneSource(
+                pack,
+                seed=storm_seed,
+                radius_km=model.planet_radius_km,
+                ocean_fraction=ocean_fraction,
+            )
+            print("  storms follow the weather pack's tracks (incl. canon tropical)")
+    elif rigid_storms:
+        if (meta.get("cyclones") or {}).get("tracks"):
+            print(
+                "  note: the input still already has storms stamped in; rigid mode "
+                "draws fresh ones from the pack — prefer a storm-free still"
+            )
         tropical_source = TropicalCycloneSource(
-            pack, seed=storm_seed, radius_km=model.planet_radius_km
+            pack,
+            seed=storm_seed,
+            radius_km=model.planet_radius_km,
+            ocean_fraction=ocean_fraction,
         )
-        print("  storms follow the weather pack's tracks (incl. canon tropical)")
+        print("  storms: rigid per-frame compositing from the pack's tracks")
 
     ocean = None
     if not args.no_ocean:
         surface_indices = export_cell_index_grid(mesh, width, height, tree=tree)
         ocean_cells = np.array([c.elevation < sea_level for c in mesh.cells], dtype=bool)
         ocean = ocean_cells[surface_indices].astype(np.float64)
+
+    fbm_stack = None
+    if rigid_storms:
+        # Template noise fields are grid+seed dependent only; compute once.
+        fbm_stack = template_fbm_stack(tex_height, tex_width, storm_seed)
 
     start = time.perf_counter()
     renderer = SpinRenderer(
@@ -342,7 +463,7 @@ def main() -> None:
     print(
         f"advection: {args.sim_hours:g} h over {total} frames at "
         f"{tex_width}x{tex_height}, vortex={'on' if cyclones else 'off'}, "
-        f"cirrus={'on' if cloud_high is not None else 'off'}"
+        f"cirrus={'on' if cloud_high is not None else 'off'}, storms={storm_mode}"
     )
 
     out = args.output or Path("exports") / "spin" / f"{clouds_dir.name}_cloudflow_{args.res}p.mp4"
@@ -394,39 +515,40 @@ def main() -> None:
                 else:
                     deck_east = high_east = wind_east
                     deck_north = high_north = wind_north
-                storm_list: list[Cyclone] = []
-                if pack is not None and cyclones:
-                    # Real tracks: the storm set and positions at the step midpoint.
-                    f_mid = start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h)
-                    storm_list = weather_cyclones_at_frame(
-                        pack,
-                        f_mid,
-                        seed=storm_seed,
-                        radius_km=model.planet_radius_km,
-                        tropical=tropical_source,
-                    )
-                    centres = [(s.lat_deg, s.lon_deg) for s in storm_list]
-                elif cyclones:
-                    centres = _advance_centres(
-                        centres,
-                        deck_east,
-                        deck_north,
-                        dt_seconds=dt,
-                        radius_km=model.planet_radius_km,
-                    )
-                    storm_list = list(cyclones)
-                if storm_list:
-                    vortex_east, vortex_north = cyclone_wind_field(
-                        storm_list,
-                        height=tex_height,
-                        width=tex_width,
-                        radius_km=model.planet_radius_km,
-                        centers=centres,
-                    )
-                    deck_east = deck_east + vortex_east
-                    deck_north = deck_north + vortex_north
-                    high_east = high_east + vortex_east
-                    high_north = high_north + vortex_north
+                if storm_mode == "vortex":
+                    storm_list: list[Cyclone] = []
+                    if pack is not None and cyclones:
+                        # Real tracks: the storm set and positions at the step midpoint.
+                        f_mid = start_frame + (i - 0.5) * dt / (3600.0 * frame_interval_h)
+                        storm_list = weather_cyclones_at_frame(
+                            pack,
+                            f_mid,
+                            seed=storm_seed,
+                            radius_km=model.planet_radius_km,
+                            tropical=tropical_source,
+                        )
+                        centres = [(s.lat_deg, s.lon_deg) for s in storm_list]
+                    elif cyclones:
+                        centres = _advance_centres(
+                            centres,
+                            deck_east,
+                            deck_north,
+                            dt_seconds=dt,
+                            radius_km=model.planet_radius_km,
+                        )
+                        storm_list = list(cyclones)
+                    if storm_list:
+                        vortex_east, vortex_north = cyclone_wind_field(
+                            storm_list,
+                            height=tex_height,
+                            width=tex_width,
+                            radius_km=model.planet_radius_km,
+                            centers=centres,
+                        )
+                        deck_east = deck_east + vortex_east
+                        deck_north = deck_north + vortex_north
+                        high_east = high_east + vortex_east
+                        high_north = high_north + vortex_north
                 substeps = args.substeps or advection_substeps(
                     deck_east,
                     deck_north,
@@ -454,7 +576,37 @@ def main() -> None:
                         bfecc=not args.no_bfecc,
                         interp=args.interp,
                     )
-            renderer.set_cloud(cloud, cloud_high)
+            # Rigid mode: composite the pack's storms over the advected deck
+            # every frame — position at this frame's own time, spin from the
+            # elapsed simulated time (deterministic, not accumulated float),
+            # intensity from the track's life cycle.
+            deck_render = cloud
+            if rigid_storms:
+                f_i = start_frame + i * dt / (3600.0 * frame_interval_h)
+                storms = weather_cyclones_at_frame(
+                    pack,
+                    f_i,
+                    seed=storm_seed,
+                    radius_km=model.planet_radius_km,
+                    tropical=tropical_source,
+                )
+                if storms:
+                    elapsed_s = i * dt
+                    storms = [
+                        replace(
+                            s,
+                            spin_deg=math.degrees(pattern_spin_rate_rad_s(s) * elapsed_s),
+                        )
+                        for s in storms
+                    ]
+                    deck_render = _composite_storms(
+                        cloud,
+                        storms,
+                        radius_km=model.planet_radius_km,
+                        seed=storm_seed,
+                        fbm_stack=fbm_stack,
+                    )
+            renderer.set_cloud(deck_render, cloud_high)
             frame = renderer.frame(0.0)
             canvas[y0 : y0 + args.res, x0 : x0 + args.res] = frame
             proc.stdin.write(canvas.tobytes())

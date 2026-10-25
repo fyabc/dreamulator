@@ -59,6 +59,8 @@ __all__ = [
     "cyclone_wind_field",
     "holland_b_1980",
     "holland_wind_m_s",
+    "pattern_spin_rate_rad_s",
+    "template_fbm_stack",
     "synthetic_cyclones",
     "warp_cyclone_texture",
 ]
@@ -103,6 +105,25 @@ class Cyclone:
     motion_east_m_s: float = 0.0
     motion_north_m_s: float = 0.0
     shape_seed: int = 0
+    #: Rigid pattern rotation accumulated since a clip's start, in degrees.
+    #: Positive is the cyclonic sense (counter-clockwise in the northern
+    #: hemisphere, clockwise in the southern): the spin phases of the band /
+    #: cirrus structure rotate with it while the translation-asymmetry phases
+    #: stay fixed relative to the storm's motion.  0 (the default) is the
+    #: still-image orientation.
+    spin_deg: float = 0.0
+    #: Planetary rotation rate (rad/s) entering the Holland profile's Coriolis
+    #: term and the pattern-spin rate.  Earth's value is the default so
+    #: hand-written track configs keep their meaning; pack-driven sources set
+    #: it from the pack's sidereal day.
+    omega_rad_s: float = 7.292115e-5
+    #: Downwind cirrus-plume length (km); 0 draws no plume.  The upper-level
+    #: outflow streams with the ambient wind, so the plume points downwind,
+    #: does not rotate with the pattern spin, and is what makes a sheared
+    #: storm read as embedded in its environment instead of stamped on it.
+    plume_km: float = 0.0
+    #: Compass bearing the plume points toward (degrees from north; 90 is east).
+    plume_bearing_deg: float = 90.0
 
     @property
     def deficit_hpa(self) -> float:
@@ -129,10 +150,14 @@ def _shape_of(cyc: Cyclone) -> _Shape:
 
     Azimuthal wavenumbers 1 and 2 dominate organised tropical-cyclone bands;
     wavenumber 3 and higher are suppressed by filamentation (vortex Rossby
-    wave literature), so ``band_count`` is capped at 2.
+    wave literature), so ``band_count`` is capped at 2.  The environment
+    regime carried on the storm (plume length, shield size) then adjusts the
+    geometry: a broad shield in calm air is a loose monsoon gyre — a shallow
+    eye and gently wrapped bands — while a compact shield in strong shear
+    keeps the tight spiral of a sheared storm.
     """
     if cyc.shape_seed == 0:
-        return _Shape(
+        shape = _Shape(
             eye_fraction=0.24,
             band_count=1,
             band_pitch=3.6,
@@ -140,15 +165,36 @@ def _shape_of(cyc: Cyclone) -> _Shape:
             core_scale=1.8,
             shear_phase=0.0,
         )
-    rng = np.random.default_rng(cyc.shape_seed)
-    return _Shape(
-        eye_fraction=float(rng.uniform(0.14, 0.30)),
-        band_count=int(rng.integers(1, 3)),
-        band_pitch=float(rng.uniform(2.4, 5.2)),
-        asymmetry=float(rng.uniform(0.20, 0.50)),
-        core_scale=float(rng.uniform(3.5, 7.0)),
-        shear_phase=float(rng.uniform(0.0, 2.0 * math.pi)),
-    )
+    else:
+        rng = np.random.default_rng(cyc.shape_seed)
+        shape = _Shape(
+            eye_fraction=float(rng.uniform(0.14, 0.30)),
+            band_count=int(rng.integers(1, 3)),
+            band_pitch=float(rng.uniform(2.4, 5.2)),
+            asymmetry=float(rng.uniform(0.20, 0.50)),
+            core_scale=float(rng.uniform(3.5, 7.0)),
+            shear_phase=float(rng.uniform(0.0, 2.0 * math.pi)),
+        )
+    if _is_gyre(cyc):
+        return _Shape(
+            eye_fraction=shape.eye_fraction * 0.55,
+            band_count=shape.band_count,
+            band_pitch=shape.band_pitch * 0.62,
+            asymmetry=shape.asymmetry * 0.75,
+            core_scale=shape.core_scale * 1.25,
+            shear_phase=shape.shear_phase,
+        )
+    return shape
+
+
+def _is_gyre(cyc: Cyclone) -> bool:
+    """A broad shield in calm upper air is a monsoon gyre, not a hurricane.
+
+    The plume length tracks the local upper-level wind, so a short plume with
+    a large shield means the environment barely moves — exactly where the
+    weak Coriolis budget of a slow rotator allows only broad, gentle vortices.
+    """
+    return cyc.plume_km <= 300.0 and cyc.outer_radius_km >= 1000.0
 
 
 def holland_b_1980(
@@ -180,10 +226,12 @@ def holland_wind_m_s(
     environment_pressure_hpa: float,
     lat_deg: float,
     b: float = 1.5,
+    omega: float = _OMEGA,
 ) -> np.ndarray:
     """Holland (1980) gradient-wind speed at radius ``r_km`` (m/s).
 
     ``b`` is Holland's profile shape parameter (1.0–2.5; 1.5 is the common
+    default); ``omega`` is the planet's rotation rate (rad/s, Earth by
     default).  The Coriolis term is kept for inner-core realism; the result is
     clipped at zero on the axis.
     """
@@ -191,10 +239,45 @@ def holland_wind_m_s(
     rmax_m = max(rmax_km, 1.0e-6) * 1000.0
     dp_pa = max(environment_pressure_hpa - central_pressure_hpa, 0.0) * 100.0
     x = (rmax_m / r) ** b
-    f = 2.0 * _OMEGA * math.sin(math.radians(lat_deg))
+    f = 2.0 * omega * math.sin(math.radians(lat_deg))
     v = np.sqrt((b / _AIR_DENSITY_KG_M3) * x * dp_pa * np.exp(-x) + (r * f / 2.0) ** 2)
     v = v - r * f / 2.0
     return np.maximum(v, 0.0)
+
+
+def pattern_spin_rate_rad_s(cyc: Cyclone, *, b: float = 1.5, n: int = 256) -> float:
+    """Rigid rotation rate (rad/s, cyclonic sense) of a storm's cloud pattern.
+
+    Spiral bands are convection-maintained, quasi-stationary features in the
+    storm frame, so the visible pattern rotates at the angular velocity of its
+    own cloud mass — not the eye-wall wind (which turns several times faster
+    and would differentially wind a passively advected texture into oblivion
+    within a day).  The rate is the Holland tangential wind's angular velocity
+    ω(r) = V(r)/r weighted by the template's radial cloud profile (the band
+    envelope e-fold at 1.2 × outer, integrated from 0.4 × Rmax where the eye
+    clears).  Extratropical commas are frontal rather than vortex-driven and
+    do not rotate in this model (0.0).
+    """
+    if cyc.kind != "tropical" or cyc.deficit_hpa <= 0.0:
+        return 0.0
+    rmax = max(cyc.rmax_km, 1.0)
+    outer = max(cyc.outer_radius_km, rmax)
+    rs = np.linspace(0.4 * rmax, outer, n)
+    v = holland_wind_m_s(
+        rs,
+        rmax_km=cyc.rmax_km,
+        central_pressure_hpa=cyc.central_pressure_hpa,
+        environment_pressure_hpa=cyc.environment_pressure_hpa,
+        lat_deg=cyc.lat_deg,
+        b=b,
+        omega=cyc.omega_rad_s,
+    )
+    omega = v / (rs * 1000.0)
+    weight = np.exp(-((rs / (1.2 * outer)) ** 2))
+    denom = float(np.trapezoid(weight * rs, rs))
+    if denom <= 0.0:
+        return 0.0
+    return float(np.trapezoid(weight * omega * rs, rs) / denom)
 
 
 def _latlon_grid(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
@@ -283,6 +366,7 @@ def cyclone_wind_field(
             environment_pressure_hpa=cyc.environment_pressure_hpa,
             lat_deg=centre_lat,
             b=1.5,
+            omega=cyc.omega_rad_s,
         )
         if cyc.kind == "extratropical":
             speed = speed * _EXTRATROPICAL_VORTEX_SCALE
@@ -308,6 +392,13 @@ def _tropical_template(
     rmax = max(cyc.rmax_km, 1.0)
     r = dist / rmax
     outer = max(cyc.outer_radius_km, cyc.rmax_km)
+    # A compact shield in strong shear elongates along the plume (downwind)
+    # axis: sheared storms are elliptical, stretched by the ambient flow that
+    # also drags their outflow into the plume.
+    plume_dir = math.radians(cyc.plume_bearing_deg)
+    if cyc.plume_km > 300.0 and cyc.outer_radius_km < 450.0:
+        elong = min(1.0, (450.0 - cyc.outer_radius_km) / 250.0)
+        r = r / (1.0 + 0.55 * elong * np.cos(bearing - plume_dir) ** 2)
     motion_bearing = math.atan2(cyc.motion_east_m_s, cyc.motion_north_m_s)
     rel = bearing - motion_bearing
     # Spiral chirality: the bands must trail the cyclonic spin, curling
@@ -317,9 +408,11 @@ def _tropical_template(
     # the log-spiral phases, so the north gets the mirror and the south keeps
     # the original (already clockwise); the motion-asymmetry phases below keep
     # the original ``rel`` because they are about the translation direction,
-    # not the spin.
+    # not the spin.  ``spin_deg`` rigidly rotates the spiral phases in the
+    # cyclonic sense (a positive spin moves the crests counter-clockwise in
+    # the north, clockwise in the south) without re-sampling the template.
     hemis = 1.0 if cyc.lat_deg >= 0.0 else -1.0
-    rel_s = -hemis * rel
+    rel_s = -hemis * rel - math.radians(cyc.spin_deg)
     shape = _shape_of(cyc)
 
     # Eye: clear inside the per-storm eye fraction, eyewall ring at Rmax.
@@ -380,8 +473,32 @@ def _tropical_template(
         np.exp(-((dist / (1.10 * outer)) ** 2)) * _smoothstep(1.2, 2.5, r) * (0.6 + 0.4 * grain)
     )
     cirrus_alpha = 0.18 * cirrus * cirrus_env
+    # Downwind cirrus plume: the upper-level outflow streams with the ambient
+    # wind, so the streak points downwind (not with the spin), brightens over
+    # the inner end near the core and dissolves into filaments at the far end.
+    # Its length comes from the environment (the source), not the template.
+    plume = np.zeros_like(dist)
+    if cyc.plume_km > 0.0:
+        length = cyc.plume_km
+        along_p = dist * np.cos(bearing - plume_dir)
+        across_p = dist * np.sin(bearing - plume_dir)
+        width_p = 0.12 * length + 0.20 * outer
+        # The centre sits past the shield edge (0.58 × L) so the streak's
+        # brightest part is outside the symmetric rainbands instead of hiding
+        # inside them: the plume must read as cloud the environment carries
+        # away, which starts where the vortex's own bands have faded.
+        plume = np.exp(-(((along_p - 0.58 * length) / (0.50 * length)) ** 2))
+        plume *= np.exp(-((across_p / width_p) ** 2))
+        # Filaments run along the axis, so their phase depends on the cross-axis
+        # coordinate only; the noise fields merely wobble the stripes, they do
+        # not randomise them (a random phase per pixel would turn the plume
+        # into the same broken texture as the ambient deck).
+        stripes = 0.5 + 0.5 * np.cos(11.0 * across_p / width_p + 2.5 * noise)
+        plume *= 0.30 + 0.70 * stripes**1.5
+        plume *= 0.75 + 0.25 * grain
+        plume *= _smoothstep(0.18 * outer, 0.40 * outer, dist)
     sheet = np.clip(
-        np.maximum(np.maximum(core, eyewall), bands_total) + veil + cirrus_alpha,
+        np.maximum(np.maximum(core, eyewall), bands_total) + veil + cirrus_alpha + 0.85 * plume,
         0.0,
         1.0,
     )
@@ -555,26 +672,15 @@ def _extratropical_template(
     return out
 
 
-def cyclone_alpha(
-    cyclones: list[Cyclone],
-    *,
-    height: int,
-    width: int,
-    radius_km: float,
-    seed: int = 41,
-    erosion: np.ndarray | None = None,
-) -> np.ndarray:
-    """Composite cloud-opacity template for a set of cyclone tracks.
+def template_fbm_stack(
+    height: int, width: int, seed: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The four ambient fBm fields the templates break their edges with.
 
-    ``erosion`` is an optional 0–1 local-contrast field from the L2 cloud
-    texture (``cloud_erosion_field``).  Extratropical templates multiply
-    their shield by it so the comma inherits the ambient cloud's holes and
-    grain instead of being a separate smooth white brush stroke.
+    They depend only on the grid and the seed, so a per-frame caller (the L4
+    video) computes them once and passes them to every ``cyclone_alpha`` /
+    ``cyclone_envelope`` call.
     """
-    if erosion is not None and erosion.shape != (height, width):
-        raise ValueError("erosion must match the (height, width) template grid")
-    if not cyclones:
-        return np.zeros((height, width), dtype=np.float64)
     lat_deg, lon_deg = _latlon_grid(height, width)
     x, y, z = _sphere_xyz(lat_deg, lon_deg)
     noise = fbm_on_points(x.ravel(), y.ravel(), z.ravel(), seed=seed, octaves=2).reshape(
@@ -601,6 +707,36 @@ def cyclone_alpha(
         base_freq=16.0,
         persistence=0.6,
     ).reshape(height, width)
+    return noise, texture, fine, mid
+
+
+def cyclone_alpha(
+    cyclones: list[Cyclone],
+    *,
+    height: int,
+    width: int,
+    radius_km: float,
+    seed: int = 41,
+    erosion: np.ndarray | None = None,
+    fbm_stack: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> np.ndarray:
+    """Composite cloud-opacity template for a set of cyclone tracks.
+
+    ``erosion`` is an optional 0–1 local-contrast field from the L2 cloud
+    texture (``cloud_erosion_field``).  Extratropical templates multiply
+    their shield by it so the comma inherits the ambient cloud's holes and
+    grain instead of being a separate smooth white brush stroke.
+    ``fbm_stack`` optionally supplies the pre-computed ambient noise fields
+    from :func:`template_fbm_stack` (identical values to computing them here).
+    """
+    if erosion is not None and erosion.shape != (height, width):
+        raise ValueError("erosion must match the (height, width) template grid")
+    if not cyclones:
+        return np.zeros((height, width), dtype=np.float64)
+    if fbm_stack is None:
+        fbm_stack = template_fbm_stack(height, width, seed)
+    noise, texture, fine, mid = fbm_stack
+    lat_deg, lon_deg = _latlon_grid(height, width)
     total = np.zeros((height, width), dtype=np.float64)
     for cyc in cyclones:
         if cyc.kind == "tropical":
@@ -622,6 +758,7 @@ def cyclone_envelope(
     width: int,
     radius_km: float,
     seed: int = 41,
+    noise: np.ndarray | None = None,
 ) -> np.ndarray:
     """Storm-influence envelope ∈ [0, 1] for compositing.
 
@@ -629,14 +766,17 @@ def cyclone_envelope(
     instead of merely adding cloud on top: screening a template over an
     already overcast field leaves only the eye visible (user QA 2026-10-21).
     The envelope is the broad shield/comma footprint, not the bright core.
+    ``noise`` optionally supplies the pre-computed ambient field (the first
+    entry of :func:`template_fbm_stack`'s tuple).
     """
     if not cyclones:
         return np.zeros((height, width), dtype=np.float64)
     lat_deg, lon_deg = _latlon_grid(height, width)
-    x, y, z = _sphere_xyz(lat_deg, lon_deg)
-    noise = fbm_on_points(x.ravel(), y.ravel(), z.ravel(), seed=seed, octaves=2).reshape(
-        height, width
-    )
+    if noise is None:
+        x, y, z = _sphere_xyz(lat_deg, lon_deg)
+        noise = fbm_on_points(x.ravel(), y.ravel(), z.ravel(), seed=seed, octaves=2).reshape(
+            height, width
+        )
     env = np.zeros((height, width), dtype=np.float64)
     for cyc in cyclones:
         dist, bearing = _distance_bearing_km(cyc.lat_deg, cyc.lon_deg, lat_deg, lon_deg, radius_km)
@@ -649,6 +789,18 @@ def cyclone_envelope(
             edge = np.sqrt((along / (1.12 * scale)) ** 2 + (cross / (0.84 * scale)) ** 2)
             edge = edge / (1.0 + 0.18 * noise + 0.10 * np.cos(rel - shape.shear_phase))
             one = 1.0 - _smoothstep(0.75, 1.08, edge)
+            if cyc.plume_km > 0.0:
+                # The envelope follows the plume so the deck blends toward the
+                # streak along its whole length, not just around the core.
+                pdir = math.radians(cyc.plume_bearing_deg)
+                along_p = dist * np.cos(bearing - pdir)
+                across_p = dist * np.sin(bearing - pdir)
+                w_env = 0.16 * cyc.plume_km + 0.22 * scale
+                plume_env = np.exp(
+                    -(((along_p - 0.40 * cyc.plume_km) / (0.60 * cyc.plume_km)) ** 2)
+                )
+                plume_env *= np.exp(-((across_p / w_env) ** 2))
+                one = np.maximum(one, 0.85 * plume_env)
         else:
             a, c, dist, scale = _comma_geometry(cyc, lat_deg, lon_deg, radius_km)
             at, ct, r, theta = _comma_twist(a, c, noise)

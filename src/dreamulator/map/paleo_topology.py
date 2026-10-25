@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
 _CM_PER_KM = 1.0e5
 
+SUTURE = "suture"
 RIDGE = "ridge"
 TRENCH = "trench"
 TRANSFORM = "transform"

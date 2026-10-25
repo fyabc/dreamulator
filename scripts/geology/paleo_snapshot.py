@@ -116,6 +116,7 @@ def main() -> None:
         np.savez_compressed(
             args.out_dir / f"snapshot_{t:g}.npz",
             label=snap.label,
+            display_label=snap.display_label,
             continental=snap.continental,
             age_myr=snap.age_myr,
             elevation_m=snap.elevation_m,
@@ -145,7 +146,7 @@ def _plot(w: World, snaps: list, out: Path) -> None:  # type: ignore[type-arg]
         fig, axes = plt.subplots(rows, 2, figsize=(18, 4.6 * rows), squeeze=False)
         for ax, snap in zip(axes.ravel(), snaps, strict=False):
             if name == "plates":
-                col = pal[snap.label % len(pal)].copy()
+                col = pal[snap.display_label % len(pal)].copy()
                 col[snap.continental] *= 0.75
                 ax.scatter(w.lon, w.lat, s=0.4, c=col, lw=0, rasterized=True)
                 for seg in snap.topology.segments:

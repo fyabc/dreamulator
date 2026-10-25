@@ -1267,6 +1267,36 @@ def cloud_vertical_weights(
     return low_weight[indices], high_weight[indices]
 
 
+def pack_ocean_fraction(
+    mesh: CVTMesh, lat_deg: np.ndarray, lon_deg: np.ndarray, sea_level_m: float
+) -> np.ndarray:
+    """Ocean flag (1/0) of the nearest mesh cell on a regular lat×lon grid.
+
+    The weather pack's grid is coarser (T42 ≈ 2.8°) than the mesh cells, so
+    nearest-cell sampling is enough: the result tells the tropical-cyclone
+    genesis sampler where the surface is water.  ``lat_deg``/``lon_deg`` are
+    the 1-D grid axes (ascending latitude), matching the pack convention.
+    """
+    from scipy.spatial import cKDTree
+
+    cell_xyz = np.array([[c.x, c.y, c.z] for c in mesh.cells], dtype=np.float64)
+    land = np.array([c.elevation >= sea_level_m for c in mesh.cells], dtype=np.float64)
+    lat = np.radians(np.asarray(lat_deg, dtype=float))
+    lon = np.radians(np.asarray(lon_deg, dtype=float))
+    cos_lat = np.cos(lat)
+    grid = np.stack(
+        np.broadcast_arrays(
+            (cos_lat[:, None] * np.cos(lon)[None, :]),
+            np.sin(lat)[:, None] * np.ones_like(lon)[None, :],
+            (cos_lat[:, None] * np.sin(lon)[None, :]),
+        ),
+        axis=-1,
+    ).reshape(-1, 3)
+    _, j = cKDTree(cell_xyz).query(grid)
+    ocean = np.asarray(1.0 - land[j], dtype=np.float64)
+    return ocean.reshape(lat_deg.size, lon_deg.size)
+
+
 def conditioning_grids(
     mesh: CVTMesh,
     indices: np.ndarray,
