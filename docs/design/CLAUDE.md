@@ -31,7 +31,7 @@
 - `civilization-pipeline.md` — 文明层 pipeline（宜居/农业分类与评分、湖滨淡水修正、摇篮候选发现）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
-- `canvas-hydrology.md` — 全球画布链：画布契约、外存填平/汇流/湖级联、区域裁窗与渲染衔接
+- `canvas-chain.md` — 全球画布链：画布契约、外存填平/汇流/湖级联、区域裁窗与渲染衔接
 - `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
 - `gcm-weather-pack.md` — GCM 气象图层包（L1）：高频瞬时快照、ISCCP 云量分层与云顶、测高公式高度、TempestExtremes 式气旋检测与追踪、包结构与读取
 
@@ -56,6 +56,7 @@
 - `orogen-topography.md` — 造山带地形与地形极值的格子平均语义（技术债 43，并入 37）：✅ 已实现（2026-10-21），只保留设计理由、未完成与移交项、已否证方向与作者裁决；物理与标定在 `knowledge/geology/orogen_topography.md`，实现在 `pipelines/geological-pipeline.md`
 - `island-catalog.md` — 亚格子岛屿目录（技术债 44）：热点链、热管火山省（按潮汐加热采样）、岛弧、海山与环礁按成因生成目录，格子只记汇总字段；提案，2026-10 立案
 - `history-contract.md` — 历史契约（roadmap P2）：地形合成从板块历史读取的量（洋底年龄、陆缘类型与年龄、汇聚边界段的碰撞年龄与积分汇聚量、缝合带）的定义、来源（作者 `plate_history.yaml`、地质时间轴、演化模式、缺省值）与一致性校验；造山带部分先于技术债 43 落地；2026-10 立案
+- `canvas-conditioning-structure.md` — 画布条件场的构造结构（金字塔、同质山地、高原无镶边的诊断与方案：格子平均不变的零均值构造结构场、TD 响应对照实验、地球 Copernicus 指标验收；提案，2026-10 立案）
 - `inland-water-refine.md` — 内陆水体 refine 提案（湖命运 P−E 判决四类结局、溢流河网接通、rim/spill 字段缺口；未实现，2026-10 立案）
 - `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）

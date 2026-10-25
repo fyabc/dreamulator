@@ -11,7 +11,11 @@
 模型是条件扩散（diffusion）架构。五个条件通道（高程 m、年均温 °C
 海平面口径、温度变率、年降水 mm、降水变率 %，均在 23 km 网格）以
 加噪引导的方式进入网络：条件场与噪声按 `cos(t)·cond + sin(t)·noise`
-混合，SNR 参数控制条件强度。生成过程分两级：粗尺度 U-Net 先在
+混合，SNR 参数控制条件强度：数值越小，条件越强（本库在全球画布上的对照：高程通道取 1.0 时
+模型几乎不理会高程条件，取 0.05 时 92 km 波长的条件结构保留一半以上，见
+[canvas-conditioning-structure.md](../../design/proposals/canvas-conditioning-structure.md) 第 4 节）。另外，气温条件对生成
+地形的起伏影响很大：同一块高地换成寒冷的气温，10 km 局部起伏可以增大到两倍以上，模型把寒冷的高地画成冰蚀高山。即使以真实地形的 23 km 块平均为条件，模型给出的 10 km 局部起伏也只有地球实测的约 30–60%（阿尔卑斯与喜马拉雅前缘，
+Copernicus GLO-90 对照），峰顶约 5.8 km；起伏的上限在模型本身。生成过程分两级：粗尺度 U-Net 先在
 64×64 tile 上重新生成粗图（一个条件像素对应 256×256 输出像素），
 再经 base + decoder 一致性级联放大 256 倍到最终分辨率，输出 int16
 米值 GeoTIFF。
@@ -30,6 +34,27 @@
 | 海岸线 | 符号一致率 97.5%（SNR 0.2），陆面占比漂移 −1.5 pp |
 | 大尺度锚定 | 高程分位数与条件场吻合（q50 −214 m vs −317 m） |
 | 水文 | **不管**：生成场约 12–13.7% 陆地是封闭盆地（550 km 窗实测），排水、河网、湖语义全部由本库的 Priority-Flood 层补齐 |
+
+## 大画布上的无缝分块生成
+
+上游的采样算法 InfiniteDiffusion 是 MultiDiffusion 的推广。MultiDiffusion 在一张固定大小的画布上，每一步去噪都把
+互相重叠的窗口各自预测一次，再在重叠处取平均，所以窗口之间没有接缝，但整张画布要一次算完。InfiniteDiffusion
+把同一套重叠平均改成按需计算：画布被当作一个只由种子和坐标索引的无限数组，取任何一块时只计算覆盖它所需的
+那些窗口，中间结果按坐标缓存（上游的 infinite-tensor 框架）。论文称之为无界范围、种子一致与常数时间随机访问，
+并报告它相对 MultiDiffusion 几乎没有质量损失。
+
+由此得到全球画布链依赖的三条性质：
+
+1. **分块之间没有接缝。** 一张画布按 2048 像素的分块逐块取出，每一块都是同一个无限数组的一部分，相邻分块
+   在边界两侧来自同一次重叠平均，不是两次独立生成拼起来的。曙光试点画布上，分块边界两侧相邻像素的高差
+   与块内相邻像素的高差之比为 1.02。
+2. **生成顺序与分块方式不影响结果。** 同一种子、同一条件场下，先算哪一块、由哪个进程算，结果都一样，
+   所以一张大陆画布可以拆给多张 GPU 并行生成、中断后续算。不同进程之间只有 GPU 浮点运算顺序带来的差异：
+   约 0.3–3% 的像素相差 1 m。
+3. **无缝只在同一张画布内成立。** 坐标原点和条件场属于一张画布；画布的正方形一旦放大或平移，同一地点的
+   采样坐标就变了，得到的是另一张统计相似的地形，已生成的分块必须重算。两张画布之间也是两次独立生成，
+   重叠区里要按归属规则取舍并混合（`blend_overlap`，见
+   [canvas-chain.md](../../design/pipelines/canvas-chain.md) 2.4 节）。
 
 ## 与本库 SPL 链的分工
 
@@ -76,4 +101,6 @@ cd <clone> && uv --no-config pip install --python .venv/Scripts/python.exe     -
 
 - 仓库与权重：https://github.com/xandergos/terrain-diffusion
   （HF 权重 `xandergos/terrain-diffusion-90m`，约 1.1 GB）
-- 论文：arXiv 2512.08309（SIGGRAPH 2026）
+- 论文：arXiv 2512.08309（SIGGRAPH 2026），Goslin，*InfiniteDiffusion: Bridging Learned Fidelity and
+  Procedural Utility for Open-World Terrain Generation*；采样算法的独立示例见上游仓库的
+  `annotated_infinite_panorama.py`

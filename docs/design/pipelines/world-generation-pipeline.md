@@ -48,7 +48,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 | 8/8 | 导出 | `:650` | 同 §导出（大内流湖升级在本相位开头） |
 
 全球网格上不做河网汇流；渲染用的汇流、河流与湖泊在高分辨率画布链上计算，见
-[canvas-hydrology.md](canvas-hydrology.md)。
+[canvas-chain.md](canvas-chain.md)。
 
 区域后处理（管线之外）：**Gaea 局部精细化**——跑完全管线拿到地形/气候/土壤/植被后
 选固定区域高分辨率细化，未实现，见 [gaea-refinement.md](../proposals/gaea-refinement.md)。

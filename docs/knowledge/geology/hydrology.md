@@ -3,11 +3,11 @@
 > 实现：全球网格 `src/dreamulator/map/hydrology.py`（填洼与封闭盆地湖泊）；栅格画布链
 > `src/dreamulator/media/canvas_hydrology.py` 与 `src/dreamulator/map/prog_erosion.py`（汇流、
 > 河网、湖泊）。设计：`docs/design/pipelines/geological-pipeline.md` §9、
-> `docs/design/pipelines/canvas-hydrology.md`。
+> `docs/design/pipelines/canvas-chain.md`。
 
 全球 CVT 网格只做两件水文相关的事：用优先洪泛求溢流高程（供地形合成的沉积填充使用），
 以及标记封闭盆地湖泊。汇流、河网与湖泊水收支都在高分辨率栅格画布链上计算（§7 与
-canvas-hydrology.md）。第 1–3 节说明全球网格上的做法，第 4–6 节给出画布链沿用的通用
+canvas-chain.md）。第 1–3 节说明全球网格上的做法，第 4–6 节给出画布链沿用的通用
 汇流定义。
 
 ---
@@ -31,7 +31,7 @@ cell，所以在这个分辨率上算出的流向与河道只反映网格的离�
 `filled` 是填平后的临时标高，`connected` 标记海洋可达的格（连通球面上恒为全真）。
 地形合成的沉积填充用 `filled` 判断哪些被钳制的内陆盆地低于溢流高程，把大多数盆地
 填到溢流高程，并把一部分大盆地留成湖（`is_lake`）。画布链使用带分水岭标签的分块版本，
-见 canvas-hydrology.md。
+见 canvas-chain.md。
 
 ## 3. 闭合内陆湖（endorheic basin）
 
