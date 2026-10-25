@@ -1074,21 +1074,28 @@ def export_clouds(
     from dreamulator.media.cyclone_render import Cyclone, synthetic_cyclones
 
     cyclone_source_label: str | None = None
+    ocean_fraction = None
+    if weather_pack is not None:
+        from dreamulator.gcm.weather_pack import load_pack as _load_pack
+        from dreamulator.media.cloud_render import pack_ocean_fraction
+
+        _pack_obj = _load_pack(weather_pack)
+        ocean_fraction = pack_ocean_fraction(mesh, _pack_obj.lat, _pack_obj.lon, sea_level)
     if cfg.cyclones.tracks:
         cyclone_set: list[Cyclone] | None = [
             Cyclone(**track.model_dump()) for track in cfg.cyclones.tracks
         ]
         cyclone_source_label = "explicit config tracks"
     elif cyclones and weather_pack is not None:
-        from dreamulator.gcm.weather_pack import load_pack as _load_pack
         from dreamulator.media.cyclone_tracks import weather_cyclones_at_frame
 
         cyclone_set = weather_cyclones_at_frame(
-            _load_pack(weather_pack),
+            _pack_obj,
             weather_frame,
             seed=cyclone_seed,
             include_stationary=stationary_lows,
             radius_km=radius_km,
+            ocean_fraction=ocean_fraction,
         )
         cyclone_source_label = (
             "weather pack tracks (moving extratropical) + parametric tropical (canon)"
@@ -1176,6 +1183,12 @@ def export_clouds(
     elapsed = time.perf_counter() - start
     for name, path in paths.items():
         console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
+    if ocean_fraction is not None:
+        import numpy as np
+
+        # Ocean mask on the weather pack's grid: the video chain's tropical
+        # genesis reads it so cyclones are born over water, not on continents.
+        np.save(out_dir / "ocean_fraction.npy", ocean_fraction.astype(np.float32))
     console.print(f"  done in {elapsed:.1f}s")
 
 

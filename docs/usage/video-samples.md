@@ -55,6 +55,11 @@ uv run dreamulator export globe nacrea -p satellite_nacrea -b gcm-t42-712 \
 
 云纹理沿气象包自身的 6 小时风场平流（低层云壳走中层风、卷云壳走高层风），
 相机与恒星固定、晨昏线不动。`--sim-hours 24` 表示 8 秒画面压缩 24 小时演化。
+两版都以**无风暴静帧**为输入：无风暴版 `--storm-mode none`；风暴版走默认的
+`--storm-mode rigid`——风暴模板每帧按真实轨迹重新合成，云盾大小与顺风卷云幡
+由该帧局地风场求解（弱风内热带是宽而缓的涡旋，靠近急流的是拖长幡的紧凑核），
+热带旋臂以图案自转速度（约 0.3–1 圈/天）刚性旋转，24 小时内保持结构而不被
+差速卷绕。
 
 ```bash
 # 无风暴版
@@ -62,22 +67,26 @@ uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
     exports/globe/nacrea-gcm-t42-712-f273-clear \
     -o exports/video/cloudflow/flow-f273-24h-clear.mp4 \
     --res 720 --width 1280 --height 720 --seconds 8 --sim-hours 24 \
-    --texture-width 2048 --no-vortex \
+    --texture-width 2048 --storm-mode none \
     --weather-pack exports/weather/nacrea-gcm-t42-712 \
     --poster exports/video/cloudflow/flow-f273-24h-clear-poster
 
-# 风暴版（去掉 --no-vortex：风暴环流叠加进平流风场，旋臂随之旋转）
+# 风暴版（rigid 为默认，显式写出便于阅读）
 uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
-    exports/globe/nacrea-gcm-t42-712-f273-cyclones \
+    exports/globe/nacrea-gcm-t42-712-f273-clear \
     -o exports/video/cloudflow/flow-f273-24h-cyclones.mp4 \
     --res 720 --width 1280 --height 720 --seconds 8 --sim-hours 24 \
-    --texture-width 2048 \
+    --texture-width 2048 --storm-mode rigid --storm-seed 33 \
     --weather-pack exports/weather/nacrea-gcm-t42-712 \
     --poster exports/video/cloudflow/flow-f273-24h-cyclones-poster
 ```
 
 `--poster` 会把首帧/末帧各存一张 PNG 在输出旁边，方便发图不发视频。
-720p、24 小时窗口一版约 30–60 分钟。
+`--storm-seed` 覆盖热带气旋抽样种子（默认继承静帧 `meta.json` 的 `cyclones.seed`，
+无风暴静帧未记录时为 31）：生成位置由 GPI 场加权、只落在洋面（静帧目录的
+`ocean_fraction.npy` 是陆海掩膜），云盾与卷云幡随局地风场求解，所以换种子只是换
+「这一幕在哪片海出现风暴」。当前样片用 33（风暴在 15°N 附近的洋面上加强）。
+720p、24 小时窗口一版约 50–90 分钟。
 
 ## 3. 自转视频（spin_video，含 19.9° 轴倾角）
 
