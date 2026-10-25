@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792951854337,
+  "lastUpdate": 1792955739396,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1180,6 +1180,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00004221938477549865",
             "extra": "mean: 5.076317800006791 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "66f46982ccf4528ccdcf8ccc359c3d8612869eb8",
+          "message": "merge: 服务器 2026-10-26 画布生成工具批（含 Windows 文件锁可移植修复）\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-26T03:13:19+08:00",
+          "tree_id": "e9b7c0e0950f05b03145c873d499d684db30fc2c",
+          "url": "https://github.com/fyabc/dreamulator/commit/66f46982ccf4528ccdcf8ccc359c3d8612869eb8"
+        },
+        "date": 1792955738538,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.31054157393099496,
+            "unit": "iter/sec",
+            "range": "stddev: 0.12676762744970857",
+            "extra": "mean: 3.2201807550000012 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 2.9345795357917304,
+            "unit": "iter/sec",
+            "range": "stddev: 0.019970905916510805",
+            "extra": "mean: 340.7643200000052 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.394846448551895,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1536780383489953",
+            "extra": "mean: 716.9247919999956 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 895.4796188847965,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011565577830086212",
+            "extra": "mean: 1.1167199999988497 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 190.84625772799933,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009025944785781638",
+            "extra": "mean: 5.239819800004852 msec\nrounds: 5"
           }
         ]
       }
