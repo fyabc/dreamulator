@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792955739396,
+  "lastUpdate": 1793200547134,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1239,6 +1239,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009025944785781638",
             "extra": "mean: 5.239819800004852 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "24f8a9f954add30bbe7d7e2ba5cebd6966e45b2c",
+          "message": "fix(gcm): 构建锁平台分支 + symlink 测试特权探针（Windows 侧收编补丁）\n\n- fortran_patches.patched_executable 的 build.lock 从 fcntl.flock 改为\n  sys.platform 分支：Windows 走 msvcrt.locking(LK_LOCK) 锁首字节（同\n  td_canvas_worker 先例），POSIX 保持 flock——消除 Windows 本机 mypy 两处\n  Unix-only 误报\n- test_cli_export_canvas 的 symlink 替换测试加能力探针 skipif：Windows\n  未开开发者模式时创建符号链接报 WinError 1314（环境限制非代码缺陷），\n  开发者模式机器上探针通过、测试照常运行\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-28T22:49:46+08:00",
+          "tree_id": "753338ce04ca012d7f5c767965a7e93c74a614d3",
+          "url": "https://github.com/fyabc/dreamulator/commit/24f8a9f954add30bbe7d7e2ba5cebd6966e45b2c"
+        },
+        "date": 1793200544213,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.40307235670789693,
+            "unit": "iter/sec",
+            "range": "stddev: 0.08686105614523035",
+            "extra": "mean: 2.480944136599999 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.9062707291749477,
+            "unit": "iter/sec",
+            "range": "stddev: 0.028556220979966625",
+            "extra": "mean: 255.99864149999974 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9381848265571315,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8246027467797404",
+            "extra": "mean: 515.9466663333324 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 882.1502023022452,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001429417452318236",
+            "extra": "mean: 1.13359380000162 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 224.04593622789312,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001937777799515591",
+            "extra": "mean: 4.463370400000599 msec\nrounds: 5"
           }
         ]
       }
