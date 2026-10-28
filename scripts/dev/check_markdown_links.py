@@ -87,13 +87,17 @@ def _find_project_root() -> Path:
 def _slugify(heading: str) -> str:
     """GitHub-style heading anchor: lowercase, drop punctuation, spaces → '-'."""
     text = heading.strip().lower()
-    # Strip inline markup that should not contribute to the anchor.
-    text = re.sub(r"[`*_]", "", text)
+    # Code spans contribute their literal text: backticks vanish but the
+    # underscores inside survive (GitHub keeps word characters in anchors).
+    text = re.sub(r"`+([^`]*)`+", r"\1", text)
+    # Stray emphasis markers contribute nothing; underscores are word
+    # characters and GitHub anchors keep them (foo_bar → foo_bar).
+    text = text.replace("*", "")
     out: list[str] = []
     for ch in text:
         if ch == " ":
             out.append("-")
-        elif ch.isalnum() or ch == "-":
+        elif ch.isalnum() or ch in "-_":
             out.append(ch)
         # other punctuation is dropped
     return "".join(out)
