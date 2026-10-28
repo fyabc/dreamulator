@@ -18,7 +18,10 @@ This script performs the whole "rebuild + publish" loop in one command:
   2. Package the generated maps + derived, plus the pinned GCM field sets
      (``branches/<b>/layers/climate/input/gcm_fields.msgpack.gz``, too large for git),
      into a tarball.
-  3. Upload the tarball to the ``worlds-data`` release.
+  3. Upload the tarball to the ``worlds-data`` release.  The tarball is packaged
+     into ``exports/release/`` (gitignored) and stays there after the run, so a
+     failed upload can retry without repackaging and the file doubles as an
+     audit copy of what was published.
 
 Usage::
 
@@ -34,7 +37,6 @@ import argparse
 import subprocess
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
 
 DEFAULT_TAG = "worlds-data"
@@ -316,15 +318,16 @@ def main() -> None:
         print(f"Worlds directory not found: {worlds_dir}", file=sys.stderr)
         sys.exit(1)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        tar_path = Path(tmp) / TARBALL_NAME
-        if _package(worlds_dir, tar_path) == 0:
-            sys.exit(1)
-        if args.dry_run:
-            print("Dry run: not uploading.")
-            return
-        _upload(tar_path, args.tag)
-        print(f"Uploaded to release '{args.tag}'")
+    out_dir = root / "exports" / "release"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tar_path = out_dir / TARBALL_NAME
+    if _package(worlds_dir, tar_path) == 0:
+        sys.exit(1)
+    if args.dry_run:
+        print("Dry run: not uploading.")
+        return
+    _upload(tar_path, args.tag)
+    print(f"Uploaded to release '{args.tag}' ({tar_path})")
 
 
 if __name__ == "__main__":
