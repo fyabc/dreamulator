@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -14,9 +17,6 @@ from dreamulator import cli_export_canvas as cli
 from dreamulator.cli_export_canvas import _stale_reason
 from dreamulator.map import td_canvas_build as tb
 from dreamulator.world_manager import WorldManager
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _canvas_metadata() -> dict[str, Any]:
@@ -166,6 +166,21 @@ def test_matching_plan_updates_inputs_and_preserves_generated_chunks(
     assert (root / "owner_points.npy").read_bytes() == b"new-owner-points"
 
 
+def _symlink_privilege() -> bool:
+    """Whether this interpreter may create symlinks (Windows needs Developer Mode)."""
+    if sys.platform != "win32":
+        return True
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            (Path(td) / "probe").symlink_to(Path(td) / "missing")
+        except OSError:
+            return False
+        return True
+
+
+@pytest.mark.skipif(
+    not _symlink_privilege(), reason="no symlink privilege on this Windows (WinError 1314)"
+)
 def test_planning_replaces_input_symlink_without_overwriting_its_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

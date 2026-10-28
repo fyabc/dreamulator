@@ -66,6 +66,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -366,11 +367,20 @@ def patched_executable(
     exe = root / "plasim" / "run" / f"most_plasim_t{nsp}_l{layers}_p{ncpus}.x"
     if exe.exists():
         return exe.parent
-    import fcntl
 
-    # compile.sh builds every resolution in the one shared plasim/bld tree
+    # compile.sh builds every resolution in the one shared plasim/bld tree.
+    # The build lock follows td_canvas_worker: POSIX flock, Windows
+    # msvcrt.locking on byte 0 (LK_LOCK retries ~10 s, matching flock's
+    # blocking wait); both release when the with-block closes the file.
     with (root / "build.lock").open("w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        if sys.platform == "win32":
+            import msvcrt
+
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock, fcntl.LOCK_EX)
         if not exe.exists():
             skip = ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "LD_PRELOAD")
             env = {k: v for k, v in os.environ.items() if k not in skip}
