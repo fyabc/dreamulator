@@ -7,6 +7,32 @@ import numpy as np
 from dreamulator.gcm.diagnostics import equinox_day_from_declination, orbital_phase_of_records
 
 
+def test_surface_summary_uses_spherical_area_and_equal_seasons(tmp_path) -> None:
+    from netCDF4 import Dataset
+
+    from dreamulator.gcm.diagnostics import summarize
+
+    mu, _ = np.polynomial.legendre.leggauss(8)
+    phase = (np.arange(13) + 0.5) / 12
+    surface = 300 + 6 * mu[None, :, None] ** 2 + 4 * np.sin(2 * np.pi * phase)[:, None, None]
+    path = tmp_path / "climate.nc"
+    with Dataset(path, "w") as ds:
+        for name, size in [("time", 13), ("lev", 2), ("lat", 8), ("lon", 1)]:
+            ds.createDimension(name, size)
+        ds.createVariable("lat", "f8", ("lat",))[:] = np.degrees(np.arcsin(mu))
+        ds.createVariable("time", "f8", ("time",))[:] = (np.arange(13) + 0.5) * 32
+        ds.createVariable("zdec", "f8", ("time",))[:] = 20 * np.sin(2 * np.pi * phase)
+        ds.createVariable("tas", "f8", ("time", "lat", "lon"))[:] = surface
+        for name, value in [("ua", 2), ("va", 0), ("ta", 200)]:
+            ds.createVariable(name, "f8", ("time", "lev", "lat", "lon"))[:] = value
+    result = summarize(path, tail_records=13, orbital_year_days=12)
+    # The spherical mean of sin(latitude)^2 is 1/3; all seasons have equal weight.
+    assert np.isclose(result["t_global_c"], 302 - 273.15)
+    assert np.isclose(result["t_eq_c"], 300 + 6 * mu[3] ** 2 - 273.15)
+    assert np.isclose(result["t_global_column_c"], 200 - 273.15)
+    assert result["phase_counts"][0] == 2
+
+
 def test_phase_wraps_within_orbital_year() -> None:
     # nacrea: 32 steps/day, orbital year 99.8 d, model calendar 120 d/yr.
     # Records every 30 model days (960 steps) over 2 model years (2400 d):

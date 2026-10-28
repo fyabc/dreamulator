@@ -64,6 +64,15 @@ class TestCellFieldCacheReplay:
         # Run 2: every stage cache-hits — in-place side effects must replay.
         r2 = run_terrain_pipeline(cfg, tmp_path, cache=cache)
 
+        assert r1.orogen_contract is not None and r2.orogen_contract is not None
+        assert (
+            r1.orogen_contract.polarity_stage
+            == r2.orogen_contract.polarity_stage
+            == "terrain-crust"
+        )
+        assert r1.orogen_contract.contact_polarities == r2.orogen_contract.contact_polarities
+        assert r1.orogen_contract.polarity_sources == r2.orogen_contract.polarity_sources
+
         dumps1 = [c.model_dump() for c in r1.mesh.cells]
         dumps2 = [c.model_dump() for c in r2.mesh.cells]
         assert len(dumps1) == len(dumps2) > 0

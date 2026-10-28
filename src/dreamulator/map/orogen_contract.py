@@ -20,7 +20,7 @@ Andean cell ``φ·L``.  Pure functions apart from
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -29,6 +29,7 @@ from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
 from dreamulator.map.paleo_sutures import polyline_geometry
+from dreamulator.map.subduction_polarity import SubductionPolarity, plate_pair, polarity_at_age
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -93,6 +94,23 @@ class CollisionOverride:
     upper_plate_ratio: float | None = None
 
 
+@dataclass(frozen=True)
+class ContactConvergenceHistory:
+    """Transferred evolution record, preserved alongside effective contract quantities.
+
+    The numerical contract uses zero when no positive-duration source is in range.
+    ``status`` identifies that case; author overrides affect the effective quantities
+    while this record retains the evolution's values and nearest-cell provenance.
+    """
+
+    continuous_duration_myr: float
+    continuous_convergence_km: float
+    cumulative_convergence_km: float
+    source_cell_id: int | None
+    transfer_chord_km: float | None
+    status: str
+
+
 @dataclass
 class OrogenSegment:
     """One convergent boundary segment and its contract quantities."""
@@ -119,6 +137,7 @@ class OrogenSegment:
     cell_convergence_km: dict[int, float] = field(default_factory=dict)
     cell_pre_collision_km: dict[int, float] = field(default_factory=dict)
     cell_rate_cm_yr: dict[int, float] = field(default_factory=dict)
+    cell_history: dict[int, ContactConvergenceHistory] = field(default_factory=dict)
 
 
 @dataclass
@@ -130,6 +149,10 @@ class OrogenContract:
     retained_km: dict[int, float]
     warnings: list[str]  # author inputs or onsets that need attention
     notes: list[str] = field(default_factory=list)  # informational summaries
+    contact_polarities: dict[int, tuple[str, str, str]] = field(default_factory=dict)
+    polarity_sources: dict[int, dict[str, Any]] = field(default_factory=dict)
+    subduction_polarities: list[SubductionPolarity] = field(default_factory=list)
+    polarity_stage: str = "boundaries"
 
 
 def load_collision_overrides(path: Path) -> list[CollisionOverride]:
@@ -191,7 +214,11 @@ def _plate_velocity(plate: TectonicPlate, pos: np.ndarray, radius_cm: float) -> 
 
 
 def contact_polarity(
-    mesh: CVTMesh, plates: list[TectonicPlate], radius_km: float
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    radius_km: float,
+    *,
+    subduction_polarities: list[SubductionPolarity] | None = None,
 ) -> dict[int, tuple[str, str, str]]:
     """Kind and polarity of every convergent contact cell: ``cell -> (kind, down, over)``.
 
@@ -240,7 +267,108 @@ def contact_polarity(
     for i, a, b in ocean_cells:
         down, over = (a, b) if np.mean(ocean_pairs[(a, b)]) > 0.0 else (b, a)
         out[i] = ("ocean", down, over)
+    explicit = polarity_at_age(subduction_polarities or [])
+    for i, (kind, a, b) in out.items():
+        source = explicit.get(plate_pair(a, b))
+        if source is not None and kind != "collision":
+            over = b if source.down_going == a else a
+            out[i] = (kind, source.down_going, over)
     return out
+
+
+def contract_contact_polarity(
+    mesh: CVTMesh, plates: list[TectonicPlate], contract: OrogenContract, radius_km: float
+) -> dict[int, tuple[str, str, str]]:
+    """Use the frozen contract's sides, restoring older contracts from their inputs."""
+    if contract.contact_polarities:
+        return dict(contract.contact_polarities)
+    out = contact_polarity(
+        mesh, plates, radius_km, subduction_polarities=contract.subduction_polarities
+    )
+    for seg in contract.segments:
+        if seg.kind == "andean":
+            for k in seg.cell_ids:
+                out[k] = (seg.kind, seg.pro_plate, seg.retro_plate)
+    return out
+
+
+def resolve_contract_polarities(
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    contract: OrogenContract,
+    radius_km: float,
+    *,
+    stage: str,
+) -> None:
+    """Freeze contact types after crust preparation, retaining the orogen's history.
+
+    Authored microcontinents and crust cleanup belong to the existing terrain
+    preparation. Ocean contacts use that prepared crust; the orogen's numerical
+    segments keep their original history and explicit side overrides.
+    """
+    if stage not in ("boundaries", "terrain-crust"):
+        raise ValueError("unknown polarity source stage")
+    sources = contract.subduction_polarities
+    explicit = polarity_at_age(sources)
+    contacts = contact_polarity(mesh, plates, radius_km, subduction_polarities=sources)
+    provenance: dict[int, dict[str, Any]] = {}
+    for k, (kind, down, over) in contacts.items():
+        source = explicit.get(plate_pair(down, over)) if kind != "collision" else None
+        provenance[k] = (
+            asdict(source)
+            if source is not None
+            else {
+                "source_kind": {
+                    "ocean": "absolute-speed-proxy",
+                    "andean": "crust-contrast",
+                    "collision": "plate-size-proxy",
+                }[kind],
+                "epoch_age_myr": 0.0,
+            }
+        )
+    for seg in contract.segments:
+        for k in seg.cell_ids:
+            value = (seg.kind, seg.pro_plate, seg.retro_plate)
+            if contacts.get(k) != value:
+                provenance[k] = {
+                    "source_kind": "orogen-history-contract",
+                    "segment_id": seg.id,
+                    "segment_sources": dict(seg.sources),
+                    "epoch_age_myr": 0.0,
+                }
+            contacts[k] = value
+    contract.contact_polarities = contacts
+    contract.polarity_sources = provenance
+    contract.polarity_stage = stage
+
+
+def _contact_histories(
+    mesh: CVTMesh, ids: list[int], radius_km: float
+) -> dict[int, ContactConvergenceHistory]:
+    """Replay the existing nearest evolution-cell transfer, including unmatched contacts."""
+    cells = mesh.cells
+    xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
+    run_dur = np.array([c.convergent_duration_my for c in cells])
+    run_km = np.array([c.convergent_run_km for c in cells])
+    total_km = np.array([c.cumulative_convergence_km for c in cells])
+    had = np.flatnonzero(run_dur > 0.0)
+    empty = ContactConvergenceHistory(0.0, 0.0, 0.0, None, None, "unavailable")
+    result = dict.fromkeys(ids, empty)
+    if had.size and ids:
+        tree = cKDTree(xyz[had])
+        dist, idx = tree.query(xyz[ids], distance_upper_bound=_RUN_TRANSFER_KM / radius_km)
+        for k, d, j in zip(ids, dist, idx, strict=True):
+            if np.isfinite(d):
+                source = int(had[j])
+                result[k] = ContactConvergenceHistory(
+                    float(run_dur[source]),
+                    float(run_km[source]),
+                    float(total_km[source]),
+                    source,
+                    float(d * radius_km),
+                    "nearest-evolution-cell",
+                )
+    return result
 
 
 def convergent_segments(
@@ -248,6 +376,8 @@ def convergent_segments(
     plates: list[TectonicPlate],
     radius_km: float,
     overrides: list[CollisionOverride] | None = None,
+    *,
+    subduction_polarities: list[SubductionPolarity] | None = None,
 ) -> tuple[list[OrogenSegment], list[str]]:
     """Group contact cells of convergent boundaries into segments with contract quantities.
 
@@ -261,27 +391,12 @@ def convergent_segments(
     warnings: list[str] = []
     cells = mesh.cells
     xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
-    polarity = contact_polarity(mesh, plates, radius_km)
+    polarity = contact_polarity(
+        mesh, plates, radius_km, subduction_polarities=subduction_polarities
+    )
     pair_of = {k: v for k, v in polarity.items() if v[0] != "ocean"}
 
-    # continuous convergent stretch carried over from the evolution's boundary cells
-    run_dur = np.array([c.convergent_duration_my for c in cells])
-    run_km = np.array([c.convergent_run_km for c in cells])
-    total_km = np.array([c.cumulative_convergence_km for c in cells])
-    had = np.flatnonzero(run_dur > 0.0)
-    contact_dur: dict[int, float] = {}
-    contact_km: dict[int, float] = {}
-    contact_total: dict[int, float] = {}
-    if had.size:
-        run_tree = cKDTree(xyz[had])
-        keys = np.array(sorted(pair_of))
-        if keys.size:
-            dist, idx = run_tree.query(xyz[keys], distance_upper_bound=_RUN_TRANSFER_KM / radius_km)
-            for k, d, j in zip(keys, dist, idx, strict=True):
-                found = np.isfinite(d)
-                contact_dur[int(k)] = float(run_dur[had[j]]) if found else 0.0
-                contact_km[int(k)] = float(run_km[had[j]]) if found else 0.0
-                contact_total[int(k)] = float(total_km[had[j]]) if found else 0.0
+    history = _contact_histories(mesh, sorted(pair_of), radius_km)
 
     segments: list[OrogenSegment] = []
     by_pair: dict[tuple[str, str, str], list[int]] = {}
@@ -293,10 +408,10 @@ def convergent_segments(
         pairs = np.array(sorted(sub.query_pairs(_SEGMENT_LINK_KM / radius_km)), dtype=np.int64)
         for group in _union_find_groups(len(mem), pairs.reshape(-1, 2)):
             ids = [int(mem[g]) for g in group]
-            dur = np.array([contact_dur.get(k, 0.0) for k in ids])
-            run = np.array([contact_km.get(k, 0.0) for k in ids])
+            dur = np.array([history[k].continuous_duration_myr for k in ids])
+            run = np.array([history[k].continuous_convergence_km for k in ids])
             rate = float(np.median([cells[k].convergence_rate_cm_yr for k in ids]))
-            total = np.array([contact_total.get(k, 0.0) for k in ids])
+            total = np.array([history[k].cumulative_convergence_km for k in ids])
             segments.append(
                 OrogenSegment(
                     id=f"seg_{len(segments):03d}",
@@ -315,6 +430,7 @@ def convergent_segments(
                         k: float(max(0.0, t - r)) for k, t, r in zip(ids, total, run, strict=True)
                     },
                     cell_rate_cm_yr={k: float(cells[k].convergence_rate_cm_yr) for k in ids},
+                    cell_history={k: history[k] for k in ids},
                     sources={
                         "onset_age_myr": "derived",
                         "convergence_km": "derived",
@@ -329,6 +445,15 @@ def convergent_segments(
         if not claimed:
             warnings.append(f"plate_history {ov.id}: claims no {ov.kind} segment")
         for s in claimed:
+            source = polarity_at_age(subduction_polarities or []).get(
+                plate_pair(s.pro_plate, s.retro_plate)
+            )
+            if (
+                source is not None
+                and ov.down_going is not None
+                and ov.down_going != source.down_going
+            ):
+                raise ValueError(f"conflicting slab sides in {ov.id} and {source.id}")
             _apply_override(ov, s, warnings)
     return segments, warnings
 
@@ -455,11 +580,82 @@ def escape_ratios(
     return out
 
 
-def save_orogen_contract(path: Path, contract: OrogenContract) -> None:
-    """Write the contract as JSON: segments with their quantities and sources, warnings.
+def _geometry_signature(mesh: CVTMesh) -> str:
+    """Identify ordered cells at the persisted mesh's coordinate precision."""
+    import hashlib
 
-    Per-cell escape and retained shortening are summarised per segment (median, range);
-    the cell arrays are recomputed at build time rather than stored.
+    digest = hashlib.sha256()
+    digest.update(np.asarray([c.id for c in mesh.cells], dtype="<i8").tobytes())
+    positions = np.round([(c.lat, c.lon) for c in mesh.cells], 4).astype("<f8")
+    digest.update(positions.tobytes())
+    return digest.hexdigest()
+
+
+def _interface_geometry(mesh: CVTMesh, contract: OrogenContract) -> dict[str, Any]:
+    """Export each segment's full shared-cell interface, including zero-retained contacts."""
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    interfaces = []
+    used_vertices: set[int] = set()
+    for segment in contract.segments:
+        members = set(segment.cell_ids)
+        seen: set[tuple[int, int]] = set()
+        for i in sorted(members):
+            for j in sorted(mesh.cells[i].neighbors):
+                pair = (min(i, j), max(i, j))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                if {mesh.cells[i].plate_id, mesh.cells[j].plate_id} != {
+                    segment.pro_plate,
+                    segment.retro_plate,
+                }:
+                    continue
+                common = sorted(set(mesh.regions[i]) & set(mesh.regions[j]))
+                if len(common) != 2:
+                    raise ValueError(f"contact cells {i}, {j} must share two interface vertices")
+                a, b = common
+                pro = i if mesh.cells[i].plate_id == segment.pro_plate else j
+                if np.cross(vertices[a], vertices[b]) @ mesh.cell_xyz[pro] < 0:
+                    a, b = b, a
+                contacts = sorted(members.intersection(pair))
+                interfaces.append(
+                    {
+                        "segment_id": segment.id,
+                        "cell_ids": list(pair),
+                        "vertex_ids": [a, b],
+                        "contact_cell_ids": contacts,
+                        "positive_retained_contact_cell_ids": [
+                            k for k in contacts if contract.retained_km.get(k, 0.0) > 0.0
+                        ],
+                    }
+                )
+                used_vertices.update((a, b))
+    return {
+        "interface_kind": "shared CVT edges, minor great-circle arcs",
+        "interface_orientation": "a cross b points toward pro_plate",
+        "vertices": [
+            {
+                "vertex_id": i,
+                "xyz": (vertices[i] / np.linalg.norm(vertices[i])).tolist(),
+            }
+            for i in sorted(used_vertices)
+        ],
+        "interfaces": interfaces,
+    }
+
+
+def save_orogen_contract(
+    path: Path,
+    contract: OrogenContract,
+    *,
+    mesh: CVTMesh | None = None,
+    radius_km: float | None = None,
+) -> None:
+    """Write summaries plus an exact, versioned contract for downstream terrain sources.
+
+    ``detail`` preserves full precision, cell membership and all per-contact quantities.
+    With a mesh, attach source coordinates and a geometry signature to bind cell indices.
+    Existing summary keys retain their format for human-facing consumers.
     """
     import json
 
@@ -486,8 +682,135 @@ def save_orogen_contract(path: Path, contract: OrogenContract) -> None:
                 "sources": s.sources,
             }
         )
-    payload = {"segments": rows, "warnings": contract.warnings, "notes": contract.notes}
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    detail = asdict(contract)
+    # Keep v2's numerical detail compatible with existing readers; history is additive.
+    history = {row["id"]: row.pop("cell_history") for row in detail["segments"]}
+    polarity = {
+        "format": "subduction-polarity-v1",
+        "contacts": detail.pop("contact_polarities"),
+        "contact_sources": detail.pop("polarity_sources"),
+        "source_definitions": detail.pop("subduction_polarities"),
+        "crust_stage": detail.pop("polarity_stage"),
+        "epoch_age_myr": 0.0,
+    }
+    payload: dict[str, Any] = {
+        "format": "orogen-contract-v2",
+        "segments": rows,
+        "warnings": contract.warnings,
+        "notes": contract.notes,
+        "detail": detail,
+        "contact_history": history,
+        "subduction_polarity": polarity,
+        "units": {"length": "km", "rate": "cm/yr", "age": "Myr", "escape": "fraction"},
+        "history_transfer": {
+            "method": "nearest positive-duration evolution cell",
+            "maximum_chord_km": _RUN_TRANSFER_KM,
+            "values": "evolution records, preserved alongside effective author/derived quantities",
+            "unavailable": "legacy numerical zero with status and null source provenance",
+        },
+    }
+    if radius_km is not None:
+        if not np.isfinite(radius_km) or radius_km <= 0:
+            raise ValueError("radius must be positive and finite")
+        payload["radius_km"] = radius_km
+    if mesh is not None:
+        ids = sorted(
+            {i for s in contract.segments for i in s.cell_ids} | set(contract.contact_polarities)
+        )
+        if any(i < 0 or i >= len(mesh.cells) or mesh.cells[i].id != i for i in ids):
+            raise ValueError("contract cell indices do not match the source mesh")
+        payload["geometry"] = {
+            "signature": _geometry_signature(mesh),
+            "signature_precision_degrees": 1e-4,
+            "num_cells": len(mesh.cells),
+            "coordinate_frame": "unit sphere, y north",
+            "contacts": [
+                {
+                    "cell_id": i,
+                    "lat": mesh.cells[i].lat,
+                    "lon": mesh.cells[i].lon,
+                    "xyz": mesh.cell_xyz[i].tolist(),
+                    "plate_id": mesh.cells[i].plate_id,
+                }
+                for i in ids
+            ],
+            "evolution_sources": [
+                {
+                    "cell_id": i,
+                    "lat": mesh.cells[i].lat,
+                    "lon": mesh.cells[i].lon,
+                    "xyz": mesh.cell_xyz[i].tolist(),
+                }
+                for i in sorted(
+                    {
+                        h.source_cell_id
+                        for s in contract.segments
+                        for h in s.cell_history.values()
+                        if h.source_cell_id is not None
+                    }
+                )
+            ],
+            **_interface_geometry(mesh, contract),
+        }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8"
+    )
+
+
+def load_orogen_contract(path: Path, *, mesh: CVTMesh | None = None) -> OrogenContract:
+    """Restore exact contract quantities; optionally check their mesh-cell binding."""
+    import json
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("format") != "orogen-contract-v2" or "detail" not in payload:
+        raise ValueError("a v2 contract with per-contact detail is required")
+    if mesh is not None:
+        geometry = payload.get("geometry", {})
+        if geometry.get("signature") != _geometry_signature(mesh):
+            raise ValueError("contract geometry does not match the mesh")
+    detail = payload["detail"]
+    polarity = payload.get("subduction_polarity", {})
+    if polarity and polarity.get("format") != "subduction-polarity-v1":
+        raise ValueError("unsupported subduction polarity contract")
+    if polarity.get("crust_stage", "boundaries") not in ("boundaries", "terrain-crust"):
+        raise ValueError("unknown polarity source stage")
+    for cid, value in polarity.get("contacts", {}).items():
+        if (
+            len(value) != 3
+            or value[0] not in ("ocean", "andean", "collision")
+            or value[1] == value[2]
+        ):
+            raise ValueError("invalid contact polarity record")
+        if mesh is not None:
+            k = int(cid)
+            if not 0 <= k < len(mesh.cells) or mesh.cells[k].plate_id not in value[1:]:
+                raise ValueError("polarity contact does not match the source plate assignment")
+            other = value[2] if mesh.cells[k].plate_id == value[1] else value[1]
+            if not any(mesh.cells[j].plate_id == other for j in mesh.cells[k].neighbors):
+                raise ValueError("polarity contact does not match the plate-pair interface")
+    segments = []
+    for row in detail["segments"]:
+        row = dict(row)
+        for name in ("cell_convergence_km", "cell_pre_collision_km", "cell_rate_cm_yr"):
+            row[name] = {int(k): v for k, v in row[name].items()}
+        row["cell_history"] = {
+            int(k): ContactConvergenceHistory(**v)
+            for k, v in payload.get("contact_history", {}).get(row["id"], {}).items()
+        }
+        segments.append(OrogenSegment(**row))
+    return OrogenContract(
+        segments=segments,
+        escape={int(k): v for k, v in detail["escape"].items()},
+        retained_km={int(k): v for k, v in detail["retained_km"].items()},
+        warnings=detail["warnings"],
+        notes=detail["notes"],
+        contact_polarities={int(k): tuple(v) for k, v in polarity.get("contacts", {}).items()},
+        polarity_sources={int(k): v for k, v in polarity.get("contact_sources", {}).items()},
+        subduction_polarities=[
+            SubductionPolarity(**v) for v in polarity.get("source_definitions", [])
+        ],
+        polarity_stage=polarity.get("crust_stage", "boundaries"),
+    )
 
 
 def build_orogen_contract(
@@ -497,13 +820,31 @@ def build_orogen_contract(
     overrides: list[CollisionOverride] | None = None,
     *,
     max_onset_myr: float | None = None,
+    subduction_polarities: list[SubductionPolarity] | None = None,
 ) -> OrogenContract:
     """Segments, escape ratios and the retained shortening of every contact cell.
 
     ``max_onset_myr`` (the tectonic evolution length) bounds author onset ages: an
     onset older than the history the world has is flagged (§3.5).
     """
-    segments, warnings = convergent_segments(mesh, plates, radius_km, overrides)
+    sources = subduction_polarities or []
+    explicit = polarity_at_age(sources)
+    segments, warnings = convergent_segments(
+        mesh, plates, radius_km, overrides, subduction_polarities=sources
+    )
+    contract = OrogenContract(
+        segments=segments,
+        escape={},
+        retained_km={},
+        warnings=warnings,
+        subduction_polarities=list(sources),
+    )
+    resolve_contract_polarities(mesh, plates, contract, radius_km, stage="boundaries")
+    contacts = contract.contact_polarities
+    active_pairs = {plate_pair(a, b) for kind, a, b in contacts.values() if kind != "collision"}
+    for pair, source in explicit.items():
+        if pair not in active_pairs:
+            warnings.append(f"subduction polarity {source.id}: claims no active plate-pair contact")
     escape = escape_ratios(mesh, plates, segments, radius_km)
     retained: dict[int, float] = {}
     n_zero = 0
@@ -545,6 +886,7 @@ def build_orogen_contract(
             "pre-breakoff subduction exceed the convergence); only their pre-collision "
             "Andean-type thickening remains"
         )
-    return OrogenContract(
-        segments=segments, escape=escape, retained_km=retained, warnings=warnings, notes=notes
-    )
+    contract.escape = escape
+    contract.retained_km = retained
+    contract.notes = notes
+    return contract

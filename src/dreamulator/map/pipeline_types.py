@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .heat_pipe import TidalHeatHistory
     from .orogen_contract import CollisionOverride
     from .paleo_sutures import AuthorSuture
+    from .subduction_polarity import SubductionPolarity
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +247,8 @@ class TerrainPipelineConfig:
     # overrides from plate_history.yaml (`collisions`, `andean_margins`), loaded by the
     # engine.  Empty = every segment uses the values derived from tectonic evolution.
     collision_overrides: list[CollisionOverride] = field(default_factory=list)
+    # Plate-pair slab sides with explicit author/observation and age provenance.
+    subduction_polarities: list[SubductionPolarity] = field(default_factory=list)
     # Paleo-sutures from plate_history.yaml (`sutures`), loaded by the engine: old orogens
     # stand along them (map/paleo_orogens.py).  Empty = no old orogens.
     paleo_sutures: list[AuthorSuture] = field(default_factory=list)

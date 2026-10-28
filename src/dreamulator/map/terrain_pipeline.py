@@ -20,8 +20,11 @@ reference of stages 1-5/7-8 and ``climate-pipeline.md`` for stage 6.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import pickle
 import time
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
@@ -194,6 +197,8 @@ def run_terrain_pipeline(
     geography_raster: np.ndarray | None = None,
     cache: CacheConfig | None = None,
     geography_hash: str = "",
+    source_fields: dict[str, np.ndarray] | None = None,
+    tectonic_state: TerrainPipelineResult | None = None,
 ) -> TerrainPipelineResult:
     """Run the terrain generation pipeline.
 
@@ -209,6 +214,12 @@ def run_terrain_pipeline(
         geography_hash: SHA-256 of geography.yaml (optional). When provided
             and caching is enabled, geography-dependent stages are invalidated
             when the geography file changes.
+        source_fields: Optional output mapping for frozen source-stage arrays.
+            Capture reruns only terrain, while retaining valid upstream caches.
+        tectonic_state: Explicit pre-terrain mesh, plates, boundaries and optional
+            history contract. A private copy is consumed by the requested downstream
+            stages. Callers retain and verify the source artifact's provenance.
+            Requires an explicit downstream stage list and disabled stage caching.
 
     Returns:
         TerrainPipelineResult with generated data.
@@ -217,6 +228,34 @@ def run_terrain_pipeline(
     result = TerrainPipelineResult()
 
     ordered = _resolve_stages(stages)
+    frozen_fingerprint = ""
+    if tectonic_state is not None:
+        if stages is None or any(
+            s in ordered for s in ("mesh", "plates", "tectonics", "boundaries")
+        ):
+            raise ValueError("tectonic_state requires explicit downstream stages")
+        if cache is not None and cache.enabled:
+            raise ValueError("tectonic_state requires disabled stage caching")
+        if tectonic_state.mesh is None or not tectonic_state.plates:
+            raise ValueError("tectonic_state requires a mesh and plates")
+        mesh = tectonic_state.mesh
+        plate_ids = {p.id for p in tectonic_state.plates}
+        if len(mesh.cells) != config.num_nodes or any(
+            c.id != i or c.plate_id not in plate_ids for i, c in enumerate(mesh.cells)
+        ):
+            raise ValueError("tectonic_state cell count, ordering or plate assignment mismatch")
+        area = sum(c.area_km2 for c in mesh.cells)
+        if not np.isclose(area, 4 * np.pi * config.radius_km**2, rtol=1e-3):
+            raise ValueError("tectonic_state radius differs from the requested terrain")
+        frozen_fingerprint = hashlib.sha256(pickle.dumps(tectonic_state, protocol=5)).hexdigest()
+        result = deepcopy(tectonic_state)
+        result.stages_completed = []
+        result.stage_timings = {}
+        result.elapsed_seconds = 0.0
+        result.output_dir = None
+        result.elevation_grid = None
+        if "terrain" in ordered:
+            result.island_catalog = None
     logger.info(
         "Starting terrain pipeline: %s (seed=%d, nodes=%d)",
         " → ".join(ordered),
@@ -228,6 +267,8 @@ def run_terrain_pipeline(
     tc: TerrainCache | None = None
     use_cache = cache is not None and cache.enabled
     upstream_fps: dict[str, str] = {}  # upstream stage → fingerprint
+    if frozen_fingerprint:
+        upstream_fps["boundaries"] = frozen_fingerprint
     if use_cache and output_dir is not None:
         tc = TerrainCache(output_dir)
         _console.print(f"  [dim]Cache: {tc.cache_dir}[/dim]")
@@ -472,13 +513,15 @@ def run_terrain_pipeline(
         # and their shortening history, read from the tectonic-stage fields.
         from .orogen_contract import build_orogen_contract
 
-        result.orogen_contract = build_orogen_contract(
-            result.mesh,
-            result.plates,
-            config.radius_km,
-            config.collision_overrides,
-            max_onset_myr=config.tectonic_duration_my or None,
-        )
+        if result.orogen_contract is None:
+            result.orogen_contract = build_orogen_contract(
+                result.mesh,
+                result.plates,
+                config.radius_km,
+                config.collision_overrides,
+                max_onset_myr=config.tectonic_duration_my or None,
+                subduction_polarities=config.subduction_polarities,
+            )
         for _w in result.orogen_contract.warnings:
             logger.warning("  Collision history: %s", _w)
         for _w in result.orogen_contract.notes:
@@ -490,7 +533,7 @@ def run_terrain_pipeline(
             upstream_fingerprints=upstream_fps,
         )
         upstream_fps["terrain"] = terrain_fp
-        if tc is not None and tc.has_valid("terrain", terrain_fp):
+        if tc is not None and tc.has_valid("terrain", terrain_fp) and source_fields is None:
             _console.print("  [dim]terrain: cache hit, loading…[/dim]")
             t = time.time()
             cached_arrays = tc.load("terrain")
@@ -506,6 +549,15 @@ def run_terrain_pipeline(
                     result.mesh.cells[_i].landform = str(_lf[_i]) if _lf[_i] else None
                     result.mesh.cells[_i].hotspot_id = str(_hs[_i]) if _hs[_i] else None
                     result.mesh.cells[_i].is_lake = bool(_lk[_i])
+                from .orogen_contract import resolve_contract_polarities
+
+                resolve_contract_polarities(
+                    result.mesh,
+                    result.plates,
+                    result.orogen_contract,
+                    config.radius_km,
+                    stage="terrain-crust",
+                )
                 result.stages_completed.append("terrain")
                 result.stage_timings["terrain"] = time.time() - t
                 _stage_end(result.stage_timings["terrain"])
@@ -518,6 +570,7 @@ def run_terrain_pipeline(
                 config,
                 raster_bias=raster_bias,
                 orogen_contract=result.orogen_contract,
+                source_fields=source_fields,
             )
             result.stages_completed.append("terrain")
             result.stage_timings["terrain"] = time.time() - t
@@ -593,7 +646,7 @@ def run_terrain_pipeline(
 
             # the volcanoes whose volume terrain synthesis put into the cell means
             result.island_catalog = take_synthesis_catalog() or build_island_catalog(
-                result.mesh, result.plates, config
+                result.mesh, result.plates, config, orogen_contract=result.orogen_contract
             )
             _contrib = volcano_cell_mean(result.mesh, result.island_catalog, config.radius_km)
             _isl = summarise_islands(
@@ -684,7 +737,12 @@ def run_terrain_pipeline(
             if result.orogen_contract is not None:
                 from .orogen_contract import save_orogen_contract
 
-                save_orogen_contract(output_dir / "orogen_contract.json", result.orogen_contract)
+                save_orogen_contract(
+                    output_dir / "orogen_contract.json",
+                    result.orogen_contract,
+                    mesh=result.mesh,
+                    radius_km=config.radius_km,
+                )
             if result.island_catalog is not None:
                 import json as _json
 
@@ -694,6 +752,40 @@ def run_terrain_pipeline(
                     _json.dumps(catalog_to_json(result.island_catalog), ensure_ascii=False),
                     encoding="utf-8",
                 )
+            if source_fields:
+                from .island_source import catalogue_geometry
+                from .terrain_source_export import save_terrain_source_fields
+
+                save_terrain_source_fields(
+                    output_dir / "terrain_sources.npz",
+                    source_fields,
+                    radius_km=config.radius_km,
+                    source={
+                        "terrain_fingerprint": upstream_fps.get("terrain"),
+                        "seed": config.seed,
+                        "sea_level_m": config.sea_level_offset_m,
+                        "island_geometry": (
+                            catalogue_geometry(result.island_catalog)
+                            if result.island_catalog is not None
+                            else None
+                        ),
+                        "polarity_stage": (
+                            result.orogen_contract.polarity_stage
+                            if result.orogen_contract is not None
+                            else None
+                        ),
+                    },
+                )
+            elif (output_dir / "terrain_sources.json").exists():
+                import json as _source_json
+
+                source_path = output_dir / "terrain_sources.json"
+                previous = _source_json.loads(source_path.read_text(encoding="utf-8"))
+                if previous.get("source", {}).get("terrain_fingerprint") != upstream_fps.get(
+                    "terrain"
+                ):
+                    (output_dir / "terrain_sources.npz").unlink(missing_ok=True)
+                    source_path.unlink()
             result.output_dir = output_dir
 
         result.stages_completed.append("export")

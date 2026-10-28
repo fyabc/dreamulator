@@ -17,9 +17,8 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 ```
 
 - **physics / chemistry 无引擎**：这两层的 input 为空即标准物理/化学，derived 无内容。
-- **geological 是复合引擎**：内部跑地形管线 8 相位（见下表），气候模拟嵌在其中
-  6/8 相位；climate 层因此既被 geological 内嵌顺跑、也有独立引擎
-  （`--only climate` 增量重建）。
+- **geological 是复合引擎**：内部使用地形管线的相位编排（见下表），默认跳过
+  6/8 气候相位，由 `ClimateEngine` 独立构建气候。显式指定相位时可以在地形管线中顺跑气候。
 - **climate 的 geological 依赖走 maps 不走 DAG**（`climate.py:48`）：气候引擎从
   `maps/{planet}/` 读 geological 的 mesh 产物，而非层级 derived 文件。
 
@@ -28,7 +27,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 | 引擎 | 层级 | requires | 产出 | 技术参考 |
 |------|------|----------|------|---------|
 | `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py` |
-| `GeologicalEngine` | geological | astronomy | `maps/{planet}/`（cvt_mesh.json、elevation.png、plates.json、图层导出） | [geological-pipeline.md](geological-pipeline.md) |
+| `GeologicalEngine` | geological | astronomy | `maps/{planet}/` 保存压缩网格、地形和板块图层，可按需捕获阶段来源。 | [geological-pipeline.md](geological-pipeline.md) |
 | `ClimateEngine` | climate | astronomy, geological | 温度/降水/Köppen/风/洋流/月度场，写回 mesh | [climate-pipeline.md](climate-pipeline.md) |
 | `EcologyEngine` | ecology | climate, geological | 群系/NPP/可驯化/土纲/生物地理省图层 | [ecology-pipeline.md](ecology-pipeline.md)；设计动机见 [ecology-layer.md](../proposals/ecology-layer.md) |
 | `CivilizationEngine` | civilization | ecology, climate, geological | 文明层 derived（消费 mesh 上的气候/生态字段） | [civilization-pipeline.md](civilization-pipeline.md)；Phase 3C 半结构化设计见 [civilization-layer.md](../proposals/civilization-layer.md) |
@@ -75,3 +74,16 @@ CivilizationEngine ── 文明推演（消费地形/气候/生态底图）
 分支目录；子相位缓存按输入内容指纹失效（改 geography.yaml 不需要 `--force`）。
 分支系统见 [layer-control-model.md](../proposals/layer-control-model.md) 与
 [geological-pipeline.md](geological-pipeline.md)。
+
+## GCM 分支与高清画布
+
+气候分支可从 GCM 字段读取长期月气候。Nacrea 的正典分支为 `gcm-t42-712`，
+根世界的参数化气候用于快速诊断。地质来源改变时，先更新地形及冰盖，再刷新引擎气候、
+GCM 地表输入和正典 GCM，随后构建同分支的生态与文明输出。
+GCM 降水通过完整原生父格与球面目标面积的交叠输出，过程分量分别保持月水量预算。
+统计口径和接口见 [气候管线 14 节](climate-pipeline.md#14-gcm-与参数化管线的定位后续开发)。
+
+高清画布读取同批地质与气候来源。气候版本进入 TD 时，更新四个气候条件，
+重新准备共享统计场，并完整生成地形块；两档总览图从同一批原生块输出。
+已有河湖产物按新地形及月气候重算。画布条件、来源版本和生成接口见
+[画布链 2.5 节](canvas-chain.md#25-条件场与气候通道)。

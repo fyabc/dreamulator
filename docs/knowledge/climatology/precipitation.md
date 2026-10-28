@@ -7,6 +7,28 @@
 
 ---
 
+## 原生降水的面积预算与空间取样
+
+降水深度乘以面积给出水量。同一个原生父格内的细化场应满足
+`Σ A_i P_i = A_parent P_parent`，其中面积包含陆地和海洋，月值采用相同的参考时间基准。
+高斯网格的父格面积由高斯求积权重乘以经度宽度与半径平方得到；累计权重确定纬度边界，
+从而为完整球面建立与原生求积一致的正面积分区。
+
+长期插值底场可保留格内相对形状，再按完整面积积分归一到每个分量的原生月配额。
+这是数值分配约束，空间质量由过程模型和独立观测另行检验。
+源码 `gcm/native_partition.py` 保存完整分区与双精度月分量，地理点查询返回所在积分单元的深度。
+CVT 格心与投影栅格中心构成该场的点取样视图；目标单元的面积平均需显式计算交叠面积。
+面积预算、点取样、目标单元覆盖积分分别使用对应的测度。
+
+经纬度矩形目标单元可在 $(\sin\varphi,\lambda)$ 坐标中计算解析交叠，球面面积为
+$R^2\Delta\sin\varphi\,\Delta\lambda$。经度周期连接，两极具有有限正面积。
+同一稀疏面积算子可以积分全部月份与降水分量；目标面积均值由交叠水量除以该目标面积得到。
+区域覆盖核验其足迹中的源水量，全球覆盖进一步核验每个原生单元的完整面积。
+投影矩形的球面边界可以在同一等面积坐标中细分为多边形，再与原生经纬度单元裁切。
+面积用投影雅可比独立求积核验，相邻细分的交叠面积变化控制雨量分配的数值误差。
+极冠与经度周期按球面拓扑处理，所得平均值及覆盖水量对应实际目标足迹。
+跨画布所有权与 CVT 多边形分别提供对应的分区几何。
+
 ## 一、饱和水汽压与 Clausius–Clapeyron 方程
 
 饱和水汽压 $e_s$ 随温度**指数**上升（Clausius–Clapeyron 关系）：
@@ -160,10 +182,52 @@ _solve_moisture_budget()`，水汽沿风场从东岸进入、向西耗尽）；�
 （`climate_physics.sst_convection_gate`）表示。引擎没有动力副热带高压，第二种机制只能
 间接体现（见 `docs/design/pipelines/climate-pipeline.md` §5.1）。
 
+## 饱和条件稳定度与线性地形雨的适用范围
+
+Smith 与 Barstad 的线性地形雨模型以稳态背景气流和相应的分层状态描述抬升、水汽转化及降水输送。
+原生大尺度凝结与对流具有各自的过程来源，分量相加的水量闭合和线性响应的状态适用性分别验收。
+在保留父格水量的降尺度中，未解析过程及无效状态仍保留其父场份额。
+
+实际热力状态的层厚由静力平衡求得：
+
+$$dz=-\frac{R_dT_v}{g}\,d\ln p,\qquad T_v=T\left[1+\left(\frac{R_v}{R_d}-1\right)q\right].$$
+
+这里 $q$ 是比湿，虚温表达采用无凝结物负载的气体密度。环境递减率 $\gamma=-dT/dz$ 与液水饱和递减率
+$\Gamma_m$ 的比较给出条件诊断 $g(\Gamma_m-\gamma)/T$。液水气块的浮力诊断进一步计算
+饱和虚温随温度和压力共同变化的导数：
+
+$$\frac{dT_{v,p}}{dz}=-\Gamma_m\frac{\partial T_{v,s}}{\partial T}
++\frac{dp}{dz}\frac{\partial T_{v,s}}{\partial p},\qquad
+N_p^2=\frac{g}{T_{v,e}}\left(\frac{dT_{v,e}}{dz}-\frac{dT_{v,p}}{dz}\right).$$
+
+下标 $s$ 表示饱和状态，$p$ 表示气块，$e$ 表示环境。此近似令凝结物即时落出，保留真实负值，
+可用有限气块位移独立核对其导数。压力导数、环境虚温和相变约定共同决定实际稳定度。
+完整湿浮力频率还需要总水混合比及其垂直梯度、云凝结物、液水热容和相变约定。
+未饱和虚位温分层、液水饱和条件分层和完整湿分层使用各自的状态定义。
+
+山地云中可以发生嵌入对流，改变降水效率、位置及强度。单一上游稳定度或低层 RH 对实际云层及对流的预测范围有限，
+近饱和阈值可用于描述输入覆盖，过程适用域需要云层、热力和流动条件共同约束。
+RH 的单位与垂直坐标也须按实际数据生产公式核对，写出量化造成的误差按输入编码推导。
+
+ICAR 以线性山地波提供扰动风场，并推进时间输送及微物理。新西兰公里级研究表明其高山降水有改善，
+同时显示模型顶高度和稳定气流状态会影响误差。行星接入须统一各物理模块的重力、热力及自转参数。
+比湿 $q$ 转干空气水汽混合比使用 $r=q/(1-q)$；诊断云属性与微物理凝结物按过程来源分别核对。
+
 ## 参考来源
+
+- Gutmann, E. 等 (2016). "The Intermediate Complexity Atmospheric Research Model (ICAR)."
+  *Journal of Hydrometeorology*. DOI: [10.1175/JHM-D-15-0155.1](https://doi.org/10.1175/JHM-D-15-0155.1)。
+- Horak, J. 等 (2019). "Assessing the added value of the intermediate complexity atmospheric research (ICAR) model for precipitation in complex topography."
+  *Hydrology and Earth System Sciences* 23, 2715–2734。
+  DOI: [10.5194/hess-23-2715-2019](https://hess.copernicus.org/articles/23/2715/2019/)。
 
 - Smith, R.B. (1979). "The influence of mountains on the atmosphere."
   *Advances in Geophysics* 21, 87–230.（地形降水线性理论）
+- Smith, R.B., & Barstad, I. (2004). "A Linear Theory of Orographic Precipitation."
+  *Journal of the Atmospheric Sciences* 61, 1377–1391。作者会议全文：<https://ams.confex.com/ams/pdfpapers/62756.pdf>。
+- Fuhrer, O., & Schär, C. (2005). "Embedded Cellular Convection in Moist Flow past Topography."
+  *Journal of the Atmospheric Sciences* 62, 2810–2828。全文：<https://iacweb.ethz.ch/doc/publications/2005_Fuhrer_Cellular.pdf>。
+  方程 4 与周边讨论给出完整湿稳定度的状态输入及条件不稳定云层的解释范围。
 - Houze, R.A. (2012). "Orographic effects on precipitating clouds."
   *Reviews of Geophysics* 50, RG1001.（降水效率 10–50% 及云物理机制综述）
 - Roe, G.H., Montgomery, D.R., & Hallet, B. (2002). "Precipitation sensitivity

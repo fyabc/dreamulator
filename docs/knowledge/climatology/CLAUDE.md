@@ -11,12 +11,14 @@
 - 统一气候描述（UCC）→ **已迁至专门目录 `docs/ucc/`**（主文档 `docs/ucc/specification.md`：时间基准契约、连续描述量、Hamon-1961 需求模型声明与有效域、分类 profile v1 与 L2 实验冻结依据）
 - `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学（水力控制公式、门槛水深标度与自转速率的影响、地球海平面门控案例、海平面敏感海峡诊断工具）、ENSO 类振荡（3A.3 科学底座）
 - `sea_level.md` — 海平面与气候：冰量与热膨胀两个来源（冰盖剖面与平均厚度、热膨胀系数）、地球数值与时间尺度、海平面变化对气候的反作用、在 GCM 中只作边界条件的处理与估算方法
-- `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
+- `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、液水气块的虚温导数和线性地形雨适用范围、原生高斯父格的完整面积预算与目标球面交叠积分、ICAR 时变后端的物理输入、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
 - `obliquity_ice_albedo.md` — 轴倾角只重新分配日照（全球年平均恒为 S/4，极点年平均 S·sin ε/π），冰反照率把高纬夏季的增量整流成全球净增温；在 GCM 中检验时的注意事项（必须固定轨道）；EBM 为什么复现不了（全球均温锚定、冰反照率只做局地降温）
 - `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）、极端天气（温带风暴与热带气旋的自转标度律、寒潮与热浪、夜间强对流，含 Nacrea 与地球的 GCM 对照）
 - `cloud_field_statistics.md` — 云场两条统计律：单点光学厚度近似指数分布（薄云主导，Marchand 2010 直方图评审）+ 空间功率谱一维 −5/3 幂律（Cahalan & Joseph 1989 / Davis 1997 转引）；对程序化云纹理的参数映射（指数逆 CDF + fBm persistence ≈ 0.7）；竞品工程实现调研见 `cloud_generation_competitors.md`
 - `atmospheric_scattering.md` — 行星圆盘 L5 大气渲染：单次散射方程与球壳几何、瑞利/米氏/臭氧系数与柱质量缩放、标高与大气顶、恒星光谱到 sRGB 白点与有效瑞利系数（Wyman CIE 拟合）、透射率查找表、分层云壳与云影、已知限制（无多次散射/偏振/光谱相关）与参考文献
 - `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 地质历史（显生宙逐期表 + 前寒武、CH4 快变量/CO2 慢变量框架、冰期旋回耦合、火山-风化稳态与脉冲放大标度律、世界构建锚点速查表；2026-10 nacrea 路线 1 调研沉淀）
+
+- `gcm_climate_statistics.md` — GCM 的高斯面积权重、近地面气温与大气层温度、轨道季节统计及分辨率差异的解释。
 
 ## 规划中的文档
 

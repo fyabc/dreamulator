@@ -24,7 +24,9 @@ Method (all on the tail of the run, default last 5 model years):
   (epistemic class: approximate derivation; the GCM grid at T21/T42 cannot
   resolve the mesh topography).  Ocean cells use sea level.
 - **Precipitation.**  Monthly totals on the Earth-year basis (365.25/12 days per
-  month), matching the engine's ``precipitation_mm`` convention; no correction.
+  month), matching the engine's ``precipitation_mm`` convention. An optional
+  native precipitation archive uses full spherical CVT footprint integrals and
+  stores its double-precision integration areas with the field set.
 - **Köppen.**  The engine's own ``koppen_classify`` with the same seasonal
   inputs (``warm_cold_half_precip``, ``seasonal_precip_extremes``,
   months ≥ 10 °C), so the classifier is identical on both sides.
@@ -79,6 +81,8 @@ from dreamulator.gcm.fields import (
 )
 
 if TYPE_CHECKING:
+    from dreamulator.gcm.cvt_area import CvtPrecipitationCoverage
+    from dreamulator.gcm.native_partition import NativePrecipitationField
     from dreamulator.map.models import CVTMesh
 
 LAPSE_K_PER_M = 0.0065
@@ -226,6 +230,8 @@ def compute_field_set(
     steps_per_model_day: float = 32.0,
     tail_years: int = 5,
     sea_level_m: float = 0.0,
+    precipitation_field: NativePrecipitationField | None = None,
+    precipitation_coverage: CvtPrecipitationCoverage | None = None,
 ) -> GcmFieldSet:
     """Per-cell GCM climate of ``nc_path`` on ``mesh`` (see the module docstring)."""
     import netCDF4
@@ -311,6 +317,19 @@ def compute_field_set(
         t_monthly = t_monthly + LAPSE_K_PER_M * (z_gcm - z_cell)[:, None]
     slp_unreliable = is_land & (z_gcm >= SLP_UNRELIABLE_HEIGHT_M)
     p_monthly = np.maximum(to_cells(pr_m).T, 0.0)
+    if precipitation_field is not None:
+        if precipitation_coverage is None:
+            from dreamulator.gcm.cvt_area import cvt_precipitation_coverage
+
+            precipitation_coverage = cvt_precipitation_coverage(
+                precipitation_field.partition, lat, lon
+            )
+        precipitation_coverage.check_sites(precipitation_field.partition, lat, lon)
+        p_monthly = (
+            precipitation_coverage.cells.means(precipitation_field.component_monthly_mm)
+            .sum(axis=0)
+            .T
+        )
     dp_monthly = to_cells(dp_m).T
     u_monthly, v_monthly = to_cells(u_m).T, to_cells(v_m).T
 
@@ -335,6 +354,13 @@ def compute_field_set(
         t_months_ge10=(t_monthly >= 10.0).sum(axis=1),
     )
 
+    reference_geometry = mesh_reference_geometry(mesh)
+    if precipitation_field is not None and precipitation_coverage is not None:
+        reference_geometry["precipitation_area_km2"] = precipitation_coverage.cells.area_km2
+        reference_geometry["precipitation_geometric_area_km2"] = (
+            precipitation_coverage.geometric_area_km2
+        )
+
     return GcmFieldSet(
         num_cells=mesh.num_cells,
         mesh_fingerprint=mesh_fingerprint(mesh),
@@ -358,7 +384,7 @@ def compute_field_set(
         },
         koppen=[None if k is None else str(k) for k in koppen],
         slp_reduction_unreliable=slp_unreliable,
-        reference_geometry=mesh_reference_geometry(mesh),
+        reference_geometry=reference_geometry,
         provenance={
             "source_nc": str(nc_path),
             "tail_years": n_tail / 12,
@@ -366,6 +392,17 @@ def compute_field_set(
             "phase_origin": phase_origin,
             "lapse_k_per_m": LAPSE_K_PER_M if zsurf is not None else None,
             "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
+            **(
+                {
+                    "precipitation_source": {
+                        **precipitation_field.metadata,
+                        "sampling": precipitation_coverage.metadata["sampling"],
+                        "target_coverage": precipitation_coverage.metadata,
+                    }
+                }
+                if precipitation_field is not None and precipitation_coverage is not None
+                else {}
+            ),
             "wind_source": wind_source,
             "slp_smoothing": f"Hoskins spectral filter, 0.1 at n = {SLP_SMOOTHING_N0}",
             "sea_level_m": sea_level_m,
@@ -382,6 +419,11 @@ def compute_field_set(
 def summarize_field_set(fs: GcmFieldSet, mesh: CVTMesh, sea_level_m: float = 0.0) -> dict[str, Any]:
     """Global and land means plus the land Köppen counts of a field set (pure)."""
     area = np.array([c.area_km2 for c in mesh.cells], dtype=float)
+    precipitation_area = (
+        fs.reference_geometry.get("precipitation_area_km2", area)
+        if fs.reference_geometry is not None
+        else area
+    )
     is_land = np.array([c.elevation for c in mesh.cells], dtype=float) >= sea_level_m
     t_mean, p_annual = fs.annual["temperature_C"], fs.annual["precipitation_mm"]
     koppen = np.array(["" if k is None else k for k in fs.koppen])
@@ -392,7 +434,9 @@ def summarize_field_set(fs: GcmFieldSet, mesh: CVTMesh, sea_level_m: float = 0.0
         "cleared_fields": list(CLEARED_FIELDS),
         "global_mean_temperature_c": float(np.average(t_mean, weights=area)),
         "land_mean_temperature_c": float(np.average(t_mean[is_land], weights=area[is_land])),
-        "land_mean_precipitation_mm": float(np.average(p_annual[is_land], weights=area[is_land])),
+        "land_mean_precipitation_mm": float(
+            np.average(p_annual[is_land], weights=precipitation_area[is_land])
+        ),
         **(
             {
                 "global_mean_cloud_total": float(

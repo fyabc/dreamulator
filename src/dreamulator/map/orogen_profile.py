@@ -120,6 +120,8 @@ def orogen_relief(
     gravity_m_s2: float,
     base_m: float,
     forearc_km: dict[int, float] | None = None,
+    *,
+    segment_contributions: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Cell-mean orogen relief (m above the continental base) and the cap that bounds it.
 
@@ -143,6 +145,8 @@ def orogen_relief(
     relief = np.zeros(n, dtype=np.float64)
     cap_of = np.full(n, np.inf)
     sources = [k for k, v in contract.retained_km.items() if v > 0.0]
+    if segment_contributions is not None:
+        segment_contributions.clear()
     if not sources:
         return relief, cap_of
     seg_of = {k: s for s in contract.segments for k in s.cell_ids}
@@ -185,6 +189,7 @@ def orogen_relief(
     segs = {s.id: s for s in contract.segments}
     for sid, bs in seg_src.items():
         seg = segs[sid]
+        segment_out = np.zeros(n) if segment_contributions is not None else None
         cap_km = max(caps_m[seg.kind] - base_m, 0.0) / 1000.0
         # search far enough to reach the end of this segment's widest profile
         a_max = max(smooth_of[b] for b in bs) * _REFERENCE_CRUST_KM / _AIRY_THICKENING_PER_ELEVATION
@@ -236,9 +241,14 @@ def orogen_relief(
                         v = cap_km if d <= plateau else cap_km - sr * (d - plateau)
                     else:
                         v = cap_km - sp * d
+                if segment_out is not None:
+                    segment_out[i] = max(1000.0 * v, 0.0)
                 if v > 0.0 and 1000.0 * v > relief[i]:
                     relief[i] = 1000.0 * v
                     cap_of[i] = caps_m[seg.kind]
+        if segment_contributions is not None and segment_out is not None:
+            segment_out.setflags(write=False)
+            segment_contributions[sid] = segment_out
     return relief, cap_of
 
 

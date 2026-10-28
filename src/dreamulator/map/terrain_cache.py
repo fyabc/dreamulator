@@ -93,6 +93,7 @@ def _config_fingerprint(config: TerrainPipelineConfig, stages: list[str]) -> str
             "rift_base_rate",
             "rift_rate_per_my",
             "boundary_warp",
+            "subduction_polarities",
             "seed",
         ],
         "boundaries": [
@@ -352,7 +353,9 @@ _STAGE_SCHEMA_VERSIONS: dict[str, int] = {
     # outline, islands cut on the final surface, channels from shelf to fragment basins);
     # oceanic specks filled in the crust partition.  v28: one-octave island cut.
     # v29–v33 (debt 44 phase A): hotspot volcanoes from the island catalogue.
-    "terrain": 44,
+    # v45: the shelf retains the down-going plate's existing flexural footprint;
+    # the forearc and final sea-level solve consume the resulting surface.
+    "terrain": 46,  # v46: explicit slab-side source and shared contact-polarity contract
 }
 
 

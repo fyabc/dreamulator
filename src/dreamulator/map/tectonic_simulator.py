@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .pipeline_types import TerrainPipelineConfig
+    from .subduction_polarity import SubductionPolarity
 
 logger = logging.getLogger(__name__)
 
@@ -616,6 +617,8 @@ def _evolve_cortial2019(
                 radius_km,
                 config.trench_arc,
                 arc_state,
+                subduction_polarities=getattr(config, "subduction_polarities", []),
+                age_myr=(num_steps - step - 1) * dt_my,
                 locked=locked,
                 adj_offsets=_adj_offsets,
                 adj_nbrs=_adj_nbrs,
@@ -1105,6 +1108,8 @@ def _trench_arc_relaxation(
     *,
     adj_offsets: np.ndarray | None = None,
     adj_nbrs: np.ndarray | None = None,
+    subduction_polarities: list[SubductionPolarity] | None = None,
+    age_myr: float = 0.0,
 ) -> dict[int, str]:
     """Bend subduction boundaries into small-circle arcs (Frank 1968).
 
@@ -1208,6 +1213,8 @@ def _trench_arc_relaxation(
                     widths,
                     adj_offsets=adj_offsets,
                     adj_nbrs=adj_nbrs,
+                    subduction_polarities=subduction_polarities,
+                    age_myr=age_myr,
                 )
 
     # Enclave guard: arc flips can sever thin boundary protrusions into
@@ -1364,6 +1371,8 @@ def _relax_segment(
     *,
     adj_offsets: np.ndarray | None = None,
     adj_nbrs: np.ndarray | None = None,
+    subduction_polarities: list[SubductionPolarity] | None = None,
+    age_myr: float = 0.0,
 ) -> None:
     """Relax one boundary segment toward its kinematic small-circle arc.
 
@@ -1388,7 +1397,12 @@ def _relax_segment(
     mid0 = _seg_mid(mesh, seg)
     va = float(np.linalg.norm(_plate_velocity_cm_yr(pla, mid0, radius_km)))
     vb = float(np.linalg.norm(_plate_velocity_cm_yr(plb, mid0, radius_km)))
-    if abs(fa - fb) > 0.2:
+    from .subduction_polarity import plate_pair, polarity_at_age
+
+    declared = polarity_at_age(subduction_polarities or [], age_myr).get(plate_pair(pla.id, plb.id))
+    if declared is not None and max(fa, fb) >= 0.6:
+        retreat, other = (pla, plb) if declared.down_going == pla.id else (plb, pla)
+    elif abs(fa - fb) > 0.2:
         # One side oceanic → subduction: boundary retreats into the oceanic
         # (subducting) plate.
         retreat, other = (pla, plb) if fa > fb else (plb, pla)

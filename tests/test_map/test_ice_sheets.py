@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 
 import numpy as np
@@ -10,6 +11,8 @@ import pytest
 from dreamulator.map.ice_sheets import (
     ICE_LOAD_DEPRESSION,
     RHO_ICE_KG_M3,
+    _adjacency_graph,
+    _weighted_graph,
     annual_mean_insolation,
     apply_polar_ice_sheets,
 )
@@ -154,3 +157,56 @@ def test_bed_depression_is_airy():
     apply_polar_ice_sheets(mesh, cfg_off)
     land = [c for c in mesh.cells if c.lat > 45.0]
     assert all(c.elevation == pytest.approx(200.0, abs=1e-6) for c in land)
+
+
+def test_spherical_edge_lengths_are_independent_of_radial_scale():
+    """Persisted vectors describe directions even after their norms have been truncated."""
+    from dreamulator.map.models import CVTMesh, VoronoiCell
+
+    angle = np.radians(0.5)
+    mesh = CVTMesh(
+        seed=7,
+        num_cells=2,
+        cells=[
+            VoronoiCell(id=0, x=0.9999, y=0.0, z=0.0, lat=0.0, lon=0.0, neighbors=[1]),
+            VoronoiCell(
+                id=1,
+                x=1.0001 * np.cos(angle),
+                y=1.0001 * np.sin(angle),
+                z=0.0,
+                lat=0.0,
+                lon=0.5,
+                neighbors=[0],
+            ),
+        ],
+    )
+    graph, mean = _adjacency_graph(mesh)
+    weighted = _weighted_graph(mesh, graph)
+    np.testing.assert_allclose(mean, angle, rtol=0, atol=1e-15)
+    np.testing.assert_allclose(weighted.data, angle, rtol=0, atol=1e-15)
+
+
+def test_ice_replay_is_invariant_to_exported_vector_lengths():
+    mesh = _flat_world(n=1500)
+    scaled = copy.deepcopy(mesh)
+    scaled._xyz = mesh.cell_xyz * np.random.default_rng(42).uniform(
+        0.9997, 1.0002, size=(len(mesh.cells), 1)
+    )
+    cfg = dataclasses.replace(
+        TerrainPipelineConfig(num_nodes=1500, lloyd_iterations=1, seed=7),
+        ice_sheet_insolation_fraction=2.0,
+        ice_maritime_distance_km=700.0,
+    )
+    original_xyz, scaled_xyz = mesh.cell_xyz.copy(), scaled.cell_xyz.copy()
+    original = apply_polar_ice_sheets(mesh, cfg)
+    replay = apply_polar_ice_sheets(scaled, cfg)
+    assert original["dome_cells"] > 0
+    assert original["dome_cells"] == replay["dome_cells"]
+    np.testing.assert_allclose(
+        [c.ice_thickness_m or 0 for c in mesh.cells],
+        [c.ice_thickness_m or 0 for c in scaled.cells],
+        rtol=0,
+        atol=1e-6,
+    )
+    np.testing.assert_array_equal(mesh.cell_xyz, original_xyz)
+    np.testing.assert_array_equal(scaled.cell_xyz, scaled_xyz)

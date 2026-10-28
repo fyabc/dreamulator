@@ -81,6 +81,55 @@ Suppe & Dahlen 1983）。格子平均剖面的翼部坡度在地球上是：上�
 前陆挠曲的挠曲参数 α = [4D/((ρm − ρ_填充)·g)]^¼ 约 100 km（Te 50 km），与 54 km 格子同级；前陆盆地被沉积物填到
 出口高度后只比相邻地台低 200–500 m（DeCelles & Giles 1996），对格子平均影响小。
 
+### 4.1 有限山带端部的数值延拓
+
+连续剖面沿有限球面弧查询时，弧内点使用原有前楔和后楔剖面。
+对每条有限弧，径向距离为 $r$，到该弧所在大圆的有向横向距离为 $q$，
+并且 $|q|\le r$。两侧的方向距离定义为
+
+$$d_{\mathrm{pro}}=(r+q)/2,\qquad d_{\mathrm{retro}}=(r-q)/2.$$
+
+这两个非负距离之和为 $r$。最近位置位于弧内部时，$r=|q|$，表达式准确恢复相应单侧剖面。
+在端点外的轴向延长线上，$q=0$，两侧距离各为径向距离的一半，因此端部高程随方向连续变化。
+
+设两翼坡度为 $s_{\mathrm{pro}}$、$s_{\mathrm{retro}}$，未达上限的峰高为 $P$，
+力平衡高程上限为 $H$，受限剖面的后侧平台宽度为 $L$。未达上限时的高程为
+$\max(P-s_{\mathrm{pro}}d_{\mathrm{pro}}-s_{\mathrm{retro}}d_{\mathrm{retro}},0)$；
+受限剖面的高程为
+$\max(H-s_{\mathrm{pro}}d_{\mathrm{pro}}-s_{\mathrm{retro}}\max(d_{\mathrm{retro}}-L,0),0)$。
+各距离和高程使用同一长度单位，源码将结果转换成米。
+
+这一表达属于有限轴线的数值延拓约定，沿用现有翼坡与平台宽度。
+原二维横截面积约束继续用于弧内剖面，端部体积与真实山带端部的构造来源分别核验。
+同一山带的每条弧先给出上述连续剖面 $h_i(x)$，整体高程取
+$h(x)=\max_i h_i(x)$。有限个连续函数的最大值保持连续，弧段主导关系切换时
+可以出现坡度折点。各弧共用原接受缩短量场，以及按到整条来源的最近距离向整段均值的延拓；
+沿轴积分与参数来源保持原定义。共享节点也作为每条有限弧的端部参加计算，
+其高程由相邻剖面的包络决定。连接、端部与重叠的三维体积分别记账。
+
+沿轴截面积积分 $V_{\mathrm{axis}}=\int A(s)\,\mathrm{d}s$ 是名义挤出体积，
+有限球面上的实际高程体积为 $V_{\mathrm{surface}}=\int h(x)\,\mathrm{d}S$。
+端部延拓、弯曲走廊、覆盖与最大值组合会改变后者，两项分别验收。
+有限弧包络属于数值连续性候选。生产剖面的高程上限、翼坡与宽度共同满足
+所声明的留存地壳体积约束；端部与连接区的物质归入对应来源预算，
+地壳覆盖和继承山带的重叠按其实际关系登记。
+
+上述高程积分使用同一 Airy 换算后的地表抬升等效体积。
+陆壳覆盖的连续权重记为 $c(x)$，实际覆盖内的来源体积为
+$V_{\mathrm{covered}}=\int c(x)h(x)\,\mathrm{d}S$。
+完整有限剖面、覆盖后的来源和后续阶段表面的积分分别记录。
+全带比例截面积分配使用 $A_\lambda(s)=\lambda A(s)$ 作数值试点，
+原始缩短量场及声明总预算继续保存，局部截面积按该分配变化。
+未达高程上限时，峰高与两翼宽度随截面积平方根变化；达到上限后，平台宽度由剩余截面积确定。
+覆盖测度下的系数由 $\int c(x)h(\lambda A,x)\,\mathrm{d}S=V_{\mathrm{axis}}$ 确定。
+独立细分验证该覆盖积分，完整剖面体积单独保存；继承山带与活动山带的最大值组合
+再按共同支持域积分。覆盖数值预算的闭合、局部输运依据和后续地质阶段分别验收。
+统一比例分配保留原始缩短量与总预算，局部截面积按有限几何调整，属于数值分配近似。
+
+实现为 `CollisionProfileField.with_continuous_arc_envelope` 和
+`ContactCollisionProfileField.with_continuous_arc_envelope` 的显式候选接口。
+`with_continuous_endcaps` 保留开放端点单独延拓的诊断入口，端点连接度随元数据记录。
+
 ## 5 海沟
 
 海沟格子的平均深度等于俯冲板块的年龄深度加上断板挠曲在格子范围内的平均。俯冲板块在沟轴处断开、只受端部荷载：
@@ -96,6 +145,19 @@ Suppe & Dahlen 1983）。格子平均剖面的翼部坡度在地球上是：上�
   反推约 1.9 km；文献典型 0.5–2.5 km。
 - 地球格子平均：深于 6000/7000/8000 m 的海洋格子 1014/144/30 个；沟轴（边界 120 km 内最深格）中位数 −5788 m，
   最深一成 −8102 m；沟轴到陆地的距离第 10 百分位约 120 km，中位数 230 km。
+
+入沟海底的后续阶段使用同一俯冲侧来源。非对称合成的陆架阶段保留已有挠曲作用域，
+随后按实际地表计算弧前、限深和海平面响应。沟轴点值与格平均之间的偏移仍由同一解析剖面计算。
+这一阶段分工沿用既有剖面参数；极性识别的精度与地形取样分别核对。
+现有洋洋接触的较快板块规则在马里亚纳识别为上覆侧，与太平洋板块向西下插的观测不同。
+板块的绝对速度依赖参考系，俯冲方向由板块对的几何、观测或演化来源确定，
+其来源契约与已有速度近似分别记录（Lallemand 2016）。
+`subduction_polarity.py` 保存明确的板块对下插侧、作者或观测证据及年代区间。
+当代接触快照在地形阶段的地壳准备完成后建立；陆壳恢复会改变局部陆洋类型，
+其阶段时点与造山段的缩短史分别保存。海沟取下插侧，岛弧取上覆侧，二者查询同一快照。
+按年代声明的稳定板块对供现有运动学演化读取，未注明年代的输入描述当代。
+GPlates 同样将俯冲极性作为有方向的边界来源属性；本接口以板块编号明确侧别，
+沿线分段极性及裂解继承的几何契约继续按历史来源扩展。
 
 ## 6 弧前带
 
@@ -182,6 +244,7 @@ Suppe & Dahlen 1983）。格子平均剖面的翼部坡度在地球上是：上�
   *Earth and Planetary Science Letters*, 185, 149–159.
 - Lott, F., & Miller, M. J. (1997). A new subgrid-scale orographic drag parametrization: its
   formulation and testing. *Quarterly Journal of the Royal Meteorological Society*, 123, 101–127.
+- Lallemand, S. (2016). Philippine Sea Plate inception, evolution, and consumption with special emphasis on the early stages of Izu-Bonin-Mariana subduction. *Progress in Earth and Planetary Science*, 3, 15. https://doi.org/10.1186/s40645-016-0085-6
 - McQuarrie, N., & van Hinsbergen, D. J. J. (2013). Retrodeforming the Arabia-Eurasia collision zone: Age of collision versus magnitude of continental subduction. *Geology*, 41(3), 315–318.
 - Molnar, P., & Lyon-Caen, H. (1988). Some simple physical aspects of the support, structure, and
   evolution of mountain belts. *GSA Special Paper*, 218, 179–207.

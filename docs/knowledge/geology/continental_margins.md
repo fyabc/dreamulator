@@ -63,9 +63,123 @@ h_坡折 ≈ |A_低海面|（加上低海面期浪和流仍能改造海底的深
 - 坡折以外按约 4° 下降，直到与原有海底相交，原有海底更浅时保留原值；
 - 距离从海陆格之间的 Voronoi 边量起，每格取剖面在本格范围内的平均值。
 
-已知局限：陆缘带宽度在同一陆缘类型内是常数，真实陆架宽度还随陆缘年龄与沉积物供应变化很大；在约 54 km 的
-格距上，被动海岸的第一环格子因此得到几乎相同的格内平均深度，深度分布在 −20 至 −30 m 留有尖峰。以后由
-「历史契约」提供陆缘年龄后，宽度改由年龄推出。
+俯冲陆缘的下沉洋壳以入沟海底和挠曲剖面描述，上覆板块的陆架、陆坡和弧前楔依其基底组合。
+常规非对称合成将 `trench_relief` 的下沉板块作用域传给 `_apply_continental_shelf`，
+该作用域内保留陆架阶段之前的地形。海沟中的沉积负载与填充需要沉积收支，
+其作用与陆缘平台的观测近似分别计算（Contreras-Reyes et al. 2013）。
+极性的来源精度随构造输入保存。板块绝对速度依赖运动参考系，洋洋边界较快板块的近似在马里亚纳与观测极性不同。
+明确的作者或观测方向由板块对声明提供，记录下插板块、证据和适用年代；
+海沟与岛弧消费地壳准备完成后的共同侧别快照，陆架沿用该海沟的作用域。
+按稳定板块编号查询的年代区间用于现有演化，板块裂解后的继承另由历史来源提供。
+这种声明属于作者输入或观测约束，海沟挠曲与陆坡剖面仍按各自物理近似计算。
+
+现行陆缘带在同一陆缘类型内采用相同的观测平均宽度。在约 54 km 的格距上，被动海岸的第一环格子因此
+得到接近的格内平均深度，深度分布在 −20 至 −30 m 留有尖峰。局部宽度由裂解时的基底结构、拉薄范围、
+沉降、沉积物供应及相对海面共同决定。历史契约提供相应过程的年代，局部剖面还需要几何和物质来源。
+按需导出的 `shelf_coast_drowned_width_m` 与 `shelf_coast_type_width_m` 分别保存现行几何范围和类型平均值，
+其较大者形成 `shelf_coast_width_m`；`shelf_coast_type_active_mask` 保存沿岸来源的当前分类。
+
+陆架阶段读取完成地理准备和地壳重标后的大陆地壳标签，按需导出的
+`shelf_continental_crust_mask` 保存这一严格大陆地壳范围。造山来源的 `land_crust_mask`
+表示有效非洋壳资格，两者的判据、地表海陆分类和构造阶段标签分别记录。
+原生陆架通过海陆格分类及邻接距离确定岸源归属，并以对应岸源最远淹没陆壳格的投影范围求宽度。
+浅海格跨过海面时，岸源或宽度可能切换，其离散响应需要与连续岸线位移分别核验。
+固定山带贡献、仅施加统一海面位移的独立重放，可以识别这部分原生陆架几何敏感性。
+Nacrea 的约 2 m 基准位移试点中，最大五格的数公里海底差额由该独立陆架重放逐值复现，
+这些格的活动山带贡献保持零。此结果用于定位数值来源，局部陆缘形态仍按相应地质和观测依据验收。
+
+## 6. 连续岸坡与海面位移
+
+连续陆架试点从陆架阶段之前的地表与海面交线计算岸距 $d$，岸线处水深为零。
+现有陆架宽度 $W$、坡折深度 $h_b$ 和陆坡坡度 $s$ 给出几何剖面：
+
+$$
+h(d)=
+\begin{cases}
+h_b d/W, & 0\le d\le W,\\
+h_b+s(d-W), & d>W.
+\end{cases}
+$$
+
+剖面与实际前陆架背景取较浅的表面包络，保留原背景更浅的海底并在外侧接触。
+宽度和原剖面调制从实际来源场连续查询；输入信息仍由原地质网格和既有参数提供。
+该包络属于地貌几何近似，沉积供应、波浪侵蚀与质量收支由过程模型另行解释。
+实现见 `map/shelf_source.py` 的 `ShelfEnvelopeDifferenceSource`。
+其当前下沉板块保护域采用冻结最近格标签：域内返回原陆架端点，域外计算新包络。
+两份表面在标签边界的极限可有差额，源点重放与分批查询的通过分别表示各自数值契约。
+连续阶段的分域边界需消费对应板块和挠曲来源，基底的连接及真实断层地形按其来源分别解释。
+对粗格保护标签，正权球面三角网可重建连续资格 $u(x)$，并以
+$h=h_{\mathrm{ref}}+u(x)(h_{\mathrm{new}}-h_{\mathrm{ref}})$ 组合两份阶段表面。
+全保护和全资格三角形分别恢复其端点，混合区采用来源网格的数值尺度。
+这一重建表达已有分域证据，材料分界和沉积物供应各自需要相应地质依据。
+
+对线性岸坡，海面相对地表的位移 $\Delta\eta$ 对应岸线位移
+$\Delta x=\Delta\eta/(h_b/W)$。宽 88 km、坡折深度 60 m 的剖面在约 18 m 海面位移下，
+名义岸线移动约 26.4 km；粗格单值描述的整格出露与该连续位移分别计量。
+曲岸的等距轮廓会在岬角形成圆弧，连续距离的数值精度与源岸线形状、实际宽度变化分别验收。
+同类陆缘的平均宽度提供总体尺度，局部宽度的依据来自陆壳拉薄、沉降历史、沉积物供应或独立观测。
+
+陆架变化经过沿岸平原、前弧、限深和作者约束后才形成最终地表。
+参考端点作差用于归因，连续试点的传递另核对各阶段的实际响应。
+顺序组合先由传入陆架表面求岸线和岸距，再应用同一沿岸剖面。
+带粗格作用域的上下界通过正权来源重建各顶点局部响应，无约束顶点贡献零响应。
+来源节点恢复原算子，混合区使用来源网格尺度，真实材料边界按对应地质来源解释。
+深海下界的近岸资格和最终海面均由新表面在实际原生网格上重新计算。
+原平原混合系数的连续重建保留其数值尺度，前弧与限深的粗格作用域继续注明精度。
+作者高程约束共用原几何和侧别规则，海面参考按该试点固定。
+地质几何积分、地表过程物质收支与创作采用分别记账。
+
+## 7. 约 50 km 输入中的陆架形态与局部宽度
+
+同一 ETOPO1 海底数据在同一批 200k 格心构成的球面 Voronoi 单元内进行面积平均，
+可以区分观测形态、粗格信息和重建方法。导入档案中的格心、顶点与面积各自核对精度；
+研究中的球面多边形由同一格心重建，面积同时用解析立体角和数值积分验证。
+ETOPO1 的输入分辨率为 1 角分，359.375 m 的查询间距用于统一展示与剖面测量。
+
+澳洲三处固定区域的东西向剖面，以平滑后的海岸到持续至少 5 km 的 130 m 水深位置为测量范围。
+珀斯以北、新南威尔士中北岸、布鲁姆及 Rowley 陆架的观测宽度中位数分别约为 39 km、23 km 和 173 km。
+同源粗格均值的连续重建分别得到约 24 km、5 km 和 150 km；加入固定 88 km 陆架包络后分别约为
+90 km、88 km 和 150 km。这些数值描述指定方向与阈值的剖面宽度，地貌坡折的位置另按剖面形状识别。
+超出剖面范围的宽度记录下界。
+
+连续插值表达了格间坡面，海岸细部与窄陆架仍依赖格内信息。固定宽度包络在两处窄陆架降低浅海水深误差，
+同时增大坡折位置与宽度误差；已有宽浅海底则保留其背景。浅海高程误差、坡折位置和海岸形状分别验收。
+独立地区观测表明，同类陆缘具有显著宽度变化。新南威尔士陆架从 Newcastle 外侧约 72 km 变到
+Montague Island 外侧约 17 km，坡折深度为 130–170 m；其形态与裂解基底和沉积覆盖有关（Davies 1979）。
+澳洲西北岸从 North West Cape 外侧约 16 km 变到 Rowley Shoals 附近约 200 km（Harris et al. 2005）。
+这些资料为局部几何提供观测依据，陆缘类型平均值用于总体尺度核对。
+
+局部剖面来源共同记录存在范围、岸线与坡折几何、垂直基准、年代及宽度依据。
+有观测或作者几何的区域直接读取相应控制；具有陆壳拉薄与沉积历史的区域按其过程计算基底与覆盖层。
+宽度取最终表面中相应坡折到岸线的距离，其信息精度随输入记录。连续表达、地貌来源和地表过程收支分别验收。
+
+## 8. 地貌曲线的连接与剖面
+
+海岸、陆架坡折和山前缘具有空间连接关系。曲线控制同时保存节点顺序、闭合环、孔洞、
+边界端点及两侧的高程范围，连续重建在各连通分区内消费相应来源。
+GRASS 的等高线重建采用分区内的上下界曲线和真实距离；其文档同时列出曲线连接、
+栅格精度及点高程的适用条件。曲线间的观测点需要单独表达，山顶和洼底的高程约束各自保留。
+
+对于上下界高程 $z_l,z_u$ 与到相应边界的距离 $d_l,d_u$，线性距离剖面为
+
+$$
+t=\frac{d_l}{d_l+d_u},\qquad z=z_l+(z_u-z_l)t.
+$$
+
+这一公式属于数值重建。曲线的位置、年代、垂直基准及剖面依据由地质来源或观测提供。
+仅有一条边界的封闭区域还需要内部高程或幅度依据；缺少这些输入时记录其可用范围。
+生产中的基底和覆盖层采用各自的厚度、高程及收支，来源节点的点值与面积均值分别积分核验。
+
+同一澳洲观测曲线的密集顶点点插值与完整分区剖面已进行配对。
+点插值仍有三角形坡面及海岸错位；分区剖面的三处海岸错位面积明显减少。
+两处窄陆架的区间高程误差下降，Rowley 宽陆架的水深误差略升，宽度位置改善。
+试验中的零端坡度三次剖面 $3t^2-2t^3$ 使边界附近变平，宽陆架水深误差进一步增加。
+来源端坡度可由对应高程场在曲线两侧单独取样，数值差分步长与原始信息精度分别声明。
+单调有理二次剖面将区间高差与非负归一化端坡度作为插值约束，内部点值残差采用零边界权重。
+缺失或反向坡度保留原语义；试验使用的单位割线先验单独记为数值重建。
+澳洲三处来源端坡度试点的整体收益有限，线性距离剖面继续作为来源比较基线。
+曲线连接、局部剖面与最终高清地形按各自采用范围评价。
+这些对照使用额外观测几何，地球的约 50 km 粗格信息与新增输入分别计量。
 
 ## 参考资料
 
@@ -73,7 +187,12 @@ h_坡折 ≈ |A_低海面|（加上低海面期浪和流仍能改造海底的深
 - Lambeck, K., Rouby, H., Purcell, A., Sun, Y., & Sambridge, M. (2014). Sea level and global ice volumes from the Last Glacial Maximum to the Holocene. *PNAS*, 111(43), 15296–15303.
 - Peters, S. E., & Loss, D. P. (2012). Storm and fair-weather wave base: A relevant distinction? *Geology*, 40(6), 511–514.
 - Harris, P. T., Macmillan-Lawler, M., Rupp, J., & Baker, E. K. (2014). Geomorphology of the oceans. *Marine Geology*, 352, 4–24.
+- Davies, P. J. (1979). *Marine geology of the continental shelf off southeast Australia*. Bureau of Mineral Resources Bulletin 195. [Geoscience Australia 资料记录](https://ecat.ga.gov.au/geonetwork/srv/api/records/a05f7892-7f9e-7506-e044-00144fdd4fa6)。
+- Harris, P. T., et al. (2005). *Geomorphic Features of the Continental Margin of Australia*. Geoscience Australia Record 2003/30. [政府报告](https://www.dcceew.gov.au/sites/default/files/documents/nmb-geomorphic-report.pdf)。
+- GRASS Development Team. [r.surf.contour 方法与适用条件](https://grass.osgeo.org/grass-stable/manuals/r.surf.contour.html)。
+- ContourPy. [有向曲线、闭合环及节点顺序](https://contourpy.readthedocs.io/en/stable/user_guide/calculate/line_type.html)。
 - McKenzie, D. (1978). Some remarks on the development of sedimentary basins. *Earth and Planetary Science Letters*, 40, 25–32.
 - Helland-Hansen, W., Steel, R. J., & Sømme, T. O. (2012). Shelf genesis revisited. *Journal of Sedimentary Research*, 82(3), 133–148.（引 Shepard 1973、Emery 1981 的全球平均宽度与坡折水深）
 - Brothers, D. S., et al. (2018). Slope failure and mass transport processes along the Queen Charlotte Fault, southeastern Alaska. *Geological Society, London, Special Publications*, 477.（引述大陆坡平均坡度约 4°）
 - Cogley, J. G. (1984). Continental margins and the extent and number of the continents. *Reviews of Geophysics*, 22(2), 101–122.
+- Contreras-Reyes, E., et al. (2013). Sediment loading at the southern Chilean trench and its tectonic implications. *Marine and Petroleum Geology*. https://www.sciencedirect.com/science/article/abs/pii/S0264370713000355 （沉积负载与入沟洋壳挠曲的分工）

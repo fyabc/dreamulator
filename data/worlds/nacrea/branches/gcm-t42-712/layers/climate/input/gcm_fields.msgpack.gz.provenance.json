@@ -1,5 +1,5 @@
 {
-  "source_nc": "<gcm-workdir>/runs/t42r/cold_712/MOST.00000.nc",
+  "source_nc": "<gcm-workdir>/runs/t42-refresh-20261028-v2/cold_712/MOST.00000.nc",
   "tail_years": 5.0,
   "grid": [
     64,
@@ -8,69 +8,64 @@
   "phase_origin": "northern vernal equinox (fitted from zdec)",
   "lapse_k_per_m": 0.0065,
   "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
+  "precipitation_source": {
+    "source_run_id": "t42-refresh-20261028-v2/cold_712",
+    "source_nc_sha256": "8ec3e7090b19613612635c118c3b369347d8f702830fd613263351141bb63a85",
+    "source_manifest_sha256": "73e0d66a681d0506c72f3354c4080e3af5c6c9f55dc5cfa0f45b2e45129fe741",
+    "tail_records": 60,
+    "phase_counts": [
+      3,
+      7,
+      6,
+      3,
+      6,
+      4,
+      7,
+      3,
+      5,
+      6,
+      5,
+      5
+    ],
+    "source_component_sum_max_error_mm": 2.958593370294693e-05,
+    "weather_response": "long-term conservative baseline; weather redistribution pending acceptance",
+    "format": "native-precipitation-v1",
+    "components": [
+      "prl",
+      "prc"
+    ],
+    "basis": "mm per reference month (365.25/12 days)",
+    "spacing_km": 50.0,
+    "radius_km": 6816.97,
+    "area_ledger": "complete Gaussian parent partition, including land and sea",
+    "sampling": "spherical area mean over reconstructed CVT cells",
+    "target_coverage": {
+      "format": "cvt-precipitation-area-v1",
+      "coordinate_sha256": "33b8828f25a4d62d28c4a1987d79bd92bb80d63358215d88fefefafe344ae16a",
+      "native_geometry": [
+        64,
+        128,
+        6816.97,
+        50.0
+      ],
+      "max_raw_target_area_relative_error": 6.63306279125031e-07,
+      "max_overlap_change_relative": 1.9999626957317312e-06,
+      "max_raw_source_parent_area_relative_error": 1.9099914289268838e-07,
+      "max_source_column_relative_correction": 1.2218209288761273e-06,
+      "max_final_target_area_relative_error": 8.050584752172796e-07,
+      "max_edge_subdivisions": 1024,
+      "sampling": "spherical area mean over reconstructed CVT cells",
+      "target_area_array": "reference_geometry.precipitation_area_km2",
+      "area_correction": "native integration-cell columns normalized after geometry checks"
+    }
+  },
   "wind_source": "ua/va lowest model level",
   "slp_smoothing": "Hoskins spectral filter, 0.1 at n = 21",
   "sea_level_m": 0.0,
   "cloud_levels": "ISCCP pressure levels (440/680 hPa), random overlap within a level; total = model clt",
-  "run_manifest": {
-    "configure_kwargs": {
-      "radius": 1.07,
-      "gravity": 10.278609485544589,
-      "rotationperiod": 3.1336,
-      "obliquity": 19.9,
-      "eccentricity": 0.06786252,
-      "flux": 1254.8535066078023,
-      "year": 99.81959208267338,
-      "pressure": 1.013971434,
-      "fixedorbit": true,
-      "twobandalbedo": true,
-      "physicsfilter": "gp|exp|sp",
-      "startemp": 4365.0,
-      "lonvernaleq": 262.67774399999996,
-      "pN2": 0.7903907328029999,
-      "pO2": 0.21283260399659998,
-      "pAr": 0.01013971434,
-      "pCO2": 0.000721434
-    },
-    "input_paths": {
-      "planets": "data/worlds/nacrea/layers/geological/input/planets.yaml",
-      "stellar": "data/worlds/nacrea/layers/astronomy/input/stellar.yaml",
-      "landmap": "<gcm-workdir>/surf/r22/nacrea_N064_surf_0172.sra",
-      "topomap": "<gcm-workdir>/surf/r22/nacrea_N064_surf_0129.sra"
-    },
-    "input_hashes": {
-      "planets": "6372a7f660d66171beb893003eef3be405f210532057f9ff4c974c34a8d06e3b",
-      "stellar": "96e5e3c537c341fde426816f6d72eaceda04862d0563a179310818115d1452fc",
-      "landmap": "2de3e242452bd5451b1179ff1635288550a7e5d17807021bdb31d57888bcf0c2",
-      "topomap": "02eba779cf0ffbe80512796443cd9d65382c31aad986777b12ceab2b489eaf2b"
-    },
-    "model_options": {
-      "years": 30,
-      "resolution": "T42",
-      "layers": 10,
-      "ncpus": 16,
-      "aquaplanet": false,
-      "topography": true,
-      "namelist_overrides": {
-        "NHDIFF@oceanmod_namelist": "1",
-        "HDIFFK@oceanmod_namelist": "1.0E4"
-      },
-      "wall_seconds": 7885.6
-    },
-    "command": "python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap <gcm-workdir>/surf/r22/nacrea_N064_surf_0172.sra --topomap <gcm-workdir>/surf/r22/nacrea_N064_surf_0129.sra --configure '{\"twobandalbedo\": true, \"physicsfilter\": \"gp|exp|sp\"}' --namelist '{\"NHDIFF@oceanmod_namelist\": \"1\", \"HDIFFK@oceanmod_namelist\": \"1.0E4\"}' --workdir <gcm-workdir>/runs/t42r/cold_712",
-    "code_version": "v1.1.0-30-g4ba8d808d2d5",
-    "versions": {
-      "python": "3.12.3",
-      "exoplasim": "3.4.2",
-      "platform": "Linux-5.10.134-19.103.al8.x86_64-x86_64-with-glibc2.39"
-    },
-    "created_utc": "2026-10-22T15:48:02Z"
-  },
-  "pco2_ppm": 711.5,
-  "code_commit": "v1.1.0-48-gfb9ade084a4d",
   "file": "gcm_fields.msgpack.gz",
-  "sha256": "bcd845c9dc477de78f19959cf45320b124c28df3c53636575d1dfb2490557297",
+  "sha256": "7b836391fbd5072ead3f5d0368e5fb66c7f601f9d65c54ef859c00de43c0a50b",
   "num_cells": 200000,
-  "mesh_fingerprint": "c060af384241afa37083a486f5f28bab5b87265a0c8c02e2b18b943ab11d2556",
+  "mesh_fingerprint": "1ce399d135dfdd84d2d09ff1e6f284e780b27f6608660dc16fe72a0dcc4f246e",
   "format_version": 2
 }

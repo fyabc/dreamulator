@@ -78,7 +78,9 @@ from dreamulator.map.trench_flexure import flexural_parameter_km
 
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh, TectonicPlate
+    from dreamulator.map.orogen_contract import OrogenContract
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.map.subduction_polarity import SubductionPolarity
 
 _EARTH_AREA_KM2 = 4.0 * np.pi * 6371.0**2
 _EARTH_OCEAN_AREA_KM2 = 3.61e8
@@ -162,6 +164,7 @@ class Volcano:
     summit_m: float = float("nan")  # relative to the sea surface, at the present day
     emergent_area_km2: float = 0.0
     status: str = ""
+    floor_elevation_m: float = float("nan")  # final background relative to sea level
 
 
 @dataclass
@@ -212,10 +215,14 @@ _SYNTHESIS_CATALOG: IslandCatalog | None = None
 
 
 def build_island_catalog(
-    mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    *,
+    orogen_contract: OrogenContract | None = None,
 ) -> IslandCatalog:
     """Hotspot-chain, arc, heat-pipe volcanoes and seamounts of the present map."""
-    return _build_island_catalog(mesh, plates, config)
+    return _build_island_catalog(mesh, plates, config, orogen_contract=orogen_contract)
 
 
 def remember_synthesis_catalog(cat: IslandCatalog) -> None:
@@ -238,7 +245,11 @@ def take_synthesis_catalog() -> IslandCatalog | None:
 
 
 def _build_island_catalog(
-    mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    *,
+    orogen_contract: OrogenContract | None = None,
 ) -> IslandCatalog:
     cat = IslandCatalog()
     if not config.island_catalog_enabled:
@@ -307,7 +318,13 @@ def _build_island_catalog(
             k += 1
 
     # ---- island arcs: volcanoes along the arc axis of ocean–ocean margins ----
-    dist, _age, _ = _arc_geometry(mesh, plates, radius_km)
+    dist, _age, _ = _arc_geometry(
+        mesh,
+        plates,
+        radius_km,
+        orogen_contract=orogen_contract,
+        subduction_polarities=getattr(config, "subduction_polarities", []),
+    )
     dx = float(np.sqrt(4.0 * np.pi * radius_km**2 / len(cells)))
     axis_cells = np.flatnonzero(np.isfinite(dist) & (np.abs(dist - _ARC_TRENCH_KM) < 0.5 * dx))
     arc_volume = _ARC_GROWTH_KM3_KM_MY * _ARC_EXTRUSIVE_SHARE * _ARC_SPACING_KM * _ARC_EDIFICE_MY
@@ -503,21 +520,30 @@ def _heat_pipe_volcanoes(
 
 
 def _arc_geometry(
-    mesh: CVTMesh, plates: list[TectonicPlate], radius_km: float
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    radius_km: float,
+    *,
+    orogen_contract: OrogenContract | None = None,
+    subduction_polarities: list[SubductionPolarity] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Distance (km) from the ocean–ocean trench on the overriding plate, the arc age (Myr) of
     the nearest contact, and the overriding contact mask (all (N,); inf / 0 elsewhere)."""
     from scipy.sparse import csr_matrix
     from scipy.sparse.csgraph import dijkstra
 
-    from dreamulator.map.orogen_contract import contact_polarity
+    from dreamulator.map.orogen_contract import contact_polarity, contract_contact_polarity
 
     cells = mesh.cells
     n = len(cells)
     dist = np.full(n, np.inf)
     age = np.zeros(n)
     over_contact = np.zeros(n, dtype=bool)
-    pol = contact_polarity(mesh, plates, radius_km)
+    pol = (
+        contract_contact_polarity(mesh, plates, orogen_contract, radius_km)
+        if orogen_contract is not None
+        else contact_polarity(mesh, plates, radius_km, subduction_polarities=subduction_polarities)
+    )
     for k, (kind, _down, over) in pol.items():
         if kind == "ocean" and cells[k].plate_id == over:
             over_contact[k] = True
@@ -555,7 +581,11 @@ def _arc_geometry(
 
 
 def arc_platform(
-    mesh: CVTMesh, plates: list[TectonicPlate], config: TerrainPipelineConfig
+    mesh: CVTMesh,
+    plates: list[TectonicPlate],
+    config: TerrainPipelineConfig,
+    *,
+    orogen_contract: OrogenContract | None = None,
 ) -> np.ndarray:
     """Cell-mean rise (m) of the arc crust of ocean–ocean margins (the intrusive arc magma).
 
@@ -567,7 +597,13 @@ def arc_platform(
     out = np.zeros(len(mesh.cells))
     if not config.island_catalog_enabled:
         return out
-    dist, age, _ = _arc_geometry(mesh, plates, config.radius_km)
+    dist, age, _ = _arc_geometry(
+        mesh,
+        plates,
+        config.radius_km,
+        orogen_contract=orogen_contract,
+        subduction_polarities=getattr(config, "subduction_polarities", []),
+    )
     ok = np.isfinite(dist)
     x = np.abs(dist[ok] - _ARC_TRENCH_KM) / _ARC_HALF_WIDTH_KM
     shape = np.maximum(1.0 - x, 0.0)  # triangle of unit height, area = half-width
@@ -634,6 +670,7 @@ def summarise_islands(
     cell_km = np.sqrt(area)
     for v in cat.volcanoes:
         floor = z[v.cell] - contribution[v.cell] - sea_level_m
+        v.floor_elevation_m = float(floor)
         if v.kind == "seamount" and floor > -_SEAMOUNT_MIN_FLOOR_DEPTH_M:
             v.status = "dropped"
             continue
@@ -684,6 +721,15 @@ def catalog_to_json(cat: IslandCatalog) -> list[dict[str, object]]:
                 "age_myr": None if np.isnan(v.age_myr) else round(v.age_myr, 3),
                 "volume_km3": round(v.volume_km3, 1),
                 "base_radius_km": round(v.base_radius_km, 2),
+                "built_relief_m": round(v.relief_m, 1),
+                "floor_elevation_m": (
+                    round(v.floor_elevation_m, 1) if np.isfinite(v.floor_elevation_m) else None
+                ),
+                "present_relief_m": (
+                    round(v.summit_m - v.floor_elevation_m, 1)
+                    if np.isfinite(v.floor_elevation_m) and np.isfinite(v.summit_m)
+                    else None
+                ),
                 "summit_m": round(v.summit_m, 1),
                 "emergent_area_km2": round(v.emergent_area_km2, 1),
                 "status": v.status,

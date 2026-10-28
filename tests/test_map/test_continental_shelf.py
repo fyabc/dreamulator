@@ -71,3 +71,41 @@ def test_disabled_by_nonpositive_width(base) -> None:
     off = TerrainPipelineConfig(**{**cfg.__dict__, "shelf_width_km": 0.0})
     out = _apply_continental_shelf(mesh, z.copy(), off, np.random.default_rng(0))
     assert np.array_equal(out, z)
+
+
+def test_stage_crust_capture_distinguishes_drowned_crust_land_and_unknown_labels(base) -> None:
+    cfg, mesh, z, lat = _world(base, 6.0)
+    # A drowned continental margin remains crust; elevated oceanic material and
+    # an unresolved label remain separate from the shelf's continental domain.
+    drowned = int(np.flatnonzero((lat > 24) & (lat < 30))[0])
+    elevated_oceanic = int(np.flatnonzero(lat < 20)[0])
+    unknown = int(np.flatnonzero(lat < 0)[-1])
+    z[elevated_oceanic] = 20
+    mesh.cells[unknown].crust_type = None
+    disabled = TerrainPipelineConfig(**{**cfg.__dict__, "shelf_width_km": 0.0})
+    fields: dict[str, np.ndarray] = {}
+    rng = np.random.default_rng(8)
+    reference_rng = np.random.default_rng(8)
+    result = _apply_continental_shelf(mesh, z.copy(), disabled, rng, source_fields=fields)
+    crust = fields["shelf_continental_crust_mask"]
+    assert crust[drowned] and z[drowned] < 0
+    assert not crust[elevated_oceanic] and z[elevated_oceanic] > 0
+    assert not crust[unknown]
+    assert not crust.flags.writeable
+    np.testing.assert_array_equal(result, z)
+    np.testing.assert_array_equal(rng.random(20), reference_rng.random(20))
+
+
+def test_explicit_down_going_flexure_keeps_incoming_floor_and_random_sequence(base) -> None:
+    cfg, mesh, z, lat = _world(base, 0.0)
+    # A source-defined part of the ocean lies on the incoming plate. The
+    # opposite side remains eligible for the same shelf calculation.
+    incoming = (lat < 30) & (lat > 10) & (mesh.cell_xyz[:, 0] > 0)
+    old_rng, new_rng = np.random.default_rng(8), np.random.default_rng(8)
+    control = _apply_continental_shelf(mesh, z.copy(), cfg, old_rng)
+    result = _apply_continental_shelf(mesh, z.copy(), cfg, new_rng, active_flexure=incoming)
+    assert np.any(control[incoming] != z[incoming])
+    np.testing.assert_array_equal(result[incoming], z[incoming])
+    np.testing.assert_array_equal(result[~incoming], control[~incoming])
+    np.testing.assert_array_equal(old_rng.random(20), new_rng.random(20))
+    np.testing.assert_array_equal(result > 0, control > 0)

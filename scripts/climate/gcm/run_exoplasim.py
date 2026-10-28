@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -90,6 +91,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="warm start from another run's restart file (e.g. <run>/MOST_REST.00000); "
         "the run fails unless MOST_DIAG confirms it was loaded",
     )
+    ap.add_argument(
+        "--stock-plasim",
+        action="store_true",
+        help="run the unpatched ExoPlaSim binary (reproduces runs before the 2026-10-26 "
+        "routing and restart fixes; see dreamulator.gcm.fortran_patches)",
+    )
     ap.add_argument("--nc", default=None, help="existing .nc to diagnose (skips the run)")
     ap.add_argument("--no-plot", action="store_true")
     return ap.parse_args(argv)
@@ -149,10 +156,24 @@ def main(argv: list[str] | None = None) -> int:
             topomap=args.topomap,
             namelist_overrides=json.loads(args.namelist),
             command=command,
+            fortran_patches=not args.stock_plasim,
         )
         nc_path = outputs["nc"]
 
-    summary = summarize(nc_path, radius_m=params.radius * 6_371_220.0, gravity=params.gravity)
+    timestep = float(params.extras.get("timestep", 45.0))
+    namelist = nc_path.parent / "plasim_namelist"
+    if namelist.exists():
+        match = re.search(r"\bMPSTEP\s*=\s*([\d.]+)", namelist.read_text(encoding="utf-8"))
+        if match:
+            timestep = float(match[1])
+    summary = summarize(
+        nc_path,
+        radius_m=params.radius * 6_371_220.0,
+        gravity=params.gravity,
+        tail_records=120,
+        orbital_year_days=params.year,
+        steps_per_model_day=1440.0 / timestep,
+    )
     out_json = nc_path.parent / "summary.json"
     out_json.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"[summary] {json.dumps(summary, indent=2, ensure_ascii=False)}")

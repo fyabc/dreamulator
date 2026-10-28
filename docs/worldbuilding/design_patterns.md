@@ -477,3 +477,49 @@ climate_source: gcm          # engine（默认，模拟）或 gcm（导入固定
 - `src/dreamulator/gcm/fields.py` — 字段文件读写、网格指纹、`apply_field_set`
 - `src/dreamulator/engine/climate.py` — `_climate_source` 与 `_apply_pinned_gcm_climate`
 - `docs/usage/exoplasim-gcm.md` §9 — 建立分支、输出字段文件、release 发布与校验规则
+
+## 模式 13：有年代来源的俯冲侧别
+
+作者可以在 `layers/geological/input/plate_history.yaml` 声明稳定板块对的下插关系。
+地形、海沟和岛弧消费同一当代来源，运动学演化按地质年龄查询其有效时段。
+该模式适合板块编号已经固定的世界，来源的年代范围与地物形状分别记录。
+
+```yaml
+subduction_polarities:
+  - id: western_slab
+    plates: [plate_west, plate_east]
+    down_going: plate_west
+    source_kind: author
+    evidence: 作者规定的西侧下插关系
+    valid_from_age_myr: 30
+    valid_until_age_myr: 0
+```
+
+年代单位为距今百万年；较老端点包含，较新端点属于下一时段，当代零年龄包含。
+省略 `valid_from_age_myr` 时，声明只用于当代。观测来源将 `source_kind` 设为 `observation`，
+并在 `evidence` 中提供资料引用。相同板块对的相反方向在重叠年代内构成输入冲突。
+板块旋转保留编号；板块裂解后的父子继承和沿边界分段方向由后续历史契约扩展。
+
+参考实现为 `map/subduction_polarity.py` 与 `map/orogen_contract.py`，
+字段语义见 [历史契约 3.4](../design/proposals/history-contract.md#34-作者输入格式)。
+
+## 模式 14：固定来源的地形批次
+
+地形来源采用后，生成输入按独立批次保存。`canvas.json` 的 `height_refinement` 记录连续来源、
+参考高程哈希和求积阶数，`coarse_source` 记录六通道 TD 共享场及其统计参照的相对路径、形状与哈希。
+新均值与已接受的均值减第五百分位之差分别保存，四个气候编码通道保持该批次的参考值。
+常规生成 worker 校验这些字段后再生成高清地形，原批次可继续作为创作参照。
+
+常规 `export canvas refine` 按画布显式选择原生山带来源，从原始 S3 参考准备完整新目录。
+作者配置、地质来源档案、造山契约和模型快照共同构成输入依据；球面条件积分及共享统计场
+通过核验后安装整批。选定来源的准备回执与布局一起保存，完整高清采用按其范围另行验收。
+各画布可显式选择已接受的统计参照。原 S3 高程参考与接受统计分别记账，参照的完整条件、
+共享场哈希和查询顺序一同封装；条件相同时直接复用参照，来源变化时保留其统计幅度。
+
+地质来源可另行保存为 `terrain_sources.npz` 与 `terrain_sources.json`，后者采用
+`terrain-source-fields-v1` 并记录源网格精度、数组单位及地形指纹。原阶段数组与连续重建结果分别保存，
+地形版本改变后重新生成对应来源。地质来源导出属于可选的开发和生产准备入口，
+其输出与其他推导产物遵循相同的存储规则。
+
+接口见 [画布管线 2.5.2](../design/pipelines/canvas-chain.md#252-连续地形来源)
+与 [地质管线 7.6](../design/pipelines/geological-pipeline.md#76-参数表)。

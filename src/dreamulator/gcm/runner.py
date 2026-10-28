@@ -51,6 +51,18 @@ Design points (2026-10-05 harness decision):
   with ``np.frombuffer`` in under 1 s and returns bit-identical arrays.
   :func:`install_pyburn_patches` swaps it in for both the regular and the
   snapshot postprocessing.
+- **Patched PlaSim binary.**  By default :func:`run_gcm` runs a PlaSim built
+  from a private copy of the package with the Fortran fixes of
+  :mod:`dreamulator.gcm.fortran_patches` (river-routing sub-steps from the
+  routing Courant number; river storage kept across restarts).  The installed
+  package and its binaries stay unchanged; the manifest records the patch id
+  and executable hash.  ``fortran_patches=False`` reproduces pre-2026-10-26
+  runs with the stock binary.
+- **Fixed noise seed.**  A cold start adds white noise (``KICK=1``) whose
+  seed defaults to the system clock (``SEED=0``), so two otherwise identical
+  runs differed.  :func:`run_gcm` writes ``SEED`` (default 1) into the
+  namelist; a warm start takes the generator state from the restart file.
+  Older runs print the clock seed they used in ``MOST_DIAG``.
 """
 
 from __future__ import annotations
@@ -329,6 +341,8 @@ def run_gcm(
     topomap: str | Path | None = None,
     namelist_overrides: dict[str, str] | None = None,
     command: list[str] | None = None,
+    fortran_patches: bool = True,
+    seed: int = 1,
 ) -> dict[str, Path]:
     """Run ExoPlaSim for ``years`` model years and return output paths.
 
@@ -353,7 +367,13 @@ def run_gcm(
     manifest so the run can be reproduced.  A warm start passes
     ``params.extras["restartfile"]``; the run then fails unless ``MOST_DIAG``
     confirms the restart file was loaded.
+
+    ``fortran_patches`` selects the patched PlaSim build (see module docstring);
+    False runs the stock ExoPlaSim binary.  ``seed`` (non-zero) fixes the
+    cold-start noise; ``namelist_overrides`` may still set ``SEED`` itself.
     """
+    if seed == 0:
+        raise ValueError("seed=0 makes PlaSim seed from the system clock; pass a non-zero seed")
     if topomap is not None and landmap is None:
         raise ValueError("topomap requires landmap (ExoPlaSim reads both or neither)")
     ensure_environment()
@@ -374,6 +394,15 @@ def run_gcm(
     removed = serial_make_environment()
     if removed:
         logger.info("unset %s: PlaSim must be built with serial make", ", ".join(removed))
+    patch_record: dict[str, object] | None = None
+    source: str | None = None
+    if fortran_patches:
+        from dreamulator.gcm import fortran_patches as fp
+
+        run_dir = fp.patched_executable(resolution, layers, ncpus)
+        source = str(run_dir)
+        exe = run_dir / f"most_plasim_t{int(resolution.upper().lstrip('T'))}_l{layers}_p{ncpus}.x"
+        patch_record = fp.provenance(run_dir.parents[1], exe)
     model = exoplasim.Model(
         workdir=str(workdir),
         modelname=model_name,
@@ -381,13 +410,18 @@ def run_gcm(
         layers=layers,
         ncpus=ncpus,
         outputtype=".nc",
+        source=source,
     )
     kwargs = params.to_configure_kwargs()
     model.configure(
         aquaplanet=landmap is None,
         landmap=str(landmap) if landmap is not None else None,
         topomap=str(topomap) if topomap is not None else None,
-        otherargs={**(namelist_overrides or {}), **multi_year_otherargs(years)},
+        otherargs={
+            "SEED@plasim_namelist": str(seed),
+            **(namelist_overrides or {}),
+            **multi_year_otherargs(years),
+        },
         **kwargs,
     )
     if params.fixedorbit:
@@ -439,6 +473,8 @@ def run_gcm(
             "aquaplanet": landmap is None,
             "topography": topomap is not None,
             "namelist_overrides": dict(namelist_overrides or {}),
+            "fortran_patches": patch_record,
+            "seed": seed,
             "wall_seconds": round(time.time() - started, 1),
         },
         command=command,

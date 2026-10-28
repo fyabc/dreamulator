@@ -13,6 +13,13 @@
 
 ## 0 定位与当前基线
 
+本文保留参数化引擎的设计依据与候选方向。Nacrea 的公开气候及下游输出采用
+`gcm-t42-712` 分支，根世界的参数化气候提供快速诊断。
+GCM 的近地面球面统计、有限面积长期降水、高频状态和 TD 气候消费见
+[气候管线 14 节](../pipelines/climate-pipeline.md#14-gcm-与参数化管线的定位后续开发)。
+天气驱动地形雨的过程适用域与独立质量要求见
+[画布条件提案 4.1](canvas-conditioning-structure.md#41-第-4-步gcm-气候场的守恒重采样与地形雨候选)。
+
 **验证基线**（earth/climate-dev，200k，2026-09-16 F 总验收轮（E 包后）`validate_climate` +
 `diagnose_climate_bias`）：
 

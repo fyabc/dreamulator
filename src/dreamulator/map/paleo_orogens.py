@@ -85,14 +85,43 @@ def paleo_orogen_relief(
         return relief
     xyz = mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True)
     idx = np.flatnonzero(land_crust)
+    relief[idx] = paleo_orogen_field(xyz[idx], sutures, active_crest_m, radius_km)
+    return relief
+
+
+def paleo_orogen_field(
+    xyz: np.ndarray,
+    sutures: list[AuthorSuture],
+    active_crest_m: float,
+    radius_km: float,
+) -> np.ndarray:
+    """Continuous old-orogen relief at unit vectors in the mesh frame (y north).
+
+    The same author paths, decay and physical wedge width serve mesh and canvas queries.
+    The caller supplies the crust domain and keeps source inputs fixed across batches.
+    Return metres above the continental base, before combination with active orogens and
+    subsequent geological stages. Points may have arbitrary leading dimensions.
+    """
+    points = np.asarray(xyz, dtype=np.float64)
+    if points.ndim < 1 or points.shape[-1] != 3 or not np.isfinite(points).all():
+        raise ValueError("points must be finite unit vectors with final dimension 3")
+    points = points.reshape(-1, 3)
+    if not np.allclose(np.linalg.norm(points, axis=1), 1.0, rtol=0, atol=1e-7):
+        raise ValueError("points must be unit vectors")
+    if not np.isfinite(radius_km) or radius_km <= 0:
+        raise ValueError("radius must be positive and finite")
+    if not np.isfinite(active_crest_m) or active_crest_m < 0:
+        raise ValueError("active crest must be nonnegative and finite")
+    relief = np.zeros(len(points), dtype=np.float64)
     half_width_km = active_crest_m / 1000.0 / float(np.tan(np.radians(_PRO_SLOPE_DEG)))
+    if half_width_km == 0:
+        return relief.reshape(np.shape(xyz)[:-1])
     for s in sutures:
         if s.collision_age_myr is None or len(s.path) < 2:
             continue
         crest = residual_crest_m(s.collision_age_myr, active_crest_m)
-        d_km = polyline_geometry(xyz[idx], s.path)[0] * radius_km
+        d_km = polyline_geometry(points, s.path)[0] * radius_km
         inside = d_km < half_width_km
         v = crest * (1.0 - d_km[inside] / half_width_km)
-        tgt = idx[inside]
-        relief[tgt] = np.maximum(relief[tgt], v)
-    return relief
+        relief[inside] = np.maximum(relief[inside], v)
+    return relief.reshape(np.shape(xyz)[:-1])

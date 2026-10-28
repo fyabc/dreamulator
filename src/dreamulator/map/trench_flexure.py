@@ -43,7 +43,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
-from dreamulator.map.orogen_contract import contact_polarity
+from dreamulator.map.orogen_contract import contract_contact_polarity
 
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh, TectonicPlate
@@ -107,7 +107,9 @@ def trench_sources(
         for k in seg.cell_ids:
             if cells[k].plate_id == seg.pro_plate and cells[k].crust_type == "oceanic":
                 out[k] = seg.pro_plate
-    for k, (kind, down, _over) in contact_polarity(mesh, plates, radius_km).items():
+    for k, (kind, down, _over) in contract_contact_polarity(
+        mesh, plates, contract, radius_km
+    ).items():
         if kind == "ocean" and cells[k].plate_id == down and cells[k].crust_type == "oceanic":
             out[k] = down
     return out

@@ -102,7 +102,7 @@ nacrea 的实现结果：26 个碰撞段的开始时刻中位约 21 My、75 分�
 ### 3.4 作者输入格式
 
 作者输入是可选覆盖，只在叙事需要的个别地方写，其余碰撞段全部用推导值；geography 的高程钉扎照常有效。
-`plate_history.yaml` 新增 `collisions` 与 `andean_margins` 两节，与已有的 `sutures` 并列：
+`plate_history.yaml` 的 `collisions`、`andean_margins` 和 `subduction_polarities` 与 `sutures` 并列：
 
 ```yaml
 collisions:
@@ -118,9 +118,26 @@ andean_margins:
   - id: margin_west_zhuri
     plates: [plate_007, plate_018]
     upper_plate_ratio: 0.06
+
+subduction_polarities:
+  - id: western_slab
+    plates: [plate_007, plate_018]
+    down_going: plate_007
+    source_kind: author
+    evidence: 作者规定的西侧下插关系
+    valid_from_age_myr: 30
+    valid_until_age_myr: 0
 ```
 
 板块编号在重新生成后会变，所以 `path` 是稳定的写法；`plates` 只适合板块已冻结的世界。
+
+俯冲极性声明指定一对稳定板块中的下插板块，来源类别为 `author` 或 `observation`；
+观测声明同时提供 `evidence` 引用。年代以距今百万年计，区间的较老端点包含，较新端点按下一时段解释，
+当代零年龄包含在以零结尾的区间内。省略 `valid_from_age_myr` 时，声明只描述当代。
+构造演化按所处年代查询，地形、海沟和岛弧按当代查询；板块旋转保留稳定编号，裂解后的父子关系由后续历史来源提供。
+同一板块对在重叠年代声明相反下插方向时，读取即报冲突；声明与已有造山侧别覆盖冲突时同样报错。
+当代声明未命中有效俯冲接触时提示来源适用范围。缺省近似的来源类别与明确声明分别导出，
+接口及地壳准备时点见 [地质管线 6.1](../pipelines/geological-pipeline.md#61-历史契约汇聚边界段orogen_contractpy)。
 
 ### 3.5 一致性校验
 

@@ -109,16 +109,22 @@ def annual_mean_insolation(
     return total / samples
 
 
+def _edge_angles(mesh: CVTMesh, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+    """Central angles in radians, independent of stored vectors' radial lengths."""
+    xyz = mesh.cell_xyz
+    if not np.isfinite(xyz).all() or np.any(np.linalg.norm(xyz, axis=1) == 0):
+        raise ValueError("ice geometry requires finite, nonzero Cartesian directions")
+    a, b = xyz[rows], xyz[cols]
+    angles: np.ndarray = np.arctan2(np.linalg.norm(np.cross(a, b), axis=1), (a * b).sum(axis=1))
+    return angles
+
+
 def _adjacency_graph(mesh: CVTMesh) -> tuple[csr_matrix, np.ndarray]:
-    """Symmetric adjacency CSR + per-cell mean neighbour distance (km)."""
+    """Symmetric adjacency CSR and per-cell mean neighbour angle in radians."""
     rows: list[int] = []
     cols: list[int] = []
-    dists: list[float] = []
-    radius = 1.0  # unit sphere positions; scaled by config radius at call site
-    xyz = mesh.cell_xyz
     seen: set[tuple[int, int]] = set()
     for i, cell in enumerate(mesh.cells):
-        xi = xyz[i]
         for j in cell.neighbors:
             if (i, j) in seen:
                 continue
@@ -128,10 +134,8 @@ def _adjacency_graph(mesh: CVTMesh) -> tuple[csr_matrix, np.ndarray]:
             cols.append(j)
             rows.append(j)
             cols.append(i)
-            d = float(np.arccos(np.clip(np.dot(xi, xyz[j]), -1.0, 1.0))) * radius
-            dists.append(d)
-            dists.append(d)
     n = len(mesh.cells)
+    dists = _edge_angles(mesh, np.asarray(rows, dtype=int), np.asarray(cols, dtype=int))
     graph = coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n)).tocsr()
     edge_dist = coo_matrix((dists, (rows, cols)), shape=(n, n)).tocsr()
     deg = np.asarray(graph.sum(axis=1)).ravel()
@@ -142,9 +146,8 @@ def _adjacency_graph(mesh: CVTMesh) -> tuple[csr_matrix, np.ndarray]:
 
 def _weighted_graph(mesh: CVTMesh, graph: csr_matrix) -> csr_matrix:
     """Adjacency weighted by unit-sphere geodesic edge lengths (radians)."""
-    unit_xyz = mesh.cell_xyz
     coo = graph.tocoo()
-    w = np.arccos(np.clip((unit_xyz[coo.row] * unit_xyz[coo.col]).sum(axis=1), -1.0, 1.0))
+    w = _edge_angles(mesh, coo.row, coo.col)
     return coo_matrix((w, (coo.row, coo.col)), shape=graph.shape).tocsr()
 
 

@@ -8,12 +8,16 @@ import numpy as np
 import pytest
 
 from dreamulator.map.island_catalog import (
+    IslandCatalog,
+    Volcano,
     _cone,
     build_island_catalog,
+    catalog_to_json,
     edifice_subsidence_m,
     summarise_islands,
     volcano_cell_mean,
 )
+from dreamulator.map.models import CVTMesh, VoronoiCell
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.map.terrain_pipeline import run_terrain_pipeline
 
@@ -34,6 +38,28 @@ def test_edifice_subsidence() -> None:
     assert edifice_subsidence_m(0.0) == 0.0
     assert edifice_subsidence_m(0.1) / 0.1e6 * 1e3 == pytest.approx(2.4, abs=0.3)  # ~2.5 mm/yr
     assert edifice_subsidence_m(20.0) == pytest.approx(2000.0, abs=1.0)
+
+
+def test_catalogue_exports_background_and_relief_in_the_same_sea_level_datum() -> None:
+    import json
+
+    mesh = CVTMesh(
+        seed=1,
+        num_cells=1,
+        cells=[VoronoiCell(id=0, lon=0, lat=0, elevation=-1800, area_km2=3000)],
+    )
+    volcano = Volcano("test", "hotspot", "source", 0, 0, 0, 0, 1000, 20, 4000)
+    cat = IslandCatalog([volcano])
+    # A cached catalogue predating the background field has an explicit missing value.
+    record = catalog_to_json(cat)[0]
+    assert record["floor_elevation_m"] is None
+    summarise_islands(mesh, cat, np.array([200.0]), sea_level_m=100)
+    record = catalog_to_json(cat)[0]
+    assert record["floor_elevation_m"] == -2100
+    assert record["built_relief_m"] == 4000
+    assert record["summit_m"] == 1900
+    assert record["present_relief_m"] == 4000
+    json.dumps(record, allow_nan=False)
 
 
 @pytest.fixture(scope="module")

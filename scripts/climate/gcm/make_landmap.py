@@ -28,7 +28,15 @@ if str(SRC) not in sys.path:
 
 from dreamulator.gcm.surface import make_landmap, make_topomap  # noqa: E402
 
-RESOLUTIONS = {"T21": (32, 64), "T42": (64, 128), "T63": (96, 192)}
+RESOLUTIONS = {
+    "T21": (32, 64),
+    "T42": (64, 128),
+    "T63": (96, 192),
+    "T85": (128, 256),
+    "T106": (160, 320),
+    "T127": (192, 384),
+    "T170": (256, 512),
+}
 
 
 def main(argv: list[str] | None = None) -> int:

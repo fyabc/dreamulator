@@ -3,6 +3,7 @@
 One subcommand per stage, in chain order:
 
 * ``plan``      S1 layout, ownership tables and per-canvas inputs (``canvas_layout.yaml``)
+* ``refine``    S1 native mountain-source selection, integration and accepted reference statistics
 * ``generate``  S1 chunk generation with terrain-diffusion, one worker per GPU, resumable
 * ``status``    per-canvas progress and checksums
 * ``hydrology`` S2 out-of-core fill, accumulation and river segments
@@ -20,6 +21,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
 
 import typer
@@ -148,6 +150,9 @@ def canvas_plan(
     force: bool = typer.Option(
         False, "--force", help="Overwrite inputs even where generated chunks would go stale"
     ),
+    precipitation_field: Path | None = typer.Option(
+        None, "--precipitation-field", help="Complete native Gaussian monthly precipitation archive"
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """S1: canvas layout, ownership tables and per-canvas TD inputs."""
@@ -163,59 +168,76 @@ def canvas_plan(
         raise typer.Exit(code=1) from None
     cfg_file = config or world_dir / LAYOUT_FILE
     cfg = tb.CanvasLayoutConfig.load(cfg_file) if cfg_file.exists() else tb.CanvasLayoutConfig()
+    native_precipitation = None
+    if precipitation_field is not None:
+        from dreamulator.gcm.native_partition import NativePrecipitationField
+
+        native_precipitation = NativePrecipitationField.load(precipitation_field)
     branch = branch or cfg.branch
     mesh, layout, _r, map_dir, world_dir, source = _plan_world(world, branch, planet, cfg)
     root = root or world_dir / "canvases" / (branch or "root")
     total = sum(len(p.chunks) for p in layout.plans)
     console.print(f"Layout: {len(layout.plans)} canvases, {total} chunks")
-    tb.write_layout(root, layout, cfg, source)
-
-    ids = _select(root, canvas)
-    t_m, p_m = load_climate_monthly(map_dir)
-    cols = tb.MeshColumns.from_mesh(mesh, t_m, p_m)
     table = Table(title=f"Canvases — {root}")
     for col in ("id", "centre", "ncell", "chunks", "anisotropy", "land (M km²)"):
         table.add_column(col)
-    stale = []
-    for plan in layout.plans:
-        if plan.canvas_id not in ids:
-            continue
-        out = root / plan.canvas_id
-        old_file = out / "canvas.json"
-        old = json.loads(old_file.read_text(encoding="utf-8")) if old_file.exists() else None
-        tb.write_canvas_inputs(
-            root, plan, cols, cfg.generation_params(), source, structure=cfg.structure
-        )
-        if old is not None:
-            why = _stale_reason(old, json.loads(old_file.read_text(encoding="utf-8")), out)
-            if why is not None:
-                stale.append((plan.canvas_id, why))
-        g = plan.geometry
-        table.add_row(
-            plan.canvas_id,
-            f"{g.center_lat:.2f}, {g.center_lon:.2f}",
-            str(g.ncell),
-            str(len(plan.chunks)),
-            f"{plan.max_anisotropy:.3f}",
-            f"{plan.land_km2 / 1e6:.2f}",
-        )
-    console.print(table)
-    if stale:
-        names = ", ".join(f"{cid} ({why})" for cid, why in stale)
-        msg = f"existing chunks no longer match the new inputs: {names}"
-        if not force:
-            console.print(
-                f"[red]{msg}. Move their chunks/ and chunks.sha256 aside before generating.[/red]"
+
+    root.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".canvas-plan-", dir=root.parent) as temporary:
+        staged = Path(temporary)
+        tb.write_layout(staged, layout, cfg, source)
+        ids = _select(staged, canvas)
+        t_m, p_m = load_climate_monthly(map_dir)
+        cols = tb.MeshColumns.from_mesh(mesh, t_m, p_m)
+        stale = []
+        for plan in layout.plans:
+            if plan.canvas_id not in ids:
+                continue
+            out = root / plan.canvas_id
+            old_file = out / "canvas.json"
+            old = json.loads(old_file.read_text(encoding="utf-8")) if old_file.exists() else None
+            planned = tb.write_canvas_inputs(
+                staged,
+                plan,
+                cols,
+                cfg.generation_params(),
+                source,
+                structure=cfg.structure,
+                precipitation_field=native_precipitation,
             )
-            raise typer.Exit(code=1) from None
-        console.print(f"[yellow]{msg} (--force)[/yellow]")
+            if old is not None:
+                new = json.loads((planned / "canvas.json").read_text(encoding="utf-8"))
+                why = _stale_reason(old, new, out)
+                if why is not None:
+                    stale.append((plan.canvas_id, why))
+            g = plan.geometry
+            table.add_row(
+                plan.canvas_id,
+                f"{g.center_lat:.2f}, {g.center_lon:.2f}",
+                str(g.ncell),
+                str(len(plan.chunks)),
+                f"{plan.max_anisotropy:.3f}",
+                f"{plan.land_km2 / 1e6:.2f}",
+            )
+        console.print(table)
+        if stale:
+            names = ", ".join(f"{cid} ({why})" for cid, why in stale)
+            msg = f"existing chunks no longer match the new inputs: {names}"
+            if not force:
+                console.print(
+                    f"[red]{msg}. Original inputs were retained. Choose another --root or move "
+                    "their chunks/ and chunks.sha256 aside before planning.[/red]"
+                )
+                raise typer.Exit(code=1) from None
+            console.print(f"[yellow]{msg} (--force)[/yellow]")
+        tb.install_planned_inputs(staged, root)
 
 
 def _stale_reason(old: dict[str, Any], new: dict[str, Any], out: Path) -> str | None:
     """Which input field changed under existing chunks (None when none did or no chunks exist)."""
     if not any((out / "chunks").glob("r*_c*.npy")):
         return None
-    for key in ("geometry", "conditioning_sha256", "generation", "structure"):
+    for key in ("geometry", "conditioning_sha256", "generation", "structure", "coarse_source"):
         if old.get(key) != new.get(key):
             return key
     return None
@@ -231,6 +253,103 @@ def _parse_gpus(gpus: str) -> list[str]:
         elif part:
             out.append(part)
     return out
+
+
+@canvas_app.command("refine")
+def canvas_refine(
+    world: str = typer.Argument(help="World whose geological sources to use"),
+    reference: Path = typer.Argument(help="Original S3 layout root"),
+    output: Path = typer.Argument(help="New independent layout root"),
+    config: Path = typer.Option(
+        ...,
+        "--config",
+        help="Native mountain sources and accepted statistical references by canvas",
+    ),
+    td: Path = typer.Option(..., "--td", help="terrain-diffusion clone with its .venv"),
+    branch: str | None = typer.Option(
+        None, "--branch", "-b", help="Source branch (config or reference by default)"
+    ),
+    source_map: Path | None = typer.Option(
+        None,
+        "--source-map",
+        help="Geological map directory with native source archive and contract",
+    ),
+    gpu: str = typer.Option("0", "--gpu", help="GPU used once for each shared statistics batch"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """S1: prepare native continuous mountain sources with their accepted reference statistics."""
+    from dreamulator.map import td_canvas_worker
+    from dreamulator.map.canvas_orogen_refinement import (
+        CanvasRefinementConfig,
+        load_native_inputs,
+        refine_canvas_layout,
+    )
+    from dreamulator.map.manager import MapManager
+    from dreamulator.media.terrain_refine import _td_python
+    from dreamulator.resolver import LayerResolver
+    from dreamulator.world_manager import WorldManager
+
+    _set_data_dir(data_dir)
+    try:
+        cfg = CanvasRefinementConfig.load(config)
+        world_dir = WorldManager().world_dir(world)
+        layout = json.loads((reference / "layout.json").read_text(encoding="utf-8"))
+        source = layout.get("source", {})
+        if source.get("world") and source["world"] != world:
+            raise ValueError("reference layout belongs to a different world")
+        branch = branch or cfg.branch or source.get("branch")
+        planet = cfg.planet or source.get("planet")
+        if not planet:
+            raise ValueError("select a planet in the refinement config or reference layout")
+        if source.get("planet") and source["planet"] != planet:
+            raise ValueError("reference layout belongs to a different planet")
+        if source_map is None:
+            origin = LayerResolver(world_dir, branch).resolve_layer("geological").source
+            geological_branch = (
+                origin.removeprefix("branch:") if origin.startswith("branch:") else None
+            )
+            source_map = MapManager(world_dir, geological_branch)._maps_dir(planet)
+        if source_map is None:
+            raise FileNotFoundError("no native geological map found; provide --source-map")
+        native = load_native_inputs(world_dir, source_map, branch=branch, planet=planet)
+        td = td.resolve()
+        python = _td_python(td)
+        worker = Path(td_canvas_worker.__file__).resolve()
+        env = {
+            **os.environ,
+            "CUDA_VISIBLE_DEVICES": gpu,
+            "PYTHONUNBUFFERED": "1",
+            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        }
+
+        def prepare_statistics(original: Path, candidate: Path, out: Path) -> None:
+            console.print(f"{candidate.parent.name}: preparing fixed reference statistics")
+            log = out.parent / "prepare.log"
+            with log.open("w", encoding="utf-8") as stream:
+                subprocess.run(
+                    [
+                        str(python),
+                        str(worker),
+                        "--prepare-coarse",
+                        str(original.resolve()),
+                        str(candidate.resolve()),
+                        str(out.resolve()),
+                    ],
+                    cwd=td,
+                    env=env,
+                    stdout=stream,
+                    stderr=subprocess.STDOUT,
+                    check=True,
+                )
+            log.replace(out / "prepare.log")
+
+        result = refine_canvas_layout(
+            reference, output, cfg, native, prepare_statistics=prepare_statistics
+        )
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    console.print(f"Prepared native mountain inputs: {result}")
 
 
 @canvas_app.command("generate")

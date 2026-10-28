@@ -556,6 +556,47 @@ def apply_boundary_effects(
     return delta_h
 
 
+def apply_elevation_pin_values(
+    elevation: np.ndarray,
+    pins: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    *,
+    crosses_sea_level: bool,
+) -> np.ndarray:
+    """Apply one authored pin pass to a surface in the calibrated sea datum."""
+    weight, target, strength, exponent = pins
+    crosses = crosses_sea_level
+    # Decisive core, soft edge: the kernel rarely hits exactly 1 on a discrete
+    # mesh, so saturate the blend factor at w ≥ 0.5 — the author's target is
+    # authoritative at the feature core while the rim still fades smoothly.
+    factor = strength * np.asarray(np.clip(2.0 * weight, 0.0, 1.0))
+    if not crosses:
+        # Side of the calibrated datum (0 m), the frame the targets are
+        # written in; a sea_level_offset_m experiment then moves the water
+        # against the pinned floor as before.
+        same_side = (target > 0.0) == (elevation > 0.0)
+        factor = np.where(same_side, factor, 0.0)
+    # Deviation exponentiation: cells further from target get proportionally
+    # stronger pull (exponent > 1 = 削峰强力, 平原温和; exponent = 1 = 线性).
+    # Normalised to a reference scale so exponent=1.0 is byte-identical
+    # to the linear formula.
+    deviation = target - elevation
+    ref = 1000.0  # metres — at this deviation the pull equals linear
+    normalised = deviation / ref
+    mag = np.power(np.abs(normalised), exponent)
+    # 削峰 (exponent > 1) is meant to *depress* cells above the target.  Applied
+    # symmetrically it also over-raises cells far below the target — a deep ocean
+    # trench on the feature's soft edge gets pulled up into a mountain (§3.9).
+    # Keep the downward (above-target) amplification, but make the upward
+    # (below-target) pull linear so the ocean floor stays in the ocean.
+    mag = np.where((exponent > 1.0) & (normalised >= 0.0), np.abs(normalised), mag)
+    # The exponent < 1 branch amplifies small deviations (|n|^e > |n|), so
+    # factor·|n|^e can exceed the deviation itself and overshoot the target.
+    # Cap the applied pull at the full deviation: the pin may reach its
+    # target but never pass it, so a same-side pin cannot cross the surface.
+    applied = np.minimum(factor * mag, np.abs(normalised))
+    return np.asarray(elevation + np.sign(normalised) * applied * ref)
+
+
 def _apply_geography_pins(
     mesh: CVTMesh,
     elevation: np.ndarray,
@@ -591,36 +632,10 @@ def _apply_geography_pins(
         if pins is None:
             continue
         weight, target, strength, exponent = pins
-        # Decisive core, soft edge: the kernel rarely hits exactly 1 on a discrete
-        # mesh, so saturate the blend factor at w ≥ 0.5 — the author's target is
-        # authoritative at the feature core while the rim still fades smoothly.
+        elevation = apply_elevation_pin_values(elevation, pins, crosses_sea_level=crosses)
         factor = strength * np.asarray(np.clip(2.0 * weight, 0.0, 1.0))
         if not crosses:
-            # Side of the calibrated datum (0 m), the frame the targets are
-            # written in; a sea_level_offset_m experiment then moves the water
-            # against the pinned floor as before.
-            same_side = (target > 0.0) == (elevation > 0.0)
-            factor = np.where(same_side, factor, 0.0)
-        # Deviation exponentiation: cells further from target get proportionally
-        # stronger pull (exponent > 1 = 削峰强力, 平原温和; exponent = 1 = 线性).
-        # Normalised to a reference scale so exponent=1.0 is byte-identical
-        # to the linear formula.
-        deviation = target - elevation
-        ref = 1000.0  # metres — at this deviation the pull equals linear
-        normalised = deviation / ref
-        mag = np.power(np.abs(normalised), exponent)
-        # 削峰 (exponent > 1) is meant to *depress* cells above the target.  Applied
-        # symmetrically it also over-raises cells far below the target — a deep ocean
-        # trench on the feature's soft edge gets pulled up into a mountain (§3.9).
-        # Keep the downward (above-target) amplification, but make the upward
-        # (below-target) pull linear so the ocean floor stays in the ocean.
-        mag = np.where((exponent > 1.0) & (normalised >= 0.0), np.abs(normalised), mag)
-        # The exponent < 1 branch amplifies small deviations (|n|^e > |n|), so
-        # factor·|n|^e can exceed the deviation itself and overshoot the target.
-        # Cap the applied pull at the full deviation: the pin may reach its
-        # target but never pass it, so a same-side pin cannot cross the surface.
-        applied = np.minimum(factor * mag, np.abs(normalised))
-        elevation = np.asarray(elevation + np.sign(normalised) * applied * ref)
+            factor = np.where((target > 0.0) == (elevation > 0.0), factor, 0.0)
         n_pinned += int(np.count_nonzero(factor > 0.0))
     logger.info("  Geography pins: %d cells pulled toward authored targets", n_pinned)
     return elevation
@@ -648,6 +663,7 @@ def synthesize_terrain(
     *,
     raster_bias: np.ndarray | None = None,
     orogen_contract: OrogenContract | None = None,
+    source_fields: dict[str, np.ndarray] | None = None,
 ) -> None:
     """Synthesize terrain elevation (dispatches to configured algorithm).
 
@@ -661,6 +677,10 @@ def synthesize_terrain(
         ValueError: Unknown terrain algorithm.
     """
     algo = config.terrain_algorithm
+    if source_fields is not None:
+        if algo != "cortial2019_asymmetric":
+            raise ValueError("terrain source capture requires the asymmetric source pipeline")
+        source_fields.clear()
     if algo not in _TERRAIN_ALGORITHMS:
         raise ValueError(
             f"Unknown terrain algorithm '{algo}'. Available: {sorted(_TERRAIN_ALGORITHMS.keys())}"
@@ -697,7 +717,11 @@ def synthesize_terrain(
             from .orogen_contract import build_orogen_contract
 
             orogen_contract = build_orogen_contract(
-                mesh, plates, config.radius_km, config.collision_overrides
+                mesh,
+                plates,
+                config.radius_km,
+                config.collision_overrides,
+                subduction_polarities=getattr(config, "subduction_polarities", []),
             )
         _synthesize_asymmetric(
             mesh,
@@ -706,6 +730,7 @@ def synthesize_terrain(
             geography_bias=geography_bias,
             uplift_mod=uplift_mod,
             orogen_contract=orogen_contract,
+            source_fields=source_fields,
         )
 
 
@@ -929,6 +954,7 @@ def _synthesize_asymmetric(
     geography_bias: np.ndarray | None = None,
     uplift_mod: np.ndarray | None = None,
     orogen_contract: OrogenContract,
+    source_fields: dict[str, np.ndarray] | None = None,
 ) -> None:
     """Cortial 2019 — asymmetric mountain profiles + hotspots + landforms.
 
@@ -940,6 +966,21 @@ def _synthesize_asymmetric(
     logger.info("Synthesizing terrain (asymmetric)")
     n = mesh.num_cells
     rng = np.random.default_rng(config.seed + 100)
+
+    from .terrain_source_export import capture_source_field
+
+    if source_fields is not None:
+        capture_source_field(
+            source_fields,
+            "xyz",
+            mesh.cell_xyz / np.linalg.norm(mesh.cell_xyz, axis=1, keepdims=True),
+        )
+        capture_source_field(
+            source_fields, "plate_id", np.array([c.plate_id or "" for c in mesh.cells])
+        )
+        capture_source_field(
+            source_fields, "cell_area_km2", np.array([c.area_km2 for c in mesh.cells])
+        )
 
     # 1. Bimodal base + per-plate offsets (same as gaussian)
     _restamp_overlay_microcontinents(mesh, config)
@@ -958,6 +999,12 @@ def _synthesize_asymmetric(
 
     logger.info("  Step 1/6: Base elevation + plate offsets")
     _relabel_leaked_crust(mesh, geography_bias)
+    if orogen_contract.polarity_stage != "terrain-crust":
+        from .orogen_contract import resolve_contract_polarities
+
+        resolve_contract_polarities(
+            mesh, plates, orogen_contract, config.radius_km, stage="terrain-crust"
+        )
     plate_offsets: dict[str, float] = {}
     for plate in plates:
         plate_offsets[plate.id] = rng.uniform(
@@ -1003,6 +1050,7 @@ def _synthesize_asymmetric(
     )
     from .orogen_profile import orogen_relief
 
+    contributions: dict[str, np.ndarray] | None = {} if source_fields is not None else None
     orogen, orogen_cap = orogen_relief(
         mesh,
         orogen_contract,
@@ -1010,7 +1058,24 @@ def _synthesize_asymmetric(
         config.gravity_m_s2,
         config.continental_elevation_m,
         forearc_km=forearc_km,
+        segment_contributions=contributions,
     )
+    if contributions is not None:
+        for sid, layer in contributions.items():
+            capture_source_field(source_fields, "orogen.segment." + sid, layer)
+    capture_source_field(source_fields, "active_orogen_m", orogen)
+    capture_source_field(source_fields, "base_m", base)
+    capture_source_field(source_fields, "boundary_m", boundary_delta)
+    capture_source_field(source_fields, "trench_m", trench)
+    capture_source_field(source_fields, "trench_axis_offset_m", _axis_offset)
+    capture_source_field(source_fields, "subducting_mask", subducting)
+    capture_source_field(source_fields, "forearc_surface_m", forearc_surface)
+    if source_fields is not None:
+        capture_source_field(
+            source_fields,
+            "land_crust_mask",
+            np.array([c.crust_type != "oceanic" for c in mesh.cells]),
+        )
     # old orogens along the history's paleo-sutures (terrain_synthesis.md §4.3): crest
     # decays from the world's typical collision crest (median over its collision segments)
     # towards the residual
@@ -1026,6 +1091,7 @@ def _synthesize_asymmetric(
         else collision_cap_m(config.gravity_m_s2) - config.continental_elevation_m
     )
     paleo = paleo_orogen_relief(mesh, config.paleo_sutures, active_crest, config.radius_km)
+    capture_source_field(source_fields, "paleo_orogen_m", paleo)
     logger.info(
         "  Old orogens: %d sutures, active crest %.0f m, %d cells",
         len(config.paleo_sutures),
@@ -1036,6 +1102,7 @@ def _synthesize_asymmetric(
         if not mesh.cells[k].landform:
             mesh.cells[k].landform = "orogeny"
     orogen = np.maximum(orogen, paleo)
+    capture_source_field(source_fields, "combined_orogen_m", orogen)
 
     # 3. Sub-grid island catalogue: hotspot and arc volcanoes enter as cell means of their
     # volume; the intrusive arc magma thickens the arc crust (island-catalog.md §3.2)
@@ -1047,11 +1114,13 @@ def _synthesize_asymmetric(
     )
 
     logger.info("  Step 3/6: Island catalogue (hotspot chains, island arcs)")
-    catalog = build_island_catalog(mesh, plates, config)
+    catalog = build_island_catalog(mesh, plates, config, orogen_contract=orogen_contract)
     remember_synthesis_catalog(catalog)
-    hotspot_delta = volcano_cell_mean(mesh, catalog, config.radius_km) + arc_platform(
-        mesh, plates, config
-    )
+    volcano_delta = volcano_cell_mean(mesh, catalog, config.radius_km)
+    arc_delta = arc_platform(mesh, plates, config, orogen_contract=orogen_contract)
+    hotspot_delta = volcano_delta + arc_delta
+    capture_source_field(source_fields, "volcano_cell_mean_m", volcano_delta)
+    capture_source_field(source_fields, "arc_platform_m", arc_delta)
 
     # 4–5. Regional + detail noise (reuse)
     logger.info("  Step 4/6: Regional noise (scale=%.1f)", config.regional_noise_scale)
@@ -1110,6 +1179,7 @@ def _synthesize_asymmetric(
         + regional_fbm * regional_amp
         + fbm * noise_amp * interior_factor * transform_boost
     )
+    capture_source_field(source_fields, "combined_elevation_m", elevation)
 
     for i, cell in enumerate(mesh.cells):
         cell.elevation = float(elevation[i])
@@ -1126,6 +1196,8 @@ def _synthesize_asymmetric(
         for i, cell in enumerate(mesh.cells):
             cell.elevation = float(elevation[i])
 
+    capture_source_field(source_fields, "after_initial_sea_level_m", elevation)
+
     # Post-processing (order matters: arcs/orogeny add elevation,
     # shelf/plain must run last to not be overwritten)
     sea_level = config.sea_level_offset_m
@@ -1133,9 +1205,14 @@ def _synthesize_asymmetric(
     # must not lift a plateau above its cap; orogen_topography.md §3)
     from .orogen_profile import apply_orogen_cap
 
+    capture_source_field(source_fields, "orogen_cap_m", orogen_cap)
     elevation = apply_orogen_cap(elevation, orogen_cap, sea_level)
+    capture_source_field(source_fields, "after_orogen_cap_m", elevation)
     elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
+    capture_source_field(source_fields, "after_interior_lowlands_m", elevation)
+    capture_source_field(source_fields, "interior_lowland_clamped_mask", clamped)
     elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
+    capture_source_field(source_fields, "after_deposition_fill_m", elevation)
     if not config.island_catalog_enabled:
         elevation = _apply_island_arcs(
             mesh,
@@ -1145,13 +1222,24 @@ def _synthesize_asymmetric(
             uplift_mod=uplift_mod,
             subducting=subducting,
         )
-    elevation = _apply_continental_shelf(mesh, elevation, config, rng)
-    elevation = _apply_coastal_plain(mesh, elevation, config, rng)
+    shelf_sources = {"source_fields": source_fields} if source_fields is not None else {}
+    elevation = _apply_continental_shelf(
+        mesh, elevation, config, rng, active_flexure=subducting, **shelf_sources
+    )
+    capture_source_field(source_fields, "before_coastal_plain_m", elevation)
+    elevation = _apply_coastal_plain(mesh, elevation, config, rng, source_fields=source_fields)
+    capture_source_field(source_fields, "after_coastal_plain_m", elevation)
     # forearc wedge of ocean–continent margins bounds the surface between trench and coast
     # (orogen_topography.md §6); after the shelf, so the wedge rather than a passive-margin
     # shelf sets it.  The land it drowns is made up by the final sea-level trim below.
     elevation = np.minimum(elevation, forearc_surface + datum_shift + sea_level)
+    if source_fields is not None:
+        capture_source_field(
+            source_fields, "final_forearc_surface_m", forearc_surface + datum_shift + sea_level
+        )
+    capture_source_field(source_fields, "after_forearc_m", elevation)
     elevation = _clamp_deep_ocean_floors(mesh, elevation, config)
+    capture_source_field(source_fields, "after_deep_ocean_clamp_m", elevation)
 
     # Final sea-level trim (technical debt 47): the forearc and the other post-processing
     # changed the land area after the solve above.  Solving again on the final surface,
@@ -1166,11 +1254,14 @@ def _synthesize_asymmetric(
             overlay_mask=_overlay_calibration_mask(mesh, config),
             label="Final sea-level trim",
         )
+    capture_source_field(source_fields, "after_final_sea_level_m", elevation)
     # islands of positive overlays, cut from the actual sea surface
     elevation = _apply_overlay_archipelago_texture(mesh, config, elevation)
+    capture_source_field(source_fields, "after_overlay_archipelago_m", elevation)
 
     # Author elevation pins (final word; see _apply_geography_pins)
     elevation = _apply_geography_pins(mesh, elevation, config)
+    capture_source_field(source_fields, "final_elevation_m", elevation)
 
     # Cell-mean semantics (orogen_topography.md §1): no asymptotic compression — the
     # land limit is a peak height (orogen means are capped by the profile) and the ocean
@@ -2477,19 +2568,51 @@ def _apply_continental_shelf(
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
+    *,
+    active_flexure: np.ndarray | None = None,
+    source_fields: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
     """Continental shelf and slope (see ``_shelf_profile`` for the physics).
 
-    Modifies *elevation* in-place.
+    Modifies *elevation* in-place. With an explicit active-flexure footprint,
+    the down-going plate keeps its incoming seafloor and flexural topography;
+    the shelf and continental slope describe the other margin substrate.
+    The asymmetric pipeline supplies the footprint from ``trench_relief``.
+    Active trench sediment infill requires its own sediment budget. Callers
+    without this source footprint use the coastal shelf approximation.
     """
+    from .terrain_source_export import capture_source_field
+
+    capture_source_field(source_fields, "before_shelf_m", elevation)
+    if source_fields is not None:
+        capture_source_field(
+            source_fields,
+            "shelf_continental_crust_mask",
+            np.array([cell.crust_type == "continental" for cell in mesh.cells]),
+        )
     if config.shelf_width_km <= 0:
+        capture_source_field(source_fields, "after_shelf_m", elevation)
         return elevation
+    if active_flexure is not None:
+        active_flexure = np.asarray(active_flexure, dtype=bool)
+        if active_flexure.shape != elevation.shape:
+            raise ValueError("active flexure must have one value per elevation cell")
     # Draws kept identical in kind and order (one scalar, one per-cell array)
     # so the downstream stages see the same RNG state.
     shore_level = rng.uniform(-5.0, -1.0)  # shoreline depth below sea level (m)
     shelf_noise = rng.uniform(-0.05, 0.05, size=len(mesh.cells))  # per-cell ±5%, by cell id
-    touched, z_new = _shelf_profile(mesh, elevation, config, -shore_level, shelf_noise)
+    capture_source_field(source_fields, "shelf_noise_fraction", shelf_noise)
+    capture_source_field(
+        source_fields, "shelf_shore_depth_m", np.full(len(elevation), -shore_level)
+    )
+    touched, z_new = _shelf_profile(
+        mesh, elevation, config, -shore_level, shelf_noise, source_fields=source_fields
+    )
+    if active_flexure is not None:
+        eligible = ~active_flexure[touched]
+        touched, z_new = touched[eligible], z_new[eligible]
     elevation[touched] = z_new
+    capture_source_field(source_fields, "after_shelf_m", elevation)
     return elevation
 
 
@@ -2499,6 +2622,8 @@ def _shelf_profile(
     config: TerrainPipelineConfig,
     shore_depth: float,
     shelf_noise: np.ndarray,
+    *,
+    source_fields: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Continental shelf on submerged continental crust, continental slope beyond it.
 
@@ -2564,6 +2689,14 @@ def _shelf_profile(
                     source[oc] = nid
     seeds = np.nonzero(np.isfinite(dist))[0]
     if seeds.size == 0:
+        from .terrain_source_export import capture_source_field
+
+        capture_source_field(source_fields, "shelf_coast_cell_id", source)
+        capture_source_field(source_fields, "shelf_coast_width_m", np.zeros(n))
+        capture_source_field(source_fields, "shelf_coast_drowned_width_m", np.zeros(n))
+        capture_source_field(source_fields, "shelf_coast_type_width_m", np.zeros(n))
+        capture_source_field(source_fields, "shelf_coast_type_active_mask", np.zeros(n, dtype=bool))
+        capture_source_field(source_fields, "shelf_distance_m", dist * 1000)
         logger.info("  Continental shelf: no coastline cells detected")
         return np.zeros(0, dtype=np.int64), np.zeros(0)
 
@@ -2601,6 +2734,7 @@ def _shelf_profile(
     width = np.zeros(n)
     for j in np.nonzero(margin)[0]:
         width[source[j]] = max(width[source[j]], dist[j] + footprint_r[j])
+    drowned_width = width.copy() if source_fields is not None else None
     active = np.array(
         [
             c.distance_to_boundary_km is not None
@@ -2612,6 +2746,28 @@ def _shelf_profile(
     belt = np.where(active, _ACTIVE_MARGIN_SHELF_KM, _PASSIVE_MARGIN_SHELF_KM)
     coast = np.unique(source[seeds])
     width[coast] = np.maximum(width[coast], belt[coast])
+
+    if source_fields is not None:
+        from .terrain_source_export import capture_source_field
+
+        coastal_source = source.copy()
+        coastal_source[coast] = coast
+        width_field = np.zeros(n)
+        reachable = coastal_source >= 0
+        width_field[reachable] = width[coastal_source[reachable]] * 1000
+        capture_source_field(source_fields, "shelf_coast_cell_id", coastal_source)
+        capture_source_field(source_fields, "shelf_coast_width_m", width_field)
+        assert drowned_width is not None
+        drowned_field = np.zeros(n)
+        type_field = np.zeros(n)
+        active_field = np.zeros(n, dtype=bool)
+        drowned_field[reachable] = drowned_width[coastal_source[reachable]] * 1000
+        type_field[reachable] = belt[coastal_source[reachable]] * 1000
+        active_field[reachable] = active[coastal_source[reachable]]
+        capture_source_field(source_fields, "shelf_coast_drowned_width_m", drowned_field)
+        capture_source_field(source_fields, "shelf_coast_type_width_m", type_field)
+        capture_source_field(source_fields, "shelf_coast_type_active_mask", active_field)
+        capture_source_field(source_fields, "shelf_distance_m", dist * 1000)
 
     shelf_break = config.shelf_break_depth_m
     deepest = float(-(elevation[ocean].min() - sea_level))
@@ -2662,6 +2818,8 @@ def _apply_coastal_plain(
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
     rng: np.random.Generator,
+    *,
+    source_fields: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
     """Gentle coastal plain on the land side of coastlines.
 
@@ -2744,6 +2902,11 @@ def _apply_coastal_plain(
     mountain_coast_ratio = 0.15
     # Lowland targets addressed by cell id (see the shelf note above).
     lowland_targets = sea_level + rng.uniform(10.0, 50.0, size=len(mesh.cells))
+    source_blend = np.ones(n) if source_fields is not None else None
+    if source_fields is not None:
+        from .terrain_source_export import capture_source_field
+
+        capture_source_field(source_fields, "coastal_lowland_target_m", lowland_targets)
 
     for cid, d_km in inland_dist.items():
         if elevation[cid] <= sea_level:
@@ -2770,10 +2933,15 @@ def _apply_coastal_plain(
 
         t = d_km / max(effective_width, 1.0)  # 0 at coast → 1 at effective limit
         blend = t * t * (3.0 - 2.0 * t)  # smoothstep
+        if source_blend is not None:
+            source_blend[cid] = blend
         elevation[cid] = max(
             lowland_target,
             elevation[cid] * blend + coast_target * (1.0 - blend),
         )
+
+    if source_blend is not None:
+        capture_source_field(source_fields, "coastal_plain_blend_fraction", source_blend)
 
     logger.info(
         "  Coastal plain: %d land cells, width=%.0f km (min strip %.0f km / %.1f cells)",

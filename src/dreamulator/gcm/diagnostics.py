@@ -143,13 +143,18 @@ def summarize(
     radius_m: float = 6.37122e6,
     gravity: float = _G,
     tail_records: int = 12,
+    orbital_year_days: float | None = None,
+    steps_per_model_day: float = 32.0,
 ) -> dict[str, Any]:
     """Extract the oracle-comparison diagnostics from one run.
 
     ``radius_m``/``gravity`` should match the mapped ExoPlaSim parameters
     (they set physical units of the streamfunction only).  ``tail_records``
-    defaults to 12: run_gcm now writes one record per model month, so the
-    tail spans exactly one full seasonal cycle (a seasonally unbiased mean).
+    defaults to 12 output records. With an orbital year, records are averaged
+    in twelve equal orbital-phase bins; callers should provide a multi-year
+    tail when the model calendar differs from the orbital year. Global
+    surface temperatures use Gaussian quadrature areas, rather than equal
+    latitude-row weights. Column temperatures remain separate diagnostics.
     """
     ds = netCDF4.Dataset(str(nc_path))
     try:
@@ -165,6 +170,37 @@ def summarize(
         ua_t = _tail(ua, tail_records)
         va_t = _tail(va, tail_records)
         ta_t = _tail(ta, tail_records)
+        record_weight = np.full(len(ta_t), 1.0 / len(ta_t))
+        if orbital_year_days is not None:
+            clock = np.asarray(ds.variables["time"][:])
+            equinox = (
+                equinox_day_from_declination(
+                    clock,
+                    np.asarray(ds.variables["zdec"][:]),
+                    orbital_year_days=orbital_year_days,
+                    steps_per_model_day=steps_per_model_day,
+                )
+                if "zdec" in ds.variables
+                else 0.0
+            )
+            phase = orbital_phase_of_records(
+                _tail(clock, tail_records),
+                orbital_year_days=orbital_year_days,
+                steps_per_model_day=steps_per_model_day,
+                perihelion_day=equinox,
+            )
+            bins = np.minimum((phase * 12).astype(int), 11)
+            counts = np.bincount(bins, minlength=12)
+            record_weight = 1.0 / (np.count_nonzero(counts) * counts[bins])
+            out["phase_counts"] = counts.tolist()
+            out["complete_seasonal_coverage"] = bool(np.all(counts > 0))
+        out["temperature_time_mean"] = (
+            "equal occupied orbital-phase bins"
+            if orbital_year_days is not None
+            else "output records"
+        )
+        _, area = np.polynomial.legendre.leggauss(len(lat))
+        area /= area.sum()
 
         out["max_abs_ua_ms"] = float(np.abs(ua).max())
         out["max_abs_va_ms"] = float(np.abs(va).max())
@@ -175,22 +211,24 @@ def summarize(
         out["jet_speed_ms"] = float(u_zm[jlev, jlat])
         out["jet_lat_deg"] = float(lat[jlat])
 
-        t_zm = np.mean(ta_t, axis=(0, 3))
-        i_eq = int(np.argmin(np.abs(lat)))
-        out["t_eq_c"] = float(t_zm[:, i_eq].mean() - 273.15)
-        out["t_pole_c"] = float(0.5 * (t_zm[:, 0].mean() + t_zm[:, -1].mean()) - 273.15)
-
         # Surface temperature: prefer tas (2m air temp) over ta column mean.
         # ta includes the stratosphere (−100°C+) which dominates a 3D average
         # and gives a misleading "global temperature" (the 2026-10-06 bug:
         # reported −45.6°C when the actual surface was −2°C).
         if "tas" in ds.variables:
             tas_t = _tail(np.asarray(ds.variables["tas"][:]), tail_records)
-            out["t_global_c"] = float(tas_t.mean() - 273.15)
+            out["surface_temperature_source"] = "tas"
         else:
             # Fallback: bottom level of ta (sigma closest to 1)
-            out["t_global_c"] = float(ta_t[:, -1, :, :].mean() - 273.15)
-        out["t_global_column_c"] = float(ta_t.mean() - 273.15)
+            tas_t = ta_t[:, -1, :, :]
+            out["surface_temperature_source"] = "lowest model level of ta"
+        surface_zonal = np.average(tas_t.mean(axis=-1), axis=0, weights=record_weight)
+        out["t_global_c"] = float(surface_zonal @ area - 273.15)
+        out["t_eq_c"] = float(surface_zonal[np.argmin(np.abs(lat))] - 273.15)
+        out["t_pole_c"] = float((surface_zonal[0] + surface_zonal[-1]) / 2 - 273.15)
+        column_zonal = np.average(ta_t.mean(axis=(1, 3)), axis=0, weights=record_weight)
+        out["t_global_column_c"] = float(column_zonal @ area - 273.15)
+        out["temperature_area_mean"] = "Gaussian quadrature"
 
         if "levp" in ds.variables and "ps" in ds.variables:
             levp = np.asarray(ds.variables["levp"][:])

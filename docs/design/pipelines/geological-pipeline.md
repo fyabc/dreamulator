@@ -85,7 +85,7 @@
 
 `run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:189`）按固定
 顺序执行 8 个相位（`_STAGE_NAMES` :69-78，控制台 `1/8`-`8/8`）；`stages` 参数可选子集，
-`_resolve_stages`（:116）按依赖自动补齐前驱。行号锚为 `terrain_pipeline.py` 当前值，
+`_resolve_stages`（:116）校验阶段名称，并按管线顺序执行选定阶段；调用方提供其前置状态。行号锚为 `terrain_pipeline.py` 当前值，
 细节章节在 §3-§10 展开。
 
 | 相位 | 名称 | 行号 | 调用 | 产出 → 下游 |
@@ -108,6 +108,13 @@
 schema 版本 + 上游相位指纹 + geography 哈希，`build_stage_fingerprint`），指纹命中则
 整相位跳过——改 geography.yaml 只失效受影响的相位，不需要 `--force`（`--force` 仅用于
 强制全量重建）。
+
+**固定构造状态续算**：`run_terrain_pipeline(..., tectonic_state=...)` 接受明确选定的
+地形处理前网格、板块、边界及历史契约，复制状态后执行显式指定的下游阶段。
+入口核对格子数、编号顺序、板块归属及球面面积对应的半径，来源状态的内容哈希进入地形指纹。
+调用方保存原状态及其文件哈希、配置和代码版本；续算采用关闭阶段缓存的独立目录。
+若提供历史契约，地形与后续导出共同消费该契约；采用范围变化时另行建立并核验来源。
+这种续算保留已选定的构造格局，地形重算的海陆与高程变化仍需独立检查。
 
 **缓存负载必须覆盖相位的全部 in-place cell 副作用**（2026-09-17 nacrea 图层丢失教训）：
 凡「计算过程直接改 `mesh.cells[*]` 字段」的相位，缓存负载要一并保存这些字段数组、
@@ -538,7 +545,14 @@ fBm 的 seed = `config.seed + 500`（确定性）。按 score 降序取前
 
 - 命名大陆（正场强）稳定落在锚点；命名大洋（负场）被压到阈值以下。
 - fBm 让海岸线保持分形、让弱场区（如前导点褶皱山系）叠加噪声产生复杂地形。
-- 全局海陆比精确命中 `land_fraction_target`。
+- 目标比例按格数确定全局排序的初始陆壳选取数量。
+
+全局排序选取的是陆壳分配的初始数量。随后 `_fill_oceanic_specks` 填入大陆内部的小洋壳斑块，
+`apply_geography_crust` 对非豁免板块按 `crust_plate_floor` 补足陆壳比例；
+均值地理偏置低于 −0.3 的板块属于明确大洋，豁免这项下限。补入格按同一评分排序选取。
+这两步可以增加陆壳面积，最终出露陆地面积由地形合成及海平面校准确定。
+来源诊断分别保存排序掩膜、填充增量和下限增量，并使用 `plate_view()` 核对板块阶段输入。
+地壳分配的阈值属于生成规则，评分的连续轮廓描述其几何支持，高程和厚度另按地质模型确定。
 
 #### 注入点与构造漂移
 
@@ -836,8 +850,26 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 ### 6.1 历史契约：汇聚边界段（`orogen_contract.py`）
 
 地形合成开始前，`build_orogen_contract` 按历史契约（`docs/design/proposals/history-contract.md` §3）
-整理每段汇聚边界的缩短史，结果写入 `orogen_contract.json`。地形合成目前还不读取它（技术债 43 阶段 A
-接入）。
+整理每段汇聚边界的缩短史，供造山剖面和海沟计算读取，结果写入 `orogen_contract.json`。
+文件采用 `orogen-contract-v2`：保留分段摘要，并在 `detail` 中保存完整精度的段参数、接触格归属、逐格汇聚量、
+现今速率、逃逸比和保留缩短量。导出阶段同时记录接触格坐标、板块归属、行星半径及网格几何签名。
+`load_orogen_contract` 可恢复这些量，并按格号与坐标核对所用网格；旧摘要文件在重新导出后用于来源重放。
+
+`contact_history` 保存逐接触格的连续汇聚时长、连续与累积汇聚量、最近演化格号及迁移弦长。
+`ContactConvergenceHistory` 的 `status` 标记匹配结果；未匹配格沿用数值契约的零值，来源格号与迁移距离为 null。
+作者覆盖改变有效段参数与汇聚量，演化记录继续作为独立来源保存。旧 v2 数值 `detail` 的结构保持，历史字段缺省的文件仍可读取。
+`geometry.interfaces` 保存所选段全部接触格对应的共享 CVT 边，`geometry.vertices` 保存共用顶点的球面坐标，
+弧的两端按法向指向 `pro_plate` 定向。每条边同时记录接触格与正保留量接触格，零贡献段保留其界线；
+`geometry.evolution_sources` 保存迁移来源格的坐标。来源范围、界线连接与后续山前、主谷几何分别处理。
+
+`subduction_polarity` 以 `subduction-polarity-v1` 保存所有汇聚接触的类型、下插与上覆板块、来源定义和年代。
+`subduction_polarity.py` 读取 `plate_history.yaml` 的明确板块对声明，作者声明与有引用的观测声明使用同一接口。
+缺省的洋陆方向来自陆壳对比，洋洋方向来自原绝对速度近似，碰撞方向来自原板块尺寸近似；来源类别分别保存。
+明确俯冲声明作用于洋陆和洋洋接触，碰撞段的侧别仍由其历史契约确定。
+`resolve_contract_polarities` 在地形阶段的陆壳恢复和整理完成后保存 `terrain-crust` 快照，
+海沟与岛弧共享其接触类型和侧别，陆架读取同一次海沟计算的作用域。
+缓存命中时从已恢复的地壳建立相同快照，造山段缩短史保持原数值。
+加载契约除几何签名外，还校验接触格的板块归属和相邻板块对。terrain 缓存版本为 46。
 
 1. **接触格与类型**：汇聚边界上、速率高于 0.3 cm/yr、紧邻另一板块的格子。两侧各取该板块 500 km 内
    的陆壳占比：都过半为碰撞，俯冲侧取较小的板块；一侧过半为安第斯型，洋壳一侧俯冲；都不过半的洋—洋
@@ -845,7 +877,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 2. **碰撞开始时刻与积分汇聚量**：演化结束后的边界整形会把边界移开（nacrea 上终态接触格到最近的演化
    汇聚格中位约 100 km，90 分位约 400 km），所以每个接触格读取 400 km 内最近的演化汇聚格的
    `convergent_duration_my` 与 `convergent_run_km`。留存缩短量逐格计算（边界会弯折、斜交程度沿走向变化，
-   整段共用一个中位数会把正面段的汇聚量套到斜交段上）；段内中位数只作摘要写入 `orogen_contract.json`。
+   整段共用一个中位数会把正面段的汇聚量套到斜交段上）；段内中位数作为摘要，逐格量另存于契约的完整记录。
 3. **作者覆盖**：`plate_history.yaml` 的 `collisions` 与 `andean_margins`（`load_collision_overrides`）
    按板块对或折线（两倍半宽内过半的接触格）认领段，可改写开始时刻（积分汇聚量随之取现今速率乘开始
    时刻）、断离时长、安第斯型缩短比与俯冲侧。
@@ -928,7 +960,7 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    洋格写 None，沟轴最深点见第 2c 步。
 2c. **海沟** `trench_flexure.py::trench_relief`（技术债 43 阶段 D，物理与标定见 `docs/knowledge/geology/orogen_topography.md` §5–6）：
    只在俯冲板块的洋壳格子上加挠曲下弯 w(x) = −W0·e^(−x/α)·cos(x/α)，叠加在年龄深度海底上。沟轴格是俯冲侧的
-   汇聚接触格：洋陆边界取历史契约安第斯段的俯冲板块，洋洋边界取较快的板块（`contact_polarity`）。x 沿该板块
+   汇聚接触格：洋陆边界取历史契约安第斯段的俯冲板块，洋洋边界取共同极性快照的下插板块（`contract_contact_polarity`）。x 沿该板块
    洋壳格子的图距离量，每格取 w 在 [d, d + Δx] 上的解析平均，剖面在 3π/2·α 处归零。Te 取 25 km（地球
    α ≈ 65 km，随 g 按 g^(−¼) 变化），W0 取 2.0 km（ETOPO 沟轴格相对外侧海底的中位数反推，观测拟合）。
    地形阶段之后，俯冲侧沟轴格写入 `trench_axis_elevation_m`（沟轴格的最终平均高程减去 0.38·W0，即 W0 与沟轴格平均下弯 0.62·W0 之差），
@@ -971,6 +1003,11 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    e 折时间降低，考艾岛标定）、出水面积与状态（立在陆地上的记为 land volcano），出水部分比格子还宽的火山由网格分辨、
    不计入汇总，写入格子字段 `island_count`、`island_area_frac`、`island_peak_m`
    与 `hotspot_id`，火山格的 `peak_elevation_m` 取目录峰顶；地图目录输出 `island_catalog.json`。
+
+   目录同时输出 `built_relief_m`、`floor_elevation_m` 和 `present_relief_m`。
+   建成起伏相对于建成背景海底，当前背景高程为最终格平均减去目录自身格内贡献后相对于海平面的高程，
+   当前峰顶高差为 `summit_m` 减去该背景。新增字段便于细剖面与格内贡献使用同一参考态。
+   格内体积的沉降近似和出水轮廓的演化近似分别登记，连续剖面接入先核对二者的体积与基底范围。
 4. **区域噪声**：低频 fBm（`regional_noise_scale`，陆/海不同振幅
    `regional_noise_amplitude_land_m` / `regional_noise_amplitude_ocean_m`）。
 5. **细节噪声**：`_anisotropic_fbm`（3D Simplex 在节点 (x,y,z) 采样，无投影畸变；
@@ -1024,6 +1061,11 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 **校准后的海岸线（目标陆面比）不变**，低地也不会全部堆在同一个高度。在 §7.5
 后处理中排在海平面校准之后、岛弧之前；老造山带在校准之前已叠加，随大陆基准一起下压，相对高度不变，裂谷与
 盆地则下切（部分低于海平面，成内流湖或内海）。
+
+`interior_lowland_distance_scale_km` 表示距汇聚边界达到全部下压量的过渡距离，
+`interior_lowland_depth_m` 与 `interior_lowland_floor_m` 分别约束下压量和高程下限。
+作者给出的区域高程钉扎另在最终地表作用。山前和沿岸平原的宽度、存在范围与岸边高程采用各自的来源依据；
+沿岸默认剖面和陆架的陆缘类型均值分别保留其数值重建与海底地形近似的适用范围。
 
 | 参数 | 默认值 | 范围 | 含义 |
 |------|--------|------|------|
@@ -1102,6 +1144,12 @@ age = max_age · d_div / (d_div + d_conv)
    原有海底；距离从海陆 Voronoi 边量起，每格取剖面在本格范围内的平均。`shelf_width_km <= 0` 关闭此步。
    物理依据见
    `docs/knowledge/geology/continental_margins.md`。
+   常规非对称合成通过 `active_flexure` 传入同一次 `trench_relief` 计算的下沉板块挠曲作用域；
+   这些格保留入沟海底与挠曲地形，陆架和陆坡用于其余陆缘基底。随机数消耗保持一致，
+   弧前楔、海底限深与末次海平面校准继续消费实际地表。terrain 缓存版本为 46。
+   高斯合成采用原有海沟表达，陆架调用沿用该算法的作用域。
+   极性来源与共同接触快照见 6.1 节，连续来源的采用范围见
+   [画布管线 2.5.2](canvas-chain.md#252-连续地形来源)。
 6. **沿海平原** `_apply_coastal_plain`（`coastal_plain_width_km`）：对所有陆上 cell
    （海拔高于海平面且有海洋邻居）施加海岸过渡，不论地壳类型——O-C 俯冲带下插侧
    （物理上是海沟）和大陆海岸山一起平滑（§4.4 海岸过渡）。随后施加弧前楔（§7.1 第 2c 步）。
@@ -1127,6 +1175,51 @@ age = max_age · d_div / (d_div + d_conv)
 （Frisch et al. 2011）。张开速率来自板块运动学，没有单独的扩张速率参数。
 
 ### 7.6 参数表
+
+常规管线可通过 `run_terrain_pipeline(..., source_fields=...)` 按需导出原地质阶段的数值来源。
+该选项保留有效的网格、板块、构造与边界缓存，重新计算地形以记录实际阶段值。
+`terrain_sources.npz` 保存源网格坐标、各活动山带贡献、古山带包络、基底、边界地形、海沟及弧前表面，
+同时保存陆架和平原前后高程、该次计算的低地目标和最终高程。
+陆架捕获还保存原岸格编号、实际宽度、岸距、岸边深度及剖面调制；
+`shelf_coast_drowned_width_m` 保存与岸相连的淹没陆壳所给出的几何范围，
+`shelf_coast_type_width_m` 保存当前陆缘类型采用的观测平均宽度，
+`shelf_coast_type_active_mask` 保存该岸格的活动陆缘分类。
+三者沿用 `shelf_coast_cell_id` 的来源对应，实际宽度取几何范围与类型平均值中较大的一个。
+侧记文件的 `basis` 说明各项依据；类型平均值描述全球观测尺度，局部宽度由相应地质或作者来源补充。
+`coastal_plain_blend_fraction` 保存原平原算子的实际混合系数，未参与混合的格子为 1。
+这些字段由该次合成的原参数和随机实现取得，来源捕获保持正常数值路径和随机数消耗。
+侧记文件 `terrain_sources.json` 采用
+`terrain-source-fields-v1`，记录数组形状、单位、缺值语义、地形指纹、半径及源格距。
+来源数组在捕获时复制并冻结，消费时校验文件哈希及所用地形指纹。
+匹配指纹的缓存重放保留来源档案，地形来源改变后使旧档案失效。
+这些数组保存现有计算的信息，解析几何精度仍由原网格及地物来源决定。
+主体构造演化和地形合成使用同一原生 CVT 网格；200k 格对应约 50 km 的信息尺度。
+山带解析剖面、挠曲曲线和岛屿目录可在亚格子位置求值，来源捕获保存这些已有信息。
+连续查询的取样间距与构造几何的原始精度分别记录。
+
+阶段档案同时保存与源点同序的 `cell_area_km2`、实际大陆地壳指示量
+`shelf_continental_crust_mask` 和造山资格 `land_crust_mask`。
+`combined_elevation_m` 与 `after_initial_sea_level_m` 给出初次海面校准前后的表面；
+`orogen_cap_m`、`after_orogen_cap_m`、`after_interior_lowlands_m`、
+`interior_lowland_clamped_mask` 和 `after_deposition_fill_m` 给出实际高程上限及低地响应。
+岸坡之后的 `final_forearc_surface_m` 与初次校准采用同一海面基准，
+`after_forearc_m`、`after_deep_ocean_clamp_m`、`after_final_sea_level_m` 和
+`after_overlay_archipelago_m` 给出后续阶段端点。`final_elevation_m` 是作者约束后的表面。
+消费者按这些阶段的实际顺序组合来源，并用相同球面面积核对原生重放及来源体积。
+按需捕获也保存 `volcano_cell_mean_m` 和 `arc_platform_m`，分别记录火山体的原格内贡献与弧地壳平台。
+侧记的 `source.island_geometry` 使用 `volcanic-cone-sources-v1`，以完整精度保存地物来源、年龄、建成几何和当前背景。
+`island_source.catalogue_geometry` 根据当前峰顶与建成翼坡导出连续锥体，其体积与原格内载荷分别保存。
+默认地形与目录汇总沿用当前算法，连续几何由来源试点显式消费。
+连续来源替换使用实际撤回响应建立背景。原载荷经陆架覆盖、海面校准及作者钉扎后，
+对最终高程的贡献随阶段组合而变；研究重放保存各阶段输入与输出，并使目录峰顶消费对应背景。
+生产目录的背景估计与实际来源存活分别核对，新的背景定义通过全局验收后再接入汇总。
+
+`geography.build_elevation_pins_at_xyz` 为连续球面查询提供同一作者高程约束，
+`terrain_synthesizer.apply_elevation_pin_values` 共用于粗格和连续地表，保留两遍侧别、指数和目标约束。
+`shelf_source.ShelfEnvelopeDifferenceSource` 按前陆架地表的海面交线计算连续岸距，
+查询原宽度与调制场，将陆架—陆坡剖面与实际背景组成较浅表面包络。
+它返回冻结陆架端点差，后续平原、前弧、海底限深、海面与作者约束由消费入口另行组合。
+当前连续陆架采用显式研究入口，常规 200k 地形继续沿用已接受路径。
 
 | 参数 | 默认值 | 范围 | 物理含义 |
 |------|--------|------|----------|
@@ -1294,7 +1387,7 @@ def check_polar_configuration(
 ### 极地冰盖（7/8 追加相位，`ice_sheets.py`）
 
 极地冰盖在海平面校准、地理钉扎、均衡压缩、平滑与封闭盆地湖泊标记全部完成**之后**追加
-（`apply_polar_ice_sheets`，`ice_sheets.py:165`）：冰只堆叠在陆地 cell 上，海平面
+（`apply_polar_ice_sheets`，`ice_sheets.py:168`）：冰只堆叠在陆地 cell 上，海平面
 维持校准值不动，**海岸线格局不受影响**。
 每个 cell 的 `ice_thickness_m` 字段记录冰厚，受载基岩高程为 `elevation − ice_thickness_m`。冰载荷按局地 Airy
 均衡压低基岩 `ICE_LOAD_DEPRESSION` = ρ_i/ρ_m ≈ 0.28 倍冰厚（技术债 45），冰面 = 无冰基岩 + 0.72·冰厚；重跑幂等
@@ -1314,6 +1407,9 @@ def check_polar_configuration(
    `ice_maritime_distance_km`（700 km）的大陆内部建完整穹丘；门内近海陆地只在
    雪线（`ice_cap_snowline_m`）以上长局部冰帽（加拿大北极 / 斯瓦尔巴式，上限
    `ice_cap_max_m`）。地球参照：苔原海岸距海 < ~500 km，Dome A 内陆 ~1200 km。
+   邻接边的球面角距由 `_edge_angles` 计算，采用 `atan2(|a×b|, a·b)`。
+   向量的长度与方向分别处理，导出坐标的小数截断保持同一角距定义；
+   边长以弧度进入图，再乘行星半径得到物理距离。
 3. **穹丘剖面（完美塑性 Vialov）**：冰厚 h(x) = √(2·τ_d·x/(ρ_i·g))，x 为到冰缘
    的测地距离（穹丘子图内从边界 cell 多源 Dijkstra；子图隔离保证冰只在陆地上
    传播、绝不穿过海洋）。驱动应力 τ_d = 40 kPa（观测冰盖范围 50–100 kPa，

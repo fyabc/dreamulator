@@ -330,9 +330,11 @@ class GeologicalEngine(BaseEngine):
         if history_path is not None:
             from dreamulator.map.orogen_contract import load_collision_overrides
             from dreamulator.map.paleo_sutures import load_sutures
+            from dreamulator.map.subduction_polarity import load_subduction_polarities
 
             cfg.collision_overrides = load_collision_overrides(history_path)
             cfg.paleo_sutures = load_sutures(history_path)
+            cfg.subduction_polarities = load_subduction_polarities(history_path)
 
         # Tidal heat history (island-catalog.md §3.3): drives the heat-pipe provinces.
         from dreamulator.map.heat_pipe import load_tidal_heat_history

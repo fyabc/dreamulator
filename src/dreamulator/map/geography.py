@@ -488,6 +488,21 @@ def build_elevation_pins(
     ``pin_crosses_sea_level`` value (None = all).  Pure function of (mesh,
     spec) — no randomness.
     """
+    xyz = np.array([(c.x, c.y, c.z) for c in mesh.cells], dtype=np.float64).reshape(-1, 3)
+    return build_elevation_pins_at_xyz(xyz, spec, crosses_sea_level=crosses_sea_level)
+
+
+def build_elevation_pins_at_xyz(
+    xyz: np.ndarray, spec: GeographySpec, *, crosses_sea_level: bool | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    """Evaluate the same authored pin kernels in the geological sphere frame.
+
+    Continuous terrain queries and coarse cells share the same targets, pin
+    strength, overlap and exponent rules. Coordinates are unit sphere points.
+    """
+    points = np.asarray(xyz, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all():
+        raise ValueError("pin coordinates must be finite xyz points")
     pinned = [
         f
         for f in spec.all_features
@@ -497,10 +512,8 @@ def build_elevation_pins(
     if not pinned:
         return None
 
-    n = len(mesh.cells)
-    px = np.fromiter((c.x for c in mesh.cells), dtype=np.float64, count=n)
-    py = np.fromiter((c.y for c in mesh.cells), dtype=np.float64, count=n)
-    pz = np.fromiter((c.z for c in mesh.cells), dtype=np.float64, count=n)
+    n = len(points)
+    px, py, pz = points.T
 
     w_sum = np.zeros(n, dtype=np.float64)
     wt = np.zeros(n, dtype=np.float64)

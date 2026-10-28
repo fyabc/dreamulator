@@ -11,10 +11,11 @@ from dreamulator.map.cvt_mesh import generate_cvt_mesh
 from dreamulator.map.paleo_orogens import (
     DECAY_MYR,
     RESIDUAL_CREST_M,
+    paleo_orogen_field,
     paleo_orogen_relief,
     residual_crest_m,
 )
-from dreamulator.map.paleo_sutures import AuthorSuture
+from dreamulator.map.paleo_sutures import AuthorSuture, lonlat_to_xyz
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 
@@ -56,3 +57,43 @@ def test_relief_along_suture_only_on_land_crust() -> None:
     assert not paleo_orogen_relief(mesh, [], 2000.0, cfg.radius_km).any()
     s0 = AuthorSuture(id="u", name="u", collision_age_myr=None, path=s.path)
     assert not paleo_orogen_relief(mesh, [s0], 2000.0, cfg.radius_km).any()
+
+
+def test_continuous_field_matches_spherical_cross_section_and_batches() -> None:
+    """On an equatorial arc the exact cross-track distance is radius times latitude."""
+    s = AuthorSuture(
+        id="equator",
+        name="equator",
+        collision_age_myr=70,
+        path=np.array([[-20.0, 0.0], [20.0, 0.0]]),
+        width_km=1,
+    )
+    radius, active = 6371.0, 2000.0
+    lon, lat = np.meshgrid(np.array([-10.0, 0, 10]), np.array([0.0, 0.5, 1, 2]))
+    xyz = lonlat_to_xyz(np.column_stack([lon.ravel(), lat.ravel()])).reshape(4, 3, 3)
+    half_width = 2 / math.tan(math.radians(0.6))
+    crest = RESIDUAL_CREST_M + (active - RESIDUAL_CREST_M) / math.e
+    expected = crest * np.maximum(1 - radius * np.radians(lat) / half_width, 0)
+    actual = paleo_orogen_field(xyz, [s], active, radius)
+    np.testing.assert_allclose(actual, expected, atol=1e-9)
+    pieces = [paleo_orogen_field(row, [s], active, radius) for row in xyz]
+    np.testing.assert_allclose(pieces, actual, rtol=0, atol=1e-9)
+    assert actual[0, 1] == pytest.approx(crest)
+    assert not actual[-1].any()
+
+
+def test_continuous_field_overlaps_use_maximum_and_zero_crest_is_empty() -> None:
+    path = np.array([[179.0, -20.0], [179.0, 20.0]])
+    sutures = [
+        AuthorSuture(id=str(age), name=str(age), collision_age_myr=age, path=path)
+        for age in [0, 70]
+    ]
+    xyz = lonlat_to_xyz(np.array([[179.0, 0], [-179.9, 0], [170.0, 0]]))
+    result = paleo_orogen_field(xyz, sutures, 2000, 6371)
+    np.testing.assert_array_equal(result, paleo_orogen_field(xyz, sutures[:1], 2000, 6371))
+    assert result[0] == pytest.approx(2000)
+    assert 0 < result[1] < 2000
+    assert result[2] == 0
+    assert not paleo_orogen_field(xyz, sutures, 0, 6371).any()
+    with pytest.raises(ValueError, match="unit vectors"):
+        paleo_orogen_field(xyz * 2, sutures, 2000, 6371)
