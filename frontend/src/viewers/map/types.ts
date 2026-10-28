@@ -48,6 +48,27 @@ export interface VoronoiCell {
   distance_to_boundary_km?: number
   boundary_type?: string | null
   convergence_rate_cm_yr?: number
+
+  // History-contract orogen fields (stage C, 2026-10): sub-grid relief and
+  // convergent-segment history quantities baked into the frozen mesh.
+  /** Sub-grid relief: standard deviation of elevation inside the cell (m); land only. */
+  relief_std_m?: number | null
+  /** Sub-grid peak (m) = cell mean elevation + 3.5 × relief_std_m — already
+   *  amplified, display raw and never scale it again. */
+  peak_elevation_m?: number | null
+  /** Time since collision start on the convergent segment (Myr, history contract). */
+  convergent_duration_my?: number | null
+  /** Integrated shortening along the convergent segment since collision (km). */
+  convergent_run_km?: number | null
+  cumulative_convergence_km?: number | null
+  cumulative_divergence_km?: number | null
+  /** Modelled elevation at the subduction trench axis (m), trench cells only. */
+  trench_axis_elevation_m?: number | null
+
+  // Sub-grid island catalog (debt 44): islands below cell resolution.
+  island_count?: number | null
+  island_peak_m?: number | null
+  island_area_frac?: number | null
   temperature_C?: number | null
   temperature_hottest_month_C?: number | null
   temperature_coldest_month_C?: number | null

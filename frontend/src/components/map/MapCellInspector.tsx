@@ -659,6 +659,45 @@ function CellDetails({
                   : '—'}
               </dd>
             </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.reliefStd')}>{t('inspector.reliefStd')}</dt>
+              <dd className="font-mono">
+                {cell.relief_std_m != null ? `${formatNumber(Math.round(cell.relief_std_m))} m` : '—'}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500" title={t('tooltip.peakElevation')}>{t('inspector.peakElevation')}</dt>
+              <dd className="font-mono">
+                {cell.peak_elevation_m != null ? `${formatNumber(Math.round(cell.peak_elevation_m))} m` : '—'}
+              </dd>
+            </div>
+            {cell.trench_axis_elevation_m != null && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title={t('tooltip.trenchAxis')}>{t('inspector.trenchAxis')}</dt>
+                <dd className="font-mono">{Math.round(cell.trench_axis_elevation_m)} m</dd>
+              </div>
+            )}
+            {cell.convergent_duration_my != null && cell.convergent_duration_my > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title={t('tooltip.convergentDuration')}>{t('inspector.convergentDuration')}</dt>
+                <dd className="font-mono">{cell.convergent_duration_my.toFixed(1)} Myr</dd>
+              </div>
+            )}
+            {cell.convergent_run_km != null && cell.convergent_run_km > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title={t('tooltip.convergentRun')}>{t('inspector.convergentRun')}</dt>
+                <dd className="font-mono">{formatNumber(Math.round(cell.convergent_run_km))} km</dd>
+              </div>
+            )}
+            {(cell.island_count ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500" title={t('tooltip.subgridIslands')}>{t('inspector.subgridIslands')}</dt>
+                <dd className="font-mono">
+                  {cell.island_count}
+                  {cell.island_peak_m != null ? ` · ↑${Math.round(cell.island_peak_m)} m` : ''}
+                </dd>
+              </div>
+            )}
             {(cell.hotspot_id || cell.landform) && (
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.specialCrust')}>{t('inspector.specialCrust')}</dt>
