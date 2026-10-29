@@ -84,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--tail-years", type=int, default=5)
     ap.add_argument("--sea-level", type=float, default=0.0)
+    ap.add_argument(
+        "--precipitation-field", type=Path, help="Complete refined native precipitation archive"
+    )
+    ap.add_argument(
+        "--precipitation-coverage", type=Path, help="Reusable spherical CVT overlap archive"
+    )
     args = ap.parse_args(argv)
     if args.out is None and args.emit_fields is None:
         ap.error("pass --out and/or --emit-fields")
@@ -100,6 +106,24 @@ def main(argv: list[str] | None = None) -> int:
         mesh = found
     params = map_world(world, args.planet)
     nc = Path(args.nc)
+    precipitation, coverage = None, None
+    if args.precipitation_field:
+        from dreamulator.gcm.native_partition import NativePrecipitationField
+
+        precipitation = NativePrecipitationField.load(args.precipitation_field)
+        if args.precipitation_coverage:
+            import numpy as np
+
+            from dreamulator.gcm.cvt_area import CvtPrecipitationCoverage
+            from dreamulator.map.export import load_cvt_mesh_model
+
+            source_mesh = load_cvt_mesh_model(mesh)
+            coverage = CvtPrecipitationCoverage.load(
+                args.precipitation_coverage,
+                precipitation.partition,
+                np.array([c.lat for c in source_mesh.cells]),
+                np.array([c.lon for c in source_mesh.cells]),
+            )
     summary = project_to_mesh(
         nc,
         mesh,
@@ -111,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         sea_level_m=args.sea_level,
         fields_out=args.emit_fields,
         extra_provenance=run_provenance(nc.parent),
+        precipitation_field=precipitation,
+        precipitation_coverage=coverage,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     return 0

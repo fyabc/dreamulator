@@ -166,7 +166,7 @@ C[+laryngeal] > ∅
 
 - **声调特征**（本稿 §3.1 预留）：tonogenesis 规则包
   （tonogenesis.md §4）依赖声调进入特征系统，可在 2b 之后作为
-  独立增量交付；
+  独立增量实现；
 - **类推与借用 pass**：特征系统不解决"例外系统化"问题——
   类推平整与借词绕过是独立的规则阶段（见 sound-change-library.md
   §9 与主仓 `docs/design/language-phylogeny.md` §6），建议列为

@@ -213,7 +213,32 @@ ICAR 以线性山地波提供扰动风场，并推进时间输送及微物理。
 同时显示模型顶高度和稳定气流状态会影响误差。行星接入须统一各物理模块的重力、热力及自转参数。
 比湿 $q$ 转干空气水汽混合比使用 $r=q/(1-q)$；诊断云属性与微物理凝结物按过程来源分别核对。
 
+## 地形暴露与守恒降水分配
+
+地形暴露指标用上游高差概括抬升和遮蔽的空间关系。Böhner 与 Antonic（2009）的
+SAGA wind effect 方法沿风向搜索地形，按距离加权并以对数和分数次幂压缩响应。
+其角度变换使用米制高差和距离平方根，属于具有固定单位约定的地球经验参数化。
+300 km 搜索支持、1.5 倍步长增长和响应阻尼沿用参考实现，标定域与观测误差另行声明。
+
+细地形与大气模式地形计算相同指标，取两者比值可以表达未解析地形的增量，
+同时保留原生降水的大尺度分配。高频降水加权的风向积分保留湿天气的不同流向，
+月平均风向提供相应的简化对照。该几何指标描述地形暴露关系，凝结、云水转化和输送
+由原生大气模式及其经验闭合承担。
+
+CHELSA 的降尺度框架按父格内的地形权重分配降水并恢复父格配额。
+对细格权重 $w_i>0$、面积 $A_i$ 和父格月平均降水 $P_p$，分配为
+$P_i=P_p w_i / (\sum_{i\in p} A_i w_i/\sum_{i\in p}A_i)$。
+完整陆海覆盖参加分母；大尺度与对流分量分别归一，空间响应只作用于有依据的过程分量。
+守恒检查与地球迎背风空间质量分别验收，经验权重的应用范围由实际观测比较确定。
+
 ## 参考来源
+
+- Böhner, J., & Antonic, O. (2009). Land-Surface Parameters Specific to Topo-Climatology.
+  *Developments in Soil Science* 33, 195–226. DOI:10.1016/S0166-2481(08)00008-1。
+- SAGA GIS. Wind Effect 的算法实现：
+  <https://github.com/saga-gis/saga-gis/blob/master/saga-gis/src/tools/terrain_analysis/ta_morphometry/wind_effect.cpp>。
+- Karger, D. N. 等 (2017). Climatologies at high resolution for the earth’s land surface areas.
+  *Scientific Data* 4, 170122. DOI:10.1038/sdata.2017.122。
 
 - Gutmann, E. 等 (2016). "The Intermediate Complexity Atmospheric Research Model (ICAR)."
   *Journal of Hydrometeorology*. DOI: [10.1175/JHM-D-15-0155.1](https://doi.org/10.1175/JHM-D-15-0155.1)。

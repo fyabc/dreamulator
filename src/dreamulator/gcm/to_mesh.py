@@ -476,6 +476,8 @@ def project_to_mesh(
     sea_level_m: float = 0.0,
     fields_out: str | Path | None = None,
     extra_provenance: dict[str, Any] | None = None,
+    precipitation_field: NativePrecipitationField | None = None,
+    precipitation_coverage: CvtPrecipitationCoverage | None = None,
 ) -> dict[str, Any]:
     """Project ``nc_path`` onto the mesh at ``mesh_path``.
 
@@ -499,6 +501,8 @@ def project_to_mesh(
         steps_per_model_day=steps_per_model_day,
         tail_years=tail_years,
         sea_level_m=sea_level_m,
+        precipitation_field=precipitation_field,
+        precipitation_coverage=precipitation_coverage,
     )
     fs.provenance.update(extra_provenance or {})
     summary = {"source_mesh": str(mesh_path), **summarize_field_set(fs, mesh, sea_level_m)}

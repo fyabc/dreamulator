@@ -4,14 +4,9 @@ The yearly UCC file is a *derived product* of the persisted monthly series,
 but the in-memory ``_t_monthly_c`` stash does not survive a mesh save/load
 round trip — so after a classifier/profile change the engine worlds would
 otherwise need a full climate rebuild (GW6-scale) just to refresh a
-descriptors file.  This script dequantizes ``climate_monthly.msgpack``
-(int16, resolution ~0.001 °C / ~0.04 mm — far below the data's own precision)
-and re-runs the engine-side writer directly.
-
-Caveat: the regenerated values pass through the monthly quantization, so they
-can differ from a fresh full-build export in the last digits (threshold-
-adjacent cells can in principle flip; the quantization resolution makes this
-rare).  Canonical freshness for a release still comes from a full build.
+descriptors file. This script reads the float32 scientific monthly companion
+when available and re-runs the engine-side writer directly. Legacy datasets
+are read from their int16 monthly display file and retain its quantization.
 
 Solar-System bodies and the earth root are NOT handled here — their yearly
 files regenerate through their own importers / ``export_earth_yearly.py``
@@ -39,22 +34,15 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 from dreamulator.map.export import (  # noqa: E402
     find_mesh_file,
+    load_climate_monthly,
     load_cvt_mesh_model,
     write_engine_climate_yearly,
 )
 
 
 def _load_monthly(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Dequantize climate_monthly.msgpack → (t (N,12) °C, p (N,12) mm)."""
-    with path.open("rb") as f:
-        d = msgpack.unpackb(f.read())
-    n, m = int(d["num_cells"]), int(d["months"])
-
-    def deq(prefix: str) -> np.ndarray:
-        q = np.frombuffer(d[f"{prefix}_monthly"], dtype="<i2").astype(np.float64)
-        return (q * float(d[f"{prefix}_scale"]) + float(d[f"{prefix}_offset"])).reshape(n, m)
-
-    return deq("t"), deq("p")
+    """Read the shared scientific monthly series in cell/month order."""
+    return load_climate_monthly(path.parent)
 
 
 def _modifier_stats(path: Path) -> str:

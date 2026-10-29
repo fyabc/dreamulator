@@ -258,3 +258,25 @@ def test_load_climate_monthly_roundtrip(tmp_path):
     assert np.allclose(p2, p, atol=1e-2)
     with pytest.raises(FileNotFoundError):
         load_climate_monthly(tmp_path / "elsewhere")
+
+
+def test_monthly_scientific_precision_and_source_binding(tmp_path):
+    """Science consumers preserve small rainfall and reject a mismatched display file."""
+    from dreamulator.map.export import load_climate_monthly, write_climate_monthly_scientific
+
+    display = tmp_path / "climate_monthly.msgpack"
+    display.write_bytes(b"display-version")
+    t = np.full((2, 12), 13.456789, dtype=np.float32)
+    p = np.full((2, 12), 0.0000123, dtype=np.float32)
+    write_climate_monthly_scientific(tmp_path, t, p)
+    actual_t, actual_p = load_climate_monthly(tmp_path)
+    np.testing.assert_array_equal(actual_t, t.astype(np.float64))
+    np.testing.assert_array_equal(actual_p, p.astype(np.float64))
+    from scripts.climate.regen_climate_yearly import _load_monthly
+
+    yearly_t, yearly_p = _load_monthly(display)
+    np.testing.assert_array_equal(yearly_t, actual_t)
+    np.testing.assert_array_equal(yearly_p, actual_p)
+    display.write_bytes(b"different-display-version")
+    with pytest.raises(ValueError, match="does not match"):
+        load_climate_monthly(tmp_path)
