@@ -17,7 +17,7 @@
 - `inland_water_classification.md` — 内陆水体分类学：water_class × is_lake 二维语义矩阵、尺寸分界依据、各层湖语义与不变式（2026-10）
 - `coastal_geomorphology.md` — 海岸侵蚀/堆积地貌分类、潮差控制律（Davies/Hayes/Dalrymple）、44 m 巨潮差外推与 ~50 km 分辨率可表达性（2026-08）
 - `continental_margins.md` — 大陆边缘：陆架即淹没陆壳、坡折深度与低海面和浪基面的关系、陆缘类型与宽度、陆坡坡度；俯冲陆缘的作用域、连续岸坡与海面位移、同等约 50 km 输入的地球陆架对照、局部宽度来源及地貌曲线的连接和剖面。
-- `ice_sheets.md` — 极地冰盖物理学：无量纲日照门、距海分域、完美塑性 Vialov 穹丘剖面与 Bedmap2 标定（2026-09）
+- `ice_sheets.md` — 极地冰盖物理学：无量纲日照门、距海分域、完美塑性穹丘与 Bedmap2 标定，以及冰面、受载基岩和卸载基岩的高程语义与形态验收。
 
 ## 关键参考
 

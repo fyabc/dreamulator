@@ -124,6 +124,11 @@ nacrea 当前是 19 张画布、9259 个分块、约 388 亿像素，int16 存�
   粗格上的陆地专属量记为 NaN。编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致，消费者
   判定海陆一律以高程是否大于 0 m 为准。
 
+地质网格的 `elevation` 已包含冰盖表面，受载基岩高程为 `elevation − ice_thickness_m`。
+TD 高程条件使用这一地表高程，`climate/ice.m.npy` 另存粗尺度冰厚，供水文与渲染使用。
+高清分块按地表高程解读，结构增量和生成细节沿用地形起伏统计；冰面形态约束、冰流与冰蚀属于
+[冰川地貌提案](../proposals/canvas-glacial-landforms.md) 的后续验收范围。高清冰下基岩的恢复需要独立来源。
+
 画布计划可通过 `--precipitation-field` 读取 `NativePrecipitationField` 的完整原生高斯降水档案。
 档案分别保存大尺度与对流分量的十二个月值，每个父格覆盖全部陆海面积；读取时核对面积水量预算。
 此路径的降水条件和气候降水使用 `canvas_precipitation.canvas_precipitation_coverage` 提供的完整粗格球面足迹。

@@ -29,6 +29,18 @@
 （Bedmap2）。冰面仍高于无冰基岩，所以没有陆地格因此变成海洋；重跑时先把下沉量补回再重算，保持幂等。
 认识论类别：守恒定律加观测约束的密度。
 
+### 1.2 冰面与冰下基岩的高程语义
+
+冰面高程 s、受载基岩高程 b 与冰厚 H 满足 s = b + H。按上述局地完全补偿近似，
+无冰卸载基岩高程为 s − (1 − ρ_i/ρ_m)H；它与当前受载基岩 s − H 是不同的情景。
+地形对照需要选择相同的表面：Copernicus 数字表面模型记录地表，冰盖处对应冰面；
+Bedmap2 则分别提供南极冰面、冰厚和冰下基岩（Fretwell 等 2013）。
+
+冰面局地起伏由冰流、物质平衡和基底条件共同决定。基底起伏向冰面的传递取决于起伏波长相对冰厚的比例
+和底部滑动条件（Gudmundsson 2003），厚冰内部与冰缘、出口冰川及裸岩露头需要分别验收。
+高程生成方法即使使用含冰的粗尺度输入，也需要验证最终冰面的坡度与分尺度起伏；
+高清基岩的恢复还需要同尺度冰厚或独立基岩来源。
+
 ## 2. 日照门（热限，无量纲）
 
 冰盖能在某个纬度存活，经典控制是**入射日照**（米兰科维奇理论的核心机制：
@@ -160,3 +172,7 @@ h_cap = min((bed − snowline)·0.5, cap_max)    （snowline = 1200 m, cap_max =
    ch. 8（完美塑性剖面、驱动应力观测范围、冰密度）. Academic Press.
 3. Hartmann, D.L. (2016). *Global Physical Climatology*, 2nd ed., 式 3.7
    （逐日平均日照）. Elsevier.
+4. Gudmundsson, G.H. (2003). Transmission of basal variability to a glacier surface.
+   *Journal of Geophysical Research*, 108(B5), 2253. [doi:10.1029/2002JB002107](https://doi.org/10.1029/2002JB002107)。
+5. [Copernicus DEM 数据说明](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM)。
+   产品记录数字表面高程。

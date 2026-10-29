@@ -440,8 +440,8 @@ features:
     elongation: 1.0
 
   # 永耀岛：向星点火山省上的主火山，位于 Aegis 深渊洋中央，Aegis 永悬天顶，为 nacrea 文明传说中的
-  # "世界之眼"。叙事豁免：此处热流与火山活动异常增大，岛屿目录推出的热管盾状火山只有约 1 km 起伏、
-  # 出不了深海，所以永耀岛的高度由作者钉扎，不由目录推出（design-notes/0017 §5）。
+  # "世界之眼"。岛的存在由软钉扎约束；正典采用定版输出，岛心格均约 1.55 km、亚格子峰顶约 1.8 km
+  # （作者 2026-10-29，design-notes/0017 §5）。钉扎参考值属于生成输入，正典高程取实际输出。
   - name: 永耀岛
     lon: 0.4                    # 略偏向星点，不完全重合
     lat: -0.6
@@ -450,7 +450,7 @@ features:
     noise_amplitude: 1.2
     elongation: 1.1
     bearing_deg: 0.0
-    elevation_target_m: 2100.0
+    elevation_target_m: 2100.0  # 软钉扎参考值，正典格均及峰顶见上方说明
     pin_strength: 0.7
     pin_exponent: 3.0           # 削峰——孤立的尖耸火山锥
 
