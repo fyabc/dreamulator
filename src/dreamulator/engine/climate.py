@@ -210,7 +210,7 @@ class ClimateEngine(BaseEngine):
 
         from dreamulator.map.export import export_climate_layers
 
-        export_climate_layers(mesh, export_dir, config)
+        export_climate_layers(mesh, export_dir, config, climate_provenance=gcm_provenance)
 
         # ---- 7. Write summary YAML ----
         summary = _build_climate_summary(mesh, planet, config)

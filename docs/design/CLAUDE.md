@@ -17,7 +17,7 @@
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器架构（真实比例设计、层级轨道解算、标签去重叠）
 - `roadmap.md` — 开发路线图（Phase 状态、优先级、技术债务）
 - `competitor-analysis.md` — 竞品分析（护城河定位与参考链接）
-- `audit-plan.md` — 三波审计计划（按变化速率分波，各有启动判据与交付物）
+- `audit-plan.md` — 三波审计计划（按变化速率分波，各有启动判据与审计产物）
 - `profiling.md` — 性能剖析工作流（build_profile.json、py-spy 火焰图、CI 基准测试、前端 React Profiler、跨版本对比）
 - `performance-optimizations.md` — 性能优化记录（基线数据、改动内容、效果对比、待优化清单）
 

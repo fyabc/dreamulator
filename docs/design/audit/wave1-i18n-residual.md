@@ -109,4 +109,4 @@ T5 硬编码扫完后**直接做语言切换器**，便于前端验收中英双�
 - **实现**：`i18n.changeLanguage(lng)` + `localStorage` 持久化 + 首次按
   `navigator.language` 取默认（`SUPPORTED_LANGUAGES` 已在 index.ts 就位）；
 - **前置**：en 覆盖率到位（即 T5 扫完），否则 en 模式中英混杂；
-- **交付**：切换器 UI + zh-CN/en 双语切换验证。
+- **实现成果**：切换器 UI 与 zh-CN/en 双语切换验证。

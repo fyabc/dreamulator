@@ -78,7 +78,7 @@
 
 - **F3** `usage/skills.md`（08-25）：`.claude/commands/` 实际 5 技能，文档列 3（漏 /audit-doc、/diagnose-climate）；:19 引用旧路径 `../design/harness.md`。
 - **F6** `usage/performance-optimizations.md`（08-25）：P1 scipy 稀疏 BFS 未勾选但 `tectonic_simulator.py:790` 已实现；累计表 317.0s vs roadmap v0.36.0 基线 ~391s（版本口径未注明）；`noise_kernels.py` Numba 优化组 + numba 依赖漏记。
-- **F7** `design/audit-plan.md`（08-23）：第一波 6/7 交付物已有 wave1-*.md 报告 + `_is_dirty()` 已实现（`pipeline.py:295`），表格未回填；第二波未启动合理（M4 判据未达）；第三波已标 ✅。
+- **F7** `design/audit-plan.md`（08-23）：第一波 6/7 审计产物已有 wave1-*.md 报告 + `_is_dirty()` 已实现（`pipeline.py:295`），表格未回填；第二波未启动合理（M4 判据未达）；第三波已标 ✅。
 - 轻微：`layer-control-model.md` 无落地状态标注；`geological-pipeline.md` 头部「设计草案」。
 
 ### 组织合理性

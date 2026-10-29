@@ -1111,8 +1111,8 @@ def write_engine_climate_yearly(
     is GCM-derived) — the engine declaration alone does not distinguish an
     engine-built root from a GCM-imported branch.  Called from
     :func:`export_climate_layers` during a build; the
-    regeneration script calls it directly with monthly arrays dequantized
-    from the persisted ``climate_monthly.msgpack`` (the in-memory ``_t_*``
+    regeneration script calls it directly with persisted scientific monthly
+    arrays, or legacy display arrays (the in-memory ``_t_*``
     stash does not survive a mesh save/load round trip).
     """
     import msgpack
@@ -1192,20 +1192,50 @@ def write_engine_climate_yearly(
     logger.info("  Exported climate_yearly.msgpack (%d cells)", mesh.num_cells)
 
 
+def write_climate_monthly_scientific(
+    output_dir: Path, t_monthly: np.ndarray, p_monthly: np.ndarray
+) -> None:
+    """Keep float32 science inputs alongside the int16 display encoding."""
+    import hashlib
+
+    path = output_dir / "climate_monthly.msgpack"
+    np.savez_compressed(
+        output_dir / "climate_monthly.npz",
+        format="climate-monthly-f32-v1",
+        source_monthly_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        t_monthly_c=t_monthly.astype(np.float32),
+        p_monthly_mm=p_monthly.astype(np.float32),
+    )
+
+
 def load_climate_monthly(map_dir: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Dequantize ``climate_monthly.msgpack`` into the monthly t/p arrays.
+    """Read float32 scientific months, or dequantize a legacy monthly file.
 
     Returns ``(t_monthly_c, p_monthly_mm)``: per-cell monthly-mean temperature
     in °C and monthly precipitation in mm per month, both float64 of shape
-    (num_cells, 12) in mesh-cell order — the reading inverse of the writer in
-    ``export_climate_layers`` (int16 + per-field scale/offset).  Raises
+    (num_cells, 12) in mesh-cell order. The scientific companion is tied to
+    its display file by SHA-256; legacy files use int16 scale/offset. Raises
     FileNotFoundError naming the path when the file is missing.
     """
+    import hashlib
+
     import msgpack
 
     path = map_dir / "climate_monthly.msgpack"
     if not path.exists():
         raise FileNotFoundError(f"monthly climate series missing: {path}")
+    scientific = map_dir / "climate_monthly.npz"
+    if scientific.exists():
+        with np.load(scientific, allow_pickle=False) as arrays:
+            if (
+                str(arrays["format"]) != "climate-monthly-f32-v1"
+                or str(arrays["source_monthly_sha256"])
+                != hashlib.sha256(path.read_bytes()).hexdigest()
+            ):
+                raise ValueError("scientific monthly climate does not match its display file")
+            return arrays["t_monthly_c"].astype(np.float64), arrays["p_monthly_mm"].astype(
+                np.float64
+            )
     with path.open("rb") as f:
         d = msgpack.unpackb(f.read())
     n, m = int(d["num_cells"]), int(d["months"])
@@ -1221,6 +1251,8 @@ def export_climate_layers(
     mesh: CVTMesh,
     output_dir: Path,
     config: TerrainPipelineConfig,
+    *,
+    climate_provenance: dict[str, object] | None = None,
 ) -> None:
     """Export climate raster and vector layers.
 
@@ -1353,14 +1385,33 @@ def export_climate_layers(
             monthly["pressure_range_hpa"] = [float(np.min(pr_monthly)), float(np.max(pr_monthly))]
 
         monthly_path = output_dir / "climate_monthly.msgpack"
+        if climate_provenance is not None:
+            monthly["source_provenance"] = climate_provenance
         with monthly_path.open("wb") as _f:
             _f.write(msgpack.packb(monthly))
+        write_climate_monthly_scientific(output_dir, t_monthly, p_monthly)
         logger.info("  Exported climate_monthly.msgpack (%d×%d)", mesh.num_cells, 12)
 
         # 6. Yearly climate descriptors (UCC-01 step 2) — computed by the
         # shared writer (declarations: reference-year basis, Hamon demand,
         # engine climate_state + declared lapse rate for the -H modifier).
-        write_engine_climate_yearly(mesh, output_dir)
+        source = None
+        if climate_provenance is not None:
+            precipitation_source = climate_provenance.get("precipitation_source", {})
+            source = "gcm"
+            if isinstance(precipitation_source, dict):
+                run = precipitation_source.get("source_run_id", "native atmosphere")
+                method = precipitation_source.get("terrain_refinement", {}).get(
+                    "method_version", "conservative-area-remap"
+                )
+                source = f"GCM {run}; {method}"
+        write_engine_climate_yearly(
+            mesh,
+            output_dir,
+            t_monthly=t_monthly.astype(np.float32).astype(np.float64),
+            p_monthly=p_monthly.astype(np.float32).astype(np.float64),
+            climate_source=source,
+        )
 
 
 def _nice_range(

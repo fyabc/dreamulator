@@ -33,6 +33,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -92,6 +93,18 @@ def _solar(body: str, planet_id: str, data_source: str, note: str) -> RegenTarge
 
 
 def yearly_targets(*, all_targets: bool) -> list[RegenTarget]:
+    source = f"gcm pack import ({NACREA_CANON_BRANCH})"
+    provenance = (
+        _ROOT
+        / "data/worlds/nacrea/branches"
+        / NACREA_CANON_BRANCH
+        / "layers/climate/input/gcm_fields.msgpack.gz.provenance.json"
+    )
+    if provenance.exists():
+        meta = json.loads(provenance.read_text(encoding="utf-8"))
+        refinement = meta.get("precipitation_source", {}).get("terrain_refinement", {})
+        if refinement:
+            source += f"; {refinement['method_version']}; fields sha256 {meta['sha256']}"
     targets = [
         _engine("nacrea (root, engine climate)", "nacrea", "satellite_nacrea"),
         _engine(
@@ -99,7 +112,7 @@ def yearly_targets(*, all_targets: bool) -> list[RegenTarget]:
             "nacrea",
             "satellite_nacrea",
             branch=NACREA_CANON_BRANCH,
-            climate_source=f"gcm pack import ({NACREA_CANON_BRANCH})",
+            climate_source=source,
         ),
         _engine("myworld/planet_gaia", "myworld", "planet_gaia"),
         _engine("earth/climate-dev", "earth", "planet_earth", branch="climate-dev"),

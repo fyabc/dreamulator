@@ -947,7 +947,11 @@ GCM 分辨率比较先统一统计。`gcm/diagnostics.py` 的 `summarize` 用高
 近地面全球均温，赤道和极地也读取 `tas`，整层大气均温独立保存。
 `scripts/climate/gcm/run_exoplasim.py` 从实际 namelist 读取步长，取末 120 条记录，
 按十二个已覆盖的轨道相位箱等权平均，并记录相位覆盖。
-分辨率引起的云和海冰变化通过辐射收支解释，共同配置干预用于分离其因果份额。
+`scripts/climate/gcm/compare_resolution.py` 比较共同物理时间窗口，读取模式打印的实际
+扩散幂次、临界波数和扩散时间，并用球面交叠积分给出各纬度带对全球差异的贡献。
+输入包含晴空辐射时，工具把短波变化分成晴空吸收变化和云辐射效应变化。
+分辨率比较同时核对步长、数值扩散、地表取样和代码补丁，共同配置干预用于判断
+这些变化对云与海冰的影响。短暖启动对照用于描述瞬态响应，平衡差异另按长积分验收。
 统计定义及参数化来源见 [GCM 气候统计](../../knowledge/climatology/gcm_climate_statistics.md)。
 
 ### 14.2 长期降水的有限面积输出
@@ -969,6 +973,37 @@ GCM 分辨率比较先统一统计。`gcm/diagnostics.py` 的 `summarize` 用高
 跨画布所有权按其独立分区计算。画布月温度和月降水先量化到导出精度，
 蒸散与径流随后使用双精度计算，消费者可从实际月文件复现水文输入。
 
+#### 14.2.1 地形暴露增量
+
+`gcm/terrain_exposure.py` 实现 `terrain-exposure-increment-v1`。空间权重参照
+Böhner 与 Antonic 的地形暴露指标及 SAGA wind effect 算法，父格分配参照 CHELSA
+的配额归一框架。地形指标属于地球经验参数化，面积归一承担水量守恒。
+
+算子在完整球面沿上游大圆取样，以 300 km 为搜索支持，初始步长取积分单元格距，
+后续步长乘 1.5。高程和距离采用米制，角度变换、对数响应与四分之一次幂阻尼
+沿用参考算法的数值约定。细地质地形与原生 GCM 地形计算相同指标，二者之比
+给出原生模式未解析的地形增量。海洋地形使用海平面，陆地读取真实地球或生成世界的 CVT 高程。
+
+高频 `prl` 按轨道相位和最低模式层风向累加，32 个风向箱提供降水加权求积。
+每月仅用该增量改变大尺度降水 `prl` 的空间权重，对流降水 `prc` 保留长期分配。
+两个分量分别按每个完整父格的面积月水量归一，全年干父格保持干燥。
+地球验收检查山地父格内的对数误差、相关性和六处迎背风比值；
+当前方法获得有限的空间增益，原生模式的区域偏差仍计入适用范围。
+
+准备命令读取已有地质网格、长期降水底场及同源高频年，生成独立档案：
+
+```bash
+python scripts/climate/gcm/refine_precipitation.py \
+    --world data/worlds/nacrea --planet satellite_nacrea \
+    --baseline native-precipitation.npz --weather snapshots.nc \
+    --out refined-precipitation.npz
+```
+
+`gcm_to_mesh.py --precipitation-field` 将档案映射到 CVT；
+`--precipitation-coverage` 可复用已核验的球面交叠权重。
+档案记录长期父数据、高频驱动、地质网格哈希和经验参数来源。
+方法依据见 [地形暴露与降水分配](../../knowledge/climatology/precipitation.md#地形暴露与守恒降水分配)。
+
 ### 14.3 高频状态与 TD 消费
 
 频繁快照使用当前时点的谱湿度诊断缓存。`gcm/runner.py` 在隔离构建中提供
@@ -976,7 +1011,7 @@ GCM 分辨率比较先统一统计。`gcm/diagnostics.py` 的 `summarize` 用高
 比湿与派生相对湿度按相同缓存时点读取，原始重启字段保持其物理状态。
 原生云水的辐射诊断与凝结倾向产生的降水分别定义，湿稳定度按对应气块近似核验。
 
-当前画布采用有限面积守恒重采样的长期气候，地形驱动的降水重分配属于后续候选。
+画布附带月气候读取有限面积的地形暴露细化场，供分类、生态及水文消费。
 新版本进入 TD 时，`refresh_canvas_climate` 在独立
 未生成批次中设置 `refresh_conditioning=True`，更新海平面年均温、月温度标准差、
 年降水及月降水变异系数，保留接受版高程条件。
@@ -985,8 +1020,30 @@ GCM 分辨率比较先统一统计。`gcm/diagnostics.py` 的 `summarize` 用高
 全部地形块使用这份共享场和新条件生成，两档高清图消费同一批块。
 接口与来源约束见 [画布链 2.5 节](canvas-chain.md#25-条件场与气候通道)。
 
-天气驱动的地形雨和 ICAR 保留候选范围。算子不变性、边界收敛、
+已接受地形可以单独刷新附带气候。此时保留生成条件、共享场及地形块，
+`canvas.json` 分别声明生成时的气候来源和新的消费气候来源，S2 水文按新月值重算。
+原生天气包继续使用原大气来源。
+
+线性动力地形雨和 ICAR 保留候选范围。算子不变性、边界收敛、
 过程适用域、父格月预算与独立地球空间质量共同决定采用，设计依据见
 [画布条件提案 4.1](../proposals/canvas-conditioning-structure.md#41-第-4-步gcm-气候场的守恒重采样与地形雨候选)。
 其他气候后端见 [GCM 方案](../proposals/climate-gcm-plan.md)，
 参数化管线的稳态耦合见 [稳态耦合](../proposals/climate-steady-coupling.md)。
+
+### 14.4 科学月字段与冻结契约
+
+`map/export.py` 同时写出逐月显示文件 `climate_monthly.msgpack` 和科学文件
+`climate_monthly.npz`。科学文件保留固定 GCM 字段的 float32 精度，温度单位为 °C，
+降水单位为 mm/reference month，数组顺序为格、月。十二个相位月从北半球春分起算，
+参考月为 365.25/12 地球日。文件以 SHA-256 绑定同批显示文件。
+`load_climate_monthly` 优先读取科学文件；UCC 年描述符重生成和画布准备共用此入口。
+显示端继续使用现有 MessagePack 接口。
+
+定版科学数据另提供 `layers/climate/derived/surface_climate_200k.npz` 和
+`surface_climate.json`，包含格 ID、位置、高程、海陆、面积、逐月温度与降水、
+风、气压异常及 Köppen 分类。降水积分使用 `precipitation_area_km2`，
+网格原面积保存在 `area_km2`；两个面积的数值口径分别声明。
+完整父格与分量月预算保存在 `native_precipitation.npz`，23 km 画布通过球面足迹读取同一来源。
+
+冻结说明记录方法版本、原生大气来源、地表网格版本、父数据哈希、字段单位及失效资产。
+地形生成版与地表气候版分别固定，月气候、年描述符、生态、水文输入与全球图层保持同批来源。

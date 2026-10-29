@@ -456,7 +456,7 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 纸色。输出 `.jpg`（每边不超过 65535 像素，JPEG 的格式上限）、`.png` 或分块压缩的 BigTIFF（`.tif`），
 旁边附一份 `<图>.json` 记录画布、步长、像素尺寸与几何；默认路径在 `exports/mosaic/<画布根目录名>/`，不同配方的画布根目录各占一个子目录。
 
-同批交付同时提供 `--step 2` 和 `--step 4` 两档图，实际格距为 179.6875 m 和 359.375 m。
+最终图像产品同时提供 `--step 2` 和 `--step 4` 两档图，实际格距为 179.6875 m 和 359.375 m。
 每对图从同一批原生块取样，范围、配色和高程放大倍数保持一致。
 批次清单记录画布元数据、原图哈希、尺寸及来源版本，预览与原图分别保存。
 
@@ -524,22 +524,47 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 90 m 像素的同一起点约 27000 格，因此 `--threshold-cells` 默认 27000；需要更密的小溪网
 时下调。
 
-### 3.7 磁盘布局
+### 3.7 最终产品目录约定
+
+最终产品使用第 2.7 节的画布根目录。共享几何文件位于根目录，各画布的资产状态与水文产品位于其子目录。
 
 ```
-<canvas>/hydro-work/          中间区（可删、可断点续算）
-  fill/     r<ci>_c<cj>.i16.npy     局部填平面
-  labels/   r<ci>_c<cj>.i32.npy     局部分水岭标签
-  summary/  r<ci>_c<cj>.npz         溢出图与四边标签/高程
-  final/    r<ci>_c<cj>.i16.npy     全局填平面
-  chunks.sha256                     已完成分块的校验和
-<canvas>/hydro/               最终产品
-  rivers.line.npy / rivers.flow.npy / rivers.regime.npy
-  rivers.png / rivers.meta.json
+<root>/
+├── layout.json                       # 画布布局与来源
+├── owner_points.npy                  # 成员陆地点的球面坐标
+├── owner_canvas.npy                  # 成员陆地点所属画布
+├── seam_pairs.json                   # 跨所有权边界的共同取样点
+└── <canvas_id>/
+    ├── asset_status.json             # 地形、气候与水文产品的实际状态
+    └── hydro/
+        ├── rivers.line.npy           # 河段几何
+        ├── rivers.flow.npy           # 河段流量
+        ├── rivers.regime.npy         # 河段情相编码
+        ├── rivers.png                # 河网栅格图
+        ├── rivers.meta.json          # 河网元数据
+        ├── lakes.json                # 湖表预留路径
+        ├── terminal_lakes.json       # 终端湖表预留路径
+        └── lakes.sparse/             # 稀疏湖面预留目录
 ```
 
-最终产品的目录约定还为湖表预留了 `lakes.json`、`terminal_lakes.json` 与
-`lakes.sparse/`，接入湖级联后补齐。
+`asset_status.json` 记录 S1 分块、气候文件、地质契约及 S2 湖表的实际完成状态。
+地形、气候与地质来源分别记录版本，湖表按所采用的地形和月气候生成。
+当前目录为湖表预留路径，S2 接入湖级联后写入这些产品并更新状态。
+
+`seam_pairs.json` 提供实际 CVT 陆地邻接边上的跨所有权配对点。
+每项记录两侧格 ID、同一地理点及两张画布的像素坐标，只包含双方已有地形块覆盖的点。
+S4 结合布局与所有权文件对同一地点取样，检查接缝高程、河湖与流量的一致性。
+
+水文中间结果保存于各画布的 `hydro-work/`，供断点续算使用，完成后可清理。
+
+```
+<canvas>/hydro-work/
+├── fill/r<ci>_c<cj>.i16.npy           # 局部填平面
+├── labels/r<ci>_c<cj>.i32.npy         # 局部分水岭标签
+├── summary/r<ci>_c<cj>.npz           # 溢出图、四边标签与高程
+├── final/r<ci>_c<cj>.i16.npy          # 全局填平面
+└── chunks.sha256                     # 已完成分块的校验和
+```
 
 ## 4. S3：区域裁窗
 
