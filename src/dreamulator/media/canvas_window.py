@@ -380,9 +380,11 @@ def crop_canvas_window(
 
     canvas_meta = json.loads((source.root / "canvas.json").read_text(encoding="utf-8"))
     legends: dict[str, dict[str, str]] = {}
-    for key in ("koppen_legend", "biome_legend"):
-        if key in canvas_meta:
-            legends[key.split("_")[0]] = {str(k): str(v) for k, v in canvas_meta[key].items()}
+    canvas_legends = canvas_meta.get("legends", {})
+    for field in ("koppen", "biome"):
+        merged = canvas_meta.get(f"{field}_legend") or canvas_legends.get(f"{field}.codes")
+        if merged:
+            legends[field] = {str(k): str(v) for k, v in merged.items()}
     if "koppen" not in legends and (inp / "koppen.codes.npy").exists():
         codes = np.unique(np.load(inp / "koppen.codes.npy"))
         legends["koppen"] = {str(int(c)): f"class_{int(c)}" for c in codes}

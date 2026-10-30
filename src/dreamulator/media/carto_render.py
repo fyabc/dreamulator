@@ -468,6 +468,16 @@ def compose_rgb(
             months = inputs.lake_ice_months.reshape(res, f, res, f).max(axis=(1, 3))
             rgb[lake & (months >= 12)] = np.asarray(LAKE_ICE_COLOR) / 255.0
         rgb[shore] = np.asarray(LAKE_SHORE_COLOR) / 255.0
+    # Intertidal (drying-foreshore) band: pixels within ±2 m of sea level
+    # across the waterline, painted flat after every multiply like the lake
+    # fill — the charting convention's own colour (IHO S-52 DEPIT; same
+    # constants as the canvas mosaic, single source).  A rendering class,
+    # not a land/sea test.
+    from dreamulator.map.td_canvas_mosaic import INTERTIDAL_M, INTERTIDAL_RGB
+
+    if INTERTIDAL_M is not None:
+        band = (height >= INTERTIDAL_M[0]) & (height <= INTERTIDAL_M[1])
+        rgb[band] = np.asarray(INTERTIDAL_RGB, dtype=np.float64)
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
 
@@ -1394,21 +1404,12 @@ def carto_region(
             f"{name} 地形图 —— {fmt_deg(abs(center_lat))}°{lat_ns} "
             f"{fmt_deg(abs(center_lon))}°{lon_ew} 附近"
         )
-    # Unclamped engine range drives the shared palette (seafloor-clamped
-    # Gaea heights would misplace the min-anchored deep-water gradient).
-    # Palette anchor range: the planet-wide elevation range when the pack
-    # records it (same elevation → same colour on every sheet/window,
-    # cross-map comparability), falling back to the window range with a
-    # virtual-ocean reserve for landlocked windows (sea anchors would
-    # collapse and the min-anchored deep-water gradient would eat the
-    # lowland bands).
-    if "elevation_m_global" in meta:
-        rng_m = (float(meta["elevation_m_global"][0]), float(meta["elevation_m_global"][1]))
-    else:
-        rng_lo, rng_hi = (float(v) for v in meta["height_png_range_m"])
-        if rng_lo > float(meta["sea_level_m"]):
-            rng_lo = float(meta["sea_level_m"]) - 1000.0
-        rng_m = (rng_lo, rng_hi)
+    # Fixed ±9000 m planet-wide palette anchor (same as the mosaic adaptive
+    # LUT): one shared elevation axis across every sheet, window and canvas —
+    # the same elevation always maps to the same colour, and no window's own
+    # range renormalises the bands (a low island canvas must not spend its
+    # white end at 3 km).  The meta range fields stay as record-keeping.
+    rng_m = (-9000.0, 9000.0)
     return render_carto(
         inputs,
         out_dir or pack_dir / "carto",
