@@ -119,7 +119,7 @@
 | **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
 | **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 重叠窗一致性与 S5 全局概览待做；S1 画布已生成，可用于接入验收；降尺度正典冻结后集中更新终版数据）→ [canvas-chain.md](pipelines/canvas-chain.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，SPL 刻蚀不治理湖——湖盆是排水树的汇，刻蚀只会加深；侵蚀/沉积只在画布链做生产，区域 refine 链为研发台，CVT 层不做；输出独立资产层，不动 chunks 正典）→ [drainage_cartography.md](../knowledge/cartography/drainage_cartography.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
-| P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；零均值构造结构场与 TD 配方已实现；一级气候降尺度已决定进入正典，验证与生产接入待做）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
+| P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；零均值构造结构场与 TD 配方已实现；一级气候降尺度已决定进入正典，验证与生产接入待做。**永耀岛例证 2026-10-30：正典盾状火山被 TD 生成为高原台地+峰林，五项形态检验全不符；修复 = 该画布接入已实现的火山锥连续来源（`VolcanicConeField`）重生成，S1 归服务器、待同步**，定量见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示** ✅ 2026-10-23：月度风场箭头与粒子流、洋流粒子流（洋流为年均场）；操作见 `usage/map-workflow.md` §4 | — | ★★★★ |
