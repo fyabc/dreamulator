@@ -673,7 +673,14 @@ def export_render(
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
-    build_dir = gaea or (pack / "gaea-out")
+    build_dir = gaea or next(
+        (
+            pack / cand
+            for cand in ("gaea-out", "refined-out", "prog-out")
+            if (pack / cand).is_dir()
+        ),
+        pack / "gaea-out",
+    )
     if style == "satellite":
         from dreamulator.media.satellite_color import colorize_region
 
@@ -732,12 +739,12 @@ def export_render(
             raise typer.Exit(code=2) from None
         console.print(f'Rendering "{style}" sheet {pack} ({build_dir.name}) → {out_dir}')
         if style == "medieval":
-            medieval_region(pack, out_dir, res=res, dpi=dpi, title=title, gaea_dir=gaea)
+            medieval_region(pack, out_dir, res=res, dpi=dpi, title=title, gaea_dir=build_dir)
         else:
             carto_region(
                 pack,
                 out_dir,
-                gaea_dir=gaea,
+                gaea_dir=build_dir,
                 res=res,
                 dpi=dpi,
                 data_dir=data_dir,
