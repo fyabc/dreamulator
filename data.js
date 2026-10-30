@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793293845646,
+  "lastUpdate": 1793399264685,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1357,6 +1357,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0004546269393354228",
             "extra": "mean: 6.318789200000197 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "4d7e40a575f2813d04894553c479b3d47943cbd5",
+          "message": "Merge S2/S3 canvas consumption: 画布水文语义补全 + S3 裁窗湖掩膜修复 + 首窗渲染修复\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-10-31T06:26:57+08:00",
+          "tree_id": "56eaa3dcf2c144ac50fe74f2446cea58fd6d2ad3",
+          "url": "https://github.com/fyabc/dreamulator/commit/4d7e40a575f2813d04894553c479b3d47943cbd5"
+        },
+        "date": 1793399263855,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.37582524154710534,
+            "unit": "iter/sec",
+            "range": "stddev: 0.18144335358387148",
+            "extra": "mean: 2.6608111681999986 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.7356344961369654,
+            "unit": "iter/sec",
+            "range": "stddev: 0.027724142267597448",
+            "extra": "mean: 267.69214200000135 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.7855310487788525,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9010800862500342",
+            "extra": "mean: 560.0574690000002 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 844.2219675659522,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00015381262045069543",
+            "extra": "mean: 1.1845226000019693 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 207.97760497154943,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00019799799270299822",
+            "extra": "mean: 4.80820999999878 msec\nrounds: 5"
           }
         ]
       }
