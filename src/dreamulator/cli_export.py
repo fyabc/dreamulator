@@ -674,11 +674,7 @@ def export_render(
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
     build_dir = gaea or next(
-        (
-            pack / cand
-            for cand in ("gaea-out", "refined-out", "prog-out")
-            if (pack / cand).is_dir()
-        ),
+        (pack / cand for cand in ("gaea-out", "refined-out", "prog-out") if (pack / cand).is_dir()),
         pack / "gaea-out",
     )
     if style == "satellite":
