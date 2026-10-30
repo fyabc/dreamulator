@@ -154,7 +154,7 @@ def _local_flood_kernel(
     dem: np.ndarray,
     external: np.ndarray,
     eps: float,
-):
+) -> tuple[np.ndarray, np.ndarray, dict[int, float]]:
     """Numba twin of ``_local_flood_reference``; see the module docstring."""
     h, w = dem.shape
     n_cells = h * w

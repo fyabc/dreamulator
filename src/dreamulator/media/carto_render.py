@@ -468,16 +468,20 @@ def compose_rgb(
             months = inputs.lake_ice_months.reshape(res, f, res, f).max(axis=(1, 3))
             rgb[lake & (months >= 12)] = np.asarray(LAKE_ICE_COLOR) / 255.0
         rgb[shore] = np.asarray(LAKE_SHORE_COLOR) / 255.0
-    # Intertidal (drying-foreshore) band: pixels within ±2 m of sea level
-    # across the waterline, painted flat after every multiply like the lake
-    # fill — the charting convention's own colour (IHO S-52 DEPIT; same
-    # constants as the canvas mosaic, single source).  A rendering class,
-    # not a land/sea test.
-    from dreamulator.map.td_canvas_mosaic import INTERTIDAL_M, INTERTIDAL_RGB
+    # Intertidal (drying-foreshore) band: the shared mosaic helper paints
+    # the S-52 DEPIT strip around sea level — sea-adjacent land only (the
+    # tidal working range), lakes excluded — flat after every multiply like
+    # the lake fill.  A rendering class, not a land/sea test.
+    from dreamulator.map.td_canvas_mosaic import INTERTIDAL_M, _paint_intertidal
 
-    if INTERTIDAL_M is not None:
-        band = (height >= INTERTIDAL_M[0]) & (height <= INTERTIDAL_M[1])
-        rgb[band] = np.asarray(INTERTIDAL_RGB, dtype=np.float64)
+    _paint_intertidal(
+        rgb,
+        height,
+        INTERTIDAL_M,
+        sea,
+        inputs.km_per_px * f,
+        exclude=lake,
+    )
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
 
@@ -607,7 +611,10 @@ def _river_collections(
         return []
     flows = np.asarray(flows, dtype=np.float64)
     w_n = np.clip(flows / max(float(flows.max()), 1.0), 0.0, 1.0) ** 0.5
-    widths = 0.25 + 1.15 * w_n
+    # 0.4 pt floor (≈2 px at 300 dpi, 0.14 mm): a 0.25 pt line renders as
+    # ~1 px and survives neither a downsampled view nor antialiasing as a
+    # continuous stroke.  Inside the survey-ink convention.
+    widths = 0.4 + 1.0 * w_n
     if regimes is None:
         regime_arr = np.zeros(len(segments), dtype=np.uint8)
     else:
@@ -1070,12 +1077,12 @@ def _edge_crossing(
 
 
 def _has_intertidal(inputs: ColorizeInputs) -> bool:
-    """The sheet carries a visible intertidal band (DEPIT strip around sea level)."""
-    from dreamulator.map.td_canvas_mosaic import INTERTIDAL_M
+    """The sheet carries a visible foreshore strip (same rule as the paint)."""
+    from dreamulator.map.td_canvas_mosaic import INTERTIDAL_M, intertidal_mask
 
     if INTERTIDAL_M is None or not bool(inputs.sea_water.any()):
         return False
-    band = (inputs.height_m >= INTERTIDAL_M[0]) & (inputs.height_m <= INTERTIDAL_M[1])
+    band = intertidal_mask(inputs.height_m, INTERTIDAL_M, inputs.sea_water, inputs.km_per_px)
     return bool(band.sum() > inputs.height_m.size * 1e-5)
 
 

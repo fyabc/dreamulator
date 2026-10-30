@@ -44,6 +44,8 @@ def _make_canvas(root: Path) -> CanvasGeometry:
             np.save(root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy", dem.astype(np.int16))
     n = geom.ncell
     np.save(root / "climate" / "runoff.mm.npy", np.full((n, n), 200.0, dtype=np.float32))
+    np.save(root / "climate" / "precipitation.mm.npy", np.full((n, n), 900.0, dtype=np.float32))
+    np.save(root / "climate" / "temperature.C.npy", np.full((n, n), 22.0, dtype=np.float32))
     return geom
 
 
@@ -70,3 +72,14 @@ def test_canvas_rivers(tmp_path: Path) -> None:
     assert (hydro / "rivers.png").exists()
     meta = json.loads((hydro / "rivers.meta.json").read_text(encoding="utf-8"))
     assert meta["segments"] == int(segs.shape[0])
+    # Lake tables (S3 consumes these instead of re-deriving) + the heal
+    # delta driving the fill generation.
+    lakes = json.loads((hydro / "lakes.json").read_text(encoding="utf-8"))
+    assert lakes["schema"] == "canvas-lakes-v1" and isinstance(lakes["lakes"], list)
+    term = json.loads((hydro / "terminal_lakes.json").read_text(encoding="utf-8"))
+    assert term["schema"] == "canvas-terminal-lakes-v1"
+    assert set(term["stats"]) == {"terminal", "dry_playas", "shrunk"}
+    assert meta["healed_pit_cells"] >= 0  # heal.npz exists and was counted
+    assert (root / "hydro-work" / "heal.npz").exists()
+    # The pit on the tilted slope is a lake with a verdict.
+    assert len(lakes["lakes"]) > 0 and all("verdict" in lk for lk in lakes["lakes"])
