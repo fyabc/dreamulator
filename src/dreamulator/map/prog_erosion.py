@@ -180,13 +180,25 @@ def priority_flood(
 
 def flow_accumulation(order: np.ndarray, receiver: np.ndarray, weight: np.ndarray) -> np.ndarray:
     """Upstream sum of ``weight`` along receivers (downstream-first order)."""
+    import gc
+    import time
+
     from ._erosion_kernels import _accumulate_numba
 
-    return _accumulate_numba(
+    args = (
         np.ascontiguousarray(order, dtype=np.int64),
         np.ascontiguousarray(receiver, dtype=np.int64),
         np.ascontiguousarray(weight, dtype=np.float64),
     )
+    try:
+        return _accumulate_numba(*args)
+    except MemoryError:
+        # Whole-canvas allocations race the Windows pagefile's on-demand
+        # growth; one collect-and-pause retry lets the commit limit catch up
+        # before giving up.
+        gc.collect()
+        time.sleep(3.0)
+        return _accumulate_numba(*args)
 
 
 def spl_erode(

@@ -409,12 +409,13 @@ def canvas_flow_fields(
     nrow = (max(ci for ci, _ in store.chunks) + 1) * t
     ncol = (max(cj for _, cj in store.chunks) + 1) * t
     filled = np.full((nrow, ncol), np.nan, dtype=np.float32)
-    dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
     for ci, cj in store.chunks:
         filled[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = np.load(
             store.path("final", ci, cj, "i16.npy")
         ).astype(np.float32)
-        dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
+    # NOTE: the raw DEM is a pure return value (nothing above reads it), so it
+    # loads only after the accumulation's whole-canvas allocation — the peak
+    # moment for commit on large canvases.
     h, w = filled.shape
     filled = _grade_flats(filled, sea_level, 1e-3)
     rec2d = np.full((h, w), -1, dtype=np.int64)
@@ -465,6 +466,9 @@ def canvas_flow_fields(
     else:
         weight = land.astype(np.float64)
     acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
+    dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
+    for ci, cj in store.chunks:
+        dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
     return filled, dem, rec, acc, land, order
 
 
