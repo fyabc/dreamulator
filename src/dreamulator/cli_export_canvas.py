@@ -546,7 +546,9 @@ def canvas_mosaic(
         "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
     ),
     sea: str = typer.Option(
-        "carto", "--sea", help="Ocean: carto (depth blues) | palette (the palette's own) | grey"
+        "carto",
+        "--sea",
+        help="Ocean: carto (depth blues) | palette (palette colours) | flat (constant blue) | grey",
     ),
     exaggeration: float | None = typer.Option(
         None, "--exaggeration", help="relief: vertical exaggeration (default pixel size / 90 m)"

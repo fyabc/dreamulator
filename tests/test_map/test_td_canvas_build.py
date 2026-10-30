@@ -318,6 +318,8 @@ def test_mosaic_relief_style_palettes_and_seas(tmp_path: Path) -> None:
         assert (np.asarray(Image.open(out))[200, 50] == paper).all()  # outside the manifest
     tm.render_mosaic(c, tmp_path / "g.png", step=16, style="relief", sea="grey", workers=1)
     assert (np.asarray(Image.open(tmp_path / "g.png"))[200, 50] == grey).all()
+    depths = np.array([[-10.0, -500.0, -6000.0]])
+    assert np.all(tm.sea_rgb(depths, "flat", "pastel") == tm.SEA_FLAT_RGB)
     with pytest.raises(ValueError, match="unknown style"):
         tm.render_mosaic(c, out, step=16, style="oil")
     with pytest.raises(ValueError, match="unknown palette"):

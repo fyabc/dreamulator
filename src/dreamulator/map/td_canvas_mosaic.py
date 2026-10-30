@@ -17,7 +17,8 @@ multi-directional hillshade on vertically exaggerated heights (default exaggerat
 / 90 m, so a block-averaged pixel shades about as steeply as the native one) with a soft shadow
 along the coast.  ``palette`` picks the land colours from ``hypsometric_palettes.json`` (or the
 built-in ``adaptive`` export-carto LUT); ``sea`` picks the ocean: ``carto`` (the export-carto
-depth blues, default), ``palette`` (the palette's own bathymetry where it has one) or ``grey``.
+depth blues, default), ``palette`` (the palette's own bathymetry where it has one),
+``flat`` (constant blue without depth colouring) or ``grey``.
 ``intertidal_m`` paints a height band around sea level (default ±2 m) in the IHO S-52 intertidal
 colour, as charts tint drying areas.  The ``cross-blended`` palette (Patterson & Jenny 2011)
 blends arid, warm-humid, cold-humid and polar ramps per pixel from the canvas's coarse climate
@@ -49,7 +50,8 @@ STYLES = ("carto", "relief")
 #: Relief style: light directions (azimuth deg, weight) at 40 deg altitude, NW key light.
 RELIEF_LIGHTS = ((315.0, 0.5), (270.0, 0.2), (0.0, 0.2), (225.0, 0.1))
 RELIEF_ALTITUDE_DEG = 40.0
-SEAS = ("carto", "palette", "grey")
+SEAS = ("carto", "palette", "flat", "grey")
+SEA_FLAT_RGB = (0.13, 0.34, 0.49)
 SEA_GREY_RGB = (0.88, 0.88, 0.88)
 #: Coast shadow on the sea: depth of the darkening and its e-folding distance (km).
 RELIEF_COAST_SHADOW = (0.12, 2.0)
@@ -154,6 +156,8 @@ def _sea_depth(h: np.ndarray) -> np.ndarray:
 def sea_rgb(h: np.ndarray, sea: str, palette: str) -> np.ndarray:
     """Ocean colours (RGB 0..1) of heights ``h`` (land pixels get colours too)."""
     spec = _HYPSO.get(palette, {})
+    if sea == "flat":
+        return np.broadcast_to(np.array(SEA_FLAT_RGB), (*h.shape, 3)).copy()
     if sea == "grey":
         return np.broadcast_to(np.array(SEA_GREY_RGB), (*h.shape, 3)).copy()
     if sea == "palette" and spec.get("sea"):
