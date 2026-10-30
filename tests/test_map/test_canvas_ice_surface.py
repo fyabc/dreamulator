@@ -114,3 +114,46 @@ def test_subgrid_level_preserves_volume_and_exposes_peaks_in_thin_ice():
     )
     assert response[0] < 0.001
     assert response[1] > 0.99
+
+
+def test_partial_cells_use_support_thickness_and_conserve_volume():
+    bed = np.zeros((6, 6))
+    land = np.ones(bed.shape, bool)
+    fraction = np.ones(bed.shape)
+    fraction[:, 3:] = 0.5
+    # Equal surfaces on support: half-area cells hold half the cell-mean volume.
+    still, _ = redistribute_ice(
+        bed,
+        np.where(fraction < 1, 400.0, 800.0),
+        land,
+        spacing_m=5750,
+        elapsed_yr=10,
+        gravity_m_s2=10.28,
+        support_fraction=fraction,
+    )
+    np.testing.assert_allclose(still, np.where(fraction < 1, 400.0, 800.0), atol=1e-6)
+    stepped = np.where(fraction < 1, 100.0, 800.0)
+    result, budget = redistribute_ice(
+        bed,
+        stepped,
+        land,
+        spacing_m=5750,
+        elapsed_yr=50,
+        gravity_m_s2=10.28,
+        support_fraction=fraction,
+    )
+    assert abs(budget.residual_m3) < 1e-6 * budget.initial_volume_m3
+    assert result[:, 3:].mean() > 100
+    full, _ = redistribute_ice(
+        bed, stepped, land, spacing_m=5750, elapsed_yr=50, gravity_m_s2=10.28
+    )
+    same, _ = redistribute_ice(
+        bed,
+        stepped,
+        land,
+        spacing_m=5750,
+        elapsed_yr=50,
+        gravity_m_s2=10.28,
+        support_fraction=np.ones(bed.shape),
+    )
+    np.testing.assert_array_equal(full, same)

@@ -141,6 +141,7 @@ def _redistribute(
     bed: np.ndarray,
     ice: np.ndarray,
     land: np.ndarray,
+    fraction: np.ndarray,
     spacing: float,
     duration: float,
     coefficient: float,
@@ -160,7 +161,7 @@ def _redistribute(
             raise RuntimeError("shallow-ice redistribution exceeded the substep budget")
         for i in range(nr):
             for j in range(nc):
-                surface[i, j] = bed[i, j] + h[i, j]
+                surface[i, j] = bed[i, j] + h[i, j] / fraction[i, j] if land[i, j] else bed[i, j]
                 outgoing[i, j] = diffusion[i, j] = 0.0
         for i in range(nr):
             for j in range(nc):
@@ -180,9 +181,11 @@ def _redistribute(
                 if land[i, j] and land[i, j + 1]:
                     slope = (surface[i, j] - surface[i, j + 1]) / spacing
                     transverse = 0.5 * (gy[i, j] + gy[i, j + 1])
-                    donor = h[i, j] if slope > 0 else h[i, j + 1]
+                    donor = (
+                        h[i, j] / fraction[i, j] if slope > 0 else h[i, j + 1] / fraction[i, j + 1]
+                    )
                     diffusivity = coefficient * donor**5 * (slope**2 + transverse**2)
-                    flux = diffusivity * slope
+                    flux = diffusivity * slope * min(fraction[i, j], fraction[i, j + 1])
                 fx[i, j] = flux
                 diffusion[i, j] += diffusivity
                 diffusion[i, j + 1] += diffusivity
@@ -194,9 +197,11 @@ def _redistribute(
                 if land[i, j] and land[i + 1, j]:
                     slope = (surface[i, j] - surface[i + 1, j]) / spacing
                     transverse = 0.5 * (gx[i, j] + gx[i + 1, j])
-                    donor = h[i, j] if slope > 0 else h[i + 1, j]
+                    donor = (
+                        h[i, j] / fraction[i, j] if slope > 0 else h[i + 1, j] / fraction[i + 1, j]
+                    )
                     diffusivity = coefficient * donor**5 * (slope**2 + transverse**2)
-                    flux = diffusivity * slope
+                    flux = diffusivity * slope * min(fraction[i, j], fraction[i + 1, j])
                 fy[i, j] = flux
                 diffusion[i, j] += diffusivity
                 diffusion[i + 1, j] += diffusivity
@@ -235,6 +240,7 @@ def redistribute_ice(
     gravity_m_s2: float,
     rate_factor_pa3_s: float = TEMPERATE_RATE_FACTOR_PA3_S,
     max_substeps: int = 500_000,
+    support_fraction: np.ndarray | None = None,
 ) -> tuple[np.ndarray, IceSurfaceBudget]:
     """Redistribute an initial ice inventory, keeping bed and frame fixed.
 
@@ -243,15 +249,26 @@ def redistribute_ice(
     cells to receive ice without exporting a nonexistent inventory. A stable
     forward step removes at most 90% of any cell's thickness, without clipping.
     Elapsed time is physical model time, not an inferred glacier age.
+
+    ``support_fraction`` treats partial cells by area (cut cells): ice is a
+    cell-mean volume spread over the fraction f that can hold it, the bed is
+    the mean over that part, and each face passes flux in proportion to the
+    smaller fraction of its two cells. Full cells (f = 1) reduce to the
+    standard scheme; sea portions stay closed.
     """
     bed = np.asarray(bed_m, dtype=np.float64)
     ice = np.asarray(ice_m, dtype=np.float64)
     land = np.asarray(land_mask, dtype=bool)
+    fraction = (
+        np.ones(bed.shape) if support_fraction is None else np.asarray(support_fraction, float)
+    )
     if (
         bed.ndim != 2
         or min(bed.shape) < 2
         or ice.shape != bed.shape
         or land.shape != bed.shape
+        or fraction.shape != bed.shape
+        or np.any(land & ((fraction <= 0) | (fraction > 1)))
         or not np.isfinite(bed).all()
         or not np.isfinite(ice).all()
         or np.any(ice < 0)
@@ -268,7 +285,14 @@ def redistribute_ice(
     initial = float(ice.sum() * spacing_m**2)
     coefficient = 2.0 / 5.0 * rate_factor_pa3_s * (RHO_ICE_KG_M3 * gravity_m_s2) ** 3
     final, steps = _redistribute(
-        bed, ice, land, spacing_m, elapsed_yr * SECONDS_PER_YEAR, coefficient, max_substeps
+        bed,
+        ice,
+        land,
+        np.where(land, fraction, 1.0),
+        spacing_m,
+        elapsed_yr * SECONDS_PER_YEAR,
+        coefficient,
+        max_substeps,
     )
     volume = float(final.sum() * spacing_m**2)
     residual = volume - initial

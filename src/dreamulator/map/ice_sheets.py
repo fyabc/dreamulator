@@ -81,6 +81,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RHO_ICE_KG_M3 = 917.0
+# Ice-sheet modelling reference for sea water (PISM constants.sea_water.density).
+RHO_SEAWATER_KG_M3 = 1028.0
 RHO_MANTLE_KG_M3 = 3300.0
 # bed depression per unit ice thickness (local Airy compensation)
 ICE_LOAD_DEPRESSION = RHO_ICE_KG_M3 / RHO_MANTLE_KG_M3
