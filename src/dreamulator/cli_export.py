@@ -643,6 +643,12 @@ def export_render(
     biome_legend: bool = typer.Option(
         False, "--biome-legend/--no-biome-legend", help="relief only: append biome swatches"
     ),
+    vegetation_palette: Path | None = typer.Option(
+        None,
+        "--vegetation-palette",
+        help="relief only: JSON biome-name→colour overrides (#rrggbb or [r,g,b]); "
+        "e.g. a world whose photosynthetic canon is not green",
+    ),
     svg: bool = typer.Option(False, "--svg/--no-svg", help="Also write the vector SVG sheet"),
 ) -> None:
     """Render a region pack: satellite true colour or a cartographic sheet."""
@@ -692,17 +698,30 @@ def export_render(
 
         out_dir = output or (pack / "carto")
         if style in ("biome", "relief"):
-            fn = biome_region if style == "biome" else relief_region
-            info = fn(
-                pack,
-                out_dir,
-                gaea_dir=gaea,
-                res=res,
-                dpi=dpi,
-                data_dir=data_dir,
-                title=title,
-                svg=svg,
-            )
+            if style == "relief" and vegetation_palette is not None:
+                info = relief_region(
+                    pack,
+                    out_dir,
+                    gaea_dir=gaea,
+                    res=res,
+                    dpi=dpi,
+                    data_dir=data_dir,
+                    title=title,
+                    svg=svg,
+                    vegetation_palette=vegetation_palette,
+                )
+            else:
+                fn = biome_region if style == "biome" else relief_region
+                info = fn(
+                    pack,
+                    out_dir,
+                    gaea_dir=gaea,
+                    res=res,
+                    dpi=dpi,
+                    data_dir=data_dir,
+                    title=title,
+                    svg=svg,
+                )
             name = f"{style}.png"
             path = out_dir / name
             console.print(f"  [green]{name}[/green] → {path} ({path.stat().st_size / 1024:.0f} KB)")
