@@ -60,6 +60,29 @@ def _local_flood(
     external: np.ndarray,
     eps: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, dict[tuple[int, int], float]]:
+    """Stage 1 of the tiled fill for one tile (numba kernel fast path).
+
+    Semantics identical to :func:`_local_flood_reference` (the pure-Python
+    oracle the equivalence tests compare against); see its docstring for the
+    seeding and spill-graph rules.
+    """
+    from dreamulator.media._hydrology_kernels import _local_flood_kernel
+
+    labels, filled, spill = _local_flood_kernel(
+        np.ascontiguousarray(dem), np.ascontiguousarray(external), eps
+    )
+    out: dict[tuple[int, int], float] = {}
+    for key, value in spill.items():
+        out[(int(key) >> 32, int(key) & 0xFFFFFFFF)] = float(value)
+    assert (labels >= 0).all(), "tile flood left unlabeled cells"
+    return labels, filled, out
+
+
+def _local_flood_reference(
+    dem: np.ndarray,
+    external: np.ndarray,
+    eps: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray, dict[tuple[int, int], float]]:
     """Stage 1 of the tiled fill for one tile.
 
     Seeds: cells flagged ``external`` (ocean, canvas edge, missing chunk)

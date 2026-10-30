@@ -325,6 +325,23 @@ def _shift(f: np.ndarray, dy: int, dx: int) -> np.ndarray:
 def _grade_flats(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray:
     """PF+ε ramp for flow routing: equal-value flats grade toward their outlets.
 
+    Numba kernel fast path (semantics identical to
+    :func:`_grade_flats_reference`, the pure-Python oracle): multi-source
+    Dijkstra over each flat level, seeds are outlets and cells touching a
+    strictly lower level.  The result is used only for flow directions, not
+    written back.
+    """
+    from dreamulator.media._hydrology_kernels import _grade_flats_kernel
+
+    flat = filled.ravel().astype(np.float64)
+    level = _grade_flats_kernel(np.ascontiguousarray(filled), sea_level, eps)
+    out = np.where(np.isfinite(level), np.maximum(level, flat), flat)
+    return out.reshape(filled.shape).astype(np.float32)
+
+
+def _grade_flats_reference(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray:
+    """PF+ε ramp for flow routing: equal-value flats grade toward their outlets.
+
     Mirrors the in-memory fill's ramp (multi-source Dijkstra over each flat
     level: seeds are outlets and cells touching a strictly lower level).
     The result is used only for flow directions, not written back.
@@ -374,11 +391,17 @@ def _grade_flats(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray
 
 def canvas_flow_fields(
     store: CanvasStore, *, sea_level: float = 0.0
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Assembled (filled, dem, receiver, accumulation, land) for QA/extraction.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Assembled (filled, dem, receiver, accumulation, land, order) for
+    QA/extraction.
 
     Applies the PF+ε flat grading before the D8 receivers so depressions have
-    defined flow directions.  Memory scales with the canvas (QA/demo path).
+    defined flow directions.  Memory scales with the canvas (QA/demo path):
+    the D8 loop is banded and the runoff weights are tiled per coarse row, so
+    beyond the six returned full-canvas arrays no whole-canvas temporaries
+    remain.  ``order`` is the downstream-first (ascending filled) sort used by
+    accumulation — NaN cells sort last, matching the ``nan_to_num(1e30)``
+    order of previous versions without the full-size copy.
     """
     from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM, flow_accumulation
 
@@ -394,30 +417,55 @@ def canvas_flow_fields(
         dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
     h, w = filled.shape
     filled = _grade_flats(filled, sea_level, 1e-3)
-    rr, cc = np.mgrid[0:h, 0:w]
-    rec2d = -np.ones((h, w), dtype=np.int64)
-    best = np.zeros((h, w), dtype=np.float64)
+    rec2d = np.full((h, w), -1, dtype=np.int64)
     diag = 2**0.5
-    for dy, dx in _NEIGHBOURS:
-        nb = _shift(filled, dy, dx)
-        slope = (filled - nb) / (diag if dy and dx else 1.0)
-        better = np.isfinite(slope) & (nb < filled) & (slope > best)
-        best = np.where(better, slope, best)
-        rec2d = np.where(better, (rr + dy) * w + (cc + dx), rec2d)
+    cc = np.arange(w)[None, :]
+    # Banded D8: ``best`` and the receiver candidates are band-local, so the
+    # per-neighbour temporaries scale with the band, not the whole canvas
+    # (the previous full-size int64 mgrid/where chain peaked > 20 GiB here).
+    band_rows = max(1, min(2048, h))
+    for r0 in range(0, h, band_rows):
+        r1 = min(h, r0 + band_rows)
+        fb = filled[r0:r1]
+        best = np.zeros(fb.shape, dtype=np.float64)
+        recb = np.full(fb.shape, -1, dtype=np.int64)
+        rr = np.arange(r0, r1, dtype=np.int64)[:, None]
+        for dy, dx in _NEIGHBOURS:
+            # Neighbour values via one row of band context: _shift on the
+            # context slice reproduces the global out[y,x]=f[y+dy,x+dx] with
+            # +inf outside the canvas, at band-sized cost.
+            ctx0 = max(0, r0 - 1)
+            ctx1 = min(h, r1 + 1)
+            shifted = _shift(filled[ctx0:ctx1], dy, dx)
+            nb = shifted[r0 - ctx0 : r1 - ctx0]
+            slope = (fb - nb) / (diag if dy and dx else 1.0)
+            better = np.isfinite(slope) & (nb < fb) & (slope > best)
+            best = np.where(better, slope, best)
+            recb = np.where(better, (rr + dy) * w + (cc + dx), recb)
+        rec2d[r0:r1] = recb
     land = np.isfinite(filled) & (filled > sea_level)
     rec = rec2d.reshape(-1)
     rec[~land.reshape(-1)] = -1
-    order = np.argsort(np.nan_to_num(filled, nan=1e30).ravel(), kind="stable")
+    # NaN sorts after every real value (same stable order nan_to_num(1e30)
+    # produced) — skips a full-canvas copy per sort.
+    order = np.argsort(filled.ravel(), kind="stable")
     runoff_path = store.root / "climate" / "runoff.mm.npy"
     if runoff_path.exists():
         coarse = np.nan_to_num(np.load(runoff_path).astype(np.float64), nan=0.0)
         factor = h // coarse.shape[0]
-        up = np.kron(coarse, np.ones((factor, factor)))[:h, :w]
-        weight = np.where(land, np.maximum(up, 0.0) / RUNOFF_REFERENCE_MM, 0.0)
+        # Tile the coarse runoff per row block: same values as
+        # kron(coarse, ones(f, f))[:h, :w] without two whole-canvas temporaries.
+        weight = np.zeros((h, w), dtype=np.float64)
+        ncr = coarse.shape[0]
+        for i in range(ncr):
+            r0, r1 = i * factor, min(h, (i + 1) * factor)
+            row = np.maximum(np.repeat(coarse[i], factor)[:w], 0.0) / RUNOFF_REFERENCE_MM
+            weight[r0:r1] = row[None, :]
+        weight[~land] = 0.0
     else:
         weight = land.astype(np.float64)
     acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
-    return filled, dem, rec, acc, land
+    return filled, dem, rec, acc, land, order
 
 
 def run_canvas_rivers(
@@ -436,10 +484,9 @@ def run_canvas_rivers(
         river_segments,
     )
 
-    filled, dem, rec, acc, land = canvas_flow_fields(store, sea_level=sea_level)
+    filled, dem, rec, acc, land, order = canvas_flow_fields(store, sea_level=sea_level)
     h, w = filled.shape
     t = store.tile
-    order = np.argsort(np.nan_to_num(filled, nan=1e30).ravel(), kind="stable")
     weight_source = (
         "runoff.mm" if (store.root / "climate" / "runoff.mm.npy").exists() else "uniform"
     )

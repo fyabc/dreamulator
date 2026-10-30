@@ -35,6 +35,16 @@ nacrea 200k 地质层强制重建（`--only geological --force`，2026-10-22）�
 - **Numba JIT 噪声内核**（`noise_kernels.py`，`numba>=0.61`）：逐 cell
   `opensimplex.noise3`（~44 µs）→ 编译 3D Perlin（~0.1 µs），确定性保持
   （显式种子排列表、逐点独立求值；换后端不逐位一致是已记录口径）。
+- **画布水文 numba 内核 + 分带 D8**（`_hydrology_kernels.py`、`canvas_hydrology_tiled.py`、
+  `canvas_pipeline.py`，2026-10-30）：S2 逐块填洼的带标签 Priority-Flood 与 PF+ε 平地
+  整平从纯 Python 堆搬进 numba（平坦数组二叉堆，(水位, 格号) 字典序，float64 计算、
+  存回原生 dtype 后再入堆），纯 Python 版保留为参照实现并由测试逐位断言等价；单块
+  2048² float32 填洼约 3.6 s（纯 Python 每块 30 分钟以上且在海洋主导画布上元组堆
+  OOM）。河段提取的拼装路径 D8 改分带（带内局部 best/接收格 + 上下文切片复用
+  `_shift`），去掉全图 `mgrid`/`np.where` 链（20480×18432 画布上单发 2.81 GiB 的
+  int64 临时多份，峰值 >20 GiB）；径流权重按粗格行分块平铺替代 `np.kron`，排序直接
+  用 argsort 的 NaN-排后语义替代 `nan_to_num` 全图拷贝，累积排序由上游返回复用。
+  接收格与权重相对旧实现逐位一致（含海、平地与缺角的合成地形验证）。
 
 ## Backlog（未完成）
 
@@ -43,6 +53,7 @@ nacrea 200k 地质层强制重建（`--only geological --force`，2026-10-22）�
 | P1 | 布尔 mask listcomp → 向量化 | terrain_synthesizer.py | 1.5-2×（`[c.crust_type == ... for c in cells]` 族） |
 | P1 | 网格保存去掉 JSON 中间层与正则截断小数 | map/export.py | 导出 25 s → 约 8 s；需保证小数截断语义不变 |
 | P2 | 热管火山的逐时段回溯向量化 | island_catalog.py | 约 10 s → 数秒 |
+| P2 | S2 河段提取去拼装化（分块 D8 + 跨块转移，接 `accumulate_canvas_tiled` 波次） | canvas_pipeline.py | 拼装路径内存与画布同阶（54 块画布约 15 GiB 地板），分块化后可跑大陆级画布不受单机内存限制 |
 | P2 | Ocean 并行 basin 求解 | climate_simulator.py | 有限（主海盆 139k cells 占 99% 时间） |
 | P2 | useCellIdMap Web Worker | useCellIdMap.ts | KD-tree 构建不阻塞主线程 |
 | P2 | Progressive cvt_mesh loading | 前端 | 首帧渲染提前 2-5 s |
