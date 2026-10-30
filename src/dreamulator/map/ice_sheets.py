@@ -38,7 +38,7 @@ Geographic mode split (where the N/S asymmetry comes from):
     (Canadian-Arctic / Svalbard style; Earth: tundra coasts < ~500 km
     from sea, Dome A ~1200 km inland).
 
-Dome profile (perfect-plastic Vialov):
+Dome profile (perfect-plastic):
     h(x) = sqrt(2·τ_d·x / (ρ_i·g)),  x = distance from the ice margin.
     With driving stress τ_d ≈ 50–100 kPa (observed ice-sheet range,
     Cuffey & Paterson 2010) this reproduces Earth's polar caps: τ = 50 kPa

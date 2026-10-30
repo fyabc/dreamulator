@@ -96,7 +96,7 @@
 | 4/8 | boundaries | `:424` | `detect_boundaries`（§6） | `boundary_type` → 5 |
 | 5/8 | terrain | `:465` | `synthesize_terrain`（§7）；`compute_land_mask` → `water_class` 写入 | `elevation` / 海陆掩膜 → 6-8 |
 | 6/8 | climate | `:615` | `simulate_climate`；`GeologicalEngine` 的默认阶段列表跳过此相位，因为气候引擎才是气候字段的权威来源（细节见 [climate-pipeline.md](climate-pipeline.md) §10） | 温度 / 降水 / Köppen / 风 / 洋流 |
-| 7/8 | ice | `:638` | `apply_polar_ice_sheets`（§8 极地冰盖：日照门 + 海陆分域 + Vialov 穹丘） | `ice_thickness_m` / 冰面 `elevation` → 8 |
+| 7/8 | ice | `:638` | `apply_polar_ice_sheets`（§8 极地冰盖：日照门 + 海陆分域 + 完美塑性穹丘） | `ice_thickness_m` / 冰面 `elevation` → 8 |
 | 8/8 | export | `:650` | `upgrade_large_endorheic_lakes` → `export_equirectangular` + `save_outputs`（§10） | 栅格 PNG + plates.json + cvt_mesh.msgpack.gz |
 
 海陆分类在 5/8 末尾写入。气候相位之后、冰盖之前，管线调用 `mark_closed_basin_lakes`
@@ -1410,7 +1410,7 @@ def check_polar_configuration(
    邻接边的球面角距由 `_edge_angles` 计算，采用 `atan2(|a×b|, a·b)`。
    向量的长度与方向分别处理，导出坐标的小数截断保持同一角距定义；
    边长以弧度进入图，再乘行星半径得到物理距离。
-3. **穹丘剖面（完美塑性 Vialov）**：冰厚 h(x) = √(2·τ_d·x/(ρ_i·g))，x 为到冰缘
+3. **穹丘剖面（完美塑性）**：冰厚 h(x) = √(2·τ_d·x/(ρ_i·g))，x 为到冰缘
    的测地距离（穹丘子图内从边界 cell 多源 Dijkstra；子图隔离保证冰只在陆地上
    传播、绝不穿过海洋）。驱动应力 τ_d = 40 kPa（观测冰盖范围 50–100 kPa，
    Cuffey & Paterson 2010），世界重力直接进入——重力更大的世界冰更薄。nacrea

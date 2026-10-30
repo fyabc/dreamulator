@@ -178,6 +178,7 @@ def carto_tint(
     sea_mode: str = "carto",
     weights: dict[str, np.ndarray] | None = None,
     intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
+    ice_fraction: np.ndarray | None = None,
 ) -> np.ndarray:
     """Export-carto shading (float RGB 0..1) of a height field; NaN = paper."""
     from dreamulator.media.carto_render import (
@@ -193,6 +194,9 @@ def carto_tint(
         rgb = _lut_rgb(h, sea, np.where(sea, _sea_depth(h), 0.0), world_range_m)
     else:
         rgb = np.where(sea[..., None], sea_rgb(h, sea_mode, palette), land_rgb(h, palette, weights))
+    if ice_fraction is not None:
+        fraction = np.where(sea, 0.0, ice_fraction)[..., None]
+        rgb = rgb * (1.0 - fraction) + np.array([0.91, 0.96, 0.98]) * fraction
     relief = two_scale_relief(h, km_per_px, struct_sigma_px=struct_sigma_px)
     shade = (1.0 - HILLSHADE_STRENGTH) + HILLSHADE_STRENGTH * relief[..., None]
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
@@ -213,6 +217,7 @@ def relief_tint(
     sea_mode: str = "carto",
     weights: dict[str, np.ndarray] | None = None,
     intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
+    ice_fraction: np.ndarray | None = None,
 ) -> np.ndarray:
     """Shaded-relief shading (float RGB 0..1) of a height field; NaN = paper (or the sea grey)."""
     from scipy.ndimage import distance_transform_edt
@@ -220,6 +225,9 @@ def relief_tint(
     h = np.where(np.isfinite(height_m), height_m, world_range_m[0])
     sea = h <= 0.0
     tint = land_rgb(h, palette, weights)
+    if ice_fraction is not None:
+        fraction = np.where(sea, 0.0, ice_fraction)[..., None]
+        tint = tint * (1.0 - fraction) + np.array([0.91, 0.96, 0.98]) * fraction
     gy, gx = np.gradient(np.where(sea, 0.0, h) * exaggeration, km_per_px * 1000.0)
     slope = np.arctan(np.hypot(gx, gy))
     aspect = np.arctan2(-gx, gy)
@@ -256,9 +264,10 @@ def _init(ctx: dict[str, Any]) -> None:
     _ctx.update(ctx)
 
 
-def _load_rows(r0: int, r1: int) -> np.ndarray:
+def _load_rows(r0: int, r1: int, files: dict[tuple[int, int], str] | None = None) -> np.ndarray:
     """Native heights for canvas pixel rows [r0, r1) over the column span; NaN where no chunk."""
-    c0, c1, files = _ctx["c0"], _ctx["c1"], _ctx["files"]
+    c0, c1 = _ctx["c0"], _ctx["c1"]
+    files = _ctx["files"] if files is None else files
     h = np.full((r1 - r0, c1 - c0), np.nan, np.float32)
     for ci in range(r0 // CHUNK_PX, (r1 - 1) // CHUNK_PX + 1):
         a0, a1 = max(r0, ci * CHUNK_PX), min(r1, (ci + 1) * CHUNK_PX)
@@ -282,6 +291,13 @@ def _band(ci: int) -> tuple[int, np.ndarray]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN blocks outside the manifest
             h = np.nanmean(h, axis=(1, 3))
+    ice_fraction = None
+    if _ctx["ice_files"]:
+        ice_fraction = (_load_rows(a0, a1, _ctx["ice_files"]) > 1.0).astype(np.float32)
+        if step > 1:
+            ice_fraction = ice_fraction.reshape(
+                ice_fraction.shape[0] // step, step, ice_fraction.shape[1] // step, step
+            ).mean(axis=(1, 3))
     weights = None
     if _ctx["weights"] is not None:
         from scipy.ndimage import map_coordinates
@@ -299,6 +315,7 @@ def _band(ci: int) -> tuple[int, np.ndarray]:
         "sea_mode": _ctx["sea"],
         "weights": weights,
         "intertidal_m": _ctx["intertidal"],
+        "ice_fraction": ice_fraction,
     }
     if _ctx["style"] == "relief":
         rgb = relief_tint(h, _ctx["km_px"], _ctx["exaggeration"], **kw)
@@ -321,6 +338,7 @@ def render_mosaic(
     intertidal_m: tuple[float, float] | None = INTERTIDAL_M,
     quality: int = 90,
     workers: int = 8,
+    ice_overlay: bool = False,
 ) -> dict[str, Any]:
     """Write the mosaic image and its sidecar; returns the sidecar dict."""
     if step < 1 or CHUNK_PX % step:
@@ -347,6 +365,12 @@ def render_mosaic(
     ve = float(exaggeration) if exaggeration is not None else km_px / (23.0 / 256)
     ctx = {
         "files": files,
+        "ice_files": {
+            (int(p.stem[1:4]), int(p.stem[6:9])): str(p)
+            for p in (canvas_dir / "surface" / "ice_chunks").glob("r*_c*.npy")
+        }
+        if ice_overlay
+        else {},
         "step": step,
         "halo": int(math.ceil(4 * sigma_px)) + 2,
         "km_px": km_px,
@@ -417,6 +441,7 @@ def render_mosaic(
         "intertidal_m": list(intertidal_m) if intertidal_m else None,
         "exaggeration": round(ve, 3) if style == "relief" else None,
         "struct_km": struct_km,
+        "ice_overlay": ice_overlay,
     }
     Path(str(out) + ".json").write_text(json.dumps(side, indent=1), encoding="utf-8")
     return side

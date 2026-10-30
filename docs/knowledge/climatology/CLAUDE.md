@@ -18,7 +18,7 @@
 - `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）、极端天气（温带风暴与热带气旋的自转标度律、寒潮与热浪、夜间强对流，含 Nacrea 与地球的 GCM 对照）
 - `cloud_field_statistics.md` — 云场两条统计律：单点光学厚度近似指数分布（薄云主导，Marchand 2010 直方图评审）+ 空间功率谱一维 −5/3 幂律（Cahalan & Joseph 1989 / Davis 1997 转引）；对程序化云纹理的参数映射（指数逆 CDF + fBm persistence ≈ 0.7）；竞品工程实现调研见 `cloud_generation_competitors.md`
 - `atmospheric_scattering.md` — 行星圆盘 L5 大气渲染：单次散射方程与球壳几何、瑞利/米氏/臭氧系数与柱质量缩放、标高与大气顶、恒星光谱到 sRGB 白点与有效瑞利系数（Wyman CIE 拟合）、透射率查找表、分层云壳与云影、已知限制（无多次散射/偏振/光谱相关）与参考文献
-- `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 地质历史（显生宙逐期表 + 前寒武、CH4 快变量/CO2 慢变量框架、冰期旋回耦合、火山-风化稳态与脉冲放大标度律、世界构建锚点速查表；2026-10 nacrea 路线 1 调研沉淀）
+- `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 历史、火山与风化预算，以及热流驱动的约化碳库存响应和世界构建锚点。
 
 - `gcm_climate_statistics.md` 说明 GCM 的高斯面积、近地面气温、轨道季节统计、实际数值扩散、晴空辐射分解和更换步长的重启时钟。
 
