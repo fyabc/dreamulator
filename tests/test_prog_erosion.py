@@ -855,7 +855,9 @@ def test_terminal_routing_emits_lake_records() -> None:
     lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
     assert lakes_draw.any()
     common = dict(
-        weight=runoff / rbar,
+        # The routing mutates the weight in place (pass-through depletion);
+        # each call gets its own pristine copy.
+        weight=np.array(runoff / rbar, copy=True),
         precip_mm=np.full((n, n), 2100.0),
         temp_c=np.full((n, n), 10.0),
         runoff_land_mean_mm=rbar,
@@ -875,7 +877,12 @@ def test_terminal_routing_emits_lake_records() -> None:
     assert bowl[0]["spill_elev_m"] > 0.0
     assert bowl[0]["inflow_mm"] > 0.0
     # Arid forcing: the same geometry dries to a terminal verdict.
-    arid = dict(common, precip_mm=np.full((n, n), 50.0), temp_c=np.full((n, n), 30.0))
+    arid = dict(
+        common,
+        weight=np.array(runoff / rbar, copy=True),
+        precip_mm=np.full((n, n), 50.0),
+        temp_c=np.full((n, n), 30.0),
+    )
     _h2, _l2, _lr2, _cs2, _fd2, _rr2, _acc2, _tw2, _st2, records2 = terminal_equilibrium_routing(
         dem, land, lakes_draw, order, rec, **arid
     )

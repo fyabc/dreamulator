@@ -26,8 +26,10 @@ def _make_canvas(root: Path) -> CanvasGeometry:
             {
                 "geometry": geom.to_dict(),
                 "chunks": [[0, 0], [0, 1], [1, 0], [1, 1]],
-                "koppen_legend": {"1": "Af", "2": "BWh"},
-                "biome_legend": {"1": "tropical_rainforest"},
+                "legends": {
+                    "koppen.codes": {"1": "Af", "2": "BWh"},
+                    "biome.codes": {"1": "tropical_rainforest"},
+                },
             }
         ),
         encoding="utf-8",
@@ -120,6 +122,12 @@ def test_crop_canvas_window(tmp_path: Path) -> None:
     assert line.shape == (1, 2, 2)
     # SW-origin km: the segment spans the window centre (half = 275).
     assert np.allclose(line[0, 0], [225.0, 225.0], atol=2.0)
+
+    # Climate legends are inherited from the canvas's nested `legends` block
+    # (real class names, not the class_N fallback that greys out biome/relief).
+    win_meta = json.loads((out / "input" / "meta.json").read_text(encoding="utf-8"))
+    assert win_meta["climate"]["biome"]["legend"] == {"1": "tropical_rainforest"}
+    assert win_meta["climate"]["koppen"]["legend"]["1"] == "Af"
     assert np.allclose(line[0, 1], [325.0, 325.0], atol=2.0)
 
     temp = np.load(out / "input" / "temperature.C.npy")

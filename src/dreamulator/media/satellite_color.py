@@ -360,6 +360,7 @@ def colorize(
     texture: bool = True,
     ecotone_sigma_px: float | None = None,
     texture_gain: float = 1.0,
+    biome_colors: dict[str, tuple[int, int, int]] | None = None,
 ) -> np.ndarray:
     """Composite the albedo; returns (N, N, 3) uint8 sRGB.
 
@@ -370,6 +371,9 @@ def colorize(
     scaled to the engine cell pitch for imagery-style transitions.
     ``texture_gain`` scales the grain amplitudes (sheet legs run a reduced
     gain — see :func:`_vegetation_texture`).
+    ``biome_colors`` overrides selected entries of ``BIOME_COLORS`` by biome
+    name (world-specific vegetation palettes — e.g. a non-green photosynthetic
+    canon; unspecified names fall back to the Earth-prior table).
     """
     from scipy.ndimage import gaussian_filter
 
@@ -387,9 +391,10 @@ def colorize(
     max_code = max(
         [int(biome.max()) if biome.size else 0, *inp.biome_legend.keys()],
     )
+    base_colors = {**BIOME_COLORS, **(biome_colors or {})}
     palette = [MISSING_COLOR] * (max_code + 1)
     for code, name in inp.biome_legend.items():
-        palette[code] = BIOME_COLORS.get(name, MISSING_COLOR)
+        palette[code] = base_colors.get(name, MISSING_COLOR)
     base = _to_rgb(palette)[biome].reshape(n, n, 3)
     for ch in range(3):
         base[..., ch] = gaussian_filter(base[..., ch], sigma)

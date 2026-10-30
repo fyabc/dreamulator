@@ -207,6 +207,21 @@ def _accumulate_numba(order: np.ndarray, receiver: np.ndarray, weight: np.ndarra
 
 
 @numba.njit(cache=True)
+def _accumulate_into(order: np.ndarray, receiver: np.ndarray, out: np.ndarray) -> None:
+    """In-place variant of :func:`_accumulate_numba`: ``out`` must already
+    hold the weights; the upstream sums overwrite it.  Same loop order, so
+    the results are bit-identical."""
+    flat = out.reshape(-1)
+    for a in range(order.size - 1, -1, -1):
+        i = order[a]
+        if i < 0:
+            continue
+        r = receiver[i]
+        if r >= 0:
+            flat[r] += flat[i]
+
+
+@numba.njit(cache=True)
 def _spl_step_numba(
     h: np.ndarray,
     land: np.ndarray,
