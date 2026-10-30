@@ -1132,12 +1132,27 @@ def month_active_counts(
         raise ValueError(f"active_cells must be positive, got {active_cells}")
     if reference_mm <= 0.0 or not runoff_monthly_pack.any():
         return counts
+    from ._erosion_kernels import _accumulate_into
+
+    h, w = land.shape
+    # One reused refined buffer: each month is tiled into it directly (nan→0
+    # and the reference scaling folded into the fill) and accumulated in
+    # place.  The previous kron + division + f64-conversion chain peaked at
+    # several whole-canvas fields per month, which canvas-sized grids cannot
+    # afford.
+    acc = np.empty((h, w), dtype=np.float64)
+    o = np.ascontiguousarray(order, dtype=np.int64)
+    r = np.ascontiguousarray(receiver, dtype=np.int64)
     for m in range(runoff_monthly_pack.shape[-1]):
-        r_pack = np.nan_to_num(runoff_monthly_pack[..., m], nan=0.0)
-        if factor > 1:
-            r_pack = np.kron(r_pack, np.ones((factor, factor), dtype=r_pack.dtype))
-        acc_m = flow_accumulation(order, receiver, r_pack / reference_mm)
-        counts += acc_m >= active_cells
+        pack_m = runoff_monthly_pack[..., m]
+        for i in range(pack_m.shape[0]):
+            r0, r1 = i * factor, min(h, (i + 1) * factor)
+            if r1 <= r0:
+                continue
+            row = np.repeat(np.nan_to_num(pack_m[i], nan=0.0), factor)[:w] / reference_mm
+            acc[r0:r1] = row[None, :]
+        _accumulate_into(o, r, acc)
+        counts += acc >= active_cells
     return counts
 
 
