@@ -75,11 +75,19 @@ class CanvasTiles:
     filled in place by :func:`flood_canvas`.  Tiles missing from ``raw``
     are treated as open boundary (the S1 chunk list only covers the
     generation buffer).
+
+    ``ocean`` optionally carries the canvas's connected-sea determination
+    (``canvas_marine.ocean_mask``, True = open sea) per tile.  When it is
+    given, outlets are the connected sea instead of "surface at or below
+    sea level": sub-sea-level pixels that do not connect to the geological
+    ocean are dry inland lows, and the fill must treat them as ordinary
+    terrain (closed basins) rather than drain them as sea.
     """
 
     raw: dict[tuple[int, int], np.ndarray]
     grid: ChunkGrid
     filled: dict[tuple[int, int], np.ndarray] = field(default_factory=dict)
+    ocean: dict[tuple[int, int], np.ndarray] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +102,7 @@ def _flood_graph(
     *,
     sea_level: float,
     eps: float,
+    ocean: dict[Hashable, np.ndarray] | None = None,
 ) -> dict[Hashable, np.ndarray]:
     """Classic Priority-Flood over an arbitrary tile graph.
 
@@ -130,9 +139,11 @@ def _flood_graph(
     for key in tiles:
         dem = tiles[key]
         st = state[key]
+        sea = None if ocean is None else ocean.get(key)
         for r in range(t):
             for c in range(t):
-                if dem[r, c] <= sea_level or outlet(key, r, c):
+                is_sea = bool(sea[r, c]) if sea is not None else dem[r, c] <= sea_level
+                if is_sea or outlet(key, r, c):
                     st[r, c] = 2
                     filled[key][r, c] = dem[r, c]
                     heapq.heappush(heap, (float(dem[r, c]), gi_of(key, r, c)))
@@ -208,6 +219,7 @@ def flood_canvas(
             _grid_outlet_fn(neighbour),
             sea_level=sea_level,
             eps=eps,
+            ocean=cast("dict[Hashable, np.ndarray] | None", tiles.ocean),
         ),
     )
 
