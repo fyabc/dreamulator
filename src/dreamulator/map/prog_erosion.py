@@ -936,6 +936,9 @@ def terminal_equilibrium_routing(
     fringe_desc = lake_fringe_descend(h, chain_stop, lakes_render)
     rec_route = receiver.copy()
     rec_route[lake_term.reshape(-1)] = -1
+    # Both masks are consumed above; freeing them keeps the records pass and
+    # the second accumulation inside the canvas-scale memory budget.
+    del lake_term, lakes_draw
     # Depletion mutates the weight IN PLACE: every caller hands the weight
     # over for good after this point (the canvas driver drops it right
     # after the call), and a whole-grid f64 twin cost 3 GiB at the tail's
@@ -958,9 +961,14 @@ def terminal_equilibrium_routing(
     # only in transient arrays (inland-water-refine's "不落盘" gap).
     h_flat = h.reshape(-1)
     _hh, ww = h.shape
+    # Per-lake cell counts in one pass: a whole-canvas ``lbl == a`` per lake
+    # allocated 2 x 360 MiB on a 377M-cell canvas and ran the process out of
+    # memory at the tail's allocation peak.
+    lbl_flat = lbl.reshape(-1)
+    draw_counts = np.bincount(lbl_flat, minlength=n + 1)
+    kept_counts = np.bincount(lbl_flat[water_kept.reshape(-1)], minlength=n + 1)
     for a in range(1, n + 1):
-        member = lbl == a
-        if not member.any():
+        if draw_counts[a] == 0:
             continue
         ex = exits[lake_flat[exits] == a]
         spill_cell = None
@@ -970,8 +978,8 @@ def terminal_equilibrium_routing(
             pick = int(ex[int(np.argmin(h_flat[tgt]))])
             spill_cell = [int(pick // ww), int(pick % ww)]
             spill_elev_m = round(float(h_flat[int(rec_flat[pick])]), 3)
-        draw_cells = int(member.sum())
-        kept = int((member & water_kept).sum())
+        draw_cells = int(draw_counts[a])
+        kept = int(kept_counts[a])
         if is_term[a]:
             verdict = "dry_playa" if kept == 0 else ("shrunk" if kept < draw_cells else "terminal")
         else:
