@@ -1107,7 +1107,7 @@ def soil_bucket_monthly(
     *,
     s_init_mm: float | np.ndarray | None = None,
     max_cycles: int = 100,
-    tol_mm: float = 0.05,
+    tol_mm: float = 1e-9,
 ) -> tuple[np.ndarray, np.ndarray, int, float]:
     """Single-layer soil-water bucket at periodic steady state (Manabe 1969).
 
@@ -1127,9 +1127,13 @@ def soil_bucket_monthly(
         S     = min(S', C)
 
     Exact per-cell monthly balance: ``P_m = E_m + R_m + ΔS``.  The annual
-    cycle is iterated until the store closes on itself (``max|ΔS_cycle| <
-    tol``) — the periodic steady state, so the reported year has ``ΣΔS = 0``
-    and ``ΣP = ΣE + ΣR``.
+    The periodic steady state is solved directly: the annual map
+    ``S₀ ↦ S₁₂`` is monotone with slope ≤ 1, so its fixed point is bracketed
+    by ``[0, C]`` and found by bisection to ``tol_mm``.  The reported year
+    therefore has ``ΣΔS = 0`` and ``ΣP = ΣE + ΣR`` per cell.  (Iterating the
+    annual cycle instead converges at the map's own slope, which is exactly 1
+    wherever a year neither empties nor fills the store, so those cells never
+    closed.)
 
     No snow store in v1: all precipitation enters the bucket as liquid (a
     documented limitation where seasonal snowpack matters; the snow regime
@@ -1142,16 +1146,19 @@ def soil_bucket_monthly(
         p_monthly: Precipitation, shape (N, 12), mm per month.
         e_pot_monthly: Potential evapotranspiration, shape (N, 12), mm/month.
         capacity_mm: Bucket capacity C (mm), > 0.
-        s_init_mm: Initial store (scalar or (N,)); default = capacity/2
-            (a neutral start; the periodic iteration removes the dependence).
-        max_cycles: Cap on 12-month iterations (truncated iteration is
-            reported via the returned residual, never silently converged).
-        tol_mm: Convergence tolerance on max |ΔS| per cycle.
+        s_init_mm: Fixed initial store (scalar or (N,)).  Default ``None``
+            solves the periodic steady state; giving a value reports that one
+            year as it runs, which is only for diagnosing the transient.
+        max_cycles: Cap on bisection steps (about 40 reach 1e-9 mm from a
+            150 mm capacity); a truncated solve is reported through the
+            returned residual, never silently called converged.
+        tol_mm: Target width of the bracket on the initial store (mm).
 
     Returns:
-        (e_monthly, runoff_monthly, cycles, max_delta_s): actual
-        evapotranspiration and runoff (N, 12) mm/month, cycles run, and the
-        final cycle's max store change (convergence residual).
+        (e_monthly, runoff_monthly, steps, max_delta_s): actual
+        evapotranspiration and runoff (N, 12) mm/month, bisection steps used,
+        and the max store change over the reported year (the residual, zero to
+        the solver's tolerance at the periodic steady state).
     """
     p = np.asarray(p_monthly, dtype=np.float64)
     e_pot = np.asarray(e_pot_monthly, dtype=np.float64)
@@ -1161,28 +1168,48 @@ def soil_bucket_monthly(
         raise ValueError(f"capacity_mm must be > 0, got {capacity_mm}")
 
     n = p.shape[0]
-    if s_init_mm is None:
-        s = np.full(n, capacity_mm / 2.0)
-    else:
-        s = np.broadcast_to(np.asarray(s_init_mm, dtype=np.float64), (n,)).copy()
 
-    e_out = np.zeros_like(p)
-    r_out = np.zeros_like(p)
-    max_ds = float("inf")
-    cycles = 0
-    while cycles < max_cycles:
-        cycles += 1
-        s_start = s.copy()
+    def run_year(start: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """One annual cycle from ``start``: (end store, E, runoff)."""
+        store = start.copy()
+        e_year = np.zeros_like(p)
+        r_year = np.zeros_like(p)
         for m in range(p.shape[1]):
-            avail = s + np.maximum(p[:, m], 0.0)
+            avail = store + np.maximum(p[:, m], 0.0)
             e_m = np.minimum(e_pot[:, m], avail)
             s_new = avail - e_m
-            r_out[:, m] = np.maximum(s_new - capacity_mm, 0.0)
-            s = np.minimum(s_new, capacity_mm)
-            e_out[:, m] = e_m
-        max_ds = float(np.abs(s - s_start).max()) if n else 0.0
-        if max_ds < tol_mm:
-            break
+            r_year[:, m] = np.maximum(s_new - capacity_mm, 0.0)
+            store = np.minimum(s_new, capacity_mm)
+            e_year[:, m] = e_m
+        return store, e_year, r_year
+
+    # Periodic steady state solved directly instead of by repeated annual
+    # cycles.  The annual map f(S₀) = S₁₂ is built from monotone
+    # non-decreasing steps with slope ≤ 1 (each month adds, subtracts a
+    # min(), and clips), so g(S₀) = f(S₀) − S₀ is non-increasing with
+    # g(0) ≥ 0 and g(C) ≤ 0: the fixed point is bracketed by [0, C] and
+    # bisection reaches it to the requested tolerance.  Iterating the cycle
+    # instead converges at the map's own slope, which is exactly 1 wherever a
+    # year neither empties nor fills the store — those cells never closed
+    # (nacrea ran the 100-cycle cap out at a 0.57 mm residual, 2026-11-01).
+    low = np.zeros(n)
+    high = np.full(n, float(capacity_mm))
+    cycles = 0
+    while cycles < max_cycles and (n == 0 or float(np.max(high - low)) > tol_mm):
+        cycles += 1
+        mid = 0.5 * (low + high)
+        end, _, _ = run_year(mid)
+        above = end > mid  # the store still grows: the fixed point is above mid
+        low = np.where(above, mid, low)
+        high = np.where(above, high, mid)
+
+    if s_init_mm is None:
+        s_start = 0.5 * (low + high)
+    else:
+        # An explicit start skips the periodic solve and reports that year as is.
+        s_start = np.broadcast_to(np.asarray(s_init_mm, dtype=np.float64), (n,)).copy()
+    s_end, e_out, r_out = run_year(s_start)
+    max_ds = float(np.abs(s_end - s_start).max()) if n else 0.0
     return e_out, r_out, cycles, max_ds
 
 

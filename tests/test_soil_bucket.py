@@ -71,14 +71,33 @@ class TestSoilBucketContract:
         expected = np.minimum(e_pot, p)
         np.testing.assert_allclose(e, expected, atol=1e-6)
 
-    def test_periodic_steady_state_converges(self):
-        """Even with strong seasonality the cycle iteration closes on itself."""
+    def test_periodic_steady_state_closes_exactly(self):
+        """The store closes on itself to the solver's tolerance, not approximately.
+
+        The periodic state is bisected on the initial store, so the residual is
+        at the bracket width rather than at whatever the annual cycle's own
+        convergence rate reached; about 40 steps cover a 200 mm capacity.
+        """
         p = np.zeros((2, 12))
         p[:, 4:8] = 300.0  # extreme 4-month monsoon
         e_pot = np.full((2, 12), 80.0)
-        _, _, cycles, ds = soil_bucket_monthly(p, e_pot, capacity_mm=200.0)
-        assert ds < 0.05
-        assert cycles < 24
+        _, _, steps, ds = soil_bucket_monthly(p, e_pot, capacity_mm=200.0)
+        assert ds <= 1e-8
+        assert steps <= 48
+
+    def test_flat_forcing_closes_without_drawdown(self):
+        """A year that neither empties nor fills the store still closes.
+
+        Here the annual map has slope exactly 1 — iterating the cycle leaves the
+        residual wherever it started, which is what the 100-cycle cap used to
+        run into.
+        """
+        p = np.full((3, 12), 60.0)
+        e_pot = np.full((3, 12), 60.0)
+        e, r, _steps, ds = soil_bucket_monthly(p, e_pot, capacity_mm=150.0)
+        assert ds <= 1e-8
+        np.testing.assert_allclose(e, p)  # energy-limited, nothing stored or shed
+        np.testing.assert_allclose(r, 0.0)
 
     def test_invalid_inputs_raise(self):
         p, e_pot = _seasonal_forcing()

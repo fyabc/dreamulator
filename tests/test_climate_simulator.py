@@ -1073,3 +1073,38 @@ def test_monthly_solve_workers_respects_host_and_env(monkeypatch) -> None:
     assert cs._monthly_solve_workers() == 3
     monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "nonsense")
     assert cs._monthly_solve_workers() >= 1  # 无效值忽略，不抛错
+
+
+def test_sentinel_excess_is_spread_not_deleted() -> None:
+    """哨兵把超额降水交给有余量的邻居，面积加权总量守恒。"""
+    from dreamulator.map.climate_simulator import _spread_over_sentinel
+
+    # 一条五格链：中间一格超上限，两侧邻居的余量足够接住。
+    src = np.array([0, 1, 1, 2, 2, 3, 3, 4])
+    dst = np.array([1, 0, 2, 1, 3, 2, 4, 3])
+    area = np.array([2.0, 1.0, 3.0, 1.0, 2.0])
+    sentinel = np.full(5, 2000.0)
+    p = np.array([100.0, 200.0, 3000.0, 150.0, 120.0])
+
+    out = _spread_over_sentinel(p, sentinel, src, dst, area)
+
+    assert float((out * area).sum()) == pytest.approx(float((p * area).sum()), rel=1e-12)
+    assert out.max() <= 2000.0 + 1e-9  # 没有格子仍在上限之上
+    assert out[1] > p[1] and out[3] > p[3]  # 邻居接到了水
+    assert np.all(out >= 0.0)
+
+
+def test_sentinel_keeps_water_when_neighbours_are_full() -> None:
+    """邻居没有余量时，超额的水留在原地而不是被删掉（账本不许有外部汇）。"""
+    from dreamulator.map.climate_simulator import _spread_over_sentinel
+
+    src = np.array([0, 1])
+    dst = np.array([1, 0])
+    area = np.array([1.0, 1.0])
+    sentinel = np.full(2, 100.0)
+    p = np.array([5000.0, 100.0])  # 两格合计远超两格上限之和
+
+    out = _spread_over_sentinel(p, sentinel, src, dst, area)
+
+    assert float((out * area).sum()) == pytest.approx(float((p * area).sum()), rel=1e-12)
+    assert out.max() > 100.0  # 装不下的部分仍在原地，由日志与账本报出

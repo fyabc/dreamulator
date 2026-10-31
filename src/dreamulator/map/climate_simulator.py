@@ -115,6 +115,44 @@ _MIN_WIND_SPEED: float = 0.1
 _P_CONVERGENCE_SENTINEL_ALPHA: float = 8.0
 
 
+#: Spreading passes for the sentinel excess.  Each pass moves water one cell
+#: outward, so this bounds how far a concentration spot can spill; the nacrea
+#: spots are a few cells across.
+_SENTINEL_SPREAD_PASSES: int = 24
+
+
+def _spread_over_sentinel(
+    p_annual: np.ndarray,
+    sentinel: np.ndarray,
+    src: np.ndarray,
+    dst: np.ndarray,
+    area_km2: np.ndarray,
+) -> np.ndarray:
+    """Move precipitation above the sentinel to neighbours that have headroom.
+
+    Water is conserved exactly in area-weighted terms: every cell's excess
+    volume is handed to its graph neighbours, split by their own remaining
+    volume headroom, and the loop stops once nothing is above the ceiling.
+    Returns the redistributed field (mm/yr).
+    """
+    volume = p_annual * area_km2
+    ceiling = sentinel * area_km2
+    for _ in range(_SENTINEL_SPREAD_PASSES):
+        excess = np.maximum(volume - ceiling, 0.0)
+        if not np.any(excess > 0.0):
+            break
+        headroom = np.maximum(ceiling - volume, 0.0)
+        # Per directed edge: how much headroom the destination offers its source.
+        offered = headroom[dst]
+        total = np.bincount(src, weights=offered, minlength=volume.size)
+        movable = np.minimum(excess, total)  # a cell cannot push more than fits
+        share = np.divide(movable, total, out=np.zeros_like(total), where=total > 0.0)
+        sent = share[src] * offered
+        volume -= np.bincount(src, weights=sent, minlength=volume.size)
+        volume += np.bincount(dst, weights=sent, minlength=volume.size)
+    return np.asarray(volume / area_km2, dtype=np.float64)
+
+
 def _convergence_sentinel(
     temperature_c: np.ndarray,
     k_rain_field: np.ndarray,
@@ -3592,32 +3630,48 @@ def _compute_precipitation_monthly_budget(
     # the enhancement scales with the local column water instead of adding a
     # fixed amount over whatever the budget produced.
 
-    # Convergence sentinel (CLIM-02 slice 5): per-cell annual cap
+    # Convergence sentinel (CLIM-02 slice 5): per-cell annual ceiling
     # α·k_rain·W_sat(T) — world-independent and temperature-adaptive, replacing
-    # the fixed 11000 mm/yr Earth-station clip.  Applied to the monthly values
-    # proportionally so the seasonal shape is preserved where it engages.
-    # Numerical stabilisation (discipline #9), not physics: it clips the
-    # slice-1 per-edge orographic over-concentration on steep terrain — and
-    # warns loudly instead of deleting water silently.
+    # the fixed 11000 mm/yr Earth-station clip.  Numerical stabilisation
+    # (discipline #9), not physics: it bounds the slice-1 per-edge orographic
+    # over-concentration on steep terrain, where one solver cell collects the
+    # condensate of several uphill edges at once.
+    #
+    # The excess is *spread to the neighbours*, not deleted (discipline #6: the
+    # ledger has no sink outside the budget).  Physically it says the condensate
+    # a cell cannot process falls along the rest of the slope instead; that
+    # sub-grid distribution is a declared approximation, but water is conserved
+    # exactly, which clipping was not — it removed 1.35% of nacrea's global
+    # precipitation (2026-11-01).  Each pass hands every cell's excess to its
+    # graph neighbours in proportion to their own remaining headroom, so water
+    # only moves to cells that can hold it; a cell whose neighbours are all full
+    # keeps its excess and the residual is reported.
     p_annual = p_monthly.sum(axis=1)
     if debug is not None:
         debug["pre_cap"] = p_annual.copy()
     _sentinel = _convergence_sentinel(temperature_c, _k_base * (1.0 + _rain_ann))
     _over = p_annual > _sentinel
     if _over.any():
+        _before = p_annual.copy()
         logger.warning(
-            "convergence sentinel clipped %d cells (%.3f%%): max P %.0f mm/yr "
+            "convergence sentinel engaged on %d cells (%.3f%%): max P %.0f mm/yr "
             "(sentinel range %.0f–%.0f) — slice-1 per-edge orographic "
-            "over-concentration; revisit with the stage-D supply route",
+            "over-concentration; the excess is spread to neighbours with headroom",
             int(_over.sum()),
             float(_over.mean()) * 100.0,
             float(p_annual[_over].max()),
             float(_sentinel[_over].min()),
             float(_sentinel[_over].max()),
         )
-    scale = np.where(_over, _sentinel / np.maximum(p_annual, 1e-9), 1.0)
-    p_monthly *= scale[:, None]
-    p_annual = p_monthly.sum(axis=1)
+        p_annual = _spread_over_sentinel(p_annual, _sentinel, src, dst, _area_km2)
+        # Rescale the monthly series to the redistributed annual total, keeping
+        # each cell's seasonal shape; cells that only received water take the
+        # shape of what they already had, or an even year where they had none.
+        _share = np.divide(
+            p_monthly, _before[:, None], out=np.zeros_like(p_monthly), where=_before[:, None] > 0
+        )
+        _share = np.where(_before[:, None] > 0, _share, 1.0 / 12.0)
+        p_monthly = _share * p_annual[:, None]
     _ledger_stages.append(("sentinel", _pa()))
     if debug is not None:
         debug["final"] = p_annual.copy()
