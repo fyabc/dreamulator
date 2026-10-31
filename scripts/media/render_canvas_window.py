@@ -12,7 +12,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from dreamulator.map.td_canvas_mosaic import render_mosaic
+from dreamulator.map.td_canvas_mosaic import (
+    DEFAULT_PALETTE,
+    DEFAULT_SEA,
+    DEFAULT_STYLE,
+    PRINT_EXAGGERATION,
+    render_mosaic,
+)
 
 
 def digest(path: Path) -> str:
@@ -76,6 +82,24 @@ def main() -> None:
     (args.view / "chunks").mkdir(parents=True)
     for name in verified:
         (args.view / "chunks" / name).symlink_to((args.canvas / "chunks" / name).resolve())
+    # Ice cover comes from the canvas's native ice blocks, checked against their own hash list.
+    ice_dir = args.canvas / "surface" / "ice_chunks"
+    ice_verified: dict[str, str] = {}
+    if ice_dir.is_dir():
+        ice_hashes = {}
+        for line in (args.canvas / "surface" / "ice_chunks.sha256").read_text().splitlines():
+            value, name = line.split()
+            ice_hashes[Path(name).name] = value
+        (args.view / "surface" / "ice_chunks").mkdir(parents=True)
+        for name in verified:
+            source = ice_dir / name
+            if not source.exists():
+                continue
+            actual = digest(source)
+            if ice_hashes.get(name) != actual:
+                raise ValueError(f"Ice block hash mismatch: {source}")
+            (args.view / "surface" / "ice_chunks" / name).symlink_to(source.resolve())
+            ice_verified[name] = actual
     meta["chunks"] = [[int(name[1:4]), int(name[6:9])] for name in verified]
     (args.view / "canvas.json").write_text(json.dumps(meta, indent=2) + "\n")
     mosaic_path = args.output.with_name(args.output.stem + "-uncropped.png")
@@ -84,11 +108,12 @@ def main() -> None:
         args.view,
         mosaic_path,
         step=args.step,
-        style="relief",
-        palette="pastel",
-        sea="carto",
-        exaggeration=4,
+        style=DEFAULT_STYLE,
+        palette=DEFAULT_PALETTE[DEFAULT_STYLE],
+        sea=DEFAULT_SEA,
+        exaggeration=PRINT_EXAGGERATION,
         workers=args.workers,
+        ice_overlay=True,
     )
     left = c0 - side["canvas_cols"][0] // args.step
     top = r0 - side["canvas_rows"][0] // args.step
@@ -110,6 +135,7 @@ def main() -> None:
         "canvas": str(args.canvas),
         "canvas_metadata_sha256": digest(args.canvas / "canvas.json"),
         "chunk_sha256": verified,
+        "ice_chunk_sha256": ice_verified,
         "receipts": [str(p) for p in args.receipt],
         "requested_centre_xy_km": [args.centre_x_km, args.centre_y_km],
         "actual_bounds_xy_km": [
@@ -130,7 +156,15 @@ def main() -> None:
     Path(str(args.output) + ".json").write_text(json.dumps(record, indent=2) + "\n")
     mosaic_path.unlink()
     Path(str(mosaic_path) + ".json").unlink()
-    print(json.dumps({k: v for k, v in record.items() if k not in {"chunk_sha256", "render"}}))
+    print(
+        json.dumps(
+            {
+                k: v
+                for k, v in record.items()
+                if k not in {"chunk_sha256", "ice_chunk_sha256", "render"}
+            }
+        )
+    )
 
 
 if __name__ == "__main__":
