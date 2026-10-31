@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793399264685,
+  "lastUpdate": 1793452111145,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1416,6 +1416,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00019799799270299822",
             "extra": "mean: 4.80820999999878 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "e87ae91f2429c5d33fe3679dbe41b7d87de3e7a1",
+          "message": "feat(map): ship connected-sea exceptions with canvas products\n\nCanvas products gain surface/inland_low/<chunk>.npz: bit-packed pixels whose\nsurface is at or below 0 m but that are not 4-connected to the geological\nocean. canvas_marine.write_inland_low / read_inland_low store and load the\nmasks, and ocean_mask gives consumers the sea as surface <= 0 m minus inland\nlows, so drainage outlets and rendered sea can share one rule. canvas.json\nrecords the version, rule and area under sea_mask.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-10-31T19:55:05+08:00",
+          "tree_id": "c2d8d424f884cb31ca3e3cb482d8e8189299dbbd",
+          "url": "https://github.com/fyabc/dreamulator/commit/e87ae91f2429c5d33fe3679dbe41b7d87de3e7a1"
+        },
+        "date": 1793452110382,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.6371344655383786,
+            "unit": "iter/sec",
+            "range": "stddev: 0.090848414313729",
+            "extra": "mean: 1.5695273982000018 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.593751294217632,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011330364399213309",
+            "extra": "mean: 217.68701350000086 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.5093718157456846,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6394622496723406",
+            "extra": "mean: 398.5061096666698 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1481.6022046238754,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008587949554176052",
+            "extra": "mean: 674.9450000000934 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 284.04646227524506,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001537550320123497",
+            "extra": "mean: 3.5205507999990004 msec\nrounds: 5"
           }
         ]
       }
