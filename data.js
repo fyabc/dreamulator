@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793452111145,
+  "lastUpdate": 1793468682434,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1475,6 +1475,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0001537550320123497",
             "extra": "mean: 3.5205507999990004 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "b0602a7161d587df84e86e2e5c1d7b2e11526146",
+          "message": "Merge S2 画布水文收口与 S4 接缝校验器\n\n- 海按安装地表边界连通判定；内陆低地按普通格填平\n- 河段坐标按画布高度换算；渲染海与水文同判据\n- 画布级内存与精度收口（654M 像素画布可跑完）\n- S4 跨画布接缝校验器与首个接缝样本结论；冰崖问题入技术债",
+          "timestamp": "2026-11-01T01:40:45+08:00",
+          "tree_id": "32df2cdaf7ef5457b0d380abacb8fcc127340343",
+          "url": "https://github.com/fyabc/dreamulator/commit/b0602a7161d587df84e86e2e5c1d7b2e11526146"
+        },
+        "date": 1793468682031,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3185746979837698,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09404748094513696",
+            "extra": "mean: 3.138981238400001 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.0828479407234277,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02024144497098902",
+            "extra": "mean: 324.3753889999965 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.439239780422114,
+            "unit": "iter/sec",
+            "range": "stddev: 1.1119900435763526",
+            "extra": "mean: 694.8112563333334 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 922.3375205607598,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001283001551668148",
+            "extra": "mean: 1.0842018000005282 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 195.55917957132502,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008551287557163943",
+            "extra": "mean: 5.113541600000815 msec\nrounds: 5"
           }
         ]
       }
