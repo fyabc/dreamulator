@@ -39,6 +39,8 @@ from dreamulator.map.td_canvas import PX_PER_CELL, CanvasGeometry
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from dreamulator.map.canvas_marine import SeaConnectivity
+
 __all__ = ["CanvasSource", "crop_canvas_window"]
 
 #: Canvas chunk edge in pixels (contract §3).
@@ -56,6 +58,7 @@ class CanvasSource:
     chunks: set[tuple[int, int]]
     tile: int = CHUNK_PX
     _chunk_cache: dict[tuple[int, int], np.ndarray] | None = None
+    _sea: SeaConnectivity | None = None
 
     @classmethod
     def load(cls, root: Path) -> CanvasSource:
@@ -289,6 +292,73 @@ def _rasterise_rivers(
     return mask
 
 
+def _sea_connectivity(source: CanvasSource) -> SeaConnectivity:
+    """The canvas's connected sea, seeded at its open boundary.
+
+    Hydrological and rendered sea must agree: a sub-sea-level hollow that
+    does not reach the canvas boundary is a closed basin (the fill turns it
+    into land or a lake), not water — painting it as sea strands lakes in
+    the ocean, the 65.3S 15.2W report.
+    """
+    from dreamulator.map.canvas_marine import connect_sea
+
+    keys = sorted(source.chunks)
+    present = set(keys)
+    row_set = {ci for ci, _ in keys}
+    col_set = {cj for _, cj in keys}
+    rmin, rmax = min(row_set), max(row_set)
+    cmin, cmax = min(col_set), max(col_set)
+
+    def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+        ci, cj = key
+        arr = source.chunk(ci, cj)
+        water = np.asarray(arr) <= 0.0
+        seed = np.zeros_like(water)
+        if ci == rmin:
+            seed[0, :] = True
+        if ci == rmax:
+            seed[-1, :] = True
+        if cj == cmin:
+            seed[:, 0] = True
+        if cj == cmax:
+            seed[:, -1] = True
+        for di, dj, sl in (
+            (-1, 0, (0, slice(None))),
+            (1, 0, (-1, slice(None))),
+            (0, -1, (slice(None), 0)),
+            (0, 1, (slice(None), -1)),
+        ):
+            if (ci + di, cj + dj) not in present:
+                seed[sl] = True
+        return water, water & seed
+
+    return connect_sea(keys, read, workers=4)
+
+
+def _sea_raster(
+    source: CanvasSource, r0: int, c0: int, r1: int, c1: int, sea: SeaConnectivity
+) -> np.ndarray:
+    """Connected-sea mask for the canvas crop [r0:r1, c0:c1]."""
+    out = np.zeros((r1 - r0, c1 - c0), dtype=bool)
+    t = source.tile
+    for ci in range(r0 // t, (r1 - 1) // t + 1):
+        for cj in range(c0 // t, (c1 - 1) // t + 1):
+            arr = source.chunk(ci, cj)
+            if arr is None:
+                continue
+            water = np.asarray(arr) <= 0.0
+            m = np.asarray(sea.mask((ci, cj), water)) & water
+            tr0, tc0 = ci * t, cj * t
+            ir0, ic0 = max(r0, tr0), max(c0, tc0)
+            ir1, ic1 = min(r1, tr0 + t), min(c1, tc0 + t)
+            if ir1 <= ir0 or ic1 <= ic0:
+                continue
+            out[ir0 - r0 : ir1 - r0, ic0 - c0 : ic1 - c0] = m[
+                ir0 - tr0 : ir1 - tr0, ic0 - tc0 : ic1 - tc0
+            ]
+    return out
+
+
 def crop_canvas_window(
     source: CanvasSource,
     *,
@@ -352,7 +422,14 @@ def crop_canvas_window(
         )
         lake_canvas = _footprint_any(lake_canvas, source.geometry.px_km, span_km, out_res)
     lake = _nearest(lake_canvas, rows - r_lo, cols - c_lo) & ~np.isnan(height)
-    sea = (height <= 0.0) & ~np.isnan(height)
+    # Rendered sea = the same connected-sea rule S2 uses, pooled onto the
+    # window grid; a closed sub-sea-level hollow stays land (or shows as the
+    # lake the fill put there) instead of an inland "sea".
+    if source._sea is None:
+        source._sea = _sea_connectivity(source)
+    sea_canvas = _sea_raster(source, r_lo, c_lo, r_hi, c_hi, source._sea)
+    sea_canvas = _footprint_any(sea_canvas, source.geometry.px_km, span_km, out_res)
+    sea = _nearest(sea_canvas, rows - r_lo, cols - c_lo) & ~np.isnan(height) & ~lake
     river = _rasterise_rivers(source, window, out_res)
 
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -42,7 +42,7 @@ def _push_grow(
     if n == prio.size:
         cap = max(1024, n * 2)
         new_p = np.empty(cap, dtype=np.float64)
-        new_c = np.empty(cap, dtype=np.int64)
+        new_c = np.empty(cap, dtype=cell.dtype)
         new_p[:n] = prio[:n]
         new_c[:n] = cell[:n]
         prio, cell = new_p, new_c
@@ -61,11 +61,13 @@ def _grade_flats_kernel(filled: np.ndarray, sea_level: float, eps: float) -> np.
     """
     h, w = filled.shape
     n_cells = h * w
-    flat = filled.reshape(n_cells).astype(np.float64)
+    # float32 view: the f64 copy cost 5 GiB on a 654M-cell canvas, and every
+    # value is exact in float64 anyway (the comparisons promote per element).
+    flat = filled.reshape(n_cells)
     level = np.full(n_cells, np.inf)
     cap = max(1024, n_cells // 4)
     prio = np.empty(cap, dtype=np.float64)
-    heap_cell = np.empty(cap, dtype=np.int64)
+    heap_cell = np.empty(cap, dtype=np.int32)  # cell ids < 2^31
     heap_len = 0
 
     for c in range(n_cells):

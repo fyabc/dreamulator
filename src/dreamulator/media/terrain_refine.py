@@ -461,6 +461,7 @@ def refine_region_pack(
             sea_level_m=float(meta["sea_level_m"]),
         )
     )
+    assert h is not None  # keep_rewritten_h defaults to True here
     thr = (
         river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS * factor * factor
     )

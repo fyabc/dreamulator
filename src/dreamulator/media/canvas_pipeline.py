@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from dreamulator.map.td_canvas import CanvasGeometry
+from dreamulator.map.td_canvas import PX_PER_CELL, CanvasGeometry
 from dreamulator.media.canvas_hydrology_tiled import _local_flood
 
 if TYPE_CHECKING:
@@ -545,10 +545,22 @@ def _grade_flats(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray
     """
     from dreamulator.media._hydrology_kernels import _grade_flats_kernel
 
-    flat = filled.ravel().astype(np.float64)
-    level = _grade_flats_kernel(np.ascontiguousarray(filled), sea_level, eps)
-    out = np.where(np.isfinite(level), np.maximum(level, flat), flat)
-    return out.reshape(filled.shape).astype(np.float32)
+    # Banded in place: the previous whole-canvas float64 twin plus the
+    # np.where/np.maximum temporaries peaked at four f64 fields and ran the
+    # 654M-cell canvas out of memory.
+    level = _grade_flats_kernel(np.ascontiguousarray(filled), sea_level, eps).reshape(filled.shape)
+    out = np.empty(filled.shape, dtype=np.float32)
+    h = filled.shape[0]
+    band = max(1, min(2048, h))
+    for r0 in range(0, h, band):
+        r1 = min(h, r0 + band)
+        lv = level[r0:r1]
+        fl = filled[r0:r1]
+        finite = np.isfinite(lv)
+        np.maximum(lv, fl, out=lv)
+        lv[~finite] = fl[~finite]
+        out[r0:r1] = lv
+    return out
 
 
 def _grade_flats_reference(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray:
@@ -601,6 +613,25 @@ def _grade_flats_reference(filled: np.ndarray, sea_level: float, eps: float) -> 
     return out.reshape(h, w).astype(np.float32)
 
 
+def _climate_on_grid(coarse: np.ndarray, h: int, w: int) -> np.ndarray:
+    """Tile a canvas climate grid onto the assembled chunk-bbox pixel grid.
+
+    The climate grid spans the whole canvas (``ncell`` cells of
+    ``PX_PER_CELL`` pixels); the assembled array starts at canvas pixel 0
+    and usually stops short of the canvas edge.  The grid is therefore
+    cropped to the array's extent and each cell repeated ``PX_PER_CELL``
+    times.  Scaling by ``h // ncell`` is wrong whenever the chunk bounding
+    box does not reach the far canvas edge — it shears every field.
+    """
+    f = PX_PER_CELL
+    rows = min(coarse.shape[0], h // f)
+    cols = min(coarse.shape[1], w // f)
+    out = np.zeros((h, w), dtype=coarse.dtype)
+    for i in range(rows):
+        out[i * f : (i + 1) * f, : cols * f] = np.repeat(coarse[i, :cols], f)[None, :]
+    return out
+
+
 _FlowFields = tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]
@@ -621,11 +652,7 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     sort last, matching the ``nan_to_num(1e30)`` order of previous versions
     without the full-size copy.
     """
-    from dreamulator.map.prog_erosion import (
-        RUNOFF_REFERENCE_MM,
-        flow_accumulation,
-        tile_coarse_field,
-    )
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM, flow_accumulation
 
     t = store.tile
     nrow = (max(ci for ci, _ in store.chunks) + 1) * t
@@ -649,9 +676,9 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     for r0 in range(0, h, band_rows):
         r1 = min(h, r0 + band_rows)
         fb = filled[r0:r1]
-        best = np.zeros(fb.shape, dtype=np.float64)
-        recb = np.full(fb.shape, -1, dtype=np.int64)
-        rr = np.arange(r0, r1, dtype=np.int64)[:, None]
+        best = np.zeros(fb.shape, dtype=np.float64)  # slope: keep f64 for tie determinism
+        recb = np.full(fb.shape, -1, dtype=np.int32)
+        rr = np.arange(r0, r1, dtype=np.int32)[:, None]
         for dy, dx in _NEIGHBOURS:
             # Neighbour values via one row of band context: _shift on the
             # context slice reproduces the global out[y,x]=f[y+dy,x+dx] with
@@ -663,7 +690,7 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
             slope = (fb - nb) / (diag if dy and dx else 1.0)
             better = np.isfinite(slope) & (nb < fb) & (slope > best)
             best = np.where(better, slope, best)
-            recb = np.where(better, ((rr + dy) * w + (cc + dx)).astype(np.int32), recb)
+            recb = np.where(better, (rr + dy) * w + (cc + dx), recb)
         rec2d[r0:r1] = recb
     # Hydrology land reaches down to the drying foreshore's low edge
     # (INTERTIDAL_M's lower bound).  A tidal flat is dry for part of the
@@ -691,13 +718,14 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     order = np.argsort(filled.ravel(), kind="stable").astype(np.int32)
     runoff_path = store.root / "climate" / "runoff.mm.npy"
     if runoff_path.exists():
-        coarse = np.nan_to_num(np.load(runoff_path).astype(np.float64), nan=0.0)
-        # Block-tiled upsample (bit-identical to kron, peak one row block) —
-        # shared with the region chain's hydrology_weight.
-        weight = tile_coarse_field(np.maximum(coarse, 0.0), (h, w)) / RUNOFF_REFERENCE_MM
+        coarse = np.nan_to_num(np.load(runoff_path).astype(np.float32), nan=0.0)
+        # The climate grid spans the whole canvas; the chunk bounding box
+        # may stop short of the canvas edge, so crop and tile at the true
+        # cell size instead of rescaling (see _climate_on_grid).
+        weight = _climate_on_grid(np.maximum(coarse, 0.0), h, w) / RUNOFF_REFERENCE_MM
         weight[~land] = 0.0
     else:
-        weight = land.astype(np.float64)
+        weight = land.astype(np.float32)
     acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
     dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
     for ci, cj in store.chunks:
@@ -772,7 +800,7 @@ def run_canvas_rivers(
     if has_basis:
         precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
         temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
-        climate_block = h // precip.shape[0]
+        climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
     (
         _h_rewritten,
         land,
@@ -798,6 +826,8 @@ def run_canvas_rivers(
         km_per_px=km,
         sea_level_m=sea_level,
         climate_block=climate_block,
+        consume_receiver=True,
+        keep_rewritten_h=False,
     )
     # Routing consumed them; the regime pass and segment extraction below
     # work from order/rec_route/acc (and the monthly pack's own weights).
@@ -809,11 +839,11 @@ def run_canvas_rivers(
     month_active = None
     monthly_path = climate / "runoff_monthly.mm.npy"
     if monthly_path.exists():
-        monthly = np.load(monthly_path).astype(np.float64)
+        monthly = np.load(monthly_path).astype(np.float32)
         if monthly.ndim == 3:
             monthly = np.moveaxis(monthly, 0, -1)  # (12,n,n) -> (n,n,12)
             active = regime_active_cells(km)
-            factor = h // monthly.shape[0]
+            factor = PX_PER_CELL
             month_active = month_active_counts(
                 order, rec_route, monthly, land, active, factor=factor
             )
@@ -826,6 +856,7 @@ def run_canvas_rivers(
         lake=chain_stop,
         lake_descend=fringe_desc,
         month_active=month_active,
+        pixel_rows=store.geometry.size_px,
     )
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
