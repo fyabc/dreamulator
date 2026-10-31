@@ -59,6 +59,7 @@
 - `canvas-conditioning-structure.md` — 画布条件场的总体需求与设计依据，包含连续山带、海岸地貌、气候尺度传递及候选方案的验收范围。
 - `canvas-glacial-landforms.md` — 画布的覆冰与冰川地貌：现今冰面、气候物质平衡、热流驱动的约化碳响应与全球冰量历史、基底热状态，以及后续基岩侵蚀与地球验证方案。
 - `inland-water-refine.md` — 内陆水体 refine 提案（湖命运 P−E 判决四类结局、溢流河网接通、rim/spill 字段缺口；未实现，2026-10 立案）
+- `climate-engine-round.md` — 气候引擎本轮迭代（速度与准确度同时推进：现状测量、守恒缺口、两套网格结构候选、四个阶段与已否证方向）
 - `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）
 - `climate-steady-coupling.md` — 气候层稳态耦合中间态（远期提案：DAG 某一步 T↔P 耦合解定点，介于单向 DAG 与瞬态 GCM 之间，先关 T↔P 干旱度反馈）
