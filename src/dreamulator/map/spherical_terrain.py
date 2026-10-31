@@ -1,8 +1,9 @@
 """Continuous spherical reconstruction of fixed coarse samples and their contours.
 
-Point values are linearly interpolated on faces of their spherical convex hull.
-This reconstructs a continuous surface from coarse inputs; it does not infer finer
-geological observations or impose conservation of cell averages.
+Point values are linearly interpolated on faces of their spherical convex hull,
+or reconstructed with continuous gradients by ``SphericalC1Field``. Both rebuild a
+continuous surface from coarse inputs; neither infers finer geological observations
+or imposes conservation of cell averages.
 """
 
 from __future__ import annotations
@@ -97,6 +98,11 @@ class SphericalPointTerrainField:
         Consumers can reconstruct nonlinear constraint responses with infinite
         inactive bounds, while sharing the established source triangulation.
         """
+        ids, weights = self.locate(xyz)
+        return self.faces[ids], weights
+
+    def locate(self, xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return the containing hull face of each query and its barycentric weights."""
         points = np.asarray(xyz, dtype=np.float64)
         if points.ndim < 1 or points.shape[-1] != 3 or not np.isfinite(points).all():
             raise ValueError("query points must be finite unit vectors")
@@ -105,7 +111,7 @@ class SphericalPointTerrainField:
         shape = points.shape[:-1]
         points = points.reshape(-1, 3)
         points = points / np.linalg.norm(points, axis=1, keepdims=True)
-        result_vertices = np.empty((len(points), 3), dtype=np.int64)
+        result_faces = np.empty(len(points), dtype=np.int64)
         result_weights = np.empty((len(points), 3), dtype=np.float64)
         for start in range(0, len(points), 4096):
             q = points[start : start + 4096]
@@ -151,7 +157,7 @@ class SphericalPointTerrainField:
                 ids = candidates[rows, chosen]
                 w = np.maximum(weights[rows, chosen], 0)
                 w /= w.sum(axis=1, keepdims=True)
-                result_vertices[base + unresolved[found]] = self.faces[ids]
+                result_faces[base + unresolved[found]] = ids
                 result_weights[base + unresolved[found]] = w
                 unresolved = unresolved[~found]
                 return weights, found
@@ -184,7 +190,7 @@ class SphericalPointTerrainField:
                         break
             if len(unresolved):
                 raise ValueError("spherical source coverage failed")
-        return result_vertices.reshape((*shape, 3)), result_weights.reshape((*shape, 3))
+        return result_faces.reshape(shape), result_weights.reshape((*shape, 3))
 
     def contour_segments(self, level: float = 0.0, channel: int = 0) -> np.ndarray:
         """Extract exact great-circle segments of the reconstructed level contour."""
@@ -269,6 +275,136 @@ class SphericalPointTerrainField:
         if self.values.ndim == 2:
             left, right = left[:, channel], right[:, channel]
         return [path if left[i] >= right[i] else path[::-1].copy() for i, path in enumerate(paths)]
+
+
+class SphericalC1Field:
+    """C1 reconstruction of fixed spherical point values (Clough-Tocher on hull faces).
+
+    Linear barycentric weights leave gradient jumps on every face edge, so level
+    contours of coarse fields become polylines at the source spacing. Each face is
+    split at its centroid into three cubic Bezier patches (Clough & Tocher 1965;
+    the ``CloughTocher2DInterpolator`` construction in SciPy). Vertex gradients
+    are least-squares fits over the vertex's hull neighbours in its tangent plane.
+    Directional edge derivatives use the shared chord vector, and the normal
+    derivative varies linearly along each edge, so adjacent faces join with
+    continuous value and gradient. Vertex values are reproduced exactly; the
+    reconstruction adds no information finer than the source spacing.
+    """
+
+    def __init__(self, xyz: np.ndarray, values: np.ndarray) -> None:
+        self.linear = SphericalPointTerrainField(xyz, values)
+        points, data = self.linear.points, self.linear.values
+        flat = data.reshape(len(points), -1)
+        hull_neighbours = ConvexHull(points).neighbors
+        faces = self.linear.faces
+        edges = np.unique(
+            np.sort(faces[:, [[0, 1], [1, 2], [2, 0]]].reshape(-1, 2), axis=1), axis=0
+        )
+        pairs = np.concatenate([edges, edges[:, ::-1]])
+        # Orthonormal tangent basis at each vertex.
+        helper = np.where(np.abs(points[:, [2]]) < 0.9, [[0.0, 0.0, 1.0]], [[1.0, 0.0, 0.0]])
+        east = np.cross(helper, points)
+        east /= np.linalg.norm(east, axis=1, keepdims=True)
+        north = np.cross(points, east)
+        offset = points[pairs[:, 1]] - points[pairs[:, 0]]
+        d = np.stack(
+            [np.sum(offset * east[pairs[:, 0]], 1), np.sum(offset * north[pairs[:, 0]], 1)], 1
+        )
+        normal = np.zeros((len(points), 2, 2))
+        np.add.at(normal, pairs[:, 0], d[:, :, None] * d[:, None, :])
+        rhs = np.zeros((len(points), 2, flat.shape[1]))
+        np.add.at(
+            rhs, pairs[:, 0], d[:, :, None] * (flat[pairs[:, 1]] - flat[pairs[:, 0]])[:, None, :]
+        )
+        local = np.linalg.solve(normal, rhs)
+        self.gradient = east[:, :, None] * local[:, None, 0] + north[:, :, None] * local[:, None, 1]
+        # Barycentric position of each neighbour's centroid fixes the linear
+        # cross-boundary derivative shared by the two faces of an edge.
+        inverse = np.linalg.inv(points[faces].transpose(0, 2, 1))
+        centroid = points[faces[hull_neighbours]].mean(axis=2)
+        c = np.einsum("fij,fkj->fki", inverse, centroid)
+        c /= c.sum(axis=2, keepdims=True)
+        self.edge_shape = np.stack(
+            [
+                (2 * c[:, 0, 2] + c[:, 0, 1] - 1) / (2 - 3 * c[:, 0, 2] - 3 * c[:, 0, 1]),
+                (2 * c[:, 1, 0] + c[:, 1, 2] - 1) / (2 - 3 * c[:, 1, 0] - 3 * c[:, 1, 2]),
+                (2 * c[:, 2, 1] + c[:, 2, 0] - 1) / (2 - 3 * c[:, 2, 1] - 3 * c[:, 2, 0]),
+            ],
+            axis=1,
+        )
+        digest = hashlib.sha256(self.linear.sha256.encode())
+        digest.update(b"clough-tocher-c1-v1")
+        self.sha256 = digest.hexdigest()
+        for arr in (self.gradient, self.edge_shape):
+            arr.setflags(write=False)
+
+    def __call__(self, xyz: np.ndarray) -> np.ndarray:
+        query = np.asarray(xyz, dtype=np.float64)
+        ids, b = self.linear.locate(query)
+        shape = ids.shape
+        ids, b = ids.reshape(-1), b.reshape(-1, 3)
+        points, faces = self.linear.points, self.linear.faces[ids]
+        f = self.linear.values.reshape(len(points), -1)[faces]
+        grad = self.gradient[faces]
+        p = points[faces]
+        e12, e23, e31 = p[:, 1] - p[:, 0], p[:, 2] - p[:, 1], p[:, 0] - p[:, 2]
+
+        def along(k: int, edge: np.ndarray) -> np.ndarray:
+            return np.asarray(np.einsum("nj,njc->nc", edge, grad[:, k]))
+
+        f1, f2, f3 = f[:, 0], f[:, 1], f[:, 2]
+        c3000, c0300, c0030 = f1, f2, f3
+        c2100 = (along(0, e12) + 3 * f1) / 3
+        c2010 = (-along(0, e31) + 3 * f1) / 3
+        c1200 = (-along(1, e12) + 3 * f2) / 3
+        c0210 = (along(1, e23) + 3 * f2) / 3
+        c1020 = (along(2, e31) + 3 * f3) / 3
+        c0120 = (-along(2, e23) + 3 * f3) / 3
+        c2001 = (c2100 + c2010 + c3000) / 3
+        c0201 = (c1200 + c0300 + c0210) / 3
+        c0021 = (c1020 + c0120 + c0030) / 3
+        g = self.edge_shape[ids][:, :, None]
+        c0111 = (
+            g[:, 0] * (-c0300 + 3 * c0210 - 3 * c0120 + c0030)
+            + (-c0300 + 2 * c0210 - c0120 + c0021 + c0201)
+        ) / 2
+        c1011 = (
+            g[:, 1] * (-c0030 + 3 * c1020 - 3 * c2010 + c3000)
+            + (-c0030 + 2 * c1020 - c2010 + c2001 + c0021)
+        ) / 2
+        c1101 = (
+            g[:, 2] * (-c3000 + 3 * c2100 - 3 * c1200 + c0300)
+            + (-c3000 + 2 * c2100 - c1200 + c2001 + c0201)
+        ) / 2
+        c1002 = (c1101 + c1011 + c2001) / 3
+        c0102 = (c1101 + c0111 + c0201) / 3
+        c0012 = (c1011 + c0111 + c0021) / 3
+        c0003 = (c1002 + c0102 + c0012) / 3
+        m = b.min(axis=1, keepdims=True)
+        b1, b2, b3 = (b - m).T[:, :, None]
+        b4 = 3 * m
+        value = (
+            b1**3 * c3000
+            + 3 * b1**2 * b2 * c2100
+            + 3 * b1**2 * b3 * c2010
+            + 3 * b1**2 * b4 * c2001
+            + 3 * b1 * b2**2 * c1200
+            + 6 * b1 * b2 * b4 * c1101
+            + 3 * b1 * b3**2 * c1020
+            + 6 * b1 * b3 * b4 * c1011
+            + 3 * b1 * b4**2 * c1002
+            + b2**3 * c0300
+            + 3 * b2**2 * b3 * c0210
+            + 3 * b2**2 * b4 * c0201
+            + 3 * b2 * b3**2 * c0120
+            + 6 * b2 * b3 * b4 * c0111
+            + 3 * b2 * b4**2 * c0102
+            + b3**3 * c0030
+            + 3 * b3**2 * b4 * c0021
+            + 3 * b3 * b4**2 * c0012
+            + b4**3 * c0003
+        )
+        return np.asarray(value).reshape((*shape, *self.linear.values.shape[1:]))
 
 
 class SphericalCoastGeometry:

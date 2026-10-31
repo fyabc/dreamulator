@@ -103,3 +103,41 @@ def test_local_face_walk_resolves_dense_curve_triangle_interiors() -> None:
     np.testing.assert_allclose(
         field(q), np.concatenate([field(p) for p in np.array_split(q, 5)]), rtol=0, atol=1e-10
     )
+
+
+def test_c1_field_reproduces_vertices_and_joins_faces_smoothly() -> None:
+    from dreamulator.map.spherical_terrain import SphericalC1Field
+
+    xyz = globe_points(2000)
+    smooth = np.sin(3 * xyz[:, 0]) * np.cos(2 * xyz[:, 1]) + xyz[:, 2] ** 2
+    field = SphericalC1Field(xyz, np.column_stack([smooth * 1000, xyz[:, 0]]))
+    np.testing.assert_allclose(field(xyz), np.column_stack([smooth * 1000, xyz[:, 0]]), atol=1e-6)
+    # Off-vertex accuracy beats the linear reconstruction on the same faces.
+    rng = np.random.default_rng(4)
+    q = rng.normal(size=(4000, 3))
+    q /= np.linalg.norm(q, axis=1, keepdims=True)
+    truth = (np.sin(3 * q[:, 0]) * np.cos(2 * q[:, 1]) + q[:, 2] ** 2) * 1000
+    c1 = np.abs(field(q)[:, 0] - truth).max()
+    linear = np.abs(field.linear(q)[:, 0] - truth).max()
+    assert c1 < 0.35 * linear
+    # Directional derivative across a shared edge agrees from both faces.
+    face = field.linear.faces[50]
+    a, b = field.linear.points[face[0]], field.linear.points[face[1]]
+    mid = (a + b) / np.linalg.norm(a + b)
+    tangent = np.cross(mid, b - a)
+    tangent /= np.linalg.norm(tangent)
+    h = 1e-5
+    sides = []
+    for sign in (1, -1):
+        near = mid + sign * h * tangent
+        far = mid + sign * 2 * h * tangent
+        near, far = (p / np.linalg.norm(p) for p in (near, far))
+        sides.append((field(far[None])[0, 0] - field(near[None])[0, 0]) / h * sign)
+    jump_c1 = abs(sides[0] - sides[1])
+    lin = []
+    for sign in (1, -1):
+        near = mid + sign * h * tangent
+        far = mid + sign * 2 * h * tangent
+        near, far = (p / np.linalg.norm(p) for p in (near, far))
+        lin.append((field.linear(far[None])[0, 0] - field.linear(near[None])[0, 0]) / h * sign)
+    assert jump_c1 < 1e-3 * max(abs(lin[0] - lin[1]), 1.0) + 1e-2
