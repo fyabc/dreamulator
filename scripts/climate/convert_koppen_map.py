@@ -88,9 +88,26 @@ def load_beck_array(tif_path: Path) -> np.ndarray:
             zf.extract(target, tmp_dir)
             tif_path = tmp_dir / target
 
-    arr = tifffile.imread(str(tif_path))
-    print(f"  Loaded Beck map: {arr.shape[1]}x{arr.shape[0]} (5 arc-min)")
+    try:
+        arr = tifffile.imread(str(tif_path))
+    except ValueError as exc:
+        # The 2023 maps are LZW-compressed, which tifffile only decodes with the
+        # optional imagecodecs package; Pillow reads them as a palette image.
+        if "imagecodecs" not in str(exc):
+            raise
+        from PIL import Image
+
+        Image.MAX_IMAGE_PIXELS = None
+        with Image.open(tif_path) as image:
+            arr = np.asarray(image)
+    print(f"  Loaded Beck map: {arr.shape[1]}x{arr.shape[0]} ({_grid_label(arr)})")
     return arr
+
+
+def _grid_label(arr: np.ndarray) -> str:
+    """Grid spacing of a global map, as degrees and arc-minutes."""
+    step = 180.0 / int(arr.shape[0])
+    return f"{step:.6g}° ≈ {step * 60.0:.3g} arc-min"
 
 
 def _is_zip(path: Path) -> bool:
@@ -132,7 +149,7 @@ def sample_beck_at_cells(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert Beck et al. (2018) Köppen map to per-cell JSON",
+        description="Convert a Beck Köppen-Geiger GeoTIFF to per-cell JSON",
     )
     parser.add_argument(
         "--tif",
@@ -150,16 +167,31 @@ def main() -> None:
         default="data/worlds/earth/branches/climate-dev/maps/planet_earth/koppen_obs.json",
         help="Output JSON path (stored alongside the mesh)",
     )
+    parser.add_argument(
+        "--source-label",
+        default="Beck et al. (2018), Present Köppen-Geiger at 5 arc-min",
+        help="Source description written into the output (set it when converting "
+        "another release, e.g. the 2023 maps)",
+    )
+    parser.add_argument(
+        "--source-url",
+        default="https://doi.org/10.1038/sdata.2018.214",
+        help="Source DOI or URL written into the output",
+    )
     args = parser.parse_args()
+
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+    from dreamulator.map.models import CVTMesh
 
     # Find project root
     project_root = _find_project_root()
     mesh_path = project_root / args.mesh
-    if not mesh_path.exists():
-        _mf = find_mesh_file(mesh_path.parent)
-        if _mf is None:
-            raise SystemExit(f"no mesh file near {mesh_path}")
-        mesh_path = _mf
+    if mesh_path.is_dir() or not mesh_path.exists():
+        # The default points at the map directory; take whichever mesh file it holds.
+        found = find_mesh_file(mesh_path if mesh_path.is_dir() else mesh_path.parent)
+        if found is None:
+            raise SystemExit(f"no mesh file in or near {mesh_path}")
+        mesh_path = found
     output_path = project_root / args.output
 
     if not mesh_path.exists():
@@ -167,21 +199,14 @@ def main() -> None:
         print("Run: uv run python scripts/earth/import_earth_elevation.py first", file=sys.stderr)
         sys.exit(1)
 
-    # Load Beck data
-    if args.tif:
-        tif_path = Path(args.tif)
-    else:
-        # Auto-download
-        tif_path = _auto_download_beck()
+    # Beck data: the given GeoTIFF, or the auto-downloaded Version 1 map.
+    tif_path = Path(args.tif) if args.tif else _auto_download_beck()
 
     print(f"Loading Beck Koppen map from: {tif_path}")
     beck = load_beck_array(tif_path)
 
     # Load CVT mesh
     print(f"Loading CVT mesh from: {mesh_path}")
-    from dreamulator.map.export import find_mesh_file, load_cvt_mesh
-    from dreamulator.map.models import CVTMesh
-
     mesh = CVTMesh(**load_cvt_mesh(mesh_path))
     print(f"  Mesh: {mesh.num_cells} cells")
 
@@ -200,9 +225,9 @@ def main() -> None:
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_data = {
-        "source": "Beck et al. (2018), Present Köppen-Geiger at 5 arc-min",
-        "source_url": "https://doi.org/10.1038/sdata.2018.214",
-        "resolution": "5 arc-minute (2160x4320)",
+        "source": args.source_label,
+        "source_url": args.source_url,
+        "resolution": f"{_grid_label(beck)} ({beck.shape[1]}x{beck.shape[0]})",
         "num_cells": mesh.num_cells,
         "seed": mesh.seed,
         "mesh_path": str(mesh_path.relative_to(project_root)),

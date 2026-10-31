@@ -1054,3 +1054,22 @@ def test_wet_trough_pickup_weight_runs_without_debug() -> None:
     p = [c.precipitation_mm or 0.0 for c in mesh.cells]
     assert all(np.isfinite(x) for x in p)
     assert max(p) > 0.0
+
+
+def test_monthly_solve_workers_respects_host_and_env(monkeypatch) -> None:
+    """单线程宿主（Pyodide）与显式 1 都必须退回串行路径。"""
+    from dreamulator.map import climate_simulator as cs
+
+    monkeypatch.delenv("DREAMULATOR_CLIMATE_WORKERS", raising=False)
+    monkeypatch.setattr(cs.sys, "platform", "emscripten")
+    assert cs._can_fork() is False
+    assert cs._monthly_solve_workers() == 1  # 浏览器里没有进程池
+
+    monkeypatch.setattr(cs.sys, "platform", "linux")
+    assert cs._monthly_solve_workers() >= 1
+    monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "1")
+    assert cs._monthly_solve_workers() == 1
+    monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "3")
+    assert cs._monthly_solve_workers() == 3
+    monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "nonsense")
+    assert cs._monthly_solve_workers() >= 1  # 无效值忽略，不抛错

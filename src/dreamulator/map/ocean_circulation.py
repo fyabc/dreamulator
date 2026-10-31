@@ -594,13 +594,19 @@ def apply_dirichlet_coastal(
     if not coastal_local:
         return A, rhs_mod
 
-    # Convert to LIL once, edit coastal rows, convert back.
-    A_lil = A.tolil()
-    for li in coastal_local:
-        A_lil[li, :] = 0.0
-        A_lil[li, li] = 1.0
-
-    return A_lil.tocsr(), rhs_mod
+    # Zero the coastal rows and put 1 on their diagonal, vectorised on CSR:
+    # mask every stored entry of those rows at once, drop them, then add the
+    # unit diagonal as a one-entry-per-row sparse term.  The former LIL
+    # round-trip edited one row at a time and cost 34 s of the nacrea ocean
+    # stage (2026-11-01 py-spy); the assembled matrix is the same.
+    A = A.tocsr(copy=True)
+    row_mask = np.zeros(A.shape[0], dtype=bool)
+    row_mask[coastal_local] = True
+    A.data[np.repeat(row_mask, np.diff(A.indptr))] = 0.0
+    A.eliminate_zeros()
+    index = np.asarray(coastal_local, dtype=np.int64)
+    unit = sparse.coo_matrix((np.ones(index.size), (index, index)), shape=A.shape, dtype=A.dtype)
+    return (A + unit).tocsr(), rhs_mod
 
 
 # ===================================================================

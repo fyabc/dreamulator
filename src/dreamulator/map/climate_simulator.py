@@ -13,7 +13,11 @@ on the CVT mesh and writes results into `VoronoiCell` fields in-place.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
+import sys
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -73,6 +77,8 @@ from dreamulator.engine.stellar_physics import solar_day_days
 from dreamulator.map.water_bodies import resolve_land_mask
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .models import CVTMesh, VoronoiCell
     from .pipeline_types import TerrainPipelineConfig
 
@@ -2286,6 +2292,64 @@ def _apply_cold_trap(
 # calibration knob — so it is shared by every world (only wind speed and
 # evaporation differ, and the advective e-folding length L = u·τ adapts
 # automatically with Ω).
+#: Worker processes for the twelve monthly moisture-budget solves.  Unset (the
+#: default) picks ``min(12, usable cores)``; ``1`` forces the serial path, which
+#: every result must match bit-for-bit.  ``DREAMULATOR_CLIMATE_WORKERS``
+#: overrides it where the CPU budget is shared.  The parallel path speeds up the
+#: server and CLI diagnosis loop only: a single-threaded host (the Pyodide
+#: playground) always takes the serial path, so the per-solve cost — not the
+#: parallelism — is what a browser target has to improve.
+_MONTHLY_SOLVE_WORKERS_ENV = "DREAMULATOR_CLIMATE_WORKERS"
+
+#: Set by ``_monthly_pass`` just before forking, so the worker entry point below
+#: (a module-level function, hence picklable) reaches the closure the children
+#: inherit through fork.
+_MONTHLY_SOLVE_TASK: Callable[[int], tuple[np.ndarray, np.ndarray, np.ndarray | None]] | None = None
+
+
+def _can_fork() -> bool:
+    """Whether this interpreter can fork worker processes.
+
+    Pyodide (``sys.platform == "emscripten"``, the browser playground) and WASI
+    have no fork and no process pool, so the engine must stay usable there on
+    the serial path — which is also the path the bit-identity requirement is
+    stated against.
+    """
+    return sys.platform not in ("emscripten", "wasi") and hasattr(os, "fork")
+
+
+def _monthly_solve_workers() -> int:
+    """Worker count for the monthly budget solves (see the env var above)."""
+    if not _can_fork():
+        return 1
+    raw = os.environ.get(_MONTHLY_SOLVE_WORKERS_ENV, "").strip()
+    if raw:
+        try:
+            requested = int(raw)
+        except ValueError:
+            logger.warning("%s=%r is not an integer; ignoring", _MONTHLY_SOLVE_WORKERS_ENV, raw)
+        else:
+            if requested > 0:
+                return requested
+            logger.warning("%s=%d is not positive; ignoring", _MONTHLY_SOLVE_WORKERS_ENV, requested)
+    usable = (
+        len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
+    )
+    return max(1, min(12, usable))
+
+
+def _monthly_solve_task(month: int) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """Entry point of a monthly-solve worker; the closure arrives through fork."""
+    if _MONTHLY_SOLVE_TASK is None:  # pragma: no cover - set before the fork
+        raise RuntimeError("monthly solve task is not set")
+    return _MONTHLY_SOLVE_TASK(month)
+
+
+#: How many smoothed wind fields to keep per mesh (each is 3 N float64 ≈ 5 MB
+#: at 200k cells).  One climate stage reuses at most the annual field plus the
+#: twelve monthly ones within an outer iteration.
+_WIND_SMOOTH_CACHE_ENTRIES: int = 16
+
 _MOISTURE_RESIDENCE_DAYS: float = 9.0
 
 # Brunt–Väisälä derivation constants for the D1 low-Froude flow splitting
@@ -2537,8 +2601,28 @@ def _solve_moisture_budget(
         _cache["fields"] = (_avg, edge_dir, l_m, area_m2, _h_eff)
         _cache["struct"] = (_indices, _indptr, _order)
         object.__setattr__(mesh, "_budget_cache", _cache)
-    for _ in range(40):
-        wind = 0.5 * wind + 0.5 * (_avg @ wind)
+    # The 40 Jacobi passes depend only on the wind field and the smoothing
+    # operator, and the same field arrives repeatedly: each month is solved
+    # two or three times by the pickup-gate Picard step, and the annual field
+    # likewise.  Memoise by the field's content hash (bit-identical result by
+    # construction); the graph smoothing was 23 s of the nacrea climate stage
+    # (2026-11-01 py-spy).
+    _wind_key = hashlib.blake2b(
+        np.ascontiguousarray(wind, dtype=np.float64).tobytes(), digest_size=16
+    ).digest()
+    _wind_cache = getattr(mesh, "_wind_smooth_cache", None)
+    if _wind_cache is None:
+        _wind_cache = OrderedDict()
+        object.__setattr__(mesh, "_wind_smooth_cache", _wind_cache)
+    _smoothed = _wind_cache.get((_wind_key, _ck))
+    if _smoothed is None:
+        for _ in range(40):
+            wind = 0.5 * wind + 0.5 * (_avg @ wind)
+        _wind_cache[(_wind_key, _ck)] = wind
+        while len(_wind_cache) > _WIND_SMOOTH_CACHE_ENTRIES:
+            _wind_cache.popitem(last=False)
+    else:
+        wind = _smoothed
 
     # Outward wind component across the edge (m/s): positive = outflow from src.
     # Use the edge-averaged wind so the two directed edges of each neighbour pair
@@ -3308,7 +3392,7 @@ def _compute_precipitation_monthly_budget(
     def _monthly_pass(
         e_land_rate: np.ndarray | None,
     ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray]:
-        """Run the 12 monthly budget solves.
+        """Run the 12 monthly budget solves (in parallel processes by default).
 
         Args:
             e_land_rate: (n, 12) land evapotranspiration in mm/yr per month
@@ -3319,12 +3403,9 @@ def _compute_precipitation_monthly_budget(
             (p_monthly mm/month, ledger core ΣP·A, storm debug, W debug,
             pickup-gate debug).
         """
-        p_out = np.zeros((n, 12), dtype=np.float64)
-        dbg_storm = np.zeros(n)
-        dbg_pickup = np.ones(n)
-        dbg_w = np.zeros(n)
-        ledger = 0.0
-        for m in range(12):
+
+        def _solve_month(m: int) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+            """One month's budget: (precipitation mm/yr, column water, pickup gate)."""
             t_m = t_monthly_c[:, m]
             if e_land_rate is None:
                 # Monthly land ET: energy limitation from that month's
@@ -3388,8 +3469,41 @@ def _compute_precipitation_monthly_budget(
                     edge_table=(src, dst),
                     land_evapotranspiration=_e_land_m,
                 )
-                dbg_pickup *= _pickup_m
+                return p_m, w_m, _pickup_m
+            return p_m, w_m, None
 
+        # The twelve months are independent: each reads the frozen monthly
+        # forcing and solves its own budget, so they run in parallel processes
+        # (fork, so the mesh and the invariant budget cache built by the annual
+        # solve above are inherited rather than pickled).  SuperLU does not
+        # fully release the GIL, so threads gave only ~2x where processes scale
+        # nearly linearly (2026-11-01 measurement).  The reduction below stays
+        # in month order, so the result is bit-identical to the serial path.
+        months = range(12)
+        results: list[tuple[np.ndarray, np.ndarray, np.ndarray | None]]
+        workers = min(_monthly_solve_workers(), 12)
+        if workers > 1:
+            from multiprocessing import get_context
+
+            global _MONTHLY_SOLVE_TASK
+            _MONTHLY_SOLVE_TASK = _solve_month
+            try:
+                with get_context("fork").Pool(workers) as pool:
+                    results = pool.map(_monthly_solve_task, months, chunksize=1)
+            finally:
+                _MONTHLY_SOLVE_TASK = None
+        else:
+            results = [_solve_month(m) for m in months]
+
+        p_out = np.zeros((n, 12), dtype=np.float64)
+        dbg_storm = np.zeros(n)
+        dbg_pickup = np.ones(n)
+        dbg_w = np.zeros(n)
+        ledger = 0.0
+        for m in months:
+            p_m, w_m, _pickup_m = results[m]
+            if _pickup_m is not None:
+                dbg_pickup *= _pickup_m
             # p_m already includes the orographic condensation (in-solver flux
             # sink, CLIM-02 slice 1) — the former post-budget add-on is gone.
             p_out[:, m] = p_m / 12.0

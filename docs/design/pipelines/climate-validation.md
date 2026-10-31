@@ -335,6 +335,17 @@ Earth（三圈环流）、LGM（冷体制）、金星/火星（极端端元）�
 分类不同，要求也不同。本节是验收口径的单一事实源；某一轮的具体目标指标与实验记录
 不写在这里，写在对应提案与 `CHANGELOG.md`。
 
+**测量工具**：`scripts/climate/scorecard.py` 一次给出地球与 nacrea 两张表，按本节的口径
+统计——地球各大洲等权、nacrea 排除 GCM 不可信区域，并附真值替换归因与各阶段耗时：
+
+```bash
+uv run python scripts/climate/scorecard.py                      # 两张表
+uv run python scripts/climate/scorecard.py --world earth
+uv run python scripts/climate/scorecard.py --json scorecard.json
+```
+
+逐格偏差定位仍用 `diagnose_climate_bias.py` 等诊断脚本；评分卡只回答「这次改动能不能过」。
+
 ### 8.1 数值等价类改动
 
 并行化、缓存、向量化与纯重构属于这一类。要求是**逐位不变**：
