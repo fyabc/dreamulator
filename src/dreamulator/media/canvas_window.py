@@ -159,6 +159,31 @@ def _nearest(raster: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.ndarr
     return np.asarray(raster[r, c])
 
 
+def _footprint_any(
+    mask: np.ndarray,
+    canvas_km: float,
+    span_km: float,
+    out_res: int,
+) -> np.ndarray:
+    """Widen a canvas-pitch mask so nearest sampling preserves presence.
+
+    The window is about three times coarser than the 90 m canvas, so a water
+    body narrower than one window pixel can fall between two sampled centres
+    and vanish.  Taking the maximum over one window pixel's footprint makes a
+    window pixel read as covered when ANY canvas pixel under it is: the body
+    stays present at its own location, roughly one window pixel wide.
+    """
+    from scipy.ndimage import maximum_filter
+
+    # One window pixel spans ``span/res/canvas_km`` canvas pixels (about 3 at
+    # 2048 over a 550 km window on the 90 m canvas); the odd footprint edge
+    # covering that span is the pooling window.
+    size = max(1, int(round((span_km / out_res) / canvas_km)))
+    if size % 2 == 0:
+        size += 1
+    return np.asarray(maximum_filter(mask, size=size))
+
+
 def _coarse_indices(rows: np.ndarray, cols: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Canvas pixel coords → coarse-cell fractional indices (centres +0.5)."""
     return (rows - (CELL_PX - 1) / 2.0) / CELL_PX, (cols - (CELL_PX - 1) / 2.0) / CELL_PX
@@ -300,19 +325,33 @@ def crop_canvas_window(
     height = _bilinear(raster, rows - r_lo, cols - c_lo)
     missing = int(np.isnan(height).sum())
 
-    lake_raster = _lake_raster(source, r_lo, c_lo, r_hi, c_hi)
-    lake = (_nearest(lake_raster, rows - r_lo, cols - c_lo) > 0) & ~np.isnan(height)
-    if lake.any():
-        # Same MMU gates the river chain used to stop reaches at lakes, at
-        # the window's own pixel pitch (the mask is on the window grid).
-        km_px = span_km / out_res
-        from dreamulator.map.prog_erosion import (
-            LAKE_MIN_WIDTH_KM,
-            keep_large_lakes,
-            lake_mmu_cells,
-        )
+    from dreamulator.map.prog_erosion import (
+        LAKE_MIN_WIDTH_KM,
+        keep_large_lakes,
+        lake_mmu_cells,
+    )
 
-        lake = keep_large_lakes(lake, lake_mmu_cells(km_px), LAKE_MIN_WIDTH_KM, km_px)
+    lake_canvas = _lake_raster(source, r_lo, c_lo, r_hi, c_hi) > 0
+    if lake_canvas.any():
+        # The lake gates (LAKE_MMU_KM2 area and LAKE_MIN_WIDTH_KM width) are
+        # the river chain's own stop criteria, measured at the CANVAS pitch
+        # where the chain makes that decision; ``lakes.sparse`` already
+        # holds exactly the lakes that passed them.  Re-applying the gates
+        # on the window grid measures the same lakes with ~3x coarser cells,
+        # where a lake that legitimately receives a river fragments into
+        # speckle and fails the area gate, so the water body the chain stops
+        # in disappeared from the sheet and the river read as ending in bare
+        # ground.  Gate at canvas pitch (a no-op for the sparse product, the
+        # needed filter for the geometry fallback), then pool onto the
+        # window grid preserving presence.
+        lake_canvas = keep_large_lakes(
+            lake_canvas,
+            lake_mmu_cells(source.geometry.px_km),
+            LAKE_MIN_WIDTH_KM,
+            source.geometry.px_km,
+        )
+        lake_canvas = _footprint_any(lake_canvas, source.geometry.px_km, span_km, out_res)
+    lake = _nearest(lake_canvas, rows - r_lo, cols - c_lo) & ~np.isnan(height)
     sea = (height <= 0.0) & ~np.isnan(height)
     river = _rasterise_rivers(source, window, out_res)
 
@@ -380,9 +419,11 @@ def crop_canvas_window(
 
     canvas_meta = json.loads((source.root / "canvas.json").read_text(encoding="utf-8"))
     legends: dict[str, dict[str, str]] = {}
-    for key in ("koppen_legend", "biome_legend"):
-        if key in canvas_meta:
-            legends[key.split("_")[0]] = {str(k): str(v) for k, v in canvas_meta[key].items()}
+    canvas_legends = canvas_meta.get("legends", {})
+    for field in ("koppen", "biome"):
+        merged = canvas_meta.get(f"{field}_legend") or canvas_legends.get(f"{field}.codes")
+        if merged:
+            legends[field] = {str(k): str(v) for k, v in merged.items()}
     if "koppen" not in legends and (inp / "koppen.codes.npy").exists():
         codes = np.unique(np.load(inp / "koppen.codes.npy"))
         legends["koppen"] = {str(int(c)): f"class_{int(c)}" for c in codes}

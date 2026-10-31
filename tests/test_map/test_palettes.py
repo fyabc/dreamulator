@@ -18,7 +18,7 @@ def test_categorical_palettes_load():
     assert koppen["Ocean"] == "#1a5276"
     assert "ET" in koppen
 
-    assert palettes.whittaker_colors()["tropical_rainforest"] == "#1B5E20"
+    assert palettes.whittaker_colors()["tropical_rainforest"] == "#317A22"
     assert palettes.soil_colors()["mollisol"] == "#33691E"
     assert len(palettes.plate_colors()) == 20
 

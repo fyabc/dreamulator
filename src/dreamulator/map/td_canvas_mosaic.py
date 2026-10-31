@@ -202,7 +202,7 @@ def carto_tint(
     rgb[~sea] = rgb[~sea] * np.broadcast_to(shade, rgb.shape)[~sea]
     lum = rgb.mean(axis=2, keepdims=True)
     rgb = np.clip(lum + (rgb - lum) * COLOR_SATURATION, 0.0, 1.0)
-    _paint_intertidal(rgb, height_m, intertidal_m)
+    _paint_intertidal(rgb, height_m, intertidal_m, sea, km_per_px)
     rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
     return np.asarray(rgb)
 
@@ -243,20 +243,64 @@ def relief_tint(
     dist_km = distance_transform_edt(sea) * km_per_px
     ocean = sea_rgb(h, sea_mode, palette)
     rgb[sea] = ocean[sea] * (1.0 - depth * np.exp(-dist_km[sea] / efold))[:, None]
-    _paint_intertidal(rgb, height_m, intertidal_m)
+    _paint_intertidal(rgb, height_m, intertidal_m, sea, km_per_px)
     rgb[~np.isfinite(height_m)] = SEA_GREY_RGB if sea_mode == "grey" else PAPER_RGB
     return np.asarray(rgb)
 
 
-def _paint_intertidal(
-    rgb: np.ndarray, height_m: np.ndarray, band: tuple[float, float] | None
-) -> None:
-    """Flat intertidal tint on pixels whose height lies in ``band`` (in place)."""
+#: Drying foreshore reaches at most this far from the waterline — the tidal
+#: working range.  Interior lowland at the same elevations is NOT foreshore,
+#: and lakes inside the band are water rather than shore.
+INTERTIDAL_MAX_SEA_DIST_KM = 3.0
+
+
+def intertidal_mask(
+    height_m: np.ndarray,
+    band: tuple[float, float] | None,
+    sea: np.ndarray,
+    km_per_px: float,
+    *,
+    exclude: np.ndarray | None = None,
+) -> np.ndarray:
+    """The drying-foreshore mask: the height band ACROSS the waterline
+    (IHO foreshore spans chart datum to high water — the sea-side shallow
+    strip belongs to it), within the tidal working range of the OPEN sea
+    (water deeper than the band's low edge), minus excluded water (lakes).
+
+    Single source for the mosaic painting, the survey sheet painting and
+    the survey legend's presence check — all three must agree.
+    """
+    from scipy.ndimage import distance_transform_edt
+
     if band is None:
-        return
+        return np.zeros(height_m.shape, dtype=bool)
     lo, hi = band
     with np.errstate(invalid="ignore"):
         m = (height_m >= lo) & (height_m <= hi)
+    open_sea = sea & ~(height_m > lo)  # below the low-water edge
+    m &= ~open_sea
+    if exclude is not None:
+        m &= ~exclude
+    if m.any():
+        # Distance from the WATERLINE (any sea), not the deep water: the
+        # foreshore itself is shore — the gate exists to drop interior
+        # lowland at the same elevations.
+        dist = distance_transform_edt(~sea, sampling=(km_per_px, km_per_px))
+        m &= dist <= INTERTIDAL_MAX_SEA_DIST_KM
+    return m
+
+
+def _paint_intertidal(
+    rgb: np.ndarray,
+    height_m: np.ndarray,
+    band: tuple[float, float] | None,
+    sea: np.ndarray,
+    km_per_px: float,
+    *,
+    exclude: np.ndarray | None = None,
+) -> None:
+    """Flat intertidal tint on the foreshore mask (in place)."""
+    m = intertidal_mask(height_m, band, sea, km_per_px, exclude=exclude)
     rgb[m] = INTERTIDAL_RGB
 
 

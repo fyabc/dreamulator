@@ -63,7 +63,7 @@ def test_render_categorical_biome():
     mesh = _mesh()
     rgba = render_categorical_layer(mesh, _INDICES, "biome", whittaker_colors())
     # Land rainforest → (27,94,32); ocean → (21,101,192).
-    assert tuple(int(v) for v in rgba[0, 0]) == (27, 94, 32, 255)
+    assert tuple(int(v) for v in rgba[0, 0]) == (49, 122, 34, 255)
     assert tuple(int(v) for v in rgba[0, 1]) == (21, 101, 192, 255)
 
 

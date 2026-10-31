@@ -80,7 +80,11 @@ RELIEF_WATER_RGB = (74, 116, 156)
 
 
 def compose_relief_rgb(
-    inputs: ColorizeInputs, *, res: int = 2048, texture: bool = True
+    inputs: ColorizeInputs,
+    *,
+    res: int = 2048,
+    texture: bool = True,
+    biome_colors: dict[str, tuple[int, int, int]] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[tuple[str, tuple[int, int, int]]]]:
     """Relief-sheet underlay: (h, w, 3) float 0..1 + sea mask + legend entries.
 
@@ -98,7 +102,11 @@ def compose_relief_rgb(
 
     sigma = RELIEF_ECOTONE_CELLS * inputs.cell_px if inputs.cell_px > 0 else None
     albedo = colorize(
-        inputs, texture=texture, ecotone_sigma_px=sigma, texture_gain=RELIEF_TEXTURE_GAIN
+        inputs,
+        texture=texture,
+        ecotone_sigma_px=sigma,
+        texture_gain=RELIEF_TEXTURE_GAIN,
+        biome_colors=biome_colors,
     ).astype(np.float32)
     albedo /= 255.0
 
@@ -121,17 +129,19 @@ def compose_relief_rgb(
     sea = inputs.sea_water.reshape(res, f, res, f).mean(axis=(1, 3)) > 0.5
 
     # Legend: land classes present (post ocean reconciliation, so classes
-    # erased by it drop out), palette order of the satellite table.
+    # erased by it drop out), palette order of the satellite table — with
+    # the same vegetation overrides the base layer used.
     biome = reconcile_ocean_on_land(inputs.biome_codes, inputs.biome_legend, inputs.sea_water)[
         ::f, ::f
     ]
     land_codes = set(int(c) for c in np.unique(biome[~sea]))
-    order = {name: i for i, name in enumerate(BIOME_COLORS)}
+    merged = {**BIOME_COLORS, **(biome_colors or {})}
+    order = {name: i for i, name in enumerate(merged)}
     entries = sorted(
         (
-            (inputs.biome_legend[c], BIOME_COLORS[inputs.biome_legend[c]])
+            (inputs.biome_legend[c], merged[inputs.biome_legend[c]])
             for c in land_codes
-            if inputs.biome_legend.get(c) in BIOME_COLORS
+            if inputs.biome_legend.get(c) in merged
         ),
         key=lambda e: order[e[0]],
     )
@@ -150,6 +160,7 @@ def render_relief_sheet(
     svg: bool = False,
     center_lat: float = 0.0,
     center_lon: float = 0.0,
+    biome_colors: dict[str, tuple[int, int, int]] | None = None,
 ) -> dict[str, object]:
     """Write ``relief.png`` (+ ``relief.svg`` when ``svg``); returns sheet metadata."""
     import matplotlib
@@ -169,7 +180,7 @@ def render_relief_sheet(
     f = n // res
     km = res * inputs.km_per_px * f
 
-    rgb, sea, entries = compose_relief_rgb(inputs, res=res)
+    rgb, sea, entries = compose_relief_rgb(inputs, res=res, biome_colors=biome_colors)
     rivers = inputs.rivers[::f, ::f].astype(np.float32)
     rivers[sea] = 0.0
 
@@ -224,6 +235,28 @@ def render_relief_sheet(
     return {"res": res, "extent_km": round(km, 1), "classes": len(entries)}
 
 
+def _load_vegetation_palette(path: Path | None) -> dict[str, tuple[int, int, int]] | None:
+    """Read a JSON vegetation palette: biome name → ``#rrggbb`` or ``[r, g, b]``.
+
+    The relief sheet's world-specific colour hook (e.g. a non-green
+    photosynthetic canon): entries override the Earth-prior ``BIOME_COLORS``
+    by name; unspecified names fall back to the default table.
+    """
+    import json
+
+    if path is None:
+        return None
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    out: dict[str, tuple[int, int, int]] = {}
+    for name, value in raw.items():
+        if isinstance(value, str):
+            v = int(value.lstrip("#"), 16)
+            out[str(name)] = ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+        else:
+            out[str(name)] = (int(value[0]), int(value[1]), int(value[2]))
+    return out
+
+
 def relief_region(
     pack_dir: Path,
     out_dir: Path | None = None,
@@ -236,6 +269,7 @@ def relief_region(
     graticule: bool = True,
     biome_legend: bool = False,
     svg: bool = False,
+    vegetation_palette: Path | None = None,
 ) -> dict[str, object]:
     """CLI entry: render the natural-colour relief sheet for a region pack.
 
@@ -275,4 +309,5 @@ def relief_region(
         svg=svg,
         center_lat=center_lat,
         center_lon=center_lon,
+        biome_colors=_load_vegetation_palette(vegetation_palette),
     )
