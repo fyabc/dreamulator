@@ -84,3 +84,23 @@ def test_sea_connects_vertically_and_ignores_missing_neighbours():
     assert sea.mask((0, 0), top)[:, 1].all()
     assert not sea.mask((1, 0), bottom)[3, 3]
     assert not sea.mask((5, 5), water[(5, 5)]).any()
+
+
+def test_inland_low_masks_round_trip_and_define_the_ocean(tmp_path):
+    from dreamulator.map.canvas_marine import ocean_mask, read_inland_low, write_inland_low
+
+    surface = np.array([[-5.0, -1.0, 3.0], [0.0, 2.0, -7.0]])
+    inland = np.array([[False, False, False], [False, False, True]])
+    assert write_inland_low(tmp_path, "r000_c000", inland) is not None
+    np.testing.assert_array_equal(read_inland_low(tmp_path, "r000_c000", surface.shape), inland)
+    np.testing.assert_array_equal(
+        ocean_mask(tmp_path, "r000_c000", surface),
+        [[True, True, False], [True, False, False]],
+    )
+    # A chunk without inland lows has no file and every sub-sea-level pixel is sea.
+    assert write_inland_low(tmp_path, "r000_c000", np.zeros_like(inland)) is None
+    assert not (tmp_path / "surface/inland_low/r000_c000.npz").exists()
+    np.testing.assert_array_equal(ocean_mask(tmp_path, "r000_c000", surface), surface <= 0)
+    write_inland_low(tmp_path, "r000_c001", inland)
+    with pytest.raises(ValueError):
+        read_inland_low(tmp_path, "r000_c001", (3, 3))

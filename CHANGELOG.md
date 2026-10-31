@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **画布外海掩膜（2026-10-31）**：画布产品附带 `surface/inland_low/` 稀疏掩膜，记录地表不高于 0 m 但不与外海连通的像素。
+  `canvas_marine.ocean_mask` 给出消费侧的海洋判定，水文出口与渲染海面可共用同一规则。
+
 - **岩石条件场与光滑覆冰种子（2026-10-31）**：含地质参考冰的画布以受载基岩为 TD 高程条件重新生成，
   TD 只画岩石，冰由覆冰种子与细尺度响应叠加，冰退处不再留下冰盖高台的岛链与规整岸线。
   新增 `SphericalC1Field`（球面 Clough–Tocher 三次重建），覆冰种子的冰缘与露出基岩不再沿来源三角形成折线。

@@ -4,14 +4,18 @@ Sea water exists only where pixels at or below sea level connect to the
 geological ocean. Sub-sea-level pixels without that connection are dry
 inland lows; under an ice sheet they are part of the grounded bed.
 Ice in sea water is grounded when its thickness exceeds the floatation
-thickness rho_w / rho_i times the water depth (Cuffey & Paterson 2010,
-ch. 11; PISM floatation criterion). Floating ice is not retained here:
-ice shelves need their own stress balance.
+thickness rho_w / rho_i times the water depth (PISM floatation criterion).
+Floating ice is not retained here: ice shelves need their own stress balance.
 
 Connectivity runs out of core over storage chunks. Each chunk labels its
 4-connected water once; a union-find over shared chunk edges joins labels,
 and a second pass maps the same deterministic labels to the result.
 Four-connectivity keeps water from crossing a diagonal land corner.
+
+Canvas products record the exceptions to "surface at or below 0 m is sea":
+``surface/inland_low/<chunk>.npz`` marks pixels at or below sea level that
+are not connected sea. A chunk without a file has none, so consumers take
+``ocean_mask`` = (surface <= 0) and not inland low.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from .ice_sheets import RHO_ICE_KG_M3, RHO_SEAWATER_KG_M3
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+    from pathlib import Path
 
 ChunkKey = tuple[int, int]
 FLOATATION_RATIO = RHO_SEAWATER_KG_M3 / RHO_ICE_KG_M3
@@ -185,3 +190,46 @@ def connect_sea(
     marine = marine_root[roots]
     marine[0] = False
     return SeaConnectivity(offsets, marine)
+
+
+INLAND_LOW_DIR = "surface/inland_low"
+
+
+def write_inland_low(canvas: Path, chunk: str, inland_low: np.ndarray) -> Path | None:
+    """Store a chunk's sub-sea-level pixels that are not connected sea.
+
+    Pixels are bit-packed along rows in a compressed archive. Nothing is
+    written for a chunk without such pixels; the file is removed if present.
+    """
+    mask = np.asarray(inland_low, dtype=bool)
+    if mask.ndim != 2:
+        raise ValueError("inland-low mask must be a 2D chunk")
+    path = canvas / INLAND_LOW_DIR / f"{chunk}.npz"
+    if not mask.any():
+        path.unlink(missing_ok=True)
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".partial.npz")
+    np.savez_compressed(temporary, packed=np.packbits(mask, axis=1), shape=np.array(mask.shape))
+    temporary.replace(path)
+    return path
+
+
+def read_inland_low(canvas: Path, chunk: str, shape: tuple[int, int]) -> np.ndarray:
+    """Return a chunk's inland-low mask; absent files mean no inland lows."""
+    path = canvas / INLAND_LOW_DIR / f"{chunk}.npz"
+    if not path.exists():
+        return np.zeros(shape, dtype=bool)
+    with np.load(path) as archive:
+        stored = tuple(int(v) for v in archive["shape"])
+        if stored != tuple(shape):
+            raise ValueError(f"inland-low mask {path.name} has shape {stored}, expected {shape}")
+        return np.unpackbits(archive["packed"], axis=1, count=shape[1]).astype(bool)
+
+
+def ocean_mask(
+    canvas: Path, chunk: str, surface_m: np.ndarray, sea_level_m: float = 0.0
+) -> np.ndarray:
+    """Connected sea of a chunk: surface at or below sea level, minus inland lows."""
+    surface = np.asarray(surface_m)
+    return np.asarray((surface <= sea_level_m) & ~read_inland_low(canvas, chunk, surface.shape))
