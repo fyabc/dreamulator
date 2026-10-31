@@ -545,24 +545,35 @@ def canvas_mosaic(
         help="Land colours (default: pastel for relief, adaptive for carto): adaptive, pastel, "
         "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
     ),
-    sea: str = typer.Option(
-        "carto",
+    sea: str | None = typer.Option(
+        None,
         "--sea",
-        help="Ocean: carto (depth blues) | palette (palette colours) | flat (constant blue) | grey",
+        help="Ocean: carto (depth blues, default) | palette (palette colours) "
+        "| flat (constant blue) | grey",
     ),
     exaggeration: float | None = typer.Option(
-        None, "--exaggeration", help="relief: vertical exaggeration (default pixel size / 90 m)"
+        None, "--exaggeration", help="relief: vertical exaggeration (default 4 at every step)"
     ),
     intertidal: str = typer.Option(
         "-2,2",
         "--intertidal",
         help="Height band LO,HI (m) in the intertidal colour (IHO S-52 DEPIT); 'off' disables",
     ),
-    quality: int = typer.Option(90, "--quality", help="JPEG quality"),
+    ice: bool = typer.Option(
+        True, "--ice/--no-ice", help="Overlay ice cover from surface/ice_chunks where present"
+    ),
+    quality: int | None = typer.Option(None, "--quality", help="JPEG quality (default 95)"),
     workers: int = typer.Option(16, "--workers", help="Parallel band workers"),
 ) -> None:
-    """Full-resolution overview image of one canvas in the export-carto palette."""
-    from dreamulator.map.td_canvas_mosaic import render_mosaic
+    """Full-resolution overview image of one canvas in the shared print look."""
+    from dreamulator.map.td_canvas_mosaic import (
+        DEFAULT_PALETTE,
+        DEFAULT_SEA,
+        DEFAULT_STYLE,
+        PRINT_EXAGGERATION,
+        PRINT_QUALITY,
+        render_mosaic,
+    )
 
     _require_canvas_dir(canvas)
     band: tuple[float, float] | None = None
@@ -579,13 +590,11 @@ def canvas_mosaic(
         tag = canvas.resolve().parent.name
         px_m = round(float(meta["geometry"]["px_km"]) * step * 1000)
         root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
-        from dreamulator.map.td_canvas_mosaic import DEFAULT_PALETTE, DEFAULT_STYLE
-
         # the default look gets no suffix; any other style or palette is named in the file
         tags = [style] if style != DEFAULT_STYLE else []
         if palette not in (None, DEFAULT_PALETTE[style]):
             tags.append(palette)
-        if sea != "carto":
+        if sea not in (None, DEFAULT_SEA):
             tags.append(f"sea-{sea}")
         suffix = "".join(f"_{t}" for t in tags)
         output = root / "mosaic" / tag / f"{meta['id']}_{px_m}m{suffix}.jpg"
@@ -597,11 +606,12 @@ def canvas_mosaic(
             step=step,
             style=style,
             palette=palette,
-            sea=sea,
-            exaggeration=exaggeration,
+            sea=sea or DEFAULT_SEA,
+            exaggeration=PRINT_EXAGGERATION if exaggeration is None else exaggeration,
             intertidal_m=band,
-            quality=quality,
+            quality=PRINT_QUALITY if quality is None else quality,
             workers=workers,
+            ice_overlay=ice,
         )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")

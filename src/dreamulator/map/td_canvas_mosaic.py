@@ -13,11 +13,12 @@ read alike; the fine shade is the true slope at the output pixel size.
 
 Colour and shading are independent options.  ``style`` picks the shading: ``carto`` (default) is
 the export-carto look above; ``relief`` is a shaded-relief look for overview prints, a
-multi-directional hillshade on vertically exaggerated heights (default exaggeration = pixel size
-/ 90 m, so a block-averaged pixel shades about as steeply as the native one) with a soft shadow
-along the coast.  ``palette`` picks the land colours from ``hypsometric_palettes.json`` (or the
-built-in ``adaptive`` export-carto LUT); ``sea`` picks the ocean: ``carto`` (the export-carto
-depth blues, default), ``palette`` (the palette's own bathymetry where it has one),
+multi-directional hillshade on vertically exaggerated heights (library default exaggeration =
+pixel size / 90 m, so a block-averaged pixel shades about as steeply as the native one; the mosaic
+command uses ``PRINT_EXAGGERATION`` at every step) with a soft shadow along the coast.
+``palette`` picks the land colours from ``hypsometric_palettes.json`` (or the built-in
+``adaptive`` export-carto LUT); ``sea`` picks the ocean: ``carto`` (the export-carto depth blues,
+default), ``palette`` (the palette's own bathymetry where it has one),
 ``flat`` (constant blue without depth colouring) or ``grey``.
 ``intertidal_m`` paints a height band around sea level (default ±2 m) in the IHO S-52 intertidal
 colour, as charts tint drying areas.  The ``cross-blended`` palette (Patterson & Jenny 2011)
@@ -67,6 +68,13 @@ INTERTIDAL_M: tuple[float, float] | None = (-2.0, 2.0)
 INTERTIDAL_RGB = (131 / 255, 178 / 255, 149 / 255)
 #: Default shading of the mosaic command (the print look; carto stays available).
 DEFAULT_STYLE = "relief"
+#: Default sea of the mosaic command.
+DEFAULT_SEA = "carto"
+#: Print defaults of the mosaic command (author choice 2026-11-01): one relief exaggeration at
+#: every step, so the 180 m and 359 m prints of a canvas share one look, and JPEG quality 95.
+#: The command also overlays ice cover wherever a canvas has ``surface/ice_chunks``.
+PRINT_EXAGGERATION = 4.0
+PRINT_QUALITY = 95
 #: Cross-blended weights (rendering choices): aridity index P/PET from the dry sub-humid bound
 #: 0.65 to the arid bound 0.2 (UNEP classes); warm vs cold humid over a 8–18 °C annual mean;
 #: polar below a 10 °C warmest month (Köppen E) with a ±2 K blend, and wherever ice lies.

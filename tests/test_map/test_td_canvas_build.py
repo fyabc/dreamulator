@@ -289,6 +289,10 @@ def test_export_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
     )
     assert res.exit_code == 0, res.output
     assert out.exists() and (tmp_path / "m.jpg.json").exists()
+    side = json.loads((tmp_path / "m.jpg.json").read_text(encoding="utf-8"))
+    # shared print defaults: relief, pastel, carto sea, fixed exaggeration, ice overlay on
+    assert (side["style"], side["palette"], side["sea"]) == ("relief", "pastel", "carto")
+    assert side["exaggeration"] == pytest.approx(4.0) and side["ice_overlay"] is True
 
 
 def test_mosaic_relief_style_palettes_and_seas(tmp_path: Path) -> None:

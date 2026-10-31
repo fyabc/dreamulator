@@ -411,8 +411,9 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 海洋颜色是三个独立的选项：
 
 - `--style` 选画法，缺省 `relief`。`carto` 与 `export render` 的地形图相同，是只乘在陆地上的双尺度晕渲加饱和度提升；`relief`
-  是印刷用的立体晕渲，把高程放大（缺省倍数为像素边长除以 90 m，让平均后的像素与原生像素明暗相当）后用四个方向
-  的光照合成，海岸外加一圈柔和的阴影。
+  是印刷用的立体晕渲，把高程放大后用四个方向的光照合成，海岸外加一圈柔和的阴影。命令的放大倍数缺省为 4，
+  各档步长相同，所以同一画布的 180 m 图与 359 m 图明暗一致；`--exaggeration` 可改。直接调用 `render_mosaic`
+  而不给倍数时，倍数取像素边长除以 90 m。
 - `--palette` 选陆地颜色：`adaptive` 是 `export render` 的自适应地形色表（锚定在固定的 ±9000 m，`carto` 的缺省），
   其余取自 `map/hypsometric_palettes.json`：`pastel`（本项目的浅色分层，`relief` 的缺省）、`gmt-etopo1`、
   `gmt-globe`、`gmt-relief`（GMT 的原始色表）、`wikipedia`（维基百科地形图规范）与 `cross-blended`。每套色表
@@ -425,6 +426,12 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 - `--sea` 选海洋：`carto`（自适应色表的水深蓝，缺省）、`palette`（色表自带的水深色）、
   `flat`（统一蓝色，便于单独查看海岸几何）或 `grey`（统一的灰色，
   清单外也填灰色）。
+- `--ice/--no-ice` 选是否叠加覆冰，缺省叠加：画布有 `surface/ice_chunks` 时按 `ice_overlay=True` 画出覆冰（2.5.8 节），
+  没有冰厚块的画布不受影响。`--quality` 是 JPEG 质量，缺省 95。
+
+不加选项时，命令画出的就是共享的印刷外观：`relief` 画法、`pastel` 色表、`carto` 海洋、放大倍数 4、结构晕渲尺度
+约 34.5 km、±2 m 潮间带、叠加覆冰、JPEG 质量 95。这些缺省值定义在 `td_canvas_mosaic` 的 `DEFAULT_STYLE`、
+`DEFAULT_PALETTE`、`DEFAULT_SEA`、`PRINT_EXAGGERATION`、`PRINT_QUALITY` 与 `INTERTIDAL_M` 中，两台机器出图共用这一份。
 
 `cross-blended` 是 Patterson 与 Jenny（2011）的交叉混合分层设色：低地颜色随自然环境变化。逐像素的混合权重取自
 画布的粗格气候通道（`cross_blend_weights`）：干旱指数（年降水除以 Hamon 潜在蒸散）从 0.65 降到 0.2 时过渡到

@@ -389,7 +389,7 @@ dreamulator export canvas status <root> --verify          # 每张画布的完�
 dreamulator export canvas hydrology <canvas_dir>          # S2 外存水文
 dreamulator export canvas window <canvas_dir> --lat 15 --lon -100 --span-km 550   # S3 裁窗
 dreamulator export render <窗口包> --style all             # topo + relief + biome
-dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清总览图（约 180 m 一像素）
+dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清总览图（约 180 m 一像素，缺省即共享印刷外观并叠加覆冰）
 ```
 
 - `plan` 的布局根目录默认是 `data/worlds/<世界>/canvases/<分支>/`（已被 git 忽略），`--root` 可改。
@@ -406,6 +406,8 @@ dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清�
   `--style relief|carto` 选画法（缺省 `relief`，放大高程的多向光照立体晕渲；缺省画法与色表不加文件名后缀），`--palette` 选陆地色表（`adaptive`、
   `pastel`、`gmt-etopo1`、`gmt-globe`、`gmt-relief`、`wikipedia`、`cross-blended`），`--sea carto|palette|grey`
   选海洋颜色，`--intertidal LO,HI` 把海平面附近的高程带画成潮间带色（缺省 `-2,2`，取 IHO S-52 海图标准的潮间带色，`off` 关闭），例如 `--style relief --palette cross-blended`。
+  `--exaggeration` 是立体晕渲的高程放大倍数（缺省 4，各档步长相同），`--ice/--no-ice` 选是否叠加 `surface/ice_chunks` 的覆冰（缺省叠加），
+  `--quality` 是 JPEG 质量（缺省 95）。不加选项时画出的就是两台机器共用的印刷外观，见[画布链 2.8 节](../design/pipelines/canvas-chain.md#28-总览图)。
 
 布局规则、坐标约定、归属与混合、水文算法与输出契约见
 [画布链技术参考](../design/pipelines/canvas-chain.md)。
