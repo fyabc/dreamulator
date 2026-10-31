@@ -33,11 +33,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from dreamulator.map.td_canvas import CanvasGeometry
+from dreamulator.map.td_canvas import PX_PER_CELL, CanvasGeometry
 from dreamulator.media.canvas_hydrology_tiled import _local_flood
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from dreamulator.map.canvas_marine import SeaConnectivity
 
 __all__ = ["CanvasStore", "run_canvas_fill"]
 
@@ -113,6 +115,94 @@ class CanvasStore:
             fh.write(f"{digest}  {name}\n")
 
 
+#: Connected-sea product version this consumer understands (canvas contract,
+#: handoff 2026-10-31 §3): sea = surface at or below 0 m that connects to the
+#: geological ocean; sub-sea-level pixels without that connection are dry
+#: inland lows recorded in ``surface/inland_low/``.
+SEA_MASK_VERSION = "connected-sea-inland-low-20261031-v1"
+
+
+def _declares_sea_mask(store: CanvasStore) -> bool:
+    """True when the canvas ships the connected-sea determination."""
+    meta = json.loads((store.root / "canvas.json").read_text(encoding="utf-8"))
+    sea_mask = meta.get("sea_mask") or {}
+    return isinstance(sea_mask, dict) and str(sea_mask.get("version", "")) == SEA_MASK_VERSION
+
+
+def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> SeaConnectivity:
+    """Connected sea on the installed surface, seeded at the canvas's open boundary.
+
+    Water is every pixel at or below sea level.  The seeds are water pixels on
+    the open boundary the fill itself honours — the outer edges of the chunk
+    grid and the edges facing a missing chunk.  A water body that reaches one
+    of them is sea; anything else is an inland low, whatever the coarse
+    geological conditioning says about its 23 km cell.
+
+    The canvas's own water, not its bed: hydrology runs on the installed
+    surface, where grounded ice can close a basin that the sub-ice bed links
+    to the ocean.  Without the coarse seeds, quantization pits inside shallow
+    shelf cells are no longer outlets, so rivers are not cut off in what is
+    in fact a closed hollow.
+    """
+    from dreamulator.map.canvas_marine import connect_sea
+
+    keys = list(store.chunks)
+    present = set(keys)
+    rows = {ci for ci, _ in keys}
+    cols = {cj for _, cj in keys}
+    rmin, rmax, cmin, cmax = min(rows), max(rows), min(cols), max(cols)
+
+    def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+        ci, cj = key
+        water = store.raw(ci, cj) <= sea_level
+        seed = np.zeros_like(water)
+        if ci == rmin:
+            seed[0, :] = True
+        if ci == rmax:
+            seed[-1, :] = True
+        if cj == cmin:
+            seed[:, 0] = True
+        if cj == cmax:
+            seed[:, -1] = True
+        for di, dj, sl in (
+            (-1, 0, (0, slice(None))),
+            (1, 0, (-1, slice(None))),
+            (0, -1, (slice(None), 0)),
+            (0, 1, (slice(None), -1)),
+        ):
+            if (ci + di, cj + dj) not in present:
+                seed[sl] = True
+        return water, water & seed
+
+    return connect_sea(keys, read, workers=workers)
+
+
+def chunk_ocean(
+    store: CanvasStore,
+    key: tuple[int, int],
+    dem: np.ndarray,
+    sea_level: float,
+    *,
+    sea: SeaConnectivity | None = None,
+) -> np.ndarray:
+    """Open sea per pixel.
+
+    With ``sea`` (the canvas's surface connectivity) the outlet is water that
+    reaches the canvas's open boundary, minus the product's inland lows.
+    Without it — a canvas that does not declare the connected-sea product —
+    the legacy rule keeps every pixel at or below sea level as an outlet.
+    """
+    water = dem <= sea_level
+    if sea is None:
+        return water
+    from dreamulator.map.canvas_marine import read_inland_low
+
+    ci, cj = key
+    ocean = np.asarray(sea.mask(key, water), dtype=bool) & water
+    inland = read_inland_low(store.root, f"r{ci:03d}_c{cj:03d}", dem.shape)
+    return np.asarray(ocean & ~inland)
+
+
 def _external_mask(
     store: CanvasStore,
     key: tuple[int, int],
@@ -120,9 +210,11 @@ def _external_mask(
     sea_level: float,
     *,
     healed: np.ndarray | None = None,
+    sea: SeaConnectivity | None = None,
 ) -> np.ndarray:
     ci, cj = key
-    ext = dem <= sea_level
+    # Connected sea is the outlet; dry inland lows below sea level are not.
+    ext = chunk_ocean(store, key, dem, sea_level, sea=sea)
     if healed is not None and healed.any():
         # Healed pit cells sit AT sea level but are land the fill must
         # flood (the region chain's heal→PF order); leaving them in the
@@ -170,6 +262,22 @@ def _ensure_heal_delta(
     predate the heal generation).
     """
     from dreamulator.map.prog_erosion import LAKE_MIN_WIDTH_KM, heal_inland_water, lake_mmu_cells
+
+    if _declares_sea_mask(store):
+        # The canvas ships the connectivity verdict, so there is no sub-sea
+        # water body left to classify: pixels at or below sea level that are
+        # not connected sea are dry inland lows (ordinary terrain for the
+        # fill) and the connected sea is the outlet.  Healing existed to
+        # remove sub-sea-level TD noise pits that made rivers terminate; the
+        # product now identifies them at the production scale, and the lake
+        # criteria decide whether any of them holds water.
+        empty_idx = np.zeros(0, dtype=np.int64)
+        if verbose:
+            print("[hydrology] heal: skipped (connected-sea product)")
+        return (
+            {"idx": empty_idx, "h": np.zeros(0, dtype=np.float32), "inland_idx": empty_idx},
+            False,
+        )
 
     path = store.work / "heal.npz"
     if path.exists():
@@ -245,6 +353,14 @@ def run_canvas_fill(
             "heal.npz was rebuilt but pre-heal fill caches remain — clear hydro-work and rerun"
         )
     healed_idx, healed_h = heal["idx"], heal["h"]
+    # Canvases that ship the connected-sea product determine the sea on the
+    # installed surface: water that reaches the canvas's open boundary.  One
+    # out-of-core pass over the chunks, reused by every stage-1 chunk.
+    sea = None
+    if _declares_sea_mask(store):
+        sea = surface_sea(store, sea_level)
+        if verbose:
+            print("[hydrology] sea: surface connectivity from the canvas's open boundary")
 
     # Stage 1: local flood per chunk; summaries on disk.
     summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}
@@ -266,7 +382,7 @@ def run_canvas_fill(
             rr, cc = r[sel] - ci * t, c[sel] - cj * t
             dem[rr, cc] = healed_h[sel]
             healed_mask[rr, cc] = True
-        ext = _external_mask(store, key, dem, sea_level, healed=healed_mask)
+        ext = _external_mask(store, key, dem, sea_level, healed=healed_mask, sea=sea)
         labels, filled, spill = _local_flood(dem, ext)
         np.save(fill_path, np.rint(filled).astype(np.int16))
         np.save(label_path, labels.astype(np.int32))
@@ -429,10 +545,22 @@ def _grade_flats(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray
     """
     from dreamulator.media._hydrology_kernels import _grade_flats_kernel
 
-    flat = filled.ravel().astype(np.float64)
-    level = _grade_flats_kernel(np.ascontiguousarray(filled), sea_level, eps)
-    out = np.where(np.isfinite(level), np.maximum(level, flat), flat)
-    return out.reshape(filled.shape).astype(np.float32)
+    # Banded in place: the previous whole-canvas float64 twin plus the
+    # np.where/np.maximum temporaries peaked at four f64 fields and ran the
+    # 654M-cell canvas out of memory.
+    level = _grade_flats_kernel(np.ascontiguousarray(filled), sea_level, eps).reshape(filled.shape)
+    out = np.empty(filled.shape, dtype=np.float32)
+    h = filled.shape[0]
+    band = max(1, min(2048, h))
+    for r0 in range(0, h, band):
+        r1 = min(h, r0 + band)
+        lv = level[r0:r1]
+        fl = filled[r0:r1]
+        finite = np.isfinite(lv)
+        np.maximum(lv, fl, out=lv)
+        lv[~finite] = fl[~finite]
+        out[r0:r1] = lv
+    return out
 
 
 def _grade_flats_reference(filled: np.ndarray, sea_level: float, eps: float) -> np.ndarray:
@@ -485,6 +613,25 @@ def _grade_flats_reference(filled: np.ndarray, sea_level: float, eps: float) -> 
     return out.reshape(h, w).astype(np.float32)
 
 
+def _climate_on_grid(coarse: np.ndarray, h: int, w: int) -> np.ndarray:
+    """Tile a canvas climate grid onto the assembled chunk-bbox pixel grid.
+
+    The climate grid spans the whole canvas (``ncell`` cells of
+    ``PX_PER_CELL`` pixels); the assembled array starts at canvas pixel 0
+    and usually stops short of the canvas edge.  The grid is therefore
+    cropped to the array's extent and each cell repeated ``PX_PER_CELL``
+    times.  Scaling by ``h // ncell`` is wrong whenever the chunk bounding
+    box does not reach the far canvas edge — it shears every field.
+    """
+    f = PX_PER_CELL
+    rows = min(coarse.shape[0], h // f)
+    cols = min(coarse.shape[1], w // f)
+    out = np.zeros((h, w), dtype=coarse.dtype)
+    for i in range(rows):
+        out[i * f : (i + 1) * f, : cols * f] = np.repeat(coarse[i, :cols], f)[None, :]
+    return out
+
+
 _FlowFields = tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]
@@ -505,11 +652,7 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     sort last, matching the ``nan_to_num(1e30)`` order of previous versions
     without the full-size copy.
     """
-    from dreamulator.map.prog_erosion import (
-        RUNOFF_REFERENCE_MM,
-        flow_accumulation,
-        tile_coarse_field,
-    )
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM, flow_accumulation
 
     t = store.tile
     nrow = (max(ci for ci, _ in store.chunks) + 1) * t
@@ -533,9 +676,9 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     for r0 in range(0, h, band_rows):
         r1 = min(h, r0 + band_rows)
         fb = filled[r0:r1]
-        best = np.zeros(fb.shape, dtype=np.float64)
-        recb = np.full(fb.shape, -1, dtype=np.int64)
-        rr = np.arange(r0, r1, dtype=np.int64)[:, None]
+        best = np.zeros(fb.shape, dtype=np.float64)  # slope: keep f64 for tie determinism
+        recb = np.full(fb.shape, -1, dtype=np.int32)
+        rr = np.arange(r0, r1, dtype=np.int32)[:, None]
         for dy, dx in _NEIGHBOURS:
             # Neighbour values via one row of band context: _shift on the
             # context slice reproduces the global out[y,x]=f[y+dy,x+dx] with
@@ -547,7 +690,7 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
             slope = (fb - nb) / (diag if dy and dx else 1.0)
             better = np.isfinite(slope) & (nb < fb) & (slope > best)
             best = np.where(better, slope, best)
-            recb = np.where(better, ((rr + dy) * w + (cc + dx)).astype(np.int32), recb)
+            recb = np.where(better, (rr + dy) * w + (cc + dx), recb)
         rec2d[r0:r1] = recb
     # Hydrology land reaches down to the drying foreshore's low edge
     # (INTERTIDAL_M's lower bound).  A tidal flat is dry for part of the
@@ -559,8 +702,11 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
 
     land_floor = sea_level if INTERTIDAL_M is None else sea_level + INTERTIDAL_M[0]
     land = np.isfinite(filled) & (filled >= land_floor)
+    # A canvas with the connected-sea product has no heal delta (its inland
+    # lows are ordinary terrain); a stale heal.npz from an older generation
+    # must not be applied to it.
     heal_path = store.work / "heal.npz"
-    if heal_path.exists():
+    if heal_path.exists() and not _declares_sea_mask(store):
         healed_idx = np.load(heal_path)["idx"]
         land.reshape(-1)[healed_idx] = True
     rec = rec2d.reshape(-1)
@@ -572,20 +718,21 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     order = np.argsort(filled.ravel(), kind="stable").astype(np.int32)
     runoff_path = store.root / "climate" / "runoff.mm.npy"
     if runoff_path.exists():
-        coarse = np.nan_to_num(np.load(runoff_path).astype(np.float64), nan=0.0)
-        # Block-tiled upsample (bit-identical to kron, peak one row block) —
-        # shared with the region chain's hydrology_weight.
-        weight = tile_coarse_field(np.maximum(coarse, 0.0), (h, w)) / RUNOFF_REFERENCE_MM
+        coarse = np.nan_to_num(np.load(runoff_path).astype(np.float32), nan=0.0)
+        # The climate grid spans the whole canvas; the chunk bounding box
+        # may stop short of the canvas edge, so crop and tile at the true
+        # cell size instead of rescaling (see _climate_on_grid).
+        weight = _climate_on_grid(np.maximum(coarse, 0.0), h, w) / RUNOFF_REFERENCE_MM
         weight[~land] = 0.0
     else:
-        weight = land.astype(np.float64)
+        weight = land.astype(np.float32)
     acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
     dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
     for ci, cj in store.chunks:
         dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
     inland_big = np.zeros((h, w), dtype=bool)
     heal_path = store.work / "heal.npz"
-    if heal_path.exists():
+    if heal_path.exists() and not _declares_sea_mask(store):
         idx = np.load(heal_path)["inland_idx"]
         flat = inland_big.reshape(-1)
         flat[idx] = True
@@ -653,7 +800,7 @@ def run_canvas_rivers(
     if has_basis:
         precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
         temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
-        climate_block = h // precip.shape[0]
+        climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
     (
         _h_rewritten,
         land,
@@ -679,6 +826,8 @@ def run_canvas_rivers(
         km_per_px=km,
         sea_level_m=sea_level,
         climate_block=climate_block,
+        consume_receiver=True,
+        keep_rewritten_h=False,
     )
     # Routing consumed them; the regime pass and segment extraction below
     # work from order/rec_route/acc (and the monthly pack's own weights).
@@ -690,11 +839,11 @@ def run_canvas_rivers(
     month_active = None
     monthly_path = climate / "runoff_monthly.mm.npy"
     if monthly_path.exists():
-        monthly = np.load(monthly_path).astype(np.float64)
+        monthly = np.load(monthly_path).astype(np.float32)
         if monthly.ndim == 3:
             monthly = np.moveaxis(monthly, 0, -1)  # (12,n,n) -> (n,n,12)
             active = regime_active_cells(km)
-            factor = h // monthly.shape[0]
+            factor = PX_PER_CELL
             month_active = month_active_counts(
                 order, rec_route, monthly, land, active, factor=factor
             )
@@ -707,6 +856,7 @@ def run_canvas_rivers(
         lake=chain_stop,
         lake_descend=fringe_desc,
         month_active=month_active,
+        pixel_rows=store.geometry.size_px,
     )
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
@@ -722,7 +872,11 @@ def run_canvas_rivers(
     _write_lake_tables(store, lakes_draw, lake_records, lake_stats, mmu, km)
 
     heal_path = store.work / "heal.npz"
-    healed_cells = int(np.load(heal_path)["idx"].size) if heal_path.exists() else 0
+    healed_cells = (
+        int(np.load(heal_path)["idx"].size)
+        if heal_path.exists() and not _declares_sea_mask(store)
+        else 0
+    )
     meta = {
         "threshold_cells": threshold_cells,
         "weight_source": weight_source,
@@ -732,6 +886,9 @@ def run_canvas_rivers(
         "non_perennial": int((regimes == 1).sum()),
         "regime_source": "monthly-runoff" if month_active is not None else "annual-default",
         "terminal_lakes": lake_stats,
+        "sea_source": (
+            "surface-boundary-connectivity" if _declares_sea_mask(store) else "sea-level"
+        ),
         "healed_pit_cells": healed_cells,
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,

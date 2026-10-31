@@ -298,11 +298,13 @@ def _lut_rgb(
     # anchors); sea cells are depth-keyed below and always shallow-blue.
     frac = (height_m - lo) / (hi - lo) * (len(lut) - 1)
     idx = np.where(height_m >= 0, np.ceil(frac), np.rint(frac))
-    idx = np.clip(idx, 0, len(lut) - 1)
+    # Missing chunks (a window near a canvas edge) are NaN: floor them to
+    # the first LUT bin here — the caller paints them as no-data paper.
+    idx = np.clip(np.nan_to_num(idx, nan=0.0), 0, len(lut) - 1)
     rgb = lut[idx.astype(np.int32)] / 255.0
     sea_idx = np.clip(np.rint((-sea_depth_m - lo) / (hi - lo) * (len(lut) - 1)), 0, len(lut) - 1)
     rgb[sea] = lut[sea_idx[sea].astype(np.int32)] / 255.0
-    return rgb
+    return np.asarray(rgb)
 
 
 def contour_levels(h_min: float, h_max: float) -> tuple[np.ndarray, np.ndarray]:
@@ -482,6 +484,11 @@ def compose_rgb(
         inputs.km_per_px * f,
         exclude=lake,
     )
+    # Missing chunks (no S1 coverage) are no-data, not terrain: shade and
+    # tint both carry NaN there, so paint paper last.
+    missing = ~np.isfinite(height)
+    if missing.any():
+        rgb[missing] = np.asarray(PAPER_RGB, dtype=np.float64) / 255.0
     return np.asarray(np.clip(rgb, 0.0, 1.0), dtype=np.float32)
 
 
@@ -796,7 +803,15 @@ def render_carto(
     km = res * inputs.km_per_px * f
 
     rgb = compose_rgb(inputs, rng_m, res=res, hand=hand)
-    minor, major = contour_levels(float(height.min()), float(height.max()))
+    # Missing chunks are NaN; contour levels derive from the covered cells
+    # only (a window near a canvas edge may hold a third no-data pixels).
+    covered = np.isfinite(height)
+    if covered.any():
+        minor, major = contour_levels(
+            float(np.min(height[covered])), float(np.max(height[covered]))
+        )
+    else:
+        minor, major = np.zeros(0), np.zeros(0)
 
     fig, ax = plt.subplots(figsize=(12, 12), dpi=dpi)
     # Leave a head band for the suptitle; the map itself stays square.

@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 71 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 72 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
 与 `docs/usage/climate-validation-workflow.md`。
@@ -142,13 +142,15 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   `dreamulator export region` 的数据包；`blender -b -P … -- --datadir <pack>
   [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
 
-## dev/ — 开发工具（4 个）
+## dev/ — 开发工具（5 个）
 
 - `check_doc_refs.py` — 文档↔代码引用审计（`docs/design/pipelines/` 的 file:line 与反引号符号）；
   **pre-push 钩子对 main 强制**（`.git/hooks/pre-push`，钩子内路径指向本组）。
 - `profile_build.py` — 构建性能剖析（产出 `build_profile.json`，见 `docs/design/profiling.md`）。
 - `prepare_civmap_data.py` — 文明地图底图数据下载与预处理。
 - `generate_planet_heightmap.py` — 外部高度图生成（世界创作辅助，配合地图导入工作流）。
+- `check_canvas_seams.py` — S4 跨画布接缝一致性检查（按 `seam_pairs.json` 取样两侧画布的高程、
+  湖、河与流量；退出码 0/1/2 分别表示通过、阈值超限、有配对点无法测量）。
 
 ## 约定
 

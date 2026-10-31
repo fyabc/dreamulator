@@ -165,7 +165,13 @@ def fill_canvas_tiled(
     def external_mask(key: tuple[int, int]) -> np.ndarray:
         ci, cj = key
         dem = tiles.raw[key]
-        ext = dem <= sea_level
+        ocean = None if tiles.ocean is None else tiles.ocean.get(key)
+        # With the canvas's connected-sea determination, a sub-sea-level pixel
+        # that is not connected sea is a dry inland low: it stays an ordinary
+        # cell and the fill turns it into a closed basin (the lake criteria
+        # then decide whether water stands in it).  Without it, every pixel at
+        # or below sea level drains, the legacy rule.
+        ext = (dem <= sea_level) if ocean is None else np.asarray(ocean, dtype=bool).copy()
         if ci == 0:
             ext[0, :] = True
         if ci == grid.rows - 1:
@@ -329,7 +335,8 @@ def _apply_eps_ramp(tiles: CanvasTiles, *, sea_level: float, eps: float) -> None
         ci, cj = key
         dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = arr
         filled[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = tiles.filled[key]
-        ext = arr <= sea_level
+        ocean = None if tiles.ocean is None else tiles.ocean.get(key)
+        ext = (arr <= sea_level) if ocean is None else np.asarray(ocean, dtype=bool).copy()
         if ci == 0:
             ext[0, :] = True
         if ci == nrows - 1:
