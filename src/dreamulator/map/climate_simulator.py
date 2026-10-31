@@ -2733,14 +2733,25 @@ def _solve_moisture_budget(
     _c_in = c * (1.0 - _phi)  # attenuated inflow coefficients (pos edges: φ=0)
 
     def _oro_from_w(w_field: np.ndarray) -> np.ndarray:
-        """Windward orographic condensation, from the solved column water."""
-        if _uphill_inflow.any():
-            return np.bincount(
-                src[_uphill_inflow],
-                weights=_phi[_uphill_inflow] * (-c[_uphill_inflow]) * w_field[dst[_uphill_inflow]],
-                minlength=n,
-            )
-        return np.zeros(n, dtype=np.float64)
+        """Orographic condensation of each uphill edge, from the solved column water.
+
+        The condensate is an *edge* source: the air ascends across the edge, so
+        the rain falls along that span, not only inside the uphill cell.  It is
+        therefore split by equal volume between the two cells the edge joins —
+        the ordinary finite-volume treatment of an edge source — and converted
+        back to each cell's own rate.  Attributing the whole edge to the uphill
+        cell concentrated a slope's rain in one solver cell, which is what drove
+        the convergence sentinel (2026-11-01).  The total condensate volume is
+        unchanged either way, so ΣA·P = ΣA·E still holds exactly.
+        """
+        if not _uphill_inflow.any():
+            return np.zeros(n, dtype=np.float64)
+        uphill, downhill = src[_uphill_inflow], dst[_uphill_inflow]
+        rate = _phi[_uphill_inflow] * (-c[_uphill_inflow]) * w_field[downhill]
+        half = 0.5 * rate * area_m2[uphill]  # half the edge's condensate volume
+        volume = np.bincount(uphill, weights=half, minlength=n)
+        volume += np.bincount(downhill, weights=half, minlength=n)
+        return np.asarray(volume / area_m2, dtype=np.float64)
 
     # Add a turbulent-diffusion term κ∇²W alongside the upwind advection.  The
     # pure upwind scheme concentrates the ITCZ into a single spurious cell-wide
