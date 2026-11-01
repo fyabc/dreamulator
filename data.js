@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793468682434,
+  "lastUpdate": 1793542895056,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1534,6 +1534,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008551287557163943",
             "extra": "mean: 5.113541600000815 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "2f51cee2856fc8639c1e0be1a497f47f097a8cd4",
+          "message": "Merge main: S2 hydrology closure, S4 seam verifier and knowledge notes",
+          "timestamp": "2026-11-01T22:01:17+08:00",
+          "tree_id": "5e30429be96170ade8c76bebab0ceadc2a6db245",
+          "url": "https://github.com/fyabc/dreamulator/commit/2f51cee2856fc8639c1e0be1a497f47f097a8cd4"
+        },
+        "date": 1793542894716,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.2976261933936449,
+            "unit": "iter/sec",
+            "range": "stddev: 0.13026415888598805",
+            "extra": "mean: 3.3599193290000016 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.208322748541856,
+            "unit": "iter/sec",
+            "range": "stddev: 0.013219549364692534",
+            "extra": "mean: 311.6893400000009 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.47335191776552,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0859489929687958",
+            "extra": "mean: 678.7244703333309 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1000.3913530993469,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006962063442225051",
+            "extra": "mean: 999.6087999979864 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.88899634649042,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006799032012237677",
+            "extra": "mean: 5.079004000000964 msec\nrounds: 5"
           }
         ]
       }
