@@ -591,6 +591,84 @@ def pressure_from_temperature(
     return np.asarray(np.clip(p_thermal, 0.5 * surface_pressure_hpa, 1.07 * surface_pressure_hpa))
 
 
+#: Zonal-mean sea-level pressure belts, as departures from the global mean (hPa),
+#: anchored on the **Southern** Hemisphere's observed profile (NCEP annual mean):
+#: equatorial trough −2, subtropical high +5 at the Hadley edge, subpolar low −27,
+#: polar high +2.  The southern profile is the anchor because that hemisphere is
+#: ocean-dominated, so it carries the belt structure a landless world would have;
+#: the land–sea contrast then supplies the longitudinal structure *and* the
+#: hemispheric asymmetry (the observed northern subpolar low is only −2, filled in
+#: by the continental highs).  Epistemic class: observation fit, calibration
+#: domain Earth, scaled to other worlds by rotation and cell width below.
+PRESSURE_TROUGH_HPA: float = -2.0
+PRESSURE_SUBTROPICAL_HIGH_HPA: float = 5.0
+PRESSURE_SUBPOLAR_LOW_HPA: float = -27.0
+PRESSURE_POLAR_HIGH_HPA: float = 2.0
+
+#: Global-mean sea-level pressure of a 1-atmosphere world (hPa); other worlds
+#: scale with their own surface pressure.
+PRESSURE_GLOBAL_MEAN_HPA: float = 1013.25
+
+
+def zonal_pressure_profile(
+    lat_rad: np.ndarray,
+    *,
+    itcz_lat_deg: float = 0.0,
+    hadley_extent_deg: float = 30.0,
+    polar_cell_start_deg: float = 60.0,
+    rotation_period_days: float = 1.0,
+    surface_pressure_hpa: float = PRESSURE_GLOBAL_MEAN_HPA,
+) -> np.ndarray:
+    """Zonal-mean sea-level pressure (hPa) from the three-cell geometry.
+
+    The belts sit where the circulation puts them — trough at the ITCZ, high at
+    the Hadley edge, low where the polar cell begins, high at the pole — so their
+    *positions* come from the same quantities as ``hadley_cell_wind`` and are not
+    free.  Their amplitudes are the Earth-anchored constants above.
+
+    Scaling to other worlds follows geostrophy: a belt's pressure contrast is
+    Δp ~ ρ f u L, and the engine's zonal wind already scales as u ∝ Ω^(1/3)
+    (``hadley_cell_wind``), so with f ∝ Ω and the belt width L given by the cell
+    geometry the amplitude scales as Ω^(4/3) times the width in radians, which is
+    1 for Earth by construction.  A faster rotator therefore gets stronger but
+    narrower belts, and a slower one weaker, wider ones.
+
+    Args:
+        lat_rad: Latitudes in radians, shape (N,).
+        itcz_lat_deg: Annual-mean ITCZ latitude (the trough's position).
+        hadley_extent_deg: Hadley cell edge (the subtropical high's position).
+        polar_cell_start_deg: Polar cell start (the subpolar low's position).
+        rotation_period_days: Rotation period in Earth days (1.0 = Earth).
+        surface_pressure_hpa: The world's global-mean sea-level pressure.
+
+    Returns:
+        Sea-level pressure in hPa, shape (N,).
+    """
+    lat_deg = np.degrees(np.asarray(lat_rad, dtype=np.float64)) - float(itcz_lat_deg)
+    h = float(hadley_extent_deg)
+    p_start = float(polar_cell_start_deg)
+    # Ω^(4/3) from f·u, times the belt width relative to Earth's 30° Hadley cell.
+    omega_ratio = 1.0 / max(float(rotation_period_days), 1e-9)
+    amplitude = omega_ratio ** (4.0 / 3.0) * (h / 30.0)
+
+    absolute = np.abs(lat_deg)
+    profile = np.zeros_like(lat_deg)
+
+    # Trough → subtropical high over the Hadley cell, then high → subpolar low
+    # over the Ferrel cell, then low → polar high: raised cosines between the
+    # anchors, so the profile is smooth and its extrema land on the cell edges.
+    def blend(start: float, end: float, low: float, high: float) -> None:
+        span = max(end - start, 1e-9)
+        band = (absolute >= start) & (absolute <= end)
+        t = (absolute[band] - start) / span
+        profile[band] = low + (high - low) * 0.5 * (1.0 - np.cos(np.pi * t))
+
+    blend(0.0, h, PRESSURE_TROUGH_HPA, PRESSURE_SUBTROPICAL_HIGH_HPA)
+    blend(h, p_start, PRESSURE_SUBTROPICAL_HIGH_HPA, PRESSURE_SUBPOLAR_LOW_HPA)
+    blend(p_start, 90.0, PRESSURE_SUBPOLAR_LOW_HPA, PRESSURE_POLAR_HIGH_HPA)
+    return np.asarray(float(surface_pressure_hpa) + amplitude * profile, dtype=np.float64)
+
+
 def hadley_cell_wind(
     lat_rad: np.ndarray,
     mesh_nodes_xyz: np.ndarray,

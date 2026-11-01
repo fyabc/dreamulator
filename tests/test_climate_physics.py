@@ -1103,3 +1103,52 @@ class TestLandRunoff:
         assert 150.0 < float(r_csa[0]) < 200.0  # ≈ 176: real rivers where the bucket yields 0
         # Zero precipitation is a hard zero, not a division artefact.
         assert float(annual_runoff_turc_pike(np.array([0.0]), np.array([1500.0]))[0]) == 0.0
+
+
+class TestZonalPressureProfile:
+    """纬向气压带剖面：位置由环流几何决定，幅度按南半球观测锚定。"""
+
+    def test_belts_sit_on_the_cell_edges(self) -> None:
+        from dreamulator.engine.climate_physics import zonal_pressure_profile
+
+        lat = np.radians(np.arange(-90.0, 90.1, 1.0))
+        p = zonal_pressure_profile(lat, hadley_extent_deg=30.0, polar_cell_start_deg=60.0)
+        deg = np.degrees(lat)
+        trough = p[np.argmin(np.abs(deg))]
+        high = p[np.argmin(np.abs(np.abs(deg) - 30.0))]
+        low = p[np.argmin(np.abs(np.abs(deg) - 60.0))]
+        pole = p[np.argmin(np.abs(np.abs(deg) - 90.0))]
+        assert high > trough > low  # 副热带高压 > 赤道槽 > 副极地低压
+        assert pole > low  # 极地高压回升
+        # 极值落在胞边界上，不在带内
+        assert np.argmax(p) in (
+            int(np.argmin(np.abs(deg + 30.0))),
+            int(np.argmin(np.abs(deg - 30.0))),
+        )
+
+    def test_itcz_shift_moves_the_trough(self) -> None:
+        from dreamulator.engine.climate_physics import zonal_pressure_profile
+
+        lat = np.radians(np.arange(-90.0, 90.1, 1.0))
+        shifted = zonal_pressure_profile(lat, itcz_lat_deg=10.0)
+        deg = np.degrees(lat)
+        assert (
+            abs(deg[np.argmin(shifted)] - 10.0) > 40.0
+            or abs(deg[np.argmin(np.abs(deg - 10.0))] - 10.0) < 1.0
+        )
+        # 槽心随 ITCZ 移动：10°N 处低于 0°
+        assert shifted[np.argmin(np.abs(deg - 10.0))] < shifted[np.argmin(np.abs(deg))]
+
+    def test_rotation_scales_the_amplitude(self) -> None:
+        from dreamulator.engine.climate_physics import (
+            PRESSURE_GLOBAL_MEAN_HPA,
+            zonal_pressure_profile,
+        )
+
+        lat = np.radians(np.arange(-90.0, 90.1, 1.0))
+        earth = zonal_pressure_profile(lat)
+        slow = zonal_pressure_profile(lat, rotation_period_days=3.13)
+        span_earth = earth.max() - earth.min()
+        span_slow = slow.max() - slow.min()
+        assert span_slow < span_earth  # 慢自转 → 气压对比更弱
+        assert abs(np.mean(earth) - PRESSURE_GLOBAL_MEAN_HPA) < 15.0
