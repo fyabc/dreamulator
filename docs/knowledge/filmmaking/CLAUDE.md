@@ -14,6 +14,10 @@
 - [`blender_scripting_basics.md`](blender_scripting_basics.md) — Blender 脚本
   入门：`-b -P` 调用、最小脚本、`bpy.data/context/ops` 三个入口、常用对象、
   后台运行的坑与中文学习资料。
+- [`planet_asset_rendering.md`](planet_asset_rendering.md) — 行星/卫星表面资产：
+  烘焙贴图与节点程序化的取舍、现成素材与许可（NASA、Solar System Scope 等）、
+  气巨纬向拉伸与风暴的正确做法、撞击坑与盆地的 π 标度、物理坡度法线、
+  体积大气散射。
 
 ## 关联
 
