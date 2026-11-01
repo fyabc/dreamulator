@@ -49,6 +49,8 @@ from dreamulator.engine.climate_physics import (
     subsidence_rainout_gate,
     surface_temperature,
     terrain_wind_blocking,
+    thermal_pressure_anomaly,
+    zonal_pressure_profile,
 )
 from dreamulator.engine.climate_seasonality import (
     apply_eddy_relaxation,
@@ -723,6 +725,43 @@ def simulate_climate(
     _lapse_by_cell = np.full(len(lat_deg), float(config.lapse_rate_c_km))
     if config.variable_lapse_rate:
         _lapse_by_cell[land_mask_arr] = np.asarray(lapse)
+    # ── Absolute sea-level pressure (stage 2 of the wind proposal) ─────────
+    # The zonal belts put the trough at the ITCZ and the highs and lows on the
+    # cell edges, and the thermal term adds the longitudinal structure the
+    # land-sea contrast supports.  Unlike the monsoon forcing below, the
+    # contrast here is taken against the *whole* latitude band, not the ocean
+    # part of it, so the sea can carry an anomaly at all — the cool subtropical
+    # ocean beside a hot continent is part of the subtropical high.  The
+    # subsidence-driven remainder of those highs is the next piece of the
+    # proposal; for now the field is assembled, exported and measured.
+    _t_band_mean = np.empty_like(t_monthly_C)
+    _band_edges = np.arange(-90.0, 90.0 + 2.0, 2.0)
+    for _lo, _hi in zip(_band_edges[:-1], _band_edges[1:], strict=True):
+        _band = (lat_deg >= _lo) & (lat_deg < _hi)
+        if _band.any():
+            _t_band_mean[_band] = t_monthly_C[_band].mean(axis=0)
+    _slp_monthly = np.stack(
+        [
+            zonal_pressure_profile(
+                lat_rad,
+                itcz_lat_deg=float(itcz_lat_monthly[_m]),
+                hadley_extent_deg=hadley_extent_deg,
+                polar_cell_start_deg=polar_cell_start_deg,
+                rotation_period_days=config.rotation_period_days,
+                surface_pressure_hpa=config.surface_pressure_hpa,
+            )
+            for _m in range(12)
+        ],
+        axis=1,
+    ) + thermal_pressure_anomaly(
+        t_monthly_C - _t_band_mean,
+        elevation_m,
+        _t_band_mean,
+        lapse_rate_c_per_km=_lapse_by_cell,
+        surface_pressure_hpa=config.surface_pressure_hpa,
+    )
+    _slp_annual = _slp_monthly.mean(axis=1)
+
     _dp_hpa_raw = pressure_anomaly_monthly(
         t_monthly_C,
         lat_deg,
@@ -1728,7 +1767,7 @@ def simulate_climate(
     # the stationary land–sea contrast, so the frontend's annual pressure
     # layer works for engine-built worlds too (slp_annual_hpa is obs-only).
     _dp_annual_hpa = _dp_hpa.mean(axis=1)
-    for cell, _t, _p, _k, _t_hot, _t_cold, _dp, _d in zip(
+    for cell, _t, _p, _k, _t_hot, _t_cold, _dp, _slp, _d in zip(
         mesh.cells,
         t_mean_C,
         precipitation_mm,
@@ -1736,6 +1775,7 @@ def simulate_climate(
         t_hot_C,
         t_cold_C,
         _dp_annual_hpa,
+        _slp_annual,
         distance_to_coast_km,
         strict=True,
     ):
@@ -1745,6 +1785,7 @@ def simulate_climate(
         cell.temperature_hottest_month_C = float(_t_hot)
         cell.temperature_coldest_month_C = float(_t_cold)
         cell.pressure_anomaly_annual_hpa = float(_dp)
+        cell.slp_annual_hpa = float(_slp)
         # Distance to coast (already computed for seasonal heat capacity + inland
         # aridity) is stored on the cell so the civilization engine's "habitable
         # coast" layer can reuse it without re-running the graph Dijkstra.

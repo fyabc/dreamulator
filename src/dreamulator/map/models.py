@@ -316,7 +316,11 @@ class VoronoiCell(BaseModel):
 
     # Annual-mean sea-level pressure (hPa) — the persistent surface-pressure
     # field (subtropical highs, ITCZ low).  Filled by the real-Earth importer
-    # (NCEP SLP annual mean) only; the engine models pressure *anomalies*
+    # Sources: the real-Earth importer (NCEP annual mean), the GCM projection,
+    # and — since 2026-11-01 — the engine itself, which assembles it from the
+    # zonal pressure belts plus the thermal term (``zonal_pressure_profile`` and
+    # ``thermal_pressure_anomaly``).  Historically the engine wrote nothing here
+    # and modelled pressure *anomalies*
     # (see ``pressure_anomaly_annual_hpa``), never absolute SLP.  The *monthly*
     # seasonal anomaly lives in the separate ``climate_monthly.msgpack``
     # (``pressure_monthly``).

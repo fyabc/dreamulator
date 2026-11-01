@@ -108,7 +108,18 @@ def load_world(world: str, planet: str, branch: str | None, *, monthly: bool = T
         t_annual_c=np.array([_or_nan(c.temperature_C) for c in cells]),
         p_annual_mm=np.array([_or_nan(c.precipitation_mm) for c in cells]),
         koppen=np.array([(c.koppen_class or "") for c in cells], dtype=object),
-        pressure_anomaly_hpa=np.array([_or_nan(c.pressure_anomaly_annual_hpa) for c in cells]),
+        # The absolute field when the world carries one, else the older anomaly:
+        # both are reduced to a departure from their own zonal mean before use.
+        pressure_anomaly_hpa=np.array(
+            [
+                _or_nan(
+                    c.slp_annual_hpa
+                    if c.slp_annual_hpa is not None
+                    else c.pressure_anomaly_annual_hpa
+                )
+                for c in cells
+            ]
+        ),
         wind_east_m_s=np.array([_or_nan(c.wind_east_m_s) for c in cells]),
         wind_north_m_s=np.array([_or_nan(c.wind_north_m_s) for c in cells]),
         t_monthly_c=t_monthly,
