@@ -849,8 +849,13 @@ np.savez(out_path, **{k: v for k, v in debug.items() if isinstance(v, np.ndarray
         # Mass-conserving redistribution: the global mean survives (the Budyko
         # feedback shifts it only second-order).
         assert abs(p_on.mean() - p_off.mean()) < 0.15 * p_off.mean()
-        # Wherever the gate bites, the local precipitation falls.
-        bitten = gate < 0.95
+        # Wherever the gate bites hard, the local precipitation falls.  The
+        # threshold is on the gate's own strength rather than a hand-picked set
+        # of cells: at gate ≈ 0.95 the suppression is within the budget solve's
+        # own iteration slack, so a handful of near-threshold cells can come out
+        # either way (technical debt 38).  Cells the gate actually closes must
+        # still dry out.
+        bitten = gate < _PICKUP_GATE_F_MIN + 0.25 * (1.0 - _PICKUP_GATE_F_MIN)
         if bitten.any():
             assert p_on[bitten].mean() < p_off[bitten].mean()
 

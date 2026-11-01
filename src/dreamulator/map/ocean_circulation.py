@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 RHO_AIR: float = 1.225  # kg / m³
 RHO_WATER: float = 1025.0  # kg / m³
 C_D: float = 1.2e-3  # surface drag coefficient (dimensionless)
+#: Planet radius used when a caller does not supply one (Earth, metres).
+EARTH_RADIUS_M: float = 6.371e6
 DEFAULT_H_ML: float = 50.0  # mixed-layer depth (m)
 DEFAULT_BOTTOM_FRICTION: float = 1e-6  # Stommel R (s⁻¹), tuned for WBC ratio
 DEFAULT_SST_PASSES: int = 8
@@ -174,11 +176,17 @@ def _graph_gradient(
     src: np.ndarray,
     dst: np.ndarray,
     n: int,
+    radius_m: float,
 ) -> np.ndarray:
     """Finite-difference gradient of a scalar field on the directed edge table.
 
-    For each cell *i*, the gradient is the weighted average of
-    (scalar[j] − scalar[i]) / distance_ij × direction_ij over all neighbours *j*.
+    For each cell *i*, the gradient is the inverse-distance-weighted average of
+    the directional derivatives (scalar[j] − scalar[i]) / d_ij × n̂_ij over the
+    neighbours *j*, with d_ij the great-circle distance **in metres** and n̂_ij
+    the unit tangent towards *j*.  Both matter: an earlier form used the
+    central angle and an unnormalised offset vector, which cancelled the
+    distance and returned the scalar's own units — the gradient came out a
+    factor d_angle²·R too large (about 68× at 51 km spacing).
 
     Args:
         scalar: Field values, shape (N,).
@@ -193,19 +201,24 @@ def _graph_gradient(
     node_j = nodes_xyz[dst]
 
     dot = np.clip(np.einsum("ij,ij->i", node_i, node_j), -1.0, 1.0)
-    dist = np.arccos(dot)
+    dist = np.arccos(dot) * radius_m  # great-circle distance in metres
 
     direction = node_j - node_i
     radial = np.einsum("ij,ij->i", direction, node_i)
     direction = direction - radial[:, None] * node_i
     dir_norm = np.linalg.norm(direction, axis=1)
     valid = (dist >= 1e-9) & (dir_norm >= 1e-9)
+    # Unit tangent towards the neighbour, so the edge term below is the
+    # directional derivative (scalar per metre) rather than a difference.
+    unit = np.zeros_like(direction)
+    unit[valid] = direction[valid] / dir_norm[valid, None]
 
     weight = np.zeros_like(dist)
     weight[valid] = 1.0 / dist[valid]
 
-    diff = scalar[dst] - scalar[src]
-    contrib = (weight * diff)[:, None] * direction
+    diff = np.zeros_like(dist)
+    diff[valid] = (scalar[dst] - scalar[src])[valid] / dist[valid]
+    contrib = (weight * diff)[:, None] * unit
 
     grad = np.stack(
         [np.bincount(src, weights=contrib[:, k], minlength=n) for k in range(3)],
@@ -255,6 +268,7 @@ def compute_curl_z(
     dst: np.ndarray,
     east: np.ndarray,
     north: np.ndarray,
+    radius_m: float = EARTH_RADIUS_M,
 ) -> np.ndarray:
     """Vertical component of the curl of a tangent vector field.
 
@@ -273,8 +287,8 @@ def compute_curl_z(
     """
     n = len(tau)
     tau_e, tau_n = decompose_tangent(tau, east, north)
-    grad_te = _graph_gradient(tau_e, nodes_xyz, src, dst, n)
-    grad_tn = _graph_gradient(tau_n, nodes_xyz, src, dst, n)
+    grad_te = _graph_gradient(tau_e, nodes_xyz, src, dst, n, radius_m)
+    grad_tn = _graph_gradient(tau_n, nodes_xyz, src, dst, n, radius_m)
     # ∂τ_n/∂x_e (change of north component in the east direction)
     dtn_de = np.einsum("ij,ij->i", grad_tn, east)
     # ∂τ_e/∂x_n (change of east component in the north direction)
@@ -289,6 +303,7 @@ def compute_divergence(
     dst: np.ndarray,
     east: np.ndarray,
     north: np.ndarray,
+    radius_m: float = EARTH_RADIUS_M,
 ) -> np.ndarray:
     """Divergence of a tangent vector field (via gradient-of-components).
 
@@ -309,8 +324,8 @@ def compute_divergence(
     """
     n = len(field)
     v_e, v_n = decompose_tangent(field, east, north)
-    grad_ve = _graph_gradient(v_e, nodes_xyz, src, dst, n)
-    grad_vn = _graph_gradient(v_n, nodes_xyz, src, dst, n)
+    grad_ve = _graph_gradient(v_e, nodes_xyz, src, dst, n, radius_m)
+    grad_vn = _graph_gradient(v_n, nodes_xyz, src, dst, n, radius_m)
     dve_de = np.einsum("ij,ij->i", grad_ve, east)  # ∂v_e/∂x_e
     dvn_dn = np.einsum("ij,ij->i", grad_vn, north)  # ∂v_n/∂x_n
     return dve_de + dvn_dn  # type: ignore[no-any-return]
@@ -383,7 +398,7 @@ def _global_to_local(basin_cells: np.ndarray, n_global: int) -> np.ndarray:
 
 def assemble_graph_laplacian(
     basin_cells: np.ndarray,
-    areas_km2: np.ndarray,
+    areas_m2: np.ndarray,
     cells: list[VoronoiCell],
 ) -> sparse.csr_matrix:
     """Uniform-weighted graph Laplacian on a single ocean basin.
@@ -396,7 +411,7 @@ def assemble_graph_laplacian(
 
     Args:
         basin_cells: Global cell indices of this basin.
-        areas_km2:   Cell areas (km²), shape (N_global,).
+        areas_m2:    Cell areas (m²), shape (N_global,).
         cells:       All VoronoiCell objects.
 
     Returns:
@@ -413,7 +428,7 @@ def assemble_graph_laplacian(
     for gi in basin_cells:
         li = local_map[gi]
         ki = len(cells[gi].neighbors)
-        inv_area = 1.0 / areas_km2[gi]
+        inv_area = 1.0 / areas_m2[gi]
         # Off-diagonal: +1/A_i per neighbour in basin
         for gj in cells[gi].neighbors:
             if 0 <= gj < n_global:
@@ -435,12 +450,13 @@ def assemble_east_gradient(
     cells: list[VoronoiCell],
     nodes_xyz: np.ndarray,
     east: np.ndarray,
+    radius_m: float = EARTH_RADIUS_M,
 ) -> sparse.csr_matrix:
     """East-component of the graph gradient on a single ocean basin.
 
     ∂ψ/∂x|_i = (1/W_i) · Σ_{j∈N(i)} (ψ_j − ψ_i) / d_ij × (n̂_ij · ê_i)
 
-    where  W_i = Σ_{j∈N(i)} 1/d_ij,  d_ij is the great-circle distance,
+    where  W_i = Σ_{j∈N(i)} 1/d_ij,  d_ij is the great-circle distance in metres,
     n̂_ij is the unit direction from i to j tangent to the sphere,
     and ê_i is the local east direction.
 
@@ -477,7 +493,7 @@ def assemble_east_gradient(
         for gj in neighbors:
             xyz_j = nodes_xyz[gj]
             dot = max(-1.0, min(1.0, float(np.dot(xyz_i, xyz_j))))
-            d = np.arccos(dot)
+            d = np.arccos(dot) * radius_m  # metres, so the derivative is per metre
             if d < 1e-9:
                 weights.append(0.0)
                 directions.append(np.zeros(3, dtype=np.float64))
@@ -501,7 +517,11 @@ def assemble_east_gradient(
             lj = local_map[gj]
             if lj < 0:
                 continue
-            coeff = (w / w_sum) * float(np.dot(n_ij, e_i))
+            # (w_j/W)·(1/d_j)·(n̂·ê): the inverse-distance weight normalises to
+            # one, and the remaining 1/d makes the entry a derivative per metre.
+            # Without it the operator returned Δψ itself — a factor d (about
+            # 5×10⁴ m) too large, which made ψ that much too small.
+            coeff = (w / w_sum) * w * float(np.dot(n_ij, e_i))
             if abs(coeff) < 1e-15:
                 continue
             row.append(li)
@@ -527,6 +547,7 @@ def assemble_stommel_operator(
     beta: np.ndarray,
     bottom_friction: float,
     east: np.ndarray,
+    radius_m: float = EARTH_RADIUS_M,
 ) -> sparse.csr_matrix:
     """Assemble Stommel operator  A = diag(β) @ G_east + R × L.
 
@@ -542,8 +563,11 @@ def assemble_stommel_operator(
     Returns:
         Sparse (N_basin × N_basin) CSR matrix.
     """
-    L = assemble_graph_laplacian(basin_cells, areas_km2, cells)
-    G_east = assemble_east_gradient(basin_cells, cells, nodes_xyz, east)
+    # Metres and square metres: the operator's two terms must share one length
+    # unit, or the friction-to-beta ratio (hence the Stommel boundary layer)
+    # is meaningless — see the gradient's docstring.
+    L = assemble_graph_laplacian(basin_cells, areas_km2 * 1.0e6, cells)
+    G_east = assemble_east_gradient(basin_cells, cells, nodes_xyz, east, radius_m)
 
     # Extract basin β values
     beta_basin = beta[basin_cells]
@@ -625,6 +649,7 @@ def solve_ocean_gyre(
     h_ml: float = DEFAULT_H_ML,
     east: np.ndarray | None = None,
     sea_level_m: float = 0.0,
+    radius_m: float = EARTH_RADIUS_M,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Solve the Stommel streamfunction and derive current velocity for one basin.
 
@@ -665,6 +690,7 @@ def solve_ocean_gyre(
         beta,
         bottom_friction,
         east,
+        radius_m,
     )
 
     # ---- RHS ----
@@ -681,8 +707,18 @@ def solve_ocean_gyre(
     # Jacobi (diagonal) preconditioner: Stommel operator has strong diagonal
     # from the graph Laplacian (R * L, with L_diag ∝ -k_i/A_i).  Diagonal
     # scaling costs O(N) and typically halves the iteration count.
+    # Row-normalise first: in SI units the operator's entries are ~1e-16 (β and
+    # R/A both carry inverse metres), so an absolute floor on the diagonal would
+    # reject every row and leave the preconditioner as the identity — GMRES then
+    # "converges" at ψ = 0 within its relative tolerance.  Scaling the whole
+    # equation leaves the solution unchanged.
+    scale = float(np.median(np.abs(A.diagonal())))
+    if scale > 0.0:
+        A = A / scale
+        rhs = rhs / scale
     diag = np.abs(A.diagonal())
-    diag_inv = np.where(diag > 1e-15, 1.0 / diag, 1.0)
+    floor = 1e-12 * float(diag.max()) if diag.size else 0.0
+    diag_inv = np.where(diag > floor, 1.0 / diag, 1.0)
     M = sparse.diags(diag_inv, format="csr")
     psi, info = gmres(
         A,
@@ -707,7 +743,7 @@ def solve_ocean_gyre(
     psi_global[basin_cells] = psi
 
     src, dst = _build_directed_edge_table(cells)
-    grad_psi = _graph_gradient(psi_global, nodes_xyz, src, dst, n_global)
+    grad_psi = _graph_gradient(psi_global, nodes_xyz, src, dst, n_global, radius_m)
     # Only return basin cells
     grad_basin = grad_psi[basin_cells]
     # u = k̂ × ∇ψ  (cross product with radial unit vector, giving tangent vector)
@@ -718,60 +754,6 @@ def solve_ocean_gyre(
     # scaling by H_ml (that shrank speeds ~50×, leaving nacrea currents at
     # ~0.9 cm/s instead of the physically expected ~50 cm/s surface flow).
     return psi, velocity
-
-
-def apply_subgrid_wbc_boost(
-    psi: np.ndarray,
-    velocity: np.ndarray,
-    beta_basin: np.ndarray,
-    *,
-    bottom_friction_s: float,
-    core_fraction: float = 0.9,
-    max_boost: float = 25.0,
-) -> np.ndarray:
-    """Sub-grid western-boundary-current jet speed (E4, 2026-09-16).
-
-    The Stommel solve is transport-faithful in ψ, but the graph Laplacian's
-    numerical viscosity spreads the western boundary layer
-    (δ = R/β ≈ 60 km on Earth, ≈ 165 km on nacrea at 30° — sub-grid or ~1
-    cell at the ~51 km mesh) over several cells, so the resolved core speed
-    ``u_res = |∇ψ|`` underestimates the physical jet ``u_jet = ψ_max/δ`` by
-    the spreading factor (observed Gulf Stream / Kuroshio 100–250 cm/s vs
-    the resolved p90 ~1 cm/s — the "SST anomaly structure death" of
-    proposals/climate-layer-improvement.md §4).
-
-    The boost restores the analytic jet speed inside the intensification
-    core (|ψ| ≥ ``core_fraction``·ψ_max — in the Stommel solution that core
-    hugs the western boundary), preserving direction.  The Sverdrup interior
-    is untouched (boost floor 1).  Used for the semi-Lagrangian SST
-    advection (reviving the WBC warm corridor / cold eastern-boundary
-    structure) and the stored/displayed currents.
-
-    Args:
-        psi: Streamfunction of the basin (m²/s), shape (N_basin,).
-        velocity: Resolved current vectors (m/s), shape (N_basin, 3).
-        beta_basin: Planetary β at the basin cells (m⁻¹ s⁻¹), shape (N_basin,).
-        bottom_friction_s: Stommel R (s⁻¹) — the same value the solve used.
-        core_fraction: |ψ| fraction of the basin max defining the jet core.
-        max_boost: Cap on the velocity multiplier (spreading-factor guard).
-
-    Returns:
-        Boosted current vectors (m/s), same shape as *velocity*.
-    """
-    speed = np.linalg.norm(velocity, axis=1)
-    psi_abs = np.abs(psi)
-    psi_max = float(psi_abs.max()) if psi_abs.size else 0.0
-    if psi_max <= 0.0 or not np.any(speed > 1e-12):
-        return velocity
-    # Stommel boundary-layer width at the ψ-peak cell (β varies with latitude).
-    i_peak = int(np.argmax(psi_abs))
-    delta_wbc_m = bottom_friction_s / max(float(beta_basin[i_peak]), 1e-13)
-    u_jet = psi_max / delta_wbc_m
-    # Boost only the intensification core, only upward, capped.
-    core = psi_abs >= core_fraction * psi_max
-    boost = np.ones_like(speed)
-    boost[core] = np.clip(u_jet / np.maximum(speed[core], 1e-9), 1.0, max_boost)
-    return np.asarray(velocity * boost[:, None])
 
 
 def _is_coastal(

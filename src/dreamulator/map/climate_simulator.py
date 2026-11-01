@@ -982,7 +982,6 @@ def simulate_climate(
             _build_directed_edge_table,
             advect_sst_semilagrangian,
             advect_temperature_anomaly,
-            apply_subgrid_wbc_boost,
             apply_upwelling_sst_correction,
             compute_curl_z,
             compute_upwelling_index,
@@ -1014,11 +1013,11 @@ def simulate_climate(
             axis=0,
         )
         src, dst = _build_directed_edge_table(mesh.cells)
-        curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north)
+        radius_m = config.radius_km * 1000.0
+        curl_z = compute_curl_z(tau, nodes_xyz, src, dst, east, north, radius_m=radius_m)
 
         # Planetary β = 2Ω cos(φ) / a
         omega = 2.0 * np.pi / (config.rotation_period_days * 86400.0)
-        radius_m = config.radius_km * 1000.0
         beta = 2.0 * omega * np.cos(lat_rad) / radius_m
 
         # Detect ocean basins
@@ -1055,13 +1054,13 @@ def simulate_climate(
                     h_ml=h_ml,
                     east=east,
                     sea_level_m=config.sea_level_offset_m,
+                    radius_m=radius_m,
                 )
-                # E4 (2026-09-16): sub-grid WBC jet — restore the analytic
-                # jet speed ψ_max/(R/β) in the western-intensification core,
-                # which the ~51 km graph Laplacian smears out (observed WBC
-                # 100–250 cm/s vs resolved ~1 cm/s).  Feeds the SST advection
-                # (longitudinal anomaly structure) and the stored currents.
-                vel = apply_subgrid_wbc_boost(psi, vel, beta[b_cells], bottom_friction_s=R)
+                # The western boundary layer (δ = R/β ≈ 50 km) is at the mesh's
+                # own spacing, so the jet stays unresolved; the former sub-grid
+                # boost was removed on 2026-11-01 because it broke the
+                # divergence-free property of u = k̂ × ∇ψ (13% spurious net
+                # divergence once the units were consistent).
                 all_psi[b_idx] = psi
                 all_velocity[b_idx] = vel
 
