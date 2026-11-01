@@ -46,11 +46,13 @@ def plastic_margin_thickness(
 
     Balancing the driving stress against a constant yield stress τ₀ integrates to
     ``h(x) = √(2·τ₀·x/(ρ·g))`` — zero at the margin, rising as the square root of
-    the distance inland.  Used as a *cap* on the reconstructed pixel thickness:
-    the shared level surface of a solver cell is flat, which holds inside the
-    sheet and fails at its margin, where the surface must come down to the bed.
-    The cap binds within a kilometre or two of the edge and is inactive inland,
-    where a real sheet is thicker than this idealisation.
+    the distance inland.  It describes ice that has reached flow equilibrium, which
+    a margin does and an interior whose thickness comes from the mass balance does
+    not: this profile reaches 450 m only 12 km inland and 2000 m only 240 km inland,
+    so a sheet thinner than that is *everywhere* below the profile and using it as
+    an unrestricted cap replaces the whole sheet's shape rather than correcting its
+    edge (measured on a 630 000 km² canvas sheet: binding over 56% of the area and
+    shaving 20% of the volume).  Hence :func:`margin_taper` applies it in a band.
 
     Args:
         distance_m: Distance from the ice margin (m); negatives clip to zero.
@@ -65,6 +67,75 @@ def plastic_margin_thickness(
         np.sqrt(2.0 * basal_shear_stress_pa * distance / (RHO_ICE_KG_M3 * gravity_m_s2)),
         dtype=np.float64,
     )
+
+
+#: Width of the band in which the plastic margin profile is trusted (m).  Inside
+#: a band this wide the ice has had time to reach flow equilibrium, so the profile
+#: applies; beyond it the thickness is set by the mass balance and the profile is
+#: the wrong statement (see :func:`plastic_margin_thickness`).  The value is the
+#: distance at which the profile reaches the measured thickness of the outermost
+#: pixel ring, ``L = ρ·g·h̄²/(2·τ₀)`` with h̄ = 451 m, so the band-mean effective
+#: yield stress equals τ₀ instead of exceeding it — 5 km would imply 187 kPa,
+#: outside the observed 50–100 kPa range.  Epistemic class: numerical shape
+#: closure with a physical consistency anchor, calibration domain grounded
+#: continental ice at a 90 m pixel.
+MARGIN_BAND_LIMIT_M: float = 12.0e3
+
+
+def margin_taper(
+    thickness_m: np.ndarray,
+    margin_distance_m: np.ndarray,
+    *,
+    gravity_m_s2: float,
+    band_limit_m: float = MARGIN_BAND_LIMIT_M,
+    basal_shear_stress_pa: float = BASAL_SHEAR_STRESS_PA,
+) -> np.ndarray:
+    """Bring a reconstructed thickness field down to the bed at the ice margin.
+
+    The reconstruction gives each solver cell's pixels a shared level surface,
+    which is right inside a sheet and wrong at its edge, where it leaves a wall of
+    ice standing over bare ground — measured at 451 m mean and 1049 m at the 95th
+    percentile along one canvas's margin, where real grounded cliffs are tens of
+    metres.  This replaces that wall with
+
+        h ← min(h, max(plastic(d), h·√(min(d/L, 1)))) ,
+
+    whose two branches need no switch.  For ice thinner than
+    ``√(2·τ₀·L/(ρ·g))`` the first branch wins and the result *is* the plastic
+    profile, since ``h·√(d/L)`` with ``L = ρ·g·h²/(2·τ₀)`` cancels h exactly.  For
+    thicker ice the second branch pins the taper to a band of width ``L``, which is
+    what keeps the profile from reshaping an interior it does not describe: beyond
+    the band the expression reduces to ``min(h, h) = h``, so interior pixels come
+    out bit-identical rather than merely close.
+
+    Volume is not conserved — the taper removes 1–5% of a sheet, which leaves at
+    the margin, where ice calves and ablates.  Report it as an export; it is a
+    one-off shape adjustment, not a calibrated calving flux.
+
+    Args:
+        thickness_m: Reconstructed pixel ice thickness (m).
+        margin_distance_m: Distance from each pixel to the nearest ice-free pixel
+            (m), measured at the same resolution as ``thickness_m``.
+        gravity_m_s2: Surface gravity of the world.
+        band_limit_m: Band width L (see :data:`MARGIN_BAND_LIMIT_M`).
+        basal_shear_stress_pa: Yield stress τ₀.
+
+    Returns:
+        Tapered thickness (m), never above the input, same shape.
+    """
+    if band_limit_m <= 0.0:
+        raise ValueError("band_limit_m must be positive")
+    thickness = np.asarray(thickness_m, dtype=np.float64)
+    distance = np.maximum(np.asarray(margin_distance_m, dtype=np.float64), 0.0)
+    if thickness.shape != distance.shape:
+        raise ValueError(
+            f"shape mismatch: thickness {thickness.shape} vs distance {distance.shape}"
+        )
+    plastic = plastic_margin_thickness(
+        distance, gravity_m_s2=gravity_m_s2, basal_shear_stress_pa=basal_shear_stress_pa
+    )
+    banded = thickness * np.sqrt(np.minimum(distance / band_limit_m, 1.0))
+    return np.asarray(np.minimum(thickness, np.maximum(plastic, banded)), dtype=np.float64)
 
 
 def subgrid_ice_surface_level(bed_samples_m: np.ndarray, mean_ice_m: np.ndarray) -> np.ndarray:

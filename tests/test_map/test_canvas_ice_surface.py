@@ -181,3 +181,69 @@ class TestPlasticMarginThickness:
         weak = plastic_margin_thickness(np.array([1000.0]), gravity_m_s2=5.0)
         earth = plastic_margin_thickness(np.array([1000.0]), gravity_m_s2=9.81)
         assert weak[0] > earth[0]  # 重力弱 → 同样的屈服应力支撑更厚的冰
+
+
+class TestMarginTaper:
+    """冰缘锥度：带外逐位不变、带内取塑性剖面、冰量只减不增。"""
+
+    def test_interior_is_bit_identical_beyond_the_band(self) -> None:
+        """这是锥度的结构保证，不是近似——带外表达式归约为 min(h, h)。"""
+        from dreamulator.map.canvas_ice_surface import MARGIN_BAND_LIMIT_M, margin_taper
+
+        h = np.array([800.0, 1680.0, 2500.0])
+        d = np.full(3, MARGIN_BAND_LIMIT_M * 1.001)
+        np.testing.assert_array_equal(margin_taper(h, d, gravity_m_s2=10.28), h)
+
+    def test_thin_ice_follows_the_plastic_profile_exactly(self) -> None:
+        """薄冰（带内 h·√(d/L) 低于塑性剖面）的结果与 h 无关，正是塑性剖面本身。"""
+        from dreamulator.map.canvas_ice_surface import margin_taper, plastic_margin_thickness
+
+        d = np.array([90.0, 360.0, 2000.0])
+        expected = plastic_margin_thickness(d, gravity_m_s2=10.28)
+        for thickness in (200.0, 300.0, 440.0):
+            got = margin_taper(np.full(3, thickness), d, gravity_m_s2=10.28)
+            np.testing.assert_allclose(got, np.minimum(thickness, expected), rtol=1e-12)
+
+    def test_band_limit_keeps_thick_ice_above_the_profile(self) -> None:
+        """厚冰的带宽被钉在 L：若不钉，2000 m 的冰会被一路削到 240 km 以内。"""
+        from dreamulator.map.canvas_ice_surface import (
+            MARGIN_BAND_LIMIT_M,
+            margin_taper,
+            plastic_margin_thickness,
+        )
+
+        d = np.array([MARGIN_BAND_LIMIT_M * 0.25])
+        thick = np.array([2000.0])
+        got = margin_taper(thick, d, gravity_m_s2=10.28)
+        assert got[0] == pytest.approx(1000.0)  # √0.25 = 0.5
+        assert got[0] > plastic_margin_thickness(d, gravity_m_s2=10.28)[0]
+
+    def test_margin_wall_comes_down_and_volume_only_falls(self) -> None:
+        from dreamulator.map.canvas_ice_surface import (
+            MARGIN_BAND_LIMIT_M,
+            margin_taper,
+            plastic_margin_thickness,
+        )
+
+        rng = np.random.default_rng(7)
+        h = rng.uniform(100.0, 1500.0, size=512)
+        d = rng.uniform(0.0, 50_000.0, size=512)
+        got = margin_taper(h, d, gravity_m_s2=10.28)
+        assert np.all(got <= h + 1e-9)
+        assert got.sum() < h.sum()
+        # 最外一圈像素（90 m）至多留下原厚度的 √(90/L)，即削掉九成以上
+        edge = margin_taper(h, np.full(512, 90.0), gravity_m_s2=10.28)
+        bound = np.maximum(
+            plastic_margin_thickness(np.full(512, 90.0), gravity_m_s2=10.28),
+            h * np.sqrt(90.0 / MARGIN_BAND_LIMIT_M),
+        )
+        assert np.all(edge <= bound + 1e-9)
+        assert edge.max() < 140.0  # 最厚的 1500 m 冰给 130 m，实测画布均值为 51 m
+
+    def test_invalid_inputs_raise(self) -> None:
+        from dreamulator.map.canvas_ice_surface import margin_taper
+
+        with pytest.raises(ValueError, match="band_limit_m"):
+            margin_taper(np.ones(3), np.ones(3), gravity_m_s2=10.28, band_limit_m=0.0)
+        with pytest.raises(ValueError, match="shape mismatch"):
+            margin_taper(np.ones(3), np.ones(4), gravity_m_s2=10.28)
