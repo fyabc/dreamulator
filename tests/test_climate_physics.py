@@ -1152,3 +1152,46 @@ class TestZonalPressureProfile:
         span_slow = slow.max() - slow.min()
         assert span_slow < span_earth  # 慢自转 → 气压对比更弱
         assert abs(np.mean(earth) - PRESSURE_GLOBAL_MEAN_HPA) < 15.0
+
+
+class TestThermalPressureAnomaly:
+    """热力气压距平：柱温订正到海平面，暖冷两支同一处理。"""
+
+    def test_lapse_cold_at_elevation_gives_no_anomaly(self) -> None:
+        from dreamulator.engine.climate_physics import thermal_pressure_anomaly
+
+        # 2 km、比参照冷 13 K，正好是 6.5 K/km 的递减量 → 柱温与环境相同
+        dp = thermal_pressure_anomaly(
+            np.array([-13.0]), np.array([2000.0]), np.array([15.0]), lapse_rate_c_per_km=6.5
+        )
+        assert abs(float(dp[0])) < 1e-9
+
+    def test_warm_and_cold_are_one_statement(self) -> None:
+        from dreamulator.engine.climate_physics import thermal_pressure_anomaly
+
+        z = np.array([0.0, 0.0])
+        ref = np.array([20.0, 20.0])
+        dp = thermal_pressure_anomaly(np.array([8.0, -8.0]), z, ref)
+        assert dp[0] < 0.0 < dp[1]  # 暖为低压、冷为高压
+        # 同样大小的暖冷给出同样大小的响应，所以季节循环不留年均偏差
+        assert abs(float(dp[0] + dp[1])) < 1e-12
+
+    def test_elevated_warm_surface_deepens_the_low(self) -> None:
+        from dreamulator.engine.climate_physics import thermal_pressure_anomaly
+
+        # 高原夏季热低压：同样的地面暖距平，在高处对应更暖的柱
+        dp = thermal_pressure_anomaly(
+            np.array([5.0, 5.0]), np.array([0.0, 3000.0]), np.array([15.0, 15.0])
+        )
+        assert dp[1] < dp[0] < 0.0
+
+    def test_monthly_shape_and_annual_mean(self) -> None:
+        from dreamulator.engine.climate_physics import thermal_pressure_anomaly
+
+        monthly = np.zeros((2, 12))
+        monthly[0] = 10.0 * np.cos(np.arange(12) * 2 * np.pi / 12.0)  # 纯季节循环
+        dp = thermal_pressure_anomaly(monthly, np.array([400.0, 400.0]), np.full((2, 12), 20.0))
+        assert dp.shape == (2, 12)
+        # 季节项的年均只剩海拔柱项，不因暖冷不对称而漂移
+        seasonal = dp[0] - dp[0].mean()
+        assert abs(float(seasonal.mean())) < 1e-12

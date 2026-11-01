@@ -669,6 +669,64 @@ def zonal_pressure_profile(
     return np.asarray(float(surface_pressure_hpa) + amplitude * profile, dtype=np.float64)
 
 
+def thermal_pressure_anomaly(
+    delta_t_c: np.ndarray,
+    elevation_m: np.ndarray,
+    reference_t_c: np.ndarray,
+    *,
+    lapse_rate_c_per_km: np.ndarray | float = 6.5,
+    surface_pressure_hpa: float = PRESSURE_GLOBAL_MEAN_HPA,
+    projection_fraction: float = 0.3,
+) -> np.ndarray:
+    """Sea-level pressure anomaly from a surface temperature contrast (hPa).
+
+    Sea-level pressure responds to the *column's* temperature departure, not the
+    surface's, so a surface contrast at elevation ``z`` is first extrapolated down
+    the lapse rate: ``ΔT_column = ΔT + Γ·z``.  A surface whose cold is merely the
+    lapse-rate consequence of its elevation leaves the column ambient and produces
+    no anomaly; a genuinely cold airmass produces the full high; and an elevated
+    surface warmer than the ambient profile produces a *stronger* low than the
+    same contrast at sea level (the summer plateau heat low).  The treatment is
+    the same for both signs, which is the point: warm and cold are one hydrostatic
+    statement, so a seasonal cycle leaves no annual-mean bias.
+
+    This is deliberately **not** the monsoon forcing of
+    ``monsoon_circulation.pressure_anomaly_monthly``: that field derates warm
+    anomalies by elevation because the monsoon's heat source is the lowland
+    non-orographic heating (Boos & Kuang 2010), which is a claim about where the
+    circulation is driven from rather than about sea-level pressure.  Keeping the
+    two apart is what removes the contradiction — one field cannot answer both.
+
+    Args:
+        delta_t_c: Surface temperature departure from the reference (K), shape (N,)
+            or (N, M).
+        elevation_m: Surface elevation (m), shape (N,); negatives are clipped to 0.
+        reference_t_c: Reference temperature the departure is taken against (°C),
+            broadcastable to ``delta_t_c``; sets the hydrostatic sensitivity.
+        lapse_rate_c_per_km: Lapse rate used for the column extrapolation (K/km),
+            scalar or per cell — pass the same field the temperature stage used.
+        surface_pressure_hpa: The world's global-mean sea-level pressure.
+        projection_fraction: Share of the column's hydrostatic response that
+            appears at the surface.  Epistemic class: observation fit (the heat
+            low's finite depth), calibration domain Earth.
+
+    Returns:
+        Pressure anomaly in hPa, same shape as ``delta_t_c`` (negative = low).
+    """
+    dt = np.asarray(delta_t_c, dtype=np.float64)
+    z = np.maximum(np.asarray(elevation_m, dtype=np.float64), 0.0)
+    lapse = np.asarray(lapse_rate_c_per_km, dtype=np.float64) * np.ones(z.shape)
+    if dt.ndim == 2:
+        z = z[:, None]
+        lapse = lapse[:, None]
+    dt_column = dt + lapse * z / 1000.0
+    reference_k = np.maximum(np.asarray(reference_t_c, dtype=np.float64) + 273.15, 200.0)
+    return np.asarray(
+        -float(surface_pressure_hpa) * float(projection_fraction) * dt_column / reference_k,
+        dtype=np.float64,
+    )
+
+
 def hadley_cell_wind(
     lat_rad: np.ndarray,
     mesh_nodes_xyz: np.ndarray,
