@@ -78,6 +78,8 @@ class World:
     t_annual_c: np.ndarray
     p_annual_mm: np.ndarray
     koppen: np.ndarray
+    wind_east_m_s: np.ndarray | None = None
+    wind_north_m_s: np.ndarray | None = None
     t_monthly_c: np.ndarray | None = None
     p_monthly_mm: np.ndarray | None = None
     neighbours: list[Sequence[int]] = field(default_factory=list)
@@ -105,6 +107,8 @@ def load_world(world: str, planet: str, branch: str | None, *, monthly: bool = T
         t_annual_c=np.array([_or_nan(c.temperature_C) for c in cells]),
         p_annual_mm=np.array([_or_nan(c.precipitation_mm) for c in cells]),
         koppen=np.array([(c.koppen_class or "") for c in cells], dtype=object),
+        wind_east_m_s=np.array([_or_nan(c.wind_east_m_s) for c in cells]),
+        wind_north_m_s=np.array([_or_nan(c.wind_north_m_s) for c in cells]),
         t_monthly_c=t_monthly,
         p_monthly_mm=p_monthly,
         neighbours=[c.neighbors for c in cells],
@@ -113,6 +117,57 @@ def load_world(world: str, planet: str, branch: str | None, *, monthly: bool = T
 
 def _or_nan(value: float | None) -> float:
     return float("nan") if value is None else float(value)
+
+
+#: Eastern-boundary upwelling coasts.  The alongshore wind there drives the cold
+#: tongues that in turn drive the fog deserts, so each box reports its own
+#: equatorward wind: (lat_min, lat_max, lon_min, lon_max, equatorward sign of the
+#: northward component).
+UPWELLING_COASTS: dict[str, tuple[float, float, float, float, float]] = {
+    "Peru": (-20.0, -5.0, -82.0, -76.0, 1.0),
+    "Benguela": (-28.0, -17.0, 10.0, 14.0, 1.0),
+    "Canary": (20.0, 30.0, -19.0, -13.0, -1.0),
+    "California": (32.0, 42.0, -128.0, -120.0, -1.0),
+    "Somali": (0.0, 12.0, 48.0, 56.0, -1.0),
+}
+
+#: Below this speed a wind has no meaningful direction, so direction agreement
+#: skips the cell instead of scoring noise.
+CALM_M_S: float = 0.5
+
+
+def wind_direction_match(
+    model_east: np.ndarray,
+    model_north: np.ndarray,
+    obs_east: np.ndarray,
+    obs_north: np.ndarray,
+    mask: np.ndarray,
+    within_deg: float = 45.0,
+) -> float:
+    """Share of cells whose wind direction is within ``within_deg`` of observed."""
+    speed_model = np.hypot(model_east, model_north)
+    speed_obs = np.hypot(obs_east, obs_north)
+    use = mask & (speed_model > CALM_M_S) & (speed_obs > CALM_M_S)
+    if not use.any():
+        return float("nan")
+    cosine = (model_east[use] * obs_east[use] + model_north[use] * obs_north[use]) / (
+        speed_model[use] * speed_obs[use]
+    )
+    return float(np.mean(np.arccos(np.clip(cosine, -1.0, 1.0)) <= np.radians(within_deg)))
+
+
+def observed_wind(path: Path, count: int) -> tuple[np.ndarray, np.ndarray]:
+    """Observed annual surface wind components per cell from ``climate_obs.json``."""
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    east = np.full(count, np.nan)
+    north = np.full(count, np.nan)
+    for key, value in data["cells"].items():
+        index = int(key)
+        if index < count:
+            east[index] = float(value.get("uwnd_obs_m_s", np.nan))
+            north[index] = float(value.get("vwnd_obs_m_s", np.nan))
+    return east, north
 
 
 def continent_masks(world: World) -> dict[str, np.ndarray]:
@@ -248,6 +303,7 @@ def earth_table(branch: str) -> dict[str, Any]:
             maps_dir / "koppen_obs_beck2023.json", model.lat.size
         )
     obs_codes = references["beck2018"]
+    wind_obs_east, wind_obs_north = observed_wind(maps_dir / "climate_obs.json", model.lat.size)
     t_summer_m, t_winter_m = half_year_means(model.t_monthly_c, model.lat)
     t_summer_o, t_winter_o = half_year_means(t_obs, model.lat)
     p_summer_m, p_winter_m = half_year_means(model.p_monthly_mm, model.lat)
@@ -273,6 +329,13 @@ def earth_table(branch: str) -> dict[str, Any]:
             "p_summer_corr": _correlation(p_summer_m[mask], p_summer_o[mask]),
             "p_winter_corr": _correlation(p_winter_m[mask], p_winter_o[mask]),
             "wet_phase_match": wet_season_phase_match(model.p_monthly_mm, p_obs, mask),
+            "wind_dir_match": wind_direction_match(
+                model.wind_east_m_s,
+                model.wind_north_m_s,
+                wind_obs_east,
+                wind_obs_north,
+                mask,
+            ),
             "t_bias_c": _bias(model.t_monthly_c.mean(axis=1)[mask], t_obs.mean(axis=1)[mask]),
             "p_bias_mm": _bias(model.p_monthly_mm.sum(axis=1)[mask], p_obs.sum(axis=1)[mask]),
         }
@@ -294,11 +357,39 @@ def earth_table(branch: str) -> dict[str, Any]:
         "observed_precipitation": agreement(swap_p, obs_codes, land)[0],
         "both_observed": agreement(both, obs_codes, land)[0],
     }
+    # Eastern-boundary alongshore wind: the input coastal upwelling and the SST
+    # convection gate depend on (the round proposal's precipitation entry).
+    coasts: dict[str, dict[str, float]] = {}
+    for name, (lat0, lat1, lon0, lon1, sign) in UPWELLING_COASTS.items():
+        sea = (
+            ~model.is_land
+            & (model.lat >= lat0)
+            & (model.lat <= lat1)
+            & (model.lon >= lon0)
+            & (model.lon <= lon1)
+        )
+        if not sea.any():
+            continue
+        coasts[name] = {
+            "cells": int(sea.sum()),
+            "model_equatorward_m_s": float(np.nanmean(sign * model.wind_north_m_s[sea])),
+            "obs_equatorward_m_s": float(np.nanmean(sign * wind_obs_north[sea])),
+            "model_zonal_speed_m_s": float(np.nanmean(np.abs(model.wind_east_m_s[sea]))),
+            "obs_zonal_speed_m_s": float(np.nanmean(np.abs(wind_obs_east[sea]))),
+            "dir_match": wind_direction_match(
+                model.wind_east_m_s,
+                model.wind_north_m_s,
+                wind_obs_east,
+                wind_obs_north,
+                sea,
+            ),
+        }
     return {
         "world": model.name,
         "reference": "earth root observations (NCEP/GPCP monthly); Köppen: "
         + ", ".join(references),
         "continents": rows,
+        "upwelling_coasts": coasts,
         "equal_weight_mean": mean,
         "truth_swap_koppen_class": swap,
         "timings_s": stage_timings(WORLDS / "earth"),
@@ -421,7 +512,8 @@ def _show_earth(table: dict[str, Any]) -> None:
     header = (
         f"{'continent':<15}{'cells':>7}{'Köppen':>9}{'group':>8}"
         f"{'T sum':>8}{'T win':>8}{'P sum':>8}{'P win':>8}{'wet φ':>8}"
-        f"{'ΔT':>7}{'ΔP':>8}" + "".join(f"{key.removeprefix('koppen_class_'):>10}" for key in extra)
+        f"{'ΔT':>7}{'ΔP':>8}{'wind':>7}"
+        + "".join(f"{key.removeprefix('koppen_class_'):>10}" for key in extra)
     )
     print(header)
     for name, row in table["continents"].items():
@@ -430,7 +522,7 @@ def _show_earth(table: dict[str, Any]) -> None:
             f"{row['koppen_group'] * 100:>7.1f}%{row['t_summer_rmse_c']:>8.2f}"
             f"{row['t_winter_rmse_c']:>8.2f}{row['p_summer_corr']:>8.3f}"
             f"{row['p_winter_corr']:>8.3f}{row['wet_phase_match'] * 100:>7.1f}%"
-            f"{row['t_bias_c']:>7.2f}{row['p_bias_mm']:>8.0f}"
+            f"{row['t_bias_c']:>7.2f}{row['p_bias_mm']:>8.0f}{row['wind_dir_match'] * 100:>6.1f}%"
             + "".join(f"{row[key] * 100:>9.1f}%" for key in extra)
         )
     mean = table["equal_weight_mean"]
@@ -439,12 +531,21 @@ def _show_earth(table: dict[str, Any]) -> None:
         f"{mean['koppen_group'] * 100:>7.1f}%{mean['t_summer_rmse_c']:>8.2f}"
         f"{mean['t_winter_rmse_c']:>8.2f}{mean['p_summer_corr']:>8.3f}"
         f"{mean['p_winter_corr']:>8.3f}{mean['wet_phase_match'] * 100:>7.1f}%"
-        f"{mean['t_bias_c']:>7.2f}{mean['p_bias_mm']:>8.0f}"
+        f"{mean['t_bias_c']:>7.2f}{mean['p_bias_mm']:>8.0f}{mean['wind_dir_match'] * 100:>6.1f}%"
         + "".join(f"{mean[key] * 100:>9.1f}%" for key in extra)
     )
     print(
         "  (T in K RMSE for the summer / winter half; P as pattern correlation; ΔT, ΔP annual bias)"
     )
+    coasts = table.get("upwelling_coasts") or {}
+    if coasts:
+        print("  eastern-boundary alongshore wind (equatorward, m/s) — drives coastal upwelling")
+        print(f"    {'coast':<12}{'cells':>6}{'model':>8}{'obs':>8}{'dir<45°':>9}")
+        for name, row in coasts.items():
+            print(
+                f"    {name:<12}{row['cells']:>6}{row['model_equatorward_m_s']:>8.2f}"
+                f"{row['obs_equatorward_m_s']:>8.2f}{row['dir_match'] * 100:>8.1f}%"
+            )
     swap = table["truth_swap_koppen_class"]
     print("  truth swap, Köppen class on land:")
     for key, value in swap.items():
