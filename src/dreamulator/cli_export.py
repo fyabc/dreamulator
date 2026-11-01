@@ -73,10 +73,11 @@ _VALID_LAYERS = frozenset(
         "temperature",
         "precipitation",
         "pressure",
+        "slp",
     }
 )
 #: Layers comparing --mesh (or the world mesh) against --compare-mesh.
-_DIFF_LAYERS = frozenset({"temperature_diff", "precipitation_diff", "koppen_agreement"})
+_DIFF_LAYERS = frozenset({"temperature_diff", "precipitation_diff", "koppen_agreement", "slp_diff"})
 
 #: Köppen agreement colours: same class / same main group / different group.
 _KOPPEN_AGREEMENT_COLORS = {"same": (46, 160, 67), "group": (234, 179, 8), "differ": (220, 38, 38)}
@@ -161,7 +162,38 @@ def _render_layer(
         return render_value_layer(
             dp, indices, continuous_scale("temperature"), lambda d: (d + 5.0) / 10.0, reliable
         )
+    if name == "slp":  # absolute sea-level pressure as its departure from the
+        # zonal mean (±12 hPa): the centres of action are longitudinal features,
+        # so the belts would otherwise swamp them at any usable colour range.
+        import numpy as np
+
+        slp = _cell_array(mesh, "slp_annual_hpa")
+        lat = np.array([c.lat for c in mesh.cells], dtype=np.float64)
+        # Masked where reducing pressure to sea level is unreliable (ice caps
+        # and high terrain), the same guard the ΔP layer uses: over a 3 km
+        # plateau the reduction is an extrapolation, not a measurement.
+        reliable = np.array([c.slp_reduction_unreliable is not True for c in mesh.cells])
+        return render_value_layer(
+            _zonal_departure(slp, lat),
+            indices,
+            continuous_scale("temperature"),
+            lambda d: (d + 12.0) / 24.0,
+            reliable,
+        )
     raise ValueError(f"Unknown layer: {name}")
+
+
+def _zonal_departure(values: np.ndarray, lat: np.ndarray, step: float = 2.0) -> np.ndarray:
+    """Departure of a field from its own zonal mean, band by band."""
+    import numpy as np
+
+    out = np.full(values.shape, np.nan)
+    edges = np.arange(-90.0, 90.0 + step, step)
+    for low, high in zip(edges[:-1], edges[1:], strict=True):
+        band = (lat >= low) & (lat < high) & np.isfinite(values)
+        if band.any():
+            out[band] = values[band] - values[band].mean()
+    return out
 
 
 def _cell_array(mesh: CVTMesh, field: str) -> np.ndarray:
@@ -186,6 +218,24 @@ def _render_diff_layer(
         delta = _cell_array(mesh, "temperature_C") - _cell_array(ref, "temperature_C")
         return render_value_layer(
             delta, indices, continuous_scale("temperature"), lambda d: (d + 20.0) / 40.0, land
+        )
+    if name == "slp_diff":  # ±8 hPa: both fields as departures from their own
+        # zonal mean, so each one's reference cancels (the engine's absolute
+        # field against the observations or another branch).
+        import numpy as np
+
+        lat = np.array([c.lat for c in mesh.cells], dtype=np.float64)
+        delta = _zonal_departure(_cell_array(mesh, "slp_annual_hpa"), lat) - _zonal_departure(
+            _cell_array(ref, "slp_annual_hpa"), lat
+        )
+        reliable = np.array(
+            [
+                a.slp_reduction_unreliable is not True and b.slp_reduction_unreliable is not True
+                for a, b in zip(mesh.cells, ref.cells, strict=True)
+            ]
+        )
+        return render_value_layer(
+            delta, indices, continuous_scale("temperature"), lambda d: (d + 8.0) / 16.0, reliable
         )
     if name == "precipitation_diff":  # ±2000 mm/yr, land only
         delta = _cell_array(mesh, "precipitation_mm") - _cell_array(ref, "precipitation_mm")
