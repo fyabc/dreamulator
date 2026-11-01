@@ -78,6 +78,7 @@ class World:
     t_annual_c: np.ndarray
     p_annual_mm: np.ndarray
     koppen: np.ndarray
+    pressure_anomaly_hpa: np.ndarray | None = None
     wind_east_m_s: np.ndarray | None = None
     wind_north_m_s: np.ndarray | None = None
     t_monthly_c: np.ndarray | None = None
@@ -107,6 +108,7 @@ def load_world(world: str, planet: str, branch: str | None, *, monthly: bool = T
         t_annual_c=np.array([_or_nan(c.temperature_C) for c in cells]),
         p_annual_mm=np.array([_or_nan(c.precipitation_mm) for c in cells]),
         koppen=np.array([(c.koppen_class or "") for c in cells], dtype=object),
+        pressure_anomaly_hpa=np.array([_or_nan(c.pressure_anomaly_annual_hpa) for c in cells]),
         wind_east_m_s=np.array([_or_nan(c.wind_east_m_s) for c in cells]),
         wind_north_m_s=np.array([_or_nan(c.wind_north_m_s) for c in cells]),
         t_monthly_c=t_monthly,
@@ -135,6 +137,60 @@ UPWELLING_COASTS: dict[str, tuple[float, float, float, float, float]] = {
 #: skips the cell instead of scoring noise.
 CALM_M_S: float = 0.5
 
+#: Ocean basins for the equal-weight pressure statistics, so a basin's share of
+#: the sea does not set its share of the score: (lat_min, lat_max, lon_min,
+#: lon_max).  A box whose lon_min exceeds lon_max crosses the date line.
+OCEAN_BASINS: dict[str, tuple[float, float, float, float]] = {
+    "N Atlantic": (5.0, 65.0, -80.0, 0.0),
+    "S Atlantic": (-50.0, 5.0, -60.0, 20.0),
+    "N Pacific": (5.0, 60.0, 120.0, -100.0),
+    "S Pacific": (-50.0, 5.0, 160.0, -75.0),
+    "Indian": (-45.0, 25.0, 40.0, 115.0),
+    "Southern": (-70.0, -50.0, -180.0, 180.0),
+}
+
+#: Centres of action: the named pressure features whose place and strength the
+#: wind structure depends on.  (lat_min, lat_max, lon_min, lon_max, sign) with
+#: sign −1 for a low and +1 for a high; a box may cross the date line.
+PRESSURE_CENTRES: dict[str, tuple[float, float, float, float, float]] = {
+    "Icelandic low": (52.0, 70.0, -45.0, -5.0, -1.0),
+    "Aleutian low": (42.0, 60.0, 160.0, -150.0, -1.0),
+    "Siberian high": (42.0, 62.0, 80.0, 120.0, 1.0),
+    "Azores high": (22.0, 42.0, -45.0, -15.0, 1.0),
+    "Hawaii high": (22.0, 42.0, -160.0, -130.0, 1.0),
+    "St Helena high": (-35.0, -15.0, -20.0, 5.0, 1.0),
+    "Easter high": (-35.0, -15.0, -110.0, -85.0, 1.0),
+    "Mascarene high": (-35.0, -15.0, 60.0, 95.0, 1.0),
+}
+
+
+def box_mask(
+    lat: np.ndarray, lon: np.ndarray, box: tuple[float, float, float, float]
+) -> np.ndarray:
+    """Cells inside a lat/lon box; a box with lon_min > lon_max crosses the date line."""
+    lat0, lat1, lon0, lon1 = box
+    within_lat = (lat >= lat0) & (lat <= lat1)
+    within_lon = (lon >= lon0) & (lon <= lon1) if lon0 <= lon1 else (lon >= lon0) | (lon <= lon1)
+    return within_lat & within_lon
+
+
+def zonal_departure(values: np.ndarray, lat: np.ndarray, step: float = 2.0) -> np.ndarray:
+    """Departure of a field from its own zonal mean, band by band.
+
+    Both pressure fields are reduced this way before they are compared: the
+    engine models an anomaly whose reference is its own, and the observations
+    are an absolute pressure, so only the longitudinal structure — which is what
+    the centres of action and the wind's cross-isobar flow are about — is
+    common ground.
+    """
+    out = np.full(values.shape, np.nan)
+    edges = np.arange(-90.0, 90.0 + step, step)
+    for low, high in zip(edges[:-1], edges[1:], strict=True):
+        band = (lat >= low) & (lat < high) & np.isfinite(values)
+        if band.any():
+            out[band] = values[band] - values[band].mean()
+    return out
+
 
 def wind_direction_match(
     model_east: np.ndarray,
@@ -154,6 +210,66 @@ def wind_direction_match(
         speed_model[use] * speed_obs[use]
     )
     return float(np.mean(np.arccos(np.clip(cosine, -1.0, 1.0)) <= np.radians(within_deg)))
+
+
+def observed_pressure(path: Path, count: int) -> np.ndarray:
+    """Observed annual sea-level pressure per cell (hPa) from ``climate_obs.json``."""
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    out = np.full(count, np.nan)
+    for key, value in data["cells"].items():
+        index = int(key)
+        if index < count:
+            out[index] = float(value.get("slp_obs_hpa", np.nan))
+    return out
+
+
+def pressure_table(
+    model: World, obs_slp: np.ndarray
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    """Pressure statistics: per region (equal weight) and per centre of action."""
+    if model.pressure_anomaly_hpa is None:
+        return {}, {}
+    model_dep = zonal_departure(model.pressure_anomaly_hpa, model.lat)
+    obs_dep = zonal_departure(obs_slp, model.lat)
+
+    regions: dict[str, dict[str, float]] = {}
+    for name, box in CONTINENTS.items():
+        mask = model.is_land & box_mask(model.lat, model.lon, box)
+        if mask.sum() >= 50:
+            regions[name] = {
+                "cells": int(mask.sum()),
+                "rmse_hpa": _rmse(model_dep[mask], obs_dep[mask]),
+                "pattern_corr": _correlation(model_dep[mask], obs_dep[mask]),
+            }
+    for name, box in OCEAN_BASINS.items():
+        mask = ~model.is_land & box_mask(model.lat, model.lon, box)
+        if mask.sum() >= 50:
+            regions[name] = {
+                "cells": int(mask.sum()),
+                "rmse_hpa": _rmse(model_dep[mask], obs_dep[mask]),
+                "pattern_corr": _correlation(model_dep[mask], obs_dep[mask]),
+            }
+
+    centres: dict[str, dict[str, float]] = {}
+    for name, (lat0, lat1, lon0, lon1, sign) in PRESSURE_CENTRES.items():
+        mask = box_mask(model.lat, model.lon, (lat0, lat1, lon0, lon1))
+        usable = mask & np.isfinite(model_dep) & np.isfinite(obs_dep)
+        if usable.sum() < 20:
+            continue
+        index = np.flatnonzero(usable)
+        # Strength = the box's most extreme departure in the feature's own sense.
+        model_extreme = index[np.argmax(sign * model_dep[usable])]
+        obs_extreme = index[np.argmax(sign * obs_dep[usable])]
+        centres[name] = {
+            "model_hpa": float(sign * model_dep[model_extreme]),
+            "obs_hpa": float(sign * obs_dep[obs_extreme]),
+            "model_lat": float(model.lat[model_extreme]),
+            "model_lon": float(model.lon[model_extreme]),
+            "obs_lat": float(model.lat[obs_extreme]),
+            "obs_lon": float(model.lon[obs_extreme]),
+        }
+    return regions, centres
 
 
 def observed_wind(path: Path, count: int) -> tuple[np.ndarray, np.ndarray]:
@@ -304,6 +420,8 @@ def earth_table(branch: str) -> dict[str, Any]:
         )
     obs_codes = references["beck2018"]
     wind_obs_east, wind_obs_north = observed_wind(maps_dir / "climate_obs.json", model.lat.size)
+    obs_slp = observed_pressure(maps_dir / "climate_obs.json", model.lat.size)
+    pressure_regions, pressure_centres = pressure_table(model, obs_slp)
     t_summer_m, t_winter_m = half_year_means(model.t_monthly_c, model.lat)
     t_summer_o, t_winter_o = half_year_means(t_obs, model.lat)
     p_summer_m, p_winter_m = half_year_means(model.p_monthly_mm, model.lat)
@@ -390,6 +508,14 @@ def earth_table(branch: str) -> dict[str, Any]:
         + ", ".join(references),
         "continents": rows,
         "upwelling_coasts": coasts,
+        "pressure_regions": pressure_regions,
+        "pressure_centres": pressure_centres,
+        "pressure_equal_weight": {
+            key: float(np.nanmean([row[key] for row in pressure_regions.values()]))
+            for key in ("rmse_hpa", "pattern_corr")
+        }
+        if pressure_regions
+        else {},
         "equal_weight_mean": mean,
         "truth_swap_koppen_class": swap,
         "timings_s": stage_timings(WORLDS / "earth"),
@@ -537,6 +663,29 @@ def _show_earth(table: dict[str, Any]) -> None:
     print(
         "  (T in K RMSE for the summer / winter half; P as pattern correlation; ΔT, ΔP annual bias)"
     )
+    regions = table.get("pressure_regions") or {}
+    if regions:
+        mean = table["pressure_equal_weight"]
+        print("  sea-level pressure, departure from the zonal mean (model vs NCEP)")
+        print(f"    {'region':<14}{'cells':>6}{'RMSE hPa':>10}{'pattern r':>11}")
+        for name, row in regions.items():
+            print(
+                f"    {name:<14}{row['cells']:>6}{row['rmse_hpa']:>10.2f}"
+                f"{row['pattern_corr']:>11.3f}"
+            )
+        print(
+            f"    {'equal weight':<14}{'':>6}{mean['rmse_hpa']:>10.2f}{mean['pattern_corr']:>11.3f}"
+        )
+    centres = table.get("pressure_centres") or {}
+    if centres:
+        print("  centres of action: strength (hPa from the zonal mean) and position")
+        print(f"    {'centre':<16}{'model':>8}{'obs':>8}{'model lat/lon':>18}{'obs lat/lon':>18}")
+        for name, row in centres.items():
+            print(
+                f"    {name:<16}{row['model_hpa']:>8.1f}{row['obs_hpa']:>8.1f}"
+                f"{row['model_lat']:>9.0f}{row['model_lon']:>9.0f}"
+                f"{row['obs_lat']:>9.0f}{row['obs_lon']:>9.0f}"
+            )
     coasts = table.get("upwelling_coasts") or {}
     if coasts:
         print("  eastern-boundary alongshore wind (equatorward, m/s) — drives coastal upwelling")
