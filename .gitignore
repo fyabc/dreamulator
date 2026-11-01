@@ -67,6 +67,10 @@ data/**/build_profile.json
 # Validation reports (regeneratable via scripts/validate_climate.py)
 reports/
 
+# Local external-data caches (NCEP/GPCP/SODA climatology, UCC L2 datasets) —
+# re-fetchable, see src/dreamulator/import_earth_climate.py
+work/
+
 # Headless map-layer export artifacts (diagnostic, regeneratable via `dreamulator export`)
 export/
 # Default output root of `dreamulator export globe` and the GCM weather packs

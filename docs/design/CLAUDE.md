@@ -48,6 +48,7 @@
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `blender-render-pipeline.md` — Blender 高清渲染链（区域数据包 `dreamulator export region` + bpy 脚本重建场景；MVP 已实现，路线节登记扩展）
+- `sky-ephemeris.md` — 天球星历查询（任意观测点的天球位置/视直径/相位/升落；catalog 驱动的两体星历 + CLI/API，渲染与 FUI 共用 JSON，前端天球视图后续；提案，2026-11-01 立项）
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `browser-playground.md` — 浏览器气候实验台（Gate D 温度首图原型：拖放高度图 → 年均/逐月温度；规则 180×90 网格、只算温度；2026-10-23 原型落地，完整气候待引擎加速）
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）

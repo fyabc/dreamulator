@@ -894,3 +894,35 @@ def test_terminal_routing_emits_lake_records() -> None:
         if r["verdict"] in ("terminal", "dry_playa", "shrunk"):
             cap = math.ceil(r["inflow_mm"] / r["demand_mm"] * r["draw_cells"]) + 1
             assert r["kept_water_cells"] <= cap, (r["label"], r["kept_water_cells"], cap)
+
+
+def test_river_segment_y_uses_the_canvas_height() -> None:
+    """A shorter chunk box must not shift reaches toward the canvas bottom.
+
+    Row 0 is the north edge of the CANVAS; when the mask array covers only
+    part of it, the y origin is the canvas's bottom edge (`pixel_rows`),
+    not the array's.
+    """
+    import numpy as np
+
+    from dreamulator.map.prog_erosion import river_segments
+
+    h, w, km = 8, 8, 1.0
+    land = np.ones((h, w), dtype=bool)
+    rec = np.full(h * w, -1, dtype=np.int64)
+    acc = np.zeros((h, w), dtype=np.float64)
+    for r in range(h):
+        for c in range(w):
+            i = r * w + c
+            acc[r, c] = 10.0 + i
+            if r + 1 < h:
+                rec[i] = (r + 1) * w + c
+    rivers = land.copy()
+
+    segs, _flows, _regimes = river_segments(rivers, rec, acc, km)
+    segs_full, _, _ = river_segments(rivers, rec, acc, km, pixel_rows=8)
+    assert np.allclose(segs[:, :, 1], segs_full[:, :, 1])
+
+    segs_tall, _, _ = river_segments(rivers, rec, acc, km, pixel_rows=12)
+    # Same rows, canvas four rows taller: every y moves up by 4 km.
+    assert np.allclose(segs_tall[:, :, 1] - segs[:, :, 1], 4.0)

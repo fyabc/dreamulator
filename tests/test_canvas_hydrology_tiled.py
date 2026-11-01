@@ -148,3 +148,31 @@ def test_grade_flats_kernel_matches_reference(
     if sea:
         dem[:, :4] = np.float32(-30.0)
     assert np.array_equal(_grade_flats(dem, 0.0, eps), _grade_flats_reference(dem, 0.0, eps))
+
+
+def test_connected_sea_mask_keeps_inland_lows_as_basins() -> None:
+    """A sub-sea-level basin not connected to the sea fills instead of draining.
+
+    Without the canvas's connected-sea product every pixel at or below sea
+    level is an outlet, so the basin drains (filled == raw).  With the
+    product the basin is dry land and the fill raises it to its rim.
+    """
+    t = 16
+    dem = np.full((2 * t, 2 * t), 100.0)
+    dem[:, :3] = -50.0  # western sea column (touches the canvas edge)
+    dem[10:14, 10:14] = -100.0  # enclosed sub-sea-level basin
+    grid = ChunkGrid(2, 2, t)
+    raw = _split(dem, grid)
+
+    legacy = CanvasTiles(raw={k: v.copy() for k, v in raw.items()}, grid=grid)
+    fill_canvas_tiled(legacy, sea_level=0.0, eps=0.0)
+    legacy_filled = _assemble(legacy.filled, grid)
+    assert np.allclose(legacy_filled[10:14, 10:14], -100.0)
+
+    ocean_mask = dem <= 0.0
+    ocean_mask[10:14, 10:14] = False  # the basin is dry inland low
+    ocean = _split(ocean_mask, grid)
+    modern = CanvasTiles(raw={k: v.copy() for k, v in raw.items()}, grid=grid, ocean=ocean)
+    fill_canvas_tiled(modern, sea_level=0.0, eps=0.0)
+    modern_filled = _assemble(modern.filled, grid)
+    assert np.allclose(modern_filled[10:14, 10:14], 100.0)

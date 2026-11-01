@@ -184,7 +184,10 @@ def flow_accumulation(order: np.ndarray, receiver: np.ndarray, weight: np.ndarra
     Index arrays keep their input dtype: canvas-scale grids pass int32
     receivers/orders (half the int64 footprint; grid cells < 2^31 on every
     canvas), and the numba kernel specialises per dtype — an int64 cast
-    here would silently re-materialise whole-grid copies.
+    here would silently re-materialise whole-grid copies.  The weight dtype
+    is likewise preserved: the canvas driver passes float32 to halve the
+    input and the accumulation on 600M-cell canvases; float32 keeps ~7
+    significant digits, far inside the river and lake budgets.
     """
     import gc
     import time
@@ -194,7 +197,7 @@ def flow_accumulation(order: np.ndarray, receiver: np.ndarray, weight: np.ndarra
     args = (
         np.ascontiguousarray(order),
         np.ascontiguousarray(receiver),
-        np.ascontiguousarray(weight, dtype=np.float64),
+        np.ascontiguousarray(weight),
     )
     try:
         return _accumulate_numba(*args)
@@ -279,6 +282,31 @@ def river_mask(
     return land & (accumulation > threshold_cells)
 
 
+def _bincount_banded(
+    values: np.ndarray,
+    minlength: int,
+    *,
+    mask: np.ndarray | None = None,
+    band: int = 8_000_000,
+) -> np.ndarray:
+    """``np.bincount`` over a large flat array, one band at a time.
+
+    ``np.bincount`` casts its input to ``intp``; on a 654M-cell canvas that
+    is a 4.9 GiB int64 twin of the whole grid — enough to fail the lake
+    stage on its own.  Banding keeps the transient at one band.
+    """
+    total = np.zeros(minlength, dtype=np.int64)
+    size = values.size
+    for r0 in range(0, size, band):
+        r1 = min(size, r0 + band)
+        chunk = values[r0:r1]
+        if mask is not None:
+            chunk = chunk[mask[r0:r1]]
+        if chunk.size:
+            total += np.bincount(chunk, minlength=minlength)
+    return total
+
+
 def lake_mask(
     filled: np.ndarray,
     dem: np.ndarray,
@@ -299,7 +327,7 @@ def lake_mask(
     out = np.zeros_like(deep)
     lbl, n = label(deep)
     if n:
-        sizes = np.bincount(lbl.ravel())
+        sizes = _bincount_banded(lbl.reshape(-1), n + 1)
         big = np.nonzero(sizes >= max(min_cells, 1))[0]
         big = big[big > 0]
         out[np.isin(lbl, big)] = True
@@ -316,6 +344,8 @@ def keep_large_lakes(
     min_cells: int,
     min_width_km: float = 0.0,
     km_per_px: float = 1.0,
+    *,
+    labels: np.ndarray | None = None,
 ) -> np.ndarray:
     """Lake mask reduced to components that pass BOTH gates — at least
     ``min_cells`` cells (the MMU) and, when ``min_width_km`` > 0, a minimum
@@ -328,9 +358,43 @@ def keep_large_lakes(
     from scipy.ndimage import find_objects, label
 
     out = np.zeros_like(lake, dtype=bool)
+    if not lake.any():
+        return out  # label() would allocate an int32 twin of the whole grid
+    if labels is not None:
+        # Component ids from an existing lake labelling (the mask is a union
+        # of whole components).  Counting and bounding the selected cells
+        # avoids label()'s int32 twin of a 654M-cell canvas.
+        cells = np.flatnonzero(lake.reshape(-1))
+        if cells.size == 0:
+            return out
+        lab = np.asarray(labels).reshape(-1)[cells]
+        n_lab = int(lab.max()) + 1
+        counts = np.bincount(lab, minlength=n_lab)
+        keep_ids = np.nonzero((counts >= max(min_cells, 1)) & (np.arange(n_lab) > 0))[0]
+        if min_width_km > 0.0 and keep_ids.size:
+            width = lake.shape[1]
+            rows = cells // width
+            cols = cells - rows * width
+            sentinel = np.iinfo(np.int64).max
+            rmin = np.full(n_lab, sentinel)
+            rmax = np.full(n_lab, -1)
+            cmin = np.full(n_lab, sentinel)
+            cmax = np.full(n_lab, -1)
+            np.minimum.at(rmin, lab, rows)
+            np.maximum.at(rmax, lab, rows)
+            np.minimum.at(cmin, lab, cols)
+            np.maximum.at(cmax, lab, cols)
+            min_px = min_width_km / max(km_per_px, 1e-9)
+            extent = np.minimum(rmax - rmin + 1, cmax - cmin + 1)
+            keep_ids = keep_ids[extent[keep_ids] >= min_px]
+        if keep_ids.size:
+            keep = np.zeros(n_lab, dtype=bool)
+            keep[keep_ids] = True
+            out.reshape(-1)[cells[keep[lab]]] = True
+        return out
     lbl, n = label(lake)
     if n:
-        sizes = np.bincount(lbl.ravel())
+        sizes = _bincount_banded(lbl.reshape(-1), n + 1)
         big = np.nonzero(sizes >= max(min_cells, 1))[0]
         big = big[big > 0]
         if min_width_km > 0.0:
@@ -481,6 +545,33 @@ def hydrology_weight(input_dir: Path, res: int, land: np.ndarray) -> tuple[np.nd
     return np.where(land, 1.0, 0.0), 0.0, "uniform-land"
 
 
+def _lake_entry_donors(
+    rec_flat: np.ndarray,
+    lake_flat: np.ndarray,
+    *,
+    require_other_lake: bool = False,
+    band: int = 4_000_000,
+) -> np.ndarray:
+    """Cell ids whose receiver is a lake cell (optionally a different lake).
+
+    Banded on purpose: the whole-grid twin materialises ``max(rec, 0)`` and
+    ``lake_flat[that]`` as two full arrays (2 x 2.6 GiB on a 654M-cell
+    canvas), which exhausts memory at the lake cascade's allocation peak.
+    """
+    n_cells = rec_flat.size
+    hits = np.zeros(n_cells, dtype=bool)
+    for r0 in range(0, n_cells, band):
+        r1 = min(n_cells, r0 + band)
+        rec_b = rec_flat[r0:r1]
+        ok = rec_b >= 0
+        lake_of_rec = lake_flat[np.maximum(rec_b, 0)]
+        hit = ok & (lake_of_rec > 0)
+        if require_other_lake:
+            hit &= lake_of_rec != lake_flat[r0:r1]
+        hits[r0:r1] = hit
+    return np.nonzero(hits)[0]
+
+
 def _lake_balances(
     lake: np.ndarray,
     receiver: np.ndarray,
@@ -522,11 +613,9 @@ def _lake_balances(
     lake_mask_flat = lake.reshape(-1)
     acc_flat = accumulation.reshape(-1)
     rec_flat = receiver.reshape(-1)
-    r_all = np.where(rec_flat >= 0, rec_flat, 0)
-    enters = (rec_flat >= 0) & (lake_flat[r_all] > 0) & (lake_flat[r_all] != lake_flat)
-    cand = np.nonzero(enters)[0]
-    inflow = np.bincount(lake_flat[r_all[cand]], weights=acc_flat[cand], minlength=n + 1)
-    del r_all, enters, cand
+    cand = _lake_entry_donors(rec_flat, lake_flat, require_other_lake=True)
+    inflow = np.bincount(lake_flat[rec_flat[cand]], weights=acc_flat[cand], minlength=n + 1)
+    del cand
 
     lake_idx = np.nonzero(lake_mask_flat)[0]
     ncc = precip_mm.shape[1]
@@ -616,7 +705,9 @@ def _equilibrium_water(
     *,
     mmu_cells: int,
     sea_level_m: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int]]:
+    labels: np.ndarray | None = None,
+    keep_h: bool = True,
+) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, int]]:
     """Rewrite terminal lakes to their equilibrium water surface.
 
     Takes per-label inflow and net-demand in reference-cell units (the
@@ -636,20 +727,43 @@ def _equilibrium_water(
     """
     import math
 
-    from scipy.ndimage import label
-
-    out_h = h.copy()
+    # The canvas driver never reads the rewritten height (it only feeds the
+    # land/water masks), so it can skip the whole-grid copy.
+    out_h = h.copy() if keep_h else None
     out_land = land.copy()
     water = np.zeros_like(land, dtype=bool)
     stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}
-    lbl, n = label(lake_terminal)
-    if not n:
+    # Work on the terminal cells only.  A full-grid ``label()`` output costs
+    # 2.4 GiB on a 654M-cell canvas and each ``lbl == i`` mask another
+    # 0.6 GiB; the component ids come from the caller's lake labels when
+    # given (the terminal mask is a union of whole lake components).
+    term_cells = np.flatnonzero(lake_terminal.reshape(-1))
+    if term_cells.size == 0:
         return out_h, out_land, water, stats
-    sizes = np.bincount(lbl.ravel(), minlength=n + 1)
+    if labels is None:
+        from scipy.ndimage import label
+
+        lab_full, _n = label(lake_terminal)
+        cell_lbl = lab_full.reshape(-1)[term_cells]
+        del lab_full
+    else:
+        cell_lbl = labels.reshape(-1)[term_cells]
+    # scipy numbers components in raster scan order, so the ascending ids a
+    # terminal subset keeps are exactly its first-appearance order — the
+    # order inflow/demand were concatenated in.
+    uniq, inv = np.unique(cell_lbl, return_inverse=True)
+    comp = inv + 1
+    n = int(uniq.size)
+    order = np.argsort(comp, kind="stable")
+    bounds = np.concatenate(([0], np.cumsum(np.bincount(comp, minlength=n + 2)[1:])))
+    h_flat = h.reshape(-1)
+    water_flat = water.reshape(-1)
+    land_flat = out_land.reshape(-1)
+    out_h_flat = None if out_h is None else out_h.reshape(-1)
     for i in range(1, n + 1):
         stats["terminal"] += 1
-        ys, xs = np.nonzero(lbl == i)
-        n_cells = int(sizes[i])
+        cells = term_cells[order[bounds[i - 1] : bounds[i]]]
+        n_cells = int(cells.size)
         demand = demand_cells[i]
         if demand <= 0.0:
             continue  # balance-positive: keep as drawn (verdict disagreed — skip)
@@ -660,15 +774,16 @@ def _equilibrium_water(
             stats["dry_playas"] += 1
         else:
             stats["shrunk"] += 1
-        deepest = np.argsort(h[ys, xs])[:k]
-        wy, wx = ys[deepest], xs[deepest]
-        water[wy, wx] = True
-        out_land[wy, wx] = False
+        deepest = np.argsort(h_flat[cells])[:k]
+        keep_cells = cells[deepest]
+        water_flat[keep_cells] = True
+        land_flat[keep_cells] = False
         rest = np.ones(n_cells, dtype=bool)
         rest[deepest] = False
-        ry, rx = ys[rest], xs[rest]
-        out_land[ry, rx] = True
-        out_h[ry, rx] = np.maximum(out_h[ry, rx], sea_level_m)
+        floor_cells = cells[rest]
+        land_flat[floor_cells] = True
+        if out_h_flat is not None:
+            out_h_flat[floor_cells] = np.maximum(out_h_flat[floor_cells], sea_level_m)
     return out_h, out_land, water, stats
 
 
@@ -685,7 +800,7 @@ def apply_terminal_equilibrium(
     mmu_cells: int,
     sea_level_m: float,
     evaporation_factor: float = LAKE_EVAPORATION_FACTOR,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int]]:
+) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, int]]:
     """Rewrite terminal lakes from a single (receiver, accumulation) pair.
 
     Convenience wrapper around :func:`_equilibrium_water` computing the
@@ -712,6 +827,7 @@ def apply_terminal_equilibrium(
         demand,
         mmu_cells=mmu_cells,
         sea_level_m=sea_level_m,
+        labels=lbl,
     )
 
 
@@ -730,8 +846,10 @@ def terminal_equilibrium_routing(
     km_per_px: float,
     sea_level_m: float,
     climate_block: int = 1,
+    consume_receiver: bool = False,
+    keep_rewritten_h: bool = True,
 ) -> tuple[
-    np.ndarray,
+    np.ndarray | None,
     np.ndarray,
     np.ndarray,
     np.ndarray,
@@ -839,26 +957,30 @@ def terminal_equilibrium_routing(
     acc_all = flow_accumulation(order, rec_all, weight)
     # int32 non-negative view of the receivers (grid < 2^31 cells): the
     # int64 ``np.where`` twin cost 3 GiB per whole-canvas materialisation.
-    r_all = rec_all.astype(np.int32)  # independent non-negative twin
-    r_all[r_all < 0] = 0
-    enters = (rec_all >= 0) & (lake_flat[r_all] > 0)
-    donors = np.nonzero(enters)[0]
+    # Lake cells were cut from the routing above, so any surviving receiver
+    # that lands in a lake crosses into it — no label test needed.
+    donors = _lake_entry_donors(rec_all.reshape(-1), lake_flat)
     external = np.bincount(
-        lake_flat[r_all[donors]], weights=acc_all.reshape(-1)[donors], minlength=n + 1
+        lake_flat[rec_all.reshape(-1)[donors]],
+        weights=acc_all.reshape(-1)[donors],
+        minlength=n + 1,
     )
     # First-touch temporaries die here (canvas-scale runs hold several
     # whole-grid arrays simultaneously; the cascade below allocates more).
     # acc_all survives one more call: the second _lake_balances reuses it
     # as its accumulation input.
-    del r_all, enters, donors, rec_all
+    del donors, rec_all
 
     # 2) lake-graph edges: each component's exits, walked to the next
     #    lake / the sea / the frame sink along the receiver forest.
-    r_orig = rec_flat.astype(np.int32)
-    r_orig[r_orig < 0] = 0
-    is_exit = (rec_flat >= 0) & (lake_flat[r_orig] != lake_flat) & (lake_flat > 0)
-    exits = np.nonzero(is_exit)[0]
-    del r_orig, is_exit  # exits itself feeds the depletion pass and records
+    # Exits are lake cells whose receiver leaves the component.  Restricting
+    # the gather to lake cells avoids two whole-grid temporaries (2 x 2.6 GiB
+    # on a 654M-cell canvas).
+    lake_cells = np.flatnonzero(lake_flat > 0)
+    rec_lake = rec_flat[lake_cells]
+    is_exit = (rec_lake >= 0) & (lake_flat[np.maximum(rec_lake, 0)] != lake_flat[lake_cells])
+    exits = lake_cells[is_exit]
+    del rec_lake, is_exit  # exits itself feeds the depletion pass and records
     downstream_of = np.zeros(n + 1, dtype=np.int64)  # 0 = sea/frame
     for e in exits:
         src_lbl = int(lake_flat[e])
@@ -927,15 +1049,27 @@ def terminal_equilibrium_routing(
         np.concatenate(([0.0], demand[term_labels])),
         mmu_cells=mmu_cells,
         sea_level_m=sea_level_m,
+        labels=lbl,
+        keep_h=keep_rewritten_h,
     )
-    water_kept = keep_large_lakes(term_water, mmu_cells, LAKE_MIN_WIDTH_KM, km_per_px)
+    water_kept = keep_large_lakes(term_water, mmu_cells, LAKE_MIN_WIDTH_KM, km_per_px, labels=lbl)
     lakes_render = (lakes_draw & ~lake_term) | water_kept
     chain_stop = lakes_render | lake_term
+    # The canvas driver releases its receiver right after this call, so it
+    # hands the array over for the rewrite instead of paying a 2.6 GiB copy.
+    rec_route = receiver if consume_receiver else receiver.copy()
+    rec_route[lake_term.reshape(-1)] = -1
+    # Both masks are consumed above; freeing them before the fringe descent
+    # keeps the peak inside the canvas-scale memory budget.
+    del lake_term, lakes_draw
     # Descent across dried fringes toward the kept water, on the field as
     # it was BEFORE the rewrite (flattened playa floors erased the slope).
-    fringe_desc = lake_fringe_descend(h, chain_stop, lakes_render)
-    rec_route = receiver.copy()
-    rec_route[lake_term.reshape(-1)] = -1
+    # Without a terminal verdict nothing shrank, so there is no dried fringe
+    # to descend — and the descent labels the whole chain mask (an int32 twin
+    # of the canvas) that a 654M-cell canvas cannot spare.
+    fringe_desc = (
+        lake_fringe_descend(h, chain_stop, lakes_render, labels=lbl) if np.any(is_term) else None
+    )
     # Depletion mutates the weight IN PLACE: every caller hands the weight
     # over for good after this point (the canvas driver drops it right
     # after the call), and a whole-grid f64 twin cost 3 GiB at the tail's
@@ -958,9 +1092,14 @@ def terminal_equilibrium_routing(
     # only in transient arrays (inland-water-refine's "不落盘" gap).
     h_flat = h.reshape(-1)
     _hh, ww = h.shape
+    # Per-lake cell counts in one pass: a whole-canvas ``lbl == a`` per lake
+    # allocated 2 x 360 MiB on a 377M-cell canvas and ran the process out of
+    # memory at the tail's allocation peak.
+    lbl_flat = lbl.reshape(-1)
+    draw_counts = _bincount_banded(lbl_flat, n + 1)
+    kept_counts = _bincount_banded(lbl_flat, n + 1, mask=water_kept.reshape(-1))
     for a in range(1, n + 1):
-        member = lbl == a
-        if not member.any():
+        if draw_counts[a] == 0:
             continue
         ex = exits[lake_flat[exits] == a]
         spill_cell = None
@@ -970,8 +1109,8 @@ def terminal_equilibrium_routing(
             pick = int(ex[int(np.argmin(h_flat[tgt]))])
             spill_cell = [int(pick // ww), int(pick % ww)]
             spill_elev_m = round(float(h_flat[int(rec_flat[pick])]), 3)
-        draw_cells = int(member.sum())
-        kept = int((member & water_kept).sum())
+        draw_cells = int(draw_counts[a])
+        kept = int(kept_counts[a])
         if is_term[a]:
             verdict = "dry_playa" if kept == 0 else ("shrunk" if kept < draw_cells else "terminal")
         else:
@@ -1104,7 +1243,13 @@ def _chaikin(pts: np.ndarray, rounds: int = 2) -> np.ndarray:
     return pts
 
 
-def lake_fringe_descend(h: np.ndarray, footprint: np.ndarray, water: np.ndarray) -> np.ndarray:
+def lake_fringe_descend(
+    h: np.ndarray,
+    footprint: np.ndarray,
+    water: np.ndarray,
+    *,
+    labels: np.ndarray | None = None,
+) -> np.ndarray:
     """Flat-index descent tree inside terminal footprints, toward the water.
 
     Chain extraction stops where a channel meets a terminal footprint, but
@@ -1127,21 +1272,37 @@ def lake_fringe_descend(h: np.ndarray, footprint: np.ndarray, water: np.ndarray)
     desc = np.full(h.size, -1, dtype=np.int32)  # cell ids < 2^31; int64 twin cost 2x
     if not water.any():
         return desc
-    from scipy.ndimage import label
-
-    lbl, _n = label(footprint)
-    water_lbl = set(int(v) for v in np.unique(lbl[water]) if v > 0)
-    if not water_lbl:
-        return desc
     hgt, wid = h.shape
     hflat = h.reshape(-1)
     water_flat = water.reshape(-1)
-    done = np.zeros(h.size, dtype=bool)  # resolved: water or desc assigned
-    for wl in sorted(water_lbl):
-        cells = np.nonzero((lbl == wl).reshape(-1) & water_flat)[0]
-        desc[cells] = cells
-        done[cells] = True
-        fringe = np.nonzero((lbl == wl).reshape(-1) & ~water_flat)[0]
+    # Component ids come from the caller's lake labels when given (the chain
+    # mask is a union of whole lake components); otherwise label the mask.
+    # Working on the footprint's cells avoids two full-grid int32 twins
+    # (label output and per-component masks) that a 654M-cell canvas cannot
+    # afford at the cascade's peak.
+    foot = np.flatnonzero(footprint.reshape(-1))
+    if foot.size == 0:
+        return desc
+    if labels is None:
+        from scipy.ndimage import label
+
+        lab_full, _n = label(footprint)
+        foot_lbl = lab_full.reshape(-1)[foot]
+        del lab_full
+    else:
+        foot_lbl = labels.reshape(-1)[foot]
+    order = np.argsort(foot_lbl, kind="stable")
+    foot, foot_lbl = foot[order], foot_lbl[order]
+    uniq, first = np.unique(foot_lbl, return_index=True)
+    bounds = [int(v) for v in first] + [int(foot.size)]
+    for k, _wl in enumerate(uniq):
+        cells = foot[bounds[k] : bounds[k + 1]]
+        wet = water_flat[cells]
+        if not wet.any():
+            continue  # dry playa: no visible surface to walk to
+        wcells = cells[wet]
+        desc[wcells] = wcells
+        fringe = cells[~wet]
         for c in fringe[np.argsort(hflat[fringe], kind="stable")].tolist():
             y, x = divmod(c, wid)
             best, best_key = -1, (np.inf, np.inf, -1)
@@ -1152,13 +1313,11 @@ def lake_fringe_descend(h: np.ndarray, footprint: np.ndarray, water: np.ndarray)
                     ny, nx = y + dy, x + dx
                     if 0 <= ny < hgt and 0 <= nx < wid:
                         nc = ny * wid + nx
-                        if done[nc]:
+                        if desc[nc] >= 0:  # resolved: water or an assigned descent
                             key = (hflat[nc], (dy * dy + dx * dx) ** 0.5, nc)
                             if key < best_key:
                                 best_key, best = key, nc
             desc[c] = best
-            if best >= 0:
-                done[c] = True
     return desc
 
 
@@ -1225,9 +1384,12 @@ def month_active_counts(
     # place.  The previous kron + division + f64-conversion chain peaked at
     # several whole-canvas fields per month, which canvas-sized grids cannot
     # afford.
-    acc = np.empty((h, w), dtype=np.float64)
-    o = np.ascontiguousarray(order, dtype=np.int64)
-    r = np.ascontiguousarray(receiver, dtype=np.int64)
+    # int64 casts of the index arrays are 4.9 GiB each on a 654M-cell
+    # canvas; the kernel specialises per dtype, so keep int32, and float32
+    # matches the annual accumulation's precision.
+    acc = np.empty((h, w), dtype=np.float32)
+    o = np.ascontiguousarray(order)
+    r = np.ascontiguousarray(receiver)
     for m in range(runoff_monthly_pack.shape[-1]):
         pack_m = runoff_monthly_pack[..., m]
         for i in range(pack_m.shape[0]):
@@ -1249,6 +1411,7 @@ def river_segments(
     lake: np.ndarray | None = None,
     lake_descend: np.ndarray | None = None,
     month_active: np.ndarray | None = None,
+    pixel_rows: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Channel polylines for vector rendering, smoothed.
 
@@ -1326,8 +1489,14 @@ def river_segments(
     acc_flat = accumulation.reshape(-1)
 
     def cell_xyz_km(c: int) -> tuple[float, float, float]:
+        # Row 0 is the NORTH edge of the canvas.  The array may be shorter
+        # than the canvas square (only the chunks near land exist), so the
+        # y origin is the canvas's bottom edge, not the array's: using the
+        # array height shifted every reach south by the empty rows
+        # (184 km on a 104x96-cell box of a 112-cell canvas).
         y, x = c // w, c % w
-        return (x * km_per_px, (h - 1 - y) * km_per_px, float(acc_flat[c]))
+        rows = h if pixel_rows is None else int(pixel_rows)
+        return (x * km_per_px, (rows - 1 - y) * km_per_px, float(acc_flat[c]))
 
     segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
     flows: list[float] = []
@@ -1493,7 +1662,7 @@ def erode_region_pack(
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
     (
-        h,
+        h_rw,
         land,
         lakes_draw,
         chain_stop,
@@ -1517,6 +1686,8 @@ def erode_region_pack(
         km_per_px=km_pp,
         sea_level_m=float(meta["sea_level_m"]),
     )
+    assert h_rw is not None  # keep_rewritten_h defaults to True here
+    h = h_rw
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
