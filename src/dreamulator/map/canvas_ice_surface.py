@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from numba import njit
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import label, maximum_filter, uniform_filter
 
 from .ice_sheets import RHO_ICE_KG_M3
 
@@ -67,6 +67,77 @@ def plastic_margin_thickness(
         np.sqrt(2.0 * basal_shear_stress_pa * distance / (RHO_ICE_KG_M3 * gravity_m_s2)),
         dtype=np.float64,
     )
+
+
+def descending_margin_mask(
+    thickness_m: np.ndarray, surface_elevation_m: np.ndarray, *, ice_floor_m: float = 1.0
+) -> np.ndarray:
+    """Ice-free pixels where the ice surface has to descend to reach the ground.
+
+    Not every ice-free pixel beside ice is a margin.  Where a mountain rises
+    through a sheet, the level-surface reconstruction already ends the ice
+    correctly: thickness is ``level − bed``, so it falls to zero as the bed rises
+    to meet the level, with no wall left standing and nothing to taper.  Only
+    where the ground lies *below* the neighbouring ice surface — a coast, a
+    lowland, a lake — must the surface come down, and only there does the
+    reconstruction leave a cliff.
+
+    The test needs no threshold, because the reconstruction itself fixes the ice
+    extent by comparing bed against level: the first ice-free pixel on a nunatak's
+    flank is by construction at or above the level, while a coastal one is far
+    below it.  Measured on two canvas sheets, 3.5% and 9.5% of the ice sat within
+    a band of an interior ice-free patch, so taking every ice-free pixel as a
+    margin thinned the ice in rings around the nunataks.
+
+    Args:
+        thickness_m: Pixel ice thickness (m).
+        surface_elevation_m: Pixel surface elevation (m) — bed plus ice where
+            there is ice, bare ground where there is none.
+        ice_floor_m: Thickness above which a pixel counts as iced.
+
+    Returns:
+        Boolean mask of the pixels a margin distance should be measured from.
+    """
+    thickness = np.asarray(thickness_m)
+    surface = np.asarray(surface_elevation_m, dtype=np.float64)
+    if thickness.shape != surface.shape:
+        raise ValueError(f"shape mismatch: thickness {thickness.shape} vs surface {surface.shape}")
+    icy = thickness > ice_floor_m
+    iced_surface = np.where(icy, surface, -np.inf)
+    neighbouring_ice = maximum_filter(iced_surface, size=3, mode="nearest")
+    return np.asarray(~icy & (surface < neighbouring_ice), dtype=bool)
+
+
+def enclosed_ice_free_mask(icy: np.ndarray) -> np.ndarray:
+    """Ice-free pixels in a region the ice encloses, which is not a margin either.
+
+    A sheet does not end at a mountain it surrounds or at a hollow inside it: it
+    flows around the one and fills the other, so neither is an edge where the
+    plastic profile applies.  Treating them as margins carves a band into the
+    sheet around every interior patch — measured on one canvas, a lake ringed by
+    3.7 km of ice lost up to 3689 m in a twelve-kilometre crater, which is a worse
+    artefact than the cliff it replaced.  (That cliff is itself a defect of the
+    upstream ice-free lake, not something the taper should paper over.)
+
+    An enclosed region is one whose ice-free component does not reach the array
+    border.  Passed a whole-canvas mask, that border lies outside the data, so the
+    sea and every coastal inlet connected to it count as exterior and keep their
+    margins, while a nunatak or an interior lake does not.
+
+    Args:
+        icy: Boolean mask of pixels holding ice, covering a whole canvas.
+
+    Returns:
+        Boolean mask of the ice-free pixels that are enclosed by ice.
+    """
+    icy = np.asarray(icy, dtype=bool)
+    if icy.ndim != 2:
+        raise ValueError(f"icy must be a 2-D canvas mask, got {icy.ndim} dimensions")
+    labels, count = label(~icy)
+    if count == 0:
+        return np.zeros(icy.shape, dtype=bool)
+    outside = np.unique(np.concatenate([labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]]))
+    return np.asarray((labels > 0) & ~np.isin(labels, outside), dtype=bool)
 
 
 #: Width of the band in which the plastic margin profile is trusted (m).  Inside

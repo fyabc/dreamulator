@@ -247,3 +247,79 @@ class TestMarginTaper:
             margin_taper(np.ones(3), np.ones(3), gravity_m_s2=10.28, band_limit_m=0.0)
         with pytest.raises(ValueError, match="shape mismatch"):
             margin_taper(np.ones(3), np.ones(4), gravity_m_s2=10.28)
+
+
+class TestDescendingMarginMask:
+    """冰缘源判别：岛峰不是冰缘，海岸才是，且不需要阈值。"""
+
+    def _sheet(self) -> tuple[np.ndarray, np.ndarray]:
+        """一维剖面：左端海面、中段冰盖、中间一座穿出冰面的山峰。"""
+        bed = np.array([[-200.0, -100.0, 50.0, 120.0, 900.0, 140.0, 130.0, 100.0]])
+        level = 800.0
+        thickness = np.maximum(level - bed, 0.0)
+        thickness[bed >= level] = 0.0
+        surface = np.where(thickness > 1.0, bed + thickness, bed)
+        return thickness, surface
+
+    def test_nunatak_is_not_a_margin_but_the_coast_is(self) -> None:
+        from dreamulator.map.canvas_ice_surface import descending_margin_mask
+
+        thickness, surface = self._sheet()
+        mask = descending_margin_mask(thickness, surface)
+        # 山峰（900 m，高于 800 m 冰面）无冰，但它不是冰缘源
+        assert thickness[0, 4] == 0.0
+        assert not mask[0, 4]
+        # 冰盖内部与冰下像素都不是源
+        assert not mask[0, 2] and not mask[0, 3]
+
+    def test_low_ground_beside_ice_is_a_margin(self) -> None:
+        from dreamulator.map.canvas_ice_surface import descending_margin_mask
+
+        thickness = np.array([[0.0, 0.0, 1200.0, 1200.0]])
+        surface = np.array([[0.0, 0.0, 1200.0, 1200.0]])
+        mask = descending_margin_mask(thickness, surface)
+        assert mask[0, 1]  # 紧邻冰的低地是源
+        assert not mask[0, 0]  # 不紧邻冰的低地不是源（无冰面可下降到此）
+
+    def test_invalid_inputs_raise(self) -> None:
+        from dreamulator.map.canvas_ice_surface import descending_margin_mask
+
+        with pytest.raises(ValueError, match="shape mismatch"):
+            descending_margin_mask(np.ones((2, 2)), np.ones((2, 3)))
+
+
+class TestEnclosedIceFreeMask:
+    """封闭无冰区判别：岛峰与内陆湖被冰包围，海与海岸入口通到数组外。"""
+
+    def test_interior_patch_is_enclosed_and_the_sea_is_not(self) -> None:
+        from dreamulator.map.canvas_ice_surface import enclosed_ice_free_mask
+
+        icy = np.zeros((9, 9), dtype=bool)
+        icy[2:7, 2:7] = True  # 一块冰盖，四周是海
+        icy[4, 4] = False  # 中间一个无冰点（岛峰或湖）
+        mask = enclosed_ice_free_mask(icy)
+        assert mask[4, 4]
+        assert not mask[0, 0]  # 外围的海不是封闭区
+        assert not mask[2, 2]  # 冰本身不在掩膜里
+        assert mask.sum() == 1
+
+    def test_inlet_connected_to_the_sea_stays_exterior(self) -> None:
+        from dreamulator.map.canvas_ice_surface import enclosed_ice_free_mask
+
+        icy = np.zeros((9, 9), dtype=bool)
+        icy[2:7, 2:7] = True
+        icy[4, 4:7] = False  # 一条通到冰盖外的峡湾
+        mask = enclosed_ice_free_mask(icy)
+        assert not mask.any()
+
+    def test_all_ice_and_no_ice_are_both_empty(self) -> None:
+        from dreamulator.map.canvas_ice_surface import enclosed_ice_free_mask
+
+        assert not enclosed_ice_free_mask(np.ones((4, 4), dtype=bool)).any()
+        assert not enclosed_ice_free_mask(np.zeros((4, 4), dtype=bool)).any()
+
+    def test_requires_a_two_dimensional_mask(self) -> None:
+        from dreamulator.map.canvas_ice_surface import enclosed_ice_free_mask
+
+        with pytest.raises(ValueError, match="2-D canvas mask"):
+            enclosed_ice_free_mask(np.ones(5, dtype=bool))
