@@ -25,6 +25,48 @@ SECONDS_PER_YEAR = 365.25 * 86400.0
 TEMPERATE_RATE_FACTOR_PA3_S = 2.4e-24
 
 
+#: Basal shear stress of a grounded ice sheet (Pa).  The perfectly plastic
+#: closure's single parameter: a sheet adjusts its surface slope so that the
+#: driving stress ρ·g·h·∇s stays at this yield value, which gives the parabolic
+#: margin profile below.  Observed sheets span 50–100 kPa (Nye 1951's perfectly
+#: plastic sheet; Vialov 1958's profile), and 80 kPa is the mid-range value.
+#: Epistemic class: approximate derivation with an observational constraint,
+#: calibration domain Earth's ice sheets; it carries over to other worlds
+#: through ρ·g rather than being refitted.
+BASAL_SHEAR_STRESS_PA: float = 8.0e4
+
+
+def plastic_margin_thickness(
+    distance_m: np.ndarray | float,
+    *,
+    gravity_m_s2: float,
+    basal_shear_stress_pa: float = BASAL_SHEAR_STRESS_PA,
+) -> np.ndarray:
+    """Thickness a perfectly plastic sheet sustains at a distance from its margin.
+
+    Balancing the driving stress against a constant yield stress τ₀ integrates to
+    ``h(x) = √(2·τ₀·x/(ρ·g))`` — zero at the margin, rising as the square root of
+    the distance inland.  Used as a *cap* on the reconstructed pixel thickness:
+    the shared level surface of a solver cell is flat, which holds inside the
+    sheet and fails at its margin, where the surface must come down to the bed.
+    The cap binds within a kilometre or two of the edge and is inactive inland,
+    where a real sheet is thicker than this idealisation.
+
+    Args:
+        distance_m: Distance from the ice margin (m); negatives clip to zero.
+        gravity_m_s2: Surface gravity of the world.
+        basal_shear_stress_pa: Yield stress τ₀ (see the constant above).
+
+    Returns:
+        Maximum sustainable ice thickness (m), same shape as ``distance_m``.
+    """
+    distance = np.maximum(np.asarray(distance_m, dtype=np.float64), 0.0)
+    return np.asarray(
+        np.sqrt(2.0 * basal_shear_stress_pa * distance / (RHO_ICE_KG_M3 * gravity_m_s2)),
+        dtype=np.float64,
+    )
+
+
 def subgrid_ice_surface_level(bed_samples_m: np.ndarray, mean_ice_m: np.ndarray) -> np.ndarray:
     """Recover a cell's level surface from its bed hypsometry and mean ice.
 

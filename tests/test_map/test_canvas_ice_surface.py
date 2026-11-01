@@ -157,3 +157,27 @@ def test_partial_cells_use_support_thickness_and_conserve_volume():
         support_fraction=np.ones(bed.shape),
     )
     np.testing.assert_array_equal(full, same)
+
+
+class TestPlasticMarginThickness:
+    """塑性冰缘剖面：冰缘为零、按距离开方上升、随 ρg 跨世界变化。"""
+
+    def test_zero_at_the_margin_and_square_root_inland(self) -> None:
+        from dreamulator.map.canvas_ice_surface import plastic_margin_thickness
+
+        d = np.array([0.0, 90.0, 360.0, 5750.0])
+        h = plastic_margin_thickness(d, gravity_m_s2=10.28)
+        assert h[0] == 0.0
+        # 90 m 处约 39 m，5750 m 处约 312 m（τ₀ = 80 kPa，nacrea 的 g）
+        assert 35.0 < h[1] < 43.0
+        assert 300.0 < h[3] < 325.0
+        # 四倍距离给两倍厚度
+        assert h[2] / h[1] == pytest.approx(2.0, rel=1e-9)
+
+    def test_negative_distance_clips_and_gravity_scales(self) -> None:
+        from dreamulator.map.canvas_ice_surface import plastic_margin_thickness
+
+        assert float(plastic_margin_thickness(np.array([-5.0]), gravity_m_s2=9.81)[0]) == 0.0
+        weak = plastic_margin_thickness(np.array([1000.0]), gravity_m_s2=5.0)
+        earth = plastic_margin_thickness(np.array([1000.0]), gravity_m_s2=9.81)
+        assert weak[0] > earth[0]  # 重力弱 → 同样的屈服应力支撑更厚的冰
