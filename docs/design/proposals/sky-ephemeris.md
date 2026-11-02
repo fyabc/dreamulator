@@ -1,7 +1,11 @@
 # 天球星历查询（sky ephemeris）
 
-> **状态**：立案（2026-11-01，P2）。本文只记设计、里程碑与非目标；实现完成后
-> 蒸馏进 `pipelines/`。现有原语是 `engine/sky_geometry.py`（角径、天球位置、
+> **状态**：M1（引擎 + CLI）已实现（2026-11-02，分支 `feature/sky-ephemeris`：
+> `engine/ephemeris.py` + `cli_sky.py` + guard 查询注册，测试对齐冻结锚点）。
+> M2–M4 未动。框架与约定的单一事实源 = `engine/ephemeris.py` 模块 docstring 与
+> `knowledge/astrophysics/observer_sky_frames.md`。API 端点由既有的 guard 查询路由
+> 代持（`POST /api/guard/queries/sky_ephemeris`），专用 GET 随 M3 前端一并做。
+> 实现完成后本文蒸馏进 `pipelines/`。现有原语是 `engine/sky_geometry.py`（角径、天球位置、
 > 相位、本影），轨道根数在 `system_catalog.yaml` 的 `orbits:` 段；已有两体传播
 > 原型（视频侧消费）。目标：把「在时刻 T、从天体 B 的 (lat, lon) 看去，天空里
 > 有什么」做成引擎的第一性查询，渲染、FUI、前端星图与日历共用同一份结果。

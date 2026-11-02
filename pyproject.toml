@@ -138,6 +138,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 "src/dreamulator/cli_export_canvas.py" = ["B008"]
 "src/dreamulator/cli_data.py" = ["B008", "TC003"]
 "src/dreamulator/cli_ucc.py" = ["B008"]
+"src/dreamulator/cli_sky.py" = ["B008", "TC003"]
 # Typer evaluates `Path`/`Path | None` annotations at runtime (inspect.get_annotations),
 # so the import is a genuine runtime dependency, not a type-checking-only one.
 "src/dreamulator/cli_explore_seeds.py" = ["B008", "TC003"]
