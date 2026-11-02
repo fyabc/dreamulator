@@ -194,6 +194,21 @@ def _convergence_sentinel(
 # keep it at None and pay nothing.
 ORO_DIAG_LOG: list[dict[str, object]] | None = None
 
+# Set to a directory by a profiling script to have `_solve_moisture_budget`
+# write out the assembled budget matrix and its right-hand side, one `.npz` per
+# solve, so a solver can be timed against the real operator rather than a
+# synthetic one.  The matrix depends on the month's wind, the rain rate and the
+# diffusivity, all of which the stored mesh does not keep, so capturing it here
+# is the only way to benchmark on the real conditioning.  Production builds
+# keep it at None and pay nothing.
+BUDGET_MATRIX_DUMP_DIR: str | None = None
+
+# Set to a list by a diagnostic script to have the wet-trough loop append one
+# record per Picard pass: the cells and months whose wet increment hit the
+# amplitude cap, and that pass's monthly precipitation.  Used to locate where
+# the loop's gain exceeds one.  Production builds keep it at None and pay nothing.
+WET_TROUGH_DIAG_LOG: list[dict[str, np.ndarray]] | None = None
+
 
 # ---------------------------------------------------------------------------
 # Main entry point
@@ -1491,10 +1506,24 @@ def simulate_climate(
             # gate cannot stabilise it because saturated columns get f≈1).
             # DP_CAP_HPA is the same guard ④ v1/v2 use: the NCEP stationary-eddy
             # SLP climatology bound, i.e. the validity domain of a *linear*
-            # steady response — beyond it the solver's own premise is violated,
-            # so clipping is a numerical-stabilisation statement, not a tuning
-            # knob.  Clipped share is logged (v1 monitoring precedent).
-            _clip_frac = float((np.abs(_dp_wet_new) >= DP_CAP_HPA * 0.999).mean())
+            # steady response — beyond it the solver's own premise is violated.
+            # The cap bounds the pressure increment but does not give the loop a
+            # fixed point: run past three passes, the capped share and the
+            # precipitation keep drifting (Earth 0.39% → 4.18% of cell-months
+            # capped by pass 10, Köppen agreement 26.0% → 18.3%), so the pass
+            # count acts as a stopping point calibrated on Earth rather than as
+            # convergence — see wet_trough_iterations.  Clipped share is logged
+            # (v1 monitoring precedent).
+            _clipped = np.abs(_dp_wet_new) >= DP_CAP_HPA * 0.999
+            _clip_frac = float(_clipped.mean())
+            if WET_TROUGH_DIAG_LOG is not None:
+                WET_TROUGH_DIAG_LOG.append(
+                    {
+                        "clipped": _clipped.copy(),
+                        "dp_wet_uncapped_hpa": _dp_wet_new.astype(np.float32),
+                        "p_monthly_before_mm": p_monthly.astype(np.float32),
+                    }
+                )
             _dp_wet_new = np.clip(_dp_wet_new, -DP_CAP_HPA, DP_CAP_HPA)
             # ── Round 7: ω-gate composed off the SAME two-mode solve ──
             # The wet-trough solver already yields mid-level w for free; feed
@@ -1516,8 +1545,10 @@ def simulate_climate(
             # extratropical share; the waveguide share rides as the solver's
             # lower-level wind (tangent 3D via the local east/north basis),
             # under the same Picard relaxation as the ΔP increment.  The wind
-            # needs no cap of its own: the solver's momentum damping r₁ bounds
-            # it (round-4 equatorial winds stayed physical while ΔP diverged).
+            # has no cap of its own: the solver's momentum damping r₁ bounds the
+            # wind speed, but not the convergence that wind drives — from pass 3
+            # to pass 10 the uncapped coastal cells of Sumatra and Sulawesi go
+            # from 0.05–0.9 to 17–23 m/yr (2026-11-02).
             _vlo_new = (
                 _v_lower[:, :, 0][:, :, None] * _east_w[:, None, :]
                 + _v_lower[:, :, 1][:, :, None] * _north_w[:, None, :]
@@ -2629,7 +2660,7 @@ def _solve_moisture_budget(
     _cache = getattr(mesh, "_budget_cache", None)
     if _cache is not None and _cache.get("key") == _ck:
         _avg, edge_dir, l_m, area_m2, _h_eff = _cache["fields"]
-        _indices, _indptr, _order = _cache["struct"]
+        _indices, _indptr, _order, _elim = _cache["struct"]
     else:
         _cache = {"key": _ck}
         # Smooth the wind over the graph: large-scale moisture transport
@@ -2672,12 +2703,25 @@ def _solve_moisture_budget(
         # its CSC conversion yields a fixed slot order `_order` (source index
         # per CSC data slot).  Subsequent calls rebuild only the value vector
         # and index it, skipping the COO sort/dedup entirely.
-        _row0 = np.concatenate([np.arange(n), src])
-        _col0 = np.concatenate([np.arange(n), dst])
+        #
+        # The probe is laid out in a fill-reducing elimination order computed
+        # once from the mesh graph, so every assembled matrix already arrives
+        # permuted and SuperLU factorises it as it stands.  Every budget matrix
+        # in a build shares this pattern, so the order is reused about a
+        # hundred times; SuperLU's built-in minimum degree recomputed it on
+        # each call.  Nested dissection on nacrea's 200k mesh: 1.70 → 1.11 s
+        # per factorisation, results equal to round-off (2026-11-02).
+        from dreamulator.map.sparse_ordering import nested_dissection_order
+
+        _elim = nested_dissection_order(nodes_xyz, src, dst)
+        _position = np.empty(n, dtype=np.int64)
+        _position[_elim] = np.arange(n, dtype=np.int64)
+        _row0 = _position[np.concatenate([np.arange(n), src])]
+        _col0 = _position[np.concatenate([np.arange(n), dst])]
         _probe = sparse.coo_matrix((np.arange(n + len(src)), (_row0, _col0)), shape=(n, n)).tocsc()
         _indices, _indptr, _order = _probe.indices, _probe.indptr, _probe.data.astype(np.int64)
         _cache["fields"] = (_avg, edge_dir, l_m, area_m2, _h_eff)
-        _cache["struct"] = (_indices, _indptr, _order)
+        _cache["struct"] = (_indices, _indptr, _order, _elim)
         object.__setattr__(mesh, "_budget_cache", _cache)
     # The 40 Jacobi passes depend only on the wind field and the smoothing
     # operator, and the same field arrives repeatedly: each month is solved
@@ -2823,16 +2867,38 @@ def _solve_moisture_budget(
     _vals = np.concatenate([diag, _off_edge])
     a = sparse.csc_matrix((_vals[_order], _indices, _indptr), shape=(n, n))
 
+    if BUDGET_MATRIX_DUMP_DIR is not None:
+        from pathlib import Path as _Path
+
+        _dump = _Path(BUDGET_MATRIX_DUMP_DIR)
+        _dump.mkdir(parents=True, exist_ok=True)
+        _stamp = f"{os.getpid()}-{len(list(_dump.glob('budget-*.npz')))}"
+        np.savez(
+            _dump / f"budget-{_stamp}.npz",
+            data=a.data,
+            indices=a.indices,
+            indptr=a.indptr,
+            shape=np.array(a.shape),
+            rhs=e,
+            k_rain=k_rain_field,
+            elimination_order=_elim,
+        )
+
     from scipy.sparse.linalg import splu
 
-    # Column ordering: MMD_AT_PLUS_A + SymmetricMode — the budget matrix's
-    # pattern is structurally symmetric (the diffusion term gives every
-    # neighbour pair entries on both sides), and SuperLU rejects MMD_*
-    # orderings without SymmetricMode.  Measured 2026-09-27 on nacrea 200k
-    # (GW6 default-on): precipitation stage 674 → 403 s (−40%) vs default
-    # COLAMD, with cell aggregates bit-identical after 4-decimal storage
-    # truncation (pivot order shifts rounding below that layer only).
-    lu = splu(a, permc_spec="MMD_AT_PLUS_A", options={"SymmetricMode": True})
+    # The matrix is assembled in the elimination order above, so the column
+    # ordering is NATURAL.  SymmetricMode keeps SuperLU pivoting on the
+    # diagonal, which the pattern supports because it is structurally
+    # symmetric (the diffusion term gives every neighbour pair entries on both
+    # sides).  Pivot order moves rounding only, below the 4-decimal storage
+    # layer — the same criterion the earlier COLAMD → MMD switch was accepted
+    # on (2026-09-27).
+    lu = splu(a, permc_spec="NATURAL", options={"SymmetricMode": True})
+
+    def _solve(rhs: np.ndarray) -> np.ndarray:
+        out = np.empty(n, dtype=np.float64)
+        out[_elim] = lu.solve(rhs[_elim])
+        return out
 
     # Budyko land-recycling fixed point (see the module-level constants).  The
     # matrix A is independent of the evaporation source E, so factor once and
@@ -2844,7 +2910,7 @@ def _solve_moisture_budget(
         _e_pot_land = evaporation_rate(temperature_c, is_land, config.evaporation_base_mm)
         _e_land = e_land_init
         for _ in range(_LAND_RECYCLING_MAX_ITER):
-            w = lu.solve(e)
+            w = _solve(e)
             w = np.maximum(w, 0.0)
             p = w * k_rain_field + _oro_from_w(w)  # orographic rain feeds land ET
             _e_new = _e_pot_land * p / (_e_pot_land + p + 1e-9)
@@ -2854,7 +2920,7 @@ def _solve_moisture_budget(
             if _delta < _LAND_RECYCLING_TOL_MM:
                 break
 
-    w = lu.solve(e)
+    w = _solve(e)
     p_oro = _oro_from_w(w)  # from the solved (pre-trap) column water
 
     if ORO_DIAG_LOG is not None:

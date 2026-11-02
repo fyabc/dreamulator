@@ -639,14 +639,19 @@ class TerrainPipelineConfig:
     # Default ON (2026-09-27 user ruling): the measured cost is 2.9× (1091 s
     # earth; the old 6.4× figure predates D1), which the user exempted from the
     # ≤2× release bar — S1-S4 speed work is registered at raised priority.
-    # iterations 3→2 was measured and rejected (κ −4.3 pp, monsoon boxes fall
-    # out of band: the third Picard pass is what converges the trough
-    # amplitude).  nacrea same-physics regression PASS (island/mountains/ledger
-    # all held).  Known accepted residual: the West-Africa corridor family
-    # (Sahara/Sahel overshoot, spurious wet-trough over the Sahara, Guinea
-    # overshoot) is registered as a single-layer-framework limitation — three
-    # independent mechanism routes were falsified inside this framework.
-    # Full record: docs/design/proposals/climate-layer-improvement.md §5 and
+    # The loop has no fixed point: its gain exceeds one, the amplitude cap
+    # bounds the pressure increment but not the precipitation, and the pass
+    # count is a stopping point fitted on Earth (epistemic class: observation
+    # fit, calibration domain Earth).  Two passes scored κ −4.3 pp; ten passes
+    # lower the equal-weight Köppen class agreement from 26.0% to 18.3% and the
+    # wet-season phase match from 48.7% to 37.6%, so three sits near the best
+    # stopping point (2026-11-02, climate-engine-round.md 5.7).  nacrea
+    # same-physics regression PASS (island/mountains/ledger all held).  Known
+    # accepted residual: the West-Africa corridor family (Sahara/Sahel
+    # overshoot, spurious wet-trough over the Sahara, Guinea overshoot) is
+    # registered as a single-layer-framework limitation — three independent
+    # mechanism routes were falsified inside this framework.  Full record:
+    # docs/design/proposals/climate-layer-improvement.md §5 and
     # docs/design/profiling.md §2.1.
     wet_trough_enabled: bool = True
     wet_trough_relaxation: float = 0.5  # Picard under-relaxation of the ΔP wet increment

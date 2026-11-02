@@ -125,6 +125,12 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 > LU 结构性成本 ~210 s（降水段 60%），再往下只有 S5-full 粗网格（登记）或
 > GPU 服务器实验。
 >
+> **排序复用（2026-11-02）**：一次构建 100 次预算分解共用同一稀疏结构，现行排序
+> 改为网格上算一次的几何嵌套剖分（`map/sparse_ordering.py`），矩阵按消元顺序直接
+> 装配、`splu` 用 `NATURAL`。单次分解 1.70 → 1.11 秒，填充多 7% 但超节点更大；
+> 存储层逐位不变。100 次的构成与湿槽迭代不收敛的实测见
+> `proposals/climate-engine-round.md` 5.7。
+>
 > **内存画像**（进程树 RSS 轮询）：
 > 健康构建峰值 **3.3 GB**（降水 Picard 段，含单次 LU 因子 ~0.5 GB 瞬态）；
 > 每层 mesh 全量重存有 ~2.4-2.8 GB 尖峰（S4 削减对象）。MMD 排序下单 LU
