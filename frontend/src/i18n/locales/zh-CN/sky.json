@@ -1,0 +1,127 @@
+{
+  "title": {
+    "sky": "天球视图"
+  },
+  "staticModeHint": "天球视图需要后端引擎计算（时刻 × 观测点 × 观测者参数化查询），静态模式不可用。请在本地运行 `dreamulator serve` 后访问。",
+  "mode": {
+    "pan": "环视",
+    "disc": "全天"
+  },
+  "modeHint": {
+    "pan": "沉浸视图：拖动环视、滚轮/双指缩放视场",
+    "disc": "全天概览圆盘：一眼看全整半球与升落结构"
+  },
+  "pan": {
+    "fov": "视场",
+    "hint": "拖动环视 · 滚轮/双指缩放 · 点击天体"
+  },
+  "observer": {
+    "label": "观测者",
+    "lat": "纬度",
+    "lon": "经度",
+    "spinSource": "自转轴来源",
+    "solarDay": "太阳日"
+  },
+  "time": {
+    "epochDays": "自历元",
+    "solarDays": "太阳日",
+    "play": "播放",
+    "pause": "暂停",
+    "speed": "速度",
+    "speedUnit": "时/秒",
+    "day": "天",
+    "inputHint": "输入任意天数（回车确认）",
+    "sliderRange": "滑条范围 0–{{days}} 天",
+    "earthDays": "地球日",
+    "solarDaysShort": "太阳日",
+    "earthDaysShort": "地球日",
+    "unitSolar": "太阳日",
+    "unitEarth": "地球日",
+    "unitHint": "切换时间显示单位（太阳日 = 观测者本地日）",
+    "speedUnitSolar": "太阳日/秒",
+    "speedUnitEarth": "地球日/秒",
+    "epochHint": "时刻 = 历元 + N 天；表盘与输入框单位见右侧按钮",
+    "speedHint": "时间流逝速度（对数刻度，太阳日/秒 = 表盘自身单位）"
+  },
+  "chart": {
+    "cardinal": {
+      "N": "北",
+      "NE": "东北",
+      "E": "东",
+      "SE": "东南",
+      "S": "南",
+      "SW": "西南",
+      "W": "西",
+      "NW": "西北"
+    },
+    "altitude": "高度",
+    "azimuth": "方位",
+    "zenith": "天顶",
+    "belowHorizon": "地平线下",
+    "noRiseInfo": "拖动停止后显示升落"
+  },
+  "rise": {
+    "rises_sets": "有升有落",
+    "never_sets": "永不落下",
+    "never_rises": "永不升起",
+    "nextRise": "下次升起",
+    "nextSet": "下次落下",
+    "tableTitle": "升落年历",
+    "state": "状态"
+  },
+  "inspector": {
+    "title": "天体详情",
+    "none": "点击星图中的天体查看详情",
+    "phaseAngle": "相位角",
+    "illuminated": "盘面照亮",
+    "phaseFunction": "相位函数 Φ(α)",
+    "magnitude": "视星等",
+    "illuminance": "照度",
+    "distance": "距离",
+    "angularDiameter": "视径",
+    "altitudeRate": "高度变化率",
+    "elongationStar": "恒星星距",
+    "elongationParent": "母星距角",
+    "ra": "赤经",
+    "dec": "赤纬",
+    "eclipticLon": "黄经",
+    "eclipticLat": "黄纬"
+  },
+  "legend": {
+    "title": "图例",
+    "size": "圆盘大小 = 视径",
+    "starColor": "恒星颜色 = 色温",
+    "phase": "月牙 = 相位（亮缘朝恒星）",
+    "dim": "暗淡 = 肉眼不可见（≥6 等）"
+  },
+  "status": {
+    "loading": "正在计算天空…",
+    "error": "天球数据加载失败"
+  },
+  "dialog": {
+    "observer": {
+      "title": "观测设置"
+    },
+    "display": {
+      "title": "显示",
+      "grids": "坐标网格",
+      "panels": "信息面板"
+    }
+  },
+  "grids": {
+    "altAz": "地平网格",
+    "equatorial": "赤道网格（含天赤道）",
+    "ecliptic": "黄道线"
+  },
+  "panels": {
+    "below": "地平线下列表",
+    "almanac": "升落年历"
+  },
+  "ui": {
+    "back": "返回世界页",
+    "help": "帮助（新窗口）"
+  },
+  "info": {
+    "close": "取消选择"
+  }
+}

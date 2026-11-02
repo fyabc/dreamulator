@@ -6,6 +6,8 @@ interface BranchSelectorProps {
   worldName: string
   selectedBranch: string | null
   onSelect: (branch: string | null) => void
+  /** Tight layout for dialogs: label above a full-width select, no meta. */
+  compact?: boolean
 }
 
 const LAYER_LABELS: Record<string, string> = {
@@ -22,6 +24,7 @@ export default function BranchSelector({
   worldName,
   selectedBranch,
   onSelect,
+  compact,
 }: BranchSelectorProps) {
   const { t } = useTranslation('worlds')
   const { data: branches } = useQuery({
@@ -34,6 +37,28 @@ export default function BranchSelector({
 
   if (!branches || branches.length === 0) {
     return null
+  }
+
+  if (compact) {
+    return (
+      <label className="block space-y-1 min-w-0">
+        <span className="text-[11px] text-gray-500">{t('branch.label')}</span>
+        <select
+          value={selectedBranch ?? ''}
+          onChange={(e) => onSelect(e.target.value || null)}
+          className="w-full min-w-0 bg-space-bg border border-space-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-neon-cyan transition-colors"
+          aria-label={t('label.selectBranch')}
+          title={t('branch.hint')}
+        >
+          <option value="">{t('label.baseWorld')}</option>
+          {branches.map((b) => (
+            <option key={b.name} value={b.name}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
   }
 
   return (

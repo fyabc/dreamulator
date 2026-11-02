@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build_fact_context"]
+__all__ = ["build_fact_context", "load_entities"]
 
 # body 顶层保留键（不参与拍平，避免被 physical/orbit/derived 覆盖）。
 _BODY_IDENTITY_KEYS = (
@@ -90,7 +90,7 @@ def _flatten_body(body: dict[str, Any]) -> dict[str, Any]:
     return entity
 
 
-def _load_entities(catalog: dict[str, Any]) -> dict[str, Any]:
+def load_entities(catalog: dict[str, Any]) -> dict[str, Any]:
     """Key celestial bodies by stable ID (stars as-is, bodies flattened).
 
     A body's ``orbits:`` entry merges over the flattened body: the top-level
@@ -177,7 +177,7 @@ def build_fact_context(world_dir: Path, branch: str | None = None) -> dict[str, 
         return None
 
     return {
-        "entities": _load_entities(catalog),
+        "entities": load_entities(catalog),
         "aggregates": _load_aggregates(resolver),
         "spatial": {},
         # The target body's sky view (angular diameters / magnitudes / eclipse),

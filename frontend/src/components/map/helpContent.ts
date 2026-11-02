@@ -457,6 +457,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     render: (t) => entryKeys('globeViewer', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
+    id: 'sky-viewer',
+    title: 'help:section.skyViewer.title',
+    icon: '✨',
+    render: (t) => entryKeys('skyViewer', 4).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+  },
+  {
     id: 'civmap',
     title: 'help:section.civmap.title',
     icon: '🏛️',

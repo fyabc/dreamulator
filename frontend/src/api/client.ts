@@ -5,6 +5,7 @@ import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
+import type { SkyEphemerisResult } from '../viewers/sky/types'
 
 const API_BASE = '/api'
 
@@ -629,6 +630,62 @@ const readApi = {
     fetchJson<ProbeResult>(
       `/packs/${encodeURIComponent(pack)}/probe?lat=${lat}&lon=${lon}`,
     ),
+
+  // ---- Sky ephemeris (observer's sky) — API-only: the output is
+  // parameterized (observer × lat × lon × time), so it has no static mirror
+  // (same posture as packs); the page guards static mode.
+
+  getSky: (name: string, params: {
+    from?: string | null
+    lat?: number
+    lon?: number
+    at?: number
+    targets?: string[] | null
+    includeEvents?: boolean
+    branch?: string | null
+  }) =>
+    fetchJson<SkyEphemerisResult>(
+      `/worlds/${encodeURIComponent(name)}/sky?${skyQueryString(params)}`,
+    ),
+}
+
+/** Build the sky endpoint query string (exported for the fast-path fetch). */
+export function skyQueryString(params: {
+  from?: string | null
+  lat?: number
+  lon?: number
+  at?: number
+  targets?: string[] | null
+  includeEvents?: boolean
+  branch?: string | null
+}): string {
+  const q = new URLSearchParams()
+  if (params.from) q.set('from', params.from)
+  if (params.lat !== undefined) q.set('lat', String(params.lat))
+  if (params.lon !== undefined) q.set('lon', String(params.lon))
+  if (params.at !== undefined) q.set('at', String(params.at))
+  if (params.targets && params.targets.length > 0) q.set('targets', params.targets.join(','))
+  if (params.includeEvents !== undefined) q.set('include_events', String(params.includeEvents))
+  if (params.branch) q.set('branch', params.branch)
+  return q.toString()
+}
+
+/** Latest-wins slider fast path (include_events=false), abortable; bypasses
+ *  react-query so drags never churn its cache (probeSeq precedent). */
+export async function fetchSkyFast(
+  name: string,
+  params: Parameters<typeof api.getSky>[1],
+  signal?: AbortSignal,
+): Promise<SkyEphemerisResult> {
+  const response = await fetch(
+    `${API_BASE}/worlds/${encodeURIComponent(name)}/sky?${skyQueryString({ ...params, includeEvents: false })}`,
+    { signal, headers: { 'Content-Type': 'application/json' } },
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return (await response.json()) as SkyEphemerisResult
 }
 
 export const api = {

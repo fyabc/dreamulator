@@ -490,3 +490,48 @@ def test_query_registered() -> None:
     by_name = {q["name"]: q for q in list_queries()}
     assert "sky_ephemeris" in by_name
     assert by_name["sky_ephemeris"]["dimension"] == "sky"
+
+
+# ---------------------------------------------------------------------------
+# Slider fast path (include_events=False)
+# ---------------------------------------------------------------------------
+
+
+def test_fast_path_matches_full_positions() -> None:
+    full = sky_ephemeris(ENTITIES, "satellite_nacrea", 0.0, 0.0, T_DAWN)
+    fast = sky_ephemeris(ENTITIES, "satellite_nacrea", 0.0, 0.0, T_DAWN, include_events=False)
+    assert len(fast.targets) == len(full.targets)
+    for full_row, fast_row in zip(full.targets, fast.targets, strict=True):
+        assert fast_row.body_id == full_row.body_id
+        # Everything the chart draws is byte-identical; only events vanish.
+        for field in (
+            "altitude_deg",
+            "azimuth_deg",
+            "distance_km",
+            "angular_diameter_deg",
+            "apparent_magnitude",
+            "phase_angle_deg",
+        ):
+            assert getattr(fast_row, field) == getattr(full_row, field)
+        assert fast_row.rise_state is None
+        assert fast_row.next_rise_days is None
+        assert fast_row.next_set_days is None
+
+
+def test_fast_path_rate_matches_full_path() -> None:
+    full = sky_ephemeris(ENTITIES, "satellite_nacrea", 0.0, 0.0, T_DAWN)
+    fast = sky_ephemeris(ENTITIES, "satellite_nacrea", 0.0, 0.0, T_DAWN, include_events=False)
+    star_full = next(r for r in full.targets if r.body_id == "star_ignis")
+    star_fast = next(r for r in fast.targets if r.body_id == "star_ignis")
+    assert abs(star_fast.altitude_rate_deg_per_hr) > 1.0  # dawn: the sun climbs
+    assert star_fast.altitude_rate_deg_per_hr == pytest.approx(
+        star_full.altitude_rate_deg_per_hr, rel=0.02
+    )
+    # The sign is physical: at dawn the star is rising.
+    assert star_fast.altitude_rate_deg_per_hr > 0.0
+
+
+def test_events_default_on() -> None:
+    from dreamulator.engine.ephemeris import SkyEphemerisParams
+
+    assert SkyEphemerisParams(observer_id="satellite_nacrea").include_events is True

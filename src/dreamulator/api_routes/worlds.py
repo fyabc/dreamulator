@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from dreamulator import doc_render
+from dreamulator.engine.ephemeris import sky_ephemeris
+from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import WorldManager
 
 if TYPE_CHECKING:
@@ -282,6 +285,100 @@ def get_system_catalog(world_name: str, branch: str | None = None) -> dict[str, 
             status_code=404, detail="system_catalog.yaml not found — run dreamulator build"
         )
     return catalog
+
+
+#: Sky-entities cache cap — one entry per (world, branch), stat-validated.
+_SKY_CACHE_CAP = 8
+_SKY_ENTITIES: OrderedDict[tuple[str, str | None], tuple[int, int, dict[str, Any], str | None]] = (
+    OrderedDict()
+)
+
+
+def _sky_entities(
+    world_name: str, world_dir: Path, branch: str | None
+) -> tuple[dict[str, Any], str | None]:
+    """Entities (+ default observer) for the sky query, cached per (world, branch).
+
+    Re-parsing the catalog costs ~135 ms per call — fatal under a time slider
+    polling the fast path — so the parsed table is kept until the yaml's
+    (mtime_ns, size) changes; same always-fresh posture as the packs npy cache.
+    """
+    derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
+    if derived_dir is None:
+        raise HTTPException(status_code=404, detail="astronomy derived layer not found")
+    catalog_path = derived_dir / "system_catalog.yaml"
+    if not catalog_path.exists():
+        raise HTTPException(
+            status_code=404, detail="system_catalog.yaml not found — run dreamulator build"
+        )
+    stat = catalog_path.stat()
+    fingerprint = (stat.st_mtime_ns, stat.st_size)
+    key = (world_name, branch)
+    cached = _SKY_ENTITIES.get(key)
+    if cached is not None and cached[0] == fingerprint[0] and cached[1] == fingerprint[1]:
+        _SKY_ENTITIES.move_to_end(key)
+        return cached[2], cached[3]
+    catalog = _load_yaml(catalog_path)
+    if not isinstance(catalog, dict):
+        raise HTTPException(status_code=404, detail="system_catalog.yaml is unreadable")
+    entities = load_entities(catalog)
+    target = catalog.get("target_body_id")
+    target_id = str(target) if target else None
+    _SKY_ENTITIES[key] = (*fingerprint, entities, target_id)
+    _SKY_ENTITIES.move_to_end(key)
+    while len(_SKY_ENTITIES) > _SKY_CACHE_CAP:
+        _SKY_ENTITIES.popitem(last=False)
+    return entities, target_id
+
+
+@router.get("/{world_name}/sky")
+def get_sky(
+    world_name: str,
+    from_: str | None = Query(default=None, alias="from"),
+    lat: float = 0.0,
+    lon: float = 0.0,
+    at: float = 0.0,
+    targets: str | None = None,
+    include_events: bool = True,
+    branch: str | None = None,
+) -> dict[str, Any]:
+    """The observer's sky above one surface point (sky-ephemeris proposal §3).
+
+    Serves ``engine.ephemeris.sky_ephemeris`` (its result verbatim, no
+    envelope).  ``include_events=false`` is the slider fast path (~1 ms vs
+    ~1 s); see the engine module for the frame conventions.  API-only by
+    design: the output is parameterized, so it has no static mirror (packs
+    precedent).
+    """
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    entities, default_observer = _sky_entities(world_name, world_dir, branch)
+    observer = from_ if from_ is not None else default_observer
+    if observer is None:
+        raise HTTPException(
+            status_code=422,
+            detail="no observer given and the catalog has no target_body_id — pass ?from=",
+        )
+    target_ids = None
+    if targets is not None:
+        target_ids = [t.strip() for t in targets.split(",") if t.strip()] or None
+    try:
+        result = sky_ephemeris(
+            entities,
+            observer,
+            lat,
+            lon,
+            at,
+            targets=target_ids,
+            include_events=include_events,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"unknown body: {e}") from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return dict[str, Any](result.model_dump())
 
 
 @router.get("/{world_name}/habitable-zones")
