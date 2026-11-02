@@ -254,6 +254,30 @@ dreamulator narrate earth --branch pangea  # 分支描述
 
 ---
 
+## 天球星历（sky）
+
+`sky` 回答「在时刻 T、从天体 B 的 (lat, lon) 看去，天空里有什么」：每个目标天体
+（恒星、行星、卫星）的高度/方位、黄道与赤道坐标、视直径、相位与照亮、视星等与照度、
+距角、升落状态与高度变化率。引擎实现是 `engine/ephemeris.py`（纯模块），经 guard 查询
+注册表暴露（`POST /api/guard/queries/sky_ephemeris`）；`--json` 输出即消费方（视频
+镜头规划、FUI 数据卡、前端星图）读取的载荷。
+
+```bash
+# 永耀岛新机位在 EP1 冻结时刻的天空（表格）
+uv run dreamulator sky nacrea --from satellite_nacrea     --lat -0.106 --lon 1.121 --at 61.979
+
+# 同一查询的 JSON（--targets 省略 = 除观测者外全部天体）
+uv run dreamulator sky nacrea --from satellite_nacrea     --at 61.979 --targets planet_aegis,satellite_cadence --json
+```
+
+选项：`--from`（观测天体，缺省取 catalog 的 `target_body_id`）、`--lat/--lon`
+（观测点，北正东正）、`--at`（catalog 历元起的天数）、`--targets`（逗号分隔或
+`all`）、`--branch`、`--data-dir`、`--json`。
+
+坐标系与约定（黄道/本体赤道/站心 ENU、自转轴阶梯、历元零点、升落窗口）见
+`docs/knowledge/astrophysics/observer_sky_frames.md`。注意：观测天体的自转轴方位
+不可导出时（catalog 会警告，如 nacrea 的 Aegis）查询明确报错，而不是猜一个方位。
+
 ## 守护轴（guard）
 
 守护轴（Harness）是校验 / 审计 / 设定维护的**第三条轨道**（总纲见 `docs/design/proposals/harness.md`）。

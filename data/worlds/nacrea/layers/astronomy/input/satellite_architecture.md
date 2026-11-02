@@ -18,7 +18,7 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| Nacrea 轨道位置 | {{ (entities.satellite_nacrea.semi_major_axis_au * 149597870.7) | group }} km（10.15 R_p） | YAML stellar.yaml |
+| Nacrea 轨道位置 | {{ (entities.satellite_nacrea.semi_major_axis_au * 149597870.7) | group }} km（{{ ((entities.satellite_nacrea.semi_major_axis_au * 149597870.7) / entities.planet_aegis.radius_km) | round(2) }} R_p） | YAML stellar.yaml |
 | 占顺行稳定区 | **{{ (entities.satellite_nacrea.a_rh_ratio / 0.48 * 100) | round1 }}%** | a/R_H ÷ 顺行稳定极限 0.48（Domingos 2006） |
 | Nacrea 外侧空间 | **~1,076,000 km**（标称） | 由韵珠（轨道 {{ (entities.satellite_cadence.semi_major_axis_au * 149597870.7) | round0 }} km）与守珠（轨道 {{ (entities.satellite_vigil.semi_major_axis_au * 149597870.7) | round0 }} km，内迁构型）两颗单体逆行捕获卫占据 |
 
