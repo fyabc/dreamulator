@@ -43,7 +43,21 @@ def _make_canvas(root: Path) -> CanvasGeometry:
             y = geom.half_km - (ci * T + r + 0.5) * px
             dem = 200.0 + 0.01 * x + 0.005 * y
             dem = np.where(y < -150.0, -50.0, dem)
+            # A closed sub-sea-level basin touching the canvas's EAST edge in
+            # geological-land cells: boundary-connected, so the boundary-only
+            # rule paints it as sea; the geological anchor must keep it land.
+            gr = ci * T + r
+            gc = cj * T + c
+            dem = np.where((gr >= 100) & (gr <= 500) & (gc >= 4060), -80.0, dem)
             np.save(root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy", dem.astype(np.int16))
+
+    # Geological ocean in the southern coarse row (the y < -150 km sea band);
+    # land elsewhere, including the east-edge basin's cells.
+    n = geom.ncell
+    conditioning = np.full((n, n), 100.0, dtype=np.float32)
+    conditioning[-1, :] = -100.0
+    (root / "conditioning").mkdir()
+    np.save(root / "conditioning" / "heightmap.npy", conditioning)
 
     n = geom.ncell
     ii, jj = np.mgrid[0:n, 0:n]
@@ -113,6 +127,10 @@ def test_crop_canvas_window(tmp_path: Path) -> None:
     sea = mask("sea-water.png")
     assert sea.shape == (128, 128)
     assert 0.0 < float(sea.mean()) < 0.5
+    # The east-edge basin is boundary-connected but geologically land: the
+    # anchored rule keeps it off the rendered sea (the northern half of the
+    # window has no water at all without it).
+    assert not sea[:64].any()
     lake = mask("lake.png")
     assert bool(lake[64, 64])
     rivers = mask("rivers.png")

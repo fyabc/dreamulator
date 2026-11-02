@@ -37,6 +37,7 @@ from dreamulator.map.td_canvas import PX_PER_CELL, CanvasGeometry
 from dreamulator.media.canvas_hydrology_tiled import _local_flood
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from dreamulator.map.canvas_marine import SeaConnectivity
@@ -129,32 +130,80 @@ def _declares_sea_mask(store: CanvasStore) -> bool:
     return isinstance(sea_mask, dict) and str(sea_mask.get("version", "")) == SEA_MASK_VERSION
 
 
-def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> SeaConnectivity:
-    """Connected sea on the installed surface, seeded at the canvas's open boundary.
+@dataclass(frozen=True)
+class AnchoredSea:
+    """Sea of the installed surface: boundary-linked and geologically oceanic.
 
-    Water is every pixel at or below sea level.  The seeds are water pixels on
-    the open boundary the fill itself honours — the outer edges of the chunk
-    grid and the edges facing a missing chunk.  A water body that reaches one
-    of them is sea; anything else is an inland low, whatever the coarse
-    geological conditioning says about its 23 km cell.
+    ``boundary`` holds the water bodies that reach the canvas's open boundary,
+    ``geological`` the bodies that contain a pixel inside a 23 km
+    geological-ocean cell.  Both passes run on the same water mask, so they
+    partition it into the same bodies and the intersection picks the bodies
+    that pass both tests.
+    """
 
-    The canvas's own water, not its bed: hydrology runs on the installed
-    surface, where grounded ice can close a basin that the sub-ice bed links
-    to the ocean.  Without the coarse seeds, quantization pits inside shallow
-    shelf cells are no longer outlets, so rivers are not cut off in what is
-    in fact a closed hollow.
+    boundary: SeaConnectivity
+    geological: SeaConnectivity
+
+    def mask(self, key: tuple[int, int], water: np.ndarray) -> np.ndarray:
+        """Sea pixels of a chunk, from the same water mask used to connect it."""
+        return np.asarray(
+            self.boundary.mask(key, water) & self.geological.mask(key, water), dtype=bool
+        )
+
+
+def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) -> np.ndarray:
+    """23 km geological-ocean cells of the canvas conditioning (True = ocean)."""
+    path = root / "conditioning" / "heightmap.npy"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} is missing: the canvas declares the connected-sea product, "
+            "and the geological-ocean anchor needs the conditioning heightmap. "
+            "Ship conditioning/heightmap.npy with the canvas."
+        )
+    grid = np.asarray(np.load(path))
+    ncell = geometry.ncell
+    if grid.shape != (ncell, ncell):
+        raise ValueError(
+            f"conditioning heightmap {path} has shape {grid.shape}, expected "
+            f"{(ncell, ncell)} (one value per 23 km cell)"
+        )
+    return grid <= sea_level
+
+
+def _cell_span(start: int, stop: int) -> tuple[np.ndarray, np.ndarray]:
+    """23 km cell indices covering pixels [start, stop) and their pixel counts."""
+    ks = np.arange(start // PX_PER_CELL, -(-stop // PX_PER_CELL))
+    counts = np.minimum((ks + 1) * PX_PER_CELL, stop) - np.maximum(ks * PX_PER_CELL, start)
+    return ks, counts
+
+
+def _anchored_sea(
+    keys: list[tuple[int, int]],
+    load: Callable[[tuple[int, int]], np.ndarray],
+    tile: int,
+    geo: np.ndarray,
+    sea_level: float,
+    *,
+    workers: int = 8,
+) -> AnchoredSea:
+    """Both connectivity passes of the anchored sea over one chunk list.
+
+    ``load`` returns a chunk's raw surface and is called once per pass.  The
+    boundary pass seeds the open boundary the fill itself honours — the outer
+    edges of the chunk grid and the edges facing a missing chunk; the
+    geological pass seeds the pixels inside 23 km geological-ocean cells of
+    ``geo``, upsampled to native resolution.
     """
     from dreamulator.map.canvas_marine import connect_sea
 
-    keys = list(store.chunks)
     present = set(keys)
     rows = {ci for ci, _ in keys}
     cols = {cj for _, cj in keys}
     rmin, rmax, cmin, cmax = min(rows), max(rows), min(cols), max(cols)
 
-    def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+    def read_boundary(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
         ci, cj = key
-        water = store.raw(ci, cj) <= sea_level
+        water = load(key) <= sea_level
         seed = np.zeros_like(water)
         if ci == rmin:
             seed[0, :] = True
@@ -174,7 +223,51 @@ def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> Se
                 seed[sl] = True
         return water, water & seed
 
-    return connect_sea(keys, read, workers=workers)
+    def read_geological(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+        ci, cj = key
+        water = load(key) <= sea_level
+        rk, rcount = _cell_span(ci * tile, (ci + 1) * tile)
+        ck, ccount = _cell_span(cj * tile, (cj + 1) * tile)
+        geo_px = np.repeat(np.repeat(geo[np.ix_(rk, ck)], rcount, axis=0), ccount, axis=1)
+        return water, water & geo_px
+
+    return AnchoredSea(
+        boundary=connect_sea(keys, read_boundary, workers=workers),
+        geological=connect_sea(keys, read_geological, workers=workers),
+    )
+
+
+def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> AnchoredSea:
+    """Connected sea on the installed surface, anchored to the geological ocean.
+
+    Water is every pixel at or below sea level.  Two out-of-core connectivity
+    passes run on that same water mask:
+
+    * the boundary pass seeds the open boundary the fill itself honours — the
+      outer edges of the chunk grid and the edges facing a missing chunk;
+    * the geological pass seeds the pixels inside 23 km geological-ocean cells
+      (``conditioning/heightmap.npy`` at or below sea level, upsampled to native
+      resolution).
+
+    A water body is sea when it passes both tests.  Boundary reach alone would
+    make a sea out of an inland closed basin that happens to touch the canvas's
+    artificial edge — canvases overlap, so one canvas's boundary runs through
+    another's interior.  Geological contact alone is the coarse-seed rule,
+    which misjudges ice-dammed hollows and ponds inside shallow shelf cells.
+    Each condition closes the other's failure mode, with no new parameter.
+
+    The canvas's own water, not its bed: hydrology runs on the installed
+    surface, where grounded ice can close a basin that the sub-ice bed links
+    to the ocean.
+    """
+    return _anchored_sea(
+        list(store.chunks),
+        lambda key: store.raw(*key),
+        store.tile,
+        _geological_ocean(store.root, store.geometry, sea_level),
+        sea_level,
+        workers=workers,
+    )
 
 
 def chunk_ocean(
@@ -183,14 +276,15 @@ def chunk_ocean(
     dem: np.ndarray,
     sea_level: float,
     *,
-    sea: SeaConnectivity | None = None,
+    sea: SeaConnectivity | AnchoredSea | None = None,
 ) -> np.ndarray:
     """Open sea per pixel.
 
-    With ``sea`` (the canvas's surface connectivity) the outlet is water that
-    reaches the canvas's open boundary, minus the product's inland lows.
-    Without it — a canvas that does not declare the connected-sea product —
-    the legacy rule keeps every pixel at or below sea level as an outlet.
+    With ``sea`` (the canvas's anchored surface connectivity) the outlet is
+    water that reaches the canvas's open boundary inside a geologically oceanic
+    body, minus the product's inland lows.  Without it — a canvas that does
+    not declare the connected-sea product — the legacy rule keeps every pixel
+    at or below sea level as an outlet.
     """
     water = dem <= sea_level
     if sea is None:
@@ -210,7 +304,7 @@ def _external_mask(
     sea_level: float,
     *,
     healed: np.ndarray | None = None,
-    sea: SeaConnectivity | None = None,
+    sea: SeaConnectivity | AnchoredSea | None = None,
 ) -> np.ndarray:
     ci, cj = key
     # Connected sea is the outlet; dry inland lows below sea level are not.
@@ -360,7 +454,7 @@ def run_canvas_fill(
     if _declares_sea_mask(store):
         sea = surface_sea(store, sea_level)
         if verbose:
-            print("[hydrology] sea: surface connectivity from the canvas's open boundary")
+            print("[hydrology] sea: boundary connectivity anchored to the geological ocean")
 
     # Stage 1: local flood per chunk; summaries on disk.
     summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}
