@@ -209,6 +209,14 @@ BUDGET_MATRIX_DUMP_DIR: str | None = None
 # the loop's gain exceeds one.  Production builds keep it at None and pay nothing.
 WET_TROUGH_DIAG_LOG: list[dict[str, np.ndarray]] | None = None
 
+# Set by an intervention script to a (12, n, 3) array of monthly tangent wind
+# vectors (engine month order, March first) to replace the model wind wherever
+# the moisture budget consumes it, initial pass and wet-trough passes alike.
+# Used to measure how much of the precipitation error the wind carries, by
+# solving the budget under an observed wind; a diagnostic intervention only
+# (discipline 8), never a product input.  Production builds keep it at None.
+PRESCRIBED_BUDGET_WIND_MONTHLY: np.ndarray | None = None
+
 
 # ---------------------------------------------------------------------------
 # Main entry point
@@ -3363,6 +3371,9 @@ def _compute_precipitation_monthly_budget(
     Returns:
         (p_annual_mm shape (N,), p_monthly_mm shape (N, 12)).
     """
+    if PRESCRIBED_BUDGET_WIND_MONTHLY is not None:
+        wind_monthly = np.asarray(PRESCRIBED_BUDGET_WIND_MONTHLY, dtype=np.float64)
+        wind = wind_monthly.mean(axis=0)
     n = mesh.num_cells
     lat_rad = np.radians(np.array([c.lat for c in mesh.cells], dtype=np.float64))
     lon_rad = np.radians(np.array([c.lon for c in mesh.cells], dtype=np.float64))
