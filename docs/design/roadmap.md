@@ -108,7 +108,7 @@
 | P1 | **M3 结果契约与 UCC 第四步**（分类导出 + 着色 + 用途验证；前三步已收口） | ~1 周 | ★★★★ |
 | P2 | **M4 有边界的世界创作扩展**（四选一真实用户任务驱动；16 份 proposal 状态整理随后） | 按所选任务 | ★★★ |
 | P2 | **气候 rethinking 机制侧**（M2 实施框架 = ▶ 主线的阶段 A–E；输入契约/账本/迁移已收口，输送场主病待 GW6 域前置后的重标定轮） | 随主线 | ★★★★★ |
-| P1 | **气候引擎速度与准确度轮**（原「降水预算加速」，2026-11-01 扩成速度加准确度的同一轮，提案 [climate-engine-round.md](proposals/climate-engine-round.md)）：实测 nacrea 根世界气候 435 s，降水 297 s（其中稀疏 LU 分解 171 s）、洋流 62 s；阶段 0 评分卡与 Beck 2023 口径、阶段 1 数值等价提速、阶段 2 两套网格结构决策、阶段 3 每轮一个闭合。作者 11-01 裁决速度不是硬门槛。验收口径见 [气候验证 §8](pipelines/climate-validation.md#8-引擎改动的验收标准) | 2–3 周 | ★★★★；分出提案 [季节热容量闭合](proposals/seasonal-heat-capacity-closure.md)（短年世界的季节振幅受单层 C 结构约束，地球已双重标定，暂无独立证据可判决）；降水段入口分出提案 [由气压场推地面风](proposals/surface-wind-from-pressure.md)（风向吻合 52.2%、东边界沿岸风弱 7–17 倍且两处反向，为沿岸上升流与冷舌的共同前提） |
+| P1 | **气候引擎速度与准确度轮**（原「降水预算加速」，2026-11-01 扩成速度加准确度的同一轮，提案 [climate-engine-round.md](proposals/climate-engine-round.md)）：实测 nacrea 根世界气候 435 s，降水 297 s（其中稀疏 LU 分解 171 s）、洋流 62 s；阶段 0 评分卡与 Beck 2023 口径、阶段 1 数值等价提速、阶段 2 两套网格结构决策、阶段 3 每轮一个闭合。作者 11-01 裁决速度不是硬门槛。验收口径见 [气候验证 §8](pipelines/climate-validation.md#8-引擎改动的验收标准) | 2–3 周 | ★★★★；分出提案 [季节热容量闭合](proposals/seasonal-heat-capacity-closure.md)（短年世界的季节振幅受单层 C 结构约束，地球已双重标定，暂无独立证据可判决）；湿槽回路无定点（三轮是按地球拟合的停止点），替换方案分出提案 [湿静力能辐合闭合](proposals/moist-static-energy-convergence.md)；降水段入口分出提案 [由气压场推地面风](proposals/surface-wind-from-pressure.md)（风向吻合 52.2%、东边界沿岸风弱 7–17 倍且两处反向，为沿岸上升流与冷舌的共同前提） |
 | P2 | **宽 Hadley 体制下副热带过干**（GCM 交叉核查：nacrea 副热带降水约为 GCM 的三分之一，地球同纬带正常，属体制外推问题；首要线索为背景信风，先做规定低层风的干预实验）→ `audit/wave6-gcm-ebm-crosscheck.md` + `proposals/climate-layer-improvement.md` §7；同处登记高纬陆地季节振幅偏弱 | 随气候层开发 | ★★★★ |
 
 ### 既有待办
