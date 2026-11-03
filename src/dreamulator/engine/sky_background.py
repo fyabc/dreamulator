@@ -29,6 +29,8 @@ from dreamulator.models.sky_background import (
     StarfieldSpec,
     TransientEvent,
     TransientEventDerived,
+    WanderingObject,
+    WanderingObjectDerived,
 )
 
 # Bolometric magnitude of the Sun; the magnitude derived from luminosity is a
@@ -120,6 +122,7 @@ def derive_star(star: BackgroundStar) -> BackgroundStarDerived:
         temperature_k=star.temperature_k,
         unit=unit_vector_ecliptic(star.ecliptic_lon_deg, star.ecliptic_lat_deg),
         source=source,
+        variability=star.variability,
     )
 
 
@@ -153,6 +156,19 @@ def derive_event(event: TransientEvent) -> TransientEventDerived:
     )
 
 
+def derive_wandering(obj: WanderingObject) -> WanderingObjectDerived:
+    return WanderingObjectDerived(
+        id=obj.id,
+        name=obj.name,
+        object_type=obj.object_type,
+        unit=unit_vector_ecliptic(obj.ecliptic_lon_deg, obj.ecliptic_lat_deg),
+        distance_pc=obj.distance_pc,
+        magnitude=obj.magnitude,
+        close_approach_au=obj.close_approach_au,
+        encounter_age_myr=obj.encounter_age_myr,
+    )
+
+
 def derive_sky_background(source: SkyBackgroundInput) -> SkyBackgroundDerived:
     """Input → derived: resolve magnitudes, freeze directions as unit vectors,
     and append the seeded star field to the authored stars."""
@@ -165,4 +181,5 @@ def derive_sky_background(source: SkyBackgroundInput) -> SkyBackgroundDerived:
         deep_sky=[derive_deep_sky(d) for d in source.deep_sky],
         galactic_band=derive_band(source.galactic_band) if source.galactic_band else None,
         transient_events=[derive_event(e) for e in source.transient_events],
+        wandering_objects=[derive_wandering(o) for o in source.wandering_objects],
     )

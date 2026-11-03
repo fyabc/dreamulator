@@ -58,6 +58,10 @@ export interface SkyPanChartProps {
   onSelect: (bodyId: string) => void
   /** Clean tap on empty sky (deselect). */
   onBackgroundSelect?: () => void
+  /** Selected background object (universe-setting star/DSO); draws its ring. */
+  selectedBgId?: string | null
+  /** Tap on an authored background star / deep-sky sprite. */
+  onBgSelect?: (id: string) => void
 }
 
 export default function SkyPanChart({
@@ -76,6 +80,8 @@ export default function SkyPanChart({
   onHover,
   onSelect,
   onBackgroundSelect,
+  selectedBgId = null,
+  onBgSelect,
 }: SkyPanChartProps) {
   const { t } = useTranslation('sky')
   const svgRef = useRef<SVGSVGElement>(null)
@@ -260,10 +266,14 @@ export default function SkyPanChart({
       setDragging(false)
       if (!movedRef.current) {
         // Pointer capture retargets the click to the SVG, so resolve the
-        // press target ourselves: a body marker selects it, empty sky clears.
+        // press target ourselves: a body marker selects it, an authored
+        // background object selects that, empty sky clears.
         const hit = (downTargetRef.current as Element | null)?.closest?.('[data-body-id]')
         const bodyId = hit?.getAttribute('data-body-id')
+        const bgHit = (downTargetRef.current as Element | null)?.closest?.('[data-bg-id]')
+        const bgId = bgHit?.getAttribute('data-bg-id')
         if (bodyId) onSelect(bodyId)
+        else if (bgId) onBgSelect?.(bgId)
         else onBackgroundSelect?.()
       } else if (dirtyRef.current) {
         dirtyRef.current = false
@@ -312,6 +322,8 @@ export default function SkyPanChart({
           project={(v) => projector.projectDir(v)}
           fovDeg={projector.look.fovDeg}
           height={height}
+          interactive
+          selectedBgId={selectedBgId}
         />
       )}
       {gridLayers.map((layer, i) => (

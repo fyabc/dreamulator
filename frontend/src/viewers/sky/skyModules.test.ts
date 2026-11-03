@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { applyMat3, fitRotation, type FramePair } from './frameFit'
 import { graticulePaths, greatCirclePaths } from './graticule'
-import { backgroundLimit, starDotAlpha, starDotRadius } from './SkyBackground'
+import { backgroundLimit, starDotAlpha, starDotRadius } from './backgroundStars'
 import { estimateTextWidth, layoutLabels, type LabelItem } from './labelLayout'
 import { buildMarkers, glareRadiusPx, isOccultedMarker } from './markers'
 import { gridLabels } from './skyGrids'

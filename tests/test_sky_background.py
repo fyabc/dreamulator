@@ -23,6 +23,8 @@ from dreamulator.models.sky_background import (
     BackgroundStar,
     SkyBackgroundInput,
     StarfieldSpec,
+    StarVariability,
+    WanderingObject,
 )
 
 
@@ -66,6 +68,52 @@ def test_background_star_requires_a_magnitude_route() -> None:
         id="s", ecliptic_lon_deg=1.0, ecliptic_lat_deg=1.0, luminosity_sol=2.0, distance_pc=10.0
     )
     assert derive_star(star).source == "authored"
+
+
+def test_variability_round_trip_and_validation() -> None:
+    star = BackgroundStar(
+        id="v",
+        ecliptic_lon_deg=1.0,
+        ecliptic_lat_deg=1.0,
+        magnitude=-0.7,
+        temperature_k=18000.0,
+        variability=StarVariability(
+            type="gamma_cassiopeiae",
+            magnitude_range=(-1.3, -0.3),  # irregular: no period
+        ),
+    )
+    derived = derive_star(star)
+    assert derived.variability is not None
+    assert derived.variability.magnitude_range == (-1.3, -0.3)
+    assert derived.variability.period_days is None
+    with pytest.raises(ValidationError):
+        StarVariability(type="x", magnitude_range=(-0.3, -1.3))  # reversed bounds
+    # procedural field stars never carry variability
+    assert all(s.variability is None for s in generate_starfield(StarfieldSpec(seed=1, count=2)))
+
+
+def test_wandering_objects_round_trip() -> None:
+    source = SkyBackgroundInput(
+        wandering_objects=[
+            WanderingObject(
+                id="w1",
+                name="IDS J201.3-34.8",
+                object_type="m_dwarf_binary",
+                ecliptic_lon_deg=201.3,
+                ecliptic_lat_deg=-34.8,
+                distance_pc=24.0,
+                magnitude=9.3,
+                close_approach_au=68000.0,
+                encounter_age_myr=92.0,
+            )
+        ],
+    )
+    derived = derive_sky_background(source)
+    (w,) = derived.wandering_objects
+    assert math.hypot(*w.unit[:2]) > 0
+    assert w.close_approach_au == 68000.0
+    assert w.encounter_age_myr == 92.0
+    assert w.magnitude == 9.3  # naked-eye invisible: the sky view never renders these
 
 
 def test_derive_merges_authored_and_procedural_stars() -> None:

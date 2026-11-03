@@ -43,7 +43,6 @@ export function useElementSize<T extends HTMLElement>() {
     observer.observe(el)
     return () => observer.disconnect()
     // Attach once on mount (the callback ref has already resolved by then).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measure])
 
   return { ref: setRef, size }

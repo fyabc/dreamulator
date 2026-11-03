@@ -87,6 +87,26 @@
     "eclipticLon": "Ecliptic lon",
     "eclipticLat": "Ecliptic lat"
   },
+  "objectInspector": {
+    "magnitude": "Apparent magnitude",
+    "temperature": "Colour temperature",
+    "variability": "Variable type",
+    "variableRange": "Magnitude range (bright…faint)",
+    "variablePeriod": "Variation period",
+    "periodDays": "{{d}} d",
+    "irregular": "Irregular",
+    "type": "Type",
+    "angularSize": "Angular size",
+    "dsoTypes": {
+      "nebula": "Nebula",
+      "cluster": "Star cluster",
+      "galaxy": "Galaxy",
+      "remnant": "Supernova remnant"
+    },
+    "varTypes": {
+      "gamma_cassiopeiae": "γ Cas type (eruptive Be)"
+    }
+  },
   "legend": {
     "title": "Legend",
     "size": "Disc size = angular diameter",

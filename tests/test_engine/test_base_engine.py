@@ -57,3 +57,29 @@ def test_find_input_branch_file_wins_over_root(tmp_path):
     engine.layer = Layer.GEOLOGICAL
 
     assert engine.find_input("terrain_config.yaml") == branch_geo / "terrain_config.yaml"
+
+
+def test_find_input_own_output_never_shadows_own_input(tmp_path):
+    """A rebuild after the first must read the authored input again.
+
+    The first astronomy build writes derived/sky_background.yaml; with the
+    input named the same, derived-first lookup would freeze the stale derived
+    copy as the engine's own input on every later build.
+    """
+    astro_in = tmp_path / "layers" / "astronomy" / "input"
+    astro_derived = tmp_path / "layers" / "astronomy" / "derived"
+    astro_in.mkdir(parents=True)
+    astro_derived.mkdir(parents=True)
+    (astro_in / "sky_background.yaml").write_text("authored: true", encoding="utf-8")
+    (astro_derived / "sky_background.yaml").write_text("stale derived", encoding="utf-8")
+
+    engine = _StubEngine(
+        tmp_path,
+        seed=1,
+        layer_input_dirs={"astronomy": astro_in},
+        layer_derived_dirs={"astronomy": astro_derived},
+    )
+    engine.layer = Layer.ASTRONOMY
+    engine.output_files = ["sky_background.yaml"]
+
+    assert engine.find_input("sky_background.yaml") == astro_in / "sky_background.yaml"

@@ -1,8 +1,17 @@
-# 宇宙设定（背景天球）— 框架占位值，位置待作者后续调整
+# 宇宙设定（背景天球）— 第一版正式内容（2026-11-04 作者定稿）
 #
 # 方向 = 目录参考面（与 orbits: 同一黄道系）的黄经/黄纬；背景天体固定在天球上，
 # 不随时间传播（自行是 mas/yr 量级，远低于一个像素）。渲染口径与星图软件一致：
 # 静态「方向 + 星等 + 色温」目录，由观测者参考系旋转后投影（Stellarium 星表范式）。
+#
+# 暂定命名（开发交流用）：亮星 Bayer 制 Arrow-α..ι；深空天体目录制 NDC 1..4
+# （Nacrea Deep-sky Catalog）。文明层将按文化另命名，引用一律走 id，不改这里。
+#
+# 骨架设计：8 星箭（Arrow）骑银带指向北天极——口诀「沿箭四倍见极」，实际倍数
+# 4.029（尾星 Arrow-δ 到箭尖 Arrow-α 全长 13°，北极在延长线上 52.4° 处，偏失 1°）。
+# 尾羽 = 疏散星团 NDC 1（δ 为簇中最亮成员，光度+距离署入）；暗枢星 Pivot m 2.44
+# 守在极旁 3.5°（可见但不够亮——指极必须靠箭）；顶星 Zenith 在珠赤道上（赤道海域
+# 纬度锚）；烬星 Ember 为银带红超巨（超新星候选）；NDC 2 贴黄道（偕日升历法锚）。
 #
 # 三个消费方：天球视图（星点/深空精灵/银道带）、生态层（transient_events 的
 # 偶发超新星/GRB 辐射强迫）、文明层（星空文化按 id 引用恒星画连线，不复制位置）。
@@ -13,71 +22,215 @@ starfield:
   count: 900            # 裸眼深度内的程序星数
   magnitude_limit: 6.5  # 生成分布的暗端（裸眼极限附近）
 
-# 手置近邻星（占位位置；生态/文明锚点后续在这里调）
 stars:
-  - id: star_neighbor_elderbright
-    name: "长庚邻星 · Elderbright"
-    ecliptic_lon_deg: 214.7
-    ecliptic_lat_deg: 18.3
-    magnitude: 1.4
+# ---- 箭官（the Arrow）----
+  - id: star_arrow_delta
+    name: "Arrow-δ"
+    ecliptic_lon_deg: 309.19
+    ecliptic_lat_deg: 40.88
+    # 箭尾星 = NDC 1 最亮成员：K 亮巨星，物理署入（光度+距离 → m 1.21）
+    luminosity_sol: 2600.0
+    distance_pc: 100.0
     temperature_k: 4600
-  - id: star_neighbor_twinwatch
-    name: "双望星 · Twinwatch"
-    ecliptic_lon_deg: 96.2
-    ecliptic_lat_deg: -32.8
-    magnitude: 2.6
-    temperature_k: 6100
-  - id: star_neighbor_farlantern
-    name: "远灯星 · Farlantern"
-    ecliptic_lon_deg: 321.5
-    ecliptic_lat_deg: 55.1
-    # 混合输入示例：光度 + 距离 → 引擎派生视星等（玻尔兹曼近似，无 bolometric 修正）
-    luminosity_sol: 210.0
-    distance_pc: 148.0
-    temperature_k: 4100
+  - id: star_arrow_eta
+    name: "Arrow-η"
+    ecliptic_lon_deg: 311.16
+    ecliptic_lat_deg: 39.33
+    magnitude: 4.9
+    temperature_k: 5200
+  - id: star_arrow_theta
+    name: "Arrow-θ"
+    ecliptic_lon_deg: 306.36
+    ecliptic_lat_deg: 37.55
+    magnitude: 5.3
+    temperature_k: 6000
+  - id: star_arrow_iota
+    name: "Arrow-ι"
+    ecliptic_lon_deg: 309.08
+    ecliptic_lat_deg: 38.28
+    magnitude: 5.6
+    temperature_k: 4800
+  - id: star_arrow_gamma
+    name: "Arrow-γ"
+    ecliptic_lon_deg: 311.86
+    ecliptic_lat_deg: 46.21
+    magnitude: 0.8
+    temperature_k: 9500
+  - id: star_arrow_beta
+    name: "Arrow-β"
+    ecliptic_lon_deg: 312.36
+    ecliptic_lat_deg: 49.62
+    magnitude: 0.4
+    temperature_k: 8000
+  - id: star_arrow_epsilon
+    name: "Arrow-ε"
+    ecliptic_lon_deg: 317.05
+    ecliptic_lat_deg: 50.54
+    magnitude: 1.7
+    temperature_k: 7000
+  - id: star_arrow_zeta
+    name: "Arrow-ζ"
+    ecliptic_lon_deg: 310.62
+    ecliptic_lat_deg: 51.73
+    magnitude: 1.9
+    temperature_k: 6500
+  - id: star_arrow_alpha
+    name: "Arrow-α"
+    ecliptic_lon_deg: 315.09
+    ecliptic_lat_deg: 53.25
+    magnitude: -0.7
+    temperature_k: 18000
+    # 箭尖 = 爆发型 Be 变星（γ Cas 型；B2/18000K 正是该型主域）：不规则爆发
+    # 幅度约 1 等，文明叙事锚（「箭尖出鞘」预兆历）
+    variability:
+      type: gamma_cassiopeiae
+      magnitude_range: [-1.3, -0.3]
+      period_days: null
+
+# ---- 其他锚点星（暂属功能名，将来并入各自星官的 Bayer 序）----
+  - id: star_pivot
+    name: "Pivot"
+    ecliptic_lon_deg: 51.69
+    ecliptic_lat_deg: 73.05
+    magnitude: 2.44
+    temperature_k: 5800
+  - id: star_zenith
+    name: "Zenith"
+    ecliptic_lon_deg: 58.60
+    ecliptic_lat_deg: -13.39
+    magnitude: 0.2
+    temperature_k: 8200
+  - id: star_ember
+    name: "Ember"
+    ecliptic_lon_deg: 61.49
+    ecliptic_lat_deg: 52.27
+    magnitude: 0.5
+    temperature_k: 3600
+  - id: star_band_1
+    name: "Band-1"
+    ecliptic_lon_deg: 281.68
+    ecliptic_lat_deg: -2.39
+    magnitude: 1.0
+    temperature_k: 11000
+  - id: star_band_2
+    name: "Band-2"
+    ecliptic_lon_deg: 106.25
+    ecliptic_lat_deg: -6.51
+    magnitude: 1.3
+    temperature_k: 4500
+  - id: star_band_3
+    name: "Band-3"
+    ecliptic_lon_deg: 208.64
+    ecliptic_lat_deg: -62.00
+    magnitude: 0.9
+    temperature_k: 20000
+  - id: star_guide_1
+    name: "Guide-1"
+    ecliptic_lon_deg: 150.00
+    ecliptic_lat_deg: -40.00
+    magnitude: 0.9
+    temperature_k: 12000
+  - id: star_guide_2
+    name: "Guide-2"
+    ecliptic_lon_deg: 300.00
+    ecliptic_lat_deg: 8.00
+    magnitude: 1.1
+    temperature_k: 5000
+  # ---- Ignis 同源星（出生星团散伙后的近邻；光度+距离署入，肉眼平凡）----
+  - id: star_ignis_kin_1
+    name: "Kin-1"
+    ecliptic_lon_deg: 35.00
+    ecliptic_lat_deg: 12.00
+    luminosity_sol: 0.85
+    distance_pc: 22.0
+    temperature_k: 5600
+  - id: star_ignis_kin_2
+    name: "Kin-2"
+    ecliptic_lon_deg: 150.00
+    ecliptic_lat_deg: -18.00
+    luminosity_sol: 0.22
+    distance_pc: 14.0
+    temperature_k: 4300
+  - id: star_ignis_kin_3
+    name: "Kin-3"
+    ecliptic_lon_deg: 262.00
+    ecliptic_lat_deg: 42.00
+    luminosity_sol: 0.03
+    distance_pc: 6.0
+    temperature_k: 3400
 
 deep_sky:
-  - id: dso_veil_of_ash
-    name: "灰烬幔 · Veil of Ash"
+  - id: dso_ndc_1
+    name: "NDC 1"
+    type: cluster
+    ecliptic_lon_deg: 309.12
+    ecliptic_lat_deg: 39.15
+    angular_size_deg: 4.0
+    magnitude: 2.3
+    # 箭尾羽簇（δ 所在）；毕星团+毕宿五范式
+  - id: dso_ndc_2
+    name: "NDC 2"
+    type: cluster
+    ecliptic_lon_deg: 96.00
+    ecliptic_lat_deg: 3.20
+    angular_size_deg: 2.0
+    magnitude: 1.2
+    # 历法星团：贴黄道（太阳年路径），偕日升定年锚
+  - id: dso_ndc_3
+    name: "NDC 3"
     type: remnant
-    ecliptic_lon_deg: 148.9
-    ecliptic_lat_deg: 6.4
+    ecliptic_lon_deg: 252.04
+    ecliptic_lat_deg: -45.07
     angular_size_deg: 1.8
     magnitude: 4.8
-  - id: dso_sister_cluster
-    name: "姊妹星团 · Sister Cluster"
-    type: cluster
-    ecliptic_lon_deg: 41.0
-    ecliptic_lat_deg: -12.5
-    angular_size_deg: 0.9
-    magnitude: 5.2
-  - id: dso_tilted_isle
-    name: "斜屿星系 · Tilted Isle"
+    # 银带上的古超新星遗迹
+  - id: dso_ndc_4
+    name: "NDC 4"
     type: galaxy
-    ecliptic_lon_deg: 268.4
-    ecliptic_lat_deg: 41.7
-    angular_size_deg: 0.6
-    magnitude: 5.9
+    ecliptic_lon_deg: 246.52
+    ecliptic_lat_deg: -57.56
+    angular_size_deg: 3.0
+    magnitude: 0.9
+    # 远南伴星系（南天极 20°；北陆只见其擦南地平）
 
 galactic_band:
-  pole_lon_deg: 192.9    # 占位银极：带面在天空斜跨
+  pole_lon_deg: 192.9    # 银极：与北天极夹角 74.4°（地球 63.9°），极点距银带 15.6°
   pole_lat_deg: 27.1
   width_deg: 14.0
   brightness: 0.35
 
 # 生态层钩子（偶发高能事件；天球视图只在时刻落入窗口时标记方向）
 transient_events:
-  - id: sn_candidate_ashmother
+  - id: sn_candidate_ember
     type: supernova
-    ecliptic_lon_deg: 148.9   # 与灰烬幔同向： remnant = 它的遗迹（叙事自洽占位）
-    ecliptic_lat_deg: 6.4
-    epoch_window_days: [-4200.0, -3800.0]   # 历元前的一次爆发（遗迹年龄自洽占位）
-    peak_magnitude: -9.0
+    ecliptic_lon_deg: 61.49
+    ecliptic_lat_deg: 52.27
+    epoch_window_days: null
+    peak_magnitude: -10.0
     rate_per_myr: 0.02
-  - id: grb_candidate_whisper
+    # 烬星（红超巨）的终局；窗口待作者设定
+  - id: grb_candidate_ndc4
     type: grb
-    ecliptic_lon_deg: 12.0
-    ecliptic_lat_deg: -64.0
-    epoch_window_days: null   # 窗口待作者设定
+    ecliptic_lon_deg: 246.52
+    ecliptic_lat_deg: -57.56
+    epoch_window_days: null
     peak_magnitude: -6.0
     rate_per_myr: 0.001
+    # 来自 NDC 4 方向的伽马暴；窗口待作者设定
+
+# ---- 飞掠星（wandering objects；肉眼不可见，不渲染，纯正典数据）----
+wandering_objects:
+  - id: wandering_flyby_1
+    name: "IDS J201.3-34.8"
+    object_type: m_dwarf_binary
+    ecliptic_lon_deg: 201.30
+    ecliptic_lat_deg: -34.80
+    distance_pc: 24.0
+    magnitude: 9.3
+    close_approach_au: 68000.0
+    encounter_age_myr: 92.0
+    # ~92 Myr 前自 ~68,000 AU 近距掠过（M4.5V 主星 + 褐矮星伴星），搅动散射盘/
+    # 奥尔特云，延迟淋浴 Myr 级抵达内系——近期长周期撞击体偏多的供给源
+    # （0015 半人马型撞击体即其果实）。现退至 24 pc、合视星等 9.3，肉眼不可见；
+    # 来向（长周期彗星辐射点汇聚点）≈ 现位置的对跖点 (21.3, +34.8)。
+    # 「IDS J…」为暂定现代式编号（坐标编码），正典发现前作内部指称。

@@ -81,6 +81,11 @@ export interface SkyBackgroundStar {
   temperature_k: number
   unit: [number, number, number]
   source: 'authored' | 'starfield'
+  variability: {
+    type: string
+    magnitude_range: [number, number] | null
+    period_days: number | null
+  } | null
 }
 
 export interface SkyBackgroundDso {
@@ -105,5 +110,15 @@ export interface SkyBackground {
     epoch_window_days: [number, number] | null
     peak_magnitude: number | null
     rate_per_myr: number | null
+  }>
+  wandering_objects: Array<{
+    id: string
+    name: string | null
+    object_type: string
+    unit: [number, number, number]
+    distance_pc: number
+    magnitude: number | null
+    close_approach_au: number | null
+    encounter_age_myr: number | null
   }>
 }

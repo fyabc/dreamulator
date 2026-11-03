@@ -86,6 +86,29 @@ planets:
     albedo: 0.313                 # Charon 型处理结晶水冰（HZ 辐照压暗版）
 
   # ================================================================
+  # Aegis 内侧微卫（牧羊犬双卫）— Zone 1 光环区环缘看守者（km 级；
+  # Δa = 7.9 / 8.3 r_H、远低于 Nacrea 出生轨道，见 stellar.yaml 注）
+  # ================================================================
+  - id: satellite_grit
+    name: "砾星 · Grit"
+    orbits: planet_aegis
+    planet_type: terrestrial
+    mass: 7.0e-11                  # M⊕（r≈3.4 km，ρ≈2.5 g/cm³）
+    radius: 5.3e-4                 # R⊕ (3.4 km)
+    rotation_period_days: 0.451    # 潮汐锁定 = 公转周期
+    axial_tilt_deg: 0.0
+    albedo: 0.16                   # 硅质亮岩（0.4 AU 冰面不稳定，不走冰线）
+  - id: satellite_glint
+    name: "微芒星 · Glint"
+    orbits: planet_aegis
+    planet_type: terrestrial
+    mass: 3.1e-11                  # M⊕（r≈2.6 km）
+    radius: 4.1e-4                 # R⊕ (2.6 km)
+    rotation_period_days: 0.346    # 潮汐锁定 = 公转周期
+    axial_tilt_deg: 0.0
+    albedo: 0.16
+
+  # ================================================================
   # Crucible（鼎星）捕获卫星 — 小卫星（火卫一类比）
   # ================================================================
   - id: satellite_cinder
