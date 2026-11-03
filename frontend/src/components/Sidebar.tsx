@@ -47,6 +47,10 @@ export default function Sidebar({
         { path: `/worlds/${currentWorld}${search}`, label: t('nav.overview'), icon: '📋' },
         { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: '🗺️' },
         { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: '🔭' },
+        // API-only view (parameterized engine query) — hidden in static mode.
+        ...(isStaticMode()
+          ? []
+          : [{ path: `/worlds/${currentWorld}/sky${search}`, label: t('nav.sky'), icon: '✨' }]),
       ]
     : []
 

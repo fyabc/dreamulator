@@ -10,7 +10,9 @@
   body 的 ``physical`` / ``orbit`` / ``derived`` 拍平到顶层（
   ``entities.satellite_nacrea.axial_tilt_deg``），``atmosphere`` /
   ``hydrosphere`` / ``lithosphere`` 作为子系统保留嵌套（含 ``composition`` /
-  ``crust_composition`` 等嵌套映射）。恒星原样键控。
+  ``crust_composition`` 等嵌套映射）。恒星原样键控。``orbits:`` 顶层条目是
+  根数的权威存储（全精度 + Ω/ω/M₀/历元），合入对应实体并覆盖 ``bodies.orbit``
+  的圆整渲染值。
 - **聚合统计**：各层 ``*_summary.yaml`` 作为命名归约（``aggregates``），带溯源
   但非实体（``climate`` / ``ecology`` / ``civilization``）。
 - **空间锚点**：``spatial`` 为 §6 几何查询的预计算缓存，P0 留空，P2 由
@@ -36,7 +38,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build_fact_context"]
+__all__ = ["build_fact_context", "load_entities"]
 
 # body 顶层保留键（不参与拍平，避免被 physical/orbit/derived 覆盖）。
 _BODY_IDENTITY_KEYS = (
@@ -88,15 +90,32 @@ def _flatten_body(body: dict[str, Any]) -> dict[str, Any]:
     return entity
 
 
-def _load_entities(catalog: dict[str, Any]) -> dict[str, Any]:
-    """Key celestial bodies by stable ID (stars as-is, bodies flattened)."""
+def load_entities(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Key celestial bodies by stable ID (stars as-is, bodies flattened).
+
+    A body's ``orbits:`` entry merges over the flattened body: the top-level
+    list is the authoritative element store (full-precision ``a``/``e``/``i``
+    plus the node / periapsis / epoch anomaly that the ``bodies.orbit`` block
+    does not carry — that block only renders rounded display values), so
+    consumers such as the ephemeris propagate from the same numbers the input
+    declared instead of a second, lossy copy.
+    """
+    orbits = {
+        str(entry["body_id"]): entry
+        for entry in catalog.get("orbits") or []
+        if isinstance(entry, dict) and entry.get("body_id") is not None
+    }
     entities: dict[str, Any] = {}
     for star in catalog.get("stars") or []:
         if isinstance(star, dict) and star.get("id") is not None:
             entities[str(star["id"])] = star
     for body in catalog.get("bodies") or []:
         if isinstance(body, dict) and body.get("id") is not None:
-            entities[str(body["id"])] = _flatten_body(body)
+            entity = _flatten_body(body)
+            elements = orbits.get(str(body["id"]))
+            if elements is not None:
+                entity.update({k: v for k, v in elements.items() if k != "body_id"})
+            entities[str(body["id"])] = entity
     return entities
 
 
@@ -158,7 +177,7 @@ def build_fact_context(world_dir: Path, branch: str | None = None) -> dict[str, 
         return None
 
     return {
-        "entities": _load_entities(catalog),
+        "entities": load_entities(catalog),
         "aggregates": _load_aggregates(resolver),
         "spatial": {},
         # The target body's sky view (angular diameters / magnitudes / eclipse),

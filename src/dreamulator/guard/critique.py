@@ -42,6 +42,7 @@ DIMENSIONS: tuple[Dimension, ...] = (
             "angular_size",
             "apparent_illuminance",
             "hill_radius",
+            "sky_ephemeris",
             "sky_position",
             "tidal_amplitude",
             "transit_classification",

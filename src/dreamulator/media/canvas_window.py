@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from dreamulator.map.canvas_marine import SeaConnectivity
+    from dreamulator.media.canvas_pipeline import AnchoredSea
 
 __all__ = ["CanvasSource", "crop_canvas_window"]
 
@@ -58,7 +59,7 @@ class CanvasSource:
     chunks: set[tuple[int, int]]
     tile: int = CHUNK_PX
     _chunk_cache: dict[tuple[int, int], np.ndarray] | None = None
-    _sea: SeaConnectivity | None = None
+    _sea: SeaConnectivity | AnchoredSea | None = None
 
     @classmethod
     def load(cls, root: Path) -> CanvasSource:
@@ -292,51 +293,29 @@ def _rasterise_rivers(
     return mask
 
 
-def _sea_connectivity(source: CanvasSource) -> SeaConnectivity:
-    """The canvas's connected sea, seeded at its open boundary.
+def _sea_connectivity(source: CanvasSource) -> AnchoredSea:
+    """The canvas's anchored sea — the same rule S2's ``surface_sea`` applies.
 
-    Hydrological and rendered sea must agree: a sub-sea-level hollow that
-    does not reach the canvas boundary is a closed basin (the fill turns it
-    into land or a lake), not water — painting it as sea strands lakes in
-    the ocean, the 65.3S 15.2W report.
+    Hydrological and rendered sea must agree: a sub-sea-level hollow that does
+    not reach the canvas boundary inside a geologically oceanic body is a
+    closed basin (the fill turns it into land or a lake), not water — painting
+    it as sea strands lakes in the ocean, the 65.3S 15.2W report.  The shared
+    builder keeps this from drifting out of sync with the hydrology rule.
     """
-    from dreamulator.map.canvas_marine import connect_sea
+    from dreamulator.media.canvas_pipeline import _anchored_sea, _geological_ocean
 
-    keys = sorted(source.chunks)
-    present = set(keys)
-    row_set = {ci for ci, _ in keys}
-    col_set = {cj for _, cj in keys}
-    rmin, rmax = min(row_set), max(row_set)
-    cmin, cmax = min(col_set), max(col_set)
-
-    def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
-        ci, cj = key
-        arr = source.chunk(ci, cj)
-        water = np.asarray(arr) <= 0.0
-        seed = np.zeros_like(water)
-        if ci == rmin:
-            seed[0, :] = True
-        if ci == rmax:
-            seed[-1, :] = True
-        if cj == cmin:
-            seed[:, 0] = True
-        if cj == cmax:
-            seed[:, -1] = True
-        for di, dj, sl in (
-            (-1, 0, (0, slice(None))),
-            (1, 0, (-1, slice(None))),
-            (0, -1, (slice(None), 0)),
-            (0, 1, (slice(None), -1)),
-        ):
-            if (ci + di, cj + dj) not in present:
-                seed[sl] = True
-        return water, water & seed
-
-    return connect_sea(keys, read, workers=4)
+    return _anchored_sea(
+        sorted(source.chunks),
+        lambda key: np.asarray(source.chunk(*key)),
+        source.tile,
+        _geological_ocean(source.root, source.geometry, 0.0),
+        0.0,
+        workers=4,
+    )
 
 
 def _sea_raster(
-    source: CanvasSource, r0: int, c0: int, r1: int, c1: int, sea: SeaConnectivity
+    source: CanvasSource, r0: int, c0: int, r1: int, c1: int, sea: SeaConnectivity | AnchoredSea
 ) -> np.ndarray:
     """Connected-sea mask for the canvas crop [r0:r1, c0:c1]."""
     out = np.zeros((r1 - r0, c1 - c0), dtype=bool)

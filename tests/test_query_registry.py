@@ -18,6 +18,7 @@ def test_list_queries_has_all_primitives() -> None:
         "apparent_illuminance",
         "cell_facts",
         "hill_radius",
+        "sky_ephemeris",
         "sky_position",
         "tidal_amplitude",
         "transit_classification",

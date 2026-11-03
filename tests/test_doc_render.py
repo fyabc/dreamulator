@@ -272,7 +272,7 @@ _DOC_ANCHORS: dict[str, list[str]] = {
     # Satellite-dynamics derived fields (#13): Hill geometry, stability
     # metrics, sibling separations, synchronous-orbit economics.
     "layers/astronomy/input/satellite_architecture.md": [
-        "723,306 km（10.15 R_p）",
+        "723,277 km（10.14 R_p）",
         "**32.1%**",
         "≈ 0.252 r_H",
         "≈ 0.373 r_H",

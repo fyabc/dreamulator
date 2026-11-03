@@ -13,6 +13,7 @@ import yaml
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.physical_inputs import build_system_catalog
+from dreamulator.engine.sky_background import derive_sky_background
 from dreamulator.engine.stellar_physics import (
     compute_stellar_parameters,
     condensation_lines,
@@ -21,6 +22,7 @@ from dreamulator.engine.stellar_physics import (
 )
 from dreamulator.io.loader import load_yaml_model
 from dreamulator.models.layers import Layer
+from dreamulator.models.sky_background import SkyBackgroundDerived, SkyBackgroundInput
 from dreamulator.models.stellar import StellarSystem
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,9 @@ class AstronomyEngine(BaseEngine):
         "stellar_derived.yaml",
         "habitable_zones.yaml",
         "system_catalog.yaml",
+        # Optional input (sky_background.yaml) → always-written derived, so the
+        # up-to-date check stays deterministic even for worlds without one.
+        "sky_background.yaml",
     ]
 
     def run(
@@ -147,10 +152,21 @@ class AstronomyEngine(BaseEngine):
         for w in catalog_warnings:
             logger.warning("%s", w)
 
+        # Optional universe setting: neighbour stars, deep-sky objects, the
+        # galactic band and transient-event hooks.  Directions are frozen as
+        # unit vectors here so every consumer (sky view, ecology, civilization)
+        # reads one resolved table.
+        bg_input_path = self.find_input("sky_background.yaml")
+        if bg_input_path is not None:
+            background = derive_sky_background(load_yaml_model(bg_input_path, SkyBackgroundInput))
+        else:
+            background = SkyBackgroundDerived()
+
         # Write output files
         self._write_yaml("stellar_derived.yaml", {"stars": stars_derived})
         self._write_yaml("habitable_zones.yaml", {"stars": hz_data})
         self._write_system_catalog(catalog)
+        self._write_yaml("sky_background.yaml", background.model_dump(mode="json"))
 
         logger.info(
             "Computed derived parameters for %d star(s) in '%s'",

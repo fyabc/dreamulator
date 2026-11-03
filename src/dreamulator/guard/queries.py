@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+import dreamulator.engine.ephemeris  # noqa: F401 触发注册
 import dreamulator.engine.sky_geometry  # noqa: F401 触发注册
 import dreamulator.map.query  # noqa: F401 触发注册
 from dreamulator.guard.facts import build_fact_context

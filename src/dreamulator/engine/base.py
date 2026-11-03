@@ -101,8 +101,13 @@ class BaseEngine(ABC):
                 search_layers.append(layer.value)
 
         for layer_name in search_layers:
-            # Check derived (computed) outputs first
-            if layer_name in self.layer_derived_dirs:
+            # Check derived (computed) outputs first — except this engine's own
+            # outputs in its own layer: a same-named output file (the astronomy
+            # sky_background.yaml) would shadow the authored input on every
+            # rebuild after the first, freezing the derived copy in place.
+            if layer_name in self.layer_derived_dirs and not (
+                layer_name == self.layer.value and relative_path in self.output_files
+            ):
                 path = self.layer_derived_dirs[layer_name] / relative_path
                 if path.exists():
                     return path

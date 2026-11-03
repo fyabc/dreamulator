@@ -130,6 +130,44 @@ def test_star_entity_passthrough(tmp_path: Path) -> None:
     assert ctx["entities"]["star_sol"]["luminosity_sol"] == 1.0
 
 
+def test_orbits_entries_merge_into_entities(tmp_path: Path) -> None:
+    # The top-level orbits: list is the authoritative element store: full
+    # precision values plus node / periapsis / epoch anomaly merge over the
+    # rounded bodies.orbit rendering; bodies without an entry are unaffected.
+    catalog = {
+        **_CATALOG,
+        "orbits": [
+            {
+                "body_id": "satellite_luna",
+                "parent_id": "planet_terra",
+                "semi_major_axis_au": 0.0025700123,
+                "eccentricity": 0.0549,
+                "inclination_deg": 5.145,
+                "longitude_ascending_node_deg": 125.08,
+                "argument_of_periapsis_deg": 318.15,
+                "mean_anomaly_epoch_deg": 135.27,
+                "epoch_year": 0.0,
+            }
+        ],
+    }
+    world = _make_world(tmp_path, catalog=catalog)
+    ctx = build_fact_context(world)
+    assert ctx is not None
+    luna = ctx["entities"]["satellite_luna"]
+    assert luna["semi_major_axis_au"] == 0.0025700123  # overrides the rounded copy
+    assert luna["eccentricity"] == 0.0549
+    assert luna["inclination_deg"] == 5.145
+    assert luna["longitude_ascending_node_deg"] == 125.08
+    assert luna["argument_of_periapsis_deg"] == 318.15
+    assert luna["mean_anomaly_epoch_deg"] == 135.27
+    assert luna["epoch_year"] == 0.0
+    assert "body_id" not in luna  # identity keys stay canonical
+    # A body without an orbits entry keeps the rounded rendering untouched.
+    terra = ctx["entities"]["planet_terra"]
+    assert terra["semi_major_axis_au"] == 1.0
+    assert "longitude_ascending_node_deg" not in terra
+
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------

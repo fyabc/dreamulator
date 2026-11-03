@@ -12,7 +12,15 @@ cells with different owners) and gives, for every point, its canvas pixel
 coordinates in both owners.  This module reads those points, samples each
 canvas's products at the recorded position, and reports the disagreement:
 
-* **elevation** — the DEM value of each side, in metres;
+* **surface elevation** — the DEM value of each side, in metres
+  (``surface_delta_m``);
+* **bedrock elevation** — surface minus ice thickness (``bed_delta_m``), with
+  both sides' ice thickness; on ice-free points it equals the surface delta;
+* **land/sea** — the anchored sea determination (the same rule S2 and S3 use)
+  at each side, reported as its own category: a point the two canvases
+  disagree is a generation fault that no elevation tolerance covers, because
+  the ice-margin refinement closes on the sea side only and amplifies such
+  disagreements;
 * **water** — whether the point is a lake cell on each side;
 * **river** — whether a river segment passes within ``river_reach_km`` on
   each side, and the flow of the nearest segment;
@@ -29,7 +37,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -37,6 +45,8 @@ from dreamulator.map.td_canvas import CanvasGeometry
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from dreamulator.media.canvas_pipeline import AnchoredSea
 
 __all__ = [
     "PairReport",
@@ -96,30 +106,37 @@ class PairReport:
     canvases: tuple[str, ...]
     samples: int = 0
     counts: dict[str, int] = field(default_factory=dict)
-    delta_m: list[float] = field(default_factory=list)
+    surface_delta_m: list[float] = field(default_factory=list)
+    bed_delta_m: list[float] = field(default_factory=list)
+    landsea_disagree: int = 0
+    landsea_points: list[dict[str, object]] = field(default_factory=list)
     water_disagree: int = 0
     river_disagree: int = 0
     flow_ratios: list[float] = field(default_factory=list)
     coord_mismatch_px: float = 0.0
-    worst: list[dict[str, float]] = field(default_factory=list)
+    worst: list[dict[str, object]] = field(default_factory=list)
 
     def summary(self) -> dict[str, object]:
-        d = np.asarray(self.delta_m, dtype=np.float64)
+        def stats(values: list[float]) -> dict[str, object] | None:
+            d = np.asarray(values, dtype=np.float64)
+            if not d.size:
+                return None
+            return {
+                "n": int(d.size),
+                "median_abs_m": float(np.median(np.abs(d))),
+                "p95_abs_m": float(np.percentile(np.abs(d), 95)),
+                "max_abs_m": float(np.max(np.abs(d))),
+            }
+
         ratios = np.asarray(self.flow_ratios, dtype=np.float64)
         return {
             "canvases": list(self.canvases),
             "samples": self.samples,
             "counts": dict(self.counts),
-            "elevation": (
-                {
-                    "n": int(d.size),
-                    "median_abs_m": float(np.median(np.abs(d))),
-                    "p95_abs_m": float(np.percentile(np.abs(d), 95)),
-                    "max_abs_m": float(np.max(np.abs(d))),
-                }
-                if d.size
-                else None
-            ),
+            "surface_delta": stats(self.surface_delta_m),
+            "bed_delta": stats(self.bed_delta_m),
+            "landsea_disagree": self.landsea_disagree,
+            "landsea_points": self.landsea_points,
             "water_disagree": self.water_disagree,
             "river_disagree": self.river_disagree,
             "flow_ratio": (
@@ -213,6 +230,87 @@ def sample_elevation(canvas_root: Path, loc: SeamLocation, tile: int) -> float |
     return float(chunk[row, col])
 
 
+def sample_ice(canvas_root: Path, loc: SeamLocation, tile: int) -> float | None:
+    """Ice thickness metres at the sample point; 0 when the block has no ice.
+
+    None means the canvas ships no ice product at all (no
+    ``surface/ice_chunks/``), which leaves the bedrock caliber *unverified*
+    rather than identical-to-surface — a missing product is not a zero-ice
+    claim.
+    """
+    ice_dir = canvas_root / "surface" / "ice_chunks"
+    if not ice_dir.is_dir():
+        return None
+    ci, cj = loc.chunk
+    path = ice_dir / f"r{ci:03d}_c{cj:03d}.npy"
+    if not path.exists():
+        return 0.0
+    row, col = _local_index(loc, tile)
+    if not (0 <= row < tile and 0 <= col < tile):
+        return 0.0
+    return float(np.load(path, mmap_mode="r")[row, col])
+
+
+def _anchored_sea_of(
+    canvas_root: Path, cache: dict[Path, AnchoredSea | None]
+) -> AnchoredSea | None:
+    """The canvas's anchored sea, or None when its data does not allow it.
+
+    Read-only: builds the connectivity straight from the chunk files (no
+    CanvasStore, no work directory).  A canvas without the conditioning grid
+    or with unreadable chunks leaves the land/sea caliber unverified.
+    """
+    if canvas_root in cache:
+        return cache[canvas_root]
+    sea: AnchoredSea | None = None
+    try:
+        from dreamulator.media.canvas_pipeline import _anchored_sea, _geological_ocean
+
+        keys = [
+            (int(c[0]), int(c[1]))
+            for c in json.loads((canvas_root / "canvas.json").read_text(encoding="utf-8")).get(
+                "chunks", []
+            )
+        ]
+        if not keys:
+            keys = sorted(
+                (int(p.stem.removeprefix("r").split("_c")[0]), int(p.stem.split("_c")[1]))
+                for p in (canvas_root / "chunks").glob("r*_c*.npy")
+            )
+        tile = _tile_size(canvas_root)
+
+        def load(key: tuple[int, int]) -> np.ndarray:
+            ci, cj = key
+            return np.asarray(np.load(canvas_root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"))
+
+        sea = _anchored_sea(
+            keys,
+            load,
+            tile,
+            _geological_ocean(canvas_root, _canvas_geometry(canvas_root), 0.0),
+            0.0,
+            workers=4,
+        )
+    except (OSError, ValueError, KeyError):
+        sea = None
+    cache[canvas_root] = sea
+    return sea
+
+
+def sample_sea(
+    sea: AnchoredSea | None, canvas_root: Path, loc: SeamLocation, tile: int
+) -> bool | None:
+    """Sea membership at the sample point; None when undeterminable."""
+    if sea is None:
+        return None
+    path = _chunk_path(canvas_root, loc)
+    if not path.exists():
+        return None
+    row, col = _local_index(loc, tile)
+    water = np.asarray(np.load(path)) <= 0.0
+    return bool(sea.mask(loc.chunk, water)[row, col])
+
+
 def sample_lake(canvas_root: Path, loc: SeamLocation, tile: int) -> bool | None:
     """True/False when the canvas has lake tables, None when it does not."""
     sparse = canvas_root / "hydro" / "lakes.sparse"
@@ -265,9 +363,10 @@ def _pair_report(
     canvases_root: Path,
     *,
     river_reach_km: float,
+    sea_cache: dict[Path, AnchoredSea | None],
 ) -> PairReport:
     report = PairReport(canvases=pair.canvases, samples=len(pair.samples))
-    counts = {"elevation": 0, "water": 0, "river": 0}
+    counts = {"elevation": 0, "bedrock": 0, "landsea": 0, "water": 0, "river": 0}
     for sample in pair.samples:
         if len(sample.locations) != 2:
             continue
@@ -293,17 +392,48 @@ def _pair_report(
             sample_elevation(root, loc, tile)
             for root, loc, tile in zip(roots, (left, right), tiles, strict=True)
         ]
+        ices = [
+            sample_ice(root, loc, tile)
+            for root, loc, tile in zip(roots, (left, right), tiles, strict=True)
+        ]
         if all(v is not None for v in elevations):
             counts["elevation"] += 1
-            delta = float(elevations[0]) - float(elevations[1])  # type: ignore[arg-type]
-            report.delta_m.append(delta)
+            surf_l, surf_r = (float(v) for v in elevations)  # type: ignore[arg-type]
+            surface_delta = surf_l - surf_r
+            report.surface_delta_m.append(surface_delta)
+            bed_delta: float | None = None
+            ice_pair: list[float] | None = None
+            if all(v is not None for v in ices):
+                counts["bedrock"] += 1
+                ice_l, ice_r = (float(v) for v in ices)  # type: ignore[arg-type]
+                bed_delta = (surf_l - ice_l) - (surf_r - ice_r)
+                report.bed_delta_m.append(bed_delta)
+                ice_pair = [round(ice_l, 1), round(ice_r, 1)]
             report.worst.append(
                 {
                     "lat": round(sample.latitude_deg, 4),
                     "lon": round(sample.longitude_deg, 4),
-                    "delta_m": round(delta, 1),
+                    "surface_delta_m": round(surface_delta, 1),
+                    "bed_delta_m": None if bed_delta is None else round(bed_delta, 1),
+                    "ice_m": ice_pair,
                 }
             )
+
+        seas = [
+            sample_sea(_anchored_sea_of(root, sea_cache), root, loc, tile)
+            for root, loc, tile in zip(roots, (left, right), tiles, strict=True)
+        ]
+        if all(v is not None for v in seas):
+            counts["landsea"] += 1
+            if bool(seas[0]) != bool(seas[1]):
+                report.landsea_disagree += 1
+                report.landsea_points.append(
+                    {
+                        "lat": round(sample.latitude_deg, 4),
+                        "lon": round(sample.longitude_deg, 4),
+                        "sides": [bool(seas[0]), bool(seas[1])],
+                    }
+                )
 
         lakes = [
             sample_lake(root, loc, tile)
@@ -327,7 +457,7 @@ def _pair_report(
             if all(present) and f0 > 0.0 and f1 > 0.0:
                 report.flow_ratios.append(max(f0 / f1, f1 / f0))
     report.counts = counts
-    report.worst.sort(key=lambda w: -abs(float(w["delta_m"])))
+    report.worst.sort(key=lambda w: -abs(cast("float", w["surface_delta_m"])))
     report.worst = report.worst[:5]
     return report
 
@@ -352,7 +482,11 @@ def run_seam_check(
         and (child / "chunks").is_dir()
         and any((child / "chunks").glob("r*_c*.npy"))
     )
-    reports = [_pair_report(pair, canvases_root, river_reach_km=river_reach_km) for pair in pairs]
+    sea_cache: dict[Path, AnchoredSea | None] = {}
+    reports = [
+        _pair_report(pair, canvases_root, river_reach_km=river_reach_km, sea_cache=sea_cache)
+        for pair in pairs
+    ]
     return {
         "format": fmt,
         "canvases_with_chunks": have_chunks,

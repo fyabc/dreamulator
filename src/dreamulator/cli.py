@@ -222,6 +222,11 @@ from dreamulator.cli_ucc import ucc_app  # noqa: E402
 
 app.add_typer(ucc_app, name="ucc")
 
+# Sky ephemeris — bare top-level command over the registered engine query.
+from dreamulator.cli_sky import sky  # noqa: E402
+
+app.command(name="sky")(sky)
+
 # Seed explorer — top-level command, imported late to avoid a circular import
 # (cli_explore_seeds imports the terrain-config loader from this module lazily).
 from dreamulator.cli_explore_seeds import explore_seeds  # noqa: E402

@@ -11,7 +11,8 @@
     "map": "地图",
     "viewer3d": "3D 视图",
     "packs": "子地图",
-    "playground": "气候实验台"
+    "playground": "气候实验台",
+    "sky": "天球视图"
   },
   "action": {
     "back": "← 返回",
