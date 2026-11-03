@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793542895056,
+  "lastUpdate": 1793717076354,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1593,6 +1593,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006799032012237677",
             "extra": "mean: 5.079004000000964 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "86ce5e506af40572182b9f437e024db03eaba3a9",
+          "message": "Merge feature/sky-background: universe setting for the sky view, grid labels, and ephemeris fixes",
+          "timestamp": "2026-11-03T22:27:52+08:00",
+          "tree_id": "466b81883236ac3594afa3693859c059f4d1677e",
+          "url": "https://github.com/fyabc/dreamulator/commit/86ce5e506af40572182b9f437e024db03eaba3a9"
+        },
+        "date": 1793717075452,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4299564923198809,
+            "unit": "iter/sec",
+            "range": "stddev: 0.10817159562972715",
+            "extra": "mean: 2.325816723 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.6393070814633592,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009947859626225637",
+            "extra": "mean: 274.7775820000058 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9245573123005846,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8278979473769111",
+            "extra": "mean: 519.6000106666693 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1146.1959133090345,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008769744028441916",
+            "extra": "mean: 872.4511999986362 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 244.97400311397874,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007448189083335433",
+            "extra": "mean: 4.082065799997281 msec\nrounds: 5"
           }
         ]
       }
