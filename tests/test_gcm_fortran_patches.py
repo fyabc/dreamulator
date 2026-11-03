@@ -87,3 +87,18 @@ def test_substep_count_from_courant_number_keeps_storage_non_negative() -> None:
         sub = _mkradv_step(sub, u, v, dt / nsub)
     assert sub.min() >= -1e-18
     np.testing.assert_allclose(sub.sum(), store0.sum(), rtol=1e-12)
+
+
+def test_patch_id_follows_a_reassigned_patch_tuple(monkeypatch) -> None:
+    """A caller that extends PATCHES must get a different cache name.
+
+    patch_id used to bind PATCHES as a default argument, so reassigning the
+    module global left the id unchanged while patched_source_dir's own loop saw
+    the new patch — either writing a patched tree under the canonical name or
+    reusing the canonical tree and running unpatched.
+    """
+    canonical = fp.patch_id()
+    monkeypatch.setattr(
+        fp, "PATCHES", fp.PATCHES + (fp.FortranPatch("diag", "rainmod.f90", "a", "b"),)
+    )
+    assert fp.patch_id() != canonical

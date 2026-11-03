@@ -275,8 +275,17 @@ PATCHES: tuple[FortranPatch, ...] = (
 )
 
 
-def patch_id(patches: tuple[FortranPatch, ...] = PATCHES) -> str:
-    """Short content hash of the patch set (pure); names the build cache."""
+def patch_id(patches: tuple[FortranPatch, ...] | None = None) -> str:
+    """Short content hash of the patch set (pure); names the build cache.
+
+    The default is resolved from :data:`PATCHES` on each call rather than bound
+    at definition time, so a caller that extends the tuple — a diagnostic
+    intervention adding one patch, say — gets a cache name that moves with it.
+    Binding the default would have let ``patched_source_dir`` write a patched
+    tree under the canonical directory name, or reuse the canonical tree and
+    silently run unpatched.
+    """
+    patches = PATCHES if patches is None else patches
     digest = hashlib.sha256(EXOPLASIM_VERSION.encode())
     for p in patches:
         for part in (p.name, p.file, p.anchor, p.replacement):
