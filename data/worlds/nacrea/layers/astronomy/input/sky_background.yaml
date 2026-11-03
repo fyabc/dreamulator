@@ -5,13 +5,14 @@
 # 静态「方向 + 星等 + 色温」目录，由观测者参考系旋转后投影（Stellarium 星表范式）。
 #
 # 暂定命名（开发交流用）：亮星 Bayer 制 Arrow-α..ι；深空天体目录制 NDC 1..4
-# （Nacrea Deep-sky Catalog）。文明层将按文化另命名，引用一律走 id，不改这里。
+# （Nacrea Deep-sky Catalog）。文明层按文化另命名（见文明层 sky_culture.yaml），
+# 引用一律走 id，不改这里。
 #
 # 骨架设计：8 星箭（Arrow）骑银带指向北天极——口诀「沿箭四倍见极」，实际倍数
 # 4.029（尾星 Arrow-δ 到箭尖 Arrow-α 全长 13°，北极在延长线上 52.4° 处，偏失 1°）。
 # 尾羽 = 疏散星团 NDC 1（δ 为簇中最亮成员，光度+距离署入）；暗枢星 Pivot m 2.44
 # 守在极旁 3.5°（可见但不够亮——指极必须靠箭）；顶星 Zenith 在珠赤道上（赤道海域
-# 纬度锚）；烬星 Ember 为银带红超巨（超新星候选）；NDC 2 贴黄道（偕日升历法锚）。
+# 纬度锚）；Band-4 为银带红超巨（超新星候选）；NDC 2 贴黄道（偕日升历法锚）。
 #
 # 三个消费方：天球视图（星点/深空精灵/银道带）、生态层（transient_events 的
 # 偶发超新星/GRB 辐射强迫）、文明层（星空文化按 id 引用恒星画连线，不复制位置）。
@@ -100,12 +101,6 @@ stars:
     ecliptic_lat_deg: -13.39
     magnitude: 0.2
     temperature_k: 8200
-  - id: star_ember
-    name: "Ember"
-    ecliptic_lon_deg: 61.49
-    ecliptic_lat_deg: 52.27
-    magnitude: 0.5
-    temperature_k: 3600
   - id: star_band_1
     name: "Band-1"
     ecliptic_lon_deg: 281.68
@@ -124,6 +119,13 @@ stars:
     ecliptic_lat_deg: -62.00
     magnitude: 0.9
     temperature_k: 20000
+  - id: star_band_4
+    name: "Band-4"
+    ecliptic_lon_deg: 61.49
+    ecliptic_lat_deg: 52.27
+    magnitude: 0.5
+    temperature_k: 3600
+    # 红超巨（超新星候选，见 transient_events）；按纪律暂不起专名，仅编号
   - id: star_guide_1
     name: "Guide-1"
     ecliptic_lon_deg: 150.00
@@ -201,14 +203,14 @@ galactic_band:
 
 # 生态层钩子（偶发高能事件；天球视图只在时刻落入窗口时标记方向）
 transient_events:
-  - id: sn_candidate_ember
+  - id: sn_candidate_band_4
     type: supernova
     ecliptic_lon_deg: 61.49
     ecliptic_lat_deg: 52.27
     epoch_window_days: null
     peak_magnitude: -10.0
     rate_per_myr: 0.02
-    # 烬星（红超巨）的终局；窗口待作者设定
+    # 银带红超巨 Band-4 的终局；窗口待作者设定
   - id: grb_candidate_ndc4
     type: grb
     ecliptic_lon_deg: 246.52
