@@ -122,3 +122,27 @@ export interface SkyBackground {
     encounter_age_myr: number | null
   }>
 }
+
+/** Mirror of derived/sky_culture.yaml (the civilization layer's star lore).
+ *  Cultures reference background objects by id only — positions are joined
+ *  against the SkyBackground catalogue client-side, never copied here. */
+export interface SkyCultureAsterism {
+  id: string
+  name: string
+  meaning: string | null
+  /** Edges as pairs of background-object ids (authored star or deep-sky). */
+  lines: Array<[string, string]>
+}
+
+export interface SkyCultureEntry {
+  id: string
+  name: string
+  description: string | null
+  /** Background-star id -> this culture's proper name for it. */
+  star_names: Record<string, string>
+  asterisms: SkyCultureAsterism[]
+}
+
+export interface SkyCulture {
+  cultures: SkyCultureEntry[]
+}

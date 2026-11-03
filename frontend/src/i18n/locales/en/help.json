@@ -406,6 +406,10 @@
         {
           "title": "Rise/set and events",
           "content": "Below the chart, bodies under the horizon list with their next rise; the right inspector shows the selected body's phase, illuminance, elongations and equatorial/ecliptic coordinates. Inside the polar circles a body may cross the horizon only once per season — the missing event shows as empty (deferred to the engine's M4 event search)."
+        },
+        {
+          "title": "Sky cultures (asterism lines)",
+          "content": "The Display dialog's asterism-lines toggle (URL parameter cul) draws the civilization layer's sky cultures: cultures name background stars and connect them into figures strictly by id (authored in sky_culture.yaml; every reference is validated at build time). In the look-around view, hovering a figure brightens it and shows the culture's asterism name, and clicking opens the inspector (culture, member stars with magnitudes, meaning). An authored star's inspector also lists each culture's proper name for it. The toggle stays hidden for worlds without sky cultures."
         }
       ]
     }

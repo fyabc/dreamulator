@@ -19,6 +19,8 @@ import {
 } from './panProjector'
 import { phasePathD, brightAngleRad, markerRadius } from './phaseGeometry'
 import { ALTITUDE_RING_DEGREES, skyProjector } from './projector'
+import { buildAsterismGeometry, buildCultureLookup, greatCircleSamples, toVec3 } from './skyCulture'
+import type { SkyBackground } from './types'
 import { dayClock, dayReadout, sliderStep, sliderYearDays } from './timeFormat'
 import { formatIrradiance } from './units'
 
@@ -408,5 +410,83 @@ describe('gridLabels', () => {
     const labels = gridLabels('equatorial', project, { mode: 'pan', rotation: identity, look })
     expect(labels.length).toBeGreaterThan(0)
     expect(labels.every((l) => l.text.endsWith('°'))).toBe(true)
+  })
+})
+
+describe('skyCulture', () => {
+  const background: SkyBackground = {
+    frame: 'ecliptic',
+    starfield: { seed: 1, count: 1, magnitude_limit: 6.5 },
+    stars: [
+      {
+        id: 'star_a', name: 'A', magnitude: 1, temperature_k: 6000,
+        unit: [1, 0, 0], source: 'authored', variability: null,
+      },
+      {
+        id: 'star_b', name: 'B', magnitude: 2, temperature_k: 5000,
+        unit: [0, 1, 0], source: 'authored', variability: null,
+      },
+      {
+        id: 'bg_star_00000', name: null, magnitude: 5, temperature_k: 4000,
+        unit: [0, 0, 1], source: 'starfield', variability: null,
+      },
+    ],
+    deep_sky: [
+      { id: 'dso_x', name: 'X', type: 'cluster', magnitude: 3, angular_size_deg: 1, unit: [0, 0, 1] },
+    ],
+    galactic_band: null,
+    transient_events: [],
+    wandering_objects: [],
+  }
+  const culture = {
+    id: 'c1', name: 'Culture', description: null, star_names: {},
+    asterisms: [{ id: 'ast1', name: 'Figure', meaning: null, lines: [['star_a', 'star_b']] as Array<[string, string]> }],
+  }
+
+  it('samples the great circle with unit vectors and exact endpoints', () => {
+    const a = toVec3([1, 0, 0])
+    const b = toVec3([0, 1, 0])
+    const pts = greatCircleSamples(a, b)
+    expect(pts[0]).toEqual(a)
+    expect(pts[pts.length - 1]).toEqual(b)
+    // 90° at 2° steps → 45 segments → 46 samples
+    expect(pts.length).toBe(46)
+    for (const p of pts) expect(Math.hypot(p.e, p.n, p.u)).toBeCloseTo(1, 9)
+    // the 45° midpoint of the quarter arc: pick a step count that lands on it
+    // (90° at 3° steps → 30 segments → the exact midpoint is sample 15)
+    const mid = greatCircleSamples(a, b, 3)[15]
+    expect(mid.e).toBeCloseTo(Math.SQRT1_2, 9)
+    expect(mid.n).toBeCloseTo(Math.SQRT1_2, 9)
+    // coincident endpoints degenerate cleanly
+    expect(greatCircleSamples(a, a)).toEqual([a, a])
+  })
+
+  it('joins only authored stars and deep-sky objects (never the starfield)', () => {
+    const lookup = buildCultureLookup(background)
+    expect(lookup.get('star_a')).toEqual([1, 0, 0])
+    expect(lookup.get('dso_x')).toBeDefined()
+    expect(lookup.has('bg_star_00000')).toBe(false)
+  })
+
+  it('builds figure geometry and degrades gracefully on stale references', () => {
+    const lookup = buildCultureLookup(background)
+    const geom = buildAsterismGeometry(culture, culture.asterisms[0], lookup)
+    expect(geom).not.toBeNull()
+    expect(geom!.edges.length).toBe(1)
+    expect(geom!.memberIds).toEqual(['star_a', 'star_b'])
+    expect(geom!.centroid).not.toBeNull()
+    expect(Math.hypot(geom!.centroid!.e, geom!.centroid!.n, geom!.centroid!.u)).toBeCloseTo(1, 9)
+
+    // one stale endpoint drops only that edge; a resolvable edge survives
+    const mixed = buildAsterismGeometry(
+      culture,
+      { ...culture.asterisms[0], lines: [['star_a', 'gone'], ['star_a', 'dso_x']] },
+      lookup,
+    )
+    expect(mixed!.edges.length).toBe(1)
+    expect(mixed!.memberIds).toEqual(['star_a', 'dso_x'])
+
+    // nothing resolves → no figure at all
+    expect(buildAsterismGeometry(culture, { ...culture.asterisms[0], lines: [['x', 'y']] }, lookup)).toBeNull()
   })
 })

@@ -1,0 +1,33 @@
+# 星空文化（文明层设定）— 第一版（2026-11-04 作者裁决）
+#
+# 文化给天文层 sky_background.yaml 里的背景天体命名、连线；引用一律走稳定 id，
+# 不复制任何坐标（Stellarium 星空文化范式）：星的位置变动只改 sky_background.yaml，
+# 这里的连线自动跟随。程序化暗星场（bg_star_*）不可引用——改 seed/count 会静默
+# 重编号，语义漂移比断链更糟。构建时文明引擎校验全部 id 引用，未知 id 直接失败。
+#
+# culture_xiangxing 是暂定占位：civilizations.yaml 填入正式文化实体后合并对齐
+# （以那边的 id 为准）。Arrow-α..ι / NDC 1..4 等目录名仍是开发交流用暂定名
+# （见 sky_background.yaml 文件头），正式的文化内名称只写在本文件。
+#
+# 长中文文本一律用单行引号字符串——YAML 折叠标量（>-）会在折行处并入空格，
+# 中文句子里会多出「， 以及」这样的脏空格（本文件与 derived 转储都遵守）。
+
+cultures:
+  - id: culture_xiangxing
+    name: "向星诸族（暂定）"
+    description: "以巨神星为天标的向星区诸部族——从世界岛北部到曙光大陆西北的早期交流圈，以及光暗分界线上的黄昏高原。箭是他们共同的指极星官：北天终年不落，沿箭寻极的口诀在诸族间通用。"
+    star_names:
+      # 箭尖变星的文化专名：不定期增亮约一等，被诸族视为预兆（「出鞘」预兆历）
+      star_arrow_alpha: "出鞘"
+    asterisms:
+      - id: asterism_arrow
+        name: "箭"
+        meaning: "一支骑在银道带上、指向北天极的巨箭。箭尾浸在疏散星团 NDC 1 的柔光里（箭尾星是簇中最亮成员），箭杆穿过两颗亮星抵达箭尖「出鞘」。口诀「沿箭四倍见极」：从箭尾到箭尖全长约 13°，沿箭的指向再延长约四倍便落到北天极附近，偏差仅约 1°。极旁 3.5° 虽有一颗暗枢星，但它不足以独自指极——认极必须靠箭。"
+        lines:
+          # 箭杆 δ→γ→β→α（轻微折弯，南十字式的不完全对齐是刻意的）；
+          # 箭镞 ε—α—ζ 两翼对称张开；η/θ/ι 三颗暗星属 NDC 1 星团的柔光尾羽，不画线
+          - [star_arrow_delta, star_arrow_gamma]
+          - [star_arrow_gamma, star_arrow_beta]
+          - [star_arrow_beta, star_arrow_alpha]
+          - [star_arrow_epsilon, star_arrow_alpha]
+          - [star_arrow_alpha, star_arrow_zeta]
