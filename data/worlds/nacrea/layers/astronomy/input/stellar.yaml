@@ -246,6 +246,32 @@ orbits:
     mean_anomaly_epoch_deg: 330.18051
     epoch_year: 0.0
 
+  # ---- Aegis 内侧微卫（牧羊犬群）— Nacrea 形成盘内侧残余碎块 ----
+  # 物理约束：质量 ~1e-11 M⊕（点质量级别，不进 REBOUND 主链 _SATS）；与 Nacrea
+  # 间距 Δa = 6.9 / 4.5 r_H(Nacrea ≈ 66,800 km)，均在 Gladman 稳定间隙外
+  # （Nacrea 清扫作用不触及）；且都低于 Nacrea 出生轨道 ≈657,500 km
+  # （诞生后外迁 ~10% 的扫掠带从未越过它们）。周期比 4.64 / 2.26，避开一阶共振。
+  # 共 Nacrea 轨道面（同源碎屑；内侧平衡面应近 Aegis 赤道——微体简化，对认证
+  # 与主链无可测影响）。
+  - body_id: satellite_grit
+    parent_id: planet_aegis
+    semi_major_axis_au: 0.0017380   # ~260,000 km, P≈0.68 d
+    eccentricity: 0.02
+    inclination_deg: 13.9
+    longitude_ascending_node_deg: 137.4
+    argument_of_periapsis_deg: 45.0
+    mean_anomaly_epoch_deg: 20.0
+    epoch_year: 0.0
+  - body_id: satellite_glint
+    parent_id: planet_aegis
+    semi_major_axis_au: 0.0028075   # ~420,000 km, P≈1.39 d
+    eccentricity: 0.015
+    inclination_deg: 13.2
+    longitude_ascending_node_deg: 137.4
+    argument_of_periapsis_deg: 200.0
+    mean_anomaly_epoch_deg: 310.0
+    epoch_year: 0.0
+
   # ---- Crucible 捕获小卫星（火卫一类比） ----
   - body_id: satellite_cinder
     parent_id: planet_crucible

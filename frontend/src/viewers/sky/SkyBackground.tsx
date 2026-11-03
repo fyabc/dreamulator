@@ -3,37 +3,23 @@
  *  direction+magnitude catalogue rotated into the observer frame, never
  *  propagated).  Directions arrive as ecliptic-frame unit vectors; the same
  *  fitted rotation that powers the ecliptic grid turns them into ENU, then
- *  the active projector places them.  Everything is pointer-transparent —
- *  the background never intercepts a body click.
+ *  the active projector places them.
+ *
+ *  With `interactive`, authored stars and deep-sky sprites carry invisible
+ *  hit targets: hover shows a name tag and click selects the object (the
+ *  chart resolves the press target via data-bg-id — pointer capture never
+ *  delivers a plain click to the circle).  Procedural field stars stay
+ *  pointer-transparent, as does everything when interactive is off.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { applyMat3, type Mat3 } from './frameFit'
 import { starColorCss } from './bodyColor'
+import { backgroundLimit, starDotRadius, starDotAlpha } from './backgroundStars'
 import type { ProjectDir } from './graticule'
 import type { Vec3 } from './panProjector'
 import type { SkyBackground } from './types'
-
-/** Limiting magnitude rises as the field narrows (the zoom-linked limit
- *  planetariums use): a tighter field earns ~2 magnitudes of depth at 9×. */
-export function backgroundLimit(baseLimit: number, fovDeg: number | null): number {
-  const boost = fovDeg === null ? 1 : Math.max(0, 2 * Math.log10(90 / fovDeg))
-  return baseLimit + Math.min(boost, 4)
-}
-
-/** Star dot radius in chart pixels: brighter = bigger, clamped to a point
- *  source.  Calibrated BELOW the system-body scale on purpose: the faintest
- *  system body (a −5 mag moon) outshines the brightest background star by
- *  ~100×, and the chart must read that hierarchy. */
-export function starDotRadius(magnitude: number, limit: number): number {
-  return Math.min(2.4, Math.max(0.5, 0.5 + (limit - magnitude) * 0.28))
-}
-
-/** Star dot opacity: the naked-eye fade, capped well below a lit planet disc. */
-export function starDotAlpha(magnitude: number, limit: number): number {
-  return Math.min(0.8, Math.max(0.1, 0.12 + (limit - magnitude) * 0.11))
-}
 
 export interface SkyBackgroundLayerProps {
   background: SkyBackground
@@ -44,7 +30,17 @@ export interface SkyBackgroundLayerProps {
   fovDeg: number | null
   /** Pixel height of the view (deep-sky sprite scale). */
   height: number
+  /** Hover/click targets on authored stars and DSOs (the pan view). */
+  interactive?: boolean
+  /** Selected background-object id — draws the selection ring. */
+  selectedBgId?: string | null
 }
+
+const HALO = {
+  stroke: 'rgba(4,8,18,0.85)',
+  strokeWidth: 2.6,
+  paintOrder: 'stroke',
+} as const
 
 function perpendicularBasis(pole: Vec3): [Vec3, Vec3] {
   const seed: Vec3 = Math.abs(pole.u) < 0.9 ? { e: 0, n: 0, u: 1 } : { e: 1, n: 0, u: 0 }
@@ -66,7 +62,10 @@ export default function SkyBackgroundLayer({
   project,
   fovDeg,
   height,
+  interactive = false,
+  selectedBgId = null,
 }: SkyBackgroundLayerProps) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
   const limit = useMemo(
     () => backgroundLimit(background.starfield.magnitude_limit, fovDeg),
     [background, fovDeg],
@@ -155,34 +154,109 @@ export default function SkyBackgroundLayer({
       )}
 
       {/* Deep-sky sprites */}
-      {dsos.map(({ dso, point, sizePx }) => (
-        <g key={dso.id} opacity={Math.min(0.9, Math.max(0.25, (9 - dso.magnitude) / 6))}>
-          <ellipse cx={point!.x} cy={point!.y} rx={sizePx} ry={sizePx * (dso.type === 'galaxy' ? 0.55 : 0.8)} fill="url(#dso-glow)" />
-          {(dso.type === 'remnant' || dso.type === 'galaxy') && (
-            <ellipse
-              cx={point!.x}
-              cy={point!.y}
-              rx={sizePx * 0.85}
-              ry={sizePx * (dso.type === 'galaxy' ? 0.4 : 0.68)}
-              fill="none"
-              stroke="rgba(255,255,255,0.3)"
-              strokeWidth={0.8}
-            />
-          )}
-        </g>
-      ))}
+      {dsos.map(({ dso, point, sizePx }) => {
+        const marked = interactive && (hoveredId === dso.id || selectedBgId === dso.id)
+        return (
+          <g key={dso.id} opacity={Math.min(0.9, Math.max(0.25, (9 - dso.magnitude) / 6))}>
+            <ellipse cx={point!.x} cy={point!.y} rx={sizePx} ry={sizePx * (dso.type === 'galaxy' ? 0.55 : 0.8)} fill="url(#dso-glow)" />
+            {(dso.type === 'remnant' || dso.type === 'galaxy') && (
+              <ellipse
+                cx={point!.x}
+                cy={point!.y}
+                rx={sizePx * 0.85}
+                ry={sizePx * (dso.type === 'galaxy' ? 0.4 : 0.68)}
+                fill="none"
+                stroke="rgba(255,255,255,0.3)"
+                strokeWidth={0.8}
+              />
+            )}
+            {marked && (
+              <ellipse
+                cx={point!.x}
+                cy={point!.y}
+                rx={Math.max(sizePx * 1.15, 9)}
+                ry={Math.max(sizePx * (dso.type === 'galaxy' ? 0.7 : 1.0), 8)}
+                fill="none"
+                stroke="rgba(126,200,227,0.9)"
+                strokeWidth={1.2}
+              />
+            )}
+            {interactive && (
+              <circle
+                cx={point!.x}
+                cy={point!.y}
+                r={Math.max(9, sizePx * 0.7)}
+                fill="transparent"
+                pointerEvents="all"
+                data-bg-id={dso.id}
+                onMouseEnter={() => setHoveredId(dso.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              />
+            )}
+            {marked && (
+              <text
+                x={point!.x + Math.max(sizePx * 1.15, 9) + 4}
+                y={point!.y - 6}
+                fontSize={11}
+                fill="rgba(255,255,255,0.85)"
+                {...HALO}
+              >
+                {dso.name ?? dso.id} · {dso.angular_size_deg.toFixed(1)}°
+              </text>
+            )}
+          </g>
+        )
+      })}
 
       {/* Star dots (point sources, colour = temperature, alpha = naked-eye fade) */}
-      {stars.map(({ star, point }) => (
-        <circle
-          key={star.id}
-          cx={point!.x}
-          cy={point!.y}
-          r={starDotRadius(star.magnitude, limit)}
-          fill={starColorCss(star.temperature_k)}
-          opacity={starDotAlpha(star.magnitude, limit)}
-        />
-      ))}
+      {stars.map(({ star, point }) => {
+        const authored = star.source === 'authored'
+        const marked = interactive && authored && (hoveredId === star.id || selectedBgId === star.id)
+        return (
+          <g key={star.id}>
+            <circle
+              cx={point!.x}
+              cy={point!.y}
+              r={starDotRadius(star.magnitude, limit)}
+              fill={starColorCss(star.temperature_k)}
+              opacity={starDotAlpha(star.magnitude, limit)}
+            />
+            {marked && (
+              <circle
+                cx={point!.x}
+                cy={point!.y}
+                r={Math.max(starDotRadius(star.magnitude, limit) + 3.5, 6)}
+                fill="none"
+                stroke="rgba(126,200,227,0.9)"
+                strokeWidth={1.2}
+              />
+            )}
+            {interactive && authored && (
+              <circle
+                cx={point!.x}
+                cy={point!.y}
+                r={9}
+                fill="transparent"
+                pointerEvents="all"
+                data-bg-id={star.id}
+                onMouseEnter={() => setHoveredId(star.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              />
+            )}
+            {marked && (
+              <text
+                x={point!.x + 11}
+                y={point!.y - 8}
+                fontSize={11}
+                fill="rgba(255,255,255,0.85)"
+                {...HALO}
+              >
+                {star.name ?? star.id} · {star.magnitude.toFixed(1)}ᵐ
+              </text>
+            )}
+          </g>
+        )
+      })}
     </g>
   )
 }

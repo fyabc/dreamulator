@@ -72,6 +72,8 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 并双双入影）**~1500 年一遇**——「一文明一次」的历法与神话核心节律（1500 地球年
 N 体 MC 判决，方法与统计见 design-notes/0009 附录 §9.5）。详见 sky_phenomena.md。
 
+巨盘旁另有两颗**牧羊犬微卫**——砾星（Grit，{{ (entities.satellite_grit.semi_major_axis_au * 149597870.7) | round0 }} km）与微芒星（Glint，{{ (entities.satellite_glint.semi_major_axis_au * 149597870.7) | round0 }} km）：Nacrea 形成盘内侧的残余碎块（km 级，质量可忽略，不参与主链引力计算），在珠母星轨道内侧、Nacrea 清扫间隙（Δa = 6.9 / 4.5 倍希尔半径）之外以 {{ entities.satellite_grit.period_days | round(2) }} / {{ entities.satellite_glint.period_days | round(2) }} 天周期绕巨盘巡行。从珠母星看是巨盘近旁 +3~+6 等的暗点，肉眼勉强、巨盘辉光内难辨（视径 2–3″ 点源）。
+
 ### 因变量 — 60 亿年离心率演化简史（受迫振荡）
 
 Nacrea 的偏心率**不是自由衰减的**，而是受恒星四极矩与伴星摄动维持的

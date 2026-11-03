@@ -86,6 +86,29 @@ planets:
     albedo: 0.313                 # Charon 型处理结晶水冰（HZ 辐照压暗版）
 
   # ================================================================
+  # Aegis 内侧微卫（牧羊犬群）— Nacrea 形成盘内侧残余碎块（km 级；
+  # Δa = 6.9 / 4.5 r_H 外、低于 Nacrea 出生轨道 657,500 km，见 stellar.yaml 注）
+  # ================================================================
+  - id: satellite_grit
+    name: "砾星 · Grit"
+    orbits: planet_aegis
+    planet_type: terrestrial
+    mass: 3.1e-11                  # M⊕（r≈2.6 km，ρ≈2.5 g/cm³）
+    radius: 4.1e-4                 # R⊕ (2.6 km)
+    rotation_period_days: 0.677    # 潮汐锁定 = 公转周期
+    axial_tilt_deg: 0.0
+    albedo: 0.10
+  - id: satellite_glint
+    name: "微芒星 · Glint"
+    orbits: planet_aegis
+    planet_type: terrestrial
+    mass: 1.2e-11                  # M⊕（r≈1.9 km）
+    radius: 3.0e-4                 # R⊕ (1.9 km)
+    rotation_period_days: 1.389    # 潮汐锁定 = 公转周期
+    axial_tilt_deg: 0.0
+    albedo: 0.10
+
+  # ================================================================
   # Crucible（鼎星）捕获卫星 — 小卫星（火卫一类比）
   # ================================================================
   - id: satellite_cinder

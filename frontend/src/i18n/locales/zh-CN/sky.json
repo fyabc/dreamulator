@@ -87,6 +87,26 @@
     "eclipticLon": "黄经",
     "eclipticLat": "黄纬"
   },
+  "objectInspector": {
+    "magnitude": "视星等",
+    "temperature": "色温",
+    "variability": "变星类型",
+    "variableRange": "星等范围（亮…暗）",
+    "variablePeriod": "光变周期",
+    "periodDays": "{{d}} 天",
+    "irregular": "不规则",
+    "type": "类型",
+    "angularSize": "视大小",
+    "dsoTypes": {
+      "nebula": "星云",
+      "cluster": "星团",
+      "galaxy": "星系",
+      "remnant": "超新星遗迹"
+    },
+    "varTypes": {
+      "gamma_cassiopeiae": "γ Cas 型（爆发 Be）"
+    }
+  },
   "legend": {
     "title": "图例",
     "size": "圆盘大小 = 视径",

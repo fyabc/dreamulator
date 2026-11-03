@@ -39,6 +39,30 @@ class TransientEventType(StrEnum):
     GRB = "grb"
 
 
+class StarVariability(BaseModel):
+    """Variable-star classification (GCVS-style) — a narrative anchor, not a series.
+
+    The sky view renders the star's baseline magnitude; the variability record
+    feeds civilization-layer lore (an omens calendar around an erupting arrow
+    tip, say).  ``magnitude`` on the star is the quiescent/mean level.
+    """
+
+    type: str = Field(description="GCVS-style type, e.g. 'gamma_cassiopeiae'")
+    magnitude_range: tuple[float, float] | None = Field(
+        default=None,
+        description="Numerical (min, max) the brightness stays between, e.g. (-1.3, -0.3)",
+    )
+    period_days: float | None = Field(
+        default=None, gt=0, description="Pulsation/eruption cycle; None = irregular"
+    )
+
+    @model_validator(mode="after")
+    def _check_range(self) -> StarVariability:
+        if self.magnitude_range is not None and self.magnitude_range[0] > self.magnitude_range[1]:
+            raise ValueError("magnitude_range must be numerical (min, max), got reversed bounds")
+        return self
+
+
 class BackgroundStar(BaseModel):
     """A hand-placed neighbour star.
 
@@ -58,7 +82,7 @@ class BackgroundStar(BaseModel):
         ge=-90.0, le=90.0, description="Ecliptic latitude in the catalog frame"
     )
     magnitude: float | None = Field(
-        default=None, description="Apparent magnitude as seen from the system"
+        default=None, description="Baseline apparent magnitude as seen from the system"
     )
     luminosity_sol: float | None = Field(
         default=None, gt=0, description="Bolometric luminosity in L_sun (alternative input)"
@@ -68,6 +92,9 @@ class BackgroundStar(BaseModel):
     )
     temperature_k: float = Field(
         default=5800.0, gt=0, description="Effective temperature — the marker colour"
+    )
+    variability: StarVariability | None = Field(
+        default=None, description="Variable-star classification (lore anchor)"
     )
 
     @model_validator(mode="after")
@@ -124,6 +151,28 @@ class TransientEvent(BaseModel):
     )
 
 
+class WanderingObject(BaseModel):
+    """A passing object that is far away now (a flyby star, say).
+
+    Direction + distance are the CURRENT state; the encounter metadata
+    records the close pass.  The sky view does not render these (naked-eye
+    invisible) — this is canon data for lore and the future forensic-astronomy
+    thread (long-period comet radiants converging on the incoming direction).
+    """
+
+    id: str
+    name: str | None = None
+    object_type: str = Field(description="Free-form classification, e.g. 'm_dwarf_binary'")
+    ecliptic_lon_deg: float = Field(ge=0.0, lt=360.0)
+    ecliptic_lat_deg: float = Field(ge=-90.0, le=90.0)
+    distance_pc: float = Field(gt=0, description="Current distance from the system")
+    magnitude: float | None = Field(default=None, description="Current combined apparent magnitude")
+    close_approach_au: float | None = Field(default=None, gt=0)
+    encounter_age_myr: float | None = Field(
+        default=None, description="Millions of years since perihelion"
+    )
+
+
 class StarfieldSpec(BaseModel):
     """The seeded procedural faint-star field that fills the naked-eye sky.
 
@@ -150,6 +199,7 @@ class SkyBackgroundInput(BaseModel):
     deep_sky: list[DeepSkyObject] = Field(default_factory=list)
     galactic_band: GalacticBand | None = None
     transient_events: list[TransientEvent] = Field(default_factory=list)
+    wandering_objects: list[WanderingObject] = Field(default_factory=list)
 
 
 class BackgroundStarDerived(BaseModel):
@@ -161,6 +211,7 @@ class BackgroundStarDerived(BaseModel):
     temperature_k: float
     unit: tuple[float, float, float]
     source: Literal["authored", "starfield"]
+    variability: StarVariability | None = None
 
 
 class DeepSkyObjectDerived(BaseModel):
@@ -187,6 +238,17 @@ class TransientEventDerived(BaseModel):
     rate_per_myr: float | None = None
 
 
+class WanderingObjectDerived(BaseModel):
+    id: str
+    name: str | None = None
+    object_type: str
+    unit: tuple[float, float, float]
+    distance_pc: float
+    magnitude: float | None = None
+    close_approach_au: float | None = None
+    encounter_age_myr: float | None = None
+
+
 class SkyBackgroundDerived(BaseModel):
     """`layers/astronomy/derived/sky_background.yaml` — what the sky view reads."""
 
@@ -196,3 +258,4 @@ class SkyBackgroundDerived(BaseModel):
     deep_sky: list[DeepSkyObjectDerived] = Field(default_factory=list)
     galactic_band: GalacticBandDerived | None = None
     transient_events: list[TransientEventDerived] = Field(default_factory=list)
+    wandering_objects: list[WanderingObjectDerived] = Field(default_factory=list)

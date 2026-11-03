@@ -16,6 +16,7 @@ import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import SkyChart from '../viewers/sky/SkyChart'
 import SkyInspector from '../viewers/sky/SkyInspector'
+import SkyObjectInspector from '../viewers/sky/SkyObjectInspector'
 import SkyPanChart from '../viewers/sky/SkyPanChart'
 import SkyRiseSetTable from '../viewers/sky/SkyRiseSetTable'
 import SkyTimeControl from '../viewers/sky/SkyTimeControl'
@@ -60,6 +61,9 @@ export default function SkyViewerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const staticMode = isStaticMode()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  /** Selected universe-setting object (authored star / DSO) — a namespace
+   *  disjoint from body ids; the two selections are mutually exclusive. */
+  const [bgId, setBgId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'none' | 'observer' | 'display'>('none')
   const { visible: chromeVisible, pin: chromePin, hold: chromeHold } = useIdleChrome()
 
@@ -159,7 +163,6 @@ export default function SkyViewerPage() {
       )
     }
     // Aims once on the first result; look.fovDeg is read, not tracked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.display])
 
   const setParam = (key: string, value: string | null) => {
@@ -177,10 +180,21 @@ export default function SkyViewerPage() {
   const observerOptions = useMemo(() => (catalog ? observerCandidates(catalog) : []), [catalog])
 
   const selectBody = (id: string) => {
+    setBgId(null)
     navigate(`/worlds/${worldName}/sky/${id}${window.location.search}`, { replace: true })
   }
   const deselectBody = () => {
     navigate(`/worlds/${worldName}/sky${window.location.search}`, { replace: true })
+  }
+  /** Selecting a universe-setting object clears any body selection (and vice
+   *  versa via selectBody) — one info panel, two namespaces. */
+  const selectBgObject = (id: string) => {
+    deselectBody()
+    setBgId(id)
+  }
+  const clearSelection = () => {
+    deselectBody()
+    setBgId(null)
   }
 
   const commitLook = () => {
@@ -260,7 +274,9 @@ export default function SkyViewerPage() {
               hoveredId={hoveredId}
               onHover={setHoveredId}
               onSelect={selectBody}
-              onBackgroundSelect={deselectBody}
+              onBackgroundSelect={clearSelection}
+              selectedBgId={bgId}
+              onBgSelect={selectBgObject}
             />
           ) : (
             <div className="absolute inset-0 p-4 md:p-8">
@@ -282,9 +298,9 @@ export default function SkyViewerPage() {
 
         {/* Right-side column: the selected-body info panel and the one open
             panel popup, translucent so the sky stays visible through them. */}
-        {(bodyId || activePanel) && (
+        {(bodyId || bgId || activePanel) && (
           <div className="absolute top-3 right-3 flex flex-col items-end gap-2 max-h-[calc(100vh-8rem)]">
-            {bodyId && data.display && (
+            {(bodyId || bgId) && data.display && (
               <div
                 className="relative w-64 max-h-full overflow-y-auto border border-space-border/60 bg-space-panel/55 backdrop-blur-md rounded-lg p-3 shadow-lg"
                 onPointerEnter={() => chromePin(true)}
@@ -292,14 +308,18 @@ export default function SkyViewerPage() {
               >
                 <button
                   type="button"
-                  onClick={deselectBody}
+                  onClick={clearSelection}
                   className="absolute top-2 right-2 w-5 h-5 rounded text-gray-500 hover:text-gray-200 hover:bg-space-surface text-xs leading-none"
                   aria-label={t('sky:info.close')}
                   title={t('sky:info.close')}
                 >
                   ✕
                 </button>
-                <SkyInspector result={data.display} selectedId={bodyId} />
+                {bodyId ? (
+                  <SkyInspector result={data.display} selectedId={bodyId} />
+                ) : (
+                  <SkyObjectInspector background={background ?? undefined} selectedId={bgId} />
+                )}
               </div>
             )}
             {activePanel && data.display && (
