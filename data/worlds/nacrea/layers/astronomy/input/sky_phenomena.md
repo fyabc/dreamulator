@@ -223,12 +223,12 @@ $2\arcsin({{ sky.eclipse.eclipse_threshold_km | round0 }}/{{ sky.eclipse.max_ver
 | 13 | **珠行墟带**（韵珠/守珠穿行于墟带光带上——暗红/灰蓝珠饰嵌入幽带） | 常驻：两珠沿黄道带游走，轨迹黄纬 \|β\|≲14°（与墟带光带同带）；对巨神星的距角随会合在 0°–约 89° 全域摆动，仅近合时回到巨盘旁；双珠同框每 {{ (1/(1/entities.satellite_cadence.period_days - 1/entities.satellite_vigil.period_days)) | round(1) }} 地球日会合 | ★★★ 构图素材 |
 | 14 | **双节点流星增强**（墟带尘经 P-R 拖曳内迁至 0.365 AU 黄道面；Nacrea 轨道每 {{ entities.satellite_nacrea.period_days | round(3) }} d 两次穿越） | **{{ (entities.satellite_nacrea.period_days / 2) | round(2) }} 地球日节拍**的常态流星雨 | ★★★ |
 | 15 | **长周期彗星淋浴**（92 Myr 前一颗暗双星自 ~68,000 AU 近距掠过系统、搅动外储库的延迟果实；长周期彗星辐射点汇聚于其来向，即现位置对跖方向 (21.3°, +34.8°)——未来的法证天文学时刻） | Myr 级稀疏；近期撞击体偏多即其余波 | ★★ 叙事种子 |
-| 16 | **牧羊犬双星**（内侧微卫 Grit/Glint 绕巨盘快速巡行：+3~+6 等暗点、2–3″，每会合周期横越巨盘一次——凌巨盘或没入盘后） | 绕巨盘周期 {{ entities.satellite_grit.period_days | round(2) }} / {{ entities.satellite_glint.period_days | round(2) }} d | ★★ |
+| 16 | **牧羊犬双星**（Zone 1 环区微卫 Grit/Glint 巡行于巨盘旁 13°–16°：+0.8~+3.5 等暗点（随会合距离与相位）、1–2″，约四分之一时间凌/掩于盘面——满相巨神夜 Grit 稳定可辨、Glint 边缘；**食夜双灭窗口（烬星入盘、巨神背光）眩光归零时双星最清晰**，是「巨神熄灭时双卫守灵」的仪式级天象） | 绕巨盘周期 {{ (entities.satellite_grit.period_days * 24) | round(1) }} / {{ (entities.satellite_glint.period_days * 24) | round(1) }} 地球时 | ★★★ 食夜天象 |
 
 > **两处几何修正**：
 > 1. **外卫星只会「被掩」、不会「凌」巨神星**：珠母星是最内卫星（{{ sky.planet_aegis.distance_km | round0 }} km），韵珠/守珠轨道
 >    更大（{{ entities.satellite_cadence.semi_major_axis_au }} / {{ entities.satellite_vigil.semi_major_axis_au }} AU），从珠母星看它们永远在巨神星盘面**后方**，只会被巨神星遮蔽
->    （掩），不会掠过盘面前方（凌）。只有轨道在珠母星**内侧**的天体才会凌巨神星——牧羊犬双卫（{{ entities.satellite_grit.semi_major_axis_au }} / {{ entities.satellite_glint.semi_major_axis_au }} AU）即是：绕巨盘一周凌、掩各一次。
+>    （掩），不会掠过盘面前方（凌）。只有轨道在珠母星**内侧**的天体才会凌巨神星——Zone 1 环区的牧羊犬双卫（{{ (entities.satellite_grit.semi_major_axis_au * 149597870.7) | round0 }} / {{ (entities.satellite_glint.semi_major_axis_au * 149597870.7) | round0 }} km）即是：绕盘缘巡行，每会合周期凌、掩各一次，约四分之一时间隐没于盘面。
 > 2. **「环食」非「日环食」**：巨神星视直径 {{ sky.planet_aegis.angular_diameter_deg | round2 }}° ≫ 烬星 {{ sky.star_ignis.angular_diameter_deg | round2 }}°，巨神星总是完全遮住烬星（日全食），
 >    「日环食」不可能。若巨神星有环，环面可额外遮挡烬星光（星环掩星）——但现有环极暗、限于
 >    <125,000 km 内圈，对珠母星可忽略；「过大环」延伸到珠母星轨道（{{ sky.planet_aegis.distance_km | round0 }} km）会被珠母星引力

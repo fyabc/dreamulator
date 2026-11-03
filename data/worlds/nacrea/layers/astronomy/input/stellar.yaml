@@ -246,27 +246,30 @@ orbits:
     mean_anomaly_epoch_deg: 330.18051
     epoch_year: 0.0
 
-  # ---- Aegis 内侧微卫（牧羊犬群）— Nacrea 形成盘内侧残余碎块 ----
-  # 物理约束：质量 ~1e-11 M⊕（点质量级别，不进 REBOUND 主链 _SATS）；与 Nacrea
-  # 间距 Δa = 6.9 / 4.5 r_H(Nacrea ≈ 66,800 km)，均在 Gladman 稳定间隙外
-  # （Nacrea 清扫作用不触及）；且都低于 Nacrea 出生轨道 ≈657,500 km
-  # （诞生后外迁 ~10% 的扫掠带从未越过它们）。周期比 4.64 / 2.26，避开一阶共振。
-  # 共 Nacrea 轨道面（同源碎屑；内侧平衡面应近 Aegis 赤道——微体简化，对认证
-  # 与主链无可测影响）。
+  # ---- Aegis 内侧微卫（牧羊犬双卫）— Zone 1 光环区（环缘看守者）----
+  # 正典定位（satellite_architecture.md 分区表）：Zone 1 = 潮汐撕碎胚胎的光环与
+  # 牧羊犬区，Zone 2（约 207k–700k km）= Nacrea 扫雪清出的死寂真空——双卫属 Zone 1。
+  # 环区边界 = 流体洛希极限 2.456·R_p·(ρ_p/ρ_s)^1/3，取温冰屑 ρ_s ≈ 1.2 g/cm³
+  # （ρ_p = 1.99）→ ≈207,500 km；牧羊犬本体为固体洛希（~84k km）外的强度束缚单体。
+  # 物理约束：质量 ~3–7e-11 M⊕（点质量级别，不进 REBOUND 主链 _SATS）；与 Nacrea
+  # 间距 Δa = 7.9 / 8.3 r_H(Nacrea ≈ 66,800 km)，远超 Gladman 稳定间隙（清扫不触及），
+  # 且远低于出生轨道 ≈657,500 km（外迁 10% 的扫掠带从未越过）。周期比 6.96 / 9.07，
+  # 脱离低阶共振。倾角近 Aegis 赤道（真赤道方位未定）±2.5°——刻意超出引擎自转轴
+  # 推导的 ±2° 触发线，方位不派生，认证与主链零改动。
   - body_id: satellite_grit
     parent_id: planet_aegis
-    semi_major_axis_au: 0.0017380   # ~260,000 km, P≈0.68 d
-    eccentricity: 0.02
-    inclination_deg: 13.9
+    semi_major_axis_au: 0.00132756  # ~198,600 km（环缘外侧看守），P≈0.451 d
+    eccentricity: 0.01
+    inclination_deg: 42.4
     longitude_ascending_node_deg: 137.4
     argument_of_periapsis_deg: 45.0
     mean_anomaly_epoch_deg: 20.0
     epoch_year: 0.0
   - body_id: satellite_glint
     parent_id: planet_aegis
-    semi_major_axis_au: 0.0028075   # ~420,000 km, P≈1.39 d
-    eccentricity: 0.015
-    inclination_deg: 13.2
+    semi_major_axis_au: 0.00111165  # ~166,300 km（内圈结构），P≈0.346 d
+    eccentricity: 0.008
+    inclination_deg: 47.2
     longitude_ascending_node_deg: 137.4
     argument_of_periapsis_deg: 200.0
     mean_anomaly_epoch_deg: 310.0

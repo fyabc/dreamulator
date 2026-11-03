@@ -28,8 +28,8 @@ tags: [satellite, impact-shield, CPD, retrograde-capture]
 
 | 区域 | 距离范围 | 状态 | 成因 |
 |------|---------|------|------|
-| **Zone 1：内圈光环与牧羊犬区** | < 125,000 km（洛希极限内） | 极黯淡硅酸盐+冰质尘埃光环 + 数颗 <20 km 牧羊犬卫星 | 大型胚胎被潮汐力撕碎 |
-| **Zone 2：绝对真空区** | 125,000 – 700,000 km | **死寂真空** | Nacrea 寡头吸积吞噬 99% 固态物质；60 亿年轨道外迁（形成以来 +10%）如"引力扫雪机"弹射/清除沿途所有竞争者 |
+| **Zone 1：内圈光环与牧羊犬区** | < 约 207,000 km（温冰屑流体洛希极限 2.456·R_p·(ρ_p/ρ_s)^⅓；ρ_p=1.99、ρ_s≈1.2 g/cm³） | 极黯淡硅酸盐+冰质尘埃光环 + 牧羊犬双卫（Grit/Glint，正典登记） | 大型胚胎被潮汐力撕碎 |
+| **Zone 2：绝对真空区** | 约 207,000 – 700,000 km | **死寂真空** | Nacrea 寡头吸积吞噬 99% 固态物质；60 亿年轨道外迁（形成以来 +10%）如"引力扫雪机"弹射/清除沿途所有竞争者 |
 | **Zone 3：双单体逆行捕获卫 + 外圈捕获群** | 700,000 – 2,100,000 km | **韵珠 Cadence**（0.006 M⊕，Europa 大小 R=1437 km，轨道 {{ (entities.satellite_cadence.semi_major_axis_au * 149597870.7) | round0 }} km ≈ {{ entities.satellite_cadence.a_rh_ratio }} r_H）与**守珠 Vigil**（Charon 级 3×10⁻⁴ M⊕，轨道 {{ (entities.satellite_vigil.semi_major_axis_au * 149597870.7) | round0 }} km ≈ {{ entities.satellite_vigil.a_rh_ratio }} r_H，内迁构型）。两者是互相独立的单体捕获卫，径向净空约 {{ ((entities.satellite_vigil.semi_major_axis_au - entities.satellite_cadence.semi_major_axis_au) * 149597870.7) | round0 }} km，合 {{ entities.satellite_cadence.mutual_hill_separation_to_outer | round0 }} 个互希尔半径。双珠属 **FJ 近平衡族**（黄道系基准）：捕获后就停在各自逆行拉普拉斯面的近旁（韵珠初始 i=167.2°/Ω=180°，守珠 i=170°/Ω=180°；当前历元分别为 168.8° 与 170.1°）。由于 r_L 之外的平衡面是拉普拉斯面而不是赤道面，i_ecl 是准不变量，轨道面绕平衡面做有界进动；两个轨道面的互倾角在 0.2–23.9° 之间（均值 12.7°）缓慢拍动。此外还有约 30–50 颗 10–100 km 级的不规则捕获卫星 | 两颗珠都是晚期散射期（约 0.5 Gyr，本系统的「晚期重轰炸」）的逆行捕获天体，与 Glacis 的逆石星 Rogue 同世代、同机制，与墟带雕塑属同一事件；不规则捕获群则是 60 亿年间偶然捕获的星际访客与彗星 |
 
 **为什么是「双单体」而非共振链/双星/共轨对**：Nacrea 的质量比 μ = 2.4×10⁻³，
@@ -72,7 +72,7 @@ Nacrea 被潮汐锁定后，巨行星潮汐以极强效率阻尼其轨道偏心�
 并双双入影）**~1500 年一遇**——「一文明一次」的历法与神话核心节律（1500 地球年
 N 体 MC 判决，方法与统计见 design-notes/0009 附录 §9.5）。详见 sky_phenomena.md。
 
-巨盘旁另有两颗**牧羊犬微卫**——砾星（Grit，{{ (entities.satellite_grit.semi_major_axis_au * 149597870.7) | round0 }} km）与微芒星（Glint，{{ (entities.satellite_glint.semi_major_axis_au * 149597870.7) | round0 }} km）：Nacrea 形成盘内侧的残余碎块（km 级，质量可忽略，不参与主链引力计算），在珠母星轨道内侧、Nacrea 清扫间隙（Δa = 6.9 / 4.5 倍希尔半径）之外以 {{ entities.satellite_grit.period_days | round(2) }} / {{ entities.satellite_glint.period_days | round(2) }} 天周期绕巨盘巡行。从珠母星看是巨盘近旁 +3~+6 等的暗点，肉眼勉强、巨盘辉光内难辨（视径 2–3″ 点源）。
+巨盘旁另有两颗**牧羊犬微卫**——砾星（Grit，{{ (entities.satellite_grit.semi_major_axis_au * 149597870.7) | round0 }} km，环缘外侧看守）与微芒星（Glint，{{ (entities.satellite_glint.semi_major_axis_au * 149597870.7) | round0 }} km，内圈结构）：Zone 1 环区潮汐撕碎胚胎的强度束缚残块（km 级，质量可忽略，不参与主链引力计算），在 Nacrea 清扫间隙（Δa = 7.8 / 8.4 倍希尔半径）之外、远低于 Nacrea 出生轨道处，以 {{ (entities.satellite_grit.period_days * 24) | round(1) }} / {{ (entities.satellite_glint.period_days * 24) | round(1) }} 地球时周期绕盘缘巡行。从珠母星看是巨盘旁 13°–16° 处 +0.8~+3.5 等的暗点（视径 1–2″ 点源，约四分之一时间凌/掩于盘面）——满相巨神夜受眩光（~111 lux 永暮级天光 + 眼内散射面纱）压至 Grit 稳定可辨、Glint 边缘；**食季双灭窗口（烬星入盘、巨神背光）眩光归零时双星最清晰**。
 
 ### 因变量 — 60 亿年离心率演化简史（受迫振荡）
 
