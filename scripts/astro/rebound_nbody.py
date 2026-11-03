@@ -74,7 +74,7 @@ MEARTH_MSUN = 3.003e-6  # Earth mass in solar masses
 
 _STAR = "star"
 _CHAIN = ("planet_aegis", "planet_boreal", "planet_glacis")
-_SATS = ("satellite_nacrea", "satellite_cadence", "satellite_vigil", "satellite_pendant")
+_SATS = ("satellite_nacrea", "satellite_cadence", "satellite_vigil")
 _EXTRAS = ("planet_ember", "planet_crucible", "planet_sentinel")
 
 _STELLAR_YAML_RELPATH = "data/worlds/nacrea/layers/astronomy/input/stellar.yaml"
@@ -104,8 +104,6 @@ _SAT_K2Q = {
     "satellite_nacrea": 1.0e-3,
     "satellite_cadence": 0.25 / 100.0,
     "satellite_vigil": 0.25 / 100.0,
-    # inner-capture experiment body (absent from the canonical yaml; rocky)
-    "satellite_pendant": 0.30 / 100.0,
 }
 _AU_KM = 1.496e8
 
