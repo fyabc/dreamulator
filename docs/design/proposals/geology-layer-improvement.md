@@ -205,9 +205,18 @@ terrain/boundary 里多处 `cell_km = √(4πR²/n)` 平均间距近似；修 `_
 ## 8 未实现 proposal 汇总 + 待办
 
 **未实现 proposal**：
-- 裂谷海宽度沿走向分段（§3.5 transitional 带）。
+- 裂谷海宽度沿走向分段（§3.5 transitional 带）。**2026-11-04 补**：分段的成因可以不靠逐条裂谷
+  调参。Gianni 等（2026）给出的机制是裂谷速率取决于**整板应力收支**而非局部岩石圈强度——
+  西太平洋双重俯冲通过太平洋板块把张应力传到对侧，使加利福尼亚湾附近张应力增加 5 到 10 MPa、
+  局部超过 10 MPa，而板块运动方向并未突变。可移植的两条：岩石圈先期变薄变弱是快速张裂的必要
+  而非充分条件，额外的远场张应力使变形集中到少数断裂带；以及快速张裂不必伴随运动学突变，所以
+  重建中看不到方向剧变不能用来排除动力学原因。依赖
+  [`geological-timeline.md` §4.3.1](geological-timeline.md) 的力收支，物理见
+  [plate_force_budget.md](../../knowledge/geology/plate_force_budget.md)。
 - 方案 1：板块从 geography 派生（最彻底，重写板块剖分 + geography 接口）。
 - 热点火山岛建设剖面（§9）。
+- 洋中脊轴部形态随扩张速率（§10）。
+- 张裂型陆内造山缺口（§11）。
 
 **待办**：本文件是部分「已实现」设计依据的事实源（§1–§8 的实现 detail 尚未迁入
 `pipelines/geological-pipeline.md`），后续应迁入 pipelines、本文件只留「为什么」+ 未实现 proposal。
@@ -236,12 +245,58 @@ terrain/boundary 里多处 `cell_km = √(4πR²/n)` 平均间距近似；修 `_
 
 ---
 
-## 参考资料
+## 10 洋中脊轴部形态随扩张速率（立项未实现，2026-11-04）
+
+**现状**：`terrain_synthesizer.py` 的洋脊剖面是一个固定宽度的高斯隆起（`ridge_sigma_km` 默认
+80 km）叠一个更宽的高斯，与扩张速率无关，也没有中央裂谷。
+
+**物理**：轴部形态是扩张速率决定的两种力学体制。Small（1994）对 156 条全球测深剖面的统计给出
+的形状是不对称的——**轴部裂谷的最大起伏随扩张速率下降而增大，但这种依赖只在全扩张 80 mm/yr
+以下出现；轴部高地的起伏在所有速率上大致恒定**。所以实现不该写成「速率越高隆起越高」，而应
+写成「80 mm/yr 以上是起伏大致恒定的轴部高地，以下随速率降低逐渐塌成越来越深的裂谷」，取平滑
+过渡。分档、地球标定与超慢速一类的界线见
+[mid_ocean_ridge_morphology.md](../../knowledge/geology/mid_ocean_ridge_morphology.md)。
+
+**为什么优先级值得抬高**：扩张速率在网格上已有字段（`convergence_rate_cm_yr` 的离散一侧与
+`cumulative_divergence_km`），所以这是把一个先验参数换成可推导量，符合纪律第 1 条，而实现量
+很小。**下游风险也最低**：海底高程不进 GCM（平板海洋只需要海陆掩膜与地表位势），气候层对海洋
+格子取海平面，所以改动主要体现在地图观感与洋流诊断。
+
+**标定口径**：Small 的统计量是「最大起伏」，而格子平均会削减它，所以标定对象是格子平均后的
+下凹深度，不是文献里的裂谷最大深度（与 `orogen_topography.md` 同一条纪律）。本库格子约 30 km
+而中央裂谷宽 20 到 30 km，所以裂谷只能作为轴部单格的高程下凹，不期望解出两侧断层地貌。
+
+**与正典的关系**：实现时做成默认关闭的开关，nacrea 正典的海底地形保持现状，等下一次全量重生成
+再开。
+
+## 11 张裂型陆内造山缺口（登记，2026-11-04）
+
+本库的造山带由到边界的距离与汇聚积分驱动，所以**只在汇聚边界附近造山**。Zheng 等（2026）指出
+陆内造山有两类：挤压型由远场应力驱动，形成逆冲推覆与褶皱，地温梯度低；**张裂型由近场软流圈
+底辟驱动，形成拆离断层与穹隆隆起，地温梯度高，伴生巴肯型变质与长英质岩浆**。后者在本库产不
+出来——盆岭式的陆内穹隆与变质核杂岩没有对应机制。
+
+他们还提出**隐性张裂**的概念：不表现为地堑或半地堑，而以拆离断层带与变质核杂岩的形式存在于
+碰撞造山带内部，用来解释大陆内部广泛分布却缺乏地表裂谷形态的高温压变质与长英质岩浆活动。
+
+**此处只登记，不立方案**，理由有两条。第一，它需要岩石圈厚度与地温梯度这两个本库不建模的量，
+而建模它们属于「增加机制数量」而非「修守恒账本」，与纪律第 5 条的顺序相反。第二，它与
+`canvas-conditioning-structure.md` 记录的「金字塔、同质山地与高原无镶边」**不是同一个问题**
+——那个是条件场只携带格子平均造成的，与陆内造山机制无关，两者不应混为一条待办。
+
+物理与例证见
+[thermal_regimes_and_metamorphism.md](../../knowledge/geology/thermal_regimes_and_metamorphism.md)。
 
 ---
 
 ## 参考资料
 
+- Small, C. (1994). *A global analysis of mid-ocean ridge axial topography*. GJI 116(1). — 轴部
+  裂谷起伏的速率依赖只在 80 mm/yr 以下出现（§10）。
+- Zheng, Y.-F. et al. (2026). *Structure, composition and dynamics of divergent and convergent
+  plate margins*. Geoscience Frontiers 17(6). — 主动与被动俯冲、两类陆内造山、隐性张裂（§11）。
+- Gianni, G. M. et al. (2026). *Western Pacific double subduction drives Gulf of California
+  rifting*. Science 394(6823). — 远场应力传递与裂谷速率（§8 裂谷海宽度分段）。
 - Beuthe, M. (2013). *Spatial patterns of tidal heating*. Icarus 223(1). [arXiv:1212.4630](https://archive.org/details/arxiv-1212.4630)
 - Lithgow-Bertelloni et al. (1993). *Toroidal-poloidal partitioning of plate motions since 120 Ma*. GRL 20(5). [doi:10.1029/93GL00168](https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/93GL00168)
 - Scholz, C. A. et al. (1998). *Comparative sequence stratigraphy of … East African and Baikal rifts*. — 半地堑分段、倾角域交替。

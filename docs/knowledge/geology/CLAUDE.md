@@ -7,6 +7,9 @@
 - `terrain_synthesis.md` — 地形合成（双峰基准、构造效应、fBm 噪声）
 - `orogen_topography.md` — 造山带与海沟的格子平均地形：亚格子起伏标定、留存缩短量与 Airy 增厚、力平衡平均高程上限、翼部坡度、有限山带端部的数值延拓、断板海沟挠曲、明确板块对极性与年代来源、弧前楔与地球体积检验（技术债 43，2026-10）
 - `mountain_belt_morphology.md` — 山系与裂谷的空间组织：喜马拉雅的山前分支、安第斯山脉与高原、阿巴拉契亚长山脊及东非分段盆地；区分山带联系、剖面变化和局地起伏。
+- `mid_ocean_ridge_morphology.md` — 洋中脊轴部形态随扩张速率的谱系：80 mm/yr 以上为起伏大致恒定的轴部高地、以下随速率降低塌成越来越深的中央裂谷（Small 1994 的 156 条剖面统计），超慢速一类的界线与非岩浆洋脊段，以及与半空间冷却下沉律的分工；本库现为固定高斯隆起，改动的下游风险低（海底高程不进 GCM）
+- `thermal_regimes_and_metamorphism.md` — 温压体制作为构造背景到岩性的换算标尺：两条相变界线（10–11 与 25–35 °C/km）切出阿尔卑斯型/巴罗型/巴肯型三相系、四元动力学与热力反馈回路、主动与被动俯冲的产物差异（含陆壳是否增生）、碰撞连续谱与岩石圈拆沉、两类陆内造山与隐性张裂；本库暂不建模，定位为知识储备
+- `plate_force_budget.md` — 板块速度从逐板块净力矩平衡解出（Forsyth & Uyeda 1975：板片上的力主导且强一个数量级）、力的清单与线性求解结构（不需要地幔流场），以及远场应力传递：对侧边界重组使张应力增加 5–10 MPa（Gianni 等 2026）
 - `isostasy_elevation_limits.md` — 地壳均衡与高程极限（Airy/Pratt 补偿、挠曲海沟、重力标度；2026-08）
 - `cortial_2019_notes.md` — Cortial et al. 2019 论文解读（自 geological-pipeline.md 附录 D 上浮）
 - `tidal_plate_speed.md` — 内热与板块速度的关系（v ∝ q^β 标度律与争论、金星悖论；热管体制下板块只排出传导部分，板块排热按半空间冷却 ∝ √v）
@@ -24,3 +27,5 @@
 - Cortial, Y., Peytavie, A., Galin, E., & Guérin, E. (2019). *Procedural Tectonic Planets*. Computer Graphics Forum, 38(2).（`tectonic_simulator.py` 的算法来源）
 - Frank, F. (1968). *Curvature of Island Arcs*. Nature.（海沟小圆弧涌现机制）
 - Tovish, A., & Schubert, G. (1978). *Island Arc Curvature, Subducting Slab Dip*.（弧矢标定）
+- Zheng, Y.-F. 等 (2026). *Structure, composition and dynamics of divergent and convergent plate margins*. Geoscience Frontiers 17(6).（温压体制框架；见 `thermal_regimes_and_metamorphism.md`）
+- Gianni, G. M. 等 (2026). *Western Pacific double subduction drives Gulf of California rifting*. Science 394(6823).（远场应力传递；见 `plate_force_budget.md`）
