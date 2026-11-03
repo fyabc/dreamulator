@@ -959,6 +959,121 @@ def column_water_saturation(
     return q_sat * vapor_scale_height_m * rho_air_kg_m3 / rho_water_kg_m3 * 1000.0
 
 
+#: Seconds in a reference year, for turning a surface flux into an annual depth.
+_SECONDS_PER_YEAR: float = 365.25 * 86400.0
+
+#: Moisture exchange coefficient of the bulk aerodynamic formula (the Dalton
+#: number).  Observed over the open ocean at 1.1 to 1.5 × 10⁻³ and nearly
+#: independent of wind speed and stability in the trade-wind regime
+#: (Large and Pond 1982; the COARE algorithm's neutral value).  The engine's
+#: own momentum drag coefficient is the same order, as the boundary-layer drag
+#: rate's comment records.  Epistemic class: observational fit, calibration
+#: domain the open ocean; it carries to other worlds unchanged because it is a
+#: property of the turbulent surface layer, not of Earth's climate.
+OCEAN_DALTON_NUMBER: float = 1.3e-3
+
+#: Near-surface relative humidity over the open ocean.  Observed at 0.75 to
+#: 0.85 almost everywhere and in every season, because evaporation and the
+#: boundary layer's mixing with drier air above hold each other in balance
+#: (the "80 per cent rule"; Peixoto and Oort 1992).  Epistemic class:
+#: observational fit; a world with a very different hydrological cycle would
+#: need its own value.
+OCEAN_SURFACE_RELATIVE_HUMIDITY: float = 0.8
+
+#: How much colder than the water the air just above it sits (K).  The ocean
+#: loses heat to the air, so the air is the cooler of the two almost everywhere;
+#: observed at 1 to 2 K over the open ocean, larger where cold air blows over
+#: warm water.  It matters more than its size suggests: the humidity deficit
+#: that drives evaporation is a difference of two saturation humidities, and
+#: Clausius–Clapeyron makes 1.5 K worth about a third of the 20% that the
+#: relative-humidity deficit contributes, so dropping it costs a quarter of the
+#: evaporation (measured on Earth: an ocean mean of 865 against 640).  Epistemic
+#: class: observational fit, calibration domain the open ocean; a prognostic
+#: air-sea temperature difference would need a surface energy balance the engine
+#: does not carry.
+OCEAN_AIR_SEA_TEMPERATURE_DIFFERENCE_K: float = 1.5
+
+#: Minimum wind speed the bulk formula sees (m/s).  A dead calm evaporates by
+#: free convection rather than by turbulent transfer, which the bulk formula
+#: with |U| → 0 would put at zero; the gustiness floor is the standard remedy
+#: (Fairall et al. 1996 add a convective gustiness velocity).  Numerical
+#: stabilisation of a formula outside its domain, not a tuning knob.
+OCEAN_GUSTINESS_FLOOR_M_S: float = 2.0
+
+
+def bulk_ocean_evaporation(
+    sst_c: np.ndarray,
+    wind_speed_m_s: np.ndarray,
+    is_ocean: np.ndarray,
+    *,
+    dalton_number: float = OCEAN_DALTON_NUMBER,
+    relative_humidity: float = OCEAN_SURFACE_RELATIVE_HUMIDITY,
+    air_sea_temperature_difference_k: float = OCEAN_AIR_SEA_TEMPERATURE_DIFFERENCE_K,
+    gustiness_floor_m_s: float = OCEAN_GUSTINESS_FLOOR_M_S,
+    air_density_kg_m3: float = 1.2,
+) -> np.ndarray:
+    """Ocean evaporation from the bulk aerodynamic formula (mm/yr).
+
+    Turbulent eddies carry water vapour away from the surface at a rate set by
+    the wind that stirs them and by how far the air is from saturation:
+
+        E = ρ_air · C_E · |U| · (q_sat(T_s) − q_air),
+
+    and the air just above the water is both unsaturated and cooler than the
+    water, so ``q_air = RH · q_sat(T_s − ΔT)`` and the deficit is
+
+        q_sat(T_s) − RH · q_sat(T_s − ΔT).
+
+    Both the temperature dependence (through Clausius–Clapeyron) and the wind
+    dependence therefore come out of the formula rather than being fitted.
+    Keeping ΔT is not a refinement: evaluating the air's humidity at the water's
+    own temperature instead costs a quarter of the evaporation, because the
+    deficit is a difference of two saturation humidities that Clausius–Clapeyron
+    makes steep (measured on Earth, an ocean mean of 865 against 640 mm/yr,
+    2026-11-03).
+
+    This is why observed ocean evaporation peaks in the trade-wind belts, where
+    the wind is strong, and dips along the equator, where it is weak despite the
+    warmest water — a shape a temperature-only law has inverted.
+
+    **Not yet wired into the product.**  Measured on Earth (2026-11-03), the
+    formula under the engine's own wind scores worse than the temperature-only
+    law it would replace (pattern correlation 0.33 against 0.80 globally),
+    because the model wind is both too weak and shaped wrongly — strong on the
+    equator, weak in the trades, the opposite of what evaporation needs.  Under
+    the observed wind it wins where it matters, +0.35 in the tropics against the
+    current law's −0.18, which is an anticorrelation.  So it is the surface
+    wind's turn first; enabling this before that would stack two errors.  It
+    still reaches only 72% of the observed ocean mean, the rest being the
+    uniform air-sea difference (3 to 5 K over the western boundary currents) and
+    the observed wind's own level (sigma 0.995, nearer 40 m than 10 m).
+
+    Args:
+        sst_c: Sea surface temperature (°C).
+        wind_speed_m_s: Surface wind speed (m/s); a floor is applied.
+        is_ocean: True where there is open water to evaporate from.
+        dalton_number: Moisture exchange coefficient C_E.
+        relative_humidity: Near-surface relative humidity.
+        air_sea_temperature_difference_k: How much cooler the air is (K).
+        gustiness_floor_m_s: Lowest wind speed the formula is evaluated at.
+        air_density_kg_m3: Surface air density.
+
+    Returns:
+        Annual evaporation (mm/yr), zero off the ocean.
+    """
+    if not 0.0 <= relative_humidity < 1.0:
+        raise ValueError(f"relative_humidity must lie in [0, 1), got {relative_humidity}")
+    ocean = np.asarray(is_ocean, dtype=bool)
+    speed = np.maximum(np.asarray(wind_speed_m_s, dtype=np.float64), gustiness_floor_m_s)
+    sst = np.asarray(sst_c, dtype=np.float64)
+    deficit = saturation_specific_humidity(sst) - relative_humidity * saturation_specific_humidity(
+        sst - air_sea_temperature_difference_k
+    )
+    # kg/m²/s of water, then to mm/yr (1 kg/m² of water is 1 mm depth).
+    flux = air_density_kg_m3 * dalton_number * speed * deficit
+    return np.where(ocean, np.maximum(flux, 0.0) * _SECONDS_PER_YEAR, 0.0)
+
+
 def evaporation_rate(
     temperature_c: np.ndarray,
     is_ocean: np.ndarray,

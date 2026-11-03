@@ -493,6 +493,27 @@ evaporation = evaporation_base_mm × (1 + 0.03 × (SST − 15))   # mm/yr
 - `evaporation_base_mm` 默认 1000（15 °C 洋面年蒸发），标定使全球洋均蒸发 ≈ 1143 mm/yr
   （Trenberth 2009 实测）。~3%/°C 是能量限制响应（Trenberth 2009；Held & Soden 2006），
   非饱和水汽压的 ~7%/°C。
+**块体公式（已入库，暂未启用）**：上式只随温度变化，所以经向形状与观测相反——引擎给出赤道
+附近最大且平坦，观测则在信风区最大（14°N 为 1821、16°S 为 1851 mm/yr）、赤道反而是低值
+（1117），因为蒸发还取决于搅动边界层的风。湍流输送的标准写法是块体空气动力学公式：
+
+$$E = \rho_{air}\, C_E\, |U|\,\bigl[q_{sat}(T_s) - \mathrm{RH}\cdot q_{sat}(T_s - \Delta T)\bigr]$$
+
+- $C_E \approx 1.3\times10^{-3}$ 为水汽交换系数（道尔顿数，Large 与 Pond 1982；COARE 的中性值），
+  与引擎动量阻力系数同量级；
+- $\mathrm{RH} \approx 0.8$ 是洋面近地相对湿度，几乎处处如此（Peixoto 与 Oort 1992）；
+- $\Delta T \approx 1.5$ K 为海气温差（空气比水面冷）。它不是可省的小项：湿度亏缺是两个饱和
+  比湿之差，C–C 的陡度使 1.5 K 约相当于相对湿度亏缺那 20% 的三分之一，省掉它会损失四分之一的
+  蒸发（实测洋均 865 对 640 mm/yr）。
+- 静风下限 2 m/s 是数值稳定化：无风时蒸发由自由对流而非湍流输送进行，而 $|U|\to0$ 会给出零
+  （Fairall 等 1996 的阵风速度同理）。
+
+实现为 `bulk_ocean_evaporation`，带测试，但**产品仍用温度单变量式**：2026-11-03 实测表明，在
+引擎自己的风下块体公式反而更差（全球型相关 0.33 对 0.80），因为模型风偏弱且形状相反（赤道偏强、
+信风区偏弱）；在观测风下它在热带胜出（+0.35，而现行式为 −0.18，即与观测反相关）。所以顺序是
+先修风、后启用，否则两个误差叠加。它在观测风下也只到观测洋均的 72%，差额来自均匀的海气温差
+（西边界流上实为 3–5 K）与观测风的高度（σ=0.995 层接近 40 m 而非 10 m）。
+
 - **陆地蒸散 = 土壤水桶**（Manabe 1969 单层桶，`soil_bucket_monthly`）：储量 $S$
   （mm，容量 $C$ = 根区有效持水量，默认 150 mm）逐月闭合
   $P_m = E_m + R_m + \Delta S$，其中 $E_m = \min(E^{pot}_m,\ S + P_m)$ 为实际蒸散
@@ -538,7 +559,8 @@ dreamulator.map.climate_simulator._apply_cold_trap                       # 饱�
 dreamulator.map.climate_simulator._convergence_sentinel                  # 收敛哨兵
 dreamulator.engine.climate_physics.cc_lift_drying_scale                  # H_cc 抬升干燥尺度
 dreamulator.engine.climate_physics.soil_bucket_monthly                   # 土壤水桶（周期稳态）
-dreamulator.engine.climate_physics.evaporation_rate                      # 能量限制蒸发
+dreamulator.engine.climate_physics.evaporation_rate                      # 能量限制蒸发（现行）
+dreamulator.engine.climate_physics.bulk_ocean_evaporation                # 块体公式（暂未启用）
 ```
 
 ---

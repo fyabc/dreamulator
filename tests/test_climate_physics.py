@@ -1195,3 +1195,66 @@ class TestThermalPressureAnomaly:
         # 季节项的年均只剩海拔柱项，不因暖冷不对称而漂移
         seasonal = dp[0] - dp[0].mean()
         assert abs(float(seasonal.mean())) < 1e-12
+
+
+class TestBulkOceanEvaporation:
+    """块体公式蒸发：风与湿度亏缺各自的依赖、海气温差的分量、以及定义域。"""
+
+    def test_scales_linearly_with_wind_above_the_floor(self) -> None:
+        from dreamulator.engine.climate_physics import bulk_ocean_evaporation
+
+        sst = np.full(4, 27.0)
+        speed = np.array([2.0, 4.0, 6.0, 8.0])
+        e = bulk_ocean_evaporation(sst, speed, np.ones(4, dtype=bool))
+        np.testing.assert_allclose(e[1:] / e[0], [2.0, 3.0, 4.0], rtol=1e-12)
+
+    def test_gustiness_floor_keeps_a_calm_from_evaporating_nothing(self) -> None:
+        from dreamulator.engine.climate_physics import (
+            OCEAN_GUSTINESS_FLOOR_M_S,
+            bulk_ocean_evaporation,
+        )
+
+        sst = np.full(3, 27.0)
+        e = bulk_ocean_evaporation(
+            sst, np.array([0.0, 1.0, OCEAN_GUSTINESS_FLOOR_M_S]), np.ones(3, bool)
+        )
+        assert e[0] > 0.0
+        np.testing.assert_allclose(e, e[2])
+
+    def test_the_air_sea_difference_carries_a_third_of_the_deficit(self) -> None:
+        """取消海气温差会少掉约四分之一的蒸发——它不是可省的小项。"""
+        from dreamulator.engine.climate_physics import bulk_ocean_evaporation
+
+        sst = np.full(2, 27.0)
+        speed = np.full(2, 7.0)
+        with_difference = bulk_ocean_evaporation(sst, speed, np.ones(2, bool))
+        without = bulk_ocean_evaporation(
+            sst, speed, np.ones(2, bool), air_sea_temperature_difference_k=0.0
+        )
+        assert 1.25 < float(with_difference[0] / without[0]) < 1.5
+
+    def test_rises_with_temperature_by_clausius_clapeyron(self) -> None:
+        from dreamulator.engine.climate_physics import bulk_ocean_evaporation
+
+        e = bulk_ocean_evaporation(np.array([5.0, 15.0, 25.0]), np.full(3, 7.0), np.ones(3, bool))
+        assert np.all(np.diff(e) > 0.0)
+        # ~6-7%/K from Clausius-Clapeyron: a 20 K rise more than triples it
+        assert 3.0 < float(e[2] / e[0]) < 5.0
+
+    def test_trade_wind_and_equatorial_magnitudes_are_physical(self) -> None:
+        """信风区约 1800、赤道静风区约 1100 mm/yr（观测量级）。"""
+        from dreamulator.engine.climate_physics import bulk_ocean_evaporation
+
+        trades = bulk_ocean_evaporation(np.array([26.0]), np.array([7.5]), np.ones(1, bool))
+        doldrums = bulk_ocean_evaporation(np.array([28.0]), np.array([3.5]), np.ones(1, bool))
+        assert 1400.0 < float(trades[0]) < 2400.0
+        assert float(doldrums[0]) < float(trades[0])
+
+    def test_land_evaporates_nothing_and_inputs_are_checked(self) -> None:
+        from dreamulator.engine.climate_physics import bulk_ocean_evaporation
+
+        mask = np.array([True, False])
+        e = bulk_ocean_evaporation(np.full(2, 20.0), np.full(2, 5.0), mask)
+        assert e[1] == 0.0
+        with pytest.raises(ValueError, match="relative_humidity"):
+            bulk_ocean_evaporation(np.ones(1), np.ones(1), np.ones(1, bool), relative_humidity=1.0)
