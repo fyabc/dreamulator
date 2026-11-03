@@ -175,6 +175,27 @@ PRESSURE_CENTRES: dict[str, tuple[float, float, float, float, float]] = {
 }
 
 
+#: Eastern and western halves of each ocean basin, for the cross-basin
+#: temperature contrast that the western boundary currents and the eastern
+#: upwelling set up: (lat_min, lat_max, west_lon_min, west_lon_max,
+#: east_lon_min, east_lon_max).  The equatorial row is the cold tongue, whose
+#: east-minus-west contrast the engine's missing cold tongue shows up in.
+BASIN_CONTRASTS: dict[str, tuple[float, float, float, float, float, float]] = {
+    "N Atlantic 20-40N": (20.0, 40.0, -80.0, -60.0, -25.0, -10.0),
+    "N Pacific 20-40N": (20.0, 40.0, 130.0, 160.0, -130.0, -115.0),
+    "S Pacific 20-40S": (-40.0, -20.0, 155.0, 180.0, -85.0, -70.0),
+    "S Atlantic 20-40S": (-40.0, -20.0, -45.0, -30.0, 5.0, 15.0),
+    "Equatorial Pacific": (-5.0, 5.0, 140.0, 170.0, -120.0, -90.0),
+}
+
+#: Smoothing scales for the ocean pattern correlations, in graph-neighbour
+#: passes.  One quantity can give opposite verdicts at different scales — the
+#: product's tropical-ocean P - E correlates at 0.07 cell by cell and 0.53 at
+#: 11 degrees — so the curve is reported, not a single number
+#: (climate-validation, ocean criteria).
+OCEAN_SMOOTHING_PASSES: tuple[int, ...] = (0, 4, 16)
+
+
 def box_mask(
     lat: np.ndarray, lon: np.ndarray, box: tuple[float, float, float, float]
 ) -> np.ndarray:
@@ -235,6 +256,134 @@ def observed_pressure(path: Path, count: int) -> np.ndarray:
     return out
 
 
+def graph_smooth(
+    values: np.ndarray, neighbours: list[list[int]], mask: np.ndarray, passes: int
+) -> np.ndarray:
+    """Average over the mesh graph, staying inside ``mask``.
+
+    A scale-free smoother for an unstructured mesh: each pass replaces a cell by
+    the mean of itself and its masked neighbours, so ``passes`` sets the scale in
+    cell diameters (about 51 km each on the 200k mesh).
+    """
+    out = np.where(mask, values, np.nan)
+    for _ in range(passes):
+        nxt = out.copy()
+        for index in np.flatnonzero(mask):
+            pool = [out[index]]
+            pool += [out[j] for j in neighbours[index] if mask[j] and np.isfinite(out[j])]
+            nxt[index] = float(np.mean(pool))
+        out = nxt
+    return out
+
+
+def ocean_table(
+    model: World, t_obs_annual: np.ndarray, p_obs_annual: np.ndarray, e_obs_annual: np.ndarray
+) -> dict[str, Any]:
+    """Ocean criteria: the rain pattern across scales, and the temperature gates.
+
+    The pattern correlations are area-weighted per basin and then averaged with
+    equal weight, so the Pacific's size does not set its share; see
+    climate-validation's ocean criteria for why each row is here.
+    """
+    sea = ~model.is_land
+    out: dict[str, Any] = {}
+
+    # Group one: the rain pattern, across scales, plus the rain belt's latitude.
+    surplus_model = model.p_annual_mm - e_obs_annual
+    surplus_obs = p_obs_annual - e_obs_annual
+    tropics = sea & (np.abs(model.lat) <= 30.0) & (np.abs(model.lat) >= 3.0)
+    curves: dict[str, dict[str, float]] = {}
+    for passes in OCEAN_SMOOTHING_PASSES:
+        model_s = graph_smooth(surplus_model, model.neighbours, tropics, passes)
+        obs_s = graph_smooth(surplus_obs, model.neighbours, tropics, passes)
+        rain_model = graph_smooth(model.p_annual_mm, model.neighbours, tropics, passes)
+        rain_obs = graph_smooth(p_obs_annual, model.neighbours, tropics, passes)
+        per_basin_pe, per_basin_p = [], []
+        for box in OCEAN_BASINS.values():
+            sel = tropics & box_mask(model.lat, model.lon, box)
+            if sel.sum() < 50:
+                continue
+            per_basin_pe.append(_correlation(model_s[sel], obs_s[sel]))
+            per_basin_p.append(_correlation(rain_model[sel], rain_obs[sel]))
+        curves[f"{passes}_passes"] = {
+            "p_minus_e_corr": float(np.nanmean(per_basin_pe)),
+            "precipitation_corr": float(np.nanmean(per_basin_p)),
+        }
+    out["rain_pattern_by_scale"] = curves
+
+    bands = np.arange(-30.0, 30.0, 2.5)
+
+    def peak(values: np.ndarray) -> dict[str, float]:
+        means = []
+        for low in bands:
+            sel = sea & (model.lat >= low) & (model.lat < low + 2.5) & np.isfinite(values)
+            if sel.any():
+                means.append(float(np.average(values[sel], weights=model.area_km2[sel])))
+            else:
+                means.append(float("nan"))
+        index = int(np.nanargmax(means))
+        return {"latitude_deg": float(bands[index] + 1.25), "value_mm_yr": float(means[index])}
+
+    out["rain_belt"] = {"model": peak(model.p_annual_mm), "observed": peak(p_obs_annual)}
+    for label, values in (("model", model.p_annual_mm), ("observed", p_obs_annual)):
+        out.setdefault("basin_mean_precipitation_mm_yr", {})[label] = float(
+            np.average(values[sea], weights=model.area_km2[sea])
+        )
+
+    # Group two: the temperature gates, the upstream check on the ocean chain.
+    zonal = []
+    for low in np.arange(-70.0, 70.0, 5.0):
+        sel = sea & (model.lat >= low) & (model.lat < low + 5.0)
+        sel &= np.isfinite(model.t_annual_c) & np.isfinite(t_obs_annual)
+        if sel.any():
+            weights = model.area_km2[sel]
+            zonal.append(
+                np.average(model.t_annual_c[sel], weights=weights)
+                - np.average(t_obs_annual[sel], weights=weights)
+            )
+    out["zonal_sst_profile"] = {
+        "rmse_c": float(np.sqrt(np.nanmean(np.square(zonal)))),
+        "bias_c": float(np.nanmean(zonal)),
+    }
+    contrasts: dict[str, dict[str, float]] = {}
+    for name, (lat0, lat1, w0, w1, e0, e1) in BASIN_CONTRASTS.items():
+        west = sea & box_mask(model.lat, model.lon, (lat0, lat1, w0, w1))
+        east = sea & box_mask(model.lat, model.lon, (lat0, lat1, e0, e1))
+        if not (west.any() and east.any()):
+            continue
+
+        def mean(values: np.ndarray, sel: np.ndarray) -> float:
+            ok = sel & np.isfinite(values)
+            if not ok.any():
+                return float("nan")
+            return float(np.average(values[ok], weights=model.area_km2[ok]))
+
+        contrasts[name] = {
+            "model_east_minus_west_c": mean(model.t_annual_c, east) - mean(model.t_annual_c, west),
+            "observed_east_minus_west_c": mean(t_obs_annual, east) - mean(t_obs_annual, west),
+        }
+    out["basin_temperature_contrast"] = contrasts
+    if model.t_monthly_c is not None:
+        amplitude = model.t_monthly_c.max(axis=1) - model.t_monthly_c.min(axis=1)
+        rows = {}
+        for low in (-60.0, -30.0, 0.0, 30.0):
+            sel = sea & (model.lat >= low) & (model.lat < low + 30.0)
+            if sel.any():
+                rows[f"{low:+.0f}..{low + 30:+.0f}"] = float(
+                    np.average(amplitude[sel], weights=model.area_km2[sel])
+                )
+        out["sst_seasonal_amplitude_c"] = rows
+    for label, values in (("model", model.t_annual_c), ("observed", t_obs_annual)):
+        edges = {}
+        for hemisphere, sign in (("north", 1.0), ("south", -1.0)):
+            sel = sea & (sign * model.lat > 0) & np.isfinite(values) & (values <= -1.8)
+            edges[hemisphere] = (
+                float(sign * np.min(sign * model.lat[sel])) if sel.any() else float("nan")
+            )
+        out.setdefault("sea_ice_edge_latitude_deg", {})[label] = edges
+    return out
+
+
 def pressure_table(
     model: World, obs_slp: np.ndarray
 ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
@@ -281,6 +430,28 @@ def pressure_table(
             "obs_lon": float(model.lon[obs_extreme]),
         }
     return regions, centres
+
+
+def observed_evaporation(path: Path, model: World) -> np.ndarray:
+    """Observed ocean evaporation per cell (mm/yr).
+
+    The reanalysis latent heat flux is the observation, but it is not among the
+    fields the Earth root imports, so when it is absent this falls back to the
+    engine's own evaporation; the P - E rows then compare a model P - E against
+    an observed P with the same E, which still scores the precipitation pattern.
+    """
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    out = np.full(model.lat.size, np.nan)
+    for key, value in data["cells"].items():
+        index = int(key)
+        if index < out.size and value.get("e_obs_mm") is not None:
+            out[index] = float(value["e_obs_mm"])
+    if np.isfinite(out).any():
+        return out
+    from dreamulator.engine.climate_physics import evaporation_rate
+
+    return np.asarray(evaporation_rate(model.t_annual_c, ~model.is_land, 1000.0), dtype=float)
 
 
 def observed_wind(path: Path, count: int) -> tuple[np.ndarray, np.ndarray]:
@@ -519,6 +690,12 @@ def earth_table(branch: str) -> dict[str, Any]:
         + ", ".join(references),
         "continents": rows,
         "upwelling_coasts": coasts,
+        "ocean": ocean_table(
+            model,
+            t_obs.mean(axis=1),
+            p_obs.sum(axis=1),
+            observed_evaporation(maps_dir / "climate_obs.json", model),
+        ),
         "pressure_regions": pressure_regions,
         "pressure_centres": pressure_centres,
         "pressure_equal_weight": {
@@ -705,6 +882,43 @@ def _show_earth(table: dict[str, Any]) -> None:
             print(
                 f"    {name:<12}{row['cells']:>6}{row['model_equatorward_m_s']:>8.2f}"
                 f"{row['obs_equatorward_m_s']:>8.2f}{row['dir_match'] * 100:>8.1f}%"
+            )
+    ocean = table.get("ocean") or {}
+    if ocean:
+        print("  ocean criteria (basins equally weighted; see climate-validation)")
+        scales = ocean.get("rain_pattern_by_scale") or {}
+        print(f"    {'smoothing':<14}{'P-E r':>9}{'rain r':>9}")
+        for name, row in scales.items():
+            label = name.replace("_passes", " passes")
+            print(f"    {label:<14}{row['p_minus_e_corr']:>9.3f}{row['precipitation_corr']:>9.3f}")
+        belt = ocean.get("rain_belt") or {}
+        if belt:
+            print(
+                f"    rain belt: model {belt['model']['latitude_deg']:+.1f}° "
+                f"{belt['model']['value_mm_yr']:.0f} mm/yr, "
+                f"observed {belt['observed']['latitude_deg']:+.1f}° "
+                f"{belt['observed']['value_mm_yr']:.0f}"
+            )
+        profile = ocean.get("zonal_sst_profile") or {}
+        if profile:
+            print(
+                f"    zonal SST profile: RMSE {profile['rmse_c']:.2f} K, "
+                f"bias {profile['bias_c']:+.2f} K"
+            )
+        contrasts = ocean.get("basin_temperature_contrast") or {}
+        if contrasts:
+            print(f"    {'east minus west SST':<22}{'model':>8}{'obs':>8}")
+            for name, row in contrasts.items():
+                print(
+                    f"    {name:<22}{row['model_east_minus_west_c']:>8.1f}"
+                    f"{row['observed_east_minus_west_c']:>8.1f}"
+                )
+        edges = ocean.get("sea_ice_edge_latitude_deg") or {}
+        if edges:
+            print(
+                f"    sea-ice edge: model {edges['model']['north']:.0f}/"
+                f"{edges['model']['south']:.0f}°, observed "
+                f"{edges['observed']['north']:.0f}/{edges['observed']['south']:.0f}°"
             )
     swap = table["truth_swap_koppen_class"]
     print("  truth swap, Köppen class on land:")
