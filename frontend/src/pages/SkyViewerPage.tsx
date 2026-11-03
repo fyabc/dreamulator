@@ -99,6 +99,18 @@ export default function SkyViewerPage() {
   })
   const catalog = catalogQuery.data
 
+  // The universe setting is static per (world, branch): fetch once, rotate
+  // client-side — look-around stays fetch-free.
+  const backgroundQuery = useQuery({
+    queryKey: ['sky-background', worldName, branch],
+    queryFn: () => api.getSkyBackground(worldName!, branch),
+    enabled: !!worldName && !staticMode,
+    retry: false,
+    staleTime: Infinity,
+  })
+  const background = backgroundQuery.data ?? null
+  const backgroundOn = searchParams.get('bg') !== '0'
+
   const observerId = useMemo(() => {
     const from = searchParams.get('from')
     if (from) return from
@@ -242,6 +254,8 @@ export default function SkyViewerPage() {
               onLookChange={setLook}
               onLookCommit={commitLook}
               grids={grids}
+              background={background}
+              backgroundOn={backgroundOn}
               selectedId={bodyId ?? null}
               hoveredId={hoveredId}
               onHover={setHoveredId}
@@ -259,6 +273,8 @@ export default function SkyViewerPage() {
                 onSelect={selectBody}
                 look={look}
                 grids={grids}
+                background={background}
+                backgroundOn={backgroundOn}
               />
             </div>
           )}
@@ -394,6 +410,8 @@ export default function SkyViewerPage() {
                 onMode={(m) => setParam('mode', m === 'pan' ? null : m)}
                 grids={grids}
                 onGrids={setGrids}
+                backgroundOn={backgroundOn}
+                onBackgroundOn={(on) => setParam('bg', on ? null : '0')}
                 activePanel={activePanel}
                 onSelectPanel={setPanel}
                 onPointerEnter={() => chromePin(true)}

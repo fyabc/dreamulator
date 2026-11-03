@@ -15,11 +15,13 @@ import {
 } from './projector'
 import { estimateTextWidth, layoutLabels, type Box, type LabelItem } from './labelLayout'
 import { markerRadius } from './phaseGeometry'
-import { buildMarkers, isOccultedMarker, labeledIds, type Marker } from './markers'
-import { buildGridLayers, type GridToggles } from './skyGrids'
+import { buildMarkers, glareRadiusPx, isOccultedMarker, labeledIds, type Marker } from './markers'
+import { buildGridLayers, eclipticRotation, gridLabels, type GridToggles } from './skyGrids'
+import SkyBackgroundLayer from './SkyBackground'
+import type { SkyBackground } from './types'
 import SkyBodyMarker from './SkyBodyMarker'
 import { NORTH_ACCENT, SELECTED_STROKE, TEXT_HALO } from './bodyColor'
-import { altAzFromDir, type LookDirection } from './panProjector'
+import { altAzFromDir, type LookDirection, type Vec3 } from './panProjector'
 import type { SkyCatalog, SkyEphemerisResult } from './types'
 
 const VIEW = 640
@@ -37,6 +39,9 @@ export interface SkyChartProps {
   look?: LookDirection | null
   /** Overlay grids (horizon / equatorial / ecliptic). */
   grids: GridToggles
+  /** The universe setting (static directions); null until fetched. */
+  background: SkyBackground | null
+  backgroundOn: boolean
 }
 
 export default function SkyChart({
@@ -48,6 +53,8 @@ export default function SkyChart({
   onSelect,
   look,
   grids,
+  background,
+  backgroundOn,
 }: SkyChartProps) {
   const { t } = useTranslation('sky')
   const projector = useMemo(() => skyProjector(VIEW / 2, VIEW / 2, RADIUS), [])
@@ -73,6 +80,28 @@ export default function SkyChart({
         grids,
       ),
     [result, projector, grids],
+  )
+
+  const eclRotation = useMemo(() => eclipticRotation(result), [result])
+
+  const projectDir = useMemo(
+    () => (v: Vec3) => {
+      const { altDeg, azDeg } = altAzFromDir(v)
+      return projector.project(altDeg, azDeg)
+    },
+    [projector],
+  )
+  const discCenter = { x: VIEW / 2, y: VIEW / 2 }
+  const altAzLabels = useMemo(
+    () => (grids.altAz ? gridLabels('altAz', projectDir, { mode: 'disc', center: discCenter }) : []),
+    [grids.altAz, projectDir],
+  )
+  const eqLabels = useMemo(
+    () =>
+      grids.equatorial
+        ? gridLabels('equatorial', projectDir, { mode: 'disc', rotation: eclRotation })
+        : [],
+    [grids.equatorial, projectDir, eclRotation],
   )
 
   const labelled = useMemo(
@@ -130,6 +159,11 @@ export default function SkyChart({
   return (
     <svg viewBox={`0 0 ${VIEW} ${VIEW}`} className="w-full h-full select-none">
         <defs>
+        <radialGradient id="body-glare">
+          <stop offset="0%" stopColor="rgba(255,244,214,0.55)" />
+          <stop offset="55%" stopColor="rgba(255,244,214,0.18)" />
+          <stop offset="100%" stopColor="rgba(255,244,214,0)" />
+        </radialGradient>
           <clipPath id="disc-region">
             <circle cx={VIEW / 2} cy={VIEW / 2} r={RADIUS} />
           </clipPath>
@@ -151,6 +185,18 @@ export default function SkyChart({
           strokeWidth={1}
         />
 
+        {backgroundOn && background && (
+          <SkyBackgroundLayer
+            background={background}
+            rotation={eclRotation}
+            project={(v) => {
+              const { altDeg, azDeg } = altAzFromDir(v)
+              return projector.project(altDeg, azDeg)
+            }}
+            fovDeg={null}
+            height={VIEW}
+          />
+        )}
         {/* Overlay grids (segments break at the horizon via null projection) */}
         {gridLayers.map((layer, i) => (
           <path
@@ -162,6 +208,17 @@ export default function SkyChart({
             strokeDasharray={layer.dash}
             pointerEvents="none"
           />
+        ))}
+        {/* Grid degree labels (null projection drops below-horizon values) */}
+        {altAzLabels.map((l, i) => (
+          <text key={`az${i}`} x={l.x} y={l.y} fontSize={9} fill="rgba(255,255,255,0.42)" {...TEXT_HALO}>
+            {l.text}
+          </text>
+        ))}
+        {eqLabels.map((l, i) => (
+          <text key={`eq${i}`} x={l.x} y={l.y} fontSize={9} fill="rgba(77,166,255,0.62)" {...TEXT_HALO}>
+            {l.text}
+          </text>
         ))}
         {/* Altitude rings (r linear in zenith distance) + zenith mark */}
         {ALTITUDE_RING_DEGREES.map((alt) => (
@@ -218,6 +275,7 @@ export default function SkyChart({
                 brightAngle={m.brightAngle}
                 isStar={m.isStar}
                 illuminatedFraction={m.row.illuminated_fraction}
+                glare={glareRadiusPx(m.row.apparent_magnitude)}
                 selected={selected}
                 hovered={hovered}
                 dimmed={m.row.apparent_magnitude >= 6 && !hovered && !selected}

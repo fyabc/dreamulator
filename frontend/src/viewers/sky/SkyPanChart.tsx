@@ -22,10 +22,13 @@ import {
   panProjector,
   type LookDirection,
   type ScreenPoint,
+  type Vec3,
 } from './panProjector'
 import { estimateTextWidth, layoutLabels, type Box, type LabelItem } from './labelLayout'
-import { buildMarkers, isOccultedMarker, labeledIds, type Marker } from './markers'
-import { buildGridLayers, type GridToggles } from './skyGrids'
+import { buildMarkers, glareRadiusPx, isOccultedMarker, labeledIds, type Marker } from './markers'
+import { buildGridLayers, eclipticRotation, gridLabels, type GridToggles } from './skyGrids'
+import SkyBackgroundLayer from './SkyBackground'
+import type { SkyBackground } from './types'
 import SkyBodyMarker from './SkyBodyMarker'
 import { GROUND_FILL, NORTH_ACCENT, SELECTED_STROKE, TEXT_HALO } from './bodyColor'
 import type { SkyCatalog, SkyEphemerisResult } from './types'
@@ -46,6 +49,9 @@ export interface SkyPanChartProps {
   /** Gesture ended with changes — commit to the URL. */
   onLookCommit: () => void
   grids: GridToggles
+  /** The universe setting (static directions); null until fetched. */
+  background: SkyBackground | null
+  backgroundOn: boolean
   selectedId: string | null
   hoveredId: string | null
   onHover: (bodyId: string | null) => void
@@ -63,6 +69,8 @@ export default function SkyPanChart({
   onLookChange,
   onLookCommit,
   grids,
+  background,
+  backgroundOn,
   selectedId,
   hoveredId,
   onHover,
@@ -98,6 +106,21 @@ export default function SkyPanChart({
   const gridLayers = useMemo(
     () => buildGridLayers(result, (v) => projector.projectDir(v), grids),
     [result, projector, grids],
+  )
+
+  const eclRotation = useMemo(() => eclipticRotation(result), [result])
+
+  const projectDir = useMemo(() => (v: Vec3) => projector.projectDir(v), [projector])
+  const altAzLabels = useMemo(
+    () => (grids.altAz ? gridLabels('altAz', projectDir, { mode: 'pan', look }) : []),
+    [grids.altAz, projectDir, look],
+  )
+  const eqLabels = useMemo(
+    () =>
+      grids.equatorial
+        ? gridLabels('equatorial', projectDir, { mode: 'pan', rotation: eclRotation, look })
+        : [],
+    [grids.equatorial, projectDir, eclRotation, look],
   )
 
   const labelled = useMemo(
@@ -265,6 +288,11 @@ export default function SkyPanChart({
       onPointerCancel={handlePointerEnd}
     >
       <defs>
+        <radialGradient id="body-glare">
+          <stop offset="0%" stopColor="rgba(255,244,214,0.55)" />
+          <stop offset="55%" stopColor="rgba(255,244,214,0.18)" />
+          <stop offset="100%" stopColor="rgba(255,244,214,0)" />
+        </radialGradient>
         {/* Sky region = viewport minus the ground.  clipPath children UNION,
             so the subtraction must live in ONE compound path: rect outline +
             ground outline with evenodd (inside both ⇒ winding 2 ⇒ clipped). */}
@@ -277,6 +305,15 @@ export default function SkyPanChart({
       </defs>
       {/* Sky + grids (ground covers the below-horizon parts) */}
       <rect x={0} y={0} width={width} height={height} fill="#030308" />
+      {backgroundOn && background && (
+        <SkyBackgroundLayer
+          background={background}
+          rotation={eclRotation}
+          project={(v) => projector.projectDir(v)}
+          fovDeg={projector.look.fovDeg}
+          height={height}
+        />
+      )}
       {gridLayers.map((layer, i) => (
         <path
           key={i}
@@ -287,6 +324,19 @@ export default function SkyPanChart({
           strokeDasharray={layer.dash}
           pointerEvents="none"
         />
+      ))}
+
+      {/* Grid degree labels (drawn under the ground fill so below-horizon
+          values stay hidden, exactly like their grid lines) */}
+      {altAzLabels.map((l, i) => (
+        <text key={`az${i}`} x={l.x} y={l.y} fontSize={9} fill="rgba(255,255,255,0.42)" {...TEXT_HALO}>
+          {l.text}
+        </text>
+      ))}
+      {eqLabels.map((l, i) => (
+        <text key={`eq${i}`} x={l.x} y={l.y} fontSize={9} fill="rgba(77,166,255,0.62)" {...TEXT_HALO}>
+          {l.text}
+        </text>
       ))}
 
       {/* Ground + horizon */}
@@ -356,6 +406,7 @@ export default function SkyPanChart({
               brightAngle={m.brightAngle}
               isStar={m.isStar}
               illuminatedFraction={m.row.illuminated_fraction}
+              glare={glareRadiusPx(m.row.apparent_magnitude)}
               selected={selected}
               hovered={hovered}
               dimmed={m.row.apparent_magnitude >= 6 && !hovered && !selected}

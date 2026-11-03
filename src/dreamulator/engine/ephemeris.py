@@ -899,7 +899,10 @@ def sky_ephemeris(
                 _target_altitude_deg(entities, frames_pm[0], target_id, at_days - rate_step),
                 _target_altitude_deg(entities, frames_pm[1], target_id, at_days + rate_step),
             )
-            rate = (altitude_pm[1] - altitude_pm[0]) * 12.0 / rate_step
+            # Central difference over ±rate_step DAYS: °/day = Δ/(2·step),
+            # and °/h = °/day / 24 — i.e. Δ/(48·step).  (An earlier ×12/step
+            # multiplied by 24 instead of dividing: a 576× overstatement.)
+            rate = (altitude_pm[1] - altitude_pm[0]) / (48.0 * rate_step)
         else:
             # No rotation field at all (a star-locked observer): the horizon
             # does not turn, and the target's own motion sets the rate; the

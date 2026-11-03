@@ -14,6 +14,8 @@ export interface SkyBodyMarkerProps {
   brightAngle: number
   isStar: boolean
   illuminatedFraction: number | null
+  /** Irradiation halo width in px (0 = none); the chart supplies the gradient. */
+  glare: number
   selected: boolean
   hovered: boolean
   dimmed: boolean
@@ -32,6 +34,7 @@ export default function SkyBodyMarker({
   brightAngle,
   isStar,
   illuminatedFraction,
+  glare,
   selected,
   hovered,
   dimmed,
@@ -53,6 +56,9 @@ export default function SkyBodyMarker({
       }}
       className="cursor-pointer"
     >
+      {glare > 0 && (
+        <circle cx={x} cy={y} r={radius + glare} fill="url(#body-glare)" opacity={0.5} />
+      )}
       <circle cx={x} cy={y} r={radius} fill="#1a1a3a" stroke="none" />
       {k !== null && (
         <path

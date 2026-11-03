@@ -123,6 +123,8 @@ export interface SkyDisplayDialogProps {
   onMode: (mode: 'pan' | 'disc') => void
   grids: GridToggles
   onGrids: (grids: GridToggles) => void
+  backgroundOn: boolean
+  onBackgroundOn: (on: boolean) => void
   /** The one open right-side panel, if any (radio behaviour). */
   activePanel: SkyPanel | null
   onSelectPanel: (panel: SkyPanel | null) => void
@@ -135,6 +137,8 @@ export function SkyDisplayDialog({
   onMode,
   grids,
   onGrids,
+  backgroundOn,
+  onBackgroundOn,
   activePanel,
   onSelectPanel,
   onPointerEnter,
@@ -180,6 +184,15 @@ export function SkyDisplayDialog({
         {gridRow('equatorial', t('grids.equatorial'), 'rgba(77,166,255,0.7)')}
         {gridRow('ecliptic', t('grids.ecliptic'), 'rgba(240,192,64,0.7)')}
       </div>
+      <label className="flex items-center gap-2 text-[11px] text-gray-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={backgroundOn}
+          onChange={(e) => onBackgroundOn(e.target.checked)}
+          className="accent-neon-cyan"
+        />
+        {t('dialog.display.background')}
+      </label>
       <div className="space-y-1">
         <div className="text-[11px] text-gray-500">{t('dialog.display.panels')}</div>
         <div className="flex gap-1.5">

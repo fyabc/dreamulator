@@ -105,7 +105,8 @@
     "display": {
       "title": "Display",
       "grids": "Coordinate grids",
-      "panels": "Info panels"
+      "panels": "Info panels",
+      "background": "Background sky (neighbour stars / deep sky / galactic band)"
     }
   },
   "grids": {

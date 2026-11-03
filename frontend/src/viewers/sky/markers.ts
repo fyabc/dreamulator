@@ -78,6 +78,14 @@ export function isOccultedMarker(markers: Marker[], m: Marker): boolean {
   )
 }
 
+/** Irradiation glare radius (px) added around bright bodies: the eye/optics
+ *  point-spread that planetariums render for luminous sources.  Only bodies
+ *  brighter than mag 1 glare — no background star qualifies, so the flux
+ *  hierarchy (bright moon ≫ brightest star) reads on screen. */
+export function glareRadiusPx(apparentMagnitude: number): number {
+  return apparentMagnitude < 1 ? Math.min(6, (1 - apparentMagnitude) * 0.5) : 0
+}
+
 /** Labeled set policy shared by both charts: selected + hovered + the five
  *  brightest above the horizon. */
 export function labeledIds(markers: Marker[], selectedId: string | null, hoveredId: string | null): Set<string> {

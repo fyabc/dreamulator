@@ -105,7 +105,8 @@
     "display": {
       "title": "显示",
       "grids": "坐标网格",
-      "panels": "信息面板"
+      "panels": "信息面板",
+      "background": "背景星空（近邻星 / 深空 / 银道带）"
     }
   },
   "grids": {

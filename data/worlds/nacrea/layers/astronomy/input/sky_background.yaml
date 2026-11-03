@@ -1,0 +1,83 @@
+# 宇宙设定（背景天球）— 框架占位值，位置待作者后续调整
+#
+# 方向 = 目录参考面（与 orbits: 同一黄道系）的黄经/黄纬；背景天体固定在天球上，
+# 不随时间传播（自行是 mas/yr 量级，远低于一个像素）。渲染口径与星图软件一致：
+# 静态「方向 + 星等 + 色温」目录，由观测者参考系旋转后投影（Stellarium 星表范式）。
+#
+# 三个消费方：天球视图（星点/深空精灵/银道带）、生态层（transient_events 的
+# 偶发超新星/GRB 辐射强迫）、文明层（星空文化按 id 引用恒星画连线，不复制位置）。
+frame: ecliptic
+
+starfield:
+  seed: 20261103        # 种子化程序暗星场：同种子 = 同一片天（可复现纪律）
+  count: 900            # 裸眼深度内的程序星数
+  magnitude_limit: 6.5  # 生成分布的暗端（裸眼极限附近）
+
+# 手置近邻星（占位位置；生态/文明锚点后续在这里调）
+stars:
+  - id: star_neighbor_elderbright
+    name: "长庚邻星 · Elderbright"
+    ecliptic_lon_deg: 214.7
+    ecliptic_lat_deg: 18.3
+    magnitude: 1.4
+    temperature_k: 4600
+  - id: star_neighbor_twinwatch
+    name: "双望星 · Twinwatch"
+    ecliptic_lon_deg: 96.2
+    ecliptic_lat_deg: -32.8
+    magnitude: 2.6
+    temperature_k: 6100
+  - id: star_neighbor_farlantern
+    name: "远灯星 · Farlantern"
+    ecliptic_lon_deg: 321.5
+    ecliptic_lat_deg: 55.1
+    # 混合输入示例：光度 + 距离 → 引擎派生视星等（玻尔兹曼近似，无 bolometric 修正）
+    luminosity_sol: 210.0
+    distance_pc: 148.0
+    temperature_k: 4100
+
+deep_sky:
+  - id: dso_veil_of_ash
+    name: "灰烬幔 · Veil of Ash"
+    type: remnant
+    ecliptic_lon_deg: 148.9
+    ecliptic_lat_deg: 6.4
+    angular_size_deg: 1.8
+    magnitude: 4.8
+  - id: dso_sister_cluster
+    name: "姊妹星团 · Sister Cluster"
+    type: cluster
+    ecliptic_lon_deg: 41.0
+    ecliptic_lat_deg: -12.5
+    angular_size_deg: 0.9
+    magnitude: 5.2
+  - id: dso_tilted_isle
+    name: "斜屿星系 · Tilted Isle"
+    type: galaxy
+    ecliptic_lon_deg: 268.4
+    ecliptic_lat_deg: 41.7
+    angular_size_deg: 0.6
+    magnitude: 5.9
+
+galactic_band:
+  pole_lon_deg: 192.9    # 占位银极：带面在天空斜跨
+  pole_lat_deg: 27.1
+  width_deg: 14.0
+  brightness: 0.35
+
+# 生态层钩子（偶发高能事件；天球视图只在时刻落入窗口时标记方向）
+transient_events:
+  - id: sn_candidate_ashmother
+    type: supernova
+    ecliptic_lon_deg: 148.9   # 与灰烬幔同向： remnant = 它的遗迹（叙事自洽占位）
+    ecliptic_lat_deg: 6.4
+    epoch_window_days: [-4200.0, -3800.0]   # 历元前的一次爆发（遗迹年龄自洽占位）
+    peak_magnitude: -9.0
+    rate_per_myr: 0.02
+  - id: grb_candidate_whisper
+    type: grb
+    ecliptic_lon_deg: 12.0
+    ecliptic_lat_deg: -64.0
+    epoch_window_days: null   # 窗口待作者设定
+    peak_magnitude: -6.0
+    rate_per_myr: 0.001

@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { applyMat3, fitRotation, type FramePair } from './frameFit'
 import { graticulePaths, greatCirclePaths } from './graticule'
+import { backgroundLimit, starDotAlpha, starDotRadius } from './SkyBackground'
 import { estimateTextWidth, layoutLabels, type LabelItem } from './labelLayout'
-import { buildMarkers, isOccultedMarker } from './markers'
+import { buildMarkers, glareRadiusPx, isOccultedMarker } from './markers'
+import { gridLabels } from './skyGrids'
+import type { Vec3 } from './panProjector'
 import {
   clampLook,
   enuFromAltAz,
@@ -17,6 +20,7 @@ import {
 import { phasePathD, brightAngleRad, markerRadius } from './phaseGeometry'
 import { ALTITUDE_RING_DEGREES, skyProjector } from './projector'
 import { dayClock, dayReadout, sliderStep, sliderYearDays } from './timeFormat'
+import { formatIrradiance } from './units'
 
 describe('skyProjector', () => {
   const p = skyProjector(320, 320, 300)
@@ -342,5 +346,67 @@ describe('markers', () => {
     // far sits 1 px from near's centre, inside its 40 px disc, and is farther.
     expect(isOccultedMarker(build.markers, far)).toBe(true)
     expect(isOccultedMarker(build.markers, near)).toBe(false)
+  })
+})
+
+describe('SkyBackground magnitude law', () => {
+  it('narrows the field to earn depth, capped', () => {
+    expect(backgroundLimit(6.5, 90)).toBeCloseTo(6.5, 6)
+    expect(backgroundLimit(6.5, 45)).toBeCloseTo(6.5 + 2 * Math.log10(2), 6)
+    expect(backgroundLimit(6.5, 9)).toBeCloseTo(8.5, 6)
+    expect(backgroundLimit(6.5, 0.9)).toBeCloseTo(10.5, 6) // capped at +4
+    expect(backgroundLimit(6.5, null)).toBeCloseTo(7.5, 6) // disc mode
+  })
+
+  it('sizes and fades stars by magnitude against the limit', () => {
+    expect(starDotRadius(1.0, 6.5)).toBeGreaterThan(starDotRadius(5.0, 6.5))
+    expect(starDotRadius(-2, 6.5)).toBe(2.4) // clamped point-source ceiling
+    expect(starDotAlpha(6.4, 6.5)).toBeLessThan(starDotAlpha(1.0, 6.5))
+    expect(starDotAlpha(0.0, 6.5)).toBeLessThan(0.85) // never reads as a lit disc
+    expect(starDotAlpha(9.0, 6.5)).toBeCloseTo(0.1, 6) // floor
+  })
+
+  it('glare only for bodies brighter than mag 1 (the flux hierarchy)', () => {
+    expect(glareRadiusPx(-7.5)).toBeCloseTo(4.25, 6)
+    expect(glareRadiusPx(-18.8)).toBe(6) // capped
+    expect(glareRadiusPx(1.4)).toBe(0) // brightest background star: no glare
+  })
+})
+
+describe('units', () => {
+  it('renders irradiance with SI prefixes instead of decimal sprawl', () => {
+    expect(formatIrradiance(2.904952581647662e-5)).toBe('29.0 µW/m²')
+    expect(formatIrradiance(125.2)).toBe('125 W/m²')
+    expect(formatIrradiance(0)).toBe('0 W/m²')
+    expect(formatIrradiance(2e-9)).toBe('2.00 nW/m²')
+    expect(formatIrradiance(1.3e-3)).toBe('1.30 mW/m²')
+  })
+})
+
+describe('gridLabels', () => {
+  const project = panProjector(720, 480, { azDeg: 0, altDeg: 20, fovDeg: 120 }).projectDir
+  const look = { azDeg: 0, altDeg: 20, fovDeg: 120 }
+
+  it('labels parallels on the centre meridian and meridians on the horizon', () => {
+    const labels = gridLabels('altAz', project, { mode: 'pan', look })
+    const texts = labels.map((l) => l.text)
+    expect(texts).toContain('+30°') // parallel on the centre meridian
+    expect(texts).toContain('60°') // meridian on the horizon
+    expect(texts).not.toContain('0°') // cardinal positions skipped
+    // Below-horizon parallels still project in pan mode (the chart draws them
+    // under the opaque ground fill); the disc mode drops them via null proj.
+    expect(texts).toContain('-30°')
+  })
+
+  it('needs a fitted rotation for the equatorial family', () => {
+    expect(gridLabels('equatorial', project, { mode: 'pan', rotation: null, look })).toEqual([])
+    const identity: [Vec3, Vec3, Vec3] = [
+      { e: 1, n: 0, u: 0 },
+      { e: 0, n: 1, u: 0 },
+      { e: 0, n: 0, u: 1 },
+    ]
+    const labels = gridLabels('equatorial', project, { mode: 'pan', rotation: identity, look })
+    expect(labels.length).toBeGreaterThan(0)
+    expect(labels.every((l) => l.text.endsWith('°'))).toBe(true)
   })
 })

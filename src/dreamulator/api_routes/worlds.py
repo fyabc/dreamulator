@@ -381,6 +381,49 @@ def get_sky(
     return dict[str, Any](result.model_dump())
 
 
+_SKY_BACKGROUND: OrderedDict[tuple[str, str | None], tuple[int, int, dict[str, Any]]] = (
+    OrderedDict()
+)
+
+
+@router.get("/{world_name}/sky/background")
+def get_sky_background(world_name: str, branch: str | None = None) -> dict[str, Any]:
+    """The static universe setting around the system (sky-background framework).
+
+    Neighbour stars, deep-sky objects, the galactic band and transient-event
+    hooks, directions frozen as ecliptic-frame unit vectors by the astronomy
+    engine.  Time- and observer-independent, so it is served once (cached per
+    (world, branch), stat-validated like the sky-entities cache) and rotated
+    into the observer frame client-side — keeping look-around fetch-free.
+    """
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    derived_dir = _resolve_layer_dir(world_dir, "astronomy", "derived", branch)
+    if derived_dir is None:
+        raise HTTPException(status_code=404, detail="astronomy derived layer not found")
+    bg_path = derived_dir / "sky_background.yaml"
+    if not bg_path.exists():
+        raise HTTPException(
+            status_code=404, detail="sky_background.yaml not found — run dreamulator build"
+        )
+    stat = bg_path.stat()
+    key = (world_name, branch)
+    cached = _SKY_BACKGROUND.get(key)
+    if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+        _SKY_BACKGROUND.move_to_end(key)
+        return cached[2]
+    data = _load_yaml(bg_path)
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=404, detail="sky_background.yaml is unreadable")
+    _SKY_BACKGROUND[key] = (stat.st_mtime_ns, stat.st_size, data)
+    _SKY_BACKGROUND.move_to_end(key)
+    while len(_SKY_BACKGROUND) > _SKY_CACHE_CAP:
+        _SKY_BACKGROUND.popitem(last=False)
+    return data
+
+
 @router.get("/{world_name}/habitable-zones")
 def get_habitable_zones(world_name: str, branch: str | None = None) -> dict[str, Any]:
     """Get habitable zone data from the astronomy derived layer."""

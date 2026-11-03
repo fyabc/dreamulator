@@ -33,6 +33,15 @@ function normalize(a: Vec3): Vec3 {
   return len > 0 ? scale(a, 1 / len) : a
 }
 
+/** The inverse rotation (mᵀ·v) — recovers frame-A coordinates of an ENU vector. */
+export function applyMat3Transpose(m: Mat3, v: Vec3): Vec3 {
+  return {
+    e: m[0].e * v.e + m[1].e * v.n + m[2].e * v.u,
+    n: m[0].n * v.e + m[1].n * v.n + m[2].n * v.u,
+    u: m[0].u * v.e + m[1].u * v.n + m[2].u * v.u,
+  }
+}
+
 export function applyMat3(m: Mat3, v: Vec3): Vec3 {
   return {
     e: dot(m[0], v),

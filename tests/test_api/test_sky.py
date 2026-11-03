@@ -224,3 +224,61 @@ def test_sky_entities_cache_stat_validated(
     assert loads["count"] == 2
     ids = {row["body_id"] for row in resp.json()["targets"]}
     assert "planet_reject" not in ids
+
+
+def test_sky_background_missing_is_404(client: TestClient) -> None:
+    worlds_module._SKY_BACKGROUND.clear()
+    resp = client.get("/api/worlds/test-world/sky/background")
+    assert resp.status_code == 404
+
+
+def test_sky_background_serves_and_caches(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    worlds_module._SKY_BACKGROUND.clear()
+    bg = {
+        "frame": "ecliptic",
+        "starfield": {"seed": 1, "count": 2, "magnitude_limit": 6.0},
+        "stars": [
+            {
+                "id": "bg_star_00000",
+                "name": None,
+                "magnitude": 3.0,
+                "temperature_k": 5000.0,
+                "unit": [0.0, 0.0, 1.0],
+                "source": "starfield",
+            }
+        ],
+        "deep_sky": [],
+        "galactic_band": None,
+        "transient_events": [],
+    }
+    path = (
+        tmp_path
+        / "worlds"
+        / "test-world"
+        / "layers"
+        / "astronomy"
+        / "derived"
+        / "sky_background.yaml"
+    )
+    with path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(bg, fh, allow_unicode=True)
+
+    loads = {"count": 0}
+    real_load = worlds_module._load_yaml
+
+    def counting_load(p: Any) -> Any:
+        if str(p).endswith("sky_background.yaml"):
+            loads["count"] += 1
+        return real_load(p)
+
+    monkeypatch.setattr(worlds_module, "_load_yaml", counting_load)
+
+    resp = client.get("/api/worlds/test-world/sky/background")
+    assert resp.status_code == 200
+    assert resp.json()["stars"][0]["id"] == "bg_star_00000"
+    assert loads["count"] == 1
+    # Stat-validated cache: second call reuses the parsed table.
+    assert client.get("/api/worlds/test-world/sky/background").status_code == 200
+    assert loads["count"] == 1

@@ -523,12 +523,42 @@ def test_fast_path_rate_matches_full_path() -> None:
     fast = sky_ephemeris(ENTITIES, "satellite_nacrea", 0.0, 0.0, T_DAWN, include_events=False)
     star_full = next(r for r in full.targets if r.body_id == "star_ignis")
     star_fast = next(r for r in fast.targets if r.body_id == "star_ignis")
-    assert abs(star_fast.altitude_rate_deg_per_hr) > 1.0  # dawn: the sun climbs
     assert star_fast.altitude_rate_deg_per_hr == pytest.approx(
         star_full.altitude_rate_deg_per_hr, rel=0.02
     )
     # The sign is physical: at dawn the star is rising.
     assert star_fast.altitude_rate_deg_per_hr > 0.0
+    # Absolute scale: the dawn climb is a few degrees per local hour, not
+    # thousands (a 576x unit slip once shipped here — sign and fast/full
+    # self-consistency alone did not catch it).
+    assert 0.5 < star_fast.altitude_rate_deg_per_hr < 5.0
+
+
+def test_altitude_rate_physical_ceiling_and_cross_check() -> None:
+    """The horizon cannot turn faster than the observer spins; and an
+    independent finite difference of the engine's own altitudes must agree."""
+    full = sky_ephemeris(ENTITIES, "satellite_nacrea", -0.106, 1.121, T_DAWN)
+    solar_day = next(
+        float(v) for k, v in ENTITIES["satellite_nacrea"].items() if k == "solar_day_days"
+    )
+    ceiling = 360.0 / (solar_day * 24.0) * 1.05
+    for row in full.targets:
+        assert abs(row.altitude_rate_deg_per_hr) <= ceiling, row.body_id
+
+    # Independent cross-check: central difference of altitudes at +-1e-4 d,
+    # converted with the correct °/day -> °/h chain.
+    delta = 1e-4
+    lo = sky_ephemeris(
+        ENTITIES, "satellite_nacrea", -0.106, 1.121, T_DAWN - delta, include_events=False
+    )
+    hi = sky_ephemeris(
+        ENTITIES, "satellite_nacrea", -0.106, 1.121, T_DAWN + delta, include_events=False
+    )
+    for row in full.targets:
+        a_lo = next(r for r in lo.targets if r.body_id == row.body_id).altitude_deg
+        a_hi = next(r for r in hi.targets if r.body_id == row.body_id).altitude_deg
+        expect = (a_hi - a_lo) / (48.0 * delta)
+        assert row.altitude_rate_deg_per_hr == pytest.approx(expect, rel=0.02, abs=0.05)
 
 
 def test_events_default_on() -> None:

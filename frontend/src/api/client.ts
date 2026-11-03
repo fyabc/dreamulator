@@ -5,7 +5,7 @@ import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
-import type { SkyEphemerisResult } from '../viewers/sky/types'
+import type { SkyBackground, SkyEphemerisResult } from '../viewers/sky/types'
 
 const API_BASE = '/api'
 
@@ -647,6 +647,8 @@ const readApi = {
     fetchJson<SkyEphemerisResult>(
       `/worlds/${encodeURIComponent(name)}/sky?${skyQueryString(params)}`,
     ),
+
+  getSkyBackground,
 }
 
 /** Build the sky endpoint query string (exported for the fast-path fetch). */
@@ -672,6 +674,19 @@ export function skyQueryString(params: {
 
 /** Latest-wins slider fast path (include_events=false), abortable; bypasses
  *  react-query so drags never churn its cache (probeSeq precedent). */
+/** The static universe setting (neighbour stars / DSOs / band / event hooks).
+ *  Time- and observer-independent: fetched once per world+branch and rotated
+ *  into the observer frame client-side, so look-around stays fetch-free. */
+async function getSkyBackground(name: string, branch?: string | null): Promise<SkyBackground> {
+  const qs = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+  const response = await fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/sky/background${qs}`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return (await response.json()) as SkyBackground
+}
+
 export async function fetchSkyFast(
   name: string,
   params: Parameters<typeof api.getSky>[1],

@@ -4,6 +4,7 @@
 
 import { useTranslation } from 'react-i18next'
 
+import { formatIrradiance } from './units'
 import type { SkyEphemerisResult } from './types'
 
 function fmtDistance(km: number): string {
@@ -44,7 +45,7 @@ export default function SkyInspector({ result, selectedId }: SkyInspectorProps) 
       row.phase_function !== null ? row.phase_function.toFixed(3) : '—',
     ],
     [t('inspector.magnitude'), row.apparent_magnitude.toFixed(2)],
-    [t('inspector.illuminance'), `${row.illuminance_w_m2.toPrecision(3)} W/m²`],
+    [t('inspector.illuminance'), formatIrradiance(row.illuminance_w_m2)],
     [t('inspector.distance'), fmtDistance(row.distance_km)],
     [t('inspector.angularDiameter'), fmtAngleSize(row.angular_diameter_deg)],
     [t('inspector.altitudeRate'), `${row.altitude_rate_deg_per_hr >= 0 ? '+' : ''}${row.altitude_rate_deg_per_hr.toFixed(2)}°/h`],

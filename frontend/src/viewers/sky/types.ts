@@ -72,3 +72,38 @@ export interface SkyCatalog {
   bodies?: SkyCatalogBody[] | null
   target_body_id?: string | null
 }
+
+/** Mirror of derived/sky_background.yaml (the universe setting). */
+export interface SkyBackgroundStar {
+  id: string
+  name: string | null
+  magnitude: number
+  temperature_k: number
+  unit: [number, number, number]
+  source: 'authored' | 'starfield'
+}
+
+export interface SkyBackgroundDso {
+  id: string
+  name: string | null
+  type: 'nebula' | 'cluster' | 'galaxy' | 'remnant'
+  magnitude: number
+  angular_size_deg: number
+  unit: [number, number, number]
+}
+
+export interface SkyBackground {
+  frame: 'ecliptic'
+  starfield: { seed: number; count: number; magnitude_limit: number }
+  stars: SkyBackgroundStar[]
+  deep_sky: SkyBackgroundDso[]
+  galactic_band: { pole_unit: [number, number, number]; width_deg: number; brightness: number } | null
+  transient_events: Array<{
+    id: string
+    type: 'supernova' | 'grb'
+    unit: [number, number, number]
+    epoch_window_days: [number, number] | null
+    peak_magnitude: number | null
+    rate_per_myr: number | null
+  }>
+}
