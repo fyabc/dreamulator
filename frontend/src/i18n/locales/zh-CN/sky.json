@@ -97,6 +97,10 @@
     "irregular": "不规则",
     "type": "类型",
     "angularSize": "视大小",
+    "asterism": "星官",
+    "culture": "文化",
+    "members": "成员星",
+    "cultureName": "文化专名",
     "dsoTypes": {
       "nebula": "星云",
       "cluster": "星团",
@@ -126,7 +130,8 @@
       "title": "显示",
       "grids": "坐标网格",
       "panels": "信息面板",
-      "background": "背景星空（近邻星 / 深空 / 银道带）"
+      "background": "背景星空（近邻星 / 深空 / 银道带）",
+      "culture": "星官连线（星空文化）"
     }
   },
   "grids": {

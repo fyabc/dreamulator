@@ -28,7 +28,8 @@ import { estimateTextWidth, layoutLabels, type Box, type LabelItem } from './lab
 import { buildMarkers, glareRadiusPx, isOccultedMarker, labeledIds, type Marker } from './markers'
 import { buildGridLayers, eclipticRotation, gridLabels, type GridToggles } from './skyGrids'
 import SkyBackgroundLayer from './SkyBackground'
-import type { SkyBackground } from './types'
+import SkyCultureLayer from './SkyCultureLayer'
+import type { SkyBackground, SkyCulture } from './types'
 import SkyBodyMarker from './SkyBodyMarker'
 import { GROUND_FILL, NORTH_ACCENT, SELECTED_STROKE, TEXT_HALO } from './bodyColor'
 import type { SkyCatalog, SkyEphemerisResult } from './types'
@@ -52,6 +53,9 @@ export interface SkyPanChartProps {
   /** The universe setting (static directions); null until fetched. */
   background: SkyBackground | null
   backgroundOn: boolean
+  /** Star lore (constellation figures); null until fetched / when absent. */
+  culture: SkyCulture | null
+  cultureOn: boolean
   selectedId: string | null
   hoveredId: string | null
   onHover: (bodyId: string | null) => void
@@ -75,6 +79,8 @@ export default function SkyPanChart({
   grids,
   background,
   backgroundOn,
+  culture,
+  cultureOn,
   selectedId,
   hoveredId,
   onHover,
@@ -322,6 +328,16 @@ export default function SkyPanChart({
           project={(v) => projector.projectDir(v)}
           fovDeg={projector.look.fovDeg}
           height={height}
+          interactive
+          selectedBgId={selectedBgId}
+        />
+      )}
+      {cultureOn && culture && background && (
+        <SkyCultureLayer
+          culture={culture}
+          background={background}
+          rotation={eclRotation}
+          project={(v) => projector.projectDir(v)}
           interactive
           selectedBgId={selectedBgId}
         />

@@ -1,4 +1,4 @@
-"""Civilization engine — habitability & agriculture derived layers.
+"""Civilization engine — habitability & agriculture derived layers + sky culture.
 
 Reads the CVT mesh with climate data (temperature, precipitation, distance-to-coast)
 already populated by the ClimateEngine, and computes per-cell civilization inputs:
@@ -12,10 +12,18 @@ the 3C event-sourcing/state-machine engine — it only produces the two per-cell
 land-suitability layers that ``civilizations.yaml`` anchors on (roadmap §七
 "文明宜居/农业图层").  See ``docs/design/civilization-layer.md`` for 3C.
 
+The engine also carries the sky-culture hook (the civilization consumer designed
+into ``models/sky_background.py``): the optional authored input
+``sky_culture.yaml`` names and connects background objects strictly by their
+astronomy-layer ids, is validated against the derived sky catalogue at build
+time (unknown references fail the build), and is always re-emitted as a derived
+file so consumers can fetch it unconditionally.
+
 Output files (written to ``layers/civilization/derived/``):
     - habitability_summary.yaml — per-cell habitable/agricultural counts + overlap
     - civilization_seed_candidates.yaml — derived seed-candidate regions (ranked
       by carrying capacity, features inherited from climate/ecology/geography)
+    - sky_culture.yaml — validated star lore (cultures → asterisms → id edges)
 """
 
 from __future__ import annotations
@@ -24,6 +32,8 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+import yaml
+from pydantic import ValidationError
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.habitability import (
@@ -34,14 +44,24 @@ from dreamulator.engine.habitability import (
 )
 from dreamulator.engine.physical_inputs import load_planet_for_engine
 from dreamulator.engine.seed_discovery import discover_seed_candidates
+from dreamulator.engine.sky_background import derive_sky_background
+from dreamulator.engine.sky_culture import (
+    collect_reference_ids,
+    derive_sky_culture,
+    validate_cultures,
+)
+from dreamulator.io.loader import load_yaml_model
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.map.water_bodies import resolve_land_mask
 from dreamulator.models.layers import Layer
+from dreamulator.models.sky_background import SkyBackgroundDerived, SkyBackgroundInput
+from dreamulator.models.sky_culture import SkyCultureInput
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
+    from dreamulator.models.sky_culture import SkyCultureDerived
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +98,58 @@ class CivilizationEngine(BaseEngine):
     layer = Layer.CIVILIZATION
     requires = ["ecology", "climate", "geological"]
     input_files: list[str] = []
-    optional_input_files: list[str] = []
+    optional_input_files: list[str] = ["sky_culture.yaml"]
     output_files = [
         "habitability_summary.yaml",
         "civilization_seed_candidates.yaml",
+        "sky_culture.yaml",
     ]
+
+    def _load_sky_catalogue(self) -> SkyBackgroundDerived | None:
+        """The astronomy layer's sky catalogue, for sky-culture id validation.
+
+        ``find_input`` resolves derived-first, so a built world yields the
+        derived file directly; on a fresh checkout it falls back to the
+        authored input, which is derived here on the spot (the same two
+        code paths the astronomy engine itself runs).
+        """
+        path = self.find_input("sky_background.yaml")
+        if path is None:
+            return None
+        try:
+            return load_yaml_model(path, SkyBackgroundDerived)
+        except ValidationError:
+            pass  # not the derived shape — find_input fell back to the input
+        return derive_sky_background(load_yaml_model(path, SkyBackgroundInput))
+
+    def _prepare_sky_culture(self) -> tuple[SkyCultureDerived, list[str], list[str]]:
+        """Load and validate the authored sky culture (no IO beyond reads).
+
+        Returns (derived, warnings, errors).  Errors are build-fatal (the
+        author must fix the offending ids) and are reported in one batch; the
+        only warning case is a culture with references that could not be
+        validated because no sky catalogue exists anywhere in the layer chain.
+        The caller writes the derived file on the success path only — a failed
+        build never publishes derived data.
+        """
+        warnings: list[str] = []
+        errors: list[str] = []
+        source = SkyCultureInput()
+        input_path = self.find_input("sky_culture.yaml")
+        if input_path is not None:
+            source = load_yaml_model(input_path, SkyCultureInput)
+            if source.cultures:
+                catalogue = self._load_sky_catalogue()
+                if catalogue is None:
+                    warnings.append(
+                        "sky_culture.yaml: no sky_background catalogue found — "
+                        "id references were NOT validated"
+                    )
+                else:
+                    errors.extend(
+                        validate_cultures(source.cultures, collect_reference_ids(catalogue))
+                    )
+        return derive_sky_culture(source), warnings, errors
 
     def run(
         self, parameters: dict[str, object] | None = None, *, force: bool = False
@@ -102,6 +169,16 @@ class CivilizationEngine(BaseEngine):
         EngineResult
         """
         warnings: list[str] = []
+
+        # ---- 0. Sky culture (mesh-independent; bad id references fail fast) ----
+        culture_derived, culture_warnings, culture_errors = self._prepare_sky_culture()
+        warnings.extend(culture_warnings)
+        if culture_errors:
+            return EngineResult(
+                engine_name=self.name,
+                success=False,
+                warnings=warnings + culture_errors,
+            )
 
         # ---- 1. Load CVT mesh ----
         mesh, mwarnings = _load_cvt_mesh(self)
@@ -218,7 +295,6 @@ class CivilizationEngine(BaseEngine):
         # ---- 6. Write summary + seed-candidate YAML ----
         summary = _build_habitability_summary(mesh, counts, n_land, planet_id, planet_name)
         candidates_doc = _build_seed_candidates_doc(candidates, planet_id, planet_name)
-        import yaml
 
         yaml_path = self.output_path("habitability_summary.yaml")
         yaml_path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,11 +311,25 @@ class CivilizationEngine(BaseEngine):
             encoding="utf-8",
         )
 
+        culture_path = self.output_path("sky_culture.yaml")
+        culture_path.write_text(
+            yaml.dump(
+                culture_derived.model_dump(mode="json"),
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+                # Never fold long strings: fold points re-parse as spaces, which
+                # corrupts CJK prose (the input file's single-line rule).
+                width=4096,
+            ),
+            encoding="utf-8",
+        )
+
         return EngineResult(
             engine_name=self.name,
             success=True,
             warnings=warnings,
-            output_files=[str(yaml_path), str(candidates_path)],
+            output_files=[str(yaml_path), str(candidates_path), str(culture_path)],
             metadata={
                 "n_cells": n_cells,
                 "n_land": n_land,

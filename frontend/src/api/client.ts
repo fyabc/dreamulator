@@ -5,7 +5,7 @@ import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
-import type { SkyBackground, SkyEphemerisResult } from '../viewers/sky/types'
+import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
 const API_BASE = '/api'
 
@@ -649,6 +649,8 @@ const readApi = {
     ),
 
   getSkyBackground,
+
+  getSkyCulture,
 }
 
 /** Build the sky endpoint query string (exported for the fast-path fetch). */
@@ -685,6 +687,19 @@ async function getSkyBackground(name: string, branch?: string | null): Promise<S
     throw new Error(error.detail || `HTTP ${response.status}`)
   }
   return (await response.json()) as SkyBackground
+}
+
+/** The civilization layer's star lore (asterism figures + per-star culture
+ *  names).  Static per world+branch like the background; the client joins it
+ *  against the background catalogue by id — positions are never duplicated. */
+async function getSkyCulture(name: string, branch?: string | null): Promise<SkyCulture> {
+  const qs = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+  const response = await fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/sky/culture${qs}`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return (await response.json()) as SkyCulture
 }
 
 export async function fetchSkyFast(

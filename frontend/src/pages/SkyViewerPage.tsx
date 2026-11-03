@@ -115,6 +115,21 @@ export default function SkyViewerPage() {
   const background = backgroundQuery.data ?? null
   const backgroundOn = searchParams.get('bg') !== '0'
 
+  // The civilization layer's star lore (asterism figures + culture star
+  // names), joined against the background catalogue by id client-side.  A
+  // world without cultures 404s — that is normal, not an error state: the
+  // toggle and the layer simply stay hidden.
+  const cultureQuery = useQuery({
+    queryKey: ['sky-culture', worldName, branch],
+    queryFn: () => api.getSkyCulture(worldName!, branch),
+    enabled: !!worldName && !staticMode,
+    retry: false,
+    staleTime: Infinity,
+  })
+  const culture = cultureQuery.data ?? null
+  const hasCulture = (culture?.cultures.length ?? 0) > 0
+  const cultureOn = searchParams.get('cul') !== '0'
+
   const observerId = useMemo(() => {
     const from = searchParams.get('from')
     if (from) return from
@@ -270,6 +285,8 @@ export default function SkyViewerPage() {
               grids={grids}
               background={background}
               backgroundOn={backgroundOn}
+              culture={culture}
+              cultureOn={cultureOn}
               selectedId={bodyId ?? null}
               hoveredId={hoveredId}
               onHover={setHoveredId}
@@ -291,6 +308,8 @@ export default function SkyViewerPage() {
                 grids={grids}
                 background={background}
                 backgroundOn={backgroundOn}
+                culture={culture}
+                cultureOn={cultureOn}
               />
             </div>
           )}
@@ -318,7 +337,11 @@ export default function SkyViewerPage() {
                 {bodyId ? (
                   <SkyInspector result={data.display} selectedId={bodyId} />
                 ) : (
-                  <SkyObjectInspector background={background ?? undefined} selectedId={bgId} />
+                  <SkyObjectInspector
+                    background={background ?? undefined}
+                    cultures={culture}
+                    selectedId={bgId}
+                  />
                 )}
               </div>
             )}
@@ -432,6 +455,9 @@ export default function SkyViewerPage() {
                 onGrids={setGrids}
                 backgroundOn={backgroundOn}
                 onBackgroundOn={(on) => setParam('bg', on ? null : '0')}
+                cultureOn={cultureOn}
+                onCultureOn={(on) => setParam('cul', on ? null : '0')}
+                hasCulture={hasCulture}
                 activePanel={activePanel}
                 onSelectPanel={setPanel}
                 onPointerEnter={() => chromePin(true)}

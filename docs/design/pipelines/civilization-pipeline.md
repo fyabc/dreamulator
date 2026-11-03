@@ -1,11 +1,12 @@
 # 文明引擎实现架构
 
 > 本文档描述 dreamulator 文明引擎（CivilizationEngine）的计算方式：宜居海岸与
-> 农业核心区分类、宜居/农业评分（含湖滨淡水修正）、文明摇篮候选区发现，以及
-> 输出格式。
+> 农业核心区分类、宜居/农业评分（含湖滨淡水修正）、文明摇篮候选区发现、
+> 星空文化（sky culture）钩子的校验与派生，以及输出格式。
 > 对应源码：`src/dreamulator/engine/civilization.py`（引擎封装）、
 > `engine/habitability.py`（评分纯函数）、`engine/seed_discovery.py`
->（摇篮候选发现）。
+>（摇篮候选发现）、`engine/sky_culture.py`（星空文化纯函数）与
+> `models/sky_culture.py`（数据模型）。
 > 知识背景见 [knowledge/sociology/human_settlement.md](../../knowledge/sociology/human_settlement.md)。
 
 ---
@@ -21,6 +22,8 @@ DAG 的最后一环。它加载三层数据齐全的 CVT 网格（温度、降�
 本引擎是气候/生态与 Phase 3C 半结构化文明模型之间的薄桥：只产出两个逐格
 陆地适宜性图层（`habitable_coast` / `agricultural_core`）与连续评分
 （`habitability_score` / `agriculture_score`），供 `civilizations.yaml` 锚定。
+引擎同时承载星空文化钩子（§6）——与网格无关的纯设定数据，走独立的
+加载/校验/派生路径。
 
 ## 2. 海陆判据与湖面语义
 
@@ -81,3 +84,52 @@ False`——湖面上无人定居也无农业，适宜性落在湖滨陆地而�
   总数）、评分统计、摇篮候选数量。湖面与海洋格不进计数（summary 只覆盖
   陆地格）。
 - **civilization_seed_candidates.yaml**：候选区域清单（排名、特征、评分）。
+- **sky_culture.yaml**：校验后的星空文化（§6）；成功构建总是写出（无作者
+  输入时 `cultures: []`），失败构建不发布任何 derived。
+
+## 6. 星空文化（sky culture 钩子）
+
+文明层对天文层背景天球目录（`sky_background.yaml`）的消费接口，实现的是
+`models/sky_background.py` 设计时预留的两个跨层消费方之一（Stellarium 星空
+文化范式）：文化给背景星起专名、把星连成星官图形，**引用一律走稳定 id、
+永不复制坐标**——星的位置只住在天文层目录里，移动恒星不需要改任何文化
+文件。另一个消费方（生态层的 `transient_events` 辐射强迫）仍为设计预留，
+等待生态层的时序事件模型。
+
+**输入**（可选，`layers/civilization/input/sky_culture.yaml`）：
+
+```yaml
+cultures:
+  - id: culture_xiangxing        # 稳定 id；civilizations.yaml 实体就位后合并对齐
+    name: "向星诸族（暂定）"
+    description: "…"             # 可选
+    star_names:                  # 背景星 id → 该文化的专名（可选）
+      star_arrow_alpha: "出鞘"
+    asterisms:
+      - id: asterism_arrow       # 全局唯一（前端选择命名空间是扁平的）
+        name: "箭"
+        meaning: "…"             # 可选，详情面板展示
+        lines:                   # Stellarium 式无序星对边表，支持分叉图形
+          - [star_arrow_delta, star_arrow_gamma]
+          - [star_arrow_beta, star_arrow_alpha]
+```
+
+**校验分两层**。结构问题由 Pydantic 校验器在加载时拒绝（`models/sky_culture.py`）：
+空边表、自环边、文化 id 重复、星官 id 跨文化重复。跨文件引用完整性由
+`validate_cultures`（`engine/sky_culture.py`）对照天文层目录检查：边表顶点与
+`star_names` 键必须是**署名星或深空天体 id**——程序化暗星场 id（`bg_star_*`）
+一律拒绝，因为改 starfield 的 seed/count 会静默重编号，陈旧引用会无声指向
+另一颗星（语义漂移比断链更糟）。未知 id 使构建**硬失败**，错误消息一次列全；
+天文目录完全不存在时降级为 warning（无法校验，引用原样通过）。目录经
+`find_input` 的 derived 优先搜索读取（`_load_sky_catalogue`），fresh checkout
+回退到 input 时现场派生。
+
+**派生**（`derive_sky_culture`）只做规范化：无序边对去重（保留首现顺序）。
+`SkyCultureDerived` 与输入同形，成功构建总是写出。
+
+**消费**：API 端点 `GET /api/worlds/{world}/sky/culture`（读 civilization
+derived，stat 校验缓存，与 `/sky/background` 同款式）；前端天球视图把 id
+连到背景星表目录帧单位矢量上，沿大圆采样后经同一旋转/投影管线绘制（两种
+视图模式都画，环视模式可悬停/点击选中，选中 id 与署名星/深空天体共用
+`data-bg-id` 命名空间）。sky 页为 API-only，无静态导出镜像。操作说明见
+[usage/sky-viewer.md](../../usage/sky-viewer.md)。
