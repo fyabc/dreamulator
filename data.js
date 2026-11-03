@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793717076354,
+  "lastUpdate": 1793731361642,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1652,6 +1652,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007448189083335433",
             "extra": "mean: 4.082065799997281 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "1b9b349aac31e0b334bc0ff2a720860ca4e1ec29",
+          "message": "Merge feature/sky-bg-content: universe-setting content (the Arrow, deep-sky anchors, shepherd moons, flyby star) and sky-view interaction\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-04T02:38:49+08:00",
+          "tree_id": "02b7fa4cc350c2f0cd23350277234d8cae38c013",
+          "url": "https://github.com/fyabc/dreamulator/commit/1b9b349aac31e0b334bc0ff2a720860ca4e1ec29"
+        },
+        "date": 1793731358366,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4283316941858962,
+            "unit": "iter/sec",
+            "range": "stddev: 0.17369256981627892",
+            "extra": "mean: 2.3346392843999992 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.583559521936362,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017636961392267846",
+            "extra": "mean: 279.0521530000021 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.9519741777864614,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8138972172077489",
+            "extra": "mean: 512.3018589999996 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1217.7271852699187,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000055115967135755965",
+            "extra": "mean: 821.2020000016196 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 246.5352308459762,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006202829912133726",
+            "extra": "mean: 4.056215399999985 msec\nrounds: 5"
           }
         ]
       }
