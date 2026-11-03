@@ -214,10 +214,22 @@ def _render_diff_layer(
     import numpy as np
 
     land = np.array([c.elevation >= sea_level for c in mesh.cells])
-    if name == "temperature_diff":  # ±20 K, land only
+    # Which layers mask the sea is a statement about where the comparison means
+    # something.  Precipitation and Köppen are land-only because the observed
+    # precipitation's caliper differs over the sea and Köppen is a land
+    # classification; temperature is not, because sea surface temperature has a
+    # per-cell observation and is in fact the larger error — +1.74 K over the
+    # ocean against −0.72 over land on Earth's climate-dev branch, with the
+    # east-minus-west basin contrasts and the polar bias both living at sea
+    # (2026-11-03).  Masking it hid exactly what wanted looking at.
+    if name == "temperature_diff":  # ±20 K, global
         delta = _cell_array(mesh, "temperature_C") - _cell_array(ref, "temperature_C")
         return render_value_layer(
-            delta, indices, continuous_scale("temperature"), lambda d: (d + 20.0) / 40.0, land
+            delta,
+            indices,
+            continuous_scale("temperature"),
+            lambda d: (d + 20.0) / 40.0,
+            np.isfinite(delta),
         )
     if name == "slp_diff":  # ±8 hPa: both fields as departures from their own
         # zonal mean, so each one's reference cancels (the engine's absolute
