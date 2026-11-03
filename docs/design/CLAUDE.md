@@ -18,6 +18,7 @@
 - `roadmap.md` — 开发路线图（Phase 状态、优先级、技术债务）
 - `competitor-analysis.md` — 竞品分析（护城河定位与参考链接）
 - `audit-plan.md` — 三波审计计划（按变化速率分波，各有启动判据与审计产物）
+- `web-gcm-and-frontend.md` — 浏览器内 GCM 与前端调研（web-exoplasim：把 ExoPlaSim 重写为 TypeScript 加 WGSL 而非仅编译 Fortran；T42 每 10 模式日 32.6 s 对本机 7.2 s，按核归一后相当；可借鉴的是工程纪律三条、迭代过程可见、参数面板即文档、以及共享内存 Worker 推翻了「浏览器只能串行」的前提；GPL-2.0 不抄码）
 - `profiling.md` — 性能剖析工作流（build_profile.json、py-spy 火焰图、CI 基准测试、前端 React Profiler、跨版本对比）
 - `performance-optimizations.md` — 性能优化记录（基线数据、改动内容、效果对比、待优化清单）
 

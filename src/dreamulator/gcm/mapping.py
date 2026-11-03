@@ -62,6 +62,12 @@ SOLAR_CONSTANT_WM2 = 1361.0  # dreamulator flux convention (PoC-era, kept)
 DAYS_PER_YEAR = 365.25  # sidereal-year unit behind Kepler's third law
 ATM_TO_BAR = 1.01325
 
+#: How far an atmosphere's mole fractions may sum from one before the mapping
+#: says so.  Loose enough to pass a composition that omits a trace species
+#: (methane at 1e-7 and the like), tight enough to catch a fraction set that was
+#: written as percentages or left unnormalised.
+_COMPOSITION_CLOSURE_TOLERANCE = 1.0e-3
+
 _PLANET_FILE = "layers/geological/input/planets.yaml"
 _STELLAR_FILE = "layers/astronomy/input/stellar.yaml"
 
@@ -241,6 +247,22 @@ def map_planet(
     if greenhouse_mode == "pco2" and pco2_bar:
         pressure_bar += pco2_bar  # total = background + CO2 (composition closure)
     composition = dict(atmosphere.get("composition", {}))
+    # The composition is a set of mole fractions, so it must close to one before
+    # being multiplied by the total: anything else rescales the atmosphere
+    # silently.  nacrea's sums to 1.000112, which put the partial pressures
+    # 0.011% above the total in every canonical run — harmless there, but a world
+    # whose fractions summed to 1.05 would get a 5% heavier atmosphere with no
+    # sign of it (2026-11-03).  A trace species may legitimately be left out, so
+    # a deficit is only reported once it is larger than the tolerance below.
+    fraction_total = sum(float(value) for value in composition.values())
+    if composition and abs(fraction_total - 1.0) > _COMPOSITION_CLOSURE_TOLERANCE:
+        warnings.append(
+            f"atmosphere composition sums to {fraction_total:.6f}, not 1 — the "
+            f"partial pressures are scaled by that factor, so the atmosphere is "
+            f"{abs(fraction_total - 1.0) * 100:.2f}% "
+            f"{'heavier' if fraction_total > 1.0 else 'lighter'} than "
+            "surface_pressure_atm states"
+        )
     # Partial pressures in bar; keys follow exoplasim spelling (pN2/pO2/pAr).
     pn2 = pressure_bar * float(composition["N2"]) if "N2" in composition else None
     po2 = pressure_bar * float(composition["O2"]) if "O2" in composition else None

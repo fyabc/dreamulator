@@ -250,3 +250,44 @@ def test_fixed_orbit_is_requested_by_default() -> None:
     """Without fixedorbit PlaSim ignores the mapped orbit and uses Earth's Berger orbit."""
     kwargs = map_planet(PLANET, STAR, ORBIT).to_configure_kwargs()
     assert kwargs["fixedorbit"] is True
+
+
+def _with_composition(composition: dict[str, float]) -> dict[str, object]:
+    planet = dict(PLANET)
+    planet["atmosphere"] = {"surface_pressure_atm": 1.0, "composition": composition}
+    return planet
+
+
+def test_composition_closing_to_one_is_quiet() -> None:
+    """The reference composition closes, so it must not warn."""
+    params = map_planet(_with_composition({"N2": 0.78, "O2": 0.21, "Ar": 0.01}), STAR, ORBIT)
+    assert not [w for w in params.warnings if "composition sums" in w]
+
+
+def test_a_trace_species_left_out_is_tolerated() -> None:
+    """Omitting methane at 1e-7 is legitimate and stays below the tolerance."""
+    params = map_planet(
+        _with_composition({"N2": 0.7795, "O2": 0.2099, "Ar": 0.01, "CO2": 0.000712}),
+        STAR,
+        ORBIT,
+    )
+    assert not [w for w in params.warnings if "composition sums" in w]
+
+
+def test_unnormalised_composition_is_reported_with_its_size() -> None:
+    """A set of fractions summing to 1.05 scales the whole atmosphere by 5%."""
+    params = map_planet(_with_composition({"N2": 0.82, "O2": 0.22, "Ar": 0.01}), STAR, ORBIT)
+    messages = [w for w in params.warnings if "composition sums" in w]
+    assert len(messages) == 1
+    assert "5.00% heavier" in messages[0]
+
+
+def test_percentage_style_composition_is_caught() -> None:
+    """Fractions written as percentages are the error the check exists for."""
+    params = map_planet(_with_composition({"N2": 78.0, "O2": 21.0, "Ar": 1.0}), STAR, ORBIT)
+    assert any("composition sums to 100.000000" in w for w in params.warnings)
+
+
+def test_a_light_composition_is_reported_as_lighter() -> None:
+    params = map_planet(_with_composition({"N2": 0.50, "O2": 0.20}), STAR, ORBIT)
+    assert any("30.00% lighter" in w for w in params.warnings)
